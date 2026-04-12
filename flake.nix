@@ -28,8 +28,8 @@
             # CUDA & AI
             cudaPackages.cudatoolkit
             cudaPackages.cudnn
-            cudaPackages.tensorrt
             cudaPackages.cuda_nvcc
+            llama-cpp
             
             # GStreamer & Media
             gst_all_1.gstreamer
@@ -56,7 +56,6 @@
               pkgs.libGL
               pkgs.cudaPackages.cudatoolkit
               pkgs.cudaPackages.cudnn
-              pkgs.cudaPackages.tensorrt
               pkgs.linuxPackages.nvidia_x11
             ]}"
             
