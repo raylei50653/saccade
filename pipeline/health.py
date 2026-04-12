@@ -85,10 +85,10 @@ class HealthReport:
 # ── Checkers ──────────────────────────────────────────────────────────────────
 
 async def check_systemd(service: str) -> ServiceStatus:
-    """Check a single Systemd service via systemctl is-active."""
+    """Check a single Systemd service via systemctl --user is-active."""
     try:
         result = subprocess.run(
-            ["systemctl", "is-active", "--quiet", service],
+            ["systemctl", "--user", "is-active", "--quiet", service],
             timeout=3,
         )
         ok = result.returncode == 0

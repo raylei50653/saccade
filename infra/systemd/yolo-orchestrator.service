@@ -1,7 +1,6 @@
 [Unit]
 Description=YOLO-LLM Orchestrator (Slow Path Logic)
-After=network.target redis.service yolo-vlm-backend.service
-Requires=redis.service
+After=network.target yolo-vlm-backend.service mediamtx.service
 
 [Service]
 Type=simple
