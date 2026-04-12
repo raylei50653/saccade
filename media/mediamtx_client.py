@@ -36,22 +36,43 @@ class MediaMTXClient:
         while self._running:
             if self.cap and self.cap.isOpened():
                 ret, frame = self.cap.read()
+                
+                # 針對本地檔案的循環播放邏輯
+                if not ret and self.dummy_video:
+                    print("🔄 [MediaClient] Video end reached, looping...")
+                    self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                    continue
+
                 with self._lock:
                     self._ret = ret
                     if ret:
                         self._last_frame = frame
                     else:
-                        print("⚠️ [MediaClient] Failed to read frame, stream might be disconnected.")
-                        # 如果斷線，這裡不主動重連，交給 grab_frame 判斷
+                        if not self.dummy_video: # 只有串流才報錯
+                            print("⚠️ [MediaClient] Failed to read frame, stream might be disconnected.")
             
-            if not self._ret:
-                time.sleep(1) # 斷線時稍微休息
+            if not self._ret and not self.dummy_video:
+                time.sleep(1) # 串流斷線時稍微休息
             else:
                 time.sleep(0.01) # 正常時維持高頻率抓取
 
     def connect(self) -> bool:
         """建立連線"""
-        # 1. 模擬影片優先
+        # 關鍵修正：環境變數必須在所有 cv2 調用前設定，並包含更多限制
+        os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|latency;0|threads;1"
+        os.environ["OPENCV_FFMPEG_THREADS"] = "1"
+        
+        # 確保舊線程已徹底結束並釋放資源
+        if self._thread and self._thread.is_alive():
+            self._running = False
+            self._thread.join(timeout=2)
+            
+        with self._lock:
+            if self.cap:
+                self.cap.release()
+                self.cap = None
+
+        # 1. 模擬影片優先 (移除強制 CAP_FFMPEG，讓 OpenCV 自動選擇最穩定的後端)
         if self.dummy_video and os.path.exists(self.dummy_video):
             self.cap = cv2.VideoCapture(self.dummy_video)
         else:
@@ -60,18 +81,10 @@ class MediaMTXClient:
             self.cap = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
             
             if not self.cap.isOpened():
-                # 關鍵修正：限制 FFMPEG 執行緒數量並關閉 async 選項以防衝突
-                os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|latency;0|threads;1"
                 self.cap = cv2.VideoCapture(self.rtsp_url, cv2.CAP_FFMPEG)
 
         if self.cap.isOpened():
             self._running = True
-            # 確保舊線程已結束
-            if self._thread and self._thread.is_alive():
-                self._running = False
-                self._thread.join(timeout=1)
-                self._running = True
-            
             self._thread = threading.Thread(target=self._update_loop, daemon=True)
             self._thread.start()
             return True
@@ -81,10 +94,10 @@ class MediaMTXClient:
     def grab_frame(self) -> Tuple[bool, Optional[np.ndarray]]:
         """獲取最新影格"""
         with self._lock:
-            if not self._ret and self.cap:
-                # 嘗試重新連接
-                print("🔄 [MediaClient] Attempting to reconnect...")
-                self.cap.release()
+            # 只有在「非本地影片」且「確定斷線」時才嘗試重連
+            if not self._ret and self.cap and not self.dummy_video:
+                print("🔄 [MediaClient] Stream seems down, attempting to reconnect...")
+                # 避免頻繁重連，這裡可以增加時間戳判斷，但目前先簡單處理
                 self.connect()
                 
             return self._ret, self._last_frame

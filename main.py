@@ -17,7 +17,7 @@ async def run_perception():
     dummy_video = os.getenv("DUMMY_VIDEO_PATH")
     
     detector = Detector()
-    trigger = EntropyTrigger(threshold=0.6)
+    trigger = EntropyTrigger(threshold=0.8, cooldown=5.0) # 提高閾值，增加冷卻至 5s
     media = MediaMTXClient(use_local=use_local, dummy_video=dummy_video)
     
     # 增加二次推流器 (Visualizer)
@@ -31,6 +31,13 @@ async def run_perception():
     source_name = f"Dummy ({dummy_video})" if dummy_video else ("Local" if use_local else "RTSP")
     print(f"✅ Perception Pipeline connected! (Source: {source_name})")
     
+    # 等待第一影格就緒
+    print("⏳ Waiting for first frame...")
+    for _ in range(50):
+        ret, _ = media.grab_frame()
+        if ret: break
+        await asyncio.sleep(0.1)
+
     frame_id = 0
     try:
         while True:
@@ -48,7 +55,10 @@ async def run_perception():
             if results and len(results) > 0:
                 # 使用 YOLO 的內建繪製功能
                 annotated_frame = results[0].plot()
-                streamer.push_frame(annotated_frame)
+                
+                # 關鍵修正：限制推流頻率以匹配 15 FPS (假設輸入為 50 FPS, 約每 3 幀推一次)
+                if frame_id % 3 == 0:
+                    streamer.push_frame(annotated_frame)
                 
                 # 3. 評估與觸發事件
                 if len(results[0].boxes) > 0:
