@@ -12,7 +12,7 @@ Like the saccadic motion of the eye — fast scanning, then focused understandin
 
 ## Architecture
 
-![架構圖](./architecture.svg)
+![架構圖](./assets/images/architecture.svg)
 
 **Fast track** runs continuously, evaluating every frame for information entropy. Only high-value events trigger the slow track — keeping the LLM off the hot path entirely.
 
