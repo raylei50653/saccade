@@ -2,6 +2,8 @@ import asyncio
 import argparse
 import os
 import torch
+import time
+from typing import cast, Any
 from perception.detector import Detector
 from perception.entropy import EntropyTrigger
 from perception.cropper import ZeroCopyCropper
@@ -9,6 +11,7 @@ from perception.feature_extractor import TRTFeatureExtractor
 from perception.tracker import SmartTracker
 from perception.drift_handler import SemanticDriftHandler
 from media.mediamtx_client import MediaMTXClient
+from storage.redis_cache import RedisCache
 from pipeline.orchestrator import PipelineOrchestrator
 from dotenv import load_dotenv
 
@@ -25,6 +28,7 @@ async def run_perception() -> None:
     detector = Detector()
     trigger = EntropyTrigger(threshold=0.8, cooldown=5.0)
     media = MediaMTXClient(use_local=use_local, dummy_video=dummy_video)
+    redis_cache = RedisCache() # 實時時空快取
     
     # 初始化 Phase 1~4 的零拷貝語義特徵提取組件
     cropper = ZeroCopyCropper(output_size=(512, 512))
@@ -40,7 +44,7 @@ async def run_perception() -> None:
         print("⏳ Waiting for media source (RTSP/Camera/Dummy)... retrying in 2s")
         await asyncio.sleep(2)
     
-    print("✅ Perception Pipeline connected via Zero-Copy GStreamer!")
+    print(f"✅ Perception Pipeline connected via Zero-Copy GStreamer!")
     
     # 等待第一影格就緒
     print("⏳ Waiting for first frame...")
@@ -59,6 +63,7 @@ async def run_perception() -> None:
                 continue
             
             frame_id += 1
+            now = time.time()
             
             with torch.no_grad():
                 # [1080, 1920, 3] -> [1, 3, 1080, 1920]
@@ -76,8 +81,20 @@ async def run_perception() -> None:
             if results and len(results[0].boxes) > 0 and results[0].boxes.id is not None:
                 boxes = results[0].boxes.xyxy
                 ids = results[0].boxes.id
+                cls_ids = results[0].boxes.cls
+                names = detector.model.names
                 
-                # 將 640x640 的 box 映射回 1080p
+                # --- [實時時空整合] ---
+                # 將 YOLO 偵測到的物件即時更新至 Redis 時空快取
+                for i, obj_id_tensor in enumerate(ids):
+                    obj_id = int(obj_id_tensor.item())
+                    label = names.get(int(cls_ids[i].item()), "unknown")
+                    box = boxes[i].tolist()
+                    # 這裡是異步非阻塞更新
+                    asyncio.create_task(redis_cache.update_object_track(obj_id, label, box, now))
+                # ----------------------
+
+                # 將 640x640 的 box 映射回 1080p 供裁切使用
                 scale_x = tensor.shape[1] / 640.0
                 scale_y = tensor.shape[0] / 640.0
                 boxes_1080p = boxes.clone()
@@ -99,7 +116,6 @@ async def run_perception() -> None:
                     
                     if novel_ids.numel() > 0:
                         print(f"✨ [Frame {frame_id}] Extracted novel semantics for Obj IDs: {novel_ids.tolist()}")
-                        # 未來可以在此處將 novel_features 寫入 Redis/ChromaDB
                 
                 # 觸發傳統事件
                 labels = detector.get_actionable_labels(results)
@@ -120,6 +136,7 @@ async def run_perception() -> None:
     finally:
         media.release()
         streamer.stop()
+        await redis_cache.disconnect()
         await trigger.close()
 
 def main() -> None:

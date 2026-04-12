@@ -19,9 +19,14 @@ case "$1" in
         exec uv run python main.py --mode perception
         ;;
     orchestrator)
-        echo "🚀 Starting Orchestrator (Logic & Cognition Loop)..."
+        echo "🚀 Starting Orchestrator (Logic & High-Speed Indexer)..."
         exec uv run python main.py --mode orchestrator
         ;;
+    api)
+        echo "🌐 Starting Saccade Retrieval API..."
+        exec uv run uvicorn api.server:app --host 0.0.0.0 --port 8000
+        ;;
+
     *)
         echo "Usage: $0 {vlm-backend|perception|orchestrator}"
         exit 1
