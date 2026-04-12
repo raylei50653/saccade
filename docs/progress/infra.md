@@ -1,14 +1,14 @@
 # Infra 模組進度 (2026-04-12)
 
-## 模組狀態：待啟動
+## 模組狀態：穩定 (Systemd --user 模式已實作)
 
-## 1. Systemd 服務 (systemd/)
-- [ ] **熱切換單元檔**: 支援 Perception 與 Cognition 模組的獨立啟停。
-- [ ] **失敗自啟動**: 偵測 GPU 驅動崩潰並嘗試重啟服務。
-- [ ] **環境變數注入**: 整合 `.env` 與 Nix Shell 環境。
+## 1. Systemd 服務 (infra/systemd/)
+- [x] **熱切換單元檔**: 支援 Perception, Cognition, MediaMTX 等模組的獨立啟停。
+- [x] **管理工具**: 透過 `scripts/saccade` 實作一鍵啟動與健康檢查。
+- [x] **User 模式**: 修正權限問題，全面遷移至 `systemctl --user`。
 
-## 2. MediaMTX 配置 (mediamtx.yml)
-- [ ] **串流路徑**: 設定 live/cognition 等不同延遲需求的 Path。
+## 2. MediaMTX 配置 (infra/mediamtx.yml)
+- [x] **串流路徑**: 已設定 RTSP/WebRTC 通用 Path。
 - [ ] **緩衝策略**: 針對 HLS/WebRTC 進行低延遲調優。
 - [ ] **身份驗證**: 設定串流接取的密鑰。
 

@@ -23,7 +23,7 @@ class LLMEngine:
         url = f"{self.base_url}/completion"
         
         # 針對 VLM 模型 (如 Qwen2-VL) 使用特定的 Prompt 格式與 image_data 欄位
-        full_prompt = f"USER: [img-0] {prompt}\nASSISTANT: " if image_data else f"USER: {prompt}\nASSISTANT: "
+        full_prompt = f"USER:[image_0]\n{prompt}\nASSISTANT:" if image_data else f"USER:{prompt}\nASSISTANT:"
         
         payload = {
             "prompt": full_prompt,
