@@ -1,7 +1,7 @@
 import gi # noqa: E402
 gi.require_version('Gst', '1.0') # noqa: E402
 gi.require_version('GstApp', '1.0') # noqa: E402
-from gi.repository import Gst # noqa: E402
+from gi.repository import Gst, GstApp # noqa: E402
 import torch # noqa: E402
 import numpy as np # noqa: E402
 from typing import Optional # noqa: E402
@@ -16,7 +16,7 @@ class GstZeroCopyDecoder:
     
     支援 RTSP 與本地檔案，強制使用 NVDEC (nvh264dec) 並嘗試保留在 CUDA 記憶體中。
     """
-    def __init__(self, source_url: str):
+    def __init__(self, source_url: str) -> None:
         self.source_url = source_url
         self.pipeline_str = self._build_pipeline_str()
         
@@ -54,7 +54,7 @@ class GstZeroCopyDecoder:
                 f"{decoder_path} ! {sink_path}"
             )
 
-    def _on_bus_message(self, bus, message):
+    def _on_bus_message(self, bus: Gst.Bus, message: Gst.Message) -> None:
         t = message.type
         if t == Gst.MessageType.ERROR:
             err, debug = message.parse_error()
@@ -64,7 +64,7 @@ class GstZeroCopyDecoder:
         elif t == Gst.MessageType.EOS:
             print("🏁 GStreamer: End of stream")
 
-    def _on_new_sample(self, sink):
+    def _on_new_sample(self, sink: GstApp.AppSink) -> Gst.FlowReturn:
         sample = sink.emit("pull-sample")
         if not sample:
             return Gst.FlowReturn.ERROR
@@ -97,7 +97,7 @@ class GstZeroCopyDecoder:
         
         return Gst.FlowReturn.OK
 
-    def start(self):
+    def start(self) -> None:
         self._running = True
         self.pipeline.set_state(Gst.State.PLAYING)
         print(f"🚀 GStreamer Pipeline started: {self.source_url}")
@@ -106,7 +106,7 @@ class GstZeroCopyDecoder:
         with self._lock:
             return self.last_tensor
 
-    def stop(self):
+    def stop(self) -> None:
         self._running = False
         self.pipeline.set_state(Gst.State.NULL)
 

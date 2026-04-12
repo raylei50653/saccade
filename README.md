@@ -14,24 +14,24 @@ Like the saccadic motion of the eye — fast scanning, then focused understandin
 
 **Fast track (Perception)** runs continuously at 140+ FPS, evaluating every frame using YOLO and TensorRT. It handles Zero-Copy hardware decoding (NVDEC) to keep the pipeline entirely on the GPU.
 
-**Slow track (Semantic Extraction)** operates purely on GPU via an asynchronous CUDA stream. It uses `torchvision.ops.roi_align` for microsecond-level cropping and a TensorRT-optimized SigLIP model to extract high-dimensional semantic features. These are filtered for semantic drift and written to ChromaDB alongside structured metadata.
+**Slow track (Semantic Extraction)** operates purely on GPU via an asynchronous CUDA stream. It uses `torchvision.ops.roi_align` for microsecond-level cropping and a TensorRT-optimized **Jina-CLIP-v2** model to extract high-dimensional (1024D) semantic features at 512x512 resolution. These are filtered for semantic drift and written to ChromaDB alongside structured metadata.
 
 ## Key Design Decisions
 
-**Pure Vision-Vector Pipeline** — We transitioned from heavy VLMs to a pure YOLO + SigLIP (TensorRT) architecture, reducing VRAM usage from ~8GB to just 1.5GB while scaling throughput massively.
+**Pure Vision-Vector Pipeline** — We transitioned from heavy VLMs to a pure YOLO + Jina-CLIP-v2 (TensorRT) architecture, reducing VRAM usage while scaling throughput massively.
 
 **Semantic Drift Handling** — To prevent database bloat, extracted features are compared against a GPU-based hot cache using Cosine Similarity. Only features indicating a significant semantic shift are written to the vector database.
 
 **Zero-copy GPU path** — video frames travel `NVDEC → NVMM → CUDA Tensor → TensorRT` without touching CPU memory, minimising PCIe bandwidth usage and CPU load.
 
-**Vector-indexed memory** — every novel detection is embedded, tagged, and stored with a Unix timestamp in ChromaDB. Supported by Hybrid Search (Semantic + Metadata + Temporal filtering).
+**Vector-indexed memory** — every novel detection is embedded using Jina-CLIP-v2, tagged, and stored with a Unix timestamp in ChromaDB. Supported by Hybrid Search (Semantic + Metadata + Temporal filtering).
 
 ## Tech Stack
 
 | Layer | Technology |
 | :--- | :--- |
 | Detection | YOLO11 (TensorRT Engine), CV tracking |
-| Extraction | SigLIP SO400M (TensorRT FP16 Engine) |
+| Extraction | Jina-CLIP-v2 (TensorRT FP16 Engine, 512x512) |
 | Media | MediaMTX, GStreamer (nvh264dec), FFmpeg |
 | Memory | ChromaDB (vector), Redis (cache/queue) |
 | Compute | TensorRT, CUDA Streams, NVDEC |

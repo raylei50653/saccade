@@ -23,7 +23,8 @@ class RedisCache:
 
     async def update_object_track(self, obj_id: int, label: str, box: List[float], timestamp: float) -> None:
         """核心整合：更新 YOLO 目標的時空軌跡"""
-        if not self.client: await self.connect()
+        if not self.client:
+            await self.connect()
         if self.client:
             key = f"saccade:obj:{obj_id}"
             raw_data = await cast(Awaitable[Optional[str]], self.client.get(key))
@@ -47,7 +48,8 @@ class RedisCache:
 
     async def get_active_objects(self) -> List[str]:
         """獲取目前所有活躍 (最近 5 分鐘內出現) 的目標 ID"""
-        if not self.client: await self.connect()
+        if not self.client:
+            await self.connect()
         if self.client:
             keys = await cast(Awaitable[List[bytes]], self.client.keys("saccade:obj:*"))
             return [k.decode('utf-8').split(':')[-1] for k in keys]
@@ -55,7 +57,8 @@ class RedisCache:
 
     async def get_object_history(self, obj_id: int) -> Optional[Dict[str, Any]]:
         """獲取特定物件的時空歷史"""
-        if not self.client: await self.connect()
+        if not self.client:
+            await self.connect()
         if self.client:
             key = f"saccade:obj:{obj_id}"
             data = await cast(Awaitable[Optional[str]], self.client.get(key))
@@ -63,7 +66,8 @@ class RedisCache:
         return None
 
     async def publish_event(self, queue: str, event_data: Dict[str, Any]) -> None:
-        if not self.client: await self.connect()
+        if not self.client:
+            await self.connect()
         if self.client:
             await cast(Awaitable[Any], self.client.rpush(queue, json.dumps(event_data)))
             await cast(Awaitable[Any], self.client.expire(queue, 3600))

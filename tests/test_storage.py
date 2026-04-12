@@ -15,18 +15,21 @@ async def test_redis_cache_operations():
         cache = RedisCache()
         await cache.connect()
         
+        # Set default return for get to None
+        mock_client.get.return_value = None
+        
         # Test event publish
         await cache.publish_event("test_q", {"data": 1})
         assert mock_client.rpush.called
         
-        # Test state update
-        await cache.update_object_state("123", {"pos": [1, 2]})
+        # Test object track update
+        await cache.update_object_track(123, "person", [0, 0, 10, 10], 12345.67)
         assert mock_client.set.called
         
-        # Test state get
-        mock_client.get.return_value = '{"pos": [1, 2]}'
-        state = await cache.get_object_state("123")
-        assert state["pos"] == [1, 2]
+        # Test object history get
+        mock_client.get.return_value = '{"id": 123, "label": "person"}'
+        state = await cache.get_object_history(123)
+        assert state["label"] == "person"
 
 def test_chroma_store_operations():
     test_db = "./storage/test_pytest_db"

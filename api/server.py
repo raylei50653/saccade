@@ -1,10 +1,8 @@
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
+from typing import Optional, Dict, Any
 from storage.redis_cache import RedisCache
 from storage.chroma_store import ChromaStore
-import time
-import os
 
 app = FastAPI(title="Saccade Spatiotemporal Retrieval API")
 
@@ -19,19 +17,19 @@ class SearchQuery(BaseModel):
     is_anomaly: Optional[bool] = None
 
 @app.on_event("startup")
-async def startup():
+async def startup() -> None:
     await redis_cache.connect()
 
 @app.on_event("shutdown")
-async def shutdown():
+async def shutdown() -> None:
     await redis_cache.disconnect()
 
 @app.get("/")
-async def root():
+async def root() -> Dict[str, str]:
     return {"status": "online", "system": "Saccade", "api_version": "1.0"}
 
 @app.get("/objects")
-async def list_active_objects():
+async def list_active_objects() -> Dict[str, Any]:
     """獲取目前所有活躍 (最近 5 分鐘內出現) 的目標 ID"""
     try:
         object_ids = await redis_cache.get_active_objects()
@@ -40,7 +38,7 @@ async def list_active_objects():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/objects/{obj_id}")
-async def get_object_history(obj_id: int):
+async def get_object_history(obj_id: int) -> Dict[str, Any]:
     """獲取特定物件的詳細時空紀錄與軌跡"""
     history = await redis_cache.get_object_history(obj_id)
     if not history:
@@ -53,7 +51,7 @@ async def get_object_history(obj_id: int):
     return history
 
 @app.post("/search")
-async def semantic_search(query: SearchQuery):
+async def semantic_search(query: SearchQuery) -> Dict[str, Any]:
     """
     執行時空語義檢索
     範例：查詢 'person with suspicious bag' 且只看異常紀錄
@@ -82,7 +80,3 @@ async def semantic_search(query: SearchQuery):
         return {"query": query.text, "results": formatted_results}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)

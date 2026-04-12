@@ -43,7 +43,7 @@ class ChromaStore:
         3. 異常標籤 (僅看 ALERT)
         4. 特定物件 (包含 car)
         """
-        where_clauses = []
+        where_clauses: List[Dict[str, Any]] = []
         
         if start_time:
             where_clauses.append({"timestamp": {"$gte": start_time}})
@@ -54,7 +54,7 @@ class ChromaStore:
             where_clauses.append({"objects": {"$contains": object_filter}})
 
         # 構建 ChromaDB $and 條件
-        where = None
+        where: Any = None
         if len(where_clauses) > 1:
             where = {"$and": where_clauses}
         elif len(where_clauses) == 1:
@@ -63,7 +63,7 @@ class ChromaStore:
         results = self.collection.query(
             query_texts=[query_text],
             n_results=n_results,
-            where=where # type: ignore[arg-type]
+            where=where
         )
         return cast(Dict[str, Any], results)
 

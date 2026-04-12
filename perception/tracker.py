@@ -1,6 +1,6 @@
 import torch
 import torchvision.ops as ops
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Any, cast
 import math
 
 class SmartTracker:
@@ -11,7 +11,7 @@ class SmartTracker:
     2. 基於規則 (New ID, IOU Change, Velocity Change) 篩選需要更新特徵的物件。
     3. 在獨立的 CUDA Stream 中非同步觸發特徵提取，不阻塞主 YOLO 推理。
     """
-    def __init__(self, iou_threshold: float = 0.7, velocity_angle_threshold: float = 45.0):
+    def __init__(self, iou_threshold: float = 0.7, velocity_angle_threshold: float = 45.0) -> None:
         self.iou_threshold = iou_threshold
         # 將角度閾值轉為 Cosine 相似度閾值
         self.cos_threshold = math.cos(math.radians(velocity_angle_threshold))
@@ -20,7 +20,7 @@ class SmartTracker:
         self.states: Dict[int, Dict[str, torch.Tensor]] = {}
         
         # 建立獨立的 CUDA Stream 供特徵提取使用
-        self.extraction_stream = torch.cuda.Stream()
+        self.extraction_stream = torch.cuda.Stream()  # type: ignore[no-untyped-call]
         
     def _calculate_center(self, box: torch.Tensor) -> torch.Tensor:
         """計算 BBox 中心點 (x, y)"""
@@ -58,7 +58,7 @@ class SmartTracker:
             norm_last = torch.norm(last_velocity)
             
             # 若移動距離極小 (雜訊)，不視為方向改變
-            if norm_curr > 2.0 and norm_last > 2.0:
+            if norm_curr.item() > 2.0 and norm_last.item() > 2.0:
                 cos_sim = torch.dot(current_velocity, last_velocity) / (norm_curr * norm_last)
                 if cos_sim.item() < self.cos_threshold:
                     return True
@@ -105,7 +105,7 @@ class SmartTracker:
         return obj_ids[indices_tensor], boxes[indices_tensor]
 
     def async_extract_features(self, frame_tensor: torch.Tensor, extract_boxes: torch.Tensor, 
-                               cropper, extractor) -> Optional[torch.Tensor]:
+                               cropper: Any, extractor: Any) -> Optional[torch.Tensor]:
         """
         在獨立的 CUDA Stream 中執行裁切與特徵提取
         """
@@ -120,10 +120,7 @@ class SmartTracker:
             # 2. TensorRT 特徵提取
             features = extractor.extract(crops)
             
-        # 注意：我們沒有在這裡呼叫 torch.cuda.synchronize()。
-        # 因此主迴圈的 YOLO 推理不會被阻塞。
-        # 當後續需要使用這批特徵寫入 DB 時，才需要確保這個 Stream 執行完畢。
-        return features
+        return cast(Optional[torch.Tensor], features)
 
 if __name__ == "__main__":
     print("🚀 Testing SmartTracker Logic...")

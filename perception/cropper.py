@@ -1,6 +1,6 @@
 import torch
 import torchvision.ops as ops
-from typing import Tuple
+from typing import Tuple, cast
 
 class ZeroCopyCropper:
     """
@@ -9,7 +9,7 @@ class ZeroCopyCropper:
     直接在 GPU 顯存中接收原始高解析度 Frame Tensor 與 YOLO Bounding Boxes，
     使用 torchvision.ops.roi_align 進行批次裁切與縮放，產出 CLIP/SigLIP 相容的 Tensor。
     """
-    def __init__(self, output_size: Tuple[int, int] = (512, 512)):
+    def __init__(self, output_size: Tuple[int, int] = (512, 512)) -> None:
         self.output_size = output_size
 
     def process(self, frame_tensor: torch.Tensor, boxes: torch.Tensor) -> torch.Tensor:
@@ -33,8 +33,6 @@ class ZeroCopyCropper:
         rois = torch.cat([batch_indices, boxes], dim=1)
         
         # 使用 RoI Align 進行硬體加速的裁切與對齊
-        # spatial_scale=1.0 表示 boxes 的座標比例與 frame_tensor 的像素比例為 1:1
-        # aligned=True 確保像素採樣中心對齊，提升邊緣精準度
         crops = ops.roi_align(
             input=frame_tensor, 
             boxes=rois, 
@@ -43,7 +41,7 @@ class ZeroCopyCropper:
             aligned=True
         )
         
-        return crops
+        return cast(torch.Tensor, crops)
 
 if __name__ == "__main__":
     # 微秒級延遲測試 (Dry Run)
@@ -70,7 +68,7 @@ if __name__ == "__main__":
     
     # 測速
     start = time.perf_counter()
-    for _ in range(100):
+    for i in range(100):
         out_crops = cropper.process(dummy_frame, dummy_boxes)
     torch.cuda.synchronize()
     latency = (time.perf_counter() - start) / 100 * 1000 * 1000 # 轉換為微秒 (µs)
