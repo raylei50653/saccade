@@ -1,0 +1,16 @@
+# MediaMTX 基礎配置 (通用版本)
+paths:
+  all:
+    # 預設允許所有路徑接收推流
+    source: publisher
+
+# 監聽所有網路介面
+rtspAddress: :8554
+hlsAddress: :8888
+webrtcAddress: :8889
+
+# 強制使用 TCP 以提高穩定性
+rtspTransports: [tcp]
+
+# 允許來自任何 IP 的連線
+# 注意：在較新版本中此欄位可能不在全域，我們改用最簡約配置

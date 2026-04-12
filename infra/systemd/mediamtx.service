@@ -1,0 +1,16 @@
+[Unit]
+Description=MediaMTX RTSP Server
+After=network.target
+
+[Service]
+Type=simple
+User=ray
+WorkingDirectory=/home/ray/developer/ai/YOLO_LLM
+# 直接執行 mediamtx，並載入設定檔
+ExecStart=/usr/bin/env mediamtx /home/ray/developer/ai/YOLO_LLM/infra/mediamtx.yml
+
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
