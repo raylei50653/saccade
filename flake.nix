@@ -1,5 +1,5 @@
 {
-  description = "Saccade Development Environment (CUDA + GStreamer + UV)";
+  description = "Saccade Development Environment (CUDA + GStreamer + UV + Zero-Copy)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
@@ -29,18 +29,22 @@
             cudaPackages.cudatoolkit
             cudaPackages.cudnn
             cudaPackages.cuda_nvcc
-            llama-cpp
+            cudaPackages.tensorrt
             
-            # GStreamer & Media
+            # GStreamer & Media (Added gobject-introspection for pygobject)
             gst_all_1.gstreamer
             gst_all_1.gst-plugins-base
             gst_all_1.gst-plugins-good
             gst_all_1.gst-plugins-bad
             gst_all_1.gst-plugins-ugly
             gst_all_1.gst-vaapi
+            gst_all_1.gst-python
+            gobject-introspection
+            pkg-config
+            cairo
             ffmpeg_6-full
 
-            # System Libraries (Required for OpenCV, CUDA, and LLM backends)
+            # System Libraries (Required for OpenCV, CUDA, and ONNX backends)
             zlib
             glib
             libGL
@@ -49,6 +53,7 @@
           ];
 
           shellHook = ''
+            # Dynamic Library Path (Crucial for ONNX GPU & TensorRT)
             export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath [
               pkgs.stdenv.cc.cc.lib
               pkgs.zlib
@@ -56,9 +61,18 @@
               pkgs.libGL
               pkgs.cudaPackages.cudatoolkit
               pkgs.cudaPackages.cudnn
+              pkgs.cudaPackages.tensorrt
               pkgs.linuxPackages.nvidia_x11
             ]}"
             
+            # GStreamer & GObject path for pygobject/gi
+            export GI_TYPELIB_PATH="${pkgs.lib.makeSearchPath "lib/girepository-1.0" [
+              pkgs.gst_all_1.gstreamer
+              pkgs.gst_all_1.gst-plugins-base
+              pkgs.glib
+              pkgs.cairo
+            ]}"
+
             # CUDA configuration
             export CUDA_PATH=${pkgs.cudaPackages.cudatoolkit}
             export EXTRA_LDFLAGS="-L/lib -L${pkgs.linuxPackages.nvidia_x11}/lib"
@@ -67,13 +81,12 @@
             # Python path for local modules
             export PYTHONPATH=$PYTHONPATH:$(pwd)
 
-            echo "🚀 Saccade GPU environment loaded (CUDA + GStreamer + Python 3.12)"
+            echo "🚀 Saccade GPU environment loaded (Zero-Copy + TRT + GStreamer)"
             echo "💡 Tip: Run 'uv sync' to initialize Python dependencies."
-            echo "⚠️  MediaMTX not managed by Nix — see infra/mediamtx.yml"
           '';
         };
 
-        # 輕量級 CI 環境 (GitHub Actions 使用，排除 GPU 驅動)
+        # 輕量級 CI 環境 (GitHub Actions 使用)
         devShells.ci = pkgs.mkShell {
           name = "saccade-ci-shell";
           buildInputs = with pkgs; [
