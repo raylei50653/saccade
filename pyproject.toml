@@ -21,7 +21,7 @@ dependencies = [
     "pytest",
     "httpx",
     "nvidia-ml-py",
-    "redis[asyncio]",
+    "lap>=0.5.13",
 ]
 
 [tool.mypy]
