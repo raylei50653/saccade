@@ -2,7 +2,7 @@ import pytest
 import os
 import shutil
 import time
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import patch, AsyncMock
 from storage.redis_cache import RedisCache
 from storage.chroma_store import ChromaStore
 

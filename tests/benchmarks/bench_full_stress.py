@@ -1,9 +1,7 @@
 import asyncio
-import os
 import time
 import subprocess
 import pynvml
-from datetime import datetime
 
 async def monitor_vram(duration: int):
     """即時監測 VRAM 變化"""
@@ -24,7 +22,7 @@ async def monitor_vram(duration: int):
     return max_used
 
 async def run_stress_test():
-    print(f"🚀 [Stress Test] Starting 20s Demo Stress Test (-c 32768, -np 4)...")
+    print("🚀 [Stress Test] Starting 20s Demo Stress Test (-c 32768, -np 4)...")
     
     # 1. 確保相機開啟
     subprocess.run(["./scripts/saccade", "camera-on"], check=True)
@@ -39,10 +37,10 @@ async def run_stress_test():
     subprocess.run(["./scripts/saccade", "camera-off"], check=True)
     
     max_vram = await monitor_task
-    print(f"\n📊 --- [ Stress Test Results ] ---")
+    print("\n📊 --- [ Stress Test Results ] ---")
     print(f"  - Peak VRAM Usage: {max_vram:.2f} GB")
-    print(f"  - System Context: 32768")
-    print(f"  - Slots (NP): 4")
+    print("  - System Context: 32768")
+    print("  - Slots (NP): 4")
     
     # 4. 擷取日誌觀察瓶頸
     print("\n🔍 [Log Analysis] Recent Orchestrator Logs:")

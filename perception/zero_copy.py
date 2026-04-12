@@ -18,6 +18,6 @@
 """
 
 class PerceptionPathInfo:
-    def __init__(self):
+    def __init__(self) -> None:
         self.current_path = "OpenCV + NVDEC"
         self.experimental_path = "NVIDIA DALI"

@@ -1,7 +1,5 @@
 import asyncio
 import time
-import cv2
-import numpy as np
 import os
 from perception.detector import Detector
 from media.mediamtx_client import MediaMTXClient
@@ -42,7 +40,7 @@ async def benchmark_yolo():
         start_frame = time.perf_counter()
         
         # 執行偵測
-        results = detector.detect(frame)
+        _ = detector.detect(frame)
         
         latency = (time.perf_counter() - start_frame) * 1000
         latencies.append(latency)
@@ -55,7 +53,7 @@ async def benchmark_yolo():
     avg_latency = sum(latencies) / len(latencies)
     fps = num_frames / total_time
     
-    print(f"\n✅ Benchmark Complete!")
+    print("\n✅ Benchmark Complete!")
     print(f"  - Average Inference Latency: {avg_latency:.2f} ms")
     print(f"  - End-to-End Throughput: {fps:.2f} FPS")
     print(f"  - Resolution: {frame.shape[1]}x{frame.shape[0]}")

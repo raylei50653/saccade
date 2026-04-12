@@ -81,7 +81,7 @@ class PipelineOrchestrator:
                     "timestamp": time.time()
                 }
             )
-            print(f"💾 [Storage] Analysis saved to ChromaDB.")
+            print("💾 [Storage] Analysis saved to ChromaDB.")
         except Exception as e:
             print(f"❌ [Storage] Failed to save memory: {e}")
 

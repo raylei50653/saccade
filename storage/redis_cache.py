@@ -27,7 +27,8 @@ class RedisCache:
 
     async def publish_event(self, queue: str, event_data: Dict[str, Any]) -> None:
         """發布事件至指定的 Redis 佇列 (List)"""
-        if not self.client: await self.connect()
+        if not self.client:
+            await self.connect()
         if self.client:
             await cast(Awaitable[Any], self.client.rpush(queue, json.dumps(event_data)))
             # 設定預設 TTL 為 1 小時，防止記憶體溢出
@@ -35,14 +36,16 @@ class RedisCache:
 
     async def update_object_state(self, obj_id: str, state: Dict[str, Any], ttl: int = 60) -> None:
         """更新追蹤目標的即時狀態 (如最後位置、時間)"""
-        if not self.client: await self.connect()
+        if not self.client:
+            await self.connect()
         if self.client:
             key = f"saccade:obj:{obj_id}"
             await cast(Awaitable[Any], self.client.set(key, json.dumps(state), ex=ttl))
 
     async def get_object_state(self, obj_id: str) -> Optional[Dict[str, Any]]:
         """獲取目標的最後已知狀態"""
-        if not self.client: await self.connect()
+        if not self.client:
+            await self.connect()
         if self.client:
             key = f"saccade:obj:{obj_id}"
             data = await cast(Awaitable[Optional[str]], self.client.get(key))
@@ -51,7 +54,8 @@ class RedisCache:
 
     async def get_active_objects(self) -> List[str]:
         """獲取目前所有活躍 (未過期) 的追蹤目標 ID"""
-        if not self.client: await self.connect()
+        if not self.client:
+            await self.connect()
         if self.client:
             keys = await cast(Awaitable[List[bytes]], self.client.keys("saccade:obj:*"))
             return [k.decode('utf-8').split(':')[-1] for k in keys]
