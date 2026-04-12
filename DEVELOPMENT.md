@@ -4,20 +4,20 @@
 
 ## 1. 系統架構核心 (The 5 Pillars)
 
-本系統採用雙軌非同步管線，以確保在有限的 VRAM 資源下，達到即時回應與深度分析的平衡。
+本系統採用純視覺與向量檢索管線，以確保在極低 VRAM (1.5GB) 佔用下，達到毫秒級即時回應與精準檢索。
 
-1. **雙軌非同步管線 (Bifurcated Pipeline)**
-   - **快路徑 (感知)：** 使用 YOLO26 與傳統 CV 追蹤技術，負責基礎偵測與資訊熵評估。
-   - **慢路徑 (認知)：** LLM / VLM 僅在偵測到高價值事件時，從 MediaMTX 拉取關鍵幀進行深入分析。
+1. **純視覺向量管線 (Vision-Vector Pipeline)**
+   - **感知層 (Perception)：** 使用 YOLO11 與 TensorRT 引擎，負責即時物件追蹤與偵測。
+   - **特徵提取 (Extraction)：** 運用 Zero-Copy Cropper 與 SigLIP TRT 引擎，僅針對「新出現」或「行為發生重大改變」的物件提取高維特徵。
 
-2. **變範圍自動分配 (Dynamic Compute Provisioning)**
-   - 在 12GB VRAM 限制下，利用 **llama.cpp** 的彈性調度能力，動態調整模型上下文 (`-c`) 與 Offload 層數 (`-ngl`)，必要時將計算負載平滑遷移至 64GB 系統主記憶體。
+2. **語義漂移去重 (Semantic Drift Handling)**
+   - 透過 GPU 內的 `Cosine Similarity`，將新特徵與快取進行比對。避免連續幀重複存儲，僅當物體姿態或特徵產生「漂移 (Drift)」時寫入。
 
 3. **防禦性熱切換 (Systemd + NVML Hot Swapping)**
-   - 透過 Systemd 管理進程，配合 MediaMTX 處理串流緩衝，確保在 AI 模型切換或重啟時，視訊串流不中斷。
+   - 透過 Systemd `--user` 管理進程，配合 MediaMTX 處理串流緩衝，確保在模組切換或重啟時，視訊串流不中斷。
 
 4. **底層算力優化 (Pure NVIDIA Native Zero-Copy)**
-   - 實現 MediaMTX -> NVDEC -> NVMM -> CUDA Tensor 的零拷貝數據路徑，最小化 CPU 與 GPU 間的數據搬移。
+   - 實現 `MediaMTX -> NVDEC -> CUDA Tensor -> TensorRT (YOLO & SigLIP)` 的 100% 零拷貝數據路徑，全程無 CPU 記憶體搬運。
 
 5. **環境與狀態管理 (Unified Environment)**
    - **Nix Flakes：** 鎖定 CUDA、GStreamer 等系統級依賴。
@@ -34,21 +34,29 @@
   # 安裝 Python 依賴
   uv sync
   ```
+  
+- **編譯 TensorRT 模型：**
+  ```bash
+  # 首次啟動前需將 ONNX 轉為 TRT Engine
+  uv run python scripts/build_engine.py
+  ```
 
 ## 3. 媒體與串流管理 (Media Gateway)
 
-使用 **MediaMTX** 作為核心媒介閘道，實現推理單元與影像源的解耦。
+使用 **MediaMTX** 作為核心媒介閘道，並以 GStreamer `nvh264dec` 作為解碼前端。
 
-- **媒體路徑：** 攝像頭/FFmpeg -> [RTSP/RTMP] -> **MediaMTX** -> [RTSP/WebRTC] -> 推理引擎
-- **壓力測試：** 使用 `ffmpeg -re -i source.mp4 -c copy -f rtsp rtsp://localhost:8554/stream` 進行多路串流壓力模擬。
+- **啟動所有服務：**
+  ```bash
+  ./scripts/saccade up
+  ```
 
 ## 4. 關鍵技術堆疊
 
 | 層級 | 技術 |
 | :--- | :--- |
-| **算法** | YOLO26, Qwen-3.5 (GGUF), CLIP/SigLIP, **llama.cpp (推理後端)** |
-| **媒體** | MediaMTX, FFmpeg (NVDEC/NVENC), GStreamer |
-| **計算與資源** | TensorRT, PagedAttention, NVML |
+| **算法** | YOLO11 (TRT), SigLIP SO400M (TRT FP16), `torchvision.ops.roi_align` |
+| **媒體** | MediaMTX, FFmpeg (NVDEC), GStreamer (`appsink`) |
+| **計算與資源** | TensorRT, CUDA Streams, Pynvml |
 | **環境維運** | Nix Flakes, uv (Rust-based) |
 
 ## 5. 開發約定

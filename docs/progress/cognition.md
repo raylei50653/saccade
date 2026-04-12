@@ -1,30 +1,20 @@
 # Cognition 模組進度核對 (2026-04-12)
 
-## 模組狀態：進行中 (VLM 管線已打通)
+## 模組狀態：已棄用 / 架構轉型 (Deprecated)
 
-## 1. LLM 引擎 (llm_engine.py)
-- [x] **基礎實作**: 非同步 `httpx` 客戶端封裝。
-- [x] **伺服器後端**: 採用 `llama-server` (llama.cpp) 提供 HTTP API。
-- [x] **Systemd 整合**: 完成 `yolo-cognition.service` 服務配置。
-- [x] **超時管理**: 實作了 60 秒異步超時機制。
+> 💡 **重要通知：** 
+> 為了在邊緣設備 (12GB VRAM) 上榨出極限吞吐量並確保毫秒級延遲，Saccade 系統已將架構從「雙軌 VLM 認知」轉移至「純視覺向量 (Pure Vision-Vector) 管線」。
+> 原本由 `llama-server` (VLM) 承擔的認知與分析工作，現在已完全轉由 `perception/` 模組內的 **SigLIP TensorRT 引擎** 配合 **Zero-Copy 特徵提取** 所取代。
 
-## 2. 視覺推理 (vlm_engine.py / orchestrator.py)
-- [x] **多模態對接**: 整合 `llama-server` 的視覺提示詞介面。
-- [x] **視覺提示詞**: 實作將影格編碼為 Base64 並傳輸，並優化安全性分析提示詞。
-- [x] **標籤轉換**: 實作將 YOLO Class ID 轉換為人類可讀標籤。
+## 已停用組件
+- [x] **`llm_engine.py`**: VLM HTTP 請求與 60 秒超時機制 (已從管線移除)。
+- [x] **`yolo-vlm-backend.service`**: Systemd 後台服務 (已停用，釋放約 6.5GB VRAM)。
+- [x] **`resource_manager.py`**: 由於不再需要動態調配 `-c` 與 `-np`，VRAM 管理器轉為備用。
 
-## 3. 幀選取器 (frame_selector.py)
-- [x] **資訊熵介面**: 接收來自 `perception/entropy.py` 的觸發信號。
-- [ ] **動態抓幀**: 串接更穩定的背景抓幀機制 (已在 MediaMTXClient 實作)。
+## 歷史里程碑 (存檔)
+- 曾成功實作基於 VRAM 狀態的模型動態載入。
+- 曾成功達成 16-Slot 並發處理與 `[image_0]` 多模態提示詞的閉環分析。
 
-## 4. 資源調度器 (resource_manager.py)
-- [x] **VRAM 動態管理**: 透過 `pynvml` 監測 VRAM，並根據 `llm_profiles.yaml` 自動選擇最優配置。
-- [x] **預留機制**: 實作 `reserve_mb` 邏輯，保護 Perception (YOLO) 的運作空間。
-
-## 已完成里程碑
-- [x] **VRAM 動態管理**: 實作基於當前資源狀態的模型配置選擇邏輯 (Pillar 2)。
-- [x] **VLM 閉環驗證**: 成功從串流抓取影格並獲得模型語義描述。
-- [x] **提示詞優化**: 建立專業安全 AI 角色設定。
-
-## 最後更新
-2026-04-12
+## 架構演進
+- 有關「特徵提取 (Feature Extraction)」的最新進展，請參閱 [perception.md](perception.md) 的 Phase 1 ~ 4 紀錄。
+- 有關「時空記憶 (Memory)」的進展，請參閱 [storage.md](storage.md)。

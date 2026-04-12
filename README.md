@@ -6,39 +6,35 @@ Continuous visual perception with vector DB memory — every detection tagged, t
 
 ## Overview
 
-Saccade is a dual-track visual reasoning system designed to run on constrained GPU hardware (12GB VRAM). It combines continuous real-time perception with event-driven cognitive analysis, storing every detection as a vector-indexed, time-tagged memory queryable by semantic description.
+Saccade is a dual-track visual reasoning system designed to run on constrained GPU hardware (12GB VRAM). It combines continuous real-time perception with event-driven semantic extraction, storing every detection and feature vector as a time-tagged memory queryable by semantic description.
 
-Like the saccadic motion of the eye — fast scanning, then focused understanding — Saccade separates perception from cognition into two asynchronous tracks that run in parallel without blocking each other.
+Like the saccadic motion of the eye — fast scanning, then focused understanding — Saccade separates bounding box perception from deep semantic feature extraction into two asynchronous tracks that run in parallel without blocking each other.
 
 ## Architecture
 
-![架構圖](./assets/images/architecture.svg)
+**Fast track (Perception)** runs continuously at 140+ FPS, evaluating every frame using YOLO and TensorRT. It handles Zero-Copy hardware decoding (NVDEC) to keep the pipeline entirely on the GPU.
 
-**Fast track** runs continuously, evaluating every frame for information entropy. Only high-value events trigger the slow track — keeping the LLM off the hot path entirely.
-
-**Slow track** pulls keyframes from MediaMTX on demand, runs deep visual-language analysis, and writes structured detections to ChromaDB with semantic tags and timestamps.
+**Slow track (Semantic Extraction)** operates purely on GPU via an asynchronous CUDA stream. It uses `torchvision.ops.roi_align` for microsecond-level cropping and a TensorRT-optimized SigLIP model to extract high-dimensional semantic features. These are filtered for semantic drift and written to ChromaDB alongside structured metadata.
 
 ## Key Design Decisions
 
-**Bifurcated pipeline** — perception and cognition run as independent services. A Redis queue is the only coupling point between them. Either service can restart without interrupting the video stream.
+**Pure Vision-Vector Pipeline** — We transitioned from heavy VLMs to a pure YOLO + SigLIP (TensorRT) architecture, reducing VRAM usage from ~8GB to just 1.5GB while scaling throughput massively.
 
-**Dynamic compute provisioning** — llama.cpp `-c` (context) and `-ngl` (GPU offload layers) are tuned at runtime based on available VRAM, with smooth fallback to 64GB system RAM when needed.
+**Semantic Drift Handling** — To prevent database bloat, extracted features are compared against a GPU-based hot cache using Cosine Similarity. Only features indicating a significant semantic shift are written to the vector database.
 
-**Zero-copy GPU path** — video frames travel `NVDEC → NVMM → CUDA Tensor` without touching CPU memory, minimising PCIe bandwidth usage.
+**Zero-copy GPU path** — video frames travel `NVDEC → NVMM → CUDA Tensor → TensorRT` without touching CPU memory, minimising PCIe bandwidth usage and CPU load.
 
-**Stateless inference** — inference units hold no persistent state. All memory lives in ChromaDB (vector store) and Redis (event queue), so services are safe to hot-swap via Systemd without data loss.
-
-**Vector-indexed memory** — every detection is embedded, tagged, and stored with a Unix timestamp. Query examples: *"show all people detected near the entrance after 18:00"*, *"find frames where a vehicle was stationary for more than 30 seconds"*.
+**Vector-indexed memory** — every novel detection is embedded, tagged, and stored with a Unix timestamp in ChromaDB. Supported by Hybrid Search (Semantic + Metadata + Temporal filtering).
 
 ## Tech Stack
 
 | Layer | Technology |
 | :--- | :--- |
-| Detection | YOLO26, CV tracking |
-| Cognition | Qwen-3.5 (GGUF), CLIP, SigLIP, llama.cpp |
-| Media | MediaMTX, FFmpeg (NVDEC/NVENC), GStreamer |
+| Detection | YOLO11 (TensorRT Engine), CV tracking |
+| Extraction | SigLIP SO400M (TensorRT FP16 Engine) |
+| Media | MediaMTX, GStreamer (nvh264dec), FFmpeg |
 | Memory | ChromaDB (vector), Redis (cache/queue) |
-| Compute | TensorRT, PagedAttention, NVML |
+| Compute | TensorRT, CUDA Streams, NVDEC |
 | Environment | Nix Flakes, uv |
 
 ## Getting Started
@@ -52,16 +48,8 @@ nix develop
 # Install Python dependencies
 uv sync
 
-# Copy and configure environment variables
-cp .env.example .env
-
 # Start the pipeline
-python main.py
-```
-
-**Stream pressure test:**
-```bash
-ffmpeg -re -i source.mp4 -c copy -f rtsp rtsp://localhost:8554/stream
+./scripts/saccade up
 ```
 
 ## Project Structure
@@ -70,14 +58,12 @@ Detailed functional mapping of each directory can be found in [**docs/architectu
 
 ```bash
 saccade/
-├── perception/    # Fast track: YOLO detection & Entropy evaluation
-├── cognition/     # Slow track: VLM analysis & VRAM resource management
-├── pipeline/      # Orchestrator: Event routing & System health
-├── media/         # Streaming: MediaMTX client & FFmpeg utilities
-├── storage/       # Memory: ChromaDB (Vector) & Redis (State)
+├── perception/    # Perception: YOLO TRT, Zero-Copy Cropping, SigLIP TRT, Semantic Drift
+├── pipeline/      # Orchestrator: Event routing, metadata indexing & System health
+├── media/         # Streaming: MediaMTX client (GStreamer Zero-Copy) & FFmpeg utilities
+├── storage/       # Memory: ChromaDB (Vector + Metadata) & Redis (State)
 ├── infra/         # DevOps: Systemd units & MediaMTX config
-├── configs/       # Settings: LLM profiles & model thresholds
-├── scripts/       # CLI Tools: Service management & VRAM monitor
+├── scripts/       # CLI Tools: Service management, TRT compilation, VRAM monitor
 └── tests/         # Quality: Unit tests & Performance benchmarks
 ```
 

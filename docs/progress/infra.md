@@ -3,7 +3,7 @@
 ## 模組狀態：穩定 (Systemd --user 模式已實作)
 
 ## 1. Systemd 服務 (infra/systemd/)
-- [x] **熱切換單元檔**: 支援 Perception, Cognition, MediaMTX 等模組的獨立啟停。
+- [x] **熱切換單元檔**: 支援 Perception, Orchestrator, MediaMTX 等模組的獨立啟停。
 - [x] **管理工具**: 透過 `scripts/saccade` 實作一鍵啟動與健康檢查。
 - [x] **User 模式**: 修正權限問題，全面遷移至 `systemctl --user`。
 
