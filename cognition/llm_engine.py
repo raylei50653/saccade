@@ -16,18 +16,25 @@ class LLMEngine:
         self.base_url = base_url
         self.timeout = httpx.Timeout(60.0, connect=5.0)
 
-    async def generate(self, prompt: str, max_tokens: int = 128, temperature: float = 0.7) -> str:
+    async def generate(self, prompt: str, image_data: Optional[str] = None, max_tokens: int = 128, temperature: float = 0.7) -> str:
         """
-        執行非同步文字生成 (llama.cpp /completion API)
+        執行非同步文字生成 (支援 VLM 圖片輸入)
         """
         url = f"{self.base_url}/completion"
+        
+        # 針對 VLM 模型 (如 Qwen2-VL) 使用特定的 Prompt 格式與 image_data 欄位
+        full_prompt = f"USER: [img-0] {prompt}\nASSISTANT: " if image_data else f"USER: {prompt}\nASSISTANT: "
+        
         payload = {
-            "prompt": f"### Human: {prompt}\n### Assistant: ",
+            "prompt": full_prompt,
             "n_predict": max_tokens,
             "temperature": temperature,
-            "stop": ["### Human:", "\n"],
+            "stop": ["USER:", "\n", "</s>"],
             "stream": False
         }
+
+        if image_data:
+            payload["image_data"] = [{"data": image_data, "id": 0}]
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             try:

@@ -1,0 +1,16 @@
+[Unit]
+Description=YOLO-LLM Orchestrator (Slow Path Logic)
+After=network.target redis.service yolo-vlm-backend.service
+Requires=redis.service
+
+[Service]
+Type=simple
+User=ray
+WorkingDirectory=/home/ray/developer/ai/YOLO_LLM
+ExecStart=/home/ray/developer/ai/YOLO_LLM/scripts/run.sh orchestrator
+
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

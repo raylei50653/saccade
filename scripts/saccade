@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# Saccade 系統管理控制台 (Unified CLI)
+
+set -e
+
+PROJECT_DIR="/home/ray/developer/ai/YOLO_LLM"
+SERVICES=("mediamtx" "yolo-vlm-backend" "yolo-perception" "yolo-orchestrator")
+
+cd "$PROJECT_DIR"
+
+case "$1" in
+    up)
+        echo "🚀 Starting all Saccade services..."
+        for s in "${SERVICES[@]}"; do
+            echo "  - Starting $s..."
+            sudo systemctl start "$s"
+        done
+        echo "✅ All services requested. Use './scripts/saccade health' to verify."
+        ;;
+    down)
+        echo "🛑 Stopping all Saccade services..."
+        for s in "${SERVICES[@]}"; do
+            echo "  - Stopping $s..."
+            sudo systemctl stop "$s"
+        done
+        echo "✅ All services stopped."
+        ;;
+    restart)
+        echo "♻️  Restarting all services..."
+        for s in "${SERVICES[@]}"; do
+            sudo systemctl restart "$s"
+        done
+        ;;
+    status)
+        echo "📊 Service Status:"
+        for s in "${SERVICES[@]}"; do
+            status=$(systemctl is-active "$s")
+            echo "  - $s: $status"
+        done
+        # 額外檢查 RTSP 輸入流
+        if ffprobe -v error rtsp://127.0.0.1:8554/live >/dev/null 2>&1; then
+            echo "  - 🎥 Camera Input: ACTIVE"
+        else
+            echo "  - 🎥 Camera Input: INACTIVE (Waiting for push...)"
+        fi
+        ;;
+    camera-on)
+        echo "🎬 Starting mock camera stream in background..."
+        nohup ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=15 -vcodec h264 -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/live > /tmp/mock_cam.log 2>&1 &
+        echo "✅ Mock camera is pushing to rtsp://127.0.0.1:8554/live"
+        ;;
+    camera-off)
+        echo "🛑 Stopping mock camera..."
+        pkill -f "testsrc=size=640x480" || echo "No mock camera running."
+        ;;
+    health)
+        echo "🩺 Running internal health check..."
+        uv run python pipeline/health.py
+        ;;
+    logs)
+        case "$2" in
+            backend) sudo journalctl -u yolo-vlm-backend -f ;;
+            perception) sudo journalctl -u yolo-perception -f ;;
+            orchestrator) sudo journalctl -u yolo-orchestrator -f ;;
+            *) echo "Usage: $0 logs {backend|perception|orchestrator}" ;;
+        esac
+        ;;
+    *)
+        echo "Saccade - Dual-Track Video Perception Management CLI"
+        echo "Usage: $0 {up|down|restart|status|health|logs [service]}"
+        exit 1
+        ;;
+esac

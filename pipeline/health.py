@@ -35,7 +35,8 @@ VRAM_WARN_PCT    = float(os.getenv("VRAM_WARN_PCT", "85"))
 
 SYSTEMD_SERVICES = [
     "yolo-perception",
-    "yolo-cognition",
+    "yolo-vlm-backend",
+    "yolo-orchestrator",
     "mediamtx",
 ]
 
