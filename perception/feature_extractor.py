@@ -9,7 +9,7 @@ class TRTFeatureExtractor:
     直接讀取 GPU 上的 torch.Tensor 記憶體指標 (Data Pointer) 並餵給 TensorRT Engine，
     產出高維度的語義向量，達成微秒級的無縫交接。
     """
-    def __init__(self, engine_path: str = "models/embedding/vit_so400m_patch14_siglip_224.engine", device: str = "cuda:0"):
+    def __init__(self, engine_path: str = "models/embedding/google_siglip2-so400m-patch14-384.engine", device: str = "cuda:0"):
         self.device = device
         self.logger = trt.Logger(trt.Logger.ERROR)
         
@@ -22,7 +22,7 @@ class TRTFeatureExtractor:
             
         self.context = self.engine.create_execution_context()
         # 取得輸出維度大小 (通常 SigLIP SO400M 的特徵維度是 1152)
-        out_shape = self.engine.get_tensor_shape("output")
+        out_shape = self.engine.get_tensor_shape("pooler_output")
         self.feature_dim = out_shape[1]
         print(f"✅ Extractor Ready. Feature Dimension: {self.feature_dim}")
         
@@ -41,14 +41,18 @@ class TRTFeatureExtractor:
         input_tensor = input_tensor.contiguous()
         
         # 2. 動態設定本次推理的 Batch Size
-        self.context.set_input_shape("input", (batch_size, 3, 224, 224))
+        self.context.set_input_shape("pixel_values", (batch_size, 3, 384, 384))
         
         # 3. 預先分配輸出空間 (全在 GPU 上)
         output_tensor = torch.empty((batch_size, self.feature_dim), device=self.device, dtype=torch.float32)
+        # 額外綁定 unused 的 last_hidden_state 以避免 TRT 報錯
+        # 根據 SigLIP 2 的 shape，它通常是 [batch_size, 729, 1152]
+        hidden_state_tensor = torch.empty((batch_size, 729, self.feature_dim), device=self.device, dtype=torch.float32)
         
         # 4. 記憶體綁定：直接告訴 TensorRT 從這兩個 PyTorch 指標讀寫數據
-        self.context.set_tensor_address("input", input_tensor.data_ptr())
-        self.context.set_tensor_address("output", output_tensor.data_ptr())
+        self.context.set_tensor_address("pixel_values", input_tensor.data_ptr())
+        self.context.set_tensor_address("pooler_output", output_tensor.data_ptr())
+        self.context.set_tensor_address("last_hidden_state", hidden_state_tensor.data_ptr())
         
         # 5. 異步觸發推理 (利用當前 PyTorch 的 CUDA Stream)
         stream = torch.cuda.current_stream().cuda_stream
