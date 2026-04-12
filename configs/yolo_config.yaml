@@ -1,0 +1,17 @@
+# YOLO26 推理與偵測參數
+
+detection:
+  model_path: "./models/yolo26-n.pt" # 預設使用 nano 模型
+  confidence_threshold: 0.25
+  iou_threshold: 0.45
+  img_size: [640, 640]
+  device: "cuda:0"
+
+tracking:
+  tracker_type: "bytetrack" # 或 botsort
+  persist: true
+
+entropy:
+  threshold: 0.8
+  frame_window: 10
+  description: "資訊熵觸發慢路徑 (Cognition) 的閾值與窗口"

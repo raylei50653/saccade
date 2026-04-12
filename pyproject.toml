@@ -1,0 +1,25 @@
+[project]
+name = "yolo-llm"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "ultralytics",
+    "numpy",
+    "opencv-python",
+    "tensorrt",
+    "llama-cpp-python",
+    "chromadb",
+    "redis",
+    "torch",
+    "torchvision",
+    "fastapi",
+    "uvicorn",
+    "python-dotenv",
+]
+
+[tool.mypy]
+strict = true
+ignore_missing_imports = true
+exclude = ["tests/"]

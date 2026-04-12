@@ -1,0 +1,23 @@
+# LLM 靜態與動態配置預設組合
+
+profiles:
+  - name: "12GB-offload"
+    vram_limit: 12.0
+    n_gpu_layers: -1
+    n_ctx: 4096
+    batch_size: 512
+    description: "全 GPU 負載模式"
+
+  - name: "8GB-balanced"
+    vram_limit: 8.0
+    n_gpu_layers: 24
+    n_ctx: 2048
+    batch_size: 256
+    description: "VRAM 節省模式，適合併行運作 Perception"
+
+  - name: "4GB-low"
+    vram_limit: 4.0
+    n_gpu_layers: 12
+    n_ctx: 512
+    batch_size: 64
+    description: "極低 VRAM 模式，主要使用 CPU"

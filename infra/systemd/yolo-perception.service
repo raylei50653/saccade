@@ -1,0 +1,22 @@
+[Unit]
+Description=YOLO-LLM Perception (Fast Path)
+After=network.target mediamtx.service
+Requires=mediamtx.service
+
+[Service]
+Type=simple
+User=ray
+WorkingDirectory=/home/ray/developer/ai/YOLO_LLM
+EnvironmentFile=/home/ray/developer/ai/YOLO_LLM/.env
+ExecStart=/usr/bin/env bash -c "nix develop --command python3 main.py --mode perception"
+
+# 熱切換與重啟策略
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=0
+
+# 資源監控 (配合 Pipeline/health.py)
+WatchdogSec=30
+
+[Install]
+WantedBy=multi-user.target

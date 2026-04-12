@@ -1,0 +1,33 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# AI Models (Large Binaries)
+models/**/*.pt
+models/**/*.engine
+models/**/*.gguf
+models/**/*.bin
+
+# Python Caches
+__pycache__/
+*.py[cod]
+*.class
+
+# Nix & Env
+.nix/
+.direnv/
+
+# Systemd units
+*.service.backup
+
+# LLM Quantization temporary files
+*.gguf.tmp
+*.bin.tmp
+.env
