@@ -1,5 +1,5 @@
 import os
-from typing import List, Any, Optional, Dict
+from typing import List, Any, Optional, Dict, cast
 import numpy as np
 from ultralytics import YOLO # type: ignore[attr-defined]
 from dotenv import load_dotenv
@@ -72,8 +72,6 @@ class Detector:
             label = names.get(cls_id, str(cls_id))
             labels.append(label)
         return list(set(labels)) # 去重
-
-from typing import cast
 
 if __name__ == "__main__":
     # 測試偵測
