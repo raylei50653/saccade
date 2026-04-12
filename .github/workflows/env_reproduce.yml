@@ -12,7 +12,7 @@ jobs:
           extra_nix_config: "experimental-features = nix-command flakes"
       - name: Nix flake check
         run: nix flake check
-      - name: Verify uv sync in Nix shell
-        run: nix develop --command uv sync
-      - name: Verify build with Nix
-        run: nix build .#devShells.x86_64-linux.default
+      - name: Verify uv sync in Nix shell (CI)
+        run: nix develop .#ci --command uv sync
+      - name: Verify build with Nix (CI)
+        run: nix build .#devShells.x86_64-linux.ci

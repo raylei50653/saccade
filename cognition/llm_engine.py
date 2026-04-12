@@ -1,51 +1,61 @@
 import os
-from llama_cpp import Llama
+import httpx
+import asyncio
+from typing import Dict, Any, Optional
 from dotenv import load_dotenv
 
 load_dotenv()
 
 class LLMEngine:
-    def __init__(self, model_path: str, n_gpu_layers: int = -1):
-        """
-        初始化 LLM 引擎 (llama-cpp-python)
-        
-        :param model_path: GGUF 模型路徑
-        :param n_gpu_layers: offload 到 GPU 的層數 (-1 表示全部)
-        """
-        self.model_path = model_path
-        self.n_gpu_layers = n_gpu_layers
-        self.llm = None
-        
-        if os.path.exists(model_path):
-            self.load_model()
-        else:
-            print(f"Warning: Model file not found at {model_path}")
+    """
+    對接 llama-server (llama.cpp HTTP API) 的推理客戶端
+    
+    支援 OpenAI 格式與 llama.cpp 原生格式推理。
+    """
+    def __init__(self, base_url: str = "http://localhost:8080"):
+        self.base_url = base_url
+        self.timeout = httpx.Timeout(60.0, connect=5.0)
 
-    def load_model(self):
-        """載入 GGUF 模型"""
-        self.llm = Llama(
-            model_path=self.model_path,
-            n_gpu_layers=self.n_gpu_layers,
-            n_ctx=2048, # 預設上下文長度
-            verbose=False
-        )
-        print(f"LLM loaded from {self.model_path} with {self.n_gpu_layers} GPU layers.")
+    async def generate(self, prompt: str, max_tokens: int = 128, temperature: float = 0.7) -> str:
+        """
+        執行非同步文字生成 (llama.cpp /completion API)
+        """
+        url = f"{self.base_url}/completion"
+        payload = {
+            "prompt": f"### Human: {prompt}\n### Assistant: ",
+            "n_predict": max_tokens,
+            "temperature": temperature,
+            "stop": ["### Human:", "\n"],
+            "stream": False
+        }
 
-    def generate(self, prompt: str, max_tokens: int = 128):
-        """執行推理"""
-        if not self.llm:
-            return "Error: LLM model not loaded."
-        
-        output = self.llm(
-            f"Q: {prompt} A: ",
-            max_tokens=max_tokens,
-            stop=["Q:", "\n"],
-            echo=True
-        )
-        return output['choices'][0]['text']
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                response = await client.post(url, json=payload)
+                response.raise_for_status()
+                data = response.json()
+                return str(data.get("content", ""))
+            except httpx.HTTPError as e:
+                return f"Error: LLM server communication failed - {str(e)}"
+
+    async def get_health(self) -> bool:
+        """確認 llama-server 是否運作中"""
+        url = f"{self.base_url}/health"
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.get(url)
+                return response.status_code == 200
+            except Exception:
+                return False
 
 if __name__ == "__main__":
-    # 測試程式碼
-    # engine = LLMEngine("path/to/model.gguf")
-    # print(engine.generate("Describe the activity in the video stream."))
-    pass
+    # 簡易測試範例
+    async def test():
+        engine = LLMEngine()
+        if await engine.get_health():
+            res = await engine.generate("What is the visual activity in the current frame?")
+            print(f"LLM Response: {res}")
+        else:
+            print("LLM Server is offline.")
+
+    asyncio.run(test())

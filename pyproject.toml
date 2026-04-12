@@ -19,6 +19,9 @@ dependencies = [
     "python-dotenv",
     "ruff",
     "pytest",
+    "httpx",
+    "nvidia-ml-py",
+    "redis[asyncio]",
 ]
 
 [tool.mypy]

@@ -1,0 +1,22 @@
+[Unit]
+Description=Saccade LLM Inference Server (llama.cpp)
+After=network.target
+
+[Service]
+Type=simple
+User=ray
+WorkingDirectory=/home/ray/developer/ai/YOLO_LLM
+EnvironmentFile=/home/ray/developer/ai/YOLO_LLM/.env
+# 執行路徑與模型參數範例
+ExecStart=/usr/bin/env bash -c "nix develop --command llama-server \
+    -m /home/ray/developer/ai/models/unsloth/Qwen3-VL-4B-Instruct-GGUF/Qwen3-VL-4B-Instruct-Q4_K_M.gguf \
+    --mmproj /home/ray/developer/ai/models/unsloth/Qwen3-VL-4B-Instruct-GGUF/mmproj-F16.gguf \
+    --host 0.0.0.0 --port 8080 \
+    -ngl 24 -c 4096"
+
+# 自動重啟設定
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
