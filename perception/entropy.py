@@ -17,10 +17,12 @@ class EntropyTrigger:
     
     負責評估影格價值，並在達到閾值時向 Redis 發布事件以觸發慢路徑 (Cognition)。
     """
-    def __init__(self, threshold: float = 0.8, redis_url: str = REDIS_URL):
+    def __init__(self, threshold: float = 0.8, redis_url: str = REDIS_URL, cooldown: float = 2.0):
         self.threshold = threshold
         self.redis_url = redis_url
         self.redis_client: Optional[redis.Redis] = None
+        self.last_emit_time = 0.0
+        self.cooldown = cooldown
 
     async def _ensure_redis(self) -> redis.Redis:
         """確保 Redis 連線已建立"""
@@ -77,13 +79,20 @@ class EntropyTrigger:
 
     async def process_frame(self, frame_id: int, detections: List[Any], source_path: str) -> bool:
         """
-        處理單個影格的邏輯
+        處理單個影格的邏輯 (增加冷卻時間檢查)
         """
+        current_time = time.time()
+        if current_time - self.last_emit_time < self.cooldown:
+            return False
+
         entropy = self.calculate_entropy(detections)
         
         if entropy >= self.threshold:
             objects = [str(d) for d in detections] # 簡化轉字串
-            return await self.emit_event(entropy, frame_id, source_path, objects)
+            success = await self.emit_event(entropy, frame_id, source_path, objects)
+            if success:
+                self.last_emit_time = current_time
+            return success
         
         return False
 

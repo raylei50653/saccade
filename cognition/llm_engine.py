@@ -33,17 +33,31 @@ class LLMEngine:
             "stream": False
         }
 
-        if image_data:
-            payload["image_data"] = [{"data": image_data, "id": 0}]
-
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             try:
+                # 確保 Base64 乾淨且無頭
+                if image_data:
+                    clean_image = image_data.split(",")[-1] if "," in image_data else image_data
+                    payload["image_data"] = [{"data": clean_image, "id": 0}]
+
                 response = await client.post(url, json=payload)
-                response.raise_for_status()
+                
+                if response.status_code != 200:
+                    print(f"❌ [LLMEngine] Server returned error {response.status_code}: {response.text}")
+                    return f"Error: LLM server returned {response.status_code}"
+                
                 data = response.json()
-                return str(data.get("content", ""))
-            except httpx.HTTPError as e:
-                return f"Error: LLM server communication failed - {str(e)}"
+                return str(data.get("content", "")).strip()
+                
+            except httpx.ConnectError:
+                return "Error: LLM server connection refused (is it running on port 8080?)"
+            except httpx.TimeoutException:
+                return "Error: LLM server request timed out"
+            except Exception as e:
+                import traceback
+                print(f"❌ [LLMEngine] Unexpected error: {str(e)}")
+                traceback.print_exc()
+                return f"Error: {type(e).__name__} - {str(e)}"
 
     async def get_health(self) -> bool:
         """確認 llama-server 是否運作中"""
