@@ -27,7 +27,7 @@ async def run_perception() -> None:
     media = MediaMTXClient(use_local=use_local, dummy_video=dummy_video)
     
     # 初始化 Phase 1~4 的零拷貝語義特徵提取組件
-    cropper = ZeroCopyCropper(output_size=(384, 384))
+    cropper = ZeroCopyCropper(output_size=(512, 512))
     extractor = TRTFeatureExtractor()
     tracker = SmartTracker(iou_threshold=0.7, velocity_angle_threshold=45.0)
     drift_handler = SemanticDriftHandler(similarity_threshold=0.95)

@@ -23,7 +23,7 @@ def build_engine(onnx_file_path, engine_file_path):
             
     # 設定 Dynamic Shapes 的最佳化設定：Min=1, Opt=8, Max=32
     profile = builder.create_optimization_profile()
-    profile.set_shape("pixel_values", (1, 3, 384, 384), (8, 3, 384, 384), (32, 3, 384, 384))
+    profile.set_shape("pixel_values", (1, 3, 512, 512), (8, 3, 512, 512), (32, 3, 512, 512))
     config.add_optimization_profile(profile)
     
     print("⚙️ Building TensorRT Engine (this takes a few minutes)...")
@@ -38,8 +38,8 @@ def build_engine(onnx_file_path, engine_file_path):
     print(f"🎉 Successfully built and saved TRT Engine to: {engine_file_path}")
 
 if __name__ == "__main__":
-    onnx_path = "models/embedding/google_siglip2-so400m-patch14-384.onnx"
-    engine_path = "models/embedding/google_siglip2-so400m-patch14-384.engine"
+    onnx_path = "models/embedding/jinaai_jina-clip-v2.onnx"
+    engine_path = "models/embedding/jinaai_jina-clip-v2.engine"
     
     if not os.path.exists(engine_path):
         build_engine(onnx_path, engine_path)
