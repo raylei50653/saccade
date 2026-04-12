@@ -31,6 +31,7 @@ dependencies = [
     "types-pyyaml>=6.0.12.20260408",
     "decord>=0.6.0",
     "nvidia-dali-cuda120>=2.0.0",
+    "pygobject>=3.56.2",
 ]
 
 [tool.mypy]

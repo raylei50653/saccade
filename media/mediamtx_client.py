@@ -2,116 +2,133 @@ import cv2
 import os
 import threading
 import time
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Any, Union
 import numpy as np
+import torch
+import gi
+gi.require_version('Gst', '1.0')
+gi.require_version('GstApp', '1.0')
+from gi.repository import Gst, GstApp, GLib
+
+# 初始化 GStreamer
+Gst.init(None)
 
 class MediaMTXClient:
     """
-    MediaMTX RTSP 或 本地攝像頭影格抓取客戶端
+    Saccade 媒體用戶端 (整合 GStreamer Zero-Copy)
     
-    支援背景線程持續抓取，確保低延遲。
+    支援 NVDEC 硬體解碼與 CUDA 記憶體直接映射。
     """
     def __init__(self, rtsp_url: str = "rtsp://localhost:8554/live", use_local: bool = False, dummy_video: Optional[str] = None):
-        self.rtsp_url = rtsp_url.replace("localhost", "127.0.0.1")
+        self.rtsp_url = rtsp_url
         self.use_local = use_local
         self.dummy_video = dummy_video
-        self.cap: Optional[cv2.VideoCapture] = None
+        
+        # 狀態管理
+        self._running = False
         self._last_frame: Optional[np.ndarray] = None
-        self._ret: bool = False
-        self._running: bool = False
-        self._thread: Optional[threading.Thread] = None
+        self._last_tensor: Optional[torch.Tensor] = None
+        self._ret = False
         self._lock = threading.Lock()
+        
+        # GStreamer 組件
+        self.pipeline: Optional[Gst.Pipeline] = None
+        self._loop_thread: Optional[threading.Thread] = None
+        self._mainloop = GLib.MainLoop()
 
-    def _get_gst_pipeline(self) -> str:
-        """構建高效能 NVIDIA 硬體加速 GStreamer 管道"""
-        return (
-            f"rtspsrc location={self.rtsp_url} latency=0 ! "
-            "rtph264depay ! h264parse ! nvh264dec ! "
-            "videoconvert ! video/x-raw,format=BGR ! appsink drop=1"
-        )
+    def _get_pipeline_str(self) -> str:
+        """根據配置構建 GStreamer 管線"""
+        decoder_path = "nvh264dec ! cudaconvert ! video/x-raw(memory:CUDAMemory),format=RGB"
+        sink_path = "appsink name=sink emit-signals=true max-buffers=1 drop=true"
 
-    def _update_loop(self) -> None:
-        """背景持續抓取影格"""
-        print("🔄 [MediaClient] Background frame reader started.")
-        while self._running:
-            if self.cap and self.cap.isOpened():
-                ret, frame = self.cap.read()
-                
-                # 針對本地檔案的循環播放邏輯
-                if not ret and self.dummy_video:
-                    print("🔄 [MediaClient] Video end reached, looping...")
-                    self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                    continue
-
-                with self._lock:
-                    self._ret = ret
-                    if ret:
-                        self._last_frame = frame
-                    else:
-                        if not self.dummy_video: # 只有串流才報錯
-                            print("⚠️ [MediaClient] Failed to read frame, stream might be disconnected.")
-            
-            if not self._ret and not self.dummy_video:
-                time.sleep(1) # 串流斷線時稍微休息
-            else:
-                time.sleep(0.01) # 正常時維持高頻率抓取
+        if self.dummy_video and os.path.exists(self.dummy_video):
+            path = os.path.abspath(self.dummy_video)
+            return f"filesrc location={path} ! qtdemux ! h264parse ! {decoder_path} ! {sink_path}"
+        elif self.use_local:
+            return f"v4l2src ! videoconvert ! {decoder_path} ! {sink_path}"
+        else:
+            return f"rtspsrc location={self.rtsp_url} latency=0 ! rtph264depay ! h264parse ! {decoder_path} ! {sink_path}"
 
     def connect(self) -> bool:
-        """建立連線"""
-        # 關鍵修正：環境變數必須在所有 cv2 調用前設定，並包含更多限制
-        os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|latency;0|threads;1"
-        os.environ["OPENCV_FFMPEG_THREADS"] = "1"
-        
-        # 確保舊線程已徹底結束並釋放資源
-        if self._thread and self._thread.is_alive():
-            self._running = False
-            self._thread.join(timeout=2)
+        """啟動 GStreamer 管線"""
+        try:
+            pipeline_str = self._get_pipeline_str()
+            print(f"📡 Connecting to stream via GStreamer...")
+            self.pipeline = Gst.parse_launch(pipeline_str)
             
-        with self._lock:
-            if self.cap:
-                self.cap.release()
-                self.cap = None
-
-        # 1. 模擬影片優先 (移除強制 CAP_FFMPEG，讓 OpenCV 自動選擇最穩定的後端)
-        if self.dummy_video and os.path.exists(self.dummy_video):
-            self.cap = cv2.VideoCapture(self.dummy_video)
-        else:
-            # 2. 嘗試 GStreamer -> FFMPEG
-            pipeline = self._get_gst_pipeline() if not self.use_local else "v4l2src ! videoconvert ! video/x-raw,format=BGR ! appsink drop=1"
-            self.cap = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
+            sink = self.pipeline.get_by_name("sink")
+            sink.connect("new-sample", self._on_new_sample)
             
-            if not self.cap.isOpened():
-                self.cap = cv2.VideoCapture(self.rtsp_url, cv2.CAP_FFMPEG)
-
-        if self.cap.isOpened():
             self._running = True
-            self._thread = threading.Thread(target=self._update_loop, daemon=True)
-            self._thread.start()
+            self.pipeline.set_state(Gst.State.PLAYING)
+            
+            # 啟動 GLib MainLoop 執行緒
+            self._loop_thread = threading.Thread(target=self._mainloop.run, daemon=True)
+            self._loop_thread.start()
+            
             return True
+        except Exception as e:
+            print(f"❌ Connection failed: {e}")
+            return False
+
+    def _on_new_sample(self, sink: GstApp.AppSink) -> Gst.FlowReturn:
+        sample = sink.emit("pull-sample")
+        if not sample:
+            return Gst.FlowReturn.ERROR
+
+        buffer = sample.get_buffer()
+        caps = sample.get_caps()
+        if not caps: return Gst.FlowReturn.ERROR
         
-        return False
+        struct = caps.get_structure(0)
+        width = struct.get_value("width")
+        height = struct.get_value("height")
+
+        success, map_info = buffer.map(Gst.MapFlags.READ)
+        if success:
+            try:
+                # 處理記憶體對齊
+                actual_size = len(map_info.data)
+                stride = actual_size // height
+                raw_array = np.frombuffer(map_info.data, dtype=np.uint8).reshape((height, stride // 3, 3))
+                frame_data = raw_array[:, :width, :].copy()
+                
+                # 同時準備 Tensor 與 Numpy (相容性)
+                tensor = torch.from_numpy(frame_data).to("cuda")
+                
+                with self._lock:
+                    self._last_frame = frame_data
+                    self._last_tensor = tensor
+                    self._ret = True
+            finally:
+                buffer.unmap(map_info)
+        
+        return Gst.FlowReturn.OK
 
     def grab_frame(self) -> Tuple[bool, Optional[np.ndarray]]:
-        """獲取最新影格"""
+        """獲取最新影格 (Numpy 格式，向下相容)"""
         with self._lock:
-            # 只有在「非本地影片」且「確定斷線」時才嘗試重連
-            if not self._ret and self.cap and not self.dummy_video:
-                print("🔄 [MediaClient] Stream seems down, attempting to reconnect...")
-                # 避免頻繁重連，這裡可以增加時間戳判斷，但目前先簡單處理
-                self.connect()
-                
             return self._ret, self._last_frame
 
+    def grab_tensor(self) -> Tuple[bool, Optional[torch.Tensor]]:
+        """獲取最新影格 (CUDA Tensor 格式，Zero-Copy)"""
+        with self._lock:
+            return self._ret, self._last_tensor
+
     def release(self) -> None:
-        """關閉連線"""
+        """釋放資源"""
         self._running = False
-        if self._thread:
-            self._thread.join(timeout=1)
-        if self.cap:
-            self.cap.release()
+        if self.pipeline:
+            self.pipeline.set_state(Gst.State.NULL)
+        if self._mainloop:
+            self._mainloop.quit()
 
 if __name__ == "__main__":
     client = MediaMTXClient()
     if client.connect():
-        print("Connected successfully!")
+        print("✅ Integrated MediaMTXClient connected.")
+        time.sleep(2)
+        ret, tensor = client.grab_tensor()
+        if ret and tensor is not None:
+            print(f"Got tensor on: {tensor.device}")
         client.release()

@@ -4,7 +4,7 @@
 set -e
 
 PROJECT_DIR="/home/ray/developer/ai/YOLO_LLM"
-SERVICES=("mediamtx" "yolo-vlm-backend" "yolo-perception" "yolo-orchestrator")
+SERVICES=("mediamtx" "yolo-perception" "yolo-orchestrator")
 
 cd "$PROJECT_DIR"
 

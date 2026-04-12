@@ -5,23 +5,20 @@ from typing import Dict, Any, List, Optional, cast
 
 class ChromaStore:
     """
-    Saccade 向量記憶庫 (Storage 模組)
+    Saccade 向量記憶庫 (強化版)
     
-    基於 ChromaDB，負責儲存 Cognition 的 VLM 分析結果，支援語義相似性檢索。
-    實踐 Pillar 5 中的 Vector-indexed memory。
+    支援混合檢索：語義搜尋 + Metadata (時間、物件、異常標籤) 過濾。
+    實踐 Pillar 5 中的 Feature & Timestamp Correlation。
     """
     def __init__(self, path: str = "./storage/chroma_db", collection_name: str = "saccade_memories"):
         self.path = path
         self.collection_name = collection_name
         self.client = chromadb.PersistentClient(path=self.path)
-        # 預設使用 Chroma 的 Embedding 函數，未來可自定義
         self.collection = self.client.get_or_create_collection(name=self.collection_name)
 
     def add_memory(self, content: str, metadata: Dict[str, Any], doc_id: Optional[str] = None) -> str:
-        """新增一條記憶"""
+        """新增一條記憶，包含多維度元數據"""
         memory_id = doc_id or str(uuid.uuid4())
-        
-        # 確保 metadata 中包含 timestamp
         if "timestamp" not in metadata:
             metadata["timestamp"] = time.time()
             
@@ -32,28 +29,43 @@ class ChromaStore:
         )
         return memory_id
 
-    def query_memories(self, query_text: str, n_results: int = 5, where: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """語義搜尋相似的記憶"""
+    def hybrid_query(self, 
+                     query_text: str, 
+                     n_results: int = 5, 
+                     start_time: Optional[float] = None, 
+                     is_anomaly: Optional[int] = None,
+                     object_filter: Optional[str] = None) -> Dict[str, Any]:
+        """
+        核心功能：關聯檢索
+        支援同時搜尋：
+        1. 語義描述 (如 'person with knife')
+        2. 時間區間 (最近一小時)
+        3. 異常標籤 (僅看 ALERT)
+        4. 特定物件 (包含 car)
+        """
+        where_clauses = []
+        
+        if start_time:
+            where_clauses.append({"timestamp": {"$gte": start_time}})
+        if is_anomaly is not None:
+            where_clauses.append({"is_anomaly": is_anomaly})
+        if object_filter:
+            # 支援簡單的物件名稱包含查詢
+            where_clauses.append({"objects": {"$contains": object_filter}})
+
+        # 構建 ChromaDB $and 條件
+        where = None
+        if len(where_clauses) > 1:
+            where = {"$and": where_clauses}
+        elif len(where_clauses) == 1:
+            where = where_clauses[0]
+
         results = self.collection.query(
             query_texts=[query_text],
             n_results=n_results,
-            where=where
+            where=where # type: ignore[arg-type]
         )
         return cast(Dict[str, Any], results)
 
-    def get_memories_by_time(self, start_time: float, end_time: Optional[float] = None) -> Dict[str, Any]:
-        """按時間範圍搜尋記憶"""
-        end_time_val = end_time or time.time()
-        where_clause = {
-            "$and": [
-                {"timestamp": {"$gte": start_time}},
-                {"timestamp": {"$lte": end_time_val}}
-            ]
-        }
-        # ChromaDB 的 get 方法期望特定的 Where 格式
-        results = self.collection.get(where=cast(Any, where_clause))
-        return cast(Dict[str, Any], results)
-
     def delete_memories(self, ids: List[str]) -> None:
-        """刪除指定記憶"""
         self.collection.delete(ids=ids)

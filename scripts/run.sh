@@ -14,14 +14,6 @@ MMPROJ_PATH="/home/ray/developer/ai/models/unsloth/Qwen3-VL-4B-Instruct-GGUF/mmp
 cd "$PROJECT_DIR"
 
 case "$1" in
-    vlm-backend)
-        echo "🚀 Starting VLM Inference Backend (llama-server)..."
-        exec /home/ray/.local/bin/llama-server \
-            -m "$MODEL_PATH" \
-            --mmproj "$MMPROJ_PATH" \
-            --host 0.0.0.0 --port 8080 \
-            -ngl 24 -c 32768 -np 4
-        ;;
     perception)
         echo "🚀 Starting Perception Pipeline (YOLO)..."
         exec uv run python main.py --mode perception

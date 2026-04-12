@@ -22,20 +22,17 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
-import httpx
 import pynvml
 import redis.asyncio as aioredis
 
 
 # ── Config (override via .env) ────────────────────────────────────────────────
 
-LLAMA_SERVER_URL = os.getenv("LLAMA_SERVER_URL", "http://localhost:8080")
-REDIS_URL        = os.getenv("REDIS_URL", "redis://localhost:6379")
+REDIS_URL        = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 VRAM_WARN_PCT    = float(os.getenv("VRAM_WARN_PCT", "85"))
 
 SYSTEMD_SERVICES = [
     "yolo-perception",
-    "yolo-vlm-backend",
     "yolo-orchestrator",
     "mediamtx",
 ]
@@ -68,14 +65,12 @@ class HealthReport:
     timestamp: datetime
     systemd: list[ServiceStatus]
     vram: Optional[VramStatus]
-    llama: ServiceStatus
     redis: ServiceStatus
     overall_ok: bool = field(init=False)
 
     def __post_init__(self) -> None:
         checks = [
             all(s.ok for s in self.systemd),
-            self.llama.ok,
             self.redis.ok,
             (not self.vram.warn if self.vram else True),
         ]
@@ -118,27 +113,6 @@ def check_vram() -> Optional[VramStatus]:
     except Exception:
         return None
 
-
-async def check_llama_server() -> ServiceStatus:
-    """Hit llama-server /health endpoint and measure latency."""
-    url = f"{LLAMA_SERVER_URL}/health"
-    try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(5.0, connect=2.0)) as client:
-            resp = await client.get(url)
-            ok = resp.status_code == 200
-            return ServiceStatus(
-                name="llama-server",
-                ok=ok,
-                detail=f"HTTP {resp.status_code}",
-            )
-    except httpx.ConnectError:
-        return ServiceStatus(name="llama-server", ok=False, detail="connection refused")
-    except httpx.TimeoutException:
-        return ServiceStatus(name="llama-server", ok=False, detail="timeout")
-    except Exception as e:
-        return ServiceStatus(name="llama-server", ok=False, detail=str(e))
-
-
 async def check_redis() -> ServiceStatus:
     """Ping Redis and report queue depth."""
     try:
@@ -157,16 +131,12 @@ async def check_redis() -> ServiceStatus:
 class HealthChecker:
     async def run(self) -> HealthReport:
         systemd_results = await asyncio.gather(*[check_systemd(s) for s in SYSTEMD_SERVICES])
-        llama, redis_status = await asyncio.gather(
-            check_llama_server(),
-            check_redis(),
-        )
+        redis_status = await check_redis()
 
         return HealthReport(
             timestamp=datetime.now(),
             systemd=list(systemd_results),
             vram=check_vram(),
-            llama=llama,
             redis=redis_status,
         )
 
@@ -199,9 +169,8 @@ def render(report: HealthReport) -> str:
 
     lines.append("")
     lines.append("Services")
-    for svc in [report.llama, report.redis]:
-        dot = "●" if svc.ok else "✗"
-        lines.append(f"  {dot} {svc.name:<24} {svc.detail}")
+    dot = "●" if report.redis.ok else "✗"
+    lines.append(f"  {dot} {report.redis.name:<24} {report.redis.detail}")
 
     return "\n".join(lines)
 
