@@ -3,10 +3,12 @@ import json
 import os
 import cv2
 import base64
+import time
 import redis.asyncio as redis
 from typing import Dict, Any, Optional, cast, Awaitable
 from cognition.llm_engine import LLMEngine
 from media.mediamtx_client import MediaMTXClient
+from storage.chroma_store import ChromaStore
 from pipeline.health import HealthChecker, render
 from dotenv import load_dotenv
 import numpy as np
@@ -18,6 +20,7 @@ class PipelineOrchestrator:
     Saccade 雙軌管線調度器
     
     負責監聽 Perception 的觸發事件，並調度 Cognition (VLM) 進行深度視覺推理。
+    將分析結果存儲於 ChromaDB 向量記憶庫中。
     """
     def __init__(self) -> None:
         self.redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -33,6 +36,7 @@ class PipelineOrchestrator:
         )
         self.llm_engine = LLMEngine()
         self.redis_client = redis.from_url(self.redis_url)
+        self.memory_store = ChromaStore()
 
     async def _encode_image(self, frame: np.ndarray) -> str:
         """將 OpenCV 影格轉換為 Base64 字串以傳輸至 VLM"""
@@ -66,8 +70,20 @@ class PipelineOrchestrator:
 
         print(f"💡 [VLM Result] {response}")
 
-        # 4. 寫入狀態層 (後續實作 ChromaDB 儲存)
-        # TODO: Save structured data to storage/chroma_store.py
+        # 4. 寫入狀態層 (ChromaDB 儲存)
+        try:
+            self.memory_store.add_memory(
+                content=response,
+                metadata={
+                    "frame_id": frame_id,
+                    "entropy": entropy,
+                    "objects": labels,
+                    "timestamp": time.time()
+                }
+            )
+            print(f"💾 [Storage] Analysis saved to ChromaDB.")
+        except Exception as e:
+            print(f"❌ [Storage] Failed to save memory: {e}")
 
     async def start_cognition_loop(self) -> None:
         """啟動慢路徑事件監聽循環"""
