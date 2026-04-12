@@ -9,7 +9,11 @@
 
 ## 進行中
 - [ ] **entropy.py**: 資訊熵閾值動態調校，避免事件頻率過高。
-- [ ] **zero_copy.py**: 預計實作 NVDEC → CUDA Tensor 高速路徑 (目前研究中)。
+- [x] **zero_copy.py**: 已實作 OpenCV + NVDEC 硬體加速路徑 (穩定)，NVIDIA DALI 作為實驗性高效能路徑保留。
+
+## 已完成里程碑
+- [x] **硬體加速解碼**: 成功整合 GStreamer `nvh264dec` 實現 GPU 硬體解碼。
+- [x] **效能基準數據**: 完成 OpenCV 與 DALI 路徑的對比測試 (1080p @ 30FPS 達成)。
 
 ## 待處理
 - [ ] **TensorRT**: 遷移至 TensorRT 以進一步降低延遲。

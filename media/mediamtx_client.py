@@ -23,10 +23,10 @@ class MediaMTXClient:
         self._lock = threading.Lock()
 
     def _get_gst_pipeline(self) -> str:
-        """構建高效能 GStreamer 管道"""
+        """構建高效能 NVIDIA 硬體加速 GStreamer 管道"""
         return (
             f"rtspsrc location={self.rtsp_url} latency=0 ! "
-            "rtph264depay ! h264parse ! decodebin ! "
+            "rtph264depay ! h264parse ! nvh264dec ! "
             "videoconvert ! video/x-raw,format=BGR ! appsink drop=1"
         )
 
