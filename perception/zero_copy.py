@@ -1,12 +1,11 @@
-import gi
-gi.require_version('Gst', '1.0')
-gi.require_version('GstApp', '1.0')
-from gi.repository import Gst, GstApp, GLib
-import torch
-import numpy as np
-from typing import Optional, Tuple, Callable
-import threading
-import os
+import gi # noqa: E402
+gi.require_version('Gst', '1.0') # noqa: E402
+gi.require_version('GstApp', '1.0') # noqa: E402
+from gi.repository import Gst # noqa: E402
+import torch # noqa: E402
+import numpy as np # noqa: E402
+from typing import Optional # noqa: E402
+import threading # noqa: E402
 
 # 初始化 GStreamer
 Gst.init(None)
@@ -60,7 +59,8 @@ class GstZeroCopyDecoder:
         if t == Gst.MessageType.ERROR:
             err, debug = message.parse_error()
             print(f"❌ GStreamer Error: {err.message}")
-            if debug: print(f"🔍 Debug Info: {debug}")
+            if debug:
+                print(f"🔍 Debug Info: {debug}")
         elif t == Gst.MessageType.EOS:
             print("🏁 GStreamer: End of stream")
 

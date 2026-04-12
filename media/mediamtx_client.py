@@ -1,14 +1,13 @@
-import cv2
 import os
 import threading
 import time
-from typing import Optional, Tuple, Any, Union
+from typing import Optional, Tuple
 import numpy as np
 import torch
-import gi
-gi.require_version('Gst', '1.0')
-gi.require_version('GstApp', '1.0')
-from gi.repository import Gst, GstApp, GLib
+import gi # noqa: E402
+gi.require_version('Gst', '1.0') # noqa: E402
+gi.require_version('GstApp', '1.0') # noqa: E402
+from gi.repository import Gst, GstApp, GLib # noqa: E402
 
 # 初始化 GStreamer
 Gst.init(None)
@@ -53,7 +52,7 @@ class MediaMTXClient:
         """啟動 GStreamer 管線"""
         try:
             pipeline_str = self._get_pipeline_str()
-            print(f"📡 Connecting to stream via GStreamer...")
+            print("📡 Connecting to stream via GStreamer...")
             self.pipeline = Gst.parse_launch(pipeline_str)
             
             sink = self.pipeline.get_by_name("sink")
@@ -78,7 +77,8 @@ class MediaMTXClient:
 
         buffer = sample.get_buffer()
         caps = sample.get_caps()
-        if not caps: return Gst.FlowReturn.ERROR
+        if not caps:
+            return Gst.FlowReturn.ERROR
         
         struct = caps.get_structure(0)
         width = struct.get_value("width")

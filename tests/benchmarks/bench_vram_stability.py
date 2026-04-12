@@ -1,10 +1,8 @@
 import asyncio
 import time
-import subprocess
 import pynvml
 import json
 import os
-from datetime import datetime
 
 # 配置
 TEST_DURATION = 60 # 測試 60 秒
@@ -41,13 +39,13 @@ async def monitor_vram_stability():
     handle = pynvml.nvmlDeviceGetHandleByIndex(0)
     
     print(f"🚀 [VRAM Stability] Starting {TEST_DURATION}s stability test...")
-    print(f"⚙️  Current System State: VLM NP=4, Context=32K, Zero-Copy Enabled.")
+    print("⚙️  Current System State: VLM NP=4, Context=32K, Zero-Copy Enabled.")
     
     start_time = time.time()
     vram_history = []
     
     # 同步啟動負載生成
-    load_task = asyncio.create_task(trigger_high_load())
+    _ = asyncio.create_task(trigger_high_load())
     
     while time.time() - start_time < TEST_DURATION:
         info = pynvml.nvmlDeviceGetMemoryInfo(handle)
@@ -68,7 +66,7 @@ async def monitor_vram_stability():
     max_vram = max(vram_history)
     avg_vram = sum(vram_history) / len(vram_history)
     
-    print(f"\n📊 --- [ Stability Test Results ] ---")
+    print("\n📊 --- [ Stability Test Results ] ---")
     print(f"  - Minimum VRAM: {min_vram:.2f} GB")
     print(f"  - Maximum VRAM: {max_vram:.2f} GB")
     print(f"  - Average VRAM: {avg_vram:.2f} GB")

@@ -4,7 +4,7 @@ import os
 TRT_LOGGER = trt.Logger(trt.Logger.INFO)
 
 def build_engine(onnx_file_path, engine_file_path):
-    print(f"🚀 Starting TensorRT Build Process (FP16)...")
+    print("🚀 Starting TensorRT Build Process (FP16)...")
     builder = trt.Builder(TRT_LOGGER)
     # 允許使用動態 Batch
     network = builder.create_network(1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH))
@@ -26,7 +26,7 @@ def build_engine(onnx_file_path, engine_file_path):
     profile.set_shape("input", (1, 3, 224, 224), (8, 3, 224, 224), (32, 3, 224, 224))
     config.add_optimization_profile(profile)
     
-    print(f"⚙️ Building TensorRT Engine (this takes a few minutes)...")
+    print("⚙️ Building TensorRT Engine (this takes a few minutes)...")
     engine_bytes = builder.build_serialized_network(network, config)
     if engine_bytes is None:
         print("❌ ERROR: Failed to build the engine.")

@@ -44,7 +44,7 @@ def test_chroma_store_operations():
         assert mid is not None
         
         # Query
-        results = store.query_memories("Who is at the gate?")
+        results = store.hybrid_query("Who is at the gate?")
         assert len(results["ids"]) > 0
         assert "Person" in results["documents"][0][0]
         

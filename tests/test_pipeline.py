@@ -1,6 +1,6 @@
 import pytest
 import json
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import patch, AsyncMock, MagicMock
 from perception.entropy import EntropyTrigger
 from pipeline.orchestrator import PipelineOrchestrator
 
@@ -54,19 +54,11 @@ async def test_entropy_trigger_cooldown():
 
 @pytest.mark.anyio
 async def test_orchestrator_handle_event():
-    # Mock dependencies
-    mock_media = MagicMock()
-    mock_media.grab_frame.return_value = (True, "fake_frame")
-    
-    mock_llm = AsyncMock()
-    mock_llm.generate.return_value = "Test response"
-    
     mock_redis = AsyncMock()
-    
-    with patch("pipeline.orchestrator.MediaMTXClient", return_value=mock_media), \
-         patch("pipeline.orchestrator.LLMEngine", return_value=mock_llm), \
-         patch("redis.asyncio.from_url", return_value=mock_redis), \
-         patch("pipeline.orchestrator.cv2.imencode", return_value=(True, b"fake_buffer")):
+    mock_chroma = MagicMock()
+
+    with patch("redis.asyncio.from_url", return_value=mock_redis), \
+         patch("pipeline.orchestrator.ChromaStore", return_value=mock_chroma):
         
         orchestrator = PipelineOrchestrator()
         
@@ -80,10 +72,7 @@ async def test_orchestrator_handle_event():
         
         await orchestrator.handle_cognitive_event(event_data)
         
-        assert mock_media.grab_frame.called
-        assert mock_llm.generate.called
-        # Check if prompt contains the detected objects
-        args, kwargs = mock_llm.generate.call_args
-        prompt = args[0]
-        assert "person" in prompt
-        assert "knife" in prompt
+        assert mock_chroma.add_memory.called
+        args, kwargs = mock_chroma.add_memory.call_args
+        assert "knife" in kwargs["content"]
+        assert kwargs["metadata"]["is_anomaly"] == 1

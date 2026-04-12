@@ -80,7 +80,7 @@ class PipelineOrchestrator:
                 print(f"❌ [Storage Error] {e}")
 
     async def start_cognition_loop(self) -> None:
-        print(f"🚀 [Orchestrator] High-Speed Vector Indexing Loop Active...")
+        print("🚀 [Orchestrator] High-Speed Vector Indexing Loop Active...")
         while True:
             try:
                 result = await cast(Awaitable[Optional[list[Any]]], self.redis_client.blpop("saccade:events", timeout=0))

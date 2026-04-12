@@ -60,7 +60,7 @@ def benchmark_trt_extreme():
     avg_latency = sum(latencies) / len(latencies)
     fps = num_frames / total_time
     
-    print(f"\n✅ Extreme Benchmark Complete!")
+    print("\n✅ Extreme Benchmark Complete!")
     print(f"  - Average End-to-End Latency: {avg_latency:.2f} ms")
     print(f"  - Peak Throughput: {fps:.2f} FPS")
     

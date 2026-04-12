@@ -18,7 +18,7 @@ def export_siglip_onnx(model_name="vit_so400m_patch14_siglip_224", output_dir="m
     try:
         # num_classes=0 表示我們只要特徵向量 (Features)，不要最後的分類層
         model = timm.create_model(model_name, pretrained=True, num_classes=0)
-    except Exception as e:
+    except Exception:
         print(f"⚠️ Failed to load {model_name}. Trying base model as fallback.")
         model_name = "vit_base_patch16_siglip_224"
         model = timm.create_model(model_name, pretrained=True, num_classes=0)

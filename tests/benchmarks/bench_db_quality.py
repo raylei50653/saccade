@@ -1,6 +1,5 @@
 import time
 from storage.chroma_store import ChromaStore
-from datetime import datetime
 
 def benchmark_db_quality():
     print("🚀 [Benchmark] Starting ChromaDB Storage & Retrieval Quality Test...")
@@ -40,15 +39,16 @@ def benchmark_db_quality():
         # 檢查類別是否符合預期
         is_correct = top_meta["category"] == query["expected"]
         status = "✅ PASS" if is_correct else "❌ FAIL"
-        if is_correct: score += 1
+        if is_correct:
+            score += 1
         
         print(f"  - Query: '{query['q']}'")
         print(f"    Match: '{top_doc[:50]}...' (Category: {top_meta['category']}) -> {status}")
 
     # 3. 測試持久化穩定性
-    print(f"\n📊 --- [ Quality Summary ] ---")
+    print("\n📊 --- [ Quality Summary ] ---")
     print(f"  - Semantic Accuracy: {score}/{len(queries)} ({score/len(queries)*100:.1f}%)")
-    print(f"  - Vector DB Latency: Testing query speed...")
+    print("  - Vector DB Latency: Testing query speed...")
     
     start_bench = time.perf_counter()
     for _ in range(10):

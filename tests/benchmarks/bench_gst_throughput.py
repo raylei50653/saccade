@@ -1,12 +1,13 @@
 import time
-import torch
 import os
-import gi
-gi.require_version('Gst', '1.0')
-from gi.repository import Gst, GLib
-from perception.zero_copy import GstZeroCopyDecoder
-from dotenv import load_dotenv
 import threading
+
+import gi # noqa: E402
+gi.require_version('Gst', '1.0') # noqa: E402
+from gi.repository import GLib # noqa: E402
+
+from perception.zero_copy import GstZeroCopyDecoder # noqa: E402
+from dotenv import load_dotenv # noqa: E402
 
 load_dotenv()
 
@@ -41,8 +42,6 @@ def benchmark_gst():
     processed_count = 0
     start_bench = time.perf_counter()
     
-    last_frame_id = -1
-    
     while processed_count < num_frames:
         start_frame = time.perf_counter()
         
@@ -66,7 +65,7 @@ def benchmark_gst():
     avg_latency = sum(latencies) / len(latencies)
     fps = num_frames / total_time
     
-    print(f"\n✅ GStreamer Benchmark Complete!")
+    print("\n✅ GStreamer Benchmark Complete!")
     print(f"  - Average Access Latency: {avg_latency:.2f} ms")
     print(f"  - Estimated Throughput: {fps:.2f} FPS")
     

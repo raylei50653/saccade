@@ -2,7 +2,6 @@ import asyncio
 import argparse
 import os
 import torch
-from typing import cast, Any
 from perception.detector import Detector
 from perception.entropy import EntropyTrigger
 from perception.cropper import ZeroCopyCropper
@@ -41,7 +40,7 @@ async def run_perception() -> None:
         print("⏳ Waiting for media source (RTSP/Camera/Dummy)... retrying in 2s")
         await asyncio.sleep(2)
     
-    print(f"✅ Perception Pipeline connected via Zero-Copy GStreamer!")
+    print("✅ Perception Pipeline connected via Zero-Copy GStreamer!")
     
     # 等待第一影格就緒
     print("⏳ Waiting for first frame...")

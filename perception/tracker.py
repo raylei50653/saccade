@@ -1,6 +1,6 @@
 import torch
 import torchvision.ops as ops
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Optional, Tuple
 import math
 
 class SmartTracker:
