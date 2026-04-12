@@ -1,7 +1,7 @@
 import os
 import yaml
 import pynvml
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 from dataclasses import dataclass
 
 @dataclass
@@ -23,7 +23,7 @@ class ResourceManager:
         self._nvml_initialized = False
         self._init_nvml()
 
-    def _init_nvml(self):
+    def _init_nvml(self) -> None:
         """初始化 NVML"""
         try:
             pynvml.nvmlInit()
@@ -40,7 +40,8 @@ class ResourceManager:
         
         with open(self.config_path, 'r', encoding='utf-8') as f:
             data = yaml.safe_load(f)
-            return data.get("profiles", [])
+            from typing import cast
+            return cast(List[Dict[str, Any]], data.get("profiles", []))
 
     def get_vram_stats(self, gpu_id: int = 0) -> VRAMStats:
         """獲取指定 GPU 的實時記憶體狀態"""
@@ -82,7 +83,7 @@ class ResourceManager:
         print("⚠️ VRAM critically low, falling back to minimal profile.")
         return sorted_profiles[-1]
 
-    def close(self):
+    def close(self) -> None:
         """關閉 NVML"""
         if self._nvml_initialized:
             pynvml.nvmlShutdown()

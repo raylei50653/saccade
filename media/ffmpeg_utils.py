@@ -1,7 +1,7 @@
 import subprocess
 import cv2
 import numpy as np
-import os
+from typing import Optional, Any
 
 class RTSPStreamer:
     """
@@ -14,9 +14,9 @@ class RTSPStreamer:
         self.fps = fps
         self.width = width
         self.height = height
-        self.process = None
+        self.process: Optional[Any] = None
 
-    def start(self):
+    def start(self) -> None:
         """啟動 FFmpeg 子進程進行推流"""
         # 使用更穩定的推流參數
         command = [
@@ -44,7 +44,7 @@ class RTSPStreamer:
         time.sleep(0.5) # 給予 FFmpeg 握手時間
         print(f"🚀 RTSP Streamer started: {self.rtsp_url}")
 
-    def push_frame(self, frame: np.ndarray):
+    def push_frame(self, frame: np.ndarray) -> None:
         """將影格寫入 FFmpeg stdin"""
         if self.process is None or self.process.poll() is not None:
             print("🔄 [RTSPStreamer] Restarting FFmpeg process...")
@@ -55,17 +55,19 @@ class RTSPStreamer:
             if frame.shape[1] != self.width or frame.shape[0] != self.height:
                 frame = cv2.resize(frame, (self.width, self.height))
             
-            self.process.stdin.write(frame.tobytes())
-            self.process.stdin.flush()
+            if self.process and self.process.stdin:
+                self.process.stdin.write(frame.tobytes())
+                self.process.stdin.flush()
         except (IOError, BrokenPipeError) as e:
             print(f"⚠️ [RTSPStreamer] Broken pipe detected, will restart on next frame: {e}")
             self.stop()
         except Exception as e:
             print(f"❌ [RTSPStreamer] Unexpected error: {e}")
 
-    def stop(self):
+    def stop(self) -> None:
         """停止推流"""
         if self.process:
-            self.process.stdin.close()
+            if self.process.stdin:
+                self.process.stdin.close()
             self.process.terminate()
             self.process = None

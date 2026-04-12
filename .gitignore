@@ -18,6 +18,12 @@ models/**/*.gguf
 models/**/*.bin
 models/**/*.trt
 models/**/*.plan
+*.pt
+
+# Data & Media
+assets/videos/*.mp4
+*.log
+!assets/videos/.gitkeep
 
 # LLM Quantization temporary files
 *.gguf.tmp

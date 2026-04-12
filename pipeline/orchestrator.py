@@ -4,12 +4,12 @@ import os
 import cv2
 import base64
 import redis.asyncio as redis
-from typing import Dict, Any, Optional
-from perception.detector import Detector
+from typing import Dict, Any, Optional, cast, Awaitable
 from cognition.llm_engine import LLMEngine
 from media.mediamtx_client import MediaMTXClient
 from pipeline.health import HealthChecker, render
 from dotenv import load_dotenv
+import numpy as np
 
 load_dotenv()
 
@@ -19,7 +19,7 @@ class PipelineOrchestrator:
     
     負責監聽 Perception 的觸發事件，並調度 Cognition (VLM) 進行深度視覺推理。
     """
-    def __init__(self):
+    def __init__(self) -> None:
         self.redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
         self.rtsp_url = os.getenv("MEDIAMTX_URL", "rtsp://localhost:8554/live")
         self.use_local = os.getenv("USE_LOCAL_CAMERA", "false").lower() == "true"
@@ -34,12 +34,12 @@ class PipelineOrchestrator:
         self.llm_engine = LLMEngine()
         self.redis_client = redis.from_url(self.redis_url)
 
-    async def _encode_image(self, frame) -> str:
+    async def _encode_image(self, frame: np.ndarray) -> str:
         """將 OpenCV 影格轉換為 Base64 字串以傳輸至 VLM"""
         _, buffer = cv2.imencode(".jpg", frame)
         return base64.b64encode(buffer).decode("utf-8")
 
-    async def handle_cognitive_event(self, event_data: Dict[str, Any]):
+    async def handle_cognitive_event(self, event_data: Dict[str, Any]) -> None:
         """處理來自 Redis 的感知觸發事件 (慢路徑)"""
         frame_id = event_data["metadata"]["frame_id"]
         entropy = event_data["metadata"]["entropy_value"]
@@ -69,23 +69,24 @@ class PipelineOrchestrator:
         # 4. 寫入狀態層 (後續實作 ChromaDB 儲存)
         # TODO: Save structured data to storage/chroma_store.py
 
-    async def start_cognition_loop(self):
+    async def start_cognition_loop(self) -> None:
         """啟動慢路徑事件監聽循環"""
         print("🚀 [Cognition Loop] Listening for events on Redis...")
         while True:
             try:
                 # 使用 BLPOP 進行阻塞式監聽，減少 CPU 負擔
-                _, raw_event = await self.redis_client.blpop("saccade:events", timeout=0)
-                event_data = json.loads(raw_event)
-                
-                # 在背景執行推理，不阻塞事件監聽
-                asyncio.create_task(self.handle_cognitive_event(event_data))
+                result = await cast(Awaitable[Optional[list[Any]]], self.redis_client.blpop("saccade:events", timeout=0))
+                if result:
+                    _, raw_event = result
+                    event_data = json.loads(raw_event)
+                    # 在背景執行推理，不阻塞事件監聽
+                    asyncio.create_task(self.handle_cognitive_event(event_data))
                 
             except Exception as e:
                 print(f"⚠️ [Cognition Loop] Error: {str(e)}")
                 await asyncio.sleep(1)
 
-    async def run(self):
+    async def run(self) -> None:
         """啟動全域管線協調"""
         # 1. 啟動前健康檢查
         checker = HealthChecker()
@@ -110,9 +111,12 @@ class PipelineOrchestrator:
         try:
             await self.start_cognition_loop()
         finally:
-            await self.media_client.release()
-            await self.redis_client.aclose()
+            self.media_client.release()
+            await cast(Awaitable[Any], self.redis_client.aclose())
+
+async def main() -> None:
+    orchestrator = PipelineOrchestrator()
+    await orchestrator.run()
 
 if __name__ == "__main__":
-    orchestrator = PipelineOrchestrator()
-    asyncio.run(orchestrator.run())
+    asyncio.run(main())

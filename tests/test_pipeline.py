@@ -1,6 +1,5 @@
 import pytest
 import json
-import asyncio
 from unittest.mock import MagicMock, patch, AsyncMock
 from perception.entropy import EntropyTrigger
 from pipeline.orchestrator import PipelineOrchestrator

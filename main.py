@@ -7,9 +7,9 @@ from media.mediamtx_client import MediaMTXClient
 from pipeline.orchestrator import PipelineOrchestrator
 from dotenv import load_dotenv
 
-load_dotenv()
-
 from media.ffmpeg_utils import RTSPStreamer
+
+load_dotenv()
 
 async def run_perception():
     """快路徑：感知偵測循環 (帶視覺化輸出)"""
@@ -35,7 +35,8 @@ async def run_perception():
     print("⏳ Waiting for first frame...")
     for _ in range(50):
         ret, _ = media.grab_frame()
-        if ret: break
+        if ret:
+            break
         await asyncio.sleep(0.1)
 
     frame_id = 0

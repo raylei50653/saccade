@@ -4,7 +4,7 @@ import uuid
 import asyncio
 import os
 import redis.asyncio as redis
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Any, cast, Awaitable
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -67,9 +67,9 @@ class EntropyTrigger:
         r = await self._ensure_redis()
         try:
             # 推送到 Redis List (saccade:events)
-            await r.rpush("saccade:events", json.dumps(event_data))
+            await cast(Awaitable[Any], r.rpush("saccade:events", json.dumps(event_data)))
             # 設定過期時間 (TTL)，防止 Redis 記憶體溢出
-            await r.expire("saccade:events", 3600) 
+            await cast(Awaitable[Any], r.expire("saccade:events", 3600)) 
             
             print(f"📡 Event emitted: {event_id} (Entropy: {entropy_value:.2f}, Frame: {frame_id})")
             return True
@@ -96,21 +96,21 @@ class EntropyTrigger:
         
         return False
 
-    async def close(self):
+    async def close(self) -> None:
         """關閉連線"""
         if self.redis_client:
             await self.redis_client.aclose()
 
-if __name__ == "__main__":
+async def main() -> None:
     # 測試執行
-    async def main():
-        trigger = EntropyTrigger(threshold=0.5)
-        # 模擬偵測到三個物體，觸發事件
-        await trigger.process_frame(
-            frame_id=1001, 
-            detections=["person", "car", "dog"], 
-            source_path="rtsp://localhost:8554/live"
-        )
-        await trigger.close()
+    trigger = EntropyTrigger(threshold=0.5)
+    # 模擬偵測到三個物體，觸發事件
+    await trigger.process_frame(
+        frame_id=1001, 
+        detections=["person", "car", "dog"], 
+        source_path="rtsp://localhost:8554/live"
+    )
+    await trigger.close()
 
+if __name__ == "__main__":
     asyncio.run(main())

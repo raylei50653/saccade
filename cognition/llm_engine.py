@@ -1,7 +1,7 @@
 import os
 import httpx
 import asyncio
-from typing import Dict, Any, Optional
+from typing import Optional, cast, Awaitable, Any
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -40,7 +40,7 @@ class LLMEngine:
                     clean_image = image_data.split(",")[-1] if "," in image_data else image_data
                     payload["image_data"] = [{"data": clean_image, "id": 0}]
 
-                response = await client.post(url, json=payload)
+                response = await cast(Awaitable[Any], client.post(url, json=payload))
                 
                 if response.status_code != 200:
                     print(f"❌ [LLMEngine] Server returned error {response.status_code}: {response.text}")
@@ -64,19 +64,19 @@ class LLMEngine:
         url = f"{self.base_url}/health"
         async with httpx.AsyncClient() as client:
             try:
-                response = await client.get(url)
-                return response.status_code == 200
+                response = await cast(Awaitable[Any], client.get(url))
+                return bool(response.status_code == 200)
             except Exception:
                 return False
 
-if __name__ == "__main__":
+async def test() -> None:
     # 簡易測試範例
-    async def test():
-        engine = LLMEngine()
-        if await engine.get_health():
-            res = await engine.generate("What is the visual activity in the current frame?")
-            print(f"LLM Response: {res}")
-        else:
-            print("LLM Server is offline.")
+    engine = LLMEngine()
+    if await engine.get_health():
+        res = await engine.generate("What is the visual activity in the current frame?")
+        print(f"LLM Response: {res}")
+    else:
+        print("LLM Server is offline.")
 
+if __name__ == "__main__":
     asyncio.run(test())

@@ -3,7 +3,6 @@ import time
 import os
 import cv2
 import base64
-import numpy as np
 from cognition.llm_engine import LLMEngine
 from media.mediamtx_client import MediaMTXClient
 from dotenv import load_dotenv
@@ -41,7 +40,7 @@ async def benchmark_vlm():
     # 3. 測試：VLM 推理速度 (llama-server)
     prompt = "Describe the main objects and their actions in this scene concisely."
     
-    print(f"  🧠 Sending request to VLM (llama-server)...")
+    print("  🧠 Sending request to VLM (llama-server)...")
     start_inf = time.perf_counter()
     
     response = await engine.generate(prompt, image_data=img_b64, max_tokens=128)
@@ -55,7 +54,7 @@ async def benchmark_vlm():
         char_count = len(response)
         words = len(response.split())
         print(f"\n💡 [VLM Result]: {response}")
-        print(f"\n📊 Performance Metrics:")
+        print("\n📊 Performance Metrics:")
         print(f"  - Total Latency: {inf_time:.2f} ms")
         print(f"  - Characters Generated: {char_count}")
         print(f"  - Words Generated: {words}")

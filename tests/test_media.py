@@ -1,5 +1,3 @@
-import pytest
-import cv2
 import numpy as np
 import os
 from unittest.mock import MagicMock, patch

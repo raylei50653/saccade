@@ -2,7 +2,7 @@ import cv2
 import os
 import threading
 import time
-from typing import Optional, Tuple, Any
+from typing import Optional, Tuple
 import numpy as np
 
 class MediaMTXClient:
@@ -30,9 +30,9 @@ class MediaMTXClient:
             "videoconvert ! video/x-raw,format=BGR ! appsink drop=1"
         )
 
-    def _update_loop(self):
+    def _update_loop(self) -> None:
         """背景持續抓取影格"""
-        print(f"🔄 [MediaClient] Background frame reader started.")
+        print("🔄 [MediaClient] Background frame reader started.")
         while self._running:
             if self.cap and self.cap.isOpened():
                 ret, frame = self.cap.read()
@@ -102,7 +102,7 @@ class MediaMTXClient:
                 
             return self._ret, self._last_frame
 
-    def release(self):
+    def release(self) -> None:
         """關閉連線"""
         self._running = False
         if self._thread:

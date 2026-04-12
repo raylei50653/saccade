@@ -142,10 +142,11 @@ async def check_llama_server() -> ServiceStatus:
 async def check_redis() -> ServiceStatus:
     """Ping Redis and report queue depth."""
     try:
+        from typing import cast, Awaitable, Any
         r = aioredis.from_url(REDIS_URL, socket_timeout=3)
-        await r.ping()
-        depth = await r.llen("saccade:events")
-        await r.aclose()
+        await cast(Awaitable[Any], r.ping())
+        depth = await cast(Awaitable[int], r.llen("saccade:events"))
+        await cast(Awaitable[Any], r.aclose())
         return ServiceStatus(name="redis", ok=True, detail=f"queue depth: {depth}")
     except Exception as e:
         return ServiceStatus(name="redis", ok=False, detail=str(e))
