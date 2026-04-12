@@ -1,0 +1,16 @@
+name: Lint & Type Check
+
+on: [push, pull_request]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - name: Sync dependencies
+        run: uv sync
+      - name: Type Check with mypy
+        run: uv run mypy perception/ cognition/ pipeline/ media/ storage/
+      - name: Lint with ruff
+        run: uv run ruff check .

@@ -17,6 +17,8 @@ dependencies = [
     "fastapi",
     "uvicorn",
     "python-dotenv",
+    "ruff",
+    "pytest",
 ]
 
 [tool.mypy]
