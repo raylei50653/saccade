@@ -8,7 +8,7 @@
 
 1. **純視覺向量管線 (Vision-Vector Pipeline)**
    - **感知層 (Perception)：** 使用 YOLO11 與 TensorRT 引擎，負責即時物件追蹤與偵測。
-   - **特徵提取 (Extraction)：** 運用 Zero-Copy Cropper 與 SigLIP TRT 引擎，僅針對「新出現」或「行為發生重大改變」的物件提取高維特徵。
+   - **特徵提取 (Extraction)：** 運用 Zero-Copy Cropper 與 **Jina-CLIP-v2** TRT 引擎，將物件裁切為 512x512 格式並提取 1024 維高品質特徵向量。
 
 2. **語義漂移去重 (Semantic Drift Handling)**
    - 透過 GPU 內的 `Cosine Similarity`，將新特徵與快取進行比對。避免連續幀重複存儲，僅當物體姿態或特徵產生「漂移 (Drift)」時寫入。
@@ -54,7 +54,7 @@
 
 | 層級 | 技術 |
 | :--- | :--- |
-| **算法** | YOLO11 (TRT), SigLIP SO400M (TRT FP16), `torchvision.ops.roi_align` |
+| **算法** | YOLO11 (TRT), Jina-CLIP-v2 (TRT FP16, 512x512), `torchvision.ops.roi_align` |
 | **媒體** | MediaMTX, FFmpeg (NVDEC), GStreamer (`appsink`) |
 | **計算與資源** | TensorRT, CUDA Streams, Pynvml |
 | **環境維運** | Nix Flakes, uv (Rust-based) |
