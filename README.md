@@ -66,19 +66,19 @@ ffmpeg -re -i source.mp4 -c copy -f rtsp rtsp://localhost:8554/stream
 
 ## Project Structure
 
-```
+Detailed functional mapping of each directory can be found in [**docs/architecture.md**](docs/architecture.md).
+
+```bash
 saccade/
-├── perception/       # Fast track — YOLO26, CV tracking, entropy evaluation
-├── cognition/        # Slow track — LLM/VLM inference, keyframe analysis
-├── pipeline/         # Orchestrator — event routing between tracks
-├── media/            # MediaMTX client, FFmpeg utilities
-├── storage/          # ChromaDB vector store, Redis cache
-├── infra/            # Systemd units, MediaMTX config
-├── configs/          # Model profiles, YOLO thresholds
-├── models/           # Model weights (not tracked by Git — see models/README.md)
-├── scripts/          # Dev utilities — stream test, VRAM monitor
-├── tests/            # Unit and integration tests, benchmarks
-└── docs/             # Architecture decisions, module progress, runbooks
+├── perception/    # Fast track: YOLO detection & Entropy evaluation
+├── cognition/     # Slow track: VLM analysis & VRAM resource management
+├── pipeline/      # Orchestrator: Event routing & System health
+├── media/         # Streaming: MediaMTX client & FFmpeg utilities
+├── storage/       # Memory: ChromaDB (Vector) & Redis (State)
+├── infra/         # DevOps: Systemd units & MediaMTX config
+├── configs/       # Settings: LLM profiles & model thresholds
+├── scripts/       # CLI Tools: Service management & VRAM monitor
+└── tests/         # Quality: Unit tests & Performance benchmarks
 ```
 
 ## Development Conventions
