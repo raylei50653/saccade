@@ -10,9 +10,8 @@ WorkingDirectory=/home/ray/developer/ai/YOLO_LLM
 ExecStart=/home/ray/developer/ai/YOLO_LLM/scripts/run.sh perception
 
 Restart=always
-RestartSec=5
-StartLimitIntervalSec=0
-WatchdogSec=30
+RestartSec=10
+WatchdogSec=60
 
 [Install]
 WantedBy=multi-user.target

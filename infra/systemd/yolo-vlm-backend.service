@@ -10,6 +10,7 @@ ExecStart=/home/ray/developer/ai/YOLO_LLM/scripts/run.sh vlm-backend
 
 Restart=on-failure
 RestartSec=10
+WatchdogSec=120
 
 [Install]
 WantedBy=multi-user.target

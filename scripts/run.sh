@@ -20,7 +20,7 @@ case "$1" in
             -m "$MODEL_PATH" \
             --mmproj "$MMPROJ_PATH" \
             --host 0.0.0.0 --port 8080 \
-            -ngl 24 -c 4096
+            -ngl 24 -c 32768 -np 4
         ;;
     perception)
         echo "🚀 Starting Perception Pipeline (YOLO)..."

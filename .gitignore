@@ -21,6 +21,7 @@ models/**/*.plan
 *.pt
 
 # Data & Media
+storage/chroma_db/
 assets/videos/*.mp4
 *.log
 !assets/videos/.gitkeep

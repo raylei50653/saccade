@@ -52,13 +52,18 @@ case "$1" in
         fi
         ;;
     camera-on)
-        printf "🎬 Starting mock camera stream in background...\n"
-        nohup ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=15 -vcodec h264 -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/live > /tmp/mock_cam.log 2>&1 &
-        printf "✅ Mock camera is pushing to rtsp://127.0.0.1:8554/live\n"
+        if [ -f "$DUMMY_VIDEO_PATH" ]; then
+            printf "🎬 Starting demo video stream (%s) in background...\n" "$DUMMY_VIDEO_PATH"
+            nohup ffmpeg -re -i "$DUMMY_VIDEO_PATH" -c copy -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/live > /tmp/mock_cam.log 2>&1 &
+        else
+            printf "🎬 Starting mock color-bar stream in background...\n"
+            nohup ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=15 -vcodec h264 -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/live > /tmp/mock_cam.log 2>&1 &
+        fi
+        printf "✅ Stream is pushing to rtsp://127.0.0.1:8554/live\n"
         ;;
     camera-off)
-        printf "🛑 Stopping mock camera...\n"
-        pkill -f "testsrc=size=640x480" || echo "No mock camera running."
+        printf "🛑 Stopping camera stream...\n"
+        pkill -f "ffmpeg.*rtsp://127.0.0.1:8554/live" || echo "No stream running."
         ;;
     health)
         printf "🩺 Running internal health check...\n"
