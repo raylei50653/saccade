@@ -18,9 +18,11 @@
 - [ ] **動態抓幀**: 串接更穩定的背景抓幀機制 (已在 MediaMTXClient 實作)。
 
 ## 4. 資源調度器 (resource_manager.py)
-- [ ] **VRAM 動態管理**: 透過 `nvml` 監測 VRAM，並在必要時透過 Systemd 重啟。
+- [x] **VRAM 動態管理**: 透過 `pynvml` 監測 VRAM，並根據 `llm_profiles.yaml` 自動選擇最優配置。
+- [x] **預留機制**: 實作 `reserve_mb` 邏輯，保護 Perception (YOLO) 的運作空間。
 
 ## 已完成里程碑
+- [x] **VRAM 動態管理**: 實作基於當前資源狀態的模型配置選擇邏輯 (Pillar 2)。
 - [x] **VLM 閉環驗證**: 成功從串流抓取影格並獲得模型語義描述。
 - [x] **提示詞優化**: 建立專業安全 AI 角色設定。
 
