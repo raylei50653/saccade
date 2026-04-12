@@ -1,37 +1,96 @@
+# Saccade
+
+Continuous visual perception with vector DB memory — every detection tagged, timestamped, and queryable.
+
+---
+
+## Overview
+
+Saccade is a dual-track visual reasoning system designed to run on constrained GPU hardware (12GB VRAM). It combines continuous real-time perception with event-driven cognitive analysis, storing every detection as a vector-indexed, time-tagged memory queryable by semantic description.
+
+Like the saccadic motion of the eye — fast scanning, then focused understanding — Saccade separates perception from cognition into two asynchronous tracks that run in parallel without blocking each other.
+
+## Architecture
+
 ![架構圖](./architecture.svg)
 
-``` txt
-yolo-llm/
-├── flake.nix                  # Nix Flakes：鎖定 CUDA / GStreamer
-├── pyproject.toml             # uv 管理的 Python 依賴
-├── .env                       # VRAM 上限、MediaMTX URL 等環境變數
-│
-├── perception/                # 快路徑 — 持續運行
-│   ├── detector.py            # YOLO26 推理封裝（TensorRT 優先）
-│   ├── tracker.py             # CV 多目標追蹤
-│   ├── entropy.py             # 資訊熵評估，決定是否觸發慢路徑
-│   └── zero_copy.py           # NVDEC → NVMM → CUDA Tensor 零拷貝
-│
-├── cognition/                 # 慢路徑 — 按需啟動
-│   ├── llm_engine.py          # llama.cpp 封裝，動態調整 -c / -ngl
-│   ├── vlm_engine.py          # Qwen-3.5 / CLIP / SigLIP 視覺推理
-│   ├── frame_selector.py      # 從 MediaMTX 拉取高價值關鍵幀
-│   └── resource_manager.py    # VRAM / 主記憶體 offload 調度
-│
-├── media/                     # 媒體閘道層
-│   ├── mediamtx_client.py     # RTSP / WebRTC 串流接取
-│   └── ffmpeg_utils.py        # NVENC / NVDEC 轉碼工具函式
-│
-├── storage/                   # 無狀態推理的外部狀態層
-│   ├── chroma_store.py        # ChromaDB 向量記憶體
-│   └── redis_cache.py         # Redis 即時狀態與事件佇列
-│
-├── infra/                     # 維運配置
-│   ├── systemd/               # .service 單元檔（熱切換用）
-│   └── mediamtx.yml           # 串流路徑與緩衝設定
-│
-└── tests/
-    ├── test_pipeline.py       # 端到端整合測試
-    ├── test_zero_copy.py      # GPU 零拷貝路徑驗證
-    └── benchmarks/            # 延遲 / VRAM 壓力測試
+**Fast track** runs continuously, evaluating every frame for information entropy. Only high-value events trigger the slow track — keeping the LLM off the hot path entirely.
+
+**Slow track** pulls keyframes from MediaMTX on demand, runs deep visual-language analysis, and writes structured detections to ChromaDB with semantic tags and timestamps.
+
+## Key Design Decisions
+
+**Bifurcated pipeline** — perception and cognition run as independent services. A Redis queue is the only coupling point between them. Either service can restart without interrupting the video stream.
+
+**Dynamic compute provisioning** — llama.cpp `-c` (context) and `-ngl` (GPU offload layers) are tuned at runtime based on available VRAM, with smooth fallback to 64GB system RAM when needed.
+
+**Zero-copy GPU path** — video frames travel `NVDEC → NVMM → CUDA Tensor` without touching CPU memory, minimising PCIe bandwidth usage.
+
+**Stateless inference** — inference units hold no persistent state. All memory lives in ChromaDB (vector store) and Redis (event queue), so services are safe to hot-swap via Systemd without data loss.
+
+**Vector-indexed memory** — every detection is embedded, tagged, and stored with a Unix timestamp. Query examples: *"show all people detected near the entrance after 18:00"*, *"find frames where a vehicle was stationary for more than 30 seconds"*.
+
+## Tech Stack
+
+| Layer | Technology |
+| :--- | :--- |
+| Detection | YOLO26, CV tracking |
+| Cognition | Qwen-3.5 (GGUF), CLIP, SigLIP, llama.cpp |
+| Media | MediaMTX, FFmpeg (NVDEC/NVENC), GStreamer |
+| Memory | ChromaDB (vector), Redis (cache/queue) |
+| Compute | TensorRT, PagedAttention, NVML |
+| Environment | Nix Flakes, uv |
+
+## Getting Started
+
+**Requirements:** NVIDIA GPU (12GB+ VRAM), Nix with flakes enabled, CUDA 12.x
+
+```bash
+# Enter the development environment (pins CUDA, GStreamer, system deps)
+nix develop
+
+# Install Python dependencies
+uv sync
+
+# Copy and configure environment variables
+cp .env.example .env
+
+# Start the pipeline
+python main.py
 ```
+
+**Stream pressure test:**
+```bash
+ffmpeg -re -i source.mp4 -c copy -f rtsp rtsp://localhost:8554/stream
+```
+
+## Project Structure
+
+```
+saccade/
+├── perception/       # Fast track — YOLO26, CV tracking, entropy evaluation
+├── cognition/        # Slow track — LLM/VLM inference, keyframe analysis
+├── pipeline/         # Orchestrator — event routing between tracks
+├── media/            # MediaMTX client, FFmpeg utilities
+├── storage/          # ChromaDB vector store, Redis cache
+├── infra/            # Systemd units, MediaMTX config
+├── configs/          # Model profiles, YOLO thresholds
+├── models/           # Model weights (not tracked by Git — see models/README.md)
+├── scripts/          # Dev utilities — stream test, VRAM monitor
+├── tests/            # Unit and integration tests, benchmarks
+└── docs/             # Architecture decisions, module progress, runbooks
+```
+
+## Development Conventions
+
+- **Performance first** — all new Python operators should prefer a CUDA/TensorRT implementation where one exists.
+- **Stateless inference** — inference units must be restartable at any time; state belongs in ChromaDB or Redis.
+- **Type safety** — strict type hinting enforced via mypy in CI.
+
+## Documentation
+
+- [`docs/architecture.md`](docs/architecture.md) — system design and ADRs
+- [`docs/progress/`](docs/progress/) — per-module development status
+- [`docs/runbooks/`](docs/runbooks/) — operational procedures (hot swap, stream recovery, OOM handling)
+- [`docs/benchmarks/`](docs/benchmarks/) — latency, VRAM, and throughput measurements
+- [`DEVELOPMENT.md`](DEVELOPMENT.md) — full development guide
