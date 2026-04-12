@@ -19,6 +19,7 @@ models/**/*.bin
 models/**/*.trt
 models/**/*.plan
 *.pt
+models/embedding/
 
 # Data & Media
 storage/chroma_db/

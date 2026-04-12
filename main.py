@@ -2,8 +2,13 @@ import asyncio
 import argparse
 import os
 import torch
+from typing import cast, Any
 from perception.detector import Detector
 from perception.entropy import EntropyTrigger
+from perception.cropper import ZeroCopyCropper
+from perception.feature_extractor import TRTFeatureExtractor
+from perception.tracker import SmartTracker
+from perception.drift_handler import SemanticDriftHandler
 from media.mediamtx_client import MediaMTXClient
 from pipeline.orchestrator import PipelineOrchestrator
 from dotenv import load_dotenv
@@ -12,14 +17,21 @@ from media.ffmpeg_utils import RTSPStreamer
 
 load_dotenv()
 
-async def run_perception():
-    """快路徑：感知偵測循環 (基於 Zero-Copy CUDA Tensor)"""
+async def run_perception() -> None:
+    """快路徑：感知偵測與特徵提取循環 (Zero-Copy)"""
     use_local = os.getenv("USE_LOCAL_CAMERA", "false").lower() == "true"
     dummy_video = os.getenv("DUMMY_VIDEO_PATH")
     
+    print("🚀 Initializing Perception Pipeline components...")
     detector = Detector()
     trigger = EntropyTrigger(threshold=0.8, cooldown=5.0)
     media = MediaMTXClient(use_local=use_local, dummy_video=dummy_video)
+    
+    # 初始化 Phase 1~4 的零拷貝語義特徵提取組件
+    cropper = ZeroCopyCropper(output_size=(224, 224))
+    extractor = TRTFeatureExtractor()
+    tracker = SmartTracker(iou_threshold=0.7, velocity_angle_threshold=45.0)
+    drift_handler = SemanticDriftHandler(similarity_threshold=0.95)
     
     # 視覺化推流器
     streamer = RTSPStreamer(rtsp_url="rtsp://localhost:8554/detected")
@@ -42,7 +54,6 @@ async def run_perception():
     frame_id = 0
     try:
         while True:
-            # 優先使用 CUDA Tensor 進行 Zero-Copy 推理
             ret, tensor = media.grab_tensor()
             if not ret or tensor is None:
                 await asyncio.sleep(0.01)
@@ -50,44 +61,69 @@ async def run_perception():
             
             frame_id += 1
             
-            # 1. 執行偵測 (YOLO 直接接收 CUDA Tensor)
-            # 將 [H, W, C] 轉為 [1, C, H, W] 並歸一化與縮放
             with torch.no_grad():
                 # [1080, 1920, 3] -> [1, 3, 1080, 1920]
                 input_tensor = tensor.permute(2, 0, 1).unsqueeze(0).float() / 255.0
-                # 縮放至 640x640
-                input_tensor = torch.nn.functional.interpolate(
+                
+                # 為了 YOLO 進行縮放 (不影響 SigLIP 的高解析裁切)
+                yolo_input = torch.nn.functional.interpolate(
                     input_tensor, size=(640, 640), mode='bilinear', align_corners=False
                 )
-                # 使用 track 模式以維持物件 ID 一致性
-                results = detector.model.track(input_tensor, verbose=False, persist=True)
+                
+                # 1. 執行 YOLO 偵測與追蹤
+                results = detector.model.track(yolo_input, verbose=False, persist=True)
 
-            
-            # 2. 視覺化 (使用 Numpy 格式推流)
-            if frame_id % 3 == 0:
-                # 獲取對應的 Numpy 影格進行繪製 (MediaMTXClient 內部已同步準備好)
-                _, frame_np = media.grab_frame()
-                if frame_np is not None:
-                    # 這裡將結果套用到 Numpy 影格上
-                    annotated_frame = results[0].plot()
-                    streamer.push_frame(annotated_frame)
-            
-            # 3. 評估與觸發事件
-            if len(results[0].boxes) > 0:
+            # 確保有追蹤結果
+            if results and len(results[0].boxes) > 0 and results[0].boxes.id is not None:
+                boxes = results[0].boxes.xyxy
+                ids = results[0].boxes.id
+                
+                # 將 640x640 的 box 映射回 1080p
+                scale_x = tensor.shape[1] / 640.0
+                scale_y = tensor.shape[0] / 640.0
+                boxes_1080p = boxes.clone()
+                boxes_1080p[:, [0, 2]] *= scale_x
+                boxes_1080p[:, [1, 3]] *= scale_y
+
+                # 2. 智能追蹤過濾 (Phase 3)
+                ext_ids, ext_boxes = tracker.update_and_filter(ids, boxes_1080p)
+
+                # 3. 非同步特徵提取 (Phase 1 & 2)
+                features = tracker.async_extract_features(input_tensor, ext_boxes, cropper, extractor)
+
+                if features is not None:
+                    # 等待 CUDA Stream 執行完畢以進行語義比對
+                    torch.cuda.current_stream().wait_stream(tracker.extraction_stream)
+                    
+                    # 4. 語義去重與漂移檢測 (Phase 4)
+                    novel_ids, novel_features = drift_handler.filter_novel_features(ext_ids, features)
+                    
+                    if novel_ids.numel() > 0:
+                        print(f"✨ [Frame {frame_id}] Extracted novel semantics for Obj IDs: {novel_ids.tolist()}")
+                        # 未來可以在此處將 novel_features 寫入 Redis/ChromaDB
+                
+                # 觸發傳統事件
                 labels = detector.get_actionable_labels(results)
                 await trigger.process_frame(
                     frame_id=frame_id, 
                     detections=labels, 
                     source_path="local_cam" if use_local else "rtsp"
                 )
+
+            # 視覺化輸出
+            if frame_id % 3 == 0:
+                _, frame_np = media.grab_frame()
+                if frame_np is not None and results:
+                    annotated_frame = results[0].plot()
+                    streamer.push_frame(annotated_frame)
             
-            await asyncio.sleep(0.005) # 降低等待時間，極大化吞吐量
+            await asyncio.sleep(0.005)
     finally:
         media.release()
         streamer.stop()
         await trigger.close()
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Saccade - Dual-Track Video Perception")
     parser.add_argument("--mode", choices=["perception", "orchestrator", "full"], default="full")
     args = parser.parse_args()
