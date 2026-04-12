@@ -19,8 +19,8 @@ class Detector:
         
         # 確保模型存在
         if not os.path.exists(model_path):
-            print(f"Warning: YOLO model not found at {model_path}, using default 'yolo11n.pt'")
-            self.model_path = "yolo11n.pt"
+            print(f"Warning: YOLO model not found at {model_path}, using default 'models/yolo/yolo11n.pt'")
+            self.model_path = "models/yolo/yolo11n.pt"
             
         self.load_model()
 
