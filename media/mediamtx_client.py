@@ -70,10 +70,11 @@ class MediaMTXClient:
     def _get_pipeline_str(self) -> str:
         """根據配置構建 GStreamer 管線"""
         if self.decoder_name == "nvh264dec":
-            decoder_path = (
-                "nvh264dec ! cudaconvert ! video/x-raw(memory:CUDAMemory),format=RGB"
-            )
+            # 硬體路徑：使用 NVDEC 並轉為 RGB
+            # 注意：在 1.20 版本中，nvh264dec 輸出的往往是 NV12，需透過 videoconvert 轉為 RGB
+            decoder_path = "nvh264dec ! videoconvert ! video/x-raw,format=RGB"
         else:
+            # CPU 備援路徑
             decoder_path = "avdec_h264 ! videoconvert ! video/x-raw,format=RGB"
 
         sink_path = "appsink name=sink emit-signals=true max-buffers=1 drop=true"

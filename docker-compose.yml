@@ -21,7 +21,7 @@ services:
       - .:/app
       - /app/.venv # 保護容器內的虛擬環境不被宿主機覆蓋
       - /tmp/.X11-unix:/tmp/.X11-unix # 支援 X11 顯示
-      # - /home/ray/.cache/uv:/root/.cache/uv # 暫時停用共用快取以排除故障
+      - /usr/lib/wsl:/usr/lib/wsl # 強制映射 WSL2 驅動庫
     
     # 環境變量配置
     environment:
@@ -29,6 +29,7 @@ services:
       - NVIDIA_DRIVER_CAPABILITIES=all
       - PYTHONPATH=/app
       - UV_LINK_MODE=copy
+      - LD_LIBRARY_PATH=/usr/lib/wsl/lib:/usr/local/cuda/lib64:/usr/local/nvidia/lib:/usr/local/nvidia/lib64
       
     # 網路配置 (對應 MediaMTX 或 LLM Server)
     network_mode: host
