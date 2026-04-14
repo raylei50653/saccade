@@ -43,9 +43,9 @@ PYBIND11_MODULE(saccade_media_ext, m) {
 
     py::class_<GstClient>(m, "GstClient")
         .def(py::init<const std::string&>())
-        .def("connect", &GstClient::connect)
-        .def("release", &GstClient::release)
-        .def("sync_buffer", &GstClient::syncBuffer)
+        .def("connect", &GstClient::connect, py::call_guard<py::gil_scoped_release>())
+        .def("release", &GstClient::release, py::call_guard<py::gil_scoped_release>())
+        .def("sync_buffer", &GstClient::syncBuffer, py::call_guard<py::gil_scoped_release>())
         .def("set_frame_callback", [](GstClient& self, py::object cb) {
             // 封裝 C++ Callback，加入 Exception Handling
             self.setFrameCallback([cb](const FrameData& data) {

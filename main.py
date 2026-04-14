@@ -10,11 +10,32 @@ Saccade CLI Entrypoint
 注意：核心的系統調度、非同步事件循環與各層級之間的資料流動，皆由 `pipeline/orchestrator.py` 負責處理。本檔案不應包含任何業務邏輯或感知流程細節。
 """
 
+import os
+import torch.multiprocessing as mp
+# CUDA 必須使用 spawn 模式
+try:
+    mp.set_start_method('spawn', force=True)
+except RuntimeError:
+    pass
+
+# 必須在 import numpy / torch 之前設定，防止執行緒暴風
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
 import asyncio
 import argparse
-import os
 import torch
-import time
+import numpy as np
+try:
+    import uvloop
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+    print("⚡ [System] Fast Event Loop (uvloop) & Single-thread NumPy config enabled.")
+except ImportError:
+    pass
+
 from typing import Optional, List
 from perception.detector_trt import TRTYoloDetector
 from perception.entropy import EntropyTrigger

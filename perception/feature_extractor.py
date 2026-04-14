@@ -15,9 +15,11 @@ class TRTFeatureExtractor:
         self,
         engine_path: str = "models/embedding/google_siglip2-base-patch16-224.engine",
         device: str = "cuda:0",
+        max_batch: int = 32
     ) -> None:
         self.device = device
         self.logger = trt.Logger(trt.Logger.ERROR)
+        self.max_batch = max_batch
 
         print(f"⏳ Loading TensorRT Engine from {engine_path}...")
         with open(engine_path, "rb") as f, trt.Runtime(self.logger) as runtime:
@@ -29,46 +31,67 @@ class TRTFeatureExtractor:
         self.context = self.engine.create_execution_context()
         # SigLIP 2 Base (ViT-B) 的特徵維度為 768
         self.feature_dim = 768
-        print(f"✅ Extractor Ready. Feature Dimension: {self.feature_dim}")
+        
+        # 🛠️ 預先分配 Pinned Buffer Pool (鎖頁記憶體)
+        # 這能避免在高頻推理中頻繁配置記憶體導致的 WSL2 抖動
+        self.pinned_buffer = torch.empty(
+            (self.max_batch, self.feature_dim), 
+            device="cpu", 
+            pin_memory=True, 
+            dtype=torch.float32
+        )
+        # GPU 端的輸出緩衝區也預先分配 (避免碎片化)
+        self.gpu_output_buffer = torch.empty(
+            (self.max_batch, self.feature_dim), 
+            device=self.device, 
+            dtype=torch.float32
+        )
+        # SigLIP 2 Base 的 last_hidden_state (可選，若不使用可移除以省顯存)
+        self.gpu_hidden_buffer = torch.empty(
+            (self.max_batch, 196, self.feature_dim),
+            device=self.device,
+            dtype=torch.float32
+        )
+        
+        print(f"✅ Extractor Ready. Feature Dimension: {self.feature_dim}, Max Batch: {self.max_batch}")
 
     def extract(self, input_tensor: torch.Tensor) -> torch.Tensor:
         """
-        執行零拷貝推論
-
-        :param input_tensor: 由 ZeroCopyCropper 產出的連續 Tensor [N, C, H, W]，型別必須是 Float32
-        :return: 提取後的語義向量 Tensor [N, Feature_Dim]
+        執行零拷貝推論 (GPU -> GPU)
         """
         batch_size = input_tensor.size(0)
         if batch_size == 0:
             return torch.empty((0, self.feature_dim), device=self.device)
 
-        # 1. 確保張量在連續的記憶體區塊中，否則 TensorRT 無法正確讀取指標
         input_tensor = input_tensor.contiguous()
-
-        # 2. 動態設定本次推理的 Batch Size (SigLIP 2 Base 為 224x224)
         self.context.set_input_shape("pixel_values", (batch_size, 3, 224, 224))
 
-        # 3. 預先分配輸出空間 (全在 GPU 上)
-        output_tensor = torch.empty(
-            (batch_size, self.feature_dim), device=self.device, dtype=torch.float32
-        )
-        # SigLIP 2 Base 的 last_hidden_state 形狀為 (batch, 196, 768)
-        hidden_state_tensor = torch.empty(
-            (batch_size, 196, self.feature_dim), device=self.device, dtype=torch.float32
-        )
+        # 複用預分配的 GPU Buffer
+        output_tensor = self.gpu_output_buffer[:batch_size]
+        hidden_tensor = self.gpu_hidden_buffer[:batch_size]
 
-        # 4. 記憶體綁定：直接告訴 TensorRT 從這兩個 PyTorch 指標讀寫數據
         self.context.set_tensor_address("pixel_values", input_tensor.data_ptr())
         self.context.set_tensor_address("image_embeds", output_tensor.data_ptr())
-        self.context.set_tensor_address(
-            "last_hidden_state", hidden_state_tensor.data_ptr()
-        )
-
-        # 5. 異步觸發推理 (利用當前 PyTorch 的 CUDA Stream)
+        self.context.set_tensor_address("last_hidden_state", hidden_tensor.data_ptr())
+        
+        # SigLIP 2 推理 (異步)
         stream = torch.cuda.current_stream().cuda_stream
         self.context.execute_async_v3(stream)
 
         return output_tensor
+
+    def extract_to_cpu(self, input_tensor: torch.Tensor) -> torch.Tensor:
+        """
+        執行推理並將結果搬移至 Pinned CPU Buffer (D2H 優化)
+        """
+        batch_size = input_tensor.size(0)
+        gpu_features = self.extract(input_tensor)
+        
+        # 使用 non_blocking=True 進行 DMA 搬運
+        cpu_features = self.pinned_buffer[:batch_size]
+        cpu_features.copy_(gpu_features, non_blocking=True)
+        
+        return cpu_features
 
 
 if __name__ == "__main__":
