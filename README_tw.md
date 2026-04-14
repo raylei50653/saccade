@@ -1,6 +1,6 @@
-# Saccade (眼動系統)
+# Saccade：針對邊緣 AI 的高效率雙軌視覺感知系統
 
-持續的視覺感知與向量資料庫記憶 — 每一次偵測與語義特徵都帶有標籤、時間戳記且可供毫秒級檢索。
+**邊緣端連續視覺推理與語義索引系統。**
 
 ---
 
@@ -8,83 +8,134 @@
 
 ---
 
-## 概述
+## 1. 專題動機與問題定義
 
-Saccade 是一個設計用於受限 GPU 硬體（12GB VRAM）的高效能視覺感知系統。它結合了實時感知與事件驅動的語義提取，將偵測結果與高維特徵向量儲存為帶有時間標籤的記憶，實現「可語義搜尋」的視訊監控。
+### 目前面臨的問題
+傳統視訊監控系統主要為「即時監控」設計，缺乏 **長效語義記憶**，這導致了幾個關鍵瓶頸：
+*   **檢索效率低下**：要搜尋特定的歷史事件（例如：「尋找昨天的紅色貨車」）需要數小時的人工回放。
+*   **運算資源浪費**：在邊緣設備上對每一影格執行沉重的視覺語言模型 (VLM) 是不切實際的。
+*   **儲存膨脹**：儲存每一影格會產生大量冗餘，且無法提供具備意義的資訊摘要。
 
-就像人類眼球的跳動（saccadic motion） — 先快速掃描（Perception），再集中理解（Extraction） — Saccade 將感知與語義提取拆分為兩個非同步軌道，透過 CUDA Streams 達成並行運作且互不阻塞。
+### 專題目標
+Saccade 旨在將原始視訊流轉化為 **可搜尋的視覺記憶系統**。透過模仿人類視覺系統的「掃視」機制，我們將高速感知與深層語義理解解耦，在資源受限的邊緣硬體上實現自然語言檢索。
 
-## 系統架構
+## 2. 核心解決方案：雙軌感知架構
 
-**感知快路徑 (Fast track)** 持續以 140+ FPS 運行，使用 YOLO26 與 TensorRT 引擎評估每一影格。透過 GStreamer (NVDEC) 與 C++ 核心實現零拷貝硬體解碼，數據全程保留在 GPU VRAM 中。
+Saccade 的邏輯架構橫向擴展為六個核心層級 (L1-L6)，系統性地整合了多項開源技術，確保高吞吐量與低資源消耗：
 
-**語義提取慢路徑 (Slow track)** 運作於獨立的 CUDA Stream。當偵測到新物件或物件行為發生重大改變（語義漂移）時，使用 `roi_align` 在顯存中直接裁切，並透過 **SigLIP 2** (TensorRT) 提取特徵向量存入 ChromaDB。
+```` Mermaid
+graph TD
+    %% 自定義樣式 (配合原圖的淺綠色調)
+    classDef default fill:#d1fae5,stroke:#10b981,stroke-width:1px,color:#065f46;
+    classDef transparent fill:none,stroke:none;
+    classDef db fill:#d1fae5,stroke:#10b981,stroke-width:1px,color:#065f46;
 
-## 核心設計決策
+    Stream["📡 RTSP / WebRTC 串流<br>MediaMTX 接收"]
 
-**純視覺向量管線 (Pure Vision-Vector)** — 為了極大化吞吐量，我們採用「YOLO26 + SigLIP 2」架構。VRAM 佔用降至 **~1.5GB**，效能提升數倍。
+    subgraph L6 ["L6 認知層（全域監控）"]
+        direction TB
+        Monitor["psutil / pynvml<br>VRAM ≤ 1.5 GB 監控"]
+        Action["動態調節<br>降幀率 / 卸載模型"]
+        Monitor -- "節流 / 卸載" --> Action
+    end
 
-**語義漂移處理 (Semantic Drift Handling)** — 為防止資料庫膨脹，提取的特徵會與 GPU 內的熱快取進行餘弦相似度比對。僅當語義發生顯著變化時才會寫入資料庫。
+    subgraph Ingestion ["媒體接入層"]
+        direction TB
+        GStreamer["GStreamer<br>nvh264dec 硬體解碼"]
+        GPUPool["5-Buffer GPU Pool<br>NV12 格式駐留 VRAM"]
+        GStreamer --> GPUPool
+    end
 
-**零拷貝 GPU 路徑 (Zero-copy GPU path)** — 影像路徑為 `NVDEC → NVMM → CUDA Tensor → TensorRT`，完全不經過 CPU 記憶體搬運，最大限度減少 PCIe 頻寬損耗。
+    Stream --> GStreamer
 
-**時空向量記憶 (Vector-indexed memory)** — 結合 Redis 與 ChromaDB。Redis 負責實時物件軌跡追蹤；ChromaDB 負責長期的語義搜尋。支援混合檢索（語義 + 元數據 + 時間過濾）。
+    subgraph L1 ["L1 感知層 · Fast Path（主 CUDA Stream）"]
+        direction TB
+        YOLO["YOLO26<br>Native TensorRT 推理<br>~3.53 ms"]
+        ByteTrack["GPU ByteTrack<br>軌跡追蹤"]
+        YOLO --> ByteTrack
+    end
 
-## 技術棧
+    GPUPool -- "Zero-Copy 指標<br>0.0004 ms" --> YOLO
 
-| 層級 | 技術 |
-| :--- | :--- |
-| 偵測 (Detection) | YOLO26 (TensorRT Engine, C++ Fast Path), GPU 實時物件追蹤 |
-| 提取 (Extraction) | SigLIP2 (TensorRT Engine) |
-| 媒體 (Media) | MediaMTX, GStreamer (nvh264dec), OpenCV (CUDA) |
-| 記憶 (Memory) | ChromaDB (向量), Redis (時空快取/事件) |
-| 介面 (API) | FastAPI (時空檢索與語義搜尋) |
-| 環境 (Env) | Docker, uv |
+    %% 動態調節的虛線路徑
+    Action -. "調節幀率" .-> YOLO
 
-## 入門指南
+    subgraph L2 ["L2 去重層 · Vector Path（背景 CUDA Stream）"]
+        direction TB
+        ROIAlign["torchvision roi_align<br>GPU 裁切 ~0.21 ms"]
+        NextStep(("↓"))
+        ROIAlign --> NextStep
+    end
 
-**需求：** NVIDIA GPU (12GB+ VRAM), 安裝 NVIDIA Container Toolkit 的 Docker, CUDA 12.x
+    Action -. "卸載至 CPU" .-> L2
+
+    %% 分支路徑
+    ByteTrack -- "位移物件<br>ROI 座標" --> ROIAlign
+    ByteTrack -- "無變化物件<br>忽略" --> Skip[(略過)]
+    
+    class Skip db;
+````
+
+*   **媒體接入 (Ingestion) - GStreamer & MediaMTX**：負責接收 RTSP/WebRTC 影像串流。底層使用 C++ 與 `nvh264dec` 進行硬體解碼，將影像幀直接放入 GPU 記憶體池。
+*   **L1 感知層 (Perception) - YOLO26 & TensorRT**：主 CUDA Stream。直接讀取 GPU 內的影像指標，使用 Native TensorRT 執行極速、無 NMS 的物件偵測，並利用 GPU ByteTrack 進行軌跡追蹤。
+*   **L2 去重層 (Deduplication) - SigLIP 2 & PyTorch**：背景 CUDA Stream。當物體產生位移時，觸發 `torchvision` 進行微秒級的 ROI 裁切，並透過 TensorRT 版本的 SigLIP 2 提取特徵，計算餘弦相似度以過濾語義漂移 (Semantic Drift)。
+*   **L3 緩衝層 (Streaming) - Redis Streams & Asyncio**：為防止後端資料庫寫入拖慢感知主循環，所有通過 L2 過濾的特徵向量與事件，都會被非同步地推送到 Redis 記憶體佇列中進行微批次 (Micro-batching) 聚合。
+*   **L4 儲存層 (Vector DB) - ChromaDB**：作為系統的長效記憶。從 Redis 接收批次資料後，將語義向量、時間戳記與空間座標寫入 ChromaDB，利用 HNSW 演算法建立多維度索引。
+*   **L5 應用層 (Retrieval API) - FastAPI**：提供輕量級的 RESTful API，允許使用者利用自然語言結合時空條件（例如：「尋找昨天下午出現在門口的紅色車子」）進行混合搜尋。
+*   **L6 認知與資源層 (Cognition) - Python `psutil`/`pynvml`**：高階決策層。動態監控 VRAM (如確保 4GB 環境下的 1.5GB 上限) 與 CPU 使用率，在資源緊繃時自動調節處理幀率或卸載模型。
+
+### 核心資料流向 (Data Flow Interaction)
+1. **硬體解碼**：MediaMTX 接收串流，GStreamer 解碼出 NV12 格式並駐留於 GPU 5-Buffer Pool。
+2. **零拷貝感知**：指標透過 PyBind11 傳遞，PyTorch 封裝為 Tensor，YOLO26 在 GPU 上輸出 Bounding Boxes。
+3. **分流處理**：追蹤結果不變的物件被忽略；出現位移的物件被裁切並送入 SigLIP 2 提取高維特徵。
+4. **過濾與緩衝**：與 GPU Hot Cache 比對發生「漂移」的特徵，被推入 Redis 佇列。
+5. **持久化與檢索**：背景 Orchestrator 讀取 Redis，將向量持久化至 ChromaDB，供前端 FastAPI 查詢。
+
+## 3. 技術設計理由 (Design Rationale)
+
+### 為什麼要「解耦」？
+解耦讓系統能維持極高的處理幀率 (**120+ FPS**)，而不受語義提取複雜度的影響。沉重的嵌入運算被移至非同步的 CUDA Stream 中，僅由特定的視覺事件觸發。
+
+### 為什麼要「零拷貝 (Zero-Copy)」？
+CPU 與 GPU 之間的資料搬運是邊緣 AI 的頭號瓶頸。Saccade 實作了嚴格的零拷貝管線：從硬體解碼到裁切與推理，影像資料全程駐留於 GPU VRAM 中，為系統省下了 85% 以上的 PCIe 頻寬與 CPU 負載。
+
+### 為什麼要「語義漂移 (Semantic Drift)」？
+儲存每一次偵測結果是冗餘的。我們使用語義漂移管理器（Cosine Similarity < 0.95）來過濾掉視覺上高度相似的影格，確保向量資料庫僅儲存具備唯一性與高價值的視覺記憶。
+
+## 4. 效能評估 (Performance Evaluation)
+
+*測試環境：NVIDIA GeForce RTX 5070 Ti Laptop GPU (12GB), 1080p @ 30fps RTSP 輸入。*
+
+| 項目 | 測試結果 | 工程意義與影響 |
+| :--- | :--- | :--- |
+| **端到端延遲** | **8.31 ms** | 保證極速的即時反應能力 |
+| **管線吞吐量** | **120.2 FPS** | 可處理高解析度、高幀率的監控串流 |
+| **顯存 (VRAM) 佔用** | **1.42 GB** | 可流暢運行於 4GB 等級的邊緣設備 |
+| **儲存空間節省** | **> 90%** | 大幅降低向量資料庫的寫入負擔 |
+
+## 5. 限制與未來展望 (Limitations & Future Work)
+
+*   **目前限制**：
+    *   效能高度依賴針對特定硬體優化的 TensorRT 引擎。
+    *   目前僅支援單攝影機輸入，尚未實作多攝影機協同調度。
+*   **未來方向**：
+    *   實作 **時序性推理 (Temporal Reasoning)**，從偵測靜態物件進化到識別「跌倒」、「奔跑」等動作行為。
+    *   分散式向量查詢，支援跨攝影機的目標重識別 (Re-ID)。
+
+## 6. 入門指南 (Getting Started)
 
 ```bash
-# 啟動並進入開發環境 (鎖定 CUDA, GStreamer, 系統依賴)
+# 1. 啟動環境
 docker-compose up -d --build
-docker-compose exec perception bash
+docker-compose exec saccade bash
 
-# 安裝 Python 依賴
-uv sync
+# 2. 編譯優化引擎 (TensorRT)
+uv run python scripts/build_yolo_engine.py --onnx models/yolo/yolo26n.onnx --engine models/yolo/yolo26n_native.engine
+uv run python scripts/build_siglip_engine.py
 
-# 編譯 TensorRT 模型 (首次啟動需執行)
-uv run python scripts/build_engine.py
-
-# 啟動全系統服務 (感知 + 調度 + API)
+# 3. 啟動 Saccade
 ./scripts/saccade up
 ```
 
-## 檢索 API (Retrieval API)
-
-系統提供 FastAPI 介面供外部查詢：
-- **活躍物件**: `GET /objects` (獲取目前畫面上所有目標 ID)
-- **歷史軌跡**: `GET /objects/{id}` (獲取特定物件的出現時間與移動路徑)
-- **語義搜尋**: `POST /search` (輸入文字搜尋相關的歷史影像記憶)
-
-## 專案結構
-
-詳細的資料夾功能對照請參見 [**docs/architecture.md**](docs/architecture.md)。
-
-```
-saccade/
-├── perception/    # 視覺核心：YOLO TRT, 零拷貝裁切, Jina-CLIP TRT, 漂移偵測
-├── pipeline/      # 調度層：事件路由、結構化索引與系統健康監控
-├── media/         # 串流層：MediaMTX 客戶端 (GStreamer Zero-Copy)
-├── storage/       # 存儲層：ChromaDB 向量庫與 Redis 時空快取
-├── api/           # 介面層：FastAPI 時空檢索伺服器
-├── infra/         # 維運層：Systemd --user 服務單元配置
-├── scripts/       # 工具集：服務管理 CLI、模型編譯、VRAM 監控
-└── tests/         # 品質保證：單元測試與效能基準 (Benchmarks)
-```
-
-## 文件連結
-
-- [`docs/architecture.md`](docs/architecture.md) — 系統架構深度設計與數據流
-- [`docs/progress/`](docs/progress/) — 各模組開發狀態追蹤
-- [`DEVELOPMENT.md`](DEVELOPMENT.md) — 完整開發與編譯指南
+---
+*本專題展示了一種仿生設計方法，旨在彌合邊緣感知與語義推理之間的鴻溝。*
