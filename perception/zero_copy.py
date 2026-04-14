@@ -14,12 +14,15 @@ class GstZeroCopyDecoder:
     """
     Saccade GStreamer 零拷貝解碼器 (Pillar 4)
     
-    支援 RTSP 與本地檔案，強制使用 NVDEC (nvh264dec) 並嘗試保留在 CUDA 記憶體中。
+    優先嘗試使用 NVDEC (nvh264dec) 進行硬體加速。
+    若環境不支援，則自動降級為 CPU 解碼 (avdec_h264)。
     """
     def __init__(self, source_url: str) -> None:
         self.source_url = source_url
+        self.decoder_name = self._get_best_decoder()
         self.pipeline_str = self._build_pipeline_str()
         
+        print(f"🛠️  Selected Decoder: {self.decoder_name}")
         print(f"🛠️  Generated Pipeline: {self.pipeline_str}")
         
         self.pipeline = Gst.parse_launch(self.pipeline_str)
@@ -35,10 +38,25 @@ class GstZeroCopyDecoder:
         self._lock = threading.Lock()
         self._running = False
 
+    def _get_best_decoder(self) -> str:
+        """偵測 GStreamer 註冊表，回傳最佳解碼器名稱"""
+        registry = Gst.Registry.get()
+        if registry.find_feature("nvh264dec", Gst.ElementFactory.__gtype__):
+            return "nvh264dec"
+        else:
+            print("⚠️ Warning: nvh264dec not found, falling back to CPU decoder (avdec_h264).")
+            return "avdec_h264"
+
     def _build_pipeline_str(self) -> str:
-        """根據輸入源自動構建管線"""
-        # 基礎處理路徑 (解碼 -> CUDA 轉換 -> RGB)
-        decoder_path = "nvh264dec ! cudaconvert ! video/x-raw(memory:CUDAMemory),format=RGB"
+        """根據輸入源與解碼器能力自動構建管線"""
+        # 根據解碼器決定後續處理路徑
+        if self.decoder_name == "nvh264dec":
+            # 硬體加速路徑：保持在 CUDA 記憶體中
+            decoder_path = "nvh264dec ! cudaconvert ! video/x-raw(memory:CUDAMemory),format=RGB"
+        else:
+            # CPU 備援路徑：一般系統記憶體
+            decoder_path = "avdec_h264 ! videoconvert ! video/x-raw,format=RGB"
+            
         sink_path = "appsink name=sink emit-signals=true max-buffers=1 drop=true"
 
         if self.source_url.startswith("rtsp://"):
@@ -88,7 +106,8 @@ class GstZeroCopyDecoder:
                 raw_array = np.frombuffer(map_info.data, dtype=np.uint8).reshape((height, stride // 3, 3))
                 frame_data = raw_array[:, :width, :].copy() # 裁切並建立副本以釋放原始 Buffer
                 
-                tensor = torch.from_numpy(frame_data).to("cuda")
+                device = "cuda" if torch.cuda.is_available() else "cpu"
+                tensor = torch.from_numpy(frame_data).to(device)
                 
                 with self._lock:
                     self.last_tensor = tensor

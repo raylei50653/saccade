@@ -1,22 +1,30 @@
-# Perception & Extraction 模組進度 (2026-04-12)
+# Perception & Extraction (L1-L2) 進度核對
 
-## 模組狀態：極速穩定運行 (140+ FPS, Zero-Copy 實作完成)
+## 系統架構層次
+- [x] **L1: Perception (極速感測層 - YOLO26)** - 升級中
+- [x] **L2: Deduplication (語義去重層 - SigLIP 2)** - 規劃中
 
-## 已完成
-- [x] **detector.py**: YOLO11 基礎推理封裝，支援 TensorRT (.engine) 優先載入，延遲 <10ms。
-- [x] **追蹤系統**: 使用 `model.track` 實作跨影格標籤一致性。
-- [x] **zero_copy.py**: 實作 OpenCV + NVDEC 硬體加速路徑，並透過 `media/mediamtx_client.py` 提供純 CUDA Tensor 輸出。
-- [x] **cropper.py (Phase 1)**: 實作 ZeroCopyCropper，透過 `torchvision.ops.roi_align` 達成微秒級 (60µs) 零拷貝目標裁切。
-- [x] **feature_extractor.py (Phase 2)**: 實作 TRTFeatureExtractor，載入 **Jina-CLIP-v2** TensorRT 引擎，達成 <170ms 之 512x512 多目標並發語義特徵提取。
-- [x] **tracker.py (Phase 3)**: 實作 SmartTracker，建立 IoU 與移動向量之非同步事件鉤子 (Event Hooks)，並在獨立 CUDA Stream 執行特徵提取，不阻塞 YOLO。
-- [x] **drift_handler.py (Phase 4)**: 實作 SemanticDriftHandler，在 GPU VRAM 中計算 Cosine Similarity，精準過濾冗餘特徵，僅保留「語義漂移」狀態。
+## 模組狀態：架構升級中 (目標：NMS-Free & High Semantic Precision)
 
-## 進行中
-- [ ] 跨鏡頭對齊機制 (Re-ID) 研究。
+## L1: Perception (感測實作)
+- [x] **YOLO26 推理**: 核心偵測器已切換至 YOLO26。支援 TensorRT (.engine) 與 NMS-Free 推理。
+- [x] **Zero-Copy 管線**: 整合 GStreamer `nvh264dec` 與 CUDA Tensor 直接映射。
+- [x] **極速裁切 (Cropper)**: 透過 `torchvision.ops.roi_align` 達成微秒級零拷貝目標裁切。
+- [x] **跨影格追蹤**: 支援 YOLO26 格式之跨影格標籤一致性。
+
+## L2: Deduplication (去重實作)
+- [ ] **SigLIP 2 特徵提取**: 規劃從 Jina-CLIP-v2 遷移至 SigLIP 2 (ViT-B/16)。
+- [x] **Jina-CLIP (Legacy)**: 現有 TensorRT 引擎可作為備選方案。
+- [x] **語義漂移處理 (Drift Handler)**: 實作基於 GPU Cosine Similarity 的動態過濾機制。
+- [x] **Smart Tracker (C++ Native)**: 完成智能追蹤與特徵提取排程的 C++ 實作，利用 pybind11 綁定 Python 3.12 虛擬環境，達成 100% GPU Zero-Copy 特徵觸發。
+
+## 待處理
+- [ ] 跨鏡頭對齊機制 (Re-ID) 研究與實作。
+- [ ] 針對極端光照環境的動態曝光補償優化。
 
 ## 已完成里程碑
+- [x] **純 C++ 感知層**: 成功將 Tracker (GPUByteTracker, SmartTracker) 遷移至底層 C++/CUDA 執行。
 - [x] **硬體加速解碼**: 成功整合 GStreamer `nvh264dec` 實現 GPU 硬體解碼與 TensorRT 全流程對接。
-- [x] **純視覺向量管線**: 成功移除 VLM 依賴，以 YOLO 標籤與 SigLIP 特徵建立結構化記憶。
+- [x] **純視覺向量管線**: 成功建立以 YOLO 標籤與 Jina-CLIP 特徵為核心的結構化數據流。
 
-## 最後更新
-2026-04-12
+最後更新：2024-05-23

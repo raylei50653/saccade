@@ -3,7 +3,7 @@ import torch
 from transformers import AutoModel
 from pathlib import Path
 
-def export_siglip2_onnx(model_name="google/siglip2-so400m-patch14-384", output_dir="models/embedding", img_size=384):
+def export_siglip2_onnx(model_name: str = "google/siglip2-so400m-patch14-384", output_dir: str = "models/embedding", img_size: int = 384) -> str:
     print(f"🚀 Starting ONNX export for {model_name}...")
 
     # 建立輸出目錄
@@ -29,31 +29,30 @@ def export_siglip2_onnx(model_name="google/siglip2-so400m-patch14-384", output_d
 
     print("⚙️ Exporting to ONNX with Dynamic Batch Size...")
     dynamic_axes = {
-        'pixel_values': {0: 'batch_size'},
-        'last_hidden_state': {0: 'batch_size'},
-        'pooler_output': {0: 'batch_size'}
+        'pixel_values': {0: 'batch_size'}
     }
 
     torch.onnx.export(
         vision_model,
-        dummy_input,
+        (dummy_input,),
         onnx_path,
         export_params=True,
         opset_version=18,
         do_constant_folding=True,
         input_names=['pixel_values'],
-        output_names=['last_hidden_state', 'pooler_output'],
+        output_names=['last_hidden_state', 'image_embeds'], # 配合 TRTFeatureExtractor 命名
         dynamic_axes=dynamic_axes,
         verbose=False
     )
+
 
     print(f"🎉 Successfully exported to {onnx_path}")
     return onnx_path
 
 if __name__ == "__main__":
-    # 使用 SigLIP 2 SO400M
-    onnx_file = export_siglip2_onnx("google/siglip2-so400m-patch14-384", img_size=384)
+    # 使用 SigLIP 2 Base (224x224) 以兼顧性能與 VRAM (預計 ~300MB)
+    onnx_file = export_siglip2_onnx("google/siglip2-base-patch16-224", img_size=224)
 
     print("\n💡 [Next Step] Compile to TensorRT FP16 Engine using trtexec:")
     print(f"trtexec --onnx={onnx_file} --saveEngine={onnx_file.replace('.onnx', '.engine')} "
-          "--fp16 --minShapes=pixel_values:1x3x384x384 --optShapes=pixel_values:8x3x384x384 --maxShapes=pixel_values:32x3x384x384")
+          "--fp16 --minShapes=pixel_values:1x3x224x224 --optShapes=pixel_values:8x3x224x224 --maxShapes=pixel_values:32x3x224x224")

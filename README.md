@@ -12,40 +12,41 @@ Like the saccadic motion of the eye — fast scanning, then focused understandin
 
 ## Architecture
 
-**Fast track (Perception)** runs continuously at 140+ FPS, evaluating every frame using YOLO and TensorRT. It handles Zero-Copy hardware decoding (NVDEC) to keep the pipeline entirely on the GPU.
+**Fast track (Perception)** runs continuously at 140+ FPS, evaluating every frame using YOLO26 and TensorRT. It handles Zero-Copy hardware decoding (NVDEC) to keep the pipeline entirely on the GPU via a C++ fast path.
 
-**Slow track (Semantic Extraction)** operates purely on GPU via an asynchronous CUDA stream. It uses `torchvision.ops.roi_align` for microsecond-level cropping and a TensorRT-optimized **Jina-CLIP-v2** model to extract high-dimensional (1024D) semantic features at 512x512 resolution. These are filtered for semantic drift and written to ChromaDB alongside structured metadata.
+**Slow track (Semantic Extraction)** operates purely on GPU via an asynchronous CUDA stream. It uses `torchvision.ops.roi_align` for microsecond-level cropping and a TensorRT-optimized **SigLIP 2** model to extract high-dimensional semantic features. These are filtered for semantic drift and written to ChromaDB alongside structured metadata.
 
 ## Key Design Decisions
 
-**Pure Vision-Vector Pipeline** — We transitioned from heavy VLMs to a pure YOLO + Jina-CLIP-v2 (TensorRT) architecture, reducing VRAM usage while scaling throughput massively.
+**Pure Vision-Vector Pipeline** — We transitioned to a pure YOLO26 + SigLIP 2 (TensorRT) architecture, reducing VRAM usage to ~1.5GB while scaling throughput massively.
 
 **Semantic Drift Handling** — To prevent database bloat, extracted features are compared against a GPU-based hot cache using Cosine Similarity. Only features indicating a significant semantic shift are written to the vector database.
 
 **Zero-copy GPU path** — video frames travel `NVDEC → NVMM → CUDA Tensor → TensorRT` without touching CPU memory, minimising PCIe bandwidth usage and CPU load.
 
-**Vector-indexed memory** — every novel detection is embedded using Jina-CLIP-v2, tagged, and stored with a Unix timestamp in ChromaDB. Supported by Hybrid Search (Semantic + Metadata + Temporal filtering).
+**Vector-indexed memory** — every novel detection is embedded using SigLIP 2, tagged, and stored with a Unix timestamp in ChromaDB. Supported by Hybrid Search (Semantic + Metadata + Temporal filtering).
 
 ## Tech Stack
 
 | Layer | Technology |
 | :--- | :--- |
-| Detection | YOLO11 (TensorRT Engine), CV tracking |
-| Extraction | Jina-CLIP-v2 (TensorRT FP16 Engine, 512x512) |
+| Detection | YOLO26 (TensorRT Engine, C++ Fast Path), GPU tracking |
+| Extraction | SigLIP2 (TensorRT Engine) |
 | Media | MediaMTX, GStreamer (nvh264dec), FFmpeg |
 | Memory | ChromaDB (vector), Redis (cache/queue) |
 | Compute | TensorRT, CUDA Streams, NVDEC |
-| Environment | Nix Flakes, uv |
+| Environment | Docker, uv |
 
 ## Getting Started
 
-**Requirements:** NVIDIA GPU (12GB+ VRAM), Nix with flakes enabled, CUDA 12.x
+**Requirements:** NVIDIA GPU (12GB+ VRAM), Docker + NVIDIA Container Toolkit, CUDA 12.x
 
 ```bash
-# Enter the development environment (pins CUDA, GStreamer, system deps)
-nix develop
+# Start and enter the development environment
+docker-compose up -d --build
+docker-compose exec perception bash
 
-# Install Python dependencies
+# Install Python dependencies (inside container)
 uv sync
 
 # Start the pipeline
@@ -79,4 +80,4 @@ saccade/
 - [`docs/progress/`](docs/progress/) — per-module development status
 - [`docs/runbooks/`](docs/runbooks/) — operational procedures (hot swap, stream recovery, OOM handling)
 - [`docs/benchmarks/`](docs/benchmarks/) — latency, VRAM, and throughput measurements
-- [`DEVELOPMENT.md`](DEVELOPMENT.md) — full development guide
+- [`DEVELOPMENT.md`](DEVELOPMENT.md) — full development guideelopment guide

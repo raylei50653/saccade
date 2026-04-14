@@ -1,108 +1,50 @@
 import torch
-import torchvision.ops as ops
-from typing import Dict, Optional, Tuple, Any, cast
-import math
+from typing import Tuple, Any, Optional, cast
+
+from saccade_tracking_ext import SmartTracker as CppSmartTracker
 
 class SmartTracker:
     """
-    Saccade 智能追蹤與特徵排程器 (Phase 3)
+    Saccade 智能追蹤與特徵排程器 (Phase 3 - C++ Native)
     
-    1. 維護物件的歷史狀態 (BBox, Velocity)。
+    1. 維護物件的歷史狀態 (BBox, Velocity)，使用 CUDA Kernel 加速處理。
     2. 基於規則 (New ID, IOU Change, Velocity Change) 篩選需要更新特徵的物件。
     3. 在獨立的 CUDA Stream 中非同步觸發特徵提取，不阻塞主 YOLO 推理。
     """
-    def __init__(self, iou_threshold: float = 0.7, velocity_angle_threshold: float = 45.0) -> None:
+    def __init__(self, iou_threshold: float = 0.7, velocity_angle_threshold: float = 45.0, max_objects: int = 2048) -> None:
         self.iou_threshold = iou_threshold
-        # 將角度閾值轉為 Cosine 相似度閾值
-        self.cos_threshold = math.cos(math.radians(velocity_angle_threshold))
+        self.velocity_angle_threshold = velocity_angle_threshold
+        self.max_objects = max_objects
         
-        # 狀態儲存：obj_id -> { "last_box": tensor, "velocity": tensor, "last_extracted_box": tensor }
-        self.states: Dict[int, Dict[str, torch.Tensor]] = {}
-        
-        # 建立獨立的 CUDA Stream 供特徵提取使用
+        self.cpp_tracker = CppSmartTracker(iou_threshold, velocity_angle_threshold, max_objects)
         self.extraction_stream = torch.cuda.Stream()  # type: ignore[no-untyped-call]
-        
-    def _calculate_center(self, box: torch.Tensor) -> torch.Tensor:
-        """計算 BBox 中心點 (x, y)"""
-        return torch.tensor([(box[0] + box[2]) / 2.0, (box[1] + box[3]) / 2.0], device=box.device)
-
-    def _should_extract_features(self, obj_id: int, current_box: torch.Tensor) -> bool:
-        """
-        評估是否需要觸發特徵提取 (Event Hooks)
-        """
-        # Condition A: 全新的 Object ID 首度出現
-        if obj_id not in self.states:
-            return True
-            
-        state = self.states[obj_id]
-        
-        # Condition C: Bounding Box IOU 變化率超過設定閾值
-        last_extracted_box = state.get("last_extracted_box")
-        if last_extracted_box is not None:
-            # 計算 IoU
-            iou = ops.box_iou(current_box.unsqueeze(0), last_extracted_box.unsqueeze(0))[0, 0].item()
-            if iou < self.iou_threshold:
-                return True
-                
-        # Condition B: 移動向量 (Velocity Vector) 發生劇烈改變
-        last_box = state["last_box"]
-        current_center = self._calculate_center(current_box)
-        last_center = self._calculate_center(last_box)
-        
-        current_velocity = current_center - last_center
-        last_velocity = state.get("velocity")
-        
-        if last_velocity is not None:
-            # 計算速度向量的 Cosine 相似度 (判斷方向改變)
-            norm_curr = torch.norm(current_velocity)
-            norm_last = torch.norm(last_velocity)
-            
-            # 若移動距離極小 (雜訊)，不視為方向改變
-            if norm_curr.item() > 2.0 and norm_last.item() > 2.0:
-                cos_sim = torch.dot(current_velocity, last_velocity) / (norm_curr * norm_last)
-                if cos_sim.item() < self.cos_threshold:
-                    return True
-                    
-        return False
 
     def update_and_filter(self, obj_ids: torch.Tensor, boxes: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        更新追蹤狀態，並過濾出需要提取特徵的物件。
-        
-        :param obj_ids: YOLO 輸出的追蹤 ID [N]
-        :param boxes: YOLO 輸出的 Bounding Boxes [N, 4]
-        :return: (需要提取的 obj_ids, 對應的 boxes)
+        根據物件 ID 和 BBox 判斷是否需要提取特徵
         """
-        extract_indices = []
+        if obj_ids.numel() == 0:
+            return torch.empty(0, device=boxes.device, dtype=obj_ids.dtype), torch.empty((0, 4), device=boxes.device, dtype=boxes.dtype)
+
+        num_objs = obj_ids.size(0)
+        mask = torch.empty(num_objs, dtype=torch.bool, device=boxes.device)
         
-        for i, (obj_id_tensor, box) in enumerate(zip(obj_ids, boxes)):
-            obj_id = int(obj_id_tensor.item())
-            
-            # 判斷是否觸發提取
-            should_extract = self._should_extract_features(obj_id, box)
-            
-            if should_extract:
-                extract_indices.append(i)
-                
-            # 更新狀態
-            if obj_id not in self.states:
-                self.states[obj_id] = {}
-                
-            current_center = self._calculate_center(box)
-            if "last_box" in self.states[obj_id]:
-                last_center = self._calculate_center(self.states[obj_id]["last_box"])
-                self.states[obj_id]["velocity"] = current_center - last_center
-                
-            self.states[obj_id]["last_box"] = box
-            
-            if should_extract:
-                self.states[obj_id]["last_extracted_box"] = box
-                
-        if not extract_indices:
-            return torch.empty(0, device=boxes.device), torch.empty((0, 4), device=boxes.device)
-            
-        indices_tensor = torch.tensor(extract_indices, device=boxes.device, dtype=torch.long)
-        return obj_ids[indices_tensor], boxes[indices_tensor]
+        # 確保型別和連續性 (必須與 C++ Kernel 期望的型別一致)
+        ids_contig = obj_ids.to(torch.int32).contiguous()
+        boxes_contig = boxes.to(torch.float32).contiguous()
+        
+        stream = torch.cuda.current_stream().cuda_stream
+        
+        self.cpp_tracker.update_and_filter(
+            ids_contig.data_ptr(),
+            boxes_contig.data_ptr(),
+            mask.data_ptr(),
+            num_objs,
+            stream
+        )
+        
+        # 使用 PyTorch 切片返回結果
+        return obj_ids[mask], boxes[mask]
 
     def async_extract_features(self, frame_tensor: torch.Tensor, extract_boxes: torch.Tensor, 
                                cropper: Any, extractor: Any) -> Optional[torch.Tensor]:
@@ -127,7 +69,7 @@ if __name__ == "__main__":
     tracker = SmartTracker()
     
     # 模擬第 1 幀：兩個新物件 (應觸發 A)
-    ids1 = torch.tensor([1, 2], device="cuda")
+    ids1 = torch.tensor([1, 2], device="cuda", dtype=torch.int32)
     boxes1 = torch.tensor([[10, 10, 50, 50], [100, 100, 150, 150]], device="cuda", dtype=torch.float32)
     ext_ids, ext_boxes = tracker.update_and_filter(ids1, boxes1)
     print(f"Frame 1 - Extracted IDs (Expect [1, 2]): {ext_ids.tolist()}")

@@ -3,13 +3,11 @@ name = "saccade"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12, <3.13"
 dependencies = [
     "ultralytics",
     "numpy",
     "opencv-python",
-    "tensorrt",
-    "llama-cpp-python",
     "chromadb",
     "redis",
     "torch",
@@ -30,14 +28,21 @@ dependencies = [
     "types-pyyaml>=6.0.12.20260408",
     "decord>=0.6.0",
     "nvidia-dali-cuda120>=2.0.0",
-    "pygobject>=3.56.2",
+    "pygobject==3.48.2",
     "timm>=1.0.26",
     "onnxscript>=0.6.2",
-    "transformers>=5.5.3",
+    "transformers>=4.48.0",
     "accelerate>=1.13.0",
     "optimum>=2.1.0",
     "einops>=0.8.2",
     "onnxruntime-gpu>=1.24.4",
+    "tensorrt>=10.16.1.11",
+    "pybind11>=3.0.3",
+]
+
+[tool.uv]
+override-dependencies = [
+    "onnxruntime==1.24.4", # Force override to avoid multiple versions if needed, or use a dummy
 ]
 
 [tool.mypy]

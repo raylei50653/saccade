@@ -9,7 +9,7 @@ class TRTFeatureExtractor:
     直接讀取 GPU 上的 torch.Tensor 記憶體指標 (Data Pointer) 並餵給 TensorRT Engine，
     產出高維度的語義向量，達成微秒級的無縫交接。
     """
-    def __init__(self, engine_path: str = "models/embedding/jinaai_jina-clip-v2.engine", device: str = "cuda:0") -> None:
+    def __init__(self, engine_path: str = "models/embedding/google_siglip2-base-patch16-224.engine", device: str = "cuda:0") -> None:
         self.device = device
         self.logger = trt.Logger(trt.Logger.ERROR)
         
@@ -21,8 +21,8 @@ class TRTFeatureExtractor:
             raise RuntimeError("Failed to load TensorRT Engine.")
             
         self.context = self.engine.create_execution_context()
-        # 取得輸出維度大小
-        self.feature_dim = 1024
+        # SigLIP 2 Base (ViT-B) 的特徵維度為 768
+        self.feature_dim = 768
         print(f"✅ Extractor Ready. Feature Dimension: {self.feature_dim}")
         
     def extract(self, input_tensor: torch.Tensor) -> torch.Tensor:
@@ -39,13 +39,13 @@ class TRTFeatureExtractor:
         # 1. 確保張量在連續的記憶體區塊中，否則 TensorRT 無法正確讀取指標
         input_tensor = input_tensor.contiguous()
         
-        # 2. 動態設定本次推理的 Batch Size
-        self.context.set_input_shape("pixel_values", (batch_size, 3, 512, 512))
+        # 2. 動態設定本次推理的 Batch Size (SigLIP 2 Base 為 224x224)
+        self.context.set_input_shape("pixel_values", (batch_size, 3, 224, 224))
         
         # 3. 預先分配輸出空間 (全在 GPU 上)
         output_tensor = torch.empty((batch_size, self.feature_dim), device=self.device, dtype=torch.float32)
-        # 額外綁定 unused 的 last_hidden_state 以避免 TRT 報錯
-        hidden_state_tensor = torch.empty((batch_size, 729, self.feature_dim), device=self.device, dtype=torch.float32)
+        # SigLIP 2 Base 的 last_hidden_state 形狀為 (batch, 196, 768)
+        hidden_state_tensor = torch.empty((batch_size, 196, self.feature_dim), device=self.device, dtype=torch.float32)
         
         # 4. 記憶體綁定：直接告訴 TensorRT 從這兩個 PyTorch 指標讀寫數據
         self.context.set_tensor_address("pixel_values", input_tensor.data_ptr())
@@ -60,11 +60,11 @@ class TRTFeatureExtractor:
 
 if __name__ == "__main__":
     # 端到端 效能測試 (Dry Run)
-    print("🚀 Testing TRTFeatureExtractor...")
+    print("🚀 Testing TRTFeatureExtractor (SigLIP 2)...")
     extractor = TRTFeatureExtractor()
     
-    # 模擬 8 個物件同時進行特徵提取
-    dummy_input = torch.randn(8, 3, 512, 512, device="cuda", dtype=torch.float32)
+    # 模擬 8 個物件同時進行特徵提取 (224x224)
+    dummy_input = torch.randn(8, 3, 224, 224, device="cuda", dtype=torch.float32)
     
     # 預熱
     _ = extractor.extract(dummy_input)

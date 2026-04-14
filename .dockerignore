@@ -1,0 +1,29 @@
+# 忽略虛擬環境與 Python 快取
+.venv/
+.python-version
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 忽略 Git 元數據
+.git/
+.gitignore
+
+# 忽略開發工具快取與紀錄
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.DS_Store
+
+# 忽略大型數據或不必要的文檔
+models/
+docs/
+tests/
+infra/systemd/
+
+# 忽略特定環境與設定檔
+.env
+.envrc
+.vscode/
+.idea/

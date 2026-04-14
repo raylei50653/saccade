@@ -31,7 +31,6 @@ case "$1" in
     kill)
         printf "💀 Performing deep cleanup of all Saccade processes...\n"
         systemctl --user stop "${SERVICES[@]}" >/dev/null 2>&1 || true
-        pkill -9 -f llama-server >/dev/null 2>&1 || true
         pkill -9 -f mediamtx >/dev/null 2>&1 || true
         pkill -9 -f "python main.py" >/dev/null 2>&1 || true
         fuser -k 8080/tcp >/dev/null 2>&1 || true
@@ -80,6 +79,10 @@ case "$1" in
     *)
         echo "Saccade - Dual-Track Video Perception Management CLI"
         echo "Usage: $0 {up|down|restart|kill|status|health|logs [service]}"
+        exit 1
+        ;;
+esac
+ervice]}"
         exit 1
         ;;
 esac

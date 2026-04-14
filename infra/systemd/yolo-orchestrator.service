@@ -1,6 +1,6 @@
 [Unit]
 Description=YOLO-LLM Orchestrator (Slow Path Logic)
-After=network.target yolo-vlm-backend.service mediamtx.service
+After=network.target mediamtx.service
 
 [Service]
 Type=simple

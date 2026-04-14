@@ -4,21 +4,23 @@ import torch.nn as nn
 from transformers import AutoModel
 from pathlib import Path
 
+from typing import Any, Optional, cast
+
 class JinaVisionWithProjection(nn.Module):
-    def __init__(self, model):
+    def __init__(self, model: Any) -> None:
         super().__init__()
         self.vision_model = model.vision_model
         self.visual_projection = model.visual_projection
 
-    def forward(self, pixel_values):
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         # 取得 pooled_output (通常是第二個回傳值)
         vision_outputs = self.vision_model(pixel_values)
         pooled_output = vision_outputs[1] 
         # 投影至 joint embedding space
         image_embeds = self.visual_projection(pooled_output)
-        return image_embeds
+        return cast(torch.Tensor, image_embeds)
 
-def export_jina_clip_onnx(model_name="jinaai/jina-clip-v2", output_dir="models/embedding", img_size=512):
+def export_jina_clip_onnx(model_name: str = "jinaai/jina-clip-v2", output_dir: str = "models/embedding", img_size: int = 512) -> Optional[str]:
     print(f"🚀 Starting ONNX export for {model_name}...")
     
     Path(output_dir).mkdir(parents=True, exist_ok=True)
@@ -50,7 +52,7 @@ def export_jina_clip_onnx(model_name="jinaai/jina-clip-v2", output_dir="models/e
     try:
         torch.onnx.export(
             vision_wrapper,
-            dummy_input,
+            (dummy_input,),
             onnx_path,
             export_params=True,
             opset_version=18,
@@ -66,6 +68,7 @@ def export_jina_clip_onnx(model_name="jinaai/jina-clip-v2", output_dir="models/e
         print(f"❌ Export failed: {e}")
         import traceback
         traceback.print_exc()
+        return None
 
 if __name__ == "__main__":
     onnx_file = export_jina_clip_onnx("jinaai/jina-clip-v2", img_size=512)

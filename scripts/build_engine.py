@@ -3,7 +3,7 @@ import os
 
 TRT_LOGGER = trt.Logger(trt.Logger.INFO)
 
-def build_engine(onnx_file_path, engine_file_path):
+def build_engine(onnx_file_path: str, engine_file_path: str) -> None:
     print("🚀 Starting TensorRT Build Process (FP16)...")
     builder = trt.Builder(TRT_LOGGER)
     # 允許使用動態 Batch

@@ -10,6 +10,7 @@ def test_media_client_init():
     assert client.use_local is False
     assert client.pipeline is None
 
+@patch("media.mediamtx_client.HAS_CPP_EXT", False)
 @patch("media.mediamtx_client.Gst.parse_launch")
 @patch("media.mediamtx_client.threading.Thread")
 def test_media_client_connect_dummy_video(mock_thread, mock_parse_launch):

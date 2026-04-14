@@ -1,7 +1,7 @@
 # YOLO26 推理與偵測參數
 
 detection:
-  model_path: "./models/yolo26-n.pt" # 預設使用 nano 模型
+  model_path: "./models/yolo/yolo26n.pt" # 預設使用 nano 模型
   confidence_threshold: 0.25
   iou_threshold: 0.45
   img_size: [640, 640]
@@ -10,6 +10,12 @@ detection:
 tracking:
   tracker_type: "bytetrack" # 或 botsort
   persist: true
+
+semantic_extraction:
+  model_path: "./models/embedding/google_siglip2-base-patch16-224.engine"
+  img_size: [224, 224]
+  feature_dim: 768
+  similarity_threshold: 0.95
 
 entropy:
   threshold: 0.8

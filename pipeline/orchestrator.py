@@ -12,7 +12,7 @@ load_dotenv()
 
 class PipelineOrchestrator:
     """
-    Saccade 純視覺向量調度器 (VLM-Free Architecture)
+    Saccade 純視覺向量調度器 (Vision-Only Architecture)
     
     接收 YOLO 的高頻事件，將結構化數據轉化為語義記憶，存入 ChromaDB。
     """
@@ -54,7 +54,7 @@ class PipelineOrchestrator:
             entropy = metadata.get("entropy_value", 0.0)
             yolo_objects = metadata.get("objects", [])
 
-            # 1. 生成場景語義描述 (取代 VLM)
+            # 1. 生成場景語義描述
             scene_description = self._generate_scene_description(yolo_objects, entropy)
 
             # 2. 定義異常邏輯 (基於規則)

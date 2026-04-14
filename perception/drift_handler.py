@@ -8,47 +8,43 @@ class SemanticDriftHandler:
     在 GPU VRAM 中維護近期物件的特徵快取。
     利用極速的 Cosine Similarity 排除高度重複的語義向量，避免 ChromaDB 垃圾資料堆積。
     """
-    def __init__(self, similarity_threshold: float = 0.95):
+    def __init__(self, similarity_threshold: float = 0.95, max_objects: int = 1000, feature_dim: int = 768):
         self.similarity_threshold = similarity_threshold
-        # 熱資料快取：obj_id -> feature_tensor [1, Feature_Dim]
-        self.feature_cache: Dict[int, torch.Tensor] = {}
+        self.max_objects = max_objects
+        self.feature_dim = feature_dim
+        
+        # 極致優化：使用大 Tensor 儲存特徵，ID 作為索引
+        self.feature_cache_tensor = torch.zeros((max_objects, feature_dim), device="cuda")
+        self.has_cache_tensor = torch.zeros(max_objects, dtype=torch.bool, device="cuda")
 
     def filter_novel_features(self, obj_ids: torch.Tensor, features: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        過濾出具有「新語義」的特徵。
-        
-        :param obj_ids: 追蹤 ID 列表 [N]
-        :param features: 剛提取出的高維特徵矩陣 [N, Feature_Dim]
-        :return: (novel_ids, novel_features) 僅保留相似度低於閾值的特徵
+        過濾出具有「新語義」的特徵 (全 GPU 向量化，移除所有同步點)。
         """
-        novel_indices = []
+        if obj_ids.numel() == 0:
+            return (torch.empty(0, device=obj_ids.device, dtype=obj_ids.dtype), 
+                    torch.empty((0, features.size(1)), device=features.device, dtype=features.dtype))
+            
+        # 使用取模運算處理長效 ID
+        ids = (obj_ids % self.max_objects).long()
         
-        for i, obj_id_tensor in enumerate(obj_ids):
-            obj_id = int(obj_id_tensor.item())
-            # 取出單筆特徵，維持 2D 形狀 [1, D]
-            current_feat = features[i:i+1]
-            
-            if obj_id in self.feature_cache:
-                cached_feat = self.feature_cache[obj_id]
-                # 在 GPU 上直接計算 Cosine Similarity
-                sim = torch.nn.functional.cosine_similarity(current_feat, cached_feat)
-                
-                # 如果相似度低於閾值，代表語義發生漂移 (例如：人轉身、拿出武器)
-                if sim.item() < self.similarity_threshold:
-                    novel_indices.append(i)
-                    # 更新快取為新的語義狀態
-                    self.feature_cache[obj_id] = current_feat
-            else:
-                # 全新物件，必定寫入
-                novel_indices.append(i)
-                self.feature_cache[obj_id] = current_feat
-                
-        if not novel_indices:
-            return torch.empty(0, device=obj_ids.device), torch.empty((0, features.size(1)), device=features.device)
-            
-        indices_tensor_feat = torch.tensor(novel_indices, device=features.device, dtype=torch.long)
-        indices_tensor_ids = torch.tensor(novel_indices, device=obj_ids.device, dtype=torch.long)
-        return obj_ids[indices_tensor_ids], features[indices_tensor_feat]
+        # 1. GPU 向量化提取歷史特徵
+        has_cache = self.has_cache_tensor[ids]
+        cached_feats = self.feature_cache_tensor[ids]
+        
+        # 2. 一次性 GPU 計算相似度
+        sims = torch.nn.functional.cosine_similarity(features, cached_feats, dim=1)
+        
+        # KEEP 邏輯：全新物件 OR 相似度低於閾值
+        should_keep = (~has_cache) | (sims < self.similarity_threshold)
+        
+        # 3. 更新快取 (直接遮罩寫入，不進行 .any() 檢查)
+        keep_ids = ids[should_keep]
+        keep_feats = features[should_keep]
+        self.feature_cache_tensor[keep_ids] = keep_feats
+        self.has_cache_tensor[keep_ids] = True
+                        
+        return obj_ids[should_keep], features[should_keep]
 
 if __name__ == "__main__":
     print("🚀 Testing SemanticDriftHandler...")

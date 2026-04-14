@@ -48,5 +48,9 @@ htmlcov/
 # Editor & OS
 .vscode/
 .idea/
+
+# C++ Extensions
+*.so
+*.so.*
 .DS_Store
 Thumbs.db

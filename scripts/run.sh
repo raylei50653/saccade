@@ -3,14 +3,10 @@
 
 set -e
 
-# 核心：顯式載入 Nix 與 使用者環境路徑
-export PATH="/nix/var/nix/profiles/default/bin:/home/ray/.nix-profile/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
-source /home/ray/.bashrc || true
+# 確保環境變量包含當前專案路徑
+export PYTHONPATH=$PYTHONPATH:$(pwd)
 
 PROJECT_DIR="/home/ray/developer/ai/YOLO_LLM"
-MODEL_PATH="/home/ray/developer/ai/models/unsloth/Qwen3-VL-4B-Instruct-GGUF/Qwen3-VL-4B-Instruct-Q4_K_M.gguf"
-MMPROJ_PATH="/home/ray/developer/ai/models/unsloth/Qwen3-VL-4B-Instruct-GGUF/mmproj-F16.gguf"
-
 cd "$PROJECT_DIR"
 
 case "$1" in
@@ -28,7 +24,7 @@ case "$1" in
         ;;
 
     *)
-        echo "Usage: $0 {vlm-backend|perception|orchestrator}"
+        echo "Usage: $0 {perception|orchestrator|api}"
         exit 1
         ;;
 esac

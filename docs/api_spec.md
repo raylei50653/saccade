@@ -1,14 +1,17 @@
-# Saccade API & Event Specification
+# Saccade API & Event Specification (L1-L5 Edition)
 
-Saccade 採用非同步事件驅動架構，主要通訊發生在 Redis 事件佇列與 llama-server HTTP 介面之間。
+Saccade 採用非同步事件驅動與向量檢索架構。通訊發生在 Redis 實時事件流與 ChromaDB 語義檢索介面。
 
-## 1. 內部事件佇列 (Redis)
-Perception (快路徑) 在觸發事件時，應推送到 Redis List。
+---
+
+## 1. 內部事件流 (L3: Redis Streams)
+Perception (快路徑) 在觸發事件時，應推送到 Redis List (saccade:events)，未來將升級為 Redis Streams。
 
 - **Key:** `saccade:events`
 - **Format:** JSON
+- **TTL:** 1 Hour (確保快路徑不因過期數據溢出)
 
-### 事件結構範例
+### 事件結構範例 (L1 -> L3)
 ```json
 {
   "event_id": "uuid-v4",
@@ -16,29 +19,32 @@ Perception (快路徑) 在觸發事件時，應推送到 Redis List。
   "type": "entropy_trigger",
   "metadata": {
     "entropy_value": 0.85,
-    "source_path": "rtsp://camera1/live",
+    "source_path": "local_cam",
     "frame_id": 4502,
-    "objects": ["person", "backpack"]
+    "objects": ["person", "backpack"],
+    "is_anomaly": 0
   }
 }
 ```
 
 ---
 
-## 2. 認知推理介面 (llama-server)
-Saccade 的慢路徑透過 HTTP 呼叫 `llama-server`。
+## 2. 向量檢索介面 (L4/L5: ChromaDB)
+Saccade 的應用層透過語義特徵進行關聯搜尋。
 
-### 視覺推理 (VLM)
-- **Endpoint:** `POST /completion`
-- **Payload 規範:**
-```json
+### 語義與 Metadata 混合查詢
+- **Query Type:** Vector + Metadata Filter
+- **Schema:**
+```python
 {
-  "prompt": "USER:[image_0]\nDescribe the activity in this frame.\nASSISTANT:",
-  "image_data": [
-    {"data": "base64_encoded_string", "id": 0}
-  ],
-  "n_predict": 256,
-  "stream": false
+  "query_text": "person with knife",
+  "n_results": 5,
+  "where": {
+    "$and": [
+      {"timestamp": {"$gte": 1712900000.0}},
+      {"is_anomaly": 1}
+    ]
+  }
 }
 ```
 
@@ -47,18 +53,20 @@ Saccade 的慢路徑透過 HTTP 呼叫 `llama-server`。
 ## 3. 健康檢查接口 (Health API)
 `pipeline/health.py` 依賴此規範來判定系統狀態。
 
-- **LLM Health:** `GET /health` (Expected: 200 OK)
-- **System Metrics:** `GET /metrics` (Prometheus format, optional)
+- **Redis Health:** `PING` (Expected: PONG)
+- **Vector DB Health:** `client.heartbeat()` (Expected: Valid timestamp)
+- **System Metrics:** 
+    - `VRAM_Usage`: 偵測 GPU 記憶體是否超過 85% 閾值。
+    - `Latency_L1`: 感知層單影格處理延遲 (目標: < 15ms)。
 
 ---
 
 ## 4. 開發約定 (Coding Standards)
 
-### 非同步呼叫
-所有對外通訊必須使用 `httpx.AsyncClient` 並明確設定 `timeout`：
-- **LLM Inference:** 60.0s
-- **Health Check:** 2.0s
-- **Redis Ping:** 3.0s
+### 非同步與併發 (Concurrency)
+- **Redis 推送**: 必須使用 `redis.asyncio` 的 `rpush`。
+- **寫入頻率控制**: `Orchestrator` 使用 `asyncio.Semaphore(32)` 控制併發，避免 I/O 阻塞。
 
-### 型別檢查
-所有 API 回傳的字典 (Dict) 必須映射到 `typing.TypedDict` 或 `dataclasses`，禁止在邏輯層直接操作裸字典。
+### 數據流向 (Data Type)
+- **影像傳輸**: 禁止使用 Base64。影像資料應留在 GPU Tensor 或存儲於本地快取路徑供 VLM/LLM 按需讀取。
+- **特徵向量**: 固定為 768 或 1024 維的 `float32` 陣列。

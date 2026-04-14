@@ -134,8 +134,7 @@
   <!-- ══ Underlying Compute Layer ══ -->
   <rect x="40" y="360" width="600" height="60" rx="12" class="bg-blue" stroke-width="0.5" opacity="0.5"/>
   <text class="th" x="340" y="380" text-anchor="middle" dominant-baseline="central" style="fill:#042C53">Compute Infrastructure — Zero-Copy Path</text>
-  <text class="ts" x="340" y="400" text-anchor="middle" dominant-baseline="central">NVDEC → NVMM → CUDA Tensor  ·  TensorRT  ·  PagedAttention</text>
-
+  <text class="ts" x="340" y="400" text-anchor="middle" dominant-baseline="central">NVDEC → NVMM → CUDA Tensor  ·  TensorRT  ·  NVIDIA SDK</text>
   <!-- Pipeline → Compute Layer -->
   <line x1="180" y1="310" x2="180" y2="358" class="arr" marker-end="url(#arrow)"/>
   <line x1="500" y1="310" x2="500" y2="358" class="arr" marker-end="url(#arrow)"/>
@@ -156,7 +155,7 @@
   <g class="c-gray">
     <rect x="440" y="450" width="200" height="52" rx="8" stroke-width="0.5"/>
     <text class="th" x="540" y="471" text-anchor="middle" dominant-baseline="central">Env Mgmt</text>
-    <text class="ts" x="540" y="488" text-anchor="middle" dominant-baseline="central">Nix Flakes + uv</text>
+    <text class="ts" x="540" y="488" text-anchor="middle" dominant-baseline="central">Docker + uv</text>
   </g>
 
   <!-- Compute → Infrastructure Arrows -->
@@ -173,4 +172,4 @@
   <text class="ts" x="218" y="562" dominant-baseline="central">Compute</text>
   <rect x="280" y="552" width="12" height="12" rx="2" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
   <text class="ts" x="298" y="562" dominant-baseline="central">Infrastructure</text>
-</svg>
+</svg></svg>

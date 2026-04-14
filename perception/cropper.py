@@ -9,7 +9,7 @@ class ZeroCopyCropper:
     直接在 GPU 顯存中接收原始高解析度 Frame Tensor 與 YOLO Bounding Boxes，
     使用 torchvision.ops.roi_align 進行批次裁切與縮放，產出 CLIP/SigLIP 相容的 Tensor。
     """
-    def __init__(self, output_size: Tuple[int, int] = (512, 512)) -> None:
+    def __init__(self, output_size: Tuple[int, int] = (224, 224)) -> None:
         self.output_size = output_size
 
     def process(self, frame_tensor: torch.Tensor, boxes: torch.Tensor) -> torch.Tensor:

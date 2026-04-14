@@ -1,0 +1,62 @@
+name: C++ Core Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # 使用 NVIDIA 官方開發鏡像，減少手動安裝 CUDA 的時間
+    # 注意：GitHub Runner 本身沒有 GPU，但 devel 鏡像包含編譯所需的所有標頭檔與庫
+    container:
+      image: nvidia/cuda:12.2.2-devel-ubuntu22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install System Dependencies
+        run: |
+          apt-get update
+          apt-get install -y \
+            libgstreamer1.0-dev \
+            libgstreamer-plugins-base1.0-dev \
+            libgstreamer-plugins-bad1.0-dev \
+            libopencv-dev \
+            pkg-config \
+            cmake \
+            curl \
+            git \
+            python3-pip \
+            python3-dev
+
+      - name: Install TensorRT (Minimal for Build)
+        run: |
+          # 安裝 TensorRT 開發庫以通過連結
+          apt-get install -y libnvinfer-dev libnvinfer-plugin-dev
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Sync dependencies
+        run: uv sync
+
+      - name: Build C++ Core and Python Extension
+        run: |
+          mkdir build
+          cd build
+          cmake .. \
+            -DPYTHON_EXECUTABLE=$(which python3) \
+            -Dpybind11_DIR=$(uv run python -c "import pybind11; print(pybind11.get_cmake_dir())") \
+            -DCMAKE_BUILD_TYPE=Release
+          make -j$(nproc)
+
+      - name: Verify Python Module Loadable
+        run: |
+          export PYTHONPATH=$PYTHONPATH:$(pwd)/build
+          # 僅驗證匯入，不執行推論 (因為無 GPU)
+          uv run python -c "import saccade_media_ext; print('✅ C++ Python Binding is loadable')"
