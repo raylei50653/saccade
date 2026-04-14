@@ -28,6 +28,7 @@ services:
       - DISPLAY=${DISPLAY}
       - NVIDIA_DRIVER_CAPABILITIES=all
       - PYTHONPATH=/app
+      - UV_LINK_MODE=copy
       
     # 網路配置 (對應 MediaMTX 或 LLM Server)
     network_mode: host

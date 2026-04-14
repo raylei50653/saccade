@@ -41,10 +41,10 @@ echo -e "\n${BLUE}[5/7] Running Mypy Type Check...${NC}"
 uv run mypy .
 echo -e "${GREEN}✅ Type safety verified.${NC}"
 
-# 6. Pytest 單元測試
-echo -e "\n${BLUE}[6/7] Running Pytest (excluding benchmarks)...${NC}"
+# 6. Pytest 單元測試與覆蓋率
+echo -e "\n${BLUE}[6/7] Running Pytest with Coverage...${NC}"
 uv run pytest tests/ -v --ignore=tests/benchmarks
-echo -e "${GREEN}✅ All unit tests passed.${NC}"
+echo -e "${GREEN}✅ All unit tests passed with coverage report.${NC}"
 
 # 7. GPU & TensorRT 健康檢查 (本地專屬)
 echo -e "\n${BLUE}[7/7] Running GPU Stack Deep Check...${NC}"

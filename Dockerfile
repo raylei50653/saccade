@@ -62,6 +62,7 @@ WORKDIR /app
 
 # 4. 配置 Python 3.12 並安裝依賴
 ENV PATH="/root/.local/bin:${PATH}"
+ENV UV_LINK_MODE=copy
 COPY pyproject.toml uv.lock ./
 
 # 安裝 Python 3.12 並建立虛擬環境
