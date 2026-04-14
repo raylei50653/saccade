@@ -33,6 +33,10 @@ public:
         cudaStream_t stream
     );
 
+    // 動態參數調整 (用於 L6 降級)
+    void set_max_lost_frames(int max_lost);
+    void set_min_confidence(float min_conf);
+
 private:
     class Impl;
     std::unique_ptr<Impl> pimpl_;

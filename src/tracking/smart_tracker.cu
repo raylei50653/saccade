@@ -119,10 +119,21 @@ public:
         );
     }
 
+    void set_max_lost_frames(int max_lost) {
+        max_lost_frames_ = max_lost;
+        // std::cout << "[SmartTracker] Updated Max Lost Frames: " << max_lost << std::endl;
+    }
+
+    void set_min_confidence(float min_conf) {
+        min_confidence_ = min_conf;
+    }
+
 private:
     float iou_threshold_;
     float cos_threshold_;
     int max_objects_;
+    int max_lost_frames_ = 30;
+    float min_confidence_ = 0.1f;
     float* d_state_tensor_;
     bool* d_flag_tensor_;
 };
@@ -132,6 +143,14 @@ SmartTracker::~SmartTracker() = default;
 
 void SmartTracker::update_and_filter(const int* ids, const float* boxes, bool* mask, int num, cudaStream_t stream) {
     pimpl_->update_and_filter(ids, boxes, mask, num, stream);
+}
+
+void SmartTracker::set_max_lost_frames(int max_lost) {
+    pimpl_->set_max_lost_frames(max_lost);
+}
+
+void SmartTracker::set_min_confidence(float min_conf) {
+    pimpl_->set_min_confidence(min_conf);
 }
 
 } // namespace saccade

@@ -1,91 +1,105 @@
 import torch
-from typing import Tuple
+import torch.nn.functional as F
+import time
+from typing import List, Tuple, Dict, Optional
+from cognition.resource_manager import DegradationLevel
 
 
 class SemanticDriftHandler:
     """
-    Saccade 語義漂移與去重管理器 (Phase 4)
-
-    在 GPU VRAM 中維護近期物件的特徵快取。
-    利用極速的 Cosine Similarity 排除高度重複的語義向量，避免 ChromaDB 垃圾資料堆積。
+    Saccade 語義漂移處理器 (Industrial Grade - L2)
+    
+    1. 實作「語義質心 (Semantic Centroid)」比對與「熱身期 (Warm-up)」動態 Alpha。
+    2. 實作「顯著性優先 (Salience-based)」截斷策略。
+    3. 新增：基於超時的語義清理機制 (Pruning)，防止記憶體長尾。
     """
 
-    def __init__(
-        self,
-        similarity_threshold: float = 0.95,
-        max_objects: int = 1000,
-        feature_dim: int = 768,
-    ):
-        self.similarity_threshold = similarity_threshold
-        self.max_objects = max_objects
-        self.feature_dim = feature_dim
+    def __init__(self, similarity_threshold: float = 0.95, base_alpha: float = 0.3) -> None:
+        self.base_threshold = similarity_threshold
+        self.base_alpha = base_alpha
+        
+        # 歷史特徵質心快取 {track_id: centroid_tensor}
+        self.feature_history: Dict[int, torch.Tensor] = {}
+        # 物件更新計數器 {track_id: update_count}
+        self.track_update_count: Dict[int, int] = {}
+        # 活躍時間追蹤 {track_id: last_active_timestamp}
+        self.last_active_time: Dict[int, float] = {}
+        
+        self.N_OPT = 8
 
-        # 極致優化：使用大 Tensor 儲存特徵，ID 作為索引
-        self.feature_cache_tensor = torch.zeros(
-            (max_objects, feature_dim), device="cuda"
-        )
-        self.has_cache_tensor = torch.zeros(
-            max_objects, dtype=torch.bool, device="cuda"
-        )
+    def _get_dynamic_alpha(self, track_id: int) -> float:
+        count = self.track_update_count.get(track_id, 0)
+        if count == 0:
+            return 1.0
+        elif count < 5:
+            return 0.7
+        else:
+            return self.base_alpha
 
-    def filter_novel_features(
-        self, obj_ids: torch.Tensor, features: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    def calculate_drift(self, track_id: int, current_feature: torch.Tensor) -> float:
+        if track_id not in self.feature_history:
+            return 0.0
+            
+        centroid = self.feature_history[track_id]
+        sim = F.cosine_similarity(current_feature.unsqueeze(0), centroid.unsqueeze(0))
+        return sim.item()
+
+    def filter_for_batch(
+        self, 
+        track_ids: List[int], 
+        boxes: torch.Tensor,
+        degradation_level: DegradationLevel
+    ) -> List[int]:
+        active_threshold = self.base_threshold
+        max_batch = 32
+        
+        if degradation_level >= DegradationLevel.FAST_PATH:
+            max_batch = self.N_OPT
+        elif degradation_level >= DegradationLevel.REDUCED:
+            max_batch = 16
+
+        areas = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
+        priority_list = []
+        for i, tid in enumerate(track_ids):
+            count = self.track_update_count.get(tid, 0)
+            area = areas[i].item()
+            if count == 0: priority = 0
+            elif count < 5: priority = 1
+            else: priority = 2
+            priority_list.append((priority, -area, tid))
+            
+        priority_list.sort()
+        return [item[2] for item in priority_list[:max_batch]]
+
+    def update_history(self, track_ids: List[int], new_features: torch.Tensor) -> None:
+        """更新質心並標記活躍時間"""
+        now = time.time()
+        for i, tid in enumerate(track_ids):
+            new_feat = new_features[i].detach().clone()
+            alpha = self._get_dynamic_alpha(tid)
+            
+            if tid not in self.feature_history:
+                self.feature_history[tid] = new_feat
+                self.track_update_count[tid] = 1
+            else:
+                old_centroid = self.feature_history[tid]
+                updated_centroid = alpha * new_feat + (1.0 - alpha) * old_centroid
+                self.feature_history[tid] = F.normalize(updated_centroid, p=2, dim=0)
+                self.track_update_count[tid] += 1
+            
+            self.last_active_time[tid] = now
+
+    def prune_expired_centroids(self, timeout_sec: float = 300.0) -> int:
         """
-        過濾出具有「新語義」的特徵 (全 GPU 向量化，移除所有同步點)。
+        清理過期語義 (應定期由 Orchestrator 呼叫)
         """
-        if obj_ids.numel() == 0:
-            return (
-                torch.empty(0, device=obj_ids.device, dtype=obj_ids.dtype),
-                torch.empty(
-                    (0, features.size(1)), device=features.device, dtype=features.dtype
-                ),
-            )
+        now = time.time()
+        expired_ids = [tid for tid, last_ts in self.last_active_time.items() if (now - last_ts) > timeout_sec]
+        for tid in expired_ids:
+            self.clear_history(tid)
+        return len(expired_ids)
 
-        # 使用取模運算處理長效 ID
-        ids = (obj_ids % self.max_objects).long()
-
-        # 1. GPU 向量化提取歷史特徵
-        has_cache = self.has_cache_tensor[ids]
-        cached_feats = self.feature_cache_tensor[ids]
-
-        # 2. 一次性 GPU 計算相似度
-        sims = torch.nn.functional.cosine_similarity(features, cached_feats, dim=1)
-
-        # KEEP 邏輯：全新物件 OR 相似度低於閾值
-        should_keep = (~has_cache) | (sims < self.similarity_threshold)
-
-        # 3. 更新快取 (直接遮罩寫入，不進行 .any() 檢查)
-        keep_ids = ids[should_keep]
-        keep_feats = features[should_keep]
-        self.feature_cache_tensor[keep_ids] = keep_feats
-        self.has_cache_tensor[keep_ids] = True
-
-        return obj_ids[should_keep], features[should_keep]
-
-
-if __name__ == "__main__":
-    print("🚀 Testing SemanticDriftHandler...")
-    handler = SemanticDriftHandler(similarity_threshold=0.95)
-
-    # 模擬 1 筆特徵
-    ids = torch.tensor([1], device="cuda")
-    feat1 = torch.randn(1, 1152, device="cuda")
-
-    # 第一次寫入 (必過)
-    novel_ids, _ = handler.filter_novel_features(ids, feat1)
-    print(f"Test 1 - Expect [1]: {novel_ids.tolist()}")
-
-    # 第二次寫入一模一樣的特徵 (應被過濾)
-    novel_ids, _ = handler.filter_novel_features(ids, feat1)
-    print(f"Test 2 - Expect []: {novel_ids.tolist()}")
-
-    # 第三次寫入加了微小雜訊的特徵 (相似度 > 0.95，應被過濾)
-    feat2 = feat1 + torch.randn_like(feat1) * 0.01
-    novel_ids, _ = handler.filter_novel_features(ids, feat2)
-    print(f"Test 3 - Expect []: {novel_ids.tolist()}")
-
-    # 第四次寫入完全不同的特徵 (語義漂移，應通過)
-    feat3 = torch.randn(1, 1152, device="cuda")
-    novel_ids, _ = handler.filter_novel_features(ids, feat3)
-    print(f"Test 4 - Expect [1]: {novel_ids.tolist()}")
+    def clear_history(self, track_id: int) -> None:
+        self.feature_history.pop(track_id, None)
+        self.track_update_count.pop(track_id, None)
+        self.last_active_time.pop(track_id, None)

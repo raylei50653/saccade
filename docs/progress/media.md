@@ -1,23 +1,26 @@
 # Media & Streaming (Media 模組) 進度核對
 
-## 模組狀態：穩定運行 (RTSP 背景抓幀已實作)
+## 模組狀態：高效能工業級 (Industrial Grade)
 
-## 1. 串流接取與處理 (mediamtx_client.py)
-- [x] **RTSP/WebRTC 對接**: 實作支援 L1 感測之串流接取。
-- [x] **背景抓幀線程**: 專屬線程讀取，確保即時性且防止緩衝區溢出。
-- [x] **自動重連機制**: 針對網路波動，實作自動斷線恢復邏輯。
-- [x] **底層穩定**: 透過 `threads;1` 鎖定與 CUDA 優先，解決 FFmpeg 併發報錯。
+## 1. C++ 零拷貝解碼器 (GstClient)
+- [x] **RTSP/WebRTC 對接**: 透過 GStreamer `appsink` 實作高效能接取。
+- [x] **[重大更新] 工業級零拷貝 V2 (2026-04-14)**:
+    - [x] **5-Buffer 狀態機緩衝池**: 引入 `EMPTY`, `WRITING`, `READY`, `PROCESSING` 狀態，徹底解決多執行緒資料競爭。
+    - [x] **Per-buffer CUDA Streams**: 為每個緩衝區分配獨立 Stream，實現並行 H2D 搬運與計算。
+    - [x] **PyTorch 深度整合**: 支援 `ExternalStream` 指標傳遞，實現全 GPU 非同步推理。
+    - [x] **RAII 自動資源釋放**: 透過 Python GC 與 C++ 綁定，自動回歸緩衝區狀態。
+- [x] **自動丟幀機制 (Drop Frame)**: 當分析速度慢於採集速度時自動丟幀，防止累積延遲。
 
 ## 2. 硬件加速工具 (ffmpeg_utils.py)
 - [x] **NVENC/NVDEC**: 已封裝 NVIDIA 硬體編解碼工具，支援 L1 感測管線。
 - [x] **GStreamer 整合**: 支援 OpenCV 透過 GStreamer 高效能接入。
 
 ## 3. 性能監測
-- [ ] **HLS 延遲監測**: 定期統計 HLS 延遲情況 (待實作)。
+- [x] **CUDA Stream 並行監控**: 已確認支援並發搬運。
 - [ ] **多路串流支援**: 優化多路 RTSP 同時處理性能。
 
 ## 待處理
 - [ ] 實作針對 L3 緩衝的影格抽樣策略。
-- [ ] 支持動態解析度切換。
+- [ ] RTSP 斷線自動恢復監聽 (Watchdog)。
 
-最後更新：2024-05-23
+最後更新：2026-04-14

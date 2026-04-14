@@ -14,13 +14,18 @@
 - [ ] **LlamaIndex 整合**: 規劃將時空數據對接到 LlamaIndex，建立 Agentic RAG 管線 (待實作)。
 - [ ] **多模態檢索**: 結合文本與 Jina-CLIP 向量的跨模態檢索優化。
 
+## L6: Resource Management (資源調度層)
+- [x] **動態資源調配 (ResourceManager)**: 
+    - 實作「決策雜訊消除」：採用滯後控制 (Hysteresis)，防止系統在臨界點發生頻繁切換（Thrashing）。
+    - 門檻區間設計：設定 90% 觸發降級，需降至 85% 才恢復正常模式，確保 FPS 平穩。
+    - 支援階梯式降級 (Stepped Degradation)：從正常、減少緩衝、到僅保留 Perception。
+
 ## 歷史里程碑 (已棄用項目)
 - [x] **`llm_engine.py`**: 已從核心管線移除，改為隨插即用的 API 呼叫。
-- [x] **`resource_manager.py`**: 由於不再頻繁加載多個大模型，權限已交還給全域系統調配。
 - [x] **`yolo-vlm-backend.service`**: 相關服務已停用以釋放 6.5GB VRAM。
 
 ## 待處理
 - [ ] 完成與本地 LlamaIndex 環境的對接實驗。
 - [ ] 實作針對特定事件的「視覺重查 (Visual Re-query)」邏輯。
 
-最後更新：2024-05-23
+最後更新：2026-04-14

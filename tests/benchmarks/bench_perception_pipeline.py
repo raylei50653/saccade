@@ -27,13 +27,13 @@ class PipelineBenchmarker:
         self.stats[key].append(duration_ms)
 
     def report(self, total_duration):
-        print("\n" + "═" * 90)
+        print("\n" + "═" * 100)
         print("📊 Saccade Perception Pipeline Benchmark Report (L1-L2 SigLIP 2)")
-        print("═" * 90)
+        print("═" * 100)
         print(
-            f"{'Module':<20} | {'Mean (ms)':<10} | {'P99 (ms)':<10} | {'StdDev':<8} | {'% Total'}"
+            f"{'Module':<20} | {'Mean (ms)':<12} | {'P99 (ms)':<12} | {'StdDev':<10} | {'% Total'}"
         )
-        print("-" * 90)
+        print("-" * 100)
         total_mean = sum(np.mean(v) for v in self.stats.values() if v and "total" not in v)
         for key, values in self.stats.items():
             if not values:
@@ -42,17 +42,17 @@ class PipelineBenchmarker:
             mean_val = np.mean(arr)
             pct = (mean_val / total_mean * 100) if "total" not in key else 100
             print(
-                f"{key:<20} | {mean_val:10.2f} | {np.percentile(arr, 99):10.2f} | {np.std(arr):8.2f} | {pct:6.1f}%"
+                f"{key:<20} | {mean_val:12.4f} | {np.percentile(arr, 99):12.4f} | {np.std(arr):10.4f} | {pct:6.1f}%"
             )
 
         avg_fps = len(self.stats["total_e2e"]) / total_duration
-        print("-" * 90)
+        print("-" * 100)
         print(f"🚀 Real-world Throughput: {avg_fps:.2f} FPS")
-        print("═" * 90)
+        print("═" * 100)
 
 
-async def run_benchmark(num_frames=200):
-    print(f"🚀 Starting L1-L2 Pipeline Analysis ({num_frames} frames)...")
+async def run_benchmark(num_frames=5000):
+    print(f"🚀 Starting L1-L2 Pipeline Long-run Analysis ({num_frames} frames)...")
     detector = TRTYoloDetector(engine_path="models/yolo/yolo26n_native.engine")
     extractor = TRTFeatureExtractor(
         engine_path="models/embedding/google_siglip2-base-patch16-224.engine"
@@ -123,7 +123,7 @@ async def run_benchmark(num_frames=200):
             bench.record("total_e2e", (time.perf_counter() - t_start) * 1000)
 
         processed += 1
-        if processed % 50 == 0:
+        if processed % 1000 == 0:
             print(f"  - {processed}/{num_frames} frames...")
 
     bench.report(time.perf_counter() - start_time_all)

@@ -31,10 +31,12 @@ include_directories(
 add_library(saccade_perception SHARED
     src/perception/trt_engine.cpp
     src/perception/preprocessor.cpp
+    src/perception/preprocessor_gpu.cu
 )
 target_link_libraries(saccade_perception
     nvinfer
     nvinfer_plugin
+    nppc nppig nppidei nppist nppicc
     ${CUDA_LIBRARIES}
     ${OpenCV_LIBS}
 )

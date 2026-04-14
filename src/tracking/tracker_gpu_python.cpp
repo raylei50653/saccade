@@ -44,6 +44,8 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             );
         },
         py::arg("ids_ptr"), py::arg("boxes_ptr"), py::arg("mask_ptr"), py::arg("num_objs"), py::arg("stream_ptr"),
-        "Filter boxes for feature extraction using GPU");
+        "Filter boxes for feature extraction using GPU")
+        .def("set_max_lost_frames", &SmartTracker::set_max_lost_frames, "Set tracking lost timeout")
+        .def("set_min_confidence", &SmartTracker::set_min_confidence, "Set minimum detection confidence");
 }
 

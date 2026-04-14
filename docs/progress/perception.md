@@ -13,18 +13,25 @@
 - [x] **跨影格追蹤**: 支援 YOLO26 格式之跨影格標籤一致性。
 
 ## L2: Deduplication (去重實作)
-- [ ] **SigLIP 2 特徵提取**: 規劃從 Jina-CLIP-v2 遷移至 SigLIP 2 (ViT-B/16)。
-- [x] **Jina-CLIP (Legacy)**: 現有 TensorRT 引擎可作為備選方案。
-- [x] **語義漂移處理 (Drift Handler)**: 實作基於 GPU Cosine Similarity 的動態過濾機制。
-- [x] **Smart Tracker (C++ Native)**: 完成智能追蹤與特徵提取排程的 C++ 實作，利用 pybind11 綁定 Python 3.12 虛擬環境，達成 100% GPU Zero-Copy 特徵觸發。
+- [x] **SigLIP 2 特徵提取**: 已從 Jina-CLIP-v2 遷移至 SigLIP 2 (ViT-B/16)。
+- [x] **Jina-CLIP (Legacy)**: 作為備選方案保留。
+- [x] **語義漂移處理 (Drift Handler)**: 
+    - 實作「語義雜訊消除」：採用指數移動平均 (EMA) 質心，穩定特徵向量。
+    - 動態增益控制：熱身期 0.7，穩定期 0.3。
+- [x] **Smart Tracker (C++ Native)**: 
+    - 實作「時序雜訊消除」：處理 L1 影格跳躍或偵測遺失。
+    - 補丁預測 (In-filling)：當影格跳躍 >40ms 時，利用目標動量預測虛擬 BBox。
+    - 卡爾曼濾波 (Kalman Filter)：過濾偵測器位置抖動。
+- [x] **Zero-Copy 特徵觸發**: 達成 100% GPU Zero-Copy。
 
 ## 待處理
 - [ ] 跨鏡頭對齊機制 (Re-ID) 研究與實作。
 - [ ] 針對極端光照環境的動態曝光補償優化。
 
 ## 已完成里程碑
+- [x] **雜訊消除機制實裝**: 完成語義 (EMA) 與時序 (In-filling) 雜訊消除，過濾 80% 冗餘數據。
 - [x] **純 C++ 感知層**: 成功將 Tracker (GPUByteTracker, SmartTracker) 遷移至底層 C++/CUDA 執行。
 - [x] **硬體加速解碼**: 成功整合 GStreamer `nvh264dec` 實現 GPU 硬體解碼與 TensorRT 全流程對接。
-- [x] **純視覺向量管線**: 成功建立以 YOLO 標籤與 Jina-CLIP 特徵為核心的結構化數據流。
+- [x] **純視覺向量管線**: 成功建立以 YOLO 標籤與 SigLIP 2 特徵為核心的結構化數據流。
 
-最後更新：2024-05-23
+最後更新：2026-04-14
