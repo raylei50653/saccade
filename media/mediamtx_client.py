@@ -70,11 +70,9 @@ class MediaMTXClient:
     def _get_pipeline_str(self) -> str:
         """根據配置構建 GStreamer 管線"""
         if self.decoder_name == "nvh264dec":
-            # 硬體路徑：使用 NVDEC 並轉為 RGB
-            # 注意：在 1.20 版本中，nvh264dec 輸出的往往是 NV12，需透過 videoconvert 轉為 RGB
-            decoder_path = "nvh264dec ! videoconvert ! video/x-raw,format=RGB"
+            # 硬體路徑：輸出 NV12 以達成零拷貝轉換
+            decoder_path = "nvh264dec ! video/x-raw,format=NV12"
         else:
-            # CPU 備援路徑
             decoder_path = "avdec_h264 ! videoconvert ! video/x-raw,format=RGB"
 
         sink_path = "appsink name=sink emit-signals=true max-buffers=1 drop=true"
@@ -124,13 +122,50 @@ class MediaMTXClient:
             print(f"❌ [MediaClient] Python Connection failed: {e}")
             return False
 
+    def _nv12_to_rgb_gpu(self, raw_nv12: torch.Tensor, h: int, w: int) -> torch.Tensor:
+        """
+        在 GPU 內將 NV12 (YUV420) 轉換為 RGB (Zero-Copy)
+        使用 ITU-R BT.601 標準
+        """
+        # 分離 Y 與 UV 平面
+        y_plane = raw_nv12[: h * w].view(1, 1, h, w).float()
+        uv_plane = raw_nv12[h * w :].view(1, h // 2, w // 2, 2).float()
+
+        # 提取 U 與 V (NV12 是 interleaved UV)
+        u_plane = uv_plane[:, :, :, 0].unsqueeze(1)
+        v_plane = uv_plane[:, :, :, 1].unsqueeze(1)
+
+        # 縮放 U/V 平面至與 Y 一致
+        u_up = torch.nn.functional.interpolate(
+            u_plane, size=(h, w), mode="bilinear", align_corners=False
+        )
+        v_up = torch.nn.functional.interpolate(
+            v_plane, size=(h, w), mode="bilinear", align_corners=False
+        )
+
+        # 轉換公式 (BT.601)
+        y = (y_plane - 16.0) * 1.164
+        u = u_up - 128.0
+        v = v_up - 128.0
+
+        r = y + 1.596 * v
+        g = y - 0.391 * u - 0.813 * v
+        b = y + 2.018 * u
+
+        rgb = torch.cat([r, g, b], dim=1).clamp(0, 255).byte()
+        return rgb.squeeze(0).permute(1, 2, 0)  # [H, W, 3]
+
     def _on_cpp_frame(self, frame_data: Any) -> None:
         """C++ 擴展的回調函式：處理 GPU 指標"""
         try:
+            h, w = frame_data.height, frame_data.width
+
+            # 根據資料大小判斷是否為 NV12 (1.5 bytes per pixel)
+            is_nv12 = frame_data.size == int(h * w * 1.5)
 
             class CudaPointerHolder:
                 def __init__(
-                    self, ptr: int, size: int, shape: Tuple[int, int, int], dtype: str
+                    self, ptr: int, shape: Tuple[int, ...], dtype: str
                 ) -> None:
                     self.__cuda_array_interface__ = {
                         "shape": shape,
@@ -139,14 +174,21 @@ class MediaMTXClient:
                         "version": 3,
                     }
 
-            holder = CudaPointerHolder(
-                ptr=frame_data.cuda_ptr,
-                size=frame_data.width * frame_data.height * 3,
-                shape=(frame_data.height, frame_data.width, 3),
-                dtype="|u1",  # uint8
-            )
-
-            tensor = torch.as_tensor(holder, device="cuda")
+            if is_nv12:
+                holder = CudaPointerHolder(
+                    ptr=frame_data.cuda_ptr,
+                    shape=(int(h * 1.5), w),
+                    dtype="|u1",
+                )
+                raw_tensor = torch.as_tensor(holder, device="cuda")
+                tensor = self._nv12_to_rgb_gpu(raw_tensor.flatten(), h, w)
+            else:
+                holder = CudaPointerHolder(
+                    ptr=frame_data.cuda_ptr,
+                    shape=(h, w, 3),
+                    dtype="|u1",
+                )
+                tensor = torch.as_tensor(holder, device="cuda")
 
             with self._lock:
                 self._last_tensor = tensor
@@ -173,27 +215,35 @@ class MediaMTXClient:
             return Gst.FlowReturn.ERROR
         struct = caps.get_structure(0)
         width, height = struct.get_value("width"), struct.get_value("height")
+        fmt = struct.get_value("format")
+
         success, map_info = buffer.map(Gst.MapFlags.READ)
         if success:
             try:
-                stride = len(map_info.data) // height
-                raw_array = np.frombuffer(map_info.data, dtype=np.uint8).reshape(
-                    (height, stride // 3, 3)
-                )
-                frame_data = raw_array[:, :width, :].copy()
-                tensor = torch.from_numpy(frame_data).to("cuda")
+                # 將原始資料載入 GPU
+                raw_data = torch.from_numpy(
+                    np.frombuffer(map_info.data, dtype=np.uint8)
+                ).to("cuda")
+
+                if fmt == "NV12":
+                    rgb_tensor = self._nv12_to_rgb_gpu(raw_data, height, width)
+                else:
+                    stride = len(map_info.data) // height
+                    rgb_tensor = raw_data.view(height, stride // 3, 3)[:, :width, :]
+
                 with self._lock:
-                    self._last_frame, self._last_tensor, self._ret = (
-                        frame_data,
-                        tensor,
-                        True,
-                    )
+                    self._last_frame = None  # 延遲解碼 np.ndarray 以節省效能
+                    self._last_tensor = rgb_tensor
+                    self._ret = True
             finally:
                 buffer.unmap(map_info)
         return Gst.FlowReturn.OK
 
     def grab_frame(self) -> Tuple[bool, Optional[np.ndarray]]:
         with self._lock:
+            if self._last_frame is None and self._last_tensor is not None:
+                # 延遲轉換：僅在真正需要視覺化時才從 GPU 搬回 CPU
+                self._last_frame = self._last_tensor.cpu().numpy()
             return self._ret, self._last_frame
 
     def grab_tensor(self) -> Tuple[bool, Optional[torch.Tensor]]:
