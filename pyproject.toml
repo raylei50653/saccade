@@ -49,3 +49,10 @@ override-dependencies = [
 strict = true
 ignore_missing_imports = true
 exclude = ["tests/"]
+
+[tool.ruff]
+exclude = ["tests/benchmarks/archive"]
+
+[tool.ruff.lint]
+ignore = ["E701"] # Allow multiple statements on one line for now to avoid tedious formatting fixes in benchmarks
+

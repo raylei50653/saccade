@@ -1,39 +1,42 @@
-import gi # noqa: E402
-gi.require_version('Gst', '1.0') # noqa: E402
-gi.require_version('GstApp', '1.0') # noqa: E402
-from gi.repository import Gst, GstApp # noqa: E402
-import torch # noqa: E402
-import numpy as np # noqa: E402
-from typing import Optional # noqa: E402
-import threading # noqa: E402
+import gi  # noqa: E402
+
+gi.require_version("Gst", "1.0")  # noqa: E402
+gi.require_version("GstApp", "1.0")  # noqa: E402
+from gi.repository import Gst, GstApp  # noqa: E402
+import torch  # noqa: E402
+import numpy as np  # noqa: E402
+from typing import Optional  # noqa: E402
+import threading  # noqa: E402
 
 # 初始化 GStreamer
 Gst.init(None)
 
+
 class GstZeroCopyDecoder:
     """
     Saccade GStreamer 零拷貝解碼器 (Pillar 4)
-    
+
     優先嘗試使用 NVDEC (nvh264dec) 進行硬體加速。
     若環境不支援，則自動降級為 CPU 解碼 (avdec_h264)。
     """
+
     def __init__(self, source_url: str) -> None:
         self.source_url = source_url
         self.decoder_name = self._get_best_decoder()
         self.pipeline_str = self._build_pipeline_str()
-        
+
         print(f"🛠️  Selected Decoder: {self.decoder_name}")
         print(f"🛠️  Generated Pipeline: {self.pipeline_str}")
-        
+
         self.pipeline = Gst.parse_launch(self.pipeline_str)
         self.appsink = self.pipeline.get_by_name("sink")
         self.appsink.connect("new-sample", self._on_new_sample)
-        
+
         # 錯誤監聽
         self.bus = self.pipeline.get_bus()
         self.bus.add_signal_watch()
         self.bus.connect("message", self._on_bus_message)
-        
+
         self.last_tensor: Optional[torch.Tensor] = None
         self._lock = threading.Lock()
         self._running = False
@@ -44,7 +47,9 @@ class GstZeroCopyDecoder:
         if registry.find_feature("nvh264dec", Gst.ElementFactory.__gtype__):
             return "nvh264dec"
         else:
-            print("⚠️ Warning: nvh264dec not found, falling back to CPU decoder (avdec_h264).")
+            print(
+                "⚠️ Warning: nvh264dec not found, falling back to CPU decoder (avdec_h264)."
+            )
             return "avdec_h264"
 
     def _build_pipeline_str(self) -> str:
@@ -52,11 +57,13 @@ class GstZeroCopyDecoder:
         # 根據解碼器決定後續處理路徑
         if self.decoder_name == "nvh264dec":
             # 硬體加速路徑：保持在 CUDA 記憶體中
-            decoder_path = "nvh264dec ! cudaconvert ! video/x-raw(memory:CUDAMemory),format=RGB"
+            decoder_path = (
+                "nvh264dec ! cudaconvert ! video/x-raw(memory:CUDAMemory),format=RGB"
+            )
         else:
             # CPU 備援路徑：一般系統記憶體
             decoder_path = "avdec_h264 ! videoconvert ! video/x-raw,format=RGB"
-            
+
         sink_path = "appsink name=sink emit-signals=true max-buffers=1 drop=true"
 
         if self.source_url.startswith("rtsp://"):
@@ -101,19 +108,23 @@ class GstZeroCopyDecoder:
                 # 計算實際步長
                 actual_size = len(map_info.data)
                 stride = actual_size // height
-                
+
                 # 先以步長建立原始陣列，再裁剪掉 Padding 部分
-                raw_array = np.frombuffer(map_info.data, dtype=np.uint8).reshape((height, stride // 3, 3))
-                frame_data = raw_array[:, :width, :].copy() # 裁切並建立副本以釋放原始 Buffer
-                
+                raw_array = np.frombuffer(map_info.data, dtype=np.uint8).reshape(
+                    (height, stride // 3, 3)
+                )
+                frame_data = raw_array[
+                    :, :width, :
+                ].copy()  # 裁切並建立副本以釋放原始 Buffer
+
                 device = "cuda" if torch.cuda.is_available() else "cpu"
                 tensor = torch.from_numpy(frame_data).to(device)
-                
+
                 with self._lock:
                     self.last_tensor = tensor
             finally:
                 buffer.unmap(map_info)
-        
+
         return Gst.FlowReturn.OK
 
     def start(self) -> None:
@@ -128,6 +139,7 @@ class GstZeroCopyDecoder:
     def stop(self) -> None:
         self._running = False
         self.pipeline.set_state(Gst.State.NULL)
+
 
 if __name__ == "__main__":
     decoder = GstZeroCopyDecoder("rtsp://localhost:8554/live")

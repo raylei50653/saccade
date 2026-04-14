@@ -94,5 +94,5 @@ if __name__ == "__main__":
     
     if yolo11_results and yolo26_results:
         improvement = (yolo11_results['avg'] - yolo26_results['avg']) / yolo11_results['avg'] * 100
-        print(f"\n📈 Performance Summary:")
+        print("\n📈 Performance Summary:")
         print(f"  - Latency Reduction: {improvement:.2f}%")

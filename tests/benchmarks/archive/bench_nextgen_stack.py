@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 async def benchmark_nextgen_stack(num_frames=200):
-    print(f"🚀 [Benchmark] Starting Next-Gen Stack (YOLO26 + SigLIP 2) Performance Test...")
+    print("🚀 [Benchmark] Starting Next-Gen Stack (YOLO26 + SigLIP 2) Performance Test...")
     
     # 1. 初始化組件
     detector = TRTYoloDetector() # 預設使用 yolo26n.engine

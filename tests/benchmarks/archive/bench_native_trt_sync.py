@@ -4,7 +4,7 @@ import numpy as np
 from perception.detector_trt import TRTYoloDetector
 
 def benchmark_native_trt_sync(num_frames=100):
-    print(f"🚀 [Benchmark] Native TRT Detector (with Sync and Preprocessing)...")
+    print("🚀 [Benchmark] Native TRT Detector (with Sync and Preprocessing)...")
     detector = TRTYoloDetector()
     
     # 1. 準備輸入 [1, 3, 640, 640]
@@ -28,7 +28,7 @@ def benchmark_native_trt_sync(num_frames=100):
         
         latencies.append((time.perf_counter() - start) * 1000)
         
-    print(f"✅ Benchmark Complete!")
+    print("✅ Benchmark Complete!")
     print(f"  - Average Latency: {np.mean(latencies):.2f} ms")
     print(f"  - StdDev (Jitter): {np.std(latencies):.2f} ms")
     print(f"  - Min/Max:         {np.min(latencies):.2f} / {np.max(latencies):.2f} ms")

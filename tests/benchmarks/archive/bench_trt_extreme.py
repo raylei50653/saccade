@@ -70,7 +70,7 @@ def benchmark_trt_extreme():
     print("\n✅ Extreme Benchmark Complete!")
     print(f"  - Average E2E Latency: {avg_latency:.2f} ms")
     print(f"  - Max Possible Throughput: {fps:.2f} FPS")
-    print(f"  - GPU Buffer Pool: 5 Frames (Circular)")
+    print("  - GPU Buffer Pool: 5 Frames (Circular)")
     
     media.release()
 

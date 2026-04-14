@@ -28,8 +28,8 @@ import redis.asyncio as aioredis
 
 # ── Config (override via .env) ────────────────────────────────────────────────
 
-REDIS_URL        = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-VRAM_WARN_PCT    = float(os.getenv("VRAM_WARN_PCT", "85"))
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+VRAM_WARN_PCT = float(os.getenv("VRAM_WARN_PCT", "85"))
 
 SYSTEMD_SERVICES = [
     "yolo-perception",
@@ -39,6 +39,7 @@ SYSTEMD_SERVICES = [
 
 
 # ── Data models ───────────────────────────────────────────────────────────────
+
 
 @dataclass
 class ServiceStatus:
@@ -79,6 +80,7 @@ class HealthReport:
 
 # ── Checkers ──────────────────────────────────────────────────────────────────
 
+
 async def check_systemd(service: str) -> ServiceStatus:
     """Check a single Systemd service via systemctl --user is-active."""
     try:
@@ -87,7 +89,9 @@ async def check_systemd(service: str) -> ServiceStatus:
             timeout=3,
         )
         ok = result.returncode == 0
-        return ServiceStatus(name=service, ok=ok, detail="running" if ok else "inactive/failed")
+        return ServiceStatus(
+            name=service, ok=ok, detail="running" if ok else "inactive/failed"
+        )
     except Exception as e:
         return ServiceStatus(name=service, ok=False, detail=str(e))
 
@@ -100,9 +104,9 @@ def check_vram() -> Optional[VramStatus]:
         mem = pynvml.nvmlDeviceGetMemoryInfo(handle)
         pynvml.nvmlShutdown()
 
-        used_gb  = mem.used  / 1024 ** 3
-        total_gb = mem.total / 1024 ** 3
-        pct      = (mem.used / mem.total) * 100
+        used_gb = mem.used / 1024**3
+        total_gb = mem.total / 1024**3
+        pct = (mem.used / mem.total) * 100
 
         return VramStatus(
             used_gb=round(used_gb, 1),
@@ -113,10 +117,12 @@ def check_vram() -> Optional[VramStatus]:
     except Exception:
         return None
 
+
 async def check_redis() -> ServiceStatus:
     """Ping Redis and report queue depth."""
     try:
         from typing import cast, Awaitable, Any
+
         r = aioredis.from_url(REDIS_URL, socket_timeout=3)
         await cast(Awaitable[Any], r.ping())
         depth = await cast(Awaitable[int], r.llen("saccade:events"))
@@ -128,9 +134,12 @@ async def check_redis() -> ServiceStatus:
 
 # ── Aggregator ────────────────────────────────────────────────────────────────
 
+
 class HealthChecker:
     async def run(self) -> HealthReport:
-        systemd_results = await asyncio.gather(*[check_systemd(s) for s in SYSTEMD_SERVICES])
+        systemd_results = await asyncio.gather(
+            *[check_systemd(s) for s in SYSTEMD_SERVICES]
+        )
         redis_status = await check_redis()
 
         return HealthReport(
@@ -142,6 +151,7 @@ class HealthChecker:
 
 
 # ── Renderer ──────────────────────────────────────────────────────────────────
+
 
 def render(report: HealthReport) -> str:
     lines: list[str] = []
@@ -177,9 +187,10 @@ def render(report: HealthReport) -> str:
 
 # ── Entrypoint ────────────────────────────────────────────────────────────────
 
+
 async def _main() -> None:
     checker = HealthChecker()
-    report  = await checker.run()
+    report = await checker.run()
     print(render(report))
 
     if not report.overall_ok:

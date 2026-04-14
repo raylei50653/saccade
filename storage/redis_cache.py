@@ -3,10 +3,12 @@ import os
 import redis.asyncio as redis
 from typing import Dict, Any, Optional, List, cast, Awaitable
 
+
 class RedisCache:
     """
     Saccade Redis 時空快取 (整合 YOLO + 時間戳)
     """
+
     def __init__(self, url: Optional[str] = None) -> None:
         env_url = os.getenv("REDIS_URL")
         self.url: str = url or env_url or "redis://localhost:6379/0"
@@ -21,7 +23,9 @@ class RedisCache:
             await cast(Awaitable[Any], self.client.aclose())
             self.client = None
 
-    async def update_object_track(self, obj_id: int, label: str, box: List[float], timestamp: float) -> None:
+    async def update_object_track(
+        self, obj_id: int, label: str, box: List[float], timestamp: float
+    ) -> None:
         """核心整合：更新 YOLO 目標的時空軌跡"""
         if not self.client:
             await self.connect()
@@ -32,7 +36,12 @@ class RedisCache:
                 data = json.loads(raw_data)
                 data["last_seen"] = timestamp
                 data["last_box"] = box
-                data["trajectory"].append({"t": timestamp, "pos": [(box[0]+box[2])/2, (box[1]+box[3])/2]})
+                data["trajectory"].append(
+                    {
+                        "t": timestamp,
+                        "pos": [(box[0] + box[2]) / 2, (box[1] + box[3]) / 2],
+                    }
+                )
                 if len(data["trajectory"]) > 10:
                     data["trajectory"].pop(0)
             else:
@@ -42,7 +51,12 @@ class RedisCache:
                     "first_seen": timestamp,
                     "last_seen": timestamp,
                     "last_box": box,
-                    "trajectory": [{"t": timestamp, "pos": [(box[0]+box[2])/2, (box[1]+box[3])/2]}]
+                    "trajectory": [
+                        {
+                            "t": timestamp,
+                            "pos": [(box[0] + box[2]) / 2, (box[1] + box[3]) / 2],
+                        }
+                    ],
                 }
             await cast(Awaitable[Any], self.client.set(key, json.dumps(data), ex=300))
 
@@ -52,7 +66,7 @@ class RedisCache:
             await self.connect()
         if self.client:
             keys = await cast(Awaitable[List[bytes]], self.client.keys("saccade:obj:*"))
-            return [k.decode('utf-8').split(':')[-1] for k in keys]
+            return [k.decode("utf-8").split(":")[-1] for k in keys]
         return []
 
     async def get_object_history(self, obj_id: int) -> Optional[Dict[str, Any]]:

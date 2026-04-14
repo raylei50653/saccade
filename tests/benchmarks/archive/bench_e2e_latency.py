@@ -1,7 +1,6 @@
 import asyncio
 import time
 import os
-import torch
 import numpy as np
 from perception.detector_trt import TRTYoloDetector
 from media.mediamtx_client import MediaMTXClient

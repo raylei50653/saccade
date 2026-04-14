@@ -3,7 +3,12 @@ import torch
 from transformers import AutoModel
 from pathlib import Path
 
-def export_siglip2_onnx(model_name: str = "google/siglip2-so400m-patch14-384", output_dir: str = "models/embedding", img_size: int = 384) -> str:
+
+def export_siglip2_onnx(
+    model_name: str = "google/siglip2-so400m-patch14-384",
+    output_dir: str = "models/embedding",
+    img_size: int = 384,
+) -> str:
     print(f"🚀 Starting ONNX export for {model_name}...")
 
     # 建立輸出目錄
@@ -28,9 +33,7 @@ def export_siglip2_onnx(model_name: str = "google/siglip2-so400m-patch14-384", o
     dummy_input = torch.randn(1, 3, img_size, img_size, dtype=torch.float32)
 
     print("⚙️ Exporting to ONNX with Dynamic Batch Size...")
-    dynamic_axes = {
-        'pixel_values': {0: 'batch_size'}
-    }
+    dynamic_axes = {"pixel_values": {0: "batch_size"}}
 
     torch.onnx.export(
         vision_model,
@@ -39,20 +42,25 @@ def export_siglip2_onnx(model_name: str = "google/siglip2-so400m-patch14-384", o
         export_params=True,
         opset_version=18,
         do_constant_folding=True,
-        input_names=['pixel_values'],
-        output_names=['last_hidden_state', 'image_embeds'], # 配合 TRTFeatureExtractor 命名
+        input_names=["pixel_values"],
+        output_names=[
+            "last_hidden_state",
+            "image_embeds",
+        ],  # 配合 TRTFeatureExtractor 命名
         dynamic_axes=dynamic_axes,
-        verbose=False
+        verbose=False,
     )
-
 
     print(f"🎉 Successfully exported to {onnx_path}")
     return onnx_path
+
 
 if __name__ == "__main__":
     # 使用 SigLIP 2 Base (224x224) 以兼顧性能與 VRAM (預計 ~300MB)
     onnx_file = export_siglip2_onnx("google/siglip2-base-patch16-224", img_size=224)
 
     print("\n💡 [Next Step] Compile to TensorRT FP16 Engine using trtexec:")
-    print(f"trtexec --onnx={onnx_file} --saveEngine={onnx_file.replace('.onnx', '.engine')} "
-          "--fp16 --minShapes=pixel_values:1x3x224x224 --optShapes=pixel_values:8x3x224x224 --maxShapes=pixel_values:32x3x224x224")
+    print(
+        f"trtexec --onnx={onnx_file} --saveEngine={onnx_file.replace('.onnx', '.engine')} "
+        "--fp16 --minShapes=pixel_values:1x3x224x224 --optShapes=pixel_values:8x3x224x224 --maxShapes=pixel_values:32x3x224x224"
+    )
