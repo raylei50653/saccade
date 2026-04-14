@@ -13,9 +13,10 @@ wheels/
 
 # AI Models (Large Binaries)
 models/**/*.pt
-models/**/*.engine
+models/**/*.onnx
 models/**/*.gguf
 models/**/*.bin
+models/**/*.engine
 models/**/*.trt
 models/**/*.plan
 *.pt
