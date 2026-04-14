@@ -19,8 +19,12 @@ models/**/*.bin
 models/**/*.engine
 models/**/*.trt
 models/**/*.plan
+models/clip/*
+models/embedding/*
+models/llm/*
+models/yolo/*
+!models/**/*.gitkeep
 *.pt
-models/embedding/
 
 # Data & Media
 storage/chroma_db/
