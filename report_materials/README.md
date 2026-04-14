@@ -4,10 +4,6 @@ Continuous visual perception with vector DB memory — every detection tagged, t
 
 ---
 
-> **🌍 [繁體中文版 (Traditional Chinese)](README_tw.md)**
-
----
-
 ## Overview
 
 Saccade is a dual-track visual reasoning system designed to run on constrained GPU hardware (12GB VRAM). It combines continuous real-time perception with event-driven semantic extraction, storing every detection and feature vector as a time-tagged memory queryable by semantic description.

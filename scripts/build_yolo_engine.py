@@ -1,5 +1,6 @@
 import tensorrt as trt
 import os
+import argparse
 
 TRT_LOGGER = trt.Logger(trt.Logger.INFO)
 
@@ -23,13 +24,19 @@ def build_engine(onnx_file_path: str, engine_file_path: str) -> None:
     with open(onnx_file_path, "rb") as model:
         if not parser.parse(model.read()):
             print("❌ ERROR: Failed to parse the ONNX file.")
-            for error in range(parser.num_errors):
-                print(parser.get_error(error))
+            for i in range(parser.num_errors):
+                error = parser.get_error(i)
+                print(f"Error {i}: {error.code()} - {error.desc()} at {error.file()}:{error.line()}")
             return None
 
-    # 設定 Dynamic Shapes (640x640 for YOLO26)
+    # 動態輸入支援 (YOLO11/YOLO26 通常使用 images 名稱)
     profile = builder.create_optimization_profile()
-    profile.set_shape("images", (1, 3, 640, 640), (1, 3, 640, 640), (1, 3, 640, 640))
+    
+    # 取得輸入節點名稱
+    input_name = network.get_input(0).name
+    print(f"🔍 Input Node Name: {input_name}")
+    
+    profile.set_shape(input_name, (1, 3, 640, 640), (1, 3, 640, 640), (1, 3, 640, 640))
     config.add_optimization_profile(profile)
 
     print("⚙️ Building TensorRT Engine (this takes a few minutes)...")
@@ -45,10 +52,13 @@ def build_engine(onnx_file_path: str, engine_file_path: str) -> None:
 
 
 if __name__ == "__main__":
-    onnx_path = "models/yolo/yolo26n.onnx"
-    engine_path = "models/yolo/yolo26n_native.engine"
+    parser = argparse.ArgumentParser(description="Build TensorRT Engine from ONNX")
+    parser.add_argument("--onnx", type=str, required=True, help="Input ONNX file path")
+    parser.add_argument("--engine", type=str, required=True, help="Output Engine file path")
+    
+    args = parser.parse_args()
 
-    if os.path.exists(onnx_path):
-        build_engine(onnx_path, engine_path)
+    if os.path.exists(args.onnx):
+        build_engine(args.onnx, args.engine)
     else:
-        print(f"❌ ONNX file not found: {onnx_path}")
+        print(f"❌ ONNX file not found: {args.onnx}")

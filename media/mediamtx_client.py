@@ -159,9 +159,9 @@ class MediaMTXClient:
         """C++ 擴展的回調函式：處理 GPU 指標"""
         try:
             h, w = frame_data.height, frame_data.width
-
-            # 根據資料大小判斷是否為 NV12 (1.5 bytes per pixel)
-            is_nv12 = frame_data.size == int(h * w * 1.5)
+            # 根據 channels 判斷格式 (C++ 層目前寫死 3，未來若支援 NV12 可透過 channels=0 或其他約定辨識)
+            channels = getattr(frame_data, "channels", 3)
+            is_nv12 = (channels == 0)  # 假設 0 代表 YUV/NV12，3 代表 RGB
 
             class CudaPointerHolder:
                 def __init__(
@@ -175,6 +175,7 @@ class MediaMTXClient:
                     }
 
             if is_nv12:
+                # NV12 佔用空間為 1.5 * H * W
                 holder = CudaPointerHolder(
                     ptr=frame_data.cuda_ptr,
                     shape=(int(h * 1.5), w),
@@ -183,6 +184,7 @@ class MediaMTXClient:
                 raw_tensor = torch.as_tensor(holder, device="cuda")
                 tensor = self._nv12_to_rgb_gpu(raw_tensor.flatten(), h, w)
             else:
+                # 預設為 RGB [H, W, 3]
                 holder = CudaPointerHolder(
                     ptr=frame_data.cuda_ptr,
                     shape=(h, w, 3),

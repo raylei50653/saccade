@@ -22,7 +22,11 @@
 *   **目標**：追蹤不同世代 YOLO 模型在當前環境下的推理速度與吞吐量差異。
 *   **關鍵指標**：Average Latency, Peak FPS。
 
-### 4. 向量存儲 (`bench_storage_vector.py`)
+### 4. 語義漂移 (`bench_drift_handler.py`)
+*   **目標**：測試 GPU 向量化 Cosine Similarity 在大規模物件下的過濾效率。
+*   **關鍵指標**：Filter Throughput, Drift Latency.
+
+### 5. 向量存儲 (`bench_storage_vector.py`)
 *   **目標**：測試 ChromaDB 向量資料庫在高頻寫入與檢索下的表現。
 *   **關鍵指標**：Query Latency, Write Throughput。
 

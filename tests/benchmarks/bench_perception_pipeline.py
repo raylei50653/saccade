@@ -4,6 +4,8 @@ import os
 import torch
 import numpy as np
 from perception.detector_trt import TRTYoloDetector
+from perception.feature_extractor import TRTFeatureExtractor
+from perception.cropper import ZeroCopyCropper
 from media.mediamtx_client import MediaMTXClient
 from dotenv import load_dotenv
 
@@ -16,7 +18,7 @@ class PipelineBenchmarker:
             "media_grab": [],
             "preprocess": [],
             "yolo_inference": [],
-            "post_logic": [],
+            "zero_copy_crop": [],
             "feature_extract": [],
             "total_e2e": [],
         }
@@ -25,28 +27,38 @@ class PipelineBenchmarker:
         self.stats[key].append(duration_ms)
 
     def report(self, total_duration):
-        print("\n" + "═" * 80)
-        print("📊 Saccade Perception Pipeline Benchmark Report")
-        print("═" * 80)
-        print(f"{'Module':<20} | {'Mean (ms)':<10} | {'P99 (ms)':<10} | {'StdDev':<8}")
-        print("-" * 80)
+        print("\n" + "═" * 90)
+        print("📊 Saccade Perception Pipeline Benchmark Report (L1-L2 SigLIP 2)")
+        print("═" * 90)
+        print(
+            f"{'Module':<20} | {'Mean (ms)':<10} | {'P99 (ms)':<10} | {'StdDev':<8} | {'% Total'}"
+        )
+        print("-" * 90)
+        total_mean = sum(np.mean(v) for v in self.stats.values() if v and "total" not in v)
         for key, values in self.stats.items():
             if not values:
                 continue
             arr = np.array(values)
+            mean_val = np.mean(arr)
+            pct = (mean_val / total_mean * 100) if "total" not in key else 100
             print(
-                f"{key:<20} | {np.mean(arr):10.2f} | {np.percentile(arr, 99):10.2f} | {np.std(arr):8.2f}"
+                f"{key:<20} | {mean_val:10.2f} | {np.percentile(arr, 99):10.2f} | {np.std(arr):8.2f} | {pct:6.1f}%"
             )
 
         avg_fps = len(self.stats["total_e2e"]) / total_duration
-        print("-" * 80)
+        print("-" * 90)
         print(f"🚀 Real-world Throughput: {avg_fps:.2f} FPS")
-        print("═" * 80)
+        print("═" * 90)
 
 
 async def run_benchmark(num_frames=200):
-    print(f"🚀 Starting Perception Pipeline Analysis ({num_frames} frames)...")
+    print(f"🚀 Starting L1-L2 Pipeline Analysis ({num_frames} frames)...")
     detector = TRTYoloDetector(engine_path="models/yolo/yolo26n_native.engine")
+    extractor = TRTFeatureExtractor(
+        engine_path="models/embedding/google_siglip2-base-patch16-224.engine"
+    )
+    cropper = ZeroCopyCropper(output_size=(224, 224))
+
     media = MediaMTXClient(
         dummy_video=os.getenv("DUMMY_VIDEO_PATH", "assets/videos/demo.mp4")
     )
@@ -56,6 +68,7 @@ async def run_benchmark(num_frames=200):
     bench = PipelineBenchmarker()
 
     # 穩健等待
+    print("⏳ Waiting for stream stability...")
     for _ in range(100):
         ret, _ = media.grab_tensor()
         if ret:
@@ -77,25 +90,34 @@ async def run_benchmark(num_frames=200):
         with torch.no_grad():
             # 1. Preprocess
             t1 = time.perf_counter()
-            input_tensor = tensor.permute(2, 0, 1).unsqueeze(0).float() / 255.0
-            yolo_input = torch.nn.functional.interpolate(input_tensor, size=(640, 640))
+            # 確保在 GPU 上進行預處理
+            frame_gpu = tensor.float() / 255.0  # [H, W, C]
+            frame_chw = frame_gpu.permute(2, 0, 1).unsqueeze(0)  # [1, C, H, W]
+            yolo_input = torch.nn.functional.interpolate(frame_chw, size=(640, 640))
             bench.record("preprocess", (time.perf_counter() - t1) * 1000)
 
-            # 2. YOLO
+            # 2. YOLO Inference (L1)
             t2 = time.perf_counter()
-            results = detector.detect(yolo_input)
+            # detector.detect returns (bboxes, scores, classes, ids)
+            bboxes, scores, classes, ids = detector.detect(yolo_input)
             bench.record("yolo_inference", (time.perf_counter() - t2) * 1000)
 
-            # 3. Feature Extract (if objects found)
+            # 3. Zero-Copy Crop
             t3 = time.perf_counter()
-            # 簡化邏輯，僅測量有物件時的開銷
-            if True:
-                _, _, _, ids = results
-                has_objs = ids is not None and ids.numel() > 0
+            # 假設有抓到目標（若無則略過 L2）
+            if bboxes is not None and bboxes.numel() > 0:
+                # 這裡需要將 bboxes 縮放回原始 frame 尺寸，
+                # 但為了 benchmark 延遲，我們直接模擬裁切
+                crops = cropper.process(frame_chw, bboxes[:8])  # 限制最多 8 個物件
+                bench.record("zero_copy_crop", (time.perf_counter() - t3) * 1000)
 
-            if has_objs:
-                # 這裡僅示意特徵提取路徑
-                bench.record("feature_extract", (time.perf_counter() - t3) * 1000)
+                # 4. SigLIP 2 Feature Extract (L2)
+                t4 = time.perf_counter()
+                _ = extractor.extract(crops)
+                bench.record("feature_extract", (time.perf_counter() - t4) * 1000)
+            else:
+                bench.record("zero_copy_crop", 0)
+                bench.record("feature_extract", 0)
 
             torch.cuda.synchronize()
             bench.record("total_e2e", (time.perf_counter() - t_start) * 1000)

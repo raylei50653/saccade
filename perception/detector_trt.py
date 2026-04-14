@@ -30,12 +30,17 @@ class TRTYoloDetector:
 
         self.context = self.engine.create_execution_context()
 
-        # 取得輸入輸出名稱與形狀
-        self.input_name = self.engine.get_tensor_name(0)
-        self.output_name = self.engine.get_tensor_name(1)
+        # 取得輸入輸出名稱與形狀 (更健壯的偵測方式)
+        for i in range(self.engine.num_io_tensors):
+            name = self.engine.get_tensor_name(i)
+            mode = self.engine.get_tensor_mode(name)
+            if mode == trt.TensorIOMode.INPUT:
+                self.input_name = name
+            elif mode == trt.TensorIOMode.OUTPUT:
+                self.output_name = name
 
-        # 預先分配輸出 Tensor [1, 300, 6]
         self.output_shape = self.engine.get_tensor_shape(self.output_name)
+        # 建立專用的輸出 Tensor 緩衝區
         self.output_tensor = torch.empty(
             tuple(self.output_shape), device=self.device, dtype=torch.float32
         )
@@ -44,7 +49,15 @@ class TRTYoloDetector:
         self.tracker = GPUByteTracker(max_objects=2048)
 
         print(
-            f"✅ Native YOLO Detector Ready with GPUByteTracker. Output Shape: {self.output_shape}"
+            f"✅ Native YOLO Detector Ready. Input: {self.input_name}, Output: {self.output_name} {self.output_shape}"
+        )
+
+    def _empty_result(self) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+        return (
+            torch.empty((0, 4), device=self.device),
+            torch.empty((0,), device=self.device),
+            torch.empty((0,), device=self.device),
+            None,
         )
 
     def detect(
@@ -53,8 +66,11 @@ class TRTYoloDetector:
         """
         執行偵測與追蹤 (零拷貝，零同步)
         """
-        # 1. 確保連續
+        # 1. 確保連續性與形狀設定
         input_tensor = input_tensor.contiguous()
+        
+        # 針對動態形狀引擎，必須顯式設定 Input Shape 否則會觸發 Illegal Memory Access
+        self.context.set_input_shape(self.input_name, input_tensor.shape)
 
         # 2. 綁定記憶體指標
         self.context.set_tensor_address(self.input_name, input_tensor.data_ptr())
@@ -64,26 +80,39 @@ class TRTYoloDetector:
         stream = torch.cuda.current_stream().cuda_stream
         self.context.execute_async_v3(stream)
 
-        # 4. YOLO26 NMS-Free 結果處理
-        results = self.output_tensor[0]  # [300, 6]
+        # 強制同步以確保後續的 Python 索引操作安全
+        torch.cuda.synchronize()
 
-        # 過濾置信度
-        mask = results[:, 4] > conf_threshold
-        valid_results = results[mask]
-
-        if valid_results.size(0) == 0:
-            return (
-                torch.empty((0, 4), device=self.device),
-                torch.empty((0,), device=self.device),
-                torch.empty((0,), device=self.device),
-                cast(Optional[torch.Tensor], None),
-            )
+        # 4. 根據輸出形狀選擇處理邏輯
+        if len(self.output_shape) == 3 and self.output_shape[2] == 6:
+            # YOLO26 NMS-Free 格式: [1, 300, 6] -> (x1, y1, x2, y2, score, cls)
+            results = self.output_tensor[0]
+            mask = results[:, 4] > conf_threshold
+            valid_results = results[mask]
+            
+            if valid_results.size(0) == 0:
+                return self._empty_result()
+                
+            boxes = valid_results[:, :4].contiguous()
+            scores = valid_results[:, 4].contiguous()
+            classes = valid_results[:, 5].to(torch.int32).contiguous()
+        else:
+            # 標準 YOLO 格式: [1, 84, 8400] -> 需要進行轉置與簡易過濾
+            # 注意：這裡僅為 benchmark 相容性，實際生產環境建議用 NMS-Free
+            results = self.output_tensor[0].transpose(0, 1)  # [8400, 84]
+            # 取得最大類別分數作為置信度
+            scores, classes = results[:, 4:].max(dim=1)
+            mask = scores > conf_threshold
+            valid_results = results[mask]
+            
+            if valid_results.size(0) == 0:
+                return self._empty_result()
+                
+            boxes = valid_results[:, :4].contiguous() # 這裡是 cx, cy, w, h，需注意
+            scores = scores[mask].contiguous()
+            classes = classes[mask].to(torch.int32).contiguous()
 
         # 5. 更新追蹤 (GPUByteTracker - Zero Sync)
-        boxes = valid_results[:, :4].contiguous()
-        scores = valid_results[:, 4].contiguous()
-        classes = valid_results[:, 5].to(torch.int32).contiguous()
-
         tracks = self.tracker.update(
             boxes.data_ptr(),
             scores.data_ptr(),
