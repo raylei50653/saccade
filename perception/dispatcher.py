@@ -1,111 +1,145 @@
 import asyncio
+import threading
+import queue
 import torch
-import torch.multiprocessing as mp
 import time
-from concurrent.futures import ProcessPoolExecutor
-from typing import List, Tuple, Dict, Any, Optional
+from typing import Tuple, Any, Optional, Callable
 from perception.detector_trt import TRTYoloDetector
 from cognition.resource_manager import ResourceManager, DegradationLevel
 
-# L2 處理函式 (預期在子進程執行，避免 GIL)
-def process_drift_check(payload: Dict[str, Any]) -> Dict[str, Any]:
-    # 這裡未來會實作 CPU-side Cosine Similarity
-    # 利用 Ryzen 9 的多核進行 768-d 向量運算
-    return {"status": "processed", "stream_id": payload["stream_id"]}
 
 class AsyncDispatcher:
     """
-    Saccade 異步分發者 (Industrial Multi-Process Edition)
-    
-    1. 收集來自不同 L1 Producer 的影格數據。
-    2. 打包為動態 Batch 並提交給單一 TensorRT Engine 推理。
-    3. 將結果異步分發回各串流處理任務。
+    Saccade 高效能異步分發器 (Thread-Safe & Batching Optimized)
+
+    1. 使用 queue.Queue 橋接 asyncio 與 Inference Thread。
+    2. 專屬 Inference Thread 執行同步 GPU 運算，不阻塞事件循環。
+    3. 觸發回調函式進行後續 L2 處理。
     """
-    
-    def __init__(self, detector: TRTYoloDetector, max_batch: int = 8):
+
+    def __init__(self, detector: TRTYoloDetector, max_batch: int = 8) -> None:
         self.detector = detector
         self.max_batch = max_batch
-        self.queue: asyncio.Queue[Tuple[str, torch.Tensor, float]] = asyncio.Queue(maxsize=32)
+        # 使用線程安全隊列
+        self.queue: queue.Queue[Tuple[str, torch.Tensor, float]] = queue.Queue(
+            maxsize=128
+        )
         self.resource_manager = ResourceManager()
         self._running = False
-        
-        # 🛠️ 關鍵：使用 'spawn' 上下文以相容 CUDA
-        ctx = mp.get_context('spawn')
-        self.executor = ProcessPoolExecutor(max_workers=4, mp_context=ctx) 
-        
-    async def put_frame(self, stream_id: str, frame_tensor: torch.Tensor, timestamp: float) -> None:
-        """生產者：將影格放入隊列"""
+
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._worker_thread: Optional[threading.Thread] = None
+        self.on_finished: Optional[Callable[[str, Any, Any, float], Any]] = (
+            None  # 回調函式
+        )
+
+        # 🚀 可配置的批次等待時間 (預設 1ms)
+        self.wait_time = 0.001
+
+    async def put_frame(
+        self, stream_id: str, frame_tensor: torch.Tensor, timestamp: float
+    ) -> None:
+        """生產者 (Asyncio Context)：將影格推入隊列"""
         try:
-            # 這裡我們使用 nowait 因為 L1 Callback 不能被阻塞
+            # queue.Queue.put_nowait 是線程安全的
             self.queue.put_nowait((stream_id, frame_tensor, timestamp))
-        except asyncio.QueueFull:
-            # 如果隊列滿了，執行 Drop Frame 以維持實時性
+        except queue.Full:
             pass
 
-    async def _worker_loop(self) -> None:
-        """消費者：貪婪抓取並執行 Batch 推理"""
-        print(f"🚀 [Dispatcher] Inference Worker active on uvloop. Offloading L2 to ProcessPool.")
-        loop = asyncio.get_running_loop()
+    def _inference_worker(self) -> None:
+        """背景推論線程 (Synchronous Context)"""
+        print("🔥 [Dispatcher] Native Inference Worker active.")
+        torch.cuda.set_device(self.detector.device)
+
+        # 🚀 建立 L1 專用 CUDA Stream，與預設 Stream 脫鉤
+        l1_stream = torch.cuda.Stream(device=self.detector.device)  # type: ignore
 
         while self._running:
-            # 1. 等待至少一個影格
             try:
-                first_item = await self.queue.get()
-            except asyncio.CancelledError:
-                break
+                # 1. 獲取第一個任務 (阻塞等待)
+                items = [self.queue.get(timeout=0.1)]
+            except queue.Empty:
+                continue
 
-            batch_items = [first_item]
-            
-            # 根據資源級別動態調整 max_batch
+            # 🚀 積極批次化：使用可配置的等待窗口
+            if self.wait_time > 0:
+                time.sleep(self.wait_time)
+
+            # 2. 獲取更多任務以填滿 Batch
             level = self.resource_manager.decide_degradation_level()
-            current_max = self.max_batch if level < DegradationLevel.FAST_PATH else 4
-            
-            while len(batch_items) < current_max:
-                try:
-                    item = self.queue.get_nowait()
-                    batch_items.append(item)
-                except asyncio.QueueEmpty:
-                    break
-            
-            # 2. 執行 Batch 推理 (GPU)
-            # 由於目前的 TensorRT Engine 可能編譯為 Static Batch=1
-            # 我們先暫時以 Batch=1 循環處理，或確保 Batch 符合 Engine 限制
-            for i, item in enumerate(batch_items):
-                stream_id, yolo_input, timestamp = item
-                # [3, 640, 640] -> [1, 3, 640, 640]
-                input_tensor = yolo_input.unsqueeze(0)
-                
-                with torch.no_grad():
-                    # 偵測單一影格
-                    result = self.detector.detect(input_tensor)
-                
-                # 3. 異步扇出 (Scatter to Sub-processes)
-                # 將結果移回 CPU，避免子進程存取 GPU 導致的 IPC 錯誤
-                cpu_result = []
-                for res in result:
-                    if isinstance(res, torch.Tensor):
-                        cpu_result.append(res.detach().cpu().numpy())
-                    else:
-                        cpu_result.append(res)
+            current_max = self.max_batch if level < DegradationLevel.FAST_PATH else 2
 
-                payload = {
-                    "stream_id": stream_id,
-                    "timestamp": timestamp,
-                    "results": tuple(cpu_result),
-                    "level": level
-                }
-                
-                # 將 L2 任務丟給 Cognition Pool
-                loop.run_in_executor(self.executor, process_drift_check, payload)
-                
-            # 標記 Queue Item 已處理
-            for _ in range(len(batch_items)):
+            while len(items) < current_max:
+                try:
+                    items.append(self.queue.get_nowait())
+                except queue.Empty:
+                    break
+
+            # 3. 批次推論 (在專屬 Stream 內執行)
+            stream_ids, tensors, timestamps = zip(*items)
+
+            with torch.cuda.stream(l1_stream):
+                batch_tensor = (
+                    torch.stack(tensors).to(self.detector.device).contiguous()
+                )
+
+                with torch.no_grad():
+                    batch_results = self.detector.detect_batch(
+                        batch_tensor, stream=l1_stream
+                    )
+
+                # 確保 GPU 運算完成才將結果往下傳遞
+                l1_stream.synchronize()
+
+            # 4. 結果分發
+            for i, result in enumerate(batch_results):
+                if self.on_finished and self._loop:
+                    # 🚀 觸發 L1 -> L2 橋接回調
+                    def _create_task(
+                        s: str = stream_ids[i],
+                        r: Tuple[
+                            torch.Tensor,
+                            torch.Tensor,
+                            torch.Tensor,
+                            Optional[torch.Tensor],
+                        ] = result,
+                        t: torch.Tensor = tensors[i],
+                        ts: float = timestamps[i],
+                    ) -> None:
+                        if self.on_finished:
+                            asyncio.create_task(self.on_finished(s, r, t, ts))
+
+                    self._loop.call_soon_threadsafe(_create_task)
+
+            # 標記 Queue 任務完成
+            for _ in range(len(items)):
                 self.queue.task_done()
 
-    def start(self) -> None:
+    def start(
+        self,
+        callback: Optional[
+            Callable[
+                [
+                    str,
+                    Tuple[
+                        torch.Tensor, torch.Tensor, torch.Tensor, Optional[torch.Tensor]
+                    ],
+                    torch.Tensor,
+                    float,
+                ],
+                Any,
+            ]
+        ] = None,
+    ) -> None:
+        self.on_finished = callback
         self._running = True
-        asyncio.create_task(self._worker_loop())
+        self._loop = asyncio.get_running_loop()
+        self._worker_thread = threading.Thread(
+            target=self._inference_worker, daemon=True
+        )
+        self._worker_thread.start()
 
     def stop(self) -> None:
         self._running = False
-        self.executor.shutdown(wait=False)
+        if self._worker_thread:
+            self._worker_thread.join(timeout=1.0)

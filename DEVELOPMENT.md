@@ -32,7 +32,7 @@
   # 啟動開發容器
   docker-compose up -d
   # 進入容器
-  docker-compose exec perception bash
+  docker-compose exec saccade zsh
   # 安裝 Python 依賴
   uv sync
   ```

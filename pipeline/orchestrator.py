@@ -1,10 +1,9 @@
 import asyncio
-import json
-import os
 import time
-import redis.asyncio as redis
-from typing import Dict, Any, Optional, cast, Awaitable, List
+import uuid
+from typing import Dict, Any, List, Tuple, Optional, cast, Awaitable
 from storage.chroma_store import ChromaStore
+from storage.redis_cache import RedisCache
 from pipeline.health import HealthChecker, render
 from dotenv import load_dotenv
 
@@ -13,25 +12,26 @@ load_dotenv()
 
 class PipelineOrchestrator:
     """
-    Saccade 純視覺向量調度器 (Vision-Only Architecture)
+    Saccade 高效能編排器 (Micro-batching Edition)
 
-    接收 YOLO 的高頻事件，將結構化數據轉化為語義記憶，存入 ChromaDB。
+    1. 從 Redis Stream 批次撈取事件 (L3 -> L4)。
+    2. 執行向量化寫入 ChromaDB，最大化 I/O 效率。
+    3. 整合健康檢查與多路併發控制。
     """
 
     def __init__(self) -> None:
-        self.redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-        self.redis_client = redis.from_url(self.redis_url)
+        self.redis_cache = RedisCache()
         self.memory_store = ChromaStore()
-
-        # 由於拔除 VLM，並發控制只需限制資料庫寫入頻率
-        self.semaphore = asyncio.Semaphore(32)
+        # 微批次大小
+        self.batch_size = 100
+        # 併發控制 (用於處理多個微批次)
+        self.semaphore = asyncio.Semaphore(16)
 
     def _generate_scene_description(self, objects: List[str], entropy: float) -> str:
-        """基於 YOLO 標籤生成結構化的場景描述，供 ChromaDB Embedding 使用"""
+        """基於 YOLO 標籤生成結構化的場景描述"""
         if not objects:
             return "Empty scene."
 
-        # 簡單的物件計數
         obj_counts: Dict[str, int] = {}
         for obj in objects:
             obj_counts[obj] = obj_counts.get(obj, 0) + 1
@@ -41,58 +41,81 @@ class PipelineOrchestrator:
             desc_parts.append(f"{count} {obj}{'s' if count > 1 else ''}")
 
         base_desc = "Scene contains: " + ", ".join(desc_parts) + "."
-
-        # 根據 Entropy 附加動態標籤
         if entropy > 0.8:
-            base_desc += " High dynamic activity or complex scene detected."
-
+            base_desc += " High dynamic activity detected."
         return base_desc
 
-    async def handle_cognitive_event(self, event_data: Dict[str, Any]) -> None:
-        """處理 YOLO 觸發的事件並持久化"""
-        async with self.semaphore:
-            metadata = event_data.get("metadata", {})
+    async def process_event_batch(
+        self, batch: List[Tuple[str, Dict[str, Any]]]
+    ) -> None:
+        """處理一組微批次事件並寫入 ChromaDB"""
+        if not batch:
+            return
+
+        msg_ids, events = zip(*batch)
+        contents = []
+        metadatas = []
+        ids = []
+
+        for event in events:
+            metadata = event.get("metadata", {})
             frame_id = metadata.get("frame_id", 0)
             entropy = metadata.get("entropy_value", 0.0)
             yolo_objects = metadata.get("objects", [])
 
-            # 1. 生成場景語義描述
+            # 1. 生成場景描述
             scene_description = self._generate_scene_description(yolo_objects, entropy)
 
-            # 2. 定義異常邏輯 (基於規則)
-            # 例如：如果在不該出現人的地方出現人，或是偵測到特定危險物品
+            # 2. 異常檢測
             risk_objects = {"knife", "gun", "fire", "smoke", "accident"}
             is_anomaly = any(obj.lower() in risk_objects for obj in yolo_objects)
 
-            # 3. 寫入 ChromaDB
-            try:
-                self.memory_store.add_memory(
-                    content=scene_description,
-                    metadata={
-                        "frame_id": frame_id,
-                        "entropy": entropy,
-                        "objects": ", ".join(yolo_objects),
-                        "is_anomaly": 1 if is_anomaly else 0,
-                        "timestamp": time.time(),
-                    },
-                )
-                status_tag = "🚨" if is_anomaly else "✅"
-                print(f"{status_tag} [Frame {frame_id}] Indexed: {scene_description}")
-            except Exception as e:
-                print(f"❌ [Storage Error] {e}")
+            contents.append(scene_description)
+            metadatas.append(
+                {
+                    "frame_id": frame_id,
+                    "entropy": entropy,
+                    "objects": ", ".join(yolo_objects),
+                    "is_anomaly": 1 if is_anomaly else 0,
+                    "timestamp": time.time(),
+                }
+            )
+            ids.append(str(uuid.uuid4()))
+
+        # 3. 向量化寫入 (Vectorized Write)
+        try:
+            # 透過 to_thread 執行同步的 ChromaDB 批量操作
+            await asyncio.to_thread(
+                self.memory_store.collection.add,
+                documents=contents,
+                metadatas=cast(Any, metadatas),
+                ids=ids,
+            )
+            # 4. 確認訊息已處理 (ACK)
+            await self.redis_cache.acknowledge(list(msg_ids))
+            print(
+                f"📦 [Orchestrator] Micro-batch committed: {len(events)} events indexed."
+            )
+        except Exception as e:
+            print(f"❌ [Storage Error] {e}")
 
     async def start_cognition_loop(self) -> None:
-        print("🚀 [Orchestrator] High-Speed Vector Indexing Loop Active...")
+        print(
+            "🚀 [Orchestrator] High-Speed Stream Indexing Loop Active (Micro-batching)..."
+        )
+        await self.redis_cache.connect()
+
         while True:
             try:
-                result = await cast(
-                    Awaitable[Optional[list[Any]]],
-                    self.redis_client.blpop("saccade:events", timeout=0),
-                )
-                if result:
-                    _, raw_event = result
-                    event_data = json.loads(raw_event)
-                    asyncio.create_task(self.handle_cognitive_event(event_data))
+                # 1. 從 Redis Stream 撈取批次
+                batch = await self.redis_cache.read_stream_batch(count=self.batch_size)
+
+                if batch:
+                    # 2. 異步處理該批次
+                    asyncio.create_task(self.process_event_batch(batch))
+                else:
+                    # 沒資料時稍微休息
+                    await asyncio.sleep(0.1)
             except Exception as e:
                 print(f"⚠️ [Loop Error] {e}")
                 await asyncio.sleep(1)
@@ -105,7 +128,7 @@ class PipelineOrchestrator:
         try:
             await self.start_cognition_loop()
         finally:
-            await cast(Awaitable[Any], self.redis_client.aclose())
+            await self.redis_cache.disconnect()
 
 
 async def main() -> None:

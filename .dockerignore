@@ -17,6 +17,7 @@ __pycache__/
 .DS_Store
 
 # 忽略大型數據或不必要的文檔
+datasets/
 models/
 docs/
 tests/

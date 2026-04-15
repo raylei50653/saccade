@@ -161,7 +161,7 @@ class MediaMTXClient:
             h, w = frame_data.height, frame_data.width
             # 根據 channels 判斷格式 (C++ 層目前寫死 3，未來若支援 NV12 可透過 channels=0 或其他約定辨識)
             channels = getattr(frame_data, "channels", 3)
-            is_nv12 = (channels == 0)  # 假設 0 代表 YUV/NV12，3 代表 RGB
+            is_nv12 = channels == 0  # 假設 0 代表 YUV/NV12，3 代表 RGB
 
             class CudaPointerHolder:
                 def __init__(

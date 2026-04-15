@@ -27,6 +27,7 @@ models/yolo/*
 *.pt
 
 # Data & Media
+datasets/
 storage/chroma_db/
 assets/videos/*.mp4
 *.log

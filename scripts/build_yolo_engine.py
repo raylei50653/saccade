@@ -26,20 +26,30 @@ def build_engine(onnx_file_path: str, engine_file_path: str) -> None:
             print("❌ ERROR: Failed to parse the ONNX file.")
             for i in range(parser.num_errors):
                 error = parser.get_error(i)
-                print(f"Error {i}: {error.code()} - {error.desc()} at {error.file()}:{error.line()}")
+                print(
+                    f"Error {i}: {error.code()} - {error.desc()} at {error.file()}:{error.line()}"
+                )
             return None
 
     # 動態輸入支援 (YOLO11/YOLO26 通常使用 images 名稱)
     profile = builder.create_optimization_profile()
-    
+
     # 取得輸入節點名稱
-    input_name = network.get_input(0).name
-    print(f"🔍 Input Node Name: {input_name}")
-    
-    profile.set_shape(input_name, (1, 3, 640, 640), (1, 3, 640, 640), (1, 3, 640, 640))
+    input_node = network.get_input(0)
+    input_name = input_node.name
+    print(f"🔍 Input Node Name: {input_name}, Current Shape: {input_node.shape}")
+
+    # 🚀 動態 Batch Profile: min=1, opt=8, max=32
+    # 這能讓 GPU 在 1 到 32 之間彈性調整併發程度
+    profile.set_shape(
+        input_name,
+        (1, 3, 640, 640),  # Min
+        (8, 3, 640, 640),  # Opt
+        (32, 3, 640, 640),  # Max
+    )
     config.add_optimization_profile(profile)
 
-    print("⚙️ Building TensorRT Engine (this takes a few minutes)...")
+    print("⚙️ Building Dynamic TensorRT Engine (this takes a few minutes)...")
     engine_bytes = builder.build_serialized_network(network, config)
     if engine_bytes is None:
         print("❌ ERROR: Failed to build the engine.")
@@ -54,8 +64,10 @@ def build_engine(onnx_file_path: str, engine_file_path: str) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Build TensorRT Engine from ONNX")
     parser.add_argument("--onnx", type=str, required=True, help="Input ONNX file path")
-    parser.add_argument("--engine", type=str, required=True, help="Output Engine file path")
-    
+    parser.add_argument(
+        "--engine", type=str, required=True, help="Output Engine file path"
+    )
+
     args = parser.parse_args()
 
     if os.path.exists(args.onnx):

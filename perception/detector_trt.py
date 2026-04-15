@@ -1,58 +1,80 @@
 import tensorrt as trt
 import torch
-from typing import Tuple, Optional, cast, List
+import sys
+from typing import Tuple, Optional, List
+
+# 🚀 嘗試導入 C++ 加速擴展
+try:
+    if "/app/build" not in sys.path:
+        sys.path.append("/app/build")
+    from saccade_perception_ext import TRTEngine as CppTRTEngine
+
+    HAS_CPP_EXT = True
+except ImportError:
+    HAS_CPP_EXT = False
 
 from saccade_tracking_ext import GPUByteTracker
 
 
 class TRTYoloDetector:
     """
-    YOLO26 極速 TensorRT 偵測器 (Native API)
-
-    直接操作 GPU 顯存指標，繞過 Ultralytics 封裝以達成極限低延遲與低抖動。
-    專為 YOLO26 NMS-Free 模型優化，並整合 GPUByteTracker 提供追蹤 ID。
+    YOLO26 極速 TensorRT 偵測器
+    優先使用 C++ 核心引擎以獲得最佳效能與最低抖動。
     """
 
     def __init__(
         self,
-        engine_path: str = "models/yolo/yolo26n_native.engine",
+        engine_path: str = "models/yolo/yolo26n.engine",
         device: str = "cuda:0",
     ):
         self.device = device
-        self.logger = trt.Logger(trt.Logger.ERROR)
+        self.use_cpp = HAS_CPP_EXT
 
-        print(f"⏳ Loading Native YOLO TRT Engine from {engine_path}...")
-        with open(engine_path, "rb") as f, trt.Runtime(self.logger) as runtime:
-            self.engine = runtime.deserialize_cuda_engine(f.read())
+        if self.use_cpp:
+            print(f"🚀 [TRT] Loading C++ Optimized Engine from {engine_path}...")
+            self.cpp_engine = CppTRTEngine(engine_path)
+            self.input_shape = self.cpp_engine.get_tensor_shape("images")
+            self.output_shape = self.cpp_engine.get_tensor_shape("output0")
+            self.input_name = "images"
+            self.output_name = "output0"
+        else:
+            print(
+                f"⚠️ [TRT] C++ Extension not found, using Python Native API for {engine_path}"
+            )
+            self.logger = trt.Logger(trt.Logger.ERROR)
+            with open(engine_path, "rb") as f, trt.Runtime(self.logger) as runtime:
+                self.engine = runtime.deserialize_cuda_engine(f.read())
+            self.context = self.engine.create_execution_context()
 
-        if self.engine is None:
-            raise RuntimeError("Failed to load Native YOLO TensorRT Engine.")
+            for i in range(self.engine.num_io_tensors):
+                name = self.engine.get_tensor_name(i)
+                mode = self.engine.get_tensor_mode(name)
+                if mode == trt.TensorIOMode.INPUT:
+                    self.input_name = name
+                elif mode == trt.TensorIOMode.OUTPUT:
+                    self.output_name = name
+            self.output_shape = self.engine.get_tensor_shape(self.output_name)
 
-        self.context = self.engine.create_execution_context()
+        # 💡 偵測模型是否支援動態 Batch
+        self.is_dynamic = self.output_shape[0] == -1
 
-        # 取得輸入輸出名稱與形狀 (更健壯的偵測方式)
-        for i in range(self.engine.num_io_tensors):
-            name = self.engine.get_tensor_name(i)
-            mode = self.engine.get_tensor_mode(name)
-            if mode == trt.TensorIOMode.INPUT:
-                self.input_name = name
-            elif mode == trt.TensorIOMode.OUTPUT:
-                self.output_name = name
-
-        self.output_shape = self.engine.get_tensor_shape(self.output_name)
         # 建立專用的輸出 Tensor 緩衝區
         self.output_tensor = torch.empty(
-            tuple(self.output_shape), device=self.device, dtype=torch.float32
+            tuple(abs(s) if s != -1 else 1 for s in self.output_shape),
+            device=self.device,
+            dtype=torch.float32,
         )
 
         # 初始化 GPU Tracker (Zero-Sync)
         self.tracker = GPUByteTracker(max_objects=2048)
 
         print(
-            f"✅ Native YOLO Detector Ready. Input: {self.input_name}, Output: {self.output_name} {self.output_shape}"
+            f"✅ Native YOLO Detector Ready. Engine: {'C++' if self.use_cpp else 'Python'}, Dynamic: {self.is_dynamic}"
         )
 
-    def _empty_result(self) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+    def _empty_result(
+        self,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
         return (
             torch.empty((0, 4), device=self.device),
             torch.empty((0,), device=self.device),
@@ -61,60 +83,90 @@ class TRTYoloDetector:
         )
 
     def detect_batch(
-        self, input_tensor: torch.Tensor, conf_threshold: float = 0.25
+        self,
+        input_tensor: torch.Tensor,
+        conf_threshold: float = 0.25,
+        stream: Optional[torch.cuda.Stream] = None,
     ) -> List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor, Optional[torch.Tensor]]]:
         """
-        執行批次偵測與追蹤 (支援多路串流聚合)
-        
-        :param input_tensor: [Batch, 3, 640, 640] GPU Tensor
-        :return: 每一路串流的偵測結果列表
+        執行批次偵測與追蹤
         """
         batch_size = input_tensor.size(0)
-        input_tensor = input_tensor.contiguous()
-        
-        # 1. 設定動態輸入 Shape
-        self.context.set_input_shape(self.input_name, input_tensor.shape)
+        current_stream = stream if stream is not None else torch.cuda.current_stream()
 
-        # 2. 準備輸出空間 (YOLO26 NMS-Free 輸出通常是 [Batch, 300, 6])
-        # 我們根據當前 Batch Size 切片或動態分配
-        output_shape = list(self.output_shape)
-        output_shape[0] = batch_size
-        
-        # 為了效能，我們儘量複用緩衝區，只有當 Batch 變大時才重新分配
-        if self.output_tensor.size(0) < batch_size:
-            self.output_tensor = torch.empty(
-                tuple(output_shape), device=self.device, dtype=torch.float32
-            )
-        
-        # 3. 綁定並執行
-        self.context.set_tensor_address(self.input_name, input_tensor.data_ptr())
-        self.context.set_tensor_address(self.output_name, self.output_tensor.data_ptr())
+        if self.is_dynamic:
+            # 🚀 動態模式：一次性推論
+            input_tensor = input_tensor.contiguous()
 
-        stream = torch.cuda.current_stream().cuda_stream
-        self.context.execute_async_v3(stream)
-        torch.cuda.synchronize()
+            if self.output_tensor.size(0) < batch_size:
+                output_shape = list(self.output_shape)
+                output_shape[0] = batch_size
+                self.output_tensor = torch.empty(
+                    tuple(output_shape), device=self.device, dtype=torch.float32
+                )
 
-        # 4. 解包結果 (Scattering)
-        batch_results = []
-        for i in range(batch_size):
-            results = self.output_tensor[i]
-            mask = results[:, 4] > conf_threshold
-            valid_results = results[mask]
-            
-            if valid_results.size(0) == 0:
-                batch_results.append(self._empty_result())
-                continue
-                
-            boxes = valid_results[:, :4].contiguous()
-            scores = valid_results[:, 4].contiguous()
-            classes = valid_results[:, 5].to(torch.int32).contiguous()
+            if self.use_cpp:
+                # 使用 C++ 推論 (直接傳遞資料指標與 Stream 指標)
+                self.cpp_engine.infer(
+                    [input_tensor.data_ptr(), self.output_tensor.data_ptr()],
+                    current_stream.cuda_stream,
+                )
+            else:
+                self.context.set_input_shape(self.input_name, input_tensor.shape)
+                self.context.set_tensor_address(
+                    self.input_name, input_tensor.data_ptr()
+                )
+                self.context.set_tensor_address(
+                    self.output_name, self.output_tensor.data_ptr()
+                )
+                self.context.execute_async_v3(current_stream.cuda_stream)
 
-            # 這裡注意：多路模式下 Tracker 應該是按路數實例化的，
-            # 但目前為了 Phase 1 展示，我們暫用全域 Tracker 或預留擴展。
-            # 生產環境下，此處應調用對應 stream_id 的 tracker.update
-            batch_results.append((boxes, scores, classes, None))
-            
-        return batch_results
+            # 解包
+            return [
+                self._postprocess(self.output_tensor[i], conf_threshold)
+                for i in range(batch_size)
+            ]
+        else:
+            # 🐢 靜態模式
+            results = []
+            for i in range(batch_size):
+                single_input = input_tensor[i].unsqueeze(0).contiguous()
+                if self.use_cpp:
+                    self.cpp_engine.infer(
+                        [single_input.data_ptr(), self.output_tensor.data_ptr()],
+                        current_stream.cuda_stream,
+                    )
+                else:
+                    self.context.set_tensor_address(
+                        self.input_name, single_input.data_ptr()
+                    )
+                    self.context.set_tensor_address(
+                        self.output_name, self.output_tensor.data_ptr()
+                    )
+                    self.context.execute_async_v3(current_stream.cuda_stream)
+                results.append(
+                    self._postprocess(self.output_tensor.clone(), conf_threshold)
+                )
+            return results
+
+    def _postprocess(
+        self, results: torch.Tensor, conf_threshold: float
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+        """結果過濾邏輯"""
+        # 如果是 [1, 300, 6] 或 [300, 6]
+        if results.dim() == 3:
+            results = results.squeeze(0)
+
+        mask = results[:, 4] > conf_threshold
+        valid_results = results[mask]
+
+        if valid_results.size(0) == 0:
+            return self._empty_result()
+
+        boxes = valid_results[:, :4].contiguous()
+        scores = valid_results[:, 4].contiguous()
+        classes = valid_results[:, 5].to(torch.int32).contiguous()
+        return (boxes, scores, classes, None)
 
     def detect(
         self, input_tensor: torch.Tensor, conf_threshold: float = 0.25

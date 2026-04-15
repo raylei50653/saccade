@@ -21,7 +21,7 @@ The project uses Docker to ensure environmental reproducibility.
 ```bash
 # Build and enter the development container
 docker-compose up -d --build
-docker-compose exec perception bash
+docker-compose exec saccade zsh
 
 # Install dependencies inside container (if not already synced)
 uv sync

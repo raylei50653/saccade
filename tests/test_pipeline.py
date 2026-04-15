@@ -54,27 +54,35 @@ async def test_entropy_trigger_cooldown():
 
 
 @pytest.mark.anyio
-async def test_orchestrator_handle_event():
+async def test_orchestrator_process_event_batch():
     mock_redis = AsyncMock()
     mock_chroma = MagicMock()
+    mock_collection = MagicMock()
+    mock_chroma.collection = mock_collection
 
     with (
-        patch("redis.asyncio.from_url", return_value=mock_redis),
+        patch("pipeline.orchestrator.RedisCache", return_value=mock_redis),
         patch("pipeline.orchestrator.ChromaStore", return_value=mock_chroma),
     ):
         orchestrator = PipelineOrchestrator()
 
-        event_data = {
-            "metadata": {
-                "frame_id": 100,
-                "entropy_value": 0.9,
-                "objects": ["person", "knife"],
-            }
-        }
+        batch = [
+            (
+                "msg-1",
+                {
+                    "metadata": {
+                        "frame_id": 100,
+                        "entropy_value": 0.9,
+                        "objects": ["person", "knife"],
+                    }
+                },
+            )
+        ]
 
-        await orchestrator.handle_cognitive_event(event_data)
+        await orchestrator.process_event_batch(batch)
 
-        assert mock_chroma.add_memory.called
-        args, kwargs = mock_chroma.add_memory.call_args
-        assert "knife" in kwargs["content"]
-        assert kwargs["metadata"]["is_anomaly"] == 1
+        assert mock_collection.add.called
+        args, kwargs = mock_collection.add.call_args
+        assert "knife" in kwargs["documents"][0]
+        assert kwargs["metadatas"][0]["is_anomaly"] == 1
+        assert mock_redis.acknowledge.called

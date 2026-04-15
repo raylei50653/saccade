@@ -5,9 +5,8 @@ services:
       dockerfile: Dockerfile
     image: saccade:latest
     container_name: saccade_dev
-    runtime: nvidia
     
-    # 支援 GPU 存取
+    # 支援 GPU 存取 (使用現代 Compose deploy 語法)
     deploy:
       resources:
         reservations:
@@ -21,7 +20,7 @@ services:
       - .:/app
       - /app/.venv # 保護容器內的虛擬環境不被宿主機覆蓋
       - /tmp/.X11-unix:/tmp/.X11-unix # 支援 X11 顯示
-      - /usr/lib/wsl:/usr/lib/wsl # 強制映射 WSL2 驅動庫
+      - /usr/lib/wsl:/usr/lib/wsl # WSL2 驅動庫映射 (Linux 宿主機可忽略此路徑報錯)
     
     # 環境變量配置
     environment:
@@ -31,12 +30,17 @@ services:
       - UV_LINK_MODE=copy
       - LD_LIBRARY_PATH=/usr/lib/wsl/lib:/usr/local/cuda/lib64:/usr/local/nvidia/lib:/usr/local/nvidia/lib64
       
-    # 網路配置 (對應 MediaMTX 或 LLM Server)
+    # 網路配置: 使用 host 模式以支持多路 RTSP/WebRTC 低延遲傳輸
     network_mode: host
     
-    # 共享記憶體優化 (重要：防止視訊處理 OOM)
-    shm_size: '2gb'
+    # 共享記憶體優化 (防止 DeepStream/DALI 多路串流 OOM)
+    shm_size: '8gb'
     
+    # 依賴管理: 確保 Redis 就緒後再啟動
+    depends_on:
+      redis:
+        condition: service_healthy
+
     # 讓容器保持運行以便開發
     stdin_open: true
     tty: true
@@ -47,5 +51,13 @@ services:
   redis:
     image: redis:7-alpine
     container_name: saccade_redis
-    network_mode: host
+    # 限制 Redis 僅綁定到 localhost (127.0.0.1)，防止網路暴露
+    # 配合 saccade 服務的 host 網路模式，仍可透過 localhost:6379 存取
+    ports:
+      - "127.0.0.1:6379:6379"
     restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 3

@@ -27,7 +27,7 @@ dependencies = [
     "pytest-anyio>=0.0.0",
     "types-pyyaml>=6.0.12.20260408",
     "decord>=0.6.0",
-    "nvidia-dali-cuda120>=2.0.0",
+    "nvidia-dali-cuda130>=2.0.0",
     "pygobject==3.48.2",
     "timm>=1.0.26",
     "onnxscript>=0.6.2",

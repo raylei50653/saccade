@@ -1,55 +1,72 @@
 import torch
 import heapq
 import time
-from typing import Tuple, Any, Optional, List, Dict, cast
+from typing import Tuple, Any, Optional, List, cast
 from saccade_tracking_ext import SmartTracker as CppSmartTracker
+
+
+from dataclasses import dataclass, field
+
+
+@dataclass(order=True)
+class BufferEntry:
+    timestamp: int
+    data: Any = field(compare=False)
 
 
 class ReorderingBuffer:
     """
     Saccade 有序暫存隊列 (Phase 4 - Industrial)
-    
+
     1. 解決多 Stream 並行導致的 Out-of-order 問題。
     2. 實作 150ms 滑動窗口重排。
     3. 實作 200ms 缺幀補丁預測 (In-filling)。
     """
+
     def __init__(self, window_ms: int = 150, timeout_ms: int = 200) -> None:
         self.window_ms = window_ms
         self.timeout_ms = timeout_ms
-        self.buffer: List[Tuple[int, Any]] = [] # (timestamp, data)
+        self.buffer: List[BufferEntry] = []  # (timestamp, data)
         self.last_emitted_ts: int = 0
-        self.frame_interval_ms: int = 33 # 預設 30fps
-        
+        self.frame_interval_ms: int = 33  # 預設 30fps
+
     def push(self, timestamp: int, data: Any) -> None:
-        heapq.heappush(self.buffer, (timestamp, data))
-        
+        heapq.heappush(self.buffer, BufferEntry(timestamp, data))
+
     def pop_ready(self) -> List[Any]:
         ready_frames = []
         current_time = int(time.time() * 1000)
-        
+
         while self.buffer:
-            top_ts, _ = self.buffer[0]
-            
+            entry = self.buffer[0]
+            top_ts = entry.timestamp
+
             # 條件 1: 緩衝區滿或時間超過窗口
             # 條件 2: 頂端影格與上一個發出的影格連續
             if len(self.buffer) > 5 or (top_ts - self.last_emitted_ts) > self.window_ms:
-                ts, data = heapq.heappop(self.buffer)
-                
+                entry = heapq.heappop(self.buffer)
+                ts = entry.timestamp
+                data = entry.data
+
                 # 檢查是否需要 In-filling (缺幀預測)
-                if self.last_emitted_ts > 0 and (ts - self.last_emitted_ts) > (self.frame_interval_ms * 1.5):
+                if self.last_emitted_ts > 0 and (ts - self.last_emitted_ts) > (
+                    self.frame_interval_ms * 1.5
+                ):
                     # 這裡觸發預測邏輯 (暫以 Log 標記，由 Tracker 實作 BBox 預測)
                     # print(f"⚠️ [ReorderingBuffer] Gap detected: {ts - self.last_emitted_ts}ms, triggering In-filling.")
                     pass
-                
+
                 # 檢查 Latency Spike
                 if (current_time - ts) > self.timeout_ms:
-                    print(f"🚨 [LATENCY_SPIKE] Frame {ts} delayed {current_time - ts}ms!")
-                
+                    print(
+                        f"🚨 [LATENCY_SPIKE] Frame {ts} delayed {current_time - ts}ms!"
+                    )
+
                 self.last_emitted_ts = ts
                 ready_frames.append(data)
             else:
                 break
-                
+
         return ready_frames
 
 
@@ -72,13 +89,13 @@ class SmartTracker:
             iou_threshold, velocity_angle_threshold, max_objects
         )
         self.reorder_buffer = ReorderingBuffer()
-        self.extraction_stream: torch.cuda.Stream = torch.cuda.Stream() # type: ignore[no-untyped-call]
-        
+        self.extraction_stream: torch.cuda.Stream = torch.cuda.Stream()  # type: ignore[no-untyped-call]
+
     def set_degradation_params(self, level: int) -> None:
         """
         根據降級級別動態調整追蹤參數 (Industrial Grade - Level 3 Support)
         """
-        if level >= 3: # EMERGENCY MODE
+        if level >= 3:  # EMERGENCY MODE
             # 大掃除：大幅縮短遺失幀緩衝 (從 30 降至 5)
             # 這能釋放追蹤器內部的歷史狀態快取
             self.cpp_tracker.set_max_lost_frames(5)
@@ -90,7 +107,9 @@ class SmartTracker:
             self.cpp_tracker.set_max_lost_frames(30)
             self.cpp_tracker.set_min_confidence(0.1)
 
-    def process_frame(self, timestamp: int, obj_ids: torch.Tensor, boxes: torch.Tensor) -> None:
+    def process_frame(
+        self, timestamp: int, obj_ids: torch.Tensor, boxes: torch.Tensor
+    ) -> None:
         """
         將新影格偵測結果推入重排隊列
         """
@@ -120,9 +139,9 @@ class SmartTracker:
                 num_objs,
                 stream,
             )
-            
+
             results.append((obj_ids[mask], boxes[mask]))
-            
+
         return results
 
     def async_extract_features(
@@ -153,24 +172,26 @@ if __name__ == "__main__":
     # 順序：Frame 10, Frame 30, Frame 20
     def mock_data(val: int) -> Tuple[torch.Tensor, torch.Tensor]:
         ids = torch.tensor([val], device="cuda", dtype=torch.int32)
-        boxes = torch.tensor([[val, val, val+50, val+50]], device="cuda", dtype=torch.float32)
+        boxes = torch.tensor(
+            [[val, val, val + 50, val + 50]], device="cuda", dtype=torch.float32
+        )
         return ids, boxes
 
     print("\n--- Phase 1: Out-of-order Handling ---")
-    tracker.process_frame(1000, *mock_data(10)) # Frame 10 @ 1.0s
-    tracker.process_frame(3000, *mock_data(30)) # Frame 30 @ 3.0s (跳躍)
-    tracker.process_frame(2000, *mock_data(20)) # Frame 20 @ 2.0s (遲到)
+    tracker.process_frame(1000, *mock_data(10))  # Frame 10 @ 1.0s
+    tracker.process_frame(3000, *mock_data(30))  # Frame 30 @ 3.0s (跳躍)
+    tracker.process_frame(2000, *mock_data(20))  # Frame 20 @ 2.0s (遲到)
 
     # 第一次讀取 (此時緩衝區有 3 幀，且 Frame 30 與 Frame 10 差距 > 150ms)
     results = tracker.update_and_filter()
-    print(f"Pop 1 - Frames ready: {len(results)}") 
+    print(f"Pop 1 - Frames ready: {len(results)}")
     # 預期會依序排出 10, 20 (因為 20 已經到了且在 10 之後)
 
     # 模擬延遲尖峰 (Latency Spike)
     print("\n--- Phase 2: Latency Spike Detection ---")
-    old_ts = int((time.time() - 5) * 1000) # 5 秒前的影格
+    old_ts = int((time.time() - 5) * 1000)  # 5 秒前的影格
     tracker.process_frame(old_ts, *mock_data(99))
-    tracker.reorder_buffer.window_ms = 0 # 強制排出
-    tracker.update_and_filter() # 應觸發 LATENCY_SPIKE Log
+    tracker.reorder_buffer.window_ms = 0  # 強制排出
+    tracker.update_and_filter()  # 應觸發 LATENCY_SPIKE Log
 
     print("\n✅ Test Completed.")

@@ -34,7 +34,9 @@ class PipelineBenchmarker:
             f"{'Module':<20} | {'Mean (ms)':<12} | {'P99 (ms)':<12} | {'StdDev':<10} | {'% Total'}"
         )
         print("-" * 100)
-        total_mean = sum(np.mean(v) for v in self.stats.values() if v and "total" not in v)
+        total_mean = sum(
+            np.mean(v) for v in self.stats.values() if v and "total" not in v
+        )
         for key, values in self.stats.items():
             if not values:
                 continue

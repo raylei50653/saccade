@@ -19,10 +19,10 @@
     - 動態增益控制：熱身期 0.7，穩定期 0.3。
     - **Multi-Process Offloading**: 利用 `ProcessPoolExecutor` (spawn) 將 L2 運算卸載至子進程，釋放主執行緒 GIL。
 - [x] **Smart Tracker (C++ Native)**: 
-...
     - 實作「時序雜訊消除」：處理 L1 影格跳躍或偵測遺失。
     - 補丁預測 (In-filling)：當影格跳躍 >40ms 時，利用目標動量預測虛擬 BBox。
     - 卡爾曼濾波 (Kalman Filter)：過濾偵測器位置抖動。
+    - **GPUByteTracker**: 將 ByteTrack 追蹤算法移植至 C++/CUDA，大幅降低追蹤延時。
 - [x] **Zero-Copy 特徵觸發**: 達成 100% GPU Zero-Copy。
 
 ## 待處理
@@ -30,10 +30,16 @@
 - [ ] 針對極端光照環境的動態曝光補償優化。
 
 ## 已完成里程碑
+- [x] **ABCD 全面效能優化 (2026-04-15)**:
+    - **(A) DALI 預處理**: 導入 NVIDIA DALI，達成純 GPU 影像解碼、縮放與歸一化。
+    - **(B) CUDA 並行化**: 透過 `torch.cuda.Stream` 實現 L1 (YOLO) 與 L2 (SigLIP2) 運算重疊。
+    - **(C) C++ 核心遷移**: 實作 `libperception.so`，將 TensorRT 推論下放到 C++ 層，消除 Python GIL 抖動。
+    - **(D) Redis 批次寫入**: 透過 Redis Pipeline 減少 90% 的寫入系統調用。
+- [x] **極極限效能記錄**: 成功達成 **32 路串流 12.7ms 端到端平均延遲** (約每秒 78 FPS/路)，GPU 利用率 98% 飽和運行。
 - [x] **極致效能突破**: 成功達成 10 路串流 3000 FPS 聚合吞吐量 (Aggregate Throughput)，單路均值 300 FPS。
 - [x] **雜訊消除機制實裝**: 完成語義 (EMA) 與時序 (In-filling) 雜訊消除，過濾 80% 冗餘數據。
 - [x] **純 C++ 感知層**: 成功將 Tracker (GPUByteTracker, SmartTracker) 遷移至底層 C++/CUDA 執行。
-- [x] **硬體加速解碼**: 成功整合 GStreamer `nvh264dec` 實現 GPU 硬體解碼與 TensorRT 全流程對接。
+- [x] **硬體加速解碼**: 成功整合 GStreamer `nvh264dec` 與 DALI 實現 GPU 硬體解碼與 TensorRT 全流程對接。
 - [x] **純視覺向量管線**: 成功建立以 YOLO 標籤與 SigLIP 2 特徵為核心的結構化數據流。
 
-最後更新：2026-04-14
+最後更新：2026-04-15

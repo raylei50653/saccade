@@ -15,7 +15,7 @@ class TRTFeatureExtractor:
         self,
         engine_path: str = "models/embedding/google_siglip2-base-patch16-224.engine",
         device: str = "cuda:0",
-        max_batch: int = 32
+        max_batch: int = 32,
     ) -> None:
         self.device = device
         self.logger = trt.Logger(trt.Logger.ERROR)
@@ -31,31 +31,32 @@ class TRTFeatureExtractor:
         self.context = self.engine.create_execution_context()
         # SigLIP 2 Base (ViT-B) 的特徵維度為 768
         self.feature_dim = 768
-        
-        # 🛠️ 預先分配 Pinned Buffer Pool (鎖頁記憶體)
-        # 這能避免在高頻推理中頻繁配置記憶體導致的 WSL2 抖動
-        self.pinned_buffer = torch.empty(
-            (self.max_batch, self.feature_dim), 
-            device="cpu", 
-            pin_memory=True, 
-            dtype=torch.float32
-        )
-        # GPU 端的輸出緩衝區也預先分配 (避免碎片化)
-        self.gpu_output_buffer = torch.empty(
-            (self.max_batch, self.feature_dim), 
-            device=self.device, 
-            dtype=torch.float32
-        )
-        # SigLIP 2 Base 的 last_hidden_state (可選，若不使用可移除以省顯存)
-        self.gpu_hidden_buffer = torch.empty(
-            (self.max_batch, 196, self.feature_dim),
-            device=self.device,
-            dtype=torch.float32
-        )
-        
-        print(f"✅ Extractor Ready. Feature Dimension: {self.feature_dim}, Max Batch: {self.max_batch}")
 
-    def extract(self, input_tensor: torch.Tensor) -> torch.Tensor:
+        # 💡 偵測模型是否支援動態 Batch
+        self.input_shape = self.engine.get_tensor_shape("pixel_values")
+        self.is_dynamic = self.input_shape[0] == -1
+
+        # 🛠️ 自動化 IO 管理
+        self.output_buffers = {}
+        self.output_names = []
+        for i in range(self.engine.num_io_tensors):
+            name = self.engine.get_tensor_name(i)
+            if self.engine.get_tensor_mode(name) == trt.TensorIOMode.OUTPUT:
+                self.output_names.append(name)
+                shape = self.engine.get_tensor_shape(name)
+                # 預先分配空間 (處理動態維度)
+                alloc_shape = [self.max_batch if s == -1 else s for s in shape]
+                self.output_buffers[name] = torch.empty(
+                    tuple(alloc_shape), device=self.device, dtype=torch.float32
+                )
+
+        print(
+            f"✅ Extractor Ready. Dynamic: {self.is_dynamic}, Outputs: {self.output_names}"
+        )
+
+    def extract(
+        self, input_tensor: torch.Tensor, stream: torch.cuda.Stream | None = None
+    ) -> torch.Tensor:
         """
         執行零拷貝推論 (GPU -> GPU)
         """
@@ -63,34 +64,64 @@ class TRTFeatureExtractor:
         if batch_size == 0:
             return torch.empty((0, self.feature_dim), device=self.device)
 
-        input_tensor = input_tensor.contiguous()
-        self.context.set_input_shape("pixel_values", (batch_size, 3, 224, 224))
+        current_stream = stream if stream is not None else torch.cuda.current_stream()
 
-        # 複用預分配的 GPU Buffer
-        output_tensor = self.gpu_output_buffer[:batch_size]
-        hidden_tensor = self.gpu_hidden_buffer[:batch_size]
+        # 1. 綁定輸入
+        input_tensor = input_tensor.contiguous()
+        if self.is_dynamic:
+            self.context.set_input_shape("pixel_values", (batch_size, 3, 224, 224))
 
         self.context.set_tensor_address("pixel_values", input_tensor.data_ptr())
-        self.context.set_tensor_address("image_embeds", output_tensor.data_ptr())
-        self.context.set_tensor_address("last_hidden_state", hidden_tensor.data_ptr())
-        
-        # SigLIP 2 推理 (異步)
-        stream = torch.cuda.current_stream().cuda_stream
-        self.context.execute_async_v3(stream)
 
-        return output_tensor
+        # 2. 綁定所有輸出 (TensorRT 要求所有輸出都必須有位址)
+        for name in self.output_names:
+            buffer = self.output_buffers[name]
+            # 如果是動態 Batch 且緩衝區不夠大，則重新分配
+            if self.is_dynamic and buffer.size(0) < batch_size:
+                shape = list(self.engine.get_tensor_shape(name))
+                shape[0] = batch_size
+                buffer = torch.empty(
+                    tuple(shape), device=self.device, dtype=torch.float32
+                )
+                self.output_buffers[name] = buffer
+
+            self.context.set_tensor_address(name, buffer.data_ptr())
+
+        # 3. 執行推論
+        if self.is_dynamic:
+            self.context.execute_async_v3(current_stream.cuda_stream)
+            # 回傳主要的 image_embeds
+            return self.output_buffers["image_embeds"][:batch_size]
+        else:
+            # 🐢 靜態模式：循序處理 (Fallback)
+            results = []
+            for i in range(batch_size):
+                single_input = input_tensor[i].unsqueeze(0).contiguous()
+                self.context.set_tensor_address("pixel_values", single_input.data_ptr())
+                # 重新綁定所有輸出地址到當前單個 batch
+                for name in self.output_names:
+                    self.context.set_tensor_address(
+                        name, self.output_buffers[name].data_ptr()
+                    )
+
+                self.context.execute_async_v3(current_stream.cuda_stream)
+                results.append(self.output_buffers["image_embeds"].clone())
+            return torch.cat(results, dim=0)
 
     def extract_to_cpu(self, input_tensor: torch.Tensor) -> torch.Tensor:
         """
-        執行推理並將結果搬移至 Pinned CPU Buffer (D2H 優化)
+        執行推理並將結果搬移至 CPU Buffer (D2H 優化)
         """
         batch_size = input_tensor.size(0)
         gpu_features = self.extract(input_tensor)
-        
+
+        # 建立 CPU tensor
+        cpu_features = torch.empty(
+            (batch_size, self.feature_dim), dtype=torch.float32, pin_memory=True
+        )
         # 使用 non_blocking=True 進行 DMA 搬運
-        cpu_features = self.pinned_buffer[:batch_size]
         cpu_features.copy_(gpu_features, non_blocking=True)
-        
+
         return cpu_features
 
 

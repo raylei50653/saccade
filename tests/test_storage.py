@@ -16,21 +16,24 @@ async def test_redis_cache_operations():
         cache = RedisCache()
         await cache.connect()
 
-        # Set default return for get to None
-        mock_client.get.return_value = None
+        # Test event stream add
+        mock_client.xadd.return_value = "123-0"
+        msg_id = await cache.add_to_stream({"data": 1})
+        assert mock_client.xadd.called
+        assert msg_id == "123-0"
 
-        # Test event publish
-        await cache.publish_event("test_q", {"data": 1})
-        assert mock_client.rpush.called
+        # Test stream read batch
+        mock_client.xreadgroup.return_value = [
+            (cache.stream_name, [("123-0", {"data": '{"test": 1}'})])
+        ]
+        events = await cache.read_stream_batch()
+        assert len(events) == 1
+        assert events[0][0] == "123-0"
+        assert events[0][1] == {"test": 1}
 
-        # Test object track update
-        await cache.update_object_track(123, "person", [0, 0, 10, 10], 12345.67)
-        assert mock_client.set.called
-
-        # Test object history get
-        mock_client.get.return_value = '{"id": 123, "label": "person"}'
-        state = await cache.get_object_history(123)
-        assert state["label"] == "person"
+        # Test ack
+        await cache.acknowledge(["123-0"])
+        assert mock_client.xack.called
 
 
 def test_chroma_store_operations():

@@ -88,6 +88,12 @@ target_link_libraries(saccade_tracking_ext PRIVATE
     ${CUDA_LIBRARIES}
 )
 
+pybind11_add_module(saccade_perception_ext src/perception/perception_python.cpp)
+target_link_libraries(saccade_perception_ext PRIVATE 
+    saccade_perception
+    ${CUDA_LIBRARIES}
+)
+
 # 7. 主程式
 add_executable(saccade_node src/main.cpp)
 target_link_libraries(saccade_node 

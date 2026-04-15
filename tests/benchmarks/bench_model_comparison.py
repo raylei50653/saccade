@@ -62,34 +62,39 @@ def run_model_test(model_name, model_path, num_frames=300):
         processed += 1
 
     media.release()
-    
+
     # 清理 GPU 記憶體，確保後續進程安全
     del detector
     torch.cuda.empty_cache()
-    
+
     return {
         "avg": np.mean(latencies),
         "p99": np.percentile(latencies, 99),
         "fps": num_frames / (sum(latencies) / 1000),
     }
 
+
 def _worker_process(model_name, model_path, queue):
     res = run_model_test(model_name, model_path)
     queue.put(res)
 
+
 def run_isolated(model_name, model_path):
     queue = multiprocessing.Queue()
-    p = multiprocessing.Process(target=_worker_process, args=(model_name, model_path, queue))
+    p = multiprocessing.Process(
+        target=_worker_process, args=(model_name, model_path, queue)
+    )
     p.start()
     p.join()
     if p.exitcode == 0:
         return queue.get()
     return None
 
+
 if __name__ == "__main__":
     # 使用 spawn 模式確保 CUDA Context 完全隔離
     multiprocessing.set_start_method("spawn", force=True)
-    
+
     print("🚀 [Benchmark] YOLO Generation Comparison (TRT Only)")
     print("═" * 70)
 

@@ -33,11 +33,13 @@ SYSTEMD_SERVICES = [
 
 # ── Data models ───────────────────────────────────────────────────────────────
 
+
 @dataclass
 class StressMetrics:
     l3_queue_depth: int
     loop_latency_ms: float
     vram_fragmentation_pct: float
+
 
 @dataclass
 class ServiceStatus:
@@ -118,6 +120,7 @@ def check_vram() -> Optional[VramStatus]:
 async def check_redis() -> Tuple[ServiceStatus, int]:
     try:
         from typing import cast, Awaitable, Any
+
         r = aioredis.from_url(REDIS_URL, socket_timeout=3)
         await cast(Awaitable[Any], r.ping())
         depth = await cast(Awaitable[int], r.llen("saccade:events"))
@@ -126,16 +129,20 @@ async def check_redis() -> Tuple[ServiceStatus, int]:
     except Exception as e:
         return ServiceStatus(name="redis", ok=False, detail=str(e)), 0
 
+
 async def measure_loop_latency() -> float:
     start = time.perf_counter()
     await asyncio.sleep(0)
     return (time.perf_counter() - start) * 1000
 
+
 def get_vram_frag() -> float:
-    if not torch.cuda.is_available(): return 0.0
+    if not torch.cuda.is_available():
+        return 0.0
     reserved = torch.cuda.memory_reserved(0)
     allocated = torch.cuda.memory_allocated(0)
-    if reserved == 0: return 0.0
+    if reserved == 0:
+        return 0.0
     return (1.0 - (allocated / reserved)) * 100
 
 
@@ -159,8 +166,8 @@ class HealthChecker:
             stress=StressMetrics(
                 l3_queue_depth=q_depth,
                 loop_latency_ms=loop_latency,
-                vram_fragmentation_pct=frag
-            )
+                vram_fragmentation_pct=frag,
+            ),
         )
 
 
@@ -201,7 +208,9 @@ def render(report: HealthReport) -> str:
         lines.append("Stress Metrics")
         lines.append(f"  ⚡ Loop Latency: {report.stress.loop_latency_ms:.2f} ms")
         lines.append(f"  📦 L3 Queue Depth: {report.stress.l3_queue_depth} items")
-        lines.append(f"  🧩 VRAM Fragmentation: {report.stress.vram_fragmentation_pct:.1f}%")
+        lines.append(
+            f"  🧩 VRAM Fragmentation: {report.stress.vram_fragmentation_pct:.1f}%"
+        )
 
     return "\n".join(lines)
 
@@ -213,6 +222,7 @@ async def _main() -> None:
     checker = HealthChecker()
     report = await checker.run()
     print(render(report))
+
 
 if __name__ == "__main__":
     asyncio.run(_main())
