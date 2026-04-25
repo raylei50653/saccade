@@ -1,8 +1,12 @@
 # MediaMTX 基礎配置 (通用版本)
 paths:
   all:
-    # 預設允許所有路徑接收推流
-    source: publisher
+    # 允許發布推流的帳號密碼
+    publishUser: publisher
+    publishPass: pubpass123
+    # 允許讀取串流的帳號密碼
+    readUser: reader
+    readPass: readpass123
 
 # 監聽所有網路介面
 rtspAddress: :8554

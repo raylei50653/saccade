@@ -9,7 +9,7 @@ from typing import Optional  # noqa: E402
 import threading  # noqa: E402
 
 # 初始化 GStreamer
-Gst.init(None)
+Gst.init([])
 
 
 class GstZeroCopyDecoder:

@@ -3,56 +3,100 @@ import threading
 import queue
 import torch
 import time
-from typing import Tuple, Any, Optional, Callable
+from typing import List, Tuple, Dict, Optional, Any, Callable, Awaitable
 from perception.detector_trt import TRTYoloDetector
+from perception.tracking import SmartTracker
 from cognition.resource_manager import ResourceManager, DegradationLevel
+
+
+# 下游結果回呼型別：(stream_id, timestamp, track_ids, boxes, classes) → None
+TrackCallback = Callable[
+    [str, float, torch.Tensor, torch.Tensor, torch.Tensor],
+    Awaitable[None],
+]
 
 
 class AsyncDispatcher:
     """
-    Saccade 高效能異步分發器 (Thread-Safe & Batching Optimized)
+    Saccade 多路感知分發器 (ReID-Enabled Edition)
 
-    1. 使用 queue.Queue 橋接 asyncio 與 Inference Thread。
-    2. 專屬 Inference Thread 執行同步 GPU 運算，不阻塞事件循環。
-    3. 觸發回調函式進行後續 L2 處理。
+    職責：
+    1. 收集各路串流影格（put_frame）。
+    2. 貪婪動態打包（greedy batching）送入 YOLO TRT 推理。
+    3. 對每路串流呼叫其專屬 SmartTracker（GPUByteTracker + Saccade Heartbeat ReID）。
+    4. 將追蹤結果透過 on_track_result 回呼送至下游（Redis / Orchestrator）。
+
+    ReID 架構：
+    - heartbeat_interval 幀對偵測框提取 SigLIP 2 embedding → 送入 C++ Sinkhorn 融合匹配
+    - 其餘幀：純 IoU 匹配，零額外 GPU 開銷
+    - 每路串流維護獨立 SmartTracker，ID 空間互不干擾
     """
 
-    def __init__(self, detector: TRTYoloDetector, max_batch: int = 8) -> None:
+    def __init__(
+        self,
+        detector: TRTYoloDetector,
+        extractor: Optional[Any] = None,        # TRTFeatureExtractor
+        cropper: Optional[Any] = None,          # ZeroCopyCropper
+        heartbeat_interval: int = 10,
+        conf_threshold: float = 0.25,
+        max_batch: int = 8,
+        on_track_result: Optional[TrackCallback] = None,
+    ) -> None:
         self.detector = detector
+        self.extractor = extractor
+        self.cropper = cropper
+        self.heartbeat_interval = heartbeat_interval
+        self.conf_threshold = conf_threshold
         self.max_batch = max_batch
-        # 使用線程安全隊列
-        self.queue: queue.Queue[Tuple[str, torch.Tensor, float]] = queue.Queue(
-            maxsize=128
-        )
+        self.on_track_result = on_track_result
+
+        self.queue: asyncio.Queue[Tuple[str, torch.Tensor, float]] = asyncio.Queue(maxsize=64)
         self.resource_manager = ResourceManager()
         self._running = False
 
-        self._loop: Optional[asyncio.AbstractEventLoop] = None
-        self._worker_thread: Optional[threading.Thread] = None
-        self.on_finished: Optional[Callable[[str, Any, Any, float], Any]] = (
-            None  # 回調函式
-        )
+        # per-stream SmartTracker（懶建立）
+        self._trackers: Dict[str, SmartTracker] = {}
 
-        # 🚀 可配置的批次等待時間 (預設 1ms)
-        self.wait_time = 0.001
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def get_tracker(self, stream_id: str) -> SmartTracker:
+        """取得（或建立）指定串流的 SmartTracker。"""
+        if stream_id not in self._trackers:
+            self._trackers[stream_id] = SmartTracker(
+                extractor=self.extractor,
+                cropper=self.cropper,
+                heartbeat_interval=self.heartbeat_interval,
+            )
+            reid_status = "✅ ReID" if self.extractor else "⚠️  IoU-only"
+            print(f"🔍 [Dispatcher] SmartTracker created for stream '{stream_id}' ({reid_status})")
+        return self._trackers[stream_id]
 
     async def put_frame(
         self, stream_id: str, frame_tensor: torch.Tensor, timestamp: float
     ) -> None:
-        """生產者 (Asyncio Context)：將影格推入隊列"""
+        """生產者：將影格推入佇列。佇列滿時 Drop Frame 以維持實時性。"""
         try:
-            # queue.Queue.put_nowait 是線程安全的
             self.queue.put_nowait((stream_id, frame_tensor, timestamp))
-        except queue.Full:
+        except asyncio.QueueFull:
             pass
 
-    def _inference_worker(self) -> None:
-        """背景推論線程 (Synchronous Context)"""
-        print("🔥 [Dispatcher] Native Inference Worker active.")
-        torch.cuda.set_device(self.detector.device)
+    def start(self) -> None:
+        self._running = True
+        asyncio.create_task(self._worker_loop())
 
-        # 🚀 建立 L1 專用 CUDA Stream，與預設 Stream 脫鉤
-        l1_stream = torch.cuda.Stream(device=self.detector.device)  # type: ignore
+    def stop(self) -> None:
+        self._running = False
+
+    # ------------------------------------------------------------------
+    # Internal worker
+    # ------------------------------------------------------------------
+
+    async def _worker_loop(self) -> None:
+        """消費者主迴圈：貪婪抓取 → YOLO 推理 → per-stream 追蹤 → 回呼。"""
+        reid_info = f"heartbeat={self.heartbeat_interval}f" if self.extractor else "ReID disabled"
+        print(f"🚀 [Dispatcher] Worker started. {reid_info}")
 
         while self._running:
             try:
@@ -61,85 +105,71 @@ class AsyncDispatcher:
             except queue.Empty:
                 continue
 
-            # 🚀 積極批次化：使用可配置的等待窗口
-            if self.wait_time > 0:
-                time.sleep(self.wait_time)
+            batch_items = [first_item]
 
-            # 2. 獲取更多任務以填滿 Batch
+            # 依資源等級動態調整 batch 上限
             level = self.resource_manager.decide_degradation_level()
             current_max = self.max_batch if level < DegradationLevel.FAST_PATH else 2
 
-            while len(items) < current_max:
+            while len(batch_items) < current_max:
                 try:
-                    items.append(self.queue.get_nowait())
-                except queue.Empty:
+                    batch_items.append(self.queue.get_nowait())
+                except asyncio.QueueEmpty:
                     break
 
-            # 3. 批次推論 (在專屬 Stream 內執行)
-            stream_ids, tensors, timestamps = zip(*items)
+            # 2. YOLO 推理（每幀獨立，確保動態 batch 不超出 engine profile）
+            await self._process_batch(batch_items, level)
 
-            with torch.cuda.stream(l1_stream):
-                batch_tensor = (
-                    torch.stack(tensors).to(self.detector.device).contiguous()
-                )
-
-                with torch.no_grad():
-                    batch_results = self.detector.detect_batch(
-                        batch_tensor, stream=l1_stream
-                    )
-
-                # 確保 GPU 運算完成才將結果往下傳遞
-                l1_stream.synchronize()
-
-            # 4. 結果分發
-            for i, result in enumerate(batch_results):
-                if self.on_finished and self._loop:
-                    # 🚀 觸發 L1 -> L2 橋接回調
-                    def _create_task(
-                        s: str = stream_ids[i],
-                        r: Tuple[
-                            torch.Tensor,
-                            torch.Tensor,
-                            torch.Tensor,
-                            Optional[torch.Tensor],
-                        ] = result,
-                        t: torch.Tensor = tensors[i],
-                        ts: float = timestamps[i],
-                    ) -> None:
-                        if self.on_finished:
-                            asyncio.create_task(self.on_finished(s, r, t, ts))
-
-                    self._loop.call_soon_threadsafe(_create_task)
-
-            # 標記 Queue 任務完成
-            for _ in range(len(items)):
+            for _ in batch_items:
                 self.queue.task_done()
 
-    def start(
+    async def _process_batch(
         self,
-        callback: Optional[
-            Callable[
-                [
-                    str,
-                    Tuple[
-                        torch.Tensor, torch.Tensor, torch.Tensor, Optional[torch.Tensor]
-                    ],
-                    torch.Tensor,
-                    float,
-                ],
-                Any,
-            ]
-        ] = None,
+        batch_items: List[Tuple[str, torch.Tensor, float]],
+        level: int,
     ) -> None:
-        self.on_finished = callback
-        self._running = True
-        self._loop = asyncio.get_running_loop()
-        self._worker_thread = threading.Thread(
-            target=self._inference_worker, daemon=True
-        )
-        self._worker_thread.start()
+        """對一批影格執行推理 + 追蹤。"""
+        loop = asyncio.get_running_loop()
 
-    def stop(self) -> None:
-        self._running = False
-        if self._worker_thread:
-            self._worker_thread.join(timeout=1.0)
+        for stream_id, yolo_input, timestamp in batch_items:
+            input_4d = yolo_input.unsqueeze(0)  # [3,H,W] → [1,3,H,W]
+
+            # --- YOLO 偵測 ---
+            with torch.no_grad():
+                boxes, scores, classes, _ = self.detector.detect(
+                    input_4d, conf_threshold=self.conf_threshold
+                )
+
+            if boxes.numel() == 0:
+                if self.on_track_result:
+                    dev = yolo_input.device
+                    await self.on_track_result(
+                        stream_id, timestamp,
+                        torch.empty((0,), dtype=torch.int32, device=dev),
+                        torch.empty((0, 4), dtype=torch.float32, device=dev),
+                        torch.empty((0,), dtype=torch.int32, device=dev),
+                    )
+                continue
+
+            # --- FAST_PATH：跳過 L2/ReID，降低 VRAM 壓力 ---
+            if level >= DegradationLevel.FAST_PATH:
+                tracker = self.get_tracker(stream_id)
+                tracker.set_degradation_params(level)
+                tracked_ids, tracked_boxes, tracked_classes = tracker.update(
+                    boxes, scores, classes
+                )
+            else:
+                # --- 正常路徑：Saccade Heartbeat ReID ---
+                tracker = self.get_tracker(stream_id)
+                tracked_ids, tracked_boxes, tracked_classes = tracker.update(
+                    boxes, scores, classes,
+                    frame_tensor=yolo_input,   # [3,640,640]，0~1
+                    stream_id=hash(stream_id) & 0x7FFFFFFF,
+                )
+
+            # --- 下游回呼 ---
+            if self.on_track_result:
+                await self.on_track_result(
+                    stream_id, timestamp,
+                    tracked_ids, tracked_boxes, tracked_classes,
+                )

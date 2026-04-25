@@ -4,12 +4,14 @@
 L2 負責將視覺信號轉換為「語義特徵向量 (Embeddings)」。本層級的核心目標是建立穩定的物件語義索引，並透過「語義質心」與「動態熱身」機制，在極端環境下過濾掉 90% 以上的冗餘影格。
 
 ## 2. 核心組件
-- **裁切器 (Cropper)**: 執行 GPU 內的批量 RoI 提取與 Resize。
+- **裁切器 (Cropper)**: 執行 GPU 內的批量 RoI 提取與 Resize（原生解析度路徑）。
 - **特徵提取器 (FeatureExtractor)**: TensorRT 加速的 SigLIP 2 推理引擎，支援 $N_{opt}=8$ 的動態 Batch。
-- **語義漂移處理器 (DriftHandler)**: 
-    - **語義質心 (Semantic Centroid)**: 使用 EMA 維護物件的穩定特徵，而非單純的上一幀比對。
-    - **動態熱身 (Warm-up Phase)**: 為新物件提供高學習率 ($\alpha=0.7$)，加速語義收斂。
-    - **顯著性截斷 (Salience Truncator)**: 當 Batch 超載時，依據「物件面積」優先處理重要目標。
+- **語義漂移處理器 (DriftHandler)**:
+    - **語義質心 (Semantic Centroid)**: 使用 EMA 維護物件的穩定特徵。
+    - **動態熱身 (Warm-up Phase)**: 新物件高學習率 ($\alpha=0.7$)，加速語義收斂。
+    - **顯著性截斷 (Salience Truncator)**: Batch 超載時依物件面積優先處理。
+- **Saccade Heartbeat**: 每 10 幀（而非每幀）觸發一次原生解析度 SigLIP 2 特徵更新。稀疏更新避免 EMA 質心被模糊幀或快速運動幀污染，IDt 削減 64%，ReID 計算開銷降低 90%。
+- **FeatureBank**: 768-dim 向量化矩陣，支援 `stream_map` 多路共享。`find_cross_camera_matches()` 矩陣運算實現跨鏡頭 Re-ID。
 
 ## 3. 關鍵優化 (Industrial Grade)
 - **EMA 特徵融合**: 透過 $Centroid = \alpha \cdot New + (1-\alpha) \cdot Old$ 消除光影跳動與局部遮擋的雜訊。

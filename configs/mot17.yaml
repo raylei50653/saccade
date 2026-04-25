@@ -1,0 +1,8 @@
+path: datasets/MOT17
+train: all_images
+val: all_images
+test: test
+
+# 類別
+names:
+  0: person

@@ -8,49 +8,90 @@ Saccade 採用「模組化雙軌感知架構」，將邊緣端的即時偵測與
 
 | 層級 | 名稱 | 核心技術 | 職責定義 | 對應目錄 |
 | :--- | :--- | :--- | :--- | :--- |
-| **L1** | **感知層 (Perception)** | YOLO26 (C++ TensorRT) | NMS-Free 極速物件偵測、GPU 追蹤與 ROI 提取。 | `perception/`, `src/` |
-| **L2** | **去重層 (Deduplication)** | SigLIP 2 / Cosine Sim | 語義漂移檢測 (Semantic Drift)，過濾冗餘影格。 | `perception/` |
-| **L3** | **緩衝層 (Streaming)** | Redis Streams / asyncio | 事件非同步推送與微批次聚合 (Micro-batching)。 | `storage/`, `pipeline/` |
-| **L4** | **儲存層 (Vector DB)** | ChromaDB / HNSW | 多維度向量索引 (語義 + 時間 + 標籤)。 | `storage/` |
-| **L5** | **應用層 (Retrieval API)**| FastAPI / Semantic Search | 將偵測事件轉化為可檢索的結構化數據與語義搜尋。 | `api/`, `pipeline/` |
-| **L6** | **認知與資源層 (Cognition)**| 自適應幀率、VRAM 監控 | 處理高層次的資源監控與決策（如 Frame Selection, Resource Management）。 | `cognition/` |
+| **L1** | **感知層 (Perception)** | YOLO26 (TRT) + GPUByteTracker (C++/CUDA) | NMS-Free 極速物件偵測、GPU 追蹤、GMC、光線補償。 | `perception/`, `src/` |
+| **L2** | **去重層 (Deduplication)** | SigLIP 2 / Saccade Heartbeat / FeatureBank | 語義漂移檢測，過濾冗餘影格；跨鏡頭 Re-ID。 | `perception/` |
+| **L3** | **緩衝層 (Streaming)** | Redis / MicroBatcher / asyncio | 事件非同步推送與微批次聚合。 | `storage/`, `pipeline/` |
+| **L4** | **儲存層 (Vector DB)** | ChromaDB / HNSW | 多維度向量索引（語義 + 時間 + 標籤）；定期 snapshot 備份。 | `storage/` |
+| **L5** | **認知層 (Agentic RAG)** | LlamaIndex + Ollama + ChromaDB | 事件觸發式語義推理；Visual Re-query；歷史事件脈絡分析。 | `pipeline/` |
+| **L6** | **資源層 (Resource Management)** | NVML / ResourceManager | 實時 VRAM 監控與階梯式降級決策。 | `cognition/` |
 
 ---
 
 ## 2. 核心設計原則
 
-### 🚀 Zero-Copy 原則 (零拷貝)
-所有的影像處理流程（從 RTSP 解碼到 YOLO26 偵測、ROI 裁切、最後到 SigLIP 2 特徵提取）完全維持在 **GPU VRAM** 中。禁止在主循環內呼叫 `.cpu()` 或轉為 `numpy`，以消除 PCIe 頻寬瓶頸。
+### Zero-Copy 原則
+所有影像處理流程（RTSP 解碼 → YOLO26 偵測 → ROI 裁切 → SigLIP 2 特徵提取）完全維持在 GPU VRAM 中。主循環內禁止呼叫 `.cpu()` 或轉為 `numpy`，以消除 PCIe 頻寬瓶頸。
 
-### 🧠 VLM-Free 語義合成
-為了在極低 VRAM 的邊緣設備達成極致效能，系統捨棄了緩慢的端到端 VLM 與複雜的 Agentic LLM 推理。改用「YOLO26 偵測 + SigLIP 2 嵌入」的組合方式，在 `Orchestrator` 中動態聚合場景特徵，實現「具備視覺理解力但無推理延遲」的高效管線。
+### Agentic RAG（L5 認知推理）
+系統採用 **LlamaIndex + Ollama** 在邊緣設備本地執行語義推理，不依賴外部 API。僅在高熵場景（entropy > 0.9）或偵測異常時才觸發查詢，避免對感知主循環造成負載。
+
+### 階梯式降級（L6 自適應）
+透過 `ResourceManager` 在 VRAM 壓力不同級別下自動降級，保證核心感知（L1）優先於語義提取（L2）與推理（L5）。
 
 ---
 
 ## 3. 數據流向 (Data Flow)
 
-1.  **Ingestion**: `media/` 透過 C++ GStreamer (nvh264dec) 將串流載入為 CUDA Tensor。
-2.  **Fast Path (L1)**: YOLO26 在主 CUDA Stream 執行偵測與 GPU ByteTrack 追蹤。
-3.  **Vector Path (L2)**: 針對新物體或產生位移的物體，在背景 Stream 進行 SigLIP 2 特徵提取。
-4.  **Buffering (L3)**: 事件進入 Redis 隊列，由 `Orchestrator` 進行微批次聚合。
-5.  **Persistence (L4)**: 批次寫入 `ChromaStore`。
-6.  **Retrieval (L5)**: 使用者透過 FastAPI 進行語義搜尋與時空檢索。
+```
+RTSP Stream
+    │
+    ▼
+[L1] GstClient (C++ / nvh264dec) → 5-Buffer GPU Pool
+    │  Zero-Copy CUDA Tensor
+    ▼
+[L1] YOLO26 TensorRT (NMS-Free) + GPUByteTracker
+    │  bbox, track_id, score, class
+    ▼
+[L2] Saccade Heartbeat (每 10 幀) → SigLIP 2 TRT → FeatureBank
+    │  768-dim embedding, drift_score
+    ▼
+[L3] RedisCache.publish_event() → MicroBatcher (100ms)
+    │  JSON event batch
+    ▼
+[L4] ChromaStore.add_memory() → ChromaDB HNSW
+    │  indexed vectors + metadata
+    ▼
+[L5] Orchestrator (entropy > 0.9 / anomaly)
+    │  → LlamaIndex ReAct Agent
+    │  → visual_requery / semantic_search / get_track_history
+    ▼
+[L6] ResourceManager (NVML) → 降級指令 → L1/L2/L5
+```
 
 ---
 
-## 4. 資料夾功能定義
+## 4. 追蹤器架構（Tracker Stack）
 
-- **`src/` 與 `include/`**: C++ 核心感知與媒體層擴充套件，負責最底層的極速運算。
-- **`perception/`**: 視覺算法層。包含 YOLO26 偵測、裁切、特徵提取與語義去重。
-- **`pipeline/`**: 系統的中樞神經。負責跨層級的非同步調度與系統健康監控。
-- **`storage/`**: 數據的終點。處理實時快取 (Redis) 與長效記憶 (ChromaDB)。
-- **`media/`**: 負責影音串流接入與硬體解碼。
-- **`cognition/`**: 處理高層次的資源監控與決策。
+```
+SmartTracker (Python 協調層)
+├── GPUByteTracker (C++/CUDA)        ← 核心匹配引擎
+│   ├── Dual-stage Sinkhorn           高/低分偵測框二次匹配
+│   ├── ReID Fusion Cost Matrix       (1-w)*IoU + w*CosSim
+│   ├── Strong ReID Gate              CosSim > 0.75 強制配對
+│   ├── GPU Kalman Filter             predict + update kernel
+│   └── GMC kernel                   仿射矩陣修正 Kalman 狀態
+├── GMC 計算 (OpenCV optical flow)   逐幀仿射矩陣 → C++
+├── Light Compensation               frame 亮度 → light_factor → R 矩陣
+├── Saccade Heartbeat (% 10)         每 10 幀觸發 SigLIP 2 特徵更新
+└── ReorderingBuffer (150ms)         並行亂序修正
+```
 
 ---
 
-## 5. 開發約定與擴展性
+## 5. 資料夾功能定義
 
-- **模組化**: 每個層級均可獨立升級。核心模組由 C++ 實作並透過 `pybind11` 提供 Python 介面。
-- **非同步設計**: 所有的 I/O 操作（Redis, DB, API）必須使用 `asyncio`，嚴禁阻塞感知主循環。
-- **資源安全**: 透過 `ResourceManager` 嚴格限制顯存使用，預估核心管線僅需 ~1.5GB VRAM。
+- **`src/` + `include/`**: C++/CUDA 核心，包含 GPUByteTracker、Kalman Filter、Sinkhorn/Hungarian/Auction 匹配算法、GstClient。
+- **`perception/`**: 視覺算法層。YOLO26 偵測、SigLIP 2 特徵提取、SmartTracker、FeatureBank、跨鏡頭 Re-ID。
+- **`pipeline/`**: 系統中樞。Orchestrator（Agentic RAG 調度）、HealthChecker。
+- **`storage/`**: 數據終點。RedisCache（MicroBatcher）、ChromaStore（向量索引 + 備份）。
+- **`media/`**: 影音串流接入、硬體解碼、RTSP Watchdog。
+- **`cognition/`**: ResourceManager（VRAM 監控與降級）、FrameSelector。
+
+---
+
+## 6. 開發約定
+
+- **模組化**: 每個層級可獨立升級。C++ 核心透過 `pybind11` 提供 Python 介面。
+- **非同步設計**: 所有 I/O（Redis、ChromaDB、RAG 查詢）必須使用 `asyncio`，嚴禁阻塞感知主循環。RAG 查詢使用 `run_in_executor` 包裝。
+- **資源安全**: `ResourceManager` 嚴格限制 VRAM 使用。核心管線（YOLO26 + SigLIP 2）約需 ~450MB，總估算含追蹤器 < 1.5GB。
+- **Zero-Copy First**: 任何新增路徑在引入 CPU 拷貝前需在 ADR 中說明理由。

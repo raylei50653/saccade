@@ -18,7 +18,7 @@ except ImportError:
     HAS_CPP_EXT = False
 
 # 初始化 GStreamer
-Gst.init(None)
+Gst.init([])
 
 
 class MediaMTXClient:
@@ -42,6 +42,7 @@ class MediaMTXClient:
         self._running = False
         self._last_frame: Optional[np.ndarray] = None
         self._last_tensor: Optional[torch.Tensor] = None
+        self._last_frame_time = time.time()
         self._ret = False
         self._lock = threading.Lock()
 
@@ -87,6 +88,7 @@ class MediaMTXClient:
 
     def connect(self) -> bool:
         """啟動媒體管線"""
+        self._last_frame_time = time.time()
         if self.use_cpp:
             try:
                 pipeline_str = self._get_pipeline_str()
@@ -193,7 +195,14 @@ class MediaMTXClient:
                 tensor = torch.as_tensor(holder, device="cuda")
 
             with self._lock:
+                # 智慧抽樣 (Smart Sampling)：若像素差異過小則丟棄 (降低低資訊幀)
+                if self._last_tensor is not None:
+                    diff = torch.mean(torch.abs(tensor.float() - self._last_tensor.float())).item()
+                    if diff < 2.0:
+                        return # 忽略低資訊幀
+                
                 self._last_tensor = tensor
+                self._last_frame_time = time.time()
                 self._ret = True
 
         except Exception as e:
@@ -234,12 +243,47 @@ class MediaMTXClient:
                     rgb_tensor = raw_data.view(height, stride // 3, 3)[:, :width, :]
 
                 with self._lock:
+                    # 智慧抽樣 (Smart Sampling)
+                    if self._last_tensor is not None:
+                        diff = torch.mean(torch.abs(rgb_tensor.float() - self._last_tensor.float())).item()
+                        if diff < 2.0:
+                            return Gst.FlowReturn.OK
+
                     self._last_frame = None  # 延遲解碼 np.ndarray 以節省效能
                     self._last_tensor = rgb_tensor
+                    self._last_frame_time = time.time()
                     self._ret = True
             finally:
                 buffer.unmap(map_info)
         return Gst.FlowReturn.OK
+
+    def _is_alive(self) -> bool:
+        """檢查管線是否仍然活躍 (5秒內有新幀)"""
+        return time.time() - self._last_frame_time < 5.0
+
+    def _restart_pipeline(self) -> bool:
+        """重啟 GStreamer 管線"""
+        print("🔄 [MediaClient] Restarting pipeline...")
+        self.release()
+        time.sleep(1) # 等待釋放
+        return self.connect()
+
+    async def watchdog_loop(self) -> None:
+        """非同步監控循環，負責自動重連"""
+        retry_delay = 1
+        while self._running:
+            if not self._is_alive() and not self.dummy_video:
+                print("⚠️ [MediaClient] Stream timeout detected.")
+                if self._restart_pipeline():
+                    print("✅ [MediaClient] Reconnected successfully.")
+                    retry_delay = 1
+                else:
+                    print(f"❌ [MediaClient] Reconnection failed. Retrying in {retry_delay}s...")
+                    await asyncio.sleep(retry_delay)
+                    retry_delay = min(retry_delay * 2, 30)
+                    continue
+            
+            await asyncio.sleep(5)
 
     def grab_frame(self) -> Tuple[bool, Optional[np.ndarray]]:
         with self._lock:

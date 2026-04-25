@@ -36,7 +36,6 @@ add_library(saccade_perception SHARED
 target_link_libraries(saccade_perception
     nvinfer
     nvinfer_plugin
-    nppc nppig nppidei nppist nppicc
     ${CUDA_LIBRARIES}
     ${OpenCV_LIBS}
 )
@@ -46,7 +45,6 @@ target_compile_definitions(saccade_perception PRIVATE SACCADE_EXPORT_PERCEPTION)
 # 4. 定義 Tracking 模組 (Dynamic Library)
 add_library(saccade_tracking SHARED
     src/tracking/tracker_gpu.cu
-    src/tracking/smart_tracker.cu
 )
 set_target_properties(saccade_tracking PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 target_link_libraries(saccade_tracking

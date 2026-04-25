@@ -1,8 +1,47 @@
 import json
 import os
-import redis
-import redis.asyncio as aioredis
-from typing import Dict, Any, Optional, List, Tuple, cast
+import time
+import asyncio
+import redis.asyncio as redis
+from typing import Dict, Any, Optional, List, cast, Awaitable
+
+class MicroBatcher:
+    """
+    非同步微批次處理器，用於減少 Redis 寫入次數。
+    """
+    def __init__(self, client: redis.Redis, queue: str, window_ms: int = 100, max_size: int = 50):
+        self.client = client
+        self.queue = queue
+        self.window_ms = window_ms
+        self.max_size = max_size
+        self._buf: List[str] = []
+        self._lock = asyncio.Lock()
+        self._timer: Optional[asyncio.TimerHandle] = None
+
+    async def add(self, event_data: Dict[str, Any]) -> None:
+        async with self._lock:
+            self._buf.append(json.dumps(event_data))
+            if len(self._buf) >= self.max_size:
+                await self._flush_locked()
+            elif self._timer is None:
+                loop = asyncio.get_running_loop()
+                self._timer = loop.call_later(self.window_ms / 1000.0, 
+                                             lambda: asyncio.create_task(self.flush()))
+
+    async def _flush_locked(self) -> None:
+        if not self._buf:
+            return
+        if self._timer:
+            self._timer.cancel()
+            self._timer = None
+        
+        await cast(Awaitable[Any], self.client.rpush(self.queue, *self._buf))
+        await cast(Awaitable[Any], self.client.expire(self.queue, 3600))
+        self._buf.clear()
+
+    async def flush(self) -> None:
+        async with self._lock:
+            await self._flush_locked()
 
 
 class RedisCache:
@@ -15,10 +54,8 @@ class RedisCache:
     def __init__(self, url: Optional[str] = None) -> None:
         env_url = os.getenv("REDIS_URL")
         self.url: str = url or env_url or "redis://localhost:6379/0"
-        self.client: Optional[aioredis.Redis] = None
-        # 串流名稱與限制
-        self.stream_name = "saccade:events:stream"
-        self.max_len = 10000  # 限制緩衝區大小，防止資料庫斷線時 Redis 爆掉
+        self.client: Optional[redis.Redis] = None
+        self.batchers: Dict[str, MicroBatcher] = {}
 
     async def connect(self) -> None:
         if self.client is None:
@@ -114,12 +151,41 @@ class RedisCache:
             await self.client.xack(self.stream_name, "orchestrator_group", *message_ids)
 
     async def disconnect(self) -> None:
+        # 確保所有批次都已送出
+        for batcher in self.batchers.values():
+            await batcher.flush()
         if self.client:
             await self.client.aclose()
             self.client = None
 
-    async def get_active_objects(self) -> List[int]:
-        """獲取目前所有活躍的目標 ID (透過 KEY 掃描或集合)"""
+    async def cleanup_expired_objects(self, max_memory_mb: int = 500) -> None:
+        """
+        定期監控 Redis 記憶體使用量，若超過閾值 (預設 500MB) 
+        則強制清理部分 saccade:obj:* 快取以防溢出。
+        """
+        if not self.client:
+            await self.connect()
+        if self.client:
+            try:
+                info = await cast(Awaitable[Dict[str, Any]], self.client.info(section="memory"))
+                used_memory_mb = info.get("used_memory", 0) / (1024 * 1024)
+                
+                if used_memory_mb > max_memory_mb:
+                    print(f"⚠️ [RedisCache] Memory {used_memory_mb:.1f}MB exceeds limit {max_memory_mb}MB. Initiating cleanup...")
+                    # 獲取所有物件鍵
+                    keys = await cast(Awaitable[List[bytes]], self.client.keys("saccade:obj:*"))
+                    if keys:
+                        # 隨機抽樣或直接刪除一半的鍵 (因為已經有 TTL 300s，這裡僅作緊急記憶體釋放)
+                        keys_to_delete = keys[:len(keys)//2]
+                        await cast(Awaitable[Any], self.client.delete(*keys_to_delete))
+                        print(f"🧹 [RedisCache] Emergency cleanup: Deleted {len(keys_to_delete)} objects.")
+            except Exception as e:
+                print(f"❌ [RedisCache] Cleanup error: {e}")
+
+    async def update_object_track(
+        self, obj_id: int, label: str, box: List[float], timestamp: float
+    ) -> None:
+        """核心整合：更新 YOLO 目標的時空軌跡"""
         if not self.client:
             await self.connect()
 
@@ -135,17 +201,10 @@ class RedisCache:
         if not self.client:
             await self.connect()
 
-        assert self.client is not None
-
-        data = await cast(Any, self.client.hgetall(f"saccade:track:{obj_id}"))
-        if not data:
-            return None
-
-        # 將資料轉型並回傳
-        return {
-            "track_id": obj_id,
-            "first_seen": float(data.get("first_seen", 0)),
-            "last_seen": float(data.get("last_seen", 0)),
-            "classes": json.loads(data.get("classes", "[]")),
-            "avg_similarity": float(data.get("avg_similarity", 1.0)),
-        }
+    async def publish_event(self, queue: str, event_data: Dict[str, Any]) -> None:
+        if not self.client:
+            await self.connect()
+        if self.client:
+            if queue not in self.batchers:
+                self.batchers[queue] = MicroBatcher(self.client, queue)
+            await self.batchers[queue].add(event_data)

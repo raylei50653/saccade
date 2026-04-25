@@ -1,15 +1,17 @@
 # Media & Streaming (Media 模組) 進度核對
 
-## 模組狀態：高效能工業級 (Industrial Grade)
+## 模組狀態：高效能工業級，維運機制完備
 
 ## 1. C++ 零拷貝解碼器 (GstClient)
 - [x] **RTSP/WebRTC 對接**: 透過 GStreamer `appsink` 實作高效能接取。
-- [x] **[重大更新] 工業級零拷貝 V2 (2026-04-14)**:
-    - [x] **5-Buffer 狀態機緩衝池**: 引入 `EMPTY`, `WRITING`, `READY`, `PROCESSING` 狀態，徹底解決多執行緒資料競爭。
+- [x] **工業級零拷貝 V2**:
+    - [x] **5-Buffer 狀態機緩衝池**: `EMPTY / WRITING / READY / PROCESSING` 狀態機，徹底解決多執行緒資料競爭。
     - [x] **Per-buffer CUDA Streams**: 為每個緩衝區分配獨立 Stream，實現並行 H2D 搬運與計算。
     - [x] **PyTorch 深度整合**: 支援 `ExternalStream` 指標傳遞，實現全 GPU 非同步推理。
     - [x] **RAII 自動資源釋放**: 透過 Python GC 與 C++ 綁定，自動回歸緩衝區狀態。
 - [x] **自動丟幀機制 (Drop Frame)**: 當分析速度慢於採集速度時自動丟幀，防止累積延遲。
+- [x] **智慧影格抽樣**: 像素差異比對（SAD < 2.0），即時丟棄低資訊幀，降低無效計算負載。
+- [x] **RTSP 斷線自動恢復 (Watchdog)**: `watchdog_loop()` 偵測超時後呼叫 `_restart_pipeline()` 重建 GStreamer pipeline，指數退避重試。
 
 ## 2. 硬件加速工具 (ffmpeg_utils.py & DALI)
 - [x] **[重大更新] NVIDIA DALI GPU 預處理 (2026-04-15)**:
@@ -21,11 +23,10 @@
 
 ## 3. 性能監測
 - [x] **CUDA Stream 並行監控**: 已確認支援並發搬運。
-- [x] **多路串流支援**: 成功達成 10 路串流 3000 FPS 聚合吞吐量。
+- [x] **多路串流支援**: 跨鏡頭 Re-ID 整合（FeatureBank `stream_map`），支援多路共享特徵索引。
 
 ## 待處理
-- [ ] 整合 DALI 至實時 RTSP 串流 (目前優先於文件輸入優化)。
-- [ ] 實作針對 L3 緩衝的影格抽樣策略。
-- [ ] RTSP 斷線自動恢復監聽 (Watchdog)。
 
-最後更新：2026-04-15
+（已清空）
+
+最後更新：2026-04-25

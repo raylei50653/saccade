@@ -28,10 +28,20 @@ models/yolo/*
 
 # Data & Media
 datasets/
+results/
 storage/chroma_db/
 assets/videos/*.mp4
 *.log
 !assets/videos/.gitkeep
+
+# Optimization / experiment artifacts
+*.db
+*.cache
+
+# Scratch / backup files
+*.bak
+debug_*.py
+.codex
 
 # LLM Quantization temporary files
 *.gguf.tmp

@@ -1,0 +1,45 @@
+cmake_minimum_required(VERSION 3.18)
+project(Saccade CXX CUDA)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CUDA_STANDARD 17)
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -fvisibility=hidden -O3 -Wall")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3 -Xcompiler -fPIC")
+
+# 依賴搜尋
+find_package(CUDA REQUIRED)
+find_package(OpenCV REQUIRED)
+
+include_directories(
+    ${PROJECT_SOURCE_DIR}/include
+    ${CUDA_INCLUDE_DIRS}
+    ${OpenCV_INCLUDE_DIRS}
+)
+
+# 🚀 僅編譯 Tracking 模組
+add_library(saccade_tracking SHARED
+    src/tracking/tracker_gpu.cu
+    src/tracking/smart_tracker.cu
+)
+set_target_properties(saccade_tracking PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+target_link_libraries(saccade_tracking
+    ${CUDA_LIBRARIES}
+    ${OpenCV_LIBS}
+)
+target_compile_definitions(saccade_tracking PRIVATE SACCADE_EXPORT_TRACKING)
+
+# Python Bindings
+find_package(Python3 3.12 EXACT REQUIRED COMPONENTS Interpreter Development.Module)
+execute_process(
+    COMMAND ${Python3_EXECUTABLE} -c "import pybind11; print(pybind11.get_cmake_dir())"
+    OUTPUT_VARIABLE pybind11_DIR
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+find_package(pybind11 REQUIRED PATHS ${pybind11_DIR})
+
+pybind11_add_module(saccade_tracking_ext src/tracking/tracker_gpu_python.cpp)
+target_link_libraries(saccade_tracking_ext PRIVATE 
+    saccade_tracking
+    ${CUDA_LIBRARIES}
+)

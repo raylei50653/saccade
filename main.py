@@ -28,6 +28,7 @@ os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
 import asyncio
+import time
 import argparse
 import torch
 import numpy as np
@@ -40,17 +41,11 @@ try:
 except ImportError:
     pass
 
-from typing import Optional, List, Tuple, Any, Dict, cast
-from perception.dispatcher import AsyncDispatcher
-from perception.embedding_dispatcher import EmbeddingDispatcher
+from typing import Optional, List
+from perception.detector_trt import TRTYoloDetector
 from perception.cropper import ZeroCopyCropper
 from perception.feature_extractor import TRTFeatureExtractor
-from perception.detector_trt import TRTYoloDetector
-from perception.drift_handler import SemanticDriftHandler
 from media.mediamtx_client import MediaMTXClient
-from media.dali_pipeline import DALIMediaClient
-from cognition.resource_manager import ResourceManager
-from storage.redis_cache import RedisCache
 from pipeline.orchestrator import PipelineOrchestrator
 from dotenv import load_dotenv
 
@@ -157,7 +152,10 @@ async def run_stream_producer(
         await asyncio.sleep(2)
 
     print(f"✅ Stream [{stream_id}] connected.")
-
+    
+    # 啟動自動重連監控
+    asyncio.create_task(media.watchdog_loop())
+    
     try:
         while True:
             ret, tensor = media.grab_tensor()
@@ -178,6 +176,30 @@ async def run_stream_producer(
     finally:
         media.release()
 
+async def run_perception() -> None:
+    """感知層：多路並行處理 (Async-Batching Dispatcher + ReID)"""
+    print("🚀 Initializing Multi-stream Perception Pipeline...")
+
+    detector = TRTYoloDetector()
+
+    # L2 ReID 組件（選配，缺少 engine 時退化為純 IoU）
+    extractor: Optional[TRTFeatureExtractor] = None
+    cropper: Optional[ZeroCopyCropper] = None
+    try:
+        extractor = TRTFeatureExtractor()
+        cropper = ZeroCopyCropper()
+        print("✅ [ReID] SigLIP 2 extractor + ZeroCopyCropper ready.")
+    except Exception as e:
+        print(f"⚠️  [ReID] Extractor unavailable ({e}), falling back to IoU-only tracking.")
+
+    dispatcher = AsyncDispatcher(
+        detector,
+        extractor=extractor,
+        cropper=cropper,
+        heartbeat_interval=10,
+        max_batch=8,
+    )
+    dispatcher.start()
 
 async def run_perception() -> None:
     """感知層：極速雙路並行 (Industrial Pipeline)"""

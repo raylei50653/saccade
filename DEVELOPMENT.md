@@ -1,4 +1,4 @@
-# YOLO-LLM 開發指南
+# Saccade 開發指南
 
 本專案旨在建構一個高效、低延遲的視覺推理系統，結合即時目標偵測與深度認知推理，並極大化 NVIDIA GPU 的運算效率。
 
@@ -7,8 +7,8 @@
 本系統採用純視覺與向量檢索管線，以確保在極低 VRAM (1.5GB) 佔用下，達到毫秒級即時回應與精準檢索。
 
 1. **純視覺向量管線 (Vision-Vector Pipeline)**
-   - **感知層 (Perception)：** 使用 YOLO11 與 TensorRT 引擎，負責即時物件追蹤與偵測。
-   - **特徵提取 (Extraction)：** 運用 Zero-Copy Cropper 與 **Jina-CLIP-v2** TRT 引擎，將物件裁切為 512x512 格式並提取 1024 維高品質特徵向量。
+   - **感知層 (Perception)：** 使用 YOLO26 與 TensorRT 引擎，負責即時物件追蹤與偵測。
+   - **特徵提取 (Extraction)：** 運用 Zero-Copy Cropper 與 **SigLIP 2 (ViT-B/16)** TRT 引擎，將物件裁切為 224×224 格式並提取 768 維高品質特徵向量。
 
 2. **語義漂移去重 (Semantic Drift Handling)**
    - 透過 GPU 內的 `Cosine Similarity`，將新特徵與快取進行比對。避免連續幀重複存儲，僅當物體姿態或特徵產生「漂移 (Drift)」時寫入。
@@ -39,8 +39,8 @@
   
 - **編譯 TensorRT 模型：**
   ```bash
-  # 首次啟動前需將 ONNX 轉為 TRT Engine
-  uv run python scripts/build_engine.py
+  # 首次啟動前需將 ONNX 轉為 TRT Engine（YOLO26 / SigLIP 2）
+  # 詳見 docs/runbooks/ 對應的引擎建構說明
   ```
 
 ## 3. 媒體與串流管理 (Media Gateway)
@@ -49,7 +49,7 @@
 
 - **啟動所有服務：**
   ```bash
-  ./scripts/saccade up
+  systemctl --user start saccade-perception saccade-orchestrator mediamtx
   ```
 
 ## 4. 關鍵技術堆疊
@@ -59,7 +59,7 @@
 | **算法** | YOLO26 (TRT), SigLIP2 (TRT), `torchvision.ops.roi_align` |
 | **媒體** | MediaMTX, FFmpeg (NVDEC), GStreamer (`appsink`) |
 | **計算與資源** | TensorRT, CUDA Streams, Pynvml |
-| **環境維運** | Nix Flakes, uv (Rust-based) |
+| **環境維運** | Docker (NVIDIA TRT base image), uv (Rust-based) |
 
 ## 5. 開發工作流 (Development Workflow)
 
@@ -81,7 +81,7 @@
 | 目錄 | 功能說明 | 適用情境 |
 | :--- | :--- | :--- |
 | **`docs/decisions/`** | **架構決策紀錄 (ADR)** | 當涉及技術選型變更 (如更換資料庫、推論後端) 或重大架構調整時使用。 |
-| **`docs/progress/`** | **模組實作規劃與進度** | 當進行新功能開發或模組功能擴展時使用。需包含目標實作路徑與 VRAM 預估。 |
+| **`docs/progress/`** | **模組實作規劃與進度** | 當進行新功能開發或模組功能擴展時使用（L1-L6 皆適用）。需包含目標實作路徑與 VRAM 預估。 |
 | **`docs/api_spec.md`** | **API 與事件規範** | 當修改 Redis 事件結構、ChromaDB Schema 或對外接口時更新。 |
 | **`docs/runbooks/`** | **運作與維護手冊** | 當新增模組後的故障排除流程 (Troubleshooting) 或日常維運指令。 |
 | **`docs/benchmarks/`** | **效能基準測試紀錄** | 提交效能優化後的數據對比 (Latency, Throughput, VRAM)。 |

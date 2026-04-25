@@ -32,6 +32,35 @@ class TRTFeatureExtractor:
         # SigLIP 2 Base (ViT-B) 的特徵維度為 768
         self.feature_dim = 768
 
+        # 從 engine optimization profile 查出真實 max_batch（覆蓋建構參數）
+        try:
+            _min, _opt, _max = self.engine.get_tensor_profile_shape("pixel_values", 0)
+            self.max_batch = int(_max[0])
+        except Exception:
+            pass  # 保留建構參數預設值
+
+        # 預先分配 GPU 輸出緩衝區（避免碎片化）
+        self.gpu_output_buffer = torch.empty(
+            (self.max_batch, self.feature_dim),
+            device=self.device,
+            dtype=torch.float32,
+        )
+        # SigLIP 2 last_hidden_state（供 ViT attention map 等進階用途）
+        self.gpu_hidden_buffer = torch.empty(
+            (self.max_batch, 196, self.feature_dim),
+            device=self.device,
+            dtype=torch.float32,
+        )
+        # Pinned CPU buffer（DMA D2H 優化）
+        self.pinned_buffer = torch.empty(
+            (self.max_batch, self.feature_dim),
+            device="cpu",
+            pin_memory=True,
+            dtype=torch.float32,
+        )
+
+        print(f"✅ Extractor Ready. Feature Dimension: {self.feature_dim}, Max Batch: {self.max_batch}")
+
         # 💡 偵測模型是否支援動態 Batch
         self.input_shape = self.engine.get_tensor_shape("pixel_values")
         self.is_dynamic = self.input_shape[0] == -1
@@ -58,13 +87,25 @@ class TRTFeatureExtractor:
         self, input_tensor: torch.Tensor, stream: torch.cuda.Stream | None = None
     ) -> torch.Tensor:
         """
-        執行零拷貝推論 (GPU -> GPU)
+        執行零拷貝推論 (GPU -> GPU)。
+        自動對超過 engine profile 上限的 batch 分塊處理。
         """
         batch_size = input_tensor.size(0)
         if batch_size == 0:
             return torch.empty((0, self.feature_dim), device=self.device)
 
-        current_stream = stream if stream is not None else torch.cuda.current_stream()
+        # 超過 engine profile 上限時分塊推理
+        if batch_size > self.max_batch:
+            chunks = input_tensor.split(self.max_batch, dim=0)
+            return torch.cat([self._extract_chunk(c) for c in chunks], dim=0)
+
+        return self._extract_chunk(input_tensor)
+
+    def _extract_chunk(self, input_tensor: torch.Tensor) -> torch.Tensor:
+        """推理單一合法大小的 chunk（≤ max_batch）。"""
+        batch_size = input_tensor.size(0)
+        input_tensor = input_tensor.contiguous()
+        self.context.set_input_shape("pixel_values", (batch_size, 3, 224, 224))
 
         # 1. 綁定輸入
         input_tensor = input_tensor.contiguous()
@@ -72,41 +113,13 @@ class TRTFeatureExtractor:
             self.context.set_input_shape("pixel_values", (batch_size, 3, 224, 224))
 
         self.context.set_tensor_address("pixel_values", input_tensor.data_ptr())
+        self.context.set_tensor_address("image_embeds", output_tensor.data_ptr())
+        self.context.set_tensor_address("last_hidden_state", hidden_tensor.data_ptr())
 
-        # 2. 綁定所有輸出 (TensorRT 要求所有輸出都必須有位址)
-        for name in self.output_names:
-            buffer = self.output_buffers[name]
-            # 如果是動態 Batch 且緩衝區不夠大，則重新分配
-            if self.is_dynamic and buffer.size(0) < batch_size:
-                shape = list(self.engine.get_tensor_shape(name))
-                shape[0] = batch_size
-                buffer = torch.empty(
-                    tuple(shape), device=self.device, dtype=torch.float32
-                )
-                self.output_buffers[name] = buffer
+        stream = torch.cuda.current_stream().cuda_stream
+        self.context.execute_async_v3(stream)
 
-            self.context.set_tensor_address(name, buffer.data_ptr())
-
-        # 3. 執行推論
-        if self.is_dynamic:
-            self.context.execute_async_v3(current_stream.cuda_stream)
-            # 回傳主要的 image_embeds
-            return self.output_buffers["image_embeds"][:batch_size]
-        else:
-            # 🐢 靜態模式：循序處理 (Fallback)
-            results = []
-            for i in range(batch_size):
-                single_input = input_tensor[i].unsqueeze(0).contiguous()
-                self.context.set_tensor_address("pixel_values", single_input.data_ptr())
-                # 重新綁定所有輸出地址到當前單個 batch
-                for name in self.output_names:
-                    self.context.set_tensor_address(
-                        name, self.output_buffers[name].data_ptr()
-                    )
-
-                self.context.execute_async_v3(current_stream.cuda_stream)
-                results.append(self.output_buffers["image_embeds"].clone())
-            return torch.cat(results, dim=0)
+        return output_tensor.clone()
 
     def extract_to_cpu(self, input_tensor: torch.Tensor) -> torch.Tensor:
         """

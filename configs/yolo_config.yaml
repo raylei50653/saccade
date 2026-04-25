@@ -2,7 +2,7 @@
 
 detection:
   model_path: "./models/yolo/yolo26n.pt" # 預設使用 nano 模型
-  confidence_threshold: 0.25
+  confidence_threshold: 0.23
   iou_threshold: 0.45
   img_size: [640, 640]
   device: "cuda:0"
@@ -15,7 +15,7 @@ semantic_extraction:
   model_path: "./models/embedding/google_siglip2-base-patch16-224.engine"
   img_size: [224, 224]
   feature_dim: 768
-  similarity_threshold: 0.95
+  similarity_threshold: 0.985
 
 entropy:
   threshold: 0.8
