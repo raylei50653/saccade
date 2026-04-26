@@ -14,6 +14,7 @@ public:
     virtual ~IPerceptionEngine() = default;
     virtual bool infer(const std::vector<void*>& bindings, cudaStream_t stream) = 0;
     virtual nvinfer1::Dims getTensorDims(const char* name) const = 0;
+    virtual bool set_input_shape(const char* name, const std::vector<int64_t>& shape) = 0;
 };
 
 /**
@@ -27,6 +28,7 @@ public:
 
     bool infer(const std::vector<void*>& bindings, cudaStream_t stream) override;
     nvinfer1::Dims getTensorDims(const char* name) const override;
+    bool set_input_shape(const char* name, const std::vector<int64_t>& shape) override;
 
 private:
     class Impl;

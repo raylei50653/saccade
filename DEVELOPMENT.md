@@ -17,7 +17,8 @@
    - 透過 Systemd `--user` 管理進程，配合 MediaMTX 處理串流緩衝，確保在模組切換或重啟時，視訊串流不中斷。
 
 4. **底層算力優化 (Pure NVIDIA Native Zero-Copy)**
-   - 實現 `MediaMTX -> NVDEC -> CUDA Tensor -> TensorRT (YOLO & SigLIP)` 的 100% 零拷貝數據路徑，全程無 CPU 記憶體搬運。
+   - 實現 `MediaMTX -> NVDEC -> CUDA Tensor -> TensorRT (YOLO & SigLIP) -> GPU Association` 的 100% 零拷貝數據路徑。
+   - 採用 **Sinkhorn-Auction Hybrid GPU Association**，徹底消除 D2H 同步瓶頸。
 
 5. **環境與狀態管理 (Unified Environment)**
    - **Docker:** 使用 NVIDIA 官方 TensorRT 基礎鏡像，鎖定 CUDA、GStreamer 等系統級依賴。

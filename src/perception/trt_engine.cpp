@@ -59,6 +59,15 @@ public:
         return engine_->getTensorShape(name);
     }
 
+    bool setInputShape(const char* name, const std::vector<int64_t>& shape) {
+        nvinfer1::Dims dims;
+        dims.nbDims = shape.size();
+        for (size_t i = 0; i < shape.size(); ++i) {
+            dims.d[i] = shape[i];
+        }
+        return context_->setInputShape(name, dims);
+    }
+
 private:
     // 使用自定義 Deleter 確保 TensorRT 物件正確釋放
     struct TRTDeleter {
@@ -86,6 +95,10 @@ bool TRTEngine::infer(const std::vector<void*>& bindings, cudaStream_t stream) {
 
 nvinfer1::Dims TRTEngine::getTensorDims(const char* name) const {
     return pimpl_->getTensorDims(name);
+}
+
+bool TRTEngine::set_input_shape(const char* name, const std::vector<int64_t>& shape) {
+    return pimpl_->setInputShape(name, shape);
 }
 
 } // namespace saccade

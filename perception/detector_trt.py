@@ -3,6 +3,13 @@ import torch
 from typing import Dict, Tuple, Optional, cast, List
 from perception.tracking import GPUByteTracker
 
+try:
+    from saccade_perception_ext import TRTEngine as CppTRTEngine
+    HAS_CPP_EXT = True
+except ImportError as e:
+    print(f"❌ [TRT] Failed to import C++ extension: {e}")
+    HAS_CPP_EXT = False
+
 
 class TRTYoloDetector:
     """
@@ -21,10 +28,20 @@ class TRTYoloDetector:
         if self.use_cpp:
             print(f"🚀 [TRT] Loading C++ Optimized Engine from {engine_path}...")
             self.cpp_engine = CppTRTEngine(engine_path)
+            # Use get_tensor_shape instead of get_input_shape as seen in previous grep
             self.input_shape = self.cpp_engine.get_tensor_shape("images")
             self.output_shape = self.cpp_engine.get_tensor_shape("output0")
             self.input_name = "images"
             self.output_name = "output0"
+            self.output_names = [self.output_name]
+            self.is_dynamic = self.output_shape[0] == -1
+            
+            # 💡 確保 C++ 模式下也有 output_tensors 屬性
+            self.output_tensors: Dict[str, torch.Tensor] = {}
+            
+            self.tracker = GPUByteTracker(max_objects=2048)
+            print("✅ C++ YOLO Detector & Tracker Ready.")
+            return
         else:
             print(
                 f"⚠️ [TRT] C++ Extension not found, using Python Native API for {engine_path}"
@@ -114,7 +131,35 @@ class TRTYoloDetector:
         """
         batch_size = input_tensor.size(0)
         input_tensor = input_tensor.contiguous()
-        
+        stream = torch.cuda.current_stream().cuda_stream
+
+        if self.use_cpp:
+            # 1. 準備所有輸出空間
+            for name in self.output_names:
+                shape = self.output_shape
+                if self.is_dynamic:
+                    # Resolve -1 to actual batch_size
+                    shape = tuple([batch_size if d == -1 else d for d in shape])
+                
+                current = self.output_tensors.get(name)
+                if current is None or tuple(current.shape) != shape:
+                    self.output_tensors[name] = torch.empty(
+                        shape, device=self.device, dtype=torch.float32
+                    )
+
+            # 2. 準備 bindings 並執行
+            # 💡 重要：對於動態 Batch，必須先設定輸入維度
+            if self.is_dynamic:
+                self.cpp_engine.set_input_shape(self.input_name, list(input_tensor.shape))
+
+            binding_ptrs = [input_tensor.data_ptr()]
+            for name in self.output_names:
+                binding_ptrs.append(self.output_tensors[name].data_ptr())
+            
+            self.cpp_engine.infer(binding_ptrs, stream)
+            return self.output_tensors
+
+        # Python Native Path (Fallback)
         # 1. 設定動態輸入 Shape
         self.context.set_input_shape(self.input_name, input_tensor.shape)
 

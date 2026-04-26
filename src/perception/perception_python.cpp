@@ -30,7 +30,8 @@ void init_perception_ext(py::module &m) {
                 shape.push_back(dims.d[i]);
             }
             return shape;
-        }, py::arg("name"));
+        }, py::arg("name"))
+        .def("set_input_shape", &TRTEngine::set_input_shape, py::arg("name"), py::arg("shape"));
 }
 
 PYBIND11_MODULE(saccade_perception_ext, m) {

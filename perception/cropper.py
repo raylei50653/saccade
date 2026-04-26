@@ -11,8 +11,80 @@ class ZeroCopyCropper:
     使用 torchvision.ops.roi_align 進行批次裁切與縮放，產出 CLIP/SigLIP 相容的 Tensor。
     """
 
-    def __init__(self, output_size: Tuple[int, int] = (224, 224)) -> None:
+    def __init__(
+        self,
+        output_size: Tuple[int, int] = (224, 224),
+        mode: str = "tight",
+        padding: float = 0.0,
+    ) -> None:
+        if mode not in {"tight", "square", "square_mean"}:
+            raise ValueError(f"Unsupported crop mode: {mode}")
         self.output_size = output_size
+        self.mode = mode
+        self.padding = padding
+
+    def _prepare_boxes(self, boxes: torch.Tensor, frame_h: int, frame_w: int) -> torch.Tensor:
+        if self.mode == "tight" and self.padding <= 0.0:
+            return boxes
+
+        x1, y1, x2, y2 = boxes.unbind(dim=1)
+        cx = (x1 + x2) * 0.5
+        cy = (y1 + y2) * 0.5
+        bw = (x2 - x1).clamp(min=1.0)
+        bh = (y2 - y1).clamp(min=1.0)
+
+        if self.mode in {"square", "square_mean"}:
+            side = torch.maximum(bw, bh) * (1.0 + self.padding)
+            half_w = side * 0.5
+            half_h = side * 0.5
+        else:
+            half_w = bw * (1.0 + self.padding) * 0.5
+            half_h = bh * (1.0 + self.padding) * 0.5
+
+        prepared = torch.stack(
+            (
+                (cx - half_w).clamp(0.0, float(frame_w - 1)),
+                (cy - half_h).clamp(0.0, float(frame_h - 1)),
+                (cx + half_w).clamp(0.0, float(frame_w - 1)),
+                (cy + half_h).clamp(0.0, float(frame_h - 1)),
+            ),
+            dim=1,
+        )
+        return prepared
+
+    def _fill_extra_with_mean(
+        self,
+        crops: torch.Tensor,
+        original_boxes: torch.Tensor,
+        prepared_boxes: torch.Tensor,
+    ) -> torch.Tensor:
+        if self.mode != "square_mean" or crops.numel() == 0:
+            return crops
+
+        out_h, out_w = self.output_size
+        px1, py1, px2, py2 = prepared_boxes.unbind(dim=1)
+        ox1, oy1, ox2, oy2 = original_boxes.unbind(dim=1)
+        pw = (px2 - px1).clamp(min=1.0)
+        ph = (py2 - py1).clamp(min=1.0)
+
+        sx1 = ((ox1 - px1) / pw * out_w).floor().clamp(0, out_w - 1).to(torch.long)
+        sx2 = ((ox2 - px1) / pw * out_w).ceil().clamp(1, out_w).to(torch.long)
+        sy1 = ((oy1 - py1) / ph * out_h).floor().clamp(0, out_h - 1).to(torch.long)
+        sy2 = ((oy2 - py1) / ph * out_h).ceil().clamp(1, out_h).to(torch.long)
+
+        xs = torch.arange(out_w, device=crops.device).view(1, 1, out_w)
+        ys = torch.arange(out_h, device=crops.device).view(1, out_h, 1)
+        inside = (
+            (xs >= sx1.view(-1, 1, 1))
+            & (xs < sx2.view(-1, 1, 1))
+            & (ys >= sy1.view(-1, 1, 1))
+            & (ys < sy2.view(-1, 1, 1))
+        )
+        outside = ~inside
+        outside_f = outside.unsqueeze(1).to(crops.dtype)
+        denom = outside_f.sum(dim=(2, 3), keepdim=True).clamp(min=1.0)
+        fill = (crops * outside_f).sum(dim=(2, 3), keepdim=True) / denom
+        return torch.where(inside.unsqueeze(1), crops, fill)
 
     def process(self, frame_tensor: torch.Tensor, boxes: torch.Tensor) -> torch.Tensor:
         """
@@ -29,8 +101,10 @@ class ZeroCopyCropper:
                 device=frame_tensor.device,
             )
 
-        # 確保 boxes 與 frame_tensor 在相同的裝置上
+        # 確保 boxes 與 frame_tensor 在相同的裝置上，並視需要在 GPU 上調整 RoI。
         boxes = boxes.to(frame_tensor.device)
+        original_boxes = boxes
+        boxes = self._prepare_boxes(boxes, frame_tensor.shape[-2], frame_tensor.shape[-1])
 
         # roi_align 需要的 boxes 格式為 [N, 5]，第一欄是 batch_index。
         # 由於我們每次只處理單張圖片 (Batch=1)，所以 index 全為 0。
@@ -48,7 +122,27 @@ class ZeroCopyCropper:
             aligned=True,
         )
 
+        crops = self._fill_extra_with_mean(cast(torch.Tensor, crops), original_boxes, boxes)
         return cast(torch.Tensor, crops)
+
+    def process_parts(self, frame_tensor: torch.Tensor, boxes: torch.Tensor) -> torch.Tensor:
+        """
+        裁切 full / upper / lower 三個視角，輸出順序為 [full, upper, lower]。
+        """
+        if boxes is None or boxes.numel() == 0:
+            return torch.empty(
+                (0, frame_tensor.shape[1], *self.output_size),
+                device=frame_tensor.device,
+            )
+
+        boxes = boxes.to(frame_tensor.device)
+        x1, y1, x2, y2 = boxes.unbind(dim=1)
+        h = (y2 - y1).clamp(min=1.0)
+
+        upper = torch.stack((x1, y1, x2, y1 + h * 0.55), dim=1)
+        lower = torch.stack((x1, y1 + h * 0.45, x2, y2), dim=1)
+        part_boxes = torch.cat((boxes, upper, lower), dim=0)
+        return self.process(frame_tensor, part_boxes)
 
 
 if __name__ == "__main__":

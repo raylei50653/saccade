@@ -22,8 +22,9 @@ Welcome to the Saccade project documentation. Saccade is a dual-path video perce
 - [ADR 006: Native TensorRT YOLO](decisions/006-native-trt-yolo.md)
 - [ADR 007: C++ Core Migration](decisions/007-cpp-migration-spec.md)
 - [ADR 008: Cognition Layer](decisions/008-cognition-layer-definition.md)
-- [ADR 009: Industrial Zero-Copy V2](decisions/009-industrial-zero-copy-v2.md)
+- [ADR 009: Industrial Zero-Copy V2](decisions/009-industrial-copy-v2.md)
 - [ADR 010: NVIDIA DALI GPU Preprocessing](decisions/010-dali-gpu-preprocessing.md)
+- [ADR 015: Sinkhorn-Auction Hybrid GPU Association](decisions/015-sinkhorn-auction-hybrid-association.md)
 
 ## 📊 效能基準 (Benchmarks)
 - [Latency Log](benchmarks/latency_log.md)

@@ -6,7 +6,7 @@ namespace saccade {
 namespace kf_gpu {
 
 // 4x4 矩陣求逆 (使用 Cramer's Rule / 伴隨矩陣，專為 GPU Kernel 優化)
-__device__ __forceinline__ void invert4x4(const float m[16], float inv[16]) {
+__host__ __device__ __forceinline__ void invert4x4(const float m[16], float inv[16]) {
     float inv0  = m[5]  * m[10] * m[15] - 
                   m[5]  * m[11] * m[14] - 
                   m[9]  * m[6]  * m[15] + 
@@ -142,7 +142,7 @@ __device__ __forceinline__ void invert4x4(const float m[16], float inv[16]) {
 }
 
 // 初始化協方差矩陣 P (8x8)
-__device__ __forceinline__ void init_covariance(float P[64]) {
+__host__ __device__ __forceinline__ void init_covariance(float P[64]) {
     for (int i = 0; i < 64; ++i) P[i] = 0.0f;
     // 較大的初始不確定性
     P[0] = 10.0f;  P[9] = 10.0f;  P[18] = 10.0f; P[27] = 10.0f;
@@ -150,7 +150,7 @@ __device__ __forceinline__ void init_covariance(float P[64]) {
 }
 
 // 取得過程噪聲矩陣 Q
-__device__ __forceinline__ void get_Q(float h, float Q[64]) {
+__host__ __device__ __forceinline__ void get_Q(float h, float Q[64]) {
     for (int i = 0; i < 64; ++i) Q[i] = 0.0f;
     float std_weight_position = 1.0f / 20.0f;
     float std_weight_velocity = 1.0f / 160.0f;
@@ -168,7 +168,7 @@ __device__ __forceinline__ void get_Q(float h, float Q[64]) {
 }
 
 // 取得測量噪聲矩陣 R
-__device__ __forceinline__ void get_R(float h, float R[16], float light_factor = 0.0f) {
+__host__ __device__ __forceinline__ void get_R(float h, float R[16], float light_factor = 0.0f) {
     for (int i = 0; i < 16; ++i) R[i] = 0.0f;
     float std_weight_position = 1.0f / 20.0f;
     float pos_std = std_weight_position * h;
@@ -181,7 +181,7 @@ __device__ __forceinline__ void get_R(float h, float R[16], float light_factor =
 }
 
 // 卡爾曼預測步
-__device__ __forceinline__ void predict(float x[8], float P[64]) {
+__host__ __device__ __forceinline__ void predict(float x[8], float P[64]) {
     // 1. x = F * x (因 F 特殊結構，等同於 x[0:4] += x[4:8])
     x[0] += x[4];
     x[1] += x[5];
@@ -212,7 +212,7 @@ __device__ __forceinline__ void predict(float x[8], float P[64]) {
 }
 
 // 卡爾曼更新步
-__device__ __forceinline__ void update(float x[8], float P[64], const float z[4], float light_factor = 0.0f) {
+__host__ __device__ __forceinline__ void update(float x[8], float P[64], const float z[4], float light_factor = 0.0f) {
     // 1. S = H * P * H^T + R
     // 由於 H = [I, 0]，H*P*H^T 就是 P 的左上 4x4
     float R[16];

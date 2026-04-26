@@ -22,6 +22,16 @@ struct TrackStateSnapshot {
     std::vector<float> covariance; // row-major 8x8 covariance
 };
 
+struct TrackCandidateSnapshot {
+    int obj_id;
+    int class_id;
+    int age;
+    int hit_streak;
+    int required_confirm_streak;
+    float score;
+    float x1, y1, x2, y2;
+};
+
 /**
  * @brief ITracker 接口
  */
@@ -36,7 +46,8 @@ public:
         cudaStream_t stream,
         float* embeddings_ptr = nullptr,
         float* gmc_ptr = nullptr,
-        float light_factor = 0.0f
+        float light_factor = 0.0f,
+        float mid_thresh_scale = 1.0f
     ) = 0;
 };
 
@@ -48,9 +59,20 @@ public:
     GPUByteTracker(int max_objects = 2048, int embedding_dim = 768);
     ~GPUByteTracker();
 
-    void set_params(float track_thresh, float high_thresh, float match_thresh, int track_buffer);
+    void set_params(
+        float track_thresh,
+        float high_thresh,
+        float match_thresh,
+        int track_buffer,
+        float mid_thresh = 0.40f,
+        int confirm_streak = 3,
+        float confirm_score_thresh = 0.50f,
+        bool adaptive_confirmation = false
+    );
+    void set_reid_params(float cos_threshold, float iou_low, float iou_high, float weight);
     void update_reference_features(int* track_ids, float* features_ptr, int num, cudaStream_t stream);
     std::vector<TrackStateSnapshot> get_state_snapshots(cudaStream_t stream);
+    std::vector<TrackCandidateSnapshot> get_tentative_candidates(cudaStream_t stream);
 
     std::vector<TrackResult> update(
         float* boxes_ptr, 
@@ -60,7 +82,8 @@ public:
         cudaStream_t stream,
         float* embeddings_ptr = nullptr,
         float* gmc_ptr = nullptr,
-        float light_factor = 0.0f
+        float light_factor = 0.0f,
+        float mid_thresh_scale = 1.0f
     ) override;
 
 private:

@@ -5,7 +5,7 @@ Welcome to the **Saccade** project. This file serves as the foundational mandate
 ## Project Overview
 **Saccade** is a dual-path video perception system designed for high-efficiency edge AI. It mimics the human visual system's "saccades" by splitting processing into two distinct loops:
 - **Fast Path (Perception):** Continuous, low-latency object detection and tracking using YOLO11 (TensorRT prioritized).
-- **Vector Path (Memory):** On-demand semantic feature extraction using Jina-CLIP-v2 (TensorRT) and vector storage in ChromaDB.
+- **Vector Path (Memory):** On-demand semantic feature extraction using SigLIP 2 (TensorRT) and vector storage in ChromaDB.
 - **Orchestrator:** A centralized pipeline that triggers semantic indexing based on Information Entropy and Semantic Drift.
 
 ### Core Technologies
@@ -69,7 +69,7 @@ All significant technical choices must be documented in `docs/decisions/` using 
 - **Pre-commit Validation:** Before staging or committing ANY Python code changes, you MUST run type checks (`uv run mypy .` or `docker-compose exec saccade uv run mypy .`) and ensure they pass. Do not commit code with unresolved typing errors unless explicitly instructed.
 
 ## Directory Map
-- `perception/`: YOLO11 inference, Jina-CLIP embedding, Semantic Drift filtering.
+- `perception/`: YOLO11 inference, SigLIP 2 embedding, Semantic Drift filtering.
 - `cognition/`: Resource management and frame selection logic.
 - `media/`: MediaMTX client, FFmpeg/GStreamer Zero-Copy utilities.
 - `storage/`: Vector DB (Chroma) and Redis real-time track cache.

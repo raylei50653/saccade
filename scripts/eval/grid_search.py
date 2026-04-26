@@ -24,7 +24,7 @@ def main():
             "--high-thresh", str(ht),
             "--match-thresh", str(mt),
             "--output", "results/grid_search_eval",
-            "--no-reid"
+            "--reid-mode", "off",
         ]
         
         subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

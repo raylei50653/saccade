@@ -44,13 +44,12 @@ def objective(trial):
         f"--sequences {SEQUENCES} "
         f"--output {out_dir} "
         f"--conf-threshold {params['conf_threshold']} "
-        f"--semantic-relink "
+        f"--reid-mode semantic "
         f"--semantic-threshold {params['semantic_threshold']} "
         f"--semantic-mahalanobis-threshold {params['mahalanobis_threshold']} "
         f"--semantic-ema {params['semantic_ema']} "
         f"--semantic-min-lost-frames {params['semantic_min_lost_frames']} "
         f"--semantic-spatial-gate {params['spatial_gate']} "
-        f"--no-reid"
     )
     
     run_command(eval_cmd)

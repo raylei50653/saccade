@@ -185,10 +185,31 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         .def_readonly("state", &TrackStateSnapshot::state)
         .def_readonly("covariance", &TrackStateSnapshot::covariance);
 
+    py::class_<TrackCandidateSnapshot>(m, "TrackCandidateSnapshot")
+        .def_readonly("obj_id", &TrackCandidateSnapshot::obj_id)
+        .def_readonly("class_id", &TrackCandidateSnapshot::class_id)
+        .def_readonly("age", &TrackCandidateSnapshot::age)
+        .def_readonly("hit_streak", &TrackCandidateSnapshot::hit_streak)
+        .def_readonly("required_confirm_streak", &TrackCandidateSnapshot::required_confirm_streak)
+        .def_readonly("score", &TrackCandidateSnapshot::score)
+        .def_readonly("x1", &TrackCandidateSnapshot::x1)
+        .def_readonly("y1", &TrackCandidateSnapshot::y1)
+        .def_readonly("x2", &TrackCandidateSnapshot::x2)
+        .def_readonly("y2", &TrackCandidateSnapshot::y2);
+
     py::class_<GPUByteTracker>(m, "GPUByteTracker")
         .def(py::init<int, int>(), py::arg("max_objects") = 2048, py::arg("embedding_dim") = 768)
         .def("set_params", &GPUByteTracker::set_params, 
-             py::arg("track_thresh"), py::arg("high_thresh"), py::arg("match_thresh"), py::arg("track_buffer"))
+             py::arg("track_thresh"),
+             py::arg("high_thresh"),
+             py::arg("match_thresh"),
+             py::arg("track_buffer"),
+             py::arg("mid_thresh") = 0.40f,
+             py::arg("confirm_streak") = 3,
+             py::arg("confirm_score_thresh") = 0.50f,
+             py::arg("adaptive_confirmation") = false)
+        .def("set_reid_params", &GPUByteTracker::set_reid_params,
+             py::arg("cos_threshold"), py::arg("iou_low"), py::arg("iou_high"), py::arg("weight"))
         .def("update_reference_features", [](GPUByteTracker& self, uintptr_t ids_ptr, uintptr_t features_ptr, int num, uintptr_t stream_ptr) {
             self.update_reference_features(
                 reinterpret_cast<int*>(ids_ptr),
@@ -197,27 +218,33 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
                 reinterpret_cast<cudaStream_t>(stream_ptr)
             );
         }, py::arg("ids_ptr"), py::arg("features_ptr"), py::arg("num"), py::arg("stream_ptr"))
-        .def("update", [](GPUByteTracker& self, uintptr_t boxes_ptr, uintptr_t scores_ptr, uintptr_t classes_ptr, int num_dets, uintptr_t stream_ptr, 
-                          std::optional<uintptr_t> embeddings_ptr, std::optional<uintptr_t> gmc_ptr, float light_factor) {
+        .def("update", [](GPUByteTracker& self, uintptr_t boxes_ptr, uintptr_t scores_ptr, uintptr_t classes_ptr, int num_dets, uintptr_t stream_ptr,
+                          uintptr_t embeddings_ptr, uintptr_t gmc_ptr, float light_factor, float mid_thresh_scale) {
             return self.update(
                 reinterpret_cast<float*>(boxes_ptr),
                 reinterpret_cast<float*>(scores_ptr),
                 reinterpret_cast<int*>(classes_ptr),
                 num_dets,
                 reinterpret_cast<cudaStream_t>(stream_ptr),
-                embeddings_ptr ? reinterpret_cast<float*>(*embeddings_ptr) : nullptr,
-                gmc_ptr ? reinterpret_cast<float*>(*gmc_ptr) : nullptr,
-                light_factor
+                embeddings_ptr ? reinterpret_cast<float*>(embeddings_ptr) : nullptr,
+                gmc_ptr ? reinterpret_cast<float*>(gmc_ptr) : nullptr,
+                light_factor,
+                mid_thresh_scale
             );
         }, 
         py::arg("boxes_ptr"), py::arg("scores_ptr"), py::arg("classes_ptr"), py::arg("num_dets"), py::arg("stream_ptr"),
-        py::arg("embeddings_ptr") = std::nullopt, py::arg("gmc_ptr") = std::nullopt, py::arg("light_factor") = 0.0f,
+        py::arg("embeddings_ptr") = 0, py::arg("gmc_ptr") = 0, py::arg("light_factor") = 0.0f, py::arg("mid_thresh_scale") = 1.0f,
         "Update tracker with raw GPU pointers and stream")
         .def("get_state_snapshots", [](GPUByteTracker& self, uintptr_t stream_ptr) {
             return self.get_state_snapshots(reinterpret_cast<cudaStream_t>(stream_ptr));
         },
         py::arg("stream_ptr"),
-        "Return active Kalman state and covariance snapshots");
+        "Return active Kalman state and covariance snapshots")
+        .def("get_tentative_candidates", [](GPUByteTracker& self, uintptr_t stream_ptr) {
+            return self.get_tentative_candidates(reinterpret_cast<cudaStream_t>(stream_ptr));
+        },
+        py::arg("stream_ptr"),
+        "Return active tentative tracks that are candidates for lazy ReID arbitration");
 
     m.def(
         "merge_cross_tile_duplicates",

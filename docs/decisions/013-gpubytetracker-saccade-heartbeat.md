@@ -37,5 +37,19 @@
 - **Recall 受限於模型**：目前的 MOTA 瓶頸完全轉移到了 YOLO 偵測器的召回能力。
 - **代碼複雜度**：C++ 核心邏輯變得精密，後續維護需依賴完善的消融實驗腳本。
 
+### 5. Farewell Embedding（告別特徵，2026-04-26）
+
+Heartbeat 間隔 10 幀意味著軌跡消失時，FeatureBank 中存放的最後一筆特徵最多可以是 10 幀前的快照，在遮擋或跨鏡切換場景下恢復準確率受限。
+
+**決策**：在 `SmartTracker` Python 層實作輕量的 Farewell ReID 補救機制：
+
+- **5 幀滑動緩衝** (`_farewell_buffer: deque(maxlen=5)`)：每幀追蹤完成後，將 `(frame_tensor, tracked_ids, tracked_boxes)` 壓入緩衝（僅持有 Python ref，不額外配置 GPU 記憶體）。
+- **消失偵測**：`lost_ids = prev_tracked_ids − current_tracked_ids`，只在有軌跡消失時才啟動，不影響正常幀。
+- **3 幀補提**：對每個 `lost_id` 倒序掃緩衝，最多取最近 3 幀的 bbox；每幀獨立 crop → SigLIP2 → embedding `[1, 768]`。
+- **L2-normalized Average**：`normalize(mean(normalize(embs, dim=1), dim=0))` — 逐幀歸一化消除尺度差異，平均後再次歸一化恢復單位球約束，抵銷特徵震盪。
+- **批量寫入 FeatureBank**：所有消失軌跡的告別 embedding 一次 `update_batch`，取代舊的過期特徵。
+
+**效果**：正常幀維持 150+ FPS 純 IoU 追蹤；只有「生離死別」瞬間才以 K≤3 次 SigLIP2 推理換取最新鮮的特徵，直接對抗跨鏡 IDF1 瓶頸。純 Python 層改動，不需重新編譯 C++。
+
 ## 狀態 (Status)
-**已定稿 (Finalized)** 並通過 MOT17 全測試集驗證。
+**已定稿 (Finalized)** 並通過 MOT17 全測試集驗證。Farewell Embedding 於 2026-04-26 實裝，待下次 MOT17 全集驗證。

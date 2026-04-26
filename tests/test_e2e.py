@@ -35,9 +35,9 @@ skip_no_dataset = pytest.mark.skipif(
 )
 
 
-def _run_eval(tmp_path, *, max_frames, no_reid, seq=SEQ):
+def _run_eval(tmp_path, *, max_frames, reid_mode, seq=SEQ):
     from perception.detector_trt import TRTYoloDetector  # noqa: F401 — must precede torchvision
-    from scripts.eval.mot17 import run_eval
+    from perception.eval.runner import run_eval
 
     out = str(tmp_path / "out")
     run_eval(
@@ -48,7 +48,7 @@ def _run_eval(tmp_path, *, max_frames, no_reid, seq=SEQ):
         sequences=seq,
         max_frames=max_frames,
         conf_threshold=0.25,
-        no_reid=no_reid,
+        reid_mode=reid_mode,
         warmup_frames=0,
         track_thresh=0.1,
         high_thresh=0.5,
@@ -63,7 +63,7 @@ def _run_eval(tmp_path, *, max_frames, no_reid, seq=SEQ):
 @skip_no_dataset
 def test_e2e_smoke(tmp_path):
     """30 frames: pipeline completes and writes valid MOT-format output."""
-    result = _run_eval(tmp_path, max_frames=30, no_reid=True)
+    result = _run_eval(tmp_path, max_frames=30, reid_mode="off")
 
     assert result.exists(), "result file not written"
     lines = [ln for ln in result.read_text().splitlines() if ln.strip()]
@@ -84,7 +84,7 @@ def test_e2e_smoke(tmp_path):
 @skip_no_dataset
 def test_e2e_tracking_continuity(tmp_path):
     """60 frames, IoU-only: at least one track persists across 10+ consecutive frames."""
-    result = _run_eval(tmp_path, max_frames=60, no_reid=True)
+    result = _run_eval(tmp_path, max_frames=60, reid_mode="off")
 
     tracks: dict[int, list[int]] = defaultdict(list)
     for line in result.read_text().splitlines():
@@ -108,7 +108,7 @@ def test_e2e_mota_floor(tmp_path):
     if not hasattr(np, "asfarray"):
         np.asfarray = lambda a, dtype=float: np.asarray(a, dtype=dtype)  # type: ignore[attr-defined]
 
-    result = _run_eval(tmp_path, max_frames=150, no_reid=False)
+    result = _run_eval(tmp_path, max_frames=150, reid_mode="semantic")
 
     gt_path = DATA_ROOT / "train" / SEQ / "gt" / "gt.txt"
     gt_all = mm.io.loadtxt(str(gt_path), fmt="mot15-2D", min_confidence=1)

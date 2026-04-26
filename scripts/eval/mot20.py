@@ -169,7 +169,12 @@ def run_eval(engine, output, data_root, split, sequences, max_frames, conf_thres
         
         conf, min_h, min_asp, tiled_mode, t_p, dyn_roi = get_seq_params(seq, conf_threshold, kwargs.get('tiled', False))
         if hasattr(detector.tracker, "set_params"):
-            detector.tracker.set_params(t_p["track_thresh"], t_p["high_thresh"], t_p["match_thresh"], t_p["track_buffer"], t_p["std_pos"], t_p["std_vel"])
+            detector.tracker.set_params(
+                t_p["track_thresh"],
+                t_p["high_thresh"],
+                t_p["match_thresh"],
+                t_p["track_buffer"],
+            )
         
         streamer = DALIStreamer(seq_path / "img1")
         dispatcher = AsyncEmbeddingDispatcher(extractor, cropper) if extractor else None
