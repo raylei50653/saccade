@@ -32,6 +32,7 @@ add_library(saccade_perception SHARED
     src/perception/trt_engine.cpp
     src/perception/preprocessor.cpp
     src/perception/preprocessor_gpu.cu
+    src/perception/feature_extractor.cpp
 )
 target_link_libraries(saccade_perception
     nvinfer
@@ -45,10 +46,13 @@ target_compile_definitions(saccade_perception PRIVATE SACCADE_EXPORT_PERCEPTION)
 # 4. 定義 Tracking 模組 (Dynamic Library)
 add_library(saccade_tracking SHARED
     src/tracking/tracker_gpu.cu
+    src/tracking/gmc.cpp
+    src/tracking/gmc_kernel.cu
 )
 set_target_properties(saccade_tracking PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 target_link_libraries(saccade_tracking
     ${CUDA_LIBRARIES}
+    ${OpenCV_LIBS}
     saccade_perception
 )
 target_compile_definitions(saccade_tracking PRIVATE SACCADE_EXPORT_TRACKING)
@@ -100,3 +104,6 @@ target_link_libraries(saccade_node
     saccade_media
     ${GSTREAMER_LIBRARIES}
 )
+
+# add_executable(test_extractor src/perception/test_extractor.cpp)
+# target_link_libraries(test_extractor saccade_perception)

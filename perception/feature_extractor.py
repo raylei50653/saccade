@@ -1,17 +1,25 @@
-import tensorrt as trt
 import torch
+import tensorrt as trt
 import torch.nn.functional as F
 import time
+from typing import Dict, List, Tuple, Optional, Any
 
 # ImageNet normalization constants (DINOv2 / TransReID)
 _IMAGENET_MEAN = [0.485, 0.456, 0.406]
 _IMAGENET_STD  = [0.229, 0.224, 0.225]
 
-_DEFAULT_ENGINE: dict[str, str] = {
+_DEFAULT_ENGINE: Dict[str, str] = {
     "siglip2":   "models/embedding/google_siglip2-base-patch16-224.engine",
     "dinov2":    "models/embedding/facebook_dinov2-base.engine",
     "transreid": "models/embedding/transreid_256x128.engine",
 }
+
+
+try:
+    from saccade_perception_ext import FeatureExtractor as FeatureExtractorCpp, ModelType
+    HAS_CPP_EXT = True
+except ImportError:
+    HAS_CPP_EXT = False
 
 
 class TRTFeatureExtractor:
@@ -32,13 +40,35 @@ class TRTFeatureExtractor:
     ) -> None:
         if model_type not in _DEFAULT_ENGINE:
             raise ValueError(f"Unknown model_type '{model_type}'. Choose from {list(_DEFAULT_ENGINE)}")
+        
         self.model_type = model_type
         self.device = device
-        self.logger = trt.Logger(trt.Logger.ERROR)
         self.max_batch = max_batch
+        self.feature_dim: int = 0
+        self.input_hw: Tuple[int, int] = (224, 224)
+        self.is_dynamic: bool = False
+        self.output_names: List[str] = []
+        self.output_buffers: Dict[str, torch.Tensor] = {}
+        self._embed_key: str = ""
+        self._imagenet_mean: Optional[torch.Tensor] = None
+        self._imagenet_std: Optional[torch.Tensor] = None
+        self._cpp: Optional[FeatureExtractorCpp] = None
 
         path = engine_path or _DEFAULT_ENGINE[model_type]
-        print(f"Loading TensorRT Engine [{model_type}] from {path}...")
+
+        if HAS_CPP_EXT:
+            cpp_type_map = {
+                "siglip2": ModelType.SIGLIP2,
+                "dinov2": ModelType.DINOV2,
+                "transreid": ModelType.TRANSREID,
+            }
+            print(f"Loading C++ TensorRT Engine [{model_type}] from {path}...")
+            self._cpp = FeatureExtractorCpp(path, cpp_type_map[model_type], max_batch)
+            self.feature_dim = self._cpp.feature_dim
+            self.input_hw = self._cpp.input_hw
+            return
+
+        self.logger = trt.Logger(trt.Logger.ERROR)
         with open(path, "rb") as f, trt.Runtime(self.logger) as runtime:
             self.engine = runtime.deserialize_cuda_engine(f.read())
 
@@ -51,17 +81,15 @@ class TRTFeatureExtractor:
         try:
             _min, _opt, _max = self.engine.get_tensor_profile_shape("pixel_values", 0)
             self.max_batch = int(_max[0])
-            self.input_hw: tuple[int, int] = (int(_opt[2]), int(_opt[3]))
+            self.input_hw = (int(_opt[2]), int(_opt[3]))
         except Exception:
-            self.input_hw = (224, 224)
+            pass
 
         # Detect dynamic batch.
         raw_shape = self.engine.get_tensor_shape("pixel_values")
         self.is_dynamic = raw_shape[0] == -1
 
         # Auto-allocate output buffers from engine metadata.
-        self.output_buffers: dict[str, torch.Tensor] = {}
-        self.output_names: list[str] = []
         for i in range(self.engine.num_io_tensors):
             name = self.engine.get_tensor_name(i)
             if self.engine.get_tensor_mode(name) == trt.TensorIOMode.OUTPUT:
@@ -74,7 +102,7 @@ class TRTFeatureExtractor:
 
         # Resolve the embedding output key and infer feature_dim.
         self._embed_key = "image_embeds" if "image_embeds" in self.output_buffers else self.output_names[0]
-        self.feature_dim: int = int(self.output_buffers[self._embed_key].shape[-1])
+        self.feature_dim = int(self.output_buffers[self._embed_key].shape[-1])
 
         # Pre-cache ImageNet normalization tensors on the target device.
         if model_type in {"dinov2", "transreid"}:
@@ -84,9 +112,6 @@ class TRTFeatureExtractor:
             self._imagenet_std = torch.tensor(
                 _IMAGENET_STD, device=device, dtype=torch.float32
             ).view(1, 3, 1, 1)
-        else:
-            self._imagenet_mean = None
-            self._imagenet_std = None
 
         print(
             f"Extractor ready — model={model_type}, dim={self.feature_dim}, "
@@ -95,7 +120,7 @@ class TRTFeatureExtractor:
         )
 
     def extract(
-        self, input_tensor: torch.Tensor, stream: torch.cuda.Stream | None = None
+        self, input_tensor: torch.Tensor, stream: Optional[torch.cuda.Stream] = None
     ) -> torch.Tensor:
         """
         執行零拷貝推論 (GPU -> GPU)。
@@ -105,9 +130,19 @@ class TRTFeatureExtractor:
         if batch_size == 0:
             return torch.empty((0, self.feature_dim), device=self.device)
 
+        if self._cpp is not None:
+            # Use C++ Backend
+            out = torch.empty((batch_size, self.feature_dim), device=self.device, dtype=torch.float32)
+            stream_ptr = stream.cuda_stream if stream else torch.cuda.current_stream().cuda_stream
+            
+            # input_tensor is [N, 3, H, W] CHW RGB float32 [0, 1]
+            # C++ extract handles chunking internally and applies normalization.
+            self._cpp.extract(input_tensor.data_ptr(), batch_size, out.data_ptr(), stream_ptr)
+            return out
+
         # 超過 engine profile 上限時分塊推理
         if batch_size > self.max_batch:
-            chunks = input_tensor.split(self.max_batch, dim=0)
+            chunks = torch.split(input_tensor, self.max_batch, dim=0)
             return torch.cat([self._extract_chunk(c) for c in chunks], dim=0)
 
         return self._extract_chunk(input_tensor)
@@ -118,8 +153,11 @@ class TRTFeatureExtractor:
         if self.model_type == "siglip2":
             # SigLIP vision_model expects pixel_values in [-1, 1].
             return x.mul(2.0).sub(1.0).contiguous()
+        
         # DINOv2 and TransReID use standard ImageNet mean/std.
-        return ((x - self._imagenet_mean) / self._imagenet_std).contiguous()  # type: ignore[operator]
+        if self._imagenet_mean is not None and self._imagenet_std is not None:
+            return ((x - self._imagenet_mean) / self._imagenet_std).contiguous()
+        return x.contiguous()
 
     def _extract_chunk(self, input_tensor: torch.Tensor) -> torch.Tensor:
         """Run inference on a single chunk (≤ max_batch)."""
@@ -146,26 +184,3 @@ class TRTFeatureExtractor:
         )
         cpu_features.copy_(gpu_features, non_blocking=True)
         return cpu_features
-
-
-if __name__ == "__main__":
-    import argparse
-    p = argparse.ArgumentParser()
-    p.add_argument("--model-type", default="siglip2", choices=list(_DEFAULT_ENGINE))
-    p.add_argument("--engine-path", default="")
-    a = p.parse_args()
-
-    extractor = TRTFeatureExtractor(engine_path=a.engine_path, model_type=a.model_type)
-    h, w = extractor.input_hw
-    dummy_input = torch.randn(8, 3, h, w, device="cuda", dtype=torch.float32)
-
-    _ = extractor.extract(dummy_input)
-    torch.cuda.synchronize()
-
-    start = time.perf_counter()
-    for _ in range(100):
-        out = extractor.extract(dummy_input)
-    torch.cuda.synchronize()
-
-    latency = (time.perf_counter() - start) / 100 * 1000
-    print(f"Shape: {out.shape}  |  Avg latency (batch=8): {latency:.2f} ms")

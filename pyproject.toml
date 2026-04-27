@@ -1,7 +1,7 @@
 [project]
 name = "saccade"
 version = "0.1.0"
-description = "Add your description here"
+description = "High-efficiency edge AI video perception system"
 readme = "README.md"
 requires-python = ">=3.12, <3.13"
 dependencies = [
@@ -45,9 +45,12 @@ dependencies = [
     "llama-index-vector-stores-chroma>=0.5.5",
 ]
 
+[tool.setuptools]
+packages = ["perception", "media", "cognition", "storage", "pipeline", "api"]
+
 [tool.uv]
 override-dependencies = [
-    "onnxruntime==1.24.4", # Force override to avoid multiple versions if needed, or use a dummy
+    "onnxruntime==1.24.4",
 ]
 
 [tool.mypy]
@@ -59,7 +62,7 @@ exclude = ["tests/"]
 exclude = ["tests/benchmarks/archive"]
 
 [tool.ruff.lint]
-ignore = ["E701"] # Allow multiple statements on one line for now to avoid tedious formatting fixes in benchmarks
+ignore = ["E701"]
 
 [tool.pytest.ini_options]
 addopts = "--cov=perception --cov=cognition --cov=media --cov=storage --cov=pipeline --cov-report=term-missing"

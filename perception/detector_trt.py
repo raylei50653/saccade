@@ -1,5 +1,5 @@
-import tensorrt as trt
 import torch
+import tensorrt as trt
 from typing import Dict, Tuple, Optional, cast, List
 from perception.tracking import GPUByteTracker
 
@@ -24,21 +24,22 @@ class TRTYoloDetector:
     ):
         self.device = device
         self.use_cpp = HAS_CPP_EXT
+        self.input_name: str = "images"
+        self.output_name: str = "output0"
+        self.output_names: List[str] = []
+        self.output_tensors: Dict[str, torch.Tensor] = {}
+        self.is_dynamic: bool = False
+        self.input_shape: List[int] = []
+        self.output_shape: Tuple[int, ...] = (0,)
 
         if self.use_cpp:
             print(f"🚀 [TRT] Loading C++ Optimized Engine from {engine_path}...")
             self.cpp_engine = CppTRTEngine(engine_path)
             # Use get_tensor_shape instead of get_input_shape as seen in previous grep
-            self.input_shape = self.cpp_engine.get_tensor_shape("images")
-            self.output_shape = self.cpp_engine.get_tensor_shape("output0")
-            self.input_name = "images"
-            self.output_name = "output0"
+            self.input_shape = self.cpp_engine.get_tensor_shape(self.input_name)
+            self.output_shape = tuple(self.cpp_engine.get_tensor_shape(self.output_name))
             self.output_names = [self.output_name]
             self.is_dynamic = self.output_shape[0] == -1
-            
-            # 💡 確保 C++ 模式下也有 output_tensors 屬性
-            self.output_tensors: Dict[str, torch.Tensor] = {}
-            
             self.tracker = GPUByteTracker(max_objects=2048)
             print("✅ C++ YOLO Detector & Tracker Ready.")
             return
@@ -49,6 +50,10 @@ class TRTYoloDetector:
             self.logger = trt.Logger(trt.Logger.ERROR)
             with open(engine_path, "rb") as f, trt.Runtime(self.logger) as runtime:
                 self.engine = runtime.deserialize_cuda_engine(f.read())
+            
+            if self.engine is None:
+                raise RuntimeError(f"Failed to deserialize engine from {engine_path}")
+
             self.context = self.engine.create_execution_context()
 
             for i in range(self.engine.num_io_tensors):
@@ -58,7 +63,8 @@ class TRTYoloDetector:
                     self.input_name = name
                 elif mode == trt.TensorIOMode.OUTPUT:
                     self.output_name = name
-            self.output_shape = self.engine.get_tensor_shape(self.output_name)
+            
+            self.output_shape = tuple(self.engine.get_tensor_shape(self.output_name))
 
         # 💡 偵測模型是否支援動態 Batch
         self.is_dynamic = self.output_shape[0] == -1
@@ -77,8 +83,7 @@ class TRTYoloDetector:
             raise RuntimeError("TensorRT engine has no output tensors.")
 
         self.output_name = self.output_names[0]
-        self.output_shape = self.engine.get_tensor_shape(self.output_name)
-        self.output_tensors: Dict[str, torch.Tensor] = {}
+        self.output_shape = tuple(self.engine.get_tensor_shape(self.output_name))
         for name in self.output_names:
             shape = self.engine.get_tensor_shape(name)
             self.output_tensors[name] = torch.empty(
@@ -125,9 +130,6 @@ class TRTYoloDetector:
     def infer_raw_batch(self, input_tensor: torch.Tensor) -> Dict[str, torch.Tensor]:
         """
         執行 TensorRT 推理並回傳所有輸出張量。
-
-        Detection-only YOLO26 engines expose only ``output0``. YOLOE segmentation
-        engines expose ``output0`` detections plus ``output1`` mask prototypes.
         """
         batch_size = input_tensor.size(0)
         input_tensor = input_tensor.contiguous()
@@ -148,7 +150,6 @@ class TRTYoloDetector:
                     )
 
             # 2. 準備 bindings 並執行
-            # 💡 重要：對於動態 Batch，必須先設定輸入維度
             if self.is_dynamic:
                 self.cpp_engine.set_input_shape(self.input_name, list(input_tensor.shape))
 
@@ -163,7 +164,7 @@ class TRTYoloDetector:
         # 1. 設定動態輸入 Shape
         self.context.set_input_shape(self.input_name, input_tensor.shape)
 
-        # 2. 準備所有輸出空間；動態 batch engine 會根據 input shape 解析輸出 shape。
+        # 2. 準備所有輸出空間
         for name in self.output_names:
             shape = tuple(self.context.get_tensor_shape(name))
             if any(dim < 0 for dim in shape):
@@ -180,18 +181,12 @@ class TRTYoloDetector:
         for name, tensor in self.output_tensors.items():
             self.context.set_tensor_address(name, tensor.data_ptr())
 
-        # Launch on the caller's current CUDA stream and let downstream GPU ops
-        # establish ordering naturally. Callers that need wall-clock timings or
-        # CPU-visible results should synchronize explicitly at their boundary.
-        stream = torch.cuda.current_stream().cuda_stream
         self.context.execute_async_v3(stream)
-
         return self.output_tensors
 
     def detect_raw(self, input_tensor: torch.Tensor) -> torch.Tensor:
         """
         執行 TensorRT 推理並直接回傳原始輸出張量 [Batch, 300, 6]。
-        避免 Python 列表解包與迴圈開銷。
         """
         outputs = self.infer_raw_batch(input_tensor)
         return outputs[self.output_name]
@@ -223,14 +218,13 @@ class TRTYoloDetector:
             boxes = valid_results[:, :4].contiguous()
             scores = valid_results[:, 4].contiguous()
             classes = valid_results[:, 5].to(torch.int32).contiguous()
+            
+            extra: Optional[torch.Tensor] = None
             if "embeddings" in outputs:
                 extra = outputs["embeddings"][i][mask].contiguous()
             else:
                 extra = valid_results[:, 6:].contiguous() if valid_results.size(1) > 6 else None
 
-            # 這裡注意：多路模式下 Tracker 應該是按路數實例化的，
-            # 但目前為了 Phase 1 展示，我們暫用全域 Tracker 或預留擴展。
-            # 生產環境下，此處應調用對應 stream_id 的 tracker.update
             batch_results.append((boxes, scores, classes, extra))
             
         return batch_results
@@ -241,26 +235,3 @@ class TRTYoloDetector:
         """單路相容性接口"""
         results = self.detect_batch(input_tensor, conf_threshold)
         return results[0] if results else self._empty_result()
-
-
-if __name__ == "__main__":
-    # 簡單測試
-    print("🚀 Testing TRTYoloDetector...")
-    detector = TRTYoloDetector()
-    dummy_input = torch.randn(1, 3, 640, 640, device="cuda", dtype=torch.float32)
-
-    # 預熱
-    _b, _s, _c, _i = detector.detect(dummy_input)
-    torch.cuda.synchronize()
-
-    import time
-
-    start = time.perf_counter()
-    for i in range(100):
-        boxes, scores, classes, ids = detector.detect(dummy_input)
-    torch.cuda.synchronize()
-
-    print(
-        f"⚡ Average Native TRT Latency: {(time.perf_counter() - start):.2f} ms (for 100 iterations)"
-    )
-    print(f"✅ Found {boxes.size(0)} objects in dummy frame.")
