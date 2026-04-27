@@ -2,7 +2,7 @@
 
 Skipped automatically when any of the following are unavailable:
   - CUDA GPU
-  - models/yolo/yolo26s_batch4.engine
+  - models/yolo/yolo26s_batch6.engine
   - models/embedding/google_siglip2-base-patch16-224.engine
   - datasets/MOT17/train/MOT17-04-SDP/
 """
@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "build"))
 
-ENGINE = ROOT / "models/yolo/yolo26s_batch4.engine"
+ENGINE = ROOT / "models/yolo/yolo26s_batch6.engine"
 REID_ENGINE = ROOT / "models/embedding/google_siglip2-base-patch16-224.engine"
 DATA_ROOT = ROOT / "datasets/MOT17"
 SEQ = "MOT17-04-SDP"

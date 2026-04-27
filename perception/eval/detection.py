@@ -231,6 +231,45 @@ def detect_single_patch_640(detector, pool, h_orig, w_orig, preprocess_modes):
     return boxes, scores, classes
 
 
+def detect_960p_3x2_tiled(detector, pool, h_orig, w_orig, preprocess_modes):
+    """3×2 tiling on 960p canvas with overlap. Two batch-4 passes (6 tiles).
+    x: 3 cols at stride=160 on 960p (75% x-overlap, same scale as 2×2).
+    y: 2 rows at stride=320 on 960p (50% y-overlap, same as 2×2).
+    """
+    if w_orig <= 960 and h_orig <= 960:
+        boxes, scores, classes = detect_single_patch_640(detector, pool, h_orig, w_orig, preprocess_modes)
+        return boxes, scores, classes, False
+
+    r = 960.0 / max(h_orig, w_orig)
+    h_new, w_new = int(h_orig * r), int(w_orig * r)
+    img_resized = torch.nn.functional.interpolate(
+        pool.frame_buffer.unsqueeze(0), size=(h_new, w_new)
+    ).squeeze(0)
+    pool.canvas_960p.fill_(114.0 / 255.0)
+    y_off = (960 - h_new) // 2
+    x_off = (960 - w_new) // 2
+    pool.canvas_960p[:, y_off:y_off + h_new, x_off:x_off + w_new].copy_(img_resized)
+
+    # Batch 6: 6 tiles in one pass
+    pool.tiles_batch6[0].copy_(pool.canvas_960p[:, 0:640,   0:640])
+    pool.tiles_batch6[1].copy_(pool.canvas_960p[:, 0:640, 160:800])
+    pool.tiles_batch6[2].copy_(pool.canvas_960p[:, 0:640, 320:960])
+    pool.tiles_batch6[3].copy_(pool.canvas_960p[:, 320:960,  0:640])
+    pool.tiles_batch6[4].copy_(pool.canvas_960p[:, 320:960, 160:800])
+    pool.tiles_batch6[5].copy_(pool.canvas_960p[:, 320:960, 320:960])
+
+    raw = detector.detect_raw(pool.tiles_batch6)
+
+    boxes = raw[:, :, :4].clone()
+    boxes[:, :, [0, 2]] = (boxes[:, :, [0, 2]] + pool.tile_3x2_dx - x_off) / r
+    boxes[:, :, [1, 3]] = (boxes[:, :, [1, 3]] + pool.tile_3x2_dy - y_off) / r
+
+    all_boxes = boxes.reshape(-1, 4)
+    all_scores = raw[:, :, 4].reshape(-1)
+    all_classes = raw[:, :, 5].reshape(-1)
+    return all_boxes, all_scores, all_classes, True
+
+
 def detect_adaptive_960_tiled(detector, pool, h_orig, w_orig, preprocess_modes):
     if w_orig <= 960 and h_orig <= 960:
         boxes, scores, classes = detect_single_patch_640(

@@ -207,7 +207,8 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
              py::arg("mid_thresh") = 0.40f,
              py::arg("confirm_streak") = 3,
              py::arg("confirm_score_thresh") = 0.50f,
-             py::arg("adaptive_confirmation") = false)
+             py::arg("adaptive_confirmation") = false,
+             py::arg("new_track_thresh") = -1.0f)
         .def("set_reid_params", &GPUByteTracker::set_reid_params,
              py::arg("cos_threshold"), py::arg("iou_low"), py::arg("iou_high"), py::arg("weight"))
         .def("update_reference_features", [](GPUByteTracker& self, uintptr_t ids_ptr, uintptr_t features_ptr, int num, uintptr_t stream_ptr) {

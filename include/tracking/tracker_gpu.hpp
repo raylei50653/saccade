@@ -67,7 +67,8 @@ public:
         float mid_thresh = 0.40f,
         int confirm_streak = 3,
         float confirm_score_thresh = 0.50f,
-        bool adaptive_confirmation = false
+        bool adaptive_confirmation = false,
+        float new_track_thresh = -1.0f
     );
     void set_reid_params(float cos_threshold, float iou_low, float iou_high, float weight);
     void update_reference_features(int* track_ids, float* features_ptr, int num, cudaStream_t stream);

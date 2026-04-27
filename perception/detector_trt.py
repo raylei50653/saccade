@@ -19,7 +19,7 @@ class TRTYoloDetector:
 
     def __init__(
         self,
-        engine_path: str = "models/yolo/yolo26s_batch4.engine",
+        engine_path: str = "models/yolo/yolo26s_batch6.engine",
         device: str = "cuda:0",
     ):
         self.device = device

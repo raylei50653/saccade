@@ -111,7 +111,7 @@ __global__ void compute_cost_matrix_kernel(
     const float* trk_states, const float* det_boxes,
     const float* trk_embeds, const float* det_embeds,
     float* cost_matrix, int n_trk, int n_det, int embed_dim,
-    float iou_weight, float cos_threshold, float gate_threshold) 
+    float reid_weight, float cos_threshold, float gate_threshold)
 {
     int t = blockIdx.y * blockDim.y + threadIdx.y;
     int d = blockIdx.x * blockDim.x + threadIdx.x;
@@ -124,7 +124,10 @@ __global__ void compute_cost_matrix_kernel(
 
     float dx = st[0] - (b2[0] + b2[2]) * 0.5f;
     float dy = st[1] - (b2[1] + b2[3]) * 0.5f;
-    if (dx*dx + dy*dy > gate_threshold * gate_threshold) {
+    float dist_sq = dx*dx + dy*dy;
+    float gate_sq = gate_threshold * gate_threshold;
+
+    if (dist_sq > gate_sq) {
         cost_matrix[t * n_det + d] = 1.0f; return;
     }
 
@@ -139,8 +142,14 @@ __global__ void compute_cost_matrix_kernel(
         const float* e2 = det_embeds + d * embed_dim;
         for (int k = 0; k < embed_dim; ++k) cos_sim += e1[k] * e2[k];
     }
+
     float cost = 1.0f - iou;
-    if (cos_sim > cos_threshold) cost = (1.0f - iou_weight) * cost + iou_weight * (1.0f - cos_sim);
+    if (cos_sim > cos_threshold) {
+        // Distance decay: similarity decreases as distance increases towards gate_threshold
+        float dist_decay = expf(-2.0f * (dist_sq / gate_sq));
+        float decayed_sim = cos_sim * dist_decay;
+        cost = (1.0f - reid_weight) * cost + reid_weight * (1.0f - decayed_sim);
+    }
     cost_matrix[t * n_det + d] = cost;
 }
 
@@ -440,6 +449,11 @@ public:
                 track_thresh_,
                 high_thresh_
             );
+            const float effective_new_track_thresh = std::clamp(
+                new_track_thresh_ * std::max(mid_thresh_scale, 0.01f),
+                track_thresh_,
+                high_thresh_
+            );
 
             // Stage 1: High-conf dets -> All active tracks
             kernel::fused_sinkhorn_topk_kernel<<<max_objs_, 128, 0, stream>>>(
@@ -519,11 +533,16 @@ public:
             track_thresh_,
             high_thresh_
         );
+        const float effective_new_track_thresh = std::clamp(
+            new_track_thresh_ * std::max(mid_thresh_scale, 0.01f),
+            track_thresh_,
+            high_thresh_
+        );
 
         if (num_dets > 0) {
             int n_new = 0;
             for (int d = 0; d < num_dets; ++d) {
-                if (d_det_to_trk_h_[d] >= 0 || h_det_scores_inp[d] < effective_mid_thresh) continue;
+                if (d_det_to_trk_h_[d] >= 0 || h_det_scores_inp[d] < effective_new_track_thresh) continue;
                 int slot = -1;
                 for (int i = 0; i < max_objs_; ++i) {
                     if (!h_active_raw_[i]) { slot = i; break; }
@@ -588,9 +607,10 @@ public:
 
     void set_params(float track_thresh, float high_thresh, float match_thresh, int track_buffer,
                     float mid_thresh, int confirm_streak, float confirm_score_thresh,
-                    bool adaptive_confirmation) {
+                    bool adaptive_confirmation, float new_track_thresh) {
         track_thresh_ = track_thresh; high_thresh_ = high_thresh; match_thresh_ = match_thresh; max_age_ = track_buffer;
         mid_thresh_ = mid_thresh;
+        new_track_thresh_ = new_track_thresh >= 0.0f ? new_track_thresh : mid_thresh;
         confirm_streak_ = std::max(confirm_streak, 1);
         confirm_score_thresh_ = confirm_score_thresh;
         adaptive_confirmation_ = adaptive_confirmation;
@@ -639,7 +659,7 @@ private:
     }
 
     int max_objs_, embed_dim_, track_id_counter_, max_assoc_;
-    float track_thresh_ = 0.1f, high_thresh_ = 0.5f, match_thresh_ = 0.8f, mid_thresh_ = 0.40f;
+    float track_thresh_ = 0.1f, high_thresh_ = 0.5f, match_thresh_ = 0.8f, mid_thresh_ = 0.40f, new_track_thresh_ = 0.40f;
     float reid_cos_threshold_ = 0.90f, reid_iou_low_ = 0.3f, reid_iou_high_ = 0.6f, reid_weight_ = 0.4f;
     int max_age_ = 30, confirm_streak_ = 3;
     float confirm_score_thresh_ = 0.50f;
@@ -665,8 +685,8 @@ GPUByteTracker::GPUByteTracker(int max_objs, int embedding_dim) : pimpl_(std::ma
 GPUByteTracker::~GPUByteTracker() = default;
 void GPUByteTracker::set_params(float track_thresh, float high_thresh, float match_thresh, int track_buffer,
                                 float mid_thresh, int confirm_streak, float confirm_score_thresh,
-                                bool adaptive_confirmation) {
-    pimpl_->set_params(track_thresh, high_thresh, match_thresh, track_buffer, mid_thresh, confirm_streak, confirm_score_thresh, adaptive_confirmation);
+                                bool adaptive_confirmation, float new_track_thresh) {
+    pimpl_->set_params(track_thresh, high_thresh, match_thresh, track_buffer, mid_thresh, confirm_streak, confirm_score_thresh, adaptive_confirmation, new_track_thresh);
 }
 void GPUByteTracker::set_reid_params(float cos_threshold, float iou_low, float iou_high, float weight) { pimpl_->set_reid_params(cos_threshold, iou_low, iou_high, weight); }
 void GPUByteTracker::update_reference_features(int* track_ids, float* features, int num, cudaStream_t stream) { /* pimpl_->update_reference_features(track_ids, features, num, stream); */ }
@@ -753,4 +773,3 @@ void merge_cross_tile_duplicates_cuda(const float* boxes_ptr, const float* score
 }
 
 } // namespace saccade
-

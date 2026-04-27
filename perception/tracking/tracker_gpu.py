@@ -39,6 +39,7 @@ class GPUByteTracker:
         confirm_streak: int = 3,
         confirm_score_thresh: float = 0.50,
         adaptive_confirmation: bool = False,
+        new_track_thresh: float = -1.0,
     ) -> None:
         """調整追蹤器門檻與參數。"""
         self.tracker.set_params(
@@ -50,6 +51,7 @@ class GPUByteTracker:
             confirm_streak,
             confirm_score_thresh,
             adaptive_confirmation,
+            new_track_thresh,
         )
 
     def set_reid_params(
