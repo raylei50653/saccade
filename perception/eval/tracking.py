@@ -19,7 +19,5 @@ class GlobalTrackIdMapper:
         for (sequence, local_id), global_id in sorted(
             self._mapping.items(), key=lambda item: item[1]
         ):
-            lines.append(
-                f"{sequence}\tlocal_id={local_id}\tglobal_id={global_id}"
-            )
+            lines.append(f"{sequence}\tlocal_id={local_id}\tglobal_id={global_id}")
         return lines

@@ -17,11 +17,13 @@ Usage:
 
 Then compile with trtexec (printed at end of script).
 """
+
 import argparse
 import os
 import torch
 import torch.nn as nn
 import timm
+from typing import cast
 from pathlib import Path
 
 
@@ -33,7 +35,7 @@ class TransReIDWrapper(nn.Module):
         self.backbone = backbone
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        return self.backbone(pixel_values)  # [B, 768]
+        return cast(torch.Tensor, self.backbone(pixel_values))  # [B, 768]
 
 
 def export(

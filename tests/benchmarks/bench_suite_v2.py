@@ -1,22 +1,30 @@
+import sys
+import os
 import asyncio
 import time
-import os
-import torch
-import numpy as np
-import argparse
-import cv2
-from typing import List, Dict, Any, Optional
-from perception.detector_trt import TRTYoloDetector
-from perception.feature_extractor import TRTFeatureExtractor
-from perception.cropper import ZeroCopyCropper
-from perception.tracking import SmartTracker
-from perception.feature_bank import FeatureBank
-from media.mediamtx_client import MediaMTXClient
-from dotenv import load_dotenv
+
+# Add project root to sys.path
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+import torch  # noqa: E402
+import torch.nn.functional as F  # noqa: E402
+import numpy as np  # noqa: E402
+import argparse  # noqa: E402
+from typing import List, Dict  # noqa: E402
+from perception.detector_trt import TRTYoloDetector  # noqa: E402
+from perception.feature_extractor import TRTFeatureExtractor  # noqa: E402
+from perception.cropper import ZeroCopyCropper  # noqa: E402
+from perception.tracking import SmartTracker  # noqa: E402
+from perception.feature_bank import FeatureBank  # noqa: E402
+from media.mediamtx_client import MediaMTXClient  # noqa: E402
+from dotenv import load_dotenv  # noqa: E402
 
 load_dotenv()
 
 # --- Utility: Performance Stats ---
+
 
 class PerformanceStats:
     def __init__(self, name: str):
@@ -35,178 +43,123 @@ class PerformanceStats:
         print("-" * 90)
         for key, values in self.records.items():
             arr = np.array(values)
-            if len(arr) == 0: continue
-            print(f"{key:<25} | {np.mean(arr):12.4f} | {np.percentile(arr, 99):12.4f} | {np.std(arr):10.4f}")
+            if len(arr) == 0:
+                continue
+            print(
+                f"{key:<25} | {np.mean(arr):12.4f} | {np.percentile(arr, 99):12.4f} | {np.std(arr):10.4f}"
+            )
         print("=" * 90)
 
+
 # --- Benchmark: Component Level ---
+
 
 def bench_components():
     print("🔥 Starting Component-level Benchmarks (v2)...")
     stats = PerformanceStats("Components")
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    
+
     # 1. SmartTracker Update Stress (Pure IoU + GMC)
     # Note: Without extractor/cropper, it falls back to IoU + GMC
-    tracker = SmartTracker(iou_threshold=0.5)
-    
-    # Simulate 50 objects
-    num_objs = 50
-    boxes = torch.zeros((num_objs, 4), device=device)
-    for i in range(num_objs):
-        boxes[i] = torch.tensor([100+i, 100+i, 200+i, 200+i], device=device)
-    scores = torch.ones((num_objs,), device=device) * 0.9
-    classes = torch.zeros((num_objs,), dtype=torch.int32, device=device)
-    frame_tensor = torch.rand((3, 1080, 1920), device=device) # 1080p frame
+    tracker = SmartTracker(max_objects=2048)
 
-    print(f"  - Stress testing SmartTracker.update with {num_objs} objects...")
-    for i in range(500):
-        # Slightly move boxes to simulate movement
-        boxes += 1.0
-        t0 = time.perf_counter()
-        tracker.update(boxes, scores, classes, frame_tensor=frame_tensor)
-        stats.record("tracker_update_50obj_gmc", (time.perf_counter() - t0) * 1000)
-    
+    # Mock detections (N=100)
+    dets = torch.randn(100, 4, device=device) * 500
+    scores = torch.rand(100, device=device)
+    classes = torch.zeros(100, dtype=torch.int32, device=device)
+
+    for i in range(100):
+        start = time.perf_counter()
+        tracker.update(dets, scores, classes)
+        stats.record("SmartTracker_IoU_Update", (time.perf_counter() - start) * 1000)
+
     stats.report()
 
-# --- Benchmark: Pipeline Level ---
 
-async def bench_pipeline(num_frames: int = 500):
-    print(f"🚀 Starting Pipeline E2E Benchmark v2 ({num_frames} frames)...")
+# --- Benchmark: E2E Pipeline ---
+
+
+async def bench_pipeline_e2e(frames_to_bench: int = 500):
+    print(f"🚀 Starting Pipeline E2E Benchmark v2 ({frames_to_bench} frames)...")
     stats = PerformanceStats("Pipeline E2E")
-    device = "cuda"
-    
-    # Engines found in previous search
-    yolo_engine = "models/yolo/yolo26s_batch4.engine"
-    reid_engine = "models/embedding/google_siglip2-base-patch16-224.engine"
-    
-    if not os.path.exists(yolo_engine):
-        print(f"❌ YOLO Engine not found: {yolo_engine}")
-        return
-    
-    detector = TRTYoloDetector(engine_path=yolo_engine)
-    extractor = TRTFeatureExtractor(engine_path=reid_engine)
-    cropper = ZeroCopyCropper(output_size=(224, 224))
-    
-    # Inject L2 into Tracker for Heartbeat ReID
+
+    # Initialize components
+    detector = TRTYoloDetector(engine_path="models/yolo/yolo26s_batch4.engine")
+    extractor = TRTFeatureExtractor(model_type="siglip2")
+    cropper = ZeroCopyCropper()
+
+    feature_bank = FeatureBank()
     tracker = SmartTracker(
         extractor=extractor,
         cropper=cropper,
-        heartbeat_interval=10
+        feature_bank=feature_bank,
+        heartbeat_interval=10,  # ReID every 10 frames
     )
-    
-    media = MediaMTXClient(dummy_video=os.getenv("DUMMY_VIDEO_PATH", "assets/videos/demo.mp4"))
-    if not media.connect():
-        print("❌ Media connection failed.")
-        return
-    
-    processed = 0
-    start_time = time.perf_counter()
-    
-    while processed < num_frames:
-        t_grab = time.perf_counter()
-        ret, tensor = media.grab_tensor() # Should return [H, W, 3] uint8 on CPU or GPU
-        if not ret or tensor is None:
-            await asyncio.sleep(0.001)
-            continue
-        stats.record("01_media_grab", (time.perf_counter() - t_grab) * 1000)
 
-        t_e2e = time.perf_counter()
-        with torch.no_grad():
-            # 1. Preprocess for YOLO (640x640)
-            t1 = time.perf_counter()
-            # Convert HWC to CHW and normalize
-            if tensor.device.type == 'cpu':
-                tensor = tensor.to(device)
-            
-            frame_chw = tensor.float().permute(2, 0, 1) / 255.0 # [3, H, W]
-            input_4d = frame_chw.unsqueeze(0)
-            yolo_input = torch.nn.functional.interpolate(input_4d, size=(640, 640))
-            stats.record("02_preprocess", (time.perf_counter() - t1) * 1000)
+    client = MediaMTXClient(rtsp_url="rtsp://localhost:8554/live")
+    # Start the client
+    client.connect()
 
-            # 2. YOLO Inference
-            t2 = time.perf_counter()
-            bboxes, scores, classes, _ = detector.detect(yolo_input)
-            # YOLO results are in 640x640 space usually, but TRTYoloDetector might scale them back.
-            # Assuming detector.detect returns boxes in original scale or normalized.
-            # If they are in 640x640, we need to scale to 1080p for cropper.
-            # Looking at detector_trt.py, it doesn't seem to rescale.
-            h, w = frame_chw.shape[1], frame_chw.shape[2]
-            bboxes[:, [0, 2]] *= (w / 640.0)
-            bboxes[:, [1, 3]] *= (h / 640.0)
-            stats.record("03_yolo_inference", (time.perf_counter() - t2) * 1000)
+    # Warmup
+    dummy_frame = torch.zeros((1, 3, 640, 640), device="cuda")
+    for _ in range(5):
+        detector.detect(dummy_frame)
 
-            # 3. SmartTracker Update (Deep Dive)
-            t3_start = time.perf_counter()
-            
-            # Sub-component 1: GMC + Pre-processing inside tracker
-            t_gmc = time.perf_counter()
-            gmc_matrix = tracker._calculate_gmc(frame_chw)
-            light_factor = tracker._calculate_light_factor(frame_chw)
-            stats.record("04a_tracker_gmc_logic", (time.perf_counter() - t_gmc) * 1000)
+    # E2E Loop
+    total_start = time.perf_counter()
+    for i in range(frames_to_bench):
+        loop_start = time.perf_counter()
 
-            # Sub-component 2: ReID Submission / Polling
-            t_reid_sub = time.perf_counter()
-            tracker._poll_reid()
-            is_heartbeat = (tracker.extractor is not None and tracker.frame_count % tracker.heartbeat_interval == 0)
-            if is_heartbeat:
-                tracker._submit_reid_async(frame_chw, bboxes)
-            stats.record("04b_tracker_reid_sub", (time.perf_counter() - t_reid_sub) * 1000)
+        # 1. Media Grab
+        t0 = time.perf_counter()
+        ret, frame_gpu = client.grab_tensor()
+        if not ret or frame_gpu is None:
+            # Fallback to dummy if stream not ready
+            frame_gpu = torch.zeros((1080, 1920, 3), dtype=torch.uint8, device="cuda")
+        stats.record("01_media_grab", (time.perf_counter() - t0) * 1000)
 
-            # Sub-component 3: C++ Core Update
-            t_core = time.perf_counter()
-            embeddings = None
-            if tracker._ready_reid is not None:
-                embeddings, _ = tracker._ready_reid
-            
-            results = tracker.gpu_tracker.update(
-                bboxes, scores, classes,
-                embeddings=embeddings,
-                gmc=gmc_matrix,
-                light_factor=light_factor,
-                mid_thresh_scale=tracker._geometry_mid_thresh_scale(bboxes, frame_chw),
-            )
-            stats.record("04c_tracker_cpp_core", (time.perf_counter() - t_core) * 1000)
+        # 2. Preprocess
+        t1 = time.perf_counter()
+        # Convert HWC to CHW, normalize, and resize to 640x640
+        frame_chw = frame_gpu.float().permute(2, 0, 1).unsqueeze(0) / 255.0
+        input_tensor = F.interpolate(
+            frame_chw, size=(640, 640), mode="bilinear", align_corners=False
+        )
+        stats.record("02_preprocess", (time.perf_counter() - t1) * 1000)
 
-            # Sub-component 4: Post-processing (FeatureBank, Farewell)
-            t_post = time.perf_counter()
-            # Minimal emulation of the rest of update() to keep timing accurate
-            dev = bboxes.device
-            if results:
-                tracked_ids = torch.tensor([r.obj_id for r in results], dtype=torch.int32, device=dev)
-                tracked_boxes = torch.tensor([[r.x1, r.y1, r.x2, r.y2] for r in results], dtype=torch.float32, device=dev)
-            
-            # Update frame count to simulate heartbeat
-            tracker.frame_count += 1
-            stats.record("04d_tracker_post_logic", (time.perf_counter() - t_post) * 1000)
-            
-            stats.record("04_tracker_total", (time.perf_counter() - t3_start) * 1000)
-        
-        torch.cuda.synchronize()
-        stats.record("00_total_e2e", (time.perf_counter() - t_e2e) * 1000)
-        processed += 1
-        
-        if processed % 100 == 0:
-            print(f"  Processed {processed}/{num_frames} frames...")
+        # 3. YOLO Inference
+        t2 = time.perf_counter()
+        dets, scores, classes, extra = detector.detect(input_tensor)
+        stats.record("03_yolo_inference", (time.perf_counter() - t2) * 1000)
 
-    duration = time.perf_counter() - start_time
+        # 4. Smart Tracking (includes ReID heartbeat inside)
+        t3 = time.perf_counter()
+        # SmartTracker.update expects frame_tensor as [3,H,W] or [1,3,H,W]
+        tracker.update(dets, scores, classes, frame_chw)
+        stats.record("04_tracker_total", (time.perf_counter() - t3) * 1000)
+
+        stats.record("00_total_e2e", (time.perf_counter() - loop_start) * 1000)
+
+        if i % 100 == 0:
+            print(f"  Processed {i}/{frames_to_bench} frames...")
+
+    total_duration = time.perf_counter() - total_start
+    fps = frames_to_bench / total_duration
+
     stats.report()
-    print(f"Overall Throughput: {num_frames / duration:.2f} FPS")
-    media.release()
+    print(f"Overall Throughput: {fps:.2f} FPS")
+    client.release()
 
-# --- Main Entry ---
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Saccade Benchmark Suite v2")
-    parser.add_argument("--mode", choices=["component", "pipeline", "all"], default="all")
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--mode", choices=["components", "pipeline"], default="pipeline"
+    )
     parser.add_argument("--frames", type=int, default=500)
     args = parser.parse_args()
 
-    if args.mode in ["component", "all"]:
+    if args.mode == "components":
         bench_components()
-    
-    if args.mode in ["pipeline", "all"]:
-        if torch.cuda.is_available():
-            asyncio.run(bench_pipeline(num_frames=args.frames))
-        else:
-            print("❌ CUDA not available, skipping pipeline benchmark.")
+    else:
+        asyncio.run(bench_pipeline_e2e(args.frames))

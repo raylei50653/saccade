@@ -2,6 +2,7 @@ import argparse
 import configparser
 from collections import defaultdict
 from pathlib import Path
+from typing import Any, Dict
 
 import cv2
 import numpy as np
@@ -10,7 +11,7 @@ import torch
 from saccade_tracking_ext import GPUByteTracker
 
 
-def load_seq_info(seq_path: Path) -> dict:
+def load_seq_info(seq_path: Path) -> Dict[str, Any]:
     config = configparser.ConfigParser()
     config.read(seq_path / "seqinfo.ini")
     return {

@@ -1,10 +1,12 @@
+import os
 import torch
 import tensorrt as trt
-from typing import Dict, Tuple, Optional, cast, List
+from typing import Dict, Tuple, Optional, List
 from perception.tracking import GPUByteTracker
 
 try:
     from saccade_perception_ext import TRTEngine as CppTRTEngine
+
     HAS_CPP_EXT = True
 except ImportError as e:
     print(f"❌ [TRT] Failed to import C++ extension: {e}")
@@ -23,7 +25,17 @@ class TRTYoloDetector:
         device: str = "cuda:0",
     ):
         self.device = device
-        self.use_cpp = HAS_CPP_EXT
+        backend = os.environ.get("SACCADE_TRT_BACKEND", "auto").strip().lower()
+        if backend not in {"auto", "cpp", "python"}:
+            raise ValueError(
+                "SACCADE_TRT_BACKEND must be one of: auto, cpp, python"
+            )
+
+        self.use_cpp = backend != "python" and HAS_CPP_EXT
+        if backend == "cpp" and not HAS_CPP_EXT:
+            raise RuntimeError(
+                "SACCADE_TRT_BACKEND=cpp requested, but saccade_perception_ext is unavailable"
+            )
         self.input_name: str = "images"
         self.output_name: str = "output0"
         self.output_names: List[str] = []
@@ -37,7 +49,9 @@ class TRTYoloDetector:
             self.cpp_engine = CppTRTEngine(engine_path)
             # Use get_tensor_shape instead of get_input_shape as seen in previous grep
             self.input_shape = self.cpp_engine.get_tensor_shape(self.input_name)
-            self.output_shape = tuple(self.cpp_engine.get_tensor_shape(self.output_name))
+            self.output_shape = tuple(
+                self.cpp_engine.get_tensor_shape(self.output_name)
+            )
             self.output_names = [self.output_name]
             self.is_dynamic = self.output_shape[0] == -1
             self.tracker = GPUByteTracker(max_objects=2048)
@@ -45,12 +59,13 @@ class TRTYoloDetector:
             return
         else:
             print(
-                f"⚠️ [TRT] C++ Extension not found, using Python Native API for {engine_path}"
+                f"⚠️ [TRT] Using Python Native API for {engine_path} "
+                f"(backend={backend}, cpp_available={HAS_CPP_EXT})"
             )
             self.logger = trt.Logger(trt.Logger.ERROR)
             with open(engine_path, "rb") as f, trt.Runtime(self.logger) as runtime:
                 self.engine = runtime.deserialize_cuda_engine(f.read())
-            
+
             if self.engine is None:
                 raise RuntimeError(f"Failed to deserialize engine from {engine_path}")
 
@@ -63,7 +78,7 @@ class TRTYoloDetector:
                     self.input_name = name
                 elif mode == trt.TensorIOMode.OUTPUT:
                     self.output_name = name
-            
+
             self.output_shape = tuple(self.engine.get_tensor_shape(self.output_name))
 
         # 💡 偵測模型是否支援動態 Batch
@@ -119,7 +134,9 @@ class TRTYoloDetector:
         """重置追蹤器狀態，用於切換影片序列時。"""
         self.tracker = GPUByteTracker(max_objects=2048)
 
-    def _empty_result(self) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+    def _empty_result(
+        self,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
         return (
             torch.empty((0, 4), device=self.device),
             torch.empty((0,), device=self.device),
@@ -142,7 +159,7 @@ class TRTYoloDetector:
                 if self.is_dynamic:
                     # Resolve -1 to actual batch_size
                     shape = tuple([batch_size if d == -1 else d for d in shape])
-                
+
                 current = self.output_tensors.get(name)
                 if current is None or tuple(current.shape) != shape:
                     self.output_tensors[name] = torch.empty(
@@ -151,12 +168,14 @@ class TRTYoloDetector:
 
             # 2. 準備 bindings 並執行
             if self.is_dynamic:
-                self.cpp_engine.set_input_shape(self.input_name, list(input_tensor.shape))
+                self.cpp_engine.set_input_shape(
+                    self.input_name, list(input_tensor.shape)
+                )
 
             binding_ptrs = [input_tensor.data_ptr()]
             for name in self.output_names:
                 binding_ptrs.append(self.output_tensors[name].data_ptr())
-            
+
             self.cpp_engine.infer(binding_ptrs, stream)
             return self.output_tensors
 
@@ -168,7 +187,9 @@ class TRTYoloDetector:
         for name in self.output_names:
             shape = tuple(self.context.get_tensor_shape(name))
             if any(dim < 0 for dim in shape):
-                shape = self._resolve_output_shape(self.engine.get_tensor_shape(name), batch_size)
+                shape = self._resolve_output_shape(
+                    self.engine.get_tensor_shape(name), batch_size
+                )
 
             current = self.output_tensors.get(name)
             if current is None or tuple(current.shape) != shape:
@@ -210,23 +231,27 @@ class TRTYoloDetector:
             results = output_tensor[i]
             mask = results[:, 4] > conf_threshold
             valid_results = results[mask]
-            
+
             if valid_results.size(0) == 0:
                 batch_results.append(self._empty_result())
                 continue
-                
+
             boxes = valid_results[:, :4].contiguous()
             scores = valid_results[:, 4].contiguous()
             classes = valid_results[:, 5].to(torch.int32).contiguous()
-            
+
             extra: Optional[torch.Tensor] = None
             if "embeddings" in outputs:
                 extra = outputs["embeddings"][i][mask].contiguous()
             else:
-                extra = valid_results[:, 6:].contiguous() if valid_results.size(1) > 6 else None
+                extra = (
+                    valid_results[:, 6:].contiguous()
+                    if valid_results.size(1) > 6
+                    else None
+                )
 
             batch_results.append((boxes, scores, classes, extra))
-            
+
         return batch_results
 
     def detect(

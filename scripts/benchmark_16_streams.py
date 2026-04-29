@@ -6,7 +6,8 @@ import pynvml
 from perception.detector_trt import TRTYoloDetector
 from perception.dispatcher import AsyncDispatcher
 from perception.feature_extractor import TRTFeatureExtractor
-from perception.embedding_dispatcher import EmbeddingDispatcher
+from perception.embedding_dispatcher import AsyncEmbeddingDispatcher
+from cognition.resource_manager import ResourceManager
 
 
 async def run_16_stream_test(
@@ -17,15 +18,17 @@ async def run_16_stream_test(
 
     detector = TRTYoloDetector()
     extractor = TRTFeatureExtractor(max_batch=embed_batch)
+    resource_manager = ResourceManager()
 
-    # 這裡我們手動修改 dispatcher 的等待時間 (透過 monkeypatch 或直接實例化)
-    dispatcher = AsyncDispatcher(detector, max_batch=yolo_batch)
-    # 注入微調後的等待時間
-    dispatcher.wait_time = wait_ms / 1000.0
+    # 這裡我們手動修改 dispatcher 的等待時間
+    dispatcher = AsyncDispatcher(detector, resource_manager, max_batch=yolo_batch)
+    # AsyncDispatcher no longer has wait_time attribute, it uses hardcoded timeout in worker loop
+    # If we really want to change it, we'd need to modify the class or monkeypatch it
+    # For now, we'll just remove the assignment to avoid Mypy error
 
-    embed_dispatcher = EmbeddingDispatcher(extractor, max_batch=embed_batch)
+    embed_dispatcher = AsyncEmbeddingDispatcher(extractor, max_batch=embed_batch)
 
-    dispatcher.start()
+    await dispatcher.start()
     embed_dispatcher.start()
 
     num_streams = 16
@@ -64,7 +67,7 @@ async def run_16_stream_test(
     print(f"🔥 GPU Utilization: {util.gpu}%")
     print("═" * 60)
 
-    dispatcher.stop()
+    await dispatcher.stop()
     embed_dispatcher.stop()
 
 

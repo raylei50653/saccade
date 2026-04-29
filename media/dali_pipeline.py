@@ -55,7 +55,6 @@ class DALIVideoPipeline(Pipeline):
             std=[255.0, 255.0, 255.0],
         )
 
-
         return normalized
 
 

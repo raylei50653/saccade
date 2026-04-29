@@ -15,14 +15,14 @@ set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 # 2. 依賴搜尋
-find_package(CUDA REQUIRED)
+find_package(CUDAToolkit REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GSTREAMER REQUIRED gstreamer-1.0 gstreamer-app-1.0 gstreamer-video-1.0)
 
 include_directories(
     ${PROJECT_SOURCE_DIR}/include
-    ${CUDA_INCLUDE_DIRS}
+    ${CUDAToolkit_INCLUDE_DIRS}
     ${GSTREAMER_INCLUDE_DIRS}
     ${OpenCV_INCLUDE_DIRS}
 )
@@ -34,12 +34,6 @@ add_library(saccade_perception SHARED
     src/perception/preprocessor_gpu.cu
     src/perception/feature_extractor.cpp
 )
-target_link_libraries(saccade_perception
-    nvinfer
-    nvinfer_plugin
-    ${CUDA_LIBRARIES}
-    ${OpenCV_LIBS}
-)
 # 設定導出宏
 target_compile_definitions(saccade_perception PRIVATE SACCADE_EXPORT_PERCEPTION)
 
@@ -48,10 +42,11 @@ add_library(saccade_tracking SHARED
     src/tracking/tracker_gpu.cu
     src/tracking/gmc.cpp
     src/tracking/gmc_kernel.cu
+    src/tracking/pipeline.cpp
 )
 set_target_properties(saccade_tracking PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 target_link_libraries(saccade_tracking
-    ${CUDA_LIBRARIES}
+    CUDA::cudart
     ${OpenCV_LIBS}
     saccade_perception
 )
@@ -63,37 +58,99 @@ add_library(saccade_media SHARED
 )
 target_link_libraries(saccade_media
     ${GSTREAMER_LIBRARIES}
-    ${CUDA_LIBRARIES}
+    CUDA::cudart
     saccade_perception
 )
 target_compile_definitions(saccade_media PRIVATE SACCADE_EXPORT_MEDIA)
 
 # 6. Python Bindings
+if(DEFINED PYTHON_EXECUTABLE AND NOT DEFINED Python3_EXECUTABLE)
+    set(Python3_EXECUTABLE "${PYTHON_EXECUTABLE}" CACHE FILEPATH "Python 3 executable" FORCE)
+endif()
+
+if(NOT DEFINED Python3_EXECUTABLE)
+    set(_repo_venv_python "${PROJECT_SOURCE_DIR}/.venv/bin/python3")
+    if(EXISTS "${_repo_venv_python}")
+        set(Python3_EXECUTABLE "${_repo_venv_python}" CACHE FILEPATH "Python 3 executable" FORCE)
+    endif()
+endif()
+
+if(NOT DEFINED Python3_EXECUTABLE AND DEFINED ENV{VIRTUAL_ENV})
+    set(_venv_python "$ENV{VIRTUAL_ENV}/bin/python")
+    if(EXISTS "${_venv_python}")
+        set(Python3_EXECUTABLE "${_venv_python}" CACHE FILEPATH "Python 3 executable" FORCE)
+    endif()
+endif()
+
 find_package(Python3 3.12 EXACT REQUIRED COMPONENTS Interpreter Development.Module)
 execute_process(
     COMMAND ${Python3_EXECUTABLE} -c "import pybind11; print(pybind11.get_cmake_dir())"
     OUTPUT_VARIABLE pybind11_DIR
     OUTPUT_STRIP_TRAILING_WHITESPACE
 )
+execute_process(
+    COMMAND ${Python3_EXECUTABLE} -c "import tensorrt_libs; print(tensorrt_libs.__path__[0])"
+    OUTPUT_VARIABLE TENSORRT_LIB_DIR
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
 find_package(pybind11 REQUIRED PATHS ${pybind11_DIR})
+
+find_library(TENSORRT_NVINFER_LIBRARY
+    NAMES nvinfer libnvinfer.so.10
+    PATHS ${TENSORRT_LIB_DIR}
+    NO_DEFAULT_PATH
+    REQUIRED
+)
+find_library(TENSORRT_NVINFER_PLUGIN_LIBRARY
+    NAMES nvinfer_plugin libnvinfer_plugin.so.10
+    PATHS ${TENSORRT_LIB_DIR}
+    NO_DEFAULT_PATH
+    REQUIRED
+)
+
+set(CMAKE_BUILD_RPATH "${TENSORRT_LIB_DIR}")
+list(APPEND CMAKE_INSTALL_RPATH "${TENSORRT_LIB_DIR}")
+
+target_link_libraries(saccade_perception
+    ${TENSORRT_NVINFER_LIBRARY}
+    ${TENSORRT_NVINFER_PLUGIN_LIBRARY}
+    CUDA::cudart
+    ${OpenCV_LIBS}
+)
+set_target_properties(
+    saccade_perception
+    saccade_tracking
+    saccade_media
+    PROPERTIES
+        BUILD_RPATH "${TENSORRT_LIB_DIR}"
+        INSTALL_RPATH "${CMAKE_INSTALL_RPATH}"
+)
 
 pybind11_add_module(saccade_media_ext src/media/gst_client_python.cpp)
 target_link_libraries(saccade_media_ext PRIVATE 
     saccade_media
     ${GSTREAMER_LIBRARIES}
-    ${CUDA_LIBRARIES}
+    CUDA::cudart
 )
 
 pybind11_add_module(saccade_tracking_ext src/tracking/tracker_gpu_python.cpp)
 target_link_libraries(saccade_tracking_ext PRIVATE 
     saccade_tracking
-    ${CUDA_LIBRARIES}
+    CUDA::cudart
 )
 
 pybind11_add_module(saccade_perception_ext src/perception/perception_python.cpp)
 target_link_libraries(saccade_perception_ext PRIVATE 
     saccade_perception
-    ${CUDA_LIBRARIES}
+    CUDA::cudart
+)
+set_target_properties(
+    saccade_media_ext
+    saccade_tracking_ext
+    saccade_perception_ext
+    PROPERTIES
+        BUILD_RPATH "${TENSORRT_LIB_DIR}"
+        INSTALL_RPATH "${CMAKE_INSTALL_RPATH}"
 )
 
 # 7. 主程式
@@ -103,6 +160,12 @@ target_link_libraries(saccade_node
     saccade_tracking
     saccade_media
     ${GSTREAMER_LIBRARIES}
+)
+set_target_properties(
+    saccade_node
+    PROPERTIES
+        BUILD_RPATH "${TENSORRT_LIB_DIR}"
+        INSTALL_RPATH "${CMAKE_INSTALL_RPATH}"
 )
 
 # add_executable(test_extractor src/perception/test_extractor.cpp)

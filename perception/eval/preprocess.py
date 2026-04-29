@@ -1,8 +1,9 @@
 import torch
 from dataclasses import dataclass
+from typing import List
 
 
-def parse_preprocess(value):
+def parse_preprocess(value: str) -> List[str]:
     modes = [mode.strip().lower() for mode in value.split(",") if mode.strip()]
     if not modes or "none" in modes:
         return []
@@ -54,13 +55,19 @@ def geometry_mid_thresh_scale(
 
     if not state.initialized:
         state.median_ratio_ema = median_ratio
-        raw_scale = max(min_scale, min(max_scale, ref_height_ratio / state.median_ratio_ema))
+        raw_scale = max(
+            min_scale, min(max_scale, ref_height_ratio / state.median_ratio_ema)
+        )
         state.prev_scale = raw_scale
         state.initialized = True
         return raw_scale
 
-    state.median_ratio_ema = ema_beta * state.median_ratio_ema + (1.0 - ema_beta) * median_ratio
-    raw_scale = max(min_scale, min(max_scale, ref_height_ratio / state.median_ratio_ema))
+    state.median_ratio_ema = (
+        ema_beta * state.median_ratio_ema + (1.0 - ema_beta) * median_ratio
+    )
+    raw_scale = max(
+        min_scale, min(max_scale, ref_height_ratio / state.median_ratio_ema)
+    )
     diff = raw_scale - state.prev_scale
     if diff < 0.0:
         step = max(diff, -loosen_step) if loosen_step > 0.0 else diff
@@ -70,12 +77,21 @@ def geometry_mid_thresh_scale(
     return state.prev_scale
 
 
-def apply_frame_preprocess(frame, modes, gamma, gamma_luma_threshold, contrast):
+def apply_frame_preprocess(
+    frame: torch.Tensor,
+    modes: List[str],
+    gamma: float,
+    gamma_luma_threshold: float,
+    contrast: float,
+) -> None:
     if not modes:
         return
     for mode in modes:
         if mode == "gamma":
-            if gamma_luma_threshold <= 0.0 or float(frame.mean()) < gamma_luma_threshold:
+            if (
+                gamma_luma_threshold <= 0.0
+                or float(frame.mean()) < gamma_luma_threshold
+            ):
                 frame.copy_(frame.clamp(0.0, 1.0).pow(gamma))
         elif mode == "contrast":
             mean = frame.mean()

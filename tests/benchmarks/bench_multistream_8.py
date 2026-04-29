@@ -3,8 +3,14 @@ import time
 import torch
 import cv2
 import os
-from perception.detector_trt import TRTYoloDetector
-from perception.dispatcher import AsyncDispatcher
+import sys
+
+# Add project root to sys.path
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+from perception.detector_trt import TRTYoloDetector  # noqa: E402
+from perception.dispatcher import AsyncDispatcher  # noqa: E402
 
 
 # 🚀 最佳化：預載圖片到 GPU 記憶體以減少 I/O 影響

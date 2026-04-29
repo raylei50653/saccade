@@ -1,9 +1,9 @@
 from pathlib import Path
 
 
-def convert_mot17_to_yolo(data_root):
-    data_root = Path(data_root)
-    for seq in (data_root / "train").iterdir():
+def convert_mot17_to_yolo(data_root: str) -> None:
+    root_path = Path(data_root)
+    for seq in (root_path / "train").iterdir():
         if not seq.name.startswith("MOT17-"):
             continue
 

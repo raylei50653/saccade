@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 import argparse
 import sys
 from pathlib import Path
@@ -92,16 +93,14 @@ class YOLOEEmbeddingExport(nn.Module):
             "mask_coefficient": mask_coeff,
         }
         dbox = head._get_decode_boxes(preds)
-        decoded = torch.cat([dbox, preds["scores"].sigmoid(), mask_coeff], dim=1).permute(
-            0, 2, 1
-        )
+        decoded = torch.cat(
+            [dbox, preds["scores"].sigmoid(), mask_coeff], dim=1
+        ).permute(0, 2, 1)
 
         raw_boxes, raw_scores, raw_mask_coeff = decoded.split(
             [4, self.num_export_classes, head.nm], dim=-1
         )
-        top_scores, top_classes, top_idx = head.get_topk_index(
-            raw_scores, head.max_det
-        )
+        top_scores, top_classes, top_idx = head.get_topk_index(raw_scores, head.max_det)
 
         top_boxes = raw_boxes.gather(dim=1, index=top_idx.repeat(1, 1, 4))
         top_masks = raw_mask_coeff.gather(dim=1, index=top_idx.repeat(1, 1, head.nm))

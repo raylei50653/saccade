@@ -2,10 +2,10 @@ import asyncio
 import time
 import torch
 import numpy as np
-from perception.detector_trt import TRTYoloDetector
-from perception.tracker import SmartTracker
-from perception.cropper import ZeroCopyCropper
-from perception.feature_extractor import TRTFeatureExtractor
+from perception.detector_trt import TRTYoloDetector  # noqa: E402
+from perception.tracker import SmartTracker  # noqa: E402
+from perception.cropper import ZeroCopyCropper  # noqa: E402
+from perception.feature_extractor import TRTFeatureExtractor  # noqa: E402
 
 
 async def run_mot20_stress_test(num_frames=500, objects_per_frame=150):

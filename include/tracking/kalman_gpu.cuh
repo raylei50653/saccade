@@ -168,15 +168,16 @@ __host__ __device__ __forceinline__ void get_Q(float h, float Q[64]) {
 }
 
 // 取得測量噪聲矩陣 R
-__host__ __device__ __forceinline__ void get_R(float h, float R[16], float light_factor = 0.0f) {
+// nsa_multiplier: NSA-Kalman noise scale, = max(0.05, (1-score)^2) when enabled, else 1.0
+__host__ __device__ __forceinline__ void get_R(float h, float R[16], float light_factor = 0.0f, float nsa_multiplier = 1.0f) {
     for (int i = 0; i < 16; ++i) R[i] = 0.0f;
     float std_weight_position = 1.0f / 20.0f;
     float pos_std = std_weight_position * h;
-    
-    float multiplier = 1.0f + 2.0f * light_factor;
-    R[0] = pos_std * pos_std * multiplier; 
-    R[5] = pos_std * pos_std * multiplier; 
-    R[10] = 1e-2f * multiplier; 
+
+    float multiplier = nsa_multiplier * (1.0f + 2.0f * light_factor);
+    R[0] = pos_std * pos_std * multiplier;
+    R[5] = pos_std * pos_std * multiplier;
+    R[10] = 1e-2f * multiplier;
     R[15] = pos_std * pos_std * multiplier;
 }
 
@@ -212,11 +213,12 @@ __host__ __device__ __forceinline__ void predict(float x[8], float P[64]) {
 }
 
 // 卡爾曼更新步
-__host__ __device__ __forceinline__ void update(float x[8], float P[64], const float z[4], float light_factor = 0.0f) {
+// nsa_multiplier: passed through to get_R for Noise Scale Adaptive Kalman
+__host__ __device__ __forceinline__ void update(float x[8], float P[64], const float z[4], float light_factor = 0.0f, float nsa_multiplier = 1.0f) {
     // 1. S = H * P * H^T + R
     // 由於 H = [I, 0]，H*P*H^T 就是 P 的左上 4x4
     float R[16];
-    get_R(x[3], R, light_factor);
+    get_R(x[3], R, light_factor, nsa_multiplier);
     
     float S[16];
     for(int i = 0; i < 4; ++i) {
@@ -272,6 +274,21 @@ __host__ __device__ __forceinline__ void update(float x[8], float P[64], const f
     }
     
     for(int i = 0; i < 64; ++i) P[i] = P_new[i];
+}
+
+// Compute innovation covariance S = H*P*H^T + R and its inverse in one pass.
+// Used for Mahalanobis gating before association (Phase 2).
+// S is the 4x4 top-left block of P plus R.
+__host__ __device__ __forceinline__ void compute_S_inv(
+    const float x[8], const float P[64], float S_inv[16], float light_factor = 0.0f)
+{
+    float R[16];
+    get_R(x[3], R, light_factor, 1.0f);
+    float S[16];
+    for (int i = 0; i < 4; ++i)
+        for (int j = 0; j < 4; ++j)
+            S[i*4+j] = P[i*8+j] + R[i*4+j];
+    invert4x4(S, S_inv);
 }
 
 } // namespace kf_gpu

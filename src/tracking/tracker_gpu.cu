@@ -27,7 +27,6 @@ namespace saccade {
 namespace {
 constexpr int TRACK_EMPTY = 0;
 constexpr int TRACK_TENTATIVE = 1;
-constexpr int TRACK_CONFIRMED = 2;
 }
 
 // --- CUDA Kernels ---
@@ -94,6 +93,130 @@ __global__ void init_covariance_kernel(float* covs, const int* new_slots, int n_
 }
 
 namespace kernel {
+
+// Compute per-track S^-1 (innovation covariance inverse) after predict+GMC, before association.
+// Stores 16 floats (row-major 4x4) per track in s_inv_out.
+__global__ void compute_innovation_sinv_kernel(
+    const float* states, const float* covs, const bool* active,
+    float* s_inv_out, int max_objs)
+{
+    int t = blockIdx.x * blockDim.x + threadIdx.x;
+    if (t >= max_objs) return;
+    float* s_inv = s_inv_out + t * 16;
+    if (!active[t]) {
+        for (int i = 0; i < 16; ++i) s_inv[i] = 0.0f;
+        return;
+    }
+    kf_gpu::compute_S_inv(states + t * 8, covs + t * 64, s_inv);
+}
+
+// Returns Mahalanobis^2 between a detection (x1,y1,x2,y2) and a track predicted state.
+__device__ __forceinline__ float mahal_sq_det(
+    const float* trk_state, const float* det_box, const float* s_inv)
+{
+    float det_h  = fmaxf(det_box[3] - det_box[1], 1e-6f);
+    float det_cx = (det_box[0] + det_box[2]) * 0.5f;
+    float det_cy = (det_box[1] + det_box[3]) * 0.5f;
+    float det_ar = (det_box[2] - det_box[0]) / det_h;
+    float innov[4] = {det_cx - trk_state[0], det_cy - trk_state[1],
+                      det_ar - trk_state[2], det_h  - trk_state[3]};
+    float d2 = 0.0f;
+    for (int i = 0; i < 4; ++i) {
+        float tmp = 0.0f;
+        for (int j = 0; j < 4; ++j) tmp += s_inv[i*4+j] * innov[j];
+        d2 += tmp * innov[i];
+    }
+    return d2;
+}
+
+// Counts per-track how many detections pass the Stage 1 gate:
+//   IoU > iou_gate  OR  Mahalanobis^2 < maha_gate
+__global__ void count_stage1_candidates_kernel(
+    const float* trk_states, const float* det_boxes,
+    const bool* trk_active, int* candidate_count,
+    const float* trk_s_inv,
+    int n_trk, int n_det, float iou_gate, float maha_gate)
+{
+    int t = blockIdx.y * blockDim.y + threadIdx.y;
+    int d = blockIdx.x * blockDim.x + threadIdx.x;
+    if (t >= n_trk || d >= n_det || !trk_active[t]) return;
+
+    const float* st = trk_states + t * 8;
+    float tw = st[2] * st[3], th = st[3];
+    float b1_x1 = st[0] - tw * 0.5f, b1_y1 = st[1] - th * 0.5f;
+    float b1_x2 = st[0] + tw * 0.5f, b1_y2 = st[1] + th * 0.5f;
+    const float* b2 = det_boxes + d * 4;
+
+    float ix1 = fmaxf(b1_x1, b2[0]), iy1 = fmaxf(b1_y1, b2[1]);
+    float ix2 = fminf(b1_x2, b2[2]), iy2 = fminf(b1_y2, b2[3]);
+    float inter = fmaxf(0.0f, ix2 - ix1) * fmaxf(0.0f, iy2 - iy1);
+    float area1 = (b1_x2 - b1_x1) * (b1_y2 - b1_y1);
+    float area2 = (b2[2] - b2[0]) * (b2[3] - b2[1]);
+    float iou = inter / (area1 + area2 - inter + 1e-6f);
+
+    bool pass = (iou > iou_gate);
+    if (!pass && trk_s_inv) {
+        float d2 = mahal_sq_det(st, b2, trk_s_inv + t * 16);
+        pass = (d2 < maha_gate);
+    }
+    if (pass) atomicAdd(&candidate_count[t], 1);
+}
+
+// Two-stage conditional cost matrix.
+// Stage 1 gate: IoU > iou_gate OR Mahalanobis^2 < maha_gate; else hard reject (cost=1).
+// Stage 2: if candidate_count[t] >= 2 AND has_clean_embedding[t]:
+//            cost = 1 - (0.55*CosSim + 0.30*IoU + 0.15*det_score)
+//          else:
+//            cost = 1 - IoU  (stable IoU-only fallback)
+__global__ void compute_conditional_cost_kernel(
+    const float* trk_states, const float* det_boxes,
+    const float* trk_embeds, const float* det_embeds,
+    const float* det_scores,
+    const int* candidate_count, const bool* has_clean_embedding,
+    const float* trk_s_inv,
+    float* cost_matrix,
+    int n_trk, int n_det, int embed_dim, float iou_gate, float maha_gate)
+{
+    int t = blockIdx.y * blockDim.y + threadIdx.y;
+    int d = blockIdx.x * blockDim.x + threadIdx.x;
+    if (t >= n_trk || d >= n_det) return;
+
+    const float* st = trk_states + t * 8;
+    float tw = st[2] * st[3], th = st[3];
+    float b1_x1 = st[0] - tw * 0.5f, b1_y1 = st[1] - th * 0.5f;
+    float b1_x2 = st[0] + tw * 0.5f, b1_y2 = st[1] + th * 0.5f;
+    const float* b2 = det_boxes + d * 4;
+
+    float ix1 = fmaxf(b1_x1, b2[0]), iy1 = fmaxf(b1_y1, b2[1]);
+    float ix2 = fminf(b1_x2, b2[2]), iy2 = fminf(b1_y2, b2[3]);
+    float inter = fmaxf(0.0f, ix2 - ix1) * fmaxf(0.0f, iy2 - iy1);
+    float area1 = (b1_x2 - b1_x1) * (b1_y2 - b1_y1);
+    float area2 = (b2[2] - b2[0]) * (b2[3] - b2[1]);
+    float iou = inter / (area1 + area2 - inter + 1e-6f);
+
+    bool pass_iou = (iou > iou_gate);
+    if (!pass_iou) {
+        bool pass_maha = trk_s_inv && (mahal_sq_det(st, b2, trk_s_inv + t * 16) < maha_gate);
+        if (!pass_maha) {
+            cost_matrix[t * n_det + d] = 1.0f;
+            return;
+        }
+    }
+
+    float cost;
+    if (candidate_count[t] >= 2 && has_clean_embedding[t] && trk_embeds && det_embeds) {
+        float cos_sim = 0.0f;
+        const float* e1 = trk_embeds + t * embed_dim;
+        const float* e2 = det_embeds + d * embed_dim;
+        for (int k = 0; k < embed_dim; ++k) cos_sim += e1[k] * e2[k];
+        cos_sim = fmaxf(0.0f, cos_sim);
+        float ds = det_scores ? det_scores[d] : 0.5f;
+        cost = 1.0f - (0.55f * cos_sim + 0.30f * iou + 0.15f * ds);
+    } else {
+        cost = 1.0f - iou;
+    }
+    cost_matrix[t * n_det + d] = fminf(1.0f, fmaxf(0.0f, cost));
+}
 
 __device__ __forceinline__ void merge_top3_fixed(float* a_v, int* a_idx, const float* b_v, const int* b_idx) {
     float res_v[3]; int res_idx[3];
@@ -334,7 +457,8 @@ __global__ void track_state_update_post_kernel(
 
 __global__ void inline_kalman_update_kernel(
     float* states, float* covs, const float* det_boxes,
-    const int* trk_to_det, const bool* active, int max_objs, float light_factor)
+    const int* trk_to_det, const bool* active, int max_objs, float light_factor,
+    const float* det_scores, bool nsa_kalman)
 {
     int t = blockIdx.x * blockDim.x + threadIdx.x;
     if (t >= max_objs || !active[t]) return;
@@ -349,7 +473,13 @@ __global__ void inline_kalman_update_kernel(
         (box[2] - box[0]) / bh,
         bh
     };
-    kf_gpu::update(states + t * 8, covs + t * 64, z, light_factor);
+    float nsa_mult = 1.0f;
+    if (nsa_kalman && det_scores) {
+        float s = det_scores[d];
+        float q = 1.0f - s;
+        nsa_mult = fmaxf(0.05f, q * q);
+    }
+    kf_gpu::update(states + t * 8, covs + t * 64, z, light_factor, nsa_mult);
 }
 } // namespace kernel
 
@@ -382,6 +512,10 @@ public:
         checkCuda(cudaMalloc(&d_score_sum_, max_objs_ * sizeof(float)));
         checkCuda(cudaMallocHost(&d_det_to_trk_h_, max_assoc_ * sizeof(int)));
 
+        checkCuda(cudaMalloc(&d_has_clean_embedding_, max_objs_ * sizeof(bool)));
+        checkCuda(cudaMalloc(&d_candidate_count_, max_objs_ * sizeof(int)));
+        checkCuda(cudaMalloc(&d_s_inv_, max_objs_ * 16 * sizeof(float)));
+
         checkCuda(cudaMemset(d_active_, 0, max_objs_ * sizeof(bool)));
         checkCuda(cudaMemset(d_states_, 0, max_objs_ * 8 * sizeof(float)));
         checkCuda(cudaMemset(d_covs_, 0, max_objs_ * 64 * sizeof(float)));
@@ -391,8 +525,12 @@ public:
         checkCuda(cudaMemset(d_hit_streak_, 0, max_objs_ * sizeof(int)));
         checkCuda(cudaMemset(d_confirm_streak_required_, 0, max_objs_ * sizeof(int)));
         checkCuda(cudaMemset(d_score_sum_, 0, max_objs_ * sizeof(float)));
+        checkCuda(cudaMemset(d_has_clean_embedding_, 0, max_objs_ * sizeof(bool)));
+        checkCuda(cudaMemset(d_candidate_count_, 0, max_objs_ * sizeof(int)));
+        checkCuda(cudaMemset(d_s_inv_, 0, max_objs_ * 16 * sizeof(float)));
 
         h_active_raw_.resize(max_objs_, 0);
+        h_has_clean_embedding_.resize(max_objs_, 0);
         h_states_.resize(max_objs_ * 8, 0.0f);
         h_track_ids_.resize(max_objs_, 0);
         h_scores_.resize(max_objs_, 0.0f);
@@ -416,7 +554,10 @@ public:
         cudaFree(d_topk_indices_); cudaFree(d_topk_probs_);
         cudaFree(d_auction_prices_); cudaFree(d_trk_to_det_); cudaFree(d_det_to_trk_);
         cudaFree(d_matched_pairs_); cudaFree(d_new_slots_);
-        cudaFree(d_state_); cudaFree(d_hit_streak_); cudaFree(d_confirm_streak_required_); cudaFree(d_score_sum_); cudaFreeHost(d_det_to_trk_h_);
+        cudaFree(d_state_); cudaFree(d_hit_streak_); cudaFree(d_confirm_streak_required_);
+        cudaFree(d_score_sum_); cudaFreeHost(d_det_to_trk_h_);
+        cudaFree(d_has_clean_embedding_); cudaFree(d_candidate_count_);
+        cudaFree(d_s_inv_);
     }
 
     std::vector<TrackResult> update(float* d_boxes, float* d_scores, int* d_classes, int num_dets,
@@ -428,13 +569,26 @@ public:
         predict_kernel<<<blocks, threads, 0, stream>>>(d_states_, d_covs_, d_active_, d_age_, max_objs_, max_age_);
         if (d_gmc) gmc_kernel<<<blocks, threads, 0, stream>>>(d_states_, d_covs_, d_active_, d_gmc, max_objs_);
 
+        // Phase 2: compute per-track S^-1 from post-predict covariance for Mahalanobis gating
+        kernel::compute_innovation_sinv_kernel<<<blocks, threads, 0, stream>>>(
+            d_states_, d_covs_, d_active_, d_s_inv_, max_objs_);
+
         if (num_dets > 0) {
             nvtxRangePushA("Association");
             dim3 b_size(16, 16);
             dim3 g_size((num_dets + 15) / 16, (max_objs_ + 15) / 16);
-            kernel::compute_cost_matrix_kernel<<<g_size, b_size, 0, stream>>>(
-                d_states_, d_boxes, d_features_, d_embeddings, d_cost_matrix_, 
-                max_objs_, num_dets, embed_dim_, reid_weight_, reid_cos_threshold_, 200.0f);
+
+            // Stage 1: count candidates passing IoU gate OR Mahalanobis gate
+            checkCuda(cudaMemsetAsync(d_candidate_count_, 0, max_objs_ * sizeof(int), stream));
+            kernel::count_stage1_candidates_kernel<<<g_size, b_size, 0, stream>>>(
+                d_states_, d_boxes, d_active_, d_candidate_count_,
+                d_s_inv_, max_objs_, num_dets, iou_stage1_gate_, maha_gate_);
+
+            // Conditional cost: IoU-only fallback, appearance only for ambiguous + clean tracks
+            kernel::compute_conditional_cost_kernel<<<g_size, b_size, 0, stream>>>(
+                d_states_, d_boxes, d_features_, d_embeddings, d_scores,
+                d_candidate_count_, d_has_clean_embedding_,
+                d_s_inv_, d_cost_matrix_, max_objs_, num_dets, embed_dim_, iou_stage1_gate_, maha_gate_);
             
             kernel::track_state_update_pre_kernel<<<blocks, threads, 0, stream>>>(
                 d_active_, d_state_, d_hit_streak_, d_confirm_streak_required_, d_score_sum_, max_objs_);
@@ -499,7 +653,8 @@ public:
             );
 
             kernel::inline_kalman_update_kernel<<<blocks, threads, 0, stream>>>(
-                d_states_, d_covs_, d_boxes, d_trk_to_det_, d_active_, max_objs_, light_factor
+                d_states_, d_covs_, d_boxes, d_trk_to_det_, d_active_, max_objs_, light_factor,
+                d_scores, nsa_kalman_
             );
 
             nvtxRangePop();
@@ -594,11 +749,21 @@ public:
             }
         }
 
+        // Build trk_slot → det_idx reverse mapping from pinned det→slot map
+        std::vector<int> h_trk_to_det(max_objs_, -1);
+        if (num_dets > 0) {
+            for (int d = 0; d < num_dets; ++d) {
+                int slot = d_det_to_trk_h_[d];
+                if (slot >= 0 && slot < max_objs_)
+                    h_trk_to_det[slot] = d;
+            }
+        }
+
         std::vector<TrackResult> results;
         for (int i = 0; i < max_objs_; ++i) {
             if (h_active_raw_[i] && h_state_[i] == 2 && h_age_[i] == 0) {
                 float cx = h_states_[i * 8], cy = h_states_[i * 8 + 1], a = h_states_[i * 8 + 2], h = h_states_[i * 8 + 3], w = a * h;
-                results.push_back({cx - w/2.0f, cy - h/2.0f, cx + w/2.0f, cy + h/2.0f, h_track_ids_[i], h_scores_[i], h_classes_[i]});
+                results.push_back({cx - w/2.0f, cy - h/2.0f, cx + w/2.0f, cy + h/2.0f, h_track_ids_[i], h_scores_[i], h_classes_[i], h_trk_to_det[i]});
             }
         }
         nvtxRangePop();
@@ -607,16 +772,63 @@ public:
 
     void set_params(float track_thresh, float high_thresh, float match_thresh, int track_buffer,
                     float mid_thresh, int confirm_streak, float confirm_score_thresh,
-                    bool adaptive_confirmation, float new_track_thresh) {
+                    bool adaptive_confirmation, float new_track_thresh, bool nsa_kalman) {
         track_thresh_ = track_thresh; high_thresh_ = high_thresh; match_thresh_ = match_thresh; max_age_ = track_buffer;
         mid_thresh_ = mid_thresh;
         new_track_thresh_ = new_track_thresh >= 0.0f ? new_track_thresh : mid_thresh;
         confirm_streak_ = std::max(confirm_streak, 1);
         confirm_score_thresh_ = confirm_score_thresh;
         adaptive_confirmation_ = adaptive_confirmation;
+        nsa_kalman_ = nsa_kalman;
     }
     void set_reid_params(float cos_threshold, float iou_low, float iou_high, float weight) {
         reid_cos_threshold_ = cos_threshold; reid_iou_low_ = iou_low; reid_iou_high_ = iou_high; reid_weight_ = weight;
+    }
+
+    // Scatter bank representative embeddings into d_features_ at the correct slots.
+    // d_track_ids_gpu and d_features_src are GPU pointers; n features each of embed_dim_ floats.
+    void update_reference_features_impl(int* d_track_ids_gpu, float* d_features_src, int num, cudaStream_t stream) {
+        if (num <= 0) return;
+        std::vector<int> h_tids(num);
+        checkCuda(cudaMemcpy(h_tids.data(), d_track_ids_gpu, num * sizeof(int), cudaMemcpyDeviceToHost));
+        for (int i = 0; i < num; ++i) {
+            const int tid = h_tids[i];
+            for (int slot = 0; slot < max_objs_; ++slot) {
+                if (h_active_raw_[slot] && h_track_ids_[slot] == tid) {
+                    checkCuda(cudaMemcpyAsync(
+                        d_features_ + slot * embed_dim_,
+                        d_features_src + i * embed_dim_,
+                        embed_dim_ * sizeof(float),
+                        cudaMemcpyDeviceToDevice, stream
+                    ));
+                    break;
+                }
+            }
+        }
+    }
+
+    // Update d_has_clean_embedding_ from Python bank's clean_ids.
+    // d_track_ids_in and d_flags_in are GPU pointers (int32 and bool/uint8).
+    void set_clean_embedding_flags(int* d_track_ids_in, bool* d_flags_in, int n, cudaStream_t stream) {
+        checkCuda(cudaMemsetAsync(d_has_clean_embedding_, 0, max_objs_ * sizeof(bool), stream));
+        std::fill(h_has_clean_embedding_.begin(), h_has_clean_embedding_.end(), static_cast<uint8_t>(0));
+        if (n == 0) return;
+        std::vector<int> h_tids(n);
+        std::vector<uint8_t> h_flags(n);
+        checkCuda(cudaMemcpy(h_tids.data(), d_track_ids_in, n * sizeof(int), cudaMemcpyDeviceToHost));
+        checkCuda(cudaMemcpy(h_flags.data(), d_flags_in, n * sizeof(uint8_t), cudaMemcpyDeviceToHost));
+        for (int i = 0; i < n; ++i) {
+            if (!h_flags[i]) continue;
+            const int tid = h_tids[i];
+            for (int slot = 0; slot < max_objs_; ++slot) {
+                if (h_active_raw_[slot] && h_track_ids_[slot] == tid) {
+                    h_has_clean_embedding_[slot] = 1;
+                    break;
+                }
+            }
+        }
+        checkCuda(cudaMemcpyAsync(d_has_clean_embedding_, h_has_clean_embedding_.data(),
+                                   max_objs_ * sizeof(bool), cudaMemcpyHostToDevice, stream));
     }
 
     std::vector<TrackCandidateSnapshot> get_tentative_candidates(cudaStream_t stream) {
@@ -661,9 +873,12 @@ private:
     int max_objs_, embed_dim_, track_id_counter_, max_assoc_;
     float track_thresh_ = 0.1f, high_thresh_ = 0.5f, match_thresh_ = 0.8f, mid_thresh_ = 0.40f, new_track_thresh_ = 0.40f;
     float reid_cos_threshold_ = 0.90f, reid_iou_low_ = 0.3f, reid_iou_high_ = 0.6f, reid_weight_ = 0.4f;
+    float iou_stage1_gate_ = 0.30f;
+    float maha_gate_ = 9.4877f;
     int max_age_ = 30, confirm_streak_ = 3;
     float confirm_score_thresh_ = 0.50f;
     bool adaptive_confirmation_ = false;
+    bool nsa_kalman_ = false;
     float *d_states_, *d_covs_, *d_scores_, *d_features_;
     float *d_cost_matrix_, *d_sinkhorn_v_, *d_topk_probs_, *d_auction_prices_;
     int *d_topk_indices_, *d_trk_to_det_, *d_det_to_trk_;
@@ -672,9 +887,13 @@ private:
     float *d_score_sum_;
     int *d_det_to_trk_h_;
     bool* d_active_;
+    bool* d_has_clean_embedding_;
+    int* d_candidate_count_;
+    float* d_s_inv_;
     int *d_age_, *d_classes_, *d_track_ids_;
     std::vector<float> h_states_, h_scores_;
     std::vector<uint8_t> h_active_raw_;
+    std::vector<uint8_t> h_has_clean_embedding_;
     std::vector<int> h_age_, h_classes_, h_track_ids_;
     std::vector<int> h_state_, h_hit_streak_, h_confirm_streak_required_;
     std::vector<float> h_score_sum_;
@@ -685,11 +904,12 @@ GPUByteTracker::GPUByteTracker(int max_objs, int embedding_dim) : pimpl_(std::ma
 GPUByteTracker::~GPUByteTracker() = default;
 void GPUByteTracker::set_params(float track_thresh, float high_thresh, float match_thresh, int track_buffer,
                                 float mid_thresh, int confirm_streak, float confirm_score_thresh,
-                                bool adaptive_confirmation, float new_track_thresh) {
-    pimpl_->set_params(track_thresh, high_thresh, match_thresh, track_buffer, mid_thresh, confirm_streak, confirm_score_thresh, adaptive_confirmation, new_track_thresh);
+                                bool adaptive_confirmation, float new_track_thresh, bool nsa_kalman) {
+    pimpl_->set_params(track_thresh, high_thresh, match_thresh, track_buffer, mid_thresh, confirm_streak, confirm_score_thresh, adaptive_confirmation, new_track_thresh, nsa_kalman);
 }
 void GPUByteTracker::set_reid_params(float cos_threshold, float iou_low, float iou_high, float weight) { pimpl_->set_reid_params(cos_threshold, iou_low, iou_high, weight); }
-void GPUByteTracker::update_reference_features(int* track_ids, float* features, int num, cudaStream_t stream) { /* pimpl_->update_reference_features(track_ids, features, num, stream); */ }
+void GPUByteTracker::update_reference_features(int* track_ids, float* features, int num, cudaStream_t stream) { pimpl_->update_reference_features_impl(track_ids, features, num, stream); }
+void GPUByteTracker::set_clean_embedding_flags(int* track_ids, bool* flags, int n, cudaStream_t stream) { pimpl_->set_clean_embedding_flags(track_ids, flags, n, stream); }
 std::vector<TrackResult> GPUByteTracker::update(float* b, float* s, int* c, int n, cudaStream_t stream, float* e, float* g, float l, float m) {
     return pimpl_->update(b, s, c, n, stream, e, g, l, m);
 }
@@ -760,6 +980,145 @@ __global__ void compact_duplicate_clusters_kernel(const float* box_sums, const f
     *out_count = out_idx;
 }
 
+__global__ void filter_detections_kernel(
+    const float* boxes,
+    const float* scores,
+    const int* classes,
+    int num_dets,
+    int* keep_indices,
+    bool* suspect_flags,
+    int* out_count,
+    float score_threshold,
+    bool track_person_only,
+    int person_class,
+    bool is_tiled,
+    int frame_w,
+    int frame_h,
+    bool person_geometry_prior,
+    bool geometry_suspect_support,
+    float person_min_height_ratio,
+    float person_min_aspect,
+    float person_max_aspect,
+    float person_min_area_ratio,
+    float person_max_area_ratio
+) {
+    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= num_dets) return;
+
+    const float* box = boxes + idx * 4;
+    bool keep = scores[idx] > score_threshold;
+    if (track_person_only) {
+        keep = keep && classes[idx] == person_class;
+    }
+    if (is_tiled) {
+        const float cx = (box[0] + box[2]) * 0.5f;
+        const float cy = (box[1] + box[3]) * 0.5f;
+        keep = keep && cx >= 0.0f && cx < static_cast<float>(frame_w) && cy >= 0.0f && cy < static_cast<float>(frame_h);
+    }
+
+    bool geometry_clean = true;
+    if (person_geometry_prior) {
+        const float box_w = fmaxf(box[2] - box[0], 1e-6f);
+        const float box_h = fmaxf(box[3] - box[1], 1e-6f);
+        const float aspect = box_h / box_w;
+        const float frame_area = fmaxf(static_cast<float>(frame_w) * static_cast<float>(frame_h), 1.0f);
+        const float area_ratio = (box_w * box_h) / frame_area;
+        if (person_min_height_ratio > 0.0f) {
+            geometry_clean = geometry_clean && box_h >= static_cast<float>(frame_h) * person_min_height_ratio;
+        }
+        if (person_min_aspect > 0.0f) {
+            geometry_clean = geometry_clean && aspect >= person_min_aspect;
+        }
+        if (person_max_aspect > 0.0f) {
+            geometry_clean = geometry_clean && aspect <= person_max_aspect;
+        }
+        if (person_min_area_ratio > 0.0f) {
+            geometry_clean = geometry_clean && area_ratio >= person_min_area_ratio;
+        }
+        if (person_max_area_ratio > 0.0f) {
+            geometry_clean = geometry_clean && area_ratio <= person_max_area_ratio;
+        }
+        if (!geometry_suspect_support) {
+            keep = keep && geometry_clean;
+        }
+    }
+
+    if (keep) {
+        const int out_idx = atomicAdd(out_count, 1);
+        keep_indices[out_idx] = idx;
+        suspect_flags[out_idx] = person_geometry_prior && geometry_suspect_support && !geometry_clean;
+    }
+}
+
+constexpr int NMS_BLOCK_SIZE = 64;
+
+__global__ void nms_bitmask_kernel(
+    const float* boxes,
+    const int* classes,
+    const int64_t* order_indices,
+    int num_dets,
+    int col_blocks,
+    uint64_t* suppression_masks,
+    float iou_threshold,
+    bool class_aware
+) {
+    const int col_block = blockIdx.x;
+    const int row_block = blockIdx.y;
+    const int row_offset = threadIdx.x;
+    const int row_pos = row_block * NMS_BLOCK_SIZE + row_offset;
+    if (row_pos >= num_dets || row_block > col_block) {
+        return;
+    }
+
+    const int row_idx = static_cast<int>(order_indices[row_pos]);
+    const float* row_box = boxes + row_idx * 4;
+    const int row_class = classes[row_idx];
+    const int col_start = col_block == row_block ? row_offset + 1 : 0;
+    uint64_t mask = 0ULL;
+    for (int col_offset = col_start; col_offset < NMS_BLOCK_SIZE; ++col_offset) {
+        const int col_pos = col_block * NMS_BLOCK_SIZE + col_offset;
+        if (col_pos >= num_dets) {
+            break;
+        }
+        const int col_idx = static_cast<int>(order_indices[col_pos]);
+        if (class_aware && classes[col_idx] != row_class) {
+            continue;
+        }
+        const float iou = get_iou_device(row_box, boxes + col_idx * 4);
+        if (iou > iou_threshold) {
+            mask |= 1ULL << col_offset;
+        }
+    }
+    suppression_masks[row_pos * col_blocks + col_block] = mask;
+}
+
+__global__ void nms_select_kernel(
+    const uint64_t* suppression_masks,
+    const int64_t* order_indices,
+    int num_dets,
+    int col_blocks,
+    int* keep_indices,
+    uint64_t* remv,
+    int* out_count
+) {
+    if (blockIdx.x != 0 || threadIdx.x != 0) return;
+
+    int keep_count = 0;
+    for (int order_pos = 0; order_pos < num_dets; ++order_pos) {
+        const int block = order_pos / NMS_BLOCK_SIZE;
+        const int offset = order_pos % NMS_BLOCK_SIZE;
+        if (remv[block] & (1ULL << offset)) {
+            continue;
+        }
+        keep_indices[keep_count++] = static_cast<int>(order_indices[order_pos]);
+        const uint64_t* row_masks = suppression_masks + order_pos * col_blocks;
+        for (int col = block; col < col_blocks; ++col) {
+            remv[col] |= row_masks[col];
+        }
+    }
+    *out_count = keep_count;
+}
+
 void merge_cross_tile_duplicates_cuda(const float* boxes_ptr, const float* scores_ptr, const int* classes_ptr, int num_dets, int* anchor_indices_ptr, float* box_sums_ptr, float* score_sums_ptr, int* score_bits_max_ptr, int* cluster_counts_ptr, float* out_boxes_ptr, float* out_scores_ptr, int* out_classes_ptr, int* out_count_ptr, float iou_threshold, float center_threshold, float area_ratio_threshold, cudaStream_t stream) {
     if (num_dets <= 0) { checkCuda(cudaMemsetAsync(out_count_ptr, 0, sizeof(int), stream)); return; }
     checkCuda(cudaMemsetAsync(box_sums_ptr, 0, num_dets * 4 * sizeof(float), stream));
@@ -770,6 +1129,105 @@ void merge_cross_tile_duplicates_cuda(const float* boxes_ptr, const float* score
     assign_duplicate_anchor_kernel<<<blocks, threads, 0, stream>>>(boxes_ptr, classes_ptr, num_dets, iou_threshold, center_threshold, area_ratio_threshold, anchor_indices_ptr);
     aggregate_duplicate_clusters_kernel<<<blocks, threads, 0, stream>>>(boxes_ptr, scores_ptr, classes_ptr, anchor_indices_ptr, num_dets, box_sums_ptr, score_sums_ptr, score_bits_max_ptr, cluster_counts_ptr);
     compact_duplicate_clusters_kernel<<<1, 1, 0, stream>>>(box_sums_ptr, score_sums_ptr, score_bits_max_ptr, cluster_counts_ptr, classes_ptr, num_dets, out_boxes_ptr, out_scores_ptr, out_classes_ptr, out_count_ptr);
+}
+
+void filter_detections_cuda(
+    const float* boxes_ptr,
+    const float* scores_ptr,
+    const int* classes_ptr,
+    int num_dets,
+    int* keep_indices_ptr,
+    bool* suspect_flags_ptr,
+    int* out_count_ptr,
+    float score_threshold,
+    bool track_person_only,
+    int person_class,
+    bool is_tiled,
+    int frame_w,
+    int frame_h,
+    bool person_geometry_prior,
+    bool geometry_suspect_support,
+    float person_min_height_ratio,
+    float person_min_aspect,
+    float person_max_aspect,
+    float person_min_area_ratio,
+    float person_max_area_ratio,
+    cudaStream_t stream
+) {
+    checkCuda(cudaMemsetAsync(out_count_ptr, 0, sizeof(int), stream));
+    if (num_dets <= 0) {
+        return;
+    }
+    const int threads = 256;
+    const int blocks = (num_dets + threads - 1) / threads;
+    filter_detections_kernel<<<blocks, threads, 0, stream>>>(
+        boxes_ptr,
+        scores_ptr,
+        classes_ptr,
+        num_dets,
+        keep_indices_ptr,
+        suspect_flags_ptr,
+        out_count_ptr,
+        score_threshold,
+        track_person_only,
+        person_class,
+        is_tiled,
+        frame_w,
+        frame_h,
+        person_geometry_prior,
+        geometry_suspect_support,
+        person_min_height_ratio,
+        person_min_aspect,
+        person_max_aspect,
+        person_min_area_ratio,
+        person_max_area_ratio
+    );
+    checkCuda(cudaGetLastError());
+}
+
+void nms_cuda(
+    const float* boxes_ptr,
+    const float* scores_ptr,
+    const int* classes_ptr,
+    const int64_t* order_indices_ptr,
+    int num_dets,
+    int* keep_indices_ptr,
+    uint64_t* suppression_masks_ptr,
+    uint64_t* remv_ptr,
+    int* out_count_ptr,
+    float iou_threshold,
+    bool class_aware,
+    cudaStream_t stream
+) {
+    (void)scores_ptr;
+    checkCuda(cudaMemsetAsync(out_count_ptr, 0, sizeof(int), stream));
+    if (num_dets <= 0) {
+        return;
+    }
+    const int col_blocks = (num_dets + NMS_BLOCK_SIZE - 1) / NMS_BLOCK_SIZE;
+    checkCuda(cudaMemsetAsync(suppression_masks_ptr, 0, static_cast<size_t>(num_dets) * col_blocks * sizeof(uint64_t), stream));
+    checkCuda(cudaMemsetAsync(remv_ptr, 0, col_blocks * sizeof(uint64_t), stream));
+    const dim3 blocks(col_blocks, col_blocks);
+    nms_bitmask_kernel<<<blocks, NMS_BLOCK_SIZE, 0, stream>>>(
+        boxes_ptr,
+        classes_ptr,
+        order_indices_ptr,
+        num_dets,
+        col_blocks,
+        suppression_masks_ptr,
+        iou_threshold,
+        class_aware
+    );
+    nms_select_kernel<<<1, 1, 0, stream>>>(
+        suppression_masks_ptr,
+        order_indices_ptr,
+        num_dets,
+        col_blocks,
+        keep_indices_ptr,
+        remv_ptr,
+        out_count_ptr
+    );
+    checkCuda(cudaGetLastError());
 }
 
 } // namespace saccade

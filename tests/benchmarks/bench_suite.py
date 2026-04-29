@@ -1,22 +1,29 @@
 import asyncio
 import time
 import os
-import torch
-import numpy as np
-import argparse
-from typing import List, Dict, Any
-from perception.detector_trt import TRTYoloDetector
-from perception.feature_extractor import TRTFeatureExtractor
-from perception.cropper import ZeroCopyCropper
-from perception.tracking import SmartTracker
-from perception.drift_handler import SemanticDriftHandler
-from media.mediamtx_client import MediaMTXClient
-from cognition.resource_manager import DegradationLevel
-from dotenv import load_dotenv
+import sys
+
+# Add project root to sys.path
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+import torch  # noqa: E402
+import numpy as np  # noqa: E402
+import argparse  # noqa: E402
+from typing import List, Dict  # noqa: E402
+from perception.detector_trt import TRTYoloDetector  # noqa: E402
+from perception.feature_extractor import TRTFeatureExtractor  # noqa: E402
+from perception.cropper import ZeroCopyCropper  # noqa: E402
+from perception.tracking import SmartTracker  # noqa: E402
+from perception.drift_handler import SemanticDriftHandler  # noqa: E402
+from media.mediamtx_client import MediaMTXClient  # noqa: E402
+from cognition.resource_manager import DegradationLevel  # noqa: E402
+from dotenv import load_dotenv  # noqa: E402
 
 load_dotenv()
 
 # --- Utility: Performance Stats ---
+
 
 class PerformanceStats:
     def __init__(self, name: str):
@@ -35,53 +42,66 @@ class PerformanceStats:
         print("-" * 80)
         for key, values in self.records.items():
             arr = np.array(values)
-            print(f"{key:<20} | {np.mean(arr):12.4f} | {np.percentile(arr, 99):12.4f} | {np.std(arr):10.4f}")
+            print(
+                f"{key:<20} | {np.mean(arr):12.4f} | {np.percentile(arr, 99):12.4f} | {np.std(arr):10.4f}"
+            )
         print("=" * 80)
 
+
 # --- Benchmark: Component Level ---
+
 
 def bench_components():
     print("🔥 Starting Component-level Benchmarks...")
     stats = PerformanceStats("Components")
-    
+
     # 1. Drift Handler Stress
     drift_handler = SemanticDriftHandler()
     obj_ids = list(range(100, 164))
     boxes = torch.randn(64, 4, device="cuda")
-    
+
     for _ in range(1000):
         t0 = time.perf_counter()
         drift_handler.filter_for_batch(obj_ids, boxes, DegradationLevel.NORMAL)
         stats.record("drift_filter_64", (time.perf_counter() - t0) * 1000)
-    
+
     # 2. Smart Tracker Buffer Reordering
     tracker = SmartTracker()
     ts_sequence = [1000, 1066, 1132, 1033, 1099]
     for _ in range(200):
         for ts in ts_sequence:
-            tracker.process_frame(ts, torch.tensor([1], device="cuda"), torch.randn(1, 4, device="cuda"))
+            tracker.process_frame(
+                ts, torch.tensor([1], device="cuda"), torch.randn(1, 4, device="cuda")
+            )
         t0 = time.perf_counter()
         tracker.update_and_filter()
         stats.record("tracker_reorder_5f", (time.perf_counter() - t0) * 1000)
-    
+
     stats.report()
 
+
 # --- Benchmark: Pipeline Level ---
+
 
 async def bench_pipeline(num_frames: int = 1000):
     print(f"🚀 Starting Pipeline E2E Benchmark ({num_frames} frames)...")
     stats = PerformanceStats("Pipeline E2E")
-    
-    detector = TRTYoloDetector(engine_path="models/yolo/yolo26n_native.engine")
-    extractor = TRTFeatureExtractor(engine_path="models/embedding/google_siglip2-base-patch16-224.engine")
-    cropper = ZeroCopyCropper(output_size=(224, 224))
-    media = MediaMTXClient(dummy_video=os.getenv("DUMMY_VIDEO_PATH", "assets/videos/demo.mp4"))
 
-    if not media.connect(): return
-    
+    detector = TRTYoloDetector(engine_path="models/yolo/yolo26n_native.engine")
+    extractor = TRTFeatureExtractor(
+        engine_path="models/embedding/google_siglip2-base-patch16-224.engine"
+    )
+    cropper = ZeroCopyCropper(output_size=(224, 224))
+    media = MediaMTXClient(
+        dummy_video=os.getenv("DUMMY_VIDEO_PATH", "assets/videos/demo.mp4")
+    )
+
+    if not media.connect():
+        return
+
     processed = 0
     start_time = time.perf_counter()
-    
+
     while processed < num_frames:
         t_grab = time.perf_counter()
         ret, tensor = media.grab_tensor()
@@ -112,7 +132,7 @@ async def bench_pipeline(num_frames: int = 1000):
                 t4 = time.perf_counter()
                 extractor.extract(crops)
                 stats.record("feature_extract", (time.perf_counter() - t4) * 1000)
-        
+
         torch.cuda.synchronize()
         stats.record("total_e2e", (time.perf_counter() - t_e2e) * 1000)
         processed += 1
@@ -122,17 +142,20 @@ async def bench_pipeline(num_frames: int = 1000):
     print(f"Overall Throughput: {num_frames / duration:.2f} FPS")
     media.release()
 
+
 # --- Main Entry ---
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Saccade Benchmark Suite")
-    parser.add_argument("--mode", choices=["component", "pipeline", "all"], default="all")
+    parser.add_argument(
+        "--mode", choices=["component", "pipeline", "all"], default="all"
+    )
     parser.add_argument("--frames", type=int, default=1000)
     args = parser.parse_args()
 
     if args.mode in ["component", "all"]:
         bench_components()
-    
+
     if args.mode in ["pipeline", "all"]:
         if torch.cuda.is_available():
             asyncio.run(bench_pipeline(num_frames=args.frames))

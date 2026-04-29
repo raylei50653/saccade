@@ -11,7 +11,6 @@ Saccade CLI Entrypoint
 """
 
 import os
-import time
 import torch.multiprocessing as mp
 
 # CUDA 必須使用 spawn 模式
@@ -29,6 +28,7 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
 import asyncio
 import time
+
 import argparse
 import torch
 import numpy as np
@@ -41,11 +41,19 @@ try:
 except ImportError:
     pass
 
-from typing import Optional, List
+from typing import Optional, List, Dict, Any, Tuple, cast
 from perception.detector_trt import TRTYoloDetector
 from perception.cropper import ZeroCopyCropper
 from perception.feature_extractor import TRTFeatureExtractor
 from media.mediamtx_client import MediaMTXClient
+from media.dali_pipeline import DALIMediaClient
+from perception.dispatcher import AsyncDispatcher
+from perception.embedding_dispatcher import (
+    AsyncEmbeddingDispatcher as EmbeddingDispatcher,
+)
+from perception.drift_handler import SemanticDriftHandler
+from cognition.resource_manager import ResourceManager
+from storage.redis_cache import RedisCache
 from pipeline.orchestrator import PipelineOrchestrator
 from dotenv import load_dotenv
 
@@ -152,10 +160,10 @@ async def run_stream_producer(
         await asyncio.sleep(2)
 
     print(f"✅ Stream [{stream_id}] connected.")
-    
+
     # 啟動自動重連監控
     asyncio.create_task(media.watchdog_loop())
-    
+
     try:
         while True:
             ret, tensor = media.grab_tensor()
@@ -176,47 +184,40 @@ async def run_stream_producer(
     finally:
         media.release()
 
+
 async def run_perception() -> None:
     """感知層：多路並行處理 (Async-Batching Dispatcher + ReID)"""
+    global _embedding_dispatcher
     print("🚀 Initializing Multi-stream Perception Pipeline...")
 
     detector = TRTYoloDetector()
+    resource_manager = ResourceManager()
 
     # L2 ReID 組件（選配，缺少 engine 時退化為純 IoU）
     extractor: Optional[TRTFeatureExtractor] = None
-    cropper: Optional[ZeroCopyCropper] = None
     try:
-        extractor = TRTFeatureExtractor()
-        cropper = ZeroCopyCropper()
-        print("✅ [ReID] SigLIP 2 extractor + ZeroCopyCropper ready.")
+        extractor = TRTFeatureExtractor(max_batch=64)
+        print("✅ [ReID] SigLIP 2 extractor ready.")
+        _embedding_dispatcher = EmbeddingDispatcher(
+            extractor, on_embeddings_ready=on_embeddings_ready
+        )
+        _embedding_dispatcher.start()
     except Exception as e:
-        print(f"⚠️  [ReID] Extractor unavailable ({e}), falling back to IoU-only tracking.")
+        print(
+            f"⚠️  [ReID] Extractor unavailable ({e}), falling back to IoU-only tracking."
+        )
 
     dispatcher = AsyncDispatcher(
         detector,
+        resource_manager,
         extractor=extractor,
-        cropper=cropper,
         heartbeat_interval=10,
         max_batch=8,
     )
-    dispatcher.start()
+    # Note: in perception/dispatcher.py, start() is async and doesn't take callback.
+    # It calls on_track_result which we can set in __init__.
 
-async def run_perception() -> None:
-    """感知層：極速雙路並行 (Industrial Pipeline)"""
-    global _embedding_dispatcher
-    print("🚀 Initializing Optimized Multi-stream Perception Pipeline...")
-
-    # 初始化偵測器與嵌入器
-    detector = TRTYoloDetector()
-    extractor = TRTFeatureExtractor(max_batch=64)
-
-    # 啟動雙路分發器
-    _embedding_dispatcher = EmbeddingDispatcher(extractor, max_batch=64)
-    _embedding_dispatcher.start(callback=on_embeddings_ready)
-
-    # YOLO 分發器：傳入橋接回調，實現 L1 -> L2 連動
-    dispatcher = AsyncDispatcher(detector, max_batch=8)
-    dispatcher.start(callback=on_detection_finished)
+    await dispatcher.start()
 
     # 模擬 4 路串流
     streams = ["stream_1", "stream_2", "stream_3", "stream_4"]
@@ -232,8 +233,7 @@ async def run_perception() -> None:
     try:
         await asyncio.gather(*tasks)
     except asyncio.CancelledError:
-        dispatcher.stop()
-        _embedding_dispatcher.stop()
+        await dispatcher.stop()
         print("🛑 Perception Pipeline shutting down...")
 
 

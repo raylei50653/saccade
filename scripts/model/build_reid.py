@@ -13,6 +13,7 @@ Usage:
         --engine models/embedding/transreid_256x128.engine \\
         --input-hw 256 128
 """
+
 import argparse
 import os
 import tensorrt as trt
@@ -76,7 +77,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--onnx", required=True)
     parser.add_argument("--engine", required=True)
-    parser.add_argument("--input-hw", nargs=2, type=int, default=[224, 224], metavar=("H", "W"))
+    parser.add_argument(
+        "--input-hw", nargs=2, type=int, default=[224, 224], metavar=("H", "W")
+    )
     parser.add_argument("--min-batch", type=int, default=1)
     parser.add_argument("--opt-batch", type=int, default=8)
     parser.add_argument("--max-batch", type=int, default=32)

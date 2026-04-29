@@ -1,7 +1,6 @@
 import asyncio
 import time
-import uuid
-from typing import Dict, Any, List, Tuple, Optional, cast, Awaitable
+from typing import Dict, Any, List, Tuple, Optional
 from storage.chroma_store import ChromaStore
 from storage.redis_cache import RedisCache
 from pipeline.health import HealthChecker, render
@@ -12,8 +11,10 @@ try:
     from llama_index.core import VectorStoreIndex, StorageContext, Settings
     from llama_index.vector_stores.chroma import ChromaVectorStore
     from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+
     # 預設使用 Ollama 作為本地 LLM
     from llama_index.llms.ollama import Ollama
+
     HAS_LLAMA_INDEX = True
 except ImportError:
     HAS_LLAMA_INDEX = False
@@ -35,7 +36,8 @@ class PipelineOrchestrator:
 
         # 由於拔除 VLM，並發控制只需限制資料庫寫入頻率
         self.semaphore = asyncio.Semaphore(32)
-        
+        self.batch_size = 50
+
         self.rag_engine: Optional[Any] = None
         if HAS_LLAMA_INDEX:
             self._setup_rag()
@@ -44,23 +46,27 @@ class PipelineOrchestrator:
         """初始化 LlamaIndex RAG 引擎"""
         try:
             # 1. 設定本地模型
-            Settings.embed_model = HuggingFaceEmbedding(model_name="BAAI/bge-small-en-v1.5")
+            Settings.embed_model = HuggingFaceEmbedding(
+                model_name="BAAI/bge-small-en-v1.5"
+            )
             Settings.llm = Ollama(model="llama3", request_timeout=30.0)
 
             # 2. 連結 ChromaDB
-            vector_store = ChromaVectorStore(chroma_collection=self.memory_store.collection)
+            vector_store = ChromaVectorStore(
+                chroma_collection=self.memory_store.collection
+            )
             storage_context = StorageContext.from_defaults(vector_store=vector_store)
-            
+
             # 3. 建立索引與查詢引擎
             self.index = VectorStoreIndex.from_vector_store(
                 vector_store, storage_context=storage_context
             )
             self.query_engine = self.index.as_query_engine(streaming=False)
-            
+
             # 4. 註冊 Visual Re-query 工具
             from llama_index.core.tools import FunctionTool
             from llama_index.core.agent import ReActAgent
-            
+
             def visual_requery(track_id: int) -> str:
                 """
                 When the LLM needs to visually confirm an object, it calls this tool with the track_id.
@@ -71,25 +77,33 @@ class PipelineOrchestrator:
                 # 這裡為雛型展示，假設我們從 ChromaDB 的 hybrid_query 進行純向量搜尋
                 # 假設我們已經拿到 embedding (這裡用 dummy vector 模擬)
                 dummy_embedding = [0.0] * 768
-                
-                results = self.memory_store.hybrid_query(query_embedding=dummy_embedding, n_results=3)
-                
-                if not results or not results.get("documents") or not results["documents"][0]:
+
+                results = self.memory_store.hybrid_query(
+                    query_embedding=dummy_embedding, n_results=3
+                )
+
+                if (
+                    not results
+                    or not results.get("documents")
+                    or not results["documents"][0]
+                ):
                     return f"No visual matches found for track {track_id}."
-                
+
                 matches = results["documents"][0]
-                return f"Visual Re-query found {len(matches)} past appearances: {matches}"
+                return (
+                    f"Visual Re-query found {len(matches)} past appearances: {matches}"
+                )
 
             self.visual_tool = FunctionTool.from_defaults(fn=visual_requery)
-            
+
             # 建立包含視覺重查能力的 Agent
-            self.agent = ReActAgent.from_tools(
-                [self.visual_tool], 
-                llm=Settings.llm, 
-                verbose=True
+            self.agent = ReActAgent.from_tools(  # type: ignore
+                [self.visual_tool], llm=Settings.llm, verbose=True
             )
-            
-            print("🚀 [Orchestrator] LlamaIndex RAG Agent Initialized with Visual Re-query.")
+
+            print(
+                "🚀 [Orchestrator] LlamaIndex RAG Agent Initialized with Visual Re-query."
+            )
         except Exception as e:
             print(f"⚠️ [RAG Setup Error] {e}")
 
@@ -151,9 +165,9 @@ class PipelineOrchestrator:
                         "timestamp": time.time(),
                     },
                 )
-                status_tag = "🚨" if is_anomaly else "✅"
+                # status_tag = "🚨" if is_anomaly else "✅"
                 # print(f"{status_tag} [Frame {frame_id}] Indexed: {scene_description}")
-                
+
                 # 4. 觸發 RAG 查詢 (當發生異常或複雜場景時)
                 if HAS_LLAMA_INDEX and (is_anomaly or entropy > 0.9):
                     query = f"The current scene has high entropy ({entropy:.2f}) and contains {yolo_objects}. Are there any similar patterns in the past 5 minutes?"
@@ -161,6 +175,21 @@ class PipelineOrchestrator:
 
             except Exception as e:
                 print(f"❌ [Storage Error] {e}")
+
+    async def process_event_batch(
+        self, batch: List[Tuple[str, Dict[str, Any]]]
+    ) -> None:
+        """處理從 Redis 讀取的批次事件"""
+        tasks = []
+        for msg_id, event in batch:
+            tasks.append(self.handle_cognitive_event(event))
+            # 確認訊息已處理
+            if self.redis_cache.client:
+                await self.redis_cache.client.xack(
+                    self.redis_cache.stream_name, "orchestrator_group", msg_id
+                )
+        if tasks:
+            await asyncio.gather(*tasks)
 
     async def start_cognition_loop(self) -> None:
         print(

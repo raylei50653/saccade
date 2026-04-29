@@ -5,7 +5,7 @@ import numpy as np
 import configparser
 
 # 🐒 NumPy 2.0 向下相容補丁：修復 motmetrics 使用已移除的 asfarray 的問題
-if not hasattr(np, 'asfarray'):
+if not hasattr(np, "asfarray"):
     np.asfarray = lambda a, dtype=float: np.asarray(a, dtype=dtype)  # type: ignore
 
 import motmetrics as mm
@@ -18,10 +18,19 @@ def compare_dataframes(gts, ts):
     accs = []
     names = []
     for k, tsacc in ts.items():
-        if k in gts:
-            print("Comparing {}...".format(k))
+        # Find which ground truth matches this test result
+        matched_gt = None
+        for gt_name in gts.keys():
+            if k == gt_name or k.startswith(gt_name + "_"):
+                matched_gt = gt_name
+                break
+
+        if matched_gt:
+            print("Comparing {} against GT {}...".format(k, matched_gt))
             accs.append(
-                mm.utils.compare_to_groundtruth(gts[k], tsacc, "iou", distth=0.5)
+                mm.utils.compare_to_groundtruth(
+                    gts[matched_gt], tsacc, "iou", distth=0.5
+                )
             )
             names.append(k)
         else:
@@ -76,14 +85,25 @@ def is_mot_result_file(path: str) -> bool:
 def run_mota_eval():
     parser = argparse.ArgumentParser()
     parser.add_argument("--results", default="results/MOT17_eval")
+    parser.add_argument(
+        "--detector",
+        choices=["SDP", "DPM", "FRCNN"],
+        default=None,
+        help="Restrict evaluation to sequences with this detector suffix.",
+    )
     args = parser.parse_args()
 
     results_folder = args.results
     gt_folder = "datasets/MOT17/train"
 
     gtfiles = glob.glob(os.path.join(gt_folder, "*/gt/gt.txt"))
+    if args.detector:
+        gtfiles = [f for f in gtfiles if f"-{args.detector}" in Path(f).parts[-3]]
     tsfiles = sorted(
-        f for f in glob.glob(os.path.join(results_folder, "*.txt")) if is_mot_result_file(f)
+        f
+        for f in glob.glob(os.path.join(results_folder, "*.txt"))
+        if is_mot_result_file(f)
+        and (not args.detector or f"-{args.detector}" in Path(f).stem)
     )
 
     print(
@@ -136,7 +156,9 @@ def run_mota_eval():
             print(f"{name:16s} fps={fps:3d} frames={frames}")
         if total_frames > 0:
             overall_fps = total_weighted_fps / total_frames
-            print(f"OVERALL source_fps={overall_fps:.2f} weighted_by_frames ({total_frames} frames)")
+            print(
+                f"OVERALL source_fps={overall_fps:.2f} weighted_by_frames ({total_frames} frames)"
+            )
 
     eval_fps_meta = load_eval_fps_summary(results_folder)
     if eval_fps_meta:

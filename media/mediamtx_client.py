@@ -1,6 +1,7 @@
 import os
 import threading
 import time
+import asyncio
 from typing import Optional, Tuple, Any
 import numpy as np
 import torch
@@ -197,10 +198,12 @@ class MediaMTXClient:
             with self._lock:
                 # 智慧抽樣 (Smart Sampling)：若像素差異過小則丟棄 (降低低資訊幀)
                 if self._last_tensor is not None:
-                    diff = torch.mean(torch.abs(tensor.float() - self._last_tensor.float())).item()
+                    diff = torch.mean(
+                        torch.abs(tensor.float() - self._last_tensor.float())
+                    ).item()
                     if diff < 2.0:
-                        return # 忽略低資訊幀
-                
+                        return  # 忽略低資訊幀
+
                 self._last_tensor = tensor
                 self._last_frame_time = time.time()
                 self._ret = True
@@ -245,7 +248,9 @@ class MediaMTXClient:
                 with self._lock:
                     # 智慧抽樣 (Smart Sampling)
                     if self._last_tensor is not None:
-                        diff = torch.mean(torch.abs(rgb_tensor.float() - self._last_tensor.float())).item()
+                        diff = torch.mean(
+                            torch.abs(rgb_tensor.float() - self._last_tensor.float())
+                        ).item()
                         if diff < 2.0:
                             return Gst.FlowReturn.OK
 
@@ -265,7 +270,7 @@ class MediaMTXClient:
         """重啟 GStreamer 管線"""
         print("🔄 [MediaClient] Restarting pipeline...")
         self.release()
-        time.sleep(1) # 等待釋放
+        time.sleep(1)  # 等待釋放
         return self.connect()
 
     async def watchdog_loop(self) -> None:
@@ -278,11 +283,13 @@ class MediaMTXClient:
                     print("✅ [MediaClient] Reconnected successfully.")
                     retry_delay = 1
                 else:
-                    print(f"❌ [MediaClient] Reconnection failed. Retrying in {retry_delay}s...")
+                    print(
+                        f"❌ [MediaClient] Reconnection failed. Retrying in {retry_delay}s..."
+                    )
                     await asyncio.sleep(retry_delay)
                     retry_delay = min(retry_delay * 2, 30)
                     continue
-            
+
             await asyncio.sleep(5)
 
     def grab_frame(self) -> Tuple[bool, Optional[np.ndarray]]:

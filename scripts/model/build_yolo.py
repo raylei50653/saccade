@@ -44,7 +44,7 @@ def build_engine(
     # 取得輸入節點名稱
     input_name = network.get_input(0).name
     print(f"🔍 Input Node Name: {input_name}")
-    
+
     profile.set_shape(
         input_name,
         (min_batch, 3, img_size, img_size),
@@ -68,12 +68,22 @@ def build_engine(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Build TensorRT Engine from ONNX")
     parser.add_argument("--onnx", type=str, required=True, help="Input ONNX file path")
-    parser.add_argument("--engine", type=str, required=True, help="Output Engine file path")
-    parser.add_argument("--min-batch", type=int, default=1, help="Minimum TensorRT profile batch size")
-    parser.add_argument("--opt-batch", type=int, default=1, help="Optimal TensorRT profile batch size")
-    parser.add_argument("--max-batch", type=int, default=1, help="Maximum TensorRT profile batch size")
-    parser.add_argument("--img-size", type=int, default=640, help="Square input image size")
-    
+    parser.add_argument(
+        "--engine", type=str, required=True, help="Output Engine file path"
+    )
+    parser.add_argument(
+        "--min-batch", type=int, default=1, help="Minimum TensorRT profile batch size"
+    )
+    parser.add_argument(
+        "--opt-batch", type=int, default=1, help="Optimal TensorRT profile batch size"
+    )
+    parser.add_argument(
+        "--max-batch", type=int, default=1, help="Maximum TensorRT profile batch size"
+    )
+    parser.add_argument(
+        "--img-size", type=int, default=640, help="Square input image size"
+    )
+
     args = parser.parse_args()
 
     if os.path.exists(args.onnx):

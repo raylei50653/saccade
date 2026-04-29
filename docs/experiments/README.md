@@ -12,6 +12,8 @@
 * **[reid/](./reid/)** - 語義特徵重識別與裁切
   * [Semantic Relink 與 Crop 實驗 (`semantic_relink_and_crop.md`)](./reid/semantic_relink_and_crop.md)
   * [動態 ReID 觸發機制設計 (`dynamic_trigger.md`)](./reid/dynamic_trigger.md)
+* **[eval/](./eval/)** - 評估與 ablation 結果整理
+  * [Rerank Phase 2 實驗 (`rerank_phase2.md`)](./eval/rerank_phase2.md)
 
 ## 💡 命名與維護規範
 

@@ -3,6 +3,8 @@
 *$py.class
 __pycache__/
 build/
+build_ci/
+build_trt_venv/
 dist/
 wheels/
 *.egg-info
@@ -29,6 +31,9 @@ models/yolo/*
 # Data & Media
 datasets/
 results/
+scripts/eval/output/*
+!scripts/eval/output/README.md
+!scripts/eval/output/.gitkeep
 storage/chroma_db/
 assets/videos/*.mp4
 *.log

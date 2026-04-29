@@ -6,6 +6,7 @@ Skipped automatically when any of the following are unavailable:
   - models/embedding/google_siglip2-base-patch16-224.engine
   - datasets/MOT17/train/MOT17-04-SDP/
 """
+
 import re
 import sys
 from collections import defaultdict
@@ -94,9 +95,7 @@ def test_e2e_tracking_continuity(tmp_path):
         tracks[int(parts[1])].append(int(parts[0]))
 
     max_span = max((max(f) - min(f) for f in tracks.values()), default=0)
-    assert max_span >= 9, (
-        f"no track spans 10+ frames; longest span = {max_span} frames"
-    )
+    assert max_span >= 9, f"no track spans 10+ frames; longest span = {max_span} frames"
 
 
 @skip_no_gpu

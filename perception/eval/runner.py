@@ -9,19 +9,39 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.nn.functional as F
-from torchvision.ops import batched_nms, nms
 
-# MUST IMPORT THIS BEFORE torchvision (already guaranteed by import order above being after perception)
+from typing import Any
+
+# Perception/eval modules load local extensions before any torchvision fallback.
 from perception.cropper import ZeroCopyCropper
 from perception.detector_trt import TRTYoloDetector
 from perception.feature_extractor import TRTFeatureExtractor
 
-from perception.eval.detection import _box_iou_single, detect_adaptive_960_tiled, detect_960p_3x2_tiled, merge_cross_tile_duplicates_fast
+from perception.eval.detection import (
+    _box_iou_single,
+    detect_adaptive_960_tiled,
+    detect_960p_3x2_tiled,
+    filter_detections_fast,
+    merge_cross_tile_duplicates_fast,
+    nms_fast,
+)
+from perception.eval.gmc import SparseOpticalFlowGMC
 from perception.eval.pool import AdaptiveFramePool
-from perception.eval.preprocess import GeometryScaleState, apply_frame_preprocess, geometry_mid_thresh_scale, parse_preprocess
-from perception.eval.relink import SemanticRelinker
+from perception.eval.preprocess import (
+    GeometryScaleState,
+    apply_frame_preprocess,
+    geometry_mid_thresh_scale,
+    parse_preprocess,
+)
+from perception.eval.relink import PythonSemanticRelinker, SemanticRelinker
 from perception.eval.streaming import DALIStreamerStream
 from perception.eval.tracking import GlobalTrackIdMapper
+from perception.tracking.tracker_gpu import (
+    DynamicReIDController,
+    ReIDTrackObservation,
+    TrackAppearanceBank,
+    need_reid_frame,
+)
 
 
 @dataclass
@@ -52,7 +72,9 @@ class IdStabilityFilter:
         self.states: dict[int, IdStabilityState] = {}
 
     @staticmethod
-    def _iou(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> float:
+    def _iou(
+        a: tuple[float, float, float, float], b: tuple[float, float, float, float]
+    ) -> float:
         x1 = max(a[0], b[0])
         y1 = max(a[1], b[1])
         x2 = min(a[2], b[2])
@@ -147,7 +169,9 @@ class TrackletLifecycleMerger:
         }
 
     @staticmethod
-    def _iou(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> float:
+    def _iou(
+        a: tuple[float, float, float, float], b: tuple[float, float, float, float]
+    ) -> float:
         x1 = max(a[0], b[0])
         y1 = max(a[1], b[1])
         x2 = min(a[2], b[2])
@@ -234,10 +258,14 @@ class TrackletLifecycleMerger:
         old = self.states.get(output_id)
         updated_emb = emb
         if old is not None and old.embedding is not None and emb is not None:
-            updated_emb = F.normalize(self.ema * old.embedding + (1.0 - self.ema) * emb, dim=0)
+            updated_emb = F.normalize(
+                self.ema * old.embedding + (1.0 - self.ema) * emb, dim=0
+            )
         elif old is not None and emb is None:
             updated_emb = old.embedding
-        self.states[output_id] = TrackletLifecycleState(output_id, frame_id, box, score, updated_emb)
+        self.states[output_id] = TrackletLifecycleState(
+            output_id, frame_id, box, score, updated_emb
+        )
         assigned_outputs.add(output_id)
         return output_id
 
@@ -257,7 +285,9 @@ class TrackletLifecycleMerger:
         print(
             "  attempts={attempts} accepted={accepted} new_ids={new_ids} "
             "reject_age={reject_age} reject_assigned={reject_assigned} "
-            "reject_spatial={reject_spatial} reject_similarity={reject_similarity}".format(**self.stats)
+            "reject_spatial={reject_spatial} reject_similarity={reject_similarity}".format(
+                **self.stats
+            )
         )
 
 
@@ -284,6 +314,63 @@ class OutputTracklet:
     start_velocity: tuple[float, float]
     end_velocity: tuple[float, float]
     mean_score: float
+
+
+class OutputAppearanceBank:
+    def __init__(
+        self,
+        *,
+        max_samples: int,
+        min_score: float,
+        min_consistency: float,
+    ) -> None:
+        self.max_samples = max(1, max_samples)
+        self.min_score = min_score
+        self.min_consistency = min_consistency
+        self.samples: dict[int, list[tuple[float, int, torch.Tensor]]] = {}
+
+    def update(
+        self,
+        track_id: int,
+        embedding: torch.Tensor | None,
+        *,
+        score: float,
+        frame_id: int,
+    ) -> None:
+        if embedding is None or score < self.min_score:
+            return
+        emb = F.normalize(embedding.detach().float().cpu(), dim=0)
+        samples = self.samples.setdefault(track_id, [])
+        samples.append((score, frame_id, emb))
+        samples.sort(key=lambda item: (item[0], item[1]), reverse=True)
+        del samples[self.max_samples :]
+
+    def count(self, track_id: int) -> int:
+        return len(self.samples.get(track_id, []))
+
+    def consistency(self, track_id: int) -> float:
+        samples = self.samples.get(track_id, [])
+        if len(samples) < 2:
+            return 1.0
+        stacked = torch.stack([sample[2] for sample in samples])
+        cosines = stacked @ stacked.T
+        n = len(samples)
+        return float((cosines.sum() - n) / max(n * (n - 1), 1))
+
+    def representative(self, track_id: int) -> torch.Tensor | None:
+        samples = self.samples.get(track_id, [])
+        if not samples:
+            return None
+        return F.normalize(
+            torch.stack([sample[2] for sample in samples]).mean(dim=0), dim=0
+        )
+
+    def similarity(self, a: int, b: int) -> float | None:
+        a_emb = self.representative(a)
+        b_emb = self.representative(b)
+        if a_emb is None or b_emb is None:
+            return None
+        return float(torch.dot(a_emb, b_emb).item())
 
 
 class UnionFind:
@@ -336,7 +423,9 @@ def _shift_box(
     return (box[0] + dx, box[1] + dy, box[2] + dx, box[3] + dy)
 
 
-def _tracklet_velocity(records: list[MotRecord], from_start: bool, samples: int) -> tuple[float, float]:
+def _tracklet_velocity(
+    records: list[MotRecord], from_start: bool, samples: int
+) -> tuple[float, float]:
     if len(records) < 2:
         return (0.0, 0.0)
     window = records[:samples] if from_start else records[-samples:]
@@ -391,7 +480,9 @@ def _format_mot_records(records: list[MotRecord]) -> list[str]:
     return lines
 
 
-def _build_output_tracklets(records: list[MotRecord], velocity_samples: int) -> list[OutputTracklet]:
+def _build_output_tracklets(
+    records: list[MotRecord], velocity_samples: int
+) -> list[OutputTracklet]:
     by_id: dict[int, list[MotRecord]] = {}
     for record in records:
         by_id.setdefault(record.track_id, []).append(record)
@@ -407,8 +498,12 @@ def _build_output_tracklets(records: list[MotRecord], velocity_samples: int) -> 
                 end=items[-1].frame,
                 start_box=_mot_box(items[0]),
                 end_box=_mot_box(items[-1]),
-                start_velocity=_tracklet_velocity(items, from_start=True, samples=velocity_samples),
-                end_velocity=_tracklet_velocity(items, from_start=False, samples=velocity_samples),
+                start_velocity=_tracklet_velocity(
+                    items, from_start=True, samples=velocity_samples
+                ),
+                end_velocity=_tracklet_velocity(
+                    items, from_start=False, samples=velocity_samples
+                ),
                 mean_score=sum(item.score for item in items) / len(items),
             )
         )
@@ -427,8 +522,20 @@ def post_merge_output_tracklets(
     time_weight: float,
     direction_weight: float,
     max_cost: float,
+    appearance_bank: OutputAppearanceBank | None = None,
+    appearance_gate: bool = False,
+    appearance_threshold: float = 0.90,
+    appearance_min_samples: int = 1,
 ) -> tuple[list[str], dict[str, int]]:
-    stats = {"candidates": 0, "accepted": 0, "ids_before": 0, "ids_after": 0}
+    stats = {
+        "candidates": 0,
+        "accepted": 0,
+        "ids_before": 0,
+        "ids_after": 0,
+        "reject_appearance": 0,
+        "reject_appearance_missing": 0,
+        "reject_appearance_consistency": 0,
+    }
     if not enabled or not lines:
         return lines, stats
 
@@ -456,12 +563,19 @@ def post_merge_output_tracklets(
 
             lost_center = _box_center(forward_box)
             new_center = _box_center(new.start_box)
-            dist = math.hypot(lost_center[0] - new_center[0], lost_center[1] - new_center[1])
-            scale = max(
-                (lost.end_box[2] - lost.end_box[0]) * (lost.end_box[3] - lost.end_box[1]),
-                (new.start_box[2] - new.start_box[0]) * (new.start_box[3] - new.start_box[1]),
-                1.0,
-            ) ** 0.5
+            dist = math.hypot(
+                lost_center[0] - new_center[0], lost_center[1] - new_center[1]
+            )
+            scale = (
+                max(
+                    (lost.end_box[2] - lost.end_box[0])
+                    * (lost.end_box[3] - lost.end_box[1]),
+                    (new.start_box[2] - new.start_box[0])
+                    * (new.start_box[3] - new.start_box[1]),
+                    1.0,
+                )
+                ** 0.5
+            )
             spatial_cost = dist / max(scale, 1.0)
             motion_cost = 1.0 - motion_iou
             time_cost = gap / max(ttl, 1)
@@ -474,6 +588,31 @@ def post_merge_output_tracklets(
             )
             if cost > max_cost:
                 continue
+            if appearance_gate:
+                if appearance_bank is None:
+                    stats["reject_appearance_missing"] += 1
+                    continue
+                if (
+                    appearance_bank.count(lost.track_id) < appearance_min_samples
+                    or appearance_bank.count(new.track_id) < appearance_min_samples
+                ):
+                    stats["reject_appearance_missing"] += 1
+                    continue
+                if (
+                    appearance_bank.consistency(lost.track_id)
+                    < appearance_bank.min_consistency
+                    or appearance_bank.consistency(new.track_id)
+                    < appearance_bank.min_consistency
+                ):
+                    stats["reject_appearance_consistency"] += 1
+                    continue
+                sim = appearance_bank.similarity(lost.track_id, new.track_id)
+                if sim is None:
+                    stats["reject_appearance_missing"] += 1
+                    continue
+                if sim < appearance_threshold:
+                    stats["reject_appearance"] += 1
+                    continue
             if not row_used:
                 rows.append(lost)
                 row_used = True
@@ -522,7 +661,45 @@ def post_merge_output_tracklets(
     return _format_mot_records(records), stats
 
 
-def run_eval(engine, output, data_root, split, sequences, max_frames, conf_threshold, reid_mode="semantic", reid_model="siglip2", **kwargs):
+def filter_low_quality_tracklets(
+    lines: list[str],
+    *,
+    min_len: int = 1,
+    min_score: float = 0.0,
+) -> tuple[list[str], dict[str, int]]:
+    stats: dict[str, int] = {"before": 0, "after": 0, "removed": 0}
+    if (min_len <= 1 and min_score <= 0.0) or not lines:
+        return lines, stats
+    records = _parse_mot_lines(lines)
+    by_id: dict[int, list[MotRecord]] = {}
+    for r in records:
+        by_id.setdefault(r.track_id, []).append(r)
+    stats["before"] = len(by_id)
+    keep_ids: set[int] = set()
+    for track_id, recs in by_id.items():
+        if len(recs) < min_len:
+            continue
+        if min_score > 0.0 and sum(r.score for r in recs) / len(recs) < min_score:
+            continue
+        keep_ids.add(track_id)
+    stats["after"] = len(keep_ids)
+    stats["removed"] = stats["before"] - stats["after"]
+    filtered = [r for r in records if r.track_id in keep_ids]
+    return _format_mot_records(filtered), stats
+
+
+def run_eval(
+    engine: str,
+    output: str,
+    data_root: str,
+    split: str,
+    sequences: str,
+    max_frames: int,
+    conf_threshold: float,
+    reid_mode: str = "semantic",
+    reid_model: str = "siglip2",
+    **kwargs: Any,
+) -> None:
     output_root = Path(output)
     output_root.mkdir(parents=True, exist_ok=True)
     fps_summary_lines = []
@@ -536,26 +713,49 @@ def run_eval(engine, output, data_root, split, sequences, max_frames, conf_thres
     if reid_mode not in {"off", "tracker", "semantic", "hybrid"}:
         raise ValueError(f"Unsupported reid_mode: {reid_mode}")
     reid_enabled = reid_mode != "off"
-    profile_lazy_reid_embeddings = bool(kwargs.get("profile_lazy_reid_embeddings", False))
-    profile_lazy_reid_candidates = bool(kwargs.get("profile_lazy_reid_candidates", False)) or profile_lazy_reid_embeddings
+    profile_lazy_reid_embeddings = bool(
+        kwargs.get("profile_lazy_reid_embeddings", False)
+    )
+    profile_lazy_reid_candidates = (
+        bool(kwargs.get("profile_lazy_reid_candidates", False))
+        or profile_lazy_reid_embeddings
+    )
     reid_work_enabled = reid_enabled or profile_lazy_reid_embeddings
     _reid_engine = kwargs.pop("reid_engine_path", "") or ""
-    _crop_hw: tuple[int, int] = (256, 128) if reid_model == "transreid" else (224, 224)
-    extractor = TRTFeatureExtractor(
-        engine_path=_reid_engine,
-        model_type=reid_model,
-    ) if reid_work_enabled else None
-    cropper = ZeroCopyCropper(
-        output_size=_crop_hw,
-        mode=kwargs.get("reid_crop_mode", "tight"),
-        padding=float(kwargs.get("reid_crop_padding", 0.0)),
-    ) if reid_work_enabled else None
+    _crop_hw: tuple[int, int] = (
+        (256, 128) if reid_model in {"transreid", "osnet", "fastreid"} else (224, 224)
+    )
+    extractor = (
+        TRTFeatureExtractor(
+            engine_path=_reid_engine,
+            model_type=reid_model,
+            max_batch=64,
+        )
+        if reid_work_enabled
+        else None
+    )
+    cropper = (
+        ZeroCopyCropper(
+            output_size=_crop_hw,
+            mode=kwargs.get("reid_crop_mode", "tight"),
+            padding=float(kwargs.get("reid_crop_padding", 0.0)),
+        )
+        if reid_work_enabled
+        else None
+    )
 
     reid_interval = max(1, int(kwargs.get("reid_interval", 10)))
     reid_crop_layout = kwargs.get("reid_crop_layout", "full")
     if reid_crop_layout not in {"full", "parts"}:
         raise ValueError(f"Unsupported reid_crop_layout: {reid_crop_layout}")
 
+    gmc_enabled = bool(kwargs.get("gmc", False))
+    gmc_downscale = max(1, int(kwargs.get("gmc_downscale", 8)))
+    semantic_buffer_size = max(1, int(kwargs.get("semantic_buffer_size", 1)))
+    semantic_min_consistency = float(kwargs.get("semantic_min_consistency", 0.0))
+    semantic_rerank_mode = str(kwargs.get("semantic_rerank_mode", "mean"))
+    semantic_reciprocal_margin = float(kwargs.get("semantic_reciprocal_margin", 0.0))
+    semantic_bank_inject = bool(kwargs.get("semantic_bank_inject", True))
     use_semantic_mode = reid_mode in {"semantic", "hybrid"}
     use_tracker_reid = reid_mode in {"tracker", "hybrid"}
     person_class = int(kwargs.get("person_class", 0))
@@ -565,11 +765,15 @@ def run_eval(engine, output, data_root, split, sequences, max_frames, conf_thres
     match_thresh = float(kwargs.get("match_thresh", 0.8))
     mid_thresh = float(kwargs.get("mid_thresh", 0.10))
     new_track_thresh_arg = kwargs.get("new_track_thresh", None)
-    new_track_thresh = 0.45 if new_track_thresh_arg is None else float(new_track_thresh_arg)
+    new_track_thresh = (
+        0.45 if new_track_thresh_arg is None else float(new_track_thresh_arg)
+    )
     tiling = kwargs.get("tiling", "960p_2x2")
     _nms_default = 0.35 if tiling == "960p_3x2" else 0.5
     nms_iou_threshold = float(kwargs.get("nms_iou_threshold") or _nms_default)
-    detect_fn = detect_960p_3x2_tiled if tiling == "960p_3x2" else detect_adaptive_960_tiled
+    detect_fn = (
+        detect_960p_3x2_tiled if tiling == "960p_3x2" else detect_adaptive_960_tiled
+    )
     cross_tile_merge = bool(kwargs.get("cross_tile_merge", False))
     geometry_mid_scale = bool(kwargs.get("geometry_mid_scale", False))
     geometry_ref_height_ratio = float(kwargs.get("geometry_ref_height_ratio", 0.12))
@@ -581,14 +785,18 @@ def run_eval(engine, output, data_root, split, sequences, max_frames, conf_thres
     geometry_min_samples = int(kwargs.get("geometry_min_samples", 5))
     lazy_reid_min_hit_streak = int(kwargs.get("lazy_reid_min_hit_streak", 2))
     lazy_reid_self_threshold = float(kwargs.get("lazy_reid_self_threshold", 0.85))
-    preprocess_modes = parse_preprocess(kwargs.get("preprocess", "letterbox,gamma,contrast"))
+    preprocess_modes = parse_preprocess(
+        kwargs.get("preprocess", "letterbox,gamma,contrast")
+    )
     gamma = float(kwargs.get("gamma", 0.8))
     gamma_luma_threshold = float(kwargs.get("gamma_luma_threshold", 0.35))
     contrast = float(kwargs.get("contrast", 1.2))
     id_stability_filter_enabled = bool(kwargs.get("id_stability_filter", True))
     id_stability_min_hits = int(kwargs.get("id_stability_min_hits", 2))
     id_stability_min_iou = float(kwargs.get("id_stability_min_iou", 0.05))
-    id_stability_max_center_shift = float(kwargs.get("id_stability_max_center_shift", 2.0))
+    id_stability_max_center_shift = float(
+        kwargs.get("id_stability_max_center_shift", 2.0)
+    )
     id_stability_max_gap = int(kwargs.get("id_stability_max_gap", 1))
     id_stability_score_ema = float(kwargs.get("id_stability_score_ema", 0.70))
     id_stability_min_score_ema = float(kwargs.get("id_stability_min_score_ema", 0.15))
@@ -601,7 +809,9 @@ def run_eval(engine, output, data_root, split, sequences, max_frames, conf_thres
     geometry_suspect_support = bool(kwargs.get("geometry_suspect_support", True))
     suspect_score_arg = kwargs.get("geometry_suspect_score", None)
     if suspect_score_arg is None:
-        geometry_suspect_score = track_thresh + max((mid_thresh - track_thresh) * 0.5, 1e-4)
+        geometry_suspect_score = track_thresh + max(
+            (mid_thresh - track_thresh) * 0.5, 1e-4
+        )
     else:
         geometry_suspect_score = float(suspect_score_arg)
     geometry_suspect_support_score = min(
@@ -619,15 +829,61 @@ def run_eval(engine, output, data_root, split, sequences, max_frames, conf_thres
     post_lifecycle_merge = bool(kwargs.get("post_lifecycle_merge", False))
     post_lifecycle_ttl = int(kwargs.get("post_lifecycle_ttl", 60))
     post_lifecycle_min_gap = int(kwargs.get("post_lifecycle_min_gap", 1))
-    post_lifecycle_velocity_samples = int(kwargs.get("post_lifecycle_velocity_samples", 5))
-    post_lifecycle_spatial_weight = float(kwargs.get("post_lifecycle_spatial_weight", 0.35))
-    post_lifecycle_motion_weight = float(kwargs.get("post_lifecycle_motion_weight", 0.45))
+    post_lifecycle_velocity_samples = int(
+        kwargs.get("post_lifecycle_velocity_samples", 5)
+    )
+    post_lifecycle_spatial_weight = float(
+        kwargs.get("post_lifecycle_spatial_weight", 0.35)
+    )
+    post_lifecycle_motion_weight = float(
+        kwargs.get("post_lifecycle_motion_weight", 0.45)
+    )
     post_lifecycle_time_weight = float(kwargs.get("post_lifecycle_time_weight", 0.10))
-    post_lifecycle_direction_weight = float(kwargs.get("post_lifecycle_direction_weight", 0.25))
+    post_lifecycle_direction_weight = float(
+        kwargs.get("post_lifecycle_direction_weight", 0.25)
+    )
     post_lifecycle_max_cost = float(kwargs.get("post_lifecycle_max_cost", 1.25))
-    seqs = sequences.split(",") if sequences else [
-        d.name for d in (Path(data_root) / split).iterdir() if d.is_dir()
-    ]
+    post_lifecycle_appearance_gate = bool(
+        kwargs.get("post_lifecycle_appearance_gate", False)
+    )
+    post_lifecycle_appearance_threshold = float(
+        kwargs.get("post_lifecycle_appearance_threshold", 0.90)
+    )
+    post_lifecycle_appearance_min_samples = max(
+        1, int(kwargs.get("post_lifecycle_appearance_min_samples", 1))
+    )
+    post_lifecycle_appearance_max_samples = max(
+        1, int(kwargs.get("post_lifecycle_appearance_max_samples", 5))
+    )
+    post_lifecycle_appearance_min_score = float(
+        kwargs.get("post_lifecycle_appearance_min_score", 0.0)
+    )
+    post_lifecycle_appearance_min_consistency = float(
+        kwargs.get("post_lifecycle_appearance_min_consistency", 0.0)
+    )
+    # Phase 3: pure motion-based merge is confirmed harmful; force appearance gate when PostMerge is enabled.
+    if post_lifecycle_merge and not post_lifecycle_appearance_gate:
+        print(
+            "⚠️  --post-lifecycle-merge requires --post-lifecycle-appearance-gate (Phase 3 design constraint). Enabling appearance gate automatically."
+        )
+        post_lifecycle_appearance_gate = True
+    min_tracklet_len = max(1, int(kwargs.get("min_tracklet_len", 1)))
+    min_tracklet_score = float(kwargs.get("min_tracklet_score", 0.0))
+    nsa_kalman = bool(kwargs.get("nsa_kalman", False))
+    appearance_bank_enabled = bool(kwargs.get("appearance_bank", True))
+    appearance_bank_size = max(1, int(kwargs.get("appearance_bank_size", 5)))
+    appearance_bank_min_score = float(kwargs.get("appearance_bank_min_score", 0.45))
+    appearance_bank_min_iou = float(kwargs.get("appearance_bank_min_iou", 0.35))
+    appearance_bank_consistency_threshold = float(
+        kwargs.get("appearance_bank_consistency_threshold", 0.75)
+    )
+    need_reid_enabled = bool(kwargs.get("need_reid", True))
+    per_seq_adapt = bool(kwargs.get("per_seq_adapt", True))
+    seqs = (
+        sequences.split(",")
+        if sequences
+        else [d.name for d in (Path(data_root) / split).iterdir() if d.is_dir()]
+    )
 
     def time_stage(stage_totals, stage_name, fn, sync_cuda=False):
         if profile_stages and sync_cuda:
@@ -680,14 +936,21 @@ def run_eval(engine, output, data_root, split, sequences, max_frames, conf_thres
     for seq in seqs:
         detector.reset_tracker()
         geometry_scale_state = GeometryScaleState()
-        id_stability_filter = IdStabilityFilter(
-            min_hits=id_stability_min_hits,
-            min_iou=id_stability_min_iou,
-            max_center_shift=id_stability_max_center_shift,
-            max_gap=id_stability_max_gap,
-            score_ema=id_stability_score_ema,
-            min_score_ema=id_stability_min_score_ema,
-        ) if id_stability_filter_enabled else None
+        gmc_estimator = (
+            SparseOpticalFlowGMC(downscale=gmc_downscale) if gmc_enabled else None
+        )
+        id_stability_filter = (
+            IdStabilityFilter(
+                min_hits=id_stability_min_hits,
+                min_iou=id_stability_min_iou,
+                max_center_shift=id_stability_max_center_shift,
+                max_gap=id_stability_max_gap,
+                score_ema=id_stability_score_ema,
+                min_score_ema=id_stability_min_score_ema,
+            )
+            if id_stability_filter_enabled
+            else None
+        )
         lifecycle_merger = TrackletLifecycleMerger(
             enabled=lifecycle_merge_enabled,
             ttl=lifecycle_ttl,
@@ -698,17 +961,6 @@ def run_eval(engine, output, data_root, split, sequences, max_frames, conf_thres
             require_embedding=lifecycle_require_embedding,
             ema=lifecycle_ema,
         )
-        detector.tracker.set_params(
-            track_thresh=track_thresh,
-            high_thresh=high_thresh,
-            match_thresh=match_thresh,
-            track_buffer=30,
-            mid_thresh=mid_thresh,
-            confirm_streak=int(kwargs.get("confirm_streak", 1)),
-            confirm_score_thresh=float(kwargs.get("confirm_score_thresh", 0.0)),
-            adaptive_confirmation=bool(kwargs.get("adaptive_confirmation", False)),
-            new_track_thresh=new_track_thresh,
-        )
         detector.tracker.set_reid_params(
             cos_threshold=float(kwargs.get("reid_cos_threshold", 0.90)),
             iou_low=float(kwargs.get("reid_iou_low", 0.30)),
@@ -716,16 +968,28 @@ def run_eval(engine, output, data_root, split, sequences, max_frames, conf_thres
             weight=float(kwargs.get("reid_weight", 0.80)),
         )
 
-        relinker = SemanticRelinker(
-            sim_threshold=kwargs.get("semantic_threshold", 0.95),
-            ttl=kwargs.get("semantic_ttl", 45),
-            ema_beta=kwargs.get("semantic_ema", 0.83),
-            spatial_gate=kwargs.get("semantic_spatial_gate", 0.20),
-            min_lost_frames=kwargs.get("semantic_min_lost_frames", 2),
-            min_iou=kwargs.get("semantic_min_iou", 0.20),
-            mahalanobis_threshold=kwargs.get("semantic_mahalanobis_threshold", 0.0),
-            debug=kwargs.get("semantic_debug", False),
-        ) if use_semantic_mode else None
+        _use_python_relinker = semantic_rerank_mode != "mean"
+        _relinker_cls = (
+            PythonSemanticRelinker if _use_python_relinker else SemanticRelinker
+        )
+        relinker = (
+            _relinker_cls(
+                sim_threshold=kwargs.get("semantic_threshold", 0.90),
+                ttl=kwargs.get("semantic_ttl", 45),
+                ema_beta=kwargs.get("semantic_ema", 0.83),
+                spatial_gate=kwargs.get("semantic_spatial_gate", 0.20),
+                min_lost_frames=kwargs.get("semantic_min_lost_frames", 2),
+                min_iou=kwargs.get("semantic_min_iou", 0.20),
+                mahalanobis_threshold=kwargs.get("semantic_mahalanobis_threshold", 0.0),
+                buffer_size=semantic_buffer_size,
+                min_consistency=semantic_min_consistency,
+                rerank_mode=semantic_rerank_mode,
+                reciprocal_margin=semantic_reciprocal_margin,
+                debug=kwargs.get("semantic_debug", False),
+            )
+            if use_semantic_mode
+            else None
+        )
 
         seq_path = Path(data_root) / split / seq
         if not (seq_path / "seqinfo.ini").exists():
@@ -735,14 +999,92 @@ def run_eval(engine, output, data_root, split, sequences, max_frames, conf_thres
         w_orig = config.getint("Sequence", "imWidth")
         h_orig = config.getint("Sequence", "imHeight")
         frame_end = min(max_frames or int(1e9), config.getint("Sequence", "seqLength"))
+        seq_fps = config.getint("Sequence", "frameRate", fallback=30)
+
+        # F-1: Per-sequence adaptive params — scale temporal params by fps/30
+        seq_reid_interval = reid_interval
+        seq_track_buffer = 30
+        if per_seq_adapt and seq_fps != 30:
+            fps_scale = seq_fps / 30.0
+            seq_reid_interval = max(1, round(reid_interval * fps_scale))
+            seq_track_buffer = max(10, round(30 * fps_scale))
+        detector.tracker.set_params(
+            track_thresh=track_thresh,
+            high_thresh=high_thresh,
+            match_thresh=match_thresh,
+            track_buffer=seq_track_buffer,
+            mid_thresh=mid_thresh,
+            confirm_streak=int(kwargs.get("confirm_streak", 1)),
+            confirm_score_thresh=float(kwargs.get("confirm_score_thresh", 0.0)),
+            adaptive_confirmation=bool(kwargs.get("adaptive_confirmation", False)),
+            new_track_thresh=new_track_thresh,
+            nsa_kalman=nsa_kalman,
+        )
 
         pool = AdaptiveFramePool(h_orig, w_orig)
         streamer = DALIStreamerStream(seq_path / "img1")
         stream_iter = iter(streamer)
         results_lines, frame_latencies = [], []
+        output_appearance_bank = (
+            OutputAppearanceBank(
+                max_samples=post_lifecycle_appearance_max_samples,
+                min_score=post_lifecycle_appearance_min_score,
+                min_consistency=post_lifecycle_appearance_min_consistency,
+            )
+            if post_lifecycle_appearance_gate
+            else None
+        )
+        primary_appearance_bank = (
+            TrackAppearanceBank(
+                k=appearance_bank_size,
+                min_score=appearance_bank_min_score,
+                min_iou=appearance_bank_min_iou,
+                consistency_threshold=appearance_bank_consistency_threshold,
+            )
+            if appearance_bank_enabled
+            else None
+        )
+        dynamic_reid = (
+            DynamicReIDController(
+                history_size=max(2, int(kwargs.get("reid_history_size", 5))),
+                mode=str(kwargs.get("reid_trigger_mode", "event_any")),
+                long_memory_decay=float(kwargs.get("reid_long_memory_decay", 0.80)),
+                long_memory_trigger=float(kwargs.get("reid_long_memory_trigger", 1.25)),
+                score_decay=float(kwargs.get("reid_score_decay", 0.80)),
+                score_threshold=float(kwargs.get("reid_score_threshold", 2.0)),
+                score_threshold_low=float(
+                    kwargs.get("reid_score_threshold_low")
+                    if kwargs.get("reid_score_threshold_low") is not None
+                    else kwargs.get("reid_score_threshold", 2.0)
+                ),
+                weight_new=float(kwargs.get("reid_weight_new", 1.0)),
+                weight_lost=float(kwargs.get("reid_weight_lost", 1.4)),
+                weight_geom=float(kwargs.get("reid_weight_geom", 0.5)),
+                weight_conf=float(kwargs.get("reid_weight_conf", 0.5)),
+                birth_death_boost=float(kwargs.get("reid_birth_death_boost", 1.0)),
+                lost_age_cap=int(kwargs.get("reid_lost_age_cap", 30)),
+                unstable_shift_weight=float(
+                    kwargs.get("reid_unstable_shift_weight", 1.0)
+                ),
+                unstable_iou_weight=float(kwargs.get("reid_unstable_iou_weight", 1.0)),
+                conf_jitter_gate=float(kwargs.get("reid_conf_jitter_gate", 0.10)),
+                trigger_persist_frames=int(
+                    kwargs.get("reid_trigger_persist_frames", 1)
+                ),
+                cooldown_frames=int(kwargs.get("reid_cooldown_frames", 0)),
+                birth_death_lost_min=float(
+                    kwargs.get("reid_birth_death_lost_min", 0.0)
+                ),
+            )
+            if need_reid_enabled
+            else None
+        )
+        prev_track_ids: set[int] = set()
         start_time = time.time()
         warmup_frames = int(kwargs.get("warmup_frames", 50))
-        seq_stage_totals = OrderedDict((name, 0.0) for name in overall_stage_totals.keys())
+        seq_stage_totals = OrderedDict(
+            (name, 0.0) for name in overall_stage_totals.keys()
+        )
         seq_post_counts = OrderedDict(
             (name, 0)
             for name in ("raw_boxes", "after_filter", "after_nms", "after_merge")
@@ -757,12 +1099,16 @@ def run_eval(engine, output, data_root, split, sequences, max_frames, conf_thres
         seq_lazy_reid_arbiter_approve = 0
         lazy_reid_prev_embeddings: dict[int, torch.Tensor] = {}
         seq_profiled_frames = 0
+        last_reid_frame = -100
 
         for frame_id in range(1, frame_end + 1):
             t_e2e_start = time.perf_counter()
             try:
                 frame_gpu, _fetch_ms = time_stage(
-                    seq_stage_totals, "fetch", lambda: next(stream_iter), sync_cuda=False
+                    seq_stage_totals,
+                    "fetch",
+                    lambda: next(stream_iter),
+                    sync_cuda=False,
                 )
             except StopIteration:
                 break
@@ -773,7 +1119,13 @@ def run_eval(engine, output, data_root, split, sequences, max_frames, conf_thres
                 "ingest_preprocess",
                 lambda: (
                     pool.frame_buffer.copy_(frame_gpu.permute(2, 0, 1).float() / 255.0),
-                    apply_frame_preprocess(pool.frame_buffer, preprocess_modes, gamma, gamma_luma_threshold, contrast),
+                    apply_frame_preprocess(
+                        pool.frame_buffer,
+                        preprocess_modes,
+                        gamma,
+                        gamma_luma_threshold,
+                        contrast,
+                    ),
                 ),
                 sync_cuda=True,
             )
@@ -789,7 +1141,9 @@ def run_eval(engine, output, data_root, split, sequences, max_frames, conf_thres
                 if frame_id > warmup_frames:
                     frame_latencies.append((time.perf_counter() - t_frame_start) * 1000)
                 if profile_stages and frame_id > warmup_frames:
-                    seq_stage_totals["frame_total"] += (time.perf_counter() - t_e2e_start) * 1000
+                    seq_stage_totals["frame_total"] += (
+                        time.perf_counter() - t_e2e_start
+                    ) * 1000
                     seq_profiled_frames += 1
                 if frame_id % 100 == 0:
                     print(f"🎬 {seq} [{frame_id}/{frame_end}]")
@@ -802,56 +1156,51 @@ def run_eval(engine, output, data_root, split, sequences, max_frames, conf_thres
                 t_post_start = time.perf_counter()
             raw_box_count = int(fused_scores.numel())
             t_sub_start = time.perf_counter()
-            keep_mask = fused_scores > min(conf_threshold, track_thresh)
-            geometry_clean_mask = torch.ones_like(keep_mask, dtype=torch.bool)
-            if track_person_only:
-                keep_mask = keep_mask & (fused_classes == person_class)
-            if is_tiled:
-                box_cx = (fused_boxes[:, 0] + fused_boxes[:, 2]) * 0.5
-                box_cy = (fused_boxes[:, 1] + fused_boxes[:, 3]) * 0.5
-                keep_mask = keep_mask & (box_cx >= 0) & (box_cx < w_orig) & (box_cy >= 0) & (box_cy < h_orig)
-            if person_geometry_prior:
-                box_wh = (fused_boxes[:, 2:] - fused_boxes[:, :2]).clamp(min=1e-6)
-                box_w = box_wh[:, 0]
-                box_h = box_wh[:, 1]
-                box_aspect = box_h / box_w
-                box_area_ratio = (box_w * box_h) / max(float(w_orig * h_orig), 1.0)
-                if person_min_height_ratio > 0.0:
-                    geometry_clean_mask = geometry_clean_mask & (box_h >= h_orig * person_min_height_ratio)
-                if person_min_aspect > 0.0:
-                    geometry_clean_mask = geometry_clean_mask & (box_aspect >= person_min_aspect)
-                if person_max_aspect > 0.0:
-                    geometry_clean_mask = geometry_clean_mask & (box_aspect <= person_max_aspect)
-                if person_min_area_ratio > 0.0:
-                    geometry_clean_mask = geometry_clean_mask & (box_area_ratio >= person_min_area_ratio)
-                if person_max_area_ratio > 0.0:
-                    geometry_clean_mask = geometry_clean_mask & (box_area_ratio <= person_max_area_ratio)
-                if not geometry_suspect_support:
-                    keep_mask = keep_mask & geometry_clean_mask
-            geometry_suspect_mask = keep_mask & ~geometry_clean_mask if (
-                person_geometry_prior and geometry_suspect_support
-            ) else torch.zeros_like(keep_mask, dtype=torch.bool)
-            fused_boxes = fused_boxes[keep_mask]
-            fused_scores = fused_scores[keep_mask]
-            fused_classes = fused_classes[keep_mask]
-            geometry_suspect_mask = geometry_suspect_mask[keep_mask]
+            keep_indices, geometry_suspect_mask = filter_detections_fast(
+                fused_boxes,
+                fused_scores,
+                fused_classes,
+                score_threshold=min(conf_threshold, track_thresh),
+                track_person_only=track_person_only,
+                person_class=person_class,
+                is_tiled=is_tiled,
+                frame_w=w_orig,
+                frame_h=h_orig,
+                person_geometry_prior=person_geometry_prior,
+                geometry_suspect_support=geometry_suspect_support,
+                person_min_height_ratio=person_min_height_ratio,
+                person_min_aspect=person_min_aspect,
+                person_max_aspect=person_max_aspect,
+                person_min_area_ratio=person_min_area_ratio,
+                person_max_area_ratio=person_max_area_ratio,
+            )
+            fused_boxes = fused_boxes[keep_indices]
+            fused_scores = fused_scores[keep_indices]
+            fused_classes = fused_classes[keep_indices]
             suspect_boxes = fused_boxes[geometry_suspect_mask]
             if geometry_suspect_support and geometry_suspect_mask.any():
                 fused_scores = fused_scores.clone()
                 fused_scores[geometry_suspect_mask] = torch.minimum(
                     fused_scores[geometry_suspect_mask],
-                    torch.full_like(fused_scores[geometry_suspect_mask], geometry_suspect_support_score),
+                    torch.full_like(
+                        fused_scores[geometry_suspect_mask],
+                        geometry_suspect_support_score,
+                    ),
                 )
             if profile_stages:
                 torch.cuda.synchronize()
-                seq_stage_totals["post_filter"] += (time.perf_counter() - t_sub_start) * 1000
+                seq_stage_totals["post_filter"] += (
+                    time.perf_counter() - t_sub_start
+                ) * 1000
             after_filter_count = int(fused_scores.numel())
 
             if fused_boxes.numel() == 0:
                 if frame_id > warmup_frames:
                     frame_latencies.append((time.perf_counter() - t_frame_start) * 1000)
                 if profile_stages and frame_id > warmup_frames:
-                    seq_stage_totals["frame_total"] += (time.perf_counter() - t_e2e_start) * 1000
+                    seq_stage_totals["frame_total"] += (
+                        time.perf_counter() - t_e2e_start
+                    ) * 1000
                     seq_profiled_frames += 1
                 if frame_id % 100 == 0:
                     print(f"🎬 {seq} [{frame_id}/{frame_end}]")
@@ -861,10 +1210,13 @@ def run_eval(engine, output, data_root, split, sequences, max_frames, conf_thres
                 if profile_stages:
                     torch.cuda.synchronize()
                     t_sub_start = time.perf_counter()
-                if track_person_only:
-                    keep = nms(fused_boxes, fused_scores, nms_iou_threshold)
-                else:
-                    keep = batched_nms(fused_boxes, fused_scores, fused_classes, nms_iou_threshold)
+                keep = nms_fast(
+                    fused_boxes,
+                    fused_scores,
+                    fused_classes,
+                    nms_iou_threshold,
+                    class_aware=not track_person_only,
+                )
                 fused_boxes = fused_boxes[keep]
                 fused_scores = fused_scores[keep]
                 fused_classes = fused_classes[keep]
@@ -872,25 +1224,33 @@ def run_eval(engine, output, data_root, split, sequences, max_frames, conf_thres
                 suspect_boxes = fused_boxes[geometry_suspect_mask]
                 if profile_stages:
                     torch.cuda.synchronize()
-                    seq_stage_totals["post_nms"] += (time.perf_counter() - t_sub_start) * 1000
+                    seq_stage_totals["post_nms"] += (
+                        time.perf_counter() - t_sub_start
+                    ) * 1000
             after_nms_count = int(fused_scores.numel())
 
             if cross_tile_merge and is_tiled and fused_boxes.numel() > 1:
                 if profile_stages:
                     torch.cuda.synchronize()
                     t_sub_start = time.perf_counter()
-                fused_boxes, fused_scores, fused_classes = merge_cross_tile_duplicates_fast(
-                    fused_boxes, fused_scores, fused_classes
+                fused_boxes, fused_scores, fused_classes = (
+                    merge_cross_tile_duplicates_fast(
+                        fused_boxes, fused_scores, fused_classes
+                    )
                 )
                 geometry_suspect_mask = torch.zeros_like(fused_scores, dtype=torch.bool)
                 suspect_boxes = fused_boxes[:0]
                 if profile_stages:
                     torch.cuda.synchronize()
-                    seq_stage_totals["post_merge"] += (time.perf_counter() - t_sub_start) * 1000
+                    seq_stage_totals["post_merge"] += (
+                        time.perf_counter() - t_sub_start
+                    ) * 1000
             after_merge_count = int(fused_scores.numel())
             if profile_stages:
                 torch.cuda.synchronize()
-                seq_stage_totals["postprocess"] += (time.perf_counter() - t_post_start) * 1000
+                seq_stage_totals["postprocess"] += (
+                    time.perf_counter() - t_post_start
+                ) * 1000
                 if frame_id > warmup_frames:
                     seq_post_counts["raw_boxes"] += raw_box_count
                     seq_post_counts["after_filter"] += after_filter_count
@@ -898,7 +1258,49 @@ def run_eval(engine, output, data_root, split, sequences, max_frames, conf_thres
                     seq_post_counts["after_merge"] += after_merge_count
 
             embeddings = None
-            if reid_enabled and extractor and cropper and fused_boxes.numel() > 0 and frame_id % reid_interval == 0:
+            _do_reid = (
+                reid_work_enabled
+                and extractor is not None
+                and cropper is not None
+                and fused_boxes.numel() > 0
+            )
+            if _do_reid:
+                # 💡 Phase 4: Enforce a minimum interval even with need_reid logic
+                # to prevent pathological cases where every frame triggers ReID.
+                MIN_REID_GAP = 5
+                time_since_last_reid = frame_id - last_reid_frame
+
+                if time_since_last_reid < MIN_REID_GAP:
+                    _do_reid = False
+                elif need_reid_enabled:
+                    if dynamic_reid is not None:
+                        _do_reid = dynamic_reid.should_reid(after_merge_count)
+                    else:
+                        _do_reid = need_reid_frame(prev_track_ids, after_merge_count)
+                else:
+                    _do_reid = frame_id % seq_reid_interval == 0
+
+                if _do_reid:
+                    last_reid_frame = frame_id
+                    if primary_appearance_bank is not None:
+                        bank_reps = primary_appearance_bank.representatives()
+                        if bank_reps:
+                            detector.tracker.set_reference_features_from_bank(bank_reps)
+                        clean_ids = primary_appearance_bank.clean_ids()
+                        if clean_ids:
+                            _clean_ids_list = sorted(clean_ids)
+                            _ids_t = torch.tensor(_clean_ids_list, dtype=torch.int32)
+                            _flags_t = torch.ones(
+                                len(_clean_ids_list), dtype=torch.bool
+                            )
+                            detector.tracker.set_clean_embedding_flags(_ids_t, _flags_t)
+                        else:
+                            detector.tracker.set_clean_embedding_flags(
+                                torch.zeros(0, dtype=torch.int32),
+                                torch.zeros(0, dtype=torch.bool),
+                            )
+
+            if reid_enabled and _do_reid:
                 if profile_stages:
                     torch.cuda.synchronize()
                     t_reid_start = time.perf_counter()
@@ -906,23 +1308,21 @@ def run_eval(engine, output, data_root, split, sequences, max_frames, conf_thres
                 if reid_crop_layout == "parts":
                     crops = cropper.process_parts(frame_batch, fused_boxes)
                     if crops.numel() > 0:
-                        part_embeddings = extractor.extract(crops).view(3, fused_boxes.shape[0], -1)
-                        weights = torch.tensor(
-                            [0.5, 0.3, 0.2],
-                            device=part_embeddings.device,
-                            dtype=part_embeddings.dtype,
-                        ).view(3, 1, 1)
-                        embeddings = F.normalize((part_embeddings * weights).sum(dim=0), dim=-1)
+                        embeddings = extractor.extract_parts_fused(crops)
                 else:
                     crops = cropper.process(frame_batch, fused_boxes)
                     if crops.numel() > 0:
                         embeddings = extractor.extract(crops)
                 if profile_stages:
                     torch.cuda.synchronize()
-                    seq_stage_totals["reid"] += (time.perf_counter() - t_reid_start) * 1000
+                    seq_stage_totals["reid"] += (
+                        time.perf_counter() - t_reid_start
+                    ) * 1000
 
             mid_thresh_scale = geometry_mid_thresh_scale(
-                fused_boxes, fused_classes, h_orig,
+                fused_boxes,
+                fused_classes,
+                h_orig,
                 enabled=geometry_mid_scale,
                 person_class=person_class,
                 track_person_only=track_person_only,
@@ -935,6 +1335,11 @@ def run_eval(engine, output, data_root, split, sequences, max_frames, conf_thres
                 min_samples=geometry_min_samples,
                 state=geometry_scale_state,
             )
+            gmc_warp = None
+            if gmc_estimator is not None:
+                _raw_warp = gmc_estimator.estimate(pool.frame_buffer)
+                if _raw_warp is not None:
+                    gmc_warp = _raw_warp.to(fused_boxes.device)
             tracks, _ = time_stage(
                 seq_stage_totals,
                 "track",
@@ -943,6 +1348,7 @@ def run_eval(engine, output, data_root, split, sequences, max_frames, conf_thres
                     fused_scores,
                     fused_classes.to(torch.int32),
                     embeddings=embeddings if use_tracker_reid else None,
+                    gmc=gmc_warp,
                     mid_thresh_scale=mid_thresh_scale,
                 ),
                 sync_cuda=True,
@@ -951,18 +1357,27 @@ def run_eval(engine, output, data_root, split, sequences, max_frames, conf_thres
             if profile_lazy_reid_candidates:
                 candidates = detector.tracker.get_tentative_candidates()
                 ready_candidates = [
-                    c for c in candidates
+                    c
+                    for c in candidates
                     if c.hit_streak >= lazy_reid_min_hit_streak
                     and c.hit_streak < c.required_confirm_streak
                 ]
                 seq_lazy_reid_candidates += len(ready_candidates)
                 seq_lazy_reid_frames += 1
-                if profile_lazy_reid_embeddings and extractor and cropper and candidates:
+                if (
+                    profile_lazy_reid_embeddings
+                    and extractor
+                    and cropper
+                    and candidates
+                ):
                     ready_ids = {int(c.obj_id) for c in ready_candidates}
 
-                    def _profile_lazy_reid_embeddings() -> tuple[int, int, int, float, int, int, set[int]]:
+                    def _profile_lazy_reid_embeddings() -> tuple[
+                        int, int, int, float, int, int, set[int]
+                    ]:
                         embed_candidates = [
-                            c for c in candidates
+                            c
+                            for c in candidates
                             if int(c.class_id) == person_class and c.hit_streak >= 1
                         ]
                         if not embed_candidates:
@@ -972,7 +1387,9 @@ def run_eval(engine, output, data_root, split, sequences, max_frames, conf_thres
                             device=pool.frame_buffer.device,
                             dtype=torch.float32,
                         )
-                        crops = cropper.process(pool.frame_buffer.unsqueeze(0), cand_boxes)
+                        crops = cropper.process(
+                            pool.frame_buffer.unsqueeze(0), cand_boxes
+                        )
                         if crops.numel() == 0:
                             return 0, 0, 0, 0.0, 0, 0, set()
                         cand_embeddings = extractor.extract(crops)
@@ -994,10 +1411,32 @@ def run_eval(engine, output, data_root, split, sequences, max_frames, conf_thres
                                     if sim >= lazy_reid_self_threshold:
                                         arbiter_approve += 1
                             lazy_reid_prev_embeddings[tid] = emb.detach()
-                        return len(embed_candidates), pairs, passed, sim_sum, arbiter_checks, arbiter_approve, seen_ids
+                        return (
+                            len(embed_candidates),
+                            pairs,
+                            passed,
+                            sim_sum,
+                            arbiter_checks,
+                            arbiter_approve,
+                            seen_ids,
+                        )
 
-                    (crop_count, pair_count, pass_count, sim_sum, arbiter_checks, arbiter_approve, seen_ids), _ = time_stage(
-                        seq_stage_totals, "lazy_reid", _profile_lazy_reid_embeddings, sync_cuda=True,
+                    (
+                        (
+                            crop_count,
+                            pair_count,
+                            pass_count,
+                            sim_sum,
+                            arbiter_checks,
+                            arbiter_approve,
+                            seen_ids,
+                        ),
+                        _,
+                    ) = time_stage(
+                        seq_stage_totals,
+                        "lazy_reid",
+                        _profile_lazy_reid_embeddings,
+                        sync_cuda=True,
                     )
                     seq_lazy_reid_crops += crop_count
                     seq_lazy_reid_self_pairs += pair_count
@@ -1006,7 +1445,9 @@ def run_eval(engine, output, data_root, split, sequences, max_frames, conf_thres
                     seq_lazy_reid_arbiter_checks += arbiter_checks
                     seq_lazy_reid_arbiter_approve += arbiter_approve
                     if seen_ids:
-                        for stale_id in set(lazy_reid_prev_embeddings.keys()) - seen_ids:
+                        for stale_id in (
+                            set(lazy_reid_prev_embeddings.keys()) - seen_ids
+                        ):
                             lazy_reid_prev_embeddings.pop(stale_id, None)
 
             if profile_stages:
@@ -1021,8 +1462,14 @@ def run_eval(engine, output, data_root, split, sequences, max_frames, conf_thres
                 if int(t.class_id) != person_class:
                     continue
                 raw_box = (float(t.x1), float(t.y1), float(t.x2), float(t.y2))
-                if geometry_suspect_support and suspect_boxes.numel() > 0 and float(t.score) <= geometry_suspect_support_score + 1e-4:
-                    tb = torch.tensor([t.x1, t.y1, t.x2, t.y2], device=suspect_boxes.device)
+                if (
+                    geometry_suspect_support
+                    and suspect_boxes.numel() > 0
+                    and float(t.score) <= geometry_suspect_support_score + 1e-4
+                ):
+                    tb = torch.tensor(
+                        [t.x1, t.y1, t.x2, t.y2], device=suspect_boxes.device
+                    )
                     if float(_box_iou_single(tb, suspect_boxes).max()) > 0.5:
                         continue
                 if id_stability_filter and not id_stability_filter.accept(
@@ -1030,18 +1477,51 @@ def run_eval(engine, output, data_root, split, sequences, max_frames, conf_thres
                 ):
                     continue
                 tid = t.obj_id
+                emb = None
+                det_idx = getattr(t, "det_idx", -1)
+                if (
+                    embeddings is not None
+                    and det_idx >= 0
+                    and det_idx < fused_boxes.shape[0]
+                ):
+                    emb = embeddings[det_idx]
+                    if primary_appearance_bank is not None:
+                        tb = torch.tensor(
+                            [t.x1, t.y1, t.x2, t.y2], device=fused_boxes.device
+                        )
+                        match_iou = float(
+                            _box_iou_single(
+                                tb, fused_boxes[det_idx : det_idx + 1]
+                            ).item()
+                        )
+                        if match_iou > 0.35:
+                            primary_appearance_bank.update(
+                                int(t.obj_id),
+                                embeddings[det_idx],
+                                det_score=float(fused_scores[det_idx]),
+                                iou=match_iou,
+                                frame_id=frame_id,
+                                geometry_clean=True,
+                                suspect_box=bool(geometry_suspect_mask[det_idx])
+                                if geometry_suspect_mask.numel() > det_idx
+                                else False,
+                            )
                 if relinker:
-                    emb = None
-                    if embeddings is not None:
-                        tb = torch.tensor([t.x1, t.y1, t.x2, t.y2], device=fused_boxes.device)
-                        ious = _box_iou_single(tb, fused_boxes)
-                        best = int(ious.argmax())
-                        if float(ious[best]) > 0.5:
-                            emb = embeddings[best]
+                    reid_emb = emb
+                    if (
+                        primary_appearance_bank is not None
+                        and not primary_appearance_bank.is_consistent(int(t.obj_id))
+                    ):
+                        reid_emb = None  # Phase 2: consistency gate — don't relink with dirty bank
                     tid = relinker.resolve(
-                        t.obj_id, emb,
+                        t.obj_id,
+                        reid_emb,
                         (t.x1, t.y1, t.x2, t.y2),
-                        t.score, frame_id, w_orig, h_orig, assigned_ids,
+                        t.score,
+                        frame_id,
+                        w_orig,
+                        h_orig,
+                        assigned_ids,
                     )
                 tid = lifecycle_merger.resolve(
                     int(tid),
@@ -1056,19 +1536,62 @@ def run_eval(engine, output, data_root, split, sequences, max_frames, conf_thres
                 global_tid = global_id_mapper.map(seq, tid)
                 x1, y1, x2, y2 = t.x1, t.y1, t.x2, t.y2
                 results_lines.append(
-                    f"{frame_id},{global_tid},{max(0,x1):.2f},{max(0,y1):.2f},"
-                    f"{min(w_orig,x2)-max(0,x1):.2f},{min(h_orig,y2)-max(0,y1):.2f},"
+                    f"{frame_id},{global_tid},{max(0, x1):.2f},{max(0, y1):.2f},"
+                    f"{min(w_orig, x2) - max(0, x1):.2f},{min(h_orig, y2) - max(0, y1):.2f},"
                     f"{t.score:.4f},-1,-1,-1"
                 )
+                if output_appearance_bank is not None:
+                    output_appearance_bank.update(
+                        int(global_tid),
+                        emb,
+                        score=float(t.score),
+                        frame_id=frame_id,
+                    )
             lifecycle_merger.prune(frame_id)
+            curr_track_ids = {int(t.obj_id) for t in tracks}
+            # C: at track death, replace relinker's drifted EMA with the bank's quality-filtered representative
+            if (
+                relinker is not None
+                and semantic_bank_inject
+                and primary_appearance_bank is not None
+            ):
+                just_lost = prev_track_ids - curr_track_ids
+                for _lost_tid in just_lost:
+                    if not primary_appearance_bank.is_consistent(_lost_tid):
+                        continue
+                    _rep = primary_appearance_bank.representative(_lost_tid)
+                    if _rep is None:
+                        continue
+                    _canonical = relinker.alias.get(_lost_tid, _lost_tid)
+                    if _canonical in relinker.features:
+                        relinker.inject_reference(_canonical, _rep)
+            if dynamic_reid is not None:
+                dynamic_reid.observe(
+                    {
+                        int(t.obj_id): ReIDTrackObservation(
+                            box=(float(t.x1), float(t.y1), float(t.x2), float(t.y2)),
+                            det_score=float(t.score),
+                        )
+                        for t in tracks
+                        if int(t.class_id) == person_class
+                    },
+                    gmc=gmc_warp if gmc_enabled else None,
+                )
+            if primary_appearance_bank is not None:
+                primary_appearance_bank.prune(curr_track_ids)
+            prev_track_ids = curr_track_ids
             if profile_stages:
                 torch.cuda.synchronize()
-                seq_stage_totals["relink_write"] += (time.perf_counter() - t_relink_write_start) * 1000
+                seq_stage_totals["relink_write"] += (
+                    time.perf_counter() - t_relink_write_start
+                ) * 1000
 
             if frame_id > warmup_frames:
                 frame_latencies.append((time.perf_counter() - t_frame_start) * 1000)
             if profile_stages and frame_id > warmup_frames:
-                seq_stage_totals["frame_total"] += (time.perf_counter() - t_e2e_start) * 1000
+                seq_stage_totals["frame_total"] += (
+                    time.perf_counter() - t_e2e_start
+                ) * 1000
                 seq_profiled_frames += 1
             if frame_id % 100 == 0:
                 print(f"🎬 {seq} [{frame_id}/{frame_end}]")
@@ -1098,17 +1621,35 @@ def run_eval(engine, output, data_root, split, sequences, max_frames, conf_thres
             time_weight=post_lifecycle_time_weight,
             direction_weight=post_lifecycle_direction_weight,
             max_cost=post_lifecycle_max_cost,
+            appearance_bank=output_appearance_bank,
+            appearance_gate=post_lifecycle_appearance_gate,
+            appearance_threshold=post_lifecycle_appearance_threshold,
+            appearance_min_samples=post_lifecycle_appearance_min_samples,
         )
         if post_lifecycle_merge:
             print(
                 "🔗 Post Lifecycle Merge: "
                 f"candidates={post_merge_stats['candidates']} "
                 f"accepted={post_merge_stats['accepted']} "
-                f"ids={post_merge_stats['ids_before']}->{post_merge_stats['ids_after']}"
+                f"ids={post_merge_stats['ids_before']}->{post_merge_stats['ids_after']} "
+                f"reject_app={post_merge_stats['reject_appearance']} "
+                f"reject_app_missing={post_merge_stats['reject_appearance_missing']} "
+                f"reject_app_consistency={post_merge_stats['reject_appearance_consistency']}"
+            )
+
+        results_lines, quality_stats = filter_low_quality_tracklets(
+            results_lines,
+            min_len=min_tracklet_len,
+            min_score=min_tracklet_score,
+        )
+        if quality_stats["removed"] > 0:
+            print(
+                f"🧹 Quality Filter: removed={quality_stats['removed']} "
+                f"ids={quality_stats['before']}->{quality_stats['after']}"
             )
 
         Path(output_root / f"{seq}.txt").write_text("\n".join(results_lines))
-        print(f"✅ Finished {seq} (Total Time: {time.time()-start_time:.2f}s)")
+        print(f"✅ Finished {seq} (Total Time: {time.time() - start_time:.2f}s)")
         if relinker:
             relinker.report()
         lifecycle_merger.report()
@@ -1127,7 +1668,9 @@ def run_eval(engine, output, data_root, split, sequences, max_frames, conf_thres
                     overall_post_counts[count_name] += total_count
             if profile_lazy_reid_candidates and seq_lazy_reid_frames > 0:
                 mean_lazy = seq_lazy_reid_candidates / seq_lazy_reid_frames
-                print(f"  - lazy_reid_candidates: {mean_lazy:.2f}/frame ({seq_lazy_reid_candidates} total)")
+                print(
+                    f"  - lazy_reid_candidates: {mean_lazy:.2f}/frame ({seq_lazy_reid_candidates} total)"
+                )
                 overall_lazy_reid_candidates += seq_lazy_reid_candidates
                 overall_lazy_reid_frames += seq_lazy_reid_frames
                 overall_lazy_reid_crops += seq_lazy_reid_crops
@@ -1138,14 +1681,24 @@ def run_eval(engine, output, data_root, split, sequences, max_frames, conf_thres
                 overall_lazy_reid_arbiter_approve += seq_lazy_reid_arbiter_approve
                 if profile_lazy_reid_embeddings:
                     mean_crops = seq_lazy_reid_crops / seq_lazy_reid_frames
-                    mean_sim = seq_lazy_reid_self_sim_sum / max(seq_lazy_reid_self_pairs, 1)
-                    pass_rate = seq_lazy_reid_self_pass / max(seq_lazy_reid_self_pairs, 1) * 100.0
+                    mean_sim = seq_lazy_reid_self_sim_sum / max(
+                        seq_lazy_reid_self_pairs, 1
+                    )
+                    pass_rate = (
+                        seq_lazy_reid_self_pass
+                        / max(seq_lazy_reid_self_pairs, 1)
+                        * 100.0
+                    )
                     print(
                         f"  - lazy_reid_embeddings: {mean_crops:.2f} crops/frame, "
                         f"self_pairs={seq_lazy_reid_self_pairs}, mean_cos={mean_sim:.3f}, "
                         f"pass@{lazy_reid_self_threshold:.2f}={pass_rate:.1f}%"
                     )
-                    arbiter_rate = seq_lazy_reid_arbiter_approve / max(seq_lazy_reid_arbiter_checks, 1) * 100.0
+                    arbiter_rate = (
+                        seq_lazy_reid_arbiter_approve
+                        / max(seq_lazy_reid_arbiter_checks, 1)
+                        * 100.0
+                    )
                     print(
                         f"  - lazy_reid_arbiter_dry_run: checks={seq_lazy_reid_arbiter_checks}, "
                         f"approve={seq_lazy_reid_arbiter_approve} ({arbiter_rate:.1f}%)"
@@ -1160,7 +1713,9 @@ def run_eval(engine, output, data_root, split, sequences, max_frames, conf_thres
                 )
             for count_name, total_count in seq_post_counts.items():
                 mean_count = total_count / seq_profiled_frames
-                stage_summary_lines.append(f"{count_name}\tmean={mean_count:.1f}\ttotal={total_count}")
+                stage_summary_lines.append(
+                    f"{count_name}\tmean={mean_count:.1f}\ttotal={total_count}"
+                )
             if profile_lazy_reid_candidates and seq_lazy_reid_frames > 0:
                 mean_lazy = seq_lazy_reid_candidates / seq_lazy_reid_frames
                 stage_summary_lines.append(
@@ -1168,14 +1723,24 @@ def run_eval(engine, output, data_root, split, sequences, max_frames, conf_thres
                 )
                 if profile_lazy_reid_embeddings:
                     mean_crops = seq_lazy_reid_crops / seq_lazy_reid_frames
-                    mean_sim = seq_lazy_reid_self_sim_sum / max(seq_lazy_reid_self_pairs, 1)
-                    pass_rate = seq_lazy_reid_self_pass / max(seq_lazy_reid_self_pairs, 1) * 100.0
+                    mean_sim = seq_lazy_reid_self_sim_sum / max(
+                        seq_lazy_reid_self_pairs, 1
+                    )
+                    pass_rate = (
+                        seq_lazy_reid_self_pass
+                        / max(seq_lazy_reid_self_pairs, 1)
+                        * 100.0
+                    )
                     stage_summary_lines.append(
                         f"lazy_reid_embeddings\tmean_crops={mean_crops:.2f}\t"
                         f"self_pairs={seq_lazy_reid_self_pairs}\tmean_cos={mean_sim:.3f}\t"
                         f"pass_rate={pass_rate:.1f}%"
                     )
-                    arbiter_rate = seq_lazy_reid_arbiter_approve / max(seq_lazy_reid_arbiter_checks, 1) * 100.0
+                    arbiter_rate = (
+                        seq_lazy_reid_arbiter_approve
+                        / max(seq_lazy_reid_arbiter_checks, 1)
+                        * 100.0
+                    )
                     stage_summary_lines.append(
                         f"lazy_reid_arbiter_dry_run\tchecks={seq_lazy_reid_arbiter_checks}\t"
                         f"approve={seq_lazy_reid_arbiter_approve}\tapprove_rate={arbiter_rate:.1f}%"
@@ -1189,8 +1754,12 @@ def run_eval(engine, output, data_root, split, sequences, max_frames, conf_thres
             fps_summary_lines.append(
                 f"OVERALL\tfps={overall_fps:.2f}\tmean_ms={overall_mean_ms:.2f}\tframes={len(overall_latency_ms)}"
             )
-            print(f"\n📈 Overall throughput: {overall_fps:.2f} FPS ({overall_mean_ms:.2f} ms)")
-        (output_root / "_fps_summary.txt").write_text("\n".join(fps_summary_lines) + "\n")
+            print(
+                f"\n📈 Overall throughput: {overall_fps:.2f} FPS ({overall_mean_ms:.2f} ms)"
+            )
+        (output_root / "_fps_summary.txt").write_text(
+            "\n".join(fps_summary_lines) + "\n"
+        )
     mapping_lines = global_id_mapper.dump_lines()
     if mapping_lines:
         (output_root / "_global_id_map.txt").write_text("\n".join(mapping_lines) + "\n")
@@ -1209,23 +1778,37 @@ def run_eval(engine, output, data_root, split, sequences, max_frames, conf_thres
             for count_name, total_count in overall_post_counts.items():
                 mean_count = total_count / overall_profiled_frames
                 print(f"    - {count_name}: {mean_count:.1f} boxes/frame")
-                stage_summary_lines.append(f"{count_name}\tmean={mean_count:.1f}\ttotal={total_count}")
+                stage_summary_lines.append(
+                    f"{count_name}\tmean={mean_count:.1f}\ttotal={total_count}"
+                )
         if profile_lazy_reid_candidates and overall_lazy_reid_frames > 0:
             mean_lazy = overall_lazy_reid_candidates / overall_lazy_reid_frames
-            print(f"  - lazy_reid_candidates: {mean_lazy:.2f}/frame ({overall_lazy_reid_candidates} total)")
+            print(
+                f"  - lazy_reid_candidates: {mean_lazy:.2f}/frame ({overall_lazy_reid_candidates} total)"
+            )
             stage_summary_lines.append(
                 f"lazy_reid_candidates\tmean={mean_lazy:.2f}\ttotal={overall_lazy_reid_candidates}"
             )
             if profile_lazy_reid_embeddings:
                 mean_crops = overall_lazy_reid_crops / overall_lazy_reid_frames
-                mean_sim = overall_lazy_reid_self_sim_sum / max(overall_lazy_reid_self_pairs, 1)
-                pass_rate = overall_lazy_reid_self_pass / max(overall_lazy_reid_self_pairs, 1) * 100.0
+                mean_sim = overall_lazy_reid_self_sim_sum / max(
+                    overall_lazy_reid_self_pairs, 1
+                )
+                pass_rate = (
+                    overall_lazy_reid_self_pass
+                    / max(overall_lazy_reid_self_pairs, 1)
+                    * 100.0
+                )
                 print(
                     f"  - lazy_reid_embeddings: {mean_crops:.2f} crops/frame, "
                     f"self_pairs={overall_lazy_reid_self_pairs}, mean_cos={mean_sim:.3f}, "
                     f"pass@{lazy_reid_self_threshold:.2f}={pass_rate:.1f}%"
                 )
-                arbiter_rate = overall_lazy_reid_arbiter_approve / max(overall_lazy_reid_arbiter_checks, 1) * 100.0
+                arbiter_rate = (
+                    overall_lazy_reid_arbiter_approve
+                    / max(overall_lazy_reid_arbiter_checks, 1)
+                    * 100.0
+                )
                 print(
                     f"  - lazy_reid_arbiter_dry_run: checks={overall_lazy_reid_arbiter_checks}, "
                     f"approve={overall_lazy_reid_arbiter_approve} ({arbiter_rate:.1f}%)"
@@ -1239,4 +1822,6 @@ def run_eval(engine, output, data_root, split, sequences, max_frames, conf_thres
                     f"lazy_reid_arbiter_dry_run\tchecks={overall_lazy_reid_arbiter_checks}\t"
                     f"approve={overall_lazy_reid_arbiter_approve}\tapprove_rate={arbiter_rate:.1f}%"
                 )
-        (output_root / "_stage_profile.txt").write_text("\n".join(stage_summary_lines) + "\n")
+        (output_root / "_stage_profile.txt").write_text(
+            "\n".join(stage_summary_lines) + "\n"
+        )

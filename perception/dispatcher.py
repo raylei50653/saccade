@@ -3,13 +3,19 @@ import torch
 import time
 from typing import List, Tuple, Dict, Any, Optional, Callable
 from perception.detector_trt import TRTYoloDetector
+
 try:
-    import saccade_tracking_ext
     from saccade_tracking_ext import GPUByteTracker
 except ImportError:
     # Fallback or placeholder if ext not built
-    GPUByteTracker = Any # type: ignore
+    GPUByteTracker = Any
 from cognition.resource_manager import ResourceManager, DegradationLevel
+
+# 定義 CallBack 類型以滿足 Mypy
+TrackResultCallback = Callable[
+    [str, float, torch.Tensor, torch.Tensor, torch.Tensor], Any
+]
+
 
 class AsyncDispatcher:
     def __init__(
@@ -18,7 +24,7 @@ class AsyncDispatcher:
         resource_manager: ResourceManager,
         max_batch: int = 4,
         conf_threshold: float = 0.25,
-        on_track_result: Optional[Callable] = None,
+        on_track_result: Optional[TrackResultCallback] = None,
         extractor: Optional[Any] = None,
         heartbeat_interval: int = 10,
     ):
@@ -29,16 +35,18 @@ class AsyncDispatcher:
         self.on_track_result = on_track_result
         self.extractor = extractor
         self.heartbeat_interval = heartbeat_interval
-        
-        self.queue = asyncio.Queue(maxsize=100)
+
+        # 明確標註 Queue 類型
+        self.queue: asyncio.Queue[Tuple[str, torch.Tensor, float]] = asyncio.Queue(
+            maxsize=100
+        )
         self.trackers: Dict[str, GPUByteTracker] = {}
         self._running = False
 
     def get_tracker(self, stream_id: str) -> GPUByteTracker:
         if stream_id not in self.trackers:
             self.trackers[stream_id] = GPUByteTracker(
-                max_objs=100, 
-                embedding_dim=768 if self.extractor else 0
+                max_objs=100, embedding_dim=768 if self.extractor else 0
             )
         return self.trackers[stream_id]
 
@@ -49,14 +57,20 @@ class AsyncDispatcher:
     async def stop(self) -> None:
         self._running = False
 
-    async def put_frame(self, stream_id: str, frame: torch.Tensor, timestamp: float) -> None:
+    async def put_frame(
+        self, stream_id: str, frame: torch.Tensor, timestamp: float
+    ) -> None:
         try:
             self.queue.put_nowait((stream_id, frame, timestamp))
         except asyncio.QueueFull:
             pass
 
     async def _worker_loop(self) -> None:
-        reid_info = f"heartbeat={self.heartbeat_interval}f" if self.extractor else "ReID disabled"
+        reid_info = (
+            f"heartbeat={self.heartbeat_interval}f"
+            if self.extractor
+            else "ReID disabled"
+        )
         print(f"🚀 [Dispatcher] Worker started. {reid_info}")
 
         while self._running:
@@ -90,7 +104,7 @@ class AsyncDispatcher:
         level: int,
     ) -> None:
         start_time = time.perf_counter()
-        
+
         for stream_id, yolo_input, timestamp in batch_items:
             # --- YOLO 偵測 ---
             with torch.no_grad():
@@ -102,7 +116,8 @@ class AsyncDispatcher:
                 if self.on_track_result:
                     dev = yolo_input.device
                     await self.on_track_result(
-                        stream_id, timestamp,
+                        stream_id,
+                        timestamp,
                         torch.empty((0,), dtype=torch.int32, device=dev),
                         torch.empty((0, 4), dtype=torch.float32, device=dev),
                         torch.empty((0,), dtype=torch.int32, device=dev),
@@ -118,7 +133,9 @@ class AsyncDispatcher:
                 )
             else:
                 tracked_ids, tracked_boxes, tracked_classes = tracker.update(
-                    boxes, scores, classes,
+                    boxes,
+                    scores,
+                    classes,
                     frame_tensor=yolo_input,
                     stream_id=hash(stream_id) & 0x7FFFFFFF,
                 )

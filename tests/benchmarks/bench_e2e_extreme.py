@@ -1,14 +1,14 @@
 import asyncio
 import time
 import torch
-from perception.detector_trt import TRTYoloDetector
-from perception.dispatcher import AsyncDispatcher
-from perception.feature_extractor import TRTFeatureExtractor
-from perception.embedding_dispatcher import EmbeddingDispatcher
-from perception.drift_handler import SemanticDriftHandler
+from perception.detector_trt import TRTYoloDetector  # noqa: E402
+from perception.dispatcher import AsyncDispatcher  # noqa: E402
+from perception.feature_extractor import TRTFeatureExtractor  # noqa: E402
+from perception.embedding_dispatcher import EmbeddingDispatcher  # noqa: E402
+from perception.drift_handler import SemanticDriftHandler  # noqa: E402
 from storage.redis_cache import RedisCache
 from pipeline.orchestrator import PipelineOrchestrator
-from cognition.resource_manager import ResourceManager
+from cognition.resource_manager import ResourceManager  # noqa: E402
 
 
 class E2EStressTester:

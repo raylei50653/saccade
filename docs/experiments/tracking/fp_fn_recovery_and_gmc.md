@@ -1,12 +1,12 @@
 # MOT17 FP/FN Recovery Experiments
 
-Date: 2026-04-27
+Date: 2026-04-29
 
 ## Summary
 
 This round started from a pure-FN-reduction probe and then recovered MOTA by preventing low-confidence detections from creating noisy new identities. Follow-up rounds then added GMC, a semantic appearance buffer, and relinker-threshold tuning.
 
-Final best SDP-wide setting in this round:
+Current base SDP-wide setting:
 
 This setting is now the default for `scripts/eval/mot17.py`; lifecycle and post-lifecycle merge remain opt-in and disabled by default.
 
@@ -34,20 +34,169 @@ This setting is now the default for `scripts/eval/mot17.py`; lifecycle and post-
 --semantic-buffer-size 10 \
 --semantic-threshold 0.90 \
 --semantic-spatial-gate 0.20 \
---semantic-min-iou 0.20
+--semantic-min-iou 0.20 \
+--appearance-bank \
+--appearance-bank-size 5 \
+--appearance-bank-min-score 0.45 \
+--appearance-bank-min-iou 0.35 \
+--appearance-bank-consistency-threshold 0.75 \
+--need-reid
 ```
 
-Best recorded result for this final operating point:
+Latest recorded result for this base operating point (re-run via `scripts/eval/ablation_relink.py`, SDP, 2026-04-28):
 
-- IDF1: `43.9%`
-- Rcll: `50.4%`
-- Prcn: `77.1%`
-- FP: `16,836`
-- FN: `55,657`
-- IDs: `1,140`
-- MOTA: `34.4%`
+- IDF1: `45.4%`
+- Rcll: `50.3%`
+- Prcn: `77.2%`
+- FP: `16,687`
+- FN: `55,765`
+- IDs: `837`
+- MOTA: `34.7%`
 
-Compared with the earlier stable baseline `tentative_sdp_off`, this improves MOTA from `31.9%` to `34.4%`, improves recall from `48.5%` to `50.4%`, and reduces FN from `57,872` to `55,657`. FP is lower (`17,959 -> 16,836`), while IDs remain higher (`656 -> 1,140`).
+Compared with the earlier stable baseline `tentative_sdp_off`, this improves MOTA from `31.9%` to `34.7%`, improves recall from `48.5%` to `50.3%`, and reduces FN from `57,872` to `55,765`. FP is lower (`17,959 -> 16,687`), while IDs remain higher (`656 -> 837`) but are materially improved over the previous ReID-era default (`1,140 -> 837`).
+
+Interpretation:
+
+- The most recent gain comes primarily from earlier ReID-path work becoming the default base, not from a new detector-side FP/FN trick.
+- In particular, promoting the primary appearance bank and lowering its consistency gate from the previously hard-coded `0.82` to `0.75` recovered appearance-path usage that Phase 2 had suppressed.
+- Relative to the previous default (`IDF1 43.9 / MOTA 34.4 / FP 16,836 / FN 55,657 / IDs 1,140`), the new base delivers `IDF1 +1.5pp`, `MOTA +0.3pp`, `FP -149`, `FN -108`, and `IDs -303`.
+
+## Current-Base Relink Sweep (2026-04-28)
+
+Ran:
+
+```bash
+uv run python scripts/eval/ablation_relink.py --detector SDP
+```
+
+This sweep treats the promoted ReID path as the base and only explores the remaining high-ROI neighbourhood:
+
+- primary appearance-bank consistency threshold
+- semantic relinker threshold
+- semantic relinker spatial gate
+- semantic minimum lost frames
+
+Results:
+
+| Config | IDF1 | Rcll | Prcn | MOTA | IDs | FP | FN |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| **Base** | **45.4%** | **50.3%** | **77.2%** | **34.7%** | **837** | **16,687** | **55,765** |
+| `cons=0.72` | 45.7% | 50.4% | 77.1% | 34.7% | 861 | 16,795 | 55,729 |
+| `cons=0.78` | 43.8% | 50.2% | 77.1% | 34.4% | 916 | 16,777 | 55,926 |
+| `thr=0.88` | 45.4% | 50.4% | 77.2% | **34.8%** | 842 | 16,693 | **55,718** |
+| `thr=0.92` | 44.5% | 50.2% | 77.0% | 34.4% | 894 | 16,786 | 55,963 |
+| `gate=0.18` | 45.1% | 50.2% | 77.1% | 34.4% | 912 | 16,753 | 55,950 |
+| `gate=0.22` | 45.7% | 50.4% | 77.1% | 34.7% | 889 | 16,802 | 55,645 |
+| `lost≥1` | 45.6% | 50.3% | 77.1% | 34.6% | **809** | 16,801 | 55,777 |
+| `cons=0.72 thr=0.92` | **45.8%** | 50.3% | 77.1% | 34.6% | 831 | 16,750 | 55,859 |
+
+Conclusions:
+
+- **No tested variant strictly dominated the current base**. The promoted ReID base remains the cleanest default operating point.
+- **Raising consistency to `0.78` is clearly harmful** for SigLIP2: IDF1, MOTA, and IDs all regress. This confirms the earlier concern that the stricter gate suppresses useful appearance recovery.
+- **Lowering consistency to `0.72` gives a small IDF1 gain but increases IDs and FP**, so it is better treated as an IDF1-leaning variant rather than the default.
+- **`thr=0.88` is nearly tied and gives the best MOTA/FN in this sweep**, but the gain is marginal enough that it does not justify changing the global default without sequence-specific follow-up.
+- **`lost≥1` is the best IDs-oriented variant** (`837 -> 809`) but pays for it with slightly higher FP and slightly lower MOTA.
+- **`cons=0.72 thr=0.92` has the best IDF1** (`45.8%`) while preserving IDs close to base, but MOTA is still slightly lower than base.
+
+Recommendation after this sweep:
+
+- Keep the current base defaults unchanged.
+- For future work, prioritize **per-sequence adaptation** over another global threshold change:
+  - `MOT17-02 / MOT17-11`: IDs/FP pressure suggests a slightly more conservative relink profile may help.
+  - `MOT17-04 / MOT17-10 / MOT17-13`: current recovery profile is already strong and should not be regressed by global tightening.
+
+## Rerank Phase 2: Bank Inject + Reciprocal Margin (2026-04-29)
+
+Ran and recorded in:
+
+- `scripts/eval/output/ablation_rerank.txt`
+- `docs/experiments/eval/rerank_phase2.md`
+
+Important context:
+
+- This sweep does **not** start from the current documented base above.
+- Its baseline is a stricter `buf=1 EMA` reference path:
+
+```text
+base (buf=1, EMA): IDF1 43.5 / MOTA 33.8 / IDs 1301 / FP 16888 / FN 56203
+```
+
+- So these results should be interpreted as **Phase 2 control validation**, not as a direct replacement claim against the current default configuration.
+
+Overall results from `ablation_rerank.txt`:
+
+| Config | IDF1 | MOTA | IDs | FP | FN |
+|---|---:|---:|---:|---:|---:|
+| `base (buf=1, EMA)` | 43.5% | 33.8% | 1301 | 16,888 | 56,203 |
+| `C: bank_inject` | 44.9% | 34.6% | 1034 | 16,724 | 55,738 |
+| `D: margin=0.02` | 44.1% | 34.1% | 1190 | 16,761 | 56,020 |
+| `D: margin=0.05` | 43.9% | 33.8% | 1244 | 16,734 | 56,357 |
+| `D: margin=0.10` | 45.0% | 34.4% | 1071 | 16,786 | 55,780 |
+| `C+D: inject+margin=0.02` | 45.0% | 34.2% | 1037 | **16,652** | 56,172 |
+| `C+D: inject+margin=0.05` | **45.3%** | **34.7%** | **842** | 16,719 | **55,723** |
+
+Key observations:
+
+- **Bank inject is the main structural win**. `C` alone already recovers most of the gain: `IDs 1301 -> 1034`, `IDF1 +1.4pp`, `MOTA +0.8pp`.
+- **Reciprocal margin alone is helpful but inconsistent**. `0.02` is a mild conservative improvement, `0.05` is nearly tied with base, and `0.10` is the strongest margin-only variant.
+- **`C+D: inject+margin=0.05` is the best Phase 2 result on this baseline**, reducing IDs by `459`, raising IDF1 by `1.8pp`, and matching the current documented base MOTA (`34.7%`) while staying close on FP.
+- **`C+D: inject+margin=0.02` gives the lowest FP** in the sweep, but its IDF1/MOTA/IDs tradeoff is weaker than `C+D: inject+margin=0.05`.
+
+Sequence-level interpretation:
+
+- `MOT17-02-SDP`: bank inject alone regresses slightly; the cleaner target-sequence behavior comes from reciprocal filtering, especially `D 0.02` or `CD 0.05`.
+- `MOT17-11-SDP`: all Phase 2 variants avoid the earlier Phase 1-style regression; gains are small but non-negative.
+- `MOT17-04-SDP`: this is the dominant gain source. `C` and especially `CD 0.05` sharply reduce IDs and improve IDF1/MOTA.
+- `MOT17-10-SDP`: effectively neutral with small IDs improvements.
+- `MOT17-13-SDP`: essentially flat; the tiny `IDs +1` changes on margin variants are not material.
+
+Practical conclusion:
+
+- Treat `C+D: inject+margin=0.05` as the leading **next default candidate** for the stripped `buf=1 EMA` reference path.
+- Do **not** yet rewrite the global default claim in this document until the same controls are verified directly against the currently documented base configuration.
+- If we want a lower-complexity fallback, `C: bank_inject` alone is already strong and much cleaner than margin-only tuning.
+
+## Reciprocal Margin on Current Documented Base (2026-04-29)
+
+Follow-up validation was run directly on the current documented base above, where `semantic_bank_inject` is already enabled by default and only reciprocal margin `D` is varied.
+
+Verification outputs:
+
+- `scripts/eval/output/current_base_verify`
+- `scripts/eval/output/current_margin_m002`
+- `scripts/eval/output/current_cd_m005_verify`
+- `scripts/eval/output/current_margin_m010`
+- `scripts/eval/output/current_margin_m013`
+- `scripts/eval/output/current_margin_m015`
+- `scripts/eval/output/current_margin_m017`
+
+Overall comparison:
+
+| Config | IDF1 | MOTA | IDs | FP | FN |
+|---|---:|---:|---:|---:|---:|
+| `base` | 44.86% | 34.79% | 862 | 16,776 | 55,589 |
+| `margin=0.02` | 45.24% | 34.54% | 864 | 16,798 | 55,851 |
+| `margin=0.05` | 45.56% | 34.53% | 861 | 16,838 | 55,822 |
+| `margin=0.10` | 44.27% | 34.52% | 891 | 16,823 | 55,820 |
+| `margin=0.13` | 45.10% | 34.70% | 919 | 16,770 | 55,640 |
+| `margin=0.15` | 44.51% | **34.82%** | **845** | 16,845 | **55,502** |
+| `margin=0.17` | 44.51% | 34.44% | 879 | 16,826 | 55,913 |
+
+Conclusions:
+
+- **No reciprocal margin value cleanly beats the current documented base as a new default.**
+- `0.02` and `0.05` improve IDF1, but both reduce MOTA and worsen FP/FN tradeoffs.
+- `0.10` is clearly harmful.
+- `0.13` is unstable: it recovers some IDF1 but regresses IDs badly (`862 -> 919`).
+- **`0.15` is the only margin worth keeping as an optional variant**: it slightly improves MOTA (`34.79 -> 34.82`), reduces IDs (`862 -> 845`), and lowers FN (`55,589 -> 55,502`), but pays with lower IDF1 and higher FP.
+- `0.17` is worse than `0.15`, so the useful region does not appear to extend upward.
+
+Practical recommendation:
+
+- Keep the current documented base unchanged.
+- If we want an **IDs/MOTA-leaning variant** for comparison or sequence-specific use, keep `--semantic-reciprocal-margin 0.15` as the only notable candidate.
+- Do not promote reciprocal margin into the default profile.
 
 ## Implemented Controls
 
@@ -360,7 +509,7 @@ if primary_appearance_bank is not None and not primary_appearance_bank.is_consis
     reid_emb = None  # disable_reid: inconsistent bank → fallback IoU-only relink
 ```
 
-`TrackAppearanceBank.is_consistent()` 計算 bank 內所有 embedding pair 的 pairwise cosine mean，若 < 0.82 代表該 track 的外觀特徵污染（如 ID switch 或 occlusion blur），此時不允許 appearance-based relink，改以 IoU-only fallback。
+`TrackAppearanceBank.is_consistent()` 計算 bank 內所有 embedding pair 的 pairwise cosine mean。Phase 2 初版使用 `< 0.82` 作為污染判定，但這對 SigLIP2 過於保守，會把太多 track 打回 IoU-only fallback。後續已將此門檻放寬並升級為可配置，現行 base 使用 `0.75`。
 
 `clean_ids()` 同時依此條件同步 `d_has_clean_embedding_` 到 C++ tracker，使 CUDA Stage 2 conditional cost kernel 也只對一致 track 啟用 appearance cost path。
 
@@ -420,11 +569,11 @@ Per-sequence:
 - **IDF1/MOTA regression (−0.4/−0.3pp)** is within measurement noise and explained entirely by the FN increase from conservative consistency gate.
 - Phase 2 design goal ("IDs ↓ 20~40%") is **partially met (−10.8%)**. Phase 1 conditional cost has not yet contributed visible IDF1 improvement, possibly because SigLIP2 within-track pairwise cosine is frequently below 0.82, leaving most tracks in IoU-only fallback path. See next directions below.
 
-**Next directions:**
+**Outcome:**
 
-1. **Lower consistency threshold** — 0.82 may be too strict for SigLIP2 (semantic model, not identity-optimized). Try 0.70–0.75 to allow more tracks into the appearance path.
-2. **OSNet / FastReID TRT** — dedicated person ReID model expected to produce within-track cosine > 0.90, enabling full benefit of conditional appearance cost and consistency gate.
-3. **Per-sequence tuning** — MOT17-04 (crowded, static camera) and MOT17-02 (wide angle) remain weak; adaptive thresholds based on `seqinfo.ini` would help.
+1. **Consistency threshold lowered and promoted to base** — the primary appearance bank gate is now configurable, and `0.75` is the new default/base because it restores appearance-path utility without reopening FP.
+2. **OSNet / FastReID TRT** — dedicated person ReID model is still the next major headroom source; SigLIP2 remains a semantic compromise.
+3. **Per-sequence tuning** — MOT17-02 and MOT17-11 remain the main weak sequences for FP/IDs; adaptive thresholds based on `seqinfo.ini` are still justified.
 
 ### Phase 3 解鎖條件
 

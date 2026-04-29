@@ -48,7 +48,9 @@ def parse_batches(raw: str) -> list[int]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Benchmark YOLO TensorRT batch latency.")
+    parser = argparse.ArgumentParser(
+        description="Benchmark YOLO TensorRT batch latency."
+    )
     parser.add_argument("--engine", default="models/yolo/yolo26m_batch4.engine")
     parser.add_argument("--batches", default="1,2,3,4")
     parser.add_argument("--warmup", type=int, default=20)

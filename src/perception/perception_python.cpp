@@ -51,12 +51,17 @@ void init_perception_ext(py::module &m) {
         .def(py::init<int, int>(), py::arg("crop_width"), py::arg("crop_height"))
         .def("process_gpu", [](Cropper &self, uintptr_t input_ptr, int src_w, int src_h, uintptr_t boxes_ptr, int num_boxes, uintptr_t output_ptr, uintptr_t stream_ptr) {
             self.process_gpu(reinterpret_cast<void*>(input_ptr), src_w, src_h, reinterpret_cast<float*>(boxes_ptr), num_boxes, reinterpret_cast<void*>(output_ptr), reinterpret_cast<cudaStream_t>(stream_ptr));
-        }, py::arg("input_ptr"), py::arg("src_w"), py::arg("src_h"), py::arg("boxes_ptr"), py::arg("num_boxes"), py::arg("output_ptr"), py::arg("stream_ptr"));
+        }, py::arg("input_ptr"), py::arg("src_w"), py::arg("src_h"), py::arg("boxes_ptr"), py::arg("num_boxes"), py::arg("output_ptr"), py::arg("stream_ptr"))
+        .def_property_readonly("cpp_ptr", [](Cropper& self) -> uintptr_t {
+            return reinterpret_cast<uintptr_t>(&self);
+        });
 
     py::enum_<ModelType>(m, "ModelType")
         .value("SIGLIP2", ModelType::SIGLIP2)
         .value("DINOV2", ModelType::DINOV2)
         .value("TRANSREID", ModelType::TRANSREID)
+        .value("OSNET", ModelType::OSNET)
+        .value("FASTREID", ModelType::FASTREID)
         .export_values();
 
     py::class_<FeatureExtractor>(m, "FeatureExtractor")
@@ -64,9 +69,17 @@ void init_perception_ext(py::module &m) {
         .def("extract", [](FeatureExtractor &self, uintptr_t input_ptr, int num, uintptr_t output_ptr, uintptr_t stream_ptr) {
             self.extract(reinterpret_cast<void*>(input_ptr), num, reinterpret_cast<void*>(output_ptr), reinterpret_cast<cudaStream_t>(stream_ptr));
         }, py::arg("input_ptr"), py::arg("num"), py::arg("output_ptr"), py::arg("stream_ptr"))
+        .def("extract_parts_fused", [](FeatureExtractor &self, uintptr_t input_ptr, int num_dets, uintptr_t output_ptr, uintptr_t stream_ptr) {
+            self.extract_parts_fused(reinterpret_cast<void*>(input_ptr), num_dets, reinterpret_cast<void*>(output_ptr), reinterpret_cast<cudaStream_t>(stream_ptr));
+        }, py::arg("input_ptr"), py::arg("num_dets"), py::arg("output_ptr"), py::arg("stream_ptr"),
+           "Extract 3-part crops, apply weighted fusion [0.5,0.3,0.2], and L2-normalize. "
+           "Input: [3*num_dets, 3, H, W]. Output: [num_dets, feat_dim].")
         .def_property_readonly("feature_dim", &FeatureExtractor::get_feature_dim)
         .def_property_readonly("max_batch", &FeatureExtractor::get_max_batch)
-        .def_property_readonly("input_hw", &FeatureExtractor::get_input_hw);
+        .def_property_readonly("input_hw", &FeatureExtractor::get_input_hw)
+        .def_property_readonly("cpp_ptr", [](FeatureExtractor& self) -> uintptr_t {
+            return reinterpret_cast<uintptr_t>(&self);
+        });
 }
 
 PYBIND11_MODULE(saccade_perception_ext, m) {

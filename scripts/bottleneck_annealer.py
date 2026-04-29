@@ -7,8 +7,9 @@ from typing import Tuple, Dict, Any, List
 from perception.detector_trt import TRTYoloDetector
 from perception.dispatcher import AsyncDispatcher
 from perception.feature_extractor import TRTFeatureExtractor
-from perception.embedding_dispatcher import EmbeddingDispatcher
+from perception.embedding_dispatcher import AsyncEmbeddingDispatcher
 from storage.redis_cache import RedisCache
+from cognition.resource_manager import ResourceManager
 
 
 class BottleneckAnnealer:
@@ -26,6 +27,7 @@ class BottleneckAnnealer:
         self.detector = TRTYoloDetector()
         self.extractor = TRTFeatureExtractor(max_batch=64)
         self.redis_cache = RedisCache()
+        self.resource_manager = ResourceManager()
 
         self.results: List[Dict[str, Any]] = []
 
@@ -35,15 +37,23 @@ class BottleneckAnnealer:
         return util.gpu, (mem.used / mem.total) * 100
 
     async def run_step(
-        self, num_streams: int, objects_per_frame: int, yolo_batch: int, embed_batch: int
+        self,
+        num_streams: int,
+        objects_per_frame: int,
+        yolo_batch: int,
+        embed_batch: int,
     ) -> Dict[str, Any]:
         """
         執行單一負載步進，測量系統穩定性
         """
-        dispatcher = AsyncDispatcher(self.detector, max_batch=yolo_batch)
-        embed_dispatcher = EmbeddingDispatcher(self.extractor, max_batch=embed_batch)
+        dispatcher = AsyncDispatcher(
+            self.detector, self.resource_manager, max_batch=yolo_batch
+        )
+        embed_dispatcher = AsyncEmbeddingDispatcher(
+            self.extractor, max_batch=embed_batch
+        )
 
-        dispatcher.start()
+        await dispatcher.start()
         embed_dispatcher.start()
         await self.redis_cache.connect()
 
@@ -88,7 +98,7 @@ class BottleneckAnnealer:
             f"📊 Result: Latency={avg_lat:.2f}ms, GPU={gpu_util}%, Mem={mem_usage:.1f}%, Queue={queue_len}"
         )
 
-        dispatcher.stop()
+        await dispatcher.stop()
         embed_dispatcher.stop()
 
         return {

@@ -35,9 +35,9 @@ class ChromaStore:
             os.makedirs(backup_dir, exist_ok=True)
             timestamp = time.strftime("%Y%m%d_%H%M%S")
             backup_path = os.path.join(backup_dir, f"chroma_backup_{timestamp}")
-            
+
             # 使用 shutil.make_archive 建立 zip 壓縮檔
-            archive_path = shutil.make_archive(backup_path, 'zip', self.path)
+            archive_path = shutil.make_archive(backup_path, "zip", self.path)
             print(f"📦 [ChromaStore] Backup successfully created at {archive_path}")
             return archive_path
         except Exception as e:
@@ -45,7 +45,11 @@ class ChromaStore:
             return None
 
     def add_memory(
-        self, content: str, metadata: Dict[str, Any], doc_id: Optional[str] = None, embedding: Optional[List[float]] = None
+        self,
+        content: str,
+        metadata: Dict[str, Any],
+        doc_id: Optional[str] = None,
+        embedding: Optional[List[float]] = None,
     ) -> str:
         """新增一條記憶，包含多維度元數據與視覺特徵"""
         memory_id = doc_id or str(uuid.uuid4())
@@ -53,9 +57,16 @@ class ChromaStore:
             metadata["timestamp"] = time.time()
 
         if embedding is not None:
-            self.collection.add(documents=[content], metadatas=[metadata], ids=[memory_id], embeddings=[embedding])
+            self.collection.add(
+                documents=[content],
+                metadatas=[metadata],
+                ids=[memory_id],
+                embeddings=[cast(Any, [embedding])],
+            )
         else:
-            self.collection.add(documents=[content], metadatas=[metadata], ids=[memory_id])
+            self.collection.add(
+                documents=[content], metadatas=[metadata], ids=[memory_id]
+            )
         return memory_id
 
     def hybrid_query(

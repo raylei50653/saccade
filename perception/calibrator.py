@@ -3,28 +3,44 @@ import os
 import torch
 import numpy as np
 import cv2
+from typing import List, Tuple, Optional
 
-class SaccadeInt8Calibrator(trt.IInt8EntropyCalibrator2):
+
+class SaccadeInt8Calibrator(trt.IInt8EntropyCalibrator2):  # type: ignore
     """
     Saccade 通用 INT8 校準器 (Pure Torch Edition)
     使用 torch.cuda 取代 pycuda 以減少環境依賴。
     """
-    def __init__(self, image_dir, cache_file, batch_size=8, input_shape=(640, 640)):
+
+    def __init__(
+        self,
+        image_dir: str,
+        cache_file: str,
+        batch_size: int = 8,
+        input_shape: Tuple[int, int] = (640, 640),
+    ) -> None:
         super().__init__()
         self.cache_file = cache_file
         self.batch_size = batch_size
         self.input_shape = input_shape
-        self.images = [os.path.join(image_dir, f) for f in os.listdir(image_dir) if f.endswith('.jpg')][:200]
+        self.images = [
+            os.path.join(image_dir, f)
+            for f in os.listdir(image_dir)
+            if f.endswith(".jpg")
+        ][:200]
         self.count = len(self.images)
         self.current_index = 0
-        
-        # 🚀 使用 torch 分配 CUDA 顯存
-        self.device_input = torch.empty(batch_size, 3, *input_shape, device="cuda", dtype=torch.float32).data_ptr()
 
-    def get_batch_size(self):
+        # 🚀 使用 torch 分配 CUDA 顯存
+        self.device_input = torch.empty(
+            batch_size, 3, *input_shape, device="cuda", dtype=torch.float32
+        ).data_ptr()
+        self.current_batch: Optional[torch.Tensor] = None
+
+    def get_batch_size(self) -> int:
         return self.batch_size
 
-    def get_batch(self, names):
+    def get_batch(self, names: List[str]) -> Optional[List[int]]:
         if self.current_index + self.batch_size > self.count:
             return None
 
@@ -32,24 +48,31 @@ class SaccadeInt8Calibrator(trt.IInt8EntropyCalibrator2):
         for i in range(self.batch_size):
             img_path = self.images[self.current_index + i]
             img = cv2.imread(img_path)
+            if img is None:
+                continue
             img = cv2.resize(img, (self.input_shape[1], self.input_shape[0]))
             img = img.transpose(2, 0, 1).astype(np.float32) / 255.0
             batch_images.append(img)
 
+        if not batch_images:
+            return None
+
         self.current_index += self.batch_size
-        batch_data = torch.from_numpy(np.ascontiguousarray(np.stack(batch_images))).to("cuda")
-        
+        batch_data = torch.from_numpy(np.ascontiguousarray(np.stack(batch_images))).to(
+            "cuda"
+        )
+
         # 🚀 複製數據到預分配的地址
         # 由於我們直接拿 data_ptr，需要確保生命週期
-        self.current_batch = batch_data 
+        self.current_batch = batch_data
         return [int(self.current_batch.data_ptr())]
 
-    def read_calibration_cache(self):
+    def read_calibration_cache(self) -> Optional[bytes]:
         if os.path.exists(self.cache_file):
             with open(self.cache_file, "rb") as f:
                 return f.read()
         return None
 
-    def write_calibration_cache(self, cache):
+    def write_calibration_cache(self, cache: bytes) -> None:
         with open(self.cache_file, "wb") as f:
             f.write(cache)

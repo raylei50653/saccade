@@ -1,3 +1,5 @@
+#pragma once
+
 #include "saccade/common.hpp"
 #include <opencv2/opencv.hpp>
 #include <vector>

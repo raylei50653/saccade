@@ -81,8 +81,8 @@ async def test_orchestrator_process_event_batch():
 
         await orchestrator.process_event_batch(batch)
 
-        assert mock_collection.add.called
-        args, kwargs = mock_collection.add.call_args
-        assert "knife" in kwargs["documents"][0]
-        assert kwargs["metadatas"][0]["is_anomaly"] == 1
-        assert mock_redis.acknowledge.called
+        assert mock_chroma.add_memory.called
+        args, kwargs = mock_chroma.add_memory.call_args
+        assert "knife" in kwargs["content"]
+        assert kwargs["metadata"]["is_anomaly"] == 1
+        assert mock_redis.client.xack.called

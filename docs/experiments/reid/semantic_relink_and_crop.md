@@ -249,6 +249,74 @@ Not recommended as defaults:
 - `--reid-mode hybrid`
 - `--reid-crop-mode square_mean`
 
+## Backbone Comparison Refresh (2026-04-29)
+
+This archive refreshes the older 2026-04-25 SigLIP2 conclusions on the current tracking base after GMC, semantic buffer, primary appearance bank, `need_reid`, and conditional appearance matching were already integrated.
+
+The purpose was not to re-open the old `tracker vs semantic vs hybrid` question. It was to check whether a dedicated person-ReID backbone could now beat the current SigLIP2 relink path once each model was given a more appropriate semantic threshold.
+
+### Setup
+
+- Eval script: `scripts/eval/ablation_reid_models.py`
+- Detector: `SDP`
+- Current tracker/relink base: same defaults as `scripts/eval/mot17.py`
+- Key hypothesis: SigLIP2 cosine scores are relatively high, so `transreid` and `osnet` must be evaluated with lower relink thresholds instead of inheriting SigLIP2's `0.90`
+
+### SigLIP2 vs TransReID
+
+| Model@thr | IDF1 | Rcll | Prcn | MOTA | IDs | FP | FN | FPS |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `siglip2@0.88` | 45.1 | 50.2 | 77.0 | 34.5 | 852 | 16808 | 55892 | 60.38 |
+| `siglip2@0.90` | 45.4 | 50.2 | 77.1 | 34.6 | 846 | 16738 | 55894 | 59.10 |
+| `siglip2@0.92` | 45.1 | 50.3 | 77.1 | 34.6 | 848 | 16734 | 55833 | 59.45 |
+| `transreid@0.78` | 44.3 | 50.4 | 77.1 | 34.6 | 888 | 16771 | 55743 | 64.03 |
+| `transreid@0.82` | 44.3 | 50.5 | 77.1 | 34.7 | 885 | 16836 | 55608 | 63.36 |
+| `transreid@0.86` | 44.5 | 50.5 | 77.2 | 34.8 | 829 | 16729 | 55616 | 63.98 |
+| `transreid@0.90` | 43.8 | 50.4 | 77.1 | 34.6 | 851 | 16806 | 55753 | 63.04 |
+
+Conclusions:
+
+- The threshold-mismatch hypothesis was correct. `transreid@0.90` was too strict and artificially suppressed relink acceptance.
+- `transreid` recovered once the threshold moved down to the `0.78-0.86` range.
+- Best `transreid` operating point on this base was `0.86`.
+- Even at its own best threshold, `transreid` did not beat `siglip2@0.90` on IDF1 (`44.5 < 45.4`).
+- `transreid@0.86` remained interesting as a secondary profile because it reduced IDs (`829`) and slightly improved MOTA (`34.8`), but its accuracy ceiling was still lower.
+
+### SigLIP2 vs OSNet
+
+OSNet required a dedicated TensorRT path before it could be measured on the same base:
+
+- ONNX: `models/embedding/osnet_x1_0_256x128.onnx`
+- Engine: `models/embedding/osnet_x1_0_256x128.engine`
+- Build script: `uv run python scripts/model/build_osnet.py`
+
+| Model@thr | IDF1 | Rcll | Prcn | MOTA | IDs | FP | FN | FPS |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `siglip2@0.88` | 45.5 | 50.3 | 77.0 | 34.4 | 879 | 16915 | 55819 | 60.89 |
+| `siglip2@0.90` | 45.3 | 50.2 | 77.1 | 34.5 | 845 | 16774 | 55904 | 61.28 |
+| `siglip2@0.92` | 44.2 | 50.2 | 77.0 | 34.5 | 854 | 16842 | 55887 | 60.78 |
+| `osnet@0.78` | 44.3 | 50.3 | 77.1 | 34.7 | 845 | 16769 | 55756 | 67.11 |
+| `osnet@0.82` | 44.6 | 50.2 | 77.1 | 34.5 | 842 | 16734 | 55963 | 69.98 |
+| `osnet@0.86` | 44.2 | 50.4 | 77.1 | 34.6 | 848 | 16830 | 55723 | 69.73 |
+| `osnet@0.90` | 44.1 | 50.3 | 77.1 | 34.6 | 840 | 16798 | 55847 | 67.01 |
+
+Conclusions:
+
+- Best `osnet` operating point on this base was around `0.82`.
+- `osnet` also failed to beat SigLIP2 on IDF1 (`44.6 < 45.3`).
+- Its main value was speed: roughly `6-9 FPS` faster than SigLIP2 in this eval path.
+- `osnet` is therefore a viable speed-balanced profile, not a new accuracy ceiling.
+
+### Archived Outcome
+
+For the current base, the backbone ranking is:
+
+- Accuracy profile: `siglip2@0.90`
+- Lower-IDs / slightly higher-MOTA alternative: `transreid@0.86`
+- Speed-balanced alternative: `osnet@0.82`
+
+The main bottleneck after this refresh is no longer "wrong ReID backbone by default". It is scene-adaptive identity recovery and relink policy design. Replacing SigLIP2 with `transreid` or `osnet` alone did not break the current IDF1 ceiling.
+
 ## Follow-Up Work
 
 1. ~~Add candidate-gated parts extraction~~  **→ Implemented as Farewell ReID (2026-04-26)**
@@ -260,9 +328,12 @@ Not recommended as defaults:
    - Use PyTorch or ONNXRuntime first.
    - Treat it as an upper-bound experiment before attempting TensorRT.
 
-3. Add diagnostics:
+3. Add model-specific relink diagnostics:
+   - Focus on why `02/11` remain the main pressure sequences even after backbone swaps.
+   - Record accepted/rejected relink counts by model and threshold, not just final MOT metrics.
+
+4. Add diagnostics:
    - Log accepted relink pairs with similarity, IoU, center distance, old/new ID, and frame.
    - Inspect false relinks on sequences where IDs increase.
 
-4. Re-run full 21-sequence MOT17 train after any candidate-gated crop change.
-
+5. Re-run full 21-sequence MOT17 train after any candidate-gated crop change.

@@ -12,7 +12,9 @@ namespace saccade {
 enum class ModelType {
     SIGLIP2,
     DINOV2,
-    TRANSREID
+    TRANSREID,
+    OSNET,
+    FASTREID,
 };
 
 /**
@@ -32,6 +34,13 @@ public:
      * @param stream CUDA stream
      */
     void extract(void* input_cuda_ptr, int num_images, void* output_cuda_ptr, cudaStream_t stream);
+
+    /**
+     * @brief Fused 3-part extraction: takes [3*num_dets, C, H, W] crops (parts stacked),
+     *        extracts features, applies weighted average [0.5, 0.3, 0.2], and L2-normalizes.
+     *        Output: [num_dets, feature_dim].
+     */
+    void extract_parts_fused(void* input_cuda_ptr, int num_dets, void* output_cuda_ptr, cudaStream_t stream);
 
     int get_feature_dim() const;
     int get_max_batch() const;

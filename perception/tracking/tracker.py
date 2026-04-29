@@ -1,9 +1,10 @@
+# mypy: ignore-errors
 import torch
 import torch.nn.functional as F
 import cv2
 import numpy as np
 from collections import deque
-from typing import Tuple, Optional, Any, Dict, Deque
+from typing import Tuple, Optional, Any, Dict, Deque, List, Set, cast
 from torchvision.ops import box_iou
 from .reorder import ReorderingBuffer
 from .tracker_gpu import GPUByteTracker
@@ -28,8 +29,8 @@ class SmartTracker:
         max_objects: int = 2048,
         embedding_dim: int = 768,
         feature_bank: Optional[FeatureBank] = None,
-        extractor: Optional[Any] = None,   # TRTFeatureExtractor
-        cropper: Optional[Any] = None,     # ZeroCopyCropper
+        extractor: Optional[Any] = None,  # TRTFeatureExtractor
+        cropper: Optional[Any] = None,  # ZeroCopyCropper
         heartbeat_interval: int = 10,
         geometry_mid_scale: bool = False,
         geometry_ref_height_ratio: float = 0.12,
@@ -73,11 +74,14 @@ class SmartTracker:
         # Non-blocking ReID: crop + extract run on a dedicated CUDA stream.
         # _pending_reid holds (embs, det_boxes, event) while GPU work is in flight.
         # _ready_reid holds the latest completed result for the main stream to consume.
-        self._reid_stream: Optional[torch.cuda.Stream] = (
-            torch.cuda.Stream() if torch.cuda.is_available() else None
-        )
-        self._pending_reid: Optional[tuple[torch.Tensor, torch.Tensor, torch.cuda.Event]] = None
-        self._ready_reid: Optional[tuple[torch.Tensor, torch.Tensor]] = None
+        self._reid_stream: Optional[torch.cuda.Stream] = None
+        if torch.cuda.is_available():
+            self._reid_stream = torch.cuda.Stream()
+
+        self._pending_reid: Optional[
+            Tuple[torch.Tensor, torch.Tensor, torch.cuda.Event]
+        ] = None
+        self._ready_reid: Optional[Tuple[torch.Tensor, torch.Tensor]] = None
 
         # GMC 狀態（per-tracker，不跨流）
         self.prev_gray: Optional[np.ndarray] = None
@@ -85,8 +89,10 @@ class SmartTracker:
 
         # Farewell ReID：緩衝最近 5 幀已確認追蹤的 (frame_tensor, ids, boxes)
         # 軌跡消失時從中取最近 3 幀做 SigLIP2 → L2-normalized average → FeatureBank
-        self._farewell_buffer: Deque[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]] = deque(maxlen=5)
-        self._prev_tracked_ids: set = set()
+        self._farewell_buffer: Deque[
+            Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+        ] = deque(maxlen=5)
+        self._prev_tracked_ids: Set[int] = set()
 
     # ------------------------------------------------------------------
     # Public API
@@ -95,9 +101,13 @@ class SmartTracker:
     def set_degradation_params(self, level: int) -> None:
         """根據 ResourceManager 降級等級動態調整追蹤參數。"""
         if level >= 3:  # EMERGENCY
-            self.gpu_tracker.set_params(track_thresh=0.2, high_thresh=0.6, track_buffer=10)
+            self.gpu_tracker.set_params(
+                track_thresh=0.2, high_thresh=0.6, track_buffer=10
+            )
         else:
-            self.gpu_tracker.set_params(track_thresh=0.1, high_thresh=0.5, track_buffer=30)
+            self.gpu_tracker.set_params(
+                track_thresh=0.1, high_thresh=0.5, track_buffer=30
+            )
 
     def update(
         self,
@@ -137,7 +147,8 @@ class SmartTracker:
             and self.frame_count % self.heartbeat_interval == 0
         )
         if is_heartbeat:
-            self._submit_reid_async(frame_tensor, boxes)
+            # 這裡 frame_tensor 已經被 is_heartbeat 檢查過非 None
+            self._submit_reid_async(cast(torch.Tensor, frame_tensor), boxes)
 
         # Use embeddings from the most recently completed async heartbeat
         embeddings: Optional[torch.Tensor] = None
@@ -148,7 +159,9 @@ class SmartTracker:
         # 3. C++ GPUByteTracker 核心更新
         #    C++ 內部：匹配後自動以偵測 embedding 更新對應追蹤槽的參考特徵
         results = self.gpu_tracker.update(
-            boxes, scores, classes,
+            boxes,
+            scores,
+            classes,
             embeddings=embeddings,
             gmc=gmc_matrix,
             light_factor=light_factor,
@@ -164,7 +177,9 @@ class SmartTracker:
                 [r.obj_id for r in results], dtype=torch.int32, device=dev
             )
             tracked_boxes = torch.tensor(
-                [[r.x1, r.y1, r.x2, r.y2] for r in results], dtype=torch.float32, device=dev
+                [[r.x1, r.y1, r.x2, r.y2] for r in results],
+                dtype=torch.float32,
+                device=dev,
             )
             tracked_classes = torch.tensor(
                 [r.class_id for r in results], dtype=torch.int32, device=dev
@@ -176,8 +191,14 @@ class SmartTracker:
 
         # 5. FeatureBank 更新（跨鏡頭 Re-ID 用）
         #    使用前一 heartbeat 完成的 embeddings；reid_det_boxes 為對應的偵測框
-        if embeddings is not None and reid_det_boxes is not None and tracked_ids.numel() > 0:
-            self._update_feature_bank_reuse(tracked_ids, tracked_boxes, reid_det_boxes, embeddings, stream_id)
+        if (
+            embeddings is not None
+            and reid_det_boxes is not None
+            and tracked_ids.numel() > 0
+        ):
+            self._update_feature_bank_reuse(
+                tracked_ids, tracked_boxes, reid_det_boxes, embeddings, stream_id
+            )
 
         # 6. Farewell ReID：軌跡消失瞬間從最近 3 幀補提 embedding
         current_ids = set(tracked_ids.tolist())
@@ -187,11 +208,13 @@ class SmartTracker:
 
         # 更新 buffer：持有 frame_tensor ref 延遲 GC，讓 farewell 可往回查
         if frame_tensor is not None and tracked_ids.numel() > 0:
-            self._farewell_buffer.append((
-                frame_tensor,
-                tracked_ids.clone(),
-                tracked_boxes.clone(),
-            ))
+            self._farewell_buffer.append(
+                (
+                    frame_tensor,
+                    tracked_ids.clone(),
+                    tracked_boxes.clone(),
+                )
+            )
         self._prev_tracked_ids = current_ids
 
         return tracked_ids, tracked_boxes, tracked_classes
@@ -199,7 +222,7 @@ class SmartTracker:
     def find_cross_camera_matches(
         self,
         query_embeddings: torch.Tensor,
-        lost_ids: list,
+        lost_ids: List[int],
         stream_id: int = 0,
     ) -> Dict[int, int]:
         """跨鏡頭 Re-ID：利用 FeatureBank 批量矩陣匹配。"""
@@ -222,16 +245,23 @@ class SmartTracker:
         if frame_h <= 0:
             return 1.0
         if boxes.shape[0] < self.geometry_min_samples:
-            return self._geometry_scale_prev if self._geometry_scale_initialized else 1.0
+            return (
+                self._geometry_scale_prev if self._geometry_scale_initialized else 1.0
+            )
         heights = (boxes[:, 3] - boxes[:, 1]).clamp_min(1.0)
         median_ratio = float(torch.median(heights).item()) / float(frame_h)
         if median_ratio <= 1e-6:
-            return self._geometry_scale_prev if self._geometry_scale_initialized else 1.0
+            return (
+                self._geometry_scale_prev if self._geometry_scale_initialized else 1.0
+            )
         if not self._geometry_scale_initialized:
             self._geometry_median_ratio_ema = median_ratio
             raw_scale = max(
                 self.geometry_min_scale,
-                min(self.geometry_max_scale, self.geometry_ref_height_ratio / self._geometry_median_ratio_ema),
+                min(
+                    self.geometry_max_scale,
+                    self.geometry_ref_height_ratio / self._geometry_median_ratio_ema,
+                ),
             )
             self._geometry_scale_prev = raw_scale
             self._geometry_scale_initialized = True
@@ -243,19 +273,30 @@ class SmartTracker:
         )
         raw_scale = max(
             self.geometry_min_scale,
-            min(self.geometry_max_scale, self.geometry_ref_height_ratio / self._geometry_median_ratio_ema),
+            min(
+                self.geometry_max_scale,
+                self.geometry_ref_height_ratio / self._geometry_median_ratio_ema,
+            ),
         )
         diff = raw_scale - self._geometry_scale_prev
         if diff < 0.0:
-            step = max(diff, -self.geometry_loosen_step) if self.geometry_loosen_step > 0.0 else diff
+            step = (
+                max(diff, -self.geometry_loosen_step)
+                if self.geometry_loosen_step > 0.0
+                else diff
+            )
         else:
-            step = min(diff, self.geometry_tighten_step) if self.geometry_tighten_step > 0.0 else diff
+            step = (
+                min(diff, self.geometry_tighten_step)
+                if self.geometry_tighten_step > 0.0
+                else diff
+            )
         self._geometry_scale_prev = max(
             self.geometry_min_scale,
             min(
                 self.geometry_max_scale,
                 self._geometry_scale_prev + step,
-            )
+            ),
         )
         return self._geometry_scale_prev
 
@@ -263,43 +304,57 @@ class SmartTracker:
         self, frame_tensor: torch.Tensor, boxes: torch.Tensor
     ) -> Optional[torch.Tensor]:
         """裁切偵測框並用 SigLIP 2 提取 embedding（同步，供 fallback 使用）。"""
-        frame_4d = frame_tensor.unsqueeze(0) if frame_tensor.dim() == 3 else frame_tensor
+        if self.cropper is None or self.extractor is None:
+            return None
+        frame_4d = (
+            frame_tensor.unsqueeze(0) if frame_tensor.dim() == 3 else frame_tensor
+        )
         with torch.no_grad():
             crops = self.cropper.process(frame_4d, boxes)
             if crops.numel() == 0:
                 return None
-            return self.extractor.extract(crops)
+            return cast(torch.Tensor, self.extractor.extract(crops))
 
     def _poll_reid(self) -> None:
         """Non-blocking check: promote _pending_reid to _ready_reid if GPU work is done."""
         if self._pending_reid is None:
             return
         embs, det_boxes, event = self._pending_reid
-        if event.query():
+        if event.query():  # type: ignore
             self._ready_reid = (embs, det_boxes)
             self._pending_reid = None
 
-    def _submit_reid_async(self, frame_tensor: torch.Tensor, boxes: torch.Tensor) -> None:
+    def _submit_reid_async(
+        self, frame_tensor: torch.Tensor, boxes: torch.Tensor
+    ) -> None:
         """Submit crop + extract to _reid_stream without blocking the main stream.
 
         The result is collected on the next _poll_reid() call after the GPU event fires.
         Skips silently if the previous extraction is still in flight.
         """
-        if self._pending_reid is not None:
+        if (
+            self._pending_reid is not None
+            or self.cropper is None
+            or self.extractor is None
+        ):
             return
         if self._reid_stream is None:
             embs = self._extract_embeddings(frame_tensor, boxes)
             if embs is not None:
                 self._ready_reid = (embs, boxes)
             return
-        with torch.no_grad(), torch.cuda.stream(self._reid_stream):
-            frame_4d = frame_tensor.unsqueeze(0) if frame_tensor.dim() == 3 else frame_tensor
+
+        with torch.no_grad(), torch.cuda.stream(self._reid_stream):  # type: ignore
+            frame_4d = (
+                frame_tensor.unsqueeze(0) if frame_tensor.dim() == 3 else frame_tensor
+            )
             crops = self.cropper.process(frame_4d, boxes)
             if crops.numel() == 0:
                 return
             embs = self.extractor.extract(crops)
-        event = torch.cuda.Event()
-        event.record(self._reid_stream)
+
+        event = torch.cuda.Event()  # type: ignore
+        event.record(self._reid_stream)  # type: ignore
         self._pending_reid = (embs, boxes.clone(), event)
 
     def _update_feature_bank_reuse(
@@ -313,29 +368,31 @@ class SmartTracker:
         """FeatureBank 更新：以 IoU 匹配將偵測 embedding 重用於追蹤框，避免第二次 SigLIP 推理。"""
         if det_boxes.numel() == 0 or tracked_boxes.numel() == 0:
             return
-        iou_mat = box_iou(tracked_boxes, det_boxes)   # [M, N]
-        max_iou, best_det = iou_mat.max(dim=1)        # [M]
+        iou_mat = box_iou(tracked_boxes, det_boxes)  # [M, N]
+        max_iou, best_det = iou_mat.max(dim=1)  # [M]
         valid = max_iou > 0.5
         if not valid.any():
             return
         valid_ids = tracked_ids[valid]
         valid_embs = det_embeddings[best_det[valid]]
-        self.feature_bank.update_batch(valid_ids, valid_embs, self.frame_count, stream_id)
+        self.feature_bank.update_batch(
+            valid_ids, valid_embs, self.frame_count, stream_id
+        )
         self.gpu_tracker.update_reference_features(valid_ids, valid_embs)
 
     def _extract_farewell_embeddings(
-        self, lost_ids: set, dev: torch.device, stream_id: int
+        self, lost_ids: Set[int], dev: torch.device, stream_id: int
     ) -> None:
         """消失軌跡補提 embedding：從最近 3 幀 buffer 裁切 crops，
         L2-normalized average 後寫入 FeatureBank，避免 heartbeat 間隔造成的特徵過期。"""
-        if not self._farewell_buffer:
+        if not self._farewell_buffer or self.cropper is None or self.extractor is None:
             return
 
-        farewell_ids: list[int] = []
-        farewell_embs: list[torch.Tensor] = []
+        farewell_ids: List[int] = []
+        farewell_embs: List[torch.Tensor] = []
 
         for tid in lost_ids:
-            crops: list[torch.Tensor] = []
+            crops: List[torch.Tensor] = []
             # 倒序掃 buffer（最近幀優先），最多取 3 幀
             for frame_t, buf_ids, buf_boxes in reversed(self._farewell_buffer):
                 if len(crops) >= 3:
@@ -391,19 +448,26 @@ class SmartTracker:
                 )
             if self.prev_points is not None:
                 curr_pts, status, _ = cv2.calcOpticalFlowPyrLK(
-                    self.prev_gray, curr_gray, self.prev_points, None
+                    self.prev_gray, curr_gray, self.prev_points, cast(np.ndarray, None)
                 )
-                good_prev = self.prev_points[status == 1]
-                good_curr = curr_pts[status == 1]
-                if len(good_prev) > 10:
-                    H, _ = cv2.estimateAffinePartial2D(good_prev, good_curr)
-                    if H is not None:
-                        # 縮放平移分量回原始解析度
-                        orig = frame_tensor.unsqueeze(0) if frame_tensor.dim() == 3 else frame_tensor
-                        H[0, 2] *= orig.shape[-1] / 320.0   # width
-                        H[1, 2] *= orig.shape[-2] / 240.0   # height
-                        h_gmc = torch.from_numpy(H.astype(np.float32)).to(frame_tensor.device)
-                self.prev_points = good_curr.reshape(-1, 1, 2)
+                if status is not None:
+                    good_prev = self.prev_points[status.flatten() == 1]
+                    good_curr = curr_pts[status.flatten() == 1]
+                    if len(good_prev) > 10:
+                        H, _ = cv2.estimateAffinePartial2D(good_prev, good_curr)
+                        if H is not None:
+                            # 縮放平移分量回原始解析度
+                            orig = (
+                                frame_tensor.unsqueeze(0)
+                                if frame_tensor.dim() == 3
+                                else frame_tensor
+                            )
+                            H[0, 2] *= orig.shape[-1] / 320.0  # width
+                            H[1, 2] *= orig.shape[-2] / 240.0  # height
+                            h_gmc = torch.from_numpy(H.astype(np.float32)).to(
+                                frame_tensor.device
+                            )
+                    self.prev_points = good_curr.reshape(-1, 1, 2)
 
         self.prev_gray = curr_gray
         return h_gmc

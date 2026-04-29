@@ -55,6 +55,7 @@ async def run_8stream_perception() -> None:
     detector = TRTYoloDetector()
     # 設置 max_batch 為 8，以發揮 YOLO26 在 GPU 上的 Batching 效能
     from cognition.resource_manager import ResourceManager
+
     resource_manager = ResourceManager()
     dispatcher = AsyncDispatcher(detector, resource_manager, max_batch=8)
     await dispatcher.start()
@@ -75,7 +76,7 @@ async def run_8stream_perception() -> None:
     except asyncio.CancelledError:
         print("🛑 Shutting down...")
     finally:
-        dispatcher.stop()
+        await dispatcher.stop()
 
 
 if __name__ == "__main__":

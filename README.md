@@ -1,115 +1,166 @@
-# Saccade: A High-Efficiency Dual-Path Visual Perception System
+# Saccade
 
-**Continuous visual reasoning and semantic indexing at the edge.**
+High-efficiency edge video perception with a TensorRT detector, GPU tracking,
+appearance-based ReID, and MOT-style evaluation tooling.
 
----
+> **🌍 [繁體中文版](README_tw.md)**
 
-> **🌍 [繁體中文版 (Traditional Chinese)](README_tw.md)**
+## What This Repo Is Now
 
----
+The repo has two practical centers:
 
-## 1. Project Motivation & Problem Statement
+- **Online perception pipeline**
+  - TensorRT-based detection and preprocessing
+  - GPU tracking, GMC, Kalman, appearance fusion
+  - async embedding / storage / orchestration components
 
-### The Problem
-Traditional video surveillance systems are primarily designed for real-time monitoring but lack **long-term semantic memory**. This results in several critical bottlenecks:
-*   **Query Inefficiency**: Searching for a specific historical event (e.g., "Find the red truck from yesterday") requires hours of manual playback.
-*   **Computational Waste**: Running heavy Vision-Language Models (VLMs) continuously on every frame is computationally prohibitive for edge devices.
-*   **Storage Bloat**: Saving every frame results in massive redundancy and storage costs without providing meaningful insights.
+- **Offline MOT evaluation and tuning**
+  - `scripts/eval/mot17.py` is the main MOT17 evaluation entry point
+  - `scripts/eval/ablation_mot17.py` is the unified ablation runner for grouped
+    tracker parameters
 
-### Our Goal
-Saccade aims to transform raw video streams into a **searchable visual memory system**. By mimicking the human visual system's "saccades," we decouple high-speed perception from deep semantic understanding to enable natural language retrieval on constrained edge hardware.
+This README focuses on the current code layout and the workflows that are still
+actively used.
 
-## 2. Proposed Solution: Dual-Track Perception
+## Core Areas
 
-To address the trade-off between real-time performance and semantic depth, Saccade employs a **Vision-Vector Pipeline** across six logical layers (L1-L6):
+- `perception/`
+  - Detector, preprocessing, ReID, relink, tracker coordination, eval runner.
 
-### System Architecture (Mermaid)
-```mermaid
-graph TD
-    %% 配色定義
-    classDef default fill:#f9f9f9,stroke:#333,stroke-width:1px;
-    classDef core fill:#d1fae5,stroke:#10b981,stroke-width:2px,color:#065f46;
-    classDef ctrl fill:#fee2e2,stroke:#ef4444,stroke-width:1px;
+- `src/` and `include/`
+  - C++ / CUDA tracking and performance-critical extensions.
 
-    Stream["📡 RTSP / WebRTC Stream"] --> GStreamer["L0: Media Ingestion<br/>(GStreamer NVDEC)"]
-    GStreamer --> GPUPool["5-Buffer GPU Pool<br/>(NV12 in VRAM)"]
+- `media/`
+  - Stream ingestion and video pipeline integration.
 
-    subgraph FastPath ["Fast Path (Main CUDA Stream)"]
-        GPUPool -- "Zero-Copy" --> YOLO["L1: Perception<br/>(YOLO26 TensorRT)"]
-        YOLO --> Tracker["GPU ByteTrack"]
-    end
+- `pipeline/`
+  - Higher-level orchestration across perception, storage, and cognition.
 
-    subgraph SlowPath ["Slow Path (Async CUDA Stream)"]
-        Tracker -- "Semantic Drift" --> ROI["L2: Deduplication<br/>(ROI Align & SigLIP 2)"]
-    end
+- `storage/`
+  - Redis / Chroma-related persistence paths.
 
-    ROI --> Redis["L3: Streaming<br/>(Redis Buffering)"]
-    Redis --> Chroma["L4: Storage<br/>(ChromaDB Vector Store)"]
-    Chroma --> API["L5: Application<br/>(FastAPI Retrieval)"]
+- `scripts/eval/`
+  - MOT17 evaluation, ablation, conversion, comparison, and metric helpers.
 
-    subgraph Cognition ["Cognition & Control"]
-        L6["L6: Cognition Layer<br/>(VRAM & FPS Control)"]
-    end
+- `tests/`
+  - Unit and benchmark coverage.
 
-    L6 -.-> GStreamer
-    L6 -.-> YOLO
-    
-    class YOLO,ROI,GPUPool core;
-    class L6 ctrl;
-```
+More architectural background lives in [docs/architecture.md](/home/ray/developer/ai/saccade/docs/architecture.md:1) and [docs/README.md](/home/ray/developer/ai/saccade/docs/README.md:1).
 
-### Core Data Flow Interaction
-1.  **L0 Media Ingestion**: RTSP streams are hardware-decoded via `nvh264dec` into a **5-Buffer GPU Pool**, ensuring frames stay in VRAM.
-2.  **L1 Perception (Fast Path)**: YOLO26 performs NMS-free inference directly on GPU pointers. Objects are tracked using GPU ByteTrack.
-3.  **L2 Deduplication (Slow Path)**: If an object moves or appears, `roi_align` crops the target, and **SigLIP 2** extracts a 768-dim feature. A **Semantic Drift** check (Cosine Similarity) filters out visually redundant data.
-4.  **L3-L4 Persistence**: Filtered events are pushed to **Redis Streams** and micro-batched into **ChromaDB** for long-term memory.
-5.  **L5-L6 Governance**: **FastAPI** provides natural language search, while the **Cognition Layer** monitors VRAM usage to dynamically throttle FPS or unload models.
+## Environment
 
-## 3. Design Rationale
+- Python: `3.12`
+- Package manager: `uv`
+- Key runtime dependencies:
+  - `torch`
+  - `torchvision`
+  - `tensorrt-cu12`
+  - `nvidia-dali-cuda120`
+  - `motmetrics`
 
-### Why Decouple?
-Decoupling allows the system to maintain a high frame rate (**120+ FPS**) regardless of the complexity of the semantic extraction. The heavy embedding process is moved to an asynchronous CUDA stream, triggered only by significant visual events.
-
-### Why Zero-Copy?
-Moving data between CPU and GPU is the #1 bottleneck in edge AI. Saccade implements a strict **Zero-Copy pipeline**: from hardware decoding to cropping and inference, image data remains entirely within GPU VRAM, reducing PCIe bandwidth usage and CPU load by >85%.
-
-### Why Semantic Drift?
-Storing every detection is redundant. We use a **Semantic Drift Handler** (Cosine Similarity < 0.95) to filter out visually similar frames, ensuring the Vector DB only stores unique, high-value visual memories.
-
-## 4. Performance Evaluation
-
-*Tested on NVIDIA GeForce RTX 5070 Ti Laptop GPU (12GB), 1080p @ 30fps RTSP input.*
-
-| Metric | Result | Engineering Impact |
-| :--- | :--- | :--- |
-| **End-to-End Latency** | **8.31 ms** | Guaranteed real-time response |
-| **Pipeline Throughput** | **120.2 FPS** | Handles high-resolution, high-FPS streams |
-| **VRAM Footprint** | **1.42 GB** | Fits within constrained 4GB edge devices |
-| **Storage Efficiency** | **> 90% Save** | Drastically reduces vector database bloat |
-
-## 5. Limitations & Future Work
-
-*   **Current Limitations**: 
-    *   Performance is highly dependent on TensorRT optimization for specific hardware.
-    *   Single-camera focus; multi-camera orchestration is not yet implemented.
-*   **Future Directions**:
-    *   Implementing **Temporal Reasoning** to detect actions (e.g., "running," "falling") rather than just static objects.
-    *   Distributed vector querying for cross-camera re-identification.
-
-## 6. Getting Started
+Install project dependencies with:
 
 ```bash
-# 1. Start Environment
-docker-compose up -d --build
-docker-compose exec saccade bash
-
-# 2. Compile Optimized Engines
-uv run python scripts/build_yolo_engine.py --onnx models/yolo/yolo26n.onnx --engine models/yolo/yolo26n_native.engine
-uv run python scripts/build_siglip_engine.py
-
-# 3. Launch Saccade
-./scripts/saccade up
+uv sync
 ```
 
----
-*This project demonstrates a biologically-inspired approach to bridge the gap between edge perception and semantic reasoning.*
+If you use the C++ / CUDA extensions, also configure and build the native
+targets for your machine.
+
+## Main Workflows
+
+### 1. Run MOT17 Evaluation
+
+```bash
+uv run python scripts/eval/mot17.py \
+  --detector SDP \
+  --output results/MOT17_eval
+```
+
+`mot17.py` now groups arguments by capability area:
+
+- detection and preprocessing
+- association
+- geometry and ID stability
+- ReID backbone
+- semantic relink
+- dynamic ReID trigger policy
+- lifecycle merge and cleanup
+
+### 2. Run Ablation Studies
+
+```bash
+uv run python scripts/eval/ablation_mot17.py --category detection
+uv run python scripts/eval/ablation_mot17.py --category detection,geometry
+uv run python scripts/eval/ablation_mot17.py --category all
+```
+
+Supported categories:
+
+- `detection`
+- `association`
+- `geometry`
+- `reid`
+- `semantic`
+- `trigger`
+- `lifecycle`
+
+See [scripts/eval/README.md](/home/ray/developer/ai/saccade/scripts/eval/README.md:1) for the current eval script map.
+
+### 3. Recompute Tracking Metrics
+
+```bash
+uv run python scripts/eval/calculate_mota.py --results results/MOT17_eval
+```
+
+### 4. Compare Against an External Baseline
+
+```bash
+uv run python scripts/eval/compare_framework_ultralytics.py \
+  --saccade results/MOT17_eval \
+  --ultralytics results/MOT17_ultralytics_eval \
+  --gt-root datasets/MOT17/train \
+  --detector SDP
+```
+
+## Alternative Evaluation Paths
+
+- `scripts/eval/mot17_public.py`
+  - Runs tracking from MOT17 public detections in `det/det.txt`.
+
+- `scripts/eval/ultralytics_official_mot17.py`
+  - Runs Ultralytics tracking as an external baseline.
+
+- `scripts/eval/bench_yolo_batch.py`
+  - Measures detector batch throughput / latency.
+
+## Development Notes
+
+- The worktree may contain active experimentation in tracking, GMC, ReID, and
+  evaluation scripts.
+- The MOT evaluation flow has recently been simplified around:
+  - `scripts/eval/mot17.py`
+  - `scripts/eval/ablation_mot17.py`
+- Older ad-hoc grid search and one-off ablation entry points were removed to
+  reduce drift.
+
+## Tests
+
+Run the Python test suite with:
+
+```bash
+uv run pytest
+```
+
+Some benchmarks and evaluation scripts require:
+
+- CUDA-capable hardware
+- TensorRT engines
+- local MOT datasets
+
+## Status
+
+If something in this README conflicts with the code, treat the code under
+`perception/`, `scripts/eval/`, and `tests/` as the source of truth. This file
+has been updated to reflect the current MOT17-centered evaluation workflow, but
+the repo is still under active iteration.

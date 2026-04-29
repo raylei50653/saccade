@@ -1,6 +1,13 @@
 import torch
-import torchvision.ops as ops
-from typing import Tuple, cast
+from typing import Tuple
+
+
+try:
+    from saccade_perception_ext import Cropper as CropperCpp
+
+    _CROPPER_CPP_AVAILABLE = True
+except ImportError:
+    _CROPPER_CPP_AVAILABLE = False
 
 
 class ZeroCopyCropper:
@@ -8,7 +15,8 @@ class ZeroCopyCropper:
     Saccade 零拷貝裁切器 (Phase 1)
 
     直接在 GPU 顯存中接收原始高解析度 Frame Tensor 與 YOLO Bounding Boxes，
-    使用 torchvision.ops.roi_align 進行批次裁切與縮放，產出 CLIP/SigLIP 相容的 Tensor。
+    優先使用 C++ Cropper (CUDA kernel)，否則使用 torchvision.ops.roi_align 進行批次裁切與縮放。
+    產出 CLIP/SigLIP 相容的 Tensor。
     """
 
     def __init__(
@@ -23,7 +31,30 @@ class ZeroCopyCropper:
         self.mode = mode
         self.padding = padding
 
-    def _prepare_boxes(self, boxes: torch.Tensor, frame_h: int, frame_w: int) -> torch.Tensor:
+        if _CROPPER_CPP_AVAILABLE and mode == "tight" and padding == 0.0:
+            self._cpp = CropperCpp(output_size[1], output_size[0])  # w, h
+        else:
+            self._cpp = None
+
+    @staticmethod
+    def _roi_align(
+        frame_tensor: torch.Tensor, rois: torch.Tensor, output_size: Tuple[int, int]
+    ) -> torch.Tensor:
+        # Import torchvision only on the Python fallback path to avoid loading
+        # image codecs before the C++ extension resolves its own dependencies.
+        from torchvision.ops import roi_align
+
+        return roi_align(
+            input=frame_tensor,
+            boxes=rois,
+            output_size=output_size,
+            spatial_scale=1.0,
+            aligned=True,
+        )
+
+    def _prepare_boxes(
+        self, boxes: torch.Tensor, frame_h: int, frame_w: int
+    ) -> torch.Tensor:
         if self.mode == "tight" and self.padding <= 0.0:
             return boxes
 
@@ -104,7 +135,34 @@ class ZeroCopyCropper:
         # 確保 boxes 與 frame_tensor 在相同的裝置上，並視需要在 GPU 上調整 RoI。
         boxes = boxes.to(frame_tensor.device)
         original_boxes = boxes
-        boxes = self._prepare_boxes(boxes, frame_tensor.shape[-2], frame_tensor.shape[-1])
+        boxes = self._prepare_boxes(
+            boxes, frame_tensor.shape[-2], frame_tensor.shape[-1]
+        )
+
+        if self._cpp is not None:
+            # Use C++ Implementation (CUDA kernel)
+            h, w = frame_tensor.shape[-2], frame_tensor.shape[-1]
+            num = boxes.shape[0]
+            out = torch.empty(
+                (num, 3, *self.output_size),
+                device=frame_tensor.device,
+                dtype=torch.float32,
+            )
+
+            # C++ process_gpu expects HWC RGB interleaved float32 [0, 1] on GPU for input.
+            # If frame_tensor is [1, 3, H, W], we permute it.
+            hwc_frame = frame_tensor.squeeze(0).permute(1, 2, 0).contiguous()
+
+            self._cpp.process_gpu(
+                hwc_frame.data_ptr(),
+                w,
+                h,
+                boxes.contiguous().data_ptr(),
+                num,
+                out.data_ptr(),
+                torch.cuda.current_stream().cuda_stream,
+            )
+            return out
 
         # roi_align 需要的 boxes 格式為 [N, 5]，第一欄是 batch_index。
         # 由於我們每次只處理單張圖片 (Batch=1)，所以 index 全為 0。
@@ -114,18 +172,14 @@ class ZeroCopyCropper:
         rois = torch.cat([batch_indices, boxes], dim=1)
 
         # 使用 RoI Align 進行硬體加速的裁切與對齊
-        crops = ops.roi_align(
-            input=frame_tensor,
-            boxes=rois,
-            output_size=self.output_size,
-            spatial_scale=1.0,
-            aligned=True,
-        )
+        crops = self._roi_align(frame_tensor, rois, self.output_size)
 
-        crops = self._fill_extra_with_mean(cast(torch.Tensor, crops), original_boxes, boxes)
-        return cast(torch.Tensor, crops)
+        crops = self._fill_extra_with_mean(crops, original_boxes, boxes)
+        return crops
 
-    def process_parts(self, frame_tensor: torch.Tensor, boxes: torch.Tensor) -> torch.Tensor:
+    def process_parts(
+        self, frame_tensor: torch.Tensor, boxes: torch.Tensor
+    ) -> torch.Tensor:
         """
         裁切 full / upper / lower 三個視角，輸出順序為 [full, upper, lower]。
         """

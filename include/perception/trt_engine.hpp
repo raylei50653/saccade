@@ -18,6 +18,11 @@ public:
     virtual bool set_tensor_address(const char* name, void* ptr) = 0;
     virtual bool enqueue_v3(cudaStream_t stream) = 0;
     virtual nvinfer1::Dims getTensorDims(const char* name) const = 0;
+    virtual nvinfer1::Dims getTensorProfileDims(
+        const char* name,
+        int profile_index,
+        nvinfer1::OptProfileSelector selector
+    ) const = 0;
     virtual int get_nb_tensors() const = 0;
     virtual const char* get_tensor_name(int index) const = 0;
     virtual bool is_input(const char* name) const = 0;
@@ -37,6 +42,11 @@ public:
     bool set_tensor_address(const char* name, void* ptr) override;
     bool enqueue_v3(cudaStream_t stream) override;
     nvinfer1::Dims getTensorDims(const char* name) const override;
+    nvinfer1::Dims getTensorProfileDims(
+        const char* name,
+        int profile_index,
+        nvinfer1::OptProfileSelector selector
+    ) const override;
     int get_nb_tensors() const override;
     const char* get_tensor_name(int index) const override;
     bool is_input(const char* name) const override;

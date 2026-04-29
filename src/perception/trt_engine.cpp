@@ -65,6 +65,14 @@ public:
         return engine_->getTensorShape(name);
     }
 
+    nvinfer1::Dims getTensorProfileDims(
+        const char* name,
+        int profile_index,
+        nvinfer1::OptProfileSelector selector
+    ) const {
+        return engine_->getProfileShape(name, profile_index, selector);
+    }
+
     int getNbTensors() const {
         return engine_->getNbIOTensors();
     }
@@ -113,6 +121,14 @@ bool TRTEngine::enqueue_v3(cudaStream_t stream) {
 
 nvinfer1::Dims TRTEngine::getTensorDims(const char* name) const {
     return pimpl_->getTensorDims(name);
+}
+
+nvinfer1::Dims TRTEngine::getTensorProfileDims(
+    const char* name,
+    int profile_index,
+    nvinfer1::OptProfileSelector selector
+) const {
+    return pimpl_->getTensorProfileDims(name, profile_index, selector);
 }
 
 int TRTEngine::get_nb_tensors() const {

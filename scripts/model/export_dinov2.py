@@ -5,11 +5,13 @@ Usage:
 
 Then compile with trtexec (printed at end of script).
 """
+
 import os
 import torch
 import torch.nn as nn
-from transformers import AutoModel
+from typing import cast, Any
 from pathlib import Path
+from transformers import AutoModel
 
 
 class DINOv2Wrapper(nn.Module):
@@ -20,8 +22,10 @@ class DINOv2Wrapper(nn.Module):
         self.model = model
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        outputs = self.model(pixel_values=pixel_values)
-        return outputs.last_hidden_state[:, 0, :]  # CLS token → [B, 768]
+        outputs = cast(Any, self.model(pixel_values=pixel_values))
+        return cast(
+            torch.Tensor, outputs.last_hidden_state[:, 0, :]
+        )  # CLS token → [B, 768]
 
 
 def export(

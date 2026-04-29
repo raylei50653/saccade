@@ -1,38 +1,43 @@
 # Saccade TODO — 具體實作清單
 
-> 基於代碼審查（2026-04-25）。每條都對應具體文件與行為落差，不是架構願景。
+> 主 TODO 只保留目前待辦與近期方向。已完成項、設計規範與 C++ 路線圖已移至 [docs/TODO_history.md](/home/ray/developer/ai/saccade/docs/TODO_history.md:1)。
 
 ---
 
-## ✅ 已完成（2026-04-25）
+## Current Focus
 
-### P0 — GPUByteTracker 核心強化（ADR 013）
-- [x] **ReID 融合代價矩陣**：`tracker_gpu.cu` cost matrix 改為 `(1-w)*IoU + w*CosSim`，預設 w=0.5，crowded 場景 w=0.8
-- [x] **Strong ReID Gate**：CosSim > 0.75 時強制配對，對抗相機劇烈晃動
-- [x] **GMC 全域運動補償**：Python 層 optical flow → 仿射矩陣傳入 C++ `gmc_kernel`，同步修正 Kalman 狀態與協方差
-- [x] **Light Compensation**：`light_factor` 動態調整 R 矩陣，穩定夜間軌跡
-- [x] **Saccade Heartbeat 間隔修正**：`% 30` → `% 10`，對齊 ADR 013 規格
+- [ ] **Rerank Phase 2：Bank Inject（C）+ Reciprocal Margin（D）— 收斂結論**
+  - **Phase 1 結論（2026-04-29）**：`buffer_size × rerank_mode` 多樣本 scoring 無效——11 的 IDF1 系統性下降（-2.8～-3.6pp），02 的 FP/IDs 未改善。問題根源不在 appearance scoring，而在 reference 品質與 false accept 過濾。
+  - **實作已完成（2026-04-29）**：
+    - C++ `SemanticRelinker` 新增 `rerank_mode`、`reciprocal_margin`、`inject_reference()`、`alias`/`features` 屬性
+    - `runner.py` 修正：`semantic_bank_inject` 與 `reciprocal_margin > 0` 不再強制 Python fallback（僅 non-mean rerank_mode 才用 Python）
+    - `relink.py` 修正：Python `inject_reference()` 強制 `.cpu()` 防止 device mismatch
+    - `ablation_rerank.py` 修正：base 加 `--no-semantic-bank-inject --semantic-buffer-size 1`；C/D/CD 均加 `--semantic-buffer-size 1`
+  - **結果輸出**：`scripts/eval/output/ablation_rerank.txt` 與 `scripts/eval/output/current_margin_m*`
+  - **Phase 2 結論**：
+    - `buf=1 EMA` 基線上，`C+D: inject+margin=0.05` 最強，可作為 stripped reference path 的最佳組合。
+    - 但在 current documented base 上，沒有任何 reciprocal margin 能乾淨取代 default。
+    - `margin=0.15` 只適合保留為 `IDs/MOTA` 傾向的可選 variant，不應進 default。
+  - **下一步**：停止 reciprocal margin default tuning，轉向 Phase 3 reference-quality / false-accept filtering。
 
-### P1 — 媒體層穩定性
-- [x] **RTSP 斷線自動恢復**：`mediamtx_client.py` 加入 `watchdog_loop()`，`_is_alive()` 偵測超時後呼叫 `_restart_pipeline()` 重建 GStreamer pipeline
+## Active Context
 
-### P2 — 儲存層
-- [x] **Redis Micro-batching**：`MicroBatcher` 整合於 `RedisCache.publish_event()`，100ms 視窗聚合，Redis QPS ~300 → ~30
+- 目前 `siglip2` 仍是最高 IDF1 ceiling。
+- `transreid` 與 `osnet` 已完成對比，但都未超過當前 `siglip2` base。
+- OSNet engine 已建立，可用 `uv run python scripts/model/build_osnet.py` 重建。
+- Phase 1 multi-sample rerank 結果已存 `results/ablation_rerank/`，可用 `--skip-run` 重新讀取。
+- Phase 2 ablation script 已修正，直接 `--fast` 執行即可（舊 `base/` 結果仍有效）。
 
-### P3 — 認知層（ADR 014）
-- [x] **LlamaIndex RAG 接入**：`orchestrator.py` 連接 ChromaDB → LlamaIndex，使用 `BAAI/bge-small-en-v1.5` local embedding + Ollama llama3
-- [x] **事件觸發式查詢**：`entropy > 0.9` 或 `is_anomaly=True` 時才觸發 RAG，避免每幀呼叫
-- [x] **Visual Re-query (視覺重查)**：在 `orchestrator.py` 中註冊 `visual_requery` Tool 給 ReAct Agent，允許 LLM 發起 ChromaDB 純向量搜尋 (Image-to-Image 語義比對)。
-- [x] **跨鏡頭 Re-ID**：重構 `FeatureBank` 支援 `stream_map`，實作 `find_cross_camera_matches` 矩陣運算，讓多路串流可共享特徵索引並進行跨畫面比對。
+## Historical Links
 
-### P4 — 基礎設施與維運（Infrastructure & Maintenance）
-- [x] **ChromaDB 冷備份**：於 `ChromaStore` 中實作 `backup()` 函數，利用 `shutil.make_archive` 定期壓縮並 snapshot 向量資料庫，防止長期記憶遺失。
-- [x] **串流身分驗證**：修改 `infra/mediamtx.yml`，為發布 (publish) 與讀取 (read) 動作加入帳號密碼保護。
-- [x] **Redis 自動清理**：實作 `cleanup_expired_objects()`，監控 Redis 記憶體使用量，當超過閾值時強制刪除最舊的 `saccade:obj:*` 快取，避免記憶體溢出。
-- [x] **智慧影格抽樣策略**：在 `MediaMTXClient` (含 C++ 及 Python 回調) 中實作像素差異比對 (SAD < 2.0)，即時丟棄低資訊幀，降低無效計算負載。
+- 歷史 TODO / 設計規範 / C++ 路線圖： [docs/TODO_history.md](/home/ray/developer/ai/saccade/docs/TODO_history.md:1)
+- Tracking base 與 relink sweep： [docs/experiments/tracking/fp_fn_recovery_and_gmc.md](/home/ray/developer/ai/saccade/docs/experiments/tracking/fp_fn_recovery_and_gmc.md:1)
+- ReID backbone refresh 歸檔： [docs/experiments/reid/semantic_relink_and_crop.md](/home/ray/developer/ai/saccade/docs/experiments/reid/semantic_relink_and_crop.md:252)
 
 ---
 
-## 🎯 專案里程碑：全部核心與周邊待辦事項已清空！
+## 🎯 專案里程碑
 
-最後更新：2026-04-25
+最後更新：2026-04-29
+
+下一步：保留 current documented base 為 default；若需要比較變體，可留 `--semantic-reciprocal-margin 0.15` 作為 `IDs/MOTA`-leaning profile，主線轉進 Phase 3。

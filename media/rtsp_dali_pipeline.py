@@ -1,5 +1,5 @@
 import torch
-from typing import List
+from typing import List, Any
 import nvidia.dali.fn as fn
 import nvidia.dali.types as types
 from nvidia.dali.pipeline import Pipeline
@@ -8,14 +8,14 @@ from nvidia.dali.pipeline import Pipeline
 class RTSPDALIPipeline(Pipeline):
     def __init__(
         self,
-        batch_size=1,
-        num_threads=4,
-        device_id=0,
-        output_size=640,
-        prefetch_queue_depth=2,
-    ):
+        batch_size: int = 1,
+        num_threads: int = 4,
+        device_id: int = 0,
+        output_size: int = 640,
+        prefetch_queue_depth: int = 2,
+    ) -> None:
         # 增加 prefetch_queue_depth 提高直播流容錯性
-        super().__init__(
+        super().__init__(  # type: ignore[no-untyped-call]
             batch_size,
             num_threads,
             device_id,
@@ -24,7 +24,7 @@ class RTSPDALIPipeline(Pipeline):
         self.output_size = output_size
         self.input = fn.external_source(device="gpu", name="rtsp_raw", no_copy=True)
 
-    def define_graph(self):
+    def define_graph(self) -> Any:
         images = self.input
 
         # 🚀 影像增強：提升亮度與對比度 (針對夜間街景)
@@ -34,11 +34,11 @@ class RTSPDALIPipeline(Pipeline):
             enhanced,
             resize_x=self.output_size,
             resize_y=self.output_size,
-            interp_type=types.INTERP_LINEAR,
+            interp_type=types.INTERP_LINEAR,  # type: ignore[attr-defined]
         )
         normalized = fn.crop_mirror_normalize(
-            resized,
-            dtype=types.FLOAT,
+            resized,  # type: ignore[arg-type]
+            dtype=types.FLOAT,  # type: ignore[attr-defined]
             output_layout="CHW",
             mean=[0.0, 0.0, 0.0],
             std=[255.0, 255.0, 255.0],
@@ -47,12 +47,14 @@ class RTSPDALIPipeline(Pipeline):
 
 
 class DALIRTSPOptimizer:
-    def __init__(self, batch_size: int = 1, device_id: int = 0, output_size: int = 640):
+    def __init__(
+        self, batch_size: int = 1, device_id: int = 0, output_size: int = 640
+    ) -> None:
         self.batch_size = batch_size
         self.pipeline = RTSPDALIPipeline(
             batch_size=batch_size, device_id=device_id, output_size=output_size
         )
-        self.pipeline.build()
+        self.pipeline.build()  # type: ignore[no-untyped-call]
         self._primed = False
 
     def process(self, tensors: List[torch.Tensor]) -> torch.Tensor:
@@ -69,11 +71,11 @@ class DALIRTSPOptimizer:
         if not self._primed:
             # 預設 prefetch_queue_depth=2，所以我們要先餵入 3 次數據 (2 預取 + 1 當前)
             for _ in range(2):
-                self.pipeline.feed_input("rtsp_raw", tensors)
+                self.pipeline.feed_input("rtsp_raw", tensors)  # type: ignore[no-untyped-call]
             self._primed = True
 
         # 4. 餵入當前數據
-        self.pipeline.feed_input("rtsp_raw", tensors)
+        self.pipeline.feed_input("rtsp_raw", tensors)  # type: ignore[no-untyped-call]
 
         # 5. 執行並取得輸出
         outputs = self.pipeline.run()
@@ -81,7 +83,7 @@ class DALIRTSPOptimizer:
 
         # 6. 零拷貝介面轉換
         class DALIInterface:
-            def __init__(self, dali_tensor):
+            def __init__(self, dali_tensor: Any) -> None:
                 self.__cuda_array_interface__ = {
                     "shape": dali_tensor.shape(),
                     "typestr": "<f4",
