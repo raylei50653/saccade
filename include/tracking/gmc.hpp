@@ -21,7 +21,7 @@ public:
         float min_distance = 10.0,
         int min_inliers = 8,
         float ransac_threshold = 3.0);
-    ~GMC() = default;
+    ~GMC();
 
     /**
      * @brief Estimate affine camera warp between previous and current frame.
@@ -57,6 +57,10 @@ private:
     // Buffer for GPU -> CPU transfer
     void* d_gray_small_ = nullptr;
     size_t gray_small_size_ = 0;
+    
+    cudaStream_t gmc_stream_ = nullptr;
+    cudaEvent_t prep_event_ = nullptr;
 };
+
 
 } // namespace saccade

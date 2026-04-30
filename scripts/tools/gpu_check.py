@@ -5,7 +5,7 @@ import sys
 
 gi.require_version("Gst", "1.0")
 from gi.repository import Gst  # noqa: E402
-from perception.detector_trt import TRTYoloDetector  # noqa: E402
+from saccade.perception.detector_trt import TRTYoloDetector  # noqa: E402
 
 
 def check_gpu_stack() -> bool:

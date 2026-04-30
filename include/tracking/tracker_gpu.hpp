@@ -77,7 +77,28 @@ public:
     void update_reference_features(int* track_ids, float* features_ptr, int num, cudaStream_t stream);
     void set_clean_embedding_flags(int* track_ids, bool* flags, int n, cudaStream_t stream);
     std::vector<TrackStateSnapshot> get_state_snapshots(cudaStream_t stream);
+    std::vector<TrackStateSnapshot> get_motion_snapshots_for_track_ids(
+        const std::vector<int>& track_ids,
+        cudaStream_t stream
+    );
     std::vector<TrackCandidateSnapshot> get_tentative_candidates(cudaStream_t stream);
+    void update_into(
+        float* boxes_ptr,
+        float* scores_ptr,
+        int* classes_ptr,
+        int num_dets,
+        cudaStream_t stream,
+        float* out_boxes_ptr,
+        float* out_scores_ptr,
+        int* out_ids_ptr,
+        int* out_classes_ptr,
+        int* out_det_idx_ptr,
+        int* out_count_ptr,
+        float* embeddings_ptr = nullptr,
+        float* gmc_ptr = nullptr,
+        float light_factor = 0.0f,
+        float mid_thresh_scale = 1.0f
+    );
 
     std::vector<TrackResult> update(
         float* boxes_ptr, 
@@ -154,5 +175,54 @@ void SACCADE_TRACKING_API nms_cuda(
     bool class_aware,
     cudaStream_t stream
 );
+
+void SACCADE_TRACKING_API nms_counted_cuda(
+    const float* boxes_ptr,
+    const float* scores_ptr,
+    const int* classes_ptr,
+    const int64_t* order_indices_ptr,
+    int max_dets,
+    const int* valid_count_ptr,
+    int* keep_indices_ptr,
+    uint64_t* suppression_masks_ptr,
+    uint64_t* remv_ptr,
+    int* out_count_ptr,
+    float iou_threshold,
+    bool class_aware,
+    cudaStream_t stream
+);
+
+// M1: GPU gather-compact helpers for PerceptionPipeline
+void SACCADE_TRACKING_API gather_compact3_cuda(
+    const float* src_boxes, const float* src_scores, const int* src_classes,
+    float* dst_boxes, float* dst_scores, int* dst_classes,
+    const int* indices, int n, cudaStream_t stream);
+
+void SACCADE_TRACKING_API gather_compact3_counted_cuda(
+    const float* src_boxes, const float* src_scores, const int* src_classes,
+    float* dst_boxes, float* dst_scores, int* dst_classes,
+    const int* indices, const int* count_ptr, int max_n, cudaStream_t stream);
+
+void SACCADE_TRACKING_API gather_compact4_cuda(
+    const float* src_boxes, const float* src_scores, const int* src_classes, const bool* src_suspect,
+    float* dst_boxes, float* dst_scores, int* dst_classes, bool* dst_suspect,
+    const int* indices, int n, cudaStream_t stream);
+
+void SACCADE_TRACKING_API gather_compact4_counted_cuda(
+    const float* src_boxes, const float* src_scores, const int* src_classes, const bool* src_suspect,
+    float* dst_boxes, float* dst_scores, int* dst_classes, bool* dst_suspect,
+    const int* indices, const int* count_ptr, int max_n, cudaStream_t stream);
+
+void SACCADE_TRACKING_API copy_bool_counted_cuda(
+    const bool* src, bool* dst, const int* count_ptr, int max_n, cudaStream_t stream);
+
+size_t SACCADE_TRACKING_API argsort_scores_descending_bytes(int n);
+
+// Stable descending argsort: equal-score ties break toward lower original index.
+// d_keys_in / d_keys_out are uint64_t scratch buffers of length n each.
+void SACCADE_TRACKING_API argsort_scores_descending_cuda(
+    const float* d_scores, int n,
+    int64_t* d_order_out, uint64_t* d_keys_in, uint64_t* d_keys_out,
+    void* d_cub_tmp, size_t cub_tmp_bytes, cudaStream_t stream);
 
 } // namespace saccade

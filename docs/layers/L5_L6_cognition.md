@@ -1,10 +1,10 @@
-# L5: 認知層 (Agentic RAG)
+# L5: 認知層 (Cognition - Agentic RAG)
 
 ## 1. 定義與目標
 L5 是 Saccade 的「語義大腦」，負責將 L1-L4 累積的結構化視覺記憶轉化為可推理的知識。目標是在邊緣設備上提供事件觸發式的語義推理，回答「過去一小時是否有可疑人物？」等複雜查詢，同時不干擾 L1 感知主循環。
 
 ## 2. 核心組件
-- **Orchestrator** (`pipeline/orchestrator.py`): 事件監聽主迴圈，負責接收 Redis 事件並決定是否觸發 RAG。
+- **Orchestrator** (`src/saccade/cognition/orchestrator.py`): 事件監聽主迴圈，負責接收 Redis 事件並決定是否觸發 RAG。
 - **LlamaIndex RAG Engine**: 連接 ChromaDB 的向量索引，提供 ReAct Agent 工具集。
 - **本地 LLM (Ollama)**: 預設 `llama3:8b`，不呼叫外部 API，符合邊緣運算限制。
 - **Local Embedding**: `BAAI/bge-small-en-v1.5`，與 L4 向量空間對齊。
@@ -31,14 +31,14 @@ L5 是 Saccade 的「語義大腦」，負責將 L1-L4 累積的結構化視覺�
 
 ---
 
-# L6: 資源層 (Resource Management)
+# L6: 資源層 (Resource - Resource Management)
 
 ## 1. 定義與目標
 L6 是 Saccade 的「決策大腦」，負責高層級的 VRAM 資源監控與系統平衡。目標是確保系統在資源極限環境下透過自適應策略優雅降級，優先保證核心感知（L1）。
 
 ## 2. 核心組件
-- **ResourceManager** (`cognition/resource_manager.py`): 透過 NVML 實時監測 VRAM 負載，輸出降級指令。
-- **FrameSelector** (`cognition/frame_selector.py`): 基於 L2 漂移分數動態調整 L1 偵測頻率。
+- **ResourceManager** (`src/saccade/resource/resource_manager.py`): 透過 NVML 實時監測 VRAM 負載，輸出降級指令。
+- **FrameSelector** (`src/saccade/resource/frame_selector.py`): 基於 L2 漂移分數動態調整 L1 偵測頻率。
 
 ## 3. 資料流向
 - **Input**: VRAM Stats (NVML)、Latency Spike (L1)、Drift Score (L2)。

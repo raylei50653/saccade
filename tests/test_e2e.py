@@ -13,7 +13,7 @@ from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
-import pytest
+import pytest  # noqa: E402
 import torch
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -37,8 +37,8 @@ skip_no_dataset = pytest.mark.skipif(
 
 
 def _run_eval(tmp_path, *, max_frames, reid_mode, seq=SEQ):
-    from perception.detector_trt import TRTYoloDetector  # noqa: F401 — must precede torchvision
-    from perception.eval.runner import run_eval
+    from saccade.perception.detector_trt import TRTYoloDetector  # noqa: F401 — must precede torchvision
+    from saccade.perception.eval.runner import run_eval
 
     out = str(tmp_path / "out")
     run_eval(

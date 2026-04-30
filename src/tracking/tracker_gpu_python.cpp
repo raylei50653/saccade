@@ -8,6 +8,7 @@
 #include <iostream>
 #include <limits>
 #include <unordered_map>
+#include <unordered_set>
 #include <numeric>
 #include <stdexcept>
 #include <string>
@@ -296,6 +297,7 @@ struct RelinkStats {
     int reject_similarity = 0;
     int reject_consistency = 0;
     int reject_margin = 0;
+    int reject_quality = 0;
     int new_ids = 0;
 };
 
@@ -313,7 +315,12 @@ public:
         float min_consistency,
         std::string rerank_mode,
         float reciprocal_margin,
-        bool debug
+        bool debug,
+        float clean_score_threshold = 0.0f,
+        float clean_margin_ratio = 0.0f,
+        float clean_min_aspect = 0.0f,
+        float clean_max_aspect = 99.0f,
+        float strict_sim_threshold = 0.0f
     )
         : sim_threshold_(sim_threshold),
           ttl_(ttl),
@@ -326,7 +333,12 @@ public:
           min_consistency_(min_consistency),
           rerank_mode_(std::move(rerank_mode)),
           reciprocal_margin_(std::max(0.0f, reciprocal_margin)),
-          debug_(debug) {}
+          debug_(debug),
+          clean_score_threshold_(clean_score_threshold),
+          clean_margin_ratio_(clean_margin_ratio),
+          clean_min_aspect_(clean_min_aspect),
+          clean_max_aspect_(clean_max_aspect),
+          strict_sim_threshold_(strict_sim_threshold > 0.0f ? strict_sim_threshold : sim_threshold) {}
 
     void update_motion_snapshots(const std::vector<TrackStateSnapshot>& snapshots) {
         for (const auto& snap : snapshots) {
@@ -348,6 +360,32 @@ public:
         }
     }
 
+    std::vector<int> motion_candidate_ids(int frame_id = -1) const {
+        if (mahalanobis_threshold_ <= 0.0f) {
+            return {};
+        }
+        std::vector<int> ids;
+        ids.reserve(feature_order_.size());
+        for (int cid : feature_order_) {
+            const auto feature_it = features_.find(cid);
+            if (feature_it == features_.end()) {
+                continue;
+            }
+            if (frame_id >= 0) {
+                const auto seen_it = last_seen_.find(cid);
+                if (seen_it == last_seen_.end()) {
+                    continue;
+                }
+                const int age = frame_id - seen_it->second;
+                if (age < min_lost_frames_ || age > ttl_) {
+                    continue;
+                }
+            }
+            ids.push_back(cid);
+        }
+        return ids;
+    }
+
     void inject_reference(int canonical_id, py::object embedding) {
         std::vector<float> emb = normalize(extract_embedding(embedding));
         features_[canonical_id] = emb;
@@ -360,6 +398,25 @@ public:
         }
     }
 
+    void inject_references_many(py::iterable references) {
+        for (py::handle item : references) {
+            py::tuple pair = py::reinterpret_borrow<py::tuple>(item);
+            if (pair.size() != 2) {
+                throw std::runtime_error("inject_references_many expects (canonical_id, embedding) pairs");
+            }
+            inject_reference(pair[0].cast<int>(), py::reinterpret_borrow<py::object>(pair[1]));
+        }
+    }
+
+    int canonical_id(int raw_id) const {
+        auto it = alias_.find(raw_id);
+        return it == alias_.end() ? raw_id : it->second;
+    }
+
+    bool has_feature(int canonical_id) const {
+        return features_.find(canonical_id) != features_.end();
+    }
+
     int resolve(
         int raw_id,
         py::object embedding,
@@ -370,22 +427,36 @@ public:
         int frame_h,
         py::set assigned
     ) {
-        (void)score;
         if (embedding.is_none()) {
             auto it = alias_.find(raw_id);
             return it == alias_.end() ? raw_id : it->second;
         }
 
         std::vector<float> emb = normalize(extract_embedding(embedding));
+        const RelinkBox box = parse_box(box_obj);
+        bool is_clean = true;
+        if (clean_score_threshold_ > 0.0f || clean_margin_ratio_ > 0.0f) {
+            float bw = box.x2 - box.x1;
+            float bh = box.y2 - box.y1;
+            float aspect = bw > 0 ? bh / bw : 0.0f;
+            float margin_w = frame_w * clean_margin_ratio_;
+            float margin_h = frame_h * clean_margin_ratio_;
+            if (score < clean_score_threshold_ || 
+                box.x1 < margin_w || box.y1 < margin_h || box.x2 > frame_w - margin_w || box.y2 > frame_h - margin_h ||
+                aspect < clean_min_aspect_ || aspect > clean_max_aspect_) {
+                is_clean = false;
+            }
+        }
+        float current_sim_thresh = is_clean ? sim_threshold_ : strict_sim_threshold_;
+
         if (!alias_.count(raw_id)) {
             stats_.attempts += 1;
             int best_id = -1;
-            float best_sim = sim_threshold_;
-            float second_best_sim = sim_threshold_ - 1.0f;
+            float best_sim = current_sim_thresh;
+            float second_best_sim = current_sim_thresh - 1.0f;
             float best_iou = 0.0f;
             float best_center = 0.0f;
             float best_maha = 0.0f;
-            const RelinkBox box = parse_box(box_obj);
 
             for (int cid : feature_order_) {
                 const auto feature_it = features_.find(cid);
@@ -471,32 +542,93 @@ public:
         }
 
         const int canonical = alias_.at(raw_id);
-        if (buffer_size_ > 1) {
-            auto& buf = buffers_[canonical];
-            buf.push_back(emb);
-            if (static_cast<int>(buf.size()) > buffer_size_) {
-                buf.erase(buf.begin());
-            }
-            features_[canonical] = buffer_mean(canonical);
+        if (!is_clean) {
+            stats_.reject_quality += 1;
         } else {
-            auto old = features_.find(canonical);
-            if (old == features_.end()) {
-                features_[canonical] = emb;
-            } else {
-                std::vector<float> updated(emb.size(), 0.0f);
-                for (size_t i = 0; i < emb.size(); ++i) {
-                    updated[i] = ema_beta_ * old->second[i] + (1.0f - ema_beta_) * emb[i];
+            if (buffer_size_ > 1) {
+                auto& buf = buffers_[canonical];
+                buf.push_back(emb);
+                if (static_cast<int>(buf.size()) > buffer_size_) {
+                    buf.erase(buf.begin());
                 }
-                features_[canonical] = normalize(updated);
+                features_[canonical] = buffer_mean(canonical);
+            } else {
+                auto old = features_.find(canonical);
+                if (old == features_.end()) {
+                    features_[canonical] = emb;
+                } else {
+                    std::vector<float> updated(emb.size(), 0.0f);
+                    for (size_t i = 0; i < emb.size(); ++i) {
+                        updated[i] = ema_beta_ * old->second[i] + (1.0f - ema_beta_) * emb[i];
+                    }
+                    features_[canonical] = normalize(updated);
+                }
             }
         }
         if (std::find(feature_order_.begin(), feature_order_.end(), canonical) == feature_order_.end()) {
             feature_order_.push_back(canonical);
         }
         last_seen_[canonical] = frame_id;
-        last_boxes_[canonical] = parse_box(box_obj);
+        last_boxes_[canonical] = box;
         assigned.add(py::int_(canonical));
         return canonical;
+    }
+
+    py::list resolve_many(
+        py::iterable candidates,
+        int frame_id,
+        int frame_w,
+        int frame_h
+    ) {
+        py::set assigned;
+        py::list out;
+        for (py::handle item : candidates) {
+            py::tuple candidate = py::reinterpret_borrow<py::tuple>(item);
+            if (candidate.size() != 4) {
+                throw std::runtime_error("resolve_many expects (raw_id, embedding, box, score) tuples");
+            }
+            out.append(resolve(
+                candidate[0].cast<int>(),
+                py::reinterpret_borrow<py::object>(candidate[1]),
+                candidate[2].cast<py::sequence>(),
+                candidate[3].cast<float>(),
+                frame_id,
+                frame_w,
+                frame_h,
+                assigned
+            ));
+        }
+        return out;
+    }
+
+    py::list resolve_many_packed(
+        py::sequence raw_ids,
+        py::sequence embeddings,
+        py::sequence boxes,
+        py::sequence scores,
+        int frame_id,
+        int frame_w,
+        int frame_h
+    ) {
+        const size_t n = static_cast<size_t>(py::len(raw_ids));
+        if (py::len(embeddings) != n || py::len(boxes) != n || py::len(scores) != n) {
+            throw std::runtime_error("resolve_many_packed expects equally sized raw_ids/embeddings/boxes/scores");
+        }
+        py::set assigned;
+        py::list out;
+        for (size_t i = 0; i < n; ++i) {
+            out.append(resolve(
+                raw_ids[i].cast<int>(),
+                py::reinterpret_borrow<py::object>(embeddings[i]),
+                boxes[i].cast<py::sequence>(),
+                scores[i].cast<float>(),
+                frame_id,
+                frame_w,
+                frame_h,
+                assigned
+            ));
+        }
+        return out;
     }
 
     py::dict get_alias() const {
@@ -526,6 +658,7 @@ public:
         out["reject_similarity"] = stats_.reject_similarity;
         out["reject_consistency"] = stats_.reject_consistency;
         out["reject_margin"] = stats_.reject_margin;
+        out["reject_quality"] = stats_.reject_quality;
         out["new_ids"] = stats_.new_ids;
         return out;
     }
@@ -541,7 +674,8 @@ public:
             " reject_spatial=" + std::to_string(stats_.reject_spatial) +
             " reject_mahalanobis=" + std::to_string(stats_.reject_mahalanobis) +
             " reject_similarity=" + std::to_string(stats_.reject_similarity) +
-            " reject_margin=" + std::to_string(stats_.reject_margin)
+            " reject_margin=" + std::to_string(stats_.reject_margin) +
+            " reject_quality=" + std::to_string(stats_.reject_quality)
         );
         if (!accept_sims_.empty()) {
             py::print(
@@ -557,6 +691,125 @@ public:
                 " reject_consistency=" + std::to_string(stats_.reject_consistency)
             );
         }
+    }
+
+    // Internal C++ resolve — takes pre-normalized embedding and C++ box.
+    // Called by IdentityResolverCpp to avoid re-parsing Python objects between stages.
+    int resolve_cpp(
+        int raw_id,
+        const std::vector<float>& emb,
+        bool has_emb,
+        const RelinkBox& box,
+        float score,
+        int frame_id,
+        int frame_w,
+        int frame_h,
+        std::unordered_set<int>& assigned
+    ) {
+        if (!has_emb) {
+            auto it = alias_.find(raw_id);
+            return it == alias_.end() ? raw_id : it->second;
+        }
+
+        bool is_clean = true;
+        if (clean_score_threshold_ > 0.0f || clean_margin_ratio_ > 0.0f) {
+            float bw = box.x2 - box.x1;
+            float bh = box.y2 - box.y1;
+            float aspect = bw > 0 ? bh / bw : 0.0f;
+            float margin_w = frame_w * clean_margin_ratio_;
+            float margin_h = frame_h * clean_margin_ratio_;
+            if (score < clean_score_threshold_ || 
+                box.x1 < margin_w || box.y1 < margin_h || box.x2 > frame_w - margin_w || box.y2 > frame_h - margin_h ||
+                aspect < clean_min_aspect_ || aspect > clean_max_aspect_) {
+                is_clean = false;
+            }
+        }
+        float current_sim_thresh = is_clean ? sim_threshold_ : strict_sim_threshold_;
+
+        if (!alias_.count(raw_id)) {
+            stats_.attempts += 1;
+            int best_id = -1;
+            float best_sim = current_sim_thresh;
+            float second_best_sim = current_sim_thresh - 1.0f;
+            float best_iou = 0.0f, best_center = 0.0f, best_maha = 0.0f;
+
+            for (int cid : feature_order_) {
+                const auto feature_it = features_.find(cid);
+                if (feature_it == features_.end()) continue;
+                if (assigned.count(cid)) { stats_.reject_assigned += 1; continue; }
+                const int age = frame_id - last_seen_.at(cid);
+                if (age < min_lost_frames_ || age > ttl_) { stats_.reject_age += 1; continue; }
+                auto [center_norm, iou] = spatial_metrics(box, last_boxes_.at(cid), frame_w, frame_h);
+                if (center_norm > spatial_gate_ || iou < min_iou_) { stats_.reject_spatial += 1; continue; }
+                float maha = 0.0f;
+                if (mahalanobis_threshold_ > 0.0f) {
+                    const auto motion_it = motion_.find(cid);
+                    if (motion_it == motion_.end()) { stats_.reject_mahalanobis += 1; continue; }
+                    maha = mahalanobis(box, motion_it->second);
+                    if (maha > mahalanobis_threshold_) { stats_.reject_mahalanobis += 1; continue; }
+                }
+                if (min_consistency_ > 0.0f && buffer_size_ > 1) {
+                    if (buffer_consistency(cid) < min_consistency_) { stats_.reject_consistency += 1; continue; }
+                }
+                std::vector<float> ref = buffer_size_ > 1 ? buffer_mean(cid) : feature_it->second;
+                if (ref.empty()) ref = feature_it->second;
+                const float sim = dot(emb, ref);
+                if (sim > best_sim) {
+                    if (best_id >= 0) second_best_sim = best_sim;
+                    best_id = cid; best_sim = sim;
+                    best_iou = iou; best_center = center_norm; best_maha = maha;
+                } else {
+                    if (sim > second_best_sim) second_best_sim = sim;
+                    stats_.reject_similarity += 1;
+                }
+            }
+
+            if (best_id >= 0 && reciprocal_margin_ > 0.0f) {
+                if (best_sim - second_best_sim < reciprocal_margin_) {
+                    stats_.reject_margin += 1; best_id = -1;
+                }
+            }
+
+            if (best_id >= 0) {
+                stats_.accepted += 1;
+                accept_sims_.push_back(best_sim);
+                accept_ious_.push_back(best_iou);
+                accept_center_dists_.push_back(best_center);
+                accept_mahas_.push_back(best_maha);
+                alias_[raw_id] = best_id;
+            } else {
+                stats_.new_ids += 1;
+                alias_[raw_id] = raw_id;
+            }
+        }
+
+        const int canonical = alias_.at(raw_id);
+        if (!is_clean) {
+            stats_.reject_quality += 1;
+        } else {
+            if (buffer_size_ > 1) {
+                auto& buf = buffers_[canonical];
+                buf.push_back(emb);
+                if (static_cast<int>(buf.size()) > buffer_size_) buf.erase(buf.begin());
+                features_[canonical] = buffer_mean(canonical);
+            } else {
+                auto old_it = features_.find(canonical);
+                if (old_it == features_.end()) {
+                    features_[canonical] = emb;
+                } else {
+                    std::vector<float> updated(emb.size(), 0.0f);
+                    for (size_t i = 0; i < emb.size(); ++i)
+                        updated[i] = ema_beta_ * old_it->second[i] + (1.0f - ema_beta_) * emb[i];
+                    features_[canonical] = normalize(updated);
+                }
+            }
+        }
+        if (std::find(feature_order_.begin(), feature_order_.end(), canonical) == feature_order_.end())
+            feature_order_.push_back(canonical);
+        last_seen_[canonical] = frame_id;
+        last_boxes_[canonical] = box;
+        assigned.insert(canonical);
+        return canonical;
     }
 
 private:
@@ -751,6 +1004,11 @@ private:
     std::string rerank_mode_;
     float reciprocal_margin_;
     bool debug_;
+    float clean_score_threshold_;
+    float clean_margin_ratio_;
+    float clean_min_aspect_;
+    float clean_max_aspect_;
+    float strict_sim_threshold_;
 
     std::unordered_map<int, int> alias_;
     std::unordered_map<int, std::vector<float>> features_;
@@ -764,6 +1022,388 @@ private:
     std::vector<float> accept_ious_;
     std::vector<float> accept_center_dists_;
     std::vector<float> accept_mahas_;
+};
+
+// ============================================================
+// TrackletLifecycleMerger (C++ port of Python class in runner.py)
+// ============================================================
+
+struct LifecycleState {
+    int output_id = 0;
+    int last_frame_id = 0;
+    RelinkBox box{};
+    float score = 0.0f;
+    std::vector<float> embedding;  // normalized; empty == no embedding
+};
+
+struct LifecycleStats {
+    int attempts = 0, accepted = 0, new_ids = 0;
+    int reject_age = 0, reject_assigned = 0, reject_spatial = 0, reject_similarity = 0;
+};
+
+class TrackletLifecycleMergerCpp {
+public:
+    TrackletLifecycleMergerCpp(
+        bool enabled, int ttl, int min_gap,
+        float spatial_gate, float min_iou, float sim_threshold,
+        bool require_embedding, float ema
+    )
+        : enabled_(enabled),
+          ttl_(std::max(1, ttl)),
+          min_gap_(std::max(0, min_gap)),
+          spatial_gate_(spatial_gate),
+          min_iou_(min_iou),
+          sim_threshold_(sim_threshold),
+          require_embedding_(require_embedding),
+          ema_(std::clamp(ema, 0.0f, 1.0f)) {}
+
+    // Internal C++ resolve — used by IdentityResolverCpp.
+    int resolve_cpp(
+        int local_id,
+        const RelinkBox& box,
+        float score,
+        int frame_id,
+        int frame_w,
+        int frame_h,
+        const std::vector<float>& emb,
+        bool has_emb,
+        std::unordered_set<int>& assigned_outputs
+    ) {
+        if (!enabled_) return local_id;
+
+        auto alias_it = alias_.find(local_id);
+        int output_id = (alias_it != alias_.end()) ? alias_it->second : -1;
+
+        if (output_id < 0) {
+            stats_.attempts += 1;
+            int best_id = -1;
+            float best_score = -1.0f;
+
+            for (auto& [candidate_id, state] : states_) {
+                if (assigned_outputs.count(candidate_id)) {
+                    stats_.reject_assigned += 1; continue;
+                }
+                const int age = frame_id - state.last_frame_id;
+                if (age < min_gap_ || age > ttl_) {
+                    stats_.reject_age += 1; continue;
+                }
+                auto [center_norm, iou] = spatial_metrics_lc(box, state.box, frame_w, frame_h);
+                if (center_norm > spatial_gate_ || iou < min_iou_) {
+                    stats_.reject_spatial += 1; continue;
+                }
+                float sim = 0.0f;
+                if (has_emb && !state.embedding.empty()) {
+                    sim = dot_lc(emb, state.embedding);
+                    if (sim < sim_threshold_) {
+                        stats_.reject_similarity += 1; continue;
+                    }
+                } else if (require_embedding_) {
+                    stats_.reject_similarity += 1; continue;
+                }
+                const float candidate_score =
+                    sim + std::max(0.0f, spatial_gate_ - center_norm) + iou;
+                if (candidate_score > best_score) {
+                    best_score = candidate_score;
+                    best_id = candidate_id;
+                }
+            }
+
+            if (best_id < 0) {
+                stats_.new_ids += 1;
+                output_id = local_id;
+            } else {
+                stats_.accepted += 1;
+                output_id = best_id;
+            }
+            alias_[local_id] = output_id;
+        }
+
+        // EMA update of state embedding
+        auto old_it = states_.find(output_id);
+        std::vector<float> updated_emb;
+        if (has_emb) {
+            updated_emb = emb;
+            if (old_it != states_.end() && !old_it->second.embedding.empty()) {
+                updated_emb = normalize_lc(ema_mix_lc(old_it->second.embedding, emb, ema_));
+            }
+        } else if (old_it != states_.end()) {
+            updated_emb = old_it->second.embedding;
+        }
+
+        states_[output_id] = LifecycleState{output_id, frame_id, box, score, std::move(updated_emb)};
+        assigned_outputs.insert(output_id);
+        return output_id;
+    }
+
+    // Python-facing API (same keyword arg names as Python class)
+    py::list resolve_many_packed(
+        py::sequence local_ids,
+        py::sequence boxes,
+        py::sequence scores,
+        py::sequence embeddings,
+        int frame_id,
+        int frame_w,
+        int frame_h
+    ) {
+        const py::ssize_t n = py::len(local_ids);
+        std::unordered_set<int> assigned;
+        py::list out;
+        for (py::ssize_t i = 0; i < n; ++i) {
+            auto [emb, has_emb] = parse_emb_lc(py::reinterpret_borrow<py::object>(embeddings[i]));
+            out.append(resolve_cpp(
+                local_ids[i].cast<int>(),
+                parse_box_lc(boxes[i]),
+                scores[i].cast<float>(),
+                frame_id, frame_w, frame_h,
+                emb, has_emb, assigned
+            ));
+        }
+        return out;
+    }
+
+    py::list resolve_many(
+        py::iterable candidates,
+        int frame_id,
+        int frame_w,
+        int frame_h
+    ) {
+        std::unordered_set<int> assigned;
+        py::list out;
+        for (py::handle item : candidates) {
+            py::tuple t = py::reinterpret_borrow<py::tuple>(item);
+            if (t.size() != 4)
+                throw std::runtime_error(
+                    "resolve_many expects (local_id, box, score, embedding) tuples");
+            auto [emb, has_emb] = parse_emb_lc(py::reinterpret_borrow<py::object>(t[3]));
+            out.append(resolve_cpp(
+                t[0].cast<int>(),
+                parse_box_lc(t[1]),
+                t[2].cast<float>(),
+                frame_id, frame_w, frame_h,
+                emb, has_emb, assigned
+            ));
+        }
+        return out;
+    }
+
+    void prune(int frame_id) {
+        std::vector<int> stale;
+        for (const auto& [oid, state] : states_) {
+            if (frame_id - state.last_frame_id > ttl_) stale.push_back(oid);
+        }
+        for (int oid : stale) states_.erase(oid);
+    }
+
+    py::dict get_alias() const {
+        py::dict out;
+        for (const auto& [k, v] : alias_) out[py::int_(k)] = py::int_(v);
+        return out;
+    }
+
+    py::dict stats_dict() const {
+        py::dict out;
+        out["attempts"]          = stats_.attempts;
+        out["accepted"]          = stats_.accepted;
+        out["new_ids"]           = stats_.new_ids;
+        out["reject_age"]        = stats_.reject_age;
+        out["reject_assigned"]   = stats_.reject_assigned;
+        out["reject_spatial"]    = stats_.reject_spatial;
+        out["reject_similarity"] = stats_.reject_similarity;
+        return out;
+    }
+
+    void report() const {
+        if (!enabled_) return;
+        py::print("🔗 Tracklet Lifecycle Report:");
+        py::print(
+            "  attempts=" + std::to_string(stats_.attempts) +
+            " accepted=" + std::to_string(stats_.accepted) +
+            " new_ids=" + std::to_string(stats_.new_ids) +
+            " reject_age=" + std::to_string(stats_.reject_age) +
+            " reject_assigned=" + std::to_string(stats_.reject_assigned) +
+            " reject_spatial=" + std::to_string(stats_.reject_spatial) +
+            " reject_similarity=" + std::to_string(stats_.reject_similarity)
+        );
+    }
+
+private:
+    static std::pair<std::vector<float>, bool> parse_emb_lc(py::object emb_obj) {
+        if (emb_obj.is_none()) return {{}, false};
+        py::object np = emb_obj.attr("detach")().attr("float")().attr("cpu")().attr("numpy")();
+        py::array_t<float, py::array::c_style | py::array::forcecast> arr(np);
+        if (arr.ndim() != 1)
+            throw std::invalid_argument("TrackletLifecycleMerger embedding must be 1D");
+        auto view = arr.unchecked<1>();
+        std::vector<float> out(static_cast<size_t>(arr.shape(0)));
+        for (ssize_t i = 0; i < arr.shape(0); ++i) out[static_cast<size_t>(i)] = view(i);
+        return {normalize_lc(out), true};
+    }
+
+    static RelinkBox parse_box_lc(py::handle h) {
+        py::sequence seq = h.cast<py::sequence>();
+        if (py::len(seq) != 4) throw std::invalid_argument("box must have four elements");
+        return {seq[0].cast<float>(), seq[1].cast<float>(),
+                seq[2].cast<float>(), seq[3].cast<float>()};
+    }
+
+    static std::vector<float> normalize_lc(const std::vector<float>& v) {
+        float norm_sq = 0.0f;
+        for (float x : v) norm_sq += x * x;
+        const float inv = 1.0f / std::max(std::sqrt(norm_sq), 1e-12f);
+        std::vector<float> out(v.size());
+        for (size_t i = 0; i < v.size(); ++i) out[i] = v[i] * inv;
+        return out;
+    }
+
+    static float dot_lc(const std::vector<float>& a, const std::vector<float>& b) {
+        float s = 0.0f;
+        const size_t n = std::min(a.size(), b.size());
+        for (size_t i = 0; i < n; ++i) s += a[i] * b[i];
+        return s;
+    }
+
+    static std::vector<float> ema_mix_lc(
+        const std::vector<float>& old_v, const std::vector<float>& new_v, float alpha
+    ) {
+        const size_t n = std::min(old_v.size(), new_v.size());
+        std::vector<float> out(n);
+        for (size_t i = 0; i < n; ++i) out[i] = alpha * old_v[i] + (1.0f - alpha) * new_v[i];
+        return out;
+    }
+
+    static std::pair<float, float> spatial_metrics_lc(
+        const RelinkBox& box, const RelinkBox& old_box, int w, int h
+    ) {
+        const float cx  = (box.x1 + box.x2) * 0.5f,  cy  = (box.y1 + box.y2) * 0.5f;
+        const float ocx = (old_box.x1 + old_box.x2) * 0.5f, ocy = (old_box.y1 + old_box.y2) * 0.5f;
+        const float center_norm =
+            std::sqrt((cx - ocx) * (cx - ocx) + (cy - ocy) * (cy - ocy))
+            / static_cast<float>(std::max({w, h, 1}));
+        const float ix1 = std::max(box.x1, old_box.x1), iy1 = std::max(box.y1, old_box.y1);
+        const float ix2 = std::min(box.x2, old_box.x2), iy2 = std::min(box.y2, old_box.y2);
+        const float inter = std::max(0.0f, ix2 - ix1) * std::max(0.0f, iy2 - iy1);
+        const float area_a = std::max(0.0f, box.x2 - box.x1) * std::max(0.0f, box.y2 - box.y1);
+        const float area_b =
+            std::max(0.0f, old_box.x2 - old_box.x1) * std::max(0.0f, old_box.y2 - old_box.y1);
+        return {center_norm, inter / std::max(area_a + area_b - inter, 1e-6f)};
+    }
+
+    bool enabled_;
+    int ttl_, min_gap_;
+    float spatial_gate_, min_iou_, sim_threshold_;
+    bool require_embedding_;
+    float ema_;
+    std::unordered_map<int, int> alias_;
+    std::unordered_map<int, LifecycleState> states_;
+    LifecycleStats stats_;
+};
+
+// ============================================================
+// IdentityResolver — single-boundary facade over relink + lifecycle
+// ============================================================
+
+class IdentityResolverCpp {
+public:
+    IdentityResolverCpp(py::object relinker_obj, py::object lifecycle_obj)
+        : relinker_obj_(std::move(relinker_obj)),
+          lifecycle_obj_(std::move(lifecycle_obj)),
+          relinker_(relinker_obj_.cast<SemanticRelinkerCpp*>()),
+          lifecycle_(lifecycle_obj_.cast<TrackletLifecycleMergerCpp*>()) {}
+
+    py::list resolve_pass(
+        py::sequence local_ids,
+        py::sequence embeddings,
+        py::sequence boxes,
+        py::sequence scores,
+        int frame_id,
+        int frame_w,
+        int frame_h
+    ) {
+        const py::ssize_t n = py::len(local_ids);
+        if (n == 0) return py::list{};
+
+        // Parse all inputs once into C++ vectors
+        std::vector<int> ids_v(static_cast<size_t>(n));
+        std::vector<std::vector<float>> embs_v(static_cast<size_t>(n));
+        std::vector<bool> has_emb_v(static_cast<size_t>(n), false);
+        std::vector<RelinkBox> boxes_v(static_cast<size_t>(n));
+        std::vector<float> scores_v(static_cast<size_t>(n));
+
+        for (py::ssize_t i = 0; i < n; ++i) {
+            const size_t idx = static_cast<size_t>(i);
+            ids_v[idx] = local_ids[i].cast<int>();
+            boxes_v[idx] = parse_box_ip(boxes[i]);
+            scores_v[idx] = scores[i].cast<float>();
+            py::object emb_obj = py::reinterpret_borrow<py::object>(embeddings[i]);
+            if (!emb_obj.is_none()) {
+                embs_v[idx] = normalize_ip(extract_emb_ip(emb_obj));
+                has_emb_v[idx] = true;
+            }
+        }
+
+        // Stage 1: semantic relink (all candidates share one assigned set)
+        std::vector<int> relinked(static_cast<size_t>(n));
+        {
+            std::unordered_set<int> assigned;
+            for (py::ssize_t i = 0; i < n; ++i) {
+                const size_t idx = static_cast<size_t>(i);
+                relinked[idx] = relinker_->resolve_cpp(
+                    ids_v[idx], embs_v[idx], has_emb_v[idx],
+                    boxes_v[idx], scores_v[idx],
+                    frame_id, frame_w, frame_h, assigned
+                );
+            }
+        }
+
+        // Stage 2: lifecycle merge
+        py::list out;
+        {
+            std::unordered_set<int> assigned;
+            for (py::ssize_t i = 0; i < n; ++i) {
+                const size_t idx = static_cast<size_t>(i);
+                out.append(lifecycle_->resolve_cpp(
+                    relinked[idx],
+                    boxes_v[idx], scores_v[idx],
+                    frame_id, frame_w, frame_h,
+                    embs_v[idx], has_emb_v[idx], assigned
+                ));
+            }
+        }
+        return out;
+    }
+
+private:
+    static std::vector<float> extract_emb_ip(py::object emb_obj) {
+        py::object np = emb_obj.attr("detach")().attr("float")().attr("cpu")().attr("numpy")();
+        py::array_t<float, py::array::c_style | py::array::forcecast> arr(np);
+        if (arr.ndim() != 1)
+            throw std::invalid_argument("IdentityResolver embedding must be 1D");
+        auto view = arr.unchecked<1>();
+        std::vector<float> out(static_cast<size_t>(arr.shape(0)));
+        for (ssize_t i = 0; i < arr.shape(0); ++i) out[static_cast<size_t>(i)] = view(i);
+        return out;
+    }
+
+    static RelinkBox parse_box_ip(py::handle h) {
+        py::sequence seq = h.cast<py::sequence>();
+        if (py::len(seq) != 4) throw std::invalid_argument("box must have four elements");
+        return {seq[0].cast<float>(), seq[1].cast<float>(),
+                seq[2].cast<float>(), seq[3].cast<float>()};
+    }
+
+    static std::vector<float> normalize_ip(const std::vector<float>& v) {
+        float norm_sq = 0.0f;
+        for (float x : v) norm_sq += x * x;
+        const float inv = 1.0f / std::max(std::sqrt(norm_sq), 1e-12f);
+        std::vector<float> out(v.size());
+        for (size_t i = 0; i < v.size(); ++i) out[i] = v[i] * inv;
+        return out;
+    }
+
+    py::object relinker_obj_;   // keeps relinker alive
+    py::object lifecycle_obj_;  // keeps lifecycle alive
+    SemanticRelinkerCpp* relinker_;
+    TrackletLifecycleMergerCpp* lifecycle_;
 };
 
 } // namespace
@@ -841,11 +1481,49 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         py::arg("boxes_ptr"), py::arg("scores_ptr"), py::arg("classes_ptr"), py::arg("num_dets"), py::arg("stream_ptr"),
         py::arg("embeddings_ptr") = 0, py::arg("gmc_ptr") = 0, py::arg("light_factor") = 0.0f, py::arg("mid_thresh_scale") = 1.0f,
         "Update tracker with raw GPU pointers and stream")
+        .def("update_into", [](GPUByteTracker& self,
+                               uintptr_t boxes_ptr, uintptr_t scores_ptr, uintptr_t classes_ptr, int num_dets, uintptr_t stream_ptr,
+                               uintptr_t out_boxes_ptr, uintptr_t out_scores_ptr, uintptr_t out_ids_ptr, uintptr_t out_classes_ptr,
+                               uintptr_t out_det_idx_ptr, uintptr_t out_count_ptr,
+                               uintptr_t embeddings_ptr, uintptr_t gmc_ptr, float light_factor, float mid_thresh_scale) {
+            self.update_into(
+                reinterpret_cast<float*>(boxes_ptr),
+                reinterpret_cast<float*>(scores_ptr),
+                reinterpret_cast<int*>(classes_ptr),
+                num_dets,
+                reinterpret_cast<cudaStream_t>(stream_ptr),
+                reinterpret_cast<float*>(out_boxes_ptr),
+                reinterpret_cast<float*>(out_scores_ptr),
+                reinterpret_cast<int*>(out_ids_ptr),
+                reinterpret_cast<int*>(out_classes_ptr),
+                reinterpret_cast<int*>(out_det_idx_ptr),
+                reinterpret_cast<int*>(out_count_ptr),
+                embeddings_ptr ? reinterpret_cast<float*>(embeddings_ptr) : nullptr,
+                gmc_ptr ? reinterpret_cast<float*>(gmc_ptr) : nullptr,
+                light_factor,
+                mid_thresh_scale
+            );
+        },
+        py::arg("boxes_ptr"), py::arg("scores_ptr"), py::arg("classes_ptr"), py::arg("num_dets"), py::arg("stream_ptr"),
+        py::arg("out_boxes_ptr"), py::arg("out_scores_ptr"), py::arg("out_ids_ptr"), py::arg("out_classes_ptr"),
+        py::arg("out_det_idx_ptr"), py::arg("out_count_ptr"),
+        py::arg("embeddings_ptr") = 0, py::arg("gmc_ptr") = 0, py::arg("light_factor") = 0.0f, py::arg("mid_thresh_scale") = 1.0f,
+        "Update tracker and write compact results into caller-provided GPU buffers")
         .def("get_state_snapshots", [](GPUByteTracker& self, uintptr_t stream_ptr) {
             return self.get_state_snapshots(reinterpret_cast<cudaStream_t>(stream_ptr));
         },
         py::arg("stream_ptr"),
         "Return active Kalman state and covariance snapshots")
+        .def("get_motion_snapshots_for_track_ids",
+             [](GPUByteTracker& self, const std::vector<int>& track_ids, uintptr_t stream_ptr) {
+                 return self.get_motion_snapshots_for_track_ids(
+                     track_ids,
+                     reinterpret_cast<cudaStream_t>(stream_ptr)
+                 );
+             },
+             py::arg("track_ids"),
+             py::arg("stream_ptr"),
+             "Return Kalman motion snapshots only for the requested track IDs")
         .def("get_tentative_candidates", [](GPUByteTracker& self, uintptr_t stream_ptr) {
             return self.get_tentative_candidates(reinterpret_cast<cudaStream_t>(stream_ptr));
         },
@@ -865,7 +1543,7 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         "Sync per-track clean-embedding flags from Python bank state to the CUDA tracker");
 
     py::class_<SemanticRelinkerCpp>(m, "SemanticRelinker")
-        .def(py::init<float, int, float, float, int, float, float, int, float, std::string, float, bool>(),
+        .def(py::init<float, int, float, float, int, float, float, int, float, std::string, float, bool, float, float, float, float, float>(),
              py::arg("sim_threshold") = 0.985f,
              py::arg("ttl") = 45,
              py::arg("ema_beta") = 0.83f,
@@ -877,10 +1555,20 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
              py::arg("min_consistency") = 0.0f,
              py::arg("rerank_mode") = "mean",
              py::arg("reciprocal_margin") = 0.0f,
-             py::arg("debug") = false)
+             py::arg("debug") = false,
+             py::arg("clean_score_threshold") = 0.0f,
+             py::arg("clean_margin_ratio") = 0.0f,
+             py::arg("clean_min_aspect") = 0.0f,
+             py::arg("clean_max_aspect") = 99.0f,
+             py::arg("strict_sim_threshold") = 0.0f)
         .def("update_motion_snapshots", &SemanticRelinkerCpp::update_motion_snapshots, py::arg("snapshots"))
+        .def("motion_candidate_ids", &SemanticRelinkerCpp::motion_candidate_ids, py::arg("frame_id") = -1)
         .def("inject_reference", &SemanticRelinkerCpp::inject_reference,
              py::arg("canonical_id"), py::arg("embedding"))
+        .def("inject_references_many", &SemanticRelinkerCpp::inject_references_many,
+             py::arg("references"))
+        .def("canonical_id", &SemanticRelinkerCpp::canonical_id, py::arg("raw_id"))
+        .def("has_feature", &SemanticRelinkerCpp::has_feature, py::arg("canonical_id"))
         .def("resolve", &SemanticRelinkerCpp::resolve,
              py::arg("raw_id"),
              py::arg("embedding"),
@@ -890,10 +1578,50 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
              py::arg("w"),
              py::arg("h"),
              py::arg("assigned"))
+        .def("resolve_many", &SemanticRelinkerCpp::resolve_many,
+             py::arg("candidates"),
+             py::arg("frame_id"),
+             py::arg("w"),
+             py::arg("h"))
+        .def("resolve_many_packed", &SemanticRelinkerCpp::resolve_many_packed,
+             py::arg("raw_ids"),
+             py::arg("embeddings"),
+             py::arg("boxes"),
+             py::arg("scores"),
+             py::arg("frame_id"),
+             py::arg("w"),
+             py::arg("h"))
         .def_property_readonly("alias", &SemanticRelinkerCpp::get_alias)
         .def_property_readonly("features", &SemanticRelinkerCpp::get_features)
         .def_property_readonly("stats", &SemanticRelinkerCpp::stats)
         .def("report", &SemanticRelinkerCpp::report);
+
+    py::class_<TrackletLifecycleMergerCpp>(m, "TrackletLifecycleMerger")
+        .def(py::init<bool, int, int, float, float, float, bool, float>(),
+             py::arg("enabled")            = true,
+             py::arg("ttl")                = 30,
+             py::arg("min_gap")            = 1,
+             py::arg("spatial_gate")       = 0.3f,
+             py::arg("min_iou")            = 0.1f,
+             py::arg("sim_threshold")      = 0.5f,
+             py::arg("require_embedding")  = false,
+             py::arg("ema")                = 0.7f)
+        .def("resolve_many_packed", &TrackletLifecycleMergerCpp::resolve_many_packed,
+             py::arg("local_ids"), py::arg("boxes"), py::arg("scores"), py::arg("embeddings"),
+             py::arg("frame_id"), py::arg("frame_w"), py::arg("frame_h"))
+        .def("resolve_many", &TrackletLifecycleMergerCpp::resolve_many,
+             py::arg("candidates"), py::arg("frame_id"), py::arg("frame_w"), py::arg("frame_h"))
+        .def("prune",    &TrackletLifecycleMergerCpp::prune,    py::arg("frame_id"))
+        .def("report",   &TrackletLifecycleMergerCpp::report)
+        .def_property_readonly("alias", &TrackletLifecycleMergerCpp::get_alias)
+        .def_property_readonly("stats", &TrackletLifecycleMergerCpp::stats_dict);
+
+    py::class_<IdentityResolverCpp>(m, "IdentityResolver")
+        .def(py::init<py::object, py::object>(),
+             py::arg("relinker"), py::arg("lifecycle_merger"))
+        .def("resolve_pass", &IdentityResolverCpp::resolve_pass,
+             py::arg("local_ids"), py::arg("embeddings"), py::arg("boxes"), py::arg("scores"),
+             py::arg("frame_id"), py::arg("frame_w"), py::arg("frame_h"));
 
     py::class_<GMC>(m, "GMC")
         .def(py::init<int, int, float, float, int, float>(),
@@ -1184,6 +1912,29 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             py::arg("is_tiled"),
             py::arg("out_boxes"), py::arg("out_scores"), py::arg("out_classes"),
             py::arg("out_suspect"), py::arg("stream_ptr"))
+        .def("process_detections_into",
+            [](PerceptionPipeline& self,
+               uintptr_t boxes_ptr, uintptr_t scores_ptr, uintptr_t classes_ptr,
+               int n_in, int frame_w, int frame_h, bool is_tiled,
+               uintptr_t out_boxes, uintptr_t out_scores, uintptr_t out_classes,
+               uintptr_t out_suspect, uintptr_t out_count, uintptr_t stream_ptr) {
+                self.process_detections_into(
+                    reinterpret_cast<const float*>(boxes_ptr),
+                    reinterpret_cast<const float*>(scores_ptr),
+                    reinterpret_cast<const int*>(classes_ptr),
+                    n_in, frame_w, frame_h, is_tiled,
+                    reinterpret_cast<float*>(out_boxes),
+                    reinterpret_cast<float*>(out_scores),
+                    reinterpret_cast<int*>(out_classes),
+                    reinterpret_cast<bool*>(out_suspect),
+                    reinterpret_cast<int*>(out_count),
+                    reinterpret_cast<cudaStream_t>(stream_ptr));
+            },
+            py::arg("boxes_ptr"), py::arg("scores_ptr"), py::arg("classes_ptr"),
+            py::arg("n_in"), py::arg("frame_w"), py::arg("frame_h"),
+            py::arg("is_tiled"),
+            py::arg("out_boxes"), py::arg("out_scores"), py::arg("out_classes"),
+            py::arg("out_suspect"), py::arg("out_count"), py::arg("stream_ptr"))
         .def("extract_reid",
             [](PerceptionPipeline& self,
                uintptr_t frame_ptr, int frame_h, int frame_w,
@@ -1200,5 +1951,21 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             py::arg("frame_ptr"), py::arg("frame_h"), py::arg("frame_w"),
             py::arg("boxes_ptr"), py::arg("n_boxes"),
             py::arg("out_embeds"), py::arg("stream_ptr"))
+        .def("set_reid_profiling_enabled", &PerceptionPipeline::set_reid_profiling_enabled, py::arg("enabled"))
+        .def("reset_reid_profile_stats", &PerceptionPipeline::reset_reid_profile_stats)
+        .def("get_reid_profile_stats",
+            [](const PerceptionPipeline& self) {
+                const auto stats = self.get_reid_profile_stats();
+                py::dict out;
+                out["crop_ms"] = stats.crop_ms;
+                out["extract_pre_normalize_ms"] = stats.extract_pre_normalize_ms;
+                out["extract_trt_enqueue_ms"] = stats.extract_trt_enqueue_ms;
+                out["extract_l2_normalize_ms"] = stats.extract_l2_normalize_ms;
+                out["extract_total_ms"] = stats.extract_total_ms;
+                out["total_ms"] = stats.total_ms;
+                out["chunks"] = stats.chunks;
+                out["images"] = stats.images;
+                return out;
+            })
         .def_property_readonly("embed_dim", &PerceptionPipeline::get_embed_dim);
 }

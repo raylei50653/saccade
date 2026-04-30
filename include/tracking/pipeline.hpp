@@ -22,6 +22,17 @@ namespace saccade {
  */
 class SACCADE_TRACKING_API PerceptionPipeline {
 public:
+    struct ReIDProfileStats {
+        double crop_ms = 0.0;
+        double extract_pre_normalize_ms = 0.0;
+        double extract_trt_enqueue_ms = 0.0;
+        double extract_l2_normalize_ms = 0.0;
+        double extract_total_ms = 0.0;
+        double total_ms = 0.0;
+        int chunks = 0;
+        int images = 0;
+    };
+
     struct Config {
         float score_threshold       = 0.05f;
         int   person_class          = 0;
@@ -71,6 +82,21 @@ public:
         cudaStream_t stream
     );
 
+    void process_detections_into(
+        const float* boxes_ptr,
+        const float* scores_ptr,
+        const int*   classes_ptr,
+        int n_in,
+        int frame_w, int frame_h,
+        bool is_tiled,
+        float* out_boxes,
+        float* out_scores,
+        int*   out_classes,
+        bool*  out_suspect,
+        int*   out_count,
+        cudaStream_t stream
+    );
+
     /**
      * @brief Crop boxes from frame_ptr and extract ReID embeddings.
      *
@@ -90,6 +116,9 @@ public:
     );
 
     int get_embed_dim() const;
+    void set_reid_profiling_enabled(bool enabled);
+    void reset_reid_profile_stats();
+    ReIDProfileStats get_reid_profile_stats() const;
 
 private:
     FeatureExtractor* reid_;
@@ -108,9 +137,21 @@ private:
     float*    d_crop_buf_             = nullptr;
     int       scratch_capacity_       = 0;
     int       crop_buf_capacity_      = 0;
+    // M1: GPU compaction scratch (NMS in-place scatter needs temp)
+    float*    d_compact_boxes_        = nullptr;
+    float*    d_compact_scores_       = nullptr;
+    int*      d_compact_classes_      = nullptr;
+    bool*     d_compact_suspect_      = nullptr;
+    // M1: GPU argsort scratch (compound uint64 keys for stable sort)
+    uint64_t* d_sort_keys_in_         = nullptr;  // unsorted compound keys
+    uint64_t* d_sort_keys_out_        = nullptr;  // CUB output scratch
+    void*     d_cub_sort_tmp_         = nullptr;
+    size_t    cub_sort_tmp_bytes_     = 0;
 
     void ensure_scratch(int n_dets, cudaStream_t stream);
     void ensure_crop_buf(int n_boxes);
+    bool reid_profiling_enabled_ = false;
+    ReIDProfileStats last_reid_profile_stats_{};
 };
 
 } // namespace saccade

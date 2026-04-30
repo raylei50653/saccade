@@ -2,6 +2,7 @@
 #include <cuda_runtime.h>
 #include <iostream>
 #include <algorithm>
+#include <stdexcept>
 
 namespace saccade {
 
@@ -143,20 +144,39 @@ FeatureExtractor::~FeatureExtractor() {
 
 void FeatureExtractor::extract(void* input_cuda_ptr, int num_images, void* output_cuda_ptr, cudaStream_t stream) {
     if (num_images <= 0) return;
+    if (profiling_enabled_) {
+        reset_profile_stats();
+        last_profile_stats_.images = num_images;
+    }
 
     int processed = 0;
     while (processed < num_images) {
         int batch = std::min(num_images - processed, max_batch_);
         float* cur_input = (float*)input_cuda_ptr + processed * 3 * input_h_ * input_w_;
         float* cur_output = (float*)output_cuda_ptr + processed * feature_dim_;
+        cudaEvent_t start = nullptr;
+        cudaEvent_t stop = nullptr;
+        if (profiling_enabled_) {
+            cudaEventCreate(&start);
+            cudaEventCreate(&stop);
+            last_profile_stats_.chunks += 1;
+        }
 
         // 1. Pre-normalize
+        if (profiling_enabled_) cudaEventRecord(start, stream);
         launch_reid_pre_normalize(
             cur_input, batch, 3, input_h_, input_w_,
             (float*)d_mean_, (float*)d_std_, 
             type_ == ModelType::SIGLIP2, 
             stream
         );
+        if (profiling_enabled_) {
+            cudaEventRecord(stop, stream);
+            cudaEventSynchronize(stop);
+            float ms = 0.0f;
+            cudaEventElapsedTime(&ms, start, stop);
+            last_profile_stats_.pre_normalize_ms += ms;
+        }
 
         // 2. Set Input Shape if dynamic
         if (is_dynamic_) {
@@ -171,12 +191,36 @@ void FeatureExtractor::extract(void* input_cuda_ptr, int num_images, void* outpu
         }
 
         // 4. Infer
+        if (profiling_enabled_) cudaEventRecord(start, stream);
         engine_->enqueue_v3(stream);
+        if (profiling_enabled_) {
+            cudaEventRecord(stop, stream);
+            cudaEventSynchronize(stop);
+            float ms = 0.0f;
+            cudaEventElapsedTime(&ms, start, stop);
+            last_profile_stats_.trt_enqueue_ms += ms;
+        }
 
         // 5. L2 Normalize output
+        if (profiling_enabled_) cudaEventRecord(start, stream);
         launch_l2_normalize(cur_output, batch, feature_dim_, stream);
+        if (profiling_enabled_) {
+            cudaEventRecord(stop, stream);
+            cudaEventSynchronize(stop);
+            float ms = 0.0f;
+            cudaEventElapsedTime(&ms, start, stop);
+            last_profile_stats_.l2_normalize_ms += ms;
+            cudaEventDestroy(start);
+            cudaEventDestroy(stop);
+        }
 
         processed += batch;
+    }
+    if (profiling_enabled_) {
+        last_profile_stats_.total_ms =
+            last_profile_stats_.pre_normalize_ms
+            + last_profile_stats_.trt_enqueue_ms
+            + last_profile_stats_.l2_normalize_ms;
     }
 }
 
@@ -203,5 +247,8 @@ void FeatureExtractor::extract_parts_fused(
 int FeatureExtractor::get_feature_dim() const { return feature_dim_; }
 int FeatureExtractor::get_max_batch() const { return max_batch_; }
 std::pair<int, int> FeatureExtractor::get_input_hw() const { return {input_h_, input_w_}; }
+void FeatureExtractor::set_profiling_enabled(bool enabled) { profiling_enabled_ = enabled; }
+void FeatureExtractor::reset_profile_stats() { last_profile_stats_ = ProfileStats{}; }
+FeatureExtractor::ProfileStats FeatureExtractor::get_profile_stats() const { return last_profile_stats_; }
 
 } // namespace saccade

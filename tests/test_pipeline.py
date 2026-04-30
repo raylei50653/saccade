@@ -1,8 +1,8 @@
-import pytest
+import pytest  # noqa: E402
 import json
 from unittest.mock import patch, AsyncMock, MagicMock
-from perception.entropy import EntropyTrigger
-from pipeline.orchestrator import PipelineOrchestrator
+from saccade.perception.entropy import EntropyTrigger  # noqa: E402
+from saccade.cognition.orchestrator import PipelineOrchestrator  # noqa: E402
 
 
 @pytest.mark.anyio
@@ -61,8 +61,8 @@ async def test_orchestrator_process_event_batch():
     mock_chroma.collection = mock_collection
 
     with (
-        patch("pipeline.orchestrator.RedisCache", return_value=mock_redis),
-        patch("pipeline.orchestrator.ChromaStore", return_value=mock_chroma),
+        patch("saccade.cognition.orchestrator.RedisCache", return_value=mock_redis),
+        patch("saccade.cognition.orchestrator.ChromaStore", return_value=mock_chroma),
     ):
         orchestrator = PipelineOrchestrator()
 

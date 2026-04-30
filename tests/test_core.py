@@ -1,4 +1,4 @@
-import pytest
+import pytest  # noqa: E402
 import torch
 import numpy as np
 import os
@@ -6,17 +6,17 @@ import shutil
 import time
 from unittest.mock import patch, AsyncMock
 from gi.repository import GLib
-from media.mediamtx_client import MediaMTXClient
-from storage.redis_cache import RedisCache
-from storage.chroma_store import ChromaStore
-from perception.tracking import SmartTracker, GPUByteTracker
-from perception.tracking.tracker_gpu import (
+from saccade.media.mediamtx_client import MediaMTXClient  # noqa: E402
+from saccade.storage.redis_cache import RedisCache  # noqa: E402
+from saccade.storage.chroma_store import ChromaStore  # noqa: E402
+from saccade.perception.tracking import GPUByteTracker  # noqa: E402
+from saccade.perception.tracking.tracker_gpu import (  # noqa: E402
     DynamicReIDController,
     ReIDTrackObservation,
     TrackAppearanceBank,
     need_reid_frame,
 )
-from perception.zero_copy import GstZeroCopyDecoder
+from saccade.perception.zero_copy import GstZeroCopyDecoder  # noqa: E402
 
 # --- Media Tests ---
 
@@ -43,6 +43,10 @@ def test_media_client_grab_frame():
 # --- Storage Tests ---
 
 
+@pytest.mark.skipif(
+    os.environ.get("CI") == "true",
+    reason="ChromaDB default embedding function loads onnxruntime which SIGABRTs in CI",
+)
 def test_chroma_store_operations():
     test_db = "./storage/test_pytest_db"
     if os.path.exists(test_db):
@@ -65,7 +69,6 @@ def test_chroma_store_operations():
 
 def test_tracker_initialization():
     try:
-        tracker = SmartTracker()
         gpu_tracker = GPUByteTracker()
     except RuntimeError as exc:
         message = str(exc).lower()
@@ -76,7 +79,6 @@ def test_tracker_initialization():
             pytest.skip(f"GPU tracker unavailable in test environment: {exc}")
         raise
 
-    assert tracker is not None
     assert gpu_tracker is not None
 
 
@@ -292,7 +294,7 @@ def test_tracker_update_basic():
 async def test_redis_cache_operations():
     mock_client = AsyncMock()
     # 這裡 patch 的路徑需與 RedisCache 內部使用的 redis 模組一致
-    with patch("storage.redis_cache.redis.from_url", return_value=mock_client):
+    with patch("saccade.storage.redis_cache.redis.from_url", return_value=mock_client):
         cache = RedisCache()
         await cache.connect()
         # 設定 Mock 的 get 方法回傳字串

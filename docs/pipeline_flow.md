@@ -1,119 +1,281 @@
-# Saccade 工業級資料管線全流程 (Pipeline Flow)
+# Saccade Pipeline Flow
 
-本文件詳細說明從 RTSP 串流攝取到最後語義推理的完整資料流向。本架構採用 **工業級零拷貝 V2**、**有序暫存隊列**、**階梯式資源管理**與 **Agentic RAG**，確保在邊緣設備上的極致效能與穩定性。
+本文件描述 **目前實作主路徑** 的資料流，重點是對應現有 `runner.py` 與 evaluation path，而不是較早期的完整產品願景圖。
+
+- 穩定架構邊界：看 [architecture.md](/docs/architecture.md:1)
+- 開發入口與 source-of-truth：看 [../DEVELOPMENT.md](/DEVELOPMENT.md:1)
+- 事件 / API / storage schema：看 [api_spec.md](/docs/api_spec.md:1)
 
 ---
 
-## 1. 系統全流程圖 (System-Wide Flow)
+## 1. 主路徑範圍
 
-```mermaid
-sequenceDiagram
-    participant RTSP as RTSP Stream
-    participant Gst as GstClient (C++)
-    participant Pool as 5-Buffer GPU Pool
-    participant Res as ResourceManager (L6)
-    participant Tracker as GPUByteTracker (C++/CUDA)
-    participant Py as SmartTracker (Python)
-    participant Reorder as ReorderingBuffer (150ms)
-    participant Redis as Redis MicroBatcher (L3)
-    participant Chroma as ChromaDB (L4)
-    participant RAG as Orchestrator / LlamaIndex (L5)
+本文件主要對應：
 
-    Note over Res: 監控 VRAM (NVML)
-    Res->>Tracker: 調整 track_buffer / confidence
-    Res->>RAG: 降級時暫停 RAG 查詢
+- [scripts/eval/mot17.py](/scripts/eval/mot17.py:1)
+- [src/saccade/perception/eval/runner.py](/src/saccade/perception/eval/runner.py:1)
 
-    RTSP->>Gst: H264 Stream
-    Gst->>Pool: Find EMPTY Buffer → cudaMemcpyAsync
-    Pool->>Py: Callback (FrameData + CUDA Stream ptr)
+這條路徑目前是 repo 最活躍的 perception / tracking / relink 主流程。
 
-    rect rgb(235, 245, 255)
-        Note right of Py: Python RAII Context (with frame:)
-        Py->>Py: GMC 計算 (optical flow → 仿射矩陣)
-        Py->>Py: light_factor 計算
-        Py->>Tracker: update(boxes, scores, embeddings, gmc, light_factor)
-        Tracker->>Tracker: Strong ReID Gate (CosSim > 0.75)
-        Tracker->>Tracker: Dual-stage Sinkhorn (ReID Fusion Cost)
-        Tracker->>Tracker: GPU Kalman update + GMC kernel
-        Tracker-->>Py: TrackResult[]
-        Py->>Reorder: push(timestamp, results)
-        Py->>Py: frame.release() (RAII 自動觸發)
-    end
+---
 
-    Note over Py: Saccade Heartbeat (每 10 幀)
-    Py->>Py: SigLIP 2 特徵提取 (AsyncEmbeddingDispatcher)
-    Py->>Tracker: update_reference_features(ids, embeddings)
+## 2. 高層流程圖
 
-    Reorder->>Reorder: 150ms 滑動窗口排序
-    Reorder->>Redis: pop_ready() → publish_event()
-    Redis->>Redis: MicroBatcher 聚合 (100ms / max 50)
-    Redis->>Chroma: pipeline RPUSH → ChromaStore.add_memory()
-
-    alt entropy > 0.9 或 is_anomaly
-        Chroma->>RAG: 觸發 Agentic RAG 查詢
-        RAG->>RAG: LlamaIndex ReAct Agent
-        RAG->>Chroma: semantic_search / get_track_history
-        RAG->>RAG: visual_requery (FeatureBank → Image-to-Image)
-        RAG-->>RAG: LLM Insight 輸出
-    end
+```text
+Frame Source
+  -> ingest / preprocess
+  -> detection
+  -> filter / NMS / cross-tile merge
+  -> optional ReID trigger decision
+  -> optional crop / embedding extract
+  -> tracker update
+  -> semantic relink / identity resolve
+  -> optional post-merge cleanup
+  -> optional low-quality tracklet filter
+  -> eval output
 ```
 
 ---
 
-## 2. 詳細流程步驟
+## 3. 逐階段流程
 
-### 第一階段：影格攝取與硬體加速（C++ L1）
-1. **採集與解碼**: GstClient 透過 nvh264dec 產生 NV12 影格。
-2. **智慧抽樣**: 像素差異比對（SAD < 2.0）即時丟棄低資訊幀，降低無效計算。
-3. **狀態機管理**: 遍歷 5-Buffer 狀態機。無可用緩衝區時執行 Drop Frame。
-4. **並行搬運**: Buffer 專屬 CUDA Stream 執行非同步 H2D 搬運，狀態切換為 `READY`。
-5. **RTSP Watchdog**: 超過閾值無新幀時，`watchdog_loop()` 指數退避重建 pipeline。
+### 3.1 Frame Ingest / Preprocess
 
-### 第二階段：資源監測與自適應降級（L6）
-6. **VRAM 監控**: `ResourceManager` 透過 NVML 實時分析 GPU 負載。
-7. **階梯式降級**:
-    - **REDUCED (>85%)**: 縮減緩衝池大小。
-    - **FAST_PATH (>92%)**: 暫停 SigLIP 2 特徵提取（L2）與 RAG 查詢（L5）。
-    - **EMERGENCY (>96%)**: 解析度熱切換 640→320、Target Culling（Confidence < 0.4）、track_buffer 30→10。
+責任：
 
-### 第三階段：追蹤核心（GPUByteTracker + SmartTracker）
-8. **GMC 計算**: Python 層用 OpenCV optical flow 計算逐幀仿射矩陣，傳入 C++ `gmc_kernel` 修正 Kalman 狀態。
-9. **Light Compensation**: 根據幀亮度計算 `light_factor`，動態調整 R 矩陣，穩定夜間軌跡。
-10. **Strong ReID Gate**: CosSim > 0.75 時強制配對，無視空間距離，對抗相機晃動。
-11. **雙階段 Sinkhorn 匹配**: high/low score 分兩輪匹配，代價矩陣 = `(1-w)*IoU + w*CosSim`。
-12. **Saccade Heartbeat**: 每 10 幀觸發一次 SigLIP 2 原生解析度特徵更新，避免 EMA 被模糊幀污染。
+- 從 frame source 取出影格
+- 做基礎 preprocess
+- 準備給 detector 的 tensor
 
-### 第四階段：有序緩衝與儲存（L3-L4）
-13. **ReorderingBuffer**: 結果進入 150ms 滑動窗口重排，解決並行亂序。
-14. **In-filling**: 影格跳躍 >40ms 時，Tracker 利用動量預測虛擬 BBox，維持 Kalman 平滑度。
-15. **MicroBatcher**: 100ms 視窗聚合 Redis 寫入，QPS ~300 → ~30。
-16. **ChromaDB 持久化**: 批次寫入向量索引；定期 snapshot 備份至本地壓縮檔。
+主要位置：
 
-### 第五階段：Agentic RAG 語義推理（L5）
-17. **觸發條件**: `entropy > 0.9` 或 `is_anomaly=True`，`run_in_executor` 包裝防止阻塞主迴圈。
-18. **ReAct Agent**: LlamaIndex 協調三個 Tool：
-    - `semantic_search`：搜尋歷史相似場景。
-    - `get_track_history`：取得特定目標軌跡。
-    - `visual_requery`：從 FeatureBank 拉 SigLIP 2 embedding → ChromaDB Image-to-Image 搜尋。
-19. **跨鏡頭 Re-ID**: `FeatureBank.find_cross_camera_matches()` 矩陣運算，讓多路串流共享特徵索引比對同一人物。
+- [src/saccade/perception/eval/runner.py](/src/saccade/perception/eval/runner.py:1849)
+
+說明：
+
+- 在 evaluation path 中，frame 先進 `AdaptiveFramePool`
+- preprocess 層目前是主流程的一部分，但不是目前主要演算法焦點
+
+### 3.2 Detection
+
+責任：
+
+- 跑 detector
+- 產出 raw `boxes / scores / classes`
+
+主要位置：
+
+- [src/saccade/perception/eval/runner.py](/src/saccade/perception/eval/runner.py:1884)
+
+說明：
+
+- detector output 之後不直接進 tracker
+- 會先經過 postprocess 與 geometry / tile merge 清理
+
+### 3.3 Detection Postprocess
+
+責任：
+
+- confidence / class / geometry filter
+- suspect box 標記
+- NMS
+- cross-tile duplicate merge
+
+主要位置：
+
+- [src/saccade/perception/eval/detection.py](/src/saccade/perception/eval/detection.py:1)
+- [src/saccade/perception/eval/runner.py](/src/saccade/perception/eval/runner.py:1910)
+- [src/tracking/pipeline.cpp](/src/tracking/pipeline.cpp:1)
+
+說明：
+
+- 若 native `PerceptionPipeline` 可用，主流程優先走 `process_detections_into()`
+- 否則走 Python wrapper / fallback path
+- 目前 `cross-tile merge` 是 current default path 的穩定增益來源之一
+
+### 3.4 ReID Trigger Decision
+
+責任：
+
+- 決定這一幀是否值得做 embedding extraction
+
+主要位置：
+
+- [src/saccade/perception/tracking/tracker_gpu.py](/src/saccade/perception/tracking/tracker_gpu.py:76)
+- [src/saccade/perception/eval/runner.py](/src/saccade/perception/eval/runner.py:2068)
+
+目前流程：
+
+- 若 `reid_work_enabled` 且有 detections，才進 trigger decision
+- 目前路徑可能使用：
+  - fixed interval
+  - `need_reid_frame()`
+  - `DynamicReIDController.should_reid()`
+- 並額外受 `MIN_REID_GAP` 限制
+
+說明：
+
+- 這裡是當前主要演算法優化熱點之一
+- 下一步方向是 track-level / budgeted ReID，而不是單純再加更多 frame-level heuristic
+
+### 3.5 ReID Crop / Extract
+
+責任：
+
+- 依 box 裁切 ROI
+- 提取 appearance embedding
+
+主要位置：
+
+- [src/saccade/perception/eval/runner.py](/src/saccade/perception/eval/runner.py:2121)
+
+目前流程：
+
+- 若 native pipeline 可用，優先走 `perception_pipeline.extract_reid()`
+- 否則走 Python cropper + extractor
+
+說明：
+
+- ReID extraction 不是每幀必做
+- 它是受 trigger 控制的昂貴步驟
+
+### 3.6 Tracker Update
+
+責任：
+
+- tracker state predict / update
+- association
+- optional appearance-aware matching
+- GMC warp consumption
+
+主要位置：
+
+- [src/tracking/tracker_gpu.cu](/src/tracking/tracker_gpu.cu:1)
+- [src/saccade/perception/eval/runner.py](/src/saccade/perception/eval/runner.py:2229)
+
+目前流程：
+
+- runner 先準備 `mid_thresh_scale`
+- 如有 GMC estimator，先算 `gmc_warp`
+- 再呼叫 tracker update path
+
+說明：
+
+- 現在的 tracker 熱路徑已大幅 native 化
+- result 優先留在 GPU result buffer，再在必要邊界 materialize
+
+### 3.7 Semantic Relink / Identity Resolve
+
+責任：
+
+- 將 local track ids 解決成較穩定的 identity output
+- 視需要使用 appearance / motion / lifecycle merge
+
+主要位置：
+
+- [src/saccade/perception/eval/relink.py](/src/saccade/perception/eval/relink.py:1)
+- [src/saccade/perception/eval/runner.py](/src/saccade/perception/eval/runner.py:692)
+
+目前流程：
+
+- semantic relink 與 lifecycle merge 已收斂成 `IdentityResolver.resolve_pass()`
+- 若可用，優先走 C++ path
+
+說明：
+
+- 這一層目前的核心議題是：
+  - reference quality
+  - false accept filtering
+  - unified association / relink scoring
+
+### 3.8 Post-Merge Cleanup
+
+責任：
+
+- 對 output tracklets 做 optional offline stitching
+- 視需要過濾低品質 tracklet
+
+主要位置：
+
+- [src/saccade/perception/eval/runner.py](/src/saccade/perception/eval/runner.py:1144)
+- [src/saccade/perception/eval/runner.py](/src/saccade/perception/eval/runner.py:1295)
+- [src/saccade/perception/eval/runner.py](/src/saccade/perception/eval/runner.py:2453)
+
+說明：
+
+- `post_merge_output_tracklets()` 屬於 optional cleanup，不是 primary online decision path
+- `filter_low_quality_tracklets()` 用於移除短命 / 低分 output IDs
 
 ---
 
-## 3. 核心技術防禦矩陣
+## 4. 外圍事件與慢路徑
 
-| 技術組件 | 防禦對象 | 核心效益 |
-| :--- | :--- | :--- |
-| **State-Machine Pool** | 資料競爭 (Race Condition) | 確保多執行緒下影格資料完整性。 |
-| **ExternalStream** | CPU 阻塞 (Sync Overhead) | 資料相依性由 GPU 硬體調度，提升吞吐量。 |
-| **RAII (`__exit__`)** | 資源洩漏 (Buffer Leak) | 確保即使 Python 邏輯出錯，緩衝區也能正確回收。 |
-| **ReorderingBuffer** | 亂序輸出 (Out-of-order) | 容忍 150ms 抖動，保證追蹤軌跡時間連續性。 |
-| **Target Culling** | 追蹤池溢出 (Track Overflow) | 在臨界點主動釋放非核心追蹤狀態。 |
-| **Stepped Degradation** | 系統崩潰 (OOM / Overload) | 在資源極限下優雅降級，優先保證核心感知。 |
-| **Strong ReID Gate** | ID Switch（相機晃動）| CosSim > 0.75 強制連結，外觀優先於空間距離。 |
-| **Saccade Heartbeat** | EMA 污染（模糊幀）| 稀疏更新，IDt 削減 64%，ReID 開銷降低 90%。 |
-| **MicroBatcher** | Redis I/O 過載 | 批次聚合，QPS ~300 → ~30。 |
-| **RTSP Watchdog** | 串流中斷無感知 | 超時自動重建 pipeline，指數退避重試。 |
+主 evaluation path 之外，repo 仍保留 event / storage / cognition 子系統。
+
+### 4.1 Event Queue / Stream
+
+主要位置：
+
+- [src/saccade/storage/redis_cache.py](/src/saccade/storage/redis_cache.py:1)
+- [src/saccade/perception/entropy.py](/src/saccade/perception/entropy.py:1)
+
+說明：
+
+- 目前同時存在：
+  - Redis List `saccade:events`
+  - Redis Stream `saccade:stream`
+- schema 以 [api_spec.md](/docs/api_spec.md:1) 為準
+
+### 4.2 Cognition / Memory
+
+主要位置：
+
+- [src/saccade/cognition/orchestrator.py](/src/saccade/cognition/orchestrator.py:1)
+- [src/saccade/storage/chroma_store.py](/src/saccade/storage/chroma_store.py:1)
+
+說明：
+
+- orchestrator 讀取 Redis stream batch
+- 轉成 scene description 與 metadata
+- 寫入 Chroma memory
+- 必要時觸發 RAG query
+
+### 4.3 Health
+
+主要位置：
+
+- [src/saccade/pipeline/health.py](/src/saccade/pipeline/health.py:1)
+
+說明：
+
+- health 屬於 operational path
+- 它不是 perception 熱路徑的一部分
 
 ---
 
-最後更新：2026-04-25
+## 5. 目前主瓶頸與熱點
+
+目前主要演算法空間集中在：
+
+- ReID trigger quality
+- association / relink unified scoring
+- reference quality gate
+- GMC quality-aware handling
+- post-merge V2 cost
+
+這些方向的近期排序以 [docs/TODO.md](/docs/TODO.md:1) 為準。
+
+---
+
+## 6. 不屬於本文件的內容
+
+本文件不負責：
+
+- 穩定架構責任邊界的完整定義
+  - 看 [architecture.md](/docs/architecture.md:1)
+- 事件 / API schema 細節
+  - 看 [api_spec.md](/docs/api_spec.md:1)
+- 實驗結果與 backlog 排序
+  - 看 [docs/TODO.md](/docs/TODO.md:1)
+
+最後更新：2026-04-30

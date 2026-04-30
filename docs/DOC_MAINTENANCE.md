@@ -8,10 +8,10 @@
 
 ```
 docs/
-├── architecture.md          ← 系統全貌（L1-L6 分層、資料流、資料夾定義）
-├── pipeline_flow.md         ← 完整資料流程圖與每階段細節
-├── api_spec.md              ← Redis 事件結構、ChromaDB Schema、對外 API
-├── TODO.md                  ← 具體待辦清單（對應代碼位置）
+├── architecture.md          ← 穩定架構形狀、責任邊界、系統合約
+├── pipeline_flow.md         ← 目前實作主路徑的資料流
+├── api_spec.md              ← Redis 事件、Chroma metadata、API / health contract
+├── TODO.md                  ← 當前待辦、近期結論、ablation backlog
 │
 ├── layers/                  ← 各層架構說明（What & Why，不追蹤進度）
 │   ├── L1_perception.md
@@ -43,18 +43,53 @@ docs/
 
 | 文件類型 | 寫什麼 | 不寫什麼 |
 |---|---|---|
-| `architecture.md` | 系統整體分層、資料流、設計原則 | 實作細節、進度狀態 |
-| `pipeline_flow.md` | 完整流程圖與各階段說明 | 模組內部實作 |
+| `architecture.md` | 穩定架構形狀、責任邊界、設計原則 | 實驗結果、細碎 TODO |
+| `pipeline_flow.md` | 目前主路徑的資料流與階段拆解 | 長篇歷史願景、細碎 TODO |
 | `layers/` | 各層的定義、組件、資料流、效能指標 | 進度 checkbox、待辦事項 |
 | `decisions/` | 決策背景、選擇理由、影響 | 實作步驟、進度追蹤 |
-| `progress/` | checkbox 狀態、已完成里程碑、待辦事項 | 架構說明（放 layers/） |
-| `TODO.md` | 具體待辦、對應文件位置、落差說明 | 已完成的項目（移至 progress 里程碑） |
+| `progress/` | 模組狀態快照、舊進度脈絡 | 最高權威架構說明 |
+| `TODO.md` | 當前待辦、近期 ablation 結論、下一輪 backlog | 長篇歷史過程、已結案細節 |
 | `runbooks/` | 操作指令、故障排除步驟 | 架構決策理由 |
 
 **核心原則：同一件事只在一個地方寫。**
 - 組件說明 → `layers/`
 - 進度狀態 → `progress/`
 - 決策理由 → `decisions/`
+
+---
+
+## 2.1 連結格式規範
+
+所有跨文件 Markdown 連結一律使用 **專案根路徑**，不要使用系統絕對路徑，也不要在 `docs/` 內混用相對層級路徑。
+
+### 正確格式
+
+- `/DEVELOPMENT.md`
+- `/docs/architecture.md`
+- `/docs/api_spec.md`
+- `/src/saccade/perception/eval/runner.py`
+- `/scripts/eval/mot17.py`
+
+若要保留行號，可使用：
+
+- `/docs/TODO.md:1`
+- `/src/tracking/tracker_gpu.cu:167`
+
+### 禁止格式
+
+- 系統路徑：
+  - `/home/ray/developer/ai/saccade/docs/architecture.md`
+- `docs/` 內相對路徑混用：
+  - `architecture.md`
+  - `decisions/013-xxx.md`
+  - `../scripts/eval/README.md`
+
+### 原則
+
+- 專案根下所有文件都用同一套路徑風格，避免：
+  - 換機器後連結失效
+  - `docs/` 內出現 `docs/docs/...` 類錯路徑
+  - 同一 repo 內混用多種連結寫法
 
 ---
 

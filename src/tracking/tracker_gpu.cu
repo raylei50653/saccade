@@ -1,5 +1,6 @@
 #include "tracking/tracker_gpu.hpp"
 #include <cuda_runtime.h>
+#include <cub/cub.cuh>
 #include <nvtx3/nvToolsExt.h>
 #include <iostream>
 #include <vector>
@@ -10,6 +11,7 @@
 #include <cmath>
 #include <sstream>
 #include <unordered_map>
+#include <unordered_set>
 #include "tracking/sinkhorn.hpp"
 #include "tracking/kalman_gpu.cuh"
 
@@ -357,13 +359,13 @@ __global__ void fused_sinkhorn_topk_kernel(
 // Prices are always non-negative so reinterpreting as int preserves ordering.
 __global__ void parallel_auction_shmem_kernel(
     const int* topk_indices, const float* topk_probs,
-    float* g_prices, int* trk_to_det, int* det_to_trk,
+    uint64_t* g_prices, int* trk_to_det, int* det_to_trk,
     int n_trk, int n_det, int K, float epsilon)
 {
-    extern __shared__ float s_prices[];
+    extern __shared__ uint64_t s_prices_u64[];
 
     for (int d = threadIdx.x; d < n_det; d += blockDim.x)
-        s_prices[d] = g_prices[d];
+        s_prices_u64[d] = g_prices[d];
     __syncthreads();
 
     int t = blockIdx.x * blockDim.x + threadIdx.x;
@@ -377,7 +379,8 @@ __global__ void parallel_auction_shmem_kernel(
         for (int k = 0; k < K; ++k) {
             int d = topk_indices[t * K + k];
             if (d < 0 || d >= n_det) continue;
-            float val = topk_probs[t * K + k] - s_prices[d];
+            float current_price = __int_as_float((int)(s_prices_u64[d] >> 32));
+            float val = topk_probs[t * K + k] - current_price;
             if (val > best_val) {
                 second_best_val = best_val; best_val = val; best_det = d;
             } else if (val > second_best_val) {
@@ -387,19 +390,31 @@ __global__ void parallel_auction_shmem_kernel(
         if (best_det >= 0) {
             float inc = (second_best_val <= -1e8f) ? epsilon
                                                     : (best_val - second_best_val + epsilon);
-            bid = s_prices[best_det] + inc;
+            float current_price = __int_as_float((int)(s_prices_u64[best_det] >> 32));
+            bid = current_price + inc;
+            
+            uint32_t bid_float_bits = __float_as_uint(bid);
+            uint32_t tie_breaker = n_trk - t;
+            uint64_t bid_u64 = ((uint64_t)bid_float_bits << 32) | (uint64_t)tie_breaker;
+
             // Level 1: intra-block conflict resolution
-            atomicMax((int*)&s_prices[best_det], __float_as_int(bid));
+            atomicMax((unsigned long long*)&s_prices_u64[best_det], (unsigned long long)bid_u64);
         }
     }
     __syncthreads();
 
     // Level 2: block winner commits to global memory
-    if (best_det >= 0 && __float_as_int(s_prices[best_det]) == __float_as_int(bid)) {
-        int prev = atomicMax((int*)&g_prices[best_det], __float_as_int(bid));
-        if (__float_as_int(bid) > prev) {
-            trk_to_det[t] = best_det;
-            atomicExch((int*)&det_to_trk[best_det], t);
+    if (best_det >= 0) {
+        uint32_t bid_float_bits = __float_as_uint(bid);
+        uint32_t tie_breaker = n_trk - t;
+        uint64_t bid_u64 = ((uint64_t)bid_float_bits << 32) | (uint64_t)tie_breaker;
+
+        if (s_prices_u64[best_det] == bid_u64) {
+            unsigned long long prev = atomicMax((unsigned long long*)&g_prices[best_det], (unsigned long long)bid_u64);
+            if (bid_u64 > prev) {
+                trk_to_det[t] = best_det;
+                det_to_trk[best_det] = t;
+            }
         }
     }
 }
@@ -483,10 +498,331 @@ __global__ void inline_kalman_update_kernel(
 }
 } // namespace kernel
 
+// ── M2 GPU lifecycle helpers ───────────────────────────────────────────────
+
+__global__ void collect_free_slots_kernel(
+    const bool* active, int max_objs, int* free_slots, int* n_free)
+{
+    if (threadIdx.x != 0 || blockIdx.x != 0) return;
+    int count = 0;
+    for (int i = 0; i < max_objs; ++i) {
+        if (!active[i]) {
+            free_slots[count++] = i;
+        }
+    }
+    *n_free = count;
+}
+
+__global__ void spawn_new_tracks_kernel(
+    const int*   d_det_to_trk,
+    const float* d_det_boxes,
+    const float* d_det_scores,
+    const int*   d_det_classes,
+    int n_det, float new_track_thresh,
+    const int* d_free_slots, const int* d_n_free,
+    bool*  d_active,  float* d_states, int* d_state,
+    int*   d_track_ids, int* d_age,
+    float* d_trk_scores, int* d_classes,
+    int*   d_hit_streak, int* d_confirm_req, float* d_score_sum,
+    int* d_track_id_ctr, int* d_slot_cursor)
+{
+    if (threadIdx.x != 0 || blockIdx.x != 0) return;
+    int cursor = *d_slot_cursor;
+    int n_free = *d_n_free;
+    int id_ctr = *d_track_id_ctr;
+
+    for (int d = 0; d < n_det; ++d) {
+        if (d_det_to_trk[d] >= 0) continue;
+        if (d_det_scores[d] < new_track_thresh) continue;
+
+        if (cursor >= n_free) break;
+        int slot = d_free_slots[cursor++];
+
+        const float* box = d_det_boxes + d * 4;
+        float bh = fmaxf(box[3] - box[1], 1e-6f);
+        d_states[slot*8+0] = (box[0] + box[2]) * 0.5f;
+        d_states[slot*8+1] = (box[1] + box[3]) * 0.5f;
+        d_states[slot*8+2] = (box[2] - box[0]) / bh;
+        d_states[slot*8+3] = bh;
+        d_states[slot*8+4] = 0.0f; d_states[slot*8+5] = 0.0f; d_states[slot*8+6] = 0.0f; d_states[slot*8+7] = 0.0f;
+
+        d_track_ids[slot]   = id_ctr++;
+        d_age[slot]         = 0;
+        d_state[slot]       = 1; // TRACK_TENTATIVE
+        d_hit_streak[slot]  = 1;
+        d_confirm_req[slot] = 0;
+        d_score_sum[slot]   = d_det_scores[d];
+        d_trk_scores[slot]  = d_det_scores[d];
+        d_classes[slot]     = d_det_classes[d];
+        d_active[slot]      = true;
+    }
+
+    *d_slot_cursor = cursor;
+    *d_track_id_ctr = id_ctr;
+}
+
+// Initialise covariance for every slot that is active+tentative+hit_streak==1 (freshly spawned).
+__global__ void init_covariance_if_new_kernel(
+    const bool* active, const int* state, const int* hit_streak,
+    float* covs, int max_objs)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= max_objs) return;
+    if (!active[i] || state[i] != 1 || hit_streak[i] != 1) return;
+    kf_gpu::init_covariance(covs + i * 64);
+}
+
+__global__ void compact_results_kernel(
+    const bool*  d_active,
+    const int*   d_state,
+    const int*   d_age,
+    const float* d_states,
+    const int*   d_track_ids,
+    const float* d_scores,
+    const int*   d_classes,
+    const int*   d_trk_to_det,
+    int max_objs,
+    float* out_boxes, float* out_scores,
+    int* out_ids, int* out_classes, int* out_det_idx,
+    int* out_count)
+{
+    if (threadIdx.x != 0 || blockIdx.x != 0) return;
+    int k = 0;
+    for (int i = 0; i < max_objs; ++i) {
+        if (!d_active[i] || d_state[i] != 2 || d_age[i] != 0) continue;
+        float cx = d_states[i*8+0], cy = d_states[i*8+1];
+        float a  = d_states[i*8+2], h  = d_states[i*8+3], w = a * h;
+        out_boxes[k*4+0] = cx - w * 0.5f;
+        out_boxes[k*4+1] = cy - h * 0.5f;
+        out_boxes[k*4+2] = cx + w * 0.5f;
+        out_boxes[k*4+3] = cy + h * 0.5f;
+        out_scores[k]   = d_scores[i];
+        out_ids[k]      = d_track_ids[i];
+        out_classes[k]  = d_classes[i];
+        out_det_idx[k]  = d_trk_to_det[i];
+        k++;
+    }
+    *out_count = k;
+}
+
+// ── M1 GPU compaction helpers ──────────────────────────────────────────────
+
+// Stable argsort keys: upper 32 bits = raw score bits (positive float → monotone uint32),
+// lower 32 bits = (n-1-i) so equal-score ties preserve original order (lower index first).
+// SortKeysDescending → larger key first → higher score first, lower index for ties.
+__global__ void build_sort_keys_kernel(const float* scores, int n, uint64_t* keys)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= n) return;
+    uint32_t sb;
+    memcpy(&sb, &scores[i], sizeof(float));
+    keys[i] = ((uint64_t)sb << 32) | (uint64_t)(uint32_t)(n - 1 - i);
+}
+
+// Decode original index from sorted compound key: index = n - 1 - lower32(key).
+__global__ void decode_sort_order_kernel(const uint64_t* sorted_keys, int64_t* order, int n)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= n) return;
+    order[i] = (int64_t)((n - 1) - (int)(uint32_t)sorted_keys[i]);
+}
+
+__global__ void gather_compact3_kernel(
+    const float* __restrict__ src_boxes,
+    const float* __restrict__ src_scores,
+    const int*   __restrict__ src_classes,
+    float* dst_boxes, float* dst_scores, int* dst_classes,
+    const int* __restrict__ indices, int n)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= n) return;
+    int k = indices[i];
+    dst_boxes[i*4+0] = src_boxes[k*4+0];
+    dst_boxes[i*4+1] = src_boxes[k*4+1];
+    dst_boxes[i*4+2] = src_boxes[k*4+2];
+    dst_boxes[i*4+3] = src_boxes[k*4+3];
+    dst_scores[i]    = src_scores[k];
+    dst_classes[i]   = src_classes[k];
+}
+
+__global__ void gather_compact3_counted_kernel(
+    const float* __restrict__ src_boxes,
+    const float* __restrict__ src_scores,
+    const int*   __restrict__ src_classes,
+    float* dst_boxes, float* dst_scores, int* dst_classes,
+    const int* __restrict__ indices, const int* __restrict__ count_ptr, int max_n)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= max_n) return;
+    const int n = *count_ptr;
+    if (i < n) {
+        int k = indices[i];
+        dst_boxes[i*4+0] = src_boxes[k*4+0];
+        dst_boxes[i*4+1] = src_boxes[k*4+1];
+        dst_boxes[i*4+2] = src_boxes[k*4+2];
+        dst_boxes[i*4+3] = src_boxes[k*4+3];
+        dst_scores[i]    = src_scores[k];
+        dst_classes[i]   = src_classes[k];
+    } else {
+        dst_boxes[i*4+0] = 0.0f;
+        dst_boxes[i*4+1] = 0.0f;
+        dst_boxes[i*4+2] = 0.0f;
+        dst_boxes[i*4+3] = 0.0f;
+        dst_scores[i]    = 0.0f;
+        dst_classes[i]   = -1;
+    }
+}
+
+__global__ void gather_compact4_kernel(
+    const float* __restrict__ src_boxes,
+    const float* __restrict__ src_scores,
+    const int*   __restrict__ src_classes,
+    const bool*  __restrict__ src_suspect,
+    float* dst_boxes, float* dst_scores, int* dst_classes, bool* dst_suspect,
+    const int* __restrict__ indices, int n)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= n) return;
+    int k = indices[i];
+    dst_boxes[i*4+0] = src_boxes[k*4+0];
+    dst_boxes[i*4+1] = src_boxes[k*4+1];
+    dst_boxes[i*4+2] = src_boxes[k*4+2];
+    dst_boxes[i*4+3] = src_boxes[k*4+3];
+    dst_scores[i]    = src_scores[k];
+    dst_classes[i]   = src_classes[k];
+    dst_suspect[i]   = src_suspect[k];
+}
+
+__global__ void gather_compact4_counted_kernel(
+    const float* __restrict__ src_boxes,
+    const float* __restrict__ src_scores,
+    const int*   __restrict__ src_classes,
+    const bool*  __restrict__ src_suspect,
+    float* dst_boxes, float* dst_scores, int* dst_classes, bool* dst_suspect,
+    const int* __restrict__ indices, const int* __restrict__ count_ptr, int max_n)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= max_n) return;
+    const int n = *count_ptr;
+    if (i < n) {
+        int k = indices[i];
+        dst_boxes[i*4+0] = src_boxes[k*4+0];
+        dst_boxes[i*4+1] = src_boxes[k*4+1];
+        dst_boxes[i*4+2] = src_boxes[k*4+2];
+        dst_boxes[i*4+3] = src_boxes[k*4+3];
+        dst_scores[i]    = src_scores[k];
+        dst_classes[i]   = src_classes[k];
+        dst_suspect[i]   = src_suspect[k];
+    } else {
+        dst_boxes[i*4+0] = 0.0f;
+        dst_boxes[i*4+1] = 0.0f;
+        dst_boxes[i*4+2] = 0.0f;
+        dst_boxes[i*4+3] = 0.0f;
+        dst_scores[i]    = 0.0f;
+        dst_classes[i]   = -1;
+        dst_suspect[i]   = false;
+    }
+}
+
+__global__ void copy_bool_counted_kernel(
+    const bool* __restrict__ src,
+    bool* dst,
+    const int* __restrict__ count_ptr,
+    int max_n)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= max_n) return;
+    const int n = *count_ptr;
+    dst[i] = (i < n) ? src[i] : false;
+}
+
+void gather_compact3_cuda(
+    const float* src_boxes, const float* src_scores, const int* src_classes,
+    float* dst_boxes, float* dst_scores, int* dst_classes,
+    const int* indices, int n, cudaStream_t stream)
+{
+    if (n <= 0) return;
+    const int thr = 256, blk = (n + thr - 1) / thr;
+    gather_compact3_kernel<<<blk, thr, 0, stream>>>(
+        src_boxes, src_scores, src_classes,
+        dst_boxes, dst_scores, dst_classes,
+        indices, n);
+}
+
+void gather_compact3_counted_cuda(
+    const float* src_boxes, const float* src_scores, const int* src_classes,
+    float* dst_boxes, float* dst_scores, int* dst_classes,
+    const int* indices, const int* count_ptr, int max_n, cudaStream_t stream)
+{
+    if (max_n <= 0) return;
+    const int thr = 256, blk = (max_n + thr - 1) / thr;
+    gather_compact3_counted_kernel<<<blk, thr, 0, stream>>>(
+        src_boxes, src_scores, src_classes,
+        dst_boxes, dst_scores, dst_classes,
+        indices, count_ptr, max_n);
+}
+
+void gather_compact4_cuda(
+    const float* src_boxes, const float* src_scores, const int* src_classes, const bool* src_suspect,
+    float* dst_boxes, float* dst_scores, int* dst_classes, bool* dst_suspect,
+    const int* indices, int n, cudaStream_t stream)
+{
+    if (n <= 0) return;
+    const int thr = 256, blk = (n + thr - 1) / thr;
+    gather_compact4_kernel<<<blk, thr, 0, stream>>>(
+        src_boxes, src_scores, src_classes, src_suspect,
+        dst_boxes, dst_scores, dst_classes, dst_suspect,
+        indices, n);
+}
+
+void gather_compact4_counted_cuda(
+    const float* src_boxes, const float* src_scores, const int* src_classes, const bool* src_suspect,
+    float* dst_boxes, float* dst_scores, int* dst_classes, bool* dst_suspect,
+    const int* indices, const int* count_ptr, int max_n, cudaStream_t stream)
+{
+    if (max_n <= 0) return;
+    const int thr = 256, blk = (max_n + thr - 1) / thr;
+    gather_compact4_counted_kernel<<<blk, thr, 0, stream>>>(
+        src_boxes, src_scores, src_classes, src_suspect,
+        dst_boxes, dst_scores, dst_classes, dst_suspect,
+        indices, count_ptr, max_n);
+}
+
+void copy_bool_counted_cuda(
+    const bool* src, bool* dst, const int* count_ptr, int max_n, cudaStream_t stream)
+{
+    if (max_n <= 0) return;
+    const int thr = 256, blk = (max_n + thr - 1) / thr;
+    copy_bool_counted_kernel<<<blk, thr, 0, stream>>>(src, dst, count_ptr, max_n);
+}
+
+size_t argsort_scores_descending_bytes(int n)
+{
+    size_t bytes = 0;
+    cub::DeviceRadixSort::SortKeysDescending(
+        nullptr, bytes,
+        static_cast<const uint64_t*>(nullptr), static_cast<uint64_t*>(nullptr), n);
+    return bytes;
+}
+
+void argsort_scores_descending_cuda(
+    const float* d_scores, int n,
+    int64_t* d_order_out, uint64_t* d_keys_in, uint64_t* d_keys_out,
+    void* d_cub_tmp, size_t cub_tmp_bytes, cudaStream_t stream)
+{
+    if (n <= 0) return;
+    const int thr = 256, blk = (n + thr - 1) / thr;
+    build_sort_keys_kernel<<<blk, thr, 0, stream>>>(d_scores, n, d_keys_in);
+    size_t bytes = cub_tmp_bytes;
+    cub::DeviceRadixSort::SortKeysDescending(
+        d_cub_tmp, bytes, d_keys_in, d_keys_out, n, 0, 64, stream);
+    decode_sort_order_kernel<<<blk, thr, 0, stream>>>(d_keys_out, d_order_out, n);
+}
+
 class GPUByteTracker::Impl {
 public:
-    Impl(int max_objects, int embedding_dim) 
-        : max_objs_(max_objects), embed_dim_(embedding_dim), track_id_counter_(1) {
+    Impl(int max_objects, int embedding_dim)
+        : max_objs_(max_objects), embed_dim_(embedding_dim) {
         checkCuda(cudaMalloc(&d_states_, max_objs_ * 8 * sizeof(float)));
         checkCuda(cudaMalloc(&d_covs_, max_objs_ * 64 * sizeof(float)));
         checkCuda(cudaMalloc(&d_active_, max_objs_ * sizeof(bool)));
@@ -501,7 +837,7 @@ public:
         checkCuda(cudaMalloc(&d_sinkhorn_v_, max_assoc_ * sizeof(float)));
         checkCuda(cudaMalloc(&d_topk_indices_, max_objs_ * 3 * sizeof(int)));
         checkCuda(cudaMalloc(&d_topk_probs_, max_objs_ * 3 * sizeof(float)));
-        checkCuda(cudaMalloc(&d_auction_prices_, max_assoc_ * sizeof(float)));
+        checkCuda(cudaMalloc(&d_auction_prices_, max_assoc_ * sizeof(uint64_t)));
         checkCuda(cudaMalloc(&d_trk_to_det_, max_objs_ * sizeof(int)));
         checkCuda(cudaMalloc(&d_det_to_trk_, max_assoc_ * sizeof(int)));
         checkCuda(cudaMalloc(&d_matched_pairs_, max_objs_ * 2 * sizeof(int)));
@@ -510,11 +846,23 @@ public:
         checkCuda(cudaMalloc(&d_hit_streak_, max_objs_ * sizeof(int)));
         checkCuda(cudaMalloc(&d_confirm_streak_required_, max_objs_ * sizeof(int)));
         checkCuda(cudaMalloc(&d_score_sum_, max_objs_ * sizeof(float)));
-        checkCuda(cudaMallocHost(&d_det_to_trk_h_, max_assoc_ * sizeof(int)));
 
         checkCuda(cudaMalloc(&d_has_clean_embedding_, max_objs_ * sizeof(bool)));
         checkCuda(cudaMalloc(&d_candidate_count_, max_objs_ * sizeof(int)));
         checkCuda(cudaMalloc(&d_s_inv_, max_objs_ * 16 * sizeof(float)));
+
+        // M2: GPU spawn + compact result buffers
+        checkCuda(cudaMalloc(&d_free_slots_,    max_objs_ * sizeof(int)));
+        checkCuda(cudaMalloc(&d_n_free_,        sizeof(int)));
+        checkCuda(cudaMalloc(&d_slot_cursor_,   sizeof(int)));
+        checkCuda(cudaMalloc(&d_track_id_ctr_,  sizeof(int)));
+        checkCuda(cudaMalloc(&d_res_boxes_,     max_objs_ * 4 * sizeof(float)));
+        checkCuda(cudaMalloc(&d_res_scores_,    max_objs_ * sizeof(float)));
+        checkCuda(cudaMalloc(&d_res_ids_,       max_objs_ * sizeof(int)));
+        checkCuda(cudaMalloc(&d_res_classes_,   max_objs_ * sizeof(int)));
+        checkCuda(cudaMalloc(&d_res_det_idx_,   max_objs_ * sizeof(int)));
+        checkCuda(cudaMalloc(&d_res_count_,     sizeof(int)));
+        { int init_id = 1; checkCuda(cudaMemcpy(d_track_id_ctr_, &init_id, sizeof(int), cudaMemcpyHostToDevice)); }
 
         checkCuda(cudaMemset(d_active_, 0, max_objs_ * sizeof(bool)));
         checkCuda(cudaMemset(d_states_, 0, max_objs_ * 8 * sizeof(float)));
@@ -532,6 +880,7 @@ public:
         h_active_raw_.resize(max_objs_, 0);
         h_has_clean_embedding_.resize(max_objs_, 0);
         h_states_.resize(max_objs_ * 8, 0.0f);
+        h_covs_.resize(max_objs_ * 64, 0.0f);
         h_track_ids_.resize(max_objs_, 0);
         h_scores_.resize(max_objs_, 0.0f);
         h_classes_.resize(max_objs_, 0);
@@ -540,10 +889,6 @@ public:
         h_hit_streak_.resize(max_objs_, 0);
         h_confirm_streak_required_.resize(max_objs_, 0);
         h_score_sum_.resize(max_objs_, 0.0f);
-        h_matched_pairs_.resize(max_objs_ * 2);
-        h_new_slots_.resize(max_objs_);
-        h_det_to_trk_.resize(max_assoc_, -1);
-        h_topk_indices_.resize(max_objs_ * 3, -1);
     }
 
     ~Impl() {
@@ -555,15 +900,68 @@ public:
         cudaFree(d_auction_prices_); cudaFree(d_trk_to_det_); cudaFree(d_det_to_trk_);
         cudaFree(d_matched_pairs_); cudaFree(d_new_slots_);
         cudaFree(d_state_); cudaFree(d_hit_streak_); cudaFree(d_confirm_streak_required_);
-        cudaFree(d_score_sum_); cudaFreeHost(d_det_to_trk_h_);
+        cudaFree(d_score_sum_);
         cudaFree(d_has_clean_embedding_); cudaFree(d_candidate_count_);
         cudaFree(d_s_inv_);
+        // M2
+        cudaFree(d_free_slots_); cudaFree(d_n_free_); cudaFree(d_slot_cursor_);
+        cudaFree(d_track_id_ctr_);
+        cudaFree(d_res_boxes_); cudaFree(d_res_scores_); cudaFree(d_res_ids_);
+        cudaFree(d_res_classes_); cudaFree(d_res_det_idx_); cudaFree(d_res_count_);
     }
 
     std::vector<TrackResult> update(float* d_boxes, float* d_scores, int* d_classes, int num_dets,
                                    cudaStream_t stream, float* d_embeddings, float* d_gmc,
                                    float light_factor, float mid_thresh_scale) {
         nvtxRangePushA("Tracker::Update");
+        run_update_device(
+            d_boxes, d_scores, d_classes, num_dets, stream, d_embeddings, d_gmc,
+            light_factor, mid_thresh_scale);
+
+        // Single blocking D2H: waits for all prior stream work
+        int n_res = 0;
+        checkCuda(cudaMemcpy(&n_res, d_res_count_, sizeof(int), cudaMemcpyDeviceToHost));
+
+        std::vector<TrackResult> results(static_cast<size_t>(n_res));
+        if (n_res > 0) {
+            std::vector<float> hb(n_res * 4);
+            std::vector<float> hs(n_res);
+            std::vector<int>   hi(n_res), hc(n_res), hd(n_res);
+            checkCuda(cudaMemcpy(hb.data(), d_res_boxes_,   n_res * 4 * sizeof(float), cudaMemcpyDeviceToHost));
+            checkCuda(cudaMemcpy(hs.data(), d_res_scores_,  n_res *     sizeof(float), cudaMemcpyDeviceToHost));
+            checkCuda(cudaMemcpy(hi.data(), d_res_ids_,     n_res *     sizeof(int),   cudaMemcpyDeviceToHost));
+            checkCuda(cudaMemcpy(hc.data(), d_res_classes_, n_res *     sizeof(int),   cudaMemcpyDeviceToHost));
+            checkCuda(cudaMemcpy(hd.data(), d_res_det_idx_, n_res *     sizeof(int),   cudaMemcpyDeviceToHost));
+            for (int i = 0; i < n_res; ++i)
+                results[i] = {hb[i*4], hb[i*4+1], hb[i*4+2], hb[i*4+3],
+                               hi[i], hs[i], hc[i], hd[i]};
+        }
+        nvtxRangePop();
+        return results;
+    }
+
+    void update_into(
+        float* d_boxes, float* d_scores, int* d_classes, int num_dets,
+        cudaStream_t stream,
+        float* out_boxes, float* out_scores, int* out_ids, int* out_classes, int* out_det_idx, int* out_count,
+        float* d_embeddings, float* d_gmc,
+        float light_factor, float mid_thresh_scale) {
+        nvtxRangePushA("Tracker::UpdateInto");
+        run_update_device(
+            d_boxes, d_scores, d_classes, num_dets, stream, d_embeddings, d_gmc,
+            light_factor, mid_thresh_scale);
+        checkCuda(cudaMemcpyAsync(out_boxes,   d_res_boxes_,   max_objs_ * 4 * sizeof(float), cudaMemcpyDeviceToDevice, stream));
+        checkCuda(cudaMemcpyAsync(out_scores,  d_res_scores_,  max_objs_ *     sizeof(float), cudaMemcpyDeviceToDevice, stream));
+        checkCuda(cudaMemcpyAsync(out_ids,     d_res_ids_,     max_objs_ *     sizeof(int),   cudaMemcpyDeviceToDevice, stream));
+        checkCuda(cudaMemcpyAsync(out_classes, d_res_classes_, max_objs_ *     sizeof(int),   cudaMemcpyDeviceToDevice, stream));
+        checkCuda(cudaMemcpyAsync(out_det_idx, d_res_det_idx_, max_objs_ *     sizeof(int),   cudaMemcpyDeviceToDevice, stream));
+        checkCuda(cudaMemcpyAsync(out_count,   d_res_count_,   sizeof(int),                    cudaMemcpyDeviceToDevice, stream));
+        nvtxRangePop();
+    }
+    void run_update_device(
+        float* d_boxes, float* d_scores, int* d_classes, int num_dets,
+        cudaStream_t stream, float* d_embeddings, float* d_gmc,
+        float light_factor, float mid_thresh_scale) {
         int threads = 256;
         int blocks = (max_objs_ + threads - 1) / threads;
         predict_kernel<<<blocks, threads, 0, stream>>>(d_states_, d_covs_, d_active_, d_age_, max_objs_, max_age_);
@@ -595,7 +993,7 @@ public:
 
             checkCuda(cudaMemsetAsync(d_det_to_trk_, -1, num_dets * sizeof(int), stream));
             checkCuda(cudaMemsetAsync(d_trk_to_det_, -1, max_objs_ * sizeof(int), stream));
-            const int shmem_auction = num_dets * static_cast<int>(sizeof(float));
+            const int shmem_auction = num_dets * static_cast<int>(sizeof(uint64_t));
             dim3 auc_b(32); dim3 auc_g((max_objs_ + 31) / 32);
 
             const float effective_mid_thresh = std::clamp(
@@ -616,7 +1014,7 @@ public:
                 high_thresh_, 1.1f, -1,
                 d_topk_indices_, d_topk_probs_
             );
-            checkCuda(cudaMemsetAsync(d_auction_prices_, 0, num_dets * sizeof(float), stream));
+            checkCuda(cudaMemsetAsync(d_auction_prices_, 0, num_dets * sizeof(uint64_t), stream));
             kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
                 d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
                 max_objs_, num_dets, 3, 0.01f);
@@ -628,7 +1026,7 @@ public:
                 effective_mid_thresh, high_thresh_, -1,
                 d_topk_indices_, d_topk_probs_
             );
-            checkCuda(cudaMemsetAsync(d_auction_prices_, 0, num_dets * sizeof(float), stream));
+            checkCuda(cudaMemsetAsync(d_auction_prices_, 0, num_dets * sizeof(uint64_t), stream));
             kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
                 d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
                 max_objs_, num_dets, 3, 0.01f);
@@ -640,7 +1038,7 @@ public:
                 track_thresh_, effective_mid_thresh, 2, // TRACK_CONFIRMED = 2
                 d_topk_indices_, d_topk_probs_
             );
-            checkCuda(cudaMemsetAsync(d_auction_prices_, 0, num_dets * sizeof(float), stream));
+            checkCuda(cudaMemsetAsync(d_auction_prices_, 0, num_dets * sizeof(uint64_t), stream));
             kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
                 d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
                 max_objs_, num_dets, 3, 0.01f);
@@ -660,114 +1058,36 @@ public:
             nvtxRangePop();
         }
 
-        checkCuda(cudaMemcpyAsync(h_active_raw_.data(), d_active_, max_objs_ * sizeof(bool), cudaMemcpyDeviceToHost, stream));
-        checkCuda(cudaMemcpyAsync(h_state_.data(), d_state_, max_objs_ * sizeof(int), cudaMemcpyDeviceToHost, stream));
-        checkCuda(cudaMemcpyAsync(h_states_.data(), d_states_, max_objs_ * 8 * sizeof(float), cudaMemcpyDeviceToHost, stream));
-        checkCuda(cudaMemcpyAsync(h_track_ids_.data(), d_track_ids_, max_objs_ * sizeof(int), cudaMemcpyDeviceToHost, stream));
-        checkCuda(cudaMemcpyAsync(h_age_.data(), d_age_, max_objs_ * sizeof(int), cudaMemcpyDeviceToHost, stream));
-        checkCuda(cudaMemcpyAsync(h_scores_.data(), d_scores_, max_objs_ * sizeof(float), cudaMemcpyDeviceToHost, stream));
-        checkCuda(cudaMemcpyAsync(h_classes_.data(), d_classes_, max_objs_ * sizeof(int), cudaMemcpyDeviceToHost, stream));
-
-        std::vector<float> h_det_boxes;
-        std::vector<float> h_det_scores_inp;
-        std::vector<int> h_det_classes_inp;
+        // M2: GPU spawn new tracks
         if (num_dets > 0) {
-            h_det_boxes.resize(num_dets * 4);
-            h_det_scores_inp.resize(num_dets);
-            h_det_classes_inp.resize(num_dets);
-            checkCuda(cudaMemcpyAsync(h_det_boxes.data(), d_boxes, num_dets * 4 * sizeof(float), cudaMemcpyDeviceToHost, stream));
-            checkCuda(cudaMemcpyAsync(h_det_scores_inp.data(), d_scores, num_dets * sizeof(float), cudaMemcpyDeviceToHost, stream));
-            checkCuda(cudaMemcpyAsync(h_det_classes_inp.data(), d_classes, num_dets * sizeof(int), cudaMemcpyDeviceToHost, stream));
-            checkCuda(cudaMemcpyAsync(d_det_to_trk_h_, d_det_to_trk_, num_dets * sizeof(int), cudaMemcpyDeviceToHost, stream));
+            const float effective_new_track_thresh = std::clamp(
+                new_track_thresh_ * std::max(mid_thresh_scale, 0.01f),
+                track_thresh_, high_thresh_);
+            cudaMemsetAsync(d_n_free_,      0, sizeof(int), stream);
+            cudaMemsetAsync(d_slot_cursor_, 0, sizeof(int), stream);
+            collect_free_slots_kernel<<<(max_objs_ + 255) / 256, 256, 0, stream>>>(
+                d_active_, max_objs_, d_free_slots_, d_n_free_);
+            spawn_new_tracks_kernel<<<(num_dets + 255) / 256, 256, 0, stream>>>(
+                d_det_to_trk_, d_boxes, d_scores, d_classes, num_dets,
+                effective_new_track_thresh,
+                d_free_slots_, d_n_free_,
+                d_active_, d_states_, d_state_,
+                d_track_ids_, d_age_, d_scores_, d_classes_,
+                d_hit_streak_, d_confirm_streak_required_, d_score_sum_,
+                d_track_id_ctr_, d_slot_cursor_);
+            init_covariance_if_new_kernel<<<(max_objs_ + 255) / 256, 256, 0, stream>>>(
+                d_active_, d_state_, d_hit_streak_, d_covs_, max_objs_);
         }
 
-        cudaStreamSynchronize(stream);
-
-        const float effective_mid_thresh = std::clamp(
-            mid_thresh_ * std::max(mid_thresh_scale, 0.01f),
-            track_thresh_,
-            high_thresh_
-        );
-        const float effective_new_track_thresh = std::clamp(
-            new_track_thresh_ * std::max(mid_thresh_scale, 0.01f),
-            track_thresh_,
-            high_thresh_
-        );
-
-        if (num_dets > 0) {
-            int n_new = 0;
-            for (int d = 0; d < num_dets; ++d) {
-                if (d_det_to_trk_h_[d] >= 0 || h_det_scores_inp[d] < effective_new_track_thresh) continue;
-                int slot = -1;
-                for (int i = 0; i < max_objs_; ++i) {
-                    if (!h_active_raw_[i]) { slot = i; break; }
-                }
-                if (slot == -1) break;
-
-                const float* box = h_det_boxes.data() + d * 4;
-                float cx = (box[0] + box[2]) * 0.5f;
-                float cy = (box[1] + box[3]) * 0.5f;
-                float bh = std::max(box[3] - box[1], 1e-6f);
-                float cls = h_det_classes_inp[d];
-                float score = h_det_scores_inp[d];
-                h_active_raw_[slot] = 1;
-                h_states_[slot * 8 + 0] = cx;
-                h_states_[slot * 8 + 1] = cy;
-                h_states_[slot * 8 + 2] = (box[2] - box[0]) / bh;
-                h_states_[slot * 8 + 3] = bh;
-                for (int k = 4; k < 8; ++k) h_states_[slot * 8 + k] = 0.0f;
-                
-                h_track_ids_[slot] = track_id_counter_++;
-                h_age_[slot] = 0;
-                h_state_[slot] = 1; // TRACK_TENTATIVE
-                h_hit_streak_[slot] = 1;
-                h_confirm_streak_required_[slot] = 0;
-                h_score_sum_[slot] = score;
-                h_scores_[slot] = score;
-                h_classes_[slot] = cls;
-                
-                h_new_slots_[n_new++] = slot;
-            }
-            if (n_new > 0) {
-                checkCuda(cudaMemcpyAsync(d_active_, h_active_raw_.data(), max_objs_ * sizeof(bool), cudaMemcpyHostToDevice, stream));
-                checkCuda(cudaMemcpyAsync(d_state_, h_state_.data(), max_objs_ * sizeof(int), cudaMemcpyHostToDevice, stream));
-                checkCuda(cudaMemcpyAsync(d_hit_streak_, h_hit_streak_.data(), max_objs_ * sizeof(int), cudaMemcpyHostToDevice, stream));
-                checkCuda(cudaMemcpyAsync(d_score_sum_, h_score_sum_.data(), max_objs_ * sizeof(float), cudaMemcpyHostToDevice, stream));
-                checkCuda(cudaMemcpyAsync(d_confirm_streak_required_, h_confirm_streak_required_.data(), max_objs_ * sizeof(int), cudaMemcpyHostToDevice, stream));
-                
-                checkCuda(cudaMemcpyAsync(d_states_, h_states_.data(), max_objs_ * 8 * sizeof(float), cudaMemcpyHostToDevice, stream));
-                checkCuda(cudaMemcpyAsync(d_track_ids_, h_track_ids_.data(), max_objs_ * sizeof(int), cudaMemcpyHostToDevice, stream));
-                checkCuda(cudaMemcpyAsync(d_age_, h_age_.data(), max_objs_ * sizeof(int), cudaMemcpyHostToDevice, stream));
-                checkCuda(cudaMemcpyAsync(d_scores_, h_scores_.data(), max_objs_ * sizeof(float), cudaMemcpyHostToDevice, stream));
-                checkCuda(cudaMemcpyAsync(d_classes_, h_classes_.data(), max_objs_ * sizeof(int), cudaMemcpyHostToDevice, stream));
-
-                checkCuda(cudaMemcpyAsync(d_new_slots_, h_new_slots_.data(), n_new * sizeof(int), cudaMemcpyHostToDevice, stream));
-                int threads = 128;
-                int blocks = (n_new + threads - 1) / threads;
-                init_covariance_kernel<<<blocks, threads, 0, stream>>>(d_covs_, d_new_slots_, n_new);
-                cudaStreamSynchronize(stream);
-            }
-        }
-
-        // Build trk_slot → det_idx reverse mapping from pinned det→slot map
-        std::vector<int> h_trk_to_det(max_objs_, -1);
-        if (num_dets > 0) {
-            for (int d = 0; d < num_dets; ++d) {
-                int slot = d_det_to_trk_h_[d];
-                if (slot >= 0 && slot < max_objs_)
-                    h_trk_to_det[slot] = d;
-            }
-        }
-
-        std::vector<TrackResult> results;
-        for (int i = 0; i < max_objs_; ++i) {
-            if (h_active_raw_[i] && h_state_[i] == 2 && h_age_[i] == 0) {
-                float cx = h_states_[i * 8], cy = h_states_[i * 8 + 1], a = h_states_[i * 8 + 2], h = h_states_[i * 8 + 3], w = a * h;
-                results.push_back({cx - w/2.0f, cy - h/2.0f, cx + w/2.0f, cy + h/2.0f, h_track_ids_[i], h_scores_[i], h_classes_[i], h_trk_to_det[i]});
-            }
-        }
-        nvtxRangePop();
-        return results;
+        // M2: GPU compact results — write only confirmed+updated tracks
+        cudaMemsetAsync(d_res_count_, 0, sizeof(int), stream);
+        compact_results_kernel<<<(max_objs_ + 255) / 256, 256, 0, stream>>>(
+            d_active_, d_state_, d_age_,
+            d_states_, d_track_ids_, d_scores_, d_classes_,
+            d_trk_to_det_, max_objs_,
+            d_res_boxes_, d_res_scores_, d_res_ids_, d_res_classes_, d_res_det_idx_,
+            d_res_count_);
+        h_dirty_ = true;  // host arrays are stale until next lazy sync
     }
 
     void set_params(float track_thresh, float high_thresh, float match_thresh, int track_buffer,
@@ -789,6 +1109,9 @@ public:
     // d_track_ids_gpu and d_features_src are GPU pointers; n features each of embed_dim_ floats.
     void update_reference_features_impl(int* d_track_ids_gpu, float* d_features_src, int num, cudaStream_t stream) {
         if (num <= 0) return;
+        checkCuda(cudaMemcpy(h_active_raw_.data(),  d_active_,    max_objs_ * sizeof(bool), cudaMemcpyDeviceToHost));
+        checkCuda(cudaMemcpy(h_track_ids_.data(),   d_track_ids_, max_objs_ * sizeof(int),  cudaMemcpyDeviceToHost));
+        h_dirty_ = false;
         std::vector<int> h_tids(num);
         checkCuda(cudaMemcpy(h_tids.data(), d_track_ids_gpu, num * sizeof(int), cudaMemcpyDeviceToHost));
         for (int i = 0; i < num; ++i) {
@@ -813,6 +1136,9 @@ public:
         checkCuda(cudaMemsetAsync(d_has_clean_embedding_, 0, max_objs_ * sizeof(bool), stream));
         std::fill(h_has_clean_embedding_.begin(), h_has_clean_embedding_.end(), static_cast<uint8_t>(0));
         if (n == 0) return;
+        checkCuda(cudaMemcpy(h_active_raw_.data(), d_active_,    max_objs_ * sizeof(bool), cudaMemcpyDeviceToHost));
+        checkCuda(cudaMemcpy(h_track_ids_.data(),  d_track_ids_, max_objs_ * sizeof(int),  cudaMemcpyDeviceToHost));
+        h_dirty_ = false;
         std::vector<int> h_tids(n);
         std::vector<uint8_t> h_flags(n);
         checkCuda(cudaMemcpy(h_tids.data(), d_track_ids_in, n * sizeof(int), cudaMemcpyDeviceToHost));
@@ -831,14 +1157,140 @@ public:
                                    max_objs_ * sizeof(bool), cudaMemcpyHostToDevice, stream));
     }
 
-    std::vector<TrackCandidateSnapshot> get_tentative_candidates(cudaStream_t stream) {
+    std::vector<TrackStateSnapshot> get_state_snapshots(cudaStream_t stream) {
         checkCuda(cudaMemcpyAsync(h_active_raw_.data(), d_active_, max_objs_ * sizeof(bool), cudaMemcpyDeviceToHost, stream));
         checkCuda(cudaMemcpyAsync(h_states_.data(), d_states_, max_objs_ * 8 * sizeof(float), cudaMemcpyDeviceToHost, stream));
+        checkCuda(cudaMemcpyAsync(h_covs_.data(), d_covs_, max_objs_ * 64 * sizeof(float), cudaMemcpyDeviceToHost, stream));
         checkCuda(cudaMemcpyAsync(h_age_.data(), d_age_, max_objs_ * sizeof(int), cudaMemcpyDeviceToHost, stream));
         checkCuda(cudaMemcpyAsync(h_scores_.data(), d_scores_, max_objs_ * sizeof(float), cudaMemcpyDeviceToHost, stream));
         checkCuda(cudaMemcpyAsync(h_classes_.data(), d_classes_, max_objs_ * sizeof(int), cudaMemcpyDeviceToHost, stream));
         checkCuda(cudaMemcpyAsync(h_track_ids_.data(), d_track_ids_, max_objs_ * sizeof(int), cudaMemcpyDeviceToHost, stream));
         cudaStreamSynchronize(stream);
+        h_dirty_ = false;
+
+        std::vector<TrackStateSnapshot> snapshots;
+        snapshots.reserve(max_objs_);
+        for (int i = 0; i < max_objs_; ++i) {
+            if (!h_active_raw_[i]) continue;
+            TrackStateSnapshot snap;
+            snap.obj_id = h_track_ids_[i];
+            snap.class_id = h_classes_[i];
+            snap.age = h_age_[i];
+            snap.score = h_scores_[i];
+            snap.state.assign(
+                h_states_.begin() + static_cast<size_t>(i) * 8,
+                h_states_.begin() + static_cast<size_t>(i + 1) * 8
+            );
+            snap.covariance.assign(
+                h_covs_.begin() + static_cast<size_t>(i) * 64,
+                h_covs_.begin() + static_cast<size_t>(i + 1) * 64
+            );
+            snapshots.push_back(std::move(snap));
+        }
+        return snapshots;
+    }
+
+    std::vector<TrackStateSnapshot> get_motion_snapshots_for_track_ids(
+        const std::vector<int>& track_ids,
+        cudaStream_t stream
+    ) {
+        if (track_ids.empty()) {
+            return {};
+        }
+        checkCuda(cudaMemcpyAsync(h_active_raw_.data(), d_active_, max_objs_ * sizeof(bool), cudaMemcpyDeviceToHost, stream));
+        checkCuda(cudaMemcpyAsync(h_track_ids_.data(), d_track_ids_, max_objs_ * sizeof(int), cudaMemcpyDeviceToHost, stream));
+        cudaStreamSynchronize(stream);
+        h_dirty_ = false;
+
+        std::unordered_set<int> wanted(track_ids.begin(), track_ids.end());
+        std::vector<int> matched_slots;
+        matched_slots.reserve(track_ids.size());
+        for (int slot = 0; slot < max_objs_; ++slot) {
+            if (!h_active_raw_[slot]) continue;
+            if (wanted.find(h_track_ids_[slot]) != wanted.end()) {
+                matched_slots.push_back(slot);
+            }
+        }
+        if (matched_slots.empty()) {
+            return {};
+        }
+
+        std::vector<TrackStateSnapshot> snapshots(matched_slots.size());
+        std::vector<float> matched_states(matched_slots.size() * 8, 0.0f);
+        std::vector<float> matched_covs(matched_slots.size() * 64, 0.0f);
+        std::vector<int> matched_classes(matched_slots.size(), 0);
+        std::vector<int> matched_ages(matched_slots.size(), 0);
+        std::vector<float> matched_scores(matched_slots.size(), 0.0f);
+
+        for (size_t i = 0; i < matched_slots.size(); ++i) {
+            const int slot = matched_slots[i];
+            snapshots[i].obj_id = h_track_ids_[slot];
+            checkCuda(cudaMemcpyAsync(
+                matched_states.data() + i * 8,
+                d_states_ + static_cast<size_t>(slot) * 8,
+                8 * sizeof(float),
+                cudaMemcpyDeviceToHost,
+                stream
+            ));
+            checkCuda(cudaMemcpyAsync(
+                matched_covs.data() + i * 64,
+                d_covs_ + static_cast<size_t>(slot) * 64,
+                64 * sizeof(float),
+                cudaMemcpyDeviceToHost,
+                stream
+            ));
+            checkCuda(cudaMemcpyAsync(
+                matched_classes.data() + i,
+                d_classes_ + slot,
+                sizeof(int),
+                cudaMemcpyDeviceToHost,
+                stream
+            ));
+            checkCuda(cudaMemcpyAsync(
+                matched_ages.data() + i,
+                d_age_ + slot,
+                sizeof(int),
+                cudaMemcpyDeviceToHost,
+                stream
+            ));
+            checkCuda(cudaMemcpyAsync(
+                matched_scores.data() + i,
+                d_scores_ + slot,
+                sizeof(float),
+                cudaMemcpyDeviceToHost,
+                stream
+            ));
+        }
+        cudaStreamSynchronize(stream);
+
+        for (size_t i = 0; i < matched_slots.size(); ++i) {
+            snapshots[i].class_id = matched_classes[i];
+            snapshots[i].age = matched_ages[i];
+            snapshots[i].score = matched_scores[i];
+            snapshots[i].state.assign(
+                matched_states.begin() + static_cast<ptrdiff_t>(i * 8),
+                matched_states.begin() + static_cast<ptrdiff_t>((i + 1) * 8)
+            );
+            snapshots[i].covariance.assign(
+                matched_covs.begin() + static_cast<ptrdiff_t>(i * 64),
+                matched_covs.begin() + static_cast<ptrdiff_t>((i + 1) * 64)
+            );
+        }
+        return snapshots;
+    }
+
+    std::vector<TrackCandidateSnapshot> get_tentative_candidates(cudaStream_t stream) {
+        checkCuda(cudaMemcpyAsync(h_active_raw_.data(),            d_active_,                    max_objs_ *     sizeof(bool),  cudaMemcpyDeviceToHost, stream));
+        checkCuda(cudaMemcpyAsync(h_states_.data(),                d_states_,                    max_objs_ * 8 * sizeof(float), cudaMemcpyDeviceToHost, stream));
+        checkCuda(cudaMemcpyAsync(h_age_.data(),                   d_age_,                       max_objs_ *     sizeof(int),   cudaMemcpyDeviceToHost, stream));
+        checkCuda(cudaMemcpyAsync(h_scores_.data(),                d_scores_,                    max_objs_ *     sizeof(float), cudaMemcpyDeviceToHost, stream));
+        checkCuda(cudaMemcpyAsync(h_classes_.data(),               d_classes_,                   max_objs_ *     sizeof(int),   cudaMemcpyDeviceToHost, stream));
+        checkCuda(cudaMemcpyAsync(h_track_ids_.data(),             d_track_ids_,                 max_objs_ *     sizeof(int),   cudaMemcpyDeviceToHost, stream));
+        checkCuda(cudaMemcpyAsync(h_state_.data(),                 d_state_,                     max_objs_ *     sizeof(int),   cudaMemcpyDeviceToHost, stream));
+        checkCuda(cudaMemcpyAsync(h_hit_streak_.data(),            d_hit_streak_,                max_objs_ *     sizeof(int),   cudaMemcpyDeviceToHost, stream));
+        checkCuda(cudaMemcpyAsync(h_confirm_streak_required_.data(), d_confirm_streak_required_, max_objs_ *     sizeof(int),   cudaMemcpyDeviceToHost, stream));
+        cudaStreamSynchronize(stream);
+        h_dirty_ = false;
 
         std::vector<TrackCandidateSnapshot> candidates;
         for (int i = 0; i < max_objs_; ++i) {
@@ -870,7 +1322,7 @@ private:
         return confirm_streak_ + 1;
     }
 
-    int max_objs_, embed_dim_, track_id_counter_, max_assoc_;
+    int max_objs_, embed_dim_, max_assoc_;
     float track_thresh_ = 0.1f, high_thresh_ = 0.5f, match_thresh_ = 0.8f, mid_thresh_ = 0.40f, new_track_thresh_ = 0.40f;
     float reid_cos_threshold_ = 0.90f, reid_iou_low_ = 0.3f, reid_iou_high_ = 0.6f, reid_weight_ = 0.4f;
     float iou_stage1_gate_ = 0.30f;
@@ -880,24 +1332,40 @@ private:
     bool adaptive_confirmation_ = false;
     bool nsa_kalman_ = false;
     float *d_states_, *d_covs_, *d_scores_, *d_features_;
-    float *d_cost_matrix_, *d_sinkhorn_v_, *d_topk_probs_, *d_auction_prices_;
+    float *d_cost_matrix_, *d_sinkhorn_v_, *d_topk_probs_;
+    uint64_t *d_auction_prices_;
     int *d_topk_indices_, *d_trk_to_det_, *d_det_to_trk_;
     int *d_matched_pairs_, *d_new_slots_;
     int *d_state_, *d_hit_streak_, *d_confirm_streak_required_;
     float *d_score_sum_;
-    int *d_det_to_trk_h_;
     bool* d_active_;
     bool* d_has_clean_embedding_;
     int* d_candidate_count_;
     float* d_s_inv_;
     int *d_age_, *d_classes_, *d_track_ids_;
-    std::vector<float> h_states_, h_scores_;
-    std::vector<uint8_t> h_active_raw_;
-    std::vector<uint8_t> h_has_clean_embedding_;
-    std::vector<int> h_age_, h_classes_, h_track_ids_;
-    std::vector<int> h_state_, h_hit_streak_, h_confirm_streak_required_;
-    std::vector<float> h_score_sum_;
-    std::vector<int> h_matched_pairs_, h_new_slots_, h_det_to_trk_, h_topk_indices_;
+    // M2: GPU spawn
+    int *d_free_slots_  = nullptr;
+    int *d_n_free_      = nullptr;
+    int *d_slot_cursor_ = nullptr;
+    int *d_track_id_ctr_= nullptr;
+    // M2: compact result outputs
+    float *d_res_boxes_   = nullptr;
+    float *d_res_scores_  = nullptr;
+    int   *d_res_ids_     = nullptr;
+    int   *d_res_classes_ = nullptr;
+    int   *d_res_det_idx_ = nullptr;
+    int   *d_res_count_   = nullptr;
+    // Host caches — valid only after a lazy sync (set_clean_embedding_flags /
+    // update_reference_features_impl / get_tentative_candidates).
+    // h_dirty_ is set true by update() and cleared by each lazy-sync function.
+    // Any read of h_* arrays while h_dirty_==true is a stale-read bug.
+    bool h_dirty_ = false;
+    std::vector<float>    h_states_, h_covs_, h_scores_;
+    std::vector<uint8_t>  h_active_raw_;
+    std::vector<uint8_t>  h_has_clean_embedding_;
+    std::vector<int>      h_age_, h_classes_, h_track_ids_;
+    std::vector<int>      h_state_, h_hit_streak_, h_confirm_streak_required_;
+    std::vector<float>    h_score_sum_;
 };
 
 GPUByteTracker::GPUByteTracker(int max_objs, int embedding_dim) : pimpl_(std::make_unique<Impl>(max_objs, embedding_dim)) {}
@@ -910,10 +1378,22 @@ void GPUByteTracker::set_params(float track_thresh, float high_thresh, float mat
 void GPUByteTracker::set_reid_params(float cos_threshold, float iou_low, float iou_high, float weight) { pimpl_->set_reid_params(cos_threshold, iou_low, iou_high, weight); }
 void GPUByteTracker::update_reference_features(int* track_ids, float* features, int num, cudaStream_t stream) { pimpl_->update_reference_features_impl(track_ids, features, num, stream); }
 void GPUByteTracker::set_clean_embedding_flags(int* track_ids, bool* flags, int n, cudaStream_t stream) { pimpl_->set_clean_embedding_flags(track_ids, flags, n, stream); }
+void GPUByteTracker::update_into(
+    float* b, float* s, int* c, int n, cudaStream_t stream,
+    float* out_boxes, float* out_scores, int* out_ids, int* out_classes, int* out_det_idx, int* out_count,
+    float* e, float* g, float l, float m) {
+    pimpl_->update_into(
+        b, s, c, n, stream,
+        out_boxes, out_scores, out_ids, out_classes, out_det_idx, out_count,
+        e, g, l, m);
+}
 std::vector<TrackResult> GPUByteTracker::update(float* b, float* s, int* c, int n, cudaStream_t stream, float* e, float* g, float l, float m) {
     return pimpl_->update(b, s, c, n, stream, e, g, l, m);
 }
-std::vector<TrackStateSnapshot> GPUByteTracker::get_state_snapshots(cudaStream_t stream) { return {}; }
+std::vector<TrackStateSnapshot> GPUByteTracker::get_state_snapshots(cudaStream_t stream) { return pimpl_->get_state_snapshots(stream); }
+std::vector<TrackStateSnapshot> GPUByteTracker::get_motion_snapshots_for_track_ids(const std::vector<int>& track_ids, cudaStream_t stream) {
+    return pimpl_->get_motion_snapshots_for_track_ids(track_ids, stream);
+}
 std::vector<TrackCandidateSnapshot> GPUByteTracker::get_tentative_candidates(cudaStream_t stream) { return pimpl_->get_tentative_candidates(stream); }
 
 __device__ float get_iou_device(const float* b1, const float* b2) {
@@ -1119,6 +1599,77 @@ __global__ void nms_select_kernel(
     *out_count = keep_count;
 }
 
+__global__ void nms_bitmask_counted_kernel(
+    const float* boxes,
+    const int* classes,
+    const int64_t* order_indices,
+    const int* valid_count_ptr,
+    int max_dets,
+    int col_blocks,
+    uint64_t* suppression_masks,
+    float iou_threshold,
+    bool class_aware
+) {
+    const int valid_count = min(*valid_count_ptr, max_dets);
+    const int col_block = blockIdx.x;
+    const int row_block = blockIdx.y;
+    const int row_offset = threadIdx.x;
+    const int row_pos = row_block * NMS_BLOCK_SIZE + row_offset;
+    if (row_pos >= valid_count || row_block > col_block) {
+        return;
+    }
+
+    const int row_idx = static_cast<int>(order_indices[row_pos]);
+    const float* row_box = boxes + row_idx * 4;
+    const int row_class = classes[row_idx];
+    const int col_start = col_block == row_block ? row_offset + 1 : 0;
+    uint64_t mask = 0ULL;
+    for (int col_offset = col_start; col_offset < NMS_BLOCK_SIZE; ++col_offset) {
+        const int col_pos = col_block * NMS_BLOCK_SIZE + col_offset;
+        if (col_pos >= valid_count) {
+            break;
+        }
+        const int col_idx = static_cast<int>(order_indices[col_pos]);
+        if (class_aware && classes[col_idx] != row_class) {
+            continue;
+        }
+        const float iou = get_iou_device(row_box, boxes + col_idx * 4);
+        if (iou > iou_threshold) {
+            mask |= 1ULL << col_offset;
+        }
+    }
+    suppression_masks[row_pos * col_blocks + col_block] = mask;
+}
+
+__global__ void nms_select_counted_kernel(
+    const uint64_t* suppression_masks,
+    const int64_t* order_indices,
+    const int* valid_count_ptr,
+    int max_dets,
+    int col_blocks,
+    int* keep_indices,
+    uint64_t* remv,
+    int* out_count
+) {
+    if (blockIdx.x != 0 || threadIdx.x != 0) return;
+
+    const int valid_count = min(*valid_count_ptr, max_dets);
+    int keep_count = 0;
+    for (int order_pos = 0; order_pos < valid_count; ++order_pos) {
+        const int block = order_pos / NMS_BLOCK_SIZE;
+        const int offset = order_pos % NMS_BLOCK_SIZE;
+        if (remv[block] & (1ULL << offset)) {
+            continue;
+        }
+        keep_indices[keep_count++] = static_cast<int>(order_indices[order_pos]);
+        const uint64_t* row_masks = suppression_masks + order_pos * col_blocks;
+        for (int col = block; col < col_blocks; ++col) {
+            remv[col] |= row_masks[col];
+        }
+    }
+    *out_count = keep_count;
+}
+
 void merge_cross_tile_duplicates_cuda(const float* boxes_ptr, const float* scores_ptr, const int* classes_ptr, int num_dets, int* anchor_indices_ptr, float* box_sums_ptr, float* score_sums_ptr, int* score_bits_max_ptr, int* cluster_counts_ptr, float* out_boxes_ptr, float* out_scores_ptr, int* out_classes_ptr, int* out_count_ptr, float iou_threshold, float center_threshold, float area_ratio_threshold, cudaStream_t stream) {
     if (num_dets <= 0) { checkCuda(cudaMemsetAsync(out_count_ptr, 0, sizeof(int), stream)); return; }
     checkCuda(cudaMemsetAsync(box_sums_ptr, 0, num_dets * 4 * sizeof(float), stream));
@@ -1222,6 +1773,54 @@ void nms_cuda(
         suppression_masks_ptr,
         order_indices_ptr,
         num_dets,
+        col_blocks,
+        keep_indices_ptr,
+        remv_ptr,
+        out_count_ptr
+    );
+    checkCuda(cudaGetLastError());
+}
+
+void nms_counted_cuda(
+    const float* boxes_ptr,
+    const float* scores_ptr,
+    const int* classes_ptr,
+    const int64_t* order_indices_ptr,
+    int max_dets,
+    const int* valid_count_ptr,
+    int* keep_indices_ptr,
+    uint64_t* suppression_masks_ptr,
+    uint64_t* remv_ptr,
+    int* out_count_ptr,
+    float iou_threshold,
+    bool class_aware,
+    cudaStream_t stream
+) {
+    (void)scores_ptr;
+    checkCuda(cudaMemsetAsync(out_count_ptr, 0, sizeof(int), stream));
+    if (max_dets <= 0) {
+        return;
+    }
+    const int col_blocks = (max_dets + NMS_BLOCK_SIZE - 1) / NMS_BLOCK_SIZE;
+    checkCuda(cudaMemsetAsync(suppression_masks_ptr, 0, static_cast<size_t>(max_dets) * col_blocks * sizeof(uint64_t), stream));
+    checkCuda(cudaMemsetAsync(remv_ptr, 0, col_blocks * sizeof(uint64_t), stream));
+    const dim3 blocks(col_blocks, col_blocks);
+    nms_bitmask_counted_kernel<<<blocks, NMS_BLOCK_SIZE, 0, stream>>>(
+        boxes_ptr,
+        classes_ptr,
+        order_indices_ptr,
+        valid_count_ptr,
+        max_dets,
+        col_blocks,
+        suppression_masks_ptr,
+        iou_threshold,
+        class_aware
+    );
+    nms_select_counted_kernel<<<1, 1, 0, stream>>>(
+        suppression_masks_ptr,
+        order_indices_ptr,
+        valid_count_ptr,
+        max_dets,
         col_blocks,
         keep_indices_ptr,
         remv_ptr,

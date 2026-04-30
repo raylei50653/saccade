@@ -1,8 +1,8 @@
 import asyncio
 import time
 import torch
-from perception.feature_extractor import TRTFeatureExtractor  # noqa: E402
-from perception.embedding_dispatcher import EmbeddingDispatcher  # noqa: E402
+from saccade.perception.feature_extractor import TRTFeatureExtractor  # noqa: E402  # noqa: E402
+from saccade.perception.embedding_dispatcher import EmbeddingDispatcher  # noqa: E402  # noqa: E402
 
 
 async def stream_producer(

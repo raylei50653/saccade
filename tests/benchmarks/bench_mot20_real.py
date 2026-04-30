@@ -10,10 +10,10 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 import numpy as np  # noqa: E402
-from perception.detector_trt import TRTYoloDetector  # noqa: E402  # noqa: E402
-from perception.tracker import SmartTracker  # noqa: E402  # noqa: E402
-from perception.cropper import ZeroCopyCropper  # noqa: E402  # noqa: E402
-from perception.feature_extractor import TRTFeatureExtractor  # noqa: E402  # noqa: E402
+from saccade.perception.detector_trt import TRTYoloDetector  # noqa: E402  # noqa: E402  # noqa: E402
+from saccade.perception.tracker import SmartTracker  # noqa: E402  # noqa: E402  # noqa: E402
+from saccade.perception.cropper import ZeroCopyCropper  # noqa: E402  # noqa: E402  # noqa: E402
+from saccade.perception.feature_extractor import TRTFeatureExtractor  # noqa: E402  # noqa: E402  # noqa: E402
 
 
 async def run_mot20_real_benchmark(seq_name="MOT20-04", limit_frames=100):

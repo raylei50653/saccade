@@ -21,7 +21,17 @@ GMC::GMC(int downscale,
       quality_level_(quality_level),
       min_distance_(min_distance),
       min_inliers_(min_inliers),
-      ransac_threshold_(ransac_threshold) {}
+      ransac_threshold_(ransac_threshold) {
+    cudaStreamCreate(&gmc_stream_);
+    cudaEventCreate(&prep_event_);
+}
+
+GMC::~GMC() {
+    if (gmc_stream_) cudaStreamDestroy(gmc_stream_);
+    if (prep_event_) cudaEventDestroy(prep_event_);
+    if (d_gray_small_) cudaFree(d_gray_small_);
+}
+
 
 void GMC::reset() {
     prev_gray_.release();
@@ -31,19 +41,20 @@ void GMC::reset() {
 std::vector<float> GMC::estimate(const float* frame_gpu_ptr, int width, int height, cudaStream_t stream) {
     int dst_w = width / downscale_;
     int dst_h = height / downscale_;
-    size_t needed = dst_w * dst_h;
-
-    if (d_gray_small_ == nullptr || gray_small_size_ < needed) {
+    size_t needed = dst_w * dst_h;    if (d_gray_small_ == nullptr || gray_small_size_ < needed) {
         if (d_gray_small_) cudaFree(d_gray_small_);
         cudaMalloc(&d_gray_small_, needed);
         gray_small_size_ = needed;
     }
 
-    launch_grayscale_downscale(frame_gpu_ptr, (uint8_t*)d_gray_small_, width, height, dst_w, dst_h, stream);
+    cudaEventRecord(prep_event_, stream);
+    cudaStreamWaitEvent(gmc_stream_, prep_event_, 0);
+
+    launch_grayscale_downscale(frame_gpu_ptr, (uint8_t*)d_gray_small_, width, height, dst_w, dst_h, gmc_stream_);
     
     cv::Mat curr_gray(dst_h, dst_w, CV_8UC1);
-    cudaMemcpyAsync(curr_gray.data, d_gray_small_, needed, cudaMemcpyDeviceToHost, stream);
-    cudaStreamSynchronize(stream);
+    cudaMemcpyAsync(curr_gray.data, d_gray_small_, needed, cudaMemcpyDeviceToHost, gmc_stream_);
+    cudaStreamSynchronize(gmc_stream_);
 
     return estimate_mat(curr_gray, 1); // downscale already done
 }

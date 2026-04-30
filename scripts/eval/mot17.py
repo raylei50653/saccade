@@ -6,13 +6,16 @@ from pathlib import Path
 
 project_root = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(project_root))
+src_path = project_root / "src"
+if src_path.exists():
+    sys.path.insert(0, str(src_path))
 build_path = project_root / "build"
 if build_path.exists():
     sys.path.insert(0, str(build_path))
 
 # MUST IMPORT THIS BEFORE torchvision TO AVOID LIBJPEG CONFLICT
-from perception.detector_trt import TRTYoloDetector  # noqa: F401, E402
-from perception.eval.runner import run_eval  # noqa: E402
+from saccade.perception.detector_trt import TRTYoloDetector  # noqa: F401, E402
+from saccade.perception.eval.runner import run_eval  # noqa: E402
 
 
 def _help(text, *, range_hint=None, edge=None):
@@ -152,8 +155,18 @@ def build_parser():
     detect_group.add_argument(
         "--cross-tile-merge",
         action=argparse.BooleanOptionalAction,
-        default=False,
+        default=True,
         help="Merge duplicate detections across tile boundaries.",
+    )
+    detect_group.add_argument(
+        "--cross-tile-score-penalty",
+        type=float,
+        default=1.0,
+        help=_help(
+            "MOT17-b: multiply the score of cross-tile-merged boxes by this factor "
+            "(1.0 = no change, <1 makes merged boxes less aggressive in association).",
+            range_hint="0-1",
+        ),
     )
     detect_group.add_argument(
         "--nms-iou-threshold",
@@ -223,7 +236,7 @@ def build_parser():
     assoc_group.add_argument(
         "--match-thresh",
         type=float,
-        default=0.8,
+        default=0.78,
         help=_help(
             "Association similarity gate.",
             range_hint="0-1",
@@ -594,7 +607,7 @@ def build_parser():
     semantic_group.add_argument(
         "--semantic-threshold",
         type=float,
-        default=0.90,
+        default=0.91,
         help=_help("Similarity gate for semantic relinking.", range_hint="0-1"),
     )
     semantic_group.add_argument(
@@ -679,6 +692,48 @@ def build_parser():
             "Reject relink if top-1 and top-2 similarities are too close; 0 disables.",
             range_hint=">=0",
         ),
+    )
+    semantic_group.add_argument(
+        "--semantic-iou-weight",
+        type=float,
+        default=0.0,
+        help=_help(
+            "MOT17-a: blend IoU into joint ranking score (0 = pure cosine).",
+            range_hint=">=0",
+        ),
+    )
+    semantic_group.add_argument(
+        "--semantic-mahalanobis-weight",
+        type=float,
+        default=0.0,
+        help=_help(
+            "MOT17-a: blend normalised motion evidence into joint ranking score (0 = off).",
+            range_hint=">=0",
+        ),
+    )
+    semantic_group.add_argument(
+        "--semantic-dynamic-margin-crowd",
+        type=float,
+        default=0.0,
+        help=_help(
+            "MOT17-a: add this × crowd_factor to reciprocal margin (crowd_factor = min(1, (n_competitors-1)/8)).",
+            range_hint=">=0",
+        ),
+    )
+    semantic_group.add_argument(
+        "--semantic-dynamic-margin-age",
+        type=float,
+        default=0.0,
+        help=_help(
+            "MOT17-a: add this × (lost_frames/ttl) to reciprocal margin; penalises older lost tracks.",
+            range_hint=">=0",
+        ),
+    )
+    semantic_group.add_argument(
+        "--force-python-relinker",
+        action="store_true",
+        default=False,
+        help="Force Python relinker path (confound control: same algorithm as C++, different impl).",
     )
     semantic_group.add_argument(
         "--semantic-bank-inject",
@@ -785,7 +840,7 @@ def build_parser():
     trigger_group.add_argument(
         "--reid-score-threshold-low",
         type=float,
-        default=None,
+        default=2.0,
         help=_help(
             "Lower hysteresis threshold for staying active; unset reuses high threshold.",
             range_hint=">=0 or unset",
@@ -852,7 +907,7 @@ def build_parser():
     trigger_group.add_argument(
         "--reid-trigger-persist-frames",
         type=int,
-        default=1,
+        default=2,
         help=_help(
             "Frames score must stay high before trigger fires.", range_hint=">=1"
         ),
@@ -860,13 +915,13 @@ def build_parser():
     trigger_group.add_argument(
         "--reid-cooldown-frames",
         type=int,
-        default=0,
+        default=4,
         help=_help("Frames to suppress ReID after each trigger.", range_hint=">=0"),
     )
     trigger_group.add_argument(
         "--reid-birth-death-lost-min",
         type=float,
-        default=0.0,
+        default=0.1,
         help=_help(
             "Minimum lost-signal before birth/death boost applies.", range_hint=">=0"
         ),
