@@ -2,7 +2,7 @@ import os
 import torch
 import tensorrt as trt
 from typing import Dict, Tuple, Optional, List
-from perception.tracking import GPUByteTracker
+from saccade.perception.tracking import GPUByteTracker
 
 try:
     from saccade_perception_ext import TRTEngine as CppTRTEngine

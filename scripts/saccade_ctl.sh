@@ -66,7 +66,7 @@ case "$1" in
         ;;
     health)
         printf "🩺 Running internal health check...\n"
-        uv run python pipeline/health.py
+        uv run python src/saccade/pipeline/health.py
         ;;
     logs)
         case "$2" in

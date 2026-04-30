@@ -4,12 +4,12 @@ import torch
 import numpy as np
 import pynvml
 from typing import Tuple, Dict, Any, List
-from perception.detector_trt import TRTYoloDetector
-from perception.dispatcher import AsyncDispatcher
-from perception.feature_extractor import TRTFeatureExtractor
-from perception.embedding_dispatcher import AsyncEmbeddingDispatcher
-from storage.redis_cache import RedisCache
-from cognition.resource_manager import ResourceManager
+from saccade.perception.detector_trt import TRTYoloDetector
+from saccade.perception.dispatcher import AsyncDispatcher
+from saccade.perception.feature_extractor import TRTFeatureExtractor
+from saccade.perception.embedding_dispatcher import AsyncEmbeddingDispatcher
+from saccade.storage.redis_cache import RedisCache
+from saccade.resource.resource_manager import ResourceManager
 
 
 class BottleneckAnnealer:

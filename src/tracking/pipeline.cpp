@@ -8,7 +8,10 @@
 namespace saccade {
 
 PerceptionPipeline::PerceptionPipeline(FeatureExtractor* reid, Cropper* cropper, Config cfg)
-    : reid_(reid), cropper_(cropper), cfg_(cfg) {}
+    : reid_(reid), cropper_(cropper), cfg_(cfg) {
+    if (cfg_.max_detections > 0)
+        ensure_scratch(cfg_.max_detections, nullptr);
+}
 
 PerceptionPipeline::~PerceptionPipeline() {
     if (d_filter_keep_indices_) cudaFree(d_filter_keep_indices_);
@@ -20,6 +23,13 @@ PerceptionPipeline::~PerceptionPipeline() {
     if (d_nms_remv_) cudaFree(d_nms_remv_);
     if (d_nms_count_) cudaFree(d_nms_count_);
     if (d_crop_buf_) cudaFree(d_crop_buf_);
+    if (d_compact_boxes_)   cudaFree(d_compact_boxes_);
+    if (d_compact_scores_)  cudaFree(d_compact_scores_);
+    if (d_compact_classes_) cudaFree(d_compact_classes_);
+    if (d_compact_suspect_) cudaFree(d_compact_suspect_);
+    if (d_sort_keys_in_)    cudaFree(d_sort_keys_in_);
+    if (d_sort_keys_out_)   cudaFree(d_sort_keys_out_);
+    if (d_cub_sort_tmp_)    cudaFree(d_cub_sort_tmp_);
 }
 
 void PerceptionPipeline::ensure_scratch(int n_dets, cudaStream_t /*stream*/) {
@@ -43,6 +53,29 @@ void PerceptionPipeline::ensure_scratch(int n_dets, cudaStream_t /*stream*/) {
 
     if (!d_filter_count_) cudaMalloc(&d_filter_count_, sizeof(int));
     if (!d_nms_count_) cudaMalloc(&d_nms_count_, sizeof(int));
+
+    // M1: GPU compaction scratch
+    if (d_compact_boxes_)   cudaFree(d_compact_boxes_);
+    if (d_compact_scores_)  cudaFree(d_compact_scores_);
+    if (d_compact_classes_) cudaFree(d_compact_classes_);
+    if (d_compact_suspect_) cudaFree(d_compact_suspect_);
+    if (d_sort_keys_in_)    cudaFree(d_sort_keys_in_);
+    if (d_sort_keys_out_)   cudaFree(d_sort_keys_out_);
+    cudaMalloc(&d_compact_boxes_,   cap * 4 * sizeof(float));
+    cudaMalloc(&d_compact_scores_,  cap * sizeof(float));
+    cudaMalloc(&d_compact_classes_, cap * sizeof(int));
+    cudaMalloc(&d_compact_suspect_, cap * sizeof(bool));
+    cudaMalloc(&d_sort_keys_in_,    cap * sizeof(uint64_t));
+    cudaMalloc(&d_sort_keys_out_,   cap * sizeof(uint64_t));
+
+    // Query CUB temp storage required for argsort of `cap` elements
+    size_t new_tmp = argsort_scores_descending_bytes(cap);
+    if (new_tmp > cub_sort_tmp_bytes_) {
+        if (d_cub_sort_tmp_) cudaFree(d_cub_sort_tmp_);
+        cudaMalloc(&d_cub_sort_tmp_, new_tmp);
+        cub_sort_tmp_bytes_ = new_tmp;
+    }
+
     scratch_capacity_ = cap;
 }
 
@@ -54,23 +87,6 @@ void PerceptionPipeline::ensure_crop_buf(int n_boxes) {
     if (d_crop_buf_) cudaFree(d_crop_buf_);
     cudaMalloc(&d_crop_buf_, needed * sizeof(float));
     crop_buf_capacity_ = needed;
-}
-
-// Helper: argsort scores descending on CPU using pinned host copy
-static void fill_order_descending(
-    const float* d_scores, int n, int64_t* d_order, cudaStream_t stream)
-{
-    std::vector<float> h_scores(n);
-    cudaMemcpyAsync(h_scores.data(), d_scores, n * sizeof(float),
-                    cudaMemcpyDeviceToHost, stream);
-    cudaStreamSynchronize(stream);
-
-    std::vector<int64_t> order(n);
-    for (int i = 0; i < n; ++i) order[i] = i;
-    std::sort(order.begin(), order.end(),
-              [&](int64_t a, int64_t b){ return h_scores[a] > h_scores[b]; });
-    cudaMemcpyAsync(d_order, order.data(), n * sizeof(int64_t),
-                    cudaMemcpyHostToDevice, stream);
 }
 
 int PerceptionPipeline::process_detections(
@@ -87,9 +103,40 @@ int PerceptionPipeline::process_detections(
     cudaStream_t stream)
 {
     if (n_in <= 0) return 0;
+    int* d_out_count = nullptr;
+    cudaMalloc(&d_out_count, sizeof(int));
+    process_detections_into(
+        boxes_ptr, scores_ptr, classes_ptr, n_in,
+        frame_w, frame_h, is_tiled,
+        out_boxes, out_scores, out_classes, out_suspect,
+        d_out_count, stream);
+    int n_out = 0;
+    cudaMemcpyAsync(&n_out, d_out_count, sizeof(int), cudaMemcpyDeviceToHost, stream);
+    cudaStreamSynchronize(stream);
+    cudaFree(d_out_count);
+    return n_out;
+}
+
+void PerceptionPipeline::process_detections_into(
+    const float* boxes_ptr,
+    const float* scores_ptr,
+    const int*   classes_ptr,
+    int n_in,
+    int frame_w, int frame_h,
+    bool is_tiled,
+    float* out_boxes,
+    float* out_scores,
+    int*   out_classes,
+    bool*  out_suspect,
+    int*   out_count,
+    cudaStream_t stream)
+{
+    if (n_in <= 0) {
+        cudaMemsetAsync(out_count, 0, sizeof(int), stream);
+        return;
+    }
     ensure_scratch(n_in, stream);
 
-    // Stage 1: filter (score threshold + geometry prior)
     cudaMemsetAsync(d_filter_count_, 0, sizeof(int), stream);
     filter_detections_cuda(
         boxes_ptr, scores_ptr, classes_ptr, n_in,
@@ -102,91 +149,36 @@ int PerceptionPipeline::process_detections(
         cfg_.person_min_aspect, cfg_.person_max_aspect,
         cfg_.person_min_area_ratio, cfg_.person_max_area_ratio,
         stream);
-    int n_filtered = 0;
-    cudaMemcpyAsync(&n_filtered, d_filter_count_, sizeof(int),
-                    cudaMemcpyDeviceToHost, stream);
-    cudaStreamSynchronize(stream);
-    if (n_filtered <= 0) return 0;
+    gather_compact3_counted_cuda(
+        boxes_ptr, scores_ptr, classes_ptr,
+        out_boxes, out_scores, out_classes,
+        d_filter_keep_indices_, d_filter_count_, n_in, stream);
+    copy_bool_counted_cuda(d_filter_suspect_flags_, out_suspect, d_filter_count_, n_in, stream);
 
-    // Compact filtered arrays into out_* buffers
-    // We use host-side compaction (already synced) for simplicity
-    {
-        std::vector<int>   h_keep(n_filtered);
-        std::vector<uint8_t>  h_suspect(n_filtered);
-        cudaMemcpy(h_keep.data(), d_filter_keep_indices_, n_filtered * sizeof(int), cudaMemcpyDeviceToHost);
-        cudaMemcpy(h_suspect.data(), d_filter_suspect_flags_, n_filtered * sizeof(bool), cudaMemcpyDeviceToHost);
-
-        std::vector<float> h_boxes_in(n_in * 4);
-        std::vector<float> h_scores_in(n_in);
-        std::vector<int>   h_classes_in(n_in);
-        cudaMemcpy(h_boxes_in.data(), boxes_ptr, n_in * 4 * sizeof(float), cudaMemcpyDeviceToHost);
-        cudaMemcpy(h_scores_in.data(), scores_ptr, n_in * sizeof(float), cudaMemcpyDeviceToHost);
-        cudaMemcpy(h_classes_in.data(), classes_ptr, n_in * sizeof(int), cudaMemcpyDeviceToHost);
-
-        std::vector<float> h_boxes_f(n_filtered * 4);
-        std::vector<float> h_scores_f(n_filtered);
-        std::vector<int>   h_classes_f(n_filtered);
-        for (int i = 0; i < n_filtered; ++i) {
-            int k = h_keep[i];
-            for (int j = 0; j < 4; ++j) h_boxes_f[i * 4 + j] = h_boxes_in[k * 4 + j];
-            h_scores_f[i] = h_scores_in[k];
-            h_classes_f[i] = h_classes_in[k];
-        }
-        cudaMemcpyAsync(out_boxes, h_boxes_f.data(), n_filtered * 4 * sizeof(float), cudaMemcpyHostToDevice, stream);
-        cudaMemcpyAsync(out_scores, h_scores_f.data(), n_filtered * sizeof(float), cudaMemcpyHostToDevice, stream);
-        cudaMemcpyAsync(out_classes, h_classes_f.data(), n_filtered * sizeof(int), cudaMemcpyHostToDevice, stream);
-        cudaMemcpyAsync(out_suspect, h_suspect.data(), n_filtered * sizeof(bool), cudaMemcpyHostToDevice, stream);
-        cudaStreamSynchronize(stream);
-    }
-
-    // Stage 2: NMS
-    ensure_scratch(n_filtered, stream);
-    fill_order_descending(out_scores, n_filtered, d_nms_order_, stream);
+    const int col_blocks = (n_in + 63) / 64;
+    cudaMemsetAsync(d_nms_suppression_, 0, (size_t)n_in * col_blocks * sizeof(uint64_t), stream);
+    cudaMemsetAsync(d_nms_remv_, 0, col_blocks * sizeof(uint64_t), stream);
     cudaMemsetAsync(d_nms_count_, 0, sizeof(int), stream);
 
-    int col_blocks = (n_filtered + 63) / 64;
-    cudaMemsetAsync(d_nms_suppression_, 0, (size_t)n_filtered * col_blocks * sizeof(uint64_t), stream);
-    cudaMemsetAsync(d_nms_remv_, 0, col_blocks * sizeof(uint64_t), stream);
+    argsort_scores_descending_cuda(
+        out_scores, n_in,
+        d_nms_order_, d_sort_keys_in_, d_sort_keys_out_,
+        d_cub_sort_tmp_, cub_sort_tmp_bytes_, stream);
 
-    nms_cuda(
+    nms_counted_cuda(
         out_boxes, out_scores, out_classes, d_nms_order_,
-        n_filtered, d_nms_keep_, d_nms_suppression_, d_nms_remv_,
+        n_in, d_filter_count_, d_nms_keep_, d_nms_suppression_, d_nms_remv_,
         d_nms_count_, cfg_.nms_threshold, false, stream);
 
-    int n_nms = 0;
-    cudaMemcpy(&n_nms, d_nms_count_, sizeof(int), cudaMemcpyDeviceToHost);
-    if (n_nms <= 0) return 0;
-    if (n_nms == n_filtered) return n_nms;
-
-    // Compact NMS result back into out_* in-place (host-side)
-    {
-        std::vector<int> h_nms_keep(n_nms);
-        cudaMemcpy(h_nms_keep.data(), d_nms_keep_, n_nms * sizeof(int), cudaMemcpyDeviceToHost);
-        std::vector<float> h_boxes(n_filtered * 4), h_scores(n_filtered);
-        std::vector<int>   h_classes(n_filtered);
-        std::vector<uint8_t>  h_suspect(n_filtered);
-        cudaMemcpy(h_boxes.data(), out_boxes, n_filtered * 4 * sizeof(float), cudaMemcpyDeviceToHost);
-        cudaMemcpy(h_scores.data(), out_scores, n_filtered * sizeof(float), cudaMemcpyDeviceToHost);
-        cudaMemcpy(h_classes.data(), out_classes, n_filtered * sizeof(int), cudaMemcpyDeviceToHost);
-        cudaMemcpy(h_suspect.data(), out_suspect, n_filtered * sizeof(bool), cudaMemcpyDeviceToHost);
-
-        std::vector<float>   h_boxes_out(n_nms * 4), h_scores_out(n_nms);
-        std::vector<int>     h_classes_out(n_nms);
-        std::vector<uint8_t> h_suspect_out(n_nms);
-        for (int i = 0; i < n_nms; ++i) {
-            int k = h_nms_keep[i];
-            for (int j = 0; j < 4; ++j) h_boxes_out[i * 4 + j] = h_boxes[k * 4 + j];
-            h_scores_out[i] = h_scores[k];
-            h_classes_out[i] = h_classes[k];
-            h_suspect_out[i] = h_suspect[k];
-        }
-        cudaMemcpyAsync(out_boxes, h_boxes_out.data(), n_nms * 4 * sizeof(float), cudaMemcpyHostToDevice, stream);
-        cudaMemcpyAsync(out_scores, h_scores_out.data(), n_nms * sizeof(float), cudaMemcpyHostToDevice, stream);
-        cudaMemcpyAsync(out_classes, h_classes_out.data(), n_nms * sizeof(int), cudaMemcpyHostToDevice, stream);
-        cudaMemcpyAsync(out_suspect, h_suspect_out.data(), n_nms * sizeof(uint8_t), cudaMemcpyHostToDevice, stream);
-        cudaStreamSynchronize(stream);
-    }
-    return n_nms;
+    gather_compact4_counted_cuda(
+        out_boxes, out_scores, out_classes, out_suspect,
+        d_compact_boxes_, d_compact_scores_, d_compact_classes_, d_compact_suspect_,
+        d_nms_keep_, d_nms_count_, n_in, stream);
+    cudaMemcpyAsync(out_boxes,   d_compact_boxes_,   n_in * 4 * sizeof(float), cudaMemcpyDeviceToDevice, stream);
+    cudaMemcpyAsync(out_scores,  d_compact_scores_,  n_in *     sizeof(float), cudaMemcpyDeviceToDevice, stream);
+    cudaMemcpyAsync(out_classes, d_compact_classes_, n_in *     sizeof(int),   cudaMemcpyDeviceToDevice, stream);
+    cudaMemcpyAsync(out_suspect, d_compact_suspect_, n_in *     sizeof(bool),  cudaMemcpyDeviceToDevice, stream);
+    cudaMemcpyAsync(out_count, d_nms_count_, sizeof(int), cudaMemcpyDeviceToDevice, stream);
 }
 
 void PerceptionPipeline::extract_reid(
@@ -196,17 +188,65 @@ void PerceptionPipeline::extract_reid(
     cudaStream_t stream)
 {
     if (!reid_ || !cropper_ || n_boxes <= 0) return;
+    if (reid_profiling_enabled_) {
+        reset_reid_profile_stats();
+        last_reid_profile_stats_.images = n_boxes;
+    }
     ensure_crop_buf(n_boxes);
+    cudaEvent_t start = nullptr;
+    cudaEvent_t stop = nullptr;
+    if (reid_profiling_enabled_) {
+        cudaEventCreate(&start);
+        cudaEventCreate(&stop);
+    }
+    if (reid_profiling_enabled_) cudaEventRecord(start, stream);
     cropper_->process_gpu(
         const_cast<void*>(reinterpret_cast<const void*>(frame_ptr)),
         frame_w, frame_h,
         const_cast<float*>(boxes_ptr), n_boxes,
         d_crop_buf_, stream);
+    if (reid_profiling_enabled_) {
+        cudaEventRecord(stop, stream);
+        cudaEventSynchronize(stop);
+        float ms = 0.0f;
+        cudaEventElapsedTime(&ms, start, stop);
+        last_reid_profile_stats_.crop_ms += ms;
+    }
     reid_->extract(d_crop_buf_, n_boxes, out_embeds, stream);
+    if (reid_profiling_enabled_) {
+        const auto feature_stats = reid_->get_profile_stats();
+        last_reid_profile_stats_.extract_pre_normalize_ms = feature_stats.pre_normalize_ms;
+        last_reid_profile_stats_.extract_trt_enqueue_ms = feature_stats.trt_enqueue_ms;
+        last_reid_profile_stats_.extract_l2_normalize_ms = feature_stats.l2_normalize_ms;
+        last_reid_profile_stats_.extract_total_ms = feature_stats.total_ms;
+        last_reid_profile_stats_.chunks = feature_stats.chunks;
+        last_reid_profile_stats_.total_ms =
+            last_reid_profile_stats_.crop_ms + last_reid_profile_stats_.extract_total_ms;
+        cudaEventDestroy(start);
+        cudaEventDestroy(stop);
+    }
 }
 
 int PerceptionPipeline::get_embed_dim() const {
     return reid_ ? reid_->get_feature_dim() : 0;
+}
+
+void PerceptionPipeline::set_reid_profiling_enabled(bool enabled) {
+    reid_profiling_enabled_ = enabled;
+    if (reid_) {
+        reid_->set_profiling_enabled(enabled);
+    }
+}
+
+void PerceptionPipeline::reset_reid_profile_stats() {
+    last_reid_profile_stats_ = ReIDProfileStats{};
+    if (reid_) {
+        reid_->reset_profile_stats();
+    }
+}
+
+PerceptionPipeline::ReIDProfileStats PerceptionPipeline::get_reid_profile_stats() const {
+    return last_reid_profile_stats_;
 }
 
 } // namespace saccade

@@ -13,12 +13,12 @@ import torch.nn.functional as F  # noqa: E402
 import numpy as np  # noqa: E402
 import argparse  # noqa: E402
 from typing import List, Dict  # noqa: E402
-from perception.detector_trt import TRTYoloDetector  # noqa: E402
-from perception.feature_extractor import TRTFeatureExtractor  # noqa: E402
-from perception.cropper import ZeroCopyCropper  # noqa: E402
-from perception.tracking import SmartTracker  # noqa: E402
-from perception.feature_bank import FeatureBank  # noqa: E402
-from media.mediamtx_client import MediaMTXClient  # noqa: E402
+from saccade.perception.detector_trt import TRTYoloDetector  # noqa: E402
+from saccade.perception.feature_extractor import TRTFeatureExtractor  # noqa: E402
+from saccade.perception.cropper import ZeroCopyCropper  # noqa: E402
+from saccade.perception.tracking import SmartTracker  # noqa: E402
+from saccade.perception.feature_bank import FeatureBank  # noqa: E402
+from saccade.media.mediamtx_client import MediaMTXClient  # noqa: E402
 from dotenv import load_dotenv  # noqa: E402
 
 load_dotenv()

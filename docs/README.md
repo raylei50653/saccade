@@ -76,7 +76,7 @@ understand the current intended system shape.
 ## Notes
 
 - Some documents still capture historical milestones or earlier design phases.
-- If a document conflicts with current code under `perception/`, `scripts/eval/`,
+- If a document conflicts with current code under `src/saccade/perception/`, `scripts/eval/`,
   `src/`, or `tests/`, treat the code as the source of truth.
 - The most actively maintained evaluation path is now:
   - `scripts/eval/mot17.py`

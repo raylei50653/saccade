@@ -23,6 +23,15 @@ enum class ModelType {
  */
 class SACCADE_PERCEPTION_API FeatureExtractor {
 public:
+    struct ProfileStats {
+        double pre_normalize_ms = 0.0;
+        double trt_enqueue_ms = 0.0;
+        double l2_normalize_ms = 0.0;
+        double total_ms = 0.0;
+        int chunks = 0;
+        int images = 0;
+    };
+
     FeatureExtractor(const std::string& model_path, ModelType type, int max_batch = 32);
     ~FeatureExtractor();
 
@@ -45,6 +54,9 @@ public:
     int get_feature_dim() const;
     int get_max_batch() const;
     std::pair<int, int> get_input_hw() const;
+    void set_profiling_enabled(bool enabled);
+    void reset_profile_stats();
+    ProfileStats get_profile_stats() const;
 
 private:
     std::unique_ptr<TRTEngine> engine_;
@@ -57,6 +69,8 @@ private:
     std::string input_name_;
     std::string output_name_;
     std::vector<std::pair<std::string, void*>> scratch_buffers_;
+    bool profiling_enabled_ = false;
+    ProfileStats last_profile_stats_{};
 
     // Model-specific normalization parameters on GPU
     void* d_mean_ = nullptr;

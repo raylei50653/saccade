@@ -69,10 +69,10 @@ All significant technical choices must be documented in `docs/decisions/` using 
 - **Pre-commit Validation:** Before staging or committing ANY Python code changes, you MUST run type checks (`uv run mypy .` or `docker-compose exec saccade uv run mypy .`) and ensure they pass. Do not commit code with unresolved typing errors unless explicitly instructed.
 
 ## Directory Map
-- `perception/`: YOLO11 inference, SigLIP 2 embedding, Semantic Drift filtering.
-- `cognition/`: Resource management and frame selection logic.
-- `media/`: MediaMTX client, FFmpeg/GStreamer Zero-Copy utilities.
-- `storage/`: Vector DB (Chroma) and Redis real-time track cache.
-- `pipeline/`: High-level orchestration and health monitoring.
+- `src/saccade/perception/`: YOLO11 inference, SigLIP 2 embedding, Semantic Drift filtering.
+- `src/saccade/resource/`: Resource management and frame selection logic.
+- `src/saccade/media/`: MediaMTX client, FFmpeg/GStreamer Zero-Copy utilities.
+- `src/saccade/storage/`: Vector DB (Chroma) and Redis real-time track cache.
+- `src/saccade/pipeline/`: High-level orchestration and health monitoring.
 - `configs/`: Hardware-specific profiles and model thresholds.
 - `scripts/`: Devops, TensorRT building, and export tools.

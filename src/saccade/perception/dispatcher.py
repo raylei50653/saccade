@@ -2,14 +2,14 @@ import asyncio
 import torch
 import time
 from typing import List, Tuple, Dict, Any, Optional, Callable
-from perception.detector_trt import TRTYoloDetector
+from saccade.perception.detector_trt import TRTYoloDetector
 
 try:
     from saccade_tracking_ext import GPUByteTracker
 except ImportError:
     # Fallback or placeholder if ext not built
     GPUByteTracker = Any
-from cognition.resource_manager import ResourceManager, DegradationLevel
+from saccade.resource.resource_manager import ResourceManager, DegradationLevel
 
 # 定義 CallBack 類型以滿足 Mypy
 TrackResultCallback = Callable[

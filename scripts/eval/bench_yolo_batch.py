@@ -12,7 +12,7 @@ build_path = project_root / "build"
 if build_path.exists():
     sys.path.insert(0, str(build_path))
 
-from perception.detector_trt import TRTYoloDetector  # noqa: E402
+from saccade.perception.detector_trt import TRTYoloDetector  # noqa: E402
 
 
 def run_benchmark(engine: str, batches: list[int], warmup: int, iters: int) -> None:

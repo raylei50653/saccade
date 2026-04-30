@@ -142,7 +142,7 @@ if (h_active_raw_[i] && h_state_[i] == CONFIRMED && h_age_[i] == 0) {
 | `confirm_streak` | 3 | Tentative → Confirmed 所需連續匹配幀數 |
 | `confirm_score_thresh` | 0.50 | 升確認所需平均 score |
 
-於 `set_params()` 介面中新增，`scripts/eval/mot17.py` 對應新增 `--mid-thresh`、`--confirm-streak`、`--confirm-score-thresh` CLI 參數（主邏輯實作於 `perception/eval/runner.py`）。
+於 `set_params()` 介面中新增，`scripts/eval/mot17.py` 對應新增 `--mid-thresh`、`--confirm-streak`、`--confirm-score-thresh` CLI 參數（主邏輯實作於 `src/saccade/perception/eval/runner.py`）。
 
 ---
 
@@ -170,7 +170,7 @@ GPU 端同步 buffer 相同，**總額外 VRAM < 10 KB**，可忽略。
 - [ ] ADR 撰寫（如架構委員會認定為重大變更）
 - [x] `tracker_gpu.cu` 實作
 - [x] `tracker_gpu.hpp` / `tracker_gpu_python.cpp` 介面更新
-- [x] `scripts/eval/mot17.py` 新增 CLI 參數（邏輯位於 `perception/eval/runner.py`）
+- [x] `scripts/eval/mot17.py` 新增 CLI 參數（邏輯位於 `src/saccade/perception/eval/runner.py`）
 - [x] MOT17 full SDP A/B 驗證（baseline vs tentative state machine）
 - [x] `docs/benchmarks/` 更新比較結果
 

@@ -1,9 +1,9 @@
 import asyncio
 import time
 import torch
-from perception.detector_trt import TRTYoloDetector
-from perception.dispatcher import AsyncDispatcher
-from media.mediamtx_client import MediaMTXClient
+from saccade.perception.detector_trt import TRTYoloDetector
+from saccade.perception.dispatcher import AsyncDispatcher
+from saccade.media.mediamtx_client import MediaMTXClient
 
 
 async def run_stream_producer(
@@ -54,7 +54,7 @@ async def run_8stream_perception() -> None:
 
     detector = TRTYoloDetector()
     # 設置 max_batch 為 8，以發揮 YOLO26 在 GPU 上的 Batching 效能
-    from cognition.resource_manager import ResourceManager
+    from saccade.resource.resource_manager import ResourceManager
 
     resource_manager = ResourceManager()
     dispatcher = AsyncDispatcher(detector, resource_manager, max_batch=8)

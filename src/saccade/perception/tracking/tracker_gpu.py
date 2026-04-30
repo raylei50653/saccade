@@ -2,7 +2,7 @@ from collections import deque
 import torch
 import torch.nn.functional as F
 from dataclasses import dataclass
-from typing import List, Any, cast, Optional
+from typing import List, Any, cast, Optional, TypedDict
 
 try:
     from saccade_tracking_ext import GPUByteTracker as CppGPUByteTracker, TrackResult
@@ -28,7 +28,15 @@ except ImportError:
         def update(self, *args: Any, **kwargs: Any) -> List[TrackResult]:
             return []
 
+        def update_into(self, *args: Any, **kwargs: Any) -> None:
+            return None
+
         def get_state_snapshots(self, *args: Any, **kwargs: Any) -> List[Any]:
+            return []
+
+        def get_motion_snapshots_for_track_ids(
+            self, *args: Any, **kwargs: Any
+        ) -> List[Any]:
             return []
 
         def get_tentative_candidates(self, *args: Any, **kwargs: Any) -> List[Any]:
@@ -37,7 +45,7 @@ except ImportError:
 
 @dataclass
 class AppearanceSample:
-    embedding: torch.Tensor  # L2-normalized CPU float32, shape [D]
+    embedding: torch.Tensor  # L2-normalized float32, shape [D], stored on CPU
     det_score: float
     iou: float
     frame_id: int
@@ -54,6 +62,15 @@ class ReIDFrameStats:
 class ReIDTrackObservation:
     box: tuple[float, float, float, float]
     det_score: float
+
+
+class GPUTrackResultBuffers(TypedDict):
+    boxes: torch.Tensor
+    scores: torch.Tensor
+    ids: torch.Tensor
+    classes: torch.Tensor
+    det_idx: torch.Tensor
+    count: torch.Tensor
 
 
 class DynamicReIDController:
@@ -442,7 +459,7 @@ class TrackAppearanceBank:
             or suspect_box
         ):
             return
-        emb = F.normalize(embedding.detach().float().cpu(), dim=0)
+        emb = F.normalize(embedding.detach().to(device="cpu", dtype=torch.float32), dim=0)
         bank = self._banks.setdefault(track_id, [])
         bank.append(AppearanceSample(emb, det_score, iou, frame_id))
         # Rank: 0.5*det_score + 0.3*iou, with frame_id as recency tiebreaker
@@ -451,6 +468,43 @@ class TrackAppearanceBank:
         )
         del bank[self.k :]
         self._refresh_track(track_id)
+
+    def update_many(
+        self,
+        updates: list[
+            tuple[int, torch.Tensor, float, float, int, bool, bool]
+        ],
+    ) -> None:
+        touched_track_ids: set[int] = set()
+        for (
+            track_id,
+            embedding,
+            det_score,
+            iou,
+            frame_id,
+            geometry_clean,
+            suspect_box,
+        ) in updates:
+            if (
+                det_score < self.min_score
+                or iou < self.min_iou
+                or not geometry_clean
+                or suspect_box
+            ):
+                continue
+            emb = F.normalize(embedding.detach().to(device="cpu", dtype=torch.float32), dim=0)
+            bank = self._banks.setdefault(track_id, [])
+            bank.append(AppearanceSample(emb, det_score, iou, frame_id))
+            touched_track_ids.add(track_id)
+
+        for track_id in touched_track_ids:
+            bank = self._banks.get(track_id, [])
+            bank.sort(
+                key=lambda s: (0.5 * s.det_score + 0.3 * s.iou, s.frame_id),
+                reverse=True,
+            )
+            del bank[self.k :]
+            self._refresh_track(track_id)
 
     def has_clean_embedding(self, track_id: int) -> bool:
         return bool(self._banks.get(track_id))
@@ -540,6 +594,8 @@ class GPUByteTracker:
     """
 
     def __init__(self, max_objects: int = 2048, embedding_dim: int = 768) -> None:
+        self.max_objects = max_objects
+        self.embedding_dim = embedding_dim
         self.tracker = CppGPUByteTracker(max_objects, embedding_dim)
 
     def set_params(
@@ -648,10 +704,83 @@ class GPUByteTracker:
             ),
         )
 
+    def allocate_result_buffers(
+        self,
+        *,
+        device: str | torch.device = "cuda",
+    ) -> GPUTrackResultBuffers:
+        return {
+            "boxes": torch.empty(
+                (self.max_objects, 4), device=device, dtype=torch.float32
+            ),
+            "scores": torch.empty((self.max_objects,), device=device, dtype=torch.float32),
+            "ids": torch.empty((self.max_objects,), device=device, dtype=torch.int32),
+            "classes": torch.empty((self.max_objects,), device=device, dtype=torch.int32),
+            "det_idx": torch.empty((self.max_objects,), device=device, dtype=torch.int32),
+            "count": torch.empty((), device=device, dtype=torch.int32),
+        }
+
+    def update_into(
+        self,
+        boxes: torch.Tensor,
+        scores: torch.Tensor,
+        classes: torch.Tensor,
+        result_buffers: GPUTrackResultBuffers,
+        embeddings: Optional[torch.Tensor] = None,
+        gmc: Optional[torch.Tensor] = None,
+        light_factor: float = 0.0,
+        mid_thresh_scale: float = 1.0,
+    ) -> GPUTrackResultBuffers:
+        num_dets = boxes.size(0)
+
+        boxes_contig = boxes.to(torch.float32).contiguous()
+        scores_contig = scores.to(torch.float32).contiguous()
+        classes_contig = classes.to(torch.int32).contiguous()
+
+        embed_ptr = 0
+        if embeddings is not None:
+            embeddings = embeddings.to(torch.float32).contiguous()
+            embed_ptr = embeddings.data_ptr()
+
+        gmc_ptr = 0
+        if gmc is not None:
+            gmc = gmc.to(torch.float32).contiguous()
+            gmc_ptr = gmc.data_ptr()
+
+        stream = torch.cuda.current_stream().cuda_stream
+        self.tracker.update_into(
+            boxes_contig.data_ptr(),
+            scores_contig.data_ptr(),
+            classes_contig.data_ptr(),
+            num_dets,
+            stream,
+            result_buffers["boxes"].data_ptr(),
+            result_buffers["scores"].data_ptr(),
+            result_buffers["ids"].data_ptr(),
+            result_buffers["classes"].data_ptr(),
+            result_buffers["det_idx"].data_ptr(),
+            result_buffers["count"].data_ptr(),
+            embed_ptr,
+            gmc_ptr,
+            light_factor,
+            mid_thresh_scale,
+        )
+        return result_buffers
+
     def get_state_snapshots(self) -> List[Any]:
         """Return active Kalman state/covariance snapshots from the C++ tracker."""
         stream = torch.cuda.current_stream().cuda_stream
         return cast(List[Any], self.tracker.get_state_snapshots(stream))
+
+    def get_motion_snapshots_for_track_ids(self, track_ids: list[int]) -> List[Any]:
+        """Return Kalman motion snapshots only for the requested track IDs."""
+        if not track_ids:
+            return []
+        get_motion = getattr(self.tracker, "get_motion_snapshots_for_track_ids", None)
+        if get_motion is None:
+            return self.get_state_snapshots()
+        stream = torch.cuda.current_stream().cuda_stream
+        return cast(List[Any], get_motion(track_ids, stream))
 
     def get_tentative_candidates(self) -> List[Any]:
         """Return active tentative tracks for lazy ReID arbitration/profiling."""
@@ -690,8 +819,9 @@ class GPUByteTracker:
         all_ids = list(bank_reps.keys())
         stacked = torch.stack([bank_reps[tid] for tid in all_ids])  # [n, D]
         n = len(all_ids)
-        ids_gpu = torch.tensor(all_ids, dtype=torch.int32, device="cuda").contiguous()
-        feats_gpu = stacked.cuda().float().contiguous()
+        device = torch.device("cuda")
+        ids_gpu = torch.tensor(all_ids, dtype=torch.int32, device=device).contiguous()
+        feats_gpu = stacked.to(device=device, dtype=torch.float32).contiguous()
         stream = torch.cuda.current_stream().cuda_stream
         self.tracker.update_reference_features(
             ids_gpu.data_ptr(), feats_gpu.data_ptr(), n, stream

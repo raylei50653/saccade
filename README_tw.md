@@ -22,19 +22,19 @@ appearance-based ReID，以及 MOT 風格的評估工具。
 
 ## 核心目錄
 
-- `perception/`
+- `src/saccade/perception/`
   - Detector、preprocessing、ReID、relink、tracker 協調與 eval runner。
 
 - `src/` 與 `include/`
   - C++ / CUDA tracking 與效能敏感的 extension。
 
-- `media/`
+- `src/saccade/media/`
   - 串流接入與視訊管線整合。
 
-- `pipeline/`
+- `src/saccade/pipeline/`
   - perception、storage、cognition 之上的高階 orchestration。
 
-- `storage/`
+- `src/saccade/storage/`
   - Redis / Chroma 相關的持久化路徑。
 
 - `scripts/eval/`
@@ -155,4 +155,4 @@ uv run pytest
 
 ## 狀態
 
-如果這份 README 與程式碼不一致，請以 `perception/`、`scripts/eval/`、`tests/` 內的實作為準。這份文件已更新為目前以 MOT17 為中心的 evaluation workflow，但整個 repo 仍在持續迭代中。
+如果這份 README 與程式碼不一致，請以 `src/saccade/perception/`、`scripts/eval/`、`tests/` 內的實作為準。這份文件已更新為目前以 MOT17 為中心的 evaluation workflow，但整個 repo 仍在持續迭代中。

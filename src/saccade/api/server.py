@@ -1,8 +1,8 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
-from storage.redis_cache import RedisCache
-from storage.chroma_store import ChromaStore
+from saccade.storage.redis_cache import RedisCache
+from saccade.storage.chroma_store import ChromaStore
 
 app = FastAPI(title="Saccade Spatiotemporal Retrieval API")
 

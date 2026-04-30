@@ -17,7 +17,7 @@
 - [x] **[重大更新] NVIDIA DALI GPU 預處理 (2026-04-15)**:
     - [x] **全 GPU 管線**: 整合 DALI 實現影像解碼、縮放與歸一化全在 GPU 執行。
     - [x] **效能突破**: 預處理延遲從 ~8ms 降至 <1.5ms。
-    - [x] **DALI Pipeline**: 實作於 `media/dali_pipeline.py`，支援多串流非同步併發處理。
+    - [x] **DALI Pipeline**: 實作於 `src/saccade/media/dali_pipeline.py`，支援多串流非同步併發處理。
 - [x] **NVENC/NVDEC**: 已封裝 NVIDIA 硬體編解碼工具，支援 L1 感測管線。
 - [x] **GStreamer 整合**: 支援 OpenCV 透過 GStreamer 高效能接入。
 

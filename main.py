@@ -7,7 +7,7 @@ Saccade CLI Entrypoint
 2. 初始化環境變數與全局設定。
 3. 根據指定的模式（如 perception, orchestrator）實例化並啟動對應的核心邏輯。
 
-注意：核心的系統調度、非同步事件循環與各層級之間的資料流動，皆由 `pipeline/orchestrator.py` 負責處理。本檔案不應包含任何業務邏輯或感知流程細節。
+注意：核心的系統調度、非同步事件循環與各層級之間的資料流動，皆由 `src/saccade/cognition/orchestrator.py` 負責處理。本檔案不應包含任何業務邏輯或感知流程細節。
 """
 
 import os
@@ -42,19 +42,19 @@ except ImportError:
     pass
 
 from typing import Optional, List, Dict, Any, Tuple, cast
-from perception.detector_trt import TRTYoloDetector
-from perception.cropper import ZeroCopyCropper
-from perception.feature_extractor import TRTFeatureExtractor
-from media.mediamtx_client import MediaMTXClient
-from media.dali_pipeline import DALIMediaClient
-from perception.dispatcher import AsyncDispatcher
-from perception.embedding_dispatcher import (
+from saccade.perception.detector_trt import TRTYoloDetector
+from saccade.perception.cropper import ZeroCopyCropper
+from saccade.perception.feature_extractor import TRTFeatureExtractor
+from saccade.media.mediamtx_client import MediaMTXClient
+from saccade.media.dali_pipeline import DALIMediaClient
+from saccade.perception.dispatcher import AsyncDispatcher
+from saccade.perception.embedding_dispatcher import (
     AsyncEmbeddingDispatcher as EmbeddingDispatcher,
 )
-from perception.drift_handler import SemanticDriftHandler
-from cognition.resource_manager import ResourceManager
-from storage.redis_cache import RedisCache
-from pipeline.orchestrator import PipelineOrchestrator
+from saccade.perception.drift_handler import SemanticDriftHandler
+from saccade.resource.resource_manager import ResourceManager
+from saccade.storage.redis_cache import RedisCache
+from saccade.cognition.orchestrator import PipelineOrchestrator
 from dotenv import load_dotenv
 
 load_dotenv()

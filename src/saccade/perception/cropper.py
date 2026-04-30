@@ -1,5 +1,5 @@
 import torch
-from typing import Tuple
+from typing import Any, Tuple, cast
 
 
 try:
@@ -197,6 +197,13 @@ class ZeroCopyCropper:
         lower = torch.stack((x1, y1 + h * 0.45, x2, y2), dim=1)
         part_boxes = torch.cat((boxes, upper, lower), dim=0)
         return self.process(frame_tensor, part_boxes)
+
+    @property
+    def cpp_ptr(self) -> int:
+        """Raw pointer to the C++ Cropper object (for native PerceptionPipeline)."""
+        if self._cpp is None:
+            raise RuntimeError("C++ cropper path not available")
+        return int(getattr(cast(Any, self._cpp), "cpp_ptr"))
 
 
 if __name__ == "__main__":

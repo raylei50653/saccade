@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 import time
 from typing import List, Tuple, Dict
-from cognition.resource_manager import DegradationLevel
+from saccade.resource.resource_manager import DegradationLevel
 
 
 class SemanticDriftHandler:

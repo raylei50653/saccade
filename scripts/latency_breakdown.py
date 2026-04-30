@@ -3,8 +3,8 @@ import time
 import torch
 import numpy as np
 import pynvml
-from perception.detector_trt import TRTYoloDetector
-from perception.feature_extractor import TRTFeatureExtractor
+from saccade.perception.detector_trt import TRTYoloDetector
+from saccade.perception.feature_extractor import TRTFeatureExtractor
 
 
 async def run_latency_breakdown() -> None:

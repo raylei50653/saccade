@@ -10,14 +10,14 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from typing import Any
+from typing import Any, TypedDict
 
 # Perception/eval modules load local extensions before any torchvision fallback.
-from perception.cropper import ZeroCopyCropper
-from perception.detector_trt import TRTYoloDetector
-from perception.feature_extractor import TRTFeatureExtractor
+from saccade.perception.cropper import ZeroCopyCropper
+from saccade.perception.detector_trt import TRTYoloDetector
+from saccade.perception.feature_extractor import TRTFeatureExtractor
 
-from perception.eval.detection import (
+from saccade.perception.eval.detection import (
     _box_iou_single,
     detect_adaptive_960_tiled,
     detect_960p_3x2_tiled,
@@ -25,23 +25,39 @@ from perception.eval.detection import (
     merge_cross_tile_duplicates_fast,
     nms_fast,
 )
-from perception.eval.gmc import SparseOpticalFlowGMC
-from perception.eval.pool import AdaptiveFramePool
-from perception.eval.preprocess import (
+from saccade.perception.eval.gmc import SparseOpticalFlowGMC
+from saccade.perception.eval.pool import AdaptiveFramePool
+from saccade.perception.eval.preprocess import (
     GeometryScaleState,
     apply_frame_preprocess,
     geometry_mid_thresh_scale,
     parse_preprocess,
 )
-from perception.eval.relink import PythonSemanticRelinker, SemanticRelinker
-from perception.eval.streaming import DALIStreamerStream
-from perception.eval.tracking import GlobalTrackIdMapper
-from perception.tracking.tracker_gpu import (
+from saccade.perception.eval.relink import IdentityResolver, PythonSemanticRelinker, SemanticRelinker
+
+try:
+    from saccade_tracking_ext import (
+        TrackletLifecycleMerger as _CppTrackletLifecycleMerger,
+        IdentityResolver as _CppIdentityResolver,
+    )
+    _LIFECYCLE_CLS: type | None = _CppTrackletLifecycleMerger
+except ImportError:
+    _CppIdentityResolver = None
+    _LIFECYCLE_CLS = None
+from saccade.perception.eval.streaming import DALIStreamerStream
+from saccade.perception.eval.tracking import GlobalTrackIdMapper
+from saccade.perception.tracking.tracker_gpu import (
     DynamicReIDController,
     ReIDTrackObservation,
     TrackAppearanceBank,
     need_reid_frame,
 )
+
+try:
+    from saccade_tracking_ext import PerceptionPipeline, PerceptionPipelineConfig
+except ImportError:
+    PerceptionPipeline = None
+    PerceptionPipelineConfig = None
 
 
 @dataclass
@@ -125,6 +141,36 @@ class IdStabilityFilter:
             score_ema=score_ema,
         )
         return stable_hits >= self.min_hits and score_ema >= self.min_score_ema
+
+    def accept_many(
+        self,
+        candidates: list[tuple[int, tuple[float, float, float, float], float]],
+        frame_id: int,
+    ) -> list[bool]:
+        results: list[bool] = []
+        for obj_id, box, score in candidates:
+            prev = self.states.get(obj_id)
+            if prev is None or frame_id - prev.frame_id > self.max_gap + 1:
+                self.states[obj_id] = IdStabilityState(frame_id, box, 1, 1, score)
+                results.append(self.min_hits <= 1 and score >= self.min_score_ema)
+                continue
+
+            iou = self._iou(prev.box, box)
+            shift = self._center_shift_ratio(prev.box, box)
+            is_stable = iou >= self.min_iou or shift <= self.max_center_shift
+            stable_hits = prev.stable_hits + 1 if is_stable else 1
+            score_ema = self.score_ema * prev.score_ema + (1.0 - self.score_ema) * score
+            self.states[obj_id] = IdStabilityState(
+                frame_id=frame_id,
+                box=box,
+                stable_hits=stable_hits,
+                total_hits=prev.total_hits + 1,
+                score_ema=score_ema,
+            )
+            results.append(
+                stable_hits >= self.min_hits and score_ema >= self.min_score_ema
+            )
+        return results
 
 
 @dataclass
@@ -269,6 +315,64 @@ class TrackletLifecycleMerger:
         assigned_outputs.add(output_id)
         return output_id
 
+    def resolve_many(
+        self,
+        candidates: list[
+            tuple[
+                int,
+                tuple[float, float, float, float],
+                float,
+                torch.Tensor | None,
+            ]
+        ],
+        *,
+        frame_id: int,
+        frame_w: int,
+        frame_h: int,
+    ) -> list[int]:
+        assigned_outputs: set[int] = set()
+        return [
+            self.resolve(
+                local_id,
+                box,
+                score,
+                frame_id,
+                frame_w,
+                frame_h,
+                embedding,
+                assigned_outputs,
+            )
+            for local_id, box, score, embedding in candidates
+        ]
+
+    def resolve_many_packed(
+        self,
+        local_ids: list[int],
+        boxes: list[tuple[float, float, float, float]],
+        scores: list[float],
+        embeddings: list[torch.Tensor | None],
+        *,
+        frame_id: int,
+        frame_w: int,
+        frame_h: int,
+    ) -> list[int]:
+        assigned_outputs: set[int] = set()
+        return [
+            self.resolve(
+                local_id,
+                box,
+                score,
+                frame_id,
+                frame_w,
+                frame_h,
+                embedding,
+                assigned_outputs,
+            )
+            for local_id, box, score, embedding in zip(
+                local_ids, boxes, scores, embeddings
+            )
+        ]
+
     def prune(self, frame_id: int) -> None:
         stale = [
             output_id
@@ -301,6 +405,56 @@ class MotRecord:
     h: float
     score: float
     tail: list[str]
+
+
+class HostTrackResultView(TypedDict):
+    count: int
+    boxes: torch.Tensor
+    scores: torch.Tensor
+    ids: torch.Tensor
+    classes: torch.Tensor | None
+    det_idx: torch.Tensor | None
+
+
+@dataclass(frozen=True)
+class HostTrackBatch:
+    boxes_gpu: torch.Tensor
+    boxes: list[tuple[float, float, float, float]]
+    scores: list[float]
+    ids: list[int]
+    classes: list[int] | None
+    det_idx: list[int] | None
+    person_observations: dict[int, ReIDTrackObservation] | None
+
+
+@dataclass(frozen=True)
+class PreparedTrackCandidate:
+    local_track_id: int
+    box: tuple[float, float, float, float]
+    score: float
+    embedding: torch.Tensor | None
+
+
+@dataclass(frozen=True)
+class CandidateAppearanceUpdate:
+    track_id: int
+    embedding: torch.Tensor
+    det_score: float
+    iou: float
+    frame_id: int
+    geometry_clean: bool
+    suspect_box: bool
+
+
+@dataclass(frozen=True)
+class ResolvedTrack:
+    local_track_id: int
+    resolved_track_id: int
+    box: tuple[float, float, float, float]
+    score: float
+    embedding: torch.Tensor | None
+
+
 
 
 @dataclass
@@ -339,11 +493,29 @@ class OutputAppearanceBank:
     ) -> None:
         if embedding is None or score < self.min_score:
             return
-        emb = F.normalize(embedding.detach().float().cpu(), dim=0)
+        emb = F.normalize(embedding.detach().float(), dim=0)
         samples = self.samples.setdefault(track_id, [])
         samples.append((score, frame_id, emb))
         samples.sort(key=lambda item: (item[0], item[1]), reverse=True)
         del samples[self.max_samples :]
+
+    def update_many(
+        self,
+        updates: list[tuple[int, torch.Tensor | None, float, int]],
+    ) -> None:
+        touched_track_ids: set[int] = set()
+        for track_id, embedding, score, frame_id in updates:
+            if embedding is None or score < self.min_score:
+                continue
+            emb = F.normalize(embedding.detach().float(), dim=0)
+            samples = self.samples.setdefault(track_id, [])
+            samples.append((score, frame_id, emb))
+            touched_track_ids.add(track_id)
+
+        for track_id in touched_track_ids:
+            samples = self.samples.get(track_id, [])
+            samples.sort(key=lambda item: (item[0], item[1]), reverse=True)
+            del samples[self.max_samples :]
 
     def count(self, track_id: int) -> int:
         return len(self.samples.get(track_id, []))
@@ -371,6 +543,466 @@ class OutputAppearanceBank:
         if a_emb is None or b_emb is None:
             return None
         return float(torch.dot(a_emb, b_emb).item())
+
+
+def _safe_cpp_ptr(obj: Any) -> int:
+    try:
+        return int(getattr(obj, "cpp_ptr"))
+    except Exception:
+        return 0
+
+
+def _materialize_gpu_track_results(
+    result_buffers: Any,
+    *,
+    default_class_id: int | None = None,
+    include_det_idx: bool = True,
+) -> HostTrackResultView:
+    count = int(result_buffers["count"].cpu().item())
+    if count <= 0:
+        return {
+            "count": 0,
+            "boxes": torch.empty((0, 4), dtype=torch.float32),
+            "scores": torch.empty((0,), dtype=torch.float32),
+            "ids": torch.empty((0,), dtype=torch.int32),
+            "classes": (
+                None
+                if default_class_id is not None
+                else torch.empty((0,), dtype=torch.int32)
+            ),
+            "det_idx": (
+                torch.empty((0,), dtype=torch.int32) if include_det_idx else None
+            ),
+        }
+
+    boxes = result_buffers["boxes"][:count].cpu()
+    scores = result_buffers["scores"][:count].cpu()
+    ids = result_buffers["ids"][:count].cpu()
+    classes = (
+        None
+        if default_class_id is not None
+        else result_buffers["classes"][:count].cpu()
+    )
+    det_idx = result_buffers["det_idx"][:count].cpu() if include_det_idx else None
+
+    if default_class_id is not None:
+        classes = torch.full_like(ids, int(default_class_id), dtype=torch.int32)
+
+    return {
+        "count": count,
+        "boxes": boxes,
+        "scores": scores,
+        "ids": ids,
+        "classes": classes,
+        "det_idx": det_idx,
+    }
+
+
+def _mot_result_line(
+    frame_id: int,
+    global_tid: int,
+    box: tuple[float, float, float, float],
+    score: float,
+    frame_w: int,
+    frame_h: int,
+) -> str:
+    x1, y1, x2, y2 = box
+    return (
+        f"{frame_id},{global_tid},{max(0, x1):.2f},{max(0, y1):.2f},"
+        f"{min(frame_w, x2) - max(0, x1):.2f},{min(frame_h, y2) - max(0, y1):.2f},"
+        f"{score:.4f},-1,-1,-1"
+    )
+
+
+def _build_dynamic_reid_observations(
+    track_ids: list[int],
+    track_boxes: list[tuple[float, float, float, float]],
+    track_scores: list[float],
+    track_classes: list[int] | None,
+    *,
+    person_class: int,
+) -> dict[int, ReIDTrackObservation]:
+    if track_classes is None:
+        return {}
+    observations: dict[int, ReIDTrackObservation] = {}
+    for obj_id, box, score, class_id in zip(
+        track_ids, track_boxes, track_scores, track_classes
+    ):
+        if class_id != person_class:
+            continue
+        observations[obj_id] = ReIDTrackObservation(box=box, det_score=score)
+    return observations
+
+
+def _prepare_host_track_batch(
+    track_results: HostTrackResultView,
+    tracker_result_buffers: Any,
+    *,
+    dynamic_reid_enabled: bool,
+    person_class: int,
+) -> HostTrackBatch:
+    boxes = [tuple(box) for box in track_results["boxes"].tolist()]
+    scores = [float(score) for score in track_results["scores"].tolist()]
+    ids = [int(obj_id) for obj_id in track_results["ids"].tolist()]
+    classes = (
+        [int(class_id) for class_id in track_results["classes"].tolist()]
+        if track_results["classes"] is not None
+        else None
+    )
+    det_idx = (
+        [int(det_index) for det_index in track_results["det_idx"].tolist()]
+        if track_results["det_idx"] is not None
+        else None
+    )
+    person_observations = (
+        _build_dynamic_reid_observations(
+            ids,
+            boxes,
+            scores,
+            classes,
+            person_class=person_class,
+        )
+        if dynamic_reid_enabled
+        else None
+    )
+    return HostTrackBatch(
+        boxes_gpu=tracker_result_buffers["boxes"][: track_results["count"]],
+        boxes=boxes,
+        scores=scores,
+        ids=ids,
+        classes=classes,
+        det_idx=det_idx,
+        person_observations=person_observations,
+    )
+
+
+def _resolve_frame_tracks(
+    *,
+    frame_id: int,
+    frame_w: int,
+    frame_h: int,
+    prepared_candidates: list[PreparedTrackCandidate],
+    lifecycle_merger: TrackletLifecycleMerger,
+    identity_resolver: IdentityResolver | None = None,
+) -> list[ResolvedTrack]:
+    if identity_resolver is not None and prepared_candidates:
+        resolved_ids = identity_resolver.resolve_pass(
+            [c.local_track_id for c in prepared_candidates],
+            [c.embedding for c in prepared_candidates],
+            [c.box for c in prepared_candidates],
+            [c.score for c in prepared_candidates],
+            frame_id=frame_id,
+            frame_w=frame_w,
+            frame_h=frame_h,
+        )
+        return [
+            ResolvedTrack(
+                local_track_id=candidate.local_track_id,
+                resolved_track_id=int(resolved_id),
+                box=candidate.box,
+                score=candidate.score,
+                embedding=candidate.embedding,
+            )
+            for candidate, resolved_id in zip(prepared_candidates, resolved_ids)
+        ]
+
+    # relinker is None: lifecycle merge only, no embeddings
+    if not prepared_candidates:
+        return []
+    resolve_many_packed = getattr(lifecycle_merger, "resolve_many_packed", None)
+    if callable(resolve_many_packed):
+        resolved_ids = resolve_many_packed(
+            [c.local_track_id for c in prepared_candidates],
+            [c.box for c in prepared_candidates],
+            [c.score for c in prepared_candidates],
+            [None] * len(prepared_candidates),
+            frame_id=frame_id,
+            frame_w=frame_w,
+            frame_h=frame_h,
+        )
+    else:
+        resolved_ids = lifecycle_merger.resolve_many(
+            [(c.local_track_id, c.box, c.score, None) for c in prepared_candidates],
+            frame_id=frame_id,
+            frame_w=frame_w,
+            frame_h=frame_h,
+        )
+    return [
+        ResolvedTrack(
+            local_track_id=candidate.local_track_id,
+            resolved_track_id=int(resolved_id),
+            box=candidate.box,
+            score=candidate.score,
+            embedding=candidate.embedding,
+        )
+        for candidate, resolved_id in zip(prepared_candidates, resolved_ids)
+    ]
+
+
+
+
+def _prepare_track_candidates(
+    *,
+    frame_id: int,
+    track_results: HostTrackResultView,
+    host_batch: HostTrackBatch,
+    person_class: int,
+    track_person_only: bool,
+    suspect_boxes: torch.Tensor,
+    geometry_suspect_support: bool,
+    geometry_suspect_support_score: float,
+    id_stability_filter: Any,
+    embeddings: torch.Tensor | None,
+    fused_boxes: torch.Tensor,
+    fused_scores: torch.Tensor,
+    geometry_suspect_mask: torch.Tensor,
+    primary_appearance_bank: Any,
+) -> list[PreparedTrackCandidate]:
+    candidate_indices, stability_candidates = _collect_stability_candidates(
+        track_results=track_results,
+        host_batch=host_batch,
+        person_class=person_class,
+        track_person_only=track_person_only,
+        suspect_boxes=suspect_boxes,
+        geometry_suspect_support=geometry_suspect_support,
+        geometry_suspect_support_score=geometry_suspect_support_score,
+    )
+
+    stability_accepts = (
+        id_stability_filter.accept_many(stability_candidates, frame_id)
+        if id_stability_filter
+        else [True] * len(stability_candidates)
+    )
+
+    prepared, appearance_updates = _build_prepared_candidates(
+        candidate_indices=candidate_indices,
+        stability_accepts=stability_accepts,
+        host_batch=host_batch,
+        embeddings=embeddings,
+        fused_boxes=fused_boxes,
+        fused_scores=fused_scores,
+        geometry_suspect_mask=geometry_suspect_mask,
+        frame_id=frame_id,
+    )
+    if primary_appearance_bank is not None and appearance_updates:
+        primary_appearance_bank.update_many(
+            [
+                (
+                    update.track_id,
+                    update.embedding,
+                    update.det_score,
+                    update.iou,
+                    update.frame_id,
+                    update.geometry_clean,
+                    update.suspect_box,
+                )
+                for update in appearance_updates
+            ]
+        )
+    if primary_appearance_bank is not None:
+        prepared = _apply_consistency_gate(prepared, primary_appearance_bank)
+    return prepared
+
+
+def _collect_stability_candidates(
+    *,
+    track_results: HostTrackResultView,
+    host_batch: HostTrackBatch,
+    person_class: int,
+    track_person_only: bool,
+    suspect_boxes: torch.Tensor,
+    geometry_suspect_support: bool,
+    geometry_suspect_support_score: float,
+) -> tuple[list[int], list[tuple[int, tuple[float, float, float, float], float]]]:
+    candidate_indices: list[int] = []
+    stability_candidates: list[
+        tuple[int, tuple[float, float, float, float], float]
+    ] = []
+    for i in range(track_results["count"]):
+        class_id = host_batch.classes[i] if host_batch.classes is not None else -1
+        if not track_person_only and class_id != person_class:
+            continue
+        raw_box = host_batch.boxes[i]
+        score = host_batch.scores[i]
+        obj_id = host_batch.ids[i]
+        track_box_gpu = host_batch.boxes_gpu[i]
+        if (
+            geometry_suspect_support
+            and suspect_boxes.numel() > 0
+            and score <= geometry_suspect_support_score + 1e-4
+        ):
+            if float(_box_iou_single(track_box_gpu, suspect_boxes).max()) > 0.5:
+                continue
+        candidate_indices.append(i)
+        stability_candidates.append((obj_id, raw_box, score))
+    return candidate_indices, stability_candidates
+
+
+def _build_prepared_candidates(
+    *,
+    candidate_indices: list[int],
+    stability_accepts: list[bool],
+    host_batch: HostTrackBatch,
+    embeddings: torch.Tensor | None,
+    fused_boxes: torch.Tensor,
+    fused_scores: torch.Tensor,
+    geometry_suspect_mask: torch.Tensor,
+    frame_id: int,
+) -> tuple[list[PreparedTrackCandidate], list[CandidateAppearanceUpdate]]:
+    prepared: list[PreparedTrackCandidate] = []
+    appearance_updates: list[CandidateAppearanceUpdate] = []
+    for i, accepted in zip(candidate_indices, stability_accepts):
+        if not accepted:
+            continue
+        raw_box = host_batch.boxes[i]
+        score = host_batch.scores[i]
+        obj_id = host_batch.ids[i]
+        emb = None
+        det_idx = host_batch.det_idx[i] if host_batch.det_idx is not None else -1
+        if (
+            embeddings is not None
+            and det_idx >= 0
+            and det_idx < fused_boxes.shape[0]
+        ):
+            emb = embeddings[det_idx]
+            match_iou = float(
+                _box_iou_single(host_batch.boxes_gpu[i], fused_boxes[det_idx : det_idx + 1]).item()
+            )
+            if match_iou > 0.35:
+                appearance_updates.append(
+                    CandidateAppearanceUpdate(
+                        track_id=obj_id,
+                        embedding=embeddings[det_idx],
+                        det_score=float(fused_scores[det_idx]),
+                        iou=match_iou,
+                        frame_id=frame_id,
+                        geometry_clean=True,
+                        suspect_box=bool(geometry_suspect_mask[det_idx])
+                        if geometry_suspect_mask.numel() > det_idx
+                        else False,
+                    )
+                )
+        prepared.append(
+            PreparedTrackCandidate(
+                local_track_id=obj_id,
+                box=raw_box,
+                score=score,
+                embedding=emb,
+            )
+        )
+    return prepared, appearance_updates
+
+
+def _apply_consistency_gate(
+    prepared: list[PreparedTrackCandidate],
+    primary_appearance_bank: Any,
+) -> list[PreparedTrackCandidate]:
+    return [
+        PreparedTrackCandidate(
+            local_track_id=candidate.local_track_id,
+            box=candidate.box,
+            score=candidate.score,
+            embedding=(
+                None
+                if not primary_appearance_bank.is_consistent(candidate.local_track_id)
+                else candidate.embedding
+            ),
+        )
+        for candidate in prepared
+    ]
+
+
+def _emit_resolved_tracks(
+    *,
+    seq: str,
+    frame_id: int,
+    frame_w: int,
+    frame_h: int,
+    resolved_tracks: list[ResolvedTrack],
+    global_id_mapper: GlobalTrackIdMapper,
+    output_appearance_bank: Any,
+) -> list[str]:
+    mapped_tracks = [
+        (
+            global_id_mapper.map(seq, track.resolved_track_id),
+            track.box,
+            track.score,
+            track.embedding,
+        )
+        for track in resolved_tracks
+    ]
+    if output_appearance_bank is not None and mapped_tracks:
+        output_appearance_bank.update_many(
+            [
+                (int(global_tid), embedding, score, frame_id)
+                for global_tid, _, score, embedding in mapped_tracks
+            ]
+        )
+    return [
+        _mot_result_line(frame_id, global_tid, box, score, frame_w, frame_h)
+        for global_tid, box, score, _ in mapped_tracks
+    ]
+
+
+def _inject_lost_track_references(
+    *,
+    relinker: Any,
+    primary_appearance_bank: Any,
+    prev_track_ids: set[int],
+    curr_track_ids: set[int],
+) -> None:
+    references_to_inject: list[tuple[int, torch.Tensor]] = []
+    for lost_tid in prev_track_ids - curr_track_ids:
+        if not primary_appearance_bank.is_consistent(lost_tid):
+            continue
+        representative = primary_appearance_bank.representative(lost_tid)
+        if representative is None:
+            continue
+        canonical_id = relinker.canonical_id(lost_tid)
+        if not relinker.has_feature(canonical_id):
+            continue
+        references_to_inject.append((canonical_id, representative))
+
+    if not references_to_inject:
+        return
+    if hasattr(relinker, "inject_references_many"):
+        relinker.inject_references_many(references_to_inject)
+        return
+    for canonical_id, embedding in references_to_inject:
+        relinker.inject_reference(canonical_id, embedding)
+
+
+def _finalize_frame_side_effects(
+    *,
+    curr_track_ids: set[int],
+    prev_track_ids: set[int],
+    relinker: Any,
+    semantic_bank_inject: bool,
+    primary_appearance_bank: Any,
+    dynamic_reid: Any,
+    person_observations: dict[int, ReIDTrackObservation] | None,
+    gmc_warp: torch.Tensor | None,
+    gmc_enabled: bool,
+) -> set[int]:
+    if (
+        relinker is not None
+        and semantic_bank_inject
+        and primary_appearance_bank is not None
+    ):
+        _inject_lost_track_references(
+            relinker=relinker,
+            primary_appearance_bank=primary_appearance_bank,
+            prev_track_ids=prev_track_ids,
+            curr_track_ids=curr_track_ids,
+        )
+    if dynamic_reid is not None and person_observations is not None:
+        dynamic_reid.observe(
+            person_observations,
+            gmc=gmc_warp if gmc_enabled else None,
+        )
+    if primary_appearance_bank is not None:
+        primary_appearance_bank.prune(curr_track_ids)
+    return curr_track_ids
 
 
 class UnionFind:
@@ -734,6 +1366,7 @@ def run_eval(
         if reid_work_enabled
         else None
     )
+
     cropper = (
         ZeroCopyCropper(
             output_size=_crop_hw,
@@ -818,6 +1451,39 @@ def run_eval(
         max(geometry_suspect_score, track_thresh + 1e-4),
         max(mid_thresh - 1e-4, track_thresh + 1e-4),
     )
+    extractor_cpp_ptr = _safe_cpp_ptr(extractor) if extractor is not None else 0
+    cropper_cpp_ptr = _safe_cpp_ptr(cropper) if cropper is not None else 0
+    native_postprocess_available = (
+        PerceptionPipeline is not None and PerceptionPipelineConfig is not None
+    )
+    native_reid_available = (
+        native_postprocess_available
+        and extractor_cpp_ptr != 0
+        and cropper_cpp_ptr != 0
+        and reid_crop_layout == "full"
+    )
+    perception_pipeline = None
+    if native_postprocess_available:
+        native_cfg = PerceptionPipelineConfig()
+        native_cfg.score_threshold = min(conf_threshold, track_thresh)
+        native_cfg.person_class = person_class
+        native_cfg.person_only = track_person_only
+        native_cfg.nms_threshold = nms_iou_threshold
+        native_cfg.person_geometry_prior = person_geometry_prior
+        native_cfg.geometry_suspect_support = geometry_suspect_support
+        native_cfg.person_min_height_ratio = person_min_height_ratio
+        native_cfg.person_min_aspect = person_min_aspect
+        native_cfg.person_max_aspect = person_max_aspect
+        native_cfg.person_min_area_ratio = person_min_area_ratio
+        native_cfg.person_max_area_ratio = person_max_area_ratio
+        native_cfg.max_detections = 2048
+        perception_pipeline = PerceptionPipeline(
+            extractor_cpp_ptr if native_reid_available else 0,
+            cropper_cpp_ptr if native_reid_available else 0,
+            native_cfg,
+        )
+        if native_reid_available:
+            perception_pipeline.set_reid_profiling_enabled(profile_stages)
     lifecycle_merge_enabled = bool(kwargs.get("lifecycle_merge", False))
     lifecycle_ttl = int(kwargs.get("lifecycle_ttl", 45))
     lifecycle_min_gap = int(kwargs.get("lifecycle_min_gap", 2))
@@ -884,6 +1550,38 @@ def run_eval(
         if sequences
         else [d.name for d in (Path(data_root) / split).iterdir() if d.is_dir()]
     )
+    top_level_stage_names = (
+        "fetch",
+        "ingest_preprocess",
+        "detect",
+        "postprocess",
+        "reid_bank_sync",
+        "reid_crop",
+        "reid_extract",
+        "lazy_reid",
+        "track",
+        "relink_write",
+        "frame_total",
+    )
+    breakdown_stage_names = ("post_filter", "post_nms", "post_merge")
+    native_reid_breakdown_names = (
+        "native_reid_crop",
+        "native_reid_pre_normalize",
+        "native_reid_trt_enqueue",
+        "native_reid_l2_normalize",
+    )
+    current_stage_samples: dict[str, list[float]] | None = None
+    current_frame_stage_elapsed: dict[str, float] | None = None
+    current_stage_sample_active = False
+
+    def record_stage_sample(stage_name: str, elapsed_ms: float) -> None:
+        if (
+            profile_stages
+            and current_stage_sample_active
+            and current_frame_stage_elapsed is not None
+            and stage_name in current_frame_stage_elapsed
+        ):
+            current_frame_stage_elapsed[stage_name] += elapsed_ms
 
     def time_stage(stage_totals, stage_name, fn, sync_cuda=False):
         if profile_stages and sync_cuda:
@@ -895,25 +1593,13 @@ def run_eval(
         elapsed_ms = (time.perf_counter() - t0) * 1000
         if profile_stages:
             stage_totals[stage_name] += elapsed_ms
+            record_stage_sample(stage_name, elapsed_ms)
         return result, elapsed_ms
 
     overall_stage_totals = OrderedDict(
-        (name, 0.0)
-        for name in (
-            "fetch",
-            "ingest_preprocess",
-            "detect",
-            "postprocess",
-            "post_filter",
-            "post_nms",
-            "post_merge",
-            "reid",
-            "lazy_reid",
-            "track",
-            "relink_write",
-            "frame_total",
-        )
+        (name, 0.0) for name in (*top_level_stage_names, *breakdown_stage_names)
     )
+    overall_stage_samples = OrderedDict((name, []) for name in top_level_stage_names)
     overall_profiled_frames = 0
     overall_post_counts = OrderedDict(
         (name, 0)
@@ -951,7 +1637,7 @@ def run_eval(
             if id_stability_filter_enabled
             else None
         )
-        lifecycle_merger = TrackletLifecycleMerger(
+        lifecycle_merger = (_LIFECYCLE_CLS or TrackletLifecycleMerger)(
             enabled=lifecycle_merge_enabled,
             ttl=lifecycle_ttl,
             min_gap=lifecycle_min_gap,
@@ -990,6 +1676,19 @@ def run_eval(
             if use_semantic_mode
             else None
         )
+
+        if relinker is not None:
+            if (
+                _CppIdentityResolver is not None
+                and _LIFECYCLE_CLS is not None
+                and isinstance(lifecycle_merger, _LIFECYCLE_CLS)
+                and not isinstance(relinker, PythonSemanticRelinker)
+            ):
+                identity_resolver = _CppIdentityResolver(relinker, lifecycle_merger)
+            else:
+                identity_resolver = IdentityResolver(relinker, lifecycle_merger)
+        else:
+            identity_resolver = None
 
         seq_path = Path(data_root) / split / seq
         if not (seq_path / "seqinfo.ini").exists():
@@ -1053,9 +1752,9 @@ def run_eval(
                 score_decay=float(kwargs.get("reid_score_decay", 0.80)),
                 score_threshold=float(kwargs.get("reid_score_threshold", 2.0)),
                 score_threshold_low=float(
-                    kwargs.get("reid_score_threshold_low")
+                    kwargs["reid_score_threshold_low"]
                     if kwargs.get("reid_score_threshold_low") is not None
-                    else kwargs.get("reid_score_threshold", 2.0)
+                    else 2.0
                 ),
                 weight_new=float(kwargs.get("reid_weight_new", 1.0)),
                 weight_lost=float(kwargs.get("reid_weight_lost", 1.4)),
@@ -1069,11 +1768,11 @@ def run_eval(
                 unstable_iou_weight=float(kwargs.get("reid_unstable_iou_weight", 1.0)),
                 conf_jitter_gate=float(kwargs.get("reid_conf_jitter_gate", 0.10)),
                 trigger_persist_frames=int(
-                    kwargs.get("reid_trigger_persist_frames", 1)
+                    kwargs.get("reid_trigger_persist_frames", 2)
                 ),
-                cooldown_frames=int(kwargs.get("reid_cooldown_frames", 0)),
+                cooldown_frames=int(kwargs.get("reid_cooldown_frames", 4)),
                 birth_death_lost_min=float(
-                    kwargs.get("reid_birth_death_lost_min", 0.0)
+                    kwargs.get("reid_birth_death_lost_min", 0.1)
                 ),
             )
             if need_reid_enabled
@@ -1084,6 +1783,10 @@ def run_eval(
         warmup_frames = int(kwargs.get("warmup_frames", 50))
         seq_stage_totals = OrderedDict(
             (name, 0.0) for name in overall_stage_totals.keys()
+        )
+        seq_stage_samples = OrderedDict((name, []) for name in top_level_stage_names)
+        seq_native_reid_samples = OrderedDict(
+            (name, []) for name in native_reid_breakdown_names
         )
         seq_post_counts = OrderedDict(
             (name, 0)
@@ -1100,8 +1803,18 @@ def run_eval(
         lazy_reid_prev_embeddings: dict[int, torch.Tensor] = {}
         seq_profiled_frames = 0
         last_reid_frame = -100
+        tracker_result_buffers = detector.tracker.allocate_result_buffers(
+            device=pool.frame_buffer.device
+        )
 
         for frame_id in range(1, frame_end + 1):
+            current_stage_samples = seq_stage_samples
+            current_stage_sample_active = frame_id > warmup_frames
+            current_frame_stage_elapsed = (
+                {name: 0.0 for name in top_level_stage_names}
+                if current_stage_sample_active
+                else None
+            )
             t_e2e_start = time.perf_counter()
             try:
                 frame_gpu, _fetch_ms = time_stage(
@@ -1155,44 +1868,92 @@ def run_eval(
                 torch.cuda.synchronize()
                 t_post_start = time.perf_counter()
             raw_box_count = int(fused_scores.numel())
-            t_sub_start = time.perf_counter()
-            keep_indices, geometry_suspect_mask = filter_detections_fast(
-                fused_boxes,
-                fused_scores,
-                fused_classes,
-                score_threshold=min(conf_threshold, track_thresh),
-                track_person_only=track_person_only,
-                person_class=person_class,
-                is_tiled=is_tiled,
-                frame_w=w_orig,
-                frame_h=h_orig,
-                person_geometry_prior=person_geometry_prior,
-                geometry_suspect_support=geometry_suspect_support,
-                person_min_height_ratio=person_min_height_ratio,
-                person_min_aspect=person_min_aspect,
-                person_max_aspect=person_max_aspect,
-                person_min_area_ratio=person_min_area_ratio,
-                person_max_area_ratio=person_max_area_ratio,
-            )
-            fused_boxes = fused_boxes[keep_indices]
-            fused_scores = fused_scores[keep_indices]
-            fused_classes = fused_classes[keep_indices]
-            suspect_boxes = fused_boxes[geometry_suspect_mask]
-            if geometry_suspect_support and geometry_suspect_mask.any():
-                fused_scores = fused_scores.clone()
-                fused_scores[geometry_suspect_mask] = torch.minimum(
-                    fused_scores[geometry_suspect_mask],
-                    torch.full_like(
-                        fused_scores[geometry_suspect_mask],
-                        geometry_suspect_support_score,
-                    ),
+
+            if perception_pipeline is not None:
+                if profile_stages:
+                    torch.cuda.synchronize()
+                raw_boxes_contig = fused_boxes.to(torch.float32).contiguous()
+                raw_scores_contig = fused_scores.to(torch.float32).contiguous()
+                raw_classes_contig = fused_classes.to(torch.int32).contiguous()
+                post_boxes = torch.empty_like(raw_boxes_contig)
+                post_scores = torch.empty_like(raw_scores_contig)
+                post_classes = torch.empty_like(raw_classes_contig)
+                geometry_suspect_mask = torch.empty(
+                    (raw_box_count,), device=raw_boxes_contig.device, dtype=torch.bool
                 )
-            if profile_stages:
-                torch.cuda.synchronize()
-                seq_stage_totals["post_filter"] += (
-                    time.perf_counter() - t_sub_start
-                ) * 1000
-            after_filter_count = int(fused_scores.numel())
+                post_count = torch.empty(
+                    (), device=raw_boxes_contig.device, dtype=torch.int32
+                )
+                perception_pipeline.process_detections_into(
+                    raw_boxes_contig.data_ptr(),
+                    raw_scores_contig.data_ptr(),
+                    raw_classes_contig.data_ptr(),
+                    raw_box_count,
+                    w_orig,
+                    h_orig,
+                    is_tiled,
+                    post_boxes.data_ptr(),
+                    post_scores.data_ptr(),
+                    post_classes.data_ptr(),
+                    geometry_suspect_mask.data_ptr(),
+                    post_count.data_ptr(),
+                    torch.cuda.current_stream().cuda_stream,
+                )
+                n_post = int(post_count.cpu().item())
+                fused_boxes = post_boxes[:n_post]
+                fused_scores = post_scores[:n_post]
+                fused_classes = post_classes[:n_post]
+                geometry_suspect_mask = geometry_suspect_mask[:n_post]
+                suspect_boxes = fused_boxes[geometry_suspect_mask]
+                if geometry_suspect_support and geometry_suspect_mask.any():
+                    fused_scores = fused_scores.clone()
+                    fused_scores[geometry_suspect_mask] = torch.minimum(
+                        fused_scores[geometry_suspect_mask],
+                        torch.full_like(
+                            fused_scores[geometry_suspect_mask],
+                            geometry_suspect_support_score,
+                        ),
+                    )
+                after_filter_count = int(n_post)
+                after_nms_count = int(n_post)
+            else:
+                t_sub_start = time.perf_counter()
+                keep_indices, geometry_suspect_mask = filter_detections_fast(
+                    fused_boxes,
+                    fused_scores,
+                    fused_classes,
+                    score_threshold=min(conf_threshold, track_thresh),
+                    track_person_only=track_person_only,
+                    person_class=person_class,
+                    is_tiled=is_tiled,
+                    frame_w=w_orig,
+                    frame_h=h_orig,
+                    person_geometry_prior=person_geometry_prior,
+                    geometry_suspect_support=geometry_suspect_support,
+                    person_min_height_ratio=person_min_height_ratio,
+                    person_min_aspect=person_min_aspect,
+                    person_max_aspect=person_max_aspect,
+                    person_min_area_ratio=person_min_area_ratio,
+                    person_max_area_ratio=person_max_area_ratio,
+                )
+                fused_boxes = fused_boxes[keep_indices]
+                fused_scores = fused_scores[keep_indices]
+                fused_classes = fused_classes[keep_indices]
+                suspect_boxes = fused_boxes[geometry_suspect_mask]
+                if geometry_suspect_support and geometry_suspect_mask.any():
+                    fused_scores = fused_scores.clone()
+                    fused_scores[geometry_suspect_mask] = torch.minimum(
+                        fused_scores[geometry_suspect_mask],
+                        torch.full_like(
+                            fused_scores[geometry_suspect_mask],
+                            geometry_suspect_support_score,
+                        ),
+                    )
+                if profile_stages:
+                    torch.cuda.synchronize()
+                    elapsed_ms = (time.perf_counter() - t_sub_start) * 1000
+                    seq_stage_totals["post_filter"] += elapsed_ms
+                after_filter_count = int(fused_scores.numel())
 
             if fused_boxes.numel() == 0:
                 if frame_id > warmup_frames:
@@ -1206,7 +1967,7 @@ def run_eval(
                     print(f"🎬 {seq} [{frame_id}/{frame_end}]")
                 continue
 
-            if is_tiled and fused_boxes.numel() > 0:
+            if perception_pipeline is None and is_tiled and fused_boxes.numel() > 0:
                 if profile_stages:
                     torch.cuda.synchronize()
                     t_sub_start = time.perf_counter()
@@ -1224,10 +1985,10 @@ def run_eval(
                 suspect_boxes = fused_boxes[geometry_suspect_mask]
                 if profile_stages:
                     torch.cuda.synchronize()
-                    seq_stage_totals["post_nms"] += (
-                        time.perf_counter() - t_sub_start
-                    ) * 1000
-            after_nms_count = int(fused_scores.numel())
+                    elapsed_ms = (time.perf_counter() - t_sub_start) * 1000
+                    seq_stage_totals["post_nms"] += elapsed_ms
+            if perception_pipeline is None:
+                after_nms_count = int(fused_scores.numel())
 
             if cross_tile_merge and is_tiled and fused_boxes.numel() > 1:
                 if profile_stages:
@@ -1242,15 +2003,14 @@ def run_eval(
                 suspect_boxes = fused_boxes[:0]
                 if profile_stages:
                     torch.cuda.synchronize()
-                    seq_stage_totals["post_merge"] += (
-                        time.perf_counter() - t_sub_start
-                    ) * 1000
+                    elapsed_ms = (time.perf_counter() - t_sub_start) * 1000
+                    seq_stage_totals["post_merge"] += elapsed_ms
             after_merge_count = int(fused_scores.numel())
             if profile_stages:
                 torch.cuda.synchronize()
-                seq_stage_totals["postprocess"] += (
-                    time.perf_counter() - t_post_start
-                ) * 1000
+                elapsed_ms = (time.perf_counter() - t_post_start) * 1000
+                seq_stage_totals["postprocess"] += elapsed_ms
+                record_stage_sample("postprocess", elapsed_ms)
                 if frame_id > warmup_frames:
                     seq_post_counts["raw_boxes"] += raw_box_count
                     seq_post_counts["after_filter"] += after_filter_count
@@ -1283,6 +2043,9 @@ def run_eval(
                 if _do_reid:
                     last_reid_frame = frame_id
                     if primary_appearance_bank is not None:
+                        if profile_stages:
+                            torch.cuda.synchronize()
+                            t_reid_bank_sync_start = time.perf_counter()
                         bank_reps = primary_appearance_bank.representatives()
                         if bank_reps:
                             detector.tracker.set_reference_features_from_bank(bank_reps)
@@ -1299,25 +2062,113 @@ def run_eval(
                                 torch.zeros(0, dtype=torch.int32),
                                 torch.zeros(0, dtype=torch.bool),
                             )
+                        if profile_stages:
+                            torch.cuda.synchronize()
+                            elapsed_ms = (
+                                time.perf_counter() - t_reid_bank_sync_start
+                            ) * 1000
+                            seq_stage_totals["reid_bank_sync"] += elapsed_ms
+                            record_stage_sample("reid_bank_sync", elapsed_ms)
 
             if reid_enabled and _do_reid:
-                if profile_stages:
-                    torch.cuda.synchronize()
-                    t_reid_start = time.perf_counter()
-                frame_batch = pool.frame_buffer.unsqueeze(0)
-                if reid_crop_layout == "parts":
-                    crops = cropper.process_parts(frame_batch, fused_boxes)
-                    if crops.numel() > 0:
-                        embeddings = extractor.extract_parts_fused(crops)
+                if native_reid_available and perception_pipeline is not None:
+                    frame_hwc = pool.frame_buffer.permute(1, 2, 0).contiguous()
+                    embeddings = torch.empty(
+                        (fused_boxes.shape[0], extractor.feature_dim),
+                        device=fused_boxes.device,
+                        dtype=torch.float32,
+                    )
+                    if profile_stages:
+                        perception_pipeline.reset_reid_profile_stats()
+                    if profile_stages:
+                        torch.cuda.synchronize()
+                        t_reid_extract_start = time.perf_counter()
+                    perception_pipeline.extract_reid(
+                        frame_hwc.data_ptr(),
+                        h_orig,
+                        w_orig,
+                        fused_boxes.data_ptr(),
+                        int(fused_boxes.shape[0]),
+                        embeddings.data_ptr(),
+                        torch.cuda.current_stream().cuda_stream,
+                    )
+                    if profile_stages:
+                        torch.cuda.synchronize()
+                        elapsed_ms = (time.perf_counter() - t_reid_extract_start) * 1000
+                        seq_stage_totals["reid_extract"] += elapsed_ms
+                        record_stage_sample("reid_extract", elapsed_ms)
+                        if current_stage_sample_active:
+                            native_stats = perception_pipeline.get_reid_profile_stats()
+                            seq_native_reid_samples["native_reid_crop"].append(
+                                float(native_stats.get("crop_ms", 0.0))
+                            )
+                            seq_native_reid_samples[
+                                "native_reid_pre_normalize"
+                            ].append(
+                                float(
+                                    native_stats.get(
+                                        "extract_pre_normalize_ms", 0.0
+                                    )
+                                )
+                            )
+                            seq_native_reid_samples["native_reid_trt_enqueue"].append(
+                                float(
+                                    native_stats.get("extract_trt_enqueue_ms", 0.0)
+                                )
+                            )
+                            seq_native_reid_samples[
+                                "native_reid_l2_normalize"
+                            ].append(
+                                float(
+                                    native_stats.get("extract_l2_normalize_ms", 0.0)
+                                )
+                            )
                 else:
-                    crops = cropper.process(frame_batch, fused_boxes)
-                    if crops.numel() > 0:
-                        embeddings = extractor.extract(crops)
-                if profile_stages:
-                    torch.cuda.synchronize()
-                    seq_stage_totals["reid"] += (
-                        time.perf_counter() - t_reid_start
-                    ) * 1000
+                    frame_batch = pool.frame_buffer.unsqueeze(0)
+                    if reid_crop_layout == "parts":
+                        if profile_stages:
+                            torch.cuda.synchronize()
+                            t_reid_crop_start = time.perf_counter()
+                        crops = cropper.process_parts(frame_batch, fused_boxes)
+                        if profile_stages:
+                            torch.cuda.synchronize()
+                            elapsed_ms = (time.perf_counter() - t_reid_crop_start) * 1000
+                            seq_stage_totals["reid_crop"] += elapsed_ms
+                            record_stage_sample("reid_crop", elapsed_ms)
+                        if crops.numel() > 0:
+                            if profile_stages:
+                                torch.cuda.synchronize()
+                                t_reid_extract_start = time.perf_counter()
+                            embeddings = extractor.extract_parts_fused(crops)
+                            if profile_stages:
+                                torch.cuda.synchronize()
+                                elapsed_ms = (
+                                    time.perf_counter() - t_reid_extract_start
+                                ) * 1000
+                                seq_stage_totals["reid_extract"] += elapsed_ms
+                                record_stage_sample("reid_extract", elapsed_ms)
+                    else:
+                        if profile_stages:
+                            torch.cuda.synchronize()
+                            t_reid_crop_start = time.perf_counter()
+                        crops = cropper.process(frame_batch, fused_boxes)
+                        if profile_stages:
+                            torch.cuda.synchronize()
+                            elapsed_ms = (time.perf_counter() - t_reid_crop_start) * 1000
+                            seq_stage_totals["reid_crop"] += elapsed_ms
+                            record_stage_sample("reid_crop", elapsed_ms)
+                        if crops.numel() > 0:
+                            if profile_stages:
+                                torch.cuda.synchronize()
+                                t_reid_extract_start = time.perf_counter()
+                            embeddings = extractor.extract(crops)
+                            if profile_stages:
+                                torch.cuda.synchronize()
+                                elapsed_ms = (
+                                    time.perf_counter() - t_reid_extract_start
+                                ) * 1000
+                                seq_stage_totals["reid_extract"] += elapsed_ms
+                                record_stage_sample("reid_extract", elapsed_ms)
 
             mid_thresh_scale = geometry_mid_thresh_scale(
                 fused_boxes,
@@ -1340,17 +2191,25 @@ def run_eval(
                 _raw_warp = gmc_estimator.estimate(pool.frame_buffer)
                 if _raw_warp is not None:
                     gmc_warp = _raw_warp.to(fused_boxes.device)
-            tracks, _ = time_stage(
+            track_results, _ = time_stage(
                 seq_stage_totals,
                 "track",
-                lambda: detector.tracker.update(
-                    fused_boxes,
-                    fused_scores,
-                    fused_classes.to(torch.int32),
-                    embeddings=embeddings if use_tracker_reid else None,
-                    gmc=gmc_warp,
-                    mid_thresh_scale=mid_thresh_scale,
-                ),
+                lambda: (
+                    detector.tracker.update_into(
+                        fused_boxes,
+                        fused_scores,
+                        fused_classes.to(torch.int32),
+                        tracker_result_buffers,
+                        embeddings=embeddings if use_tracker_reid else None,
+                        gmc=gmc_warp,
+                        mid_thresh_scale=mid_thresh_scale,
+                    ),
+                    _materialize_gpu_track_results(
+                        tracker_result_buffers,
+                        default_class_id=person_class if track_person_only else None,
+                        include_det_idx=embeddings is not None,
+                    ),
+                )[1],
                 sync_cuda=True,
             )
 
@@ -1454,144 +2313,82 @@ def run_eval(
                 torch.cuda.synchronize()
                 t_relink_write_start = time.perf_counter()
             if relinker:
-                relinker.update_motion_snapshots(detector.tracker.get_state_snapshots())
+                motion_candidate_ids = relinker.motion_candidate_ids(frame_id)
+                if motion_candidate_ids:
+                    relinker.update_motion_snapshots(
+                        detector.tracker.get_motion_snapshots_for_track_ids(
+                            motion_candidate_ids
+                        )
+                    )
 
-            assigned_ids: set = set()
-            lifecycle_assigned_ids: set[int] = set()
-            for t in tracks:
-                if int(t.class_id) != person_class:
-                    continue
-                raw_box = (float(t.x1), float(t.y1), float(t.x2), float(t.y2))
-                if (
-                    geometry_suspect_support
-                    and suspect_boxes.numel() > 0
-                    and float(t.score) <= geometry_suspect_support_score + 1e-4
-                ):
-                    tb = torch.tensor(
-                        [t.x1, t.y1, t.x2, t.y2], device=suspect_boxes.device
-                    )
-                    if float(_box_iou_single(tb, suspect_boxes).max()) > 0.5:
-                        continue
-                if id_stability_filter and not id_stability_filter.accept(
-                    int(t.obj_id), raw_box, float(t.score), frame_id
-                ):
-                    continue
-                tid = t.obj_id
-                emb = None
-                det_idx = getattr(t, "det_idx", -1)
-                if (
-                    embeddings is not None
-                    and det_idx >= 0
-                    and det_idx < fused_boxes.shape[0]
-                ):
-                    emb = embeddings[det_idx]
-                    if primary_appearance_bank is not None:
-                        tb = torch.tensor(
-                            [t.x1, t.y1, t.x2, t.y2], device=fused_boxes.device
-                        )
-                        match_iou = float(
-                            _box_iou_single(
-                                tb, fused_boxes[det_idx : det_idx + 1]
-                            ).item()
-                        )
-                        if match_iou > 0.35:
-                            primary_appearance_bank.update(
-                                int(t.obj_id),
-                                embeddings[det_idx],
-                                det_score=float(fused_scores[det_idx]),
-                                iou=match_iou,
-                                frame_id=frame_id,
-                                geometry_clean=True,
-                                suspect_box=bool(geometry_suspect_mask[det_idx])
-                                if geometry_suspect_mask.numel() > det_idx
-                                else False,
-                            )
-                if relinker:
-                    reid_emb = emb
-                    if (
-                        primary_appearance_bank is not None
-                        and not primary_appearance_bank.is_consistent(int(t.obj_id))
-                    ):
-                        reid_emb = None  # Phase 2: consistency gate — don't relink with dirty bank
-                    tid = relinker.resolve(
-                        t.obj_id,
-                        reid_emb,
-                        (t.x1, t.y1, t.x2, t.y2),
-                        t.score,
-                        frame_id,
-                        w_orig,
-                        h_orig,
-                        assigned_ids,
-                    )
-                tid = lifecycle_merger.resolve(
-                    int(tid),
-                    raw_box,
-                    float(t.score),
-                    frame_id,
-                    w_orig,
-                    h_orig,
-                    emb if relinker else None,
-                    lifecycle_assigned_ids,
-                )
-                global_tid = global_id_mapper.map(seq, tid)
-                x1, y1, x2, y2 = t.x1, t.y1, t.x2, t.y2
-                results_lines.append(
-                    f"{frame_id},{global_tid},{max(0, x1):.2f},{max(0, y1):.2f},"
-                    f"{min(w_orig, x2) - max(0, x1):.2f},{min(h_orig, y2) - max(0, y1):.2f},"
-                    f"{t.score:.4f},-1,-1,-1"
-                )
-                if output_appearance_bank is not None:
-                    output_appearance_bank.update(
-                        int(global_tid),
-                        emb,
-                        score=float(t.score),
-                        frame_id=frame_id,
-                    )
+            host_track_batch = _prepare_host_track_batch(
+                track_results,
+                tracker_result_buffers,
+                dynamic_reid_enabled=dynamic_reid is not None,
+                person_class=person_class,
+            )
+            prepared_candidates = _prepare_track_candidates(
+                frame_id=frame_id,
+                track_results=track_results,
+                host_batch=host_track_batch,
+                person_class=person_class,
+                track_person_only=track_person_only,
+                suspect_boxes=suspect_boxes,
+                geometry_suspect_support=geometry_suspect_support,
+                geometry_suspect_support_score=geometry_suspect_support_score,
+                id_stability_filter=id_stability_filter,
+                embeddings=embeddings,
+                fused_boxes=fused_boxes,
+                fused_scores=fused_scores,
+                geometry_suspect_mask=geometry_suspect_mask,
+                primary_appearance_bank=primary_appearance_bank,
+            )
+            resolved_tracks = _resolve_frame_tracks(
+                frame_id=frame_id,
+                frame_w=w_orig,
+                frame_h=h_orig,
+                prepared_candidates=prepared_candidates,
+                lifecycle_merger=lifecycle_merger,
+                identity_resolver=identity_resolver,
+            )
+            frame_result_lines = _emit_resolved_tracks(
+                seq=seq,
+                frame_id=frame_id,
+                frame_w=w_orig,
+                frame_h=h_orig,
+                resolved_tracks=resolved_tracks,
+                global_id_mapper=global_id_mapper,
+                output_appearance_bank=output_appearance_bank,
+            )
+            results_lines.extend(frame_result_lines)
+            curr_track_ids = set(host_track_batch.ids)
             lifecycle_merger.prune(frame_id)
-            curr_track_ids = {int(t.obj_id) for t in tracks}
-            # C: at track death, replace relinker's drifted EMA with the bank's quality-filtered representative
-            if (
-                relinker is not None
-                and semantic_bank_inject
-                and primary_appearance_bank is not None
-            ):
-                just_lost = prev_track_ids - curr_track_ids
-                for _lost_tid in just_lost:
-                    if not primary_appearance_bank.is_consistent(_lost_tid):
-                        continue
-                    _rep = primary_appearance_bank.representative(_lost_tid)
-                    if _rep is None:
-                        continue
-                    _canonical = relinker.alias.get(_lost_tid, _lost_tid)
-                    if _canonical in relinker.features:
-                        relinker.inject_reference(_canonical, _rep)
-            if dynamic_reid is not None:
-                dynamic_reid.observe(
-                    {
-                        int(t.obj_id): ReIDTrackObservation(
-                            box=(float(t.x1), float(t.y1), float(t.x2), float(t.y2)),
-                            det_score=float(t.score),
-                        )
-                        for t in tracks
-                        if int(t.class_id) == person_class
-                    },
-                    gmc=gmc_warp if gmc_enabled else None,
-                )
-            if primary_appearance_bank is not None:
-                primary_appearance_bank.prune(curr_track_ids)
-            prev_track_ids = curr_track_ids
+            prev_track_ids = _finalize_frame_side_effects(
+                curr_track_ids=curr_track_ids,
+                prev_track_ids=prev_track_ids,
+                relinker=relinker,
+                semantic_bank_inject=semantic_bank_inject,
+                primary_appearance_bank=primary_appearance_bank,
+                dynamic_reid=dynamic_reid,
+                person_observations=host_track_batch.person_observations,
+                gmc_warp=gmc_warp,
+                gmc_enabled=gmc_enabled,
+            )
             if profile_stages:
                 torch.cuda.synchronize()
-                seq_stage_totals["relink_write"] += (
-                    time.perf_counter() - t_relink_write_start
-                ) * 1000
+                elapsed_ms = (time.perf_counter() - t_relink_write_start) * 1000
+                seq_stage_totals["relink_write"] += elapsed_ms
+                record_stage_sample("relink_write", elapsed_ms)
 
             if frame_id > warmup_frames:
                 frame_latencies.append((time.perf_counter() - t_frame_start) * 1000)
             if profile_stages and frame_id > warmup_frames:
-                seq_stage_totals["frame_total"] += (
-                    time.perf_counter() - t_e2e_start
-                ) * 1000
+                elapsed_ms = (time.perf_counter() - t_frame_start) * 1000
+                seq_stage_totals["frame_total"] += elapsed_ms
+                record_stage_sample("frame_total", elapsed_ms)
+                if current_frame_stage_elapsed is not None:
+                    for stage_name, stage_elapsed in current_frame_stage_elapsed.items():
+                        seq_stage_samples[stage_name].append(stage_elapsed)
                 seq_profiled_frames += 1
             if frame_id % 100 == 0:
                 print(f"🎬 {seq} [{frame_id}/{frame_end}]")
@@ -1654,12 +2451,43 @@ def run_eval(
             relinker.report()
         lifecycle_merger.report()
         if profile_stages and seq_profiled_frames > 0:
-            print(f"\n🧪 Stage Profile for {seq}:")
-            for stage_name, total_ms in seq_stage_totals.items():
-                mean_ms = total_ms / seq_profiled_frames
-                share = total_ms / max(seq_stage_totals["frame_total"], 1e-6) * 100.0
-                print(f"  - {stage_name}: {mean_ms:.2f} ms/frame ({share:.1f}%)")
-                overall_stage_totals[stage_name] += total_ms
+            print(f"\n🧪 Stage Jitter Report for {seq} (exclusive top-level stages):")
+            for stage_name in top_level_stage_names:
+                samples = seq_stage_samples[stage_name]
+                if not samples:
+                    continue
+                arr = np.array(samples, dtype=np.float64)
+                mean_ms = float(arr.mean())
+                std_ms = float(arr.std())
+                p95_ms = float(np.percentile(arr, 95))
+                p99_ms = float(np.percentile(arr, 99))
+                print(
+                    f"  - {stage_name}: mean={mean_ms:.2f} ms "
+                    f"std={std_ms:.2f} ms p95={p95_ms:.2f} ms p99={p99_ms:.2f} ms"
+                )
+                overall_stage_totals[stage_name] += float(arr.sum())
+                overall_stage_samples[stage_name].extend(samples)
+            if any(seq_stage_totals[name] > 0.0 for name in breakdown_stage_names):
+                print("  - postprocess_breakdown:")
+                for stage_name in breakdown_stage_names:
+                    total_ms = seq_stage_totals[stage_name]
+                    if total_ms <= 0.0:
+                        continue
+                    mean_ms = total_ms / seq_profiled_frames
+                    print(f"    - {stage_name}: {mean_ms:.2f} ms/frame")
+                    overall_stage_totals[stage_name] += total_ms
+            if any(seq_native_reid_samples[name] for name in native_reid_breakdown_names):
+                print("  - reid_extract_breakdown:")
+                for stage_name in native_reid_breakdown_names:
+                    samples = seq_native_reid_samples[stage_name]
+                    if not samples:
+                        continue
+                    arr = np.array(samples, dtype=np.float64)
+                    print(
+                        f"    - {stage_name}: mean={arr.mean():.2f} ms "
+                        f"std={arr.std():.2f} ms p95={np.percentile(arr, 95):.2f} ms "
+                        f"p99={np.percentile(arr, 99):.2f} ms"
+                    )
             if any(seq_post_counts.values()):
                 print("  - post_counts:")
                 for count_name, total_count in seq_post_counts.items():
@@ -1705,11 +2533,32 @@ def run_eval(
                     )
             overall_profiled_frames += seq_profiled_frames
             stage_summary_lines.append(f"[{seq}] frames={seq_profiled_frames}")
-            for stage_name, total_ms in seq_stage_totals.items():
-                mean_ms = total_ms / seq_profiled_frames
-                share = total_ms / max(seq_stage_totals["frame_total"], 1e-6) * 100.0
+            for stage_name in top_level_stage_names:
+                samples = seq_stage_samples[stage_name]
+                if not samples:
+                    continue
+                arr = np.array(samples, dtype=np.float64)
                 stage_summary_lines.append(
-                    f"{stage_name}\tmean_ms={mean_ms:.2f}\ttotal_ms={total_ms:.2f}\tshare={share:.1f}%"
+                    f"{stage_name}\tmean_ms={arr.mean():.2f}\tstd_ms={arr.std():.2f}\t"
+                    f"p95_ms={np.percentile(arr, 95):.2f}\tp99_ms={np.percentile(arr, 99):.2f}\t"
+                    f"samples={len(samples)}"
+                )
+            for stage_name in breakdown_stage_names:
+                total_ms = seq_stage_totals[stage_name]
+                if total_ms <= 0.0:
+                    continue
+                stage_summary_lines.append(
+                    f"{stage_name}\tmean_ms={total_ms / seq_profiled_frames:.2f}\ttotal_ms={total_ms:.2f}"
+                )
+            for stage_name in native_reid_breakdown_names:
+                samples = seq_native_reid_samples[stage_name]
+                if not samples:
+                    continue
+                arr = np.array(samples, dtype=np.float64)
+                stage_summary_lines.append(
+                    f"{stage_name}\tmean_ms={arr.mean():.2f}\tstd_ms={arr.std():.2f}\t"
+                    f"p95_ms={np.percentile(arr, 95):.2f}\tp99_ms={np.percentile(arr, 99):.2f}\t"
+                    f"samples={len(samples)}"
                 )
             for count_name, total_count in seq_post_counts.items():
                 mean_count = total_count / seq_profiled_frames
@@ -1764,15 +2613,33 @@ def run_eval(
     if mapping_lines:
         (output_root / "_global_id_map.txt").write_text("\n".join(mapping_lines) + "\n")
     if profile_stages and overall_profiled_frames > 0:
-        print(f"\n🧪 Overall Stage Profile ({overall_profiled_frames} frames):")
+        print(f"\n🧪 Overall Stage Jitter Report ({overall_profiled_frames} frames):")
         stage_summary_lines.append(f"[OVERALL] frames={overall_profiled_frames}")
-        for stage_name, total_ms in overall_stage_totals.items():
-            mean_ms = total_ms / overall_profiled_frames
-            share = total_ms / max(overall_stage_totals["frame_total"], 1e-6) * 100.0
-            print(f"  - {stage_name}: {mean_ms:.2f} ms/frame ({share:.1f}%)")
-            stage_summary_lines.append(
-                f"{stage_name}\tmean_ms={mean_ms:.2f}\ttotal_ms={total_ms:.2f}\tshare={share:.1f}%"
+        for stage_name in top_level_stage_names:
+            samples = overall_stage_samples[stage_name]
+            if not samples:
+                continue
+            arr = np.array(samples, dtype=np.float64)
+            print(
+                f"  - {stage_name}: mean={arr.mean():.2f} ms "
+                f"std={arr.std():.2f} ms p95={np.percentile(arr, 95):.2f} ms "
+                f"p99={np.percentile(arr, 99):.2f} ms"
             )
+            stage_summary_lines.append(
+                f"{stage_name}\tmean_ms={arr.mean():.2f}\tstd_ms={arr.std():.2f}\t"
+                f"p95_ms={np.percentile(arr, 95):.2f}\tp99_ms={np.percentile(arr, 99):.2f}\t"
+                f"samples={len(samples)}"
+            )
+        if any(overall_stage_totals[name] > 0.0 for name in breakdown_stage_names):
+            print("  - postprocess_breakdown:")
+            for stage_name in breakdown_stage_names:
+                total_ms = overall_stage_totals[stage_name]
+                if total_ms <= 0.0:
+                    continue
+                print(f"    - {stage_name}: {total_ms / overall_profiled_frames:.2f} ms/frame")
+                stage_summary_lines.append(
+                    f"{stage_name}\tmean_ms={total_ms / overall_profiled_frames:.2f}\ttotal_ms={total_ms:.2f}"
+                )
         if any(overall_post_counts.values()):
             print("  - post_counts:")
             for count_name, total_count in overall_post_counts.items():

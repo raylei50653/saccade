@@ -34,7 +34,7 @@ results/
 scripts/eval/output/*
 !scripts/eval/output/README.md
 !scripts/eval/output/.gitkeep
-storage/chroma_db/
+src/saccade/storage/chroma_db/
 assets/videos/*.mp4
 *.log
 !assets/videos/.gitkeep

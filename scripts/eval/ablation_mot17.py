@@ -203,6 +203,12 @@ def is_mot_file(path: str) -> bool:
 
 def evaluate_dir(results_dir: str, gt_root: str, detector: str | None) -> dict | None:
     import glob
+    import json
+
+    cache_path = os.path.join(results_dir, "metrics.json")
+    if os.path.exists(cache_path):
+        with open(cache_path, "r") as f:
+            return json.load(f)
 
     files = sorted(
         f for f in glob.glob(os.path.join(results_dir, "*.txt")) if is_mot_file(f)
@@ -235,7 +241,16 @@ def evaluate_dir(results_dir: str, gt_root: str, detector: str | None) -> dict |
     summary = mh.compute_many(
         accs, names=names, metrics=_METRICS, generate_overall=True
     )
-    return {m: summary.loc["OVERALL", m] for m in _METRICS}
+    results = {m: summary.loc["OVERALL", m] for m in _METRICS}
+    
+    # Save to cache
+    try:
+        with open(cache_path, "w") as f:
+            json.dump(results, f, indent=2)
+    except Exception:
+        pass
+        
+    return results
 
 
 def fmt(val, metric: str) -> str:
@@ -325,7 +340,7 @@ def main() -> None:
     parser.add_argument("--detector", choices=["SDP", "DPM", "FRCNN"], default="SDP")
     parser.add_argument("--max-frames", type=int, default=None)
     parser.add_argument("--gt-root", default="datasets/MOT17/train")
-    parser.add_argument("--output-root", default="results/ablation_mot17")
+    parser.add_argument("--output-root", default="scripts/eval/output/ablation_mot17")
     parser.add_argument("--skip-run", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()

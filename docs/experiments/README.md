@@ -7,6 +7,7 @@
 
 * **[pipeline/](./pipeline/)** - 管線與系統效能優化
   * [解析度與 Zero-Copy 實驗 (`resolution_and_zerocopy.md`)](./pipeline/resolution_and_zerocopy.md)
+  * [GPU Pipeline M1+M2：全 GPU 化熱路徑 (`gpu_pipeline_m1m2.md`)](./pipeline/gpu_pipeline_m1m2.md)
 * **[tracking/](./tracking/)** - 追蹤器與生命週期關聯
   * [FP/FN 恢復與 GMC 實驗 (`fp_fn_recovery_and_gmc.md`)](./tracking/fp_fn_recovery_and_gmc.md)
 * **[reid/](./reid/)** - 語義特徵重識別與裁切

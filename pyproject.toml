@@ -46,7 +46,8 @@ dependencies = [
 ]
 
 [tool.setuptools]
-packages = ["perception", "media", "cognition", "storage", "pipeline", "api"]
+package-dir = {"" = "src"}
+packages = {find = {where = ["src"]}}
 
 [tool.uv]
 override-dependencies = [
@@ -57,6 +58,7 @@ override-dependencies = [
 strict = true
 ignore_missing_imports = true
 exclude = ["tests/"]
+python_path = "src"
 
 [tool.ruff]
 exclude = ["tests/benchmarks/archive"]
@@ -65,7 +67,8 @@ exclude = ["tests/benchmarks/archive"]
 ignore = ["E701"]
 
 [tool.pytest.ini_options]
-addopts = "--cov=perception --cov=cognition --cov=media --cov=storage --cov=pipeline --cov-report=term-missing"
+addopts = "--cov=saccade --cov-report=term-missing"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 asyncio_mode = "strict"
+pythonpath = ["src"]

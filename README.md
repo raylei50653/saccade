@@ -24,19 +24,19 @@ actively used.
 
 ## Core Areas
 
-- `perception/`
+- `src/saccade/perception/`
   - Detector, preprocessing, ReID, relink, tracker coordination, eval runner.
 
 - `src/` and `include/`
   - C++ / CUDA tracking and performance-critical extensions.
 
-- `media/`
+- `src/saccade/media/`
   - Stream ingestion and video pipeline integration.
 
-- `pipeline/`
+- `src/saccade/pipeline/`
   - Higher-level orchestration across perception, storage, and cognition.
 
-- `storage/`
+- `src/saccade/storage/`
   - Redis / Chroma-related persistence paths.
 
 - `scripts/eval/`
@@ -161,6 +161,6 @@ Some benchmarks and evaluation scripts require:
 ## Status
 
 If something in this README conflicts with the code, treat the code under
-`perception/`, `scripts/eval/`, and `tests/` as the source of truth. This file
+`src/saccade/perception/`, `scripts/eval/`, and `tests/` as the source of truth. This file
 has been updated to reflect the current MOT17-centered evaluation workflow, but
 the repo is still under active iteration.

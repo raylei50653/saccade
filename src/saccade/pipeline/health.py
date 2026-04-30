@@ -1,5 +1,5 @@
 """
-pipeline/health.py
+src/saccade/pipeline/health.py
 
 Saccade system health monitor with Industrial Stress Metrics.
 """

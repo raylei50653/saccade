@@ -8,12 +8,12 @@ Saccade 採用「模組化雙軌感知架構」，將邊緣端的即時偵測與
 
 | 層級 | 名稱 | 核心技術 | 職責定義 | 對應目錄 |
 | :--- | :--- | :--- | :--- | :--- |
-| **L1** | **感知層 (Perception)** | YOLO26 (TRT) + GPUByteTracker (C++/CUDA) | NMS-Free 極速物件偵測、GPU 追蹤、GMC、光線補償。 | `perception/`, `src/` |
-| **L2** | **去重層 (Deduplication)** | SigLIP 2 / Saccade Heartbeat / FeatureBank | 語義漂移檢測，過濾冗餘影格；跨鏡頭 Re-ID。 | `perception/` |
-| **L3** | **緩衝層 (Streaming)** | Redis / MicroBatcher / asyncio | 事件非同步推送與微批次聚合。 | `storage/`, `pipeline/` |
-| **L4** | **儲存層 (Vector DB)** | ChromaDB / HNSW | 多維度向量索引（語義 + 時間 + 標籤）；定期 snapshot 備份。 | `storage/` |
-| **L5** | **認知層 (Agentic RAG)** | LlamaIndex + Ollama + ChromaDB | 事件觸發式語義推理；Visual Re-query；歷史事件脈絡分析。 | `pipeline/` |
-| **L6** | **資源層 (Resource Management)** | NVML / ResourceManager | 實時 VRAM 監控與階梯式降級決策。 | `cognition/` |
+| **L1** | **感知層 (Perception)** | YOLO26 (TRT) + GPUByteTracker (C++/CUDA) | NMS-Free 極速物件偵測、GPU 追蹤、GMC、光線補償。 | `src/saccade/perception/`, `src/` |
+| **L2** | **去重層 (Deduplication)** | SigLIP 2 / Saccade Heartbeat / FeatureBank | 語義漂移檢測，過濾冗餘影格；跨鏡頭 Re-ID。 | `src/saccade/perception/` |
+| **L3** | **緩衝層 (Streaming)** | Redis / MicroBatcher / asyncio | 事件非同步推送與微批次聚合。 | `src/saccade/storage/`, `src/saccade/pipeline/` |
+| **L4** | **儲存層 (Vector DB)** | ChromaDB / HNSW | 多維度向量索引（語義 + 時間 + 標籤）；定期 snapshot 備份。 | `src/saccade/storage/` |
+| **L5** | **認知層 (Agentic RAG)** | LlamaIndex + Ollama + ChromaDB | 事件觸發式語義推理；Visual Re-query；歷史事件脈絡分析。 | `src/saccade/pipeline/` |
+| **L6** | **資源層 (Resource Management)** | NVML / ResourceManager | 實時 VRAM 監控與階梯式降級決策。 | `src/saccade/resource/` |
 
 ---
 
@@ -61,9 +61,16 @@ RTSP Stream
 ---
 
 ## 4. 追蹤器架構（Tracker Stack）
+```
+GPUByteTracker (C++/CUDA Facade)
+├── 核心匹配引擎 (Sinkhorn/Auction)
+├── GPU Kalman Filter + GMC kernel
+├── TrackAppearanceBank (GPU-resident)
+└── ReorderingBuffer (Python/C++ Bridge)
+```
 
 ```
-SmartTracker (Python 協調層)
+GPUByteTracker (Native 協調層)
 ├── GPUByteTracker (C++/CUDA)        ← 核心匹配引擎
 │   ├── Dual-stage Sinkhorn           高/低分偵測框二次匹配
 │   ├── ReID Fusion Cost Matrix       (1-w)*IoU + w*CosSim
@@ -81,11 +88,11 @@ SmartTracker (Python 協調層)
 ## 5. 資料夾功能定義
 
 - **`src/` + `include/`**: C++/CUDA 核心，包含 GPUByteTracker、Kalman Filter、Sinkhorn/Hungarian/Auction 匹配算法、GstClient。
-- **`perception/`**: 視覺算法層。YOLO26 偵測、SigLIP 2 特徵提取、SmartTracker、FeatureBank、跨鏡頭 Re-ID。
-- **`pipeline/`**: 系統中樞。Orchestrator（Agentic RAG 調度）、HealthChecker。
-- **`storage/`**: 數據終點。RedisCache（MicroBatcher）、ChromaStore（向量索引 + 備份）。
-- **`media/`**: 影音串流接入、硬體解碼、RTSP Watchdog。
-- **`cognition/`**: ResourceManager（VRAM 監控與降級）、FrameSelector。
+- **`src/saccade/perception/`**: 視覺算法層。YOLO26 偵測、SigLIP 2 特徵提取、GPUByteTracker、FeatureBank、跨鏡頭 Re-ID。
+- **`src/saccade/pipeline/`**: 系統中樞。Orchestrator（Agentic RAG 調度）、HealthChecker。
+- **`src/saccade/storage/`**: 數據終點。RedisCache（MicroBatcher）、ChromaStore（向量索引 + 備份）。
+- **`src/saccade/media/`**: 影音串流接入、硬體解碼、RTSP Watchdog。
+- **`src/saccade/resource/`**: ResourceManager（VRAM 監控與降級）、FrameSelector。
 
 ---
 

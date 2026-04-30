@@ -11,8 +11,8 @@ if build_path.exists():
     sys.path.insert(0, str(build_path))
 
 # MUST IMPORT THIS BEFORE torchvision TO AVOID LIBJPEG CONFLICT
-from perception.detector_trt import TRTYoloDetector  # noqa: F401, E402
-from perception.eval.runner import run_eval  # noqa: E402
+from saccade.perception.detector_trt import TRTYoloDetector  # noqa: F401, E402
+from saccade.perception.eval.runner import run_eval  # noqa: E402
 
 
 def _help(text, *, range_hint=None, edge=None):
@@ -785,7 +785,7 @@ def build_parser():
     trigger_group.add_argument(
         "--reid-score-threshold-low",
         type=float,
-        default=None,
+        default=2.0,
         help=_help(
             "Lower hysteresis threshold for staying active; unset reuses high threshold.",
             range_hint=">=0 or unset",
@@ -852,7 +852,7 @@ def build_parser():
     trigger_group.add_argument(
         "--reid-trigger-persist-frames",
         type=int,
-        default=1,
+        default=2,
         help=_help(
             "Frames score must stay high before trigger fires.", range_hint=">=1"
         ),
@@ -860,13 +860,13 @@ def build_parser():
     trigger_group.add_argument(
         "--reid-cooldown-frames",
         type=int,
-        default=0,
+        default=4,
         help=_help("Frames to suppress ReID after each trigger.", range_hint=">=0"),
     )
     trigger_group.add_argument(
         "--reid-birth-death-lost-min",
         type=float,
-        default=0.0,
+        default=0.1,
         help=_help(
             "Minimum lost-signal before birth/death boost applies.", range_hint=">=0"
         ),

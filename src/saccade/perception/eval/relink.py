@@ -103,6 +103,18 @@ class PythonSemanticRelinker:
             canonical = self.alias.get(snap.obj_id, snap.obj_id)
             self.motion[canonical] = snap
 
+    def motion_candidate_ids(self, frame_id: int = -1) -> List[int]:
+        if self.mahalanobis_threshold <= 0.0:
+            return []
+        ids: List[int] = []
+        for cid in self.features:
+            if frame_id >= 0:
+                age = frame_id - self.last_seen.get(cid, -(10**9))
+                if age < self.min_lost_frames or age > self.ttl:
+                    continue
+            ids.append(cid)
+        return ids
+
     def _measurement(self, box: torch.Tensor) -> np.ndarray:
         w = max(1e-6, float(box[2] - box[0]))
         h = max(1e-6, float(box[3] - box[1]))
@@ -176,6 +188,18 @@ class PythonSemanticRelinker:
             buf = self.buffers.setdefault(canonical_id, [])
             buf.append(emb.detach())
             del buf[: max(0, len(buf) - self.buffer_size)]
+
+    def inject_references_many(
+        self, references: List[Tuple[int, torch.Tensor]]
+    ) -> None:
+        for canonical_id, embedding in references:
+            self.inject_reference(canonical_id, embedding)
+
+    def canonical_id(self, raw_id: int) -> int:
+        return self.alias.get(raw_id, raw_id)
+
+    def has_feature(self, canonical_id: int) -> bool:
+        return canonical_id in self.features
 
     def resolve(
         self,
@@ -281,6 +305,44 @@ class PythonSemanticRelinker:
         assigned.add(canonical)
         return canonical
 
+    def resolve_many(
+        self,
+        candidates: List[
+            Tuple[
+                int,
+                Optional[torch.Tensor],
+                torch.Tensor,
+                float,
+            ]
+        ],
+        *,
+        frame_id: int,
+        w: int,
+        h: int,
+    ) -> List[int]:
+        assigned: Set[int] = set()
+        return [
+            self.resolve(raw_id, embedding, box, score, frame_id, w, h, assigned)
+            for raw_id, embedding, box, score in candidates
+        ]
+
+    def resolve_many_packed(
+        self,
+        raw_ids: List[int],
+        embeddings: List[Optional[torch.Tensor]],
+        boxes: List[torch.Tensor],
+        scores: List[float],
+        *,
+        frame_id: int,
+        w: int,
+        h: int,
+    ) -> List[int]:
+        assigned: Set[int] = set()
+        return [
+            self.resolve(raw_id, embedding, box, score, frame_id, w, h, assigned)
+            for raw_id, embedding, box, score in zip(raw_ids, embeddings, boxes, scores)
+        ]
+
     def report(self) -> None:
         print("🔁 Semantic Relink Report:")
         print(
@@ -310,3 +372,73 @@ try:
     SemanticRelinker = CppSemanticRelinker
 except Exception:
     SemanticRelinker = PythonSemanticRelinker
+
+
+class IdentityResolver:
+    """Compose semantic relink + tracklet lifecycle merge into a single call.
+
+    Owns no state; alias/features/stats remain with the constituent stages.
+    Only instantiated when relinker is not None.
+    """
+
+    def __init__(self, relinker: Any, lifecycle_merger: Any) -> None:
+        self._relinker = relinker
+        self._lifecycle = lifecycle_merger
+
+    def resolve_pass(
+        self,
+        local_ids: List[int],
+        embeddings: List[Optional[torch.Tensor]],
+        boxes: List[Any],
+        scores: List[float],
+        *,
+        frame_id: int,
+        frame_w: int,
+        frame_h: int,
+    ) -> List[int]:
+        if not local_ids:
+            return []
+
+        # Stage 1: semantic relink (relinker uses w=/h= kwargs)
+        resolve_rk_packed = getattr(self._relinker, "resolve_many_packed", None)
+        if callable(resolve_rk_packed):
+            relinked_ids = resolve_rk_packed(
+                local_ids, embeddings, boxes, scores,
+                frame_id=frame_id, w=frame_w, h=frame_h,
+            )
+        else:
+            resolve_rk_many = getattr(self._relinker, "resolve_many", None)
+            if callable(resolve_rk_many):
+                relinked_ids = resolve_rk_many(
+                    list(zip(local_ids, embeddings, boxes, scores)),
+                    frame_id=frame_id, w=frame_w, h=frame_h,
+                )
+            else:
+                assigned: Set[int] = set()
+                relinked_ids = [
+                    self._relinker.resolve(lid, emb, box, score, frame_id, frame_w, frame_h, assigned)
+                    for lid, emb, box, score in zip(local_ids, embeddings, boxes, scores)
+                ]
+
+        # Stage 2: lifecycle merge (lifecycle uses frame_w=/frame_h= kwargs)
+        resolve_lc_packed = getattr(self._lifecycle, "resolve_many_packed", None)
+        if callable(resolve_lc_packed):
+            resolved_ids = resolve_lc_packed(
+                relinked_ids, boxes, scores, embeddings,
+                frame_id=frame_id, frame_w=frame_w, frame_h=frame_h,
+            )
+        else:
+            resolve_lc_many = getattr(self._lifecycle, "resolve_many", None)
+            if callable(resolve_lc_many):
+                resolved_ids = resolve_lc_many(
+                    list(zip(relinked_ids, boxes, scores, embeddings)),
+                    frame_id=frame_id, frame_w=frame_w, frame_h=frame_h,
+                )
+            else:
+                assigned_out: Set[int] = set()
+                resolved_ids = [
+                    self._lifecycle.resolve(rid, box, score, frame_id, frame_w, frame_h, emb, assigned_out)
+                    for rid, box, score, emb in zip(relinked_ids, boxes, scores, embeddings)
+                ]
+
+        return list(resolved_ids)

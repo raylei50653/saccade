@@ -10,7 +10,7 @@
 - [x] **Redis RPUSH 整合**: 實作基礎的事件串流化，將語義特徵異步寫入 Redis 隊列。
 - [x] **[重大更新] Redis Pipelining (2026-04-15)**:
     - [x] **批次寫入**: 透過 Redis Pipeline 減少 90% 的寫入系統調用，支撐極高吞吐量需求。
-    - [x] **實作位置**: `storage/redis_cache.py` 中的 `add_to_stream_batch`。
+    - [x] **實作位置**: `src/saccade/storage/redis_cache.py` 中的 `add_to_stream_batch`。
 - [x] **儲存雜訊消除**: 
     - 語義去重：僅在 Drift Score 超過閾值時才觸發「強記憶（儲存）」，過濾無意義的重複背景。
 - [x] **Micro-batching**: `MicroBatcher` 整合於 `RedisCache`，100ms 滑動窗口聚合，Redis QPS 從 ~300 降至 ~30。

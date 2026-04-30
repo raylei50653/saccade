@@ -1,5 +1,5 @@
 from pathlib import Path
-from perception.eval.runner import run_eval
+from saccade.perception.eval.runner import run_eval
 
 ROOT = Path(__file__).resolve().parent.parent
 ENGINE = ROOT / "models/yolo/yolo26s_batch6.engine"
