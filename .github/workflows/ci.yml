@@ -36,24 +36,16 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            libgstreamer1.0-dev \
-            libgstreamer-plugins-base1.0-dev \
-            pkg-config \
-            cmake \
-            libopencv-dev \
-            libnvinfer-dev \
-            libnvinfer-plugin-dev
+            libgirepository-1.0-1 \
+            gir1.2-gstreamer-1.0 \
+            gir1.2-gst-plugins-base-1.0 \
+            gstreamer1.0-plugins-base \
+            gstreamer1.0-tools
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
       - name: Sync dependencies
         run: uv sync
-      - name: Build C++ Core for Testing
+      - name: Run Pytest (exclude GPU benchmarks and rely on Python fallbacks)
         run: |
-          mkdir build && cd build
-          cmake .. -Dpybind11_DIR=$(uv run python -c "import pybind11; print(pybind11.get_cmake_dir())")
-          make -j$(nproc)
-      - name: Run Pytest (exclude GPU benchmarks)
-        run: |
-          export PYTHONPATH=$PYTHONPATH:$(pwd)/build:$(pwd)
           uv run pytest tests/ -v --ignore=tests/benchmarks
