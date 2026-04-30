@@ -359,13 +359,13 @@ __global__ void fused_sinkhorn_topk_kernel(
 // Prices are always non-negative so reinterpreting as int preserves ordering.
 __global__ void parallel_auction_shmem_kernel(
     const int* topk_indices, const float* topk_probs,
-    float* g_prices, int* trk_to_det, int* det_to_trk,
+    uint64_t* g_prices, int* trk_to_det, int* det_to_trk,
     int n_trk, int n_det, int K, float epsilon)
 {
-    extern __shared__ float s_prices[];
+    extern __shared__ uint64_t s_prices_u64[];
 
     for (int d = threadIdx.x; d < n_det; d += blockDim.x)
-        s_prices[d] = g_prices[d];
+        s_prices_u64[d] = g_prices[d];
     __syncthreads();
 
     int t = blockIdx.x * blockDim.x + threadIdx.x;
@@ -379,7 +379,8 @@ __global__ void parallel_auction_shmem_kernel(
         for (int k = 0; k < K; ++k) {
             int d = topk_indices[t * K + k];
             if (d < 0 || d >= n_det) continue;
-            float val = topk_probs[t * K + k] - s_prices[d];
+            float current_price = __int_as_float((int)(s_prices_u64[d] >> 32));
+            float val = topk_probs[t * K + k] - current_price;
             if (val > best_val) {
                 second_best_val = best_val; best_val = val; best_det = d;
             } else if (val > second_best_val) {
@@ -389,19 +390,31 @@ __global__ void parallel_auction_shmem_kernel(
         if (best_det >= 0) {
             float inc = (second_best_val <= -1e8f) ? epsilon
                                                     : (best_val - second_best_val + epsilon);
-            bid = s_prices[best_det] + inc;
+            float current_price = __int_as_float((int)(s_prices_u64[best_det] >> 32));
+            bid = current_price + inc;
+            
+            uint32_t bid_float_bits = __float_as_uint(bid);
+            uint32_t tie_breaker = n_trk - t;
+            uint64_t bid_u64 = ((uint64_t)bid_float_bits << 32) | (uint64_t)tie_breaker;
+
             // Level 1: intra-block conflict resolution
-            atomicMax((int*)&s_prices[best_det], __float_as_int(bid));
+            atomicMax((unsigned long long*)&s_prices_u64[best_det], (unsigned long long)bid_u64);
         }
     }
     __syncthreads();
 
     // Level 2: block winner commits to global memory
-    if (best_det >= 0 && __float_as_int(s_prices[best_det]) == __float_as_int(bid)) {
-        int prev = atomicMax((int*)&g_prices[best_det], __float_as_int(bid));
-        if (__float_as_int(bid) > prev) {
-            trk_to_det[t] = best_det;
-            atomicExch((int*)&det_to_trk[best_det], t);
+    if (best_det >= 0) {
+        uint32_t bid_float_bits = __float_as_uint(bid);
+        uint32_t tie_breaker = n_trk - t;
+        uint64_t bid_u64 = ((uint64_t)bid_float_bits << 32) | (uint64_t)tie_breaker;
+
+        if (s_prices_u64[best_det] == bid_u64) {
+            unsigned long long prev = atomicMax((unsigned long long*)&g_prices[best_det], (unsigned long long)bid_u64);
+            if (bid_u64 > prev) {
+                trk_to_det[t] = best_det;
+                det_to_trk[best_det] = t;
+            }
         }
     }
 }
@@ -490,10 +503,14 @@ __global__ void inline_kalman_update_kernel(
 __global__ void collect_free_slots_kernel(
     const bool* active, int max_objs, int* free_slots, int* n_free)
 {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= max_objs || active[i]) return;
-    int idx = atomicAdd(n_free, 1);
-    free_slots[idx] = i;
+    if (threadIdx.x != 0 || blockIdx.x != 0) return;
+    int count = 0;
+    for (int i = 0; i < max_objs; ++i) {
+        if (!active[i]) {
+            free_slots[count++] = i;
+        }
+    }
+    *n_free = count;
 }
 
 __global__ void spawn_new_tracks_kernel(
@@ -509,32 +526,39 @@ __global__ void spawn_new_tracks_kernel(
     int*   d_hit_streak, int* d_confirm_req, float* d_score_sum,
     int* d_track_id_ctr, int* d_slot_cursor)
 {
-    int d = blockIdx.x * blockDim.x + threadIdx.x;
-    if (d >= n_det) return;
-    if (d_det_to_trk[d] >= 0) return;
-    if (d_det_scores[d] < new_track_thresh) return;
+    if (threadIdx.x != 0 || blockIdx.x != 0) return;
+    int cursor = *d_slot_cursor;
+    int n_free = *d_n_free;
+    int id_ctr = *d_track_id_ctr;
 
-    int cursor = atomicAdd(d_slot_cursor, 1);
-    if (cursor >= *d_n_free) return;
-    int slot = d_free_slots[cursor];
+    for (int d = 0; d < n_det; ++d) {
+        if (d_det_to_trk[d] >= 0) continue;
+        if (d_det_scores[d] < new_track_thresh) continue;
 
-    const float* box = d_det_boxes + d * 4;
-    float bh = fmaxf(box[3] - box[1], 1e-6f);
-    d_states[slot*8+0] = (box[0] + box[2]) * 0.5f;
-    d_states[slot*8+1] = (box[1] + box[3]) * 0.5f;
-    d_states[slot*8+2] = (box[2] - box[0]) / bh;
-    d_states[slot*8+3] = bh;
-    d_states[slot*8+4] = d_states[slot*8+5] = d_states[slot*8+6] = d_states[slot*8+7] = 0.0f;
+        if (cursor >= n_free) break;
+        int slot = d_free_slots[cursor++];
 
-    d_track_ids[slot]   = atomicAdd(d_track_id_ctr, 1);
-    d_age[slot]         = 0;
-    d_state[slot]       = 1; // TRACK_TENTATIVE
-    d_hit_streak[slot]  = 1;
-    d_confirm_req[slot] = 0;
-    d_score_sum[slot]   = d_det_scores[d];
-    d_trk_scores[slot]  = d_det_scores[d];
-    d_classes[slot]     = d_det_classes[d];
-    d_active[slot]      = true;
+        const float* box = d_det_boxes + d * 4;
+        float bh = fmaxf(box[3] - box[1], 1e-6f);
+        d_states[slot*8+0] = (box[0] + box[2]) * 0.5f;
+        d_states[slot*8+1] = (box[1] + box[3]) * 0.5f;
+        d_states[slot*8+2] = (box[2] - box[0]) / bh;
+        d_states[slot*8+3] = bh;
+        d_states[slot*8+4] = 0.0f; d_states[slot*8+5] = 0.0f; d_states[slot*8+6] = 0.0f; d_states[slot*8+7] = 0.0f;
+
+        d_track_ids[slot]   = id_ctr++;
+        d_age[slot]         = 0;
+        d_state[slot]       = 1; // TRACK_TENTATIVE
+        d_hit_streak[slot]  = 1;
+        d_confirm_req[slot] = 0;
+        d_score_sum[slot]   = d_det_scores[d];
+        d_trk_scores[slot]  = d_det_scores[d];
+        d_classes[slot]     = d_det_classes[d];
+        d_active[slot]      = true;
+    }
+
+    *d_slot_cursor = cursor;
+    *d_track_id_ctr = id_ctr;
 }
 
 // Initialise covariance for every slot that is active+tentative+hit_streak==1 (freshly spawned).
@@ -562,20 +586,23 @@ __global__ void compact_results_kernel(
     int* out_ids, int* out_classes, int* out_det_idx,
     int* out_count)
 {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= max_objs) return;
-    if (!d_active[i] || d_state[i] != 2 || d_age[i] != 0) return;
-    int k = atomicAdd(out_count, 1);
-    float cx = d_states[i*8+0], cy = d_states[i*8+1];
-    float a  = d_states[i*8+2], h  = d_states[i*8+3], w = a * h;
-    out_boxes[k*4+0] = cx - w * 0.5f;
-    out_boxes[k*4+1] = cy - h * 0.5f;
-    out_boxes[k*4+2] = cx + w * 0.5f;
-    out_boxes[k*4+3] = cy + h * 0.5f;
-    out_scores[k]   = d_scores[i];
-    out_ids[k]      = d_track_ids[i];
-    out_classes[k]  = d_classes[i];
-    out_det_idx[k]  = d_trk_to_det[i];
+    if (threadIdx.x != 0 || blockIdx.x != 0) return;
+    int k = 0;
+    for (int i = 0; i < max_objs; ++i) {
+        if (!d_active[i] || d_state[i] != 2 || d_age[i] != 0) continue;
+        float cx = d_states[i*8+0], cy = d_states[i*8+1];
+        float a  = d_states[i*8+2], h  = d_states[i*8+3], w = a * h;
+        out_boxes[k*4+0] = cx - w * 0.5f;
+        out_boxes[k*4+1] = cy - h * 0.5f;
+        out_boxes[k*4+2] = cx + w * 0.5f;
+        out_boxes[k*4+3] = cy + h * 0.5f;
+        out_scores[k]   = d_scores[i];
+        out_ids[k]      = d_track_ids[i];
+        out_classes[k]  = d_classes[i];
+        out_det_idx[k]  = d_trk_to_det[i];
+        k++;
+    }
+    *out_count = k;
 }
 
 // ── M1 GPU compaction helpers ──────────────────────────────────────────────
@@ -810,7 +837,7 @@ public:
         checkCuda(cudaMalloc(&d_sinkhorn_v_, max_assoc_ * sizeof(float)));
         checkCuda(cudaMalloc(&d_topk_indices_, max_objs_ * 3 * sizeof(int)));
         checkCuda(cudaMalloc(&d_topk_probs_, max_objs_ * 3 * sizeof(float)));
-        checkCuda(cudaMalloc(&d_auction_prices_, max_assoc_ * sizeof(float)));
+        checkCuda(cudaMalloc(&d_auction_prices_, max_assoc_ * sizeof(uint64_t)));
         checkCuda(cudaMalloc(&d_trk_to_det_, max_objs_ * sizeof(int)));
         checkCuda(cudaMalloc(&d_det_to_trk_, max_assoc_ * sizeof(int)));
         checkCuda(cudaMalloc(&d_matched_pairs_, max_objs_ * 2 * sizeof(int)));
@@ -966,7 +993,7 @@ public:
 
             checkCuda(cudaMemsetAsync(d_det_to_trk_, -1, num_dets * sizeof(int), stream));
             checkCuda(cudaMemsetAsync(d_trk_to_det_, -1, max_objs_ * sizeof(int), stream));
-            const int shmem_auction = num_dets * static_cast<int>(sizeof(float));
+            const int shmem_auction = num_dets * static_cast<int>(sizeof(uint64_t));
             dim3 auc_b(32); dim3 auc_g((max_objs_ + 31) / 32);
 
             const float effective_mid_thresh = std::clamp(
@@ -987,7 +1014,7 @@ public:
                 high_thresh_, 1.1f, -1,
                 d_topk_indices_, d_topk_probs_
             );
-            checkCuda(cudaMemsetAsync(d_auction_prices_, 0, num_dets * sizeof(float), stream));
+            checkCuda(cudaMemsetAsync(d_auction_prices_, 0, num_dets * sizeof(uint64_t), stream));
             kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
                 d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
                 max_objs_, num_dets, 3, 0.01f);
@@ -999,7 +1026,7 @@ public:
                 effective_mid_thresh, high_thresh_, -1,
                 d_topk_indices_, d_topk_probs_
             );
-            checkCuda(cudaMemsetAsync(d_auction_prices_, 0, num_dets * sizeof(float), stream));
+            checkCuda(cudaMemsetAsync(d_auction_prices_, 0, num_dets * sizeof(uint64_t), stream));
             kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
                 d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
                 max_objs_, num_dets, 3, 0.01f);
@@ -1011,7 +1038,7 @@ public:
                 track_thresh_, effective_mid_thresh, 2, // TRACK_CONFIRMED = 2
                 d_topk_indices_, d_topk_probs_
             );
-            checkCuda(cudaMemsetAsync(d_auction_prices_, 0, num_dets * sizeof(float), stream));
+            checkCuda(cudaMemsetAsync(d_auction_prices_, 0, num_dets * sizeof(uint64_t), stream));
             kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
                 d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
                 max_objs_, num_dets, 3, 0.01f);
@@ -1305,7 +1332,8 @@ private:
     bool adaptive_confirmation_ = false;
     bool nsa_kalman_ = false;
     float *d_states_, *d_covs_, *d_scores_, *d_features_;
-    float *d_cost_matrix_, *d_sinkhorn_v_, *d_topk_probs_, *d_auction_prices_;
+    float *d_cost_matrix_, *d_sinkhorn_v_, *d_topk_probs_;
+    uint64_t *d_auction_prices_;
     int *d_topk_indices_, *d_trk_to_det_, *d_det_to_trk_;
     int *d_matched_pairs_, *d_new_slots_;
     int *d_state_, *d_hit_streak_, *d_confirm_streak_required_;

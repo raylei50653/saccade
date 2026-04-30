@@ -1388,6 +1388,23 @@ def run_eval(
     semantic_rerank_mode = str(kwargs.get("semantic_rerank_mode", "mean"))
     semantic_reciprocal_margin = float(kwargs.get("semantic_reciprocal_margin", 0.0))
     semantic_bank_inject = bool(kwargs.get("semantic_bank_inject", True))
+    # MOT17-a: joint scoring weights and dynamic margin params
+    semantic_iou_weight = float(kwargs.get("semantic_iou_weight", 0.0))
+    semantic_mahalanobis_weight = float(kwargs.get("semantic_mahalanobis_weight", 0.0))
+    semantic_dynamic_margin_crowd = float(kwargs.get("semantic_dynamic_margin_crowd", 0.0))
+    semantic_dynamic_margin_age = float(kwargs.get("semantic_dynamic_margin_age", 0.0))
+    # MOT17-b: penalise cross-tile-merged boxes in association (fraction of score kept)
+    cross_tile_score_penalty = float(kwargs.get("cross_tile_score_penalty", 1.0))
+    # confound control: force Python relinker path without changing any scoring params
+    force_python_relinker = bool(kwargs.get("force_python_relinker", False))
+    
+    # Rerank Phase 3: reference quality and false accept filtering
+    semantic_clean_score_threshold = float(kwargs.get("semantic_clean_score_threshold", 0.0))
+    semantic_clean_margin_ratio = float(kwargs.get("semantic_clean_margin_ratio", 0.0))
+    semantic_clean_min_aspect = float(kwargs.get("semantic_clean_min_aspect", 0.0))
+    semantic_clean_max_aspect = float(kwargs.get("semantic_clean_max_aspect", 99.0))
+    semantic_strict_sim_threshold = float(kwargs.get("semantic_strict_sim_threshold", 0.0))
+
     use_semantic_mode = reid_mode in {"semantic", "hybrid"}
     use_tracker_reid = reid_mode in {"tracker", "hybrid"}
     person_class = int(kwargs.get("person_class", 0))
@@ -1652,9 +1669,27 @@ def run_eval(
             weight=float(kwargs.get("reid_weight", 0.80)),
         )
 
-        _use_python_relinker = semantic_rerank_mode != "mean"
+        _use_python_relinker = (
+            force_python_relinker
+            or semantic_rerank_mode != "mean"
+            or semantic_iou_weight > 0.0
+            or semantic_mahalanobis_weight > 0.0
+            or semantic_dynamic_margin_crowd > 0.0
+            or semantic_dynamic_margin_age > 0.0
+        )
         _relinker_cls = (
             PythonSemanticRelinker if _use_python_relinker else SemanticRelinker
+        )
+        # New MOT17-a params only exist on PythonSemanticRelinker; C++ accepts neither.
+        _python_only_kwargs = (
+            {
+                "iou_weight": semantic_iou_weight,
+                "mahalanobis_weight": semantic_mahalanobis_weight,
+                "dynamic_margin_crowd": semantic_dynamic_margin_crowd,
+                "dynamic_margin_age": semantic_dynamic_margin_age,
+            }
+            if _use_python_relinker
+            else {}
         )
         relinker = (
             _relinker_cls(
@@ -1669,6 +1704,12 @@ def run_eval(
                 min_consistency=semantic_min_consistency,
                 rerank_mode=semantic_rerank_mode,
                 reciprocal_margin=semantic_reciprocal_margin,
+                clean_score_threshold=semantic_clean_score_threshold,
+                clean_margin_ratio=semantic_clean_margin_ratio,
+                clean_min_aspect=semantic_clean_min_aspect,
+                clean_max_aspect=semantic_clean_max_aspect,
+                strict_sim_threshold=semantic_strict_sim_threshold,
+                **_python_only_kwargs,
                 debug=kwargs.get("semantic_debug", False),
             )
             if use_semantic_mode
@@ -1991,11 +2032,21 @@ def run_eval(
                 if profile_stages:
                     torch.cuda.synchronize()
                     t_sub_start = time.perf_counter()
-                fused_boxes, fused_scores, fused_classes = (
+                fused_boxes, fused_scores, fused_classes, _merge_counts = (
                     merge_cross_tile_duplicates_fast(
                         fused_boxes, fused_scores, fused_classes
                     )
                 )
+                # MOT17-b: penalise boxes that were merged from multiple tiles.
+                # Merged boxes have uncertain positions; lowering their score makes
+                # ByteTracker treat them more conservatively during association.
+                if cross_tile_score_penalty < 1.0:
+                    merged_mask = _merge_counts > 1
+                    if merged_mask.any():
+                        fused_scores = fused_scores.clone()
+                        fused_scores[merged_mask] = (
+                            fused_scores[merged_mask] * cross_tile_score_penalty
+                        )
                 geometry_suspect_mask = torch.zeros_like(fused_scores, dtype=torch.bool)
                 suspect_boxes = fused_boxes[:0]
                 if profile_stages:

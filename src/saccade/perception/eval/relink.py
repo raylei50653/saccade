@@ -18,7 +18,16 @@ class PythonSemanticRelinker:
         min_consistency: float = 0.0,
         rerank_mode: str = "mean",
         reciprocal_margin: float = 0.0,
+        iou_weight: float = 0.0,
+        mahalanobis_weight: float = 0.0,
+        dynamic_margin_crowd: float = 0.0,
+        dynamic_margin_age: float = 0.0,
         debug: bool = False,
+        clean_score_threshold: float = 0.0,
+        clean_margin_ratio: float = 0.0,
+        clean_min_aspect: float = 0.0,
+        clean_max_aspect: float = 99.0,
+        strict_sim_threshold: float = 0.0,
     ) -> None:
         self.sim_threshold = sim_threshold
         self.ttl = ttl
@@ -45,6 +54,20 @@ class PythonSemanticRelinker:
         # D: reciprocal_margin > 0 rejects matches where best_sim - second_best_sim < margin,
         # preventing ambiguous accepts in crowd scenes.
         self.reciprocal_margin = max(0.0, reciprocal_margin)
+        # Joint scoring: blend IoU and normalised motion evidence into the ranking score.
+        # Default 0 → pure cosine (backward-compatible).
+        self.iou_weight = max(0.0, float(iou_weight))
+        self.mahalanobis_weight = max(0.0, float(mahalanobis_weight))
+        # Dynamic margin: add context-sensitive increments to reciprocal_margin.
+        #   crowd  → +margin per extra gate-passing competitor (caps at 8 competitors)
+        #   age    → +margin proportional to lost_frames / ttl
+        self.dynamic_margin_crowd = max(0.0, float(dynamic_margin_crowd))
+        self.dynamic_margin_age = max(0.0, float(dynamic_margin_age))
+        self.clean_score_threshold = clean_score_threshold
+        self.clean_margin_ratio = clean_margin_ratio
+        self.clean_min_aspect = clean_min_aspect
+        self.clean_max_aspect = clean_max_aspect
+        self.strict_sim_threshold = strict_sim_threshold if strict_sim_threshold > 0.0 else sim_threshold
         self.debug = debug
         self.alias: Dict[int, int] = {}
         self.features: Dict[int, torch.Tensor] = {}
@@ -62,6 +85,7 @@ class PythonSemanticRelinker:
             "reject_similarity": 0,
             "reject_consistency": 0,
             "reject_margin": 0,
+            "reject_quality": 0,
             "new_ids": 0,
         }
         self.accept_sims: List[float] = []
@@ -70,7 +94,9 @@ class PythonSemanticRelinker:
         self.accept_mahas: List[float] = []
 
     def _normalize(self, embedding: torch.Tensor) -> torch.Tensor:
-        return F.normalize(embedding.float(), dim=0)
+        # Always operate on CPU: inject_reference stores CPU tensors, so all
+        # buffer/feature ops must stay on the same device.
+        return F.normalize(embedding.float().cpu(), dim=0)
 
     def _spatial_metrics(
         self, box: torch.Tensor, old_box: torch.Tensor, w: int, h: int
@@ -216,13 +242,31 @@ class PythonSemanticRelinker:
             return self.alias.get(raw_id, raw_id)
 
         emb = self._normalize(embedding)
+        
+        is_clean = True
+        if self.clean_score_threshold > 0.0 or self.clean_margin_ratio > 0.0:
+            bw = float(box[2] - box[0])
+            bh = float(box[3] - box[1])
+            aspect = bh / bw if bw > 0 else 0.0
+            margin_w = w * self.clean_margin_ratio
+            margin_h = h * self.clean_margin_ratio
+            if (score < self.clean_score_threshold or
+                float(box[0]) < margin_w or float(box[1]) < margin_h or
+                float(box[2]) > w - margin_w or float(box[3]) > h - margin_h or
+                aspect < self.clean_min_aspect or aspect > self.clean_max_aspect):
+                is_clean = False
+                
+        current_sim_thresh = self.sim_threshold if is_clean else self.strict_sim_threshold
+
         if raw_id not in self.alias:
             self.stats["attempts"] += 1
-            best_id, best_sim = None, self.sim_threshold
-            second_best_sim = (
-                self.sim_threshold - 1.0
-            )  # D: track runner-up among gate-passing candidates
+            best_id = None
+            best_joint = current_sim_thresh  # joint score sentinel (must beat threshold)
+            best_sim_raw = 0.0              # raw cosine of the current winner
+            second_best_joint = current_sim_thresh - 1.0  # runner-up joint score
             best_iou, best_center, best_maha = 0.0, 0.0, 0.0
+            n_gate_passed = 0  # candidates that pass all hard gates (for crowd margin)
+            _use_joint = self.iou_weight > 0.0 or self.mahalanobis_weight > 0.0
             for cid in self.features:
                 age = frame_id - self.last_seen.get(cid, -(10**9))
                 if cid in assigned:
@@ -252,27 +296,51 @@ class PythonSemanticRelinker:
                     if consistency < self.min_consistency:
                         self.stats["reject_consistency"] += 1
                         continue
+                n_gate_passed += 1
                 if self.buffer_size > 1:
                     sim = self._buffer_sim(cid, emb)
                 else:
                     sim = float(torch.dot(emb, self.features[cid]).item())
-                if sim > best_sim:
+                # Hard appearance gate: raw cosine must still pass sim_threshold.
+                if sim < current_sim_thresh:
+                    self.stats["reject_similarity"] += 1
+                    continue
+                # Joint score: appearance + optional spatial/motion evidence for ranking.
+                if _use_joint:
+                    maha_score = 0.0
+                    if self.mahalanobis_threshold > 0.0 and maha > 0.0:
+                        maha_score = max(0.0, 1.0 - maha / self.mahalanobis_threshold)
+                    joint = sim + self.iou_weight * iou + self.mahalanobis_weight * maha_score
+                else:
+                    joint = sim
+                if joint > best_joint:
                     if best_id is not None:
-                        second_best_sim = best_sim  # D: demote previous winner
-                    best_id, best_sim = cid, sim
+                        second_best_joint = best_joint  # demote previous winner
+                    best_id = cid
+                    best_joint = joint
+                    best_sim_raw = sim
                     best_iou, best_center, best_maha = iou, center_norm, maha
                 else:
-                    if sim > second_best_sim:
-                        second_best_sim = sim  # D: update runner-up
+                    if joint > second_best_joint:
+                        second_best_joint = joint  # update runner-up
                     self.stats["reject_similarity"] += 1
-            # D: reciprocal margin check — reject ambiguous matches
-            if best_id is not None and self.reciprocal_margin > 0.0:
-                if best_sim - second_best_sim < self.reciprocal_margin:
+            # Dynamic margin: base + crowd penalty + age penalty
+            effective_margin = self.reciprocal_margin
+            if best_id is not None:
+                if self.dynamic_margin_crowd > 0.0 and n_gate_passed > 1:
+                    crowd_factor = min(1.0, (n_gate_passed - 1) / 8.0)
+                    effective_margin += self.dynamic_margin_crowd * crowd_factor
+                if self.dynamic_margin_age > 0.0:
+                    lost_frames = frame_id - self.last_seen.get(best_id, frame_id)
+                    age_factor = min(1.0, lost_frames / max(1, self.ttl))
+                    effective_margin += self.dynamic_margin_age * age_factor
+            if best_id is not None and effective_margin > 0.0:
+                if best_joint - second_best_joint < effective_margin:
                     self.stats["reject_margin"] += 1
                     best_id = None
             if best_id is not None:
                 self.stats["accepted"] += 1
-                self.accept_sims.append(best_sim)
+                self.accept_sims.append(best_sim_raw)
                 self.accept_ious.append(best_iou)
                 self.accept_center_dists.append(best_center)
                 self.accept_mahas.append(best_maha)
@@ -282,24 +350,27 @@ class PythonSemanticRelinker:
                 self.alias[raw_id] = raw_id
 
         canonical = self.alias[raw_id]
-        if self.buffer_size > 1:
-            buf = self.buffers.setdefault(canonical, [])
-            buf.append(emb.detach())
-            if len(buf) > self.buffer_size:
-                buf.pop(0)
-            self.features[canonical] = F.normalize(
-                torch.stack(buf).mean(dim=0), dim=0
-            ).detach()
+        if not is_clean:
+            self.stats["reject_quality"] += 1
         else:
-            old = self.features.get(canonical)
-            updated = (
-                emb
-                if old is None
-                else F.normalize(
-                    self.ema_beta * old + (1.0 - self.ema_beta) * emb, dim=0
+            if self.buffer_size > 1:
+                buf = self.buffers.setdefault(canonical, [])
+                buf.append(emb.detach())
+                if len(buf) > self.buffer_size:
+                    buf.pop(0)
+                self.features[canonical] = F.normalize(
+                    torch.stack(buf).mean(dim=0), dim=0
+                ).detach()
+            else:
+                old = self.features.get(canonical)
+                updated = (
+                    emb
+                    if old is None
+                    else F.normalize(
+                        self.ema_beta * old + (1.0 - self.ema_beta) * emb, dim=0
+                    )
                 )
-            )
-            self.features[canonical] = updated.detach()
+                self.features[canonical] = updated.detach()
         self.last_seen[canonical] = frame_id
         self.last_boxes[canonical] = box
         assigned.add(canonical)

@@ -297,6 +297,7 @@ struct RelinkStats {
     int reject_similarity = 0;
     int reject_consistency = 0;
     int reject_margin = 0;
+    int reject_quality = 0;
     int new_ids = 0;
 };
 
@@ -314,7 +315,12 @@ public:
         float min_consistency,
         std::string rerank_mode,
         float reciprocal_margin,
-        bool debug
+        bool debug,
+        float clean_score_threshold = 0.0f,
+        float clean_margin_ratio = 0.0f,
+        float clean_min_aspect = 0.0f,
+        float clean_max_aspect = 99.0f,
+        float strict_sim_threshold = 0.0f
     )
         : sim_threshold_(sim_threshold),
           ttl_(ttl),
@@ -327,7 +333,12 @@ public:
           min_consistency_(min_consistency),
           rerank_mode_(std::move(rerank_mode)),
           reciprocal_margin_(std::max(0.0f, reciprocal_margin)),
-          debug_(debug) {}
+          debug_(debug),
+          clean_score_threshold_(clean_score_threshold),
+          clean_margin_ratio_(clean_margin_ratio),
+          clean_min_aspect_(clean_min_aspect),
+          clean_max_aspect_(clean_max_aspect),
+          strict_sim_threshold_(strict_sim_threshold > 0.0f ? strict_sim_threshold : sim_threshold) {}
 
     void update_motion_snapshots(const std::vector<TrackStateSnapshot>& snapshots) {
         for (const auto& snap : snapshots) {
@@ -416,22 +427,36 @@ public:
         int frame_h,
         py::set assigned
     ) {
-        (void)score;
         if (embedding.is_none()) {
             auto it = alias_.find(raw_id);
             return it == alias_.end() ? raw_id : it->second;
         }
 
         std::vector<float> emb = normalize(extract_embedding(embedding));
+        const RelinkBox box = parse_box(box_obj);
+        bool is_clean = true;
+        if (clean_score_threshold_ > 0.0f || clean_margin_ratio_ > 0.0f) {
+            float bw = box.x2 - box.x1;
+            float bh = box.y2 - box.y1;
+            float aspect = bw > 0 ? bh / bw : 0.0f;
+            float margin_w = frame_w * clean_margin_ratio_;
+            float margin_h = frame_h * clean_margin_ratio_;
+            if (score < clean_score_threshold_ || 
+                box.x1 < margin_w || box.y1 < margin_h || box.x2 > frame_w - margin_w || box.y2 > frame_h - margin_h ||
+                aspect < clean_min_aspect_ || aspect > clean_max_aspect_) {
+                is_clean = false;
+            }
+        }
+        float current_sim_thresh = is_clean ? sim_threshold_ : strict_sim_threshold_;
+
         if (!alias_.count(raw_id)) {
             stats_.attempts += 1;
             int best_id = -1;
-            float best_sim = sim_threshold_;
-            float second_best_sim = sim_threshold_ - 1.0f;
+            float best_sim = current_sim_thresh;
+            float second_best_sim = current_sim_thresh - 1.0f;
             float best_iou = 0.0f;
             float best_center = 0.0f;
             float best_maha = 0.0f;
-            const RelinkBox box = parse_box(box_obj);
 
             for (int cid : feature_order_) {
                 const auto feature_it = features_.find(cid);
@@ -517,30 +542,34 @@ public:
         }
 
         const int canonical = alias_.at(raw_id);
-        if (buffer_size_ > 1) {
-            auto& buf = buffers_[canonical];
-            buf.push_back(emb);
-            if (static_cast<int>(buf.size()) > buffer_size_) {
-                buf.erase(buf.begin());
-            }
-            features_[canonical] = buffer_mean(canonical);
+        if (!is_clean) {
+            stats_.reject_quality += 1;
         } else {
-            auto old = features_.find(canonical);
-            if (old == features_.end()) {
-                features_[canonical] = emb;
-            } else {
-                std::vector<float> updated(emb.size(), 0.0f);
-                for (size_t i = 0; i < emb.size(); ++i) {
-                    updated[i] = ema_beta_ * old->second[i] + (1.0f - ema_beta_) * emb[i];
+            if (buffer_size_ > 1) {
+                auto& buf = buffers_[canonical];
+                buf.push_back(emb);
+                if (static_cast<int>(buf.size()) > buffer_size_) {
+                    buf.erase(buf.begin());
                 }
-                features_[canonical] = normalize(updated);
+                features_[canonical] = buffer_mean(canonical);
+            } else {
+                auto old = features_.find(canonical);
+                if (old == features_.end()) {
+                    features_[canonical] = emb;
+                } else {
+                    std::vector<float> updated(emb.size(), 0.0f);
+                    for (size_t i = 0; i < emb.size(); ++i) {
+                        updated[i] = ema_beta_ * old->second[i] + (1.0f - ema_beta_) * emb[i];
+                    }
+                    features_[canonical] = normalize(updated);
+                }
             }
         }
         if (std::find(feature_order_.begin(), feature_order_.end(), canonical) == feature_order_.end()) {
             feature_order_.push_back(canonical);
         }
         last_seen_[canonical] = frame_id;
-        last_boxes_[canonical] = parse_box(box_obj);
+        last_boxes_[canonical] = box;
         assigned.add(py::int_(canonical));
         return canonical;
     }
@@ -581,13 +610,13 @@ public:
         int frame_w,
         int frame_h
     ) {
-        const py::ssize_t n = py::len(raw_ids);
+        const size_t n = static_cast<size_t>(py::len(raw_ids));
         if (py::len(embeddings) != n || py::len(boxes) != n || py::len(scores) != n) {
             throw std::runtime_error("resolve_many_packed expects equally sized raw_ids/embeddings/boxes/scores");
         }
         py::set assigned;
         py::list out;
-        for (py::ssize_t i = 0; i < n; ++i) {
+        for (size_t i = 0; i < n; ++i) {
             out.append(resolve(
                 raw_ids[i].cast<int>(),
                 py::reinterpret_borrow<py::object>(embeddings[i]),
@@ -629,6 +658,7 @@ public:
         out["reject_similarity"] = stats_.reject_similarity;
         out["reject_consistency"] = stats_.reject_consistency;
         out["reject_margin"] = stats_.reject_margin;
+        out["reject_quality"] = stats_.reject_quality;
         out["new_ids"] = stats_.new_ids;
         return out;
     }
@@ -644,7 +674,8 @@ public:
             " reject_spatial=" + std::to_string(stats_.reject_spatial) +
             " reject_mahalanobis=" + std::to_string(stats_.reject_mahalanobis) +
             " reject_similarity=" + std::to_string(stats_.reject_similarity) +
-            " reject_margin=" + std::to_string(stats_.reject_margin)
+            " reject_margin=" + std::to_string(stats_.reject_margin) +
+            " reject_quality=" + std::to_string(stats_.reject_quality)
         );
         if (!accept_sims_.empty()) {
             py::print(
@@ -669,7 +700,7 @@ public:
         const std::vector<float>& emb,
         bool has_emb,
         const RelinkBox& box,
-        float /*score*/,
+        float score,
         int frame_id,
         int frame_w,
         int frame_h,
@@ -680,11 +711,26 @@ public:
             return it == alias_.end() ? raw_id : it->second;
         }
 
+        bool is_clean = true;
+        if (clean_score_threshold_ > 0.0f || clean_margin_ratio_ > 0.0f) {
+            float bw = box.x2 - box.x1;
+            float bh = box.y2 - box.y1;
+            float aspect = bw > 0 ? bh / bw : 0.0f;
+            float margin_w = frame_w * clean_margin_ratio_;
+            float margin_h = frame_h * clean_margin_ratio_;
+            if (score < clean_score_threshold_ || 
+                box.x1 < margin_w || box.y1 < margin_h || box.x2 > frame_w - margin_w || box.y2 > frame_h - margin_h ||
+                aspect < clean_min_aspect_ || aspect > clean_max_aspect_) {
+                is_clean = false;
+            }
+        }
+        float current_sim_thresh = is_clean ? sim_threshold_ : strict_sim_threshold_;
+
         if (!alias_.count(raw_id)) {
             stats_.attempts += 1;
             int best_id = -1;
-            float best_sim = sim_threshold_;
-            float second_best_sim = sim_threshold_ - 1.0f;
+            float best_sim = current_sim_thresh;
+            float second_best_sim = current_sim_thresh - 1.0f;
             float best_iou = 0.0f, best_center = 0.0f, best_maha = 0.0f;
 
             for (int cid : feature_order_) {
@@ -738,20 +784,24 @@ public:
         }
 
         const int canonical = alias_.at(raw_id);
-        if (buffer_size_ > 1) {
-            auto& buf = buffers_[canonical];
-            buf.push_back(emb);
-            if (static_cast<int>(buf.size()) > buffer_size_) buf.erase(buf.begin());
-            features_[canonical] = buffer_mean(canonical);
+        if (!is_clean) {
+            stats_.reject_quality += 1;
         } else {
-            auto old_it = features_.find(canonical);
-            if (old_it == features_.end()) {
-                features_[canonical] = emb;
+            if (buffer_size_ > 1) {
+                auto& buf = buffers_[canonical];
+                buf.push_back(emb);
+                if (static_cast<int>(buf.size()) > buffer_size_) buf.erase(buf.begin());
+                features_[canonical] = buffer_mean(canonical);
             } else {
-                std::vector<float> updated(emb.size(), 0.0f);
-                for (size_t i = 0; i < emb.size(); ++i)
-                    updated[i] = ema_beta_ * old_it->second[i] + (1.0f - ema_beta_) * emb[i];
-                features_[canonical] = normalize(updated);
+                auto old_it = features_.find(canonical);
+                if (old_it == features_.end()) {
+                    features_[canonical] = emb;
+                } else {
+                    std::vector<float> updated(emb.size(), 0.0f);
+                    for (size_t i = 0; i < emb.size(); ++i)
+                        updated[i] = ema_beta_ * old_it->second[i] + (1.0f - ema_beta_) * emb[i];
+                    features_[canonical] = normalize(updated);
+                }
             }
         }
         if (std::find(feature_order_.begin(), feature_order_.end(), canonical) == feature_order_.end())
@@ -954,6 +1004,11 @@ private:
     std::string rerank_mode_;
     float reciprocal_margin_;
     bool debug_;
+    float clean_score_threshold_;
+    float clean_margin_ratio_;
+    float clean_min_aspect_;
+    float clean_max_aspect_;
+    float strict_sim_threshold_;
 
     std::unordered_map<int, int> alias_;
     std::unordered_map<int, std::vector<float>> features_;
@@ -1235,8 +1290,9 @@ private:
 
     bool enabled_;
     int ttl_, min_gap_;
-    float spatial_gate_, min_iou_, sim_threshold_, ema_;
+    float spatial_gate_, min_iou_, sim_threshold_;
     bool require_embedding_;
+    float ema_;
     std::unordered_map<int, int> alias_;
     std::unordered_map<int, LifecycleState> states_;
     LifecycleStats stats_;
@@ -1487,7 +1543,7 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         "Sync per-track clean-embedding flags from Python bank state to the CUDA tracker");
 
     py::class_<SemanticRelinkerCpp>(m, "SemanticRelinker")
-        .def(py::init<float, int, float, float, int, float, float, int, float, std::string, float, bool>(),
+        .def(py::init<float, int, float, float, int, float, float, int, float, std::string, float, bool, float, float, float, float, float>(),
              py::arg("sim_threshold") = 0.985f,
              py::arg("ttl") = 45,
              py::arg("ema_beta") = 0.83f,
@@ -1499,7 +1555,12 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
              py::arg("min_consistency") = 0.0f,
              py::arg("rerank_mode") = "mean",
              py::arg("reciprocal_margin") = 0.0f,
-             py::arg("debug") = false)
+             py::arg("debug") = false,
+             py::arg("clean_score_threshold") = 0.0f,
+             py::arg("clean_margin_ratio") = 0.0f,
+             py::arg("clean_min_aspect") = 0.0f,
+             py::arg("clean_max_aspect") = 99.0f,
+             py::arg("strict_sim_threshold") = 0.0f)
         .def("update_motion_snapshots", &SemanticRelinkerCpp::update_motion_snapshots, py::arg("snapshots"))
         .def("motion_candidate_ids", &SemanticRelinkerCpp::motion_candidate_ids, py::arg("frame_id") = -1)
         .def("inject_reference", &SemanticRelinkerCpp::inject_reference,

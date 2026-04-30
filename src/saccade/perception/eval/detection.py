@@ -333,15 +333,19 @@ def merge_cross_tile_duplicates(
     iou_threshold: float = 0.45,
     center_threshold: float = 0.18,
     area_ratio_threshold: float = 0.6,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    if boxes.numel() == 0 or boxes.size(0) <= 1:
-        return boxes, scores, classes
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Returns (boxes, scores, classes, merge_counts) where merge_counts[i] is the
+    number of original detections fused into output box i (1 = no merge happened)."""
+    n = boxes.size(0)
+    if boxes.numel() == 0 or n <= 1:
+        return boxes, scores, classes, torch.ones(n, device=boxes.device, dtype=torch.long)
 
     order = torch.argsort(scores, descending=True)
     remaining = order.tolist()
     merged_boxes = []
     merged_scores = []
     merged_classes = []
+    merged_counts: List[int] = []
 
     while remaining:
         anchor_idx = remaining[0]
@@ -389,6 +393,7 @@ def merge_cross_tile_duplicates(
         merged_boxes.append(fused_box)
         merged_scores.append(fused_score)
         merged_classes.append(anchor_class)
+        merged_counts.append(int(cluster_indices.size(0)))
 
         cluster_set = set(int(idx) for idx in cluster_indices.tolist())
         remaining = [idx for idx in remaining if idx not in cluster_set]
@@ -398,12 +403,14 @@ def merge_cross_tile_duplicates(
             torch.empty((0, 4), device=boxes.device, dtype=boxes.dtype),
             torch.empty((0,), device=boxes.device, dtype=scores.dtype),
             torch.empty((0,), device=boxes.device, dtype=classes.dtype),
+            torch.empty((0,), device=boxes.device, dtype=torch.long),
         )
 
     return (
         torch.stack(merged_boxes, dim=0),
         torch.stack(merged_scores, dim=0),
         torch.stack(merged_classes, dim=0),
+        torch.tensor(merged_counts, device=boxes.device, dtype=torch.long),
     )
 
 
@@ -414,7 +421,9 @@ def merge_cross_tile_duplicates_fast(
     iou_threshold: float = 0.45,
     center_threshold: float = 0.18,
     area_ratio_threshold: float = 0.6,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Returns (boxes, scores, classes, merge_counts).  merge_counts[i] is the
+    number of original detections fused into output box i (1 = unmerged)."""
     if boxes.numel() == 0 or boxes.size(0) <= 1:
         return merge_cross_tile_duplicates(
             boxes,
@@ -460,6 +469,7 @@ def merge_cross_tile_duplicates_fast(
             workspace["out_boxes"][:merged_count],
             workspace["out_scores"][:merged_count],
             workspace["out_classes"][:merged_count],
+            workspace["cluster_counts"][:merged_count].to(torch.long),
         )
 
     if cpp_merge_cross_tile_duplicates is not None:
@@ -486,7 +496,14 @@ def merge_cross_tile_duplicates_fast(
         merged_classes = torch.from_numpy(np.asarray(merged_classes_np)).to(
             device=device, dtype=classes_i32.dtype
         )
-        return merged_boxes, merged_scores, merged_classes
+        # C++ CPU path does not expose per-cluster counts; treat all as unmerged.
+        merged_count = int(merged_boxes.size(0))
+        return (
+            merged_boxes,
+            merged_scores,
+            merged_classes,
+            torch.ones(merged_count, device=device, dtype=torch.long),
+        )
 
     return merge_cross_tile_duplicates(
         boxes,

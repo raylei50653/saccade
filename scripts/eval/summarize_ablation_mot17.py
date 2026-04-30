@@ -47,6 +47,11 @@ _CATEGORY_ORDER = [
     "semantic",
     "trigger",
     "lifecycle",
+    "combination",
+    "combination_fine",
+    "mot17_a",
+    "mot17_b",
+    "mot17_c",
 ]
 _SORT_KEYS = {
     "category",
@@ -114,6 +119,97 @@ def load_overall_fps(results_dir: Path) -> float | None:
         return float(fps)
     except ValueError:
         return None
+
+
+def evaluate_dir_per_seq(
+    results_dir: Path, gt_root: Path, detector: str | None
+) -> dict[str, dict[str, float]] | None:
+    """Return per-sequence metrics dict, keyed by sequence name."""
+    import numpy as np
+    import motmetrics as mm
+
+    if not hasattr(np, "asfarray"):
+        np.asfarray = lambda a, dtype=float: np.asarray(a, dtype=dtype)
+
+    files = sorted(
+        f
+        for f in glob.glob(os.path.join(results_dir.as_posix(), "*.txt"))
+        if is_mot_file(f)
+    )
+    if detector:
+        files = [f for f in files if f"-{detector}" in Path(f).stem]
+    if not files:
+        return None
+
+    gt_files = glob.glob(os.path.join(gt_root.as_posix(), "*/gt/gt.txt"))
+    if detector:
+        gt_files = [f for f in gt_files if f"-{detector}" in Path(f).parts[-3]]
+    gt = {
+        Path(f).parts[-3]: mm.io.loadtxt(f, fmt="mot15-2D", min_confidence=1)
+        for f in gt_files
+    }
+
+    per_seq: dict[str, dict[str, float]] = {}
+    mh = mm.metrics.create()
+    for f in files:
+        name = Path(f).stem
+        if name not in gt:
+            continue
+        ts = mm.io.loadtxt(f, fmt="mot15-2D", min_confidence=-1.0)
+        acc = mm.utils.compare_to_groundtruth(gt[name], ts, "iou", distth=0.5)
+        summary = mh.compute(acc, metrics=_METRICS, name=name)
+        per_seq[name] = {m: float(summary.loc[name, m]) for m in _METRICS}
+
+    return per_seq if per_seq else None
+
+
+def print_per_seq_table(
+    title: str,
+    experiments: list[tuple[str, dict[str, dict[str, float]] | None]],
+) -> None:
+    """Print per-sequence IDF1 / IDs / MOTA breakdown across experiments."""
+    # Collect all sequence names in sorted order
+    all_seqs: list[str] = []
+    for _, seq_data in experiments:
+        if seq_data:
+            for seq in seq_data:
+                if seq not in all_seqs:
+                    all_seqs.append(seq)
+    all_seqs.sort()
+
+    print(f"\n{'=' * 120}")
+    print(f"  {title}  [per-sequence IDF1 / IDs / MOTA]")
+    print(f"{'=' * 120}")
+
+    col_w = 12
+    header = f"{'Sequence':<22}"
+    for label, _ in experiments:
+        short = label[:col_w]
+        header += f"  {short:>{col_w}}"
+    print(header)
+    print("-" * len(header))
+
+    base_data = experiments[0][1] if experiments else None
+
+    for seq in all_seqs:
+        row = f"{seq:<22}"
+        for label, seq_data in experiments:
+            if seq_data is None or seq not in seq_data:
+                row += f"  {'n/a':>{col_w}}"
+                continue
+            m = seq_data[seq]
+            cell = f"{m['idf1']*100:.1f}/{int(m['num_switches'])}/{m['mota']*100:.1f}"
+            # mark delta vs baseline
+            if base_data and seq in base_data and label != experiments[0][0]:
+                d_ids = int(m["num_switches"]) - int(base_data[seq]["num_switches"])
+                sign = "+" if d_ids >= 0 else ""
+                cell += f"({sign}{d_ids})"
+            row += f"  {cell:>{col_w}}"
+        print(row)
+
+    print(f"{'=' * 120}")
+    print("  Format: IDF1% / IDs / MOTA%  (delta IDs vs baseline in parens)")
+    print(f"{'=' * 120}")
 
 
 def evaluate_dir(
@@ -336,6 +432,22 @@ def main() -> None:
         default="",
         help="Optional CSV output path.",
     )
+    parser.add_argument(
+        "--per-seq",
+        action="store_true",
+        default=False,
+        help="Print per-sequence IDF1/IDs/MOTA breakdown for selected experiments.",
+    )
+    parser.add_argument(
+        "--per-seq-experiments",
+        default="",
+        help="Comma-separated experiment slug names to include in --per-seq table (default: all in category).",
+    )
+    parser.add_argument(
+        "--per-seq-extra-dirs",
+        default="",
+        help="Comma-separated dirs relative to --root to append as extra columns in --per-seq table.",
+    )
     args = parser.parse_args()
 
     root = Path(args.root)
@@ -391,6 +503,35 @@ def main() -> None:
         csv_path = Path(args.csv)
         write_csv(csv_path, sorted_rows)
         print(f"CSV written to {csv_path}")
+
+    if args.per_seq:
+        filter_slugs = {s.strip() for s in args.per_seq_experiments.split(",") if s.strip()}
+        # baseline always first
+        per_seq_experiments: list[tuple[str, dict[str, dict[str, float]] | None]] = [
+            ("baseline", evaluate_dir_per_seq(baseline_dir, gt_root, args.detector))
+        ]
+        for category in categories:
+            category_dir = root / category
+            if not category_dir.exists():
+                continue
+            for experiment_dir in sorted(p for p in category_dir.iterdir() if p.is_dir()):
+                slug = experiment_dir.name
+                if filter_slugs and slug not in filter_slugs:
+                    continue
+                seq_data = evaluate_dir_per_seq(experiment_dir, gt_root, args.detector)
+                if seq_data:
+                    per_seq_experiments.append((slug, seq_data))
+        for extra_rel in (s.strip() for s in args.per_seq_extra_dirs.split(",") if s.strip()):
+            extra_dir = root / extra_rel
+            seq_data = evaluate_dir_per_seq(extra_dir, gt_root, args.detector)
+            if seq_data:
+                per_seq_experiments.append((extra_dir.name, seq_data))
+            else:
+                print(f"[WARN] No results in extra dir: {extra_dir}")
+        print_per_seq_table(
+            f"Per-sequence breakdown - detector={args.detector}",
+            per_seq_experiments,
+        )
 
 
 if __name__ == "__main__":

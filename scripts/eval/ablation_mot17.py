@@ -29,6 +29,9 @@ from pathlib import Path
 
 project_root = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(project_root))
+src_path = project_root / "src"
+if src_path.exists():
+    sys.path.insert(0, str(src_path))
 build_path = project_root / "build"
 if build_path.exists():
     sys.path.insert(0, str(build_path))
@@ -59,6 +62,11 @@ _CATEGORY_ORDER = [
     "semantic",
     "trigger",
     "lifecycle",
+    "combination",
+    "combination_fine",
+    "mot17_a",
+    "mot17_b",
+    "mot17_c",
 ]
 
 _CATEGORY_EXPERIMENTS: dict[str, list[tuple[str, str, list[str]]]] = {
@@ -193,6 +201,342 @@ _CATEGORY_EXPERIMENTS: dict[str, list[tuple[str, str, list[str]]]] = {
             ],
         ),
     ],
+    "combination": [
+        (
+            "cross-tile + match=0.75",
+            "cross_tile_match075",
+            ["--cross-tile-merge", "--match-thresh", "0.75"],
+        ),
+        (
+            "cross-tile + semantic thr=0.92",
+            "cross_tile_thr092",
+            ["--cross-tile-merge", "--semantic-threshold", "0.92"],
+        ),
+        (
+            "cross-tile + match=0.75 + semantic thr=0.92",
+            "cross_tile_match075_thr092",
+            [
+                "--cross-tile-merge",
+                "--match-thresh",
+                "0.75",
+                "--semantic-threshold",
+                "0.92",
+            ],
+        ),
+    ],
+    "combination_fine": [
+        (
+            "cross-tile + match=0.72 + semantic thr=0.91",
+            "cross_tile_match072_thr091",
+            [
+                "--cross-tile-merge",
+                "--match-thresh",
+                "0.72",
+                "--semantic-threshold",
+                "0.91",
+            ],
+        ),
+        (
+            "cross-tile + match=0.72 + semantic thr=0.92",
+            "cross_tile_match072_thr092",
+            [
+                "--cross-tile-merge",
+                "--match-thresh",
+                "0.72",
+                "--semantic-threshold",
+                "0.92",
+            ],
+        ),
+        (
+            "cross-tile + match=0.72 + semantic thr=0.93",
+            "cross_tile_match072_thr093",
+            [
+                "--cross-tile-merge",
+                "--match-thresh",
+                "0.72",
+                "--semantic-threshold",
+                "0.93",
+            ],
+        ),
+        (
+            "cross-tile + match=0.75 + semantic thr=0.91",
+            "cross_tile_match075_thr091",
+            [
+                "--cross-tile-merge",
+                "--match-thresh",
+                "0.75",
+                "--semantic-threshold",
+                "0.91",
+            ],
+        ),
+        (
+            "cross-tile + match=0.75 + semantic thr=0.92",
+            "cross_tile_match075_thr092",
+            [
+                "--cross-tile-merge",
+                "--match-thresh",
+                "0.75",
+                "--semantic-threshold",
+                "0.92",
+            ],
+        ),
+        (
+            "cross-tile + match=0.75 + semantic thr=0.93",
+            "cross_tile_match075_thr093",
+            [
+                "--cross-tile-merge",
+                "--match-thresh",
+                "0.75",
+                "--semantic-threshold",
+                "0.93",
+            ],
+        ),
+        (
+            "cross-tile + match=0.78 + semantic thr=0.91",
+            "cross_tile_match078_thr091",
+            [
+                "--cross-tile-merge",
+                "--match-thresh",
+                "0.78",
+                "--semantic-threshold",
+                "0.91",
+            ],
+        ),
+        (
+            "cross-tile + match=0.78 + semantic thr=0.92",
+            "cross_tile_match078_thr092",
+            [
+                "--cross-tile-merge",
+                "--match-thresh",
+                "0.78",
+                "--semantic-threshold",
+                "0.92",
+            ],
+        ),
+        (
+            "cross-tile + match=0.78 + semantic thr=0.93",
+            "cross_tile_match078_thr093",
+            [
+                "--cross-tile-merge",
+                "--match-thresh",
+                "0.78",
+                "--semantic-threshold",
+                "0.93",
+            ],
+        ),
+    ],
+    # ── MOT17-a: semantic relink ambiguity suppression ─────────────────────────
+    # Tuple format: (label, slug, extra_args[, path_override])
+    # path_override reuses an existing output dir (must already have metrics.json).
+    "mot17_a": [
+        (
+            "best [m=0.78 thr=0.91]",
+            "best_m78_t091",
+            ["--cross-tile-merge", "--match-thresh", "0.78", "--semantic-threshold", "0.91"],
+            "combination_fine/cross_tile_match078_thr091",  # reuse cached result
+        ),
+        (
+            "thr=0.92 no fix",
+            "t092_no_fix",
+            ["--cross-tile-merge", "--match-thresh", "0.78", "--semantic-threshold", "0.92"],
+            "combination_fine/cross_tile_match078_thr092",  # reuse cached result
+        ),
+        (
+            "crowd=0.05 thr=0.91",
+            "crowd05_t091",
+            [
+                "--cross-tile-merge", "--match-thresh", "0.78", "--semantic-threshold", "0.91",
+                "--semantic-dynamic-margin-crowd", "0.05",
+            ],
+        ),
+        (
+            "crowd=0.03 thr=0.92",
+            "crowd03_t092",
+            [
+                "--cross-tile-merge", "--match-thresh", "0.78", "--semantic-threshold", "0.92",
+                "--semantic-dynamic-margin-crowd", "0.03",
+            ],
+        ),
+        (
+            "crowd=0.05 thr=0.92",
+            "crowd05_t092",
+            [
+                "--cross-tile-merge", "--match-thresh", "0.78", "--semantic-threshold", "0.92",
+                "--semantic-dynamic-margin-crowd", "0.05",
+            ],
+        ),
+        (
+            "crowd=0.08 thr=0.92",
+            "crowd08_t092",
+            [
+                "--cross-tile-merge", "--match-thresh", "0.78", "--semantic-threshold", "0.92",
+                "--semantic-dynamic-margin-crowd", "0.08",
+            ],
+        ),
+        (
+            "age=0.05 thr=0.92",
+            "age05_t092",
+            [
+                "--cross-tile-merge", "--match-thresh", "0.78", "--semantic-threshold", "0.92",
+                "--semantic-dynamic-margin-age", "0.05",
+            ],
+        ),
+        (
+            "iou=0.10 thr=0.92",
+            "iou10_t092",
+            [
+                "--cross-tile-merge", "--match-thresh", "0.78", "--semantic-threshold", "0.92",
+                "--semantic-iou-weight", "0.10",
+            ],
+        ),
+        (
+            "crowd=0.05+age=0.03 thr=0.92",
+            "crowd05_age03_t092",
+            [
+                "--cross-tile-merge", "--match-thresh", "0.78", "--semantic-threshold", "0.92",
+                "--semantic-dynamic-margin-crowd", "0.05",
+                "--semantic-dynamic-margin-age", "0.03",
+            ],
+        ),
+        (
+            "crowd=0.05+iou=0.10 thr=0.92",
+            "crowd05_iou10_t092",
+            [
+                "--cross-tile-merge", "--match-thresh", "0.78", "--semantic-threshold", "0.92",
+                "--semantic-dynamic-margin-crowd", "0.05",
+                "--semantic-iou-weight", "0.10",
+            ],
+        ),
+        (
+            "py_relinker thr=0.92 no-iou",
+            "py_t092_noiou",
+            [
+                "--cross-tile-merge", "--match-thresh", "0.78", "--semantic-threshold", "0.92",
+                "--force-python-relinker",
+            ],
+        ),
+    ],
+    # ── MOT17-b: cross-tile score penalty ──────────────────────────────────────
+    "mot17_b": [
+        (
+            "best [m=0.78 thr=0.91]",
+            "best_m78_t091",
+            ["--cross-tile-merge", "--match-thresh", "0.78", "--semantic-threshold", "0.91"],
+            "combination_fine/cross_tile_match078_thr091",
+        ),
+        (
+            "thr=0.92 no fix",
+            "t092_no_fix",
+            ["--cross-tile-merge", "--match-thresh", "0.78", "--semantic-threshold", "0.92"],
+            "combination_fine/cross_tile_match078_thr092",
+        ),
+        (
+            "pen=0.95 thr=0.91",
+            "pen95_t091",
+            [
+                "--cross-tile-merge", "--match-thresh", "0.78", "--semantic-threshold", "0.91",
+                "--cross-tile-score-penalty", "0.95",
+            ],
+        ),
+        (
+            "pen=0.90 thr=0.91",
+            "pen90_t091",
+            [
+                "--cross-tile-merge", "--match-thresh", "0.78", "--semantic-threshold", "0.91",
+                "--cross-tile-score-penalty", "0.90",
+            ],
+        ),
+        (
+            "pen=0.85 thr=0.91",
+            "pen85_t091",
+            [
+                "--cross-tile-merge", "--match-thresh", "0.78", "--semantic-threshold", "0.91",
+                "--cross-tile-score-penalty", "0.85",
+            ],
+        ),
+        (
+            "pen=0.95 thr=0.92",
+            "pen95_t092",
+            [
+                "--cross-tile-merge", "--match-thresh", "0.78", "--semantic-threshold", "0.92",
+                "--cross-tile-score-penalty", "0.95",
+            ],
+        ),
+        (
+            "pen=0.90 thr=0.92",
+            "pen90_t092",
+            [
+                "--cross-tile-merge", "--match-thresh", "0.78", "--semantic-threshold", "0.92",
+                "--cross-tile-score-penalty", "0.90",
+            ],
+        ),
+        (
+            "pen=0.85 thr=0.92",
+            "pen85_t092",
+            [
+                "--cross-tile-merge", "--match-thresh", "0.78", "--semantic-threshold", "0.92",
+                "--cross-tile-score-penalty", "0.85",
+            ],
+        ),
+        (
+            "pen=0.90+crowd=0.05 thr=0.92",
+            "pen90_crowd05_t092",
+            [
+                "--cross-tile-merge", "--match-thresh", "0.78", "--semantic-threshold", "0.92",
+                "--cross-tile-score-penalty", "0.90",
+                "--semantic-dynamic-margin-crowd", "0.05",
+            ],
+        ),
+    ],
+    # ── MOT17-c: semantic buffer/rerank default-path verification ──────────────
+    "mot17_c": [
+        (
+            "best [m=0.78 thr=0.91]",
+            "best_m78_t091",
+            ["--cross-tile-merge", "--match-thresh", "0.78", "--semantic-threshold", "0.91"],
+            "combination_fine/cross_tile_match078_thr091",
+        ),
+        (
+            "buf=2",
+            "buf2_t091",
+            [
+                "--cross-tile-merge", "--match-thresh", "0.78", "--semantic-threshold", "0.91",
+                "--semantic-buffer-size", "2",
+            ],
+        ),
+        (
+            "buf=3",
+            "buf3_t091",
+            [
+                "--cross-tile-merge", "--match-thresh", "0.78", "--semantic-threshold", "0.91",
+                "--semantic-buffer-size", "3",
+            ],
+        ),
+        (
+            "buf=2 rerank=max",
+            "buf2_max_t091",
+            [
+                "--cross-tile-merge", "--match-thresh", "0.78", "--semantic-threshold", "0.91",
+                "--semantic-buffer-size", "2", "--semantic-rerank-mode", "max",
+            ],
+        ),
+        (
+            "buf=2 cons=0.65",
+            "buf2_cons065_t091",
+            [
+                "--cross-tile-merge", "--match-thresh", "0.78", "--semantic-threshold", "0.91",
+                "--semantic-buffer-size", "2", "--semantic-min-consistency", "0.65",
+            ],
+        ),
+        (
+            "buf=2 top2_mean",
+            "buf2_top2_t091",
+            [
+                "--cross-tile-merge", "--match-thresh", "0.78", "--semantic-threshold", "0.91",
+                "--semantic-buffer-size", "2", "--semantic-rerank-mode", "top2_mean",
+            ],
+        ),
+    ],
 }
 
 
@@ -277,13 +621,23 @@ def run_eval(
         + base_args
         + extra_args
     )
+    env = os.environ.copy()
+    pythonpath_entries = [str(project_root)]
+    if src_path.exists():
+        pythonpath_entries.append(str(src_path))
+    if build_path.exists():
+        pythonpath_entries.append(str(build_path))
+    existing_pythonpath = env.get("PYTHONPATH")
+    if existing_pythonpath:
+        pythonpath_entries.append(existing_pythonpath)
+    env["PYTHONPATH"] = os.pathsep.join(pythonpath_entries)
     print(f"\n{'=' * 68}")
     print(f"  Running: {label}")
     print(f"  Cmd:     {' '.join(cmd)}")
     print(f"{'=' * 68}")
     if dry:
         return True
-    result = subprocess.run(cmd, cwd=str(project_root))
+    result = subprocess.run(cmd, cwd=str(project_root), env=env)
     return result.returncode == 0
 
 
@@ -357,12 +711,30 @@ def main() -> None:
     baseline_metrics = evaluate_dir(baseline_dir, args.gt_root, args.detector)
 
     for category in categories:
-        experiments = [("Baseline", baseline_dir, [])]
-        for label, slug, extra in _CATEGORY_EXPERIMENTS[category]:
-            experiments.append((label, f"{args.output_root}/{category}/{slug}", extra))
+        # Expand experiment tuples: (label, slug, extra[, path_override])
+        # path_override points to an existing output dir to reuse (skips run if
+        # metrics.json already present there).
+        expanded: list[tuple[str, str, list[str]]] = []
+        for entry in _CATEGORY_EXPERIMENTS[category]:
+            label, slug, extra = entry[0], entry[1], entry[2]
+            path_override: str | None = entry[3] if len(entry) > 3 else None  # type: ignore[misc]
+            if path_override:
+                out_dir = f"{args.output_root}/{path_override}"
+            else:
+                out_dir = f"{args.output_root}/{category}/{slug}"
+            expanded.append((label, out_dir, extra))
+
+        experiments: list[tuple[str, str, list[str]]] = [
+            ("Baseline", baseline_dir, [])
+        ] + expanded
 
         if not args.skip_run:
             for label, out_dir, extra in experiments[1:]:
+                # Skip if cached — supports both resume and path_override reuse.
+                metrics_cache = os.path.join(out_dir, "metrics.json")
+                if os.path.exists(metrics_cache):
+                    print(f"  [CACHED] {category} / {label}  ({out_dir})")
+                    continue
                 ok = run_eval(
                     f"{category}: {label}", out_dir, extra, base_args, args.dry_run
                 )
