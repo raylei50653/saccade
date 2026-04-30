@@ -9,8 +9,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "build"))
 
-from saccade.perception.eval.relink import IdentityResolver
-from saccade.perception.eval.runner import (
+from saccade.perception.eval.relink import IdentityResolver  # noqa: E402
+from saccade.perception.eval.runner import (  # noqa: E402
     IdStabilityFilter,
     OutputAppearanceBank,
     PreparedTrackCandidate,
@@ -19,7 +19,7 @@ from saccade.perception.eval.runner import (
     _inject_lost_track_references,
     _resolve_frame_tracks,
 )
-from saccade.perception.tracking.tracker_gpu import TrackAppearanceBank
+from saccade.perception.tracking.tracker_gpu import TrackAppearanceBank  # noqa: E402
 
 
 def test_id_stability_accept_many_matches_sequential_accept() -> None:
@@ -157,7 +157,9 @@ class _StubDynamicReID:
     def __init__(self) -> None:
         self.calls: list[tuple[dict[int, object], torch.Tensor | None]] = []
 
-    def observe(self, tracks: dict[int, object], gmc: torch.Tensor | None = None) -> None:
+    def observe(
+        self, tracks: dict[int, object], gmc: torch.Tensor | None = None
+    ) -> None:
         self.calls.append((tracks, gmc))
 
 
@@ -187,12 +189,60 @@ def test_inject_lost_track_references_batches_consistent_tracks() -> None:
     )
     bank.update_many(
         [
-            (1, torch.tensor([1.0, 0.0], dtype=torch.float32), 0.95, 0.9, 1, True, False),
-            (1, torch.tensor([0.98, 0.02], dtype=torch.float32), 0.90, 0.85, 2, True, False),
-            (2, torch.tensor([0.0, 1.0], dtype=torch.float32), 0.93, 0.9, 1, True, False),
-            (2, torch.tensor([0.0, -1.0], dtype=torch.float32), 0.92, 0.85, 2, True, False),
-            (3, torch.tensor([1.0, 1.0], dtype=torch.float32), 0.96, 0.9, 1, True, False),
-            (3, torch.tensor([1.0, 1.0], dtype=torch.float32), 0.91, 0.85, 2, True, False),
+            (
+                1,
+                torch.tensor([1.0, 0.0], dtype=torch.float32),
+                0.95,
+                0.9,
+                1,
+                True,
+                False,
+            ),
+            (
+                1,
+                torch.tensor([0.98, 0.02], dtype=torch.float32),
+                0.90,
+                0.85,
+                2,
+                True,
+                False,
+            ),
+            (
+                2,
+                torch.tensor([0.0, 1.0], dtype=torch.float32),
+                0.93,
+                0.9,
+                1,
+                True,
+                False,
+            ),
+            (
+                2,
+                torch.tensor([0.0, -1.0], dtype=torch.float32),
+                0.92,
+                0.85,
+                2,
+                True,
+                False,
+            ),
+            (
+                3,
+                torch.tensor([1.0, 1.0], dtype=torch.float32),
+                0.96,
+                0.9,
+                1,
+                True,
+                False,
+            ),
+            (
+                3,
+                torch.tensor([1.0, 1.0], dtype=torch.float32),
+                0.91,
+                0.85,
+                2,
+                True,
+                False,
+            ),
         ]
     )
 

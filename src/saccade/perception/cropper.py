@@ -44,12 +44,15 @@ class ZeroCopyCropper:
         # image codecs before the C++ extension resolves its own dependencies.
         from torchvision.ops import roi_align
 
-        return roi_align(
-            input=frame_tensor,
-            boxes=rois,
-            output_size=output_size,
-            spatial_scale=1.0,
-            aligned=True,
+        return cast(
+            torch.Tensor,
+            roi_align(
+                input=frame_tensor,
+                boxes=rois,
+                output_size=output_size,
+                spatial_scale=1.0,
+                aligned=True,
+            ),
         )
 
     def _prepare_boxes(

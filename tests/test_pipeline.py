@@ -1,8 +1,8 @@
-import pytest
+import pytest  # noqa: E402
 import json
 from unittest.mock import patch, AsyncMock, MagicMock
-from saccade.perception.entropy import EntropyTrigger
-from saccade.cognition.orchestrator import PipelineOrchestrator
+from saccade.perception.entropy import EntropyTrigger  # noqa: E402
+from saccade.cognition.orchestrator import PipelineOrchestrator  # noqa: E402
 
 
 @pytest.mark.anyio

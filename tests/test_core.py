@@ -1,4 +1,4 @@
-import pytest
+import pytest  # noqa: E402
 import torch
 import numpy as np
 import os
@@ -6,17 +6,17 @@ import shutil
 import time
 from unittest.mock import patch, AsyncMock
 from gi.repository import GLib
-from saccade.media.mediamtx_client import MediaMTXClient
-from saccade.storage.redis_cache import RedisCache
-from saccade.storage.chroma_store import ChromaStore
-from saccade.perception.tracking import GPUByteTracker
-from saccade.perception.tracking.tracker_gpu import (
+from saccade.media.mediamtx_client import MediaMTXClient  # noqa: E402
+from saccade.storage.redis_cache import RedisCache  # noqa: E402
+from saccade.storage.chroma_store import ChromaStore  # noqa: E402
+from saccade.perception.tracking import GPUByteTracker  # noqa: E402
+from saccade.perception.tracking.tracker_gpu import (  # noqa: E402
     DynamicReIDController,
     ReIDTrackObservation,
     TrackAppearanceBank,
     need_reid_frame,
 )
-from saccade.perception.zero_copy import GstZeroCopyDecoder
+from saccade.perception.zero_copy import GstZeroCopyDecoder  # noqa: E402
 
 # --- Media Tests ---
 

@@ -33,13 +33,18 @@ from saccade.perception.eval.preprocess import (
     geometry_mid_thresh_scale,
     parse_preprocess,
 )
-from saccade.perception.eval.relink import IdentityResolver, PythonSemanticRelinker, SemanticRelinker
+from saccade.perception.eval.relink import (
+    IdentityResolver,
+    PythonSemanticRelinker,
+    SemanticRelinker,
+)
 
 try:
     from saccade_tracking_ext import (
         TrackletLifecycleMerger as _CppTrackletLifecycleMerger,
         IdentityResolver as _CppIdentityResolver,
     )
+
     _LIFECYCLE_CLS: type | None = _CppTrackletLifecycleMerger
 except ImportError:
     _CppIdentityResolver = None
@@ -455,8 +460,6 @@ class ResolvedTrack:
     embedding: torch.Tensor | None
 
 
-
-
 @dataclass
 class OutputTracklet:
     track_id: int
@@ -739,8 +742,6 @@ def _resolve_frame_tracks(
     ]
 
 
-
-
 def _prepare_track_candidates(
     *,
     frame_id: int,
@@ -859,14 +860,12 @@ def _build_prepared_candidates(
         obj_id = host_batch.ids[i]
         emb = None
         det_idx = host_batch.det_idx[i] if host_batch.det_idx is not None else -1
-        if (
-            embeddings is not None
-            and det_idx >= 0
-            and det_idx < fused_boxes.shape[0]
-        ):
+        if embeddings is not None and det_idx >= 0 and det_idx < fused_boxes.shape[0]:
             emb = embeddings[det_idx]
             match_iou = float(
-                _box_iou_single(host_batch.boxes_gpu[i], fused_boxes[det_idx : det_idx + 1]).item()
+                _box_iou_single(
+                    host_batch.boxes_gpu[i], fused_boxes[det_idx : det_idx + 1]
+                ).item()
             )
             if match_iou > 0.35:
                 appearance_updates.append(
@@ -1570,7 +1569,6 @@ def run_eval(
         "native_reid_trt_enqueue",
         "native_reid_l2_normalize",
     )
-    current_stage_samples: dict[str, list[float]] | None = None
     current_frame_stage_elapsed: dict[str, float] | None = None
     current_stage_sample_active = False
 
@@ -1808,7 +1806,6 @@ def run_eval(
         )
 
         for frame_id in range(1, frame_end + 1):
-            current_stage_samples = seq_stage_samples
             current_stage_sample_active = frame_id > warmup_frames
             current_frame_stage_elapsed = (
                 {name: 0.0 for name in top_level_stage_names}
@@ -2102,26 +2099,14 @@ def run_eval(
                             seq_native_reid_samples["native_reid_crop"].append(
                                 float(native_stats.get("crop_ms", 0.0))
                             )
-                            seq_native_reid_samples[
-                                "native_reid_pre_normalize"
-                            ].append(
-                                float(
-                                    native_stats.get(
-                                        "extract_pre_normalize_ms", 0.0
-                                    )
-                                )
+                            seq_native_reid_samples["native_reid_pre_normalize"].append(
+                                float(native_stats.get("extract_pre_normalize_ms", 0.0))
                             )
                             seq_native_reid_samples["native_reid_trt_enqueue"].append(
-                                float(
-                                    native_stats.get("extract_trt_enqueue_ms", 0.0)
-                                )
+                                float(native_stats.get("extract_trt_enqueue_ms", 0.0))
                             )
-                            seq_native_reid_samples[
-                                "native_reid_l2_normalize"
-                            ].append(
-                                float(
-                                    native_stats.get("extract_l2_normalize_ms", 0.0)
-                                )
+                            seq_native_reid_samples["native_reid_l2_normalize"].append(
+                                float(native_stats.get("extract_l2_normalize_ms", 0.0))
                             )
                 else:
                     frame_batch = pool.frame_buffer.unsqueeze(0)
@@ -2132,7 +2117,9 @@ def run_eval(
                         crops = cropper.process_parts(frame_batch, fused_boxes)
                         if profile_stages:
                             torch.cuda.synchronize()
-                            elapsed_ms = (time.perf_counter() - t_reid_crop_start) * 1000
+                            elapsed_ms = (
+                                time.perf_counter() - t_reid_crop_start
+                            ) * 1000
                             seq_stage_totals["reid_crop"] += elapsed_ms
                             record_stage_sample("reid_crop", elapsed_ms)
                         if crops.numel() > 0:
@@ -2154,7 +2141,9 @@ def run_eval(
                         crops = cropper.process(frame_batch, fused_boxes)
                         if profile_stages:
                             torch.cuda.synchronize()
-                            elapsed_ms = (time.perf_counter() - t_reid_crop_start) * 1000
+                            elapsed_ms = (
+                                time.perf_counter() - t_reid_crop_start
+                            ) * 1000
                             seq_stage_totals["reid_crop"] += elapsed_ms
                             record_stage_sample("reid_crop", elapsed_ms)
                         if crops.numel() > 0:
@@ -2387,7 +2376,10 @@ def run_eval(
                 seq_stage_totals["frame_total"] += elapsed_ms
                 record_stage_sample("frame_total", elapsed_ms)
                 if current_frame_stage_elapsed is not None:
-                    for stage_name, stage_elapsed in current_frame_stage_elapsed.items():
+                    for (
+                        stage_name,
+                        stage_elapsed,
+                    ) in current_frame_stage_elapsed.items():
                         seq_stage_samples[stage_name].append(stage_elapsed)
                 seq_profiled_frames += 1
             if frame_id % 100 == 0:
@@ -2476,7 +2468,9 @@ def run_eval(
                     mean_ms = total_ms / seq_profiled_frames
                     print(f"    - {stage_name}: {mean_ms:.2f} ms/frame")
                     overall_stage_totals[stage_name] += total_ms
-            if any(seq_native_reid_samples[name] for name in native_reid_breakdown_names):
+            if any(
+                seq_native_reid_samples[name] for name in native_reid_breakdown_names
+            ):
                 print("  - reid_extract_breakdown:")
                 for stage_name in native_reid_breakdown_names:
                     samples = seq_native_reid_samples[stage_name]
@@ -2636,7 +2630,9 @@ def run_eval(
                 total_ms = overall_stage_totals[stage_name]
                 if total_ms <= 0.0:
                     continue
-                print(f"    - {stage_name}: {total_ms / overall_profiled_frames:.2f} ms/frame")
+                print(
+                    f"    - {stage_name}: {total_ms / overall_profiled_frames:.2f} ms/frame"
+                )
                 stage_summary_lines.append(
                     f"{stage_name}\tmean_ms={total_ms / overall_profiled_frames:.2f}\ttotal_ms={total_ms:.2f}"
                 )

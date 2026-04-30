@@ -58,7 +58,7 @@ override-dependencies = [
 strict = true
 ignore_missing_imports = true
 exclude = ["tests/"]
-python_path = "src"
+mypy_path = "src"
 
 [tool.ruff]
 exclude = ["tests/benchmarks/archive"]

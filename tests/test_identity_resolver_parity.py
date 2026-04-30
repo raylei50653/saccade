@@ -1,8 +1,8 @@
 """Parity test: IdentityResolver.resolve_pass must be byte-equal to the legacy
 _resolve_frame_tracks path (relink → lifecycle) for every candidate across every frame."""
+
 from __future__ import annotations
 
-import copy
 import sys
 from pathlib import Path
 
@@ -12,8 +12,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "build"))
 
-from saccade.perception.eval.relink import IdentityResolver, PythonSemanticRelinker
-from saccade.perception.eval.runner import (
+from saccade.perception.eval.relink import IdentityResolver, PythonSemanticRelinker  # noqa: E402
+from saccade.perception.eval.runner import (  # noqa: E402
     PreparedTrackCandidate,
     TrackletLifecycleMerger,
     _resolve_frame_tracks,
@@ -131,13 +131,17 @@ def test_resolve_pass_ids_match_frame_tracks() -> None:
     n_frames, n_per_frame = 10, 5
     track_ids = [1, 2, 3, 4, 5]
 
-    frames = [_make_candidates(rng, n_per_frame, track_ids, frame_w=frame_w, frame_h=frame_h)
-              for _ in range(n_frames)]
+    frames = [
+        _make_candidates(rng, n_per_frame, track_ids, frame_w=frame_w, frame_h=frame_h)
+        for _ in range(n_frames)
+    ]
 
-    rk_ft = _make_relinker(); lc_ft = _make_lifecycle()
+    rk_ft = _make_relinker()
+    lc_ft = _make_lifecycle()
     ft_ids = _run_via_frame_tracks(frames, rk_ft, lc_ft, frame_w, frame_h)
 
-    rk_new = _make_relinker(); lc_new = _make_lifecycle()
+    rk_new = _make_relinker()
+    lc_new = _make_lifecycle()
     resolver = IdentityResolver(rk_new, lc_new)
     resolver_ids = _run_resolver(frames, resolver, lc_new, frame_w, frame_h)
 
@@ -154,19 +158,23 @@ def test_resolve_pass_alias_and_stats_match_frame_tracks() -> None:
     n_frames, n_per_frame = 8, 4
     track_ids = [10, 20, 30, 40]
 
-    frames = [_make_candidates(rng, n_per_frame, track_ids, frame_w=frame_w, frame_h=frame_h)
-              for _ in range(n_frames)]
+    frames = [
+        _make_candidates(rng, n_per_frame, track_ids, frame_w=frame_w, frame_h=frame_h)
+        for _ in range(n_frames)
+    ]
 
-    rk_ft = _make_relinker(); lc_ft = _make_lifecycle()
+    rk_ft = _make_relinker()
+    lc_ft = _make_lifecycle()
     _run_via_frame_tracks(frames, rk_ft, lc_ft, frame_w, frame_h)
 
-    rk_new = _make_relinker(); lc_new = _make_lifecycle()
+    rk_new = _make_relinker()
+    lc_new = _make_lifecycle()
     _run_resolver(frames, IdentityResolver(rk_new, lc_new), lc_new, frame_w, frame_h)
 
-    assert dict(rk_ft.alias)  == dict(rk_new.alias),  "relinker alias mismatch"
-    assert dict(lc_ft.alias)  == dict(lc_new.alias),  "lifecycle alias mismatch"
-    assert dict(rk_ft.stats)  == dict(rk_new.stats),  "relinker stats mismatch"
-    assert dict(lc_ft.stats)  == dict(lc_new.stats),  "lifecycle stats mismatch"
+    assert dict(rk_ft.alias) == dict(rk_new.alias), "relinker alias mismatch"
+    assert dict(lc_ft.alias) == dict(lc_new.alias), "lifecycle alias mismatch"
+    assert dict(rk_ft.stats) == dict(rk_new.stats), "relinker stats mismatch"
+    assert dict(lc_ft.stats) == dict(lc_new.stats), "lifecycle stats mismatch"
 
 
 def test_resolve_pass_empty_candidates() -> None:
@@ -184,15 +192,21 @@ def test_resolve_pass_with_none_embeddings() -> None:
     resolver = IdentityResolver(rk, lc)
 
     candidates = [
-        PreparedTrackCandidate(local_track_id=7, box=(10.0, 10.0, 50.0, 50.0), score=0.8, embedding=None),
-        PreparedTrackCandidate(local_track_id=8, box=(60.0, 60.0, 100.0, 100.0), score=0.9, embedding=None),
+        PreparedTrackCandidate(
+            local_track_id=7, box=(10.0, 10.0, 50.0, 50.0), score=0.8, embedding=None
+        ),
+        PreparedTrackCandidate(
+            local_track_id=8, box=(60.0, 60.0, 100.0, 100.0), score=0.9, embedding=None
+        ),
     ]
     result = resolver.resolve_pass(
         [c.local_track_id for c in candidates],
         [c.embedding for c in candidates],
         [c.box for c in candidates],
         [c.score for c in candidates],
-        frame_id=1, frame_w=640, frame_h=480,
+        frame_id=1,
+        frame_w=640,
+        frame_h=480,
     )
     assert len(result) == 2
 
@@ -211,16 +225,24 @@ def test_resolve_pass_with_relink_match() -> None:
         resolver = IdentityResolver(relinker, lifecycle)
         # frame 1: establish track 1
         _resolve_frame_tracks(
-            frame_id=1, frame_w=frame_w, frame_h=frame_h,
+            frame_id=1,
+            frame_w=frame_w,
+            frame_h=frame_h,
             prepared_candidates=[PreparedTrackCandidate(1, box_a, 0.9, emb_a)],
-            lifecycle_merger=lifecycle, identity_resolver=resolver,
+            lifecycle_merger=lifecycle,
+            identity_resolver=resolver,
         )
         lifecycle.prune(1)
-        emb_b = torch.nn.functional.normalize(emb_a * 0.99 + torch.randn(8) * 0.01, dim=0)
+        emb_b = torch.nn.functional.normalize(
+            emb_a * 0.99 + torch.randn(8) * 0.01, dim=0
+        )
         result = _resolve_frame_tracks(
-            frame_id=5, frame_w=frame_w, frame_h=frame_h,
+            frame_id=5,
+            frame_w=frame_w,
+            frame_h=frame_h,
             prepared_candidates=[PreparedTrackCandidate(99, box_a, 0.85, emb_b)],
-            lifecycle_merger=lifecycle, identity_resolver=resolver,
+            lifecycle_merger=lifecycle,
+            identity_resolver=resolver,
         )
         lifecycle.prune(5)
         return [t.resolved_track_id for t in result]
@@ -228,14 +250,26 @@ def test_resolve_pass_with_relink_match() -> None:
     def run_two_frame_resolver(relinker, lifecycle):
         resolver = IdentityResolver(relinker, lifecycle)
         resolver.resolve_pass(
-            [1], [emb_a], [box_a], [0.9],
-            frame_id=1, frame_w=frame_w, frame_h=frame_h,
+            [1],
+            [emb_a],
+            [box_a],
+            [0.9],
+            frame_id=1,
+            frame_w=frame_w,
+            frame_h=frame_h,
         )
         lifecycle.prune(1)
-        emb_b = torch.nn.functional.normalize(emb_a * 0.99 + torch.randn(8) * 0.01, dim=0)
+        emb_b = torch.nn.functional.normalize(
+            emb_a * 0.99 + torch.randn(8) * 0.01, dim=0
+        )
         result = resolver.resolve_pass(
-            [99], [emb_b], [box_a], [0.85],
-            frame_id=5, frame_w=frame_w, frame_h=frame_h,
+            [99],
+            [emb_b],
+            [box_a],
+            [0.85],
+            frame_id=5,
+            frame_w=frame_w,
+            frame_h=frame_h,
         )
         lifecycle.prune(5)
         return [int(rid) for rid in result]

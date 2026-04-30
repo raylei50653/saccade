@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "build"))
 
-from saccade.perception.eval.runner import _materialize_gpu_track_results
+from saccade.perception.eval.runner import _materialize_gpu_track_results  # noqa: E402
 
 
 def test_materialize_gpu_track_results_empty() -> None:
@@ -53,9 +53,7 @@ def test_materialize_gpu_track_results_preserves_fields() -> None:
 
     assert result["count"] == 2
     assert result["boxes"].tolist() == [[1.0, 2.0, 30.0, 40.0], [5.0, 6.0, 50.0, 60.0]]
-    assert torch.equal(
-        result["scores"], torch.tensor([0.9, 0.8], dtype=torch.float32)
-    )
+    assert torch.equal(result["scores"], torch.tensor([0.9, 0.8], dtype=torch.float32))
     assert result["ids"].tolist() == [11, 22]
     assert result["classes"] is not None
     assert result["classes"].tolist() == [1, 3]

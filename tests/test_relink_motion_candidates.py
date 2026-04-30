@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "build"))
 
-from saccade.perception.eval.relink import PythonSemanticRelinker
+from saccade.perception.eval.relink import PythonSemanticRelinker  # noqa: E402
 
 
 def test_motion_candidate_ids_filters_by_lost_age_window() -> None:
@@ -111,7 +111,9 @@ def test_resolve_many_matches_sequential_resolve() -> None:
     )
     assigned: set[int] = set()
     sequential_resolved = [
-        sequential_relinker.resolve(raw_id, embedding, box, score, 4, 100, 100, assigned)
+        sequential_relinker.resolve(
+            raw_id, embedding, box, score, 4, 100, 100, assigned
+        )
         for raw_id, embedding, box, score in candidates
     ]
 
