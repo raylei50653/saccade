@@ -1391,19 +1391,25 @@ def run_eval(
     # MOT17-a: joint scoring weights and dynamic margin params
     semantic_iou_weight = float(kwargs.get("semantic_iou_weight", 0.0))
     semantic_mahalanobis_weight = float(kwargs.get("semantic_mahalanobis_weight", 0.0))
-    semantic_dynamic_margin_crowd = float(kwargs.get("semantic_dynamic_margin_crowd", 0.0))
+    semantic_dynamic_margin_crowd = float(
+        kwargs.get("semantic_dynamic_margin_crowd", 0.0)
+    )
     semantic_dynamic_margin_age = float(kwargs.get("semantic_dynamic_margin_age", 0.0))
     # MOT17-b: penalise cross-tile-merged boxes in association (fraction of score kept)
     cross_tile_score_penalty = float(kwargs.get("cross_tile_score_penalty", 1.0))
     # confound control: force Python relinker path without changing any scoring params
     force_python_relinker = bool(kwargs.get("force_python_relinker", False))
-    
+
     # Rerank Phase 3: reference quality and false accept filtering
-    semantic_clean_score_threshold = float(kwargs.get("semantic_clean_score_threshold", 0.0))
+    semantic_clean_score_threshold = float(
+        kwargs.get("semantic_clean_score_threshold", 0.0)
+    )
     semantic_clean_margin_ratio = float(kwargs.get("semantic_clean_margin_ratio", 0.0))
     semantic_clean_min_aspect = float(kwargs.get("semantic_clean_min_aspect", 0.0))
     semantic_clean_max_aspect = float(kwargs.get("semantic_clean_max_aspect", 99.0))
-    semantic_strict_sim_threshold = float(kwargs.get("semantic_strict_sim_threshold", 0.0))
+    semantic_strict_sim_threshold = float(
+        kwargs.get("semantic_strict_sim_threshold", 0.0)
+    )
 
     use_semantic_mode = reid_mode in {"semantic", "hybrid"}
     use_tracker_reid = reid_mode in {"tracker", "hybrid"}

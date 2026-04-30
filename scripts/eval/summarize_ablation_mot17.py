@@ -198,7 +198,9 @@ def print_per_seq_table(
                 row += f"  {'n/a':>{col_w}}"
                 continue
             m = seq_data[seq]
-            cell = f"{m['idf1']*100:.1f}/{int(m['num_switches'])}/{m['mota']*100:.1f}"
+            cell = (
+                f"{m['idf1'] * 100:.1f}/{int(m['num_switches'])}/{m['mota'] * 100:.1f}"
+            )
             # mark delta vs baseline
             if base_data and seq in base_data and label != experiments[0][0]:
                 d_ids = int(m["num_switches"]) - int(base_data[seq]["num_switches"])
@@ -505,7 +507,9 @@ def main() -> None:
         print(f"CSV written to {csv_path}")
 
     if args.per_seq:
-        filter_slugs = {s.strip() for s in args.per_seq_experiments.split(",") if s.strip()}
+        filter_slugs = {
+            s.strip() for s in args.per_seq_experiments.split(",") if s.strip()
+        }
         # baseline always first
         per_seq_experiments: list[tuple[str, dict[str, dict[str, float]] | None]] = [
             ("baseline", evaluate_dir_per_seq(baseline_dir, gt_root, args.detector))
@@ -514,14 +518,18 @@ def main() -> None:
             category_dir = root / category
             if not category_dir.exists():
                 continue
-            for experiment_dir in sorted(p for p in category_dir.iterdir() if p.is_dir()):
+            for experiment_dir in sorted(
+                p for p in category_dir.iterdir() if p.is_dir()
+            ):
                 slug = experiment_dir.name
                 if filter_slugs and slug not in filter_slugs:
                     continue
                 seq_data = evaluate_dir_per_seq(experiment_dir, gt_root, args.detector)
                 if seq_data:
                     per_seq_experiments.append((slug, seq_data))
-        for extra_rel in (s.strip() for s in args.per_seq_extra_dirs.split(",") if s.strip()):
+        for extra_rel in (
+            s.strip() for s in args.per_seq_extra_dirs.split(",") if s.strip()
+        ):
             extra_dir = root / extra_rel
             seq_data = evaluate_dir_per_seq(extra_dir, gt_root, args.detector)
             if seq_data:

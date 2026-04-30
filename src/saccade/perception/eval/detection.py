@@ -338,7 +338,12 @@ def merge_cross_tile_duplicates(
     number of original detections fused into output box i (1 = no merge happened)."""
     n = boxes.size(0)
     if boxes.numel() == 0 or n <= 1:
-        return boxes, scores, classes, torch.ones(n, device=boxes.device, dtype=torch.long)
+        return (
+            boxes,
+            scores,
+            classes,
+            torch.ones(n, device=boxes.device, dtype=torch.long),
+        )
 
     order = torch.argsort(scores, descending=True)
     remaining = order.tolist()

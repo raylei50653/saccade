@@ -67,7 +67,9 @@ class PythonSemanticRelinker:
         self.clean_margin_ratio = clean_margin_ratio
         self.clean_min_aspect = clean_min_aspect
         self.clean_max_aspect = clean_max_aspect
-        self.strict_sim_threshold = strict_sim_threshold if strict_sim_threshold > 0.0 else sim_threshold
+        self.strict_sim_threshold = (
+            strict_sim_threshold if strict_sim_threshold > 0.0 else sim_threshold
+        )
         self.debug = debug
         self.alias: Dict[int, int] = {}
         self.features: Dict[int, torch.Tensor] = {}
@@ -242,7 +244,7 @@ class PythonSemanticRelinker:
             return self.alias.get(raw_id, raw_id)
 
         emb = self._normalize(embedding)
-        
+
         is_clean = True
         if self.clean_score_threshold > 0.0 or self.clean_margin_ratio > 0.0:
             bw = float(box[2] - box[0])
@@ -250,19 +252,28 @@ class PythonSemanticRelinker:
             aspect = bh / bw if bw > 0 else 0.0
             margin_w = w * self.clean_margin_ratio
             margin_h = h * self.clean_margin_ratio
-            if (score < self.clean_score_threshold or
-                float(box[0]) < margin_w or float(box[1]) < margin_h or
-                float(box[2]) > w - margin_w or float(box[3]) > h - margin_h or
-                aspect < self.clean_min_aspect or aspect > self.clean_max_aspect):
+            if (
+                score < self.clean_score_threshold
+                or float(box[0]) < margin_w
+                or float(box[1]) < margin_h
+                or float(box[2]) > w - margin_w
+                or float(box[3]) > h - margin_h
+                or aspect < self.clean_min_aspect
+                or aspect > self.clean_max_aspect
+            ):
                 is_clean = False
-                
-        current_sim_thresh = self.sim_threshold if is_clean else self.strict_sim_threshold
+
+        current_sim_thresh = (
+            self.sim_threshold if is_clean else self.strict_sim_threshold
+        )
 
         if raw_id not in self.alias:
             self.stats["attempts"] += 1
             best_id = None
-            best_joint = current_sim_thresh  # joint score sentinel (must beat threshold)
-            best_sim_raw = 0.0              # raw cosine of the current winner
+            best_joint = (
+                current_sim_thresh  # joint score sentinel (must beat threshold)
+            )
+            best_sim_raw = 0.0  # raw cosine of the current winner
             second_best_joint = current_sim_thresh - 1.0  # runner-up joint score
             best_iou, best_center, best_maha = 0.0, 0.0, 0.0
             n_gate_passed = 0  # candidates that pass all hard gates (for crowd margin)
@@ -310,7 +321,11 @@ class PythonSemanticRelinker:
                     maha_score = 0.0
                     if self.mahalanobis_threshold > 0.0 and maha > 0.0:
                         maha_score = max(0.0, 1.0 - maha / self.mahalanobis_threshold)
-                    joint = sim + self.iou_weight * iou + self.mahalanobis_weight * maha_score
+                    joint = (
+                        sim
+                        + self.iou_weight * iou
+                        + self.mahalanobis_weight * maha_score
+                    )
                 else:
                     joint = sim
                 if joint > best_joint:
