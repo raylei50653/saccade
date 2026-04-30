@@ -403,42 +403,64 @@ class IdentityResolver:
         resolve_rk_packed = getattr(self._relinker, "resolve_many_packed", None)
         if callable(resolve_rk_packed):
             relinked_ids = resolve_rk_packed(
-                local_ids, embeddings, boxes, scores,
-                frame_id=frame_id, w=frame_w, h=frame_h,
+                local_ids,
+                embeddings,
+                boxes,
+                scores,
+                frame_id=frame_id,
+                w=frame_w,
+                h=frame_h,
             )
         else:
             resolve_rk_many = getattr(self._relinker, "resolve_many", None)
             if callable(resolve_rk_many):
                 relinked_ids = resolve_rk_many(
                     list(zip(local_ids, embeddings, boxes, scores)),
-                    frame_id=frame_id, w=frame_w, h=frame_h,
+                    frame_id=frame_id,
+                    w=frame_w,
+                    h=frame_h,
                 )
             else:
                 assigned: Set[int] = set()
                 relinked_ids = [
-                    self._relinker.resolve(lid, emb, box, score, frame_id, frame_w, frame_h, assigned)
-                    for lid, emb, box, score in zip(local_ids, embeddings, boxes, scores)
+                    self._relinker.resolve(
+                        lid, emb, box, score, frame_id, frame_w, frame_h, assigned
+                    )
+                    for lid, emb, box, score in zip(
+                        local_ids, embeddings, boxes, scores
+                    )
                 ]
 
         # Stage 2: lifecycle merge (lifecycle uses frame_w=/frame_h= kwargs)
         resolve_lc_packed = getattr(self._lifecycle, "resolve_many_packed", None)
         if callable(resolve_lc_packed):
             resolved_ids = resolve_lc_packed(
-                relinked_ids, boxes, scores, embeddings,
-                frame_id=frame_id, frame_w=frame_w, frame_h=frame_h,
+                relinked_ids,
+                boxes,
+                scores,
+                embeddings,
+                frame_id=frame_id,
+                frame_w=frame_w,
+                frame_h=frame_h,
             )
         else:
             resolve_lc_many = getattr(self._lifecycle, "resolve_many", None)
             if callable(resolve_lc_many):
                 resolved_ids = resolve_lc_many(
                     list(zip(relinked_ids, boxes, scores, embeddings)),
-                    frame_id=frame_id, frame_w=frame_w, frame_h=frame_h,
+                    frame_id=frame_id,
+                    frame_w=frame_w,
+                    frame_h=frame_h,
                 )
             else:
                 assigned_out: Set[int] = set()
                 resolved_ids = [
-                    self._lifecycle.resolve(rid, box, score, frame_id, frame_w, frame_h, emb, assigned_out)
-                    for rid, box, score, emb in zip(relinked_ids, boxes, scores, embeddings)
+                    self._lifecycle.resolve(
+                        rid, box, score, frame_id, frame_w, frame_h, emb, assigned_out
+                    )
+                    for rid, box, score, emb in zip(
+                        relinked_ids, boxes, scores, embeddings
+                    )
                 ]
 
         return list(resolved_ids)

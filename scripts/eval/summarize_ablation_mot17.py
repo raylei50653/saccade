@@ -116,7 +116,9 @@ def load_overall_fps(results_dir: Path) -> float | None:
         return None
 
 
-def evaluate_dir(results_dir: Path, gt_root: Path, detector: str | None) -> dict[str, float] | None:
+def evaluate_dir(
+    results_dir: Path, gt_root: Path, detector: str | None
+) -> dict[str, float] | None:
     import numpy as np
     import motmetrics as mm
     import json
@@ -132,7 +134,11 @@ def evaluate_dir(results_dir: Path, gt_root: Path, detector: str | None) -> dict
     if not hasattr(np, "asfarray"):
         np.asfarray = lambda a, dtype=float: np.asarray(a, dtype=dtype)
 
-    files = sorted(f for f in glob.glob(os.path.join(results_dir.as_posix(), "*.txt")) if is_mot_file(f))
+    files = sorted(
+        f
+        for f in glob.glob(os.path.join(results_dir.as_posix(), "*.txt"))
+        if is_mot_file(f)
+    )
     if detector:
         files = [f for f in files if f"-{detector}" in Path(f).stem]
     if not files:
@@ -158,7 +164,9 @@ def evaluate_dir(results_dir: Path, gt_root: Path, detector: str | None) -> dict
         return None
 
     mh = mm.metrics.create()
-    summary = mh.compute_many(accs, names=names, metrics=_METRICS, generate_overall=True)
+    summary = mh.compute_many(
+        accs, names=names, metrics=_METRICS, generate_overall=True
+    )
     metrics = {metric: float(summary.loc["OVERALL", metric]) for metric in _METRICS}
     fps = load_overall_fps(results_dir)
     if fps is not None:
@@ -204,7 +212,13 @@ def fps_delta_text(val: float | None) -> str:
     return f"{sign}{val:.2f}"
 
 
-def make_row(category: str, experiment: str, path: Path, metrics: dict[str, float], baseline: dict[str, float]) -> dict[str, object]:
+def make_row(
+    category: str,
+    experiment: str,
+    path: Path,
+    metrics: dict[str, float],
+    baseline: dict[str, float],
+) -> dict[str, object]:
     row: dict[str, object] = {
         "category": category,
         "experiment": experiment,
@@ -256,10 +270,14 @@ def sort_rows(rows: list[dict[str, object]], sort_by: str) -> list[dict[str, obj
             normalized = float("-inf") if reverse else float("inf")
         else:
             normalized = value
-        return (row["category"], row["experiment"]) if sort_by == "category" else (
-            normalized,
-            row["category"],
-            row["experiment"],
+        return (
+            (row["category"], row["experiment"])
+            if sort_by == "category"
+            else (
+                normalized,
+                row["category"],
+                row["experiment"],
+            )
         )
 
     return sorted(rows, key=key, reverse=reverse)

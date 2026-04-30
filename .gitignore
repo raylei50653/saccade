@@ -75,3 +75,4 @@ htmlcov/
 *.so.*
 .DS_Store
 Thumbs.db
+build-native-coverage/

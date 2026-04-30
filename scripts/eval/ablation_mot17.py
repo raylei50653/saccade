@@ -242,14 +242,14 @@ def evaluate_dir(results_dir: str, gt_root: str, detector: str | None) -> dict |
         accs, names=names, metrics=_METRICS, generate_overall=True
     )
     results = {m: summary.loc["OVERALL", m] for m in _METRICS}
-    
+
     # Save to cache
     try:
         with open(cache_path, "w") as f:
             json.dump(results, f, indent=2)
     except Exception:
         pass
-        
+
     return results
 
 

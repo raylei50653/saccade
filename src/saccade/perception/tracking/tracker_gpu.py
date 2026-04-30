@@ -459,7 +459,9 @@ class TrackAppearanceBank:
             or suspect_box
         ):
             return
-        emb = F.normalize(embedding.detach().to(device="cpu", dtype=torch.float32), dim=0)
+        emb = F.normalize(
+            embedding.detach().to(device="cpu", dtype=torch.float32), dim=0
+        )
         bank = self._banks.setdefault(track_id, [])
         bank.append(AppearanceSample(emb, det_score, iou, frame_id))
         # Rank: 0.5*det_score + 0.3*iou, with frame_id as recency tiebreaker
@@ -471,9 +473,7 @@ class TrackAppearanceBank:
 
     def update_many(
         self,
-        updates: list[
-            tuple[int, torch.Tensor, float, float, int, bool, bool]
-        ],
+        updates: list[tuple[int, torch.Tensor, float, float, int, bool, bool]],
     ) -> None:
         touched_track_ids: set[int] = set()
         for (
@@ -492,7 +492,9 @@ class TrackAppearanceBank:
                 or suspect_box
             ):
                 continue
-            emb = F.normalize(embedding.detach().to(device="cpu", dtype=torch.float32), dim=0)
+            emb = F.normalize(
+                embedding.detach().to(device="cpu", dtype=torch.float32), dim=0
+            )
             bank = self._banks.setdefault(track_id, [])
             bank.append(AppearanceSample(emb, det_score, iou, frame_id))
             touched_track_ids.add(track_id)
@@ -713,10 +715,16 @@ class GPUByteTracker:
             "boxes": torch.empty(
                 (self.max_objects, 4), device=device, dtype=torch.float32
             ),
-            "scores": torch.empty((self.max_objects,), device=device, dtype=torch.float32),
+            "scores": torch.empty(
+                (self.max_objects,), device=device, dtype=torch.float32
+            ),
             "ids": torch.empty((self.max_objects,), device=device, dtype=torch.int32),
-            "classes": torch.empty((self.max_objects,), device=device, dtype=torch.int32),
-            "det_idx": torch.empty((self.max_objects,), device=device, dtype=torch.int32),
+            "classes": torch.empty(
+                (self.max_objects,), device=device, dtype=torch.int32
+            ),
+            "det_idx": torch.empty(
+                (self.max_objects,), device=device, dtype=torch.int32
+            ),
             "count": torch.empty((), device=device, dtype=torch.int32),
         }
 

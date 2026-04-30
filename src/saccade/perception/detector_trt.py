@@ -27,9 +27,7 @@ class TRTYoloDetector:
         self.device = device
         backend = os.environ.get("SACCADE_TRT_BACKEND", "auto").strip().lower()
         if backend not in {"auto", "cpp", "python"}:
-            raise ValueError(
-                "SACCADE_TRT_BACKEND must be one of: auto, cpp, python"
-            )
+            raise ValueError("SACCADE_TRT_BACKEND must be one of: auto, cpp, python")
 
         self.use_cpp = backend != "python" and HAS_CPP_EXT
         if backend == "cpp" and not HAS_CPP_EXT:
