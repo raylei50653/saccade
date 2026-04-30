@@ -3,7 +3,8 @@
 
 set -e
 
-PROJECT_DIR="/home/ray/developer/ai/YOLO_LLM"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 SERVICES=("mediamtx" "yolo-perception" "yolo-orchestrator" "yolo-api")
 
 cd "$PROJECT_DIR"
@@ -15,7 +16,7 @@ case "$1" in
             printf "  - Starting %s...\n" "$s"
             systemctl --user start "$s"
         done
-        printf "✅ All services requested. Use './scripts/saccade health' to verify.\n"
+        printf "✅ All services requested. Use './scripts/ops/saccade_ctl.sh health' to verify.\n"
         ;;
     down)
         printf "🛑 Stopping all Saccade services...\n"
@@ -78,11 +79,7 @@ case "$1" in
         ;;
     *)
         echo "Saccade - Dual-Track Video Perception Management CLI"
-        echo "Usage: $0 {up|down|restart|kill|status|health|logs [service]}"
-        exit 1
-        ;;
-esac
-ervice]}"
+        echo "Usage: $0 {up|down|restart|kill|status|camera-on|camera-off|health|logs [service]}"
         exit 1
         ;;
 esac

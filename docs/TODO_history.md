@@ -1,6 +1,6 @@
 # Saccade TODO History
 
-> 從 [docs/TODO.md](/home/ray/developer/ai/saccade/docs/TODO.md:1) 拆出的歷史/脈絡內容。保留已完成項、設計規範與 C++ 化路線圖，避免主 TODO 被長篇歷史淹沒。
+> 從 [docs/TODO.md](/docs/TODO.md:1) 拆出的歷史/脈絡內容。保留已完成項、設計規範與 C++ 化路線圖，避免主 TODO 被長篇歷史淹沒。
 
 ---
 
@@ -50,8 +50,8 @@
   - `include/tracking/tracker_gpu.hpp` + `src/tracking/tracker_gpu.cu` + `src/tracking/tracker_gpu_python.cpp`: `set_params` 加入 `nsa_kalman` bool
   - `perception/tracking/tracker_gpu.py` + `perception/eval/runner.py` + `scripts/eval/mot17.py`: 對應 Python 層露出 `--nsa-kalman` 旗標
 
-### C — Mahalanobis Gating（未來）
-- [ ] 將 cost matrix kernel 中的固定 200px 空間閘替換為馬氏距離閘，需修改 CUDA kernel 接口（較複雜），留待後續實作。→ 見 ReID 強化 Phase 2。
+### C — Mahalanobis Gating（已併入 Phase 2）
+- [x] 將 cost matrix kernel 中的固定空間閘替換為馬氏距離閘；後續實作與結論見下方「ReID 強化與 Association 重構 / Phase 2」。
 
 ### D — Score Decay（關閉：無效）
 - [x] ~~Score Decay~~ — 分析確認 unmatched confirmed tracks 的 `age>0` 條件已阻止其輸出，Score Decay 對 FP 無影響，放棄。
@@ -126,7 +126,7 @@
 
 目標：Python 保留 CLI / experiment orchestration / motmetrics 報表，per-frame perception 熱路徑逐步移到 C++/CUDA。
 
-### CXX-1 — SemanticRelinker C++ 化（進行中）
+### CXX-1 — SemanticRelinker C++ 化 ✅
 - [x] 在 `saccade_tracking_ext` 暴露 C++ `SemanticRelinker`
 - [x] Python `perception/eval/relink.py` 優先使用 C++ relinker，失敗時 fallback 原 Python 實作
 - [x] 保持現有 runner API：`resolve(raw_id, emb, box, score, frame_id, w, h, assigned)`
@@ -147,7 +147,7 @@
 - [x] embedding 直接供 tracker/relinker 使用，減少 Python tensor orchestration
   - `TrackResult.det_idx`: tracker 直接暴露每個 track 的匹配 detection index，消除 runner.py 的 O(n_tracks×n_dets) IoU 重計算迴圈
   - `FeatureExtractor::extract_parts_fused()`: 3-part crop 的加權融合 [0.5,0.3,0.2] + L2-normalize 移至 CUDA kernel，Python 端只需一行 call
-  - OSNet / FastReID model type 支援加入 C++ ModelType enum 與 Python wrapper；引擎路徑預設已設定，待 TRT engine 建立即可啟用
+  - OSNet / FastReID model type 支援已加入 C++ ModelType enum 與 Python wrapper；此處保留的是當時擴充範圍的歷史記錄
 
 ### CXX-5 — Eval / Product Pipeline Facade ✅
 - [x] 建立 C++ `PerceptionPipeline::process_frame`

@@ -29,7 +29,7 @@
 
 ## 待處理
 
-- [x] **Tentative/Confirmed 狀態機**（詳見 `docs/progress/tracking_tentative_state.md`）
+- [x] **Tentative/Confirmed 狀態機**（詳見 `/docs/experiments/tracking/tentative_confirmed_state.md`）
   - 三層 detection 分級：High(≥0.5) / Mid(0.25~0.5) / Low(0.1~0.25)
   - Mid-conf detection 可建立 Tentative track，連續 3 幀匹配後升 Confirmed
   - 已完成 MOT17 full SDP A/B 驗證，`mid=0.40 / confirm_score=0.50` 為目前預設

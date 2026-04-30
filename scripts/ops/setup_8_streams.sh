@@ -1,6 +1,6 @@
 #!/bin/bash
 
-PROJ="$(cd "$(dirname "$0")/.." && pwd)"
+PROJ="$(cd "$(dirname "$0")/../.." && pwd)"
 VIDEOS=(
     "$PROJ/assets/videos/MOT20-04.mp4"
     "$PROJ/assets/videos/MOT20-06.mp4"

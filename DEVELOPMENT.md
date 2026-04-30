@@ -1,129 +1,354 @@
 # Saccade 開發指南
 
-本專案旨在建構一個高效、低延遲的視覺推理系統，結合即時目標偵測與深度認知推理，並極大化 NVIDIA GPU 的運算效率。
+本文件是目前的開發主入口。目標是讓開發者只看這一份，就能知道：
 
-## 1. 系統架構核心 (The 5 Pillars)
+- 專案現在的主架構與主路徑
+- 哪些文件 / 程式碼是 source of truth
+- 現在優先在解的問題是什麼
+- 改動時應更新哪裡、驗證什麼
 
-本系統採用純視覺與向量檢索管線，以確保在極低 VRAM (1.5GB) 佔用下，達到毫秒級即時回應與精準檢索。
+---
 
-1. **純視覺向量管線 (Vision-Vector Pipeline)**
-   - **感知層 (Perception)：** 使用 YOLO26 與 TensorRT 引擎，負責即時物件追蹤與偵測。
-   - **特徵提取 (Extraction)：** 運用 Zero-Copy Cropper 與 **SigLIP 2 (ViT-B/16)** TRT 引擎，將物件裁切為 224×224 格式並提取 768 維高品質特徵向量。
+## 1. 開發原則
 
-2. **語義漂移去重 (Semantic Drift Handling)**
-   - 透過 GPU 內的 `Cosine Similarity`，將新特徵與快取進行比對。避免連續幀重複存儲，僅當物體姿態或特徵產生「漂移 (Drift)」時寫入。
+本專案採用 **架構與合約驅動為主，TODO 驅動為輔**。
 
-3. **防禦性熱切換 (Systemd + NVML Hot Swapping)**
-   - 透過 Systemd `--user` 管理進程，配合 MediaMTX 處理串流緩衝，確保在模組切換或重啟時，視訊串流不中斷。
+- 架構與合約先回答：
+  - 哪一層負責什麼
+  - 資料怎麼流
+  - 哪些邊界與 fallback 不能破
+  - 什麼指標代表成功
+- TODO 只承接：
+  - 當前真的要做的工作
+  - 近期仍影響決策的 ablation 結論
+  - 下一輪已排定的實驗與實作 backlog
 
-4. **底層算力優化 (Pure NVIDIA Native Zero-Copy)**
-   - 實現 `MediaMTX -> NVDEC -> CUDA Tensor -> TensorRT (YOLO & SigLIP) -> GPU Association` 的 100% 零拷貝數據路徑。
-   - 採用 **Sinkhorn-Auction Hybrid GPU Association**，徹底消除 D2H 同步瓶頸。
+一句話：
+**先用架構與合約決定什麼值得做，再用 TODO 排順序。**
 
-5. **環境與狀態管理 (Unified Environment)**
-   - **Docker:** 使用 NVIDIA 官方 TensorRT 基礎鏡像，鎖定 CUDA、GStreamer 等系統級依賴。
-   - **uv：** 在容器內進行 Python 環境隔離，實現秒級依賴安裝與重現性。
+---
 
-## 2. 開發環境與建構 (DevOps)
+## 2. Source of Truth 順序
 
-本專案依賴 Docker 與 uv 進行宣告式環境管理。
+當文件彼此衝突時，請依下列優先順序判讀：
 
-- **初始化環境：**
-  ```bash
-  # 啟動開發容器
-  docker-compose up -d
-  # 進入容器
-  docker-compose exec saccade zsh
-  # 安裝 Python 依賴
-  uv sync
-  ```
-  
-- **編譯 TensorRT 模型：**
-  ```bash
-  # 首次啟動前需將 ONNX 轉為 TRT Engine（YOLO26 / SigLIP 2）
-  # 詳見 docs/runbooks/ 對應的引擎建構說明
-  ```
+1. **目前主路徑程式碼**
+   - `src/saccade/perception/`
+   - `src/tracking/`
+   - `src/`
+   - `scripts/eval/mot17.py`
+   - `src/saccade/perception/eval/runner.py`
+2. **本文件 `DEVELOPMENT.md`**
+   - 用於快速理解目前開發方向、模組責任與文件更新規則
+3. **穩定架構 / 合約文件**
+   - [docs/architecture.md](/docs/architecture.md:1)
+   - [docs/api_spec.md](/docs/api_spec.md:1)
+   - `docs/decisions/*.md`
+4. **當前待辦與近期結論**
+   - [docs/TODO.md](/docs/TODO.md:1)
+5. **歷史脈絡**
+   - [docs/TODO_history.md](/docs/TODO_history.md:1)
+   - `docs/progress/`
+   - `docs/experiments/`
 
-## 3. 媒體與串流管理 (Media Gateway)
+`docs/TODO_history.md` 與 `docs/progress/` 是歷史與過程紀錄，不是目前行為合約的最高權威。
 
-使用 **MediaMTX** 作為核心媒介閘道，並以 GStreamer `nvh264dec` 作為解碼前端。
+---
 
-- **啟動所有服務：**
-  ```bash
-  systemctl --user start saccade-perception saccade-orchestrator mediamtx
-  ```
+## 3. 系統現況摘要
 
-## 4. 關鍵技術堆疊
+Saccade 目前以 **MOT17-centered evaluation path** 為最活躍主線，核心是一條 GPU 優先的 perception/tracking/relink pipeline。
 
-| 層級 | 技術 |
-| :--- | :--- |
-| **算法** | YOLO26 (TRT), SigLIP2 (TRT), `torchvision.ops.roi_align` |
-| **媒體** | MediaMTX, FFmpeg (NVDEC), GStreamer (`appsink`) |
-| **計算與資源** | TensorRT, CUDA Streams, Pynvml |
-| **環境維運** | Docker (NVIDIA TRT base image), uv (Rust-based) |
+### 3.1 邏輯分層
 
-## 5. 開發工作流 (Development Workflow)
+- **L1 Perception**
+  - YOLO + detection postprocess + GPU tracker
+  - 主要位置：`src/saccade/perception/`, `src/tracking/`
+- **L2 Appearance / ReID**
+  - crop / embedding / appearance bank / semantic relink
+  - 主要位置：`src/saccade/perception/tracking/`, `src/saccade/perception/eval/relink.py`
+- **L3-L4 Streaming / Storage**
+  - Redis / Chroma / microbatch
+  - 主要位置：`src/saccade/storage/`, `src/saccade/pipeline/`
+- **L5-L6 Cognition / Resource**
+  - orchestrator / resource manager / entropy trigger
+  - 主要位置：`src/saccade/cognition/`, `src/saccade/resource/`
 
-本專案嚴格執行 **「文檔先行 (Documentation-First)」** 的開發策略。在進行任何代碼變更或核心邏輯重構前，開發者必須遵守以下流程：
+### 3.2 目前主開發路徑
 
-1. **實作提案 (Planning)**: 
-   - 必須先在 `docs/decisions/` (若涉及重大架構決策) 或 `docs/progress/` (若為功能擴展) 中提交目標實作規劃。
-   - 規劃中應包含：目標 (Objective)、技術路徑 (Technical Path)、對 L1-L5 架構的影響、以及 VRAM 資源預估。
-2. **審核與確認 (Review)**: 
-   - 確保提案符合 **Zero-Copy** 原則與 **Pillar 5** 核心理念。
-3. **實作與驗證 (Execution)**: 
-   - 僅在規劃文檔提交並確認後，才開始編寫代碼。
-   - 實作完成後，應同步更新相關進度文檔。
+如果你要改 MOT / tracking / relink / ReID，先看這些檔案：
 
-## 6. 文檔結構指南 (Documentation Structure)
+- [src/saccade/perception/eval/runner.py](/src/saccade/perception/eval/runner.py:1)
+- [src/saccade/perception/eval/relink.py](/src/saccade/perception/eval/relink.py:1)
+- [src/saccade/perception/tracking/tracker_gpu.py](/src/saccade/perception/tracking/tracker_gpu.py:1)
+- [src/tracking/tracker_gpu.cu](/src/tracking/tracker_gpu.cu:1)
+- [src/saccade/perception/eval/detection.py](/src/saccade/perception/eval/detection.py:1)
+- [src/saccade/perception/eval/gmc.py](/src/saccade/perception/eval/gmc.py:1)
+- [scripts/eval/mot17.py](/scripts/eval/mot17.py:1)
+- [scripts/eval/ablation_mot17.py](/scripts/eval/ablation_mot17.py:1)
 
-為了維護 **L1-L5 架構** 的一致性，開發者應根據變更性質，將文檔提交至對應目錄：
+---
 
-| 目錄 | 功能說明 | 適用情境 |
-| :--- | :--- | :--- |
-| **`docs/decisions/`** | **架構決策紀錄 (ADR)** | 當涉及技術選型變更 (如更換資料庫、推論後端) 或重大架構調整時使用。 |
-| **`docs/progress/`** | **模組實作規劃與進度** | 當進行新功能開發或模組功能擴展時使用（L1-L6 皆適用）。需包含目標實作路徑與 VRAM 預估。 |
-| **`docs/api_spec.md`** | **API 與事件規範** | 當修改 Redis 事件結構、ChromaDB Schema 或對外接口時更新。 |
-| **`docs/runbooks/`** | **運作與維護手冊** | 當新增模組後的故障排除流程 (Troubleshooting) 或日常維運指令。 |
-| **`docs/benchmarks/`** | **效能基準測試紀錄** | 提交效能優化後的數據對比 (Latency, Throughput, VRAM)。 |
-| **`docs/architecture.md`** | **系統架構說明書** | 僅在全系統分層 (L1-L5) 定義產生變化時更新。 |
+## 4. 當前主合約
 
-## 7. 開發約定 (Coding Standards) 與 Git 規範
+這些不是單純實作細節，而是改動時應優先守住的系統合約。
 
-### 7.1 程式碼風格 (Coding Style)
-- **Python**: 遵循 PEP 8，使用 `ruff` 進行 Linter 與 Formatting，並強制 `mypy` 嚴格型別檢查 (`strict = true`)。
-- **C++/CUDA**: 遵循 C++17 標準，使用 `PascalCase` 命名類別，`camelCase` 命名函式，`snake_case` 命名變數與私有成員 (`_` 結尾)。
+### 4.1 Pipeline 合約
 
-### 7.2 Git 提交與分支規範 (Git Conventions)
-本專案嚴格採用 **[Conventional Commits](https://www.conventionalcommits.org/zh-hant/v1.0.0/)** 規範，以利自動化生成 Changelog 並追蹤版本歷史。
+- 主熱路徑優先走 GPU / native facade。
+- 新增路徑若引入 CPU roundtrip，必須能說明必要性與影響。
+- Python 可以負責 orchestration、評估、輸出整理，但不應輕易接回每幀大量資料面工作。
 
-#### 提交格式 (Commit Format)
-```text
-<type>(<scope>): <subject>
+### 4.2 Tracking / Association 合約
 
-<body>
+- ambiguous case 不應只靠單一固定 threshold 決策。
+- fallback 必須穩定且可解釋；目前最低保證仍是 `IoU-only fallback`。
+- appearance、motion、quality 的責任邊界要清楚，避免同一訊號在多層重複加權、互相污染。
+
+### 4.3 ReID / Reference 合約
+
+- noisy reference 不應進 bank。
+- low-quality observation 不應用與 clean observation 相同 accept 條件。
+- ReID 是稀缺算力資源，不應無差別全幀觸發。
+
+### 4.4 Documentation 合約
+
+- 若改的是穩定行為或責任邊界，要更新架構 / ADR / API 文件。
+- 若改的是近期工作方向與實驗排序，要更新 [docs/TODO.md](/docs/TODO.md:1)。
+- 已完成且不再需要逐步追蹤的內容，移到 [docs/TODO_history.md](/docs/TODO_history.md:1)。
+
+---
+
+## 5. 目前最佳主路徑設定
+
+截至 2026-04-30，MOT17 SDP 7 序列的 current documented default 為：
+
+- `--cross-tile-merge`
+- `--match-thresh 0.78`
+- `--semantic-threshold 0.91`
+
+近期主結論：
+
+- `cross-tile merge` 是穩定增益來源，但增益不是 detection merge 自己完成的，而是要配合 association / semantic gate。
+- `thr=0.92` 路徑沒有打贏目前 default。
+- reciprocal margin 不再是近期 default tuning 主軸。
+- 下一步主軸是 **reference quality / false-accept filtering**，不是再做大範圍 threshold 亂掃。
+
+完整近期結論與 backlog 以 [docs/TODO.md](/docs/TODO.md:1) 為準。
+
+---
+
+## 6. 目前最重要的開發方向
+
+如果沒有更高優先需求，請優先朝這些方向開發：
+
+### P0：Reference Quality + False-Accept Filtering
+
+- 位置：
+  - `src/saccade/perception/eval/relink.py`
+  - `src/saccade/perception/tracking/tracker_gpu.py`
+- 目標：
+  - 降低 contaminated reference 進 bank
+  - 對 low-quality current observation 提高 accept 門檻
+  - 改善 `IDs / FP`，接受少量 `FN` 成本
+
+### P1：Unified Association / Relink Scoring
+
+- 位置：
+  - `src/tracking/tracker_gpu.cu`
+  - `src/saccade/perception/eval/relink.py`
+- 目標：
+  - 從多個硬閾值與固定權重，收斂到更一致的 decision score
+  - 讓 `track age / lost age / ambiguity / quality` 真正進入打分
+
+### P1：Track-Level / Budgeted ReID
+
+- 位置：
+  - `src/saccade/perception/tracking/tracker_gpu.py`
+  - `src/saccade/perception/eval/runner.py`
+- 目標：
+  - 從 frame-level trigger 走向 track-level candidate prioritization
+  - 控住 over-trigger 與 FPS collapse
+
+### P2：GMC Quality-Aware 補強
+
+- 位置：`src/saccade/perception/eval/gmc.py`
+- 目標：
+  - 避免 foreground 主導 GMC
+  - 把 GMC quality 回饋到 trigger / tracking 決策
+
+### P2：Post-Merge V2 與 Detection/Bank Quality Scoring
+
+- 位置：
+  - `src/saccade/perception/eval/runner.py`
+  - `src/saccade/perception/eval/detection.py`
+  - `src/saccade/perception/tracking/tracker_gpu.py`
+
+---
+
+## 7. 檔案對應指南
+
+### 7.1 你要改 tracking / association
+
+先看：
+
+- `src/tracking/tracker_gpu.cu`
+- `include/tracking/tracker_gpu.hpp`
+- `src/saccade/perception/tracking/tracker_gpu.py`
+
+常見改動：
+
+- cost matrix
+- gating
+- tracker state lifecycle
+- appearance bank 與 clean embedding flags
+
+### 7.2 你要改 semantic relink / identity resolve
+
+先看：
+
+- `src/saccade/perception/eval/relink.py`
+- `src/saccade/perception/eval/runner.py`
+- `src/tracking/tracker_gpu_python.cpp`
+
+常見改動：
+
+- semantic threshold logic
+- reciprocal / dynamic margin
+- quality gate
+- lifecycle merge / resolve pass
+
+### 7.3 你要改 detection postprocess / tile merge / suspect logic
+
+先看：
+
+- `src/saccade/perception/eval/detection.py`
+- `src/tracking/tracker_gpu.cu`
+- `include/tracking/pipeline.hpp`
+
+### 7.4 你要改 evaluation / ablation
+
+先看：
+
+- `scripts/eval/mot17.py`
+- `scripts/eval/ablation_mot17.py`
+- `src/saccade/perception/eval/runner.py`
+- `scripts/eval/summarize_ablation_mot17.py`
+
+---
+
+## 8. 開發流程
+
+### 8.1 改動前
+
+先判斷這次改動屬於哪一類：
+
+- **架構 / 合約改動**
+  - 更新 `docs/decisions/`、`docs/architecture.md`、`docs/api_spec.md`
+- **近期方向 / 實驗排序改動**
+  - 更新 [docs/TODO.md](/docs/TODO.md:1)
+- **單純實作細節或 bug fix**
+  - 至少在 commit / PR 記錄 why
+
+### 8.2 改動中
+
+- 優先維持主熱路徑的 GPU-first 原則
+- 避免未說明的 `.cpu()` / `numpy()` / host materialization
+- 若引入 fallback，需明確定義何時觸發與退回何種行為
+
+### 8.3 改動後
+
+至少做以下其中之一：
+
+- 單元測試
+- parity test
+- MOT17 short eval
+- 對應 ablation / benchmark
+
+若改動會影響 default path，應補：
+
+- `IDs / IDF1 / MOTA / FP / FN / FPS` 的比較
+- 哪些 sequence 改善，哪些 sequence 退化
+- 是否屬於 run-to-run noise 還是系統性差異
+
+---
+
+## 9. 常用驗證
+
+依改動範圍選擇：
+
+```bash
+uv run mypy .
+uv run pytest
+scripts/test_native.sh
 ```
 
-#### 常見的 Type 定義
-- `feat`: 新增功能 (Feature)。
-- `fix`: 錯誤修復 (Bug fix)。
-- `refactor`: 重構 (既不是新增功能也不是修復 bug 的程式碼變動，例如：架構遷移、重寫邏輯)。
-- `docs`: 文檔變更 (Documentation only changes，包含 ADR 或進度更新)。
-- `perf`: 改善效能的程式碼變更 (Performance improvements，如 Zero-Copy 最佳化)。
-- `test`: 增加或修正測試 (Adding missing tests or correcting existing tests)。
-- `chore`: 構建過程或輔助工具的變更 (例如更新依賴、修改 Dockerfile 或 CMakeLists)。
+若是 MOT / tracking / relink 相關，優先補：
 
-#### 提交原則 (Commit Rules)
-1. **原子性提交 (Atomic Commits)**: 每個 Commit 應該只處理一個邏輯單元的變更，嚴禁將不相關的修改混在一起。
-2. **清晰的 Scope**: 盡量在括號中註明影響的模組範圍（例如 `perception`, `tracking`, `docs`, `infra`）。
-3. **詳細的 Body**: 對於重大變更或重構，必須在 Body 中說明「為什麼 (Why) 這樣做」以及「達成了什麼 (What)」。
-4. **提交前驗證 (Pre-commit Validation)**: 在提交任何 Python 程式碼前，**必須**執行型別檢查 (`uv run mypy .`) 並確保完全通過。嚴禁提交帶有未解決型別錯誤的程式碼。
-
-#### 範例 (Example)
-```text
-refactor(tracking): migrate SmartTracker to C++/CUDA
-
-- Implement SmartTracker in C++/CUDA to avoid Python CPU/GPU sync bottleneck
-- Expose SmartTracker via pybind11
-- Update tests and benchmark scripts to use the new native module
+```bash
+uv run python scripts/eval/mot17.py ...
+uv run python scripts/eval/ablation_mot17.py ...
 ```
+
+原則：
+
+- 不要只看單次 `IDs`
+- 要區分單序列現象與 7-seq aggregate
+- 若差異接近既有 noise，不能直接宣稱演算法勝出
+
+---
+
+## 10. Scripts 與 Tests
+
+- 主 workflow 腳本集中在 `scripts/eval/`
+- 核心入口仍是：
+  - `scripts/eval/mot17.py`
+  - `scripts/eval/ablation_mot17.py`
+- 效能量測與壓力測試集中在 `scripts/benchmarks/`
+- native build / coverage helpers 集中在 `scripts/native/`
+- 本地串流與服務控制集中在 `scripts/ops/`
+- 一般 Python 測試放在 `tests/test_*.py`
+- native tests 放在 `tests/native/`
+- benchmarks 放在 `tests/benchmarks/bench_*.py`
+- 詳細規範、命名、目錄分工與最低驗證要求，見 [docs/TESTING.md](/docs/TESTING.md:1)
+
+---
+
+## 11. 文件更新規則
+
+### 主 TODO
+
+[docs/TODO.md](/docs/TODO.md:1) 只保留：
+
+- 目前真的還要做的事項
+- 近期仍影響決策的 ablation 結論
+- 下一輪已排定的 backlog
+
+### 歷史 TODO
+
+[docs/TODO_history.md](/docs/TODO_history.md:1) 保留：
+
+- 已完成項
+- 已收斂並放棄的方向
+- 舊路線圖與長篇過程紀錄
+
+### 歸檔原則
+
+- 主 TODO 保留高訊號摘要
+- 細節、過程、舊掃描結果移入 history
+- 某方向若重新啟動，再從 history 摘回主 TODO，不要讓主 TODO 長期堆積舊脈絡
+
+---
+
+## 12. 補充入口
+
+若需要更深背景，再查這些文件：
+
+- [docs/architecture.md](/docs/architecture.md:1)
+- [docs/api_spec.md](/docs/api_spec.md:1)
+- [docs/TODO.md](/docs/TODO.md:1)
+- [docs/decisions/016-rerank-phase3-reference-quality.md](/docs/decisions/016-rerank-phase3-reference-quality.md:1)
+- [docs/experiments/reid/dynamic_trigger.md](/docs/experiments/reid/dynamic_trigger.md:1)
+- [docs/layers/gpubytetracker_deep_dive.md](/docs/layers/gpubytetracker_deep_dive.md:1)
+
+如果你發現這份文件與主路徑程式碼不一致，先修這份文件，再決定是否需要補 ADR / TODO / history。

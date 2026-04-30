@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 build_dir="${repo_root}/build-native-coverage"
 target="saccade_assignment_algorithms_test"
 gcov_input="CMakeFiles/${target}.dir/tests/native/test_assignment_algorithms.cpp.gcno"

@@ -1,75 +1,84 @@
 # Saccade
 
-High-efficiency edge video perception with a TensorRT detector, GPU tracking,
-appearance-based ReID, and MOT-style evaluation tooling.
+高效率邊緣視覺感知與 MOT 風格評估系統，整合 TensorRT detection、
+GPU tracking、appearance-aware ReID，以及 native-heavy tracking
+infrastructure。
 
-> **🌍 [繁體中文版](README_tw.md)**
+## Start Here
+
+如果你要開發這個 repo，請用這個閱讀順序進入：
+
+1. [DEVELOPMENT.md](/DEVELOPMENT.md:1)
+2. [docs/architecture.md](/docs/architecture.md:1)
+3. [docs/pipeline_flow.md](/docs/pipeline_flow.md:1)
+4. [docs/api_spec.md](/docs/api_spec.md:1)
+5. [docs/TODO.md](/docs/TODO.md:1)
+
+這個 repo 目前以 **MOT17 為中心的 evaluation 與 tuning workflow** 為主，
+線上 perception stack 仍保留在周邊。
 
 ## What This Repo Is Now
 
-The repo has two practical centers:
+這個 repo 現在有兩個實用中心：
 
-- **Online perception pipeline**
-  - TensorRT-based detection and preprocessing
-  - GPU tracking, GMC, Kalman, appearance fusion
-  - async embedding / storage / orchestration components
+- **GPU-first perception / tracking stack**
+  - detection、postprocess、GMC、Kalman、association、relink
+  - 主要 hot path 在 `src/`、`include/`、`src/saccade/perception/`
 
-- **Offline MOT evaluation and tuning**
-  - `scripts/eval/mot17.py` is the main MOT17 evaluation entry point
-  - `scripts/eval/ablation_mot17.py` is the unified ablation runner for grouped
-    tracker parameters
+- **離線 MOT evaluation 與 tuning**
+  - `scripts/eval/mot17.py` 是主要 evaluation 入口
+  - `scripts/eval/ablation_mot17.py` 是目前的 grouped ablation runner
 
-This README focuses on the current code layout and the workflows that are still
-actively used.
+目前記錄中的 default path 與活躍優化方向，請看
+[docs/TODO.md](/docs/TODO.md:1)。
 
-## Core Areas
+## Main Code Areas
 
 - `src/saccade/perception/`
-  - Detector, preprocessing, ReID, relink, tracker coordination, eval runner.
+  - detector、preprocessing、ReID、relink、tracker coordination、eval runner
 
 - `src/` and `include/`
-  - C++ / CUDA tracking and performance-critical extensions.
-
-- `src/saccade/media/`
-  - Stream ingestion and video pipeline integration.
-
-- `src/saccade/pipeline/`
-  - Higher-level orchestration across perception, storage, and cognition.
+  - C++ / CUDA tracking 與效能敏感的 native components
 
 - `src/saccade/storage/`
-  - Redis / Chroma-related persistence paths.
+  - Redis / Chroma eventing 與 persistence
+
+- `src/saccade/cognition/`
+  - orchestrator 與 slow-path cognition
+
+- `src/saccade/api/`
+  - retrieval API
 
 - `scripts/eval/`
-  - MOT17 evaluation, ablation, conversion, comparison, and metric helpers.
+  - MOT17 evaluation、ablation、metrics、comparison helpers
 
 - `tests/`
-  - Unit and benchmark coverage.
+  - unit、parity、e2e、benchmark coverage
 
-More architectural background lives in [docs/architecture.md](/home/ray/developer/ai/saccade/docs/architecture.md:1) and [docs/README.md](/home/ray/developer/ai/saccade/docs/README.md:1).
+更多文件入口請看 [docs/README.md](/docs/README.md:1)。
 
 ## Environment
 
-- Python: `3.12`
-- Package manager: `uv`
-- Key runtime dependencies:
+- Python：`3.12`
+- 套件管理：`uv`
+- 常見執行期相依：
   - `torch`
   - `torchvision`
   - `tensorrt-cu12`
   - `nvidia-dali-cuda120`
   - `motmetrics`
 
-Install project dependencies with:
+安裝相依：
 
 ```bash
 uv sync
 ```
 
-If you use the C++ / CUDA extensions, also configure and build the native
-targets for your machine.
+如果你要使用 native C++ / CUDA extension，也需要為你的機器完成對應 build。
 
 ## Main Workflows
 
-### 1. Run MOT17 Evaluation
+### 執行 MOT17 Evaluation
 
 ```bash
 uv run python scripts/eval/mot17.py \
@@ -77,25 +86,24 @@ uv run python scripts/eval/mot17.py \
   --output results/MOT17_eval
 ```
 
-`mot17.py` now groups arguments by capability area:
+目前 evaluation flow 主要圍繞：
 
 - detection and preprocessing
 - association
-- geometry and ID stability
-- ReID backbone
+- geometry / ID stability
+- ReID backbone and trigger policy
 - semantic relink
-- dynamic ReID trigger policy
-- lifecycle merge and cleanup
+- lifecycle merge / cleanup
 
-### 2. Run Ablation Studies
+### 執行 Ablation
 
 ```bash
 uv run python scripts/eval/ablation_mot17.py --category detection
-uv run python scripts/eval/ablation_mot17.py --category detection,geometry
+uv run python scripts/eval/ablation_mot17.py --category association,semantic
 uv run python scripts/eval/ablation_mot17.py --category all
 ```
 
-Supported categories:
+目前支援的 category：
 
 - `detection`
 - `association`
@@ -105,15 +113,15 @@ Supported categories:
 - `trigger`
 - `lifecycle`
 
-See [scripts/eval/README.md](/home/ray/developer/ai/saccade/scripts/eval/README.md:1) for the current eval script map.
+目前 script map 請看 [scripts/eval/README.md](/scripts/eval/README.md:1)。
 
-### 3. Recompute Tracking Metrics
+### 重算 Metrics
 
 ```bash
 uv run python scripts/eval/calculate_mota.py --results results/MOT17_eval
 ```
 
-### 4. Compare Against an External Baseline
+### 與外部 Baseline 比較
 
 ```bash
 uv run python scripts/eval/compare_framework_ultralytics.py \
@@ -123,36 +131,50 @@ uv run python scripts/eval/compare_framework_ultralytics.py \
   --detector SDP
 ```
 
-## Alternative Evaluation Paths
+## Alternative Paths
 
 - `scripts/eval/mot17_public.py`
-  - Runs tracking from MOT17 public detections in `det/det.txt`.
+  - 用 MOT17 public detections 跑 tracking
 
 - `scripts/eval/ultralytics_official_mot17.py`
-  - Runs Ultralytics tracking as an external baseline.
+  - Ultralytics baseline path
 
 - `scripts/eval/bench_yolo_batch.py`
-  - Measures detector batch throughput / latency.
+  - detector batch throughput / latency
 
-## Development Notes
+## Development and Documentation
 
-- The worktree may contain active experimentation in tracking, GMC, ReID, and
-  evaluation scripts.
-- The MOT evaluation flow has recently been simplified around:
-  - `scripts/eval/mot17.py`
-  - `scripts/eval/ablation_mot17.py`
-- Older ad-hoc grid search and one-off ablation entry points were removed to
-  reduce drift.
+- [DEVELOPMENT.md](/DEVELOPMENT.md:1)
+  - 開發主入口
+
+- [docs/architecture.md](/docs/architecture.md:1)
+  - 穩定架構邊界
+
+- [docs/pipeline_flow.md](/docs/pipeline_flow.md:1)
+  - 目前實作主路徑 flow
+
+- [docs/api_spec.md](/docs/api_spec.md:1)
+  - API / event / storage contract
+
+- [docs/TODO.md](/docs/TODO.md:1)
+  - 當前工作與 ablation backlog
 
 ## Tests
 
-Run the Python test suite with:
+執行 Python 測試：
 
 ```bash
 uv run pytest
 ```
 
-Some benchmarks and evaluation scripts require:
+常用驗證指令：
+
+```bash
+uv run mypy .
+scripts/test_native.sh
+```
+
+部分 benchmark 與 eval flow 需要：
 
 - CUDA-capable hardware
 - TensorRT engines
@@ -160,7 +182,6 @@ Some benchmarks and evaluation scripts require:
 
 ## Status
 
-If something in this README conflicts with the code, treat the code under
-`src/saccade/perception/`, `scripts/eval/`, and `tests/` as the source of truth. This file
-has been updated to reflect the current MOT17-centered evaluation workflow, but
-the repo is still under active iteration.
+如果這份 README 與程式碼衝突，請以
+`src/saccade/perception/`、`src/tracking/`、`scripts/eval/`、`tests/`
+下的主路徑程式碼為準，並同步更新文件。

@@ -33,5 +33,5 @@
     - 引入了對 `nvidia-dali-cuda120` 的額外依賴。
 
 ## 驗證指標
-- 通過 `scripts/latency_breakdown.py` 驗證預處理階段的耗時。
+- 通過 `scripts/benchmarks/latency_breakdown.py` 驗證預處理階段的耗時。
 - 32 路串流穩定運行且 CPU 使用率維持在 20% 以下。

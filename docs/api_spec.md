@@ -1,17 +1,44 @@
-# Saccade API & Event Specification (L1-L5 Edition)
+# Saccade API & Event Specification
 
-Saccade 採用非同步事件驅動與向量檢索架構。通訊發生在 Redis 實時事件流與 ChromaDB 語義檢索介面。
+本文件描述目前程式碼中實際存在的介面與資料合約。重點分成三類：
+
+- L1/L3：Perception 發出的 Redis event queue
+- L3/L5：Orchestrator 使用的 Redis stream
+- 外部查詢：FastAPI retrieval API
+
+若本文件與目前主路徑程式碼衝突，以程式碼為準，並應同步修正本文件。
 
 ---
 
-## 1. 內部事件流 (L3: Redis Streams)
-Perception (快路徑) 在觸發事件時，應推送到 Redis List (saccade:events)，未來將升級為 Redis Streams。
+## 1. Source of Truth
 
-- **Key:** `saccade:events`
-- **Format:** JSON
-- **TTL:** 1 Hour (確保快路徑不因過期數據溢出)
+此規範主要對應下列檔案：
 
-### 事件結構範例 (L1 -> L3)
+- [src/saccade/perception/entropy.py](/src/saccade/perception/entropy.py:1)
+- [src/saccade/storage/redis_cache.py](/src/saccade/storage/redis_cache.py:1)
+- [src/saccade/storage/chroma_store.py](/src/saccade/storage/chroma_store.py:1)
+- [src/saccade/cognition/orchestrator.py](/src/saccade/cognition/orchestrator.py:1)
+- [src/saccade/api/server.py](/src/saccade/api/server.py:1)
+- [src/saccade/pipeline/health.py](/src/saccade/pipeline/health.py:1)
+
+---
+
+## 2. Redis Event Queue
+
+### 2.1 Queue Key
+
+- Key: `saccade:events`
+- Type: Redis List
+- Producer:
+  - `EntropyTrigger.emit_event()`
+  - `RedisCache.publish_event()` + `MicroBatcher`
+- Retention:
+  - TTL `3600s`
+
+### 2.2 Event Schema
+
+目前 `entropy.py` 實際發送格式如下：
+
 ```json
 {
   "event_id": "uuid-v4",
@@ -19,54 +46,316 @@ Perception (快路徑) 在觸發事件時，應推送到 Redis List (saccade:eve
   "type": "entropy_trigger",
   "metadata": {
     "entropy_value": 0.85,
-    "source_path": "local_cam",
+    "source_path": "rtsp://localhost:8554/live",
     "frame_id": 4502,
-    "objects": ["person", "backpack"],
-    "is_anomaly": 0
+    "objects": ["person", "backpack"]
   }
 }
 ```
 
+### 2.3 Field Contract
+
+- `event_id`
+  - type: `string`
+  - contract: globally unique event id, currently `uuid4`
+- `timestamp`
+  - type: `float`
+  - contract: unix timestamp in seconds
+- `type`
+  - type: `string`
+  - current value: `entropy_trigger`
+- `metadata.entropy_value`
+  - type: `float`
+  - range: expected `0.0 ~ 1.0`
+- `metadata.source_path`
+  - type: `string`
+  - contract: source camera / stream identifier
+- `metadata.frame_id`
+  - type: `int`
+  - contract: source frame index
+- `metadata.objects`
+  - type: `list[string]`
+  - contract: detected object labels
+
+### 2.4 Notes
+
+- `is_anomaly` 不是目前 perception event producer 的必填欄位。
+- `is_anomaly` 目前主要在 cognition / storage 寫入 Chroma metadata 時推導產生。
+- 若未來要讓 perception 直接發 `is_anomaly`，需同步更新本文件與 `orchestrator.py`。
+
 ---
 
-## 2. 向量檢索介面 (L4/L5: ChromaDB)
-Saccade 的應用層透過語義特徵進行關聯搜尋。
+## 3. Redis Stream Contract
 
-### 語義與 Metadata 混合查詢
-- **Query Type:** Vector + Metadata Filter
-- **Schema:**
+### 3.1 Stream Key
+
+- Key: `saccade:stream`
+- Type: Redis Stream
+- Producer:
+  - `RedisCache.add_to_stream()`
+  - `RedisCache.add_to_stream_batch()`
+- Consumer group:
+  - group: `orchestrator_group`
+  - consumer: currently `worker_1`
+
+### 3.2 Stream Payload
+
+`RedisCache` 目前將事件包成單欄位 payload：
+
+```text
+{
+  "data": "<json-serialized-event>"
+}
+```
+
+其中 `data` 反序列化後的內容，應沿用第 2 節的 event schema。
+
+### 3.3 Consumption Contract
+
+- reader:
+  - `RedisCache.read_stream_batch(count=..., timeout_ms=...)`
+- ack:
+  - `RedisCache.acknowledge(message_ids)`
+  - 或 orchestrator 直接 `XACK`
+- retention:
+  - approximate `MAXLEN=10000`
+
+### 3.4 Notes
+
+- 目前 repo 同時存在 Redis List 與 Redis Stream 兩條事件入口。
+- 若未來正式統一為 Stream-only，需更新：
+  - `entropy.py`
+  - `tests/test_pipeline.py`
+  - 本文件
+
+---
+
+## 4. Chroma Memory Contract
+
+### 4.1 Collection
+
+- default path: `./storage/chroma_db`
+- default collection: `saccade_memories`
+
+### 4.2 Insert Contract
+
+`ChromaStore.add_memory()` 目前接受：
+
+```python
+add_memory(
+    content: str,
+    metadata: dict[str, Any],
+    doc_id: str | None = None,
+    embedding: list[float] | None = None,
+) -> str
+```
+
+### 4.3 Stored Metadata
+
+目前 orchestrator 實際寫入的 metadata 典型欄位：
+
 ```python
 {
-  "query_text": "person with knife",
-  "n_results": 5,
-  "where": {
+    "frame_id": 123,
+    "entropy": 0.91,
+    "objects": "person, backpack",
+    "is_anomaly": 1,
+    "timestamp": 1712918400.123,
+}
+```
+
+欄位合約：
+
+- `frame_id`: `int`
+- `entropy`: `float`
+- `objects`: `string`
+  - 注意：這裡目前是 comma-separated string，不是 list
+- `is_anomaly`: `0 | 1`
+- `timestamp`: `float`
+
+### 4.4 Query Contract
+
+`ChromaStore.hybrid_query()` 目前支援：
+
+- `query_text`
+- `query_embedding`
+- `n_results`
+- `start_time`
+- `is_anomaly`
+- `object_filter`
+
+對應 where filter 範型：
+
+```python
+{
     "$and": [
-      {"timestamp": {"$gte": 1712900000.0}},
-      {"is_anomaly": 1}
+        {"timestamp": {"$gte": 1712900000.0}},
+        {"is_anomaly": 1},
+        {"objects": {"$contains": "person"}}
     ]
-  }
 }
 ```
 
 ---
 
-## 3. 健康檢查接口 (Health API)
-`pipeline/health.py` 依賴此規範來判定系統狀態。
+## 5. FastAPI Retrieval API
 
-- **Redis Health:** `PING` (Expected: PONG)
-- **Vector DB Health:** `client.heartbeat()` (Expected: Valid timestamp)
-- **System Metrics:** 
-    - `VRAM_Usage`: 偵測 GPU 記憶體是否超過 85% 閾值。
-    - `Latency_L1`: 感知層單影格處理延遲 (目標: < 15ms)。
+對應檔案：[src/saccade/api/server.py](/src/saccade/api/server.py:1)
+
+### 5.1 `GET /`
+
+Response:
+
+```json
+{
+  "status": "online",
+  "system": "Saccade",
+  "api_version": "1.0"
+}
+```
+
+### 5.2 `GET /objects`
+
+用途：
+
+- 讀取目前 Redis 中仍未過期的 active object ids
+
+Response:
+
+```json
+{
+  "count": 2,
+  "active_objects": [101, 102]
+}
+```
+
+### 5.3 `GET /objects/{obj_id}`
+
+用途：
+
+- 讀取單一物件的 Redis 快取資料
+
+目前注意事項：
+
+- code path 會計算 `dwell_time_seconds`
+- 但 `RedisCache.update_object_track()` 目前只寫 `id / label / box / timestamp`
+- 若沒有 `first_seen / last_seen`，此 endpoint 的 dwell-time 假設不完整
+
+這代表：
+
+- `server.py` 與 `redis_cache.py` 之間目前存在資料合約缺口
+- 若要正式對外使用此 endpoint，需先補齊 object history schema
+
+### 5.4 `POST /search`
+
+Request body:
+
+```json
+{
+  "text": "person with suspicious bag",
+  "n_results": 5,
+  "start_time": 1712900000.0,
+  "is_anomaly": true
+}
+```
+
+Request contract:
+
+- `text`: `string`, required
+- `n_results`: `int | null`, default `5`
+- `start_time`: `float | null`
+- `is_anomaly`: `bool | null`
+
+Response shape:
+
+```json
+{
+  "query": "person with suspicious bag",
+  "results": [
+    {
+      "id": "memory-id",
+      "content": "Scene contains: 1 person, 1 backpack.",
+      "metadata": {
+        "frame_id": 4502,
+        "entropy": 0.91,
+        "objects": "person, backpack",
+        "is_anomaly": 1,
+        "timestamp": 1712918400.123
+      },
+      "distance": 0.123
+    }
+  ]
+}
+```
 
 ---
 
-## 4. 開發約定 (Coding Standards)
+## 6. Health Contract
 
-### 非同步與併發 (Concurrency)
-- **Redis 推送**: 必須使用 `redis.asyncio` 的 `rpush`。
-- **寫入頻率控制**: `Orchestrator` 使用 `asyncio.Semaphore(32)` 控制併發，避免 I/O 阻塞。
+對應檔案：[src/saccade/pipeline/health.py](/src/saccade/pipeline/health.py:1)
 
-### 數據流向 (Data Type)
-- **影像傳輸**: 禁止使用 Base64。影像資料應留在 GPU Tensor 或存儲於本地快取路徑供 VLM/LLM 按需讀取。
-- **特徵向量**: 固定為 768 或 1024 維的 `float32` 陣列。
+### 6.1 Checked Services
+
+- systemd user services:
+  - `yolo-perception`
+  - `yolo-orchestrator`
+  - `mediamtx`
+- redis connectivity:
+  - `PING`
+  - queue depth via `LLEN saccade:events`
+- vram:
+  - NVML memory usage
+- stress metrics:
+  - event loop latency
+  - redis queue depth
+  - torch-reported VRAM fragmentation
+
+### 6.2 Health Output Contract
+
+`HealthChecker.run()` returns:
+
+- `timestamp`
+- `systemd`
+- `vram`
+- `redis`
+- `stress`
+- `overall_ok`
+
+這是 internal operational contract，不是正式對外 HTTP API。
+
+---
+
+## 7. Concurrency / I/O Rules
+
+- Redis list writes:
+  - use `redis.asyncio`
+  - high-frequency queue writes should prefer `RedisCache.publish_event()` + `MicroBatcher`
+- Redis stream writes:
+  - use `RedisCache.add_to_stream()` or batch variant
+- Orchestrator:
+  - DB-bound tasks are limited by `asyncio.Semaphore(32)`
+- Blocking RAG calls:
+  - must be wrapped through executor / background task path
+
+---
+
+## 8. Known Gaps
+
+- `EntropyTrigger.calculate_entropy()` is still placeholder logic and not a stable semantic contract yet.
+- Redis List event path and Redis Stream path are both present; long-term canonical path is not fully unified.
+- `GET /objects/{obj_id}` assumes richer object history than `RedisCache.update_object_track()` currently stores.
+- `docs/architecture.md` and `docs/pipeline_flow.md` still describe the intended system shape at a higher level; this file describes currently implemented interface contracts.
+
+---
+
+## 9. Update Rules
+
+更新本文件的時機：
+
+- 修改 event schema
+- 修改 Redis key / stream name / consumer group
+- 修改 Chroma metadata schema
+- 修改 FastAPI request/response shape
+- 修改 health checker 的輸出合約
+
+若只是實驗性欄位掃描，先記在 [docs/TODO.md](/docs/TODO.md:1) 或實驗文件；當欄位成為穩定介面時，再回寫此規範。

@@ -7,6 +7,7 @@
 - [latency_log.md](latency_log.md): 端到端延遲、分段延遲與觀測紀錄。
 - [throughput.md](throughput.md): 單路與多路串流吞吐量結果。
 - [vram_usage.md](vram_usage.md): 不同配置下的 VRAM 使用量與壓力觀察。
+- [optimization_phases_abcd.md](optimization_phases_abcd.md): 非推理開銷清除計畫的階段性量測與結果摘要。
 
 ## 維護原則
 
