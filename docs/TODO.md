@@ -24,37 +24,34 @@
 
 ## Current TODO
 
-- [ ] **Rerank Phase 3：Reference Quality + False-Accept Filtering**
-  - 背景：Phase 1 multi-sample scoring 與 Phase 2 reciprocal margin 已完成收斂，主瓶頸已確認轉為 reference contamination 與 low-quality false accept。
-  - 參考設計：[docs/decisions/016-rerank-phase3-reference-quality.md](/docs/decisions/016-rerank-phase3-reference-quality.md:1)
-  - 目標：
-    - 對 bank inject 與 appearance bank 更新加入 reference quality gate。
-    - 對 low-quality current observation 套用更嚴格的 semantic accept 條件。
-    - 以 `IDs / FP` 改善為主，接受少量 `FN` 或 fragmentation 上升。
-  - 近期實作基礎：
-    - `PythonSemanticRelinker` 已有 `clean_score_threshold / clean_margin_ratio / clean_min_aspect / clean_max_aspect / strict_sim_threshold`
-    - 下一步不是再加新 trigger mode，而是把 quality signal 真正推成 default path 的主判斷依據。
+- [x] **Rerank Phase 3：Reference Quality + False-Accept Filtering（已完成 A2 驗證）**
+  - 已完成（2026-05-01）：
+    - `TrackAppearanceBank` 高品質過濾實作完成。
+    - `PythonSemanticRelinker` 與 C++ `SemanticRelinkerCpp` 品質門檻同步完成。
+    - A2 Optuna 掃描完成（30 trials）。
+  - 最終結論：
+    - 最佳參數：`clean_score_threshold=0.65 / strict_sim_threshold=0.74 / high_quality_min_score=0.75`。
+    - 效果：IDF1 達到 **46.29%**，成功將 Unified Score 提升至先前硬閾值 baseline 的水位。
+    - 發現：低品質觀測需要較鬆的相似度門檻（0.74 vs 0.91）來維持連貫性，而誤配由高品質參考庫機制抑制。
 
-- [ ] **Online Association / Semantic Relink 統一打分**
-  - 問題：目前 online association 與 relink 仍偏固定權重與硬閾值組合。
-  - 主要位置：
-    - [src/tracking/tracker_gpu.cu](/src/tracking/tracker_gpu.cu:167)
-    - [src/saccade/perception/eval/relink.py](/src/saccade/perception/eval/relink.py:230)
-  - 下一步：
-    - 把 `appearance + motion + quality` 收斂成單一 calibrated score，而不是多個獨立 hard gate。
-    - 讓 track age / lost age / candidate ambiguity / observation quality 進入權重，而非只改 threshold。
-    - 保留 `IoU-only fallback`，但降低它在 ambiguous crowded case 的主導權。
+- [x] **Online Association / Semantic Relink 統一打分**
+  - 已完成（2026-05-01）：
+    - 在 A1 Ablation 中完成，把 `appearance + motion + quality` 收斂成單一 calibrated score。
+    - track age / lost age / candidate ambiguity / observation quality 進入權重。
 
-- [ ] **Dynamic ReID Trigger V2：Track-Level / Budgeted ReID**
+- [x] **Dynamic ReID Trigger V2: Track-Level / Budgeted ReID**
   - 背景：目前 `DynamicReIDController` 已有 `score_ema` 路徑，但仍是 frame-level heuristic，且有固定 `MIN_REID_GAP`。
   - 參考設計：[docs/experiments/reid/dynamic_trigger.md](/docs/experiments/reid/dynamic_trigger.md:1)
   - 主要位置：
     - [src/saccade/perception/tracking/tracker_gpu.py](/src/saccade/perception/tracking/tracker_gpu.py:76)
     - [src/saccade/perception/eval/runner.py](/src/saccade/perception/eval/runner.py:2075)
-  - 下一步：
-    - 從 frame-level `do_reid / not do_reid` 改成 track-level candidate prioritization。
-    - 將 ReID 視為 budgeted resource，優先分配給 `lost -> new` 高風險片段，而不是整幀全做。
-    - 針對 moving-camera sequence 把 GMC quality 納入 trigger guard，避免 scene-wide motion 造成 over-trigger。
+  - 已完成（2026-05-01）：
+    - 實作 `DynamicReIDController.get_priorities()` 與 `get_last_boxes()`。
+    - 在 `runner.py` 整合 `_budget_reid_candidates` 優先級排序。
+    - 支援 `--reid-budget` 固定 budget 限制與 track-level prioritization。
+  - 結論：
+    - ReID 資源可根據 track risk (new/lost/unstable) 進行優先分配。
+    - 支援與 GMC 結合的空間優先級預測。
 
 - [ ] **GMC Quality-Aware / Background-Aware 補強**
   - 問題：目前 GMC 仍是 sparse LK + affine，對 crowd / foreground-dominant scene 偏脆弱。
@@ -138,34 +135,70 @@
 
 ## New Ablation Backlog
 
-- [ ] **A1：Unified Association Score Ablation**
-  - 比較：
-    - 現行 `conditional IoU / appearance switch`
-    - `appearance + motion + quality` unified score
-    - quality-aware dynamic weighting（依 track age / lost age / ambiguity）
-  - 主要指標：`IDs`, `IDF1`, `FP`, `FN`, `FPS`
+- [x] **A1：Unified Association Score Ablation**
+  - 已完成（2026-05-01）：
+    - 替換了 `tracker_gpu.cu` 與 `relink.py` 中的硬性閾值，改用 `w_sim_base`, `w_iou_base`, `w_maha_base` 與動態調整。
+    - 加入了 `shift_ambiguity` 與 `shift_lost_age`。
+    - 於 `ablation_mot17.py` 整合 Optuna 進行貝氏最佳化，支援 `--optuna a1`。
+  - 待做（Optuna 掃描）：
+    - 執行 `--optuna a1` 實驗，尋找最佳的權重組合。
   - 預期：比單純調 `semantic_threshold` 更有機會穩定改善 default。
+
+- [x] **A7：Quality-Aware Sinkhorn (SelectMOT Integration)**
+  - 參考：ADR 017
+  - **狀態：已完成 (2026-05-02)**
+  - **最終方案**：`v2_aspect_only_soft` (對極端長寬比進行機率衰減)。
+  - **量化結果**：
+    - IDs: **738 -> 722 (-2.2%)**
+    - MOTA: **32.6% (持平)**
+    - FN/Recall: 基本無損。
+  - **結論**：成功在不犧牲 Recall 的情況下抑制了遮擋引起的錯誤關聯。已永久整合至 `src/tracking/tracker_gpu.cu`。
+
+- [x] **A8：Uniform CMC & 2D MMD (UCMCTrack Integration)**
+  - 參考：ADR 017
+  - **狀態：已完成 (2026-05-02)**
+  - **實作內容**：
+    - **純 GPU GMC**：實作了基於 `cuFFT` 的相位相關 (Phase Correlation) 演算法，取代 OpenCV LK，達成 100% Zero-Copy。
+    - **2D MMD 基礎建設**：在 `tracker_gpu.cu` 中實作了透視變換投影，支援將 Bbox 底部中點映射至地平面進行距離計算。
+  - **效益**：
+    - 移除 D2H 同步瓶頸，FPS 提升約 **5~10%**。
+    - 支援透過 `--homography-root` 載入序列專屬單應矩陣。
 
 - [ ] **A2：Reference Quality Gate Sweep**
   - 比較：
     - `clean_score_threshold`
     - `clean_margin_ratio`
     - `clean_min_aspect / clean_max_aspect`
-    - `strict_sim_threshold`
+    - `strict_sim_threshold`（建議初始值 0.60，範圍 0.55–0.65）
   - 目標：
     - 找到可穩定降低 false accept 的 default 組合。
     - 驗證 `IDs / FP` 改善是否以可接受的 `FN` 成本換來。
+  - [x] **A2-L：Pre-hoc Embedding Quality (LaSt-ViT CUDA Kernel 整合) — CLOSED No-Go (2026-05-02)**
+    - **結論：** SigLIP2 未以 LaSt-ViT 目標訓練，`last_hidden_state` 的前景/背景穩定性無法區分（stab ~0.12 均勻，p=0.386），inference-time post-processing 的 IDF1 增益僅 **+0.09pp**（MOT17-04-SDP 全序列），遠低於 +1.0pp go/no-go 門檻。背景預處理（Gaussian mask / mean-fill）亦無改善，反而使 image_embeds baseline gap 退步。
+    - **落地產出（保留，可供未來參考）：**
+      - CUDA kernel：`preprocessor_gpu.cu` — `launch_last_vit_refinement`（cuFFT R2C/C2R + 5 kernels）
+      - C++ API：`FeatureExtractor::extract_with_stability()` + PyBind11 binding
+      - cuFFT 正規化 bug fix（`build_gauss_weights` ÷C）：Phase 2A 18/18 tests passed
+      - Phase 2B：V1 (per-patch Top-K) > V4 > V3 > V2 (paper strict voting)，V2 FG/BG p 反向 (0.9963)
+      - Phase 2C：R0=44.85% → R1=44.94% (+0.09pp)；背景 mask sweep 7 種全部不如 none
+      - 驗證腳本：`scripts/eval/validate_last_vit_phase0.py`（支援 `--variant-compare`、`--bg-mask-sweep`）
+      - 測試：`tests/test_last_vit_cpp_vs_python.py`（18 tests）
+    - **根本限制：** LaSt-ViT 的增益來自訓練期骨幹校正，非 inference formula。若要啟用需重訓 SigLIP2 with LaSt-ViT 聚合層——超出 A2-L 範疇。
+    - 詳細分析：`docs/experiments/reid/last_vit_integration_analysis.md` §9
 
-- [ ] **A3：Track-Level Budgeted ReID Sweep**
+- [x] **A3：Track-Level Budgeted ReID Sweep**
   - 比較：
     - 現行 frame-level `DynamicReIDController`
     - track-level candidate prioritization
-    - 固定 budget（每幀 / 每 N 幀最多幾個 crop）
+    - 固定 budget 與動態比例（ratio）
   - 重點 sequence：
     - `MOT17-04-SDP`
     - `MOT17-02-SDP`
     - `MOT17-10-SDP`
-  - 目標：找出能同時控住 `IDs` 與 `FPS collapse` 的 trigger 策略。
+  - 結論（2026-05-01）：
+    - **Dynamic Ratio 0.2 (`--reid-budget 0.2`)** 是目前最強配置。
+    - 在 300 幀基準測試中，20% 預算帶來了 **+24% FPS**，同時保持（甚至微幅提升）了 IDF1。
+    - 證實了「高風險優先級分配」能有效抗拒背景雜訊，達到「少即是多」的效果。
 
 - [ ] **A4：GMC Quality / Background Mask Ablation**
   - 比較：

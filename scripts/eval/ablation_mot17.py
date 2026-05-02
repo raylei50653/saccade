@@ -67,6 +67,18 @@ _CATEGORY_ORDER = [
     "mot17_a",
     "mot17_b",
     "mot17_c",
+    "a3",
+]
+
+_A2_BEST = [
+    "--semantic-w-sim-base", "0.8012",
+    "--semantic-w-iou-base", "0.3423",
+    "--semantic-w-maha-base", "0.3117",
+    "--semantic-shift-ambiguity", "0.3425",
+    "--semantic-shift-lost-age", "0.1778",
+    "--semantic-clean-score-threshold", "0.65",
+    "--semantic-strict-sim-threshold", "0.74",
+    "--appearance-bank-high-quality-min-score", "0.75",
 ]
 
 _CATEGORY_EXPERIMENTS: dict[str, list[tuple[str, str, list[str]]]] = {
@@ -680,6 +692,59 @@ _CATEGORY_EXPERIMENTS: dict[str, list[tuple[str, str, list[str]]]] = {
             ],
         ),
     ],
+    # ── A3: Track-Level Budgeted ReID Sweep ────────────────────────────────────
+    "a3": [
+        (
+            "fixed interval 16 (base)",
+            "fixed16",
+            _A2_BEST + ["--no-need-reid", "--reid-interval", "16"],
+        ),
+        (
+            "score_ema (unlimited)",
+            "score_ema_unlimited",
+            _A2_BEST + ["--need-reid", "--reid-trigger-mode", "score_ema", "--reid-budget", "0"],
+        ),
+        (
+            "fixed budget 1",
+            "fixed_b1",
+            _A2_BEST + ["--no-need-reid", "--reid-interval", "1", "--reid-budget", "1"],
+        ),
+        (
+            "fixed budget 4",
+            "fixed_b4",
+            _A2_BEST + ["--no-need-reid", "--reid-interval", "1", "--reid-budget", "4"],
+        ),
+        (
+            "fixed budget 8",
+            "fixed_b8",
+            _A2_BEST + ["--no-need-reid", "--reid-interval", "1", "--reid-budget", "8"],
+        ),
+        (
+            "dynamic budget 1",
+            "dyn_b1",
+            _A2_BEST + ["--need-reid", "--reid-trigger-mode", "score_ema", "--reid-budget", "1"],
+        ),
+        (
+            "dynamic budget 4",
+            "dyn_b4",
+            _A2_BEST + ["--need-reid", "--reid-trigger-mode", "score_ema", "--reid-budget", "4"],
+        ),
+        (
+            "dynamic budget 8",
+            "dyn_b8",
+            _A2_BEST + ["--need-reid", "--reid-trigger-mode", "score_ema", "--reid-budget", "8"],
+        ),
+        (
+            "dynamic ratio 0.2",
+            "dyn_r02",
+            _A2_BEST + ["--need-reid", "--reid-trigger-mode", "score_ema", "--reid-budget", "0.2"],
+        ),
+        (
+            "dynamic ratio 0.4",
+            "dyn_r04",
+            _A2_BEST + ["--need-reid", "--reid-trigger-mode", "score_ema", "--reid-budget", "0.4"],
+        ),
+    ],
 }
 
 
@@ -829,23 +894,184 @@ def print_table(title: str, results: list[tuple[str, dict | None]]) -> None:
     print(f"{'=' * 88}")
 
 
+def run_optuna_a1(args, base_args):
+    import optuna
+    
+    def objective(trial):
+        w_sim = trial.suggest_float("w_sim_base", 0.0, 1.0)
+        w_iou = trial.suggest_float("w_iou_base", 0.0, 1.0)
+        w_maha = trial.suggest_float("w_maha_base", 0.0, 1.0)
+        shift_ambiguity = trial.suggest_float("shift_ambiguity", 0.0, 0.5)
+        shift_lost_age = trial.suggest_float("shift_lost_age", 0.0, 0.5)
+        
+        extra_args = [
+            "--semantic-w-sim-base", str(w_sim),
+            "--semantic-w-iou-base", str(w_iou),
+            "--semantic-w-maha-base", str(w_maha),
+            "--semantic-shift-ambiguity", str(shift_ambiguity),
+            "--semantic-shift-lost-age", str(shift_lost_age),
+        ]
+        
+        out_dir = f"{args.output_root}/optuna/trial_{trial.number}"
+        run_eval(f"Optuna A1 Trial {trial.number}", out_dir, extra_args, base_args, args.dry_run)
+        
+        metrics = evaluate_dir(out_dir, args.gt_root, args.detector)
+        if not metrics:
+            raise optuna.TrialPruned()
+        
+        # Maximize IDF1 primarily
+        return metrics["idf1"]
+        
+    study = optuna.create_study(direction="maximize", study_name="A1_Unified_Score")
+    study.optimize(objective, n_trials=args.optuna_trials)
+    
+    print(f"{'=' * 88}")
+    print("Optuna A1 Unified Score Sweep Complete")
+    try:
+        best_trial = study.best_trial
+        print(f"Best trial (IDF1: {best_trial.value:.4f}):")
+        for key, value in best_trial.params.items():
+            print(f"  {key}: {value:.4f}")
+    except ValueError:
+        print("No trials completed successfully.")
+    print(f"{'=' * 88}")
+
+
+def run_optuna_a2(args, base_args):
+    import optuna
+    
+    # Use A1 best params as fixed base for A2 sweep
+    a1_base = [
+        "--semantic-w-sim-base", "0.8012",
+        "--semantic-w-iou-base", "0.3423",
+        "--semantic-w-maha-base", "0.3117",
+        "--semantic-shift-ambiguity", "0.3425",
+        "--semantic-shift-lost-age", "0.1778",
+    ]
+    
+    def objective(trial):
+        clean_score = trial.suggest_float("clean_score_threshold", 0.50, 0.90)
+        strict_sim = trial.suggest_float("strict_sim_threshold", 0.55, 0.95)
+        hq_bank_score = trial.suggest_float("high_quality_min_score", 0.60, 0.95)
+        
+        extra_args = a1_base + [
+            "--semantic-clean-score-threshold", str(clean_score),
+            "--semantic-strict-sim-threshold", str(strict_sim),
+            "--appearance-bank-high-quality-min-score", str(hq_bank_score),
+        ]
+        
+        out_dir = f"{args.output_root}/optuna_a2/trial_{trial.number}"
+        run_eval(f"Optuna A2 Trial {trial.number}", out_dir, extra_args, base_args, args.dry_run)
+        
+        metrics = evaluate_dir(out_dir, args.gt_root, args.detector)
+        if not metrics:
+            raise optuna.TrialPruned()
+        
+        # Maximize IDF1
+        return metrics["idf1"]
+        
+    study = optuna.create_study(direction="maximize", study_name="A2_Reference_Quality")
+    study.optimize(objective, n_trials=args.optuna_trials)
+    
+    print(f"{'=' * 88}")
+    print("Optuna A2 Reference Quality Sweep Complete")
+    try:
+        best_trial = study.best_trial
+        print(f"Best trial (IDF1: {best_trial.value:.4f}):")
+        for key, value in best_trial.params.items():
+            print(f"  {key}: {value:.4f}")
+    except ValueError:
+        print("No trials completed successfully.")
+    print(f"{'=' * 88}")
+
+
+def run_optuna_a3(args, base_args):
+    import optuna
+
+    # Use A2 best params as fixed base for A3 sweep
+    a2_base = _A2_BEST
+
+    def objective(trial):
+        budget = trial.suggest_categorical("reid_budget", [1, 2, 4, 8, 12, 16])
+        trigger_mode = trial.suggest_categorical(
+            "reid_trigger_mode", ["score_ema", "event_any"]
+        )
+
+        extra_args = a2_base + [
+            "--need-reid",
+            "--reid-trigger-mode",
+            trigger_mode,
+            "--reid-budget",
+            str(budget),
+        ]
+
+        out_dir = f"{args.output_root}/optuna_a3/trial_{trial.number}"
+        run_eval(
+            f"Optuna A3 Trial {trial.number}", out_dir, extra_args, base_args, args.dry_run
+        )
+
+        metrics = evaluate_dir(out_dir, args.gt_root, args.detector)
+        if not metrics:
+            raise optuna.TrialPruned()
+
+        # Maximize IDF1
+        return metrics["idf1"]
+
+    study = optuna.create_study(direction="maximize", study_name="A3_Budgeted_ReID")
+    study.optimize(objective, n_trials=args.optuna_trials)
+
+    print(f"{'=' * 88}")
+    print("Optuna A3 Budgeted ReID Sweep Complete")
+    try:
+        best_trial = study.best_trial
+        print(f"Best trial (IDF1: {best_trial.value:.4f}):")
+        for key, value in best_trial.params.items():
+            print(f"  {key}: {value}")
+    except ValueError:
+        print("No trials completed successfully.")
+    print(f"{'=' * 88}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--category", default="all", help="Comma-separated categories or 'all'."
     )
     parser.add_argument("--detector", choices=["SDP", "DPM", "FRCNN"], default="SDP")
+    parser.add_argument("--sequences", default="", help="Comma-separated sequence names.")
     parser.add_argument("--max-frames", type=int, default=None)
     parser.add_argument("--gt-root", default="datasets/MOT17/train")
     parser.add_argument("--output-root", default="scripts/eval/output/ablation_mot17")
     parser.add_argument("--skip-run", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--optuna",
+        choices=["a1", "a2", "a3"],
+        default=None,
+        help="Run Bayesian optimization for a specific module.",
+    )
+    parser.add_argument(
+        "--optuna-trials", type=int, default=20, help="Number of trials for Optuna."
+    )
     args = parser.parse_args()
 
-    categories = parse_categories(args.category)
     base_args = ["--detector", args.detector]
+    if args.sequences:
+        base_args += ["--sequences", args.sequences]
     if args.max_frames:
         base_args += ["--max-frames", str(args.max_frames)]
+
+    if args.optuna == "a1":
+        run_optuna_a1(args, base_args)
+        return
+    if args.optuna == "a2":
+        run_optuna_a2(args, base_args)
+        return
+    if args.optuna == "a3":
+        run_optuna_a3(args, base_args)
+        return
+
+    categories = parse_categories(args.category)
 
     baseline_dir = f"{args.output_root}/baseline"
     if not args.skip_run:

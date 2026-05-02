@@ -449,6 +449,7 @@ class CandidateAppearanceUpdate:
     frame_id: int
     geometry_clean: bool
     suspect_box: bool
+    aspect_ratio: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -796,6 +797,7 @@ def _prepare_track_candidates(
                     update.frame_id,
                     update.geometry_clean,
                     update.suspect_box,
+                    update.aspect_ratio,
                 )
                 for update in appearance_updates
             ]
@@ -868,6 +870,10 @@ def _build_prepared_candidates(
                 ).item()
             )
             if match_iou > 0.35:
+                det_box = fused_boxes[det_idx].cpu().tolist()
+                bw = max(det_box[2] - det_box[0], 1e-6)
+                bh = max(det_box[3] - det_box[1], 1e-6)
+                aspect_ratio = bh / bw
                 appearance_updates.append(
                     CandidateAppearanceUpdate(
                         track_id=obj_id,
@@ -879,6 +885,7 @@ def _build_prepared_candidates(
                         suspect_box=bool(geometry_suspect_mask[det_idx])
                         if geometry_suspect_mask.numel() > det_idx
                         else False,
+                        aspect_ratio=aspect_ratio,
                     )
                 )
         prepared.append(
@@ -952,13 +959,19 @@ def _inject_lost_track_references(
 ) -> None:
     references_to_inject: list[tuple[int, torch.Tensor]] = []
     for lost_tid in prev_track_ids - curr_track_ids:
-        if not primary_appearance_bank.is_consistent(lost_tid):
-            continue
-        representative = primary_appearance_bank.representative(lost_tid)
-        if representative is None:
-            continue
         canonical_id = relinker.canonical_id(lost_tid)
         if not relinker.has_feature(canonical_id):
+            continue
+        # Prefer high-quality reference (Phase 3); fall back to consistent reference.
+        if primary_appearance_bank.is_high_quality(lost_tid):
+            representative = primary_appearance_bank.high_quality_representative(
+                lost_tid
+            )
+        elif primary_appearance_bank.is_consistent(lost_tid):
+            representative = primary_appearance_bank.representative(lost_tid)
+        else:
+            continue
+        if representative is None:
             continue
         references_to_inject.append((canonical_id, representative))
 
@@ -1002,6 +1015,81 @@ def _finalize_frame_side_effects(
     if primary_appearance_bank is not None:
         primary_appearance_bank.prune(curr_track_ids)
     return curr_track_ids
+
+
+def _budget_reid_candidates(
+    fused_boxes: torch.Tensor,
+    fused_scores: torch.Tensor,
+    budget: int,
+    dynamic_reid: Any = None,
+    gmc_warp: torch.Tensor | None = None,
+) -> torch.Tensor:
+    """Select top-budget detections for ReID extraction using track-level prioritization (A3)."""
+    num_dets = fused_boxes.shape[0]
+    if budget <= 0 or num_dets <= budget:
+        return torch.arange(num_dets, device=fused_boxes.device)
+
+    # Fallback to pure score-based budget if dynamic controller is missing or cold.
+    if dynamic_reid is None:
+        _, top_idx = torch.topk(fused_scores, budget)
+        return torch.sort(top_idx).values
+
+    track_priorities = dynamic_reid.get_priorities()
+    track_boxes = dynamic_reid.get_last_boxes()
+
+    if not track_priorities:
+        _, top_idx = torch.topk(fused_scores, budget)
+        return torch.sort(top_idx).values
+
+    # Apply GMC to track boxes to align with current frame detections.
+    h00, h01, h02, h10, h11, h12 = 1.0, 0.0, 0.0, 0.0, 1.0, 0.0
+    if gmc_warp is not None:
+        gmc_cpu = gmc_warp.detach().cpu().view(-1).tolist()
+        if len(gmc_cpu) >= 6:
+            h00, h01, h02, h10, h11, h12 = gmc_cpu[:6]
+
+    warped_track_boxes = []
+    priorities_list = []
+    for tid, p in track_priorities.items():
+        box = track_boxes.get(tid)
+        if box is None:
+            continue
+
+        if gmc_warp is not None:
+            x1, y1, x2, y2 = box
+            corners = [(x1, y1), (x2, y1), (x2, y2), (x1, y2)]
+            tx = [h00 * x + h01 * y + h02 for x, y in corners]
+            ty = [h10 * x + h11 * y + h12 for x, y in corners]
+            box = (min(tx), min(ty), max(tx), max(ty))
+
+        warped_track_boxes.append(box)
+        priorities_list.append(p)
+
+    if not warped_track_boxes:
+        _, top_idx = torch.topk(fused_scores, budget)
+        return torch.sort(top_idx).values
+
+    # Compute max(priority * IoU) for each detection.
+    t_boxes = torch.tensor(warped_track_boxes, device=fused_boxes.device)
+    t_priorities = torch.tensor(priorities_list, device=fused_boxes.device)
+
+    # Vectorized IoU: [N, 4] vs [M, 4]
+    lt = torch.max(fused_boxes[:, None, :2], t_boxes[None, :, :2])
+    rb = torch.min(fused_boxes[:, None, 2:], t_boxes[None, :, 2:])
+    wh = (rb - lt).clamp(min=0)
+    inter = wh[:, :, 0] * wh[:, :, 1]
+    area_a = (fused_boxes[:, 2] - fused_boxes[:, 0]) * (
+        fused_boxes[:, 3] - fused_boxes[:, 1]
+    )
+    area_b = (t_boxes[:, 2] - t_boxes[:, 0]) * (t_boxes[:, 3] - t_boxes[:, 1])
+    iou = inter / (area_a[:, None] + area_b[None, :] - inter).clamp(min=1e-6)
+
+    # Combined priority: detection confidence + highest weighted IoU from a prioritized track.
+    track_contribution, _ = torch.max(t_priorities[None, :] * iou, dim=1)
+    det_priorities = fused_scores + track_contribution
+
+    _, top_idx = torch.topk(det_priorities, budget)
+    return torch.sort(top_idx).values
 
 
 class UnionFind:
@@ -1329,6 +1417,11 @@ def run_eval(
     conf_threshold: float,
     reid_mode: str = "semantic",
     reid_model: str = "siglip2",
+    last_vit_embed: bool = False,
+    last_vit_gate: float = 0.0,
+    last_vit_sigma_embed: float = 0.015,
+    last_vit_sigma_gate: float = 0.040,
+    last_vit_top_k: float = 0.5,
     **kwargs: Any,
 ) -> None:
     output_root = Path(output)
@@ -1382,7 +1475,9 @@ def run_eval(
         raise ValueError(f"Unsupported reid_crop_layout: {reid_crop_layout}")
 
     gmc_enabled = bool(kwargs.get("gmc", False))
+    gmc_mode = str(kwargs.get("gmc_mode", "gpu"))
     gmc_downscale = max(1, int(kwargs.get("gmc_downscale", 8)))
+    homography_root = str(kwargs.get("homography_root", ""))
     semantic_buffer_size = max(1, int(kwargs.get("semantic_buffer_size", 1)))
     semantic_min_consistency = float(kwargs.get("semantic_min_consistency", 0.0))
     semantic_rerank_mode = str(kwargs.get("semantic_rerank_mode", "mean"))
@@ -1395,18 +1490,28 @@ def run_eval(
         kwargs.get("semantic_dynamic_margin_crowd", 0.0)
     )
     semantic_dynamic_margin_age = float(kwargs.get("semantic_dynamic_margin_age", 0.0))
+    semantic_w_sim_base = float(kwargs.get("semantic_w_sim_base", 0.0))
+    semantic_w_iou_base = float(kwargs.get("semantic_w_iou_base", 0.0))
+    semantic_w_maha_base = float(kwargs.get("semantic_w_maha_base", 0.0))
+    semantic_shift_ambiguity = float(kwargs.get("semantic_shift_ambiguity", 0.0))
+    semantic_shift_lost_age = float(kwargs.get("semantic_shift_lost_age", 0.0))
     # MOT17-b: penalise cross-tile-merged boxes in association (fraction of score kept)
     cross_tile_score_penalty = float(kwargs.get("cross_tile_score_penalty", 1.0))
     # confound control: force Python relinker path without changing any scoring params
     force_python_relinker = bool(kwargs.get("force_python_relinker", False))
 
     # Rerank Phase 3: reference quality and false accept filtering
+    # clean_score_threshold: observations below this score are treated as low-quality
+    # and require strict_sim_threshold to be accepted (false-accept filtering).
     semantic_clean_score_threshold = float(
-        kwargs.get("semantic_clean_score_threshold", 0.0)
+        kwargs.get("semantic_clean_score_threshold", 0.60)
     )
     semantic_clean_margin_ratio = float(kwargs.get("semantic_clean_margin_ratio", 0.0))
-    semantic_clean_min_aspect = float(kwargs.get("semantic_clean_min_aspect", 0.0))
-    semantic_clean_max_aspect = float(kwargs.get("semantic_clean_max_aspect", 99.0))
+    # Aspect ratio gate on current observations for relink accept/bank update.
+    semantic_clean_min_aspect = float(kwargs.get("semantic_clean_min_aspect", 1.2))
+    semantic_clean_max_aspect = float(kwargs.get("semantic_clean_max_aspect", 4.5))
+    # strict_sim_threshold: similarity required for low-quality observations;
+    # 0.0 means fall back to sim_threshold (same for all, no strict gate).
     semantic_strict_sim_threshold = float(
         kwargs.get("semantic_strict_sim_threshold", 0.0)
     )
@@ -1483,6 +1588,7 @@ def run_eval(
         and extractor_cpp_ptr != 0
         and cropper_cpp_ptr != 0
         and reid_crop_layout == "full"
+        and not last_vit_embed  # LaSt-ViT uses Python extraction path
     )
     perception_pipeline = None
     if native_postprocess_available:
@@ -1506,6 +1612,7 @@ def run_eval(
         )
         if native_reid_available:
             perception_pipeline.set_reid_profiling_enabled(profile_stages)
+    reid_budget_raw = float(kwargs.get("reid_budget", 0.0))
     lifecycle_merge_enabled = bool(kwargs.get("lifecycle_merge", False))
     lifecycle_ttl = int(kwargs.get("lifecycle_ttl", 45))
     lifecycle_min_gap = int(kwargs.get("lifecycle_min_gap", 2))
@@ -1565,6 +1672,11 @@ def run_eval(
     appearance_bank_consistency_threshold = float(
         kwargs.get("appearance_bank_consistency_threshold", 0.75)
     )
+    appearance_bank_high_quality_min_score = float(
+        kwargs.get("appearance_bank_high_quality_min_score", 0.70)
+    )
+    appearance_bank_min_aspect = float(kwargs.get("appearance_bank_min_aspect", 1.2))
+    appearance_bank_max_aspect = float(kwargs.get("appearance_bank_max_aspect", 4.5))
     need_reid_enabled = bool(kwargs.get("need_reid", True))
     per_seq_adapt = bool(kwargs.get("per_seq_adapt", True))
     seqs = (
@@ -1578,6 +1690,7 @@ def run_eval(
         "detect",
         "postprocess",
         "reid_bank_sync",
+        "reid_budget",
         "reid_crop",
         "reid_extract",
         "lazy_reid",
@@ -1643,9 +1756,35 @@ def run_eval(
     for seq in seqs:
         detector.reset_tracker()
         geometry_scale_state = GeometryScaleState()
-        gmc_estimator = (
-            SparseOpticalFlowGMC(downscale=gmc_downscale) if gmc_enabled else None
-        )
+        
+        # A8: Uniform CMC & 2D MMD
+        gmc_estimator = None
+        if gmc_enabled:
+            if gmc_mode == "gpu":
+                try:
+                    from saccade_tracking_ext import GMC as CppGMC
+                    gmc_estimator = CppGMC(downscale=gmc_downscale)
+                except ImportError:
+                    gmc_estimator = SparseOpticalFlowGMC(downscale=gmc_downscale)
+            else:
+                gmc_estimator = SparseOpticalFlowGMC(downscale=gmc_downscale)
+
+        # Load homography if provided (ADR 017)
+        homography_root = str(kwargs.get("homography_root", ""))
+        if homography_root:
+            h_path = Path(homography_root) / f"{seq}.txt"
+            if h_path.exists():
+                try:
+                    h_mat = np.loadtxt(h_path).astype(np.float32).flatten()
+                    if h_mat.size == 9:
+                        detector.tracker.set_homography(h_mat)
+                except Exception:
+                    detector.tracker.set_homography(None)
+            else:
+                detector.tracker.set_homography(None)
+        else:
+            detector.tracker.set_homography(None)
+
         id_stability_filter = (
             IdStabilityFilter(
                 min_hits=id_stability_min_hits,
@@ -1674,28 +1813,22 @@ def run_eval(
             iou_high=float(kwargs.get("reid_iou_high", 0.60)),
             weight=float(kwargs.get("reid_weight", 0.80)),
         )
+        
+        if hasattr(detector.tracker, "set_unified_score_params"):
+            detector.tracker.set_unified_score_params(
+                w_sim_base=semantic_w_sim_base,
+                w_iou_base=semantic_w_iou_base,
+                w_maha_base=semantic_w_maha_base,
+                shift_ambiguity=semantic_shift_ambiguity,
+                shift_lost_age=semantic_shift_lost_age,
+            )
 
         _use_python_relinker = (
             force_python_relinker
             or semantic_rerank_mode != "mean"
-            or semantic_iou_weight > 0.0
-            or semantic_mahalanobis_weight > 0.0
-            or semantic_dynamic_margin_crowd > 0.0
-            or semantic_dynamic_margin_age > 0.0
         )
         _relinker_cls = (
             PythonSemanticRelinker if _use_python_relinker else SemanticRelinker
-        )
-        # New MOT17-a params only exist on PythonSemanticRelinker; C++ accepts neither.
-        _python_only_kwargs = (
-            {
-                "iou_weight": semantic_iou_weight,
-                "mahalanobis_weight": semantic_mahalanobis_weight,
-                "dynamic_margin_crowd": semantic_dynamic_margin_crowd,
-                "dynamic_margin_age": semantic_dynamic_margin_age,
-            }
-            if _use_python_relinker
-            else {}
         )
         relinker = (
             _relinker_cls(
@@ -1715,7 +1848,15 @@ def run_eval(
                 clean_min_aspect=semantic_clean_min_aspect,
                 clean_max_aspect=semantic_clean_max_aspect,
                 strict_sim_threshold=semantic_strict_sim_threshold,
-                **_python_only_kwargs,
+                w_sim_base=semantic_w_sim_base,
+                w_iou_base=semantic_w_iou_base,
+                w_maha_base=semantic_w_maha_base,
+                shift_ambiguity=semantic_shift_ambiguity,
+                shift_lost_age=semantic_shift_lost_age,
+                iou_weight=semantic_iou_weight,
+                mahalanobis_weight=semantic_mahalanobis_weight,
+                dynamic_margin_crowd=semantic_dynamic_margin_crowd,
+                dynamic_margin_age=semantic_dynamic_margin_age,
                 debug=kwargs.get("semantic_debug", False),
             )
             if use_semantic_mode
@@ -1784,6 +1925,9 @@ def run_eval(
                 min_score=appearance_bank_min_score,
                 min_iou=appearance_bank_min_iou,
                 consistency_threshold=appearance_bank_consistency_threshold,
+                high_quality_min_score=appearance_bank_high_quality_min_score,
+                min_aspect=appearance_bank_min_aspect,
+                max_aspect=appearance_bank_max_aspect,
             )
             if appearance_bank_enabled
             else None
@@ -1848,6 +1992,7 @@ def run_eval(
         lazy_reid_prev_embeddings: dict[int, torch.Tensor] = {}
         seq_profiled_frames = 0
         last_reid_frame = -100
+        gmc_warp = None
         tracker_result_buffers = detector.tracker.allocate_result_buffers(
             device=pool.frame_buffer.device
         )
@@ -2081,7 +2226,7 @@ def run_eval(
             if _do_reid:
                 # 💡 Phase 4: Enforce a minimum interval even with need_reid logic
                 # to prevent pathological cases where every frame triggers ReID.
-                MIN_REID_GAP = 5
+                MIN_REID_GAP = 2
                 time_since_last_reid = frame_id - last_reid_frame
 
                 if time_since_last_reid < MIN_REID_GAP:
@@ -2125,96 +2270,177 @@ def run_eval(
                             record_stage_sample("reid_bank_sync", elapsed_ms)
 
             if reid_enabled and _do_reid:
-                if native_reid_available and perception_pipeline is not None:
-                    frame_hwc = pool.frame_buffer.permute(1, 2, 0).contiguous()
-                    embeddings = torch.empty(
-                        (fused_boxes.shape[0], extractor.feature_dim),
-                        device=fused_boxes.device,
-                        dtype=torch.float32,
-                    )
-                    if profile_stages:
-                        perception_pipeline.reset_reid_profile_stats()
-                    if profile_stages:
-                        torch.cuda.synchronize()
-                        t_reid_extract_start = time.perf_counter()
-                    perception_pipeline.extract_reid(
-                        frame_hwc.data_ptr(),
-                        h_orig,
-                        w_orig,
-                        fused_boxes.data_ptr(),
-                        int(fused_boxes.shape[0]),
-                        embeddings.data_ptr(),
-                        torch.cuda.current_stream().cuda_stream,
-                    )
-                    if profile_stages:
-                        torch.cuda.synchronize()
-                        elapsed_ms = (time.perf_counter() - t_reid_extract_start) * 1000
-                        seq_stage_totals["reid_extract"] += elapsed_ms
-                        record_stage_sample("reid_extract", elapsed_ms)
-                        if current_stage_sample_active:
-                            native_stats = perception_pipeline.get_reid_profile_stats()
-                            seq_native_reid_samples["native_reid_crop"].append(
-                                float(native_stats.get("crop_ms", 0.0))
-                            )
-                            seq_native_reid_samples["native_reid_pre_normalize"].append(
-                                float(native_stats.get("extract_pre_normalize_ms", 0.0))
-                            )
-                            seq_native_reid_samples["native_reid_trt_enqueue"].append(
-                                float(native_stats.get("extract_trt_enqueue_ms", 0.0))
-                            )
-                            seq_native_reid_samples["native_reid_l2_normalize"].append(
-                                float(native_stats.get("extract_l2_normalize_ms", 0.0))
-                            )
+                if profile_stages:
+                    torch.cuda.synchronize()
+                    t_reid_budget_start = time.perf_counter()
+
+                num_dets = fused_boxes.shape[0]
+                if reid_budget_raw >= 1.0:
+                    actual_budget = int(reid_budget_raw)
+                elif reid_budget_raw > 0.0:
+                    actual_budget = max(1, int(reid_budget_raw * num_dets))
                 else:
-                    frame_batch = pool.frame_buffer.unsqueeze(0)
-                    if reid_crop_layout == "parts":
+                    actual_budget = 0  # Unlimited or handled by _budget_reid_candidates
+
+                budget_indices = _budget_reid_candidates(
+                    fused_boxes,
+                    fused_scores,
+                    actual_budget,
+                    dynamic_reid=dynamic_reid,
+                    gmc_warp=gmc_warp if gmc_enabled else None,
+                )
+
+                if profile_stages:
+                    torch.cuda.synchronize()
+                    elapsed_ms = (time.perf_counter() - t_reid_budget_start) * 1000
+                    seq_stage_totals["reid_budget"] += elapsed_ms
+                    record_stage_sample("reid_budget", elapsed_ms)
+
+                # Initialize full embeddings with zeros. Detections without budget
+                # will have neutral features for association.
+                embeddings = torch.zeros(
+                    (fused_boxes.shape[0], extractor.feature_dim),
+                    device=fused_boxes.device,
+                    dtype=torch.float32,
+                )
+
+                if budget_indices.numel() > 0:
+                    budgeted_boxes = fused_boxes[budget_indices].contiguous()
+
+                    if native_reid_available and perception_pipeline is not None:
+                        frame_hwc = pool.frame_buffer.permute(1, 2, 0).contiguous()
+                        # Temporary buffer for budgeted embeddings
+                        budget_embeddings = torch.empty(
+                            (budget_indices.numel(), extractor.feature_dim),
+                            device=fused_boxes.device,
+                            dtype=torch.float32,
+                        )
+
                         if profile_stages:
+                            perception_pipeline.reset_reid_profile_stats()
                             torch.cuda.synchronize()
-                            t_reid_crop_start = time.perf_counter()
-                        crops = cropper.process_parts(frame_batch, fused_boxes)
+                            t_reid_extract_start = time.perf_counter()
+
+                        perception_pipeline.extract_reid(
+                            frame_hwc.data_ptr(),
+                            h_orig,
+                            w_orig,
+                            budgeted_boxes.data_ptr(),
+                            int(budgeted_boxes.shape[0]),
+                            budget_embeddings.data_ptr(),
+                            torch.cuda.current_stream().cuda_stream,
+                        )
+
                         if profile_stages:
                             torch.cuda.synchronize()
                             elapsed_ms = (
-                                time.perf_counter() - t_reid_crop_start
+                                time.perf_counter() - t_reid_extract_start
                             ) * 1000
-                            seq_stage_totals["reid_crop"] += elapsed_ms
-                            record_stage_sample("reid_crop", elapsed_ms)
-                        if crops.numel() > 0:
-                            if profile_stages:
-                                torch.cuda.synchronize()
-                                t_reid_extract_start = time.perf_counter()
-                            embeddings = extractor.extract_parts_fused(crops)
-                            if profile_stages:
-                                torch.cuda.synchronize()
-                                elapsed_ms = (
-                                    time.perf_counter() - t_reid_extract_start
-                                ) * 1000
-                                seq_stage_totals["reid_extract"] += elapsed_ms
-                                record_stage_sample("reid_extract", elapsed_ms)
+                            seq_stage_totals["reid_extract"] += elapsed_ms
+                            record_stage_sample("reid_extract", elapsed_ms)
+                            if current_stage_sample_active:
+                                native_stats = (
+                                    perception_pipeline.get_reid_profile_stats()
+                                )
+                                seq_native_reid_samples["native_reid_crop"].append(
+                                    float(native_stats.get("crop_ms", 0.0))
+                                )
+                                seq_native_reid_samples[
+                                    "native_reid_pre_normalize"
+                                ].append(
+                                    float(
+                                        native_stats.get(
+                                            "extract_pre_normalize_ms", 0.0
+                                        )
+                                    )
+                                )
+                                seq_native_reid_samples["native_reid_trt_enqueue"].append(
+                                    float(
+                                        native_stats.get("extract_trt_enqueue_ms", 0.0)
+                                    )
+                                )
+                                seq_native_reid_samples["native_reid_l2_normalize"].append(
+                                    float(native_stats.get("extract_l2_normalize_ms", 0.0))
+                                )
+                        embeddings[budget_indices] = budget_embeddings
                     else:
-                        if profile_stages:
-                            torch.cuda.synchronize()
-                            t_reid_crop_start = time.perf_counter()
-                        crops = cropper.process(frame_batch, fused_boxes)
-                        if profile_stages:
-                            torch.cuda.synchronize()
-                            elapsed_ms = (
-                                time.perf_counter() - t_reid_crop_start
-                            ) * 1000
-                            seq_stage_totals["reid_crop"] += elapsed_ms
-                            record_stage_sample("reid_crop", elapsed_ms)
-                        if crops.numel() > 0:
+                        frame_batch = pool.frame_buffer.unsqueeze(0)
+                        if reid_crop_layout == "parts":
                             if profile_stages:
                                 torch.cuda.synchronize()
-                                t_reid_extract_start = time.perf_counter()
-                            embeddings = extractor.extract(crops)
+                                t_reid_crop_start = time.perf_counter()
+                            crops = cropper.process_parts(frame_batch, budgeted_boxes)
                             if profile_stages:
                                 torch.cuda.synchronize()
                                 elapsed_ms = (
-                                    time.perf_counter() - t_reid_extract_start
+                                    time.perf_counter() - t_reid_crop_start
                                 ) * 1000
-                                seq_stage_totals["reid_extract"] += elapsed_ms
-                                record_stage_sample("reid_extract", elapsed_ms)
+                                seq_stage_totals["reid_crop"] += elapsed_ms
+                                record_stage_sample("reid_crop", elapsed_ms)
+
+                            if crops.numel() > 0:
+                                if profile_stages:
+                                    torch.cuda.synchronize()
+                                    t_reid_extract_start = time.perf_counter()
+                                if last_vit_embed:
+                                    budget_embeddings, _stab = extractor.extract_with_stability(
+                                        crops,
+                                        sigma_embed=last_vit_sigma_embed,
+                                        sigma_gate=last_vit_sigma_gate,
+                                        top_k_ratio=last_vit_top_k,
+                                    )
+                                else:
+                                    budget_embeddings = extractor.extract_parts_fused(crops)
+                                    _stab = None
+                                if profile_stages:
+                                    torch.cuda.synchronize()
+                                    elapsed_ms = (
+                                        time.perf_counter() - t_reid_extract_start
+                                    ) * 1000
+                                    seq_stage_totals["reid_extract"] += elapsed_ms
+                                    record_stage_sample("reid_extract", elapsed_ms)
+                                embeddings[budget_indices] = budget_embeddings
+                                if last_vit_gate > 0.0 and _stab is not None:
+                                    _low_stab = _stab < last_vit_gate
+                                    embeddings[budget_indices[_low_stab]] = 0.0
+                        else:
+                            if profile_stages:
+                                torch.cuda.synchronize()
+                                t_reid_crop_start = time.perf_counter()
+                            crops = cropper.process(frame_batch, budgeted_boxes)
+                            if profile_stages:
+                                torch.cuda.synchronize()
+                                elapsed_ms = (
+                                    time.perf_counter() - t_reid_crop_start
+                                ) * 1000
+                                seq_stage_totals["reid_crop"] += elapsed_ms
+                                record_stage_sample("reid_crop", elapsed_ms)
+
+                            if crops.numel() > 0:
+                                if profile_stages:
+                                    torch.cuda.synchronize()
+                                    t_reid_extract_start = time.perf_counter()
+                                if last_vit_embed:
+                                    budget_embeddings, _stab = extractor.extract_with_stability(
+                                        crops,
+                                        sigma_embed=last_vit_sigma_embed,
+                                        sigma_gate=last_vit_sigma_gate,
+                                        top_k_ratio=last_vit_top_k,
+                                    )
+                                else:
+                                    budget_embeddings = extractor.extract(crops)
+                                    _stab = None
+                                if profile_stages:
+                                    torch.cuda.synchronize()
+                                    elapsed_ms = (
+                                        time.perf_counter() - t_reid_extract_start
+                                    ) * 1000
+                                    seq_stage_totals["reid_extract"] += elapsed_ms
+                                    record_stage_sample("reid_extract", elapsed_ms)
+                                embeddings[budget_indices] = budget_embeddings
+                                if last_vit_gate > 0.0 and _stab is not None:
+                                    _low_stab = _stab < last_vit_gate
+                                    embeddings[budget_indices[_low_stab]] = 0.0
 
             mid_thresh_scale = geometry_mid_thresh_scale(
                 fused_boxes,
@@ -2234,9 +2460,26 @@ def run_eval(
             )
             gmc_warp = None
             if gmc_estimator is not None:
-                _raw_warp = gmc_estimator.estimate(pool.frame_buffer)
+                if hasattr(gmc_estimator, "estimate_mat"):
+                    # C++ version or GlobalMotionCompensator
+                    # Convert [C, H, W] to [H, W, C] for C++ GMC kernel
+                    hwc_frame = pool.frame_buffer.permute(1, 2, 0).contiguous()
+                    _raw_warp = gmc_estimator.estimate(
+                        hwc_frame.data_ptr(),
+                        w_orig,
+                        h_orig,
+                        torch.cuda.current_stream().cuda_stream,
+                    )
+                else:
+                    _raw_warp = gmc_estimator.estimate(pool.frame_buffer)
+
                 if _raw_warp is not None:
-                    gmc_warp = _raw_warp.to(fused_boxes.device)
+                    if isinstance(_raw_warp, list):
+                        gmc_warp = torch.tensor(
+                            _raw_warp, dtype=torch.float32, device=fused_boxes.device
+                        )
+                    else:
+                        gmc_warp = _raw_warp.to(fused_boxes.device)
             track_results, _ = time_stage(
                 seq_stage_totals,
                 "track",

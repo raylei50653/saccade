@@ -272,6 +272,15 @@ def build_parser():
         help="Enable global motion compensation.",
     )
     assoc_group.add_argument(
+        "--gmc-mode",
+        choices=["cpu", "gpu"],
+        default="gpu",
+        help=_help(
+            "GMC algorithm mode. 'cpu' uses OpenCV LK; 'gpu' uses cuFFT phase correlation.",
+            range_hint="cpu/gpu",
+        ),
+    )
+    assoc_group.add_argument(
         "--gmc-downscale",
         type=int,
         default=8,
@@ -280,6 +289,11 @@ def build_parser():
             range_hint=">=1",
             edge="too large is faster but loses fine camera motion",
         ),
+    )
+    assoc_group.add_argument(
+        "--homography-root",
+        default="",
+        help="Optional directory containing sequence-specific .txt homography matrices (3x3 row-major).",
     )
     assoc_group.add_argument(
         "--nsa-kalman",
@@ -484,6 +498,16 @@ def build_parser():
         "exist at all and how strict identity similarity should be."
     )
     reid_group.add_argument(
+        "--reid-budget",
+        type=float,
+        default=0.2,
+        help=_help(
+            "Maximum detections to ReID per frame; <1.0 means ratio of detections, >=1 means fixed count, 0 means unlimited.",
+            range_hint=">=0",
+            edge="lower saves FPS but risks missing identity signals",
+        ),
+    )
+    reid_group.add_argument(
         "--profile-lazy-reid-candidates",
         action="store_true",
         help="Profile candidate generation for lazy ReID triggering.",
@@ -528,6 +552,36 @@ def build_parser():
         "--reid-engine-path",
         default="",
         help="Optional TensorRT/engine path for the selected ReID backend.",
+    )
+    reid_group.add_argument(
+        "--last-vit-embed",
+        action="store_true",
+        help="Phase 2C: replace image_embeds with LaSt-ViT V1 frequency-filtered embedding.",
+    )
+    reid_group.add_argument(
+        "--last-vit-gate",
+        type=float,
+        default=0.0,
+        help="Phase 2C: stability gate threshold [0,1]. Embeddings below this are zeroed "
+             "out before bank/tracker injection. 0 disables.",
+    )
+    reid_group.add_argument(
+        "--last-vit-sigma-embed",
+        type=float,
+        default=0.015,
+        help="Gaussian sigma for Top-K patch selection (LaSt-ViT).",
+    )
+    reid_group.add_argument(
+        "--last-vit-sigma-gate",
+        type=float,
+        default=0.040,
+        help="Gaussian sigma for stability gating (LaSt-ViT).",
+    )
+    reid_group.add_argument(
+        "--last-vit-top-k",
+        type=float,
+        default=0.5,
+        help="Fraction of N patches to pool in LaSt-ViT (top_k_ratio).",
     )
     reid_group.add_argument(
         "--reid-interval",
@@ -730,6 +784,36 @@ def build_parser():
         ),
     )
     semantic_group.add_argument(
+        "--semantic-w-sim-base",
+        type=float,
+        default=0.0,
+        help=_help("A1 Unified Score: Base weight for appearance similarity.", range_hint="0-1"),
+    )
+    semantic_group.add_argument(
+        "--semantic-w-iou-base",
+        type=float,
+        default=0.0,
+        help=_help("A1 Unified Score: Base weight for spatial IoU.", range_hint="0-1"),
+    )
+    semantic_group.add_argument(
+        "--semantic-w-maha-base",
+        type=float,
+        default=0.0,
+        help=_help("A1 Unified Score: Base weight for Mahalanobis score.", range_hint="0-1"),
+    )
+    semantic_group.add_argument(
+        "--semantic-shift-ambiguity",
+        type=float,
+        default=0.0,
+        help=_help("A1 Unified Score: Shift weight from IoU to Sim under crowd ambiguity.", range_hint="0-1"),
+    )
+    semantic_group.add_argument(
+        "--semantic-shift-lost-age",
+        type=float,
+        default=0.0,
+        help=_help("A1 Unified Score: Shift weight from IoU to Sim as lost age increases.", range_hint="0-1"),
+    )
+    semantic_group.add_argument(
         "--force-python-relinker",
         action="store_true",
         default=False,
@@ -778,6 +862,72 @@ def build_parser():
             range_hint="0-1",
         ),
     )
+    semantic_group.add_argument(
+        "--appearance-bank-high-quality-min-score",
+        type=float,
+        default=0.70,
+        help=_help(
+            "Minimum detection score for a bank sample to qualify as high-quality "
+            "(used for reference injection gate, Phase 3).",
+            range_hint="0-1",
+        ),
+    )
+    semantic_group.add_argument(
+        "--appearance-bank-min-aspect",
+        type=float,
+        default=1.2,
+        help=_help(
+            "Minimum h/w aspect ratio for a high-quality bank sample (person tracking).",
+            range_hint=">=0",
+        ),
+    )
+    semantic_group.add_argument(
+        "--appearance-bank-max-aspect",
+        type=float,
+        default=4.5,
+        help=_help(
+            "Maximum h/w aspect ratio for a high-quality bank sample (person tracking).",
+            range_hint=">=0",
+        ),
+    )
+    semantic_group.add_argument(
+        "--semantic-clean-score-threshold",
+        type=float,
+        default=0.60,
+        help=_help(
+            "Detection score below which current observation is treated as low-quality "
+            "(triggers strict_sim_threshold gate, Phase 3).",
+            range_hint="0-1",
+        ),
+    )
+    semantic_group.add_argument(
+        "--semantic-clean-min-aspect",
+        type=float,
+        default=1.2,
+        help=_help(
+            "Minimum h/w aspect ratio for current observation to be treated as clean.",
+            range_hint=">=0",
+        ),
+    )
+    semantic_group.add_argument(
+        "--semantic-clean-max-aspect",
+        type=float,
+        default=4.5,
+        help=_help(
+            "Maximum h/w aspect ratio for current observation to be treated as clean.",
+            range_hint=">=0",
+        ),
+    )
+    semantic_group.add_argument(
+        "--semantic-strict-sim-threshold",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Similarity threshold for low-quality observations (0=use sim_threshold). "
+            "Set higher than semantic-threshold to enforce strict false-accept filter.",
+            range_hint="0-1",
+        ),
+    )
 
     trigger_group = parser.add_argument_group("Dynamic ReID trigger policy")
     trigger_group.description = (
@@ -808,7 +958,7 @@ def build_parser():
             "score_ema_geom",
             "score_ema_conf",
         ),
-        default="event_any",
+        default="score_ema",
         help="Dynamic ReID trigger logic.",
     )
     trigger_group.add_argument(

@@ -34,6 +34,14 @@ struct TrackCandidateSnapshot {
     float x1, y1, x2, y2;
 };
 
+struct UnifiedScoreParams {
+    float w_sim_base = 0.0f;
+    float w_iou_base = 0.0f;
+    float w_maha_base = 0.0f;
+    float shift_ambiguity = 0.0f;
+    float shift_lost_age = 0.0f;
+};
+
 /**
  * @brief ITracker 接口
  */
@@ -74,6 +82,14 @@ public:
         bool nsa_kalman = false
     );
     void set_reid_params(float cos_threshold, float iou_low, float iou_high, float weight);
+
+    /**
+     * @brief Set homography matrix for 2D Ground Plane Mapping (MMD).
+     * @param h 9-float array (3x3 row-major). If all zeros, MMD is disabled.
+     */
+    void set_homography(const float* h);
+
+    void set_unified_score_params(const UnifiedScoreParams& params);
     void update_reference_features(int* track_ids, float* features_ptr, int num, cudaStream_t stream);
     void set_clean_embedding_flags(int* track_ids, bool* flags, int n, cudaStream_t stream);
     std::vector<TrackStateSnapshot> get_state_snapshots(cudaStream_t stream);

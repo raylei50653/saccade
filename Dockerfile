@@ -43,8 +43,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     zlib1g-dev \
     ffmpeg \
     zsh \
-    libnvinfer-dev \
-    libnvinfer-plugin-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # 3. 安裝 UV 與配置環境

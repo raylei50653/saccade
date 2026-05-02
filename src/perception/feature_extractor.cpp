@@ -20,6 +20,16 @@ void launch_parts_fuse(
     float w0, float w1, float w2,
     cudaStream_t stream);
 
+void launch_last_vit_refinement(
+    const float* lhs,
+    float* embedding_out,
+    float* stability_out,
+    int B, int N, int C,
+    float sigma_embed,
+    float sigma_gate,
+    float top_k_ratio,
+    cudaStream_t stream);
+
 FeatureExtractor::FeatureExtractor(const std::string& model_path, ModelType type, int max_batch)
     : type_(type), max_batch_(max_batch) {
     
@@ -98,7 +108,14 @@ FeatureExtractor::FeatureExtractor(const std::string& model_path, ModelType type
             void* ptr = nullptr;
             cudaMalloc(&ptr, size);
             scratch_buffers_.push_back({name, ptr});
-            std::cout << "🔍 [FeatureExtractor] Allocated scratch buffer for unused output: " << name << " (" << size << " bytes)" << std::endl;
+            std::cout << "[FeatureExtractor] Allocated scratch buffer for unused output: " << name << " (" << size << " bytes)" << std::endl;
+
+            // Record dims for LaSt-ViT if this is last_hidden_state [B, N, C]
+            if (std::string(name) == "last_hidden_state" && dims.nbDims == 3) {
+                lhs_name_ = name;
+                lhs_N_ = (dims.d[1] == -1) ? 196 : static_cast<int>(dims.d[1]);
+                lhs_C_ = (dims.d[2] == -1) ? 768 : static_cast<int>(dims.d[2]);
+            }
         }
     }
 
@@ -250,5 +267,67 @@ std::pair<int, int> FeatureExtractor::get_input_hw() const { return {input_h_, i
 void FeatureExtractor::set_profiling_enabled(bool enabled) { profiling_enabled_ = enabled; }
 void FeatureExtractor::reset_profile_stats() { last_profile_stats_ = ProfileStats{}; }
 FeatureExtractor::ProfileStats FeatureExtractor::get_profile_stats() const { return last_profile_stats_; }
+
+void FeatureExtractor::extract_with_stability(
+    void* input_cuda_ptr, int num_images,
+    void* embedding_out, void* stability_out,
+    cudaStream_t stream,
+    float sigma_embed, float sigma_gate, float top_k_ratio)
+{
+    if (lhs_name_.empty()) {
+        throw std::runtime_error(
+            "extract_with_stability requires a SigLIP2 model with last_hidden_state output");
+    }
+    if (num_images <= 0) return;
+
+    // Find the lhs scratch buffer pointer
+    void* lhs_buf = nullptr;
+    for (auto& p : scratch_buffers_) {
+        if (p.first == lhs_name_) { lhs_buf = p.second; break; }
+    }
+    if (!lhs_buf) {
+        throw std::runtime_error("extract_with_stability: last_hidden_state buffer not found");
+    }
+
+    int processed = 0;
+    while (processed < num_images) {
+        int batch = std::min(num_images - processed, max_batch_);
+        float* cur_input     = (float*)input_cuda_ptr + processed * 3 * input_h_ * input_w_;
+        float* cur_embed_out = (float*)embedding_out  + processed * feature_dim_;
+        float* cur_stab_out  = (float*)stability_out  + processed;
+
+        // Pre-normalize (SigLIP: x*2-1)
+        launch_reid_pre_normalize(
+            cur_input, batch, 3, input_h_, input_w_,
+            nullptr, nullptr, true, stream);
+
+        // Set input shape if dynamic
+        if (is_dynamic_) {
+            engine_->set_input_shape(input_name_.c_str(), {batch, 3, input_h_, input_w_});
+        }
+
+        // Bind tensors — lhs goes to its scratch buffer (overwritten each batch, that's fine)
+        engine_->set_tensor_address(input_name_.c_str(), cur_input);
+        engine_->set_tensor_address(output_name_.c_str(), cur_embed_out); // image_embeds reused as temp
+        for (auto& p : scratch_buffers_) {
+            engine_->set_tensor_address(p.first.c_str(), p.second);
+        }
+
+        // TRT inference — populates lhs_buf [batch, N, C] and cur_embed_out [batch, feat_dim]
+        engine_->enqueue_v3(stream);
+
+        // LaSt-ViT refinement: overwrites cur_embed_out with Top-K pooled result
+        launch_last_vit_refinement(
+            (const float*)lhs_buf, cur_embed_out, cur_stab_out,
+            batch, lhs_N_, lhs_C_,
+            sigma_embed, sigma_gate, top_k_ratio,
+            stream);
+
+        // L2 normalize the refined embedding
+        launch_l2_normalize(cur_embed_out, batch, lhs_C_, stream);
+
+        processed += batch;
+    }
+}
 
 } // namespace saccade

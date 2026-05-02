@@ -1,6 +1,7 @@
 from collections import deque
 import torch
 import torch.nn.functional as F
+import numpy as np
 from dataclasses import dataclass
 from typing import List, Any, cast, Optional, TypedDict
 
@@ -23,6 +24,12 @@ except ImportError:
             pass
 
         def set_reid_params(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+        def set_homography(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+        def set_unified_score_params(self, *args: Any, **kwargs: Any) -> None:
             pass
 
         def update(self, *args: Any, **kwargs: Any) -> List[TrackResult]:
@@ -49,6 +56,7 @@ class AppearanceSample:
     det_score: float
     iou: float
     frame_id: int
+    aspect_ratio: float = 0.0  # h/w of detection box; 0.0 = unknown
 
 
 @dataclass(frozen=True)
@@ -139,6 +147,10 @@ class DynamicReIDController:
         self._score_geom = 0.0
         self._score_conf = 0.0
         self._last_birth_death_boost = 0.0
+        self._last_new_ids: set[int] = set()
+        self._last_lost_ids: set[int] = set()
+        self._per_track_instability: dict[int, float] = {}
+        self._per_track_conf_jitter: dict[int, float] = {}
         self._persist_counter = 0
         self._cooldown_remaining = 0
 
@@ -188,6 +200,8 @@ class DynamicReIDController:
         unstable = 0
         unstable_signal = 0.0
         conf_signal = 0.0
+        self._per_track_instability = {}
+        self._per_track_conf_jitter = {}
 
         # Prepare GMC affine parameters if provided
         # gmc is expected to be a 2x3 matrix: [[H00, H01, H02], [H10, H11, H12]]
@@ -232,10 +246,15 @@ class DynamicReIDController:
             if instability > 0.0:
                 unstable += 1
                 unstable_signal += instability
+                self._per_track_instability[tid] = instability
+
             prev_score_ema = self._track_score_ema.get(tid, prev[tid].det_score)
-            conf_signal += max(
+            conf_jitter = max(
                 0.0, abs(tracks[tid].det_score - prev_score_ema) - self.conf_jitter_gate
             )
+            if conf_jitter > 0.0:
+                conf_signal += conf_jitter
+                self._per_track_conf_jitter[tid] = conf_jitter
 
         new_signal = sum(tracks[tid].det_score for tid in curr_ids - prev_ids)
         lost_signal = 0.0
@@ -265,6 +284,9 @@ class DynamicReIDController:
         self._score_lost = self.score_decay * self._score_lost + lost_signal
         self._score_geom = self.score_decay * self._score_geom + unstable_signal
         self._score_conf = self.score_decay * self._score_conf + conf_signal
+
+        self._last_new_ids = curr_ids - prev_ids
+        self._last_lost_ids = prev_ids - curr_ids
         self._last_birth_death_boost = (
             self.birth_death_boost
             if new_signal > 0.0
@@ -285,6 +307,98 @@ class DynamicReIDController:
             )
         self._track_ages = next_ages
         self._track_score_ema = next_score_ema
+
+    def get_track_priorities(
+        self,
+        tracks: dict[int, ReIDTrackObservation],
+        weight_recovery: float = 2.0,
+    ) -> dict[int, float]:
+        """Compute per-track priority scores for budgeted ReID (A3 Phase 1)."""
+        priorities: dict[int, float] = {}
+        # birth_death_boost applies only to NEW tracks if event is active.
+        bd_boost = self._last_birth_death_boost
+
+        for tid, obs in tracks.items():
+            priority = 0.0
+            if tid in self._last_new_ids:
+                # 1. New Track: det_score base + birth_death boost
+                priority = self.weight_new * obs.det_score + bd_boost
+            else:
+                # 2. Matched tracks
+                instability = self._per_track_instability.get(tid, 0.0)
+                jitter = self._per_track_conf_jitter.get(tid, 0.0)
+                priority = self.weight_geom * instability + self.weight_conf * jitter
+
+                # 3. Recovery boost: if this track was lost in the very recent history
+                # We can check if its age > 1 (meaning it's not brand new) but it was not
+                # matched in the immediately preceding frame.
+                age = self._track_ages.get(tid, 1)
+                # Note: if it's in shared_ids (it was in prev frame), then it's NOT recovered.
+                # If it's in tracks but NOT in _last_new_ids, it MUST be recovered.
+                is_recovered = (
+                    tid not in self._last_new_ids
+                    and len(self._track_history) >= 2
+                    and tid not in self._track_history[-2]
+                )
+                if is_recovered:
+                    recovery_factor = min(1.0, age / float(self.lost_age_cap))
+                    priority += weight_recovery * recovery_factor
+
+            # Stable tracks get a tiny base priority from their confidence.
+            if priority <= 0.0:
+                priority = 0.1 * obs.det_score
+
+            priorities[tid] = priority
+
+        return priorities
+
+    def get_priorities(self) -> dict[int, float]:
+        """Returns priorities for tracks based on state as of the last observed frame."""
+        priorities = {}
+        
+        # 1. New tracks (born in the frame just observed)
+        # We want to ReID them in the NEXT frame to confirm they are stable.
+        for tid in self._last_new_ids:
+            priorities[tid] = self.weight_new * self._track_score_ema.get(tid, 0.5) + self._last_birth_death_boost
+            
+        # 2. Matched tracks (active in the frame just observed)
+        # We prioritize those that were unstable or had high confidence jitter.
+        for tid in self._track_ages:
+            if tid in self._last_new_ids: continue
+            instability = self._per_track_instability.get(tid, 0.0)
+            jitter = self._per_track_conf_jitter.get(tid, 0.0)
+            priority = self.weight_geom * instability + self.weight_conf * jitter
+            if priority <= 0.0:
+                priority = 0.1 * self._track_score_ema.get(tid, 0.5)
+            priorities[tid] = priority
+            
+        # 3. Lost tracks (disappeared in the frame just observed)
+        # We want to find them in the current frame.
+        for tid in self._last_lost_ids:
+            # We don't have a current EMA for them easily accessible if they just disappeared,
+            # but we can assume they were important.
+            priorities[tid] = self.weight_lost * 1.0 # Mature/Stable lost tracks
+            
+        return priorities
+
+    def get_last_boxes(self) -> dict[int, tuple[float, float, float, float]]:
+        """Returns the last known boxes for all tracks (active and just lost)."""
+        boxes = {}
+        if not self._track_history:
+            return boxes
+            
+        # Active tracks from the most recent frame
+        for tid, obs in self._track_history[-1].items():
+            boxes[tid] = obs.box
+            
+        # Just lost tracks (were in history[-2] but not history[-1])
+        if len(self._track_history) >= 2:
+            prev = self._track_history[-2]
+            curr = self._track_history[-1]
+            for tid in set(prev) - set(curr):
+                boxes[tid] = prev[tid].box
+                
+        return boxes
 
     def should_reid(self, det_count: int) -> bool:
         if det_count <= 0 or not self._track_history:
@@ -431,15 +545,22 @@ class TrackAppearanceBank:
         min_score: float = 0.45,
         min_iou: float = 0.35,
         consistency_threshold: float = 0.82,
+        high_quality_min_score: float = 0.70,
+        min_aspect: float = 1.2,
+        max_aspect: float = 4.5,
     ) -> None:
         self.k = max(1, k)
         self.min_score = float(min_score)
         self.min_iou = float(min_iou)
         self.consistency_threshold = float(consistency_threshold)
+        self.high_quality_min_score = float(high_quality_min_score)
+        self.min_aspect = float(min_aspect)
+        self.max_aspect = float(max_aspect)
         self._banks: dict[int, list[AppearanceSample]] = {}
         self._representatives: dict[int, torch.Tensor] = {}
         self._consistency: dict[int, float] = {}
         self._clean_ids: set[int] = set()
+        self._high_quality_reps: dict[int, torch.Tensor] = {}
 
     def update(
         self,
@@ -451,6 +572,7 @@ class TrackAppearanceBank:
         frame_id: int,
         geometry_clean: bool = True,
         suspect_box: bool = False,
+        aspect_ratio: float = 0.0,
     ) -> None:
         if (
             det_score < self.min_score
@@ -463,7 +585,7 @@ class TrackAppearanceBank:
             embedding.detach().to(device="cpu", dtype=torch.float32), dim=0
         )
         bank = self._banks.setdefault(track_id, [])
-        bank.append(AppearanceSample(emb, det_score, iou, frame_id))
+        bank.append(AppearanceSample(emb, det_score, iou, frame_id, aspect_ratio))
         # Rank: 0.5*det_score + 0.3*iou, with frame_id as recency tiebreaker
         bank.sort(
             key=lambda s: (0.5 * s.det_score + 0.3 * s.iou, s.frame_id), reverse=True
@@ -473,7 +595,7 @@ class TrackAppearanceBank:
 
     def update_many(
         self,
-        updates: list[tuple[int, torch.Tensor, float, float, int, bool, bool]],
+        updates: list[tuple[int, torch.Tensor, float, float, int, bool, bool, float]],
     ) -> None:
         touched_track_ids: set[int] = set()
         for (
@@ -484,6 +606,7 @@ class TrackAppearanceBank:
             frame_id,
             geometry_clean,
             suspect_box,
+            aspect_ratio,
         ) in updates:
             if (
                 det_score < self.min_score
@@ -496,7 +619,7 @@ class TrackAppearanceBank:
                 embedding.detach().to(device="cpu", dtype=torch.float32), dim=0
             )
             bank = self._banks.setdefault(track_id, [])
-            bank.append(AppearanceSample(emb, det_score, iou, frame_id))
+            bank.append(AppearanceSample(emb, det_score, iou, frame_id, aspect_ratio))
             touched_track_ids.add(track_id)
 
         for track_id in touched_track_ids:
@@ -510,6 +633,14 @@ class TrackAppearanceBank:
 
     def has_clean_embedding(self, track_id: int) -> bool:
         return bool(self._banks.get(track_id))
+
+    def is_high_quality(self, track_id: int) -> bool:
+        """True if at least one bank sample passes the high-quality score/aspect gate."""
+        return track_id in self._high_quality_reps
+
+    def high_quality_representative(self, track_id: int) -> Optional[torch.Tensor]:
+        """Mean embedding of all high-quality samples for this track, or None."""
+        return self._high_quality_reps.get(track_id)
 
     def consistency(self, track_id: int) -> float:
         return self._consistency.get(track_id, 1.0)
@@ -534,6 +665,7 @@ class TrackAppearanceBank:
             self._representatives.pop(tid, None)
             self._consistency.pop(tid, None)
             self._clean_ids.discard(tid)
+            self._high_quality_reps.pop(tid, None)
 
     def _refresh_track(self, track_id: int) -> None:
         bank = self._banks.get(track_id, [])
@@ -541,6 +673,7 @@ class TrackAppearanceBank:
             self._representatives.pop(track_id, None)
             self._consistency.pop(track_id, None)
             self._clean_ids.discard(track_id)
+            self._high_quality_reps.pop(track_id, None)
             return
 
         embs = torch.stack([sample.embedding for sample in bank])
@@ -558,6 +691,34 @@ class TrackAppearanceBank:
             self._clean_ids.add(track_id)
         else:
             self._clean_ids.discard(track_id)
+
+        hq_embs = [
+            s.embedding
+            for s in bank
+            if s.det_score >= self.high_quality_min_score
+            and (
+                s.aspect_ratio == 0.0
+                or self.min_aspect <= s.aspect_ratio <= self.max_aspect
+            )
+        ]
+        if hq_embs:
+            if len(hq_embs) >= 2:
+                stacked_hq = torch.stack(hq_embs)
+                sims_hq = stacked_hq @ stacked_hq.T
+                n_hq = len(hq_embs)
+                hq_consistency = float(
+                    (sims_hq.sum() - n_hq) / max(n_hq * (n_hq - 1), 1)
+                )
+                if hq_consistency >= self.consistency_threshold:
+                    self._high_quality_reps[track_id] = F.normalize(
+                        stacked_hq.mean(dim=0), dim=0
+                    )
+                else:
+                    self._high_quality_reps.pop(track_id, None)
+            else:
+                self._high_quality_reps[track_id] = hq_embs[0]
+        else:
+            self._high_quality_reps.pop(track_id, None)
 
 
 def need_reid_frame(
@@ -638,6 +799,41 @@ class GPUByteTracker:
         set_reid_params = getattr(self.tracker, "set_reid_params", None)
         if set_reid_params is not None:
             set_reid_params(cos_threshold, iou_low, iou_high, weight)
+
+    def set_homography(self, h: Optional[np.ndarray | List[float]]) -> None:
+        """Set 3x3 homography matrix for 2D ground plane mapping (ADR 017)."""
+        set_h = getattr(self.tracker, "set_homography", None)
+        if set_h is not None:
+            if h is None:
+                set_h(None)
+            else:
+                import numpy as np
+                h_arr = np.array(h, dtype=np.float32).flatten()
+                if h_arr.size != 9:
+                    raise ValueError("Homography must have 9 elements (3x3)")
+                set_h(h_arr)
+
+    def set_unified_score_params(
+        self,
+        w_sim_base: float = 0.0,
+        w_iou_base: float = 0.0,
+        w_maha_base: float = 0.0,
+        shift_ambiguity: float = 0.0,
+        shift_lost_age: float = 0.0,
+    ) -> None:
+        import saccade_tracking_ext
+
+        set_unified_score_params = getattr(
+            self.tracker, "set_unified_score_params", None
+        )
+        if set_unified_score_params is not None:
+            params = saccade_tracking_ext.UnifiedScoreParams()
+            params.w_sim_base = w_sim_base
+            params.w_iou_base = w_iou_base
+            params.w_maha_base = w_maha_base
+            params.shift_ambiguity = shift_ambiguity
+            params.shift_lost_age = shift_lost_age
+            set_unified_score_params(params)
 
     def update_reference_features(
         self,

@@ -121,20 +121,26 @@ Saccade 目前以 **MOT17-centered evaluation path** 為最活躍主線，核心
 
 ## 5. 目前最佳主路徑設定
 
-截至 2026-04-30，MOT17 SDP 7 序列的 current documented default 為：
+截至 2026-05-01，MOT17 SDP 7 序列的 current documented default 為：
 
 - `--cross-tile-merge`
 - `--match-thresh 0.78`
-- `--semantic-threshold 0.91`
+- **A1 Unified Score (動態權重)**:
+  - `--semantic-w-sim-base 0.80`
+  - `--semantic-w-iou-base 0.34`
+  - `--semantic-w-maha-base 0.31`
+  - `--semantic-shift-ambiguity 0.34`
+  - `--semantic-shift-lost-age 0.18`
+- **A2 Quality Gate (品質門檻)**:
+  - `--semantic-clean-score-threshold 0.65`
+  - `--semantic-strict-sim-threshold 0.74`
+  - `--appearance-bank-high-quality-min-score 0.75`
 
 近期主結論：
 
-- `cross-tile merge` 是穩定增益來源，但增益不是 detection merge 自己完成的，而是要配合 association / semantic gate。
-- `thr=0.92` 路徑沒有打贏目前 default。
-- reciprocal margin 不再是近期 default tuning 主軸。
-- 下一步主軸是 **reference quality / false-accept filtering**，不是再做大範圍 threshold 亂掃。
-
-完整近期結論與 backlog 以 [docs/TODO.md](/docs/TODO.md:1) 為準。
+- `A1 + A2` 組合已達到 **IDF1 46.3%**，成功追平硬閾值紀錄，且在擁擠場景 (Ambiguity) 與長遺失 (Lost Age) 下具有更好的自動適應能力。
+- `strict_sim_threshold` (0.74) 低於預設的 0.91，說明對於低品質觀測，適度放寬外觀門檻能有效減少 Fragmentations (FN)，而錯誤匹配則由 A1 的動態權重與 A2 的高品質參考庫控住。
+- 下一步主軸是 **Track-Level Budgeted ReID (A3)**，控住運算資源同時維持此高 IDF1 水位。
 
 ---
 
@@ -142,33 +148,32 @@ Saccade 目前以 **MOT17-centered evaluation path** 為最活躍主線，核心
 
 如果沒有更高優先需求，請優先朝這些方向開發：
 
-### P0：Reference Quality + False-Accept Filtering
+### P0：2026 高 MOTA 整合：品質感知關聯 (SelectMOT)
+- **位置**：`src/tracking/tracker_gpu.cu`、`include/tracking/pipeline.hpp`
+- **目標**：實作 ADR 017 規劃的品質加權。在 `Phase 0` 根據 YOLO Confidence 與 bbox 幾何變化動態產生 Quality Score，並在 `Phase 1` 的 Dense Sinkhorn 中作為邊際分佈的先驗權重，抑制遮擋框的競價能力。這是目前最能立即提升擁擠場景 IDF1/MOTA 的方向。
 
-- 位置：
-  - `src/saccade/perception/eval/relink.py`
-  - `src/saccade/perception/tracking/tracker_gpu.py`
-- 目標：
-  - 降低 contaminated reference 進 bank
-  - 對 low-quality current observation 提高 accept 門檻
-  - 改善 `IDs / FP`，接受少量 `FN` 成本
+### P1：2026 高 MOTA 整合：純 GPU 均勻相機補償 (UCMCTrack)
+- **位置**：`include/tracking/gmc.hpp`、`src/tracking/kalman_gpu.cuh`
+- **目標**：實作 ADR 017 規劃的 Uniform CMC 與 2D MMD。將目前依賴 OpenCV 的稀疏光流替換為純 CUDA 實作，並在計算卡爾曼距離時引入地平面透視變換，達成真正的全管線 Zero-Copy。
 
-### P1：Unified Association / Relink Scoring
+### ~~P0：Pre-hoc Embedding Quality (LaSt-ViT CUDA Kernel)~~ — CLOSED No-Go (2026-05-02)
 
-- 位置：
-  - `src/tracking/tracker_gpu.cu`
-  - `src/saccade/perception/eval/relink.py`
-- 目標：
-  - 從多個硬閾值與固定權重，收斂到更一致的 decision score
-  - 讓 `track age / lost age / ambiguity / quality` 真正進入打分
+實作已完成（CUDA kernels + C++ API + PyBind11），但 MOT17 驗證結果僅 +0.09pp IDF1（低於 +1.0pp 門檻）。
+根本限制：SigLIP2 未以 LaSt-ViT 目標訓練，`last_hidden_state` 穩定分數無前景/背景區分力。
+API 保留供未來使用：`FeatureExtractor::extract_with_stability()`，`mot17.py --last-vit-embed`。
+詳見 `docs/experiments/reid/last_vit_integration_analysis.md` §10。
 
-### P1：Track-Level / Budgeted ReID
+### ~~P0：Reference Quality + False-Accept Filtering~~ — DONE (2026-05-01)
 
-- 位置：
-  - `src/saccade/perception/tracking/tracker_gpu.py`
-  - `src/saccade/perception/eval/runner.py`
-- 目標：
-  - 從 frame-level trigger 走向 track-level candidate prioritization
-  - 控住 over-trigger 與 FPS collapse
+bank 高品質 tier + inject gate + false-accept filter 已實作。詳見 `docs/TODO.md` A2 Phase 3 結論。
+
+### ~~P1：Unified Association / Relink Scoring~~ — DONE (2026-05-01)
+
+`w_sim_base/w_iou_base/w_maha_base/shift_ambiguity/shift_lost_age` 動態調整已整合（A1）。
+
+### ~~P1：Track-Level / Budgeted ReID~~ — DONE (2026-05-01)
+
+`--reid-budget 0.2`（Dynamic Ratio 0.2）已成為預設最佳配置（A3，+24% FPS）。
 
 ### P2：GMC Quality-Aware 補強
 

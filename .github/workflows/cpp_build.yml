@@ -32,11 +32,6 @@ jobs:
             python3-pip \
             python3-dev
 
-      - name: Install TensorRT (Minimal for Build)
-        run: |
-          # 安裝 TensorRT 開發庫以通過連結
-          apt-get install -y libnvinfer-dev libnvinfer-plugin-dev
-
       - name: Install uv
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh

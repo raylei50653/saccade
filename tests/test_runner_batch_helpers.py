@@ -167,6 +167,12 @@ class _StubPrimaryAppearanceBank:
     def __init__(self) -> None:
         self.pruned: list[set[int]] = []
 
+    def is_high_quality(self, track_id: int) -> bool:
+        return False
+
+    def high_quality_representative(self, track_id: int) -> torch.Tensor | None:
+        return None
+
     def is_consistent(self, track_id: int) -> bool:
         return track_id == 1
 
@@ -197,6 +203,7 @@ def test_inject_lost_track_references_batches_consistent_tracks() -> None:
                 1,
                 True,
                 False,
+                0.0,
             ),
             (
                 1,
@@ -206,6 +213,7 @@ def test_inject_lost_track_references_batches_consistent_tracks() -> None:
                 2,
                 True,
                 False,
+                0.0,
             ),
             (
                 2,
@@ -215,6 +223,7 @@ def test_inject_lost_track_references_batches_consistent_tracks() -> None:
                 1,
                 True,
                 False,
+                0.0,
             ),
             (
                 2,
@@ -224,6 +233,7 @@ def test_inject_lost_track_references_batches_consistent_tracks() -> None:
                 2,
                 True,
                 False,
+                0.0,
             ),
             (
                 3,
@@ -233,6 +243,7 @@ def test_inject_lost_track_references_batches_consistent_tracks() -> None:
                 1,
                 True,
                 False,
+                0.0,
             ),
             (
                 3,
@@ -242,6 +253,7 @@ def test_inject_lost_track_references_batches_consistent_tracks() -> None:
                 2,
                 True,
                 False,
+                0.0,
             ),
         ]
     )

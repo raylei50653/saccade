@@ -320,7 +320,16 @@ public:
         float clean_margin_ratio = 0.0f,
         float clean_min_aspect = 0.0f,
         float clean_max_aspect = 99.0f,
-        float strict_sim_threshold = 0.0f
+        float strict_sim_threshold = 0.0f,
+        float w_sim_base = 0.0f,
+        float w_iou_base = 0.0f,
+        float w_maha_base = 0.0f,
+        float shift_ambiguity = 0.0f,
+        float shift_lost_age = 0.0f,
+        float iou_weight = 0.0f,
+        float mahalanobis_weight = 0.0f,
+        float dynamic_margin_crowd = 0.0f,
+        float dynamic_margin_age = 0.0f
     )
         : sim_threshold_(sim_threshold),
           ttl_(ttl),
@@ -338,7 +347,16 @@ public:
           clean_margin_ratio_(clean_margin_ratio),
           clean_min_aspect_(clean_min_aspect),
           clean_max_aspect_(clean_max_aspect),
-          strict_sim_threshold_(strict_sim_threshold > 0.0f ? strict_sim_threshold : sim_threshold) {}
+          strict_sim_threshold_(strict_sim_threshold > 0.0f ? strict_sim_threshold : sim_threshold),
+          w_sim_base_(std::max(0.0f, w_sim_base)),
+          w_iou_base_(std::max(0.0f, w_iou_base)),
+          w_maha_base_(std::max(0.0f, w_maha_base)),
+          shift_ambiguity_(shift_ambiguity),
+          shift_lost_age_(shift_lost_age),
+          iou_weight_(std::max(0.0f, iou_weight)),
+          mahalanobis_weight_(std::max(0.0f, mahalanobis_weight)),
+          dynamic_margin_crowd_(std::max(0.0f, dynamic_margin_crowd)),
+          dynamic_margin_age_(std::max(0.0f, dynamic_margin_age)) {}
 
     void update_motion_snapshots(const std::vector<TrackStateSnapshot>& snapshots) {
         for (const auto& snap : snapshots) {
@@ -729,9 +747,19 @@ public:
         if (!alias_.count(raw_id)) {
             stats_.attempts += 1;
             int best_id = -1;
-            float best_sim = current_sim_thresh;
-            float second_best_sim = current_sim_thresh - 1.0f;
+            float best_joint = -1.0f;
+            float best_sim_raw = 0.0f;
+            float second_best_joint = -2.0f;
             float best_iou = 0.0f, best_center = 0.0f, best_maha = 0.0f;
+
+            struct CandidateInfo {
+                int cid;
+                int age;
+                float iou;
+                float center_norm;
+                float maha;
+            };
+            std::vector<CandidateInfo> candidates_to_score;
 
             for (int cid : feature_order_) {
                 const auto feature_it = features_.find(cid);
@@ -751,28 +779,104 @@ public:
                 if (min_consistency_ > 0.0f && buffer_size_ > 1) {
                     if (buffer_consistency(cid) < min_consistency_) { stats_.reject_consistency += 1; continue; }
                 }
+                candidates_to_score.push_back({cid, age, iou, center_norm, maha});
+            }
+
+            int n_gate_passed = static_cast<int>(candidates_to_score.size());
+            bool _use_legacy_joint = iou_weight_ > 0.0f || mahalanobis_weight_ > 0.0f;
+            bool _use_unified_score = w_sim_base_ > 0.0f || w_iou_base_ > 0.0f || w_maha_base_ > 0.0f;
+
+            if (!_use_unified_score && !_use_legacy_joint) {
+                best_joint = current_sim_thresh;
+                second_best_joint = current_sim_thresh - 1.0f;
+            }
+
+            for (const auto& cand : candidates_to_score) {
+                int cid = cand.cid;
+                const auto feature_it = features_.find(cid);
                 std::vector<float> ref = buffer_size_ > 1 ? buffer_mean(cid) : feature_it->second;
                 if (ref.empty()) ref = feature_it->second;
                 const float sim = dot(emb, ref);
-                if (sim > best_sim) {
-                    if (best_id >= 0) second_best_sim = best_sim;
-                    best_id = cid; best_sim = sim;
-                    best_iou = iou; best_center = center_norm; best_maha = maha;
+
+                if (sim < current_sim_thresh) {
+                    stats_.reject_similarity += 1;
+                    continue;
+                }
+
+                float maha_score = 0.0f;
+                if (mahalanobis_threshold_ > 0.0f && cand.maha > 0.0f) {
+                    maha_score = std::max(0.0f, 1.0f - cand.maha / mahalanobis_threshold_);
+                }
+
+                float joint;
+                if (_use_unified_score) {
+                    float w_sim = w_sim_base_;
+                    float w_iou = w_iou_base_;
+                    float w_maha = w_maha_base_;
+
+                    if (n_gate_passed > 1) {
+                        float ambiguity_factor = std::min(1.0f, (n_gate_passed - 1) / 8.0f);
+                        w_sim += shift_ambiguity_ * ambiguity_factor;
+                        w_iou -= shift_ambiguity_ * ambiguity_factor;
+                    }
+
+                    float lost_factor = std::min(1.0f, static_cast<float>(cand.age) / std::max(1, ttl_));
+                    w_sim += shift_lost_age_ * lost_factor;
+                    w_iou -= shift_lost_age_ * lost_factor;
+
+                    w_sim = std::max(0.0f, w_sim);
+                    w_iou = std::max(0.0f, w_iou);
+                    w_maha = std::max(0.0f, w_maha);
+                    float sum_w = w_sim + w_iou + w_maha;
+                    if (sum_w > 0.0f) {
+                        w_sim /= sum_w;
+                        w_iou /= sum_w;
+                        w_maha /= sum_w;
+                    }
+
+                    joint = w_sim * sim + w_iou * cand.iou + w_maha * maha_score;
+                } else if (_use_legacy_joint) {
+                    joint = sim + iou_weight_ * cand.iou + mahalanobis_weight_ * maha_score;
                 } else {
-                    if (sim > second_best_sim) second_best_sim = sim;
+                    joint = sim;
+                }
+
+                if (joint > best_joint) {
+                    if (best_id >= 0) second_best_joint = best_joint;
+                    best_id = cid;
+                    best_joint = joint;
+                    best_sim_raw = sim;
+                    best_iou = cand.iou;
+                    best_center = cand.center_norm;
+                    best_maha = cand.maha;
+                } else {
+                    if (joint > second_best_joint) second_best_joint = joint;
                     stats_.reject_similarity += 1;
                 }
             }
 
-            if (best_id >= 0 && reciprocal_margin_ > 0.0f) {
-                if (best_sim - second_best_sim < reciprocal_margin_) {
+            float effective_margin = reciprocal_margin_;
+            if (best_id >= 0) {
+                if (dynamic_margin_crowd_ > 0.0f && n_gate_passed > 1) {
+                    float crowd_factor = std::min(1.0f, (n_gate_passed - 1) / 8.0f);
+                    effective_margin += dynamic_margin_crowd_ * crowd_factor;
+                }
+                if (dynamic_margin_age_ > 0.0f) {
+                    int lost_frames = frame_id - last_seen_.at(best_id);
+                    float age_factor = std::min(1.0f, static_cast<float>(lost_frames) / std::max(1, ttl_));
+                    effective_margin += dynamic_margin_age_ * age_factor;
+                }
+            }
+
+            if (best_id >= 0 && effective_margin > 0.0f) {
+                if (best_joint - second_best_joint < effective_margin) {
                     stats_.reject_margin += 1; best_id = -1;
                 }
             }
 
             if (best_id >= 0) {
                 stats_.accepted += 1;
-                accept_sims_.push_back(best_sim);
+                accept_sims_.push_back(best_sim_raw);
                 accept_ious_.push_back(best_iou);
                 accept_center_dists_.push_back(best_center);
                 accept_mahas_.push_back(best_maha);
@@ -1009,6 +1113,15 @@ private:
     float clean_min_aspect_;
     float clean_max_aspect_;
     float strict_sim_threshold_;
+    float w_sim_base_;
+    float w_iou_base_;
+    float w_maha_base_;
+    float shift_ambiguity_;
+    float shift_lost_age_;
+    float iou_weight_;
+    float mahalanobis_weight_;
+    float dynamic_margin_crowd_;
+    float dynamic_margin_age_;
 
     std::unordered_map<int, int> alias_;
     std::unordered_map<int, std::vector<float>> features_;
@@ -1441,6 +1554,14 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         .def_readonly("x2", &TrackCandidateSnapshot::x2)
         .def_readonly("y2", &TrackCandidateSnapshot::y2);
 
+    py::class_<UnifiedScoreParams>(m, "UnifiedScoreParams")
+        .def(py::init<>())
+        .def_readwrite("w_sim_base", &UnifiedScoreParams::w_sim_base)
+        .def_readwrite("w_iou_base", &UnifiedScoreParams::w_iou_base)
+        .def_readwrite("w_maha_base", &UnifiedScoreParams::w_maha_base)
+        .def_readwrite("shift_ambiguity", &UnifiedScoreParams::shift_ambiguity)
+        .def_readwrite("shift_lost_age", &UnifiedScoreParams::shift_lost_age);
+
     py::class_<GPUByteTracker>(m, "GPUByteTracker")
         .def(py::init<int, int>(), py::arg("max_objects") = 2048, py::arg("embedding_dim") = 768)
         .def("set_params", &GPUByteTracker::set_params,
@@ -1456,6 +1577,16 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
              py::arg("nsa_kalman") = false)
         .def("set_reid_params", &GPUByteTracker::set_reid_params,
              py::arg("cos_threshold"), py::arg("iou_low"), py::arg("iou_high"), py::arg("weight"))
+        .def("set_homography", [](GPUByteTracker& self, py::object h_obj) {
+            if (h_obj.is_none()) {
+                self.set_homography(nullptr);
+            } else {
+                py::array_t<float, py::array::c_style | py::array::forcecast> h(h_obj);
+                if (h.size() != 9) throw std::invalid_argument("Homography must have 9 elements");
+                self.set_homography(h.data());
+            }
+        }, py::arg("h"))
+        .def("set_unified_score_params", &GPUByteTracker::set_unified_score_params, py::arg("params"))
         .def("update_reference_features", [](GPUByteTracker& self, uintptr_t ids_ptr, uintptr_t features_ptr, int num, uintptr_t stream_ptr) {
             self.update_reference_features(
                 reinterpret_cast<int*>(ids_ptr),
@@ -1543,7 +1674,7 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         "Sync per-track clean-embedding flags from Python bank state to the CUDA tracker");
 
     py::class_<SemanticRelinkerCpp>(m, "SemanticRelinker")
-        .def(py::init<float, int, float, float, int, float, float, int, float, std::string, float, bool, float, float, float, float, float>(),
+        .def(py::init<float, int, float, float, int, float, float, int, float, std::string, float, bool, float, float, float, float, float, float, float, float, float, float, float, float, float, float>(),
              py::arg("sim_threshold") = 0.985f,
              py::arg("ttl") = 45,
              py::arg("ema_beta") = 0.83f,
@@ -1560,7 +1691,16 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
              py::arg("clean_margin_ratio") = 0.0f,
              py::arg("clean_min_aspect") = 0.0f,
              py::arg("clean_max_aspect") = 99.0f,
-             py::arg("strict_sim_threshold") = 0.0f)
+             py::arg("strict_sim_threshold") = 0.0f,
+             py::arg("w_sim_base") = 0.0f,
+             py::arg("w_iou_base") = 0.0f,
+             py::arg("w_maha_base") = 0.0f,
+             py::arg("shift_ambiguity") = 0.0f,
+             py::arg("shift_lost_age") = 0.0f,
+             py::arg("iou_weight") = 0.0f,
+             py::arg("mahalanobis_weight") = 0.0f,
+             py::arg("dynamic_margin_crowd") = 0.0f,
+             py::arg("dynamic_margin_age") = 0.0f)
         .def("update_motion_snapshots", &SemanticRelinkerCpp::update_motion_snapshots, py::arg("snapshots"))
         .def("motion_candidate_ids", &SemanticRelinkerCpp::motion_candidate_ids, py::arg("frame_id") = -1)
         .def("inject_reference", &SemanticRelinkerCpp::inject_reference,
@@ -1631,11 +1771,11 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
              py::arg("min_distance") = 10.0f,
              py::arg("min_inliers") = 8,
              py::arg("ransac_threshold") = 3.0f)
-        .def("estimate", [](GMC& self, uintptr_t frame_ptr, int width, int height, uintptr_t stream_ptr) {
-            auto warp = self.estimate(reinterpret_cast<const float*>(frame_ptr), width, height, reinterpret_cast<cudaStream_t>(stream_ptr));
+        .def("estimate", [](GMC& self, uintptr_t frame_ptr, int width, int height, uintptr_t stream_ptr, bool use_gpu_phase_corr) {
+            auto warp = self.estimate(reinterpret_cast<const float*>(frame_ptr), width, height, reinterpret_cast<cudaStream_t>(stream_ptr), use_gpu_phase_corr);
             if (warp.empty()) return py::none().cast<py::object>();
             return py::cast(warp);
-        }, py::arg("frame_ptr"), py::arg("width"), py::arg("height"), py::arg("stream_ptr"))
+        }, py::arg("frame_ptr"), py::arg("width"), py::arg("height"), py::arg("stream_ptr"), py::arg("use_gpu_phase_corr") = true)
         .def("estimate_mat", [](GMC& self, py::array_t<uint8_t> frame, int downscale) {
             py::buffer_info info = frame.request();
             if (info.ndim != 2 && info.ndim != 3) {

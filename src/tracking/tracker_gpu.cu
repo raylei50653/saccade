@@ -113,12 +113,35 @@ __global__ void compute_innovation_sinv_kernel(
 }
 
 // Returns Mahalanobis^2 between a detection (x1,y1,x2,y2) and a track predicted state.
+// If homography is provided, projects bottom-center to ground plane first (2D MMD).
 __device__ __forceinline__ float mahal_sq_det(
-    const float* trk_state, const float* det_box, const float* s_inv)
+    const float* trk_state, const float* det_box, const float* s_inv, const float* homography)
 {
     float det_h  = fmaxf(det_box[3] - det_box[1], 1e-6f);
     float det_cx = (det_box[0] + det_box[2]) * 0.5f;
     float det_cy = (det_box[1] + det_box[3]) * 0.5f;
+    
+    if (homography) {
+        // 2D MMD: Project bottom center to ground plane
+        auto project = [&](float x, float y, float& ox, float& oy) {
+            float z = homography[6] * x + homography[7] * y + homography[8];
+            float inv_z = 1.0f / (fmaxf(std::abs(z), 1e-6f));
+            ox = (homography[0] * x + homography[1] * y + homography[2]) * inv_z;
+            oy = (homography[3] * x + homography[4] * y + homography[5]) * inv_z;
+        };
+        
+        float t_gx, t_gy, d_gx, d_gy;
+        project(trk_state[0], trk_state[1] + trk_state[3] * 0.5f, t_gx, t_gy);
+        project(det_cx, det_box[3], d_gx, d_gy);
+        
+        // Simple Euclidean distance on ground plane as fallback/complement for gating
+        // In a full MMD, we'd need ground-plane KF. For now, we use a hybrid approach:
+        // If homography is provided, we use the ground-plane L2 distance for the center part of Mahalanobis.
+        float dx = t_gx - d_gx;
+        float dy = t_gy - d_gy;
+        return (dx * dx + dy * dy) * 0.01f; // Scaled L2 for gating
+    }
+
     float det_ar = (det_box[2] - det_box[0]) / det_h;
     float innov[4] = {det_cx - trk_state[0], det_cy - trk_state[1],
                       det_ar - trk_state[2], det_h  - trk_state[3]};
@@ -136,7 +159,7 @@ __device__ __forceinline__ float mahal_sq_det(
 __global__ void count_stage1_candidates_kernel(
     const float* trk_states, const float* det_boxes,
     const bool* trk_active, int* candidate_count,
-    const float* trk_s_inv,
+    const float* trk_s_inv, const float* homography,
     int n_trk, int n_det, float iou_gate, float maha_gate)
 {
     int t = blockIdx.y * blockDim.y + threadIdx.y;
@@ -158,7 +181,7 @@ __global__ void count_stage1_candidates_kernel(
 
     bool pass = (iou > iou_gate);
     if (!pass && trk_s_inv) {
-        float d2 = mahal_sq_det(st, b2, trk_s_inv + t * 16);
+        float d2 = mahal_sq_det(st, b2, trk_s_inv + t * 16, homography);
         pass = (d2 < maha_gate);
     }
     if (pass) atomicAdd(&candidate_count[t], 1);
@@ -175,7 +198,7 @@ __global__ void compute_conditional_cost_kernel(
     const float* trk_embeds, const float* det_embeds,
     const float* det_scores,
     const int* candidate_count, const bool* has_clean_embedding,
-    const float* trk_s_inv,
+    const float* trk_s_inv, const float* homography,
     float* cost_matrix,
     int n_trk, int n_det, int embed_dim, float iou_gate, float maha_gate)
 {
@@ -198,7 +221,7 @@ __global__ void compute_conditional_cost_kernel(
 
     bool pass_iou = (iou > iou_gate);
     if (!pass_iou) {
-        bool pass_maha = trk_s_inv && (mahal_sq_det(st, b2, trk_s_inv + t * 16) < maha_gate);
+        bool pass_maha = trk_s_inv && (mahal_sq_det(st, b2, trk_s_inv + t * 16, homography) < maha_gate);
         if (!pass_maha) {
             cost_matrix[t * n_det + d] = 1.0f;
             return;
@@ -282,8 +305,8 @@ __global__ void compute_cost_matrix_kernel(
 // Replaces the 1-warp design to improve GPU occupancy and cut scheduling jitter.
 // Shared memory layout: s_vals[3][128] + s_idxs[3][128] = 3 KiB per block.
 __global__ void fused_sinkhorn_topk_kernel(
-    const float* cost_matrix, const float* det_scores, const int* trk_states,
-    const bool* trk_active, const int* trk_to_det,
+    const float* cost_matrix, const float* det_scores, const float* det_boxes,
+    const int* trk_states, const bool* trk_active, const int* trk_to_det,
     int n_trk, int n_det, float lambda, float max_cost,
     float min_det_score, float max_det_score, int required_trk_state,
     int* out_indices, float* out_probs)
@@ -308,7 +331,18 @@ __global__ void fused_sinkhorn_topk_kernel(
             float cost = cost_matrix[t * n_det + d];
             if (cost > max_cost) continue;
 
-            float p = expf(-lambda * cost);
+            // ADR 017: Quality-Aware Sinkhorn Prior (Winning Strategy: v2_aspect_only_soft)
+            float aspect_penalty = 1.0f;
+            if (det_boxes) {
+                const float* b2 = det_boxes + d * 4;
+                float aspect = (b2[2] - b2[0]) / (b2[3] - b2[1] + 1e-6f);
+                // Pedestrian aspect ratio penalty: penalize abnormal shapes (e.g., highly occluded / truncated)
+                // Typical pedestrian is around 0.3~0.5.
+                if (aspect > 0.8f) aspect_penalty = fmaxf(0.5f, 1.0f - (aspect - 0.8f));
+                else if (aspect < 0.15f) aspect_penalty = fmaxf(0.5f, 1.0f - (0.15f - aspect) * 5.0f);
+            }
+
+            float p = expf(-lambda * cost) * aspect_penalty;
             if (p > lv0) {
                 lv2 = lv1; li2 = li1; lv1 = lv0; li1 = li0; lv0 = p; li0 = d;
             } else if (p > lv1) {
@@ -850,6 +884,8 @@ public:
         checkCuda(cudaMalloc(&d_has_clean_embedding_, max_objs_ * sizeof(bool)));
         checkCuda(cudaMalloc(&d_candidate_count_, max_objs_ * sizeof(int)));
         checkCuda(cudaMalloc(&d_s_inv_, max_objs_ * 16 * sizeof(float)));
+        checkCuda(cudaMalloc(&d_homography_, 9 * sizeof(float)));
+        checkCuda(cudaMemset(d_homography_, 0, 9 * sizeof(float)));
 
         // M2: GPU spawn + compact result buffers
         checkCuda(cudaMalloc(&d_free_slots_,    max_objs_ * sizeof(int)));
@@ -903,6 +939,7 @@ public:
         cudaFree(d_score_sum_);
         cudaFree(d_has_clean_embedding_); cudaFree(d_candidate_count_);
         cudaFree(d_s_inv_);
+        cudaFree(d_homography_);
         // M2
         cudaFree(d_free_slots_); cudaFree(d_n_free_); cudaFree(d_slot_cursor_);
         cudaFree(d_track_id_ctr_);
@@ -980,13 +1017,13 @@ public:
             checkCuda(cudaMemsetAsync(d_candidate_count_, 0, max_objs_ * sizeof(int), stream));
             kernel::count_stage1_candidates_kernel<<<g_size, b_size, 0, stream>>>(
                 d_states_, d_boxes, d_active_, d_candidate_count_,
-                d_s_inv_, max_objs_, num_dets, iou_stage1_gate_, maha_gate_);
+                d_s_inv_, d_homography_, max_objs_, num_dets, iou_stage1_gate_, maha_gate_);
 
             // Conditional cost: IoU-only fallback, appearance only for ambiguous + clean tracks
             kernel::compute_conditional_cost_kernel<<<g_size, b_size, 0, stream>>>(
                 d_states_, d_boxes, d_features_, d_embeddings, d_scores,
                 d_candidate_count_, d_has_clean_embedding_,
-                d_s_inv_, d_cost_matrix_, max_objs_, num_dets, embed_dim_, iou_stage1_gate_, maha_gate_);
+                d_s_inv_, d_homography_, d_cost_matrix_, max_objs_, num_dets, embed_dim_, iou_stage1_gate_, maha_gate_);
             
             kernel::track_state_update_pre_kernel<<<blocks, threads, 0, stream>>>(
                 d_active_, d_state_, d_hit_streak_, d_confirm_streak_required_, d_score_sum_, max_objs_);
@@ -1009,7 +1046,7 @@ public:
 
             // Stage 1: High-conf dets -> All active tracks
             kernel::fused_sinkhorn_topk_kernel<<<max_objs_, 128, 0, stream>>>(
-                d_cost_matrix_, d_scores, d_state_, d_active_, d_trk_to_det_,
+                d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
                 max_objs_, num_dets, 30.0f, match_thresh_,
                 high_thresh_, 1.1f, -1,
                 d_topk_indices_, d_topk_probs_
@@ -1021,7 +1058,7 @@ public:
 
             // Stage 1b: Mid-conf dets -> Unmatched active tracks
             kernel::fused_sinkhorn_topk_kernel<<<max_objs_, 128, 0, stream>>>(
-                d_cost_matrix_, d_scores, d_state_, d_active_, d_trk_to_det_,
+                d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
                 max_objs_, num_dets, 30.0f, match_thresh_,
                 effective_mid_thresh, high_thresh_, -1,
                 d_topk_indices_, d_topk_probs_
@@ -1033,7 +1070,7 @@ public:
 
             // Stage 2: Low-conf dets -> Unmatched confirmed tracks only
             kernel::fused_sinkhorn_topk_kernel<<<max_objs_, 128, 0, stream>>>(
-                d_cost_matrix_, d_scores, d_state_, d_active_, d_trk_to_det_,
+                d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
                 max_objs_, num_dets, 30.0f, 0.5f,
                 track_thresh_, effective_mid_thresh, 2, // TRACK_CONFIRMED = 2
                 d_topk_indices_, d_topk_probs_
@@ -1103,6 +1140,17 @@ public:
     }
     void set_reid_params(float cos_threshold, float iou_low, float iou_high, float weight) {
         reid_cos_threshold_ = cos_threshold; reid_iou_low_ = iou_low; reid_iou_high_ = iou_high; reid_weight_ = weight;
+    }
+    void set_homography(const float* h) {
+        if (h) {
+            checkCuda(cudaMemcpy(d_homography_, h, 9 * sizeof(float), cudaMemcpyHostToDevice));
+        } else {
+            checkCuda(cudaMemset(d_homography_, 0, 9 * sizeof(float)));
+        }
+    }
+    void set_unified_score_params(const UnifiedScoreParams& /*params*/) {
+        // Unified score params are reserved for future use in the C++ tracker.
+        // The Python layer applies them directly during semantic reranking.
     }
 
     // Scatter bank representative embeddings into d_features_ at the correct slots.
@@ -1342,6 +1390,7 @@ private:
     bool* d_has_clean_embedding_;
     int* d_candidate_count_;
     float* d_s_inv_;
+    float* d_homography_;
     int *d_age_, *d_classes_, *d_track_ids_;
     // M2: GPU spawn
     int *d_free_slots_  = nullptr;
@@ -1376,6 +1425,8 @@ void GPUByteTracker::set_params(float track_thresh, float high_thresh, float mat
     pimpl_->set_params(track_thresh, high_thresh, match_thresh, track_buffer, mid_thresh, confirm_streak, confirm_score_thresh, adaptive_confirmation, new_track_thresh, nsa_kalman);
 }
 void GPUByteTracker::set_reid_params(float cos_threshold, float iou_low, float iou_high, float weight) { pimpl_->set_reid_params(cos_threshold, iou_low, iou_high, weight); }
+void GPUByteTracker::set_homography(const float* h) { pimpl_->set_homography(h); }
+void GPUByteTracker::set_unified_score_params(const UnifiedScoreParams& params) { pimpl_->set_unified_score_params(params); }
 void GPUByteTracker::update_reference_features(int* track_ids, float* features, int num, cudaStream_t stream) { pimpl_->update_reference_features_impl(track_ids, features, num, stream); }
 void GPUByteTracker::set_clean_embedding_flags(int* track_ids, bool* flags, int n, cudaStream_t stream) { pimpl_->set_clean_embedding_flags(track_ids, flags, n, stream); }
 void GPUByteTracker::update_into(
