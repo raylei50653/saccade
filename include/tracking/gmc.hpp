@@ -61,10 +61,10 @@ private:
     size_t gray_small_size_ = 0;
     
     // Pure GPU Phase Correlation members
-    void* d_prev_gray_ = nullptr;
+    float* d_prev_gray_ = nullptr;
     void* d_tmp_complex_a_ = nullptr;
     void* d_tmp_complex_b_ = nullptr;
-    void* d_tmp_float_ = nullptr;
+    float* d_tmp_float_ = nullptr;
     cufftHandle plan_r2c_ = 0;
     cufftHandle plan_c2r_ = 0;
     bool plans_created_ = false;

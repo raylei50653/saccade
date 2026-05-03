@@ -1422,8 +1422,10 @@ def run_eval(
     last_vit_sigma_embed: float = 0.015,
     last_vit_sigma_gate: float = 0.040,
     last_vit_top_k: float = 0.5,
+    detector: TRTYoloDetector = None,
+    extractor: TRTFeatureExtractor = None,
     **kwargs: Any,
-) -> None:
+) -> dict[str, Any] | None:
     output_root = Path(output)
     output_root.mkdir(parents=True, exist_ok=True)
     fps_summary_lines = []
@@ -1432,7 +1434,8 @@ def run_eval(
     stage_summary_lines = []
     global_id_mapper = GlobalTrackIdMapper()
 
-    detector = TRTYoloDetector(engine_path=engine)
+    if detector is None:
+        detector = TRTYoloDetector(engine_path=engine)
 
     if reid_mode not in {"off", "tracker", "semantic", "hybrid"}:
         raise ValueError(f"Unsupported reid_mode: {reid_mode}")
@@ -1449,15 +1452,13 @@ def run_eval(
     _crop_hw: tuple[int, int] = (
         (256, 128) if reid_model in {"transreid", "osnet", "fastreid"} else (224, 224)
     )
-    extractor = (
-        TRTFeatureExtractor(
+    
+    if extractor is None and reid_work_enabled:
+        extractor = TRTFeatureExtractor(
             engine_path=_reid_engine,
             model_type=reid_model,
             max_batch=64,
         )
-        if reid_work_enabled
-        else None
-    )
 
     cropper = (
         ZeroCopyCropper(
@@ -2462,10 +2463,8 @@ def run_eval(
             if gmc_estimator is not None:
                 if hasattr(gmc_estimator, "estimate_mat"):
                     # C++ version or GlobalMotionCompensator
-                    # Convert [C, H, W] to [H, W, C] for C++ GMC kernel
-                    hwc_frame = pool.frame_buffer.permute(1, 2, 0).contiguous()
                     _raw_warp = gmc_estimator.estimate(
-                        hwc_frame.data_ptr(),
+                        pool.frame_buffer.data_ptr(),
                         w_orig,
                         h_orig,
                         torch.cuda.current_stream().cuda_stream,
@@ -2988,3 +2987,71 @@ def run_eval(
         (output_root / "_stage_profile.txt").write_text(
             "\n".join(stage_summary_lines) + "\n"
         )
+
+    # ── MOTMetrics Evaluation ──────────────────────────────────────────────────
+    import motmetrics as mm
+    import glob
+    import os
+
+    # Force NumPy 2.0 compatibility
+    if not hasattr(np, "asfarray"):
+        np.asfarray = lambda a, dtype=float: np.asarray(a, dtype=dtype)
+
+    gt_folder = os.path.join(data_root, split)
+    gtfiles = glob.glob(os.path.join(gt_folder, "*/gt/gt.txt"))
+    # Filter by selected sequences and detector
+    if sequences:
+        seq_list = sequences.split(",")
+        gtfiles = [f for f in gtfiles if Path(f).parts[-3] in seq_list]
+    elif kwargs.get("detector"):
+        det = kwargs.get("detector")
+        gtfiles = [f for f in gtfiles if f"-{det}" in Path(f).parts[-3]]
+
+    tsfiles = sorted(glob.glob(os.path.join(output, "*.txt")))
+    # Filter tsfiles similarly
+    if sequences:
+        seq_list = sequences.split(",")
+        tsfiles = [f for f in tsfiles if Path(f).stem in seq_list]
+
+    if not gtfiles or not tsfiles:
+        return None
+
+    gt = OrderedDict([
+        (Path(f).parts[-3], mm.io.loadtxt(f, fmt="mot15-2D", min_confidence=1))
+        for f in gtfiles
+    ])
+    ts = OrderedDict([
+        (Path(f).stem, mm.io.loadtxt(f, fmt="mot15-2D", min_confidence=-1.0))
+        for f in tsfiles
+    ])
+
+    mh = mm.metrics.create()
+    accs = []
+    names = []
+    for k, tsacc in ts.items():
+        matched_gt = None
+        for gt_name in gt.keys():
+            if k == gt_name or k.startswith(gt_name + "_"):
+                matched_gt = gt_name
+                break
+        if matched_gt:
+            accs.append(mm.utils.compare_to_groundtruth(gt[matched_gt], tsacc, "iou", distth=0.5))
+            names.append(k)
+
+    if not accs:
+        return None
+
+    metrics_list = mm.metrics.motchallenge_metrics + ["num_objects"]
+    summary = mh.compute_many(accs, names=names, metrics=metrics_list, generate_overall=True)
+    
+    # Return OVERALL metrics
+    overall = summary.loc["OVERALL"]
+    return {
+        "IDF1": f"{overall['idf1']*100:.1f}%",
+        "MOTA": f"{overall['mota']*100:.1f}%",
+        "IDs": int(overall['num_switches']),
+        "FP": int(overall['num_false_positives']),
+        "FN": int(overall['num_misses']),
+        "Rcll": f"{overall['recall']*100:.1f}%",
+        "Prcn": f"{overall['precision']*100:.1f}%",
+    }

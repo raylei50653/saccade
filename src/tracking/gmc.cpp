@@ -6,12 +6,12 @@ namespace saccade {
 
 // Externs from gmc_kernel.cu
 void launch_grayscale_downscale(
-    const float* src, uint8_t* dst, 
+    const float* src, float* dst, 
     int src_w, int src_h, int dst_w, int dst_h, 
     cudaStream_t stream);
 
 extern "C" void launch_phase_correlation(
-    const uint8_t* prev_gray, const uint8_t* curr_gray,
+    const float* prev_gray, const float* curr_gray,
     int w, int h, float* dx, float* dy,
     void* d_tmp_complex_a, void* d_tmp_complex_b, void* d_tmp_float,
     cufftHandle plan_r2c, cufftHandle plan_c2r, cudaStream_t stream);
@@ -51,7 +51,7 @@ GMC::~GMC() {
 void GMC::reset() {
     prev_gray_.release();
     prev_pts_.clear();
-    if (d_prev_gray_) cudaMemset(d_prev_gray_, 0, last_w_ * last_h_);
+    if (d_prev_gray_) cudaMemset(d_prev_gray_, 0, last_w_ * last_h_ * sizeof(float));
 }
 
 void GMC::ensure_gpu_resources(int w, int h) {
@@ -67,7 +67,7 @@ void GMC::ensure_gpu_resources(int w, int h) {
     cufftSetStream(plan_r2c_, gmc_stream_);
     cufftSetStream(plan_c2r_, gmc_stream_);
     
-    size_t size_gray = w * h;
+    size_t size_gray = w * h * sizeof(float);
     size_t size_complex = w * (h / 2 + 1) * sizeof(cuComplex);
     size_t size_float = w * h * sizeof(float);
 
@@ -90,7 +90,7 @@ void GMC::ensure_gpu_resources(int w, int h) {
 std::vector<float> GMC::estimate(const float* frame_gpu_ptr, int width, int height, cudaStream_t stream, bool use_gpu_phase_corr) {
     int dst_w = width / downscale_;
     int dst_h = height / downscale_;
-    size_t needed = dst_w * dst_h;
+    size_t needed = dst_w * dst_h * sizeof(float);
     
     if (d_gray_small_ == nullptr || gray_small_size_ < needed) {
         if (d_gray_small_) cudaFree(d_gray_small_);
@@ -101,14 +101,15 @@ std::vector<float> GMC::estimate(const float* frame_gpu_ptr, int width, int heig
     cudaEventRecord(prep_event_, stream);
     cudaStreamWaitEvent(gmc_stream_, prep_event_, 0);
 
-    launch_grayscale_downscale(frame_gpu_ptr, (uint8_t*)d_gray_small_, width, height, dst_w, dst_h, gmc_stream_);
+    // Optimized: HWC -> Float Gray with Hanning Window
+    launch_grayscale_downscale(frame_gpu_ptr, (float*)d_gray_small_, width, height, dst_w, dst_h, gmc_stream_);
     
     if (use_gpu_phase_corr) {
         ensure_gpu_resources(dst_w, dst_h);
         
         float dx = 0, dy = 0;
         launch_phase_correlation(
-            (const uint8_t*)d_prev_gray_, (const uint8_t*)d_gray_small_,
+            (const float*)d_prev_gray_, (const float*)d_gray_small_,
             dst_w, dst_h, &dx, &dy,
             d_tmp_complex_a_, d_tmp_complex_b_, d_tmp_float_,
             plan_r2c_, plan_c2r_, gmc_stream_
@@ -117,21 +118,15 @@ std::vector<float> GMC::estimate(const float* frame_gpu_ptr, int width, int heig
         // Update previous frame
         cudaMemcpyAsync(d_prev_gray_, d_gray_small_, needed, cudaMemcpyDeviceToDevice, gmc_stream_);
 
-        // Results are translation only: H = [1, 0, dx*ds, 0, 1, dy*ds]
         std::vector<float> warp(6);
         warp[0] = 1.0f; warp[1] = 0.0f; warp[2] = dx * downscale_;
         warp[3] = 0.0f; warp[4] = 1.0f; warp[5] = dy * downscale_;
         
-        // Sanity check: if motion is too large, it might be a failure or scene change
         if (std::abs(dx) > dst_w * 0.25f || std::abs(dy) > dst_h * 0.25f) return {};
         
         return warp;
     } else {
-        // Fallback to CPU OpenCV
-        cv::Mat curr_gray(dst_h, dst_w, CV_8UC1);
-        cudaMemcpyAsync(curr_gray.data, d_gray_small_, needed, cudaMemcpyDeviceToHost, gmc_stream_);
-        cudaStreamSynchronize(gmc_stream_);
-        return estimate_mat(curr_gray, 1); 
+        return {}; // Optimized GPU path only for this ADR
     }
 }
 
