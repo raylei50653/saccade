@@ -33,7 +33,11 @@ class PythonSemanticRelinker:
         clean_min_aspect: float = 0.0,
         clean_max_aspect: float = 99.0,
         strict_sim_threshold: float = 0.0,
+        device: str | None = None,
     ) -> None:
+        if device is None:
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = torch.device(device)
         self.sim_threshold = sim_threshold
         self.ttl = ttl
         self.ema_beta = ema_beta
@@ -109,9 +113,7 @@ class PythonSemanticRelinker:
         self.accept_mahas: List[float] = []
 
     def _normalize(self, embedding: torch.Tensor) -> torch.Tensor:
-        # Always operate on CPU: inject_reference stores CPU tensors, so all
-        # buffer/feature ops must stay on the same device.
-        return F.normalize(embedding.float().cpu(), dim=0)
+        return F.normalize(embedding.float().to(self.device), dim=0)
 
     def _spatial_metrics(
         self, box: torch.Tensor, old_box: torch.Tensor, w: int, h: int
@@ -223,7 +225,7 @@ class PythonSemanticRelinker:
     def inject_reference(self, canonical_id: int, embedding: torch.Tensor) -> None:
         """C: Replace stored reference with a high-quality external embedding (e.g. from TrackAppearanceBank).
         Called at track-death time so the relinker holds a clean farewell snapshot instead of a drifted EMA."""
-        emb = self._normalize(embedding.cpu())
+        emb = self._normalize(embedding)
         self.features[canonical_id] = emb.detach()
         if self.buffer_size > 1:
             buf = self.buffers.setdefault(canonical_id, [])
@@ -328,11 +330,18 @@ class PythonSemanticRelinker:
                 best_joint = current_sim_thresh
                 second_best_joint = current_sim_thresh - 1.0
 
+            # Batch similarity: one matmul + one D2H instead of N dot-products
+            if candidates_to_score and self.buffer_size == 1:
+                _cand_ids = [c[0] for c in candidates_to_score]
+                _bank = torch.stack([self.features[cid] for cid in _cand_ids]).to(self.device)
+                _batch_sims = (_bank @ emb).tolist()  # single kernel + single D2H
+                _sim_iter = iter(_batch_sims)
+
             for cid, age, iou, center_norm, maha in candidates_to_score:
                 if self.buffer_size > 1:
                     sim = self._buffer_sim(cid, emb)
                 else:
-                    sim = float(torch.dot(emb, self.features[cid]).item())
+                    sim = next(_sim_iter)
                 
                 # Hard appearance gate: raw cosine must still pass sim_threshold.
                 if sim < current_sim_thresh:
@@ -427,6 +436,8 @@ class PythonSemanticRelinker:
                 ).detach()
             else:
                 old = self.features.get(canonical)
+                if old is not None:
+                    old = old.to(self.device)
                 updated = (
                     emb
                     if old is None

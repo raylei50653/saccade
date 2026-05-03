@@ -19,6 +19,8 @@ from saccade.perception.feature_extractor import TRTFeatureExtractor
 
 from saccade.perception.eval.detection import (
     _box_iou_single,
+    _box_iou_matrix,
+    _box_iou_pairwise_diag,
     detect_adaptive_960_tiled,
     detect_960p_3x2_tiled,
     filter_detections_fast,
@@ -817,27 +819,36 @@ def _collect_stability_candidates(
     geometry_suspect_support: bool,
     geometry_suspect_support_score: float,
 ) -> tuple[list[int], list[tuple[int, tuple[float, float, float, float], float]]]:
-    candidate_indices: list[int] = []
-    stability_candidates: list[
-        tuple[int, tuple[float, float, float, float], float]
-    ] = []
-    for i in range(track_results["count"]):
+    count = track_results["count"]
+
+    # Phase 1: class filter (CPU only)
+    person_indices: list[int] = []
+    for i in range(count):
         class_id = host_batch.classes[i] if host_batch.classes is not None else -1
         if not track_person_only and class_id != person_class:
             continue
-        raw_box = host_batch.boxes[i]
-        score = host_batch.scores[i]
-        obj_id = host_batch.ids[i]
-        track_box_gpu = host_batch.boxes_gpu[i]
-        if (
-            geometry_suspect_support
-            and suspect_boxes.numel() > 0
-            and score <= geometry_suspect_support_score + 1e-4
-        ):
-            if float(_box_iou_single(track_box_gpu, suspect_boxes).max()) > 0.5:
-                continue
+        person_indices.append(i)
+
+    if not person_indices:
+        return [], []
+
+    # Phase 2: batch suspect IoU for low-score tracks — one GPU kernel instead of N
+    excluded: set[int] = set()
+    if geometry_suspect_support and suspect_boxes.numel() > 0:
+        low_i = [i for i in person_indices if host_batch.scores[i] <= geometry_suspect_support_score + 1e-4]
+        if low_i:
+            track_boxes = host_batch.boxes_gpu[low_i]  # (K, 4) GPU
+            max_ious = _box_iou_matrix(track_boxes, suspect_boxes).max(dim=1).values  # (K,) GPU
+            excluded = {low_i[j] for j, v in enumerate(max_ious.cpu().tolist()) if v > 0.5}
+
+    # Phase 3: build result
+    candidate_indices: list[int] = []
+    stability_candidates: list[tuple[int, tuple[float, float, float, float], float]] = []
+    for i in person_indices:
+        if i in excluded:
+            continue
         candidate_indices.append(i)
-        stability_candidates.append((obj_id, raw_box, score))
+        stability_candidates.append((host_batch.ids[i], host_batch.boxes[i], host_batch.scores[i]))
     return candidate_indices, stability_candidates
 
 
@@ -852,28 +863,48 @@ def _build_prepared_candidates(
     geometry_suspect_mask: torch.Tensor,
     frame_id: int,
 ) -> tuple[list[PreparedTrackCandidate], list[CandidateAppearanceUpdate]]:
-    prepared: list[PreparedTrackCandidate] = []
-    appearance_updates: list[CandidateAppearanceUpdate] = []
-    for i, accepted in zip(candidate_indices, stability_accepts):
+    # Phase 1: collect pairs that need IoU+aspect computation (GPU batch)
+    # pairs: list of (loop_idx, track_i, det_idx)
+    pairs: list[tuple[int, int, int]] = []
+    accepted_flat: list[tuple[int, int, int, float]] = []  # (loop_idx, track_i, obj_id, score)
+    for loop_idx, (i, accepted) in enumerate(zip(candidate_indices, stability_accepts)):
         if not accepted:
             continue
-        raw_box = host_batch.boxes[i]
-        score = host_batch.scores[i]
         obj_id = host_batch.ids[i]
-        emb = None
+        score = host_batch.scores[i]
+        accepted_flat.append((loop_idx, i, obj_id, score))
         det_idx = host_batch.det_idx[i] if host_batch.det_idx is not None else -1
-        if embeddings is not None and det_idx >= 0 and det_idx < fused_boxes.shape[0]:
-            emb = embeddings[det_idx]
-            match_iou = float(
-                _box_iou_single(
-                    host_batch.boxes_gpu[i], fused_boxes[det_idx : det_idx + 1]
-                ).item()
-            )
+        if embeddings is not None and 0 <= det_idx < fused_boxes.shape[0]:
+            pairs.append((loop_idx, i, det_idx))
+
+    # Phase 2: batch GPU IoU + aspect ratio — single kernel + single D2H
+    precomp: dict[int, tuple[float, float]] = {}  # loop_idx → (match_iou, aspect_ratio)
+    if pairs:
+        li_list = [p[0] for p in pairs]
+        ti_list = [p[1] for p in pairs]
+        di_list = [p[2] for p in pairs]
+        track_boxes = host_batch.boxes_gpu[ti_list]   # (N, 4) GPU
+        det_boxes = fused_boxes[di_list]              # (N, 4) GPU
+        ious_gpu = _box_iou_pairwise_diag(track_boxes, det_boxes)  # (N,) GPU
+        bw_gpu = (det_boxes[:, 2] - det_boxes[:, 0]).clamp(min=1e-6)
+        bh_gpu = (det_boxes[:, 3] - det_boxes[:, 1]).clamp(min=1e-6)
+        aspects_gpu = bh_gpu / bw_gpu
+        # Single D2H for all N tracks
+        ious_cpu = ious_gpu.cpu().tolist()
+        aspects_cpu = aspects_gpu.cpu().tolist()
+        for li, iou, asp in zip(li_list, ious_cpu, aspects_cpu):
+            precomp[li] = (iou, asp)
+
+    # Phase 3: build result using precomputed values
+    prepared: list[PreparedTrackCandidate] = []
+    appearance_updates: list[CandidateAppearanceUpdate] = []
+    for loop_idx, i, obj_id, score in accepted_flat:
+        raw_box = host_batch.boxes[i]
+        det_idx = host_batch.det_idx[i] if host_batch.det_idx is not None else -1
+        emb = embeddings[det_idx] if (embeddings is not None and 0 <= det_idx < fused_boxes.shape[0]) else None
+        if emb is not None and loop_idx in precomp:
+            match_iou, aspect_ratio = precomp[loop_idx]
             if match_iou > 0.35:
-                det_box = fused_boxes[det_idx].cpu().tolist()
-                bw = max(det_box[2] - det_box[0], 1e-6)
-                bh = max(det_box[3] - det_box[1], 1e-6)
-                aspect_ratio = bh / bw
                 appearance_updates.append(
                     CandidateAppearanceUpdate(
                         track_id=obj_id,

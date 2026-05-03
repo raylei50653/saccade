@@ -38,6 +38,26 @@ def _box_iou_single(box: torch.Tensor, boxes: torch.Tensor) -> torch.Tensor:
     return inter / (area + areas - inter + 1e-6)
 
 
+def _box_iou_pairwise_diag(boxes_a: torch.Tensor, boxes_b: torch.Tensor) -> torch.Tensor:
+    """IoU between boxes_a[i] and boxes_b[i] for each i. Both (N,4). Returns (N,) on same device."""
+    lt = torch.maximum(boxes_a[:, :2], boxes_b[:, :2])
+    rb = torch.minimum(boxes_a[:, 2:], boxes_b[:, 2:])
+    inter = (rb - lt).clamp(min=0).prod(dim=1)
+    area_a = (boxes_a[:, 2] - boxes_a[:, 0]) * (boxes_a[:, 3] - boxes_a[:, 1])
+    area_b = (boxes_b[:, 2] - boxes_b[:, 0]) * (boxes_b[:, 3] - boxes_b[:, 1])
+    return inter / (area_a + area_b - inter + 1e-6)
+
+
+def _box_iou_matrix(boxes_a: torch.Tensor, boxes_b: torch.Tensor) -> torch.Tensor:
+    """Full (N,M) IoU matrix between N and M boxes. Both on same device."""
+    lt = torch.maximum(boxes_a[:, None, :2], boxes_b[None, :, :2])
+    rb = torch.minimum(boxes_a[:, None, 2:], boxes_b[None, :, 2:])
+    inter = (rb - lt).clamp(min=0).prod(dim=2)
+    area_a = ((boxes_a[:, 2] - boxes_a[:, 0]) * (boxes_a[:, 3] - boxes_a[:, 1]))[:, None]
+    area_b = ((boxes_b[:, 2] - boxes_b[:, 0]) * (boxes_b[:, 3] - boxes_b[:, 1]))[None, :]
+    return inter / (area_a + area_b - inter + 1e-6)
+
+
 def filter_detections_fast(
     boxes: torch.Tensor,
     scores: torch.Tensor,
