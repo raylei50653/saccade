@@ -92,10 +92,8 @@ class CoordinateOptimizer:
         return tunable
 
     def _get_initial_params(self):
-        params = {}
-        for k, v in self.all_params.items():
-            params[k] = v["default"]
-        return params
+        args_dict = vars(self.args)
+        return {k: args_dict.get(k, v["default"]) for k, v in self.all_params.items()}
 
     def _load_history(self):
         try:
