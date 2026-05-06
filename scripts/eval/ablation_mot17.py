@@ -67,17 +67,22 @@ _CATEGORY_ORDER = [
     "mot17_a",
     "mot17_b",
     "mot17_c",
+    "a2",
     "a3",
+    "a6",
+    "regression",
 ]
 
 _A2_BEST = [
+    "--cross-tile-merge",
+    "--match-thresh", "0.78",
     "--semantic-w-sim-base", "0.8012",
     "--semantic-w-iou-base", "0.3423",
     "--semantic-w-maha-base", "0.3117",
     "--semantic-shift-ambiguity", "0.3425",
     "--semantic-shift-lost-age", "0.1778",
     "--semantic-clean-score-threshold", "0.65",
-    "--semantic-strict-sim-threshold", "0.74",
+    "--semantic-strict-sim-threshold", "0.0",
     "--appearance-bank-high-quality-min-score", "0.75",
 ]
 
@@ -692,6 +697,89 @@ _CATEGORY_EXPERIMENTS: dict[str, list[tuple[str, str, list[str]]]] = {
             ],
         ),
     ],
+    # ── A2: Reference Quality Gate Sweep (margin + aspect bounds) ─────────────
+    # Base: A1+A2 best params (clean_score=0.65, strict_sim=0.0, hq_bank=0.75).
+    # Sweeps the two remaining unswept dimensions: frame-edge margin_ratio and
+    # h/w aspect ratio bounds [min_aspect, max_aspect].
+    "a2": [
+        (
+            "baseline (defaults)",
+            "a2_baseline",
+            _A2_BEST,
+        ),
+        # ── margin_ratio variants ──────────────────────────────────────────────
+        (
+            "margin=0.02",
+            "a2_margin002",
+            _A2_BEST + ["--semantic-clean-margin-ratio", "0.02"],
+        ),
+        (
+            "margin=0.05",
+            "a2_margin005",
+            _A2_BEST + ["--semantic-clean-margin-ratio", "0.05"],
+        ),
+        (
+            "margin=0.08",
+            "a2_margin008",
+            _A2_BEST + ["--semantic-clean-margin-ratio", "0.08"],
+        ),
+        # ── min_aspect variants (default=1.2) ──────────────────────────────────
+        (
+            "min_asp=1.0 (relaxed)",
+            "a2_minasp10",
+            _A2_BEST + ["--semantic-clean-min-aspect", "1.0"],
+        ),
+        (
+            "min_asp=1.5 (stricter)",
+            "a2_minasp15",
+            _A2_BEST + ["--semantic-clean-min-aspect", "1.5"],
+        ),
+        (
+            "min_asp=2.0 (strict)",
+            "a2_minasp20",
+            _A2_BEST + ["--semantic-clean-min-aspect", "2.0"],
+        ),
+        # ── max_aspect variants (default=4.5) ──────────────────────────────────
+        (
+            "max_asp=3.5 (tighter)",
+            "a2_maxasp35",
+            _A2_BEST + ["--semantic-clean-max-aspect", "3.5"],
+        ),
+        (
+            "max_asp=6.0 (looser)",
+            "a2_maxasp60",
+            _A2_BEST + ["--semantic-clean-max-aspect", "6.0"],
+        ),
+        # ── aspect combo: typical pedestrian range ─────────────────────────────
+        (
+            "asp=[1.5,3.5] (tight pedestrian)",
+            "a2_asp_tight",
+            _A2_BEST + ["--semantic-clean-min-aspect", "1.5", "--semantic-clean-max-aspect", "3.5"],
+        ),
+        (
+            "asp=[1.0,6.0] (loose)",
+            "a2_asp_loose",
+            _A2_BEST + ["--semantic-clean-min-aspect", "1.0", "--semantic-clean-max-aspect", "6.0"],
+        ),
+        # ── joint combo: margin + aspect ──────────────────────────────────────
+        (
+            "margin=0.05 + asp=[1.5,4.5]",
+            "a2_margin005_minasp15",
+            _A2_BEST + [
+                "--semantic-clean-margin-ratio", "0.05",
+                "--semantic-clean-min-aspect", "1.5",
+            ],
+        ),
+        (
+            "margin=0.05 + asp=[1.5,3.5]",
+            "a2_margin005_asp_tight",
+            _A2_BEST + [
+                "--semantic-clean-margin-ratio", "0.05",
+                "--semantic-clean-min-aspect", "1.5",
+                "--semantic-clean-max-aspect", "3.5",
+            ],
+        ),
+    ],
     # ── A3: Track-Level Budgeted ReID Sweep ────────────────────────────────────
     "a3": [
         (
@@ -745,6 +833,106 @@ _CATEGORY_EXPERIMENTS: dict[str, list[tuple[str, str, list[str]]]] = {
             _A2_BEST + ["--need-reid", "--reid-trigger-mode", "score_ema", "--reid-budget", "0.4"],
         ),
     ],
+    "a6": [
+        (
+            "bank quality v2 (default weights)",
+            "bank_v2_default",
+            _A2_BEST + ["--bank-quality-v2"],
+        ),
+        (
+            "detection quality scaling",
+            "det_quality_scaling",
+            _A2_BEST + ["--detection-quality-scaling"],
+        ),
+        (
+            "bank v2 + det quality",
+            "bank_det_quality",
+            _A2_BEST + ["--bank-quality-v2", "--detection-quality-scaling"],
+        ),
+        (
+            "bank quality v2 (high det weight)",
+            "bank_v2_high_det",
+            _A2_BEST + ["--bank-quality-v2", "--bank-quality-w-det", "0.7", "--bank-quality-w-iou", "0.1", "--bank-quality-w-area", "0.05"],
+        ),
+    ],
+    # ── Regression: 46.28% → 43.4% gap isolation ──────────────────────────────
+    # Baseline is current defaults (43.40%). Each experiment removes exactly one
+    # change that landed after the 46.28% result.  Run in order: the biggest
+    # single-factor deltas identify the primary culprits.
+    "regression": [
+        (
+            "budget=0 (unlimited)",
+            "budget0",
+            ["--reid-budget", "0"],
+        ),
+        (
+            "event_any trigger",
+            "event_any",
+            ["--reid-trigger-mode", "event_any"],
+        ),
+        (
+            "strict_sim=0 (disabled→uses 0.91)",
+            "strict_sim_0",
+            ["--semantic-strict-sim-threshold", "0.0"],
+        ),
+        (
+            "no det quality scaling",
+            "no_det_quality",
+            ["--no-detection-quality-scaling"],
+        ),
+        (
+            "budget=0 + event_any",
+            "budget0_event_any",
+            ["--reid-budget", "0", "--reid-trigger-mode", "event_any"],
+        ),
+        (
+            "budget=0 + event_any + strict_sim=0",
+            "budget0_event_any_strict0",
+            ["--reid-budget", "0", "--reid-trigger-mode", "event_any",
+             "--semantic-strict-sim-threshold", "0.0"],
+        ),
+        (
+            "all-old approx (46.28% era config)",
+            "all_old",
+            [
+                "--cross-tile-merge", "--match-thresh", "0.78",
+                "--semantic-threshold", "0.91",
+                "--reid-trigger-mode", "event_any",
+                "--reid-budget", "0",
+                "--semantic-strict-sim-threshold", "0.0",
+                "--semantic-clean-score-threshold", "0.60",
+                "--semantic-w-sim-base", "0",
+                "--semantic-w-iou-base", "0",
+                "--semantic-w-maha-base", "0",
+                "--semantic-shift-ambiguity", "0",
+                "--semantic-shift-lost-age", "0",
+                "--no-detection-quality-scaling",
+                "--no-bank-quality-v2",
+                "--appearance-bank-high-quality-min-score", "0.70",
+            ],
+        ),
+        (
+            "all-old + no GMC (exact 46.28% era)",
+            "all_old_no_gmc",
+            [
+                "--cross-tile-merge", "--match-thresh", "0.78",
+                "--semantic-threshold", "0.91",
+                "--reid-trigger-mode", "event_any",
+                "--reid-budget", "0",
+                "--semantic-strict-sim-threshold", "0.0",
+                "--semantic-clean-score-threshold", "0.60",
+                "--semantic-w-sim-base", "0",
+                "--semantic-w-iou-base", "0",
+                "--semantic-w-maha-base", "0",
+                "--semantic-shift-ambiguity", "0",
+                "--semantic-shift-lost-age", "0",
+                "--no-detection-quality-scaling",
+                "--no-bank-quality-v2",
+                "--appearance-bank-high-quality-min-score", "0.70",
+                "--no-gmc",
+            ],
+        ),
+    ],
 }
 
 
@@ -794,13 +982,16 @@ def evaluate_dir(results_dir: str, gt_root: str, detector: str | None) -> dict |
         accs, names=names, metrics=_METRICS, generate_overall=True
     )
     results = {m: summary.loc["OVERALL", m] for m in _METRICS}
+    
+    # Cast to float/int for JSON serialization
+    results = {
+        m: (float(v) if m in _PCT or "num" not in m else int(v))
+        for m, v in results.items()
+    }
 
     # Save to cache
-    try:
-        with open(cache_path, "w") as f:
-            json.dump(results, f, indent=2)
-    except Exception:
-        pass
+    with open(cache_path, "w") as f:
+        json.dump(results, f, indent=2)
 
     return results
 
@@ -953,11 +1144,17 @@ def run_optuna_a2(args, base_args):
         clean_score = trial.suggest_float("clean_score_threshold", 0.50, 0.90)
         strict_sim = trial.suggest_float("strict_sim_threshold", 0.55, 0.95)
         hq_bank_score = trial.suggest_float("high_quality_min_score", 0.60, 0.95)
-        
+        margin_ratio = trial.suggest_float("clean_margin_ratio", 0.0, 0.10)
+        min_aspect = trial.suggest_float("clean_min_aspect", 0.8, 2.0)
+        max_aspect = trial.suggest_float("clean_max_aspect", 3.0, 7.0)
+
         extra_args = a1_base + [
             "--semantic-clean-score-threshold", str(clean_score),
             "--semantic-strict-sim-threshold", str(strict_sim),
             "--appearance-bank-high-quality-min-score", str(hq_bank_score),
+            "--semantic-clean-margin-ratio", str(margin_ratio),
+            "--semantic-clean-min-aspect", str(min_aspect),
+            "--semantic-clean-max-aspect", str(max_aspect),
         ]
         
         out_dir = f"{args.output_root}/optuna_a2/trial_{trial.number}"
@@ -1032,6 +1229,63 @@ def run_optuna_a3(args, base_args):
     print(f"{'=' * 88}")
 
 
+def run_optuna_a6(args, base_args):
+    import optuna
+
+    # Use A2/A3 best params as fixed base for A6 sweep
+    a3_base = _A2_BEST + ["--reid-budget", "0.2", "--reid-trigger-mode", "score_ema"]
+
+    def objective(trial):
+        w_det = trial.suggest_float("w_det", 0.3, 0.7)
+        w_iou = trial.suggest_float("w_iou", 0.1, 0.4)
+        w_aspect = trial.suggest_float("w_aspect", 0.05, 0.25)
+        w_center = trial.suggest_float("w_center", 0.05, 0.20)
+        w_area = trial.suggest_float("w_area", 0.05, 0.20)
+        
+        # Normalize weights
+        sum_w = w_det + w_iou + w_aspect + w_center + w_area
+        w_det /= sum_w
+        w_iou /= sum_w
+        w_aspect /= sum_w
+        w_center /= sum_w
+        w_area /= sum_w
+        
+        extra_args = a3_base + [
+            "--bank-quality-v2",
+            "--bank-quality-w-det", f"{w_det:.4f}",
+            "--bank-quality-w-iou", f"{w_iou:.4f}",
+            "--bank-quality-w-aspect", f"{w_aspect:.4f}",
+            "--bank-quality-w-center", f"{w_center:.4f}",
+            "--bank-quality-w-area", f"{w_area:.4f}",
+        ]
+        
+        out_dir = f"{args.output_root}/optuna_a6/trial_{trial.number}"
+        run_eval(f"Optuna A6 Trial {trial.number}", out_dir, extra_args, base_args, args.dry_run)
+        
+        metrics = evaluate_dir(out_dir, args.gt_root, args.detector)
+        if not metrics:
+            raise optuna.TrialPruned()
+            
+        return metrics["idf1"]
+
+    study = optuna.create_study(direction="maximize", study_name="A6_Bank_Quality")
+    study.optimize(objective, n_trials=args.optuna_trials)
+
+    print(f"{'=' * 88}")
+    print("Optuna A6 Bank Quality Sweep Complete")
+    try:
+        best_trial = study.best_trial
+        print(f"Best trial (IDF1: {best_trial.value:.4f}):")
+        # Normalize best params for printing
+        p = best_trial.params
+        s = sum(p.values())
+        for key, value in p.items():
+            print(f"  --bank-quality-{key.replace('_', '-')}: {value/s:.4f}")
+    except ValueError:
+        print("No trials completed successfully.")
+    print(f"{'=' * 88}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -1046,7 +1300,7 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument(
         "--optuna",
-        choices=["a1", "a2", "a3"],
+        choices=["a1", "a2", "a3", "a6"],
         default=None,
         help="Run Bayesian optimization for a specific module.",
     )
@@ -1069,6 +1323,9 @@ def main() -> None:
         return
     if args.optuna == "a3":
         run_optuna_a3(args, base_args)
+        return
+    if args.optuna == "a6":
+        run_optuna_a6(args, base_args)
         return
 
     categories = parse_categories(args.category)

@@ -2,6 +2,43 @@
 
 Date: 2026-04-29
 
+## 2026-05-05 Addendum: Tiled Detector vs Native 960
+
+This document originally focused on tracker / relink / GMC controls. The latest FN investigation exposed a detector-side issue on the tiled path, so the current interpretation must include that result.
+
+Two-sequence control (`MOT17-04-SDP,MOT17-10-SDP`):
+
+| Config | IDF1 | MOTA | IDs | FP | FN | Rcll | Prcn |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `960p_2x2 tiled` baseline | 43.6% | 31.6% | 187 | 8,516 | 32,584 | 46.0% | 76.6% |
+| `native_960` | **47.4%** | **41.4%** | **151** | **4,222** | **31,007** | **48.7%** | **87.4%** |
+| `960p_2x2 tiled + native seam-aware merge` | 42.9% | 32.5% | 197 | 7,746 | 32,845 | 45.6% | 78.1% |
+| `960p_2x2 tiled + fused representative box` | 43.6% | 32.2% | 192 | 8,022 | 32,729 | 45.8% | 77.5% |
+
+What changed in the tiled path:
+
+- added `--tiling native_960` as a direct detector control;
+- added tile diagnostics:
+  - `--tile-diagnostics`
+  - `--tile-seam-margin-canvas-px`
+- added seam-aware cross-tile duplicate merge controls:
+  - `--cross-tile-seam-center-scale`
+  - `--cross-tile-seam-area-ratio-threshold`
+  - `--cross-tile-seam-min-overlap-ratio`
+
+Key diagnosis:
+
+- The old tiled path left too many seam-near detections unmerged, especially on `MOT17-04-SDP`.
+- Simple seam score penalty reduced FP but also suppressed true positives, so it is not the right fix.
+- Moving duplicate merge to seam-aware logic is directionally correct, but the current merge still does not recover enough recall to match `native_960`.
+- Current best interpretation: the tiled path remains structurally weaker than `native_960`; threshold tuning alone is not enough.
+
+Recommended reading with this update:
+
+- For pipeline shape: [pipeline_flow.md](/docs/pipeline_flow.md:1)
+- For detector / postprocess code: [L1_perception.md](/docs/layers/L1_perception.md:1)
+- For CLI entry point: [scripts/eval/README.md](/scripts/eval/README.md:1)
+
 ## Summary
 
 This round started from a pure-FN-reduction probe and then recovered MOTA by preventing low-confidence detections from creating noisy new identities. Follow-up rounds then added GMC, a semantic appearance buffer, and relinker-threshold tuning.

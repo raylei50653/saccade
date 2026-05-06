@@ -44,7 +44,7 @@ def build_parser():
     )
     io_group.add_argument(
         "--engine",
-        default="models/yolo/yolo26s_batch6.engine",
+        default="models/yolo/yolo26s_960_batch1.engine",
         help="TensorRT detector engine path.",
     )
     io_group.add_argument(
@@ -77,6 +77,21 @@ def build_parser():
             range_hint=">=1 or unset",
             edge="small caps under-sample relink and long-gap behavior",
         ),
+    )
+    io_group.add_argument(
+        "--debug-dump-seq",
+        default="",
+        help="Optional single sequence name whose detection stages should be dumped.",
+    )
+    io_group.add_argument(
+        "--debug-dump-frames",
+        default="",
+        help="Optional frame list/ranges for stage dump, e.g. 172-235,300,301.",
+    )
+    io_group.add_argument(
+        "--debug-dump-csv",
+        default="",
+        help="Optional CSV path for raw/post_filter/post_nms/post_merge box dumps.",
     )
     io_group.add_argument(
         "--detector",
@@ -148,8 +163,8 @@ def build_parser():
     )
     detect_group.add_argument(
         "--tiling",
-        choices=["960p_2x2", "960p_3x2"],
-        default="960p_2x2",
+        choices=["960p_2x2", "960p_3x2", "native_960"],
+        default="native_960",
         help="Inference tiling preset.",
     )
     detect_group.add_argument(
@@ -169,6 +184,58 @@ def build_parser():
         ),
     )
     detect_group.add_argument(
+        "--tile-diagnostics",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Emit per-sequence diagnostics for tiled detection: seam-near boxes, merge compression, and merged clusters.",
+    )
+    detect_group.add_argument(
+        "--tile-seam-score-penalty",
+        type=float,
+        default=1.0,
+        help=_help(
+            "Multiply scores of seam-near tiled detections by this factor.",
+            range_hint="0-1",
+            edge="lower suppresses tile-boundary artifacts but can also hide true partial people",
+        ),
+    )
+    detect_group.add_argument(
+        "--tile-seam-margin-canvas-px",
+        type=float,
+        default=24.0,
+        help=_help(
+            "Half-width of the seam-near band on the 960 canvas used for seam-aware diagnostics and score penalty.",
+            range_hint=">=0",
+        ),
+    )
+    detect_group.add_argument(
+        "--cross-tile-seam-center-scale",
+        type=float,
+        default=1.8,
+        help=_help(
+            "Scale factor that widens center-distance gating for seam-near duplicate merge.",
+            range_hint=">=1",
+        ),
+    )
+    detect_group.add_argument(
+        "--cross-tile-seam-area-ratio-threshold",
+        type=float,
+        default=0.30,
+        help=_help(
+            "Minimum area-ratio for seam-near duplicate merge candidates.",
+            range_hint="0-1",
+        ),
+    )
+    detect_group.add_argument(
+        "--cross-tile-seam-min-overlap-ratio",
+        type=float,
+        default=0.45,
+        help=_help(
+            "Minimum overlap ratio on both axes for seam-near duplicate merge.",
+            range_hint="0-1",
+        ),
+    )
+    detect_group.add_argument(
         "--nms-iou-threshold",
         type=float,
         default=None,
@@ -176,6 +243,76 @@ def build_parser():
             "Override detector NMS IoU.",
             range_hint="0-1 or unset",
             edge="lower removes duplicates earlier; higher preserves crowded detections",
+        ),
+    )
+    detect_group.add_argument(
+        "--crowd-low-score-mode",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Enable lower detector/tracker score floors only on crowded frames.",
+    )
+    detect_group.add_argument(
+        "--crowd-low-score-trigger",
+        type=int,
+        default=25,
+        help=_help(
+            "Activate crowd low-score mode when post-merge detections reach this count.",
+            range_hint=">=1",
+        ),
+    )
+    detect_group.add_argument(
+        "--crowd-conf-threshold",
+        type=float,
+        default=0.02,
+        help=_help(
+            "Detector confidence floor used during crowd low-score mode.",
+            range_hint="0-1",
+        ),
+    )
+    detect_group.add_argument(
+        "--narrow-person-score-bonus",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Additive score bonus for narrow person-like raw detections before post-filter.",
+            range_hint=">=0",
+            edge="too high will promote background slivers into tracks",
+        ),
+    )
+    detect_group.add_argument(
+        "--narrow-person-max-width-ratio",
+        type=float,
+        default=0.018,
+        help=_help(
+            "Maximum box width / frame width for narrow-person score bonus.",
+            range_hint=">0",
+        ),
+    )
+    detect_group.add_argument(
+        "--narrow-person-min-height-ratio",
+        type=float,
+        default=0.045,
+        help=_help(
+            "Minimum box height / frame height for narrow-person score bonus.",
+            range_hint=">0",
+        ),
+    )
+    detect_group.add_argument(
+        "--narrow-person-min-aspect",
+        type=float,
+        default=2.0,
+        help=_help(
+            "Minimum h/w aspect ratio for narrow-person score bonus.",
+            range_hint=">0",
+        ),
+    )
+    detect_group.add_argument(
+        "--narrow-person-max-aspect",
+        type=float,
+        default=4.8,
+        help=_help(
+            "Maximum h/w aspect ratio for narrow-person score bonus.",
+            range_hint=">0",
         ),
     )
     detect_group.add_argument(
@@ -206,7 +343,7 @@ def build_parser():
     assoc_group.add_argument(
         "--high-thresh",
         type=float,
-        default=0.5,
+        default=0.45,
         help=_help(
             "High-confidence matching threshold.",
             range_hint="0-1",
@@ -226,11 +363,38 @@ def build_parser():
     assoc_group.add_argument(
         "--new-track-thresh",
         type=float,
-        default=0.45,
+        default=0.35,
         help=_help(
             "Minimum score for starting a new track.",
             range_hint="0-1",
-            edge="lower births more short noisy tracks",
+            edge="higher suppresses weak true positives and tends to increase FN",
+        ),
+    )
+    assoc_group.add_argument(
+        "--crowd-track-thresh",
+        type=float,
+        default=0.02,
+        help=_help(
+            "Low-confidence association floor used during crowd low-score mode.",
+            range_hint="0-1",
+        ),
+    )
+    assoc_group.add_argument(
+        "--crowd-mid-thresh",
+        type=float,
+        default=0.05,
+        help=_help(
+            "Mid-tier confidence bucket used during crowd low-score mode.",
+            range_hint="0-1",
+        ),
+    )
+    assoc_group.add_argument(
+        "--crowd-new-track-thresh",
+        type=float,
+        default=0.25,
+        help=_help(
+            "New-track score threshold used during crowd low-score mode.",
+            range_hint="0-1",
         ),
     )
     assoc_group.add_argument(
@@ -288,6 +452,23 @@ def build_parser():
             "Downscale factor for GMC estimation.",
             range_hint=">=1",
             edge="too large is faster but loses fine camera motion",
+        ),
+    )
+    assoc_group.add_argument(
+        "--gmc-fg-mask",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="(A4) Zero out previous-frame track boxes in the downscaled gray image before "
+             "phase correlation, reducing foreground bias in crowded scenes.",
+    )
+    assoc_group.add_argument(
+        "--gmc-pcr-uncertain-thresh",
+        type=float,
+        default=8.0,
+        help=_help(
+            "(A4) PCR ratio below which a valid GMC shift is flagged as 'uncertain', "
+            "triggering a 1.5× ReID priority boost for all active tracks.",
+            range_hint=">5.0 (PCR threshold is 5.0)",
         ),
     )
     assoc_group.add_argument(
@@ -478,6 +659,31 @@ def build_parser():
         ),
     )
     geom_group.add_argument(
+        "--detection-quality-scaling",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="(A6) Scale detection scores by a continuous quality factor (aspect+center+area) "
+             "instead of binary suspect capping.",
+    )
+    geom_group.add_argument(
+        "--detection-quality-w-aspect",
+        type=float,
+        default=0.50,
+        help="(A6) Weight for aspect ratio in detection quality factor.",
+    )
+    geom_group.add_argument(
+        "--detection-quality-w-center",
+        type=float,
+        default=0.30,
+        help="(A6) Weight for center bias (truncation) in detection quality factor.",
+    )
+    geom_group.add_argument(
+        "--detection-quality-w-area",
+        type=float,
+        default=0.20,
+        help="(A6) Weight for area ratio in detection quality factor.",
+    )
+    geom_group.add_argument(
         "--geometry-suspect-support",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -505,6 +711,27 @@ def build_parser():
             "Maximum detections to ReID per frame; <1.0 means ratio of detections, >=1 means fixed count, 0 means unlimited.",
             range_hint=">=0",
             edge="lower saves FPS but risks missing identity signals",
+        ),
+    )
+    reid_group.add_argument(
+        "--async-reid",
+        action="store_true",
+        help=(
+            "Pipeline ReID extract on a side CUDA stream, overlapping with "
+            "tracker.update_into on the main stream. Bank/relink still receive "
+            "fresh embeddings; tracker cost matrix loses detection-side appearance "
+            "for the pipelined frames. Expected throughput gain: ~1.5ms/reid-frame."
+        ),
+    )
+    reid_group.add_argument(
+        "--pipeline-relink",
+        action="store_true",
+        help=(
+            "Inter-frame pipelining: run relink_write for frame N in a background "
+            "thread while the main thread runs detect+postprocess for frame N+1. "
+            "All GPU tensors pre-materialized to CPU before submit to avoid stream "
+            "conflicts. Incompatible with --profile-stages (auto-disabled). "
+            "Expected gain: ~5ms/frame (~62 FPS from ~51 FPS)."
         ),
     )
     reid_group.add_argument(
@@ -786,31 +1013,31 @@ def build_parser():
     semantic_group.add_argument(
         "--semantic-w-sim-base",
         type=float,
-        default=0.0,
+        default=0.80,
         help=_help("A1 Unified Score: Base weight for appearance similarity.", range_hint="0-1"),
     )
     semantic_group.add_argument(
         "--semantic-w-iou-base",
         type=float,
-        default=0.0,
+        default=0.34,
         help=_help("A1 Unified Score: Base weight for spatial IoU.", range_hint="0-1"),
     )
     semantic_group.add_argument(
         "--semantic-w-maha-base",
         type=float,
-        default=0.0,
+        default=0.31,
         help=_help("A1 Unified Score: Base weight for Mahalanobis score.", range_hint="0-1"),
     )
     semantic_group.add_argument(
         "--semantic-shift-ambiguity",
         type=float,
-        default=0.0,
+        default=0.34,
         help=_help("A1 Unified Score: Shift weight from IoU to Sim under crowd ambiguity.", range_hint="0-1"),
     )
     semantic_group.add_argument(
         "--semantic-shift-lost-age",
         type=float,
-        default=0.0,
+        default=0.18,
         help=_help("A1 Unified Score: Shift weight from IoU to Sim as lost age increases.", range_hint="0-1"),
     )
     semantic_group.add_argument(
@@ -865,7 +1092,7 @@ def build_parser():
     semantic_group.add_argument(
         "--appearance-bank-high-quality-min-score",
         type=float,
-        default=0.70,
+        default=0.75,
         help=_help(
             "Minimum detection score for a bank sample to qualify as high-quality "
             "(used for reference injection gate, Phase 3).",
@@ -891,9 +1118,46 @@ def build_parser():
         ),
     )
     semantic_group.add_argument(
+        "--bank-quality-v2",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="(A6) Use composite quality score (det+iou+aspect+center+area) for bank sample "
+             "ranking instead of the legacy 0.5*det+0.3*iou formula.",
+    )
+    semantic_group.add_argument(
+        "--bank-quality-w-det",
+        type=float,
+        default=0.45,
+        help="(A6) Weight for detection score in composite quality score.",
+    )
+    semantic_group.add_argument(
+        "--bank-quality-w-iou",
+        type=float,
+        default=0.20,
+        help="(A6) Weight for IoU in composite quality score.",
+    )
+    semantic_group.add_argument(
+        "--bank-quality-w-aspect",
+        type=float,
+        default=0.15,
+        help="(A6) Weight for aspect ratio in composite quality score.",
+    )
+    semantic_group.add_argument(
+        "--bank-quality-w-center",
+        type=float,
+        default=0.10,
+        help="(A6) Weight for center bias (truncation) in composite quality score.",
+    )
+    semantic_group.add_argument(
+        "--bank-quality-w-area",
+        type=float,
+        default=0.10,
+        help="(A6) Weight for area ratio in composite quality score.",
+    )
+    semantic_group.add_argument(
         "--semantic-clean-score-threshold",
         type=float,
-        default=0.60,
+        default=0.65,
         help=_help(
             "Detection score below which current observation is treated as low-quality "
             "(triggers strict_sim_threshold gate, Phase 3).",
@@ -916,6 +1180,17 @@ def build_parser():
         help=_help(
             "Maximum h/w aspect ratio for current observation to be treated as clean.",
             range_hint=">=0",
+        ),
+    )
+    semantic_group.add_argument(
+        "--semantic-clean-margin-ratio",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Frame-edge margin: observations whose bounding box touches within this "
+            "fraction of frame width/height from the edge are treated as low-quality "
+            "(triggers strict_sim_threshold gate). 0=disabled.",
+            range_hint="0-0.15",
         ),
     )
     semantic_group.add_argument(
@@ -1250,6 +1525,44 @@ def build_parser():
         ),
     )
     merge_group.add_argument(
+        "--post-lifecycle-appearance-weight",
+        type=float,
+        default=0.0,
+        help=_help(
+            "(A5) Add appearance cost (1-sim) as a soft term in post-merge cost. "
+            "0 disables. Combined with gate for full quality control.",
+            range_hint="0-2",
+        ),
+    )
+    merge_group.add_argument(
+        "--post-lifecycle-gap-uncertainty-weight",
+        type=float,
+        default=0.0,
+        help=_help(
+            "(A5) Scale appearance weight by (1 + k * gap/ttl). "
+            "Longer gaps require stronger appearance match.",
+            range_hint="0-2",
+        ),
+    )
+    merge_group.add_argument(
+        "--post-lifecycle-consistency-weight",
+        type=float,
+        default=0.0,
+        help=_help(
+            "(A5) Penalise low-consistency tracklets in post-merge cost.",
+            range_hint="0-1",
+        ),
+    )
+    merge_group.add_argument(
+        "--post-lifecycle-missing-appearance-cost",
+        type=float,
+        default=0.5,
+        help=_help(
+            "(A5) Appearance cost assigned when embedding is unavailable.",
+            range_hint="0-1",
+        ),
+    )
+    merge_group.add_argument(
         "--min-tracklet-len",
         type=int,
         default=1,
@@ -1287,4 +1600,8 @@ if __name__ == "__main__":
                     if d.is_dir() and d.name.endswith(f"-{args.detector}")
                 )
             )
-    run_eval(**vars(args))
+    metrics = run_eval(**vars(args))
+    if metrics:
+        print("\n=== OVERALL METRICS ===")
+        for k, v in metrics.items():
+            print(f"  {k}: {v}")

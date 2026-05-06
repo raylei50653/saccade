@@ -41,8 +41,9 @@
 2. **本文件 `DEVELOPMENT.md`**
    - 用於快速理解目前開發方向、模組責任與文件更新規則
 3. **穩定架構 / 合約文件**
-   - [docs/architecture.md](/docs/architecture.md:1)
-   - [docs/api_spec.md](/docs/api_spec.md:1)
+   - [docs/architecture.md](docs/architecture.md)
+   - [docs/PIPELINE_REFERENCE.md](docs/PIPELINE_REFERENCE.md)
+   - [docs/api_spec.md](docs/api_spec.md)
    - `docs/decisions/*.md`
 4. **當前待辦與近期結論**
    - [docs/TODO.md](/docs/TODO.md:1)
@@ -117,30 +118,42 @@ Saccade 目前以 **MOT17-centered evaluation path** 為最活躍主線，核心
 - 若改的是近期工作方向與實驗排序，要更新 [docs/TODO.md](/docs/TODO.md:1)。
 - 已完成且不再需要逐步追蹤的內容，移到 [docs/TODO_history.md](/docs/TODO_history.md:1)。
 
+### 4.5 Detection / Tiling 合約
+
+- `native_960` 現在是 detector path 的 control；所有 tiled 修補都應先和它對照。
+- tiled path 若引入 seam duplicate / truncation 汙染，應盡量在進 tracker 前消化，不要把不乾淨的 observation 留給 association / relink / bank update。
+- `cross-tile merge` 是 tiled path 的必要補救，不代表 tiled 已等價於 `native_960`。
+
 ---
 
 ## 5. 目前最佳主路徑設定
 
-截至 2026-05-01，MOT17 SDP 7 序列的 current documented default 為：
+截至 2026-05-06，MOT17 SDP 7 序列的 current documented live default 為：
 
+- `--gmc --gmc-mode gpu`
+- `--reid-trigger-mode event_any`
 - `--cross-tile-merge`
 - `--match-thresh 0.78`
-- **A1 Unified Score (動態權重)**:
-  - `--semantic-w-sim-base 0.80`
-  - `--semantic-w-iou-base 0.34`
-  - `--semantic-w-maha-base 0.31`
-  - `--semantic-shift-ambiguity 0.34`
-  - `--semantic-shift-lost-age 0.18`
-- **A2 Quality Gate (品質門檻)**:
-  - `--semantic-clean-score-threshold 0.65`
-  - `--semantic-strict-sim-threshold 0.74`
-  - `--appearance-bank-high-quality-min-score 0.75`
+- `--semantic-threshold 0.91`
+- `--detection-quality-scaling`
+- `--reid-budget 0.2`
+- `--new-track-thresh 0.45`
+- D2-C CUDA tentative isolation（已納入 default）
 
-近期主結論：
+最近一輪 SDP 7 序列結果（2026-05-06，`mot17.py --detector SDP`）：
 
-- `A1 + A2` 組合已達到 **IDF1 46.3%**，成功追平硬閾值紀錄，且在擁擠場景 (Ambiguity) 與長遺失 (Lost Age) 下具有更好的自動適應能力。
-- `strict_sim_threshold` (0.74) 低於預設的 0.91，說明對於低品質觀測，適度放寬外觀門檻能有效減少 Fragmentations (FN)，而錯誤匹配則由 A1 的動態權重與 A2 的高品質參考庫控住。
-- 下一步主軸是 **Track-Level Budgeted ReID (A3)**，控住運算資源同時維持此高 IDF1 水位。
+- **IDF1 47.9%**
+- **MOTA 40.7%**
+- **IDs 648**
+- **FP 10,821**
+- **FN 55,103**
+- **Recall 50.9%**
+- **Eval FPS 51.5**（mean 19.4ms/frame）
+
+目前重要補充：
+
+- `new-track-thresh 0.55` 的舊方向已不再是當前代碼默認；CLI 與 runner fallback 都已對齊為 `0.45`。
+- `native_960` 在 `MOT17-04-SDP / MOT17-10-SDP` 上明顯優於 `960p_2x2 tiled`，因此 tiled 現在被視為需要持續診斷的流程風險點，而不是更健康的 detector path。
 
 ---
 
@@ -148,13 +161,31 @@ Saccade 目前以 **MOT17-centered evaluation path** 為最活躍主線，核心
 
 如果沒有更高優先需求，請優先朝這些方向開發：
 
-### P0：2026 高 MOTA 整合：品質感知關聯 (SelectMOT)
-- **位置**：`src/tracking/tracker_gpu.cu`、`include/tracking/pipeline.hpp`
-- **目標**：實作 ADR 017 規劃的品質加權。在 `Phase 0` 根據 YOLO Confidence 與 bbox 幾何變化動態產生 Quality Score，並在 `Phase 1` 的 Dense Sinkhorn 中作為邊際分佈的先驗權重，抑制遮擋框的競價能力。這是目前最能立即提升擁擠場景 IDF1/MOTA 的方向。
+### ~~P0：Tiled Detector 流程診斷與收斂~~ — CLOSED (2026-05-05)
 
-### P1：2026 高 MOTA 整合：純 GPU 均勻相機補償 (UCMCTrack)
-- **位置**：`include/tracking/gmc.hpp`、`src/tracking/kalman_gpu.cuh`
-- **目標**：實作 ADR 017 規劃的 Uniform CMC 與 2D MMD。將目前依賴 OpenCV 的稀疏光流替換為純 CUDA 實作，並在計算卡爾曼距離時引入地平面透視變換，達成真正的全管線 Zero-Copy。
+- 目前判斷：`960p_2x2 tiled` 的主問題是流程層面的 seam duplicate / truncation / score calibration 汙染，導致產生近兩倍的 FP。
+- 已落地：
+  - `--tiling native_960`
+  - `--tile-diagnostics`
+  - seam-aware cross-tile duplicate merge
+  - fused representative box
+- 結論：經過對 `tiled_seam_coord_weight` / `tiled_best_blend` 的徹底網格掃描，確認無論如何調整 fused box，都無法修復 tiled 流程引入的 FP 與 FN 缺陷。
+- **後續行動：已停止在 tiled 上繼續調參，並將 CLI 預設改為 `native_960` 與對應的 960 engine。後續的 Tracking / Association 最佳化將以 `native_960` 為新的 baseline。**
+
+### ~~P0：2026 高 MOTA 整合：品質感知關聯 (SelectMOT)~~ — DONE (2026-05-02)
+
+實作已完成（A7）。`v2_aspect_only_soft` 在 `src/tracking/tracker_gpu.cu` 中作為 Sinkhorn 先驗權重，有效抑制遮擋框。IDs -2.2%，Recall 無損。
+
+### ~~P1：2026 高 MOTA 整合：純 GPU 均勻相機補償 (UCMCTrack)~~ — DONE (2026-05-03)
+
+實作已完成（A8）。純 GPU GMC (cuFFT PCR) 與 2D MMD 落地，移除 D2H 瓶頸，FPS +5~10%。
+
+### ~~P2：Detection/Bank Quality Scoring~~ — DONE (2026-05-03)
+
+實作已完成（A6）。`aspect / center / area` 連續品質因子落地，`--detection-quality-scaling` 帶來 **+1.9pp MOTA** 與 **-23.5% IDs** (7-seq SDP)，且 **FP -28.8%**。
+位置：
+  - `src/saccade/perception/eval/runner.py`
+  - `scripts/eval/mot17.py`
 
 ### ~~P0：Pre-hoc Embedding Quality (LaSt-ViT CUDA Kernel)~~ — CLOSED No-Go (2026-05-02)
 
@@ -175,17 +206,22 @@ bank 高品質 tier + inject gate + false-accept filter 已實作。詳見 `docs
 
 `--reid-budget 0.2`（Dynamic Ratio 0.2）已成為預設最佳配置（A3，+24% FPS）。
 
-### P2：GMC Quality-Aware 補強
+### ~~P2：GMC Quality-Aware 補強~~ — DONE (2026-05-03)
 
-- 位置：`src/saccade/perception/eval/gmc.py`
-- 目標：
-  - 避免 foreground 主導 GMC
-  - 把 GMC quality 回饋到 trigger / tracking 決策
+PCR score exposure + PCR→ReID feedback + foreground mask kernel 已完成。
+Ablation 結論：MOT17 背景紋理足以主導 Phase Correlation，`--gmc-fg-mask` 無增益（不為 default）。
+7-seq IDF1 43.5%，無 regression。詳見 `docs/TODO.md` A4 結論。
 
-### P2：Post-Merge V2 與 Detection/Bank Quality Scoring
+### ~~P2：Post-Merge V2~~ — DONE (2026-05-03)
 
-- 位置：
-  - `src/saccade/perception/eval/runner.py`
+A5 appearance soft cost + gap_uncertainty + consistency weight 已完成。
+Ablation：`max_cost=0.8` 讓 post-merge 從「有害」變「中性偏正」（FP -104）。
+改善訊號仍在 noise range，不納入 default。詳見 `docs/TODO.md` A5 結論。
+
+### ~~P2：Detection/Bank Quality Scoring~~ — DONE (2026-05-03)
+
+實作已完成（A6）。`aspect / center / area` 連續品質因子落地，`--detection-quality-scaling` 帶來 **+1.9pp MOTA** 與 **-23.5% IDs** (7-seq SDP)，且 **FP -28.8%**。已納入 default。
+位置：
   - `src/saccade/perception/eval/detection.py`
   - `src/saccade/perception/tracking/tracker_gpu.py`
 
@@ -230,6 +266,13 @@ bank 高品質 tier + inject gate + false-accept filter 已實作。詳見 `docs
 - `src/saccade/perception/eval/detection.py`
 - `src/tracking/tracker_gpu.cu`
 - `include/tracking/pipeline.hpp`
+- `scripts/eval/mot17.py`
+
+常見改動：
+
+- detector routing（`native_960` vs tiled）
+- tile diagnostics
+- seam-aware duplicate merge / representative box fusion
 
 ### 7.4 你要改 evaluation / ablation
 
@@ -349,9 +392,10 @@ uv run python scripts/eval/ablation_mot17.py ...
 
 若需要更深背景，再查這些文件：
 
-- [docs/architecture.md](/docs/architecture.md:1)
-- [docs/api_spec.md](/docs/api_spec.md:1)
-- [docs/TODO.md](/docs/TODO.md:1)
+- [docs/architecture.md](docs/architecture.md)
+- [docs/PIPELINE_REFERENCE.md](docs/PIPELINE_REFERENCE.md)
+- [docs/api_spec.md](docs/api_spec.md)
+- [docs/TODO.md](docs/TODO.md)
 - [docs/decisions/016-rerank-phase3-reference-quality.md](/docs/decisions/016-rerank-phase3-reference-quality.md:1)
 - [docs/experiments/reid/dynamic_trigger.md](/docs/experiments/reid/dynamic_trigger.md:1)
 - [docs/layers/gpubytetracker_deep_dive.md](/docs/layers/gpubytetracker_deep_dive.md:1)

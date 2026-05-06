@@ -29,7 +29,7 @@ Saccade 目前以 **GPU-first 的 MOT / tracking / relink pipeline** 為核心�
 | **L3** | **Streaming / Buffering** | Redis queue / stream、microbatch、event buffering | `src/saccade/storage/`, `src/saccade/pipeline/` |
 | **L4** | **Vector Storage** | Chroma memory、metadata filter、hybrid query | `src/saccade/storage/` |
 | **L5** | **Cognition / Retrieval** | orchestrator、RAG trigger、query / visual requery | `src/saccade/cognition/`, `src/saccade/api/` |
-| **L6** | **Resource / Health** | VRAM、service health、degrade signals | `src/saccade/resource/`, `src/saccade/pipeline/health.py` |
+| **L6** | **Resource / Health** | VRAM 監控、階梯降級、跨進程 VRAM 狀態廣播、service health | `src/saccade/resource/`, `src/saccade/pipeline/health.py` |
 
 ---
 
@@ -145,7 +145,35 @@ Frame Source
 - event queue / stream 屬於較外圍層，不應反向影響 perception 熱路徑
 - 具體 schema 以 [docs/api_spec.md](/docs/api_spec.md:1) 為準
 
-### 4.5 Cognition / API / Health
+### 4.5 Resource / Memory Management
+
+責任：
+
+- VRAM 使用率監控（pynvml，85/92/96% 三階 hysteresis）
+- 跨進程 VRAM 狀態廣播（POSIX named shared memory）
+- Dispatcher 端 GPU tracker 生命週期管理（LRU eviction）
+
+主要位置：
+
+- [src/saccade/resource/resource_manager.py](/src/saccade/resource/resource_manager.py:1)
+- [src/saccade/perception/dispatcher.py](/src/saccade/perception/dispatcher.py:1)
+
+目前架構重點：
+
+**跨進程 VRAM 狀態同步**
+
+`AsyncDispatcher`（dispatcher 進程）持有 `VRAMLevelWriter`，每次 `decide_degradation_level()` 後將 `DegradationLevel`（0–3）寫入 POSIX named shared memory `saccade_vram_level`（1 byte）。`PipelineOrchestrator`（獨立進程）持有 `VRAMLevelReader`，在每個 `handle_cognitive_event` 入口讀取：
+
+- `FAST_PATH (>92%)`：跳過 RAG 分析（停止 HuggingFaceEmbedding GPU 呼叫）
+- `EMERGENCY (>96%)`：丟棄非異常 frame，不寫 ChromaDB
+
+兩進程獨立啟動（無共同父進程），故用具名 shared memory 而非 `multiprocessing.Value`。Writer 啟動時自動清除前次崩潰的 stale segment；Reader 找不到 segment 時 fallback 為 NORMAL，不阻塞。
+
+**Dispatcher GPU Tracker LRU**
+
+`AsyncDispatcher.trackers` 改為 `OrderedDict`，加入 `max_streams`（default 8）上限。`get_tracker()` 命中時 `move_to_end` 刷新 LRU 順序；超限時 `popitem(last=False)` 取出最舊 tracker 並 `del`，觸發 C++ `~GPUByteTracker` 釋放所有 CUDA buffer。`deregister_stream()` 支援串流正常結束時的主動釋放。`stop()` 清空全部 tracker。
+
+### 4.6 Cognition / API / Health
 
 責任：
 
@@ -234,4 +262,4 @@ Frame Source
 - 全流程敘事版資料流：[docs/pipeline_flow.md](/docs/pipeline_flow.md:1)
 - Tracker 深入說明：[docs/layers/gpubytetracker_deep_dive.md](/docs/layers/gpubytetracker_deep_dive.md:1)
 
-最後更新：2026-04-30
+最後更新：2026-05-04
