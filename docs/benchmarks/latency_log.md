@@ -1,3 +1,27 @@
+# Current Recommended Baseline
+
+Before reading the historical profiling notes below, use this as the default
+comparison point for current module-level work:
+
+- Baseline directory: `results/module_benchmark/baseline_native_960`
+- Entry point: `./scripts/eval/module_benchmark.sh --mode all`
+- Detector: `SDP`
+- Sequences: `MOT17-04-SDP,MOT17-10-SDP`
+- Engine: `models/yolo/yolo26s_960_batch1.engine`
+- Tiling: `native_960`
+- Max frames: `100`
+
+Current baseline summary:
+
+- validate: `65.12 FPS`, `15.36 ms`, `IDF1 9.4%`, `MOTA 4.5%`
+- profile main stages: `detect 4.53 ms`, `postprocess 1.40 ms`, `track 1.10 ms`, `reid_extract 1.88 ms`, `relink_write 3.46 ms`
+- best current ablation signal: `geometry mid-scale` (`IDF1 9.9%`, `MOTA 4.7%`, `IDs 14`)
+
+Use `results/module_benchmark/baseline_native_960/notes.md` and
+`results/module_benchmark/baseline_native_960/experiment_matrix.md` as the
+live baseline record. The sections below remain useful as historical profiling
+context and optimization notes.
+
 # 2026-05-06 Inter-Frame Relink Pipelining (`--pipeline-relink`)
 
 ## Design

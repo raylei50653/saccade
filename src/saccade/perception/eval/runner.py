@@ -2156,7 +2156,9 @@ def run_eval(
         "reid_crop",
         "reid_extract",
         "lazy_reid",
+        "gmc",
         "track",
+        "materialize",
         "relink_write",
         "frame_total",
     )
@@ -3282,41 +3284,55 @@ def run_eval(
             gmc_warp = None
             gmc_uncertain = False
             if gmc_estimator is not None:
-                # A4: foreground mask — zero out current-frame detection regions before FFT.
-                # Using current-frame fused_boxes gives accurate positions; the stored
-                # d_prev_gray_ is also the masked version, so both frames in the
-                # correlation are background-only on the next call.
-                if gmc_fg_mask and hasattr(gmc_estimator, "set_fg_mask_boxes"):
-                    if fused_boxes.numel() > 0:
-                        _flat = fused_boxes.detach().cpu().view(-1).tolist()
-                        gmc_estimator.set_fg_mask_boxes(_flat)
+                def _run_gmc() -> tuple[torch.Tensor | None, bool]:
+                    local_gmc_warp: torch.Tensor | None = None
+                    local_gmc_uncertain = False
+                    # A4: foreground mask — zero out current-frame detection regions before FFT.
+                    # Using current-frame fused_boxes gives accurate positions; the stored
+                    # d_prev_gray_ is also the masked version, so both frames in the
+                    # correlation are background-only on the next call.
+                    if gmc_fg_mask and hasattr(gmc_estimator, "set_fg_mask_boxes"):
+                        if fused_boxes.numel() > 0:
+                            _flat = fused_boxes.detach().cpu().view(-1).tolist()
+                            gmc_estimator.set_fg_mask_boxes(_flat)
 
-                if hasattr(gmc_estimator, "estimate_mat"):
-                    # C++ version or GlobalMotionCompensator
-                    _raw_warp = gmc_estimator.estimate(
-                        pool.frame_buffer.data_ptr(),
-                        w_orig,
-                        h_orig,
-                        torch.cuda.current_stream().cuda_stream,
-                    )
-                else:
-                    _raw_warp = gmc_estimator.estimate(pool.frame_buffer)
-
-                if _raw_warp is not None:
-                    if isinstance(_raw_warp, list):
-                        gmc_warp = torch.tensor(
-                            _raw_warp, dtype=torch.float32, device=fused_boxes.device
+                    if hasattr(gmc_estimator, "estimate_mat"):
+                        # C++ version or GlobalMotionCompensator
+                        _raw_warp = gmc_estimator.estimate(
+                            pool.frame_buffer.data_ptr(),
+                            w_orig,
+                            h_orig,
+                            torch.cuda.current_stream().cuda_stream,
                         )
                     else:
-                        gmc_warp = _raw_warp.to(fused_boxes.device)
+                        _raw_warp = gmc_estimator.estimate(pool.frame_buffer)
 
-                # A4: PCR quality feedback — flag marginal motion estimates so the
-                # ReID budget function widens appearance coverage on uncertain frames.
-                if hasattr(gmc_estimator, "pcr_score"):
-                    _pcr = gmc_estimator.pcr_score()
-                    gmc_uncertain = (
-                        gmc_warp is not None and 0.0 < _pcr < gmc_pcr_uncertain_thresh
-                    )
+                    if _raw_warp is not None:
+                        if isinstance(_raw_warp, list):
+                            local_gmc_warp = torch.tensor(
+                                _raw_warp,
+                                dtype=torch.float32,
+                                device=fused_boxes.device,
+                            )
+                        else:
+                            local_gmc_warp = _raw_warp.to(fused_boxes.device)
+
+                    # A4: PCR quality feedback — flag marginal motion estimates so the
+                    # ReID budget function widens appearance coverage on uncertain frames.
+                    if hasattr(gmc_estimator, "pcr_score"):
+                        _pcr = gmc_estimator.pcr_score()
+                        local_gmc_uncertain = (
+                            local_gmc_warp is not None
+                            and 0.0 < _pcr < gmc_pcr_uncertain_thresh
+                        )
+                    return local_gmc_warp, local_gmc_uncertain
+
+                (gmc_warp, gmc_uncertain), _ = time_stage(
+                    seq_stage_totals,
+                    "gmc",
+                    _run_gmc,
+                    sync_cuda=hasattr(gmc_estimator, "estimate_mat"),
+                )
             # Async ReID: sync side stream and inject fresh embeddings right before
             # tracker.update_into so the cost matrix still has detection-side appearance.
             # GMC on main stream overlapped with reid on side stream during the gap above.
@@ -3333,25 +3349,28 @@ def run_eval(
                 _reid_side_pending = False
                 _reid_frame_hwc_ref = None
 
-            track_results, _ = time_stage(
+            _, _ = time_stage(
                 seq_stage_totals,
                 "track",
-                lambda: (
-                    detector.tracker.update_into(
-                        fused_boxes,
-                        fused_scores,
-                        fused_classes.to(torch.int32),
-                        tracker_result_buffers,
-                        embeddings=embeddings if use_tracker_reid else None,
-                        gmc=gmc_warp,
-                        mid_thresh_scale=mid_thresh_scale,
-                    ),
-                    _materialize_gpu_track_results(
-                        tracker_result_buffers,
-                        default_class_id=person_class if track_person_only else None,
-                        include_det_idx=embeddings is not None,
-                    ),
-                )[1],
+                lambda: detector.tracker.update_into(
+                    fused_boxes,
+                    fused_scores,
+                    fused_classes.to(torch.int32),
+                    tracker_result_buffers,
+                    embeddings=embeddings if use_tracker_reid else None,
+                    gmc=gmc_warp,
+                    mid_thresh_scale=mid_thresh_scale,
+                ),
+                sync_cuda=True,
+            )
+            track_results, _ = time_stage(
+                seq_stage_totals,
+                "materialize",
+                lambda: _materialize_gpu_track_results(
+                    tracker_result_buffers,
+                    default_class_id=person_class if track_person_only else None,
+                    include_det_idx=embeddings is not None,
+                ),
                 sync_cuda=True,
             )
 

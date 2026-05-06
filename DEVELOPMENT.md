@@ -319,6 +319,50 @@ Ablation：`max_cost=0.8` 讓 post-merge 從「有害」變「中性偏正」（
 - 哪些 sequence 改善，哪些 sequence 退化
 - 是否屬於 run-to-run noise 還是系統性差異
 
+### 8.4 實驗入口與對比層級
+
+MOT / tracking / relink 類改動，不要把所有驗證都壓成「最後 `IDF1 / MOTA` 有沒有變好」。
+現行做法是分三層：
+
+1. **baseline**
+   - 固定對照面：`./scripts/eval/module_benchmark.sh --mode all`
+   - 目前標準 baseline：`results/module_benchmark/baseline_native_960`
+2. **module-local**
+   - 先看你改的那個模組自己的主指標
+   - 例如：
+   - preprocess：`ingest_preprocess`
+   - detection：`detect`、`raw_boxes -> after_merge`
+   - postprocess：`post_filter` / `post_nms` / `post_merge`
+   - reid：`reid_budget`、`reid_extract`
+   - lifecycle / relink：`relink_write`
+3. **promotion validate**
+   - 只有當 local signal 明確，才升級去看整體 `IDF1 / MOTA / FP / FN / IDs / FPS`
+
+判讀規則：
+
+- `local improved`, `downstream neutral`, `e2e neutral`
+  - 可以先標記為局部優化，不必硬說整體演算法勝出
+- `local improved`, `downstream worse`
+  - 視為 regression，不保留
+- `local better`, `downstream better`, `e2e better`
+  - 才是強候選，值得進一步推成 default
+
+實驗紀錄原則：
+
+- 每次候選實驗都應明確寫出：
+  - 跟哪個 baseline 比
+  - 改的是哪個 module / knob
+  - local metric 是什麼
+  - downstream metric 是什麼
+  - 是否值得升級成 promotion validate
+
+什麼時候要打開 `docs/PIPELINE_REFERENCE.md`：
+
+- 你要知道某個 pipeline module 現在對應哪個 metric
+- 你要判讀某個 delta 到底算改善、noise 還是 regression
+- 你要確認某個 module 是 `directly measured`、`indirectly measured`，還是目前仍是 gap
+- 你要做 module-local experiment，而不是只跑整體 `mot17.py` 結果
+
 ---
 
 ## 9. 常用驗證
@@ -334,6 +378,7 @@ scripts/test_native.sh
 若是 MOT / tracking / relink 相關，優先補：
 
 ```bash
+./scripts/eval/module_benchmark.sh --mode all
 uv run python scripts/eval/mot17.py ...
 uv run python scripts/eval/ablation_mot17.py ...
 ```
@@ -343,6 +388,7 @@ uv run python scripts/eval/ablation_mot17.py ...
 - 不要只看單次 `IDs`
 - 要區分單序列現象與 7-seq aggregate
 - 若差異接近既有 noise，不能直接宣稱演算法勝出
+- 先看 local metric，再看 downstream，再看 end-to-end
 
 ---
 
@@ -350,6 +396,7 @@ uv run python scripts/eval/ablation_mot17.py ...
 
 - 主 workflow 腳本集中在 `scripts/eval/`
 - 核心入口仍是：
+  - `scripts/eval/module_benchmark.sh`
   - `scripts/eval/mot17.py`
   - `scripts/eval/ablation_mot17.py`
 - 效能量測與壓力測試集中在 `scripts/benchmarks/`
