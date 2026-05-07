@@ -86,17 +86,19 @@ find_library(TENSORRT_NVINFER_PLUGIN_LIBRARY
 # 5. 全局包含路徑
 include_directories(
     ${PROJECT_SOURCE_DIR}/include
-    ${TENSORRT_INCLUDE_DIR}
     ${CUDAToolkit_INCLUDE_DIRS}
     ${GSTREAMER_INCLUDE_DIRS}
     ${OpenCV_INCLUDE_DIRS}
 )
+# TensorRT headers as SYSTEM to suppress third-party deprecation warnings
+include_directories(SYSTEM ${TENSORRT_INCLUDE_DIR})
 
 # 6. 定義 Perception 模組 (Dynamic Library)
 add_library(saccade_perception SHARED
     src/perception/trt_engine.cpp
     src/perception/preprocessor.cpp
     src/perception/preprocessor_gpu.cu
+    src/perception/letterbox_kernel.cu
     src/perception/feature_extractor.cpp
 )
 # 設定導出宏

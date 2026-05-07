@@ -17,6 +17,8 @@ def print_overall_summary(
     breakdown_stage_names: tuple[str, ...],
     overall_stage_totals: dict[str, float],
     overall_post_counts: dict[str, int],
+    gmc_breakdown_names: tuple[str, ...],
+    overall_gmc_samples: dict[str, list[float]],
     overall_lazy_reid_frames: int,
     overall_lazy_reid_candidates: int,
     overall_lazy_reid_crops: int,
@@ -75,6 +77,25 @@ def print_overall_summary(
                 print(f"| {stage_name} | {total_ms / overall_profiled_frames:.2f} |")
                 stage_summary_lines.append(
                     f"{stage_name}\tmean_ms={total_ms / overall_profiled_frames:.2f}\ttotal_ms={total_ms:.2f}"
+                )
+        if any(overall_gmc_samples[name] for name in gmc_breakdown_names):
+            print(
+                "\n| GMC Breakdown | Mean (ms) | Std (ms) | P95 (ms) | P99 (ms) |"
+            )
+            print("| :--- | :--- | :--- | :--- | :--- |")
+            for stage_name in gmc_breakdown_names:
+                samples = overall_gmc_samples[stage_name]
+                if not samples:
+                    continue
+                arr = np.array(samples, dtype=np.float64)
+                print(
+                    f"| {stage_name} | {arr.mean():.2f} | {arr.std():.2f} | "
+                    f"{np.percentile(arr, 95):.2f} | {np.percentile(arr, 99):.2f} |"
+                )
+                stage_summary_lines.append(
+                    f"{stage_name}\tmean_ms={arr.mean():.2f}\tstd_ms={arr.std():.2f}\t"
+                    f"p95_ms={np.percentile(arr, 95):.2f}\tp99_ms={np.percentile(arr, 99):.2f}\t"
+                    f"samples={len(samples)}"
                 )
         if any(overall_post_counts.values()):
             print("\n| Post Counts | Mean (boxes/frame) |")
@@ -174,6 +195,9 @@ def print_sequence_summary(
     seq_stage_totals: dict[str, float],
     native_reid_breakdown_names: tuple[str, ...],
     seq_native_reid_samples: dict[str, list[float]],
+    gmc_breakdown_names: tuple[str, ...],
+    seq_gmc_samples: dict[str, list[float]],
+    overall_gmc_samples: dict[str, list[float]],
     seq_post_counts: dict[str, int],
     overall_post_counts: dict[str, int],
     seq_lazy_reid_frames: int,
@@ -257,6 +281,20 @@ def print_sequence_summary(
                     f"{arr.std():.2f} | {np.percentile(arr, 95):.2f} | "
                     f"{np.percentile(arr, 99):.2f} |"
                 )
+        if any(seq_gmc_samples[name] for name in gmc_breakdown_names):
+            print("\n| GMC Breakdown | Mean (ms) | Std (ms) | P95 (ms) | P99 (ms) |")
+            print("| :--- | :--- | :--- | :--- | :--- |")
+            for stage_name in gmc_breakdown_names:
+                samples = seq_gmc_samples[stage_name]
+                if not samples:
+                    continue
+                arr = np.array(samples, dtype=np.float64)
+                print(
+                    f"| {stage_name} | {arr.mean():.2f} | "
+                    f"{arr.std():.2f} | {np.percentile(arr, 95):.2f} | "
+                    f"{np.percentile(arr, 99):.2f} |"
+                )
+                overall_gmc_samples[stage_name].extend(samples)
         if any(seq_post_counts.values()):
             print("\n| Post Counts | Mean (boxes/frame) |")
             print("| :--- | :--- |")
@@ -320,6 +358,16 @@ def print_sequence_summary(
             )
         for stage_name in native_reid_breakdown_names:
             samples = seq_native_reid_samples[stage_name]
+            if not samples:
+                continue
+            arr = np.array(samples, dtype=np.float64)
+            stage_summary_lines.append(
+                f"{stage_name}\tmean_ms={arr.mean():.2f}\tstd_ms={arr.std():.2f}\t"
+                f"p95_ms={np.percentile(arr, 95):.2f}\tp99_ms={np.percentile(arr, 99):.2f}\t"
+                f"samples={len(samples)}"
+            )
+        for stage_name in gmc_breakdown_names:
+            samples = seq_gmc_samples[stage_name]
             if not samples:
                 continue
             arr = np.array(samples, dtype=np.float64)

@@ -23,6 +23,15 @@
 namespace py = pybind11;
 using namespace saccade;
 
+// Forward declaration from letterbox_kernel.cu (saccade_perception)
+namespace saccade {
+void launch_letterbox_gpu(
+    const float* src, int src_w, int src_h,
+    float* dst, int dst_size,
+    int x_off, int y_off, int w_new, int h_new,
+    float pad_val, cudaStream_t stream);
+}
+
 namespace {
 
 float compute_iou(const float* a, const float* b) {
@@ -1893,6 +1902,15 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             if (warp.empty()) return py::none().cast<py::object>();
             return py::cast(warp);
         }, py::arg("frame_ptr"), py::arg("width"), py::arg("height"), py::arg("stream_ptr"), py::arg("use_gpu_phase_corr") = true)
+        .def("estimate_into", [](GMC& self, uintptr_t frame_ptr, int width, int height, uintptr_t stream_ptr, uintptr_t out_warp_ptr, bool use_gpu_phase_corr) {
+            self.estimate_into(
+                reinterpret_cast<const float*>(frame_ptr),
+                width,
+                height,
+                reinterpret_cast<cudaStream_t>(stream_ptr),
+                reinterpret_cast<float*>(out_warp_ptr),
+                use_gpu_phase_corr);
+        }, py::arg("frame_ptr"), py::arg("width"), py::arg("height"), py::arg("stream_ptr"), py::arg("out_warp_ptr"), py::arg("use_gpu_phase_corr") = true)
         .def("estimate_mat", [](GMC& self, py::array_t<uint8_t> frame, int downscale) {
             py::buffer_info info = frame.request();
             if (info.ndim != 2 && info.ndim != 3) {
@@ -1907,6 +1925,24 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             if (warp.empty()) return py::none().cast<py::object>();
             return py::cast(warp);
         }, py::arg("frame"), py::arg("downscale") = -1)
+        .def("set_profiling_enabled", &GMC::set_profiling_enabled, py::arg("enabled"))
+        .def("reset_profile_stats", &GMC::reset_profile_stats)
+        .def("get_profile_stats",
+            [](const GMC& self) {
+                const auto stats = self.get_profile_stats();
+                py::dict out;
+                out["gray_downscale_ms"] = stats.gray_downscale_ms;
+                out["fg_mask_ms"] = stats.fg_mask_ms;
+                out["phase_corr_ms"] = stats.phase_corr_ms;
+                out["fft_ms"] = stats.fft_ms;
+                out["cross_power_ms"] = stats.cross_power_ms;
+                out["ifft_ms"] = stats.ifft_ms;
+                out["peak_find_ms"] = stats.peak_find_ms;
+                out["handoff_ms"] = stats.handoff_ms;
+                out["total_ms"] = stats.total_ms;
+                out["frames"] = stats.frames;
+                return out;
+            })
         .def("reset", &GMC::reset)
         .def("pcr_score", &GMC::pcr_score,
              "PCR (peak-to-RMS ratio) from the most recent GPU phase correlation. "
@@ -2273,4 +2309,25 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
                 return out;
             })
         .def_property_readonly("embed_dim", &PerceptionPipeline::get_embed_dim);
+
+    // Fused letterbox: bilinear resize + pad in one CUDA kernel.
+    // Replaces: interpolate → fill_ → copy_ (3 ops) with a single kernel launch.
+    m.def("letterbox_gpu", [](
+        uintptr_t src_ptr, int src_w, int src_h,
+        uintptr_t dst_ptr, int dst_size,
+        int x_off, int y_off, int w_new, int h_new,
+        float pad_val, uintptr_t stream_ptr)
+    {
+        launch_letterbox_gpu(
+            reinterpret_cast<const float*>(src_ptr), src_w, src_h,
+            reinterpret_cast<float*>(dst_ptr), dst_size,
+            x_off, y_off, w_new, h_new,
+            pad_val, reinterpret_cast<cudaStream_t>(stream_ptr));
+    },
+    py::arg("src_ptr"), py::arg("src_w"), py::arg("src_h"),
+    py::arg("dst_ptr"), py::arg("dst_size"),
+    py::arg("x_off"), py::arg("y_off"), py::arg("w_new"), py::arg("h_new"),
+    py::arg("pad_val") = 114.0f / 255.0f,
+    py::arg("stream_ptr") = 0,
+    "Fused letterbox: bilinear resize + constant pad into a square canvas in one kernel.");
 }

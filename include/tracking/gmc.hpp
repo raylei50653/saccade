@@ -16,6 +16,19 @@ namespace saccade {
  */
 class SACCADE_TRACKING_API GMC {
 public:
+    struct ProfileStats {
+        double gray_downscale_ms = 0.0;
+        double fg_mask_ms = 0.0;
+        double phase_corr_ms = 0.0;  // total of sub-stages below
+        double fft_ms = 0.0;
+        double cross_power_ms = 0.0;
+        double ifft_ms = 0.0;
+        double peak_find_ms = 0.0;
+        double handoff_ms = 0.0;
+        double total_ms = 0.0;
+        int frames = 0;
+    };
+
     GMC(int downscale = 8,
         int max_corners = 100,
         float quality_level = 0.01,
@@ -36,14 +49,27 @@ public:
     std::vector<float> estimate(const float* frame_gpu_ptr, int width, int height, cudaStream_t stream, bool use_gpu_phase_corr = true);
 
     /**
+     * @brief Estimate camera warp and write a 2x3 affine matrix directly to GPU memory.
+     * Writes identity when the estimate is unreliable, so callers can pass the result
+     * directly into tracker kernels without an extra host roundtrip.
+     */
+    void estimate_into(
+        const float* frame_gpu_ptr,
+        int width,
+        int height,
+        cudaStream_t stream,
+        float* d_out_warp,
+        bool use_gpu_phase_corr = true);
+
+    /**
      * @brief Set foreground bounding boxes to be zeroed before phase correlation.
      * Boxes are in original-frame pixel coordinates: [x1,y1,x2,y2, ...] flat.
      * Call before estimate() to suppress foreground bias.
      */
     void set_fg_mask_boxes(const std::vector<float>& boxes_xyxy);
 
-    /** @brief PCR (peak-to-RMS ratio) from the most recent GPU phase correlation. */
-    float pcr_score() const { return last_pcr_score_; }
+    /** @brief PCR (peak-to-RMS ratio) from the most recent completed GPU phase correlation. */
+    float pcr_score();
 
     /**
      * @brief Estimate affine camera warp using CPU Mat (for Python compatibility).
@@ -54,6 +80,9 @@ public:
     std::vector<float> estimate_mat(const cv::Mat& frame, int downscale = -1);
 
     void reset();
+    void set_profiling_enabled(bool enabled);
+    void reset_profile_stats();
+    ProfileStats get_profile_stats() const;
 
 private:
     int downscale_;
@@ -92,9 +121,16 @@ private:
     int orig_w_ = 0, orig_h_ = 0;
 
     void ensure_gpu_resources(int w, int h);
+    void refresh_pcr_score();
 
     cudaStream_t gmc_stream_ = nullptr;
     cudaEvent_t prep_event_ = nullptr;
+    cudaEvent_t gmc_done_event_ = nullptr;
+    cudaEvent_t pcr_ready_event_ = nullptr;
+    float* h_pcr_score_async_ = nullptr;
+    bool pcr_pending_ = false;
+    bool profiling_enabled_ = false;
+    ProfileStats last_profile_stats_{};
 };
 
 

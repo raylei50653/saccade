@@ -479,8 +479,8 @@ def parse_eval_config(
         bank_quality_w_center=float(kwargs.get("bank_quality_w_center", 0.10)),
         bank_quality_w_area=float(kwargs.get("bank_quality_w_area", 0.10)),
         need_reid_enabled=bool(kwargs.get("need_reid", False)),
-        async_reid=bool(kwargs.get("async_reid", False)),
-        pipeline_relink=bool(kwargs.get("pipeline_relink", False))
+        async_reid=bool(kwargs.get("async_reid", True)),
+        pipeline_relink=bool(kwargs.get("pipeline_relink", True))
         and not profile_stages,
         per_seq_adapt=bool(kwargs.get("per_seq_adapt", True)),
         seqs=seqs,
