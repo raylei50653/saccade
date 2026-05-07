@@ -41,6 +41,8 @@ jobs:
             libgstreamer-plugins-bad1.0-dev \
             libopencv-dev \
             libcairo2-dev \
+            libgirepository1.0-dev \
+            libglib2.0-dev \
             pkg-config \
             cmake \
             curl \
