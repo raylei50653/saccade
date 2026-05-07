@@ -1,6 +1,6 @@
 # Saccade TODO — 具體實作清單
 
-> 主 TODO 只保留目前待辦、近期 ablation 結論與下一步方向。已完成項、設計規範與 C++ 路線圖已移至 [docs/TODO_history.md](/docs/TODO_history.md:1)。
+> 主 TODO 只保留目前待辦、近期 ablation 結論與下一步方向。已完成項、設計規範與 C++ 路線圖已移至 [docs/TODO_history.md](/docs/TODO_history.md)。
 
 ---
 
@@ -10,7 +10,7 @@
   - 目前真的還要做的事項
   - 近期仍會影響決策的 ablation 結論
   - 下一輪已排定的實驗 / 實作 backlog
-- 內容應移入 [docs/TODO_history.md](/docs/TODO_history.md:1) 的情況：
+- 內容應移入 [docs/TODO_history.md](/docs/TODO_history.md) 的情況：
   - 已完成，且後續不再需要逐步追蹤
   - 已收斂並明確放棄，不再作為近期 default 候選
   - 已被新方向取代，只需保留背景與結論
@@ -104,6 +104,21 @@
 
 - **GMC fg-mask**：MOT17 背景紋理足以主導 Phase Correlation peak，`--gmc-fg-mask` 無增益，**不納入 default**。
 
+- **GMC GPU phase correlation profiling + peak_find 優化（2026-05-07）**
+  - 已完成 C++ GMC 的子階段 profiling（`fft_ms`、`cross_power_ms`、`ifft_ms`、`peak_find_ms`），並接進 `--profile-stages` 報表。
+  - 子階段 profiling 結果（1920×1080, downscale=8）：
+    - `peak_find` 是主成本：單執行緒 O(N) scan，`0.413ms`（佔 ~73% of phase_corr）
+    - `fft`：`0.041ms`；`cross_power`：`0.086ms`；`ifft`：`0.021ms`
+  - **peak_find 優化**：`find_peak_subpixel_kernel<<<1,1>>>` → parallel reduction `<<<1,256>>>`
+    - 每個 thread stride 掃描 ~128 個元素，shared memory tree reduction（argmax + sum_sq 一趟）
+    - `peak_find`：`0.413ms` → `0.033ms`（**12.5×**）
+    - `phase_corr` total：`0.562ms` → `0.163ms`（**3.4×**）
+    - frame total：`0.708ms` → `0.278ms`（**2.5×**）
+  - 優化後 bottleneck 已轉移到 `cross_power`（`0.048ms`），GMC 整體已無明顯熱點。
+  - **TODO**：
+    - 視場景評估 `gmc_fg_mask` 是否要換更便宜的 mask 實作
+    - 若要再榨 FPS，優先考慮 GMC 降頻或 warp reuse
+
 ---
 
 - **Async ReID Pipelining（2026-05-06）**
@@ -112,7 +127,7 @@
   - 7-seq SDP A/B：IDF1/MOTA/IDs 完全不變，**Eval FPS 54.90 → 56.34（+2.6%，-0.46ms/frame）**
   - 注意：`--profile-stages` 的 `torch.cuda.synchronize()` 會序列化 GPU 工作，在 profile 模式下看不到增益
   - 實作：`--async-reid` flag；`runner.py` kwargs `async_reid=True`
-  - 結論：**增益真實但很小（~0.5ms）。目前不納入 default，保留為實驗性 flag。**
+  - 結論：**已設為 default（2026-05-07）。7-seq SDP：IDF1/MOTA/IDs 完全不變，FPS +2.2%。**
 
 ## Inter-Frame Relink Pipelining — 實作計畫（2026-05-06）
 
@@ -178,7 +193,7 @@ Frame N+1: fetch → detect → postprocess → [SYNC bg(N)]   → reid → ...
 - Python GIL 競爭在 bg thread 執行 Python loops 時增加 main thread 的等待開銷 ~1ms
 - 綜合：~2ms 隱藏，~1.5ms 新增開銷，net ~0.35ms/frame
 
-**結論：** 增益真實但很小（~0.5%）。目前不納入 default，保留為實驗性 flag。如未來 relink_write 工作量增加（更多 tracks）或 detect 時間增加，增益會放大。
+**結論：** 已設為 default（2026-05-07）。7-seq SDP 驗證：IDF1/MOTA/IDs 完全不變。
 
 ---
 
@@ -190,16 +205,17 @@ Frame N+1: fetch → detect → postprocess → [SYNC bg(N)]   → reid → ...
 - `transreid` 與 `osnet` 已完成對比，但都未超過當前 `siglip2` base。
 - OSNet engine 已建立，可用 `uv run python scripts/model/build_osnet.py` 重建。
 - Phase 1 multi-sample rerank 結果已存 `results/ablation_rerank/`，可用 `--skip-run` 重新讀取。
+- GMC 現在預設是 `gpu` phase correlation 路徑；若要比對退回方案，可直接切 `--gmc-mode cpu` 看 OpenCV LK 版本。
 - `native_960` 現在是 detector path 的重要 control；所有 tiled 修正都應先對照它，而不是只和舊 tiled baseline 比。
 - tiled path 目前已知最大風險是 seam 汙染進入 tracker，拖髒 association、appearance bank 與 semantic relink。
-- E2E 延遲現況（2026-05-06）：無 profiling 時實際約 14ms/frame（~70 FPS 7-seq avg）。`--pipeline-relink` 可再壓 ~0.35ms（+2.5%），目前不納入 default。`--profile-stages` 測量的 5.4ms relink_write 包含強制 sync 開銷，實際 wall-clock 約 2ms。
+- E2E 延遲現況（2026-05-07）：`async_reid` + `pipeline_relink` 已設為 default，`letterbox_gpu` fused kernel 已上線。7-seq SDP：**107.64 FPS（9.29ms/frame）**，IDF1 47.8% / MOTA 40.5%，accuracy 無退化。
 
 ---
 
 ## Historical Links
 
-- 歷史 TODO / 設計規範 / C++ 路線圖： [docs/TODO_history.md](/docs/TODO_history.md:1)
-- Tracking base 與 relink sweep： [docs/experiments/tracking/fp_fn_recovery_and_gmc.md](/docs/experiments/tracking/fp_fn_recovery_and_gmc.md:1)
+- 歷史 TODO / 設計規範 / C++ 路線圖： [docs/TODO_history.md](/docs/TODO_history.md)
+- Tracking base 與 relink sweep： [docs/experiments/tracking/fp_fn_recovery_and_gmc.md](/docs/experiments/tracking/fp_fn_recovery_and_gmc.md)
 - ReID backbone refresh 歸檔： [docs/experiments/reid/semantic_relink_and_crop.md](/docs/experiments/reid/semantic_relink_and_crop.md:252)
 
 ---

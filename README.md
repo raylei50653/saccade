@@ -8,11 +8,11 @@ infrastructure。
 
 如果你要開發這個 repo，請用這個閱讀順序進入：
 
-1. [DEVELOPMENT.md](/DEVELOPMENT.md:1)
-2. [docs/architecture.md](/docs/architecture.md:1)
-3. [docs/pipeline_flow.md](/docs/pipeline_flow.md:1)
-4. [docs/api_spec.md](/docs/api_spec.md:1)
-5. [docs/TODO.md](/docs/TODO.md:1)
+1. [DEVELOPMENT.md](/DEVELOPMENT.md)
+2. [docs/architecture.md](/docs/architecture.md)
+3. [docs/pipeline_flow.md](/docs/pipeline_flow.md)
+4. [docs/api_spec.md](/docs/api_spec.md)
+5. [docs/TODO.md](/docs/TODO.md)
 
 這個 repo 目前以 **MOT17 為中心的 evaluation 與 tuning workflow** 為主，
 線上 perception stack 仍保留在周邊。
@@ -30,7 +30,7 @@ infrastructure。
   - `scripts/eval/ablation_mot17.py` 是目前的 grouped ablation runner
 
 目前記錄中的 default path 與活躍優化方向，請看
-[docs/TODO.md](/docs/TODO.md:1)。
+[docs/TODO.md](/docs/TODO.md)。
 
 ## Main Code Areas
 
@@ -55,7 +55,7 @@ infrastructure。
 - `tests/`
   - unit、parity、e2e、benchmark coverage
 
-更多文件入口請看 [docs/README.md](/docs/README.md:1)。
+更多文件入口請看 [docs/README.md](/docs/README.md)。
 
 ## Environment
 
@@ -113,7 +113,7 @@ uv run python scripts/eval/ablation_mot17.py --category all
 - `trigger`
 - `lifecycle`
 
-目前 script map 請看 [scripts/eval/README.md](/scripts/eval/README.md:1)。
+目前 script map 請看 [scripts/eval/README.md](/scripts/eval/README.md)。
 
 ### 重算 Metrics
 
@@ -144,19 +144,19 @@ uv run python scripts/eval/compare_framework_ultralytics.py \
 
 ## Development and Documentation
 
-- [DEVELOPMENT.md](/DEVELOPMENT.md:1)
+- [DEVELOPMENT.md](/DEVELOPMENT.md)
   - 開發主入口
 
-- [docs/architecture.md](/docs/architecture.md:1)
+- [docs/architecture.md](/docs/architecture.md)
   - 穩定架構邊界
 
-- [docs/pipeline_flow.md](/docs/pipeline_flow.md:1)
+- [docs/pipeline_flow.md](/docs/pipeline_flow.md)
   - 目前實作主路徑 flow
 
-- [docs/api_spec.md](/docs/api_spec.md:1)
+- [docs/api_spec.md](/docs/api_spec.md)
   - API / event / storage contract
 
-- [docs/TODO.md](/docs/TODO.md:1)
+- [docs/TODO.md](/docs/TODO.md)
   - 當前工作與 ablation backlog
 
 ## Tests

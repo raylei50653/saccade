@@ -45,6 +45,7 @@ assets/videos/*.mp4
 
 # Scratch / backup files
 *.bak
+*.diff
 debug_*.py
 .codex
 

@@ -10,6 +10,7 @@ try:
         merge_cross_tile_duplicates as cpp_merge_cross_tile_duplicates,
         merge_cross_tile_duplicates_cuda as cpp_merge_cross_tile_duplicates_cuda,
         nms_cuda as cpp_nms_cuda,
+        letterbox_gpu as cpp_letterbox_gpu,
     )
 except ImportError:
     cpp_filter_detections = None
@@ -17,6 +18,7 @@ except ImportError:
     cpp_merge_cross_tile_duplicates = None
     cpp_merge_cross_tile_duplicates_cuda = None
     cpp_nms_cuda = None
+    cpp_letterbox_gpu = None
 
 from torchvision.ops import batched_nms, nms
 
@@ -697,15 +699,31 @@ def detect_single_patch_640(
     if "letterbox" in preprocess_modes:
         r = 640.0 / max(h_orig, w_orig)
         h_new, w_new = int(h_orig * r), int(w_orig * r)
-        img_resized = torch.nn.functional.interpolate(
-            pool.frame_buffer.unsqueeze(0), size=(h_new, w_new)
-        ).squeeze(0)
-        pool.canvas_640p.fill_(114.0 / 255.0)
         y_off = (640 - h_new) // 2
         x_off = (640 - w_new) // 2
-        pool.canvas_640p[:, y_off : y_off + h_new, x_off : x_off + w_new].copy_(
-            img_resized
-        )
+        if cpp_letterbox_gpu is not None:
+            stream = torch.cuda.current_stream().cuda_stream
+            cpp_letterbox_gpu(
+                pool.frame_buffer.data_ptr(),
+                w_orig,
+                h_orig,
+                pool.canvas_640p.data_ptr(),
+                640,
+                x_off,
+                y_off,
+                w_new,
+                h_new,
+                114.0 / 255.0,
+                stream,
+            )
+        else:
+            img_resized = torch.nn.functional.interpolate(
+                pool.frame_buffer.unsqueeze(0), size=(h_new, w_new)
+            ).squeeze(0)
+            pool.canvas_640p.fill_(114.0 / 255.0)
+            pool.canvas_640p[:, y_off : y_off + h_new, x_off : x_off + w_new].copy_(
+                img_resized
+            )
 
         raw_dets = detector.detect_raw(pool.canvas_640p.unsqueeze(0))
         boxes = raw_dets[0, :, :4]
@@ -735,15 +753,31 @@ def detect_single_patch_960(
     if "letterbox" in preprocess_modes:
         r = 960.0 / max(h_orig, w_orig)
         h_new, w_new = int(h_orig * r), int(w_orig * r)
-        img_resized = torch.nn.functional.interpolate(
-            pool.frame_buffer.unsqueeze(0), size=(h_new, w_new)
-        ).squeeze(0)
-        pool.canvas_960p.fill_(114.0 / 255.0)
         y_off = (960 - h_new) // 2
         x_off = (960 - w_new) // 2
-        pool.canvas_960p[:, y_off : y_off + h_new, x_off : x_off + w_new].copy_(
-            img_resized
-        )
+        if cpp_letterbox_gpu is not None:
+            stream = torch.cuda.current_stream().cuda_stream
+            cpp_letterbox_gpu(
+                pool.frame_buffer.data_ptr(),
+                w_orig,
+                h_orig,
+                pool.canvas_960p.data_ptr(),
+                960,
+                x_off,
+                y_off,
+                w_new,
+                h_new,
+                114.0 / 255.0,
+                stream,
+            )
+        else:
+            img_resized = torch.nn.functional.interpolate(
+                pool.frame_buffer.unsqueeze(0), size=(h_new, w_new)
+            ).squeeze(0)
+            pool.canvas_960p.fill_(114.0 / 255.0)
+            pool.canvas_960p[:, y_off : y_off + h_new, x_off : x_off + w_new].copy_(
+                img_resized
+            )
 
         raw_dets = detector.detect_raw(pool.canvas_960p.unsqueeze(0))
         boxes = raw_dets[0, :, :4]

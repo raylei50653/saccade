@@ -2,9 +2,9 @@
 
 本文件描述 **目前穩定的系統形狀與責任邊界**。它不是實驗日誌，也不是待辦清單。
 
-- 近期工作方向與 ablation backlog：看 [docs/TODO.md](/docs/TODO.md:1)
-- 開發入口與 source-of-truth 規則：看 [DEVELOPMENT.md](/DEVELOPMENT.md:1)
-- 事件 / API / storage schema：看 [docs/api_spec.md](/docs/api_spec.md:1)
+- 近期工作方向與 ablation backlog：看 [docs/TODO.md](/docs/TODO.md)
+- 開發入口與 source-of-truth 規則：看 [DEVELOPMENT.md](/DEVELOPMENT.md)
+- 事件 / API / storage schema：看 [docs/api_spec.md](/docs/api_spec.md)
 
 ---
 
@@ -37,8 +37,8 @@ Saccade 目前以 **GPU-first 的 MOT / tracking / relink pipeline** 為核心�
 
 目前最活躍、最常被維護的主路徑是 **MOT17-centered evaluation path**：
 
-- [scripts/eval/mot17.py](/scripts/eval/mot17.py:1)
-- [src/saccade/perception/eval/runner.py](/src/saccade/perception/eval/runner.py:1)
+- [scripts/eval/mot17.py](/scripts/eval/mot17.py)
+- [src/saccade/perception/eval/runner.py](/src/saccade/perception/eval/runner.py)
 
 在這條路徑上，主要資料流如下：
 
@@ -73,13 +73,14 @@ Frame Source
 
 主要位置：
 
-- [src/saccade/perception/eval/detection.py](/src/saccade/perception/eval/detection.py:1)
-- [include/tracking/pipeline.hpp](/include/tracking/pipeline.hpp:1)
-- [src/tracking/pipeline.cpp](/src/tracking/pipeline.cpp:1)
+- [src/saccade/perception/eval/detection.py](/src/saccade/perception/eval/detection.py)
+- [include/tracking/pipeline.hpp](/include/tracking/pipeline.hpp)
+- [src/tracking/pipeline.cpp](/src/tracking/pipeline.cpp)
 
 目前架構重點：
 
 - 盡量走 native facade / CUDA fast path
+- letterbox / resize 已換為 fused CUDA kernel（`src/perception/letterbox_kernel.cu`），單次 detect 節省 ~1ms
 - Python wrapper 保留 orchestration 與 fallback
 - detection quality 仍有進一步演算法空間，但責任邊界已固定
 
@@ -95,13 +96,14 @@ Frame Source
 
 主要位置：
 
-- [src/tracking/tracker_gpu.cu](/src/tracking/tracker_gpu.cu:1)
-- [include/tracking/tracker_gpu.hpp](/include/tracking/tracker_gpu.hpp:1)
-- [src/saccade/perception/tracking/tracker_gpu.py](/src/saccade/perception/tracking/tracker_gpu.py:1)
+- [src/tracking/tracker_gpu.cu](/src/tracking/tracker_gpu.cu)
+- [include/tracking/tracker_gpu.hpp](/include/tracking/tracker_gpu.hpp)
+- [src/saccade/perception/tracking/tracker_gpu.py](/src/saccade/perception/tracking/tracker_gpu.py)
 
 目前架構重點：
 
 - result path 優先走 GPU-side buffers，再在必要邊界 materialize
+- GMC（Global Motion Compensation）走 GPU phase correlation；`estimate_into()` 直寫 device buffer，避免 host roundtrip；sub-stage profiling 可追蹤 FFT / cross_power / IFFT / peak_find 分段耗時
 - association 允許 appearance 參與，但仍保留穩定 fallback
 - deterministic assignment 與 native identity resolve 已完成收斂
 
@@ -116,14 +118,15 @@ Frame Source
 
 主要位置：
 
-- [src/saccade/perception/tracking/tracker_gpu.py](/src/saccade/perception/tracking/tracker_gpu.py:1)
-- [src/saccade/perception/eval/relink.py](/src/saccade/perception/eval/relink.py:1)
-- [src/saccade/perception/feature_extractor.py](/src/saccade/perception/feature_extractor.py:1)
+- [src/saccade/perception/tracking/tracker_gpu.py](/src/saccade/perception/tracking/tracker_gpu.py)
+- [src/saccade/perception/eval/relink.py](/src/saccade/perception/eval/relink.py)
+- [src/saccade/perception/feature_extractor.py](/src/saccade/perception/feature_extractor.py)
 
 目前架構重點：
 
 - reference quality 與 false-accept filtering 是當前主優化方向
-- ReID 不是每幀必做；它是受 trigger / budget 控制的昂貴決策資源
+- ReID 不是每幀必做；它是受 trigger / budget 控制的昂貴決策資源（`async_reid=True` 為預設，走 side CUDA stream，不阻塞主追蹤循環）
+- inter-frame relink 預設走 `pipeline_relink=True`（ThreadPoolExecutor overlap）
 - noisy reference 不應污染 bank
 
 ### 4.4 Storage / Eventing
@@ -136,14 +139,14 @@ Frame Source
 
 主要位置：
 
-- [src/saccade/storage/redis_cache.py](/src/saccade/storage/redis_cache.py:1)
-- [src/saccade/storage/chroma_store.py](/src/saccade/storage/chroma_store.py:1)
+- [src/saccade/storage/redis_cache.py](/src/saccade/storage/redis_cache.py)
+- [src/saccade/storage/chroma_store.py](/src/saccade/storage/chroma_store.py)
 
 目前架構重點：
 
 - perception 與 cognition 透過 Redis/Chroma 解耦
 - event queue / stream 屬於較外圍層，不應反向影響 perception 熱路徑
-- 具體 schema 以 [docs/api_spec.md](/docs/api_spec.md:1) 為準
+- 具體 schema 以 [docs/api_spec.md](/docs/api_spec.md) 為準
 
 ### 4.5 Resource / Memory Management
 
@@ -155,8 +158,8 @@ Frame Source
 
 主要位置：
 
-- [src/saccade/resource/resource_manager.py](/src/saccade/resource/resource_manager.py:1)
-- [src/saccade/perception/dispatcher.py](/src/saccade/perception/dispatcher.py:1)
+- [src/saccade/resource/resource_manager.py](/src/saccade/resource/resource_manager.py)
+- [src/saccade/perception/dispatcher.py](/src/saccade/perception/dispatcher.py)
 
 目前架構重點：
 
@@ -184,9 +187,9 @@ Frame Source
 
 主要位置：
 
-- [src/saccade/cognition/orchestrator.py](/src/saccade/cognition/orchestrator.py:1)
-- [src/saccade/api/server.py](/src/saccade/api/server.py:1)
-- [src/saccade/pipeline/health.py](/src/saccade/pipeline/health.py:1)
+- [src/saccade/cognition/orchestrator.py](/src/saccade/cognition/orchestrator.py)
+- [src/saccade/api/server.py](/src/saccade/api/server.py)
+- [src/saccade/pipeline/health.py](/src/saccade/pipeline/health.py)
 
 目前架構重點：
 
@@ -232,6 +235,8 @@ Frame Source
   - `--cross-tile-merge`
   - `--match-thresh 0.78`
   - `--semantic-threshold 0.91`
+  - `async_reid=True`、`pipeline_relink=True`（非同步 side-stream + inter-frame relink overlap）
+- GPU GMC 已收斂：phase correlation pipeline 全段 GPU；peak_find 改為 256-thread parallel reduction（原 single-thread O(N) → 12.5× 加速）；frame total 0.71 → 0.28 ms
 
 這些屬於目前穩定系統形狀的一部分，不應在日常小改動中隨意漂移。
 
@@ -248,18 +253,18 @@ Frame Source
 
 這些應分別放在：
 
-- [docs/TODO.md](/docs/TODO.md:1)
-- [docs/TODO_history.md](/docs/TODO_history.md:1)
+- [docs/TODO.md](/docs/TODO.md)
+- [docs/TODO_history.md](/docs/TODO_history.md)
 - `docs/experiments/`
 
 ---
 
 ## 8. 相關文件
 
-- 開發入口：[DEVELOPMENT.md](/DEVELOPMENT.md:1)
-- API / event / storage contract：[docs/api_spec.md](/docs/api_spec.md:1)
-- 當前待辦與近期結論：[docs/TODO.md](/docs/TODO.md:1)
-- 全流程敘事版資料流：[docs/pipeline_flow.md](/docs/pipeline_flow.md:1)
-- Tracker 深入說明：[docs/layers/gpubytetracker_deep_dive.md](/docs/layers/gpubytetracker_deep_dive.md:1)
+- 開發入口：[DEVELOPMENT.md](/DEVELOPMENT.md)
+- API / event / storage contract：[docs/api_spec.md](/docs/api_spec.md)
+- 當前待辦與近期結論：[docs/TODO.md](/docs/TODO.md)
+- 全流程敘事版資料流：[docs/pipeline_flow.md](/docs/pipeline_flow.md)
+- Tracker 深入說明：[docs/layers/gpubytetracker_deep_dive.md](/docs/layers/gpubytetracker_deep_dive.md)
 
-最後更新：2026-05-04
+最後更新：2026-05-07

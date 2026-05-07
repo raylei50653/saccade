@@ -796,7 +796,7 @@ def build_parser() -> argparse.ArgumentParser:
     reid_group.add_argument(
         "--reid-interval",
         type=int,
-        default=10,
+        default=20,
         help=_help(
             "Fixed heartbeat interval for appearance refresh when dynamic triggering is off.",
             range_hint=">=1",
@@ -1205,8 +1205,8 @@ def build_parser() -> argparse.ArgumentParser:
     trigger_group.add_argument(
         "--need-reid",
         action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Use dynamic need_reid_frame() triggering instead of a fixed heartbeat.",
+        default=False,
+        help="Use dynamic need_reid_frame() triggering instead of the default fixed heartbeat.",
     )
     trigger_group.add_argument(
         "--reid-history-size",

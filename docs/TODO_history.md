@@ -1,6 +1,6 @@
 # Saccade TODO History
 
-> 從 [docs/TODO.md](/docs/TODO.md:1) 拆出的歷史/脈絡內容。保留已完成項、設計規範與 C++ 化路線圖，避免主 TODO 被長篇歷史淹沒。
+> 從 [docs/TODO.md](/docs/TODO.md) 拆出的歷史/脈絡內容。保留已完成項、設計規範與 C++ 化路線圖，避免主 TODO 被長篇歷史淹沒。
 
 ---
 

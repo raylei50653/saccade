@@ -84,8 +84,8 @@ except ImportError:
     _LIFECYCLE_CLS = None
 from saccade.perception.eval.streaming import DALIStreamerStream
 from saccade.perception.eval.tracking import GlobalTrackIdMapper
+from saccade.perception.tracking.dynamic_reid import DynamicReIDController
 from saccade.perception.tracking.tracker_gpu import (
-    DynamicReIDController,
     TrackAppearanceBank,
     need_reid_frame,
 )
@@ -271,6 +271,12 @@ def run_eval(
         "native_reid_trt_enqueue",
         "native_reid_l2_normalize",
     )
+    gmc_breakdown_names = (
+        "gmc_gray_downscale",
+        "gmc_fg_mask",
+        "gmc_phase_corr",
+        "gmc_handoff",
+    )
     current_frame_stage_elapsed: dict[str, float] | None = None
     current_stage_sample_active = False
 
@@ -300,6 +306,7 @@ def run_eval(
         (name, 0.0) for name in (*top_level_stage_names, *breakdown_stage_names)
     )
     overall_stage_samples = OrderedDict((name, []) for name in top_level_stage_names)
+    overall_gmc_samples = OrderedDict((name, []) for name in gmc_breakdown_names)
     overall_profiled_frames = 0
     overall_post_counts = OrderedDict(
         (name, 0)
@@ -345,6 +352,8 @@ def run_eval(
                     from saccade_tracking_ext import GMC as CppGMC
 
                     gmc_estimator = CppGMC(downscale=cfg.gmc_downscale)
+                    if hasattr(gmc_estimator, "set_profiling_enabled"):
+                        gmc_estimator.set_profiling_enabled(profile_stages)
                 except ImportError:
                     gmc_estimator = SparseOpticalFlowGMC(downscale=cfg.gmc_downscale)
             else:
@@ -574,6 +583,7 @@ def run_eval(
         seq_native_reid_samples = OrderedDict(
             (name, []) for name in native_reid_breakdown_names
         )
+        seq_gmc_samples = OrderedDict((name, []) for name in gmc_breakdown_names)
         seq_post_counts = OrderedDict(
             (name, 0)
             for name in ("raw_boxes", "after_filter", "after_nms", "after_merge")
@@ -1424,6 +1434,7 @@ def run_eval(
                 def _run_gmc() -> tuple[torch.Tensor | None, bool]:
                     local_gmc_warp: torch.Tensor | None = None
                     local_gmc_uncertain = False
+                    _raw_warp = None
                     # A4: foreground mask — zero out current-frame detection regions before FFT.
                     # Using current-frame fused_boxes gives accurate positions; the stored
                     # d_prev_gray_ is also the masked version, so both frames in the
@@ -1433,7 +1444,18 @@ def run_eval(
                             _flat = fused_boxes.detach().cpu().view(-1).tolist()
                             gmc_estimator.set_fg_mask_boxes(_flat)
 
-                    if hasattr(gmc_estimator, "estimate_mat"):
+                    if hasattr(gmc_estimator, "estimate_into"):
+                        local_gmc_warp = torch.empty(
+                            6, dtype=torch.float32, device=fused_boxes.device
+                        )
+                        gmc_estimator.estimate_into(
+                            pool.frame_buffer.data_ptr(),
+                            w_orig,
+                            h_orig,
+                            torch.cuda.current_stream().cuda_stream,
+                            local_gmc_warp.data_ptr(),
+                        )
+                    elif hasattr(gmc_estimator, "estimate_mat"):
                         # C++ version or GlobalMotionCompensator
                         _raw_warp = gmc_estimator.estimate(
                             pool.frame_buffer.data_ptr(),
@@ -1462,6 +1484,21 @@ def run_eval(
                             local_gmc_warp is not None
                             and 0.0 < _pcr < cfg.gmc_pcr_uncertain_thresh
                         )
+                    if profile_stages and hasattr(gmc_estimator, "get_profile_stats"):
+                        _gmc_stats = gmc_estimator.get_profile_stats()
+                        if _gmc_stats:
+                            seq_gmc_samples["gmc_gray_downscale"].append(
+                                float(_gmc_stats.get("gray_downscale_ms", 0.0))
+                            )
+                            seq_gmc_samples["gmc_fg_mask"].append(
+                                float(_gmc_stats.get("fg_mask_ms", 0.0))
+                            )
+                            seq_gmc_samples["gmc_phase_corr"].append(
+                                float(_gmc_stats.get("phase_corr_ms", 0.0))
+                            )
+                            seq_gmc_samples["gmc_handoff"].append(
+                                float(_gmc_stats.get("handoff_ms", 0.0))
+                            )
                     return local_gmc_warp, local_gmc_uncertain
 
                 (gmc_warp, gmc_uncertain), _ = time_stage(
@@ -1837,6 +1874,9 @@ def run_eval(
             seq_stage_totals=seq_stage_totals,
             native_reid_breakdown_names=native_reid_breakdown_names,
             seq_native_reid_samples=seq_native_reid_samples,
+            gmc_breakdown_names=gmc_breakdown_names,
+            seq_gmc_samples=seq_gmc_samples,
+            overall_gmc_samples=overall_gmc_samples,
             seq_post_counts=seq_post_counts,
             overall_post_counts=overall_post_counts,
             seq_lazy_reid_frames=seq_lazy_reid_frames,
@@ -1874,6 +1914,8 @@ def run_eval(
         breakdown_stage_names=breakdown_stage_names,
         overall_stage_totals=overall_stage_totals,
         overall_post_counts=overall_post_counts,
+        gmc_breakdown_names=gmc_breakdown_names,
+        overall_gmc_samples=overall_gmc_samples,
         overall_lazy_reid_frames=overall_lazy_reid_frames,
         overall_lazy_reid_candidates=overall_lazy_reid_candidates,
         overall_lazy_reid_crops=overall_lazy_reid_crops,
