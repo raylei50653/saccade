@@ -9,6 +9,7 @@ from saccade.perception.eval.reporting import print_overall_summary, print_seque
 TOP_STAGES = ("detect", "reid_extract")
 BREAKDOWN_STAGES = ("post_filter",)
 NATIVE_REID_STAGES = ("crop",)
+GMC_STAGES = ("gmc_gray_downscale", "gmc_fg_mask", "gmc_phase_corr", "gmc_handoff")
 
 
 def make_cfg(**kwargs):
@@ -42,6 +43,8 @@ def base_overall_kwargs(output_root, **overrides):
         breakdown_stage_names=BREAKDOWN_STAGES,
         overall_stage_totals={s: 0.0 for s in BREAKDOWN_STAGES},
         overall_post_counts={},
+        gmc_breakdown_names=GMC_STAGES,
+        overall_gmc_samples={s: [] for s in GMC_STAGES},
         overall_lazy_reid_frames=0,
         overall_lazy_reid_candidates=0,
         overall_lazy_reid_crops=0,
@@ -147,6 +150,9 @@ def base_seq_kwargs(**overrides):
         seq_stage_totals={s: 0.0 for s in BREAKDOWN_STAGES},
         native_reid_breakdown_names=NATIVE_REID_STAGES,
         seq_native_reid_samples={s: [] for s in NATIVE_REID_STAGES},
+        gmc_breakdown_names=GMC_STAGES,
+        seq_gmc_samples={s: [] for s in GMC_STAGES},
+        overall_gmc_samples={s: [] for s in GMC_STAGES},
         seq_post_counts={},
         overall_post_counts={},
         seq_lazy_reid_frames=0,
