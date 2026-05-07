@@ -1,4 +1,5 @@
 import json
+import math
 import time
 import uuid
 import asyncio
@@ -34,20 +35,47 @@ class EntropyTrigger:
             self.redis_client = redis.from_url(self.redis_url)
         return self.redis_client
 
-    def calculate_entropy(self, detections: List[Any]) -> float:
+    def calculate_entropy(self, detections: List[Any], density_max: int = 10) -> float:
         """
-        計算影格資訊熵 (目前的簡化實作)
+        計算影格資訊熵，結合 Shannon Entropy（類別分佈）與 Object Density（物體密度）。
 
-        可以根據偵測到的物體數量、類別分佈或邊界框的位移量來計算。
+        detections 元素可為：
+          - 有 class_id / label 屬性的偵測物件
+          - 字串類別標籤
         """
-        # TODO: 實作基於 Shannon Entropy 或 Object Density 的計算邏輯
-        # 這裡先用簡單的偵測物體數量模擬
         if not detections:
             return 0.0
 
-        # 模擬：偵測到越多物體，熵值越高
-        score = len(detections) * 0.2
-        return min(score, 1.0)
+        # 提取類別標籤
+        labels: List[Any] = []
+        for d in detections:
+            if hasattr(d, "class_id"):
+                labels.append(d.class_id)
+            elif hasattr(d, "label"):
+                labels.append(d.label)
+            else:
+                labels.append(str(d))
+
+        n = len(labels)
+
+        # Shannon entropy over class distribution, normalized to [0, 1]
+        counts: dict = {}
+        for lbl in labels:
+            counts[lbl] = counts.get(lbl, 0) + 1
+
+        raw_entropy = 0.0
+        for count in counts.values():
+            p = count / n
+            raw_entropy -= p * math.log2(p)
+
+        n_classes = len(counts)
+        max_entropy = math.log2(n_classes) if n_classes > 1 else 1.0
+        shannon_score = raw_entropy / max_entropy if max_entropy > 0 else 0.0
+
+        # Object density: linear scale up to density_max objects
+        density_score = min(n / density_max, 1.0)
+
+        return 0.5 * shannon_score + 0.5 * density_score
 
     async def emit_event(
         self, entropy_value: float, frame_id: int, source_path: str, objects: List[str]

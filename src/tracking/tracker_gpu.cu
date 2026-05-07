@@ -94,6 +94,43 @@ __global__ void init_covariance_kernel(float* covs, const int* new_slots, int n_
     kf_gpu::init_covariance(covs + new_slots[i] * 64);
 }
 
+__global__ void apply_detection_quality_scaling_kernel(
+    float* d_scores, const float* d_boxes, int num_dets,
+    int frame_w, int frame_h,
+    float w_aspect, float w_center, float w_area)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= num_dets) return;
+
+    float x1 = d_boxes[i * 4 + 0];
+    float y1 = d_boxes[i * 4 + 1];
+    float x2 = d_boxes[i * 4 + 2];
+    float y2 = d_boxes[i * 4 + 3];
+
+    float bw = fmaxf(x2 - x1, 1e-6f);
+    float bh = fmaxf(y2 - y1, 1e-6f);
+
+    // Aspect ratio: Gaussian peak at 2.5
+    float aspect = bh / bw;
+    float aspect_q = expf(-0.5f * powf((aspect - 2.5f) / 1.2f, 2.0f));
+
+    // Center bias
+    float cx = (x1 + x2) * 0.5f;
+    float cy = (y1 + y2) * 0.5f;
+    float cx_norm = cx / fmaxf((float)frame_w, 1.0f);
+    float cy_norm = cy / fmaxf((float)frame_h, 1.0f);
+    
+    float center_q = fminf(fminf(cx_norm, 1.0f - cx_norm), fminf(cy_norm, 1.0f - cy_norm)) * 4.0f;
+    center_q = fmaxf(0.0f, fminf(1.0f, center_q));
+
+    // Area ratio: Gaussian peak at 0.01
+    float area_ratio = (bw * bh) / fmaxf((float)(frame_w * frame_h), 1.0f);
+    float area_q = expf(-0.5f * powf((area_ratio - 0.01f) / 0.01f, 2.0f));
+
+    float quality = w_aspect * aspect_q + w_center * center_q + w_area * area_q;
+    d_scores[i] *= quality;
+}
+
 namespace kernel {
 
 // Compute per-track S^-1 (innovation covariance inverse) after predict+GMC, before association.
@@ -309,6 +346,7 @@ __global__ void fused_sinkhorn_topk_kernel(
     const int* trk_states, const bool* trk_active, const int* trk_to_det,
     int n_trk, int n_det, float lambda, float max_cost,
     float min_det_score, float max_det_score, int required_trk_state,
+    const int* det_to_trk,
     int* out_indices, float* out_probs)
 {
     __shared__ float s_vals[3][128];
@@ -325,6 +363,7 @@ __global__ void fused_sinkhorn_topk_kernel(
 
     if (valid_trk) {
         for (int d = tid; d < n_det; d += 128) {
+            if (det_to_trk && det_to_trk[d] != -1) continue;
             float score = det_scores[d];
             if (score < min_det_score || score >= max_det_score) continue;
             
@@ -857,6 +896,13 @@ class GPUByteTracker::Impl {
 public:
     Impl(int max_objects, int embedding_dim)
         : max_objs_(max_objects), embed_dim_(embedding_dim) {
+        enable_quality_scaling_ = false;
+        q_w_aspect_ = 0.50f;
+        q_w_center_ = 0.30f;
+        q_w_area_ = 0.20f;
+        frame_w_ = 1920;
+        frame_h_ = 1080;
+
         checkCuda(cudaMalloc(&d_states_, max_objs_ * 8 * sizeof(float)));
         checkCuda(cudaMalloc(&d_covs_, max_objs_ * 64 * sizeof(float)));
         checkCuda(cudaMalloc(&d_active_, max_objs_ * sizeof(bool)));
@@ -865,6 +911,7 @@ public:
         checkCuda(cudaMalloc(&d_classes_, max_objs_ * sizeof(int)));
         checkCuda(cudaMalloc(&d_track_ids_, max_objs_ * sizeof(int)));
         checkCuda(cudaMalloc(&d_features_, max_objs_ * embed_dim_ * sizeof(float)));
+        d_features_owned_ = true;
         
         max_assoc_ = 1024;
         checkCuda(cudaMalloc(&d_cost_matrix_, max_objs_ * max_assoc_ * sizeof(float)));
@@ -930,7 +977,8 @@ public:
     ~Impl() {
         cudaFree(d_states_); cudaFree(d_covs_); cudaFree(d_active_);
         cudaFree(d_age_); cudaFree(d_scores_); cudaFree(d_classes_);
-        cudaFree(d_track_ids_); cudaFree(d_features_);
+        cudaFree(d_track_ids_);
+        if (d_features_owned_) cudaFree(d_features_);
         cudaFree(d_cost_matrix_); cudaFree(d_sinkhorn_v_);
         cudaFree(d_topk_indices_); cudaFree(d_topk_probs_);
         cudaFree(d_auction_prices_); cudaFree(d_trk_to_det_); cudaFree(d_det_to_trk_);
@@ -999,6 +1047,15 @@ public:
         float* d_boxes, float* d_scores, int* d_classes, int num_dets,
         cudaStream_t stream, float* d_embeddings, float* d_gmc,
         float light_factor, float mid_thresh_scale) {
+        
+        if (num_dets > 0 && enable_quality_scaling_) {
+            int threads = 256;
+            int blocks = (num_dets + threads - 1) / threads;
+            apply_detection_quality_scaling_kernel<<<blocks, threads, 0, stream>>>(
+                d_scores, d_boxes, num_dets, frame_w_, frame_h_,
+                q_w_aspect_, q_w_center_, q_w_area_);
+        }
+
         int threads = 256;
         int blocks = (max_objs_ + threads - 1) / threads;
         predict_kernel<<<blocks, threads, 0, stream>>>(d_states_, d_covs_, d_active_, d_age_, max_objs_, max_age_);
@@ -1044,11 +1101,12 @@ public:
                 high_thresh_
             );
 
-            // Stage 1: High-conf dets -> All active tracks
+            // Stage 1: High-conf dets -> Confirmed tracks first (D2-C)
             kernel::fused_sinkhorn_topk_kernel<<<max_objs_, 128, 0, stream>>>(
                 d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
                 max_objs_, num_dets, 30.0f, match_thresh_,
-                high_thresh_, 1.1f, -1,
+                high_thresh_, 1.1f, 2, // TRACK_CONFIRMED only
+                nullptr,
                 d_topk_indices_, d_topk_probs_
             );
             checkCuda(cudaMemsetAsync(d_auction_prices_, 0, num_dets * sizeof(uint64_t), stream));
@@ -1056,11 +1114,25 @@ public:
                 d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
                 max_objs_, num_dets, 3, 0.01f);
 
-            // Stage 1b: Mid-conf dets -> Unmatched active tracks
+            // Stage 1b: Mid-conf dets -> Unmatched confirmed tracks (D2-C)
             kernel::fused_sinkhorn_topk_kernel<<<max_objs_, 128, 0, stream>>>(
                 d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
                 max_objs_, num_dets, 30.0f, match_thresh_,
-                effective_mid_thresh, high_thresh_, -1,
+                effective_mid_thresh, high_thresh_, 2, // TRACK_CONFIRMED only
+                nullptr,
+                d_topk_indices_, d_topk_probs_
+            );
+            checkCuda(cudaMemsetAsync(d_auction_prices_, 0, num_dets * sizeof(uint64_t), stream));
+            kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
+                d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
+                max_objs_, num_dets, 3, 0.01f);
+
+            // Stage 1c: Unmatched high+mid-conf dets -> Tentative tracks (D2-C isolation)
+            kernel::fused_sinkhorn_topk_kernel<<<max_objs_, 128, 0, stream>>>(
+                d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
+                max_objs_, num_dets, 30.0f, match_thresh_,
+                effective_mid_thresh, 1.1f, 1, // TRACK_TENTATIVE only
+                d_det_to_trk_, // skip dets already claimed by confirmed tracks
                 d_topk_indices_, d_topk_probs_
             );
             checkCuda(cudaMemsetAsync(d_auction_prices_, 0, num_dets * sizeof(uint64_t), stream));
@@ -1073,6 +1145,7 @@ public:
                 d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
                 max_objs_, num_dets, 30.0f, 0.5f,
                 track_thresh_, effective_mid_thresh, 2, // TRACK_CONFIRMED = 2
+                nullptr,
                 d_topk_indices_, d_topk_probs_
             );
             checkCuda(cudaMemsetAsync(d_auction_prices_, 0, num_dets * sizeof(uint64_t), stream));
@@ -1124,7 +1197,8 @@ public:
             d_trk_to_det_, max_objs_,
             d_res_boxes_, d_res_scores_, d_res_ids_, d_res_classes_, d_res_det_idx_,
             d_res_count_);
-        h_dirty_ = true;  // host arrays are stale until next lazy sync
+        h_dirty_ = true;           // host arrays are stale until next lazy sync
+        h_slot_map_dirty_ = true;  // tid→slot map must be rebuilt before next scatter
     }
 
     void set_params(float track_thresh, float high_thresh, float match_thresh, int track_buffer,
@@ -1141,6 +1215,16 @@ public:
     void set_reid_params(float cos_threshold, float iou_low, float iou_high, float weight) {
         reid_cos_threshold_ = cos_threshold; reid_iou_low_ = iou_low; reid_iou_high_ = iou_high; reid_weight_ = weight;
     }
+    void set_quality_params(bool enabled, float w_aspect, float w_center, float w_area) {
+        enable_quality_scaling_ = enabled;
+        q_w_aspect_ = w_aspect;
+        q_w_center_ = w_center;
+        q_w_area_ = w_area;
+    }
+    void set_frame_size(int w, int h) {
+        frame_w_ = w;
+        frame_h_ = h;
+    }
     void set_homography(const float* h) {
         if (h) {
             checkCuda(cudaMemcpy(d_homography_, h, 9 * sizeof(float), cudaMemcpyHostToDevice));
@@ -1153,28 +1237,66 @@ public:
         // The Python layer applies them directly during semantic reranking.
     }
 
+    // Rebuild h_tid_to_slot_ from host arrays.  D2H only if h_dirty_; map rebuild only if
+    // h_slot_map_dirty_.  Both update_reference_features_impl and set_clean_embedding_flags
+    // call this, so the D2H + rebuild happen at most once per frame.
+    void ensure_slot_map() {
+        if (!h_slot_map_dirty_) return;
+        if (h_dirty_) {
+            checkCuda(cudaMemcpy(h_active_raw_.data(), d_active_,    max_objs_ * sizeof(bool), cudaMemcpyDeviceToHost));
+            checkCuda(cudaMemcpy(h_track_ids_.data(),  d_track_ids_, max_objs_ * sizeof(int),  cudaMemcpyDeviceToHost));
+            h_dirty_ = false;
+        }
+        h_tid_to_slot_.clear();
+        for (int slot = 0; slot < max_objs_; ++slot) {
+            if (h_active_raw_[slot]) {
+                h_tid_to_slot_[h_track_ids_[slot]] = slot;
+            }
+        }
+        h_slot_map_dirty_ = false;
+    }
+
+    // Bind an externally-owned GPU float buffer as d_features_.
+    // The caller (Python) owns the lifetime; C++ will not cudaFree it.
+    void bind_external_features_buffer(float* ptr) {
+        if (d_features_owned_) {
+            cudaFree(d_features_);
+            d_features_owned_ = false;
+        }
+        d_features_ = ptr;
+        // Zero the external buffer so stale data doesn't corrupt association.
+        cudaMemset(d_features_, 0, max_objs_ * embed_dim_ * sizeof(float));
+    }
+
+    // Return the current tid→slot mapping as a flat list of (tid, slot) pairs.
+    // Shares the ensure_slot_map() cache — free if called in the same frame as
+    // update_reference_features_impl or set_clean_embedding_flags.
+    std::vector<std::pair<int,int>> get_active_tid_slot_pairs() {
+        ensure_slot_map();
+        std::vector<std::pair<int,int>> result;
+        result.reserve(h_tid_to_slot_.size());
+        for (const auto& kv : h_tid_to_slot_) {
+            result.emplace_back(kv.first, kv.second);
+        }
+        return result;
+    }
+
     // Scatter bank representative embeddings into d_features_ at the correct slots.
     // d_track_ids_gpu and d_features_src are GPU pointers; n features each of embed_dim_ floats.
     void update_reference_features_impl(int* d_track_ids_gpu, float* d_features_src, int num, cudaStream_t stream) {
         if (num <= 0) return;
-        checkCuda(cudaMemcpy(h_active_raw_.data(),  d_active_,    max_objs_ * sizeof(bool), cudaMemcpyDeviceToHost));
-        checkCuda(cudaMemcpy(h_track_ids_.data(),   d_track_ids_, max_objs_ * sizeof(int),  cudaMemcpyDeviceToHost));
-        h_dirty_ = false;
+        ensure_slot_map();
         std::vector<int> h_tids(num);
         checkCuda(cudaMemcpy(h_tids.data(), d_track_ids_gpu, num * sizeof(int), cudaMemcpyDeviceToHost));
         for (int i = 0; i < num; ++i) {
-            const int tid = h_tids[i];
-            for (int slot = 0; slot < max_objs_; ++slot) {
-                if (h_active_raw_[slot] && h_track_ids_[slot] == tid) {
-                    checkCuda(cudaMemcpyAsync(
-                        d_features_ + slot * embed_dim_,
-                        d_features_src + i * embed_dim_,
-                        embed_dim_ * sizeof(float),
-                        cudaMemcpyDeviceToDevice, stream
-                    ));
-                    break;
-                }
-            }
+            auto it = h_tid_to_slot_.find(h_tids[i]);
+            if (it == h_tid_to_slot_.end()) continue;
+            checkCuda(cudaMemcpyAsync(
+                d_features_ + it->second * embed_dim_,
+                d_features_src + i * embed_dim_,
+                embed_dim_ * sizeof(float),
+                cudaMemcpyDeviceToDevice, stream
+            ));
         }
     }
 
@@ -1184,21 +1306,16 @@ public:
         checkCuda(cudaMemsetAsync(d_has_clean_embedding_, 0, max_objs_ * sizeof(bool), stream));
         std::fill(h_has_clean_embedding_.begin(), h_has_clean_embedding_.end(), static_cast<uint8_t>(0));
         if (n == 0) return;
-        checkCuda(cudaMemcpy(h_active_raw_.data(), d_active_,    max_objs_ * sizeof(bool), cudaMemcpyDeviceToHost));
-        checkCuda(cudaMemcpy(h_track_ids_.data(),  d_track_ids_, max_objs_ * sizeof(int),  cudaMemcpyDeviceToHost));
-        h_dirty_ = false;
+        ensure_slot_map();
         std::vector<int> h_tids(n);
         std::vector<uint8_t> h_flags(n);
         checkCuda(cudaMemcpy(h_tids.data(), d_track_ids_in, n * sizeof(int), cudaMemcpyDeviceToHost));
         checkCuda(cudaMemcpy(h_flags.data(), d_flags_in, n * sizeof(uint8_t), cudaMemcpyDeviceToHost));
         for (int i = 0; i < n; ++i) {
             if (!h_flags[i]) continue;
-            const int tid = h_tids[i];
-            for (int slot = 0; slot < max_objs_; ++slot) {
-                if (h_active_raw_[slot] && h_track_ids_[slot] == tid) {
-                    h_has_clean_embedding_[slot] = 1;
-                    break;
-                }
+            auto it = h_tid_to_slot_.find(h_tids[i]);
+            if (it != h_tid_to_slot_.end()) {
+                h_has_clean_embedding_[it->second] = 1;
             }
         }
         checkCuda(cudaMemcpyAsync(d_has_clean_embedding_, h_has_clean_embedding_.data(),
@@ -1373,6 +1490,14 @@ private:
     int max_objs_, embed_dim_, max_assoc_;
     float track_thresh_ = 0.1f, high_thresh_ = 0.5f, match_thresh_ = 0.8f, mid_thresh_ = 0.40f, new_track_thresh_ = 0.40f;
     float reid_cos_threshold_ = 0.90f, reid_iou_low_ = 0.3f, reid_iou_high_ = 0.6f, reid_weight_ = 0.4f;
+    
+    bool enable_quality_scaling_ = false;
+    float q_w_aspect_ = 0.50f;
+    float q_w_center_ = 0.30f;
+    float q_w_area_ = 0.20f;
+    int frame_w_ = 1920;
+    int frame_h_ = 1080;
+
     float iou_stage1_gate_ = 0.30f;
     float maha_gate_ = 9.4877f;
     int max_age_ = 30, confirm_streak_ = 3;
@@ -1409,6 +1534,12 @@ private:
     // h_dirty_ is set true by update() and cleared by each lazy-sync function.
     // Any read of h_* arrays while h_dirty_==true is a stale-read bug.
     bool h_dirty_ = false;
+    // h_slot_map_dirty_: set true alongside h_dirty_; cleared when h_tid_to_slot_ is rebuilt.
+    // ensure_slot_map() rebuilds only once per frame, shared by update_reference_features_impl
+    // and set_clean_embedding_flags.
+    bool h_slot_map_dirty_ = true;
+    std::unordered_map<int,int> h_tid_to_slot_;
+    bool d_features_owned_ = true;  // false when bound to an external Python tensor
     std::vector<float>    h_states_, h_covs_, h_scores_;
     std::vector<uint8_t>  h_active_raw_;
     std::vector<uint8_t>  h_has_clean_embedding_;
@@ -1424,11 +1555,24 @@ void GPUByteTracker::set_params(float track_thresh, float high_thresh, float mat
                                 bool adaptive_confirmation, float new_track_thresh, bool nsa_kalman) {
     pimpl_->set_params(track_thresh, high_thresh, match_thresh, track_buffer, mid_thresh, confirm_streak, confirm_score_thresh, adaptive_confirmation, new_track_thresh, nsa_kalman);
 }
-void GPUByteTracker::set_reid_params(float cos_threshold, float iou_low, float iou_high, float weight) { pimpl_->set_reid_params(cos_threshold, iou_low, iou_high, weight); }
+void GPUByteTracker::set_reid_params(float cos_threshold, float iou_low, float iou_high, float weight) {
+    pimpl_->set_reid_params(cos_threshold, iou_low, iou_high, weight);
+}
+
+void GPUByteTracker::set_quality_params(bool enabled, float w_aspect, float w_center, float w_area) {
+    pimpl_->set_quality_params(enabled, w_aspect, w_center, w_area);
+}
+
+void GPUByteTracker::set_frame_size(int w, int h) {
+    pimpl_->set_frame_size(w, h);
+}
+
 void GPUByteTracker::set_homography(const float* h) { pimpl_->set_homography(h); }
 void GPUByteTracker::set_unified_score_params(const UnifiedScoreParams& params) { pimpl_->set_unified_score_params(params); }
 void GPUByteTracker::update_reference_features(int* track_ids, float* features, int num, cudaStream_t stream) { pimpl_->update_reference_features_impl(track_ids, features, num, stream); }
 void GPUByteTracker::set_clean_embedding_flags(int* track_ids, bool* flags, int n, cudaStream_t stream) { pimpl_->set_clean_embedding_flags(track_ids, flags, n, stream); }
+void GPUByteTracker::bind_features_buffer(float* ptr) { pimpl_->bind_external_features_buffer(ptr); }
+std::vector<std::pair<int,int>> GPUByteTracker::get_active_tid_slot_pairs() { return pimpl_->get_active_tid_slot_pairs(); }
 void GPUByteTracker::update_into(
     float* b, float* s, int* c, int n, cudaStream_t stream,
     float* out_boxes, float* out_scores, int* out_ids, int* out_classes, int* out_det_idx, int* out_count,
@@ -1458,7 +1602,57 @@ __device__ float get_iou_device(const float* b1, const float* b2) {
     return inter / (area1 + area2 - inter + 1e-6f);
 }
 
-__global__ void assign_duplicate_anchor_kernel(const float* boxes, const int* classes, int num_dets, float iou_threshold, float center_threshold, float area_ratio_threshold, int* anchor_indices) {
+__device__ bool is_box_near_tiled_seam_device(
+    const float* box,
+    int tiling_mode,
+    int frame_w,
+    int frame_h,
+    float seam_margin_canvas_px
+) {
+    if (tiling_mode <= 0 || frame_w <= 0 || frame_h <= 0) return false;
+    const float r = 960.0f / fmaxf((float)frame_h, (float)frame_w);
+    const int h_new = (int)((float)frame_h * r);
+    const int w_new = (int)((float)frame_w * r);
+    const float y_off = (float)((960 - h_new) / 2);
+    const float x_off = (float)((960 - w_new) / 2);
+    const float seam_margin_orig = seam_margin_canvas_px / fmaxf(r, 1e-6f);
+    const float cx = 0.5f * (box[0] + box[2]);
+    const float cy = 0.5f * (box[1] + box[3]);
+    const float seam_xs[4] = {160.0f, 320.0f, 640.0f, 800.0f};
+    const int seam_x_count = (tiling_mode == 2) ? 4 : 2;
+    const int seam_x_start = (tiling_mode == 2) ? 0 : 1;
+    for (int i = seam_x_start; i < seam_x_start + seam_x_count; ++i) {
+        const float sx_canvas = seam_xs[i];
+        if (!(x_off < sx_canvas && sx_canvas < x_off + (float)w_new)) continue;
+        const float sx = (sx_canvas - x_off) / r;
+        if ((box[0] <= sx && box[2] >= sx) || fabsf(cx - sx) <= seam_margin_orig) return true;
+    }
+    const float seam_ys[2] = {320.0f, 640.0f};
+    for (int i = 0; i < 2; ++i) {
+        const float sy_canvas = seam_ys[i];
+        if (!(y_off < sy_canvas && sy_canvas < y_off + (float)h_new)) continue;
+        const float sy = (sy_canvas - y_off) / r;
+        if ((box[1] <= sy && box[3] >= sy) || fabsf(cy - sy) <= seam_margin_orig) return true;
+    }
+    return false;
+}
+
+__global__ void assign_duplicate_anchor_kernel(
+    const float* boxes,
+    const int* classes,
+    int num_dets,
+    float iou_threshold,
+    float center_threshold,
+    float area_ratio_threshold,
+    int tiling_mode,
+    int frame_w,
+    int frame_h,
+    float seam_margin_canvas_px,
+    float seam_center_scale,
+    float seam_area_ratio_threshold,
+    float seam_min_overlap_ratio,
+    int* anchor_indices
+) {
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= num_dets) return;
     const float* candidate = boxes + idx * 4;
@@ -1469,6 +1663,9 @@ __global__ void assign_duplicate_anchor_kernel(const float* boxes, const int* cl
     const float candidate_area = candidate_w * candidate_h;
     const float candidate_cx = 0.5f * (candidate[0] + candidate[2]);
     const float candidate_cy = 0.5f * (candidate[1] + candidate[3]);
+    const bool candidate_is_seam = is_box_near_tiled_seam_device(
+        candidate, tiling_mode, frame_w, frame_h, seam_margin_canvas_px
+    );
     for (int prev = 0; prev < idx; ++prev) {
         if (classes[prev] != candidate_class) continue;
         const float* other = boxes + prev * 4;
@@ -1481,30 +1678,110 @@ __global__ void assign_duplicate_anchor_kernel(const float* boxes, const int* cl
         const float center_dx = other_cx - candidate_cx, center_dy = other_cy - candidate_cy;
         const float center_dist = sqrtf(center_dx * center_dx + center_dy * center_dy);
         const float area_ratio = fminf(candidate_area / fmaxf(other_area, 1e-6f), other_area / fmaxf(candidate_area, 1e-6f));
-        if (iou >= iou_threshold || (center_dist <= center_gate && area_ratio >= area_ratio_threshold)) { anchor = prev; break; }
+        const float x1 = fmaxf(candidate[0], other[0]);
+        const float y1 = fmaxf(candidate[1], other[1]);
+        const float x2 = fminf(candidate[2], other[2]);
+        const float y2 = fminf(candidate[3], other[3]);
+        const float inter_w = fmaxf(0.0f, x2 - x1);
+        const float inter_h = fmaxf(0.0f, y2 - y1);
+        const float overlap_ratio_x = inter_w / fmaxf(min_w, 1e-6f);
+        const float overlap_ratio_y = inter_h / fmaxf(min_h, 1e-6f);
+        const bool other_is_seam = is_box_near_tiled_seam_device(
+            other, tiling_mode, frame_w, frame_h, seam_margin_canvas_px
+        );
+        const bool seam_pair = candidate_is_seam || other_is_seam;
+        const bool seam_duplicate =
+            seam_pair &&
+            center_dist <= center_gate * seam_center_scale &&
+            area_ratio >= seam_area_ratio_threshold &&
+            overlap_ratio_x >= seam_min_overlap_ratio &&
+            overlap_ratio_y >= seam_min_overlap_ratio;
+        if (iou >= iou_threshold || (center_dist <= center_gate && area_ratio >= area_ratio_threshold) || seam_duplicate) {
+            anchor = prev; break;
+        }
     }
     anchor_indices[idx] = anchor;
 }
 
-__global__ void aggregate_duplicate_clusters_kernel(const float* boxes, const float* scores, const int* classes, const int* anchor_indices, int num_dets, float* box_sums, float* score_sums, int* score_bits_max, int* cluster_counts) {
+__global__ void aggregate_duplicate_clusters_kernel(
+    const float* boxes,
+    const float* scores,
+    const int* classes,
+    const int* anchor_indices,
+    int num_dets,
+    int tiling_mode,
+    int frame_w,
+    int frame_h,
+    float seam_margin_canvas_px,
+    float* box_sums,
+    float* score_sums,
+    int* score_bits_max,
+    float* best_boxes,
+    int* best_key_bits,
+    int* cluster_counts
+) {
+    constexpr float kTiledSeamCoordWeight = 0.35f;
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= num_dets) return;
     const int anchor = anchor_indices[idx];
     const float score = scores[idx];
-    atomicAdd(score_sums + anchor, score);
+    const bool is_seam = is_box_near_tiled_seam_device(
+        boxes + idx * 4, tiling_mode, frame_w, frame_h, seam_margin_canvas_px
+    );
+    const float coord_weight =
+        score * ((tiling_mode > 0 && is_seam) ? kTiledSeamCoordWeight : 1.0f);
+    atomicAdd(score_sums + anchor, coord_weight);
     atomicAdd(cluster_counts + anchor, 1);
     atomicMax(score_bits_max + anchor, __float_as_int(score));
-    for (int k = 0; k < 4; ++k) atomicAdd(box_sums + anchor * 4 + k, boxes[idx * 4 + k] * score);
+    for (int k = 0; k < 4; ++k) {
+        atomicAdd(box_sums + anchor * 4 + k, boxes[idx * 4 + k] * coord_weight);
+    }
+    const int key_bonus = (!is_seam && tiling_mode > 0) ? 0x40000000 : 0;
+    const int key = __float_as_int(score) + key_bonus;
+    const int prev_key = atomicMax(best_key_bits + anchor, key);
+    if (key > prev_key) {
+        for (int k = 0; k < 4; ++k) best_boxes[anchor * 4 + k] = boxes[idx * 4 + k];
+    }
 }
 
-__global__ void compact_duplicate_clusters_kernel(const float* box_sums, const float* score_sums, const int* score_bits_max, const int* cluster_counts, const int* classes, int num_dets, float* out_boxes, float* out_scores, int* out_classes, int* out_count) {
+__global__ void compact_duplicate_clusters_kernel(
+    const float* box_sums,
+    const float* score_sums,
+    const int* score_bits_max,
+    const float* best_boxes,
+    const int* best_key_bits,
+    const int* cluster_counts,
+    const int* classes,
+    int num_dets,
+    int tiling_mode,
+    float* out_boxes,
+    float* out_scores,
+    int* out_classes,
+    int* out_count
+) {
+    constexpr float kTiledBestBlend = 0.25f;
     if (blockIdx.x != 0 || threadIdx.x != 0) return;
     int out_idx = 0;
     for (int idx = 0; idx < num_dets; ++idx) {
         if (cluster_counts[idx] <= 0) continue;
-        const float inv_score_sum = 1.0f / fmaxf(score_sums[idx], 1e-6f);
-        for (int k = 0; k < 4; ++k) out_boxes[out_idx * 4 + k] = box_sums[idx * 4 + k] * inv_score_sum;
-        out_scores[out_idx] = __int_as_float(score_bits_max[idx]);
+        if (tiling_mode > 0) {
+            const float inv_coord_sum = 1.0f / fmaxf(score_sums[idx], 1e-6f);
+            const float blend_best = cluster_counts[idx] > 1 ? kTiledBestBlend : 1.0f;
+            const float blend_avg = 1.0f - blend_best;
+            for (int k = 0; k < 4; ++k) {
+                const float avg_box = box_sums[idx * 4 + k] * inv_coord_sum;
+                const float best_box = best_boxes[idx * 4 + k];
+                out_boxes[out_idx * 4 + k] =
+                    (cluster_counts[idx] > 1) ? (avg_box * blend_avg + best_box * blend_best) : best_box;
+            }
+            int key = best_key_bits[idx];
+            if (key >= 0x40000000) key -= 0x40000000;
+            out_scores[out_idx] = __int_as_float(key);
+        } else {
+            const float inv_score_sum = 1.0f / fmaxf(score_sums[idx], 1e-6f);
+            for (int k = 0; k < 4; ++k) out_boxes[out_idx * 4 + k] = box_sums[idx * 4 + k] * inv_score_sum;
+            out_scores[out_idx] = __int_as_float(score_bits_max[idx]);
+        }
         out_classes[out_idx] = classes[idx];
         ++out_idx;
     }
@@ -1518,6 +1795,7 @@ __global__ void filter_detections_kernel(
     int num_dets,
     int* keep_indices,
     bool* suspect_flags,
+    float* quality_scores,
     int* out_count,
     float score_threshold,
     bool track_person_only,
@@ -1537,23 +1815,25 @@ __global__ void filter_detections_kernel(
     if (idx >= num_dets) return;
 
     const float* box = boxes + idx * 4;
-    bool keep = scores[idx] > score_threshold;
+    const float score = scores[idx];
+    bool keep = score > score_threshold;
     if (track_person_only) {
         keep = keep && classes[idx] == person_class;
     }
+    const float cx = (box[0] + box[2]) * 0.5f;
+    const float cy = (box[1] + box[3]) * 0.5f;
     if (is_tiled) {
-        const float cx = (box[0] + box[2]) * 0.5f;
-        const float cy = (box[1] + box[3]) * 0.5f;
         keep = keep && cx >= 0.0f && cx < static_cast<float>(frame_w) && cy >= 0.0f && cy < static_cast<float>(frame_h);
     }
 
+    const float box_w = fmaxf(box[2] - box[0], 1e-6f);
+    const float box_h = fmaxf(box[3] - box[1], 1e-6f);
+    const float aspect = box_h / box_w;
+    const float frame_area = fmaxf(static_cast<float>(frame_w) * static_cast<float>(frame_h), 1.0f);
+    const float area_ratio = (box_w * box_h) / frame_area;
+
     bool geometry_clean = true;
     if (person_geometry_prior) {
-        const float box_w = fmaxf(box[2] - box[0], 1e-6f);
-        const float box_h = fmaxf(box[3] - box[1], 1e-6f);
-        const float aspect = box_h / box_w;
-        const float frame_area = fmaxf(static_cast<float>(frame_w) * static_cast<float>(frame_h), 1.0f);
-        const float area_ratio = (box_w * box_h) / frame_area;
         if (person_min_height_ratio > 0.0f) {
             geometry_clean = geometry_clean && box_h >= static_cast<float>(frame_h) * person_min_height_ratio;
         }
@@ -1578,6 +1858,24 @@ __global__ void filter_detections_kernel(
         const int out_idx = atomicAdd(out_count, 1);
         keep_indices[out_idx] = idx;
         suspect_flags[out_idx] = person_geometry_prior && geometry_suspect_support && !geometry_clean;
+        
+        // A6: Continuous Quality Score (Aspect + Center + Area)
+        // 1. Aspect: Gaussian peak at 2.5
+        float aspect_q = expf(-0.5f * powf((aspect - 2.5f) / 1.2f, 2.0f));
+        
+        // 2. Center: 1.0 at center, 0.0 at boundary (proxy for truncation)
+        float cx_norm = cx / fmaxf(static_cast<float>(frame_w), 1.0f);
+        float cy_norm = cy / fmaxf(static_cast<float>(frame_h), 1.0f);
+        float center_q = fminf(fminf(cx_norm, 1.0f - cx_norm), fminf(cy_norm, 1.0f - cy_norm)) * 4.0f;
+        center_q = fmaxf(0.0f, fminf(1.0f, center_q));
+        
+        // 3. Area: Gaussian peak at 0.01
+        float area_q = expf(-0.5f * powf((area_ratio - 0.01f) / 0.01f, 2.0f));
+        
+        // Combined quality (geometrical only); weights must sum to 1.0
+        if (quality_scores) {
+            quality_scores[out_idx] = 0.50f * aspect_q + 0.30f * center_q + 0.20f * area_q;
+        }
     }
 }
 
@@ -1721,16 +2019,57 @@ __global__ void nms_select_counted_kernel(
     *out_count = keep_count;
 }
 
-void merge_cross_tile_duplicates_cuda(const float* boxes_ptr, const float* scores_ptr, const int* classes_ptr, int num_dets, int* anchor_indices_ptr, float* box_sums_ptr, float* score_sums_ptr, int* score_bits_max_ptr, int* cluster_counts_ptr, float* out_boxes_ptr, float* out_scores_ptr, int* out_classes_ptr, int* out_count_ptr, float iou_threshold, float center_threshold, float area_ratio_threshold, cudaStream_t stream) {
+void merge_cross_tile_duplicates_cuda(
+    const float* boxes_ptr,
+    const float* scores_ptr,
+    const int* classes_ptr,
+    int num_dets,
+    int* anchor_indices_ptr,
+    float* box_sums_ptr,
+    float* score_sums_ptr,
+    int* score_bits_max_ptr,
+    float* best_boxes_ptr,
+    int* best_key_bits_ptr,
+    int* cluster_counts_ptr,
+    float* out_boxes_ptr,
+    float* out_scores_ptr,
+    int* out_classes_ptr,
+    int* out_count_ptr,
+    float iou_threshold,
+    float center_threshold,
+    float area_ratio_threshold,
+    int tiling_mode,
+    int frame_w,
+    int frame_h,
+    float seam_margin_canvas_px,
+    float seam_center_scale,
+    float seam_area_ratio_threshold,
+    float seam_min_overlap_ratio,
+    cudaStream_t stream
+) {
     if (num_dets <= 0) { checkCuda(cudaMemsetAsync(out_count_ptr, 0, sizeof(int), stream)); return; }
     checkCuda(cudaMemsetAsync(box_sums_ptr, 0, num_dets * 4 * sizeof(float), stream));
     checkCuda(cudaMemsetAsync(score_sums_ptr, 0, num_dets * sizeof(float), stream));
     checkCuda(cudaMemsetAsync(score_bits_max_ptr, 0, num_dets * sizeof(int), stream));
+    checkCuda(cudaMemsetAsync(best_boxes_ptr, 0, num_dets * 4 * sizeof(float), stream));
+    checkCuda(cudaMemsetAsync(best_key_bits_ptr, 0, num_dets * sizeof(int), stream));
     checkCuda(cudaMemsetAsync(cluster_counts_ptr, 0, num_dets * sizeof(int), stream));
     const int threads = 256; const int blocks = (num_dets + threads - 1) / threads;
-    assign_duplicate_anchor_kernel<<<blocks, threads, 0, stream>>>(boxes_ptr, classes_ptr, num_dets, iou_threshold, center_threshold, area_ratio_threshold, anchor_indices_ptr);
-    aggregate_duplicate_clusters_kernel<<<blocks, threads, 0, stream>>>(boxes_ptr, scores_ptr, classes_ptr, anchor_indices_ptr, num_dets, box_sums_ptr, score_sums_ptr, score_bits_max_ptr, cluster_counts_ptr);
-    compact_duplicate_clusters_kernel<<<1, 1, 0, stream>>>(box_sums_ptr, score_sums_ptr, score_bits_max_ptr, cluster_counts_ptr, classes_ptr, num_dets, out_boxes_ptr, out_scores_ptr, out_classes_ptr, out_count_ptr);
+    assign_duplicate_anchor_kernel<<<blocks, threads, 0, stream>>>(
+        boxes_ptr, classes_ptr, num_dets, iou_threshold, center_threshold, area_ratio_threshold,
+        tiling_mode, frame_w, frame_h, seam_margin_canvas_px, seam_center_scale,
+        seam_area_ratio_threshold, seam_min_overlap_ratio, anchor_indices_ptr
+    );
+    aggregate_duplicate_clusters_kernel<<<blocks, threads, 0, stream>>>(
+        boxes_ptr, scores_ptr, classes_ptr, anchor_indices_ptr, num_dets,
+        tiling_mode, frame_w, frame_h, seam_margin_canvas_px,
+        box_sums_ptr, score_sums_ptr, score_bits_max_ptr, best_boxes_ptr, best_key_bits_ptr, cluster_counts_ptr
+    );
+    compact_duplicate_clusters_kernel<<<1, 1, 0, stream>>>(
+        box_sums_ptr, score_sums_ptr, score_bits_max_ptr, best_boxes_ptr, best_key_bits_ptr,
+        cluster_counts_ptr, classes_ptr, num_dets, tiling_mode,
+        out_boxes_ptr, out_scores_ptr, out_classes_ptr, out_count_ptr
+    );
 }
 
 void filter_detections_cuda(
@@ -1740,6 +2079,7 @@ void filter_detections_cuda(
     int num_dets,
     int* keep_indices_ptr,
     bool* suspect_flags_ptr,
+    float* quality_scores_ptr,
     int* out_count_ptr,
     float score_threshold,
     bool track_person_only,
@@ -1769,6 +2109,7 @@ void filter_detections_cuda(
         num_dets,
         keep_indices_ptr,
         suspect_flags_ptr,
+        quality_scores_ptr,
         out_count_ptr,
         score_threshold,
         track_person_only,

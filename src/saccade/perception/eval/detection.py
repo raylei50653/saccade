@@ -28,6 +28,46 @@ _duplicate_merge_cuda_workspace: Dict[
 ] = {}
 
 
+def _tile_seam_mask_for_boxes(
+    boxes: torch.Tensor,
+    *,
+    tiling: str,
+    frame_w: int,
+    frame_h: int,
+    seam_margin_canvas_px: float,
+) -> torch.Tensor:
+    if boxes.numel() == 0 or tiling not in {"960p_2x2", "960p_3x2"}:
+        return torch.zeros((boxes.size(0),), device=boxes.device, dtype=torch.bool)
+
+    r = 960.0 / max(frame_h, frame_w)
+    h_new = int(frame_h * r)
+    w_new = int(frame_w * r)
+    y_off = (960 - h_new) // 2
+    x_off = (960 - w_new) // 2
+
+    seam_x_canvas = [320.0, 640.0]
+    seam_y_canvas = [320.0, 640.0]
+    if tiling == "960p_3x2":
+        seam_x_canvas = [160.0, 320.0, 640.0, 800.0]
+
+    seam_margin_orig = seam_margin_canvas_px / max(r, 1e-6)
+    seam_x = [(sx - x_off) / r for sx in seam_x_canvas if x_off < sx < x_off + w_new]
+    seam_y = [(sy - y_off) / r for sy in seam_y_canvas if y_off < sy < y_off + h_new]
+    if not seam_x and not seam_y:
+        return torch.zeros((boxes.size(0),), device=boxes.device, dtype=torch.bool)
+
+    cx = (boxes[:, 0] + boxes[:, 2]) * 0.5
+    cy = (boxes[:, 1] + boxes[:, 3]) * 0.5
+    near_any = torch.zeros((boxes.size(0),), device=boxes.device, dtype=torch.bool)
+    for sx in seam_x:
+        near_any |= (boxes[:, 0] <= sx) & (boxes[:, 2] >= sx)
+        near_any |= (cx - sx).abs() <= seam_margin_orig
+    for sy in seam_y:
+        near_any |= (boxes[:, 1] <= sy) & (boxes[:, 3] >= sy)
+        near_any |= (cy - sy).abs() <= seam_margin_orig
+    return near_any
+
+
 def _box_iou_single(box: torch.Tensor, boxes: torch.Tensor) -> torch.Tensor:
     lt = torch.maximum(box[:2], boxes[:, :2])
     rb = torch.minimum(box[2:], boxes[:, 2:])
@@ -76,11 +116,12 @@ def filter_detections_fast(
     person_max_aspect: float,
     person_min_area_ratio: float,
     person_max_area_ratio: float,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
     if boxes.numel() == 0:
         return (
             torch.empty((0,), device=boxes.device, dtype=torch.long),
             torch.empty((0,), device=boxes.device, dtype=torch.bool),
+            torch.empty((0,), device=boxes.device, dtype=torch.float32),
         )
 
     boxes = boxes.contiguous()
@@ -98,6 +139,7 @@ def filter_detections_fast(
             int(boxes.size(0)),
             workspace["keep_indices"].data_ptr(),
             workspace["suspect_flags"].data_ptr(),
+            workspace["quality_scores"].data_ptr(),
             workspace["out_count"].data_ptr(),
             score_threshold,
             track_person_only,
@@ -119,7 +161,8 @@ def filter_detections_fast(
         order = torch.argsort(keep_i32)
         keep = keep_i32[order].to(torch.long)
         suspect = workspace["suspect_flags"][:keep_count][order]
-        return keep, suspect
+        quality = workspace["quality_scores"][:keep_count][order]
+        return keep, suspect, quality
 
     if cpp_filter_detections is not None:
         device = boxes.device
@@ -145,7 +188,7 @@ def filter_detections_fast(
         suspect = torch.from_numpy(np.asarray(suspect_np)).to(
             device=device, dtype=torch.bool
         )
-        return keep, suspect
+        return keep, suspect, None
 
     keep_mask = scores > score_threshold
     geometry_clean_mask = torch.ones_like(keep_mask, dtype=torch.bool)
@@ -196,7 +239,7 @@ def filter_detections_fast(
         else torch.zeros_like(keep_mask, dtype=torch.bool)
     )
     keep_indices = torch.nonzero(keep_mask, as_tuple=False).flatten()
-    return keep_indices, suspect_full[keep_indices]
+    return keep_indices, suspect_full[keep_indices], None
 
 
 def _get_filter_detections_cuda_workspace(
@@ -218,6 +261,7 @@ def _get_filter_detections_cuda_workspace(
         "capacity": capacity,
         "keep_indices": torch.empty((capacity,), device=box_device, dtype=torch.int32),
         "suspect_flags": torch.empty((capacity,), device=box_device, dtype=torch.bool),
+        "quality_scores": torch.empty((capacity,), device=box_device, dtype=torch.float32),
         "out_count": torch.zeros((), device=box_device, dtype=torch.int32),
     }
     _filter_detections_cuda_workspace[key] = workspace
@@ -334,6 +378,8 @@ def _get_duplicate_merge_cuda_workspace(
         "score_bits_max": torch.empty(
             (capacity,), device=box_device, dtype=torch.int32
         ),
+        "best_boxes": torch.empty((capacity, 4), device=box_device, dtype=torch.float32),
+        "best_key_bits": torch.empty((capacity,), device=box_device, dtype=torch.int32),
         "cluster_counts": torch.empty(
             (capacity,), device=box_device, dtype=torch.int32
         ),
@@ -353,9 +399,19 @@ def merge_cross_tile_duplicates(
     iou_threshold: float = 0.45,
     center_threshold: float = 0.18,
     area_ratio_threshold: float = 0.6,
+    *,
+    tiling: str | None = None,
+    frame_w: int = 0,
+    frame_h: int = 0,
+    seam_margin_canvas_px: float = 24.0,
+    seam_center_scale: float = 1.8,
+    seam_area_ratio_threshold: float = 0.30,
+    seam_min_overlap_ratio: float = 0.45,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """Returns (boxes, scores, classes, merge_counts) where merge_counts[i] is the
     number of original detections fused into output box i (1 = no merge happened)."""
+    tiled_seam_coord_weight = 0.5
+    tiled_best_blend = 0.5
     n = boxes.size(0)
     if boxes.numel() == 0 or n <= 1:
         return (
@@ -371,6 +427,13 @@ def merge_cross_tile_duplicates(
     merged_scores = []
     merged_classes = []
     merged_counts: List[int] = []
+    seam_mask = _tile_seam_mask_for_boxes(
+        boxes,
+        tiling=tiling or "",
+        frame_w=frame_w,
+        frame_h=frame_h,
+        seam_margin_canvas_px=seam_margin_canvas_px,
+    )
 
     while remaining:
         anchor_idx = remaining[0]
@@ -402,18 +465,51 @@ def merge_cross_tile_duplicates(
             torch.tensor(anchor_area, device=boxes.device)
             / candidate_areas.clamp(min=1e-6),
         )
+        inter_lt = torch.maximum(anchor_box[:2], candidate_boxes[:, :2])
+        inter_rb = torch.minimum(anchor_box[2:], candidate_boxes[:, 2:])
+        inter_wh = (inter_rb - inter_lt).clamp(min=0)
+        overlap_ratio_x = inter_wh[:, 0] / min_wh[:, 0].clamp(min=1e-6)
+        overlap_ratio_y = inter_wh[:, 1] / min_wh[:, 1].clamp(min=1e-6)
 
-        duplicate_mask = same_class & (
+        anchor_is_seam = bool(seam_mask[anchor_idx].item())
+        candidate_is_seam = seam_mask[candidate_indices]
+        seam_pair = candidate_is_seam | anchor_is_seam
+
+        base_duplicate_mask = same_class & (
             (ious >= iou_threshold)
             | ((center_dist <= center_gate) & (area_ratio >= area_ratio_threshold))
         )
+        seam_duplicate_mask = same_class & seam_pair & (
+            (center_dist <= center_gate * seam_center_scale)
+            & (area_ratio >= seam_area_ratio_threshold)
+            & (overlap_ratio_x >= seam_min_overlap_ratio)
+            & (overlap_ratio_y >= seam_min_overlap_ratio)
+        )
+        duplicate_mask = base_duplicate_mask | seam_duplicate_mask
 
         cluster_indices = candidate_indices[duplicate_mask]
         cluster_boxes = boxes[cluster_indices]
         cluster_scores = scores[cluster_indices]
-        weights = cluster_scores / cluster_scores.sum().clamp(min=1e-6)
-        fused_box = (cluster_boxes * weights.unsqueeze(1)).sum(dim=0)
-        fused_score = cluster_scores.max()
+        cluster_seam = seam_mask[cluster_indices]
+        if (~cluster_seam).any():
+            preferred = torch.where(~cluster_seam)[0]
+            best_local = preferred[torch.argmax(cluster_scores[preferred])]
+        else:
+            best_local = torch.argmax(cluster_scores)
+        if tiling:
+            coord_weights = cluster_scores * torch.where(
+                cluster_seam,
+                torch.full_like(cluster_scores, tiled_seam_coord_weight),
+                torch.ones_like(cluster_scores),
+            )
+            fused_box = (cluster_boxes * coord_weights[:, None]).sum(dim=0) / coord_weights.sum().clamp(min=1e-6)
+            if cluster_indices.numel() > 1:
+                fused_box = fused_box * (1.0 - tiled_best_blend) + cluster_boxes[best_local] * tiled_best_blend
+            else:
+                fused_box = cluster_boxes[best_local]
+        else:
+            fused_box = cluster_boxes[best_local]
+        fused_score = cluster_scores[best_local]
 
         merged_boxes.append(fused_box)
         merged_scores.append(fused_score)
@@ -446,6 +542,14 @@ def merge_cross_tile_duplicates_fast(
     iou_threshold: float = 0.45,
     center_threshold: float = 0.18,
     area_ratio_threshold: float = 0.6,
+    *,
+    tiling: str | None = None,
+    frame_w: int = 0,
+    frame_h: int = 0,
+    seam_margin_canvas_px: float = 24.0,
+    seam_center_scale: float = 1.8,
+    seam_area_ratio_threshold: float = 0.30,
+    seam_min_overlap_ratio: float = 0.45,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """Returns (boxes, scores, classes, merge_counts).  merge_counts[i] is the
     number of original detections fused into output box i (1 = unmerged)."""
@@ -457,6 +561,13 @@ def merge_cross_tile_duplicates_fast(
             iou_threshold,
             center_threshold,
             area_ratio_threshold,
+            tiling=tiling,
+            frame_w=frame_w,
+            frame_h=frame_h,
+            seam_margin_canvas_px=seam_margin_canvas_px,
+            seam_center_scale=seam_center_scale,
+            seam_area_ratio_threshold=seam_area_ratio_threshold,
+            seam_min_overlap_ratio=seam_min_overlap_ratio,
         )
 
     boxes = boxes.contiguous()
@@ -464,6 +575,11 @@ def merge_cross_tile_duplicates_fast(
     classes_i32 = classes.to(torch.int32).contiguous()
 
     if cpp_merge_cross_tile_duplicates_cuda is not None and boxes.is_cuda:
+        tiling_mode = 0
+        if tiling == "960p_2x2":
+            tiling_mode = 1
+        elif tiling == "960p_3x2":
+            tiling_mode = 2
         workspace = _get_duplicate_merge_cuda_workspace(
             int(boxes.size(0)),
             boxes.device,
@@ -479,6 +595,8 @@ def merge_cross_tile_duplicates_fast(
             workspace["box_sums"].data_ptr(),
             workspace["score_sums"].data_ptr(),
             workspace["score_bits_max"].data_ptr(),
+            workspace["best_boxes"].data_ptr(),
+            workspace["best_key_bits"].data_ptr(),
             workspace["cluster_counts"].data_ptr(),
             workspace["out_boxes"].data_ptr(),
             workspace["out_scores"].data_ptr(),
@@ -487,6 +605,13 @@ def merge_cross_tile_duplicates_fast(
             iou_threshold,
             center_threshold,
             area_ratio_threshold,
+            tiling_mode,
+            frame_w,
+            frame_h,
+            seam_margin_canvas_px,
+            seam_center_scale,
+            seam_area_ratio_threshold,
+            seam_min_overlap_ratio,
             torch.cuda.current_stream().cuda_stream,
         )
         merged_count = int(workspace["out_count"].item())
@@ -510,6 +635,13 @@ def merge_cross_tile_duplicates_fast(
                 iou_threshold,
                 center_threshold,
                 area_ratio_threshold,
+                1 if tiling == "960p_2x2" else 2 if tiling == "960p_3x2" else 0,
+                frame_w,
+                frame_h,
+                seam_margin_canvas_px,
+                seam_center_scale,
+                seam_area_ratio_threshold,
+                seam_min_overlap_ratio,
             )
         )
         merged_boxes = torch.from_numpy(np.asarray(merged_boxes_np)).to(
@@ -576,6 +708,53 @@ def detect_single_patch_640(
     boxes[:, [0, 2]] /= 640.0 / w_orig
     boxes[:, [1, 3]] /= 640.0 / h_orig
     return boxes, scores, classes
+
+
+def detect_single_patch_960(
+    detector: Any, pool: Any, h_orig: int, w_orig: int, preprocess_modes: List[str]
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    if "letterbox" in preprocess_modes:
+        r = 960.0 / max(h_orig, w_orig)
+        h_new, w_new = int(h_orig * r), int(w_orig * r)
+        img_resized = torch.nn.functional.interpolate(
+            pool.frame_buffer.unsqueeze(0), size=(h_new, w_new)
+        ).squeeze(0)
+        pool.canvas_960p.fill_(114.0 / 255.0)
+        y_off = (960 - h_new) // 2
+        x_off = (960 - w_new) // 2
+        pool.canvas_960p[:, y_off : y_off + h_new, x_off : x_off + w_new].copy_(
+            img_resized
+        )
+
+        raw_dets = detector.detect_raw(pool.canvas_960p.unsqueeze(0))
+        boxes = raw_dets[0, :, :4]
+        scores = raw_dets[0, :, 4]
+        classes = raw_dets[0, :, 5]
+
+        boxes[:, [0, 2]] = (boxes[:, [0, 2]] - x_off) / r
+        boxes[:, [1, 3]] = (boxes[:, [1, 3]] - y_off) / r
+        return boxes, scores, classes
+
+    img_input = torch.nn.functional.interpolate(
+        pool.frame_buffer.unsqueeze(0), size=(960, 960)
+    )
+    raw_dets = detector.detect_raw(img_input)
+    boxes = raw_dets[0, :, :4]
+    scores = raw_dets[0, :, 4]
+    classes = raw_dets[0, :, 5]
+
+    boxes[:, [0, 2]] /= 960.0 / w_orig
+    boxes[:, [1, 3]] /= 960.0 / h_orig
+    return boxes, scores, classes
+
+
+def detect_native_960(
+    detector: Any, pool: Any, h_orig: int, w_orig: int, preprocess_modes: List[str]
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, bool]:
+    boxes, scores, classes = detect_single_patch_960(
+        detector, pool, h_orig, w_orig, preprocess_modes
+    )
+    return boxes, scores, classes, False
 
 
 def detect_960p_3x2_tiled(

@@ -13,7 +13,7 @@ async def test_entropy_trigger_emit_event():
     with patch("redis.asyncio.from_url", return_value=mock_redis):
         trigger = EntropyTrigger(threshold=0.5)
 
-        # Test case: 3 detections -> entropy 0.6 >= 0.5 threshold
+        # Test case: 3 distinct detections -> shannon=1.0, density=0.3 -> entropy=0.65 >= 0.5
         success = await trigger.process_frame(
             frame_id=100, detections=["person", "car", "dog"], source_path="test_source"
         )
@@ -29,7 +29,7 @@ async def test_entropy_trigger_emit_event():
         assert queue_name == "saccade:events"
         event_data = json.loads(event_json)
         assert event_data["type"] == "entropy_trigger"
-        assert event_data["metadata"]["entropy_value"] == 0.6
+        assert event_data["metadata"]["entropy_value"] == 0.65
         assert event_data["metadata"]["frame_id"] == 100
         assert "person" in event_data["metadata"]["objects"]
 
@@ -42,8 +42,8 @@ async def test_entropy_trigger_cooldown():
     with patch("redis.asyncio.from_url", return_value=mock_redis):
         trigger = EntropyTrigger(threshold=0.1, cooldown=10.0)
 
-        # First emit should succeed
-        success1 = await trigger.process_frame(1, ["p1"], "s")
+        # First emit: 2 distinct classes -> shannon=1.0, density=0.2 -> entropy=0.6 >= 0.1
+        success1 = await trigger.process_frame(1, ["p1", "p2"], "s")
         assert success1 is True
         assert mock_redis.rpush.call_count == 1
 

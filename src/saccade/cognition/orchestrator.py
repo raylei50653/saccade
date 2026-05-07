@@ -4,6 +4,7 @@ from typing import Dict, Any, List, Tuple, Optional
 from saccade.storage.chroma_store import ChromaStore
 from saccade.storage.redis_cache import RedisCache
 from saccade.pipeline.health import HealthChecker, render
+from saccade.resource.resource_manager import DegradationLevel, VRAMLevelReader
 from dotenv import load_dotenv
 
 # LlamaIndex 整合
@@ -33,6 +34,7 @@ class PipelineOrchestrator:
     def __init__(self) -> None:
         self.redis_cache = RedisCache()
         self.memory_store = ChromaStore()
+        self._vram_reader = VRAMLevelReader()
 
         # 由於拔除 VLM，並發控制只需限制資料庫寫入頻率
         self.semaphore = asyncio.Semaphore(32)
@@ -153,7 +155,14 @@ class PipelineOrchestrator:
             risk_objects = {"knife", "gun", "fire", "smoke", "accident"}
             is_anomaly = any(obj.lower() in risk_objects for obj in yolo_objects)
 
-            # 3. 寫入 ChromaDB
+            # 3. VRAM 壓力感知：依降級等級決定要做多少工作
+            vram_level = self._vram_reader.read()
+            if vram_level >= DegradationLevel.EMERGENCY and not is_anomaly:
+                # VRAM >96%：只保留異常事件，普通 frame 直接丟棄
+                return
+            skip_rag = vram_level >= DegradationLevel.FAST_PATH
+
+            # 4. 寫入 ChromaDB
             try:
                 self.memory_store.add_memory(
                     content=scene_description,
@@ -165,11 +174,9 @@ class PipelineOrchestrator:
                         "timestamp": time.time(),
                     },
                 )
-                # status_tag = "🚨" if is_anomaly else "✅"
-                # print(f"{status_tag} [Frame {frame_id}] Indexed: {scene_description}")
 
-                # 4. 觸發 RAG 查詢 (當發生異常或複雜場景時)
-                if HAS_LLAMA_INDEX and (is_anomaly or entropy > 0.9):
+                # 5. 觸發 RAG 查詢 (VRAM <92% 且場景複雜/異常時)
+                if not skip_rag and HAS_LLAMA_INDEX and (is_anomaly or entropy > 0.9):
                     query = f"The current scene has high entropy ({entropy:.2f}) and contains {yolo_objects}. Are there any similar patterns in the past 5 minutes?"
                     asyncio.create_task(self._trigger_rag_analysis(query))
 
@@ -221,6 +228,7 @@ class PipelineOrchestrator:
             await self.start_cognition_loop()
         finally:
             await self.redis_cache.disconnect()
+            self._vram_reader.close()
 
 
 async def main() -> None:

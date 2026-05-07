@@ -1,5 +1,6 @@
 #include "saccade/common.hpp"
 #include <cstdint>
+#include <utility>
 #include <vector>
 
 namespace saccade {
@@ -84,6 +85,20 @@ public:
     void set_reid_params(float cos_threshold, float iou_low, float iou_high, float weight);
 
     /**
+     * @brief Set Detection Quality Scaling (A6) parameters.
+     * @param enabled Enable scaling
+     * @param w_aspect Weight for aspect ratio quality
+     * @param w_center Weight for center bias quality
+     * @param w_area Weight for area ratio quality
+     */
+    void set_quality_params(bool enabled, float w_aspect = 0.50f, float w_center = 0.30f, float w_area = 0.20f);
+
+    /**
+     * @brief Set frame size for quality scaling and other geometry-aware logic.
+     */
+    void set_frame_size(int w, int h);
+
+    /**
      * @brief Set homography matrix for 2D Ground Plane Mapping (MMD).
      * @param h 9-float array (3x3 row-major). If all zeros, MMD is disabled.
      */
@@ -92,6 +107,8 @@ public:
     void set_unified_score_params(const UnifiedScoreParams& params);
     void update_reference_features(int* track_ids, float* features_ptr, int num, cudaStream_t stream);
     void set_clean_embedding_flags(int* track_ids, bool* flags, int n, cudaStream_t stream);
+    void bind_features_buffer(float* ptr);
+    std::vector<std::pair<int,int>> get_active_tid_slot_pairs();
     std::vector<TrackStateSnapshot> get_state_snapshots(cudaStream_t stream);
     std::vector<TrackStateSnapshot> get_motion_snapshots_for_track_ids(
         const std::vector<int>& track_ids,
@@ -142,6 +159,8 @@ void SACCADE_TRACKING_API merge_cross_tile_duplicates_cuda(
     float* box_sums_ptr,
     float* score_sums_ptr,
     int* score_bits_max_ptr,
+    float* best_boxes_ptr,
+    int* best_key_bits_ptr,
     int* cluster_counts_ptr,
     float* out_boxes_ptr,
     float* out_scores_ptr,
@@ -150,6 +169,13 @@ void SACCADE_TRACKING_API merge_cross_tile_duplicates_cuda(
     float iou_threshold,
     float center_threshold,
     float area_ratio_threshold,
+    int tiling_mode,
+    int frame_w,
+    int frame_h,
+    float seam_margin_canvas_px,
+    float seam_center_scale,
+    float seam_area_ratio_threshold,
+    float seam_min_overlap_ratio,
     cudaStream_t stream
 );
 
@@ -160,6 +186,7 @@ void SACCADE_TRACKING_API filter_detections_cuda(
     int num_dets,
     int* keep_indices_ptr,
     bool* suspect_flags_ptr,
+    float* quality_scores_ptr,
     int* out_count_ptr,
     float score_threshold,
     bool track_person_only,

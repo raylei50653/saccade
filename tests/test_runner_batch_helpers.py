@@ -204,6 +204,7 @@ def test_inject_lost_track_references_batches_consistent_tracks() -> None:
                 True,
                 False,
                 0.0,
+                0.0,
             ),
             (
                 1,
@@ -213,6 +214,7 @@ def test_inject_lost_track_references_batches_consistent_tracks() -> None:
                 2,
                 True,
                 False,
+                0.0,
                 0.0,
             ),
             (
@@ -224,6 +226,7 @@ def test_inject_lost_track_references_batches_consistent_tracks() -> None:
                 True,
                 False,
                 0.0,
+                0.0,
             ),
             (
                 2,
@@ -233,6 +236,7 @@ def test_inject_lost_track_references_batches_consistent_tracks() -> None:
                 2,
                 True,
                 False,
+                0.0,
                 0.0,
             ),
             (
@@ -244,6 +248,7 @@ def test_inject_lost_track_references_batches_consistent_tracks() -> None:
                 True,
                 False,
                 0.0,
+                0.0,
             ),
             (
                 3,
@@ -253,6 +258,7 @@ def test_inject_lost_track_references_batches_consistent_tracks() -> None:
                 2,
                 True,
                 False,
+                0.0,
                 0.0,
             ),
         ]

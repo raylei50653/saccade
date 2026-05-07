@@ -1,6 +1,8 @@
 import pynvml
 from dataclasses import dataclass
 from enum import IntEnum
+from multiprocessing.shared_memory import SharedMemory
+from typing import Optional
 
 
 class DegradationLevel(IntEnum):
@@ -106,6 +108,72 @@ class ResourceManager:
     def close(self) -> None:
         if self._nvml_initialized:
             pynvml.nvmlShutdown()
+
+
+_SHM_NAME = "saccade_vram_level"
+_SHM_SIZE = 1  # single byte: DegradationLevel value (0–3)
+
+
+class VRAMLevelWriter:
+    """Dispatcher 端：建立具名 shared memory 並廣播目前降級等級。"""
+
+    def __init__(self) -> None:
+        # Unlink stale segment left by a previous crash before creating.
+        try:
+            stale = SharedMemory(name=_SHM_NAME, create=False, size=_SHM_SIZE)
+            stale.close()
+            stale.unlink()
+        except FileNotFoundError:
+            pass
+        self._shm = SharedMemory(name=_SHM_NAME, create=True, size=_SHM_SIZE)
+        self._shm.buf[0] = 0
+
+    def write(self, level: DegradationLevel) -> None:
+        self._shm.buf[0] = int(level)
+
+    def close(self) -> None:
+        self._shm.buf.release()
+        self._shm.close()
+        self._shm.unlink()
+
+    def __enter__(self) -> "VRAMLevelWriter":
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
+
+
+class VRAMLevelReader:
+    """Orchestrator 端：附掛 shared memory，讀取 dispatcher 廣播的降級等級。"""
+
+    def __init__(self) -> None:
+        self._shm: Optional[SharedMemory] = None
+        self._attach()
+
+    def _attach(self) -> None:
+        try:
+            self._shm = SharedMemory(name=_SHM_NAME, create=False, size=_SHM_SIZE)
+        except FileNotFoundError:
+            pass  # dispatcher not yet started; read() will return NORMAL
+
+    def read(self) -> DegradationLevel:
+        if self._shm is None:
+            self._attach()
+        if self._shm is None:
+            return DegradationLevel.NORMAL
+        return DegradationLevel(self._shm.buf[0])
+
+    def close(self) -> None:
+        if self._shm is not None:
+            self._shm.buf.release()
+            self._shm.close()
+            self._shm = None
+
+    def __enter__(self) -> "VRAMLevelReader":
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
 
 
 if __name__ == "__main__":
