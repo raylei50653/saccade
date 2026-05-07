@@ -1,6 +1,4 @@
 import sys
-import os
-import argparse
 import json
 import time
 import copy
@@ -252,7 +250,7 @@ class CoordinateOptimizer:
                         print(f"    ❌ No improvement ({label}): {val:.4f}")
                 
                 if not improved_this_param:
-                    print(f"    保持不變")
+                    print("    保持不變")
             
             elapsed = time.time() - round_start_time
             print(f"\nRound {r+1} finished in {elapsed/60:.1f} minutes.")

@@ -1,6 +1,5 @@
 import math
 import numpy as np
-import torch
 from typing import Any
 from .types import MotRecord, OutputTracklet
 from .utils import (

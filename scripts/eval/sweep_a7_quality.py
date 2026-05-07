@@ -1,9 +1,7 @@
-import os
 import sys
 import subprocess
 import re
 import csv
-from pathlib import Path
 import time
 
 SRC_FILE = "src/tracking/tracker_gpu.cu"

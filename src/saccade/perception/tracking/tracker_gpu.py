@@ -1,4 +1,3 @@
-from collections import deque
 import torch
 import torch.nn.functional as F
 import numpy as np
@@ -82,7 +81,6 @@ class GPUTrackResultBuffers(TypedDict):
     count: torch.Tensor
 
 
-from .dynamic_reid import DynamicReIDController
 
 class TrackAppearanceBank:
     """Per-track Top-K clean appearance sample bank (Phase 1)."""

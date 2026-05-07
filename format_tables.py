@@ -1,4 +1,3 @@
-import sys
 from pathlib import Path
 
 file_path = Path("src/saccade/perception/eval/runner.py")

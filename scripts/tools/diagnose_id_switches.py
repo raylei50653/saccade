@@ -280,7 +280,7 @@ def main():
     # P3-B impact estimate (match_gap ≥ 91 is the binding constraint)
     p3b = sum(1 for s in all_switches if s["match_gap"] >= 91)
     primary = sum(1 for s in all_switches if s["match_gap"] <= 5)
-    print(f"\n  ── Verdict ─────────────────────────────────────────")
+    print("\n  ── Verdict ─────────────────────────────────────────")
     print(f"  Primary assoc oscillation (match_gap ≤ 5f): "
           f"{primary} / {n}  ({100*primary/n:.1f}%)  ← main target")
     print(f"  P3-B relevant (match_gap ≥ 91f):             "
