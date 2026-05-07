@@ -11,7 +11,7 @@ from datetime import datetime
 project_root = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from scripts.eval.mot17 import build_parser  # noqa: E402
+from scripts.eval.mot17_args import build_parser  # noqa: E402
 from saccade.perception.eval.runner import run_eval  # noqa: E402
 from saccade.perception.detector_trt import TRTYoloDetector  # noqa: E402
 from saccade.perception.feature_extractor import TRTFeatureExtractor  # noqa: E402

@@ -1,3 +1,5 @@
+from typing import Any
+
 import torch
 from .types import MotRecord
 
@@ -35,7 +37,7 @@ def debug_frame_selected(
 
 
 def append_stage_dump_rows(
-    rows: list[dict],
+    rows: list[dict[str, Any]],
     *,
     seq: str,
     frame_id: int,
@@ -117,7 +119,7 @@ def mot_result_line(
     )
 
 
-def safe_cpp_ptr(obj: any) -> int:
+def safe_cpp_ptr(obj: object) -> int:
     try:
         return int(getattr(obj, "cpp_ptr"))
     except Exception:

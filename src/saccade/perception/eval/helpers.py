@@ -345,7 +345,7 @@ def build_prepared_candidates(
                 appearance_updates.append(
                     CandidateAppearanceUpdate(
                         track_id=obj_id,
-                        embedding=embeddings[det_idx],
+                        embedding=emb,
                         det_score=_det_score,
                         iou=match_iou,
                         frame_id=frame_id,

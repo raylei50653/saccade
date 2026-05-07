@@ -310,7 +310,7 @@ class DynamicReIDController:
 
     def get_last_boxes(self) -> dict[int, tuple[float, float, float, float]]:
         """Returns the last known boxes for all tracks (active and just lost)."""
-        boxes = {}
+        boxes: dict[int, tuple[float, float, float, float]] = {}
         if not self._track_history:
             return boxes
 

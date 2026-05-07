@@ -59,7 +59,7 @@ class EntropyTrigger:
         n = len(labels)
 
         # Shannon entropy over class distribution, normalized to [0, 1]
-        counts: dict = {}
+        counts: dict[int, int] = {}
         for lbl in labels:
             counts[lbl] = counts.get(lbl, 0) + 1
 

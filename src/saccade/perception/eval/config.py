@@ -338,7 +338,7 @@ def parse_eval_config(
         mid_thresh=mid_thresh,
         new_track_thresh=0.35
         if kwargs.get("new_track_thresh", None) is None
-        else float(kwargs.get("new_track_thresh")),
+        else float(kwargs.get("new_track_thresh")),  # type: ignore[arg-type]
         crowd_low_score_mode=bool(kwargs.get("crowd_low_score_mode", False)),
         crowd_low_score_trigger=int(kwargs.get("crowd_low_score_trigger", 25)),
         crowd_conf_threshold=float(kwargs.get("crowd_conf_threshold", 0.02)),

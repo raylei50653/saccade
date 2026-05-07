@@ -21,7 +21,7 @@ def run_motmetrics_evaluation(
 
     # Force NumPy 2.0 compatibility
     if not hasattr(np, "asfarray"):
-        np.asfarray = lambda a, dtype=float: np.asarray(a, dtype=dtype)
+        np.asfarray = lambda a, dtype=float: np.asarray(a, dtype=dtype)  # type: ignore[attr-defined]
 
     gt_folder = os.path.join(data_root, split)
     gtfiles = glob.glob(os.path.join(gt_folder, "*/gt/gt.txt"))

@@ -1,5 +1,6 @@
 # mypy: ignore-errors
 
+from saccade.perception.eval.evaluator import run_eval as run_eval  # noqa: F401
 
 # Perception/eval modules load local extensions before any torchvision fallback.
 

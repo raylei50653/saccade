@@ -1,3 +1,5 @@
+import math
+
 import torch
 import torch.nn.functional as F
 from .types import (
@@ -50,8 +52,8 @@ class IdStabilityFilter:
         ah = max(a[3] - a[1], 1e-6)
         bw = max(b[2] - b[0], 1e-6)
         bh = max(b[3] - b[1], 1e-6)
-        scale = max(((aw * ah) ** 0.5 + (bw * bh) ** 0.5) * 0.5, 1e-6)
-        return (((acx - bcx) ** 2 + (acy - bcy) ** 2) ** 0.5) / scale
+        scale = max((math.sqrt(aw * ah) + math.sqrt(bw * bh)) * 0.5, 1e-6)
+        return math.sqrt((acx - bcx) ** 2 + (acy - bcy) ** 2) / scale
 
     def accept(
         self,
@@ -146,7 +148,7 @@ class TrackletLifecycleMerger:
         acy = (a[1] + a[3]) * 0.5
         bcx = (b[0] + b[2]) * 0.5
         bcy = (b[1] + b[3]) * 0.5
-        dist = ((acx - bcx) ** 2 + (acy - bcy) ** 2) ** 0.5
+        dist = math.sqrt((acx - bcx) ** 2 + (acy - bcy) ** 2)
         return dist / max(float(frame_w), float(frame_h), 1.0)
 
     @staticmethod
