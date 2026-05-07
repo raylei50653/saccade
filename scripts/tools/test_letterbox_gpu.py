@@ -6,7 +6,7 @@ project_root = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(project_root / "build"))
 sys.path.insert(0, str(project_root / "src"))
 
-import torch
+import torch  # noqa: E402
 
 try:
     from saccade_tracking_ext import letterbox_gpu as cpp_letterbox_gpu

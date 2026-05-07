@@ -2,8 +2,6 @@ import csv
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-import pytest
-
 from saccade.perception.eval.reporting import print_overall_summary, print_sequence_summary
 
 TOP_STAGES = ("detect", "reid_extract")
@@ -186,8 +184,8 @@ def test_seq_summary_appends_stage_lines_when_profiling():
         seq_stage_samples={"detect": [10.0] * 5, "reid_extract": [5.0] * 5},
         stage_summary_lines=lines,
     ))
-    assert any("detect" in l for l in lines)
-    assert any("MOT17-02-SDP" in l for l in lines)
+    assert any("detect" in line for line in lines)
+    assert any("MOT17-02-SDP" in line for line in lines)
 
 
 def test_seq_summary_no_profile_no_lines():
@@ -211,4 +209,4 @@ def test_seq_summary_lazy_reid_appended():
         seq_lazy_reid_candidates=20,
         stage_summary_lines=lines,
     ))
-    assert any("lazy_reid_candidates" in l for l in lines)
+    assert any("lazy_reid_candidates" in line for line in lines)

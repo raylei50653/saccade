@@ -125,7 +125,6 @@ def test_identity_on_first_frame():
     torch.cuda.synchronize()
 
     warp = d_warp.cpu().tolist()
-    identity = [1, 0, 0, 0, 1, 0]
     # First frame: prev is zeroed → PCR will be low → identity written
     # (tx/ty == 0 is sufficient here)
     assert abs(warp[2]) < 1.0 and abs(warp[5]) < 1.0, \

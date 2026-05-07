@@ -1,4 +1,3 @@
-import pytest
 import torch
 
 from saccade.perception.feature_bank import FeatureBank
