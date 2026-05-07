@@ -267,7 +267,7 @@ def parse_eval_config(
         reid_enabled=reid_enabled,
         reid_model=reid_model,
         reid_engine=kwargs.get("reid_engine_path", "") or "",
-        reid_interval=max(1, int(kwargs.get("reid_interval", 10))),
+        reid_interval=max(1, int(kwargs.get("reid_interval", 20))),
         reid_crop_mode=kwargs.get("reid_crop_mode", "tight"),
         reid_crop_padding=float(kwargs.get("reid_crop_padding", 0.0)),
         reid_crop_layout=kwargs.get("reid_crop_layout", "full"),
@@ -478,7 +478,7 @@ def parse_eval_config(
         bank_quality_w_aspect=float(kwargs.get("bank_quality_w_aspect", 0.15)),
         bank_quality_w_center=float(kwargs.get("bank_quality_w_center", 0.10)),
         bank_quality_w_area=float(kwargs.get("bank_quality_w_area", 0.10)),
-        need_reid_enabled=bool(kwargs.get("need_reid", True)),
+        need_reid_enabled=bool(kwargs.get("need_reid", False)),
         async_reid=bool(kwargs.get("async_reid", False)),
         pipeline_relink=bool(kwargs.get("pipeline_relink", False))
         and not profile_stages,

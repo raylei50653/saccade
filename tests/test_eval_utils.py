@@ -1,5 +1,7 @@
 import pytest
 import torch
+from scripts.eval.mot17_args import build_parser
+from saccade.perception.eval.config import parse_eval_config
 
 from saccade.perception.eval.utils import (
     apply_narrow_person_score_bonus,
@@ -182,3 +184,27 @@ def test_count_tile_seam_boxes_returns_int():
     boxes = torch.tensor([[300.0, 100.0, 350.0, 200.0]])
     result = count_tile_seam_boxes(boxes, tiling="960p_2x2", h_orig=720, w_orig=1280)
     assert isinstance(result, int)
+
+
+def test_mot17_parser_defaults_to_fixed_interval_reid():
+    args = build_parser().parse_args([])
+
+    assert args.need_reid is False
+    assert args.reid_interval == 20
+
+
+def test_parse_eval_config_defaults_to_fixed_interval_reid(tmp_path):
+    cfg = parse_eval_config(
+        output=str(tmp_path),
+        data_root="datasets/MOT17",
+        split="train",
+        sequences="MOT17-04-SDP",
+        conf_threshold=0.05,
+        reid_mode="semantic",
+        reid_model="siglip2",
+        profile_stages=False,
+        kwargs={},
+    )
+
+    assert cfg.need_reid_enabled is False
+    assert cfg.reid_interval == 20
