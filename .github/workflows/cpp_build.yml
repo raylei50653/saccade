@@ -60,15 +60,14 @@ jobs:
         run: uv sync
 
       - name: Install newer CMake
-        run: uv run pip install "cmake>=3.28"
+        run: uv pip install "cmake>=3.28"
 
       - name: Build C++ Core and Python Extension
         run: |
           mkdir build
           cd build
           PYTHON_EXE=$(uv run python -c "import sys; print(sys.executable)")
-          CMAKE_EXE=$(uv run python -c "import cmake; import os; print(os.path.join(cmake.CMAKE_BIN_DIR, 'cmake'))")
-          $CMAKE_EXE .. \
+          uv run cmake .. \
             -DPYTHON_EXECUTABLE=$PYTHON_EXE \
             -Dpybind11_DIR=$(uv run python -c "import pybind11; print(pybind11.get_cmake_dir())") \
             -DCMAKE_BUILD_TYPE=Release
