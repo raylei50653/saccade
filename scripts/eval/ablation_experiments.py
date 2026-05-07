@@ -50,7 +50,8 @@ _A2_BEST = [
     "0.75",
 ]
 
-_CATEGORY_EXPERIMENTS: dict[str, list[tuple[str, str, list[str]]]] = {
+_ExperimentSpec = tuple[str, str, list[str]] | tuple[str, str, list[str], str]
+_CATEGORY_EXPERIMENTS: dict[str, list[_ExperimentSpec]] = {
     "detection": [
         ("conf=0.03", "conf003", ["--conf-threshold", "0.03"]),
         ("conf=0.10", "conf010", ["--conf-threshold", "0.10"]),

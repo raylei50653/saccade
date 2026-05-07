@@ -126,13 +126,13 @@ class VRAMLevelWriter:
         except FileNotFoundError:
             pass
         self._shm = SharedMemory(name=_SHM_NAME, create=True, size=_SHM_SIZE)
-        self._shm.buf[0] = 0
+        self._shm.buf[0] = 0  # type: ignore[index]
 
     def write(self, level: DegradationLevel) -> None:
-        self._shm.buf[0] = int(level)
+        self._shm.buf[0] = int(level)  # type: ignore[index]
 
     def close(self) -> None:
-        self._shm.buf.release()
+        self._shm.buf.release()  # type: ignore[union-attr]
         self._shm.close()
         self._shm.unlink()
 
@@ -161,11 +161,11 @@ class VRAMLevelReader:
             self._attach()
         if self._shm is None:
             return DegradationLevel.NORMAL
-        return DegradationLevel(self._shm.buf[0])
+        return DegradationLevel(self._shm.buf[0])  # type: ignore[index]
 
     def close(self) -> None:
         if self._shm is not None:
-            self._shm.buf.release()
+            self._shm.buf.release()  # type: ignore[union-attr]
             self._shm.close()
             self._shm = None
 

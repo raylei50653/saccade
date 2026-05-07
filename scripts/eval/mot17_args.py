@@ -1,7 +1,7 @@
 import argparse
 
 
-def _help(text, *, range_hint=None, edge=None):
+def _help(text: str, *, range_hint: str | None = None, edge: str | None = None) -> str:
     parts = [text]
     if range_hint:
         parts.append(f"Range: {range_hint}.")
@@ -10,7 +10,7 @@ def _help(text, *, range_hint=None, edge=None):
     return " ".join(parts)
 
 
-def build_parser():
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
             "Evaluate MOT17 tracking runs. Parameters are grouped by capability area so "
