@@ -33,9 +33,9 @@ def spawn_tracks(tracker: GPUByteTracker, n: int, d: int) -> list[int]:
     for i in range(n):
         x, y = 100.0 + i * (480.0 / max(n, 1)), 200.0
         boxes[i] = torch.tensor([x, y, x + 50.0, y + 100.0])
-    scores  = torch.full((n,), 0.82, device="cuda")
+    scores = torch.full((n,), 0.82, device="cuda")
     classes = torch.zeros(n, dtype=torch.int32, device="cuda")
-    stream  = torch.cuda.current_stream().cuda_stream
+    stream = torch.cuda.current_stream().cuda_stream
     results = []
     for _ in range(3):
         results = tracker.update(
@@ -53,21 +53,29 @@ def bench_new_path(
 ) -> float:
     """Time the new C++ path: ensure_slot_map (lazy) + D2D scatter."""
     n = len(ids)
-    feats   = torch.stack([F.normalize(torch.randn(d), dim=0).cuda() for _ in ids])
+    feats = torch.stack([F.normalize(torch.randn(d), dim=0).cuda() for _ in ids])
     ids_gpu = torch.tensor(ids, dtype=torch.int32, device="cuda")
-    flags   = torch.ones(n, dtype=torch.uint8, device="cuda")
-    stream  = torch.cuda.current_stream().cuda_stream
+    flags = torch.ones(n, dtype=torch.uint8, device="cuda")
+    stream = torch.cuda.current_stream().cuda_stream
 
     # warm up
     for _ in range(WARMUP):
-        tracker.update_reference_features(ids_gpu.data_ptr(), feats.data_ptr(), n, stream)
-        tracker.set_clean_embedding_flags(ids_gpu.data_ptr(), flags.data_ptr(), n, stream)
+        tracker.update_reference_features(
+            ids_gpu.data_ptr(), feats.data_ptr(), n, stream
+        )
+        tracker.set_clean_embedding_flags(
+            ids_gpu.data_ptr(), flags.data_ptr(), n, stream
+        )
     torch.cuda.synchronize()
 
     t0 = time.perf_counter()
     for _ in range(iters):
-        tracker.update_reference_features(ids_gpu.data_ptr(), feats.data_ptr(), n, stream)
-        tracker.set_clean_embedding_flags(ids_gpu.data_ptr(), flags.data_ptr(), n, stream)
+        tracker.update_reference_features(
+            ids_gpu.data_ptr(), feats.data_ptr(), n, stream
+        )
+        tracker.set_clean_embedding_flags(
+            ids_gpu.data_ptr(), flags.data_ptr(), n, stream
+        )
         torch.cuda.synchronize()
     return (time.perf_counter() - t0) / iters * 1e3  # ms/iter
 
@@ -86,15 +94,15 @@ def bench_old_path_sim(
       - N× D2D async copies (embed_dim floats each)
     Uses actual cudaMemcpy timing on dummy buffers.
     """
-    d_active   = torch.zeros(max_obj, dtype=torch.bool,  device="cuda")
-    d_tids     = torch.zeros(max_obj, dtype=torch.int32, device="cuda")
+    d_active = torch.zeros(max_obj, dtype=torch.bool, device="cuda")
+    d_tids = torch.zeros(max_obj, dtype=torch.int32, device="cuda")
     d_src_tids = torch.zeros(n_tracks, dtype=torch.int32, device="cuda")
     d_src_feat = torch.zeros(n_tracks, d, device="cuda")
-    d_dst_feat = torch.zeros(max_obj,  d, device="cuda")
+    d_dst_feat = torch.zeros(max_obj, d, device="cuda")
 
     h_active = torch.zeros(max_obj, dtype=torch.bool)
-    h_tids   = torch.zeros(max_obj, dtype=torch.int32)
-    h_src    = torch.zeros(n_tracks, dtype=torch.int32)
+    h_tids = torch.zeros(max_obj, dtype=torch.int32)
+    h_src = torch.zeros(n_tracks, dtype=torch.int32)
 
     # warm up
     for _ in range(WARMUP):
@@ -133,14 +141,16 @@ def bench_old_path_sim(
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--iters",     type=int, default=DEFAULT_ITERS)
+    ap.add_argument("--iters", type=int, default=DEFAULT_ITERS)
     ap.add_argument("--embed-dim", type=int, default=768)
-    ap.add_argument("--tracks",    type=int, nargs="+", default=[5, 20, 50, 100, 200])
+    ap.add_argument("--tracks", type=int, nargs="+", default=[5, 20, 50, 100, 200])
     args = ap.parse_args()
 
     D = args.embed_dim
     print(f"Benchmark: embed_dim={D}, MAX_OBJ={MAX_OBJ}, iters={args.iters}")
-    print(f"{'T':>5}  {'old (ms)':>10}  {'new (ms)':>10}  {'speedup':>8}  {'saved/frame':>12}")
+    print(
+        f"{'T':>5}  {'old (ms)':>10}  {'new (ms)':>10}  {'speedup':>8}  {'saved/frame':>12}"
+    )
     print("-" * 55)
 
     for T in args.tracks:
@@ -160,7 +170,9 @@ def main() -> None:
 
         speedup = t_old / t_new
         saved_us = (t_old - t_new) * 1e3  # µs
-        print(f"{T:>5}  {t_old:>10.3f}  {t_new:>10.3f}  {speedup:>7.1f}×  {saved_us:>+11.0f} µs")
+        print(
+            f"{T:>5}  {t_old:>10.3f}  {t_new:>10.3f}  {speedup:>7.1f}×  {saved_us:>+11.0f} µs"
+        )
 
     print()
     # FPS impact at T=50 (typical MOT17)
@@ -186,7 +198,9 @@ def main() -> None:
         t_new = bench_new_path(tracker, ids, D, args.iters)
         t_old = bench_old_path_sim(T, MAX_OBJ, D, args.iters)
         saved_pct = (t_old - t_new) / budget_ms * 100
-        print(f"  T={T:>3}: saved {t_old-t_new:.3f}ms/frame  ({saved_pct:+.1f}% of 33ms budget)")
+        print(
+            f"  T={T:>3}: saved {t_old - t_new:.3f}ms/frame  ({saved_pct:+.1f}% of 33ms budget)"
+        )
 
 
 if __name__ == "__main__":

@@ -5,6 +5,7 @@ from collections import OrderedDict
 from typing import Any
 import numpy as np
 
+
 def run_motmetrics_evaluation(
     data_root: str,
     split: str,
@@ -64,7 +65,9 @@ def run_motmetrics_evaluation(
                 break
         if matched_gt:
             accs.append(
-                mm.utils.compare_to_groundtruth(gt[matched_gt], tsacc, "iou", distth=0.5)
+                mm.utils.compare_to_groundtruth(
+                    gt[matched_gt], tsacc, "iou", distth=0.5
+                )
             )
             names.append(k)
 
@@ -79,11 +82,11 @@ def run_motmetrics_evaluation(
     # Return OVERALL metrics
     overall = summary.loc["OVERALL"]
     return {
-        "IDF1": f"{overall['idf1']*100:.1f}%",
-        "MOTA": f"{overall['mota']*100:.1f}%",
+        "IDF1": f"{overall['idf1'] * 100:.1f}%",
+        "MOTA": f"{overall['mota'] * 100:.1f}%",
         "IDs": int(overall["num_switches"]),
         "FP": int(overall["num_false_positives"]),
         "FN": int(overall["num_misses"]),
-        "Rcll": f"{overall['recall']*100:.1f}%",
-        "Prcn": f"{overall['precision']*100:.1f}%",
+        "Rcll": f"{overall['recall'] * 100:.1f}%",
+        "Prcn": f"{overall['precision'] * 100:.1f}%",
     }

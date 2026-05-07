@@ -84,13 +84,17 @@ def bbox_iou(gt_row: pd.Series, ts_row: pd.Series) -> float:
     ix2 = min(gx2, tx2)
     iy2 = min(gy2, ty2)
     inter = max(0.0, ix2 - ix1) * max(0.0, iy2 - iy1)
-    union = float(gt_row["W"]) * float(gt_row["H"]) + float(ts_row["W"]) * float(
-        ts_row["H"]
-    ) - inter
+    union = (
+        float(gt_row["W"]) * float(gt_row["H"])
+        + float(ts_row["W"]) * float(ts_row["H"])
+        - inter
+    )
     return inter / union if union > 0.0 else 0.0
 
 
-def best_prediction_iou(gt_row: pd.Series, ts_frame: pd.DataFrame) -> tuple[float, int | None]:
+def best_prediction_iou(
+    gt_row: pd.Series, ts_frame: pd.DataFrame
+) -> tuple[float, int | None]:
     best_iou = 0.0
     best_id = None
     for _, ts_row in ts_frame.iterrows():
@@ -179,7 +183,8 @@ def analyze_sequence(
                     "run_len": len(run),
                     "vis_median": float(run_df["vis"].median()),
                     "vis_max": float(run_df["vis"].max()),
-                    "is_high_vis_run": float(run_df["vis"].median()) >= visibility_threshold,
+                    "is_high_vis_run": float(run_df["vis"].median())
+                    >= visibility_threshold,
                     "best_iou_median": float(run_df["best_iou"].median()),
                     "best_iou_max": float(run_df["best_iou"].max()),
                     "zero_iou_frames": int((run_df["best_iou"] == 0.0).sum()),
@@ -251,9 +256,7 @@ def main() -> None:
     gt_root = Path(args.gt_root)
     sequences = [seq.strip() for seq in args.sequences.split(",") if seq.strip()]
     focus_gt_ids = {
-        int(value.strip())
-        for value in args.focus_gt_ids.split(",")
-        if value.strip()
+        int(value.strip()) for value in args.focus_gt_ids.split(",") if value.strip()
     }
 
     all_runs: list[pd.DataFrame] = []
@@ -279,7 +282,9 @@ def main() -> None:
                 miss_df = miss_df[miss_df["gt_id"].isin(focus_gt_ids)].copy()
             if not miss_df.empty:
                 all_frames.append(
-                    miss_df.sort_values(["seq", "gt_id", "frame"]).reset_index(drop=True)
+                    miss_df.sort_values(["seq", "gt_id", "frame"]).reset_index(
+                        drop=True
+                    )
                 )
 
     if args.csv and all_runs:

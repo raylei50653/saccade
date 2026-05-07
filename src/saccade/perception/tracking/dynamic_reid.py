@@ -3,6 +3,7 @@ from typing import Optional
 from collections import deque
 from .tracker_gpu import ReIDTrackObservation, ReIDFrameStats
 
+
 class DynamicReIDController:
     """5-frame bbox-history trigger for event-driven ReID refresh."""
 
@@ -277,30 +278,34 @@ class DynamicReIDController:
     def get_priorities(self) -> dict[int, float]:
         """Returns priorities for tracks based on state as of the last observed frame."""
         priorities = {}
-        
+
         # 1. New tracks (born in the frame just observed)
         # We want to ReID them in the NEXT frame to confirm they are stable.
         for tid in self._last_new_ids:
-            priorities[tid] = self.weight_new * self._track_score_ema.get(tid, 0.5) + self._last_birth_death_boost
-            
+            priorities[tid] = (
+                self.weight_new * self._track_score_ema.get(tid, 0.5)
+                + self._last_birth_death_boost
+            )
+
         # 2. Matched tracks (active in the frame just observed)
         # We prioritize those that were unstable or had high confidence jitter.
         for tid in self._track_ages:
-            if tid in self._last_new_ids: continue
+            if tid in self._last_new_ids:
+                continue
             instability = self._per_track_instability.get(tid, 0.0)
             jitter = self._per_track_conf_jitter.get(tid, 0.0)
             priority = self.weight_geom * instability + self.weight_conf * jitter
             if priority <= 0.0:
                 priority = 0.1 * self._track_score_ema.get(tid, 0.5)
             priorities[tid] = priority
-            
+
         # 3. Lost tracks (disappeared in the frame just observed)
         # We want to find them in the current frame.
         for tid in self._last_lost_ids:
             # We don't have a current EMA for them easily accessible if they just disappeared,
             # but we can assume they were important.
-            priorities[tid] = self.weight_lost * 1.0 # Mature/Stable lost tracks
-            
+            priorities[tid] = self.weight_lost * 1.0  # Mature/Stable lost tracks
+
         return priorities
 
     def get_last_boxes(self) -> dict[int, tuple[float, float, float, float]]:
@@ -308,18 +313,18 @@ class DynamicReIDController:
         boxes = {}
         if not self._track_history:
             return boxes
-            
+
         # Active tracks from the most recent frame
         for tid, obs in self._track_history[-1].items():
             boxes[tid] = obs.box
-            
+
         # Just lost tracks (were in history[-2] but not history[-1])
         if len(self._track_history) >= 2:
             prev = self._track_history[-2]
             curr = self._track_history[-1]
             for tid in set(prev) - set(curr):
                 boxes[tid] = prev[tid].box
-                
+
         return boxes
 
     def should_reid(self, det_count: int) -> bool:
@@ -452,5 +457,3 @@ class DynamicReIDController:
             self._cooldown_remaining = self.cooldown_frames
             return True
         return False
-
-

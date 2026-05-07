@@ -1,6 +1,7 @@
 import torch
 import torch.nn.functional as F
 
+
 class OutputAppearanceBank:
     def __init__(
         self,

@@ -52,6 +52,7 @@ from saccade.perception.feature_extractor import TRTFeatureExtractor  # noqa: E4
 # GT loader
 # ---------------------------------------------------------------------------
 
+
 def load_gt(gt_path: Path) -> dict[int, list[tuple[int, int, int, int, int, float]]]:
     """Return {frame_id: [(track_id, x, y, w, h, visibility), ...]} for class=pedestrian."""
     result: dict[int, list] = {}
@@ -75,12 +76,13 @@ def load_gt(gt_path: Path) -> dict[int, list[tuple[int, int, int, int, int, floa
 # LaSt-ViT pipeline
 # ---------------------------------------------------------------------------
 
+
 def _gauss_filter(x: torch.Tensor, sigma: float) -> torch.Tensor:
     """Apply 1D Gaussian low-pass along the last dimension via RFFT. Returns filtered tensor."""
     C = x.shape[-1]
     X = torch.fft.rfft(x, dim=-1)
     freqs = torch.arange(C // 2 + 1, device=x.device, dtype=torch.float32) / C
-    gauss_w = torch.exp(-freqs**2 / (2.0 * sigma**2))
+    gauss_w = torch.exp(-(freqs**2) / (2.0 * sigma**2))
     return torch.fft.irfft(X * gauss_w, n=C, dim=-1)
 
 
@@ -131,18 +133,20 @@ def last_vit_pipeline_dual(
     """
     x = last_hidden_state.float()
     x_filt_embed = _gauss_filter(x, sigma_embed)
-    x_filt_gate  = _gauss_filter(x, sigma_gate)
-    scores_gate  = _stability_scores(x, x_filt_gate)   # used for gating
+    x_filt_gate = _gauss_filter(x, sigma_gate)
+    scores_gate = _stability_scores(x, x_filt_gate)  # used for gating
     scores_embed = _stability_scores(x, x_filt_embed)  # used for Top-K selection
-    embedding    = _topk_pool(x, scores_embed, top_k_ratio)
+    embedding = _topk_pool(x, scores_embed, top_k_ratio)
     return embedding, scores_gate
 
 
-def _topk_pool(x: torch.Tensor, scores: torch.Tensor, top_k_ratio: float) -> torch.Tensor:
+def _topk_pool(
+    x: torch.Tensor, scores: torch.Tensor, top_k_ratio: float
+) -> torch.Tensor:
     """Select Top-K patches by score, average, and L2-normalize. [B, N, C] → [B, C]."""
     B, N, C = x.shape
     K = max(1, int(N * top_k_ratio))
-    topk_idx = scores.topk(K, dim=-1).indices              # [B, K]
+    topk_idx = scores.topk(K, dim=-1).indices  # [B, K]
     topk_feats = torch.gather(x, 1, topk_idx.unsqueeze(-1).expand(-1, -1, C))
     return F.normalize(topk_feats.mean(dim=1), dim=-1)
 
@@ -171,23 +175,24 @@ def last_vit_v2_channel_voting(
     B, N, C = x.shape
     K = max(1, int(N * top_k_ratio))
 
-    x_filt_embed = _gauss_filter(x, sigma_embed)   # [B, N, C]
-    x_filt_gate  = _gauss_filter(x, sigma_gate)    # [B, N, C]
+    x_filt_embed = _gauss_filter(x, sigma_embed)  # [B, N, C]
+    x_filt_gate = _gauss_filter(x, sigma_gate)  # [B, N, C]
 
     stab_embed_nc = _per_channel_stab(x, x_filt_embed)  # [B, N, C]
-    stab_gate_nc  = _per_channel_stab(x, x_filt_gate)   # [B, N, C]
+    stab_gate_nc = _per_channel_stab(x, x_filt_gate)  # [B, N, C]
 
     # Channel-wise Top-1 vote: each channel votes for its highest-stability patch
-    votes_idx = stab_embed_nc.argmax(dim=1)                         # [B, C]
+    votes_idx = stab_embed_nc.argmax(dim=1)  # [B, C]
     vote_count = torch.zeros(B, N, device=x.device, dtype=x.dtype)
-    vote_count.scatter_add_(1, votes_idx,
-                            torch.ones(B, C, device=x.device, dtype=x.dtype))  # [B, N]
+    vote_count.scatter_add_(
+        1, votes_idx, torch.ones(B, C, device=x.device, dtype=x.dtype)
+    )  # [B, N]
 
-    topk_idx   = vote_count.topk(K, dim=-1).indices                 # [B, K]
+    topk_idx = vote_count.topk(K, dim=-1).indices  # [B, K]
     topk_feats = torch.gather(x, 1, topk_idx.unsqueeze(-1).expand(-1, -1, C))
-    embedding  = F.normalize(topk_feats.mean(dim=1), dim=-1)        # [B, C]
+    embedding = F.normalize(topk_feats.mean(dim=1), dim=-1)  # [B, C]
 
-    stab_mean = stab_gate_nc.mean(dim=(1, 2))                       # [B]
+    stab_mean = stab_gate_nc.mean(dim=(1, 2))  # [B]
     return embedding, stab_mean
 
 
@@ -206,17 +211,17 @@ def last_vit_v3_weighted_mean(
     x = last_hidden_state.float()
 
     x_filt_embed = _gauss_filter(x, sigma_embed)
-    x_filt_gate  = _gauss_filter(x, sigma_gate)
+    x_filt_gate = _gauss_filter(x, sigma_gate)
 
-    scores_gate  = _stability_scores(x, x_filt_gate)   # [B, N]
+    scores_gate = _stability_scores(x, x_filt_gate)  # [B, N]
     scores_embed = _stability_scores(x, x_filt_embed)  # [B, N]
 
-    weights   = scores_embed.unsqueeze(-1)              # [B, N, 1]
-    w_sum     = (x * weights).sum(dim=1)                # [B, C]
-    w_total   = weights.sum(dim=1).clamp(min=1e-8)      # [B, 1]
-    embedding = F.normalize(w_sum / w_total, dim=-1)    # [B, C]
+    weights = scores_embed.unsqueeze(-1)  # [B, N, 1]
+    w_sum = (x * weights).sum(dim=1)  # [B, C]
+    w_total = weights.sum(dim=1).clamp(min=1e-8)  # [B, 1]
+    embedding = F.normalize(w_sum / w_total, dim=-1)  # [B, C]
 
-    stab_mean = scores_gate.mean(dim=-1)                # [B]
+    stab_mean = scores_gate.mean(dim=-1)  # [B]
     return embedding, stab_mean
 
 
@@ -237,20 +242,20 @@ def last_vit_v4_per_channel_topk(
     K = max(1, int(N * top_k_ratio))
 
     x_filt_embed = _gauss_filter(x, sigma_embed)
-    x_filt_gate  = _gauss_filter(x, sigma_gate)
+    x_filt_gate = _gauss_filter(x, sigma_gate)
 
     stab_embed_nc = _per_channel_stab(x, x_filt_embed)  # [B, N, C]
-    stab_gate_nc  = _per_channel_stab(x, x_filt_gate)   # [B, N, C]
+    stab_gate_nc = _per_channel_stab(x, x_filt_gate)  # [B, N, C]
 
     # Per-channel Top-K: topk over N for each channel independently
     # stab: [B, N, C] → permute → [B, C, N] → topk → [B, C, K]
-    stab_T   = stab_embed_nc.permute(0, 2, 1)           # [B, C, N]
-    topk_idx = stab_T.topk(K, dim=-1).indices            # [B, C, K]
-    x_T      = x.permute(0, 2, 1)                        # [B, C, N]
-    topk_x   = torch.gather(x_T, 2, topk_idx)            # [B, C, K]
-    embedding = F.normalize(topk_x.mean(dim=-1), dim=-1) # [B, C]
+    stab_T = stab_embed_nc.permute(0, 2, 1)  # [B, C, N]
+    topk_idx = stab_T.topk(K, dim=-1).indices  # [B, C, K]
+    x_T = x.permute(0, 2, 1)  # [B, C, N]
+    topk_x = torch.gather(x_T, 2, topk_idx)  # [B, C, K]
+    embedding = F.normalize(topk_x.mean(dim=-1), dim=-1)  # [B, C]
 
-    stab_mean = stab_gate_nc.mean(dim=(1, 2))            # [B]
+    stab_mean = stab_gate_nc.mean(dim=(1, 2))  # [B]
     return embedding, stab_mean
 
 
@@ -259,10 +264,18 @@ def last_vit_v4_per_channel_topk(
 # ---------------------------------------------------------------------------
 
 _VARIANTS: dict[str, Any] = {
-    "V1 patch-topk    (current)": lambda lhs, se, sg, tk: last_vit_pipeline_dual(lhs, se, sg, tk),
-    "V2 channel-vote  (paper)  ": lambda lhs, se, sg, tk: last_vit_v2_channel_voting(lhs, se, sg, tk),
-    "V3 weighted-mean (soft)   ": lambda lhs, se, sg, tk: last_vit_v3_weighted_mean(lhs, se, sg, tk),
-    "V4 per-ch-topk   (indep)  ": lambda lhs, se, sg, tk: last_vit_v4_per_channel_topk(lhs, se, sg, tk),
+    "V1 patch-topk    (current)": lambda lhs, se, sg, tk: last_vit_pipeline_dual(
+        lhs, se, sg, tk
+    ),
+    "V2 channel-vote  (paper)  ": lambda lhs, se, sg, tk: last_vit_v2_channel_voting(
+        lhs, se, sg, tk
+    ),
+    "V3 weighted-mean (soft)   ": lambda lhs, se, sg, tk: last_vit_v3_weighted_mean(
+        lhs, se, sg, tk
+    ),
+    "V4 per-ch-topk   (indep)  ": lambda lhs, se, sg, tk: last_vit_v4_per_channel_topk(
+        lhs, se, sg, tk
+    ),
 }
 
 
@@ -279,13 +292,13 @@ def variant_compare(
         _stats = None  # type: ignore[assignment]
 
     clean = [s for s in samples if s.category == "clean_fg" and s.track_id > 0]
-    bg    = [s for s in samples if s.category == "background"]
+    bg = [s for s in samples if s.category == "background"]
     if not clean:
         print("  Not enough clean_fg samples for variant comparison.")
         return
 
-    all_lhs = torch.stack([s.lhs       for s in clean])
-    bg_lhs  = torch.stack([s.lhs       for s in bg]) if bg else None
+    all_lhs = torch.stack([s.lhs for s in clean])
+    bg_lhs = torch.stack([s.lhs for s in bg]) if bg else None
     img_emb = torch.stack([s.img_embed for s in clean])
 
     by_track: dict[int, list[int]] = {}
@@ -299,16 +312,27 @@ def variant_compare(
         for idxs in by_track.values():
             for a in range(len(idxs)):
                 for b_idx in range(a + 1, len(idxs)):
-                    same.append(float(F.cosine_similarity(
-                        embeds[idxs[a]].unsqueeze(0), embeds[idxs[b_idx]].unsqueeze(0))))
+                    same.append(
+                        float(
+                            F.cosine_similarity(
+                                embeds[idxs[a]].unsqueeze(0),
+                                embeds[idxs[b_idx]].unsqueeze(0),
+                            )
+                        )
+                    )
         n_target = min(len(same) * 3, 500)
         for _ in range(n_target * 8):
             if len(diff) >= n_target:
                 break
             ia, ib = rng.integers(0, len(clean), size=2)
             if clean[ia].track_id != clean[ib].track_id:
-                diff.append(float(F.cosine_similarity(
-                    embeds[ia].unsqueeze(0), embeds[ib].unsqueeze(0))))
+                diff.append(
+                    float(
+                        F.cosine_similarity(
+                            embeds[ia].unsqueeze(0), embeds[ib].unsqueeze(0)
+                        )
+                    )
+                )
         sa = np.array(same) if same else np.array([0.0])
         da = np.array(diff) if diff else np.array([0.0])
         return float(sa.mean()), float(da.mean()), float(sa.mean() - da.mean())
@@ -321,14 +345,18 @@ def variant_compare(
 
     # Baseline
     same_m, diff_m, gap_base = _gap(img_emb)
-    print(f"\n{'='*74}")
+    print(f"\n{'=' * 74}")
     print("PHASE 2B — ALGORITHM VARIANT COMPARISON")
     print(f"  σ_embed={sigma_embed}  σ_gate={sigma_gate}  top_k={top_k_ratio}")
     print(f"  clean_fg={len(clean)}  background={len(bg)}")
-    print(f"{'='*74}")
-    print(f"  {'Variant':<36}  {'same':>7}  {'diff':>7}  {'gap':>8}  {'Δgap':>8}  {'p(FG>BG)':>9}")
-    print(f"  {'-'*36}  {'-'*7}  {'-'*7}  {'-'*8}  {'-'*8}  {'-'*9}")
-    print(f"  {'baseline image_embeds':<36}  {same_m:>7.4f}  {diff_m:>7.4f}  {gap_base:>+8.4f}  {'—':>8}  {'—':>9}")
+    print(f"{'=' * 74}")
+    print(
+        f"  {'Variant':<36}  {'same':>7}  {'diff':>7}  {'gap':>8}  {'Δgap':>8}  {'p(FG>BG)':>9}"
+    )
+    print(f"  {'-' * 36}  {'-' * 7}  {'-' * 7}  {'-' * 8}  {'-' * 8}  {'-' * 9}")
+    print(
+        f"  {'baseline image_embeds':<36}  {same_m:>7.4f}  {diff_m:>7.4f}  {gap_base:>+8.4f}  {'—':>8}  {'—':>9}"
+    )
 
     best_name, best_gap = "", gap_base
     for name, fn in _VARIANTS.items():
@@ -337,22 +365,34 @@ def variant_compare(
         delta = gap - gap_base
 
         # FG vs BG stability discriminability
-        stab_fg_arr = stab_fg_patches.mean(dim=-1).cpu().numpy() if stab_fg_patches.ndim == 2 else stab_fg_patches.cpu().numpy()
+        stab_fg_arr = (
+            stab_fg_patches.mean(dim=-1).cpu().numpy()
+            if stab_fg_patches.ndim == 2
+            else stab_fg_patches.cpu().numpy()
+        )
         if bg_lhs is not None:
             _, stab_bg = fn(bg_lhs, sigma_embed, sigma_gate, top_k_ratio)
-            stab_bg_arr = stab_bg.mean(dim=-1).cpu().numpy() if stab_bg.ndim == 2 else stab_bg.cpu().numpy()
+            stab_bg_arr = (
+                stab_bg.mean(dim=-1).cpu().numpy()
+                if stab_bg.ndim == 2
+                else stab_bg.cpu().numpy()
+            )
         else:
             stab_bg_arr = np.array([])
         pval_str = _mw_p(stab_fg_arr, stab_bg_arr)
 
         marker = " ◀" if gap > best_gap else ""
-        print(f"  {name:<36}  {s_m:>7.4f}  {d_m:>7.4f}  {gap:>+8.4f}  {delta:>+8.4f}  {pval_str:>9}{marker}")
+        print(
+            f"  {name:<36}  {s_m:>7.4f}  {d_m:>7.4f}  {gap:>+8.4f}  {delta:>+8.4f}  {pval_str:>9}{marker}"
+        )
         if gap > best_gap:
             best_gap, best_name = gap, name
 
-    print(f"{'='*74}")
+    print(f"{'=' * 74}")
     if best_name:
-        print(f"  Best variant: {best_name.strip()}  (gap={best_gap:+.4f}, Δ={best_gap-gap_base:+.4f})")
+        print(
+            f"  Best variant: {best_name.strip()}  (gap={best_gap:+.4f}, Δ={best_gap - gap_base:+.4f})"
+        )
     else:
         print("  No variant beat the baseline.")
 
@@ -361,20 +401,22 @@ def variant_compare(
 # Sample container
 # ---------------------------------------------------------------------------
 
+
 class CropSample(NamedTuple):
     track_id: int
     frame_id: int
     bbox: tuple[int, int, int, int]
     visibility: float
-    category: str          # "clean_fg" | "small_fg" | "background"
-    img_embed: torch.Tensor    # [C] L2-normalized
-    lhs: torch.Tensor          # [N, C] last_hidden_state
+    category: str  # "clean_fg" | "small_fg" | "background"
+    img_embed: torch.Tensor  # [C] L2-normalized
+    lhs: torch.Tensor  # [N, C] last_hidden_state
     stab_scores: torch.Tensor  # [N]
 
 
 # ---------------------------------------------------------------------------
 # Frame collector
 # ---------------------------------------------------------------------------
+
 
 def collect_frame(
     img_rgb: np.ndarray,
@@ -411,13 +453,17 @@ def collect_frame(
         bx = int(rng.integers(0, max(1, W - target_hw[1])))
         by = int(rng.integers(0, max(1, H - target_hw[0])))
         bx2, by2 = bx + target_hw[1], by + target_hw[0]
-        if any(bx < x2 and bx2 > x1 and by < y2 and by2 > y1 for x1, y1, x2, y2 in gt_boxes):
+        if any(
+            bx < x2 and bx2 > x1 and by < y2 and by2 > y1 for x1, y1, x2, y2 in gt_boxes
+        ):
             continue
         crop = img_rgb[by:by2, bx:bx2]
         if crop.shape[0] < 4 or crop.shape[1] < 4:
             continue
         crop = cv2.resize(crop, (target_hw[1], target_hw[0]))
-        crops_info.append((0, bx, by, target_hw[1], target_hw[0], 0.0, "background", crop))
+        crops_info.append(
+            (0, bx, by, target_hw[1], target_hw[0], 0.0, "background", crop)
+        )
         bg_added += 1
 
     return crops_info
@@ -438,8 +484,10 @@ def _crop_resize(
 # Background mask utilities
 # ---------------------------------------------------------------------------
 
+
 def _make_gaussian_mask(
-    h: int, w: int,
+    h: int,
+    w: int,
     sigma_y: float,
     sigma_x: float,
     device: str = "cuda",
@@ -452,8 +500,8 @@ def _make_gaussian_mask(
 
 
 def apply_bg_mask(
-    batch: torch.Tensor,   # [B, 3, H, W] float32 in [0, 1]
-    mode: str,             # "none" | "gauss_0.30" | "gauss_0.40" | ...
+    batch: torch.Tensor,  # [B, 3, H, W] float32 in [0, 1]
+    mode: str,  # "none" | "gauss_0.30" | "gauss_0.40" | ...
 ) -> torch.Tensor:
     """Apply background suppression mask to a batch of crops in-place-friendly."""
     if mode == "none":
@@ -475,14 +523,16 @@ def apply_bg_mask(
         mask = _make_gaussian_mask(H, W, 0.38, 0.30, device=batch.device)
         # threshold at 0.5
         hard = (mask >= 0.5).float()
-        mean_color = (batch * hard).sum(dim=(-2, -1), keepdim=True) / hard.sum(dim=(-2, -1), keepdim=True).clamp(min=1)
+        mean_color = (batch * hard).sum(dim=(-2, -1), keepdim=True) / hard.sum(
+            dim=(-2, -1), keepdim=True
+        ).clamp(min=1)
         return batch * hard + mean_color * (1.0 - hard)
 
     if mode == "vstrip":
         # Keep centre 60 % of width, fade sides
         cx = W / 2.0
         x = (torch.arange(W, device=batch.device).float() - cx) / (0.30 * W)
-        strip = torch.exp(-x ** 2 / 2.0).view(1, 1, 1, W)
+        strip = torch.exp(-(x**2) / 2.0).view(1, 1, 1, W)
         return batch * strip
 
     raise ValueError(f"Unknown bg_mask mode: {mode}")
@@ -502,6 +552,7 @@ _BG_MASK_MODES = [
 # ---------------------------------------------------------------------------
 # Main inference loop
 # ---------------------------------------------------------------------------
+
 
 def run_inference(
     seq_dir: Path,
@@ -542,7 +593,7 @@ def run_inference(
 
         # Chunk inference to stay within engine max_batch=16
         all_embeds = []
-        all_lhs    = []
+        all_lhs = []
         max_b = extractor.max_batch
         with torch.no_grad():
             for start in range(0, len(crops_info), max_b):
@@ -557,8 +608,8 @@ def run_inference(
                     extractor.output_buffers["last_hidden_state"][:bs].float().clone()
                 )
 
-        raw_embeds = torch.cat(all_embeds, dim=0)   # [N, 768]
-        lhs_raw    = torch.cat(all_lhs,    dim=0)   # [N, 196, 768]
+        raw_embeds = torch.cat(all_embeds, dim=0)  # [N, 768]
+        lhs_raw = torch.cat(all_lhs, dim=0)  # [N, 196, 768]
 
         # L2-normalize image_embeds (TRT output is pre-norm)
         img_embeds_norm = F.normalize(raw_embeds, dim=-1)
@@ -568,27 +619,33 @@ def run_inference(
         lhs_patches = lhs_raw[:, 1:, :] if N_tok == 197 else lhs_raw  # [B, 196, C]
 
         # LaSt-ViT pipeline
-        _, stab_scores = last_vit_pipeline(lhs_patches, sigma=sigma, top_k_ratio=top_k_ratio)
+        _, stab_scores = last_vit_pipeline(
+            lhs_patches, sigma=sigma, top_k_ratio=top_k_ratio
+        )
 
         for i, (tid, x, y, w, h, vis, cat, _) in enumerate(crops_info):
-            samples.append(CropSample(
-                track_id=tid,
-                frame_id=frame_id,
-                bbox=(x, y, w, h),
-                visibility=vis,
-                category=cat,
-                img_embed=img_embeds_norm[i].cpu(),
-                lhs=lhs_patches[i].cpu(),
-                stab_scores=stab_scores[i].cpu(),
-            ))
+            samples.append(
+                CropSample(
+                    track_id=tid,
+                    frame_id=frame_id,
+                    bbox=(x, y, w, h),
+                    visibility=vis,
+                    category=cat,
+                    img_embed=img_embeds_norm[i].cpu(),
+                    lhs=lhs_patches[i].cpu(),
+                    stab_scores=stab_scores[i].cpu(),
+                )
+            )
 
         n_clean = sum(1 for c in crops_info if c[6] == "clean_fg")
         n_small = sum(1 for c in crops_info if c[6] == "small_fg")
-        n_bg    = sum(1 for c in crops_info if c[6] == "background")
+        n_bg = sum(1 for c in crops_info if c[6] == "background")
         avg_stab = f"{stab_scores[:n_clean].mean().item():.3f}" if n_clean else "n/a"
-        print(f"  frame {frame_id:5d}: {len(crops_info):2d} crops  "
-              f"clean_fg={n_clean}  small_fg={n_small}  bg={n_bg}  "
-              f"avg_stab(clean)={avg_stab}")
+        print(
+            f"  frame {frame_id:5d}: {len(crops_info):2d} crops  "
+            f"clean_fg={n_clean}  small_fg={n_small}  bg={n_bg}  "
+            f"avg_stab(clean)={avg_stab}"
+        )
 
     return samples
 
@@ -597,36 +654,44 @@ def run_inference(
 # Analysis helpers
 # ---------------------------------------------------------------------------
 
+
 def stability_report(samples: list[CropSample]) -> dict[str, np.ndarray]:
     by_cat: dict[str, list[float]] = {"clean_fg": [], "small_fg": [], "background": []}
     for s in samples:
         by_cat[s.category].append(float(s.stab_scores.mean()))
 
-    print(f"\n{'='*62}")
+    print(f"\n{'=' * 62}")
     print("STABILITY SCORE ANALYSIS  (mean per-patch score per crop)")
-    print(f"{'='*62}")
+    print(f"{'=' * 62}")
     for cat, vals in by_cat.items():
         if not vals:
             print(f"  [{cat:12s}]  no samples")
             continue
         a = np.array(vals)
-        print(f"  [{cat:12s}]  n={len(a):3d}  "
-              f"mean={a.mean():.4f}  std={a.std():.4f}  "
-              f"p25={np.percentile(a,25):.4f}  p75={np.percentile(a,75):.4f}")
+        print(
+            f"  [{cat:12s}]  n={len(a):3d}  "
+            f"mean={a.mean():.4f}  std={a.std():.4f}  "
+            f"p25={np.percentile(a, 25):.4f}  p75={np.percentile(a, 75):.4f}"
+        )
 
     clean = np.array(by_cat["clean_fg"])
-    bg    = np.array(by_cat["background"])
-    pval  = 1.0
+    bg = np.array(by_cat["background"])
+    pval = 1.0
     if len(clean) >= 5 and len(bg) >= 5:
         try:
             from scipy import stats
+
             _, pval = stats.mannwhitneyu(clean, bg, alternative="greater")
-            print(f"\n  Mann-Whitney U (clean_fg > background): p={pval:.4f} "
-                  f"{'✓ significant' if pval < 0.05 else '✗ NOT significant'}")
+            print(
+                f"\n  Mann-Whitney U (clean_fg > background): p={pval:.4f} "
+                f"{'✓ significant' if pval < 0.05 else '✗ NOT significant'}"
+            )
         except ImportError:
             delta = clean.mean() - bg.mean()
-            print(f"\n  clean_fg - background mean delta = {delta:+.4f}  "
-                  f"(install scipy for significance test)")
+            print(
+                f"\n  clean_fg - background mean delta = {delta:+.4f}  "
+                f"(install scipy for significance test)"
+            )
     return {k: np.array(v) for k, v in by_cat.items()}
 
 
@@ -641,8 +706,13 @@ def _cosine_pairs(
     for idxs in by_track.values():
         for a in range(len(idxs)):
             for b in range(a + 1, len(idxs)):
-                same.append(float(F.cosine_similarity(
-                    embeds[idxs[a]].unsqueeze(0), embeds[idxs[b]].unsqueeze(0))))
+                same.append(
+                    float(
+                        F.cosine_similarity(
+                            embeds[idxs[a]].unsqueeze(0), embeds[idxs[b]].unsqueeze(0)
+                        )
+                    )
+                )
     rng = np.random.default_rng(rng_seed)
     n_target = min(len(same) * 3, 500)
     for _ in range(n_target * 8):
@@ -650,8 +720,13 @@ def _cosine_pairs(
             break
         ia, ib = rng.integers(0, len(all_samples), size=2)
         if all_samples[ia].track_id != all_samples[ib].track_id:
-            diff.append(float(F.cosine_similarity(
-                embeds[ia].unsqueeze(0), embeds[ib].unsqueeze(0))))
+            diff.append(
+                float(
+                    F.cosine_similarity(
+                        embeds[ia].unsqueeze(0), embeds[ib].unsqueeze(0)
+                    )
+                )
+            )
     return same, diff
 
 
@@ -685,7 +760,7 @@ def similarity_report(
         print("  No clean_fg samples — skipping similarity analysis.")
         return 0.0, 0.0
 
-    all_lhs    = torch.stack([s.lhs       for s in clean])
+    all_lhs = torch.stack([s.lhs for s in clean])
     img_embeds = torch.stack([s.img_embed for s in clean])
 
     by_track: dict[int, list[int]] = {}
@@ -693,11 +768,13 @@ def similarity_report(
         by_track.setdefault(s.track_id, []).append(i)
 
     # Single-sigma embedding
-    lv_embeds_single, _ = last_vit_pipeline(all_lhs, sigma=sigma, top_k_ratio=top_k_ratio)
+    lv_embeds_single, _ = last_vit_pipeline(
+        all_lhs, sigma=sigma, top_k_ratio=top_k_ratio
+    )
 
-    print(f"\n{'='*62}")
+    print(f"\n{'=' * 62}")
     print("COSINE SIMILARITY ANALYSIS")
-    print(f"{'='*62}")
+    print(f"{'=' * 62}")
 
     same_base, diff_base = _cosine_pairs(img_embeds, by_track, clean)
     gap_base = _print_sim_row("image_embeds (baseline)", same_base, diff_base)
@@ -710,13 +787,16 @@ def similarity_report(
     if sigma_embed is not None and sigma_gate is not None:
         print()
         lv_embeds_dual, _ = last_vit_pipeline_dual(
-            all_lhs, sigma_embed=sigma_embed, sigma_gate=sigma_gate,
+            all_lhs,
+            sigma_embed=sigma_embed,
+            sigma_gate=sigma_gate,
             top_k_ratio=top_k_ratio,
         )
         same_dv, diff_dv = _cosine_pairs(lv_embeds_dual, by_track, clean)
         gap_dual = _print_sim_row(
             f"LaSt-ViT dual    σ_embed={sigma_embed}  σ_gate={sigma_gate}",
-            same_dv, diff_dv,
+            same_dv,
+            diff_dv,
         )
 
     return gap_base, gap_dual
@@ -729,20 +809,22 @@ def sigma_sweep(
 ) -> None:
     """Sweep sigma values and report discriminability metric."""
     clean = [s for s in samples if s.category == "clean_fg" and s.track_id > 0]
-    bg    = [s for s in samples if s.category == "background"]
+    bg = [s for s in samples if s.category == "background"]
     if not clean or not bg:
         print("  Not enough samples for sigma sweep.")
         return
 
-    print(f"\n{'='*62}")
+    print(f"\n{'=' * 62}")
     print("SIGMA SWEEP  (Gaussian low-pass width × Nyquist)")
-    print(f"{'='*62}")
+    print(f"{'=' * 62}")
     results: list[tuple] = []
-    print(f"  {'sigma':>7}  {'stab_fg':>8}  {'stab_bg':>8}  "
-          f"{'delta':>8}  {'lv_gap':>10}  {'gap_delta':>12}")
+    print(
+        f"  {'sigma':>7}  {'stab_fg':>8}  {'stab_bg':>8}  "
+        f"{'delta':>8}  {'lv_gap':>10}  {'gap_delta':>12}"
+    )
 
     all_lhs = torch.stack([s.lhs for s in clean])
-    bg_lhs  = torch.stack([s.lhs for s in bg])
+    bg_lhs = torch.stack([s.lhs for s in bg])
 
     # Baseline image_embeds gap
     img_embeds = torch.stack([s.img_embed for s in clean])
@@ -755,20 +837,34 @@ def sigma_sweep(
         for a in range(len(idxs)):
             for b in range(a + 1, len(idxs)):
                 ia, ib = idxs[a], idxs[b]
-                same_sig.append(float(F.cosine_similarity(
-                    img_embeds[ia].unsqueeze(0), img_embeds[ib].unsqueeze(0))))
+                same_sig.append(
+                    float(
+                        F.cosine_similarity(
+                            img_embeds[ia].unsqueeze(0), img_embeds[ib].unsqueeze(0)
+                        )
+                    )
+                )
     for _ in range(len(same_sig) * 3):
         if len(diff_sig) >= len(same_sig) * 2:
             break
         ia, ib = rng.integers(0, len(clean), size=2)
         if clean[ia].track_id != clean[ib].track_id:
-            diff_sig.append(float(F.cosine_similarity(
-                img_embeds[ia].unsqueeze(0), img_embeds[ib].unsqueeze(0))))
-    baseline_gap = np.array(same_sig).mean() - np.array(diff_sig).mean() if same_sig and diff_sig else 0.0
+            diff_sig.append(
+                float(
+                    F.cosine_similarity(
+                        img_embeds[ia].unsqueeze(0), img_embeds[ib].unsqueeze(0)
+                    )
+                )
+            )
+    baseline_gap = (
+        np.array(same_sig).mean() - np.array(diff_sig).mean()
+        if same_sig and diff_sig
+        else 0.0
+    )
 
     for sigma in sigmas:
         _, stab_fg = last_vit_pipeline(all_lhs, sigma=sigma, top_k_ratio=top_k_ratio)
-        _, stab_bg = last_vit_pipeline(bg_lhs,  sigma=sigma, top_k_ratio=top_k_ratio)
+        _, stab_bg = last_vit_pipeline(bg_lhs, sigma=sigma, top_k_ratio=top_k_ratio)
         sfg = float(stab_fg.mean())
         sbg = float(stab_bg.mean())
 
@@ -779,23 +875,38 @@ def sigma_sweep(
             for a in range(len(idxs)):
                 for b in range(a + 1, len(idxs)):
                     ia, ib = idxs[a], idxs[b]
-                    same_lv.append(float(F.cosine_similarity(
-                        lv_embeds[ia].unsqueeze(0), lv_embeds[ib].unsqueeze(0))))
+                    same_lv.append(
+                        float(
+                            F.cosine_similarity(
+                                lv_embeds[ia].unsqueeze(0), lv_embeds[ib].unsqueeze(0)
+                            )
+                        )
+                    )
         rng2 = np.random.default_rng(0)
         for _ in range(len(same_lv) * 5):
             if len(diff_lv) >= len(same_lv) * 2:
                 break
             ia, ib = rng2.integers(0, len(clean), size=2)
             if clean[ia].track_id != clean[ib].track_id:
-                diff_lv.append(float(F.cosine_similarity(
-                    lv_embeds[ia].unsqueeze(0), lv_embeds[ib].unsqueeze(0))))
-        lv_gap = (np.array(same_lv).mean() - np.array(diff_lv).mean()
-                  if same_lv and diff_lv else 0.0)
+                diff_lv.append(
+                    float(
+                        F.cosine_similarity(
+                            lv_embeds[ia].unsqueeze(0), lv_embeds[ib].unsqueeze(0)
+                        )
+                    )
+                )
+        lv_gap = (
+            np.array(same_lv).mean() - np.array(diff_lv).mean()
+            if same_lv and diff_lv
+            else 0.0
+        )
         improvement = lv_gap - baseline_gap
 
         results.append((sigma, sfg, sbg, sfg - sbg, lv_gap, improvement))
-        print(f"  {sigma:>7.4f}  {sfg:>8.4f}  {sbg:>8.4f}  "
-              f"{sfg-sbg:>+8.4f}  {lv_gap:>+10.4f}  {improvement:>+12.4f}")
+        print(
+            f"  {sigma:>7.4f}  {sfg:>8.4f}  {sbg:>8.4f}  "
+            f"{sfg - sbg:>+8.4f}  {lv_gap:>+10.4f}  {improvement:>+12.4f}"
+        )
 
     print(f"\n  baseline image_embeds gap = {baseline_gap:+.4f}")
     if results:
@@ -807,28 +918,35 @@ def sigma_sweep(
 # Verdict
 # ---------------------------------------------------------------------------
 
+
 def verdict(gap_baseline: float, gap_lastvit: float, stab_pval: float | None) -> None:
-    print(f"\n{'='*62}")
+    print(f"\n{'=' * 62}")
     print("VERDICT")
-    print(f"{'='*62}")
+    print(f"{'=' * 62}")
 
     stab_ok = stab_pval is not None and stab_pval < 0.05
-    gap_ok  = gap_lastvit > gap_baseline
+    gap_ok = gap_lastvit > gap_baseline
 
     if stab_ok:
         print("  [PASS] Stability scores significantly discriminate FG vs BG.")
     else:
         print("  [WARN] Stability scores do NOT significantly discriminate FG vs BG.")
-        print("         → Consider adjusting sigma or verifying last_hidden_state shape.")
+        print(
+            "         → Consider adjusting sigma or verifying last_hidden_state shape."
+        )
 
     if gap_ok:
         delta = gap_lastvit - gap_baseline
-        print(f"  [PASS] LaSt-ViT embedding gap ({gap_lastvit:+.4f}) > "
-              f"baseline ({gap_baseline:+.4f})  (+{delta:.4f}).")
+        print(
+            f"  [PASS] LaSt-ViT embedding gap ({gap_lastvit:+.4f}) > "
+            f"baseline ({gap_baseline:+.4f})  (+{delta:.4f})."
+        )
         print("         → Prototype validates concept. Proceed to Phase 1 CUDA.")
     else:
-        print(f"  [WARN] LaSt-ViT gap ({gap_lastvit:+.4f}) <= "
-              f"baseline ({gap_baseline:+.4f}).")
+        print(
+            f"  [WARN] LaSt-ViT gap ({gap_lastvit:+.4f}) <= "
+            f"baseline ({gap_baseline:+.4f})."
+        )
         print("         → Run --sigma-sweep to find a better sigma before Phase 1.")
 
     if stab_ok and gap_ok:
@@ -840,6 +958,7 @@ def verdict(gap_baseline: float, gap_lastvit: float, stab_pval: float | None) ->
 # ---------------------------------------------------------------------------
 # Background mask sweep (Phase 2C extension)
 # ---------------------------------------------------------------------------
+
 
 def bg_mask_sweep(
     seq_dir: Path,
@@ -865,32 +984,40 @@ def bg_mask_sweep(
     if modes is None:
         modes = _BG_MASK_MODES
 
-    print(f"\n{'='*88}")
+    print(f"\n{'=' * 88}")
     print("BACKGROUND MASK SWEEP")
     print(f"  σ_embed={sigma_embed}  σ_gate={sigma_gate}  top_k={top_k_ratio}")
     print(f"  frames={frame_ids[:3]}...  modes={modes}")
-    print(f"{'='*88}")
-    print(f"  {'Mode':<14}  {'base_gap':>9}  {'lv_gap':>9}  {'Δgap':>8}  "
-          f"{'stab_fg':>8}  {'stab_bg':>8}  {'p(FG>BG)':>9}  note")
-    print(f"  {'-'*14}  {'-'*9}  {'-'*9}  {'-'*8}  {'-'*8}  {'-'*8}  {'-'*9}  ----")
+    print(f"{'=' * 88}")
+    print(
+        f"  {'Mode':<14}  {'base_gap':>9}  {'lv_gap':>9}  {'Δgap':>8}  "
+        f"{'stab_fg':>8}  {'stab_bg':>8}  {'p(FG>BG)':>9}  note"
+    )
+    print(
+        f"  {'-' * 14}  {'-' * 9}  {'-' * 9}  {'-' * 8}  {'-' * 8}  {'-' * 8}  {'-' * 9}  ----"
+    )
 
     best_mode, best_delta = "none", -999.0
 
     for mode in modes:
         samples = run_inference(
-            seq_dir, extractor, frame_ids, gt,
-            sigma=sigma_gate, top_k_ratio=top_k_ratio,
+            seq_dir,
+            extractor,
+            frame_ids,
+            gt,
+            sigma=sigma_gate,
+            top_k_ratio=top_k_ratio,
             bg_mask=mode,
         )
         clean = [s for s in samples if s.category == "clean_fg" and s.track_id > 0]
-        bg    = [s for s in samples if s.category == "background"]
+        bg = [s for s in samples if s.category == "background"]
         if not clean:
             print(f"  {mode:<14}  (no clean_fg)")
             continue
 
-        all_lhs   = torch.stack([s.lhs       for s in clean])
-        bg_lhs    = torch.stack([s.lhs for s in bg]) if bg else None
-        img_emb   = torch.stack([s.img_embed for s in clean])
+        all_lhs = torch.stack([s.lhs for s in clean])
+        bg_lhs = torch.stack([s.lhs for s in bg]) if bg else None
+        img_emb = torch.stack([s.img_embed for s in clean])
 
         by_track: dict[int, list[int]] = {}
         for i, s in enumerate(clean):
@@ -903,15 +1030,27 @@ def bg_mask_sweep(
             for idxs in by_track.values():
                 for a in range(len(idxs)):
                     for b_idx in range(a + 1, len(idxs)):
-                        same.append(float(F.cosine_similarity(
-                            embeds[idxs[a]].unsqueeze(0), embeds[idxs[b_idx]].unsqueeze(0))))
+                        same.append(
+                            float(
+                                F.cosine_similarity(
+                                    embeds[idxs[a]].unsqueeze(0),
+                                    embeds[idxs[b_idx]].unsqueeze(0),
+                                )
+                            )
+                        )
             n_t = min(len(same) * 3, 500)
             for _ in range(n_t * 8):
-                if len(diff) >= n_t: break
+                if len(diff) >= n_t:
+                    break
                 ia, ib = rng.integers(0, len(clean), size=2)
                 if clean[ia].track_id != clean[ib].track_id:
-                    diff.append(float(F.cosine_similarity(
-                        embeds[ia].unsqueeze(0), embeds[ib].unsqueeze(0))))
+                    diff.append(
+                        float(
+                            F.cosine_similarity(
+                                embeds[ia].unsqueeze(0), embeds[ib].unsqueeze(0)
+                            )
+                        )
+                    )
             sa = np.array(same) if same else np.zeros(1)
             da = np.array(diff) if diff else np.zeros(1)
             return float(sa.mean() - da.mean())
@@ -919,16 +1058,24 @@ def bg_mask_sweep(
         base_gap = _gap_quick(img_emb)
 
         lv_embeds, scores_gate = last_vit_pipeline_dual(
-            all_lhs, sigma_embed=sigma_embed, sigma_gate=sigma_gate, top_k_ratio=top_k_ratio)
+            all_lhs,
+            sigma_embed=sigma_embed,
+            sigma_gate=sigma_gate,
+            top_k_ratio=top_k_ratio,
+        )
         lv_gap = _gap_quick(lv_embeds)
-        delta   = lv_gap - base_gap
+        delta = lv_gap - base_gap
 
         stab_fg = float(scores_gate.mean(dim=-1).mean())
         stab_bg_str = "  n/a  "
         p_str = "   N/A "
         if bg_lhs is not None:
             _, sg_bg = last_vit_pipeline_dual(
-                bg_lhs, sigma_embed=sigma_embed, sigma_gate=sigma_gate, top_k_ratio=top_k_ratio)
+                bg_lhs,
+                sigma_embed=sigma_embed,
+                sigma_gate=sigma_gate,
+                top_k_ratio=top_k_ratio,
+            )
             stab_bg = float(sg_bg.mean(dim=-1).mean())
             stab_bg_str = f"{stab_bg:.4f}"
             if _stats is not None:
@@ -943,10 +1090,12 @@ def bg_mask_sweep(
         if delta > best_delta:
             best_delta, best_mode = delta, mode
 
-        print(f"  {mode:<14}  {base_gap:>+9.4f}  {lv_gap:>+9.4f}  {delta:>+8.4f}  "
-              f"{stab_fg:>8.4f}  {stab_bg_str:>8}  {p_str:>9}{note}")
+        print(
+            f"  {mode:<14}  {base_gap:>+9.4f}  {lv_gap:>+9.4f}  {delta:>+8.4f}  "
+            f"{stab_fg:>8.4f}  {stab_bg_str:>8}  {p_str:>9}{note}"
+        )
 
-    print(f"{'='*88}")
+    print(f"{'=' * 88}")
     print(f"  Best mode: {best_mode}  (Δgap={best_delta:+.4f})")
 
 
@@ -954,46 +1103,95 @@ def bg_mask_sweep(
 # Entry point
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Phase 0 LaSt-ViT Prototype Validation",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--seq", default="MOT17-04-SDP",
-                        help="MOT17 sequence name.")
-    parser.add_argument("--data-root", default="datasets/MOT17",
-                        help="MOT17 dataset root.")
-    parser.add_argument("--engine",
-                        default="models/embedding/google_siglip2-base-patch16-224.engine",
-                        help="SigLIP2 TRT engine path.")
-    parser.add_argument("--frames", nargs="+", type=int, default=None,
-                        help="Specific frame IDs. Overrides --n-frames.")
-    parser.add_argument("--n-frames", type=int, default=12,
-                        help="Number of frames to sample evenly when --frames not given.")
-    parser.add_argument("--sigma", type=float, default=0.3,
-                        help="Gaussian low-pass sigma for single-sigma mode.")
-    parser.add_argument("--sigma-embed", type=float, default=None,
-                        help="Dual-sigma: sigma for embedding Top-K (e.g. 0.015).")
-    parser.add_argument("--sigma-gate", type=float, default=None,
-                        help="Dual-sigma: sigma for stability gating (e.g. 0.030).")
-    parser.add_argument("--top-k-ratio", type=float, default=0.5,
-                        help="Fraction of patches to include in Top-K pooling.")
-    parser.add_argument("--sigma-sweep", action="store_true",
-                        help="Sweep sigma values and report discriminability.")
-    parser.add_argument("--sigmas", nargs="+", type=float, default=None,
-                        help="Custom sigma list for sweep (overrides built-in range).")
-    parser.add_argument("--variant-compare", action="store_true",
-                        help="Phase 2B: compare V1/V2/V3/V4 aggregation variants.")
-    parser.add_argument("--bg-mask-sweep", action="store_true",
-                        help="Phase 2C: sweep background mask strategies and compare.")
-    parser.add_argument("--bg-masks", nargs="+", default=None,
-                        help=f"Subset of mask modes to test. Available: {_BG_MASK_MODES}")
-    parser.add_argument("--bg-mask", default="none",
-                        help="Single background mask mode to apply during normal inference.")
+    parser.add_argument("--seq", default="MOT17-04-SDP", help="MOT17 sequence name.")
+    parser.add_argument(
+        "--data-root", default="datasets/MOT17", help="MOT17 dataset root."
+    )
+    parser.add_argument(
+        "--engine",
+        default="models/embedding/google_siglip2-base-patch16-224.engine",
+        help="SigLIP2 TRT engine path.",
+    )
+    parser.add_argument(
+        "--frames",
+        nargs="+",
+        type=int,
+        default=None,
+        help="Specific frame IDs. Overrides --n-frames.",
+    )
+    parser.add_argument(
+        "--n-frames",
+        type=int,
+        default=12,
+        help="Number of frames to sample evenly when --frames not given.",
+    )
+    parser.add_argument(
+        "--sigma",
+        type=float,
+        default=0.3,
+        help="Gaussian low-pass sigma for single-sigma mode.",
+    )
+    parser.add_argument(
+        "--sigma-embed",
+        type=float,
+        default=None,
+        help="Dual-sigma: sigma for embedding Top-K (e.g. 0.015).",
+    )
+    parser.add_argument(
+        "--sigma-gate",
+        type=float,
+        default=None,
+        help="Dual-sigma: sigma for stability gating (e.g. 0.030).",
+    )
+    parser.add_argument(
+        "--top-k-ratio",
+        type=float,
+        default=0.5,
+        help="Fraction of patches to include in Top-K pooling.",
+    )
+    parser.add_argument(
+        "--sigma-sweep",
+        action="store_true",
+        help="Sweep sigma values and report discriminability.",
+    )
+    parser.add_argument(
+        "--sigmas",
+        nargs="+",
+        type=float,
+        default=None,
+        help="Custom sigma list for sweep (overrides built-in range).",
+    )
+    parser.add_argument(
+        "--variant-compare",
+        action="store_true",
+        help="Phase 2B: compare V1/V2/V3/V4 aggregation variants.",
+    )
+    parser.add_argument(
+        "--bg-mask-sweep",
+        action="store_true",
+        help="Phase 2C: sweep background mask strategies and compare.",
+    )
+    parser.add_argument(
+        "--bg-masks",
+        nargs="+",
+        default=None,
+        help=f"Subset of mask modes to test. Available: {_BG_MASK_MODES}",
+    )
+    parser.add_argument(
+        "--bg-mask",
+        default="none",
+        help="Single background mask mode to apply during normal inference.",
+    )
     args = parser.parse_args()
 
-    seq_dir  = Path(args.data_root) / "train" / args.seq
-    gt_path  = seq_dir / "gt" / "gt.txt"
+    seq_dir = Path(args.data_root) / "train" / args.seq
+    gt_path = seq_dir / "gt" / "gt.txt"
 
     if not gt_path.exists():
         print(f"ERROR: GT not found at {gt_path}", file=sys.stderr)
@@ -1005,7 +1203,9 @@ def main() -> None:
     print(f"GT       : {gt_path}")
     print(f"Engine   : {args.engine}")
     if dual_mode:
-        print(f"mode     : dual-sigma  σ_embed={args.sigma_embed}  σ_gate={args.sigma_gate}  topk={args.top_k_ratio}")
+        print(
+            f"mode     : dual-sigma  σ_embed={args.sigma_embed}  σ_gate={args.sigma_gate}  topk={args.top_k_ratio}"
+        )
     else:
         print(f"mode     : single-sigma  σ={args.sigma}  topk={args.top_k_ratio}")
 
@@ -1022,7 +1222,9 @@ def main() -> None:
     print(f"  Using frames: {frame_ids}")
 
     print("\nLoading TRT engine (Python path)...")
-    extractor = TRTFeatureExtractor(engine_path=args.engine, device="cuda:0", model_type="siglip2")
+    extractor = TRTFeatureExtractor(
+        engine_path=args.engine, device="cuda:0", model_type="siglip2"
+    )
 
     if "last_hidden_state" not in extractor.output_buffers:
         print(
@@ -1035,7 +1237,9 @@ def main() -> None:
 
     lhs_buf = extractor.output_buffers["last_hidden_state"]
     print(f"  last_hidden_state buffer shape : {tuple(lhs_buf.shape)}")
-    print(f"  image_embeds buffer shape      : {tuple(extractor.output_buffers['image_embeds'].shape)}")
+    print(
+        f"  image_embeds buffer shape      : {tuple(extractor.output_buffers['image_embeds'].shape)}"
+    )
 
     # In dual mode, store gate-sigma stability scores so stability_report reflects gating.
     # Single-sigma mode uses args.sigma for both.
@@ -1044,7 +1248,10 @@ def main() -> None:
     # --bg-mask-sweep: run all mask modes and exit
     if args.bg_mask_sweep:
         bg_mask_sweep(
-            seq_dir, extractor, frame_ids, gt,
+            seq_dir,
+            extractor,
+            frame_ids,
+            gt,
             sigma_embed=args.sigma_embed if dual_mode else args.sigma,
             sigma_gate=args.sigma_gate if dual_mode else args.sigma,
             top_k_ratio=args.top_k_ratio,
@@ -1054,14 +1261,21 @@ def main() -> None:
 
     print("\nRunning inference...")
     samples = run_inference(
-        seq_dir, extractor, frame_ids, gt,
-        sigma_for_stab, args.top_k_ratio,
+        seq_dir,
+        extractor,
+        frame_ids,
+        gt,
+        sigma_for_stab,
+        args.top_k_ratio,
         bg_mask=getattr(args, "bg_mask", "none"),
     )
     print(f"\nCollected {len(samples)} crop samples total.")
 
     if not samples:
-        print("ERROR: No samples collected. Check dataset path and frame IDs.", file=sys.stderr)
+        print(
+            "ERROR: No samples collected. Check dataset path and frame IDs.",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     # --- Analysis ---
@@ -1071,10 +1285,11 @@ def main() -> None:
 
     pval: float | None = None
     clean_arr = stab_arrays.get("clean_fg", np.array([]))
-    bg_arr    = stab_arrays.get("background", np.array([]))
+    bg_arr = stab_arrays.get("background", np.array([]))
     if len(clean_arr) >= 5 and len(bg_arr) >= 5:
         try:
             from scipy import stats
+
             _, pval = stats.mannwhitneyu(clean_arr, bg_arr, alternative="greater")
         except ImportError:
             pass
@@ -1088,11 +1303,15 @@ def main() -> None:
         )
 
     if args.sigma_sweep or args.sigmas:
-        sweep_sigmas = args.sigmas if args.sigmas else [0.05, 0.1, 0.2, 0.3, 0.5, 0.8, 1.2]
+        sweep_sigmas = (
+            args.sigmas if args.sigmas else [0.05, 0.1, 0.2, 0.3, 0.5, 0.8, 1.2]
+        )
         sigma_sweep(samples, sigmas=sweep_sigmas, top_k_ratio=args.top_k_ratio)
 
     gap_baseline, gap_lastvit = similarity_report(
-        samples, args.sigma, args.top_k_ratio,
+        samples,
+        args.sigma,
+        args.top_k_ratio,
         sigma_embed=args.sigma_embed if dual_mode else None,
         sigma_gate=args.sigma_gate if dual_mode else None,
     )

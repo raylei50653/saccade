@@ -1,8 +1,6 @@
 # mypy: ignore-errors
 
 
-
-
 # Perception/eval modules load local extensions before any torchvision fallback.
 
 
@@ -54,5 +52,3 @@ except ImportError:
 
 
 # Post-merge functions moved to post_merge.py
-
-

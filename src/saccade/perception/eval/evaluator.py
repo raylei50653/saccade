@@ -149,6 +149,7 @@ def run_eval(
     **kwargs: Any,
 ) -> dict[str, Any] | None:
     from .config import parse_eval_config
+
     cfg = parse_eval_config(
         output=output,
         data_root=data_root,
@@ -160,7 +161,7 @@ def run_eval(
         profile_stages=bool(kwargs.get("profile_stages", False)),
         kwargs=kwargs,
     )
-    
+
     output_root = cfg.output_root
     output_root.mkdir(parents=True, exist_ok=True)
     fps_summary_lines = []
@@ -178,7 +179,7 @@ def run_eval(
 
     if reid_mode not in {"off", "tracker", "semantic", "hybrid"}:
         raise ValueError(f"Unsupported reid_mode: {reid_mode}")
-        
+
     if extractor is None and cfg.reid_work_enabled:
         extractor = TRTFeatureExtractor(
             engine_path=cfg.reid_engine,
@@ -335,13 +336,14 @@ def run_eval(
     for seq in cfg.seqs:
         detector.reset_tracker()
         geometry_scale_state = GeometryScaleState()
-        
+
         # A8: Uniform CMC & 2D MMD
         gmc_estimator = None
         if cfg.gmc_enabled:
             if cfg.gmc_mode == "gpu":
                 try:
                     from saccade_tracking_ext import GMC as CppGMC
+
                     gmc_estimator = CppGMC(downscale=cfg.gmc_downscale)
                 except ImportError:
                     gmc_estimator = SparseOpticalFlowGMC(downscale=cfg.gmc_downscale)
@@ -391,7 +393,7 @@ def run_eval(
             iou_high=float(cfg.kwargs.get("reid_iou_high", 0.60)),
             weight=float(cfg.kwargs.get("reid_weight", 0.80)),
         )
-        
+
         if hasattr(detector.tracker, "set_unified_score_params"):
             detector.tracker.set_unified_score_params(
                 w_sim_base=cfg.semantic_w_sim_base,
@@ -402,8 +404,7 @@ def run_eval(
             )
 
         _use_python_relinker = (
-            cfg.force_python_relinker
-            or cfg.semantic_rerank_mode != "mean"
+            cfg.force_python_relinker or cfg.semantic_rerank_mode != "mean"
         )
         _relinker_cls = (
             PythonSemanticRelinker if _use_python_relinker else SemanticRelinker
@@ -416,7 +417,9 @@ def run_eval(
                 spatial_gate=cfg.kwargs.get("semantic_spatial_gate", 0.20),
                 min_lost_frames=cfg.kwargs.get("semantic_min_lost_frames", 2),
                 min_iou=cfg.kwargs.get("semantic_min_iou", 0.20),
-                mahalanobis_threshold=cfg.kwargs.get("semantic_mahalanobis_threshold", 0.0),
+                mahalanobis_threshold=cfg.kwargs.get(
+                    "semantic_mahalanobis_threshold", 0.0
+                ),
                 buffer_size=cfg.semantic_buffer_size,
                 min_consistency=cfg.semantic_min_consistency,
                 rerank_mode=cfg.semantic_rerank_mode,
@@ -490,7 +493,11 @@ def run_eval(
             new_track_thresh=cfg.new_track_thresh,
             nsa_kalman=cfg.nsa_kalman,
         )
-        active_tracker_thresholds = (cfg.track_thresh, cfg.mid_thresh, cfg.new_track_thresh)
+        active_tracker_thresholds = (
+            cfg.track_thresh,
+            cfg.mid_thresh,
+            cfg.new_track_thresh,
+        )
 
         pool = AdaptiveFramePool(h_orig, w_orig)
         streamer = DALIStreamerStream(seq_path / "img1")
@@ -523,7 +530,9 @@ def run_eval(
                 history_size=max(2, int(cfg.kwargs.get("reid_history_size", 5))),
                 mode=str(cfg.kwargs.get("reid_trigger_mode", "event_any")),
                 long_memory_decay=float(cfg.kwargs.get("reid_long_memory_decay", 0.80)),
-                long_memory_trigger=float(cfg.kwargs.get("reid_long_memory_trigger", 1.25)),
+                long_memory_trigger=float(
+                    cfg.kwargs.get("reid_long_memory_trigger", 1.25)
+                ),
                 score_decay=float(cfg.kwargs.get("reid_score_decay", 0.80)),
                 score_threshold=float(cfg.kwargs.get("reid_score_threshold", 2.0)),
                 score_threshold_low=float(
@@ -540,7 +549,9 @@ def run_eval(
                 unstable_shift_weight=float(
                     cfg.kwargs.get("reid_unstable_shift_weight", 1.0)
                 ),
-                unstable_iou_weight=float(cfg.kwargs.get("reid_unstable_iou_weight", 1.0)),
+                unstable_iou_weight=float(
+                    cfg.kwargs.get("reid_unstable_iou_weight", 1.0)
+                ),
                 conf_jitter_gate=float(cfg.kwargs.get("reid_conf_jitter_gate", 0.10)),
                 trigger_persist_frames=int(
                     cfg.kwargs.get("reid_trigger_persist_frames", 2)
@@ -855,7 +866,9 @@ def run_eval(
                     score_threshold=min(
                         cfg.conf_threshold,
                         cfg.track_thresh,
-                        cfg.crowd_conf_threshold if cfg.crowd_low_score_mode else cfg.conf_threshold,
+                        cfg.crowd_conf_threshold
+                        if cfg.crowd_low_score_mode
+                        else cfg.conf_threshold,
                         cfg.crowd_track_thresh
                         if cfg.crowd_low_score_mode
                         else cfg.track_thresh,
@@ -1020,7 +1033,8 @@ def run_eval(
                     seq_stage_totals["post_merge"] += elapsed_ms
             after_merge_count = int(fused_scores.numel())
             crowd_low_active = (
-                cfg.crowd_low_score_mode and after_merge_count >= cfg.crowd_low_score_trigger
+                cfg.crowd_low_score_mode
+                and after_merge_count >= cfg.crowd_low_score_trigger
             )
             frame_conf_threshold = (
                 cfg.crowd_conf_threshold if crowd_low_active else cfg.conf_threshold
@@ -1028,7 +1042,9 @@ def run_eval(
             frame_track_thresh = (
                 cfg.crowd_track_thresh if crowd_low_active else cfg.track_thresh
             )
-            frame_mid_thresh = cfg.crowd_mid_thresh if crowd_low_active else cfg.mid_thresh
+            frame_mid_thresh = (
+                cfg.crowd_mid_thresh if crowd_low_active else cfg.mid_thresh
+            )
             frame_new_track_thresh = (
                 cfg.crowd_new_track_thresh if crowd_low_active else cfg.new_track_thresh
             )
@@ -1083,7 +1099,11 @@ def run_eval(
                     w_orig=w_orig,
                     seam_margin_canvas_px=cfg.tile_seam_margin_canvas_px,
                 )
-            if cfg.tile_seam_score_penalty < 1.0 and is_tiled and fused_boxes.numel() > 0:
+            if (
+                cfg.tile_seam_score_penalty < 1.0
+                and is_tiled
+                and fused_boxes.numel() > 0
+            ):
                 seam_mask = _tile_seam_mask(
                     fused_boxes,
                     tiling=cfg.tiling,
@@ -1277,13 +1297,23 @@ def run_eval(
                                             )
                                         )
                                     )
-                                    seq_native_reid_samples["native_reid_trt_enqueue"].append(
+                                    seq_native_reid_samples[
+                                        "native_reid_trt_enqueue"
+                                    ].append(
                                         float(
-                                            native_stats.get("extract_trt_enqueue_ms", 0.0)
+                                            native_stats.get(
+                                                "extract_trt_enqueue_ms", 0.0
+                                            )
                                         )
                                     )
-                                    seq_native_reid_samples["native_reid_l2_normalize"].append(
-                                        float(native_stats.get("extract_l2_normalize_ms", 0.0))
+                                    seq_native_reid_samples[
+                                        "native_reid_l2_normalize"
+                                    ].append(
+                                        float(
+                                            native_stats.get(
+                                                "extract_l2_normalize_ms", 0.0
+                                            )
+                                        )
                                     )
                             embeddings[budget_indices] = budget_embeddings
                     else:
@@ -1306,14 +1336,18 @@ def run_eval(
                                     torch.cuda.synchronize()
                                     t_reid_extract_start = time.perf_counter()
                                 if last_vit_embed:
-                                    budget_embeddings, _stab = extractor.extract_with_stability(
-                                        crops,
-                                        sigma_embed=last_vit_sigma_embed,
-                                        sigma_gate=last_vit_sigma_gate,
-                                        top_k_ratio=last_vit_top_k,
+                                    budget_embeddings, _stab = (
+                                        extractor.extract_with_stability(
+                                            crops,
+                                            sigma_embed=last_vit_sigma_embed,
+                                            sigma_gate=last_vit_sigma_gate,
+                                            top_k_ratio=last_vit_top_k,
+                                        )
                                     )
                                 else:
-                                    budget_embeddings = extractor.extract_parts_fused(crops)
+                                    budget_embeddings = extractor.extract_parts_fused(
+                                        crops
+                                    )
                                     _stab = None
                                 if profile_stages:
                                     torch.cuda.synchronize()
@@ -1344,11 +1378,13 @@ def run_eval(
                                     torch.cuda.synchronize()
                                     t_reid_extract_start = time.perf_counter()
                                 if last_vit_embed:
-                                    budget_embeddings, _stab = extractor.extract_with_stability(
-                                        crops,
-                                        sigma_embed=last_vit_sigma_embed,
-                                        sigma_gate=last_vit_sigma_gate,
-                                        top_k_ratio=last_vit_top_k,
+                                    budget_embeddings, _stab = (
+                                        extractor.extract_with_stability(
+                                            crops,
+                                            sigma_embed=last_vit_sigma_embed,
+                                            sigma_gate=last_vit_sigma_gate,
+                                            top_k_ratio=last_vit_top_k,
+                                        )
                                     )
                                 else:
                                     budget_embeddings = extractor.extract(crops)
@@ -1384,6 +1420,7 @@ def run_eval(
             gmc_warp = None
             gmc_uncertain = False
             if gmc_estimator is not None:
+
                 def _run_gmc() -> tuple[torch.Tensor | None, bool]:
                     local_gmc_warp: torch.Tensor | None = None
                     local_gmc_uncertain = False
@@ -1468,7 +1505,9 @@ def run_eval(
                 "materialize",
                 lambda: _materialize_gpu_track_results(
                     tracker_result_buffers,
-                    default_class_id=cfg.person_class if cfg.track_person_only else None,
+                    default_class_id=cfg.person_class
+                    if cfg.track_person_only
+                    else None,
                     include_det_idx=embeddings is not None,
                 ),
                 sync_cuda=True,
@@ -1783,6 +1822,7 @@ def run_eval(
             relinker.report()
         lifecycle_merger.report()
         from .reporting import print_sequence_summary
+
         print_sequence_summary(
             cfg=cfg,
             seq=seq,
@@ -1820,6 +1860,7 @@ def run_eval(
         )
 
     from .reporting import print_overall_summary
+
     print_overall_summary(
         cfg=cfg,
         output_root=output_root,
@@ -1847,6 +1888,7 @@ def run_eval(
 
     # ── MOTMetrics Evaluation ──────────────────────────────────────────────────
     from .metrics import run_motmetrics_evaluation
+
     return run_motmetrics_evaluation(
         data_root=cfg.data_root,
         split=cfg.split,
@@ -1854,4 +1896,3 @@ def run_eval(
         sequences=",".join(cfg.seqs),
         detector=cfg.kwargs.get("detector"),
     )
-

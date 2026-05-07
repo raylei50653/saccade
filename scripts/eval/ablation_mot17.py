@@ -43,7 +43,15 @@ if not hasattr(np, "asfarray"):
 import motmetrics as mm  # noqa: E402
 
 
-from .ablation_experiments import _METRICS, _DISPLAY, _PCT, _CATEGORY_ORDER, _A2_BEST, _CATEGORY_EXPERIMENTS  # noqa: E402
+from .ablation_experiments import (
+    _METRICS,
+    _DISPLAY,
+    _PCT,
+    _CATEGORY_ORDER,
+    _A2_BEST,
+    _CATEGORY_EXPERIMENTS,
+)  # noqa: E402
+
 
 def is_mot_file(path: str) -> bool:
     name = Path(path).name
@@ -91,7 +99,7 @@ def evaluate_dir(results_dir: str, gt_root: str, detector: str | None) -> dict |
         accs, names=names, metrics=_METRICS, generate_overall=True
     )
     results = {m: summary.loc["OVERALL", m] for m in _METRICS}
-    
+
     # Cast to float/int for JSON serialization
     results = {
         m: (float(v) if m in _PCT or "num" not in m else int(v))
@@ -196,35 +204,46 @@ def print_table(title: str, results: list[tuple[str, dict | None]]) -> None:
 
 def run_optuna_a1(args, base_args):
     import optuna
-    
+
     def objective(trial):
         w_sim = trial.suggest_float("w_sim_base", 0.0, 1.0)
         w_iou = trial.suggest_float("w_iou_base", 0.0, 1.0)
         w_maha = trial.suggest_float("w_maha_base", 0.0, 1.0)
         shift_ambiguity = trial.suggest_float("shift_ambiguity", 0.0, 0.5)
         shift_lost_age = trial.suggest_float("shift_lost_age", 0.0, 0.5)
-        
+
         extra_args = [
-            "--semantic-w-sim-base", str(w_sim),
-            "--semantic-w-iou-base", str(w_iou),
-            "--semantic-w-maha-base", str(w_maha),
-            "--semantic-shift-ambiguity", str(shift_ambiguity),
-            "--semantic-shift-lost-age", str(shift_lost_age),
+            "--semantic-w-sim-base",
+            str(w_sim),
+            "--semantic-w-iou-base",
+            str(w_iou),
+            "--semantic-w-maha-base",
+            str(w_maha),
+            "--semantic-shift-ambiguity",
+            str(shift_ambiguity),
+            "--semantic-shift-lost-age",
+            str(shift_lost_age),
         ]
-        
+
         out_dir = f"{args.output_root}/optuna/trial_{trial.number}"
-        run_eval(f"Optuna A1 Trial {trial.number}", out_dir, extra_args, base_args, args.dry_run)
-        
+        run_eval(
+            f"Optuna A1 Trial {trial.number}",
+            out_dir,
+            extra_args,
+            base_args,
+            args.dry_run,
+        )
+
         metrics = evaluate_dir(out_dir, args.gt_root, args.detector)
         if not metrics:
             raise optuna.TrialPruned()
-        
+
         # Maximize IDF1 primarily
         return metrics["idf1"]
-        
+
     study = optuna.create_study(direction="maximize", study_name="A1_Unified_Score")
     study.optimize(objective, n_trials=args.optuna_trials)
-    
+
     print(f"{'=' * 88}")
     print("Optuna A1 Unified Score Sweep Complete")
     try:
@@ -239,16 +258,21 @@ def run_optuna_a1(args, base_args):
 
 def run_optuna_a2(args, base_args):
     import optuna
-    
+
     # Use A1 best params as fixed base for A2 sweep
     a1_base = [
-        "--semantic-w-sim-base", "0.8012",
-        "--semantic-w-iou-base", "0.3423",
-        "--semantic-w-maha-base", "0.3117",
-        "--semantic-shift-ambiguity", "0.3425",
-        "--semantic-shift-lost-age", "0.1778",
+        "--semantic-w-sim-base",
+        "0.8012",
+        "--semantic-w-iou-base",
+        "0.3423",
+        "--semantic-w-maha-base",
+        "0.3117",
+        "--semantic-shift-ambiguity",
+        "0.3425",
+        "--semantic-shift-lost-age",
+        "0.1778",
     ]
-    
+
     def objective(trial):
         clean_score = trial.suggest_float("clean_score_threshold", 0.50, 0.90)
         strict_sim = trial.suggest_float("strict_sim_threshold", 0.55, 0.95)
@@ -258,27 +282,39 @@ def run_optuna_a2(args, base_args):
         max_aspect = trial.suggest_float("clean_max_aspect", 3.0, 7.0)
 
         extra_args = a1_base + [
-            "--semantic-clean-score-threshold", str(clean_score),
-            "--semantic-strict-sim-threshold", str(strict_sim),
-            "--appearance-bank-high-quality-min-score", str(hq_bank_score),
-            "--semantic-clean-margin-ratio", str(margin_ratio),
-            "--semantic-clean-min-aspect", str(min_aspect),
-            "--semantic-clean-max-aspect", str(max_aspect),
+            "--semantic-clean-score-threshold",
+            str(clean_score),
+            "--semantic-strict-sim-threshold",
+            str(strict_sim),
+            "--appearance-bank-high-quality-min-score",
+            str(hq_bank_score),
+            "--semantic-clean-margin-ratio",
+            str(margin_ratio),
+            "--semantic-clean-min-aspect",
+            str(min_aspect),
+            "--semantic-clean-max-aspect",
+            str(max_aspect),
         ]
-        
+
         out_dir = f"{args.output_root}/optuna_a2/trial_{trial.number}"
-        run_eval(f"Optuna A2 Trial {trial.number}", out_dir, extra_args, base_args, args.dry_run)
-        
+        run_eval(
+            f"Optuna A2 Trial {trial.number}",
+            out_dir,
+            extra_args,
+            base_args,
+            args.dry_run,
+        )
+
         metrics = evaluate_dir(out_dir, args.gt_root, args.detector)
         if not metrics:
             raise optuna.TrialPruned()
-        
+
         # Maximize IDF1
         return metrics["idf1"]
-        
+
     study = optuna.create_study(direction="maximize", study_name="A2_Reference_Quality")
     study.optimize(objective, n_trials=args.optuna_trials)
-    
+
     print(f"{'=' * 88}")
     print("Optuna A2 Reference Quality Sweep Complete")
     try:
@@ -313,7 +349,11 @@ def run_optuna_a3(args, base_args):
 
         out_dir = f"{args.output_root}/optuna_a3/trial_{trial.number}"
         run_eval(
-            f"Optuna A3 Trial {trial.number}", out_dir, extra_args, base_args, args.dry_run
+            f"Optuna A3 Trial {trial.number}",
+            out_dir,
+            extra_args,
+            base_args,
+            args.dry_run,
         )
 
         metrics = evaluate_dir(out_dir, args.gt_root, args.detector)
@@ -350,7 +390,7 @@ def run_optuna_a6(args, base_args):
         w_aspect = trial.suggest_float("w_aspect", 0.05, 0.25)
         w_center = trial.suggest_float("w_center", 0.05, 0.20)
         w_area = trial.suggest_float("w_area", 0.05, 0.20)
-        
+
         # Normalize weights
         sum_w = w_det + w_iou + w_aspect + w_center + w_area
         w_det /= sum_w
@@ -358,23 +398,34 @@ def run_optuna_a6(args, base_args):
         w_aspect /= sum_w
         w_center /= sum_w
         w_area /= sum_w
-        
+
         extra_args = a3_base + [
             "--bank-quality-v2",
-            "--bank-quality-w-det", f"{w_det:.4f}",
-            "--bank-quality-w-iou", f"{w_iou:.4f}",
-            "--bank-quality-w-aspect", f"{w_aspect:.4f}",
-            "--bank-quality-w-center", f"{w_center:.4f}",
-            "--bank-quality-w-area", f"{w_area:.4f}",
+            "--bank-quality-w-det",
+            f"{w_det:.4f}",
+            "--bank-quality-w-iou",
+            f"{w_iou:.4f}",
+            "--bank-quality-w-aspect",
+            f"{w_aspect:.4f}",
+            "--bank-quality-w-center",
+            f"{w_center:.4f}",
+            "--bank-quality-w-area",
+            f"{w_area:.4f}",
         ]
-        
+
         out_dir = f"{args.output_root}/optuna_a6/trial_{trial.number}"
-        run_eval(f"Optuna A6 Trial {trial.number}", out_dir, extra_args, base_args, args.dry_run)
-        
+        run_eval(
+            f"Optuna A6 Trial {trial.number}",
+            out_dir,
+            extra_args,
+            base_args,
+            args.dry_run,
+        )
+
         metrics = evaluate_dir(out_dir, args.gt_root, args.detector)
         if not metrics:
             raise optuna.TrialPruned()
-            
+
         return metrics["idf1"]
 
     study = optuna.create_study(direction="maximize", study_name="A6_Bank_Quality")
@@ -389,7 +440,7 @@ def run_optuna_a6(args, base_args):
         p = best_trial.params
         s = sum(p.values())
         for key, value in p.items():
-            print(f"  --bank-quality-{key.replace('_', '-')}: {value/s:.4f}")
+            print(f"  --bank-quality-{key.replace('_', '-')}: {value / s:.4f}")
     except ValueError:
         print("No trials completed successfully.")
     print(f"{'=' * 88}")
@@ -401,7 +452,9 @@ def main() -> None:
         "--category", default="all", help="Comma-separated categories or 'all'."
     )
     parser.add_argument("--detector", choices=["SDP", "DPM", "FRCNN"], default="SDP")
-    parser.add_argument("--sequences", default="", help="Comma-separated sequence names.")
+    parser.add_argument(
+        "--sequences", default="", help="Comma-separated sequence names."
+    )
     parser.add_argument("--max-frames", type=int, default=None)
     parser.add_argument("--gt-root", default="datasets/MOT17/train")
     parser.add_argument("--output-root", default="scripts/eval/output/ablation_mot17")

@@ -5,6 +5,7 @@ from .types import (
     TrackletLifecycleState,
 )
 
+
 class IdStabilityFilter:
     def __init__(
         self,
@@ -224,7 +225,9 @@ class TrackletLifecycleMerger:
 
     def resolve_many(
         self,
-        candidates: list[tuple[int, tuple[float, float, float, float], float, torch.Tensor | None]],
+        candidates: list[
+            tuple[int, tuple[float, float, float, float], float, torch.Tensor | None]
+        ],
         *,
         frame_id: int,
         frame_w: int,

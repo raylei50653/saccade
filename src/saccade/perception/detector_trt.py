@@ -209,7 +209,7 @@ class TRTYoloDetector:
         #    print(f"DEBUG: Enqueueing with bounds: {bound_names}")
 
         self.context.execute_async_v3(stream)
-        
+
         # Check max score for first output
         first_out = self.output_tensors[self.output_name]
         if first_out.size(0) > 0:

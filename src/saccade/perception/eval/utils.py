@@ -1,6 +1,7 @@
 import torch
 from .types import MotRecord
 
+
 def parse_debug_frame_ranges(raw: str) -> list[tuple[int, int]]:
     ranges: list[tuple[int, int]] = []
     for chunk in raw.split(","):
@@ -19,6 +20,7 @@ def parse_debug_frame_ranges(raw: str) -> list[tuple[int, int]]:
         ranges.append((start, end))
     return ranges
 
+
 def debug_frame_selected(
     seq: str,
     frame_id: int,
@@ -30,6 +32,7 @@ def debug_frame_selected(
     if not frame_ranges:
         return True
     return any(start <= frame_id <= end for start, end in frame_ranges)
+
 
 def append_stage_dump_rows(
     rows: list[dict],
@@ -65,8 +68,10 @@ def append_stage_dump_rows(
             }
         )
 
+
 def mot_box(record: MotRecord) -> tuple[float, float, float, float]:
     return (record.x, record.y, record.x + record.w, record.y + record.h)
+
 
 def box_iou_tuple(
     a: tuple[float, float, float, float],
@@ -81,8 +86,10 @@ def box_iou_tuple(
     area_b = max(0.0, b[2] - b[0]) * max(0.0, b[3] - b[1])
     return inter / max(area_a + area_b - inter, 1e-6)
 
+
 def box_center(box: tuple[float, float, float, float]) -> tuple[float, float]:
     return ((box[0] + box[2]) * 0.5, (box[1] + box[3]) * 0.5)
+
 
 def shift_box(
     box: tuple[float, float, float, float],
@@ -92,6 +99,7 @@ def shift_box(
     dx = velocity[0] * dt
     dy = velocity[1] * dt
     return (box[0] + dx, box[1] + dy, box[2] + dx, box[3] + dy)
+
 
 def mot_result_line(
     frame_id: int,
@@ -108,11 +116,13 @@ def mot_result_line(
         f"{score:.4f},-1,-1,-1"
     )
 
+
 def safe_cpp_ptr(obj: any) -> int:
     try:
         return int(getattr(obj, "cpp_ptr"))
     except Exception:
         return 0
+
 
 def apply_narrow_person_score_bonus(
     boxes: torch.Tensor,
@@ -152,6 +162,7 @@ def apply_narrow_person_score_bonus(
     boosted = scores.clone()
     boosted[mask] = torch.clamp(boosted[mask] + bonus, max=1.0)
     return boosted
+
 
 def tile_seam_mask(
     boxes: torch.Tensor,
@@ -194,6 +205,7 @@ def tile_seam_mask(
         near_any |= (cy - sy).abs() <= seam_margin_orig
     return near_any
 
+
 def count_tile_seam_boxes(
     boxes: torch.Tensor,
     *,
@@ -209,5 +221,7 @@ def count_tile_seam_boxes(
             h_orig=h_orig,
             w_orig=w_orig,
             seam_margin_canvas_px=seam_margin_canvas_px,
-        ).sum().item()
+        )
+        .sum()
+        .item()
     )

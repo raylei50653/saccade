@@ -55,7 +55,7 @@ class AppearanceSample:
     det_score: float
     iou: float
     frame_id: int
-    aspect_ratio: float = 0.0   # h/w of detection box; 0.0 = unknown
+    aspect_ratio: float = 0.0  # h/w of detection box; 0.0 = unknown
     quality_score: float = 0.0  # A6 composite score; 0.0 → fall back to legacy formula
 
 
@@ -79,7 +79,6 @@ class GPUTrackResultBuffers(TypedDict):
     classes: torch.Tensor
     det_idx: torch.Tensor
     count: torch.Tensor
-
 
 
 class TrackAppearanceBank:
@@ -115,7 +114,11 @@ class TrackAppearanceBank:
     @staticmethod
     def _rank_key(s: "AppearanceSample") -> tuple[float, int]:
         # A6: if composite quality_score is set, use it; otherwise legacy formula
-        q = s.quality_score if s.quality_score > 0.0 else (0.5 * s.det_score + 0.3 * s.iou)
+        q = (
+            s.quality_score
+            if s.quality_score > 0.0
+            else (0.5 * s.det_score + 0.3 * s.iou)
+        )
         return (q, s.frame_id)
 
     def update(
@@ -142,14 +145,18 @@ class TrackAppearanceBank:
             embedding.detach().to(device="cpu", dtype=torch.float32), dim=0
         )
         bank = self._banks.setdefault(track_id, [])
-        bank.append(AppearanceSample(emb, det_score, iou, frame_id, aspect_ratio, quality_score))
+        bank.append(
+            AppearanceSample(emb, det_score, iou, frame_id, aspect_ratio, quality_score)
+        )
         bank.sort(key=self._rank_key, reverse=True)
         del bank[self.k :]
         self._refresh_track(track_id)
 
     def update_many(
         self,
-        updates: list[tuple[int, torch.Tensor, float, float, int, bool, bool, float, float]],
+        updates: list[
+            tuple[int, torch.Tensor, float, float, int, bool, bool, float, float]
+        ],
     ) -> None:
         touched_track_ids: set[int] = set()
         for (
@@ -174,7 +181,11 @@ class TrackAppearanceBank:
                 embedding.detach().to(device="cpu", dtype=torch.float32), dim=0
             )
             bank = self._banks.setdefault(track_id, [])
-            bank.append(AppearanceSample(emb, det_score, iou, frame_id, aspect_ratio, bank_quality_score))
+            bank.append(
+                AppearanceSample(
+                    emb, det_score, iou, frame_id, aspect_ratio, bank_quality_score
+                )
+            )
             touched_track_ids.add(track_id)
 
         for track_id in touched_track_ids:
@@ -315,11 +326,14 @@ class GPUByteTracker:
         self.embedding_dim = embedding_dim
         self.tracker = CppGPUByteTracker(max_objects, embedding_dim)
         # Check if we are using the real C++ implementation
-        self.is_cuda = not self.tracker.__class__.__name__.startswith("dummy") and hasattr(self.tracker, "set_params")
+        self.is_cuda = not self.tracker.__class__.__name__.startswith(
+            "dummy"
+        ) and hasattr(self.tracker, "set_params")
         # In fact, the dummy class is defined in the same file if import fails.
         # Let's be more explicit:
         try:
             import saccade_tracking_ext
+
             self.is_cuda = isinstance(self.tracker, saccade_tracking_ext.GPUByteTracker)
         except ImportError:
             self.is_cuda = False
@@ -401,6 +415,7 @@ class GPUByteTracker:
                 set_h(None)
             else:
                 import numpy as np
+
                 h_arr = np.array(h, dtype=np.float32).flatten()
                 if h_arr.size != 9:
                     raise ValueError("Homography must have 9 elements (3x3)")

@@ -67,14 +67,14 @@ class PythonSemanticRelinker:
         # Default 0 → pure cosine (backward-compatible).
         self.iou_weight = max(0.0, float(iou_weight))
         self.mahalanobis_weight = max(0.0, float(mahalanobis_weight))
-        
+
         # A1 Unified Score base weights and shifts
         self.w_sim_base = max(0.0, float(w_sim_base))
         self.w_iou_base = max(0.0, float(w_iou_base))
         self.w_maha_base = max(0.0, float(w_maha_base))
         self.shift_ambiguity = float(shift_ambiguity)
         self.shift_lost_age = float(shift_lost_age)
-        
+
         # Dynamic margin: add context-sensitive increments to reciprocal_margin.
         #   crowd  → +margin per extra gate-passing competitor (caps at 8 competitors)
         #   age    → +margin proportional to lost_frames / ttl
@@ -289,7 +289,7 @@ class PythonSemanticRelinker:
             best_sim_raw = 0.0  # raw cosine of the current winner
             second_best_joint = -2.0  # runner-up joint score
             best_iou, best_center, best_maha = 0.0, 0.0, 0.0
-            
+
             candidates_to_score = []
             for cid in self.features:
                 age = frame_id - self.last_seen.get(cid, -(10**9))
@@ -321,11 +321,13 @@ class PythonSemanticRelinker:
                         self.stats["reject_consistency"] += 1
                         continue
                 candidates_to_score.append((cid, age, iou, center_norm, maha))
-                
+
             n_gate_passed = len(candidates_to_score)
             _use_legacy_joint = self.iou_weight > 0.0 or self.mahalanobis_weight > 0.0
-            _use_unified_score = self.w_sim_base > 0.0 or self.w_iou_base > 0.0 or self.w_maha_base > 0.0
-            
+            _use_unified_score = (
+                self.w_sim_base > 0.0 or self.w_iou_base > 0.0 or self.w_maha_base > 0.0
+            )
+
             if not _use_unified_score and not _use_legacy_joint:
                 best_joint = current_sim_thresh
                 second_best_joint = current_sim_thresh - 1.0
@@ -333,7 +335,9 @@ class PythonSemanticRelinker:
             # Batch similarity: one matmul + one D2H instead of N dot-products
             if candidates_to_score and self.buffer_size == 1:
                 _cand_ids = [c[0] for c in candidates_to_score]
-                _bank = torch.stack([self.features[cid] for cid in _cand_ids]).to(self.device)
+                _bank = torch.stack([self.features[cid] for cid in _cand_ids]).to(
+                    self.device
+                )
                 _batch_sims = (_bank @ emb).tolist()  # single kernel + single D2H
                 _sim_iter = iter(_batch_sims)
 
@@ -342,12 +346,12 @@ class PythonSemanticRelinker:
                     sim = self._buffer_sim(cid, emb)
                 else:
                     sim = next(_sim_iter)
-                
+
                 # Hard appearance gate: raw cosine must still pass sim_threshold.
                 if sim < current_sim_thresh:
                     self.stats["reject_similarity"] += 1
                     continue
-                
+
                 maha_score = 0.0
                 if self.mahalanobis_threshold > 0.0 and maha > 0.0:
                     maha_score = max(0.0, 1.0 - maha / self.mahalanobis_threshold)
@@ -356,16 +360,16 @@ class PythonSemanticRelinker:
                     w_sim = self.w_sim_base
                     w_iou = self.w_iou_base
                     w_maha = self.w_maha_base
-                    
+
                     if n_gate_passed > 1:
                         ambiguity_factor = min(1.0, (n_gate_passed - 1) / 8.0)
                         w_sim += self.shift_ambiguity * ambiguity_factor
                         w_iou -= self.shift_ambiguity * ambiguity_factor
-                    
+
                     lost_factor = min(1.0, age / max(1, self.ttl))
                     w_sim += self.shift_lost_age * lost_factor
                     w_iou -= self.shift_lost_age * lost_factor
-                    
+
                     w_sim = max(0.0, w_sim)
                     w_iou = max(0.0, w_iou)
                     w_maha = max(0.0, w_maha)
@@ -374,7 +378,7 @@ class PythonSemanticRelinker:
                         w_sim /= sum_w
                         w_iou /= sum_w
                         w_maha /= sum_w
-                        
+
                     joint = w_sim * sim + w_iou * iou + w_maha * maha_score
                 elif _use_legacy_joint:
                     joint = (

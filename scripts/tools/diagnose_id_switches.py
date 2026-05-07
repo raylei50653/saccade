@@ -37,6 +37,7 @@ sys.path.insert(0, str(project_root))
 # GT gap index: for each (seq, gt_id) what frames does it appear in?
 # ---------------------------------------------------------------------------
 
+
 def build_gt_frames(gt_path: Path) -> dict[int, list[int]]:
     """Return gt_id → sorted list of frames (class=1, conf=1 only)."""
     by_id: dict[int, list[int]] = defaultdict(list)
@@ -102,8 +103,8 @@ def analyze_sequence(gt_path: Path, hyp_path: Path, seq_name: str) -> dict:
     # acc.events index is (FrameId, EventId) — FrameId is the actual frame number
     for (frame_id, _), row in events.iterrows():
         if row["Type"] == "MATCH":
-            oid = row["OId"]   # GT id
-            hid = row["HId"]   # hyp id
+            oid = row["OId"]  # GT id
+            hid = row["HId"]  # hyp id
             if not (isinstance(oid, float) and np.isnan(oid)):
                 match_history[int(oid)].append((int(frame_id), int(hid)))
 
@@ -144,19 +145,24 @@ def analyze_sequence(gt_path: Path, hyp_path: Path, seq_name: str) -> dict:
             else:
                 break
 
-        switches.append({
-            "frame": frame_id,
-            "gt_id": gt_id,
-            "new_hyp": new_hyp,
-            "match_gap": match_gap,
-            "gt_gap": gt_gap,
-            "vis_gap": vis_gap,  # frames of low visibility before switch
-        })
+        switches.append(
+            {
+                "frame": frame_id,
+                "gt_id": gt_id,
+                "new_hyp": new_hyp,
+                "match_gap": match_gap,
+                "gt_gap": gt_gap,
+                "vis_gap": vis_gap,  # frames of low visibility before switch
+            }
+        )
 
     # Also compute total motmetrics IDs for reference
     mh = mm.metrics.create()
-    summary = mh.compute(acc, metrics=["num_switches", "num_misses", "num_false_positives",
-                                        "idf1", "mota"], name=seq_name)
+    summary = mh.compute(
+        acc,
+        metrics=["num_switches", "num_misses", "num_false_positives", "idf1", "mota"],
+        name=seq_name,
+    )
     mm_ids = int(summary.loc[seq_name, "num_switches"])
 
     return {
@@ -171,23 +177,23 @@ def analyze_sequence(gt_path: Path, hyp_path: Path, seq_name: str) -> dict:
 # ---------------------------------------------------------------------------
 
 GT_BUCKETS = [
-    (0,   0,  "0 f    (GT continuously present — tracker oscillation)"),
-    (1,   30, "1–30 f (short occlusion)                               "),
-    (31,  90, "31–90 f (medium re-ID window)                          "),
+    (0, 0, "0 f    (GT continuously present — tracker oscillation)"),
+    (1, 30, "1–30 f (short occlusion)                               "),
+    (31, 90, "31–90 f (medium re-ID window)                          "),
     (91, 999999, "91+ f  (P3-B territory)                                "),
 ]
 
 MATCH_BUCKETS = [
-    (0,   5,  "0–5 f  (dropped briefly)  "),
-    (6,   30, "6–30 f (short gap)         "),
-    (31,  90, "31–90 f (medium gap)       "),
+    (0, 5, "0–5 f  (dropped briefly)  "),
+    (6, 30, "6–30 f (short gap)         "),
+    (31, 90, "31–90 f (medium gap)       "),
     (91, 999999, "91+ f  (long gap / P3-B)   "),
 ]
 
 VIS_BUCKETS = [
-    (0,   0,  "0 f    (target was visible at last GT frame)         "),
-    (1,   10, "1–10 f (brief occlusion before switch)               "),
-    (11,  30, "11–30 f (moderate occlusion before switch)           "),
+    (0, 0, "0 f    (target was visible at last GT frame)         "),
+    (1, 10, "1–10 f (brief occlusion before switch)               "),
+    (11, 30, "11–30 f (moderate occlusion before switch)           "),
     (31, 999999, "31+ f  (heavy/long occlusion before switch)          "),
 ]
 
@@ -205,16 +211,22 @@ def report_section(switches, label, buckets_def):
     for s in switches:
         counts[bucket(s[label], buckets_def)] += 1
     for i, (_, _, desc) in enumerate(buckets_def):
-        print(f"    {desc}: {counts[i]:5d}  ({100*counts[i]/n:.1f}%)" if n else f"    {desc}:     0")
+        print(
+            f"    {desc}: {counts[i]:5d}  ({100 * counts[i] / n:.1f}%)"
+            if n
+            else f"    {desc}:     0"
+        )
 
 
 def report_seq(seq_name: str, result: dict) -> None:
     switches = result["switches"]
     n = len(switches)
-    print(f"\n{'─'*68}")
-    print(f"  {seq_name}  ({result['n_gt_ids']} GT ids)  "
-          f"[motmetrics IDs={result['mm_ids']}, our switches={n}]")
-    print(f"{'─'*68}")
+    print(f"\n{'─' * 68}")
+    print(
+        f"  {seq_name}  ({result['n_gt_ids']} GT ids)  "
+        f"[motmetrics IDs={result['mm_ids']}, our switches={n}]"
+    )
+    print(f"{'─' * 68}")
     if not switches:
         print("  No ID switches detected.")
         return
@@ -228,10 +240,14 @@ def report_seq(seq_name: str, result: dict) -> None:
 
 def main():
     parser = argparse.ArgumentParser(description="Diagnose ID switch gap distribution")
-    parser.add_argument("--results", default="results/a2_candidate",
-                        help="Result directory with MOT17-XX-SDP.txt files")
-    parser.add_argument("--data-root", default="datasets/MOT17/train",
-                        help="MOT17 train root")
+    parser.add_argument(
+        "--results",
+        default="results/a2_candidate",
+        help="Result directory with MOT17-XX-SDP.txt files",
+    )
+    parser.add_argument(
+        "--data-root", default="datasets/MOT17/train", help="MOT17 train root"
+    )
     parser.add_argument("--detector", default="SDP")
     args = parser.parse_args()
 
@@ -264,10 +280,10 @@ def main():
 
     # Overall summary
     n = len(all_switches)
-    print(f"\n{'═'*68}")
+    print(f"\n{'═' * 68}")
     print(f"  OVERALL  ({total_gt_ids} GT ids, 7 sequences)")
     print(f"  motmetrics total IDs = {total_mm_ids}  |  our switch events = {n}")
-    print(f"{'═'*68}")
+    print(f"{'═' * 68}")
     if not all_switches:
         return
 
@@ -281,16 +297,22 @@ def main():
     p3b = sum(1 for s in all_switches if s["match_gap"] >= 91)
     primary = sum(1 for s in all_switches if s["match_gap"] <= 5)
     print("\n  ── Verdict ─────────────────────────────────────────")
-    print(f"  Primary assoc oscillation (match_gap ≤ 5f): "
-          f"{primary} / {n}  ({100*primary/n:.1f}%)  ← main target")
-    print(f"  P3-B relevant (match_gap ≥ 91f):             "
-          f"{p3b} / {n}  ({100*p3b/n:.1f}%)  ← ceiling if P3-B perfect")
+    print(
+        f"  Primary assoc oscillation (match_gap ≤ 5f): "
+        f"{primary} / {n}  ({100 * primary / n:.1f}%)  ← main target"
+    )
+    print(
+        f"  P3-B relevant (match_gap ≥ 91f):             "
+        f"{p3b} / {n}  ({100 * p3b / n:.1f}%)  ← ceiling if P3-B perfect"
+    )
 
     long_mg = [s["match_gap"] for s in all_switches if s["match_gap"] >= 91]
     if long_mg:
         arr = np.array(long_mg)
-        print(f"  Long match-gap stats: median={np.median(arr):.0f}  "
-              f"p75={np.percentile(arr,75):.0f}  max={arr.max():.0f}")
+        print(
+            f"  Long match-gap stats: median={np.median(arr):.0f}  "
+            f"p75={np.percentile(arr, 75):.0f}  max={arr.max():.0f}"
+        )
 
 
 if __name__ == "__main__":

@@ -18,6 +18,7 @@ from saccade.perception.eval.detection import (
     _box_iou_pairwise_diag,
 )
 
+
 def materialize_gpu_track_results(
     result_buffers: Any,
     *,
@@ -63,6 +64,7 @@ def materialize_gpu_track_results(
         "det_idx": det_idx,
     }
 
+
 def build_dynamic_reid_observations(
     track_ids: list[int],
     track_boxes: list[tuple[float, float, float, float]],
@@ -73,9 +75,10 @@ def build_dynamic_reid_observations(
 ) -> dict[int, Any]:
     if track_classes is None:
         return {}
-    # ReIDTrackObservation imported locally to avoid circularity if needed, 
+    # ReIDTrackObservation imported locally to avoid circularity if needed,
     # but it's already in the workspace.
     from saccade.perception.tracking.tracker_gpu import ReIDTrackObservation
+
     observations: dict[int, ReIDTrackObservation] = {}
     for obj_id, box, score, class_id in zip(
         track_ids, track_boxes, track_scores, track_classes
@@ -84,6 +87,7 @@ def build_dynamic_reid_observations(
             continue
         observations[obj_id] = ReIDTrackObservation(box=box, det_score=score)
     return observations
+
 
 def prepare_host_track_batch(
     track_results: HostTrackResultView,
@@ -125,6 +129,7 @@ def prepare_host_track_batch(
         det_idx=det_idx,
         person_observations=person_observations,
     )
+
 
 def resolve_frame_tracks(
     *,
@@ -187,6 +192,7 @@ def resolve_frame_tracks(
         for candidate, resolved_id in zip(prepared_candidates, resolved_ids)
     ]
 
+
 def collect_stability_candidates(
     *,
     track_results: HostTrackResultView,
@@ -210,20 +216,31 @@ def collect_stability_candidates(
 
     excluded: set[int] = set()
     if geometry_suspect_support and suspect_boxes.numel() > 0:
-        low_i = [i for i in person_indices if host_batch.scores[i] <= geometry_suspect_support_score + 1e-4]
+        low_i = [
+            i
+            for i in person_indices
+            if host_batch.scores[i] <= geometry_suspect_support_score + 1e-4
+        ]
         if low_i:
             track_boxes = host_batch.boxes_gpu[low_i]
             max_ious = _box_iou_matrix(track_boxes, suspect_boxes).max(dim=1).values
-            excluded = {low_i[j] for j, v in enumerate(max_ious.cpu().tolist()) if v > 0.5}
+            excluded = {
+                low_i[j] for j, v in enumerate(max_ious.cpu().tolist()) if v > 0.5
+            }
 
     candidate_indices: list[int] = []
-    stability_candidates: list[tuple[int, tuple[float, float, float, float], float]] = []
+    stability_candidates: list[
+        tuple[int, tuple[float, float, float, float], float]
+    ] = []
     for i in person_indices:
         if i in excluded:
             continue
         candidate_indices.append(i)
-        stability_candidates.append((host_batch.ids[i], host_batch.boxes[i], host_batch.scores[i]))
+        stability_candidates.append(
+            (host_batch.ids[i], host_batch.boxes[i], host_batch.scores[i])
+        )
     return candidate_indices, stability_candidates
+
 
 def build_prepared_candidates(
     *,
@@ -256,7 +273,9 @@ def build_prepared_candidates(
         if embeddings is not None and 0 <= det_idx < fused_boxes.shape[0]:
             pairs.append((loop_idx, i, det_idx))
 
-    precomp: dict[int, tuple[float, float, float, bool, tuple[float, float, float, float]]] = {}
+    precomp: dict[
+        int, tuple[float, float, float, bool, tuple[float, float, float, float]]
+    ] = {}
     if pairs:
         li_list = [p[0] for p in pairs]
         ti_list = [p[1] for p in pairs]
@@ -268,15 +287,30 @@ def build_prepared_candidates(
         bh_gpu = (det_boxes_gpu[:, 3] - det_boxes_gpu[:, 1]).clamp(min=1e-6)
         aspects_gpu = bh_gpu / bw_gpu
         det_scores_gpu = fused_scores[di_list]
-        batch_cpu = torch.stack([
-            ious_gpu, aspects_gpu, det_scores_gpu,
-            det_boxes_gpu[:, 0], det_boxes_gpu[:, 1],
-            det_boxes_gpu[:, 2], det_boxes_gpu[:, 3],
-        ], dim=1).cpu().tolist()
+        batch_cpu = (
+            torch.stack(
+                [
+                    ious_gpu,
+                    aspects_gpu,
+                    det_scores_gpu,
+                    det_boxes_gpu[:, 0],
+                    det_boxes_gpu[:, 1],
+                    det_boxes_gpu[:, 2],
+                    det_boxes_gpu[:, 3],
+                ],
+                dim=1,
+            )
+            .cpu()
+            .tolist()
+        )
         has_suspect = geometry_suspect_mask.numel() > 0
         for li, di, row in zip(li_list, di_list, batch_cpu):
             iou, asp, ds, x1, y1, x2, y2 = row
-            suspect = bool(geometry_suspect_mask[di]) if has_suspect and di < geometry_suspect_mask.numel() else False
+            suspect = (
+                bool(geometry_suspect_mask[di])
+                if has_suspect and di < geometry_suspect_mask.numel()
+                else False
+            )
             precomp[li] = (iou, asp, ds, suspect, (x1, y1, x2, y2))
 
     prepared: list[PreparedTrackCandidate] = []
@@ -284,7 +318,11 @@ def build_prepared_candidates(
     for loop_idx, i, obj_id, score in accepted_flat:
         raw_box = host_batch.boxes[i]
         det_idx = host_batch.det_idx[i] if host_batch.det_idx is not None else -1
-        emb = embeddings[det_idx] if (embeddings is not None and 0 <= det_idx < fused_boxes.shape[0]) else None
+        emb = (
+            embeddings[det_idx]
+            if (embeddings is not None and 0 <= det_idx < fused_boxes.shape[0])
+            else None
+        )
         if emb is not None and loop_idx in precomp:
             match_iou, aspect_ratio, _det_score, _suspect, _det_box = precomp[loop_idx]
             if match_iou > 0.35:
@@ -327,6 +365,7 @@ def build_prepared_candidates(
         )
     return prepared, appearance_updates
 
+
 def apply_consistency_gate(
     prepared: list[PreparedTrackCandidate],
     primary_appearance_bank: Any,
@@ -344,6 +383,7 @@ def apply_consistency_gate(
         )
         for candidate in prepared
     ]
+
 
 def emit_resolved_tracks(
     *,
@@ -375,6 +415,7 @@ def emit_resolved_tracks(
         _mot_result_line(frame_id, global_tid, box, score, frame_w, frame_h)
         for global_tid, box, score, _ in mapped_tracks
     ]
+
 
 def inject_lost_track_references(
     *,
@@ -408,6 +449,7 @@ def inject_lost_track_references(
     for canonical_id, embedding in references_to_inject:
         relinker.inject_reference(canonical_id, embedding)
 
+
 def finalize_frame_side_effects(
     *,
     curr_track_ids: set[int],
@@ -439,6 +481,7 @@ def finalize_frame_side_effects(
     if primary_appearance_bank is not None:
         primary_appearance_bank.prune(curr_track_ids)
     return curr_track_ids
+
 
 def budget_reid_candidates(
     fused_boxes: torch.Tensor,
@@ -511,6 +554,7 @@ def budget_reid_candidates(
 
     _, top_idx = torch.topk(det_priorities, budget)
     return torch.sort(top_idx).values
+
 
 def prepare_track_candidates(
     *,

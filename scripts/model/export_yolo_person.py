@@ -116,9 +116,7 @@ def main() -> None:
         description="Export YOLO detect model with class-filtered top-k output."
     )
     parser.add_argument("--weights", default="models/yolo/yolo26s.pt")
-    parser.add_argument(
-        "--output", default="models/yolo/yolo26s_person_topk1000.onnx"
-    )
+    parser.add_argument("--output", default="models/yolo/yolo26s_person_topk1000.onnx")
     parser.add_argument("--batch", type=int, default=1)
     parser.add_argument("--imgsz", type=int, default=640)
     parser.add_argument("--opset", type=int, default=20)

@@ -52,9 +52,7 @@ class AsyncDispatcher:
         self._vram_writer: Optional[VRAMLevelWriter] = None
 
     def _make_tracker(self) -> Any:
-        return GPUByteTracker(
-            max_objs=100, embedding_dim=768 if self.extractor else 0
-        )
+        return GPUByteTracker(max_objs=100, embedding_dim=768 if self.extractor else 0)
 
     def get_tracker(self, stream_id: str) -> Any:
         if stream_id in self.trackers:
@@ -64,7 +62,9 @@ class AsyncDispatcher:
         if len(self.trackers) >= self.max_streams:
             evicted_id, evicted = self.trackers.popitem(last=False)
             del evicted  # triggers ~GPUByteTracker → cudaFree for all GPU buffers
-            print(f"[Dispatcher] Evicted tracker '{evicted_id}' (LRU cap={self.max_streams})")
+            print(
+                f"[Dispatcher] Evicted tracker '{evicted_id}' (LRU cap={self.max_streams})"
+            )
 
         tracker = self._make_tracker()
         self.trackers[stream_id] = tracker

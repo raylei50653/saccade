@@ -185,7 +185,9 @@ class _StubPrimaryAppearanceBank:
         self.pruned.append(set(active_ids))
 
 
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="GPU required for TrackAppearanceBank")
+@pytest.mark.skipif(
+    not torch.cuda.is_available(), reason="GPU required for TrackAppearanceBank"
+)
 def test_inject_lost_track_references_batches_consistent_tracks() -> None:
     relinker = _StubRelinker()
     bank = TrackAppearanceBank(

@@ -78,7 +78,9 @@ def _box_iou_single(box: torch.Tensor, boxes: torch.Tensor) -> torch.Tensor:
     return inter / (area + areas - inter + 1e-6)
 
 
-def _box_iou_pairwise_diag(boxes_a: torch.Tensor, boxes_b: torch.Tensor) -> torch.Tensor:
+def _box_iou_pairwise_diag(
+    boxes_a: torch.Tensor, boxes_b: torch.Tensor
+) -> torch.Tensor:
     """IoU between boxes_a[i] and boxes_b[i] for each i. Both (N,4). Returns (N,) on same device."""
     lt = torch.maximum(boxes_a[:, :2], boxes_b[:, :2])
     rb = torch.minimum(boxes_a[:, 2:], boxes_b[:, 2:])
@@ -93,8 +95,12 @@ def _box_iou_matrix(boxes_a: torch.Tensor, boxes_b: torch.Tensor) -> torch.Tenso
     lt = torch.maximum(boxes_a[:, None, :2], boxes_b[None, :, :2])
     rb = torch.minimum(boxes_a[:, None, 2:], boxes_b[None, :, 2:])
     inter = (rb - lt).clamp(min=0).prod(dim=2)
-    area_a = ((boxes_a[:, 2] - boxes_a[:, 0]) * (boxes_a[:, 3] - boxes_a[:, 1]))[:, None]
-    area_b = ((boxes_b[:, 2] - boxes_b[:, 0]) * (boxes_b[:, 3] - boxes_b[:, 1]))[None, :]
+    area_a = ((boxes_a[:, 2] - boxes_a[:, 0]) * (boxes_a[:, 3] - boxes_a[:, 1]))[
+        :, None
+    ]
+    area_b = ((boxes_b[:, 2] - boxes_b[:, 0]) * (boxes_b[:, 3] - boxes_b[:, 1]))[
+        None, :
+    ]
     return inter / (area_a + area_b - inter + 1e-6)
 
 
@@ -261,7 +267,9 @@ def _get_filter_detections_cuda_workspace(
         "capacity": capacity,
         "keep_indices": torch.empty((capacity,), device=box_device, dtype=torch.int32),
         "suspect_flags": torch.empty((capacity,), device=box_device, dtype=torch.bool),
-        "quality_scores": torch.empty((capacity,), device=box_device, dtype=torch.float32),
+        "quality_scores": torch.empty(
+            (capacity,), device=box_device, dtype=torch.float32
+        ),
         "out_count": torch.zeros((), device=box_device, dtype=torch.int32),
     }
     _filter_detections_cuda_workspace[key] = workspace
@@ -378,7 +386,9 @@ def _get_duplicate_merge_cuda_workspace(
         "score_bits_max": torch.empty(
             (capacity,), device=box_device, dtype=torch.int32
         ),
-        "best_boxes": torch.empty((capacity, 4), device=box_device, dtype=torch.float32),
+        "best_boxes": torch.empty(
+            (capacity, 4), device=box_device, dtype=torch.float32
+        ),
         "best_key_bits": torch.empty((capacity,), device=box_device, dtype=torch.int32),
         "cluster_counts": torch.empty(
             (capacity,), device=box_device, dtype=torch.int32
@@ -479,11 +489,15 @@ def merge_cross_tile_duplicates(
             (ious >= iou_threshold)
             | ((center_dist <= center_gate) & (area_ratio >= area_ratio_threshold))
         )
-        seam_duplicate_mask = same_class & seam_pair & (
-            (center_dist <= center_gate * seam_center_scale)
-            & (area_ratio >= seam_area_ratio_threshold)
-            & (overlap_ratio_x >= seam_min_overlap_ratio)
-            & (overlap_ratio_y >= seam_min_overlap_ratio)
+        seam_duplicate_mask = (
+            same_class
+            & seam_pair
+            & (
+                (center_dist <= center_gate * seam_center_scale)
+                & (area_ratio >= seam_area_ratio_threshold)
+                & (overlap_ratio_x >= seam_min_overlap_ratio)
+                & (overlap_ratio_y >= seam_min_overlap_ratio)
+            )
         )
         duplicate_mask = base_duplicate_mask | seam_duplicate_mask
 
@@ -502,9 +516,14 @@ def merge_cross_tile_duplicates(
                 torch.full_like(cluster_scores, tiled_seam_coord_weight),
                 torch.ones_like(cluster_scores),
             )
-            fused_box = (cluster_boxes * coord_weights[:, None]).sum(dim=0) / coord_weights.sum().clamp(min=1e-6)
+            fused_box = (cluster_boxes * coord_weights[:, None]).sum(
+                dim=0
+            ) / coord_weights.sum().clamp(min=1e-6)
             if cluster_indices.numel() > 1:
-                fused_box = fused_box * (1.0 - tiled_best_blend) + cluster_boxes[best_local] * tiled_best_blend
+                fused_box = (
+                    fused_box * (1.0 - tiled_best_blend)
+                    + cluster_boxes[best_local] * tiled_best_blend
+                )
             else:
                 fused_box = cluster_boxes[best_local]
         else:

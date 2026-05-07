@@ -1,6 +1,7 @@
 import math
 import torch
 
+
 def compute_detection_quality_batch(
     boxes: torch.Tensor,
     frame_w: int,
@@ -10,7 +11,7 @@ def compute_detection_quality_batch(
     w_area: float = 0.20,
 ) -> torch.Tensor:
     """Vectorised composite quality score for all detections in a frame.
-    
+
     Returns a tensor of shape (N,) with values in [0, 1].
     """
     if boxes.numel() == 0:

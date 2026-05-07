@@ -2,6 +2,7 @@ import torch
 from dataclasses import dataclass
 from typing import TypedDict, Any
 
+
 @dataclass
 class IdStabilityState:
     frame_id: int
@@ -10,6 +11,7 @@ class IdStabilityState:
     total_hits: int
     score_ema: float
 
+
 @dataclass
 class TrackletLifecycleState:
     output_id: int
@@ -17,6 +19,7 @@ class TrackletLifecycleState:
     box: tuple[float, float, float, float]
     score: float
     embedding: torch.Tensor | None
+
 
 @dataclass
 class MotRecord:
@@ -29,6 +32,7 @@ class MotRecord:
     score: float
     tail: list[str]
 
+
 class HostTrackResultView(TypedDict):
     count: int
     boxes: torch.Tensor
@@ -36,6 +40,7 @@ class HostTrackResultView(TypedDict):
     ids: torch.Tensor
     classes: torch.Tensor | None
     det_idx: torch.Tensor | None
+
 
 @dataclass(frozen=True)
 class HostTrackBatch:
@@ -47,12 +52,14 @@ class HostTrackBatch:
     det_idx: list[int] | None
     person_observations: dict[int, Any] | None
 
+
 @dataclass(frozen=True)
 class PreparedTrackCandidate:
     local_track_id: int
     box: tuple[float, float, float, float]
     score: float
     embedding: torch.Tensor | None
+
 
 @dataclass(frozen=True)
 class CandidateAppearanceUpdate:
@@ -66,6 +73,7 @@ class CandidateAppearanceUpdate:
     aspect_ratio: float = 0.0
     bank_quality_score: float = 0.0
 
+
 @dataclass(frozen=True)
 class ResolvedTrack:
     local_track_id: int
@@ -73,6 +81,7 @@ class ResolvedTrack:
     box: tuple[float, float, float, float]
     score: float
     embedding: torch.Tensor | None
+
 
 @dataclass
 class OutputTracklet:

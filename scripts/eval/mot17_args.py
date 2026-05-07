@@ -1,5 +1,6 @@
 import argparse
 
+
 def _help(text, *, range_hint=None, edge=None):
     parts = [text]
     if range_hint:
@@ -441,7 +442,7 @@ def build_parser():
         action=argparse.BooleanOptionalAction,
         default=False,
         help="(A4) Zero out previous-frame track boxes in the downscaled gray image before "
-             "phase correlation, reducing foreground bias in crowded scenes.",
+        "phase correlation, reducing foreground bias in crowded scenes.",
     )
     assoc_group.add_argument(
         "--gmc-pcr-uncertain-thresh",
@@ -645,7 +646,7 @@ def build_parser():
         action=argparse.BooleanOptionalAction,
         default=True,
         help="(A6) Scale detection scores by a continuous quality factor (aspect+center+area) "
-             "instead of binary suspect capping.",
+        "instead of binary suspect capping.",
     )
     geom_group.add_argument(
         "--detection-quality-w-aspect",
@@ -772,7 +773,7 @@ def build_parser():
         type=float,
         default=0.0,
         help="Phase 2C: stability gate threshold [0,1]. Embeddings below this are zeroed "
-             "out before bank/tracker injection. 0 disables.",
+        "out before bank/tracker injection. 0 disables.",
     )
     reid_group.add_argument(
         "--last-vit-sigma-embed",
@@ -996,7 +997,9 @@ def build_parser():
         "--semantic-w-sim-base",
         type=float,
         default=0.80,
-        help=_help("A1 Unified Score: Base weight for appearance similarity.", range_hint="0-1"),
+        help=_help(
+            "A1 Unified Score: Base weight for appearance similarity.", range_hint="0-1"
+        ),
     )
     semantic_group.add_argument(
         "--semantic-w-iou-base",
@@ -1008,19 +1011,27 @@ def build_parser():
         "--semantic-w-maha-base",
         type=float,
         default=0.31,
-        help=_help("A1 Unified Score: Base weight for Mahalanobis score.", range_hint="0-1"),
+        help=_help(
+            "A1 Unified Score: Base weight for Mahalanobis score.", range_hint="0-1"
+        ),
     )
     semantic_group.add_argument(
         "--semantic-shift-ambiguity",
         type=float,
         default=0.34,
-        help=_help("A1 Unified Score: Shift weight from IoU to Sim under crowd ambiguity.", range_hint="0-1"),
+        help=_help(
+            "A1 Unified Score: Shift weight from IoU to Sim under crowd ambiguity.",
+            range_hint="0-1",
+        ),
     )
     semantic_group.add_argument(
         "--semantic-shift-lost-age",
         type=float,
         default=0.18,
-        help=_help("A1 Unified Score: Shift weight from IoU to Sim as lost age increases.", range_hint="0-1"),
+        help=_help(
+            "A1 Unified Score: Shift weight from IoU to Sim as lost age increases.",
+            range_hint="0-1",
+        ),
     )
     semantic_group.add_argument(
         "--force-python-relinker",
@@ -1104,7 +1115,7 @@ def build_parser():
         action=argparse.BooleanOptionalAction,
         default=True,
         help="(A6) Use composite quality score (det+iou+aspect+center+area) for bank sample "
-             "ranking instead of the legacy 0.5*det+0.3*iou formula.",
+        "ranking instead of the legacy 0.5*det+0.3*iou formula.",
     )
     semantic_group.add_argument(
         "--bank-quality-w-det",
@@ -1564,5 +1575,3 @@ def build_parser():
     )
 
     return parser
-
-

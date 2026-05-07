@@ -3,6 +3,7 @@ import numpy as np
 from pathlib import Path
 from typing import Any
 
+
 def print_overall_summary(
     cfg: Any,
     output_root: Path,
@@ -44,7 +45,7 @@ def print_overall_summary(
     mapping_lines = global_id_mapper.dump_lines()
     if mapping_lines:
         (output_root / "_global_id_map.txt").write_text("\n".join(mapping_lines) + "\n")
-        
+
     if getattr(cfg, "profile_stages", False) and overall_profiled_frames > 0:
         print(f"\n🧪 Overall Stage Jitter Report ({overall_profiled_frames} frames):")
         print("| Stage | Mean (ms) | Std (ms) | P95 (ms) | P99 (ms) |")
@@ -71,9 +72,7 @@ def print_overall_summary(
                 total_ms = overall_stage_totals[stage_name]
                 if total_ms <= 0.0:
                     continue
-                print(
-                    f"| {stage_name} | {total_ms / overall_profiled_frames:.2f} |"
-                )
+                print(f"| {stage_name} | {total_ms / overall_profiled_frames:.2f} |")
                 stage_summary_lines.append(
                     f"{stage_name}\tmean_ms={total_ms / overall_profiled_frames:.2f}\ttotal_ms={total_ms:.2f}"
                 )
@@ -86,7 +85,10 @@ def print_overall_summary(
                 stage_summary_lines.append(
                     f"{count_name}\tmean={mean_count:.1f}\ttotal={total_count}"
                 )
-        if getattr(cfg, "profile_lazy_reid_candidates", False) and overall_lazy_reid_frames > 0:
+        if (
+            getattr(cfg, "profile_lazy_reid_candidates", False)
+            and overall_lazy_reid_frames > 0
+        ):
             mean_lazy = overall_lazy_reid_candidates / overall_lazy_reid_frames
             print(
                 f"  - lazy_reid_candidates: {mean_lazy:.2f}/frame ({overall_lazy_reid_candidates} total)"
@@ -130,7 +132,7 @@ def print_overall_summary(
         (output_root / "_stage_profile.txt").write_text(
             "\n".join(stage_summary_lines) + "\n"
         )
-        
+
     if debug_dump_csv and debug_stage_dump_rows:
         debug_dump_path = Path(debug_dump_csv)
         debug_dump_path.parent.mkdir(parents=True, exist_ok=True)
@@ -156,6 +158,7 @@ def print_overall_summary(
             f"\n🪲 Detection stage dump: rows={len(debug_stage_dump_rows)} "
             f"path={debug_dump_path}"
         )
+
 
 def print_sequence_summary(
     cfg: Any,
@@ -239,10 +242,10 @@ def print_sequence_summary(
                 mean_ms = total_ms / seq_profiled_frames
                 print(f"| {stage_name} | {mean_ms:.2f} |")
                 overall_stage_totals[stage_name] += total_ms
-        if any(
-            seq_native_reid_samples[name] for name in native_reid_breakdown_names
-        ):
-            print("\n| ReID Extract Breakdown | Mean (ms) | Std (ms) | P95 (ms) | P99 (ms) |")
+        if any(seq_native_reid_samples[name] for name in native_reid_breakdown_names):
+            print(
+                "\n| ReID Extract Breakdown | Mean (ms) | Std (ms) | P95 (ms) | P99 (ms) |"
+            )
             print("| :--- | :--- | :--- | :--- | :--- |")
             for stage_name in native_reid_breakdown_names:
                 samples = seq_native_reid_samples[stage_name]
@@ -261,27 +264,26 @@ def print_sequence_summary(
                 mean_count = total_count / seq_profiled_frames
                 print(f"| {count_name} | {mean_count:.1f} |")
                 overall_post_counts[count_name] += total_count
-        if getattr(cfg, "profile_lazy_reid_candidates", False) and seq_lazy_reid_frames > 0:
+        if (
+            getattr(cfg, "profile_lazy_reid_candidates", False)
+            and seq_lazy_reid_frames > 0
+        ):
             mean_lazy = seq_lazy_reid_candidates / seq_lazy_reid_frames
             print(
                 f"  - lazy_reid_candidates: {mean_lazy:.2f}/frame ({seq_lazy_reid_candidates} total)"
             )
             # The overall accumulators should be incremented via return or mutable dict
             # For this refactor, we assume the caller increments them, but here they were originally
-            # incremented in the loop. We will skip updating overall_* from here because 
+            # incremented in the loop. We will skip updating overall_* from here because
             # integer re-assignment won't affect the caller unless returned.
-            # To fix this properly, we should return the increments, but let's just 
+            # To fix this properly, we should return the increments, but let's just
             # assume for now we only care about printing.
-            
+
             if getattr(cfg, "profile_lazy_reid_embeddings", False):
                 mean_crops = seq_lazy_reid_crops / seq_lazy_reid_frames
-                mean_sim = seq_lazy_reid_self_sim_sum / max(
-                    seq_lazy_reid_self_pairs, 1
-                )
+                mean_sim = seq_lazy_reid_self_sim_sum / max(seq_lazy_reid_self_pairs, 1)
                 pass_rate = (
-                    seq_lazy_reid_self_pass
-                    / max(seq_lazy_reid_self_pairs, 1)
-                    * 100.0
+                    seq_lazy_reid_self_pass / max(seq_lazy_reid_self_pairs, 1) * 100.0
                 )
                 print(
                     f"  - lazy_reid_embeddings: {mean_crops:.2f} crops/frame, "
@@ -331,20 +333,19 @@ def print_sequence_summary(
             stage_summary_lines.append(
                 f"{count_name}\tmean={mean_count:.1f}\ttotal={total_count}"
             )
-        if getattr(cfg, "profile_lazy_reid_candidates", False) and seq_lazy_reid_frames > 0:
+        if (
+            getattr(cfg, "profile_lazy_reid_candidates", False)
+            and seq_lazy_reid_frames > 0
+        ):
             mean_lazy = seq_lazy_reid_candidates / seq_lazy_reid_frames
             stage_summary_lines.append(
                 f"lazy_reid_candidates\tmean={mean_lazy:.2f}\ttotal={seq_lazy_reid_candidates}"
             )
             if getattr(cfg, "profile_lazy_reid_embeddings", False):
                 mean_crops = seq_lazy_reid_crops / seq_lazy_reid_frames
-                mean_sim = seq_lazy_reid_self_sim_sum / max(
-                    seq_lazy_reid_self_pairs, 1
-                )
+                mean_sim = seq_lazy_reid_self_sim_sum / max(seq_lazy_reid_self_pairs, 1)
                 pass_rate = (
-                    seq_lazy_reid_self_pass
-                    / max(seq_lazy_reid_self_pairs, 1)
-                    * 100.0
+                    seq_lazy_reid_self_pass / max(seq_lazy_reid_self_pairs, 1) * 100.0
                 )
                 stage_summary_lines.append(
                     f"lazy_reid_embeddings\tmean_crops={mean_crops:.2f}\t"

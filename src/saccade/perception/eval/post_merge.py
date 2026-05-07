@@ -10,6 +10,7 @@ from .utils import (
 )
 from .lifecycle import UnionFind
 
+
 def _tracklet_velocity(
     records: list[MotRecord], from_start: bool, samples: int
 ) -> tuple[float, float]:
@@ -210,7 +211,9 @@ def post_merge_output_tracklets(
             # A5: appearance as soft cost
             if appearance_weight > 0.0:
                 normalized_gap = gap / max(ttl, 1)
-                eff_app_w = appearance_weight * (1.0 + gap_uncertainty_weight * normalized_gap)
+                eff_app_w = appearance_weight * (
+                    1.0 + gap_uncertainty_weight * normalized_gap
+                )
                 if appearance_bank is not None:
                     sim = appearance_bank.similarity(lost.track_id, new.track_id)
                     if sim is not None:
