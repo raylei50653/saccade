@@ -96,8 +96,6 @@ def bench_old_path_sim(
     h_tids   = torch.zeros(max_obj, dtype=torch.int32)
     h_src    = torch.zeros(n_tracks, dtype=torch.int32)
 
-    stream = torch.cuda.current_stream()
-
     # warm up
     for _ in range(WARMUP):
         # 3 blocking D2H (active array, track_id array, src_tids)

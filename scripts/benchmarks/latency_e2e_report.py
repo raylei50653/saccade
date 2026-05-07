@@ -5,7 +5,7 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "build"))
 
-from saccade.perception.eval.runner import run_eval
+from saccade.perception.eval.runner import run_eval  # noqa: E402
 
 ENGINE = ROOT / "models/yolo/yolo26s_batch6.engine"
 REID_ENGINE = ROOT / "models/embedding/google_siglip2-base-patch16-224.engine"

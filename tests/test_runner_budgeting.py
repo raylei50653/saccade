@@ -9,8 +9,9 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "build"))
 
-from saccade.perception.eval.runner import _budget_reid_candidates, ReIDTrackObservation
-from saccade.perception.tracking.tracker_gpu import DynamicReIDController
+from saccade.perception.eval.helpers import budget_reid_candidates as _budget_reid_candidates  # noqa: E402
+from saccade.perception.tracking.dynamic_reid import DynamicReIDController  # noqa: E402
+from saccade.perception.tracking.tracker_gpu import ReIDTrackObservation  # noqa: E402
 
 def test_budget_reid_candidates_no_budget():
     fused_boxes = torch.tensor([[0, 0, 10, 10], [20, 20, 30, 30]], dtype=torch.float32)

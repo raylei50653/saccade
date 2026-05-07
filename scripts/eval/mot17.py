@@ -17,9 +17,9 @@ from saccade.perception.detector_trt import TRTYoloDetector  # noqa: F401, E402
 from saccade.perception.eval.runner import run_eval  # noqa: E402
 
 
-import sys
-from pathlib import Path
-from mot17_args import build_parser
+import sys  # noqa: E402
+from pathlib import Path  # noqa: E402
+from mot17_args import build_parser  # noqa: E402
 
 if __name__ == "__main__":
     parser = build_parser()

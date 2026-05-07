@@ -349,7 +349,6 @@ def run_eval(
                 gmc_estimator = SparseOpticalFlowGMC(downscale=cfg.gmc_downscale)
 
         # Load homography if provided (ADR 017)
-        homography_root= str(cfg.kwargs.get("cfg.homography_root", ""))
         if cfg.homography_root:
             h_path = Path(cfg.homography_root) / f"{seq}.txt"
             if h_path.exists():

@@ -43,7 +43,7 @@ if not hasattr(np, "asfarray"):
 import motmetrics as mm  # noqa: E402
 
 
-from .ablation_experiments import _METRICS, _DISPLAY, _PCT, _CATEGORY_ORDER, _A2_BEST, _CATEGORY_EXPERIMENTS
+from .ablation_experiments import _METRICS, _DISPLAY, _PCT, _CATEGORY_ORDER, _A2_BEST, _CATEGORY_EXPERIMENTS  # noqa: E402
 
 def is_mot_file(path: str) -> bool:
     name = Path(path).name

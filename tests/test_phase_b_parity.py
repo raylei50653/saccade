@@ -31,7 +31,7 @@ from saccade.perception.eval.relink import (  # noqa: E402
     IdentityResolver as PyIdentityResolver,
     PythonSemanticRelinker,
 )
-from saccade.perception.eval.runner import TrackletLifecycleMerger as PyLifecycleMerger  # noqa: E402
+from saccade.perception.eval.lifecycle import TrackletLifecycleMerger as PyLifecycleMerger  # noqa: E402
 
 
 # ---------------------------------------------------------------------------

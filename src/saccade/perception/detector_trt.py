@@ -4,7 +4,7 @@ import tensorrt as trt
 from typing import Dict, Tuple, Optional, List
 
 print(f"DEBUG: Loading TRTYoloDetector from {__file__}")
-from saccade.perception.tracking import GPUByteTracker
+from saccade.perception.tracking import GPUByteTracker  # noqa: E402
 
 try:
     from saccade_perception_ext import TRTEngine as CppTRTEngine
@@ -214,8 +214,7 @@ class TRTYoloDetector:
         first_out = self.output_tensors[self.output_name]
         if first_out.size(0) > 0:
             print(f"DEBUG: first_out[0, 0, :] = {first_out[0, 0, :10]}")
-            max_s = first_out[0, :, 4].max().item()
-            # print(f"DEBUG: batch 0 max score at col 4: {max_s:.4f}")
+            # print(f"DEBUG: batch 0 max score at col 4: {first_out[0, :, 4].max().item():.4f}")
             # Try other columns
             for col in [4, 5, 37, 36]:
                 if col < first_out.size(2):

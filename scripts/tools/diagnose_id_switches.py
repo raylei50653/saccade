@@ -118,10 +118,10 @@ def analyze_sequence(gt_path: Path, hyp_path: Path, seq_name: str) -> dict:
         # Find last match before this frame
         prev_matches = [(f, h) for f, h in history if f < frame_id]
         if prev_matches:
-            last_match_frame, last_match_hyp = prev_matches[-1]
+            last_match_frame, _ = prev_matches[-1]
             match_gap = frame_id - last_match_frame - 1
         else:
-            last_match_frame, last_match_hyp = None, None
+            last_match_frame, _ = None, None
             match_gap = frame_id  # never matched before — treat as large
 
         # gt_gap: frames GT id was absent before frame_id (conf=0 or off-screen)

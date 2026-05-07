@@ -35,14 +35,14 @@ _build = _project_root / "build"
 if _build.exists():
     sys.path.insert(0, str(_build))
 
-import cv2
-import numpy as np
-import torch
-import torch.nn.functional as F
+import cv2  # noqa: E402
+import numpy as np  # noqa: E402
+import torch  # noqa: E402
+import torch.nn.functional as F  # noqa: E402
 
 # Force Python TRT path to access output_buffers["last_hidden_state"].
 # The C++ path only writes image_embeds and discards last_hidden_state.
-import saccade.perception.feature_extractor as _fe_mod
+import saccade.perception.feature_extractor as _fe_mod  # noqa: E402
 
 _fe_mod.HAS_CPP_EXT = False
 from saccade.perception.feature_extractor import TRTFeatureExtractor  # noqa: E402
@@ -885,7 +885,8 @@ def bg_mask_sweep(
         clean = [s for s in samples if s.category == "clean_fg" and s.track_id > 0]
         bg    = [s for s in samples if s.category == "background"]
         if not clean:
-            print(f"  {mode:<14}  (no clean_fg)"); continue
+            print(f"  {mode:<14}  (no clean_fg)")
+            continue
 
         all_lhs   = torch.stack([s.lhs       for s in clean])
         bg_lhs    = torch.stack([s.lhs for s in bg]) if bg else None

@@ -11,10 +11,10 @@ from datetime import datetime
 project_root = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from scripts.eval.mot17 import build_parser
-from saccade.perception.eval.runner import run_eval
-from saccade.perception.detector_trt import TRTYoloDetector
-from saccade.perception.feature_extractor import TRTFeatureExtractor
+from scripts.eval.mot17 import build_parser  # noqa: E402
+from saccade.perception.eval.runner import run_eval  # noqa: E402
+from saccade.perception.detector_trt import TRTYoloDetector  # noqa: E402
+from saccade.perception.feature_extractor import TRTFeatureExtractor  # noqa: E402
 
 class CoordinateOptimizer:
     def __init__(self, args):
@@ -69,7 +69,7 @@ class CoordinateOptimizer:
             for action in group._group_actions:
                 if hasattr(action, "type") and action.type in [float, int] and action.dest != "help":
                     default = action.default if action.default is not None else 0.0
-                    if action.type == int:
+                    if action.type is int:
                         step = 1
                     else:
                         if "threshold" in action.dest or "thresh" in action.dest:
@@ -204,11 +204,13 @@ class CoordinateOptimizer:
                 
                 candidates = []
                 val_plus = curr_val + step
-                if info["type"] == int: val_plus = int(val_plus)
+                if info["type"] is int:
+                    val_plus = int(val_plus)
                 candidates.append((val_plus, "PLUS"))
-                
+
                 val_minus = curr_val - step
-                if info["type"] == int: val_minus = int(val_minus)
+                if info["type"] is int:
+                    val_minus = int(val_minus)
                 candidates.append((val_minus, "MINUS"))
                 
                 improved_this_param = False
