@@ -17,25 +17,10 @@ cmake ..
 make clean
 make -j$(nproc)
 
-# 2. Ensure symlinks in root are correct
-echo "🔗 Updating symlinks in project root..."
+# 2. Register build/ in venv so Python can find native extensions
 cd "$PROJECT_ROOT"
-
-# Helper function to create symlink
-create_link() {
-    local target="build/$1"
-    local link="$1"
-    if [ -f "$target" ]; then
-        ln -sf "$target" "$link"
-        echo "  - Linked $link -> $target"
-    else
-        echo "  - ⚠️  Target $target not found!"
-    fi
-}
-
-# Find all .so files in build directory and link them to root
-find build -maxdepth 1 -name "*.so" -exec basename {} \; | while read -r so_file; do
-    create_link "$so_file"
-done
+SITE_PACKAGES=$(python -c "import sysconfig; print(sysconfig.get_paths()['purelib'])")
+echo "$PROJECT_ROOT/build" > "$SITE_PACKAGES/saccade_build.pth"
+echo "Registered build/ -> $SITE_PACKAGES/saccade_build.pth"
 
 echo "✅ Rebuild complete. You can now run benchmarks or the pipeline."

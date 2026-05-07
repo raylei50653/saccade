@@ -167,69 +167,24 @@ Saccade 目前以 **MOT17-centered evaluation path** 為最活躍主線，核心
 
 如果沒有更高優先需求，請優先朝這些方向開發：
 
-### ~~P0：Tiled Detector 流程診斷與收斂~~ — CLOSED (2026-05-05)
+> 已完成與已結案項目見 [docs/TODO.md](docs/TODO.md) 與 [docs/TODO_history.md](docs/TODO_history.md)。
 
-- 目前判斷：`960p_2x2 tiled` 的主問題是流程層面的 seam duplicate / truncation / score calibration 汙染，導致產生近兩倍的 FP。
-- 已落地：
-  - `--tiling native_960`
-  - `--tile-diagnostics`
-  - seam-aware cross-tile duplicate merge
-  - fused representative box
-- 結論：經過對 `tiled_seam_coord_weight` / `tiled_best_blend` 的徹底網格掃描，確認無論如何調整 fused box，都無法修復 tiled 流程引入的 FP 與 FN 缺陷。
-- **後續行動：已停止在 tiled 上繼續調參，並將 CLI 預設改為 `native_960` 與對應的 960 engine。後續的 Tracking / Association 最佳化將以 `native_960` 為新的 baseline。**
+### P1：窄人低分框保留（7-seq 驗證待完成）
 
-### ~~P0：2026 高 MOTA 整合：品質感知關聯 (SelectMOT)~~ — DONE (2026-05-02)
+- 根因已定位：`MOT17-02-SDP` 的 FN 主要來自 `post_filter` 前後對窄人低分框的淘汰，不是 relink 問題。
+- 目前候選設定（單序列最佳）：
+  - `--narrow-person-score-bonus 0.05`
+  - `--narrow-person-max-width-ratio 0.015`
+  - `--narrow-person-min-aspect 2.4`
+- 單序列結果：`IDF1 32.2 / MOTA 27.5 / FP 1757 / FN 11547 / IDs 164`（vs baseline `IDF1 30.8 / MOTA 26.5`）
+- **下一步：跑 7-seq SDP 驗證，確認無 regression 後考慮納入 default。**
 
-實作已完成（A7）。`v2_aspect_only_soft` 在 `src/tracking/tracker_gpu.cu` 中作為 Sinkhorn 先驗權重，有效抑制遮擋框。IDs -2.2%，Recall 無損。
+### P2：native_960 Tracker Threshold 重評
 
-### ~~P1：2026 高 MOTA 整合：純 GPU 均勻相機補償 (UCMCTrack)~~ — DONE (2026-05-03)
-
-實作已完成（A8）。純 GPU GMC (cuFFT PCR) 與 2D MMD 落地，移除 D2H 瓶頸，FPS +5~10%。
-
-### ~~P2：Detection/Bank Quality Scoring~~ — DONE (2026-05-03)
-
-實作已完成（A6）。`aspect / center / area` 連續品質因子落地，`--detection-quality-scaling` 帶來 **+1.9pp MOTA** 與 **-23.5% IDs** (7-seq SDP)，且 **FP -28.8%**。
-位置：
-  - `src/saccade/perception/eval/runner.py`
-  - `scripts/eval/mot17.py`
-
-### ~~P0：Pre-hoc Embedding Quality (LaSt-ViT CUDA Kernel)~~ — CLOSED No-Go (2026-05-02)
-
-實作已完成（CUDA kernels + C++ API + PyBind11），但 MOT17 驗證結果僅 +0.09pp IDF1（低於 +1.0pp 門檻）。
-根本限制：SigLIP2 未以 LaSt-ViT 目標訓練，`last_hidden_state` 穩定分數無前景/背景區分力。
-API 保留供未來使用：`FeatureExtractor::extract_with_stability()`，`mot17.py --last-vit-embed`。
-詳見 `docs/experiments/reid/last_vit_integration_analysis.md` §10。
-
-### ~~P0：Reference Quality + False-Accept Filtering~~ — DONE (2026-05-01)
-
-bank 高品質 tier + inject gate + false-accept filter 已實作。詳見 `docs/TODO.md` A2 Phase 3 結論。
-
-### ~~P1：Unified Association / Relink Scoring~~ — DONE (2026-05-01)
-
-`w_sim_base/w_iou_base/w_maha_base/shift_ambiguity/shift_lost_age` 動態調整已整合（A1）。
-
-### ~~P1：Track-Level / Budgeted ReID~~ — DONE (2026-05-01)
-
-`--reid-budget 0.2`（Dynamic Ratio 0.2）已成為預設最佳配置（A3，+24% FPS）。
-
-### ~~P2：GMC Quality-Aware 補強~~ — DONE (2026-05-03)
-
-PCR score exposure + PCR→ReID feedback + foreground mask kernel 已完成。
-Ablation 結論：MOT17 背景紋理足以主導 Phase Correlation，`--gmc-fg-mask` 無增益（不為 default）。
-7-seq IDF1 43.5%，無 regression。詳見 `docs/TODO.md` A4 結論。
-
-### ~~P2：Post-Merge V2~~ — DONE (2026-05-03)
-
-A5 appearance soft cost + gap_uncertainty + consistency weight 已完成。
-Ablation：`max_cost=0.8` 讓 post-merge 從「有害」變「中性偏正」（FP -104）。
-改善訊號仍在 noise range，不納入 default。詳見 `docs/TODO.md` A5 結論。
-
-### ~~P2：Detection/Bank Quality Scoring~~ — DONE (2026-05-03)
-
-實作已完成（A6）。`aspect / center / area` 連續品質因子落地，`--detection-quality-scaling` 帶來 **+1.9pp MOTA** 與 **-23.5% IDs** (7-seq SDP)，且 **FP -28.8%**。已納入 default。
-位置：
-  - `src/saccade/perception/eval/detection.py`
-  - `src/saccade/perception/tracking/tracker_gpu.py`
+- `native_960` 已確認為主 baseline（tiled 停止調參）。
+- 目前 `--match-thresh 0.78 / --new-track-thresh 0.45` 是在舊流程下調出的參數，尚未以 `native_960` 系統性重掃。
+- 目標：在 `native_960` 上突破目前 IDF1 47.9% / MOTA 40.7% 的 7-seq 上限。
+- 入口：`scripts/eval/ablation_mot17.py`，先跑 local metric，確認 signal 再做全序列。
 
 ---
 

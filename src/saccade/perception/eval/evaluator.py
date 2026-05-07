@@ -84,8 +84,8 @@ except ImportError:
     _LIFECYCLE_CLS = None
 from saccade.perception.eval.streaming import DALIStreamerStream
 from saccade.perception.eval.tracking import GlobalTrackIdMapper
+from saccade.perception.tracking.dynamic_reid import DynamicReIDController
 from saccade.perception.tracking.tracker_gpu import (
-    DynamicReIDController,
     TrackAppearanceBank,
     need_reid_frame,
 )
