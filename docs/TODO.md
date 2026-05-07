@@ -1,6 +1,6 @@
 # Saccade TODO — 具體實作清單
 
-> 主 TODO 只保留目前待辦、近期 ablation 結論與下一步方向。已完成項、設計規範與 C++ 路線圖已移至 [docs/TODO_history.md](/docs/TODO_history.md:1)。
+> 主 TODO 只保留目前待辦、近期 ablation 結論與下一步方向。已完成項、設計規範與 C++ 路線圖已移至 [docs/TODO_history.md](/docs/TODO_history.md)。
 
 ---
 
@@ -10,7 +10,7 @@
   - 目前真的還要做的事項
   - 近期仍會影響決策的 ablation 結論
   - 下一輪已排定的實驗 / 實作 backlog
-- 內容應移入 [docs/TODO_history.md](/docs/TODO_history.md:1) 的情況：
+- 內容應移入 [docs/TODO_history.md](/docs/TODO_history.md) 的情況：
   - 已完成，且後續不再需要逐步追蹤
   - 已收斂並明確放棄，不再作為近期 default 候選
   - 已被新方向取代，只需保留背景與結論
@@ -214,8 +214,8 @@ Frame N+1: fetch → detect → postprocess → [SYNC bg(N)]   → reid → ...
 
 ## Historical Links
 
-- 歷史 TODO / 設計規範 / C++ 路線圖： [docs/TODO_history.md](/docs/TODO_history.md:1)
-- Tracking base 與 relink sweep： [docs/experiments/tracking/fp_fn_recovery_and_gmc.md](/docs/experiments/tracking/fp_fn_recovery_and_gmc.md:1)
+- 歷史 TODO / 設計規範 / C++ 路線圖： [docs/TODO_history.md](/docs/TODO_history.md)
+- Tracking base 與 relink sweep： [docs/experiments/tracking/fp_fn_recovery_and_gmc.md](/docs/experiments/tracking/fp_fn_recovery_and_gmc.md)
 - ReID backbone refresh 歸檔： [docs/experiments/reid/semantic_relink_and_crop.md](/docs/experiments/reid/semantic_relink_and_crop.md:252)
 
 ---

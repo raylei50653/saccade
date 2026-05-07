@@ -14,12 +14,12 @@
 
 此規範主要對應下列檔案：
 
-- [src/saccade/perception/entropy.py](/src/saccade/perception/entropy.py:1)
-- [src/saccade/storage/redis_cache.py](/src/saccade/storage/redis_cache.py:1)
-- [src/saccade/storage/chroma_store.py](/src/saccade/storage/chroma_store.py:1)
-- [src/saccade/cognition/orchestrator.py](/src/saccade/cognition/orchestrator.py:1)
-- [src/saccade/api/server.py](/src/saccade/api/server.py:1)
-- [src/saccade/pipeline/health.py](/src/saccade/pipeline/health.py:1)
+- [src/saccade/perception/entropy.py](/src/saccade/perception/entropy.py)
+- [src/saccade/storage/redis_cache.py](/src/saccade/storage/redis_cache.py)
+- [src/saccade/storage/chroma_store.py](/src/saccade/storage/chroma_store.py)
+- [src/saccade/cognition/orchestrator.py](/src/saccade/cognition/orchestrator.py)
+- [src/saccade/api/server.py](/src/saccade/api/server.py)
+- [src/saccade/pipeline/health.py](/src/saccade/pipeline/health.py)
 
 ---
 
@@ -200,7 +200,7 @@ add_memory(
 
 ## 5. FastAPI Retrieval API
 
-對應檔案：[src/saccade/api/server.py](/src/saccade/api/server.py:1)
+對應檔案：[src/saccade/api/server.py](/src/saccade/api/server.py)
 
 ### 5.1 `GET /`
 
@@ -292,7 +292,7 @@ Response shape:
 
 ## 6. Health Contract
 
-對應檔案：[src/saccade/pipeline/health.py](/src/saccade/pipeline/health.py:1)
+對應檔案：[src/saccade/pipeline/health.py](/src/saccade/pipeline/health.py)
 
 ### 6.1 Checked Services
 
@@ -358,4 +358,4 @@ Response shape:
 - 修改 FastAPI request/response shape
 - 修改 health checker 的輸出合約
 
-若只是實驗性欄位掃描，先記在 [docs/TODO.md](/docs/TODO.md:1) 或實驗文件；當欄位成為穩定介面時，再回寫此規範。
+若只是實驗性欄位掃描，先記在 [docs/TODO.md](/docs/TODO.md) 或實驗文件；當欄位成為穩定介面時，再回寫此規範。

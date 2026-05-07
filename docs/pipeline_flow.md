@@ -2,9 +2,9 @@
 
 本文件描述 **目前實作主路徑** 的資料流，重點是對應現有 `runner.py` 與 evaluation path，而不是較早期的完整產品願景圖。
 
-- 穩定架構邊界：看 [architecture.md](/docs/architecture.md:1)
-- 開發入口與 source-of-truth：看 [../DEVELOPMENT.md](/DEVELOPMENT.md:1)
-- 事件 / API / storage schema：看 [api_spec.md](/docs/api_spec.md:1)
+- 穩定架構邊界：看 [architecture.md](/docs/architecture.md)
+- 開發入口與 source-of-truth：看 [../DEVELOPMENT.md](/DEVELOPMENT.md)
+- 事件 / API / storage schema：看 [api_spec.md](/docs/api_spec.md)
 
 ---
 
@@ -12,8 +12,8 @@
 
 本文件主要對應：
 
-- [scripts/eval/mot17.py](/scripts/eval/mot17.py:1)
-- [src/saccade/perception/eval/runner.py](/src/saccade/perception/eval/runner.py:1)
+- [scripts/eval/mot17.py](/scripts/eval/mot17.py)
+- [src/saccade/perception/eval/runner.py](/src/saccade/perception/eval/runner.py)
 
 這條路徑目前是 repo 最活躍的 perception / tracking / relink 主流程。
 
@@ -86,9 +86,9 @@ Frame Source
 
 主要位置：
 
-- [src/saccade/perception/eval/detection.py](/src/saccade/perception/eval/detection.py:1)
+- [src/saccade/perception/eval/detection.py](/src/saccade/perception/eval/detection.py)
 - [src/saccade/perception/eval/runner.py](/src/saccade/perception/eval/runner.py:1910)
-- [src/tracking/pipeline.cpp](/src/tracking/pipeline.cpp:1)
+- [src/tracking/pipeline.cpp](/src/tracking/pipeline.cpp)
 
 說明：
 
@@ -158,7 +158,7 @@ Frame Source
 
 主要位置：
 
-- [src/tracking/tracker_gpu.cu](/src/tracking/tracker_gpu.cu:1)
+- [src/tracking/tracker_gpu.cu](/src/tracking/tracker_gpu.cu)
 - [src/saccade/perception/eval/runner.py](/src/saccade/perception/eval/runner.py:2229)
 
 目前流程：
@@ -181,7 +181,7 @@ Frame Source
 
 主要位置：
 
-- [src/saccade/perception/eval/relink.py](/src/saccade/perception/eval/relink.py:1)
+- [src/saccade/perception/eval/relink.py](/src/saccade/perception/eval/relink.py)
 - [src/saccade/perception/eval/runner.py](/src/saccade/perception/eval/runner.py:692)
 
 目前流程：
@@ -224,22 +224,22 @@ Frame Source
 
 主要位置：
 
-- [src/saccade/storage/redis_cache.py](/src/saccade/storage/redis_cache.py:1)
-- [src/saccade/perception/entropy.py](/src/saccade/perception/entropy.py:1)
+- [src/saccade/storage/redis_cache.py](/src/saccade/storage/redis_cache.py)
+- [src/saccade/perception/entropy.py](/src/saccade/perception/entropy.py)
 
 說明：
 
 - 目前同時存在：
   - Redis List `saccade:events`
   - Redis Stream `saccade:stream`
-- schema 以 [api_spec.md](/docs/api_spec.md:1) 為準
+- schema 以 [api_spec.md](/docs/api_spec.md) 為準
 
 ### 4.2 Cognition / Memory
 
 主要位置：
 
-- [src/saccade/cognition/orchestrator.py](/src/saccade/cognition/orchestrator.py:1)
-- [src/saccade/storage/chroma_store.py](/src/saccade/storage/chroma_store.py:1)
+- [src/saccade/cognition/orchestrator.py](/src/saccade/cognition/orchestrator.py)
+- [src/saccade/storage/chroma_store.py](/src/saccade/storage/chroma_store.py)
 
 說明：
 
@@ -252,7 +252,7 @@ Frame Source
 
 主要位置：
 
-- [src/saccade/pipeline/health.py](/src/saccade/pipeline/health.py:1)
+- [src/saccade/pipeline/health.py](/src/saccade/pipeline/health.py)
 
 說明：
 
@@ -273,7 +273,7 @@ Frame Source
 - GMC quality-aware handling
 - post-merge V2 cost
 
-這些方向的近期排序以 [docs/TODO.md](/docs/TODO.md:1) 為準。
+這些方向的近期排序以 [docs/TODO.md](/docs/TODO.md) 為準。
 
 ---
 
@@ -282,10 +282,10 @@ Frame Source
 本文件不負責：
 
 - 穩定架構責任邊界的完整定義
-  - 看 [architecture.md](/docs/architecture.md:1)
+  - 看 [architecture.md](/docs/architecture.md)
 - 事件 / API schema 細節
-  - 看 [api_spec.md](/docs/api_spec.md:1)
+  - 看 [api_spec.md](/docs/api_spec.md)
 - 實驗結果與 backlog 排序
-  - 看 [docs/TODO.md](/docs/TODO.md:1)
+  - 看 [docs/TODO.md](/docs/TODO.md)
 
 最後更新：2026-04-30

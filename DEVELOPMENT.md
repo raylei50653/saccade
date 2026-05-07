@@ -52,9 +52,9 @@
    - [docs/api_spec.md](docs/api_spec.md)
    - `docs/decisions/*.md`
 4. **當前待辦與近期結論**
-   - [docs/TODO.md](/docs/TODO.md:1)
+   - [docs/TODO.md](/docs/TODO.md)
 5. **歷史脈絡**
-   - [docs/TODO_history.md](/docs/TODO_history.md:1)
+   - [docs/TODO_history.md](/docs/TODO_history.md)
    - `docs/progress/`
    - `docs/experiments/`
 
@@ -85,14 +85,14 @@ Saccade 目前以 **MOT17-centered evaluation path** 為最活躍主線，核心
 
 如果你要改 MOT / tracking / relink / ReID，先看這些檔案：
 
-- [src/saccade/perception/eval/runner.py](/src/saccade/perception/eval/runner.py:1)
-- [src/saccade/perception/eval/relink.py](/src/saccade/perception/eval/relink.py:1)
-- [src/saccade/perception/tracking/tracker_gpu.py](/src/saccade/perception/tracking/tracker_gpu.py:1)
-- [src/tracking/tracker_gpu.cu](/src/tracking/tracker_gpu.cu:1)
-- [src/saccade/perception/eval/detection.py](/src/saccade/perception/eval/detection.py:1)
-- [src/saccade/perception/eval/gmc.py](/src/saccade/perception/eval/gmc.py:1)
-- [scripts/eval/mot17.py](/scripts/eval/mot17.py:1)
-- [scripts/eval/ablation_mot17.py](/scripts/eval/ablation_mot17.py:1)
+- [src/saccade/perception/eval/runner.py](/src/saccade/perception/eval/runner.py)
+- [src/saccade/perception/eval/relink.py](/src/saccade/perception/eval/relink.py)
+- [src/saccade/perception/tracking/tracker_gpu.py](/src/saccade/perception/tracking/tracker_gpu.py)
+- [src/tracking/tracker_gpu.cu](/src/tracking/tracker_gpu.cu)
+- [src/saccade/perception/eval/detection.py](/src/saccade/perception/eval/detection.py)
+- [src/saccade/perception/eval/gmc.py](/src/saccade/perception/eval/gmc.py)
+- [scripts/eval/mot17.py](/scripts/eval/mot17.py)
+- [scripts/eval/ablation_mot17.py](/scripts/eval/ablation_mot17.py)
 
 ---
 
@@ -121,8 +121,8 @@ Saccade 目前以 **MOT17-centered evaluation path** 為最活躍主線，核心
 ### 4.4 Documentation 合約
 
 - 若改的是穩定行為或責任邊界，要更新架構 / ADR / API 文件。
-- 若改的是近期工作方向與實驗排序，要更新 [docs/TODO.md](/docs/TODO.md:1)。
-- 已完成且不再需要逐步追蹤的內容，移到 [docs/TODO_history.md](/docs/TODO_history.md:1)。
+- 若改的是近期工作方向與實驗排序，要更新 [docs/TODO.md](/docs/TODO.md)。
+- 已完成且不再需要逐步追蹤的內容，移到 [docs/TODO_history.md](/docs/TODO_history.md)。
 
 ### 4.5 Detection / Tiling 合約
 
@@ -255,7 +255,7 @@ Saccade 目前以 **MOT17-centered evaluation path** 為最活躍主線，核心
 - **架構 / 合約改動**
   - 更新 `docs/decisions/`、`docs/architecture.md`、`docs/api_spec.md`
 - **近期方向 / 實驗排序改動**
-  - 更新 [docs/TODO.md](/docs/TODO.md:1)
+  - 更新 [docs/TODO.md](/docs/TODO.md)
 - **單純實作細節或 bug fix**
   - 至少在 commit / PR 記錄 why
 
@@ -366,7 +366,7 @@ uv run python scripts/eval/ablation_mot17.py ...
 - 一般 Python 測試放在 `tests/test_*.py`
 - native tests 放在 `tests/native/`
 - benchmarks 放在 `tests/benchmarks/bench_*.py`
-- 詳細規範、命名、目錄分工與最低驗證要求，見 [docs/TESTING.md](/docs/TESTING.md:1)
+- 詳細規範、命名、目錄分工與最低驗證要求，見 [docs/TESTING.md](/docs/TESTING.md)
 
 ---
 
@@ -374,7 +374,7 @@ uv run python scripts/eval/ablation_mot17.py ...
 
 ### 主 TODO
 
-[docs/TODO.md](/docs/TODO.md:1) 只保留：
+[docs/TODO.md](/docs/TODO.md) 只保留：
 
 - 目前真的還要做的事項
 - 近期仍影響決策的 ablation 結論
@@ -382,7 +382,7 @@ uv run python scripts/eval/ablation_mot17.py ...
 
 ### 歷史 TODO
 
-[docs/TODO_history.md](/docs/TODO_history.md:1) 保留：
+[docs/TODO_history.md](/docs/TODO_history.md) 保留：
 
 - 已完成項
 - 已收斂並放棄的方向
@@ -404,8 +404,8 @@ uv run python scripts/eval/ablation_mot17.py ...
 - [docs/PIPELINE_REFERENCE.md](docs/PIPELINE_REFERENCE.md)
 - [docs/api_spec.md](docs/api_spec.md)
 - [docs/TODO.md](docs/TODO.md)
-- [docs/decisions/016-rerank-phase3-reference-quality.md](/docs/decisions/016-rerank-phase3-reference-quality.md:1)
-- [docs/experiments/reid/dynamic_trigger.md](/docs/experiments/reid/dynamic_trigger.md:1)
-- [docs/layers/gpubytetracker_deep_dive.md](/docs/layers/gpubytetracker_deep_dive.md:1)
+- [docs/decisions/016-rerank-phase3-reference-quality.md](/docs/decisions/016-rerank-phase3-reference-quality.md)
+- [docs/experiments/reid/dynamic_trigger.md](/docs/experiments/reid/dynamic_trigger.md)
+- [docs/layers/gpubytetracker_deep_dive.md](/docs/layers/gpubytetracker_deep_dive.md)
 
 如果你發現這份文件與主路徑程式碼不一致，先修這份文件，再決定是否需要補 ADR / TODO / history。

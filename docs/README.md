@@ -6,28 +6,28 @@
 
 ## First Read
 
-1. [DEVELOPMENT.md](/DEVELOPMENT.md:1)
+1. [DEVELOPMENT.md](/DEVELOPMENT.md)
    - 開發主入口
    - source-of-truth 順序
    - 當前主路徑
    - 目前優先問題
    - 文件更新規則
 
-2. [architecture.md](/docs/architecture.md:1)
+2. [architecture.md](/docs/architecture.md)
    - 穩定架構形狀
    - 模組責任邊界
    - 系統合約
 
-3. [pipeline_flow.md](/docs/pipeline_flow.md:1)
+3. [pipeline_flow.md](/docs/pipeline_flow.md)
    - 目前實作主路徑的資料流
    - 對應 `runner.py` 與 MOT17 evaluation path
 
-4. [api_spec.md](/docs/api_spec.md:1)
+4. [api_spec.md](/docs/api_spec.md)
    - Redis event / stream contract
    - Chroma metadata contract
    - FastAPI request / response shape
 
-5. [TODO.md](/docs/TODO.md:1)
+5. [TODO.md](/docs/TODO.md)
    - 當前待辦
    - 近期 ablation 結論
    - 下一輪 backlog
@@ -38,18 +38,18 @@
 
 ### Stable Documents
 
-- [architecture.md](/docs/architecture.md:1)
+- [architecture.md](/docs/architecture.md)
   - 目前穩定的系統形狀與責任邊界
-- [pipeline_flow.md](/docs/pipeline_flow.md:1)
+- [pipeline_flow.md](/docs/pipeline_flow.md)
   - 目前實作主路徑的資料流
-- [api_spec.md](/docs/api_spec.md:1)
+- [api_spec.md](/docs/api_spec.md)
   - API / event / storage 合約
 
 ### Planning / Direction
 
-- [TODO.md](/docs/TODO.md:1)
+- [TODO.md](/docs/TODO.md)
   - 當前待辦與近期結論
-- [TODO_history.md](/docs/TODO_history.md:1)
+- [TODO_history.md](/docs/TODO_history.md)
   - 已完成項、已放棄方向、歷史路線圖
 
 ### Decisions
@@ -68,7 +68,7 @@
 
 - [experiments/README.md](/docs/experiments/README.md)
 - [benchmarks/README.md](/docs/benchmarks/README.md)
-- [../scripts/eval/README.md](/scripts/eval/README.md:1)
+- [../scripts/eval/README.md](/scripts/eval/README.md)
 
 主 evaluation 入口：
 
@@ -96,7 +96,7 @@
 ### Maintenance
 
 - [DOC_MAINTENANCE.md](/docs/DOC_MAINTENANCE.md)
-- [TESTING.md](/docs/TESTING.md:1)
+- [TESTING.md](/docs/TESTING.md)
 
 ---
 
@@ -106,25 +106,25 @@
 
 先看：
 
-1. [DEVELOPMENT.md](/DEVELOPMENT.md:1)
-2. [architecture.md](/docs/architecture.md:1)
-3. [pipeline_flow.md](/docs/pipeline_flow.md:1)
-4. [TODO.md](/docs/TODO.md:1)
+1. [DEVELOPMENT.md](/DEVELOPMENT.md)
+2. [architecture.md](/docs/architecture.md)
+3. [pipeline_flow.md](/docs/pipeline_flow.md)
+4. [TODO.md](/docs/TODO.md)
 5. `src/saccade/perception/eval/runner.py`
 
 ### 如果你要改事件 / API / storage schema
 
 先看：
 
-1. [DEVELOPMENT.md](/DEVELOPMENT.md:1)
-2. [api_spec.md](/docs/api_spec.md:1)
-3. [architecture.md](/docs/architecture.md:1)
+1. [DEVELOPMENT.md](/DEVELOPMENT.md)
+2. [api_spec.md](/docs/api_spec.md)
+3. [architecture.md](/docs/architecture.md)
 
 ### 如果你要理解舊決策或歷史脈絡
 
 先看：
 
-1. [TODO_history.md](/docs/TODO_history.md:1)
+1. [TODO_history.md](/docs/TODO_history.md)
 2. [decisions/README.md](/docs/decisions/README.md)
 3. [progress/README.md](/docs/progress/README.md)
 
