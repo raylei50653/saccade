@@ -15,9 +15,9 @@ sys.path.insert(0, str(ROOT / "build"))
 from saccade.perception.eval.relink import IdentityResolver, PythonSemanticRelinker  # noqa: E402
 from saccade.perception.eval.lifecycle import TrackletLifecycleMerger  # noqa: E402
 from saccade.perception.eval.types import PreparedTrackCandidate  # noqa: E402
-from saccade.perception.eval.helpers import (
+from saccade.perception.eval.helpers import (  # noqa: E402
     resolve_frame_tracks as _resolve_frame_tracks,
-)  # noqa: E402
+)
 
 
 def _make_relinker(**overrides):

@@ -9,9 +9,9 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "build"))
 
-from saccade.perception.eval.helpers import (
+from saccade.perception.eval.helpers import (  # noqa: E402
     materialize_gpu_track_results as _materialize_gpu_track_results,
-)  # noqa: E402
+)
 
 
 def test_materialize_gpu_track_results_empty() -> None:

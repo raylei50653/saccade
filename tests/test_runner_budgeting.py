@@ -8,9 +8,9 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "build"))
 
-from saccade.perception.eval.helpers import (
+from saccade.perception.eval.helpers import (  # noqa: E402
     budget_reid_candidates as _budget_reid_candidates,
-)  # noqa: E402
+)
 from saccade.perception.tracking.dynamic_reid import DynamicReIDController  # noqa: E402
 from saccade.perception.tracking.tracker_gpu import ReIDTrackObservation  # noqa: E402
 
