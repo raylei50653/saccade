@@ -38,14 +38,58 @@ float compute_iou(const float* a, const float* b) {
     return inter / (area_a + area_b - inter + 1e-6f);
 }
 
+bool is_box_near_tiled_seam_cpu(
+    const float* box,
+    int tiling_mode,
+    int frame_w,
+    int frame_h,
+    float seam_margin_canvas_px
+) {
+    if (tiling_mode <= 0 || frame_w <= 0 || frame_h <= 0) return false;
+    const float r = 960.0f / std::max((float)frame_h, (float)frame_w);
+    const int h_new = static_cast<int>((float)frame_h * r);
+    const int w_new = static_cast<int>((float)frame_w * r);
+    const float y_off = (float)((960 - h_new) / 2);
+    const float x_off = (float)((960 - w_new) / 2);
+    const float seam_margin_orig = seam_margin_canvas_px / std::max(r, 1e-6f);
+    const float cx = 0.5f * (box[0] + box[2]);
+    const float cy = 0.5f * (box[1] + box[3]);
+
+    const std::array<float, 4> seam_xs{{160.0f, 320.0f, 640.0f, 800.0f}};
+    const int seam_x_start = tiling_mode == 2 ? 0 : 1;
+    const int seam_x_count = tiling_mode == 2 ? 4 : 2;
+    for (int i = seam_x_start; i < seam_x_start + seam_x_count; ++i) {
+        const float sx_canvas = seam_xs[static_cast<size_t>(i)];
+        if (!(x_off < sx_canvas && sx_canvas < x_off + (float)w_new)) continue;
+        const float sx = (sx_canvas - x_off) / r;
+        if ((box[0] <= sx && box[2] >= sx) || std::fabs(cx - sx) <= seam_margin_orig) return true;
+    }
+    const std::array<float, 2> seam_ys{{320.0f, 640.0f}};
+    for (float sy_canvas : seam_ys) {
+        if (!(y_off < sy_canvas && sy_canvas < y_off + (float)h_new)) continue;
+        const float sy = (sy_canvas - y_off) / r;
+        if ((box[1] <= sy && box[3] >= sy) || std::fabs(cy - sy) <= seam_margin_orig) return true;
+    }
+    return false;
+}
+
 py::tuple merge_cross_tile_duplicates_cpu(
     py::array_t<float, py::array::c_style | py::array::forcecast> boxes,
     py::array_t<float, py::array::c_style | py::array::forcecast> scores,
     py::array_t<int, py::array::c_style | py::array::forcecast> classes,
     float iou_threshold,
     float center_threshold,
-    float area_ratio_threshold
+    float area_ratio_threshold,
+    int tiling_mode,
+    int frame_w,
+    int frame_h,
+    float seam_margin_canvas_px,
+    float seam_center_scale,
+    float seam_area_ratio_threshold,
+    float seam_min_overlap_ratio
 ) {
+    constexpr float kTiledSeamCoordWeight = 0.35f;
+    constexpr float kTiledBestBlend = 0.25f;
     if (boxes.ndim() != 2 || boxes.shape(1) != 4) {
         throw std::invalid_argument("boxes must have shape [N, 4]");
     }
@@ -130,29 +174,89 @@ py::tuple merge_cross_tile_duplicates_cpu(
                 anchor_area / std::max(candidate_area, 1e-6f)
             );
 
-            if (iou >= iou_threshold || (center_dist <= center_gate && area_ratio >= area_ratio_threshold)) {
+            const float x1 = std::max(anchor_box[0], candidate_box[0]);
+            const float y1 = std::max(anchor_box[1], candidate_box[1]);
+            const float x2 = std::min(anchor_box[2], candidate_box[2]);
+            const float y2 = std::min(anchor_box[3], candidate_box[3]);
+            const float inter_w = std::max(0.0f, x2 - x1);
+            const float inter_h = std::max(0.0f, y2 - y1);
+            const float overlap_ratio_x = inter_w / std::max(min_w, 1e-6f);
+            const float overlap_ratio_y = inter_h / std::max(min_h, 1e-6f);
+            const bool anchor_is_seam = is_box_near_tiled_seam_cpu(
+                anchor_box, tiling_mode, frame_w, frame_h, seam_margin_canvas_px
+            );
+            const bool candidate_is_seam = is_box_near_tiled_seam_cpu(
+                candidate_box, tiling_mode, frame_w, frame_h, seam_margin_canvas_px
+            );
+            const bool seam_duplicate =
+                (anchor_is_seam || candidate_is_seam) &&
+                center_dist <= center_gate * seam_center_scale &&
+                area_ratio >= seam_area_ratio_threshold &&
+                overlap_ratio_x >= seam_min_overlap_ratio &&
+                overlap_ratio_y >= seam_min_overlap_ratio;
+
+            if (iou >= iou_threshold || (center_dist <= center_gate && area_ratio >= area_ratio_threshold) || seam_duplicate) {
                 cluster_indices.push_back(candidate_idx);
             }
         }
 
-        float weight_sum = 0.0f;
         float fused_box[4] = {0.0f, 0.0f, 0.0f, 0.0f};
         float fused_score = 0.0f;
-        for (int idx : cluster_indices) {
-            const float score = scores_in(idx);
-            weight_sum += score;
-            fused_score = std::max(fused_score, score);
-            for (int k = 0; k < 4; ++k) {
-                fused_box[k] += boxes_in(idx, k) * score;
+        if (tiling_mode > 0) {
+            int best_idx = cluster_indices.front();
+            bool best_is_seam = true;
+            float best_score = -1.0f;
+            float coord_weight_sum = 0.0f;
+            for (int idx : cluster_indices) {
+                const float candidate_box[4] = {
+                    boxes_in(idx, 0), boxes_in(idx, 1), boxes_in(idx, 2), boxes_in(idx, 3),
+                };
+                const bool is_seam = is_box_near_tiled_seam_cpu(
+                    candidate_box, tiling_mode, frame_w, frame_h, seam_margin_canvas_px
+                );
+                const float score = scores_in(idx);
+                if ((best_is_seam && !is_seam) || (best_is_seam == is_seam && score > best_score)) {
+                    best_idx = idx;
+                    best_is_seam = is_seam;
+                    best_score = score;
+                }
+                const float coord_weight =
+                    score * (is_seam ? kTiledSeamCoordWeight : 1.0f);
+                coord_weight_sum += coord_weight;
+                for (int k = 0; k < 4; ++k) {
+                    fused_box[k] += boxes_in(idx, k) * coord_weight;
+                }
             }
+            const float inv_coord_weight_sum = 1.0f / std::max(coord_weight_sum, 1e-6f);
+            for (float& coord : fused_box) coord *= inv_coord_weight_sum;
+            if (cluster_indices.size() > 1) {
+                for (int k = 0; k < 4; ++k) {
+                    fused_box[k] =
+                        fused_box[k] * (1.0f - kTiledBestBlend)
+                        + boxes_in(best_idx, k) * kTiledBestBlend;
+                }
+            } else {
+                for (int k = 0; k < 4; ++k) fused_box[k] = boxes_in(best_idx, k);
+            }
+            fused_score = best_score;
+        } else {
+            float weight_sum = 0.0f;
+            for (int idx : cluster_indices) {
+                const float score = scores_in(idx);
+                weight_sum += score;
+                fused_score = std::max(fused_score, score);
+                for (int k = 0; k < 4; ++k) {
+                    fused_box[k] += boxes_in(idx, k) * score;
+                }
+            }
+            const float inv_weight_sum = 1.0f / std::max(weight_sum, 1e-6f);
+            for (float& coord : fused_box) coord *= inv_weight_sum;
+        }
+        for (int idx : cluster_indices) {
             consumed[static_cast<size_t>(idx)] = 1;
         }
 
-        const float inv_weight_sum = 1.0f / std::max(weight_sum, 1e-6f);
-        for (float& coord : fused_box) {
-            coord *= inv_weight_sum;
-            out_boxes.push_back(coord);
-        }
+        for (float coord : fused_box) out_boxes.push_back(coord);
         out_scores.push_back(fused_score);
         out_classes.push_back(anchor_class);
     }
@@ -320,7 +424,16 @@ public:
         float clean_margin_ratio = 0.0f,
         float clean_min_aspect = 0.0f,
         float clean_max_aspect = 99.0f,
-        float strict_sim_threshold = 0.0f
+        float strict_sim_threshold = 0.0f,
+        float w_sim_base = 0.0f,
+        float w_iou_base = 0.0f,
+        float w_maha_base = 0.0f,
+        float shift_ambiguity = 0.0f,
+        float shift_lost_age = 0.0f,
+        float iou_weight = 0.0f,
+        float mahalanobis_weight = 0.0f,
+        float dynamic_margin_crowd = 0.0f,
+        float dynamic_margin_age = 0.0f
     )
         : sim_threshold_(sim_threshold),
           ttl_(ttl),
@@ -338,7 +451,16 @@ public:
           clean_margin_ratio_(clean_margin_ratio),
           clean_min_aspect_(clean_min_aspect),
           clean_max_aspect_(clean_max_aspect),
-          strict_sim_threshold_(strict_sim_threshold > 0.0f ? strict_sim_threshold : sim_threshold) {}
+          strict_sim_threshold_(strict_sim_threshold > 0.0f ? strict_sim_threshold : sim_threshold),
+          w_sim_base_(std::max(0.0f, w_sim_base)),
+          w_iou_base_(std::max(0.0f, w_iou_base)),
+          w_maha_base_(std::max(0.0f, w_maha_base)),
+          shift_ambiguity_(shift_ambiguity),
+          shift_lost_age_(shift_lost_age),
+          iou_weight_(std::max(0.0f, iou_weight)),
+          mahalanobis_weight_(std::max(0.0f, mahalanobis_weight)),
+          dynamic_margin_crowd_(std::max(0.0f, dynamic_margin_crowd)),
+          dynamic_margin_age_(std::max(0.0f, dynamic_margin_age)) {}
 
     void update_motion_snapshots(const std::vector<TrackStateSnapshot>& snapshots) {
         for (const auto& snap : snapshots) {
@@ -729,9 +851,19 @@ public:
         if (!alias_.count(raw_id)) {
             stats_.attempts += 1;
             int best_id = -1;
-            float best_sim = current_sim_thresh;
-            float second_best_sim = current_sim_thresh - 1.0f;
+            float best_joint = -1.0f;
+            float best_sim_raw = 0.0f;
+            float second_best_joint = -2.0f;
             float best_iou = 0.0f, best_center = 0.0f, best_maha = 0.0f;
+
+            struct CandidateInfo {
+                int cid;
+                int age;
+                float iou;
+                float center_norm;
+                float maha;
+            };
+            std::vector<CandidateInfo> candidates_to_score;
 
             for (int cid : feature_order_) {
                 const auto feature_it = features_.find(cid);
@@ -751,28 +883,104 @@ public:
                 if (min_consistency_ > 0.0f && buffer_size_ > 1) {
                     if (buffer_consistency(cid) < min_consistency_) { stats_.reject_consistency += 1; continue; }
                 }
+                candidates_to_score.push_back({cid, age, iou, center_norm, maha});
+            }
+
+            int n_gate_passed = static_cast<int>(candidates_to_score.size());
+            bool _use_legacy_joint = iou_weight_ > 0.0f || mahalanobis_weight_ > 0.0f;
+            bool _use_unified_score = w_sim_base_ > 0.0f || w_iou_base_ > 0.0f || w_maha_base_ > 0.0f;
+
+            if (!_use_unified_score && !_use_legacy_joint) {
+                best_joint = current_sim_thresh;
+                second_best_joint = current_sim_thresh - 1.0f;
+            }
+
+            for (const auto& cand : candidates_to_score) {
+                int cid = cand.cid;
+                const auto feature_it = features_.find(cid);
                 std::vector<float> ref = buffer_size_ > 1 ? buffer_mean(cid) : feature_it->second;
                 if (ref.empty()) ref = feature_it->second;
                 const float sim = dot(emb, ref);
-                if (sim > best_sim) {
-                    if (best_id >= 0) second_best_sim = best_sim;
-                    best_id = cid; best_sim = sim;
-                    best_iou = iou; best_center = center_norm; best_maha = maha;
+
+                if (sim < current_sim_thresh) {
+                    stats_.reject_similarity += 1;
+                    continue;
+                }
+
+                float maha_score = 0.0f;
+                if (mahalanobis_threshold_ > 0.0f && cand.maha > 0.0f) {
+                    maha_score = std::max(0.0f, 1.0f - cand.maha / mahalanobis_threshold_);
+                }
+
+                float joint;
+                if (_use_unified_score) {
+                    float w_sim = w_sim_base_;
+                    float w_iou = w_iou_base_;
+                    float w_maha = w_maha_base_;
+
+                    if (n_gate_passed > 1) {
+                        float ambiguity_factor = std::min(1.0f, (n_gate_passed - 1) / 8.0f);
+                        w_sim += shift_ambiguity_ * ambiguity_factor;
+                        w_iou -= shift_ambiguity_ * ambiguity_factor;
+                    }
+
+                    float lost_factor = std::min(1.0f, static_cast<float>(cand.age) / std::max(1, ttl_));
+                    w_sim += shift_lost_age_ * lost_factor;
+                    w_iou -= shift_lost_age_ * lost_factor;
+
+                    w_sim = std::max(0.0f, w_sim);
+                    w_iou = std::max(0.0f, w_iou);
+                    w_maha = std::max(0.0f, w_maha);
+                    float sum_w = w_sim + w_iou + w_maha;
+                    if (sum_w > 0.0f) {
+                        w_sim /= sum_w;
+                        w_iou /= sum_w;
+                        w_maha /= sum_w;
+                    }
+
+                    joint = w_sim * sim + w_iou * cand.iou + w_maha * maha_score;
+                } else if (_use_legacy_joint) {
+                    joint = sim + iou_weight_ * cand.iou + mahalanobis_weight_ * maha_score;
                 } else {
-                    if (sim > second_best_sim) second_best_sim = sim;
+                    joint = sim;
+                }
+
+                if (joint > best_joint) {
+                    if (best_id >= 0) second_best_joint = best_joint;
+                    best_id = cid;
+                    best_joint = joint;
+                    best_sim_raw = sim;
+                    best_iou = cand.iou;
+                    best_center = cand.center_norm;
+                    best_maha = cand.maha;
+                } else {
+                    if (joint > second_best_joint) second_best_joint = joint;
                     stats_.reject_similarity += 1;
                 }
             }
 
-            if (best_id >= 0 && reciprocal_margin_ > 0.0f) {
-                if (best_sim - second_best_sim < reciprocal_margin_) {
+            float effective_margin = reciprocal_margin_;
+            if (best_id >= 0) {
+                if (dynamic_margin_crowd_ > 0.0f && n_gate_passed > 1) {
+                    float crowd_factor = std::min(1.0f, (n_gate_passed - 1) / 8.0f);
+                    effective_margin += dynamic_margin_crowd_ * crowd_factor;
+                }
+                if (dynamic_margin_age_ > 0.0f) {
+                    int lost_frames = frame_id - last_seen_.at(best_id);
+                    float age_factor = std::min(1.0f, static_cast<float>(lost_frames) / std::max(1, ttl_));
+                    effective_margin += dynamic_margin_age_ * age_factor;
+                }
+            }
+
+            if (best_id >= 0 && effective_margin > 0.0f) {
+                if (best_joint - second_best_joint < effective_margin) {
                     stats_.reject_margin += 1; best_id = -1;
                 }
             }
 
             if (best_id >= 0) {
                 stats_.accepted += 1;
-                accept_sims_.push_back(best_sim);
+                accept_sims_.push_back(best_sim_raw);
                 accept_ious_.push_back(best_iou);
                 accept_center_dists_.push_back(best_center);
                 accept_mahas_.push_back(best_maha);
@@ -1009,6 +1217,15 @@ private:
     float clean_min_aspect_;
     float clean_max_aspect_;
     float strict_sim_threshold_;
+    float w_sim_base_;
+    float w_iou_base_;
+    float w_maha_base_;
+    float shift_ambiguity_;
+    float shift_lost_age_;
+    float iou_weight_;
+    float mahalanobis_weight_;
+    float dynamic_margin_crowd_;
+    float dynamic_margin_age_;
 
     std::unordered_map<int, int> alias_;
     std::unordered_map<int, std::vector<float>> features_;
@@ -1441,6 +1658,14 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         .def_readonly("x2", &TrackCandidateSnapshot::x2)
         .def_readonly("y2", &TrackCandidateSnapshot::y2);
 
+    py::class_<UnifiedScoreParams>(m, "UnifiedScoreParams")
+        .def(py::init<>())
+        .def_readwrite("w_sim_base", &UnifiedScoreParams::w_sim_base)
+        .def_readwrite("w_iou_base", &UnifiedScoreParams::w_iou_base)
+        .def_readwrite("w_maha_base", &UnifiedScoreParams::w_maha_base)
+        .def_readwrite("shift_ambiguity", &UnifiedScoreParams::shift_ambiguity)
+        .def_readwrite("shift_lost_age", &UnifiedScoreParams::shift_lost_age);
+
     py::class_<GPUByteTracker>(m, "GPUByteTracker")
         .def(py::init<int, int>(), py::arg("max_objects") = 2048, py::arg("embedding_dim") = 768)
         .def("set_params", &GPUByteTracker::set_params,
@@ -1456,6 +1681,20 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
              py::arg("nsa_kalman") = false)
         .def("set_reid_params", &GPUByteTracker::set_reid_params,
              py::arg("cos_threshold"), py::arg("iou_low"), py::arg("iou_high"), py::arg("weight"))
+        .def("set_quality_params", &GPUByteTracker::set_quality_params,
+             py::arg("enabled"), py::arg("w_aspect") = 0.50f, py::arg("w_center") = 0.30f, py::arg("w_area") = 0.20f)
+        .def("set_frame_size", &GPUByteTracker::set_frame_size,
+             py::arg("w"), py::arg("h"))
+        .def("set_homography", [](GPUByteTracker& self, py::object h_obj) {
+            if (h_obj.is_none()) {
+                self.set_homography(nullptr);
+            } else {
+                py::array_t<float, py::array::c_style | py::array::forcecast> h(h_obj);
+                if (h.size() != 9) throw std::invalid_argument("Homography must have 9 elements");
+                self.set_homography(h.data());
+            }
+        }, py::arg("h"))
+        .def("set_unified_score_params", &GPUByteTracker::set_unified_score_params, py::arg("params"))
         .def("update_reference_features", [](GPUByteTracker& self, uintptr_t ids_ptr, uintptr_t features_ptr, int num, uintptr_t stream_ptr) {
             self.update_reference_features(
                 reinterpret_cast<int*>(ids_ptr),
@@ -1464,6 +1703,15 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
                 reinterpret_cast<cudaStream_t>(stream_ptr)
             );
         }, py::arg("ids_ptr"), py::arg("features_ptr"), py::arg("num"), py::arg("stream_ptr"))
+        .def("bind_features_buffer", [](GPUByteTracker& self, uintptr_t ptr) {
+            self.bind_features_buffer(reinterpret_cast<float*>(ptr));
+        }, py::arg("ptr"),
+        "Bind an externally-owned CUDA float buffer (shape [max_objects, embed_dim]) as d_features_. "
+        "Python owns the lifetime; C++ will not free it.")
+        .def("get_active_tid_slot_pairs", [](GPUByteTracker& self) {
+            return self.get_active_tid_slot_pairs();
+        }, "Return list of (track_id, slot_index) for all active tracks. "
+           "Shares the lazy-sync cache with update_reference_features / set_clean_embedding_flags.")
         .def("update", [](GPUByteTracker& self, uintptr_t boxes_ptr, uintptr_t scores_ptr, uintptr_t classes_ptr, int num_dets, uintptr_t stream_ptr,
                           uintptr_t embeddings_ptr, uintptr_t gmc_ptr, float light_factor, float mid_thresh_scale) {
             return self.update(
@@ -1543,7 +1791,7 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         "Sync per-track clean-embedding flags from Python bank state to the CUDA tracker");
 
     py::class_<SemanticRelinkerCpp>(m, "SemanticRelinker")
-        .def(py::init<float, int, float, float, int, float, float, int, float, std::string, float, bool, float, float, float, float, float>(),
+        .def(py::init<float, int, float, float, int, float, float, int, float, std::string, float, bool, float, float, float, float, float, float, float, float, float, float, float, float, float, float>(),
              py::arg("sim_threshold") = 0.985f,
              py::arg("ttl") = 45,
              py::arg("ema_beta") = 0.83f,
@@ -1560,7 +1808,16 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
              py::arg("clean_margin_ratio") = 0.0f,
              py::arg("clean_min_aspect") = 0.0f,
              py::arg("clean_max_aspect") = 99.0f,
-             py::arg("strict_sim_threshold") = 0.0f)
+             py::arg("strict_sim_threshold") = 0.0f,
+             py::arg("w_sim_base") = 0.0f,
+             py::arg("w_iou_base") = 0.0f,
+             py::arg("w_maha_base") = 0.0f,
+             py::arg("shift_ambiguity") = 0.0f,
+             py::arg("shift_lost_age") = 0.0f,
+             py::arg("iou_weight") = 0.0f,
+             py::arg("mahalanobis_weight") = 0.0f,
+             py::arg("dynamic_margin_crowd") = 0.0f,
+             py::arg("dynamic_margin_age") = 0.0f)
         .def("update_motion_snapshots", &SemanticRelinkerCpp::update_motion_snapshots, py::arg("snapshots"))
         .def("motion_candidate_ids", &SemanticRelinkerCpp::motion_candidate_ids, py::arg("frame_id") = -1)
         .def("inject_reference", &SemanticRelinkerCpp::inject_reference,
@@ -1631,11 +1888,11 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
              py::arg("min_distance") = 10.0f,
              py::arg("min_inliers") = 8,
              py::arg("ransac_threshold") = 3.0f)
-        .def("estimate", [](GMC& self, uintptr_t frame_ptr, int width, int height, uintptr_t stream_ptr) {
-            auto warp = self.estimate(reinterpret_cast<const float*>(frame_ptr), width, height, reinterpret_cast<cudaStream_t>(stream_ptr));
+        .def("estimate", [](GMC& self, uintptr_t frame_ptr, int width, int height, uintptr_t stream_ptr, bool use_gpu_phase_corr) {
+            auto warp = self.estimate(reinterpret_cast<const float*>(frame_ptr), width, height, reinterpret_cast<cudaStream_t>(stream_ptr), use_gpu_phase_corr);
             if (warp.empty()) return py::none().cast<py::object>();
             return py::cast(warp);
-        }, py::arg("frame_ptr"), py::arg("width"), py::arg("height"), py::arg("stream_ptr"))
+        }, py::arg("frame_ptr"), py::arg("width"), py::arg("height"), py::arg("stream_ptr"), py::arg("use_gpu_phase_corr") = true)
         .def("estimate_mat", [](GMC& self, py::array_t<uint8_t> frame, int downscale) {
             py::buffer_info info = frame.request();
             if (info.ndim != 2 && info.ndim != 3) {
@@ -1650,7 +1907,18 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             if (warp.empty()) return py::none().cast<py::object>();
             return py::cast(warp);
         }, py::arg("frame"), py::arg("downscale") = -1)
-        .def("reset", &GMC::reset);
+        .def("reset", &GMC::reset)
+        .def("pcr_score", &GMC::pcr_score,
+             "PCR (peak-to-RMS ratio) from the most recent GPU phase correlation. "
+             "0.0 before first estimate; low values indicate unreliable motion estimate.")
+        .def("set_fg_mask_boxes", [](GMC& self, py::list boxes_flat) {
+            std::vector<float> v;
+            v.reserve(py::len(boxes_flat));
+            for (auto item : boxes_flat) v.push_back(item.cast<float>());
+            self.set_fg_mask_boxes(v);
+        }, py::arg("boxes_flat"),
+           "Set foreground boxes [x1,y1,x2,y2,...] to zero before phase correlation. "
+           "Call once per frame before estimate().");
 
     m.def(
         "merge_cross_tile_duplicates",
@@ -1661,6 +1929,13 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         py::arg("iou_threshold") = 0.45f,
         py::arg("center_threshold") = 0.18f,
         py::arg("area_ratio_threshold") = 0.6f,
+        py::arg("tiling_mode") = 0,
+        py::arg("frame_w") = 0,
+        py::arg("frame_h") = 0,
+        py::arg("seam_margin_canvas_px") = 24.0f,
+        py::arg("seam_center_scale") = 1.8f,
+        py::arg("seam_area_ratio_threshold") = 0.30f,
+        py::arg("seam_min_overlap_ratio") = 0.45f,
         "Merge duplicate detections across overlapping tiles on CPU."
     );
 
@@ -1695,6 +1970,7 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             int num_dets,
             uintptr_t keep_indices_ptr,
             uintptr_t suspect_flags_ptr,
+            uintptr_t quality_scores_ptr,
             uintptr_t out_count_ptr,
             float score_threshold,
             bool track_person_only,
@@ -1718,6 +1994,7 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
                 num_dets,
                 reinterpret_cast<int*>(keep_indices_ptr),
                 reinterpret_cast<bool*>(suspect_flags_ptr),
+                reinterpret_cast<float*>(quality_scores_ptr),
                 reinterpret_cast<int*>(out_count_ptr),
                 score_threshold,
                 track_person_only,
@@ -1741,6 +2018,7 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         py::arg("num_dets"),
         py::arg("keep_indices_ptr"),
         py::arg("suspect_flags_ptr"),
+        py::arg("quality_scores_ptr"),
         py::arg("out_count_ptr"),
         py::arg("score_threshold"),
         py::arg("track_person_only"),
@@ -1816,6 +2094,8 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             uintptr_t box_sums_ptr,
             uintptr_t score_sums_ptr,
             uintptr_t score_bits_max_ptr,
+            uintptr_t best_boxes_ptr,
+            uintptr_t best_key_bits_ptr,
             uintptr_t cluster_counts_ptr,
             uintptr_t out_boxes_ptr,
             uintptr_t out_scores_ptr,
@@ -1824,6 +2104,13 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             float iou_threshold,
             float center_threshold,
             float area_ratio_threshold,
+            int tiling_mode,
+            int frame_w,
+            int frame_h,
+            float seam_margin_canvas_px,
+            float seam_center_scale,
+            float seam_area_ratio_threshold,
+            float seam_min_overlap_ratio,
             uintptr_t stream_ptr
         ) {
             merge_cross_tile_duplicates_cuda(
@@ -1835,6 +2122,8 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
                 reinterpret_cast<float*>(box_sums_ptr),
                 reinterpret_cast<float*>(score_sums_ptr),
                 reinterpret_cast<int*>(score_bits_max_ptr),
+                reinterpret_cast<float*>(best_boxes_ptr),
+                reinterpret_cast<int*>(best_key_bits_ptr),
                 reinterpret_cast<int*>(cluster_counts_ptr),
                 reinterpret_cast<float*>(out_boxes_ptr),
                 reinterpret_cast<float*>(out_scores_ptr),
@@ -1843,6 +2132,13 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
                 iou_threshold,
                 center_threshold,
                 area_ratio_threshold,
+                tiling_mode,
+                frame_w,
+                frame_h,
+                seam_margin_canvas_px,
+                seam_center_scale,
+                seam_area_ratio_threshold,
+                seam_min_overlap_ratio,
                 reinterpret_cast<cudaStream_t>(stream_ptr)
             );
         },
@@ -1854,6 +2150,8 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         py::arg("box_sums_ptr"),
         py::arg("score_sums_ptr"),
         py::arg("score_bits_max_ptr"),
+        py::arg("best_boxes_ptr"),
+        py::arg("best_key_bits_ptr"),
         py::arg("cluster_counts_ptr"),
         py::arg("out_boxes_ptr"),
         py::arg("out_scores_ptr"),
@@ -1862,6 +2160,13 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         py::arg("iou_threshold") = 0.45f,
         py::arg("center_threshold") = 0.18f,
         py::arg("area_ratio_threshold") = 0.6f,
+        py::arg("tiling_mode") = 0,
+        py::arg("frame_w") = 0,
+        py::arg("frame_h") = 0,
+        py::arg("seam_margin_canvas_px") = 24.0f,
+        py::arg("seam_center_scale") = 1.8f,
+        py::arg("seam_area_ratio_threshold") = 0.30f,
+        py::arg("seam_min_overlap_ratio") = 0.45f,
         py::arg("stream_ptr"),
         "Merge duplicate detections across overlapping tiles on the caller's CUDA stream."
     );

@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.18)
 project(Saccade CXX CUDA)
 
+# Suppress deprecation warning for FetchContent_Populate (we only need headers, not build TensorRT targets)
+cmake_policy(SET CMP0169 OLD)
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CUDA_STANDARD 17)
 
@@ -30,50 +33,7 @@ find_package(OpenCV REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GSTREAMER REQUIRED gstreamer-1.0 gstreamer-app-1.0 gstreamer-video-1.0)
 
-include_directories(
-    ${PROJECT_SOURCE_DIR}/include
-    ${CUDAToolkit_INCLUDE_DIRS}
-    ${GSTREAMER_INCLUDE_DIRS}
-    ${OpenCV_INCLUDE_DIRS}
-)
-
-# 3. 定義 Perception 模組 (Dynamic Library)
-add_library(saccade_perception SHARED
-    src/perception/trt_engine.cpp
-    src/perception/preprocessor.cpp
-    src/perception/preprocessor_gpu.cu
-    src/perception/feature_extractor.cpp
-)
-# 設定導出宏
-target_compile_definitions(saccade_perception PRIVATE SACCADE_EXPORT_PERCEPTION)
-
-# 4. 定義 Tracking 模組 (Dynamic Library)
-add_library(saccade_tracking SHARED
-    src/tracking/tracker_gpu.cu
-    src/tracking/gmc.cpp
-    src/tracking/gmc_kernel.cu
-    src/tracking/pipeline.cpp
-)
-set_target_properties(saccade_tracking PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
-target_link_libraries(saccade_tracking
-    CUDA::cudart
-    ${OpenCV_LIBS}
-    saccade_perception
-)
-target_compile_definitions(saccade_tracking PRIVATE SACCADE_EXPORT_TRACKING)
-
-# 5. 定義 Media 模組 (Dynamic Library)
-add_library(saccade_media SHARED
-    src/media/gst_client.cpp
-)
-target_link_libraries(saccade_media
-    ${GSTREAMER_LIBRARIES}
-    CUDA::cudart
-    saccade_perception
-)
-target_compile_definitions(saccade_media PRIVATE SACCADE_EXPORT_MEDIA)
-
-# 6. Python Bindings
+# 3. Python 基礎環境搜尋 (用於獲取 Pybind11 與 TensorRT 庫路徑)
 if(DEFINED PYTHON_EXECUTABLE AND NOT DEFINED Python3_EXECUTABLE)
     set(Python3_EXECUTABLE "${PYTHON_EXECUTABLE}" CACHE FILEPATH "Python 3 executable" FORCE)
 endif()
@@ -93,17 +53,22 @@ if(NOT DEFINED Python3_EXECUTABLE AND DEFINED ENV{VIRTUAL_ENV})
 endif()
 
 find_package(Python3 3.12 EXACT REQUIRED COMPONENTS Interpreter Development.Module)
-execute_process(
-    COMMAND ${Python3_EXECUTABLE} -c "import pybind11; print(pybind11.get_cmake_dir())"
-    OUTPUT_VARIABLE pybind11_DIR
-    OUTPUT_STRIP_TRAILING_WHITESPACE
+
+# 4. TensorRT 依賴處理 (方案 B: 自動下載頭文件 + 使用 Python 庫)
+include(FetchContent)
+FetchContent_Declare(
+    tensorrt_oss
+    URL https://github.com/NVIDIA/TensorRT/archive/refs/tags/v10.16.tar.gz
+    DOWNLOAD_EXTRACT_TIMESTAMP NEW
 )
+FetchContent_Populate(tensorrt_oss)
+set(TENSORRT_INCLUDE_DIR "${tensorrt_oss_SOURCE_DIR}/include")
+
 execute_process(
     COMMAND ${Python3_EXECUTABLE} -c "import tensorrt_libs; print(tensorrt_libs.__path__[0])"
     OUTPUT_VARIABLE TENSORRT_LIB_DIR
     OUTPUT_STRIP_TRAILING_WHITESPACE
 )
-find_package(pybind11 REQUIRED PATHS ${pybind11_DIR})
 
 find_library(TENSORRT_NVINFER_LIBRARY
     NAMES nvinfer libnvinfer.so.10
@@ -118,6 +83,60 @@ find_library(TENSORRT_NVINFER_PLUGIN_LIBRARY
     REQUIRED
 )
 
+# 5. 全局包含路徑
+include_directories(
+    ${PROJECT_SOURCE_DIR}/include
+    ${TENSORRT_INCLUDE_DIR}
+    ${CUDAToolkit_INCLUDE_DIRS}
+    ${GSTREAMER_INCLUDE_DIRS}
+    ${OpenCV_INCLUDE_DIRS}
+)
+
+# 6. 定義 Perception 模組 (Dynamic Library)
+add_library(saccade_perception SHARED
+    src/perception/trt_engine.cpp
+    src/perception/preprocessor.cpp
+    src/perception/preprocessor_gpu.cu
+    src/perception/feature_extractor.cpp
+)
+# 設定導出宏
+target_compile_definitions(saccade_perception PRIVATE SACCADE_EXPORT_PERCEPTION)
+
+# 7. 定義 Tracking 模組 (Dynamic Library)
+add_library(saccade_tracking SHARED
+    src/tracking/tracker_gpu.cu
+    src/tracking/gmc.cpp
+    src/tracking/gmc_kernel.cu
+    src/tracking/pipeline.cpp
+)
+set_target_properties(saccade_tracking PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+target_link_libraries(saccade_tracking
+    CUDA::cudart
+    CUDA::cufft
+    ${OpenCV_LIBS}
+    saccade_perception
+)
+target_compile_definitions(saccade_tracking PRIVATE SACCADE_EXPORT_TRACKING)
+
+# 8. 定義 Media 模組 (Dynamic Library)
+add_library(saccade_media SHARED
+    src/media/gst_client.cpp
+)
+target_link_libraries(saccade_media
+    ${GSTREAMER_LIBRARIES}
+    CUDA::cudart
+    saccade_perception
+)
+target_compile_definitions(saccade_media PRIVATE SACCADE_EXPORT_MEDIA)
+
+# 9. Python Bindings
+execute_process(
+    COMMAND ${Python3_EXECUTABLE} -c "import pybind11; print(pybind11.get_cmake_dir())"
+    OUTPUT_VARIABLE pybind11_DIR
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+find_package(pybind11 REQUIRED PATHS ${pybind11_DIR})
+
 set(SACCADE_BUILD_RPATH
     "${PROJECT_BINARY_DIR}"
     "${TENSORRT_LIB_DIR}"
@@ -131,6 +150,7 @@ target_link_libraries(saccade_perception
     ${TENSORRT_NVINFER_LIBRARY}
     ${TENSORRT_NVINFER_PLUGIN_LIBRARY}
     CUDA::cudart
+    CUDA::cufft
     ${OpenCV_LIBS}
 )
 set_target_properties(
@@ -148,6 +168,7 @@ target_link_libraries(saccade_media_ext PRIVATE
     ${GSTREAMER_LIBRARIES}
     CUDA::cudart
 )
+
 
 pybind11_add_module(saccade_tracking_ext src/tracking/tracker_gpu_python.cpp)
 target_link_libraries(saccade_tracking_ext PRIVATE 

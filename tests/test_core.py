@@ -10,8 +10,8 @@ from saccade.media.mediamtx_client import MediaMTXClient  # noqa: E402
 from saccade.storage.redis_cache import RedisCache  # noqa: E402
 from saccade.storage.chroma_store import ChromaStore  # noqa: E402
 from saccade.perception.tracking import GPUByteTracker  # noqa: E402
+from saccade.perception.tracking.dynamic_reid import DynamicReIDController  # noqa: E402
 from saccade.perception.tracking.tracker_gpu import (  # noqa: E402
-    DynamicReIDController,
     ReIDTrackObservation,
     TrackAppearanceBank,
     need_reid_frame,
@@ -92,6 +92,7 @@ def test_need_reid_frame_uses_count_heuristic():
     assert need_reid_frame(set(range(8)), 8) is True
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="GPU required")
 def test_track_appearance_bank_caches_consistency_and_prunes():
     bank = TrackAppearanceBank(k=3)
     emb = torch.tensor([1.0, 0.0, 0.0], dtype=torch.float32)
@@ -111,6 +112,7 @@ def test_track_appearance_bank_caches_consistency_and_prunes():
     assert 7 not in bank.clean_ids()
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="GPU required")
 def test_track_appearance_bank_consistency_threshold_is_configurable():
     emb_a = torch.tensor([1.0, 0.0, 0.0], dtype=torch.float32)
     emb_b = torch.tensor([0.75, (1.0 - 0.75**2) ** 0.5, 0.0], dtype=torch.float32)

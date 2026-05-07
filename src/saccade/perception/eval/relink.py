@@ -20,6 +20,11 @@ class PythonSemanticRelinker:
         reciprocal_margin: float = 0.0,
         iou_weight: float = 0.0,
         mahalanobis_weight: float = 0.0,
+        w_sim_base: float = 1.0,
+        w_iou_base: float = 0.0,
+        w_maha_base: float = 0.0,
+        shift_ambiguity: float = 0.0,
+        shift_lost_age: float = 0.0,
         dynamic_margin_crowd: float = 0.0,
         dynamic_margin_age: float = 0.0,
         debug: bool = False,
@@ -28,7 +33,11 @@ class PythonSemanticRelinker:
         clean_min_aspect: float = 0.0,
         clean_max_aspect: float = 99.0,
         strict_sim_threshold: float = 0.0,
+        device: str | None = None,
     ) -> None:
+        if device is None:
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = torch.device(device)
         self.sim_threshold = sim_threshold
         self.ttl = ttl
         self.ema_beta = ema_beta
@@ -58,6 +67,14 @@ class PythonSemanticRelinker:
         # Default 0 → pure cosine (backward-compatible).
         self.iou_weight = max(0.0, float(iou_weight))
         self.mahalanobis_weight = max(0.0, float(mahalanobis_weight))
+
+        # A1 Unified Score base weights and shifts
+        self.w_sim_base = max(0.0, float(w_sim_base))
+        self.w_iou_base = max(0.0, float(w_iou_base))
+        self.w_maha_base = max(0.0, float(w_maha_base))
+        self.shift_ambiguity = float(shift_ambiguity)
+        self.shift_lost_age = float(shift_lost_age)
+
         # Dynamic margin: add context-sensitive increments to reciprocal_margin.
         #   crowd  → +margin per extra gate-passing competitor (caps at 8 competitors)
         #   age    → +margin proportional to lost_frames / ttl
@@ -96,9 +113,7 @@ class PythonSemanticRelinker:
         self.accept_mahas: List[float] = []
 
     def _normalize(self, embedding: torch.Tensor) -> torch.Tensor:
-        # Always operate on CPU: inject_reference stores CPU tensors, so all
-        # buffer/feature ops must stay on the same device.
-        return F.normalize(embedding.float().cpu(), dim=0)
+        return F.normalize(embedding.float().to(self.device), dim=0)
 
     def _spatial_metrics(
         self, box: torch.Tensor, old_box: torch.Tensor, w: int, h: int
@@ -210,7 +225,7 @@ class PythonSemanticRelinker:
     def inject_reference(self, canonical_id: int, embedding: torch.Tensor) -> None:
         """C: Replace stored reference with a high-quality external embedding (e.g. from TrackAppearanceBank).
         Called at track-death time so the relinker holds a clean farewell snapshot instead of a drifted EMA."""
-        emb = self._normalize(embedding.cpu())
+        emb = self._normalize(embedding)
         self.features[canonical_id] = emb.detach()
         if self.buffer_size > 1:
             buf = self.buffers.setdefault(canonical_id, [])
@@ -270,14 +285,12 @@ class PythonSemanticRelinker:
         if raw_id not in self.alias:
             self.stats["attempts"] += 1
             best_id = None
-            best_joint = (
-                current_sim_thresh  # joint score sentinel (must beat threshold)
-            )
+            best_joint = -1.0  # Sentinel for normalized joint score
             best_sim_raw = 0.0  # raw cosine of the current winner
-            second_best_joint = current_sim_thresh - 1.0  # runner-up joint score
+            second_best_joint = -2.0  # runner-up joint score
             best_iou, best_center, best_maha = 0.0, 0.0, 0.0
-            n_gate_passed = 0  # candidates that pass all hard gates (for crowd margin)
-            _use_joint = self.iou_weight > 0.0 or self.mahalanobis_weight > 0.0
+
+            candidates_to_score = []
             for cid in self.features:
                 age = frame_id - self.last_seen.get(cid, -(10**9))
                 if cid in assigned:
@@ -307,20 +320,67 @@ class PythonSemanticRelinker:
                     if consistency < self.min_consistency:
                         self.stats["reject_consistency"] += 1
                         continue
-                n_gate_passed += 1
+                candidates_to_score.append((cid, age, iou, center_norm, maha))
+
+            n_gate_passed = len(candidates_to_score)
+            _use_legacy_joint = self.iou_weight > 0.0 or self.mahalanobis_weight > 0.0
+            _use_unified_score = (
+                self.w_sim_base > 0.0 or self.w_iou_base > 0.0 or self.w_maha_base > 0.0
+            )
+
+            if not _use_unified_score and not _use_legacy_joint:
+                best_joint = current_sim_thresh
+                second_best_joint = current_sim_thresh - 1.0
+
+            # Batch similarity: one matmul + one D2H instead of N dot-products
+            if candidates_to_score and self.buffer_size == 1:
+                _cand_ids = [c[0] for c in candidates_to_score]
+                _bank = torch.stack([self.features[cid] for cid in _cand_ids]).to(
+                    self.device
+                )
+                _batch_sims = (_bank @ emb).tolist()  # single kernel + single D2H
+                _sim_iter = iter(_batch_sims)
+
+            for cid, age, iou, center_norm, maha in candidates_to_score:
                 if self.buffer_size > 1:
                     sim = self._buffer_sim(cid, emb)
                 else:
-                    sim = float(torch.dot(emb, self.features[cid]).item())
+                    sim = next(_sim_iter)
+
                 # Hard appearance gate: raw cosine must still pass sim_threshold.
                 if sim < current_sim_thresh:
                     self.stats["reject_similarity"] += 1
                     continue
-                # Joint score: appearance + optional spatial/motion evidence for ranking.
-                if _use_joint:
-                    maha_score = 0.0
-                    if self.mahalanobis_threshold > 0.0 and maha > 0.0:
-                        maha_score = max(0.0, 1.0 - maha / self.mahalanobis_threshold)
+
+                maha_score = 0.0
+                if self.mahalanobis_threshold > 0.0 and maha > 0.0:
+                    maha_score = max(0.0, 1.0 - maha / self.mahalanobis_threshold)
+
+                if _use_unified_score:
+                    w_sim = self.w_sim_base
+                    w_iou = self.w_iou_base
+                    w_maha = self.w_maha_base
+
+                    if n_gate_passed > 1:
+                        ambiguity_factor = min(1.0, (n_gate_passed - 1) / 8.0)
+                        w_sim += self.shift_ambiguity * ambiguity_factor
+                        w_iou -= self.shift_ambiguity * ambiguity_factor
+
+                    lost_factor = min(1.0, age / max(1, self.ttl))
+                    w_sim += self.shift_lost_age * lost_factor
+                    w_iou -= self.shift_lost_age * lost_factor
+
+                    w_sim = max(0.0, w_sim)
+                    w_iou = max(0.0, w_iou)
+                    w_maha = max(0.0, w_maha)
+                    sum_w = w_sim + w_iou + w_maha
+                    if sum_w > 0:
+                        w_sim /= sum_w
+                        w_iou /= sum_w
+                        w_maha /= sum_w
+
+                    joint = w_sim * sim + w_iou * iou + w_maha * maha_score
+                elif _use_legacy_joint:
                     joint = (
                         sim
                         + self.iou_weight * iou
@@ -328,6 +388,7 @@ class PythonSemanticRelinker:
                     )
                 else:
                     joint = sim
+
                 if joint > best_joint:
                     if best_id is not None:
                         second_best_joint = best_joint  # demote previous winner
@@ -339,6 +400,7 @@ class PythonSemanticRelinker:
                     if joint > second_best_joint:
                         second_best_joint = joint  # update runner-up
                     self.stats["reject_similarity"] += 1
+
             # Dynamic margin: base + crowd penalty + age penalty
             effective_margin = self.reciprocal_margin
             if best_id is not None:
@@ -378,6 +440,8 @@ class PythonSemanticRelinker:
                 ).detach()
             else:
                 old = self.features.get(canonical)
+                if old is not None:
+                    old = old.to(self.device)
                 updated = (
                     emb
                     if old is None

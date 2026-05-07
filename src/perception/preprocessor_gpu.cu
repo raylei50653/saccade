@@ -1,6 +1,9 @@
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
+#include <cufft.h>
 #include <stdint.h>
+#include <cmath>
+#include <vector>
 
 namespace saccade {
 
@@ -178,6 +181,258 @@ void launch_parts_fuse(
     int threads = 256;
     int blocks = (total + threads - 1) / threads;
     parts_fuse_kernel<<<blocks, threads, 0, stream>>>(parts_ptr, out_ptr, num_dets, feat_dim, w0, w1, w2);
+}
+
+// =============================================================================
+// LaSt-ViT kernels (arXiv:2602.22394)
+// Input: last_hidden_state [B, N, C] from SigLIP2 ViT encoder
+// =============================================================================
+
+// Apply per-element Gaussian low-pass weight to complex freq domain.
+// lhs_freq: [B*N, C/2+1] cufftComplex; freqs_w: [C/2+1] float Gaussian weights.
+__global__ void apply_gauss_kernel(
+    cufftComplex* lhs_freq, const float* freqs_w,
+    int BN, int half_C)
+{
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= BN * half_C) return;
+    int k = tid % half_C;
+    float w = freqs_w[k];
+    lhs_freq[tid].x *= w;
+    lhs_freq[tid].y *= w;
+}
+
+// Compute per-patch stability score: s = clamp(1 - ||x - x_filt||^2 / ||x||^2, 0, 1)
+// x: [B, N, C], x_filt: [B, N, C], scores_out: [B, N]
+__global__ void stability_score_kernel(
+    const float* __restrict__ x,
+    const float* __restrict__ x_filt,
+    float* __restrict__ scores_out,
+    int BN, int C)
+{
+    // One warp per patch row; use warp shuffle for reduction.
+    int patch = blockIdx.x;
+    if (patch >= BN) return;
+
+    const float* xr = x + patch * C;
+    const float* xf = x_filt + patch * C;
+
+    float diff_sq = 0.0f, norm_sq = 0.0f;
+    for (int j = threadIdx.x; j < C; j += blockDim.x) {
+        float d = xr[j] - xf[j];
+        diff_sq += d * d;
+        norm_sq += xr[j] * xr[j];
+    }
+    // Block-level reduction via shared memory
+    __shared__ float s_diff[256], s_norm[256];
+    s_diff[threadIdx.x] = diff_sq;
+    s_norm[threadIdx.x] = norm_sq;
+    __syncthreads();
+    for (int stride = blockDim.x / 2; stride > 0; stride >>= 1) {
+        if (threadIdx.x < stride) {
+            s_diff[threadIdx.x] += s_diff[threadIdx.x + stride];
+            s_norm[threadIdx.x] += s_norm[threadIdx.x + stride];
+        }
+        __syncthreads();
+    }
+    if (threadIdx.x == 0) {
+        float ratio = s_diff[0] / fmaxf(s_norm[0], 1e-8f);
+        scores_out[patch] = fmaxf(0.0f, fminf(1.0f, 1.0f - ratio));
+    }
+}
+
+// Compute per-batch Top-K threshold from scores_embed [B, N].
+// For each batch b: sort N scores descending, threshold = scores[topk_idx].
+// N=196 is small — sequential scan per batch is fine.
+// Find K-th largest score via O(N*K) sequential selection (N=196, K≤98 → ≤19K ops).
+// Uses a descending "ceiling" pass: each iteration finds the max below the previous max.
+__global__ void topk_threshold_kernel(
+    const float* __restrict__ scores, float* __restrict__ thresholds,
+    int B, int N, int K)
+{
+    int b = blockIdx.x * blockDim.x + threadIdx.x;
+    if (b >= B) return;
+    const float* s = scores + b * N;
+    float ceiling = 1.0f + 1e-7f;
+    float kth = 0.0f;
+    for (int k = 0; k < K; ++k) {
+        float cur_max = -1e9f;
+        for (int i = 0; i < N; ++i) {
+            if (s[i] < ceiling && s[i] > cur_max) {
+                cur_max = s[i];
+            }
+        }
+        kth = cur_max;
+        ceiling = cur_max;
+    }
+    thresholds[b] = kth;
+}
+
+// Aggregate Top-K patches into embedding: mean of patches where score >= threshold.
+// x: [B, N, C], scores: [B, N], thresholds: [B], out: [B, C]
+// Grid: (B, ceil(C/BLOCK_C)); block: (BLOCK_C,)
+__global__ void topk_aggregate_kernel(
+    const float* __restrict__ x,
+    const float* __restrict__ scores,
+    const float* __restrict__ thresholds,
+    float* __restrict__ out,
+    int B, int N, int C)
+{
+    int b = blockIdx.x;
+    int c = blockIdx.y * blockDim.x + threadIdx.x;
+    if (b >= B || c >= C) return;
+
+    float thr = thresholds[b];
+    float sum = 0.0f;
+    int cnt = 0;
+    for (int n = 0; n < N; ++n) {
+        if (scores[b * N + n] >= thr) {
+            sum += x[b * N * C + n * C + c];
+            ++cnt;
+        }
+    }
+    out[b * C + c] = (cnt > 0) ? (sum / cnt) : 0.0f;
+}
+
+// Mean of scores_gate per batch: stability_out[b] = mean(scores_gate[b, :])
+__global__ void mean_stability_kernel(
+    const float* __restrict__ scores_gate,
+    float* __restrict__ stability_out,
+    int B, int N)
+{
+    int b = blockIdx.x * blockDim.x + threadIdx.x;
+    if (b >= B) return;
+    const float* sg = scores_gate + b * N;
+    float s = 0.0f;
+    for (int n = 0; n < N; ++n) s += sg[n];
+    stability_out[b] = s / N;
+}
+
+// Build Gaussian frequency weights [C/2+1] on host for a given sigma and C.
+// Builds Gaussian low-pass weights for cuFFT R2C output (DC at index 0).
+// Includes 1/C normalization so that IRFFT(Gauss * FFT(x)) == PyTorch's
+// normalized irfft output (cuFFT C2R is unnormalized by default).
+static void build_gauss_weights(float* h_weights, int C, float sigma) {
+    int half_C = C / 2 + 1;
+    float inv_C = 1.0f / (float)C;
+    for (int k = 0; k < half_C; ++k) {
+        float f = (float)k / C;
+        h_weights[k] = expf(-f * f / (2.0f * sigma * sigma)) * inv_C;
+    }
+}
+
+void launch_last_vit_refinement(
+    const float* lhs,          // [B, N, C] on device
+    float* embedding_out,      // [B, C] on device (un-normalized; caller does L2)
+    float* stability_out,      // [B] on device
+    int B, int N, int C,
+    float sigma_embed,
+    float sigma_gate,
+    float top_k_ratio,
+    cudaStream_t stream)
+{
+    const int half_C = C / 2 + 1;
+    const int BN = B * N;
+    const int K = (int)fmaxf(1.0f, top_k_ratio * N);
+
+    // --- Allocate workspace ---
+    cufftComplex* d_freq = nullptr;
+    float* d_filt = nullptr;
+    float* d_scores_embed = nullptr;
+    float* d_scores_gate  = nullptr;
+    float* d_thresholds   = nullptr;
+    float* d_gauss        = nullptr;
+
+    cudaMalloc(&d_freq,         (size_t)BN * half_C * sizeof(cufftComplex));
+    cudaMalloc(&d_filt,         (size_t)BN * C * sizeof(float));
+    cudaMalloc(&d_scores_embed, (size_t)BN * sizeof(float));
+    cudaMalloc(&d_scores_gate,  (size_t)BN * sizeof(float));
+    cudaMalloc(&d_thresholds,   (size_t)B  * sizeof(float));
+    cudaMalloc(&d_gauss,        (size_t)half_C * sizeof(float));
+
+    // --- cuFFT plan: batch 1D RFFT over last dim C, for BN signals ---
+    cufftHandle plan;
+    cufftPlanMany(&plan, 1, &C,
+                  nullptr, 1, C,       // input
+                  nullptr, 1, half_C,  // output
+                  CUFFT_R2C, BN);
+    cufftSetStream(plan, stream);
+
+    cufftHandle iplan;
+    cufftPlanMany(&iplan, 1, &C,
+                  nullptr, 1, half_C,  // input
+                  nullptr, 1, C,       // output
+                  CUFFT_C2R, BN);
+    cufftSetStream(iplan, stream);
+
+    // --- Helper lambda: FFT → apply gauss → IFFT → store filtered ---
+    auto fft_filter = [&](float sigma) {
+        // Forward FFT: lhs [BN, C] → d_freq [BN, half_C]
+        cufftExecR2C(plan, const_cast<float*>(lhs), d_freq);
+
+        // Upload Gaussian weights for this sigma
+        std::vector<float> h_gauss_vec(half_C);
+        build_gauss_weights(h_gauss_vec.data(), C, sigma);
+        cudaMemcpyAsync(d_gauss, h_gauss_vec.data(), half_C * sizeof(float),
+                        cudaMemcpyHostToDevice, stream);
+
+        // Apply Gaussian weights
+        int total_freq = BN * half_C;
+        int threads = 256;
+        apply_gauss_kernel<<<(total_freq + threads - 1) / threads, threads, 0, stream>>>(
+            d_freq, d_gauss, BN, half_C);
+
+        // Inverse FFT: d_freq → d_filt [BN, C] (unnormalized by C, but ratio-based
+        // stability score and original-lhs aggregation are both scale-invariant)
+        cufftExecC2R(iplan, d_freq, d_filt);
+    };
+
+    // --- Pass 1: sigma_embed branch (for Top-K selection) ---
+    fft_filter(sigma_embed);
+    {
+        int threads = 256;
+        stability_score_kernel<<<BN, threads, 0, stream>>>(
+            lhs, d_filt, d_scores_embed, BN, C);
+    }
+
+    // --- Pass 2: sigma_gate branch (for stability output) ---
+    fft_filter(sigma_gate);
+    {
+        int threads = 256;
+        stability_score_kernel<<<BN, threads, 0, stream>>>(
+            lhs, d_filt, d_scores_gate, BN, C);
+    }
+
+    // --- Top-K threshold per batch ---
+    {
+        int threads = 64;
+        topk_threshold_kernel<<<(B + threads - 1) / threads, threads, 0, stream>>>(
+            d_scores_embed, d_thresholds, B, N, K);
+    }
+
+    // --- Aggregate Top-K patches → embedding ---
+    {
+        const int BLOCK_C = 128;
+        dim3 grid(B, (C + BLOCK_C - 1) / BLOCK_C);
+        topk_aggregate_kernel<<<grid, BLOCK_C, 0, stream>>>(
+            lhs, d_scores_embed, d_thresholds, embedding_out, B, N, C);
+    }
+
+    // --- Mean gate stability per batch ---
+    {
+        int threads = 64;
+        mean_stability_kernel<<<(B + threads - 1) / threads, threads, 0, stream>>>(
+            d_scores_gate, stability_out, B, N);
+    }
+
+    cufftDestroy(plan);
+    cufftDestroy(iplan);
+    cudaFree(d_freq);
+    cudaFree(d_filt);
+    cudaFree(d_scores_embed);
+    cudaFree(d_scores_gate);
+    cudaFree(d_thresholds);
+    cudaFree(d_gauss);
 }
 
 } // namespace saccade

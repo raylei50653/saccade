@@ -140,7 +140,7 @@ void PerceptionPipeline::process_detections_into(
     cudaMemsetAsync(d_filter_count_, 0, sizeof(int), stream);
     filter_detections_cuda(
         boxes_ptr, scores_ptr, classes_ptr, n_in,
-        d_filter_keep_indices_, d_filter_suspect_flags_, d_filter_count_,
+        d_filter_keep_indices_, d_filter_suspect_flags_, nullptr, d_filter_count_,
         cfg_.score_threshold,
         cfg_.person_only, cfg_.person_class,
         is_tiled, frame_w, frame_h,

@@ -74,6 +74,24 @@ void init_perception_ext(py::module &m) {
         }, py::arg("input_ptr"), py::arg("num_dets"), py::arg("output_ptr"), py::arg("stream_ptr"),
            "Extract 3-part crops, apply weighted fusion [0.5,0.3,0.2], and L2-normalize. "
            "Input: [3*num_dets, 3, H, W]. Output: [num_dets, feat_dim].")
+        .def("extract_with_stability", [](
+                FeatureExtractor &self,
+                uintptr_t input_ptr, int num_images,
+                uintptr_t embedding_ptr, uintptr_t stability_ptr,
+                uintptr_t stream_ptr,
+                float sigma_embed, float sigma_gate, float top_k_ratio) {
+            self.extract_with_stability(
+                reinterpret_cast<void*>(input_ptr), num_images,
+                reinterpret_cast<void*>(embedding_ptr),
+                reinterpret_cast<void*>(stability_ptr),
+                reinterpret_cast<cudaStream_t>(stream_ptr),
+                sigma_embed, sigma_gate, top_k_ratio);
+        }, py::arg("input_ptr"), py::arg("num_images"),
+           py::arg("embedding_ptr"), py::arg("stability_ptr"), py::arg("stream_ptr"),
+           py::arg("sigma_embed") = 0.015f, py::arg("sigma_gate") = 0.040f,
+           py::arg("top_k_ratio") = 0.5f,
+           "LaSt-ViT refined extraction (SigLIP2 only). "
+           "Returns L2-normalized embedding [N, feat_dim] and stability scores [N].")
         .def_property_readonly("feature_dim", &FeatureExtractor::get_feature_dim)
         .def_property_readonly("max_batch", &FeatureExtractor::get_max_batch)
         .def_property_readonly("input_hw", &FeatureExtractor::get_input_hw)

@@ -33,7 +33,7 @@ MOT17/MOT20 評估邏輯統一放在 `perception/eval/` package，`scripts/eval/
 | 模組 | 職責 |
 | :--- | :--- |
 | `runner.py` | `run_eval()` 主流程（序列迴圈、profiling、結果輸出） |
-| `detection.py` | `detect_adaptive_960_tiled`、tiled NMS/merge 工具函式 |
+| `detection.py` | `detect_adaptive_960_tiled`、`detect_native_960`、tiled NMS / cross-tile duplicate merge / tile diagnostics 工具函式 |
 | `pool.py` | `AdaptiveFramePool` GPU buffer 管理 |
 | `preprocess.py` | `parse_preprocess`、`geometry_mid_thresh_scale` |
 | `relink.py` | `SemanticRelinker`（embedding-based ID recovery） |
@@ -46,3 +46,22 @@ MOT17/MOT20 評估邏輯統一放在 `perception/eval/` package，`scripts/eval/
 - **Preprocessing (NPP)**: < 0.13 ms。
 - **YOLO Inference**: ~3.12 ms。
 - **Drop Frame Rate**: 在高負載下自動 Drop，優先保證「最新幀」實時性。
+
+## 7. 2026-05 Detection / Tiling 現況
+
+- `scripts/eval/mot17.py` 現在支援三條 detector evaluation 路徑：
+  - `--tiling 960p_2x2`
+  - `--tiling 960p_3x2`
+  - `--tiling native_960`
+- `native_960` 是單張 `960x960` letterbox / resize 推論；tiled 路徑則會先做跨 tile duplicate merge，再送進 tracker。
+- `960p_2x2` 的 cross-tile merge 已改成 seam-aware：
+  - seam-near pair 使用較寬鬆的 duplicate gate
+  - cluster representative 不再只保留單一 best box，而是偏向非 seam 候選的加權融合框
+- evaluation path 也新增 tile diagnostics，可輸出：
+  - `pre_merge_seam`
+  - `post_merge_seam`
+  - `merged_clusters`
+  - `compression`
+- 目前實驗結論不是「tiled 已追上 native」。
+  - 在 `MOT17-04-SDP / MOT17-10-SDP` 上，`native_960` 仍明顯優於 `960p_2x2 tiled`。
+  - seam-aware merge 能降低一部分 tile seam 汙染，但仍未追回 `native_960` 的 `FN / MOTA`。

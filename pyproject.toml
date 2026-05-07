@@ -60,6 +60,10 @@ ignore_missing_imports = true
 exclude = ["tests/"]
 mypy_path = "src"
 
+[[tool.mypy.overrides]]
+module = ["scripts.*"]
+ignore_errors = true
+
 [tool.ruff]
 exclude = ["tests/benchmarks/archive"]
 

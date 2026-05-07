@@ -1,7 +1,8 @@
 import asyncio
 import torch
 import time
-from typing import List, Tuple, Dict, Any, Optional, Callable
+from collections import OrderedDict
+from typing import List, Tuple, Any, Optional, Callable
 from saccade.perception.detector_trt import TRTYoloDetector
 
 try:
@@ -9,7 +10,11 @@ try:
 except ImportError:
     # Fallback or placeholder if ext not built
     GPUByteTracker = Any
-from saccade.resource.resource_manager import ResourceManager, DegradationLevel
+from saccade.resource.resource_manager import (
+    ResourceManager,
+    DegradationLevel,
+    VRAMLevelWriter,
+)
 
 # 定義 CallBack 類型以滿足 Mypy
 TrackResultCallback = Callable[
@@ -27,6 +32,7 @@ class AsyncDispatcher:
         on_track_result: Optional[TrackResultCallback] = None,
         extractor: Optional[Any] = None,
         heartbeat_interval: int = 10,
+        max_streams: int = 8,
     ):
         self.detector = detector
         self.resource_manager = resource_manager
@@ -35,27 +41,56 @@ class AsyncDispatcher:
         self.on_track_result = on_track_result
         self.extractor = extractor
         self.heartbeat_interval = heartbeat_interval
+        self.max_streams = max_streams
 
-        # 明確標註 Queue 類型
         self.queue: asyncio.Queue[Tuple[str, torch.Tensor, float]] = asyncio.Queue(
             maxsize=100
         )
-        self.trackers: Dict[str, GPUByteTracker] = {}
+        # OrderedDict preserves insertion/access order for O(1) LRU eviction
+        self.trackers: OrderedDict[str, Any] = OrderedDict()
         self._running = False
+        self._vram_writer: Optional[VRAMLevelWriter] = None
 
-    def get_tracker(self, stream_id: str) -> GPUByteTracker:
-        if stream_id not in self.trackers:
-            self.trackers[stream_id] = GPUByteTracker(
-                max_objs=100, embedding_dim=768 if self.extractor else 0
+    def _make_tracker(self) -> Any:
+        return GPUByteTracker(max_objs=100, embedding_dim=768 if self.extractor else 0)
+
+    def get_tracker(self, stream_id: str) -> Any:
+        if stream_id in self.trackers:
+            self.trackers.move_to_end(stream_id)
+            return self.trackers[stream_id]
+
+        if len(self.trackers) >= self.max_streams:
+            evicted_id, evicted = self.trackers.popitem(last=False)
+            del evicted  # triggers ~GPUByteTracker → cudaFree for all GPU buffers
+            print(
+                f"[Dispatcher] Evicted tracker '{evicted_id}' (LRU cap={self.max_streams})"
             )
-        return self.trackers[stream_id]
+
+        tracker = self._make_tracker()
+        self.trackers[stream_id] = tracker
+        return tracker
+
+    def deregister_stream(self, stream_id: str) -> None:
+        tracker = self.trackers.pop(stream_id, None)
+        if tracker is not None:
+            del tracker
 
     async def start(self) -> None:
         self._running = True
+        try:
+            self._vram_writer = VRAMLevelWriter()
+        except Exception as e:
+            print(f"[Dispatcher] VRAMLevelWriter init failed: {e}")
         asyncio.create_task(self._worker_loop())
 
     async def stop(self) -> None:
         self._running = False
+        while self.trackers:
+            _, tracker = self.trackers.popitem()
+            del tracker
+        if self._vram_writer is not None:
+            self._vram_writer.close()
+            self._vram_writer = None
 
     async def put_frame(
         self, stream_id: str, frame: torch.Tensor, timestamp: float
@@ -82,8 +117,10 @@ class AsyncDispatcher:
 
             batch_items = [first_item]
 
-            # 依資源等級動態調整 batch 上限
+            # 依資源等級動態調整 batch 上限，並廣播給 orchestrator
             level = self.resource_manager.decide_degradation_level()
+            if self._vram_writer is not None:
+                self._vram_writer.write(level)
             current_max = self.max_batch if level < DegradationLevel.FAST_PATH else 2
 
             while len(batch_items) < current_max:

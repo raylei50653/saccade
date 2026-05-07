@@ -2,7 +2,9 @@ import os
 import torch
 import tensorrt as trt
 from typing import Dict, Tuple, Optional, List
-from saccade.perception.tracking import GPUByteTracker
+
+print(f"DEBUG: Loading TRTYoloDetector from {__file__}")
+from saccade.perception.tracking import GPUByteTracker  # noqa: E402
 
 try:
     from saccade_perception_ext import TRTEngine as CppTRTEngine
@@ -191,16 +193,34 @@ class TRTYoloDetector:
 
             current = self.output_tensors.get(name)
             if current is None or tuple(current.shape) != shape:
+                # print(f"DEBUG: creating output tensor {name} with shape {shape}")
                 self.output_tensors[name] = torch.empty(
                     shape, device=self.device, dtype=torch.float32
                 )
 
         # 3. 綁定並執行所有輸入/輸出
         self.context.set_tensor_address(self.input_name, input_tensor.data_ptr())
+        bound_names = []
         for name, tensor in self.output_tensors.items():
             self.context.set_tensor_address(name, tensor.data_ptr())
+            bound_names.append(name)
+
+        # if batch_size == 4:
+        #    print(f"DEBUG: Enqueueing with bounds: {bound_names}")
 
         self.context.execute_async_v3(stream)
+
+        # Check max score for first output
+        first_out = self.output_tensors[self.output_name]
+        if first_out.size(0) > 0:
+            print(f"DEBUG: first_out[0, 0, :] = {first_out[0, 0, :10]}")
+            # print(f"DEBUG: batch 0 max score at col 4: {first_out[0, :, 4].max().item():.4f}")
+            # Try other columns
+            for col in [4, 5, 37, 36]:
+                if col < first_out.size(2):
+                    ms = first_out[0, :, col].max().item()
+                    print(f"DEBUG: col {col} max: {ms:.4f}")
+
         return self.output_tensors
 
     def detect_raw(self, input_tensor: torch.Tensor) -> torch.Tensor:
@@ -227,6 +247,10 @@ class TRTYoloDetector:
         batch_results = []
         for i in range(batch_size):
             results = output_tensor[i]
+            if results.size(0) > 0:
+                max_score = results[:, 4].max().item()
+                if i == 0:
+                    print(f"DEBUG: max score in batch 0: {max_score:.4f}")
             mask = results[:, 4] > conf_threshold
             valid_results = results[mask]
 

@@ -94,6 +94,7 @@ void test_filter_detections_cuda() {
     DeviceBuffer<int> d_classes(classes.size());
     DeviceBuffer<int> d_keep(num_dets);
     DeviceBuffer<bool> d_suspect(num_dets);
+    DeviceBuffer<float> d_quality(num_dets);
     DeviceBuffer<int> d_count(1);
 
     copy_to_device(d_boxes.ptr, boxes);
@@ -107,6 +108,7 @@ void test_filter_detections_cuda() {
         num_dets,
         d_keep.ptr,
         d_suspect.ptr,
+        d_quality.ptr,
         d_count.ptr,
         0.05f,
         true,
@@ -226,6 +228,8 @@ void test_merge_cross_tile_duplicates_cuda() {
     DeviceBuffer<float> d_box_sums(boxes.size());
     DeviceBuffer<float> d_score_sums(scores.size());
     DeviceBuffer<int> d_score_bits_max(num_dets);
+    DeviceBuffer<float> d_best_boxes(boxes.size());
+    DeviceBuffer<int> d_best_key_bits(num_dets);
     DeviceBuffer<int> d_cluster_counts(num_dets);
     DeviceBuffer<float> d_out_boxes(boxes.size());
     DeviceBuffer<float> d_out_scores(scores.size());
@@ -245,6 +249,8 @@ void test_merge_cross_tile_duplicates_cuda() {
         d_box_sums.ptr,
         d_score_sums.ptr,
         d_score_bits_max.ptr,
+        d_best_boxes.ptr,
+        d_best_key_bits.ptr,
         d_cluster_counts.ptr,
         d_out_boxes.ptr,
         d_out_scores.ptr,
@@ -253,6 +259,13 @@ void test_merge_cross_tile_duplicates_cuda() {
         0.45f,
         0.18f,
         0.6f,
+        0,
+        0,
+        0,
+        24.0f,
+        1.8f,
+        0.30f,
+        0.45f,
         nullptr
     );
     check_cuda(cudaDeviceSynchronize(), "merge_cross_tile_duplicates_cuda sync");
@@ -276,6 +289,44 @@ void test_merge_cross_tile_duplicates_cuda() {
     expect_near(out_scores[1], 0.80f, 1e-6f, "standalone score");
 }
 
+void test_tracker_quality_scaling() {
+    saccade::GPUByteTracker tracker(10, 128);
+    tracker.set_frame_size(1000, 1000);
+    // Aspect ratio 2.5 (bh=50, bw=20) -> bh/bw=2.5 -> quality should be high
+    // Center (500, 500) -> cx_norm=0.5 -> quality should be high
+    // Area ratio 0.01 (1000/1000000 = 0.001) -> small area -> area_q will be lower but Gaussian centered at 0.01
+    
+    // Test case 1: Perfect box
+    std::vector<float> boxes{490.0f, 475.0f, 510.0f, 525.0f}; // bw=20, bh=50, aspect=2.5, cx=500, cy=500, area=1000
+    std::vector<float> scores{1.0f};
+    std::vector<int> classes{0};
+    
+    DeviceBuffer<float> d_boxes(4);
+    DeviceBuffer<float> d_scores(1);
+    DeviceBuffer<int> d_classes(1);
+    
+    copy_to_device(d_boxes.ptr, boxes);
+    copy_to_device(d_scores.ptr, scores);
+    copy_to_device(d_classes.ptr, classes);
+    
+    // Enable scaling
+    tracker.set_quality_params(true, 1.0f, 0.0f, 0.0f); // only aspect for simplicity
+    tracker.update(d_boxes.ptr, d_scores.ptr, d_classes.ptr, 1, nullptr);
+    
+    std::vector<float> out_scores = copy_to_host(d_scores.ptr, 1);
+    // aspect_q = exp(-0.5 * ((2.5-2.5)/1.2)^2) = 1.0
+    expect_near(out_scores[0], 1.0f, 1e-3f, "quality scaled score (perfect aspect)");
+
+    // Test case 2: Bad aspect
+    copy_to_device(d_scores.ptr, {1.0f});
+    boxes = {450.0f, 495.0f, 550.0f, 505.0f}; // bw=100, bh=10, aspect=0.1
+    copy_to_device(d_boxes.ptr, boxes);
+    tracker.update(d_boxes.ptr, d_scores.ptr, d_classes.ptr, 1, nullptr);
+    out_scores = copy_to_host(d_scores.ptr, 1);
+    // aspect_q = exp(-0.5 * ((0.1-2.5)/1.2)^2) = exp(-0.5 * (-2)^2) = exp(-2) approx 0.135
+    expect_true(out_scores[0] < 0.2f, "quality scaled score (bad aspect)");
+}
+
 }  // namespace
 
 int main() {
@@ -288,6 +339,7 @@ int main() {
     test_filter_detections_cuda();
     test_nms_cuda();
     test_merge_cross_tile_duplicates_cuda();
+    test_tracker_quality_scaling();
 
     std::cout << "gpu postprocess tests passed" << std::endl;
     return 0;

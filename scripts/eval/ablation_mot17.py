@@ -43,644 +43,14 @@ if not hasattr(np, "asfarray"):
 import motmetrics as mm  # noqa: E402
 
 
-_METRICS = [
-    "idf1",
-    "recall",
-    "precision",
-    "mota",
-    "num_switches",
-    "num_false_positives",
-    "num_misses",
-]
-_DISPLAY = ["IDF1", "Rcll", "Prcn", "MOTA", "IDs", "FP", "FN"]
-_PCT = {"idf1", "recall", "precision", "mota"}
-_CATEGORY_ORDER = [
-    "detection",
-    "association",
-    "geometry",
-    "reid",
-    "semantic",
-    "trigger",
-    "lifecycle",
-    "combination",
-    "combination_fine",
-    "mot17_a",
-    "mot17_b",
-    "mot17_c",
-]
-
-_CATEGORY_EXPERIMENTS: dict[str, list[tuple[str, str, list[str]]]] = {
-    "detection": [
-        ("conf=0.03", "conf003", ["--conf-threshold", "0.03"]),
-        ("conf=0.10", "conf010", ["--conf-threshold", "0.10"]),
-        ("letterbox only", "letterbox_only", ["--preprocess", "letterbox"]),
-        ("letterbox+gamma", "letterbox_gamma", ["--preprocess", "letterbox,gamma"]),
-        ("contrast=1.0", "contrast100", ["--contrast", "1.0"]),
-        ("cross-tile merge", "cross_tile_merge", ["--cross-tile-merge"]),
-        ("nms=0.60", "nms060", ["--nms-iou-threshold", "0.60"]),
-    ],
-    "association": [
-        ("high=0.45", "high045", ["--high-thresh", "0.45"]),
-        ("high=0.55", "high055", ["--high-thresh", "0.55"]),
-        ("new-track=0.35", "newtrack035", ["--new-track-thresh", "0.35"]),
-        ("new-track=0.50", "newtrack050", ["--new-track-thresh", "0.50"]),
-        ("match=0.75", "match075", ["--match-thresh", "0.75"]),
-        ("match=0.85", "match085", ["--match-thresh", "0.85"]),
-        ("confirm=2", "confirm2", ["--confirm-streak", "2"]),
-        ("adaptive confirm", "adaptive_confirm", ["--adaptive-confirmation"]),
-        ("no gmc", "no_gmc", ["--no-gmc"]),
-    ],
-    "geometry": [
-        ("geometry mid-scale", "mid_scale", ["--geometry-mid-scale"]),
-        (
-            "geometry tight",
-            "geometry_tight",
-            ["--geometry-min-scale", "0.92", "--geometry-max-scale", "1.12"],
-        ),
-        (
-            "geometry loose",
-            "geometry_loose",
-            ["--geometry-min-scale", "0.80", "--geometry-max-scale", "1.35"],
-        ),
-        ("no id stability", "no_id_stability", ["--no-id-stability-filter"]),
-        (
-            "strict id stability",
-            "strict_id_stability",
-            [
-                "--id-stability-min-iou",
-                "0.10",
-                "--id-stability-max-center-shift",
-                "1.5",
-            ],
-        ),
-        ("no person prior", "no_person_prior", ["--no-person-geometry-prior"]),
-        ("min height 0.024", "min_height_024", ["--person-min-height-ratio", "0.024"]),
-    ],
-    "reid": [
-        ("reid off", "reid_off", ["--reid-mode", "off"]),
-        ("tracker mode", "tracker_mode", ["--reid-mode", "tracker"]),
-        ("hybrid mode", "hybrid_mode", ["--reid-mode", "hybrid"]),
-        ("transreid", "transreid", ["--reid-model", "transreid"]),
-        ("osnet", "osnet", ["--reid-model", "osnet"]),
-        ("cos=0.88", "cos088", ["--reid-cos-threshold", "0.88"]),
-        ("cos=0.92", "cos092", ["--reid-cos-threshold", "0.92"]),
-    ],
-    "semantic": [
-        ("thr=0.88", "thr088", ["--semantic-threshold", "0.88"]),
-        ("thr=0.92", "thr092", ["--semantic-threshold", "0.92"]),
-        ("ttl=90", "ttl090", ["--semantic-ttl", "90"]),
-        ("gate=0.18", "gate018", ["--semantic-spatial-gate", "0.18"]),
-        ("gate=0.22", "gate022", ["--semantic-spatial-gate", "0.22"]),
-        ("bank inject off", "no_bank_inject", ["--no-semantic-bank-inject"]),
-        ("margin=0.05", "margin005", ["--semantic-reciprocal-margin", "0.05"]),
-    ],
-    "trigger": [
-        (
-            "fixed interval",
-            "fixed_interval",
-            ["--no-need-reid", "--reid-interval", "16"],
-        ),
-        ("count jump", "count_jump", ["--reid-trigger-mode", "count_jump"]),
-        ("event persist", "event_persist", ["--reid-trigger-mode", "event_persist"]),
-        ("event memory", "event_memory", ["--reid-trigger-mode", "event_memory"]),
-        ("score ema", "score_ema", ["--reid-trigger-mode", "score_ema"]),
-        (
-            "score ema strict",
-            "score_ema_strict",
-            [
-                "--reid-trigger-mode",
-                "score_ema",
-                "--reid-score-threshold",
-                "2.5",
-                "--reid-cooldown-frames",
-                "8",
-            ],
-        ),
-        (
-            "score ema hysteresis",
-            "score_ema_hyst",
-            [
-                "--reid-trigger-mode",
-                "score_ema",
-                "--reid-score-threshold",
-                "2.0",
-                "--reid-score-threshold-low",
-                "1.5",
-            ],
-        ),
-    ],
-    "lifecycle": [
-        ("nsa kalman", "nsa_kalman", ["--nsa-kalman"]),
-        ("min len 2", "min_len_2", ["--min-tracklet-len", "2"]),
-        ("min score 0.10", "min_score_010", ["--min-tracklet-score", "0.10"]),
-        ("lifecycle merge", "lifecycle_merge", ["--lifecycle-merge"]),
-        (
-            "post merge ttl60",
-            "postmerge_t60",
-            ["--post-lifecycle-merge", "--post-lifecycle-ttl", "60"],
-        ),
-        (
-            "post merge app gate",
-            "postmerge_app",
-            [
-                "--post-lifecycle-merge",
-                "--post-lifecycle-appearance-gate",
-                "--post-lifecycle-appearance-threshold",
-                "0.90",
-            ],
-        ),
-        (
-            "qf2 + post merge",
-            "qf2_postmerge",
-            [
-                "--min-tracklet-len",
-                "2",
-                "--post-lifecycle-merge",
-                "--post-lifecycle-ttl",
-                "60",
-            ],
-        ),
-    ],
-    "combination": [
-        (
-            "cross-tile + match=0.75",
-            "cross_tile_match075",
-            ["--cross-tile-merge", "--match-thresh", "0.75"],
-        ),
-        (
-            "cross-tile + semantic thr=0.92",
-            "cross_tile_thr092",
-            ["--cross-tile-merge", "--semantic-threshold", "0.92"],
-        ),
-        (
-            "cross-tile + match=0.75 + semantic thr=0.92",
-            "cross_tile_match075_thr092",
-            [
-                "--cross-tile-merge",
-                "--match-thresh",
-                "0.75",
-                "--semantic-threshold",
-                "0.92",
-            ],
-        ),
-    ],
-    "combination_fine": [
-        (
-            "cross-tile + match=0.72 + semantic thr=0.91",
-            "cross_tile_match072_thr091",
-            [
-                "--cross-tile-merge",
-                "--match-thresh",
-                "0.72",
-                "--semantic-threshold",
-                "0.91",
-            ],
-        ),
-        (
-            "cross-tile + match=0.72 + semantic thr=0.92",
-            "cross_tile_match072_thr092",
-            [
-                "--cross-tile-merge",
-                "--match-thresh",
-                "0.72",
-                "--semantic-threshold",
-                "0.92",
-            ],
-        ),
-        (
-            "cross-tile + match=0.72 + semantic thr=0.93",
-            "cross_tile_match072_thr093",
-            [
-                "--cross-tile-merge",
-                "--match-thresh",
-                "0.72",
-                "--semantic-threshold",
-                "0.93",
-            ],
-        ),
-        (
-            "cross-tile + match=0.75 + semantic thr=0.91",
-            "cross_tile_match075_thr091",
-            [
-                "--cross-tile-merge",
-                "--match-thresh",
-                "0.75",
-                "--semantic-threshold",
-                "0.91",
-            ],
-        ),
-        (
-            "cross-tile + match=0.75 + semantic thr=0.92",
-            "cross_tile_match075_thr092",
-            [
-                "--cross-tile-merge",
-                "--match-thresh",
-                "0.75",
-                "--semantic-threshold",
-                "0.92",
-            ],
-        ),
-        (
-            "cross-tile + match=0.75 + semantic thr=0.93",
-            "cross_tile_match075_thr093",
-            [
-                "--cross-tile-merge",
-                "--match-thresh",
-                "0.75",
-                "--semantic-threshold",
-                "0.93",
-            ],
-        ),
-        (
-            "cross-tile + match=0.78 + semantic thr=0.91",
-            "cross_tile_match078_thr091",
-            [
-                "--cross-tile-merge",
-                "--match-thresh",
-                "0.78",
-                "--semantic-threshold",
-                "0.91",
-            ],
-        ),
-        (
-            "cross-tile + match=0.78 + semantic thr=0.92",
-            "cross_tile_match078_thr092",
-            [
-                "--cross-tile-merge",
-                "--match-thresh",
-                "0.78",
-                "--semantic-threshold",
-                "0.92",
-            ],
-        ),
-        (
-            "cross-tile + match=0.78 + semantic thr=0.93",
-            "cross_tile_match078_thr093",
-            [
-                "--cross-tile-merge",
-                "--match-thresh",
-                "0.78",
-                "--semantic-threshold",
-                "0.93",
-            ],
-        ),
-    ],
-    # ── MOT17-a: semantic relink ambiguity suppression ─────────────────────────
-    # Tuple format: (label, slug, extra_args[, path_override])
-    # path_override reuses an existing output dir (must already have metrics.json).
-    "mot17_a": [
-        (
-            "best [m=0.78 thr=0.91]",
-            "best_m78_t091",
-            [
-                "--cross-tile-merge",
-                "--match-thresh",
-                "0.78",
-                "--semantic-threshold",
-                "0.91",
-            ],
-            "combination_fine/cross_tile_match078_thr091",  # reuse cached result
-        ),
-        (
-            "thr=0.92 no fix",
-            "t092_no_fix",
-            [
-                "--cross-tile-merge",
-                "--match-thresh",
-                "0.78",
-                "--semantic-threshold",
-                "0.92",
-            ],
-            "combination_fine/cross_tile_match078_thr092",  # reuse cached result
-        ),
-        (
-            "crowd=0.05 thr=0.91",
-            "crowd05_t091",
-            [
-                "--cross-tile-merge",
-                "--match-thresh",
-                "0.78",
-                "--semantic-threshold",
-                "0.91",
-                "--semantic-dynamic-margin-crowd",
-                "0.05",
-            ],
-        ),
-        (
-            "crowd=0.03 thr=0.92",
-            "crowd03_t092",
-            [
-                "--cross-tile-merge",
-                "--match-thresh",
-                "0.78",
-                "--semantic-threshold",
-                "0.92",
-                "--semantic-dynamic-margin-crowd",
-                "0.03",
-            ],
-        ),
-        (
-            "crowd=0.05 thr=0.92",
-            "crowd05_t092",
-            [
-                "--cross-tile-merge",
-                "--match-thresh",
-                "0.78",
-                "--semantic-threshold",
-                "0.92",
-                "--semantic-dynamic-margin-crowd",
-                "0.05",
-            ],
-        ),
-        (
-            "crowd=0.08 thr=0.92",
-            "crowd08_t092",
-            [
-                "--cross-tile-merge",
-                "--match-thresh",
-                "0.78",
-                "--semantic-threshold",
-                "0.92",
-                "--semantic-dynamic-margin-crowd",
-                "0.08",
-            ],
-        ),
-        (
-            "age=0.05 thr=0.92",
-            "age05_t092",
-            [
-                "--cross-tile-merge",
-                "--match-thresh",
-                "0.78",
-                "--semantic-threshold",
-                "0.92",
-                "--semantic-dynamic-margin-age",
-                "0.05",
-            ],
-        ),
-        (
-            "iou=0.10 thr=0.92",
-            "iou10_t092",
-            [
-                "--cross-tile-merge",
-                "--match-thresh",
-                "0.78",
-                "--semantic-threshold",
-                "0.92",
-                "--semantic-iou-weight",
-                "0.10",
-            ],
-        ),
-        (
-            "crowd=0.05+age=0.03 thr=0.92",
-            "crowd05_age03_t092",
-            [
-                "--cross-tile-merge",
-                "--match-thresh",
-                "0.78",
-                "--semantic-threshold",
-                "0.92",
-                "--semantic-dynamic-margin-crowd",
-                "0.05",
-                "--semantic-dynamic-margin-age",
-                "0.03",
-            ],
-        ),
-        (
-            "crowd=0.05+iou=0.10 thr=0.92",
-            "crowd05_iou10_t092",
-            [
-                "--cross-tile-merge",
-                "--match-thresh",
-                "0.78",
-                "--semantic-threshold",
-                "0.92",
-                "--semantic-dynamic-margin-crowd",
-                "0.05",
-                "--semantic-iou-weight",
-                "0.10",
-            ],
-        ),
-        (
-            "py_relinker thr=0.92 no-iou",
-            "py_t092_noiou",
-            [
-                "--cross-tile-merge",
-                "--match-thresh",
-                "0.78",
-                "--semantic-threshold",
-                "0.92",
-                "--force-python-relinker",
-            ],
-        ),
-    ],
-    # ── MOT17-b: cross-tile score penalty ──────────────────────────────────────
-    "mot17_b": [
-        (
-            "best [m=0.78 thr=0.91]",
-            "best_m78_t091",
-            [
-                "--cross-tile-merge",
-                "--match-thresh",
-                "0.78",
-                "--semantic-threshold",
-                "0.91",
-            ],
-            "combination_fine/cross_tile_match078_thr091",
-        ),
-        (
-            "thr=0.92 no fix",
-            "t092_no_fix",
-            [
-                "--cross-tile-merge",
-                "--match-thresh",
-                "0.78",
-                "--semantic-threshold",
-                "0.92",
-            ],
-            "combination_fine/cross_tile_match078_thr092",
-        ),
-        (
-            "pen=0.95 thr=0.91",
-            "pen95_t091",
-            [
-                "--cross-tile-merge",
-                "--match-thresh",
-                "0.78",
-                "--semantic-threshold",
-                "0.91",
-                "--cross-tile-score-penalty",
-                "0.95",
-            ],
-        ),
-        (
-            "pen=0.90 thr=0.91",
-            "pen90_t091",
-            [
-                "--cross-tile-merge",
-                "--match-thresh",
-                "0.78",
-                "--semantic-threshold",
-                "0.91",
-                "--cross-tile-score-penalty",
-                "0.90",
-            ],
-        ),
-        (
-            "pen=0.85 thr=0.91",
-            "pen85_t091",
-            [
-                "--cross-tile-merge",
-                "--match-thresh",
-                "0.78",
-                "--semantic-threshold",
-                "0.91",
-                "--cross-tile-score-penalty",
-                "0.85",
-            ],
-        ),
-        (
-            "pen=0.95 thr=0.92",
-            "pen95_t092",
-            [
-                "--cross-tile-merge",
-                "--match-thresh",
-                "0.78",
-                "--semantic-threshold",
-                "0.92",
-                "--cross-tile-score-penalty",
-                "0.95",
-            ],
-        ),
-        (
-            "pen=0.90 thr=0.92",
-            "pen90_t092",
-            [
-                "--cross-tile-merge",
-                "--match-thresh",
-                "0.78",
-                "--semantic-threshold",
-                "0.92",
-                "--cross-tile-score-penalty",
-                "0.90",
-            ],
-        ),
-        (
-            "pen=0.85 thr=0.92",
-            "pen85_t092",
-            [
-                "--cross-tile-merge",
-                "--match-thresh",
-                "0.78",
-                "--semantic-threshold",
-                "0.92",
-                "--cross-tile-score-penalty",
-                "0.85",
-            ],
-        ),
-        (
-            "pen=0.90+crowd=0.05 thr=0.92",
-            "pen90_crowd05_t092",
-            [
-                "--cross-tile-merge",
-                "--match-thresh",
-                "0.78",
-                "--semantic-threshold",
-                "0.92",
-                "--cross-tile-score-penalty",
-                "0.90",
-                "--semantic-dynamic-margin-crowd",
-                "0.05",
-            ],
-        ),
-    ],
-    # ── MOT17-c: semantic buffer/rerank default-path verification ──────────────
-    "mot17_c": [
-        (
-            "best [m=0.78 thr=0.91]",
-            "best_m78_t091",
-            [
-                "--cross-tile-merge",
-                "--match-thresh",
-                "0.78",
-                "--semantic-threshold",
-                "0.91",
-            ],
-            "combination_fine/cross_tile_match078_thr091",
-        ),
-        (
-            "buf=2",
-            "buf2_t091",
-            [
-                "--cross-tile-merge",
-                "--match-thresh",
-                "0.78",
-                "--semantic-threshold",
-                "0.91",
-                "--semantic-buffer-size",
-                "2",
-            ],
-        ),
-        (
-            "buf=3",
-            "buf3_t091",
-            [
-                "--cross-tile-merge",
-                "--match-thresh",
-                "0.78",
-                "--semantic-threshold",
-                "0.91",
-                "--semantic-buffer-size",
-                "3",
-            ],
-        ),
-        (
-            "buf=2 rerank=max",
-            "buf2_max_t091",
-            [
-                "--cross-tile-merge",
-                "--match-thresh",
-                "0.78",
-                "--semantic-threshold",
-                "0.91",
-                "--semantic-buffer-size",
-                "2",
-                "--semantic-rerank-mode",
-                "max",
-            ],
-        ),
-        (
-            "buf=2 cons=0.65",
-            "buf2_cons065_t091",
-            [
-                "--cross-tile-merge",
-                "--match-thresh",
-                "0.78",
-                "--semantic-threshold",
-                "0.91",
-                "--semantic-buffer-size",
-                "2",
-                "--semantic-min-consistency",
-                "0.65",
-            ],
-        ),
-        (
-            "buf=2 top2_mean",
-            "buf2_top2_t091",
-            [
-                "--cross-tile-merge",
-                "--match-thresh",
-                "0.78",
-                "--semantic-threshold",
-                "0.91",
-                "--semantic-buffer-size",
-                "2",
-                "--semantic-rerank-mode",
-                "top2_mean",
-            ],
-        ),
-    ],
-}
+from .ablation_experiments import (  # noqa: E402
+    _METRICS,
+    _DISPLAY,
+    _PCT,
+    _CATEGORY_ORDER,
+    _A2_BEST,
+    _CATEGORY_EXPERIMENTS,
+)
 
 
 def is_mot_file(path: str) -> bool:
@@ -730,12 +100,15 @@ def evaluate_dir(results_dir: str, gt_root: str, detector: str | None) -> dict |
     )
     results = {m: summary.loc["OVERALL", m] for m in _METRICS}
 
+    # Cast to float/int for JSON serialization
+    results = {
+        m: (float(v) if m in _PCT or "num" not in m else int(v))
+        for m, v in results.items()
+    }
+
     # Save to cache
-    try:
-        with open(cache_path, "w") as f:
-            json.dump(results, f, indent=2)
-    except Exception:
-        pass
+    with open(cache_path, "w") as f:
+        json.dump(results, f, indent=2)
 
     return results
 
@@ -829,23 +202,295 @@ def print_table(title: str, results: list[tuple[str, dict | None]]) -> None:
     print(f"{'=' * 88}")
 
 
+def run_optuna_a1(args, base_args):
+    import optuna
+
+    def objective(trial):
+        w_sim = trial.suggest_float("w_sim_base", 0.0, 1.0)
+        w_iou = trial.suggest_float("w_iou_base", 0.0, 1.0)
+        w_maha = trial.suggest_float("w_maha_base", 0.0, 1.0)
+        shift_ambiguity = trial.suggest_float("shift_ambiguity", 0.0, 0.5)
+        shift_lost_age = trial.suggest_float("shift_lost_age", 0.0, 0.5)
+
+        extra_args = [
+            "--semantic-w-sim-base",
+            str(w_sim),
+            "--semantic-w-iou-base",
+            str(w_iou),
+            "--semantic-w-maha-base",
+            str(w_maha),
+            "--semantic-shift-ambiguity",
+            str(shift_ambiguity),
+            "--semantic-shift-lost-age",
+            str(shift_lost_age),
+        ]
+
+        out_dir = f"{args.output_root}/optuna/trial_{trial.number}"
+        run_eval(
+            f"Optuna A1 Trial {trial.number}",
+            out_dir,
+            extra_args,
+            base_args,
+            args.dry_run,
+        )
+
+        metrics = evaluate_dir(out_dir, args.gt_root, args.detector)
+        if not metrics:
+            raise optuna.TrialPruned()
+
+        # Maximize IDF1 primarily
+        return metrics["idf1"]
+
+    study = optuna.create_study(direction="maximize", study_name="A1_Unified_Score")
+    study.optimize(objective, n_trials=args.optuna_trials)
+
+    print(f"{'=' * 88}")
+    print("Optuna A1 Unified Score Sweep Complete")
+    try:
+        best_trial = study.best_trial
+        print(f"Best trial (IDF1: {best_trial.value:.4f}):")
+        for key, value in best_trial.params.items():
+            print(f"  {key}: {value:.4f}")
+    except ValueError:
+        print("No trials completed successfully.")
+    print(f"{'=' * 88}")
+
+
+def run_optuna_a2(args, base_args):
+    import optuna
+
+    # Use A1 best params as fixed base for A2 sweep
+    a1_base = [
+        "--semantic-w-sim-base",
+        "0.8012",
+        "--semantic-w-iou-base",
+        "0.3423",
+        "--semantic-w-maha-base",
+        "0.3117",
+        "--semantic-shift-ambiguity",
+        "0.3425",
+        "--semantic-shift-lost-age",
+        "0.1778",
+    ]
+
+    def objective(trial):
+        clean_score = trial.suggest_float("clean_score_threshold", 0.50, 0.90)
+        strict_sim = trial.suggest_float("strict_sim_threshold", 0.55, 0.95)
+        hq_bank_score = trial.suggest_float("high_quality_min_score", 0.60, 0.95)
+        margin_ratio = trial.suggest_float("clean_margin_ratio", 0.0, 0.10)
+        min_aspect = trial.suggest_float("clean_min_aspect", 0.8, 2.0)
+        max_aspect = trial.suggest_float("clean_max_aspect", 3.0, 7.0)
+
+        extra_args = a1_base + [
+            "--semantic-clean-score-threshold",
+            str(clean_score),
+            "--semantic-strict-sim-threshold",
+            str(strict_sim),
+            "--appearance-bank-high-quality-min-score",
+            str(hq_bank_score),
+            "--semantic-clean-margin-ratio",
+            str(margin_ratio),
+            "--semantic-clean-min-aspect",
+            str(min_aspect),
+            "--semantic-clean-max-aspect",
+            str(max_aspect),
+        ]
+
+        out_dir = f"{args.output_root}/optuna_a2/trial_{trial.number}"
+        run_eval(
+            f"Optuna A2 Trial {trial.number}",
+            out_dir,
+            extra_args,
+            base_args,
+            args.dry_run,
+        )
+
+        metrics = evaluate_dir(out_dir, args.gt_root, args.detector)
+        if not metrics:
+            raise optuna.TrialPruned()
+
+        # Maximize IDF1
+        return metrics["idf1"]
+
+    study = optuna.create_study(direction="maximize", study_name="A2_Reference_Quality")
+    study.optimize(objective, n_trials=args.optuna_trials)
+
+    print(f"{'=' * 88}")
+    print("Optuna A2 Reference Quality Sweep Complete")
+    try:
+        best_trial = study.best_trial
+        print(f"Best trial (IDF1: {best_trial.value:.4f}):")
+        for key, value in best_trial.params.items():
+            print(f"  {key}: {value:.4f}")
+    except ValueError:
+        print("No trials completed successfully.")
+    print(f"{'=' * 88}")
+
+
+def run_optuna_a3(args, base_args):
+    import optuna
+
+    # Use A2 best params as fixed base for A3 sweep
+    a2_base = _A2_BEST
+
+    def objective(trial):
+        budget = trial.suggest_categorical("reid_budget", [1, 2, 4, 8, 12, 16])
+        trigger_mode = trial.suggest_categorical(
+            "reid_trigger_mode", ["score_ema", "event_any"]
+        )
+
+        extra_args = a2_base + [
+            "--need-reid",
+            "--reid-trigger-mode",
+            trigger_mode,
+            "--reid-budget",
+            str(budget),
+        ]
+
+        out_dir = f"{args.output_root}/optuna_a3/trial_{trial.number}"
+        run_eval(
+            f"Optuna A3 Trial {trial.number}",
+            out_dir,
+            extra_args,
+            base_args,
+            args.dry_run,
+        )
+
+        metrics = evaluate_dir(out_dir, args.gt_root, args.detector)
+        if not metrics:
+            raise optuna.TrialPruned()
+
+        # Maximize IDF1
+        return metrics["idf1"]
+
+    study = optuna.create_study(direction="maximize", study_name="A3_Budgeted_ReID")
+    study.optimize(objective, n_trials=args.optuna_trials)
+
+    print(f"{'=' * 88}")
+    print("Optuna A3 Budgeted ReID Sweep Complete")
+    try:
+        best_trial = study.best_trial
+        print(f"Best trial (IDF1: {best_trial.value:.4f}):")
+        for key, value in best_trial.params.items():
+            print(f"  {key}: {value}")
+    except ValueError:
+        print("No trials completed successfully.")
+    print(f"{'=' * 88}")
+
+
+def run_optuna_a6(args, base_args):
+    import optuna
+
+    # Use A2/A3 best params as fixed base for A6 sweep
+    a3_base = _A2_BEST + ["--reid-budget", "0.2", "--reid-trigger-mode", "score_ema"]
+
+    def objective(trial):
+        w_det = trial.suggest_float("w_det", 0.3, 0.7)
+        w_iou = trial.suggest_float("w_iou", 0.1, 0.4)
+        w_aspect = trial.suggest_float("w_aspect", 0.05, 0.25)
+        w_center = trial.suggest_float("w_center", 0.05, 0.20)
+        w_area = trial.suggest_float("w_area", 0.05, 0.20)
+
+        # Normalize weights
+        sum_w = w_det + w_iou + w_aspect + w_center + w_area
+        w_det /= sum_w
+        w_iou /= sum_w
+        w_aspect /= sum_w
+        w_center /= sum_w
+        w_area /= sum_w
+
+        extra_args = a3_base + [
+            "--bank-quality-v2",
+            "--bank-quality-w-det",
+            f"{w_det:.4f}",
+            "--bank-quality-w-iou",
+            f"{w_iou:.4f}",
+            "--bank-quality-w-aspect",
+            f"{w_aspect:.4f}",
+            "--bank-quality-w-center",
+            f"{w_center:.4f}",
+            "--bank-quality-w-area",
+            f"{w_area:.4f}",
+        ]
+
+        out_dir = f"{args.output_root}/optuna_a6/trial_{trial.number}"
+        run_eval(
+            f"Optuna A6 Trial {trial.number}",
+            out_dir,
+            extra_args,
+            base_args,
+            args.dry_run,
+        )
+
+        metrics = evaluate_dir(out_dir, args.gt_root, args.detector)
+        if not metrics:
+            raise optuna.TrialPruned()
+
+        return metrics["idf1"]
+
+    study = optuna.create_study(direction="maximize", study_name="A6_Bank_Quality")
+    study.optimize(objective, n_trials=args.optuna_trials)
+
+    print(f"{'=' * 88}")
+    print("Optuna A6 Bank Quality Sweep Complete")
+    try:
+        best_trial = study.best_trial
+        print(f"Best trial (IDF1: {best_trial.value:.4f}):")
+        # Normalize best params for printing
+        p = best_trial.params
+        s = sum(p.values())
+        for key, value in p.items():
+            print(f"  --bank-quality-{key.replace('_', '-')}: {value / s:.4f}")
+    except ValueError:
+        print("No trials completed successfully.")
+    print(f"{'=' * 88}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--category", default="all", help="Comma-separated categories or 'all'."
     )
     parser.add_argument("--detector", choices=["SDP", "DPM", "FRCNN"], default="SDP")
+    parser.add_argument(
+        "--sequences", default="", help="Comma-separated sequence names."
+    )
     parser.add_argument("--max-frames", type=int, default=None)
     parser.add_argument("--gt-root", default="datasets/MOT17/train")
     parser.add_argument("--output-root", default="scripts/eval/output/ablation_mot17")
     parser.add_argument("--skip-run", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--optuna",
+        choices=["a1", "a2", "a3", "a6"],
+        default=None,
+        help="Run Bayesian optimization for a specific module.",
+    )
+    parser.add_argument(
+        "--optuna-trials", type=int, default=20, help="Number of trials for Optuna."
+    )
     args = parser.parse_args()
 
-    categories = parse_categories(args.category)
     base_args = ["--detector", args.detector]
+    if args.sequences:
+        base_args += ["--sequences", args.sequences]
     if args.max_frames:
         base_args += ["--max-frames", str(args.max_frames)]
+
+    if args.optuna == "a1":
+        run_optuna_a1(args, base_args)
+        return
+    if args.optuna == "a2":
+        run_optuna_a2(args, base_args)
+        return
+    if args.optuna == "a3":
+        run_optuna_a3(args, base_args)
+        return
+    if args.optuna == "a6":
+        run_optuna_a6(args, base_args)
+        return
+
+    categories = parse_categories(args.category)
 
     baseline_dir = f"{args.output_root}/baseline"
     if not args.skip_run:

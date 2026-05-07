@@ -86,6 +86,55 @@ RTX 5070 Ti Laptop 量測（full update() 含 D2H，非純 kernel）：
 | 500  | 2.317 ms | 3.254 ms | 4.151 ms | 1.8× |
 | 1000 | 4.623 ms | 5.625 ms | 6.405 ms | 1.4× |
 
+## Person-Only Top-K Detector Experiment (2026-05-06)
+
+Goal: test whether filtering to `person` before YOLO end-to-end top-k, and raising the detector cap from `300` to `1000`, improves crowded-scene tracking enough to justify a default switch.
+
+Artifacts:
+
+- Base engine: `models/yolo/yolo26s_batch4.engine`
+- Experimental engine: `models/yolo/yolo26s_person_topk1000_batch4.engine`
+- Export helper: `scripts/model/export_yolo_person.py`
+
+### Detector-only latency
+
+Batch-4 benchmark (`scripts/eval/bench_yolo_batch.py`):
+
+| Engine | Mean latency | FPS |
+| :--- | ---: | ---: |
+| `yolo26s_batch4.engine` | `12.63 ms` | `316.7` |
+| `yolo26s_person_topk1000_batch4.engine` | `13.71 ms` | `291.8` |
+
+The person-only top-k1000 engine is about `8.5%` slower on detector-only throughput.
+
+### Crowded-frame detector effect
+
+On a crowded MOT20-08 frame (`000601.jpg`, 640×640 resize, `conf=0.001`):
+
+| Engine | Total detections | Person detections |
+| :--- | ---: | ---: |
+| `yolo26s_batch4.engine` | `300` | `169` |
+| `yolo26s_person_topk1000_batch4.engine` | `499` | `499` |
+
+So the structural detector fix works: the old engine is capped by the global top-k, while the new engine preserves many additional low-score person boxes.
+
+### End-to-end tracking summary
+
+Short MOT17 crowded-sequence check (`MOT17-04-SDP,MOT17-10-SDP`, first 100 frames each, `--reid-mode off`):
+
+| Config | IDF1 | MOTA | FP | FN | IDs | FPS |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| New engine, default thresholds | `8.5%` | `3.7%` | `606` | `57,528` | `27` | `60.67` |
+| New engine, global low thresholds (`0.02/0.25`) | `8.9%` | `3.7%` | `795` | `57,307` | `33` | `43.18` |
+| New engine, crowd-aware Python switch (`trigger=25`) | `8.9%` | `3.7%` | `782` | `57,316` | `39` | `65.22` |
+
+### Decision
+
+- Keep the person-only top-k1000 engine as an experimental artifact.
+- Do not switch the default detector engine or default thresholds yet.
+- The detector-side fix is real, but most recovered boxes remain low-score under current score calibration.
+- Future work, if resumed, should move crowded-scene handling into tracker-internal logic instead of per-frame Python parameter switching.
+
 ## 📈 未來優化方向
 - 探索 8-bit 量化代價矩陣以減少暫存器壓力。
 - `compute_cost_matrix_kernel`：加入 shared memory tiling 降低 trk_embeds 非合并讀取。

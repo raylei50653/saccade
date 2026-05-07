@@ -71,6 +71,9 @@ Frame Source
 
 - detector output 之後不直接進 tracker
 - 會先經過 postprocess 與 geometry / tile merge 清理
+- evaluation path 目前可走：
+  - `native_960`：單張 `960x960` 推論
+  - `960p_2x2` / `960p_3x2`：tile-based detection + cross-tile duplicate merge
 
 ### 3.3 Detection Postprocess
 
@@ -91,7 +94,12 @@ Frame Source
 
 - 若 native `PerceptionPipeline` 可用，主流程優先走 `process_detections_into()`
 - 否則走 Python wrapper / fallback path
-- 目前 `cross-tile merge` 是 current default path 的穩定增益來源之一
+- tiled 路徑的 merge 現在是 seam-aware：
+  - 對 seam-near pair 放寬 duplicate 判定
+  - 對 seam boxes 降低座標融合權重
+  - 輸出框使用「偏向非 seam 候選」的融合框，而非單純硬選 best detection
+- `runner.py` 可額外開 `--tile-diagnostics`，追蹤 seam 汙染是否真的被 merge 掉
+- 目前 `cross-tile merge` 不再被視為「穩定增益來源」；它是 tiled path 的必要補救，但在高密場景仍是主要風險點之一
 
 ### 3.4 ReID Trigger Decision
 
@@ -258,6 +266,8 @@ Frame Source
 目前主要演算法空間集中在：
 
 - ReID trigger quality
+- tiled detector 的 seam duplicate handling
+- `native_960` 與 tiled 路徑的召回 / FP 統計差異
 - association / relink unified scoring
 - reference quality gate
 - GMC quality-aware handling

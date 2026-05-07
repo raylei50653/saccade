@@ -28,6 +28,36 @@ except ImportError:
     ModelType = Any
 
 
+def _last_vit_dual(
+    lhs: torch.Tensor,
+    sigma_embed: float,
+    sigma_gate: float,
+    top_k_ratio: float,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Python reference LaSt-ViT pipeline (V1 per-patch Top-K). [B,N,C] → ([B,C], [B,N])."""
+    x = lhs.float()
+    B, N, C = x.shape
+    K = max(1, int(N * top_k_ratio))
+
+    def _filt(sigma: float) -> torch.Tensor:
+        X = torch.fft.rfft(x, dim=-1)
+        freqs = torch.arange(C // 2 + 1, device=x.device, dtype=torch.float32) / C
+        w = torch.exp(-(freqs**2) / (2.0 * sigma**2))
+        return torch.fft.irfft(X * w, n=C, dim=-1)  # type: ignore[no-any-return]
+
+    def _scores(xf: torch.Tensor) -> torch.Tensor:
+        d = (x - xf).pow(2).sum(dim=-1)
+        n2 = x.pow(2).sum(dim=-1).clamp(min=1e-8)
+        return (1.0 - d / n2).clamp(0.0, 1.0)
+
+    s_embed = _scores(_filt(sigma_embed))
+    s_gate = _scores(_filt(sigma_gate))
+    idx = s_embed.topk(K, dim=-1).indices
+    feats = torch.gather(x, 1, idx.unsqueeze(-1).expand(-1, -1, C))
+    embed = F.normalize(feats.mean(dim=1), dim=-1)
+    return embed, s_gate
+
+
 class TRTFeatureExtractor:
     """
     Saccade TensorRT 特徵提取器
@@ -235,6 +265,69 @@ class TRTFeatureExtractor:
             [0.5, 0.3, 0.2], device=part_embeds.device, dtype=part_embeds.dtype
         ).view(3, 1, 1)
         return F.normalize((part_embeds * weights).sum(dim=0), dim=-1)
+
+    def extract_with_stability(
+        self,
+        input_tensor: torch.Tensor,
+        sigma_embed: float = 0.015,
+        sigma_gate: float = 0.040,
+        top_k_ratio: float = 0.5,
+        stream: Optional[torch.cuda.Stream] = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """LaSt-ViT refined extraction (SigLIP2 only).
+
+        Returns (embeddings [N, D] L2-normalized, stability_scores [N]) both on GPU.
+        Falls back to standard extract() with ones stability if model is not SigLIP2
+        or C++ extension is unavailable and last_hidden_state not in output_buffers.
+        """
+        n = input_tensor.size(0)
+        if n == 0:
+            empty_e = torch.empty((0, self.feature_dim), device=self.device)
+            empty_s = torch.empty((0,), device=self.device)
+            return empty_e, empty_s
+
+        if self._cpp is not None:
+            embed = torch.empty(
+                (n, self.feature_dim), device=self.device, dtype=torch.float32
+            )
+            stab = torch.empty((n,), device=self.device, dtype=torch.float32)
+            stream_ptr = (
+                stream.cuda_stream
+                if stream
+                else torch.cuda.current_stream().cuda_stream
+            )
+            # Chunked over max_batch (C++ handles internally)
+            self._cpp.extract_with_stability(
+                input_tensor.data_ptr(),
+                n,
+                embed.data_ptr(),
+                stab.data_ptr(),
+                stream_ptr,
+                sigma_embed,
+                sigma_gate,
+                top_k_ratio,
+            )
+            return embed, stab
+
+        # Python TRT path: use last_hidden_state output buffer
+        if "last_hidden_state" not in self.output_buffers:
+            embed = self.extract(input_tensor, stream)
+            return embed, torch.ones(n, device=self.device, dtype=torch.float32)
+
+        # Process in chunks matching max_batch
+        all_embeds, all_stab = [], []
+        for start in range(0, n, self.max_batch):
+            chunk = input_tensor[start : start + self.max_batch]
+            bs = chunk.size(0)
+            self._extract_chunk(chunk)
+            torch.cuda.synchronize()
+            lhs = self.output_buffers["last_hidden_state"][:bs].float().clone()
+            embed_chunk, scores_gate = _last_vit_dual(
+                lhs, sigma_embed, sigma_gate, top_k_ratio
+            )
+            all_embeds.append(embed_chunk)
+            all_stab.append(scores_gate.mean(dim=-1))  # [bs]
+        return torch.cat(all_embeds, dim=0), torch.cat(all_stab, dim=0)
 
     def extract_to_cpu(self, input_tensor: torch.Tensor) -> torch.Tensor:
         """Run inference and copy result to pinned CPU memory (DMA D2H)."""
