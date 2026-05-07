@@ -104,11 +104,17 @@ def test_profiling_sub_stages():
     print(f"  handoff:        {stats['handoff_ms']:.3f} ms")
     print(f"  total:          {stats['total_ms']:.3f} ms")
 
-    sub_sum = stats['fft_ms'] + stats['cross_power_ms'] + stats['ifft_ms'] + stats['peak_find_ms']
-    assert abs(sub_sum - stats['phase_corr_ms']) < 0.01, \
+    sub_sum = (
+        stats["fft_ms"]
+        + stats["cross_power_ms"]
+        + stats["ifft_ms"]
+        + stats["peak_find_ms"]
+    )
+    assert abs(sub_sum - stats["phase_corr_ms"]) < 0.01, (
         f"sub-stage sum {sub_sum:.4f} != phase_corr_ms {stats['phase_corr_ms']:.4f}"
+    )
 
-    for key in ('fft_ms', 'cross_power_ms', 'ifft_ms', 'peak_find_ms'):
+    for key in ("fft_ms", "cross_power_ms", "ifft_ms", "peak_find_ms"):
         assert stats[key] > 0.0, f"{key} should be > 0 when profiling enabled"
 
     print("  PASS")
@@ -127,18 +133,19 @@ def test_identity_on_first_frame():
     warp = d_warp.cpu().tolist()
     # First frame: prev is zeroed → PCR will be low → identity written
     # (tx/ty == 0 is sufficient here)
-    assert abs(warp[2]) < 1.0 and abs(warp[5]) < 1.0, \
+    assert abs(warp[2]) < 1.0 and abs(warp[5]) < 1.0, (
         f"First-frame warp should be near identity, got tx={warp[2]}, ty={warp[5]}"
+    )
     print(f"  warp={[f'{v:.3f}' for v in warp]}")
     print("  PASS")
 
 
 if __name__ == "__main__":
     tests = [
-        ("estimate basic",           test_estimate_basic),
+        ("estimate basic", test_estimate_basic),
         ("estimate_into vs estimate", test_estimate_into_matches_estimate),
-        ("profiling sub-stages",      test_profiling_sub_stages),
-        ("identity on first frame",   test_identity_on_first_frame),
+        ("profiling sub-stages", test_profiling_sub_stages),
+        ("identity on first frame", test_identity_on_first_frame),
     ]
     failed = []
     for name, fn in tests:
@@ -148,7 +155,7 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"  FAIL: {e}")
             failed.append(name)
-    print(f"\n{'='*50}")
+    print(f"\n{'=' * 50}")
     if failed:
         print(f"FAILED: {failed}")
         sys.exit(1)

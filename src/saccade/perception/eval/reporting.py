@@ -79,9 +79,7 @@ def print_overall_summary(
                     f"{stage_name}\tmean_ms={total_ms / overall_profiled_frames:.2f}\ttotal_ms={total_ms:.2f}"
                 )
         if any(overall_gmc_samples[name] for name in gmc_breakdown_names):
-            print(
-                "\n| GMC Breakdown | Mean (ms) | Std (ms) | P95 (ms) | P99 (ms) |"
-            )
+            print("\n| GMC Breakdown | Mean (ms) | Std (ms) | P95 (ms) | P99 (ms) |")
             print("| :--- | :--- | :--- | :--- | :--- |")
             for stage_name in gmc_breakdown_names:
                 samples = overall_gmc_samples[stage_name]

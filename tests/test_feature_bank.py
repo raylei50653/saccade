@@ -81,12 +81,16 @@ def test_update_batch_matches_sequential():
     for tid in ids:
         s_seq = bank_seq._slot_map[(tid, 0)]
         s_bat = bank_bat._slot_map[(tid, 0)]
-        assert torch.allclose(bank_seq.features[s_seq], bank_bat.features[s_bat], atol=1e-5)
+        assert torch.allclose(
+            bank_seq.features[s_seq], bank_bat.features[s_bat], atol=1e-5
+        )
 
 
 def test_update_batch_empty_no_error():
     bank = make_bank()
-    bank.update_batch(torch.zeros((0,), dtype=torch.long), torch.zeros((0, 4)), frame_id=0)
+    bank.update_batch(
+        torch.zeros((0,), dtype=torch.long), torch.zeros((0, 4)), frame_id=0
+    )
     assert bank._slot_map == {}
 
 
@@ -105,12 +109,18 @@ def test_find_matches_batch_finds_correct_id():
 def test_find_matches_batch_empty_query():
     bank = make_bank()
     bank.update(1, rand_emb(), frame_id=0)
-    assert bank.find_matches_batch(torch.zeros((0, 4)), lost_ids=[1], current_frame=1) == {}
+    assert (
+        bank.find_matches_batch(torch.zeros((0, 4)), lost_ids=[1], current_frame=1)
+        == {}
+    )
 
 
 def test_find_matches_batch_empty_lost_ids():
     bank = make_bank()
-    assert bank.find_matches_batch(rand_emb().unsqueeze(0), lost_ids=[], current_frame=1) == {}
+    assert (
+        bank.find_matches_batch(rand_emb().unsqueeze(0), lost_ids=[], current_frame=1)
+        == {}
+    )
 
 
 def test_find_matches_batch_below_threshold_no_match():

@@ -131,10 +131,17 @@ def test_narrow_person_bonus_zero_returns_same():
     boxes = torch.tensor([[0.0, 0.0, 10.0, 50.0], [0.0, 0.0, 20.0, 60.0]])
     classes = torch.tensor([0, 0])
     result = apply_narrow_person_score_bonus(
-        boxes, scores, classes,
-        frame_w=1000, frame_h=1000, person_class=0,
-        bonus=0.0, max_width_ratio=1.0, min_height_ratio=0.0,
-        min_aspect=0.0, max_aspect=100.0,
+        boxes,
+        scores,
+        classes,
+        frame_w=1000,
+        frame_h=1000,
+        person_class=0,
+        bonus=0.0,
+        max_width_ratio=1.0,
+        min_height_ratio=0.0,
+        min_aspect=0.0,
+        max_aspect=100.0,
     )
     assert result is scores
 
@@ -144,10 +151,17 @@ def test_narrow_person_bonus_clips_at_one():
     boxes = torch.tensor([[0.0, 0.0, 5.0, 50.0]])
     classes = torch.tensor([0])
     result = apply_narrow_person_score_bonus(
-        boxes, scores, classes,
-        frame_w=1000, frame_h=1000, person_class=0,
-        bonus=0.10, max_width_ratio=1.0, min_height_ratio=0.0,
-        min_aspect=0.0, max_aspect=100.0,
+        boxes,
+        scores,
+        classes,
+        frame_w=1000,
+        frame_h=1000,
+        person_class=0,
+        bonus=0.10,
+        max_width_ratio=1.0,
+        min_height_ratio=0.0,
+        min_aspect=0.0,
+        max_aspect=100.0,
     )
     assert float(result[0]) == pytest.approx(1.0)
 
@@ -157,10 +171,17 @@ def test_narrow_person_bonus_empty_inputs():
     boxes = torch.zeros((0, 4))
     classes = torch.zeros((0,), dtype=torch.long)
     result = apply_narrow_person_score_bonus(
-        boxes, scores, classes,
-        frame_w=1000, frame_h=1000, person_class=0,
-        bonus=0.1, max_width_ratio=1.0, min_height_ratio=0.0,
-        min_aspect=0.0, max_aspect=100.0,
+        boxes,
+        scores,
+        classes,
+        frame_w=1000,
+        frame_h=1000,
+        person_class=0,
+        bonus=0.1,
+        max_width_ratio=1.0,
+        min_height_ratio=0.0,
+        min_aspect=0.0,
+        max_aspect=100.0,
     )
     assert result is scores
 

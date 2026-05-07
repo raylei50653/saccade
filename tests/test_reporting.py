@@ -2,7 +2,10 @@ import csv
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from saccade.perception.eval.reporting import print_overall_summary, print_sequence_summary
+from saccade.perception.eval.reporting import (
+    print_overall_summary,
+    print_sequence_summary,
+)
 
 TOP_STAGES = ("detect", "reid_extract")
 BREAKDOWN_STAGES = ("post_filter",)
@@ -62,11 +65,13 @@ def base_overall_kwargs(output_root, **overrides):
 
 
 def test_writes_fps_summary_file(tmp_path):
-    print_overall_summary(**base_overall_kwargs(
-        tmp_path,
-        fps_summary_lines=["SEQ1\tfps=30"],
-        overall_latency_ms=[33.3, 33.3],
-    ))
+    print_overall_summary(
+        **base_overall_kwargs(
+            tmp_path,
+            fps_summary_lines=["SEQ1\tfps=30"],
+            overall_latency_ms=[33.3, 33.3],
+        )
+    )
     assert (tmp_path / "_fps_summary.txt").exists()
     content = (tmp_path / "_fps_summary.txt").read_text()
     assert "OVERALL" in content
@@ -85,19 +90,23 @@ def test_writes_global_id_map(tmp_path):
 
 
 def test_no_global_id_map_when_empty(tmp_path):
-    print_overall_summary(**base_overall_kwargs(tmp_path, global_id_mapper=make_mapper([])))
+    print_overall_summary(
+        **base_overall_kwargs(tmp_path, global_id_mapper=make_mapper([]))
+    )
     assert not (tmp_path / "_global_id_map.txt").exists()
 
 
 def test_writes_stage_profile_when_profiling(tmp_path):
     samples = {s: [10.0, 11.0, 12.0] for s in TOP_STAGES}
-    print_overall_summary(**base_overall_kwargs(
-        tmp_path,
-        cfg=make_cfg(profile_stages=True),
-        overall_profiled_frames=3,
-        overall_stage_samples=samples,
-        stage_summary_lines=[],
-    ))
+    print_overall_summary(
+        **base_overall_kwargs(
+            tmp_path,
+            cfg=make_cfg(profile_stages=True),
+            overall_profiled_frames=3,
+            overall_stage_samples=samples,
+            stage_summary_lines=[],
+        )
+    )
     assert (tmp_path / "_stage_profile.txt").exists()
     content = (tmp_path / "_stage_profile.txt").read_text()
     assert "detect" in content
@@ -105,14 +114,29 @@ def test_writes_stage_profile_when_profiling(tmp_path):
 
 def test_writes_debug_csv(tmp_path):
     rows = [
-        {"seq": "S1", "frame": 1, "stage": "raw", "det_idx": 0,
-         "x1": 0.0, "y1": 0.0, "x2": 10.0, "y2": 10.0,
-         "w": 10.0, "h": 10.0, "score": 0.9, "cls": 0},
+        {
+            "seq": "S1",
+            "frame": 1,
+            "stage": "raw",
+            "det_idx": 0,
+            "x1": 0.0,
+            "y1": 0.0,
+            "x2": 10.0,
+            "y2": 10.0,
+            "w": 10.0,
+            "h": 10.0,
+            "score": 0.9,
+            "cls": 0,
+        },
     ]
     csv_path = str(tmp_path / "dump.csv")
-    print_overall_summary(**base_overall_kwargs(
-        tmp_path, debug_dump_csv=csv_path, debug_stage_dump_rows=rows,
-    ))
+    print_overall_summary(
+        **base_overall_kwargs(
+            tmp_path,
+            debug_dump_csv=csv_path,
+            debug_stage_dump_rows=rows,
+        )
+    )
     assert (tmp_path / "dump.csv").exists()
     with open(csv_path) as f:
         reader = list(csv.DictReader(f))
@@ -122,9 +146,13 @@ def test_writes_debug_csv(tmp_path):
 
 def test_no_csv_when_rows_empty(tmp_path):
     csv_path = str(tmp_path / "dump.csv")
-    print_overall_summary(**base_overall_kwargs(
-        tmp_path, debug_dump_csv=csv_path, debug_stage_dump_rows=[],
-    ))
+    print_overall_summary(
+        **base_overall_kwargs(
+            tmp_path,
+            debug_dump_csv=csv_path,
+            debug_stage_dump_rows=[],
+        )
+    )
     assert not (tmp_path / "dump.csv").exists()
 
 
@@ -135,9 +163,14 @@ def base_seq_kwargs(**overrides):
     kw = dict(
         cfg=make_cfg(),
         seq="MOT17-02-SDP",
-        seq_tile_diag={"frames_tiled": 0, "pre_merge_seam_boxes": 0,
-                       "post_merge_seam_boxes": 0, "merged_clusters": 0,
-                       "merged_members": 0, "merged_outputs": 0},
+        seq_tile_diag={
+            "frames_tiled": 0,
+            "pre_merge_seam_boxes": 0,
+            "post_merge_seam_boxes": 0,
+            "merged_clusters": 0,
+            "merged_members": 0,
+            "merged_outputs": 0,
+        },
         profile_stages=False,
         seq_profiled_frames=0,
         top_level_stage_names=TOP_STAGES,
@@ -178,35 +211,41 @@ def base_seq_kwargs(**overrides):
 
 def test_seq_summary_appends_stage_lines_when_profiling():
     lines = []
-    print_sequence_summary(**base_seq_kwargs(
-        profile_stages=True,
-        seq_profiled_frames=5,
-        seq_stage_samples={"detect": [10.0] * 5, "reid_extract": [5.0] * 5},
-        stage_summary_lines=lines,
-    ))
+    print_sequence_summary(
+        **base_seq_kwargs(
+            profile_stages=True,
+            seq_profiled_frames=5,
+            seq_stage_samples={"detect": [10.0] * 5, "reid_extract": [5.0] * 5},
+            stage_summary_lines=lines,
+        )
+    )
     assert any("detect" in line for line in lines)
     assert any("MOT17-02-SDP" in line for line in lines)
 
 
 def test_seq_summary_no_profile_no_lines():
     lines = []
-    print_sequence_summary(**base_seq_kwargs(
-        profile_stages=False,
-        seq_profiled_frames=0,
-        stage_summary_lines=lines,
-    ))
+    print_sequence_summary(
+        **base_seq_kwargs(
+            profile_stages=False,
+            seq_profiled_frames=0,
+            stage_summary_lines=lines,
+        )
+    )
     assert lines == []
 
 
 def test_seq_summary_lazy_reid_appended():
     lines = []
-    print_sequence_summary(**base_seq_kwargs(
-        cfg=make_cfg(profile_stages=True, profile_lazy_reid_candidates=True),
-        profile_stages=True,
-        seq_profiled_frames=5,
-        seq_stage_samples={"detect": [10.0] * 5, "reid_extract": [5.0] * 5},
-        seq_lazy_reid_frames=5,
-        seq_lazy_reid_candidates=20,
-        stage_summary_lines=lines,
-    ))
+    print_sequence_summary(
+        **base_seq_kwargs(
+            cfg=make_cfg(profile_stages=True, profile_lazy_reid_candidates=True),
+            profile_stages=True,
+            seq_profiled_frames=5,
+            seq_stage_samples={"detect": [10.0] * 5, "reid_extract": [5.0] * 5},
+            seq_lazy_reid_frames=5,
+            seq_lazy_reid_candidates=20,
+            stage_summary_lines=lines,
+        )
+    )
     assert any("lazy_reid_candidates" in line for line in lines)

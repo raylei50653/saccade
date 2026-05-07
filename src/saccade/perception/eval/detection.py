@@ -704,10 +704,17 @@ def detect_single_patch_640(
         if cpp_letterbox_gpu is not None:
             stream = torch.cuda.current_stream().cuda_stream
             cpp_letterbox_gpu(
-                pool.frame_buffer.data_ptr(), w_orig, h_orig,
-                pool.canvas_640p.data_ptr(), 640,
-                x_off, y_off, w_new, h_new,
-                114.0 / 255.0, stream,
+                pool.frame_buffer.data_ptr(),
+                w_orig,
+                h_orig,
+                pool.canvas_640p.data_ptr(),
+                640,
+                x_off,
+                y_off,
+                w_new,
+                h_new,
+                114.0 / 255.0,
+                stream,
             )
         else:
             img_resized = torch.nn.functional.interpolate(
@@ -751,10 +758,17 @@ def detect_single_patch_960(
         if cpp_letterbox_gpu is not None:
             stream = torch.cuda.current_stream().cuda_stream
             cpp_letterbox_gpu(
-                pool.frame_buffer.data_ptr(), w_orig, h_orig,
-                pool.canvas_960p.data_ptr(), 960,
-                x_off, y_off, w_new, h_new,
-                114.0 / 255.0, stream,
+                pool.frame_buffer.data_ptr(),
+                w_orig,
+                h_orig,
+                pool.canvas_960p.data_ptr(),
+                960,
+                x_off,
+                y_off,
+                w_new,
+                h_new,
+                114.0 / 255.0,
+                stream,
             )
         else:
             img_resized = torch.nn.functional.interpolate(
