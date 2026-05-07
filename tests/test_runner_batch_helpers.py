@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
 import torch
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -10,14 +11,13 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "build"))
 
 from saccade.perception.eval.relink import IdentityResolver  # noqa: E402
-from saccade.perception.eval.runner import (  # noqa: E402
-    IdStabilityFilter,
-    OutputAppearanceBank,
-    PreparedTrackCandidate,
-    TrackletLifecycleMerger,
-    _finalize_frame_side_effects,
-    _inject_lost_track_references,
-    _resolve_frame_tracks,
+from saccade.perception.eval.lifecycle import IdStabilityFilter, TrackletLifecycleMerger  # noqa: E402
+from saccade.perception.eval.output_bank import OutputAppearanceBank  # noqa: E402
+from saccade.perception.eval.types import PreparedTrackCandidate  # noqa: E402
+from saccade.perception.eval.helpers import (  # noqa: E402
+    finalize_frame_side_effects as _finalize_frame_side_effects,
+    inject_lost_track_references as _inject_lost_track_references,
+    resolve_frame_tracks as _resolve_frame_tracks,
 )
 from saccade.perception.tracking.tracker_gpu import TrackAppearanceBank  # noqa: E402
 
@@ -185,6 +185,7 @@ class _StubPrimaryAppearanceBank:
         self.pruned.append(set(active_ids))
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="GPU required for TrackAppearanceBank")
 def test_inject_lost_track_references_batches_consistent_tracks() -> None:
     relinker = _StubRelinker()
     bank = TrackAppearanceBank(
