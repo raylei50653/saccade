@@ -22,12 +22,17 @@
    - 目前實作主路徑的資料流
    - 對應 `runner.py` 與 MOT17 evaluation path
 
-4. [api_spec.md](/docs/api_spec.md)
+4. [PIPELINE_REFERENCE.md](/docs/PIPELINE_REFERENCE.md)
+   - 每個 model / 模組目前的定位
+   - default vs experimental
+   - 已知實際提升與不建議方向
+
+5. [api_spec.md](/docs/api_spec.md)
    - Redis event / stream contract
    - Chroma metadata contract
    - FastAPI request / response shape
 
-5. [TODO.md](/docs/TODO.md)
+6. [TODO.md](/docs/TODO.md)
    - 當前待辦
    - 近期 ablation 結論
    - 下一輪 backlog
@@ -42,6 +47,9 @@
   - 目前穩定的系統形狀與責任邊界
 - [pipeline_flow.md](/docs/pipeline_flow.md)
   - 目前實作主路徑的資料流
+- [PIPELINE_REFERENCE.md](/docs/PIPELINE_REFERENCE.md)
+  - model / module reference
+  - best-known lift 與 default 決策
 - [api_spec.md](/docs/api_spec.md)
   - API / event / storage 合約
 
@@ -109,8 +117,9 @@
 1. [DEVELOPMENT.md](/DEVELOPMENT.md)
 2. [architecture.md](/docs/architecture.md)
 3. [pipeline_flow.md](/docs/pipeline_flow.md)
-4. [TODO.md](/docs/TODO.md)
-5. `src/saccade/perception/eval/runner.py`
+4. [PIPELINE_REFERENCE.md](/docs/PIPELINE_REFERENCE.md)
+5. [TODO.md](/docs/TODO.md)
+6. `src/saccade/perception/eval/runner.py`
 
 ### 如果你要改事件 / API / storage schema
 
