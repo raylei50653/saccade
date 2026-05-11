@@ -48,12 +48,12 @@ class Stats:
         a = np.array(self.samples)
         return {
             "mean": float(np.mean(a)),
-            "p50":  float(np.percentile(a, 50)),
-            "p95":  float(np.percentile(a, 95)),
-            "p99":  float(np.percentile(a, 99)),
-            "min":  float(np.min(a)),
-            "max":  float(np.max(a)),
-            "std":  float(np.std(a)),
+            "p50": float(np.percentile(a, 50)),
+            "p95": float(np.percentile(a, 95)),
+            "p99": float(np.percentile(a, 99)),
+            "min": float(np.min(a)),
+            "max": float(np.max(a)),
+            "std": float(np.std(a)),
         }
 
 
@@ -101,7 +101,7 @@ def bench_grab_tensor(
     stats = Stats("grab_tensor (ms)")
 
     start_evt = torch.cuda.Event(enable_timing=True)
-    end_evt   = torch.cuda.Event(enable_timing=True)
+    end_evt = torch.cuda.Event(enable_timing=True)
 
     grabbed = 0
     total = n_warmup + n_frames
@@ -146,8 +146,10 @@ def bench_grab_tensor_bulk(
     elapsed = time.perf_counter() - t0
 
     fps = grabbed / elapsed
-    print(f"  Bulk mode: {grabbed} frames in {elapsed:.2f}s → {fps:.1f} FPS "
-          f"({elapsed / grabbed * 1000:.2f} ms/frame)")
+    print(
+        f"  Bulk mode: {grabbed} frames in {elapsed:.2f}s → {fps:.1f} FPS "
+        f"({elapsed / grabbed * 1000:.2f} ms/frame)"
+    )
     return fps
 
 
@@ -184,10 +186,10 @@ def gpu_mem_mb(device_id: int) -> float:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="DALI/NVDEC latency benchmark")
-    parser.add_argument("--video",    default=DEFAULT_VIDEO)
-    parser.add_argument("--frames",   type=int, default=300, help="frames to measure")
-    parser.add_argument("--warmup",   type=int, default=30,  help="warmup frames")
-    parser.add_argument("--device",   type=int, default=0,   help="CUDA device id")
+    parser.add_argument("--video", default=DEFAULT_VIDEO)
+    parser.add_argument("--frames", type=int, default=300, help="frames to measure")
+    parser.add_argument("--warmup", type=int, default=30, help="warmup frames")
+    parser.add_argument("--device", type=int, default=0, help="CUDA device id")
     args = parser.parse_args()
 
     if not torch.cuda.is_available():
@@ -204,14 +206,18 @@ def main() -> None:
     # ── 1. Init time ──────────────────────────────────────────────────────────
     print("[1/4] Measuring pipeline init time (3 runs)...")
     init_times = [bench_init(args.video, args.device) for _ in range(3)]
-    print(f"  Init: mean={np.mean(init_times):.1f} ms  "
-          f"min={np.min(init_times):.1f} ms  max={np.max(init_times):.1f} ms\n")
+    print(
+        f"  Init: mean={np.mean(init_times):.1f} ms  "
+        f"min={np.min(init_times):.1f} ms  max={np.max(init_times):.1f} ms\n"
+    )
 
     # ── 2a. grab_tensor — per-frame latency ──────────────────────────────────
     print("[2/4] Measuring grab_tensor() per-frame latency (sync per call)...")
     mem_before = gpu_mem_mb(args.device)
 
-    client_gpu = DALIMediaClient(video_path=args.video, batch_size=1, device_id=args.device)
+    client_gpu = DALIMediaClient(
+        video_path=args.video, batch_size=1, device_id=args.device
+    )
     client_gpu.connect()
     gt_stats, _ = bench_grab_tensor(client_gpu, args.frames, args.warmup)
     mem_after = gpu_mem_mb(args.device)
@@ -220,7 +226,9 @@ def main() -> None:
 
     # ── 2b. grab_tensor — bulk throughput ────────────────────────────────────
     print("[3/4] Measuring grab_tensor() bulk throughput (no per-frame sync)...")
-    client_bulk = DALIMediaClient(video_path=args.video, batch_size=1, device_id=args.device)
+    client_bulk = DALIMediaClient(
+        video_path=args.video, batch_size=1, device_id=args.device
+    )
     client_bulk.connect()
     bulk_fps = bench_grab_tensor_bulk(client_bulk, args.frames, args.warmup)
     client_bulk.release()
@@ -228,24 +236,30 @@ def main() -> None:
 
     # ── 3. grab (CPU) ─────────────────────────────────────────────────────────
     print("[4/4] Measuring grab() latency (GPU decode + D2H copy + numpy)...")
-    client_cpu = DALIMediaClient(video_path=args.video, batch_size=1, device_id=args.device)
+    client_cpu = DALIMediaClient(
+        video_path=args.video, batch_size=1, device_id=args.device
+    )
     client_cpu.connect()
     cpu_stats = bench_grab_cpu(client_cpu, args.frames, args.warmup)
     client_cpu.release()
     print()
 
     # ── report ────────────────────────────────────────────────────────────────
-    gt_r  = gt_stats.report()
+    gt_r = gt_stats.report()
     cpu_r = cpu_stats.report()
-    d2h   = cpu_r["mean"] - gt_r["mean"]
+    d2h = cpu_r["mean"] - gt_r["mean"]
 
     print("=== Results (all times in ms) ===")
-    print_table([
-        ("grab_tensor [GPU, per-frame]", gt_r),
-        ("grab [GPU+D2H, per-frame]",    cpu_r),
-    ])
+    print_table(
+        [
+            ("grab_tensor [GPU, per-frame]", gt_r),
+            ("grab [GPU+D2H, per-frame]", cpu_r),
+        ]
+    )
 
-    print(f"\n  Bulk throughput (pipeline hot)  : {bulk_fps:.1f} FPS ({1000/bulk_fps:.2f} ms/frame)")
+    print(
+        f"\n  Bulk throughput (pipeline hot)  : {bulk_fps:.1f} FPS ({1000 / bulk_fps:.2f} ms/frame)"
+    )
     print(f"  Per-frame mean (sync overhead)  : {gt_r['mean']:.2f} ms/frame")
     print(f"  D2H copy overhead               : {d2h:+.3f} ms / frame")
     print(f"  P99 jitter above mean           : {gt_r['p99'] - gt_r['mean']:.3f} ms\n")

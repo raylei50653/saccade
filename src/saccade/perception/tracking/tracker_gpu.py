@@ -256,7 +256,10 @@ class TrackAppearanceBank:
         embs = torch.stack([sample.embedding for sample in bank])
         if self._bank_weighted_mean:
             w = torch.tensor(
-                [s.quality_score if s.quality_score > 0.0 else s.det_score for s in bank],
+                [
+                    s.quality_score if s.quality_score > 0.0 else s.det_score
+                    for s in bank
+                ],
                 dtype=torch.float32,
             )
             w = w / w.sum().clamp(min=1e-6)
@@ -281,7 +284,8 @@ class TrackAppearanceBank:
             self._clean_ids.discard(track_id)
 
         hq_samples = [
-            s for s in bank
+            s
+            for s in bank
             if s.det_score >= self.high_quality_min_score
             and (
                 s.aspect_ratio == 0.0
@@ -295,7 +299,10 @@ class TrackAppearanceBank:
                 n_hq = len(hq_embs)
                 if self._bank_weighted_mean:
                     w_hq = torch.tensor(
-                        [s.quality_score if s.quality_score > 0.0 else s.det_score for s in hq_samples],
+                        [
+                            s.quality_score if s.quality_score > 0.0 else s.det_score
+                            for s in hq_samples
+                        ],
                         dtype=torch.float32,
                     )
                     w_hq = w_hq / w_hq.sum().clamp(min=1e-6)
@@ -650,7 +657,9 @@ class GPUByteTracker:
         push = getattr(self.tracker, "push_keypoints", None)
         if push is None or track_ids.numel() == 0 or keypoints.numel() == 0:
             return
-        ids_contig = track_ids.to(device=keypoints.device, dtype=torch.int32).contiguous()
+        ids_contig = track_ids.to(
+            device=keypoints.device, dtype=torch.int32
+        ).contiguous()
         kpts_contig = keypoints.to(torch.float32).contiguous()
         stream = torch.cuda.current_stream().cuda_stream
         push(

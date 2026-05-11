@@ -148,13 +148,27 @@ def _apply_stage2_quality_gate(
     n = fused_boxes.shape[0]
     # Guard against stale mask (detection cap / fp-filter may not update it)
     if geometry_suspect_mask.shape[0] != n:
-        geometry_suspect_mask = torch.zeros(n, dtype=torch.bool, device=fused_boxes.device)
+        geometry_suspect_mask = torch.zeros(
+            n, dtype=torch.bool, device=fused_boxes.device
+        )
     stage2_mask = (fused_scores >= track_thresh) & (fused_scores < mid_thresh)
     if not stage2_mask.any():
-        return fused_boxes, fused_scores, fused_classes, geometry_suspect_mask, aligned_keypoints
+        return (
+            fused_boxes,
+            fused_scores,
+            fused_classes,
+            geometry_suspect_mask,
+            aligned_keypoints,
+        )
     remove_mask = stage2_mask & (quality < quality_min)
     if not remove_mask.any():
-        return fused_boxes, fused_scores, fused_classes, geometry_suspect_mask, aligned_keypoints
+        return (
+            fused_boxes,
+            fused_scores,
+            fused_classes,
+            geometry_suspect_mask,
+            aligned_keypoints,
+        )
     keep = ~remove_mask
     kp = aligned_keypoints[keep] if aligned_keypoints is not None else None
     return (
@@ -218,7 +232,9 @@ def _consecutive_birth_check(
     if min_motion_px > 0 and oldest_match_cx is not None and confirmed.any():
         curr_cx = (sub_boxes[:, 0] + sub_boxes[:, 2]) / 2
         curr_cy = (sub_boxes[:, 1] + sub_boxes[:, 3]) / 2
-        disp = ((curr_cx - oldest_match_cx) ** 2 + (curr_cy - oldest_match_cy) ** 2).sqrt()
+        disp = (
+            (curr_cx - oldest_match_cx) ** 2 + (curr_cy - oldest_match_cy) ** 2
+        ).sqrt()
         confirmed &= disp >= min_motion_px
     return confirmed
 
@@ -299,7 +315,9 @@ def _compute_fp_filter_ranking(
     # Size penalty: gentle penalty for large boxes (area > 4000)
     # Real persons in MOT17 are typically 2000-8000px
     # FP tend to be larger (>5000px) with moderate scores
-    _log_max = torch.tensor(torch.log(torch.tensor(12000.0 / 4000.0)), device=area.device)
+    _log_max = torch.tensor(
+        torch.log(torch.tensor(12000.0 / 4000.0)), device=area.device
+    )
     size_penalty = torch.where(
         area > 4000,
         1.0 - 0.3 * torch.clamp(torch.log(area / 4000.0) / _log_max, 0.0, 1.0),
@@ -385,7 +403,9 @@ def _compute_adaptive_cap(
         return base_cap
 
     avg_score = scores.mean().item()
-    median_area = float(torch.median((boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])))
+    median_area = float(
+        torch.median((boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1]))
+    )
 
     # Crowdedness signal: high avg score + large boxes + many detections
     crowd_factor = 0.0
@@ -405,6 +425,8 @@ def _compute_adaptive_cap(
         cap = base_cap
 
     return max(min_cap, min(max_cap, cap))
+
+
 from saccade.perception.detector_trt import TRTYoloDetector, TwostageDetector  # noqa: E402
 from saccade.perception.feature_extractor import TRTFeatureExtractor  # noqa: E402
 
@@ -538,6 +560,7 @@ def run_eval(
 
     if not isinstance(detector, (TRTYoloDetector, TwostageDetector)):
         import os as _os
+
         tiling = kwargs.get("tiling", "native_960")
         if tiling == "960p_2x2" and "_960_batch1" in engine:
             candidate = engine.replace("_960_batch1", "_batch4")
@@ -838,9 +861,7 @@ def run_eval(
                 ),
             )
         relinker = (
-            _relinker_cls(**_relinker_common_kwargs)
-            if cfg.use_semantic_mode
-            else None
+            _relinker_cls(**_relinker_common_kwargs) if cfg.use_semantic_mode else None
         )
 
         _bio_acc = None
@@ -850,6 +871,7 @@ def run_eval(
             and hasattr(relinker, "set_biometric_tracker")
         ):
             from saccade.perception.biometric import BiometricAccumulator
+
             _bio_acc = BiometricAccumulator(window=15)
             relinker.set_biometric_tracker(_bio_acc)
 
@@ -983,29 +1005,37 @@ def run_eval(
         _consec_birth_window: deque[torch.Tensor] = deque(
             maxlen=max(1, cfg.birth_consecutive_frames - 1)
         )
-        _multi_birth_manager = MultiSignalBirthManager(
-            new_track_thresh=cfg.new_track_thresh,
-            min_score=cfg.multi_birth_min_score,
-            min_frames=cfg.multi_birth_min_frames,
-            target_motion_px=cfg.multi_birth_target_motion,
-            evidence_threshold=cfg.multi_birth_evidence_threshold,
-            iou_match=cfg.multi_birth_iou_match,
-            ttl_frames=cfg.multi_birth_ttl_frames,
-            w_score=cfg.multi_birth_w_score,
-            w_motion=cfg.multi_birth_w_motion,
-            w_quality=cfg.multi_birth_w_quality,
-            w_streak=cfg.multi_birth_w_streak,
-            min_aspect=cfg.multi_birth_min_aspect,
-            max_area_px=cfg.multi_birth_max_area_px,
-        ) if cfg.multi_birth_enabled else None
+        _multi_birth_manager = (
+            MultiSignalBirthManager(
+                new_track_thresh=cfg.new_track_thresh,
+                min_score=cfg.multi_birth_min_score,
+                min_frames=cfg.multi_birth_min_frames,
+                target_motion_px=cfg.multi_birth_target_motion,
+                evidence_threshold=cfg.multi_birth_evidence_threshold,
+                iou_match=cfg.multi_birth_iou_match,
+                ttl_frames=cfg.multi_birth_ttl_frames,
+                w_score=cfg.multi_birth_w_score,
+                w_motion=cfg.multi_birth_w_motion,
+                w_quality=cfg.multi_birth_w_quality,
+                w_streak=cfg.multi_birth_w_streak,
+                min_aspect=cfg.multi_birth_min_aspect,
+                max_area_px=cfg.multi_birth_max_area_px,
+            )
+            if cfg.multi_birth_enabled
+            else None
+        )
         # P5-4: scene-adaptive policy — classifies scene from first N frames and
         # applies seq-local narrow_person_score_bonus for crowded_narrow scenes.
-        _scene_policy = SceneAdaptivePolicy(
-            window=cfg.scene_adapt_window,
-            crowd_box_thresh=cfg.scene_adapt_crowd_thresh,
-            narrow_aspect_thresh=cfg.scene_adapt_narrow_aspect_thresh,
-            narrow_width_thresh=cfg.scene_adapt_narrow_width_thresh,
-        ) if cfg.scene_adapt_enabled else None
+        _scene_policy = (
+            SceneAdaptivePolicy(
+                window=cfg.scene_adapt_window,
+                crowd_box_thresh=cfg.scene_adapt_crowd_thresh,
+                narrow_aspect_thresh=cfg.scene_adapt_narrow_aspect_thresh,
+                narrow_width_thresh=cfg.scene_adapt_narrow_width_thresh,
+            )
+            if cfg.scene_adapt_enabled
+            else None
+        )
         # Start with 0 bonus; if scene_adapt disabled, use the configured value directly.
         seq_narrow_bonus: float = (
             0.0 if cfg.scene_adapt_enabled else cfg.narrow_person_score_bonus
@@ -1170,7 +1200,10 @@ def run_eval(
                 sync_cuda=True,
             )
 
-            (fused_boxes, fused_scores, fused_classes, is_tiled, source_keypoints), _ = time_stage(
+            (
+                (fused_boxes, fused_scores, fused_classes, is_tiled, source_keypoints),
+                _,
+            ) = time_stage(
                 seq_stage_totals,
                 "detect",
                 lambda: detect_fn(
@@ -1205,7 +1238,8 @@ def run_eval(
                         f"  [scene_adapt] {seq} @ frame {frame_id}: {st}"
                         + (
                             f" → narrow_bonus={seq_narrow_bonus:.2f}"
-                            if cfg.scene_adapt_enabled and cfg.narrow_person_score_bonus > 0
+                            if cfg.scene_adapt_enabled
+                            and cfg.narrow_person_score_bonus > 0
                             else ""
                         )
                     )
@@ -1611,7 +1645,8 @@ def run_eval(
                 max_det = cfg.per_frame_detection_cap
                 if cfg.adaptive_detection_cap:
                     max_det = _compute_adaptive_cap(
-                        fused_boxes, fused_scores,
+                        fused_boxes,
+                        fused_scores,
                         base_cap=cfg.adaptive_cap_base,
                         max_cap=cfg.adaptive_cap_max,
                         min_cap=cfg.adaptive_cap_min,
@@ -1635,17 +1670,25 @@ def run_eval(
             # Stage 2 association step, preventing bad lost-track assignments → IDs.
             if cfg.stage2_quality_gate and fused_scores.numel() > 0:
                 _s2_quality = _compute_detection_quality_batch(
-                    fused_boxes, w_orig, h_orig,
+                    fused_boxes,
+                    w_orig,
+                    h_orig,
                     w_aspect=cfg.detection_quality_w_aspect,
                     w_center=cfg.detection_quality_w_center,
                     w_area=cfg.detection_quality_w_area,
                 )
                 (
-                    fused_boxes, fused_scores, fused_classes,
-                    geometry_suspect_mask, aligned_keypoints,
+                    fused_boxes,
+                    fused_scores,
+                    fused_classes,
+                    geometry_suspect_mask,
+                    aligned_keypoints,
                 ) = _apply_stage2_quality_gate(
-                    fused_boxes, fused_scores, fused_classes,
-                    geometry_suspect_mask, aligned_keypoints,
+                    fused_boxes,
+                    fused_scores,
+                    fused_classes,
+                    geometry_suspect_mask,
+                    aligned_keypoints,
                     track_thresh=frame_track_thresh,
                     mid_thresh=frame_mid_thresh,
                     quality_min=cfg.stage2_quality_min,
@@ -1664,7 +1707,8 @@ def run_eval(
                     if below_birth.any():
                         sub_boxes = fused_boxes[below_birth]
                         confirmed = _consecutive_birth_check(
-                            sub_boxes, list(_consec_birth_window),
+                            sub_boxes,
+                            list(_consec_birth_window),
                             cfg.birth_consecutive_iou,
                             min_motion_px=cfg.birth_consecutive_min_motion,
                         )
@@ -1672,12 +1716,16 @@ def run_eval(
                             boost_idx = below_birth.nonzero(as_tuple=True)[0][confirmed]
                             # Only boost detections that are close enough to new_track_thresh
                             # (above min_score) — prevents very-low-score noise from crossing
-                            eligible = fused_scores[boost_idx] >= cfg.birth_consecutive_min_score
+                            eligible = (
+                                fused_scores[boost_idx]
+                                >= cfg.birth_consecutive_min_score
+                            )
                             boost_idx = boost_idx[eligible]
                             if boost_idx.numel() > 0:
                                 fused_scores = fused_scores.clone()
                                 fused_scores[boost_idx] = torch.clamp(
-                                    fused_scores[boost_idx] + cfg.birth_consecutive_boost,
+                                    fused_scores[boost_idx]
+                                    + cfg.birth_consecutive_boost,
                                     max=cfg.high_thresh,
                                 )
             # Only keep sub-threshold boxes in window: prevents boosting detections
@@ -1734,7 +1782,9 @@ def run_eval(
                         fused_scores = fused_scores.clone()
                         fused_scores[boost_idx] = frame_new_track_thresh + 0.01
                 else:
-                    _multi_birth_manager.update(frame_id, fused_boxes[:0], fused_scores[:0])
+                    _multi_birth_manager.update(
+                        frame_id, fused_boxes[:0], fused_scores[:0]
+                    )
 
             frame_tracker_thresholds = (
                 frame_track_thresh,
@@ -2214,7 +2264,9 @@ def run_eval(
                     default_class_id=cfg.person_class
                     if cfg.track_person_only
                     else None,
-                    include_det_idx=(embeddings is not None or aligned_keypoints is not None),
+                    include_det_idx=(
+                        embeddings is not None or aligned_keypoints is not None
+                    ),
                 ),
                 sync_cuda=True,
             )

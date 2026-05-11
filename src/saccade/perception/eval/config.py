@@ -409,22 +409,26 @@ def parse_eval_config(
         else float(kwargs.get("new_track_thresh")),  # type: ignore[arg-type]
         birth_quality_gate=bool(kwargs.get("birth_quality_gate", False)),
         birth_min_quality=float(kwargs.get("birth_min_quality", 0.0)),
-        birth_quality_score_bias=float(
-            kwargs.get("birth_quality_score_bias", 0.15)
-        ),
+        birth_quality_score_bias=float(kwargs.get("birth_quality_score_bias", 0.15)),
         stage2_quality_gate=bool(kwargs.get("stage2_quality_gate", False)),
         stage2_quality_min=float(kwargs.get("stage2_quality_min", 0.40)),
         birth_consecutive_gate=bool(kwargs.get("birth_consecutive_gate", False)),
         birth_consecutive_frames=max(2, int(kwargs.get("birth_consecutive_frames", 2))),
         birth_consecutive_iou=float(kwargs.get("birth_consecutive_iou", 0.40)),
         birth_consecutive_boost=float(kwargs.get("birth_consecutive_boost", 0.05)),
-        birth_consecutive_min_score=float(kwargs.get("birth_consecutive_min_score", 0.20)),
-        birth_consecutive_min_motion=float(kwargs.get("birth_consecutive_min_motion", 0.0)),
+        birth_consecutive_min_score=float(
+            kwargs.get("birth_consecutive_min_score", 0.20)
+        ),
+        birth_consecutive_min_motion=float(
+            kwargs.get("birth_consecutive_min_motion", 0.0)
+        ),
         multi_birth_enabled=bool(kwargs.get("multi_birth_enabled", False)),
         multi_birth_min_score=float(kwargs.get("multi_birth_min_score", 0.12)),
         multi_birth_min_frames=max(2, int(kwargs.get("multi_birth_min_frames", 3))),
         multi_birth_target_motion=float(kwargs.get("multi_birth_target_motion", 12.0)),
-        multi_birth_evidence_threshold=float(kwargs.get("multi_birth_evidence_threshold", 0.60)),
+        multi_birth_evidence_threshold=float(
+            kwargs.get("multi_birth_evidence_threshold", 0.60)
+        ),
         multi_birth_iou_match=float(kwargs.get("multi_birth_iou_match", 0.30)),
         multi_birth_ttl_frames=max(1, int(kwargs.get("multi_birth_ttl_frames", 5))),
         multi_birth_w_score=float(kwargs.get("multi_birth_w_score", 0.35)),
@@ -555,14 +559,18 @@ def parse_eval_config(
         min_tracklet_score=float(kwargs.get("min_tracklet_score", 0.0)),
         interpolate_tracklets=bool(kwargs.get("interpolate_tracklets", True)),
         interpolate_max_gap=max(0, int(kwargs.get("interpolate_max_gap", 20))),
-        interpolate_min_track_len=max(1, int(kwargs.get("interpolate_min_track_len", 5))),
+        interpolate_min_track_len=max(
+            1, int(kwargs.get("interpolate_min_track_len", 5))
+        ),
         nsa_kalman=bool(kwargs.get("nsa_kalman", False)),
         kalman_r_scale=float(kwargs.get("kalman_r_scale", 1.0)),
         vel_dir_weight=float(kwargs.get("vel_dir_weight", 0.0)),
         fuse_score_weight=float(kwargs.get("fuse_score_weight", 0.0)),
         stage2_match_thresh=float(kwargs.get("stage2_match_thresh", 0.5)),
         birth_low_score_thresh=float(kwargs.get("birth_low_score_thresh", 0.0)),
-        temporal_consistency_min_frames=int(kwargs.get("temporal_consistency_min_frames", 3)),
+        temporal_consistency_min_frames=int(
+            kwargs.get("temporal_consistency_min_frames", 3)
+        ),
         per_frame_detection_cap=int(kwargs.get("per_frame_detection_cap", 0)),
         detection_cap_rank_method=str(
             kwargs.get("detection_cap_rank_method", "fp_filter_quality")
@@ -613,6 +621,10 @@ def parse_eval_config(
         scene_adapt_enabled=bool(kwargs.get("scene_adapt_enabled", False)),
         scene_adapt_window=int(kwargs.get("scene_adapt_window", 30)),
         scene_adapt_crowd_thresh=float(kwargs.get("scene_adapt_crowd_thresh", 15.0)),
-        scene_adapt_narrow_aspect_thresh=float(kwargs.get("scene_adapt_narrow_aspect_thresh", 2.1)),
-        scene_adapt_narrow_width_thresh=float(kwargs.get("scene_adapt_narrow_width_thresh", 0.035)),
+        scene_adapt_narrow_aspect_thresh=float(
+            kwargs.get("scene_adapt_narrow_aspect_thresh", 2.1)
+        ),
+        scene_adapt_narrow_width_thresh=float(
+            kwargs.get("scene_adapt_narrow_width_thresh", 0.035)
+        ),
     )
