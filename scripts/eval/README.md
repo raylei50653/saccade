@@ -1,135 +1,39 @@
-# Eval Scripts
+# scripts/eval
 
-This directory is now centered on `mot17.py` as the primary evaluation entry
-point, with `ablation_mot17.py` as the unified tuning harness for its grouped
-parameters.
+評估、調參、延遲分析的腳本目錄。
 
-## Primary Entry Points
+---
 
-- `mot17.py`
-  - Main MOT17 evaluation pipeline.
-  - Runs detector + tracker + ReID / relink / lifecycle logic.
+## 入口點
 
-- `ablation_mot17.py`
-  - Unified ablation runner for `mot17.py`.
-  - Supports grouped studies by category:
-    - `detection`
-    - `association`
-    - `geometry`
-    - `reid`
-    - `semantic`
-    - `trigger`
-    - `lifecycle`
-  - Supports multiple categories in one run, for example:
-    - `uv run python scripts/eval/ablation_mot17.py --category detection,geometry`
+| 腳本 | 用途 |
+|---|---|
+| `mot17.py` | MOT17 主評估入口 |
+| `dancetrack.py` | DanceTrack 跨資料集評估 |
+| `sportsmot.py` | SportsMOT 跨資料集評估 |
+| `ablation_mot17.py` | 分組參數 ablation runner |
+| `pipeline_contribution.py` | 模組累積貢獻分析 |
+| `latency_report.py` | 延遲 profile 事後分析與比較 |
+| `module_benchmark.sh` | 完整實驗流程封裝 |
 
-- `pipeline_contribution.py`
-  - Cumulative cutoff runner for module contribution analysis.
-  - Runs profiles such as `tracker_core -> +gmc -> +semantic -> +bank -> full`
-    so each `Δprev` is the naked gain of one more downstream module.
+---
 
-## Support Utilities
+## 工作流
 
-- `calculate_mota.py`
-  - Evaluate MOT-format result files against GT and print tracking metrics.
-
-- `convert_mot17.py`
-  - Dataset / output conversion helper for MOT17-related formats.
-
-## Alternative Workflows
-
-- `mot17_public.py`
-  - Evaluate tracking with MOT17 public detections from `det/det.txt`.
-
-- `sportsmot.py`
-  - Cross-dataset evaluation entry point for `datasets/SportsMOT`.
-  - Reuses the main detector + tracker pipeline so changes can be checked for
-    generalization beyond MOT17.
-
-- `dancetrack.py`
-  - Cross-dataset evaluation entry point for `datasets/DanceTrack/val`.
-  - Useful for checking identity stability under large pose variation and
-    frequent close interactions.
-
-- `ultralytics_official_mot17.py`
-  - Run Ultralytics official tracking as an external baseline.
-
-- `compare_framework_ultralytics.py`
-  - Compare result directories, typically Saccade vs Ultralytics.
-
-## Performance Utility
-
-- `bench_yolo_batch.py`
-  - Batch-size throughput / latency benchmark for the detector engine.
-
-## Recommended Usage
-
-1. Run `mot17.py` for the main pipeline.
-2. Use `ablation_mot17.py` for parameter studies.
-3. Use `pipeline_contribution.py` when you want module-by-module naked uplift.
-4. Use `calculate_mota.py` when you need standalone metric recomputation.
-5. Use `sportsmot.py` and `dancetrack.py` when a change looks good on MOT17 and
-   you want a fast generalization check before doing deeper tuning.
-6. Use the remaining scripts only for alternative baselines, comparisons, or performance checks.
-
-## Cross-Dataset Generalization
-
-Two lightweight cross-dataset checks are now available:
-
-- `uv run python scripts/eval/sportsmot.py`
-- `uv run python scripts/eval/dancetrack.py`
-
-These should be treated as regression / generalization gates for tracker
-changes that were originally tuned on MOT17.
-
-Current workflow recommendation:
-
-1. Start from `configs/mot17_baseline.yaml`.
-2. Validate the change on MOT17 first.
-3. Re-run `sportsmot.py` and `dancetrack.py`.
-4. Only introduce dataset-specific profiles after the shared baseline has been
-   checked.
-
-Important findings from the current generalization pass:
-
-- The original MOT17 baseline remains the best shared starting point so far.
-- Replacing the baseline wholesale with dataset-specific conservative profiles
-  improved throughput, but reduced tracking accuracy on both SportsMOT and
-  DanceTrack.
-- On SportsMOT, the dominant failure mode is excessive false positives rather
-  than catastrophic recall collapse.
-- The highest-signal fix so far is to keep the MOT17 baseline and raise
-  `new_track_thresh` back to `0.35`.
-
-Observed SportsMOT result from the current best known generalized tweak:
+### 1. 標準評估
 
 ```bash
-uv run python scripts/eval/sportsmot.py \
-  --config configs/mot17_baseline.yaml \
-  --new-track-thresh 0.35
+uv run python scripts/eval/mot17.py \
+  --engine models/yolo/yolo26s_960_batch1.engine \
+  --detector SDP
 ```
 
-Metrics:
+載入設定的優先順序（低 → 高）：
+`configs/mot17_baseline.yaml` → `--module-<name>` YAML → `--preset` → CLI flags
 
-- `IDF1 40.7%`
-- `MOTA 29.9%`
-- `IDs 2233`
-- `FP 183207`
-- `FN 21806`
-- `Rcll 92.6%`
-- `Prcn 59.9%`
+### 2. 延遲分析
 
-Interpretation:
-
-- On SportsMOT, track birth policy generalized worse than detection recall.
-- Tightening `new_track_thresh` was materially more effective than globally
-  raising `conf_threshold` / `track_thresh`.
-- If further SportsMOT tuning is needed, continue from the MOT17 baseline plus
-  `--new-track-thresh 0.35` before touching broader detector or geometry logic.
-
-## 延遲分析工作流
-
-### 快速 profile（~3s，不跑 MOTMetrics）
+**快速 profile**（~3s，跳過 MOTMetrics）：
 
 ```bash
 uv run python scripts/eval/mot17.py \
@@ -139,180 +43,96 @@ uv run python scripts/eval/mot17.py \
   --output runs/my_profile
 ```
 
-輸出：`runs/my_profile/_stage_profile.json` + console ASCII waterfall。
+輸出：console ASCII waterfall + `runs/my_profile/_stage_profile.json`
 
-### 事後分析（不重跑）
+**事後分析**（不重跑）：
 
 ```bash
-# 單次 breakdown
 python scripts/eval/latency_report.py runs/my_profile/
-
-# 比較兩次 run（e.g. 改了某個 module 前後）
 python scripts/eval/latency_report.py runs/before/ --compare runs/after/
-
-# 看特定 sequence
 python scripts/eval/latency_report.py runs/my_profile/ --seq MOT17-04-SDP
 ```
 
-### 輸出解讀
+**Stage 解讀**：
 
-- `detect`：TRT 推論，通常是最大瓶頸（~40-50%）
-- `postprocess`：NMS + filter，第二大瓶頸（~20-25%）
-- `relink_write`：含 background async 寫入，std 會偏高屬正常
-- `[unaccounted]`：frame_total 扣掉所有 stage 後的殘差，< 1ms 正常
-- `p95 >> mean` 的 stage 代表偶發長尾，值得調查
+- `detect` — TRT 推論，通常最大瓶頸（~40-50%）
+- `postprocess` — NMS + filter，第二大（~20-25%）
+- `relink_write` — 含 background async 寫入，std 偏高屬正常
+- `[unaccounted]` — frame_total 扣掉所有 stage 的殘差，< 1ms 正常
+- `p95 >> mean` — 偶發長尾，值得調查
 
----
-
-## Module Benchmark Template
-
-When you want to rerun the full module-by-module experiment flow from
-`docs/PIPELINE_REFERENCE.md`, use:
+### 3. Ablation / 參數調整
 
 ```bash
-scripts/eval/module_benchmark.sh
+# 分組 ablation
+uv run python scripts/eval/ablation_mot17.py --category detection,geometry
+
+# Bayesian 最佳化
+uv run python scripts/eval/bayesian_optimizer.py
+
+# 彙整 ablation 結果
+uv run python scripts/eval/summarize_ablation_mot17.py results/ablation/
 ```
 
-This wrapper standardizes three recurring steps:
-
-1. `profile`: `mot17.py --profile-stages` for stage latency baseline.
-2. `ablation`: `ablation_mot17.py` for grouped parameter sweeps.
-3. `validate`: `mot17.py` without profiling for end-to-end comparison.
-4. `contribution`: `pipeline_contribution.py` for cumulative cutoff / raw uplift tables.
-
-Useful overrides:
-
-```bash
-scripts/eval/module_benchmark.sh --mode profile --sequences MOT17-09-SDP --max-frames 80
-scripts/eval/module_benchmark.sh --mode ablation --ablation-categories detection,geometry
-scripts/eval/module_benchmark.sh --mode validate --tiling 960p_2x2 --engine models/yolo/yolo26s_batch6.engine
-scripts/eval/module_benchmark.sh --mode profile -- --async-reid
-scripts/eval/module_benchmark.sh --mode contribution -- --match-thresh 0.78
-```
-
-Defaults are intentionally opinionated:
-
-- detector: `SDP`
-- sequences: `MOT17-04-SDP,MOT17-10-SDP`
-- engine: `models/yolo/yolo26s_960_batch1.engine`
-- tiling: `native_960`
-- max frames: `100`
-
-Outputs land under `results/module_benchmark/<timestamp>/`.
-
-Each run also creates:
-
-- `summary.txt`: resolved experiment configuration
-- `commands.txt`: exact commands emitted by the wrapper
-- `notes.md`: lightweight note template for hypothesis / findings / decision
-- `experiment_matrix.md`: fill-in table aligned with `docs/PIPELINE_REFERENCE.md`
-
-## Pipeline Contribution
-
-When you want to measure raw uplift without executing later modules, use:
+### 4. 模組貢獻分析
 
 ```bash
 uv run python scripts/eval/pipeline_contribution.py --detector SDP
 ```
 
-Optional pose sidecar cutoff:
+執行 `tracker_core → +gmc → +semantic → +bank → full_default` 累積切割，
+每欄 Δprev 為單一模組的裸增益。輸出 `contribution_report.md/csv`。
+
+### 5. 跨資料集驗證
+
+MOT17 調參完成後，用作泛化 gate：
 
 ```bash
-uv run python scripts/eval/pipeline_contribution.py \
-  --detector SDP \
-  --pose-engine models/yolo/yolo26s_pose_960_batch1.engine
+uv run python scripts/eval/sportsmot.py
+uv run python scripts/eval/dancetrack.py
 ```
 
-The script writes:
+從 `configs/mot17_baseline.yaml` 出發，只在泛化確認後才引入資料集專用參數。
 
-- `contribution_report.md`
-- `contribution_report.csv`
-- `commands.txt`
-
-and stores per-profile MOT outputs under `runs/<profile>/`.
-
-## MOT17 Detection / Tiling Notes
-
-`mot17.py` now exposes multiple detector geometry paths:
-
-- `--tiling 960p_2x2`
-- `--tiling 960p_3x2`
-- `--tiling native_960`
-
-Useful tiled-detection diagnostics / controls:
-
-- `--tile-diagnostics`
-- `--tile-seam-score-penalty`
-- `--tile-seam-margin-canvas-px`
-- `--cross-tile-seam-center-scale`
-- `--cross-tile-seam-area-ratio-threshold`
-- `--cross-tile-seam-min-overlap-ratio`
-
-Typical two-sequence FN diagnosis command:
+### 6. 完整實驗流程（module_benchmark.sh）
 
 ```bash
-PYTHONPATH=build:. LD_LIBRARY_PATH=build uv run python scripts/eval/mot17.py \
-  --detector SDP \
-  --sequences MOT17-04-SDP,MOT17-10-SDP \
-  --split train \
-  --engine models/yolo/yolo26s_batch6.engine \
-  --tiling 960p_2x2 \
-  --tile-diagnostics
+# 完整跑（profile → ablation → validate → contribution）
+scripts/eval/module_benchmark.sh
+
+# 單步
+scripts/eval/module_benchmark.sh --mode profile --sequences MOT17-09-SDP --max-frames 80
+scripts/eval/module_benchmark.sh --mode ablation --ablation-categories detection,geometry
+scripts/eval/module_benchmark.sh --mode validate --engine models/yolo/yolo26s_960_batch1.engine
+scripts/eval/module_benchmark.sh --mode contribution -- --match-thresh 0.78
 ```
 
-Native-960 control:
+Outputs: `results/module_benchmark/<timestamp>/`（含 `summary.txt`、`commands.txt`、`notes.md`）
 
-```bash
-PYTHONPATH=build:. LD_LIBRARY_PATH=build uv run python scripts/eval/mot17.py \
-  --detector SDP \
-  --sequences MOT17-04-SDP,MOT17-10-SDP \
-  --split train \
-  --engine models/yolo/yolo26s_960_batch1.engine \
-  --tiling native_960
-```
+---
 
-## Person-Only Top-K Detector Notes
+## 輔助工具
 
-Experimental detector artifacts:
+| 腳本 | 用途 |
+|---|---|
+| `calculate_mota.py` | 對已有 .txt 結果重新計算追蹤指標 |
+| `convert_mot17.py` | MOT17 格式轉換 |
+| `analyze_fn.py` | FN 根因診斷（逐框追蹤） |
+| `bench_yolo_batch.py` | detector engine batch 吞吐量 benchmark |
+| `ablation_experiments.py` | ablation_mot17.py 使用的實驗定義集合 |
+| `mot17_args.py` | 內部：mot17.py 的 argparse 委派 |
 
-- `models/yolo/yolo26s_person_topk1000.onnx`
-- `models/yolo/yolo26s_person_topk1000_batch4.engine`
-- `scripts/model/export_yolo_person.py`
+---
 
-Intent:
+## 封存 / 實驗性
 
-- Keep only `person` before YOLO end-to-end top-k.
-- Raise detector output cap from `300` to `1000` for crowded scenes.
-- Avoid non-person classes consuming the detector's fixed top-k budget.
+以下腳本為一次性實驗或外部 baseline 比較，不屬於常規工作流：
 
-Observed behavior summary (2026-05-06):
-
-- On crowded MOT20 frames, the new engine can recover many additional low-score person detections.
-- Under the default MOT17 eval thresholds, aggregate tracking metrics changed little.
-- Global threshold lowering (`conf/track=0.02`, `new_track=0.25`) improved recall and IDF1 slightly, but also raised FP / IDs.
-- A Python-side crowd-aware threshold switch was tested, but is not recommended as a default path due to extra complexity and unstable tradeoffs.
-
-Current recommendation:
-
-- Keep the new engine as an available experiment.
-- Do not replace the default detector engine or default eval thresholds yet.
-- If revisiting this direction, prefer a tracker-internal crowded-scene policy over per-frame Python parameter switching.
-
-Example crowded-scene experiment:
-
-```bash
-PYTHONPATH=src uv run python scripts/eval/mot17.py \
-  --detector SDP \
-  --sequences MOT17-04-SDP,MOT17-10-SDP \
-  --split train \
-  --engine models/yolo/yolo26s_person_topk1000_batch4.engine \
-  --tiling 960p_2x2 \
-  --reid-mode off \
-  --max-frames 100 \
-  --crowd-low-score-mode \
-  --crowd-low-score-trigger 25 \
-  --crowd-conf-threshold 0.02 \
-  --crowd-track-thresh 0.02 \
-  --crowd-mid-thresh 0.05 \
-  --crowd-new-track-thresh 0.25
-```
+| 腳本 | 說明 |
+|---|---|
+| `mot17_public.py` | 用 MOT17 公開 detections 評估（det/det.txt） |
+| `ultralytics_official_mot17.py` | Ultralytics 官方追蹤作為外部 baseline |
+| `compare_framework_ultralytics.py` | 比較 Saccade vs Ultralytics 結果目錄 |
+| `validate_last_vit_phase0.py` | LaSt-ViT Phase 0 原型驗證（已結案，No-Go） |
+| `sweep_a7_quality.py` | A7 quality gate 參數掃描（已結案） |
+| `coordinate_optimizer.py` | 座標最佳化實驗 |
