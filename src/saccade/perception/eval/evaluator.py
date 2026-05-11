@@ -739,6 +739,8 @@ def run_eval(
         ThreadPoolExecutor(max_workers=1) if cfg.pipeline_relink else None
     )
 
+    all_seq_profile: list[dict] = []
+
     for seq in cfg.seqs:
         detector.reset_tracker()
         geometry_scale_state = GeometryScaleState()
@@ -2611,7 +2613,8 @@ def run_eval(
                 f"frames_added={interp_stats['frames_added']}"
             )
 
-        Path(output_root / f"{seq}.txt").write_text("\n".join(results_lines))
+        if not cfg.latency_only:
+            Path(output_root / f"{seq}.txt").write_text("\n".join(results_lines))
         print(f"✅ Finished {seq} (Total Time: {time.time() - start_time:.2f}s)")
         if relinker:
             relinker.report()
@@ -2657,6 +2660,25 @@ def run_eval(
             stage_summary_lines=stage_summary_lines,
         )
 
+        overall_profiled_frames += seq_profiled_frames
+        if profile_stages and seq_profiled_frames > 0:
+            seq_entry: dict = {"seq": seq, "frames": seq_profiled_frames, "stages": {}}
+            for _sn in top_level_stage_names:
+                _samp = seq_stage_samples.get(_sn, [])
+                if _samp:
+                    _arr = np.array(_samp, dtype=np.float64)
+                    seq_entry["stages"][_sn] = {
+                        "mean_ms": float(_arr.mean()),
+                        "std_ms": float(_arr.std()),
+                        "p95_ms": float(np.percentile(_arr, 95)),
+                        "p99_ms": float(np.percentile(_arr, 99)),
+                    }
+            for _sn in breakdown_stage_names:
+                _tot = seq_stage_totals.get(_sn, 0.0)
+                if _tot > 0.0:
+                    seq_entry["stages"][_sn] = {"mean_ms": _tot / seq_profiled_frames}
+            all_seq_profile.append(seq_entry)
+
     from .reporting import print_overall_summary
 
     print_overall_summary(
@@ -2684,9 +2706,13 @@ def run_eval(
         overall_lazy_reid_arbiter_approve=overall_lazy_reid_arbiter_approve,
         debug_dump_csv=debug_dump_csv,
         debug_stage_dump_rows=debug_stage_dump_rows,
+        all_seq_profile=all_seq_profile,
     )
 
     # ── MOTMetrics Evaluation ──────────────────────────────────────────────────
+    if cfg.latency_only:
+        return {}
+
     from .metrics import run_motmetrics_evaluation
 
     return run_motmetrics_evaluation(

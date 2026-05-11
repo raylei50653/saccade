@@ -44,6 +44,7 @@ class CoreConfig:
     per_seq_adapt: bool = True
     warmup_frames: int = 50
     profile_stages: bool = False
+    latency_only: bool = False
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> "CoreConfig":
@@ -296,4 +297,9 @@ def add_core_args(parser: argparse.ArgumentParser) -> None:
     )
     core.add_argument(
         "--profile-stages", action="store_true", help="Profile stage-level runtime."
+    )
+    core.add_argument(
+        "--latency-only",
+        action="store_true",
+        help="Skip MOTMetrics and .txt result writing; output latency profile only.",
     )
