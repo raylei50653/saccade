@@ -405,10 +405,10 @@ def _compute_adaptive_cap(
         cap = base_cap
 
     return max(min_cap, min(max_cap, cap))
-from saccade.perception.detector_trt import TRTYoloDetector, TwostageDetector
-from saccade.perception.feature_extractor import TRTFeatureExtractor
+from saccade.perception.detector_trt import TRTYoloDetector, TwostageDetector  # noqa: E402
+from saccade.perception.feature_extractor import TRTFeatureExtractor  # noqa: E402
 
-from saccade.perception.eval.detection import (
+from saccade.perception.eval.detection import (  # noqa: E402
     detect_adaptive_960_tiled,
     detect_960p_3x2_tiled,
     detect_native_960,
@@ -418,15 +418,15 @@ from saccade.perception.eval.detection import (
     merge_cross_tile_duplicates_fast,
     nms_fast,
 )
-from saccade.perception.eval.gmc import SparseOpticalFlowGMC
-from saccade.perception.eval.multi_birth import MultiSignalBirthManager
-from saccade.perception.eval.pool import AdaptiveFramePool
-from saccade.perception.eval.preprocess import (
+from saccade.perception.eval.gmc import SparseOpticalFlowGMC  # noqa: E402
+from saccade.perception.eval.multi_birth import MultiSignalBirthManager  # noqa: E402
+from saccade.perception.eval.pool import AdaptiveFramePool  # noqa: E402
+from saccade.perception.eval.preprocess import (  # noqa: E402
     GeometryScaleState,
     apply_frame_preprocess,
     geometry_mid_thresh_scale,
 )
-from saccade.perception.eval.relink import (
+from saccade.perception.eval.relink import (  # noqa: E402
     IdentityResolver,
     PythonSemanticRelinker,
     SemanticRelinker,
@@ -442,10 +442,10 @@ try:
 except ImportError:
     _CppIdentityResolver = None
     _LIFECYCLE_CLS = None
-from saccade.perception.eval.streaming import DALIStreamerStream
-from saccade.perception.eval.tracking import GlobalTrackIdMapper
-from saccade.perception.tracking.dynamic_reid import DynamicReIDController
-from saccade.perception.tracking.tracker_gpu import (
+from saccade.perception.eval.streaming import DALIStreamerStream  # noqa: E402
+from saccade.perception.eval.tracking import GlobalTrackIdMapper  # noqa: E402
+from saccade.perception.tracking.dynamic_reid import DynamicReIDController  # noqa: E402
+from saccade.perception.tracking.tracker_gpu import (  # noqa: E402
     TrackAppearanceBank,
     need_reid_frame,
 )
