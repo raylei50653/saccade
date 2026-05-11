@@ -1,0 +1,438 @@
+from __future__ import annotations
+
+import argparse
+import dataclasses
+from pathlib import Path
+
+import yaml
+
+from ._helpers import _help, _tier
+
+
+@dataclasses.dataclass
+class SemanticConfig:
+    # Core semantic relink
+    semantic_threshold: float = 0.91
+    semantic_ttl: int = 45
+    semantic_ema: float = 0.83
+    semantic_spatial_gate: float = 0.20
+    semantic_min_lost_frames: int = 2
+    semantic_min_iou: float = 0.20
+    semantic_mahalanobis_threshold: float = 0.0
+    semantic_debug: bool = False
+    # Reference buffer
+    semantic_buffer_size: int = 10
+    semantic_min_consistency: float = 0.0
+    semantic_rerank_mode: str = "mean"
+    semantic_reciprocal_margin: float = 0.0
+    # Unified score weights (A1)
+    semantic_iou_weight: float = 0.0
+    semantic_mahalanobis_weight: float = 0.0
+    semantic_dynamic_margin_crowd: float = 0.0
+    semantic_dynamic_margin_age: float = 0.0
+    semantic_biometric_threshold: float = 0.0
+    semantic_w_sim_base: float = 0.80
+    semantic_w_iou_base: float = 0.34
+    semantic_w_maha_base: float = 0.31
+    semantic_shift_ambiguity: float = 0.34
+    semantic_shift_lost_age: float = 0.18
+    # Python relinker controls
+    force_python_relinker: bool = False
+    semantic_experimental_mode: str = "standard"
+    semantic_appearance_first_sim_threshold: float = 0.95
+    semantic_appearance_first_margin: float = 0.03
+    # Appearance bank
+    semantic_bank_inject: bool = False
+    appearance_bank: bool = False
+    appearance_bank_size: int = 5
+    appearance_bank_min_score: float = 0.45
+    appearance_bank_min_iou: float = 0.35
+    appearance_bank_consistency_threshold: float = 0.75
+    appearance_bank_high_quality_min_score: float = 0.75
+    appearance_bank_min_aspect: float = 1.2
+    appearance_bank_max_aspect: float = 4.5
+    # Bank quality scoring (A6)
+    bank_quality_v2: bool = True
+    bank_weighted_mean: bool = False
+    bank_quality_w_det: float = 0.45
+    bank_quality_w_iou: float = 0.20
+    bank_quality_w_aspect: float = 0.15
+    bank_quality_w_center: float = 0.10
+    bank_quality_w_area: float = 0.10
+    # False-accept filter (Phase 3)
+    semantic_clean_score_threshold: float = 0.65
+    semantic_clean_min_aspect: float = 1.2
+    semantic_clean_max_aspect: float = 4.5
+    semantic_clean_margin_ratio: float = 0.0
+    semantic_strict_sim_threshold: float = 0.0
+
+    @classmethod
+    def from_yaml(cls, path: str | Path) -> "SemanticConfig":
+        with open(path) as f:
+            data = yaml.safe_load(f) or {}
+        valid = {f.name for f in dataclasses.fields(cls)}
+        return cls(**{k: v for k, v in data.items() if k in valid})
+
+    def to_flat_dict(self) -> dict:
+        return dataclasses.asdict(self)
+
+
+def add_semantic_args(parser: argparse.ArgumentParser) -> None:
+    grp = parser.add_argument_group(
+        _tier("Semantic relink and appearance memory", "Tier 1/2")
+    )
+    grp.description = (
+        "Higher-level relinking and appearance-bank logic for recovering IDs after gaps. "
+        "Load with: --module-semantic configs/modules/semantic.yaml"
+    )
+    grp.add_argument(
+        "--semantic-threshold",
+        type=float,
+        default=0.91,
+        help=_help("Similarity gate for semantic relinking.", range_hint="0-1"),
+    )
+    grp.add_argument(
+        "--semantic-ttl",
+        type=int,
+        default=45,
+        help=_help(
+            "Frames to keep lost tracks in semantic memory.",
+            range_hint=">=1",
+            edge="larger helps long occlusion but raises stale-ID risk",
+        ),
+    )
+    grp.add_argument(
+        "--semantic-ema",
+        type=float,
+        default=0.83,
+        help=_help("EMA decay for semantic appearance updates.", range_hint="0-1"),
+    )
+    grp.add_argument(
+        "--semantic-spatial-gate",
+        type=float,
+        default=0.20,
+        help=_help(
+            "Spatial gate for semantic relink candidates.",
+            range_hint=">=0",
+            edge="too small blocks cross-lane recovery",
+        ),
+    )
+    grp.add_argument(
+        "--semantic-min-lost-frames",
+        type=int,
+        default=2,
+        help=_help(
+            "Track must be lost this many frames before semantic relink is considered.",
+            range_hint=">=0",
+        ),
+    )
+    grp.add_argument(
+        "--semantic-min-iou",
+        type=float,
+        default=0.20,
+        help=_help("Minimum IoU for semantic relink acceptance.", range_hint="0-1"),
+    )
+    grp.add_argument(
+        "--semantic-mahalanobis-threshold",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Optional motion gate for semantic relink; 0 disables.", range_hint=">=0"
+        ),
+    )
+    grp.add_argument(
+        "--semantic-debug",
+        action="store_true",
+        help="Print extra semantic relink diagnostics.",
+    )
+    grp.add_argument(
+        "--semantic-buffer-size",
+        type=int,
+        default=10,
+        help=_help("Appearance vectors kept for semantic reference.", range_hint=">=1"),
+    )
+    grp.add_argument(
+        "--semantic-min-consistency",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Minimum internal consistency for semantic references.", range_hint="0-1"
+        ),
+    )
+    grp.add_argument(
+        "--semantic-rerank-mode",
+        choices=("mean", "max", "top2_mean", "weighted"),
+        default="mean",
+        help="How to aggregate multiple reference embeddings.",
+    )
+    grp.add_argument(
+        "--semantic-reciprocal-margin",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Reject relink if top-1 and top-2 similarities are too close; 0 disables.",
+            range_hint=">=0",
+        ),
+    )
+    grp.add_argument(
+        "--semantic-iou-weight",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Blend IoU into joint ranking score (0 = pure cosine).", range_hint=">=0"
+        ),
+    )
+    grp.add_argument(
+        "--semantic-mahalanobis-weight",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Blend normalised motion evidence into joint ranking score (0 = off).",
+            range_hint=">=0",
+        ),
+    )
+    grp.add_argument(
+        "--semantic-dynamic-margin-crowd",
+        type=float,
+        default=0.0,
+        help=_help("Add this × crowd_factor to reciprocal margin.", range_hint=">=0"),
+    )
+    grp.add_argument(
+        "--semantic-dynamic-margin-age",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Add this × (lost_frames/ttl) to reciprocal margin.", range_hint=">=0"
+        ),
+    )
+    grp.add_argument(
+        "--semantic-biometric-threshold",
+        type=float,
+        default=0.0,
+        help=_help(
+            "YOLO Pose biometric veto: reject relink when body-ratio distance exceeds this; 0 disables.",
+            range_hint=">=0",
+        ),
+    )
+    grp.add_argument(
+        "--semantic-w-sim-base",
+        type=float,
+        default=0.80,
+        help=_help("A1: Base weight for appearance similarity.", range_hint="0-1"),
+    )
+    grp.add_argument(
+        "--semantic-w-iou-base",
+        type=float,
+        default=0.34,
+        help=_help("A1: Base weight for spatial IoU.", range_hint="0-1"),
+    )
+    grp.add_argument(
+        "--semantic-w-maha-base",
+        type=float,
+        default=0.31,
+        help=_help("A1: Base weight for Mahalanobis score.", range_hint="0-1"),
+    )
+    grp.add_argument(
+        "--semantic-shift-ambiguity",
+        type=float,
+        default=0.34,
+        help=_help(
+            "A1: Shift weight from IoU to Sim under crowd ambiguity.", range_hint="0-1"
+        ),
+    )
+    grp.add_argument(
+        "--semantic-shift-lost-age",
+        type=float,
+        default=0.18,
+        help=_help(
+            "A1: Shift weight from IoU to Sim as lost age increases.", range_hint="0-1"
+        ),
+    )
+    grp.add_argument(
+        "--force-python-relinker",
+        action="store_true",
+        default=False,
+        help="Force Python relinker path (confound control).",
+    )
+    grp.add_argument(
+        "--semantic-experimental-mode",
+        choices=("standard", "appearance_first"),
+        default="standard",
+        help="Experimental Python relinker mode.",
+    )
+    grp.add_argument(
+        "--semantic-appearance-first-sim-threshold",
+        type=float,
+        default=0.95,
+        help=_help("High-sim threshold for appearance_first bypass.", range_hint="0-1"),
+    )
+    grp.add_argument(
+        "--semantic-appearance-first-margin",
+        type=float,
+        default=0.03,
+        help=_help(
+            "Minimum winner-vs-runner margin for appearance_first bypass.",
+            range_hint=">=0",
+        ),
+    )
+    grp.add_argument(
+        "--semantic-bank-inject",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Inject TrackAppearanceBank representative when a track dies.",
+    )
+    grp.add_argument(
+        "--appearance-bank",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Enable Top-K appearance bank for primary association (Phase 1).",
+    )
+    grp.add_argument(
+        "--appearance-bank-size",
+        type=int,
+        default=5,
+        help=_help(
+            "Top-K samples kept per track in the appearance bank.", range_hint=">=1"
+        ),
+    )
+    grp.add_argument(
+        "--appearance-bank-min-score",
+        type=float,
+        default=0.45,
+        help=_help("Minimum detection score to admit a bank sample.", range_hint="0-1"),
+    )
+    grp.add_argument(
+        "--appearance-bank-min-iou",
+        type=float,
+        default=0.35,
+        help=_help(
+            "Minimum track/detection IoU to admit a bank sample.", range_hint="0-1"
+        ),
+    )
+    grp.add_argument(
+        "--appearance-bank-consistency-threshold",
+        type=float,
+        default=0.75,
+        help=_help(
+            "Minimum pairwise cosine mean to trust the bank for relink.",
+            range_hint="0-1",
+        ),
+    )
+    grp.add_argument(
+        "--appearance-bank-high-quality-min-score",
+        type=float,
+        default=0.75,
+        help=_help(
+            "Minimum score for a bank sample to qualify as high-quality (Phase 3).",
+            range_hint="0-1",
+        ),
+    )
+    grp.add_argument(
+        "--appearance-bank-min-aspect",
+        type=float,
+        default=1.2,
+        help=_help(
+            "Minimum h/w aspect for a high-quality bank sample.", range_hint=">=0"
+        ),
+    )
+    grp.add_argument(
+        "--appearance-bank-max-aspect",
+        type=float,
+        default=4.5,
+        help=_help(
+            "Maximum h/w aspect for a high-quality bank sample.", range_hint=">=0"
+        ),
+    )
+    grp.add_argument(
+        "--bank-quality-v2",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Use composite quality score (det+iou+aspect+center+area) for bank sample ranking.",
+    )
+    grp.add_argument(
+        "--bank-weighted-mean",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=_help(
+            "Weight bank samples by quality_score when computing the representative embedding. "
+            "Low-quality samples contribute less to the mean.",
+            range_hint="on/off",
+            edge="may slightly tighten consistency estimate; test with appearance-bank on",
+        ),
+    )
+    grp.add_argument(
+        "--bank-quality-w-det",
+        type=float,
+        default=0.45,
+        help="Weight for detection score in composite quality score.",
+    )
+    grp.add_argument(
+        "--bank-quality-w-iou",
+        type=float,
+        default=0.20,
+        help="Weight for IoU in composite quality score.",
+    )
+    grp.add_argument(
+        "--bank-quality-w-aspect",
+        type=float,
+        default=0.15,
+        help="Weight for aspect ratio in composite quality score.",
+    )
+    grp.add_argument(
+        "--bank-quality-w-center",
+        type=float,
+        default=0.10,
+        help="Weight for center bias in composite quality score.",
+    )
+    grp.add_argument(
+        "--bank-quality-w-area",
+        type=float,
+        default=0.10,
+        help="Weight for area ratio in composite quality score.",
+    )
+    grp.add_argument(
+        "--semantic-clean-score-threshold",
+        type=float,
+        default=0.65,
+        help=_help(
+            "Detection score below which observation is treated as low-quality "
+            "(triggers strict_sim gate, Phase 3).",
+            range_hint="0-1",
+        ),
+    )
+    grp.add_argument(
+        "--semantic-clean-min-aspect",
+        type=float,
+        default=1.2,
+        help=_help(
+            "Minimum h/w aspect for current observation to be treated as clean.",
+            range_hint=">=0",
+        ),
+    )
+    grp.add_argument(
+        "--semantic-clean-max-aspect",
+        type=float,
+        default=4.5,
+        help=_help(
+            "Maximum h/w aspect for current observation to be treated as clean.",
+            range_hint=">=0",
+        ),
+    )
+    grp.add_argument(
+        "--semantic-clean-margin-ratio",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Frame-edge margin: boxes touching within this fraction are low-quality; 0=disabled.",
+            range_hint="0-0.15",
+        ),
+    )
+    grp.add_argument(
+        "--semantic-strict-sim-threshold",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Similarity threshold for low-quality observations (0=use sim_threshold).",
+            range_hint="0-1",
+        ),
+    )

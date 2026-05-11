@@ -80,7 +80,12 @@ public:
         float confirm_score_thresh = 0.50f,
         bool adaptive_confirmation = false,
         float new_track_thresh = -1.0f,
-        bool nsa_kalman = false
+        bool nsa_kalman = false,
+        float r_scale = 1.0f,
+        float vel_dir_weight = 0.0f,
+        float fuse_score_weight = 0.0f,
+        float stage2_match_thresh = 0.5f,
+        float birth_low_score_thresh = 0.0f
     );
     void set_reid_params(float cos_threshold, float iou_low, float iou_high, float weight);
 

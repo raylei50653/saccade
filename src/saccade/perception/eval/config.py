@@ -44,6 +44,7 @@ class EvalConfig:
     semantic_mahalanobis_weight: float
     semantic_dynamic_margin_crowd: float
     semantic_dynamic_margin_age: float
+    semantic_biometric_threshold: float
     semantic_w_sim_base: float
     semantic_w_iou_base: float
     semantic_w_maha_base: float
@@ -74,6 +75,31 @@ class EvalConfig:
     match_thresh: float
     mid_thresh: float
     new_track_thresh: float
+    birth_quality_gate: bool
+    birth_min_quality: float
+    birth_quality_score_bias: float
+    stage2_quality_gate: bool
+    stage2_quality_min: float
+    birth_consecutive_gate: bool
+    birth_consecutive_frames: int
+    birth_consecutive_iou: float
+    birth_consecutive_boost: float
+    birth_consecutive_min_score: float
+    birth_consecutive_min_motion: float
+
+    multi_birth_enabled: bool
+    multi_birth_min_score: float
+    multi_birth_min_frames: int
+    multi_birth_target_motion: float
+    multi_birth_evidence_threshold: float
+    multi_birth_iou_match: float
+    multi_birth_ttl_frames: int
+    multi_birth_w_score: float
+    multi_birth_w_motion: float
+    multi_birth_w_quality: float
+    multi_birth_w_streak: float
+    multi_birth_min_aspect: float
+    multi_birth_max_area_px: int
 
     crowd_low_score_mode: bool
     crowd_low_score_trigger: int
@@ -166,7 +192,32 @@ class EvalConfig:
 
     min_tracklet_len: int
     min_tracklet_score: float
+    interpolate_tracklets: bool
+    interpolate_max_gap: int
+    interpolate_min_track_len: int
     nsa_kalman: bool
+    kalman_r_scale: float
+    vel_dir_weight: float
+    fuse_score_weight: float
+    stage2_match_thresh: float
+    birth_low_score_thresh: float
+
+    # Temporal consistency filter
+    temporal_consistency_min_frames: int
+    # Per-frame detection cap
+    per_frame_detection_cap: int
+    # Detection cap ranking method: "score" | "quality" | "fp_filter" | "fp_filter_quality"
+    detection_cap_rank_method: str
+    # Adaptive detection cap (overrides per_frame_detection_cap when > 0)
+    adaptive_detection_cap: bool
+    adaptive_cap_base: int
+    adaptive_cap_max: int
+    adaptive_cap_min: int
+    # FP hard filter: removes extremely suspicious low-score large-area detections
+    fp_hard_filter_enabled: bool
+    fp_hard_filter_min_score: float
+    fp_hard_filter_max_suspicious_area: int
+    fp_hard_filter_max_suspicious_score: float
 
     appearance_bank_enabled: bool
     appearance_bank_size: int
@@ -183,6 +234,7 @@ class EvalConfig:
     bank_quality_w_aspect: float
     bank_quality_w_center: float
     bank_quality_w_area: float
+    bank_weighted_mean: bool
 
     need_reid_enabled: bool
     async_reid: bool
@@ -190,6 +242,19 @@ class EvalConfig:
     per_seq_adapt: bool
     seqs: list[str]
     kwargs: dict[str, Any]
+
+    # Pose-guided box expansion
+    pose_box_expand: bool
+    pose_expand_ankle_conf: float
+    pose_expand_margin: float
+    pose_expand_flat_aspect: float
+
+    # Scene-adaptive policy (P5-4)
+    scene_adapt_enabled: bool
+    scene_adapt_window: int
+    scene_adapt_crowd_thresh: float
+    scene_adapt_narrow_aspect_thresh: float
+    scene_adapt_narrow_width_thresh: float
 
 
 def parse_eval_config(
@@ -285,7 +350,7 @@ def parse_eval_config(
         semantic_min_consistency=float(kwargs.get("semantic_min_consistency", 0.0)),
         semantic_rerank_mode=str(kwargs.get("semantic_rerank_mode", "mean")),
         semantic_reciprocal_margin=float(kwargs.get("semantic_reciprocal_margin", 0.0)),
-        semantic_bank_inject=bool(kwargs.get("semantic_bank_inject", True)),
+        semantic_bank_inject=bool(kwargs.get("semantic_bank_inject", False)),
         semantic_iou_weight=float(kwargs.get("semantic_iou_weight", 0.0)),
         semantic_mahalanobis_weight=float(
             kwargs.get("semantic_mahalanobis_weight", 0.0)
@@ -295,6 +360,9 @@ def parse_eval_config(
         ),
         semantic_dynamic_margin_age=float(
             kwargs.get("semantic_dynamic_margin_age", 0.0)
+        ),
+        semantic_biometric_threshold=float(
+            kwargs.get("semantic_biometric_threshold", 0.0)
         ),
         semantic_w_sim_base=float(kwargs.get("semantic_w_sim_base", 0.0)),
         semantic_w_iou_base=float(kwargs.get("semantic_w_iou_base", 0.0)),
@@ -339,6 +407,36 @@ def parse_eval_config(
         new_track_thresh=0.35
         if kwargs.get("new_track_thresh", None) is None
         else float(kwargs.get("new_track_thresh")),  # type: ignore[arg-type]
+        birth_quality_gate=bool(kwargs.get("birth_quality_gate", False)),
+        birth_min_quality=float(kwargs.get("birth_min_quality", 0.0)),
+        birth_quality_score_bias=float(kwargs.get("birth_quality_score_bias", 0.15)),
+        stage2_quality_gate=bool(kwargs.get("stage2_quality_gate", False)),
+        stage2_quality_min=float(kwargs.get("stage2_quality_min", 0.40)),
+        birth_consecutive_gate=bool(kwargs.get("birth_consecutive_gate", False)),
+        birth_consecutive_frames=max(2, int(kwargs.get("birth_consecutive_frames", 2))),
+        birth_consecutive_iou=float(kwargs.get("birth_consecutive_iou", 0.40)),
+        birth_consecutive_boost=float(kwargs.get("birth_consecutive_boost", 0.05)),
+        birth_consecutive_min_score=float(
+            kwargs.get("birth_consecutive_min_score", 0.20)
+        ),
+        birth_consecutive_min_motion=float(
+            kwargs.get("birth_consecutive_min_motion", 0.0)
+        ),
+        multi_birth_enabled=bool(kwargs.get("multi_birth_enabled", False)),
+        multi_birth_min_score=float(kwargs.get("multi_birth_min_score", 0.12)),
+        multi_birth_min_frames=max(2, int(kwargs.get("multi_birth_min_frames", 3))),
+        multi_birth_target_motion=float(kwargs.get("multi_birth_target_motion", 12.0)),
+        multi_birth_evidence_threshold=float(
+            kwargs.get("multi_birth_evidence_threshold", 0.60)
+        ),
+        multi_birth_iou_match=float(kwargs.get("multi_birth_iou_match", 0.30)),
+        multi_birth_ttl_frames=max(1, int(kwargs.get("multi_birth_ttl_frames", 5))),
+        multi_birth_w_score=float(kwargs.get("multi_birth_w_score", 0.35)),
+        multi_birth_w_motion=float(kwargs.get("multi_birth_w_motion", 0.30)),
+        multi_birth_w_quality=float(kwargs.get("multi_birth_w_quality", 0.20)),
+        multi_birth_w_streak=float(kwargs.get("multi_birth_w_streak", 0.15)),
+        multi_birth_min_aspect=float(kwargs.get("multi_birth_min_aspect", 0.0)),
+        multi_birth_max_area_px=int(kwargs.get("multi_birth_max_area_px", 0)),
         crowd_low_score_mode=bool(kwargs.get("crowd_low_score_mode", False)),
         crowd_low_score_trigger=int(kwargs.get("crowd_low_score_trigger", 25)),
         crowd_conf_threshold=float(kwargs.get("crowd_conf_threshold", 0.02)),
@@ -459,8 +557,38 @@ def parse_eval_config(
         ),
         min_tracklet_len=max(1, int(kwargs.get("min_tracklet_len", 1))),
         min_tracklet_score=float(kwargs.get("min_tracklet_score", 0.0)),
+        interpolate_tracklets=bool(kwargs.get("interpolate_tracklets", True)),
+        interpolate_max_gap=max(0, int(kwargs.get("interpolate_max_gap", 20))),
+        interpolate_min_track_len=max(
+            1, int(kwargs.get("interpolate_min_track_len", 5))
+        ),
         nsa_kalman=bool(kwargs.get("nsa_kalman", False)),
-        appearance_bank_enabled=bool(kwargs.get("appearance_bank", True)),
+        kalman_r_scale=float(kwargs.get("kalman_r_scale", 1.0)),
+        vel_dir_weight=float(kwargs.get("vel_dir_weight", 0.0)),
+        fuse_score_weight=float(kwargs.get("fuse_score_weight", 0.0)),
+        stage2_match_thresh=float(kwargs.get("stage2_match_thresh", 0.5)),
+        birth_low_score_thresh=float(kwargs.get("birth_low_score_thresh", 0.0)),
+        temporal_consistency_min_frames=int(
+            kwargs.get("temporal_consistency_min_frames", 3)
+        ),
+        per_frame_detection_cap=int(kwargs.get("per_frame_detection_cap", 0)),
+        detection_cap_rank_method=str(
+            kwargs.get("detection_cap_rank_method", "fp_filter_quality")
+        ),
+        adaptive_detection_cap=bool(kwargs.get("adaptive_detection_cap", True)),
+        adaptive_cap_base=int(kwargs.get("adaptive_cap_base", 40)),
+        adaptive_cap_max=int(kwargs.get("adaptive_cap_max", 60)),
+        adaptive_cap_min=int(kwargs.get("adaptive_cap_min", 15)),
+        # FP hard filter: removes extremely suspicious low-score large-area detections
+        fp_hard_filter_enabled=bool(kwargs.get("fp_hard_filter_enabled", True)),
+        fp_hard_filter_min_score=float(kwargs.get("fp_hard_filter_min_score", 0.10)),
+        fp_hard_filter_max_suspicious_area=int(
+            kwargs.get("fp_hard_filter_max_suspicious_area", 40000)
+        ),
+        fp_hard_filter_max_suspicious_score=float(
+            kwargs.get("fp_hard_filter_max_suspicious_score", 0.40)
+        ),
+        appearance_bank_enabled=bool(kwargs.get("appearance_bank", False)),
         appearance_bank_size=max(1, int(kwargs.get("appearance_bank_size", 5))),
         appearance_bank_min_score=float(kwargs.get("appearance_bank_min_score", 0.45)),
         appearance_bank_min_iou=float(kwargs.get("appearance_bank_min_iou", 0.35)),
@@ -478,6 +606,7 @@ def parse_eval_config(
         bank_quality_w_aspect=float(kwargs.get("bank_quality_w_aspect", 0.15)),
         bank_quality_w_center=float(kwargs.get("bank_quality_w_center", 0.10)),
         bank_quality_w_area=float(kwargs.get("bank_quality_w_area", 0.10)),
+        bank_weighted_mean=bool(kwargs.get("bank_weighted_mean", False)),
         need_reid_enabled=bool(kwargs.get("need_reid", False)),
         async_reid=bool(kwargs.get("async_reid", True)),
         pipeline_relink=bool(kwargs.get("pipeline_relink", True))
@@ -485,4 +614,17 @@ def parse_eval_config(
         per_seq_adapt=bool(kwargs.get("per_seq_adapt", True)),
         seqs=seqs,
         kwargs=kwargs,
+        pose_box_expand=bool(kwargs.get("pose_box_expand", False)),
+        pose_expand_ankle_conf=float(kwargs.get("pose_expand_ankle_conf", 0.30)),
+        pose_expand_margin=float(kwargs.get("pose_expand_margin", 0.05)),
+        pose_expand_flat_aspect=float(kwargs.get("pose_expand_flat_aspect", 0.0)),
+        scene_adapt_enabled=bool(kwargs.get("scene_adapt_enabled", False)),
+        scene_adapt_window=int(kwargs.get("scene_adapt_window", 30)),
+        scene_adapt_crowd_thresh=float(kwargs.get("scene_adapt_crowd_thresh", 15.0)),
+        scene_adapt_narrow_aspect_thresh=float(
+            kwargs.get("scene_adapt_narrow_aspect_thresh", 2.1)
+        ),
+        scene_adapt_narrow_width_thresh=float(
+            kwargs.get("scene_adapt_narrow_width_thresh", 0.035)
+        ),
     )
