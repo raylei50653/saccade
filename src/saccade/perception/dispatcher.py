@@ -18,8 +18,26 @@ from saccade.resource.resource_manager import (
 
 # 定義 CallBack 類型以滿足 Mypy
 TrackResultCallback = Callable[
-    [str, float, torch.Tensor, torch.Tensor, torch.Tensor], Any
+    [str, float, torch.Tensor, torch.Tensor, torch.Tensor, Optional[torch.Tensor]], Any
 ]
+
+
+def _match_keypoints_to_tracks(
+    tracked_boxes: torch.Tensor,
+    det_boxes: torch.Tensor,
+    keypoints: torch.Tensor,
+) -> torch.Tensor:
+    """For each tracked box, return keypoints of the nearest detection by center distance."""
+    if tracked_boxes.numel() == 0:
+        return torch.empty((0, *keypoints.shape[1:]), device=tracked_boxes.device)
+    det_cx = (det_boxes[:, 0] + det_boxes[:, 2]) * 0.5
+    det_cy = (det_boxes[:, 1] + det_boxes[:, 3]) * 0.5
+    trk_cx = (tracked_boxes[:, 0] + tracked_boxes[:, 2]) * 0.5
+    trk_cy = (tracked_boxes[:, 1] + tracked_boxes[:, 3]) * 0.5
+    dx = trk_cx.unsqueeze(1) - det_cx.unsqueeze(0)
+    dy = trk_cy.unsqueeze(1) - det_cy.unsqueeze(0)
+    nearest = (dx * dx + dy * dy).argmin(dim=1)
+    return keypoints[nearest]
 
 
 class AsyncDispatcher:
@@ -145,7 +163,7 @@ class AsyncDispatcher:
         for stream_id, yolo_input, timestamp in batch_items:
             # --- YOLO 偵測 ---
             with torch.no_grad():
-                boxes, scores, classes, _ = self.detector.detect(
+                boxes, scores, classes, keypoints = self.detector.detect(
                     yolo_input.unsqueeze(0), conf_threshold=self.conf_threshold
                 )
 
@@ -158,6 +176,7 @@ class AsyncDispatcher:
                         torch.empty((0,), dtype=torch.int32, device=dev),
                         torch.empty((0, 4), dtype=torch.float32, device=dev),
                         torch.empty((0,), dtype=torch.int32, device=dev),
+                        None,
                     )
                 continue
 
@@ -177,9 +196,21 @@ class AsyncDispatcher:
                     stream_id=hash(stream_id) & 0x7FFFFFFF,
                 )
 
+            # Align keypoints to tracked boxes by nearest-center matching
+            tracked_kpts = (
+                _match_keypoints_to_tracks(tracked_boxes, boxes, keypoints)
+                if keypoints is not None
+                else None
+            )
+
             if self.on_track_result:
                 await self.on_track_result(
-                    stream_id, timestamp, tracked_ids, tracked_boxes, tracked_classes
+                    stream_id,
+                    timestamp,
+                    tracked_ids,
+                    tracked_boxes,
+                    tracked_classes,
+                    tracked_kpts,
                 )
 
         elapsed = (time.perf_counter() - start_time) * 1000
