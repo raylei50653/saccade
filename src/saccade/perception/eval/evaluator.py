@@ -434,6 +434,7 @@ from saccade.perception.eval.detection import (  # noqa: E402
     detect_adaptive_960_tiled,
     detect_960p_3x2_tiled,
     detect_native_960,
+    detect_sahi_960p_2x2,
     expand_boxes_with_ankle_keypoints,
     filter_detections_fast,
     match_keypoints_to_boxes,
@@ -562,7 +563,7 @@ def run_eval(
         import os as _os
 
         tiling = kwargs.get("tiling", "native_960")
-        if tiling == "960p_2x2" and "_960_batch1" in engine:
+        if tiling in {"960p_2x2", "sahi_960p_2x2"} and "_960_batch1" in engine:
             candidate = engine.replace("_960_batch1", "_batch4")
             if _os.path.exists(candidate):
                 engine = candidate
@@ -600,6 +601,8 @@ def run_eval(
 
     if cfg.tiling == "960p_3x2":
         detect_fn = detect_960p_3x2_tiled
+    elif cfg.tiling == "sahi_960p_2x2":
+        detect_fn = detect_sahi_960p_2x2
     elif cfg.tiling == "native_960":
         detect_fn = detect_native_960
     else:
@@ -1521,7 +1524,13 @@ def run_eval(
                     w_orig=w_orig,
                 )
 
-            if cfg.cross_tile_merge and is_tiled and fused_boxes.numel() > 1:
+            use_repo_cross_tile_merge = (
+                cfg.cross_tile_merge
+                and is_tiled
+                and cfg.tiling != "sahi_960p_2x2"
+                and fused_boxes.numel() > 1
+            )
+            if use_repo_cross_tile_merge:
                 if profile_stages:
                     torch.cuda.synchronize()
                     t_sub_start = time.perf_counter()

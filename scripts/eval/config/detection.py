@@ -112,7 +112,7 @@ def add_detection_args(parser: argparse.ArgumentParser) -> None:
     )
     grp.add_argument(
         "--tiling",
-        choices=["960p_2x2", "960p_3x2", "native_960"],
+        choices=["960p_2x2", "960p_3x2", "native_960", "sahi_960p_2x2"],
         default="native_960",
         help="Inference tiling preset.",
     )

@@ -43,7 +43,7 @@ Options:
   --profile-sequences CSV        Override sequence set used by profile mode.
   --validate-sequences CSV       Override sequence set used by validate mode.
   --engine PATH                  Detector engine path for mot17.py runs.
-  --tiling NAME                  One of: native_960, 960p_2x2, 960p_3x2.
+  --tiling NAME                  One of: native_960, 960p_2x2, 960p_3x2, sahi_960p_2x2.
   --max-frames N                 Per-sequence frame cap.
   --output-root PATH             Root directory for this experiment batch.
   --ablation-categories CSV      Categories for ablation_mot17.py.

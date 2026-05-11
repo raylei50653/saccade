@@ -28,6 +28,179 @@ _nms_cuda_workspace: Dict[Tuple[int], Dict[str, Any]] = {}
 _duplicate_merge_cuda_workspace: Dict[
     Tuple[int, torch.dtype, torch.dtype], Dict[str, Any]
 ] = {}
+_SAHI_2X2_TILINGS = {"960p_2x2", "sahi_960p_2x2"}
+
+
+def _is_2x2_tiling(tiling: str | None) -> bool:
+    return tiling in _SAHI_2X2_TILINGS
+
+
+def _is_tiled_tiling(tiling: str | None) -> bool:
+    return bool(tiling) and (_is_2x2_tiling(tiling) or tiling == "960p_3x2")
+
+
+def _prepare_canvas_960p(
+    pool: Any,
+    h_orig: int,
+    w_orig: int,
+) -> tuple[float, int, int, int, int]:
+    r = 960.0 / max(h_orig, w_orig)
+    h_new, w_new = int(h_orig * r), int(w_orig * r)
+    y_off = (960 - h_new) // 2
+    x_off = (960 - w_new) // 2
+    if cpp_letterbox_gpu is not None:
+        stream = torch.cuda.current_stream().cuda_stream
+        cpp_letterbox_gpu(
+            pool.frame_buffer.data_ptr(),
+            w_orig,
+            h_orig,
+            pool.canvas_960p.data_ptr(),
+            960,
+            x_off,
+            y_off,
+            w_new,
+            h_new,
+            114.0 / 255.0,
+            stream,
+        )
+    else:
+        img_resized = torch.nn.functional.interpolate(
+            pool.frame_buffer.unsqueeze(0), size=(h_new, w_new)
+        ).squeeze(0)
+        pool.canvas_960p.fill_(114.0 / 255.0)
+        pool.canvas_960p[:, y_off : y_off + h_new, x_off : x_off + w_new].copy_(
+            img_resized
+        )
+    return r, h_new, w_new, y_off, x_off
+
+
+def _canvas_to_numpy_rgb(canvas: torch.Tensor) -> np.ndarray:
+    return (
+        canvas.clamp(0.0, 1.0)
+        .mul(255.0)
+        .to(torch.uint8)
+        .permute(1, 2, 0)
+        .contiguous()
+        .cpu()
+        .numpy()
+    )
+
+
+def _get_detector_static_batch_size(detector: Any) -> int:
+    if getattr(detector, "is_dynamic", False):
+        return 1
+    shape = getattr(detector, "input_shape", None)
+    if not shape and hasattr(detector, "engine"):
+        shape = detector.engine.get_tensor_shape(detector.input_name)
+    if not shape:
+        return 1
+    try:
+        batch_dim = int(shape[0])
+    except (TypeError, ValueError, IndexError):
+        return 1
+    return max(1, batch_dim)
+
+
+def _build_sahi_trt_detection_model(
+    detector: Any,
+    detector_box_format: str,
+):
+    try:
+        from sahi.models.base import DetectionModel
+        from sahi.prediction import ObjectPrediction
+    except ImportError as exc:
+        raise RuntimeError(
+            "tiling=sahi_960p_2x2 requires the optional 'sahi' package in the runtime environment"
+        ) from exc
+
+    class _TRTSahiDetectionModel(DetectionModel):
+        def load_model(self):
+            raise RuntimeError(
+                "TRT-backed SAHI adapter requires an already-initialized detector"
+            )
+
+        def set_model(self, model: Any, **kwargs):
+            self.model = model
+
+        def perform_inference(self, image: np.ndarray):
+            if self.model is None:
+                raise ValueError("Model is not loaded, load it by calling .set_model()")
+            image_tensor = (
+                torch.from_numpy(np.array(image, copy=True))
+                .to(device=self.model.device, dtype=torch.float32)
+                .permute(2, 0, 1)
+                .unsqueeze(0)
+                / 255.0
+            )
+            batch_size = _get_detector_static_batch_size(self.model)
+            if batch_size > 1:
+                image_tensor = image_tensor.expand(batch_size, -1, -1, -1).contiguous()
+            raw = self.model.detect_raw(image_tensor)
+            self._original_predictions = [raw[0].clone()]
+            self._original_shape = image.shape
+
+        def _create_object_prediction_list_from_original_predictions(
+            self,
+            shift_amount_list: list[list[int]] | None = [[0, 0]],
+            full_shape_list: list[list[int]] | None = None,
+        ):
+            if shift_amount_list and shift_amount_list and isinstance(
+                shift_amount_list[0], int
+            ):
+                shift_amount_list = [cast(list[int], shift_amount_list)]
+            if full_shape_list and full_shape_list and isinstance(full_shape_list[0], int):
+                full_shape_list = [cast(list[int], full_shape_list)]
+            predictions = self._original_predictions or []
+            object_prediction_list_per_image = []
+            for image_ind, image_predictions in enumerate(predictions):
+                shift_amount = (
+                    [0, 0] if shift_amount_list is None else shift_amount_list[image_ind]
+                )
+                full_shape = (
+                    list(self._original_shape[:2])
+                    if full_shape_list is None
+                    else full_shape_list[image_ind]
+                )
+                boxes = _decode_detector_boxes(
+                    image_predictions[:, :4], detector_box_format
+                )
+                scores = image_predictions[:, 4]
+                classes = image_predictions[:, 5].to(torch.int32)
+                keep = scores >= self.confidence_threshold
+                boxes = boxes[keep]
+                scores = scores[keep]
+                classes = classes[keep]
+                object_prediction_list = []
+                for box, score, class_id in zip(boxes, scores, classes):
+                    bbox = box.detach().cpu().tolist()
+                    bbox[0] = max(0.0, bbox[0])
+                    bbox[1] = max(0.0, bbox[1])
+                    bbox[2] = min(float(full_shape[1]), bbox[2])
+                    bbox[3] = min(float(full_shape[0]), bbox[3])
+                    if not (bbox[0] < bbox[2] and bbox[1] < bbox[3]):
+                        continue
+                    class_key = str(int(class_id.item()))
+                    category_name = self.category_mapping.get(
+                        class_key, f"class_{class_key}"
+                    )
+                    object_prediction_list.append(
+                        ObjectPrediction(
+                            bbox=bbox,
+                            category_id=int(class_id.item()),
+                            category_name=category_name,
+                            score=float(score.item()),
+                            shift_amount=shift_amount,
+                            full_shape=full_shape,
+                        )
+                    )
+                object_prediction_list_per_image.append(object_prediction_list)
+            self._object_prediction_list_per_image = object_prediction_list_per_image
+
+    return _TRTSahiDetectionModel(
+        model=detector,
+        confidence_threshold=0.0,
+        category_mapping={"0": "person"},
+    )
 
 
 def _decode_detector_boxes(
@@ -130,7 +303,7 @@ def _tile_seam_mask_for_boxes(
     frame_h: int,
     seam_margin_canvas_px: float,
 ) -> torch.Tensor:
-    if boxes.numel() == 0 or tiling not in {"960p_2x2", "960p_3x2"}:
+    if boxes.numel() == 0 or not _is_tiled_tiling(tiling):
         return torch.zeros((boxes.size(0),), device=boxes.device, dtype=torch.bool)
 
     r = 960.0 / max(frame_h, frame_w)
@@ -689,7 +862,7 @@ def merge_cross_tile_duplicates_fast(
 
     if cpp_merge_cross_tile_duplicates_cuda is not None and boxes.is_cuda:
         tiling_mode = 0
-        if tiling == "960p_2x2":
+        if _is_2x2_tiling(tiling):
             tiling_mode = 1
         elif tiling == "960p_3x2":
             tiling_mode = 2
@@ -748,7 +921,7 @@ def merge_cross_tile_duplicates_fast(
                 iou_threshold,
                 center_threshold,
                 area_ratio_threshold,
-                1 if tiling == "960p_2x2" else 2 if tiling == "960p_3x2" else 0,
+                1 if _is_2x2_tiling(tiling) else 2 if tiling == "960p_3x2" else 0,
                 frame_w,
                 frame_h,
                 seam_margin_canvas_px,
@@ -853,33 +1026,9 @@ def detect_single_patch_960(
     detector_box_format: str = "xyxy",
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
     if "letterbox" in preprocess_modes:
-        r = 960.0 / max(h_orig, w_orig)
-        h_new, w_new = int(h_orig * r), int(w_orig * r)
-        y_off = (960 - h_new) // 2
-        x_off = (960 - w_new) // 2
-        if cpp_letterbox_gpu is not None:
-            stream = torch.cuda.current_stream().cuda_stream
-            cpp_letterbox_gpu(
-                pool.frame_buffer.data_ptr(),
-                w_orig,
-                h_orig,
-                pool.canvas_960p.data_ptr(),
-                960,
-                x_off,
-                y_off,
-                w_new,
-                h_new,
-                114.0 / 255.0,
-                stream,
-            )
-        else:
-            img_resized = torch.nn.functional.interpolate(
-                pool.frame_buffer.unsqueeze(0), size=(h_new, w_new)
-            ).squeeze(0)
-            pool.canvas_960p.fill_(114.0 / 255.0)
-            pool.canvas_960p[:, y_off : y_off + h_new, x_off : x_off + w_new].copy_(
-                img_resized
-            )
+        r, _h_new, _w_new, y_off, x_off = _prepare_canvas_960p(
+            pool, h_orig, w_orig
+        )
 
         keypoints = None
         if hasattr(detector, "pose"):
@@ -970,15 +1119,7 @@ def detect_960p_3x2_tiled(
         )
         return boxes, scores, classes, False, None
 
-    r = 960.0 / max(h_orig, w_orig)
-    h_new, w_new = int(h_orig * r), int(w_orig * r)
-    img_resized = torch.nn.functional.interpolate(
-        pool.frame_buffer.unsqueeze(0), size=(h_new, w_new)
-    ).squeeze(0)
-    pool.canvas_960p.fill_(114.0 / 255.0)
-    y_off = (960 - h_new) // 2
-    x_off = (960 - w_new) // 2
-    pool.canvas_960p[:, y_off : y_off + h_new, x_off : x_off + w_new].copy_(img_resized)
+    r, _h_new, _w_new, y_off, x_off = _prepare_canvas_960p(pool, h_orig, w_orig)
 
     # Batch 6: 6 tiles in one pass
     pool.tiles_batch6[0].copy_(pool.canvas_960p[:, 0:640, 0:640])
@@ -1014,16 +1155,7 @@ def detect_adaptive_960_tiled(
         )
         return boxes, scores, classes, False, None
 
-    r = 960.0 / max(h_orig, w_orig)
-    h_new, w_new = int(h_orig * r), int(w_orig * r)
-    img_resized = torch.nn.functional.interpolate(
-        pool.frame_buffer.unsqueeze(0), size=(h_new, w_new)
-    ).squeeze(0)
-
-    pool.canvas_960p.fill_(114.0 / 255.0)
-    y_off = (960 - h_new) // 2
-    x_off = (960 - w_new) // 2
-    pool.canvas_960p[:, y_off : y_off + h_new, x_off : x_off + w_new].copy_(img_resized)
+    r, _h_new, _w_new, y_off, x_off = _prepare_canvas_960p(pool, h_orig, w_orig)
 
     pool.tiles_batch4[0].copy_(pool.canvas_960p[:, 0:640, 0:640])
     pool.tiles_batch4[1].copy_(pool.canvas_960p[:, 0:640, 320:960])
@@ -1044,3 +1176,70 @@ def detect_adaptive_960_tiled(
         True,
         None,
     )
+
+
+def detect_sahi_960p_2x2(
+    detector: Any,
+    pool: Any,
+    h_orig: int,
+    w_orig: int,
+    preprocess_modes: List[str],
+    detector_box_format: str = "xyxy",
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, bool, Optional[torch.Tensor]]:
+    if w_orig <= 960 and h_orig <= 960:
+        boxes, scores, classes = detect_single_patch_640(
+            detector, pool, h_orig, w_orig, preprocess_modes, detector_box_format
+        )
+        return boxes, scores, classes, False, None
+
+    if "letterbox" not in preprocess_modes:
+        raise RuntimeError(
+            "tiling=sahi_960p_2x2 currently requires letterbox preprocessing"
+        )
+
+    from sahi.predict import get_sliced_prediction
+
+    r, _h_new, _w_new, y_off, x_off = _prepare_canvas_960p(pool, h_orig, w_orig)
+    canvas_rgb = _canvas_to_numpy_rgb(pool.canvas_960p)
+
+    model_cache = getattr(detector, "_sahi_model_cache", None)
+    if model_cache is None:
+        model_cache = {}
+        setattr(detector, "_sahi_model_cache", model_cache)
+    sahi_model = model_cache.get(detector_box_format)
+    if sahi_model is None:
+        sahi_model = _build_sahi_trt_detection_model(detector, detector_box_format)
+        model_cache[detector_box_format] = sahi_model
+
+    prediction = get_sliced_prediction(
+        image=canvas_rgb,
+        detection_model=sahi_model,
+        slice_height=640,
+        slice_width=640,
+        overlap_height_ratio=0.5,
+        overlap_width_ratio=0.5,
+        perform_standard_pred=False,
+        auto_slice_resolution=False,
+        postprocess_class_agnostic=False,
+        verbose=0,
+    )
+    object_predictions = prediction.object_prediction_list
+    device = pool.frame_buffer.device
+    if not object_predictions:
+        return (
+            torch.empty((0, 4), device=device, dtype=torch.float32),
+            torch.empty((0,), device=device, dtype=torch.float32),
+            torch.empty((0,), device=device, dtype=torch.float32),
+            True,
+            None,
+        )
+
+    boxes = [object_prediction.bbox.to_xyxy() for object_prediction in object_predictions]
+    scores = [object_prediction.score.value for object_prediction in object_predictions]
+    classes = [float(object_prediction.category.id) for object_prediction in object_predictions]
+    boxes_t = torch.tensor(boxes, device=device, dtype=torch.float32)
+    scores_t = torch.tensor(scores, device=device, dtype=torch.float32)
+    classes_t = torch.tensor(classes, device=device, dtype=torch.float32)
+    boxes_t[:, [0, 2]] = (boxes_t[:, [0, 2]] - x_off) / r
+    boxes_t[:, [1, 3]] = (boxes_t[:, [1, 3]] - y_off) / r
+    return boxes_t, scores_t, classes_t, True, None
