@@ -8,7 +8,7 @@ from sqlalchemy.sql import func
 Base = declarative_base()
 
 
-class Experiment(Base):
+class Experiment(Base):  # type: ignore[misc,valid-type]
     __tablename__ = "experiments"
     id = Column(Integer, primary_key=True)
     name = Column(Text, nullable=False)
@@ -21,7 +21,7 @@ class Experiment(Base):
     )
 
 
-class Metric(Base):
+class Metric(Base):  # type: ignore[misc,valid-type]
     __tablename__ = "metrics"
     id = Column(Integer, primary_key=True)
     experiment_id = Column(Integer, ForeignKey("experiments.id", ondelete="CASCADE"))
@@ -59,7 +59,7 @@ class AblationStore:
         self.engine = create_async_engine(db_url)
         self.session_factory = async_sessionmaker(self.engine, expire_on_commit=False)
 
-    async def create_tables(self):
+    async def create_tables(self) -> None:
         """同步 ORM 模型到資料庫 (通常由 Docker init.sql 處理，此處提供作為手動更新手段)"""
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
@@ -78,7 +78,7 @@ class AblationStore:
             )
             session.add(exp)
             await session.commit()
-            return exp.id
+            return int(exp.id)
 
     async def log_metrics(
         self,
@@ -86,7 +86,7 @@ class AblationStore:
         dataset: str,
         metrics: Dict[str, Any],
         raw_results: Optional[Dict[str, Any]] = None,
-    ):
+    ) -> None:
         """為特定實驗紀錄評估結果"""
         async with self.session_factory() as session:
             metric = Metric(
@@ -131,5 +131,5 @@ class AblationStore:
                 )
             return output
 
-    async def close(self):
+    async def close(self) -> None:
         await self.engine.dispose()
