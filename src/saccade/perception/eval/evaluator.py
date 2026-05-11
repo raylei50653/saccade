@@ -1204,7 +1204,6 @@ def run_eval(
                 ),
                 sync_cuda=True,
             )
-
             (
                 (fused_boxes, fused_scores, fused_classes, is_tiled, source_keypoints),
                 _,
@@ -1221,6 +1220,7 @@ def run_eval(
                 ),
                 sync_cuda=True,
             )
+
             source_boxes_for_keypoints = fused_boxes
             debug_dump_active = _debug_frame_selected(
                 seq,
@@ -1908,7 +1908,7 @@ def run_eval(
                             detector.tracker.set_reference_features_from_bank(bank_reps)
                         clean_ids = primary_appearance_bank.clean_ids()
                         if clean_ids:
-                            _clean_ids_list = sorted(clean_ids)
+                            _clean_ids_list = list(clean_ids)
                             _ids_t = torch.tensor(_clean_ids_list, dtype=torch.int32)
                             _flags_t = torch.ones(
                                 len(_clean_ids_list), dtype=torch.bool

@@ -276,7 +276,7 @@ class TrackAppearanceBank:
             q = float(torch.dot(mean_unnorm, mean_unnorm).item())
             consistency = (n * q - 1.0) / (n - 1)
 
-        self._representatives[track_id] = representative.cuda()
+        self._representatives[track_id] = representative
         self._consistency[track_id] = consistency
         if consistency >= self.consistency_threshold:
             self._clean_ids.add(track_id)
@@ -312,13 +312,11 @@ class TrackAppearanceBank:
                 q_hq = float(torch.dot(mean_hq, mean_hq).item())
                 hq_consistency = (n_hq * q_hq - 1.0) / (n_hq - 1)
                 if hq_consistency >= self.consistency_threshold:
-                    self._high_quality_reps[track_id] = F.normalize(
-                        mean_hq, dim=0
-                    ).cuda()
+                    self._high_quality_reps[track_id] = F.normalize(mean_hq, dim=0)
                 else:
                     self._high_quality_reps.pop(track_id, None)
             else:
-                self._high_quality_reps[track_id] = hq_embs[0].cuda()
+                self._high_quality_reps[track_id] = hq_embs[0]
         else:
             self._high_quality_reps.pop(track_id, None)
 
@@ -689,12 +687,25 @@ class GPUByteTracker:
         flags: torch.Tensor,
     ) -> None:
         """Sync per-track clean-embedding flags from Python bank to the CUDA tracker."""
+        if track_ids.numel() == 0:
+            return
+        stream = torch.cuda.current_stream().cuda_stream
+        set_flags_host = getattr(self.tracker, "set_clean_embedding_flags_host", None)
+        if set_flags_host is not None:
+            ids_contig = track_ids.to(torch.int32).contiguous()    # stays on CPU
+            flags_contig = flags.to(torch.bool).contiguous()       # stays on CPU
+            set_flags_host(
+                ids_contig.data_ptr(),
+                flags_contig.data_ptr(),
+                int(track_ids.numel()),
+                stream,
+            )
+            return
         set_flags = getattr(self.tracker, "set_clean_embedding_flags", None)
-        if set_flags is None or track_ids.numel() == 0:
+        if set_flags is None:
             return
         ids_contig = track_ids.to(torch.int32).cuda().contiguous()
         flags_contig = flags.to(torch.bool).cuda().contiguous()
-        stream = torch.cuda.current_stream().cuda_stream
         set_flags(
             ids_contig.data_ptr(),
             flags_contig.data_ptr(),
@@ -721,6 +732,6 @@ class GPUByteTracker:
         slots = torch.tensor(
             [tid_to_slot[tid] for tid in valid_tids], dtype=torch.long, device="cuda"
         )
-        # reps are already CUDA tensors (P1); stack into [n, D] then scatter to slots
-        stacked = torch.stack([bank_reps[tid] for tid in valid_tids])  # [n, D] GPU
+        # reps are CPU tensors; one batched H2D transfer is cheaper than per-track .cuda() at update time
+        stacked = torch.stack([bank_reps[tid] for tid in valid_tids]).cuda()  # [n, D] GPU
         self._bank_slot_features[slots] = stacked

@@ -1372,6 +1372,22 @@ public:
                                    max_objs_ * sizeof(bool), cudaMemcpyHostToDevice, stream));
     }
 
+    void set_clean_embedding_flags_host(int* h_tids, bool* h_flags, int n, cudaStream_t stream) {
+        checkCuda(cudaMemsetAsync(d_has_clean_embedding_, 0, max_objs_ * sizeof(bool), stream));
+        std::fill(h_has_clean_embedding_.begin(), h_has_clean_embedding_.end(), static_cast<uint8_t>(0));
+        if (n == 0) return;
+        ensure_slot_map();
+        for (int i = 0; i < n; ++i) {
+            if (!h_flags[i]) continue;
+            auto it = h_tid_to_slot_.find(h_tids[i]);
+            if (it != h_tid_to_slot_.end()) {
+                h_has_clean_embedding_[it->second] = 1;
+            }
+        }
+        checkCuda(cudaMemcpyAsync(d_has_clean_embedding_, h_has_clean_embedding_.data(),
+                                   max_objs_ * sizeof(bool), cudaMemcpyHostToDevice, stream));
+    }
+
     std::vector<TrackStateSnapshot> get_state_snapshots(cudaStream_t stream) {
         checkCuda(cudaMemcpyAsync(h_active_raw_.data(), d_active_, max_objs_ * sizeof(bool), cudaMemcpyDeviceToHost, stream));
         checkCuda(cudaMemcpyAsync(h_states_.data(), d_states_, max_objs_ * 8 * sizeof(float), cudaMemcpyDeviceToHost, stream));
@@ -1628,6 +1644,7 @@ void GPUByteTracker::set_homography(const float* h) { pimpl_->set_homography(h);
 void GPUByteTracker::set_unified_score_params(const UnifiedScoreParams& params) { pimpl_->set_unified_score_params(params); }
 void GPUByteTracker::update_reference_features(int* track_ids, float* features, int num, cudaStream_t stream) { pimpl_->update_reference_features_impl(track_ids, features, num, stream); }
 void GPUByteTracker::set_clean_embedding_flags(int* track_ids, bool* flags, int n, cudaStream_t stream) { pimpl_->set_clean_embedding_flags(track_ids, flags, n, stream); }
+void GPUByteTracker::set_clean_embedding_flags_host(int* h_tids, bool* h_flags, int n, cudaStream_t stream) { pimpl_->set_clean_embedding_flags_host(h_tids, h_flags, n, stream); }
 void GPUByteTracker::bind_features_buffer(float* ptr) { pimpl_->bind_external_features_buffer(ptr); }
 std::vector<std::pair<int,int>> GPUByteTracker::get_active_tid_slot_pairs() { return pimpl_->get_active_tid_slot_pairs(); }
 void GPUByteTracker::update_into(

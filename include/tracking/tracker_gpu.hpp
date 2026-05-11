@@ -112,6 +112,7 @@ public:
     void set_unified_score_params(const UnifiedScoreParams& params);
     void update_reference_features(int* track_ids, float* features_ptr, int num, cudaStream_t stream);
     void set_clean_embedding_flags(int* track_ids, bool* flags, int n, cudaStream_t stream);
+    void set_clean_embedding_flags_host(int* h_tids, bool* h_flags, int n, cudaStream_t stream);
     void bind_features_buffer(float* ptr);
     std::vector<std::pair<int,int>> get_active_tid_slot_pairs();
     std::vector<TrackStateSnapshot> get_state_snapshots(cudaStream_t stream);
