@@ -287,7 +287,15 @@ def test_identity_resolver_cpp_vs_python_alias_and_stats():
 
     assert dict(py_rk.alias) == dict(cpp_rk.alias), "relinker alias mismatch"
     assert dict(py_lc.alias) == dict(cpp_lc.alias), "lifecycle alias mismatch"
-    assert dict(py_rk.stats) == dict(cpp_rk.stats), "relinker stats mismatch"
+    # Python relinker tracks additional fine-grained stats (biometric, age sub-breakdown,
+    # quality sub-breakdown, appearance_first_bypass) that the C++ relinker does not.
+    # Verify that all C++ stats keys match the Python values.
+    py_stats = dict(py_rk.stats)
+    for key, val in dict(cpp_rk.stats).items():
+        assert key in py_stats, f"Python relinker missing stat key: {key!r}"
+        assert py_stats[key] == val, (
+            f"Stats mismatch for {key!r}: py={py_stats[key]}, cpp={val}"
+        )
     assert dict(py_lc.stats) == dict(cpp_lc.stats), "lifecycle stats mismatch"
 
 

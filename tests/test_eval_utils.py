@@ -212,6 +212,9 @@ def test_mot17_parser_defaults_to_fixed_interval_reid():
 
     assert args.need_reid is False
     assert args.reid_interval == 20
+    assert args.birth_quality_gate is False
+    assert args.birth_min_quality == 0.0
+    assert args.birth_quality_score_bias == 0.15
 
 
 def test_parse_eval_config_defaults_to_fixed_interval_reid(tmp_path):
@@ -229,3 +232,6 @@ def test_parse_eval_config_defaults_to_fixed_interval_reid(tmp_path):
 
     assert cfg.need_reid_enabled is False
     assert cfg.reid_interval == 20
+    assert cfg.birth_quality_gate is False
+    assert cfg.birth_min_quality == 0.0
+    assert cfg.birth_quality_score_bias == 0.15
