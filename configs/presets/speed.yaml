@@ -1,0 +1,8 @@
+# High-throughput profile — yolo26s optimized
+# Engine: yolo26s (fastest)
+# Params: P3 sweep confirmed 2026-05-10 (7-seq SDP)
+# Results: IDF1 52.0% / MOTA 41.6% / IDs 475 / Rcll 55.0% / ~98 FPS  (interp+fp_hard_filter default on 2026-05-10)
+
+engine: models/yolo/yolo26s_960_batch1.engine
+match_thresh: 0.66
+new_track_thresh: 0.28

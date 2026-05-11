@@ -48,6 +48,18 @@ except ImportError:
         def get_tentative_candidates(self, *args: Any, **kwargs: Any) -> List[Any]:
             return []
 
+        def push_keypoints(self, *args: Any, **kwargs: Any) -> None:
+            return None
+
+        def get_biometric(self, *args: Any, **kwargs: Any) -> Any:
+            class _Profile:
+                valid = False
+                r_leg = float("nan")
+                r_shoulder = float("nan")
+                r_head = float("nan")
+
+            return _Profile()
+
 
 @dataclass
 class AppearanceSample:
@@ -97,6 +109,7 @@ class TrackAppearanceBank:
         high_quality_min_score: float = 0.70,
         min_aspect: float = 1.2,
         max_aspect: float = 4.5,
+        bank_weighted_mean: bool = False,
     ) -> None:
         self.k = max(1, k)
         self.min_score = float(min_score)
@@ -105,6 +118,7 @@ class TrackAppearanceBank:
         self.high_quality_min_score = float(high_quality_min_score)
         self.min_aspect = float(min_aspect)
         self.max_aspect = float(max_aspect)
+        self._bank_weighted_mean = bank_weighted_mean
         self._banks: dict[int, list[AppearanceSample]] = {}
         self._representatives: dict[int, torch.Tensor] = {}
         self._consistency: dict[int, float] = {}
@@ -240,7 +254,15 @@ class TrackAppearanceBank:
             return
 
         embs = torch.stack([sample.embedding for sample in bank])
-        mean_unnorm = embs.mean(dim=0)
+        if self._bank_weighted_mean:
+            w = torch.tensor(
+                [s.quality_score if s.quality_score > 0.0 else s.det_score for s in bank],
+                dtype=torch.float32,
+            )
+            w = w / w.sum().clamp(min=1e-6)
+            mean_unnorm = (w.unsqueeze(1) * embs).sum(0)
+        else:
+            mean_unnorm = embs.mean(dim=0)
         representative = F.normalize(mean_unnorm, dim=0)
         n = len(bank)
         if n < 2:
@@ -258,20 +280,28 @@ class TrackAppearanceBank:
         else:
             self._clean_ids.discard(track_id)
 
-        hq_embs = [
-            s.embedding
-            for s in bank
+        hq_samples = [
+            s for s in bank
             if s.det_score >= self.high_quality_min_score
             and (
                 s.aspect_ratio == 0.0
                 or self.min_aspect <= s.aspect_ratio <= self.max_aspect
             )
         ]
-        if hq_embs:
+        if hq_samples:
+            hq_embs = [s.embedding for s in hq_samples]
             if len(hq_embs) >= 2:
                 stacked_hq = torch.stack(hq_embs)
                 n_hq = len(hq_embs)
-                mean_hq = stacked_hq.mean(dim=0)
+                if self._bank_weighted_mean:
+                    w_hq = torch.tensor(
+                        [s.quality_score if s.quality_score > 0.0 else s.det_score for s in hq_samples],
+                        dtype=torch.float32,
+                    )
+                    w_hq = w_hq / w_hq.sum().clamp(min=1e-6)
+                    mean_hq = (w_hq.unsqueeze(1) * stacked_hq).sum(0)
+                else:
+                    mean_hq = stacked_hq.mean(dim=0)
                 q_hq = float(torch.dot(mean_hq, mean_hq).item())
                 hq_consistency = (n_hq * q_hq - 1.0) / (n_hq - 1)
                 if hq_consistency >= self.consistency_threshold:
@@ -362,6 +392,11 @@ class GPUByteTracker:
         adaptive_confirmation: bool = False,
         new_track_thresh: float = -1.0,
         nsa_kalman: bool = False,
+        r_scale: float = 1.0,
+        vel_dir_weight: float = 0.0,
+        fuse_score_weight: float = 0.0,
+        stage2_match_thresh: float = 0.5,
+        birth_low_score_thresh: float = 0.0,
     ) -> None:
         """調整追蹤器門檻與參數。"""
         self.tracker.set_params(
@@ -375,6 +410,11 @@ class GPUByteTracker:
             adaptive_confirmation,
             new_track_thresh,
             nsa_kalman,
+            r_scale,
+            vel_dir_weight,
+            fuse_score_weight,
+            stage2_match_thresh,
+            birth_low_score_thresh,
         )
 
     def set_reid_params(
@@ -601,6 +641,38 @@ class GPUByteTracker:
         if get_candidates is None:
             return []
         return cast(List[Any], get_candidates(stream))
+
+    def push_keypoints(
+        self,
+        track_ids: torch.Tensor,
+        keypoints: torch.Tensor,
+    ) -> None:
+        push = getattr(self.tracker, "push_keypoints", None)
+        if push is None or track_ids.numel() == 0 or keypoints.numel() == 0:
+            return
+        ids_contig = track_ids.to(device=keypoints.device, dtype=torch.int32).contiguous()
+        kpts_contig = keypoints.to(torch.float32).contiguous()
+        stream = torch.cuda.current_stream().cuda_stream
+        push(
+            ids_contig.data_ptr(),
+            kpts_contig.data_ptr(),
+            int(ids_contig.numel()),
+            stream,
+        )
+
+    def get_biometric(self, track_id: int) -> Optional[dict[str, float]]:
+        get_bio = getattr(self.tracker, "get_biometric", None)
+        if get_bio is None:
+            return None
+        profile = get_bio(int(track_id))
+        if not getattr(profile, "valid", False):
+            return None
+        out = {
+            "r_leg": float(profile.r_leg),
+            "r_shoulder": float(profile.r_shoulder),
+            "r_head": float(profile.r_head),
+        }
+        return {k: v for k, v in out.items() if not np.isnan(v)}
 
     def set_clean_embedding_flags(
         self,

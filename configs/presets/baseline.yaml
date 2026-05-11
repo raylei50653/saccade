@@ -1,0 +1,10 @@
+# tracker_core_gmc — daily development and fast iteration
+# Engine: yolo26m (balanced speed/accuracy)
+# P3 confirmed (2026-05-10): match=0.66, ntt=0.28 is best tradeoff on yolo26m
+# fuse_score_weight=0.4 added (2026-05-11): botsort-style IoU penalty; FP -12%, MOTA +1.6pp
+# Results (7-seq SDP): IDF1 51.2% / MOTA 43.4% / IDs 505 / Rcll 58.5% / ~90 FPS
+
+engine: models/yolo/yolo26m_960_batch1.engine
+match_thresh: 0.66
+new_track_thresh: 0.28
+fuse_score_weight: 0.4
