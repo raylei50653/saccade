@@ -1,0 +1,48 @@
+# Geometry priors and ID stability module
+# Load with: --module-geometry configs/modules/geometry.yaml
+
+# Crowd tracking thresholds (active when crowd_low_score_mode is on)
+crowd_track_thresh: 0.02
+crowd_mid_thresh: 0.05
+crowd_new_track_thresh: 0.25
+
+# Adaptive geometry scaling (off by default)
+geometry_mid_scale: false
+geometry_ref_height_ratio: 0.12
+geometry_min_scale: 0.875
+geometry_max_scale: 1.20
+geometry_ema_beta: 0.80
+geometry_loosen_step: 0.08
+geometry_tighten_step: 0.03
+geometry_min_samples: 5
+
+# ID stability filter
+id_stability_filter: true
+id_stability_min_hits: 2
+id_stability_min_iou: 0.05
+id_stability_max_center_shift: 2.0
+id_stability_max_gap: 1
+id_stability_score_ema: 0.70
+id_stability_min_score_ema: 0.15
+
+# Person geometry hard filter
+person_geometry_prior: true
+person_min_height_ratio: 0.018
+person_min_aspect: 1.0
+person_max_aspect: 5.5
+person_min_area_ratio: 0.00006
+person_max_area_ratio: 0.0  # 0 = disabled
+
+# Detection quality scaling (A6)
+detection_quality_scaling: true
+detection_quality_w_aspect: 0.50
+detection_quality_w_center: 0.30
+detection_quality_w_area: 0.20
+
+# Geometry suspect support
+geometry_suspect_support: true
+# geometry_suspect_score: null  # null = auto-derived from track_thresh/mid_thresh
+
+# Kalman
+nsa_kalman: false
+kalman_r_scale: 0.75

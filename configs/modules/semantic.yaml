@@ -1,0 +1,64 @@
+# Semantic relink and appearance memory module
+# Load with: --module-semantic configs/modules/semantic.yaml
+#
+# Confirmed best (2026-05-10): threshold=0.91, ttl=45, bank OFF (IDF1 51.2%)
+
+# Core semantic relink
+semantic_threshold: 0.91
+semantic_ttl: 45
+semantic_ema: 0.83
+semantic_spatial_gate: 0.20
+semantic_min_lost_frames: 2
+semantic_min_iou: 0.20
+semantic_mahalanobis_threshold: 0.0
+semantic_debug: false
+
+# Reference buffer
+semantic_buffer_size: 10
+semantic_min_consistency: 0.0
+semantic_rerank_mode: mean
+semantic_reciprocal_margin: 0.0
+
+# Unified score (A1) — zero = disabled
+semantic_iou_weight: 0.0
+semantic_mahalanobis_weight: 0.0
+semantic_dynamic_margin_crowd: 0.0
+semantic_dynamic_margin_age: 0.0
+semantic_biometric_threshold: 0.0
+semantic_w_sim_base: 0.80
+semantic_w_iou_base: 0.34
+semantic_w_maha_base: 0.31
+semantic_shift_ambiguity: 0.34
+semantic_shift_lost_age: 0.18
+
+# Python relinker (C++ is default)
+force_python_relinker: false
+semantic_experimental_mode: standard
+semantic_appearance_first_sim_threshold: 0.95
+semantic_appearance_first_margin: 0.03
+
+# Appearance bank (Phase 1 — off by default, confirmed no gain on baseline)
+semantic_bank_inject: false
+appearance_bank: false
+appearance_bank_size: 5
+appearance_bank_min_score: 0.45
+appearance_bank_min_iou: 0.35
+appearance_bank_consistency_threshold: 0.75
+appearance_bank_high_quality_min_score: 0.75
+appearance_bank_min_aspect: 1.2
+appearance_bank_max_aspect: 4.5
+
+# Bank quality scoring (A6)
+bank_quality_v2: true
+bank_quality_w_det: 0.45
+bank_quality_w_iou: 0.20
+bank_quality_w_aspect: 0.15
+bank_quality_w_center: 0.10
+bank_quality_w_area: 0.10
+
+# False-accept filter (Phase 3)
+semantic_clean_score_threshold: 0.65
+semantic_clean_min_aspect: 1.2
+semantic_clean_max_aspect: 4.5
+semantic_clean_margin_ratio: 0.0
+semantic_strict_sim_threshold: 0.0

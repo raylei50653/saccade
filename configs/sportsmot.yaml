@@ -1,0 +1,63 @@
+# SportsMOT dataset profile
+# Purpose: provide a safer starting point than the implicit MOT17 fallback.
+# This file is intentionally conservative and avoids several MOT17-specific
+# heuristics that tend to overfit pedestrian street scenes.
+#
+# Usage:
+#   uv run python scripts/eval/sportsmot.py --config configs/sportsmot.yaml
+#
+# Notes:
+# - SportsMOT has fast motion, frequent camera panning/zoom, and more varied
+#   human poses than MOT17.
+# - The main failure mode observed so far is excessive FP, so this profile
+#   tightens detector/tracker entry thresholds and disables aggressive
+#   MOT17-tuned quality heuristics.
+
+# --- Engine ---
+engine: models/yolo/yolo26m_960_batch1.engine
+
+# --- Dataset ---
+data_root: datasets/SportsMOT
+split: val
+
+# --- Core tracking ---
+conf_threshold: 0.10
+track_thresh: 0.10
+high_thresh: 0.50
+mid_thresh: 0.15
+match_thresh: 0.72
+new_track_thresh: 0.40
+confirm_streak: 1
+
+# --- Motion / GMC ---
+gmc: true
+gmc_mode: gpu
+gmc_downscale: 8
+per_seq_adapt: true
+
+# --- Detection / preprocessing ---
+preprocess: "letterbox"
+tiling: native_960
+cross_tile_merge: false
+fp_hard_filter_enabled: false
+adaptive_detection_cap: false
+per_frame_detection_cap: 0
+temporal_consistency_min_frames: 2
+
+# --- Geometry / quality ---
+# Sports players violate MOT17-style upright-pedestrian assumptions more often,
+# so keep the prior but relax it substantially and disable MOT17-tuned scaling.
+person_geometry_prior: true
+person_min_height_ratio: 0.012
+person_min_aspect: 0.55
+person_max_aspect: 7.5
+person_min_area_ratio: 0.00002
+person_max_area_ratio: 0.0
+geometry_suspect_support: true
+detection_quality_scaling: false
+id_stability_filter: false
+
+# --- Pipeline ---
+reid_mode: "off"
+appearance_bank: false
+semantic_bank_inject: false

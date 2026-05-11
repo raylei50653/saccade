@@ -1,0 +1,44 @@
+# Dynamic ReID trigger policy module (Experimental)
+# Load with: --module-trigger configs/modules/trigger.yaml
+#
+# Confirmed best (2026-04-28): cooldown=8, birth_death_lost_min=3 → p3_t40_cd8_bm3
+
+need_reid: true
+reid_history_size: 5
+reid_trigger_mode: score_ema
+
+# Long memory
+reid_long_memory_decay: 0.80
+reid_long_memory_trigger: 1.25
+
+# Score EMA
+reid_score_decay: 0.80
+reid_score_threshold: 2.0
+reid_score_threshold_low: 2.0
+
+# Signal weights
+reid_weight_new: 1.0
+reid_weight_lost: 1.4
+reid_weight_geom: 0.5
+reid_weight_conf: 0.5
+
+# Birth/death events
+reid_birth_death_boost: 1.0
+reid_birth_death_lost_min: 3.0  # confirmed best: 3.0
+
+# Lost age cap
+reid_lost_age_cap: 30
+
+# Instability scoring
+reid_unstable_shift_weight: 1.0
+reid_unstable_iou_weight: 1.0
+
+# Confidence jitter
+reid_conf_jitter_gate: 0.10
+
+# Persistence + cooldown
+reid_trigger_persist_frames: 2
+reid_cooldown_frames: 8  # confirmed best: 8
+
+# Smoothing
+reid_geom_smooth_window: 1

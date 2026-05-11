@@ -1,0 +1,55 @@
+# Detection and preprocessing module
+# Load with: --module-detection configs/modules/detection.yaml
+# Override any field; unspecified fields use code defaults.
+
+# Preprocessing
+preprocess: "letterbox,gamma,contrast"
+gamma: 0.8
+gamma_luma_threshold: 0.35
+contrast: 1.2
+
+# Tiling (native_960 = no tiling; 960p_2x2 / 960p_3x2 for dense scenes)
+tiling: native_960
+cross_tile_merge: true
+cross_tile_score_penalty: 1.0
+tile_diagnostics: false
+tile_seam_score_penalty: 1.0
+tile_seam_margin_canvas_px: 24.0
+cross_tile_seam_center_scale: 1.8
+cross_tile_seam_area_ratio_threshold: 0.30
+cross_tile_seam_min_overlap_ratio: 0.45
+
+# Basic detector settings
+person_class: 0
+track_person_only: true
+detector_box_format: xyxy
+# nms_iou_threshold: null  # null = auto (0.5 for native/2x2, 0.35 for 3x2)
+
+# Crowd low-score mode
+crowd_low_score_mode: false
+crowd_low_score_trigger: 25
+crowd_conf_threshold: 0.02
+
+# FP hard filter (off by default; enable for very noisy backgrounds)
+fp_hard_filter_enabled: false
+fp_hard_filter_min_score: 0.20
+fp_hard_filter_max_suspicious_area: 15000
+fp_hard_filter_max_suspicious_score: 0.40
+
+# Narrow person score bonus (0 = off)
+narrow_person_score_bonus: 0.0
+narrow_person_max_width_ratio: 0.018
+narrow_person_min_height_ratio: 0.045
+narrow_person_min_aspect: 2.0
+narrow_person_max_aspect: 4.8
+
+# Per-frame detection cap (0 = off)
+per_frame_detection_cap: 0
+detection_cap_rank_method: fp_filter_quality
+adaptive_detection_cap: false
+adaptive_cap_base: 40
+adaptive_cap_max: 60
+adaptive_cap_min: 15
+
+# Temporal consistency
+temporal_consistency_min_frames: 3

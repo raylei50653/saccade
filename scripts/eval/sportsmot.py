@@ -22,13 +22,6 @@ from mot17_args import build_parser  # noqa: E402
 
 
 def _load_config_defaults(project_root: Path) -> dict:
-    """Pre-parse --config / --preset / --module-* and return merged defaults dict.
-
-    Priority (lowest → highest):
-      argparse defaults < config file < module YAMLs < preset < CLI flags.
-
-    Only yaml.safe_load is used; no dynamic import or eval.
-    """
     _MODULE_FLAGS = [
         "module_detection",
         "module_geometry",
@@ -47,7 +40,6 @@ def _load_config_defaults(project_root: Path) -> dict:
 
     defaults: dict = {}
 
-    # 1. Core config file (or fallback baseline)
     if pre_args.config:
         config_path = Path(pre_args.config)
         if not config_path.is_absolute():
@@ -56,13 +48,12 @@ def _load_config_defaults(project_root: Path) -> dict:
             loaded = yaml.safe_load(f) or {}
         defaults.update(loaded)
     elif not pre_args.preset:
-        fallback = project_root / "configs" / "mot17_baseline.yaml"
+        fallback = project_root / "configs" / "sportsmot.yaml"
         if fallback.exists():
             with fallback.open() as f:
                 loaded = yaml.safe_load(f) or {}
             defaults.update(loaded)
 
-    # 2. Per-module YAML files (opt-in)
     for flag in _MODULE_FLAGS:
         path_str = getattr(pre_args, flag, None)
         if path_str:
@@ -73,35 +64,45 @@ def _load_config_defaults(project_root: Path) -> dict:
                 loaded = yaml.safe_load(f) or {}
             defaults.update(loaded)
 
-    # 3. Preset (highest priority among file-based configs)
     if pre_args.preset:
         preset_path = project_root / "configs" / "presets" / f"{pre_args.preset}.yaml"
-        with preset_path.open() as f:
-            loaded = yaml.safe_load(f) or {}
-        defaults.update(loaded)
+        if preset_path.exists():
+            with preset_path.open() as f:
+                loaded = yaml.safe_load(f) or {}
+            defaults.update(loaded)
 
     return defaults
 
 
 if __name__ == "__main__":
     parser = build_parser()
+
+    # --- SportsMOT Default Params ---
+    parser.set_defaults(data_root="datasets/SportsMOT")
+    parser.set_defaults(split="val")
+
     config_defaults = _load_config_defaults(project_root)
     if config_defaults:
         parser.set_defaults(**config_defaults)
+
     args = parser.parse_args()
-    if args.detector and not args.sequences:
+
+    # --- SportsMOT Sequence Auto-scanning ---
+    if not args.sequences:
         from pathlib import Path as _Path
 
         data_root = _Path(args.data_root)
         split_dir = data_root / args.split
         if split_dir.exists():
+            # SportsMOT sequences: v_basketball_01, v_football_01, etc.
             args.sequences = ",".join(
                 sorted(
                     d.name
                     for d in split_dir.iterdir()
-                    if d.is_dir() and d.name.endswith(f"-{args.detector}")
+                    if d.is_dir() and d.name.startswith("v_")
                 )
             )
+
     _MODULE_KEYS = {
         "module_detection",
         "module_geometry",
@@ -111,8 +112,11 @@ if __name__ == "__main__":
         "module_lifecycle",
     }
     eval_kwargs = {k: v for k, v in vars(args).items() if k not in _MODULE_KEYS}
+
+    # Run evaluation
     metrics = run_eval(**eval_kwargs)
+
     if metrics:
-        print("\n=== OVERALL METRICS ===")
+        print("\n=== SPORTSMOT EVALUATION SUMMARY ===")
         for k, v in metrics.items():
             print(f"  {k}: {v}")

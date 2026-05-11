@@ -71,6 +71,9 @@ _CATEGORY_EXPERIMENTS: dict[str, list[_ExperimentSpec]] = {
         ("confirm=2", "confirm2", ["--confirm-streak", "2"]),
         ("adaptive confirm", "adaptive_confirm", ["--adaptive-confirmation"]),
         ("no gmc", "no_gmc", ["--no-gmc"]),
+        ("r_scale=0.75", "r_scale075", ["--kalman-r-scale", "0.75"]),
+        ("r_scale=0.50", "r_scale050", ["--kalman-r-scale", "0.50"]),
+        ("r_scale=0.25", "r_scale025", ["--kalman-r-scale", "0.25"]),
     ],
     "geometry": [
         ("geometry mid-scale", "mid_scale", ["--geometry-mid-scale"]),

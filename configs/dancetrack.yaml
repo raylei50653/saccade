@@ -1,0 +1,62 @@
+# DanceTrack dataset profile
+# Purpose: provide a DanceTrack-oriented baseline instead of inheriting the
+# MOT17 profile. This keeps the pipeline simple and removes several
+# street-pedestrian-specific heuristics that can destabilize identity tracking.
+#
+# Usage:
+#   uv run python scripts/eval/dancetrack.py --config configs/dancetrack.yaml
+#
+# Notes:
+# - DanceTrack is less detection-limited than SportsMOT; the more common issue
+#   is identity instability under large pose change and close interactions.
+# - This profile therefore keeps recall reasonable while reducing hard geometry
+#   assumptions and conservative ID-stability gating.
+
+# --- Engine ---
+engine: models/yolo/yolo26m_960_batch1.engine
+
+# --- Dataset ---
+data_root: datasets/DanceTrack/val
+split: ""
+
+# --- Core tracking ---
+conf_threshold: 0.08
+track_thresh: 0.08
+high_thresh: 0.45
+mid_thresh: 0.12
+match_thresh: 0.74
+new_track_thresh: 0.35
+confirm_streak: 1
+
+# --- Motion / GMC ---
+gmc: true
+gmc_mode: gpu
+gmc_downscale: 8
+per_seq_adapt: true
+
+# --- Detection / preprocessing ---
+preprocess: "letterbox"
+tiling: native_960
+cross_tile_merge: false
+fp_hard_filter_enabled: false
+adaptive_detection_cap: false
+per_frame_detection_cap: 0
+temporal_consistency_min_frames: 1
+
+# --- Geometry / quality ---
+# Dancers regularly break simple upright-person aspect priors, so keep these
+# bounds loose and avoid MOT17-tuned quality scaling and stability gating.
+person_geometry_prior: true
+person_min_height_ratio: 0.010
+person_min_aspect: 0.45
+person_max_aspect: 8.0
+person_min_area_ratio: 0.000015
+person_max_area_ratio: 0.0
+geometry_suspect_support: true
+detection_quality_scaling: false
+id_stability_filter: false
+
+# --- Pipeline ---
+reid_mode: "off"
+appearance_bank: false
+semantic_bank_inject: false

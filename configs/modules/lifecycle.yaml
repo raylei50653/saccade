@@ -1,0 +1,53 @@
+# Lifecycle merge and tracklet cleanup module (Experimental)
+# Load with: --module-lifecycle configs/modules/lifecycle.yaml
+#
+# NOTE: post_lifecycle_merge confirmed harmful on baseline (2026-04-27).
+# Only enable lifecycle_merge for specific ablations.
+
+# Birth gates
+birth_quality_gate: false
+birth_min_quality: 0.0
+birth_quality_score_bias: 0.15
+stage2_quality_gate: false
+stage2_quality_min: 0.40
+birth_consecutive_gate: false
+birth_consecutive_frames: 2
+birth_consecutive_iou: 0.40
+birth_consecutive_boost: 0.05
+birth_consecutive_min_score: 0.20
+birth_consecutive_min_motion: 0.0
+
+# Pre-output lifecycle merge
+lifecycle_merge: false
+lifecycle_ttl: 45
+lifecycle_min_gap: 2
+lifecycle_spatial_gate: 0.08
+lifecycle_min_iou: 0.0
+lifecycle_sim_threshold: 0.90
+lifecycle_require_embedding: false
+lifecycle_ema: 0.83
+
+# Post-output lifecycle merge
+post_lifecycle_merge: false
+post_lifecycle_ttl: 60
+post_lifecycle_min_gap: 1
+post_lifecycle_velocity_samples: 5
+post_lifecycle_spatial_weight: 0.35
+post_lifecycle_motion_weight: 0.45
+post_lifecycle_time_weight: 0.10
+post_lifecycle_direction_weight: 0.25
+post_lifecycle_max_cost: 1.25
+post_lifecycle_appearance_gate: false
+post_lifecycle_appearance_threshold: 0.90
+post_lifecycle_appearance_min_samples: 1
+post_lifecycle_appearance_max_samples: 5
+post_lifecycle_appearance_min_score: 0.0
+post_lifecycle_appearance_min_consistency: 0.0
+post_lifecycle_appearance_weight: 0.0
+post_lifecycle_gap_uncertainty_weight: 0.0
+post_lifecycle_consistency_weight: 0.0
+post_lifecycle_missing_appearance_cost: 0.5
+
+# Tracklet cleanup
+min_tracklet_len: 1
+min_tracklet_score: 0.0
