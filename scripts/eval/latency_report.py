@@ -129,14 +129,18 @@ def _print_comparison(
         b_ms = stages_b.get(name, {}).get("mean_ms")
         if a_ms is None and b_ms is None:
             continue
+        if (a_ms or 0) == 0 and (b_ms or 0) == 0:
+            continue
         a_str = f"{a_ms:.2f}ms" if a_ms is not None else "—"
         b_str = f"{b_ms:.2f}ms" if b_ms is not None else "—"
         if a_ms is not None and b_ms is not None:
             delta = b_ms - a_ms
-            delta_pct = delta / a_ms * 100.0 if a_ms != 0 else float("inf")
+            if a_ms > 0:
+                pct_str = f"{'+' if delta >= 0 else ''}{delta / a_ms * 100.0:.1f}%"
+            else:
+                pct_str = "n/a"
             sign = "+" if delta >= 0 else ""
             delta_str = f"{sign}{delta:.2f}ms"
-            pct_str = f"{sign}{delta_pct:.1f}%"
         else:
             delta_str = "—"
             pct_str = "—"
