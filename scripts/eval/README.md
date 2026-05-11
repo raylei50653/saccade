@@ -127,6 +127,43 @@ Interpretation:
 - If further SportsMOT tuning is needed, continue from the MOT17 baseline plus
   `--new-track-thresh 0.35` before touching broader detector or geometry logic.
 
+## 延遲分析工作流
+
+### 快速 profile（~3s，不跑 MOTMetrics）
+
+```bash
+uv run python scripts/eval/mot17.py \
+  --profile-stages --latency-only \
+  --sequences MOT17-04-SDP \
+  --max-frames 150 --warmup-frames 50 \
+  --output runs/my_profile
+```
+
+輸出：`runs/my_profile/_stage_profile.json` + console ASCII waterfall。
+
+### 事後分析（不重跑）
+
+```bash
+# 單次 breakdown
+python scripts/eval/latency_report.py runs/my_profile/
+
+# 比較兩次 run（e.g. 改了某個 module 前後）
+python scripts/eval/latency_report.py runs/before/ --compare runs/after/
+
+# 看特定 sequence
+python scripts/eval/latency_report.py runs/my_profile/ --seq MOT17-04-SDP
+```
+
+### 輸出解讀
+
+- `detect`：TRT 推論，通常是最大瓶頸（~40-50%）
+- `postprocess`：NMS + filter，第二大瓶頸（~20-25%）
+- `relink_write`：含 background async 寫入，std 會偏高屬正常
+- `[unaccounted]`：frame_total 扣掉所有 stage 後的殘差，< 1ms 正常
+- `p95 >> mean` 的 stage 代表偶發長尾，值得調查
+
+---
+
 ## Module Benchmark Template
 
 When you want to rerun the full module-by-module experiment flow from
