@@ -43,6 +43,8 @@ dependencies = [
     "motmetrics>=1.4.0",
     "llama-index>=0.14.21",
     "llama-index-vector-stores-chroma>=0.5.5",
+    "asyncpg>=0.30.0",
+    "sqlalchemy>=2.0.38",
 ]
 
 [tool.setuptools]
@@ -76,3 +78,6 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 asyncio_mode = "strict"
 pythonpath = ["src"]
+markers = [
+    "dali: tests that require a CUDA device and nvidia-dali (NVDEC decode path)",
+]
