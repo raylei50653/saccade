@@ -20,8 +20,6 @@ except ImportError:
     cpp_nms_cuda = None
     cpp_letterbox_gpu = None
 
-from torchvision.ops import batched_nms, nms
-
 # 使用 Any 以避免 Mypy 對 Tensor | int 混合類型的屬性存取報錯
 _filter_detections_cuda_workspace: Dict[Tuple[int], Dict[str, Any]] = {}
 _nms_cuda_workspace: Dict[Tuple[int], Dict[str, Any]] = {}
