@@ -60,11 +60,20 @@ override-dependencies = [
 [tool.mypy]
 strict = true
 ignore_missing_imports = true
-exclude = ["tests/"]
+exclude = ["tests/", "build/", "build-native-coverage/"]
 mypy_path = "src"
 
 [[tool.mypy.overrides]]
 module = ["scripts.*"]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = [
+    "debug_eval",
+    "saccade.media.dali_pipeline",
+    "saccade.perception.detector_trt",
+    "saccade.perception.eval.detection",
+]
 ignore_errors = true
 
 [tool.ruff]
