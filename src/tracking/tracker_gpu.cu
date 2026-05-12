@@ -8,6 +8,8 @@
 #include <numeric>
 #include <memory>
 #include <cstdint>
+#include <cstdlib>
+#include <cstring>
 #include <cmath>
 #include <sstream>
 #include <unordered_map>
@@ -29,6 +31,26 @@ namespace saccade {
 namespace {
 constexpr int TRACK_EMPTY = 0;
 constexpr int TRACK_TENTATIVE = 1;
+
+bool env_flag_enabled(const char* name, bool default_value) {
+    const char* value = std::getenv(name);
+    if (!value || !*value) return default_value;
+    return !(
+        std::strcmp(value, "0") == 0 ||
+        std::strcmp(value, "false") == 0 ||
+        std::strcmp(value, "False") == 0 ||
+        std::strcmp(value, "FALSE") == 0
+    );
+}
+
+float env_float_value(const char* name, float default_value) {
+    const char* value = std::getenv(name);
+    if (!value || !*value) return default_value;
+    char* end = nullptr;
+    const float parsed = std::strtof(value, &end);
+    if (end == value) return default_value;
+    return parsed;
+}
 }
 
 // --- CUDA Kernels ---
@@ -1132,6 +1154,28 @@ public:
                 track_thresh_,
                 high_thresh_
             );
+            static const bool enable_dda = env_flag_enabled("SACCADE_ENABLE_DDA", true);
+            static const float dda_max_cost = env_float_value("SACCADE_DDA_MAX_COST", 0.12f);
+            const int* matched_det_mask = nullptr;
+
+            if (enable_dda) {
+                // Stage 0: Decomposed Data Association (DDA) - Unambiguous Matching
+                // Match isolated/obvious targets first using a very strict cost threshold.
+                nvtxRangePushA("Assoc/S0_Unambiguous");
+                kernel::fused_sinkhorn_topk_kernel<<<max_objs_, 128, 0, stream>>>(
+                    d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
+                    max_objs_, num_dets, 30.0f, dda_max_cost,
+                    high_thresh_, 1.1f, 2,
+                    nullptr,
+                    d_topk_indices_, d_topk_probs_
+                );
+                checkCuda(cudaMemsetAsync(d_auction_prices_, 0, num_dets * sizeof(uint64_t), stream));
+                kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
+                    d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
+                    max_objs_, num_dets, 3, 0.01f);
+                nvtxRangePop(); // Assoc/S0_Unambiguous
+                matched_det_mask = d_det_to_trk_;
+            }
 
             // Stage 1: High-conf dets -> Confirmed tracks first (D2-C)
             nvtxRangePushA("Assoc/S1_HiConf");
@@ -1139,7 +1183,7 @@ public:
                 d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
                 max_objs_, num_dets, 30.0f, match_thresh_,
                 high_thresh_, 1.1f, 2, // TRACK_CONFIRMED only
-                nullptr,
+                matched_det_mask,
                 d_topk_indices_, d_topk_probs_
             );
             checkCuda(cudaMemsetAsync(d_auction_prices_, 0, num_dets * sizeof(uint64_t), stream));
@@ -1154,7 +1198,7 @@ public:
                 d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
                 max_objs_, num_dets, 30.0f, match_thresh_,
                 effective_mid_thresh, high_thresh_, 2, // TRACK_CONFIRMED only
-                nullptr,
+                matched_det_mask,
                 d_topk_indices_, d_topk_probs_
             );
             checkCuda(cudaMemsetAsync(d_auction_prices_, 0, num_dets * sizeof(uint64_t), stream));
@@ -1169,7 +1213,7 @@ public:
                 d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
                 max_objs_, num_dets, 30.0f, match_thresh_,
                 effective_mid_thresh, 1.1f, 1, // TRACK_TENTATIVE only
-                d_det_to_trk_, // skip dets already claimed by confirmed tracks
+                matched_det_mask,
                 d_topk_indices_, d_topk_probs_
             );
             checkCuda(cudaMemsetAsync(d_auction_prices_, 0, num_dets * sizeof(uint64_t), stream));
@@ -2022,6 +2066,38 @@ __global__ void nms_select_kernel(
     *out_count = keep_count;
 }
 
+__global__ void compute_prior_immunity_kernel(
+    const float* boxes,
+    const int* classes,
+    const int64_t* order_indices,
+    const int* valid_count_ptr,
+    int max_dets,
+    const float* priors,
+    const int* prior_classes,
+    int num_priors,
+    float prior_iou_threshold,
+    bool class_aware,
+    bool* immunity_mask
+) {
+    const int valid_count = min(*valid_count_ptr, max_dets);
+    const int pos = blockIdx.x * blockDim.x + threadIdx.x;
+    if (pos >= valid_count) return;
+
+    const int idx = static_cast<int>(order_indices[pos]);
+    const float* box = boxes + idx * 4;
+    const int box_class = classes[idx];
+
+    bool immune = false;
+    for (int i = 0; i < num_priors; ++i) {
+        if (class_aware && prior_classes && box_class != prior_classes[i]) continue;
+        if (get_iou_device(box, priors + i * 4) > prior_iou_threshold) {
+            immune = true;
+            break;
+        }
+    }
+    immunity_mask[pos] = immune;
+}
+
 __global__ void nms_bitmask_counted_kernel(
     const float* boxes,
     const int* classes,
@@ -2031,7 +2107,8 @@ __global__ void nms_bitmask_counted_kernel(
     int col_blocks,
     uint64_t* suppression_masks,
     float iou_threshold,
-    bool class_aware
+    bool class_aware,
+    const bool* immunity_mask
 ) {
     const int valid_count = min(*valid_count_ptr, max_dets);
     const int col_block = blockIdx.x;
@@ -2058,7 +2135,9 @@ __global__ void nms_bitmask_counted_kernel(
         }
         const float iou = get_iou_device(row_box, boxes + col_idx * 4);
         if (iou > iou_threshold) {
-            mask |= 1ULL << col_offset;
+            if (!immunity_mask || !immunity_mask[col_pos]) {
+                mask |= 1ULL << col_offset;
+            }
         }
     }
     suppression_masks[row_pos * col_blocks + col_block] = mask;
@@ -2260,6 +2339,11 @@ void nms_counted_cuda(
     int* out_count_ptr,
     float iou_threshold,
     bool class_aware,
+    const float* priors_ptr,
+    const int* prior_classes_ptr,
+    int num_priors,
+    float prior_iou_threshold,
+    bool* immunity_mask_ptr,
     cudaStream_t stream
 ) {
     (void)scores_ptr;
@@ -2267,6 +2351,28 @@ void nms_counted_cuda(
     if (max_dets <= 0) {
         return;
     }
+
+    if (num_priors > 0 && priors_ptr != nullptr && immunity_mask_ptr != nullptr) {
+        const int threads = 256;
+        const int blocks = (max_dets + threads - 1) / threads;
+        checkCuda(cudaMemsetAsync(immunity_mask_ptr, 0, max_dets * sizeof(bool), stream));
+        compute_prior_immunity_kernel<<<blocks, threads, 0, stream>>>(
+            boxes_ptr,
+            classes_ptr,
+            order_indices_ptr,
+            valid_count_ptr,
+            max_dets,
+            priors_ptr,
+            prior_classes_ptr,
+            num_priors,
+            prior_iou_threshold,
+            class_aware,
+            immunity_mask_ptr
+        );
+    } else if (immunity_mask_ptr != nullptr) {
+        checkCuda(cudaMemsetAsync(immunity_mask_ptr, 0, max_dets * sizeof(bool), stream));
+    }
+
     const int col_blocks = (max_dets + NMS_BLOCK_SIZE - 1) / NMS_BLOCK_SIZE;
     checkCuda(cudaMemsetAsync(suppression_masks_ptr, 0, static_cast<size_t>(max_dets) * col_blocks * sizeof(uint64_t), stream));
     checkCuda(cudaMemsetAsync(remv_ptr, 0, col_blocks * sizeof(uint64_t), stream));
@@ -2280,7 +2386,8 @@ void nms_counted_cuda(
         col_blocks,
         suppression_masks_ptr,
         iou_threshold,
-        class_aware
+        class_aware,
+        num_priors > 0 ? immunity_mask_ptr : nullptr
     );
     nms_select_counted_kernel<<<1, 1, 0, stream>>>(
         suppression_masks_ptr,

@@ -1,5 +1,6 @@
 # mypy: ignore-errors
 import configparser
+import os
 import time
 from collections import OrderedDict, deque
 import dataclasses
@@ -512,6 +513,45 @@ except ImportError:
 # Post-merge functions moved to post_merge.py
 
 
+def _build_active_track_priors(
+    tracker: Any,
+    device: torch.device,
+    *,
+    min_track_age: int = 0,
+    min_track_score: float = 0.0,
+) -> tuple[torch.Tensor | None, torch.Tensor | None]:
+    snapshots = tracker.get_state_snapshots()
+    if not snapshots:
+        return None, None
+
+    prior_boxes: list[list[float]] = []
+    prior_classes: list[int] = []
+    for snap in snapshots:
+        if int(snap.age) < min_track_age:
+            continue
+        if float(snap.score) < min_track_score:
+            continue
+        cx, cy, a, h = snap.state[0], snap.state[1], snap.state[2], snap.state[3]
+        w = a * h
+        prior_boxes.append([cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2])
+        prior_classes.append(int(snap.class_id))
+
+    if not prior_boxes:
+        return None, None
+
+    return (
+        torch.tensor(prior_boxes, device=device, dtype=torch.float32).contiguous(),
+        torch.tensor(prior_classes, device=device, dtype=torch.int32).contiguous(),
+    )
+
+
+def _env_flag_enabled(name: str, default: bool = True) -> bool:
+    value = os.getenv(name)
+    if not value:
+        return default
+    return value.lower() not in {"0", "false"}
+
+
 def run_eval(
     engine: str,
     output: str,
@@ -647,6 +687,10 @@ def run_eval(
         )
         if native_reid_available:
             perception_pipeline.set_reid_profiling_enabled(profile_stages)
+    enable_onms = _env_flag_enabled("SACCADE_ENABLE_ONMS", False)
+    onms_prior_iou_threshold = 0.70
+    onms_min_track_age = 2
+    onms_min_track_score = cfg.high_thresh
 
     top_level_stage_names = (
         "fetch",
@@ -1322,6 +1366,29 @@ def run_eval(
                 post_count = torch.empty(
                     (), device=raw_boxes_contig.device, dtype=torch.int32
                 )
+
+                # Fetch priors for Occlusion-aware NMS
+                priors_tensor = None
+                prior_classes_tensor = None
+                priors_ptr = 0
+                prior_classes_ptr = 0
+                num_priors = 0
+                if enable_onms:
+                    priors_tensor, prior_classes_tensor = _build_active_track_priors(
+                        detector.tracker,
+                        raw_boxes_contig.device,
+                        min_track_age=onms_min_track_age,
+                        min_track_score=onms_min_track_score,
+                    )
+                if (
+                    enable_onms
+                    and priors_tensor is not None
+                    and prior_classes_tensor is not None
+                ):
+                    priors_ptr = priors_tensor.data_ptr()
+                    prior_classes_ptr = prior_classes_tensor.data_ptr()
+                    num_priors = priors_tensor.size(0)
+
                 perception_pipeline.process_detections_into(
                     raw_boxes_contig.data_ptr(),
                     raw_scores_contig.data_ptr(),
@@ -1335,6 +1402,10 @@ def run_eval(
                     post_classes.data_ptr(),
                     geometry_suspect_mask.data_ptr(),
                     post_count.data_ptr(),
+                    priors_ptr,
+                    prior_classes_ptr,
+                    num_priors,
+                    onms_prior_iou_threshold,
                     torch.cuda.current_stream().cuda_stream,
                 )
                 n_post = int(post_count.cpu().item())
@@ -1389,7 +1460,7 @@ def run_eval(
                     max_aspect=cfg.narrow_person_max_aspect,
                 )
                 t_sub_start = time.perf_counter()
-                keep_indices, geometry_suspect_mask = filter_detections_fast(
+                keep_indices, geometry_suspect_mask, _ = filter_detections_fast(
                     fused_boxes,
                     fused_scores,
                     fused_classes,
@@ -1484,12 +1555,27 @@ def run_eval(
                 if profile_stages:
                     torch.cuda.synchronize()
                     t_sub_start = time.perf_counter()
+
+                # Fetch priors for Occlusion-aware NMS
+                priors = None
+                prior_classes = None
+                if enable_onms:
+                    priors, prior_classes = _build_active_track_priors(
+                        detector.tracker,
+                        fused_boxes.device,
+                        min_track_age=onms_min_track_age,
+                        min_track_score=onms_min_track_score,
+                    )
+
                 keep = nms_fast(
                     fused_boxes,
                     fused_scores,
                     fused_classes,
                     cfg.nms_iou_threshold,
                     class_aware=not cfg.track_person_only,
+                    priors=priors,
+                    prior_classes=prior_classes,
+                    prior_iou_threshold=onms_prior_iou_threshold,
                 )
                 fused_boxes = fused_boxes[keep]
                 fused_scores = fused_scores[keep]

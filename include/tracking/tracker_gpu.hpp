@@ -238,6 +238,11 @@ void SACCADE_TRACKING_API nms_counted_cuda(
     int* out_count_ptr,
     float iou_threshold,
     bool class_aware,
+    const float* priors_ptr,
+    const int* prior_classes_ptr,
+    int num_priors,
+    float prior_iou_threshold,
+    bool* immunity_mask_ptr,
     cudaStream_t stream
 );
 

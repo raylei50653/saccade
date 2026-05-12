@@ -22,6 +22,7 @@ PerceptionPipeline::~PerceptionPipeline() {
     if (d_nms_suppression_) cudaFree(d_nms_suppression_);
     if (d_nms_remv_) cudaFree(d_nms_remv_);
     if (d_nms_count_) cudaFree(d_nms_count_);
+    if (d_nms_immunity_mask_) cudaFree(d_nms_immunity_mask_);
     if (d_crop_buf_) cudaFree(d_crop_buf_);
     if (d_compact_boxes_)   cudaFree(d_compact_boxes_);
     if (d_compact_scores_)  cudaFree(d_compact_scores_);
@@ -43,6 +44,7 @@ void PerceptionPipeline::ensure_scratch(int n_dets, cudaStream_t /*stream*/) {
     int col_blocks = (cap + 63) / 64;
     if (d_nms_suppression_) cudaFree(d_nms_suppression_);
     if (d_nms_remv_) cudaFree(d_nms_remv_);
+    if (d_nms_immunity_mask_) cudaFree(d_nms_immunity_mask_);
 
     cudaMalloc(&d_filter_keep_indices_, cap * sizeof(int));
     cudaMalloc(&d_filter_suspect_flags_, cap * sizeof(bool));
@@ -50,6 +52,7 @@ void PerceptionPipeline::ensure_scratch(int n_dets, cudaStream_t /*stream*/) {
     cudaMalloc(&d_nms_keep_, cap * sizeof(int));
     cudaMalloc(&d_nms_suppression_, (size_t)cap * col_blocks * sizeof(uint64_t));
     cudaMalloc(&d_nms_remv_, col_blocks * sizeof(uint64_t));
+    cudaMalloc(&d_nms_immunity_mask_, cap * sizeof(bool));
 
     if (!d_filter_count_) cudaMalloc(&d_filter_count_, sizeof(int));
     if (!d_nms_count_) cudaMalloc(&d_nms_count_, sizeof(int));
@@ -109,7 +112,7 @@ int PerceptionPipeline::process_detections(
         boxes_ptr, scores_ptr, classes_ptr, n_in,
         frame_w, frame_h, is_tiled,
         out_boxes, out_scores, out_classes, out_suspect,
-        d_out_count, stream);
+        d_out_count, nullptr, nullptr, 0, 0.5f, stream);
     int n_out = 0;
     cudaMemcpyAsync(&n_out, d_out_count, sizeof(int), cudaMemcpyDeviceToHost, stream);
     cudaStreamSynchronize(stream);
@@ -129,6 +132,10 @@ void PerceptionPipeline::process_detections_into(
     int*   out_classes,
     bool*  out_suspect,
     int*   out_count,
+    const float* priors_ptr,
+    const int* prior_classes_ptr,
+    int num_priors,
+    float prior_iou_threshold,
     cudaStream_t stream)
 {
     if (n_in <= 0) {
@@ -168,7 +175,10 @@ void PerceptionPipeline::process_detections_into(
     nms_counted_cuda(
         out_boxes, out_scores, out_classes, d_nms_order_,
         n_in, d_filter_count_, d_nms_keep_, d_nms_suppression_, d_nms_remv_,
-        d_nms_count_, cfg_.nms_threshold, false, stream);
+        d_nms_count_, cfg_.nms_threshold, false,
+        priors_ptr, prior_classes_ptr, num_priors, prior_iou_threshold,
+        d_nms_immunity_mask_,
+        stream);
 
     gather_compact4_counted_cuda(
         out_boxes, out_scores, out_classes, out_suspect,

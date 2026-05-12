@@ -94,8 +94,11 @@ public:
         int*   out_classes,
         bool*  out_suspect,
         int*   out_count,
-        cudaStream_t stream
-    );
+        const float* priors_ptr,
+        const int* prior_classes_ptr,
+        int num_priors,
+        float prior_iou_threshold,
+        cudaStream_t stream);
 
     /**
      * @brief Crop boxes from frame_ptr and extract ReID embeddings.
@@ -134,6 +137,7 @@ private:
     uint64_t* d_nms_suppression_      = nullptr;
     uint64_t* d_nms_remv_             = nullptr;
     int*      d_nms_count_            = nullptr;
+    bool*     d_nms_immunity_mask_    = nullptr;
     float*    d_crop_buf_             = nullptr;
     int       scratch_capacity_       = 0;
     int       crop_buf_capacity_      = 0;

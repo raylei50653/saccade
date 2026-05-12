@@ -2298,7 +2298,10 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
                uintptr_t boxes_ptr, uintptr_t scores_ptr, uintptr_t classes_ptr,
                int n_in, int frame_w, int frame_h, bool is_tiled,
                uintptr_t out_boxes, uintptr_t out_scores, uintptr_t out_classes,
-               uintptr_t out_suspect, uintptr_t out_count, uintptr_t stream_ptr) {
+               uintptr_t out_suspect, uintptr_t out_count,
+               uintptr_t priors_ptr, uintptr_t prior_classes_ptr,
+               int num_priors, float prior_iou_threshold,
+               uintptr_t stream_ptr) {
                 self.process_detections_into(
                     reinterpret_cast<const float*>(boxes_ptr),
                     reinterpret_cast<const float*>(scores_ptr),
@@ -2309,13 +2312,20 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
                     reinterpret_cast<int*>(out_classes),
                     reinterpret_cast<bool*>(out_suspect),
                     reinterpret_cast<int*>(out_count),
+                    reinterpret_cast<const float*>(priors_ptr),
+                    reinterpret_cast<const int*>(prior_classes_ptr),
+                    num_priors,
+                    prior_iou_threshold,
                     reinterpret_cast<cudaStream_t>(stream_ptr));
             },
             py::arg("boxes_ptr"), py::arg("scores_ptr"), py::arg("classes_ptr"),
             py::arg("n_in"), py::arg("frame_w"), py::arg("frame_h"),
             py::arg("is_tiled"),
             py::arg("out_boxes"), py::arg("out_scores"), py::arg("out_classes"),
-            py::arg("out_suspect"), py::arg("out_count"), py::arg("stream_ptr"))
+            py::arg("out_suspect"), py::arg("out_count"),
+            py::arg("priors_ptr") = 0, py::arg("prior_classes_ptr") = 0,
+            py::arg("num_priors") = 0, py::arg("prior_iou_threshold") = 0.50f,
+            py::arg("stream_ptr"))
         .def("extract_reid",
             [](PerceptionPipeline& self,
                uintptr_t frame_ptr, int frame_h, int frame_w,

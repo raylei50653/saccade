@@ -589,6 +589,9 @@ def nms_fast(
     iou_threshold: float,
     *,
     class_aware: bool,
+    priors: torch.Tensor | None = None,
+    prior_classes: torch.Tensor | None = None,
+    prior_iou_threshold: float = 0.50,
 ) -> torch.Tensor:
     if boxes.numel() == 0:
         return torch.empty((0,), device=boxes.device, dtype=torch.long)
@@ -596,6 +599,57 @@ def nms_fast(
     boxes = boxes.contiguous()
     scores = scores.contiguous()
     classes_i32 = classes.to(torch.int32).contiguous()
+
+    # O-NMS logic: priors can rescue boxes that vanilla NMS would suppress.
+    if priors is not None and priors.numel() > 0:
+        from torchvision.ops import nms, batched_nms, box_iou
+        if class_aware:
+            keep = batched_nms(boxes, scores, classes_i32, iou_threshold)
+        else:
+            keep = nms(boxes, scores, iou_threshold)
+
+        keep_set = set(keep.tolist())
+        all_indices = set(range(boxes.shape[0]))
+        suppressed = list(all_indices - keep_set)
+
+        if not suppressed:
+            return keep
+
+        suppressed_tensor = torch.tensor(suppressed, dtype=torch.long, device=boxes.device)
+        suppressed_boxes = boxes[suppressed_tensor]
+
+        if class_aware and prior_classes is not None and prior_classes.numel() > 0:
+            prior_classes_i32 = prior_classes.to(torch.int32).contiguous()
+            suppressed_classes = classes_i32[suppressed_tensor]
+            rescued_parts: list[torch.Tensor] = []
+            for cls in torch.unique(suppressed_classes).tolist():
+                cls_int = int(cls)
+                class_suppressed = suppressed_tensor[suppressed_classes == cls_int]
+                class_priors = priors[prior_classes_i32 == cls_int]
+                if class_priors.numel() == 0:
+                    continue
+                class_iou = box_iou(boxes[class_suppressed], class_priors)
+                max_ious, _ = class_iou.max(dim=1)
+                rescued = class_suppressed[max_ious > prior_iou_threshold]
+                if rescued.numel() > 0:
+                    rescued_parts.append(rescued)
+            rescued_indices = (
+                torch.cat(rescued_parts)
+                if rescued_parts
+                else torch.empty((0,), device=boxes.device, dtype=torch.long)
+            )
+        else:
+            iou_matrix = box_iou(suppressed_boxes, priors)
+            max_ious, _ = iou_matrix.max(dim=1)
+            rescued_indices = suppressed_tensor[max_ious > prior_iou_threshold]
+
+        if rescued_indices.numel() > 0:
+            print(f"  [O-NMS] Rescued {rescued_indices.numel()} suppressed boxes that overlapped with active tracks!")
+            final_keep = torch.cat([keep, rescued_indices])
+            final_keep_scores = scores[final_keep]
+            _, sort_idx = final_keep_scores.sort(descending=True)
+            return final_keep[sort_idx]
+        return keep
 
     if cpp_nms_cuda is not None and boxes.is_cuda:
         order = torch.argsort(scores, descending=True).contiguous()
