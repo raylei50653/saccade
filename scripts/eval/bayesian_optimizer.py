@@ -98,23 +98,33 @@ class BayesianOptimizer:
         return tunable
 
     def _parse_range(self, help_str, default, ptype):
-        # ... (rest of the method remains the same)
         # Look for "Range: 0-1" or "Range: 0.1-2.0"
         range_match = re.search(r"Range: ([\d.]+)-([\d.]+)", help_str)
         if range_match:
-            return float(range_match.group(1)), float(range_match.group(2))
+            try:
+                low = float(range_match.group(1).rstrip("."))
+                high = float(range_match.group(2).rstrip("."))
+                return low, high
+            except ValueError:
+                pass
 
         # Look for "Range: >=0"
         ge_match = re.search(r"Range: >=([\d.]+)", help_str)
         if ge_match:
-            low = float(ge_match.group(1))
-            return low, max(low + 1.0, default * 2.0)
+            try:
+                low = float(ge_match.group(1).rstrip("."))
+                return low, max(low + 1.0, default * 2.0)
+            except ValueError:
+                pass
 
         # Look for "Range: >0"
         gt_match = re.search(r"Range: >([\d.]+)", help_str)
         if gt_match:
-            low = float(gt_match.group(1)) + 0.0001
-            return low, max(low + 1.0, default * 2.0)
+            try:
+                low = float(gt_match.group(1).rstrip(".")) + 0.0001
+                return low, max(low + 1.0, default * 2.0)
+            except ValueError:
+                pass
 
         # Heuristics based on name or default
         if 0 <= default <= 1.0:
