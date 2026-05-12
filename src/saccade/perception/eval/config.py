@@ -14,6 +14,7 @@ class EvalConfig:
     debug_dump_frames: str
     debug_dump_csv: str
     profile_stages: bool
+    latency_only: bool
 
     reid_mode: str
     reid_enabled: bool
@@ -328,6 +329,7 @@ def parse_eval_config(
         debug_dump_frames=str(kwargs.get("debug_dump_frames", "")).strip(),
         debug_dump_csv=str(kwargs.get("debug_dump_csv", "")).strip(),
         profile_stages=profile_stages,
+        latency_only=bool(kwargs.get("latency_only", False)),
         reid_mode=reid_mode,
         reid_enabled=reid_enabled,
         reid_model=reid_model,

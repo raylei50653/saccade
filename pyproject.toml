@@ -43,6 +43,9 @@ dependencies = [
     "motmetrics>=1.4.0",
     "llama-index>=0.14.21",
     "llama-index-vector-stores-chroma>=0.5.5",
+    "asyncpg>=0.30.0",
+    "sqlalchemy>=2.0.38",
+    "sahi>=0.11.36",
 ]
 
 [tool.setuptools]
@@ -57,11 +60,20 @@ override-dependencies = [
 [tool.mypy]
 strict = true
 ignore_missing_imports = true
-exclude = ["tests/"]
+exclude = ["tests/", "build/", "build-native-coverage/"]
 mypy_path = "src"
 
 [[tool.mypy.overrides]]
 module = ["scripts.*"]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = [
+    "debug_eval",
+    "saccade.media.dali_pipeline",
+    "saccade.perception.detector_trt",
+    "saccade.perception.eval.detection",
+]
 ignore_errors = true
 
 [tool.ruff]
@@ -76,3 +88,6 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 asyncio_mode = "strict"
 pythonpath = ["src"]
+markers = [
+    "dali: tests that require a CUDA device and nvidia-dali (NVDEC decode path)",
+]

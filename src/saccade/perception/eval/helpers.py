@@ -443,11 +443,15 @@ def inject_lost_track_references(
 
     if not references_to_inject:
         return
-    if hasattr(relinker, "inject_references_many"):
+    if hasattr(relinker, "inject_references_batch"):
+        ids = [cid for cid, _ in references_to_inject]
+        reps = torch.stack([rep for _, rep in references_to_inject])
+        relinker.inject_references_batch(ids, reps)
+    elif hasattr(relinker, "inject_references_many"):
         relinker.inject_references_many(references_to_inject)
-        return
-    for canonical_id, embedding in references_to_inject:
-        relinker.inject_reference(canonical_id, embedding)
+    else:
+        for canonical_id, embedding in references_to_inject:
+            relinker.inject_reference(canonical_id, embedding)
 
 
 def finalize_frame_side_effects(

@@ -3,7 +3,6 @@ import torch
 import tensorrt as trt
 from typing import Dict, Tuple, Optional, List
 
-print(f"DEBUG: Loading TRTYoloDetector from {__file__}")
 from saccade.perception.tracking import GPUByteTracker  # noqa: E402
 
 try:
@@ -17,13 +16,13 @@ except ImportError as e:
 
 class TRTYoloDetector:
     """
-    YOLO26 極速 TensorRT 偵測器
+    YOLO TensorRT 偵測器，支援純偵測 (6-col) 與 Pose (57-col) 兩種輸出格式。
     優先使用 C++ 核心引擎以獲得最佳效能與最低抖動。
     """
 
     def __init__(
         self,
-        engine_path: str = "models/yolo/yolo26s_batch6.engine",
+        engine_path: str = "models/yolo/yolo11n_pose_batch6.engine",
         device: str = "cuda:0",
     ):
         self.device = device
@@ -205,22 +204,7 @@ class TRTYoloDetector:
             self.context.set_tensor_address(name, tensor.data_ptr())
             bound_names.append(name)
 
-        # if batch_size == 4:
-        #    print(f"DEBUG: Enqueueing with bounds: {bound_names}")
-
         self.context.execute_async_v3(stream)
-
-        # Check max score for first output
-        first_out = self.output_tensors[self.output_name]
-        if first_out.size(0) > 0:
-            print(f"DEBUG: first_out[0, 0, :] = {first_out[0, 0, :10]}")
-            # print(f"DEBUG: batch 0 max score at col 4: {first_out[0, :, 4].max().item():.4f}")
-            # Try other columns
-            for col in [4, 5, 37, 36]:
-                if col < first_out.size(2):
-                    ms = first_out[0, :, col].max().item()
-                    print(f"DEBUG: col {col} max: {ms:.4f}")
-
         return self.output_tensors
 
     def detect_raw(self, input_tensor: torch.Tensor) -> torch.Tensor:
@@ -243,14 +227,9 @@ class TRTYoloDetector:
         outputs = self.infer_raw_batch(input_tensor)
         output_tensor = outputs[self.output_name]
 
-        # 4. 解包結果 (Scattering)
         batch_results = []
         for i in range(batch_size):
             results = output_tensor[i]
-            if results.size(0) > 0:
-                max_score = results[:, 4].max().item()
-                if i == 0:
-                    print(f"DEBUG: max score in batch 0: {max_score:.4f}")
             mask = results[:, 4] > conf_threshold
             valid_results = results[mask]
 
@@ -265,12 +244,12 @@ class TRTYoloDetector:
             extra: Optional[torch.Tensor] = None
             if "embeddings" in outputs:
                 extra = outputs["embeddings"][i][mask].contiguous()
+            elif valid_results.size(1) > 6:
+                extra = valid_results[:, 6:].contiguous()
+                if extra.size(1) == 51:  # COCO 17-keypoint pose: reshape to [N, 17, 3]
+                    extra = extra.reshape(-1, 17, 3)
             else:
-                extra = (
-                    valid_results[:, 6:].contiguous()
-                    if valid_results.size(1) > 6
-                    else None
-                )
+                extra = None
 
             batch_results.append((boxes, scores, classes, extra))
 
@@ -282,3 +261,105 @@ class TRTYoloDetector:
         """單路相容性接口"""
         results = self.detect_batch(input_tensor, conf_threshold)
         return results[0] if results else self._empty_result()
+
+
+def _match_pose_to_dets(
+    det_boxes: torch.Tensor,
+    pose_boxes: torch.Tensor,
+    pose_kpts: torch.Tensor,
+    max_center_dist: float = 0.5,
+) -> torch.Tensor:
+    """Match pose keypoints [M, 17, 3] to detection boxes [N, 4] by nearest center.
+
+    Returns keypoints [N, 17, 3]. Unmatched detections (no pose box within
+    max_center_dist * sqrt(det_area)) receive NaN keypoints.
+    """
+    det_cx = (det_boxes[:, 0] + det_boxes[:, 2]) * 0.5
+    det_cy = (det_boxes[:, 1] + det_boxes[:, 3]) * 0.5
+    pose_cx = (pose_boxes[:, 0] + pose_boxes[:, 2]) * 0.5
+    pose_cy = (pose_boxes[:, 1] + pose_boxes[:, 3]) * 0.5
+
+    dx = det_cx.unsqueeze(1) - pose_cx.unsqueeze(0)  # [N, M]
+    dy = det_cy.unsqueeze(1) - pose_cy.unsqueeze(0)  # [N, M]
+    dist2 = dx * dx + dy * dy  # [N, M]
+
+    nearest_idx = dist2.argmin(dim=1)  # [N]
+    nearest_dist2 = dist2[torch.arange(det_boxes.size(0)), nearest_idx]
+
+    # Threshold: max_center_dist * sqrt(det_area)
+    det_w = (det_boxes[:, 2] - det_boxes[:, 0]).clamp(min=1)
+    det_h = (det_boxes[:, 3] - det_boxes[:, 1]).clamp(min=1)
+    thresh2 = (max_center_dist * (det_w * det_h).sqrt()) ** 2  # [N]
+
+    matched_kpts = pose_kpts[nearest_idx]  # [N, 17, 3]
+    nan_kpts = torch.full_like(matched_kpts, float("nan"))
+    valid = nearest_dist2 <= thresh2  # [N]
+    return torch.where(valid[:, None, None], matched_kpts, nan_kpts)
+
+
+class TwostageDetector:
+    """Two-stage detector: yolo (detection) + pose model (keypoints).
+
+    Stage 1 – yolo engine: detection boxes, scores, classes.
+    Stage 2 – pose engine: pose boxes + keypoints matched back to Stage 1 boxes.
+
+    detect_raw() delegates to the detection engine (used by tiled detection paths).
+    detect_batch() runs both engines and returns (boxes, scores, classes, kpts [N,17,3]).
+    """
+
+    def __init__(
+        self,
+        det_engine: str,
+        pose_engine: str,
+        pose_conf_threshold: float = 0.001,
+    ) -> None:
+        self.det = TRTYoloDetector(engine_path=det_engine)
+        self.pose = TRTYoloDetector(engine_path=pose_engine)
+        self.pose_conf_threshold = pose_conf_threshold
+
+    # ── proxy attributes / methods to the detection engine ──────────────────
+
+    @property
+    def tracker(self):
+        return self.det.tracker
+
+    def reset_tracker(self):
+        return self.det.reset_tracker()
+
+    def detect_raw(self, input_tensor: torch.Tensor) -> torch.Tensor:
+        return self.det.detect_raw(input_tensor)
+
+    def infer_raw_batch(self, input_tensor: torch.Tensor):
+        return self.det.infer_raw_batch(input_tensor)
+
+    # ── two-stage interface ──────────────────────────────────────────────────
+
+    def detect_batch(
+        self,
+        input_tensor: torch.Tensor,
+        conf_threshold: float = 0.25,
+    ) -> List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor, Optional[torch.Tensor]]]:
+        det_results = self.det.detect_batch(input_tensor, conf_threshold)
+        pose_results = self.pose.detect_batch(input_tensor, self.pose_conf_threshold)
+
+        merged: List[
+            Tuple[torch.Tensor, torch.Tensor, torch.Tensor, Optional[torch.Tensor]]
+        ] = []
+        for (det_boxes, det_scores, det_classes, _), pose_item in zip(
+            det_results, pose_results
+        ):
+            pose_boxes, _, _, pose_kpts = pose_item
+            if pose_kpts is None or pose_boxes.shape[0] == 0 or det_boxes.shape[0] == 0:
+                merged.append((det_boxes, det_scores, det_classes, None))
+            else:
+                kpts = _match_pose_to_dets(det_boxes, pose_boxes, pose_kpts)
+                merged.append((det_boxes, det_scores, det_classes, kpts))
+        return merged
+
+    def detect(
+        self,
+        input_tensor: torch.Tensor,
+        conf_threshold: float = 0.25,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+        results = self.detect_batch(input_tensor, conf_threshold)
+        return results[0] if results else self.det._empty_result()

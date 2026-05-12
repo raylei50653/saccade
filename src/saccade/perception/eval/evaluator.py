@@ -1,5 +1,6 @@
 # mypy: ignore-errors
 import configparser
+import os
 import time
 from collections import OrderedDict, deque
 import dataclasses
@@ -434,6 +435,7 @@ from saccade.perception.eval.detection import (  # noqa: E402
     detect_adaptive_960_tiled,
     detect_960p_3x2_tiled,
     detect_native_960,
+    detect_sahi_960p_2x2,
     expand_boxes_with_ankle_keypoints,
     filter_detections_fast,
     match_keypoints_to_boxes,
@@ -511,6 +513,45 @@ except ImportError:
 # Post-merge functions moved to post_merge.py
 
 
+def _build_active_track_priors(
+    tracker: Any,
+    device: torch.device,
+    *,
+    min_track_age: int = 0,
+    min_track_score: float = 0.0,
+) -> tuple[torch.Tensor | None, torch.Tensor | None]:
+    snapshots = tracker.get_state_snapshots()
+    if not snapshots:
+        return None, None
+
+    prior_boxes: list[list[float]] = []
+    prior_classes: list[int] = []
+    for snap in snapshots:
+        if int(snap.age) < min_track_age:
+            continue
+        if float(snap.score) < min_track_score:
+            continue
+        cx, cy, a, h = snap.state[0], snap.state[1], snap.state[2], snap.state[3]
+        w = a * h
+        prior_boxes.append([cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2])
+        prior_classes.append(int(snap.class_id))
+
+    if not prior_boxes:
+        return None, None
+
+    return (
+        torch.tensor(prior_boxes, device=device, dtype=torch.float32).contiguous(),
+        torch.tensor(prior_classes, device=device, dtype=torch.int32).contiguous(),
+    )
+
+
+def _env_flag_enabled(name: str, default: bool = True) -> bool:
+    value = os.getenv(name)
+    if not value:
+        return default
+    return value.lower() not in {"0", "false"}
+
+
 def run_eval(
     engine: str,
     output: str,
@@ -562,7 +603,7 @@ def run_eval(
         import os as _os
 
         tiling = kwargs.get("tiling", "native_960")
-        if tiling == "960p_2x2" and "_960_batch1" in engine:
+        if tiling in {"960p_2x2", "sahi_960p_2x2"} and "_960_batch1" in engine:
             candidate = engine.replace("_960_batch1", "_batch4")
             if _os.path.exists(candidate):
                 engine = candidate
@@ -600,6 +641,8 @@ def run_eval(
 
     if cfg.tiling == "960p_3x2":
         detect_fn = detect_960p_3x2_tiled
+    elif cfg.tiling == "sahi_960p_2x2":
+        detect_fn = detect_sahi_960p_2x2
     elif cfg.tiling == "native_960":
         detect_fn = detect_native_960
     else:
@@ -644,6 +687,10 @@ def run_eval(
         )
         if native_reid_available:
             perception_pipeline.set_reid_profiling_enabled(profile_stages)
+    enable_onms = _env_flag_enabled("SACCADE_ENABLE_ONMS", False)
+    onms_prior_iou_threshold = 0.70
+    onms_min_track_age = 2
+    onms_min_track_score = cfg.high_thresh
 
     top_level_stage_names = (
         "fetch",
@@ -738,6 +785,8 @@ def run_eval(
     _rw_executor: ThreadPoolExecutor | None = (
         ThreadPoolExecutor(max_workers=1) if cfg.pipeline_relink else None
     )
+
+    all_seq_profile: list[dict] = []
 
     for seq in cfg.seqs:
         detector.reset_tracker()
@@ -1199,7 +1248,6 @@ def run_eval(
                 ),
                 sync_cuda=True,
             )
-
             (
                 (fused_boxes, fused_scores, fused_classes, is_tiled, source_keypoints),
                 _,
@@ -1216,6 +1264,7 @@ def run_eval(
                 ),
                 sync_cuda=True,
             )
+
             source_boxes_for_keypoints = fused_boxes
             debug_dump_active = _debug_frame_selected(
                 seq,
@@ -1317,6 +1366,29 @@ def run_eval(
                 post_count = torch.empty(
                     (), device=raw_boxes_contig.device, dtype=torch.int32
                 )
+
+                # Fetch priors for Occlusion-aware NMS
+                priors_tensor = None
+                prior_classes_tensor = None
+                priors_ptr = 0
+                prior_classes_ptr = 0
+                num_priors = 0
+                if enable_onms:
+                    priors_tensor, prior_classes_tensor = _build_active_track_priors(
+                        detector.tracker,
+                        raw_boxes_contig.device,
+                        min_track_age=onms_min_track_age,
+                        min_track_score=onms_min_track_score,
+                    )
+                if (
+                    enable_onms
+                    and priors_tensor is not None
+                    and prior_classes_tensor is not None
+                ):
+                    priors_ptr = priors_tensor.data_ptr()
+                    prior_classes_ptr = prior_classes_tensor.data_ptr()
+                    num_priors = priors_tensor.size(0)
+
                 perception_pipeline.process_detections_into(
                     raw_boxes_contig.data_ptr(),
                     raw_scores_contig.data_ptr(),
@@ -1330,6 +1402,10 @@ def run_eval(
                     post_classes.data_ptr(),
                     geometry_suspect_mask.data_ptr(),
                     post_count.data_ptr(),
+                    priors_ptr,
+                    prior_classes_ptr,
+                    num_priors,
+                    onms_prior_iou_threshold,
                     torch.cuda.current_stream().cuda_stream,
                 )
                 n_post = int(post_count.cpu().item())
@@ -1384,7 +1460,7 @@ def run_eval(
                     max_aspect=cfg.narrow_person_max_aspect,
                 )
                 t_sub_start = time.perf_counter()
-                keep_indices, geometry_suspect_mask = filter_detections_fast(
+                keep_indices, geometry_suspect_mask, _ = filter_detections_fast(
                     fused_boxes,
                     fused_scores,
                     fused_classes,
@@ -1479,12 +1555,27 @@ def run_eval(
                 if profile_stages:
                     torch.cuda.synchronize()
                     t_sub_start = time.perf_counter()
+
+                # Fetch priors for Occlusion-aware NMS
+                priors = None
+                prior_classes = None
+                if enable_onms:
+                    priors, prior_classes = _build_active_track_priors(
+                        detector.tracker,
+                        fused_boxes.device,
+                        min_track_age=onms_min_track_age,
+                        min_track_score=onms_min_track_score,
+                    )
+
                 keep = nms_fast(
                     fused_boxes,
                     fused_scores,
                     fused_classes,
                     cfg.nms_iou_threshold,
                     class_aware=not cfg.track_person_only,
+                    priors=priors,
+                    prior_classes=prior_classes,
+                    prior_iou_threshold=onms_prior_iou_threshold,
                 )
                 fused_boxes = fused_boxes[keep]
                 fused_scores = fused_scores[keep]
@@ -1519,7 +1610,13 @@ def run_eval(
                     w_orig=w_orig,
                 )
 
-            if cfg.cross_tile_merge and is_tiled and fused_boxes.numel() > 1:
+            use_repo_cross_tile_merge = (
+                cfg.cross_tile_merge
+                and is_tiled
+                and cfg.tiling != "sahi_960p_2x2"
+                and fused_boxes.numel() > 1
+            )
+            if use_repo_cross_tile_merge:
                 if profile_stages:
                     torch.cuda.synchronize()
                     t_sub_start = time.perf_counter()
@@ -1897,7 +1994,7 @@ def run_eval(
                             detector.tracker.set_reference_features_from_bank(bank_reps)
                         clean_ids = primary_appearance_bank.clean_ids()
                         if clean_ids:
-                            _clean_ids_list = sorted(clean_ids)
+                            _clean_ids_list = list(clean_ids)
                             _ids_t = torch.tensor(_clean_ids_list, dtype=torch.int32)
                             _flags_t = torch.ones(
                                 len(_clean_ids_list), dtype=torch.bool
@@ -2611,7 +2708,8 @@ def run_eval(
                 f"frames_added={interp_stats['frames_added']}"
             )
 
-        Path(output_root / f"{seq}.txt").write_text("\n".join(results_lines))
+        if not cfg.latency_only:
+            Path(output_root / f"{seq}.txt").write_text("\n".join(results_lines))
         print(f"✅ Finished {seq} (Total Time: {time.time() - start_time:.2f}s)")
         if relinker:
             relinker.report()
@@ -2657,6 +2755,25 @@ def run_eval(
             stage_summary_lines=stage_summary_lines,
         )
 
+        overall_profiled_frames += seq_profiled_frames
+        if profile_stages and seq_profiled_frames > 0:
+            seq_entry: dict = {"seq": seq, "frames": seq_profiled_frames, "stages": {}}
+            for _sn in top_level_stage_names:
+                _samp = seq_stage_samples.get(_sn, [])
+                if _samp:
+                    _arr = np.array(_samp, dtype=np.float64)
+                    seq_entry["stages"][_sn] = {
+                        "mean_ms": float(_arr.mean()),
+                        "std_ms": float(_arr.std()),
+                        "p95_ms": float(np.percentile(_arr, 95)),
+                        "p99_ms": float(np.percentile(_arr, 99)),
+                    }
+            for _sn in breakdown_stage_names:
+                _tot = seq_stage_totals.get(_sn, 0.0)
+                if _tot > 0.0:
+                    seq_entry["stages"][_sn] = {"mean_ms": _tot / seq_profiled_frames}
+            all_seq_profile.append(seq_entry)
+
     from .reporting import print_overall_summary
 
     print_overall_summary(
@@ -2684,9 +2801,13 @@ def run_eval(
         overall_lazy_reid_arbiter_approve=overall_lazy_reid_arbiter_approve,
         debug_dump_csv=debug_dump_csv,
         debug_stage_dump_rows=debug_stage_dump_rows,
+        all_seq_profile=all_seq_profile,
     )
 
     # ── MOTMetrics Evaluation ──────────────────────────────────────────────────
+    if cfg.latency_only:
+        return {}
+
     from .metrics import run_motmetrics_evaluation
 
     return run_motmetrics_evaluation(

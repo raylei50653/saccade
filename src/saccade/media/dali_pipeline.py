@@ -5,7 +5,7 @@ from typing import Tuple, Optional, Any, cast
 from nvidia.dali.pipeline import Pipeline
 import nvidia.dali.fn as fn
 import nvidia.dali.types as types
-from nvidia.dali.plugin.pytorch import DALIGenericIterator
+from nvidia.dali.plugin.pytorch import DALIGenericIterator, LastBatchPolicy
 
 
 class DALIVideoPipeline(Pipeline):
@@ -94,7 +94,7 @@ class DALIMediaClient:
                 ["data"],
                 reader_name="reader",
                 auto_reset=True,
-                last_batch_policy=cast(Any, types).LastBatchPolicy.PARTIAL,
+                last_batch_policy=LastBatchPolicy.PARTIAL,
             )
             self._running = True
             return True
@@ -103,40 +103,35 @@ class DALIMediaClient:
             return False
 
     def grab_tensor(self) -> Tuple[bool, Optional[torch.Tensor]]:
-        """獲取下一個已經預處理好的 GPU Tensor"""
-        if not self._running or self.iterator is None:
+        """
+        獲取下一幀的 Tensor (GPU)
+        回傳: (success, tensor)
+        """
+        if not self.iterator:
             return False, None
 
         try:
-            # 撈取下一個 Batch
-            batch = next(self.iterator)
-
+            data = next(self.iterator)
             # DALI 回傳的 data 是 [Batch, Seq_Len, C, H, W]
-            # 因為 Seq_Len = 1, 取出對應的維度並壓平
-            # shape: [Batch, 1, 3, 640, 640] -> [Batch, 3, 640, 640]
-            tensor = batch[0]["data"].squeeze(1)
-
-            # 如果 batch_size 是 1，為了相容舊版單張圖片的介面
-            if self.batch_size == 1:
-                # 回傳 [3, 640, 640]，與先前 _nv12_to_rgb_gpu 或類似介面保持接近
-                # 但要注意 Saccade 模型介面可能期望 [H, W, C] 或 [C, H, W]
-                # 此處先回傳 [3, 640, 640] 以配合 YOLO 的需要
-                pass
-
+            # 但因為 sequence_length=1，我們拿到的會是 [Batch, 1, C, H, W]
+            # 這裡壓縮掉第 2 維度
+            tensor = data[0]["data"].squeeze(1)
             return True, tensor
-
         except StopIteration:
-            # 影片結束 (auto_reset=True 應該會自動重播，這裡做個保護)
+            self.iterator.reset()
             print("🏁 [DALI] End of stream.")
             return False, None
         except Exception as e:
             print(f"⚠️ [DALI] Grab tensor error: {e}")
             return False, None
 
-    def grab_frame(self) -> Tuple[bool, Optional[np.ndarray]]:
-        """相容舊版 CPU 撈圖介面 (僅供測試用，不建議在主路徑呼叫)"""
-        ret, tensor = self.grab_tensor()
-        if ret and tensor is not None:
+    def grab(self) -> Tuple[bool, Optional[np.ndarray]]:
+        """
+        傳統模式抓取 (回傳 CPU numpy array, HWC, uint8)
+        僅用於相容性測試。
+        """
+        success, tensor = self.grab_tensor()
+        if success and tensor is not None:
             # Tensor 是 float32 [C, H, W] 值域 [0, 1]
             # 轉回 numpy uint8 [H, W, C]
             cpu_array = tensor.cpu().numpy()

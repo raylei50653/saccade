@@ -1,7 +1,7 @@
 # NOTE: Import perception modules before torchvision in the calling script to avoid libjpeg conflict.
 import torch
 import numpy as np
-from typing import Dict, Tuple, Any, List, cast
+from typing import Dict, Tuple, Any, List, Optional, cast
 
 try:
     from saccade_tracking_ext import (
@@ -20,14 +20,285 @@ except ImportError:
     cpp_nms_cuda = None
     cpp_letterbox_gpu = None
 
-from torchvision.ops import batched_nms, nms
-
 # 使用 Any 以避免 Mypy 對 Tensor | int 混合類型的屬性存取報錯
 _filter_detections_cuda_workspace: Dict[Tuple[int], Dict[str, Any]] = {}
 _nms_cuda_workspace: Dict[Tuple[int], Dict[str, Any]] = {}
 _duplicate_merge_cuda_workspace: Dict[
     Tuple[int, torch.dtype, torch.dtype], Dict[str, Any]
 ] = {}
+_SAHI_2X2_TILINGS = {"960p_2x2", "sahi_960p_2x2"}
+
+
+def _is_2x2_tiling(tiling: str | None) -> bool:
+    return tiling in _SAHI_2X2_TILINGS
+
+
+def _is_tiled_tiling(tiling: str | None) -> bool:
+    return bool(tiling) and (_is_2x2_tiling(tiling) or tiling == "960p_3x2")
+
+
+def _prepare_canvas_960p(
+    pool: Any,
+    h_orig: int,
+    w_orig: int,
+) -> tuple[float, int, int, int, int]:
+    r = 960.0 / max(h_orig, w_orig)
+    h_new, w_new = int(h_orig * r), int(w_orig * r)
+    y_off = (960 - h_new) // 2
+    x_off = (960 - w_new) // 2
+    if cpp_letterbox_gpu is not None:
+        stream = torch.cuda.current_stream().cuda_stream
+        cpp_letterbox_gpu(
+            pool.frame_buffer.data_ptr(),
+            w_orig,
+            h_orig,
+            pool.canvas_960p.data_ptr(),
+            960,
+            x_off,
+            y_off,
+            w_new,
+            h_new,
+            114.0 / 255.0,
+            stream,
+        )
+    else:
+        img_resized = torch.nn.functional.interpolate(
+            pool.frame_buffer.unsqueeze(0), size=(h_new, w_new)
+        ).squeeze(0)
+        pool.canvas_960p.fill_(114.0 / 255.0)
+        pool.canvas_960p[:, y_off : y_off + h_new, x_off : x_off + w_new].copy_(
+            img_resized
+        )
+    return r, h_new, w_new, y_off, x_off
+
+
+def _canvas_to_numpy_rgb(canvas: torch.Tensor) -> np.ndarray:
+    return (
+        canvas.clamp(0.0, 1.0)
+        .mul(255.0)
+        .to(torch.uint8)
+        .permute(1, 2, 0)
+        .contiguous()
+        .cpu()
+        .numpy()
+    )
+
+
+def _get_detector_static_batch_size(detector: Any) -> int:
+    if getattr(detector, "is_dynamic", False):
+        return 1
+    shape = getattr(detector, "input_shape", None)
+    if not shape and hasattr(detector, "engine"):
+        shape = detector.engine.get_tensor_shape(detector.input_name)
+    if not shape:
+        return 1
+    try:
+        batch_dim = int(shape[0])
+    except (TypeError, ValueError, IndexError):
+        return 1
+    return max(1, batch_dim)
+
+
+def _build_sahi_trt_detection_model(
+    detector: Any,
+    detector_box_format: str,
+):
+    try:
+        from sahi.models.base import DetectionModel
+        from sahi.prediction import ObjectPrediction
+    except ImportError as exc:
+        raise RuntimeError(
+            "tiling=sahi_960p_2x2 requires the optional 'sahi' package in the runtime environment"
+        ) from exc
+
+    class _TRTSahiDetectionModel(DetectionModel):
+        def load_model(self):
+            raise RuntimeError(
+                "TRT-backed SAHI adapter requires an already-initialized detector"
+            )
+
+        def set_model(self, model: Any, **kwargs):
+            self.model = model
+
+        def perform_inference(self, image: np.ndarray):
+            if self.model is None:
+                raise ValueError("Model is not loaded, load it by calling .set_model()")
+            image_tensor = (
+                torch.from_numpy(np.array(image, copy=True))
+                .to(device=self.model.device, dtype=torch.float32)
+                .permute(2, 0, 1)
+                .unsqueeze(0)
+                / 255.0
+            )
+            batch_size = _get_detector_static_batch_size(self.model)
+            if batch_size > 1:
+                image_tensor = image_tensor.expand(batch_size, -1, -1, -1).contiguous()
+            raw = self.model.detect_raw(image_tensor)
+            self._original_predictions = [raw[0].clone()]
+            self._original_shape = image.shape
+
+        def _create_object_prediction_list_from_original_predictions(
+            self,
+            shift_amount_list: list[list[int]] | None = [[0, 0]],
+            full_shape_list: list[list[int]] | None = None,
+        ):
+            if (
+                shift_amount_list
+                and shift_amount_list
+                and isinstance(shift_amount_list[0], int)
+            ):
+                shift_amount_list = [cast(list[int], shift_amount_list)]
+            if (
+                full_shape_list
+                and full_shape_list
+                and isinstance(full_shape_list[0], int)
+            ):
+                full_shape_list = [cast(list[int], full_shape_list)]
+            predictions = self._original_predictions or []
+            object_prediction_list_per_image = []
+            for image_ind, image_predictions in enumerate(predictions):
+                shift_amount = (
+                    [0, 0]
+                    if shift_amount_list is None
+                    else shift_amount_list[image_ind]
+                )
+                full_shape = (
+                    list(self._original_shape[:2])
+                    if full_shape_list is None
+                    else full_shape_list[image_ind]
+                )
+                boxes = _decode_detector_boxes(
+                    image_predictions[:, :4], detector_box_format
+                )
+                scores = image_predictions[:, 4]
+                classes = image_predictions[:, 5].to(torch.int32)
+                keep = scores >= self.confidence_threshold
+                boxes = boxes[keep]
+                scores = scores[keep]
+                classes = classes[keep]
+                object_prediction_list = []
+                for box, score, class_id in zip(boxes, scores, classes):
+                    bbox = box.detach().cpu().tolist()
+                    bbox[0] = max(0.0, bbox[0])
+                    bbox[1] = max(0.0, bbox[1])
+                    bbox[2] = min(float(full_shape[1]), bbox[2])
+                    bbox[3] = min(float(full_shape[0]), bbox[3])
+                    if not (bbox[0] < bbox[2] and bbox[1] < bbox[3]):
+                        continue
+                    class_key = str(int(class_id.item()))
+                    category_name = self.category_mapping.get(
+                        class_key, f"class_{class_key}"
+                    )
+                    object_prediction_list.append(
+                        ObjectPrediction(
+                            bbox=bbox,
+                            category_id=int(class_id.item()),
+                            category_name=category_name,
+                            score=float(score.item()),
+                            shift_amount=shift_amount,
+                            full_shape=full_shape,
+                        )
+                    )
+                object_prediction_list_per_image.append(object_prediction_list)
+            self._object_prediction_list_per_image = object_prediction_list_per_image
+
+    return _TRTSahiDetectionModel(
+        model=detector,
+        confidence_threshold=0.0,
+        category_mapping={"0": "person"},
+    )
+
+
+def _decode_detector_boxes(
+    boxes: torch.Tensor,
+    detector_box_format: str,
+) -> torch.Tensor:
+    if detector_box_format == "xyxy":
+        return boxes.clone()
+    if detector_box_format == "cxcywh":
+        cxcy = boxes[..., :2]
+        wh = boxes[..., 2:4]
+        return torch.cat([cxcy - wh * 0.5, cxcy + wh * 0.5], dim=-1)
+    raise ValueError(f"Unsupported detector_box_format: {detector_box_format}")
+
+
+def expand_boxes_with_ankle_keypoints(
+    boxes: torch.Tensor,
+    keypoints: Optional[torch.Tensor],
+    frame_h: int,
+    ankle_conf_thresh: float = 0.30,
+    margin: float = 0.05,
+    flat_aspect_thresh: float = 0.0,
+) -> torch.Tensor:
+    """Extend box bottom to ankle keypoint position if ankles are visible and below current bottom.
+
+    COCO-17 indices 15 (left_ankle) and 16 (right_ankle) in absolute pixel coords.
+    Keeps box top fixed; only extends y2 downward. No-ops when keypoints=None.
+
+    flat_aspect_thresh: if > 0, only expand boxes with h/w < this value (flat/crouched boxes).
+    Typical upright person h/w ≈ 2-3; set ~1.5 to skip well-proportioned boxes.
+    """
+    if keypoints is None or boxes.numel() == 0:
+        return boxes
+
+    # keypoints: [N, 17, 3] — (x, y, conf) in absolute pixels
+    ankle_y = keypoints[:, 15:17, 1]  # [N, 2]
+    ankle_conf = keypoints[:, 15:17, 2]  # [N, 2]
+
+    # mask NaN (unmatched detections get NaN keypoints)
+    valid = (ankle_conf > ankle_conf_thresh) & ~torch.isnan(ankle_y)
+    has_ankle = valid.any(dim=1)  # [N]
+
+    if not has_ankle.any():
+        return boxes
+
+    # Highest y (= lowest in image) among valid ankles per detection
+    ankle_y_masked = ankle_y.clone()
+    ankle_y_masked[~valid] = -1e6
+    max_ankle_y = ankle_y_masked.amax(dim=1)  # [N]
+
+    box_h = boxes[:, 3] - boxes[:, 1]
+    box_w = boxes[:, 2] - boxes[:, 0]
+    new_bottom = max_ankle_y + margin * box_h
+
+    # Only expand where ankle falls below current box bottom
+    should_expand = has_ankle & (new_bottom > boxes[:, 3])
+
+    # Optionally restrict to flat (under-segmented) boxes: h/w < flat_aspect_thresh
+    if flat_aspect_thresh > 0.0:
+        safe_w = box_w.clamp(min=1.0)
+        is_flat = (box_h / safe_w) < flat_aspect_thresh
+        should_expand = should_expand & is_flat
+
+    if not should_expand.any():
+        return boxes
+
+    boxes = boxes.clone()
+    boxes[should_expand, 3] = torch.clamp(new_bottom[should_expand], max=float(frame_h))
+    return boxes
+
+
+def match_keypoints_to_boxes(
+    target_boxes: torch.Tensor,
+    source_boxes: torch.Tensor,
+    source_keypoints: Optional[torch.Tensor],
+) -> Optional[torch.Tensor]:
+    """Align keypoints from source detections to target boxes by nearest center."""
+    if (
+        source_keypoints is None
+        or source_keypoints.numel() == 0
+        or target_boxes.numel() == 0
+        or source_boxes.numel() == 0
+    ):
+        return None
+    src_cx = (source_boxes[:, 0] + source_boxes[:, 2]) * 0.5
+    src_cy = (source_boxes[:, 1] + source_boxes[:, 3]) * 0.5
+    dst_cx = (target_boxes[:, 0] + target_boxes[:, 2]) * 0.5
+    dst_cy = (target_boxes[:, 1] + target_boxes[:, 3]) * 0.5
+    dx = dst_cx.unsqueeze(1) - src_cx.unsqueeze(0)
+    dy = dst_cy.unsqueeze(1) - src_cy.unsqueeze(0)
+    nearest = (dx * dx + dy * dy).argmin(dim=1)
+    return source_keypoints[nearest]
 
 
 def _tile_seam_mask_for_boxes(
@@ -38,7 +309,7 @@ def _tile_seam_mask_for_boxes(
     frame_h: int,
     seam_margin_canvas_px: float,
 ) -> torch.Tensor:
-    if boxes.numel() == 0 or tiling not in {"960p_2x2", "960p_3x2"}:
+    if boxes.numel() == 0 or not _is_tiled_tiling(tiling):
         return torch.zeros((boxes.size(0),), device=boxes.device, dtype=torch.bool)
 
     r = 960.0 / max(frame_h, frame_w)
@@ -324,6 +595,9 @@ def nms_fast(
     iou_threshold: float,
     *,
     class_aware: bool,
+    priors: torch.Tensor | None = None,
+    prior_classes: torch.Tensor | None = None,
+    prior_iou_threshold: float = 0.50,
 ) -> torch.Tensor:
     if boxes.numel() == 0:
         return torch.empty((0,), device=boxes.device, dtype=torch.long)
@@ -331,6 +605,62 @@ def nms_fast(
     boxes = boxes.contiguous()
     scores = scores.contiguous()
     classes_i32 = classes.to(torch.int32).contiguous()
+
+    # O-NMS logic: priors can rescue boxes that vanilla NMS would suppress.
+    if priors is not None and priors.numel() > 0:
+        from torchvision.ops import nms, batched_nms, box_iou
+
+        if class_aware:
+            keep = batched_nms(boxes, scores, classes_i32, iou_threshold)
+        else:
+            keep = nms(boxes, scores, iou_threshold)
+
+        keep_set = set(keep.tolist())
+        all_indices = set(range(boxes.shape[0]))
+        suppressed = list(all_indices - keep_set)
+
+        if not suppressed:
+            return keep
+
+        suppressed_tensor = torch.tensor(
+            suppressed, dtype=torch.long, device=boxes.device
+        )
+        suppressed_boxes = boxes[suppressed_tensor]
+
+        if class_aware and prior_classes is not None and prior_classes.numel() > 0:
+            prior_classes_i32 = prior_classes.to(torch.int32).contiguous()
+            suppressed_classes = classes_i32[suppressed_tensor]
+            rescued_parts: list[torch.Tensor] = []
+            for cls in torch.unique(suppressed_classes).tolist():
+                cls_int = int(cls)
+                class_suppressed = suppressed_tensor[suppressed_classes == cls_int]
+                class_priors = priors[prior_classes_i32 == cls_int]
+                if class_priors.numel() == 0:
+                    continue
+                class_iou = box_iou(boxes[class_suppressed], class_priors)
+                max_ious, _ = class_iou.max(dim=1)
+                rescued = class_suppressed[max_ious > prior_iou_threshold]
+                if rescued.numel() > 0:
+                    rescued_parts.append(rescued)
+            rescued_indices = (
+                torch.cat(rescued_parts)
+                if rescued_parts
+                else torch.empty((0,), device=boxes.device, dtype=torch.long)
+            )
+        else:
+            iou_matrix = box_iou(suppressed_boxes, priors)
+            max_ious, _ = iou_matrix.max(dim=1)
+            rescued_indices = suppressed_tensor[max_ious > prior_iou_threshold]
+
+        if rescued_indices.numel() > 0:
+            print(
+                f"  [O-NMS] Rescued {rescued_indices.numel()} suppressed boxes that overlapped with active tracks!"
+            )
+            final_keep = torch.cat([keep, rescued_indices])
+            final_keep_scores = scores[final_keep]
+            _, sort_idx = final_keep_scores.sort(descending=True)
+            return final_keep[sort_idx]
+        return keep
 
     if cpp_nms_cuda is not None and boxes.is_cuda:
         order = torch.argsort(scores, descending=True).contiguous()
@@ -597,7 +927,7 @@ def merge_cross_tile_duplicates_fast(
 
     if cpp_merge_cross_tile_duplicates_cuda is not None and boxes.is_cuda:
         tiling_mode = 0
-        if tiling == "960p_2x2":
+        if _is_2x2_tiling(tiling):
             tiling_mode = 1
         elif tiling == "960p_3x2":
             tiling_mode = 2
@@ -656,7 +986,7 @@ def merge_cross_tile_duplicates_fast(
                 iou_threshold,
                 center_threshold,
                 area_ratio_threshold,
-                1 if tiling == "960p_2x2" else 2 if tiling == "960p_3x2" else 0,
+                1 if _is_2x2_tiling(tiling) else 2 if tiling == "960p_3x2" else 0,
                 frame_w,
                 frame_h,
                 seam_margin_canvas_px,
@@ -694,7 +1024,12 @@ def merge_cross_tile_duplicates_fast(
 
 
 def detect_single_patch_640(
-    detector: Any, pool: Any, h_orig: int, w_orig: int, preprocess_modes: List[str]
+    detector: Any,
+    pool: Any,
+    h_orig: int,
+    w_orig: int,
+    preprocess_modes: List[str],
+    detector_box_format: str = "xyxy",
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     if "letterbox" in preprocess_modes:
         r = 640.0 / max(h_orig, w_orig)
@@ -726,7 +1061,7 @@ def detect_single_patch_640(
             )
 
         raw_dets = detector.detect_raw(pool.canvas_640p.unsqueeze(0))
-        boxes = raw_dets[0, :, :4]
+        boxes = _decode_detector_boxes(raw_dets[0, :, :4], detector_box_format)
         scores = raw_dets[0, :, 4]
         classes = raw_dets[0, :, 5]
 
@@ -738,7 +1073,7 @@ def detect_single_patch_640(
         pool.frame_buffer.unsqueeze(0), size=(640, 640)
     )
     raw_dets = detector.detect_raw(img_input)
-    boxes = raw_dets[0, :, :4]
+    boxes = _decode_detector_boxes(raw_dets[0, :, :4], detector_box_format)
     scores = raw_dets[0, :, 4]
     classes = raw_dets[0, :, 5]
 
@@ -748,90 +1083,106 @@ def detect_single_patch_640(
 
 
 def detect_single_patch_960(
-    detector: Any, pool: Any, h_orig: int, w_orig: int, preprocess_modes: List[str]
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    detector: Any,
+    pool: Any,
+    h_orig: int,
+    w_orig: int,
+    preprocess_modes: List[str],
+    detector_box_format: str = "xyxy",
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
     if "letterbox" in preprocess_modes:
-        r = 960.0 / max(h_orig, w_orig)
-        h_new, w_new = int(h_orig * r), int(w_orig * r)
-        y_off = (960 - h_new) // 2
-        x_off = (960 - w_new) // 2
-        if cpp_letterbox_gpu is not None:
-            stream = torch.cuda.current_stream().cuda_stream
-            cpp_letterbox_gpu(
-                pool.frame_buffer.data_ptr(),
-                w_orig,
-                h_orig,
-                pool.canvas_960p.data_ptr(),
-                960,
-                x_off,
-                y_off,
-                w_new,
-                h_new,
-                114.0 / 255.0,
-                stream,
+        r, _h_new, _w_new, y_off, x_off = _prepare_canvas_960p(pool, h_orig, w_orig)
+
+        keypoints = None
+        if hasattr(detector, "pose"):
+            boxes, scores, classes, keypoints = detector.detect(
+                pool.canvas_960p.unsqueeze(0),
+                conf_threshold=0.0,
             )
         else:
-            img_resized = torch.nn.functional.interpolate(
-                pool.frame_buffer.unsqueeze(0), size=(h_new, w_new)
-            ).squeeze(0)
-            pool.canvas_960p.fill_(114.0 / 255.0)
-            pool.canvas_960p[:, y_off : y_off + h_new, x_off : x_off + w_new].copy_(
-                img_resized
-            )
-
-        raw_dets = detector.detect_raw(pool.canvas_960p.unsqueeze(0))
-        boxes = raw_dets[0, :, :4]
-        scores = raw_dets[0, :, 4]
-        classes = raw_dets[0, :, 5]
+            raw_dets = detector.detect_raw(pool.canvas_960p.unsqueeze(0))
+            boxes = _decode_detector_boxes(raw_dets[0, :, :4], detector_box_format)
+            scores = raw_dets[0, :, 4]
+            classes = raw_dets[0, :, 5]
 
         boxes[:, [0, 2]] = (boxes[:, [0, 2]] - x_off) / r
         boxes[:, [1, 3]] = (boxes[:, [1, 3]] - y_off) / r
-        return boxes, scores, classes
+        if keypoints is not None:
+            keypoints = keypoints.clone()
+            keypoints[:, :, 0] = (keypoints[:, :, 0] - x_off) / r
+            keypoints[:, :, 1] = (keypoints[:, :, 1] - y_off) / r
+        return boxes, scores, classes, keypoints
 
     img_input = torch.nn.functional.interpolate(
         pool.frame_buffer.unsqueeze(0), size=(960, 960)
     )
-    raw_dets = detector.detect_raw(img_input)
-    boxes = raw_dets[0, :, :4]
-    scores = raw_dets[0, :, 4]
-    classes = raw_dets[0, :, 5]
+    keypoints = None
+    if hasattr(detector, "pose"):
+        boxes, scores, classes, keypoints = detector.detect(
+            img_input,
+            conf_threshold=0.0,
+        )
+    else:
+        raw_dets = detector.detect_raw(img_input)
+        boxes = _decode_detector_boxes(raw_dets[0, :, :4], detector_box_format)
+        scores = raw_dets[0, :, 4]
+        classes = raw_dets[0, :, 5]
 
     boxes[:, [0, 2]] /= 960.0 / w_orig
     boxes[:, [1, 3]] /= 960.0 / h_orig
-    return boxes, scores, classes
+    if keypoints is not None:
+        keypoints = keypoints.clone()
+        keypoints[:, :, 0] /= 960.0 / w_orig
+        keypoints[:, :, 1] /= 960.0 / h_orig
+    return boxes, scores, classes, keypoints
 
 
 def detect_native_960(
-    detector: Any, pool: Any, h_orig: int, w_orig: int, preprocess_modes: List[str]
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, bool]:
-    boxes, scores, classes = detect_single_patch_960(
-        detector, pool, h_orig, w_orig, preprocess_modes
+    detector: Any,
+    pool: Any,
+    h_orig: int,
+    w_orig: int,
+    preprocess_modes: List[str],
+    detector_box_format: str = "xyxy",
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, bool, Optional[torch.Tensor]]:
+    boxes, scores, classes, keypoints = detect_single_patch_960(
+        detector, pool, h_orig, w_orig, preprocess_modes, detector_box_format
     )
-    return boxes, scores, classes, False
+    return boxes, scores, classes, False, keypoints
+
+
+def _detect_tiles(detector: Any, tiles_batch: torch.Tensor) -> torch.Tensor:
+    """Run detect_raw on a tile batch; fall back to sequential if engine is static batch-1.
+    Each slice must be cloned because detect_raw returns a reference to a shared buffer."""
+    raw = detector.detect_raw(tiles_batch)
+    n_tiles = tiles_batch.shape[0]
+    if raw.shape[0] == n_tiles:
+        return raw
+    pieces = [
+        detector.detect_raw(tiles_batch[i : i + 1]).clone() for i in range(n_tiles)
+    ]
+    return torch.cat(pieces, dim=0)
 
 
 def detect_960p_3x2_tiled(
-    detector: Any, pool: Any, h_orig: int, w_orig: int, preprocess_modes: List[str]
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, bool]:
+    detector: Any,
+    pool: Any,
+    h_orig: int,
+    w_orig: int,
+    preprocess_modes: List[str],
+    detector_box_format: str = "xyxy",
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, bool, Optional[torch.Tensor]]:
     """3×2 tiling on 960p canvas with overlap. Two batch-4 passes (6 tiles).
     x: 3 cols at stride=160 on 960p (75% x-overlap, same scale as 2×2).
     y: 2 rows at stride=320 on 960p (50% y-overlap, same as 2×2).
     """
     if w_orig <= 960 and h_orig <= 960:
         boxes, scores, classes = detect_single_patch_640(
-            detector, pool, h_orig, w_orig, preprocess_modes
+            detector, pool, h_orig, w_orig, preprocess_modes, detector_box_format
         )
-        return boxes, scores, classes, False
+        return boxes, scores, classes, False, None
 
-    r = 960.0 / max(h_orig, w_orig)
-    h_new, w_new = int(h_orig * r), int(w_orig * r)
-    img_resized = torch.nn.functional.interpolate(
-        pool.frame_buffer.unsqueeze(0), size=(h_new, w_new)
-    ).squeeze(0)
-    pool.canvas_960p.fill_(114.0 / 255.0)
-    y_off = (960 - h_new) // 2
-    x_off = (960 - w_new) // 2
-    pool.canvas_960p[:, y_off : y_off + h_new, x_off : x_off + w_new].copy_(img_resized)
+    r, _h_new, _w_new, y_off, x_off = _prepare_canvas_960p(pool, h_orig, w_orig)
 
     # Batch 6: 6 tiles in one pass
     pool.tiles_batch6[0].copy_(pool.canvas_960p[:, 0:640, 0:640])
@@ -841,47 +1192,43 @@ def detect_960p_3x2_tiled(
     pool.tiles_batch6[4].copy_(pool.canvas_960p[:, 320:960, 160:800])
     pool.tiles_batch6[5].copy_(pool.canvas_960p[:, 320:960, 320:960])
 
-    raw = detector.detect_raw(pool.tiles_batch6)
+    raw = _detect_tiles(detector, pool.tiles_batch6)
 
-    boxes = raw[:, :, :4].clone()
+    boxes = _decode_detector_boxes(raw[:, :, :4], detector_box_format)
     boxes[:, :, [0, 2]] = (boxes[:, :, [0, 2]] + pool.tile_3x2_dx - x_off) / r
     boxes[:, :, [1, 3]] = (boxes[:, :, [1, 3]] + pool.tile_3x2_dy - y_off) / r
 
     all_boxes = boxes.reshape(-1, 4)
     all_scores = raw[:, :, 4].reshape(-1)
     all_classes = raw[:, :, 5].reshape(-1)
-    return all_boxes, all_scores, all_classes, True
+    return all_boxes, all_scores, all_classes, True, None
 
 
 def detect_adaptive_960_tiled(
-    detector: Any, pool: Any, h_orig: int, w_orig: int, preprocess_modes: List[str]
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, bool]:
+    detector: Any,
+    pool: Any,
+    h_orig: int,
+    w_orig: int,
+    preprocess_modes: List[str],
+    detector_box_format: str = "xyxy",
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, bool, Optional[torch.Tensor]]:
     if w_orig <= 960 and h_orig <= 960:
         boxes, scores, classes = detect_single_patch_640(
-            detector, pool, h_orig, w_orig, preprocess_modes
+            detector, pool, h_orig, w_orig, preprocess_modes, detector_box_format
         )
-        return boxes, scores, classes, False
+        return boxes, scores, classes, False, None
 
-    r = 960.0 / max(h_orig, w_orig)
-    h_new, w_new = int(h_orig * r), int(w_orig * r)
-    img_resized = torch.nn.functional.interpolate(
-        pool.frame_buffer.unsqueeze(0), size=(h_new, w_new)
-    ).squeeze(0)
-
-    pool.canvas_960p.fill_(114.0 / 255.0)
-    y_off = (960 - h_new) // 2
-    x_off = (960 - w_new) // 2
-    pool.canvas_960p[:, y_off : y_off + h_new, x_off : x_off + w_new].copy_(img_resized)
+    r, _h_new, _w_new, y_off, x_off = _prepare_canvas_960p(pool, h_orig, w_orig)
 
     pool.tiles_batch4[0].copy_(pool.canvas_960p[:, 0:640, 0:640])
     pool.tiles_batch4[1].copy_(pool.canvas_960p[:, 0:640, 320:960])
     pool.tiles_batch4[2].copy_(pool.canvas_960p[:, 320:960, 0:640])
     pool.tiles_batch4[3].copy_(pool.canvas_960p[:, 320:960, 320:960])
 
-    raw_dets = detector.detect_raw(pool.tiles_batch4)
+    raw_dets = _detect_tiles(detector, pool.tiles_batch4)
     # One clone for all tiles, two broadcast ops using pre-allocated offsets
     # instead of 4 individual clones + 8 per-tile scalar ops + 3 cat calls.
-    all_boxes = raw_dets[:, :, :4].clone()  # [4, 300, 4]
+    all_boxes = _decode_detector_boxes(raw_dets[:, :, :4], detector_box_format)
     all_boxes[:, :, [0, 2]] = (all_boxes[:, :, [0, 2]] + pool.tile_dx - x_off) / r
     all_boxes[:, :, [1, 3]] = (all_boxes[:, :, [1, 3]] + pool.tile_dy - y_off) / r
     # Scores and classes are non-contiguous views; reshape() copies them automatically.
@@ -890,4 +1237,76 @@ def detect_adaptive_960_tiled(
         raw_dets[:, :, 4].reshape(-1),
         raw_dets[:, :, 5].reshape(-1),
         True,
+        None,
     )
+
+
+def detect_sahi_960p_2x2(
+    detector: Any,
+    pool: Any,
+    h_orig: int,
+    w_orig: int,
+    preprocess_modes: List[str],
+    detector_box_format: str = "xyxy",
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, bool, Optional[torch.Tensor]]:
+    if w_orig <= 960 and h_orig <= 960:
+        boxes, scores, classes = detect_single_patch_640(
+            detector, pool, h_orig, w_orig, preprocess_modes, detector_box_format
+        )
+        return boxes, scores, classes, False, None
+
+    if "letterbox" not in preprocess_modes:
+        raise RuntimeError(
+            "tiling=sahi_960p_2x2 currently requires letterbox preprocessing"
+        )
+
+    from sahi.predict import get_sliced_prediction
+
+    r, _h_new, _w_new, y_off, x_off = _prepare_canvas_960p(pool, h_orig, w_orig)
+    canvas_rgb = _canvas_to_numpy_rgb(pool.canvas_960p)
+
+    model_cache = getattr(detector, "_sahi_model_cache", None)
+    if model_cache is None:
+        model_cache = {}
+        setattr(detector, "_sahi_model_cache", model_cache)
+    sahi_model = model_cache.get(detector_box_format)
+    if sahi_model is None:
+        sahi_model = _build_sahi_trt_detection_model(detector, detector_box_format)
+        model_cache[detector_box_format] = sahi_model
+
+    prediction = get_sliced_prediction(
+        image=canvas_rgb,
+        detection_model=sahi_model,
+        slice_height=640,
+        slice_width=640,
+        overlap_height_ratio=0.5,
+        overlap_width_ratio=0.5,
+        perform_standard_pred=False,
+        auto_slice_resolution=False,
+        postprocess_class_agnostic=False,
+        verbose=0,
+    )
+    object_predictions = prediction.object_prediction_list
+    device = pool.frame_buffer.device
+    if not object_predictions:
+        return (
+            torch.empty((0, 4), device=device, dtype=torch.float32),
+            torch.empty((0,), device=device, dtype=torch.float32),
+            torch.empty((0,), device=device, dtype=torch.float32),
+            True,
+            None,
+        )
+
+    boxes = [
+        object_prediction.bbox.to_xyxy() for object_prediction in object_predictions
+    ]
+    scores = [object_prediction.score.value for object_prediction in object_predictions]
+    classes = [
+        float(object_prediction.category.id) for object_prediction in object_predictions
+    ]
+    boxes_t = torch.tensor(boxes, device=device, dtype=torch.float32)
+    scores_t = torch.tensor(scores, device=device, dtype=torch.float32)
+    classes_t = torch.tensor(classes, device=device, dtype=torch.float32)
+    boxes_t[:, [0, 2]] = (boxes_t[:, [0, 2]] - x_off) / r
+    boxes_t[:, [1, 3]] = (boxes_t[:, [1, 3]] - y_off) / r
+    return boxes_t, scores_t, classes_t, True, None

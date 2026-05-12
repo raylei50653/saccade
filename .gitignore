@@ -31,6 +31,7 @@ models/yolo/*
 # Data & Media
 datasets/
 results/
+runs/
 scripts/eval/output/*
 !scripts/eval/output/README.md
 !scripts/eval/output/.gitkeep

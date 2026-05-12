@@ -27,12 +27,16 @@ class PythonSemanticRelinker:
         shift_lost_age: float = 0.0,
         dynamic_margin_crowd: float = 0.0,
         dynamic_margin_age: float = 0.0,
+        biometric_threshold: float = 0.0,
         debug: bool = False,
         clean_score_threshold: float = 0.0,
         clean_margin_ratio: float = 0.0,
         clean_min_aspect: float = 0.0,
         clean_max_aspect: float = 99.0,
         strict_sim_threshold: float = 0.0,
+        experimental_mode: str = "standard",
+        appearance_first_sim_threshold: float = 0.95,
+        appearance_first_margin: float = 0.03,
         device: str | None = None,
     ) -> None:
         if device is None:
@@ -80,6 +84,14 @@ class PythonSemanticRelinker:
         #   age    → +margin proportional to lost_frames / ttl
         self.dynamic_margin_crowd = max(0.0, float(dynamic_margin_crowd))
         self.dynamic_margin_age = max(0.0, float(dynamic_margin_age))
+        self.biometric_threshold = max(0.0, float(biometric_threshold))
+        if experimental_mode not in {"standard", "appearance_first"}:
+            raise ValueError(f"Unknown experimental_mode: {experimental_mode!r}")
+        self.experimental_mode = experimental_mode
+        self.appearance_first_sim_threshold = max(
+            0.0, float(appearance_first_sim_threshold)
+        )
+        self.appearance_first_margin = max(0.0, float(appearance_first_margin))
         self.clean_score_threshold = clean_score_threshold
         self.clean_margin_ratio = clean_margin_ratio
         self.clean_min_aspect = clean_min_aspect
@@ -98,6 +110,8 @@ class PythonSemanticRelinker:
             "attempts": 0,
             "accepted": 0,
             "reject_age": 0,
+            "reject_age_too_fresh": 0,
+            "reject_age_too_old": 0,
             "reject_assigned": 0,
             "reject_spatial": 0,
             "reject_mahalanobis": 0,
@@ -105,12 +119,43 @@ class PythonSemanticRelinker:
             "reject_consistency": 0,
             "reject_margin": 0,
             "reject_quality": 0,
+            "reject_quality_score": 0,
+            "reject_quality_margin": 0,
+            "reject_quality_aspect_low": 0,
+            "reject_quality_aspect_high": 0,
+            "appearance_first_bypass": 0,
             "new_ids": 0,
+            "reject_biometric": 0,
         }
+        self._bio_tracker: Any = None
         self.accept_sims: List[float] = []
         self.accept_ious: List[float] = []
         self.accept_center_dists: List[float] = []
         self.accept_mahas: List[float] = []
+        self.reject_age_fresh_ages: List[int] = []
+        self.reject_age_old_ages: List[int] = []
+        self.age_gate_pass_ages: List[int] = []
+        self.age_gate_pass_outcomes: List[tuple[int, str]] = []
+        self.age_gate_pass_spatial_subreasons: List[tuple[int, str]] = []
+        self.reference_alignment_samples: List[
+            tuple[int, float, float, float, float]
+        ] = []
+
+    def set_biometric_tracker(self, tracker: Any) -> None:
+        self._bio_tracker = tracker
+
+    def _bio_distance(self, id_a: int, id_b: int) -> float:
+        if self._bio_tracker is None or self.biometric_threshold <= 0.0:
+            return 0.0
+        pa = self._bio_tracker.get_biometric(int(id_a))
+        pb = self._bio_tracker.get_biometric(int(id_b))
+        if pa is None or pb is None:
+            return 0.0
+        dist = 0.0
+        for k in ("r_leg", "r_shoulder", "r_head"):
+            if k in pa and k in pb:
+                dist += abs(pa[k] - pb[k])
+        return dist
 
     def _normalize(self, embedding: torch.Tensor) -> torch.Tensor:
         return F.normalize(embedding.float().to(self.device), dim=0)
@@ -147,7 +192,7 @@ class PythonSemanticRelinker:
             self.motion[canonical] = snap
 
     def motion_candidate_ids(self, frame_id: int = -1) -> List[int]:
-        if self.mahalanobis_threshold <= 0.0:
+        if self.mahalanobis_threshold <= 0.0 and not self.debug:
             return []
         ids: List[int] = []
         for cid in self.features:
@@ -184,6 +229,20 @@ class PythonSemanticRelinker:
         except np.linalg.LinAlgError:
             solved = np.linalg.pinv(s) @ residual
         return float(residual @ solved)
+
+    def _motion_box(self, snapshot: Any) -> Optional[torch.Tensor]:
+        try:
+            cx, cy, aspect, h = [float(v) for v in snapshot.state[:4]]
+        except Exception:
+            return None
+        if h <= 0.0 or aspect <= 0.0:
+            return None
+        w = aspect * h
+        return torch.tensor(
+            [cx - 0.5 * w, cy - 0.5 * h, cx + 0.5 * w, cy + 0.5 * h],
+            dtype=torch.float32,
+            device=self.device,
+        )
 
     def _buffer_mean(self, cid: int) -> Optional[torch.Tensor]:
         buf = self.buffers.get(cid)
@@ -261,20 +320,30 @@ class PythonSemanticRelinker:
         emb = self._normalize(embedding)
 
         is_clean = True
+        quality_score_fail = False
+        quality_margin_fail = False
+        quality_aspect_low_fail = False
+        quality_aspect_high_fail = False
         if self.clean_score_threshold > 0.0 or self.clean_margin_ratio > 0.0:
             bw = float(box[2] - box[0])
             bh = float(box[3] - box[1])
             aspect = bh / bw if bw > 0 else 0.0
             margin_w = w * self.clean_margin_ratio
             margin_h = h * self.clean_margin_ratio
-            if (
-                score < self.clean_score_threshold
-                or float(box[0]) < margin_w
+            quality_score_fail = score < self.clean_score_threshold
+            quality_margin_fail = (
+                float(box[0]) < margin_w
                 or float(box[1]) < margin_h
                 or float(box[2]) > w - margin_w
                 or float(box[3]) > h - margin_h
-                or aspect < self.clean_min_aspect
-                or aspect > self.clean_max_aspect
+            )
+            quality_aspect_low_fail = aspect < self.clean_min_aspect
+            quality_aspect_high_fail = aspect > self.clean_max_aspect
+            if (
+                quality_score_fail
+                or quality_margin_fail
+                or quality_aspect_low_fail
+                or quality_aspect_high_fail
             ):
                 is_clean = False
 
@@ -289,6 +358,7 @@ class PythonSemanticRelinker:
             best_sim_raw = 0.0  # raw cosine of the current winner
             second_best_joint = -2.0  # runner-up joint score
             best_iou, best_center, best_maha = 0.0, 0.0, 0.0
+            best_bypassed = False
 
             candidates_to_score = []
             for cid in self.features:
@@ -298,13 +368,36 @@ class PythonSemanticRelinker:
                     continue
                 if age < self.min_lost_frames or age > self.ttl:
                     self.stats["reject_age"] += 1
+                    if age < self.min_lost_frames:
+                        self.stats["reject_age_too_fresh"] += 1
+                        self.reject_age_fresh_ages.append(age)
+                    else:
+                        self.stats["reject_age_too_old"] += 1
+                        self.reject_age_old_ages.append(age)
                     continue
-                center_norm, iou = self._spatial_metrics(
-                    box, self.last_boxes[cid], w, h
-                )
-                if center_norm > self.spatial_gate or iou < self.min_iou:
-                    self.stats["reject_spatial"] += 1
-                    continue
+                self.age_gate_pass_ages.append(age)
+                last_box = self.last_boxes[cid]
+                center_norm, iou = self._spatial_metrics(box, last_box, w, h)
+                motion_box = None
+                motion_center_norm = None
+                motion_iou = None
+                snapshot = self.motion.get(cid)
+                if snapshot is not None:
+                    motion_box = self._motion_box(snapshot)
+                    if motion_box is not None:
+                        motion_center_norm, motion_iou = self._spatial_metrics(
+                            box, motion_box, w, h
+                        )
+                        self.reference_alignment_samples.append(
+                            (
+                                age,
+                                float(iou),
+                                float(center_norm),
+                                float(motion_iou),
+                                float(motion_center_norm),
+                            )
+                        )
+                spatial_failed = center_norm > self.spatial_gate or iou < self.min_iou
                 maha = 0.0
                 if self.mahalanobis_threshold > 0.0:
                     snapshot = self.motion.get(cid)
@@ -320,7 +413,9 @@ class PythonSemanticRelinker:
                     if consistency < self.min_consistency:
                         self.stats["reject_consistency"] += 1
                         continue
-                candidates_to_score.append((cid, age, iou, center_norm, maha))
+                candidates_to_score.append(
+                    (cid, age, iou, center_norm, maha, spatial_failed)
+                )
 
             n_gate_passed = len(candidates_to_score)
             _use_legacy_joint = self.iou_weight > 0.0 or self.mahalanobis_weight > 0.0
@@ -341,7 +436,7 @@ class PythonSemanticRelinker:
                 _batch_sims = (_bank @ emb).tolist()  # single kernel + single D2H
                 _sim_iter = iter(_batch_sims)
 
-            for cid, age, iou, center_norm, maha in candidates_to_score:
+            for cid, age, iou, center_norm, maha, spatial_failed in candidates_to_score:
                 if self.buffer_size > 1:
                     sim = self._buffer_sim(cid, emb)
                 else:
@@ -350,13 +445,33 @@ class PythonSemanticRelinker:
                 # Hard appearance gate: raw cosine must still pass sim_threshold.
                 if sim < current_sim_thresh:
                     self.stats["reject_similarity"] += 1
+                    self.age_gate_pass_outcomes.append((age, "similarity"))
+                    continue
+
+                appearance_first_bypass = (
+                    self.experimental_mode == "appearance_first"
+                    and spatial_failed
+                    and is_clean
+                    and sim >= self.appearance_first_sim_threshold
+                )
+                if spatial_failed and not appearance_first_bypass:
+                    self.stats["reject_spatial"] += 1
+                    self.age_gate_pass_outcomes.append((age, "spatial"))
+                    if center_norm > self.spatial_gate:
+                        self.age_gate_pass_spatial_subreasons.append(
+                            (age, "center_norm")
+                        )
+                    if iou < self.min_iou:
+                        self.age_gate_pass_spatial_subreasons.append((age, "iou"))
                     continue
 
                 maha_score = 0.0
                 if self.mahalanobis_threshold > 0.0 and maha > 0.0:
                     maha_score = max(0.0, 1.0 - maha / self.mahalanobis_threshold)
 
-                if _use_unified_score:
+                if appearance_first_bypass:
+                    joint = sim
+                elif _use_unified_score:
                     w_sim = self.w_sim_base
                     w_iou = self.w_iou_base
                     w_maha = self.w_maha_base
@@ -396,10 +511,12 @@ class PythonSemanticRelinker:
                     best_joint = joint
                     best_sim_raw = sim
                     best_iou, best_center, best_maha = iou, center_norm, maha
+                    best_bypassed = appearance_first_bypass
                 else:
                     if joint > second_best_joint:
                         second_best_joint = joint  # update runner-up
                     self.stats["reject_similarity"] += 1
+                    self.age_gate_pass_outcomes.append((age, "similarity"))
 
             # Dynamic margin: base + crowd penalty + age penalty
             effective_margin = self.reciprocal_margin
@@ -411,11 +528,25 @@ class PythonSemanticRelinker:
                     lost_frames = frame_id - self.last_seen.get(best_id, frame_id)
                     age_factor = min(1.0, lost_frames / max(1, self.ttl))
                     effective_margin += self.dynamic_margin_age * age_factor
+                if best_bypassed:
+                    effective_margin = max(
+                        effective_margin, self.appearance_first_margin
+                    )
             if best_id is not None and effective_margin > 0.0:
                 if best_joint - second_best_joint < effective_margin:
                     self.stats["reject_margin"] += 1
+                    best_age = frame_id - self.last_seen.get(best_id, frame_id)
+                    self.age_gate_pass_outcomes.append((best_age, "margin"))
+                    best_id = None
+            if best_id is not None and self.biometric_threshold > 0.0:
+                if self._bio_distance(raw_id, best_id) > self.biometric_threshold:
+                    self.stats["reject_biometric"] += 1
                     best_id = None
             if best_id is not None:
+                best_age = frame_id - self.last_seen.get(best_id, frame_id)
+                self.age_gate_pass_outcomes.append((best_age, "accepted"))
+                if best_bypassed:
+                    self.stats["appearance_first_bypass"] += 1
                 self.stats["accepted"] += 1
                 self.accept_sims.append(best_sim_raw)
                 self.accept_ious.append(best_iou)
@@ -429,6 +560,14 @@ class PythonSemanticRelinker:
         canonical = self.alias[raw_id]
         if not is_clean:
             self.stats["reject_quality"] += 1
+            if quality_score_fail:
+                self.stats["reject_quality_score"] += 1
+            if quality_margin_fail:
+                self.stats["reject_quality_margin"] += 1
+            if quality_aspect_low_fail:
+                self.stats["reject_quality_aspect_low"] += 1
+            if quality_aspect_high_fail:
+                self.stats["reject_quality_aspect_high"] += 1
         else:
             if self.buffer_size > 1:
                 buf = self.buffers.setdefault(canonical, [])
@@ -494,13 +633,156 @@ class PythonSemanticRelinker:
         ]
 
     def report(self) -> None:
+        def _histogram(
+            values: List[int], bins: List[tuple[str, int, int | None]]
+        ) -> str:
+            if not values:
+                return "none"
+            parts = []
+            for label, lo, hi in bins:
+                if hi is None:
+                    count = sum(1 for v in values if v >= lo)
+                else:
+                    count = sum(1 for v in values if lo <= v <= hi)
+                if count > 0:
+                    parts.append(f"{label}={count}")
+            return " ".join(parts) if parts else "none"
+
+        def _outcome_histogram(
+            values: List[tuple[int, str]],
+            bins: List[tuple[str, int, int | None]],
+            outcomes: List[str],
+        ) -> str:
+            if not values:
+                return "none"
+            parts = []
+            for label, lo, hi in bins:
+                bucket_parts = []
+                for outcome in outcomes:
+                    if hi is None:
+                        count = sum(
+                            1 for age, kind in values if age >= lo and kind == outcome
+                        )
+                    else:
+                        count = sum(
+                            1
+                            for age, kind in values
+                            if lo <= age <= hi and kind == outcome
+                        )
+                    if count > 0:
+                        bucket_parts.append(f"{outcome}={count}")
+                if bucket_parts:
+                    parts.append(f"{label}[{' '.join(bucket_parts)}]")
+            return " ".join(parts) if parts else "none"
+
+        def _reference_alignment_report(
+            values: List[tuple[int, float, float, float, float]],
+            bins: List[tuple[str, int, int | None]],
+        ) -> str:
+            if not values:
+                return "none"
+            parts = []
+            for label, lo, hi in bins:
+                bucket = [
+                    item
+                    for item in values
+                    if (item[0] >= lo if hi is None else lo <= item[0] <= hi)
+                ]
+                if not bucket:
+                    continue
+                n = len(bucket)
+                mean_last_iou = sum(item[1] for item in bucket) / n
+                mean_last_center = sum(item[2] for item in bucket) / n
+                mean_motion_iou = sum(item[3] for item in bucket) / n
+                mean_motion_center = sum(item[4] for item in bucket) / n
+                motion_better_iou = sum(
+                    1 for item in bucket if item[3] > item[1] + 1e-6
+                )
+                motion_better_center = sum(
+                    1 for item in bucket if item[4] < item[2] - 1e-6
+                )
+                parts.append(
+                    f"{label}[n={n} "
+                    f"last_iou={mean_last_iou:.3f} motion_iou={mean_motion_iou:.3f} "
+                    f"last_center={mean_last_center:.3f} motion_center={mean_motion_center:.3f} "
+                    f"motion_better_iou={motion_better_iou} motion_better_center={motion_better_center}]"
+                )
+            return " ".join(parts) if parts else "none"
+
         print("🔁 Semantic Relink Report:")
         print(
             "  attempts={attempts} accepted={accepted} new_ids={new_ids} "
             "reject_age={reject_age} reject_assigned={reject_assigned} "
             "reject_spatial={reject_spatial} reject_mahalanobis={reject_mahalanobis} "
-            "reject_similarity={reject_similarity} reject_margin={reject_margin}".format(
-                **self.stats
+            "reject_similarity={reject_similarity} reject_margin={reject_margin} "
+            "reject_biometric={reject_biometric}".format(**self.stats)
+        )
+        print(
+            "  reject_age_fresh={reject_age_too_fresh} reject_age_old={reject_age_too_old} "
+            "reject_quality_score={reject_quality_score} reject_quality_margin={reject_quality_margin} "
+            "reject_quality_aspect_low={reject_quality_aspect_low} "
+            "reject_quality_aspect_high={reject_quality_aspect_high} "
+            "appearance_first_bypass={appearance_first_bypass}".format(**self.stats)
+        )
+        print(
+            "  age_hist gate_pass=("
+            + _histogram(
+                self.age_gate_pass_ages,
+                [
+                    ("2-5", 2, 5),
+                    ("6-15", 6, 15),
+                    ("16-30", 16, 30),
+                    ("31-45", 31, 45),
+                ],
+            )
+            + ") reject_old=("
+            + _histogram(
+                self.reject_age_old_ages,
+                [
+                    ("46-60", 46, 60),
+                    ("61-90", 61, 90),
+                    ("91-180", 91, 180),
+                    ("181+", 181, None),
+                ],
+            )
+            + ")"
+        )
+        print(
+            "  gate_pass_outcomes "
+            + _outcome_histogram(
+                self.age_gate_pass_outcomes,
+                [
+                    ("2-5", 2, 5),
+                    ("6-15", 6, 15),
+                    ("16-30", 16, 30),
+                    ("31-45", 31, 45),
+                ],
+                ["accepted", "spatial", "similarity", "margin"],
+            )
+        )
+        print(
+            "  spatial_subreasons "
+            + _outcome_histogram(
+                self.age_gate_pass_spatial_subreasons,
+                [
+                    ("2-5", 2, 5),
+                    ("6-15", 6, 15),
+                    ("16-30", 16, 30),
+                    ("31-45", 31, 45),
+                ],
+                ["center_norm", "iou"],
+            )
+        )
+        print(
+            "  reference_alignment "
+            + _reference_alignment_report(
+                self.reference_alignment_samples,
+                [
+                    ("2-5", 2, 5),
+                    ("6-15", 6, 15),
+                    ("16-30", 16, 30),
+                    ("31-45", 31, 45),
+                ],
             )
         )
         if self.accept_sims:

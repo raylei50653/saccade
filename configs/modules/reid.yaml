@@ -1,0 +1,48 @@
+# ReID backbone and embedding policy module
+# Load with: --module-reid configs/modules/reid.yaml
+#
+# Confirmed best (2026-05-10): async_reid + pipeline_relink default ON for latency
+# reid_mode: semantic — enables relink; "off" = pure IoU/Kalman baseline
+
+reid_mode: semantic
+reid_model: siglip2
+reid_engine_path: ""
+
+# Budget + scheduling
+reid_budget: 0.2          # <1 = fraction of detections per frame
+reid_interval: 20         # fixed heartbeat when need_reid=false
+
+# Matching gates
+reid_cos_threshold: 0.90
+reid_iou_low: 0.30
+reid_iou_high: 0.60
+reid_weight: 0.80
+
+# Crop
+reid_crop_mode: tight
+reid_crop_padding: 0.0
+reid_crop_layout: full
+
+# Lazy ReID (self-similarity reuse)
+lazy_reid_min_hit_streak: 2
+lazy_reid_self_threshold: 0.85
+
+# Async pipeline (confirmed default: both ON → 107+ FPS)
+async_reid: true
+pipeline_relink: true
+
+# Advanced GMC
+gmc_fg_mask: false
+gmc_pcr_uncertain_thresh: 8.0
+homography_root: ""
+
+# Profiling (off by default)
+profile_lazy_reid_candidates: false
+profile_lazy_reid_embeddings: false
+
+# LaSt-ViT (no-go as of 2026-05-01; keep false unless actively testing)
+last_vit_embed: false
+last_vit_gate: 0.0
+last_vit_sigma_embed: 0.015
+last_vit_sigma_gate: 0.040
+last_vit_top_k: 0.5

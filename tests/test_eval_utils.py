@@ -201,6 +201,13 @@ def test_tile_seam_mask_unknown_tiling():
     assert bool(mask[0]) is False
 
 
+def test_tile_seam_mask_sahi_matches_2x2():
+    boxes = torch.tensor([[300.0, 100.0, 350.0, 200.0]])
+    native_mask = tile_seam_mask(boxes, tiling="960p_2x2", h_orig=720, w_orig=1280)
+    sahi_mask = tile_seam_mask(boxes, tiling="sahi_960p_2x2", h_orig=720, w_orig=1280)
+    assert torch.equal(native_mask, sahi_mask)
+
+
 def test_count_tile_seam_boxes_returns_int():
     boxes = torch.tensor([[300.0, 100.0, 350.0, 200.0]])
     result = count_tile_seam_boxes(boxes, tiling="960p_2x2", h_orig=720, w_orig=1280)
@@ -212,6 +219,15 @@ def test_mot17_parser_defaults_to_fixed_interval_reid():
 
     assert args.need_reid is False
     assert args.reid_interval == 20
+    assert args.birth_quality_gate is False
+    assert args.birth_min_quality == 0.0
+    assert args.birth_quality_score_bias == 0.15
+
+
+def test_mot17_parser_accepts_sahi_tiling():
+    args = build_parser().parse_args(["--tiling", "sahi_960p_2x2"])
+
+    assert args.tiling == "sahi_960p_2x2"
 
 
 def test_parse_eval_config_defaults_to_fixed_interval_reid(tmp_path):
@@ -229,3 +245,23 @@ def test_parse_eval_config_defaults_to_fixed_interval_reid(tmp_path):
 
     assert cfg.need_reid_enabled is False
     assert cfg.reid_interval == 20
+    assert cfg.birth_quality_gate is False
+    assert cfg.birth_min_quality == 0.0
+    assert cfg.birth_quality_score_bias == 0.15
+
+
+def test_parse_eval_config_preserves_sahi_tiling(tmp_path):
+    cfg = parse_eval_config(
+        output=str(tmp_path),
+        data_root="datasets/MOT17",
+        split="train",
+        sequences="MOT17-04-SDP",
+        conf_threshold=0.05,
+        reid_mode="semantic",
+        reid_model="siglip2",
+        profile_stages=False,
+        kwargs={"tiling": "sahi_960p_2x2"},
+    )
+
+    assert cfg.tiling == "sahi_960p_2x2"
+    assert cfg.nms_iou_threshold == pytest.approx(0.5)

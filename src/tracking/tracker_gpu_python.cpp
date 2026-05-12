@@ -539,6 +539,32 @@ public:
         }
     }
 
+    void inject_references_batch(
+        const std::vector<int>& canonical_ids,
+        py::object embeddings_tensor
+    ) {
+        if (canonical_ids.empty()) return;
+        py::array_t<float, py::array::c_style | py::array::forcecast> arr(
+            embeddings_tensor.attr("detach")().attr("float")().attr("cpu")().attr("numpy")()
+        );
+        if (arr.ndim() != 2 || static_cast<int>(arr.shape(0)) != static_cast<int>(canonical_ids.size()))
+            throw std::invalid_argument("inject_references_batch: embeddings shape must be [N, D] with N == len(canonical_ids)");
+        const int d = static_cast<int>(arr.shape(1));
+        for (int i = 0; i < static_cast<int>(canonical_ids.size()); ++i) {
+            const float* row = arr.data(i, 0);
+            std::vector<float> emb = normalize(std::vector<float>(row, row + d));
+            const int cid = canonical_ids[i];
+            features_[cid] = emb;
+            if (buffer_size_ > 1) {
+                auto& buf = buffers_[cid];
+                buf.push_back(emb);
+                if (static_cast<int>(buf.size()) > buffer_size_) buf.erase(buf.begin());
+            }
+            if (std::find(feature_order_.begin(), feature_order_.end(), cid) == feature_order_.end())
+                feature_order_.push_back(cid);
+        }
+    }
+
     int canonical_id(int raw_id) const {
         auto it = alias_.find(raw_id);
         return it == alias_.end() ? raw_id : it->second;
@@ -1049,12 +1075,8 @@ private:
         if (arr.ndim() != 1) {
             throw std::invalid_argument("SemanticRelinker embedding must be a 1D tensor");
         }
-        auto view = arr.unchecked<1>();
-        std::vector<float> out(static_cast<size_t>(arr.shape(0)));
-        for (ssize_t i = 0; i < arr.shape(0); ++i) {
-            out[static_cast<size_t>(i)] = view(i);
-        }
-        return out;
+        const float* data = arr.data();
+        return std::vector<float>(data, data + static_cast<size_t>(arr.shape(0)));
     }
 
     static RelinkBox parse_box(py::sequence seq) {
@@ -1459,10 +1481,8 @@ private:
         py::array_t<float, py::array::c_style | py::array::forcecast> arr(np);
         if (arr.ndim() != 1)
             throw std::invalid_argument("TrackletLifecycleMerger embedding must be 1D");
-        auto view = arr.unchecked<1>();
-        std::vector<float> out(static_cast<size_t>(arr.shape(0)));
-        for (ssize_t i = 0; i < arr.shape(0); ++i) out[static_cast<size_t>(i)] = view(i);
-        return {normalize_lc(out), true};
+        const float* data = arr.data();
+        return {normalize_lc(std::vector<float>(data, data + static_cast<size_t>(arr.shape(0)))), true};
     }
 
     static RelinkBox parse_box_lc(py::handle h) {
@@ -1802,7 +1822,19 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             );
         },
         py::arg("ids_ptr"), py::arg("flags_ptr"), py::arg("n"), py::arg("stream_ptr"),
-        "Sync per-track clean-embedding flags from Python bank state to the CUDA tracker");
+        "Sync per-track clean-embedding flags from Python bank state to the CUDA tracker")
+        .def("set_clean_embedding_flags_host", [](GPUByteTracker& self,
+                                                   uintptr_t ids_ptr, uintptr_t flags_ptr,
+                                                   int n, uintptr_t stream_ptr) {
+            self.set_clean_embedding_flags_host(
+                reinterpret_cast<int*>(ids_ptr),
+                reinterpret_cast<bool*>(flags_ptr),
+                n,
+                reinterpret_cast<cudaStream_t>(stream_ptr)
+            );
+        },
+        py::arg("ids_ptr"), py::arg("flags_ptr"), py::arg("n"), py::arg("stream_ptr"),
+        "Same as set_clean_embedding_flags but takes host (CPU) pointers — skips the D2H round-trip for IDs");
 
     py::class_<SemanticRelinkerCpp>(m, "SemanticRelinker")
         .def(py::init<float, int, float, float, int, float, float, int, float, std::string, float, bool, float, float, float, float, float, float, float, float, float, float, float, float, float, float>(),
@@ -1838,6 +1870,9 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
              py::arg("canonical_id"), py::arg("embedding"))
         .def("inject_references_many", &SemanticRelinkerCpp::inject_references_many,
              py::arg("references"))
+        .def("inject_references_batch", &SemanticRelinkerCpp::inject_references_batch,
+             py::arg("canonical_ids"), py::arg("embeddings_tensor"),
+             "Batch-inject N reference embeddings from a single [N, D] CPU tensor")
         .def("canonical_id", &SemanticRelinkerCpp::canonical_id, py::arg("raw_id"))
         .def("has_feature", &SemanticRelinkerCpp::has_feature, py::arg("canonical_id"))
         .def("resolve", &SemanticRelinkerCpp::resolve,
@@ -2263,7 +2298,10 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
                uintptr_t boxes_ptr, uintptr_t scores_ptr, uintptr_t classes_ptr,
                int n_in, int frame_w, int frame_h, bool is_tiled,
                uintptr_t out_boxes, uintptr_t out_scores, uintptr_t out_classes,
-               uintptr_t out_suspect, uintptr_t out_count, uintptr_t stream_ptr) {
+               uintptr_t out_suspect, uintptr_t out_count,
+               uintptr_t priors_ptr, uintptr_t prior_classes_ptr,
+               int num_priors, float prior_iou_threshold,
+               uintptr_t stream_ptr) {
                 self.process_detections_into(
                     reinterpret_cast<const float*>(boxes_ptr),
                     reinterpret_cast<const float*>(scores_ptr),
@@ -2274,13 +2312,20 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
                     reinterpret_cast<int*>(out_classes),
                     reinterpret_cast<bool*>(out_suspect),
                     reinterpret_cast<int*>(out_count),
+                    reinterpret_cast<const float*>(priors_ptr),
+                    reinterpret_cast<const int*>(prior_classes_ptr),
+                    num_priors,
+                    prior_iou_threshold,
                     reinterpret_cast<cudaStream_t>(stream_ptr));
             },
             py::arg("boxes_ptr"), py::arg("scores_ptr"), py::arg("classes_ptr"),
             py::arg("n_in"), py::arg("frame_w"), py::arg("frame_h"),
             py::arg("is_tiled"),
             py::arg("out_boxes"), py::arg("out_scores"), py::arg("out_classes"),
-            py::arg("out_suspect"), py::arg("out_count"), py::arg("stream_ptr"))
+            py::arg("out_suspect"), py::arg("out_count"),
+            py::arg("priors_ptr") = 0, py::arg("prior_classes_ptr") = 0,
+            py::arg("num_priors") = 0, py::arg("prior_iou_threshold") = 0.50f,
+            py::arg("stream_ptr"))
         .def("extract_reid",
             [](PerceptionPipeline& self,
                uintptr_t frame_ptr, int frame_h, int frame_w,

@@ -175,7 +175,7 @@ def tile_seam_mask(
     seam_margin_canvas_px: float = 24.0,
 ) -> torch.Tensor:
     """Return a bool mask for boxes near tiled seam boundaries."""
-    if boxes.numel() == 0 or tiling not in {"960p_2x2", "960p_3x2"}:
+    if boxes.numel() == 0 or tiling not in {"960p_2x2", "960p_3x2", "sahi_960p_2x2"}:
         return torch.zeros((boxes.size(0),), device=boxes.device, dtype=torch.bool)
 
     r = 960.0 / max(h_orig, w_orig)

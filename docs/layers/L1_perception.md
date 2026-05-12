@@ -49,10 +49,13 @@ MOT17/MOT20 評估邏輯統一放在 `perception/eval/` package，`scripts/eval/
 
 ## 7. 2026-05 Detection / Tiling 現況
 
-- `scripts/eval/mot17.py` 現在支援三條 detector evaluation 路徑：
+- `scripts/eval/mot17.py` 現在支援四條 detector evaluation 路徑：
   - `--tiling 960p_2x2`
   - `--tiling 960p_3x2`
   - `--tiling native_960`
+- 另有實驗中的 `--tiling sahi_960p_2x2`：
+  - 與 `960p_2x2` 使用相同 `960 -> 4x640` slice geometry
+  - merge 改由 SAHI default sliced postprocess 負責，不走 repo 的 cross-tile merge
 - `native_960` 是單張 `960x960` letterbox / resize 推論；tiled 路徑則會先做跨 tile duplicate merge，再送進 tracker。
 - `960p_2x2` 的 cross-tile merge 已改成 seam-aware：
   - seam-near pair 使用較寬鬆的 duplicate gate

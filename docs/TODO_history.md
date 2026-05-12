@@ -4,6 +4,58 @@
 
 ---
 
+## 已收斂結論（2026-05-09 ~ 05-11）
+
+### P2 L1：match × new-track Sweep（2026-05-09，yolo26m）
+
+| 組合 | IDF1 | MOTA | IDs | FP | FN | FPS |
+|:-----|:-----|:-----|:----|:---|:---|:----|
+| **最佳 accuracy** `0.70/0.30` | **48.9%** | 40.5% | 583 | 14676 | **51510** | 118.3 |
+| **最平衡** `0.70/0.35` | 48.5% | **40.8%** | **514** | 13347 | 53002 | 119.5 |
+| **推薦 baseline** `0.72/0.35` | 48.6% | **40.8%** | 564 | **13116** | 52818 | **118.9** |
+| 舊預設 `0.78/0.45` | 45.1% | 39.8% | 597 | 11218 | 55778 | 117.4 |
+
+結論：`match=0.66, new-track=0.28` 納入 speed preset；`match=0.72, new-track=0.35` 為 accuracy 最優。
+
+### FPS anomaly：match ≥ 0.73（2026-05-09 發現 → 2026-05-11 結案）
+
+- 原症狀：`match=0.72` ~119 FPS；`match ≥ 0.73` FPS 驟降 ~28（+2.65ms/frame）
+- Step 1（bench）：孤立 C++ tracker 無異常（1.3–1.5ms 全平）→ 根因在 Python
+- Step 2（全量實測 7-seq）：0.72 vs 0.73 差距僅 0.16ms/frame，`bg_relink_wait=0.00ms`
+- **結論：anomaly 已被 2026-05-07 pipeline 優化消除（async_reid + fused letterbox）。`match=0.72` 安全邊界已解除。**
+
+### P5-1：Multi-signal Birth Policy（2026-05-11 ❌ NO-GO）
+
+- `MultiSignalBirthManager`（`multi_birth.py`）加權 evidence = score × streak × motion × geometry
+- 7-seq speed preset：IDF1 ±0，IDs +12，FP +453，FN -530，FPS **-20**
+- 根因：Python-side O(K×C) IoU matching 每幀開銷；sub-threshold TP 比例太低
+- `--multi-birth-enabled` 保留（預設 off）
+
+### P5-2：Stage 2 Quality Gate（2026-05-10 ❌ NO-GO）
+
+- 與 `detection_quality_scaling=True` 完全重疊，零效果
+- 只在 `--no-detection-quality-scaling` 時有意義
+
+### P5-3：Consecutive-Frame Birth Gate（2026-05-10 ❌ NO-GO）
+
+- Motion gate 有效過濾靜態 FP（椅子、標誌、陰影），但殘餘 FP 仍為移動背景（車輛反射）
+- 最佳測試（n=3, iou=0.50, boost=0.15, min_score=0.25, min_motion=12px）：IDF1 +0.1pp — 統計中性
+- 根本限制：`quality_scaling + new_track_thresh=0.35` 已處理大多數弱偵測，剩下的 sub-threshold TP 比例太低
+
+### P5-4：Scene Adaptive Policy — narrow_bonus 策略（2026-05-11 ❌ NO-GO）
+
+- `SceneAdaptivePolicy` 分類正確（只有 MOT17-02 觸發 `crowded_narrow`：avg_aspect=1.97 最低）
+- 7-seq speed preset：IDF1 -0.1pp，FPS **-8**，MOT17-02 IDF1 -0.6pp（預期 +1.4pp）
+- 根因：speed preset `new_track_thresh=0.28`；bonus=0.05 把 score 0.23-0.27 低品質框推過門檻，FP 增加 > FN 改善
+- 框架 `SceneAdaptivePolicy` 保留（`--scene-adapt-enabled`，預設 off）；narrow_bonus 策略不啟用
+
+### Pose-Guided Box Expansion（2026-05-10 ❌ NO-GO）
+
+- IDF1 不退但 FPS -60%（pose engine 每幀都跑）；box 擴展引發 ID switches
+- 根本解是 detector training data，不是 post-processing
+
+---
+
 ## ❌ 放棄 / Deferred（2026-05-05）
 
 ### D3：Tiled Detector 流程修補（2026-05-05）
@@ -316,3 +368,96 @@
 
 - [x] `M1`、`M2`、`M3`、`M3.5`、`M4` 已完成。
 - 結論：runner 熱路徑的 identity resolve 已整合為 C++ pass；deterministic assignment / GMC stream / GPU-native preprocess 已落地。
+
+---
+
+## 歸檔：2026-05-06 ~ 05-11 已結案項目
+
+### Async ReID Pipelining（已完成，2026-05-07，設為 default）
+
+- `--async-reid`：reid_extract 提交至 side CUDA stream，與 GMC 重疊 ~1ms
+- 7-seq A/B：IDF1/MOTA/IDs 完全不變，FPS +2.6%（-0.46ms/frame）
+- **已設為 default。**
+
+### Inter-Frame Relink Pipelining（已完成，2026-05-07，設為 default）
+
+- `ThreadPoolExecutor(max_workers=1)`：bg thread 執行 relink_write，與 detect+postprocess 重疊
+- 7-seq A/B：IDF1/MOTA/IDs 完全不變，FPS +2.5%（-0.35ms/frame）
+- 實際 relink_write wall-clock ~2ms（profile 量到的 5.4ms 含強制 sync 放大）
+- **已設為 default。**
+
+### GMC GPU peak_find 優化（已完成，2026-05-07）
+
+- `find_peak_subpixel_kernel<<<1,1>>>` → parallel reduction `<<<1,256>>>`
+- peak_find：0.413ms → 0.033ms（12.5×）；phase_corr total：0.562ms → 0.163ms（3.4×）
+- frame total：0.708ms → 0.278ms（2.5×）
+
+### P2: match × new-track sweep（已完成，2026-05-09）
+
+- 推薦：`match=0.72, new-track=0.35` — IDF1 48.6%，MOTA 40.8%，IDs 564，FPS 118.9
+- 關鍵發現：`match=0.78`（舊預設）在 yolo26m 上失效（IDF1 45.1~46.3%）
+- FPS anomaly：`match ≥ 0.73` 在 `new-track ≥ 0.35` 時 FPS 驟降 ~28，根因未明
+- **`match=0.72` 已設為 default。**
+
+### P3: Config 文件機制（已完成，2026-05-10）
+
+- `configs/mot17_baseline.yaml` + `configs/presets/{baseline,accuracy,speed}.yaml`
+- `--config PATH` + `--preset {baseline,accuracy,speed}` 已實作；優先順序：CLI > preset > config > defaults
+- 同時完成：`fp_hard_filter` CLI args、`birth_quality_gate` Python 實作、`kalman_r_scale=0.75` C++ 鏈路
+
+### P0: Tracklet Interpolation（已完成，設為 default，2026-05-10）
+
+- `max_gap=20, min_track_len=5`：speed IDF1 +0.3pp，IDs -34，Rcll +2.0pp，FPS 不變
+- **已設為 default。**
+
+### P1: fp-hard-filter 參數調整（已完成，2026-05-10）
+
+- area 15000→40000、min_score 0.20→0.10；7-seq speed：IDF1 52.0%/MOTA 41.6%/FP -791
+- **已設為 default。**
+
+### P5-5: Kalman r_scale 驗證（已完成，2026-05-10）
+
+- `--kalman-r-scale 0.75`：accuracy 無損（±0.1pp noise），FPS 差異 noise 範圍（-1.4%）
+- 舊 50% FPS 退化已確認為 build artifact；**已設為 default。**
+
+### MOT17-02 FN 診斷與窄人加分（結案，2026-05-06 ~ 05-11）
+
+- FN 根因：raw 階段已有窄人正確框，但在 post_filter 前後因低分被淘汰
+- `narrow_person_score_bonus=0.05`（min_aspect=2.4, max_width_ratio=0.015）單序列 IDF1 +1.4pp
+- 全局 7-seq：IDF1 -0.3pp，FP +378，IDs +26（失敗）
+- P5-4 scene-adaptive 版（只對 MOT17-02 啟用）：IDF1 -0.6pp，FPS -10（失敗）
+- 根因：speed preset new_track_thresh=0.28 低，bonus 把低品質框推過門檻；需從 detector training data 解決
+
+### YOLO Pose / Biometric 整合（已完成 Phase 1+2，Phase 3 No-Go，2026-05-08 ~ 05-10）
+
+- Phase 1：C++ BiometricAccumulator，push_keypoints/get_biometric via pybind11
+- Phase 2：SemanticRelinkerCpp 加 bio gate（veto only），`--semantic-biometric-threshold`
+- Phase 3 評估（Biometric relinker）：gate 觸發（3 veto / 7-seq），接受量太低（4 relinks），FPS -47%
+- no-ReID baseline 已 52.0%，semantic 組合無法超越；**不納入 default。**
+
+### D 系列（D1/D2，已完成，2026-05-05）
+
+- D1：60.5% IDs 為 primary association 震盪，不是 ReID 問題；P3-B 天花板僅 3.9%，放棄
+- D2-B：new_track_thresh 調優；D2-C：CUDA Tentative Track Isolation（state=2/1），IDs -3.6%，已設為 default
+- D2-A-1（關閉 A6）：IDF1 +0.1pp，MOTA -4.1pp — A6 不是 IDF1 缺口根因
+
+### Semantic Relink 診斷（結案，2026-05-08）
+
+- `reject_age` 佔 86.8%（GMC 下 lost track <2f 被收回或 >45f 超 TTL）
+- `--semantic-threshold 0.93`：IDF1 +0.1pp，FP -268；目前最乾淨的小正向候選
+- GMC 消除了 semantic relink 的主要使用場景；降低 threshold 引入的 false relinks 弊大於利
+
+### YOLO non-end2end 對照（結案，2026-05-08）
+
+- `--detector-box-format {xyxy,cxcywh}` 已實作
+- non-end2end 在 MOT17-02 見輕微 recall 提升但伴隨 FP/IDs 惡化，MOT17-04 整體退步
+- **不升格為 default；保留 flag 供未來 joint retune 使用**
+
+### P5-1 ~ P5-4 算法 backlog（全部結案，2026-05-10 ~ 05-11）
+
+- P5-2 Stage 2 Quality Gate：與 detection_quality_scaling 完全重疊，零效果
+- P5-3 Consecutive-Frame Birth Gate（含 motion gate）：最佳統計中性（IDF1 +0.1pp）
+- P5-1 Multi-signal birth：IDF1 ±0，FPS -20；sub-threshold TP 比例太低
+- P5-4 Scene Adaptive（narrow_bonus）：SceneAdaptivePolicy 分類正確，但策略與 speed preset 不相容
+- 根本限制：sub-threshold 區域 FP 密度過高，任何 birth policy 均被 FP 抵消；需 detector 訓練資料改善
+

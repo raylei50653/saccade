@@ -1,5 +1,7 @@
+import io
 import math
 import numpy as np
+import pandas as pd
 from typing import Any
 from .types import MotRecord, OutputTracklet
 from .utils import (
@@ -303,3 +305,90 @@ def filter_low_quality_tracklets(
     stats["removed"] = stats["before"] - stats["after"]
     filtered = [r for r in records if r.track_id in keep_ids]
     return _format_mot_records(filtered), stats
+
+
+def interpolate_tracklets(
+    lines: list[str],
+    *,
+    max_gap: int = 20,
+    min_track_len: int = 5,
+) -> tuple[list[str], dict[str, int]]:
+    """Fill gaps ≤ max_gap in confirmed tracklets with linear interpolation.
+
+    Only operates on tracks with ≥ min_track_len observations (shorter tracklets
+    are likely noise and shouldn't be extrapolated).
+    Uses pandas + numpy for fast vectorized parse/format.
+    """
+    stats: dict[str, int] = {
+        "tracks_interpolated": 0,
+        "gaps_filled": 0,
+        "frames_added": 0,
+    }
+    if not lines or max_gap <= 0:
+        return lines, stats
+
+    # Parse only the columns needed for gap detection — avoid full string reformat
+    text = "\n".join(lines)
+    df = pd.read_csv(
+        io.StringIO(text),
+        header=None,
+        names=["frame", "tid", "x", "y", "w", "h", "score"],
+        usecols=[0, 1, 2, 3, 4, 5, 6],
+        dtype={
+            "frame": int,
+            "tid": int,
+            "x": float,
+            "y": float,
+            "w": float,
+            "h": float,
+            "score": float,
+        },
+    )
+
+    # Filter to confirmed tracks only
+    sizes = df.groupby("tid")["frame"].transform("count")
+    df = df[sizes >= min_track_len].sort_values(["tid", "frame"])
+    if df.empty:
+        return lines, stats
+
+    vals = df.values  # [N, 7]
+    same_tid = vals[:-1, 1] == vals[1:, 1]
+    gap_frames = np.where(same_tid, vals[1:, 0] - vals[:-1, 0] - 1, 0)
+    valid = (gap_frames >= 1) & (gap_frames <= max_gap)
+    gap_idx = np.where(valid)[0]
+
+    stats["gaps_filled"] = int(valid.sum())
+    if stats["gaps_filled"] == 0:
+        return lines, stats
+
+    # Build interpolated rows (only the NEW lines — originals are kept verbatim)
+    interp_rows = []
+    tracks_done: set[int] = set()
+    tail = "-1,-1,-1"
+
+    for i in gap_idx:
+        r0 = vals[i]
+        r1 = vals[i + 1]
+        gap = int(r1[0] - r0[0] - 1)
+        stats["frames_added"] += gap
+        tracks_done.add(int(r0[1]))
+        alphas = np.arange(1, gap + 1, dtype=np.float64) / (gap + 1)
+        interp = r0 + alphas[:, None] * (r1 - r0)
+        interp[:, 0] = np.arange(int(r0[0]) + 1, int(r0[0]) + gap + 1)
+        interp[:, 1] = r0[1]
+        for row in interp:
+            interp_rows.append(
+                f"{int(row[0])},{int(row[1])},{row[2]:.2f},{row[3]:.2f},"
+                f"{row[4]:.2f},{row[5]:.2f},{row[6]:.4f},{tail}"
+            )
+
+    stats["tracks_interpolated"] = len(tracks_done)
+
+    # Merge original lines + new interpolated lines, sorted by (frame, tid)
+    def _sort_key(line: str) -> tuple[int, int]:
+        p = line.split(",", 2)
+        return int(p[0]), int(p[1])
+
+    all_lines = lines + interp_rows
+    all_lines.sort(key=_sort_key)
+    return all_lines, stats

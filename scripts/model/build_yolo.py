@@ -5,6 +5,27 @@ import argparse
 TRT_LOGGER = trt.Logger(trt.Logger.INFO)
 
 
+class CacheCalibrator(trt.IInt8EntropyCalibrator2):
+    """Load a pre-existing INT8 calibration cache — no data needed."""
+
+    def __init__(self, cache_file: str):
+        super().__init__()
+        self.cache_file = cache_file
+
+    def get_batch_size(self) -> int:
+        return 1
+
+    def get_batch(self, names):  # type: ignore[override]
+        return None
+
+    def read_calibration_cache(self):
+        with open(self.cache_file, "rb") as f:
+            return f.read()
+
+    def write_calibration_cache(self, cache):
+        pass
+
+
 def build_engine(
     onnx_file_path: str,
     engine_file_path: str,
@@ -12,8 +33,12 @@ def build_engine(
     opt_batch: int = 1,
     max_batch: int = 1,
     img_size: int = 640,
+    precision: str = "fp16",
+    int8_cache: str = "",
 ) -> None:
-    print(f"🚀 Starting TensorRT Build Process for {onnx_file_path} (FP16)...")
+    print(
+        f"🚀 Starting TensorRT Build Process for {onnx_file_path} ({precision.upper()})..."
+    )
     builder = trt.Builder(TRT_LOGGER)
     network = builder.create_network(
         1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
@@ -21,8 +46,14 @@ def build_engine(
     config = builder.create_builder_config()
     parser = trt.OnnxParser(network, TRT_LOGGER)
 
-    # 強制開啟 FP16 精度
-    config.set_flag(trt.BuilderFlag.FP16)
+    config.set_flag(trt.BuilderFlag.FP16)  # always enable FP16 as fallback
+
+    if precision == "int8":
+        if not int8_cache or not os.path.exists(int8_cache):
+            raise FileNotFoundError(f"INT8 cache not found: {int8_cache}")
+        config.set_flag(trt.BuilderFlag.INT8)
+        config.int8_calibrator = CacheCalibrator(int8_cache)
+        print(f"📦 Using INT8 calibration cache: {int8_cache}")
 
     # 設定 Memory Pool 限制 (1GB)
     config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, 1 << 30)
@@ -83,6 +114,16 @@ if __name__ == "__main__":
     parser.add_argument(
         "--img-size", type=int, default=640, help="Square input image size"
     )
+    parser.add_argument(
+        "--precision",
+        type=str,
+        default="fp16",
+        choices=["fp16", "int8"],
+        help="Build precision: fp16 or int8",
+    )
+    parser.add_argument(
+        "--int8-cache", type=str, default="", help="Path to INT8 calibration cache file"
+    )
 
     args = parser.parse_args()
 
@@ -94,6 +135,8 @@ if __name__ == "__main__":
             opt_batch=args.opt_batch,
             max_batch=args.max_batch,
             img_size=args.img_size,
+            precision=args.precision,
+            int8_cache=args.int8_cache,
         )
     else:
         print(f"❌ ONNX file not found: {args.onnx}")

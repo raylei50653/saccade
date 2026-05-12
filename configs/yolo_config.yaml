@@ -1,8 +1,9 @@
-# YOLO26 推理與偵測參數
+# YOLO Pose 推理與偵測參數
 
 detection:
-  model_path: "./models/yolo/yolo26n.pt" # 預設使用 nano 模型
-  confidence_threshold: 0.23
+  model_path: "./models/yolo/yolo26s_960_batch1.engine"
+  pose_engine_path: "./models/yolo/yolo26s_pose_960_batch1.engine"
+  confidence_threshold: 0.05
   iou_threshold: 0.45
   img_size: [640, 640]
   device: "cuda:0"

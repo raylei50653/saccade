@@ -18,23 +18,29 @@ class YOLOPersonTopKExport(nn.Module):
         model: nn.Module,
         class_ids: list[int],
         max_det: int,
+        disable_end2end: bool,
+        output_box_format: str,
     ) -> None:
         super().__init__()
-        if not class_ids:
-            raise ValueError("class_ids must be non-empty")
-
         self.model = model
         self.layers = model.model
         self.save = set(model.save)
         self.head = self.layers[-1]
         self.head.export = True
         self.head.dynamic = False
+        self.disable_end2end = bool(disable_end2end)
+        self.output_box_format = output_box_format
+        if disable_end2end:
+            self.head.end2end = False
         self.max_det = int(max_det)
-        self.register_buffer(
-            "class_ids",
-            torch.tensor(class_ids, dtype=torch.long),
-            persistent=False,
-        )
+        self.num_classes = int(getattr(self.head, "nc", 0))
+        if self.num_classes <= 0:
+            raise ValueError("Detect head is missing a valid class count")
+        if class_ids:
+            keep_ids = torch.tensor(class_ids, dtype=torch.long)
+        else:
+            keep_ids = torch.arange(self.num_classes, dtype=torch.long)
+        self.register_buffer("class_ids", keep_ids, persistent=False)
 
     def _run_backbone(self, x: torch.Tensor) -> list[torch.Tensor]:
         saved: list[torch.Tensor | None] = []
@@ -66,6 +72,10 @@ class YOLOPersonTopKExport(nn.Module):
             scores, self.max_det
         )
         top_boxes = boxes.gather(dim=1, index=top_idx.repeat(1, 1, 4))
+        if self.disable_end2end and self.output_box_format == "xyxy":
+            cxcy = top_boxes[:, :, :2]
+            wh = top_boxes[:, :, 2:4]
+            top_boxes = torch.cat([cxcy - wh * 0.5, cxcy + wh * 0.5], dim=-1)
         return torch.cat([top_boxes, top_scores, top_classes], dim=-1)
 
 
@@ -77,6 +87,8 @@ def export_yolo_person(
     opset: int,
     class_ids: list[int],
     max_det: int,
+    disable_end2end: bool,
+    output_box_format: str,
 ) -> None:
     yolo = YOLO(str(weights))
     model = yolo.model.eval()
@@ -84,6 +96,8 @@ def export_yolo_person(
         model,
         class_ids=class_ids,
         max_det=max_det,
+        disable_end2end=disable_end2end,
+        output_box_format=output_box_format,
     ).eval()
     dummy = torch.zeros(batch, 3, imgsz, imgsz, dtype=torch.float32)
 
@@ -122,9 +136,23 @@ def main() -> None:
     parser.add_argument("--opset", type=int, default=20)
     parser.add_argument("--max-det", type=int, default=1000)
     parser.add_argument(
+        "--disable-end2end",
+        action="store_true",
+        help="Force the detect head to export through its non-end2end one-to-many path.",
+    )
+    parser.add_argument(
+        "--output-box-format",
+        choices=["xyxy", "cxcywh"],
+        default="xyxy",
+        help="Box layout written to the exported ONNX output tensor.",
+    )
+    parser.add_argument(
         "--class-ids",
-        default="0",
-        help="Comma-separated class ids to keep before top-k. Defaults to COCO person class 0.",
+        default="",
+        help=(
+            "Comma-separated class ids to keep before top-k. "
+            "Empty keeps all classes; use 0 for person-only."
+        ),
     )
     args = parser.parse_args()
     class_ids = [int(item) for item in args.class_ids.split(",") if item.strip()]
@@ -137,6 +165,8 @@ def main() -> None:
         opset=args.opset,
         class_ids=class_ids,
         max_det=args.max_det,
+        disable_end2end=args.disable_end2end,
+        output_box_format=args.output_box_format,
     )
 
 

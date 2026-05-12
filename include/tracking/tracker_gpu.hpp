@@ -112,6 +112,7 @@ public:
     void set_unified_score_params(const UnifiedScoreParams& params);
     void update_reference_features(int* track_ids, float* features_ptr, int num, cudaStream_t stream);
     void set_clean_embedding_flags(int* track_ids, bool* flags, int n, cudaStream_t stream);
+    void set_clean_embedding_flags_host(int* h_tids, bool* h_flags, int n, cudaStream_t stream);
     void bind_features_buffer(float* ptr);
     std::vector<std::pair<int,int>> get_active_tid_slot_pairs();
     std::vector<TrackStateSnapshot> get_state_snapshots(cudaStream_t stream);
@@ -237,6 +238,11 @@ void SACCADE_TRACKING_API nms_counted_cuda(
     int* out_count_ptr,
     float iou_threshold,
     bool class_aware,
+    const float* priors_ptr,
+    const int* prior_classes_ptr,
+    int num_priors,
+    float prior_iou_threshold,
+    bool* immunity_mask_ptr,
     cudaStream_t stream
 );
 

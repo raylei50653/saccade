@@ -34,15 +34,16 @@ Modes:
   profile    Run mot17.py with --profile-stages.
   ablation   Run ablation_mot17.py with grouped categories.
   validate   Run mot17.py without --profile-stages for end-to-end comparison.
+  contribution  Run pipeline_contribution.py for cumulative cutoff analysis.
 
 Options:
-  --mode MODE                    One of: all, profile, ablation, validate.
+  --mode MODE                    One of: all, profile, ablation, validate, contribution.
   --detector NAME                Sequence detector suffix filter. Default: SDP.
   --sequences CSV                Default sequence set for profile/validate.
   --profile-sequences CSV        Override sequence set used by profile mode.
   --validate-sequences CSV       Override sequence set used by validate mode.
   --engine PATH                  Detector engine path for mot17.py runs.
-  --tiling NAME                  One of: native_960, 960p_2x2, 960p_3x2.
+  --tiling NAME                  One of: native_960, 960p_2x2, 960p_3x2, sahi_960p_2x2.
   --max-frames N                 Per-sequence frame cap.
   --output-root PATH             Root directory for this experiment batch.
   --ablation-categories CSV      Categories for ablation_mot17.py.
@@ -58,6 +59,7 @@ Examples:
   scripts/eval/module_benchmark.sh --mode ablation --ablation-categories detection,geometry
   scripts/eval/module_benchmark.sh --mode validate --tiling 960p_2x2 --engine models/yolo/yolo26s_batch6.engine
   scripts/eval/module_benchmark.sh --mode profile -- --async-reid
+  scripts/eval/module_benchmark.sh --mode contribution -- --match-thresh 0.78
 EOF
 }
 
@@ -137,7 +139,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "${MODE}" in
-    all|profile|ablation|validate) ;;
+    all|profile|ablation|validate|contribution) ;;
     *)
         echo "Unsupported mode: ${MODE}" >&2
         exit 1
@@ -256,6 +258,23 @@ run_validate() {
     run_cmd "${cmd[@]}"
 }
 
+run_contribution() {
+    local -a cmd=(
+        uv run python scripts/eval/pipeline_contribution.py
+        --output-root "${OUTPUT_ROOT}/contribution"
+        --detector "${DETECTOR}"
+        --sequences "${VALIDATE_SEQUENCES}"
+        --max-frames "${MAX_FRAMES}"
+        --engine "${ENGINE}"
+        --tiling "${TILING}"
+    )
+    if [[ "${#EXTRA_MOT17_ARGS[@]}" -gt 0 ]]; then
+        cmd+=(-- "${EXTRA_MOT17_ARGS[@]}")
+    fi
+    echo "== Pipeline contribution =="
+    run_cmd "${cmd[@]}"
+}
+
 write_run_metadata() {
     COMMANDS_FILE="${PROJECT_ROOT}/${OUTPUT_ROOT}/commands.txt"
     NOTES_FILE="${PROJECT_ROOT}/${OUTPUT_ROOT}/notes.md"
@@ -341,6 +360,7 @@ case "${MODE}" in
         run_profile
         run_ablation
         run_validate
+        run_contribution
         ;;
     profile)
         run_profile
@@ -350,5 +370,8 @@ case "${MODE}" in
         ;;
     validate)
         run_validate
+        ;;
+    contribution)
+        run_contribution
         ;;
 esac

@@ -1,7 +1,42 @@
 import csv
+import json
 import numpy as np
 from pathlib import Path
 from typing import Any
+
+
+def _print_stage_waterfall(
+    stage_means: dict[str, float],
+    frame_total_ms: float,
+    bar_width: int = 20,
+) -> None:
+    if frame_total_ms <= 0:
+        return
+    sorted_stages = sorted(
+        [(k, v) for k, v in stage_means.items() if v > 0.0],
+        key=lambda x: -x[1],
+    )
+    if not sorted_stages:
+        return
+    accounted = sum(v for _, v in sorted_stages)
+    unaccounted = frame_total_ms - accounted
+
+    label_w = max((len(s) for s, _ in sorted_stages), default=14) + 2
+    label_w = max(label_w, 14)
+    sep = "─" * (label_w + bar_width + 18)
+    print(f"\n  Stage Breakdown (frame_total = {frame_total_ms:.2f} ms)")
+    print(f"  {sep}")
+    for name, ms in sorted_stages:
+        pct = ms / frame_total_ms * 100.0
+        filled = round(pct / 100.0 * bar_width)
+        bar = "█" * filled + "░" * (bar_width - filled)
+        print(f"  {name:<{label_w}} {bar}  {ms:6.2f}ms  {pct:5.1f}%")
+    if unaccounted > 0.5:
+        pct = unaccounted / frame_total_ms * 100.0
+        print(
+            f"  {'[unaccounted]':<{label_w}} {'░' * bar_width}  {unaccounted:6.2f}ms  {pct:5.1f}%"
+        )
+    print(f"  {sep}")
 
 
 def print_overall_summary(
@@ -29,6 +64,7 @@ def print_overall_summary(
     overall_lazy_reid_arbiter_approve: int,
     debug_dump_csv: str,
     debug_stage_dump_rows: list[dict[str, float | int | str]],
+    all_seq_profile: list[dict[str, Any]] | None = None,
 ) -> None:
     if fps_summary_lines:
         if overall_latency_ms:
@@ -150,6 +186,64 @@ def print_overall_summary(
                 )
         (output_root / "_stage_profile.txt").write_text(
             "\n".join(stage_summary_lines) + "\n"
+        )
+
+        # ASCII waterfall for overall stage breakdown
+        overall_means = {}
+        ft_samples = overall_stage_samples.get("frame_total", [])
+        ft_ms = (
+            float(np.mean(np.array(ft_samples, dtype=np.float64)))
+            if ft_samples
+            else 0.0
+        )
+        for sn in top_level_stage_names:
+            if sn == "frame_total":
+                continue
+            samp = overall_stage_samples.get(sn, [])
+            if samp:
+                overall_means[sn] = float(np.mean(np.array(samp, dtype=np.float64)))
+        for sn in breakdown_stage_names:
+            tot = overall_stage_totals.get(sn, 0.0)
+            if tot > 0.0 and overall_profiled_frames > 0:
+                overall_means[sn] = tot / overall_profiled_frames
+        _print_stage_waterfall(overall_means, ft_ms)
+
+        # JSON profile output
+        overall_stage_json: dict[str, Any] = {}
+        for sn in top_level_stage_names:
+            samp = overall_stage_samples.get(sn, [])
+            if samp:
+                arr = np.array(samp, dtype=np.float64)
+                overall_stage_json[sn] = {
+                    "mean_ms": float(arr.mean()),
+                    "std_ms": float(arr.std()),
+                    "p95_ms": float(np.percentile(arr, 95)),
+                    "p99_ms": float(np.percentile(arr, 99)),
+                }
+        for sn in breakdown_stage_names:
+            tot = overall_stage_totals.get(sn, 0.0)
+            if tot > 0.0 and overall_profiled_frames > 0:
+                overall_stage_json[sn] = {"mean_ms": tot / overall_profiled_frames}
+
+        fps_mean_ms = ft_ms if ft_ms > 0 else 0.0
+        fps_mean = 1000.0 / fps_mean_ms if fps_mean_ms > 0 else 0.0
+        profile_json: dict[str, Any] = {
+            "meta": {
+                "profiled_frames": overall_profiled_frames,
+                "fps_mean": round(fps_mean, 2),
+                "fps_mean_ms": round(fps_mean_ms, 3),
+            },
+            "overall": overall_stage_json,
+            "sequences": {
+                e["seq"]: {
+                    "frames": e["frames"],
+                    **{k: v for k, v in e["stages"].items()},
+                }
+                for e in (all_seq_profile or [])
+            },
+        }
+        (output_root / "_stage_profile.json").write_text(
+            json.dumps(profile_json, indent=2) + "\n"
         )
 
     if debug_dump_csv and debug_stage_dump_rows:
