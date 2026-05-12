@@ -162,33 +162,60 @@ void PerceptionPipeline::process_detections_into(
         d_filter_keep_indices_, d_filter_count_, n_in, stream);
     copy_bool_counted_cuda(d_filter_suspect_flags_, out_suspect, d_filter_count_, n_in, stream);
 
-    const int col_blocks = (n_in + 63) / 64;
-    cudaMemsetAsync(d_nms_suppression_, 0, (size_t)n_in * col_blocks * sizeof(uint64_t), stream);
-    cudaMemsetAsync(d_nms_remv_, 0, col_blocks * sizeof(uint64_t), stream);
-    cudaMemsetAsync(d_nms_count_, 0, sizeof(int), stream);
+    // Optimized path: merged filter+compact+sort+NMS (#3) with grid spatial culling (#1,#2)
+    // For small counts (<=64), uses compact_grid_nms_cuda which:
+    //   - Single kernel replaces filter+gather+sort+NMS (#3)
+    //   - Grid Manhattan distance pre-filter skips non-overlapping IoU (#1)
+    //   - Grid AABB pre-check before exact IoU (#2)
+    //   - No immunity_mask branch in compact path (#5)
+    int filter_count = 0;
+    cudaMemcpyAsync(&filter_count, d_filter_count_, sizeof(int),
+                    cudaMemcpyDeviceToHost, stream);
+    cudaStreamSynchronize(stream);
 
-    argsort_scores_descending_cuda(
-        out_scores, n_in,
-        d_nms_order_, d_sort_keys_in_, d_sort_keys_out_,
-        d_cub_sort_tmp_, cub_sort_tmp_bytes_, stream);
+    if (filter_count <= 1) {
+        checkCuda(cudaMemsetAsync(out_count, filter_count, sizeof(int), stream));
+        return;
+    }
 
-    nms_counted_cuda(
-        out_boxes, out_scores, out_classes, d_nms_order_,
-        n_in, d_filter_count_, d_nms_keep_, d_nms_suppression_, d_nms_remv_,
-        d_nms_count_, cfg_.nms_threshold, false,
-        priors_ptr, prior_classes_ptr, num_priors, prior_iou_threshold,
-        d_nms_immunity_mask_,
-        stream);
+    if (filter_count <= 64) {
+        compact_grid_nms_cuda(
+            boxes_ptr, scores_ptr, classes_ptr,
+            n_in,
+            d_filter_keep_indices_, filter_count,
+            out_boxes, out_scores, out_classes, out_suspect, out_count,
+            cfg_.nms_threshold,
+            stream);
+    } else {
+        // Large count: use original bitmask NMS pipeline
+        const int col_blocks = (n_in + 63) / 64;
+        cudaMemsetAsync(d_nms_suppression_, 0, (size_t)n_in * col_blocks * sizeof(uint64_t), stream);
+        cudaMemsetAsync(d_nms_remv_, 0, col_blocks * sizeof(uint64_t), stream);
+        cudaMemsetAsync(d_nms_count_, 0, sizeof(int), stream);
 
-    gather_compact4_counted_cuda(
-        out_boxes, out_scores, out_classes, out_suspect,
-        d_compact_boxes_, d_compact_scores_, d_compact_classes_, d_compact_suspect_,
-        d_nms_keep_, d_nms_count_, n_in, stream);
-    cudaMemcpyAsync(out_boxes,   d_compact_boxes_,   n_in * 4 * sizeof(float), cudaMemcpyDeviceToDevice, stream);
-    cudaMemcpyAsync(out_scores,  d_compact_scores_,  n_in *     sizeof(float), cudaMemcpyDeviceToDevice, stream);
-    cudaMemcpyAsync(out_classes, d_compact_classes_, n_in *     sizeof(int),   cudaMemcpyDeviceToDevice, stream);
-    cudaMemcpyAsync(out_suspect, d_compact_suspect_, n_in *     sizeof(bool),  cudaMemcpyDeviceToDevice, stream);
-    cudaMemcpyAsync(out_count, d_nms_count_, sizeof(int), cudaMemcpyDeviceToDevice, stream);
+        argsort_scores_descending_cuda(
+            out_scores, n_in,
+            d_nms_order_, d_sort_keys_in_, d_sort_keys_out_,
+            d_cub_sort_tmp_, cub_sort_tmp_bytes_, stream);
+
+        nms_counted_cuda(
+            out_boxes, out_scores, out_classes, d_nms_order_,
+            n_in, d_filter_count_, d_nms_keep_, d_nms_suppression_, d_nms_remv_,
+            d_nms_count_, cfg_.nms_threshold, false,
+            priors_ptr, prior_classes_ptr, num_priors, prior_iou_threshold,
+            d_nms_immunity_mask_,
+            stream);
+
+        gather_compact4_counted_cuda(
+            out_boxes, out_scores, out_classes, out_suspect,
+            d_compact_boxes_, d_compact_scores_, d_compact_classes_, d_compact_suspect_,
+            d_nms_keep_, d_nms_count_, n_in, stream);
+        cudaMemcpyAsync(out_boxes,   d_compact_boxes_,   n_in * 4 * sizeof(float), cudaMemcpyDeviceToDevice, stream);
+        cudaMemcpyAsync(out_scores,  d_compact_scores_,  n_in *     sizeof(float), cudaMemcpyDeviceToDevice, stream);
+        cudaMemcpyAsync(out_classes, d_compact_classes_, n_in *     sizeof(int),   cudaMemcpyDeviceToDevice, stream);
+        cudaMemcpyAsync(out_suspect, d_compact_suspect_, n_in *     sizeof(bool),  cudaMemcpyDeviceToDevice, stream);
+        cudaMemcpyAsync(out_count, d_nms_count_, sizeof(int), cudaMemcpyDeviceToDevice, stream);
+    }
 }
 
 void PerceptionPipeline::extract_reid(
