@@ -204,9 +204,7 @@ def test_tile_seam_mask_unknown_tiling():
 def test_tile_seam_mask_sahi_matches_2x2():
     boxes = torch.tensor([[300.0, 100.0, 350.0, 200.0]])
     native_mask = tile_seam_mask(boxes, tiling="960p_2x2", h_orig=720, w_orig=1280)
-    sahi_mask = tile_seam_mask(
-        boxes, tiling="sahi_960p_2x2", h_orig=720, w_orig=1280
-    )
+    sahi_mask = tile_seam_mask(boxes, tiling="sahi_960p_2x2", h_orig=720, w_orig=1280)
     assert torch.equal(native_mask, sahi_mask)
 
 

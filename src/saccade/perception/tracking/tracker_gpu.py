@@ -692,8 +692,8 @@ class GPUByteTracker:
         stream = torch.cuda.current_stream().cuda_stream
         set_flags_host = getattr(self.tracker, "set_clean_embedding_flags_host", None)
         if set_flags_host is not None:
-            ids_contig = track_ids.to(torch.int32).contiguous()    # stays on CPU
-            flags_contig = flags.to(torch.bool).contiguous()       # stays on CPU
+            ids_contig = track_ids.to(torch.int32).contiguous()  # stays on CPU
+            flags_contig = flags.to(torch.bool).contiguous()  # stays on CPU
             set_flags_host(
                 ids_contig.data_ptr(),
                 flags_contig.data_ptr(),
@@ -733,5 +733,7 @@ class GPUByteTracker:
             [tid_to_slot[tid] for tid in valid_tids], dtype=torch.long, device="cuda"
         )
         # reps are CPU tensors; one batched H2D transfer is cheaper than per-track .cuda() at update time
-        stacked = torch.stack([bank_reps[tid] for tid in valid_tids]).cuda()  # [n, D] GPU
+        stacked = torch.stack(
+            [bank_reps[tid] for tid in valid_tids]
+        ).cuda()  # [n, D] GPU
         self._bank_slot_features[slots] = stacked

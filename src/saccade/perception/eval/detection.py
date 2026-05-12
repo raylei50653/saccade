@@ -142,17 +142,25 @@ def _build_sahi_trt_detection_model(
             shift_amount_list: list[list[int]] | None = [[0, 0]],
             full_shape_list: list[list[int]] | None = None,
         ):
-            if shift_amount_list and shift_amount_list and isinstance(
-                shift_amount_list[0], int
+            if (
+                shift_amount_list
+                and shift_amount_list
+                and isinstance(shift_amount_list[0], int)
             ):
                 shift_amount_list = [cast(list[int], shift_amount_list)]
-            if full_shape_list and full_shape_list and isinstance(full_shape_list[0], int):
+            if (
+                full_shape_list
+                and full_shape_list
+                and isinstance(full_shape_list[0], int)
+            ):
                 full_shape_list = [cast(list[int], full_shape_list)]
             predictions = self._original_predictions or []
             object_prediction_list_per_image = []
             for image_ind, image_predictions in enumerate(predictions):
                 shift_amount = (
-                    [0, 0] if shift_amount_list is None else shift_amount_list[image_ind]
+                    [0, 0]
+                    if shift_amount_list is None
+                    else shift_amount_list[image_ind]
                 )
                 full_shape = (
                     list(self._original_shape[:2])
@@ -601,6 +609,7 @@ def nms_fast(
     # O-NMS logic: priors can rescue boxes that vanilla NMS would suppress.
     if priors is not None and priors.numel() > 0:
         from torchvision.ops import nms, batched_nms, box_iou
+
         if class_aware:
             keep = batched_nms(boxes, scores, classes_i32, iou_threshold)
         else:
@@ -613,7 +622,9 @@ def nms_fast(
         if not suppressed:
             return keep
 
-        suppressed_tensor = torch.tensor(suppressed, dtype=torch.long, device=boxes.device)
+        suppressed_tensor = torch.tensor(
+            suppressed, dtype=torch.long, device=boxes.device
+        )
         suppressed_boxes = boxes[suppressed_tensor]
 
         if class_aware and prior_classes is not None and prior_classes.numel() > 0:
@@ -642,7 +653,9 @@ def nms_fast(
             rescued_indices = suppressed_tensor[max_ious > prior_iou_threshold]
 
         if rescued_indices.numel() > 0:
-            print(f"  [O-NMS] Rescued {rescued_indices.numel()} suppressed boxes that overlapped with active tracks!")
+            print(
+                f"  [O-NMS] Rescued {rescued_indices.numel()} suppressed boxes that overlapped with active tracks!"
+            )
             final_keep = torch.cat([keep, rescued_indices])
             final_keep_scores = scores[final_keep]
             _, sort_idx = final_keep_scores.sort(descending=True)
@@ -1078,9 +1091,7 @@ def detect_single_patch_960(
     detector_box_format: str = "xyxy",
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
     if "letterbox" in preprocess_modes:
-        r, _h_new, _w_new, y_off, x_off = _prepare_canvas_960p(
-            pool, h_orig, w_orig
-        )
+        r, _h_new, _w_new, y_off, x_off = _prepare_canvas_960p(pool, h_orig, w_orig)
 
         keypoints = None
         if hasattr(detector, "pose"):
@@ -1286,9 +1297,13 @@ def detect_sahi_960p_2x2(
             None,
         )
 
-    boxes = [object_prediction.bbox.to_xyxy() for object_prediction in object_predictions]
+    boxes = [
+        object_prediction.bbox.to_xyxy() for object_prediction in object_predictions
+    ]
     scores = [object_prediction.score.value for object_prediction in object_predictions]
-    classes = [float(object_prediction.category.id) for object_prediction in object_predictions]
+    classes = [
+        float(object_prediction.category.id) for object_prediction in object_predictions
+    ]
     boxes_t = torch.tensor(boxes, device=device, dtype=torch.float32)
     scores_t = torch.tensor(scores, device=device, dtype=torch.float32)
     classes_t = torch.tensor(classes, device=device, dtype=torch.float32)

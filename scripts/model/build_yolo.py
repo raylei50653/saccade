@@ -36,7 +36,9 @@ def build_engine(
     precision: str = "fp16",
     int8_cache: str = "",
 ) -> None:
-    print(f"🚀 Starting TensorRT Build Process for {onnx_file_path} ({precision.upper()})...")
+    print(
+        f"🚀 Starting TensorRT Build Process for {onnx_file_path} ({precision.upper()})..."
+    )
     builder = trt.Builder(TRT_LOGGER)
     network = builder.create_network(
         1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
@@ -113,8 +115,11 @@ if __name__ == "__main__":
         "--img-size", type=int, default=640, help="Square input image size"
     )
     parser.add_argument(
-        "--precision", type=str, default="fp16", choices=["fp16", "int8"],
-        help="Build precision: fp16 or int8"
+        "--precision",
+        type=str,
+        default="fp16",
+        choices=["fp16", "int8"],
+        help="Build precision: fp16 or int8",
     )
     parser.add_argument(
         "--int8-cache", type=str, default="", help="Path to INT8 calibration cache file"

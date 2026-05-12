@@ -10,6 +10,7 @@ Usage:
         --img-size 960 \
         --num-images 512
 """
+
 import argparse
 import random
 from pathlib import Path
@@ -39,7 +40,7 @@ class YoloCalibrationReader(CalibrationDataReader):
             return None
         img = Image.open(p).convert("RGB").resize((self.img_size, self.img_size))
         arr = np.array(img, dtype=np.float32) / 255.0  # HWC
-        arr = arr.transpose(2, 0, 1)[None]             # 1CHW
+        arr = arr.transpose(2, 0, 1)[None]  # 1CHW
         return {self.input_name: arr}
 
 
