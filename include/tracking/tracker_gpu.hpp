@@ -270,6 +270,15 @@ void SACCADE_TRACKING_API gather_compact4_counted_cuda(
 void SACCADE_TRACKING_API copy_bool_counted_cuda(
     const bool* src, bool* dst, const int* count_ptr, int max_n, cudaStream_t stream);
 
+// Merged compact+sort+NMS with grid spatial indexing (#1,#2,#3,#5 optimizations)
+void SACCADE_TRACKING_API compact_grid_nms_cuda(
+    const float* boxes_ptr, const float* scores_ptr, const int* classes_ptr,
+    int num_dets, const int* keep_indices, int valid_count,
+    float* out_boxes, float* out_scores, int* out_classes,
+    bool* out_suspect, int* out_count,
+    float iou_threshold,
+    cudaStream_t stream);
+
 size_t SACCADE_TRACKING_API argsort_scores_descending_bytes(int n);
 
 // Stable descending argsort: equal-score ties break toward lower original index.
