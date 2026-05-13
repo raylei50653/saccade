@@ -59,8 +59,16 @@ def parse_profiles_from_source() -> list[ProfileInfo]:
                 args = node.args
                 if len(args) >= 3:
                     name_node, desc_node, args_node = args[0], args[1], args[2]
-                    name = ast.literal_eval(name_node) if isinstance(name_node, ast.Constant) else ""
-                    desc = ast.literal_eval(desc_node) if isinstance(desc_node, ast.Constant) else ""
+                    name = (
+                        ast.literal_eval(name_node)
+                        if isinstance(name_node, ast.Constant)
+                        else ""
+                    )
+                    desc = (
+                        ast.literal_eval(desc_node)
+                        if isinstance(desc_node, ast.Constant)
+                        else ""
+                    )
 
                     # Extract string args from the tuple
                     arg_list = []
@@ -146,11 +154,19 @@ def validate_cumulative_property(profiles: list[ProfileInfo]) -> list[str]:
         actual_enabled = set(profile.enabled_modules)
 
         if profile.name == "tracker_core":
-            expected_off = {"semantic_relink", "appearance_bank", "semantic_bank_inject",
-                          "async_reid", "pipeline_relink", "lifecycle_merge"}
+            expected_off = {
+                "semantic_relink",
+                "appearance_bank",
+                "semantic_bank_inject",
+                "async_reid",
+                "pipeline_relink",
+                "lifecycle_merge",
+            }
             unexpected = actual_enabled & expected_off
             if unexpected:
-                errors.append(f"  {profile.name}: unexpected enabled modules: {unexpected}")
+                errors.append(
+                    f"  {profile.name}: unexpected enabled modules: {unexpected}"
+                )
         elif i > 0:
             prev_profile = profiles[i - 1]
             prev_enabled = set(prev_profile.enabled_modules)
@@ -158,7 +174,9 @@ def validate_cumulative_property(profiles: list[ProfileInfo]) -> list[str]:
             lost_modules = prev_enabled - actual_enabled
 
             if lost_modules:
-                errors.append(f"  {profile.name}: lost modules from previous: {lost_modules}")
+                errors.append(
+                    f"  {profile.name}: lost modules from previous: {lost_modules}"
+                )
             if new_modules != set(expected):
                 errors.append(
                     f"  {profile.name}: expected to add {expected}, but added {new_modules}"
@@ -175,16 +193,20 @@ def validate_flag_consistency(profiles: list[ProfileInfo]) -> list[str]:
         flags = set(profile.args)
 
         if "--appearance-bank" in flags and "--no-appearance-bank" in flags:
-            errors.append(f"  {profile.name}: contradictory --appearance-bank / --no-appearance-bank")
+            errors.append(
+                f"  {profile.name}: contradictory --appearance-bank / --no-appearance-bank"
+            )
         if "--semantic-bank-inject" in flags and "--no-semantic-bank-inject" in flags:
-            errors.append(f"  {profile.name}: contradictory --semantic-bank-inject / --no-semantic-bank-inject")
+            errors.append(
+                f"  {profile.name}: contradictory --semantic-bank-inject / --no-semantic-bank-inject"
+            )
 
     return errors
 
 
 def _parse_stage_range(stage_str: str) -> tuple[int, int] | None:
     """Parse [N-M] or [N] into (start, end) or None if invalid."""
-    match = re.match(r'^\[(\d+)(?:-(\d+))?\]$', stage_str.strip())
+    match = re.match(r"^\[(\d+)(?:-(\d+))?\]$", stage_str.strip())
     if not match:
         return None
     start = int(match.group(1))
@@ -203,7 +225,7 @@ def _stage_in_range(stage: str, range_str: str) -> bool:
 
 def validate_stage_descriptions(profiles: list[ProfileInfo]) -> list[str]:
     """Validate that each profile's description mentions the correct stages.
-    
+
     This function checks that:
     1. All expected stage references are present in the description
     2. No unexpected stage references are present (except subset ranges)
@@ -225,14 +247,16 @@ def validate_stage_descriptions(profiles: list[ProfileInfo]) -> list[str]:
         desc = profile.description
 
         # Extract all stage refs from description
-        found_stages = re.findall(r'\[(?:\d+-\d+|\d+)\]', desc)
+        found_stages = re.findall(r"\[(?:\d+-\d+|\d+)\]", desc)
         found_set = set(found_stages)
 
         # Check required refs are present
         for stage_ref in expected:
             if stage_ref not in found_set:
                 # Also check if covered by a range
-                is_covered = any(_stage_in_range(stage_ref, found) for found in found_stages)
+                is_covered = any(
+                    _stage_in_range(stage_ref, found) for found in found_stages
+                )
                 if not is_covered:
                     errors.append(
                         f"  {profile.name}: description missing stage reference {stage_ref}"
@@ -267,8 +291,13 @@ def check_dataflow_documentation() -> list[str]:
 
     content = dataflow_path.read_text()
 
-    required_profiles = ["tracker_core", "tracker_core_gmc", "semantic_core",
-                        "semantic_bank", "full_default"]
+    required_profiles = [
+        "tracker_core",
+        "tracker_core_gmc",
+        "semantic_core",
+        "semantic_bank",
+        "full_default",
+    ]
     for profile in required_profiles:
         if profile not in content:
             errors.append(f"DATAFLOW.md missing profile: {profile}")
@@ -283,10 +312,20 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Validate pipeline_contribution.py profiles against DATAFLOW.md"
     )
-    parser.add_argument("--check-docs", action="store_true", help="Check DATAFLOW.md consistency")
-    parser.add_argument("--check-flags", action="store_true", help="Check flag consistency")
-    parser.add_argument("--check-stages", action="store_true", help="Check stage description consistency")
-    parser.add_argument("--dry-run", action="store_true", help="Only parse, don't validate")
+    parser.add_argument(
+        "--check-docs", action="store_true", help="Check DATAFLOW.md consistency"
+    )
+    parser.add_argument(
+        "--check-flags", action="store_true", help="Check flag consistency"
+    )
+    parser.add_argument(
+        "--check-stages",
+        action="store_true",
+        help="Check stage description consistency",
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Only parse, don't validate"
+    )
     parser.add_argument("--all", action="store_true", help="Run all checks")
     args = parser.parse_args()
 
