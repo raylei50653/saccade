@@ -4,6 +4,12 @@
 # NOTE: post_lifecycle_merge confirmed harmful on baseline (2026-04-27).
 # Only enable lifecycle_merge for specific ablations.
 
+# Duplicate suppression: remove near-duplicate detections within the same frame
+# (detector artifact where multiple overlapping boxes are produced for the same person)
+duplicate_suppression: false
+duplicate_suppression_iou_threshold: 0.85
+duplicate_suppression_min_score_ratio: 1.05
+
 # Birth gates
 birth_quality_gate: false
 birth_min_quality: 0.0

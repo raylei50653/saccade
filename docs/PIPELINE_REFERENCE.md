@@ -131,6 +131,9 @@
 # speed preset（yolo26s, IDF1 優先）：
 uv run scripts/eval/mot17.py --preset speed --detector SDP
 
+# speed preset, 640 profile（lower FP / higher FPS, lower recall）：
+uv run scripts/eval/mot17.py --preset speed --detector SDP --tiling native_640
+
 # baseline preset（yolo26m, Recall 優先）：
 uv run scripts/eval/mot17.py --preset baseline --detector SDP
 
@@ -150,6 +153,23 @@ uv run scripts/eval/mot17.py --preset speed --detector SDP --reid-mode semantic 
 **選用原則**：
 - **yolo26s**：優先 IDF1、IDs、FP、FPS（identity tracking 精度導向）
 - **yolo26m**：優先 MOTA、Rcll、FN（漏偵最小化導向）
+
+### Resolution Profile Note
+
+`--tiling native_640` 是一個明確的保守 profile：
+
+- `FP` 顯著下降
+- `FPS` 顯著上升
+- `Recall / IDF1 / MOTA` 明顯下降
+
+因此它適合：
+
+- 做 `FP` 問題診斷
+- 當低-FP / 高-FPS 的可選 profile
+
+不適合：
+
+- 取代 `speed preset` 成為新的 default
 
 ---
 

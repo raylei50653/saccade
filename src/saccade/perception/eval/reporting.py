@@ -64,6 +64,8 @@ def print_overall_summary(
     overall_lazy_reid_arbiter_approve: int,
     debug_dump_csv: str,
     debug_stage_dump_rows: list[dict[str, float | int | str]],
+    debug_birth_csv: str,
+    debug_birth_rows: list[dict[str, float | int | str | bool]],
     all_seq_profile: list[dict[str, Any]] | None = None,
 ) -> None:
     if fps_summary_lines:
@@ -270,6 +272,40 @@ def print_overall_summary(
         print(
             f"\n🪲 Detection stage dump: rows={len(debug_stage_dump_rows)} "
             f"path={debug_dump_path}"
+        )
+
+    if debug_birth_csv:
+        debug_birth_path = Path(debug_birth_csv)
+        debug_birth_path.parent.mkdir(parents=True, exist_ok=True)
+        fieldnames = [
+            "seq",
+            "frame",
+            "policy",
+            "det_idx",
+            "score_before",
+            "score_after",
+            "x1",
+            "y1",
+            "x2",
+            "y2",
+            "w",
+            "h",
+            "output_emitted",
+            "output_local_track_id",
+            "output_track_id",
+            "output_score",
+            "output_x1",
+            "output_y1",
+            "output_x2",
+            "output_y2",
+        ]
+        with debug_birth_path.open("w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(debug_birth_rows)
+        print(
+            f"\n🪲 Birth promotion dump: rows={len(debug_birth_rows)} "
+            f"path={debug_birth_path}"
         )
 
 

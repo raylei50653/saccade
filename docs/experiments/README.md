@@ -10,12 +10,14 @@
   * [GPU Pipeline M1+M2：全 GPU 化熱路徑 (`gpu_pipeline_m1m2.md`)](./pipeline/gpu_pipeline_m1m2.md)
 * **[tracking/](./tracking/)** - 追蹤器與生命週期關聯
   * [FP/FN 恢復與 GMC 實驗 (`fp_fn_recovery_and_gmc.md`)](./tracking/fp_fn_recovery_and_gmc.md)
+  * [Saccade vs Ultralytics 640/960 對照 (`saccade_vs_ultralytics_640_960.md`)](./tracking/saccade_vs_ultralytics_640_960.md)
   * [Tentative/Confirmed 狀態機設計 (`tentative_confirmed_state.md`)](./tracking/tentative_confirmed_state.md)
 * **[reid/](./reid/)** - 語義特徵重識別與裁切
   * [Semantic Relink 與 Crop 實驗 (`semantic_relink_and_crop.md`)](./reid/semantic_relink_and_crop.md)
   * [動態 ReID 觸發機制設計 (`dynamic_trigger.md`)](./reid/dynamic_trigger.md)
 * **[eval/](./eval/)** - 評估與 ablation 結果整理
   * [Rerank Phase 2 實驗 (`rerank_phase2.md`)](./eval/rerank_phase2.md)
+  * [FP Classifier External-Only / 0-shot 計畫 (`fp_classifier_external_only_plan.md`)](./eval/fp_classifier_external_only_plan.md)
 
 ## 💡 命名與維護規範
 

@@ -32,6 +32,17 @@ infrastructure。
 目前記錄中的 default path 與活躍優化方向，請看
 [docs/TODO.md](/docs/TODO.md)。
 
+## 0-shot Policy
+
+這個 repo 目前對 `FP/TP classifier` 的原則是：
+
+- **不接受**用最終 `MOT17` eval/test sequence 標註回訓 classifier
+- `MOT17` 應只作 inference / evaluation
+- 若要做 classifier 路線，應走 `external-only` 訓練資料，例如 `CrowdHuman / CityPersons`
+
+正式方向與實作計畫見
+[docs/experiments/eval/fp_classifier_external_only_plan.md](/docs/experiments/eval/fp_classifier_external_only_plan.md)。
+
 ## Main Code Areas
 
 - `src/saccade/perception/`
@@ -119,6 +130,15 @@ uv run python scripts/eval/ablation_mot17.py --category all
 
 ```bash
 uv run python scripts/eval/calculate_mota.py --results results/MOT17_eval
+```
+
+### 計算 Detector mAP
+
+```bash
+uv run python scripts/eval/detection_map.py \
+  --model models/yolo/yolo26s_960_batch1.engine \
+  --sequences MOT17-04-SDP \
+  --max-frames 100
 ```
 
 ### 與外部 Baseline 比較

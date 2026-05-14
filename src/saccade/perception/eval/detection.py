@@ -1151,6 +1151,20 @@ def detect_native_960(
     return boxes, scores, classes, False, keypoints
 
 
+def detect_native_640(
+    detector: Any,
+    pool: Any,
+    h_orig: int,
+    w_orig: int,
+    preprocess_modes: List[str],
+    detector_box_format: str = "xyxy",
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, bool, Optional[torch.Tensor]]:
+    boxes, scores, classes = detect_single_patch_640(
+        detector, pool, h_orig, w_orig, preprocess_modes, detector_box_format
+    )
+    return boxes, scores, classes, False, None
+
+
 def _detect_tiles(detector: Any, tiles_batch: torch.Tensor) -> torch.Tensor:
     """Run detect_raw on a tile batch; fall back to sequential if engine is static batch-1.
     Each slice must be cloned because detect_raw returns a reference to a shared buffer."""
