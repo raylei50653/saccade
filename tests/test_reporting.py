@@ -56,6 +56,8 @@ def base_overall_kwargs(output_root, **overrides):
         overall_lazy_reid_arbiter_approve=0,
         debug_dump_csv="",
         debug_stage_dump_rows=[],
+        debug_birth_csv="",
+        debug_birth_rows=[],
     )
     kw.update(overrides)
     return kw

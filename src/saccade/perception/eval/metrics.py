@@ -271,11 +271,11 @@ def compute_detection_mean_ap(
 
         valid_classes.append(class_id)
         preds_for_class: list[tuple[str, float, Sequence[float]]] = []
-        for image_id, items in predictions.items():
-            for item in items:
-                if int(item["class_id"]) == class_id:
+        for image_id, pred_items in predictions.items():
+            for pred_item in pred_items:
+                if int(pred_item["class_id"]) == class_id:
                     preds_for_class.append(
-                        (image_id, float(item["score"]), item["bbox"])
+                        (image_id, float(pred_item["score"]), pred_item["bbox"])
                     )
 
         preds_for_class.sort(key=lambda item: item[1], reverse=True)

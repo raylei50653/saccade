@@ -377,7 +377,7 @@ def apply_rule_baseline(
 def apply_low_score_logistic_filter(
     rows: Sequence[dict[str, Any]],
     *,
-    model: LogisticModel,
+    model: "LogisticModel | BandedLogisticModel",
     threshold: float,
     max_score: float,
     penalty: float | None = None,
@@ -429,7 +429,7 @@ def apply_cascade_filter(
     rows: Sequence[dict[str, Any]],
     *,
     config: CascadeFilterConfig | None = None,
-    stage2_model: LogisticModel | None = None,
+    stage2_model: LogisticModel | BandedLogisticModel | None = None,
 ) -> tuple[list[dict[str, Any]], CascadeMetrics]:
     """Two-stage cascade: rule baseline (Stage 1) + logistic filter (Stage 2).
 
@@ -961,7 +961,7 @@ def predict_external_fp_matrix(
         axis=1,
     )
     band_weights = _compute_band_weights(scores, model.band_edges)
-    return np.sum(band_probs * band_weights, axis=1)
+    return np.sum(band_probs * band_weights, axis=1)  # type: ignore[no-any-return]
 
 
 def _rule_keep(row: dict[str, Any], cfg: RuleBaselineConfig) -> bool:
@@ -1019,7 +1019,11 @@ def _standardize(
 def _softmax(logits: np.ndarray) -> np.ndarray:
     stabilized = logits - np.max(logits, axis=1, keepdims=True)
     exp_logits = np.exp(stabilized)
-    return exp_logits / np.sum(exp_logits, axis=1, keepdims=True)
+    import typing
+
+    return typing.cast(
+        np.ndarray, exp_logits / np.sum(exp_logits, axis=1, keepdims=True)
+    )
 
 
 def _compute_band_weights(
@@ -1048,7 +1052,8 @@ def _compute_band_weights(
         nearest = np.argmin(distances[zero_rows], axis=1)
         raw[zero_rows] = 0.0
         raw[zero_rows, nearest] = 1.0
-    return raw / raw.sum(axis=1, keepdims=True)
+    res: np.ndarray = raw / raw.sum(axis=1, keepdims=True)
+    return res
 
 
 def train_cascade_stage2_model(
@@ -1081,7 +1086,9 @@ def train_cascade_stage2_model(
 
 def load_cascade_config(path: Path) -> dict[str, Any]:
     """Load cascade config JSON with rule params + logistic model path."""
-    data = json.loads(path.read_text(encoding="utf-8"))
+    import typing
+
+    data = typing.cast(dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
     return data
 
 
@@ -1136,7 +1143,10 @@ def apply_cascade_from_json(
     # Load model
     stage2_model = None
     if model_path is not None and model_path.exists():
-        stage2_model = load_external_fp_model(model_path)
+        loaded_model = load_external_fp_model(model_path)
+        import typing
+
+        stage2_model = typing.cast("LogisticModel | BandedLogisticModel", loaded_model)
 
     return apply_cascade_filter(rows, config=config, stage2_model=stage2_model)
 

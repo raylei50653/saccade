@@ -617,7 +617,7 @@ def parse_eval_config(
         fp_hard_filter_max_suspicious_score=float(
             kwargs.get("fp_hard_filter_max_suspicious_score", 0.40)
         ),
-        external_fp_filter_mode=str(kwargs.get("external_fp_filter_mode", "rule")),
+        external_fp_filter_mode=str(kwargs.get("external_fp_filter_mode", "off")),
         external_fp_logistic_model=str(kwargs.get("external_fp_logistic_model", "")),
         external_fp_logistic_threshold=float(
             kwargs.get("external_fp_logistic_threshold", 0.5)
