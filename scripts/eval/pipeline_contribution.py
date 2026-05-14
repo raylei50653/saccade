@@ -118,10 +118,46 @@ def default_output_root() -> str:
 def build_profiles(
     pose_engine: str | None, semantic_threshold_full: float
 ) -> list[Profile]:
+    """Build cumulative cutoff profiles matching the 15-stage pipeline.
+
+    Each profile adds exactly one new module on top of the previous profile.
+    This allows `Δprev` to represent the raw gain of enabling that module.
+
+    Pipeline stage mapping (evaluator.py, top_level_stage_names):
+      [1]  fetch                      — always ON
+      [2]  ingest_preprocess          — always ON
+      [3]  detect                     — always ON
+      [4]  postprocess                — always ON
+      [5]  reid_bank_sync             — ReID ON + appearance_bank ON
+      [6]  reid_budget                — ReID ON
+      [7]  reid_crop                  — ReID ON
+      [8]  reid_extract               — ReID ON
+      [9]  lazy_reid                  — profiling only (--profile-lazy-reid)
+      [10] gmc                        — always ON
+      [11] track                      — always ON
+      [12] materialize                — always ON
+      [13] bg_relink_wait             — pipeline_relink ON
+      [14] relink_write               — semantic ON
+
+    Profile → module contribution mapping:
+      tracker_core          → [1-4] + [10] + [11-12]  (bare tracker baseline)
+      tracker_core_gmc      → + [10] (GMC)             (isolates GMC contribution)
+      semantic_core         → + [6-8] + [14] (ReID branch + relink)
+      semantic_bank         → + [5] (bank sync/inject)  (isolates bank contribution)
+      full_default          → + [13] (async pipeline)   (isolates async throughput)
+
+    Note: reid_bank_sync [5] only runs when appearance_bank is ON, so its contribution
+          is measured together with bank inject in semantic_bank.
+    """
     profiles = [
         Profile(
             "tracker_core",
-            "Detection + postprocess + tracker only. GMC, ReID, relink, bank, and merge are all off.",
+            (
+                "Bare tracker: detection + postprocess + tracker.\n"
+                "Stages [1-4] (fetch/ingest/detect/postprocess) + [10] (GMC OFF) + [11-12] (track/materialize).\n"
+                "All identity recovery modules OFF: ReID, bank, relink, lifecycle merge.\n"
+                "This is the baseline against which all module contributions are measured."
+            ),
             (
                 "--reid-mode",
                 "off",
@@ -133,7 +169,13 @@ def build_profiles(
         ),
         Profile(
             "tracker_core_gmc",
-            "Add GMC on top of tracker_core, but keep all identity recovery modules off.",
+            (
+                "Add GMC (global motion compensation) to bare tracker.\n"
+                "Stages [1-4] + [10] (GMC ON) + [11-12].\n"
+                "GMC computes frame-to-frame warp for motion compensation before tracker update.\n"
+                "All ReID, bank, relink modules still OFF.\n"
+                "Δprev from tracker_core isolates the raw GMC contribution."
+            ),
             (
                 "--reid-mode",
                 "off",
@@ -145,7 +187,14 @@ def build_profiles(
         ),
         Profile(
             "semantic_core",
-            "Add semantic ReID/relink on top of GMC, but keep appearance bank and merge stages off.",
+            (
+                "Add semantic ReID/relink pipeline on top of GMC baseline.\n"
+                "Stages [1-4] + [10] + [6-8] (ReID: budget/crop/extract) + [14] (relink).\n"
+                "Enables semantic threshold-based appearance matching and identity resolution.\n"
+                "Note: reid_bank_sync [5] skipped when appearance_bank is OFF;\n"
+                "      only budget [6], crop [7], extract [8] run as part of ReID branch.\n"
+                "Δprev from tracker_core_gmc measures ReID branch + relink contribution."
+            ),
             (
                 "--reid-mode",
                 "semantic",
@@ -158,7 +207,14 @@ def build_profiles(
         ),
         Profile(
             "semantic_bank",
-            "Add appearance bank + bank inject, still without lifecycle merge or throughput overlap.",
+            (
+                "Add appearance bank + bank inject on top of semantic_core.\n"
+                "Stages [1-4] + [10] + [5-8] (bank_sync enabled) + [14].\n"
+                "Appearance bank provides persistent appearance references across frames.\n"
+                "bank inject pushes bank references into the tracker for appearance-aware association.\n"
+                "Still no lifecycle merge or async overlap.\n"
+                "Δprev from semantic_core isolates the bank sync/inject contribution."
+            ),
             (
                 "--reid-mode",
                 "semantic",
@@ -171,7 +227,13 @@ def build_profiles(
         ),
         Profile(
             "full_default",
-            "Current full path: semantic bank + async_reid + pipeline_relink + best-known minimal relink threshold.",
+            (
+                "Full pipeline: semantic bank + async ReID + pipeline relink.\n"
+                "Stages [1-4] + [10] + [5-8] (ReID branch with bank) + [13] (bg_relink_wait) + [14] (async relink).\n"
+                "async-reid: ReID extraction on side CUDA stream overlaps with tracker update.\n"
+                "pipeline-relink: relink_write runs in background thread; next frame waits at [13].\n"
+                "Δprev from semantic_bank measures async + relink throughput contribution."
+            ),
             (
                 "--reid-mode",
                 "semantic",
@@ -191,7 +253,13 @@ def build_profiles(
         profiles.append(
             Profile(
                 "pose_sidecar",
-                "Add the pose sidecar on top of the full path to isolate the extra value of pose-only keypoints.",
+                (
+                    "Add pose keypoints sidecar on top of full_default.\n"
+                    "Stages [1-4] + [10] + [5-8] + [13] + [14] + pose keypoints.\n"
+                    "Pose keypoints matched to detections and pushed into tracker.\n"
+                    "Isolated from detection/appearance by using a separate pose engine.\n"
+                    "Δprev measures pure pose keypoints value for association."
+                ),
                 (
                     "--reid-mode",
                     "semantic",
