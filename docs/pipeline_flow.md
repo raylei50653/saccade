@@ -13,7 +13,8 @@
 本文件主要對應：
 
 - [scripts/eval/mot17.py](/scripts/eval/mot17.py)
-- [src/saccade/perception/eval/runner.py](/src/saccade/perception/eval/runner.py)
+- [src/saccade/perception/eval/evaluator.py](/src/saccade/perception/eval/evaluator.py)（實作主體）
+- [src/saccade/perception/eval/runner.py](/src/saccade/perception/eval/runner.py)（entry point wrapper）
 
 這條路徑目前是 repo 最活躍的 perception / tracking / relink 主流程。
 
@@ -21,19 +22,55 @@
 
 ## 2. 高層流程圖
 
+> 以下對應 `evaluator.py` 中 `time_stage()` 的實際串行順序（共 16 個 stage）。
+> ⚠️ 注意：ReID 分支（bank_sync → budget → crop → extract）**完全在 GMC 之前**。
+
 ```text
-Frame Source
-  -> ingest / preprocess
-  -> detection
-  -> filter / NMS / cross-tile merge
-  -> optional ReID trigger decision
-  -> optional crop / embedding extract
-  -> tracker update
-  -> semantic relink / identity resolve
-  -> optional post-merge cleanup
-  -> optional low-quality tracklet filter
-  -> eval output
+[1] fetch                      -> DALI / NVDEC read
+[2] ingest_preprocess          -> AdaptiveFramePool + preprocess
+[3] detect                     -> yolo26s/m native_960 or tiled
+[4] postprocess                -> filter -> NMS -> cross-tile merge
+                                 -> quality scaling + gating (6 sub-stages)
+[5] reid_bank_sync             -> appearance bank → tracker [OFF]
+[6] reid_budget                -> budget selection [OFF]
+[7] reid_crop                  -> ROI crop (Python only) [OFF]
+[8] reid_extract               -> siglip2 / other backbones [OFF]
+[9] lazy_reid                  -> self-sim profiling [OFF, profiling only]
+[10] gmc                       -> GPU/PMC warp estimation [ON]
+[11] track                     -> association + Kalman update [ON]
+[12] materialize               -> GPU -> host view [ON]
+[13] bg_relink_wait            -> wait bg relink thread [OFF]
+[14] relink_write              -> semantic relink + identity resolve [部分 ON]
+[15] frame_total               -> 本幀總時間
 ```
+
+### 階段對應表
+
+| 階段編號 | 名稱 | 是否每幀執行 | 備註 |
+|:---:|:---|:---:|:---|
+| 1-4 | 偵測前處理 | ✅ | 固定主路徑 |
+| 5-8 | ReID 分支 | ❌ | 僅 `reid_work_enabled` 時執行 |
+| 9 | Lazy ReID | ❌ | profiling only，不影響主路徑 |
+| 10 | GMC | ✅ | baseline 核心 |
+| 11-12 | 追蹤 | ✅ | 固定主路徑 |
+| 13-14 | Relink | 部分 | `pipeline_relink` 時走 bg 路徑，否則同步 |
+| 15 | 計時 | ✅ | 僅 profiling 模式 |
+
+### Postprocess 內部 Sub-stages
+
+`postprocess` 階段內含 **6 個隱藏 sub-stages**（均計入 `postprocess` 總時間）：
+
+| Sub-stage | 條件 | 說明 |
+|:---|:---|:---|
+| `post_filter` | 僅 Python path | confidence / class / geometry filter |
+| `post_nms` | 僅 Python path, tiled | NMS (native path 已內建於 PerceptionPipeline) |
+| `post_merge` | `cross_tile_merge=True` | cross-tile duplicate merge |
+| `fp_hard_filter` | `--fp-hard-filter` | 移除可疑低分大面積偵測 |
+| `detection_cap` | `--per-frame-detection-cap > 0` | 限制每幀檢測數 |
+| `stage2_quality_gate` | `--stage2-quality-gate` | 移除 mid-score 區間幾何不良偵測 |
+| `consecutive_birth_gate` | `--consecutive-birth-gate` | 跨幀出生門控 |
+| `birth_quality_gate` | `--birth-quality-gate` | 出生品質門控 |
+| `multi_birth` | `--multi-birth` | 多信號出生策略 |
 
 ---
 
@@ -49,7 +86,7 @@ Frame Source
 
 主要位置：
 
-- [src/saccade/perception/eval/runner.py](/src/saccade/perception/eval/runner.py:1849)
+- [src/saccade/perception/eval/evaluator.py](/src/saccade/perception/eval/evaluator.py:1226)
 
 說明：
 
@@ -65,7 +102,7 @@ Frame Source
 
 主要位置：
 
-- [src/saccade/perception/eval/runner.py](/src/saccade/perception/eval/runner.py:1884)
+- [src/saccade/perception/eval/evaluator.py](/src/saccade/perception/eval/evaluator.py:1254)
 
 說明：
 
@@ -86,8 +123,8 @@ Frame Source
 
 主要位置：
 
+- [src/saccade/perception/eval/evaluator.py](/src/saccade/perception/eval/evaluator.py:1333)
 - [src/saccade/perception/eval/detection.py](/src/saccade/perception/eval/detection.py)
-- [src/saccade/perception/eval/runner.py](/src/saccade/perception/eval/runner.py:1910)
 - [src/tracking/pipeline.cpp](/src/tracking/pipeline.cpp)
 
 說明：
@@ -110,7 +147,7 @@ Frame Source
 主要位置：
 
 - [src/saccade/perception/tracking/tracker_gpu.py](/src/saccade/perception/tracking/tracker_gpu.py:76)
-- [src/saccade/perception/eval/runner.py](/src/saccade/perception/eval/runner.py:2068)
+- [src/saccade/perception/eval/evaluator.py](/src/saccade/perception/eval/evaluator.py:2045)
 
 目前流程：
 
@@ -135,7 +172,7 @@ Frame Source
 
 主要位置：
 
-- [src/saccade/perception/eval/runner.py](/src/saccade/perception/eval/runner.py:2121)
+- [src/saccade/perception/eval/evaluator.py](/src/saccade/perception/eval/evaluator.py:2093)
 
 目前流程：
 
@@ -147,32 +184,81 @@ Frame Source
 - ReID extraction 不是每幀必做
 - 它是受 trigger 控制的昂貴步驟
 
-### 3.6 Tracker Update
+### 3.6 GMC（獨立階段）
+
+責任：
+
+- 計算幀間運動補償 warp
+- FG mask（optional）
+- PCR quality feedback
+
+主要位置：
+
+- [src/tracking/tracker_gpu.cu](/src/tracking/tracker_gpu.cu)
+- [src/saccade/perception/eval/evaluator.py](/src/saccade/perception/eval/evaluator.py:2250)
+
+目前流程：
+
+- 若 `gmc_estimator` 存在，先計算 `gmc_warp` + `gmc_uncertain`
+- 可選 FG mask：在 FFT 前 zero out 偵測區域
+- PCR quality：`0 < pcr < threshold` 標記為 uncertain（影響 ReID budget）
+
+說明：
+
+- GMC 是推薦 baseline 核心模組（`--gmc`）
+- 在 ReID 分支完成後、tracker update 前執行
+- `gmc_fg_mask` 目前未啟用（恆為 0ms）
+
+### 3.7 Lazy ReID（Profiling Only）
+
+責任：
+
+- 對 tentative candidates 做 self-sim embedding profiling
+- 不影響主路徑，僅收集統計數據
+
+主要位置：
+
+- [src/saccade/perception/eval/evaluator.py](/src/saccade/perception/eval/evaluator.py:2427)
+
+目前流程：
+
+- 若 `--profile-lazy-reid`，從 tracker 取出 tentative candidates
+- 計算 past embedding vs current embedding 的 cosine sim
+- 收集 pairs/pass/sim_sum 等統計
+
+說明：
+
+- 這是 profiling 階段，不影響追蹤結果
+- 計入 `lazy_reid` stage 時間
+
+### 3.8 Tracker Update
 
 責任：
 
 - tracker state predict / update
 - association
-- optional appearance-aware matching
+- optional appearance-aware matching（via embeddings）
 - GMC warp consumption
 
 主要位置：
 
 - [src/tracking/tracker_gpu.cu](/src/tracking/tracker_gpu.cu)
-- [src/saccade/perception/eval/runner.py](/src/saccade/perception/eval/runner.py:2229)
+- [src/saccade/perception/eval/evaluator.py](/src/saccade/perception/eval/evaluator.py:2342)
 
 目前流程：
 
-- runner 先準備 `mid_thresh_scale`
-- 如有 GMC estimator，先算 `gmc_warp`
-- 再呼叫 tracker update path
+- 先準備 `mid_thresh_scale`（geometry-aware）
+- 呼叫 `detector.tracker.update_into()`
+  - 傳入：fused_boxes/scores/classes, embeddings, gmc_warp, mid_thresh_scale
+  - result 留在 GPU buffer（`tracker_result_buffers`）
 
 說明：
 
 - 現在的 tracker 熱路徑已大幅 native 化
 - result 優先留在 GPU result buffer，再在必要邊界 materialize
+- GMC warp 在此階段被 tracker 消耗
 
-### 3.7 Semantic Relink / Identity Resolve
+### 3.9 Semantic Relink / Identity Resolve
 
 責任：
 
@@ -182,12 +268,16 @@ Frame Source
 主要位置：
 
 - [src/saccade/perception/eval/relink.py](/src/saccade/perception/eval/relink.py)
-- [src/saccade/perception/eval/runner.py](/src/saccade/perception/eval/runner.py:692)
+- [src/saccade/perception/eval/evaluator.py](/src/saccade/perception/eval/evaluator.py:2502)
 
 目前流程：
 
-- semantic relink 與 lifecycle merge 已收斂成 `IdentityResolver.resolve_pass()`
-- 若可用，優先走 C++ path
+- 若 `pipeline_relink`（async 路徑）：
+  - 準備 host_batch + motion snapshots，提交至背景線程
+  - 主線程在下一幀開頭 `bg_relink_wait`
+- 否則（sync 路徑）：
+  - 同步呼叫 `_prepare_track_candidates()` → `_resolve_frame_tracks()` → `_emit_resolved_tracks()`
+  - `IdentityResolver.resolve_pass()` 執行 semantic relink + lifecycle merge
 
 說明：
 
@@ -195,8 +285,9 @@ Frame Source
   - reference quality
   - false accept filtering
   - unified association / relink scoring
+- 在 GMC ON 下，semantic relink 被診斷為基本冗余
 
-### 3.8 Post-Merge Cleanup
+### 3.10 Post-Merge Cleanup
 
 責任：
 
@@ -205,9 +296,7 @@ Frame Source
 
 主要位置：
 
-- [src/saccade/perception/eval/runner.py](/src/saccade/perception/eval/runner.py:1144)
-- [src/saccade/perception/eval/runner.py](/src/saccade/perception/eval/runner.py:1295)
-- [src/saccade/perception/eval/runner.py](/src/saccade/perception/eval/runner.py:2453)
+- [src/saccade/perception/eval/evaluator.py](/src/saccade/perception/eval/evaluator.py:2597)
 
 說明：
 
@@ -288,4 +377,4 @@ Frame Source
 - 實驗結果與 backlog 排序
   - 看 [docs/TODO.md](/docs/TODO.md)
 
-最後更新：2026-04-30
+最後更新：2026-05-13

@@ -2,14 +2,14 @@ name: C++ Core Build
 
 on:
   push:
-    branches: [ main ]
+    branches: [ dev, main ]
     paths:
       - 'src/**'
       - 'include/**'
       - 'CMakeLists.txt'
       - '.github/workflows/cpp_build.yml'
   pull_request:
-    branches: [ main ]
+    branches: [ dev, main ]
     paths:
       - 'src/**'
       - 'include/**'
