@@ -68,10 +68,17 @@
   - 舊版 +1.4pp 是在 `new_track_thresh=0.35` 下測得，不適用 speed preset
   - 框架保留 `--scene-adapt-enabled`（預設 off），classification 邏輯可供未來其他策略重用
 
-- **P5-1 Multi-signal birth policy（2026-05-11）❌ NO-GO**
-  - 7-seq speed preset：IDF1 ±0，IDs +12，FP +453，FN -530，FPS **-20**
+- **P5-1 Multi-signal birth policy（2026-05-11）❌ NO-GO（2-run 確認）**
+  - 2026-05-11 初測 7-seq：IDF1 ±0，IDs +12，FP +453，FN -530，FPS **-20**
   - 根因：Python-side O(K×C) IoU matching 每幀開銷；sub-threshold TP 比例太低
   - `--multi-birth-enabled` 保留（預設 off）
+  - **2026-05-14 2-run 深度掃描（MOT17-02/10-SDP）：33 configs, 5-run avg 驗證**
+    - 所有配置 MOTA 集中在 33.8–34.1%，run-to-run 波動 ±0.15–0.25%（在誤差內）
+    - 最佳單策略：A `iou=0.90 ratio=1.03`（FPS 117.8，不降）、B `e=0.75 r=0.85`（FPS 92，-22%）
+    - 組合策略（A+B, A+C）不如單獨使用（重疊處理同一批檢測）
+    - **結論：後處理層面提升 <0.2%，不抵銷開銷。需從檢測層面下手。**
+  - 新增 debug 工具：`--debug-birth-csv` + `label_boosted_birth_rows.py`（56 測試通過）
+  - 856 boosted rows 全部 dropped（17.8% 真正 missed，需進一步分析）
 
 - **P5-2 Stage 2 Quality Gate（2026-05-10）❌ NO-GO**
   - 與 `detection_quality_scaling=True` 完全重疊，零效果。只在 `--no-detection-quality-scaling` 時有意義。
