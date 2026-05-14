@@ -149,9 +149,12 @@ uv run scripts/eval/mot17.py --preset baseline --detector SDP
 ### 推送前（鏡像 CI）
 
 ```bash
+git config core.hooksPath .githooks  # 一次性設定：commit 前自動 ruff format/check staged Python files
 bash scripts/pre_push.sh          # lockfile + ruff + mypy + pytest + C++ build 偵測
 bash scripts/pre_push.sh --fix    # 同上，自動 ruff fix / format 後再檢查
 ```
+
+`pre-commit` hook 只處理已暫存的 Python 檔案：先 `ruff format`，再 `ruff check`，最後自動重新 `git add`。`mypy / pytest / C++ build` 仍保留在 `pre_push`，避免每次 commit 過重。
 
 CI 跑兩個 ruff 步驟（`ruff check` 和 `ruff format --check`），腳本一併涵蓋。有 `src/`、`include/`、`CMakeLists.txt` 改動且 `build/` 存在時，自動跑 `make saccade_tracking_ext`。
 

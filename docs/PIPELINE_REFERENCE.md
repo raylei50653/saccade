@@ -8,13 +8,17 @@
 除非特別標註，所有模組 delta 都必須沿同一條 cumulative path 記錄。
 每一列只能相對前一列新增一個主模組，最後一列必須回到該測試路徑的 baseline。
 
-最後更新：2026-05-11
+最後更新：2026-05-13
 
 > **Baseline 更新（2026-05-10）**：P3 sweep 確認 `match=0.66, new_track=0.28` 為 yolo26s/m 共用最優參數（`per_frame_detection_cap` bug 修正後）。`--preset speed`（yolo26s）為推薦 baseline：**IDF1 51.2% / MOTA 40.8% / IDs 541 / Rcll 53.0%**。`--preset baseline`（yolo26m）適合 recall 優先場景：**IDF1 50.3% / MOTA 42.0% / Rcll 56.9%**。
 
 ---
 
 ## High-Level Dataflow
+
+> 本圖反映 `evaluator.py` 中 `time_stage()` 的實際串行順序。
+> ReID 分支（bank_sync → budget → crop → extract）**完全在 GMC 之前**執行，
+> 不是舊版圖示的平行分支。
 
 ```text
 [ Ingest ]                    [ON]
@@ -33,39 +37,61 @@
         |
         v
 [ Postprocess ]                [ON]
-   filter -> NMS -> cross-tile merge -> quality scaling
+   filter -> NMS -> cross-tile merge
+   ├─ detection quality scaling
+   ├─ FP hard filter           [OFF, --fp-hard-filter]
+   ├─ per-frame det cap        [OFF, --per-frame-detection-cap]
+   ├─ stage2 quality gate      [OFF, --stage2-quality-gate]
+   ├─ consecutive birth gate   [OFF, --consecutive-birth-gate]
+   ├─ birth quality gate       [OFF, --birth-quality-gate]
+   └─ multi-birth manager      [OFF, --multi-birth]
         |
-        +-----------------------------+
-        |                             |
-        v                             v
+        v
+[ ReID Bank Sync ]             [OFF]
+   appearance bank → tracker    └─ --appearance-bank
+        |
+        v
+[ ReID Budget ]                [OFF]
+   budget selection             └─ --reid-mode
+        |
+        v
+[ ReID Crop ]                  [OFF]
+   ROI crop (Python only)       └─ --reid-mode
+        |
+        v
+[ ReID Extract ]               [OFF]
+   siglip2 / other backbones    └─ --reid-mode
+        |
+        v
+[ Lazy ReID ]                  [OFF, profiling only]
+   self-sim profiling           └─ --profile-lazy-reid
+        |
+        v
 [ GMC ]                        [ON*]
-   gpu / cpu                    ReID Trigger      [OFF]
-   └── --gmc                    budget / policy
-        |                             |
-        +-------------+---------------+
-                      |
-                      v
-                [ ReID Extract ]       [OFF]
-                siglip2 / other backbones
-                └── --reid-mode off
-                      |
-                      v
-                [ GPU Tracker ]          [ON]
-                association + Kalman update
-                      |
-                      v
-                [ Materialize ]          [ON]
-                GPU -> host view
-                      |
-                      v
-                [ Identity Resolve ]     [部分 ON]
-                ├─ semantic relink       [OFF]
-                ├─ appearance bank       [OFF]
-                └─ lifecycle merge      [OFF]
-                      |
-                      v
-                [ Output ]               [ON]
-                metrics / MOT txt / debug artifacts
+   gpu / cpu                    └── --gmc
+   └── --gmc-fg-mask            [OFF]
+        |
+        v
+[ Tracker Update ]             [ON]
+   association + Kalman         └─ (always ON)
+        |
+        v
+[ Materialize ]                [ON]
+   GPU -> host view             └─ (always ON)
+        |
+        v
+[ BG Relink Wait ]             [OFF]
+   wait for bg relink           └─ --pipeline-relink
+        |
+        v
+[ Identity Resolve ]           [部分 ON]
+   ├─ semantic relink           [OFF, --reid-mode semantic]
+   ├─ appearance bank           [OFF, --appearance-bank]
+   └─ lifecycle merge           [OFF, --lifecycle-merge]
+        |
+        v
+[ Output ]                     [ON]
+   metrics / MOT txt / debug    └─ (always ON)
 ```
 
 ### 模組 ON/OFF 狀態說明
@@ -77,13 +103,23 @@
 | Detection | ON | N/A | 無可選 |
 | Postprocess | ON | N/A | 無可選 |
 | **GMC** | **ON** | `--gmc` / `--no-gmc` | **推薦 baseline 核心** |
+| ReID Bank Sync | **OFF** | `--appearance-bank` | 非 baseline |
+| ReID Budget | **OFF** | `--reid-mode off/semantic/hybrid` | 非 baseline |
+| ReID Crop | **OFF** | (via ReID) | 非 baseline |
 | ReID Extract | **OFF** | `--reid-mode off/semantic/hybrid` | 非 baseline |
+| Lazy ReID | **OFF** | `--profile-lazy-reid` | profiling only |
 | GPU Tracker | ON | N/A | 無可選 |
 | Materialize | ON | N/A | 無可選 |
+| BG Relink Wait | **OFF** | `--pipeline-relink` | 非 baseline |
 | Semantic Relink | **OFF** | `--reid-mode semantic` | 非 baseline（冗余） |
 | Appearance Bank | **OFF** | `--appearance-bank` / `--no-appearance-bank` | 非 baseline |
 | Lifecycle Merge | OFF | `--lifecycle-merge` / `--no-lifecycle-merge` | 非 baseline |
-| Per-frame Det Cap | **OFF** | `--per-frame-detection-cap 0` | default 0（dense scene 下 adaptive cap 壓至 ~21，破壞 recall） |
+| FP Hard Filter | **OFF** | `--fp-hard-filter` | 非 baseline |
+| Per-frame Det Cap | **OFF** | `--per-frame-detection-cap 0` | default 0（NO-GO） |
+| Stage2 Quality Gate | **OFF** | `--stage2-quality-gate` | 非 baseline |
+| Consecutive Birth Gate | **OFF** | `--consecutive-birth-gate` | 非 baseline |
+| Birth Quality Gate | **OFF** | `--birth-quality-gate` | 非 baseline |
+| Multi-birth Manager | **OFF** | `--multi-birth` | 非 baseline |
 
 > \* GMC 在 CLI 默認為 `--gmc`（ON），但推薦 baseline 明確使用 `--gmc` 標誌。
 
@@ -232,7 +268,10 @@ python scripts/eval/latency_report.py runs/latency_m/ --compare runs/latency_s/
 
 > MOT17-04-SDP 是擁擠長廊場景，raw_boxes 每帧固定打滿 topk=300 上限，為最重壓力。全 7 序列平均 FPS 會更高。
 
-### Stage Breakdown
+### Stage Breakdown（Reid mode=off 條件）
+
+> 以下為 `reid_mode=off` 下的 baseline 測量（ReID 階段皆為 0ms）。
+> 若開啟 ReID，需額外加上 `reid_bank_sync` + `reid_budget` + `reid_crop` + `reid_extract`。
 
 | Stage | yolo26m | yolo26s | Delta | 占比（m/s） |
 |:------|--------:|--------:|------:|------------:|
@@ -274,7 +313,7 @@ python scripts/eval/latency_report.py runs/latency_m/ --compare runs/latency_s/
 - `detect` + `postprocess` 合計佔 **73.5%（26m）/ 67.9%（26s）**，是唯一可觀優化空間
 - `postprocess` 3.16ms 主因是 raw_boxes=300 的全量 NMS；一般序列（raw_boxes<200）時間會下降
 - `track`、`gmc`、`materialize` 皆與引擎無關，且 track 與引擎完全一致（0.78ms）
-- ReID 全 0ms：pipeline 在 `reid_mode=off` 下 async 路徑不觸發
+- ReID 全 0ms：測量條件為 `reid_mode=off`，ReID 階段（bank_sync/budget/crop/extract）不執行
 
 ---
 
