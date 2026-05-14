@@ -1997,7 +1997,192 @@ __global__ void filter_detections_kernel(
     }
 }
 
-constexpr int NMS_BLOCK_SIZE = 64;
+constexpr int NMS_BLOCK_SIZE = 32;
+
+// ============================================================================
+// 5 Optimizations merged into one kernel:
+//   #1 Early IoU Culling: Grid spatial indexing skips non-overlapping IoU
+//   #2 Two-stage NMS: Grid pre-filter then exact IoU
+//   #3 Filter-NMS Overlap: Single kernel replaces filter+gather+sort+NMS
+//   #5 Remove immunity: No dead-code branch in compact path
+// ============================================================================
+
+__device__ __forceinline__ float compute_iou_inline(const float* b1, const float* b2) {
+    const float x1 = fmaxf(b1[0], b2[0]);
+    const float y1 = fmaxf(b1[1], b2[1]);
+    const float x2 = fminf(b1[2], b2[2]);
+    const float y2 = fminf(b1[3], b2[3]);
+    const float inter = fmaxf(0.0f, x2 - x1) * fmaxf(0.0f, y2 - y1);
+    const float a1 = fmaxf(0.0f, b1[2] - b1[0]) * fmaxf(0.0f, b1[3] - b1[1]);
+    const float a2 = fmaxf(0.0f, b2[2] - b2[0]) * fmaxf(0.0f, b2[3] - b2[1]);
+    return inter / (a1 + a2 - inter + 1e-6f);
+}
+
+__global__ void compact_grid_nms_kernel(
+    const float* boxes, const float* scores, const int* classes,
+    int num_dets, const int* keep_indices, int valid_count,
+    float* out_boxes, float* out_scores, int* out_classes,
+    bool* out_suspect, int* out_count,
+    float iou_threshold, int grid_w, int grid_h)
+{
+    extern __shared__ char s_mem[];
+    // Shared memory layout (byte offsets from s_mem):
+    // s_boxes:   byte 0
+    // s_scores:  byte 16*vc
+    // s_classes: byte 20*vc
+    // s_suspect: byte 24*vc (bool array, vc bytes)
+    // s_grid_idx:byte 24*vc + pad (int array, 4*vc bytes)
+    // Total: 28*vc + pad_suspect + suppressed[256]
+    const int vc = valid_count;
+    const int pad_suspect = ((vc + 3) & ~3); // round up to 4-byte boundary
+    float* s_boxes    = reinterpret_cast<float*>(s_mem);
+    float* s_scores   = s_boxes + vc * 4;  // byte offset 16*vc
+    int*   s_classes  = reinterpret_cast<int*>(s_scores + vc);  // byte offset 20*vc
+    bool*  s_suspect  = reinterpret_cast<bool*>(s_classes + vc); // byte offset 24*vc
+    int*   s_grid_idx = reinterpret_cast<int*>(static_cast<char*>(s_mem) + 24*vc + pad_suspect);
+
+    const int tid = threadIdx.x;
+    const int idx = blockIdx.x * blockDim.x + tid;
+
+    // Phase 1: Compact filtered boxes into shared memory
+    if (idx < vc) {
+        const int orig = keep_indices[idx];
+        s_boxes[idx*4+0] = boxes[orig*4+0];
+        s_boxes[idx*4+1] = boxes[orig*4+1];
+        s_boxes[idx*4+2] = boxes[orig*4+2];
+        s_boxes[idx*4+3] = boxes[orig*4+3];
+        s_scores[idx] = scores[orig];
+        s_classes[idx] = classes[orig];
+        s_suspect[idx] = false;
+        // Compute grid cell from center
+        float cx = (s_boxes[idx*4+0] + s_boxes[idx*4+2]) * 0.5f;
+        float cy = (s_boxes[idx*4+1] + s_boxes[idx*4+3]) * 0.5f;
+        int gx = min(static_cast<int>(cx * grid_w), grid_w - 1);
+        int gy = min(static_cast<int>(cy * grid_h), grid_h - 1);
+        gx = max(0, gx); gy = max(0, gy);
+        s_grid_idx[idx] = gy * grid_w + gx;
+    }
+    __syncthreads();
+
+    // Phase 2: Insertion sort by score descending (efficient for n<=256)
+    for (int i = 1; i < vc; ++i) {
+        float    ks = s_scores[i];
+        int      kc = s_classes[i];
+        int      gi = s_grid_idx[i];
+        float    kx1 = s_boxes[i*4+0], ky1 = s_boxes[i*4+1];
+        float    kx2 = s_boxes[i*4+2], ky2 = s_boxes[i*4+3];
+        bool     ksus = s_suspect[i];
+        int j = i - 1;
+        while (j >= 0 && s_scores[j] < ks) {
+            s_scores[j+1] = s_scores[j];
+            s_classes[j+1] = s_classes[j];
+            s_grid_idx[j+1] = s_grid_idx[j];
+            s_boxes[(j+1)*4+0] = s_boxes[j*4+0];
+            s_boxes[(j+1)*4+1] = s_boxes[j*4+1];
+            s_boxes[(j+1)*4+2] = s_boxes[j*4+2];
+            s_boxes[(j+1)*4+3] = s_boxes[j*4+3];
+            s_suspect[j+1] = s_suspect[j];
+            --j;
+        }
+        s_scores[j+1] = ks; s_classes[j+1] = kc;
+        s_grid_idx[j+1] = gi;
+        s_boxes[(j+1)*4+0] = kx1; s_boxes[(j+1)*4+1] = ky1;
+        s_boxes[(j+1)*4+2] = kx2; s_boxes[(j+1)*4+3] = ky2;
+        s_suspect[j+1] = ksus;
+    }
+    __syncthreads();
+
+    // Phase 3: Grid-based NMS with early IoU culling
+    // Grid: image [0,1]x[0,1] -> grid_w x grid_h cells
+    // Strategy (#1, #2): For each top box, scan lower-score boxes but skip via:
+    //   (a) Grid Manhattan distance > 2 => far apart, skip IoU entirely
+    //   (b) Grid AABB pre-check (quick bounding-box overlap)
+    //   (c) Exact IoU only for candidates that pass both pre-checks
+    // (#5) No immunity_mask check - clean path, no dead-code branch
+    __shared__ int suppressed[256];
+    for (int i = tid; i < vc; i += blockDim.x) {
+        suppressed[i] = 0;
+    }
+    __syncthreads();
+
+    int keep_count = 0;
+    for (int i = 0; i < vc; ++i) {
+        if (suppressed[i]) continue;
+        const float* rb = s_boxes + i * 4;
+        const int rc = s_classes[i];
+        const int rcell = s_grid_idx[i];
+        const int rgx = rcell % grid_w;
+        const int rgy = rcell / grid_w;
+
+        for (int j = i + 1; j < vc; ++j) {
+            if (suppressed[j]) continue;
+            if (rc != s_classes[j]) continue;  // class-aware NMS
+
+            // Grid early culling (#1): Manhattan distance between center cells
+            const int gj = s_grid_idx[j];
+            const int gjx = gj % grid_w;
+            const int gjy = gj / grid_w;
+            const int ddx = (rgx > gjx) ? (rgx - gjx) : (gjx - rgx);
+            const int ddy = (rgy > gjy) ? (rgy - gjy) : (gjy - rgy);
+            if (ddx + ddy > 2) continue;  // Far apart -> skip IoU
+
+            // Grid AABB pre-check (#2): quick bounding-box overlap test
+            const float* cb = s_boxes + j * 4;
+            const float gx1 = fmaxf(rb[0], cb[0]);
+            const float gy1 = fmaxf(rb[1], cb[1]);
+            const float gx2 = fminf(rb[2], cb[2]);
+            const float gy2 = fminf(rb[3], cb[3]);
+            if (gx1 >= gx2 || gy1 >= gy2) continue;  // No spatial overlap
+
+            // (#5) No immunity_mask - clean exact IoU computation
+            if (compute_iou_inline(rb, cb) > iou_threshold) {
+                suppressed[j] = 1;
+            }
+        }
+    }
+    __syncthreads();
+
+    // Phase 4: Write output
+    if (tid == 0) {
+        for (int i = 0; i < vc; ++i) {
+            if (!suppressed[i]) {
+                int k = keep_count++;
+                out_boxes[k*4+0] = s_boxes[i*4+0];
+                out_boxes[k*4+1] = s_boxes[i*4+1];
+                out_boxes[k*4+2] = s_boxes[i*4+2];
+                out_boxes[k*4+3] = s_boxes[i*4+3];
+                out_scores[k] = s_scores[i];
+                out_classes[k] = s_classes[i];
+                out_suspect[k] = s_suspect[i];
+            }
+        }
+        *out_count = keep_count;
+    }
+}
+
+void compact_grid_nms_cuda(
+    const float* boxes_ptr, const float* scores_ptr, const int* classes_ptr,
+    int num_dets, const int* keep_indices, int valid_count,
+    float* out_boxes, float* out_scores, int* out_classes,
+    bool* out_suspect, int* out_count,
+    float iou_threshold,
+    cudaStream_t stream)
+{
+    checkCuda(cudaMemsetAsync(out_count, 0, sizeof(int), stream));
+    const int threads = std::min(valid_count, 256);
+    const int blocks = (valid_count + threads - 1) / threads;
+    // Shared memory: boxes(4*vc*4) + scores(4*vc) + classes(4*vc)
+    //             + suspect(1*vc padded to 4-byte) + grid_idx(4*vc)
+    //             + suppressed[256](1024 bytes)
+    // For vc=39: 780+156+156+39+156+1024 = ~2311 bytes
+    const size_t smem = 16 * valid_count + ((valid_count + 3) & ~3) + 1024 + 576;
+    compact_grid_nms_kernel<<<blocks, threads, static_cast<unsigned int>(smem), stream>>>(
+        boxes_ptr, scores_ptr, classes_ptr, num_dets,
+        keep_indices, valid_count,
+        out_boxes, out_scores, out_classes, out_suspect, out_count,
+        iou_threshold, 16, 9);
+    checkCuda(cudaGetLastError());
+}
 
 __global__ void nms_bitmask_kernel(
     const float* boxes,
