@@ -11,6 +11,12 @@ def run_official_eval() -> None:
     parser.add_argument("--data-root", default="datasets/MOT17")
     parser.add_argument("--split", default="train")
     parser.add_argument("--output", default="results/MOT17_ultralytics_eval")
+    parser.add_argument(
+        "--imgsz",
+        type=int,
+        default=960,
+        help="Ultralytics inference size.",
+    )
     parser.add_argument("--conf", type=float, default=0.25)
     parser.add_argument("--iou", type=float, default=0.45)
     parser.add_argument("--tracker", default="botsort.yaml")
@@ -49,6 +55,7 @@ def run_official_eval() -> None:
 
         results = model.track(
             source=str(img_dir),
+            imgsz=args.imgsz,
             conf=args.conf,
             iou=args.iou,
             tracker=args.tracker,

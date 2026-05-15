@@ -1997,7 +1997,7 @@ __global__ void filter_detections_kernel(
     }
 }
 
-constexpr int NMS_BLOCK_SIZE = 32;
+constexpr int NMS_BLOCK_SIZE = 64;
 
 // ============================================================================
 // 5 Optimizations merged into one kernel:

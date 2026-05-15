@@ -75,8 +75,8 @@ MOT / tracking / relink 主線開發從這些檔案出發：
 
 | preset | engine | IDF1 | MOTA | IDs | FPS |
 |--------|--------|------|------|-----|-----|
-| **speed** | yolo26s_960 | **52.0%** | **41.6%** | **475** | **97.9** |
-| **baseline** | yolo26m_960 | 51.4% | 43.5% | 502 | ~85 |
+| **speed** | yolo26s_960 | **52.3%** | **41.8%** | **473** | **138.9** |
+| **baseline** | yolo26m_960 | **51.4%** | **43.5%** | **501** | **113.2** |
 | **accuracy** | yolo26l_960 | — | — | — | — |
 
 使用方式：
@@ -93,7 +93,7 @@ uv run scripts/eval/mot17.py --preset baseline --detector SDP
 
 詳細待辦、近期 ablation 結論、backlog 見 **[docs/TODO.md](docs/TODO.md)**。
 
-目前無高優先未完成項；下一個有明確收益的方向是 **P3：Detector 訓練資料改善**（補足腿/腳標注，根本解決 FN 問題）。
+目前高優先待辦以 **FP classifier external-only / 0-shot 路線** 為主；其餘已結案或延後的方向以 `docs/TODO.md` / `docs/TODO_history.md` 為準。
 
 ---
 
@@ -124,6 +124,9 @@ uv run scripts/eval/mot17.py --preset baseline --detector SDP
 - **近期方向 / 實驗** → 更新 `docs/TODO.md`
 - **bug fix / 實作細節** → commit message 記錄 why
 
+開分支前先確認工作項已落到 `docs/TODO.md`。
+沒有進 TODO 的工作，不直接開新分支。
+
 ### 改動中
 - 維持主熱路徑 GPU-first；避免未說明的 `.cpu()` / `numpy()` / host materialization
 - 引入 fallback 時明確定義觸發條件與回退行為
@@ -144,7 +147,31 @@ uv run scripts/eval/mot17.py --preset baseline --detector SDP
 
 ---
 
-## 9. 本地驗證
+## 9. Branching Policy
+
+- `main`：穩定 / 發佈分支。只放已驗證、可回滾的內容；原則上只透過 PR 從 `dev` 合入。
+- `dev`：主要開發分支。日常整合、文件更新、效能優化與功能開發都先回到 `dev`。
+- `feat/*`、`fix/*`、`perf/*`：功能分支。從 `dev` 拉出，完成後以 PR 合回 `dev`，合併後立即刪除。
+
+### 分支工作流
+
+1. 先在 `docs/TODO.md` 寫清楚要做的工作、目的與驗證方式。
+2. 從 `dev` 建立工作分支。
+3. 在工作分支開發與提交。
+4. 推到遠端後，開 PR 指向 `dev`。
+5. CI 通過後合併到 `dev`，並刪除工作分支。
+6. 需要發佈時，再從 `dev` 開 PR 到 `main`。
+
+### 規則
+
+- 不直接 push 到受保護分支 `dev` / `main`。
+- 預設所有改動都走 PR，即使是單人倉庫也保留 CI 與變更紀錄。
+- 調整預設開發分支時，必須同步更新 `.github/workflows/` 的 `push` / `pull_request` 觸發條件。
+- 工作樹有未提交變更時，不做分支整理、批次 merge 或預設分支切換。
+
+---
+
+## 10. 本地驗證
 
 ### 推送前（鏡像 CI）
 
@@ -169,7 +196,7 @@ uv run scripts/eval/mot17.py --preset speed --detector SDP
 
 ---
 
-## 10. 文件更新規則
+## 11. 文件更新規則
 
 | 文件 | 保留什麼 |
 |------|---------|
@@ -182,7 +209,7 @@ uv run scripts/eval/mot17.py --preset speed --detector SDP
 
 ---
 
-## 11. 補充入口
+## 12. 補充入口
 
 - [docs/architecture.md](docs/architecture.md)
 - [docs/PIPELINE_REFERENCE.md](docs/PIPELINE_REFERENCE.md)

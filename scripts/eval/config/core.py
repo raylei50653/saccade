@@ -22,6 +22,7 @@ class CoreConfig:
     debug_dump_seq: str = ""
     debug_dump_frames: str = ""
     debug_dump_csv: str = ""
+    debug_birth_csv: str = ""
     detector: str | None = None
     config: str | None = None
     preset: str | None = None
@@ -113,6 +114,11 @@ def add_core_args(parser: argparse.ArgumentParser) -> None:
         "--debug-dump-csv",
         default="",
         help="CSV path for raw/post_filter/post_nms/post_merge box dumps.",
+    )
+    io.add_argument(
+        "--debug-birth-csv",
+        default="",
+        help="CSV path for birth-promotion debug rows.",
     )
     io.add_argument(
         "--detector",

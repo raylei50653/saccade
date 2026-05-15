@@ -52,6 +52,11 @@ class LifecycleConfig:
     post_lifecycle_gap_uncertainty_weight: float = 0.0
     post_lifecycle_consistency_weight: float = 0.0
     post_lifecycle_missing_appearance_cost: float = 0.5
+    # Duplicate suppression: remove near-duplicate detections within the same frame
+    # (detector artifact where multiple overlapping boxes are produced for the same person)
+    duplicate_suppression_enabled: bool = False
+    duplicate_suppression_iou_threshold: float = 0.85
+    duplicate_suppression_min_score_ratio: float = 1.05
     # Multi-signal birth policy (P5-1): joint evidence over score × streak × motion × geometry
     multi_birth_enabled: bool = False
     multi_birth_min_score: float = 0.12
@@ -379,6 +384,30 @@ def add_lifecycle_args(parser: argparse.ArgumentParser) -> None:
         ),
     )
     grp.add_argument(
+        "--duplicate-suppression-enabled",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Suppress near-duplicate detections within the same frame (detector artifact removal).",
+    )
+    grp.add_argument(
+        "--duplicate-suppression-iou-threshold",
+        type=float,
+        default=0.85,
+        help=_help(
+            "IoU threshold for duplicate detection. Boxes with IoU above this are candidates for suppression.",
+            range_hint="0-1",
+        ),
+    )
+    grp.add_argument(
+        "--duplicate-suppression-min-score-ratio",
+        type=float,
+        default=1.05,
+        help=_help(
+            "Minimum score ratio between high-score and low-score detection for duplicate suppression.",
+            range_hint=">1",
+        ),
+    )
+    grp.add_argument(
         "--multi-birth-enabled",
         action=argparse.BooleanOptionalAction,
         default=False,
@@ -486,6 +515,21 @@ def add_lifecycle_args(parser: argparse.ArgumentParser) -> None:
         type=int,
         default=1,
         help=_help("Drop tracklets shorter than this length.", range_hint=">=1"),
+    )
+    grp.add_argument(
+        "--multi-birth-replace-mode",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Enable replace mode: suppress competing detection when evidence is very high.",
+    )
+    grp.add_argument(
+        "--multi-birth-replace-evidence-threshold",
+        type=float,
+        default=0.85,
+        help=_help(
+            "Evidence threshold for replace mode (higher than evidence_threshold).",
+            range_hint="0-1",
+        ),
     )
     grp.add_argument(
         "--min-tracklet-score",

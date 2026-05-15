@@ -1,6 +1,6 @@
 """Multi-signal birth policy (P5-1) for sub-threshold detection recovery.
 
-Implements a joint evidence model over score × streak × motion × geometry.
+Implements a joint evidence model over score x streak x motion x geometry.
 
 Unlike P5-3 (consecutive birth gate) which applies sequential binary gates
 (score AND streak AND IoU-match AND motion), this uses a weighted sum so that
@@ -13,8 +13,9 @@ Usage:
     manager = MultiSignalBirthManager(new_track_thresh=0.35, ...)
     manager.reset()  # call once per sequence
     # per frame:
-    promote_mask = manager.update(frame_id, sub_boxes, sub_scores)
+    promote_mask, replace_mask = manager.update(frame_id, sub_boxes, sub_scores)
     # fused_scores[promote_mask] = new_track_thresh + 0.01  # done by caller
+    # if replace_mode: suppress competing detection at replace_mask indices
 """
 
 from __future__ import annotations
@@ -31,11 +32,11 @@ class _Candidate:
 
 
 def _box_iou_nm(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
-    """IoU between every (a_i, b_j) pair.  a: (N,4)  b: (M,4) → (N,M)."""
+    """IoU between every (a_i, b_j) pair.  a: (N,4)  b: (M,4) -> (N,M)."""
     ax1, ay1, ax2, ay2 = a[:, 0], a[:, 1], a[:, 2], a[:, 3]
     bx1, by1, bx2, by2 = b[:, 0], b[:, 1], b[:, 2], b[:, 3]
     ix1 = torch.maximum(ax1.unsqueeze(1), bx1.unsqueeze(0))
-    iy1 = torch.maximum(ay1.unsqueeze(1), by1.unsqueeze(0))
+    iy1 = torch.maximum(ay1.unsqueeze(1), bx1.unsqueeze(0))
     ix2 = torch.minimum(ax2.unsqueeze(1), bx2.unsqueeze(0))
     iy2 = torch.minimum(ay2.unsqueeze(1), by2.unsqueeze(0))
     inter = (ix2 - ix1).clamp(min=0) * (iy2 - iy1).clamp(min=0)
@@ -54,7 +55,12 @@ class MultiSignalBirthManager:
           + w_streak * streak_norm
 
     When E >= evidence_threshold and n_frames >= min_frames, the candidate
-    detection is eligible to have its score promoted to new_track_thresh + ε.
+    detection is eligible to have its score promoted to new_track_thresh + e.
+
+    When E >= replace_evidence_threshold (higher bar), the candidate is also
+    eligible for replace_mode: suppress the competing higher-score detection
+    in the same frame. This is useful when the boosted detection has a better
+    position match than the competing detection.
 
     The caller is responsible for applying the score boost in fused_scores.
     """
@@ -74,6 +80,8 @@ class MultiSignalBirthManager:
         w_streak: float = 0.15,
         min_aspect: float = 0.0,
         max_area_px: int = 0,
+        replace_mode: bool = False,
+        replace_evidence_threshold: float = 0.85,
     ) -> None:
         self.new_track_thresh = new_track_thresh
         self.min_score = min_score
@@ -88,14 +96,18 @@ class MultiSignalBirthManager:
         self.w_streak = w_streak
         self.min_aspect = min_aspect
         self.max_area_px = max_area_px
+        self.replace_mode = replace_mode
+        self.replace_evidence_threshold = replace_evidence_threshold
         self._candidates: list[_Candidate] = []
         self._promoted_ids: set[int] = (
-            set()
-        )  # indices into _candidates already promoted
+            set()  # indices into _candidates already promoted
+        )
+        self._replace_indices: set[int] = set()  # indices to suppress (replace)
 
     def reset(self) -> None:
         self._candidates = []
         self._promoted_ids = set()
+        self._replace_indices = set()
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -118,11 +130,11 @@ class MultiSignalBirthManager:
         if aspect < 1.0:
             q = 0.0
         elif aspect < 2.0:
-            q = aspect - 1.0  # 0 → 1 as aspect goes 1 → 2
+            q = aspect - 1.0  # 0 -> 1 as aspect goes 1 -> 2
         elif aspect <= 4.0:
             q = 1.0  # ideal
         else:
-            q = max(0.0, 1.0 - (aspect - 4.0) / 3.0)  # 1 → 0 as aspect goes 4 → 7
+            q = max(0.0, 1.0 - (aspect - 4.0) / 3.0)  # 1 -> 0 as aspect goes 4 -> 7
         return q
 
     def _compute_evidence(self, cand: _Candidate) -> float:
@@ -180,11 +192,17 @@ class MultiSignalBirthManager:
         frame_id: int,
         sub_boxes: torch.Tensor,  # (K, 4) detections below new_track_thresh
         sub_scores: torch.Tensor,  # (K,)
-    ) -> torch.Tensor:
-        """Update candidates and return bool promote-mask over sub_boxes.
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Update candidates and return (promote_mask, replace_mask) over sub_boxes.
 
-        A True entry means the corresponding detection has accumulated enough
-        joint evidence to be promoted to new_track_thresh + ε for track birth.
+        A True entry in promote_mask means the corresponding detection has
+        accumulated enough joint evidence to be promoted to new_track_thresh + e
+        for track birth.
+
+        A True entry in replace_mask (when replace_mode=True) means the
+        corresponding detection should suppress a competing higher-score
+        detection in the same frame.
+
         Promoted candidates are removed from the buffer immediately so they
         cannot be boosted again next frame.
 
@@ -193,10 +211,11 @@ class MultiSignalBirthManager:
         """
         n = sub_boxes.shape[0]
         promote_mask = torch.zeros(n, dtype=torch.bool, device=sub_boxes.device)
+        replace_mask = torch.zeros(n, dtype=torch.bool, device=sub_boxes.device)
 
         if n == 0:
             self._expire(frame_id)
-            return promote_mask
+            return promote_mask, replace_mask
 
         # IoU-match incoming boxes to existing candidates
         if self._candidates:
@@ -213,6 +232,7 @@ class MultiSignalBirthManager:
 
         matched_cand_set: set[int] = set()
         to_remove: list[int] = []
+        replace_indices: list[int] = []
 
         for i in range(n):
             score = float(sub_scores[i].item())
@@ -229,9 +249,14 @@ class MultiSignalBirthManager:
                 cand.last_frame = frame_id
 
                 ev = self._compute_evidence(cand)
-                if ev >= self.evidence_threshold:
+                if ev >= self.replace_evidence_threshold:
                     promote_mask[i] = True
+                    replace_mask[i] = True
+                    replace_indices.append(i)
                     to_remove.append(ci)  # remove so it doesn't get promoted again
+                elif ev >= self.evidence_threshold:
+                    promote_mask[i] = True
+                    to_remove.append(ci)
             else:
                 # Start tracking as new candidate
                 self._candidates.append(
@@ -246,4 +271,4 @@ class MultiSignalBirthManager:
             self._candidates.pop(ci)
 
         self._expire(frame_id)
-        return promote_mask
+        return promote_mask, replace_mask

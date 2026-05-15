@@ -40,6 +40,11 @@ class DetectionConfig:
     fp_hard_filter_min_score: float = 0.10
     fp_hard_filter_max_suspicious_area: int = 40000
     fp_hard_filter_max_suspicious_score: float = 0.40
+    external_fp_filter_mode: str = "rule"
+    external_fp_logistic_threshold: float = 0.5
+    external_fp_max_score: float = 0.18
+    external_fp_penalty: float = 1.0
+    external_fp_softmax_min_scale: float = 0.7
     # Narrow person score bonus
     narrow_person_score_bonus: float = 0.0
     narrow_person_max_width_ratio: float = 0.018
@@ -112,7 +117,13 @@ def add_detection_args(parser: argparse.ArgumentParser) -> None:
     )
     grp.add_argument(
         "--tiling",
-        choices=["960p_2x2", "960p_3x2", "native_960", "sahi_960p_2x2"],
+        choices=[
+            "960p_2x2",
+            "960p_3x2",
+            "native_960",
+            "native_640",
+            "sahi_960p_2x2",
+        ],
         default="native_960",
         help="Inference tiling preset.",
     )
@@ -256,6 +267,53 @@ def add_detection_args(parser: argparse.ArgumentParser) -> None:
         default=0.40,
         help=_help(
             "Score ceiling defining the suspicious range for hard filtering.",
+            range_hint="0-1",
+        ),
+    )
+    grp.add_argument(
+        "--external-fp-filter-mode",
+        choices=["off", "rule", "rule_score", "logistic", "softmax3"],
+        default="rule",
+        help="Apply an external-only FP filter before tracking.",
+    )
+    grp.add_argument(
+        "--external-fp-logistic-model",
+        default="",
+        help="Path to a JSON external FP model from train_external_fp_classifier.py.",
+    )
+    grp.add_argument(
+        "--external-fp-logistic-threshold",
+        type=float,
+        default=0.5,
+        help=_help(
+            "Probability threshold for keeping detections in logistic FP mode.",
+            range_hint="0-1",
+        ),
+    )
+    grp.add_argument(
+        "--external-fp-max-score",
+        type=float,
+        default=0.18,
+        help=_help(
+            "Only apply external FP filtering to detections at or below this score.",
+            range_hint="0-1",
+        ),
+    )
+    grp.add_argument(
+        "--external-fp-penalty",
+        type=float,
+        default=1.0,
+        help=_help(
+            "When <1, rescore low-score detections that fail the external FP gate instead of always dropping them.",
+            range_hint="0-1",
+        ),
+    )
+    grp.add_argument(
+        "--external-fp-softmax-min-scale",
+        type=float,
+        default=0.7,
+        help=_help(
+            "Minimum score scale applied by external_fp_filter_mode=softmax3.",
             range_hint="0-1",
         ),
     )

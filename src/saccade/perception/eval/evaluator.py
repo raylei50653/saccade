@@ -38,6 +38,14 @@ from .post_merge import (
     filter_low_quality_tracklets,
     interpolate_tracklets,
 )
+from .external_fp_model import (
+    BandedLogisticModel,
+    LogisticModel,
+    RuleBaselineConfig,
+    SoftmaxLinearModel,
+    load_logistic_model,
+    predict_external_fp_matrix,
+)
 from .helpers import (
     materialize_gpu_track_results as _materialize_gpu_track_results,
     prepare_host_track_batch as _prepare_host_track_batch,
@@ -51,6 +59,12 @@ from .helpers import (
 # Perception/eval modules load local extensions before any torchvision fallback.
 from saccade.perception.cropper import ZeroCopyCropper
 from .scene_adapt import SceneAdaptivePolicy
+
+
+_SOFTMAX3_TORCH_CACHE: dict[
+    tuple[int, str],
+    tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
+] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -241,6 +255,78 @@ def _consecutive_birth_check(
 
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Duplicate detection suppression within the same frame.
+# When the detector produces multiple overlapping detections of the same
+# person at slightly different positions (detector artifact), suppress the
+# lower-score ones before they reach multi_birth / tracker.
+# ---------------------------------------------------------------------------
+def _suppress_duplicate_detections(
+    fused_boxes: torch.Tensor,
+    fused_scores: torch.Tensor,
+    *,
+    iou_threshold: float = 0.85,
+    min_score_ratio: float = 1.05,
+) -> torch.Tensor:
+    """Suppress near-duplicate detections within the same frame.
+
+    When two boxes have IoU > iou_threshold but different scores (ratio > min_score_ratio),
+    suppress the lower-score detection. This eliminates detector artifacts where the
+    detector produces multiple overlapping detections of the same person at slightly
+    different positions.
+
+    Returns a keep_mask of shape (N,).
+    """
+    n = fused_boxes.shape[0]
+    if n <= 1:
+        return torch.ones(n, dtype=torch.bool, device=fused_boxes.device)
+
+    keep = torch.ones(n, dtype=torch.bool, device=fused_boxes.device)
+    scores = fused_scores.clone()
+
+    # Compute IoU matrix
+    ax1, ay1, ax2, ay2 = (
+        fused_boxes[:, 0],
+        fused_boxes[:, 1],
+        fused_boxes[:, 2],
+        fused_boxes[:, 3],
+    )
+    areas = (ax2 - ax1) * (ay2 - ay1)
+
+    ix1 = torch.maximum(ax1.unsqueeze(1), ax1.unsqueeze(0))
+    iy1 = torch.maximum(ay1.unsqueeze(1), ay1.unsqueeze(0))
+    ix2 = torch.minimum(ax2.unsqueeze(1), ax2.unsqueeze(0))
+    iy2 = torch.minimum(ay2.unsqueeze(1), ay2.unsqueeze(0))
+    inter = (ix2 - ix1).clamp(min=0) * (iy2 - iy1).clamp(min=0)
+    iou_matrix = inter / (areas.unsqueeze(1) + areas.unsqueeze(0) - inter).clamp(
+        min=1e-6
+    )
+
+    # Sort by score descending, process highest-score first
+    sorted_idx = torch.argsort(scores, descending=True)
+    suppressed = torch.zeros(n, dtype=torch.bool, device=fused_boxes.device)
+
+    for i in range(n):
+        si = sorted_idx[i]
+        if suppressed[si]:
+            continue
+        # Check IoU against all higher-score detections
+        iou_with_higher = iou_matrix[si][sorted_idx[:i]]
+        # Find indices in sorted_idx that have high IoU with this box
+        high_iou_mask = iou_with_higher >= iou_threshold
+        if high_iou_mask.any():
+            # Check if score ratio is significant enough
+            higher_scores = scores[sorted_idx[:i]]
+            ratios = higher_scores / (scores[si] + 1e-6)
+            # Suppress if any higher-score detection has IoU >= threshold AND score ratio >= min_ratio
+            needs_suppress = high_iou_mask & (ratios >= min_score_ratio)
+            if needs_suppress.any():
+                keep[si] = False
+                suppressed[si] = True
+
+    return keep
+
+
 # Per-frame detection cap: keep top-K detections per frame by combined
 # score+quality metric.  This prevents excessive detections in crowded
 # scenes from overwhelming the association stage.
@@ -386,6 +472,207 @@ def _apply_fp_hard_filter(
     return boxes[keep], scores[keep], classes[keep]
 
 
+def _get_softmax3_torch_params(
+    model: SoftmaxLinearModel,
+    device: torch.device,
+    dtype: torch.dtype,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    cache_key = (id(model), f"{device.type}:{device.index}:{dtype}")
+    cached = _SOFTMAX3_TORCH_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+    params = (
+        torch.as_tensor(model.weights, device=device, dtype=dtype),
+        torch.as_tensor(model.bias, device=device, dtype=dtype),
+        torch.as_tensor(model.mean, device=device, dtype=dtype),
+        torch.as_tensor(model.std, device=device, dtype=dtype),
+    )
+    _SOFTMAX3_TORCH_CACHE[cache_key] = params
+    return params
+
+
+def _predict_softmax3_probs_torch(
+    model: SoftmaxLinearModel,
+    *,
+    subset_scores: torch.Tensor,
+    subset_widths: torch.Tensor,
+    subset_heights: torch.Tensor,
+    center_x: torch.Tensor,
+    center_y: torch.Tensor,
+    edge_margin: torch.Tensor,
+    touches_edge: torch.Tensor,
+    image_width: int,
+    image_height: int,
+) -> torch.Tensor:
+    feature_map = {
+        "score": subset_scores,
+        "width": subset_widths,
+        "height": subset_heights,
+        "area": subset_widths * subset_heights,
+        "aspect_ratio": subset_heights / subset_widths,
+        "center_x_norm": center_x / max(float(image_width), 1.0),
+        "center_y_norm": center_y / max(float(image_height), 1.0),
+        "edge_margin_norm": edge_margin
+        / max(min(float(image_width), float(image_height)), 1.0),
+        "touches_edge": touches_edge,
+    }
+    feature_matrix = torch.stack(
+        [feature_map[name] for name in model.feature_names],
+        dim=1,
+    )
+    weights, bias, mean, std = _get_softmax3_torch_params(
+        model,
+        device=feature_matrix.device,
+        dtype=feature_matrix.dtype,
+    )
+    standardized = (feature_matrix - mean) / std
+    logits = standardized @ weights + bias
+    return torch.softmax(logits, dim=1)
+
+
+def _apply_external_fp_filter(
+    boxes: torch.Tensor,
+    scores: torch.Tensor,
+    classes: torch.Tensor,
+    *,
+    image_width: int,
+    image_height: int,
+    mode: str,
+    rule_config: RuleBaselineConfig,
+    logistic_model: LogisticModel | BandedLogisticModel | SoftmaxLinearModel | None,
+    logistic_threshold: float,
+    max_score: float,
+    penalty: float,
+    min_score: float,
+    softmax_min_scale: float,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    if boxes.numel() == 0 or str(mode).lower() == "off":
+        return boxes, scores, classes
+
+    mode = str(mode).lower()
+    low_score_mask = scores <= max_score
+    if not low_score_mask.any():
+        return boxes, scores, classes
+
+    keep = torch.ones(scores.shape[0], dtype=torch.bool, device=boxes.device)
+    subset_boxes = boxes[low_score_mask]
+    subset_scores = scores[low_score_mask]
+    adjusted_scores = scores.clone()
+    if mode in {"rule", "rule_score"}:
+        subset_widths = (subset_boxes[:, 2] - subset_boxes[:, 0]).clamp(min=1e-6)
+        subset_heights = (subset_boxes[:, 3] - subset_boxes[:, 1]).clamp(min=1e-6)
+        subset_keep = subset_scores >= rule_config.min_score
+        subset_keep &= ~(
+            (subset_scores < rule_config.low_score)
+            & (subset_heights < rule_config.min_height)
+        )
+        subset_keep &= ~(
+            (subset_scores < rule_config.medium_score)
+            & (subset_heights < rule_config.medium_height)
+            & ((subset_heights / subset_widths) < rule_config.min_aspect)
+        )
+    elif mode in {"logistic", "softmax3"}:
+        if logistic_model is None:
+            raise ValueError(f"external_fp_filter_mode={mode} requires a loaded model")
+        subset_widths = (subset_boxes[:, 2] - subset_boxes[:, 0]).clamp(min=1e-6)
+        subset_heights = (subset_boxes[:, 3] - subset_boxes[:, 1]).clamp(min=1e-6)
+        center_x = (subset_boxes[:, 0] + subset_boxes[:, 2]) * 0.5
+        center_y = (subset_boxes[:, 1] + subset_boxes[:, 3]) * 0.5
+        left_margin = subset_boxes[:, 0]
+        top_margin = subset_boxes[:, 1]
+        right_margin = torch.clamp(float(image_width) - subset_boxes[:, 2], min=0.0)
+        bottom_margin = torch.clamp(float(image_height) - subset_boxes[:, 3], min=0.0)
+        edge_margin = torch.minimum(
+            torch.minimum(left_margin, right_margin),
+            torch.minimum(top_margin, bottom_margin),
+        )
+        touches_edge = (edge_margin <= 1.0).to(torch.float32)
+        if mode == "logistic":
+            features = np.stack(
+                [
+                    subset_scores.detach().cpu().numpy().astype(np.float64, copy=False),
+                    subset_widths.detach().cpu().numpy().astype(np.float64, copy=False),
+                    subset_heights.detach()
+                    .cpu()
+                    .numpy()
+                    .astype(np.float64, copy=False),
+                    (subset_widths * subset_heights)
+                    .detach()
+                    .cpu()
+                    .numpy()
+                    .astype(np.float64, copy=False),
+                    (subset_heights / subset_widths)
+                    .detach()
+                    .cpu()
+                    .numpy()
+                    .astype(np.float64, copy=False),
+                    (center_x / max(float(image_width), 1.0))
+                    .detach()
+                    .cpu()
+                    .numpy()
+                    .astype(np.float64, copy=False),
+                    (center_y / max(float(image_height), 1.0))
+                    .detach()
+                    .cpu()
+                    .numpy()
+                    .astype(np.float64, copy=False),
+                    (
+                        edge_margin
+                        / max(min(float(image_width), float(image_height)), 1.0)
+                    )
+                    .detach()
+                    .cpu()
+                    .numpy()
+                    .astype(np.float64, copy=False),
+                    touches_edge.detach().cpu().numpy().astype(np.float64, copy=False),
+                ],
+                axis=1,
+            )
+            probs = predict_external_fp_matrix(logistic_model, features)
+            subset_keep = torch.from_numpy(probs >= logistic_threshold).to(
+                device=boxes.device, dtype=torch.bool
+            )
+        else:
+            if not isinstance(logistic_model, SoftmaxLinearModel):
+                raise ValueError(
+                    "external_fp_filter_mode=softmax3 requires a softmax3 model JSON"
+                )
+            probs = _predict_softmax3_probs_torch(
+                logistic_model,
+                subset_scores=subset_scores,
+                subset_widths=subset_widths,
+                subset_heights=subset_heights,
+                center_x=center_x,
+                center_y=center_y,
+                edge_margin=edge_margin,
+                touches_edge=touches_edge.to(dtype=subset_scores.dtype),
+                image_width=image_width,
+                image_height=image_height,
+            )
+            tp_idx = logistic_model.class_names.index("tp")
+            fp_idx = logistic_model.class_names.index("fp")
+            tp_probs = probs[:, tp_idx]
+            fp_probs = probs[:, fp_idx]
+            tp_vs_fp = tp_probs / (tp_probs + fp_probs).clamp(min=1e-6)
+            score_scale = tp_vs_fp.clamp(min=softmax_min_scale, max=1.0)
+            adjusted_scores[low_score_mask] = subset_scores * score_scale.to(
+                dtype=subset_scores.dtype
+            )
+            subset_keep = adjusted_scores[low_score_mask] >= min_score
+    else:
+        raise ValueError(f"Unknown external FP filter mode: {mode}")
+
+    if penalty < 0.999 or mode == "rule_score":
+        penalized_scores = subset_scores.clone()
+        penalized_scores[~subset_keep] = penalized_scores[~subset_keep] * penalty
+        adjusted_scores[low_score_mask] = penalized_scores
+        subset_keep = penalized_scores >= min_score
+    keep[low_score_mask] = subset_keep
+    if not keep.any():
+        return boxes[:0], scores[:0], classes[:0]
+    return boxes[keep], adjusted_scores[keep], classes[keep]
+
+
 def _compute_adaptive_cap(
     boxes: torch.Tensor,
     scores: torch.Tensor,
@@ -434,6 +721,7 @@ from saccade.perception.feature_extractor import TRTFeatureExtractor  # noqa: E4
 from saccade.perception.eval.detection import (  # noqa: E402
     detect_adaptive_960_tiled,
     detect_960p_3x2_tiled,
+    detect_native_640,
     detect_native_960,
     detect_sahi_960p_2x2,
     expand_boxes_with_ankle_keypoints,
@@ -594,10 +882,21 @@ def run_eval(
     debug_dump_frames = _parse_debug_frame_ranges(cfg.debug_dump_frames)
     debug_dump_csv = cfg.debug_dump_csv
     debug_stage_dump_rows: list[dict[str, float | int | str]] = []
+    debug_birth_csv = cfg.debug_birth_csv
+    debug_birth_rows: list[dict[str, float | int | str | bool]] = []
     profile_stages = cfg.profile_stages
     detector_box_format = str(kwargs.get("detector_box_format", "xyxy"))
     stage_summary_lines = []
     global_id_mapper = GlobalTrackIdMapper()
+    external_fp_rule_config = RuleBaselineConfig()
+    external_fp_logistic_model = None
+    if cfg.external_fp_filter_mode in {"logistic", "softmax3"}:
+        model_path = Path(cfg.external_fp_logistic_model)
+        if not model_path.is_file():
+            raise FileNotFoundError(
+                f"external FP logistic model not found: {model_path}"
+            )
+        external_fp_logistic_model = load_logistic_model(model_path)
 
     if not isinstance(detector, (TRTYoloDetector, TwostageDetector)):
         import os as _os
@@ -609,6 +908,10 @@ def run_eval(
                 engine = candidate
         elif tiling == "960p_3x2" and "_960_batch1" in engine:
             candidate = engine.replace("_960_batch1", "_batch6")
+            if _os.path.exists(candidate):
+                engine = candidate
+        elif tiling == "native_640" and "_960_batch1" in engine:
+            candidate = engine.replace("_960_batch1", "_batch4")
             if _os.path.exists(candidate):
                 engine = candidate
         if pose_engine:
@@ -643,6 +946,8 @@ def run_eval(
         detect_fn = detect_960p_3x2_tiled
     elif cfg.tiling == "sahi_960p_2x2":
         detect_fn = detect_sahi_960p_2x2
+    elif cfg.tiling == "native_640":
+        detect_fn = detect_native_640
     elif cfg.tiling == "native_960":
         detect_fn = detect_native_960
     else:
@@ -1134,6 +1439,95 @@ def run_eval(
         # Inter-frame pipelining: relink_write for frame N runs in background while
         # frame N+1 runs detect+postprocess on the main thread. All GPU tensors are
         # pre-materialized to CPU before submit to avoid CUDA stream conflicts.
+        def _collect_output_metadata(
+            _resolved_tracks: list,
+        ) -> dict[int, dict[str, float | int]]:
+            output_by_local: dict[int, dict[str, float | int]] = {}
+            for _track in _resolved_tracks:
+                _global_tid = global_id_mapper.map(seq, _track.resolved_track_id)
+                output_by_local[int(_track.local_track_id)] = {
+                    "output_local_track_id": int(_track.local_track_id),
+                    "output_track_id": int(_global_tid),
+                    "output_score": float(_track.score),
+                    "output_x1": float(_track.box[0]),
+                    "output_y1": float(_track.box[1]),
+                    "output_x2": float(_track.box[2]),
+                    "output_y2": float(_track.box[3]),
+                }
+            return output_by_local
+
+        def _annotate_birth_events(
+            _frame_birth_events: list[dict[str, float | int | str | bool]],
+            *,
+            _det_idx_to_local_id: dict[int, int],
+            _output_by_local: dict[int, dict[str, float | int]],
+        ) -> None:
+            if not _frame_birth_events:
+                return
+            for _event in _frame_birth_events:
+                _det_idx = int(_event["det_idx"])
+                _local_id = _det_idx_to_local_id.get(_det_idx, -1)
+                _meta = _output_by_local.get(_local_id)
+                if _meta is None:
+                    _event.update(
+                        {
+                            "output_emitted": False,
+                            "output_local_track_id": _local_id,
+                            "output_track_id": -1,
+                            "output_score": float("nan"),
+                            "output_x1": float("nan"),
+                            "output_y1": float("nan"),
+                            "output_x2": float("nan"),
+                            "output_y2": float("nan"),
+                        }
+                    )
+                else:
+                    _event.update(
+                        {
+                            "output_emitted": True,
+                            **_meta,
+                        }
+                    )
+                debug_birth_rows.append(_event)
+
+        def _append_birth_event_rows(
+            _frame_birth_events: list[dict[str, float | int | str | bool]],
+            *,
+            _policy: str,
+            _det_indices: torch.Tensor,
+            _score_before: torch.Tensor,
+            _score_after: torch.Tensor,
+            _boxes: torch.Tensor,
+        ) -> None:
+            if _det_indices.numel() == 0:
+                return
+            _idx_cpu = _det_indices.detach().to(torch.int64).cpu().tolist()
+            _before_cpu = _score_before.detach().to(torch.float32).cpu().tolist()
+            _after_cpu = _score_after.detach().to(torch.float32).cpu().tolist()
+            _boxes_cpu = _boxes.detach().to(torch.float32).cpu().tolist()
+            for _det_idx, _before, _after, _box in zip(
+                _idx_cpu,
+                _before_cpu,
+                _after_cpu,
+                _boxes_cpu,
+            ):
+                _frame_birth_events.append(
+                    {
+                        "seq": seq,
+                        "frame": int(frame_id),
+                        "policy": _policy,
+                        "det_idx": int(_det_idx),
+                        "score_before": float(_before),
+                        "score_after": float(_after),
+                        "x1": float(_box[0]),
+                        "y1": float(_box[1]),
+                        "x2": float(_box[2]),
+                        "y2": float(_box[3]),
+                        "w": float(_box[2] - _box[0]),
+                        "h": float(_box[3] - _box[1]),
+                    }
+                )
+
         def _bg_relink_write(
             _frame_id: int,
             _track_results: "HostTrackResultView",
@@ -1147,7 +1541,7 @@ def run_eval(
             _motion_candidate_ids: "list[int]",
             _motion_snapshots: "list | None",
             _prev_track_ids: "set[int]",
-        ) -> "tuple[list[str], set[int]]":
+        ) -> "tuple[list[str], set[int], dict[int, int], dict[int, dict[str, float | int]]]":
             # motion snapshot update (pre-computed in main thread)
             if relinker and _motion_candidate_ids and _motion_snapshots is not None:
                 relinker.update_motion_snapshots(_motion_snapshots)
@@ -1193,6 +1587,15 @@ def run_eval(
                 global_id_mapper=global_id_mapper,
                 output_appearance_bank=output_appearance_bank,
             )
+            det_idx_to_local_id = {
+                int(_det_idx): int(_local_id)
+                for _local_id, _det_idx in zip(
+                    _host_batch.ids,
+                    _host_batch.det_idx or [],
+                )
+                if int(_det_idx) >= 0
+            }
+            output_by_local = _collect_output_metadata(resolved_tracks)
             curr_track_ids = set(_host_batch.ids)
             lifecycle_merger.prune(_frame_id)
             new_prev_track_ids = _finalize_frame_side_effects(
@@ -1206,9 +1609,15 @@ def run_eval(
                 gmc_warp=_gmc_warp,
                 gmc_enabled=cfg.gmc_enabled,
             )
-            return frame_result_lines, new_prev_track_ids
+            return (
+                frame_result_lines,
+                new_prev_track_ids,
+                det_idx_to_local_id,
+                output_by_local,
+            )
 
-        _bg_future: "Future[tuple[list[str], set[int]]] | None" = None
+        _bg_future: "Future[tuple[list[str], set[int], dict[int, int], dict[int, dict[str, float | int]]]] | None" = None
+        _bg_birth_events: list[dict[str, float | int | str | bool]] | None = None
 
         for frame_id in range(1, frame_end + 1):
             current_stage_sample_active = frame_id > warmup_frames
@@ -1698,6 +2107,34 @@ def run_eval(
                     classes=fused_classes,
                 )
 
+            if cfg.external_fp_filter_mode != "off" and fused_scores.numel() > 0:
+                fused_boxes, fused_scores, fused_classes = _apply_external_fp_filter(
+                    fused_boxes,
+                    fused_scores,
+                    fused_classes,
+                    image_width=w_orig,
+                    image_height=h_orig,
+                    mode=cfg.external_fp_filter_mode,
+                    rule_config=external_fp_rule_config,
+                    logistic_model=external_fp_logistic_model,
+                    logistic_threshold=cfg.external_fp_logistic_threshold,
+                    max_score=cfg.external_fp_max_score,
+                    penalty=cfg.external_fp_penalty,
+                    min_score=frame_score_floor,
+                    softmax_min_scale=cfg.external_fp_softmax_min_scale,
+                )
+                after_merge_count = int(fused_scores.numel())
+                if debug_dump_active:
+                    _append_stage_dump_rows(
+                        debug_stage_dump_rows,
+                        seq=seq,
+                        frame_id=frame_id,
+                        stage=f"external_fp_{cfg.external_fp_filter_mode}",
+                        boxes=fused_boxes,
+                        scores=fused_scores,
+                        classes=fused_classes,
+                    )
+
             # === FP hard filter ===
             # Removes extremely suspicious low-score large-area detections
             # that are likely false positives based on FP analysis.
@@ -1721,6 +2158,38 @@ def run_eval(
                         scores=fused_scores,
                         classes=fused_classes,
                     )
+
+            # === Duplicate suppression ===
+            # Remove near-duplicate detections within the same frame before
+            # birth gates / multi_birth / detection cap. This eliminates detector
+            # artifacts where the same person is detected at slightly different
+            # positions with different scores.
+            if cfg.duplicate_suppression and fused_scores.numel() > 0:
+                dup_keep = _suppress_duplicate_detections(
+                    fused_boxes,
+                    fused_scores,
+                    iou_threshold=cfg.duplicate_suppression_iou_threshold,
+                    min_score_ratio=cfg.duplicate_suppression_min_score_ratio,
+                )
+                if not dup_keep.all():
+                    fused_boxes = fused_boxes[dup_keep]
+                    fused_scores = fused_scores[dup_keep]
+                    fused_classes = fused_classes[dup_keep]
+                    geometry_suspect_mask = geometry_suspect_mask[dup_keep]
+                    suspect_boxes = fused_boxes[geometry_suspect_mask]
+                    if aligned_keypoints is not None:
+                        aligned_keypoints = aligned_keypoints[dup_keep]
+                    after_merge_count = int(fused_scores.numel())
+                    if debug_dump_active:
+                        _append_stage_dump_rows(
+                            debug_stage_dump_rows,
+                            seq=seq,
+                            frame_id=frame_id,
+                            stage="duplicate_suppression",
+                            boxes=fused_boxes,
+                            scores=fused_scores,
+                            classes=fused_classes,
+                        )
 
                     # === Per-frame detection cap ===
             # Cap detections per frame to prevent overwhelming association.
@@ -1794,6 +2263,8 @@ def run_eval(
                 suspect_boxes = fused_boxes[geometry_suspect_mask]
                 after_merge_count = int(fused_scores.numel())
 
+            frame_birth_events: list[dict[str, float | int | str | bool]] = []
+
             # === Consecutive-Frame Birth Gate ===
             # Boost sub-threshold detections that have appeared in the last N frames.
             # More selective than birth_quality_gate: requires temporal evidence, not
@@ -1819,11 +2290,20 @@ def run_eval(
                             )
                             boost_idx = boost_idx[eligible]
                             if boost_idx.numel() > 0:
+                                score_before = fused_scores[boost_idx].clone()
                                 fused_scores = fused_scores.clone()
                                 fused_scores[boost_idx] = torch.clamp(
                                     fused_scores[boost_idx]
                                     + cfg.birth_consecutive_boost,
                                     max=cfg.high_thresh,
+                                )
+                                _append_birth_event_rows(
+                                    frame_birth_events,
+                                    _policy="birth_consecutive_gate",
+                                    _det_indices=boost_idx,
+                                    _score_before=score_before,
+                                    _score_after=fused_scores[boost_idx],
+                                    _boxes=fused_boxes[boost_idx],
                                 )
             # Only keep sub-threshold boxes in window: prevents boosting detections
             # that match against already-tracked (high-score) detections from prior frames.
@@ -1852,6 +2332,8 @@ def run_eval(
                 high_quality = birth_quality > cfg.birth_min_quality
                 boost_mask = below_birth & high_quality
                 if boost_mask.any():
+                    boost_idx = boost_mask.nonzero(as_tuple=True)[0]
+                    score_before = fused_scores[boost_idx].clone()
                     boost = (
                         birth_quality[boost_mask] - cfg.birth_min_quality
                     ) * cfg.birth_quality_score_bias
@@ -1859,6 +2341,14 @@ def run_eval(
                     fused_scores[boost_mask] = torch.clamp(
                         fused_scores[boost_mask] + boost,
                         max=cfg.high_thresh,
+                    )
+                    _append_birth_event_rows(
+                        frame_birth_events,
+                        _policy="birth_quality_gate",
+                        _det_indices=boost_idx,
+                        _score_before=score_before,
+                        _score_after=fused_scores[boost_idx],
+                        _boxes=fused_boxes[boost_idx],
                     )
 
             # === Multi-signal birth policy (P5-1) ===
@@ -1869,15 +2359,24 @@ def run_eval(
                 above_min = fused_scores >= cfg.multi_birth_min_score
                 cand_mask = below_birth & above_min
                 if cand_mask.any():
-                    promote = _multi_birth_manager.update(
+                    promote_mask, replace_mask = _multi_birth_manager.update(
                         frame_id,
                         fused_boxes[cand_mask],
                         fused_scores[cand_mask],
                     )
-                    if promote.any():
-                        boost_idx = cand_mask.nonzero(as_tuple=True)[0][promote]
+                    if promote_mask.any():
+                        boost_idx = cand_mask.nonzero(as_tuple=True)[0][promote_mask]
+                        score_before = fused_scores[boost_idx].clone()
                         fused_scores = fused_scores.clone()
                         fused_scores[boost_idx] = frame_new_track_thresh + 0.01
+                        _append_birth_event_rows(
+                            frame_birth_events,
+                            _policy="multi_birth",
+                            _det_indices=boost_idx,
+                            _score_before=score_before,
+                            _score_after=fused_scores[boost_idx],
+                            _boxes=fused_boxes[boost_idx],
+                        )
                 else:
                     _multi_birth_manager.update(
                         frame_id, fused_boxes[:0], fused_scores[:0]
@@ -1946,19 +2445,30 @@ def run_eval(
                     seq_post_counts["after_filter"] += after_filter_count
                     seq_post_counts["after_nms"] += after_nms_count
                     seq_post_counts["after_merge"] += after_merge_count
-
             # Sync previous frame's background relink_write before accessing shared
             # mutable state (dynamic_reid, primary_appearance_bank, relinker).
             if _bg_future is not None:
                 if profile_stages:
                     t_bg_wait_start = time.perf_counter()
-                _bg_rw_lines, prev_track_ids = _bg_future.result()
+                (
+                    _bg_rw_lines,
+                    prev_track_ids,
+                    _bg_det_idx_to_local_id,
+                    _bg_output_by_local,
+                ) = _bg_future.result()
                 if profile_stages:
                     elapsed_ms = (time.perf_counter() - t_bg_wait_start) * 1000
                     seq_stage_totals["bg_relink_wait"] += elapsed_ms
                     record_stage_sample("bg_relink_wait", elapsed_ms)
                 results_lines.extend(_bg_rw_lines)
+                if _bg_birth_events is not None:
+                    _annotate_birth_events(
+                        _bg_birth_events,
+                        _det_idx_to_local_id=_bg_det_idx_to_local_id,
+                        _output_by_local=_bg_output_by_local,
+                    )
                 _bg_future = None
+                _bg_birth_events = None
 
             embeddings = None
             _do_reid = (
@@ -2536,6 +3046,7 @@ def run_eval(
                     _pm_motion_snaps,
                     prev_track_ids,
                 )
+                _bg_birth_events = frame_birth_events
             else:
                 if profile_stages:
                     torch.cuda.synchronize()
@@ -2597,6 +3108,20 @@ def run_eval(
                     global_id_mapper=global_id_mapper,
                     output_appearance_bank=output_appearance_bank,
                 )
+                det_idx_to_local_id = {
+                    int(det_idx): int(local_id)
+                    for local_id, det_idx in zip(
+                        host_track_batch.ids,
+                        host_track_batch.det_idx or [],
+                    )
+                    if int(det_idx) >= 0
+                }
+                output_by_local = _collect_output_metadata(resolved_tracks)
+                _annotate_birth_events(
+                    frame_birth_events,
+                    _det_idx_to_local_id=det_idx_to_local_id,
+                    _output_by_local=output_by_local,
+                )
                 results_lines.extend(frame_result_lines)
                 curr_track_ids = set(host_track_batch.ids)
                 lifecycle_merger.prune(frame_id)
@@ -2635,9 +3160,21 @@ def run_eval(
 
         # Flush any last background relink_write future before post-processing results.
         if _bg_future is not None:
-            _bg_rw_lines, prev_track_ids = _bg_future.result()
+            (
+                _bg_rw_lines,
+                prev_track_ids,
+                _bg_det_idx_to_local_id,
+                _bg_output_by_local,
+            ) = _bg_future.result()
             results_lines.extend(_bg_rw_lines)
+            if _bg_birth_events is not None:
+                _annotate_birth_events(
+                    _bg_birth_events,
+                    _det_idx_to_local_id=_bg_det_idx_to_local_id,
+                    _output_by_local=_bg_output_by_local,
+                )
             _bg_future = None
+            _bg_birth_events = None
 
         if frame_latencies:
             lats = np.array(frame_latencies)
@@ -2801,6 +3338,8 @@ def run_eval(
         overall_lazy_reid_arbiter_approve=overall_lazy_reid_arbiter_approve,
         debug_dump_csv=debug_dump_csv,
         debug_stage_dump_rows=debug_stage_dump_rows,
+        debug_birth_csv=debug_birth_csv,
+        debug_birth_rows=debug_birth_rows,
         all_seq_profile=all_seq_profile,
     )
 

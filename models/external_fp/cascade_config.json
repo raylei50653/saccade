@@ -1,0 +1,14 @@
+{
+  "rule": {
+    "min_score": 0.05,
+    "low_score": 0.1,
+    "medium_score": 0.18,
+    "min_height": 72.0,
+    "medium_height": 96.0,
+    "min_aspect": 1.6
+  },
+  "log_threshold": 0.5,
+  "log_max_score": 0.18,
+  "log_penalty": 0.4,
+  "model_path": "models/external_fp/cascade_stage2_logistic.json"
+}

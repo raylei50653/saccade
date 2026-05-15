@@ -13,6 +13,7 @@ class EvalConfig:
     debug_dump_seq: str
     debug_dump_frames: str
     debug_dump_csv: str
+    debug_birth_csv: str
     profile_stages: bool
     latency_only: bool
 
@@ -88,6 +89,11 @@ class EvalConfig:
     birth_consecutive_min_score: float
     birth_consecutive_min_motion: float
 
+    # Duplicate suppression: remove near-duplicate detections within the same frame
+    duplicate_suppression: bool
+    duplicate_suppression_iou_threshold: float
+    duplicate_suppression_min_score_ratio: float
+    # Multi-signal birth policy (P5-1): joint evidence over score × streak × motion × geometry
     multi_birth_enabled: bool
     multi_birth_min_score: float
     multi_birth_min_frames: int
@@ -101,6 +107,9 @@ class EvalConfig:
     multi_birth_w_streak: float
     multi_birth_min_aspect: float
     multi_birth_max_area_px: int
+    # Multi-birth replace mode: suppress competing detection when evidence is high
+    multi_birth_replace_mode: bool
+    multi_birth_replace_evidence_threshold: float
 
     crowd_low_score_mode: bool
     crowd_low_score_trigger: int
@@ -219,7 +228,12 @@ class EvalConfig:
     fp_hard_filter_min_score: float
     fp_hard_filter_max_suspicious_area: int
     fp_hard_filter_max_suspicious_score: float
-
+    external_fp_filter_mode: str
+    external_fp_logistic_model: str
+    external_fp_logistic_threshold: float
+    external_fp_max_score: float
+    external_fp_penalty: float
+    external_fp_softmax_min_scale: float
     appearance_bank_enabled: bool
     appearance_bank_size: int
     appearance_bank_min_score: float
@@ -328,6 +342,7 @@ def parse_eval_config(
         debug_dump_seq=str(kwargs.get("debug_dump_seq", "")).strip(),
         debug_dump_frames=str(kwargs.get("debug_dump_frames", "")).strip(),
         debug_dump_csv=str(kwargs.get("debug_dump_csv", "")).strip(),
+        debug_birth_csv=str(kwargs.get("debug_birth_csv", "")).strip(),
         profile_stages=profile_stages,
         latency_only=bool(kwargs.get("latency_only", False)),
         reid_mode=reid_mode,
@@ -424,6 +439,14 @@ def parse_eval_config(
         birth_consecutive_min_motion=float(
             kwargs.get("birth_consecutive_min_motion", 0.0)
         ),
+        # Duplicate suppression
+        duplicate_suppression=bool(kwargs.get("duplicate_suppression", False)),
+        duplicate_suppression_iou_threshold=float(
+            kwargs.get("duplicate_suppression_iou_threshold", 0.85)
+        ),
+        duplicate_suppression_min_score_ratio=float(
+            kwargs.get("duplicate_suppression_min_score_ratio", 1.05)
+        ),
         multi_birth_enabled=bool(kwargs.get("multi_birth_enabled", False)),
         multi_birth_min_score=float(kwargs.get("multi_birth_min_score", 0.12)),
         multi_birth_min_frames=max(2, int(kwargs.get("multi_birth_min_frames", 3))),
@@ -439,6 +462,10 @@ def parse_eval_config(
         multi_birth_w_streak=float(kwargs.get("multi_birth_w_streak", 0.15)),
         multi_birth_min_aspect=float(kwargs.get("multi_birth_min_aspect", 0.0)),
         multi_birth_max_area_px=int(kwargs.get("multi_birth_max_area_px", 0)),
+        multi_birth_replace_mode=bool(kwargs.get("multi_birth_replace_mode", False)),
+        multi_birth_replace_evidence_threshold=float(
+            kwargs.get("multi_birth_replace_evidence_threshold", 0.85)
+        ),
         crowd_low_score_mode=bool(kwargs.get("crowd_low_score_mode", False)),
         crowd_low_score_trigger=int(kwargs.get("crowd_low_score_trigger", 25)),
         crowd_conf_threshold=float(kwargs.get("crowd_conf_threshold", 0.02)),
@@ -589,6 +616,16 @@ def parse_eval_config(
         ),
         fp_hard_filter_max_suspicious_score=float(
             kwargs.get("fp_hard_filter_max_suspicious_score", 0.40)
+        ),
+        external_fp_filter_mode=str(kwargs.get("external_fp_filter_mode", "off")),
+        external_fp_logistic_model=str(kwargs.get("external_fp_logistic_model", "")),
+        external_fp_logistic_threshold=float(
+            kwargs.get("external_fp_logistic_threshold", 0.5)
+        ),
+        external_fp_max_score=float(kwargs.get("external_fp_max_score", 0.18)),
+        external_fp_penalty=float(kwargs.get("external_fp_penalty", 1.0)),
+        external_fp_softmax_min_scale=float(
+            kwargs.get("external_fp_softmax_min_scale", 0.7)
         ),
         appearance_bank_enabled=bool(kwargs.get("appearance_bank", False)),
         appearance_bank_size=max(1, int(kwargs.get("appearance_bank_size", 5))),
