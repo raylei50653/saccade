@@ -40,6 +40,7 @@ public:
         float nms_threshold         = 0.50f;
         bool  person_geometry_prior = true;
         bool  geometry_suspect_support = true;
+        float geometry_suspect_support_score = 0.25f;
         float person_min_height_ratio = 0.018f;
         float person_min_aspect       = 1.0f;
         float person_max_aspect       = 5.5f;
@@ -99,6 +100,32 @@ public:
         int num_priors,
         float prior_iou_threshold,
         cudaStream_t stream);
+
+    /**
+     * @brief Like process_detections_into() but fully synchronous and returns
+     *        the post-NMS count directly.  Python binding uses
+     *        py::gil_scoped_release so GIL is released for the entire call
+     *        (including the internal stream syncs), allowing other Python
+     *        threads to make progress during GPU execution.
+     */
+    int process_detections_n(
+        const float* boxes_ptr,
+        const float* scores_ptr,
+        const int*   classes_ptr,
+        int n_in,
+        int frame_w, int frame_h,
+        bool is_tiled,
+        float* out_boxes,
+        float* out_scores,
+        int*   out_classes,
+        bool*  out_suspect,
+        const float* priors_ptr,
+        const int* prior_classes_ptr,
+        int num_priors,
+        float prior_iou_threshold,
+        cudaStream_t stream);
+
+    const Config& get_config() const { return cfg_; }
 
     /**
      * @brief Crop boxes from frame_ptr and extract ReID embeddings.

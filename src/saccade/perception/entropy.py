@@ -7,6 +7,7 @@ import os
 import redis.asyncio as redis
 from typing import List, Optional, Any, cast, Awaitable
 from dotenv import load_dotenv
+from saccade.media.rtsp import build_rtsp_url, DEFAULT_RTSP_SINGLE_STREAM_PATH
 
 load_dotenv()
 
@@ -149,7 +150,7 @@ async def main() -> None:
     await trigger.process_frame(
         frame_id=1001,
         detections=["person", "car", "dog"],
-        source_path="rtsp://localhost:8554/live",
+        source_path=build_rtsp_url(DEFAULT_RTSP_SINGLE_STREAM_PATH),
     )
     await trigger.close()
 

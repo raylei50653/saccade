@@ -16,6 +16,8 @@ class EvalConfig:
     debug_birth_csv: str
     profile_stages: bool
     latency_only: bool
+    workbench: bool
+    threads: int
 
     reid_mode: str
     reid_enabled: bool
@@ -314,11 +316,18 @@ def parse_eval_config(
         max(mid_thresh - 1e-4, track_thresh + 1e-4),
     )
 
-    seqs = (
-        sequences.split(",")
-        if sequences
-        else [d.name for d in (Path(data_root) / split).iterdir() if d.is_dir()]
-    )
+    _detector_suffixes = {"SDP", "DPM", "FRCNN"}
+    if sequences:
+        filters = [s.strip() for s in sequences.split(",")]
+        if all(f in _detector_suffixes for f in filters):
+            _all = sorted(
+                d.name for d in (Path(data_root) / split).iterdir() if d.is_dir()
+            )
+            seqs = [d for d in _all if any(d.endswith(f"-{f}") for f in filters)]
+        else:
+            seqs = filters
+    else:
+        seqs = sorted(d.name for d in (Path(data_root) / split).iterdir() if d.is_dir())
 
     tiling = kwargs.get("tiling", "960p_2x2")
     _nms_default = 0.35 if tiling == "960p_3x2" else 0.5
@@ -345,6 +354,8 @@ def parse_eval_config(
         debug_birth_csv=str(kwargs.get("debug_birth_csv", "")).strip(),
         profile_stages=profile_stages,
         latency_only=bool(kwargs.get("latency_only", False)),
+        workbench=bool(kwargs.get("workbench", False)),
+        threads=int(kwargs.get("threads", 1)),
         reid_mode=reid_mode,
         reid_enabled=reid_enabled,
         reid_model=reid_model,

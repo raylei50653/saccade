@@ -197,3 +197,6 @@ class AsyncEmbeddingDispatcher:
         self._running = False
         if self._worker_task:
             self._worker_task.cancel()
+
+
+EmbeddingDispatcher = AsyncEmbeddingDispatcher

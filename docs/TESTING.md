@@ -90,7 +90,36 @@
 
 ---
 
-## 3. 現行工具設定
+## 3. 測試覆蓋率
+
+詳細覆蓋率報告請見 **[docs/TEST_COVERAGE.md](docs/TEST_COVERAGE.md)**。
+
+### 覆蓋率目標
+
+- **核心評估模組**（`perception/eval/`）：目標 ≥ 80%
+- **追蹤模組**（`perception/tracking/`）：目標 ≥ 70%
+- **感知模組**（`perception/` 不含 eval）：目標 ≥ 50%
+- **儲存模組**（`storage/`）：目標 ≥ 50%
+- **總體覆蓋率**：目標 ≥ 60%
+
+### 查看覆蓋率
+
+```bash
+# 執行測試並顯示覆蓋率
+uv run pytest --cov=saccade --cov-report=term-missing
+
+# 產生 HTML 報告
+uv run coverage html
+# 開啟：htmlcov/index.html
+```
+
+### 覆蓋率成長
+
+| 日期 | 覆蓋率 |
+|------|--------|
+| 2026-05-15 | 56% |
+
+## 4. 現行工具設定
 
 目前工具設定以 `/pyproject.toml` 為準。
 

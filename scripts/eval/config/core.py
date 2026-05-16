@@ -11,10 +11,12 @@ from ._helpers import _help, _tier
 
 @dataclasses.dataclass
 class CoreConfig:
-    # I/O
+    # I/O and dataset scope
     engine: str = "models/yolo/yolo26m_960_batch1.engine"
     pose_engine: str | None = None
     output: str = "results/MOT17_eval"
+    workbench: bool = False
+    threads: int = 1
     data_root: str = "datasets/MOT17"
     split: str = "train"
     sequences: str = ""
@@ -78,6 +80,17 @@ def add_core_args(parser: argparse.ArgumentParser) -> None:
         "--output",
         default="results/MOT17_eval",
         help="Directory for outputs, metrics, and dumps.",
+    )
+    io.add_argument(
+        "--workbench",
+        action="store_true",
+        help="Use the C++ Workbench hot-path (avoids GIL contention for scaling)",
+    )
+    io.add_argument(
+        "--threads",
+        type=int,
+        default=1,
+        help="Number of concurrent Workbench instances to run (only applies if --workbench is set)",
     )
     io.add_argument("--data-root", default="datasets/MOT17", help="MOT17 dataset root.")
     io.add_argument(

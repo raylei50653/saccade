@@ -7,6 +7,17 @@ import time
 from unittest.mock import patch, AsyncMock
 from gi.repository import GLib
 from saccade.media.mediamtx_client import MediaMTXClient  # noqa: E402
+from saccade.media.rtsp import (  # noqa: E402
+    DEFAULT_RTSP_HOST,
+    DEFAULT_RTSP_PORT,
+    DEFAULT_RTSP_READ_PASSWORD,
+    DEFAULT_RTSP_READ_USER,
+    DEFAULT_RTSP_STREAM_PREFIX,
+    RTSPEndpoint,
+    build_reader_url,
+    build_rtsp_url,
+    build_stream_path,
+)
 from saccade.storage.redis_cache import RedisCache  # noqa: E402
 from saccade.storage.chroma_store import ChromaStore  # noqa: E402
 from saccade.perception.tracking import GPUByteTracker  # noqa: E402
@@ -21,10 +32,73 @@ from saccade.perception.zero_copy import GstZeroCopyDecoder  # noqa: E402
 # --- Media Tests ---
 
 
+def test_rtsp_helper_builds_reader_url_with_defaults():
+    assert build_reader_url("live") == (
+        f"rtsp://{DEFAULT_RTSP_READ_USER}:{DEFAULT_RTSP_READ_PASSWORD}"
+        f"@{DEFAULT_RTSP_HOST}:{DEFAULT_RTSP_PORT}/live"
+    )
+
+
+def test_rtsp_helper_builds_stream_path():
+    assert build_stream_path(7) == f"{DEFAULT_RTSP_STREAM_PREFIX}7"
+
+
+def test_rtsp_endpoint_round_trips():
+    url = build_rtsp_url(
+        "stream_3",
+        host="10.0.0.8",
+        port=9554,
+        username="reader",
+        password="secret",
+    )
+    endpoint = RTSPEndpoint.from_url(url)
+
+    assert endpoint.host == "10.0.0.8"
+    assert endpoint.port == 9554
+    assert endpoint.path == "stream_3"
+    assert endpoint.username == "reader"
+    assert endpoint.password == "secret"
+    assert endpoint.url() == url
+
+
+def test_media_client_default_rtsp_url_is_canonical():
+    client = MediaMTXClient()
+    assert client.rtsp_url == build_rtsp_url("live")
+
+
 def test_media_client_init():
     client = MediaMTXClient(rtsp_url="rtsp://test:8554/live", use_local=False)
     assert "test" in client.rtsp_url
     assert client.pipeline is None
+
+
+def test_media_client_rtsp_pipeline_prefers_tcp_and_cpu_decode():
+    client = MediaMTXClient(rtsp_url="rtsp://reader:pass@test:8554/live")
+    pipeline = client._get_pipeline_str()
+
+    assert "protocols=tcp" in pipeline
+    assert "avdec_h264" in pipeline
+    assert "video/x-raw,format=RGB" in pipeline
+    assert "sync=false" in pipeline
+    assert "nvh264dec" not in pipeline
+
+
+def test_media_client_cpp_path_is_opt_in_for_rtsp():
+    client = MediaMTXClient(rtsp_url="rtsp://test:8554/live", use_local=False)
+    assert client.use_cpp is False
+
+
+def test_media_client_waits_for_first_frame_success():
+    client = MediaMTXClient(rtsp_url="rtsp://test:8554/live")
+    client._ret = True
+    client._last_tensor = torch.zeros((1, 1, 3), dtype=torch.uint8)
+    assert client._await_first_frame(timeout_sec=0.01) is True
+
+
+def test_media_client_waits_for_first_frame_fails_on_bus_error():
+    client = MediaMTXClient(rtsp_url="rtsp://test:8554/live")
+    client._bus_error = "Not found"
+    assert client._await_first_frame(timeout_sec=0.01) is False
 
 
 def test_media_client_grab_frame():
@@ -34,10 +108,27 @@ def test_media_client_grab_frame():
     client._ret = True
     client._last_frame = fake_frame
     client._last_tensor = fake_tensor
+    client._frame_generation = 1
 
     ret_frame, frame = client.grab_frame()
     assert ret_frame is True
     assert np.array_equal(frame, fake_frame)
+
+
+def test_media_client_grab_tensor_only_returns_new_frame_once():
+    client = MediaMTXClient(dummy_video="non_existent.mp4")
+    fake_tensor = torch.zeros((100, 100, 3), dtype=torch.float32)
+    client._ret = True
+    client._last_tensor = fake_tensor
+    client._frame_generation = 1
+
+    first_ret, first_tensor = client.grab_tensor()
+    second_ret, second_tensor = client.grab_tensor()
+
+    assert first_ret is True
+    assert first_tensor is fake_tensor
+    assert second_ret is False
+    assert second_tensor is None
 
 
 # --- Storage Tests ---
@@ -307,12 +398,27 @@ async def test_redis_cache_operations():
 
 
 def test_gst_decoder_initialization():
+    source_url = build_rtsp_url("test")
     try:
-        decoder = GstZeroCopyDecoder("rtsp://localhost:8554/test")
+        decoder = GstZeroCopyDecoder(source_url)
     except GLib.GError as exc:
         pytest.skip(
             f"GStreamer decoder pipeline unavailable in test environment: {exc}"
         )
 
-    assert decoder.source_url == "rtsp://localhost:8554/test"
+    assert decoder.source_url == source_url
     assert decoder.decoder_name in ["nvh264dec", "avdec_h264"]
+
+
+def test_gst_decoder_rtsp_pipeline_prefers_tcp_and_cpu_decode():
+    decoder = GstZeroCopyDecoder.__new__(GstZeroCopyDecoder)
+    decoder.source_url = build_rtsp_url("test")
+    decoder.decoder_name = "nvh264dec"
+
+    pipeline = decoder._build_pipeline_str()
+
+    assert "protocols=tcp" in pipeline
+    assert "avdec_h264" in pipeline
+    assert "video/x-raw,format=RGB" in pipeline
+    assert "sync=false" in pipeline
+    assert "nvh264dec" not in pipeline

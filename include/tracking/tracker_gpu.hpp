@@ -1,3 +1,5 @@
+#pragma once
+
 #include "saccade/common.hpp"
 #include <cstdint>
 #include <utility>
@@ -269,6 +271,9 @@ void SACCADE_TRACKING_API gather_compact4_counted_cuda(
 
 void SACCADE_TRACKING_API copy_bool_counted_cuda(
     const bool* src, bool* dst, const int* count_ptr, int max_n, cudaStream_t stream);
+
+void SACCADE_TRACKING_API penalize_suspect_scores_cuda(
+    float* scores, const bool* suspect, const int* count_ptr, float penalty_score, int max_n, cudaStream_t stream);
 
 // Merged compact+sort+NMS with grid spatial indexing (#1,#2,#3,#5 optimizations)
 void SACCADE_TRACKING_API compact_grid_nms_cuda(

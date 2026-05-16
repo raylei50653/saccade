@@ -2,6 +2,7 @@
 
 本文件描述目前程式碼中實際存在的介面與資料合約。重點分成三類：
 
+- RTSP / MediaMTX stream contract
 - L1/L3：Perception 發出的 Redis event queue
 - L3/L5：Orchestrator 使用的 Redis stream
 - 外部查詢：FastAPI retrieval API
@@ -14,6 +15,9 @@
 
 此規範主要對應下列檔案：
 
+- [src/saccade/media/rtsp.py](/src/saccade/media/rtsp.py)
+- [src/saccade/media/mediamtx_client.py](/src/saccade/media/mediamtx_client.py)
+- [src/saccade/media/ffmpeg_utils.py](/src/saccade/media/ffmpeg_utils.py)
 - [src/saccade/perception/entropy.py](/src/saccade/perception/entropy.py)
 - [src/saccade/storage/redis_cache.py](/src/saccade/storage/redis_cache.py)
 - [src/saccade/storage/chroma_store.py](/src/saccade/storage/chroma_store.py)
@@ -23,7 +27,75 @@
 
 ---
 
-## 2. Redis Event Queue
+## 2. RTSP / MediaMTX Contract
+
+### 2.1 Source of Truth
+
+- Module: `src/saccade/media/rtsp.py`
+- Purpose:
+  - build canonical RTSP URLs
+  - define default MediaMTX host / port / credentials
+  - standardize per-stream path naming
+
+### 2.2 Canonical Defaults
+
+- host: `127.0.0.1`
+- port: `8554`
+- read credentials:
+  - user: `reader`
+  - password: `readpass123`
+- publish credentials:
+  - user: `publisher`
+  - password: `pubpass123`
+
+### 2.3 Path Naming
+
+- single-camera path: `live`
+- multi-stream path pattern: `stream_<id>`
+- processed output path: `detected`
+
+Examples:
+
+```text
+rtsp://reader:readpass123@127.0.0.1:8554/live
+rtsp://reader:readpass123@127.0.0.1:8554/stream_0
+rtsp://publisher:pubpass123@127.0.0.1:8554/stream_7
+rtsp://127.0.0.1:8554/detected
+```
+
+### 2.4 Programmatic API
+
+- `build_rtsp_url(path, host=..., port=..., username=..., password=...)`
+- `build_reader_url(path, host=..., port=..., username=..., password=...)`
+- `build_publisher_url(path, host=..., port=..., username=..., password=...)`
+- `build_stream_path(stream_id, prefix="stream_")`
+- `RTSPEndpoint.from_url(url)`
+
+### 2.5 Runtime Contract
+
+- Reader side:
+  - `MediaMTXClient` expects a full RTSP URL.
+  - For RTSP, the stable default pipeline is TCP transport plus CPU decode to RGB appsink.
+- Publisher side:
+  - `RTSPStreamer` accepts a full RTSP URL.
+  - FFmpeg push scripts must use `-rtsp_transport tcp`.
+- Multi-stream demo:
+  - preferred flags:
+    - `--rtsp-host`
+    - `--rtsp-port`
+    - `--rtsp-user`
+    - `--rtsp-password`
+    - `--rtsp-path-prefix`
+  - `--rtsp-prefix` is legacy / deprecated.
+
+### 2.6 Compatibility Notes
+
+- Passing a fully formed RTSP URL remains supported.
+- New code should not hardcode `rtsp://...` strings inline when the helper API can express the same endpoint.
+
+---
+
+## 3. Redis Event Queue
 
 ### 2.1 Queue Key
 
@@ -46,7 +118,7 @@
   "type": "entropy_trigger",
   "metadata": {
     "entropy_value": 0.85,
-    "source_path": "rtsp://localhost:8554/live",
+    "source_path": "rtsp://127.0.0.1:8554/live",
     "frame_id": 4502,
     "objects": ["person", "backpack"]
   }
@@ -85,7 +157,7 @@
 
 ---
 
-## 3. Redis Stream Contract
+## 4. Redis Stream Contract
 
 ### 3.1 Stream Key
 
@@ -130,7 +202,7 @@
 
 ---
 
-## 4. Chroma Memory Contract
+## 5. Chroma Memory Contract
 
 ### 4.1 Collection
 
@@ -198,7 +270,7 @@ add_memory(
 
 ---
 
-## 5. FastAPI Retrieval API
+## 6. FastAPI Retrieval API
 
 對應檔案：[src/saccade/api/server.py](/src/saccade/api/server.py)
 

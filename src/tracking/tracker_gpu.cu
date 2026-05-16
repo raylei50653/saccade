@@ -912,6 +912,27 @@ void gather_compact4_counted_cuda(
         indices, count_ptr, max_n);
 }
 
+
+__global__ void penalize_suspect_scores_kernel(
+    float* scores, const bool* suspect, const int* count_ptr, float penalty_score, int max_n)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int count = *count_ptr;
+    if (i < count && i < max_n) {
+        if (suspect[i] && scores[i] > penalty_score) {
+            scores[i] = penalty_score;
+        }
+    }
+}
+
+void penalize_suspect_scores_cuda(
+    float* scores, const bool* suspect, const int* count_ptr, float penalty_score, int max_n, cudaStream_t stream)
+{
+    if (max_n <= 0) return;
+    const int thr = 256, blk = (max_n + thr - 1) / thr;
+    penalize_suspect_scores_kernel<<<blk, thr, 0, stream>>>(scores, suspect, count_ptr, penalty_score, max_n);
+}
+
 void copy_bool_counted_cuda(
     const bool* src, bool* dst, const int* count_ptr, int max_n, cudaStream_t stream)
 {

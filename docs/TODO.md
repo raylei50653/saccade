@@ -37,6 +37,115 @@
 
 | 優先 | 項目 | 行動 | 預期收益 |
 |------|------|------|---------|
+| P2 | **測試覆蓋率提升（56% → 70%+）** | 見下方覆蓋率任務清單 | 穩定性、CI 保護、開發信心 |
+
+### 測試覆蓋率任務清單（P2）
+
+> 詳細報告：[docs/TEST_COVERAGE.md](/docs/TEST_COVERAGE.md)
+
+| 優先 | 模組 | 覆蓋率 | 未覆蓋行 | 狀態 |
+|------|------|--------|----------|------|
+| ~~P2-1~~ | ~~`perception/eval/evaluator.py`~~ | ~~40%~~ | ~~734~~ | **待實作** |
+| ~~P2-2~~ | ~~`perception/dispatcher.py`~~ | ~~0%~~ | ~~116~~ | **✅ 已完成（22 tests, 94% coverage）** |
+| ~~P2-3~~ | ~~`perception/eval/detection.py`~~ | ~~40%~~ | ~~336~~ | **✅ 已完成（39 tests, 49% coverage）** |
+| ~~P2-4~~ | ~~`perception/eval/relink.py`~~ | ~~51%~~ | ~~228~~ | **✅ 已完成（73 tests, 88% coverage）** |
+| ~~P2-5~~ | ~~`perception/drift_handler.py`~~ | ~~0%~~ | ~~71~~ | **✅ 已完成（43 tests, 100% coverage）** |
+| ~~P2-6~~ | ~~`storage/redis_cache.py`~~ | ~~27%~~ | ~~106~~ | **✅ 已完成（53 tests, 99% coverage）** |
+| ~~P2-7~~ | ~~`perception/calibrator.py`~~ | ~~0%~~ | ~~45~~ | **✅ 已完成（17 tests, 96% coverage）** |
+| ~~P2-8~~ | ~~`perception/cropper.py`~~ | ~~23%~~ | ~~81~~ | **✅ 已完成（32 tests, 77% coverage）** |
+
+**目標**：
+- ✅ 短期 v1：`dispatcher.py` (94%)、`helpers.py` (91%) — **已完成**
+- ✅ 短期 v2：`perception/eval/detection.py` (49%) — **已完成**
+- ✅ 短期 v3：`perception/eval/relink.py` (88%) — **已完成**
+- 🔄 短期 v4：`perception/eval/evaluator.py` (40%)
+- ✅ 短期 v5：`storage/redis_cache.py` (99%) — **已完成**
+- ✅ 短期 v6：`perception/calibrator.py` (96%) — **已完成**
+- ✅ 短期 v7：`perception/cropper.py` (77%) — **已完成**
+- ✅ 短期 v8：`perception/eval/quality.py` (100%) — **已完成**
+- ✅ 短期 v9：`perception/eval/reporting.py` (93%) — **已完成**
+- 📋 中期：`perception/eval/evaluator.py` (40%), `perception/eval/detection.py` (49%)
+- 📋 長期：API 模組、media 模組、native 測試
+
+**覆蓋率成長**：
+- ✅ P2-1 + P2-2：新增 33 tests（dispatcher 22 + helpers 11）
+  - `dispatcher.py` 從 0% → **94%**
+  - `helpers.py` 從 18% → **91%**
+  - 總覆蓋率 56% → **58%**
+- ✅ P2-3：新增 39 tests
+  - 涵蓋：`_decode_detector_boxes`, `expand_boxes_with_ankle_keypoints`, `match_keypoints_to_boxes`, `_tile_seam_mask_for_boxes`, `_get_detector_static_batch_size`
+  - `detection.py` 從 40% → **49%**
+- ✅ P2-4：新增 73 tests
+  - 涵蓋：`__init__` 參數驗證、`_spatial_metrics`、`_measurement`、`_mahalanobis`、`_motion_box`、`_buffer_mean/consistency/sim`
+  - `resolve()` 涵蓋：相似性匹配、年齡閾值拒絕、空間閾值拒絕、Mahalanobis 拒絕、margin 拒絕、生物特徵拒絕
+  - 涵蓋：unified score mode、legacy joint score mode、appearance-first mode、quality filtering
+  - `IdentityResolver.resolve_pass()` 涵蓋三種 API 路徑
+  - `relink.py` 從 51% → **88%**
+- ✅ P2-5：新增 43 tests
+  - 涵蓋：`__init__`、`_get_dynamic_alpha`（所有 count 範圍 × 所有 DegradationLevel）、`calculate_drift`（新 track、相似/不同、所有降級級別）
+  - 涵蓋：`filter_for_batch`（NORMAL/REDUCED/FAST_PATH/EMERGENCY 批次限制、優先級排序、面積 tiebreak）
+  - 涵蓋：`update_history`（新 track 播種、EMA 更新、batch 多軌道、time.time 戳記、detach/clone、L2 normalization）
+  - 涵蓋：`prune_expired_centroids`（過期/未過期、自訂 timeout、全部過期）
+  - 涵蓋：`clear_history`（單軌道清除、不存在的 ID 安全處理、部分清除）
+  - 涵蓋：完整生命週期整合測試（播種→更新→漂移檢查→清理）
+  - `drift_handler.py` 從 0% → **100%**
+  - 總覆蓋率 59% → **60%**
+- ✅ P2-5：新增 43 tests
+  - 涵蓋：`__init__`、`_get_dynamic_alpha`（所有 count 範圍 × 所有 DegradationLevel）、`calculate_drift`（新 track、相似/不同、所有降級級別）
+  - 涵蓋：`filter_for_batch`（NORMAL/REDUCED/FAST_PATH/EMERGENCY 批次限制、優先級排序、面積 tiebreak）
+  - 涵蓋：`update_history`（新 track 播種、EMA 更新、batch 多軌道、time.time 戳記、detach/clone、L2 normalization）
+  - 涵蓋：`prune_expired_centroids`（過期/未過期、自訂 timeout、全部過期）
+  - 涵蓋：`clear_history`（單軌道清除、不存在的 ID 安全處理、部分清除）
+  - 涵蓋：完整生命週期整合測試（播種→更新→漂移檢查→清理）
+  - `drift_handler.py` 從 0% → **100%**
+  - `relink.py` 從 51% → **88%**
+- ✅ P2-6：新增 53 tests（修復 10+ NameError + 重複 decorator bug）
+  - 涵蓋：`MicroBatcher.__init__`、`add`（buffer 不足/max_size 觸發/超過）、`flush`（正常/含 timer/空 buffer）、timer 排程與取消、JSON 序列化
+  - 涵蓋：`RedisCache.__init__`（default/url/env）、`connect`（建立 client/跳過已有/建立 stream group/BUSYGROUP 處理/其他錯誤）
+  - 涵蓋：`add_to_stream`（xadd 呼叫/auto-connect）、`add_to_stream_batch`（pipeline/空 list/auto-connect）
+  - 涵蓋：`read_stream_batch`（空 streams/解析事件/參數傳遞/auto-connect）
+  - 涵蓋：`acknowledge`（xack 呼叫/空 list/auto-connect）
+  - 涵蓋：`disconnect`（flush batchers/關閉 client/無 client/無 batchers）
+  - 涵蓋：`cleanup_expired_objects`（低於閾值/超過閾值/無 keys/error handling/auto-connect）
+  - 涵蓋：`update_object_track`（set key with TTL/auto-connect）、`get_active_objects`（返回 ID/跳過無效/空/auto-connect）
+  - 涵蓋：`get_object_history`（返回資料/缺失/返回 None/auto-connect）
+  - 涵蓋：`publish_event`（建立新 batcher/重用舊 batcher）
+  - 涵蓋：attribute tests（queue/max_size/window_ms/stream_name/max_len）
+  - `redis_cache.py` 從 27% → **99%**
+  - 總覆蓋率 60% → **63%**
+- ✅ P2-7：新增 17 tests
+  - 涵蓋：`__init__`（cache_file/batch_size/input_shape/default 值/200 圖片上限/非 jpg 過濾）
+  - 涵蓋：`get_batch_size`
+  - 涵蓋：`read_calibration_cache` / `write_calibration_cache`（寫入+讀取/不存在的檔案/覆蓋寫入/建立檔案）
+  - 涵蓋：`get_batch`（耗盡時返回 None/無有效圖片時返回 None/index 遞增）
+  - 涵蓋：CUDA 記憶體分配、`current_batch` 初始值
+  - `calibrator.py` 從 0% → **96%**
+  - 總覆蓋率 63% → **64%**
+- ✅ P2-9：新增 22 tests（`test_quality.py`）
+  - 涵蓋：`compute_detection_quality_batch`（空 box/中心框/aspect 質量/center 質量/area 質量/多框/邊界檢查/自訂權重/CUDA/零面積/大幀）
+  - 涵蓋：`compute_bank_quality_score`（基本計算/det 分數影響/IoU 影響/ideal aspect/unknown aspect/center bias/area ratio/自訂權重/邊界/負座標/大幀）
+  - `quality.py` 從 11% → **100%**
+  - 總覆蓋率 64% → **64%**
+- ✅ P2-10：新增 30 tests（`test_reporting_extended.py`）
+  - 涵蓋：`_print_stage_waterfall`（空 stages/零幀總時間/有 stages/排序/過濾零值/unaccounted 顯示與否/閾值行為）
+  - 涵蓋：`print_overall_summary`（JSON profile 輸出/JSON 包含 stats/lazy reid candidates/lazy reid embeddings/lazy reid lines/birth CSV/GMC breakdown/post counts/breakdown stage/FPS summary 含/不含 latency）
+  - 涵蓋：`print_sequence_summary`（tile diagnostics 打印/禁用/post counts/Native ReID breakdown/GMC/blank line/overall totals 累積/post counts 累積/GMC samples 累積）
+  - `reporting.py` 從 49% → **93%**
+  - 總覆蓋率 64% → **66%**
+- ✅ P2-8：新增 32 tests
+  - 涵蓋：`__init__`（default/custom output_size/padding/mode 驗證/invalid mode raise）
+  - 涵蓋：`process`（None boxes/空 boxes/通道數保持/roi_align fallback）
+  - 涵蓋：`_prepare_boxes`（tight 無 padding/expand 正方形/expand 正方形 mean/邊界 clamp/寬度 clamp/最小框尺寸/多框）
+  - 涵蓋：`_fill_extra_with_mean`（非 square_mean 不修改/空 tensor/square_mean 填充）
+  - 涵蓋：`process_parts`（None boxes/空 boxes/3x 輸出）
+  - 涵蓋：`cpp_ptr`（raise when no C++）
+  - `cropper.py` 從 23% → **77%**
+  - 總覆蓋率 64% → **64%**
+
+---
+
+| 優先 | 項目 | 行動 | 預期收益 |
+|------|------|------|---------|
 | ~~P1~~ | ~~FPS anomaly 根因（match ≥ 0.73）~~ | **✅ 已結案（2026-05-11）**：全量實測（7 seq + profile-stages）確認 match=0.72 vs 0.73 差距僅 0.16ms/frame（82.3 vs 81.3 FPS），`bg_relink_wait=0.00ms`，**anomaly 已消失**。推測 2026-05-07 的 async_reid + pipeline_relink + fused letterbox 等優化將 frame total 從 ~8.4ms 壓至 12ms（其中 detect 佔 6ms），原本的臨界條件不再觸發。**`match=0.72` 安全邊界解除**。 | ✅ 已完成 |
 | P3 | **Detector 訓練資料改善** | pred_h = 61.4% of gt_h，77% 近似 FP 有真實 GT；需補足腿/腳標注 | 根本解決 FN 問題；目前所有 score-gate 手段天花板已見 |
 

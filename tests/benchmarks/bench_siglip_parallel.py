@@ -48,7 +48,8 @@ async def run_siglip_benchmark(num_streams=8, objs_per_stream=4, total_frames=10
         nonlocal processed_count
         processed_count += len(embeddings)
 
-    dispatcher.start(callback=on_embeddings_ready)
+    dispatcher.on_embeddings_ready = on_embeddings_ready
+    dispatcher.start()
 
     # 預熱
     dummy_input = torch.randn(num_streams * objs_per_stream, 3, 224, 224, device="cuda")

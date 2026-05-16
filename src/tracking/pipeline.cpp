@@ -218,6 +218,47 @@ void PerceptionPipeline::process_detections_into(
     }
 }
 
+int PerceptionPipeline::process_detections_n(
+    const float* boxes_ptr,
+    const float* scores_ptr,
+    const int*   classes_ptr,
+    int n_in,
+    int frame_w, int frame_h,
+    bool is_tiled,
+    float* out_boxes,
+    float* out_scores,
+    int*   out_classes,
+    bool*  out_suspect,
+    const float* priors_ptr,
+    const int* prior_classes_ptr,
+    int num_priors,
+    float prior_iou_threshold,
+    cudaStream_t stream)
+{
+    if (n_in <= 0) return 0;
+
+    // Reuse d_filter_count_ as a pinned staging slot for the final count.
+    // process_detections_into writes d_nms_count_ → out_count (D2D).
+    // We'll read d_filter_count_ after the stream sync instead.
+    int* d_count_staging = d_filter_count_;  // safe to reuse after filter stage
+    cudaMemsetAsync(d_count_staging, 0, sizeof(int), stream);
+
+    process_detections_into(
+        boxes_ptr, scores_ptr, classes_ptr, n_in,
+        frame_w, frame_h, is_tiled,
+        out_boxes, out_scores, out_classes, out_suspect,
+        d_count_staging,        // out_count written D2D here
+        priors_ptr, prior_classes_ptr, num_priors, prior_iou_threshold,
+        stream);
+
+    // Sync stream (GIL already released in Python binding) then read count.
+    int n_post = 0;
+    cudaMemcpyAsync(&n_post, d_count_staging, sizeof(int),
+                    cudaMemcpyDeviceToHost, stream);
+    cudaStreamSynchronize(stream);
+    return n_post;
+}
+
 void PerceptionPipeline::extract_reid(
     const float* frame_ptr, int frame_h, int frame_w,
     const float* boxes_ptr, int n_boxes,

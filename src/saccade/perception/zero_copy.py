@@ -7,6 +7,7 @@ import torch  # noqa: E402
 import numpy as np  # noqa: E402
 from typing import Optional  # noqa: E402
 import threading  # noqa: E402
+from saccade.media.rtsp import build_reader_url, DEFAULT_RTSP_SINGLE_STREAM_PATH  # noqa: E402
 
 # 初始化 GStreamer
 Gst.init([])
@@ -55,23 +56,24 @@ class GstZeroCopyDecoder:
 
     def _build_pipeline_str(self) -> str:
         """根據輸入源與解碼器能力自動構建管線"""
-        # 為了極致效能，硬體路徑輸出 NV12，由 GPU 進行後續轉換
-        if self.decoder_name == "nvh264dec":
-            # 直接輸出 NV12，不經過 videoconvert
-            decoder_path = "nvh264dec ! video/x-raw,format=NV12"
-        else:
-            # CPU 備援路徑輸出 RGB
-            decoder_path = "avdec_h264 ! videoconvert ! video/x-raw,format=RGB"
-
-        sink_path = "appsink name=sink emit-signals=true max-buffers=1 drop=true"
+        sink_path = (
+            "appsink name=sink emit-signals=true max-buffers=1 drop=true sync=false"
+        )
 
         if self.source_url.startswith("rtsp://"):
+            # 舊的 NVDEC RTSP 路徑在目前 MediaMTX/testsrc 場景下不穩定，
+            # 這裡跟 MediaMTXClient 對齊，優先保證 RTSP 可讀。
             return (
-                f"rtspsrc location={self.source_url} latency=0 ! "
-                f"rtph264depay ! h264parse ! {decoder_path} ! {sink_path}"
+                f"rtspsrc location={self.source_url} latency=0 protocols=tcp ! "
+                f"rtph264depay ! h264parse ! avdec_h264 ! videoconvert ! "
+                f"video/x-raw,format=RGB ! {sink_path}"
             )
         else:
             path = self.source_url.replace("file://", "")
+            if self.decoder_name == "nvh264dec":
+                decoder_path = "nvh264dec ! video/x-raw,format=NV12"
+            else:
+                decoder_path = "avdec_h264 ! videoconvert ! video/x-raw,format=RGB"
             return (
                 f"filesrc location={path} ! qtdemux ! h264parse ! "
                 f"{decoder_path} ! {sink_path}"
@@ -170,5 +172,5 @@ class GstZeroCopyDecoder:
 
 
 if __name__ == "__main__":
-    decoder = GstZeroCopyDecoder("rtsp://localhost:8554/live")
+    decoder = GstZeroCopyDecoder(build_reader_url(DEFAULT_RTSP_SINGLE_STREAM_PATH))
     print("GStreamer Decoder Ready.")
