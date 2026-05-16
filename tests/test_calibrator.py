@@ -18,6 +18,20 @@ import pytest
 from saccade.perception.calibrator import SaccadeInt8Calibrator
 
 
+def _has_gpu() -> bool:
+    """Check if a CUDA GPU is available."""
+    try:
+        import torch
+
+        return torch.cuda.is_available()
+    except Exception:
+        return False
+
+
+@pytest.mark.skipif(
+    not _has_gpu(),
+    reason="No NVIDIA GPU available (required for INT8 calibrator)",
+)
 class TestSaccadeInt8CalibratorInit:
     """Test __init__ parameter storage."""
 
@@ -88,6 +102,10 @@ class TestSaccadeInt8CalibratorInit:
         assert len(cal.images) == 2
 
 
+@pytest.mark.skipif(
+    not _has_gpu(),
+    reason="No NVIDIA GPU available (required for INT8 calibrator)",
+)
 class TestCalibratorBatchSize:
     """Test get_batch_size."""
 
@@ -100,6 +118,10 @@ class TestCalibratorBatchSize:
         assert cal.get_batch_size() == 12
 
 
+@pytest.mark.skipif(
+    not _has_gpu(),
+    reason="No NVIDIA GPU available (required for INT8 calibrator)",
+)
 class TestCalibratorCacheFileIO:
     """Test read_calibration_cache / write_calibration_cache."""
 
@@ -146,6 +168,10 @@ class TestCalibratorCacheFileIO:
         assert os.path.exists(cache_file)
 
 
+@pytest.mark.skipif(
+    not _has_gpu(),
+    reason="No NVIDIA GPU available (required for INT8 calibrator)",
+)
 class TestCalibratorGetBatch:
     """Test get_batch with mocked images."""
 
@@ -210,6 +236,10 @@ class TestCalibratorGetBatch:
         assert cal.get_batch(None) is None
 
 
+@pytest.mark.skipif(
+    not _has_gpu(),
+    reason="No NVIDIA GPU available (required for INT8 calibrator)",
+)
 class TestCalibratorWithMockedCUDA:
     """Test that init allocates CUDA memory."""
 
