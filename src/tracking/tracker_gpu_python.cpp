@@ -16,6 +16,7 @@
 #include "tracking/tracker_gpu.hpp"
 #include "tracking/gmc.hpp"
 #include "tracking/pipeline.hpp"
+#include "tracking/workbench.hpp"
 #include "perception/feature_extractor.hpp"
 #include "perception/preprocessor.hpp"
 #include <opencv2/opencv.hpp>
@@ -1728,6 +1729,15 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
                 self.set_homography(h.data());
             }
         }, py::arg("h"))
+        .def("set_unified_score_params", [](GPUByteTracker& self, float w_sim_base, float w_iou_base, float w_maha_base, float shift_ambiguity, float shift_lost_age) {
+            UnifiedScoreParams p;
+            p.w_sim_base = w_sim_base;
+            p.w_iou_base = w_iou_base;
+            p.w_maha_base = w_maha_base;
+            p.shift_ambiguity = shift_ambiguity;
+            p.shift_lost_age = shift_lost_age;
+            self.set_unified_score_params(p);
+        }, py::arg("w_sim_base"), py::arg("w_iou_base"), py::arg("w_maha_base"), py::arg("shift_ambiguity"), py::arg("shift_lost_age"))
         .def("set_unified_score_params", &GPUByteTracker::set_unified_score_params, py::arg("params"))
         .def("update_reference_features", [](GPUByteTracker& self, uintptr_t ids_ptr, uintptr_t features_ptr, int num, uintptr_t stream_ptr) {
             self.update_reference_features(
@@ -1768,6 +1778,10 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
                                uintptr_t out_boxes_ptr, uintptr_t out_scores_ptr, uintptr_t out_ids_ptr, uintptr_t out_classes_ptr,
                                uintptr_t out_det_idx_ptr, uintptr_t out_count_ptr,
                                uintptr_t embeddings_ptr, uintptr_t gmc_ptr, float light_factor, float mid_thresh_scale) {
+            // All args are raw pointers / primitives — no Python objects accessed.
+            // Releasing the GIL lets sibling worker threads make Python progress
+            // while this tracker's C++ work (1–3 ms/frame) runs on its stream.
+            py::gil_scoped_release release;
             self.update_into(
                 reinterpret_cast<float*>(boxes_ptr),
                 reinterpret_cast<float*>(scores_ptr),
@@ -1834,7 +1848,10 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             );
         },
         py::arg("ids_ptr"), py::arg("flags_ptr"), py::arg("n"), py::arg("stream_ptr"),
-        "Same as set_clean_embedding_flags but takes host (CPU) pointers — skips the D2H round-trip for IDs");
+        "Same as set_clean_embedding_flags but takes host (CPU) pointers — skips the D2H round-trip for IDs")
+        .def_property_readonly("cpp_ptr", [](GPUByteTracker& self) {
+            return reinterpret_cast<uintptr_t>(&self);
+        }, "Raw C++ pointer to this GPUByteTracker (for Workbench construction)");
 
     py::class_<SemanticRelinkerCpp>(m, "SemanticRelinker")
         .def(py::init<float, int, float, float, int, float, float, int, float, std::string, float, bool, float, float, float, float, float, float, float, float, float, float, float, float, float, float>(),
@@ -2256,6 +2273,7 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         .def_readwrite("nms_threshold",             &PerceptionPipeline::Config::nms_threshold)
         .def_readwrite("person_geometry_prior",     &PerceptionPipeline::Config::person_geometry_prior)
         .def_readwrite("geometry_suspect_support",  &PerceptionPipeline::Config::geometry_suspect_support)
+        .def_readwrite("geometry_suspect_support_score", &PerceptionPipeline::Config::geometry_suspect_support_score)
         .def_readwrite("person_min_height_ratio",   &PerceptionPipeline::Config::person_min_height_ratio)
         .def_readwrite("person_min_aspect",         &PerceptionPipeline::Config::person_min_aspect)
         .def_readwrite("person_max_aspect",         &PerceptionPipeline::Config::person_max_aspect)
@@ -2326,11 +2344,47 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             py::arg("priors_ptr") = 0, py::arg("prior_classes_ptr") = 0,
             py::arg("num_priors") = 0, py::arg("prior_iou_threshold") = 0.50f,
             py::arg("stream_ptr"))
+        // GIL-free synchronous variant: releases GIL for the entire filter+NMS+sync
+        // sequence so concurrent Python threads can make progress during GPU execution.
+        .def("process_detections_n",
+            [](PerceptionPipeline& self,
+               uintptr_t boxes_ptr, uintptr_t scores_ptr, uintptr_t classes_ptr,
+               int n_in, int frame_w, int frame_h, bool is_tiled,
+               uintptr_t out_boxes, uintptr_t out_scores, uintptr_t out_classes,
+               uintptr_t out_suspect,
+               uintptr_t priors_ptr, uintptr_t prior_classes_ptr,
+               int num_priors, float prior_iou_threshold,
+               uintptr_t stream_ptr) -> int {
+                py::gil_scoped_release release;
+                return self.process_detections_n(
+                    reinterpret_cast<const float*>(boxes_ptr),
+                    reinterpret_cast<const float*>(scores_ptr),
+                    reinterpret_cast<const int*>(classes_ptr),
+                    n_in, frame_w, frame_h, is_tiled,
+                    reinterpret_cast<float*>(out_boxes),
+                    reinterpret_cast<float*>(out_scores),
+                    reinterpret_cast<int*>(out_classes),
+                    reinterpret_cast<bool*>(out_suspect),
+                    reinterpret_cast<const float*>(priors_ptr),
+                    reinterpret_cast<const int*>(prior_classes_ptr),
+                    num_priors, prior_iou_threshold,
+                    reinterpret_cast<cudaStream_t>(stream_ptr));
+            },
+            py::arg("boxes_ptr"), py::arg("scores_ptr"), py::arg("classes_ptr"),
+            py::arg("n_in"), py::arg("frame_w"), py::arg("frame_h"),
+            py::arg("is_tiled"),
+            py::arg("out_boxes"), py::arg("out_scores"), py::arg("out_classes"),
+            py::arg("out_suspect"),
+            py::arg("priors_ptr") = 0, py::arg("prior_classes_ptr") = 0,
+            py::arg("num_priors") = 0, py::arg("prior_iou_threshold") = 0.50f,
+            py::arg("stream_ptr"))
         .def("extract_reid",
             [](PerceptionPipeline& self,
                uintptr_t frame_ptr, int frame_h, int frame_w,
                uintptr_t boxes_ptr, int n_boxes,
                uintptr_t out_embeds, uintptr_t stream_ptr) {
+                // All args are raw pointers / primitives — safe to release GIL.
+                py::gil_scoped_release release;
                 self.extract_reid(
                     reinterpret_cast<const float*>(frame_ptr),
                     frame_h, frame_w,
@@ -2358,7 +2412,70 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
                 out["images"] = stats.images;
                 return out;
             })
-        .def_property_readonly("embed_dim", &PerceptionPipeline::get_embed_dim);
+        .def_property_readonly("embed_dim", &PerceptionPipeline::get_embed_dim)
+        .def_property_readonly("cpp_ptr", [](PerceptionPipeline& self) {
+            return reinterpret_cast<uintptr_t>(&self);
+        }, "Raw C++ pointer to this PerceptionPipeline (for Workbench construction)");
+
+    // Workbench: per-thread isolated workspace for the post-YOLO hot path.
+    // See include/tracking/workbench.hpp for the full architectural intent.
+    py::class_<Workbench>(m, "Workbench")
+        .def(py::init([](uintptr_t pipeline_ptr, uintptr_t tracker_ptr,
+                         uintptr_t stream_ptr, int max_dets, int max_tracks) {
+                return new Workbench(
+                    reinterpret_cast<PerceptionPipeline*>(pipeline_ptr),
+                    reinterpret_cast<GPUByteTracker*>(tracker_ptr),
+                    reinterpret_cast<cudaStream_t>(stream_ptr),
+                    max_dets, max_tracks);
+             }),
+             py::arg("pipeline_ptr"), py::arg("tracker_ptr"), py::arg("stream_ptr"),
+             py::arg("max_dets") = 2048, py::arg("max_tracks") = 256,
+             "Borrow pipeline + tracker (must be per-workbench instances, not shared) "
+             "and a CUDA stream. Allocates per-workbench post-NMS scratch.")
+        .def("process_frame_postyolo",
+            [](Workbench& self,
+               uintptr_t raw_boxes, uintptr_t raw_scores, uintptr_t raw_classes,
+               int n_in, int frame_w, int frame_h, bool is_tiled,
+               uintptr_t priors_ptr, uintptr_t prior_classes_ptr,
+               int num_priors, float prior_iou_threshold,
+               uintptr_t embeddings_ptr, uintptr_t gmc_ptr,
+               float light_factor, float mid_thresh_scale,
+               uintptr_t out_boxes, uintptr_t out_scores,
+               uintptr_t out_ids, uintptr_t out_classes,
+               uintptr_t out_det_idx, uintptr_t out_count) -> int {
+                // Single GIL release for the entire ~3-6 ms hot path. All
+                // inputs are raw GPU pointers / primitives; nothing accesses
+                // Python state inside, so sibling worker threads can make
+                // Python progress (incl. their own next-frame submission)
+                // while this thread's C++ kernels run on its CUDA stream.
+                py::gil_scoped_release release;
+                return self.process_frame_postyolo(
+                    reinterpret_cast<const float*>(raw_boxes),
+                    reinterpret_cast<const float*>(raw_scores),
+                    reinterpret_cast<const int*>(raw_classes),
+                    n_in, frame_w, frame_h, is_tiled,
+                    reinterpret_cast<const float*>(priors_ptr),
+                    reinterpret_cast<const int*>(prior_classes_ptr),
+                    num_priors, prior_iou_threshold,
+                    reinterpret_cast<const float*>(embeddings_ptr),
+                    reinterpret_cast<const float*>(gmc_ptr),
+                    light_factor, mid_thresh_scale,
+                    reinterpret_cast<float*>(out_boxes),
+                    reinterpret_cast<float*>(out_scores),
+                    reinterpret_cast<int*>(out_ids),
+                    reinterpret_cast<int*>(out_classes),
+                    reinterpret_cast<int*>(out_det_idx),
+                    reinterpret_cast<int*>(out_count));
+            },
+            py::arg("raw_boxes_ptr"), py::arg("raw_scores_ptr"), py::arg("raw_classes_ptr"),
+            py::arg("n_in"), py::arg("frame_w"), py::arg("frame_h"), py::arg("is_tiled"),
+            py::arg("priors_ptr") = 0, py::arg("prior_classes_ptr") = 0,
+            py::arg("num_priors") = 0, py::arg("prior_iou_threshold") = 0.5f,
+            py::arg("embeddings_ptr") = 0, py::arg("gmc_ptr") = 0,
+            py::arg("light_factor") = 0.0f, py::arg("mid_thresh_scale") = 1.0f,
+            py::arg("out_boxes_ptr"), py::arg("out_scores_ptr"),
+            py::arg("out_ids_ptr"), py::arg("out_classes_ptr"),
+            py::arg("out_det_idx_ptr"), py::arg("out_count_ptr"));
 
     // Fused letterbox: bilinear resize + pad in one CUDA kernel.
     // Replaces: interpolate → fill_ → copy_ (3 ops) with a single kernel launch.

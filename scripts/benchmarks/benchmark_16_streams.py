@@ -16,15 +16,18 @@ async def run_16_stream_test(
     pynvml.nvmlInit()
     gpu_handle = pynvml.nvmlDeviceGetHandleByIndex(0)
 
-    detector = TRTYoloDetector()
+    detector = TRTYoloDetector(engine_path="models/yolo/yolo26m_960_batch16.engine")
     extractor = TRTFeatureExtractor(max_batch=embed_batch)
     resource_manager = ResourceManager()
 
     # 這裡我們手動修改 dispatcher 的等待時間
-    dispatcher = AsyncDispatcher(detector, resource_manager, max_batch=yolo_batch)
-    # AsyncDispatcher no longer has wait_time attribute, it uses hardcoded timeout in worker loop
-    # If we really want to change it, we'd need to modify the class or monkeypatch it
-    # For now, we'll just remove the assignment to avoid Mypy error
+    dispatcher = AsyncDispatcher(
+        detector,
+        resource_manager,
+        max_batch=yolo_batch,
+        input_hw=(960, 960),
+        batch_timeout_ms=wait_ms,
+    )
 
     embed_dispatcher = AsyncEmbeddingDispatcher(extractor, max_batch=embed_batch)
 
@@ -45,7 +48,7 @@ async def run_16_stream_test(
     for f in range(total_frames):
         t_f = time.perf_counter()
         for s in range(num_streams):
-            frame = torch.randn(3, 640, 640, device="cuda")
+            frame = torch.randn(3, 960, 960, device="cuda")
             await dispatcher.put_frame(f"s_{s}", frame, t_f)
 
             # 模擬偵測到的物件
@@ -65,10 +68,12 @@ async def run_16_stream_test(
     print(f"⏱️  Average Latency: {np.mean(latencies):.2f} ms")
     print(f"🚀 System Throughput: {(num_streams * total_frames) / duration:.2f} FPS")
     print(f"🔥 GPU Utilization: {util.gpu}%")
+    print(f"📈 Dispatcher Stats: {dispatcher.get_stats()}")
     print("═" * 60)
 
     await dispatcher.stop()
     embed_dispatcher.stop()
+    resource_manager.close()
 
 
 if __name__ == "__main__":

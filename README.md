@@ -181,17 +181,25 @@ uv run python scripts/eval/compare_framework_ultralytics.py \
 
 ## Tests
 
-執行 Python 測試：
+執行 Python 測試（覆蓋率 56%）：
 
 ```bash
 uv run pytest
 ```
+
+詳細覆蓋率報告：[docs/TEST_COVERAGE.md](/docs/TEST_COVERAGE.md)
 
 常用驗證指令：
 
 ```bash
 uv run mypy .
 scripts/test_native.sh
+```
+
+產出 HTML 覆蓋率報告：
+
+```bash
+uv run coverage html  # 開啟 htmlcov/index.html
 ```
 
 部分 benchmark 與 eval flow 需要：

@@ -2,6 +2,19 @@
 
 ## 模組狀態：高效能工業級，維運機制完備
 
+## RTSP 規範
+- [x] **Canonical RTSP Contract**: `src/saccade/media/rtsp.py` 作為 host / port / credentials / path naming 的單一來源。
+- [x] **Canonical Path Naming**:
+    - [x] 單路輸入：`live`
+    - [x] 多路輸入：`stream_<id>`
+    - [x] 推論輸出：`detected`
+- [x] **讀寫權限分離**:
+    - [x] reader: `reader` / `readpass123`
+    - [x] publisher: `publisher` / `pubpass123`
+- [x] **Local MediaMTX Baseline**:
+    - [x] 開發用 `infra/mediamtx.yml` 僅開 RTSP `8554`
+    - [x] `docker-compose.yml` 改為顯式 port mapping，避免 host-network 與 `8888/8889` 衝突
+
 ## 1. C++ 零拷貝解碼器 (GstClient)
 - [x] **RTSP/WebRTC 對接**: 透過 GStreamer `appsink` 實作高效能接取。
 - [x] **工業級零拷貝 V2**:

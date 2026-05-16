@@ -39,7 +39,30 @@ void init_perception_ext(py::module &m) {
             }
             return shape;
         }, py::arg("name"))
-        .def("set_input_shape", &TRTEngine::set_input_shape, py::arg("name"), py::arg("shape"));
+        .def("set_input_shape", &TRTEngine::set_input_shape, py::arg("name"), py::arg("shape"))
+        .def("create_context", [](TRTEngine &self) -> uintptr_t {
+            auto* ctx = self.create_context();
+            return reinterpret_cast<uintptr_t>(ctx);
+        }, py::return_value_policy::reference_internal,
+           "Create a new execution context for concurrent inference.")
+        .def("infer_with_context", [](TRTEngine &self, uintptr_t ctx_ptr,
+                                      const std::vector<size_t> &binding_ptrs,
+                                      size_t stream_ptr) {
+            auto* ctx = reinterpret_cast<nvinfer1::IExecutionContext*>(ctx_ptr);
+            std::vector<void*> bindings;
+            bindings.reserve(binding_ptrs.size());
+            for (auto ptr : binding_ptrs) {
+                bindings.push_back(reinterpret_cast<void*>(ptr));
+            }
+            return self.infer_with_context(ctx, bindings,
+                                           reinterpret_cast<cudaStream_t>(stream_ptr));
+        }, py::arg("ctx_ptr"), py::arg("bindings"), py::arg("stream"),
+           "Run inference using a specific context (thread-safe).")
+        .def_static("delete_context", [](uintptr_t ctx_ptr) {
+            TRTEngine::delete_context(
+                reinterpret_cast<nvinfer1::IExecutionContext*>(ctx_ptr));
+        }, py::arg("ctx_ptr"),
+           "Destroy a context created by create_context().");
 
     py::class_<Preprocessor>(m, "Preprocessor")
         .def(py::init<int, int>(), py::arg("target_width"), py::arg("target_height"))

@@ -4,5 +4,6 @@
 # Results: IDF1 52.0% / MOTA 41.6% / IDs 475 / Rcll 55.0% / ~98 FPS  (interp+fp_hard_filter default on 2026-05-10)
 
 engine: models/yolo/yolo26s_960_batch1.engine
+tiling: native_960
 match_thresh: 0.66
 new_track_thresh: 0.28

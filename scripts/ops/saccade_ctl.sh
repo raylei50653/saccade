@@ -6,6 +6,15 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 SERVICES=("mediamtx" "yolo-perception" "yolo-orchestrator" "yolo-api")
+RTSP_HOST="${RTSP_HOST:-127.0.0.1}"
+RTSP_PORT="${RTSP_PORT:-8554}"
+RTSP_READ_USER="${RTSP_READ_USER:-reader}"
+RTSP_READ_PASSWORD="${RTSP_READ_PASSWORD:-readpass123}"
+RTSP_PUBLISH_USER="${RTSP_PUBLISH_USER:-publisher}"
+RTSP_PUBLISH_PASSWORD="${RTSP_PUBLISH_PASSWORD:-pubpass123}"
+RTSP_LIVE_PATH="${RTSP_LIVE_PATH:-live}"
+RTSP_READER_URL="rtsp://${RTSP_READ_USER}:${RTSP_READ_PASSWORD}@${RTSP_HOST}:${RTSP_PORT}/${RTSP_LIVE_PATH}"
+RTSP_PUBLISHER_URL="rtsp://${RTSP_PUBLISH_USER}:${RTSP_PUBLISH_PASSWORD}@${RTSP_HOST}:${RTSP_PORT}/${RTSP_LIVE_PATH}"
 
 cd "$PROJECT_DIR"
 
@@ -45,7 +54,7 @@ case "$1" in
             printf "  - %-20s: %s\n" "$s" "$status"
         done
         # 額外檢查 RTSP 輸入流
-        if ffprobe -v error rtsp://127.0.0.1:8554/live >/dev/null 2>&1; then
+        if ffprobe -v error "$RTSP_READER_URL" >/dev/null 2>&1; then
             printf "  - %-20s: ACTIVE\n" "🎥 Camera Input"
         else
             printf "  - %-20s: INACTIVE (Waiting for push...)\n" "🎥 Camera Input"
@@ -54,16 +63,16 @@ case "$1" in
     camera-on)
         if [ -f "$DUMMY_VIDEO_PATH" ]; then
             printf "🎬 Starting demo video stream (%s) in background...\n" "$DUMMY_VIDEO_PATH"
-            nohup ffmpeg -re -i "$DUMMY_VIDEO_PATH" -c copy -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/live > /tmp/mock_cam.log 2>&1 &
+            nohup ffmpeg -re -i "$DUMMY_VIDEO_PATH" -c copy -f rtsp -rtsp_transport tcp "$RTSP_PUBLISHER_URL" > /tmp/mock_cam.log 2>&1 &
         else
             printf "🎬 Starting mock color-bar stream in background...\n"
-            nohup ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=15 -vcodec h264 -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/live > /tmp/mock_cam.log 2>&1 &
+            nohup ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=15 -vcodec h264 -f rtsp -rtsp_transport tcp "$RTSP_PUBLISHER_URL" > /tmp/mock_cam.log 2>&1 &
         fi
-        printf "✅ Stream is pushing to rtsp://127.0.0.1:8554/live\n"
+        printf "✅ Stream is pushing to %s\n" "$RTSP_PUBLISHER_URL"
         ;;
     camera-off)
         printf "🛑 Stopping camera stream...\n"
-        pkill -f "ffmpeg.*rtsp://127.0.0.1:8554/live" || echo "No stream running."
+        pkill -f "ffmpeg.*${RTSP_HOST}:${RTSP_PORT}/${RTSP_LIVE_PATH}" || echo "No stream running."
         ;;
     health)
         printf "🩺 Running internal health check...\n"

@@ -111,8 +111,82 @@ if __name__ == "__main__":
         "module_lifecycle",
     }
     eval_kwargs = {k: v for k, v in vars(args).items() if k not in _MODULE_KEYS}
-    metrics = run_eval(**eval_kwargs)
-    if metrics:
-        print("\n=== OVERALL METRICS ===")
-        for k, v in metrics.items():
-            print(f"  {k}: {v}")
+
+    if args.workbench and args.threads > 1:
+        from saccade.perception.detector_trt import BatchingTRTDetector
+        from concurrent.futures import ThreadPoolExecutor
+
+        from saccade.perception.eval.config import parse_eval_config as _pec
+
+        _cfg_tmp = _pec(
+            output=args.output,
+            data_root=args.data_root,
+            split=args.split,
+            sequences=args.sequences or "",
+            conf_threshold=args.conf_threshold,
+            reid_mode="off",
+            reid_model="siglip2",
+            profile_stages=False,
+            kwargs={},
+        )
+        seqs = _cfg_tmp.seqs
+        print(
+            f"🚀 [Workbench] Running {len(seqs)} sequences with {args.threads} threads using BatchingTRTDetector"
+        )
+
+        # Auto-select a batch engine compatible with the requested thread count.
+        # Exact match first (batchN), then smallest batch ≥ threads, else batch_size=1.
+        from pathlib import Path as _Path
+        import re as _re
+
+        _ep = _Path(args.engine)
+        _exact = _ep.parent / _ep.name.replace("_batch1", f"_batch{args.threads}")
+        if _exact.exists():
+            _engine_path, _eff_batch = str(_exact), args.threads
+        else:
+            # Scan siblings for engines with batch ≥ threads
+            _candidates = []
+            for _f in _ep.parent.glob(f"{_ep.stem.split('_batch')[0]}*.engine"):
+                _m = _re.search(r"_batch(\d+)", _f.name)
+                if _m:
+                    _b = int(_m.group(1))
+                    if _b >= args.threads:
+                        _candidates.append((_b, _f))
+            if _candidates:
+                _b, _f = min(_candidates)
+                _engine_path, _eff_batch = str(_f), args.threads
+                print(
+                    f"  No batch-{args.threads} engine; using batch-{_b} engine with batch_size={args.threads}"
+                )
+            else:
+                _engine_path, _eff_batch = args.engine, 1
+                print(
+                    "  No compatible batch engine found; running batch_size=1 (sequential)"
+                )
+        print(f"  Engine: {_engine_path}  batch_size={_eff_batch}")
+        batcher = BatchingTRTDetector(_engine_path, batch_size=_eff_batch)
+
+        def run_single_seq(seq_name):
+            proxy = batcher.make_proxy()
+            kwargs = eval_kwargs.copy()
+            kwargs["sequences"] = seq_name
+            kwargs["detector"] = proxy
+            kwargs["workbench"] = True  # ensure evaluator uses the workbench path
+            return run_eval(**kwargs)
+
+        with ThreadPoolExecutor(max_workers=args.threads) as executor:
+            results = list(executor.map(run_single_seq, seqs))
+
+        # We don't have a good way to merge overall metrics here since motmetrics
+        # aggregation is complex, but for parity check of per-sequence results it's fine.
+        # Actually, evaluator.py prints per-sequence results anyway.
+        metrics = (
+            None  # Overall metrics print won't happen, but sequences already printed.
+        )
+        print("\n✅ Concurrent evaluation finished.")
+    else:
+        metrics = run_eval(**eval_kwargs)
+        if metrics:
+            print("\n=== OVERALL METRICS ===")
+            for k, v in metrics.items():
+                print(f"  {k}: {v}")

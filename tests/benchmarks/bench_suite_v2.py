@@ -19,6 +19,7 @@ from saccade.perception.cropper import ZeroCopyCropper  # noqa: E402  # noqa: E4
 from saccade.perception.tracking import SmartTracker  # noqa: E402  # noqa: E402
 from saccade.perception.feature_bank import FeatureBank  # noqa: E402  # noqa: E402
 from saccade.media.mediamtx_client import MediaMTXClient  # noqa: E402  # noqa: E402
+from saccade.media.rtsp import build_reader_url, DEFAULT_RTSP_SINGLE_STREAM_PATH  # noqa: E402
 from dotenv import load_dotenv  # noqa: E402
 
 load_dotenv()
@@ -96,7 +97,7 @@ async def bench_pipeline_e2e(frames_to_bench: int = 500):
         heartbeat_interval=10,  # ReID every 10 frames
     )
 
-    client = MediaMTXClient(rtsp_url="rtsp://localhost:8554/live")
+    client = MediaMTXClient(rtsp_url=build_reader_url(DEFAULT_RTSP_SINGLE_STREAM_PATH))
     # Start the client
     client.connect()
 

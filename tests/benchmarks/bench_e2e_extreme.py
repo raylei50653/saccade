@@ -28,7 +28,9 @@ class E2EStressTester:
         self.frames_per_stream = frames_per_stream
 
         # 初始化組件
-        self.detector = TRTYoloDetector()
+        self.detector = TRTYoloDetector(
+            engine_path="models/yolo/yolo26m_960_batch16.engine"
+        )
         self.extractor = TRTFeatureExtractor(max_batch=64)
         self.drift_handler = SemanticDriftHandler(
             similarity_threshold=0.8
@@ -37,8 +39,15 @@ class E2EStressTester:
         self.redis_cache = RedisCache()
 
         # 初始化分發器
-        self.yolo_dispatcher = AsyncDispatcher(self.detector, max_batch=num_streams)
+        self.yolo_dispatcher = AsyncDispatcher(
+            self.detector,
+            self.resource_manager,
+            max_batch=num_streams,
+            input_hw=(960, 960),
+            batch_timeout_ms=3.0,
+        )
         self.embed_dispatcher = EmbeddingDispatcher(self.extractor, max_batch=64)
+        self.embed_dispatcher.on_embeddings_ready = self.on_embedding_ready
 
         # 初始化編排器
         self.orchestrator = PipelineOrchestrator()
@@ -85,7 +94,7 @@ class E2EStressTester:
         """
         for f in range(self.frames_per_stream):
             # 模擬 640x640 影格
-            frame = torch.randn(3, 640, 640, device="cuda")
+            frame = torch.randn(3, 960, 960, device="cuda")
             await self.yolo_dispatcher.put_frame(
                 f"stream_{stream_id}", frame, time.time()
             )
@@ -100,8 +109,8 @@ class E2EStressTester:
 
         # 1. 啟動所有背景組件
         await self.redis_cache.connect()
-        self.yolo_dispatcher.start()
-        self.embed_dispatcher.start(callback=self.on_embedding_ready)
+        await self.yolo_dispatcher.start()
+        self.embed_dispatcher.start()
 
         # 啟動編排器 (背景執行)
         orch_task = asyncio.create_task(self.orchestrator.start_cognition_loop())
@@ -139,7 +148,8 @@ class E2EStressTester:
         # 等待 5 秒讓 Redis 與 ChromaDB 消化
         await asyncio.sleep(5.0)
 
-        self.yolo_dispatcher.stop()
+        print(f"📈 Dispatcher Stats: {self.yolo_dispatcher.get_stats()}")
+        await self.yolo_dispatcher.stop()
         self.embed_dispatcher.stop()
         bridge_task.cancel()
         orch_task.cancel()

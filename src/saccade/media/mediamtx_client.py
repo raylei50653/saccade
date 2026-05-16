@@ -10,6 +10,7 @@ import gi  # noqa: E402
 gi.require_version("Gst", "1.0")  # noqa: E402
 gi.require_version("GstApp", "1.0")  # noqa: E402
 from gi.repository import Gst, GstApp, GLib  # noqa: E402
+from saccade.media.rtsp import build_rtsp_url, DEFAULT_RTSP_SINGLE_STREAM_PATH  # noqa: E402
 
 try:
     import saccade_media_ext
@@ -31,7 +32,7 @@ class MediaMTXClient:
 
     def __init__(
         self,
-        rtsp_url: str = "rtsp://localhost:8554/live",
+        rtsp_url: str = build_rtsp_url(DEFAULT_RTSP_SINGLE_STREAM_PATH),
         use_local: bool = False,
         dummy_video: Optional[str] = None,
     ):
@@ -45,10 +46,13 @@ class MediaMTXClient:
         self._last_tensor: Optional[torch.Tensor] = None
         self._last_frame_time = time.time()
         self._ret = False
+        self._bus_error: Optional[str] = None
+        self._frame_generation = 0
+        self._last_grab_generation = 0
         self._lock = threading.Lock()
 
-        # 偵測是否使用 C++ 擴展
-        self.use_cpp = HAS_CPP_EXT
+        # 舊的 C++ GstClient 路徑仍屬早期實驗功能，對 RTSP 場景預設關閉。
+        self.use_cpp = HAS_CPP_EXT and os.getenv("SACCADE_MEDIA_USE_CPP", "0") == "1"
         self.cpp_client: Optional[saccade_media_ext.GstClient] = None
 
         # GStreamer 組件 (Python 備援用)
@@ -71,25 +75,33 @@ class MediaMTXClient:
 
     def _get_pipeline_str(self) -> str:
         """根據配置構建 GStreamer 管線"""
-        if self.decoder_name == "nvh264dec":
-            # 硬體路徑：輸出 NV12 以達成零拷貝轉換
-            decoder_path = "nvh264dec ! video/x-raw,format=NV12"
-        else:
-            decoder_path = "avdec_h264 ! videoconvert ! video/x-raw,format=RGB"
-
-        sink_path = "appsink name=sink emit-signals=true max-buffers=1 drop=true"
+        sink_path = (
+            "appsink name=sink emit-signals=true max-buffers=1 drop=true sync=false"
+        )
 
         if self.dummy_video and os.path.exists(self.dummy_video):
             path = os.path.abspath(self.dummy_video)
-            return f"filesrc location={path} ! qtdemux ! h264parse ! {decoder_path} ! {sink_path}"
+            return (
+                f"filesrc location={path} ! decodebin ! videoconvert ! "
+                f"video/x-raw,format=RGB ! {sink_path}"
+            )
         elif self.use_local:
-            return f"v4l2src ! videoconvert ! {decoder_path} ! {sink_path}"
+            return f"v4l2src ! videoconvert ! video/x-raw,format=RGB ! {sink_path}"
         else:
-            return f"rtspsrc location={self.rtsp_url} latency=0 ! rtph264depay ! h264parse ! {decoder_path} ! {sink_path}"
+            # RTSP 讀流路徑優先追求穩定拿到 frame，而不是實驗性的 GPU decode。
+            # MediaMTX + test publisher 在 nvh264dec 路徑下會報 internal data stream error；
+            # 使用 TCP + avdec_h264/decodebin 則能穩定輸出到 appsink。
+            return (
+                f"rtspsrc location={self.rtsp_url} latency=0 protocols=tcp ! "
+                f"rtph264depay ! h264parse ! avdec_h264 ! videoconvert ! "
+                f"video/x-raw,format=RGB ! {sink_path}"
+            )
 
     def connect(self) -> bool:
         """啟動媒體管線"""
         self._last_frame_time = time.time()
+        self._ret = False
+        self._bus_error = None
         if self.use_cpp:
             try:
                 pipeline_str = self._get_pipeline_str()
@@ -98,6 +110,12 @@ class MediaMTXClient:
                 self.cpp_client.set_frame_callback(self._on_cpp_frame)
 
                 if self.cpp_client.connect():
+                    if not self._await_first_frame():
+                        print(
+                            "❌ [MediaClient] C++ pipeline connected but no frame arrived."
+                        )
+                        self.release()
+                        return False
                     self._running = True
                     return True
             except Exception as e:
@@ -120,10 +138,29 @@ class MediaMTXClient:
             self.pipeline.set_state(Gst.State.PLAYING)
             self._loop_thread = threading.Thread(target=self._mainloop.run, daemon=True)
             self._loop_thread.start()
+            if not self._await_first_frame():
+                reason = self._bus_error or "Timed out waiting for first frame"
+                print(
+                    f"❌ [MediaClient] Python pipeline failed before first frame: {reason}"
+                )
+                self.release()
+                return False
             return True
         except Exception as e:
             print(f"❌ [MediaClient] Python Connection failed: {e}")
             return False
+
+    def _await_first_frame(self, timeout_sec: float = 3.0) -> bool:
+        """阻塞直到收到第一幀或發生 bus error。"""
+        deadline = time.time() + timeout_sec
+        while time.time() < deadline:
+            with self._lock:
+                if self._ret and self._last_tensor is not None:
+                    return True
+                if self._bus_error:
+                    return False
+            time.sleep(0.05)
+        return False
 
     def _nv12_to_rgb_gpu(self, raw_nv12: torch.Tensor, h: int, w: int) -> torch.Tensor:
         """
@@ -206,6 +243,7 @@ class MediaMTXClient:
 
                 self._last_tensor = tensor
                 self._last_frame_time = time.time()
+                self._frame_generation += 1
                 self._ret = True
 
         except Exception as e:
@@ -215,7 +253,9 @@ class MediaMTXClient:
         t = message.type
         if t == Gst.MessageType.ERROR:
             err, debug = message.parse_error()
-            print(f"❌ [MediaClient] GStreamer Bus Error: {err.message}")
+            debug_msg = f" ({debug})" if debug else ""
+            self._bus_error = err.message
+            print(f"❌ [MediaClient] GStreamer Bus Error: {err.message}{debug_msg}")
         elif t == Gst.MessageType.EOS:
             print("🏁 [MediaClient] GStreamer: End of stream")
 
@@ -257,6 +297,7 @@ class MediaMTXClient:
                     self._last_frame = None  # 延遲解碼 np.ndarray 以節省效能
                     self._last_tensor = rgb_tensor
                     self._last_frame_time = time.time()
+                    self._frame_generation += 1
                     self._ret = True
             finally:
                 buffer.unmap(map_info)
@@ -294,14 +335,28 @@ class MediaMTXClient:
 
     def grab_frame(self) -> Tuple[bool, Optional[np.ndarray]]:
         with self._lock:
+            if (
+                not self._ret
+                or self._last_tensor is None
+                or self._frame_generation == self._last_grab_generation
+            ):
+                return False, None
             if self._last_frame is None and self._last_tensor is not None:
                 # 延遲轉換：僅在真正需要視覺化時才從 GPU 搬回 CPU
                 self._last_frame = self._last_tensor.cpu().numpy()
-            return self._ret, self._last_frame
+            self._last_grab_generation = self._frame_generation
+            return True, self._last_frame
 
     def grab_tensor(self) -> Tuple[bool, Optional[torch.Tensor]]:
         with self._lock:
-            return self._ret, self._last_tensor
+            if (
+                not self._ret
+                or self._last_tensor is None
+                or self._frame_generation == self._last_grab_generation
+            ):
+                return False, None
+            self._last_grab_generation = self._frame_generation
+            return True, self._last_tensor
 
     def release(self) -> None:
         self._running = False

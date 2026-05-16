@@ -94,6 +94,22 @@ public:
         return context_->setInputShape(name, dims);
     }
 
+    nvinfer1::IExecutionContext* create_context() const {
+        return engine_->createExecutionContext();
+    }
+
+    bool infer_with_context(nvinfer1::IExecutionContext* ctx,
+                            const std::vector<void*>& bindings,
+                            cudaStream_t stream) {
+        int nbTensors = engine_->getNbIOTensors();
+        for (int i = 0; i < nbTensors; ++i) {
+            if (i >= (int)bindings.size()) continue;
+            const char* name = engine_->getIOTensorName(i);
+            ctx->setTensorAddress(name, bindings[i]);
+        }
+        return ctx->enqueueV3(stream);
+    }
+
 private:
     std::unique_ptr<nvinfer1::IRuntime> runtime_;
     std::unique_ptr<nvinfer1::ICudaEngine> engine_;
@@ -145,6 +161,20 @@ bool TRTEngine::is_input(const char* name) const {
 
 bool TRTEngine::set_input_shape(const char* name, const std::vector<int64_t>& shape) {
     return pimpl_->setInputShape(name, shape);
+}
+
+nvinfer1::IExecutionContext* TRTEngine::create_context() const {
+    return pimpl_->create_context();
+}
+
+bool TRTEngine::infer_with_context(nvinfer1::IExecutionContext* ctx,
+                                    const std::vector<void*>& bindings,
+                                    cudaStream_t stream) {
+    return pimpl_->infer_with_context(ctx, bindings, stream);
+}
+
+void TRTEngine::delete_context(nvinfer1::IExecutionContext* ctx) {
+    delete ctx;
 }
 
 } // namespace saccade

@@ -3,6 +3,8 @@ import cv2
 import numpy as np
 from typing import Optional, Any
 
+from saccade.media.rtsp import build_rtsp_url, DEFAULT_RTSP_OUTPUT_PATH
+
 
 class RTSPStreamer:
     """
@@ -13,7 +15,7 @@ class RTSPStreamer:
 
     def __init__(
         self,
-        rtsp_url: str = "rtsp://localhost:8554/detected",
+        rtsp_url: str = build_rtsp_url(DEFAULT_RTSP_OUTPUT_PATH),
         fps: int = 15,
         width: int = 640,
         height: int = 480,

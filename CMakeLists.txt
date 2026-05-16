@@ -6,6 +6,7 @@ cmake_policy(SET CMP0169 OLD)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CUDA_STANDARD 17)
+set(CMAKE_CUDA_ARCHITECTURES "native")
 
 option(ENABLE_NATIVE_TESTS "Build native C++ tests" ON)
 option(ENABLE_NATIVE_COVERAGE "Enable coverage instrumentation for native C++ test targets" OFF)
@@ -110,6 +111,7 @@ add_library(saccade_tracking SHARED
     src/tracking/gmc.cpp
     src/tracking/gmc_kernel.cu
     src/tracking/pipeline.cpp
+    src/tracking/workbench.cpp
 )
 set_target_properties(saccade_tracking PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 target_link_libraries(saccade_tracking
