@@ -20,7 +20,11 @@ from saccade.resource.resource_manager import (
     ResourceManager,
     VRAMLevelWriter,
 )
-from saccade_tracking_ext import PerceptionPipelineConfig
+
+try:
+    from saccade_tracking_ext import PerceptionPipelineConfig
+except ImportError:
+    PerceptionPipelineConfig = None
 
 TrackResultCallback = Callable[
     [str, float, torch.Tensor, torch.Tensor, torch.Tensor, Optional[torch.Tensor]], Any
@@ -212,6 +216,12 @@ class WorkbenchPool:
         # Create shared batching detector
         self._batcher = BatchingTRTDetector(self.engine_path, batch_size=self.n_streams)
 
+        if PerceptionPipelineConfig is None:
+            raise RuntimeError(
+                "saccade_tracking_ext C++ extension is not available. "
+                "Please build the extension: `pip install -e .` or check "
+                "CONCURRENT_EVAL.md for build instructions."
+            )
         pipeline_cfg = PerceptionPipelineConfig()
 
         # Create per-workbench worker threads
