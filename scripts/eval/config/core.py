@@ -17,6 +17,7 @@ class CoreConfig:
     output: str = "results/MOT17_eval"
     workbench: bool = False
     threads: int = 1
+    cpp_threads: int = 0
     data_root: str = "datasets/MOT17"
     split: str = "train"
     sequences: str = ""
@@ -91,6 +92,13 @@ def add_core_args(parser: argparse.ArgumentParser) -> None:
         type=int,
         default=1,
         help="Number of concurrent Workbench instances to run (only applies if --workbench is set)",
+    )
+    io.add_argument(
+        "--cpp-threads",
+        type=int,
+        default=0,
+        dest="cpp_threads",
+        help="Run C++ multi-threaded evaluation with N threads (0 = disabled, uses Python path).",
     )
     io.add_argument("--data-root", default="datasets/MOT17", help="MOT17 dataset root.")
     io.add_argument(

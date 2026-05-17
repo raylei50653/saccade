@@ -2459,6 +2459,9 @@ void filter_detections_cuda(
     if (num_dets <= 0) {
         return;
     }
+    // Clear any stale error before kernel launch so cudaGetLastError below
+    // reports only errors from THIS kernel.
+    cudaGetLastError();
     const int threads = 256;
     const int blocks = (num_dets + threads - 1) / threads;
     filter_detections_kernel<<<blocks, threads, 0, stream>>>(
@@ -2484,7 +2487,16 @@ void filter_detections_cuda(
         person_min_area_ratio,
         person_max_area_ratio
     );
-    checkCuda(cudaGetLastError());
+    {
+        cudaError_t _err = cudaGetLastError();
+        if (_err != cudaSuccess) {
+            std::stringstream _ss;
+            _ss << "CUDA Error: " << cudaGetErrorString(_err)
+                << " (code=" << static_cast<int>(_err) << ")"
+                << " at " << __FILE__ << ":" << __LINE__;
+            throw std::runtime_error(_ss.str());
+        }
+    }
 }
 
 void nms_cuda(

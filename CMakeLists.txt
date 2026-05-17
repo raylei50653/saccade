@@ -112,6 +112,9 @@ add_library(saccade_tracking SHARED
     src/tracking/gmc_kernel.cu
     src/tracking/pipeline.cpp
     src/tracking/workbench.cpp
+    src/tracking/quality_filter.cu
+    src/tracking/seq_runner.cpp
+    src/tracking/eval_pool.cpp
 )
 set_target_properties(saccade_tracking PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 target_link_libraries(saccade_tracking
@@ -175,19 +178,27 @@ target_link_libraries(saccade_media_ext PRIVATE
 
 
 pybind11_add_module(saccade_tracking_ext src/tracking/tracker_gpu_python.cpp)
-target_link_libraries(saccade_tracking_ext PRIVATE 
+target_link_libraries(saccade_tracking_ext PRIVATE
     saccade_tracking
     CUDA::cudart
 )
 
+pybind11_add_module(saccade_eval_ext src/tracking/eval_python.cpp)
+target_link_libraries(saccade_eval_ext PRIVATE
+    saccade_tracking
+    saccade_perception
+    CUDA::cudart
+)
+
 pybind11_add_module(saccade_perception_ext src/perception/perception_python.cpp)
-target_link_libraries(saccade_perception_ext PRIVATE 
+target_link_libraries(saccade_perception_ext PRIVATE
     saccade_perception
     CUDA::cudart
 )
 set_target_properties(
     saccade_media_ext
     saccade_tracking_ext
+    saccade_eval_ext
     saccade_perception_ext
     PROPERTIES
         BUILD_RPATH "${SACCADE_BUILD_RPATH}"

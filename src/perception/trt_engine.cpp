@@ -37,28 +37,37 @@ public:
         engine_.reset(runtime_->deserializeCudaEngine(model_data.data(), size));
         if (!engine_) throw std::runtime_error("❌ Failed to deserialize engine");
 
-        context_.reset(engine_->createExecutionContext());
-        if (!context_) throw std::runtime_error("❌ Failed to create execution context");
-
+        // context_ is created lazily on first infer()/enqueueV3() call so that
+        // callers that only query metadata (tensor shapes, engine ptr) or use
+        // infer_with_context() with their own context don't pay the VRAM cost.
         std::cout << "✅ [TRTEngine] Pimpl Loaded: " << model_path << std::endl;
     }
 
+    nvinfer1::IExecutionContext* ensure_context() {
+        if (!context_) {
+            context_.reset(engine_->createExecutionContext());
+            if (!context_) throw std::runtime_error("❌ Failed to create execution context");
+        }
+        return context_.get();
+    }
+
     bool infer(const std::vector<void*>& bindings, cudaStream_t stream) {
+        auto* ctx = ensure_context();
         int nbTensors = engine_->getNbIOTensors();
         for (int i = 0; i < nbTensors; ++i) {
             if (i >= (int)bindings.size()) continue;
             const char* name = engine_->getIOTensorName(i);
-            context_->setTensorAddress(name, bindings[i]);
+            ctx->setTensorAddress(name, bindings[i]);
         }
-        return context_->enqueueV3(stream);
+        return ctx->enqueueV3(stream);
     }
 
     bool setTensorAddress(const char* name, void* ptr) {
-        return context_->setTensorAddress(name, ptr);
+        return ensure_context()->setTensorAddress(name, ptr);
     }
 
     bool enqueueV3(cudaStream_t stream) {
-        return context_->enqueueV3(stream);
+        return ensure_context()->enqueueV3(stream);
     }
 
     nvinfer1::Dims getTensorDims(const char* name) const {
@@ -91,7 +100,7 @@ public:
         for (size_t i = 0; i < shape.size(); ++i) {
             dims.d[i] = shape[i];
         }
-        return context_->setInputShape(name, dims);
+        return ensure_context()->setInputShape(name, dims);
     }
 
     nvinfer1::IExecutionContext* create_context() const {

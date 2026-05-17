@@ -16,6 +16,7 @@ if build_path.exists():
 # MUST IMPORT THIS BEFORE torchvision TO AVOID LIBJPEG CONFLICT
 from saccade.perception.detector_trt import TRTYoloDetector  # noqa: F401, E402
 from saccade.perception.eval.runner import run_eval  # noqa: E402
+from saccade.perception.eval.evaluator import run_eval_cpp  # noqa: E402
 
 import yaml  # noqa: E402
 from mot17_args import build_parser  # noqa: E402
@@ -112,7 +113,38 @@ if __name__ == "__main__":
     }
     eval_kwargs = {k: v for k, v in vars(args).items() if k not in _MODULE_KEYS}
 
-    if args.workbench and args.threads > 1:
+    if getattr(args, "cpp_threads", 0) > 0:
+        # ── C++ multi-threaded path ───────────────────────────────────────────
+        n = args.cpp_threads
+        print(f"🚀 [C++ EvaluatorPool] Running with {n} threads")
+        metrics = run_eval_cpp(
+            engine=args.engine,
+            output=args.output,
+            data_root=args.data_root,
+            split=args.split,
+            sequences=args.sequences or "",
+            n_threads=n,
+            **{
+                k: v
+                for k, v in eval_kwargs.items()
+                if k
+                not in {
+                    "engine",
+                    "output",
+                    "data_root",
+                    "split",
+                    "sequences",
+                    "workbench",
+                    "threads",
+                    "cpp_threads",
+                }
+            },
+        )
+        if metrics:
+            print("\n=== OVERALL METRICS ===")
+            for k, v in metrics.items():
+                print(f"  {k}: {v}")
+    elif args.workbench and args.threads > 1:
         from saccade.perception.detector_trt import BatchingTRTDetector
         from concurrent.futures import ThreadPoolExecutor
 

@@ -62,7 +62,10 @@ void init_perception_ext(py::module &m) {
             TRTEngine::delete_context(
                 reinterpret_cast<nvinfer1::IExecutionContext*>(ctx_ptr));
         }, py::arg("ctx_ptr"),
-           "Destroy a context created by create_context().");
+           "Destroy a context created by create_context().")
+        .def_property_readonly("cpp_ptr", [](TRTEngine& self) -> uintptr_t {
+            return reinterpret_cast<uintptr_t>(&self);
+        }, "Raw pointer to the underlying C++ TRTEngine (for eval_pool etc.).");
 
     py::class_<Preprocessor>(m, "Preprocessor")
         .def(py::init<int, int>(), py::arg("target_width"), py::arg("target_height"))
