@@ -16,14 +16,20 @@ def _apply_fp_hard_filter(
     boxes: torch.Tensor,
     scores: torch.Tensor,
     classes: torch.Tensor,
+    ids: torch.Tensor,
+    det_idx: torch.Tensor,
     *,
     min_score: float = 0.25,
     max_suspicious_area: int = 10000,
     max_suspicious_score: float = 0.45,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Remove suspicious low-score large-area detections."""
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Remove suspicious low-score large-area detections.
+
+    Filters ALL five output tensors with the same keep mask so that
+    box/cls/score/ids/det_idx stay perfectly aligned.
+    """
     if boxes.numel() == 0:
-        return boxes, scores, classes
+        return boxes[:0], scores[:0], classes[:0], ids[:0], det_idx[:0]
     bw = (boxes[:, 2] - boxes[:, 0]).clamp(min=1e-6)
     bh = (boxes[:, 3] - boxes[:, 1]).clamp(min=1e-6)
     area = bw * bh
@@ -31,8 +37,8 @@ def _apply_fp_hard_filter(
     very_low = scores < min_score
     keep = ~(suspicious | very_low)
     if not keep.any():
-        return boxes[:0], scores[:0], classes[:0]
-    return boxes[keep], scores[keep], classes[keep]
+        return boxes[:0], scores[:0], classes[:0], ids[:0], det_idx[:0]
+    return boxes[keep], scores[keep], classes[keep], ids[keep], det_idx[keep]
 
 
 def _ptr_or_zero_extractor(extractor: Any) -> int:
@@ -114,11 +120,19 @@ class Workbench:
         # ── ReID frame tracking ──────────────────────────────────────
         last_reid_frame: int = -100,
         # ── Output buffer capacity ───────────────────────────────────
-        output_capacity: int = 256,
+        # Must match C++ tracker max_objs_ = max_tracks * 8 to avoid
+        # buffer overflow in update_into (which unconditionally copies
+        # max_objs_ elements).  Default of 256 was a dangerous mismatch
+        # when max_tracks=256 → tracker writes 2048 to a 256-buffer.
+        output_capacity: int | None = None,
     ):
         self.device = device
         self.max_dets = max_dets
         self.max_tracks = max_tracks
+
+        # ── Output buffer capacity (align with C++ max_objs = max_tracks * 8) ──
+        if output_capacity is None:
+            output_capacity = max_tracks * 8
 
         # ── Optional components ──────────────────────────────────────
         self.extractor = extractor
@@ -277,6 +291,7 @@ class Workbench:
     def _compute_reid_embeddings(
         self,
         boxes: torch.Tensor,
+        scores: torch.Tensor,
         frame_chw: torch.Tensor,
         frame_w: int,
         frame_h: int,
@@ -319,12 +334,9 @@ class Workbench:
         else:
             actual_budget = num_dets  # Unlimited
 
-        # Budget selection: top-k by score (simplified; full version needs
-        # dynamic_reid priorities from evaluator.py helpers)
+        # Budget selection: top-k by score (aligned with helpers.py budget_reid_candidates)
         if actual_budget < num_dets:
-            _, top_idx = torch.topk(
-                boxes[:, 3] - boxes[:, 1], actual_budget
-            )  # height as proxy
+            _, top_idx = torch.topk(scores, actual_budget)
         else:
             top_idx = torch.arange(num_dets, device=boxes.device)
         budget_indices = top_idx.sort().values
@@ -496,6 +508,7 @@ class Workbench:
             if frame_chw is not None:
                 reid_embeddings, next_reid = self._compute_reid_embeddings(
                     raw_boxes,
+                    raw_scores,
                     frame_chw,
                     frame_w,
                     frame_h,
@@ -552,10 +565,18 @@ class Workbench:
 
         # Step 5: FP hard filter (Python, fast — applied to post-tracker output)
         if self.fp_hard_filter:
-            out_boxes, out_scores, out_classes = _apply_fp_hard_filter(
+            (
                 out_boxes,
                 out_scores,
                 out_classes,
+                out_ids,
+                out_det_idx,
+            ) = _apply_fp_hard_filter(
+                out_boxes,
+                out_scores,
+                out_classes,
+                out_ids,
+                out_det_idx,
                 min_score=self.fp_min_score,
                 max_suspicious_area=self.fp_max_suspicious_area,
                 max_suspicious_score=self.fp_max_suspicious_score,
