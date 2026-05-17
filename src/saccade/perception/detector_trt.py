@@ -166,12 +166,35 @@ class TRTYoloDetector:
         stream = torch.cuda.current_stream().cuda_stream
 
         if self.use_cpp:
+            engine_batch = (
+                int(self.input_shape[0])
+                if self.input_shape
+                and len(self.input_shape) > 0
+                and int(self.input_shape[0]) > 0
+                else batch_size
+            )
+            infer_batch = batch_size
+            infer_input = input_tensor
+
+            if not self.is_dynamic and engine_batch != batch_size:
+                if batch_size > engine_batch:
+                    raise ValueError(
+                        f"Static TRT engine expects batch {engine_batch}, got {batch_size}"
+                    )
+                infer_batch = engine_batch
+                infer_input = torch.zeros(
+                    (engine_batch, *input_tensor.shape[1:]),
+                    device=input_tensor.device,
+                    dtype=input_tensor.dtype,
+                )
+                infer_input[:batch_size].copy_(input_tensor)
+
             # 1. 準備所有輸出空間
             for name in self.output_names:
                 shape = self.output_shape
                 if self.is_dynamic:
                     # Resolve -1 to actual batch_size
-                    shape = tuple([batch_size if d == -1 else d for d in shape])
+                    shape = tuple([infer_batch if d == -1 else d for d in shape])
 
                 current = self.output_tensors.get(name)
                 if current is None or tuple(current.shape) != shape:
@@ -182,15 +205,20 @@ class TRTYoloDetector:
             # 2. 準備 bindings 並執行
             if self.is_dynamic:
                 self.cpp_engine.set_input_shape(
-                    self.input_name, list(input_tensor.shape)
+                    self.input_name, list(infer_input.shape)
                 )
 
-            binding_ptrs = [input_tensor.data_ptr()]
+            binding_ptrs = [infer_input.data_ptr()]
             for name in self.output_names:
                 binding_ptrs.append(self.output_tensors[name].data_ptr())
 
             self.cpp_engine.infer(binding_ptrs, stream)
-            return self.output_tensors
+            if infer_batch == batch_size:
+                return self.output_tensors
+            return {
+                name: tensor[:batch_size]
+                for name, tensor in self.output_tensors.items()
+            }
 
         # Python Native Path (Fallback)
         # 1. 設定動態輸入 Shape

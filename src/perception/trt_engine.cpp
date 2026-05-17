@@ -100,7 +100,7 @@ public:
         for (size_t i = 0; i < shape.size(); ++i) {
             dims.d[i] = shape[i];
         }
-        return context_->setInputShape(name, dims);
+        return ensure_context()->setInputShape(name, dims);
     }
 
     nvinfer1::IExecutionContext* create_context() const {
