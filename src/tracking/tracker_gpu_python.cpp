@@ -17,6 +17,7 @@
 #include "tracking/gmc.hpp"
 #include "tracking/pipeline.hpp"
 #include "tracking/workbench.hpp"
+#include "tracking/quality_filter.cuh"
 #include "perception/feature_extractor.hpp"
 #include "perception/preprocessor.hpp"
 #include <opencv2/opencv.hpp>
@@ -2497,4 +2498,70 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
     py::arg("pad_val") = 114.0f / 255.0f,
     py::arg("stream_ptr") = 0,
     "Fused letterbox: bilinear resize + constant pad into a square canvas in one kernel.");
+
+    // ── GPU Quality Filter ops (ports of quality.py / workbench.py) ──────────
+
+    m.def("quality_scale_scores",
+        [](uintptr_t scores_ptr, uintptr_t boxes_ptr, int n,
+           int frame_w, int frame_h,
+           float w_aspect, float w_center, float w_area,
+           uintptr_t stream_ptr) {
+            py::gil_scoped_release release;
+            quality_scale_scores(
+                reinterpret_cast<float*>(scores_ptr),
+                reinterpret_cast<const float*>(boxes_ptr),
+                n, frame_w, frame_h, w_aspect, w_center, w_area,
+                reinterpret_cast<cudaStream_t>(stream_ptr));
+        },
+        py::arg("scores_ptr"), py::arg("boxes_ptr"), py::arg("n"),
+        py::arg("frame_w"), py::arg("frame_h"),
+        py::arg("w_aspect") = 0.50f, py::arg("w_center") = 0.30f, py::arg("w_area") = 0.20f,
+        py::arg("stream_ptr") = 0,
+        "Multiply scores in-place by detection geometry quality (aspect/center/area). "
+        "GPU equivalent of compute_detection_quality_batch().");
+
+    m.def("narrow_bonus_scores",
+        [](uintptr_t scores_ptr, uintptr_t boxes_ptr, uintptr_t classes_ptr, int n,
+           float bonus, int person_class,
+           float narrow_aspect_thresh, float narrow_height_thresh,
+           int frame_h, uintptr_t stream_ptr) {
+            py::gil_scoped_release release;
+            narrow_bonus_scores(
+                reinterpret_cast<float*>(scores_ptr),
+                reinterpret_cast<const float*>(boxes_ptr),
+                reinterpret_cast<const int*>(classes_ptr),
+                n, bonus, person_class,
+                narrow_aspect_thresh, narrow_height_thresh, frame_h,
+                reinterpret_cast<cudaStream_t>(stream_ptr));
+        },
+        py::arg("scores_ptr"), py::arg("boxes_ptr"), py::arg("classes_ptr"), py::arg("n"),
+        py::arg("bonus"), py::arg("person_class") = 0,
+        py::arg("narrow_aspect_thresh") = 2.1f, py::arg("narrow_height_thresh") = 0.5f,
+        py::arg("frame_h") = 1080, py::arg("stream_ptr") = 0,
+        "Add score bonus to narrow/tall person detections in-place. "
+        "GPU equivalent of _apply_narrow_bonus().");
+
+    m.def("fp_hard_filter",
+        [](uintptr_t boxes_in, uintptr_t scores_in, uintptr_t classes_in, int n,
+           float min_score, float max_area, float max_suspicious_score,
+           uintptr_t boxes_out, uintptr_t scores_out, uintptr_t classes_out,
+           uintptr_t stream_ptr) -> int {
+            py::gil_scoped_release release;
+            return fp_hard_filter(
+                reinterpret_cast<const float*>(boxes_in),
+                reinterpret_cast<const float*>(scores_in),
+                reinterpret_cast<const int*>(classes_in),
+                n, min_score, max_area, max_suspicious_score,
+                reinterpret_cast<float*>(boxes_out),
+                reinterpret_cast<float*>(scores_out),
+                reinterpret_cast<int*>(classes_out),
+                reinterpret_cast<cudaStream_t>(stream_ptr));
+        },
+        py::arg("boxes_in"), py::arg("scores_in"), py::arg("classes_in"), py::arg("n"),
+        py::arg("min_score") = 0.25f, py::arg("max_area") = 10000.0f,
+        py::arg("max_suspicious_score") = 0.45f,
+        py::arg("boxes_out"), py::arg("scores_out"), py::arg("classes_out"),
+        py::arg("stream_ptr") = 0,
+        "Compact-filter detections removing very-low-score and large+uncertain boxes. "
+        "Returns count of kept detections. GPU equivalent of _apply_fp_hard_filter().");
 }

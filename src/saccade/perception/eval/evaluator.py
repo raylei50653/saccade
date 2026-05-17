@@ -29,6 +29,7 @@ from .utils import (
     debug_frame_selected as _debug_frame_selected,
     append_stage_dump_rows as _append_stage_dump_rows,
     safe_cpp_ptr as _safe_cpp_ptr,
+    mot_result_line as _mot_result_line,
     apply_narrow_person_score_bonus as _apply_narrow_person_score_bonus,
     tile_seam_mask as _tile_seam_mask,
     count_tile_seam_boxes as _count_tile_seam_boxes,
@@ -846,6 +847,237 @@ def _env_flag_enabled(name: str, default: bool = True) -> bool:
     return value.lower() not in {"0", "false"}
 
 
+def _build_cpp_seq_config(
+    cfg: Any,
+    seq: str,
+    data_root: str,
+    split: str = "train",
+    trt_input_size: int = 640,
+    max_raw_dets: int = 8400,
+) -> Any:
+    """Build a CppSequenceConfig from eval config + sequence name."""
+    from saccade_eval_ext import CppSequenceConfig
+    from pathlib import Path
+
+    seq_dir = Path(data_root) / split / seq / "img1"
+    frame_paths = sorted(str(p) for p in seq_dir.glob("*.jpg"))
+
+    # Read seqinfo.ini for frame dimensions
+    seqinfo = Path(data_root) / split / seq / "seqinfo.ini"
+    w, h = 1920, 1080
+    if seqinfo.exists():
+        import configparser
+
+        cp = configparser.ConfigParser()
+        cp.read(str(seqinfo))
+        w = int(cp.get("Sequence", "imWidth", fallback=str(w)))
+        h = int(cp.get("Sequence", "imHeight", fallback=str(h)))
+
+    c = CppSequenceConfig()
+    c.name = seq
+    c.frame_paths = frame_paths
+    c.width = w
+    c.height = h
+
+    # Quality filter params
+    c.w_aspect = getattr(cfg, "detection_quality_w_aspect", 0.5)
+    c.w_center = getattr(cfg, "detection_quality_w_center", 0.3)
+    c.w_area = getattr(cfg, "detection_quality_w_area", 0.2)
+    c.fp_hard_filter = getattr(cfg, "fp_hard_filter_enabled", True)
+    c.fp_min_score = getattr(cfg, "fp_hard_filter_min_score", 0.25)
+    c.fp_max_area = float(getattr(cfg, "fp_hard_filter_max_suspicious_area", 10000))
+    c.fp_max_susp_score = getattr(cfg, "fp_hard_filter_max_suspicious_score", 0.45)
+    c.narrow_bonus = 0.0  # scene-adapt handled separately if needed
+    c.person_class = getattr(cfg, "person_class", 0)
+    c.trt_input_size = trt_input_size
+    c.max_raw_dets = max_raw_dets
+
+    # Tracker params — match Python baseline set_params call
+    c.track_thresh = float(getattr(cfg, "track_thresh", 0.05))
+    c.high_thresh = float(getattr(cfg, "high_thresh", 0.45))
+    c.match_thresh = float(getattr(cfg, "match_thresh", 0.66))
+    c.new_track_thresh = float(getattr(cfg, "new_track_thresh", 0.28))
+    c.mid_thresh = float(getattr(cfg, "mid_thresh", 0.10))
+    c.confirm_streak = int(cfg.kwargs.get("confirm_streak", 1))
+    c.confirm_score_thresh = float(cfg.kwargs.get("confirm_score_thresh", 0.0))
+    c.fuse_score_weight = float(getattr(cfg, "fuse_score_weight", 0.4))
+    c.vel_dir_weight = float(getattr(cfg, "vel_dir_weight", 0.0))
+    c.stage2_match_thresh = float(getattr(cfg, "stage2_match_thresh", 0.5))
+    c.birth_low_score_thresh = float(getattr(cfg, "birth_low_score_thresh", 0.0))
+    c.track_buffer = 30
+
+    return c
+
+
+def run_eval_cpp(
+    engine: str,
+    output: str,
+    data_root: str,
+    split: str,
+    sequences: str,
+    n_threads: int = 4,
+    **kwargs: Any,
+) -> dict[str, Any] | None:
+    """Multi-threaded C++ evaluation loop via CppEvaluatorPool.
+
+    Runs detection+tracking for all sequences in parallel (GIL-free in C++).
+    Post-processing (relink, post_merge, metrics) runs in Python after all
+    sequences complete.
+    """
+    try:
+        from saccade_eval_ext import CppEvaluatorPool
+    except ImportError:
+        raise RuntimeError(
+            "saccade_eval_ext not available — build with cmake and copy .so to project root"
+        )
+    from .config import parse_eval_config
+    from saccade.perception.detector_trt import TRTYoloDetector
+
+    cfg = parse_eval_config(
+        output=output,
+        data_root=data_root,
+        split=split,
+        sequences=sequences,
+        conf_threshold=float(kwargs.pop("conf_threshold", 0.05)),
+        reid_mode=str(kwargs.pop("reid_mode", "off")),
+        reid_model=str(kwargs.pop("reid_model", "siglip2")),
+        profile_stages=bool(kwargs.pop("profile_stages", False)),
+        kwargs=kwargs,
+    )
+    detector: TRTYoloDetector = TRTYoloDetector(engine)
+
+    # Build PerceptionPipelineConfig (native)
+    from saccade_tracking_ext import PerceptionPipelineConfig
+
+    native_cfg = PerceptionPipelineConfig()
+    native_cfg.score_threshold = cfg.conf_threshold
+    native_cfg.person_class = cfg.person_class
+    native_cfg.nms_threshold = cfg.nms_iou_threshold
+    native_cfg.person_geometry_prior = cfg.person_geometry_prior
+    native_cfg.person_min_height_ratio = cfg.person_min_height_ratio
+    native_cfg.person_min_aspect = cfg.person_min_aspect
+    native_cfg.person_max_aspect = cfg.person_max_aspect
+
+    if not hasattr(detector, "cpp_engine"):
+        raise RuntimeError(
+            "run_eval_cpp requires the C++ TRT backend (SACCADE_TRT_BACKEND=cpp)"
+        )
+    detect_engine_ptr = int(detector.cpp_engine.cpp_ptr)
+
+    # Read engine's actual input/output shapes to configure seq_configs correctly.
+    _in_shape = detector.cpp_engine.get_tensor_shape("images")  # [B,C,H,W]
+    _out_shape = detector.cpp_engine.get_tensor_shape("output0")  # [B,N,6]
+    trt_input_size = int(_in_shape[2])  # spatial side (H == W)
+    max_raw_dets = int(_out_shape[1])  # N detections
+
+    seq_configs = [
+        _build_cpp_seq_config(
+            cfg, seq, data_root, cfg.split, trt_input_size, max_raw_dets
+        )
+        for seq in cfg.seqs
+    ]
+
+    pool = CppEvaluatorPool(
+        detect_engine_ptr=detect_engine_ptr,
+        pipe_cfg=native_cfg,
+        n_threads=min(n_threads, len(cfg.seqs)),
+        max_dets=2048,
+        max_tracks=256,
+        device_id=0,
+    )
+
+    import time
+    import numpy as np
+    from pathlib import Path as _Path
+    from .post_merge import (
+        post_merge_output_tracklets,
+        filter_low_quality_tracklets,
+        interpolate_tracklets,
+    )
+
+    output_root = cfg.output_root
+    output_root.mkdir(parents=True, exist_ok=True)
+
+    t0 = time.monotonic()
+    cpp_results = pool.run_sequences(seq_configs)  # GIL released here
+    elapsed = time.monotonic() - t0
+    print(
+        f"[run_eval_cpp] {len(cfg.seqs)} sequences in {elapsed:.1f}s "
+        f"({n_threads} threads)"
+    )
+
+    # ── Per-sequence post-processing ──────────────────────────────────────────
+    for seq in cfg.seqs:
+        if seq not in cpp_results:
+            print(f"⚠️  {seq}: no C++ results, skipping")
+            continue
+
+        res = cpp_results[seq]
+        frame_ids: np.ndarray = res["frame_ids"]
+        track_ids: np.ndarray = res["track_ids"]
+        boxes: np.ndarray = res["boxes"]  # [N,4] x1 y1 x2 y2
+        scores: np.ndarray = res["scores"]  # [N]
+
+        # Convert to MOT17 lines: frame,id,x,y,w,h,score,-1,-1,-1
+        results_lines: list[str] = []
+        for i in range(len(frame_ids)):
+            x1, y1, x2, y2 = boxes[i]
+            w = x2 - x1
+            h = y2 - y1
+            results_lines.append(
+                f"{frame_ids[i]},{track_ids[i]},{x1:.2f},{y1:.2f},{w:.2f},{h:.2f},"
+                f"{scores[i]:.4f},-1,-1,-1"
+            )
+
+        results_lines, _ = post_merge_output_tracklets(
+            results_lines,
+            enabled=cfg.post_lifecycle_merge,
+            ttl=cfg.post_lifecycle_ttl,
+            min_gap=cfg.post_lifecycle_min_gap,
+            velocity_samples=cfg.post_lifecycle_velocity_samples,
+            spatial_weight=cfg.post_lifecycle_spatial_weight,
+            motion_weight=cfg.post_lifecycle_motion_weight,
+            time_weight=cfg.post_lifecycle_time_weight,
+            direction_weight=cfg.post_lifecycle_direction_weight,
+            max_cost=cfg.post_lifecycle_max_cost,
+            appearance_bank=None,
+        )
+
+        results_lines, quality_stats = filter_low_quality_tracklets(
+            results_lines,
+            min_len=cfg.min_tracklet_len,
+            min_score=cfg.min_tracklet_score,
+        )
+        if quality_stats["removed"] > 0:
+            print(
+                f"  {seq}: quality filter removed {quality_stats['removed']} tracklets"
+            )
+
+        if cfg.interpolate_tracklets:
+            results_lines, interp_stats = interpolate_tracklets(
+                results_lines,
+                max_gap=cfg.interpolate_max_gap,
+                min_track_len=cfg.interpolate_min_track_len,
+            )
+            print(
+                f"  {seq}: interpolation gaps={interp_stats['gaps_filled']} "
+                f"frames_added={interp_stats['frames_added']}"
+            )
+
+        _Path(output_root / f"{seq}.txt").write_text("\n".join(results_lines))
+        print(f"✅ {seq} written ({len(results_lines)} lines)")
+
+    from .metrics import run_motmetrics_evaluation
+
+    return run_motmetrics_evaluation(
+        data_root=cfg.data_root,
+        split=cfg.split,
+        output=str(cfg.output_root),
+        sequences=",".join(cfg.seqs),
+        detector=cfg.kwargs.get("detector"),
+    )
+
+
 def run_eval(
     engine: str,
     output: str,
@@ -1110,15 +1342,42 @@ def run_eval(
 
     for seq in cfg.seqs:
         wb = None
+        wb_scene_policy = None
         if getattr(cfg, "workbench", False):
             from saccade.perception.workbench import Workbench
 
+            # Build workbench with quality/ReID/GMC components (baseline-aligned)
             wb = Workbench(
                 detector,
                 native_cfg,
                 device=str(detector.device),
                 max_dets=2048,
                 max_tracks=256,
+                # Quality/ReID/GMC components
+                extractor=extractor,
+                cropper=cropper,
+                gmc_estimator=None,  # set below after gmc_estimator is created
+                narrow_bonus=0.0,
+                # Quality filter params
+                quality_weights=(
+                    cfg.detection_quality_w_aspect,
+                    cfg.detection_quality_w_center,
+                    cfg.detection_quality_w_area,
+                )
+                if cfg.detection_quality_scaling
+                else (0.5, 0.3, 0.2),
+                max_detections=cfg.per_frame_detection_cap or 30,
+                fp_hard_filter=cfg.fp_hard_filter_enabled,
+                fp_min_score=cfg.fp_hard_filter_min_score,
+                fp_max_suspicious_area=cfg.fp_hard_filter_max_suspicious_area,
+                fp_max_suspicious_score=cfg.fp_hard_filter_max_suspicious_score,
+                # ReID params
+                reid_budget_raw=cfg.reid_budget_raw,
+                reid_interval=cfg.reid_interval,
+                need_reid=cfg.need_reid_enabled,
+                dynamic_reid=None,
+                gmc_uncertain=False,
+                output_capacity=256,
             )
         else:
             detector.reset_tracker()
@@ -1139,6 +1398,24 @@ def run_eval(
                     gmc_estimator = SparseOpticalFlowGMC(downscale=cfg.gmc_downscale)
             else:
                 gmc_estimator = SparseOpticalFlowGMC(downscale=cfg.gmc_downscale)
+
+        # Set scene-adapt policy on workbench
+        if wb is not None:
+            wb_scene_policy = (
+                SceneAdaptivePolicy(
+                    window=cfg.scene_adapt_window,
+                    crowd_box_thresh=cfg.scene_adapt_crowd_thresh,
+                    narrow_aspect_thresh=cfg.scene_adapt_narrow_aspect_thresh,
+                    narrow_width_thresh=cfg.scene_adapt_narrow_width_thresh,
+                )
+                if cfg.scene_adapt_enabled
+                else None
+            )
+            wb.scene_adapt_policy = wb_scene_policy
+
+        # Set GMC estimator on workbench (after gmc_estimator is created)
+        if wb is not None and gmc_estimator is not None:
+            wb.gmc_estimator = gmc_estimator
 
         # Load homography if provided (ADR 017)
         if cfg.homography_root:
@@ -1383,6 +1660,10 @@ def run_eval(
             if cfg.need_reid_enabled
             else None
         )
+        # Update workbench with dynamic_reid (created after Workbench init)
+        if wb is not None:
+            wb.dynamic_reid = dynamic_reid
+
         prev_track_ids: set[int] = set()
         _consec_birth_window: deque[torch.Tensor] = deque(
             maxlen=max(1, cfg.birth_consecutive_frames - 1)
@@ -1460,6 +1741,7 @@ def run_eval(
         last_reid_frame = -100
         gmc_warp = None
         gmc_uncertain = False
+        prev_gray: torch.Tensor | None = None  # for GMC (workbench path)
         tracker_result_buffers = detector.tracker.allocate_result_buffers(
             device=pool.frame_buffer.device
         )
@@ -1714,58 +1996,105 @@ def run_eval(
                     sync_cuda=True,
                 )
 
-                # Fetch priors for ONMS if enabled
-                priors_tensor, prior_classes_tensor = None, None
-                if enable_onms:
-                    priors_tensor, prior_classes_tensor = _build_active_track_priors(
-                        wb.tracker,
-                        fused_boxes.device,
-                        min_track_age=onms_min_track_age,
-                        min_track_score=onms_min_track_score,
-                    )
+                # ── Scene-adapt: observe & classify on first frames ────────
+                if wb_scene_policy is not None and not wb_scene_policy.is_classified:
+                    wb_scene_policy.observe(fused_boxes, fused_scores, w_orig, h_orig)
+                    if (
+                        wb_scene_policy.is_classified
+                        and wb_scene_policy.stats is not None
+                    ):
+                        st = wb_scene_policy.stats
+                        if st.scene_type == "crowded_narrow":
+                            seq_narrow_bonus = cfg.narrow_person_score_bonus
+                        wb.narrow_bonus = seq_narrow_bonus
+                        print(
+                            f"  [scene_adapt] {seq} @ frame {frame_id}: {st}"
+                            + (
+                                f" → narrow_bonus={seq_narrow_bonus:.2f}"
+                                if cfg.scene_adapt_enabled
+                                and cfg.narrow_person_score_bonus > 0
+                                else ""
+                            )
+                        )
 
-                # Narrow-person score bonus (pre-postyolo hook equivalent)
-                fused_scores = _apply_narrow_person_score_bonus(
-                    fused_boxes,
-                    fused_scores,
-                    fused_classes,
-                    frame_w=w_orig,
-                    frame_h=h_orig,
-                    person_class=cfg.person_class,
-                    bonus=seq_narrow_bonus,
-                    max_width_ratio=cfg.narrow_person_max_width_ratio,
-                    min_height_ratio=cfg.narrow_person_min_height_ratio,
-                    min_aspect=cfg.narrow_person_min_aspect,
-                    max_aspect=cfg.narrow_person_max_aspect,
-                )
-
-                # Step 3: GIL-free filter+NMS+tracking via workbench C++ hot path
+                # ── Quality-aware processing (baseline-aligned pipeline) ────
                 wb_result, _ = time_stage(
                     seq_stage_totals,
                     "postprocess",
-                    lambda: wb.process_detections(
+                    lambda: wb.process_detections_quality_aware(
                         fused_boxes,
                         fused_scores,
                         fused_classes,
                         frame_w=w_orig,
                         frame_h=h_orig,
+                        frame_chw=pool.frame_buffer,
+                        frame_id=frame_id,
+                        last_reid_frame=last_reid_frame,
+                        prev_gray=prev_gray,
                         is_tiled=is_tiled,
-                        priors=priors_tensor if enable_onms else None,
-                        prior_classes=prior_classes_tensor if enable_onms else None,
                     ),
                     sync_cuda=True,
                 )
+                # Update scene-adapt narrow bonus from workbench
+                seq_narrow_bonus = wb.narrow_bonus
+                last_reid_frame = wb.last_reid_frame
 
-                track_results = {
-                    "count": len(wb_result.ids),
-                    "ids": wb_result.ids,
-                    "boxes": wb_result.boxes,
-                    "scores": wb_result.scores,
-                    "classes": wb_result.classes,
-                    "det_idx": wb_result.det_idx,
+                # Set tracker_result_buffers to match workbench results so
+                # downstream _materialize_gpu_track_results reads the correct data
+                tracker_result_buffers = {
+                    "count": torch.tensor(
+                        [len(wb_result.ids)], dtype=torch.int32, device="cpu"
+                    ),
+                    "boxes": wb_result.boxes.clone().detach().cpu(),
+                    "scores": wb_result.scores.clone().detach().cpu(),
+                    "ids": wb_result.ids.clone().detach().cpu(),
+                    "classes": wb_result.classes.clone().detach().cpu(),
+                    "det_idx": wb_result.det_idx.clone().detach().cpu(),
                 }
 
-                # Mock missing variables
+                # Set track_results (format expected by _prepare_host_track_batch / relink)
+                # Workbench C++ already materialized; wrap to match non-wb format
+                wb_count = int(len(wb_result.ids))
+                track_results = {
+                    "count": wb_count,
+                    "boxes": wb_result.boxes.clone().detach().cpu(),
+                    "scores": wb_result.scores.clone().detach().cpu(),
+                    "ids": wb_result.ids.clone().detach().cpu(),
+                    "classes": wb_result.classes.clone().detach().cpu(),
+                    "det_idx": wb_result.det_idx.clone().detach().cpu(),
+                }
+
+                # Write MOT result lines for workbench path (C++ already tracked).
+                # Build lines: "frame_id, global_tid, x1, y1, w, h, score, -1, -1, -1"
+                wb_mot_lines: list[str] = []
+                if wb_count > 0:
+                    wb_ids_np = wb_result.ids[:wb_count].cpu().numpy().astype(int)
+                    wb_boxes_np = wb_result.boxes[:wb_count].cpu().numpy()
+                    wb_scores_np = wb_result.scores[:wb_count].cpu().numpy()
+                    for i in range(wb_count):
+                        global_tid = int(global_id_mapper.map(seq, wb_ids_np[i]))
+                        box = (
+                            float(wb_boxes_np[i, 0]),
+                            float(wb_boxes_np[i, 1]),
+                            float(wb_boxes_np[i, 2]),
+                            float(wb_boxes_np[i, 3]),
+                        )
+                        score = float(wb_scores_np[i])
+                        wb_mot_lines.append(
+                            _mot_result_line(
+                                frame_id, global_tid, box, score, w_orig, h_orig
+                            )
+                        )
+
+                # Add MOT lines to results_lines so they go through post-processing
+                if wb_mot_lines:
+                    results_lines.extend(wb_mot_lines)
+
+                # Update prev_track_ids for downstream (lazy ReID, etc.)
+                if wb_count > 0:
+                    prev_track_ids = set(wb_ids_np.tolist())
+
+                # Mock missing variables for downstream compatibility
                 fused_boxes = wb_result.boxes
                 fused_scores = wb_result.scores
                 fused_classes = wb_result.classes
@@ -1781,10 +2110,21 @@ def run_eval(
                 raw_dump_classes = fused_classes
                 frame_birth_events = []
 
-                # Update seq_stage_totals for the skipped stages to match legacy timing expectations
+                # Update seq_stage_totals for the skipped stages
                 seq_stage_totals["postprocess"] += 0.0
                 seq_stage_totals["track"] += 0.0
                 seq_stage_totals["materialize"] += 0.0
+
+                # Save gray frame for GMC in next frame
+                prev_gray = (
+                    (
+                        0.299 * pool.frame_buffer[2]
+                        + 0.587 * pool.frame_buffer[1]
+                        + 0.114 * pool.frame_buffer[0]
+                    )
+                    .unsqueeze(0)
+                    .clone()
+                )
             else:
                 _, _ = time_stage(
                     seq_stage_totals,
