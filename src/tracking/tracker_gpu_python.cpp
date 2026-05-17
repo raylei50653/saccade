@@ -2413,6 +2413,34 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
                 out["images"] = stats.images;
                 return out;
             })
+        .def("set_postprocess_profiling_enabled", &PerceptionPipeline::set_postprocess_profiling_enabled, py::arg("enabled"))
+        .def("reset_postprocess_profile_stats", &PerceptionPipeline::reset_postprocess_profile_stats)
+        .def("get_postprocess_profile_stats",
+            [](const PerceptionPipeline& self) {
+                const auto stats = self.get_postprocess_profile_stats();
+                py::dict out;
+                out["filter_ms"] = stats.filter_ms;
+                out["nms_ms"] = stats.nms_ms;
+                out["count_d2h_ms"] = stats.count_d2h_ms;
+                out["total_ms"] = stats.total_ms;
+                out["native_filter_gather_ms"] = stats.native_filter_gather_ms;
+                out["native_filter_kernel_ms"] = stats.native_filter_kernel_ms;
+                out["native_gather_compact3_ms"] = stats.native_gather_compact3_ms;
+                out["native_copy_suspect_ms"] = stats.native_copy_suspect_ms;
+                out["native_filter_count_sync_ms"] = stats.native_filter_count_sync_ms;
+                out["native_small_nms_ms"] = stats.native_small_nms_ms;
+                out["native_suspect_penalty_ms"] = stats.native_suspect_penalty_ms;
+                out["native_large_sort_nms_ms"] = stats.native_large_sort_nms_ms;
+                out["native_large_argsort_ms"] = stats.native_large_argsort_ms;
+                out["native_large_nms_ms"] = stats.native_large_nms_ms;
+                out["native_compact_copy_ms"] = stats.native_compact_copy_ms;
+                out["native_large_gather4_ms"] = stats.native_large_gather4_ms;
+                out["native_large_copyback_ms"] = stats.native_large_copyback_ms;
+                out["input_boxes"] = stats.input_boxes;
+                out["filtered_boxes"] = stats.filtered_boxes;
+                out["output_boxes"] = stats.output_boxes;
+                return out;
+            })
         .def_property_readonly("embed_dim", &PerceptionPipeline::get_embed_dim)
         .def_property_readonly("cpp_ptr", [](PerceptionPipeline& self) {
             return reinterpret_cast<uintptr_t>(&self);

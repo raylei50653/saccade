@@ -77,18 +77,6 @@ int Workbench::process_frame_postyolo(
         return 0; 
     }
 
-    // 2.5 Optional: apply geometry suspect penalty
-    const auto& cfg = pipeline_->get_config();
-    if (cfg.geometry_suspect_support && n_post > 0) {
-        penalize_suspect_scores_cuda(
-            d_post_scores_,
-            d_post_suspect_,
-            d_post_count_,
-            cfg.geometry_suspect_support_score,
-            max_dets_,
-            stream_);
-    }
-
     // 3. Tracker update_into → caller-provided output buffers, still on stream_.
     //    update_into's signature is non-const for legacy reasons; it does not
     //    write through embeddings/gmc.

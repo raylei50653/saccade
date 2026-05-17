@@ -5,6 +5,7 @@ import os
 import time
 from collections import OrderedDict, deque
 import dataclasses
+from contextlib import nullcontext
 from concurrent.futures import ThreadPoolExecutor, Future
 from pathlib import Path
 
@@ -67,6 +68,16 @@ _SOFTMAX3_TORCH_CACHE: dict[
     tuple[int, str],
     tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
 ] = {}
+
+
+def _record_profile_scope(name: str):
+    profiler_mod = getattr(torch, "profiler", None)
+    if profiler_mod is None:
+        return nullcontext()
+    record_fn = getattr(profiler_mod, "record_function", None)
+    if record_fn is None:
+        return nullcontext()
+    return record_fn(name)
 
 
 # ---------------------------------------------------------------------------
@@ -906,6 +917,31 @@ def _build_cpp_seq_config(
     c.birth_low_score_thresh = float(getattr(cfg, "birth_low_score_thresh", 0.0))
     c.track_buffer = 30
 
+    # GMC — always enabled (GPU phase correlation, matches Python workbench default)
+    c.gmc_enabled = True
+    c.gmc_downscale = 8
+    c.gmc_phase_corr = True
+
+    # ReID — wire from cfg when reid is active and an engine path is provided
+    _reid_engine_path = getattr(cfg, "reid_engine", "") or ""
+    _reid_enabled = getattr(cfg, "reid_enabled", False)
+    c.reid_engine_path = _reid_engine_path if _reid_enabled else ""
+    _reid_model = getattr(cfg, "reid_model", "siglip2")
+    _model_type_map = {
+        "siglip2": 0,
+        "dinov2": 1,
+        "transreid": 2,
+        "osnet": 3,
+        "fastreid": 4,
+    }
+    c.reid_model_type = _model_type_map.get(_reid_model, 0)
+    _budget_raw = float(getattr(cfg, "reid_budget_raw", 0.0))
+    c.reid_budget = int(_budget_raw) if _budget_raw > 0 else 64
+    c.reid_interval = max(1, int(getattr(cfg, "reid_interval", 1)))
+    _crop_hw = getattr(cfg, "crop_hw", (224, 224))
+    c.reid_crop_h = int(_crop_hw[0])
+    c.reid_crop_w = int(_crop_hw[1])
+
     return c
 
 
@@ -1237,6 +1273,7 @@ def run_eval(
             cropper_cpp_ptr if native_reid_available else 0,
             native_cfg,
         )
+        perception_pipeline.set_postprocess_profiling_enabled(profile_stages)
         if native_reid_available:
             perception_pipeline.set_reid_profiling_enabled(profile_stages)
     enable_onms = _env_flag_enabled("SACCADE_ENABLE_ONMS", False)
@@ -1261,7 +1298,32 @@ def run_eval(
         "relink_write",
         "frame_total",
     )
-    breakdown_stage_names = ("post_filter", "post_nms", "post_merge")
+    breakdown_stage_names = (
+        "post_gpu_elapsed",
+        "post_tensor_prep",
+        "post_filter",
+        "post_nms",
+        "post_count_sync",
+        "post_native_other",
+        "native_filter_gather",
+        "native_filter_kernel",
+        "native_gather_compact3",
+        "native_copy_suspect",
+        "native_filter_count_sync",
+        "native_small_nms",
+        "native_suspect_penalty",
+        "native_large_sort_nms",
+        "native_large_argsort",
+        "native_large_nms",
+        "native_compact_copy",
+        "native_large_gather4",
+        "native_large_copyback",
+        "post_keypoint_align",
+        "post_output_slicing",
+        "post_quality_scale",
+        "post_tail_filtering",
+        "post_merge",
+    )
 
     native_reid_breakdown_names = (
         "native_reid_crop",
@@ -1377,7 +1439,6 @@ def run_eval(
                 need_reid=cfg.need_reid_enabled,
                 dynamic_reid=None,
                 gmc_uncertain=False,
-                output_capacity=256,
             )
         else:
             detector.reset_tracker()
@@ -1845,7 +1906,6 @@ def run_eval(
             _fused_boxes: torch.Tensor,
             _fused_scores: torch.Tensor,
             _geometry_suspect_mask: torch.Tensor,
-            _suspect_boxes: torch.Tensor,
             _embeddings: "torch.Tensor | None",
             _gmc_warp: "torch.Tensor | None",
             _motion_candidate_ids: "list[int]",
@@ -1862,7 +1922,6 @@ def run_eval(
                 host_batch=_host_batch,
                 person_class=cfg.person_class,
                 track_person_only=cfg.track_person_only,
-                suspect_boxes=_suspect_boxes,
                 geometry_suspect_support=cfg.geometry_suspect_support,
                 geometry_suspect_support_score=cfg.geometry_suspect_support_score,
                 id_stability_filter=id_stability_filter,
@@ -2039,38 +2098,40 @@ def run_eval(
                 seq_narrow_bonus = wb.narrow_bonus
                 last_reid_frame = wb.last_reid_frame
 
-                # Set tracker_result_buffers to match workbench results so
-                # downstream _materialize_gpu_track_results reads the correct data
-                tracker_result_buffers = {
-                    "count": torch.tensor(
-                        [len(wb_result.ids)], dtype=torch.int32, device="cpu"
-                    ),
-                    "boxes": wb_result.boxes.clone().detach().cpu(),
-                    "scores": wb_result.scores.clone().detach().cpu(),
-                    "ids": wb_result.ids.clone().detach().cpu(),
-                    "classes": wb_result.classes.clone().detach().cpu(),
-                    "det_idx": wb_result.det_idx.clone().detach().cpu(),
-                }
-
-                # Set track_results (format expected by _prepare_host_track_batch / relink)
-                # Workbench C++ already materialized; wrap to match non-wb format
+                # D2H once, share across tracker_result_buffers, track_results, and
+                # MOT line writing — avoids 10 redundant device syncs (was 13 .cpu()
+                # calls per frame × 7 threads = 91 syncs/cycle; now 5).
                 wb_count = int(len(wb_result.ids))
+                _wb_boxes_cpu = wb_result.boxes.cpu()
+                _wb_scores_cpu = wb_result.scores.cpu()
+                _wb_ids_cpu = wb_result.ids.cpu()
+                _wb_classes_cpu = wb_result.classes.cpu()
+                _wb_det_idx_cpu = wb_result.det_idx.cpu()
+
+                tracker_result_buffers = {
+                    "count": torch.tensor([wb_count], dtype=torch.int32, device="cpu"),
+                    "boxes": _wb_boxes_cpu,
+                    "scores": _wb_scores_cpu,
+                    "ids": _wb_ids_cpu,
+                    "classes": _wb_classes_cpu,
+                    "det_idx": _wb_det_idx_cpu,
+                }
                 track_results = {
                     "count": wb_count,
-                    "boxes": wb_result.boxes.clone().detach().cpu(),
-                    "scores": wb_result.scores.clone().detach().cpu(),
-                    "ids": wb_result.ids.clone().detach().cpu(),
-                    "classes": wb_result.classes.clone().detach().cpu(),
-                    "det_idx": wb_result.det_idx.clone().detach().cpu(),
+                    "boxes": _wb_boxes_cpu,
+                    "scores": _wb_scores_cpu,
+                    "ids": _wb_ids_cpu,
+                    "classes": _wb_classes_cpu,
+                    "det_idx": _wb_det_idx_cpu,
                 }
 
                 # Write MOT result lines for workbench path (C++ already tracked).
                 # Build lines: "frame_id, global_tid, x1, y1, w, h, score, -1, -1, -1"
                 wb_mot_lines: list[str] = []
                 if wb_count > 0:
-                    wb_ids_np = wb_result.ids[:wb_count].cpu().numpy().astype(int)
-                    wb_boxes_np = wb_result.boxes[:wb_count].cpu().numpy()
-                    wb_scores_np = wb_result.scores[:wb_count].cpu().numpy()
+                    wb_ids_np = _wb_ids_cpu.numpy().astype(int)
+                    wb_boxes_np = _wb_boxes_cpu.numpy()
+                    wb_scores_np = _wb_scores_cpu.numpy()
                     for i in range(wb_count):
                         global_tid = int(global_id_mapper.map(seq, wb_ids_np[i]))
                         box = (
@@ -2101,7 +2162,6 @@ def run_eval(
                 geometry_suspect_mask = torch.zeros(
                     len(fused_boxes), dtype=torch.bool, device=fused_boxes.device
                 )
-                suspect_boxes = torch.empty((0, 4), device=fused_boxes.device)
                 embeddings = None
                 gmc_warp = None
                 aligned_keypoints = None
@@ -2218,11 +2278,24 @@ def run_eval(
                         print(f"🎬 {seq} [{frame_id}/{frame_end}]")
                     continue
 
+                t_keypoint_align_start = None
+                if profile_stages:
+                    torch.cuda.synchronize()
+                    t_keypoint_align_start = time.perf_counter()
                 aligned_keypoints = match_keypoints_to_boxes(
                     fused_boxes,
                     source_boxes_for_keypoints,
                     source_keypoints,
                 )
+                if (
+                    profile_stages
+                    and current_stage_sample_active
+                    and t_keypoint_align_start is not None
+                ):
+                    torch.cuda.synchronize()
+                    seq_stage_totals["post_keypoint_align"] += (
+                        time.perf_counter() - t_keypoint_align_start
+                    ) * 1000
 
                 if cfg.pose_box_expand and aligned_keypoints is not None:
                     fused_boxes = expand_boxes_with_ankle_keypoints(
@@ -2236,117 +2309,225 @@ def run_eval(
 
                 # Keep low-score boxes down to cfg.track_thresh so ByteTrack's
                 # second-stage association can actually use them.
+                post_gpu_start_event = None
+                post_gpu_end_event = None
                 if profile_stages:
                     torch.cuda.synchronize()
                     t_post_start = time.perf_counter()
+                    post_gpu_start_event = torch.cuda.Event(enable_timing=True)
+                    post_gpu_end_event = torch.cuda.Event(enable_timing=True)
+                    post_gpu_start_event.record(torch.cuda.current_stream())
                 raw_box_count = int(fused_scores.numel())
 
                 if perception_pipeline is not None:
+                    t_native_prep_start = None
                     if profile_stages:
                         torch.cuda.synchronize()
-                    raw_boxes_contig = fused_boxes.to(torch.float32).contiguous()
-                    raw_scores_contig = fused_scores.to(torch.float32).contiguous()
-                    raw_classes_contig = fused_classes.to(torch.int32).contiguous()
-                    raw_scores_contig = _apply_narrow_person_score_bonus(
-                        raw_boxes_contig,
-                        raw_scores_contig,
-                        raw_classes_contig,
-                        frame_w=w_orig,
-                        frame_h=h_orig,
-                        person_class=cfg.person_class,
-                        bonus=seq_narrow_bonus,
-                        max_width_ratio=cfg.narrow_person_max_width_ratio,
-                        min_height_ratio=cfg.narrow_person_min_height_ratio,
-                        min_aspect=cfg.narrow_person_min_aspect,
-                        max_aspect=cfg.narrow_person_max_aspect,
-                    )
-                    post_boxes = torch.empty_like(raw_boxes_contig)
-                    post_scores = torch.empty_like(raw_scores_contig)
-                    post_classes = torch.empty_like(raw_classes_contig)
-                    geometry_suspect_mask = torch.empty(
-                        (raw_box_count,),
-                        device=raw_boxes_contig.device,
-                        dtype=torch.bool,
-                    )
-
-                    # Fetch priors for Occlusion-aware NMS
-                    priors_tensor = None
-                    prior_classes_tensor = None
-                    priors_ptr = 0
-                    prior_classes_ptr = 0
-                    num_priors = 0
-                    if enable_onms:
-                        priors_tensor, prior_classes_tensor = (
-                            _build_active_track_priors(
-                                detector.tracker,
-                                raw_boxes_contig.device,
-                                min_track_age=onms_min_track_age,
-                                min_track_score=onms_min_track_score,
-                            )
+                        t_native_prep_start = time.perf_counter()
+                    with _record_profile_scope("post.native_tensor_prep"):
+                        raw_boxes_contig = fused_boxes.to(torch.float32).contiguous()
+                        raw_scores_contig = fused_scores.to(torch.float32).contiguous()
+                        raw_classes_contig = fused_classes.to(torch.int32).contiguous()
+                        raw_scores_contig = _apply_narrow_person_score_bonus(
+                            raw_boxes_contig,
+                            raw_scores_contig,
+                            raw_classes_contig,
+                            frame_w=w_orig,
+                            frame_h=h_orig,
+                            person_class=cfg.person_class,
+                            bonus=seq_narrow_bonus,
+                            max_width_ratio=cfg.narrow_person_max_width_ratio,
+                            min_height_ratio=cfg.narrow_person_min_height_ratio,
+                            min_aspect=cfg.narrow_person_min_aspect,
+                            max_aspect=cfg.narrow_person_max_aspect,
                         )
+                        post_boxes = torch.empty_like(raw_boxes_contig)
+                        post_scores = torch.empty_like(raw_scores_contig)
+                        post_classes = torch.empty_like(raw_classes_contig)
+                        geometry_suspect_mask = torch.empty(
+                            (raw_box_count,),
+                            device=raw_boxes_contig.device,
+                            dtype=torch.bool,
+                        )
+
+                        # Fetch priors for Occlusion-aware NMS
+                        priors_tensor = None
+                        prior_classes_tensor = None
+                        priors_ptr = 0
+                        prior_classes_ptr = 0
+                        num_priors = 0
+                        if enable_onms:
+                            priors_tensor, prior_classes_tensor = (
+                                _build_active_track_priors(
+                                    detector.tracker,
+                                    raw_boxes_contig.device,
+                                    min_track_age=onms_min_track_age,
+                                    min_track_score=onms_min_track_score,
+                                )
+                            )
+                        if (
+                            enable_onms
+                            and priors_tensor is not None
+                            and prior_classes_tensor is not None
+                        ):
+                            priors_ptr = priors_tensor.data_ptr()
+                            prior_classes_ptr = prior_classes_tensor.data_ptr()
+                            num_priors = priors_tensor.size(0)
                     if (
-                        enable_onms
-                        and priors_tensor is not None
-                        and prior_classes_tensor is not None
+                        profile_stages
+                        and current_stage_sample_active
+                        and t_native_prep_start is not None
                     ):
-                        priors_ptr = priors_tensor.data_ptr()
-                        prior_classes_ptr = prior_classes_tensor.data_ptr()
-                        num_priors = priors_tensor.size(0)
+                        torch.cuda.synchronize()
+                        seq_stage_totals["post_tensor_prep"] += (
+                            time.perf_counter() - t_native_prep_start
+                        ) * 1000
 
                     # process_detections_n releases GIL for the full filter+NMS+sync
                     # sequence so sibling threads can run Python while GPU is busy.
-                    n_post = perception_pipeline.process_detections_n(
-                        raw_boxes_contig.data_ptr(),
-                        raw_scores_contig.data_ptr(),
-                        raw_classes_contig.data_ptr(),
-                        raw_box_count,
-                        w_orig,
-                        h_orig,
-                        is_tiled,
-                        post_boxes.data_ptr(),
-                        post_scores.data_ptr(),
-                        post_classes.data_ptr(),
-                        geometry_suspect_mask.data_ptr(),
-                        priors_ptr,
-                        prior_classes_ptr,
-                        num_priors,
-                        onms_prior_iou_threshold,
-                        torch.cuda.current_stream().cuda_stream,
-                    )
-                    fused_boxes = post_boxes[:n_post]
-                    fused_scores = post_scores[:n_post]
-                    fused_classes = post_classes[:n_post]
-                    geometry_suspect_mask = geometry_suspect_mask[:n_post]
-                    suspect_boxes = fused_boxes[geometry_suspect_mask]
+                    with _record_profile_scope("post.native_process_detections_n"):
+                        n_post = perception_pipeline.process_detections_n(
+                            raw_boxes_contig.data_ptr(),
+                            raw_scores_contig.data_ptr(),
+                            raw_classes_contig.data_ptr(),
+                            raw_box_count,
+                            w_orig,
+                            h_orig,
+                            is_tiled,
+                            post_boxes.data_ptr(),
+                            post_scores.data_ptr(),
+                            post_classes.data_ptr(),
+                            geometry_suspect_mask.data_ptr(),
+                            priors_ptr,
+                            prior_classes_ptr,
+                            num_priors,
+                            onms_prior_iou_threshold,
+                            torch.cuda.current_stream().cuda_stream,
+                        )
+                    if profile_stages and current_stage_sample_active:
+                        _post_stats = (
+                            perception_pipeline.get_postprocess_profile_stats()
+                        )
+                        _post_filter_ms = float(_post_stats.get("filter_ms", 0.0))
+                        _post_nms_ms = float(_post_stats.get("nms_ms", 0.0))
+                        _post_count_sync_ms = float(
+                            _post_stats.get("count_d2h_ms", 0.0)
+                        )
+                        _post_total_ms = float(_post_stats.get("total_ms", 0.0))
+                        seq_stage_totals["post_filter"] += float(_post_filter_ms)
+                        seq_stage_totals["post_nms"] += float(_post_nms_ms)
+                        seq_stage_totals["post_count_sync"] += _post_count_sync_ms
+                        seq_stage_totals["native_filter_gather"] += float(
+                            _post_stats.get("native_filter_gather_ms", 0.0)
+                        )
+                        seq_stage_totals["native_filter_kernel"] += float(
+                            _post_stats.get("native_filter_kernel_ms", 0.0)
+                        )
+                        seq_stage_totals["native_gather_compact3"] += float(
+                            _post_stats.get("native_gather_compact3_ms", 0.0)
+                        )
+                        seq_stage_totals["native_copy_suspect"] += float(
+                            _post_stats.get("native_copy_suspect_ms", 0.0)
+                        )
+                        seq_stage_totals["native_filter_count_sync"] += float(
+                            _post_stats.get("native_filter_count_sync_ms", 0.0)
+                        )
+                        seq_stage_totals["native_small_nms"] += float(
+                            _post_stats.get("native_small_nms_ms", 0.0)
+                        )
+                        seq_stage_totals["native_suspect_penalty"] += float(
+                            _post_stats.get("native_suspect_penalty_ms", 0.0)
+                        )
+                        seq_stage_totals["native_large_sort_nms"] += float(
+                            _post_stats.get("native_large_sort_nms_ms", 0.0)
+                        )
+                        seq_stage_totals["native_large_argsort"] += float(
+                            _post_stats.get("native_large_argsort_ms", 0.0)
+                        )
+                        seq_stage_totals["native_large_nms"] += float(
+                            _post_stats.get("native_large_nms_ms", 0.0)
+                        )
+                        seq_stage_totals["native_compact_copy"] += float(
+                            _post_stats.get("native_compact_copy_ms", 0.0)
+                        )
+                        seq_stage_totals["native_large_gather4"] += float(
+                            _post_stats.get("native_large_gather4_ms", 0.0)
+                        )
+                        seq_stage_totals["native_large_copyback"] += float(
+                            _post_stats.get("native_large_copyback_ms", 0.0)
+                        )
+                        seq_stage_totals["post_native_other"] += max(
+                            0.0,
+                            _post_total_ms
+                            - _post_filter_ms
+                            - _post_nms_ms
+                            - _post_count_sync_ms,
+                        )
+                    t_output_slicing_start = None
+                    if profile_stages:
+                        torch.cuda.synchronize()
+                        t_output_slicing_start = time.perf_counter()
+                    with _record_profile_scope("post.output_slicing"):
+                        fused_boxes = post_boxes[:n_post]
+                        fused_scores = post_scores[:n_post]
+                        fused_classes = post_classes[:n_post]
+                        geometry_suspect_mask = geometry_suspect_mask[:n_post]
+                    if (
+                        profile_stages
+                        and current_stage_sample_active
+                        and t_output_slicing_start is not None
+                    ):
+                        torch.cuda.synchronize()
+                        seq_stage_totals["post_output_slicing"] += (
+                            time.perf_counter() - t_output_slicing_start
+                        ) * 1000
+                    t_keypoint_align_start = None
+                    if profile_stages:
+                        torch.cuda.synchronize()
+                        t_keypoint_align_start = time.perf_counter()
                     aligned_keypoints = match_keypoints_to_boxes(
                         fused_boxes,
                         source_boxes_for_keypoints,
                         source_keypoints,
                     )
-
                     if (
-                        cfg.detection_quality_scaling
-                        and n_post > 0
-                        and not getattr(detector.tracker, "is_cuda", False)
+                        profile_stages
+                        and current_stage_sample_active
+                        and t_keypoint_align_start is not None
                     ):
-                        quality_factors = _compute_detection_quality_batch(
-                            fused_boxes,
-                            w_orig,
-                            h_orig,
-                            w_aspect=cfg.detection_quality_w_aspect,
-                            w_center=cfg.detection_quality_w_center,
-                            w_area=cfg.detection_quality_w_area,
-                        )
-                        fused_scores = fused_scores * quality_factors
-                    elif cfg.geometry_suspect_support and geometry_suspect_mask.any():
-                        fused_scores = fused_scores.clone()
-                        fused_scores[geometry_suspect_mask] = torch.minimum(
-                            fused_scores[geometry_suspect_mask],
-                            torch.full_like(
-                                fused_scores[geometry_suspect_mask],
-                                cfg.geometry_suspect_support_score,
-                            ),
-                        )
+                        torch.cuda.synchronize()
+                        seq_stage_totals["post_keypoint_align"] += (
+                            time.perf_counter() - t_keypoint_align_start
+                        ) * 1000
+
+                    t_quality_scale_start = None
+                    if profile_stages:
+                        torch.cuda.synchronize()
+                        t_quality_scale_start = time.perf_counter()
+                    with _record_profile_scope("post.quality_scale"):
+                        if (
+                            cfg.detection_quality_scaling
+                            and n_post > 0
+                            and not getattr(detector.tracker, "is_cuda", False)
+                        ):
+                            quality_factors = _compute_detection_quality_batch(
+                                fused_boxes,
+                                w_orig,
+                                h_orig,
+                                w_aspect=cfg.detection_quality_w_aspect,
+                                w_center=cfg.detection_quality_w_center,
+                                w_area=cfg.detection_quality_w_area,
+                            )
+                            fused_scores = fused_scores * quality_factors
+                    if (
+                        profile_stages
+                        and current_stage_sample_active
+                        and t_quality_scale_start is not None
+                    ):
+                        torch.cuda.synchronize()
+                        seq_stage_totals["post_quality_scale"] += (
+                            time.perf_counter() - t_quality_scale_start
+                        ) * 1000
                     after_filter_count = int(n_post)
                     after_nms_count = int(n_post)
                 else:
@@ -2394,7 +2575,6 @@ def run_eval(
                     fused_boxes = fused_boxes[keep_indices]
                     fused_scores = fused_scores[keep_indices]
                     fused_classes = fused_classes[keep_indices]
-                    suspect_boxes = fused_boxes[geometry_suspect_mask]
                     if aligned_keypoints is not None:
                         aligned_keypoints = aligned_keypoints[keep_indices]
 
@@ -2487,7 +2667,6 @@ def run_eval(
                     fused_scores = fused_scores[keep]
                     fused_classes = fused_classes[keep]
                     geometry_suspect_mask = geometry_suspect_mask[keep]
-                    suspect_boxes = fused_boxes[geometry_suspect_mask]
                     if aligned_keypoints is not None:
                         aligned_keypoints = aligned_keypoints[keep]
                     if profile_stages:
@@ -2562,7 +2741,6 @@ def run_eval(
                     geometry_suspect_mask = torch.zeros_like(
                         fused_scores, dtype=torch.bool
                     )
-                    suspect_boxes = fused_boxes[:0]
                     aligned_keypoints = None
                     if profile_stages:
                         torch.cuda.synchronize()
@@ -2589,16 +2767,32 @@ def run_eval(
                 )
                 frame_score_floor = min(frame_conf_threshold, frame_track_thresh)
                 base_score_floor = min(cfg.conf_threshold, cfg.track_thresh)
-                if frame_score_floor > base_score_floor and fused_scores.numel() > 0:
-                    floor_keep = fused_scores > frame_score_floor
-                    fused_boxes = fused_boxes[floor_keep]
-                    fused_scores = fused_scores[floor_keep]
-                    fused_classes = fused_classes[floor_keep]
-                    geometry_suspect_mask = geometry_suspect_mask[floor_keep]
-                    suspect_boxes = fused_boxes[geometry_suspect_mask]
-                    if aligned_keypoints is not None:
-                        aligned_keypoints = aligned_keypoints[floor_keep]
-                    after_merge_count = int(fused_scores.numel())
+                t_tail_filtering_start = None
+                if profile_stages:
+                    torch.cuda.synchronize()
+                    t_tail_filtering_start = time.perf_counter()
+                with _record_profile_scope("post.tail_filtering"):
+                    if (
+                        frame_score_floor > base_score_floor
+                        and fused_scores.numel() > 0
+                    ):
+                        floor_keep = fused_scores > frame_score_floor
+                        fused_boxes = fused_boxes[floor_keep]
+                        fused_scores = fused_scores[floor_keep]
+                        fused_classes = fused_classes[floor_keep]
+                        geometry_suspect_mask = geometry_suspect_mask[floor_keep]
+                        if aligned_keypoints is not None:
+                            aligned_keypoints = aligned_keypoints[floor_keep]
+                        after_merge_count = int(fused_scores.numel())
+                if (
+                    profile_stages
+                    and current_stage_sample_active
+                    and t_tail_filtering_start is not None
+                ):
+                    torch.cuda.synchronize()
+                    seq_stage_totals["post_tail_filtering"] += (
+                        time.perf_counter() - t_tail_filtering_start
+                    ) * 1000
                 if debug_dump_active:
                     _append_stage_dump_rows(
                         debug_stage_dump_rows,
@@ -2681,7 +2875,6 @@ def run_eval(
                         fused_scores = fused_scores[dup_keep]
                         fused_classes = fused_classes[dup_keep]
                         geometry_suspect_mask = geometry_suspect_mask[dup_keep]
-                        suspect_boxes = fused_boxes[geometry_suspect_mask]
                         if aligned_keypoints is not None:
                             aligned_keypoints = aligned_keypoints[dup_keep]
                         after_merge_count = int(fused_scores.numel())
@@ -2765,7 +2958,6 @@ def run_eval(
                         quality_min=cfg.stage2_quality_min,
                         quality=_s2_quality,
                     )
-                    suspect_boxes = fused_boxes[geometry_suspect_mask]
                     after_merge_count = int(fused_scores.numel())
 
                 frame_birth_events: list[dict[str, float | int | str | bool]] = []
@@ -2945,10 +3137,20 @@ def run_eval(
                             fused_scores[seam_mask] * cfg.tile_seam_score_penalty
                         )
                 if profile_stages:
+                    if post_gpu_end_event is not None:
+                        post_gpu_end_event.record(torch.cuda.current_stream())
                     torch.cuda.synchronize()
                     elapsed_ms = (time.perf_counter() - t_post_start) * 1000
                     seq_stage_totals["postprocess"] += elapsed_ms
                     record_stage_sample("postprocess", elapsed_ms)
+                    if (
+                        current_stage_sample_active
+                        and post_gpu_start_event is not None
+                        and post_gpu_end_event is not None
+                    ):
+                        seq_stage_totals["post_gpu_elapsed"] += float(
+                            post_gpu_start_event.elapsed_time(post_gpu_end_event)
+                        )
                     if frame_id > warmup_frames:
                         seq_post_counts["raw_boxes"] += raw_box_count
                         seq_post_counts["after_filter"] += after_filter_count
@@ -3526,7 +3728,7 @@ def run_eval(
                         ):
                             lazy_reid_prev_embeddings.pop(stale_id, None)
 
-            if cfg.pipeline_relink:
+            if cfg.pipeline_relink and not getattr(cfg, "workbench", False):
                 # Pre-materialize: host_track_batch + motion snapshots (need main CUDA stream)
                 # then D2H-copy GPU tensors so background thread stays off CUDA streams.
                 _pm_host_batch = _prepare_host_track_batch(
@@ -3551,7 +3753,6 @@ def run_eval(
                 _pm_fused_boxes = fused_boxes.cpu()
                 _pm_fused_scores = fused_scores.cpu()
                 _pm_geom_mask = geometry_suspect_mask.cpu()
-                _pm_suspect = suspect_boxes.cpu()
                 _pm_embeddings = embeddings.cpu() if embeddings is not None else None
                 _pm_gmc = (
                     gmc_warp.cpu()
@@ -3566,7 +3767,6 @@ def run_eval(
                     _pm_fused_boxes,
                     _pm_fused_scores,
                     _pm_geom_mask,
-                    _pm_suspect,
                     _pm_embeddings,
                     _pm_gmc,
                     _pm_motion_cids,
@@ -3600,7 +3800,6 @@ def run_eval(
                     host_batch=host_track_batch,
                     person_class=cfg.person_class,
                     track_person_only=cfg.track_person_only,
-                    suspect_boxes=suspect_boxes,
                     geometry_suspect_support=cfg.geometry_suspect_support,
                     geometry_suspect_support_score=cfg.geometry_suspect_support_score,
                     id_stability_filter=id_stability_filter,
@@ -3849,6 +4048,39 @@ def run_eval(
                 _tot = seq_stage_totals.get(_sn, 0.0)
                 if _tot > 0.0:
                     seq_entry["stages"][_sn] = {"mean_ms": _tot / seq_profiled_frames}
+            _seq_post_means = {
+                _sn: seq_stage_totals[_sn] / seq_profiled_frames
+                for _sn in breakdown_stage_names
+                if seq_stage_totals.get(_sn, 0.0) > 0.0
+            }
+            _seq_post_wall_ms = (
+                seq_entry["stages"].get("postprocess", {}).get("mean_ms", 0.0)
+            )
+            _seq_post_gpu_ms = float(_seq_post_means.get("post_gpu_elapsed", 0.0))
+            _seq_has_native_breakdown = any(
+                _k.startswith("native_") for _k in _seq_post_means
+            )
+            _seq_excluded_post_stages = (
+                {"post_filter", "post_nms"} if _seq_has_native_breakdown else set()
+            )
+            _seq_known_gpu_ms = float(
+                sum(
+                    _v
+                    for _k, _v in _seq_post_means.items()
+                    if (
+                        _k.startswith("post_")
+                        and _k != "post_gpu_elapsed"
+                        and _k not in _seq_excluded_post_stages
+                    )
+                    or _k.startswith("native_")
+                )
+            )
+            seq_entry["postprocess_attribution"] = {
+                "wall_ms": float(_seq_post_wall_ms),
+                "gpu_ms": _seq_post_gpu_ms,
+                "unattributed_gpu_ms": max(0.0, _seq_post_gpu_ms - _seq_known_gpu_ms),
+                "overhead_ms": max(0.0, float(_seq_post_wall_ms) - _seq_post_gpu_ms),
+            }
             all_seq_profile.append(seq_entry)
 
     from .reporting import print_overall_summary

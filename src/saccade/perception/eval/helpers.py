@@ -199,7 +199,8 @@ def collect_stability_candidates(
     host_batch: HostTrackBatch,
     person_class: int,
     track_person_only: bool,
-    suspect_boxes: torch.Tensor,
+    fused_boxes: torch.Tensor,
+    geometry_suspect_mask: torch.Tensor,
     geometry_suspect_support: bool,
     geometry_suspect_support_score: float,
 ) -> tuple[list[int], list[tuple[int, tuple[float, float, float, float], float]]]:
@@ -215,7 +216,7 @@ def collect_stability_candidates(
         return [], []
 
     excluded: set[int] = set()
-    if geometry_suspect_support and suspect_boxes.numel() > 0:
+    if geometry_suspect_support and geometry_suspect_mask.any():
         low_i = [
             i
             for i in person_indices
@@ -223,6 +224,7 @@ def collect_stability_candidates(
         ]
         if low_i:
             track_boxes = host_batch.boxes_gpu[low_i]
+            suspect_boxes = fused_boxes[geometry_suspect_mask]
             max_ious = _box_iou_matrix(track_boxes, suspect_boxes).max(dim=1).values
             excluded = {
                 low_i[j] for j, v in enumerate(max_ious.cpu().tolist()) if v > 0.5
@@ -567,7 +569,6 @@ def prepare_track_candidates(
     host_batch: HostTrackBatch,
     person_class: int,
     track_person_only: bool,
-    suspect_boxes: torch.Tensor,
     geometry_suspect_support: bool,
     geometry_suspect_support_score: float,
     id_stability_filter: Any,
@@ -590,7 +591,8 @@ def prepare_track_candidates(
         host_batch=host_batch,
         person_class=person_class,
         track_person_only=track_person_only,
-        suspect_boxes=suspect_boxes,
+        fused_boxes=fused_boxes,
+        geometry_suspect_mask=geometry_suspect_mask,
         geometry_suspect_support=geometry_suspect_support,
         geometry_suspect_support_score=geometry_suspect_support_score,
     )
