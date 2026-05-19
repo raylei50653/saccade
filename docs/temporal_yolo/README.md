@@ -16,13 +16,16 @@
 | [pipeline.md](pipeline.md) | Option C/D 完整資料流：tensor shapes、跨幀狀態、訓練迴圈 |
 | [track-conditioned-design.md](track-conditioned-design.md) | Option D 詳細設計：TrackerGateInput + TrackSpatialGate |
 | [implementation-plan.md](implementation-plan.md) | 分階段實作計畫、風險與里程碑 |
+| [option-e-v2-design.md](option-e-v2-design.md) | **Option E-v2 設計**：Quality-Gated Temporal Feature Fusion（基於 Option E 延伸）|
 
 ## 設計演進總覽
 
 ```
-Option B  →  Option C  →  Option D  →  Option E
-凍結 YOLO    聯合訓練     Gate+Decoder  Gate+標準Head+Fine-Tune
-(已實作)     (已實作)     (NO-GO)       (✅ 當前 baseline, IDF1 57.2%)
+Option B  →  Option C  →  Option D  →  Option E  →  Option E-v2
+凍結 YOLO    聯合訓練     Gate+Decoder  Gate+標準     Quality-Gated
+                                       Head+FT       Temporal Fusion
+(已實作)     (已實作)     (NO-GO)       (✅ baseline) (設計階段)
+                                       IDF1 57.2%
 ```
 
 ### 核心問題
