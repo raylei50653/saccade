@@ -217,6 +217,12 @@ def collect_stability_candidates(
 
     excluded: set[int] = set()
     if geometry_suspect_support and geometry_suspect_mask.any():
+        # Guard: external_fp_filter / fp_hard_filter may have removed detections
+        # from fused_boxes without updating geometry_suspect_mask (bug). Re-sync.
+        if geometry_suspect_mask.shape[0] != fused_boxes.shape[0]:
+            geometry_suspect_mask = torch.zeros(
+                fused_boxes.shape[0], dtype=torch.bool, device=fused_boxes.device
+            )
         low_i = [
             i
             for i in person_indices
@@ -225,10 +231,11 @@ def collect_stability_candidates(
         if low_i:
             track_boxes = host_batch.boxes_gpu[low_i]
             suspect_boxes = fused_boxes[geometry_suspect_mask]
-            max_ious = _box_iou_matrix(track_boxes, suspect_boxes).max(dim=1).values
-            excluded = {
-                low_i[j] for j, v in enumerate(max_ious.cpu().tolist()) if v > 0.5
-            }
+            if suspect_boxes.numel() > 0:
+                max_ious = _box_iou_matrix(track_boxes, suspect_boxes).max(dim=1).values
+                excluded = {
+                    low_i[j] for j, v in enumerate(max_ious.cpu().tolist()) if v > 0.5
+                }
 
     candidate_indices: list[int] = []
     stability_candidates: list[

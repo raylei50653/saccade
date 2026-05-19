@@ -741,6 +741,7 @@ from saccade.perception.eval.detection import (  # noqa: E402
     detect_960p_3x2_tiled,
     detect_native_640,
     detect_native_960,
+    detect_native_960_tta,
     detect_sahi_960p_2x2,
     expand_boxes_with_ankle_keypoints,
     filter_detections_fast,
@@ -915,6 +916,7 @@ def _build_cpp_seq_config(
     c.vel_dir_weight = float(getattr(cfg, "vel_dir_weight", 0.0))
     c.stage2_match_thresh = float(getattr(cfg, "stage2_match_thresh", 0.5))
     c.birth_low_score_thresh = float(getattr(cfg, "birth_low_score_thresh", 0.0))
+    c.birth_prox_norm_thresh = float(getattr(cfg, "birth_prox_norm_thresh", 0.0))
     c.track_buffer = 30
 
     # GMC — always enabled (GPU phase correlation, matches Python workbench default)
@@ -1231,7 +1233,9 @@ def run_eval(
     elif cfg.tiling == "native_640":
         detect_fn = detect_native_640
     elif cfg.tiling == "native_960":
-        detect_fn = detect_native_960
+        detect_fn = (
+            detect_native_960_tta if getattr(cfg, "tta", False) else detect_native_960
+        )
     else:
         detect_fn = detect_adaptive_960_tiled
 
@@ -1579,6 +1583,27 @@ def run_eval(
                 appearance_first_margin=float(
                     cfg.kwargs.get("semantic_appearance_first_margin", 0.03)
                 ),
+                # Motion-based relinking (PythonSemanticRelinker only)
+                motion_vel_alpha=cfg.kwargs.get("motion_vel_alpha", 0.3),
+                motion_acc_alpha=cfg.kwargs.get("motion_acc_alpha", 0.15),
+                motion_min_observations=cfg.kwargs.get("motion_min_observations", 2),
+                motion_w_iou=cfg.kwargs.get("motion_w_iou", 0.3),
+                motion_consistency_check=cfg.kwargs.get(
+                    "motion_consistency_check", True
+                ),
+                motion_consistency_tol=cfg.kwargs.get("motion_consistency_tol", 2.0),
+                motion_enable_motion_only=cfg.kwargs.get(
+                    "motion_enable_motion_only", True
+                ),
+                motion_motion_only_lost_frames=cfg.kwargs.get(
+                    "motion_motion_only_lost_frames", 5
+                ),
+                motion_motion_only_iou_threshold=cfg.kwargs.get(
+                    "motion_motion_only_iou_threshold", 0.15
+                ),
+                motion_motion_only_min_lost_frames=cfg.kwargs.get(
+                    "motion_motion_only_min_lost_frames", 1
+                ),
             )
         relinker = (
             _relinker_cls(**_relinker_common_kwargs) if cfg.use_semantic_mode else None
@@ -1648,6 +1673,7 @@ def run_eval(
             fuse_score_weight=cfg.fuse_score_weight,
             stage2_match_thresh=cfg.stage2_match_thresh,
             birth_low_score_thresh=cfg.birth_low_score_thresh,
+            birth_prox_norm_thresh=cfg.birth_prox_norm_thresh,
         )
         active_tracker_thresholds = (
             cfg.track_thresh,
@@ -3109,6 +3135,7 @@ def run_eval(
                         fuse_score_weight=cfg.fuse_score_weight,
                         stage2_match_thresh=cfg.stage2_match_thresh,
                         birth_low_score_thresh=cfg.birth_low_score_thresh,
+                        birth_prox_norm_thresh=cfg.birth_prox_norm_thresh,
                     )
                     active_tracker_thresholds = frame_tracker_thresholds
                 if cfg.tile_diagnostics and is_tiled:

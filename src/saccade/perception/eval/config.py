@@ -213,6 +213,7 @@ class EvalConfig:
     fuse_score_weight: float
     stage2_match_thresh: float
     birth_low_score_thresh: float
+    birth_prox_norm_thresh: float
 
     # Temporal consistency filter
     temporal_consistency_min_frames: int
@@ -608,6 +609,7 @@ def parse_eval_config(
         fuse_score_weight=float(kwargs.get("fuse_score_weight", 0.0)),
         stage2_match_thresh=float(kwargs.get("stage2_match_thresh", 0.5)),
         birth_low_score_thresh=float(kwargs.get("birth_low_score_thresh", 0.0)),
+        birth_prox_norm_thresh=float(kwargs.get("birth_prox_norm_thresh", 0.0)),
         temporal_consistency_min_frames=int(
             kwargs.get("temporal_consistency_min_frames", 3)
         ),

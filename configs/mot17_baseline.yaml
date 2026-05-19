@@ -46,3 +46,16 @@ semantic_bank_inject: false
 id_stability_filter: true
 per_seq_adapt: true
 geometry_suspect_support: true
+
+# --- Motion-based relinking ---
+motion:
+  vel_alpha: 0.3
+  acc_alpha: 0.15
+  min_motion_observations: 2
+  w_motion_iou: 0.3
+  motion_consistency_check: true
+  consistency_tol: 2.0
+  enable_motion_only: true
+  motion_only_lost_frames: 5
+  motion_only_iou_threshold: 0.15
+  motion_only_min_lost_frames: 1

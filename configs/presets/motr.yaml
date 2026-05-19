@@ -1,0 +1,19 @@
+# MOTR End-to-End Tracking Pipeline Configuration Preset
+# Target use cases: Crowded scenes, heavy occlusion
+
+# Core configuration
+conf_threshold: 0.35
+
+# MOTR does not use GMC, NMS, or Kalman filters internally
+gmc: false
+reid_mode: "off"
+
+# Disable post-processing gates
+stage2_quality_gate: false
+birth_quality_gate: false
+multi_birth_enabled: false
+duplicate_suppression: false
+
+# MOTR specific (these would be consumed by MOTREvaluator)
+# motr_query_number: 256
+# motr_drop_query_threshold: 0.2

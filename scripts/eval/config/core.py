@@ -202,6 +202,12 @@ def add_core_args(parser: argparse.ArgumentParser) -> None:
         metavar="PATH",
         help="YAML for lifecycle merge, post-merge, tracklet cleanup (Experimental).",
     )
+    mod.add_argument(
+        "--module-motion",
+        default=None,
+        metavar="PATH",
+        help="YAML for motion-based relinking params (EMA, motion bonus, motion-only fallback).",
+    )
 
     core = parser.add_argument_group(_tier("Core tracking and thresholds", "Tier 1"))
     core.description = (

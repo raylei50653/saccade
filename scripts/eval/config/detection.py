@@ -16,8 +16,9 @@ class DetectionConfig:
     gamma: float = 0.8
     gamma_luma_threshold: float = 0.35
     contrast: float = 1.2
-    # Tiling
+    # Tiling / TTA
     tiling: str = "native_960"
+    tta: bool = False
     cross_tile_merge: bool = True
     cross_tile_score_penalty: float = 1.0
     tile_diagnostics: bool = False
@@ -126,6 +127,12 @@ def add_detection_args(parser: argparse.ArgumentParser) -> None:
         ],
         default="native_960",
         help="Inference tiling preset.",
+    )
+    grp.add_argument(
+        "--tta",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Horizontal-flip TTA: run detector twice per frame, merge results. ~2× detect cost (~30%% overall FPS penalty).",
     )
     grp.add_argument(
         "--cross-tile-merge",
