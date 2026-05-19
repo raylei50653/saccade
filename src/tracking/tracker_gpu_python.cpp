@@ -13,6 +13,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include "tracking/auction.hpp"
 #include "tracking/tracker_gpu.hpp"
 #include "tracking/gmc.hpp"
 #include "tracking/pipeline.hpp"
@@ -1714,7 +1715,8 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
              py::arg("vel_dir_weight") = 0.0f,
              py::arg("fuse_score_weight") = 0.0f,
              py::arg("stage2_match_thresh") = 0.5f,
-             py::arg("birth_low_score_thresh") = 0.0f)
+             py::arg("birth_low_score_thresh") = 0.0f,
+             py::arg("birth_prox_norm_thresh") = 0.0f)
         .def("set_reid_params", &GPUByteTracker::set_reid_params,
              py::arg("cos_threshold"), py::arg("iou_low"), py::arg("iou_high"), py::arg("weight"))
         .def("set_quality_params", &GPUByteTracker::set_quality_params,
@@ -2592,4 +2594,41 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         py::arg("stream_ptr") = 0,
         "Compact-filter detections removing very-low-score and large+uncertain boxes. "
         "Returns count of kept detections. GPU equivalent of _apply_fp_hard_filter().");
+
+    m.def("auction_solve_cpp",
+        [](py::array_t<float, py::array::c_style | py::array::forcecast> cost_matrix, float epsilon) {
+            if (cost_matrix.ndim() != 2) {
+                throw std::invalid_argument("cost_matrix must be 2D");
+            }
+            int n_bidders = static_cast<int>(cost_matrix.shape(0));
+            int n_items = static_cast<int>(cost_matrix.shape(1));
+            
+            std::vector<std::vector<float>> profit_matrix(n_bidders, std::vector<float>(n_items, 0.0f));
+            auto buf = cost_matrix.unchecked<2>();
+            for (int i = 0; i < n_bidders; ++i) {
+                for (int j = 0; j < n_items; ++j) {
+                    profit_matrix[i][j] = -buf(i, j); // profit = -cost
+                }
+            }
+            
+            std::vector<int> assignment;
+            // release GIL for auction algorithm execution
+            {
+                py::gil_scoped_release release;
+                saccade::AuctionAlgorithm::Solve(profit_matrix, assignment, epsilon);
+            }
+            
+            std::vector<int> row_ind;
+            std::vector<int> col_ind;
+            for (int i = 0; i < n_bidders; ++i) {
+                if (assignment[i] != -1) {
+                    row_ind.push_back(i);
+                    col_ind.push_back(assignment[i]);
+                }
+            }
+            
+            return py::make_tuple(row_ind, col_ind);
+        },
+        py::arg("cost_matrix"), py::arg("epsilon") = 0.01f,
+        "Solve linear assignment problem using C++ Auction Algorithm (minimizing cost_matrix).");
 }

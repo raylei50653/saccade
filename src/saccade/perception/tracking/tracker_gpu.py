@@ -402,6 +402,7 @@ class GPUByteTracker:
         fuse_score_weight: float = 0.0,
         stage2_match_thresh: float = 0.5,
         birth_low_score_thresh: float = 0.0,
+        birth_prox_norm_thresh: float = 0.0,
     ) -> None:
         """調整追蹤器門檻與參數。"""
         self.tracker.set_params(
@@ -420,6 +421,7 @@ class GPUByteTracker:
             fuse_score_weight,
             stage2_match_thresh,
             birth_low_score_thresh,
+            birth_prox_norm_thresh,
         )
 
     def set_reid_params(

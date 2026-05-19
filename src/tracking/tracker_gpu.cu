@@ -647,7 +647,8 @@ __global__ void spawn_new_tracks_kernel(
     float* d_trk_scores, int* d_classes,
     int*   d_hit_streak, int* d_confirm_req, float* d_score_sum,
     int* d_track_id_ctr, int* d_slot_cursor,
-    int confirm_streak, float birth_low_score_thresh)
+    int confirm_streak, float birth_low_score_thresh,
+    int max_objs, float birth_prox_norm_thresh)
 {
     if (threadIdx.x != 0 || blockIdx.x != 0) return;
     int cursor = *d_slot_cursor;
@@ -657,6 +658,29 @@ __global__ void spawn_new_tracks_kernel(
     for (int d = 0; d < n_det; ++d) {
         if (d_det_to_trk[d] >= 0) continue;
         if (d_det_scores[d] < new_track_thresh) continue;
+
+        // Proximity birth gate: suppress if center is within birth_prox_norm_thresh
+        // box-heights of any confirmed track. Targets ghost tracks (shadows) that
+        // are spatially close to a real person but have IoU < NMS threshold.
+        if (birth_prox_norm_thresh > 0.0f) {
+            const float* det_box = d_det_boxes + d * 4;
+            float det_cx = (det_box[0] + det_box[2]) * 0.5f;
+            float det_cy = (det_box[1] + det_box[3]) * 0.5f;
+            float det_h  = det_box[3] - det_box[1];
+            bool too_close = false;
+            for (int t = 0; t < max_objs && !too_close; ++t) {
+                if (!d_active[t] || d_state[t] != 2) continue;  // CONFIRMED only
+                float trk_cx = d_states[t * 8 + 0];
+                float trk_cy = d_states[t * 8 + 1];
+                float trk_h  = d_states[t * 8 + 3];
+                float dx = det_cx - trk_cx;
+                float dy = det_cy - trk_cy;
+                float dist = sqrtf(dx * dx + dy * dy);
+                float ref_h = fmaxf(fmaxf(det_h, trk_h), 1.0f);
+                too_close = (dist < birth_prox_norm_thresh * ref_h);
+            }
+            if (too_close) continue;
+        }
 
         if (cursor >= n_free) break;
         int slot = d_free_slots[cursor++];
@@ -1292,7 +1316,8 @@ public:
                 d_track_ids_, d_age_, d_scores_, d_classes_,
                 d_hit_streak_, d_confirm_streak_required_, d_score_sum_,
                 d_track_id_ctr_, d_slot_cursor_,
-                confirm_streak_, birth_low_score_thresh_);
+                confirm_streak_, birth_low_score_thresh_,
+                max_objs_, birth_prox_norm_thresh_);
             init_covariance_if_new_kernel<<<(max_objs_ + 255) / 256, 256, 0, stream>>>(
                 d_active_, d_state_, d_hit_streak_, d_covs_, max_objs_);
         }
@@ -1313,7 +1338,8 @@ public:
                     float mid_thresh, int confirm_streak, float confirm_score_thresh,
                     bool adaptive_confirmation, float new_track_thresh, bool nsa_kalman,
                     float r_scale = 1.0f, float vel_dir_weight = 0.0f, float fuse_score_weight = 0.0f,
-                    float stage2_match_thresh = 0.5f, float birth_low_score_thresh = 0.0f) {
+                    float stage2_match_thresh = 0.5f, float birth_low_score_thresh = 0.0f,
+                    float birth_prox_norm_thresh = 0.0f) {
         track_thresh_ = track_thresh; high_thresh_ = high_thresh; match_thresh_ = match_thresh; max_age_ = track_buffer;
         mid_thresh_ = mid_thresh;
         new_track_thresh_ = new_track_thresh >= 0.0f ? new_track_thresh : mid_thresh;
@@ -1326,6 +1352,7 @@ public:
         fuse_score_weight_ = std::clamp(fuse_score_weight, 0.0f, 1.0f);
         stage2_match_thresh_ = std::clamp(stage2_match_thresh, 0.0f, 1.0f);
         birth_low_score_thresh_ = fmaxf(0.0f, birth_low_score_thresh);
+        birth_prox_norm_thresh_ = fmaxf(0.0f, birth_prox_norm_thresh);
     }
     void set_reid_params(float cos_threshold, float iou_low, float iou_high, float weight) {
         reid_cos_threshold_ = cos_threshold; reid_iou_low_ = iou_low; reid_iou_high_ = iou_high; reid_weight_ = weight;
@@ -1640,6 +1667,7 @@ private:
     float fuse_score_weight_ = 0.0f;
     float stage2_match_thresh_ = 0.5f;
     float birth_low_score_thresh_ = 0.0f;
+    float birth_prox_norm_thresh_ = 0.0f;
     float *d_states_, *d_covs_, *d_scores_, *d_features_;
     float *d_cost_matrix_, *d_sinkhorn_v_, *d_topk_probs_;
     uint64_t *d_auction_prices_;
@@ -1690,8 +1718,9 @@ void GPUByteTracker::set_params(float track_thresh, float high_thresh, float mat
                                 float mid_thresh, int confirm_streak, float confirm_score_thresh,
                                 bool adaptive_confirmation, float new_track_thresh, bool nsa_kalman,
                                 float r_scale, float vel_dir_weight, float fuse_score_weight,
-                                float stage2_match_thresh, float birth_low_score_thresh) {
-    pimpl_->set_params(track_thresh, high_thresh, match_thresh, track_buffer, mid_thresh, confirm_streak, confirm_score_thresh, adaptive_confirmation, new_track_thresh, nsa_kalman, r_scale, vel_dir_weight, fuse_score_weight, stage2_match_thresh, birth_low_score_thresh);
+                                float stage2_match_thresh, float birth_low_score_thresh,
+                                float birth_prox_norm_thresh) {
+    pimpl_->set_params(track_thresh, high_thresh, match_thresh, track_buffer, mid_thresh, confirm_streak, confirm_score_thresh, adaptive_confirmation, new_track_thresh, nsa_kalman, r_scale, vel_dir_weight, fuse_score_weight, stage2_match_thresh, birth_low_score_thresh, birth_prox_norm_thresh);
 }
 void GPUByteTracker::set_reid_params(float cos_threshold, float iou_low, float iou_high, float weight) {
     pimpl_->set_reid_params(cos_threshold, iou_low, iou_high, weight);

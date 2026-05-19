@@ -270,4 +270,58 @@ void parse_yolo_output(
         N, inv_scale, x_off, y_off);
 }
 
+// ─── gather_boxes_cuda ────────────────────────────────────────────────────────
+
+__global__ static void gather_boxes_kernel(
+    const float* __restrict__ src,
+    const int*   __restrict__ indices,
+    float*       __restrict__ dst,
+    int K)
+{
+    int k = blockIdx.x;
+    int f = threadIdx.x;  // 0..3
+    if (k >= K || f >= 4) return;
+    dst[k * 4 + f] = src[indices[k] * 4 + f];
+}
+
+void gather_boxes_cuda(
+    const float* src,
+    const int*   d_indices,
+    float*       dst,
+    int          K,
+    cudaStream_t stream)
+{
+    if (K <= 0) return;
+    gather_boxes_kernel<<<K, 4, 0, stream>>>(src, d_indices, dst, K);
+}
+
+// ─── scatter_embeddings_cuda ──────────────────────────────────────────────────
+
+__global__ static void scatter_embeddings_kernel(
+    float*       __restrict__ dst,
+    const float* __restrict__ src,
+    const int*   __restrict__ indices,
+    int K, int D)
+{
+    int k = blockIdx.x;
+    if (k >= K) return;
+    int dst_base = indices[k] * D;
+    int src_base = k * D;
+    for (int f = threadIdx.x; f < D; f += blockDim.x)
+        dst[dst_base + f] = src[src_base + f];
+}
+
+void scatter_embeddings_cuda(
+    float*       dst,
+    const float* src,
+    const int*   d_indices,
+    int          K,
+    int          D,
+    cudaStream_t stream)
+{
+    if (K <= 0 || D <= 0) return;
+    int threads = std::min(D, 512);
+    scatter_embeddings_kernel<<<K, threads, 0, stream>>>(dst, src, d_indices, K, D);
+}
+
 } // namespace saccade

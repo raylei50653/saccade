@@ -3,7 +3,10 @@
 #include "tracking/pipeline.hpp"
 #include "tracking/workbench.hpp"
 #include "tracking/tracker_gpu.hpp"
+#include "tracking/gmc.hpp"
 #include "perception/trt_engine.hpp"
+#include "perception/feature_extractor.hpp"
+#include "perception/preprocessor.hpp"
 #include <NvInfer.h>
 #include <cuda_runtime.h>
 #include <array>
@@ -52,11 +55,25 @@ struct SequenceConfig {
     float vel_dir_weight         = 0.0f;
     float stage2_match_thresh    = 0.5f;
     float birth_low_score_thresh = 0.0f;
+    float birth_prox_norm_thresh = 0.0f;  // proximity birth gate (0=off)
     int   track_buffer           = 30;
 
     // YOLO TRT geometry
     int   trt_input_size = 640;    // square input side (e.g. 640)
     int   max_raw_dets   = 8400;   // max detections from TRT output
+
+    // GMC (camera motion compensation)
+    bool  gmc_enabled    = true;
+    int   gmc_downscale  = 8;
+    bool  gmc_phase_corr = true;
+
+    // ReID embedding extraction (empty path = disabled)
+    std::string reid_engine_path = "";
+    int   reid_model_type = 0;     // 0=SIGLIP2, 1=DINOV2, 2=TRANSREID, 3=OSNET, 4=FASTREID
+    int   reid_budget     = 64;    // max detections to embed per frame
+    int   reid_interval   = 1;     // extract every N frames
+    int   reid_crop_h     = 224;
+    int   reid_crop_w     = 224;
 };
 
 /**
@@ -118,6 +135,25 @@ private:
     std::unique_ptr<PerceptionPipeline> pipeline_;
     cudaStream_t                        stream_ = nullptr;
     int                                 device_id_;
+
+    // GMC — lazy-init on first run() with gmc_enabled=true
+    std::unique_ptr<GMC> gmc_;
+    float* d_gmc_warp_ = nullptr;   // [6] float32, GPU
+
+    // ReID — lazy-init on first run() when reid_engine_path non-empty
+    std::unique_ptr<FeatureExtractor> reid_extractor_;
+    std::unique_ptr<Cropper>          reid_cropper_;
+    float* d_reid_embeds_     = nullptr;  // [max_raw * feat_dim], GPU, zeroed per frame
+    float* d_reid_sel_embeds_ = nullptr;  // [reid_budget * feat_dim], GPU
+    float* d_reid_sel_boxes_  = nullptr;  // [reid_budget, 4], GPU
+    int*   d_reid_sel_idx_    = nullptr;  // [reid_budget], GPU
+    float* d_crop_buf_        = nullptr;  // [reid_budget, 3, crop_h, crop_w], GPU
+    float* h_raw_scores_pin_  = nullptr;  // [max_raw], pinned host
+    float* h_reid_boxes_pin_  = nullptr;  // [reid_budget, 4], pinned host
+    int*   h_reid_idx_pin_    = nullptr;  // [reid_budget], pinned host
+    int    reid_feat_dim_     = 0;
+    int    reid_crop_h_       = 0;
+    int    reid_crop_w_       = 0;
 
     // GPU buffers (owned)
     float* d_src_chw_     = nullptr;  // [3, H_max, W_max] original CHW frame

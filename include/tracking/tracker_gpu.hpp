@@ -87,7 +87,8 @@ public:
         float vel_dir_weight = 0.0f,
         float fuse_score_weight = 0.0f,
         float stage2_match_thresh = 0.5f,
-        float birth_low_score_thresh = 0.0f
+        float birth_low_score_thresh = 0.0f,
+        float birth_prox_norm_thresh = 0.0f
     );
     void set_reid_params(float cos_threshold, float iou_low, float iou_high, float weight);
 
