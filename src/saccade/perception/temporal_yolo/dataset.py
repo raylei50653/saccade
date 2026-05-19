@@ -1,0 +1,289 @@
+"""
+MOT17 Temporal Dataset — 供 TemporalYOLOHybrid 訓練使用。
+
+每個 batch 包含連續 T 幀的 clip，讓模型能夠學習 Track Queries 的時序傳遞。
+
+MOT17 資料集目錄結構：
+    <data_root>/train/<seq_name>/
+        img1/   <- JPEG 影像，名稱為 000001.jpg, ...
+        gt/gt.txt <- Ground truth，格式: frame, id, x, y, w, h, conf, cls, vis
+
+gt.txt 格式（每行）：
+    frame_id, track_id, x1, y1, w, h, conf, class_id, visibility
+    (conf=1 代表有效, class_id=1 代表人)
+"""
+
+from __future__ import annotations
+import configparser
+import csv
+from pathlib import Path
+from typing import Iterator  # noqa: F401  (used in type hints of _iter_frames in evaluator)
+import torch
+from torch.utils.data import Dataset, DataLoader
+
+
+class MOT17TemporalClip(Dataset):
+    """
+    從 MOT17 訓練集切出長度為 clip_len 的連續幀 clip。
+
+    每個 sample 包含：
+      - frames:  (T, 3, H, W) float32
+      - gt_boxes:  list[Tensor(N_t, 4)]  每幀的 GT boxes [x1, y1, x2, y2]（絕對像素）
+      - gt_ids:    list[Tensor(N_t,)]    每幀的 GT track IDs
+      - frame_ids: list[int]             每幀的 frame number
+
+    preload_to_ram=True（預設）：init 時將所有幀以 uint8 載入 RAM（~6 GB），
+    __getitem__ 只需做 .float()/255 轉換，消除 JPEG decode 瓶頸。
+    搭配 num_workers=0 可避免 CUDA fork 死鎖且 GPU 利用率更高。
+    """
+
+    def __init__(
+        self,
+        data_root: str | Path,
+        split: str = "train",
+        clip_len: int = 5,
+        img_size: int = 640,
+        stride: int = 1,
+        seqs: list[str] | None = None,
+        detector: str = "SDP",
+        preload_to_ram: bool = True,
+    ):
+        self.data_root = Path(data_root)
+        self.split = split
+        self.clip_len = clip_len
+        self.img_size = img_size
+        self.stride = stride
+
+        split_dir = self.data_root / split
+        if seqs is not None:
+            self.sequences = seqs
+        else:
+            # Only load sequences for the specified detector (e.g., MOT17-02-SDP)
+            # This avoids loading redundant images from FRCNN/DPM versions.
+            self.sequences = sorted(
+                [
+                    d.name
+                    for d in split_dir.iterdir()
+                    if d.is_dir() and d.name.endswith(f"-{detector}")
+                ]
+            )
+            if not self.sequences:
+                print(
+                    f"[Dataset] Warning: No sequences found with detector {detector} in {split_dir}"
+                )
+
+        self._clips: list[tuple[str, int]] = []
+        self._gt: dict[str, dict[int, tuple[torch.Tensor, torch.Tensor]]] = {}
+        self._img_dirs: dict[str, Path] = {}
+        self._frame_lists: dict[str, list[Path]] = {}
+        self._scale_hw: dict[str, tuple[float, float]] = {}
+
+        for seq in self.sequences:
+            seq_dir = split_dir / seq
+            img_dir = seq_dir / "img1"
+            gt_file = seq_dir / "gt" / "gt.txt"
+
+            if not img_dir.exists() or not gt_file.exists():
+                continue
+
+            frames = sorted(img_dir.glob("*.jpg"))
+            if len(frames) < clip_len:
+                continue
+
+            self._img_dirs[seq] = img_dir
+            self._frame_lists[seq] = frames
+
+            ini = seq_dir / "seqinfo.ini"
+            if ini.exists():
+                cfg_parser = configparser.ConfigParser()
+                cfg_parser.read(ini)
+                orig_h = int(cfg_parser["Sequence"]["imHeight"])
+                orig_w = int(cfg_parser["Sequence"]["imWidth"])
+            else:
+                import torchvision.io as tv_io
+
+                _img = tv_io.read_image(str(frames[0]))
+                _, orig_h, orig_w = _img.shape
+            self._scale_hw[seq] = (img_size / orig_h, img_size / orig_w)
+
+            gt_per_frame: dict[int, tuple[list, list]] = {}
+            with gt_file.open() as f:
+                for row in csv.reader(f):
+                    fid = int(row[0])
+                    tid = int(row[1])
+                    x, y, w, h = (
+                        float(row[2]),
+                        float(row[3]),
+                        float(row[4]),
+                        float(row[5]),
+                    )
+                    conf = int(row[6]) if len(row) > 6 else 1
+                    cls = int(row[7]) if len(row) > 7 else 1
+                    vis = float(row[8]) if len(row) > 8 else 1.0
+
+                    if conf != 1 or cls != 1 or vis < 0.1:
+                        continue
+
+                    if fid not in gt_per_frame:
+                        gt_per_frame[fid] = ([], [])
+                    gt_per_frame[fid][0].append([x, y, x + w, y + h])
+                    gt_per_frame[fid][1].append(tid)
+
+            gt_tensors: dict[int, tuple[torch.Tensor, torch.Tensor]] = {}
+            for fid, (boxes, ids) in gt_per_frame.items():
+                gt_tensors[fid] = (
+                    torch.tensor(boxes, dtype=torch.float32),
+                    torch.tensor(ids, dtype=torch.int64),
+                )
+            self._gt[seq] = gt_tensors
+
+            n_frames = len(frames)
+            for start in range(0, n_frames - clip_len + 1, stride):
+                self._clips.append((seq, start))
+
+        # Preload all frames as uint8 (3, H, W) — eliminates JPEG decode at getitem time.
+        self._img_cache: dict[str, list[torch.Tensor]] | None = None
+        if preload_to_ram:
+            self._img_cache = self._preload_images()
+
+    def _preload_images(self) -> dict[str, list[torch.Tensor]]:
+        import torchvision.io as tv_io
+        import torchvision.transforms.functional as TF
+        from concurrent.futures import ThreadPoolExecutor
+
+        all_tasks = []
+        for seq, frame_paths in self._frame_lists.items():
+            for i, fpath in enumerate(frame_paths):
+                all_tasks.append((seq, i, fpath))
+
+        total = len(all_tasks)
+        print(
+            f"[Dataset] Preloading {total} frames to RAM (uint8 640×640) using multi-threading...",
+            flush=True,
+        )
+
+        cache: dict[str, list[torch.Tensor]] = {
+            seq: [None] * len(paths) for seq, paths in self._frame_lists.items()
+        }
+
+        def load_and_resize_task(task):
+            seq, idx, fpath = task
+            img = tv_io.read_image(str(fpath))  # uint8 (3, H, W)
+            img = TF.resize(img, [self.img_size, self.img_size], antialias=True)
+            return seq, idx, img
+
+        done = 0
+        # Use a reasonable number of workers (e.g., 8 or num_cpus)
+        import os
+
+        num_workers = min(os.cpu_count() or 4, 16)
+
+        with ThreadPoolExecutor(max_workers=num_workers) as executor:
+            for seq, idx, img in executor.map(load_and_resize_task, all_tasks):
+                cache[seq][idx] = img
+                done += 1
+                if done % 500 == 0:
+                    print(f"  {done}/{total}", flush=True)
+
+        print(f"  {done}/{total} — done", flush=True)
+        return cache
+
+    def __len__(self) -> int:
+        return len(self._clips)
+
+    def __getitem__(self, idx: int) -> dict:
+        seq, start = self._clips[idx]
+
+        frames_list: list[torch.Tensor] = []
+        gt_boxes_list: list[torch.Tensor] = []
+        gt_ids_list: list[torch.Tensor] = []
+        fids: list[int] = []
+
+        frame_paths = self._frame_lists[seq]
+        scale_h, scale_w = self._scale_hw[seq]
+
+        for t in range(self.clip_len):
+            frame_id = int(frame_paths[start + t].stem)
+
+            if self._img_cache is not None:
+                img = self._img_cache[seq][start + t]  # uint8 (3, H, W)
+            else:
+                img = _load_and_resize(frame_paths[start + t], self.img_size)
+            frames_list.append(img)
+
+            gt = self._gt[seq].get(
+                frame_id, (torch.zeros(0, 4), torch.zeros(0, dtype=torch.int64))
+            )
+            gt_boxes = gt[0].clone()
+            if gt_boxes.numel() > 0:
+                gt_boxes[:, [0, 2]] *= scale_w
+                gt_boxes[:, [1, 3]] *= scale_h
+            gt_boxes_list.append(gt_boxes)
+            gt_ids_list.append(gt[1])
+            fids.append(frame_id)
+
+        return {
+            "frames": torch.stack(frames_list),
+            "gt_boxes": gt_boxes_list,
+            "gt_ids": gt_ids_list,
+            "frame_ids": fids,
+            "seq": seq,
+        }
+
+
+def _load_and_resize(path: Path, target_size: int) -> torch.Tensor:
+    """
+    讀取 JPEG 並縮放至正方形（preload_to_ram=False 的 fallback path）。
+    """
+    import torchvision.io as tv_io
+    import torchvision.transforms.functional as TF
+
+    img = tv_io.read_image(str(path))
+    img = TF.resize(img, [target_size, target_size], antialias=True)
+    return img
+
+
+def collate_fn(batch: list[dict]) -> dict:
+    return {
+        "frames": torch.stack([b["frames"] for b in batch]),
+        "gt_boxes": [b["gt_boxes"] for b in batch],
+        "gt_ids": [b["gt_ids"] for b in batch],
+        "frame_ids": [b["frame_ids"] for b in batch],
+        "seq": [b["seq"] for b in batch],
+    }
+
+
+def build_mot17_dataloader(
+    data_root: str | Path,
+    clip_len: int = 5,
+    img_size: int = 640,
+    batch_size: int = 8,
+    num_workers: int = 0,
+    stride: int = 2,
+    seqs: list[str] | None = None,
+    detector: str = "SDP",
+    shuffle: bool = True,
+    preload_to_ram: bool = True,
+) -> DataLoader:
+    dataset = MOT17TemporalClip(
+        data_root=data_root,
+        split="train",
+        clip_len=clip_len,
+        img_size=img_size,
+        stride=stride,
+        seqs=seqs,
+        detector=detector,
+        preload_to_ram=preload_to_ram,
+    )
+    print(f"[Dataset] {len(dataset)} clips from {len(dataset.sequences)} sequences")
+    # num_workers=0: CUDA is active before DataLoader creation (model already on GPU);
+    # fork would inherit CUDA context → deadlock. With preloaded RAM, single-process
+    # is fast enough and avoids all multiprocessing complexity.
+    return DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        num_workers=num_workers,
+        collate_fn=collate_fn,
+        pin_memory=True,
+    )

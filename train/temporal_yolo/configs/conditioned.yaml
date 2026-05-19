@@ -1,0 +1,55 @@
+# Option D: Track-Conditioned YOLO Neck Training
+# 對應 train/temporal_yolo/train_conditioned.py
+
+model:
+  yolo_weights: models/yolo/yolo26s.pt
+  scales: p5
+  num_queries: 100
+  num_decoder_layers: 3
+  embed_dim: 256
+  ffn_dim: 1024
+  score_threshold: 0.3
+
+gate:
+  sigma_scale: 0.5      # Gaussian sigma = box_size * sigma_scale
+  min_score: 0.5        # 低於此 score 的 track 不渲染進 heatmap
+
+training:
+  epochs: 20
+  batch_size: 4
+  clip_len: 5
+  img_size: 640
+  lr: 1.0e-4            # decoder LR
+  lr_backbone: 1.0e-5
+  lr_gate: 5.0e-5       # gate alpha LR（介於 backbone 與 decoder 之間）
+  weight_decay: 1.0e-4
+  grad_clip: 0.1
+  save_every: 5
+  num_workers: 4
+
+phase1:
+  # 凍結 backbone + decoder，只訓 gate.alpha
+  # heatmap 用 GT box oracle（確保 gate 學到有意義的值）
+  epochs: 10
+  resume: runs/joint/best.ckpt    # 從 Option C checkpoint 熱啟動
+  run_dir: runs/conditioned_p1
+
+phase2:
+  # 全部解凍，差分 LR，predicted box 取代 GT box
+  epochs: 50
+  resume: runs/conditioned_p1/best.ckpt
+  run_dir: runs/conditioned_p2
+  gate_warmup: 5        # Phase 2 頭 5 epochs 先只訓 gate，再全解凍
+
+# Quick-start commands:
+#   Phase 1 (gate only, GT oracle):
+#     uv run train/temporal_yolo/train_conditioned.py \
+#         --data-root /path/to/MOT17 \
+#         --resume runs/joint/best.ckpt \
+#         --phase 1 --epochs 10 --run-dir runs/conditioned_p1
+#
+#   Phase 2 (full joint):
+#     uv run train/temporal_yolo/train_conditioned.py \
+#         --data-root /path/to/MOT17 \
+#         --resume runs/conditioned_p1/best.ckpt \
+#         --phase 2 --epochs 50 --run-dir runs/conditioned_p2

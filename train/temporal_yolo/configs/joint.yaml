@@ -1,0 +1,37 @@
+# Option C: Joint YOLO + Decoder Training
+# 對應 train/temporal_yolo/train_joint.py
+
+model:
+  yolo_weights: models/yolo/yolo26s.pt
+  scales: p5            # p5 or p3,p4,p5
+  num_queries: 100
+  num_decoder_layers: 3
+  embed_dim: 256
+  ffn_dim: 1024
+  score_threshold: 0.3
+
+training:
+  epochs: 50
+  batch_size: 4
+  clip_len: 5
+  img_size: 640
+  lr: 1.0e-4            # decoder LR
+  lr_backbone: 1.0e-5   # backbone LR (1/10 of decoder)
+  weight_decay: 1.0e-4
+  grad_clip: 0.1
+  save_every: 5
+  num_workers: 4
+
+run:
+  run_dir: runs/joint
+  resume: ""            # path to checkpoint, empty = train from scratch
+
+# Quick-start commands:
+#   P5-only (default):
+#     uv run train/temporal_yolo/train_joint.py --data-root /path/to/MOT17
+#
+#   Multi-scale:
+#     uv run train/temporal_yolo/train_joint.py --data-root /path/to/MOT17 --scales p3,p4,p5
+#
+#   Resume:
+#     uv run train/temporal_yolo/train_joint.py --data-root /path/to/MOT17 --resume runs/joint/latest.ckpt
