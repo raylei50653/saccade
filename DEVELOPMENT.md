@@ -93,7 +93,18 @@ uv run scripts/eval/mot17.py --preset baseline --detector SDP
 
 詳細待辦、近期 ablation 結論、backlog 見 **[docs/TODO.md](docs/TODO.md)**。
 
-目前高優先待辦以 **FP classifier external-only / 0-shot 路線** 為主；其餘已結案或延後的方向以 `docs/TODO.md` / `docs/TODO_history.md` 為準。
+### 🔴 P0 — Temporal YOLO Option D（新方向）
+
+**Track-Conditioned YOLO**：把 ByteTrack 輸出的空間先驗（位置 + Kalman 速度）注入 YOLO FPN，讓 backbone 在已知目標區域產生更強的特徵。
+
+- 設計文件：[docs/temporal_yolo/](docs/temporal_yolo/)（architecture / pipeline / track-conditioned-design / implementation-plan）
+- 當前進度：設計全數文件化完成，進入實作階段
+- 下一步：實作 `src/saccade/perception/temporal_yolo/yolo_conditioned.py`（TrackerGateInput → GaussianHeatmapRenderer → TrackSpatialGate → TemporalYOLOConditioned）
+- 訓練腳本骨架：`train/temporal_yolo/train_conditioned.py`
+
+### FP classifier external-only / 0-shot 路線
+
+其餘已結案或延後的方向以 `docs/TODO.md` / `docs/TODO_history.md` 為準。
 
 ---
 

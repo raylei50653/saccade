@@ -29,51 +29,28 @@
 [ Preprocess ]                 [ON]
    letterbox / gamma / contrast
         |
-        v
-[ Detection ]                  [ON]
-   yolo26s native_960          (--preset speed)
-   yolo26m native_960          (--preset baseline)
-   └── pose sidecar           [OFF, --pose-engine]
-        |
-        v
-[ Postprocess ]                [ON]
-   filter -> NMS -> cross-tile merge
-   ├─ detection quality scaling
-   ├─ FP hard filter           [OFF, --fp-hard-filter]
-   ├─ per-frame det cap        [OFF, --per-frame-detection-cap]
-   ├─ stage2 quality gate      [OFF, --stage2-quality-gate]
-   ├─ consecutive birth gate   [OFF, --consecutive-birth-gate]
-   ├─ birth quality gate       [OFF, --birth-quality-gate]
-   └─ multi-birth manager      [OFF, --multi-birth]
-        |
-        v
-[ ReID Bank Sync ]             [OFF]
-   appearance bank → tracker    └─ --appearance-bank
-        |
-        v
-[ ReID Budget ]                [OFF]
-   budget selection             └─ --reid-mode
-        |
-        v
-[ ReID Crop ]                  [OFF]
-   ROI crop (Python only)       └─ --reid-mode
-        |
-        v
-[ ReID Extract ]               [OFF]
-   siglip2 / other backbones    └─ --reid-mode
-        |
-        v
-[ Lazy ReID ]                  [OFF, profiling only]
-   self-sim profiling           └─ --profile-lazy-reid
-        |
-        v
-[ GMC ]                        [ON*]
-   gpu / cpu                    └── --gmc
-   └── --gmc-fg-mask            [OFF]
-        |
-        v
-[ Tracker Update ]             [ON]
-   association + Kalman         └─ (always ON)
+        +-----------------------------------+
+        |                                   |
+        v                                   v
+[ Detection (YOLO) ]           [ Temporal YOLO Hybrid ]
+   yolo26s / yolo26m             YOLO + Transformer Cross-Attention
+        |                                   | (Feedback: Track Queries)
+        v                                   |
+[ Postprocess ]                [ON]         |
+   filter -> NMS -> cross-tile merge        |
+   ├─ detection quality scaling             |
+   ├─ FP hard filter                        |
+   ├─ per-frame det cap                     |
+   └─ ...                                   |
+        |                                   |
+        v                                   |
+[ ReID Stack / GMC ]           [OFF/ON]     |
+        |                                   |
+        v                                   |
+[ Tracker Update ]             [ON]         |
+   association + Kalman                     |
+        |                                   |
+        +-----------------------------------+
         |
         v
 [ Materialize ]                [ON]
@@ -139,6 +116,9 @@ uv run scripts/eval/mot17.py --preset baseline --detector SDP
 
 # 完整 pipeline（手動開啟 ReID）：
 uv run scripts/eval/mot17.py --preset speed --detector SDP --reid-mode semantic --appearance-bank
+
+# MOTR 端到端追蹤（實驗中）：
+uv run scripts/eval/mot17.py --preset motr --detector SDP
 ```
 
 ---
