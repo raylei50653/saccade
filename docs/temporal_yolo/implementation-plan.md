@@ -1,5 +1,9 @@
 # Option D 實作計畫
 
+> **[結案 2026-05-19 — NO-GO]** Phase 1+2 全部完成。最終結果：IDF1 31.7% / MOTA 24.5% vs baseline 52.0% / 41.6%。
+> Gate ablation：gate-on 38.3% vs gate-off 38.2%，∆ <0.2pp。
+> 里程碑全數完成，但 `MOT17 val IDF1 > Option C baseline` 未達成。保留作參考。
+
 ## 前置條件
 
 - [x] Option C 架構已完成（`yolo_joint.py`）

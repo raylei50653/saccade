@@ -1,5 +1,9 @@
 # Option D：Track-Conditioned YOLO Neck — 詳細設計
 
+> **[結案 2026-05-19 — NO-GO]** 本設計已完整實作並訓練（Phase 1+2）。
+> 結論：gate 無貢獻（∆ <0.2pp）；根因為 100 queries recall 天花板（34.9% vs baseline 55%）。
+> 保留作設計參考。
+
 ## 核心動機
 
 現有 ByteTrack-style tracker 成本極低，已能穩定輸出每幀的追蹤狀態。

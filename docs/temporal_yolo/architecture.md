@@ -1,5 +1,8 @@
 # Temporal YOLO — 架構對比
 
+> **[結案 2026-05-19 — NO-GO]** Option D 實作完成，gate ablation 確認 gate-on vs gate-off ∆ <0.2pp。
+> 保留作設計參考。
+
 ## YOLO26s 基礎結構回顧
 
 ```
@@ -65,7 +68,7 @@ Track Queries_{t-1} (B, 100, 256) ────────→ Cross-Attention (3
 
 ---
 
-## Option D：Track-Conditioned YOLO Neck（設計完成，實作中）
+## Option D：Track-Conditioned YOLO Neck（已完成，NO-GO）
 
 Gate 輸入來自**外部 ByteTrack**，而非 Track Queries——ByteTrack 已是穩定系統，
 從 day 1 就能提供乾淨的空間先驗，無 curriculum 問題。

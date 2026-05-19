@@ -1,5 +1,10 @@
 # Temporal YOLO — 設計文件索引
 
+> **[結案 2026-05-19 — NO-GO]** Option D 實作並訓練完成（Phase 1+2），但 gate 無實質貢獻（∆ <0.2pp），
+> IDF1 31.7% vs baseline 52.0%，差距 -20pp。根因：100 queries recall 天花板 + Phase 2 gt_ratio→0。
+> Checkpoints 保留：`runs/conditioned_p1_v2/best.ckpt`、`runs/conditioned_p2/best.ckpt`。
+> **本目錄保留作設計參考，不代表當前開發方向。**
+
 本目錄記錄「讓 YOLO 具備時序感知能力」的完整設計演進，
 從最初的 Option B（凍結 backbone）到 Option D（外部 tracker 回饋驅動特徵提取）。
 
@@ -17,7 +22,7 @@
 ```
 Option B  →  Option C  →  Option D
 凍結 YOLO    聯合訓練     外部 Tracker 回饋進 YOLO
-(已實作)     (已實作)     (設計完成，實作中)
+(已實作)     (已實作)     (已完成，NO-GO 2026-05-19)
 ```
 
 ### 核心問題

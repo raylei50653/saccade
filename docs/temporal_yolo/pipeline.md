@@ -1,5 +1,7 @@
 # Temporal YOLO — Pipeline & Dataflow
 
+> **[結案 2026-05-19 — NO-GO]** 保留作設計參考。
+
 ## 資料流總覽
 
 ```
