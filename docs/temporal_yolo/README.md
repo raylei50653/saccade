@@ -12,7 +12,7 @@
 
 | 文件 | 內容 |
 |------|------|
-| [architecture.md](architecture.md) | 四個選項的完整架構對比與技術細節 |
+| [architecture.md](architecture.md) | **五個選項**的完整架構對比與技術細節（含 Option E 實測結果）|
 | [pipeline.md](pipeline.md) | Option C/D 完整資料流：tensor shapes、跨幀狀態、訓練迴圈 |
 | [track-conditioned-design.md](track-conditioned-design.md) | Option D 詳細設計：TrackerGateInput + TrackSpatialGate |
 | [implementation-plan.md](implementation-plan.md) | 分階段實作計畫、風險與里程碑 |
@@ -20,9 +20,9 @@
 ## 設計演進總覽
 
 ```
-Option B  →  Option C  →  Option D
-凍結 YOLO    聯合訓練     外部 Tracker 回饋進 YOLO
-(已實作)     (已實作)     (已完成，NO-GO 2026-05-19)
+Option B  →  Option C  →  Option D  →  Option E
+凍結 YOLO    聯合訓練     Gate+Decoder  Gate+標準Head+Fine-Tune
+(已實作)     (已實作)     (NO-GO)       (✅ 當前 baseline, IDF1 57.2%)
 ```
 
 ### 核心問題

@@ -120,18 +120,52 @@ Frame_t ──→ YOLO26s Backbone & Neck
 
 ---
 
-## 四個選項比較
+## Option E：GatedYOLODetector + Fine-Tune（當前有效 Baseline）
 
-| 面向 | 基準（純 YOLO） | Option B | Option C | Option D |
-|------|----------------|----------|----------|----------|
-| Backbone 可訓練 | — | 否 | 是 | 是 |
-| 追蹤狀態影響特徵提取 | — | 否 | 否（間接） | **是（直接注入）** |
-| Gate 輸入來源 | — | — | — | **外部 ByteTrack** |
-| 特徵尺度 | P3/P4/P5 | P5 only | P3+P4+P5 | P3+P4+P5（gate 調制後） |
-| 速度資訊利用 | — | 否 | 否 | **是（Kalman vx/vy）** |
-| 訓練 Matcher | — | Auction | Auction | 標準 detection loss |
-| 訓練穩定性 | — | 中 | 中 | **高（外部穩定 tracker）** |
-| 理論上限 | — | 中 | 中-高 | 高 |
+跳過 cross-attention decoder，直接在 gate 架構上使用標準 YOLO Detect head，
+並針對 MOT17 行人資料 fine-tune backbone。**目前已驗證有效的方向。**
+
+```
+Frame_t → YOLO26s Backbone (layers 0~10)
+               │
+          TrackSpatialGate (gate_input 可選)
+               │
+          P3_gated / P4_gated / P5_gated
+               │
+          標準 YOLO Detect Head  → (B, 300, 6)
+               │
+          GPUByteTracker (外部，不變)
+```
+
+**實驗結果（`runs/gated_det_v1/best.ckpt`，gate-off 推論）：**
+
+| 指標 | 舊 baseline（yolo26s） | Option E | ∆ |
+|------|----------------------|----------|---|
+| IDF1 | 52.0% | **57.2%** | +5.2pp |
+| MOTA | 41.6% | **52.6%** | +11.0pp |
+| FP | 14,563 | **3,233** | **-78%** |
+| IDs | 475 | 489 | +14 |
+| Rcll | 55.0% | 56.1% | +1.1pp |
+
+**關鍵發現：**
+- 改善主要來自 **fine-tune**（FP -78%），而非 gate
+- Gate 貢獻 ∆ <0.2pp（已確認，default=off）
+- Gate 架構保留於程式碼，但 FPN 空間先驗注入的增益仍待進一步驗證
+
+---
+
+## 五個選項比較
+
+| 面向 | 基準（純 YOLO） | Option B | Option C | Option D | **Option E** |
+|------|----------------|----------|----------|----------|--------------|
+| Backbone 可訓練 | — | 否 | 是 | 是 | **是（fine-tune）** |
+| 追蹤狀態影響特徵提取 | — | 否 | 否（間接） | 是（直接注入）| 是（gate，效果待確認） |
+| Decoder 架構 | — | Cross-Attn | Cross-Attn | Cross-Attn | **無（標準 head）** |
+| 特徵尺度 | P3/P4/P5 | P5 only | P3+P4+P5 | P3+P4+P5 | **P3+P4+P5** |
+| 訓練 Matcher | — | Auction | Auction | 標準 det loss | **標準 det loss** |
+| 訓練穩定性 | — | 中 | 中 | 高 | **高** |
+| 實測 IDF1 | 52.0% | — | — | 31.7%（NO-GO）| **57.2%** |
+| 狀態 | baseline | 結案 | 結案 | NO-GO | **✅ 當前 baseline** |
 
 ## 關鍵實作決策紀錄
 
