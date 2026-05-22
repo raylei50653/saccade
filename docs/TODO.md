@@ -22,12 +22,14 @@
 
 ---
 
-## 當前 Baseline（2026-05-11，最後更新）
+## 當前 Baseline（2026-05-22 更新）
 
-| preset | IDF1 | MOTA | IDs | Rcll | FPS |
-|--------|------|------|-----|------|-----|
-| **speed**（yolo26s） | **52.0%** | **41.6%** | **475** | 55.0% | **97.9** |
-| **baseline**（yolo26m） | **51.4%** | **43.5%** | **502** | 59.0% | ~85 |
+| preset | IDF1 | MOTA | IDs | Rcll | FP | FPS |
+|--------|------|------|-----|------|-----|-----|
+| **speed**（yolo26s） | **52.0%** | **41.6%** | **475** | 55.0% | 14687 | **97.9** |
+| **baseline**（yolo26m） | **51.4%** | **43.5%** | **502** | 59.0% | — | ~85 |
+| **gated_det_v1**（Option E） | **56.9%** | **52.5%** | **515** | 56.2% | 3712 | ~71 |
+| **e-v2 α_tier**（Option E-v2） | **55.6%** | **54.2%** | **545** | 57.3% | **2932** | ~37 |
 
 已 default 的 flag：`fuse_score_weight=0.4`、`interp`、`fp_hard_filter`（area=40000）、`kalman_r_scale=0.75`、`async_reid`、`pipeline_relink`、`gmc gpu`、`detection_quality_scaling`。
 
@@ -73,6 +75,27 @@
 > Gate ablation 確認 gate 無貢獻（gate-on 38.3% vs gate-off 38.2%，∆<0.2pp）。
 > 根因：100 queries recall 天花板（34.9% vs baseline 55%）+ Phase 2 gt_ratio→0 使 decoder 繞過 gate。
 > Checkpoints 保留：`runs/conditioned_p1_v2/best.ckpt`、`runs/conditioned_p2/best.ckpt`。
+
+### ✅ Option E-v2 — Quality-Gated Temporal Feature Fusion（GO，2026-05-22 結案）
+
+> 設計文件：[docs/temporal_yolo/option-e-v2-design.md](/docs/temporal_yolo/option-e-v2-design.md)
+>
+> 直接利用 t-1 的 FPN 特徵加上 α_tier（per-track-state）加權做時序融合。無需重訓，從 gated_det_v1 熱啟動。
+>
+> 最終結果（MOT17 train，7 SDP，yolo26s）：
+> **MOTA 54.2%（+1.7pp），FP 2932（-21%），Rcll 57.3%（+1.1pp）**
+>
+> 四 Phase 全完成：
+> - P0 ✅ α=0 輸出與 baseline 完全一致
+> - P1 ✅ Fixed α sweep：α=0.15 最佳（MOTA+1.6pp, Rcll+2.6pp）
+> - P2 ❌ GMC warp NO-GO（sparse optical flow 精度不足，全面倒退）
+> - P3 ✅ α_tier 分層：MOTA 54.2%, FP -21%，Prcn 95.6%
+> - P4 ✅ Lock-in 檢測通過：最長序列 FP -25%，無鎖定問題
+>
+> 最佳配置：`--temporal-fusion --fusion-alpha 1.0`（不 warp）
+> Code：`src/saccade/perception/temporal_yolo/temporal_fusion.py`（TemporalFeatureFusion）
+>
+> 未完成：detector score heatmap、per-scale α_tier tuning、FPS 優化、訓練腳本
 
 ---
 

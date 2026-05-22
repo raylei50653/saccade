@@ -34,6 +34,7 @@ from .yolo_conditioned import (
     TemporalYOLOConditioned,
     build_temporal_yolo_conditioned,
 )
+from .temporal_fusion import TemporalFeatureFusion, AlphaTierConfig
 
 __all__ = [
     "TemporalYOLOConfig",
@@ -55,4 +56,6 @@ __all__ = [
     "ConditionedConfig",
     "TemporalYOLOConditioned",
     "build_temporal_yolo_conditioned",
+    "TemporalFeatureFusion",
+    "AlphaTierConfig",
 ]

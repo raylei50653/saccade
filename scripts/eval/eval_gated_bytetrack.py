@@ -34,11 +34,14 @@ from saccade.perception.temporal_yolo.yolo_gated_detector import (  # noqa: E402
     GatedDetConfig,
     build_gated_yolo_detector,
 )
+from saccade.perception.temporal_yolo.temporal_fusion import AlphaTierConfig  # noqa: E402
 from saccade.perception.temporal_yolo.roi_embedder import (  # noqa: E402
     ROIEmbeddingBank,
+    FPNCropEmbedder,
     extract_roi_embeddings,
     EMB_DIM,
 )
+from saccade.perception.temporal_yolo.reid_head import load_reid_head  # noqa: E402
 
 _SDP_SEQS = [
     "MOT17-02-SDP",
@@ -108,8 +111,11 @@ def eval_sequence(
     device: torch.device,
     disable_gate: bool = False,
     use_roi_reid: bool = False,
-    dim_selector: torch.Tensor
-    | None = None,  # (K,) top-K dim indices from Fisher analysis
+    dim_selector: torch.Tensor | None = None,
+    reid_head=None,
+    fpn_embedder=None,
+    use_gmc_warp: bool = False,
+    use_detector_heatmap: bool = False,
 ) -> int:
     seq_name = seq_dir.name
     frames = _load_frames(seq_dir, img_size)
@@ -118,10 +124,23 @@ def eval_sequence(
 
     tracker.tracker.reset() if hasattr(tracker.tracker, "reset") else None
     tracker.set_frame_size(orig_w, orig_h)
+    if hasattr(model, "reset_fusion"):
+        model.reset_fusion()
 
     sx, sy = orig_w / img_size, orig_h / img_size
+    prev_gate_input: object | None = None
     prev_boxes_640: torch.Tensor | None = None
     prev_scores: torch.Tensor | None = None
+    prev_det_boxes: torch.Tensor | None = None
+    prev_det_scores: torch.Tensor | None = None
+
+    # GMC for temporal fusion warp (Phase 2)
+    gmc: SparseOpticalFlowGMC | None = None
+    gmc_matrix: torch.Tensor | None = None
+    if use_gmc_warp:
+        from saccade.perception.eval.gmc import SparseOpticalFlowGMC
+
+        gmc = SparseOpticalFlowGMC()
 
     # ROI ReID bank: reset per sequence
     emb_bank = ROIEmbeddingBank(img_size=img_size) if use_roi_reid else None
@@ -132,9 +151,20 @@ def eval_sequence(
     for frame_id, frame in frames:
         frame = frame.to(device)
 
-        # Gate input from previous frame
+        # Update GMC for temporal fusion warp (before model forward)
+        if gmc is not None:
+            # frame is (1, 3, 640, 640) on device; GMC expects (3, H, W) input
+            gmc_matrix = gmc.estimate(frame.squeeze(0))
+
+        # Set GMC matrix on model (None = identity for first frame)
+        if hasattr(model, "set_gmc") and use_gmc_warp:
+            model.set_gmc(gmc_matrix)
+
+        # Gate input from previous frame's tracker state (Phase 3)
         gate_input = None
-        if (
+        if not disable_gate and prev_gate_input is not None:
+            gate_input = prev_gate_input
+        elif (
             not disable_gate
             and prev_boxes_640 is not None
             and prev_boxes_640.numel() > 0
@@ -151,6 +181,9 @@ def eval_sequence(
             model.cache_feats = True
             model._feat_cache.clear()
 
+        if hasattr(model, "set_prev_detections") and use_detector_heatmap:
+            model.set_prev_detections(prev_det_boxes, prev_det_scores)
+
         with torch.no_grad():
             out = model(frame, gate_input=gate_input)
 
@@ -165,6 +198,9 @@ def eval_sequence(
         if dets.numel() > 0:
             prev_boxes_640 = dets[:, :4].clone()
             prev_scores = dets[:, 4].clone()
+            if use_detector_heatmap:
+                prev_det_boxes = dets[:, :4].clone()
+                prev_det_scores = dets[:, 4].clone()
 
             boxes_orig = dets[:, :4].clone()
             boxes_orig[:, [0, 2]] *= sx
@@ -174,17 +210,26 @@ def eval_sequence(
 
             # Extract ROI embeddings (640px space)
             if use_roi_reid and model._feat_cache:
-                embeddings = extract_roi_embeddings(
-                    model._feat_cache, dets[:, :4]
-                )  # (N, 896) — in 640px space
-                if dim_selector is not None:
-                    # Select top-K Fisher dims and re-normalize to reduce noise
-                    embeddings = torch.nn.functional.normalize(
-                        embeddings[:, dim_selector], dim=1
+                if reid_head is not None:
+                    # Multi-scale 896-dim → projected 128-dim
+                    embeddings = extract_roi_embeddings(
+                        model._feat_cache, dets[:, :4], reid_head=reid_head
                     )
+                elif fpn_embedder is not None:
+                    # Single-scale crop (P4 256-dim by default)
+                    embeddings = fpn_embedder.extract(model._feat_cache, dets[:, :4])
+                else:
+                    # Raw 896-dim multi-scale (legacy / Fisher dim-select path)
+                    embeddings = extract_roi_embeddings(model._feat_cache, dets[:, :4])
+                    if dim_selector is not None:
+                        embeddings = torch.nn.functional.normalize(
+                            embeddings[:, dim_selector], dim=1
+                        )
         else:
             prev_boxes_640 = None
             prev_scores = None
+            prev_det_boxes = None
+            prev_det_scores = None
             boxes_orig = torch.zeros((0, 4), device=device)
             scores = torch.zeros((0,), device=device)
             classes = torch.zeros((0,), device=device, dtype=torch.int32)
@@ -193,6 +238,20 @@ def eval_sequence(
         track_results = tracker.update(
             boxes_orig, scores, classes, embeddings=embeddings
         )
+
+        # Build gate input from tracker state for next frame (Phase 3 α_tier)
+        if not disable_gate:
+            try:
+                snapshots = tracker.get_state_snapshots()
+                candidates = tracker.get_tentative_candidates()
+                prev_gate_input = TrackerGateInput.from_tracker_results(
+                    track_results,
+                    snapshots,
+                    candidates,
+                    (img_size, img_size),
+                ).to(device)
+            except Exception:
+                prev_gate_input = None
 
         # Update ROI bank for confirmed tracks, then inject smoothed embeddings as reference
         if (
@@ -252,6 +311,51 @@ def main() -> None:
     parser.add_argument("--conf-threshold", type=float, default=0.05)
     parser.add_argument("--no-gate", action="store_true")
     parser.add_argument(
+        "--temporal-fusion",
+        action="store_true",
+        help="Enable Option E-v2 temporal feature fusion",
+    )
+    parser.add_argument(
+        "--fusion-alpha",
+        type=float,
+        default=0.0,
+        help="Fixed fusion alpha for temporal fusion (0=sanity check, 0.1=Phase 1)",
+    )
+    parser.add_argument(
+        "--fusion-warp",
+        action="store_true",
+        help="Enable GMC warp in temporal feature fusion (Phase 2)",
+    )
+    parser.add_argument(
+        "--detector-heatmap",
+        action="store_true",
+        help="Add prev-frame detector score heatmap to Q_spatial (Phase 3)",
+    )
+    parser.add_argument(
+        "--alpha-tier-occluded",
+        type=float,
+        default=0.20,
+        help="α_tier for occluded tracks (det_idx == -1)",
+    )
+    parser.add_argument(
+        "--alpha-tier-recent",
+        type=float,
+        default=0.15,
+        help="α_tier for confirmed tracks age 1-10",
+    )
+    parser.add_argument(
+        "--alpha-tier-stable",
+        type=float,
+        default=0.05,
+        help="α_tier for confirmed tracks age >10",
+    )
+    parser.add_argument(
+        "--alpha-tier-tentative",
+        type=float,
+        default=0.05,
+        help="α_tier for tentative/unconfirmed tracks",
+    )
+    parser.add_argument(
         "--roi-reid",
         action="store_true",
         help="Enable YOLO ROI embedding for lost-track ReID",
@@ -281,6 +385,19 @@ def main() -> None:
         default="",
         help="Path to .npy file with top-K Fisher dim indices (from analyze_roi_dim_importance.py)",
     )
+    parser.add_argument(
+        "--reid-head",
+        default="",
+        help="Path to trained ReIDHead checkpoint (runs/reid_head_v1/best.ckpt). "
+        "Projects 896-dim raw FPN → 128-dim discriminative embedding.",
+    )
+    parser.add_argument(
+        "--fpn-scale",
+        default="p4",
+        choices=["p3", "p4", "p5"],
+        help="FPN scale for FPNCropEmbedder (used when --roi-reid without --reid-head). "
+        "p3=128-dim, p4=256-dim, p5=512-dim.",
+    )
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -297,6 +414,18 @@ def main() -> None:
         gate_sigma_scale=train_args.get("gate_sigma_scale", 0.5),
         gate_min_score=train_args.get("gate_min_score", 0.5),
         freeze_backbone=False,
+        enable_temporal_fusion=args.temporal_fusion,
+        fusion_alpha=args.fusion_alpha,
+        fusion_fixed_alpha=True,
+        enable_detector_heatmap=args.detector_heatmap,
+        alpha_tier=AlphaTierConfig(
+            occluded=args.alpha_tier_occluded,
+            confirmed_recent=args.alpha_tier_recent,
+            confirmed_stable=args.alpha_tier_stable,
+            tentative=args.alpha_tier_tentative,
+        )
+        if args.temporal_fusion
+        else None,
     )
     yolo_weights = project_root / train_args.get(
         "yolo_weights", "models/yolo/yolo26s.pt"
@@ -308,9 +437,20 @@ def main() -> None:
     print(
         f"Loaded: {ckpt_path}  epoch={raw.get('epoch')}  loss={raw.get('best_loss', 0):.4f}"
     )
+    fusion_str = ""
+    if args.temporal_fusion:
+        warp_str = " +warp" if args.fusion_warp else ""
+        deth_str = " +det" if args.detector_heatmap else ""
+        tier_str = (
+            f" tier=[{args.alpha_tier_occluded:.2f}/{args.alpha_tier_recent:.2f}"
+            f"/{args.alpha_tier_stable:.2f}/{args.alpha_tier_tentative:.2f}]"
+        )
+        fusion_str = (
+            f"  temporal_fusion α={args.fusion_alpha}{warp_str}{deth_str}{tier_str}"
+        )
     print(
         f"Gate {'DISABLED' if args.no_gate else 'ENABLED'}  "
-        f"ROI-ReID {'ENABLED' if args.roi_reid else 'DISABLED'}"
+        f"ROI-ReID {'ENABLED' if args.roi_reid else 'DISABLED'}{fusion_str}"
     )
     # Load dim selector from Fisher analysis if provided
     dim_selector: torch.Tensor | None = None
@@ -322,18 +462,44 @@ def main() -> None:
             f"  dim_selector: top-{len(dim_selector)} Fisher dims from {args.dim_select}"
         )
 
-    if args.roi_reid:
-        active_dim = len(dim_selector) if dim_selector is not None else EMB_DIM
+    # Load trained ReID projection head if provided
+    reid_head = None
+    if args.reid_head and Path(args.reid_head).exists():
+        reid_head = load_reid_head(args.reid_head, device=device)
+        print(f"  ReIDHead loaded: {args.reid_head}  out_dim={reid_head.out_dim}")
+
+    # Build FPN crop embedder (used when --roi-reid and no --reid-head)
+    fpn_embedder: FPNCropEmbedder | None = None
+    if args.roi_reid and reid_head is None and not args.dim_select:
+        fpn_embedder = FPNCropEmbedder(scale=args.fpn_scale)
         print(
-            f"  embedding_dim={active_dim}  cos_thr={args.reid_cos_thr}  "
-            f"reid_weight={args.reid_weight}"
+            f"  FPNCropEmbedder: scale={args.fpn_scale}  emb_dim={fpn_embedder.emb_dim}"
         )
 
-    emb_dim = (
-        (len(dim_selector) if dim_selector is not None else EMB_DIM)
-        if args.roi_reid
-        else 768
-    )
+    if args.roi_reid:
+        if reid_head is not None:
+            active_dim = reid_head.out_dim
+        elif fpn_embedder is not None:
+            active_dim = fpn_embedder.emb_dim
+        elif dim_selector is not None:
+            active_dim = len(dim_selector)
+        else:
+            active_dim = EMB_DIM
+        print(
+            f"  embedding_dim={active_dim}  cos_thr={args.reid_cos_thr}  reid_weight={args.reid_weight}"
+        )
+
+    if args.roi_reid:
+        if reid_head is not None:
+            emb_dim = reid_head.out_dim
+        elif fpn_embedder is not None:
+            emb_dim = fpn_embedder.emb_dim
+        elif dim_selector is not None:
+            emb_dim = len(dim_selector)
+        else:
+            emb_dim = EMB_DIM
+    else:
+        emb_dim = 768
     tracker = GPUByteTracker(max_objects=2048, embedding_dim=emb_dim)
     tracker.set_params(
         track_thresh=args.track_thresh,
@@ -374,6 +540,10 @@ def main() -> None:
             disable_gate=args.no_gate,
             use_roi_reid=args.roi_reid,
             dim_selector=dim_selector,
+            reid_head=reid_head,
+            fpn_embedder=fpn_embedder,
+            use_gmc_warp=args.fusion_warp,
+            use_detector_heatmap=args.detector_heatmap,
         )
 
     try:

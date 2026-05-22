@@ -57,6 +57,7 @@ class TrackerGateInput:
     )  # (M,) hit_streak / required_confirm_streak ∈ [0, 1]
     img_hw: tuple[int, int]
     confirmed_occluded: Tensor | None = None  # (N,) bool; True ↔ det_idx == -1
+    confirmed_ages: Tensor | None = None  # (N,) int; track age in frames
 
     @classmethod
     def from_tracker_results(
@@ -75,14 +76,16 @@ class TrackerGateInput:
         vel_lookup: dict[int, tuple[float, float]] = {
             s.obj_id: (float(s.state[4]), float(s.state[5])) for s in state_snapshots
         }
+        age_lookup: dict[int, int] = {s.obj_id: int(s.age) for s in state_snapshots}
 
-        boxes, scores, vels, occluded = [], [], [], []
+        boxes, scores, vels, occluded, ages = [], [], [], [], []
         for tr in track_results:
             boxes.append([tr.x1, tr.y1, tr.x2, tr.y2])
             scores.append(float(tr.score))
             vx, vy = vel_lookup.get(tr.obj_id, (0.0, 0.0))
             vels.append([vx, vy])
             occluded.append(tr.det_idx == -1)
+            ages.append(age_lookup.get(tr.obj_id, 0))
 
         t_boxes, t_ratios = [], []
         for c in candidates:
@@ -99,6 +102,7 @@ class TrackerGateInput:
         confirmed_occluded = (
             torch.tensor(occluded, dtype=torch.bool) if occluded else None
         )
+        confirmed_ages_t = torch.tensor(ages, dtype=torch.int32) if ages else None
         tentative_boxes = (
             torch.tensor(t_boxes, dtype=torch.float32) if t_boxes else None
         )
@@ -114,6 +118,7 @@ class TrackerGateInput:
             tentative_ratios=tentative_ratios,
             img_hw=img_hw,
             confirmed_occluded=confirmed_occluded,
+            confirmed_ages=confirmed_ages_t,
         )
 
     @classmethod
@@ -190,6 +195,11 @@ class TrackerGateInput:
                 if self.confirmed_occluded is not None
                 else None
             ),
+            confirmed_ages=(
+                self.confirmed_ages.to(device)
+                if self.confirmed_ages is not None
+                else None
+            ),
         )
 
 
@@ -227,6 +237,7 @@ class GaussianHeatmapRenderer(nn.Module):
         feat_hw: tuple[int, int],
         velocities: Tensor | None = None,  # (N, 2) [vx, vy]
         sigma_multiplier: Tensor | None = None,  # (N,) per-track sigma scale
+        per_track_weights: Tensor | None = None,  # (N,) α_tier per track
     ) -> Tensor:  # (1, H_s, W_s)
         """Vectorized Gaussian rendering. Returns zero map when N == 0."""
         H_img, W_img = img_hw
@@ -273,6 +284,8 @@ class GaussianHeatmapRenderer(nn.Module):
         dy = (gy.view(1, H_s, 1) - cy.view(N, 1, 1)) / sg_y
         dx = (gx.view(1, 1, W_s) - cx.view(N, 1, 1)) / sg_x
         gauss = torch.exp(-0.5 * (dy**2 + dx**2)) * intensities.view(N, 1, 1)
+        if per_track_weights is not None:
+            gauss = gauss * per_track_weights.view(N, 1, 1)
 
         return gauss.max(dim=0, keepdim=True).values  # (1, H_s, W_s)
 
@@ -281,6 +294,7 @@ class GaussianHeatmapRenderer(nn.Module):
         self,
         gate_input: TrackerGateInput,
         feat_hw: tuple[int, int],
+        per_track_weights: Tensor | None = None,  # (N,) α_tier
     ) -> Tensor:  # (1, H_s, W_s) ∈ [0, 1]
         device = gate_input.confirmed_boxes.device
 
@@ -296,6 +310,10 @@ class GaussianHeatmapRenderer(nn.Module):
             scores = scores[keep]
             vels = vels[keep] if vels is not None else None
             occ = occ[keep] if occ is not None else None
+            if per_track_weights is not None and per_track_weights.shape[0] == len(
+                keep
+            ):
+                per_track_weights = per_track_weights[keep]
 
         # intensity = sigmoid(score), halved for occluded tracks
         intensity = torch.sigmoid(scores)
@@ -306,7 +324,13 @@ class GaussianHeatmapRenderer(nn.Module):
             sigma_mult = 1.0 + 0.5 * occ_f  # 1.0 normal, 1.5 occluded
 
         heatmap = self._render_gaussians(
-            boxes, intensity, gate_input.img_hw, feat_hw, vels, sigma_mult
+            boxes,
+            intensity,
+            gate_input.img_hw,
+            feat_hw,
+            vels,
+            sigma_mult,
+            per_track_weights=per_track_weights,
         )
 
         # Tentative tracks: weaker signal, no velocity, no occlusion handling

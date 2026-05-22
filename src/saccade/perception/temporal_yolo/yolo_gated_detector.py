@@ -6,15 +6,11 @@ Architecture:
         ↓  hooks modify layer 16 (P3), 19 (P4), 22 (P5) outputs
     TrackSpatialGate  (gate = 1 + alpha * heatmap; alpha init=0)
         ↓  gated FPN features passed to Detect head
+    TemporalFeatureFusion  (optional, Option E-v2)
+        ↓  P_fused = P_gated + α × Q × warp(P_prev)
     YOLO Detect Head (layer 23, pre-trained)
         ↓
     Standard YOLO detection output
-
-Key difference from TemporalYOLOConditioned:
-- No track queries, no Transformer decoder
-- Detect head is a shallow CNN → cannot bypass gate
-- Standard detection loss (v8DetectionLoss) provides direct gradient to alpha
-- Inference: gate_input from ByteTrack previous frame; training: GT oracle (gt_ratio)
 """
 
 from __future__ import annotations
@@ -24,9 +20,9 @@ import torch.nn as nn
 from dataclasses import dataclass
 
 from .yolo_conditioned import TrackerGateInput, TrackSpatialGate
+from .temporal_fusion import TemporalFeatureFusion, _compute_alpha_tier, AlphaTierConfig
 
 
-# Layer indices for P3/P4/P5 in yolo26s (verified by layer dump)
 _GATE_LAYER_IDX: dict[str, int] = {"p3": 16, "p4": 19, "p5": 22}
 
 
@@ -38,14 +34,29 @@ class GatedDetConfig:
     scales: tuple[str, ...] = ("p3", "p4", "p5")
     gate_sigma_scale: float = 0.5
     gate_min_score: float = 0.5
-    freeze_backbone: bool = False  # unfreeze for joint fine-tuning
+    freeze_backbone: bool = False
+    img_size: int = 640
+
+    # Option E-v2 temporal fusion
+    enable_temporal_fusion: bool = False
+    fusion_alpha: float = 0.0
+    fusion_fixed_alpha: bool = True
+
+    # Phase 3 α_tier
+    alpha_tier: AlphaTierConfig | None = None
+
+    # Phase 3 detector heatmap
+    enable_detector_heatmap: bool = False
 
 
 # ---------------------------------------------------------------------------
 # Model
 # ---------------------------------------------------------------------------
 class GatedYOLODetector(nn.Module):
-    """YOLO26s with TrackSpatialGate injected at P3/P4/P5 via forward hooks."""
+    """YOLO26s with TrackSpatialGate injected at P3/P4/P5 via forward hooks.
+
+    Option E-v2: enables TemporalFeatureFusion for cross-frame feature reuse.
+    """
 
     def __init__(
         self,
@@ -63,14 +74,11 @@ class GatedYOLODetector(nn.Module):
         yolo = _YOLO(yolo_pt_path)
         self.yolo_model = yolo.model.to(device)
 
-        # Enable / disable backbone gradients
         for p in self.yolo_model.parameters():
             p.requires_grad_(not cfg.freeze_backbone)
 
-        # (feat_channels not needed by TrackSpatialGate; kept for reference only)
         _ = self._probe_feat_channels(device)
 
-        # Gate (always trainable; feat_channels not needed — gate is feature-agnostic)
         self.gate = TrackSpatialGate(
             scales=tuple(cfg.scales),
             sigma_scale=cfg.gate_sigma_scale,
@@ -79,17 +87,41 @@ class GatedYOLODetector(nn.Module):
         for p in self.gate.parameters():
             p.requires_grad_(True)
 
-        # Hook state: set before forward, cleared after
-        self._current_gate: TrackerGateInput | list[TrackerGateInput] | None = None
+        # Temporal fusion (Option E-v2)
+        self.fusion: TemporalFeatureFusion | None = None
+        if cfg.enable_temporal_fusion:
+            tier_cfg = cfg.alpha_tier or AlphaTierConfig()
+            self.fusion = TemporalFeatureFusion(
+                scales=tuple(cfg.scales),
+                img_size=cfg.img_size,
+                tier_cfg=tier_cfg,
+            )
+            if cfg.fusion_fixed_alpha:
+                self.fusion.set_fixed_alpha(cfg.fusion_alpha)
+            for p in self.fusion.parameters():
+                p.requires_grad_(True)
 
-        # FPN feature cache: populated during forward when cache_feats=True
+        self._current_gate: TrackerGateInput | list[TrackerGateInput] | None = None
         self._feat_cache: dict[str, torch.Tensor] = {}
         self.cache_feats: bool = False
 
-        # Register gate-injection hooks at P3/P4/P5 output layers
+        # Phase 3: prev-frame raw detections for detector heatmap
+        self._det_boxes_prev: torch.Tensor | None = None
+        self._det_scores_prev: torch.Tensor | None = None
+
         for scale in cfg.scales:
             idx = _GATE_LAYER_IDX[scale]
             self.yolo_model.model[idx].register_forward_hook(self._make_hook(scale))
+
+    # ------------------------------------------------------------------
+    # Detector heatmap support
+    # ------------------------------------------------------------------
+    def set_prev_detections(
+        self, boxes: torch.Tensor | None, scores: torch.Tensor | None
+    ) -> None:
+        """Set prev-frame raw detections for detector score heatmap (Phase 3)."""
+        self._det_boxes_prev = boxes
+        self._det_scores_prev = scores
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -111,22 +143,80 @@ class GatedYOLODetector(nn.Module):
             h.remove()
         return channels
 
+    def _render_detector_heatmap(
+        self, scale: str, hw: tuple[int, int]
+    ) -> torch.Tensor | None:
+        if not self.cfg.enable_detector_heatmap:
+            return None
+        if self._det_boxes_prev is None or self._det_boxes_prev.numel() == 0:
+            return None
+
+        renderer = self.gate.renderer
+        heatmap = renderer._render_gaussians(
+            self._det_boxes_prev,
+            torch.sigmoid(self._det_scores_prev)
+            if self._det_scores_prev is not None
+            else torch.ones(
+                self._det_boxes_prev.shape[0], device=self._det_boxes_prev.device
+            ),
+            (self.cfg.img_size, self.cfg.img_size),
+            hw,
+            velocities=None,
+            sigma_multiplier=None,
+            per_track_weights=None,
+        )
+        return heatmap  # (1, H_s, W_s)
+
     def _make_hook(self, scale: str):
         def _hook(module, inp, output: torch.Tensor) -> torch.Tensor:
-            if self.cache_feats:
-                self._feat_cache[scale] = output  # (B, C, H, W)
+            if self.cache_feats or self.fusion is not None:
+                self._feat_cache[scale] = output
+
             if self._current_gate is None:
                 return output
+
             hw = (output.shape[2], output.shape[3])
             renderer = self.gate.renderer
             alpha = self.gate.alphas[scale]
+
             if isinstance(self._current_gate, list):
-                maps = renderer.batch_forward(self._current_gate, hw)  # (B, H, W)
-                gate_map = 1.0 + alpha * maps.unsqueeze(1)  # (B, 1, H, W)
+                maps = renderer.batch_forward(self._current_gate, hw)
+                gate_map = 1.0 + alpha * maps.unsqueeze(1)
             else:
-                heatmap = renderer(self._current_gate, hw)  # (1, H, W)
-                gate_map = (1.0 + alpha * heatmap).unsqueeze(0)  # (1, 1, H, W)
-            return output * gate_map
+                heatmap = renderer(self._current_gate, hw)
+                gate_map = (1.0 + alpha * heatmap).unsqueeze(0)
+
+            gated = output * gate_map
+
+            if self.fusion is not None:
+                gi = self._current_gate
+                if isinstance(gi, list):
+                    q = maps.unsqueeze(1)
+                else:
+                    if gi.confirmed_ages is not None:
+                        confirmed_w, _ = _compute_alpha_tier(
+                            gi.confirmed_ages,
+                            gi.confirmed_occluded,
+                            tier_cfg=self.fusion.tier_cfg,
+                        )
+                        q_heatmap = renderer(
+                            gi,
+                            hw,
+                            per_track_weights=confirmed_w,
+                        )
+                    else:
+                        q_heatmap = heatmap
+
+                    # Phase 3: merge detector heatmap (max union)
+                    det_hmap = self._render_detector_heatmap(scale, hw)
+                    if det_hmap is not None:
+                        q_heatmap = torch.maximum(q_heatmap, det_hmap)
+
+                    q = q_heatmap.unsqueeze(0)
+
+                gated = self.fusion.fuse(scale, gated, q)
+
+            return gated
 
         return _hook
 
@@ -138,19 +228,29 @@ class GatedYOLODetector(nn.Module):
         frame: torch.Tensor,
         gate_input: TrackerGateInput | list[TrackerGateInput] | None = None,
     ) -> dict | tuple:
-        """
-        Args:
-            frame:      (B, 3, H, W)
-            gate_input: TrackerGateInput (inference, broadcasts) or
-                        list[TrackerGateInput] (training, per-sample)
-        Returns:
-            train mode: dict with 'one2one' / 'one2many' dicts
-            eval mode:  tuple (boxes_tensor (B,300,6), meta_dict)
-        """
         self._current_gate = gate_input
         result = self.yolo_model(frame)
         self._current_gate = None
+
+        if self.fusion is not None and self._feat_cache:
+            self.fusion.update_prev(self._feat_cache)
+
         return result
+
+    # ------------------------------------------------------------------
+    # Fusion control
+    # ------------------------------------------------------------------
+    def set_fusion_alpha(self, alpha: float | None):
+        if self.fusion is not None:
+            self.fusion.set_fixed_alpha(alpha)
+
+    def set_gmc(self, matrix: torch.Tensor | None):
+        if self.fusion is not None:
+            self.fusion.set_gmc(matrix)
+
+    def reset_fusion(self):
+        if self.fusion is not None:
+            self.fusion.reset()
 
     # ------------------------------------------------------------------
     # Optimizer helper
@@ -163,6 +263,14 @@ class GatedYOLODetector(nn.Module):
         groups: list[dict] = [
             {"params": list(self.gate.parameters()), "name": "gate", "lr": lr_gate},
         ]
+        if self.fusion is not None:
+            groups.append(
+                {
+                    "params": list(self.fusion.parameters()),
+                    "name": "fusion",
+                    "lr": lr_gate,
+                }
+            )
         if lr_yolo > 0.0:
             trainable = [p for p in self.yolo_model.parameters() if p.requires_grad]
             if trainable:
@@ -171,6 +279,8 @@ class GatedYOLODetector(nn.Module):
 
     def alpha_summary(self) -> str:
         parts = [f"{s}={self.gate.alphas[s].item():.4f}" for s in self.cfg.scales]
+        if self.fusion is not None:
+            parts.append(f"fusion=[{self.fusion.alpha_summary()}]")
         return "  ".join(parts)
 
 
@@ -183,12 +293,10 @@ def build_gated_yolo_detector(
     device: str | torch.device = "cuda",
     weights_path: str = "",
 ) -> GatedYOLODetector:
-    """Build GatedYOLODetector, optionally loading a checkpoint."""
     model = GatedYOLODetector(yolo_pt_path, cfg=cfg, device=device)
     if weights_path:
         state = torch.load(weights_path, map_location="cpu", weights_only=False)
         sd = state["model"] if "model" in state else state
-        # strip compile prefix if present
         sd = {k.replace("._orig_mod.", "."): v for k, v in sd.items()}
         missing, unexpected = model.load_state_dict(sd, strict=False)
         if missing:
