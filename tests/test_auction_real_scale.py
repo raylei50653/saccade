@@ -1,9 +1,10 @@
 import numpy as np
+import pytest
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-import saccade_tracking_ext
+saccade_tracking_ext = pytest.importorskip("saccade_tracking_ext")
 
 
 def test_auction_real_values():
