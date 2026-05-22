@@ -39,6 +39,7 @@ import random
 import time
 import sys
 from pathlib import Path
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -61,7 +62,7 @@ _CONDITIONED_AVAILABLE = True
 # Checkpoint helpers（與 train_joint.py 相同介面）
 # ---------------------------------------------------------------------------
 def save_checkpoint(
-    state: dict, run_dir: Path, epoch: int, is_best: bool = False
+    state: dict[str, Any], run_dir: Path, epoch: int, is_best: bool = False
 ) -> None:
     run_dir.mkdir(parents=True, exist_ok=True)
     torch.save(state, run_dir / "latest.ckpt")
@@ -72,7 +73,7 @@ def save_checkpoint(
     print(f"  Saved epoch_{epoch:04d}.ckpt{tag}")
 
 
-def _strip_compiled_keys(sd: dict) -> dict:
+def _strip_compiled_keys(sd: dict[str, Any]) -> dict[str, Any]:
     """Remove _orig_mod. prefix inserted by torch.compile so checkpoints are compile-agnostic."""
     return {k.replace("._orig_mod.", "."): v for k, v in sd.items()}
 
@@ -104,7 +105,7 @@ def load_checkpoint(
     print(
         f"  Resumed from epoch {state.get('epoch', 0)}  best_loss={state.get('best_loss', float('inf')):.4f}"
     )
-    return epoch
+    return epoch  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
@@ -132,7 +133,7 @@ def _select_heatmap_boxes(
 def _proxy_step(
     model: "TemporalYOLOConditioned",
     frames: torch.Tensor,  # (B, T, 3, H, W)
-    gt_boxes_batch: list,
+    gt_boxes_batch: list[Any],
     device: torch.device,
 ) -> torch.Tensor:
     """
@@ -144,7 +145,7 @@ def _proxy_step(
     B, T, _, H, W = frames.shape
     loss = frames.new_zeros(())
 
-    with torch.amp.autocast("cuda", dtype=torch.bfloat16):
+    with torch.amp.autocast("cuda", dtype=torch.bfloat16):  # type: ignore[attr-defined]
         for t in range(T):
             # Gate receives t-1 boxes (simulates tracker state arriving before frame t).
             # t=0 has no prior frame → empty boxes; gate produces near-zero maps, no gradient.
@@ -188,19 +189,19 @@ def _proxy_step(
 def _gpu_forward(
     model: "TemporalYOLOConditioned",
     frames: torch.Tensor,  # (B, T, 3, H, W) float32 on device
-    gt_boxes_batch: list,
+    gt_boxes_batch: list[Any],
     gt_box_ratio: float,
     device: torch.device,
-) -> tuple[list, list]:
+) -> tuple[list[Any], list[Any]]:
     """Run all T forward passes under autocast. Returns pred_boxes_b_t, pred_scores_b_t."""
     B, T, _, H, W = frames.shape
     model.reset_sequence()
     prev_queries: torch.Tensor | None = None
     prev_boxes: torch.Tensor | None = None
-    pred_boxes_b_t = [[] for _ in range(B)]
-    pred_scores_b_t = [[] for _ in range(B)]
+    pred_boxes_b_t: list[list[torch.Tensor]] = [[] for _ in range(B)]
+    pred_scores_b_t: list[list[torch.Tensor]] = [[] for _ in range(B)]
 
-    with torch.amp.autocast("cuda", dtype=torch.bfloat16):
+    with torch.amp.autocast("cuda", dtype=torch.bfloat16):  # type: ignore[attr-defined]
         for t in range(T):
             gate_inputs_t: list[TrackerGateInput] = []
             for b in range(B):
@@ -225,7 +226,7 @@ def _gpu_forward(
     return pred_boxes_b_t, pred_scores_b_t
 
 
-def train_one_epoch(
+def train_one_epoch(  # type: ignore[no-untyped-def]
     model: "TemporalYOLOConditioned",
     loader,
     criterion: TemporalTrackingLoss,
@@ -259,7 +260,7 @@ def train_one_epoch(
             )
             batch_loss = losses["loss_total"]
 
-        batch_loss.backward()
+        batch_loss.backward()  # type: ignore[no-untyped-call]
         nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.1)
         optimizer.step()
 
@@ -434,7 +435,7 @@ def main() -> None:
         print(
             "[Compile] torch.compile backbone (mode=default) — first epoch has cold-start ~30s"
         )
-        model.pyramid = torch.compile(model.pyramid, mode="default")
+        model.pyramid = torch.compile(model.pyramid, mode="default")  # type: ignore[assignment]
 
     # ── DataLoader ──
     loader = build_mot17_dataloader(

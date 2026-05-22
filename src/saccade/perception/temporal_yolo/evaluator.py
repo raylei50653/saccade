@@ -10,7 +10,7 @@ MOTREvaluator — 使用 TemporalYOLOHybrid 的逐幀追蹤評估器。
 from __future__ import annotations
 import time
 from pathlib import Path
-from typing import Iterator
+from typing import Any, Iterator
 import torch
 from saccade.perception.eval.config import EvalConfig
 from .model import TemporalYOLOConfig, build_temporal_yolo_model, TemporalYOLOHybrid
@@ -125,7 +125,7 @@ class MOTREvaluator:
     # ------------------------------------------------------------------
     # Core feedback loop
     # ------------------------------------------------------------------
-    def _time_stage(self, frame: torch.Tensor) -> dict:
+    def _time_stage(self, frame: torch.Tensor) -> dict[str, Any]:
         """
         單幀推理。
 
@@ -143,7 +143,7 @@ class MOTREvaluator:
         # 更新狀態（關鍵一行：把新的 queries 存起來，下一幀才能「記住」物體）
         self.track_queries = outputs["updated_queries"].detach()
 
-        return outputs
+        return outputs  # type: ignore[no-any-return]
 
     # ------------------------------------------------------------------
     # Output formatting
@@ -151,8 +151,8 @@ class MOTREvaluator:
     def _to_mot_lines(
         self,
         frame_id: int,
-        outputs: dict,
-        frame_shape: tuple,
+        outputs: dict[str, Any],
+        frame_shape: tuple[int, ...],
     ) -> list[str]:
         """
         將模型輸出轉換為 MOT txt 格式：

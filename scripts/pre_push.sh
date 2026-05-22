@@ -21,19 +21,19 @@ if uv lock --check 2>&1; then
     ok "lockfile up to date"
 else
     fail "uv.lock is out of sync — run: uv lock"
-    ((ERRORS++))
+    ERRORS=$((ERRORS + 1))
 fi
 
 # ── 2. ruff lint ─────────────────────────────────────────────────────────────
 echo "── ruff check"
 if [[ $FIX -eq 1 ]]; then
-    uv run ruff check --fix . && ok "ruff check (auto-fixed)" || { fail "ruff check"; ((ERRORS++)); }
+    uv run ruff check --fix . && ok "ruff check (auto-fixed)" || { fail "ruff check"; ERRORS=$((ERRORS + 1)); }
 else
     if uv run ruff check . 2>&1; then
         ok "ruff check"
     else
         fail "ruff check — rerun with --fix to auto-fix"
-        ((ERRORS++))
+        ERRORS=$((ERRORS + 1))
     fi
 fi
 
@@ -46,7 +46,7 @@ else
         ok "ruff format"
     else
         fail "ruff format — rerun with --fix to auto-format"
-        ((ERRORS++))
+        ERRORS=$((ERRORS + 1))
     fi
 fi
 
@@ -56,7 +56,7 @@ if uv run mypy . 2>&1; then
     ok "mypy"
 else
     fail "mypy"
-    ((ERRORS++))
+    ERRORS=$((ERRORS + 1))
 fi
 
 # ── 5. pytest ────────────────────────────────────────────────────────────────
@@ -65,7 +65,7 @@ if uv run pytest tests/ -q --ignore=tests/benchmarks 2>&1; then
     ok "pytest"
 else
     fail "pytest"
-    ((ERRORS++))
+    ERRORS=$((ERRORS + 1))
 fi
 
 # ── 6. C++ build check ───────────────────────────────────────────────────────
@@ -86,7 +86,7 @@ if [[ -n "$CPP_CHANGED" ]]; then
             ok "C++ build"
         else
             fail "C++ build"
-            ((ERRORS++))
+            ERRORS=$((ERRORS + 1))
         fi
     else
         warn "build/ dir not found — skipping compile (CI will catch errors)"

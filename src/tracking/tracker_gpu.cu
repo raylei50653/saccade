@@ -246,6 +246,39 @@ __global__ void count_stage1_candidates_kernel(
     if (pass) atomicAdd(&candidate_count[t], 1);
 }
 
+// OA-SORT: per-track occlusion coefficient = max IoU of predicted box with all other active
+// track predicted boxes. Cheap O(n²) kernel; n_active is typically ≤ 128.
+__global__ void compute_track_occlusion_kernel(
+    const float* states, const bool* active, float* occ_coeff, int max_objs)
+{
+    int t = blockIdx.x * blockDim.x + threadIdx.x;
+    if (t >= max_objs) return;
+    if (!active[t]) { occ_coeff[t] = 0.0f; return; }
+
+    const float* st = states + t * 8;
+    float tw = st[2] * st[3], th = st[3];
+    float tx1 = st[0] - tw * 0.5f, ty1 = st[1] - th * 0.5f;
+    float tx2 = st[0] + tw * 0.5f, ty2 = st[1] + th * 0.5f;
+    float t_area = (tx2 - tx1) * (ty2 - ty1);
+
+    float max_occ = 0.0f;
+    for (int j = 0; j < max_objs; ++j) {
+        if (j == t || !active[j]) continue;
+        const float* sj = states + j * 8;
+        float jw = sj[2] * sj[3], jh = sj[3];
+        float jx1 = sj[0] - jw * 0.5f, jy1 = sj[1] - jh * 0.5f;
+        float jx2 = sj[0] + jw * 0.5f, jy2 = sj[1] + jh * 0.5f;
+        float j_area = (jx2 - jx1) * (jy2 - jy1);
+        float ix1 = fmaxf(tx1, jx1), iy1 = fmaxf(ty1, jy1);
+        float ix2 = fminf(tx2, jx2), iy2 = fminf(ty2, jy2);
+        float inter = fmaxf(0.0f, ix2 - ix1) * fmaxf(0.0f, iy2 - iy1);
+        if (inter <= 0.0f) continue;
+        float iou = inter / (t_area + j_area - inter + 1e-6f);
+        max_occ = fmaxf(max_occ, iou);
+    }
+    occ_coeff[t] = max_occ;
+}
+
 // Two-stage conditional cost matrix.
 // Stage 1 gate: IoU > iou_gate OR Mahalanobis^2 < maha_gate; else hard reject (cost=1).
 // Stage 2: if candidate_count[t] >= 2 AND has_clean_embedding[t] AND det embedding valid (norm>0.25):
@@ -253,6 +286,7 @@ __global__ void count_stage1_candidates_kernel(
 //          else:
 //            cost = 1 - IoU  (stable IoU-only fallback — also used for budget-zero detections)
 // OC-SORT: optional vel_dir_weight penalises matches where detection direction opposes track velocity.
+// OA-SORT: optional oao_tau adds occlusion penalty (cost += tau * occ_coeff[t]).
 __global__ void compute_conditional_cost_kernel(
     const float* trk_states, const float* det_boxes,
     const float* trk_embeds, const float* det_embeds,
@@ -261,7 +295,8 @@ __global__ void compute_conditional_cost_kernel(
     const float* trk_s_inv, const float* homography,
     float* cost_matrix,
     int n_trk, int n_det, int embed_dim, float iou_gate, float maha_gate,
-    float vel_dir_weight, float fuse_score_weight)
+    float vel_dir_weight, float fuse_score_weight,
+    const float* d_occ_coeff, float oao_tau)
 {
     int t = blockIdx.y * blockDim.y + threadIdx.y;
     int d = blockIdx.x * blockDim.x + threadIdx.x;
@@ -324,6 +359,11 @@ __global__ void compute_conditional_cost_kernel(
                 cost += vel_dir_weight * fmaxf(0.0f, -cos_dir);
             }
         }
+    }
+
+    // OA-SORT OAO: tracks occluded by other tracks get a cost penalty to prevent cost confusion
+    if (oao_tau > 0.0f && d_occ_coeff) {
+        cost = fminf(1.0f, cost + oao_tau * d_occ_coeff[t]);
     }
 
     cost_matrix[t * n_det + d] = fminf(1.0f, fmaxf(0.0f, cost));
@@ -1029,6 +1069,8 @@ public:
         checkCuda(cudaMalloc(&d_s_inv_, max_objs_ * 16 * sizeof(float)));
         checkCuda(cudaMalloc(&d_homography_, 9 * sizeof(float)));
         checkCuda(cudaMemset(d_homography_, 0, 9 * sizeof(float)));
+        checkCuda(cudaMalloc(&d_occ_coeff_, max_objs_ * sizeof(float)));
+        checkCuda(cudaMemset(d_occ_coeff_, 0, max_objs_ * sizeof(float)));
 
         // M2: GPU spawn + compact result buffers
         checkCuda(cudaMalloc(&d_free_slots_,    max_objs_ * sizeof(int)));
@@ -1084,6 +1126,7 @@ public:
         cudaFree(d_has_clean_embedding_); cudaFree(d_candidate_count_);
         cudaFree(d_s_inv_);
         cudaFree(d_homography_);
+        cudaFree(d_occ_coeff_);
         // M2
         cudaFree(d_free_slots_); cudaFree(d_n_free_); cudaFree(d_slot_cursor_);
         cudaFree(d_track_id_ctr_);
@@ -1166,6 +1209,12 @@ public:
             dim3 b_size(16, 16);
             dim3 g_size((num_dets + 15) / 16, (max_objs_ + 15) / 16);
 
+            // OA-SORT OAO: compute per-track occlusion coefficient from predicted positions
+            if (oao_tau_ > 0.0f) {
+                kernel::compute_track_occlusion_kernel<<<blocks, threads, 0, stream>>>(
+                    d_states_, d_active_, d_occ_coeff_, max_objs_);
+            }
+
             // Stage 1: count candidates passing IoU gate OR Mahalanobis gate
             nvtxRangePushA("Assoc/CostMatrix");
             checkCuda(cudaMemsetAsync(d_candidate_count_, 0, max_objs_ * sizeof(int), stream));
@@ -1178,7 +1227,8 @@ public:
                 d_states_, d_boxes, d_features_, d_embeddings, d_scores,
                 d_candidate_count_, d_has_clean_embedding_,
                 d_s_inv_, d_homography_, d_cost_matrix_, max_objs_, num_dets, embed_dim_, iou_stage1_gate_, maha_gate_,
-                vel_dir_weight_, fuse_score_weight_);
+                vel_dir_weight_, fuse_score_weight_,
+                oao_tau_ > 0.0f ? d_occ_coeff_ : nullptr, oao_tau_);
             nvtxRangePop(); // Assoc/CostMatrix
 
             kernel::track_state_update_pre_kernel<<<blocks, threads, 0, stream>>>(
@@ -1356,6 +1406,9 @@ public:
     }
     void set_reid_params(float cos_threshold, float iou_low, float iou_high, float weight) {
         reid_cos_threshold_ = cos_threshold; reid_iou_low_ = iou_low; reid_iou_high_ = iou_high; reid_weight_ = weight;
+    }
+    void set_oao_params(float tau) {
+        oao_tau_ = std::clamp(tau, 0.0f, 1.0f);
     }
     void set_quality_params(bool enabled, float w_aspect, float w_center, float w_area) {
         enable_quality_scaling_ = enabled;
@@ -1668,7 +1721,9 @@ private:
     float stage2_match_thresh_ = 0.5f;
     float birth_low_score_thresh_ = 0.0f;
     float birth_prox_norm_thresh_ = 0.0f;
+    float oao_tau_ = 0.0f;
     float *d_states_, *d_covs_, *d_scores_, *d_features_;
+    float* d_occ_coeff_ = nullptr;
     float *d_cost_matrix_, *d_sinkhorn_v_, *d_topk_probs_;
     uint64_t *d_auction_prices_;
     int *d_topk_indices_, *d_trk_to_det_, *d_det_to_trk_;
@@ -1724,6 +1779,9 @@ void GPUByteTracker::set_params(float track_thresh, float high_thresh, float mat
 }
 void GPUByteTracker::set_reid_params(float cos_threshold, float iou_low, float iou_high, float weight) {
     pimpl_->set_reid_params(cos_threshold, iou_low, iou_high, weight);
+}
+void GPUByteTracker::set_oao_params(float tau) {
+    pimpl_->set_oao_params(tau);
 }
 
 void GPUByteTracker::set_quality_params(bool enabled, float w_aspect, float w_center, float w_area) {

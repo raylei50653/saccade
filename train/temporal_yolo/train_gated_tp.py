@@ -26,6 +26,7 @@ import argparse
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -49,7 +50,7 @@ from ultralytics.utils.tal import make_anchors  # noqa: E402
 # Checkpoint helpers
 # ---------------------------------------------------------------------------
 def save_checkpoint(
-    state: dict, run_dir: Path, epoch: int, is_best: bool = False
+    state: dict[str, Any], run_dir: Path, epoch: int, is_best: bool = False
 ) -> None:
     run_dir.mkdir(parents=True, exist_ok=True)
     torch.save(state, run_dir / "latest.ckpt")
@@ -60,7 +61,7 @@ def save_checkpoint(
     print(f"  Saved epoch_{epoch:04d}.ckpt{tag}")
 
 
-def _strip_compiled_keys(sd: dict) -> dict:
+def _strip_compiled_keys(sd: dict[str, Any]) -> dict[str, Any]:
     return {k.replace("._orig_mod.", "."): v for k, v in sd.items()}
 
 
@@ -79,7 +80,7 @@ def load_checkpoint(
         optimizer.load_state_dict(state["optimizer"])
     except Exception:
         print("  [Warn] Optimizer state not loaded")
-    return state.get("epoch", 0) + 1
+    return state.get("epoch", 0) + 1  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
@@ -100,7 +101,7 @@ def _make_yolo_batch(
     gt_boxes_list: list[torch.Tensor],
     img_size: int,
     device: torch.device,
-) -> dict:
+) -> dict[str, Any]:
     batch_idxs, clss, bboxes = [], [], []
     for b, boxes in enumerate(gt_boxes_list):
         if boxes.numel() == 0:
@@ -125,7 +126,9 @@ def _make_yolo_batch(
 # ---------------------------------------------------------------------------
 # Anchor grid (precomputed once)
 # ---------------------------------------------------------------------------
-def build_anchor_grid(model: GatedYOLODetector, img_size: int, device: torch.device):
+def build_anchor_grid(
+    model: GatedYOLODetector, img_size: int, device: torch.device
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Precompute anchor center pixel coordinates for TP recall loss."""
     detect_head = model.yolo_model.model[-1]
     with torch.no_grad():
@@ -134,7 +137,7 @@ def build_anchor_grid(model: GatedYOLODetector, img_size: int, device: torch.dev
         out = model(dummy)
         model.train()
         feats = out[1]["one2many"]["feats"]
-    anchors, strides = make_anchors(feats, detect_head.stride, 0.5)
+    anchors, strides = make_anchors(feats, detect_head.stride, 0.5)  # type: ignore[no-untyped-call]
     anchor_cx_px = (anchors[:, 0] * strides[:, 0]).to(device)  # (8400,)
     anchor_cy_px = (anchors[:, 1] * strides[:, 0]).to(device)  # (8400,)
     return anchor_cx_px, anchor_cy_px
@@ -147,7 +150,7 @@ def compute_tp_recall_loss(
     scores_raw: torch.Tensor,  # (B, 80, 8400) raw logits from one2many
     anchor_cx_px: torch.Tensor,  # (8400,)
     anchor_cy_px: torch.Tensor,  # (8400,)
-    track_pred_list: list,  # B items, each (N, 4) xyxy img_size px or None
+    track_pred_list: list[Any],  # B items, each (N, 4) xyxy img_size px or None
     sigma_scale: float = 0.5,
     person_cls: int = 0,
 ) -> torch.Tensor:
@@ -283,12 +286,12 @@ class TrainTracker:
 # ---------------------------------------------------------------------------
 # Training loop
 # ---------------------------------------------------------------------------
-def train_one_epoch(
+def train_one_epoch(  # type: ignore[no-untyped-def]
     model: GatedYOLODetector,
     loader,
     optimizer: torch.optim.Optimizer,
     criterion,
-    scaler: torch.amp.GradScaler,
+    scaler: Any,  # GradScaler
     device: torch.device,
     img_size: int,
     gt_ratio: float,
@@ -335,15 +338,18 @@ def train_one_epoch(
             if t > 0 and has_preds:
                 gate_inputs = [
                     TrackerGateInput.from_boxes_scores(
-                        track_preds[b], None, (img_size, img_size), assume_absolute=True
+                        track_preds[b],  # type: ignore[arg-type]
+                        None,
+                        (img_size, img_size),
+                        assume_absolute=True,
                     ).to(device)
-                    if track_preds[b] is not None and track_preds[b].numel() > 0
+                    if track_preds[b] is not None and track_preds[b].numel() > 0  # type: ignore[union-attr]
                     else None
                     for b in range(B)
                 ]
 
             # ── Forward (train mode) ──
-            with torch.amp.autocast("cuda", dtype=torch.bfloat16):
+            with torch.amp.autocast("cuda", dtype=torch.bfloat16):  # type: ignore[attr-defined]
                 out = model(frame_t, gate_input=gate_inputs)
                 preds = out["one2many"]
 
@@ -475,7 +481,7 @@ def main() -> None:
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=args.epochs, eta_min=args.lr_gate * 0.01
     )
-    scaler = torch.amp.GradScaler("cuda")
+    scaler = torch.amp.GradScaler("cuda")  # type: ignore[attr-defined]
 
     # ── Resume ──
     start_epoch = 1

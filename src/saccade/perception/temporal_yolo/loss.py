@@ -16,7 +16,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, Future
 import os
 
 import saccade_tracking_ext
@@ -88,7 +88,12 @@ class AuctionMatcher:
         return _auction_solve(reward, epsilon=self.epsilon)
 
 
-_SavedBatch = tuple  # (pred_boxes_batch, pred_scores_batch, gt_boxes_batch, img_hw)
+_SavedBatch = tuple[
+    list[list[torch.Tensor]],
+    list[list[torch.Tensor]],
+    list[list[torch.Tensor]],
+    tuple[int, int],
+]
 
 
 class TemporalTrackingLoss(nn.Module):
@@ -149,7 +154,7 @@ class TemporalTrackingLoss(nn.Module):
         pred_scores_batch: list[list[torch.Tensor]],
         gt_boxes_batch: list[list[torch.Tensor]],
         img_hw: tuple[int, int],
-        all_matches: dict,
+        all_matches: dict[tuple[int, int], tuple[list[int], list[int]]],
     ) -> dict[str, torch.Tensor]:
         """GPU: accumulate box / score losses using pre-computed matches."""
         H, W = img_hw
@@ -211,7 +216,7 @@ class TemporalTrackingLoss(nn.Module):
         pred_scores_batch: list[list[torch.Tensor]],
         gt_boxes_batch: list[list[torch.Tensor]],
         img_hw: tuple[int, int],
-    ) -> tuple:
+    ) -> tuple[Future[dict[tuple[int, int], tuple[list[int], list[int]]]], _SavedBatch]:
         """
         GPU: compute cost matrices, then submit CPU auction to background thread.
         Returns (Future, saved_batch) for finish_loss().
@@ -226,7 +231,11 @@ class TemporalTrackingLoss(nn.Module):
         saved = (pred_boxes_batch, pred_scores_batch, gt_boxes_batch, img_hw)
         return future, saved
 
-    def finish_loss(self, future, saved: _SavedBatch) -> dict[str, torch.Tensor]:
+    def finish_loss(
+        self,
+        future: Future[dict[tuple[int, int], tuple[list[int], list[int]]]],
+        saved: _SavedBatch,
+    ) -> dict[str, torch.Tensor]:
         """Wait for CPU auction result, compute GPU loss. Pair with start_matching()."""
         pred_boxes_batch, pred_scores_batch, gt_boxes_batch, img_hw = saved
         all_matches = future.result()
@@ -331,7 +340,7 @@ def _batch_giou_cxcywh(
     pred: torch.Tensor,  # (N, 4) [cx, cy, w, h]
     gt: torch.Tensor,  # (M, 4) [cx, cy, w, h]
 ) -> torch.Tensor:
-    def to_xyxy(b):
+    def to_xyxy(b: torch.Tensor) -> torch.Tensor:
         x1 = b[..., 0] - b[..., 2] / 2
         y1 = b[..., 1] - b[..., 3] / 2
         x2 = b[..., 0] + b[..., 2] / 2

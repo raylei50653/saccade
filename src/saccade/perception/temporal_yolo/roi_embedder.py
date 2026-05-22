@@ -8,14 +8,20 @@ Quality-weighted EMA bank for temporal denoising:
   bank[id] = normalize(α_eff * e_new + (1-α_eff) * bank[id])
   α_eff = α_base * quality  (quality = conf * sqrt(area/img_area))
   Outlier gate: skip if cosine_sim < consistency_thr and count > warmup
+
+Optional: pass a ReIDHead to project 896-dim → 128-dim discriminative embeddings.
 """
 
 from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 import torch
 import torch.nn.functional as F
 from torchvision.ops import roi_align
 
+if TYPE_CHECKING:
+    from saccade.perception.temporal_yolo.reid_head import ReIDHead
 
 _SPATIAL_SCALES = {"p3": 1 / 8, "p4": 1 / 16, "p5": 1 / 32}
 EMB_DIM = 896  # 128 + 256 + 512
@@ -27,11 +33,18 @@ EMB_DIM = 896  # 128 + 256 + 512
 def extract_roi_embeddings(
     feat_cache: dict[str, torch.Tensor],  # populated by GatedYOLODetector hooks
     boxes_xyxy: torch.Tensor,  # (N, 4) absolute px in img_size space
+    reid_head: "ReIDHead | None" = None,
 ) -> torch.Tensor:
-    """Return L2-normalised (N, 896) embeddings. Returns zeros if no boxes."""
+    """
+    Return L2-normalised embeddings. Returns zeros if no boxes.
+
+    Without reid_head: (N, 896) raw FPN pool.
+    With    reid_head: (N, out_dim) projected discriminative embedding.
+    """
     if boxes_xyxy.numel() == 0:
         dev = next(iter(feat_cache.values())).device
-        return torch.zeros((0, EMB_DIM), device=dev)
+        out_dim = reid_head.out_dim if reid_head is not None else EMB_DIM
+        return torch.zeros((0, out_dim), device=dev)
 
     # roi_align expects [batch_idx, x1, y1, x2, y2]
     batch_boxes = torch.cat(
@@ -58,7 +71,60 @@ def extract_roi_embeddings(
         parts.append(pooled.flatten(1))  # (N, C)
 
     emb = torch.cat(parts, dim=1)  # (N, 896)
-    return F.normalize(emb, dim=1)
+    raw = F.normalize(emb, dim=1)
+
+    if reid_head is not None:
+        with torch.no_grad():
+            return reid_head(raw)  # type: ignore[no-any-return]
+    return raw
+
+
+# ---------------------------------------------------------------------------
+# Single-scale FPN crop embedder
+# ---------------------------------------------------------------------------
+class FPNCropEmbedder:
+    """
+    Single-scale FPN crop embedder: ROI-align → spatial avg-pool → L2-normalise.
+
+    Default: P4 (256-dim), output_size=7.  Compared to the 3-scale 896-dim
+    extract_roi_embeddings(), this is lighter and easier to train a projection
+    head on top of.
+    """
+
+    _SF = {"p3": 1 / 8, "p4": 1 / 16, "p5": 1 / 32}
+    _CH = {"p3": 128, "p4": 256, "p5": 512}
+
+    def __init__(self, scale: str = "p4", output_size: int = 7):
+        scale = scale.lower()
+        assert scale in self._SF, f"scale must be one of {list(self._SF)}"
+        self.scale = scale
+        self.output_size = output_size
+        self.emb_dim: int = self._CH[scale]
+
+    def extract(
+        self,
+        feat_cache: dict[str, torch.Tensor],
+        boxes_xyxy: torch.Tensor,  # (N, 4) absolute px in img_size space
+    ) -> torch.Tensor:
+        """Return (N, C) L2-normalised embeddings.  Returns zeros if no boxes."""
+        N = len(boxes_xyxy)
+        feat = feat_cache.get(self.scale)
+        dev = boxes_xyxy.device if N > 0 else next(iter(feat_cache.values())).device
+        if feat is None or N == 0:
+            return torch.zeros((N, self.emb_dim), device=dev)
+        rois = torch.cat(
+            [torch.zeros(N, 1, device=feat.device), boxes_xyxy.float().to(feat.device)],
+            dim=1,
+        )  # (N, 5)
+        crops = roi_align(
+            feat.float(),
+            rois,
+            self.output_size,
+            spatial_scale=self._SF[self.scale],
+            aligned=True,
+        )  # (N, C, output_size, output_size)
+        embs = crops.flatten(2).mean(2)  # (N, C)
+        return F.normalize(embs, dim=1)
 
 
 # ---------------------------------------------------------------------------

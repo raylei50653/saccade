@@ -78,7 +78,7 @@ class YOLOFeatureExtractor(nn.Module):
             feat: (B, C, H/8, W/8) 最終被壓扁為序列的特徵圖（Transformer 的 Key/Value）
         """
         feat = self._stub_backbone(x)  # (B, 256, H/8, W/8)
-        return feat
+        return feat  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
@@ -144,6 +144,7 @@ class TrackQueryDecoderLayer(nn.Module):
         D = cfg.embed_dim
 
         # Self-Attention (Option D)
+        self.self_attn: nn.MultiheadAttention | None
         if cfg.use_self_attn:
             self.self_attn = nn.MultiheadAttention(
                 D, cfg.num_heads, cfg.dropout, batch_first=True
@@ -273,7 +274,7 @@ class TrackQueryLifecycle:
         self._query_ids: list[list[int]] = []
         self._next_id: list[int] = []
 
-    def reset(self):
+    def reset(self) -> None:
         self._query_ids = []
         self._next_id = []
 
@@ -351,10 +352,10 @@ class TemporalYOLOHybrid(nn.Module):
         # Lifecycle manager（非 nn.Module，純 Python 狀態機）
         self.__lifecycle: TrackQueryLifecycle | None = None
 
-    def _init_lifecycle(self):
+    def _init_lifecycle(self) -> None:
         self.__lifecycle = TrackQueryLifecycle(self.cfg, self.newborn_embed)
 
-    def reset_sequence(self):
+    def reset_sequence(self) -> None:
         """在新的影片序列開始時呼叫，重置 Query 狀態與 ID 計數器。"""
         if self.__lifecycle is not None:
             self.__lifecycle.reset()
@@ -364,13 +365,13 @@ class TemporalYOLOHybrid(nn.Module):
         """第一幀時初始化所有 Query 為 newborn embedding。"""
         slots = torch.arange(self.cfg.num_queries, device=device)
         init = self.newborn_embed(slots)  # (N_q, D)
-        return init.unsqueeze(0).expand(batch_size, -1, -1).clone()
+        return init.unsqueeze(0).expand(batch_size, -1, -1).clone()  # type: ignore[no-any-return]
 
     def forward(
         self,
         frame: torch.Tensor,  # (B, 3, H, W)
         prev_queries: torch.Tensor | None = None,  # (B, N_q, D) or None
-    ) -> dict[str, torch.Tensor | list]:
+    ) -> dict[str, torch.Tensor | list[int]]:
         B, _, H, W = frame.shape
 
         # 確保 Lifecycle manager 已初始化

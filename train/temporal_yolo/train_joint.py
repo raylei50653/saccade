@@ -25,6 +25,7 @@ import argparse
 import time
 import sys
 from pathlib import Path
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -45,7 +46,7 @@ from saccade.perception.temporal_yolo.loss import TemporalTrackingLoss
 # Checkpoint helpers
 # ---------------------------------------------------------------------------
 def save_checkpoint(
-    state: dict, run_dir: Path, epoch: int, is_best: bool = False
+    state: dict[str, Any], run_dir: Path, epoch: int, is_best: bool = False
 ) -> None:
     run_dir.mkdir(parents=True, exist_ok=True)
     torch.save(state, run_dir / "latest.ckpt")
@@ -78,13 +79,13 @@ def load_checkpoint(
     print(
         f"  Resumed from epoch {state['epoch']}  best_loss={state.get('best_loss', float('inf')):.4f}"
     )
-    return epoch
+    return epoch  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
 # Training loop
 # ---------------------------------------------------------------------------
-def train_one_epoch(
+def train_one_epoch(  # type: ignore[no-untyped-def]
     model: TemporalYOLOJoint,
     loader,
     criterion: TemporalTrackingLoss,
@@ -110,13 +111,13 @@ def train_one_epoch(
         B, T, _, H, W = frames.shape
         optimizer.zero_grad(set_to_none=True)
 
-        with torch.amp.autocast("cuda", dtype=torch.bfloat16):
+        with torch.amp.autocast("cuda", dtype=torch.bfloat16):  # type: ignore[attr-defined]
             batch_loss = frames.new_zeros(())
             model.reset_sequence()
             prev_queries = None
 
-            pred_boxes_b_t = [[] for _ in range(B)]
-            pred_scores_b_t = [[] for _ in range(B)]
+            pred_boxes_b_t: list[list[torch.Tensor]] = [[] for _ in range(B)]
+            pred_scores_b_t: list[list[torch.Tensor]] = [[] for _ in range(B)]
 
             # 1. Batched Forward Pass
             # We don't detach prev_queries to allow BPTT across the clip
@@ -154,7 +155,7 @@ def train_one_epoch(
                 f"  {rate:.1f}it/s  ETA {eta / 60:.1f}m"
             )
             # print timers if t_stats is defined
-            if "t_stats" in dir():  # type: ignore[name-defined]
+            if "t_stats" in dir():
                 print(
                     "    TIMING: "
                     + " | ".join(

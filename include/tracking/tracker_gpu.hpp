@@ -93,6 +93,15 @@ public:
     void set_reid_params(float cos_threshold, float iou_low, float iou_high, float weight);
 
     /**
+     * @brief OA-SORT Occlusion-Aware Offset (OAO) penalty weight.
+     * @param tau Cost penalty scale in [0, 1]. 0 = disabled (default).
+     *            When > 0, tracks whose predicted boxes overlap other tracks get
+     *            a cost increase of tau * IoU_overlap, reducing incorrect associations
+     *            during occlusion (cost confusion).
+     */
+    void set_oao_params(float tau);
+
+    /**
      * @brief Set Detection Quality Scaling (A6) parameters.
      * @param enabled Enable scaling
      * @param w_aspect Weight for aspect ratio quality

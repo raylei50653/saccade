@@ -16,8 +16,9 @@ from __future__ import annotations
 import configparser
 import csv
 from pathlib import Path
+from typing import Any
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import ConcatDataset, DataLoader
 from .dataset import MOT17TemporalClip, collate_fn
 
 
@@ -65,7 +66,7 @@ class DanceTrackTemporalClip(MOT17TemporalClip):
         if preload_to_ram:
             self._img_cache = self._preload_images()
 
-    def _init_metadata(self, split_dir: Path):
+    def _init_metadata(self, split_dir: Path) -> None:
         for seq in self.sequences:
             seq_dir = split_dir / seq
             img_dir = seq_dir / "img1"
@@ -94,7 +95,7 @@ class DanceTrackTemporalClip(MOT17TemporalClip):
                 _, orig_h, orig_w = _img.shape
             self._scale_hw[seq] = (self.img_size / orig_h, self.img_size / orig_w)
 
-            gt_per_frame = {}
+            gt_per_frame: dict[int, tuple[list[list[float]], list[int]]] = {}
             with gt_file.open() as f:
                 for row in csv.reader(f):
                     fid = int(row[0])
@@ -125,7 +126,7 @@ class DanceTrackTemporalClip(MOT17TemporalClip):
 
 
 def build_joint_dataloader(
-    dataset_configs: list[dict],  # list of {name, root, type}
+    dataset_configs: list[dict[str, Any]],  # list of {name, root, type}
     clip_len: int = 5,
     img_size: int = 640,
     batch_size: int = 8,
@@ -133,7 +134,7 @@ def build_joint_dataloader(
     stride: int = 5,
     shuffle: bool = True,
     preload_to_ram: bool = True,
-) -> DataLoader:
+) -> DataLoader[Any]:
     """
     同時加載多個數據集（MOT17, MOT20, DanceTrack）進行聯合訓練。
     """
@@ -158,9 +159,7 @@ def build_joint_dataloader(
             )
         datasets.append(ds)
 
-    from torch.utils.data import ConcatDataset
-
-    concat_ds = ConcatDataset(datasets)
+    concat_ds: ConcatDataset[Any] = ConcatDataset(datasets)
     print(f"[JointDataset] Total clips: {len(concat_ds)} from {len(datasets)} sources")
 
     return DataLoader(

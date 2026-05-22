@@ -214,6 +214,7 @@ class EvalConfig:
     stage2_match_thresh: float
     birth_low_score_thresh: float
     birth_prox_norm_thresh: float
+    oao_tau: float
 
     # Temporal consistency filter
     temporal_consistency_min_frames: int
@@ -610,6 +611,7 @@ def parse_eval_config(
         stage2_match_thresh=float(kwargs.get("stage2_match_thresh", 0.5)),
         birth_low_score_thresh=float(kwargs.get("birth_low_score_thresh", 0.0)),
         birth_prox_norm_thresh=float(kwargs.get("birth_prox_norm_thresh", 0.0)),
+        oao_tau=float(kwargs.get("oao_tau", 0.0)),
         temporal_consistency_min_frames=int(
             kwargs.get("temporal_consistency_min_frames", 3)
         ),

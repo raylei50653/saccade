@@ -667,7 +667,7 @@ class TemporalYOLOConditioned(nn.Module):
 
     def _init_queries(self, B: int, device: torch.device) -> Tensor:
         slots = torch.arange(self.cfg.num_queries, device=device)
-        return self.newborn_embed(slots).unsqueeze(0).expand(B, -1, -1).clone()
+        return self.newborn_embed(slots).unsqueeze(0).expand(B, -1, -1).clone()  # type: ignore[no-any-return]
 
     # ------------------------------------------------------------------
     def reset_sequence(self) -> None:
@@ -702,7 +702,7 @@ class TemporalYOLOConditioned(nn.Module):
         lr_backbone: float,
         lr_gate: float,
         lr_decoder: float,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """
         Three differential-LR parameter groups.
         Only groups with at least one trainable parameter are returned.
@@ -744,7 +744,7 @@ class TemporalYOLOConditioned(nn.Module):
         | None = None,  # training: per-item list (len=B)
         prev_boxes: Tensor | None = None,  # legacy shortcut: (N,4) or (B,N,4)
         prev_scores: Tensor | None = None,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """
         Priority of gate sources: gate_inputs > gate_input > prev_boxes.
 

@@ -20,6 +20,7 @@ Option C: TemporalYOLOJoint — PyTorch YOLO + Cross-Attention 聯合訓練。
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any, Callable
 
 import torch
 import torch.nn as nn
@@ -87,38 +88,38 @@ class YOLOFeaturePyramid(nn.Module):
         freeze: bool = False,
     ):
         super().__init__()
-        from ultralytics import YOLO as UltralyticsYOLO
+        from ultralytics import YOLO as UltralyticsYOLO  # type: ignore[attr-defined]
 
         yolo = UltralyticsYOLO(yolo_pt_path)
-        self.yolo_model = yolo.model
+        self.yolo_model: Any = yolo.model
         self.scales = list(scales)
         self._feats: dict[str, torch.Tensor] = {}
-        self._hooks: list = []
+        self._hooks: list[Any] = []
         self.feat_channels: dict[str, int] = {}
 
         for scale in scales:
             idx = _FPN_HOOK_LAYERS[scale]
-            hook = self.yolo_model.model[idx].register_forward_hook(
+            hook = self.yolo_model.model[idx].register_forward_hook(  # type: ignore[union-attr]
                 self._make_hook(scale)
             )
             self._hooks.append(hook)
 
         # Ultralytics sets requires_grad=False for all params by default —
         # must explicitly enable for joint training.
-        for p in self.yolo_model.parameters():
+        for p in self.yolo_model.parameters():  # type: ignore[union-attr]
             p.requires_grad_(not freeze)
 
         if freeze:
-            self.yolo_model.eval()
+            self.yolo_model.eval()  # type: ignore[union-attr]
             print(f"[YOLOFeaturePyramid] Backbone FROZEN  scales={scales}")
         else:
-            n = sum(p.numel() for p in self.yolo_model.parameters())
+            n = sum(p.numel() for p in self.yolo_model.parameters())  # type: ignore[union-attr]
             print(
                 f"[YOLOFeaturePyramid] Backbone TRAINABLE  {n:,} params  scales={scales}"
             )
 
-    def _make_hook(self, scale: str):
-        def _h(mod, inp, out):
+    def _make_hook(self, scale: str) -> Callable[[nn.Module, Any, torch.Tensor], None]:
+        def _h(mod: nn.Module, inp: Any, out: torch.Tensor) -> None:
             if isinstance(out, torch.Tensor):
                 self._feats[scale] = out
                 if scale not in self.feat_channels:
@@ -132,7 +133,7 @@ class YOLOFeaturePyramid(nn.Module):
         _ = self.yolo_model(x)
         return {s: self._feats[s] for s in self.scales}
 
-    def __del__(self):
+    def __del__(self) -> None:
         for h in self._hooks:
             try:
                 h.remove()
@@ -258,7 +259,7 @@ class TemporalYOLOJoint(nn.Module):
 
     def _make_init_queries(self, B: int, device: torch.device) -> torch.Tensor:
         slots = torch.arange(self.cfg.num_queries, device=device)
-        return self.newborn_embed(slots).unsqueeze(0).expand(B, -1, -1).clone()
+        return self.newborn_embed(slots).unsqueeze(0).expand(B, -1, -1).clone()  # type: ignore[no-any-return]
 
     # ------------------------------------------------------------------
     # Public API
@@ -269,7 +270,9 @@ class TemporalYOLOJoint(nn.Module):
             self.__lifecycle.reset()
         self.__lifecycle = None
 
-    def parameter_groups(self, lr_backbone: float, lr_decoder: float) -> list[dict]:
+    def parameter_groups(
+        self, lr_backbone: float, lr_decoder: float
+    ) -> list[dict[str, Any]]:
         """
         Two param groups for differential learning rates:
           - backbone: lower LR (backbone benefits from gentle fine-tuning)
@@ -297,7 +300,7 @@ class TemporalYOLOJoint(nn.Module):
         self,
         frame: torch.Tensor,  # (B, 3, H, W)
         prev_queries: torch.Tensor | None = None,  # (B, N_q, D) or None
-    ) -> dict:
+    ) -> dict[str, Any]:
         B = frame.shape[0]
         lc = self._get_lifecycle()
 
@@ -319,7 +322,7 @@ class TemporalYOLOJoint(nn.Module):
         if self.cfg.use_checkpointing and self.training:
             from torch.utils.checkpoint import checkpoint
 
-            def run_layers(q, f, qp, fp):
+            def run_layers(q, f, qp, fp):  # type: ignore[no-untyped-def]
                 for layer in self.decoder_layers:
                     q = layer(q, f, qp, fp)
                 return q

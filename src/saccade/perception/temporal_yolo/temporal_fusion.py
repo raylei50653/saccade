@@ -180,7 +180,7 @@ class TemporalFeatureFusion(nn.Module):
             return torch.tensor(
                 self.fixed_alpha, device=self.fusion_alphas[scale].device
             )
-        return self.fusion_alphas[scale]
+        return self.fusion_alphas[scale]  # type: ignore[no-any-return]
 
     def fuse(
         self,

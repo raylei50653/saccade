@@ -985,7 +985,7 @@ def test_resolve_update_features_buffer_mode() -> None:
 
 def test_resolve_embedding_is_none() -> None:
     """None embedding → returns aliased id without processing."""
-    relinker = PythonSemanticRelinker()
+    relinker = PythonSemanticRelinker(motion_enable_motion_only=False)
     relinker.alias[99] = 1  # pre-existing alias
     result = relinker.resolve(
         99,

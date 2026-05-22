@@ -332,6 +332,18 @@ def add_geometry_args(parser: argparse.ArgumentParser) -> None:
         ),
     )
     grp.add_argument(
+        "--oao-tau",
+        type=float,
+        default=0.0,
+        dest="oao_tau",
+        help=_help(
+            "OA-SORT OAO penalty: cost += tau * inter-track-IoU for occluded tracks. "
+            "Reduces cost confusion when tracks overlap during occlusion.",
+            range_hint="0.0-0.4",
+            edge="too high increases cost for dense scenes, hurts recall",
+        ),
+    )
+    grp.add_argument(
         "--stage2-match-thresh",
         type=float,
         default=0.5,

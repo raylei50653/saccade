@@ -24,6 +24,7 @@ import random
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -45,7 +46,7 @@ from saccade.perception.temporal_yolo.yolo_gated_detector import (  # noqa: E402
 # Checkpoint helpers
 # ---------------------------------------------------------------------------
 def save_checkpoint(
-    state: dict, run_dir: Path, epoch: int, is_best: bool = False
+    state: dict[str, Any], run_dir: Path, epoch: int, is_best: bool = False
 ) -> None:
     run_dir.mkdir(parents=True, exist_ok=True)
     torch.save(state, run_dir / "latest.ckpt")
@@ -56,7 +57,7 @@ def save_checkpoint(
     print(f"  Saved epoch_{epoch:04d}.ckpt{tag}")
 
 
-def _strip_compiled_keys(sd: dict) -> dict:
+def _strip_compiled_keys(sd: dict[str, Any]) -> dict[str, Any]:
     return {k.replace("._orig_mod.", "."): v for k, v in sd.items()}
 
 
@@ -75,7 +76,7 @@ def load_checkpoint(
         optimizer.load_state_dict(state["optimizer"])
     except Exception:
         print("  [Warn] Optimizer state not loaded")
-    return state.get("epoch", 0) + 1
+    return state.get("epoch", 0) + 1  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
@@ -97,7 +98,7 @@ def _make_yolo_batch(
     gt_boxes_list: list[torch.Tensor],  # B items, each (N, 4) xyxy abs
     img_size: int,
     device: torch.device,
-) -> dict:
+) -> dict[str, Any]:
     """Build Ultralytics v8DetectionLoss batch dict from GT boxes."""
     batch_idxs, clss, bboxes = [], [], []
     for b, boxes in enumerate(gt_boxes_list):
@@ -145,12 +146,12 @@ def _build_gate_inputs(
 # ---------------------------------------------------------------------------
 # Training loop
 # ---------------------------------------------------------------------------
-def train_one_epoch(
+def train_one_epoch(  # type: ignore[no-untyped-def]
     model: GatedYOLODetector,
     loader,
     optimizer: torch.optim.Optimizer,
     criterion,
-    scaler: torch.amp.GradScaler,
+    scaler: Any,  # GradScaler
     device: torch.device,
     img_size: int,
     gt_ratio: float,
@@ -180,7 +181,7 @@ def train_one_epoch(
                 prev_gt = [gt_boxes_batch[b][t - 1] for b in range(B)]
                 gate_inputs = _build_gate_inputs(prev_gt, gt_ratio, img_size, device)
 
-            with torch.amp.autocast("cuda", dtype=torch.bfloat16):
+            with torch.amp.autocast("cuda", dtype=torch.bfloat16):  # type: ignore[attr-defined]
                 out = model(frame_t, gate_input=gate_inputs)
                 # Use one2many: computed from non-detached features → gradient flows to gate alphas.
                 # one2one uses x_detach internally and cuts the gradient chain.
@@ -284,7 +285,7 @@ def main() -> None:
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=args.epochs, eta_min=args.lr_gate * 0.01
     )
-    scaler = torch.amp.GradScaler("cuda")
+    scaler = torch.amp.GradScaler("cuda")  # type: ignore[attr-defined]
 
     # ── Resume ──
     start_epoch = 1

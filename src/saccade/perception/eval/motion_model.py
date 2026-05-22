@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Optional
+from typing import Iterator, Optional
 
 import torch
 
@@ -222,7 +222,7 @@ class MotionModelRegistry:
     registry.prune(active_ids)
     """
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, **kwargs) -> None:  # type: ignore[no-untyped-def]
         self._models: dict[int, MotionModel] = {}
         self._params = kwargs
 
@@ -268,5 +268,5 @@ class MotionModelRegistry:
     def __len__(self) -> int:
         return len(self._models)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[int]:
         return iter(self._models)

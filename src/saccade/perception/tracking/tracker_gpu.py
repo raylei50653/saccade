@@ -436,6 +436,16 @@ class GPUByteTracker:
         if set_reid_params is not None:
             set_reid_params(cos_threshold, iou_low, iou_high, weight)
 
+    def set_oao_params(self, tau: float = 0.0) -> None:
+        """OA-SORT Occlusion-Aware Offset (OAO) penalty.
+
+        tau in [0, 1]: cost += tau * inter_track_IoU for each occluded track.
+        0 (default) = disabled.  Recommended sweep: 0.1 – 0.4.
+        """
+        set_oao = getattr(self.tracker, "set_oao_params", None)
+        if set_oao is not None:
+            set_oao(float(tau))
+
     def set_quality_params(
         self,
         enabled: bool,

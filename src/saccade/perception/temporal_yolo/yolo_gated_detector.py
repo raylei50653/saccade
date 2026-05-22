@@ -18,6 +18,7 @@ from __future__ import annotations
 import torch
 import torch.nn as nn
 from dataclasses import dataclass
+from typing import Any
 
 from .yolo_conditioned import TrackerGateInput, TrackSpatialGate
 from .temporal_fusion import TemporalFeatureFusion, _compute_alpha_tier, AlphaTierConfig
@@ -69,10 +70,10 @@ class GatedYOLODetector(nn.Module):
             cfg = GatedDetConfig()
         self.cfg = cfg
 
-        from ultralytics import YOLO as _YOLO
+        from ultralytics import YOLO as _YOLO  # type: ignore[attr-defined]
 
         yolo = _YOLO(yolo_pt_path)
-        self.yolo_model = yolo.model.to(device)
+        self.yolo_model: Any = yolo.model.to(device)  # type: ignore[union-attr]
 
         for p in self.yolo_model.parameters():
             p.requires_grad_(not cfg.freeze_backbone)
@@ -132,7 +133,7 @@ class GatedYOLODetector(nn.Module):
         for scale in self.cfg.scales:
             idx = _GATE_LAYER_IDX[scale]
 
-            def _h(m, i, o, s=scale):
+            def _h(m: nn.Module, i: Any, o: torch.Tensor, s: str = scale) -> None:
                 channels[s] = o.shape[1]
 
             tmp_hooks.append(self.yolo_model.model[idx].register_forward_hook(_h))
@@ -167,8 +168,8 @@ class GatedYOLODetector(nn.Module):
         )
         return heatmap  # (1, H_s, W_s)
 
-    def _make_hook(self, scale: str):
-        def _hook(module, inp, output: torch.Tensor) -> torch.Tensor:
+    def _make_hook(self, scale: str):  # type: ignore[no-untyped-def]
+        def _hook(module: nn.Module, inp: Any, output: torch.Tensor) -> torch.Tensor:
             if self.cache_feats or self.fusion is not None:
                 self._feat_cache[scale] = output
 
@@ -216,7 +217,7 @@ class GatedYOLODetector(nn.Module):
 
                 gated = self.fusion.fuse(scale, gated, q)
 
-            return gated
+            return gated  # type: ignore[no-any-return]
 
         return _hook
 
@@ -227,7 +228,7 @@ class GatedYOLODetector(nn.Module):
         self,
         frame: torch.Tensor,
         gate_input: TrackerGateInput | list[TrackerGateInput] | None = None,
-    ) -> dict | tuple:
+    ) -> dict[str, Any] | tuple[Any, ...]:
         self._current_gate = gate_input
         result = self.yolo_model(frame)
         self._current_gate = None
@@ -235,20 +236,20 @@ class GatedYOLODetector(nn.Module):
         if self.fusion is not None and self._feat_cache:
             self.fusion.update_prev(self._feat_cache)
 
-        return result
+        return result  # type: ignore[no-any-return]
 
     # ------------------------------------------------------------------
     # Fusion control
     # ------------------------------------------------------------------
-    def set_fusion_alpha(self, alpha: float | None):
+    def set_fusion_alpha(self, alpha: float | None) -> None:
         if self.fusion is not None:
             self.fusion.set_fixed_alpha(alpha)
 
-    def set_gmc(self, matrix: torch.Tensor | None):
+    def set_gmc(self, matrix: torch.Tensor | None) -> None:
         if self.fusion is not None:
             self.fusion.set_gmc(matrix)
 
-    def reset_fusion(self):
+    def reset_fusion(self) -> None:
         if self.fusion is not None:
             self.fusion.reset()
 
@@ -259,8 +260,8 @@ class GatedYOLODetector(nn.Module):
         self,
         lr_gate: float,
         lr_yolo: float = 0.0,
-    ) -> list[dict]:
-        groups: list[dict] = [
+    ) -> list[dict[str, Any]]:
+        groups: list[dict[str, Any]] = [
             {"params": list(self.gate.parameters()), "name": "gate", "lr": lr_gate},
         ]
         if self.fusion is not None:

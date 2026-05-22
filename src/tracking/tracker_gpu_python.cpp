@@ -1719,6 +1719,10 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
              py::arg("birth_prox_norm_thresh") = 0.0f)
         .def("set_reid_params", &GPUByteTracker::set_reid_params,
              py::arg("cos_threshold"), py::arg("iou_low"), py::arg("iou_high"), py::arg("weight"))
+        .def("set_oao_params", &GPUByteTracker::set_oao_params,
+             py::arg("tau"),
+             "OA-SORT OAO penalty weight [0, 1]. 0 = disabled. "
+             "Tracks occluded by other tracks receive cost += tau * overlap_iou.")
         .def("set_quality_params", &GPUByteTracker::set_quality_params,
              py::arg("enabled"), py::arg("w_aspect") = 0.50f, py::arg("w_center") = 0.30f, py::arg("w_area") = 0.20f)
         .def("set_frame_size", &GPUByteTracker::set_frame_size,

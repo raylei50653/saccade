@@ -22,7 +22,9 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 
 
-class MOT17TemporalClip(Dataset):
+class MOT17TemporalClip(
+    Dataset[dict[str, torch.Tensor | list[torch.Tensor] | list[int] | str]]
+):
     """
     從 MOT17 訓練集切出長度為 clip_len 的連續幀 clip。
 
@@ -106,7 +108,7 @@ class MOT17TemporalClip(Dataset):
                 _, orig_h, orig_w = _img.shape
             self._scale_hw[seq] = (img_size / orig_h, img_size / orig_w)
 
-            gt_per_frame: dict[int, tuple[list, list]] = {}
+            gt_per_frame: dict[int, tuple[list[list[float]], list[int]]] = {}
             with gt_file.open() as f:
                 for row in csv.reader(f):
                     fid = int(row[0])
@@ -162,11 +164,13 @@ class MOT17TemporalClip(Dataset):
             flush=True,
         )
 
-        cache: dict[str, list[torch.Tensor]] = {
+        cache: dict[str, list[torch.Tensor | None]] = {
             seq: [None] * len(paths) for seq, paths in self._frame_lists.items()
         }
 
-        def load_and_resize_task(task):
+        def load_and_resize_task(
+            task: tuple[str, int, Path],
+        ) -> tuple[str, int, torch.Tensor]:
             seq, idx, fpath = task
             img = tv_io.read_image(str(fpath))  # uint8 (3, H, W)
             img = TF.resize(img, [self.img_size, self.img_size], antialias=True)
@@ -186,12 +190,14 @@ class MOT17TemporalClip(Dataset):
                     print(f"  {done}/{total}", flush=True)
 
         print(f"  {done}/{total} — done", flush=True)
-        return cache
+        return cache  # type: ignore[return-value]
 
     def __len__(self) -> int:
         return len(self._clips)
 
-    def __getitem__(self, idx: int) -> dict:
+    def __getitem__(
+        self, idx: int
+    ) -> dict[str, torch.Tensor | list[torch.Tensor] | list[int] | str]:
         seq, start = self._clips[idx]
 
         frames_list: list[torch.Tensor] = []
@@ -240,12 +246,12 @@ def _load_and_resize(path: Path, target_size: int) -> torch.Tensor:
 
     img = tv_io.read_image(str(path))
     img = TF.resize(img, [target_size, target_size], antialias=True)
-    return img
+    return img  # type: ignore[no-any-return]
 
 
-def collate_fn(batch: list[dict]) -> dict:
+def collate_fn(batch: list[dict[str, object]]) -> dict[str, object]:
     return {
-        "frames": torch.stack([b["frames"] for b in batch]),
+        "frames": torch.stack([b["frames"] for b in batch]),  # type: ignore[misc]
         "gt_boxes": [b["gt_boxes"] for b in batch],
         "gt_ids": [b["gt_ids"] for b in batch],
         "frame_ids": [b["frame_ids"] for b in batch],
@@ -264,7 +270,7 @@ def build_mot17_dataloader(
     detector: str = "SDP",
     shuffle: bool = True,
     preload_to_ram: bool = True,
-) -> DataLoader:
+) -> DataLoader[dict[str, object]]:
     dataset = MOT17TemporalClip(
         data_root=data_root,
         split="train",
@@ -280,7 +286,7 @@ def build_mot17_dataloader(
     # fork would inherit CUDA context → deadlock. With preloaded RAM, single-process
     # is fast enough and avoids all multiprocessing complexity.
     return DataLoader(
-        dataset,
+        dataset,  # type: ignore[arg-type]
         batch_size=batch_size,
         shuffle=shuffle,
         num_workers=num_workers,
