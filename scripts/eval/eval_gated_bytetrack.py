@@ -116,6 +116,7 @@ def eval_sequence(
     fpn_embedder=None,
     use_gmc_warp: bool = False,
     use_detector_heatmap: bool = False,
+    profile: bool = False,
 ) -> int:
     seq_name = seq_dir.name
     frames = _load_frames(seq_dir, img_size)
@@ -148,19 +149,25 @@ def eval_sequence(
     mot_lines: list[str] = []
     t0 = time.perf_counter()
 
+    # Profiling accumulators
+    t_gate_input = 0.0
+    t_model_fwd = 0.0
+    t_postprocess = 0.0
+    t_tracker = 0.0
+    n_prof = 0
+
     for frame_id, frame in frames:
         frame = frame.to(device)
 
         # Update GMC for temporal fusion warp (before model forward)
         if gmc is not None:
-            # frame is (1, 3, 640, 640) on device; GMC expects (3, H, W) input
             gmc_matrix = gmc.estimate(frame.squeeze(0))
 
-        # Set GMC matrix on model (None = identity for first frame)
         if hasattr(model, "set_gmc") and use_gmc_warp:
             model.set_gmc(gmc_matrix)
 
         # Gate input from previous frame's tracker state (Phase 3)
+        t1 = time.perf_counter() if profile else 0
         gate_input = None
         if not disable_gate and prev_gate_input is not None:
             gate_input = prev_gate_input
@@ -175,8 +182,9 @@ def eval_sequence(
                 (img_size, img_size),
                 assume_absolute=True,
             ).to(device)
+        if profile:
+            t_gate_input += time.perf_counter() - t1
 
-        # Forward — also caches FPN features if roi_reid enabled
         if use_roi_reid:
             model.cache_feats = True
             model._feat_cache.clear()
@@ -184,12 +192,17 @@ def eval_sequence(
         if hasattr(model, "set_prev_detections") and use_detector_heatmap:
             model.set_prev_detections(prev_det_boxes, prev_det_scores)
 
+        t2 = time.perf_counter() if profile else 0
         with torch.no_grad():
             out = model(frame, gate_input=gate_input)
+        if profile:
+            torch.cuda.synchronize()
+            t_model_fwd += time.perf_counter() - t2
 
         if use_roi_reid:
             model.cache_feats = False
 
+        t3 = time.perf_counter() if profile else 0
         raw = out[0][0]  # (300, 6)
         keep = raw[:, 4] > conf_threshold
         dets = raw[keep]
@@ -208,18 +221,14 @@ def eval_sequence(
             scores = dets[:, 4]
             classes = dets[:, 5].to(torch.int32)
 
-            # Extract ROI embeddings (640px space)
             if use_roi_reid and model._feat_cache:
                 if reid_head is not None:
-                    # Multi-scale 896-dim → projected 128-dim
                     embeddings = extract_roi_embeddings(
                         model._feat_cache, dets[:, :4], reid_head=reid_head
                     )
                 elif fpn_embedder is not None:
-                    # Single-scale crop (P4 256-dim by default)
                     embeddings = fpn_embedder.extract(model._feat_cache, dets[:, :4])
                 else:
-                    # Raw 896-dim multi-scale (legacy / Fisher dim-select path)
                     embeddings = extract_roi_embeddings(model._feat_cache, dets[:, :4])
                     if dim_selector is not None:
                         embeddings = torch.nn.functional.normalize(
@@ -234,12 +243,11 @@ def eval_sequence(
             scores = torch.zeros((0,), device=device)
             classes = torch.zeros((0,), device=device, dtype=torch.int32)
 
-        # tracker.update must run outside inference_mode (inference tensors cause silent failures)
+        t4 = time.perf_counter() if profile else 0
         track_results = tracker.update(
             boxes_orig, scores, classes, embeddings=embeddings
         )
 
-        # Build gate input from tracker state for next frame (Phase 3 α_tier)
         if not disable_gate:
             try:
                 snapshots = tracker.get_state_snapshots()
@@ -286,6 +294,12 @@ def eval_sequence(
 
         mot_lines.extend(_to_mot_lines(frame_id, track_results))
 
+        if profile:
+            torch.cuda.synchronize()
+            t_tracker += time.perf_counter() - t4
+            t_postprocess += t4 - t3
+            n_prof += 1
+
     elapsed = time.perf_counter() - t0
     fps = len(frames) / max(elapsed, 1e-6)
     (output_dir / f"{seq_name}.txt").write_text("\n".join(mot_lines))
@@ -294,6 +308,16 @@ def eval_sequence(
         f"  {seq_name}: {len(frames)} frames, {fps:.1f} FPS, "
         f"{len(mot_lines)} tracks{reid_str}"
     )
+    if profile and n_prof > 0:
+        total = t_gate_input + t_model_fwd + t_postprocess + t_tracker
+        n = n_prof
+        print(
+            f"    gate_input: {t_gate_input * 1000 / n:5.1f} ms  "
+            f"model_fwd: {t_model_fwd * 1000 / n:5.1f} ms  "
+            f"post: {t_postprocess * 1000 / n:5.1f} ms  "
+            f"tracker: {t_tracker * 1000 / n:5.1f} ms  "
+            f"total: {total * 1000 / n:.1f} ms"
+        )
     return len(frames)
 
 
@@ -397,6 +421,11 @@ def main() -> None:
         choices=["p3", "p4", "p5"],
         help="FPN scale for FPNCropEmbedder (used when --roi-reid without --reid-head). "
         "p3=128-dim, p4=256-dim, p5=512-dim.",
+    )
+    parser.add_argument(
+        "--profile",
+        action="store_true",
+        help="Print per-stage timing breakdown",
     )
     args = parser.parse_args()
 
@@ -544,6 +573,7 @@ def main() -> None:
             fpn_embedder=fpn_embedder,
             use_gmc_warp=args.fusion_warp,
             use_detector_heatmap=args.detector_heatmap,
+            profile=args.profile,
         )
 
     try:
