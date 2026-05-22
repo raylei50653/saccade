@@ -113,18 +113,17 @@ uv run train/temporal_yolo/train_mamba_head.py \
 
 ### Training Results
 
-Batch=64, LR=1e-3, AdamW + cosine schedule, 640×640.
+Batch=64, LR=1e-3, AdamW + cosine schedule, 640×640, 20 epochs.
 
 | Epoch | Loss | Time |
 |-------|------|------|
-| 1 | 408.1 | 23s |
-| 2 | 37.3 | 23s |
-| 5 | 22.5 | 23s |
-| 10 | 18.5 | 23s |
+| 1 | 424.5 | 23s |
+| 2 | 37.4 | 23s |
+| 5 | 22.2 | 23s |
+| 10 | 17.8 | 23s |
+| 20 | **14.9** | 23s |
 
-Loss is sum over 3 scales + cls+reg per scale. Per-element MSE at epoch 10 ≈ 0.  
+Loss is sum over 3 scales + cls+reg per scale. Per-element MSE at epoch 20 ≈ 10⁻⁷.
 Student successfully replicates teacher outputs within numerical noise.
-
-After convergence: fine-tune on GT with `v8DetectionLoss` (replace MSE head → YOLO-compatible output).
 
 ---
