@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstring>
 #include <iostream>
+#include <numeric>
 #include <string>
 #include <stdexcept>
 
@@ -109,6 +110,17 @@ void SequenceRunner::free_buffers() {
         h_frame_pinned_ = nullptr;
         h_frame_bytes_  = 0;
     }
+    // GMC
+    cfree((void*&)d_gmc_warp_);
+    // ReID
+    cfree((void*&)d_reid_embeds_);
+    cfree((void*&)d_reid_sel_embeds_);
+    cfree((void*&)d_reid_sel_boxes_);
+    cfree((void*&)d_reid_sel_idx_);
+    cfree((void*&)d_crop_buf_);
+    cfreehost((void*&)h_raw_scores_pin_);
+    cfreehost((void*&)h_reid_boxes_pin_);
+    cfreehost((void*&)h_reid_idx_pin_);
 }
 
 void SequenceRunner::load_frame(const std::string& path,
@@ -187,7 +199,8 @@ std::vector<FrameResult> SequenceRunner::run(const SequenceConfig& cfg) {
         cfg.vel_dir_weight,
         cfg.fuse_score_weight,
         cfg.stage2_match_thresh,
-        cfg.birth_low_score_thresh
+        cfg.birth_low_score_thresh,
+        cfg.birth_prox_norm_thresh
     );
     Workbench workbench(pipeline_.get(), &tracker, stream_, 2048, max_tracks_);
 
@@ -202,6 +215,44 @@ std::vector<FrameResult> SequenceRunner::run(const SequenceConfig& cfg) {
             nvinfer1::Dims4 in_dims{1, 3, S, S};
             detect_ctx_->setInputShape("images", in_dims);
         }
+    }
+
+    // ── GMC lazy init ──────────────────────────────────────────────────────────
+    if (cfg.gmc_enabled) {
+        if (!gmc_) {
+            gmc_ = std::make_unique<GMC>(cfg.gmc_downscale);
+            cudaMalloc(&d_gmc_warp_, 6 * sizeof(float));
+        }
+        gmc_->reset();
+    }
+
+    // ── ReID lazy init ─────────────────────────────────────────────────────────
+    if (!cfg.reid_engine_path.empty() && !reid_extractor_) {
+        reid_extractor_ = std::make_unique<FeatureExtractor>(
+            cfg.reid_engine_path,
+            static_cast<ModelType>(cfg.reid_model_type),
+            cfg.reid_budget);
+        reid_cropper_   = std::make_unique<Cropper>(cfg.reid_crop_w, cfg.reid_crop_h);
+        reid_feat_dim_  = reid_extractor_->get_feature_dim();
+        reid_crop_h_    = cfg.reid_crop_h;
+        reid_crop_w_    = cfg.reid_crop_w;
+
+        cudaMalloc(&d_reid_embeds_,
+                   (size_t)max_raw_dets_ * reid_feat_dim_ * sizeof(float));
+        cudaMalloc(&d_reid_sel_embeds_,
+                   (size_t)cfg.reid_budget * reid_feat_dim_ * sizeof(float));
+        cudaMalloc(&d_reid_sel_boxes_,
+                   (size_t)cfg.reid_budget * 4 * sizeof(float));
+        cudaMalloc(&d_reid_sel_idx_,
+                   (size_t)cfg.reid_budget * sizeof(int));
+        cudaMalloc(&d_crop_buf_,
+                   (size_t)cfg.reid_budget * 3 * cfg.reid_crop_h * cfg.reid_crop_w * sizeof(float));
+        cudaMallocHost(&h_raw_scores_pin_,
+                       (size_t)max_raw_dets_ * sizeof(float));
+        cudaMallocHost(&h_reid_boxes_pin_,
+                       (size_t)cfg.reid_budget * 4 * sizeof(float));
+        cudaMallocHost(&h_reid_idx_pin_,
+                       (size_t)cfg.reid_budget * sizeof(int));
     }
 
     const int n_frames = static_cast<int>(cfg.frame_paths.size());
@@ -244,6 +295,52 @@ std::vector<FrameResult> SequenceRunner::run(const SequenceConfig& cfg) {
                                 cfg.height, stream_);
         }
 
+        // 5b. GMC warp estimation (on d_src_chw_, original resolution)
+        float* gmc_ptr = nullptr;
+        if (gmc_) {
+            gmc_->estimate_into(d_src_chw_, cfg.width, cfg.height,
+                                stream_, d_gmc_warp_, cfg.gmc_phase_corr);
+            gmc_ptr = d_gmc_warp_;
+        }
+
+        // 5c. ReID embedding extraction (budget top-K by quality-scaled score)
+        float* embeds_ptr = nullptr;
+        if (reid_extractor_ && (fi % cfg.reid_interval == 0)) {
+            // D2H scores for CPU top-K selection (pinned = fast)
+            cudaMemcpyAsync(h_raw_scores_pin_, d_raw_scores_,
+                            (size_t)max_raw * sizeof(float),
+                            cudaMemcpyDeviceToHost, stream_);
+            cudaStreamSynchronize(stream_);
+
+            // CPU partial sort → top-K indices by descending score
+            int K = std::min(cfg.reid_budget, max_raw);
+            std::vector<int> idx(max_raw);
+            std::iota(idx.begin(), idx.end(), 0);
+            std::partial_sort(idx.begin(), idx.begin() + K, idx.end(),
+                [&](int a, int b){ return h_raw_scores_pin_[a] > h_raw_scores_pin_[b]; });
+
+            for (int k = 0; k < K; ++k)
+                h_reid_idx_pin_[k] = idx[k];
+            cudaMemcpyAsync(d_reid_sel_idx_, h_reid_idx_pin_,
+                            (size_t)K * sizeof(int),
+                            cudaMemcpyHostToDevice, stream_);
+
+            // GPU gather K boxes at selected indices
+            gather_boxes_cuda(d_raw_boxes_, d_reid_sel_idx_, d_reid_sel_boxes_, K, stream_);
+
+            // Crop and extract embeddings for K selected boxes
+            reid_cropper_->process_gpu(d_src_chw_, cfg.height, cfg.width,
+                                       d_reid_sel_boxes_, K, d_crop_buf_, stream_);
+            reid_extractor_->extract(d_crop_buf_, K, d_reid_sel_embeds_, stream_);
+
+            // Scatter K embeddings into full [max_raw, feat_dim] tensor (zeroed)
+            cudaMemsetAsync(d_reid_embeds_, 0,
+                            (size_t)max_raw * reid_feat_dim_ * sizeof(float), stream_);
+            scatter_embeddings_cuda(d_reid_embeds_, d_reid_sel_embeds_,
+                                    d_reid_sel_idx_, K, reid_feat_dim_, stream_);
+            embeds_ptr = d_reid_embeds_;
+        }
+
         // 6. Workbench: filter + NMS + tracker
         int n_out = workbench.process_frame_postyolo(
             d_raw_boxes_, d_raw_scores_, d_raw_classes_, max_raw,
@@ -251,8 +348,8 @@ std::vector<FrameResult> SequenceRunner::run(const SequenceConfig& cfg) {
             /*is_tiled=*/false,
             /*priors_ptr=*/nullptr, /*prior_classes_ptr=*/nullptr,
             /*num_priors=*/0, /*prior_iou_threshold=*/0.5f,
-            /*embeddings_ptr=*/nullptr,
-            /*gmc_ptr=*/nullptr,
+            /*embeddings_ptr=*/embeds_ptr,
+            /*gmc_ptr=*/gmc_ptr,
             /*light_factor=*/0.0f,
             /*mid_thresh_scale=*/1.0f,
             d_out_boxes_, d_out_scores_, d_out_ids_,

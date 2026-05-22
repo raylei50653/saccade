@@ -5,6 +5,7 @@ import dataclasses
 from .core import CoreConfig
 from .detection import DetectionConfig
 from .geometry import GeometryConfig
+from .motion import MotionConfig
 from .reid import ReIDConfig
 from .semantic import SemanticConfig
 from .trigger import TriggerConfig
@@ -18,6 +19,7 @@ class PipelineConfig:
     core: CoreConfig = dataclasses.field(default_factory=CoreConfig)
     detection: DetectionConfig = dataclasses.field(default_factory=DetectionConfig)
     geometry: GeometryConfig = dataclasses.field(default_factory=GeometryConfig)
+    motion: MotionConfig = dataclasses.field(default_factory=MotionConfig)
     reid: ReIDConfig = dataclasses.field(default_factory=ReIDConfig)
     semantic: SemanticConfig = dataclasses.field(default_factory=SemanticConfig)
     trigger: TriggerConfig = dataclasses.field(default_factory=TriggerConfig)
@@ -29,6 +31,7 @@ class PipelineConfig:
             self.core,
             self.detection,
             self.geometry,
+            self.motion,
             self.reid,
             self.semantic,
             self.trigger,
@@ -49,6 +52,7 @@ class PipelineConfig:
             core=_pick(CoreConfig, d),
             detection=_pick(DetectionConfig, d),
             geometry=_pick(GeometryConfig, d),
+            motion=_pick(MotionConfig, d),
             reid=_pick(ReIDConfig, d),
             semantic=_pick(SemanticConfig, d),
             trigger=_pick(TriggerConfig, d),

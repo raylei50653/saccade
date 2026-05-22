@@ -87,9 +87,19 @@ public:
         float vel_dir_weight = 0.0f,
         float fuse_score_weight = 0.0f,
         float stage2_match_thresh = 0.5f,
-        float birth_low_score_thresh = 0.0f
+        float birth_low_score_thresh = 0.0f,
+        float birth_prox_norm_thresh = 0.0f
     );
     void set_reid_params(float cos_threshold, float iou_low, float iou_high, float weight);
+
+    /**
+     * @brief OA-SORT Occlusion-Aware Offset (OAO) penalty weight.
+     * @param tau Cost penalty scale in [0, 1]. 0 = disabled (default).
+     *            When > 0, tracks whose predicted boxes overlap other tracks get
+     *            a cost increase of tau * IoU_overlap, reducing incorrect associations
+     *            during occlusion (cost confusion).
+     */
+    void set_oao_params(float tau);
 
     /**
      * @brief Set Detection Quality Scaling (A6) parameters.

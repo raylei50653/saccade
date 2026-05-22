@@ -1,0 +1,12 @@
+# Motion-based relinking — Best config (Exp #6 Aggressive)
+# Results vs baseline: MOTA +0.3pp, IDF1 +0.3pp, Prcn +0.4pp, IDs -2
+# Run: --module-motion configs/modules/motion_v2.yaml
+motion_vel_alpha: 0.5
+motion_acc_alpha: 0.2
+motion_min_observations: 1
+motion_w_iou: 0.8
+motion_consistency_check: false
+motion_enable_motion_only: true
+motion_motion_only_lost_frames: 5
+motion_motion_only_iou_threshold: 0.03
+motion_motion_only_min_lost_frames: 1

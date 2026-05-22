@@ -7,3 +7,16 @@ engine: models/yolo/yolo26s_960_batch1.engine
 tiling: native_960
 match_thresh: 0.66
 new_track_thresh: 0.28
+
+# --- Motion-based relinking ---
+motion:
+  vel_alpha: 0.3
+  acc_alpha: 0.15
+  min_motion_observations: 2
+  w_motion_iou: 0.3
+  motion_consistency_check: true
+  consistency_tol: 2.0
+  enable_motion_only: true
+  motion_only_lost_frames: 5
+  motion_only_iou_threshold: 0.15
+  motion_only_min_lost_frames: 1

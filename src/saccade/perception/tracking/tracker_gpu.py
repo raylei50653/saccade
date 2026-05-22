@@ -402,6 +402,7 @@ class GPUByteTracker:
         fuse_score_weight: float = 0.0,
         stage2_match_thresh: float = 0.5,
         birth_low_score_thresh: float = 0.0,
+        birth_prox_norm_thresh: float = 0.0,
     ) -> None:
         """調整追蹤器門檻與參數。"""
         self.tracker.set_params(
@@ -420,6 +421,7 @@ class GPUByteTracker:
             fuse_score_weight,
             stage2_match_thresh,
             birth_low_score_thresh,
+            birth_prox_norm_thresh,
         )
 
     def set_reid_params(
@@ -433,6 +435,16 @@ class GPUByteTracker:
         set_reid_params = getattr(self.tracker, "set_reid_params", None)
         if set_reid_params is not None:
             set_reid_params(cos_threshold, iou_low, iou_high, weight)
+
+    def set_oao_params(self, tau: float = 0.0) -> None:
+        """OA-SORT Occlusion-Aware Offset (OAO) penalty.
+
+        tau in [0, 1]: cost += tau * inter_track_IoU for each occluded track.
+        0 (default) = disabled.  Recommended sweep: 0.1 – 0.4.
+        """
+        set_oao = getattr(self.tracker, "set_oao_params", None)
+        if set_oao is not None:
+            set_oao(float(tau))
 
     def set_quality_params(
         self,

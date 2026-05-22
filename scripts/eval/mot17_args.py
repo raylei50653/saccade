@@ -11,6 +11,7 @@ from config import (  # noqa: E402
     add_core_args,
     add_detection_args,
     add_geometry_args,
+    add_motion_args,
     add_reid_args,
     add_semantic_args,
     add_trigger_args,
@@ -33,6 +34,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_core_args(parser)
     add_detection_args(parser)
     add_geometry_args(parser)
+    add_motion_args(parser)
     add_reid_args(parser)
     add_semantic_args(parser)
     add_trigger_args(parser)

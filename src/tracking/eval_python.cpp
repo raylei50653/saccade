@@ -81,7 +81,18 @@ PYBIND11_MODULE(saccade_eval_ext, m) {
         .def_readwrite("vel_dir_weight",         &SequenceConfig::vel_dir_weight)
         .def_readwrite("stage2_match_thresh",    &SequenceConfig::stage2_match_thresh)
         .def_readwrite("birth_low_score_thresh", &SequenceConfig::birth_low_score_thresh)
-        .def_readwrite("track_buffer",           &SequenceConfig::track_buffer);
+        .def_readwrite("track_buffer",           &SequenceConfig::track_buffer)
+        // GMC
+        .def_readwrite("gmc_enabled",    &SequenceConfig::gmc_enabled)
+        .def_readwrite("gmc_downscale",  &SequenceConfig::gmc_downscale)
+        .def_readwrite("gmc_phase_corr", &SequenceConfig::gmc_phase_corr)
+        // ReID
+        .def_readwrite("reid_engine_path", &SequenceConfig::reid_engine_path)
+        .def_readwrite("reid_model_type",  &SequenceConfig::reid_model_type)
+        .def_readwrite("reid_budget",      &SequenceConfig::reid_budget)
+        .def_readwrite("reid_interval",    &SequenceConfig::reid_interval)
+        .def_readwrite("reid_crop_h",      &SequenceConfig::reid_crop_h)
+        .def_readwrite("reid_crop_w",      &SequenceConfig::reid_crop_w);
 
     // ── SequenceRunner ────────────────────────────────────────────────────────
     py::class_<SequenceRunner>(m, "CppSequenceRunner")

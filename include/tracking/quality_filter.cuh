@@ -104,4 +104,29 @@ void parse_yolo_output(
     float        y_off,
     cudaStream_t stream);
 
+/**
+ * Gather K box rows from src[N,4] at d_indices[K] into dst[K,4].
+ * src must remain valid until stream completes.
+ */
+SACCADE_TRACKING_API
+void gather_boxes_cuda(
+    const float* src,       // [N, 4] float32 GPU
+    const int*   d_indices, // [K] int32 GPU
+    float*       dst,       // [K, 4] float32 GPU (caller-allocated)
+    int          K,
+    cudaStream_t stream);
+
+/**
+ * Scatter K embeddings from src[K,D] into dst[N,D] at d_indices[K].
+ * Caller must zero-initialise dst before calling.
+ */
+SACCADE_TRACKING_API
+void scatter_embeddings_cuda(
+    float*       dst,       // [N, D] float32 GPU
+    const float* src,       // [K, D] float32 GPU
+    const int*   d_indices, // [K] int32 GPU
+    int          K,
+    int          D,
+    cudaStream_t stream);
+
 } // namespace saccade

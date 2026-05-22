@@ -54,6 +54,11 @@
 
 ## Completed Workstreams
 
+### 測試覆蓋率提升 Phase 1（已完成，2026-05）
+
+- 完成了 `dispatcher.py` (94%)、`helpers.py` (91%)、`detection.py` (49%)、`relink.py` (88%)、`drift_handler.py` (100%)、`redis_cache.py` (99%)、`calibrator.py` (96%)、`cropper.py` (77%)、`quality.py` (100%)、`reporting.py` (93%) 等模組的覆蓋。
+- 總覆蓋率從 56% 提升至 66%。新增了針對核心模組的大量整合與單元測試。詳細覆蓋率成長日誌見 `docs/TEST_COVERAGE.md`。
+
 ### 核心能力完成（2026-04-25）
 
 ### P0 — GPUByteTracker 核心強化（ADR 013）
@@ -404,6 +409,11 @@ Cascade model（CrowdHuman-trained）泛用效果：P=4.5%, R=84.4%, FPrem=37.2%
 
 ### Archived GO
 
+#### fuse_score_weight=0.4（已設為 default，2026-05-11）
+- botsort-style：cost = 1 − IoU × (1 − 0.4 × score)，讓低信心 det 更難匹配
+- 7-seq SDP baseline preset：IDF1 +1.7pp → 51.4%，MOTA +1.6pp → 43.5%，FP **-13%**，Rcll -0.6pp，IDs -1
+- 0.4 為 Pareto 最優；≥0.75 會讓 IDs 翻倍
+
 ### Async ReID Pipelining（已完成，2026-05-07，設為 default）
 
 - `--async-reid`：reid_extract 提交至 side CUDA stream，與 GMC 重疊 ~1ms
@@ -458,6 +468,32 @@ Cascade model（CrowdHuman-trained）泛用效果：P=4.5%, R=84.4%, FPrem=37.2%
 - D2-A-1（關閉 A6）：IDF1 +0.1pp，MOTA -4.1pp — A6 不是 IDF1 缺口根因
 
 ### Archived NO-GO / Closed
+
+#### Motion-based Relinking + Better Association Cost（NO-GO，2026-05-17）
+- **思路**：用 Kalman + CT-RNN motion model 做 long-term gap closure。
+- **結果**：Baseline run-to-run 波動 ±0.3pp，motion 增益無法確定為真實訊號。89% relink candidates 被 age gate 攔截，motion 僅對 74/863 candidates 生效。
+- **結論**：NO-GO，code 保留（`motion_model.py` 等），flag `default=off`。
+
+#### Test-Time Augmentation (TTA) for Detection（NO-GO，2026-05-18）
+- **思路**：對同一幀做 flip/mirror TTA，merge 結果。
+- **結果**：IDF1/MOTA 0 Δ，FP +26 輕微負面，IDs/FN 改善在雜訊內。生產環境不穩定且 COCO 無左右方向偏差。
+- **結論**：NO-GO，code 保留。
+
+#### FP 模組 A：stage2_match_thresh（NO-GO，2026-05-11）
+- `max_cost` 是上限；提高 = 更寬鬆 = FP 增加。0.5 在 fuse_score_weight=0.4 下已適當。
+- 參數已暴露，保留為可調，但不調整 default。
+
+#### P5-5 Proximity Birth Gate（NO-GO，2026-05-18）
+- **目標**：抑制 NMS 漏網的 ghost track。
+- **結果**：FP 減少但 FN 暴增，真實人群互相靠近時被誤殺。
+- **結論**：空間接近性不能作為 ghost 判斷依據，NMS 後的 ghost 需從 detector 訓練或更高層過濾解決。
+
+#### FP 模組 B：birth_low_score_thresh（微小增益，2026-05-11）
+- 最佳 blst=0.28 → FP -63、IDs -3、IDF1 +0.1pp。
+- 效益太小，保留為可調，不設為 default。
+
+#### Pose-Guided Box Expansion（NO-GO，2026-05-10）
+- IDF1 不退但 FPS -60%，box 擴展引發 ID switches。detector training data 才是根本解。
 
 ### FPS anomaly（match ≥ 0.73）根因（已結案，歸檔於 2026-05-14）
 

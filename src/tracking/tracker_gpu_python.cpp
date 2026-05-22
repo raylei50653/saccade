@@ -13,6 +13,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include "tracking/auction.hpp"
 #include "tracking/tracker_gpu.hpp"
 #include "tracking/gmc.hpp"
 #include "tracking/pipeline.hpp"
@@ -1714,9 +1715,14 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
              py::arg("vel_dir_weight") = 0.0f,
              py::arg("fuse_score_weight") = 0.0f,
              py::arg("stage2_match_thresh") = 0.5f,
-             py::arg("birth_low_score_thresh") = 0.0f)
+             py::arg("birth_low_score_thresh") = 0.0f,
+             py::arg("birth_prox_norm_thresh") = 0.0f)
         .def("set_reid_params", &GPUByteTracker::set_reid_params,
              py::arg("cos_threshold"), py::arg("iou_low"), py::arg("iou_high"), py::arg("weight"))
+        .def("set_oao_params", &GPUByteTracker::set_oao_params,
+             py::arg("tau"),
+             "OA-SORT OAO penalty weight [0, 1]. 0 = disabled. "
+             "Tracks occluded by other tracks receive cost += tau * overlap_iou.")
         .def("set_quality_params", &GPUByteTracker::set_quality_params,
              py::arg("enabled"), py::arg("w_aspect") = 0.50f, py::arg("w_center") = 0.30f, py::arg("w_area") = 0.20f)
         .def("set_frame_size", &GPUByteTracker::set_frame_size,
@@ -2413,6 +2419,34 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
                 out["images"] = stats.images;
                 return out;
             })
+        .def("set_postprocess_profiling_enabled", &PerceptionPipeline::set_postprocess_profiling_enabled, py::arg("enabled"))
+        .def("reset_postprocess_profile_stats", &PerceptionPipeline::reset_postprocess_profile_stats)
+        .def("get_postprocess_profile_stats",
+            [](const PerceptionPipeline& self) {
+                const auto stats = self.get_postprocess_profile_stats();
+                py::dict out;
+                out["filter_ms"] = stats.filter_ms;
+                out["nms_ms"] = stats.nms_ms;
+                out["count_d2h_ms"] = stats.count_d2h_ms;
+                out["total_ms"] = stats.total_ms;
+                out["native_filter_gather_ms"] = stats.native_filter_gather_ms;
+                out["native_filter_kernel_ms"] = stats.native_filter_kernel_ms;
+                out["native_gather_compact3_ms"] = stats.native_gather_compact3_ms;
+                out["native_copy_suspect_ms"] = stats.native_copy_suspect_ms;
+                out["native_filter_count_sync_ms"] = stats.native_filter_count_sync_ms;
+                out["native_small_nms_ms"] = stats.native_small_nms_ms;
+                out["native_suspect_penalty_ms"] = stats.native_suspect_penalty_ms;
+                out["native_large_sort_nms_ms"] = stats.native_large_sort_nms_ms;
+                out["native_large_argsort_ms"] = stats.native_large_argsort_ms;
+                out["native_large_nms_ms"] = stats.native_large_nms_ms;
+                out["native_compact_copy_ms"] = stats.native_compact_copy_ms;
+                out["native_large_gather4_ms"] = stats.native_large_gather4_ms;
+                out["native_large_copyback_ms"] = stats.native_large_copyback_ms;
+                out["input_boxes"] = stats.input_boxes;
+                out["filtered_boxes"] = stats.filtered_boxes;
+                out["output_boxes"] = stats.output_boxes;
+                return out;
+            })
         .def_property_readonly("embed_dim", &PerceptionPipeline::get_embed_dim)
         .def_property_readonly("cpp_ptr", [](PerceptionPipeline& self) {
             return reinterpret_cast<uintptr_t>(&self);
@@ -2564,4 +2598,41 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         py::arg("stream_ptr") = 0,
         "Compact-filter detections removing very-low-score and large+uncertain boxes. "
         "Returns count of kept detections. GPU equivalent of _apply_fp_hard_filter().");
+
+    m.def("auction_solve_cpp",
+        [](py::array_t<float, py::array::c_style | py::array::forcecast> cost_matrix, float epsilon) {
+            if (cost_matrix.ndim() != 2) {
+                throw std::invalid_argument("cost_matrix must be 2D");
+            }
+            int n_bidders = static_cast<int>(cost_matrix.shape(0));
+            int n_items = static_cast<int>(cost_matrix.shape(1));
+            
+            std::vector<std::vector<float>> profit_matrix(n_bidders, std::vector<float>(n_items, 0.0f));
+            auto buf = cost_matrix.unchecked<2>();
+            for (int i = 0; i < n_bidders; ++i) {
+                for (int j = 0; j < n_items; ++j) {
+                    profit_matrix[i][j] = -buf(i, j); // profit = -cost
+                }
+            }
+            
+            std::vector<int> assignment;
+            // release GIL for auction algorithm execution
+            {
+                py::gil_scoped_release release;
+                saccade::AuctionAlgorithm::Solve(profit_matrix, assignment, epsilon);
+            }
+            
+            std::vector<int> row_ind;
+            std::vector<int> col_ind;
+            for (int i = 0; i < n_bidders; ++i) {
+                if (assignment[i] != -1) {
+                    row_ind.push_back(i);
+                    col_ind.push_back(assignment[i]);
+                }
+            }
+            
+            return py::make_tuple(row_ind, col_ind);
+        },
+        py::arg("cost_matrix"), py::arg("epsilon") = 0.01f,
+        "Solve linear assignment problem using C++ Auction Algorithm (minimizing cost_matrix).");
 }

@@ -33,6 +33,29 @@ public:
         int images = 0;
     };
 
+    struct PostprocessProfileStats {
+        double filter_ms = 0.0;
+        double nms_ms = 0.0;
+        double count_d2h_ms = 0.0;
+        double total_ms = 0.0;
+        double native_filter_gather_ms = 0.0;
+        double native_filter_kernel_ms = 0.0;
+        double native_gather_compact3_ms = 0.0;
+        double native_copy_suspect_ms = 0.0;
+        double native_filter_count_sync_ms = 0.0;
+        double native_small_nms_ms = 0.0;
+        double native_suspect_penalty_ms = 0.0;
+        double native_large_sort_nms_ms = 0.0;
+        double native_large_argsort_ms = 0.0;
+        double native_large_nms_ms = 0.0;
+        double native_compact_copy_ms = 0.0;
+        double native_large_gather4_ms = 0.0;
+        double native_large_copyback_ms = 0.0;
+        int input_boxes = 0;
+        int filtered_boxes = 0;
+        int output_boxes = 0;
+    };
+
     struct Config {
         float score_threshold       = 0.05f;
         int   person_class          = 0;
@@ -149,6 +172,9 @@ public:
     void set_reid_profiling_enabled(bool enabled);
     void reset_reid_profile_stats();
     ReIDProfileStats get_reid_profile_stats() const;
+    void set_postprocess_profiling_enabled(bool enabled);
+    void reset_postprocess_profile_stats();
+    PostprocessProfileStats get_postprocess_profile_stats() const;
 
 private:
     FeatureExtractor* reid_;
@@ -183,6 +209,8 @@ private:
     void ensure_crop_buf(int n_boxes);
     bool reid_profiling_enabled_ = false;
     ReIDProfileStats last_reid_profile_stats_{};
+    bool postprocess_profiling_enabled_ = false;
+    PostprocessProfileStats last_postprocess_profile_stats_{};
 };
 
 } // namespace saccade

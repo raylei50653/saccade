@@ -54,6 +54,7 @@ class GeometryConfig:
     fuse_score_weight: float = 0.0
     stage2_match_thresh: float = 0.5
     birth_low_score_thresh: float = 0.0
+    birth_prox_norm_thresh: float = 0.0
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> "GeometryConfig":
@@ -331,6 +332,18 @@ def add_geometry_args(parser: argparse.ArgumentParser) -> None:
         ),
     )
     grp.add_argument(
+        "--oao-tau",
+        type=float,
+        default=0.0,
+        dest="oao_tau",
+        help=_help(
+            "OA-SORT OAO penalty: cost += tau * inter-track-IoU for occluded tracks. "
+            "Reduces cost confusion when tracks overlap during occlusion.",
+            range_hint="0.0-0.4",
+            edge="too high increases cost for dense scenes, hurts recall",
+        ),
+    )
+    grp.add_argument(
         "--stage2-match-thresh",
         type=float,
         default=0.5,
@@ -350,5 +363,17 @@ def add_geometry_args(parser: argparse.ArgumentParser) -> None:
             "0.0 = off (backward compat).",
             range_hint="0.0-0.4",
             edge="too high delays valid low-score person detections",
+        ),
+    )
+    grp.add_argument(
+        "--birth-prox-norm-thresh",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Suppress new track birth if detection center is within this many box-heights of any "
+            "confirmed track. Targets ghost/shadow tracks that survive NMS but overlap real persons. "
+            "0.0 = off.",
+            range_hint="0.0-1.0",
+            edge="too high suppresses valid new persons in crowded scenes",
         ),
     )

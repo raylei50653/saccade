@@ -33,6 +33,7 @@ def _load_config_defaults(project_root: Path) -> dict:
     _MODULE_FLAGS = [
         "module_detection",
         "module_geometry",
+        "module_motion",
         "module_reid",
         "module_semantic",
         "module_trigger",
@@ -106,6 +107,7 @@ if __name__ == "__main__":
     _MODULE_KEYS = {
         "module_detection",
         "module_geometry",
+        "module_motion",
         "module_reid",
         "module_semantic",
         "module_trigger",
@@ -167,34 +169,42 @@ if __name__ == "__main__":
         )
 
         # Auto-select a batch engine compatible with the requested thread count.
-        # Exact match first (batchN), then smallest batch ≥ threads, else batch_size=1.
+        # Priority: exact batchN match → largest available batch engine → batch_size=1.
+        # _eff_batch is always derived from the selected engine filename so passing
+        # --engine .../yolo26s_960_batch4.engine directly works correctly.
         from pathlib import Path as _Path
         import re as _re
+
+        def _engine_batch(path: "_Path") -> int:
+            m = _re.search(r"_batch(\d+)", path.name)
+            return int(m.group(1)) if m else 1
 
         _ep = _Path(args.engine)
         _exact = _ep.parent / _ep.name.replace("_batch1", f"_batch{args.threads}")
         if _exact.exists():
-            _engine_path, _eff_batch = str(_exact), args.threads
+            _engine_path = str(_exact)
+        elif _engine_batch(_ep) > 1:
+            # User passed a batch engine directly (e.g. yolo26s_960_batch4.engine)
+            _engine_path = str(_ep)
         else:
-            # Scan siblings for engines with batch ≥ threads
+            # Scan siblings for any batch engine; pick the largest one available.
             _candidates = []
             for _f in _ep.parent.glob(f"{_ep.stem.split('_batch')[0]}*.engine"):
-                _m = _re.search(r"_batch(\d+)", _f.name)
-                if _m:
-                    _b = int(_m.group(1))
-                    if _b >= args.threads:
-                        _candidates.append((_b, _f))
+                _b = _engine_batch(_f)
+                if _b > 1:
+                    _candidates.append((_b, _f))
             if _candidates:
-                _b, _f = min(_candidates)
-                _engine_path, _eff_batch = str(_f), args.threads
+                _, _f = max(_candidates)
+                _engine_path = str(_f)
                 print(
-                    f"  No batch-{args.threads} engine; using batch-{_b} engine with batch_size={args.threads}"
+                    f"  No batch-{args.threads} engine; using batch-{_engine_batch(_f)} engine"
                 )
             else:
-                _engine_path, _eff_batch = args.engine, 1
+                _engine_path = args.engine
                 print(
                     "  No compatible batch engine found; running batch_size=1 (sequential)"
                 )
+        _eff_batch = min(_engine_batch(_Path(_engine_path)), args.threads)
         print(f"  Engine: {_engine_path}  batch_size={_eff_batch}")
         batcher = BatchingTRTDetector(_engine_path, batch_size=_eff_batch)
 
@@ -217,7 +227,34 @@ if __name__ == "__main__":
         )
         print("\n✅ Concurrent evaluation finished.")
     else:
-        metrics = run_eval(**eval_kwargs)
+        if args.preset == "motr" or args.detector == "MOTR":
+            print("\n🚀 [MOTR] Running Temporal YOLO Hybrid Tracking Pipeline")
+            from saccade.perception.eval.config import parse_eval_config
+            from saccade.perception.temporal_yolo import MOTREvaluator
+
+            cfg = parse_eval_config(
+                output=args.output,
+                data_root=args.data_root,
+                split=args.split,
+                sequences=args.sequences or "",
+                conf_threshold=args.conf_threshold,
+                reid_mode="off",
+                reid_model="",
+                profile_stages=False,
+                kwargs=eval_kwargs,
+            )
+            for seq in cfg.seqs:
+                print(f"  Evaluating MOTR on sequence: {seq}")
+                seq_dir = Path(args.data_root) / args.split / seq
+                evaluator = MOTREvaluator(cfg, seq, seq_dir)
+                try:
+                    evaluator.evaluate()
+                except NotImplementedError as e:
+                    print(f"  [MOTR] {e}")
+            metrics = None
+        else:
+            metrics = run_eval(**eval_kwargs)
+
         if metrics:
             print("\n=== OVERALL METRICS ===")
             for k, v in metrics.items():

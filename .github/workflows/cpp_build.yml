@@ -70,11 +70,19 @@ jobs:
             python3-pip \
             python3-dev \
             ccache
+          apt-get clean
+          rm -rf /var/lib/apt/lists/*
 
       - name: Install uv
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Free disk space
+        run: |
+          rm -rf /usr/local/cuda/samples 2>/dev/null || true
+          rm -rf /usr/local/cuda/doc 2>/dev/null || true
+          df -h
 
       - name: Sync dependencies
         run: uv sync

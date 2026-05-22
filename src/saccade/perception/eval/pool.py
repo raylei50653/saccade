@@ -20,6 +20,9 @@ class AdaptiveFramePool:
         self.tiles_batch6 = torch.zeros(
             (6, 3, 640, 640), device=device, dtype=torch.float32
         )
+        self.canvas_960p_flip = torch.zeros(
+            (3, 960, 960), device=device, dtype=torch.float32
+        )
 
         # Pre-allocated tile x/y offsets — avoids per-frame GPU tensor creation.
         self.tile_dx = torch.tensor(
