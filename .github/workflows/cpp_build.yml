@@ -80,10 +80,8 @@ jobs:
 
       - name: Free disk space
         run: |
-          # Remove large unnecessary packages from the container image
           rm -rf /usr/local/cuda/samples 2>/dev/null || true
           rm -rf /usr/local/cuda/doc 2>/dev/null || true
-          rm -rf /usr/local/cuda/targets/x86_64-linux/lib/libcu*_static.a 2>/dev/null || true
           df -h
 
       - name: Sync dependencies
