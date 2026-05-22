@@ -154,18 +154,70 @@ Frame_t → YOLO26s Backbone (layers 0~10)
 
 ---
 
-## 五個選項比較
+## Option F: Mamba SSM Detection Head（Prototype）
 
-| 面向 | 基準（純 YOLO） | Option B | Option C | Option D | **Option E** |
-|------|----------------|----------|----------|----------|--------------|
-| Backbone 可訓練 | — | 否 | 是 | 是 | **是（fine-tune）** |
-| 追蹤狀態影響特徵提取 | — | 否 | 否（間接） | 是（直接注入）| 是（gate，效果待確認） |
-| Decoder 架構 | — | Cross-Attn | Cross-Attn | Cross-Attn | **無（標準 head）** |
-| 特徵尺度 | P3/P4/P5 | P5 only | P3+P4+P5 | P3+P4+P5 | **P3+P4+P5** |
-| 訓練 Matcher | — | Auction | Auction | 標準 det loss | **標準 det loss** |
-| 訓練穩定性 | — | 中 | 中 | 高 | **高** |
-| 實測 IDF1 | 52.0% | — | — | 31.7%（NO-GO）| **57.2%** |
-| 狀態 | baseline | 結案 | 結案 | NO-GO | **✅ 當前 baseline** |
+以 Mamba 選擇性狀態空間模型（S6）取代 YOLO 的 CNN Detect head。
+每層 FPN 經 strided conv 降採樣後進入 Mamba scan，再以 `F.interpolate`
+還原並與原始 FPN concat，最後經 per-scale Conv head 輸出。
+
+```
+Frame_t → YOLO26s Backbone (layers 0~10)
+               │
+          TrackSpatialGate (可選)
+               │
+          P3 / P4 / P5_gated
+               │
+    ┌──────────┼──────────┐
+    │     strided conv    │  spatial reduction 1~4×
+    │     (H/s, W/s)      │
+    │         │           │
+    │   flatten → seq     │
+    │         │           │
+    │   MambaBlock × N    │  CUDA selective scan
+    │         │           │
+    │   seq → unflatten   │
+    │         │           │
+    │  F.interpolate(H,W) │
+    └──────────┼──────────┘
+               │
+         concat(FPN, mamba)
+               │
+    cls_head / reg_head (per scale)
+               │
+         (B, 80, H, W) + (B, 4, H, W)
+```
+
+**Benchmark（960×960, spatial_reduce=4, 1 block）：**
+
+| config | Mamba (ms) | Total (ms) | FPS |
+|--------|-------|-------|-----|
+| 4× reduce, 1 block | 3.0 | 15.2 | 66 |
+| 4× reduce, 2 blocks | 4.3 | 16.5 | 61 |
+| 2× reduce, 1 block | 4.9 | 17.1 | 58 |
+
+CUDA kernel 在 `src/tracking/mamba_scan.cu`。純 Python S6 block 在 `mamba_head.py`。
+
+**next steps**：distillation（YOLO Detect head → Mamba head）→ fine-tune on GT。
+詳見 [option-f-mamba-head.md](option-f-mamba-head.md)。
+
+---
+
+## 七個選項比較
+
+| 面向 | 基準 | Option B | Option C | Option D | Option E | **Option E-v2** | **Option F** |
+|------|------|----------|----------|----------|----------|-----------------|--------------|
+| Backbone 可訓練 | — | 否 | 是 | 是 | 是 | 是 | 是 |
+| 追蹤狀態影響特徵 | — | 否 | 間接 | 直接 | gate | gate+fusion | gate+fusion |
+| Decoder 架構 | Detect | Cross-Attn | Cross-Attn | Cross-Attn | Detect | Detect | **Mamba SSM** |
+| 特徵尺度 | P3/P4/P5 | P5 only | P3+P4+P5 | P3+P4+P5 | P3+P4+P5 | P3+P4+P5 | P3+P4+P5 |
+| 訓練 Matcher | nms | Auction | Auction | det loss | det loss | det loss | det loss |
+| 訓練穩定性 | — | 中 | 中 | 高 | 高 | 高 | 高 |
+| 實測 IDF1 | 52.0% | — | — | 31.7% | 57.2% | 55.0% | — |
+| MOTA | 41.6% | — | — | 24.5% | 52.6% | 53.6% | — |
+| FPS (960) | 115 | — | — | — | 47 | 38 | **66** |
+| 狀態 | baseline | 結案 | 結案 | NO-GO | baseline | prod-ready | **prototype** |
+
+注：Option F 尚無 training metrics，MOTA/IDF1 為 placeholder。
 
 ## 關鍵實作決策紀錄
 
@@ -176,3 +228,5 @@ Frame_t → YOLO26s Backbone (layers 0~10)
 | Assignment solver | AuctionMatcher（`loss.py`）| 移植自 `auction.hpp`，無 scipy，O(N²)，與 tracker 一致 |
 | Gate 注入位置 | FPN 輸出後（P3/P4/P5）| 不動 YOLO 結構，從 Option C checkpoint 熱啟動無縫 |
 | Alpha 初始化 | 0 | 確保訓練初始行為與無 gate 完全相同 |
+| Mamba scan engine | CUDA kernel (`mamba_scan.cu`) | JIT 40ms→15ms；pure PyTorch for-loop 不可行 |
+| Mamba spatial reduction | Strided conv 4× | L 降低 16×（6400→400）；2.7ms→0.2ms per scale |
