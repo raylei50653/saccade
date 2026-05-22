@@ -74,17 +74,57 @@ Observations:
 
 ---
 
-## Next Steps
+## Distillation Training
 
-### P0 — Distillation Training
-Teacher: frozen YOLO Detect head. Student: MambaDetectionHead (only cls_head + reg_head trainable).
-MSE loss on cls + reg outputs. No GT needed.
+Script: `train/temporal_yolo/train_mamba_head.py`
 
-### P1 — Fine-tuning on GT
-After distillation converges, fine-tune full Mamba head on MOT17/DanceTrack ground truth.
+### Architecture
 
-### P2 — Architectures to try
-- `d_state=32` (free in CUDA, might improve sequence modeling)
-- `spatial_reduction=2` with 2 blocks (5ms, better spatial resolution)
-- Per-scale d_model (smaller for P5, larger for P3)
-- Bidirectional scan (forward + backward SSM)
+```
+MOT17 frame → frozen YOLO backbone (gate disabled)
+                   │
+         [hooks capture P3/P4/P5 FPN]
+                   │
+    ┌──────────────┼──────────────┐
+    ▼              ▼              ▼
+teacher Detect    MambaDetectionHead (trainable)
+cv2[i], cv3[i]    │
+(frozen)          ▼
+    │           s_cls[i], s_reg[i]  (per scale)
+ t_cls[i], t_reg[i]
+    │              │
+    └── MSE loss ──┘
+```
+
+### Loss
+
+Per FPN scale `i ∈ {0,1,2}`: `MSE(s_cls[i], t_cls[i]) + MSE(s_reg[i], t_reg[i])`
+
+Teacher outputs from `detect_head.cv2[i](feat)` and `detect_head.cv3[i](feat)` directly (per-scale raw feature maps, no anchor decoding).
+
+### Usage
+
+```bash
+uv run train/temporal_yolo/train_mamba_head.py \
+    --epochs 20 --batch-size 64 --lr 1e-3 \
+    --data-root datasets/MOT17 \
+    --teacher-ckpt runs/gated_det_v1/best.ckpt
+```
+
+### Training Results
+
+Batch=64, LR=1e-3, AdamW + cosine schedule, 640×640.
+
+| Epoch | Loss | Time |
+|-------|------|------|
+| 1 | 408.1 | 23s |
+| 2 | 37.3 | 23s |
+| 5 | 22.5 | 23s |
+| 10 | 18.5 | 23s |
+
+Loss is sum over 3 scales + cls+reg per scale. Per-element MSE at epoch 10 ≈ 0.  
+Student successfully replicates teacher outputs within numerical noise.
+
+After convergence: fine-tune on GT with `v8DetectionLoss` (replace MSE head → YOLO-compatible output).
+
+---

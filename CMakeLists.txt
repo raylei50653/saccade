@@ -113,6 +113,7 @@ add_library(saccade_tracking SHARED
     src/tracking/pipeline.cpp
     src/tracking/workbench.cpp
     src/tracking/quality_filter.cu
+    src/tracking/mamba_scan.cu
     src/tracking/seq_runner.cpp
     src/tracking/eval_pool.cpp
 )

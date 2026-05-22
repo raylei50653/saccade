@@ -29,8 +29,44 @@ def _selective_scan(
     D: Tensor | None = None,
     delta_softplus: bool = True,
 ) -> Tensor:
-    # Redirect to JIT-compiled version for speed
-    return _selective_scan_jit(u, delta, A, B, C, D)
+    return _selective_scan_cuda(u, delta, A, B, C, D)
+
+
+def _selective_scan_cuda(
+    u: Tensor,
+    delta: Tensor,
+    A: Tensor,
+    B: Tensor,
+    C: Tensor,
+    D: Tensor | None = None,
+) -> Tensor:
+    import saccade_tracking_ext
+
+    D_ptr = D.data_ptr() if D is not None and D.numel() > 0 else 0
+
+    u = u.contiguous()
+    delta = delta.contiguous()
+    A = A.contiguous()
+    B = B.contiguous()
+    C = C.contiguous()
+
+    y = torch.empty_like(u)
+
+    saccade_tracking_ext.selective_scan_fwd(
+        u.data_ptr(),
+        delta.data_ptr(),
+        A.data_ptr(),
+        B.data_ptr(),
+        C.data_ptr(),
+        D_ptr,
+        y.data_ptr(),
+        u.shape[0],
+        u.shape[1],
+        u.shape[2],
+        A.shape[0],
+        1 if D_ptr != 0 else 0,
+    )
+    return y
 
 
 @torch.jit.script
