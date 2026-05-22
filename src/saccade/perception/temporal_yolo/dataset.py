@@ -47,7 +47,7 @@ class MOT17TemporalClip(
         img_size: int = 640,
         stride: int = 1,
         seqs: list[str] | None = None,
-        detector: str = "SDP",
+        detector: str | None = "SDP",
         preload_to_ram: bool = True,
     ):
         self.data_root = Path(data_root)
@@ -59,9 +59,7 @@ class MOT17TemporalClip(
         split_dir = self.data_root / split
         if seqs is not None:
             self.sequences = seqs
-        else:
-            # Only load sequences for the specified detector (e.g., MOT17-02-SDP)
-            # This avoids loading redundant images from FRCNN/DPM versions.
+        elif detector is not None:
             self.sequences = sorted(
                 [
                     d.name
@@ -69,10 +67,8 @@ class MOT17TemporalClip(
                     if d.is_dir() and d.name.endswith(f"-{detector}")
                 ]
             )
-            if not self.sequences:
-                print(
-                    f"[Dataset] Warning: No sequences found with detector {detector} in {split_dir}"
-                )
+        else:
+            self.sequences = sorted([d.name for d in split_dir.iterdir() if d.is_dir()])
 
         self._clips: list[tuple[str, int]] = []
         self._gt: dict[str, dict[int, tuple[torch.Tensor, torch.Tensor]]] = {}

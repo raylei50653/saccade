@@ -74,6 +74,8 @@ def extract_roi_embeddings(
     raw = F.normalize(emb, dim=1)
 
     if reid_head is not None:
+        if reid_head.training:
+            reid_head.eval()
         with torch.no_grad():
             return reid_head(raw)  # type: ignore[no-any-return]
     return raw

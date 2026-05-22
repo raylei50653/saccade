@@ -18,12 +18,14 @@ def test_auction():
     print(cost)
 
     row_idx, col_idx = saccade_tracking_ext.auction_solve_cpp(cost, 0.01)
-    print(f"Matches: row={row_idx}, col={col_idx}")
+    assert row_idx == [0, 1, 2], f"Expected diagonal match, got row_idx={row_idx}"
+    assert col_idx == [0, 1, 2], f"Expected diagonal match, got col_idx={col_idx}"
 
     # 2 bidders, 3 items
     cost2 = np.array([[0.1, 0.5, 0.5], [0.5, 0.1, 0.5]], dtype=np.float32)
     row_idx2, col_idx2 = saccade_tracking_ext.auction_solve_cpp(cost2, 0.01)
-    print(f"Matches (2x3): row={row_idx2}, col={col_idx2}")
+    assert len(row_idx2) == 2
+    assert len(col_idx2) == 2
 
 
 if __name__ == "__main__":

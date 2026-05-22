@@ -194,7 +194,13 @@ def compute_tp_recall_loss(
 # Per-sample tracker: runs on model predictions, provides Kalman predictions
 # ---------------------------------------------------------------------------
 class TrainTracker:
-    """Maintains ByteTrack state on model predictions during training."""
+    """Maintains ByteTrack state on model predictions during training.
+
+    NOTE: TPRecallLoss runs GPUByteTracker.update() every frame in the training loop
+    (Kalman predict/update/auction + D2H transfer). For B=8, T=5, this is 40 tracker
+    invocations per batch. The tracker overhead should be profiled separately and
+    may be replaced with a lightweight Kalman-only predictor for training efficiency.
+    """
 
     def __init__(self, img_size: int, device: torch.device, conf_thr: float = 0.25):
         self.img_size = img_size

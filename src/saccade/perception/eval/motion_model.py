@@ -168,8 +168,11 @@ class MotionModel:
         dx_obs = (cx_obs - self.cx) / dt
         dy_obs = (cy_obs - self.cy) / dt
 
-        # Expected velocity (with simple std approximation)
-        # We approximate std as sqrt(|acc|) * sqrt(dt) / sqrt(obs_count)
+        # Expected velocity (with heuristic std approximation).
+        # We approximate velocity uncertainty as |acceleration| × sqrt(dt) / sqrt(obs_count).
+        # This is a heuristic: |acc| is the magnitude, not a true standard deviation,
+        # and the forced minimum of 1.0 provides a floor when acceleration is near zero.
+        # Units: velocity (px/frame). More observations reduce uncertainty as 1/sqrt(n).
         std_x = max(
             1.0, abs(self.acc_x) * math.sqrt(dt) / max(1, math.sqrt(self.obs_count))
         )

@@ -102,6 +102,8 @@ class GatedYOLODetector(nn.Module):
             for p in self.fusion.parameters():
                 p.requires_grad_(True)
 
+        # NOTE: _current_gate and _feat_cache are mutated per-forward via hooks.
+        # This makes forward() non-reentrant — not safe for DDP or concurrent inference.
         self._current_gate: TrackerGateInput | list[TrackerGateInput] | None = None
         self._feat_cache: dict[str, torch.Tensor] = {}
         self.cache_feats: bool = False

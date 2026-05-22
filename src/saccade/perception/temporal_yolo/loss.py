@@ -112,6 +112,12 @@ class TemporalTrackingLoss(nn.Module):
         # Not saved by torch.save (not a parameter/buffer), which is intentional.
         self._executor = ThreadPoolExecutor(max_workers=min(os.cpu_count() or 4, 8))
 
+    def __del__(self) -> None:
+        try:
+            self._executor.shutdown(wait=False)
+        except Exception:
+            pass
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
