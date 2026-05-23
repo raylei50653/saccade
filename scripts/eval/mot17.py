@@ -17,6 +17,7 @@ if build_path.exists():
 from saccade.perception.detector_trt import TRTYoloDetector  # noqa: F401, E402
 from saccade.perception.eval.runner import run_eval  # noqa: E402
 from saccade.perception.eval.evaluator import run_eval_cpp  # noqa: E402
+from mlflow_logger import log_eval_run  # noqa: E402
 
 import yaml  # noqa: E402
 from mot17_args import build_parser  # noqa: E402
@@ -259,3 +260,21 @@ if __name__ == "__main__":
             print("\n=== OVERALL METRICS ===")
             for k, v in metrics.items():
                 print(f"  {k}: {v}")
+
+    if metrics:
+        try:
+            tags = {}
+            if getattr(args, "preset", None):
+                tags["preset"] = args.preset
+            if getattr(args, "detector", None):
+                tags["detector"] = args.detector
+            log_eval_run(
+                uri=args.mlflow_uri,
+                experiment_name=args.mlflow_experiment,
+                run_name=args.mlflow_run_name,
+                params={k: v for k, v in vars(args).items() if k not in _MODULE_KEYS},
+                metrics=metrics,
+                tags=tags,
+            )
+        except Exception as e:
+            print(f"[mlflow] ERROR: {e}")

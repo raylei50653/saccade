@@ -5,7 +5,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Print top Optuna trials and the mean of their parameter values."
     )
-    parser.add_argument("--storage", required=True, help="Optuna storage URL.")
+    parser.add_argument(
+        "--storage",
+        default="postgresql://saccade:saccade@localhost:5432/optuna",
+        help="Optuna storage URL.",
+    )
     parser.add_argument("--study", required=True, help="Optuna study name.")
     parser.add_argument(
         "--min-value",

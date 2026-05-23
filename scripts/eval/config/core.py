@@ -49,6 +49,10 @@ class CoreConfig:
     warmup_frames: int = 50
     profile_stages: bool = False
     latency_only: bool = False
+    # MLflow tracking
+    mlflow_uri: str = "http://localhost:5000"
+    mlflow_experiment: str = "mot17"
+    mlflow_run_name: str | None = None
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> "CoreConfig":
@@ -335,4 +339,19 @@ def add_core_args(parser: argparse.ArgumentParser) -> None:
         "--latency-only",
         action="store_true",
         help="Skip MOTMetrics and .txt result writing; output latency profile only.",
+    )
+    core.add_argument(
+        "--mlflow-uri",
+        default="http://localhost:5000",
+        help="MLflow tracking server URI.",
+    )
+    core.add_argument(
+        "--mlflow-experiment",
+        default="mot17",
+        help="MLflow experiment name.",
+    )
+    core.add_argument(
+        "--mlflow-run-name",
+        default=None,
+        help="MLflow run name (auto-generated if not set).",
     )

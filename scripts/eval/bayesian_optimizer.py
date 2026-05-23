@@ -1,3 +1,4 @@
+import os
 import sys
 import copy
 import re
@@ -25,14 +26,15 @@ class BayesianOptimizer:
         self.args = args
         self.output_dir = Path(args.output)
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        self.db_path = self.output_dir / "optuna_study.db"
 
-        # Initialize study
+        self.storage = os.getenv(
+            "OPTUNA_STORAGE",
+            "postgresql://saccade:saccade@localhost:5432/optuna",
+        )
         self.study_name = (
             args.study_name
             or f"saccade_tuning_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         )
-        self.storage = f"sqlite:///{self.db_path.absolute()}"
 
         # Load all possible parameters from mot17.py
         self.mot17_parser = build_parser()
