@@ -85,6 +85,8 @@ uv run scripts/eval/mot17.py --preset speed --detector SDP
 uv run scripts/eval/mot17.py --preset baseline --detector SDP
 ```
 
+預設會將結果登錄到 MLflow（`--mlflow-uri http://localhost:5000`）。若 MLflow 未啟動會自動跳過。
+
 調參時以 `--preset speed` 為基準線；需要更高 Recall 時用 `--preset baseline`。
 
 ---
@@ -93,16 +95,18 @@ uv run scripts/eval/mot17.py --preset baseline --detector SDP
 
 詳細待辦、近期 ablation 結論、backlog 見 **[docs/TODO.md](docs/TODO.md)**。
 
-### 🔴 P0 — Temporal YOLO Option D（新方向）
+### 🔄 Option F — Mamba SSM Detection Head（當前 branch `feat/option-f-mamba`）
 
-**Track-Conditioned YOLO**：把 ByteTrack 輸出的空間先驗（位置 + Kalman 速度）注入 YOLO FPN，讓 backbone 在已知目標區域產生更強的特徵。
+- 設計文件：[docs/temporal_yolo/option-f-mamba-head.md](docs/temporal_yolo/option-f-mamba-head.md)
+- 訓練腳本：`train/temporal_yolo/`
 
-- 設計文件：[docs/temporal_yolo/](docs/temporal_yolo/)（architecture / pipeline / track-conditioned-design / implementation-plan）
-- 當前進度：設計全數文件化完成，進入實作階段
-- 下一步：實作 `src/saccade/perception/temporal_yolo/yolo_conditioned.py`（TrackerGateInput → GaussianHeatmapRenderer → TrackSpatialGate → TemporalYOLOConditioned）
-- 訓練腳本骨架：`train/temporal_yolo/train_conditioned.py`
+### ✅ Option E — GatedYOLODetector（baseline, IDF1 57.2%）
 
-### FP classifier external-only / 0-shot 路線
+- 設計文件：[docs/temporal_yolo/option-e-v2-design.md](docs/temporal_yolo/option-e-v2-design.md)
+
+### ❌ Option D — Track-Conditioned YOLO（NO-GO, 2026-05-19）
+
+- 設計文件移至 [docs/archive/option-d/](docs/archive/option-d/) 保留供參考
 
 其餘已結案或延後的方向以 `docs/TODO.md` / `docs/TODO_history.md` 為準。
 
@@ -125,9 +129,53 @@ uv run scripts/eval/mot17.py --preset baseline --detector SDP
 ### 改 evaluation / ablation 流程
 `scripts/eval/mot17.py` → `src/saccade/perception/eval/evaluator.py`
 
+### DB / Experiment Tracking
+需要查詢時參考：
+- `scripts/ops/mlflow_server.sh` — MLflow tracking server 啟動
+- `scripts/eval/mlflow_logger.py` — MLflow logging 共用工具
+- `scripts/tools/compare_trials.py` — Optuna trial 對比
+- `scripts/tools/average_top_trials.py` — Optuna top-trial 平均
+
 ---
 
 ## 8. 開發流程
+
+### 8.1 實驗追蹤
+
+三個 PostgreSQL 資料庫透過 `docker compose up db -d` 提供：
+
+| 資料庫 | 用途 | 介面 |
+|--------|------|------|
+| `saccade` | 預留（目前空） | — |
+| `mlflow` | 實驗追蹤 (params / metrics / tags) | MLflow UI → `http://localhost:5000` |
+| `optuna` | 超參數調優 (trials / studies) | `scripts/tools/compare_trials.py` / `optuna-dashboard` |
+
+**啟動 MLflow：**
+```bash
+./scripts/ops/mlflow_server.sh
+```
+
+**跑 eval 自動登錄：**
+```bash
+uv run python scripts/eval/mot17.py --preset speed --detector SDP \
+    --mlflow-uri http://localhost:5000 \
+    --mlflow-experiment mot17
+```
+
+**跑 ablation 自動登錄每個 variant：**
+```bash
+uv run python -m scripts.eval.ablation_mot17 \
+    --category detection \
+    --mlflow-experiment mot17-ablation
+```
+
+**查詢過往 trial：**
+```bash
+uv run python scripts/tools/compare_trials.py \
+    --study A1_Unified_Score --trials 0 1 2
+```
+
+MLflow 或 Optuna 未啟動時不影嚮 eval — `log_eval_run()` 會印 warning 並退場。
 
 ### 改動前
 判斷改動類型：
@@ -226,3 +274,7 @@ uv run scripts/eval/mot17.py --preset speed --detector SDP
 - [docs/PIPELINE_REFERENCE.md](docs/PIPELINE_REFERENCE.md)
 - [docs/TODO.md](docs/TODO.md)
 - [docs/mot17_default_config.md](docs/mot17_default_config.md)
+- [MLflow UI](http://localhost:5000)（需先啟動 `scripts/ops/mlflow_server.sh`）
+- [scripts/eval/mlflow_logger.py](scripts/eval/mlflow_logger.py)（MLflow logging 工具）
+- [scripts/tools/compare_trials.py](scripts/tools/compare_trials.py)（Optuna trial 對比）
+- [scripts/tools/average_top_trials.py](scripts/tools/average_top_trials.py)（Optuna top-trial 平均）
