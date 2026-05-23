@@ -137,33 +137,37 @@ class MambaGatedDetector(nn.Module):
 
         self.stride = torch.tensor([8.0, 16.0, 32.0], device=device)
 
-        self._fpn_feats: dict[str, Tensor] = {}
-        self._hooks: list[Any] = []
-        for scale in ("p3", "p4", "p5"):
-            idx = _GATE_LAYER_IDX[scale]
-
-            def _capture(
-                _m: nn.Module,
-                _i: tuple[Any, ...],
-                _o: Tensor,
-                s: str = scale,
-            ) -> None:
-                self._fpn_feats[s] = _o
-
-            self._hooks.append(
-                self.teacher.yolo_model.model[idx].register_forward_hook(_capture)
-            )
-
     def forward(
         self,
         frame: Tensor,
         gate_input: TrackerGateInput | list[TrackerGateInput] | None = None,
     ) -> tuple[Tensor, dict[str, Any]]:
-        self._fpn_feats.clear()
+        teacher = self.teacher
+        gls = teacher._gate_layers
+        for gl in gls.values():
+            gl._gate_input = gate_input
 
-        _ = self.teacher(frame, gate_input=gate_input)
+        y: list[Tensor | None] = []
+        x: Any = frame
+        layers = teacher.yolo_model.model
+        save: set[int] = set(teacher.yolo_model.save)
 
-        feats = [self._fpn_feats[s] for s in ("p3", "p4", "p5")]
+        for i in range(23):
+            m = layers[i]
+            if m.f != -1:
+                if isinstance(m.f, int):
+                    x = y[m.f]
+                else:
+                    x = [x if j == -1 else y[j] for j in m.f]
+            x = m(x)
+            y.append(x if i in save else None)
+
+        fpn_indices = [_GATE_LAYER_IDX[s] for s in ("p3", "p4", "p5")]
+        feats = [y[i] for i in fpn_indices]
+
+        for gl in gls.values():
+            gl._gate_input = None
+
         cls_preds, reg_preds = self.mamba_head(feats)
 
         detections = _postprocess_mamba(
@@ -173,9 +177,7 @@ class MambaGatedDetector(nn.Module):
         return detections, {}
 
     def remove_hooks(self) -> None:
-        for h in self._hooks:
-            h.remove()
-        self._hooks.clear()
+        pass  # no hooks used — forward accesses YOLO layers directly
 
 
 def build_mamba_gated_detector(

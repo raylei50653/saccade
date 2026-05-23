@@ -151,6 +151,7 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--lr-gate", type=float, default=0.0)
+    parser.add_argument("--cls-weight", type=float, default=0.5)
     parser.add_argument("--img-size", type=int, default=640)
     parser.add_argument("--clip-len", type=int, default=4)
     parser.add_argument("--gt-ratio", type=float, default=0.5)
@@ -256,7 +257,7 @@ def main() -> None:
         else {}
     )
     base_args.setdefault("box", 7.5)
-    base_args.setdefault("cls", 0.5)
+    base_args.setdefault("cls", args.cls_weight)
     base_args.setdefault("dfl", 1.5)
     teacher.yolo_model.args = SimpleNamespace(**base_args)
     criterion = v8DetectionLoss(teacher.yolo_model)
@@ -265,9 +266,6 @@ def main() -> None:
     # Optimizer
     # ------------------------------------------------------------------
     optimizer = torch.optim.AdamW(mamba.parameters(), lr=args.lr, weight_decay=1e-4)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=args.epochs, eta_min=args.lr * 0.01
-    )
 
     start_epoch = 1
     best_loss = float("inf")
@@ -278,10 +276,20 @@ def main() -> None:
         )
         sd_resume = _strip_compiled_keys(ckpt["student"])
         mamba.load_state_dict(sd_resume, strict=True)
-        optimizer.load_state_dict(ckpt["optimizer"])
+        try:
+            optimizer.load_state_dict(ckpt["optimizer"])
+        except Exception:
+            print("[Warn] Optimizer state not loaded — full restart at new LR")
+            for pg, lr_val in zip(optimizer.param_groups, [args.lr]):
+                pg["lr"] = lr_val
         start_epoch = ckpt.get("epoch", 0) + 1
         best_loss = ckpt.get("best_loss", float("inf"))
         print(f"[Resume] epoch={start_epoch}  best_loss={best_loss:.4f}")
+
+    remaining = max(args.epochs - start_epoch + 1, 1)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=remaining, eta_min=args.lr * 0.01
+    )
 
     # ------------------------------------------------------------------
     # Data
