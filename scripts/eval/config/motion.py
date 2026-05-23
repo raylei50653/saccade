@@ -11,7 +11,12 @@ from ._helpers import _tier
 
 @dataclasses.dataclass
 class MotionConfig:
-    """Motion-based relinking configuration."""
+    """Motion-based relinking configuration.
+
+    NO-GO (2026-05-17): 89% relink candidates blocked by age gate;
+    motion-only gain indistinguishable from run-to-run noise (±0.3pp).
+    Code retained, default=off.
+    """
 
     # --- EMA smoothing ---
     vel_alpha: float = 0.3  # velocity EMA factor

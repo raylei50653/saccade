@@ -48,13 +48,13 @@ class GeometryConfig:
     geometry_suspect_support: bool = True
     geometry_suspect_score: float | None = None
     # Kalman
-    nsa_kalman: bool = False
+    nsa_kalman: bool = False  # NO-GO (2026-04-27): no observable effect on MOT17
     kalman_r_scale: float = 0.75
     vel_dir_weight: float = 0.0
     fuse_score_weight: float = 0.0
     stage2_match_thresh: float = 0.5
     birth_low_score_thresh: float = 0.0
-    birth_prox_norm_thresh: float = 0.0
+    birth_prox_norm_thresh: float = 0.0  # NO-GO (2026-05-18): FP reduced but FN surged — proximity cannot distinguish ghost from real crowd
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> "GeometryConfig":
@@ -297,7 +297,7 @@ def add_geometry_args(parser: argparse.ArgumentParser) -> None:
         "--nsa-kalman",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="Enable Noise Scale Adaptive Kalman: scale R by (1-score)^2 per detection.",
+        help="NO-GO (2026-04-27): Noise Scale Adaptive Kalman — scale R by (1-score)^2. No observable effect on MOT17.",
     )
     grp.add_argument(
         "--kalman-r-scale",
@@ -370,8 +370,8 @@ def add_geometry_args(parser: argparse.ArgumentParser) -> None:
         type=float,
         default=0.0,
         help=_help(
-            "Suppress new track birth if detection center is within this many box-heights of any "
-            "confirmed track. Targets ghost/shadow tracks that survive NMS but overlap real persons. "
+            "NO-GO (2026-05-18): Suppress new track birth near confirmed tracks. "
+            "FP reduced but FN surged — proximity cannot distinguish ghost from real crowd. "
             "0.0 = off.",
             range_hint="0.0-1.0",
             edge="too high suppresses valid new persons in crowded scenes",

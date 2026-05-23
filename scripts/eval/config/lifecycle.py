@@ -15,9 +15,9 @@ class LifecycleConfig:
     birth_quality_gate: bool = False
     birth_min_quality: float = 0.0
     birth_quality_score_bias: float = 0.15
-    stage2_quality_gate: bool = False
+    stage2_quality_gate: bool = False  # NO-GO (2026-05-11): overlapped with detection_quality_scaling, zero effect
     stage2_quality_min: float = 0.40
-    birth_consecutive_gate: bool = False
+    birth_consecutive_gate: bool = False  # NO-GO (2026-05-18): statistically neutral, FP reduction cancelled by FN increase
     birth_consecutive_frames: int = 2
     birth_consecutive_iou: float = 0.40
     birth_consecutive_boost: float = 0.05
@@ -33,7 +33,9 @@ class LifecycleConfig:
     lifecycle_require_embedding: bool = False
     lifecycle_ema: float = 0.83
     # Post-output lifecycle merge
-    post_lifecycle_merge: bool = False
+    post_lifecycle_merge: bool = (
+        False  # NO-GO (2026-04-27): confirmed harmful on baseline
+    )
     post_lifecycle_ttl: int = 60
     post_lifecycle_min_gap: int = 1
     post_lifecycle_velocity_samples: int = 5
@@ -126,7 +128,7 @@ def add_lifecycle_args(parser: argparse.ArgumentParser) -> None:
         "--stage2-quality-gate",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="Remove Stage 2 detections in [track_thresh, mid_thresh) below stage2-quality-min.",
+        help="NO-GO (2026-05-11): Remove Stage 2 detections below quality-min. Zero effect — overlaps with detection_quality_scaling.",
     )
     grp.add_argument(
         "--stage2-quality-min",
@@ -142,7 +144,7 @@ def add_lifecycle_args(parser: argparse.ArgumentParser) -> None:
         "--birth-consecutive-gate",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="Boost sub-threshold detections only when they appear in N consecutive frames (rolling IoU window).",
+        help="NO-GO (2026-05-18): Boost sub-threshold detections when appearing in consecutive frames. Statistically neutral.",
     )
     grp.add_argument(
         "--birth-consecutive-frames",
@@ -248,7 +250,7 @@ def add_lifecycle_args(parser: argparse.ArgumentParser) -> None:
         "--post-lifecycle-merge",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="Enable post-output lifecycle merge.",
+        help="NO-GO (2026-04-27): Post-output lifecycle merge. Confirmed harmful on baseline.",
     )
     grp.add_argument(
         "--post-lifecycle-ttl",

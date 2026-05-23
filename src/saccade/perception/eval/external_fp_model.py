@@ -79,7 +79,13 @@ class SweepCandidate:
 
 @dataclass(frozen=True)
 class CascadeFilterConfig:
-    """Two-stage cascade: rule baseline + logistic classifier."""
+    """Two-stage cascade: rule baseline + logistic classifier.
+
+    NO-GO for MOT17 (2026-05-14): MOT17 FP score distribution (median 0.269)
+    overlaps TP heavily, unlike CrowdHuman (median 0.008). Cascade model
+    (CrowdHuman-trained) yields P=4.5% on MOT17, no practical gain.
+    Code retained for CrowdHuman validation or retraining with MOT17 detector output.
+    """
 
     # Stage 1: rule baseline config
     rule: RuleBaselineConfig = None  # type: ignore[assignment]
