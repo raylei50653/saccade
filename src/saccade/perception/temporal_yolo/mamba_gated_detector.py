@@ -2,10 +2,10 @@
 MambaGatedDetector — GatedYOLODetector backbone + MambaDetectionHead.
 
 Architecture:
-    YOLO26s backbone (layers 0-22)
-        ↓  patched forward at layer 16 (P3), 19 (P4), 22 (P5)
-    TrackSpatialGate  (gate = 1 + alpha * heatmap)
-        ↓  gated FPN features captured via hooks
+    YOLO26s backbone (layers 0-22) [PyTorch or TRT]
+        ↓
+    TrackSpatialGate  (gate = 1 + alpha * heatmap) [applied in PyTorch]
+        ↓  gated FPN features
     MambaDetectionHead  (replaces YOLO Detect head, layer 23)
         ↓  per-scale cls_preds / reg_preds
     Postprocess decoder  (dist2bbox + top-k)
@@ -47,7 +47,7 @@ def _postprocess_mamba(
     anchor_strides = anchor_strides.to(device=cls_all.device, dtype=cls_all.dtype)
 
     bboxes = dist2bbox(reg_all, anchors.T.unsqueeze(0), xywh=True, dim=1)  # type: ignore[no-untyped-call]
-    strides_t = anchor_strides.squeeze(-1).unsqueeze(0)  # (1, N)
+    strides_t = anchor_strides.squeeze(-1).unsqueeze(0)
     bboxes = bboxes * strides_t
 
     xywh = bboxes.permute(0, 2, 1)
@@ -79,11 +79,58 @@ def _postprocess_mamba(
     return results
 
 
+# ---------------------------------------------------------------------------
+# TRT YOLO backbone wrapper
+# ---------------------------------------------------------------------------
+class TRTYoloBackbone(nn.Module):
+    """Runs YOLO backbone (layers 0-22) via TRT, returns P3/P4/P5 features."""
+
+    def __init__(self, engine_path: str):
+        super().__init__()
+        import tensorrt as trt
+
+        self.logger = trt.Logger(trt.Logger.WARNING)
+        with open(engine_path, "rb") as f:
+            runtime = trt.Runtime(self.logger)
+            self.engine = runtime.deserialize_cuda_engine(f.read())
+        self.context = self.engine.create_execution_context()
+
+        self.input_name = self.engine.get_tensor_name(0)
+        self.output_names = [
+            self.engine.get_tensor_name(i) for i in range(1, self.engine.num_io_tensors)
+        ]
+        self._stream = torch.cuda.Stream()
+
+    def infer(self, images: Tensor) -> tuple[Tensor, Tensor, Tensor]:
+        B, C, H, W = images.shape
+        images = images.contiguous()
+
+        self.context.set_input_shape(self.input_name, (B, C, H, W))
+        self.context.set_tensor_address(self.input_name, images.data_ptr())
+
+        outputs: list[Tensor] = []
+        for name in self.output_names:
+            shape = tuple(self.context.get_tensor_shape(name))
+            shape = tuple(B if d == -1 else d for d in shape)  # type: ignore[assignment]
+            buf = torch.empty(shape, dtype=torch.float32, device=images.device)
+            self.context.set_tensor_address(name, buf.data_ptr())
+            outputs.append(buf)
+
+        self.context.execute_async_v3(self._stream.cuda_stream)
+        self._stream.synchronize()
+
+        return outputs[0], outputs[1], outputs[2]
+
+
+# ---------------------------------------------------------------------------
+# MambaGatedDetector
+# ---------------------------------------------------------------------------
 class MambaGatedDetector(nn.Module):
     """Gated YOLO backbone with Mamba SSM detection head.
 
-    Wraps a pre-trained GatedYOLODetector for backbone + spatial gate,
-    replaces YOLO Detect head with MambaDetectionHead.
+    Supports both PyTorch and TRT backbone. When use_trt=True, the YOLO
+    backbone runs via TensorRT (FP16) and the gate is applied in PyTorch
+    after feature extraction.
     """
 
     def __init__(
@@ -95,6 +142,7 @@ class MambaGatedDetector(nn.Module):
         device: str | torch.device = "cuda",
         conf_thr: float = 0.25,
         max_det: int = 300,
+        trt_backbone_engine: str = "",
     ):
         super().__init__()
         if cfg is None:
@@ -104,6 +152,7 @@ class MambaGatedDetector(nn.Module):
         self.max_det = max_det
         self.device = device
         self.img_size = cfg.img_size
+        self._trt_backbone: TRTYoloBackbone | None = None
 
         self.teacher = build_gated_yolo_detector(
             yolo_pt_path,
@@ -114,6 +163,9 @@ class MambaGatedDetector(nn.Module):
         self.teacher.eval()
         for p in self.teacher.parameters():
             p.requires_grad_(False)
+
+        # Extract gate module + alpha for explicit gate application
+        self.gate_module = self.teacher.gate
 
         mamba_state = torch.load(mamba_ckpt, map_location="cpu", weights_only=False)
         mamba_args = mamba_state["mamba_args"]
@@ -137,21 +189,17 @@ class MambaGatedDetector(nn.Module):
 
         self.stride = torch.tensor([8.0, 16.0, 32.0], device=device)
 
-    def forward(
-        self,
-        frame: Tensor,
-        gate_input: TrackerGateInput | list[TrackerGateInput] | None = None,
-    ) -> tuple[Tensor, dict[str, Any]]:
-        teacher = self.teacher
-        gls = teacher._gate_layers
-        for gl in gls.values():
-            gl._gate_input = gate_input
+        # TRT backbone: loads pre-built engine, replaces PyTorch layer loop
+        if trt_backbone_engine:
+            self._trt_backbone = TRTYoloBackbone(trt_backbone_engine)
 
-        y: list[Tensor | None] = []
-        x: Any = frame
+    def _forward_pytorch_backbone(self, frame: Tensor) -> list[Tensor]:
+        teacher = self.teacher
         layers = teacher.yolo_model.model
         save: set[int] = set(teacher.yolo_model.save)
 
+        y: list[Tensor | None] = []
+        x: Any = frame
         for i in range(23):
             m = layers[i]
             if m.f != -1:
@@ -163,10 +211,53 @@ class MambaGatedDetector(nn.Module):
             y.append(x if i in save else None)
 
         fpn_indices = [_GATE_LAYER_IDX[s] for s in ("p3", "p4", "p5")]
-        feats = [y[i] for i in fpn_indices]
+        return [y[i] for i in fpn_indices]  # type: ignore[return-value]
 
-        for gl in gls.values():
-            gl._gate_input = None
+    def _apply_gate(
+        self,
+        feats: list[Tensor],
+        gate_input: TrackerGateInput | list[TrackerGateInput] | None,
+    ) -> list[Tensor]:
+        if gate_input is None:
+            return feats
+
+        renderer = self.gate_module.renderer
+        scales = ("p3", "p4", "p5")
+        gated: list[Tensor] = []
+        for i, (scale, feat) in enumerate(zip(scales, feats)):
+            alpha = self.gate_module.alphas[scale]
+            hw = (feat.shape[2], feat.shape[3])
+
+            if isinstance(gate_input, list):
+                maps = renderer.batch_forward(gate_input, hw)
+                gate_map = 1.0 + alpha * maps.unsqueeze(1)
+            else:
+                heatmap = renderer(gate_input, hw)
+                gate_map = (1.0 + alpha * heatmap).unsqueeze(0)
+
+            gated.append(feat * gate_map)
+        return gated
+
+    def forward(
+        self,
+        frame: Tensor,
+        gate_input: TrackerGateInput | list[TrackerGateInput] | None = None,
+    ) -> tuple[Tensor, dict[str, Any]]:
+        if self._trt_backbone is not None:
+            p3, p4, p5 = self._trt_backbone.infer(frame)
+            feats_raw = [p3, p4, p5]
+            feats = self._apply_gate(feats_raw, gate_input)
+        else:
+            # PyTorch backbone already has gates injected → feats are gated
+            teacher = self.teacher
+            gls = teacher._gate_layers
+            for gl in gls.values():
+                gl._gate_input = gate_input
+
+            feats = self._forward_pytorch_backbone(frame)
+
+            for gl in gls.values():
+                gl._gate_input = None
 
         cls_preds, reg_preds = self.mamba_head(feats)
 
@@ -177,7 +268,7 @@ class MambaGatedDetector(nn.Module):
         return detections, {}
 
     def remove_hooks(self) -> None:
-        pass  # no hooks used — forward accesses YOLO layers directly
+        pass
 
 
 def build_mamba_gated_detector(
@@ -188,6 +279,7 @@ def build_mamba_gated_detector(
     device: str | torch.device = "cuda",
     conf_thr: float = 0.25,
     max_det: int = 300,
+    trt_backbone_engine: str = "",
 ) -> MambaGatedDetector:
     teacher_raw = torch.load(teacher_ckpt, map_location="cpu", weights_only=False)
     train_args = teacher_raw.get("args", {})
@@ -209,5 +301,8 @@ def build_mamba_gated_detector(
         device=device,
         conf_thr=conf_thr,
         max_det=max_det,
+        trt_backbone_engine=str(Path(trt_backbone_engine).resolve())
+        if trt_backbone_engine
+        else "",
     )
     return model.to(device)

@@ -250,6 +250,7 @@ def main() -> None:
     parser.add_argument("--no-gate", action="store_true")
     parser.add_argument("--conf-thr", type=float, default=0.01)
     parser.add_argument("--max-det", type=int, default=1000)
+    parser.add_argument("--trt-engine", default="")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -269,6 +270,7 @@ def main() -> None:
         device=device,
         conf_thr=args.conf_thr,
         max_det=args.max_det,
+        trt_backbone_engine=args.trt_engine,
     )
     model.eval()
     print(f"Loaded teacher: {ckpt_path}")
