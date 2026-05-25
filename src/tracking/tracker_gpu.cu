@@ -296,6 +296,7 @@ __global__ void compute_conditional_cost_kernel(
     float* cost_matrix,
     int n_trk, int n_det, int embed_dim, float iou_gate, float maha_gate,
     float vel_dir_weight, float fuse_score_weight,
+    float cost_cos_w, float cost_iou_w, float cost_score_w,
     const float* d_occ_coeff, float oao_tau)
 {
     int t = blockIdx.y * blockDim.y + threadIdx.y;
@@ -338,7 +339,7 @@ __global__ void compute_conditional_cost_kernel(
         }
         if (norm_sq > 0.0625f) {  // det embedding valid (non-zero budget slot)
             cos_sim = fmaxf(0.0f, cos_sim);
-            cost = 1.0f - (0.55f * cos_sim + 0.30f * fused_iou + 0.15f * ds);
+            cost = 1.0f - (cost_cos_w * cos_sim + cost_iou_w * fused_iou + cost_score_w * ds);
         } else {
             cost = 1.0f - fused_iou;
         }
@@ -1228,6 +1229,7 @@ public:
                 d_candidate_count_, d_has_clean_embedding_,
                 d_s_inv_, d_homography_, d_cost_matrix_, max_objs_, num_dets, embed_dim_, iou_stage1_gate_, maha_gate_,
                 vel_dir_weight_, fuse_score_weight_,
+                reid_cost_cos_w_, reid_cost_iou_w_, reid_cost_score_w_,
                 oao_tau_ > 0.0f ? d_occ_coeff_ : nullptr, oao_tau_);
             nvtxRangePop(); // Assoc/CostMatrix
 
@@ -1404,8 +1406,10 @@ public:
         birth_low_score_thresh_ = fmaxf(0.0f, birth_low_score_thresh);
         birth_prox_norm_thresh_ = fmaxf(0.0f, birth_prox_norm_thresh);
     }
-    void set_reid_params(float cos_threshold, float iou_low, float iou_high, float weight) {
+    void set_reid_params(float cos_threshold, float iou_low, float iou_high, float weight,
+                         float cost_cos_w = 0.55f, float cost_iou_w = 0.30f, float cost_score_w = 0.15f) {
         reid_cos_threshold_ = cos_threshold; reid_iou_low_ = iou_low; reid_iou_high_ = iou_high; reid_weight_ = weight;
+        reid_cost_cos_w_ = cost_cos_w; reid_cost_iou_w_ = cost_iou_w; reid_cost_score_w_ = cost_score_w;
     }
     void set_oao_params(float tau) {
         oao_tau_ = std::clamp(tau, 0.0f, 1.0f);
@@ -1701,6 +1705,7 @@ private:
     int max_objs_, embed_dim_, max_assoc_;
     float track_thresh_ = 0.1f, high_thresh_ = 0.5f, match_thresh_ = 0.8f, mid_thresh_ = 0.40f, new_track_thresh_ = 0.40f;
     float reid_cos_threshold_ = 0.90f, reid_iou_low_ = 0.3f, reid_iou_high_ = 0.6f, reid_weight_ = 0.4f;
+    float reid_cost_cos_w_ = 0.55f, reid_cost_iou_w_ = 0.30f, reid_cost_score_w_ = 0.15f;
     
     bool enable_quality_scaling_ = false;
     float q_w_aspect_ = 0.50f;
@@ -1777,8 +1782,9 @@ void GPUByteTracker::set_params(float track_thresh, float high_thresh, float mat
                                 float birth_prox_norm_thresh) {
     pimpl_->set_params(track_thresh, high_thresh, match_thresh, track_buffer, mid_thresh, confirm_streak, confirm_score_thresh, adaptive_confirmation, new_track_thresh, nsa_kalman, r_scale, vel_dir_weight, fuse_score_weight, stage2_match_thresh, birth_low_score_thresh, birth_prox_norm_thresh);
 }
-void GPUByteTracker::set_reid_params(float cos_threshold, float iou_low, float iou_high, float weight) {
-    pimpl_->set_reid_params(cos_threshold, iou_low, iou_high, weight);
+void GPUByteTracker::set_reid_params(float cos_threshold, float iou_low, float iou_high, float weight,
+                                     float cost_cos_w, float cost_iou_w, float cost_score_w) {
+    pimpl_->set_reid_params(cos_threshold, iou_low, iou_high, weight, cost_cos_w, cost_iou_w, cost_score_w);
 }
 void GPUByteTracker::set_oao_params(float tau) {
     pimpl_->set_oao_params(tau);

@@ -59,6 +59,7 @@ from saccade.perception.temporal_yolo.yolo_gated_detector import (  # noqa: E402
 from saccade.perception.tracking.fpn_reid_cuda import (  # noqa: E402
     fpn_reid_extract_cuda,
 )
+from saccade.perception.eval.metrics import run_motmetrics_evaluation  # noqa: E402
 
 IMG_SIZE = 640
 
@@ -172,9 +173,29 @@ def main():
     parser.add_argument("--seq", default="MOT17-04-SDP")
     parser.add_argument("--max-frames", type=int, default=100)
     parser.add_argument("--img-size", type=int, default=IMG_SIZE)
-    parser.add_argument("--conf-thresh", type=float, default=0.4)
-    parser.add_argument("--reid-weight", type=float, default=0.70)
-    parser.add_argument("--cos-threshold", type=float, default=0.85)
+    parser.add_argument(
+        "--output",
+        default="output/fpn_reid",
+        help="Output directory for MOT txt and metrics",
+    )
+    parser.add_argument(
+        "--split", default="train", help="Data split subdirectory (e.g. train, test)"
+    )
+    parser.add_argument(
+        "--cost-cos-w", type=float, default=0.10, help="Appearance cost: cos_sim weight"
+    )
+    parser.add_argument(
+        "--cost-iou-w", type=float, default=0.70, help="Appearance cost: IoU weight"
+    )
+    parser.add_argument(
+        "--cost-score-w",
+        type=float,
+        default=0.20,
+        help="Appearance cost: detection score weight",
+    )
+    parser.add_argument("--conf-thresh", type=float, default=0.05)
+    parser.add_argument("--reid-weight", type=float, default=0.80)
+    parser.add_argument("--cos-threshold", type=float, default=0.90)
     parser.add_argument("--iou-low", type=float, default=0.30)
     parser.add_argument("--iou-high", type=float, default=0.60)
     parser.add_argument(
@@ -264,25 +285,30 @@ def main():
     # Tracker — use correct embedding dimension
     tracker = GPUByteTracker(max_objects=2048, embedding_dim=fpn_dim)
     tracker.set_params(
-        track_thresh=0.4,
-        high_thresh=0.5,
-        match_thresh=0.8,
-        track_buffer=60,
-        mid_thresh=0.1,
+        track_thresh=0.05,
+        high_thresh=0.45,
+        match_thresh=0.66,
+        track_buffer=30,
+        mid_thresh=0.10,
+        new_track_thresh=0.28,
     )
     tracker.set_reid_params(
         cos_threshold=args.cos_threshold,
         iou_low=args.iou_low,
         iou_high=args.iou_high,
         weight=args.reid_weight,
+        cost_cos_w=args.cost_cos_w,
+        cost_iou_w=args.cost_iou_w,
+        cost_score_w=args.cost_score_w,
     )
 
     result_bufs = tracker.allocate_result_buffers()
 
     # Per-track embedding bank: track_id → latest embedding (no EMA)
     bank_embeds: dict[int, torch.Tensor] = {}
+    bank_counts: dict[int, int] = {}
 
-    SYNC_INTERVAL = 10
+    SYNC_INTERVAL = 1
 
     print(f"\nRunning tracking on {len(frames)} frames...")
     print(
@@ -293,6 +319,8 @@ def main():
         print(f"  FPN dim: {fpn_dim}  Sync every {SYNC_INTERVAL}f")
 
     t0 = time.perf_counter()
+
+    mot_lines: list[str] = []
 
     for frame_idx, frame_np in enumerate(frames):
         frame_uint8 = (
@@ -308,10 +336,15 @@ def main():
         if detections_raw.dim() == 3:
             detections_raw = detections_raw.squeeze(0)
         if detections_raw.numel() > 0:
-            valid = (detections_raw[:, 4] > 0.0) & (
+            valid = (detections_raw[:, 4] > args.conf_thresh) & (
                 (detections_raw[:, 2] - detections_raw[:, 0]) > 0
             )
             detections_raw = detections_raw[valid]
+        if detections_raw.numel() > 0:
+            from torchvision.ops import nms
+
+            keep = nms(detections_raw[:, :4], detections_raw[:, 4], 0.5)
+            detections_raw = detections_raw[keep]
         if detections_raw.numel() == 0:
             detections_raw = torch.zeros(0, 6, device=device)
 
@@ -355,16 +388,19 @@ def main():
             else:
                 embeddings = detector.extract_fpn_embeddings(None, boxes)
 
-        # ── Push bank to tracker (every N frames) ──
+            # ── Push bank to tracker (every frame) ──
         if bank_embeds and not args.no_reid and frame_idx % SYNC_INTERVAL == 0:
             _ids_list = sorted(bank_embeds.keys())
             _ids = torch.tensor(_ids_list, device=device, dtype=torch.int32)
             _feats = torch.stack([bank_embeds[k] for k in _ids_list])
             tracker.update_reference_features(_ids, _feats)
-            tracker.set_clean_embedding_flags(
-                _ids,
-                torch.ones(len(_ids_list), device=device, dtype=torch.bool),
-            )
+            _clean_ids = [k for k in _ids_list if bank_counts.get(k, 0) >= 2]
+            if _clean_ids:
+                _cids = torch.tensor(_clean_ids, device=device, dtype=torch.int32)
+                tracker.set_clean_embedding_flags(
+                    _cids,
+                    torch.ones(len(_clean_ids), device=device, dtype=torch.bool),
+                )
 
         # ── Track ──
         tracker.update_into(
@@ -377,6 +413,17 @@ def main():
 
         # ── Update bank: store latest embedding per track ──
         count = result_bufs["count"].item()
+        for i in range(count):
+            x1 = result_bufs["boxes"][i, 0].item()
+            y1 = result_bufs["boxes"][i, 1].item()
+            x2 = result_bufs["boxes"][i, 2].item()
+            y2 = result_bufs["boxes"][i, 3].item()
+            tid = result_bufs["ids"][i].item()
+            score = result_bufs["scores"][i].item()
+            w, h = x2 - x1, y2 - y1
+            mot_lines.append(
+                f"{frame_idx + 1},{tid},{x1:.2f},{y1:.2f},{w:.2f},{h:.2f},{score:.4f},-1,-1,-1"
+            )
         active_tids: set[int] = set()
         if count > 0 and embeddings is not None and not args.no_reid:
             track_ids = result_bufs["ids"][:count]
@@ -387,13 +434,22 @@ def main():
                 for tid, didx in zip(
                     track_ids[matched].tolist(), det_indices[matched].tolist()
                 ):
-                    bank_embeds[int(tid)] = embeddings[int(didx)].detach()
+                    new_emb = embeddings[int(didx)].detach()
+                    if tid in bank_embeds:
+                        bank_embeds[int(tid)] = F.normalize(
+                            0.7 * bank_embeds[int(tid)] + 0.3 * new_emb, dim=0
+                        )
+                        bank_counts[int(tid)] += 1
+                    else:
+                        bank_embeds[int(tid)] = new_emb
+                        bank_counts[int(tid)] = 1
 
         # Purge
-        if count > 0 and bank_embeds:
+        if bank_embeds:
             for tid in list(bank_embeds.keys()):
                 if tid not in active_tids:
                     del bank_embeds[tid]
+                    bank_counts.pop(tid, None)
 
         if frame_idx % 20 == 0 or frame_idx == len(frames) - 1:
             print(
@@ -405,6 +461,30 @@ def main():
     elapsed = time.perf_counter() - t0
     fps = len(frames) / elapsed
     print(f"\nDone. {len(frames)} frames in {elapsed:.1f}s ({fps:.1f} FPS)")
+
+    output_dir = Path(args.output)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    seq_output = output_dir / f"{args.seq}.txt"
+    seq_output.write_text("\n".join(mot_lines))
+    print(f"Saved {len(mot_lines)} MOT lines to {seq_output}")
+
+    try:
+        metrics = run_motmetrics_evaluation(
+            data_root=str(Path(args.data_root) / "MOT17"),
+            split=args.split,
+            output=str(output_dir),
+            sequences=args.seq,
+            detector=None,
+        )
+        if metrics:
+            print("\n=== METRICS ===")
+            for k, v in metrics.items():
+                if isinstance(v, float):
+                    print(f"  {k}: {v:.4f}")
+                else:
+                    print(f"  {k}: {v}")
+    except Exception as e:
+        print(f"\n[Warn] motmetrics failed: {e}")
 
 
 if __name__ == "__main__":

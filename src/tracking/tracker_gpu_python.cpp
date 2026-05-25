@@ -1720,7 +1720,8 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
              py::arg("birth_low_score_thresh") = 0.0f,
              py::arg("birth_prox_norm_thresh") = 0.0f)
         .def("set_reid_params", &GPUByteTracker::set_reid_params,
-             py::arg("cos_threshold"), py::arg("iou_low"), py::arg("iou_high"), py::arg("weight"))
+             py::arg("cos_threshold"), py::arg("iou_low"), py::arg("iou_high"), py::arg("weight"),
+             py::arg("cost_cos_w") = 0.55f, py::arg("cost_iou_w") = 0.30f, py::arg("cost_score_w") = 0.15f)
         .def("set_oao_params", &GPUByteTracker::set_oao_params,
              py::arg("tau"),
              "OA-SORT OAO penalty weight [0, 1]. 0 = disabled. "

@@ -430,11 +430,22 @@ class GPUByteTracker:
         iou_low: float = 0.30,
         iou_high: float = 0.60,
         weight: float = 0.40,
+        cost_cos_w: float = 0.55,
+        cost_iou_w: float = 0.30,
+        cost_score_w: float = 0.15,
     ) -> None:
-        """調整 C++ ReID fusion 門檻。"""
+        """Set ReID fusion thresholds and appearance cost blend weights."""
         set_reid_params = getattr(self.tracker, "set_reid_params", None)
         if set_reid_params is not None:
-            set_reid_params(cos_threshold, iou_low, iou_high, weight)
+            set_reid_params(
+                cos_threshold,
+                iou_low,
+                iou_high,
+                weight,
+                cost_cos_w,
+                cost_iou_w,
+                cost_score_w,
+            )
 
     def set_oao_params(self, tau: float = 0.0) -> None:
         """OA-SORT Occlusion-Aware Offset (OAO) penalty.
