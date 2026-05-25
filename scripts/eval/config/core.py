@@ -355,3 +355,13 @@ def add_core_args(parser: argparse.ArgumentParser) -> None:
         default=None,
         help="MLflow run name (auto-generated if not set).",
     )
+    core.add_argument(
+        "--mamba-ckpt",
+        default="",
+        help="Path to MambaDetectionHead checkpoint for eval with Mamba head.",
+    )
+    core.add_argument(
+        "--mamba-teacher-ckpt",
+        default="runs/gated_det_v1/best.ckpt",
+        help="Path to teacher (GatedYOLODetector) checkpoint for Mamba eval.",
+    )

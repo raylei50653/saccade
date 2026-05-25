@@ -1,147 +1,81 @@
-# Saccade Documentation
+# Docs
 
-這個目錄的文件已整理成明確分工。若你是新進開發者，**不要從這裡隨便挑一份開始看**，先依下面入口順序進入。
-
----
-
-## First Read
-
-1. [DEVELOPMENT.md](/DEVELOPMENT.md)
-   - 開發主入口
-   - source-of-truth 順序
-   - 當前主路徑
-   - 目前優先問題
-   - 文件更新規則
-
-2. [architecture.md](/docs/architecture.md)
-   - 穩定架構形狀
-   - 模組責任邊界
-   - 系統合約
-
-3. [pipeline_flow.md](/docs/pipeline_flow.md)
-   - 目前實作主路徑的資料流
-   - 對應 `runner.py` 與 MOT17 evaluation path
-
-4. [PIPELINE_REFERENCE.md](/docs/PIPELINE_REFERENCE.md)
-   - 每個 model / 模組目前的定位
-   - default vs experimental
-   - 已知實際提升與不建議方向
-
-5. [api_spec.md](/docs/api_spec.md)
-   - Redis event / stream contract
-   - Chroma metadata contract
-   - FastAPI request / response shape
-
-6. [TODO.md](/docs/TODO.md)
-   - 當前待辦
-   - 近期 ablation 結論
-   - 下一輪 backlog
+> **文檔系統原則：一個文檔回答一個問題。透過索引串聯，不靠合併。**
 
 ---
 
-## What Each File Owns
+## 我去哪寫？
 
-### Stable Documents
-
-- [architecture.md](/docs/architecture.md)
-  - 目前穩定的系統形狀與責任邊界
-- [pipeline_flow.md](/docs/pipeline_flow.md)
-  - 目前實作主路徑的資料流
-- [PIPELINE_REFERENCE.md](/docs/PIPELINE_REFERENCE.md)
-  - model / module reference
-  - best-known lift 與 default 決策
-- [api_spec.md](/docs/api_spec.md)
-  - API / event / storage 合約
-
-### Planning / Direction
-
-- [TODO.md](/docs/TODO.md)
-  - 當前待辦與近期結論
-- [TODO_history.md](/docs/TODO_history.md)
-  - 已完成項、已放棄方向、歷史路線圖
-
-### Decisions
-
-- [decisions/README.md](/docs/decisions/README.md)
-  - ADR 索引
-
-重點 ADR：
-
-- [ADR 013: GPUByteTracker + Saccade Heartbeat](/docs/decisions/013-gpubytetracker-saccade-heartbeat.md)
-- [ADR 014: Agentic RAG with LlamaIndex](/docs/decisions/014-agentic-rag-llama-index.md)
-- [ADR 015: Sinkhorn-Auction Hybrid GPU Association](/docs/decisions/015-sinkhorn-auction-hybrid-association.md)
-- [ADR 016: Rerank Phase 3 - Reference Quality and False-Accept Filtering](/docs/decisions/016-rerank-phase3-reference-quality.md)
-
-### Evaluation / Experiments
-
-- [experiments/README.md](/docs/experiments/README.md)
-- [benchmarks/README.md](/docs/benchmarks/README.md)
-- [../scripts/eval/README.md](/scripts/eval/README.md)
-
-主 evaluation 入口：
-
-- `scripts/eval/mot17.py`
-- `scripts/eval/ablation_mot17.py`
-
-### Deep Dives / Legacy Context
-
-- [layers/README.md](/docs/layers/README.md)
-- [layers/gpubytetracker_deep_dive.md](/docs/layers/gpubytetracker_deep_dive.md)
-- [progress/README.md](/docs/progress/README.md)
-
-說明：
-
-- `layers/` 適合看子系統深度背景
-- `progress/` 是狀態快照，不是最高權威文件
-
-### Operations
-
-- [runbooks/README.md](/docs/runbooks/README.md)
-- [runbooks/hot_swap_model.md](/docs/runbooks/hot_swap_model.md)
-- [runbooks/stream_recovery.md](/docs/runbooks/stream_recovery.md)
-- [runbooks/vram_oom.md](/docs/runbooks/vram_oom.md)
-
-### Maintenance
-
-- [DOC_MAINTENANCE.md](/docs/DOC_MAINTENANCE.md)
-- [TESTING.md](/docs/TESTING.md)
+```
+我做了什麼？              →  去哪個目錄？         →  寫什麼格式？
+─────────────────────────────────────────────────────────────────
+新增/重構核心模組          →  architecture/       →  版本快照：vN 改了什麼、為何
+做完一個訓練實驗            →  training/           →  實驗記錄：配置、loss、結論
+做了一個架構決策            →  decisions/          →  ADR：選項、理由、後果
+新增/完成 TODO 項目        →  TODO.md             →  勾選 [x]
+寫了一個功能模組的設計      →  temporal_yolo/ 等    →  設計文件
+需要操作步驟               →  runbooks/           →  操作手冊
+需要規格/數字參考           →  reference/          →  規格表
+─────────────────────────────────────────────────────────────────
+日常 Bug fix / 調參       →  不用寫文檔
+純重構（外部行為不變）      →  不用寫文檔
+```
 
 ---
 
-## Reading Paths
+## 每個目錄做什麼？
 
-### 如果你要開發 tracking / relink / MOT
-
-先看：
-
-1. [DEVELOPMENT.md](/DEVELOPMENT.md)
-2. [architecture.md](/docs/architecture.md)
-3. [pipeline_flow.md](/docs/pipeline_flow.md)
-4. [PIPELINE_REFERENCE.md](/docs/PIPELINE_REFERENCE.md)
-5. [TODO.md](/docs/TODO.md)
-6. `src/saccade/perception/eval/runner.py`
-
-### 如果你要改事件 / API / storage schema
-
-先看：
-
-1. [DEVELOPMENT.md](/DEVELOPMENT.md)
-2. [api_spec.md](/docs/api_spec.md)
-3. [architecture.md](/docs/architecture.md)
-
-### 如果你要理解舊決策或歷史脈絡
-
-先看：
-
-1. [TODO_history.md](/docs/TODO_history.md)
-2. [decisions/README.md](/docs/decisions/README.md)
-3. [progress/README.md](/docs/progress/README.md)
+| 目錄 | 回答的問題 | 文檔範例 |
+|------|-----------|---------|
+| `architecture/` | 系統長什麼樣？版本間改什麼？ | `v1-core.md`, `v2-gmc.md` |
+| `training/` | 這個實驗試了什麼？結果如何？ | `jde-market-1501.md` |
+| `decisions/` | 我們為什麼這樣選？ | `004-yolo26-perception.md` |
+| `temporal_yolo/` | Option E/F 設計原理 | `option-e-v2-design.md` |
+| `reference/` | 精確的數字、規格、CLI flags | `PIPELINE_REFERENCE.md` |
+| `runbooks/` | 我怎麼操作？ | `runbooks/latency_profile.md` |
+| `progress/` | 各模組做到哪了？ | `perception.md` |
+| `layers/` | 各層架構詳解 (What & Why) | `L1_perception.md` |
+| `archive/` | 過時的實驗、已完成的專案 | 歷史文件 |
+| `TODO.md` | 接下來要做什麼？ | checkbox list |
 
 ---
 
-## Notes
+## 文檔格式
 
-- 若文件與 `src/saccade/perception/`, `src/tracking/`, `scripts/eval/`, `tests/` 衝突，以目前主路徑程式碼為準。
-- `TODO.md` 是當前方向，不是穩定架構規格。
-- `TODO_history.md` 是歷史，不是現在待辦。
-- `progress/` 與部分 `experiments/` 可能保留舊階段敘事，閱讀時請先確認是否仍對應目前主路徑。
+### 架構版本快照 (`architecture/vN-name.md`)
+
+```markdown
+# 架構 vN：標題
+
+日期：YYYY-MM-DD
+
+## 變更
+- 改什麼
+
+## 理由
+- 為什麼改
+
+## 涉及模組
+| 模組 | 變更 |
+|------|------|
+| x   | y    |
+```
+
+### 訓練實驗記錄 (`training/experiment-name.md`)
+
+```markdown
+# 實驗：標題
+
+日期：YYYY-MM-DD  
+命令：...
+狀態：進行中 / GO / NO-GO
+
+## 配置
+## 架構（圖/表）
+## 結果
+## 結論
+```
+
+### 架構決策 (`decisions/NNN-title.md`)
+
+依循現有 ADR 格式。

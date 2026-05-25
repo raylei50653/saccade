@@ -162,6 +162,18 @@ def main() -> None:
     parser.add_argument("--seqs", default="")
     parser.add_argument("--save-every", type=int, default=5)
     parser.add_argument("--freeze-teacher", type=bool, default=True)
+    parser.add_argument(
+        "--compile", action="store_true", help="torch.compile teacher (mode=default)"
+    )
+    parser.add_argument(
+        "--accum-steps", type=int, default=1, help="gradient accumulation steps"
+    )
+    parser.add_argument(
+        "--warmup-epochs", type=int, default=5, help="linear LR warmup epochs"
+    )
+    parser.add_argument(
+        "--clip-grad", type=float, default=1.0, help="gradient clipping max_norm"
+    )
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -286,10 +298,22 @@ def main() -> None:
         best_loss = ckpt.get("best_loss", float("inf"))
         print(f"[Resume] epoch={start_epoch}  best_loss={best_loss:.4f}")
 
+    if args.compile:
+        print("[Compile] torch.compile teacher (mode=default) — ~30s cold-start")
+        teacher.yolo_model = torch.compile(teacher.yolo_model, mode="default")
+
     remaining = max(args.epochs - start_epoch + 1, 1)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=remaining, eta_min=args.lr * 0.01
     )
+    warmup_scheduler: Any = None
+    if args.warmup_epochs > 0:
+        warmup_scheduler = torch.optim.lr_scheduler.LambdaLR(
+            optimizer,
+            lr_lambda=lambda e: (
+                (e + 1) / args.warmup_epochs if e < args.warmup_epochs else 1.0
+            ),
+        )
 
     # ------------------------------------------------------------------
     # Data
@@ -311,19 +335,26 @@ def main() -> None:
     # ------------------------------------------------------------------
     # Training loop
     # ------------------------------------------------------------------
-    print(f"\nTraining {args.epochs} epochs...")
+    n_batches = len(loader)
+    print(
+        f"\nTraining {args.epochs} epochs  ({n_batches} batches/epoch  "
+        f"B={args.batch_size} T={args.clip_len} accum={args.accum_steps})...\n"
+    )
+    accum = args.accum_steps
     for epoch in range(start_epoch, args.epochs + 1):
         mamba.train()
-        epoch_loss = 0.0
+        epoch_total_loss = 0.0
         n_steps = 0
+        acc_batches = 0
         t0 = time.perf_counter()
 
-        for batch in loader:
+        optimizer.zero_grad()
+
+        for batch_idx, batch in enumerate(loader):
             frames = batch["frames"].to(device, dtype=torch.float32) / 255.0
             gt_boxes_batch = batch["gt_boxes"]
             B, T = frames.shape[:2]
 
-            optimizer.zero_grad()
             batch_loss = frames.new_zeros(())
 
             for t in range(T):
@@ -339,7 +370,6 @@ def main() -> None:
 
                 fpn_feats.clear()
 
-                # Teacher forward (float32 — Mamba CUDA kernel requires f32)
                 _ = teacher(frame_t, gate_input=gate_inputs)
 
                 feats = [fpn_feats[s] for s in ("p3", "p4", "p5")]
@@ -348,29 +378,61 @@ def main() -> None:
                 preds = _build_preds_dict(s_cls, s_reg, feats)
                 yolo_batch = _make_yolo_batch(gt_t, args.img_size, device)
                 step_loss_vec, _ = criterion(preds, yolo_batch)
-                batch_loss = batch_loss + step_loss_vec.sum() / T
+                batch_loss = batch_loss + step_loss_vec.sum()
 
+            batch_loss = batch_loss / (T * accum)
             batch_loss.backward()
-            nn.utils.clip_grad_norm_(mamba.parameters(), max_norm=1.0)
-            optimizer.step()
+            acc_batches += 1
 
-            step_loss = batch_loss.detach().item()
+            if acc_batches == accum:
+                nn.utils.clip_grad_norm_(mamba.parameters(), max_norm=args.clip_grad)
+                optimizer.step()
+                optimizer.zero_grad()
+                acc_batches = 0
+
+            step_loss = batch_loss.detach().item() * accum
             if torch.isfinite(batch_loss):
-                epoch_loss += step_loss
+                epoch_total_loss += step_loss
                 n_steps += 1
 
-            if n_steps % 50 == 0:
-                print(f"  epoch {epoch:3d}  step {n_steps:4d}  loss={step_loss:.4f}")
+            eta_s = (
+                (n_batches - batch_idx - 1)
+                * (time.perf_counter() - t0)
+                / max(batch_idx + 1, 1)
+            )
+            pct = (batch_idx + 1) / n_batches * 100
+            print(
+                f"\r  epoch {epoch:3d}/{args.epochs}  "
+                f"[{pct:5.1f}%  {batch_idx + 1:4d}/{n_batches}]  "
+                f"loss={step_loss:7.2f}  ETA {eta_s:5.0f}s",
+                end="",
+                flush=True,
+            )
+
+        if acc_batches > 0:
+            nn.utils.clip_grad_norm_(mamba.parameters(), max_norm=args.clip_grad)
+            optimizer.step()
+            optimizer.zero_grad()
 
         scheduler.step()
-        avg_loss = epoch_loss / max(n_steps, 1)
+        if (
+            warmup_scheduler is not None
+            and epoch <= start_epoch + args.warmup_epochs - 1
+        ):
+            warmup_scheduler.step()
+            current_lr = optimizer.param_groups[0]["lr"]
+        else:
+            current_lr = scheduler.get_last_lr()[0]
+        avg_loss = epoch_total_loss / max(n_steps, 1)
         dt = time.perf_counter() - t0
-        lr = scheduler.get_last_lr()[0]
+        vram_gb = torch.cuda.max_memory_allocated() / 1e9
         is_best = avg_loss < best_loss
         best_loss = min(best_loss, avg_loss)
+        best_marker = " [BEST]" if is_best else ""
         print(
-            f"Epoch {epoch:3d}/{args.epochs}  loss={avg_loss:.4f}  "
-            f"lr={lr:.2e}  {dt / 60:.1f}min" + (" [BEST]" if is_best else "")
+            f"\r  epoch {epoch:3d}/{args.epochs}  "
+            f"loss={avg_loss:7.2f}  lr={current_lr:.2e}  "
+            f"VRAM={vram_gb:.1f}GB  {dt / 60:.1f}min{best_marker}"
         )
 
         if epoch % args.save_every == 0 or epoch == args.epochs or is_best:

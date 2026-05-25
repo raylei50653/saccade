@@ -4,7 +4,7 @@
 
 - 近期工作方向與 ablation backlog：看 [docs/TODO.md](/docs/TODO.md)
 - 開發入口與 source-of-truth 規則：看 [DEVELOPMENT.md](/DEVELOPMENT.md)
-- 事件 / API / storage schema：看 [docs/api_spec.md](/docs/api_spec.md)
+- 事件 / API / storage schema：看 [reference/api_spec.md](reference/api_spec.md)
 
 ---
 
@@ -146,7 +146,7 @@ Frame Source
 
 - perception 與 cognition 透過 Redis/Chroma 解耦
 - event queue / stream 屬於較外圍層，不應反向影響 perception 熱路徑
-- 具體 schema 以 [docs/api_spec.md](/docs/api_spec.md) 為準
+- 具體 schema 以 [reference/api_spec.md](reference/api_spec.md) 為準
 
 ### 4.5 Resource / Memory Management
 
@@ -220,7 +220,7 @@ Frame Source
 
 ### 5.4 Storage / API 合約
 
-- Redis key / stream / event schema / Chroma metadata 屬於明確合約，變更時需同步更新 `api_spec.md`
+- Redis key / stream / event schema / Chroma metadata 屬於明確合約，變更時需同步更新 `reference/api_spec.md`
 - 外部查詢 API 與 internal health output contract 不可混用
 
 ---
@@ -262,9 +262,9 @@ Frame Source
 ## 8. 相關文件
 
 - 開發入口：[DEVELOPMENT.md](/DEVELOPMENT.md)
-- API / event / storage contract：[docs/api_spec.md](/docs/api_spec.md)
-- 當前待辦與近期結論：[docs/TODO.md](/docs/TODO.md)
-- 全流程敘事版資料流：[docs/pipeline_flow.md](/docs/pipeline_flow.md)
+- API / event / storage contract：[reference/api_spec.md](reference/api_spec.md)
+- 模組 delta ledger：[reference/PIPELINE_REFERENCE.md](reference/PIPELINE_REFERENCE.md)
+- 全流程敘事版資料流：[reference/pipeline_flow.md](reference/pipeline_flow.md)
 - Tracker 深入說明：[docs/layers/gpubytetracker_deep_dive.md](/docs/layers/gpubytetracker_deep_dive.md)
 
 最後更新：2026-05-07

@@ -44,7 +44,7 @@
 
 ### 測試覆蓋率任務清單（P2）
 
-> 詳細報告：[docs/TEST_COVERAGE.md](/docs/TEST_COVERAGE.md)
+> 詳細報告：[docs/TESTING.md](/docs/TESTING.md)
 
 | 優先 | 模組 | 覆蓋率 | 未覆蓋行 | 狀態 |
 |------|------|--------|----------|------|

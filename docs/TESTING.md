@@ -92,15 +92,14 @@
 
 ## 3. 測試覆蓋率
 
-詳細覆蓋率報告請見 **[docs/TEST_COVERAGE.md](docs/TEST_COVERAGE.md)**。
+目前總體 **66%**（647 passing tests，7,751 statements）。
 
-### 覆蓋率目標
-
-- **核心評估模組**（`perception/eval/`）：目標 ≥ 80%
-- **追蹤模組**（`perception/tracking/`）：目標 ≥ 70%
-- **感知模組**（`perception/` 不含 eval）：目標 ≥ 50%
-- **儲存模組**（`storage/`）：目標 ≥ 50%
-- **總體覆蓋率**：目標 ≥ 60%
+| 模組 | 覆蓋率 |
+|------|--------|
+| `perception/eval/` | ~40% |
+| `perception/tracking/` | ~85% |
+| `perception/temporal_yolo/` | ~50% |
+| `storage/` | ~80% |
 
 ### 查看覆蓋率
 

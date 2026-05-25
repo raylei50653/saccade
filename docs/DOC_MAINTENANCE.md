@@ -1,183 +1,70 @@
-# 文件維護規範 (Doc Maintenance Guide)
+# 文檔撰寫規範 (Doc Writing Conventions)
 
-本文件定義 `docs/` 目錄的結構規範、各類文件的職責邊界，以及**何時必須更新哪份文件**。目標是讓文件與代碼保持同步，避免新人看到矛盾或過時的資訊。
+> **去哪寫？** → 見 [docs/README.md](README.md) 的決策樹。
+> 本文件定義的是**格式細節**（ADR 編號、progress 歸檔、連結寫法）。
 
 ---
 
-## 1. 目錄結構與職責
+## 路徑連結規範
+
+所有文檔內連結使用**相對於 `docs/` 的路徑**：
 
 ```
-docs/
-├── architecture.md          ← 穩定架構形狀、責任邊界、系統合約
-├── pipeline_flow.md         ← 目前實作主路徑的資料流
-├── api_spec.md              ← Redis 事件、Chroma metadata、API / health contract
-├── TODO.md                  ← 當前待辦、近期結論、ablation backlog
-│
-├── layers/                  ← 各層架構說明（What & Why，不追蹤進度）
-│   ├── L1_perception.md
-│   ├── L2_vector_path.md
-│   ├── L3_L4_storage.md
-│   └── L5_L6_cognition.md
-│
-├── decisions/               ← 架構決策紀錄 ADR（不可回頭改決策內容）
-│   ├── README.md            ← ADR 索引
-│   ├── 004-yolo26-perception.md
-│   ├── ...
-│   └── archive/             ← 已完成的整合路線圖（唯讀）
-│
-├── progress/                ← 各模組實作進度（純狀態快照）
-│   ├── perception.md
-│   ├── storage.md
-│   ├── cognition.md
-│   ├── media.md
-│   └── infra.md
-│
-├── experiments/             ← 實驗紀錄（日期命名，唯讀）
-├── benchmarks/              ← 效能測試數據
-└── runbooks/                ← 故障排除與日常維運指令
+[架構 v2](architecture/v2-gmc.md)      ← 正確
+[ADR 004](decisions/004-yolo26.md)     ← 正確
+[README](../README.md)                 ← 正確（從 docs/ 子目錄往上）
+```
+
+不對：
+```
+[架構](../architecture/v2-gmc.md)      ← 不對：多餘 `../`
+[ADR](/docs/decisions/004.md)         ← 不對：絕對路徑
 ```
 
 ---
 
-## 2. 各類文件的職責邊界
+## ADR 編寫規範
 
-| 文件類型 | 寫什麼 | 不寫什麼 |
-|---|---|---|
-| `architecture.md` | 穩定架構形狀、責任邊界、設計原則 | 實驗結果、細碎 TODO |
-| `pipeline_flow.md` | 目前主路徑的資料流與階段拆解 | 長篇歷史願景、細碎 TODO |
-| `layers/` | 各層的定義、組件、資料流、效能指標 | 進度 checkbox、待辦事項 |
-| `decisions/` | 決策背景、選擇理由、影響 | 實作步驟、進度追蹤 |
-| `progress/` | 模組狀態快照、舊進度脈絡 | 最高權威架構說明 |
-| `TODO.md` | 當前待辦、近期 ablation 結論、下一輪 backlog | 長篇歷史過程、已結案細節 |
-| `runbooks/` | 操作指令、故障排除步驟 | 架構決策理由 |
-
-**核心原則：同一件事只在一個地方寫。**
-- 組件說明 → `layers/`
-- 進度狀態 → `progress/`
-- 決策理由 → `decisions/`
-
----
-
-## 2.1 連結格式規範
-
-所有跨文件 Markdown 連結一律使用 **專案根路徑**，不要使用系統絕對路徑，也不要在 `docs/` 內混用相對層級路徑。
-
-### 正確格式
-
-- `/DEVELOPMENT.md`
-- `/docs/architecture.md`
-- `/docs/api_spec.md`
-- `/src/saccade/perception/eval/runner.py`
-- `/scripts/eval/mot17.py`
-
-若要保留行號，可使用：
-
-- `/docs/TODO.md:1`
-- `/src/tracking/tracker_gpu.cu:167`
-
-### 禁止格式
-
-- 系統路徑：
-  - `/home/ray/developer/ai/saccade/docs/architecture.md`
-- `docs/` 內相對路徑混用：
-  - `architecture.md`
-  - `decisions/013-xxx.md`
-  - `../scripts/eval/README.md`
-
-### 原則
-
-- 專案根下所有文件都用同一套路徑風格，避免：
-  - 換機器後連結失效
-  - `docs/` 內出現 `docs/docs/...` 類錯路徑
-  - 同一 repo 內混用多種連結寫法
-
----
-
-## 3. 觸發更新的時機
-
-### 改了代碼，必須同步更新的文件
-
-| 代碼變動類型 | 必須更新 | 選擇性更新 |
-|---|---|---|
-| 新增 / 替換核心模型（如 YOLO、SigLIP） | `architecture.md`、`layers/` 對應層、`progress/` | `pipeline_flow.md` |
-| 新增追蹤算法或參數調整 | `layers/L1_perception.md`、`progress/perception.md` | `architecture.md` Tracker Stack |
-| 修改 Redis 事件結構或 ChromaDB Schema | `api_spec.md` | `layers/L3_L4_storage.md` |
-| 新增 / 完成 TODO 項目 | `TODO.md`（勾選）、`progress/` 對應模組 | — |
-| 重大架構決策（換技術棧、改設計原則） | 新增 ADR、`architecture.md`、`layers/` | `pipeline_flow.md` |
-| 刪除腳本 / 移除功能 | 所有引用該腳本的文件 | — |
-
-### 不需要更新文件的情況
-- Bug fix（不改行為）
-- 重構（外部介面不變）
-- 效能調參（除非更新 benchmarks/）
-
----
-
-## 4. ADR 編寫規範
-
-### 何時新增 ADR
+### 何時新增
 - 技術選型變更（換模型、換框架、換資料庫）
-- 核心算法調整（改匹配策略、改 Kalman 參數定義）
-- 設計原則變更（如從 VLM-Free 改為 Agentic RAG）
+- 核心算法調整
+- 設計原則變更
 
-### ADR 狀態流轉
+### 狀態流轉
 ```
 Proposed → Accepted → (必要時) Superseded by ADR XXX
 ```
-- **Proposed**：提案中，尚未實作。
-- **Accepted**：已落地，代碼已更新。
-- **Superseded**：被更新的 ADR 取代，原文件保留作歷史參考，不刪除。
 
-### ADR 編號規則
-- 序號連續，不重複。若決策範圍擴大，新增下一號 ADR 而非修改舊的。
-- 已落地的整合路線圖（非決策）移至 `decisions/archive/`。
-
-### ADR 不應做的事
-- 不回頭修改已 Accepted 的決策內容（加 Superseded 另開新 ADR）。
-- 不記錄實作細節（放 `progress/` 或 `layers/`）。
+### 編號規則
+- 序號連續。若範圍擴大，新增下一號，不修改舊的。
+- 不回頭改已 Accepted 的內容（另開新 ADR 標 Superseded）。
 
 ---
 
-## 5. progress/ 維護規範
+## progress/ 維護規範
 
-### 更新時機
-- 完成一個 checkbox 項目時，立即標記 `[x]`。
-- 發現文件描述與代碼不符時，優先更新文件（不是等到「空了再一起改」）。
-
-### 歸檔時機
-當一份 progress 文件**所有項目全部完成**，且對應的架構說明已回寫到 `layers/` 或 ADR 時，將其移至 `decisions/archive/`。
-
-### 禁止事項
-- `progress/` 不寫架構說明（架構說明放 `layers/`）。
-- `progress/` 不寫操作指令（操作指令放 `runbooks/`）。
+- 完成項目時立即勾選 `[x]`
+- 全部完成後移至 `decisions/archive/`
+- `progress/` 不寫架構說明（放 `layers/` 或 `architecture/`）
+- `progress/` 不寫操作步驟（放 `runbooks/`）
 
 ---
 
-## 6. 常見錯誤與預防
+## 不需要寫文檔的情況
 
-| 常見錯誤 | 預防方式 |
-|---|---|
-| 文件描述舊模型名稱（如 YOLO11、Jina-CLIP） | 替換模型後，全域搜尋舊名稱 `grep -r "YOLO11" docs/` |
-| progress/ 待辦與 TODO.md 不同步 | 完成項目時兩個都更新 |
-| ADR 編號重複或跳號 | 新增 ADR 前先看 `decisions/README.md` 索引 |
-| 腳本路徑失效（引用已刪除的 scripts/） | 刪除腳本後搜尋 `grep -r "scripts/" docs/` |
-| architecture.md 與 layers/ 描述矛盾 | `architecture.md` 只寫摘要，細節下放 `layers/`，兩者不重複 |
-| ADR 狀態停在「執行中」但已落地 | 代碼合併後立即更新 ADR 狀態為 Accepted |
+- Bug fix（外部行為不變）
+- 重構（API 不變）
+- 調參/LR sweep（除非寫入 `training/` 實驗記錄）
 
 ---
 
-## 7. 快速檢查清單（PR 前）
+## PR 前檢查
 
 ```
-□ 新模型/算法有更新 layers/ 對應層？
-□ progress/ checkbox 與實際代碼狀態一致？
-□ 若有重大架構決策，是否新增 ADR？
-□ ADR 狀態是 Accepted（若已落地）？
-□ TODO.md 已完成項目是否勾選？
-□ 無引用已刪除腳本或舊模型名稱？
-□ architecture.md 與 pipeline_flow.md 是否反映最新流程？
+□ 新模組有 architecture/ 版本快照？
+□ 新實驗有 training/ 記錄？
+□ progress/ 與代碼一致？
+□ ADR 狀態正確？
+□ TODO.md 已完成項目已勾選？
+□ 無失效連結或舊模型名稱？
 ```
-
----
-
-最後更新：2026-04-25

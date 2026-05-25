@@ -57,7 +57,7 @@
 ### 測試覆蓋率提升 Phase 1（已完成，2026-05）
 
 - 完成了 `dispatcher.py` (94%)、`helpers.py` (91%)、`detection.py` (49%)、`relink.py` (88%)、`drift_handler.py` (100%)、`redis_cache.py` (99%)、`calibrator.py` (96%)、`cropper.py` (77%)、`quality.py` (100%)、`reporting.py` (93%) 等模組的覆蓋。
-- 總覆蓋率從 56% 提升至 66%。新增了針對核心模組的大量整合與單元測試。詳細覆蓋率成長日誌見 `docs/TEST_COVERAGE.md`。
+- 總覆蓋率從 56% 提升至 66%。新增了針對核心模組的大量整合與單元測試。詳細覆蓋率見 `docs/TESTING.md`。
 
 ### 核心能力完成（2026-04-25）
 
@@ -609,9 +609,9 @@ Cascade model（CrowdHuman-trained）泛用效果：P=4.5%, R=84.4%, FPrem=37.2%
 - B: `replace_mode` in `MultiSignalBirthManager` + CLI ✅（但 replace_mask 未實際抑制 competing detection）
 - C: CLI `--multi-birth-evidence-threshold` ✅
 - Debug: `--debug-birth-csv` + `label_boosted_birth_rows.py` + 56 tests ✅
-- 報告：`docs/ablation/multibirth_scan_summary.md` ✅
+- 報告：`docs/archive/multibirth_scan_summary.md` ✅
 
 **相關文件**：
 - 主 TODO 更新：[docs/TODO.md](/docs/TODO.md)（P5-1 更新）
-- 詳細報告：[docs/ablation/multibirth_scan_summary.md](/docs/ablation/multibirth_scan_summary.md)
+- 詳細報告：[docs/archive/multibirth_scan_summary.md](/docs/archive/multibirth_scan_summary.md)
 - 修改檔案：`evaluator.py`, `multi_birth.py`, `config.py`, `config/lifecycle.py`

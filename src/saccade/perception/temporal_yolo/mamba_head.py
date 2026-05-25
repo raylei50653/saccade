@@ -185,6 +185,9 @@ class MambaDetectionHead(nn.Module):
     processing, then upsampled back for per-position detection predictions.
     This keeps the sequence length tractable (L ≤ 400) while preserving the
     SSM's ability to model long-range spatial dependencies at the coarse level.
+
+    Optional embedding branch (emb_dim > 0) produces per-pixel appearance
+    embeddings for JDE-style joint detection + ReID.
     """
 
     def __init__(
@@ -197,6 +200,7 @@ class MambaDetectionHead(nn.Module):
         reg_max: int = 1,
         strides: tuple[int, ...] = (8, 16, 32),
         spatial_reduction: int = 4,  # downsample factor before Mamba
+        emb_dim: int = 0,  # embedding dimension (0 = disabled)
     ):
         super().__init__()
         self.nl = len(in_channels)
@@ -205,6 +209,7 @@ class MambaDetectionHead(nn.Module):
         self.stride = torch.tensor(strides, dtype=torch.float32)
         self.no = num_classes + reg_max * 4
         self.spatial_reduction = spatial_reduction
+        self.emb_dim = emb_dim
 
         self.input_proj = nn.ModuleList([nn.Conv2d(c, d_model, 1) for c in in_channels])
         self.downsample = nn.ModuleList(
@@ -241,9 +246,28 @@ class MambaDetectionHead(nn.Module):
             ]
         )
 
-    def forward(self, feats: list[Tensor]) -> tuple[list[Tensor], list[Tensor]]:
+        self.emb_head: nn.ModuleList | None = None
+        if emb_dim > 0:
+            self.emb_head = nn.ModuleList(
+                [
+                    nn.Sequential(
+                        nn.Conv2d(d_model * 2, d_model, 3, padding=1),
+                        nn.SiLU(),
+                        nn.Conv2d(d_model, emb_dim, 1),
+                    )
+                    for _ in range(self.nl)
+                ]
+            )
+
+    def forward(
+        self, feats: list[Tensor], return_embeddings: bool = False
+    ) -> (
+        tuple[list[Tensor], list[Tensor]]
+        | tuple[list[Tensor], list[Tensor], list[Tensor]]
+    ):
         cls_preds = []
         reg_preds = []
+        emb_preds: list[Tensor] = []
 
         for i, x in enumerate(feats):
             B, C, H, W = x.shape
@@ -265,5 +289,73 @@ class MambaDetectionHead(nn.Module):
             x_cat = torch.cat([x_proj, x_up], dim=1)  # (B, d_model*2, H, W)
             cls_preds.append(self.cls_head[i](x_cat))
             reg_preds.append(self.reg_head[i](x_cat))
+            if self.emb_head is not None:
+                emb_preds.append(self.emb_head[i](x_cat))
 
+        if return_embeddings and self.emb_head is not None:
+            return cls_preds, reg_preds, emb_preds
         return cls_preds, reg_preds
+
+    def pool_embeddings(self, emb_preds: list[Tensor], boxes_xyxy: Tensor) -> Tensor:
+        from torchvision.ops import roi_align
+
+        if boxes_xyxy.numel() == 0:
+            return torch.zeros((0, self.emb_dim * self.nl), device=emb_preds[0].device)
+
+        _SPATIAL_SCALES = {0: 1 / 8, 1: 1 / 16, 2: 1 / 32}
+        batch_boxes = torch.cat(
+            [
+                torch.zeros(len(boxes_xyxy), 1, device=boxes_xyxy.device),
+                boxes_xyxy.float(),
+            ],
+            dim=1,
+        )
+
+        parts = []
+        for i, emb in enumerate(emb_preds):
+            pooled = roi_align(
+                emb.float(),
+                batch_boxes,
+                output_size=1,
+                spatial_scale=_SPATIAL_SCALES[i],
+                aligned=True,
+            )
+            parts.append(pooled.flatten(1))
+        return F.normalize(torch.cat(parts, dim=1), dim=1)
+
+    def pool_embeddings_global(self, emb_preds: list[Tensor]) -> Tensor:
+        parts = []
+        for emb in emb_preds:
+            pooled = emb.mean(dim=[2, 3])
+            parts.append(pooled)
+        return F.normalize(torch.cat(parts, dim=1), dim=1)
+
+    def pool_embeddings_center(self, emb_preds: list[Tensor]) -> Tensor:
+        parts = []
+        for emb in emb_preds:
+            h, w = emb.shape[2], emb.shape[3]
+            center = emb[:, :, h // 2, w // 2]
+            parts.append(center)
+        return F.normalize(torch.cat(parts, dim=1), dim=1)
+
+
+class EmbeddingProjector(nn.Module):
+    """Projects per-scale concatenated emb_head features to a ReID embedding.
+
+    Input:  (N, emb_dim * 3)  [P3 + P4 + P5 pooled features]
+    Output: (N, out_dim)      L2-normalised
+    """
+
+    def __init__(self, emb_dim: int = 128, hidden: int = 256, out_dim: int = 128):
+        super().__init__()
+        in_dim = emb_dim * 3
+        self.proj = nn.Sequential(
+            nn.Linear(in_dim, hidden, bias=False),
+            nn.BatchNorm1d(hidden),
+            nn.ReLU(inplace=True),
+            nn.Linear(hidden, out_dim, bias=False),
+        )
+        self.out_dim = out_dim
+
+    def forward(self, x: Tensor) -> Tensor:
+        return F.normalize(self.proj(x), dim=1)

@@ -35,7 +35,7 @@ Key diagnosis:
 
 Recommended reading with this update:
 
-- For pipeline shape: [pipeline_flow.md](/docs/pipeline_flow.md)
+- For pipeline shape: [reference/pipeline_flow.md](/docs/reference/pipeline_flow.md)
 - For detector / postprocess code: [L1_perception.md](/docs/layers/L1_perception.md)
 - For CLI entry point: [scripts/eval/README.md](/scripts/eval/README.md)
 

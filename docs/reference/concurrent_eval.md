@@ -115,3 +115,27 @@ torch.cuda.current_stream().wait_event(wb_done)  # calling 等 workbench
 | `src/saccade/perception/detector_trt.py` | `BatchingTRTDetector` + `BatchedDetectorProxy` |
 | `src/saccade/perception/workbench.py` | `Workbench`（Python wrapper over C++ `_WorkbenchExt`） |
 | `src/saccade/perception/eval/runner.py` | `run_eval()` 共用 entry point |
+
+## 實作狀態（2026-05-16）
+
+### 已完成
+| 項目 | 說明 |
+|------|------|
+| `BatchingTRTDetector` server thread | `detector_trt.py` |
+| `BatchedDetectorProxy` per-thread proxy | `detector_trt.py` |
+| `Workbench` Python wrapper | `workbench.py` |
+| Batch engine 自動選擇 | `mot17.py` L129–153 |
+| CUDA stream 雙向 event handshake | `workbench.py` process_detections() |
+
+### 已廢棄
+| 項目 | 說明 |
+|------|------|
+| `ConcurrentDetectorProxy` | 早期設計，未上線 |
+| `concurrent_mot17.py` | 早期測試腳本 |
+| `TRTYoloDetector.enable_concurrent` | 早期 C++ 方案 |
+| ADR-018 | 描述廢棄方案，歷史參考 |
+
+### 已修復 Bug（2026-05-16）
+1. **Batch size mismatch**：`--threads 2` 無 batch-2 engine → 自動選擇邏輯
+2. **CUDA stream input race**：caller_event + wait_event 修復
+3. **CUDA stream output race**：wb_done + wait_event 修復

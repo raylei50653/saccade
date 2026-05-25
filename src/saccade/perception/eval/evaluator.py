@@ -1184,25 +1184,32 @@ def run_eval(
             BatchedDetectorProxy,
         ),
     ):
-        import os as _os
+        from saccade.perception.temporal_yolo.mamba_gated_detector import (
+            MambaGatedDetector,
+        )
 
-        tiling = kwargs.get("tiling", "native_960")
-        if tiling in {"960p_2x2", "sahi_960p_2x2"} and "_960_batch1" in engine:
-            candidate = engine.replace("_960_batch1", "_batch4")
-            if _os.path.exists(candidate):
-                engine = candidate
-        elif tiling == "960p_3x2" and "_960_batch1" in engine:
-            candidate = engine.replace("_960_batch1", "_batch6")
-            if _os.path.exists(candidate):
-                engine = candidate
-        elif tiling == "native_640" and "_960_batch1" in engine:
-            candidate = engine.replace("_960_batch1", "_batch4")
-            if _os.path.exists(candidate):
-                engine = candidate
-        if pose_engine:
-            detector = TwostageDetector(det_engine=engine, pose_engine=pose_engine)
+        if isinstance(detector, MambaGatedDetector):
+            pass
         else:
-            detector = TRTYoloDetector(engine_path=engine)
+            import os as _os
+
+            tiling = kwargs.get("tiling", "native_960")
+            if tiling in {"960p_2x2", "sahi_960p_2x2"} and "_960_batch1" in engine:
+                candidate = engine.replace("_960_batch1", "_batch4")
+                if _os.path.exists(candidate):
+                    engine = candidate
+            elif tiling == "960p_3x2" and "_960_batch1" in engine:
+                candidate = engine.replace("_960_batch1", "_batch6")
+                if _os.path.exists(candidate):
+                    engine = candidate
+            elif tiling == "native_640" and "_960_batch1" in engine:
+                candidate = engine.replace("_960_batch1", "_batch4")
+                if _os.path.exists(candidate):
+                    engine = candidate
+            if pose_engine:
+                detector = TwostageDetector(det_engine=engine, pose_engine=pose_engine)
+            else:
+                detector = TRTYoloDetector(engine_path=engine)
 
     if reid_mode not in {"off", "tracker", "semantic", "hybrid"}:
         raise ValueError(f"Unsupported reid_mode: {reid_mode}")
@@ -1233,7 +1240,7 @@ def run_eval(
         detect_fn = detect_sahi_960p_2x2
     elif cfg.tiling == "native_640":
         detect_fn = detect_native_640
-    elif cfg.tiling == "native_960":
+    elif cfg.tiling == "native_960" or cfg.tiling == "mamba_960":
         detect_fn = (
             detect_native_960_tta if getattr(cfg, "tta", False) else detect_native_960
         )

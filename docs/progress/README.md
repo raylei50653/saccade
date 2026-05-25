@@ -13,6 +13,6 @@
 ## 使用方式
 
 - 這些文件偏向「狀態快照」，適合追蹤進度，不是最終規格來源。
-- 若功能已穩定落地，應將關鍵內容回寫到 `architecture.md`、`api_spec.md`、`runbooks/` 或對應 ADR。
+- 若功能已穩定落地，應將關鍵內容回寫到 `architecture.md`、`reference/api_spec.md`、`runbooks/` 或對應 ADR。
 - 已收斂的實驗或效能量測應移至 `docs/experiments/` 或 `docs/benchmarks/`。
 - 已全部完成且只剩歷史脈絡價值的整合路線圖，才移至 `docs/decisions/archive/` 歸檔。

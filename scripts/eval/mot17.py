@@ -114,7 +114,31 @@ if __name__ == "__main__":
         "module_trigger",
         "module_lifecycle",
     }
-    eval_kwargs = {k: v for k, v in vars(args).items() if k not in _MODULE_KEYS}
+    _MAMBA_KEYS = {"mamba_ckpt", "mamba_teacher_ckpt"}
+    eval_kwargs = {
+        k: v
+        for k, v in vars(args).items()
+        if k not in _MODULE_KEYS and k not in _MAMBA_KEYS
+    }
+
+    if getattr(args, "mamba_ckpt", None):
+        print(f"\n🧠 [Mamba] Loading Mamba head from {args.mamba_ckpt}")
+        from saccade.perception.temporal_yolo.mamba_gated_detector import (
+            build_mamba_gated_detector,
+        )
+
+        mamba_detector = build_mamba_gated_detector(
+            yolo_pt_path="models/yolo/yolo26s.pt",
+            teacher_ckpt=args.mamba_teacher_ckpt,
+            mamba_ckpt=args.mamba_ckpt,
+            img_size=960,
+            device="cuda",
+            conf_thr=0.001,
+            max_det=300,
+        )
+        eval_kwargs["detector"] = mamba_detector
+        eval_kwargs["tiling"] = "mamba_960"
+        eval_kwargs["engine"] = "mamba"
 
     if getattr(args, "cpp_threads", 0) > 0:
         # ── C++ multi-threaded path ───────────────────────────────────────────

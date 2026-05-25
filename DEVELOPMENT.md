@@ -18,7 +18,7 @@
 
 1. **主路徑程式碼**（`src/saccade/perception/`、`src/tracking/`、`scripts/eval/mot17.py`）
 2. **本文件 DEVELOPMENT.md**
-3. **穩定架構 / 合約文件**（`docs/architecture.md`、`docs/PIPELINE_REFERENCE.md`、`docs/api_spec.md`、`docs/decisions/`）
+3. **穩定架構 / 合約文件**（`docs/architecture.md`、`docs/reference/PIPELINE_REFERENCE.md`、`docs/reference/api_spec.md`、`docs/decisions/`）
 4. **當前待辦**（`docs/TODO.md`）
 5. **歷史脈絡**（`docs/TODO_history.md`、`docs/progress/`、`docs/experiments/`）
 
@@ -262,7 +262,7 @@ uv run scripts/eval/mot17.py --preset speed --detector SDP
 | `docs/TODO.md` | 目前待辦、近期 ablation 結論、下一輪 backlog |
 | `docs/TODO_history.md` | 已完成、已收斂放棄、舊路線圖與過程紀錄 |
 | `docs/decisions/` | 架構決策紀錄（ADR） |
-| `docs/PIPELINE_REFERENCE.md` | pipeline module 與 metric 對應 |
+| `docs/reference/PIPELINE_REFERENCE.md` | pipeline module 與 metric 對應 |
 
 歸檔原則：主 TODO 保留高訊號摘要；細節、過程、舊參數掃描移入 history。某方向重新啟動再從 history 摘回，不在主 TODO 長期保留已結案脈絡。
 
@@ -271,7 +271,7 @@ uv run scripts/eval/mot17.py --preset speed --detector SDP
 ## 12. 補充入口
 
 - [docs/architecture.md](docs/architecture.md)
-- [docs/PIPELINE_REFERENCE.md](docs/PIPELINE_REFERENCE.md)
+- [docs/reference/PIPELINE_REFERENCE.md](docs/reference/PIPELINE_REFERENCE.md)
 - [docs/TODO.md](docs/TODO.md)
 - [docs/mot17_default_config.md](docs/mot17_default_config.md)
 - [MLflow UI](http://localhost:5000)（需先啟動 `scripts/ops/mlflow_server.sh`）

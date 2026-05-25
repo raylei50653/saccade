@@ -81,6 +81,12 @@ def main() -> None:
     parser.add_argument("--d-model", type=int, default=128)
     parser.add_argument("--d-state", type=int, default=16)
     parser.add_argument("--num-blocks", type=int, default=1)
+    parser.add_argument(
+        "--compile", action="store_true", help="torch.compile teacher (mode=default)"
+    )
+    parser.add_argument(
+        "--accum-steps", type=int, default=1, help="gradient accumulation steps"
+    )
     parser.add_argument("--resume", default="")
     args = parser.parse_args()
 
@@ -160,6 +166,10 @@ def main() -> None:
         best_loss = ckpt.get("best_loss", float("inf"))
         print(f"[Resume] epoch={start_epoch}  best_loss={best_loss:.4f}")
 
+    if args.compile:
+        print("[Compile] torch.compile teacher (mode=default) — ~30s cold-start")
+        teacher.yolo_model = torch.compile(teacher.yolo_model, mode="default")
+
     # ------------------------------------------------------------------
     # Data
     # ------------------------------------------------------------------
@@ -179,15 +189,16 @@ def main() -> None:
     # Training loop
     # ------------------------------------------------------------------
     print(f"\nTraining {args.epochs} epochs...")
+    accum = args.accum_steps
     for epoch in range(start_epoch, args.epochs + 1):
         epoch_loss = 0.0
         t0 = time.time()
 
+        optimizer.zero_grad(set_to_none=True)
+
         for i, batch in enumerate(loader):
             frames = batch["frames"].to(device, dtype=torch.float32) / 255.0
             B, T, _, H, W = frames.shape
-
-            optimizer.zero_grad(set_to_none=True)
 
             batch_loss = frames.new_zeros(())
 
@@ -200,11 +211,9 @@ def main() -> None:
 
                 feats = [fpn_feats[s] for s in ("p3", "p4", "p5")]
 
-                # Teacher: per-scale cls/reg from Detect head branches
                 t_cls = [detect_head.cv3[si](feats[si]) for si in range(len(feats))]
                 t_reg = [detect_head.cv2[si](feats[si]) for si in range(len(feats))]
 
-                # Student: Mamba head
                 s_cls, s_reg = student(feats)
 
                 for si in range(len(feats)):
@@ -213,17 +222,25 @@ def main() -> None:
                         + nn.functional.mse_loss(s_reg[si], t_reg[si])
                     )
 
-            batch_loss = batch_loss / T
+            batch_loss = batch_loss / (T * accum)
             batch_loss.backward()
-            nn.utils.clip_grad_norm_(student.parameters(), max_norm=1.0)
-            optimizer.step()
 
-            epoch_loss += batch_loss.item()
+            if (i + 1) % accum == 0:
+                nn.utils.clip_grad_norm_(student.parameters(), max_norm=1.0)
+                optimizer.step()
+                optimizer.zero_grad(set_to_none=True)
+
+            epoch_loss += batch_loss.item() * accum
 
             if (i + 1) % 50 == 0:
                 print(
-                    f"  epoch {epoch:3d}  batch {i + 1:4d}  loss={batch_loss.item():.4f}"
+                    f"  epoch {epoch:3d}  batch {i + 1:4d}  loss={batch_loss.item() * accum:.4f}"
                 )
+
+        if len(loader) % accum != 0:
+            nn.utils.clip_grad_norm_(student.parameters(), max_norm=1.0)
+            optimizer.step()
+            optimizer.zero_grad(set_to_none=True)
 
         scheduler.step()
         avg_loss = epoch_loss / max(len(loader), 1)

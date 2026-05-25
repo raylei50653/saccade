@@ -510,8 +510,8 @@ class GPUByteTracker:
         if num == 0:
             return
 
-        ids_contig = track_ids.to(torch.int32).contiguous()
-        features_contig = features.to(torch.float32).contiguous()
+        ids_contig = track_ids.to(torch.int32).cuda().contiguous()
+        features_contig = features.to(torch.float32).cuda().contiguous()
         stream = torch.cuda.current_stream().cuda_stream
 
         self.tracker.update_reference_features(
@@ -704,8 +704,8 @@ class GPUByteTracker:
         stream = torch.cuda.current_stream().cuda_stream
         set_flags_host = getattr(self.tracker, "set_clean_embedding_flags_host", None)
         if set_flags_host is not None:
-            ids_contig = track_ids.to(torch.int32).contiguous()  # stays on CPU
-            flags_contig = flags.to(torch.bool).contiguous()  # stays on CPU
+            ids_contig = track_ids.to(torch.int32).cpu().contiguous()
+            flags_contig = flags.to(torch.bool).cpu().contiguous()
             set_flags_host(
                 ids_contig.data_ptr(),
                 flags_contig.data_ptr(),

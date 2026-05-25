@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from pathlib import Path
 from torch import Tensor
 from typing import Any
@@ -25,7 +26,7 @@ from .yolo_gated_detector import (
     build_gated_yolo_detector,
     _GATE_LAYER_IDX,
 )
-from .mamba_head import MambaDetectionHead
+from .mamba_head import MambaDetectionHead, EmbeddingProjector
 from .yolo_conditioned import TrackerGateInput
 
 
@@ -143,6 +144,8 @@ class MambaGatedDetector(nn.Module):
         conf_thr: float = 0.25,
         max_det: int = 300,
         trt_backbone_engine: str = "",
+        emb_dim: int = 0,
+        jde_proj_ckpt: str = "",
     ):
         super().__init__()
         if cfg is None:
@@ -150,9 +153,11 @@ class MambaGatedDetector(nn.Module):
 
         self.conf_thr = conf_thr
         self.max_det = max_det
-        self.device = device
+        self._device = device
         self.img_size = cfg.img_size
         self._trt_backbone: TRTYoloBackbone | None = None
+        self.emb_dim = emb_dim
+        self._emb_projector: EmbeddingProjector | None = None
 
         self.teacher = build_gated_yolo_detector(
             yolo_pt_path,
@@ -164,7 +169,6 @@ class MambaGatedDetector(nn.Module):
         for p in self.teacher.parameters():
             p.requires_grad_(False)
 
-        # Extract gate module + alpha for explicit gate application
         self.gate_module = self.teacher.gate
 
         mamba_state = torch.load(mamba_ckpt, map_location="cpu", weights_only=False)
@@ -178,20 +182,47 @@ class MambaGatedDetector(nn.Module):
             num_classes=mamba_args["num_classes"],
             reg_max=1,
             spatial_reduction=mamba_args["spatial_reduction"],
+            emb_dim=emb_dim,
         ).to(device)
         sd = {
             k.replace("._orig_mod.", "."): v for k, v in mamba_state["student"].items()
         }
-        self.mamba_head.load_state_dict(sd, strict=True)
+        missing, unexpected = self.mamba_head.load_state_dict(sd, strict=False)
+        if missing:
+            print(f"[MambaHead] New params (init randomly): {missing}")
+        if unexpected:
+            print(f"[MambaHead] Unused params: {unexpected}")
         self.mamba_head.eval()
         for p in self.mamba_head.parameters():
             p.requires_grad_(False)
 
         self.stride = torch.tensor([8.0, 16.0, 32.0], device=device)
 
-        # TRT backbone: loads pre-built engine, replaces PyTorch layer loop
+        from saccade.perception.tracking import GPUByteTracker  # noqa: E402
+
+        self.tracker = GPUByteTracker(max_objects=2048)
+
         if trt_backbone_engine:
             self._trt_backbone = TRTYoloBackbone(trt_backbone_engine)
+
+        if jde_proj_ckpt and emb_dim > 0:
+            self._load_jde_projector(jde_proj_ckpt, device)
+
+    def _load_jde_projector(self, ckpt_path: str, device: torch.device) -> None:
+        ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+        proj_state = ckpt.get("projector", ckpt)
+        self._emb_projector = EmbeddingProjector(
+            emb_dim=self.emb_dim,
+            hidden=256,
+            out_dim=proj_state.get("out_dim", proj_state.get("emb_out_dim", 128)),
+        ).to(device)
+        self._emb_projector.load_state_dict(proj_state)
+        self._emb_projector.eval()
+        print(f"[JDE] Loaded embedding projector from {ckpt_path}")
+
+    @property
+    def device(self) -> torch.device:
+        return torch.device(self._device)
 
     def _forward_pytorch_backbone(self, frame: Tensor) -> list[Tensor]:
         teacher = self.teacher
@@ -248,9 +279,10 @@ class MambaGatedDetector(nn.Module):
             feats_raw = [p3, p4, p5]
             feats = self._apply_gate(feats_raw, gate_input)
         else:
-            # PyTorch backbone already has gates injected → feats are gated
             teacher = self.teacher
             gls = teacher._gate_layers
+            # Enable feat caching so we can reuse raw FPN for ReID
+            teacher.cache_feats = True
             for gl in gls.values():
                 gl._gate_input = gate_input
 
@@ -259,13 +291,120 @@ class MambaGatedDetector(nn.Module):
             for gl in gls.values():
                 gl._gate_input = None
 
-        cls_preds, reg_preds = self.mamba_head(feats)
+        want_emb = self.mamba_head.emb_head is not None
+        head_out = self.mamba_head(feats, return_embeddings=want_emb)
+        if want_emb:
+            cls_preds, reg_preds, emb_preds = head_out
+        else:
+            cls_preds, reg_preds = head_out
 
         detections = _postprocess_mamba(
             cls_preds, reg_preds, self.stride, self.conf_thr, self.max_det
         )
 
-        return detections, {}
+        extra: dict[str, Any] = {}
+        if want_emb:
+            extra["emb_preds"] = emb_preds
+
+        return detections, extra
+
+    def extract_det_embeddings(
+        self, emb_preds: list[Tensor], boxes_xyxy: Tensor
+    ) -> Tensor:
+        pooled = self.mamba_head.pool_embeddings(emb_preds, boxes_xyxy)
+        if self._emb_projector is not None:
+            return self._emb_projector(pooled)
+        return pooled
+
+    def extract_fpn_embeddings(
+        self,
+        frame_bchw: Tensor | None,
+        boxes_xyxy: Tensor,
+    ) -> Tensor:
+        """Zero-training ReID: center-pool raw FPN at each bbox.
+
+        If called after forward(), reuses cached raw FPN features (single
+        YOLO pass). Otherwise does a standalone backbone forward.
+
+        Args:
+            frame_bchw: (1, 3, H, W) frame, or None to reuse cached features.
+            boxes_xyxy: (N, 4) detection boxes in pixel coords [x1, y1, x2, y2]
+
+        Returns:
+            (N, total_fpn_dim) L2-normalized embeddings on CUDA
+        """
+        from saccade.perception.temporal_yolo.yolo_gated_detector import (
+            _GATE_LAYER_IDX,
+        )
+
+        # Try to reuse FPN features cached by forward()
+        cache = {}
+        if hasattr(self.teacher, "_gate_layers"):
+            cache = {}
+            for gl in self.teacher._gate_layers.values():
+                cache.update(gl._feat_cache)
+        if set(cache.keys()) == {"p3", "p4", "p5"}:
+            feats = [cache[s] for s in ("p3", "p4", "p5")]
+            frame_for_resolution = frame_bchw
+        elif frame_bchw is not None:
+            # Standalone forward
+            layers = self.teacher.yolo_model.model
+            save: set[int] = set(self.teacher.yolo_model.save)
+            y: list[Tensor | None] = []
+            x = frame_bchw
+            for i in range(23):
+                m = layers[i]
+                if m.f != -1:
+                    if isinstance(m.f, int):
+                        x = y[m.f]
+                    else:
+                        x = [x if j == -1 else y[j] for j in m.f]
+                x = m(x)
+                y.append(x if i in save else None)
+            fpn_indices = [_GATE_LAYER_IDX[s] for s in ("p3", "p4", "p5")]
+            feats = [y[i] for i in fpn_indices]
+            frame_for_resolution = frame_bchw
+        else:
+            raise RuntimeError(
+                "No cached FPN features and no frame provided. "
+                "Call forward() before extract_fpn_embeddings(None, boxes)."
+            )
+
+        h_img = (
+            frame_for_resolution.shape[2]
+            if frame_for_resolution is not None
+            else self.img_size
+        )
+        w_img = (
+            frame_for_resolution.shape[3]
+            if frame_for_resolution is not None
+            else self.img_size
+        )
+        h_ratio = h_img / self.img_size
+        w_ratio = w_img / self.img_size
+
+        boxes_xyxy.shape[0]
+        parts: list[Tensor] = []
+        for f in feats:
+            f_h, f_w = f.shape[2], f.shape[3]
+            cx = ((boxes_xyxy[:, 0] + boxes_xyxy[:, 2]) * 0.5 / w_ratio).float()
+            cy = ((boxes_xyxy[:, 1] + boxes_xyxy[:, 3]) * 0.5 / h_ratio).float()
+            cx_norm = cx / self.img_size
+            cy_norm = cy / self.img_size
+            cx_idx = (cx_norm * f_w).long().clamp(0, f_w - 1)
+            cy_idx = (cy_norm * f_h).long().clamp(0, f_h - 1)
+            center_feat = f[0][:, cy_idx, cx_idx].mT
+            parts.append(center_feat)
+        return F.normalize(torch.cat(parts, dim=1), dim=1)
+
+    def detect_raw(self, input_tensor: Tensor) -> Tensor:
+        detections, _ = self.forward(input_tensor, gate_input=None)
+        return detections
+
+    def reset_tracker(self) -> None:
+        from saccade.perception.tracking import GPUByteTracker  # noqa: E402
+
+        self.tracker = GPUByteTracker(max_objects=2048)
 
     def remove_hooks(self) -> None:
         pass
@@ -280,22 +419,34 @@ def build_mamba_gated_detector(
     conf_thr: float = 0.25,
     max_det: int = 300,
     trt_backbone_engine: str = "",
+    emb_dim: int = 0,
+    jde_proj_ckpt: str = "",
 ) -> MambaGatedDetector:
-    teacher_raw = torch.load(teacher_ckpt, map_location="cpu", weights_only=False)
-    train_args = teacher_raw.get("args", {})
-    scales = tuple(s.strip() for s in train_args.get("scales", "p3,p4,p5").split(","))
-
-    cfg = GatedDetConfig(
-        scales=scales,
-        gate_sigma_scale=train_args.get("gate_sigma_scale", 0.5),
-        gate_min_score=train_args.get("gate_min_score", 0.5),
-        freeze_backbone=True,
-        img_size=img_size,
-    )
+    if teacher_ckpt and Path(teacher_ckpt).exists():
+        teacher_raw = torch.load(teacher_ckpt, map_location="cpu", weights_only=False)
+        train_args = teacher_raw.get("args", {})
+        scales = tuple(
+            s.strip() for s in train_args.get("scales", "p3,p4,p5").split(",")
+        )
+        cfg = GatedDetConfig(
+            scales=scales,
+            gate_sigma_scale=train_args.get("gate_sigma_scale", 0.5),
+            gate_min_score=train_args.get("gate_min_score", 0.5),
+            freeze_backbone=True,
+            img_size=img_size,
+        )
+        teacher_path = teacher_ckpt
+    else:
+        cfg = GatedDetConfig(
+            scales=("p3", "p4", "p5"),
+            freeze_backbone=True,
+            img_size=img_size,
+        )
+        teacher_path = ""
 
     model = MambaGatedDetector(
         yolo_pt_path=str(Path(yolo_pt_path).resolve()),
-        teacher_ckpt=str(Path(teacher_ckpt).resolve()),
+        teacher_ckpt=teacher_path,
         mamba_ckpt=str(Path(mamba_ckpt).resolve()),
         cfg=cfg,
         device=device,
@@ -304,5 +455,7 @@ def build_mamba_gated_detector(
         trt_backbone_engine=str(Path(trt_backbone_engine).resolve())
         if trt_backbone_engine
         else "",
+        emb_dim=emb_dim,
+        jde_proj_ckpt=str(Path(jde_proj_ckpt).resolve()) if jde_proj_ckpt else "",
     )
     return model.to(device)
