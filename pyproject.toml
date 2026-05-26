@@ -78,10 +78,13 @@ ignore_errors = true
 
 [[tool.mypy.overrides]]
 module = [
+    "build_fpn_reid",
     "debug_eval",
     "saccade.media.dali_pipeline",
     "saccade.perception.detector_trt",
     "saccade.perception.eval.detection",
+    "saccade.perception.tracking.fpn_reid",
+    "saccade.perception.tracking.fpn_reid_cuda",
 ]
 ignore_errors = true
 

@@ -64,6 +64,14 @@ def log_eval_run(
 
     try:
         mlflow.set_tracking_uri(uri)
+
+        import requests
+
+        try:
+            requests.head(uri, timeout=3)
+        except Exception:
+            print("[mlflow] Server unreachable, skipping.")
+            return False
         mlflow.set_experiment(experiment_name)
 
         run_name = run_name or f"run-{time.strftime('%Y%m%d-%H%M%S')}"

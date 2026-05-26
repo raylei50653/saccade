@@ -94,7 +94,13 @@ class GPUTrackResultBuffers(TypedDict):
 
 
 class TrackAppearanceBank:
-    """Per-track Top-K clean appearance sample bank (Phase 1)."""
+    """Per-track Top-K clean appearance sample bank with EMA smoothing (Phase 1).
+
+    Stores up to K quality-sorted samples per track for consistency checking.
+    The representative used for matching is an EMA-smoothed embedding (like
+    Ultralytics BOTSORT, alpha=0.9): each new matched detection is blended
+    with the exponential moving average to reduce single-frame noise.
+    """
 
     MIN_SCORE: float = 0.45
     MIN_IOU: float = 0.35
@@ -110,6 +116,7 @@ class TrackAppearanceBank:
         min_aspect: float = 1.2,
         max_aspect: float = 4.5,
         bank_weighted_mean: bool = False,
+        ema_alpha: float = 0.7,
     ) -> None:
         self.k = max(1, k)
         self.min_score = float(min_score)
@@ -119,11 +126,14 @@ class TrackAppearanceBank:
         self.min_aspect = float(min_aspect)
         self.max_aspect = float(max_aspect)
         self._bank_weighted_mean = bank_weighted_mean
+        self.ema_alpha = float(ema_alpha)
+        self._use_ema = ema_alpha > 0.0
         self._banks: dict[int, list[AppearanceSample]] = {}
         self._representatives: dict[int, torch.Tensor] = {}
         self._consistency: dict[int, float] = {}
         self._clean_ids: set[int] = set()
         self._high_quality_reps: dict[int, torch.Tensor] = {}
+        self._ema_reps: dict[int, torch.Tensor] = {}
 
     @staticmethod
     def _rank_key(s: "AppearanceSample") -> tuple[float, int]:
@@ -158,6 +168,15 @@ class TrackAppearanceBank:
         emb = F.normalize(
             embedding.detach().to(device="cpu", dtype=torch.float32), dim=0
         )
+        if self._use_ema:
+            if track_id in self._ema_reps:
+                ema_unnorm = (
+                    self.ema_alpha * self._ema_reps[track_id]
+                    + (1.0 - self.ema_alpha) * emb
+                )
+            else:
+                ema_unnorm = emb
+            self._ema_reps[track_id] = F.normalize(ema_unnorm, dim=0)
         bank = self._banks.setdefault(track_id, [])
         bank.append(
             AppearanceSample(emb, det_score, iou, frame_id, aspect_ratio, quality_score)
@@ -194,6 +213,15 @@ class TrackAppearanceBank:
             emb = F.normalize(
                 embedding.detach().to(device="cpu", dtype=torch.float32), dim=0
             )
+            if self._use_ema:
+                if track_id in self._ema_reps:
+                    ema_unnorm = (
+                        self.ema_alpha * self._ema_reps[track_id]
+                        + (1.0 - self.ema_alpha) * emb
+                    )
+                else:
+                    ema_unnorm = emb
+                self._ema_reps[track_id] = F.normalize(ema_unnorm, dim=0)
             bank = self._banks.setdefault(track_id, [])
             bank.append(
                 AppearanceSample(
@@ -226,10 +254,14 @@ class TrackAppearanceBank:
         return self.consistency(track_id) >= self.consistency_threshold
 
     def representative(self, track_id: int) -> Optional[torch.Tensor]:
+        if self._use_ema:
+            return self._ema_reps.get(track_id)
         return self._representatives.get(track_id)
 
     def representatives(self) -> dict[int, torch.Tensor]:
         """Returns {track_id: representative_embedding} for all tracks with a clean bank."""
+        if self._use_ema:
+            return dict(self._ema_reps)
         return dict(self._representatives)
 
     def clean_ids(self) -> set[int]:
@@ -243,6 +275,7 @@ class TrackAppearanceBank:
             self._consistency.pop(tid, None)
             self._clean_ids.discard(tid)
             self._high_quality_reps.pop(tid, None)
+            self._ema_reps.pop(tid, None)
 
     def _refresh_track(self, track_id: int) -> None:
         bank = self._banks.get(track_id, [])
@@ -251,6 +284,7 @@ class TrackAppearanceBank:
             self._consistency.pop(track_id, None)
             self._clean_ids.discard(track_id)
             self._high_quality_reps.pop(track_id, None)
+            self._ema_reps.pop(track_id, None)
             return
 
         embs = torch.stack([sample.embedding for sample in bank])
@@ -446,6 +480,11 @@ class GPUByteTracker:
                 cost_iou_w,
                 cost_score_w,
             )
+
+    def set_reid_min_candidates(self, min_candidates: int = 1) -> None:
+        setter = getattr(self.tracker, "set_reid_min_candidates", None)
+        if setter is not None:
+            setter(min_candidates)
 
     def set_oao_params(self, tau: float = 0.0) -> None:
         """OA-SORT Occlusion-Aware Offset (OAO) penalty.

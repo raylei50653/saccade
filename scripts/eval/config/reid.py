@@ -84,9 +84,22 @@ def add_reid_args(parser: argparse.ArgumentParser) -> None:
     )
     grp.add_argument(
         "--reid-model",
-        choices=("siglip2", "dinov2", "transreid", "osnet", "fastreid"),
+        choices=(
+            "siglip2",
+            "dinov2",
+            "transreid",
+            "osnet",
+            "fastreid",
+            "fpn_raw",
+            "fpn_trained",
+        ),
         default="siglip2",
         help="Embedding model family.",
+    )
+    grp.add_argument(
+        "--fpn-reid-ckpt",
+        default="",
+        help="Trained DimReduceHead checkpoint for fpn_trained mode.",
     )
     grp.add_argument(
         "--reid-engine-path",

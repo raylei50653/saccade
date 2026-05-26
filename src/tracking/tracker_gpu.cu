@@ -281,12 +281,13 @@ __global__ void compute_track_occlusion_kernel(
 
 // Two-stage conditional cost matrix.
 // Stage 1 gate: IoU > iou_gate OR Mahalanobis^2 < maha_gate; else hard reject (cost=1).
-// Stage 2: if candidate_count[t] >= 2 AND has_clean_embedding[t] AND det embedding valid (norm>0.25):
-//            cost = 1 - (0.55*CosSim + 0.30*IoU + 0.15*det_score)
+// Stage 2: if candidate_count[t] >= 2 AND has_clean_embedding[t] AND both embeddings valid:
+//            app_cost = 1 - (cos_w*CosSim + iou_w*fused_iou + score_w*det_score)
+//            cost = min(iou_cost, app_cost)   (appearance can only help, never hurt)
+//            when cos_sim >= cos_threshold AND fused_iou >= iou_low; else iou_cost.
 //          else:
-//            cost = 1 - IoU  (stable IoU-only fallback — also used for budget-zero detections)
-// OC-SORT: optional vel_dir_weight penalises matches where detection direction opposes track velocity.
-// OA-SORT: optional oao_tau adds occlusion penalty (cost += tau * occ_coeff[t]).
+//            cost = 1 - fused_iou  (stable IoU-only fallback)
+// OC-SORT, OA-SORT penalties applied on top.
 __global__ void compute_conditional_cost_kernel(
     const float* trk_states, const float* det_boxes,
     const float* trk_embeds, const float* det_embeds,
@@ -297,6 +298,8 @@ __global__ void compute_conditional_cost_kernel(
     int n_trk, int n_det, int embed_dim, float iou_gate, float maha_gate,
     float vel_dir_weight, float fuse_score_weight,
     float cost_cos_w, float cost_iou_w, float cost_score_w,
+    float cos_threshold, float iou_low,
+    int reid_min_candidates,
     const float* d_occ_coeff, float oao_tau)
 {
     int t = blockIdx.y * blockDim.y + threadIdx.y;
@@ -327,8 +330,9 @@ __global__ void compute_conditional_cost_kernel(
 
     float ds = det_scores ? det_scores[d] : 0.5f;
     float fused_iou = iou * (1.0f - fuse_score_weight * ds);
+    float iou_cost = 1.0f - fused_iou;
     float cost;
-    bool try_appearance = (candidate_count[t] >= 2 && has_clean_embedding[t] && trk_embeds && det_embeds);
+    bool try_appearance = (candidate_count[t] >= reid_min_candidates && has_clean_embedding[t] && trk_embeds && det_embeds);
     if (try_appearance) {
         const float* e1 = trk_embeds + t * embed_dim;
         const float* e2 = det_embeds + d * embed_dim;
@@ -337,14 +341,19 @@ __global__ void compute_conditional_cost_kernel(
             cos_sim += e1[k] * e2[k];
             norm_sq += e2[k] * e2[k];
         }
-        if (norm_sq > 0.0625f) {  // det embedding valid (non-zero budget slot)
+        if (norm_sq > 0.0625f) {
             cos_sim = fmaxf(0.0f, cos_sim);
-            cost = 1.0f - (cost_cos_w * cos_sim + cost_iou_w * fused_iou + cost_score_w * ds);
+            if (cos_sim >= cos_threshold && fused_iou >= iou_low) {
+                float app_cost = 1.0f - (cost_cos_w * cos_sim + cost_iou_w * fused_iou + cost_score_w * ds);
+                cost = fminf(iou_cost, app_cost);
+            } else {
+                cost = iou_cost;
+            }
         } else {
-            cost = 1.0f - fused_iou;
+            cost = iou_cost;
         }
     } else {
-        cost = 1.0f - fused_iou;
+        cost = iou_cost;
     }
 
     // OC-SORT velocity direction penalty
@@ -1230,6 +1239,8 @@ public:
                 d_s_inv_, d_homography_, d_cost_matrix_, max_objs_, num_dets, embed_dim_, iou_stage1_gate_, maha_gate_,
                 vel_dir_weight_, fuse_score_weight_,
                 reid_cost_cos_w_, reid_cost_iou_w_, reid_cost_score_w_,
+                reid_cos_threshold_, reid_iou_low_,
+                reid_min_candidates_,
                 oao_tau_ > 0.0f ? d_occ_coeff_ : nullptr, oao_tau_);
             nvtxRangePop(); // Assoc/CostMatrix
 
@@ -1410,6 +1421,9 @@ public:
                          float cost_cos_w = 0.55f, float cost_iou_w = 0.30f, float cost_score_w = 0.15f) {
         reid_cos_threshold_ = cos_threshold; reid_iou_low_ = iou_low; reid_iou_high_ = iou_high; reid_weight_ = weight;
         reid_cost_cos_w_ = cost_cos_w; reid_cost_iou_w_ = cost_iou_w; reid_cost_score_w_ = cost_score_w;
+    }
+    void set_reid_min_candidates(int min_candidates) {
+        reid_min_candidates_ = max(1, min_candidates);
     }
     void set_oao_params(float tau) {
         oao_tau_ = std::clamp(tau, 0.0f, 1.0f);
@@ -1706,6 +1720,7 @@ private:
     float track_thresh_ = 0.1f, high_thresh_ = 0.5f, match_thresh_ = 0.8f, mid_thresh_ = 0.40f, new_track_thresh_ = 0.40f;
     float reid_cos_threshold_ = 0.90f, reid_iou_low_ = 0.3f, reid_iou_high_ = 0.6f, reid_weight_ = 0.4f;
     float reid_cost_cos_w_ = 0.55f, reid_cost_iou_w_ = 0.30f, reid_cost_score_w_ = 0.15f;
+    int reid_min_candidates_ = 2;
     
     bool enable_quality_scaling_ = false;
     float q_w_aspect_ = 0.50f;
@@ -1785,6 +1800,9 @@ void GPUByteTracker::set_params(float track_thresh, float high_thresh, float mat
 void GPUByteTracker::set_reid_params(float cos_threshold, float iou_low, float iou_high, float weight,
                                      float cost_cos_w, float cost_iou_w, float cost_score_w) {
     pimpl_->set_reid_params(cos_threshold, iou_low, iou_high, weight, cost_cos_w, cost_iou_w, cost_score_w);
+}
+void GPUByteTracker::set_reid_min_candidates(int min_candidates) {
+    pimpl_->set_reid_min_candidates(min_candidates);
 }
 void GPUByteTracker::set_oao_params(float tau) {
     pimpl_->set_oao_params(tau);

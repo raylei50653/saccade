@@ -128,6 +128,95 @@ class DimReduceHead(nn.Module):
         return F.normalize(self.proj(pooled), dim=1)
 
 
+# ── Top-K multi-sample appearance bank ──
+
+
+class TopKAppearanceBank:
+    """Per-track Top-K embedding pool with EMA smoothing and consistency gating.
+
+    Stores up to K latest matched embeddings per track for consistency checking.
+    The representative used for matching is an EMA-smoothed embedding (like
+    Ultralytics BOTSORT, alpha=0.9): new sample blended with exponential
+    moving average to reduce single-frame noise.
+
+    A track is "clean" (ready for ReID) when it has >= min_samples AND its
+    top-K mean L2 norm exceeds the consistency threshold.
+    """
+
+    def __init__(
+        self,
+        max_samples: int = 5,
+        min_samples: int = 2,
+        consistency_threshold: float = 0.85,
+        ema_alpha: float = 0.9,
+    ):
+        self.max_samples = max_samples
+        self.min_samples = min_samples
+        self.consistency_threshold = consistency_threshold
+        self.ema_alpha = ema_alpha
+        self._pools: dict[int, list[torch.Tensor]] = {}
+        self._means: dict[int, torch.Tensor] = {}  # cached L2-normalised mean
+        self._ema_reps: dict[int, torch.Tensor] = {}  # EMA-smoothed representatives
+        self._use_ema = ema_alpha > 0.0
+
+    def update(self, tid: int, emb: torch.Tensor) -> None:
+        pool = self._pools.setdefault(tid, [])
+        new_emb = emb.detach().cpu()
+        pool.append(new_emb)
+        if len(pool) > self.max_samples:
+            pool.pop(0)
+        self._refresh(tid, new_emb)
+
+    def _refresh(self, tid: int, new_emb: torch.Tensor | None = None) -> None:
+        pool = self._pools[tid]
+        if not pool:
+            self._means.pop(tid, None)
+            self._ema_reps.pop(tid, None)
+            return
+        stacked = torch.stack(pool)  # (N, D)
+        mean = stacked.mean(dim=0)
+        self._means[tid] = F.normalize(mean, dim=0)
+
+        if self._use_ema and new_emb is not None:
+            if tid in self._ema_reps:
+                ema_unnorm = (
+                    self.ema_alpha * self._ema_reps[tid]
+                    + (1.0 - self.ema_alpha) * new_emb
+                )
+            else:
+                ema_unnorm = new_emb
+            self._ema_reps[tid] = F.normalize(ema_unnorm, dim=0)
+
+    def representatives(
+        self, device: torch.device | str = "cuda"
+    ) -> dict[int, torch.Tensor]:
+        source = self._ema_reps if self._use_ema else self._means
+        return {tid: m.to(device, non_blocking=True) for tid, m in source.items()}
+
+    def clean_ids(self) -> set[int]:
+        result: set[int] = set()
+        for tid in self._means:
+            if len(self._pools.get(tid, [])) < self.min_samples:
+                continue
+            norm = self._means[tid].norm().item()
+            if norm >= self.consistency_threshold:
+                result.add(tid)
+        return result
+
+    def prune(self, active_tids: set[int]) -> None:
+        for tid in list(self._pools.keys()):
+            if tid not in active_tids:
+                del self._pools[tid]
+                self._means.pop(tid, None)
+                self._ema_reps.pop(tid, None)
+
+    def __len__(self) -> int:
+        return len(self._means)
+
+
+# ── Sequence loading ──
+
+
 def load_sequence_frames(seq_name: str, data_root: str, max_frames: int):
     import cv2
 
@@ -304,11 +393,12 @@ def main():
 
     result_bufs = tracker.allocate_result_buffers()
 
-    # Per-track embedding bank: track_id → latest embedding (no EMA)
-    bank_embeds: dict[int, torch.Tensor] = {}
-    bank_counts: dict[int, int] = {}
-
-    SYNC_INTERVAL = 1
+    bank = TopKAppearanceBank(
+        max_samples=args.bank_k,
+        min_samples=2,
+        consistency_threshold=0.85,
+        ema_alpha=args.bank_alpha,
+    )
 
     print(f"\nRunning tracking on {len(frames)} frames...")
     print(
@@ -316,7 +406,7 @@ def main():
         f"cos={args.cos_threshold} iou=({args.iou_low},{args.iou_high})"
     )
     if not args.no_reid:
-        print(f"  FPN dim: {fpn_dim}  Sync every {SYNC_INTERVAL}f")
+        print(f"  FPN dim: {fpn_dim}  bank sync every frame")
 
     t0 = time.perf_counter()
 
@@ -389,18 +479,21 @@ def main():
                 embeddings = detector.extract_fpn_embeddings(None, boxes)
 
             # ── Push bank to tracker (every frame) ──
-        if bank_embeds and not args.no_reid and frame_idx % SYNC_INTERVAL == 0:
-            _ids_list = sorted(bank_embeds.keys())
-            _ids = torch.tensor(_ids_list, device=device, dtype=torch.int32)
-            _feats = torch.stack([bank_embeds[k] for k in _ids_list])
-            tracker.update_reference_features(_ids, _feats)
-            _clean_ids = [k for k in _ids_list if bank_counts.get(k, 0) >= 2]
-            if _clean_ids:
-                _cids = torch.tensor(_clean_ids, device=device, dtype=torch.int32)
-                tracker.set_clean_embedding_flags(
-                    _cids,
-                    torch.ones(len(_clean_ids), device=device, dtype=torch.bool),
-                )
+            if len(bank) > 0 and not args.no_reid:
+                reps = bank.representatives(device)
+                _ids_list = sorted(reps.keys())
+                _ids = torch.tensor(_ids_list, device=device, dtype=torch.int32)
+                _feats = torch.stack([reps[k] for k in _ids_list])
+                tracker.update_reference_features(_ids, _feats)
+                _clean = bank.clean_ids()
+                if _clean:
+                    _cids = torch.tensor(
+                        sorted(_clean), device=device, dtype=torch.int32
+                    )
+                    tracker.set_clean_embedding_flags(
+                        _cids,
+                        torch.ones(len(_clean), device=device, dtype=torch.bool),
+                    )
 
         # ── Track ──
         tracker.update_into(
@@ -434,27 +527,15 @@ def main():
                 for tid, didx in zip(
                     track_ids[matched].tolist(), det_indices[matched].tolist()
                 ):
-                    new_emb = embeddings[int(didx)].detach()
-                    if tid in bank_embeds:
-                        bank_embeds[int(tid)] = F.normalize(
-                            0.7 * bank_embeds[int(tid)] + 0.3 * new_emb, dim=0
-                        )
-                        bank_counts[int(tid)] += 1
-                    else:
-                        bank_embeds[int(tid)] = new_emb
-                        bank_counts[int(tid)] = 1
+                    bank.update(int(tid), embeddings[int(didx)])
 
-        # Purge
-        if bank_embeds:
-            for tid in list(bank_embeds.keys()):
-                if tid not in active_tids:
-                    del bank_embeds[tid]
-                    bank_counts.pop(tid, None)
+        if bank:
+            bank.prune(active_tids)
 
         if frame_idx % 20 == 0 or frame_idx == len(frames) - 1:
             print(
                 f"  frame {frame_idx:4d}: {n_dets} dets, "
-                f"{count} tracks, bank={len(bank_embeds)}",
+                f"{count} tracks, bank={len(bank)}",
                 flush=True,
             )
 

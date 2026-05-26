@@ -1,6 +1,5 @@
 import os
 import glob
-from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from collections import OrderedDict
 from typing import Any, Iterable, Sequence, TypedDict
@@ -59,12 +58,6 @@ def _evaluate_single_sequence(
         "num_detections": int(row["num_detections"]),
         "num_predictions": int(row["num_predictions"]),
     }
-
-
-def _evaluate_single_sequence_star(
-    job: tuple[str, str, str],
-) -> dict[str, float | int]:
-    return _evaluate_single_sequence(*job)
 
 
 def _format_overall_metrics_from_counts(counts: dict[str, int]) -> dict[str, Any]:
@@ -149,7 +142,6 @@ def run_motmetrics_evaluation(
     if not jobs:
         return None
 
-    max_workers = min(len(jobs), max(os.cpu_count() or 1, 1))
     counts = {
         "idtp": 0,
         "idfp": 0,
@@ -161,14 +153,10 @@ def run_motmetrics_evaluation(
         "num_detections": 0,
         "num_predictions": 0,
     }
-    if max_workers <= 1:
-        results = [
-            _evaluate_single_sequence(gt_name, gt_path, ts_path)
-            for gt_name, gt_path, ts_path in jobs
-        ]
-    else:
-        with ProcessPoolExecutor(max_workers=max_workers) as executor:
-            results = list(executor.map(_evaluate_single_sequence_star, jobs))
+    results = [
+        _evaluate_single_sequence(gt_name, gt_path, ts_path)
+        for gt_name, gt_path, ts_path in jobs
+    ]
 
     for result in results:
         for key in counts:
