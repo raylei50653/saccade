@@ -20,3 +20,16 @@ void selective_scan_fwd(
     const SelectiveScanParams& params,
     void* stream = nullptr
 );
+
+void selective_scan_fwd_half(
+    const void* u,     // (B, L, D)
+    const void* delta, // (B, L, D)
+    const void* A,     // (N,)
+    const void* B_ssm, // (B, L, N)
+    const void* C_ssm, // (B, L, N)
+    const void* D,     // (D,)  or nullptr
+    void* y,           // (B, L, D)  output
+    const SelectiveScanParams& params,
+    void* stream = nullptr
+);
+

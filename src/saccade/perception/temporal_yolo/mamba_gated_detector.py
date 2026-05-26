@@ -101,6 +101,8 @@ class TRTYoloBackbone(nn.Module):
             self.engine.get_tensor_name(i) for i in range(1, self.engine.num_io_tensors)
         ]
         self._stream = torch.cuda.Stream()
+        self._output_bufs: list[Tensor] | None = None
+        self._last_batch = -1
 
     def infer(self, images: Tensor) -> tuple[Tensor, Tensor, Tensor]:
         B, C, H, W = images.shape
@@ -109,18 +111,23 @@ class TRTYoloBackbone(nn.Module):
         self.context.set_input_shape(self.input_name, (B, C, H, W))
         self.context.set_tensor_address(self.input_name, images.data_ptr())
 
-        outputs: list[Tensor] = []
-        for name in self.output_names:
-            shape = tuple(self.context.get_tensor_shape(name))
-            shape = tuple(B if d == -1 else d for d in shape)  # type: ignore[assignment]
-            buf = torch.empty(shape, dtype=torch.float32, device=images.device)
-            self.context.set_tensor_address(name, buf.data_ptr())
-            outputs.append(buf)
+        if B != self._last_batch:
+            self._output_bufs = []
+            for name in self.output_names:
+                shape = tuple(self.context.get_tensor_shape(name))
+                shape = tuple(B if d == -1 else d for d in shape)
+                buf = torch.empty(shape, dtype=torch.float32, device=images.device)
+                self.context.set_tensor_address(name, buf.data_ptr())
+                self._output_bufs.append(buf)
+            self._last_batch = B
+        else:
+            for name, buf in zip(self.output_names, self._output_bufs):
+                self.context.set_tensor_address(name, buf.data_ptr())
 
         self.context.execute_async_v3(self._stream.cuda_stream)
         self._stream.synchronize()
 
-        return outputs[0], outputs[1], outputs[2]
+        return self._output_bufs[0], self._output_bufs[1], self._output_bufs[2]
 
 
 # ---------------------------------------------------------------------------
@@ -158,6 +165,7 @@ class MambaGatedDetector(nn.Module):
         self._trt_backbone: TRTYoloBackbone | None = None
         self.emb_dim = emb_dim
         self._emb_projector: EmbeddingProjector | None = None
+        self._trt_feat_cache: dict[str, Tensor] = {}
 
         self.teacher = build_gated_yolo_detector(
             yolo_pt_path,
@@ -276,12 +284,12 @@ class MambaGatedDetector(nn.Module):
     ) -> tuple[Tensor, dict[str, Any]]:
         if self._trt_backbone is not None:
             p3, p4, p5 = self._trt_backbone.infer(frame)
+            self._trt_feat_cache = {"p3": p3, "p4": p4, "p5": p5}
             feats_raw = [p3, p4, p5]
             feats = self._apply_gate(feats_raw, gate_input)
         else:
             teacher = self.teacher
             gls = teacher._gate_layers
-            # Enable feat caching so we can reuse raw FPN for ReID
             teacher.cache_feats = True
             for gl in gls.values():
                 gl._gate_input = gate_input
@@ -337,17 +345,40 @@ class MambaGatedDetector(nn.Module):
             _GATE_LAYER_IDX,
         )
 
-        # Try to reuse FPN features cached by forward()
-        cache = {}
-        if hasattr(self.teacher, "_gate_layers"):
+        if set(self._trt_feat_cache.keys()) == {"p3", "p4", "p5"}:
+            feats = [self._trt_feat_cache[s] for s in ("p3", "p4", "p5")]
+            frame_for_resolution = frame_bchw
+
+        elif hasattr(self.teacher, "_gate_layers"):
             cache = {}
             for gl in self.teacher._gate_layers.values():
                 cache.update(gl._feat_cache)
-        if set(cache.keys()) == {"p3", "p4", "p5"}:
-            feats = [cache[s] for s in ("p3", "p4", "p5")]
-            frame_for_resolution = frame_bchw
+            if set(cache.keys()) == {"p3", "p4", "p5"}:
+                feats = [cache[s] for s in ("p3", "p4", "p5")]
+                frame_for_resolution = frame_bchw
+            elif frame_bchw is not None:
+                layers = self.teacher.yolo_model.model
+                save: set[int] = set(self.teacher.yolo_model.save)
+                y: list[Tensor | None] = []
+                x = frame_bchw
+                for i in range(23):
+                    m = layers[i]
+                    if m.f != -1:
+                        if isinstance(m.f, int):
+                            x = y[m.f]
+                        else:
+                            x = [x if j == -1 else y[j] for j in m.f]
+                    x = m(x)
+                    y.append(x if i in save else None)
+                fpn_indices = [_GATE_LAYER_IDX[s] for s in ("p3", "p4", "p5")]
+                feats = [y[i] for i in fpn_indices]
+                frame_for_resolution = frame_bchw
+            else:
+                raise RuntimeError(
+                    "No cached FPN features and no frame provided. "
+                    "Call forward() before extract_fpn_embeddings(None, boxes)."
+                )
         elif frame_bchw is not None:
-            # Standalone forward
             layers = self.teacher.yolo_model.model
             save: set[int] = set(self.teacher.yolo_model.save)
             y: list[Tensor | None] = []

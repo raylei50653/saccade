@@ -116,7 +116,7 @@ class TrackAppearanceBank:
         min_aspect: float = 1.2,
         max_aspect: float = 4.5,
         bank_weighted_mean: bool = False,
-        ema_alpha: float = 0.7,
+        ema_alpha: float = 0.8,
     ) -> None:
         self.k = max(1, k)
         self.min_score = float(min_score)

@@ -239,7 +239,7 @@ def main():
     parser.add_argument(
         "--bank-alpha",
         type=float,
-        default=0.7,
+        default=0.8,
         help="EMA decay for per-track embedding average",
     )
     args = parser.parse_args()

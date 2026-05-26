@@ -51,6 +51,7 @@ def _selective_scan_cuda(
     C = C.contiguous()
 
     y = torch.empty_like(u)
+    is_half = u.dtype == torch.float16
 
     saccade_tracking_ext.selective_scan_fwd(
         u.data_ptr(),
@@ -65,6 +66,7 @@ def _selective_scan_cuda(
         u.shape[2],
         A.shape[0],
         1 if D_ptr != 0 else 0,
+        is_half,
     )
     return y
 

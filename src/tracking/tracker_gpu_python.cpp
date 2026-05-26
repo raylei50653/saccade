@@ -2643,7 +2643,7 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         [](
             uintptr_t u_ptr, uintptr_t delta_ptr, uintptr_t A_ptr,
             uintptr_t B_ptr, uintptr_t C_ptr, uintptr_t D_ptr, uintptr_t y_ptr,
-            int B_dim, int L_dim, int D_dim, int N_dim, int has_D
+            int B_dim, int L_dim, int D_dim, int N_dim, int has_D, bool is_half
         ) {
             SelectiveScanParams params;
             params.B = B_dim;
@@ -2654,21 +2654,34 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
 
             {
                 py::gil_scoped_release release;
-                selective_scan_fwd(
-                    reinterpret_cast<const float*>(u_ptr),
-                    reinterpret_cast<const float*>(delta_ptr),
-                    reinterpret_cast<const float*>(A_ptr),
-                    reinterpret_cast<const float*>(B_ptr),
-                    reinterpret_cast<const float*>(C_ptr),
-                    has_D ? reinterpret_cast<const float*>(D_ptr) : nullptr,
-                    reinterpret_cast<float*>(y_ptr),
-                    params
-                );
+                if (is_half) {
+                    selective_scan_fwd_half(
+                        reinterpret_cast<const void*>(u_ptr),
+                        reinterpret_cast<const void*>(delta_ptr),
+                        reinterpret_cast<const void*>(A_ptr),
+                        reinterpret_cast<const void*>(B_ptr),
+                        reinterpret_cast<const void*>(C_ptr),
+                        has_D ? reinterpret_cast<const void*>(D_ptr) : nullptr,
+                        reinterpret_cast<void*>(y_ptr),
+                        params
+                    );
+                } else {
+                    selective_scan_fwd(
+                        reinterpret_cast<const float*>(u_ptr),
+                        reinterpret_cast<const float*>(delta_ptr),
+                        reinterpret_cast<const float*>(A_ptr),
+                        reinterpret_cast<const float*>(B_ptr),
+                        reinterpret_cast<const float*>(C_ptr),
+                        has_D ? reinterpret_cast<const float*>(D_ptr) : nullptr,
+                        reinterpret_cast<float*>(y_ptr),
+                        params
+                    );
+                }
             }
         },
         py::arg("u_ptr"), py::arg("delta_ptr"), py::arg("A_ptr"),
         py::arg("B_ptr"), py::arg("C_ptr"), py::arg("D_ptr"), py::arg("y_ptr"),
         py::arg("B_dim"), py::arg("L_dim"), py::arg("D_dim"),
-        py::arg("N_dim"), py::arg("has_D"),
-        "CUDA selective scan (Mamba SSM kernel).");
+        py::arg("N_dim"), py::arg("has_D"), py::arg("is_half") = false,
+        "CUDA selective scan (Mamba SSM kernel) supporting both float and half.");
 }
