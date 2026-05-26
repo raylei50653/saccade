@@ -34,7 +34,6 @@ import time
 from pathlib import Path
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 
 project_root = Path(__file__).resolve().parent.parent.parent
@@ -56,76 +55,13 @@ from saccade.perception.temporal_yolo.data_pipeline import (  # noqa: E402
 from saccade.perception.temporal_yolo.yolo_gated_detector import (  # noqa: E402
     _GATE_LAYER_IDX,
 )
+from saccade.perception.tracking.fpn_reid import DimReduceHead  # noqa: E402
 from saccade.perception.tracking.fpn_reid_cuda import (  # noqa: E402
     fpn_reid_extract_cuda,
 )
 from saccade.perception.eval.metrics import run_motmetrics_evaluation  # noqa: E402
 
 IMG_SIZE = 640
-
-
-# ── 1×1 Conv head (mirrors train_reid_1x1.py) ──
-
-
-class DimReduceHead(nn.Module):
-    def __init__(self, in_channels: list[int], out_dim: int = 128):
-        super().__init__()
-        self.in_channels = in_channels
-        self.out_dim = out_dim
-        self.nl = len(in_channels)
-        self.convs = nn.ModuleList(
-            [nn.Conv2d(c, out_dim, 1, bias=False) for c in in_channels]
-        )
-        mid_dim = out_dim * self.nl
-        if mid_dim != out_dim:
-            self.proj = nn.Sequential(
-                nn.Linear(mid_dim, out_dim, bias=False),
-                nn.BatchNorm1d(out_dim),
-            )
-        else:
-            self.proj = nn.Identity()
-
-    def forward(self, feats: list[torch.Tensor]) -> torch.Tensor:
-        parts = []
-        for conv, f in zip(self.convs, feats):
-            x = conv(f)
-            h, w = x.shape[2], x.shape[3]
-            center = x[:, :, h // 2, w // 2]
-            parts.append(center)
-        pooled = torch.cat(parts, dim=1)
-        return F.normalize(self.proj(pooled), dim=1)
-
-    def forward_boxes(
-        self,
-        feats: list[torch.Tensor],
-        boxes_xyxy: torch.Tensor,
-        img_size: int = 640,
-    ) -> torch.Tensor:
-        """Per-box embeddings: center-pool each FPN level at bbox centers.
-
-        Args:
-            feats: list of (1, C, H, W) raw FPN feature maps
-            boxes_xyxy: (N, 4) in 640×640 coords
-            img_size: 640
-
-        Returns:
-            (N, out_dim * nl) pooled concat, L2-normalized
-        """
-        boxes_xyxy.shape[0]
-        parts = []
-        for conv, f in zip(self.convs, feats):
-            x = conv(f)  # (1, out_dim, H, W)
-            f_h, f_w = x.shape[2], x.shape[3]
-            cx = (boxes_xyxy[:, 0] + boxes_xyxy[:, 2]) * 0.5
-            cy = (boxes_xyxy[:, 1] + boxes_xyxy[:, 3]) * 0.5
-            cx_norm = cx / img_size
-            cy_norm = cy / img_size
-            cx_idx = (cx_norm * f_w).long().clamp(0, f_w - 1)
-            cy_idx = (cy_norm * f_h).long().clamp(0, f_h - 1)
-            feat_per_box = x[0][:, cy_idx, cx_idx].mT  # (N, out_dim)
-            parts.append(feat_per_box)
-        pooled = torch.cat(parts, dim=1)
-        return F.normalize(self.proj(pooled), dim=1)
 
 
 # ── Top-K multi-sample appearance bank ──

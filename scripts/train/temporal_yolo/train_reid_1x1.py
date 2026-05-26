@@ -30,15 +30,15 @@ from pathlib import Path
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
-project_root = Path(__file__).resolve().parent.parent.parent
+project_root = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(project_root / "src"))
 sys.path.insert(0, str(project_root / "build"))
 
 import saccade_tracking_ext  # noqa: F401, E402
 
+from saccade.perception.tracking.fpn_reid import DimReduceHead  # noqa: E402
 from saccade.perception.temporal_yolo.mamba_gated_detector import (  # noqa: E402
     build_mamba_gated_detector,
 )
@@ -54,42 +54,6 @@ from saccade.perception.temporal_yolo.data_pipeline import (  # noqa: E402
 )
 
 IMG_SIZE = 640
-
-
-# ── 1×1 Conv dimension reduction head ──
-
-
-class DimReduceHead(nn.Module):
-    """Per-scale 1×1 Conv → center-pool → concat → optional projector → L2."""
-
-    def __init__(self, in_channels: list[int], out_dim: int = 128):
-        super().__init__()
-        self.in_channels = in_channels
-        self.out_dim = out_dim
-        self.nl = len(in_channels)
-        self.convs = nn.ModuleList(
-            [nn.Conv2d(c, out_dim, 1, bias=False) for c in in_channels]
-        )
-        nn.init.normal_(self.convs[-1].weight, std=0.001)  # smaller init for P5
-
-        mid_dim = out_dim * self.nl
-        if mid_dim != out_dim:
-            self.proj = nn.Sequential(
-                nn.Linear(mid_dim, out_dim, bias=False),
-                nn.BatchNorm1d(out_dim),
-            )
-        else:
-            self.proj = nn.Identity()
-
-    def forward(self, feats: list[torch.Tensor]) -> torch.Tensor:
-        parts = []
-        for conv, f in zip(self.convs, feats):
-            x = conv(f)
-            h, w = x.shape[2], x.shape[3]
-            center = x[:, :, h // 2, w // 2]
-            parts.append(center)
-        pooled = torch.cat(parts, dim=1)
-        return F.normalize(self.proj(pooled), dim=1)
 
 
 # ── Dataset helpers ──
