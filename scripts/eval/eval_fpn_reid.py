@@ -210,17 +210,17 @@ def main():
         "--cost-cos-w", type=float, default=0.10, help="Appearance cost: cos_sim weight"
     )
     parser.add_argument(
-        "--cost-iou-w", type=float, default=0.70, help="Appearance cost: IoU weight"
+        "--cost-iou-w", type=float, default=0.75, help="Appearance cost: IoU weight"
     )
     parser.add_argument(
         "--cost-score-w",
         type=float,
-        default=0.20,
+        default=0.15,
         help="Appearance cost: detection score weight",
     )
     parser.add_argument("--conf-thresh", type=float, default=0.05)
-    parser.add_argument("--reid-weight", type=float, default=0.80)
-    parser.add_argument("--cos-threshold", type=float, default=0.90)
+    parser.add_argument("--reid-weight", type=float, default=0.10)
+    parser.add_argument("--cos-threshold", type=float, default=0.55)
     parser.add_argument("--iou-low", type=float, default=0.30)
     parser.add_argument("--iou-high", type=float, default=0.60)
     parser.add_argument(
