@@ -141,7 +141,6 @@ if __name__ == "__main__":
         eval_kwargs["engine"] = "mamba"
 
     if getattr(args, "cpp_threads", 0) > 0:
-        # ── C++ multi-threaded path ───────────────────────────────────────────
         n = args.cpp_threads
         print(f"🚀 [C++ EvaluatorPool] Running with {n} threads")
         metrics = run_eval_cpp(
@@ -171,115 +170,8 @@ if __name__ == "__main__":
             print("\n=== OVERALL METRICS ===")
             for k, v in metrics.items():
                 print(f"  {k}: {v}")
-    elif args.workbench and args.threads > 1:
-        from saccade.perception.detector_trt import BatchingTRTDetector
-        from concurrent.futures import ThreadPoolExecutor
-
-        from saccade.perception.eval.config import parse_eval_config as _pec
-
-        _cfg_tmp = _pec(
-            output=args.output,
-            data_root=args.data_root,
-            split=args.split,
-            sequences=args.sequences or "",
-            conf_threshold=args.conf_threshold,
-            reid_mode="off",
-            reid_model="siglip2",
-            profile_stages=False,
-            kwargs={},
-        )
-        seqs = _cfg_tmp.seqs
-        print(
-            f"🚀 [Workbench] Running {len(seqs)} sequences with {args.threads} threads using BatchingTRTDetector"
-        )
-
-        # Auto-select a batch engine compatible with the requested thread count.
-        # Priority: exact batchN match → largest available batch engine → batch_size=1.
-        # _eff_batch is always derived from the selected engine filename so passing
-        # --engine .../yolo26s_960_batch4.engine directly works correctly.
-        from pathlib import Path as _Path
-        import re as _re
-
-        def _engine_batch(path: "_Path") -> int:
-            m = _re.search(r"_batch(\d+)", path.name)
-            return int(m.group(1)) if m else 1
-
-        _ep = _Path(args.engine)
-        _exact = _ep.parent / _ep.name.replace("_batch1", f"_batch{args.threads}")
-        if _exact.exists():
-            _engine_path = str(_exact)
-        elif _engine_batch(_ep) > 1:
-            # User passed a batch engine directly (e.g. yolo26s_960_batch4.engine)
-            _engine_path = str(_ep)
-        else:
-            # Scan siblings for any batch engine; pick the largest one available.
-            _candidates = []
-            for _f in _ep.parent.glob(f"{_ep.stem.split('_batch')[0]}*.engine"):
-                _b = _engine_batch(_f)
-                if _b > 1:
-                    _candidates.append((_b, _f))
-            if _candidates:
-                _, _f = max(_candidates)
-                _engine_path = str(_f)
-                print(
-                    f"  No batch-{args.threads} engine; using batch-{_engine_batch(_f)} engine"
-                )
-            else:
-                _engine_path = args.engine
-                print(
-                    "  No compatible batch engine found; running batch_size=1 (sequential)"
-                )
-        _eff_batch = min(_engine_batch(_Path(_engine_path)), args.threads)
-        print(f"  Engine: {_engine_path}  batch_size={_eff_batch}")
-        batcher = BatchingTRTDetector(_engine_path, batch_size=_eff_batch)
-
-        def run_single_seq(seq_name):
-            proxy = batcher.make_proxy()
-            kwargs = eval_kwargs.copy()
-            kwargs["sequences"] = seq_name
-            kwargs["detector"] = proxy
-            kwargs["workbench"] = True  # ensure evaluator uses the workbench path
-            return run_eval(**kwargs)
-
-        with ThreadPoolExecutor(max_workers=args.threads) as executor:
-            results = list(executor.map(run_single_seq, seqs))
-
-        # We don't have a good way to merge overall metrics here since motmetrics
-        # aggregation is complex, but for parity check of per-sequence results it's fine.
-        # Actually, evaluator.py prints per-sequence results anyway.
-        metrics = (
-            None  # Overall metrics print won't happen, but sequences already printed.
-        )
-        print("\n✅ Concurrent evaluation finished.")
     else:
-        if args.preset == "motr" or args.detector == "MOTR":
-            print("\n🚀 [MOTR] Running Temporal YOLO Hybrid Tracking Pipeline")
-            from saccade.perception.eval.config import parse_eval_config
-            from saccade.perception.temporal_yolo import MOTREvaluator
-
-            cfg = parse_eval_config(
-                output=args.output,
-                data_root=args.data_root,
-                split=args.split,
-                sequences=args.sequences or "",
-                conf_threshold=args.conf_threshold,
-                reid_mode="off",
-                reid_model="",
-                profile_stages=False,
-                kwargs=eval_kwargs,
-            )
-            for seq in cfg.seqs:
-                print(f"  Evaluating MOTR on sequence: {seq}")
-                seq_dir = Path(args.data_root) / args.split / seq
-                evaluator = MOTREvaluator(cfg, seq, seq_dir)
-                try:
-                    evaluator.evaluate()
-                except NotImplementedError as e:
-                    print(f"  [MOTR] {e}")
-            metrics = None
-        else:
-            metrics = run_eval(**eval_kwargs)
-
+        metrics = run_eval(**eval_kwargs)
         if metrics:
             print("\n=== OVERALL METRICS ===")
             for k, v in metrics.items():

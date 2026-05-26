@@ -40,17 +40,6 @@ class ReIDConfig:
     # Profiling
     profile_lazy_reid_candidates: bool = False
     profile_lazy_reid_embeddings: bool = False
-    # LaSt-ViT (experimental within reid)
-    last_vit_embed: bool = False  # NO-GO (2026-05-02): SigLIP2 not trained with LaSt-ViT objective; IDF1 gain +0.09pp < +1.0pp threshold
-    last_vit_gate: float = 0.0
-    last_vit_sigma_embed: float = 0.015
-    last_vit_sigma_gate: float = 0.040
-    last_vit_top_k: float = 0.5
-    # Pose-guided box expansion
-    pose_box_expand: bool = False  # NO-GO (2026-05-10): FPS -60%, box expansion引发ID switches; root cause in detector training data
-    pose_expand_ankle_conf: float = 0.30
-    pose_expand_margin: float = 0.05
-    pose_expand_flat_aspect: float = 0.0
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> "ReIDConfig":
@@ -239,68 +228,4 @@ def add_reid_args(parser: argparse.ArgumentParser) -> None:
         "--profile-lazy-reid-embeddings",
         action="store_true",
         help="Profile embedding extraction for lazy ReID triggering.",
-    )
-    grp.add_argument(
-        "--last-vit-embed",
-        action="store_true",
-        help="Replace image_embeds with LaSt-ViT V1 frequency-filtered embedding.",
-    )
-    grp.add_argument(
-        "--last-vit-gate",
-        type=float,
-        default=0.0,
-        help="Stability gate threshold [0,1] for LaSt-ViT embeddings. 0 disables.",
-    )
-    grp.add_argument(
-        "--last-vit-sigma-embed",
-        type=float,
-        default=0.015,
-        help="Gaussian sigma for Top-K patch selection (LaSt-ViT).",
-    )
-    grp.add_argument(
-        "--last-vit-sigma-gate",
-        type=float,
-        default=0.040,
-        help="Gaussian sigma for stability gating (LaSt-ViT).",
-    )
-    grp.add_argument(
-        "--last-vit-top-k",
-        type=float,
-        default=0.5,
-        help="Fraction of N patches to pool in LaSt-ViT (top_k_ratio).",
-    )
-    grp.add_argument(
-        "--pose-box-expand",
-        action=argparse.BooleanOptionalAction,
-        default=False,
-        help="NO-GO (2026-05-10): Extend detection box bottom to ankle keypoints. FPS -60%,引发ID switches.",
-    )
-    grp.add_argument(
-        "--pose-expand-ankle-conf",
-        type=float,
-        default=0.30,
-        help=_help(
-            "Minimum ankle keypoint confidence for box expansion.",
-            range_hint="0-1",
-            edge="too low expands on noisy ankle predictions",
-        ),
-    )
-    grp.add_argument(
-        "--pose-expand-margin",
-        type=float,
-        default=0.05,
-        help=_help(
-            "Extra margin below ankle as fraction of box height.", range_hint="0-0.2"
-        ),
-    )
-    grp.add_argument(
-        "--pose-expand-flat-aspect",
-        type=float,
-        default=0.0,
-        help=_help(
-            "Only expand boxes with h/w < this value (flat/under-segmented boxes). "
-            "0 = expand all boxes with visible ankles. Typical upright person h/w ≈ 2-3; "
-            "set ~1.5 to restrict to clearly flat boxes.",
-            range_hint="0 (off) or 1.0-2.0",
-        ),
     )

@@ -81,76 +81,6 @@ def _record_profile_scope(name: str):
 
 
 # ---------------------------------------------------------------------------
-# Temporal consistency filter: only keep detections that appear in >= N
-# consecutive frames.  This kills single-frame FP that the detector
-# occasionally produces.
-# ---------------------------------------------------------------------------
-def _apply_temporal_consistency(
-    fused_boxes: torch.Tensor,
-    fused_scores: torch.Tensor,
-    fused_classes: torch.Tensor,
-    *,
-    min_consecutive_frames: int = 3,
-    prev_frame_ids: list[int] | None = None,
-    prev_frame_boxes: torch.Tensor | None = None,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, list[int], torch.Tensor | None]:
-    """Filter detections by temporal consistency.
-
-    Returns (filtered_boxes, filtered_scores, filtered_classes,
-             current_frame_ids, current_frame_boxes).
-    """
-    n = fused_boxes.shape[0]
-    if n == 0 or min_consecutive_frames <= 1:
-        return fused_boxes, fused_scores, fused_classes, list(range(n)), fused_boxes
-
-    # Build a simple appearance hash per detection (center + size).
-    # We match detections across frames by IoU > 0.5.
-    keep_mask = torch.ones(n, dtype=torch.bool, device=fused_boxes.device)
-    if prev_frame_ids is not None and prev_frame_boxes is not None:
-        prev_n = prev_frame_boxes.shape[0]
-        if prev_n > 0:
-            # Compute IoU between current and previous detections
-            prev_boxes = prev_frame_boxes
-            curr_boxes = fused_boxes
-
-            # Vectorized IoU computation
-            px1 = prev_boxes[:, 0][:, None]  # (prev_n, 1)
-            py1 = prev_boxes[:, 1][:, None]
-            px2 = prev_boxes[:, 2][:, None]
-            py2 = prev_boxes[:, 3][:, None]
-            cx1 = curr_boxes[:, 0][None, :]  # (1, n)
-            cy1 = curr_boxes[:, 1][None, :]
-            cx2 = curr_boxes[:, 2][None, :]
-            cy2 = curr_boxes[:, 3][None, :]
-
-            ix1 = torch.maximum(px1, cx1)
-            iy1 = torch.maximum(py1, cy1)
-            ix2 = torch.minimum(px2, cx2)
-            iy2 = torch.minimum(py2, cy2)
-            inter = torch.clamp(ix2 - ix1, min=0) * torch.clamp(iy2 - iy1, min=0)
-            prev_area = (px2 - px1) * (py2 - py1)
-            curr_area = (cx2 - cx1) * (cy2 - cy1)
-            union = prev_area + curr_area - inter
-            iou = inter / torch.clamp(union, min=1e-6)
-
-            # For each current detection, check if it has IoU > 0.5 with
-            # any previous detection that was itself seen in the frame before
-            # (i.e., appears in >= 2 consecutive frames).
-            # Simple heuristic: if any IoU > 0.5, keep it (temporal evidence).
-            has_match = iou.max(dim=0).values > 0.5
-            keep_mask = has_match
-
-    # Apply filter
-    filtered_boxes = fused_boxes[keep_mask]
-    filtered_scores = fused_scores[keep_mask]
-    filtered_classes = fused_classes[keep_mask]
-    current_ids = torch.where(keep_mask)[0].tolist()
-    current_boxes = fused_boxes[keep_mask]
-
-    return filtered_boxes, filtered_scores, filtered_classes, current_ids, current_boxes
-
-
-# ---------------------------------------------------------------------------
 # Stage 2 quality gate: remove detections in the mid-score band
 # [track_thresh, mid_thresh) whose geometry quality is below a floor.
 # Bad-geometry stage-2 detections cause spurious lost-track associations → IDs.
@@ -743,7 +673,6 @@ from saccade.perception.eval.detection import (  # noqa: E402
     detect_native_960,
     detect_native_960_tta,
     detect_sahi_960p_2x2,
-    expand_boxes_with_ankle_keypoints,
     filter_detections_fast,
     match_keypoints_to_boxes,
     merge_cross_tile_duplicates_fast,
@@ -786,26 +715,6 @@ try:
 except ImportError:
     PerceptionPipeline = None
     PerceptionPipelineConfig = None
-
-
-# IdStabilityState removed
-
-
-# IdStabilityFilter removed
-
-
-# Utility functions removed
-
-
-# _apply_narrow_person_score_bonus removed
-
-
-# TrackletLifecycleMerger moved to lifecycle.py
-
-# Orphaned methods removed
-
-
-# Dataclasses moved to types.py
 
 
 # Functions moved to output_bank.py and helpers.py
@@ -1127,11 +1036,6 @@ def run_eval(
     conf_threshold: float,
     reid_mode: str = "semantic",
     reid_model: str = "siglip2",
-    last_vit_embed: bool = False,
-    last_vit_gate: float = 0.0,
-    last_vit_sigma_embed: float = 0.015,
-    last_vit_sigma_gate: float = 0.040,
-    last_vit_top_k: float = 0.5,
     detector: TRTYoloDetector = None,
     extractor: TRTFeatureExtractor = None,
     pose_engine: str = None,
@@ -1292,7 +1196,6 @@ def run_eval(
         and extractor_cpp_ptr != 0
         and cropper_cpp_ptr != 0
         and cfg.reid_crop_layout == "full"
-        and not last_vit_embed  # LaSt-ViT uses Python extraction path
     )
     perception_pipeline = None
     if native_postprocess_available:
@@ -1581,9 +1484,7 @@ def run_eval(
             )
 
         _use_python_relinker = (
-            cfg.force_python_relinker
-            or cfg.semantic_rerank_mode != "mean"
-            or cfg.semantic_biometric_threshold > 0.0
+            cfg.force_python_relinker or cfg.semantic_rerank_mode != "mean"
         )
         _relinker_cls = (
             PythonSemanticRelinker if _use_python_relinker else SemanticRelinker
@@ -1618,7 +1519,6 @@ def run_eval(
         )
         if _use_python_relinker:
             _relinker_common_kwargs.update(
-                biometric_threshold=cfg.semantic_biometric_threshold,
                 experimental_mode=str(
                     cfg.kwargs.get("semantic_experimental_mode", "standard")
                 ),
@@ -1653,17 +1553,6 @@ def run_eval(
         relinker = (
             _relinker_cls(**_relinker_common_kwargs) if cfg.use_semantic_mode else None
         )
-
-        _bio_acc = None
-        if (
-            relinker is not None
-            and cfg.semantic_biometric_threshold > 0.0
-            and hasattr(relinker, "set_biometric_tracker")
-        ):
-            from saccade.perception.biometric import BiometricAccumulator
-
-            _bio_acc = BiometricAccumulator(window=15)
-            relinker.set_biometric_tracker(_bio_acc)
 
         if relinker is not None:
             if (
@@ -2368,16 +2257,6 @@ def run_eval(
                     seq_stage_totals["post_keypoint_align"] += (
                         time.perf_counter() - t_keypoint_align_start
                     ) * 1000
-
-                if cfg.pose_box_expand and aligned_keypoints is not None:
-                    fused_boxes = expand_boxes_with_ankle_keypoints(
-                        fused_boxes,
-                        aligned_keypoints,
-                        frame_h=h_orig,
-                        ankle_conf_thresh=cfg.pose_expand_ankle_conf,
-                        margin=cfg.pose_expand_margin,
-                        flat_aspect_thresh=cfg.pose_expand_flat_aspect,
-                    )
 
                 # Keep low-score boxes down to cfg.track_thresh so ByteTrack's
                 # second-stage association can actually use them.
@@ -3507,20 +3386,9 @@ def run_eval(
                                         if profile_stages:
                                             torch.cuda.synchronize()
                                             t_reid_extract_start = time.perf_counter()
-                                        if last_vit_embed:
-                                            budget_embeddings, _stab = (
-                                                extractor.extract_with_stability(
-                                                    crops,
-                                                    sigma_embed=last_vit_sigma_embed,
-                                                    sigma_gate=last_vit_sigma_gate,
-                                                    top_k_ratio=last_vit_top_k,
-                                                )
-                                            )
-                                        else:
-                                            budget_embeddings = (
-                                                extractor.extract_parts_fused(crops)
-                                            )
-                                            _stab = None
+                                        budget_embeddings = (
+                                            extractor.extract_parts_fused(crops)
+                                        )
                                         if profile_stages:
                                             torch.cuda.synchronize()
                                             elapsed_ms = (
@@ -3534,9 +3402,6 @@ def run_eval(
                                                 "reid_extract", elapsed_ms
                                             )
                                         embeddings[budget_indices] = budget_embeddings
-                                        if last_vit_gate > 0.0 and _stab is not None:
-                                            _low_stab = _stab < last_vit_gate
-                                            embeddings[budget_indices[_low_stab]] = 0.0
                                 else:
                                     if profile_stages:
                                         torch.cuda.synchronize()
@@ -3554,18 +3419,7 @@ def run_eval(
                                         if profile_stages:
                                             torch.cuda.synchronize()
                                             t_reid_extract_start = time.perf_counter()
-                                        if last_vit_embed:
-                                            budget_embeddings, _stab = (
-                                                extractor.extract_with_stability(
-                                                    crops,
-                                                    sigma_embed=last_vit_sigma_embed,
-                                                    sigma_gate=last_vit_sigma_gate,
-                                                    top_k_ratio=last_vit_top_k,
-                                                )
-                                            )
-                                        else:
-                                            budget_embeddings = extractor.extract(crops)
-                                            _stab = None
+                                        budget_embeddings = extractor.extract(crops)
                                         if profile_stages:
                                             torch.cuda.synchronize()
                                             elapsed_ms = (
@@ -3579,9 +3433,6 @@ def run_eval(
                                                 "reid_extract", elapsed_ms
                                             )
                                         embeddings[budget_indices] = budget_embeddings
-                                        if last_vit_gate > 0.0 and _stab is not None:
-                                            _low_stab = _stab < last_vit_gate
-                                            embeddings[budget_indices[_low_stab]] = 0.0
 
                 mid_thresh_scale = geometry_mid_thresh_scale(
                     fused_boxes,
@@ -3742,16 +3593,6 @@ def run_eval(
                         ),
                         aligned_keypoints[det_idx[valid]],
                     )
-                    if _bio_acc is not None:
-                        _bio_acc.update(
-                            track_results["ids"][valid].cpu(),
-                            aligned_keypoints[det_idx[valid]].cpu(),
-                        )
-
-            if _bio_acc is not None and track_results["count"] > 0:
-                _bio_acc.evict_stale(
-                    set(track_results["ids"][: track_results["count"]].tolist())
-                )
 
             if cfg.profile_lazy_reid_candidates:
                 candidates = detector.tracker.get_tentative_candidates()
