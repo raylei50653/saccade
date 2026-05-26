@@ -2,7 +2,7 @@ name: C++ Core Build
 
 on:
   push:
-    branches: [ dev, main ]
+    branches: [ dev, main, feat/option-f-mamba ]
     paths:
       - 'src/**'
       - 'include/**'
