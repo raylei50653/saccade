@@ -48,6 +48,8 @@
 | **mamba_optimal**（P2 Cross-Scan 並行） | 71.3% | **76.6%** | **614** | 82.0% | 5391 | 93.8 | **當前 preset** |
 | **P3 Hybrid** (conv P3 + Mamba P4/P5) | **72.8%** | 75.6% | 652 | 82.0% | 6503 | 77.6 | 最高 IDF1 |
 | **P2-ST** (Spatio-Temporal) T=1 eval | 71.6% | 75.4% | 689 | 81.9% | 6543 | 92.0 | 時序頭，單幀推理 |
+| **VGT Flow-Gated** (GMC flow gate) T=1 | **72.9%** | 76.1% | 659 | **82.5%** | 6454 | 85.6 | **歷史最高 IDF1**，flow 為輸入非 warp |
+| VGT T=3 (buffer) | 41.0% | 40.2% | 1603 | 68.7% | 30378 | 40.8 | 時序 buffer 不 work，訓練/推理時序不一致 |
 
 已 default 的 flag：`fuse_score_weight=0.4`、`interp`、`fp_hard_filter`（area=40000）、`kalman_r_scale=0.75`、`async_reid`、`pipeline_relink`、`gmc gpu`、`detection_quality_scaling`。
 
