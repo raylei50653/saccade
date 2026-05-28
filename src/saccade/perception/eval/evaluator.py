@@ -1122,6 +1122,9 @@ def run_eval(
     _fpn_reid_conv_weights = None
     _fpn_reid_proj_weight = _fpn_reid_running_mean = _fpn_reid_running_var = None
     _fpn_reid_dim = 0
+    _fpn_backbone = None
+    _fpn_cache: dict[str, torch.Tensor] = {}
+    _fpn_img_size = 640
 
     if _fpn_reid_mode:
         fpn_reid_ckpt = kwargs.get("fpn_reid_ckpt", "")
@@ -1133,17 +1136,34 @@ def run_eval(
             _ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
             in_channels = _ckpt.get("in_channels", [128, 256, 512])
             _fpn_reid_conv_weights = [
-                _ckpt["head"][f"convs.{i}.weight"] for i in range(len(in_channels))
+                _ckpt["head"][f"convs.{i}.weight"].to(device="cuda")
+                for i in range(len(in_channels))
             ]
             mid_dim = 128 * len(in_channels)
             if mid_dim != 128:
-                _fpn_reid_proj_weight = _ckpt["head"]["proj.0.weight"]
-                _fpn_reid_running_mean = _ckpt["head"]["proj.1.running_mean"]
-                _fpn_reid_running_var = _ckpt["head"]["proj.1.running_var"]
+                _fpn_reid_proj_weight = _ckpt["head"]["proj.0.weight"].to(device="cuda")
+                _fpn_reid_running_mean = _ckpt["head"]["proj.1.running_mean"].to(
+                    device="cuda"
+                )
+                _fpn_reid_running_var = _ckpt["head"]["proj.1.running_var"].to(
+                    device="cuda"
+                )
         else:
             _fpn_reid_dim = 896
         extractor = None
         cropper = None
+        _fpn_backbone = None
+        _fpn_cache: dict[str, torch.Tensor] = {}
+        if not hasattr(detector, "teacher"):
+            _bb_engine = kwargs.get("fpn_backbone_engine", "")
+            if _bb_engine:
+                from saccade.perception.temporal_yolo.mamba_gated_detector import (
+                    TRTYoloBackbone as _TRTYoloBackbone,
+                )
+
+                _fpn_backbone = _TRTYoloBackbone(str(Path(_bb_engine).resolve()))
+                print(f"  FPN backbone engine: {_bb_engine}")
+                _fpn_img_size = 960 if "960" in _bb_engine else 640
     elif extractor is None and cfg.reid_work_enabled:
         extractor = TRTFeatureExtractor(
             engine_path=cfg.reid_engine,
@@ -1391,7 +1411,14 @@ def run_eval(
                 gmc_uncertain=False,
             )
         else:
-            detector.reset_tracker()
+            if _fpn_reid_mode:
+                from saccade.perception.tracking import GPUByteTracker
+
+                detector.tracker = GPUByteTracker(
+                    max_objects=2048, embedding_dim=_fpn_reid_dim
+                )
+            else:
+                detector.reset_tracker()
 
         geometry_scale_state = GeometryScaleState()
 
@@ -1470,6 +1497,9 @@ def run_eval(
             iou_low=float(cfg.kwargs.get("reid_iou_low", 0.30)),
             iou_high=float(cfg.kwargs.get("reid_iou_high", 0.60)),
             weight=float(cfg.kwargs.get("reid_weight", 0.80)),
+            cost_cos_w=float(cfg.kwargs.get("reid_cost_cos_w", 0.55)),
+            cost_iou_w=float(cfg.kwargs.get("reid_cost_iou_w", 0.30)),
+            cost_score_w=float(cfg.kwargs.get("reid_cost_score_w", 0.15)),
         )
         if _fpn_reid_mode and hasattr(detector.tracker, "set_reid_min_candidates"):
             detector.tracker.set_reid_min_candidates(1)
@@ -2187,6 +2217,18 @@ def run_eval(
                     sync_cuda=True,
                 )
 
+                if _fpn_backbone is not None and fused_boxes.numel() > 0:
+                    _fpn_in = pool.canvas_960p.unsqueeze(0)
+                    if _fpn_in.shape[2] != _fpn_img_size:
+                        _fpn_in = torch.nn.functional.interpolate(
+                            _fpn_in,
+                            size=(_fpn_img_size, _fpn_img_size),
+                            mode="bilinear",
+                            align_corners=False,
+                        )
+                    p3, p4, p5 = _fpn_backbone.infer(_fpn_in)
+                    _fpn_cache = {"p3": p3, "p4": p4, "p5": p5}
+
                 source_boxes_for_keypoints = fused_boxes
                 debug_dump_active = _debug_frame_selected(
                     seq,
@@ -2529,6 +2571,15 @@ def run_eval(
                     if aligned_keypoints is not None:
                         aligned_keypoints = aligned_keypoints[keep_indices]
 
+                    if _fpn_reid_mode and fused_boxes.numel() > 0:
+                        valid_w = (fused_boxes[:, 2] - fused_boxes[:, 0]) > 0
+                        if not valid_w.all():
+                            fused_boxes = fused_boxes[valid_w]
+                            fused_scores = fused_scores[valid_w]
+                            fused_classes = fused_classes[valid_w]
+                            if geometry_suspect_mask.numel() > 0:
+                                geometry_suspect_mask = geometry_suspect_mask[valid_w]
+
                     if cfg.detection_quality_scaling and fused_boxes.numel() > 0:
                         quality_factors = _compute_detection_quality_batch(
                             fused_boxes,
@@ -2588,7 +2639,11 @@ def run_eval(
                         print(f"🎬 {seq} [{frame_id}/{frame_end}]")
                     continue
 
-                if perception_pipeline is None and is_tiled and fused_boxes.numel() > 0:
+                if (
+                    perception_pipeline is None
+                    and (is_tiled or cfg.nms_iou_threshold is not None)
+                    and fused_boxes.numel() > 0
+                ):
                     if profile_stages:
                         torch.cuda.synchronize()
                         t_sub_start = time.perf_counter()
@@ -3134,29 +3189,29 @@ def run_eval(
                     _bg_birth_events = None
 
                 embeddings = None
-                _do_reid = (
+                _fpn_ready = _fpn_reid_mode and fused_boxes.numel() > 0
+                _do_reid = _fpn_ready or (
                     cfg.reid_work_enabled
                     and extractor is not None
                     and cropper is not None
                     and fused_boxes.numel() > 0
                 )
                 if _do_reid:
-                    # 💡 Phase 4: Enforce a minimum interval even with need_reid logic
-                    # to prevent pathological cases where every frame triggers ReID.
-                    MIN_REID_GAP = 2
-                    time_since_last_reid = frame_id - last_reid_frame
+                    if not _fpn_ready:
+                        MIN_REID_GAP = 2
+                        time_since_last_reid = frame_id - last_reid_frame
 
-                    if time_since_last_reid < MIN_REID_GAP:
-                        _do_reid = False
-                    elif cfg.need_reid_enabled:
-                        if dynamic_reid is not None:
-                            _do_reid = dynamic_reid.should_reid(after_merge_count)
+                        if time_since_last_reid < MIN_REID_GAP:
+                            _do_reid = False
+                        elif cfg.need_reid_enabled:
+                            if dynamic_reid is not None:
+                                _do_reid = dynamic_reid.should_reid(after_merge_count)
+                            else:
+                                _do_reid = need_reid_frame(
+                                    prev_track_ids, after_merge_count
+                                )
                         else:
-                            _do_reid = need_reid_frame(
-                                prev_track_ids, after_merge_count
-                            )
-                    else:
-                        _do_reid = frame_id % seq_reid_interval == 0
+                            _do_reid = frame_id % seq_reid_interval == 0
 
                     if _do_reid:
                         last_reid_frame = frame_id
@@ -3196,40 +3251,65 @@ def run_eval(
 
                 if cfg.reid_enabled and _do_reid:
                     # ── FPN ReID fast path ──
-                    if (
-                        _fpn_reid_mode
-                        and hasattr(detector, "teacher")
-                        and fused_boxes.shape[0] > 0
-                    ):
-                        boxes_960 = fused_boxes.clone()
-                        sx960 = 960.0 / w_orig
-                        sy960 = 960.0 / h_orig
-                        boxes_960[:, 0] *= sx960
-                        boxes_960[:, 1] *= sy960
-                        boxes_960[:, 2] *= sx960
-                        boxes_960[:, 3] *= sy960
-                        fpn = [
-                            detector.teacher._gate_layers[s]._feat_cache[s]
-                            for s in ("p3", "p4", "p5")
-                        ]
-                        if _fpn_reid_conv_weights is not None:
-                            from saccade.perception.tracking.fpn_reid_cuda import (
-                                fpn_reid_extract_cuda,
+                    if _fpn_reid_mode and fused_boxes.shape[0] > 0:
+                        _trt_feat_cache = getattr(detector, "_trt_feat_cache", None)
+                        if _fpn_cache:
+                            _img_sz = _fpn_img_size
+                        elif _trt_feat_cache:
+                            _p3_cache = _trt_feat_cache.get("p3")
+                            _img_sz = (
+                                int(_p3_cache.shape[2] * 8)
+                                if _p3_cache is not None
+                                else 640
                             )
-
-                            embeddings = fpn_reid_extract_cuda(
-                                fpn,
-                                _fpn_reid_conv_weights,
-                                boxes_960,
-                                img_size=960,
-                                proj_weight=_fpn_reid_proj_weight,
-                                running_mean=_fpn_reid_running_mean,
-                                running_var=_fpn_reid_running_var,
+                        elif hasattr(detector, "teacher"):
+                            _p3_cache = detector.teacher._gate_layers[
+                                "p3"
+                            ]._feat_cache.get("p3")
+                            _img_sz = (
+                                int(_p3_cache.shape[2] * 8)
+                                if _p3_cache is not None
+                                else 640
                             )
                         else:
-                            embeddings = detector.extract_fpn_embeddings(
-                                None, boxes_960
-                            )
+                            _img_sz = 960
+                        boxes_rescaled = fused_boxes.clone()
+                        sx = _img_sz / w_orig
+                        sy = _img_sz / h_orig
+                        boxes_rescaled[:, 0] *= sx
+                        boxes_rescaled[:, 1] *= sy
+                        boxes_rescaled[:, 2] *= sx
+                        boxes_rescaled[:, 3] *= sy
+                        if _trt_feat_cache:
+                            fpn = [_trt_feat_cache[s] for s in ("p3", "p4", "p5")]
+                        elif hasattr(detector, "teacher"):
+                            fpn = [
+                                detector.teacher._gate_layers[s]._feat_cache[s]
+                                for s in ("p3", "p4", "p5")
+                            ]
+                        elif _fpn_cache:
+                            fpn = [_fpn_cache[s] for s in ("p3", "p4", "p5")]
+                        else:
+                            fpn = None
+                        if fpn is not None:
+                            if _fpn_reid_conv_weights is not None:
+                                from saccade.perception.tracking.fpn_reid_cuda import (
+                                    fpn_reid_extract_cuda,
+                                )
+
+                                embeddings = fpn_reid_extract_cuda(
+                                    fpn,
+                                    _fpn_reid_conv_weights,
+                                    boxes_rescaled,
+                                    img_size=_img_sz,
+                                    proj_weight=_fpn_reid_proj_weight,
+                                    running_mean=_fpn_reid_running_mean,
+                                    running_var=_fpn_reid_running_var,
+                                )
+                            else:
+                                embeddings = detector.extract_fpn_embeddings(
+                                    None, boxes_rescaled
+                                )
                     else:
                         if profile_stages:
                             torch.cuda.synchronize()
@@ -3475,8 +3555,8 @@ def run_eval(
                             )
                             gmc_estimator.estimate_into(
                                 pool.frame_buffer.data_ptr(),
-                                w_orig,
-                                h_orig,
+                                pool.frame_buffer.shape[2],
+                                pool.frame_buffer.shape[1],
                                 torch.cuda.current_stream().cuda_stream,
                                 local_gmc_warp.data_ptr(),
                             )
@@ -3534,6 +3614,8 @@ def run_eval(
                         _run_gmc,
                         sync_cuda=hasattr(gmc_estimator, "estimate_mat"),
                     )
+                    if hasattr(detector, "set_gmc_warp"):
+                        detector.set_gmc_warp(gmc_warp, h_orig, w_orig)
                 # Async ReID: sync side stream and inject fresh embeddings right before
                 # tracker.update_into so the cost matrix still has detection-side appearance.
                 # GMC on main stream overlapped with reid on side stream during the gap above.

@@ -49,12 +49,14 @@ class MOT17TemporalClip(
         seqs: list[str] | None = None,
         detector: str | None = "SDP",
         preload_to_ram: bool = True,
+        use_letterbox: bool = False,
     ):
         self.data_root = Path(data_root)
         self.split = split
         self.clip_len = clip_len
         self.img_size = img_size
         self.stride = stride
+        self.use_letterbox = use_letterbox
 
         split_dir = self.data_root / split
         if seqs is not None:
@@ -74,7 +76,9 @@ class MOT17TemporalClip(
         self._gt: dict[str, dict[int, tuple[torch.Tensor, torch.Tensor]]] = {}
         self._img_dirs: dict[str, Path] = {}
         self._frame_lists: dict[str, list[Path]] = {}
-        self._scale_hw: dict[str, tuple[float, float]] = {}
+        self._scale_hw: dict[
+            str, tuple[float, ...] | tuple[float, float, int, int]
+        ] = {}
 
         for seq in self.sequences:
             seq_dir = split_dir / seq
@@ -102,7 +106,18 @@ class MOT17TemporalClip(
 
                 _img = tv_io.read_image(str(frames[0]))
                 _, orig_h, orig_w = _img.shape
-            self._scale_hw[seq] = (img_size / orig_h, img_size / orig_w)
+
+            if self.use_letterbox:
+                # Letterbox parameters: keep aspect ratio
+                scale = min(img_size / orig_h, img_size / orig_w)
+                new_h = int(round(orig_h * scale))
+                new_w = int(round(orig_w * scale))
+                pad_h = (img_size - new_h) // 2
+                pad_w = (img_size - new_w) // 2
+                self._scale_hw[seq] = (scale, pad_h, pad_w)
+            else:
+                # Standard stretch resizing
+                self._scale_hw[seq] = (img_size / orig_h, img_size / orig_w)
 
             gt_per_frame: dict[int, tuple[list[list[float]], list[int]]] = {}
             with gt_file.open() as f:
@@ -167,10 +182,33 @@ class MOT17TemporalClip(
         def load_and_resize_task(
             task: tuple[str, int, Path],
         ) -> tuple[str, int, torch.Tensor]:
+            import torch.nn.functional as F
+
             seq, idx, fpath = task
             img = tv_io.read_image(str(fpath))  # uint8 (3, H, W)
-            img = TF.resize(img, [self.img_size, self.img_size], antialias=True)
-            return seq, idx, img
+            if self.use_letterbox:
+                scale, pad_h, pad_w = self._scale_hw[seq]  # type: ignore[misc]
+
+                _, orig_h, orig_w = img.shape
+                new_h = int(round(orig_h * scale))
+                new_w = int(round(orig_w * scale))
+
+                img_resized = TF.resize(img, [new_h, new_w], antialias=True)
+
+                pad_left = pad_w
+                pad_right = self.img_size - new_w - pad_left
+                pad_top = pad_h
+                pad_bottom = self.img_size - new_h - pad_top
+
+                img_padded = F.pad(
+                    img_resized, (pad_left, pad_right, pad_top, pad_bottom), value=114
+                )
+                return seq, idx, img_padded
+            else:
+                img_resized = TF.resize(
+                    img, [self.img_size, self.img_size], antialias=True
+                )
+                return seq, idx, img_resized
 
         done = 0
         # Use a reasonable number of workers (e.g., 8 or num_cpus)
@@ -202,7 +240,10 @@ class MOT17TemporalClip(
         fids: list[int] = []
 
         frame_paths = self._frame_lists[seq]
-        scale_h, scale_w = self._scale_hw[seq]
+        if self.use_letterbox:
+            scale, pad_h, pad_w = self._scale_hw[seq]  # type: ignore[misc]
+        else:
+            scale_h, scale_w = self._scale_hw[seq]
 
         for t in range(self.clip_len):
             frame_id = int(frame_paths[start + t].stem)
@@ -210,7 +251,14 @@ class MOT17TemporalClip(
             if self._img_cache is not None:
                 img = self._img_cache[seq][start + t]  # uint8 (3, H, W)
             else:
-                img = _load_and_resize(frame_paths[start + t], self.img_size)
+                if self.use_letterbox:
+                    img = _load_and_resize(
+                        frame_paths[start + t], self.img_size, True, scale, pad_h, pad_w
+                    )
+                else:
+                    img = _load_and_resize(
+                        frame_paths[start + t], self.img_size, False, scale_h, scale_w
+                    )
             frames_list.append(img)
 
             gt = self._gt[seq].get(
@@ -218,8 +266,12 @@ class MOT17TemporalClip(
             )
             gt_boxes = gt[0].clone()
             if gt_boxes.numel() > 0:
-                gt_boxes[:, [0, 2]] *= scale_w
-                gt_boxes[:, [1, 3]] *= scale_h
+                if self.use_letterbox:
+                    gt_boxes[:, [0, 2]] = gt_boxes[:, [0, 2]] * scale + pad_w
+                    gt_boxes[:, [1, 3]] = gt_boxes[:, [1, 3]] * scale + pad_h
+                else:
+                    gt_boxes[:, [0, 2]] *= scale_w
+                    gt_boxes[:, [1, 3]] *= scale_h
             gt_boxes_list.append(gt_boxes)
             gt_ids_list.append(gt[1])
             fids.append(frame_id)
@@ -233,16 +285,43 @@ class MOT17TemporalClip(
         }
 
 
-def _load_and_resize(path: Path, target_size: int) -> torch.Tensor:
+def _load_and_resize(
+    path: Path,
+    target_size: int,
+    use_letterbox: bool = False,
+    scale_or_h: float = 1.0,
+    pad_h_or_w: float = 1.0,
+    pad_w: int = 0,
+) -> torch.Tensor:
     """
-    讀取 JPEG 並縮放至正方形（preload_to_ram=False 的 fallback path）。
+    讀取 JPEG 並進行縮放至正方形或 Letterbox 縮放（preload_to_ram=False 的 fallback path）。
     """
     import torchvision.io as tv_io
     import torchvision.transforms.functional as TF
+    import torch.nn.functional as F
 
     img = tv_io.read_image(str(path))
-    img = TF.resize(img, [target_size, target_size], antialias=True)
-    return img  # type: ignore[no-any-return]
+    if use_letterbox:
+        scale = scale_or_h
+        pad_h = int(pad_h_or_w)
+        _, orig_h, orig_w = img.shape
+        new_h = int(round(orig_h * scale))
+        new_w = int(round(orig_w * scale))
+
+        img_resized = TF.resize(img, [new_h, new_w], antialias=True)
+
+        pad_left = pad_w
+        pad_right = target_size - new_w - pad_left
+        pad_top = pad_h
+        pad_bottom = target_size - new_h - pad_top
+
+        img_padded = F.pad(
+            img_resized, (pad_left, pad_right, pad_top, pad_bottom), value=114
+        )
+        return img_padded
+    else:
+        img_resized = TF.resize(img, [target_size, target_size], antialias=True)
+        return img_resized
 
 
 def collate_fn(batch: list[dict[str, object]]) -> dict[str, object]:
@@ -266,6 +345,7 @@ def build_mot17_dataloader(
     detector: str = "SDP",
     shuffle: bool = True,
     preload_to_ram: bool = True,
+    use_letterbox: bool = False,
 ) -> DataLoader[dict[str, object]]:
     dataset = MOT17TemporalClip(
         data_root=data_root,
@@ -276,16 +356,21 @@ def build_mot17_dataloader(
         seqs=seqs,
         detector=detector,
         preload_to_ram=preload_to_ram,
+        use_letterbox=use_letterbox,
     )
     print(f"[Dataset] {len(dataset)} clips from {len(dataset.sequences)} sequences")
-    # num_workers=0: CUDA is active before DataLoader creation (model already on GPU);
-    # fork would inherit CUDA context → deadlock. With preloaded RAM, single-process
-    # is fast enough and avoids all multiprocessing complexity.
+    # num_workers > 0 with multiprocessing_context='spawn': avoids CUDA fork deadlock
+    # (spawn starts fresh processes without inheriting the parent's CUDA context).
+    # persistent_workers=True keeps workers alive between epochs to avoid re-init overhead.
+    # pin_memory=True is only effective when num_workers > 0; enables DMA H2D transfers.
+    use_mp_ctx = "spawn" if num_workers > 0 else None
     return DataLoader(
         dataset,  # type: ignore[arg-type]
         batch_size=batch_size,
         shuffle=shuffle,
         num_workers=num_workers,
         collate_fn=collate_fn,
-        pin_memory=True,
+        pin_memory=num_workers > 0,
+        multiprocessing_context=use_mp_ctx,
+        persistent_workers=num_workers > 0,
     )

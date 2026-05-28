@@ -59,4 +59,4 @@ After any phase succeeds, re-run A1 (association score) and A2 (threshold sweep)
 | `consistency_threshold` | 0.82 | 0.75–0.80 |
 | `strict_sim_threshold` | 0.0 (disabled) | 0.55–0.65 (start at 0.60) |
 
-Full research analysis: [`docs/experiments/reid/last_vit_integration_analysis.md`](../experiments/reid/last_vit_integration_analysis.md)
+Full research analysis: [`docs/research/reid/last_vit_integration_analysis.md`](../research/reid/last_vit_integration_analysis.md)

@@ -59,6 +59,20 @@ else
     ERRORS=$((ERRORS + 1))
 fi
 
+# ── 4.5 GPU-first contract ───────────────────────────────────────────────────
+echo "── GPU-first contract check"
+if uv run python3 scripts/tools/check_gpu_contract.py 2>&1; then
+    ok "GPU-first contract"
+else
+    fail "GPU-first contract"
+    ERRORS=$((ERRORS + 1))
+fi
+
+# ── 4.6 API layer audit ──────────────────────────────────────────────────────
+echo "── API layer audit"
+uv run python3 scripts/tools/check_api_layers.py 2>&1 || true
+ok "API layer audit (warnings only)"
+
 # ── 5. pytest ────────────────────────────────────────────────────────────────
 echo "── pytest"
 if uv run pytest tests/ -q --ignore=tests/benchmarks 2>&1; then

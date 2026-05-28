@@ -14,6 +14,8 @@ Architecture:
 
 from __future__ import annotations
 
+from collections import deque
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -124,8 +126,16 @@ class TRTYoloBackbone(nn.Module):
             for name, buf in zip(self.output_names, self._output_bufs):
                 self.context.set_tensor_address(name, buf.data_ptr())
 
+        current_stream = torch.cuda.current_stream()
+        event_input = torch.cuda.Event()
+        event_input.record(current_stream)
+        self._stream.wait_event(event_input)
+
         self.context.execute_async_v3(self._stream.cuda_stream)
-        self._stream.synchronize()
+
+        event_output = torch.cuda.Event()
+        event_output.record(self._stream)
+        current_stream.wait_event(event_output)
 
         return self._output_bufs[0], self._output_bufs[1], self._output_bufs[2]
 
@@ -153,6 +163,7 @@ class MambaGatedDetector(nn.Module):
         trt_backbone_engine: str = "",
         emb_dim: int = 0,
         jde_proj_ckpt: str = "",
+        temporal_T: int = 0,
     ):
         super().__init__()
         if cfg is None:
@@ -166,6 +177,13 @@ class MambaGatedDetector(nn.Module):
         self.emb_dim = emb_dim
         self._emb_projector: EmbeddingProjector | None = None
         self._trt_feat_cache: dict[str, Tensor] = {}
+
+        self._temporal_T: int = temporal_T
+        self._temporal_buffer: list[deque[Tensor]] | None = None
+        self._gmc_mat_buffer: deque[Tensor] = deque[Tensor]()
+        self._gmc_mat_buf_max: int = temporal_T
+        if temporal_T > 0:
+            self._temporal_buffer = [deque[Tensor]() for _ in range(3)]
 
         self.teacher = build_gated_yolo_detector(
             yolo_pt_path,
@@ -191,6 +209,10 @@ class MambaGatedDetector(nn.Module):
             reg_max=1,
             spatial_reduction=mamba_args["spatial_reduction"],
             emb_dim=emb_dim,
+            use_pixel_shuffle=mamba_args.get("use_pixel_shuffle", False),
+            use_cross_scan=mamba_args.get("use_cross_scan", False),
+            use_hybrid_head=mamba_args.get("use_hybrid_head", False),
+            use_temporal_mamba=mamba_args.get("use_temporal_mamba", False),
         ).to(device)
         sd = {
             k.replace("._orig_mod.", "."): v for k, v in mamba_state["student"].items()
@@ -299,12 +321,46 @@ class MambaGatedDetector(nn.Module):
             for gl in gls.values():
                 gl._gate_input = None
 
-        want_emb = self.mamba_head.emb_head is not None
-        head_out = self.mamba_head(feats, return_embeddings=want_emb)
-        if want_emb:
-            cls_preds, reg_preds, emb_preds = head_out
+        if self._temporal_buffer is not None:
+            for si in range(3):
+                self._temporal_buffer[si].append(feats[si].detach())
+                if len(self._temporal_buffer[si]) > self._temporal_T:
+                    self._temporal_buffer[si].popleft()
+            T_buf = len(self._temporal_buffer[0])
+            feats = [
+                torch.cat(list(self._temporal_buffer[si]), dim=0) for si in range(3)
+            ]
+            flows = None
+            if len(self._gmc_mat_buffer) >= 2:
+                flows = []
+                for si in range(3):
+                    _, _, Hf, Wf = feats[si].shape
+                    B = feats[si].shape[0] // T_buf
+                    flow_scales = []
+                    for t in range(T_buf):
+                        f = _gmc_matrices_to_flow(
+                            self._gmc_mat_buffer, t, T_buf - 1, Hf, Wf, feats[si].device
+                        )
+                        flow_scales.append(f.unsqueeze(0).expand(B, -1, -1, -1))
+                    flows.append(torch.cat(flow_scales, dim=0))
+            want_emb = self.mamba_head.emb_head is not None
+            head_out = self.mamba_head(
+                feats, return_embeddings=want_emb, T=T_buf, flows=flows
+            )
+            B = feats[0].shape[0] // T_buf
+            if want_emb:
+                cls_preds, reg_preds, emb_preds = head_out
+            else:
+                cls_preds, reg_preds = head_out
+            cls_preds = [c[(T_buf - 1) * B :] for c in cls_preds]
+            reg_preds = [r[(T_buf - 1) * B :] for r in reg_preds]
         else:
-            cls_preds, reg_preds = head_out
+            want_emb = self.mamba_head.emb_head is not None
+            head_out = self.mamba_head(feats, return_embeddings=want_emb)
+            if want_emb:
+                cls_preds, reg_preds, emb_preds = head_out
+            else:
+                cls_preds, reg_preds = head_out
 
         detections = _postprocess_mamba(
             cls_preds, reg_preds, self.stride, self.conf_thr, self.max_det
@@ -432,10 +488,54 @@ class MambaGatedDetector(nn.Module):
         detections, _ = self.forward(input_tensor, gate_input=None)
         return detections
 
+    def set_gmc_warp(
+        self, warp: Tensor | None, orig_h: int = 0, orig_w: int = 0
+    ) -> None:
+        if warp is not None:
+            self._gmc_mat_buffer.append(warp.detach())
+            if len(self._gmc_mat_buffer) > self._gmc_mat_buf_max:
+                self._gmc_mat_buffer.popleft()
+
     def reset_tracker(self) -> None:
         from saccade.perception.tracking import GPUByteTracker  # noqa: E402
 
         self.tracker = GPUByteTracker(max_objects=2048)
+        if self._temporal_buffer is not None:
+            for buf in self._temporal_buffer:
+                buf.clear()
+        if hasattr(self, "_gmc_mat_buffer"):
+            self._gmc_mat_buffer.clear()
+
+
+def _gmc_matrices_to_flow(
+    mat_buffer: deque[Tensor],
+    t_idx: int,
+    target_idx: int,
+    H: int,
+    W: int,
+    device: torch.device,
+) -> Tensor:
+    """Convert deque of GMC affine matrices to (2, H, W) flow for frame t→target."""
+    if t_idx >= target_idx:
+        return torch.zeros(2, H, W, device=device)
+    buf_list = list(mat_buffer)
+    cumulative = torch.eye(2, 3, device=device, dtype=torch.float32)
+    for i in range(t_idx + 1, target_idx + 1):
+        if i >= len(buf_list):
+            break
+        mat = buf_list[i].to(device).reshape(2, 3)
+        m3 = torch.eye(3, device=device, dtype=mat.dtype)
+        m3[:2, :] = mat
+        cumulative = mat @ m3
+    gy, gx = torch.meshgrid(
+        torch.arange(H, device=device, dtype=torch.float32),
+        torch.arange(W, device=device, dtype=torch.float32),
+        indexing="ij",
+    )
+    coords = torch.stack([gx, gy, torch.ones_like(gx)], dim=0).reshape(3, -1)
+    warped = cumulative @ coords
+    flow = warped - coords[:2]
+    return flow.reshape(2, H, W)
 
     def remove_hooks(self) -> None:
         pass
@@ -452,6 +552,7 @@ def build_mamba_gated_detector(
     trt_backbone_engine: str = "",
     emb_dim: int = 0,
     jde_proj_ckpt: str = "",
+    temporal_T_override: int | None = None,
 ) -> MambaGatedDetector:
     if teacher_ckpt and Path(teacher_ckpt).exists():
         teacher_raw = torch.load(teacher_ckpt, map_location="cpu", weights_only=False)
@@ -475,10 +576,17 @@ def build_mamba_gated_detector(
         )
         teacher_path = ""
 
+    mamba_path = str(Path(mamba_ckpt).resolve())
+    mamba_state = torch.load(mamba_path, map_location="cpu", weights_only=False)
+    mamba_args = mamba_state.get("mamba_args", {})
+    temporal_T = 3 if mamba_args.get("use_temporal_mamba", False) else 0
+    if temporal_T_override is not None:
+        temporal_T = temporal_T_override
+
     model = MambaGatedDetector(
         yolo_pt_path=str(Path(yolo_pt_path).resolve()),
         teacher_ckpt=teacher_path,
-        mamba_ckpt=str(Path(mamba_ckpt).resolve()),
+        mamba_ckpt=mamba_path,
         cfg=cfg,
         device=device,
         conf_thr=conf_thr,
@@ -488,5 +596,6 @@ def build_mamba_gated_detector(
         else "",
         emb_dim=emb_dim,
         jde_proj_ckpt=str(Path(jde_proj_ckpt).resolve()) if jde_proj_ckpt else "",
+        temporal_T=temporal_T,
     )
     return model.to(device)

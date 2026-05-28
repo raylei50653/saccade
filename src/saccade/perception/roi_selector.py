@@ -36,8 +36,8 @@ class ROISelector:
         cy = (tracks[:, 1] + tracks[:, 3]) / 2.0
 
         # 2. 找出重心
-        target_cx = torch.mean(cx).item()
-        target_cy = torch.mean(cy).item()
+        target_cx = torch.mean(cx).item()  # saccade-allow-cpu
+        target_cy = torch.mean(cy).item()  # saccade-allow-cpu
 
         # 3. 緩動平滑 (Exponential Moving Average)
         curr_cx = self.last_roi_center[0] * smoothing + target_cx * (1.0 - smoothing)

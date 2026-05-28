@@ -1,7 +1,7 @@
 # Temporal YOLO — 設計文件索引
 
 > Option D（Track-Conditioned YOLO）已於 2026-05-19 結案 NO-GO，設計文件移至
-> [docs/archive/option-d/](../archive/option-d/) 保留供歷史參考。
+> [docs/archive/option-d/](../../archive/option-d/) 保留供歷史參考。
 
 本目錄保留**當前 active** 的 Temporal YOLO 設計：
 
@@ -38,7 +38,7 @@ Option B  →  Option C  →  Option D  →  Option E  →  Option E-v2  →  Op
 | `reid_head.py` | ReIDHead, supcon_loss |
 | `roi_embedder.py` | FPNCropEmbedder, ROIEmbeddingBank |
 
-### 訓練腳本 (`train/temporal_yolo/`)
+### 訓練腳本 (`scripts/train/temporal_yolo/`)
 
 | 腳本 | 內容 |
 |------|------|
@@ -82,5 +82,5 @@ Phase 3 — SAVE     checkpoint 由 training_utils.save_checkpoint() 統一處�
 
 ## 歷史文件
 
-- Option D 完整設計 (4 文件) → [docs/archive/option-d/](../archive/option-d/)
+- Option D 完整設計 (4 文件) → [docs/archive/option-d/](../../archive/option-d/)
 - Option D 訓練產物：`runs/conditioned_p1_v2/best.ckpt`、`runs/conditioned_p2/best.ckpt`

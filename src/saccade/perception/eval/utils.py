@@ -113,8 +113,8 @@ def mot_result_line(
 ) -> str:
     x1, y1, x2, y2 = box
     return (
-        f"{frame_id},{global_tid},{max(0, x1):.2f},{max(0, y1):.2f},"
-        f"{min(frame_w, x2) - max(0, x1):.2f},{min(frame_h, y2) - max(0, y1):.2f},"
+        f"{frame_id},{global_tid},{x1:.2f},{y1:.2f},"
+        f"{x2 - x1:.2f},{y2 - y1:.2f},"
         f"{score:.4f},-1,-1,-1"
     )
 

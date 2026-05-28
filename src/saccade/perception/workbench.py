@@ -546,7 +546,7 @@ class Workbench:
             wb_done.record(self.stream)
 
         torch.cuda.current_stream().wait_event(wb_done)
-        n_out = int(self.out_count[0].item())
+        n_out = int(self.out_count[0].item())  # saccade-allow-cpu
 
         if n_out == 0:
             return WorkbenchResult(

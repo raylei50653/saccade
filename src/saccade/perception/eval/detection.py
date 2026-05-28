@@ -63,7 +63,10 @@ def _prepare_canvas_960p(
         )
     else:
         img_resized = torch.nn.functional.interpolate(
-            pool.frame_buffer.unsqueeze(0), size=(h_new, w_new)
+            pool.frame_buffer.unsqueeze(0),
+            size=(h_new, w_new),
+            mode="bilinear",
+            align_corners=False,
         ).squeeze(0)
         pool.canvas_960p.fill_(114.0 / 255.0)
         pool.canvas_960p[:, y_off : y_off + h_new, x_off : x_off + w_new].copy_(
@@ -1053,7 +1056,10 @@ def detect_single_patch_640(
             )
         else:
             img_resized = torch.nn.functional.interpolate(
-                pool.frame_buffer.unsqueeze(0), size=(h_new, w_new)
+                pool.frame_buffer.unsqueeze(0),
+                size=(h_new, w_new),
+                mode="bilinear",
+                align_corners=False,
             ).squeeze(0)
             pool.canvas_640p.fill_(114.0 / 255.0)
             pool.canvas_640p[:, y_off : y_off + h_new, x_off : x_off + w_new].copy_(
@@ -1070,8 +1076,12 @@ def detect_single_patch_640(
         return boxes, scores, classes
 
     img_input = torch.nn.functional.interpolate(
-        pool.frame_buffer.unsqueeze(0), size=(640, 640)
+        pool.frame_buffer.unsqueeze(0),
+        size=(640, 640),
+        mode="bilinear",
+        align_corners=False,
     )
+    pool.canvas_640p.copy_(img_input[0])
     raw_dets = detector.detect_raw(img_input)
     boxes = _decode_detector_boxes(raw_dets[0, :, :4], detector_box_format)
     scores = raw_dets[0, :, 4]
@@ -1114,8 +1124,12 @@ def detect_single_patch_960(
         return boxes, scores, classes, keypoints
 
     img_input = torch.nn.functional.interpolate(
-        pool.frame_buffer.unsqueeze(0), size=(960, 960)
+        pool.frame_buffer.unsqueeze(0),
+        size=(960, 960),
+        mode="bilinear",
+        align_corners=False,
     )
+    pool.canvas_960p.copy_(img_input[0])
     keypoints = None
     if hasattr(detector, "pose"):
         boxes, scores, classes, keypoints = detector.detect(

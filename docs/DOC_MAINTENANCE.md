@@ -62,9 +62,10 @@ Proposed → Accepted → (必要時) Superseded by ADR XXX
 
 ```
 □ 新模組有 architecture/ 版本快照？
-□ 新實驗有 training/ 記錄？
-□ progress/ 與代碼一致？
+□ 新實驗有 research/ 記錄？
+□ 系統模組實作進度表與代碼一致？
 □ ADR 狀態正確？
 □ TODO.md 已完成項目已勾選？
+□ 通過 check_gpu_contract.py 靜態效能合約檢查？
 □ 無失效連結或舊模型名稱？
 ```

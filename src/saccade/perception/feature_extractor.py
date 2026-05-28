@@ -320,7 +320,7 @@ class TRTFeatureExtractor:
             chunk = input_tensor[start : start + self.max_batch]
             bs = chunk.size(0)
             self._extract_chunk(chunk)
-            torch.cuda.synchronize()
+            torch.cuda.synchronize()  # saccade-allow-cpu
             lhs = self.output_buffers["last_hidden_state"][:bs].float().clone()
             embed_chunk, scores_gate = _last_vit_dual(
                 lhs, sigma_embed, sigma_gate, top_k_ratio

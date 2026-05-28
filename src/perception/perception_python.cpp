@@ -4,6 +4,7 @@
 #include "perception/trt_engine.hpp"
 #include "perception/preprocessor.hpp"
 #include "perception/feature_extractor.hpp"
+#include "perception/mamba_gated_detector.hpp"
 #include <cuda_runtime_api.h>
 
 namespace py = pybind11;
@@ -124,6 +125,21 @@ void init_perception_ext(py::module &m) {
         .def_property_readonly("cpp_ptr", [](FeatureExtractor& self) -> uintptr_t {
             return reinterpret_cast<uintptr_t>(&self);
         });
+
+    py::class_<MambaGatedDetector>(m, "MambaGatedDetector")
+        .def(py::init<const std::string &, const std::string &, int, float>(),
+             py::arg("trt_backbone_path"),
+             py::arg("mamba_head_script_path"),
+             py::arg("img_size") = 640,
+             py::arg("conf_thr") = 0.05f)
+        .def("forward_ptr", [](MambaGatedDetector &self, uintptr_t d_input_img, uintptr_t d_out_dets) {
+            return self.forward_ptr(d_input_img, d_out_dets);
+        }, py::arg("d_input_img"), py::arg("d_out_dets"))
+        .def("extract_fpn_embeddings_ptr", [](MambaGatedDetector &self, uintptr_t d_boxes_xyxy, int num_dets, uintptr_t d_out_embs) {
+            self.extract_fpn_embeddings_ptr(d_boxes_xyxy, num_dets, d_out_embs);
+        }, py::arg("d_boxes_xyxy"), py::arg("num_dets"), py::arg("d_out_embs"))
+        .def_property_readonly("img_size", &MambaGatedDetector::get_img_size)
+        .def_property_readonly("fpn_dim", &MambaGatedDetector::get_fpn_dim);
 }
 
 PYBIND11_MODULE(saccade_perception_ext, m) {

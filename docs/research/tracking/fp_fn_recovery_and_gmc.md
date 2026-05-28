@@ -35,9 +35,9 @@ Key diagnosis:
 
 Recommended reading with this update:
 
-- For pipeline shape: [reference/pipeline_flow.md](/docs/reference/pipeline_flow.md)
-- For detector / postprocess code: [L1_perception.md](/docs/layers/L1_perception.md)
-- For CLI entry point: [scripts/eval/README.md](/scripts/eval/README.md)
+- For pipeline shape: [pipeline_flow.md](../../reference/pipeline_flow.md)
+- For detector / postprocess code: [L1_perception.md](../../architecture/L1_perception.md)
+- For CLI entry point: [scripts/eval/](../../scripts/eval/)
 
 ## Summary
 
@@ -148,7 +148,7 @@ Recommendation after this sweep:
 Ran and recorded in:
 
 - `scripts/eval/output/ablation_rerank.txt`
-- `docs/experiments/eval/rerank_phase2.md`
+- `docs/research/eval/rerank_phase2.md`
 
 Important context:
 

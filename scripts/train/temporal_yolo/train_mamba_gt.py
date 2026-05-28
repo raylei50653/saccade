@@ -174,6 +174,11 @@ def main() -> None:
     parser.add_argument(
         "--clip-grad", type=float, default=1.0, help="gradient clipping max_norm"
     )
+    parser.add_argument(
+        "--cache-dir",
+        default="",
+        help="Use precomputed teacher FPN features (skip backbone forward pass)",
+    )
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -224,6 +229,7 @@ def main() -> None:
         "num_blocks": args.num_blocks,
         "spatial_reduction": args.spatial_reduction,
         "num_classes": nc,
+        "use_pixel_shuffle": False,
     }
     for k, v in mamba_args_default.items():
         mamba_args.setdefault(k, v)
@@ -236,6 +242,10 @@ def main() -> None:
         num_classes=mamba_args["num_classes"],
         reg_max=1,
         spatial_reduction=mamba_args["spatial_reduction"],
+        use_pixel_shuffle=mamba_args["use_pixel_shuffle"],
+        use_cross_scan=mamba_args.get("use_cross_scan", False),
+        use_hybrid_head=mamba_args.get("use_hybrid_head", False),
+        use_temporal_mamba=mamba_args.get("use_temporal_mamba", False),
     ).to(device)
     sd = _strip_compiled_keys(mamba_state["student"])
     mamba.load_state_dict(sd, strict=True)
@@ -332,6 +342,10 @@ def main() -> None:
         f"[MambaGT] {len(loader)} batches/epoch  gt_ratio={args.gt_ratio}  lr={args.lr}"
     )
 
+    cache_dir = Path(args.cache_dir) if args.cache_dir else None
+    if cache_dir:
+        print(f"[Cache] Loading precomputed teacher features from {cache_dir}")
+
     # ------------------------------------------------------------------
     # Training loop
     # ------------------------------------------------------------------
@@ -368,11 +382,28 @@ def main() -> None:
                         prev_gt, args.gt_ratio, args.img_size, device
                     )
 
-                fpn_feats.clear()
-
-                _ = teacher(frame_t, gate_input=gate_inputs)
-
-                feats = [fpn_feats[s] for s in ("p3", "p4", "p5")]
+                if cache_dir is not None:
+                    p3s, p4s, p5s = [], [], []
+                    for b in range(B):
+                        seq: str = batch["seq"][b]  # type: ignore[index]
+                        fid: int = batch["frame_ids"][b][t]  # type: ignore[index]
+                        feat = torch.load(
+                            cache_dir / seq / f"{fid:06d}.pt",
+                            map_location="cpu",
+                            weights_only=True,
+                        )
+                        p3s.append(feat["p3"].to(device, dtype=torch.float32))
+                        p4s.append(feat["p4"].to(device, dtype=torch.float32))
+                        p5s.append(feat["p5"].to(device, dtype=torch.float32))
+                    feats = [
+                        torch.stack(p3s),
+                        torch.stack(p4s),
+                        torch.stack(p5s),
+                    ]
+                else:
+                    fpn_feats.clear()
+                    _ = teacher(frame_t, gate_input=gate_inputs)
+                    feats = [fpn_feats[s] for s in ("p3", "p4", "p5")]
 
                 s_cls, s_reg = mamba(feats)
                 preds = _build_preds_dict(s_cls, s_reg, feats)
@@ -449,6 +480,12 @@ def main() -> None:
                         "num_blocks": mamba_args["num_blocks"],
                         "spatial_reduction": mamba_args["spatial_reduction"],
                         "num_classes": nc,
+                        "use_pixel_shuffle": mamba_args.get("use_pixel_shuffle", False),
+                        "use_cross_scan": mamba_args.get("use_cross_scan", False),
+                        "use_hybrid_head": mamba_args.get("use_hybrid_head", False),
+                        "use_temporal_mamba": mamba_args.get(
+                            "use_temporal_mamba", False
+                        ),
                     },
                 },
                 run_dir,

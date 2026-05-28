@@ -334,7 +334,7 @@ def build_prepared_candidates(
         )
         if emb is not None and loop_idx in precomp:
             match_iou, aspect_ratio, _det_score, _suspect, _det_box = precomp[loop_idx]
-            if match_iou > 0.35:
+            if match_iou >= 0.0:
                 if bank_quality_v2 and frame_w > 0 and frame_h > 0:
                     _bq = _compute_bank_quality_score(
                         _det_score,

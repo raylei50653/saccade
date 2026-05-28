@@ -22,14 +22,32 @@
 
 ---
 
-## 當前 Baseline（2026-05-22 更新）
+## 系統模組實作進度表
 
-| preset | IDF1 | MOTA | IDs | Rcll | FP | FPS |
-|--------|------|------|-----|------|-----|-----|
-| **speed**（yolo26s） | **52.0%** | **41.6%** | **475** | 55.0% | 14687 | **97.9** |
-| **baseline**（yolo26m） | **51.4%** | **43.5%** | **502** | 59.0% | — | ~85 |
-| **gated_det_v1**（Option E） | **56.9%** | **52.5%** | **515** | 56.2% | 3712 | ~71 |
-| **e-v2 α_tier**（Option E-v2） | **55.6%** | **54.2%** | **545** | 57.3% | **2932** | ~37 |
+| 系統分層/模組 | 當前實作狀態 | 關鍵特徵與已完成里程碑 |
+|---|---|---|
+| **Media & Streaming** (媒體接入) | 🟢 高效能工業級 | Canonical RTSP 規範與讀寫分離、GstClient C++ 零拷貝解碼 (5-Buffer 狀態機 + Per-buffer CUDA Stream)、DALI GPU 預處理、 Watchdog 自動斷線恢復 |
+| **L1 Perception** (感測/追蹤) | 🟢 穩定落地 | YOLO26s/m/l TRT 偵測推理、GPUByteTracker 雙階段關聯、GMC 運動補償與光線自適應、動態預測協方差 R 矩陣 |
+| **L2 Deduplication** (去重) | 🟢 穩定落地 | SigLIP 2 特徵提取、Saccade Heartbeat 影格更新隔離、AsyncEmbeddingDispatcher 雙串流、FeatureBank 向量記憶庫 |
+| **L3–L4 Storage** (快取/儲存) | 🟢 穩定運行 | Redis RPUSH + Pipelining 批次寫入、Micro-batching (100ms 聚合，降低 90% QPS)、ChromaDB 混合向量語意查詢、資料過期快取清理與冷備份 |
+| **L5 Cognition** (認知推理) | 🟢 穩定落地 | LlamaIndex + local BAAI 嵌入 + llama3 邊緣 Agentic RAG 本地推理、高熵事件觸發、視覺二次查詢與跨鏡頭 ReID 關聯 |
+| **L6 Resource** (資源調度) | 🟢 穩定運行 | ResourceManager 階梯式資源降級管理（NORMAL → REDUCED → FAST_PATH → EMERGENCY）、滯後控制（Hysteresis）預防切換震盪 |
+| **Infra & CI/CD** (基礎設施) | 🟢 維運完備 | Systemd modular user 服務生命週期管理 (`saccade-*`)、Github Action (Ruff / Mypy / Pytest / C++ CUDA 容器自動編譯與推送 GHCR) |
+
+---
+
+## 當前 Baseline（2026-05-28 更新）
+
+| preset | IDF1 | MOTA | IDs | Rcll | FP | FPS | 備註 |
+|--------|------|------|-----|------|-----|-----|------|
+| **speed**（yolo26s） | **52.0%** | **41.6%** | **475** | 55.0% | 14687 | **97.9** | Baseline s |
+| **baseline**（yolo26m） | **51.4%** | **43.5%** | **502** | 59.0% | — | ~85 | Baseline m |
+| **gated_det_v1**（Option E） | **56.9%** | **52.5%** | **515** | 56.2% | 3712 | ~71 | |
+| **e-v2 α_tier**（Option E-v2） | **55.6%** | **54.2%** | **545** | 57.3% | **2932** | ~37 | |
+| **mamba_optimal**（Option F, P1 PixelShuffle） | **71.2%** | **76.3%** | 665 | 82.3% | 6050 | **100.9** | 單向掃描 |
+| **mamba_optimal**（P2 Cross-Scan 並行） | 71.3% | **76.6%** | **614** | 82.0% | 5391 | 93.8 | **當前 preset** |
+| **P3 Hybrid** (conv P3 + Mamba P4/P5) | **72.8%** | 75.6% | 652 | 82.0% | 6503 | 77.6 | 最高 IDF1 |
+| **P2-ST** (Spatio-Temporal) T=1 eval | 71.6% | 75.4% | 689 | 81.9% | 6543 | 92.0 | 時序頭，單幀推理 |
 
 已 default 的 flag：`fuse_score_weight=0.4`、`interp`、`fp_hard_filter`（area=40000）、`kalman_r_scale=0.75`、`async_reid`、`pipeline_relink`、`gmc gpu`、`detection_quality_scaling`。
 
@@ -78,7 +96,7 @@
 
 ### ✅ Option E-v2 — Quality-Gated Temporal Feature Fusion（GO，2026-05-22 結案）
 
-> 設計文件：[docs/temporal_yolo/option-e-v2-design.md](/docs/temporal_yolo/option-e-v2-design.md)
+> 設計文件：[docs/architecture/temporal_yolo/option-e-v2-design.md](architecture/temporal_yolo/option-e-v2-design.md)
 >
 > 直接利用 t-1 的 FPN 特徵加上 α_tier（per-track-state）加權做時序融合。無需重訓，從 gated_det_v1 熱啟動。
 >
@@ -96,6 +114,50 @@
 > Code：`src/saccade/perception/temporal_yolo/temporal_fusion.py`（TemporalFeatureFusion）
 >
 > 未完成：detector score heatmap、per-scale α_tier tuning、FPS 優化、訓練腳本
+
+### ✅ Option F — Mamba Gated Detector & Tracker Optimization (2026-05-27 已結案/已儲存)
+
+> 設計預設檔：[configs/presets/mamba_optimal.yaml](/configs/presets/mamba_optimal.yaml)
+>
+> 徹底挖掘 Mamba 檢測頭在追蹤任務上的能力，移除了高運算負擔但無效益的 ReID 模組，透過對動態關聯、GMC 運動對齊與軌跡插值的協同精調，大幅突破性能極限。
+>
+> #### 🚀 PixelShuffle Breakthrough（2026-05-27）
+>
+> 在 Mamba 頭中引入 **PixelShuffle 上取樣**（取代無參數 `F.interpolate`）後，配合 Stretch-Resize 預處理，指標全面突破：
+>
+> **IDF1 71.2%（+6.3pp），MOTA 76.3%（+14.3pp），Rcll 82.3%（+15.0pp）**
+>
+> 關鍵發現：
+> 1. **預處理域一致性是決定性的**：Teacher FPN 特徵圖若受 Letterbox 灰色 padding 污染，Mamba 頭定位能力崩潰（IDF1 23.3%）。Stretch-Resize（`preprocess: none`）恢復純淨特徵域後定位精度完全恢復。
+> 2. **`use_letterbox=False` 是訓練預設的正確決策**：所有訓練腳本預設走 Stretch-Resize，推理端 `--preset mamba_optimal` 對應 `preprocess: none`，域一致。
+> 3. **特徵快取加速**：加入 `--precompute-dir` / `--cache-dir` 支援，預計算 Teacher FPN 特徵後 Phase 1 蒸餾每 epoch 從數分鐘降至 **15 秒**。
+>
+> 最終訓練流程（`~10min` 總耗時）：
+> ```bash
+> # 1. 預計算 Teacher FPN 特徵（一次性，~97s）
+> uv run scripts/train/temporal_yolo/train_mamba_head.py --data-root datasets/MOT17 --use-pixel-shuffle --precompute-dir runs/trt_feat_cache_v2
+> # 2. Phase 1 蒸餾（~5min）
+> uv run scripts/train/temporal_yolo/train_mamba_head.py --data-root datasets/MOT17 --use-pixel-shuffle --cache-dir runs/trt_feat_cache_v2 --run-dir runs/mamba_distill_pixelshuffle_correct --epochs 20 --batch-size 8
+> # 3. Phase 2 GT 微調（~15min）
+> uv run scripts/train/temporal_yolo/train_mamba_gt.py --data-root datasets/MOT17 --mamba-ckpt runs/mamba_distill_pixelshuffle_correct/best.ckpt --run-dir runs/mamba_gt_pixelshuffle_correct --epochs 30 --batch-size 4
+> ```
+>
+> #### 先前三項核心精調結論
+> 1. **Mamba 專屬 IoU 門檻 (`match_thresh=0.50`)**：適配 Mamba 信心分佈，相比預設 0.66 顯著挽救斷軌。
+> 2. **軌跡插值鎖定 (`interpolate_max_gap=35`)**：容忍 ~1.17 秒完全遮擋，Recall 拉升 1.3pp。
+> 3. **高精度 GMC 運動對齊 (`gmc_downscale=4`)**：GPU FFT 相位相關性估計極精準，以零速度代價將 IDs 壓制在低位。
+
+---
+
+## Mamba 檢測頭中長期優化待辦（2026-05-27 新增）
+
+| 優先 | 項目 | 具體思路 | 預期收益 | 狀態 |
+| :---: | :--- | :--- | :--- | :---: |
+| **P1** | **特徵還原層優化（Pixel-Shuffle）** | 將 `F.interpolate` 還原放大改為 **Pixel-Shuffle (子像素卷積)**。 | MOTA +14.3pp, IDF1 +6.3pp, Rcll +15.0pp | ✅ 已完工 (2026-05-27) |
+| **P2** | **2D 空間多向掃描 (Cross-Scan Module)** | 將 row-major 單向 1D 壓平改為「上下左右」四向交叉掃描與融合，消除方向偏見。`--use-cross-scan` flag，零參數增長（共享 MambaBlocks）。 | 全向對稱 2D 全局感受野，預期提升複雜運動追蹤穩定度 | ✅ 已實作 (2026-05-27) |
+| **P2** | **時空聯合 Mamba (Spatio-Temporal SSM)** | 將連續 T 幀的 FPN 特徵做空間 cross-scan 後再做時間軸 SSM 掃描。**已訓練（stride=1, clip_len=3），單幀推理與 cross-scan 持平，時序 buffer 因固定位置掃描無法追蹤移動物體而不 work。** | 未達預期，需 GMC/Kalman 引導的對齊機制（見 VGT-Mamba）。 | 🔴 VGT 進行中 |
+| **P2-VGT** | **VGT-Mamba (Velocity-Guided Temporal)** | 用 GMC affine flow 將歷史幀 FPN 特徵 warp 對齊到當前幀後再做 temporal Mamba。GMC 已預計算（127 KB），訓練中（Phase 1）。 | 根治時序對齊，從源頭降低遮擋 FN | 🔄 訓練中 |
+| **P3** | **混合 Head 架構 (Hybrid Mamba-ViT)** | 在低層 FPN (P3) 採用硬體效率極高的 **EfficientViT-style CGA** 卷積頭；在高層 FPN (P5) 採用 **Mamba 頭** 捕捉全局語義。 | 兼顧 Mamba 的全局上下文建模優勢與 EfficientViT 對 TensorRT / GPU 架構極友好的推論速度。 | 📋 待實作 |
 
 ---
 
@@ -129,6 +191,6 @@
 
 ## Historical Links
 
-- 歷史 TODO / 設計規範 / C++ 路線圖：[docs/TODO_history.md](/docs/TODO_history.md)
-- Tracking base 與 relink sweep：[docs/experiments/tracking/fp_fn_recovery_and_gmc.md](/docs/experiments/tracking/fp_fn_recovery_and_gmc.md)
-- ReID backbone refresh 歸檔：[docs/experiments/reid/semantic_relink_and_crop.md](/docs/experiments/reid/semantic_relink_and_crop.md)
+- 歷史 TODO / 設計規範 / C++ 路線圖：[TODO_history.md](TODO_history.md)
+- Tracking base 與 relink sweep：[fp_fn_recovery_and_gmc.md](research/tracking/fp_fn_recovery_and_gmc.md)
+- ReID backbone refresh 歸檔：[semantic_relink_and_crop.md](research/reid/semantic_relink_and_crop.md)

@@ -416,7 +416,7 @@ Response shape:
 - `EntropyTrigger.calculate_entropy()` is still placeholder logic and not a stable semantic contract yet.
 - Redis List event path and Redis Stream path are both present; long-term canonical path is not fully unified.
 - `GET /objects/{obj_id}` assumes richer object history than `RedisCache.update_object_track()` currently stores.
-- `docs/architecture.md` and `docs/pipeline_flow.md` still describe the intended system shape at a higher level; this file describes currently implemented interface contracts.
+- `docs/architecture/README.md` and `docs/reference/pipeline_flow.md` still describe the intended system shape at a higher level; this file describes currently implemented interface contracts.
 
 ---
 
@@ -430,4 +430,4 @@ Response shape:
 - 修改 FastAPI request/response shape
 - 修改 health checker 的輸出合約
 
-若只是實驗性欄位掃描，先記在 [docs/TODO.md](/docs/TODO.md) 或實驗文件；當欄位成為穩定介面時，再回寫此規範。
+若只是實驗性欄位掃描，先記在 [TODO.md](../TODO.md) 或實驗文件；當欄位成為穩定介面時，再回寫此規範。

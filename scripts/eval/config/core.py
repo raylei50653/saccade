@@ -159,7 +159,7 @@ def add_core_args(parser: argparse.ArgumentParser) -> None:
     )
     io.add_argument(
         "--preset",
-        choices=("baseline", "accuracy", "speed"),
+        choices=("baseline", "accuracy", "speed", "mamba_optimal", "fpn_reid_baseline"),
         default=None,
         help="Built-in preset from configs/presets/<name>.yaml.",
     )
@@ -364,4 +364,9 @@ def add_core_args(parser: argparse.ArgumentParser) -> None:
         "--mamba-teacher-ckpt",
         default="runs/gated_det_v1/best.ckpt",
         help="Path to teacher (GatedYOLODetector) checkpoint for Mamba eval.",
+    )
+    core.add_argument(
+        "--no-temporal",
+        action="store_true",
+        help="Disable temporal buffer in MambaGatedDetector (force T=1 inference).",
     )

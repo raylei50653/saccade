@@ -166,7 +166,8 @@ class TrackAppearanceBank:
         ):
             return
         emb = F.normalize(
-            embedding.detach().to(device="cpu", dtype=torch.float32), dim=0
+            embedding.detach().to(device="cpu", dtype=torch.float32),
+            dim=0,  # saccade-allow-cpu
         )
         if self._use_ema:
             if track_id in self._ema_reps:
@@ -211,7 +212,8 @@ class TrackAppearanceBank:
             ):
                 continue
             emb = F.normalize(
-                embedding.detach().to(device="cpu", dtype=torch.float32), dim=0
+                embedding.detach().to(device="cpu", dtype=torch.float32),
+                dim=0,  # saccade-allow-cpu
             )
             if self._use_ema:
                 if track_id in self._ema_reps:
@@ -307,7 +309,7 @@ class TrackAppearanceBank:
         else:
             # mean pairwise cosine = (n * ||mean_unnorm||² - 1) / (n - 1)
             # derivation: sum_ij sim_ij = n²*||mean_unnorm||², subtract n diagonal
-            q = float(torch.dot(mean_unnorm, mean_unnorm).item())
+            q = float(torch.dot(mean_unnorm, mean_unnorm).item())  # saccade-allow-cpu
             consistency = (n * q - 1.0) / (n - 1)
 
         self._representatives[track_id] = representative
@@ -343,7 +345,7 @@ class TrackAppearanceBank:
                     mean_hq = (w_hq.unsqueeze(1) * stacked_hq).sum(0)
                 else:
                     mean_hq = stacked_hq.mean(dim=0)
-                q_hq = float(torch.dot(mean_hq, mean_hq).item())
+                q_hq = float(torch.dot(mean_hq, mean_hq).item())  # saccade-allow-cpu
                 hq_consistency = (n_hq * q_hq - 1.0) / (n_hq - 1)
                 if hq_consistency >= self.consistency_threshold:
                     self._high_quality_reps[track_id] = F.normalize(mean_hq, dim=0)
@@ -754,8 +756,10 @@ class GPUByteTracker:
         stream = torch.cuda.current_stream().cuda_stream
         set_flags_host = getattr(self.tracker, "set_clean_embedding_flags_host", None)
         if set_flags_host is not None:
-            ids_contig = track_ids.to(torch.int32).cpu().contiguous()
-            flags_contig = flags.to(torch.bool).cpu().contiguous()
+            ids_contig = (
+                track_ids.to(torch.int32).cpu().contiguous()
+            )  # saccade-allow-cpu
+            flags_contig = flags.to(torch.bool).cpu().contiguous()  # saccade-allow-cpu
             set_flags_host(
                 ids_contig.data_ptr(),
                 flags_contig.data_ptr(),

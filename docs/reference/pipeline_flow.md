@@ -2,9 +2,9 @@
 
 本文件描述 **目前實作主路徑** 的資料流，重點是對應現有 `runner.py` 與 evaluation path，而不是較早期的完整產品願景圖。
 
-- 穩定架構邊界：看 [architecture.md](/docs/architecture.md)
-- 開發入口與 source-of-truth：看 [../DEVELOPMENT.md](/DEVELOPMENT.md)
-- 事件 / API / storage schema：看 [api_spec.md](/docs/api_spec.md)
+- 穩定架構邊界：看 [README.md](../architecture/README.md)
+- 開發入口與 source-of-truth：看 [DEVELOPMENT.md](../../DEVELOPMENT.md)
+- 事件 / API / storage schema：看 [api_spec.md](api_spec.md)
 
 ---
 
@@ -321,7 +321,7 @@
 - 目前同時存在：
   - Redis List `saccade:events`
   - Redis Stream `saccade:stream`
-- schema 以 [api_spec.md](/docs/api_spec.md) 為準
+- schema 以 [api_spec.md](api_spec.md) 為準
 
 ### 4.2 Cognition / Memory
 
@@ -362,7 +362,7 @@
 - GMC quality-aware handling
 - post-merge V2 cost
 
-這些方向的近期排序以 [docs/TODO.md](/docs/TODO.md) 為準。
+這些方向的近期排序以 [TODO.md](../TODO.md) 為準。
 
 ---
 
@@ -371,10 +371,10 @@
 本文件不負責：
 
 - 穩定架構責任邊界的完整定義
-  - 看 [architecture.md](/docs/architecture.md)
+  - 看 [README.md](../architecture/README.md)
 - 事件 / API schema 細節
-  - 看 [api_spec.md](/docs/api_spec.md)
+  - 看 [api_spec.md](api_spec.md)
 - 實驗結果與 backlog 排序
-  - 看 [docs/TODO.md](/docs/TODO.md)
+  - 看 [TODO.md](../TODO.md)
 
 最後更新：2026-05-13

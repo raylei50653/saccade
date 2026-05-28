@@ -127,17 +127,21 @@ if __name__ == "__main__":
             build_mamba_gated_detector,
         )
 
+        _tiling = getattr(args, "tiling", "native_640")
+        _img_sz = 960 if "960" in _tiling else 640
         mamba_detector = build_mamba_gated_detector(
             yolo_pt_path="models/yolo/yolo26s.pt",
             teacher_ckpt=args.mamba_teacher_ckpt,
             mamba_ckpt=args.mamba_ckpt,
-            img_size=960,
+            img_size=_img_sz,
             device="cuda",
             conf_thr=0.001,
             max_det=300,
+            trt_backbone_engine=getattr(args, "fpn_backbone_engine", ""),
+            temporal_T_override=0 if getattr(args, "no_temporal", False) else None,
         )
         eval_kwargs["detector"] = mamba_detector
-        eval_kwargs["tiling"] = "mamba_960"
+        eval_kwargs["tiling"] = _tiling
         eval_kwargs["engine"] = "mamba"
 
     if getattr(args, "cpp_threads", 0) > 0:

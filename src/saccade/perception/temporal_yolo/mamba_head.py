@@ -178,6 +178,44 @@ class MambaBlock(nn.Module):
 
 
 # ---------------------------------------------------------------------------
+# Cross-scan Mamba: 4-directional spatial scanning (P2 optimization)
+# ---------------------------------------------------------------------------
+def _cross_scan_mamba(
+    x_2d: Tensor,
+    blocks: nn.ModuleList,
+    H: int,
+    W: int,
+) -> Tensor:
+    B, C = x_2d.shape[0], x_2d.shape[1]
+
+    scans = torch.stack(
+        [
+            x_2d,
+            torch.flip(x_2d, dims=[2, 3]),
+            torch.flip(x_2d, dims=[3]),
+            torch.flip(x_2d, dims=[2]),
+        ],
+        dim=0,
+    )  # (4, B, C, H, W)
+
+    scans_batched = scans.reshape(4 * B, C, H, W)
+    seq = scans_batched.flatten(2).transpose(1, 2)  # (4*B, L, C)
+    for block in blocks:
+        seq = block(seq) + seq
+
+    out = seq.transpose(1, 2).reshape(4, B, C, H, W)
+
+    return torch.stack(
+        [
+            out[0],
+            torch.flip(out[1], dims=[2, 3]),
+            torch.flip(out[2], dims=[3]),
+            torch.flip(out[3], dims=[2]),
+        ]
+    ).mean(dim=0)
+
+
+# ---------------------------------------------------------------------------
 # Mamba detection head
 # ---------------------------------------------------------------------------
 class MambaDetectionHead(nn.Module):
@@ -203,6 +241,10 @@ class MambaDetectionHead(nn.Module):
         strides: tuple[int, ...] = (8, 16, 32),
         spatial_reduction: int = 4,  # downsample factor before Mamba
         emb_dim: int = 0,  # embedding dimension (0 = disabled)
+        use_pixel_shuffle: bool = False,  # enable PixelShuffle learned upsampling (P1 optimization)
+        use_cross_scan: bool = False,  # enable 4-directional cross-scan (P2 optimization)
+        use_hybrid_head: bool = False,  # hybrid: conv blocks on P3, Mamba on P4/P5 (P3 optimization)
+        use_temporal_mamba: bool = False,  # spatio-temporal SSM across T frames (P2 ST optimization)
     ):
         super().__init__()
         self.nl = len(in_channels)
@@ -212,6 +254,13 @@ class MambaDetectionHead(nn.Module):
         self.no = num_classes + reg_max * 4
         self.spatial_reduction = spatial_reduction
         self.emb_dim = emb_dim
+        self.use_pixel_shuffle = use_pixel_shuffle
+        self.use_cross_scan = use_cross_scan
+        self.use_hybrid_head = use_hybrid_head
+        self.use_temporal_mamba = use_temporal_mamba
+        self.upsample_loaded = (
+            use_pixel_shuffle  # Default to True if initialized to use it
+        )
 
         self.input_proj = nn.ModuleList([nn.Conv2d(c, d_model, 1) for c in in_channels])
         self.downsample = nn.ModuleList(
@@ -227,6 +276,41 @@ class MambaDetectionHead(nn.Module):
                 for _ in range(self.nl)
             ]
         )
+
+        # P3: EfficientViT-style depthwise separable conv blocks for hybrid mode
+        self.hybrid_conv: nn.ModuleList | None = None
+        if use_hybrid_head:
+            self.hybrid_conv = nn.ModuleList(
+                [
+                    nn.Sequential(
+                        nn.Conv2d(d_model, d_model, 3, padding=1, groups=d_model),
+                        nn.Conv2d(d_model, d_model, 1),
+                        nn.SiLU(),
+                    )
+                    for _ in range(num_blocks)
+                ]
+            )
+        # P2-ST: temporal Mamba blocks — scan across frames for each spatial location
+        self.temporal_blocks: nn.ModuleList | None = None
+        self.flow_gate_conv: nn.ModuleList | None = None
+        if use_temporal_mamba:
+            self.temporal_blocks = nn.ModuleList(
+                [
+                    nn.ModuleList([MambaBlock(d_model, d_state) for _ in range(1)])
+                    for _ in range(self.nl)
+                ]
+            )
+            self.flow_gate_conv = nn.ModuleList(
+                [
+                    nn.Sequential(
+                        nn.Conv2d(d_model + 2, d_model, 3, padding=1),
+                        nn.SiLU(),
+                        nn.Conv2d(d_model, d_model, 3, padding=1),
+                        nn.Sigmoid(),
+                    )
+                    for _ in range(self.nl)
+                ]
+            )
         self.cls_head = nn.ModuleList(
             [
                 nn.Sequential(
@@ -261,34 +345,103 @@ class MambaDetectionHead(nn.Module):
                 ]
             )
 
+        # P1: PixelShuffle learned upsampler layer (with 3x3 conv for spatial feature integration)
+        if use_pixel_shuffle:
+            self.upsample = nn.ModuleList(
+                [
+                    nn.Sequential(
+                        nn.Conv2d(
+                            d_model, d_model * (spatial_reduction**2), 3, padding=1
+                        ),
+                        nn.PixelShuffle(spatial_reduction),
+                    )
+                    for _ in range(self.nl)
+                ]
+            )
+        else:
+            self.upsample = None
+
+    def load_state_dict(self, state_dict, strict=True):
+        # Check if the keys of state_dict contain 'upsample' parameters.
+        # This prevents breaking existing checkpoints that were trained without PixelShuffle.
+        has_upsample = any("upsample" in k for k in state_dict.keys())
+        if self.use_pixel_shuffle and self.upsample is not None:
+            self.upsample_loaded = has_upsample
+        else:
+            self.upsample_loaded = False
+            # Strip 'upsample' from state_dict to avoid unexpected keys in strict loading
+            state_dict = {k: v for k, v in state_dict.items() if "upsample" not in k}
+        return super().load_state_dict(state_dict, strict=strict)
+
     def forward(
-        self, feats: list[Tensor], return_embeddings: bool = False
+        self,
+        feats: list[Tensor],
+        return_embeddings: bool = False,
+        T: int | None = None,
+        flows: list[Tensor] | None = None,
     ) -> (
         tuple[list[Tensor], list[Tensor]]
         | tuple[list[Tensor], list[Tensor], list[Tensor]]
     ):
-        cls_preds = []
-        reg_preds = []
+        cls_preds: list[Tensor] = []
+        reg_preds: list[Tensor] = []
         emb_preds: list[Tensor] = []
 
         for i, x in enumerate(feats):
-            B, C, H, W = x.shape
+            B_merged, C, H, W = x.shape
+            T_frames = T if T is not None else 1
+            B = B_merged // T_frames
 
-            x_proj = self.input_proj[i](x)  # (B, d_model, H, W)
-            x_small = self.downsample[i](x_proj)  # (B, d_model, H/4, W/4)
+            x_proj = self.input_proj[i](x)
+            x_small = self.downsample[i](x_proj)
             _, _, Hs, Ws = x_small.shape
 
-            x_seq = x_small.flatten(2).transpose(1, 2)  # (B, Hs*Ws, d_model)
+            if self.use_hybrid_head and i == 0:
+                x_proc = x_small
+                for block in self.hybrid_conv:
+                    x_proc = block(x_proc) + x_proc
+                x_up = x_proc
+            elif self.use_cross_scan:
+                x_up = _cross_scan_mamba(x_small, self.mamba_blocks[i], Hs, Ws)
+            else:
+                x_seq = x_small.flatten(2).transpose(1, 2)
+                for block in self.mamba_blocks[i]:
+                    x_seq = block(x_seq) + x_seq
+                x_up = x_seq.transpose(1, 2).reshape(B_merged, -1, Hs, Ws)
 
-            for block in self.mamba_blocks[i]:
-                x_seq = block(x_seq) + x_seq
+            if self.use_pixel_shuffle and getattr(self, "upsample_loaded", False):
+                x_up = self.upsample[i](x_up)
+            else:
+                x_up = F.interpolate(
+                    x_up, size=(H, W), mode="bilinear", align_corners=False
+                )
 
-            x_up = x_seq.transpose(1, 2).reshape(B, -1, Hs, Ws)
-            x_up = F.interpolate(
-                x_up, size=(H, W), mode="bilinear", align_corners=False
-            )
+            if (
+                self.use_temporal_mamba
+                and self.temporal_blocks is not None
+                and T_frames > 1
+            ):
+                if (
+                    flows is not None
+                    and self.flow_gate_conv is not None
+                    and i < len(flows)
+                ):
+                    flow_i = flows[i]  # (B*T, 2, Hf, Wf) or (B*T, 2, H, W)
+                    if flow_i.shape[2:] != (H, W):
+                        flow_i = F.interpolate(
+                            flow_i, size=(H, W), mode="bilinear", align_corners=False
+                        )
+                    gate_input = torch.cat([x_up, flow_i], dim=1)
+                    gate = self.flow_gate_conv[i](gate_input)
+                    x_up = x_up * (1.0 + gate)
+                x_up_t = x_up.reshape(B, T_frames, -1, H, W).permute(0, 2, 3, 4, 1)
+                x_up_t = x_up_t.reshape(B * H * W, T_frames, -1)
+                for block in self.temporal_blocks[i]:
+                    x_up_t = block(x_up_t) + x_up_t
+                x_up = x_up_t.reshape(B, H, W, T_frames, -1).permute(0, 3, 4, 1, 2)
+                x_up = x_up.reshape(B_merged, -1, H, W)
 
-            x_cat = torch.cat([x_proj, x_up], dim=1)  # (B, d_model*2, H, W)
+            x_cat = torch.cat([x_proj, x_up], dim=1)
             cls_preds.append(self.cls_head[i](x_cat))
             reg_preds.append(self.reg_head[i](x_cat))
             if self.emb_head is not None:

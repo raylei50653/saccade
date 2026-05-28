@@ -309,7 +309,7 @@ class TrackQueryLifecycle:
             self._next_id = [1] * B
 
         # 避免在 GPU Tensor 上逐點存取造成巨大的 PCIe 同步延遲 (CUDA Sync)
-        alive_mask_cpu = alive_mask.cpu().tolist()
+        alive_mask_cpu = alive_mask.cpu().tolist()  # saccade-allow-cpu
 
         batch_ids = []
         for b in range(B):

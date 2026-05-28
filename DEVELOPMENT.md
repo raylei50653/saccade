@@ -18,9 +18,9 @@
 
 1. **主路徑程式碼**（`src/saccade/perception/`、`src/tracking/`、`scripts/eval/mot17.py`）
 2. **本文件 DEVELOPMENT.md**
-3. **穩定架構 / 合約文件**（`docs/architecture.md`、`docs/reference/PIPELINE_REFERENCE.md`、`docs/reference/api_spec.md`、`docs/decisions/`）
+3. **穩定架構 / 合約文件**（`docs/architecture/README.md`、`docs/reference/PIPELINE_REFERENCE.md`、`docs/reference/api_spec.md`、`docs/decisions/`）
 4. **當前待辦**（`docs/TODO.md`）
-5. **歷史脈絡**（`docs/TODO_history.md`、`docs/progress/`、`docs/experiments/`）
+5. **歷史脈絡**（`docs/TODO_history.md`、`docs/research/`）
 
 ---
 
@@ -83,6 +83,7 @@ MOT / tracking / relink 主線開發從這些檔案出發：
 ```bash
 uv run scripts/eval/mot17.py --preset speed --detector SDP
 uv run scripts/eval/mot17.py --preset baseline --detector SDP
+uv run scripts/eval/mot17.py --preset mamba_optimal --detector SDP
 ```
 
 預設會將結果登錄到 MLflow（`--mlflow-uri http://localhost:5000`）。若 MLflow 未啟動會自動跳過。
@@ -97,12 +98,13 @@ uv run scripts/eval/mot17.py --preset baseline --detector SDP
 
 ### 🔄 Option F — Mamba SSM Detection Head（當前 branch `feat/option-f-mamba`）
 
-- 設計文件：[docs/temporal_yolo/option-f-mamba-head.md](docs/temporal_yolo/option-f-mamba-head.md)
-- 訓練腳本：`train/temporal_yolo/`
+- 設計文件：[docs/architecture/temporal_yolo/option-f-mamba-head.md](docs/architecture/temporal_yolo/option-f-mamba-head.md)
+- 訓練腳本：`scripts/train/temporal_yolo/`
+- 評估命令：`uv run scripts/eval/mot17.py --preset mamba_optimal --detector SDP`
 
 ### ✅ Option E — GatedYOLODetector（baseline, IDF1 57.2%）
 
-- 設計文件：[docs/temporal_yolo/option-e-v2-design.md](docs/temporal_yolo/option-e-v2-design.md)
+- 設計文件：[docs/architecture/temporal_yolo/option-e-v2-design.md](docs/architecture/temporal_yolo/option-e-v2-design.md)
 
 ### ❌ Option D — Track-Conditioned YOLO（NO-GO, 2026-05-19）
 
@@ -251,6 +253,7 @@ uv run pytest tests/ --ignore=tests/benchmarks
 scripts/test_native.sh
 ./scripts/eval/module_benchmark.sh --mode all
 uv run scripts/eval/mot17.py --preset speed --detector SDP
+uv run scripts/eval/mot17.py --preset mamba_optimal --detector SDP
 ```
 
 ---

@@ -131,7 +131,7 @@ class DynamicReIDController:
         h00, h01, h02, h10, h11, h12 = 1.0, 0.0, 0.0, 0.0, 1.0, 0.0
         if gmc is not None:
             # Check shape: could be (2, 3) or (6,) or (1, 6)
-            gmc_cpu = gmc.detach().cpu().view(-1).tolist()
+            gmc_cpu = gmc.detach().cpu().view(-1).tolist()  # saccade-allow-cpu
             if len(gmc_cpu) >= 6:
                 h00, h01, h02, h10, h11, h12 = gmc_cpu[:6]
 

@@ -1,0 +1,52 @@
+# FPN ReID Replication Baseline Config
+# Standardized baseline replicating scripts/eval/eval_fpn_reid.py
+# Load with: --preset fpn_reid_baseline
+
+# --- Detection & Tiling ---
+tiling: native_640
+preprocess: none
+track_person_only: false
+person_geometry_prior: false
+detection_quality_scaling: false
+
+# --- GMC ---
+gmc: false
+
+# --- ReID ---
+reid_mode: tracker
+reid_model: fpn_trained
+appearance_bank: true
+appearance_bank_size: 5
+appearance_bank_min_score: 0.0
+appearance_bank_min_iou: 0.0
+appearance_bank_consistency_threshold: 0.85
+appearance_bank_min_aspect: 0.0
+appearance_bank_max_aspect: 99.0
+bank_quality_v2: false
+
+# --- Matching Thresholds ---
+reid_cos_threshold: 0.55
+reid_iou_low: 0.30
+reid_iou_high: 0.60
+reid_weight: 0.10
+reid_cost_cos_w: 0.10
+reid_cost_iou_w: 0.75
+reid_cost_score_w: 0.15
+
+# --- ReID Frequency ---
+reid_interval: 1
+
+# --- Tracker Parameters ---
+match_thresh: 0.66
+new_track_thresh: 0.28
+kalman_r_scale: 1.0
+confirm_streak: 3
+confirm_score_thresh: 0.50
+fuse_score_weight: 0.0
+id_stability_filter: false
+per_seq_adapt: false
+geometry_suspect_support: false
+interpolate_tracklets: false
+
+# --- Detection ---
+fp_hard_filter_enabled: false

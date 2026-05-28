@@ -23,6 +23,10 @@ class ReIDConfig:
     reid_iou_low: float = 0.30
     reid_iou_high: float = 0.60
     reid_weight: float = 0.80
+    # Appearance cost blend (affects Hungarian matcher cost matrix)
+    reid_cost_cos_w: float = 0.55
+    reid_cost_iou_w: float = 0.30
+    reid_cost_score_w: float = 0.15
     # Cropping
     reid_crop_mode: str = "tight"
     reid_crop_padding: float = 0.0
@@ -91,6 +95,11 @@ def add_reid_args(parser: argparse.ArgumentParser) -> None:
         help="Trained DimReduceHead checkpoint for fpn_trained mode.",
     )
     grp.add_argument(
+        "--fpn-backbone-engine",
+        default="",
+        help="TRT backbone engine path for FPN feature extraction (used when detector has no teacher backbone).",
+    )
+    grp.add_argument(
         "--reid-engine-path",
         default="",
         help="Optional TensorRT/engine path for the selected ReID backend.",
@@ -152,6 +161,34 @@ def add_reid_args(parser: argparse.ArgumentParser) -> None:
             "Blend weight for appearance in combined matching cost.",
             range_hint="0-1",
             edge="near 1 lets embeddings dominate geometry",
+        ),
+    )
+    grp.add_argument(
+        "--reid-cost-cos-w",
+        type=float,
+        default=0.55,
+        help=_help(
+            "Appearance cost weight (cosine similarity term) in the Hungarian matcher.",
+            range_hint="0-1",
+            edge="lower = rely more on IoU, higher = trust embeddings more",
+        ),
+    )
+    grp.add_argument(
+        "--reid-cost-iou-w",
+        type=float,
+        default=0.30,
+        help=_help(
+            "IoU cost weight in the appearance-aware Hungarian matcher.",
+            range_hint="0-1",
+        ),
+    )
+    grp.add_argument(
+        "--reid-cost-score-w",
+        type=float,
+        default=0.15,
+        help=_help(
+            "Detection score cost weight in the appearance-aware Hungarian matcher.",
+            range_hint="0-1",
         ),
     )
     grp.add_argument(

@@ -77,7 +77,7 @@ class SemanticDriftHandler:
         centroid = self.feature_history[track_id]
         sim = F.cosine_similarity(
             current_feature.unsqueeze(0), centroid.unsqueeze(0)
-        ).item()
+        ).item()  # saccade-allow-cpu
 
         # 如果相似度低於動態門檻，則視為「有效漂移」
         should_persist = sim < dynamic_threshold
@@ -101,7 +101,7 @@ class SemanticDriftHandler:
         priority_list = []
         for i, tid in enumerate(track_ids):
             count = self.track_update_count.get(tid, 0)
-            area = areas[i].item()
+            area = areas[i].item()  # saccade-allow-cpu
             if count == 0:
                 priority = 0
             elif count < 5:

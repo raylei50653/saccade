@@ -30,7 +30,7 @@ infrastructure。
   - `scripts/eval/ablation_mot17.py` 是目前的 grouped ablation runner
 
 目前記錄中的 default path 與活躍優化方向，請看
-[docs/TODO.md](/docs/TODO.md)。
+[docs/TODO.md](docs/TODO.md)。
 
 ## 0-shot Policy
 
@@ -41,7 +41,7 @@ infrastructure。
 - 若要做 classifier 路線，應走 `external-only` 訓練資料，例如 `CrowdHuman / CityPersons`
 
 正式方向與實作計畫見
-[docs/experiments/eval/fp_classifier_external_only_plan.md](/docs/experiments/eval/fp_classifier_external_only_plan.md)。
+[docs/research/eval/fp_classifier_external_only_plan.md](docs/research/eval/fp_classifier_external_only_plan.md)。
 
 ## Main Code Areas
 
