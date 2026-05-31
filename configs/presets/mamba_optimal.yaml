@@ -11,7 +11,7 @@ person_geometry_prior: false
 detection_quality_scaling: false
 
 # --- Mamba Detector ---
-mamba_ckpt: runs/mamba_gt_pixelshuffle_crossscan/best.ckpt
+mamba_ckpt: runs/mamba_gt_vgt_mamba_v14/best.ckpt
 fpn_backbone_engine: models/yolo/yolo26s_backbone_640_best.engine
 
 # --- GMC ---

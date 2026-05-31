@@ -48,7 +48,17 @@ def _selective_scan_cuda(
     delta = delta.contiguous()
     A = A.contiguous()
     B = B.contiguous()
-    C = C.contiguous()
+
+    # A is (1, N) → numel()=N is the true SSM state dimension.
+    # A.shape[0]=1 was a bug (dstate=1 instead of N=16).
+    N = A.numel()
+
+    # C may be rank-1 (shape ...,1) from legacy x_proj=d_state*2+1 checkpoints.
+    # Broadcast to (B, L, N) so the kernel reads correct C values for all N states.
+    if C.shape[-1] < N:
+        C = C.expand(*C.shape[:-1], N).contiguous()
+    else:
+        C = C.contiguous()
 
     y = torch.empty_like(u)
     is_half = u.dtype == torch.float16
@@ -64,7 +74,7 @@ def _selective_scan_cuda(
         u.shape[0],
         u.shape[1],
         u.shape[2],
-        A.shape[0],
+        N,
         1 if D_ptr != 0 else 0,
         is_half,
     )
@@ -112,12 +122,14 @@ class MambaBlock(nn.Module):
         d_state: int = 16,
         d_conv: int = 4,
         expand: int = 2,
+        full_rank_c: bool = False,
     ):
         super().__init__()
         self.d_model = d_model
         self.d_state = d_state
         self.d_conv = d_conv
         self.expand = expand
+        self.full_rank_c = full_rank_c
         d_inner = d_model * expand
 
         self.in_proj = nn.Linear(d_model, d_inner * 2, bias=False)
@@ -130,8 +142,11 @@ class MambaBlock(nn.Module):
             groups=d_inner,
         )
 
-        # SSM parameters
-        self.x_proj = nn.Linear(d_inner, d_state * 2 + 1, bias=False)
+        # SSM parameters: [dt(d_state) | B(d_state) | C(c_rank)]
+        # full_rank_c=False: c_rank=1 (rank-1, broadcast to N) — compatible with v14 weights
+        # full_rank_c=True:  c_rank=d_state (rank-N) — selective per-state output weighting
+        c_rank = d_state if full_rank_c else 1
+        self.x_proj = nn.Linear(d_inner, d_state * 2 + c_rank, bias=False)
         self.dt_proj = nn.Linear(d_state, d_inner, bias=True)
 
         # A is a learned parameter matrix (diagonalized per channel)
@@ -175,6 +190,45 @@ class MambaBlock(nn.Module):
         y = self.out_proj(y)
 
         return y
+
+
+# ---------------------------------------------------------------------------
+# Temporal self-attention block (T=4 optimized)
+# ---------------------------------------------------------------------------
+class TemporalAttentionBlock(nn.Module):
+    """Self-attention over T frames at each spatial location.
+
+    Input/output: (B*H*W, T, d_model) — drop-in for MambaBlock in temporal path.
+    ReZero init (out_proj.weight=0) ensures identity at start so spatial features
+    are not disturbed before the block has learned anything useful.
+    """
+
+    def __init__(self, d_model: int, num_heads: int = 1):
+        super().__init__()
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.head_dim = d_model // num_heads
+        self.scale = self.head_dim**-0.5
+
+        self.norm = nn.LayerNorm(d_model)
+        self.qkv = nn.Linear(d_model, d_model * 3, bias=False)
+        self.out_proj = nn.Linear(d_model, d_model, bias=False)
+        # ReZero init: starts as identity, gradients flow from step 1
+        nn.init.zeros_(self.out_proj.weight)
+
+    def forward(self, x: Tensor) -> Tensor:  # (BHW, T, d_model)
+        BHW, T, D = x.shape
+        h = self.norm(x)
+        qkv = self.qkv(h).reshape(BHW, T, 3, self.num_heads, self.head_dim)
+        qkv = qkv.permute(2, 0, 3, 1, 4)  # (3, BHW, heads, T, head_dim)
+        q, k, v = qkv.unbind(0)  # each (BHW, heads, T, head_dim)
+
+        attn = (q @ k.transpose(-2, -1)) * self.scale  # (BHW, heads, T, T)
+        attn = attn.softmax(dim=-1)
+
+        out = attn @ v  # (BHW, heads, T, head_dim)
+        out = out.transpose(1, 2).reshape(BHW, T, D)  # (BHW, T, d_model)
+        return x + self.out_proj(out)
 
 
 # ---------------------------------------------------------------------------
@@ -245,6 +299,7 @@ class MambaDetectionHead(nn.Module):
         use_cross_scan: bool = False,  # enable 4-directional cross-scan (P2 optimization)
         use_hybrid_head: bool = False,  # hybrid: conv blocks on P3, Mamba on P4/P5 (P3 optimization)
         use_temporal_mamba: bool = False,  # spatio-temporal SSM across T frames (P2 ST optimization)
+        use_temporal_attention: bool = False,  # T=4 self-attention over frames (replaces SSM, no flow gate)
     ):
         super().__init__()
         self.nl = len(in_channels)
@@ -296,7 +351,12 @@ class MambaDetectionHead(nn.Module):
         if use_temporal_mamba:
             self.temporal_blocks = nn.ModuleList(
                 [
-                    nn.ModuleList([MambaBlock(d_model, d_state) for _ in range(1)])
+                    nn.ModuleList(
+                        [
+                            MambaBlock(d_model, d_state, full_rank_c=True)
+                            for _ in range(1)
+                        ]
+                    )
                     for _ in range(self.nl)
                 ]
             )
@@ -311,6 +371,21 @@ class MambaDetectionHead(nn.Module):
                     for _ in range(self.nl)
                 ]
             )
+            # Init last conv so gate≈0: weight=0, bias=-10 → sigmoid(-10)≈0
+            # → x_up*(1+0)=x_up (identity). Prevents random gate noise when
+            # flow_gate_conv is never activated during cache-based training.
+            for gate_seq in self.flow_gate_conv:
+                last_conv = gate_seq[-2]  # Conv2d before Sigmoid
+                nn.init.zeros_(last_conv.weight)
+                nn.init.constant_(last_conv.bias, -10.0)
+        # Temporal self-attention (T=4): replaces SSM temporal blocks, no flow gate needed
+        self.use_temporal_attention = use_temporal_attention
+        self.temporal_attn_blocks: nn.ModuleList | None = None
+        if use_temporal_attention:
+            self.temporal_attn_blocks = nn.ModuleList(
+                [TemporalAttentionBlock(d_model) for _ in range(self.nl)]
+            )
+
         self.cls_head = nn.ModuleList(
             [
                 nn.Sequential(
@@ -371,6 +446,17 @@ class MambaDetectionHead(nn.Module):
             self.upsample_loaded = False
             # Strip 'upsample' from state_dict to avoid unexpected keys in strict loading
             state_dict = {k: v for k, v in state_dict.items() if "upsample" not in k}
+
+        if not strict:
+            # When strict=False, also skip keys with shape mismatches (e.g. loading
+            # rank-1 C checkpoint into a model with rank-N C temporal blocks, or vice versa).
+            own_state = self.state_dict()
+            state_dict = {
+                k: v
+                for k, v in state_dict.items()
+                if not (k in own_state and own_state[k].shape != v.shape)
+            }
+
         return super().load_state_dict(state_dict, strict=strict)
 
     def forward(
@@ -441,6 +527,17 @@ class MambaDetectionHead(nn.Module):
                 x_up = x_up_t.reshape(B, H, W, T_frames, -1).permute(0, 3, 4, 1, 2)
                 x_up = x_up.reshape(B_merged, -1, H, W)
 
+            # Temporal attention path (T=4 self-attention, no flow gate)
+            if (
+                self.use_temporal_attention
+                and self.temporal_attn_blocks is not None
+                and T_frames > 1
+            ):
+                x_up_t = x_up.reshape(B, T_frames, -1, H, W).permute(0, 2, 3, 4, 1)
+                x_up_t = x_up_t.reshape(B * H * W, T_frames, -1)
+                x_up_t = self.temporal_attn_blocks[i](x_up_t)
+                x_up = x_up_t.reshape(B, H, W, T_frames, -1).permute(0, 3, 4, 1, 2)
+                x_up = x_up.reshape(B_merged, -1, H, W)
             x_cat = torch.cat([x_proj, x_up], dim=1)
             cls_preds.append(self.cls_head[i](x_cat))
             reg_preds.append(self.reg_head[i](x_cat))

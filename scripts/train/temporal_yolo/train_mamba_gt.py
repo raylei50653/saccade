@@ -179,6 +179,37 @@ def main() -> None:
         default="",
         help="Use precomputed teacher FPN features (skip backbone forward pass)",
     )
+    parser.add_argument(
+        "--freeze-temporal",
+        action="store_true",
+        help="Freeze temporal_blocks and flow_gate_conv; only train spatial path.",
+    )
+    parser.add_argument(
+        "--add-temporal",
+        action="store_true",
+        help="Load spatial weights from --mamba-ckpt (strict=False), force use_temporal_mamba=True. "
+        "Use when the base checkpoint has no temporal blocks (e.g. Cross-Scan).",
+    )
+    parser.add_argument(
+        "--freeze-spatial",
+        action="store_true",
+        help="Freeze all spatial path (input_proj, downsample, mamba_blocks, upsample, heads). "
+        "Only temporal_blocks and flow_gate_conv are trained. Use with --add-temporal.",
+    )
+    parser.add_argument(
+        "--use-temporal-attention",
+        action="store_true",
+        help="Use TemporalAttentionBlock instead of SSM for temporal path. "
+        "No hidden state → no train/eval mismatch. Use with --add-temporal.",
+    )
+    parser.add_argument(
+        "--t1-weight",
+        type=float,
+        default=0.0,
+        help="Weight for T=1 auxiliary loss (pure spatial, temporal blocks bypassed). "
+        "Prevents spatial path from drifting toward temporal-dependent features. "
+        "1.0 = equal weight to the full T-clip loss. Requires --add-temporal.",
+    )
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -233,6 +264,11 @@ def main() -> None:
     }
     for k, v in mamba_args_default.items():
         mamba_args.setdefault(k, v)
+    if args.add_temporal:
+        if getattr(args, "use_temporal_attention", False):
+            mamba_args["use_temporal_attention"] = True
+        else:
+            mamba_args["use_temporal_mamba"] = True
 
     mamba = MambaDetectionHead(
         in_channels=(128, 256, 512),
@@ -246,13 +282,47 @@ def main() -> None:
         use_cross_scan=mamba_args.get("use_cross_scan", False),
         use_hybrid_head=mamba_args.get("use_hybrid_head", False),
         use_temporal_mamba=mamba_args.get("use_temporal_mamba", False),
+        use_temporal_attention=mamba_args.get("use_temporal_attention", False),
     ).to(device)
     sd = _strip_compiled_keys(mamba_state["student"])
-    mamba.load_state_dict(sd, strict=True)
+    strict = not args.add_temporal
+    missing, unexpected = mamba.load_state_dict(sd, strict=strict)
+    mamba.to(device)  # ensure new temporal keys are on correct device
+    if missing:
+        temporal_keys = [k for k in missing if "temporal" in k or "flow_gate" in k]
+        other_missing = [k for k in missing if k not in temporal_keys]
+        print(f"  New temporal keys (random init): {len(temporal_keys)}")
+        if other_missing:
+            print(f"  WARNING: other missing keys: {other_missing}")
     mamba.train()
 
+    if args.freeze_temporal:
+        frozen = []
+        for mod in [mamba.temporal_blocks, mamba.flow_gate_conv]:
+            if mod is not None:
+                for p in mod.parameters():
+                    p.requires_grad_(False)
+                frozen.append(mod.__class__.__name__)
+        print(f"  Frozen: {frozen} (temporal FP gate preserved from checkpoint)")
+
+    if args.freeze_spatial:
+        # Freeze feature extraction only — NOT cls_head/reg_head so they can
+        # adapt to temporal-modified features (x_up + temporal_delta).
+        spatial_mods = [mamba.input_proj, mamba.downsample, mamba.mamba_blocks]
+        if hasattr(mamba, "upsample") and mamba.upsample is not None:
+            spatial_mods.append(mamba.upsample)
+        if mamba.hybrid_conv is not None:
+            spatial_mods.append(mamba.hybrid_conv)
+        for mod in spatial_mods:
+            for p in mod.parameters():
+                p.requires_grad_(False)
+        print(
+            "  Frozen: feature extraction (input_proj/downsample/mamba_blocks/upsample)"
+        )
+
     n_params = sum(p.numel() for p in mamba.parameters())
-    print(f"  Mamba params: {n_params:,}")
+    n_trainable = sum(p.numel() for p in mamba.parameters() if p.requires_grad)
+    print(f"  Mamba params: {n_params:,}  trainable: {n_trainable:,}")
 
     # FPN feature capture hooks
     fpn_feats: dict[str, torch.Tensor] = {}
@@ -369,11 +439,17 @@ def main() -> None:
             gt_boxes_batch = batch["gt_boxes"]
             B, T = frames.shape[:2]
 
-            batch_loss = frames.new_zeros(())
+            # Collect features for all T frames, then forward as one temporal clip.
+            # This ensures temporal blocks see actual frame-to-frame context during
+            # training (instead of per-frame independent passes that never activate
+            # the temporal SSM). All-frames loss prevents temporal hallucination.
+            all_feats: list[list[torch.Tensor]] = [[], [], []]
+            all_gt: list[list[torch.Tensor]] = []
 
             for t in range(T):
                 frame_t = frames[:, t]
                 gt_t = [gt_boxes_batch[b][t] for b in range(B)]
+                all_gt.append(gt_t)
 
                 gate_inputs = None
                 if t > 0:
@@ -395,7 +471,7 @@ def main() -> None:
                         p3s.append(feat["p3"].to(device, dtype=torch.float32))
                         p4s.append(feat["p4"].to(device, dtype=torch.float32))
                         p5s.append(feat["p5"].to(device, dtype=torch.float32))
-                    feats = [
+                    feats_t = [
                         torch.stack(p3s),
                         torch.stack(p4s),
                         torch.stack(p5s),
@@ -403,15 +479,39 @@ def main() -> None:
                 else:
                     fpn_feats.clear()
                     _ = teacher(frame_t, gate_input=gate_inputs)
-                    feats = [fpn_feats[s] for s in ("p3", "p4", "p5")]
+                    feats_t = [fpn_feats[s] for s in ("p3", "p4", "p5")]
 
-                s_cls, s_reg = mamba(feats)
-                preds = _build_preds_dict(s_cls, s_reg, feats)
-                yolo_batch = _make_yolo_batch(gt_t, args.img_size, device)
+                for si in range(3):
+                    all_feats[si].append(feats_t[si])
+
+            # Stack T frames in batch-major order: (B*T, C, H, W) per scale.
+            # MambaDetectionHead.forward() uses reshape(B, T, ...) which requires
+            # [b0t0, b0t1, ..., b0tT, b1t0, ...] ordering so each SSM sequence
+            # corresponds to one sample across T frames, not B samples at one frame.
+            feats_T = [
+                torch.stack(all_feats[si], dim=1).reshape(
+                    B * T, *all_feats[si][0].shape[1:]
+                )
+                for si in range(3)
+            ]
+
+            # Temporal forward — T_frames activates temporal blocks
+            s_cls_T, s_reg_T = mamba(feats_T, T=T)
+
+            # All-frames loss: every frame supervised with its own GT.
+            # Batch-major layout: [b0t0, b0t1, ..., b0tT, b1t0, ...]
+            # Frame t for all B items: indices t, T+t, 2T+t, ... → c[t::T]
+            batch_loss = frames.new_zeros(())
+            for t in range(T):
+                s_cls_t = [c[t::T] for c in s_cls_T]
+                s_reg_t = [r[t::T] for r in s_reg_T]
+                feats_t = [all_feats[si][t] for si in range(3)]
+                preds = _build_preds_dict(s_cls_t, s_reg_t, feats_t)
+                yolo_batch = _make_yolo_batch(all_gt[t], args.img_size, device)
                 step_loss_vec, _ = criterion(preds, yolo_batch)
                 batch_loss = batch_loss + step_loss_vec.sum()
-
             batch_loss = batch_loss / (T * accum)
+
             batch_loss.backward()
             acc_batches += 1
 
@@ -485,6 +585,9 @@ def main() -> None:
                         "use_hybrid_head": mamba_args.get("use_hybrid_head", False),
                         "use_temporal_mamba": mamba_args.get(
                             "use_temporal_mamba", False
+                        ),
+                        "use_temporal_attention": mamba_args.get(
+                            "use_temporal_attention", False
                         ),
                     },
                 },

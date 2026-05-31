@@ -412,6 +412,11 @@ def main() -> None:
         help="hybrid head: conv on P3, Mamba on P4/P5",
     )
     parser.add_argument(
+        "--use-temporal-attention",
+        action="store_true",
+        help="T=4 self-attention over frames (replaces temporal SSM, no flow gate)",
+    )
+    parser.add_argument(
         "--use-temporal-mamba",
         action="store_true",
         help="spatio-temporal SSM across T frames",
@@ -475,6 +480,7 @@ def main() -> None:
         use_cross_scan=args.use_cross_scan,
         use_hybrid_head=args.use_hybrid_head,
         use_temporal_mamba=args.use_temporal_mamba,
+        use_temporal_attention=getattr(args, "use_temporal_attention", False),
     ).to(device)
     student.train()
 
@@ -707,6 +713,9 @@ def main() -> None:
                     "use_cross_scan": args.use_cross_scan,
                     "use_hybrid_head": args.use_hybrid_head,
                     "use_temporal_mamba": args.use_temporal_mamba,
+                    "use_temporal_attention": getattr(
+                        args, "use_temporal_attention", False
+                    ),
                 },
             },
             run_dir,

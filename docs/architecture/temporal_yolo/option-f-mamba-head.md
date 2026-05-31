@@ -1,6 +1,6 @@
 # Option F: Mamba SSM 檢測頭 (Detection Head)
 
-> **狀態**：主動生產環境候選方案 (Active Production Candidate, 2026-05-28)
+> **狀態**：主動生產環境候選方案 (Active Production Candidate, 2026-05-31)
 > 將標準 YOLO 的檢測頭 (Detect Head) 替換為 Mamba 選擇性狀態空間 (S6) 模組，以建模長程空間與時間依賴性。
 > 已完全整合 Gated YOLO 骨幹網路 (支援 PyTorch 與 TensorRT 引擎) 以及 GPUByteTracker。
 
@@ -187,7 +187,7 @@ cv2[i], cv3[i] (Frozen)            │
 
 ```yaml
 # configs/presets/mamba_optimal.yaml
-mamba_ckpt: runs/mamba_gt_pixelshuffle_crossscan/best.ckpt
+mamba_ckpt: runs/mamba_gt_vgt_mamba_v14/best.ckpt
 fpn_backbone_engine: models/yolo/yolo26s_backbone_640_best.engine
 reid_mode: "off"         # 關閉 ReID，以達到極限 108 FPS 運作速度
 gmc: true
@@ -198,3 +198,123 @@ confirm_streak: 3
 ```
 
 此配置能在相機劇烈晃動下保持極其穩定且精準的動態邊框追蹤，且完全不引入額外的 ReID 特徵提取延遲。
+
+---
+
+## 各元件實測增益 (MOT17-SDP Ablation)
+
+> 基準：yolo26s baseline tracker，IDF1 ≈ 52%。所有 Mamba 結果使用 `mamba_optimal` preset (match_thresh=0.50, confirm_streak=3, interpolate=true)。
+
+### 當前最佳：**v14 — N=16 Cross-Scan**（2026-05-31）
+
+`runs/mamba_gt_vgt_mamba_v14/best.ckpt`
+
+| IDF1 | MOTA | FP | FN | Recall | Prcn | loss |
+|------|------|-----|-----|--------|------|------|
+| **72.4%** | **77.3%** | 5754 | 19077 | 83.0% | 94.2% | 2.87 |
+
+架構：Cross-Scan + PixelShuffle + **N=16 SSM fix**（無 temporal blocks）
+
+---
+
+### 元件拆解
+
+| 配置 | IDF1 | MOTA | FP | FN | Recall |
+|------|------|------|-----|-----|--------|
+| Baseline (no Mamba) | 52.0% | 43.5% | — | — | — |
+| v2 spatial only (`--no-temporal`) | 49.4% | 49.0% | 17246 | 39044 | 65.2% |
+| v2 full (spatial + temporal) | 71.6% | 76.7% | 5252 | 20352 | 81.9% |
+| vgt_v2 checkpoint | 69.4% | 74.4% | 4437 | 23752 | 78.8% |
+| **Cross-Scan (N=1, 原版)** | 71.6% | 76.7% | 5252 | 20352 | 81.9% |
+| Cross-Scan + N=16 fix（不重訓）| 72.2% | 76.3% | 5431 | 20522 | 81.7% |
+| **v14 Cross-Scan + N=16 retrain** | **72.4%** | **77.3%** | 5754 | **19077** | **83.0%** |
+
+### Temporal Blocks 的雙重貢獻
+
+Temporal blocks 透過 **eval 時的 sliding window buffer**（T=3~4 幀）在每個空間位置做幀間 SSM 掃描，提供兩種增益：
+
+| 機制 | v2 | v8 |
+|------|-----|-----|
+| **FP 壓制**（不一致偵測被過濾）| 17246 → 5327（**-69%**）| 9775 → 8125（-17%）|
+| **FN 回收**（遮擋目標靠歷史幀補回）| 39044 → 20329（**+18715**）| 30256 → 21949（+8307）|
+| 總 IDF1 增益 | **+21.8pp** | +5.9pp |
+
+> **關鍵發現**：v2 的 temporal blocks 從未在訓練時看過多幀（frame-by-frame 訓練），但在 eval buffer 模式下能自然學到強力的時序一致性 gate。v8 用 all-frames loss 明確訓練 temporal，反而弱化了這個 gate 行為。
+
+---
+
+## 訓練版本歷程與教訓
+
+| 版本 | 訓練方式 | IDF1 | FP | 問題根因 |
+|------|----------|------|-----|---------|
+| **v2** (current best) | Frame-by-frame 空間訓練，temporal 未激活 | **71.2%** | **5327** | — |
+| v6 | `--scratch` 全隨機初始化 | 32.0% | — | MOT17 7 條 seq 不足以訓練偵測頭 |
+| v7 | `--add-temporal`，time-major stacking，last-frame loss | 68.2% | 15727 | stacking 順序錯誤；last-frame loss 無法抑制 FP |
+| v8 | batch-major stacking，all-frames loss | 70.5% | 8125 | temporal FP gate 被弱化（v2 −69% → v8 −17%）|
+| v10 | **凍結 temporal**，只訓練 spatial | TBD | TBD | 保留 v2 temporal gate + 提升 spatial 品質 |
+
+### 訓練設計原則（從失敗中學到的）
+
+1. **不能從零訓練偵測頭**：MOT17 資料量遠不足以訓練 spatial detection，必須從預訓練 checkpoint 繼承。
+2. **Stacking 順序影響 SSM 語意**：`torch.cat(time-major)` 讓 SSM 的「時序序列」是不同 batch item 的同一幀，不是單一 sample 的多幀。正確方式：`torch.stack(dim=1).reshape(B*T, ...)`（batch-major）。
+3. **All-frames loss ≠ 保留 temporal gate**：All-frames loss 讓每幀偵測品質好，但不直接優化「抑制跨幀不一致的 FP」。v2 的 temporal gate 效果是訓練時未激活、eval 時 emergent 的行為。
+4. **Freeze temporal + 訓練 spatial** 是目前最有希望的方向：v8 no-temporal 的空間品質（FP=9775，Recall=73.1%）已明顯優於 v2（FP=17246，Recall=65.2%），若能保留 v2 的 temporal gate（FP −69%，FN +18715），理論上可超越 71.2%。
+
+---
+
+## 時序特徵方向結案（2026-05-31）
+
+所有在 v14 Cross-Scan 空間基線上增加時序模組的嘗試均無法超越純空間模型。以下為完整 ablation 結果與根本原因分析。
+
+### 實驗結果
+
+| 版本 | 方法 | T=1 eval | Recurrent eval | 結論 |
+|------|------|----------|----------------|------|
+| v14（基線）| Cross-Scan 純空間 | **72.4% IDF1** | — | 最佳 |
+| v15 | + SSM temporal blocks | 58.6% (−13.8pp) | 66.0% (−6.4pp) | NO-GO |
+| v17 | + TemporalAttentionBlock | 69.2% (−3.2pp) | 69.5% (−2.9pp) | NO-GO |
+
+v15 temporal 的 FP 壓制有效（T=1: 32,630 → recurrent: 13,934，−57%），但空間路徑退步的代價遠超過時序增益。
+
+### 根本原因
+
+**1. 訓練 code path 問題（all-frames loss 從不激活純 T=1 路徑）**
+
+```
+訓練 t=0：x_up → temporal_block(h=0) → x_cat   ← 仍通過 temporal block
+eval T=1： x_up → x_cat                          ← temporal block 完全 bypass
+```
+
+All-frames loss 的 t=0 不等於 T=1 eval 模式。訓練 30 epoch 後，空間 features 優化成「temporal block 會在後面補正」，T=1 eval 時 temporal block 不在，空間退步暴露。
+
+**2. SSM 特有的 train-test 分布不一致**
+
+SSM temporal blocks 有 hidden state `h`。訓練時每個 clip 從 `h₀=0` 重置；eval 時 recurrent 模式下 `h` 攜帶跨 clip 的連續歷史。模型從未在訓練中見過「有長歷史的 h」，導致推論行為和訓練分布不一致。TemporalAttentionBlock 沒有 hidden state，理論上規避了此問題，但仍因空間退步而失敗。
+
+**3. Cross-Scan 已提供全局空間 context，時序增益空間有限**
+
+4 方向掃描讓每個位置能看到整張圖的空間資訊，部分替代了時序需要做的「區分背景 vs 真實移動目標」功能。空間基線已夠強，temporal 的邊際增益不足以彌補它帶來的訓練複雜度。
+
+**4. MOT17 訓練資料量不足**
+
+MOT17 僅 7 條 SDP 序列，temporal blocks 沒有足夠多樣的時序樣本來學習有意義的跨幀模式。每個 epoch 約 300-400 個 clip，不足以讓時序 SSM 收斂到有效的狀態轉移。
+
+### 結論與未來方向
+
+v14（Cross-Scan + N=16，純空間）為 Option F 最終版本。
+
+若未來要重新嘗試時序方向，需同時解決以下條件：
+- **更大時序資料集**（MOT17 × 3 以上的序列多樣性）
+- **Recurrent rollout 訓練**（在 clip 間傳遞 hidden state，消除 train-test 不一致）
+- 或改用 **純 frame-by-frame 訓練 + eval-only buffer**（復現 v2 的 emergent temporal gate，但需重新設計訓練流程）
+
+---
+
+## CUDA SSM Kernel 注意事項
+
+CUDA kernel 接受 `A.shape[0]` 作為 `dstate` 參數。`A_log` 在 checkpoint 中的形狀為 `(1, N)`，因此 `A.shape[0]=1` 而非 `N=16`，導致 kernel 只用 1 個狀態維度。
+
+- **正確路徑**：使用 TRT backbone（fp16）→ CUDA kernel → `dstate=1`（有效狀態數不足）
+- **原始路徑**：不使用 TRT backbone（fp32）→ JIT scan → `N = A.shape[1] = 16`（正確）
+
+v2 的 71.2% 是在 fp32 JIT path 下達成的（TRT backbone 啟用後會降至 ~49%）。長期修法：將 kernel 呼叫改為 `A.numel()` 取得正確 dstate。
