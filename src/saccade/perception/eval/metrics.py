@@ -162,7 +162,118 @@ def run_motmetrics_evaluation(
         for key in counts:
             counts[key] += int(result[key])
 
-    return _format_overall_metrics_from_counts(counts)
+    metrics = _format_overall_metrics_from_counts(counts)
+
+    hota_scores = _calculate_hota(data_root, split, output, jobs)
+    if hota_scores is not None:
+        # Insert HOTA family right after MOTA to keep the printed order natural.
+        ordered: dict[str, Any] = {}
+        for key, value in metrics.items():
+            ordered[key] = value
+            if key == "MOTA":
+                ordered["HOTA"] = f"{hota_scores['HOTA'] * 100:.1f}%"
+                ordered["DetA"] = f"{hota_scores['DetA'] * 100:.1f}%"
+                ordered["AssA"] = f"{hota_scores['AssA'] * 100:.1f}%"
+        metrics = ordered
+
+    return metrics
+
+
+def _ensure_numpy_legacy_aliases() -> None:
+    """Restore NumPy 1.x scalar aliases removed in NumPy 2.0 (TrackEval needs them)."""
+    for name, target in (("float", float), ("int", int), ("bool", bool)):
+        if not hasattr(np, name):
+            setattr(np, name, target)
+
+
+def _find_trackeval_root() -> Path | None:
+    """Locate the vendored third_party/TrackEval by walking up from this file."""
+    for parent in Path(__file__).resolve().parents:
+        candidate = parent / "third_party" / "TrackEval"
+        if (candidate / "trackeval").is_dir():
+            return candidate
+    return None
+
+
+def _calculate_hota(
+    data_root: str,
+    split: str,
+    output_dir: str,
+    jobs: Sequence[tuple[str, str, str]],
+) -> dict[str, float] | None:
+    """Compute overall HOTA/DetA/AssA via the vendored TrackEval.
+
+    ``jobs`` is the same ``(seq_name, gt_path, ts_path)`` list built by
+    :func:`run_motmetrics_evaluation`. Only ``seq_name`` is used here to tell
+    TrackEval which sequences to score; it locates the gt/ts files itself from
+    the standard MOTChallenge layout (``GT_FOLDER/<seq>/gt/gt.txt`` and
+    ``<output_dir>/<seq>.txt``).
+
+    Returns HOTA/DetA/AssA as fractions in ``[0, 1]``, or ``None`` if TrackEval
+    is unavailable. HOTA uses TrackEval's MOT ground-truth preprocessing
+    (distractor/zero-marked box removal), so it is the standard protocol score.
+    """
+    import sys
+
+    trackeval_root = _find_trackeval_root()
+    if trackeval_root is None:
+        return None
+
+    _ensure_numpy_legacy_aliases()
+    if str(trackeval_root) not in sys.path:
+        sys.path.insert(0, str(trackeval_root))
+
+    try:
+        import trackeval
+    except Exception:
+        return None
+
+    results_path = Path(output_dir).resolve()
+    tracker_name = results_path.name
+
+    eval_config = {
+        **trackeval.Evaluator.get_default_eval_config(),
+        "DISPLAY_LESS_PROGRESS": True,
+        "TIME_PROGRESS": False,
+        "PRINT_RESULTS": False,
+        "PRINT_CONFIG": False,
+        "OUTPUT_SUMMARY": False,
+        "OUTPUT_DETAILED": False,
+        "PLOT_CURVES": False,
+        "USE_PARALLEL": False,
+    }
+    dataset_config = {
+        **trackeval.datasets.MotChallenge2DBox.get_default_dataset_config(),
+        "GT_FOLDER": os.path.join(data_root, split),
+        "SKIP_SPLIT_FOL": True,
+        "TRACKERS_FOLDER": str(results_path.parent),
+        "TRACKER_SUB_FOLDER": "",
+        "TRACKERS_TO_EVAL": [tracker_name],
+        "SPLIT_TO_EVAL": split,
+        "SEQ_INFO": {seq_name: None for seq_name, _, _ in jobs},
+    }
+    metrics_config = {"METRICS": ["HOTA"]}
+
+    try:
+        evaluator = trackeval.Evaluator(eval_config)
+        dataset_list = [trackeval.datasets.MotChallenge2DBox(dataset_config)]
+        metrics_list = [trackeval.metrics.HOTA(metrics_config)]
+        output_res, _ = evaluator.evaluate(dataset_list, metrics_list)
+    except Exception:
+        return None
+
+    try:
+        tracker_res = next(iter(output_res.values()))[tracker_name]
+        combined = tracker_res["COMBINED_SEQ"]
+        cls_key = "pedestrian" if "pedestrian" in combined else next(iter(combined))
+        hota_res = combined[cls_key]["HOTA"]
+        return {
+            "HOTA": float(np.mean(hota_res["HOTA"])),
+            "DetA": float(np.mean(hota_res["DetA"])),
+            "AssA": float(np.mean(hota_res["AssA"])),
+        }
+    except (KeyError, StopIteration, TypeError):
+        return None
 
 
 def _box_iou_xyxy(box_a: Sequence[float], box_b: Sequence[float]) -> float:

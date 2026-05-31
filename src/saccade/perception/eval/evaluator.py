@@ -826,7 +826,8 @@ def _build_cpp_seq_config(
     c.stage2_match_thresh = float(getattr(cfg, "stage2_match_thresh", 0.5))
     c.birth_low_score_thresh = float(getattr(cfg, "birth_low_score_thresh", 0.0))
     c.birth_prox_norm_thresh = float(getattr(cfg, "birth_prox_norm_thresh", 0.0))
-    c.oao_tau = float(getattr(cfg, "oao_tau", 0.0))
+    # NB: OAO is configured on the tracker via set_oao_params(cfg.oao_tau); the
+    # C++ SequenceConfig has no oao_tau field, so do not set it here.
     c.track_buffer = 30
 
     # GMC — always enabled (GPU phase correlation, matches Python workbench default)

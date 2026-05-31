@@ -81,6 +81,7 @@ PYBIND11_MODULE(saccade_eval_ext, m) {
         .def_readwrite("vel_dir_weight",         &SequenceConfig::vel_dir_weight)
         .def_readwrite("stage2_match_thresh",    &SequenceConfig::stage2_match_thresh)
         .def_readwrite("birth_low_score_thresh", &SequenceConfig::birth_low_score_thresh)
+        .def_readwrite("birth_prox_norm_thresh", &SequenceConfig::birth_prox_norm_thresh)
         .def_readwrite("track_buffer",           &SequenceConfig::track_buffer)
         // GMC
         .def_readwrite("gmc_enabled",    &SequenceConfig::gmc_enabled)

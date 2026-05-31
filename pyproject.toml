@@ -89,7 +89,7 @@ module = [
 ignore_errors = true
 
 [tool.ruff]
-exclude = ["tests/benchmarks/archive", "storage/", "runs/", "results/"]
+exclude = ["tests/benchmarks/archive", "storage/", "runs/", "results/", "third_party/"]
 
 [tool.ruff.lint]
 ignore = ["E701"]
