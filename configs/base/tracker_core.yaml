@@ -1,0 +1,27 @@
+# tracker_core — metric-critical tracker parameters
+# Baseline: MOT17-SDP tuned values. Override per-preset as needed.
+
+# --- Association thresholds ---
+match_thresh: 0.66
+new_track_thresh: 0.28
+track_thresh: 0.05
+high_thresh: 0.45
+mid_thresh: 0.10
+
+# --- Track confirmation ---
+confirm_streak: 1
+confirm_score_thresh: 0.0
+
+# --- Score fusion (botsort-style: IoU × (1 - w × score)) ---
+fuse_score_weight: 0.4
+
+# --- Track lifecycle ---
+id_stability_filter: true
+per_seq_adapt: true
+geometry_suspect_support: true
+oao_tau: 0.0
+
+# --- Interpolation ---
+interpolate_tracklets: false
+interpolate_max_gap: 35
+interpolate_min_track_len: 5

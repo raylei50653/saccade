@@ -1,0 +1,33 @@
+_base:
+  - tracker_core
+  - gmc
+  - mamba_detector
+
+_meta:
+  date: 2026-05-30
+  checkpoint: mamba_gt_vgt_mamba_v2
+  idf1: 72.9
+  mota: 76.1
+  ids: 651
+  notes: >
+    VGT Flow-Gated baseline. N=16 kernel fix + ReZero temporal blocks (v6 training).
+    Tracker params from mamba_optimal sweep (pixelshuffle_crossscan); may need re-sweep for v6.
+  run: >
+    uv run scripts/eval/mot17.py --preset mamba_vgt_v1 --detector SDP
+
+# --- Checkpoint (override base placeholder) ---
+mamba_ckpt: runs/mamba_gt_vgt_mamba_v2/best.ckpt
+
+# --- Tracker overrides vs tracker_core base ---
+match_thresh: 0.50
+new_track_thresh: 0.28
+confirm_streak: 3
+confirm_score_thresh: 0.50
+fuse_score_weight: 0.0
+id_stability_filter: false
+per_seq_adapt: false
+geometry_suspect_support: false
+interpolate_tracklets: true
+
+# --- Temporal mode ---
+use_recurrent: true

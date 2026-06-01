@@ -1,0 +1,7 @@
+# gmc — Global Motion Compensation parameters
+# Baseline values for standard TRT presets; mamba presets override gmc_downscale to 4.
+
+gmc: true
+gmc_mode: gpu
+gmc_downscale: 8
+gmc_fg_mask: false
