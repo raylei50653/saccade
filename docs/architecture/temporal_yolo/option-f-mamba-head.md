@@ -310,11 +310,42 @@ v14（Cross-Scan + N=16，純空間）為 Option F 最終版本。
 
 ---
 
+## per-channel A + MOT20 結案（2026-06-01）
+
+在 v14 純空間基線上嘗試 **per-channel SSM A**（每 channel 獨立衰減動態，`A_log` 形狀 `(d_inner, N)` 取代共享 `(1, N)`）並混入 **MOT20** 擴充訓練資料 → **NO-GO**。
+
+### 動機
+- v14 的 A 在所有 `d_inner=256` channel 間共享（僅 16 個衰減率），是表達力瓶頸；per-channel A 給每 channel 獨立動態。
+- 為避免小資料上難收斂，採 **warm-start**：載入時把共享 `(1,N)` 廣播到每列，init 與 v14 **bit-exact 相同**，微調只學偏移。
+- MOT20（4 train seq、~227 boxes/幀）補 crowd 密度，主攻 AssA 瓶頸 [[project_hota_metric_integrated]]。
+
+### 結果（`runs/mamba_pc_a_mot20`，30 epochs，train loss 6.73；同 `mamba_optimal` preset、同 21 序列對照）
+
+| 指標 | v14 baseline | per-channel A + MOT20 | Δ |
+|------|------|------|------|
+| IDF1 | 70.6% | 68.8% | **−1.8pp** |
+| MOTA | 70.4% | 68.6% | **−1.8pp** |
+| HOTA | 62.7% | 60.8% | **−1.9pp** |
+| DetA | 65.5% | 63.7% | **−1.8pp** |
+| AssA | 60.5% | 58.5% | **−2.0pp** |
+| IDs | 1774 | 1958 | **+184** |
+
+> 此處為 21-seq（全 detector）對照，故絕對值低於上方 SDP-only 的 72.4%；v14 與新版同 scope，delta 有效。
+
+### 根本原因
+1. **MOT20 domain shift（主因）**：**DetA 也退化 −1.8pp** → detection 本身被帶歪，非單純關聯問題。MOT20 dashcam-free 但高密度、不同尺度分布把 head 從 MOT17 的好位置拉走，連最想改善的 AssA 都掉。與「在 v14 上做加法都退步」的歷史教訓一致（見上方時序結案、v6 scratch）。
+2. **架構/資料 confound**：per-channel A 與 MOT20 同時改動，無法歸因。尚未隔離 per-channel A 本身（待補 MOT17-only 對照）。
+3. 呼應反覆出現的核心限制：**MOT17 資料規模不足**，加容量（per-channel A 多 256× A 參數）在小資料 + domain-shift 資料上只會更難收斂。
+
+### 結論
+v14（Cross-Scan + N=16，共享 A，純空間）仍為 Option F 最終版。per-channel A 與 MOT20 混訓的實作全部保留（已 push，預設 `per_channel_a=False`，不影響 v14 線上），未來若要重啟需先：① 隔離 per-channel A（MOT17-only 對照確認不退步）；② 解決 MOT20 domain shift（例如只取 MOT20 子集、或加 domain-balanced sampling）。詳見 [[project_per_channel_a_mot20_nogo]]。
+
+---
+
 ## CUDA SSM Kernel 注意事項
 
-CUDA kernel 接受 `A.shape[0]` 作為 `dstate` 參數。`A_log` 在 checkpoint 中的形狀為 `(1, N)`，因此 `A.shape[0]=1` 而非 `N=16`，導致 kernel 只用 1 個狀態維度。
+**SSM 狀態維度 `N`（已修，2026-04）**：早期 kernel 誤用 `A.shape[0]` 作為 `dstate`，而 `A_log` 形狀為 `(1, N)` → `A.shape[0]=1`，導致 TRT/fp16 路徑只用 1 個狀態維度（精度降至 ~49%）。現已修正為由 **`A.shape[-1]`** 取得 `N`，fp16 與 fp32 路徑一致。
 
-- **正確路徑**：使用 TRT backbone（fp16）→ CUDA kernel → `dstate=1`（有效狀態數不足）
-- **原始路徑**：不使用 TRT backbone（fp32）→ JIT scan → `N = A.shape[1] = 16`（正確）
+**per-channel A 支援（2026-06-01）**：`A` 可為 `(1, N)`（共享）或 `(d_inner, N)`（per-channel）。kernel 以 `a_per_channel` 旗標決定索引 `A[n]`（共享）或 `A[d*N+n]`（per-channel）；旗標經 `SelectiveScanParams` 傳遞，Python 端依 `A.dim()` 與 `A.shape[0]==D` 自動偵測。
 
-v2 的 71.2% 是在 fp32 JIT path 下達成的（TRT backbone 啟用後會降至 ~49%）。長期修法：將 kernel 呼叫改為 `A.numel()` 取得正確 dstate。
+**device 分派（2026-06-01）**：`_selective_scan` 對 **CPU tensor** 走純 PyTorch `_selective_scan_jit`，只有 CUDA tensor 進 kernel。否則把 host 指標餵進 CUDA kernel 會觸發 `cudaErrorIllegalAddress` 並汙染整個 process 的 CUDA context（曾導致全測試套件連鎖失敗）。
