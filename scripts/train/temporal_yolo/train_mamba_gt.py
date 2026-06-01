@@ -71,6 +71,78 @@ def _strip_compiled_keys(sd: dict[str, Any]) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Feature-cache RAM/VRAM preload
+# ---------------------------------------------------------------------------
+# In cache mode the backbone never runs, so each step's only heavy work was
+# B*T synchronous torch.load() calls from disk — that starves the GPU (util
+# ~30%). Preloading the (only the used) cached features into RAM/VRAM once
+# turns per-step loading into a dict lookup + H2D copy.
+_feature_ram_cache: dict[int, tuple[torch.Tensor, torch.Tensor, torch.Tensor]] = {}
+
+
+def _preload_feature_cache(
+    cache_dir: Path, seqs: list[str], device: torch.device
+) -> None:
+    global _feature_ram_cache
+    if _feature_ram_cache:
+        return
+
+    seq_dirs = [cache_dir / s for s in seqs if (cache_dir / s).is_dir()]
+    total = sum(1 for sd in seq_dirs for _ in sd.glob("*.pt"))
+
+    # Hold features in VRAM only if there is comfortable headroom; otherwise CPU
+    # RAM (still removes the disk read + deserialize from the hot path).
+    target = torch.device("cpu")
+    if device.type == "cuda":
+        try:
+            free_b, _ = torch.cuda.mem_get_info(device)
+            # ~3 MB/frame; require ~2x headroom for activations + model.
+            if free_b > total * 3 * 1024**2 * 2:
+                target = device
+        except Exception:
+            pass
+
+    print(
+        f"[FeatureCache] Preloading {total} files from {len(seq_dirs)} seq(s) to {target}...",
+        flush=True,
+    )
+    t0 = time.time()
+    done = 0
+    try:
+        for sd in seq_dirs:
+            for pt_file in sorted(sd.glob("*.pt")):
+                feat = torch.load(pt_file, map_location=target, weights_only=True)
+                _feature_ram_cache[(sd.name, int(pt_file.stem))] = (
+                    feat["p3"],
+                    feat["p4"],
+                    feat["p5"],
+                )
+                done += 1
+        print(
+            f"[FeatureCache] {done}/{total} on {target} in {time.time() - t0:.0f}s",
+            flush=True,
+        )
+    except RuntimeError as e:
+        if "out of memory" in str(e).lower() and target.type == "cuda":
+            print("[FeatureCache] VRAM OOM — falling back to CPU RAM...", flush=True)
+            _feature_ram_cache.clear()
+            import gc
+
+            gc.collect()
+            torch.cuda.empty_cache()
+            for sd in seq_dirs:
+                for pt_file in sorted(sd.glob("*.pt")):
+                    feat = torch.load(pt_file, map_location="cpu", weights_only=True)
+                    _feature_ram_cache[(sd.name, int(pt_file.stem))] = (
+                        feat["p3"],
+                        feat["p4"],
+                        feat["p5"],
+                    )
+        else:
+            raise
+
+
+# ---------------------------------------------------------------------------
 # GT helpers
 # ---------------------------------------------------------------------------
 def _xyxy_to_cxcywh_norm(boxes: torch.Tensor, img_size: int) -> torch.Tensor:
@@ -184,6 +256,13 @@ def main() -> None:
         "--cache-dir",
         default="",
         help="Use precomputed teacher FPN features (skip backbone forward pass)",
+    )
+    parser.add_argument(
+        "--no-preload-cache",
+        action="store_true",
+        help="Disable preloading the feature cache into RAM/VRAM (load per-step "
+        "from disk instead). Preload is on by default in cache mode and removes "
+        "the per-step torch.load that otherwise starves the GPU.",
     )
     parser.add_argument(
         "--freeze-temporal",
@@ -434,6 +513,8 @@ def main() -> None:
     cache_dir = Path(args.cache_dir) if args.cache_dir else None
     if cache_dir:
         print(f"[Cache] Loading precomputed teacher features from {cache_dir}")
+        if not args.no_preload_cache:
+            _preload_feature_cache(cache_dir, list(loader.dataset.sequences), device)  # type: ignore[attr-defined]
 
     # ------------------------------------------------------------------
     # Training loop
@@ -482,14 +563,17 @@ def main() -> None:
                     for b in range(B):
                         seq: str = batch["seq"][b]  # type: ignore[index]
                         fid: int = batch["frame_ids"][b][t]  # type: ignore[index]
-                        feat = torch.load(
-                            cache_dir / seq / f"{fid:06d}.pt",
-                            map_location="cpu",
-                            weights_only=True,
-                        )
-                        p3s.append(feat["p3"].to(device, dtype=torch.float32))
-                        p4s.append(feat["p4"].to(device, dtype=torch.float32))
-                        p5s.append(feat["p5"].to(device, dtype=torch.float32))
+                        cached = _feature_ram_cache.get((seq, fid))
+                        if cached is None:
+                            feat = torch.load(
+                                cache_dir / seq / f"{fid:06d}.pt",
+                                map_location="cpu",
+                                weights_only=True,
+                            )
+                            cached = (feat["p3"], feat["p4"], feat["p5"])
+                        p3s.append(cached[0].to(device, dtype=torch.float32))
+                        p4s.append(cached[1].to(device, dtype=torch.float32))
+                        p5s.append(cached[2].to(device, dtype=torch.float32))
                     feats_t = [
                         torch.stack(p3s),
                         torch.stack(p4s),
