@@ -23,12 +23,15 @@ Usage:
 
 from __future__ import annotations
 
-import argparse, sys, time
+import argparse
+import sys
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-import torch, torch.nn as nn
+import torch
+import torch.nn as nn
 
 _root = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(_root))

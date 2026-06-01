@@ -1,5 +1,4 @@
 import torch
-import pytest
 from saccade.perception.temporal_yolo.mamba_head import MambaDetectionHead
 
 

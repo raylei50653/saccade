@@ -13,7 +13,10 @@ Usage:
         [--batch-size 8]
 """
 
-import argparse, sys, time, torch
+import argparse
+import sys
+import time
+import torch
 from pathlib import Path
 
 _root = Path(__file__).resolve().parent.parent.parent.parent

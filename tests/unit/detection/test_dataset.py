@@ -1,9 +1,19 @@
+import pytest
 import torch
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 from saccade.perception.temporal_yolo.dataset import MOT17TemporalClip, _load_and_resize
 
+# This test mocks the module-level `open`/`csv`/`Path` helpers but the dataset
+# reads gt.txt via `Path.open()`, which is not mocked — so it needs the real
+# MOT17 dataset on disk. Skip when absent (e.g. CI) instead of FileNotFoundError.
+_GT = Path("datasets/MOT17/train/MOT17-02-SDP/gt/gt.txt")
+skip_no_dataset = pytest.mark.skipif(
+    not _GT.exists(), reason="MOT17 dataset not found (e.g. CI)"
+)
 
+
+@skip_no_dataset
 @patch("saccade.perception.temporal_yolo.dataset.Path.exists")
 @patch("saccade.perception.temporal_yolo.dataset.configparser.ConfigParser")
 @patch("saccade.perception.temporal_yolo.dataset.csv.reader")

@@ -8,8 +8,7 @@ src_path = project_root / "src"
 if src_path.exists():
     sys.path.insert(0, str(src_path))
 
-import motmetrics as mm
-from saccade.perception.eval.metrics import _evaluate_single_sequence
+from saccade.perception.eval.metrics import _evaluate_single_sequence  # noqa: E402
 
 data_root = "datasets/MOT17"
 split = "train"

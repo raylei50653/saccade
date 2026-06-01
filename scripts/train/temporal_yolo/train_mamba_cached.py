@@ -15,12 +15,15 @@ Usage:
         --from-scratch --batch-size 8 --lr 1e-4 --epochs 30
 """
 
-import argparse, sys, time, gc
+import argparse
+import sys
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-import torch, torch.nn as nn
+import torch
+import torch.nn as nn
 
 _root = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(_root))
@@ -186,7 +189,6 @@ def _collate(batch):
     """Collate: each item is (feats_list, gt_list) for one clip."""
     # Group all features by time step
     T = len(batch[0][0])
-    B = len(batch)
 
     batched_feats = []
     batched_gt = []
