@@ -12,7 +12,9 @@ def _breakdown_display_names(breakdown_stage_names: tuple[str, ...]) -> tuple[st
     return tuple(
         name
         for name in breakdown_stage_names
-        if name != POST_GPU_STAGE and not name.startswith("native_")
+        if name != POST_GPU_STAGE
+        and not name.startswith("native_")
+        and not name.startswith("post_seg_")
     )
 
 
@@ -58,6 +60,7 @@ def _postprocess_attribution_from_means(
                     k.startswith("post_")
                     and k != POST_GPU_STAGE
                     and k not in excluded_post_stages
+                    and not k.startswith("post_seg_")
                 )
                 or (k.startswith("native_") and k not in excluded_native_stages)
             )
@@ -82,6 +85,39 @@ def _print_postprocess_gpu_attribution(attribution: dict[str, float]) -> None:
     print(f"| postprocess_gpu | {attribution['gpu_ms']:.2f} |")
     print(f"| post_unattributed_gpu | {attribution['unattributed_gpu_ms']:.2f} |")
     print(f"| post_overhead | {attribution['overhead_ms']:.2f} |")
+
+
+def _print_postprocess_segment_span(
+    segment_names: tuple[str, ...],
+    segment_samples: dict[str, list[float]],
+    gpu_ms: float,
+) -> None:
+    """Print the sync-free CUDA-event partition of the postprocess GPU span.
+
+    Per-frame samples → Mean/Std/P95/P99 per segment (tail latency, not just the
+    mean). Σ of segment means should ≈ post_gpu_elapsed (gpu_ms). Locates which
+    segment holds the otherwise-unattributed GPU time.
+    """
+    if not any(segment_samples.get(name) for name in segment_names):
+        return
+    print(
+        "\n| Postprocess Segment Span (CUDA events) | "
+        "Mean (ms) | Std (ms) | P95 (ms) | P99 (ms) |"
+    )
+    print("| :--- | :--- | :--- | :--- | :--- |")
+    seg_sum = 0.0
+    for name in segment_names:
+        samples = segment_samples.get(name)
+        if not samples:
+            continue
+        arr = np.array(samples, dtype=np.float64)
+        seg_sum += float(arr.mean())
+        print(
+            f"| {name} | {arr.mean():.2f} | {arr.std():.2f} | "
+            f"{np.percentile(arr, 95):.2f} | {np.percentile(arr, 99):.2f} |"
+        )
+    print(f"| Σ segments (mean) | {seg_sum:.2f} | | | |")
+    print(f"| post_gpu_elapsed (ref) | {gpu_ms:.2f} | | | |")
 
 
 def _print_native_postprocess_breakdown(
@@ -151,6 +187,8 @@ def print_overall_summary(
     overall_post_counts: dict[str, int],
     gmc_breakdown_names: tuple[str, ...],
     overall_gmc_samples: dict[str, list[float]],
+    segment_breakdown_names: tuple[str, ...],
+    overall_segment_samples: dict[str, list[float]],
     overall_lazy_reid_frames: int,
     overall_lazy_reid_candidates: int,
     overall_lazy_reid_crops: int,
@@ -228,6 +266,11 @@ def print_overall_summary(
             overall_top_level_means.get("postprocess", 0.0),
         )
         _print_postprocess_gpu_attribution(overall_post_attr)
+        _print_postprocess_segment_span(
+            segment_breakdown_names,
+            overall_segment_samples,
+            overall_post_attr["gpu_ms"],
+        )
         _print_native_postprocess_breakdown(
             native_breakdown_names,
             overall_stage_totals,
@@ -480,6 +523,9 @@ def print_sequence_summary(
     gmc_breakdown_names: tuple[str, ...],
     seq_gmc_samples: dict[str, list[float]],
     overall_gmc_samples: dict[str, list[float]],
+    segment_breakdown_names: tuple[str, ...],
+    seq_segment_samples: dict[str, list[float]],
+    overall_segment_samples: dict[str, list[float]],
     seq_post_counts: dict[str, int],
     overall_post_counts: dict[str, int],
     seq_lazy_reid_frames: int,
@@ -568,6 +614,15 @@ def print_sequence_summary(
             seq_top_level_means.get("postprocess", 0.0),
         )
         _print_postprocess_gpu_attribution(seq_post_attr)
+        _print_postprocess_segment_span(
+            segment_breakdown_names,
+            seq_segment_samples,
+            seq_post_attr["gpu_ms"],
+        )
+        for _seg_name in segment_breakdown_names:
+            overall_segment_samples[_seg_name].extend(
+                seq_segment_samples.get(_seg_name, [])
+            )
         _print_native_postprocess_breakdown(
             native_breakdown_names,
             seq_stage_totals,

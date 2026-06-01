@@ -376,6 +376,36 @@ def _compute_fp_filter_ranking(
     return ranking
 
 
+# Score assigned to detections rejected by the FP hard filter when masking in
+# place (instead of compacting). Below every tracker score threshold, so the GPU
+# tracker's score gate drops them with no host sync. Negative is safe: score
+# fusion uses non-negative thresholds only.
+_FP_HARD_REJECT_SCORE = -1.0
+
+
+def _fp_hard_reject_mask(
+    boxes: torch.Tensor,
+    scores: torch.Tensor,
+    *,
+    min_score: float,
+    max_suspicious_area: int,
+    max_suspicious_score: float,
+) -> torch.Tensor:
+    """Boolean mask (True = reject) for the FP hard filter.
+
+    Rejects detections that are either very low score, or low score AND
+    oversized — the tail of the FP distribution. Pure elementwise GPU ops, no
+    host sync.
+    """
+    bw = (boxes[:, 2] - boxes[:, 0]).clamp(min=1e-6)
+    bh = (boxes[:, 3] - boxes[:, 1]).clamp(min=1e-6)
+    area = bw * bh
+    # Suspicious: low score AND large area. Also reject very low score regardless.
+    suspicious = (scores < max_suspicious_score) & (area > max_suspicious_area)
+    very_low_score = scores < min_score
+    return suspicious | very_low_score
+
+
 def _apply_fp_hard_filter(
     boxes: torch.Tensor,
     scores: torch.Tensor,
@@ -385,34 +415,25 @@ def _apply_fp_hard_filter(
     max_suspicious_area: int = 10000,
     max_suspicious_score: float = 0.45,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Hard filter that removes extremely suspicious detections.
+    """Compacting hard filter: removes extremely suspicious detections.
 
-    Strategy: remove detections that have BOTH:
-      - Score below a threshold (likely low-confidence FP)
-      - Area above a threshold (likely oversized FP)
-
-    This catches the tail of the FP distribution without affecting
-    high-confidence detections.
+    Retained for the workbench / unit-test contract. The hot eval path uses
+    `_fp_hard_reject_mask` + masked_fill instead (sync-free, fixed shape).
     """
     if boxes.numel() == 0:
         return boxes, scores, classes
 
-    bw = (boxes[:, 2] - boxes[:, 0]).clamp(min=1e-6)
-    bh = (boxes[:, 3] - boxes[:, 1]).clamp(min=1e-6)
-    area = bw * bh
-
-    # Suspicious mask: low score AND large area
-    suspicious = (scores < max_suspicious_score) & (area > max_suspicious_area)
-
-    # Also filter: very low score (< min_score) regardless of size
-    very_low_score = scores < min_score
-
-    keep = ~(suspicious | very_low_score)
-
-    if not keep.any():
-        return boxes[:0], scores[:0], classes[:0]
-
-    return boxes[keep], scores[keep], classes[keep]
+    reject = _fp_hard_reject_mask(
+        boxes,
+        scores,
+        min_score=min_score,
+        max_suspicious_area=max_suspicious_area,
+        max_suspicious_score=max_suspicious_score,
+    )
+    # Single .nonzero() (one host sync) — three separate bool index ops would
+    # each re-run .nonzero() internally, triggering three syncs.
+    keep_idx = (~reject).nonzero(as_tuple=True)[0]
+    return boxes[keep_idx], scores[keep_idx], classes[keep_idx]
 
 
 def _get_softmax3_torch_params(
@@ -1294,6 +1315,13 @@ def run_eval(
         "post_quality_scale",
         "post_tail_filtering",
         "post_merge",
+        # Sync-free CUDA-event span partition (diagnostic; excluded from attribution)
+        "post_seg_prep",
+        "post_seg_native",
+        "post_seg_slice_quality",
+        "post_seg_tail_filter",
+        "post_seg_fp_hard",
+        "post_seg_python_tail",
     )
 
     native_reid_breakdown_names = (
@@ -1307,6 +1335,11 @@ def run_eval(
         "gmc_fg_mask",
         "gmc_phase_corr",
         "gmc_handoff",
+    )
+    # Sync-free CUDA-event partition of the postprocess GPU span; sampled per
+    # frame so the report can show P95/P99 (not just the mean) per segment.
+    segment_breakdown_names = tuple(
+        name for name in breakdown_stage_names if name.startswith("post_seg_")
     )
     current_frame_stage_elapsed: dict[str, float] | None = None
     current_stage_sample_active = False
@@ -1338,6 +1371,9 @@ def run_eval(
     )
     overall_stage_samples = OrderedDict((name, []) for name in top_level_stage_names)
     overall_gmc_samples = OrderedDict((name, []) for name in gmc_breakdown_names)
+    overall_segment_samples: "OrderedDict[str, list[float]]" = OrderedDict(
+        (name, []) for name in segment_breakdown_names
+    )
     overall_profiled_frames = 0
     overall_post_counts = OrderedDict(
         (name, 0)
@@ -1766,6 +1802,9 @@ def run_eval(
             (name, []) for name in native_reid_breakdown_names
         )
         seq_gmc_samples = OrderedDict((name, []) for name in gmc_breakdown_names)
+        seq_segment_samples: "OrderedDict[str, list[float]]" = OrderedDict(
+            (name, []) for name in segment_breakdown_names
+        )
         seq_post_counts = OrderedDict(
             (name, 0)
             for name in ("raw_boxes", "after_filter", "after_nms", "after_merge")
@@ -2305,6 +2344,13 @@ def run_eval(
                 # second-stage association can actually use them.
                 post_gpu_start_event = None
                 post_gpu_end_event = None
+                # Sync-free CUDA-event markers partitioning the postprocess GPU span
+                # (post_gpu_elapsed) into contiguous segments. Each entry carries the
+                # name of the segment ENDING at that marker; the residual from the last
+                # marker to post_gpu_end_event is attributed to "post_seg_python_tail".
+                # No torch.cuda.synchronize() is inserted between markers, so timing is
+                # not distorted. Used only to locate the "unattributed GPU" residual.
+                post_seg_events: list[tuple[str, "torch.cuda.Event"]] = []
                 if profile_stages:
                     torch.cuda.synchronize()
                     t_post_start = time.perf_counter()
@@ -2376,6 +2422,10 @@ def run_eval(
                         seq_stage_totals["post_tensor_prep"] += (
                             time.perf_counter() - t_native_prep_start
                         ) * 1000
+                    if profile_stages and current_stage_sample_active:
+                        _seg_ev = torch.cuda.Event(enable_timing=True)
+                        _seg_ev.record(torch.cuda.current_stream())
+                        post_seg_events.append(("post_seg_prep", _seg_ev))
 
                     # process_detections_n releases GIL for the full filter+NMS+sync
                     # sequence so sibling threads can run Python while GPU is busy.
@@ -2457,6 +2507,10 @@ def run_eval(
                             - _post_nms_ms
                             - _post_count_sync_ms,
                         )
+                    if profile_stages and current_stage_sample_active:
+                        _seg_ev = torch.cuda.Event(enable_timing=True)
+                        _seg_ev.record(torch.cuda.current_stream())
+                        post_seg_events.append(("post_seg_native", _seg_ev))
                     t_output_slicing_start = None
                     if profile_stages:
                         torch.cuda.synchronize()
@@ -2522,6 +2576,10 @@ def run_eval(
                         seq_stage_totals["post_quality_scale"] += (
                             time.perf_counter() - t_quality_scale_start
                         ) * 1000
+                    if profile_stages and current_stage_sample_active:
+                        _seg_ev = torch.cuda.Event(enable_timing=True)
+                        _seg_ev.record(torch.cuda.current_stream())
+                        post_seg_events.append(("post_seg_slice_quality", _seg_ev))
                     after_filter_count = int(n_post)
                     after_nms_count = int(n_post)
                 else:
@@ -2800,6 +2858,10 @@ def run_eval(
                     seq_stage_totals["post_tail_filtering"] += (
                         time.perf_counter() - t_tail_filtering_start
                     ) * 1000
+                if profile_stages and current_stage_sample_active:
+                    _seg_ev = torch.cuda.Event(enable_timing=True)
+                    _seg_ev.record(torch.cuda.current_stream())
+                    post_seg_events.append(("post_seg_tail_filter", _seg_ev))
                 if debug_dump_active:
                     _append_stage_dump_rows(
                         debug_stage_dump_rows,
@@ -2845,13 +2907,19 @@ def run_eval(
                 # Removes extremely suspicious low-score large-area detections
                 # that are likely false positives based on FP analysis.
                 if cfg.fp_hard_filter_enabled and fused_scores.numel() > 0:
-                    fused_boxes, fused_scores, fused_classes = _apply_fp_hard_filter(
+                    # Mask-in-place (fixed shape, sync-free): set rejected scores
+                    # below all tracker thresholds rather than compacting. The GPU
+                    # tracker's score gate drops them without a host .nonzero()
+                    # sync, and geometry_suspect_mask / keypoints stay aligned.
+                    _fp_reject = _fp_hard_reject_mask(
                         fused_boxes,
                         fused_scores,
-                        fused_classes,
                         min_score=cfg.fp_hard_filter_min_score,
                         max_suspicious_area=cfg.fp_hard_filter_max_suspicious_area,
                         max_suspicious_score=cfg.fp_hard_filter_max_suspicious_score,
+                    )
+                    fused_scores = fused_scores.masked_fill(
+                        _fp_reject, _FP_HARD_REJECT_SCORE
                     )
                     after_merge_count = int(fused_scores.numel())
                     if debug_dump_active:
@@ -2864,6 +2932,10 @@ def run_eval(
                             scores=fused_scores,
                             classes=fused_classes,
                         )
+                if profile_stages and current_stage_sample_active:
+                    _seg_ev = torch.cuda.Event(enable_timing=True)
+                    _seg_ev.record(torch.cuda.current_stream())
+                    post_seg_events.append(("post_seg_fp_hard", _seg_ev))
 
                 # === Duplicate suppression ===
                 # Remove near-duplicate detections within the same frame before
@@ -3159,6 +3231,18 @@ def run_eval(
                         seq_stage_totals["post_gpu_elapsed"] += float(
                             post_gpu_start_event.elapsed_time(post_gpu_end_event)
                         )
+                        # Partition the GPU span into contiguous segments. Each marker
+                        # carries the name of the segment ending at it; the residual to
+                        # post_gpu_end_event is the Python tail (gates 2814-3147).
+                        _prev_ev = post_gpu_start_event
+                        for _seg_name, _seg_ev in post_seg_events:
+                            _seg_ms = float(_prev_ev.elapsed_time(_seg_ev))
+                            seq_stage_totals[_seg_name] += _seg_ms
+                            seq_segment_samples[_seg_name].append(_seg_ms)
+                            _prev_ev = _seg_ev
+                        _tail_ms = float(_prev_ev.elapsed_time(post_gpu_end_event))
+                        seq_stage_totals["post_seg_python_tail"] += _tail_ms
+                        seq_segment_samples["post_seg_python_tail"].append(_tail_ms)
                     if frame_id > warmup_frames:
                         seq_post_counts["raw_boxes"] += raw_box_count
                         seq_post_counts["after_filter"] += after_filter_count
@@ -4054,6 +4138,9 @@ def run_eval(
             gmc_breakdown_names=gmc_breakdown_names,
             seq_gmc_samples=seq_gmc_samples,
             overall_gmc_samples=overall_gmc_samples,
+            segment_breakdown_names=segment_breakdown_names,
+            seq_segment_samples=seq_segment_samples,
+            overall_segment_samples=overall_segment_samples,
             seq_post_counts=seq_post_counts,
             overall_post_counts=overall_post_counts,
             seq_lazy_reid_frames=seq_lazy_reid_frames,
@@ -4145,6 +4232,8 @@ def run_eval(
         overall_post_counts=overall_post_counts,
         gmc_breakdown_names=gmc_breakdown_names,
         overall_gmc_samples=overall_gmc_samples,
+        segment_breakdown_names=segment_breakdown_names,
+        overall_segment_samples=overall_segment_samples,
         overall_lazy_reid_frames=overall_lazy_reid_frames,
         overall_lazy_reid_candidates=overall_lazy_reid_candidates,
         overall_lazy_reid_crops=overall_lazy_reid_crops,
