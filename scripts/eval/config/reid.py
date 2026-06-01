@@ -79,6 +79,7 @@ def add_reid_args(parser: argparse.ArgumentParser) -> None:
         "--reid-model",
         choices=(
             "siglip2",
+            "siglip2_reid",
             "dinov2",
             "transreid",
             "osnet",
