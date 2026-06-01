@@ -27,7 +27,7 @@ reid_mode: "off"
 # --- Tracker Parameters ---
 match_thresh: 0.50       # Low threshold optimized for Mamba detector box confidence & IoU distributions
 new_track_thresh: 0.28   # Keep standard baseline new track threshold
-kalman_r_scale: 1.0
+kalman_r_scale: 2.8      # r_scale>1 trusts Kalman prediction more → smoother trajectory → better stage-2 re-association → IDF1 +1.9pp IDs -84 vs r_scale=1.0
 confirm_streak: 3
 confirm_score_thresh: 0.50
 fuse_score_weight: 0.0
