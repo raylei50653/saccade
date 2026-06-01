@@ -19,7 +19,7 @@ __global__ void selective_scan_fwd_kernel(
     const T* __restrict__ C_vals,
     const T* __restrict__ D,
     T* __restrict__ y,
-    int B, int L, int D_dim, int N, int has_D
+    int B, int L, int D_dim, int N, int has_D, int a_per_channel
 ) {
     int b = blockIdx.x / D_dim;
     int d = blockIdx.x % D_dim;
@@ -30,7 +30,9 @@ __global__ void selective_scan_fwd_kernel(
     if (n >= N) return;
 
     // Use float for internal computations and high-precision scan accumulation (numerical stability)
-    float A_n = static_cast<float>(A[n]);
+    // a_per_channel: A is (D_dim, N) → row d holds this channel's decay schedule.
+    //                otherwise A is (1, N) shared across all channels.
+    float A_n = static_cast<float>(A[a_per_channel ? (d * N + n) : n]);
     float h = 0.0f;
 
     extern __shared__ float y_shared[];
@@ -110,7 +112,8 @@ void selective_scan_fwd(
 
     cudaStream_t s = static_cast<cudaStream_t>(stream);
     selective_scan_fwd_kernel<float><<<grid, block, smem, s>>>(
-        u, delta, A, B_ssm, C_ssm, D, y, B, L, D_dim, N, params.has_D ? 1 : 0
+        u, delta, A, B_ssm, C_ssm, D, y, B, L, D_dim, N,
+        params.has_D ? 1 : 0, params.a_per_channel ? 1 : 0
     );
 }
 
@@ -146,6 +149,6 @@ void selective_scan_fwd_half(
         static_cast<const __half*>(C_ssm),
         static_cast<const __half*>(D),
         static_cast<__half*>(y),
-        B, L, D_dim, N, params.has_D ? 1 : 0
+        B, L, D_dim, N, params.has_D ? 1 : 0, params.a_per_channel ? 1 : 0
     );
 }

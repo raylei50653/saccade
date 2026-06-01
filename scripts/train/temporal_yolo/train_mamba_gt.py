@@ -159,6 +159,12 @@ def main() -> None:
     parser.add_argument("--d-model", type=int, default=128)
     parser.add_argument("--d-state", type=int, default=16)
     parser.add_argument("--num-blocks", type=int, default=1)
+    parser.add_argument(
+        "--per-channel-a",
+        action="store_true",
+        help="Per-channel SSM A (d_inner, N) instead of shared (1, N). "
+        "Warm-starts from a shared-A checkpoint (broadcast → init == base).",
+    )
     parser.add_argument("--seqs", default="")
     parser.add_argument("--save-every", type=int, default=5)
     parser.add_argument("--freeze-teacher", type=bool, default=True)
@@ -261,6 +267,7 @@ def main() -> None:
         "spatial_reduction": args.spatial_reduction,
         "num_classes": nc,
         "use_pixel_shuffle": False,
+        "per_channel_a": False,
     }
     for k, v in mamba_args_default.items():
         mamba_args.setdefault(k, v)
@@ -269,6 +276,10 @@ def main() -> None:
             mamba_args["use_temporal_attention"] = True
         else:
             mamba_args["use_temporal_mamba"] = True
+    if args.per_channel_a:
+        # Force per-channel A; the shared-A base ckpt warm-starts via broadcast
+        # inside MambaDetectionHead.load_state_dict (init == base, then fine-tune).
+        mamba_args["per_channel_a"] = True
 
     mamba = MambaDetectionHead(
         in_channels=(128, 256, 512),
@@ -283,9 +294,13 @@ def main() -> None:
         use_hybrid_head=mamba_args.get("use_hybrid_head", False),
         use_temporal_mamba=mamba_args.get("use_temporal_mamba", False),
         use_temporal_attention=mamba_args.get("use_temporal_attention", False),
+        per_channel_a=mamba_args.get("per_channel_a", False),
     ).to(device)
     sd = _strip_compiled_keys(mamba_state["student"])
-    strict = not args.add_temporal
+    # per_channel_a from a shared-A base warm-starts via A_log broadcast; relax
+    # strict so any incidental layout drift is tolerated alongside it.
+    base_per_channel = mamba_state.get("mamba_args", {}).get("per_channel_a", False)
+    strict = not args.add_temporal and not (args.per_channel_a and not base_per_channel)
     missing, unexpected = mamba.load_state_dict(sd, strict=strict)
     mamba.to(device)  # ensure new temporal keys are on correct device
     if missing:
@@ -399,6 +414,9 @@ def main() -> None:
     # Data
     # ------------------------------------------------------------------
     seqs = args.seqs.split(",") if args.seqs else None
+    # In cache mode the backbone never runs, so raw frame pixels are unused —
+    # skip RAM preload to allow large mixes (e.g. MOT17+MOT20) without OOM.
+    preload = args.cache_dir == ""
     loader = build_mot17_dataloader(
         data_root=project_root / args.data_root,
         clip_len=args.clip_len,
@@ -407,6 +425,7 @@ def main() -> None:
         stride=args.clip_len * 2,
         shuffle=True,
         seqs=seqs,
+        preload_to_ram=preload,
     )
     print(
         f"[MambaGT] {len(loader)} batches/epoch  gt_ratio={args.gt_ratio}  lr={args.lr}"
@@ -589,6 +608,7 @@ def main() -> None:
                         "use_temporal_attention": mamba_args.get(
                             "use_temporal_attention", False
                         ),
+                        "per_channel_a": mamba_args.get("per_channel_a", False),
                     },
                 },
                 run_dir,

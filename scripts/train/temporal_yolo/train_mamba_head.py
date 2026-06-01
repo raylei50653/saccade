@@ -432,6 +432,11 @@ def main() -> None:
         default="",
         help="Use precomputed teacher FPN features (skip backbone forward pass)",
     )
+    parser.add_argument(
+        "--seqs",
+        default="",
+        help="Comma-separated sequence names (empty = all -SDP under data-root/train)",
+    )
 
     args = parser.parse_args()
 
@@ -545,6 +550,7 @@ def main() -> None:
         batch_size=args.batch_size,
         stride=1 if args.use_temporal_mamba else args.clip_len * 2,
         shuffle=not args.use_temporal_mamba,
+        seqs=args.seqs.split(",") if args.seqs else None,
     )
 
     # ------------------------------------------------------------------

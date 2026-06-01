@@ -2643,7 +2643,8 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         [](
             uintptr_t u_ptr, uintptr_t delta_ptr, uintptr_t A_ptr,
             uintptr_t B_ptr, uintptr_t C_ptr, uintptr_t D_ptr, uintptr_t y_ptr,
-            int B_dim, int L_dim, int D_dim, int N_dim, int has_D, bool is_half
+            int B_dim, int L_dim, int D_dim, int N_dim, int has_D,
+            int a_per_channel, bool is_half
         ) {
             SelectiveScanParams params;
             params.B = B_dim;
@@ -2651,6 +2652,7 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             params.D = D_dim;
             params.N = N_dim;
             params.has_D = has_D;
+            params.a_per_channel = a_per_channel;
 
             {
                 py::gil_scoped_release release;
@@ -2682,6 +2684,7 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         py::arg("u_ptr"), py::arg("delta_ptr"), py::arg("A_ptr"),
         py::arg("B_ptr"), py::arg("C_ptr"), py::arg("D_ptr"), py::arg("y_ptr"),
         py::arg("B_dim"), py::arg("L_dim"), py::arg("D_dim"),
-        py::arg("N_dim"), py::arg("has_D"), py::arg("is_half") = false,
+        py::arg("N_dim"), py::arg("has_D"),
+        py::arg("a_per_channel") = 0, py::arg("is_half") = false,
         "CUDA selective scan (Mamba SSM kernel) supporting both float and half.");
 }

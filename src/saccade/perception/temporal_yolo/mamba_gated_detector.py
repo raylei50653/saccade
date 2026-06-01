@@ -206,13 +206,14 @@ class MambaGatedDetector(nn.Module):
             d_state=mamba_args["d_state"],
             num_blocks=mamba_args["num_blocks"],
             num_classes=mamba_args["num_classes"],
-            reg_max=1,
+            reg_max=mamba_args.get("reg_max", 1),
             spatial_reduction=mamba_args["spatial_reduction"],
             emb_dim=emb_dim,
             use_pixel_shuffle=mamba_args.get("use_pixel_shuffle", False),
             use_cross_scan=mamba_args.get("use_cross_scan", False),
             use_hybrid_head=mamba_args.get("use_hybrid_head", False),
             use_temporal_mamba=mamba_args.get("use_temporal_mamba", False),
+            per_channel_a=mamba_args.get("per_channel_a", False),
         ).to(device)
         sd = {
             k.replace("._orig_mod.", "."): v for k, v in mamba_state["student"].items()

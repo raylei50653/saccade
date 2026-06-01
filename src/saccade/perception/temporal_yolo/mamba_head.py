@@ -27,9 +27,13 @@ def _selective_scan(
     B: Tensor,
     C: Tensor,
     D: Tensor | None = None,
-    delta_softplus: bool = True,
 ) -> Tensor:
-    return _selective_scan_cuda(u, delta, A, B, C, D)
+    # softplus(delta) is applied inside both backends, so delta is passed raw.
+    try:
+        return _selective_scan_cuda(u, delta, A, B, C, D)
+    except ImportError:
+        # Pure-PyTorch fallback when the CUDA extension is unavailable.
+        return _selective_scan_jit(u, delta, A, B, C, D)
 
 
 def _selective_scan_cuda(
@@ -49,9 +53,12 @@ def _selective_scan_cuda(
     A = A.contiguous()
     B = B.contiguous()
 
-    # A is (1, N) → numel()=N is the true SSM state dimension.
-    # A.shape[0]=1 was a bug (dstate=1 instead of N=16).
-    N = A.numel()
+    # A is (rows, N): rows=1 → shared decay across channels; rows=d_inner →
+    # per-channel dynamics. N (state dim) is always the last axis; the kernel
+    # indexes A[d * N + n] when per-channel.
+    N = A.shape[-1]
+    D_dim = u.shape[2]
+    a_per_channel = 1 if (A.dim() == 2 and A.shape[0] == D_dim) else 0
 
     # C may be rank-1 (shape ...,1) from legacy x_proj=d_state*2+1 checkpoints.
     # Broadcast to (B, L, N) so the kernel reads correct C values for all N states.
@@ -76,6 +83,7 @@ def _selective_scan_cuda(
         u.shape[2],
         N,
         1 if D_ptr != 0 else 0,
+        a_per_channel,
         is_half,
     )
     return y
@@ -123,6 +131,7 @@ class MambaBlock(nn.Module):
         d_conv: int = 4,
         expand: int = 2,
         full_rank_c: bool = False,
+        per_channel_a: bool = False,
     ):
         super().__init__()
         self.d_model = d_model
@@ -130,6 +139,7 @@ class MambaBlock(nn.Module):
         self.d_conv = d_conv
         self.expand = expand
         self.full_rank_c = full_rank_c
+        self.per_channel_a = per_channel_a
         d_inner = d_model * expand
 
         self.in_proj = nn.Linear(d_model, d_inner * 2, bias=False)
@@ -149,9 +159,16 @@ class MambaBlock(nn.Module):
         self.x_proj = nn.Linear(d_inner, d_state * 2 + c_rank, bias=False)
         self.dt_proj = nn.Linear(d_state, d_inner, bias=True)
 
-        # A is a learned parameter matrix (diagonalized per channel)
-        A = torch.arange(1, d_state + 1, dtype=torch.float32).unsqueeze(0)  # (1, N)
-        self.A_log = nn.Parameter(torch.log(A))
+        # A: real S4D init, A[..., n] = n+1.
+        # per_channel_a=False: shape (1, N) — single decay schedule shared by all
+        #   d_inner channels (v14-compatible, fewer params).
+        # per_channel_a=True:  shape (d_inner, N) — each channel learns its own
+        #   SSM dynamics. Initialized identically across rows so a shared-A (1, N)
+        #   checkpoint warm-starts (broadcast) to an exactly equivalent state; the
+        #   kernel indexes A[d * N + n].
+        rows = d_inner if per_channel_a else 1
+        A = torch.arange(1, d_state + 1, dtype=torch.float32).expand(rows, d_state)
+        self.A_log = nn.Parameter(torch.log(A).contiguous())
         self.D = nn.Parameter(torch.ones(d_inner))
 
         self.out_proj = nn.Linear(d_inner, d_model, bias=False)
@@ -175,7 +192,7 @@ class MambaBlock(nn.Module):
         B_ssm = x_db[..., self.d_state : self.d_state * 2]
         C_ssm = x_db[..., self.d_state * 2 :]
 
-        A = -torch.exp(self.A_log.float())  # (1, N)
+        A = -torch.exp(self.A_log.float())  # (1, N) shared or (d_inner, N) per-channel
 
         y = _selective_scan(
             x_t,
@@ -300,6 +317,7 @@ class MambaDetectionHead(nn.Module):
         use_hybrid_head: bool = False,  # hybrid: conv blocks on P3, Mamba on P4/P5 (P3 optimization)
         use_temporal_mamba: bool = False,  # spatio-temporal SSM across T frames (P2 ST optimization)
         use_temporal_attention: bool = False,  # T=4 self-attention over frames (replaces SSM, no flow gate)
+        per_channel_a: bool = False,  # per-channel SSM A (d_inner, N); warm-starts from shared (1, N)
     ):
         super().__init__()
         self.nl = len(in_channels)
@@ -313,6 +331,7 @@ class MambaDetectionHead(nn.Module):
         self.use_cross_scan = use_cross_scan
         self.use_hybrid_head = use_hybrid_head
         self.use_temporal_mamba = use_temporal_mamba
+        self.per_channel_a = per_channel_a
         self.upsample_loaded = (
             use_pixel_shuffle  # Default to True if initialized to use it
         )
@@ -327,7 +346,12 @@ class MambaDetectionHead(nn.Module):
 
         self.mamba_blocks = nn.ModuleList(
             [
-                nn.ModuleList([MambaBlock(d_model, d_state) for _ in range(num_blocks)])
+                nn.ModuleList(
+                    [
+                        MambaBlock(d_model, d_state, per_channel_a=per_channel_a)
+                        for _ in range(num_blocks)
+                    ]
+                )
                 for _ in range(self.nl)
             ]
         )
@@ -353,7 +377,12 @@ class MambaDetectionHead(nn.Module):
                 [
                     nn.ModuleList(
                         [
-                            MambaBlock(d_model, d_state, full_rank_c=True)
+                            MambaBlock(
+                                d_model,
+                                d_state,
+                                full_rank_c=True,
+                                per_channel_a=per_channel_a,
+                            )
                             for _ in range(1)
                         ]
                     )
@@ -446,6 +475,23 @@ class MambaDetectionHead(nn.Module):
             self.upsample_loaded = False
             # Strip 'upsample' from state_dict to avoid unexpected keys in strict loading
             state_dict = {k: v for k, v in state_dict.items() if "upsample" not in k}
+
+        # Warm-start A_log between shared (1, N) and per-channel (d_inner, N) layouts.
+        # Shared→per-channel: broadcast the single decay schedule to every channel so
+        #   a v14 (shared-A) checkpoint initializes an exactly equivalent per-channel
+        #   model (init == v14), then fine-tuning learns per-channel deviations.
+        # Per-channel→shared: collapse by averaging rows.
+        own_state = self.state_dict()
+        for k, v in list(state_dict.items()):
+            if not k.endswith("A_log") or k not in own_state:
+                continue
+            tgt = own_state[k]
+            if tgt.shape == v.shape:
+                continue
+            if v.shape[0] == 1 and tgt.shape[0] > 1 and v.shape[1:] == tgt.shape[1:]:
+                state_dict[k] = v.expand_as(tgt).contiguous()
+            elif tgt.shape[0] == 1 and v.shape[0] > 1 and tgt.shape[1:] == v.shape[1:]:
+                state_dict[k] = v.mean(dim=0, keepdim=True).contiguous()
 
         if not strict:
             # When strict=False, also skip keys with shape mismatches (e.g. loading
