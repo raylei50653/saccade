@@ -112,6 +112,11 @@ def mot_result_line(
     frame_h: int,
 ) -> str:
     x1, y1, x2, y2 = box
+    # Clip to frame bounds so MOT lines never carry negative or out-of-frame coords.
+    x1 = min(max(x1, 0.0), frame_w)
+    y1 = min(max(y1, 0.0), frame_h)
+    x2 = min(max(x2, 0.0), frame_w)
+    y2 = min(max(y2, 0.0), frame_h)
     return (
         f"{frame_id},{global_tid},{x1:.2f},{y1:.2f},"
         f"{x2 - x1:.2f},{y2 - y1:.2f},"
