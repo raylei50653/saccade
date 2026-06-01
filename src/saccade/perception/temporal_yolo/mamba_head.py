@@ -29,10 +29,15 @@ def _selective_scan(
     D: Tensor | None = None,
 ) -> Tensor:
     # softplus(delta) is applied inside both backends, so delta is passed raw.
+    # The CUDA kernel dereferences raw device pointers, so it must only be given
+    # CUDA tensors — CPU inputs (and the case where the extension is unavailable)
+    # fall back to the pure-PyTorch scan instead of feeding host pointers to the
+    # kernel (which corrupts the CUDA context with an illegal memory access).
+    if not u.is_cuda:
+        return _selective_scan_jit(u, delta, A, B, C, D)
     try:
         return _selective_scan_cuda(u, delta, A, B, C, D)
     except ImportError:
-        # Pure-PyTorch fallback when the CUDA extension is unavailable.
         return _selective_scan_jit(u, delta, A, B, C, D)
 
 
