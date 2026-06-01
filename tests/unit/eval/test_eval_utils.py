@@ -102,11 +102,14 @@ def test_mot_result_line_format():
     assert line.endswith("-1,-1,-1")
 
 
-def test_mot_result_line_clips_negative():
+def test_mot_result_line_preserves_out_of_frame():
+    # MOT17 GT contains many out-of-frame boxes (negative / beyond-frame coords,
+    # ~13-20% near edges). Clipping predictions but not GT breaks IoU matching and
+    # inflates FP+FN (MOTA -6.9pp observed), so coords must pass through raw.
     line = mot_result_line(1, 1, (-5.0, -5.0, 10.0, 10.0), 0.5, 100, 100)
     parts = line.split(",")
-    assert float(parts[2]) == pytest.approx(0.0)
-    assert float(parts[3]) == pytest.approx(0.0)
+    assert float(parts[2]) == pytest.approx(-5.0)
+    assert float(parts[3]) == pytest.approx(-5.0)
 
 
 # --- safe_cpp_ptr ---
