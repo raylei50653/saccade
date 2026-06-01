@@ -44,7 +44,7 @@ def _last_vit_dual(
         X = torch.fft.rfft(x, dim=-1)
         freqs = torch.arange(C // 2 + 1, device=x.device, dtype=torch.float32) / C
         w = torch.exp(-(freqs**2) / (2.0 * sigma**2))
-        return torch.fft.irfft(X * w, n=C, dim=-1)  # type: ignore[no-any-return]
+        return torch.fft.irfft(X * w, n=C, dim=-1)
 
     def _scores(xf: torch.Tensor) -> torch.Tensor:
         d = (x - xf).pow(2).sum(dim=-1)

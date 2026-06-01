@@ -167,7 +167,7 @@ class Workbench:
 
         # ── Per-workbench tracker ────────────────────────────────────
         self.tracker = GPUByteTracker(max_objects=max_tracks * 8)
-        self.stream = torch.cuda.Stream(device=device)  # type: ignore[no-untyped-call]
+        self.stream = torch.cuda.Stream(device=device)
 
         self.proxy = proxy
         if hasattr(self.proxy, "tracker"):
@@ -248,7 +248,7 @@ class Workbench:
                 self.out_det_idx.data_ptr(),
                 self.out_count.data_ptr(),
             )
-            wb_done = torch.cuda.Event()  # type: ignore[no-untyped-call]
+            wb_done = torch.cuda.Event()
             wb_done.record(self.stream)
 
         torch.cuda.current_stream().wait_event(wb_done)
@@ -470,7 +470,7 @@ class Workbench:
         priors_ptr, prior_classes_ptr, num_priors = _ptrs_or_zero_priors(
             priors, prior_classes
         )
-        caller_event = torch.cuda.Event()  # type: ignore[no-untyped-call]
+        caller_event = torch.cuda.Event()
         caller_event.record()
 
         with torch.cuda.stream(self.stream):
@@ -542,7 +542,7 @@ class Workbench:
                 self.out_det_idx.data_ptr(),
                 self.out_count.data_ptr(),
             )
-            wb_done = torch.cuda.Event()  # type: ignore[no-untyped-call]
+            wb_done = torch.cuda.Event()
             wb_done.record(self.stream)
 
         torch.cuda.current_stream().wait_event(wb_done)

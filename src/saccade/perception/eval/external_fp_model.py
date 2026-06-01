@@ -967,7 +967,7 @@ def predict_external_fp_matrix(
         axis=1,
     )
     band_weights = _compute_band_weights(scores, model.band_edges)
-    return np.sum(band_probs * band_weights, axis=1)  # type: ignore[no-any-return]
+    return np.sum(band_probs * band_weights, axis=1)
 
 
 def _rule_keep(row: dict[str, Any], cfg: RuleBaselineConfig) -> bool:

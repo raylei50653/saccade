@@ -9,7 +9,7 @@ from nvidia.dali.pipeline import Pipeline
 from nvidia.dali.plugin.pytorch import DALIGenericIterator
 
 
-class JpgPipe(Pipeline):
+class JpgPipe(Pipeline):  # type: ignore[misc]
     def __init__(
         self, batch_size: int, num_threads: int, device_id: int, files: List[str]
     ):
@@ -33,7 +33,7 @@ class DALIStreamer:
         self.pipe = JpgPipe(
             batch_size=batch_size, num_threads=2, device_id=0, files=files
         )
-        self.pipe.build()  # type: ignore
+        self.pipe.build()
         self.iterator = DALIGenericIterator([self.pipe], ["data"], size=len(files))
 
     def __iter__(self) -> Iterator[Any]:
@@ -61,7 +61,7 @@ class DALIStreamerStream:
                 handle.write(f"{img} 0\n")
             self.file_list_path = handle.name
 
-        class _JpgPipe(Pipeline):
+        class _JpgPipe(Pipeline):  # type: ignore[misc]
             def __init__(self, file_list: str):
                 cast(Any, super()).__init__(1, 4, 0, prefetch_queue_depth=2)
                 self.input = fn.readers.file(file_list=file_list, name="reader")

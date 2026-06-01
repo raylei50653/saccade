@@ -5,7 +5,7 @@ import nvidia.dali.types as types
 from nvidia.dali.pipeline import Pipeline
 
 
-class RTSPDALIPipeline(Pipeline):
+class RTSPDALIPipeline(Pipeline):  # type: ignore[misc]
     def __init__(
         self,
         batch_size: int = 1,
@@ -15,7 +15,7 @@ class RTSPDALIPipeline(Pipeline):
         prefetch_queue_depth: int = 2,
     ) -> None:
         # 增加 prefetch_queue_depth 提高直播流容錯性
-        super().__init__(  # type: ignore[no-untyped-call]
+        super().__init__(
             batch_size,
             num_threads,
             device_id,
@@ -34,11 +34,11 @@ class RTSPDALIPipeline(Pipeline):
             enhanced,
             resize_x=self.output_size,
             resize_y=self.output_size,
-            interp_type=types.INTERP_LINEAR,  # type: ignore[attr-defined]
+            interp_type=types.INTERP_LINEAR,
         )
         normalized = fn.crop_mirror_normalize(
-            resized,  # type: ignore[arg-type]
-            dtype=types.FLOAT,  # type: ignore[attr-defined]
+            resized,
+            dtype=types.FLOAT,
             output_layout="CHW",
             mean=[0.0, 0.0, 0.0],
             std=[255.0, 255.0, 255.0],
@@ -54,7 +54,7 @@ class DALIRTSPOptimizer:
         self.pipeline = RTSPDALIPipeline(
             batch_size=batch_size, device_id=device_id, output_size=output_size
         )
-        self.pipeline.build()  # type: ignore[no-untyped-call]
+        self.pipeline.build()
         self._primed = False
 
     def process(self, tensors: List[torch.Tensor]) -> torch.Tensor:
@@ -71,11 +71,11 @@ class DALIRTSPOptimizer:
         if not self._primed:
             # 預設 prefetch_queue_depth=2，所以我們要先餵入 3 次數據 (2 預取 + 1 當前)
             for _ in range(2):
-                self.pipeline.feed_input("rtsp_raw", tensors)  # type: ignore[no-untyped-call]
+                self.pipeline.feed_input("rtsp_raw", tensors)
             self._primed = True
 
         # 4. 餵入當前數據
-        self.pipeline.feed_input("rtsp_raw", tensors)  # type: ignore[no-untyped-call]
+        self.pipeline.feed_input("rtsp_raw", tensors)
 
         # 5. 執行並取得輸出
         outputs = self.pipeline.run()
