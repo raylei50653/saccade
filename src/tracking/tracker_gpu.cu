@@ -66,6 +66,7 @@ __global__ void predict_kernel(float* states, float* covs, bool* active, int* ag
 }
 
 __global__ void gmc_kernel(float* states, float* covs, bool* active, const float* gmc, int max_objs) {
+    if (!gmc) return;
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= max_objs) return;
     if (active[idx]) {
@@ -1218,6 +1219,9 @@ public:
         h_hit_streak_.resize(max_objs_, 0);
         h_confirm_streak_required_.resize(max_objs_, 0);
         h_score_sum_.resize(max_objs_, 0.0f);
+
+        enable_dda_ = env_flag_enabled("SACCADE_ENABLE_DDA", true);
+        dda_max_cost_ = env_float_value("SACCADE_DDA_MAX_COST", 0.12f);
     }
 
     ~Impl() {
@@ -1294,196 +1298,175 @@ public:
         float* d_boxes, float* d_scores, int* d_classes, int num_dets,
         cudaStream_t stream, float* d_embeddings, float* d_gmc,
         float light_factor, float mid_thresh_scale) {
-        
-        if (num_dets > 0 && enable_quality_scaling_) {
-            int threads = 256;
-            int blocks = (num_dets + threads - 1) / threads;
-            apply_detection_quality_scaling_kernel<<<blocks, threads, 0, stream>>>(
-                d_scores, d_boxes, num_dets, frame_w_, frame_h_,
-                q_w_aspect_, q_w_center_, q_w_area_);
-        }
 
         int threads = 256;
+
+        // Quality scaling: always launch; kernel guards with i < num_dets
+        int blocks_qs = (max_assoc_ + threads - 1) / threads;
+        apply_detection_quality_scaling_kernel<<<blocks_qs, threads, 0, stream>>>(
+            d_scores, d_boxes, num_dets, frame_w_, frame_h_,
+            q_w_aspect_, q_w_center_, q_w_area_);
+
         int blocks = (max_objs_ + threads - 1) / threads;
         predict_kernel<<<blocks, threads, 0, stream>>>(d_states_, d_covs_, d_active_, d_age_, max_objs_, max_age_);
-        if (d_gmc) gmc_kernel<<<blocks, threads, 0, stream>>>(d_states_, d_covs_, d_active_, d_gmc, max_objs_);
 
-        // Phase 2: compute per-track S^-1 from post-predict covariance for Mahalanobis gating
+        gmc_kernel<<<blocks, threads, 0, stream>>>(d_states_, d_covs_, d_active_, d_gmc, max_objs_);
+
         kernel::compute_innovation_sinv_kernel<<<blocks, threads, 0, stream>>>(
             d_states_, d_covs_, d_active_, d_s_inv_, max_objs_);
 
-        if (num_dets > 0) {
-            nvtxRangePushA("Association");
-            dim3 b_size(16, 16);
-            dim3 g_size((num_dets + 15) / 16, (max_objs_ + 15) / 16);
+        // Association: always launch with fixed grid; kernels guard with
+        // idx >= num_dets or tau == 0.
+        nvtxRangePushA("Association");
+        dim3 b_size(16, 16);
+        dim3 g_size((max_assoc_ + 15) / 16, (max_objs_ + 15) / 16);
 
-            // OA-SORT OAO: compute per-track occlusion coefficient from predicted positions
-            if (oao_tau_ > 0.0f) {
-                kernel::compute_track_occlusion_kernel<<<blocks, threads, 0, stream>>>(
-                    d_states_, d_active_, d_occ_coeff_, max_objs_);
-            }
+        kernel::compute_track_occlusion_kernel<<<blocks, threads, 0, stream>>>(
+            d_states_, d_active_, d_occ_coeff_, max_objs_);
 
-            // Stage 1: count candidates passing IoU gate OR Mahalanobis gate
-            nvtxRangePushA("Assoc/CostMatrix");
-            checkCuda(cudaMemsetAsync(d_candidate_count_, 0, max_objs_ * sizeof(int), stream));
-            kernel::count_stage1_candidates_kernel<<<g_size, b_size, 0, stream>>>(
-                d_states_, d_boxes, d_active_, d_candidate_count_,
-                d_s_inv_, d_homography_, max_objs_, num_dets, iou_stage1_gate_, maha_gate_);
+        nvtxRangePushA("Assoc/CostMatrix");
+        checkCuda(cudaMemsetAsync(d_candidate_count_, 0, max_objs_ * sizeof(int), stream));
+        kernel::count_stage1_candidates_kernel<<<g_size, b_size, 0, stream>>>(
+            d_states_, d_boxes, d_active_, d_candidate_count_,
+            d_s_inv_, d_homography_, max_objs_, num_dets, iou_stage1_gate_, maha_gate_);
 
-            // Conditional cost: IoU-only fallback, appearance only for ambiguous + clean tracks
-            kernel::compute_conditional_cost_kernel<<<g_size, b_size, 0, stream>>>(
-                d_states_, d_boxes, d_features_, d_embeddings, d_scores,
-                d_candidate_count_, d_has_clean_embedding_,
-                d_s_inv_, d_homography_, d_cost_matrix_, max_objs_, num_dets, embed_dim_, iou_stage1_gate_, maha_gate_,
-                vel_dir_weight_, fuse_score_weight_,
-                reid_cost_cos_w_, reid_cost_iou_w_, reid_cost_score_w_,
-                reid_cos_threshold_, reid_iou_low_,
-                reid_min_candidates_,
-                oao_tau_ > 0.0f ? d_occ_coeff_ : nullptr, oao_tau_);
-            nvtxRangePop(); // Assoc/CostMatrix
+        kernel::compute_conditional_cost_kernel<<<g_size, b_size, 0, stream>>>(
+            d_states_, d_boxes, d_features_, d_embeddings, d_scores,
+            d_candidate_count_, d_has_clean_embedding_,
+            d_s_inv_, d_homography_, d_cost_matrix_, max_objs_, num_dets, embed_dim_, iou_stage1_gate_, maha_gate_,
+            vel_dir_weight_, fuse_score_weight_,
+            reid_cost_cos_w_, reid_cost_iou_w_, reid_cost_score_w_,
+            reid_cos_threshold_, reid_iou_low_,
+            reid_min_candidates_,
+            oao_tau_ > 0.0f ? d_occ_coeff_ : nullptr, oao_tau_);
+        nvtxRangePop();
 
-            kernel::track_state_update_pre_kernel<<<blocks, threads, 0, stream>>>(
-                d_active_, d_state_, d_hit_streak_, d_confirm_streak_required_, d_score_sum_, max_objs_);
+        kernel::track_state_update_pre_kernel<<<blocks, threads, 0, stream>>>(
+            d_active_, d_state_, d_hit_streak_, d_confirm_streak_required_, d_score_sum_, max_objs_);
 
-            checkCuda(cudaMemsetAsync(d_det_to_trk_, -1, num_dets * sizeof(int), stream));
-            checkCuda(cudaMemsetAsync(d_trk_to_det_, -1, max_objs_ * sizeof(int), stream));
-            const int shmem_auction = num_dets * static_cast<int>(sizeof(uint64_t));
-            dim3 auc_b(32); dim3 auc_g((max_objs_ + 31) / 32);
+        checkCuda(cudaMemsetAsync(d_det_to_trk_, -1, max_assoc_ * sizeof(int), stream));
+        checkCuda(cudaMemsetAsync(d_trk_to_det_, -1, max_objs_ * sizeof(int), stream));
+        const int shmem_auction = max_assoc_ * static_cast<int>(sizeof(uint64_t));
+        dim3 auc_b(32); dim3 auc_g((max_objs_ + 31) / 32);
 
-            const float effective_mid_thresh = std::clamp(
-                mid_thresh_ * std::max(mid_thresh_scale, 0.01f),
-                track_thresh_,
-                high_thresh_
-            );
-            const float effective_new_track_thresh = std::clamp(
-                new_track_thresh_ * std::max(mid_thresh_scale, 0.01f),
-                track_thresh_,
-                high_thresh_
-            );
-            static const bool enable_dda = env_flag_enabled("SACCADE_ENABLE_DDA", true);
-            static const float dda_max_cost = env_float_value("SACCADE_DDA_MAX_COST", 0.12f);
-            const int* matched_det_mask = nullptr;
+        const float effective_mid_thresh = std::clamp(
+            mid_thresh_ * std::max(mid_thresh_scale, 0.01f),
+            track_thresh_,
+            high_thresh_
+        );
+        const int* matched_det_mask = nullptr;
 
-            if (enable_dda) {
-                // Stage 0: Decomposed Data Association (DDA) - Unambiguous Matching
-                // Match isolated/obvious targets first using a very strict cost threshold.
-                nvtxRangePushA("Assoc/S0_Unambiguous");
-                kernel::fused_sinkhorn_topk_kernel<<<max_objs_, 128, 0, stream>>>(
-                    d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
-                    max_objs_, num_dets, 30.0f, dda_max_cost,
-                    high_thresh_, 1.1f, 2,
-                    nullptr,
-                    d_topk_indices_, d_topk_probs_
-                );
-                checkCuda(cudaMemsetAsync(d_auction_prices_, 0, num_dets * sizeof(uint64_t), stream));
-                kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
-                    d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
-                    max_objs_, num_dets, 3, 0.01f);
-                nvtxRangePop(); // Assoc/S0_Unambiguous
-                matched_det_mask = d_det_to_trk_;
-            }
-
-            // Stage 1: High-conf dets -> Confirmed tracks first (D2-C)
-            nvtxRangePushA("Assoc/S1_HiConf");
+        if (enable_dda_) {
+            nvtxRangePushA("Assoc/S0_Unambiguous");
             kernel::fused_sinkhorn_topk_kernel<<<max_objs_, 128, 0, stream>>>(
                 d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
-                max_objs_, num_dets, 30.0f, match_thresh_,
-                high_thresh_, 1.1f, 2, // TRACK_CONFIRMED only
-                matched_det_mask,
-                d_topk_indices_, d_topk_probs_
+                max_objs_, num_dets, 30.0f, dda_max_cost_,
+                high_thresh_, 1.1f, 2,
+                nullptr, d_topk_indices_, d_topk_probs_
             );
-            checkCuda(cudaMemsetAsync(d_auction_prices_, 0, num_dets * sizeof(uint64_t), stream));
+            checkCuda(cudaMemsetAsync(d_auction_prices_, 0, max_assoc_ * sizeof(uint64_t), stream));
             kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
                 d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
                 max_objs_, num_dets, 3, 0.01f);
-            nvtxRangePop(); // Assoc/S1_HiConf
-
-            // Stage 1b: Mid-conf dets -> Unmatched confirmed tracks (D2-C)
-            nvtxRangePushA("Assoc/S1b_MidConf");
-            kernel::fused_sinkhorn_topk_kernel<<<max_objs_, 128, 0, stream>>>(
-                d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
-                max_objs_, num_dets, 30.0f, match_thresh_,
-                effective_mid_thresh, high_thresh_, 2, // TRACK_CONFIRMED only
-                matched_det_mask,
-                d_topk_indices_, d_topk_probs_
-            );
-            checkCuda(cudaMemsetAsync(d_auction_prices_, 0, num_dets * sizeof(uint64_t), stream));
-            kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
-                d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
-                max_objs_, num_dets, 3, 0.01f);
-            nvtxRangePop(); // Assoc/S1b_MidConf
-
-            // Stage 1c: Unmatched high+mid-conf dets -> Tentative tracks (D2-C isolation)
-            nvtxRangePushA("Assoc/S1c_Tentative");
-            kernel::fused_sinkhorn_topk_kernel<<<max_objs_, 128, 0, stream>>>(
-                d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
-                max_objs_, num_dets, 30.0f, match_thresh_,
-                effective_mid_thresh, 1.1f, 1, // TRACK_TENTATIVE only
-                matched_det_mask,
-                d_topk_indices_, d_topk_probs_
-            );
-            checkCuda(cudaMemsetAsync(d_auction_prices_, 0, num_dets * sizeof(uint64_t), stream));
-            kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
-                d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
-                max_objs_, num_dets, 3, 0.01f);
-            nvtxRangePop(); // Assoc/S1c_Tentative
-
-            // Stage 2: Low-conf dets -> Unmatched confirmed tracks only
-            nvtxRangePushA("Assoc/S2_LoConf");
-            kernel::fused_sinkhorn_topk_kernel<<<max_objs_, 128, 0, stream>>>(
-                d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
-                max_objs_, num_dets, 30.0f, stage2_match_thresh_,
-                track_thresh_, effective_mid_thresh, 2, // TRACK_CONFIRMED = 2
-                nullptr,
-                d_topk_indices_, d_topk_probs_
-            );
-            checkCuda(cudaMemsetAsync(d_auction_prices_, 0, num_dets * sizeof(uint64_t), stream));
-            kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
-                d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
-                max_objs_, num_dets, 3, 0.01f);
-            nvtxRangePop(); // Assoc/S2_LoConf
-
-            nvtxRangePushA("Assoc/StateUpdate");
-            kernel::track_state_update_post_kernel<<<blocks, threads, 0, stream>>>(
-                d_active_, d_state_, d_age_, d_scores_, d_classes_,
-                d_hit_streak_, d_confirm_streak_required_, d_score_sum_,
-                d_trk_to_det_, d_scores, d_classes,
-                confirm_streak_, confirm_score_thresh_, max_objs_
-            );
-
-            kernel::inline_kalman_update_kernel<<<blocks, threads, 0, stream>>>(
-                d_states_, d_covs_, d_boxes, d_trk_to_det_, d_active_, max_objs_, light_factor,
-                d_scores, nsa_kalman_, r_scale_
-            );
-            nvtxRangePop(); // Assoc/StateUpdate
-
             nvtxRangePop();
+            matched_det_mask = d_det_to_trk_;
         }
 
-        // M2: GPU spawn new tracks
-        if (num_dets > 0) {
-            const float effective_new_track_thresh = std::clamp(
-                new_track_thresh_ * std::max(mid_thresh_scale, 0.01f),
-                track_thresh_, high_thresh_);
-            cudaMemsetAsync(d_n_free_,      0, sizeof(int), stream);
-            cudaMemsetAsync(d_slot_cursor_, 0, sizeof(int), stream);
-            collect_free_slots_kernel<<<1, 256, 0, stream>>>(
-                d_active_, max_objs_, d_free_slots_, d_n_free_);
-            spawn_new_tracks_kernel<<<1, 256, 0, stream>>>(
-                d_det_to_trk_, d_boxes, d_scores, d_classes, num_dets,
-                effective_new_track_thresh,
-                d_free_slots_, d_n_free_,
-                d_active_, d_states_, d_state_,
-                d_track_ids_, d_age_, d_scores_, d_classes_,
-                d_hit_streak_, d_confirm_streak_required_, d_score_sum_,
-                d_track_id_ctr_, d_slot_cursor_,
-                confirm_streak_, birth_low_score_thresh_,
-                max_objs_, birth_prox_norm_thresh_);
-            init_covariance_if_new_kernel<<<(max_objs_ + 255) / 256, 256, 0, stream>>>(
-                d_active_, d_state_, d_hit_streak_, d_covs_, max_objs_);
-        }
+        nvtxRangePushA("Assoc/S1_HiConf");
+        kernel::fused_sinkhorn_topk_kernel<<<max_objs_, 128, 0, stream>>>(
+            d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
+            max_objs_, num_dets, 30.0f, match_thresh_,
+            high_thresh_, 1.1f, 2,
+            matched_det_mask,
+            d_topk_indices_, d_topk_probs_
+        );
+        checkCuda(cudaMemsetAsync(d_auction_prices_, 0, max_assoc_ * sizeof(uint64_t), stream));
+        kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
+            d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
+            max_objs_, num_dets, 3, 0.01f);
+        nvtxRangePop();
 
-        // M2: GPU compact results — write only confirmed+updated tracks
+        nvtxRangePushA("Assoc/S1b_MidConf");
+        kernel::fused_sinkhorn_topk_kernel<<<max_objs_, 128, 0, stream>>>(
+            d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
+            max_objs_, num_dets, 30.0f, match_thresh_,
+            effective_mid_thresh - 0.001f, 1.1f, 2,
+            d_det_to_trk_,
+            d_topk_indices_, d_topk_probs_
+        );
+        checkCuda(cudaMemsetAsync(d_auction_prices_, 0, max_assoc_ * sizeof(uint64_t), stream));
+        kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
+            d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
+            max_objs_, num_dets, 3, 0.01f);
+        nvtxRangePop();
+
+        nvtxRangePushA("Assoc/S1c_Tentative");
+        kernel::fused_sinkhorn_topk_kernel<<<max_objs_, 128, 0, stream>>>(
+            d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
+            max_objs_, num_dets, 30.0f, match_thresh_,
+            effective_mid_thresh, 1.1f, 1,
+            matched_det_mask,
+            d_topk_indices_, d_topk_probs_
+        );
+        checkCuda(cudaMemsetAsync(d_auction_prices_, 0, max_assoc_ * sizeof(uint64_t), stream));
+        kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
+            d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
+            max_objs_, num_dets, 3, 0.01f);
+        nvtxRangePop();
+
+        nvtxRangePushA("Assoc/S2_LoConf");
+        kernel::fused_sinkhorn_topk_kernel<<<max_objs_, 128, 0, stream>>>(
+            d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
+            max_objs_, num_dets, 30.0f, stage2_match_thresh_,
+            track_thresh_, effective_mid_thresh, 2,
+            nullptr,
+            d_topk_indices_, d_topk_probs_
+        );
+        checkCuda(cudaMemsetAsync(d_auction_prices_, 0, max_assoc_ * sizeof(uint64_t), stream));
+        kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
+            d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
+            max_objs_, num_dets, 3, 0.01f);
+        nvtxRangePop();
+
+        nvtxRangePushA("Assoc/StateUpdate");
+        kernel::track_state_update_post_kernel<<<blocks, threads, 0, stream>>>(
+            d_active_, d_state_, d_age_, d_scores_, d_classes_,
+            d_hit_streak_, d_confirm_streak_required_, d_score_sum_,
+            d_trk_to_det_, d_scores, d_classes,
+            confirm_streak_, confirm_score_thresh_, max_objs_
+        );
+
+        kernel::inline_kalman_update_kernel<<<blocks, threads, 0, stream>>>(
+            d_states_, d_covs_, d_boxes, d_trk_to_det_, d_active_, max_objs_, light_factor,
+            d_scores, nsa_kalman_, r_scale_
+        );
+        nvtxRangePop();
+
+        nvtxRangePop();
+
+        // Spawn: always launch; kernels guard with idx >= num_dets or
+        // free slots exhausted.
+        const float effective_new_track_thresh_spawn = std::clamp(
+            new_track_thresh_ * std::max(mid_thresh_scale, 0.01f),
+            track_thresh_, high_thresh_);
+        cudaMemsetAsync(d_n_free_,      0, sizeof(int), stream);
+        cudaMemsetAsync(d_slot_cursor_, 0, sizeof(int), stream);
+        collect_free_slots_kernel<<<1, 256, 0, stream>>>(
+            d_active_, max_objs_, d_free_slots_, d_n_free_);
+        spawn_new_tracks_kernel<<<1, 256, 0, stream>>>(
+            d_det_to_trk_, d_boxes, d_scores, d_classes, num_dets,
+            effective_new_track_thresh_spawn,
+            d_free_slots_, d_n_free_,
+            d_active_, d_states_, d_state_,
+            d_track_ids_, d_age_, d_scores_, d_classes_,
+            d_hit_streak_, d_confirm_streak_required_, d_score_sum_,
+            d_track_id_ctr_, d_slot_cursor_,
+            confirm_streak_, birth_low_score_thresh_,
+            max_objs_, birth_prox_norm_thresh_);
+        init_covariance_if_new_kernel<<<(max_objs_ + 255) / 256, 256, 0, stream>>>(
+            d_active_, d_state_, d_hit_streak_, d_covs_, max_objs_);
+
+        // Compact: always launch
         cudaMemsetAsync(d_res_count_, 0, sizeof(int), stream);
         compact_results_kernel<<<1, 256, 0, stream>>>(
             d_active_, d_state_, d_age_,
@@ -1491,8 +1474,8 @@ public:
             d_trk_to_det_, max_objs_,
             d_res_boxes_, d_res_scores_, d_res_ids_, d_res_classes_, d_res_det_idx_,
             d_res_count_);
-        h_dirty_ = true;           // host arrays are stale until next lazy sync
-        h_slot_map_dirty_ = true;  // tid→slot map must be rebuilt before next scatter
+        h_dirty_ = true;
+        h_slot_map_dirty_ = true;
     }
 
     void set_params(float track_thresh, float high_thresh, float match_thresh, int track_buffer,
@@ -1840,6 +1823,8 @@ private:
     float birth_low_score_thresh_ = 0.0f;
     float birth_prox_norm_thresh_ = 0.0f;
     float oao_tau_ = 0.0f;
+    bool enable_dda_ = false;
+    float dda_max_cost_ = 0.12f;
     float *d_states_, *d_covs_, *d_scores_, *d_features_;
     float* d_occ_coeff_ = nullptr;
     float *d_cost_matrix_, *d_sinkhorn_v_, *d_topk_probs_;

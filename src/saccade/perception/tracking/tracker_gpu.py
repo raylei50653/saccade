@@ -803,3 +803,167 @@ class GPUByteTracker:
             [bank_reps[tid] for tid in valid_tids]
         ).cuda()  # [n, D] GPU
         self._bank_slot_features[slots] = stacked
+
+
+class GraphedTrackerUpdate:
+    """CUDA-graph-captured ``update_into`` for the GPU byte tracker.
+
+    Pre-allocates fixed-size input/output buffers (box/scores padded to
+    ``max_assoc``) and lazy-captures the C++ :meth:`update_into` call via
+    :func:`torch.cuda.make_graphed_callables`.  The tracker's
+    ``run_update_device`` has been modified to always launch every kernel
+    with fixed grids — zero-padded detection slots are naturally filtered
+    by score/IoU gates inside the kernels.
+
+    Usage::
+
+        gtu = GraphedTrackerUpdate(tracker, max_assoc=1024)
+        # Per frame:
+        gtu.copy_inputs(boxes, scores, classes, gmc)
+        result = gtu.replay()
+        gtu.read_outputs(boxes_out, scores_out, ...)  # or use result dict
+    """
+
+    def __init__(
+        self,
+        tracker: GPUByteTracker,
+        max_assoc: int = 1024,
+        max_objs: int = 2048,
+    ):
+        self._tracker = tracker
+        self._max_assoc = max_assoc
+        self._max_objs = max_objs
+
+        device = torch.device("cuda")
+
+        self.d_boxes = torch.zeros(max_assoc, 4, dtype=torch.float32, device=device)
+        self.d_scores = torch.zeros(max_assoc, dtype=torch.float32, device=device)
+        self.d_classes = torch.zeros(max_assoc, dtype=torch.int32, device=device)
+        self.d_gmc = (
+            torch.eye(3, dtype=torch.float32, device=device).flatten()[:9].contiguous()
+        )
+
+        self.out_boxes = torch.zeros(max_objs, 4, dtype=torch.float32, device=device)
+        self.out_scores = torch.zeros(max_objs, dtype=torch.float32, device=device)
+        self.out_ids = torch.zeros(max_objs, dtype=torch.int32, device=device)
+        self.out_classes = torch.zeros(max_objs, dtype=torch.int32, device=device)
+        self.out_det_idx = torch.zeros(max_objs, dtype=torch.int32, device=device)
+        self.out_count = torch.zeros((), dtype=torch.int32, device=device)
+
+        self._graphed_callable = None
+
+    def _warmup(self) -> None:
+        with torch.no_grad():
+            stream = torch.cuda.current_stream().cuda_stream
+            self._tracker.tracker.update_into(
+                self.d_boxes.data_ptr(),
+                self.d_scores.data_ptr(),
+                self.d_classes.data_ptr(),
+                self._max_assoc,
+                stream,
+                self.out_boxes.data_ptr(),
+                self.out_scores.data_ptr(),
+                self.out_ids.data_ptr(),
+                self.out_classes.data_ptr(),
+                self.out_det_idx.data_ptr(),
+                self.out_count.data_ptr(),
+                0,
+                self.d_gmc.data_ptr(),
+                0.0,
+                1.0,
+            )
+            torch.cuda.synchronize()
+
+    def _capture(self) -> None:
+        if self._graphed_callable is not None:
+            return
+        self._warmup()
+
+        def _graph_fn(
+            boxes: torch.Tensor,
+            scores: torch.Tensor,
+            classes: torch.Tensor,
+            d_gmc: torch.Tensor,
+            out_boxes: torch.Tensor,
+            out_scores: torch.Tensor,
+            out_ids: torch.Tensor,
+            out_classes: torch.Tensor,
+            out_det_idx: torch.Tensor,
+            out_count: torch.Tensor,
+        ) -> tuple[torch.Tensor, ...]:
+            tracker_cpp = self._tracker.tracker
+            stream = torch.cuda.current_stream().cuda_stream
+            tracker_cpp.update_into(
+                boxes.data_ptr(),
+                scores.data_ptr(),
+                classes.data_ptr(),
+                self._max_assoc,
+                stream,
+                out_boxes.data_ptr(),
+                out_scores.data_ptr(),
+                out_ids.data_ptr(),
+                out_classes.data_ptr(),
+                out_det_idx.data_ptr(),
+                out_count.data_ptr(),
+                0,
+                d_gmc.data_ptr(),
+                0.0,
+                1.0,
+            )
+            return (out_boxes, out_scores, out_ids, out_classes, out_det_idx, out_count)
+
+        sample = (
+            self.d_boxes,
+            self.d_scores,
+            self.d_classes,
+            self.d_gmc,
+            self.out_boxes,
+            self.out_scores,
+            self.out_ids,
+            self.out_classes,
+            self.out_det_idx,
+            self.out_count,
+        )
+        self._graphed_callable = torch.cuda.make_graphed_callables(_graph_fn, sample)
+
+    def copy_inputs(
+        self,
+        boxes: torch.Tensor,
+        scores: torch.Tensor,
+        classes: torch.Tensor,
+        gmc: torch.Tensor | None = None,
+    ) -> None:
+        n = min(boxes.shape[0], self._max_assoc)
+        self.d_boxes.zero_()
+        self.d_scores.zero_()
+        self.d_classes.zero_()
+        if n > 0:
+            self.d_boxes[:n].copy_(boxes[:n].float())
+            self.d_scores[:n].copy_(scores[:n].float())
+            self.d_classes[:n].copy_(classes[:n].int())
+        if gmc is not None:
+            self.d_gmc.copy_(gmc.flatten()[:9].float().contiguous())
+
+    def replay(self) -> dict[str, torch.Tensor]:
+        if self._graphed_callable is None:
+            self._capture()
+        self._graphed_callable(
+            self.d_boxes,
+            self.d_scores,
+            self.d_classes,
+            self.d_gmc,
+            self.out_boxes,
+            self.out_scores,
+            self.out_ids,
+            self.out_classes,
+            self.out_det_idx,
+            self.out_count,
+        )
+        return {
+            "boxes": self.out_boxes,
+            "scores": self.out_scores,
+            "ids": self.out_ids,
+            "classes": self.out_classes,
+            "det_idx": self.out_det_idx,
+            "count": self.out_count,
+        }
