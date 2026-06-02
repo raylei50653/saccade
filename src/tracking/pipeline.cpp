@@ -90,10 +90,10 @@ void PerceptionPipeline::ensure_scratch(int n_dets, cudaStream_t /*stream*/) {
     cudaMalloc(&d_compact_scores_,  cap * sizeof(float));
     cudaMalloc(&d_compact_classes_, cap * sizeof(int));
     cudaMalloc(&d_compact_suspect_, cap * sizeof(bool));
+    // sort keys buffers
     cudaMalloc(&d_sort_keys_in_,    cap * sizeof(uint64_t));
     cudaMalloc(&d_sort_keys_out_,   cap * sizeof(uint64_t));
 
-    // Query CUB temp storage required for argsort of `cap` elements
     size_t new_tmp = argsort_scores_descending_bytes(cap);
     if (new_tmp > cub_sort_tmp_bytes_) {
         if (d_cub_sort_tmp_) cudaFree(d_cub_sort_tmp_);
@@ -206,32 +206,10 @@ void PerceptionPipeline::process_detections_into(
             last_postprocess_profile_stats_.native_filter_kernel_ms,
             launch_filter_kernel
         );
-        measure_gpu_stage(
-            stream,
-            last_postprocess_profile_stats_.native_gather_compact3_ms,
-            launch_gather_compact3
-        );
-        measure_gpu_stage(
-            stream,
-            last_postprocess_profile_stats_.native_copy_suspect_ms,
-            launch_copy_suspect
-        );
-        last_postprocess_profile_stats_.native_filter_gather_ms =
-            last_postprocess_profile_stats_.native_filter_kernel_ms
-            + last_postprocess_profile_stats_.native_gather_compact3_ms
-            + last_postprocess_profile_stats_.native_copy_suspect_ms;
     } else {
         launch_filter_kernel();
-        launch_gather_compact3();
-        launch_copy_suspect();
     }
 
-    // Optimized path: merged filter+compact+sort+NMS (#3) with grid spatial culling (#1,#2)
-    // For small counts (<=64), uses compact_grid_nms_cuda which:
-    //   - Single kernel replaces filter+gather+sort+NMS (#3)
-    //   - Grid Manhattan distance pre-filter skips non-overlapping IoU (#1)
-    //   - Grid AABB pre-check before exact IoU (#2)
-    //   - No immunity_mask branch in compact path (#5)
     int filter_count = 0;
     const Clock::time_point filter_count_sync_start = profile_post ? Clock::now() : Clock::time_point{};
     cudaMemcpyAsync(&filter_count, d_filter_count_, sizeof(int),
@@ -289,6 +267,14 @@ void PerceptionPipeline::process_detections_into(
     const Clock::time_point nms_start = profile_post ? Clock::now() : Clock::time_point{};
 
     if (filter_count <= 64) {
+        // Small path: skip gather/copy — compact_grid_nms reads raw data
+        // via keep_indices and writes final output in one merged kernel.
+        if (profile_post) {
+            last_postprocess_profile_stats_.native_gather_compact3_ms = 0.0;
+            last_postprocess_profile_stats_.native_copy_suspect_ms = 0.0;
+            last_postprocess_profile_stats_.native_filter_gather_ms =
+                last_postprocess_profile_stats_.native_filter_kernel_ms;
+        }
         auto launch_small_nms = [&] {
             compact_grid_nms_cuda(
                 boxes_ptr, scores_ptr, classes_ptr,
@@ -308,7 +294,26 @@ void PerceptionPipeline::process_detections_into(
             launch_small_nms();
         }
     } else {
-        // Large count: use original bitmask NMS pipeline
+        // Large path: gather+copied arrays needed for CUB sort + bitmask NMS.
+        if (profile_post) {
+            measure_gpu_stage(
+                stream,
+                last_postprocess_profile_stats_.native_gather_compact3_ms,
+                launch_gather_compact3
+            );
+            measure_gpu_stage(
+                stream,
+                last_postprocess_profile_stats_.native_copy_suspect_ms,
+                launch_copy_suspect
+            );
+            last_postprocess_profile_stats_.native_filter_gather_ms =
+                last_postprocess_profile_stats_.native_filter_kernel_ms
+                + last_postprocess_profile_stats_.native_gather_compact3_ms
+                + last_postprocess_profile_stats_.native_copy_suspect_ms;
+        } else {
+            launch_gather_compact3();
+            launch_copy_suspect();
+        }
         const int col_blocks = (n_in + 63) / 64;
         cudaMemsetAsync(d_nms_suppression_, 0, (size_t)n_in * col_blocks * sizeof(uint64_t), stream);
         cudaMemsetAsync(d_nms_remv_, 0, col_blocks * sizeof(uint64_t), stream);
