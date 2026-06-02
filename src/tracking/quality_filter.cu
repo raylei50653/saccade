@@ -1,5 +1,6 @@
 #include "tracking/quality_filter.cuh"
 #include <cuda_runtime.h>
+#include <cub/cub.cuh>
 #include <cmath>
 
 namespace saccade {
@@ -137,21 +138,6 @@ __global__ static void fp_keep_mask_kernel(
     keep_mask[i] = 1;
 }
 
-// Phase 2: prefix-sum scan (exclusive) — single-warp sequential for small N
-// For N <= 2048 (typical post-NMS count), one block is fine.
-__global__ static void prefix_sum_kernel(const int* in, int* out, int* total, int n) {
-    // single-thread sequential scan in shared memory
-    extern __shared__ int s[];
-    if (threadIdx.x == 0) {
-        int sum = 0;
-        for (int i = 0; i < n; ++i) {
-            s[i] = sum;
-            sum += in[i];
-        }
-        *total = sum;
-        for (int i = 0; i < n; ++i) out[i] = s[i];
-    }
-}
 
 // Phase 3: scatter kept elements
 __global__ static void fp_scatter_kernel(
@@ -199,10 +185,18 @@ int fp_hard_filter(
     fp_keep_mask_kernel<<<blocks, threads, 0, stream>>>(
         boxes_in, scores_in, n, min_score, max_area, max_suspicious_score, d_keep);
 
-    // Phase 2: prefix sum — single block, shared mem = n * sizeof(int)
-    // Safe for N up to ~8KB / 4 = 2048, which covers all post-NMS outputs.
-    prefix_sum_kernel<<<1, 1, (size_t)n * sizeof(int), stream>>>(
-        d_keep, d_prefix, d_total, n);
+    // Phase 2: CUB exclusive prefix sum (no shared-memory size limit)
+    {
+        size_t scan_bytes = 0, reduce_bytes = 0;
+        cub::DeviceScan::ExclusiveSum(nullptr, scan_bytes,   d_keep, d_prefix, n, stream);
+        cub::DeviceReduce::Sum(nullptr,        reduce_bytes, d_keep, d_total,  n, stream);
+        size_t temp_bytes = std::max(scan_bytes, reduce_bytes);
+        void* d_cub_tmp = nullptr;
+        cudaMallocAsync(&d_cub_tmp, temp_bytes, stream);
+        cub::DeviceScan::ExclusiveSum(d_cub_tmp, scan_bytes,   d_keep, d_prefix, n, stream);
+        cub::DeviceReduce::Sum(d_cub_tmp,        reduce_bytes, d_keep, d_total,  n, stream);
+        cudaFreeAsync(d_cub_tmp, stream);
+    }
 
     // Phase 3: scatter
     fp_scatter_kernel<<<blocks, threads, 0, stream>>>(

@@ -1862,6 +1862,13 @@ def run_eval(
             device=pool.frame_buffer.device
         )
 
+        gtu: Any = None
+        if cfg.kwargs.get("use_tracker_graph", False):
+            from saccade.perception.tracking.tracker_gpu import GraphedTrackerUpdate
+
+            gtu = GraphedTrackerUpdate(detector.tracker)
+            print(f"🕯️ [TrackerGraph] Captured tracker update for seq {seq}")
+
         # Inter-frame pipelining: relink_write for frame N runs in background while
         # frame N+1 runs detect+postprocess on the main thread. All GPU tensors are
         # pre-materialized to CPU before submit to avoid CUDA stream conflicts.
@@ -2258,6 +2265,7 @@ def run_eval(
                     ),
                     sync_cuda=True,
                 )
+
                 (
                     (
                         fused_boxes,
@@ -3648,9 +3656,6 @@ def run_eval(
                         local_gmc_uncertain = False
                         _raw_warp = None
                         # A4: foreground mask — zero out current-frame detection regions before FFT.
-                        # Using current-frame fused_boxes gives accurate positions; the stored
-                        # d_prev_gray_ is also the masked version, so both frames in the
-                        # correlation are background-only on the next call.
                         if cfg.gmc_fg_mask and hasattr(
                             gmc_estimator, "set_fg_mask_boxes"
                         ):
@@ -3741,20 +3746,37 @@ def run_eval(
                     _reid_side_pending = False
                     _reid_frame_hwc_ref = None
 
-                _, _ = time_stage(
-                    seq_stage_totals,
-                    "track",
-                    lambda: detector.tracker.update_into(
+                if gtu is not None:
+                    gtu.copy_inputs(
                         fused_boxes,
                         fused_scores,
                         fused_classes.to(torch.int32),
-                        tracker_result_buffers,
-                        embeddings=embeddings if cfg.use_tracker_reid else None,
                         gmc=gmc_warp,
-                        mid_thresh_scale=mid_thresh_scale,
-                    ),
-                    sync_cuda=True,
-                )
+                    )
+                    # replay() returns gtu.out_* tensors directly; use them as
+                    # tracker_result_buffers to skip the extra D2D copy + item() sync
+                    # that read_outputs() would introduce.
+                    tracker_result_buffers, _ = time_stage(
+                        seq_stage_totals,
+                        "track",
+                        lambda: gtu.replay(),
+                        sync_cuda=True,
+                    )
+                else:
+                    _, _ = time_stage(
+                        seq_stage_totals,
+                        "track",
+                        lambda: detector.tracker.update_into(
+                            fused_boxes,
+                            fused_scores,
+                            fused_classes.to(torch.int32),
+                            tracker_result_buffers,
+                            embeddings=embeddings if cfg.use_tracker_reid else None,
+                            gmc=gmc_warp,
+                            mid_thresh_scale=mid_thresh_scale,
+                        ),
+                        sync_cuda=True,
+                    )
                 track_results, _ = time_stage(
                     seq_stage_totals,
                     "materialize",

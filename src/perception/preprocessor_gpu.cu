@@ -63,10 +63,11 @@ __global__ void batch_crop_resize_kernel(
         float dx = sx - x_low;
         float dy = sy - y_low;
 
+        // src is CHW float (output of normalize_chw_kernel)
         auto get_pixel = [&](int px, int py, int c) {
             px = max(0, min(px, src_w - 1));
             py = max(0, min(py, src_h - 1));
-            return src[(py * src_w + px) * 3 + c];
+            return src[c * src_h * src_w + py * src_w + px];
         };
 
         float* dst_ptr = dst + box_idx * (3 * crop_w * crop_h);

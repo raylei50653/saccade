@@ -51,27 +51,14 @@ __global__ void selective_scan_fwd_kernel(
 
         __syncthreads();
 
-        // Reduction across N threads (warp-level for N ≤ 32)
-        if (N <= 32) {
-            if (n == 0) {
-                float acc = 0.0f;
-                #pragma unroll
-                for (int k = 0; k < N; k++) {
-                    acc += y_shared[k];
-                }
-                y[((b * L + t) * D_dim) + d] = static_cast<T>(acc);
-            }
-        } else {
-            // Block-level reduction for larger N
-            for (int stride = N / 2; stride > 0; stride >>= 1) {
-                if (n < stride) {
-                    y_shared[n] += y_shared[n + stride];
-                }
-                __syncthreads();
-            }
-            if (n == 0) {
-                y[((b * L + t) * D_dim) + d] = static_cast<T>(y_shared[0]);
-            }
+        // Reduction across N threads.
+        // Tree reduction is only correct for N that is a power of 2; use the
+        // sequential path for all N to stay correct for any state-size config.
+        __syncthreads();
+        if (n == 0) {
+            float acc = 0.0f;
+            for (int k = 0; k < N; k++) acc += y_shared[k];
+            y[((b * L + t) * D_dim) + d] = static_cast<T>(acc);
         }
         __syncthreads();
     }

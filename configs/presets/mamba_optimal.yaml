@@ -22,6 +22,11 @@ fpn_backbone_engine: models/yolo/yolo26s_backbone_640_best.engine
 # See docs/research/pipeline/mamba_head_cuda_graph_eval_bug_20260602.md.
 use_cuda_graph: true
 
+# CUDA-graph capture of the GPU tracker (run_update_device with fixed
+# max_assoc_ grids). Experimental — defaults off until full MOTA parity
+# validation.
+use_tracker_graph: false
+
 # --- GMC ---
 # Highly critical when match_thresh is low to compensate for camera motion
 gmc: true

@@ -25,6 +25,7 @@ fpn_backbone_engine: models/yolo/yolo26s_backbone_640_best.engine
 # enabled simultaneously but the whole-graph path takes priority.
 use_whole_graph: true
 use_cuda_graph: true
+use_tracker_graph: true
 
 # --- GMC ---
 gmc: true

@@ -148,6 +148,36 @@ public:
         float prior_iou_threshold,
         cudaStream_t stream);
 
+    /**
+     * @brief Sync-free variant of process_detections_n.
+     *
+     * Runs the same filter + NMS pipeline but skips both D2H count syncs
+     * (filter_count path-selection and final n_post read).  Output buffers
+     * are always n_in elements: valid detections are compacted to the front,
+     * remaining slots are zero-padded by the gather kernels.  Returns n_in
+     * (the raw input count) so the caller can use a fixed-size tensor.
+     *
+     * Callers MUST NOT slice output by the returned count; instead rely on
+     * the tracker's score gate (track_thresh > 0) to ignore zero-score slots.
+     * This allows a direct feed into GraphedTrackerUpdate without a CPU sync.
+     */
+    int process_detections_n_fixed(
+        const float* boxes_ptr,
+        const float* scores_ptr,
+        const int*   classes_ptr,
+        int n_in,
+        int frame_w, int frame_h,
+        bool is_tiled,
+        float* out_boxes,
+        float* out_scores,
+        int*   out_classes,
+        bool*  out_suspect,
+        const float* priors_ptr,
+        const int* prior_classes_ptr,
+        int num_priors,
+        float prior_iou_threshold,
+        cudaStream_t stream);
+
     const Config& get_config() const { return cfg_; }
 
     /**

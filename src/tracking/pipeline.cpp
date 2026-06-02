@@ -473,6 +473,47 @@ int PerceptionPipeline::process_detections_n(
     return n_post;
 }
 
+int PerceptionPipeline::process_detections_n_fixed(
+    const float* boxes_ptr,
+    const float* scores_ptr,
+    const int*   classes_ptr,
+    int n_in,
+    int frame_w, int frame_h,
+    bool is_tiled,
+    float* out_boxes,
+    float* out_scores,
+    int*   out_classes,
+    bool*  out_suspect,
+    const float* priors_ptr,
+    const int* prior_classes_ptr,
+    int num_priors,
+    float prior_iou_threshold,
+    cudaStream_t stream)
+{
+    if (n_in <= 0) return 0;
+
+    // Run the same filter+NMS pipeline as process_detections_into, which includes
+    // the filter_count D2H sync used for small/large path selection and NMS efficiency.
+    // The gather_compact*_counted kernels already zero-pad output beyond the actual
+    // post-NMS count, so no additional work is needed.
+    // The ONLY difference from process_detections_n: we skip the final n_post D2H read
+    // and return n_in (fixed size) instead of the actual post-NMS count.
+    int* d_count_staging = d_filter_count_;
+    cudaMemsetAsync(d_count_staging, 0, sizeof(int), stream);
+    process_detections_into(
+        boxes_ptr, scores_ptr, classes_ptr, n_in,
+        frame_w, frame_h, is_tiled,
+        out_boxes, out_scores, out_classes, out_suspect,
+        d_count_staging,
+        priors_ptr, prior_classes_ptr, num_priors, prior_iou_threshold,
+        stream);
+
+    // Output layout: [0..n_nms_survived] valid, [n_nms_survived+1..n_in-1] zero-padded.
+    // Caller feeds this directly to GraphedTrackerUpdate; zero-score slots are gated
+    // by track_thresh inside the tracker kernels without any CPU synchronisation.
+    return n_in;
+}
+
 void PerceptionPipeline::extract_reid(
     const float* frame_ptr, int frame_h, int frame_w,
     const float* boxes_ptr, int n_boxes,

@@ -1969,15 +1969,22 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             if (warp.empty()) return py::none().cast<py::object>();
             return py::cast(warp);
         }, py::arg("frame_ptr"), py::arg("width"), py::arg("height"), py::arg("stream_ptr"), py::arg("use_gpu_phase_corr") = true)
-        .def("estimate_into", [](GMC& self, uintptr_t frame_ptr, int width, int height, uintptr_t stream_ptr, uintptr_t out_warp_ptr, bool use_gpu_phase_corr) {
+        .def("estimate_into", [](GMC& self, uintptr_t frame_ptr, int width, int height,
+                                  uintptr_t stream_ptr, uintptr_t out_warp_ptr,
+                                  bool use_gpu_phase_corr, bool sync_caller_stream) {
+            py::gil_scoped_release release;
             self.estimate_into(
                 reinterpret_cast<const float*>(frame_ptr),
-                width,
-                height,
+                width, height,
                 reinterpret_cast<cudaStream_t>(stream_ptr),
                 reinterpret_cast<float*>(out_warp_ptr),
-                use_gpu_phase_corr);
-        }, py::arg("frame_ptr"), py::arg("width"), py::arg("height"), py::arg("stream_ptr"), py::arg("out_warp_ptr"), py::arg("use_gpu_phase_corr") = true)
+                use_gpu_phase_corr, sync_caller_stream);
+        }, py::arg("frame_ptr"), py::arg("width"), py::arg("height"),
+           py::arg("stream_ptr"), py::arg("out_warp_ptr"),
+           py::arg("use_gpu_phase_corr") = true, py::arg("sync_caller_stream") = true)
+        .def("sync_to_stream", [](GMC& self, uintptr_t stream_ptr) {
+            self.sync_to_stream(reinterpret_cast<cudaStream_t>(stream_ptr));
+        }, py::arg("stream_ptr"))
         .def("estimate_mat", [](GMC& self, py::array_t<uint8_t> frame, int downscale) {
             py::buffer_info info = frame.request();
             if (info.ndim != 2 && info.ndim != 3) {
@@ -2367,6 +2374,39 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
                uintptr_t stream_ptr) -> int {
                 py::gil_scoped_release release;
                 return self.process_detections_n(
+                    reinterpret_cast<const float*>(boxes_ptr),
+                    reinterpret_cast<const float*>(scores_ptr),
+                    reinterpret_cast<const int*>(classes_ptr),
+                    n_in, frame_w, frame_h, is_tiled,
+                    reinterpret_cast<float*>(out_boxes),
+                    reinterpret_cast<float*>(out_scores),
+                    reinterpret_cast<int*>(out_classes),
+                    reinterpret_cast<bool*>(out_suspect),
+                    reinterpret_cast<const float*>(priors_ptr),
+                    reinterpret_cast<const int*>(prior_classes_ptr),
+                    num_priors, prior_iou_threshold,
+                    reinterpret_cast<cudaStream_t>(stream_ptr));
+            },
+            py::arg("boxes_ptr"), py::arg("scores_ptr"), py::arg("classes_ptr"),
+            py::arg("n_in"), py::arg("frame_w"), py::arg("frame_h"),
+            py::arg("is_tiled"),
+            py::arg("out_boxes"), py::arg("out_scores"), py::arg("out_classes"),
+            py::arg("out_suspect"),
+            py::arg("priors_ptr") = 0, py::arg("prior_classes_ptr") = 0,
+            py::arg("num_priors") = 0, py::arg("prior_iou_threshold") = 0.50f,
+            py::arg("stream_ptr"))
+        .def("process_detections_n_fixed",
+            [](PerceptionPipeline& self,
+               uintptr_t boxes_ptr, uintptr_t scores_ptr, uintptr_t classes_ptr,
+               int n_in, int frame_w, int frame_h, bool is_tiled,
+               uintptr_t out_boxes, uintptr_t out_scores, uintptr_t out_classes,
+               uintptr_t out_suspect,
+               uintptr_t priors_ptr, uintptr_t prior_classes_ptr,
+               int num_priors, float prior_iou_threshold,
+               uintptr_t stream_ptr) -> int {
+                // GIL released: all work is async GPU + D2D, no CPU sync.
+                py::gil_scoped_release release;
+                return self.process_detections_n_fixed(
                     reinterpret_cast<const float*>(boxes_ptr),
                     reinterpret_cast<const float*>(scores_ptr),
                     reinterpret_cast<const int*>(classes_ptr),

@@ -381,11 +381,20 @@ __global__ void stage1_cost_fused_kernel(
         iou_cost_val = fminf(1.0f, iou_cost_val + oao_tau * d_occ_coeff[t]);
 
     if (vel_dir_weight > 0.0f) {
-        float vx = st[4], vy = st[5], det_vx = st[0] - st[2] * 0.5f;
-        (void)det_vx;
+        float vx = st[4], vy = st[5];
+        float vel_sq = vx * vx + vy * vy;
+        if (vel_sq > 1.0f) {
+            float det_cx = (b2[0] + b2[2]) * 0.5f, det_cy = (b2[1] + b2[3]) * 0.5f;
+            float dx = det_cx - st[0], dy = det_cy - st[1];
+            float dist_sq = dx * dx + dy * dy;
+            if (dist_sq > 1e-6f) {
+                float cos_dir = (vx * dx + vy * dy) / sqrtf(vel_sq * dist_sq);
+                iou_cost_val += vel_dir_weight * fmaxf(0.0f, -cos_dir);
+            }
+        }
     }
 
-    *cost = iou_cost_val;
+    *cost = fminf(1.0f, iou_cost_val);
 }
 __global__ void compute_conditional_cost_kernel(
     const float* trk_states, const float* det_boxes,
@@ -631,6 +640,7 @@ __global__ void fused_sinkhorn_topk_kernel(
 __global__ void parallel_auction_shmem_kernel(
     const int* topk_indices, const float* topk_probs,
     uint64_t* g_prices, int* trk_to_det, int* det_to_trk,
+    int* pending_det, uint64_t* pending_bid,
     int n_trk, int n_det, int K, float epsilon)
 {
     extern __shared__ uint64_t s_prices_u64[];
@@ -663,7 +673,7 @@ __global__ void parallel_auction_shmem_kernel(
                                                     : (best_val - second_best_val + epsilon);
             float current_price = __int_as_float((int)(s_prices_u64[best_det] >> 32));
             bid = current_price + inc;
-            
+
             uint32_t bid_float_bits = __float_as_uint(bid);
             uint32_t tie_breaker = n_trk - t;
             uint64_t bid_u64 = ((uint64_t)bid_float_bits << 32) | (uint64_t)tie_breaker;
@@ -674,19 +684,39 @@ __global__ void parallel_auction_shmem_kernel(
     }
     __syncthreads();
 
-    // Level 2: block winner commits to global memory
+    // Level 2: block winner commits bid to global prices.
+    // Assignments are written by commit_auction_results_kernel after all blocks
+    // finish, avoiding the inter-block race where two winners write det_to_trk
+    // in undefined order and create an inconsistent trk_to_det/det_to_trk pair.
     if (best_det >= 0) {
         uint32_t bid_float_bits = __float_as_uint(bid);
         uint32_t tie_breaker = n_trk - t;
         uint64_t bid_u64 = ((uint64_t)bid_float_bits << 32) | (uint64_t)tie_breaker;
 
         if (s_prices_u64[best_det] == bid_u64) {
-            unsigned long long prev = atomicMax((unsigned long long*)&g_prices[best_det], (unsigned long long)bid_u64);
-            if (bid_u64 > prev) {
-                trk_to_det[t] = best_det;
-                det_to_trk[best_det] = t;
-            }
+            atomicMax((unsigned long long*)&g_prices[best_det], (unsigned long long)bid_u64);
+            pending_det[t]  = best_det;
+            pending_bid[t]  = bid_u64;
         }
+    }
+}
+
+// Resolves auction results after all blocks have committed bids to g_prices.
+// bid_u64 encodes (price_float_bits << 32 | tie_breaker), making it globally
+// unique per track — so exactly one track satisfies g_prices[d] == pending_bid[t].
+__global__ void commit_auction_results_kernel(
+    const uint64_t* g_prices,
+    const int* pending_det, const uint64_t* pending_bid,
+    int* trk_to_det, int* det_to_trk,
+    int n_trk)
+{
+    int t = blockIdx.x * blockDim.x + threadIdx.x;
+    if (t >= n_trk) return;
+    int d = pending_det[t];
+    if (d < 0) return;
+    if (g_prices[d] == pending_bid[t]) {
+        trk_to_det[t] = d;
+        det_to_trk[d] = t;
     }
 }
 
@@ -832,7 +862,8 @@ __global__ void spawn_new_tracks_kernel(
     int chunk = (n_det + 255) / 256;
     if (chunk < 1) chunk = 1;
 
-    int local_dets[2];
+    // 8 slots handles up to 2048 detections with 256 threads (chunk ≤ 8).
+    int local_dets[8];
     int local_count = 0;
 
     int start_d = tid * chunk;
@@ -864,10 +895,8 @@ __global__ void spawn_new_tracks_kernel(
             if (too_close) valid = false;
         }
 
-        if (valid) {
-            if (local_count < 2) {
-                local_dets[local_count++] = d;
-            }
+        if (valid && local_count < 8) {
+            local_dets[local_count++] = d;
         }
     }
 
@@ -1279,6 +1308,10 @@ public:
         checkCuda(cudaMalloc(&d_occ_coeff_, max_objs_ * sizeof(float)));
         checkCuda(cudaMemset(d_occ_coeff_, 0, max_objs_ * sizeof(float)));
 
+        // Auction pending buffers (used by commit_auction_results_kernel)
+        checkCuda(cudaMalloc(&d_pending_det_, max_objs_ * sizeof(int)));
+        checkCuda(cudaMalloc(&d_pending_bid_, max_objs_ * sizeof(uint64_t)));
+
         // M2: GPU spawn + compact result buffers
         checkCuda(cudaMalloc(&d_free_slots_,    max_objs_ * sizeof(int)));
         checkCuda(cudaMalloc(&d_n_free_,        sizeof(int)));
@@ -1337,6 +1370,7 @@ public:
         cudaFree(d_s_inv_);
         cudaFree(d_homography_);
         cudaFree(d_occ_coeff_);
+        cudaFree(d_pending_det_); cudaFree(d_pending_bid_);
         // M2
         cudaFree(d_free_slots_); cudaFree(d_n_free_); cudaFree(d_slot_cursor_);
         cudaFree(d_track_id_ctr_);
@@ -1469,9 +1503,13 @@ public:
                 nullptr, d_topk_indices_, d_topk_probs_
             );
             checkCuda(cudaMemsetAsync(d_auction_prices_, 0, max_assoc_ * sizeof(uint64_t), stream));
+            checkCuda(cudaMemsetAsync(d_pending_det_, -1, max_objs_ * sizeof(int), stream));
             kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
                 d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
-                max_objs_, num_dets, 3, 0.01f);
+                d_pending_det_, d_pending_bid_, max_objs_, num_dets, 3, 0.01f);
+            kernel::commit_auction_results_kernel<<<auc_g, auc_b, 0, stream>>>(
+                d_auction_prices_, d_pending_det_, d_pending_bid_,
+                d_trk_to_det_, d_det_to_trk_, max_objs_);
             nvtxRangePop();
             matched_det_mask = d_det_to_trk_;
         }
@@ -1485,9 +1523,13 @@ public:
             d_topk_indices_, d_topk_probs_
         );
         checkCuda(cudaMemsetAsync(d_auction_prices_, 0, max_assoc_ * sizeof(uint64_t), stream));
+        checkCuda(cudaMemsetAsync(d_pending_det_, -1, max_objs_ * sizeof(int), stream));
         kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
             d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
-            max_objs_, num_dets, 3, 0.01f);
+            d_pending_det_, d_pending_bid_, max_objs_, num_dets, 3, 0.01f);
+        kernel::commit_auction_results_kernel<<<auc_g, auc_b, 0, stream>>>(
+            d_auction_prices_, d_pending_det_, d_pending_bid_,
+            d_trk_to_det_, d_det_to_trk_, max_objs_);
         nvtxRangePop();
 
         nvtxRangePushA("Assoc/S1b_MidConf");
@@ -1499,9 +1541,13 @@ public:
             d_topk_indices_, d_topk_probs_
         );
         checkCuda(cudaMemsetAsync(d_auction_prices_, 0, max_assoc_ * sizeof(uint64_t), stream));
+        checkCuda(cudaMemsetAsync(d_pending_det_, -1, max_objs_ * sizeof(int), stream));
         kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
             d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
-            max_objs_, num_dets, 3, 0.01f);
+            d_pending_det_, d_pending_bid_, max_objs_, num_dets, 3, 0.01f);
+        kernel::commit_auction_results_kernel<<<auc_g, auc_b, 0, stream>>>(
+            d_auction_prices_, d_pending_det_, d_pending_bid_,
+            d_trk_to_det_, d_det_to_trk_, max_objs_);
         nvtxRangePop();
 
         nvtxRangePushA("Assoc/S1c_Tentative");
@@ -1513,9 +1559,13 @@ public:
             d_topk_indices_, d_topk_probs_
         );
         checkCuda(cudaMemsetAsync(d_auction_prices_, 0, max_assoc_ * sizeof(uint64_t), stream));
+        checkCuda(cudaMemsetAsync(d_pending_det_, -1, max_objs_ * sizeof(int), stream));
         kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
             d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
-            max_objs_, num_dets, 3, 0.01f);
+            d_pending_det_, d_pending_bid_, max_objs_, num_dets, 3, 0.01f);
+        kernel::commit_auction_results_kernel<<<auc_g, auc_b, 0, stream>>>(
+            d_auction_prices_, d_pending_det_, d_pending_bid_,
+            d_trk_to_det_, d_det_to_trk_, max_objs_);
         nvtxRangePop();
 
         nvtxRangePushA("Assoc/S2_LoConf");
@@ -1527,9 +1577,13 @@ public:
             d_topk_indices_, d_topk_probs_
         );
         checkCuda(cudaMemsetAsync(d_auction_prices_, 0, max_assoc_ * sizeof(uint64_t), stream));
+        checkCuda(cudaMemsetAsync(d_pending_det_, -1, max_objs_ * sizeof(int), stream));
         kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
             d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
-            max_objs_, num_dets, 3, 0.01f);
+            d_pending_det_, d_pending_bid_, max_objs_, num_dets, 3, 0.01f);
+        kernel::commit_auction_results_kernel<<<auc_g, auc_b, 0, stream>>>(
+            d_auction_prices_, d_pending_det_, d_pending_bid_,
+            d_trk_to_det_, d_det_to_trk_, max_objs_);
         nvtxRangePop();
 
         nvtxRangePushA("Assoc/StateUpdate");
@@ -1943,6 +1997,9 @@ private:
     float* d_s_inv_;
     float* d_homography_;
     int *d_age_, *d_classes_, *d_track_ids_;
+    // Auction pending buffers
+    int*      d_pending_det_ = nullptr;
+    uint64_t* d_pending_bid_ = nullptr;
     // M2: GPU spawn
     int *d_free_slots_  = nullptr;
     int *d_n_free_      = nullptr;

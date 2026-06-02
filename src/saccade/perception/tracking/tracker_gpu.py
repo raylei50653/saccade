@@ -840,7 +840,9 @@ class GraphedTrackerUpdate:
         self.d_scores = torch.zeros(max_assoc, dtype=torch.float32, device=device)
         self.d_classes = torch.zeros(max_assoc, dtype=torch.int32, device=device)
         self.d_gmc = (
-            torch.eye(3, dtype=torch.float32, device=device).flatten()[:9].contiguous()
+            torch.eye(2, 3, dtype=torch.float32, device=device)
+            .flatten()[:6]
+            .contiguous()
         )
 
         self.out_boxes = torch.zeros(max_objs, 4, dtype=torch.float32, device=device)
@@ -934,15 +936,18 @@ class GraphedTrackerUpdate:
         gmc: torch.Tensor | None = None,
     ) -> None:
         n = min(boxes.shape[0], self._max_assoc)
-        self.d_boxes.zero_()
-        self.d_scores.zero_()
-        self.d_classes.zero_()
         if n > 0:
             self.d_boxes[:n].copy_(boxes[:n].float())
             self.d_scores[:n].copy_(scores[:n].float())
             self.d_classes[:n].copy_(classes[:n].int())
+        # Only zero the tail beyond valid dets — the tracker gates on score,
+        # so stale data in slots [n:] must be cleared to avoid ghost associations.
+        if n < self._max_assoc:
+            self.d_boxes[n:].zero_()
+            self.d_scores[n:].zero_()
+            self.d_classes[n:].zero_()
         if gmc is not None:
-            self.d_gmc.copy_(gmc.flatten()[:9].float().contiguous())
+            self.d_gmc.copy_(gmc.flatten()[:6].float().contiguous())
 
     def replay(self) -> dict[str, torch.Tensor]:
         if self._graphed_callable is None:
@@ -967,3 +972,16 @@ class GraphedTrackerUpdate:
             "det_idx": self.out_det_idx,
             "count": self.out_count,
         }
+
+    def read_outputs(self, target: dict[str, torch.Tensor]) -> None:
+        """Copy internal output buffers into the caller-provided result dict."""
+        target["count"].copy_(self.out_count, non_blocking=True)
+        count = self.out_count.item()
+        if count > 0:
+            target["boxes"][:count].copy_(self.out_boxes[:count], non_blocking=True)
+            target["scores"][:count].copy_(self.out_scores[:count], non_blocking=True)
+            target["ids"][:count].copy_(self.out_ids[:count], non_blocking=True)
+            target["classes"][:count].copy_(self.out_classes[:count], non_blocking=True)
+            target["det_idx"][:count].copy_(self.out_det_idx[:count], non_blocking=True)
+        else:
+            target["count"].zero_()

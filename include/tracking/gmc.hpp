@@ -52,6 +52,11 @@ public:
      * @brief Estimate camera warp and write a 2x3 affine matrix directly to GPU memory.
      * Writes identity when the estimate is unreliable, so callers can pass the result
      * directly into tracker kernels without an extra host roundtrip.
+     *
+     * @param sync_caller_stream If true (default), inserts cudaStreamWaitEvent into
+     *   `stream` so all subsequent work on that stream waits for GMC to finish.
+     *   Pass false when running GMC in parallel with detect; then call sync_to_stream()
+     *   explicitly after detect+postproc to insert the dependency before the tracker.
      */
     void estimate_into(
         const float* frame_gpu_ptr,
@@ -59,7 +64,15 @@ public:
         int height,
         cudaStream_t stream,
         float* d_out_warp,
-        bool use_gpu_phase_corr = true);
+        bool use_gpu_phase_corr = true,
+        bool sync_caller_stream = true);
+
+    /**
+     * @brief Insert a dependency into `stream` that waits for the most recent
+     *   estimate_into() to complete.  Call this after detect+postproc when
+     *   estimate_into() was launched with sync_caller_stream=false.
+     */
+    void sync_to_stream(cudaStream_t stream);
 
     /**
      * @brief Set foreground bounding boxes to be zeroed before phase correlation.
