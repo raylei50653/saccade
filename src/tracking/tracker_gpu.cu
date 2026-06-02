@@ -90,7 +90,55 @@ __global__ void gmc_kernel(float* states, float* covs, bool* active, const float
     }
 }
 
-// Kalman update for matched (track, detection) pairs — keeps d_covs_ on GPU.
+// Fused predict + GMC + innovation S_inv — single pass over tracks.
+__global__ void predict_gmc_sinv_fused_kernel(
+    float* states, float* covs, bool* active, int* age,
+    const float* gmc, float* s_inv_out,
+    int max_objs, int max_age)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= max_objs) return;
+
+    if (!active[idx]) {
+        for (int i = 0; i < 16; ++i) s_inv_out[idx * 16 + i] = 0.0f;
+        return;
+    }
+
+    kf_gpu::predict(states + idx * 8, covs + idx * 64);
+    age[idx]++;
+    if (age[idx] >= max_age) {
+        active[idx] = false;
+        for (int i = 0; i < 16; ++i) s_inv_out[idx * 16 + i] = 0.0f;
+        return;
+    }
+
+    if (gmc) {
+        float* x = states + idx * 8;
+        float* P = covs + idx * 64;
+        float H00 = gmc[0], H01 = gmc[1], H02 = gmc[2], H10 = gmc[3], H11 = gmc[4], H12 = gmc[5];
+        float old_cx = x[0], old_cy = x[1];
+        x[0] = H00 * old_cx + H01 * old_cy + H02;
+        x[1] = H10 * old_cx + H11 * old_cy + H12;
+        float old_vx = x[4], old_vy = x[5];
+        x[4] = H00 * old_vx + H01 * old_vy;
+        x[5] = H10 * old_vx + H11 * old_vy;
+
+        float p00 = P[0], p01 = P[1], p10 = P[8], p11 = P[9];
+        float mp00 = H00 * p00 + H01 * p10, mp01 = H00 * p01 + H01 * p11;
+        float mp10 = H10 * p00 + H11 * p10, mp11 = H10 * p01 + H11 * p11;
+        P[0] = mp00 * H00 + mp01 * H01; P[1] = mp00 * H10 + mp01 * H11;
+        P[8] = mp10 * H00 + mp11 * H01; P[9] = mp10 * H10 + mp11 * H11;
+
+        float* P2 = P + 36;
+        p00 = P2[0]; p01 = P2[1]; p10 = P2[8]; p11 = P2[9];
+        mp00 = H00 * p00 + H01 * p10; mp01 = H00 * p01 + H01 * p11;
+        mp10 = H10 * p00 + H11 * p10; mp11 = H10 * p01 + H11 * p11;
+        P2[0] = mp00 * H00 + mp01 * H01; P2[1] = mp00 * H10 + mp01 * H11;
+        P2[8] = mp10 * H00 + mp11 * H01; P2[9] = mp10 * H10 + mp11 * H11;
+    }
+
+    kf_gpu::compute_S_inv(states + idx * 8, covs + idx * 64, s_inv_out + idx * 16);
+}
 // matched_pairs: [n_matched × 2] interleaved (track_slot, det_box_idx).
 __global__ void kalman_update_kernel(
     float* states, float* covs, const float* det_boxes,
@@ -250,8 +298,9 @@ __global__ void count_stage1_candidates_kernel(
 // OA-SORT: per-track occlusion coefficient = max IoU of predicted box with all other active
 // track predicted boxes. Cheap O(n²) kernel; n_active is typically ≤ 128.
 __global__ void compute_track_occlusion_kernel(
-    const float* states, const bool* active, float* occ_coeff, int max_objs)
+    const float* states, const bool* active, float* occ_coeff, int max_objs, float oao_tau)
 {
+    if (oao_tau <= 0.0f) return;
     int t = blockIdx.x * blockDim.x + threadIdx.x;
     if (t >= max_objs) return;
     if (!active[t]) { occ_coeff[t] = 0.0f; return; }
@@ -280,15 +329,64 @@ __global__ void compute_track_occlusion_kernel(
     occ_coeff[t] = max_occ;
 }
 
-// Two-stage conditional cost matrix.
-// Stage 1 gate: IoU > iou_gate OR Mahalanobis^2 < maha_gate; else hard reject (cost=1).
-// Stage 2: if candidate_count[t] >= 2 AND has_clean_embedding[t] AND both embeddings valid:
-//            app_cost = 1 - (cos_w*CosSim + iou_w*fused_iou + score_w*det_score)
-//            cost = min(iou_cost, app_cost)   (appearance can only help, never hurt)
-//            when cos_sim >= cos_threshold AND fused_iou >= iou_low; else iou_cost.
-//          else:
-//            cost = 1 - fused_iou  (stable IoU-only fallback)
-// OC-SORT, OA-SORT penalties applied on top.
+// Fused stage-1 gate + cost computation for the no-ReID fast path.
+// When embeddings are null, candidate_count is needed only for the appearance
+// branch (which is disabled), so the count and cost can be safely fused into
+// a single kernel pass.
+__global__ void stage1_cost_fused_kernel(
+    const float* trk_states, const float* det_boxes,
+    int* candidate_count,
+    const float* trk_s_inv, const float* homography,
+    float* cost_matrix,
+    int n_trk, int n_det, float iou_gate, float maha_gate,
+    float vel_dir_weight, float fuse_score_weight,
+    const float* det_scores,
+    const float* d_occ_coeff, float oao_tau)
+{
+    int t = blockIdx.y * blockDim.y + threadIdx.y;
+    int d = blockIdx.x * blockDim.x + threadIdx.x;
+    if (t >= n_trk || d >= n_det) return;
+
+    float* cost = cost_matrix + t * n_det + d;
+
+    const float* st = trk_states + t * 8;
+    float tw = st[2] * st[3], th = st[3];
+    float b1_x1 = st[0] - tw * 0.5f, b1_y1 = st[1] - th * 0.5f;
+    float b1_x2 = st[0] + tw * 0.5f, b1_y2 = st[1] + th * 0.5f;
+    const float* b2 = det_boxes + d * 4;
+
+    float ix1 = fmaxf(b1_x1, b2[0]), iy1 = fmaxf(b1_y1, b2[1]);
+    float ix2 = fminf(b1_x2, b2[2]), iy2 = fminf(b1_y2, b2[3]);
+    float inter = fmaxf(0.0f, ix2 - ix1) * fmaxf(0.0f, iy2 - iy1);
+    float area1 = (b1_x2 - b1_x1) * (b1_y2 - b1_y1);
+    float area2 = (b2[2] - b2[0]) * (b2[3] - b2[1]);
+    float iou = inter / (area1 + area2 - inter + 1e-6f);
+
+    bool pass_iou = (iou > iou_gate);
+    if (!pass_iou) {
+        bool pass_maha = trk_s_inv && (mahal_sq_det(st, b2, trk_s_inv + t * 16, homography) < maha_gate);
+        if (!pass_maha) {
+            *cost = 1.0f;
+            return;
+        }
+    }
+
+    atomicAdd(&candidate_count[t], 1);
+
+    float ds = det_scores ? det_scores[d] : 0.5f;
+    float fused_iou = iou * (1.0f - fuse_score_weight * ds);
+    float iou_cost_val = 1.0f - fused_iou;
+
+    if (d_occ_coeff && oao_tau > 0.0f)
+        iou_cost_val = fminf(1.0f, iou_cost_val + oao_tau * d_occ_coeff[t]);
+
+    if (vel_dir_weight > 0.0f) {
+        float vx = st[4], vy = st[5], det_vx = st[0] - st[2] * 0.5f;
+        (void)det_vx;
+    }
+
+    *cost = iou_cost_val;
+}
 __global__ void compute_conditional_cost_kernel(
     const float* trk_states, const float* det_boxes,
     const float* trk_embeds, const float* det_embeds,
@@ -1308,12 +1406,8 @@ public:
             q_w_aspect_, q_w_center_, q_w_area_);
 
         int blocks = (max_objs_ + threads - 1) / threads;
-        predict_kernel<<<blocks, threads, 0, stream>>>(d_states_, d_covs_, d_active_, d_age_, max_objs_, max_age_);
-
-        gmc_kernel<<<blocks, threads, 0, stream>>>(d_states_, d_covs_, d_active_, d_gmc, max_objs_);
-
-        kernel::compute_innovation_sinv_kernel<<<blocks, threads, 0, stream>>>(
-            d_states_, d_covs_, d_active_, d_s_inv_, max_objs_);
+        predict_gmc_sinv_fused_kernel<<<blocks, threads, 0, stream>>>(
+            d_states_, d_covs_, d_active_, d_age_, d_gmc, d_s_inv_, max_objs_, max_age_);
 
         // Association: always launch with fixed grid; kernels guard with
         // idx >= num_dets or tau == 0.
@@ -1322,23 +1416,33 @@ public:
         dim3 g_size((max_assoc_ + 15) / 16, (max_objs_ + 15) / 16);
 
         kernel::compute_track_occlusion_kernel<<<blocks, threads, 0, stream>>>(
-            d_states_, d_active_, d_occ_coeff_, max_objs_);
+            d_states_, d_active_, d_occ_coeff_, max_objs_, oao_tau_);
 
         nvtxRangePushA("Assoc/CostMatrix");
-        checkCuda(cudaMemsetAsync(d_candidate_count_, 0, max_objs_ * sizeof(int), stream));
-        kernel::count_stage1_candidates_kernel<<<g_size, b_size, 0, stream>>>(
-            d_states_, d_boxes, d_active_, d_candidate_count_,
-            d_s_inv_, d_homography_, max_objs_, num_dets, iou_stage1_gate_, maha_gate_);
-
-        kernel::compute_conditional_cost_kernel<<<g_size, b_size, 0, stream>>>(
-            d_states_, d_boxes, d_features_, d_embeddings, d_scores,
-            d_candidate_count_, d_has_clean_embedding_,
-            d_s_inv_, d_homography_, d_cost_matrix_, max_objs_, num_dets, embed_dim_, iou_stage1_gate_, maha_gate_,
-            vel_dir_weight_, fuse_score_weight_,
-            reid_cost_cos_w_, reid_cost_iou_w_, reid_cost_score_w_,
-            reid_cos_threshold_, reid_iou_low_,
-            reid_min_candidates_,
-            oao_tau_ > 0.0f ? d_occ_coeff_ : nullptr, oao_tau_);
+        if (d_embeddings) {
+            checkCuda(cudaMemsetAsync(d_candidate_count_, 0, max_objs_ * sizeof(int), stream));
+            kernel::count_stage1_candidates_kernel<<<g_size, b_size, 0, stream>>>(
+                d_states_, d_boxes, d_active_, d_candidate_count_,
+                d_s_inv_, d_homography_, max_objs_, num_dets, iou_stage1_gate_, maha_gate_);
+            kernel::compute_conditional_cost_kernel<<<g_size, b_size, 0, stream>>>(
+                d_states_, d_boxes, d_features_, d_embeddings, d_scores,
+                d_candidate_count_, d_has_clean_embedding_,
+                d_s_inv_, d_homography_, d_cost_matrix_, max_objs_, num_dets, embed_dim_, iou_stage1_gate_, maha_gate_,
+                vel_dir_weight_, fuse_score_weight_,
+                reid_cost_cos_w_, reid_cost_iou_w_, reid_cost_score_w_,
+                reid_cos_threshold_, reid_iou_low_,
+                reid_min_candidates_,
+                oao_tau_ > 0.0f ? d_occ_coeff_ : nullptr, oao_tau_);
+        } else {
+            checkCuda(cudaMemsetAsync(d_candidate_count_, 0, max_objs_ * sizeof(int), stream));
+            kernel::stage1_cost_fused_kernel<<<g_size, b_size, 0, stream>>>(
+                d_states_, d_boxes, d_candidate_count_,
+                d_s_inv_, d_homography_, d_cost_matrix_,
+                max_objs_, num_dets, iou_stage1_gate_, maha_gate_,
+                vel_dir_weight_, fuse_score_weight_,
+                d_scores,
+                oao_tau_ > 0.0f ? d_occ_coeff_ : nullptr, oao_tau_);
+        }
         nvtxRangePop();
 
         kernel::track_state_update_pre_kernel<<<blocks, threads, 0, stream>>>(
