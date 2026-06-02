@@ -79,87 +79,26 @@
 
 ---
 
-## 算法方向探索（2026-05-17 新增）
+## 算法方向探索（已結案，詳見 history）
 
-> 背景：2026-05-17 speed preset（yolo26s）7-seq SDP 全量評估，參數優化已觸天花板。
+> 背景：2026-05-17 yolo26s 參數優化觸天花板（threshold 調整 MOTA 波動 <0.5pp）→「需要新架構而非調參」。後續 Option D/E/F 探索結論已歸檔至 [TODO_history.md](/docs/TODO_history.md) 的「Algorithm Direction Exploration」節：
 >
-> Current results: IDF1=52.4%, MOTA=41.7%, IDs=464, FP=14,687, FN=50,356, Rcll=55.2%, FPS=131.8
->
-> Key insight: yolo26s 檢測能力弱於 yolo26m（FN +3,800），但 FPS 優勢顯著（131 vs ~98）。
-> 所有 threshold 調整（conf=0.02~0.05, track=0.02~0.05, nms=0.35~0.5, fuse_score=0.0~0.4）
-> MOTA 波動 <0.5pp。**需要新算法架構，而非參數調校。**
-
-### ❌ Option D — Track-Conditioned YOLO（NO-GO，2026-05-19 結案）
-
-> Phase 2（50 epochs）eval 完成。IDF1 31.7% / MOTA 24.5% vs baseline 52.0% / 41.6%，差距 -20pp。
-> Gate ablation 確認 gate 無貢獻（gate-on 38.3% vs gate-off 38.2%，∆<0.2pp）。
-> 根因：100 queries recall 天花板（34.9% vs baseline 55%）+ Phase 2 gt_ratio→0 使 decoder 繞過 gate。
-> Checkpoints 保留：`runs/conditioned_p1_v2/best.ckpt`、`runs/conditioned_p2/best.ckpt`。
-
-### ✅ Option E-v2 — Quality-Gated Temporal Feature Fusion（GO，2026-05-22 結案）
-
-> 設計文件：[docs/architecture/temporal_yolo/option-e-v2-design.md](architecture/temporal_yolo/option-e-v2-design.md)
->
-> 直接利用 t-1 的 FPN 特徵加上 α_tier（per-track-state）加權做時序融合。無需重訓，從 gated_det_v1 熱啟動。
->
-> 最終結果（MOT17 train，7 SDP，yolo26s）：
-> **MOTA 54.2%（+1.7pp），FP 2932（-21%），Rcll 57.3%（+1.1pp）**
->
-> 四 Phase 全完成：
-> - P0 ✅ α=0 輸出與 baseline 完全一致
-> - P1 ✅ Fixed α sweep：α=0.15 最佳（MOTA+1.6pp, Rcll+2.6pp）
-> - P2 ❌ GMC warp NO-GO（sparse optical flow 精度不足，全面倒退）
-> - P3 ✅ α_tier 分層：MOTA 54.2%, FP -21%，Prcn 95.6%
-> - P4 ✅ Lock-in 檢測通過：最長序列 FP -25%，無鎖定問題
->
-> 最佳配置：`--temporal-fusion --fusion-alpha 1.0`（不 warp）
-> Code：`src/saccade/perception/temporal_yolo/temporal_fusion.py`（TemporalFeatureFusion）
->
-> 未完成：detector score heatmap、per-scale α_tier tuning、FPS 優化、訓練腳本
-
-### ✅ Option F — Mamba Gated Detector & Tracker Optimization (2026-05-27 已結案/已儲存)
-
-> 設計預設檔：[configs/presets/mamba_optimal.yaml](/configs/presets/mamba_optimal.yaml)
->
-> 徹底挖掘 Mamba 檢測頭在追蹤任務上的能力，移除了高運算負擔但無效益的 ReID 模組，透過對動態關聯、GMC 運動對齊與軌跡插值的協同精調，大幅突破性能極限。
->
-> #### 🚀 PixelShuffle Breakthrough（2026-05-27）
->
-> 在 Mamba 頭中引入 **PixelShuffle 上取樣**（取代無參數 `F.interpolate`）後，配合 Stretch-Resize 預處理，指標全面突破：
->
-> **IDF1 71.2%（+6.3pp），MOTA 76.3%（+14.3pp），Rcll 82.3%（+15.0pp）**
->
-> 關鍵發現：
-> 1. **預處理域一致性是決定性的**：Teacher FPN 特徵圖若受 Letterbox 灰色 padding 污染，Mamba 頭定位能力崩潰（IDF1 23.3%）。Stretch-Resize（`preprocess: none`）恢復純淨特徵域後定位精度完全恢復。
-> 2. **`use_letterbox=False` 是訓練預設的正確決策**：所有訓練腳本預設走 Stretch-Resize，推理端 `--preset mamba_optimal` 對應 `preprocess: none`，域一致。
-> 3. **特徵快取加速**：加入 `--precompute-dir` / `--cache-dir` 支援，預計算 Teacher FPN 特徵後 Phase 1 蒸餾每 epoch 從數分鐘降至 **15 秒**。
->
-> 最終訓練流程（`~10min` 總耗時）：
-> ```bash
-> # 1. 預計算 Teacher FPN 特徵（一次性，~97s）
-> uv run scripts/train/temporal_yolo/train_mamba_head.py --data-root datasets/MOT17 --use-pixel-shuffle --precompute-dir runs/trt_feat_cache_v2
-> # 2. Phase 1 蒸餾（~5min）
-> uv run scripts/train/temporal_yolo/train_mamba_head.py --data-root datasets/MOT17 --use-pixel-shuffle --cache-dir runs/trt_feat_cache_v2 --run-dir runs/mamba_distill_pixelshuffle_correct --epochs 20 --batch-size 8
-> # 3. Phase 2 GT 微調（~15min）
-> uv run scripts/train/temporal_yolo/train_mamba_gt.py --data-root datasets/MOT17 --mamba-ckpt runs/mamba_distill_pixelshuffle_correct/best.ckpt --run-dir runs/mamba_gt_pixelshuffle_correct --epochs 30 --batch-size 4
-> ```
->
-> #### 先前三項核心精調結論
-> 1. **Mamba 專屬 IoU 門檻 (`match_thresh=0.50`)**：適配 Mamba 信心分佈，相比預設 0.66 顯著挽救斷軌。
-> 2. **軌跡插值鎖定 (`interpolate_max_gap=35`)**：容忍 ~1.17 秒完全遮擋，Recall 拉升 1.3pp。
-> 3. **高精度 GMC 運動對齊 (`gmc_downscale=4`)**：GPU FFT 相位相關性估計極精準，以零速度代價將 IDs 壓制在低位。
+> - **Option D**（Track-Conditioned YOLO）❌ NO-GO（2026-05-19）：IDF1 31.7%，gate 無貢獻、recall 天花板。
+> - **Option E-v2**（Quality-Gated Temporal Fusion）✅ GO（2026-05-22）：MOTA 54.2% / FP -21%；後被 Option F 取代。
+> - **Option F**（Mamba Gated Detector）✅ 結案（2026-05-27）→ **當前 production preset `mamba_optimal`**：PixelShuffle 上取樣 + Stretch-Resize 域一致 → IDF1 71.2% / MOTA 76.3% / Rcll 82.3%。訓練流程、breakthrough 與 3 項核心精調（`match_thresh=0.50`、`interpolate_max_gap=35`、`gmc_downscale=4`）見 history。當前指標見上方 baseline 表。
 
 ---
 
 ## Mamba 檢測頭中長期優化待辦（2026-05-27 新增）
 
+> 已完成項（Pixel-Shuffle、Cross-Scan，均已設為當前 preset）已歸檔至 [TODO_history.md](/docs/TODO_history.md)。
+
 | 優先 | 項目 | 具體思路 | 預期收益 | 狀態 |
 | :---: | :--- | :--- | :--- | :---: |
-| **P1** | **特徵還原層優化（Pixel-Shuffle）** | 將 `F.interpolate` 還原放大改為 **Pixel-Shuffle (子像素卷積)**。 | MOTA +14.3pp, IDF1 +6.3pp, Rcll +15.0pp | ✅ 已完工 (2026-05-27) |
-| **P2** | **2D 空間多向掃描 (Cross-Scan Module)** | 將 row-major 單向 1D 壓平改為「上下左右」四向交叉掃描與融合，消除方向偏見。`--use-cross-scan` flag，零參數增長（共享 MambaBlocks）。 | 全向對稱 2D 全局感受野，預期提升複雜運動追蹤穩定度 | ✅ 已實作 (2026-05-27) |
 | **P2** | **時空聯合 Mamba (Spatio-Temporal SSM)** | 將連續 T 幀的 FPN 特徵做空間 cross-scan 後再做時間軸 SSM 掃描。**已訓練（stride=1, clip_len=3），單幀推理與 cross-scan 持平，時序 buffer 因固定位置掃描無法追蹤移動物體而不 work。** | 未達預期，需 GMC/Kalman 引導的對齊機制（見 VGT-Mamba）。 | 🔴 VGT 進行中 |
 | **P2-VGT** | **VGT-Mamba (Velocity-Guided Temporal)** | 用 GMC affine flow 將歷史幀 FPN 特徵 warp 對齊到當前幀後再做 temporal Mamba。GMC 已預計算（127 KB），訓練中（Phase 1）。 | 根治時序對齊，從源頭降低遮擋 FN | 🔄 訓練中 |
 | **P3** | **混合 Head 架構 (Hybrid Mamba-ViT)** | 在低層 FPN (P3) 採用硬體效率極高的 **EfficientViT-style CGA** 卷積頭；在高層 FPN (P5) 採用 **Mamba 頭** 捕捉全局語義。 | 兼顧 Mamba 的全局上下文建模優勢與 EfficientViT 對 TensorRT / GPU 架構極友好的推論速度。 | 📋 待實作 |
+| ~~**P1**~~ | ~~**mamba_head CUDA graph(修 eval 整合 bug)**~~ | ✅ **完成(2026-06-02)**。真因:custom `selective_scan_fwd` CUDA op 跑在 legacy default stream(stream 0)→ CUDA-graph capture 不錄 → replay 缺 scan kernel → cls 飽和 → ~10× FP → MOTA 崩。修法:pybind binding 加 `stream_ptr` + op 傳 `torch.cuda.current_stream().cuda_stream` + graph path 改 `torch.cuda.make_graphed_callables`。隔離 bit-exact、full-SDP parity(噪音內)、FPS 95.5→110.2(+15%)。詳見 [research](research/pipeline/mamba_head_cuda_graph_eval_bug_20260602.md)。 | **+15% FPS 達成,精度持平** | ✅ 已 default(`use_cuda_graph: true`) |
 
 ---
 
@@ -180,14 +119,6 @@
 | **問題** | yolo26s 對於被遮擋或只有腿/腳的行人檢測能力弱 |
 | **思路** | 針對遮擋與小目標，使用包含更多半身/肢體標註的資料集重新微調 YOLO |
 | **狀態** | 📋 暫緩，將優先觀察 Temporal YOLO 是否能透過時序資訊彌補此缺陷 |
-
----
-
-## Recent Ablation Conclusions（2026-05-10 ~ 05-11）
-
-- **FP 模組 C：bank_weighted_mean（待測）**
-  - 以 quality_score 加權 bank 樣本均值，降低低品質 embedding 影響
-  - 只在 `--appearance-bank` 開啟時有效；ReID stack 測試待排。
 
 ---
 

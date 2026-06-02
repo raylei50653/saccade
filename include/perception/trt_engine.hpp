@@ -1,7 +1,8 @@
 #pragma once
 
-#include "saccade/common.hpp"
+#include "perception/base_detector.hpp"
 #include <NvInfer.h>
+#include <torch/torch.h>
 #include <string>
 #include <vector>
 
@@ -36,10 +37,10 @@ public:
  * 支援多執行緒：透過 create_context() 為每個執行緒建立獨立的
  * execution context，共享同一 engine_ 例項（只讀，線程安全）。
  */
-class SACCADE_PERCEPTION_API TRTEngine : public IPerceptionEngine {
+class SACCADE_PERCEPTION_API TRTEngine : public IPerceptionEngine, public BaseDetector {
 public:
     TRTEngine(const std::string& model_path);
-    ~TRTEngine();
+    ~TRTEngine() override;
 
     // IPerceptionEngine interface
     bool infer(const std::vector<void*>& bindings, cudaStream_t stream) override;
@@ -74,6 +75,14 @@ public:
      * @brief 釋放由 create_context() 建立的 context
      */
     static void delete_context(nvinfer1::IExecutionContext* ctx);
+
+    // BaseDetector interface
+    torch::Tensor forward(torch::Tensor d_input_img) override;
+    torch::Tensor extract_fpn_embeddings(torch::Tensor d_boxes_xyxy) override;
+    int forward_ptr(uintptr_t d_input_img, uintptr_t d_out_dets) override;
+    void extract_fpn_embeddings_ptr(uintptr_t d_boxes_xyxy, int num_dets, uintptr_t d_out_embs) override;
+    int get_img_size() const override;
+    int get_fpn_dim() const override;
 
 private:
     class Impl;

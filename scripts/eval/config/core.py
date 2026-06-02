@@ -159,7 +159,14 @@ def add_core_args(parser: argparse.ArgumentParser) -> None:
     )
     io.add_argument(
         "--preset",
-        choices=("baseline", "accuracy", "speed", "mamba_optimal", "fpn_reid_baseline"),
+        choices=(
+            "baseline",
+            "accuracy",
+            "speed",
+            "mamba_optimal",
+            "mamba_whole_graph",
+            "fpn_reid_baseline",
+        ),
         default=None,
         help="Built-in preset from configs/presets/<name>.yaml.",
     )
@@ -369,4 +376,9 @@ def add_core_args(parser: argparse.ArgumentParser) -> None:
         "--no-temporal",
         action="store_true",
         help="Disable temporal buffer in MambaGatedDetector (force T=1 inference).",
+    )
+    core.add_argument(
+        "--use-cuda-graph",
+        action="store_true",
+        help="Enable CUDA Graph capture and replay in MambaDetectionHead.",
     )

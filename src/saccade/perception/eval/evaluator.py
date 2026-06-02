@@ -723,7 +723,10 @@ try:
 except ImportError:
     _CppIdentityResolver = None
     _LIFECYCLE_CLS = None
-from saccade.perception.eval.streaming import DALIStreamerStream  # noqa: E402
+from saccade.perception.eval.streaming import (  # noqa: E402
+    DALIStreamerStream,
+    TorchvisionGpuStreamer,
+)
 from saccade.perception.eval.tracking import GlobalTrackIdMapper  # noqa: E402
 from saccade.perception.tracking.dynamic_reid import DynamicReIDController  # noqa: E402
 from saccade.perception.tracking.tracker_gpu import (  # noqa: E402
@@ -914,8 +917,6 @@ def run_eval_cpp(
         profile_stages=bool(kwargs.pop("profile_stages", False)),
         kwargs=kwargs,
     )
-    detector: TRTYoloDetector = TRTYoloDetector(engine)
-
     # Build PerceptionPipelineConfig (native)
     from saccade_tracking_ext import PerceptionPipelineConfig
 
@@ -928,17 +929,31 @@ def run_eval_cpp(
     native_cfg.person_min_aspect = cfg.person_min_aspect
     native_cfg.person_max_aspect = cfg.person_max_aspect
 
-    if not hasattr(detector, "cpp_engine"):
+    detector = kwargs.pop("detector", None)
+    if detector is None:
+        from saccade.perception.detector_trt import TRTYoloDetector
+
+        detector = TRTYoloDetector(engine)
+
+    if hasattr(detector, "cpp_ptr"):
+        detect_detector_ptr = int(detector.cpp_ptr)
+    elif hasattr(detector, "cpp_engine") and hasattr(detector.cpp_engine, "cpp_ptr"):
+        detect_detector_ptr = int(detector.cpp_engine.cpp_ptr)
+    else:
         raise RuntimeError(
-            "run_eval_cpp requires the C++ TRT backend (SACCADE_TRT_BACKEND=cpp)"
+            f"run_eval_cpp: detector {detector} has no cpp_ptr or cpp_engine.cpp_ptr"
         )
-    detect_engine_ptr = int(detector.cpp_engine.cpp_ptr)
 
     # Read engine's actual input/output shapes to configure seq_configs correctly.
-    _in_shape = detector.cpp_engine.get_tensor_shape("images")  # [B,C,H,W]
-    _out_shape = detector.cpp_engine.get_tensor_shape("output0")  # [B,N,6]
-    trt_input_size = int(_in_shape[2])  # spatial side (H == W)
-    max_raw_dets = int(_out_shape[1])  # N detections
+    if hasattr(detector, "cpp_engine"):
+        _in_shape = detector.cpp_engine.get_tensor_shape("images")  # [B,C,H,W]
+        _out_shape = detector.cpp_engine.get_tensor_shape("output0")  # [B,N,6]
+        trt_input_size = int(_in_shape[2])  # spatial side (H == W)
+        max_raw_dets = int(_out_shape[1])  # N detections
+    else:
+        # It's a MambaGatedDetector
+        trt_input_size = getattr(detector, "img_size", 640)
+        max_raw_dets = 8400  # YOLO default
 
     seq_configs = [
         _build_cpp_seq_config(
@@ -948,7 +963,7 @@ def run_eval_cpp(
     ]
 
     pool = CppEvaluatorPool(
-        detect_engine_ptr=detect_engine_ptr,
+        detect_detector_ptr=detect_detector_ptr,
         pipe_cfg=native_cfg,
         n_threads=min(n_threads, len(cfg.seqs)),
         max_dets=2048,
@@ -1113,8 +1128,11 @@ def run_eval(
         from saccade.perception.temporal_yolo.mamba_gated_detector import (
             MambaGatedDetector,
         )
+        from saccade.perception.multistream_mamba_server import (
+            MambaStreamProxy,
+        )
 
-        if isinstance(detector, MambaGatedDetector):
+        if isinstance(detector, (MambaGatedDetector, MambaStreamProxy)):
             pass
         else:
             import os as _os
@@ -1684,7 +1702,13 @@ def run_eval(
         )
 
         pool = AdaptiveFramePool(h_orig, w_orig)
-        streamer = DALIStreamerStream(seq_path / "img1")
+        # SACCADE_GPU_DECODE=1 routes JPEG decode to the GPU's NVJPG hardware
+        # engine (torchvision/nvJPEG) instead of CPU (DALI), offloading decode
+        # off the CPU. Both yield [H, W, C] uint8 CUDA frames.
+        if os.environ.get("SACCADE_GPU_DECODE") == "1":
+            streamer: Any = TorchvisionGpuStreamer(seq_path / "img1")
+        else:
+            streamer = DALIStreamerStream(seq_path / "img1")
         stream_iter = iter(streamer)
         results_lines, frame_latencies = [], []
         output_appearance_bank = (

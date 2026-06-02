@@ -5,6 +5,7 @@
 #include "tracking/tracker_gpu.hpp"
 #include "tracking/gmc.hpp"
 #include "perception/trt_engine.hpp"
+#include "perception/base_detector.hpp"
 #include "perception/feature_extractor.hpp"
 #include "perception/preprocessor.hpp"
 #include <NvInfer.h>
@@ -90,18 +91,18 @@ struct FrameResult {
 /**
  * Runs a single MOT sequence in one C++ thread.
  * Owns per-thread GPU resources (stream, TRT context, tracker, pipeline, workbench).
- * The TRTEngine is borrowed (shared across threads).
+ * The BaseDetector is borrowed (shared across threads).
  */
 class SACCADE_TRACKING_API SequenceRunner {
 public:
     /**
-     * @param detect_engine  Shared (read-only) YOLO TRT engine. Thread-safe.
+     * @param detect_detector Shared (read-only) BaseDetector. Thread-safe.
      * @param pipe_cfg       PerceptionPipeline config (filter + NMS thresholds).
      * @param max_dets       Max detections fed to the workbench.
      * @param max_tracks     Max concurrent tracks.
      * @param device_id      CUDA device index.
      */
-    SequenceRunner(TRTEngine*                        detect_engine,
+    SequenceRunner(BaseDetector*                     detect_detector,
                    const PerceptionPipeline::Config& pipe_cfg,
                    int                               max_dets   = 2048,
                    int                               max_tracks = 256,
@@ -128,7 +129,7 @@ private:
                     int frame_w, int frame_h, int S,
                     float& out_scale, int& out_x_off, int& out_y_off);
 
-    TRTEngine*                   detect_engine_;  // borrowed, thread-safe (read-only)
+    BaseDetector*                detect_detector_;  // borrowed, thread-safe (read-only)
     nvinfer1::IExecutionContext* detect_ctx_ = nullptr;
 
     // Pipeline is created once; tracker + workbench are created fresh per run()

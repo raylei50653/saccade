@@ -97,14 +97,14 @@ PYBIND11_MODULE(saccade_eval_ext, m) {
 
     // ── SequenceRunner ────────────────────────────────────────────────────────
     py::class_<SequenceRunner>(m, "CppSequenceRunner")
-        .def(py::init([](uintptr_t detect_engine_ptr,
+        .def(py::init([](uintptr_t detect_detector_ptr,
                          const PerceptionPipeline::Config& pipe_cfg,
                          int max_dets, int max_tracks, int device_id) {
                  return new SequenceRunner(
-                     reinterpret_cast<TRTEngine*>(detect_engine_ptr),
+                     reinterpret_cast<BaseDetector*>(detect_detector_ptr),
                      pipe_cfg, max_dets, max_tracks, device_id);
              }),
-             py::arg("detect_engine_ptr"),
+             py::arg("detect_detector_ptr"),
              py::arg("pipe_cfg"),
              py::arg("max_dets")   = 2048,
              py::arg("max_tracks") = 256,
@@ -121,14 +121,14 @@ PYBIND11_MODULE(saccade_eval_ext, m) {
 
     // ── EvaluatorPool ─────────────────────────────────────────────────────────
     py::class_<EvaluatorPool>(m, "CppEvaluatorPool")
-        .def(py::init([](uintptr_t detect_engine_ptr,
+        .def(py::init([](uintptr_t detect_detector_ptr,
                          const PerceptionPipeline::Config& pipe_cfg,
                          int n_threads, int max_dets, int max_tracks, int device_id) {
                  return new EvaluatorPool(
-                     reinterpret_cast<TRTEngine*>(detect_engine_ptr),
+                     reinterpret_cast<BaseDetector*>(detect_detector_ptr),
                      pipe_cfg, n_threads, max_dets, max_tracks, device_id);
              }),
-             py::arg("detect_engine_ptr"),
+             py::arg("detect_detector_ptr"),
              py::arg("pipe_cfg"),
              py::arg("n_threads")  = 4,
              py::arg("max_dets")   = 2048,

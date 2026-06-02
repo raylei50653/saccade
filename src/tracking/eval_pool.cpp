@@ -3,13 +3,13 @@
 
 namespace saccade {
 
-EvaluatorPool::EvaluatorPool(TRTEngine*                        detect_engine,
+EvaluatorPool::EvaluatorPool(BaseDetector*                      detect_detector,
                               const PerceptionPipeline::Config& pipe_cfg,
                               int                               n_threads,
                               int                               max_dets,
                               int                               max_tracks,
                               int                               device_id)
-    : detect_engine_(detect_engine)
+    : detect_detector_(detect_detector)
     , pipe_cfg_(pipe_cfg)
     , n_threads_(std::max(1, n_threads))
     , max_dets_(max_dets)
@@ -28,7 +28,7 @@ void EvaluatorPool::worker_fn(
     std::unique_ptr<SequenceRunner> runner_ptr;
     try {
         runner_ptr = std::make_unique<SequenceRunner>(
-            detect_engine_, pipe_cfg_, max_dets_, max_tracks_, device_id_);
+            detect_detector_, pipe_cfg_, max_dets_, max_tracks_, device_id_);
     } catch (const std::exception& e) {
         fprintf(stderr, "[EvaluatorPool] Worker %d: failed to create SequenceRunner: %s\n",
                 worker_idx, e.what());

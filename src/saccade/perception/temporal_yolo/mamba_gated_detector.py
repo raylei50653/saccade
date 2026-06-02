@@ -83,6 +83,76 @@ def _postprocess_mamba(
 
 
 # ---------------------------------------------------------------------------
+# Precomputed anchors for CUDA-graph-safe postprocess (torch.full / arange
+# are not capturable).
+# ---------------------------------------------------------------------------
+
+
+def _precompute_anchor_grid(
+    stride_tensor: Tensor,
+    feat_shapes: list[tuple[int, int, int, int]],
+) -> tuple[Tensor, Tensor]:
+    anchor_points = []
+    stride_points = []
+    for i in range(len(stride_tensor)):
+        _, _, h, w = feat_shapes[i]
+        sx = torch.arange(w, dtype=torch.float32, device=stride_tensor.device) + 0.5
+        sy = torch.arange(h, dtype=torch.float32, device=stride_tensor.device) + 0.5
+        sy, sx = torch.meshgrid(sy, sx, indexing="ij")
+        anchor_points.append(torch.stack((sx, sy), -1).reshape(-1, 2))
+        stride_points.append(
+            torch.full(
+                (h * w, 1),
+                stride_tensor[i].item(),
+                dtype=torch.float32,
+                device=stride_tensor.device,
+            )
+        )
+    return torch.cat(anchor_points), torch.cat(stride_points)
+
+
+def _postprocess_mamba_fixed(
+    cls_preds: list[Tensor],
+    reg_preds: list[Tensor],
+    strides: Tensor,
+    conf_thr: float,
+    max_det: int,
+    *,
+    anchors: Tensor | None = None,
+    anchor_strides: Tensor | None = None,
+) -> Tensor:
+    from ultralytics.utils.tal import dist2bbox
+
+    cls_all = torch.cat([c.flatten(2) for c in cls_preds], dim=2)
+    reg_all = torch.cat([r.flatten(2) for r in reg_preds], dim=2)
+
+    if anchors is None or anchor_strides is None:
+        anchors, anchor_strides = _precompute_anchor_grid(
+            strides, [tuple(c.shape) for c in cls_preds]
+        )
+
+    bboxes = dist2bbox(reg_all, anchors.T.unsqueeze(0), xywh=True, dim=1)
+    strides_t = anchor_strides.squeeze(-1).unsqueeze(0)
+    bboxes = bboxes * strides_t
+
+    xywh = bboxes.permute(0, 2, 1)
+    x1y1 = xywh[..., :2] - xywh[..., 2:4] / 2
+    x2y2 = xywh[..., :2] + xywh[..., 2:4] / 2
+    boxes_xyxy = torch.cat([x1y1, x2y2], dim=-1)
+
+    scores = cls_all.sigmoid()
+    scores_max, class_ids = scores.max(dim=1)
+
+    results = boxes_xyxy.new_zeros(cls_all.shape[0], max_det, 6)
+    for b in range(cls_all.shape[0]):
+        topk_scores, topk_idx = scores_max[b].topk(max_det)
+        results[b, :, :4] = boxes_xyxy[b][topk_idx]
+        results[b, :, 4] = topk_scores
+        results[b, :, 5] = class_ids[b][topk_idx].float()
+    return results
+
+
+# ---------------------------------------------------------------------------
 # TRT YOLO backbone wrapper
 # ---------------------------------------------------------------------------
 class TRTYoloBackbone(nn.Module):
@@ -139,6 +209,74 @@ class TRTYoloBackbone(nn.Module):
 
         return self._output_bufs[0], self._output_bufs[1], self._output_bufs[2]
 
+    def infer_graph(self, images: Tensor) -> tuple[Tensor, Tensor, Tensor]:
+        """TRT inference on the *calling* stream — graph-capturable.
+
+        Uses no dedicated stream or cross-stream events.  Callers must ensure
+        the calling stream is the CUDA-graph capture stream.
+        ``set_tensor_address`` calls are host-side API (not captured); only
+        ``execute_async_v3`` lands in the graph.
+        """
+        B, C, H, W = images.shape
+        images = images.contiguous()
+
+        self.context.set_input_shape(self.input_name, (B, C, H, W))
+        self.context.set_tensor_address(self.input_name, images.data_ptr())
+
+        if B != self._last_batch:
+            self._output_bufs = []
+            for name in self.output_names:
+                shape = tuple(self.context.get_tensor_shape(name))
+                shape = tuple(B if d == -1 else d for d in shape)
+                buf = torch.empty(shape, dtype=torch.float32, device=images.device)
+                self.context.set_tensor_address(name, buf.data_ptr())
+                self._output_bufs.append(buf)
+            self._last_batch = B
+        else:
+            for name, buf in zip(self.output_names, self._output_bufs):
+                self.context.set_tensor_address(name, buf.data_ptr())
+
+        self.context.execute_async_v3(torch.cuda.current_stream().cuda_stream)
+        return self._output_bufs[0], self._output_bufs[1], self._output_bufs[2]
+
+
+# ---------------------------------------------------------------------------
+# Per-stream temporal state
+# ---------------------------------------------------------------------------
+class StreamState:
+    """Per-stream temporal state: FPN feature ring buffers + GMC warp buffer.
+
+    A single-stream ``MambaGatedDetector`` owns exactly one of these; the
+    multi-stream server owns one per stream so that each stream's temporal
+    window and GMC trajectory stay independent.
+    """
+
+    def __init__(
+        self,
+        temporal_T: int,
+        temporal_buffer: list[deque[Tensor]] | None,
+        gmc_mat_buffer: deque[Tensor],
+    ) -> None:
+        self.temporal_T = temporal_T
+        self.temporal_buffer = temporal_buffer
+        self.gmc_mat_buffer = gmc_mat_buffer
+
+    @classmethod
+    def create(cls, temporal_T: int) -> StreamState:
+        buf = [deque[Tensor]() for _ in range(3)] if temporal_T > 0 else None
+        return cls(temporal_T, buf, deque[Tensor]())
+
+    def push_gmc(self, warp: Tensor) -> None:
+        self.gmc_mat_buffer.append(warp.detach())
+        if len(self.gmc_mat_buffer) > self.temporal_T:
+            self.gmc_mat_buffer.popleft()
+
+    def reset(self) -> None:
+        if self.temporal_buffer is not None:
+            for buf in self.temporal_buffer:
+                buf.clear()
+        self.gmc_mat_buffer.clear()
+
 
 # ---------------------------------------------------------------------------
 # MambaGatedDetector
@@ -164,6 +302,8 @@ class MambaGatedDetector(nn.Module):
         emb_dim: int = 0,
         jde_proj_ckpt: str = "",
         temporal_T: int = 0,
+        use_cuda_graph: bool = False,
+        use_whole_graph: bool = False,
     ):
         super().__init__()
         if cfg is None:
@@ -179,11 +319,13 @@ class MambaGatedDetector(nn.Module):
         self._trt_feat_cache: dict[str, Tensor] = {}
 
         self._temporal_T: int = temporal_T
-        self._temporal_buffer: list[deque[Tensor]] | None = None
-        self._gmc_mat_buffer: deque[Tensor] = deque[Tensor]()
-        self._gmc_mat_buf_max: int = temporal_T
-        if temporal_T > 0:
-            self._temporal_buffer = [deque[Tensor]() for _ in range(3)]
+        self._stream_state = StreamState.create(temporal_T)
+
+        self.use_whole_graph = use_whole_graph
+        self._whole_graph_anchors: Tensor | None = None
+        self._whole_graph_anchor_strides: Tensor | None = None
+        self._whole_graphed_callables: dict = {}
+        self._whole_graph_warm = False
 
         self.teacher = build_gated_yolo_detector(
             yolo_pt_path,
@@ -214,6 +356,7 @@ class MambaGatedDetector(nn.Module):
             use_hybrid_head=mamba_args.get("use_hybrid_head", False),
             use_temporal_mamba=mamba_args.get("use_temporal_mamba", False),
             per_channel_a=mamba_args.get("per_channel_a", False),
+            use_cuda_graph=use_cuda_graph,
         ).to(device)
         sd = {
             k.replace("._orig_mod.", "."): v for k, v in mamba_state["student"].items()
@@ -236,6 +379,12 @@ class MambaGatedDetector(nn.Module):
         if trt_backbone_engine:
             self._trt_backbone = TRTYoloBackbone(trt_backbone_engine)
 
+        if self.use_whole_graph and self._trt_backbone is not None:
+            FEAT_SHAPES = [(1, 128, 80, 80), (1, 256, 40, 40), (1, 512, 20, 20)]
+            self._whole_graph_anchors, self._whole_graph_anchor_strides = (
+                _precompute_anchor_grid(self.stride, FEAT_SHAPES)
+            )
+
         if jde_proj_ckpt and emb_dim > 0:
             self._load_jde_projector(jde_proj_ckpt, device)
 
@@ -254,6 +403,38 @@ class MambaGatedDetector(nn.Module):
     @property
     def device(self) -> torch.device:
         return torch.device(self._device)
+
+    @property
+    def cpp_ptr(self) -> int:
+        if not hasattr(self, "_cpp_detector") or self._cpp_detector is None:
+            from saccade_perception_ext import (
+                MambaGatedDetector as CppMambaGatedDetector,
+            )
+            from pathlib import Path
+
+            project_root = Path(__file__).resolve().parent.parent.parent.parent.parent
+
+            # Resolve TRT backbone path
+            trt_path = project_root / "models/yolo/yolo26s_backbone_640_best.engine"
+            if not trt_path.exists():
+                trt_path = Path("models/yolo/yolo26s_backbone_640_best.engine")
+
+            # Resolve Mamba head TorchScript path
+            mamba_head_path = project_root / "models/yolo/mamba_head_best.pt"
+            if not mamba_head_path.exists():
+                mamba_head_path = Path("models/yolo/mamba_head_best.pt")
+
+            print("[Python MambaGatedDetector] Initializing C++ counterpart with:")
+            print(f"  Backbone: {trt_path}")
+            print(f"  Mamba Head JIT: {mamba_head_path}")
+
+            self._cpp_detector = CppMambaGatedDetector(
+                str(trt_path.resolve()),
+                str(mamba_head_path.resolve()),
+                self.img_size,
+                self.conf_thr,
+            )
+        return int(self._cpp_detector.cpp_ptr)
 
     def _forward_pytorch_backbone(self, frame: Tensor) -> list[Tensor]:
         teacher = self.teacher
@@ -300,11 +481,14 @@ class MambaGatedDetector(nn.Module):
             gated.append(feat * gate_map)
         return gated
 
+    @torch.no_grad()
     def forward(
         self,
         frame: Tensor,
         gate_input: TrackerGateInput | list[TrackerGateInput] | None = None,
     ) -> tuple[Tensor, dict[str, Any]]:
+        if self.use_whole_graph and self._trt_backbone is not None:
+            return self._forward_whole_graph(frame)
         if self._trt_backbone is not None:
             p3, p4, p5 = self._trt_backbone.infer(frame)
             self._trt_feat_cache = {"p3": p3, "p4": p4, "p5": p5}
@@ -322,17 +506,81 @@ class MambaGatedDetector(nn.Module):
             for gl in gls.values():
                 gl._gate_input = None
 
-        if self._temporal_buffer is not None:
+        return self._detect_from_feats(feats, self._stream_state)
+
+    @torch.no_grad()
+    def _forward_whole_graph(
+        self,
+        frame: Tensor,
+    ) -> tuple[Tensor, dict[str, Any]]:
+        key = tuple(frame.shape)
+        if key not in self._whole_graphed_callables:
+            if not self._whole_graph_warm:
+                self._whole_graph_warmup(frame)
+            self._whole_graph_capture(frame)
+
+        graphed = self._whole_graphed_callables[key]
+        detections = graphed(frame)
+        return detections, {}
+
+    def _whole_graph_fn(self, frame: Tensor) -> Tensor:
+        backbone = self._trt_backbone
+        p3, p4, p5 = backbone.infer_graph(frame)
+        cls_preds, reg_preds = self.mamba_head._forward_eager(
+            [p3, p4, p5],
+            return_embeddings=False,
+        )
+        return _postprocess_mamba_fixed(
+            cls_preds,
+            reg_preds,
+            self.stride,
+            self.conf_thr,
+            self.max_det,
+            anchors=self._whole_graph_anchors,
+            anchor_strides=self._whole_graph_anchor_strides,
+        )
+
+    def _whole_graph_warmup(self, frame: Tensor) -> None:
+        with torch.no_grad():
+            warm = frame.clone()
+            _ = self._whole_graph_fn(warm)
+            torch.cuda.synchronize()
+        self._whole_graph_warm = True
+
+    def _whole_graph_capture(self, frame: Tensor) -> None:
+        if len(self._whole_graphed_callables) >= 10:
+            self._whole_graphed_callables.clear()
+        key = tuple(frame.shape)
+        print(f"🕯️ [WholeDetectGraph] Capturing graphed callable for shape {key}")
+        sample = frame.clone()
+        graphed = torch.cuda.make_graphed_callables(self._whole_graph_fn, (sample,))
+        self._whole_graphed_callables[key] = graphed
+
+    @torch.no_grad()
+    def _detect_from_feats(
+        self,
+        feats: list[Tensor],
+        state: StreamState,
+    ) -> tuple[Tensor, dict[str, Any]]:
+        """Temporal-window assembly + Mamba head + post-process for one frame.
+
+        Shared by the single-stream ``forward()`` and the multi-stream server.
+        ``feats`` are the (already gated) raw FPN features for the *current*
+        frame; ``state`` holds this stream's temporal feature ring buffer and
+        GMC warp buffer, so concurrent streams stay independent.
+        """
+        emb_preds: list[Tensor] | None = None
+        if state.temporal_buffer is not None:
             for si in range(3):
-                self._temporal_buffer[si].append(feats[si].detach())
-                if len(self._temporal_buffer[si]) > self._temporal_T:
-                    self._temporal_buffer[si].popleft()
-            T_buf = len(self._temporal_buffer[0])
+                state.temporal_buffer[si].append(feats[si].detach())
+                if len(state.temporal_buffer[si]) > state.temporal_T:
+                    state.temporal_buffer[si].popleft()
+            T_buf = len(state.temporal_buffer[0])
             feats = [
-                torch.cat(list(self._temporal_buffer[si]), dim=0) for si in range(3)
+                torch.cat(list(state.temporal_buffer[si]), dim=0) for si in range(3)
             ]
             flows = None
-            if len(self._gmc_mat_buffer) >= 2:
+            if len(state.gmc_mat_buffer) >= 2:
                 flows = []
                 for si in range(3):
                     _, _, Hf, Wf = feats[si].shape
@@ -340,7 +588,7 @@ class MambaGatedDetector(nn.Module):
                     flow_scales = []
                     for t in range(T_buf):
                         f = _gmc_matrices_to_flow(
-                            self._gmc_mat_buffer, t, T_buf - 1, Hf, Wf, feats[si].device
+                            state.gmc_mat_buffer, t, T_buf - 1, Hf, Wf, feats[si].device
                         )
                         flow_scales.append(f.unsqueeze(0).expand(B, -1, -1, -1))
                     flows.append(torch.cat(flow_scales, dim=0))
@@ -368,10 +616,126 @@ class MambaGatedDetector(nn.Module):
         )
 
         extra: dict[str, Any] = {}
-        if want_emb:
+        if want_emb and emb_preds is not None:
             extra["emb_preds"] = emb_preds
 
         return detections, extra
+
+    @torch.no_grad()
+    def _detect_batch(
+        self,
+        feats_list: list[list[Tensor]],
+        states: list[StreamState],
+    ) -> list[tuple[Tensor, dict[str, Any]]]:
+        """Batched detection across N streams sharing the same temporal depth.
+
+        Streams are stacked **batch-major** (flat row = ``b * T + t``) so the
+        layout matches the head's internal ``x.reshape(B, T_frames, ...)``
+        (mamba_head.py). Each stream keeps its own temporal buffer + GMC flows,
+        so per-stream results equal the single-stream ``_detect_from_feats``
+        path — this only amortizes the head launch across streams.
+
+        NOTE on layout: the single-stream path builds flows time-major and uses
+        the slice ``c[(T-1)*B:]``; both coincide with batch-major only at B=1.
+        This method uses batch-major throughout, which is the correct general
+        form for B>1.
+
+        ``feats_list[b]`` is stream b's ``[p3, p4, p5]`` for the *current* frame
+        (each leading dim 1). All states must already share the same buffer
+        depth (the server groups by depth before calling).
+        """
+        n = len(feats_list)
+        assert n > 0 and n == len(states)
+        want_emb = self.mamba_head.emb_head is not None
+        temporal = states[0].temporal_buffer is not None
+
+        if temporal:
+            for feats, st in zip(feats_list, states):
+                assert st.temporal_buffer is not None
+                for si in range(3):
+                    st.temporal_buffer[si].append(feats[si].detach())
+                    if len(st.temporal_buffer[si]) > st.temporal_T:
+                        st.temporal_buffer[si].popleft()
+            T_buf = len(states[0].temporal_buffer[0])  # type: ignore[index]
+            for st in states:
+                assert st.temporal_buffer is not None
+                assert len(st.temporal_buffer[0]) == T_buf, (
+                    "mixed temporal depth in batch"
+                )
+
+            # Batch-major feats: per stream cat over T, then cat across streams.
+            feats_combined: list[Tensor] = []
+            for si in range(3):
+                per_stream = [
+                    torch.cat(list(st.temporal_buffer[si]), dim=0)  # type: ignore[index]
+                    for st in states
+                ]  # each (T_buf, C, H, W)
+                feats_combined.append(
+                    torch.cat(per_stream, dim=0)
+                )  # (n*T_buf, C, H, W)
+
+            flows: list[Tensor] | None = None
+            if all(len(st.gmc_mat_buffer) >= 2 for st in states):
+                flows = []
+                for si in range(3):
+                    _, _, Hf, Wf = feats_combined[si].shape
+                    dev = feats_combined[si].device
+                    per_stream_flow = []
+                    for st in states:
+                        flow_t = [
+                            _gmc_matrices_to_flow(
+                                st.gmc_mat_buffer, t, T_buf - 1, Hf, Wf, dev
+                            ).unsqueeze(0)
+                            for t in range(T_buf)
+                        ]
+                        per_stream_flow.append(
+                            torch.cat(flow_t, dim=0)
+                        )  # (T_buf,2,Hf,Wf)
+                    flows.append(torch.cat(per_stream_flow, dim=0))  # (n*T_buf,2,Hf,Wf)
+
+            head_out = self.mamba_head(
+                feats_combined, return_embeddings=want_emb, T=T_buf, flows=flows
+            )
+            if want_emb:
+                cls_preds, reg_preds, emb_preds = head_out
+            else:
+                cls_preds, reg_preds = head_out
+                emb_preds = None
+            # last frame per stream: (n*T_buf, ...) -> (n, T_buf, ...) -> [:, -1]
+            cls_last = [c.reshape(n, T_buf, *c.shape[1:])[:, -1] for c in cls_preds]
+            reg_last = [r.reshape(n, T_buf, *r.shape[1:])[:, -1] for r in reg_preds]
+            emb_last = (
+                [e.reshape(n, T_buf, *e.shape[1:])[:, -1] for e in emb_preds]
+                if emb_preds is not None
+                else None
+            )
+        else:
+            feats_combined = [
+                torch.cat([f[si] for f in feats_list], dim=0) for si in range(3)
+            ]
+            head_out = self.mamba_head(feats_combined, return_embeddings=want_emb)
+            if want_emb:
+                cls_last, reg_last, emb_last = head_out
+            else:
+                cls_last, reg_last = head_out
+                emb_last = None
+
+        results: list[tuple[Tensor, dict[str, Any]]] = []
+        for b in range(n):
+            cls_b = [c[b : b + 1] for c in cls_last]
+            reg_b = [r[b : b + 1] for r in reg_last]
+            dets = _postprocess_mamba(
+                cls_b, reg_b, self.stride, self.conf_thr, self.max_det
+            )
+            extra: dict[str, Any] = {}
+            if emb_last is not None:
+                extra["emb_preds"] = [e[b : b + 1] for e in emb_last]
+            results.append((dets, extra))
+        return results
+
+    def set_use_cuda_graph(self, enabled: bool) -> None:
+        """Enable or disable CUDA Graph capture and replay for the Mamba head."""
+        self.mamba_head.set_use_cuda_graph(enabled)
 
     def extract_det_embeddings(
         self, emb_preds: list[Tensor], boxes_xyxy: Tensor
@@ -493,19 +857,13 @@ class MambaGatedDetector(nn.Module):
         self, warp: Tensor | None, orig_h: int = 0, orig_w: int = 0
     ) -> None:
         if warp is not None:
-            self._gmc_mat_buffer.append(warp.detach())
-            if len(self._gmc_mat_buffer) > self._gmc_mat_buf_max:
-                self._gmc_mat_buffer.popleft()
+            self._stream_state.push_gmc(warp)
 
     def reset_tracker(self) -> None:
         from saccade.perception.tracking import GPUByteTracker  # noqa: E402
 
         self.tracker = GPUByteTracker(max_objects=2048)
-        if self._temporal_buffer is not None:
-            for buf in self._temporal_buffer:
-                buf.clear()
-        if hasattr(self, "_gmc_mat_buffer"):
-            self._gmc_mat_buffer.clear()
+        self._stream_state.reset()
 
 
 def _gmc_matrices_to_flow(
@@ -554,6 +912,8 @@ def build_mamba_gated_detector(
     emb_dim: int = 0,
     jde_proj_ckpt: str = "",
     temporal_T_override: int | None = None,
+    use_cuda_graph: bool = False,
+    use_whole_graph: bool = False,
 ) -> MambaGatedDetector:
     if teacher_ckpt and Path(teacher_ckpt).exists():
         teacher_raw = torch.load(teacher_ckpt, map_location="cpu", weights_only=False)
@@ -598,5 +958,7 @@ def build_mamba_gated_detector(
         emb_dim=emb_dim,
         jde_proj_ckpt=str(Path(jde_proj_ckpt).resolve()) if jde_proj_ckpt else "",
         temporal_T=temporal_T,
+        use_cuda_graph=use_cuda_graph,
+        use_whole_graph=use_whole_graph,
     )
     return model.to(device)

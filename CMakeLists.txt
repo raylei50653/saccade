@@ -64,6 +64,19 @@ execute_process(
 list(APPEND CMAKE_PREFIX_PATH "${TORCH_CMAKE_DIR}")
 find_package(Torch REQUIRED)
 
+# Find PyTorch Python bindings library (torch_python) for pybind11 at::Tensor type-casting
+execute_process(
+    COMMAND ${Python3_EXECUTABLE} -c "import torch, os; print(os.path.join(os.path.dirname(torch.__file__), 'lib'))"
+    OUTPUT_VARIABLE TORCH_LIB_DIR
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+find_library(TORCH_PYTHON_LIBRARY
+    NAMES torch_python libtorch_python.so
+    PATHS ${TORCH_LIB_DIR}
+    NO_DEFAULT_PATH
+    REQUIRED
+)
+
 # LibTorch/Caffe2 injects -flto=auto into CMAKE_CXX_FLAGS which causes LTO
 # version mismatches when linking pybind11 modules. Strip it out immediately.
 string(REPLACE "-flto=auto" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
@@ -118,6 +131,7 @@ add_library(saccade_perception STATIC
     src/perception/letterbox_kernel.cu
     src/perception/feature_extractor.cpp
     src/perception/mamba_gated_detector.cpp
+    src/perception/batched_mamba_detector.cpp
 )
 # 設定導出宏
 target_compile_definitions(saccade_perception PRIVATE SACCADE_EXPORT_PERCEPTION)
@@ -220,6 +234,7 @@ pybind11_add_module(saccade_perception_ext NO_EXTRAS src/perception/perception_p
 target_link_libraries(saccade_perception_ext PRIVATE
     saccade_perception
     CUDA::cudart
+    ${TORCH_PYTHON_LIBRARY}
 )
 target_compile_options(saccade_perception_ext PRIVATE -fno-lto)
 set_target_properties(

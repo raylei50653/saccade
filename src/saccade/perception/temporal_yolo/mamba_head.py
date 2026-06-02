@@ -41,6 +41,101 @@ def _selective_scan(
         return _selective_scan_jit(u, delta, A, B, C, D)
 
 
+# Custom operator registration for traceability in PyTorch 2.x / torch.compile / torch.export
+try:
+
+    @torch.library.custom_op("saccade::selective_scan_fwd", mutates_args=())
+    def _saccade_selective_scan_op(
+        u: torch.Tensor,
+        delta: torch.Tensor,
+        A: torch.Tensor,
+        B: torch.Tensor,
+        C: torch.Tensor,
+        D: torch.Tensor,
+        a_per_channel: int,
+        is_half: bool,
+    ) -> torch.Tensor:
+        import saccade_tracking_ext
+
+        u = u.contiguous()
+        delta = delta.contiguous()
+        A = A.contiguous()
+        B = B.contiguous()
+        C = C.contiguous()
+
+        D_ptr = D.data_ptr() if D.numel() > 0 else 0
+        y = torch.empty_like(u)
+
+        # Launch on PyTorch's current stream so the kernel is recorded during
+        # CUDA-graph capture (the legacy default stream is never captured).
+        saccade_tracking_ext.selective_scan_fwd(
+            u.data_ptr(),
+            delta.data_ptr(),
+            A.data_ptr(),
+            B.data_ptr(),
+            C.data_ptr(),
+            D_ptr,
+            y.data_ptr(),
+            u.shape[0],
+            u.shape[1],
+            u.shape[2],
+            A.shape[-1],
+            1 if D_ptr != 0 else 0,
+            a_per_channel,
+            is_half,
+            torch.cuda.current_stream(u.device).cuda_stream,
+        )
+        return y
+
+    @_saccade_selective_scan_op.register_fake
+    def _(
+        u: torch.Tensor,
+        delta: torch.Tensor,
+        A: torch.Tensor,
+        B: torch.Tensor,
+        C: torch.Tensor,
+        D: torch.Tensor,
+        a_per_channel: int,
+        is_half: bool,
+    ) -> torch.Tensor:
+        return torch.empty_like(u)
+
+except Exception:
+    # Fallback to direct call in case custom_op is not supported or errors out
+    def _saccade_selective_scan_op(
+        u: torch.Tensor,
+        delta: torch.Tensor,
+        A: torch.Tensor,
+        B: torch.Tensor,
+        C: torch.Tensor,
+        D: torch.Tensor,
+        a_per_channel: int,
+        is_half: bool,
+    ) -> torch.Tensor:
+        import saccade_tracking_ext
+
+        D_ptr = D.data_ptr() if D.numel() > 0 else 0
+        y = torch.empty_like(u)
+        saccade_tracking_ext.selective_scan_fwd(
+            u.contiguous().data_ptr(),
+            delta.contiguous().data_ptr(),
+            A.contiguous().data_ptr(),
+            B.contiguous().data_ptr(),
+            C.contiguous().data_ptr(),
+            D_ptr,
+            y.data_ptr(),
+            u.shape[0],
+            u.shape[1],
+            u.shape[2],
+            A.shape[-1],
+            1 if D_ptr != 0 else 0,
+            a_per_channel,
+            is_half,
+            torch.cuda.current_stream(u.device).cuda_stream,
+        )
+        return y
+
+
 def _selective_scan_cuda(
     u: Tensor,
     delta: Tensor,
@@ -49,15 +144,6 @@ def _selective_scan_cuda(
     C: Tensor,
     D: Tensor | None = None,
 ) -> Tensor:
-    import saccade_tracking_ext
-
-    D_ptr = D.data_ptr() if D is not None and D.numel() > 0 else 0
-
-    u = u.contiguous()
-    delta = delta.contiguous()
-    A = A.contiguous()
-    B = B.contiguous()
-
     # A is (rows, N): rows=1 → shared decay across channels; rows=d_inner →
     # per-channel dynamics. N (state dim) is always the last axis; the kernel
     # indexes A[d * N + n] when per-channel.
@@ -72,26 +158,19 @@ def _selective_scan_cuda(
     else:
         C = C.contiguous()
 
-    y = torch.empty_like(u)
     is_half = u.dtype == torch.float16
+    D_tensor = D if D is not None else torch.empty(0, dtype=u.dtype, device=u.device)
 
-    saccade_tracking_ext.selective_scan_fwd(
-        u.data_ptr(),
-        delta.data_ptr(),
-        A.data_ptr(),
-        B.data_ptr(),
-        C.data_ptr(),
-        D_ptr,
-        y.data_ptr(),
-        u.shape[0],
-        u.shape[1],
-        u.shape[2],
-        N,
-        1 if D_ptr != 0 else 0,
+    return _saccade_selective_scan_op(
+        u,
+        delta,
+        A,
+        B,
+        C,
+        D_tensor,
         a_per_channel,
         is_half,
     )
-    return y
 
 
 @torch.jit.script
@@ -323,6 +402,7 @@ class MambaDetectionHead(nn.Module):
         use_temporal_mamba: bool = False,  # spatio-temporal SSM across T frames (P2 ST optimization)
         use_temporal_attention: bool = False,  # T=4 self-attention over frames (replaces SSM, no flow gate)
         per_channel_a: bool = False,  # per-channel SSM A (d_inner, N); warm-starts from shared (1, N)
+        use_cuda_graph: bool = False,  # enable CUDA Graph capture and replay
     ):
         super().__init__()
         self.nl = len(in_channels)
@@ -470,6 +550,16 @@ class MambaDetectionHead(nn.Module):
         else:
             self.upsample = None
 
+        self.use_cuda_graph = use_cuda_graph
+        # Lazily-captured ``torch.cuda.make_graphed_callables``, keyed by
+        # (input shapes, return_embeddings). make_graphed_callables owns the
+        # graph pool + capture stream + static I/O, so its replay is robust to
+        # the surrounding eval GPU work (GMC / tracker kernels). This replaces a
+        # hand-rolled ``torch.cuda.CUDAGraph`` capture whose replay corrupted
+        # cls outputs in the full eval pipeline — see
+        # docs/research/pipeline/mamba_head_cuda_graph_eval_bug_20260602.md.
+        self._graphed_callables: dict = {}
+
     def load_state_dict(self, state_dict, strict=True):
         # Check if the keys of state_dict contain 'upsample' parameters.
         # This prevents breaking existing checkpoints that were trained without PixelShuffle.
@@ -510,7 +600,109 @@ class MambaDetectionHead(nn.Module):
 
         return super().load_state_dict(state_dict, strict=strict)
 
+    def set_use_cuda_graph(self, enabled: bool) -> None:
+        """Enable or disable CUDA Graph capture and replay."""
+        self.use_cuda_graph = enabled
+        if not enabled:
+            self.clear_cuda_graphs()
+
+    def clear_cuda_graphs(self) -> None:
+        """Drop all graphed callables (releases their captured graph mempools)."""
+        self._graphed_callables.clear()
+
     def forward(
+        self,
+        feats: list[Tensor],
+        return_embeddings: bool = False,
+        T: int | None = None,
+        flows: list[Tensor] | None = None,
+    ) -> (
+        tuple[list[Tensor], list[Tensor]]
+        | tuple[list[Tensor], list[Tensor], list[Tensor]]
+    ):
+        # Fall back to eager execution under any of these conditions:
+        # 1. CUDA Graph not explicitly enabled
+        # 2. PyTorch is tracing (e.g. exporting to TorchScript)
+        # 3. Inputs are not on CUDA
+        # 4. Gradients are enabled (i.e. during training)
+        is_tracing = False
+        try:
+            import torch.jit
+
+            if torch.jit.is_tracing():
+                is_tracing = True
+        except Exception:
+            pass
+
+        if (
+            not self.use_cuda_graph
+            or is_tracing
+            or not feats[0].is_cuda
+            or torch.is_grad_enabled()
+            # The graph only covers the static single-frame path. The temporal /
+            # flow-gated path has data-dependent shapes (T_buf grows while the
+            # ring buffer fills, flows toggle on once GMC has ≥2 mats), so it is
+            # left eager.
+            or T is not None
+            or flows is not None
+        ):
+            return self._forward_eager(feats, return_embeddings, T, flows)
+
+        return self._graphed_forward(feats, return_embeddings)
+
+    def _graphed_forward(
+        self,
+        feats: list[Tensor],
+        return_embeddings: bool,
+    ) -> (
+        tuple[list[Tensor], list[Tensor]]
+        | tuple[list[Tensor], list[Tensor], list[Tensor]]
+    ):
+        """Single-frame head replayed via ``torch.cuda.make_graphed_callables``.
+
+        Collapses the ~278 eager kernel launches of one head pass into a single
+        CUDA-graph replay. The graphed callable copies the live ``feats`` into
+        its static input surface on each call, so passing fresh tensors per
+        frame is fine. Captured lazily per input shape; make_graphed_callables
+        manages the graph pool / capture stream / static I/O so replay is
+        isolated from the surrounding eval GPU work.
+        """
+        feats = [f.contiguous() for f in feats]
+        key = (tuple(tuple(f.shape) for f in feats), return_embeddings)
+
+        graphed = self._graphed_callables.get(key)
+        if graphed is None:
+            if len(self._graphed_callables) >= 10:
+                self.clear_cuda_graphs()
+
+            sample = tuple(f.clone() for f in feats)
+
+            def _head_fn(*fs: Tensor) -> tuple[Tensor, ...]:
+                out = self._forward_eager(list(fs), return_embeddings, None, None)
+                # Flatten (cls, reg[, emb]) lists into one tuple of tensors so
+                # make_graphed_callables' pytree handling captures every output.
+                flat: list[Tensor] = []
+                for group in out:
+                    flat.extend(group)
+                return tuple(flat)
+
+            print(
+                f"🧠 [MambaHead] Capturing graphed callable for shapes "
+                f"{[list(s) for s in key[0]]} (return_embeddings={return_embeddings})"
+            )
+            graphed = torch.cuda.make_graphed_callables(_head_fn, sample)
+            self._graphed_callables[key] = graphed
+
+        flat_out = graphed(*feats)
+        n = self.nl
+        cls_preds = list(flat_out[:n])
+        reg_preds = list(flat_out[n : 2 * n])
+        if return_embeddings and self.emb_head is not None:
+            emb_preds = list(flat_out[2 * n :])
+            return cls_preds, reg_preds, emb_preds
+        return cls_preds, reg_preds
+
+    def _forward_eager(
         self,
         feats: list[Tensor],
         return_embeddings: bool = False,

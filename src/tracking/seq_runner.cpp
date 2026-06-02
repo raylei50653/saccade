@@ -3,6 +3,10 @@
 #include <opencv2/opencv.hpp>
 #include <cuda_runtime.h>
 #include <NvInfer.h>
+#include <c10/cuda/CUDAStream.h>
+#include <c10/cuda/CUDAGuard.h>
+#include <ATen/cuda/CUDAContext.h>
+#include <torch/torch.h>
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -22,21 +26,26 @@ void launch_letterbox_gpu(
 
 // ─── SequenceRunner ───────────────────────────────────────────────────────────
 
-SequenceRunner::SequenceRunner(TRTEngine*                        detect_engine,
+SequenceRunner::SequenceRunner(BaseDetector*                     detect_detector,
                                const PerceptionPipeline::Config& pipe_cfg,
                                int                               max_dets,
                                int                               max_tracks,
                                int                               device_id)
-    : detect_engine_(detect_engine)
+    : detect_detector_(detect_detector)
     , device_id_(device_id)
     , max_tracks_(max_tracks)
 {
     cudaSetDevice(device_id_);
     cudaStreamCreate(&stream_);
 
-    detect_ctx_ = detect_engine_->create_context();
-    if (!detect_ctx_)
-        throw std::runtime_error("SequenceRunner: failed to create TRT execution context");
+    TRTEngine* trt_det = dynamic_cast<TRTEngine*>(detect_detector_);
+    if (trt_det) {
+        detect_ctx_ = trt_det->create_context();
+        if (!detect_ctx_)
+            throw std::runtime_error("SequenceRunner: failed to create TRT execution context");
+    } else {
+        detect_ctx_ = nullptr;
+    }
 
     pipeline_ = std::make_unique<PerceptionPipeline>(nullptr, nullptr, pipe_cfg);
 }
@@ -129,10 +138,12 @@ void SequenceRunner::load_frame(const std::string& path,
 {
     // Ensure src CHW buffer is large enough
     size_t needed_src = 3 * (size_t)frame_h * frame_w * sizeof(float);
-    if (d_src_chw_ == nullptr)
+    if (d_src_chw_ == nullptr || needed_src > h_frame_bytes_) {
+        if (d_src_chw_) cudaFree(d_src_chw_);
         cudaMalloc(&d_src_chw_, needed_src);
+    }
 
-    if (needed_src > h_frame_bytes_) {
+    if (h_frame_pinned_ == nullptr || needed_src > h_frame_bytes_) {
         if (h_frame_pinned_) cudaFreeHost(h_frame_pinned_);
         cudaMallocHost(&h_frame_pinned_, needed_src);
         h_frame_bytes_ = needed_src;
@@ -205,15 +216,18 @@ std::vector<FrameResult> SequenceRunner::run(const SequenceConfig& cfg) {
     Workbench workbench(pipeline_.get(), &tracker, stream_, 2048, max_tracks_);
 
     // Configure TRT context input shape (only needed for dynamic/profile engines)
-    {
-        nvinfer1::Dims engine_dims = detect_engine_->getTensorDims("images");
-        bool is_dynamic = false;
-        for (int i = 0; i < engine_dims.nbDims; ++i) {
-            if (engine_dims.d[i] < 0) { is_dynamic = true; break; }
-        }
-        if (is_dynamic) {
-            nvinfer1::Dims4 in_dims{1, 3, S, S};
-            detect_ctx_->setInputShape("images", in_dims);
+    if (detect_ctx_) {
+        TRTEngine* trt_det = dynamic_cast<TRTEngine*>(detect_detector_);
+        if (trt_det) {
+            nvinfer1::Dims engine_dims = trt_det->getTensorDims("images");
+            bool is_dynamic = false;
+            for (int i = 0; i < engine_dims.nbDims; ++i) {
+                if (engine_dims.d[i] < 0) { is_dynamic = true; break; }
+            }
+            if (is_dynamic) {
+                nvinfer1::Dims4 in_dims{1, 3, S, S};
+                detect_ctx_->setInputShape("images", in_dims);
+            }
         }
     }
 
@@ -269,30 +283,64 @@ std::vector<FrameResult> SequenceRunner::run(const SequenceConfig& cfg) {
         float scale; int x_off, y_off;
         load_frame(cfg.frame_paths[fi], cfg.width, cfg.height, S, scale, x_off, y_off);
 
-        // 2. TRT detection (async)
-        {
+        // 2. Detection (polymorphic)
+        int actual_dets = 0;
+        TRTEngine* trt_det = dynamic_cast<TRTEngine*>(detect_detector_);
+        if (trt_det) {
+            // TRT detection (async)
             void* bindings[2] = {d_input_, d_yolo_out_};
-            detect_engine_->infer_with_context(detect_ctx_, {bindings[0], bindings[1]}, stream_);
-        }
+            trt_det->infer_with_context(detect_ctx_, {bindings[0], bindings[1]}, stream_);
 
-        // 3. Parse YOLO output: [max_raw, 6] → boxes/scores/classes + inverse letterbox
-        parse_yolo_output(d_yolo_out_,
-                          d_raw_boxes_, d_raw_scores_, d_raw_classes_,
-                          max_raw, 1.0f / scale, (float)x_off, (float)y_off,
-                          stream_);
+            // 3. Parse YOLO output: [max_raw, 6] → boxes/scores/classes + inverse letterbox
+            parse_yolo_output(d_yolo_out_,
+                              d_raw_boxes_, d_raw_scores_, d_raw_classes_,
+                              max_raw, 1.0f / scale, (float)x_off, (float)y_off,
+                              stream_);
 
-        // 4. Quality scaling (in-place)
-        quality_scale_scores(d_raw_scores_, d_raw_boxes_, max_raw,
-                             cfg.width, cfg.height,
-                             cfg.w_aspect, cfg.w_center, cfg.w_area,
-                             stream_);
+            // 4. Quality scaling (in-place)
+            quality_scale_scores(d_raw_scores_, d_raw_boxes_, max_raw,
+                                 cfg.width, cfg.height,
+                                 cfg.w_aspect, cfg.w_center, cfg.w_area,
+                                 stream_);
 
-        // 5. Narrow bonus (optional, in-place)
-        if (cfg.narrow_bonus > 0.0f) {
-            narrow_bonus_scores(d_raw_scores_, d_raw_boxes_, d_raw_classes_, max_raw,
-                                cfg.narrow_bonus, cfg.person_class,
-                                cfg.narrow_aspect_thresh, cfg.narrow_height_thresh,
-                                cfg.height, stream_);
+            // 5. Narrow bonus (optional, in-place)
+            if (cfg.narrow_bonus > 0.0f) {
+                narrow_bonus_scores(d_raw_scores_, d_raw_boxes_, d_raw_classes_, max_raw,
+                                    cfg.narrow_bonus, cfg.person_class,
+                                    cfg.narrow_aspect_thresh, cfg.narrow_height_thresh,
+                                    cfg.height, stream_);
+            }
+            actual_dets = max_raw;
+        } else {
+            // MambaGatedDetector or polymorphic BaseDetector
+            c10::cuda::CUDAStreamGuard stream_guard(c10::cuda::getStreamFromExternal(stream_, device_id_));
+            int num_dets = detect_detector_->forward_ptr((uintptr_t)d_input_, (uintptr_t)d_yolo_out_);
+            if (num_dets > 0) {
+                auto options_float = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
+                auto options_int = torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA);
+
+                auto yolo_out_tensor = torch::from_blob(d_yolo_out_, {num_dets, 6}, options_float);
+                auto raw_boxes_tensor = torch::from_blob(d_raw_boxes_, {num_dets, 4}, options_float);
+                auto raw_scores_tensor = torch::from_blob(d_raw_scores_, {num_dets}, options_float);
+                auto raw_classes_tensor = torch::from_blob(d_raw_classes_, {num_dets}, options_int);
+
+                auto x1 = yolo_out_tensor.select(1, 0);
+                auto y1 = yolo_out_tensor.select(1, 1);
+                auto x2 = yolo_out_tensor.select(1, 2);
+                auto y2 = yolo_out_tensor.select(1, 3);
+                auto scores = yolo_out_tensor.select(1, 4);
+                auto classes = yolo_out_tensor.select(1, 5).to(torch::kInt32);
+
+                float inv_scale = 1.0f / scale;
+                raw_boxes_tensor.select(1, 0).copy_((x1 - x_off) * inv_scale);
+                raw_boxes_tensor.select(1, 1).copy_((y1 - y_off) * inv_scale);
+                raw_boxes_tensor.select(1, 2).copy_((x2 - x_off) * inv_scale);
+                raw_boxes_tensor.select(1, 3).copy_((y2 - y_off) * inv_scale);
+
+                raw_scores_tensor.copy_(scores);
+                raw_classes_tensor.copy_(classes);
+            }
+            actual_dets = num_dets;
         }
 
         // 5b. GMC warp estimation (on d_src_chw_, original resolution)
@@ -305,16 +353,16 @@ std::vector<FrameResult> SequenceRunner::run(const SequenceConfig& cfg) {
 
         // 5c. ReID embedding extraction (budget top-K by quality-scaled score)
         float* embeds_ptr = nullptr;
-        if (reid_extractor_ && (fi % cfg.reid_interval == 0)) {
+        if (reid_extractor_ && (fi % cfg.reid_interval == 0) && (actual_dets > 0)) {
             // D2H scores for CPU top-K selection (pinned = fast)
             cudaMemcpyAsync(h_raw_scores_pin_, d_raw_scores_,
-                            (size_t)max_raw * sizeof(float),
+                            (size_t)actual_dets * sizeof(float),
                             cudaMemcpyDeviceToHost, stream_);
             cudaStreamSynchronize(stream_);
 
             // CPU partial sort → top-K indices by descending score
-            int K = std::min(cfg.reid_budget, max_raw);
-            std::vector<int> idx(max_raw);
+            int K = std::min(cfg.reid_budget, actual_dets);
+            std::vector<int> idx(actual_dets);
             std::iota(idx.begin(), idx.end(), 0);
             std::partial_sort(idx.begin(), idx.begin() + K, idx.end(),
                 [&](int a, int b){ return h_raw_scores_pin_[a] > h_raw_scores_pin_[b]; });
@@ -335,7 +383,7 @@ std::vector<FrameResult> SequenceRunner::run(const SequenceConfig& cfg) {
 
             // Scatter K embeddings into full [max_raw, feat_dim] tensor (zeroed)
             cudaMemsetAsync(d_reid_embeds_, 0,
-                            (size_t)max_raw * reid_feat_dim_ * sizeof(float), stream_);
+                            (size_t)max_raw_dets_ * reid_feat_dim_ * sizeof(float), stream_);
             scatter_embeddings_cuda(d_reid_embeds_, d_reid_sel_embeds_,
                                     d_reid_sel_idx_, K, reid_feat_dim_, stream_);
             embeds_ptr = d_reid_embeds_;
@@ -343,7 +391,7 @@ std::vector<FrameResult> SequenceRunner::run(const SequenceConfig& cfg) {
 
         // 6. Workbench: filter + NMS + tracker
         int n_out = workbench.process_frame_postyolo(
-            d_raw_boxes_, d_raw_scores_, d_raw_classes_, max_raw,
+            d_raw_boxes_, d_raw_scores_, d_raw_classes_, actual_dets,
             cfg.width, cfg.height,
             /*is_tiled=*/false,
             /*priors_ptr=*/nullptr, /*prior_classes_ptr=*/nullptr,

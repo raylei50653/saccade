@@ -615,3 +615,69 @@ Cascade model（CrowdHuman-trained）泛用效果：P=4.5%, R=84.4%, FPrem=37.2%
 - 主 TODO 更新：[docs/TODO.md](/docs/TODO.md)（P5-1 更新）
 - 詳細報告：[docs/archive/multibirth_scan_summary.md](/docs/archive/multibirth_scan_summary.md)
 - 修改檔案：`evaluator.py`, `multi_birth.py`, `config.py`, `config/lifecycle.py`
+
+---
+
+## Algorithm Direction Exploration — Option D / E-v2 / F + Mamba Head（2026-05-17 ~ 06-02，歸檔於 2026-06-02）
+
+> 從主 TODO 拆出。背景：2026-05-17 speed preset（yolo26s）7-seq SDP 全量評估，參數優化觸天花板
+> （IDF1 52.4% / MOTA 41.7% / Rcll 55.2% / FPS 131.8）；threshold 調整 MOTA 波動 <0.5pp，
+> 結論「需要新算法架構，而非參數調校」。後續 Option D/E/F 即此脈絡下的探索。當前 production
+> preset 為 **Option F `mamba_optimal`**（見主 TODO baseline 表與 [configs/presets/mamba_optimal.yaml](/configs/presets/mamba_optimal.yaml)）。
+
+### ❌ Option D — Track-Conditioned YOLO（NO-GO，2026-05-19 結案）
+
+Phase 2（50 epochs）eval 完成。IDF1 31.7% / MOTA 24.5% vs baseline 52.0% / 41.6%，差距 -20pp。
+Gate ablation 確認 gate 無貢獻（gate-on 38.3% vs gate-off 38.2%，∆<0.2pp）。
+根因：100 queries recall 天花板（34.9% vs baseline 55%）+ Phase 2 gt_ratio→0 使 decoder 繞過 gate。
+Checkpoints 保留：`runs/conditioned_p1_v2/best.ckpt`、`runs/conditioned_p2/best.ckpt`。
+
+### ✅ Option E-v2 — Quality-Gated Temporal Feature Fusion（GO，2026-05-22 結案；後被 Option F 取代為 preset）
+
+設計文件：[docs/architecture/temporal_yolo/option-e-v2-design.md](architecture/temporal_yolo/option-e-v2-design.md)。
+直接利用 t-1 的 FPN 特徵加上 α_tier（per-track-state）加權做時序融合，無需重訓，從 gated_det_v1 熱啟動。
+最終結果（MOT17 train，7 SDP，yolo26s）：**MOTA 54.2%（+1.7pp），FP 2932（-21%），Rcll 57.3%（+1.1pp）**。
+- P0 ✅ α=0 與 baseline 一致 / P1 ✅ Fixed α sweep（α=0.15 最佳）/ P2 ❌ GMC warp NO-GO（sparse flow 精度不足）
+- P3 ✅ α_tier 分層（MOTA 54.2%, FP -21%, Prcn 95.6%）/ P4 ✅ Lock-in 檢測通過
+- 最佳配置：`--temporal-fusion --fusion-alpha 1.0`（不 warp）；Code：`temporal_yolo/temporal_fusion.py`
+- 未完成：detector score heatmap、per-scale α_tier tuning、FPS 優化、訓練腳本
+
+### ✅ Option F — Mamba Gated Detector & Tracker Optimization（2026-05-27 結案，當前 preset）
+
+設計預設檔：[configs/presets/mamba_optimal.yaml](/configs/presets/mamba_optimal.yaml)。徹底挖掘 Mamba 檢測頭，
+移除無效益 ReID，協同精調動態關聯 / GMC 對齊 / 軌跡插值。
+
+**🚀 PixelShuffle Breakthrough（2026-05-27）**：Mamba 頭以 **PixelShuffle 上取樣**取代無參數 `F.interpolate`，
+配合 Stretch-Resize 預處理：**IDF1 71.2%（+6.3pp），MOTA 76.3%（+14.3pp），Rcll 82.3%（+15.0pp）**。
+關鍵發現：
+1. **預處理域一致性是決定性的**：Teacher FPN 若受 Letterbox 灰邊污染，Mamba 頭定位崩潰（IDF1 23.3%）；
+   Stretch-Resize（`preprocess: none`）恢復純淨域後完全恢復。
+2. `use_letterbox=False` 是訓練預設正確決策（推理 `--preset mamba_optimal` 對應 `preprocess: none`，域一致）。
+3. 特徵快取：`--precompute-dir`/`--cache-dir` 使 Phase 1 蒸餾每 epoch 從數分鐘降至 ~15 秒。
+
+最終訓練流程（~10min）：
+```bash
+# 1. 預計算 Teacher FPN 特徵（一次性，~97s）
+uv run scripts/train/temporal_yolo/train_mamba_head.py --data-root datasets/MOT17 --use-pixel-shuffle --precompute-dir runs/trt_feat_cache_v2
+# 2. Phase 1 蒸餾（~5min）
+uv run scripts/train/temporal_yolo/train_mamba_head.py --data-root datasets/MOT17 --use-pixel-shuffle --cache-dir runs/trt_feat_cache_v2 --run-dir runs/mamba_distill_pixelshuffle_correct --epochs 20 --batch-size 8
+# 3. Phase 2 GT 微調（~15min）
+uv run scripts/train/temporal_yolo/train_mamba_gt.py --data-root datasets/MOT17 --mamba-ckpt runs/mamba_distill_pixelshuffle_correct/best.ckpt --run-dir runs/mamba_gt_pixelshuffle_correct --epochs 30 --batch-size 4
+```
+
+三項核心精調結論：
+1. **Mamba 專屬 IoU 門檻 `match_thresh=0.50`**：適配信心分佈，相比 0.66 顯著挽救斷軌。
+2. **軌跡插值鎖定 `interpolate_max_gap=35`**：容忍 ~1.17s 完全遮擋，Recall +1.3pp。
+3. **高精度 GMC `gmc_downscale=4`**：GPU FFT 相位相關估計極精準，以零速度代價壓 IDs。
+
+### Mamba 檢測頭優化 — 已完成項（歸檔）
+
+| 項目 | 結論 | 狀態 |
+| :--- | :--- | :---: |
+| **特徵還原層（Pixel-Shuffle）** | 取代 `F.interpolate`。MOTA +14.3pp, IDF1 +6.3pp, Rcll +15.0pp | ✅ 已完工 (2026-05-27) |
+| **2D 多向掃描 (Cross-Scan)** | row-major 單向改四向交叉掃描融合，零參數增長（共享 MambaBlocks），消除方向偏見 | ✅ 已實作 (2026-05-27，當前 preset) |
+
+### Recent Ablation Conclusions（2026-05-10 ~ 05-11，歸檔）
+
+- **FP 模組 C：bank_weighted_mean（待測）**：以 quality_score 加權 bank 樣本均值，降低低品質 embedding 影響；
+  只在 `--appearance-bank` 開啟時有效，ReID stack 測試待排。

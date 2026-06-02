@@ -84,5 +84,6 @@ build-native-coverage/
 /test_*.py
 /trt_bench.py
 *.prof
+scratch/nsys_profiles/
 storage/mlflow_artifacts/
 output/

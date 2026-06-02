@@ -6,6 +6,10 @@ Usage:
 """
 
 import sys
+import ctypes
+
+sys.setdlopenflags(sys.getdlopenflags() | ctypes.RTLD_GLOBAL)
+import torch
 from pathlib import Path
 
 project_root = Path(__file__).resolve().parent.parent.parent
@@ -15,7 +19,6 @@ sys.path.insert(0, str(project_root / "src"))
 # MUST import saccade_tracking_ext before torchvision/PIL to avoid shared library conflict
 import saccade_tracking_ext  # noqa: F401
 
-import torch
 import torch.nn as nn
 from saccade.perception.temporal_yolo.mamba_gated_detector import (
     build_mamba_gated_detector,
@@ -38,12 +41,15 @@ def export():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
 
+    # Force cuBLAS initialization
+    _ = torch.zeros(1, device="cuda") @ torch.zeros(1, device="cuda")
+
     # Build student detector
     print("Building detector...")
     detector = build_mamba_gated_detector(
         yolo_pt_path=str(project_root / "models/yolo/yolo26s.pt"),
         teacher_ckpt=str(project_root / "runs/gated_det_v1/best.ckpt"),
-        mamba_ckpt=str(project_root / "runs/mamba_gt_960_v2/best.ckpt"),
+        mamba_ckpt=str(project_root / "runs/mamba_gt_vgt_mamba_v14/best.ckpt"),
         img_size=640,
         device=device,
         emb_dim=128,
@@ -58,6 +64,11 @@ def export():
         torch.zeros(1, 256, 40, 40, device=device),
         torch.zeros(1, 512, 20, 20, device=device),
     ]
+
+    # Warm up model before JIT tracing to initialize all cuBLAS and CUDA states
+    print("Warming up model on CUDA...")
+    with torch.no_grad():
+        wrapper(dummy_fpn)
 
     # Trace the mamba head wrapper
     print("Tracing MambaHeadWrapper to TorchScript...")

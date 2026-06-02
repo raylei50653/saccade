@@ -88,3 +88,53 @@ class DALIStreamerStream:
             if self.file_list_path and os.path.exists(self.file_list_path):
                 os.remove(self.file_list_path)
             raise
+
+
+class TorchvisionGpuStreamer:
+    """Drop-in for DALIStreamerStream that decodes JPEGs on the GPU's dedicated
+    NVJPG hardware engine via torchvision/nvJPEG.
+
+    DALI's ``device="mixed"`` decoder can't build under WSL2 (its nvJPEG init
+    queries NVML, which WSL2 stubs out), so the eval path falls back to CPU
+    decode. torchvision's ``decode_jpeg(device="cuda")`` hits the same nvJPEG
+    library directly and works — running on the NVJPG engine (~90% util) without
+    touching the SMs, so it offloads decode off the CPU for free.
+
+    Yields ``[H, W, C]`` uint8 CUDA tensors to match ``DALIStreamerStream``.
+    """
+
+    def __init__(self, img_dir: Path, prefetch: int = 2):
+        import torch
+        from torchvision.io import ImageReadMode, decode_jpeg, read_file
+
+        self._read_file = read_file
+        self._decode = decode_jpeg
+        self._rgb = ImageReadMode.RGB
+        self._torch = torch
+        self.img_files = sorted(str(path.absolute()) for path in img_dir.glob("*.jpg"))
+        self._prefetch = max(1, prefetch)
+        self._idx = 0
+        # Prefetch raw file bytes (CPU read) a few ahead so the GPU decode of
+        # frame N overlaps the file read of frame N+1.
+        self._raw: list[Any] = []
+
+    def __iter__(self) -> "TorchvisionGpuStreamer":
+        self._idx = 0
+        self._raw = []
+        return self
+
+    def __next__(self) -> Any:
+        if self._idx >= len(self.img_files):
+            raise StopIteration
+        # Top up the raw-bytes prefetch queue.
+        while len(self._raw) < self._prefetch and (self._idx + len(self._raw)) < len(
+            self.img_files
+        ):
+            self._raw.append(
+                self._read_file(self.img_files[self._idx + len(self._raw)])
+            )
+        data = self._raw.pop(0)
+        self._idx += 1
+        # [C, H, W] uint8 CUDA -> [H, W, C] view (caller does permute(2,0,1)).
+        img_chw = self._decode(data, device="cuda", mode=self._rgb)
+        return img_chw.permute(1, 2, 0)

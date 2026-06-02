@@ -2,6 +2,7 @@
 #include "saccade/common.hpp"
 #include "tracking/seq_runner.hpp"
 #include "tracking/pipeline.hpp"
+#include "perception/base_detector.hpp"
 #include "perception/trt_engine.hpp"
 #include <map>
 #include <memory>
@@ -27,7 +28,7 @@ namespace saccade {
  */
 class SACCADE_TRACKING_API EvaluatorPool {
 public:
-    EvaluatorPool(TRTEngine*                        detect_engine,
+    EvaluatorPool(BaseDetector*                     detect_detector,
                   const PerceptionPipeline::Config& pipe_cfg,
                   int                               n_threads   = 4,
                   int                               max_dets    = 2048,
@@ -53,7 +54,7 @@ private:
                    std::map<std::string, std::vector<FrameResult>>& results,
                    std::mutex& results_mtx);
 
-    TRTEngine*                  detect_engine_;
+    BaseDetector*               detect_detector_;
     PerceptionPipeline::Config  pipe_cfg_;
     int                         n_threads_;
     int                         max_dets_;

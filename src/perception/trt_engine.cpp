@@ -4,6 +4,8 @@
 #include <iostream>
 #include <fstream>
 #include <vector>
+#include <c10/cuda/CUDAStream.h>
+#include <ATen/cuda/CUDAContext.h>
 
 namespace saccade {
 
@@ -184,6 +186,65 @@ bool TRTEngine::infer_with_context(nvinfer1::IExecutionContext* ctx,
 
 void TRTEngine::delete_context(nvinfer1::IExecutionContext* ctx) {
     delete ctx;
+}
+
+// ── BaseDetector interface implementations ──────────────────────────────────
+
+torch::Tensor TRTEngine::forward(torch::Tensor d_input_img) {
+    auto current_stream = at::cuda::getCurrentCUDAStream();
+    auto out_dims = getTensorDims("output0");
+    std::vector<int64_t> out_shape;
+    for (int i = 0; i < out_dims.nbDims; ++i) {
+        out_shape.push_back(out_dims.d[i]);
+    }
+    if (out_shape.empty()) {
+        out_shape = {1, 8400, 6}; // YOLO default fallback
+    }
+
+    auto options = torch::TensorOptions().dtype(torch::kFloat32).device(d_input_img.device());
+    auto y = torch::empty(out_shape, options);
+
+    std::vector<void*> bindings = { d_input_img.data_ptr(), y.data_ptr() };
+    infer(bindings, current_stream.stream());
+    return y;
+}
+
+torch::Tensor TRTEngine::extract_fpn_embeddings(torch::Tensor d_boxes_xyxy) {
+    // Standard TRT backbone has no appearance embedding branch; return zero dummy embeddings
+    auto options = torch::TensorOptions().dtype(torch::kFloat32).device(d_boxes_xyxy.device());
+    auto out = torch::zeros({d_boxes_xyxy.size(0), get_fpn_dim()}, options);
+    return out / (out.norm(2, 1, true) + 1e-12f);
+}
+
+int TRTEngine::forward_ptr(uintptr_t d_input_img, uintptr_t d_out_dets) {
+    auto current_stream = at::cuda::getCurrentCUDAStream();
+    std::vector<void*> bindings = { reinterpret_cast<void*>(d_input_img), reinterpret_cast<void*>(d_out_dets) };
+    infer(bindings, current_stream.stream());
+    
+    // Return max_raw_dets from output0 dims
+    auto out_dims = getTensorDims("output0");
+    if (out_dims.nbDims >= 2) {
+        return out_dims.d[1];
+    }
+    return 8400; // YOLO standard default fallback
+}
+
+void TRTEngine::extract_fpn_embeddings_ptr(uintptr_t d_boxes_xyxy, int num_dets, uintptr_t d_out_embs) {
+    if (num_dets == 0) return;
+    auto current_stream = at::cuda::getCurrentCUDAStream();
+    cudaMemsetAsync(reinterpret_cast<void*>(d_out_embs), 0, num_dets * get_fpn_dim() * sizeof(float), current_stream.stream());
+}
+
+int TRTEngine::get_img_size() const {
+    auto dims = getTensorDims("images");
+    if (dims.nbDims >= 3) {
+        return dims.d[2];
+    }
+    return 640; // standard default fallback
+}
+
+int TRTEngine::get_fpn_dim() const {
+    return 128;
 }
 
 } // namespace saccade

@@ -1,0 +1,49 @@
+# Mamba Whole-Graph CUDA Graph Preset
+# Captures the entire detect pipeline (TRT backbone + Mamba head + postprocess
+# decode) into a single CUDA graph replay. Extends mamba_optimal with even less
+# kernel launch overhead.
+# Load with: --preset mamba_whole_graph
+#
+# Inherits all mamba_optimal settings (same tracker, GMC, ReID=off, etc.)
+# and replaces the head-only CUDA graph with a whole-detect graph.
+# Expected gain: detect ~7.4 ms → ~3.1 ms (2.38×).
+# See docs/research/pipeline/mamba_head_cuda_graph_eval_bug_20260602.md.
+
+# --- Detection & Tiling ---
+tiling: native_640
+preprocess: none
+track_person_only: false
+person_geometry_prior: false
+detection_quality_scaling: false
+
+# --- Mamba Detector ---
+mamba_ckpt: runs/mamba_gt_vgt_mamba_v14/best.ckpt
+fpn_backbone_engine: models/yolo/yolo26s_backbone_640_best.engine
+
+# Whole-detect CUDA graph — captures TRT backbone + Mamba head + postprocess
+# decode in a single replay. Supersedes the head-only graph; both can be
+# enabled simultaneously but the whole-graph path takes priority.
+use_whole_graph: true
+use_cuda_graph: true
+
+# --- GMC ---
+gmc: true
+gmc_downscale: 4
+gmc_fg_mask: false
+
+# --- ReID ---
+reid_mode: "off"
+
+# --- Tracker Parameters ---
+match_thresh: 0.50
+new_track_thresh: 0.28
+kalman_r_scale: 2.8
+confirm_streak: 3
+confirm_score_thresh: 0.50
+fuse_score_weight: 0.0
+id_stability_filter: false
+per_seq_adapt: false
+geometry_suspect_support: false
+interpolate_tracklets: true
+interpolate_max_gap: 35
+interpolate_min_track_len: 5

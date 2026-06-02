@@ -72,22 +72,31 @@ def _draw_box(
     colour: tuple[int, int, int],
     show_score: bool,
 ) -> None:
+    # Adaptively scale font size and thickness based on image height
+    ref_h = img.shape[0]
+    scale_factor = ref_h / 1080.0
+
+    font_scale = 0.55 * scale_factor
+    box_thickness = max(1, int(round(2.0 * scale_factor)))
+    text_thickness = max(1, int(round(1.0 * scale_factor)))
+    label_pad = max(1, int(round(4.0 * scale_factor)))
+
     x1, y1 = int(round(x)), int(round(y))
     x2, y2 = int(round(x + w)), int(round(y + h))
-    cv2.rectangle(img, (x1, y1), (x2, y2), colour, _THICKNESS)
+    cv2.rectangle(img, (x1, y1), (x2, y2), colour, box_thickness)
 
     label = f"#{tid}" if not show_score or score < 0 else f"#{tid} {score:.2f}"
-    (tw, th), baseline = cv2.getTextSize(label, _FONT, _FONT_SCALE, 1)
-    bg_y1 = max(y1 - th - baseline - _LABEL_PAD * 2, 0)
-    cv2.rectangle(img, (x1, bg_y1), (x1 + tw + _LABEL_PAD * 2, y1), colour, -1)
+    (tw, th), baseline = cv2.getTextSize(label, _FONT, font_scale, text_thickness)
+    bg_y1 = max(y1 - th - baseline - label_pad * 2, 0)
+    cv2.rectangle(img, (x1, bg_y1), (x1 + tw + label_pad * 2, y1), colour, -1)
     cv2.putText(
         img,
         label,
-        (x1 + _LABEL_PAD, y1 - baseline - _LABEL_PAD),
+        (x1 + label_pad, y1 - baseline - label_pad),
         _FONT,
-        _FONT_SCALE,
+        font_scale,
         (255, 255, 255),
-        1,
+        text_thickness,
         cv2.LINE_AA,
     )
 
@@ -105,6 +114,7 @@ def render(
     fps: int | None = None,
     scale: float = 1.0,
     show_score: bool = True,
+    trail_len: int = 30,
 ) -> None:
     img_dir = seq_dir / "img1"
     if not img_dir.exists():
@@ -135,6 +145,9 @@ def render(
 
     output_mp4.parent.mkdir(parents=True, exist_ok=True)
 
+    # Track center history: {track_id: list[(cx, cy)]}
+    track_history: dict[int, list[tuple[int, int]]] = defaultdict(list)
+
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp = Path(tmp_dir)
 
@@ -144,11 +157,40 @@ def render(
             if img is None:
                 continue
 
+            # Update track centers history
+            if trail_len > 0:
+                for tid, x, y, w, h, _ in pred.get(fid, []):
+                    cx = int(round(x + w / 2))
+                    cy = int(round(y + h / 2))
+                    track_history[tid].append((cx, cy))
+                    if len(track_history[tid]) > trail_len:
+                        track_history[tid].pop(0)
+
             # Draw GT (faint grey, dashed effect via thin rect)
             for tid, x, y, w, h, _ in gt.get(fid, []):
                 x1, y1 = int(x), int(y)
                 x2, y2 = int(x + w), int(y + h)
                 cv2.rectangle(img, (x1, y1), (x2, y2), (180, 180, 180), 1)
+
+            # Draw trajectory trails
+            if trail_len > 0:
+                ref_h = img.shape[0]
+                scale_factor = ref_h / 1080.0
+                trail_thickness = max(1, int(round(2.5 * scale_factor)))
+
+                for tid, _, _, _, _, _ in pred.get(fid, []):
+                    pts = track_history[tid]
+                    if len(pts) > 1:
+                        colour = _id_colour(tid)
+                        pts_arr = np.array(pts, dtype=np.int32).reshape((-1, 1, 2))
+                        cv2.polylines(
+                            img,
+                            [pts_arr],
+                            isClosed=False,
+                            color=colour,
+                            thickness=trail_thickness,
+                            lineType=cv2.LINE_AA,
+                        )
 
             # Draw predictions
             for tid, x, y, w, h, score in pred.get(fid, []):
@@ -156,14 +198,21 @@ def render(
                 _draw_box(img, tid, x, y, w, h, score, colour, show_score)
 
             # Frame counter
+            ref_h = img.shape[0]
+            scale_factor = ref_h / 1080.0
+            counter_scale = 0.75 * scale_factor
+            counter_thick = max(1, int(round(1.0 * scale_factor)))
+            counter_x = int(8 * scale_factor)
+            counter_y = int(28 * scale_factor)
+
             cv2.putText(
                 img,
                 f"frame {fid}",
-                (8, 24),
+                (counter_x, counter_y),
                 _FONT,
-                0.6,
+                counter_scale,
                 (220, 220, 220),
-                1,
+                counter_thick,
                 cv2.LINE_AA,
             )
 
@@ -227,6 +276,14 @@ def main() -> None:
         "--scale", default=0.5, type=float, help="Resize scale (default 0.5 for speed)"
     )
     ap.add_argument("--no-score", action="store_true", help="Hide score labels")
+    ap.add_argument(
+        "--trail-len",
+        default=30,
+        type=int,
+        nargs="?",
+        const=30,
+        help="Length of trajectory trail in frames (default 30, 0 to disable)",
+    )
     args = ap.parse_args()
 
     render(
@@ -239,6 +296,7 @@ def main() -> None:
         fps=args.fps,
         scale=args.scale,
         show_score=not args.no_score,
+        trail_len=args.trail_len,
     )
 
 

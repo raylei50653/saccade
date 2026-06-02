@@ -675,14 +675,40 @@ __global__ void inline_kalman_update_kernel(
 __global__ void collect_free_slots_kernel(
     const bool* active, int max_objs, int* free_slots, int* n_free)
 {
-    if (threadIdx.x != 0 || blockIdx.x != 0) return;
-    int count = 0;
-    for (int i = 0; i < max_objs; ++i) {
-        if (!active[i]) {
-            free_slots[count++] = i;
+    int tid = threadIdx.x;
+    __shared__ int s_counts[256];
+    __shared__ int s_offsets[256];
+
+    int local_slots[8];
+    int local_count = 0;
+    
+    int start_idx = tid * 8;
+    for (int step = 0; step < 8; ++step) {
+        int i = start_idx + step;
+        if (i < max_objs) {
+            if (!active[i]) {
+                local_slots[local_count++] = i;
+            }
         }
     }
-    *n_free = count;
+
+    s_counts[tid] = local_count;
+    __syncthreads();
+
+    if (tid == 0) {
+        int offset = 0;
+        for (int i = 0; i < 256; ++i) {
+            s_offsets[i] = offset;
+            offset += s_counts[i];
+        }
+        *n_free = offset;
+    }
+    __syncthreads();
+
+    int global_offset = s_offsets[tid];
+    for (int step = 0; step < local_count; ++step) {
+        free_slots[global_offset + step] = local_slots[step];
+    }
 }
 
 __global__ void spawn_new_tracks_kernel(
@@ -700,26 +726,33 @@ __global__ void spawn_new_tracks_kernel(
     int confirm_streak, float birth_low_score_thresh,
     int max_objs, float birth_prox_norm_thresh)
 {
-    if (threadIdx.x != 0 || blockIdx.x != 0) return;
-    int cursor = *d_slot_cursor;
-    int n_free = *d_n_free;
-    int id_ctr = *d_track_id_ctr;
+    int tid = threadIdx.x;
+    __shared__ int s_counts[256];
+    __shared__ int s_offsets[256];
 
-    for (int d = 0; d < n_det; ++d) {
-        if (d_det_to_trk[d] >= 0) continue;
-        if (d_det_scores[d] < new_track_thresh) continue;
+    int chunk = (n_det + 255) / 256;
+    if (chunk < 1) chunk = 1;
 
-        // Proximity birth gate: suppress if center is within birth_prox_norm_thresh
-        // box-heights of any confirmed track. Targets ghost tracks (shadows) that
-        // are spatially close to a real person but have IoU < NMS threshold.
-        if (birth_prox_norm_thresh > 0.0f) {
+    int local_dets[2];
+    int local_count = 0;
+
+    int start_d = tid * chunk;
+    int end_d = start_d + chunk;
+    if (end_d > n_det) end_d = n_det;
+
+    for (int d = start_d; d < end_d; ++d) {
+        bool valid = true;
+        if (d_det_to_trk[d] >= 0) valid = false;
+        if (valid && d_det_scores[d] < new_track_thresh) valid = false;
+
+        if (valid && birth_prox_norm_thresh > 0.0f) {
             const float* det_box = d_det_boxes + d * 4;
             float det_cx = (det_box[0] + det_box[2]) * 0.5f;
             float det_cy = (det_box[1] + det_box[3]) * 0.5f;
             float det_h  = det_box[3] - det_box[1];
             bool too_close = false;
             for (int t = 0; t < max_objs && !too_close; ++t) {
-                if (!d_active[t] || d_state[t] != 2) continue;  // CONFIRMED only
+                if (!d_active[t] || d_state[t] != 2) continue;
                 float trk_cx = d_states[t * 8 + 0];
                 float trk_cy = d_states[t * 8 + 1];
                 float trk_h  = d_states[t * 8 + 3];
@@ -729,34 +762,68 @@ __global__ void spawn_new_tracks_kernel(
                 float ref_h = fmaxf(fmaxf(det_h, trk_h), 1.0f);
                 too_close = (dist < birth_prox_norm_thresh * ref_h);
             }
-            if (too_close) continue;
+            if (too_close) valid = false;
         }
 
-        if (cursor >= n_free) break;
-        int slot = d_free_slots[cursor++];
-
-        const float* box = d_det_boxes + d * 4;
-        float bh = fmaxf(box[3] - box[1], 1e-6f);
-        d_states[slot*8+0] = (box[0] + box[2]) * 0.5f;
-        d_states[slot*8+1] = (box[1] + box[3]) * 0.5f;
-        d_states[slot*8+2] = (box[2] - box[0]) / bh;
-        d_states[slot*8+3] = bh;
-        d_states[slot*8+4] = 0.0f; d_states[slot*8+5] = 0.0f; d_states[slot*8+6] = 0.0f; d_states[slot*8+7] = 0.0f;
-
-        d_track_ids[slot]   = id_ctr++;
-        d_age[slot]         = 0;
-        d_state[slot]       = 1; // TRACK_TENTATIVE
-        d_hit_streak[slot]  = 1;
-        d_confirm_req[slot] = (birth_low_score_thresh > 0.0f && d_det_scores[d] < birth_low_score_thresh)
-            ? (confirm_streak + 1) : 0;
-        d_score_sum[slot]   = d_det_scores[d];
-        d_trk_scores[slot]  = d_det_scores[d];
-        d_classes[slot]     = d_det_classes[d];
-        d_active[slot]      = true;
+        if (valid) {
+            if (local_count < 2) {
+                local_dets[local_count++] = d;
+            }
+        }
     }
 
-    *d_slot_cursor = cursor;
-    *d_track_id_ctr = id_ctr;
+    s_counts[tid] = local_count;
+    __syncthreads();
+
+    if (tid == 0) {
+        int offset = 0;
+        for (int i = 0; i < 256; ++i) {
+            s_offsets[i] = offset;
+            offset += s_counts[i];
+        }
+        s_counts[0] = offset;
+    }
+    __syncthreads();
+
+    int total_to_spawn = s_counts[0];
+    int start_cursor = *d_slot_cursor;
+    int n_free = *d_n_free;
+    int id_ctr = *d_track_id_ctr;
+
+    int global_offset = s_offsets[tid];
+    for (int step = 0; step < local_count; ++step) {
+        int cursor = start_cursor + global_offset + step;
+        if (cursor < n_free) {
+            int slot = d_free_slots[cursor];
+            int det_idx = local_dets[step];
+
+            const float* box = d_det_boxes + det_idx * 4;
+            float bh = fmaxf(box[3] - box[1], 1e-6f);
+            d_states[slot*8+0] = (box[0] + box[2]) * 0.5f;
+            d_states[slot*8+1] = (box[1] + box[3]) * 0.5f;
+            d_states[slot*8+2] = (box[2] - box[0]) / bh;
+            d_states[slot*8+3] = bh;
+            d_states[slot*8+4] = 0.0f; d_states[slot*8+5] = 0.0f; d_states[slot*8+6] = 0.0f; d_states[slot*8+7] = 0.0f;
+
+            d_track_ids[slot]   = id_ctr + global_offset + step;
+            d_age[slot]         = 0;
+            d_state[slot]       = 1; // TRACK_TENTATIVE
+            d_hit_streak[slot]  = 1;
+            d_confirm_req[slot] = (birth_low_score_thresh > 0.0f && d_det_scores[det_idx] < birth_low_score_thresh)
+                ? (confirm_streak + 1) : 0;
+            d_score_sum[slot]   = d_det_scores[det_idx];
+            d_trk_scores[slot]  = d_det_scores[det_idx];
+            d_classes[slot]     = d_det_classes[det_idx];
+            d_active[slot]      = true;
+        }
+    }
+
+    __syncthreads();
+    if (tid == 0) {
+        int final_spawned = min(total_to_spawn, n_free - start_cursor);
+        *d_slot_cursor = start_cursor + final_spawned;
+        *d_track_id_ctr = id_ctr + final_spawned;
+    }
 }
 
 // Initialise covariance for every slot that is active+tentative+hit_streak==1 (freshly spawned).
@@ -784,23 +851,54 @@ __global__ void compact_results_kernel(
     int* out_ids, int* out_classes, int* out_det_idx,
     int* out_count)
 {
-    if (threadIdx.x != 0 || blockIdx.x != 0) return;
-    int k = 0;
-    for (int i = 0; i < max_objs; ++i) {
-        if (!d_active[i] || d_state[i] != 2 || d_age[i] != 0) continue;
+    int tid = threadIdx.x;
+    __shared__ int s_counts[256];
+    __shared__ int s_offsets[256];
+
+    int local_slots[8];
+    int local_count = 0;
+
+    int start_idx = tid * 8;
+    for (int step = 0; step < 8; ++step) {
+        int i = start_idx + step;
+        if (i < max_objs) {
+            if (d_active[i] && d_state[i] == 2 && d_age[i] == 0) {
+                local_slots[local_count++] = i;
+            }
+        }
+    }
+
+    s_counts[tid] = local_count;
+    __syncthreads();
+
+    if (tid == 0) {
+        int offset = 0;
+        for (int i = 0; i < 256; ++i) {
+            s_offsets[i] = offset;
+            offset += s_counts[i];
+        }
+        *out_count = offset;
+    }
+    __syncthreads();
+
+    int global_offset = s_offsets[tid];
+    for (int step = 0; step < local_count; ++step) {
+        int i = local_slots[step];
+        int dest = global_offset + step;
+        
         float cx = d_states[i*8+0], cy = d_states[i*8+1];
         float a  = d_states[i*8+2], h  = d_states[i*8+3], w = a * h;
-        out_boxes[k*4+0] = cx - w * 0.5f;
-        out_boxes[k*4+1] = cy - h * 0.5f;
-        out_boxes[k*4+2] = cx + w * 0.5f;
-        out_boxes[k*4+3] = cy + h * 0.5f;
-        out_scores[k]   = d_scores[i];
-        out_ids[k]      = d_track_ids[i];
-        out_classes[k]  = d_classes[i];
-        out_det_idx[k]  = d_trk_to_det[i];
-        k++;
+        
+        out_boxes[dest*4+0] = cx - w * 0.5f;
+        out_boxes[dest*4+1] = cy - h * 0.5f;
+        out_boxes[dest*4+2] = cx + w * 0.5f;
+        out_boxes[dest*4+3] = cy + h * 0.5f;
+        
+        out_scores[dest]   = d_scores[i];
+        out_ids[dest]      = d_track_ids[i];
+        out_classes[dest]  = d_classes[i];
+        out_det_idx[dest]  = d_trk_to_det[i];
     }
-    *out_count = k;
 }
 
 // ── M1 GPU compaction helpers ──────────────────────────────────────────────
@@ -1369,9 +1467,9 @@ public:
                 track_thresh_, high_thresh_);
             cudaMemsetAsync(d_n_free_,      0, sizeof(int), stream);
             cudaMemsetAsync(d_slot_cursor_, 0, sizeof(int), stream);
-            collect_free_slots_kernel<<<(max_objs_ + 255) / 256, 256, 0, stream>>>(
+            collect_free_slots_kernel<<<1, 256, 0, stream>>>(
                 d_active_, max_objs_, d_free_slots_, d_n_free_);
-            spawn_new_tracks_kernel<<<(num_dets + 255) / 256, 256, 0, stream>>>(
+            spawn_new_tracks_kernel<<<1, 256, 0, stream>>>(
                 d_det_to_trk_, d_boxes, d_scores, d_classes, num_dets,
                 effective_new_track_thresh,
                 d_free_slots_, d_n_free_,
@@ -1387,7 +1485,7 @@ public:
 
         // M2: GPU compact results — write only confirmed+updated tracks
         cudaMemsetAsync(d_res_count_, 0, sizeof(int), stream);
-        compact_results_kernel<<<(max_objs_ + 255) / 256, 256, 0, stream>>>(
+        compact_results_kernel<<<1, 256, 0, stream>>>(
             d_active_, d_state_, d_age_,
             d_states_, d_track_ids_, d_scores_, d_classes_,
             d_trk_to_det_, max_objs_,

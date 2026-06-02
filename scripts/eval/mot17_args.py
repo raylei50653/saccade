@@ -39,4 +39,54 @@ def build_parser() -> argparse.ArgumentParser:
     add_semantic_args(parser)
     add_trigger_args(parser)
     add_lifecycle_args(parser)
+
+    # Multi-processing
+    parser.add_argument(
+        "--processes",
+        type=int,
+        default=0,
+        help="Run Python multi-process evaluation with N processes (each running one sequence with GPU decode + CUDA Graph).",
+    )
+
+    # Decode backend
+    dec = parser.add_argument_group("Decode backend")
+    dec.add_argument(
+        "--no-gpu-decode",
+        action="store_true",
+        help="Use CPU JPEG decode (DALI) instead of GPU NVJPG engine (default: GPU decode).",
+    )
+
+    # Tracking result visualization
+    vis = parser.add_argument_group("Tracking result visualization")
+    vis.add_argument(
+        "--visualize",
+        action="store_true",
+        help="Generate visualized tracking video using scripts/tools/render_mot_result.py",
+    )
+    vis.add_argument(
+        "--visualize-scale",
+        type=float,
+        default=0.5,
+        help="Resize scale of the visualization video (default: 0.5 for speed)",
+    )
+    vis.add_argument(
+        "--visualize-fps",
+        type=int,
+        default=None,
+        help="FPS of the visualization video. Defaults to seqinfo.ini frameRate if not set.",
+    )
+    vis.add_argument(
+        "--no-visualize-score",
+        action="store_true",
+        help="Hide confidence score labels in the visualization",
+    )
+    vis.add_argument(
+        "--visualize-trail-len",
+        type=int,
+        nargs="?",
+        const=30,
+        default=30,
+        help="Length of trajectory trail in frames (default: 30, set to 0 to disable)",
+    )
+
     return parser

@@ -1,6 +1,8 @@
+#include <torch/extension.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <pybind11/numpy.h>
+#include "perception/batched_mamba_detector.hpp"
 #include "perception/trt_engine.hpp"
 #include "perception/preprocessor.hpp"
 #include "perception/feature_extractor.hpp"
@@ -15,9 +17,20 @@ namespace saccade {
  * @brief 為感知模組提供 Python 綁定
  */
 void init_perception_ext(py::module &m) {
-    py::class_<IPerceptionEngine>(m, "IPerceptionEngine");
+    py::class_<IPerceptionEngine, std::shared_ptr<IPerceptionEngine>>(m, "IPerceptionEngine");
 
-    py::class_<TRTEngine, IPerceptionEngine>(m, "TRTEngine")
+    py::class_<BaseDetector, std::shared_ptr<BaseDetector>>(m, "BaseDetector")
+        .def("forward", &BaseDetector::forward, py::arg("d_input_img"))
+        .def("extract_fpn_embeddings", &BaseDetector::extract_fpn_embeddings, py::arg("d_boxes_xyxy"))
+        .def("forward_ptr", &BaseDetector::forward_ptr, py::arg("d_input_img"), py::arg("d_out_dets"))
+        .def("extract_fpn_embeddings_ptr", &BaseDetector::extract_fpn_embeddings_ptr, py::arg("d_boxes_xyxy"), py::arg("num_dets"), py::arg("d_out_embs"))
+        .def_property_readonly("img_size", &BaseDetector::get_img_size)
+        .def_property_readonly("fpn_dim", &BaseDetector::get_fpn_dim)
+        .def_property_readonly("cpp_ptr", [](BaseDetector& self) -> uintptr_t {
+            return reinterpret_cast<uintptr_t>(&self);
+        });
+
+    py::class_<TRTEngine, IPerceptionEngine, BaseDetector, std::shared_ptr<TRTEngine>>(m, "TRTEngine")
         .def(py::init<const std::string &>(), py::arg("model_path"))
         .def("infer", [](TRTEngine &self, const std::vector<size_t> &binding_ptrs, size_t stream_ptr) {
             std::vector<void*> bindings;
@@ -126,7 +139,7 @@ void init_perception_ext(py::module &m) {
             return reinterpret_cast<uintptr_t>(&self);
         });
 
-    py::class_<MambaGatedDetector>(m, "MambaGatedDetector")
+    py::class_<MambaGatedDetector, BaseDetector, std::shared_ptr<MambaGatedDetector>>(m, "MambaGatedDetector")
         .def(py::init<const std::string &, const std::string &, int, float>(),
              py::arg("trt_backbone_path"),
              py::arg("mamba_head_script_path"),
@@ -134,12 +147,38 @@ void init_perception_ext(py::module &m) {
              py::arg("conf_thr") = 0.05f)
         .def("forward_ptr", [](MambaGatedDetector &self, uintptr_t d_input_img, uintptr_t d_out_dets) {
             return self.forward_ptr(d_input_img, d_out_dets);
-        }, py::arg("d_input_img"), py::arg("d_out_dets"))
+        }, py::arg("d_input_img"), py::arg("d_out_dets"),
+           py::call_guard<py::gil_scoped_release>())
+        .def("forward_from_feats_ptr", [](MambaGatedDetector &self, uintptr_t p3, uintptr_t p4, uintptr_t p5, uintptr_t d_out_dets) {
+            return self.forward_from_feats_ptr(p3, p4, p5, d_out_dets);
+        }, py::arg("p3"), py::arg("p4"), py::arg("p5"), py::arg("d_out_dets"),
+           py::call_guard<py::gil_scoped_release>())
+        .def("forward_feats_padded_ptr", [](MambaGatedDetector &self, uintptr_t p3, uintptr_t p4, uintptr_t p5, float conf_thr, int max_det, uintptr_t d_out_dets) {
+            self.forward_feats_padded_ptr(p3, p4, p5, conf_thr, max_det, d_out_dets);
+        }, py::arg("p3"), py::arg("p4"), py::arg("p5"), py::arg("conf_thr"), py::arg("max_det"), py::arg("d_out_dets"),
+           py::call_guard<py::gil_scoped_release>())
         .def("extract_fpn_embeddings_ptr", [](MambaGatedDetector &self, uintptr_t d_boxes_xyxy, int num_dets, uintptr_t d_out_embs) {
             self.extract_fpn_embeddings_ptr(d_boxes_xyxy, num_dets, d_out_embs);
-        }, py::arg("d_boxes_xyxy"), py::arg("num_dets"), py::arg("d_out_embs"))
+        }, py::arg("d_boxes_xyxy"), py::arg("num_dets"), py::arg("d_out_embs"),
+           py::call_guard<py::gil_scoped_release>())
         .def_property_readonly("img_size", &MambaGatedDetector::get_img_size)
-        .def_property_readonly("fpn_dim", &MambaGatedDetector::get_fpn_dim);
+        .def_property_readonly("fpn_dim", &MambaGatedDetector::get_fpn_dim)
+        .def_property_readonly("cpp_ptr", [](MambaGatedDetector& self) -> uintptr_t {
+            return reinterpret_cast<uintptr_t>(&self);
+        });
+
+    // BatchedBackbone: pure TRT batch-N backbone, Mamba head stays in Python
+    py::class_<BatchedBackbone>(m, "BatchedBackbone")
+        .def(py::init<const std::string&, int, int>(),
+             py::arg("trt_engine_path"),
+             py::arg("max_batch") = 4,
+             py::arg("img_size")  = 640)
+        .def("batch_infer",
+             &BatchedBackbone::batch_infer,
+             py::arg("batch_frames"),
+             py::call_guard<py::gil_scoped_release>())
+        .def_property_readonly("img_size",  &BatchedBackbone::get_img_size)
+        .def_property_readonly("max_batch", &BatchedBackbone::get_max_batch);
 }
 
 PYBIND11_MODULE(saccade_perception_ext, m) {

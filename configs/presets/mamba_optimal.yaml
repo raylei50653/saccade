@@ -13,6 +13,14 @@ detection_quality_scaling: false
 # --- Mamba Detector ---
 mamba_ckpt: runs/mamba_gt_vgt_mamba_v14/best.ckpt
 fpn_backbone_engine: models/yolo/yolo26s_backbone_640_best.engine
+# CUDA-graph replay of the Mamba head via torch.cuda.make_graphed_callables.
+# Collapses ~278 eager kernel launches/frame into one replay (detect is
+# launch-bound). The prior hand-rolled capture corrupted cls outputs because
+# the selective_scan CUDA op launched on the legacy default stream (invisible
+# to capture); the op now launches on PyTorch's current stream, so replay is
+# bit-exact. Verified full-eval MOTA parity vs eager.
+# See docs/research/pipeline/mamba_head_cuda_graph_eval_bug_20260602.md.
+use_cuda_graph: true
 
 # --- GMC ---
 # Highly critical when match_thresh is low to compensate for camera motion

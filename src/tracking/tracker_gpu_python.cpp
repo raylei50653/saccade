@@ -2644,7 +2644,7 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             uintptr_t u_ptr, uintptr_t delta_ptr, uintptr_t A_ptr,
             uintptr_t B_ptr, uintptr_t C_ptr, uintptr_t D_ptr, uintptr_t y_ptr,
             int B_dim, int L_dim, int D_dim, int N_dim, int has_D,
-            int a_per_channel, bool is_half
+            int a_per_channel, bool is_half, uintptr_t stream_ptr
         ) {
             SelectiveScanParams params;
             params.B = B_dim;
@@ -2653,6 +2653,13 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             params.N = N_dim;
             params.has_D = has_D;
             params.a_per_channel = a_per_channel;
+
+            // Launch on the caller's CUDA stream (PyTorch's current stream).
+            // Defaulting to the legacy default stream (stream 0) makes the
+            // kernel invisible to CUDA-graph capture, which never records work
+            // on the capture stream — replay then leaves y unfilled and the
+            // head output saturates. See mamba_head_cuda_graph_eval_bug doc.
+            void* stream = reinterpret_cast<void*>(stream_ptr);
 
             {
                 py::gil_scoped_release release;
@@ -2665,7 +2672,8 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
                         reinterpret_cast<const void*>(C_ptr),
                         has_D ? reinterpret_cast<const void*>(D_ptr) : nullptr,
                         reinterpret_cast<void*>(y_ptr),
-                        params
+                        params,
+                        stream
                     );
                 } else {
                     selective_scan_fwd(
@@ -2676,7 +2684,8 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
                         reinterpret_cast<const float*>(C_ptr),
                         has_D ? reinterpret_cast<const float*>(D_ptr) : nullptr,
                         reinterpret_cast<float*>(y_ptr),
-                        params
+                        params,
+                        stream
                     );
                 }
             }
@@ -2686,5 +2695,6 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         py::arg("B_dim"), py::arg("L_dim"), py::arg("D_dim"),
         py::arg("N_dim"), py::arg("has_D"),
         py::arg("a_per_channel") = 0, py::arg("is_half") = false,
+        py::arg("stream_ptr") = 0,
         "CUDA selective scan (Mamba SSM kernel) supporting both float and half.");
 }

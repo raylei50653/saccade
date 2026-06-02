@@ -4,10 +4,13 @@
 #include <ATen/cuda/CUDAContext.h>
 #include <iostream>
 #include <stdexcept>
+#include <mutex>
 
 namespace saccade {
 
 namespace {
+
+std::mutex g_mamba_head_mutex;
 
 torch::Tensor nms_gpu(torch::Tensor bboxes, torch::Tensor scores, float iou_threshold) {
     if (bboxes.size(0) == 0) {
@@ -54,6 +57,49 @@ torch::Tensor nms_gpu(torch::Tensor bboxes, torch::Tensor scores, float iou_thre
     return torch::tensor(keep, torch::TensorOptions().dtype(torch::kLong).device(bboxes.device()));
 }
 
+struct ThreadState {
+    nvinfer1::IExecutionContext* ctx = nullptr;
+    cudaStream_t stream = nullptr;
+    void* d_p3 = nullptr;
+    void* d_p4 = nullptr;
+    void* d_p5 = nullptr;
+    torch::jit::script::Module mamba_head;
+    bool has_mamba_head = false;
+
+    ~ThreadState() {
+        if (d_p3) cudaFree(d_p3);
+        if (d_p4) cudaFree(d_p4);
+        if (d_p5) cudaFree(d_p5);
+        if (stream) cudaStreamDestroy(stream);
+        if (ctx) TRTEngine::delete_context(ctx);
+    }
+};
+
+ThreadState& get_thread_state(TRTEngine* backbone, const std::string& mamba_head_path, int p3_bytes, int p4_bytes, int p5_bytes) {
+    static thread_local ThreadState state;
+    if (!state.ctx) {
+        state.ctx = backbone->create_context();
+        if (!state.ctx) {
+            throw std::runtime_error("MambaGatedDetector: Failed to create TRT execution context for thread");
+        }
+        cudaStreamCreate(&state.stream);
+        cudaMalloc(&state.d_p3, p3_bytes);
+        cudaMalloc(&state.d_p4, p4_bytes);
+        cudaMalloc(&state.d_p5, p5_bytes);
+    }
+    if (!state.has_mamba_head) {
+        try {
+            state.mamba_head = torch::jit::load(mamba_head_path);
+            state.mamba_head.to(torch::kCUDA);
+            state.mamba_head.eval();
+            state.has_mamba_head = true;
+        } catch (const c10::Error& e) {
+            throw std::runtime_error("MambaGatedDetector: Failed to load TorchScript module on thread: " + std::string(e.what()));
+        }
+    }
+    return state;
+}
+
 } // namespace
 
 MambaGatedDetector::MambaGatedDetector(
@@ -61,7 +107,7 @@ MambaGatedDetector::MambaGatedDetector(
     const std::string& mamba_head_script_path,
     int img_size,
     float conf_thr
-) : img_size_(img_size), conf_thr_(conf_thr) {
+) : mamba_head_script_path_(mamba_head_script_path), img_size_(img_size), conf_thr_(conf_thr) {
     
     // Force LibTorch to initialize CUDA, cuBLAS, and its internal handlers
     auto dummy_x = torch::zeros({1, 1}, torch::TensorOptions().device(torch::kCUDA));
@@ -71,7 +117,7 @@ MambaGatedDetector::MambaGatedDetector(
     // 1. Create TRT engine instance
     backbone_ = std::make_unique<TRTEngine>(trt_backbone_path);
 
-    // 2. Load JIT TorchScript model for Mamba SSM head
+    // 2. Load JIT TorchScript model for Mamba SSM head (on main thread to catch early errors)
     try {
         mamba_head_ = torch::jit::load(mamba_head_script_path);
         mamba_head_.to(torch::kCUDA);
@@ -79,64 +125,58 @@ MambaGatedDetector::MambaGatedDetector(
     } catch (const c10::Error& e) {
         throw std::runtime_error("MambaGatedDetector: Failed to load TorchScript module: " + std::string(e.what()));
     }
-
-    // 3. Create CUDA Stream for asynchronous TRT execution
-    cudaStreamCreate(&trt_stream_);
-
-    // 4. Pre-allocate device buffers for TensorRT features (P3, P4, P5)
-    cudaMalloc(&d_p3_, 1 * p3_c_ * p3_h_ * p3_w_ * sizeof(float));
-    cudaMalloc(&d_p4_, 1 * p4_c_ * p4_h_ * p4_w_ * sizeof(float));
-    cudaMalloc(&d_p5_, 1 * p5_c_ * p5_h_ * p5_w_ * sizeof(float));
 }
 
-MambaGatedDetector::~MambaGatedDetector() {
-    if (d_p3_) cudaFree(d_p3_);
-    if (d_p4_) cudaFree(d_p4_);
-    if (d_p5_) cudaFree(d_p5_);
-    if (trt_stream_) cudaStreamDestroy(trt_stream_);
-}
+MambaGatedDetector::~MambaGatedDetector() = default;
 
 torch::Tensor MambaGatedDetector::forward(torch::Tensor d_input_img) {
     auto options = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
     auto current_stream = at::cuda::getCurrentCUDAStream();
 
+    // Get thread-local state
+    auto& state = get_thread_state(
+        backbone_.get(),
+        mamba_head_script_path_,
+        1 * p3_c_ * p3_h_ * p3_w_ * sizeof(float),
+        1 * p4_c_ * p4_h_ * p4_w_ * sizeof(float),
+        1 * p5_c_ * p5_h_ * p5_w_ * sizeof(float)
+    );
+
     // Ensure the input tensor is contiguous
     auto img_contiguous = d_input_img.contiguous();
 
-    // 1. Asynchronous Stream Synchronization: Let TRT stream wait for PyTorch current stream
-    cudaEvent_t event_input;
-    cudaEventCreate(&event_input);
-    cudaEventRecord(event_input, current_stream.stream());
-    cudaStreamWaitEvent(trt_stream_, event_input, 0);
+    // 1. Execute TensorRT backbone directly on the current PyTorch stream
+    backbone_->infer_with_context(state.ctx, {img_contiguous.data_ptr<float>(), state.d_p3, state.d_p4, state.d_p5}, current_stream.stream());
 
-    // 2. Execute TensorRT backbone
-    backbone_->set_tensor_address("images", img_contiguous.data_ptr<float>());
-    backbone_->set_tensor_address("p3_feat", d_p3_);
-    backbone_->set_tensor_address("p4_feat", d_p4_);
-    backbone_->set_tensor_address("p5_feat", d_p5_);
-    backbone_->enqueue_v3(trt_stream_);
+    // 4. Wrap pre-allocated device memory as LibTorch Tensors and run head/decode.
+    return forward_from_feats(
+        torch::from_blob(state.d_p3, {1, p3_c_, p3_h_, p3_w_}, options),
+        torch::from_blob(state.d_p4, {1, p4_c_, p4_h_, p4_w_}, options),
+        torch::from_blob(state.d_p5, {1, p5_c_, p5_h_, p5_w_}, options)
+    );
+}
 
-    // 3. Asynchronous Stream Synchronization: Let PyTorch current stream wait for TRT stream
-    cudaEvent_t event_output;
-    cudaEventCreate(&event_output);
-    cudaEventRecord(event_output, trt_stream_);
-    cudaStreamWaitEvent(current_stream.stream(), event_output, 0);
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
+MambaGatedDetector::decode_feats(torch::Tensor p3, torch::Tensor p4, torch::Tensor p5) {
+    auto options = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
 
-    cudaEventDestroy(event_input);
-    cudaEventDestroy(event_output);
+    // Thread-local state owns this thread's TorchScript head instance (avoids
+    // cross-thread contention on a shared jit::Module during concurrent calls).
+    auto& state = get_thread_state(
+        backbone_.get(),
+        mamba_head_script_path_,
+        1 * p3_c_ * p3_h_ * p3_w_ * sizeof(float),
+        1 * p4_c_ * p4_h_ * p4_w_ * sizeof(float),
+        1 * p5_c_ * p5_h_ * p5_w_ * sizeof(float)
+    );
 
-    // 4. Wrap pre-allocated device memory as LibTorch Tensors
-    std::vector<torch::Tensor> feats = {
-        torch::from_blob(d_p3_, {1, p3_c_, p3_h_, p3_w_}, options),
-        torch::from_blob(d_p4_, {1, p4_c_, p4_h_, p4_w_}, options),
-        torch::from_blob(d_p5_, {1, p5_c_, p5_h_, p5_w_}, options)
-    };
+    std::vector<torch::Tensor> feats = {p3, p4, p5};
 
     // 5. Run TorchScript Mamba SSM Head Wrapper
     std::vector<torch::jit::IValue> inputs;
     inputs.push_back(feats);
-    
-    auto outputs = mamba_head_.forward(inputs).toTuple();
+
+    auto outputs = state.mamba_head.forward(inputs).toTuple();
     auto cls_preds = outputs->elements()[0].toTensorList().vec();
     auto reg_preds = outputs->elements()[1].toTensorList().vec();
 
@@ -144,7 +184,7 @@ torch::Tensor MambaGatedDetector::forward(torch::Tensor d_input_img) {
     std::vector<float> strides_vec = {8.0f, 16.0f, 32.0f};
     std::vector<torch::Tensor> anchor_points;
     std::vector<torch::Tensor> stride_tensor;
-    
+
     std::vector<torch::Tensor> cls_flat, reg_flat;
     for (size_t i = 0; i < cls_preds.size(); ++i) {
         cls_flat.push_back(cls_preds[i].flatten(2));
@@ -188,13 +228,24 @@ torch::Tensor MambaGatedDetector::forward(torch::Tensor d_input_img) {
     auto x2y2 = c_xy_final + wh_final / 2.0f;
     auto boxes_xyxy = torch::cat({x1y1, x2y2}, -1).squeeze(0); // [N, 4]
 
-    // 8. Thresholding & Filtering
+    // 8. Per-anchor max class score + id
     auto scores = cls_all.sigmoid(); // [1, num_classes, N]
     auto max_scores_and_ids = scores.max(1);
     auto scores_max = std::get<0>(max_scores_and_ids).squeeze(0); // [N]
     auto class_ids = std::get<1>(max_scores_and_ids).squeeze(0).to(torch::kFloat32); // [N]
 
-    auto mask = (scores_max >= conf_thr_) & 
+    return {boxes_xyxy, scores_max, class_ids};
+}
+
+torch::Tensor MambaGatedDetector::forward_from_feats(torch::Tensor p3, torch::Tensor p4, torch::Tensor p5) {
+    auto options = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
+
+    auto decoded = decode_feats(p3, p4, p5);
+    auto boxes_xyxy = std::get<0>(decoded); // [N, 4]
+    auto scores_max = std::get<1>(decoded); // [N]
+    auto class_ids = std::get<2>(decoded);  // [N]
+
+    auto mask = (scores_max >= conf_thr_) &
                 ((boxes_xyxy.select(1, 2) - boxes_xyxy.select(1, 0)) > 0.0f) & 
                 ((boxes_xyxy.select(1, 3) - boxes_xyxy.select(1, 1)) > 0.0f);
     
@@ -221,6 +272,44 @@ torch::Tensor MambaGatedDetector::forward(torch::Tensor d_input_img) {
     return torch::cat({nms_boxes, nms_scores.unsqueeze(-1), nms_classes.unsqueeze(-1)}, 1);
 }
 
+torch::Tensor MambaGatedDetector::forward_feats_padded(
+    torch::Tensor p3, torch::Tensor p4, torch::Tensor p5, float conf_thr, int max_det) {
+    auto options = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
+
+    auto decoded = decode_feats(p3, p4, p5);
+    auto boxes_xyxy = std::get<0>(decoded); // [N, 4]
+    auto scores_max = std::get<1>(decoded); // [N]
+    auto class_ids = std::get<2>(decoded);  // [N]
+
+    // Mirror Python _postprocess_mamba EXACTLY: conf-threshold + topk(max_det),
+    // padded [max_det, 6], NO NMS and NO w/h validity filter. The downstream
+    // run_eval postprocess applies the real confidence gate + NMS, so this entry
+    // must stay a faithful drop-in for the Python serving head.
+    auto results = torch::zeros({max_det, 6}, options);
+
+    auto mask = scores_max >= conf_thr;
+    auto s = scores_max.index({mask});
+    auto c = class_ids.index({mask});
+    auto bx = boxes_xyxy.index({mask, torch::indexing::Slice()});
+
+    int64_t total = s.size(0);
+    int64_t n = std::min<int64_t>(total, max_det);
+    if (n > 0) {
+        if (total > max_det) {
+            auto topk = std::get<1>(s.topk(max_det));
+            s = s.index({topk});
+            c = c.index({topk});
+            bx = bx.index({topk, torch::indexing::Slice()});
+        }
+        using torch::indexing::Slice;
+        results.index_put_({Slice(0, n), Slice(0, 4)}, bx.slice(0, 0, n));
+        results.index_put_({Slice(0, n), 4}, s.slice(0, 0, n));
+        results.index_put_({Slice(0, n), 5}, c.slice(0, 0, n));
+    }
+
+    return results;
+}
+
 torch::Tensor MambaGatedDetector::extract_fpn_embeddings(torch::Tensor d_boxes_xyxy) {
     auto options = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
     
@@ -228,10 +317,19 @@ torch::Tensor MambaGatedDetector::extract_fpn_embeddings(torch::Tensor d_boxes_x
         return torch::zeros({0, get_fpn_dim()}, options);
     }
 
+    // Get thread-local state
+    auto& state = get_thread_state(
+        backbone_.get(),
+        mamba_head_script_path_,
+        1 * p3_c_ * p3_h_ * p3_w_ * sizeof(float),
+        1 * p4_c_ * p4_h_ * p4_w_ * sizeof(float),
+        1 * p5_c_ * p5_h_ * p5_w_ * sizeof(float)
+    );
+
     std::vector<torch::Tensor> feats = {
-        torch::from_blob(d_p3_, {1, p3_c_, p3_h_, p3_w_}, options),
-        torch::from_blob(d_p4_, {1, p4_c_, p4_h_, p4_w_}, options),
-        torch::from_blob(d_p5_, {1, p5_c_, p5_h_, p5_w_}, options)
+        torch::from_blob(state.d_p3, {1, p3_c_, p3_h_, p3_w_}, options),
+        torch::from_blob(state.d_p4, {1, p4_c_, p4_h_, p4_w_}, options),
+        torch::from_blob(state.d_p5, {1, p5_c_, p5_h_, p5_w_}, options)
     };
 
     std::vector<torch::Tensor> parts;
@@ -269,6 +367,39 @@ int MambaGatedDetector::forward_ptr(uintptr_t d_input_img, uintptr_t d_out_dets)
                         num_dets * 6 * sizeof(float), cudaMemcpyDeviceToDevice, current_stream.stream());
     }
     return num_dets;
+}
+
+int MambaGatedDetector::forward_from_feats_ptr(uintptr_t p3, uintptr_t p4, uintptr_t p5, uintptr_t d_out_dets) {
+    auto options = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
+    auto p3_t = torch::from_blob(reinterpret_cast<void*>(p3), {1, p3_c_, p3_h_, p3_w_}, options);
+    auto p4_t = torch::from_blob(reinterpret_cast<void*>(p4), {1, p4_c_, p4_h_, p4_w_}, options);
+    auto p5_t = torch::from_blob(reinterpret_cast<void*>(p5), {1, p5_c_, p5_h_, p5_w_}, options);
+
+    auto detections = forward_from_feats(p3_t, p4_t, p5_t);
+    int num_dets = detections.size(0);
+
+    if (num_dets > 0) {
+        auto current_stream = at::cuda::getCurrentCUDAStream();
+        cudaMemcpyAsync(reinterpret_cast<void*>(d_out_dets), detections.data_ptr<float>(),
+                        num_dets * 6 * sizeof(float), cudaMemcpyDeviceToDevice, current_stream.stream());
+    }
+    return num_dets;
+}
+
+void MambaGatedDetector::forward_feats_padded_ptr(
+    uintptr_t p3, uintptr_t p4, uintptr_t p5, float conf_thr, int max_det, uintptr_t d_out_dets) {
+    auto options = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
+    auto p3_t = torch::from_blob(reinterpret_cast<void*>(p3), {1, p3_c_, p3_h_, p3_w_}, options);
+    auto p4_t = torch::from_blob(reinterpret_cast<void*>(p4), {1, p4_c_, p4_h_, p4_w_}, options);
+    auto p5_t = torch::from_blob(reinterpret_cast<void*>(p5), {1, p5_c_, p5_h_, p5_w_}, options);
+
+    // [max_det, 6] padded (zeros for empty slots), matching Python serving head.
+    auto results = forward_feats_padded(p3_t, p4_t, p5_t, conf_thr, max_det);
+
+    auto current_stream = at::cuda::getCurrentCUDAStream();
+    cudaMemcpyAsync(reinterpret_cast<void*>(d_out_dets), results.data_ptr<float>(),
+                    static_cast<size_t>(max_det) * 6 * sizeof(float),
+                    cudaMemcpyDeviceToDevice, current_stream.stream());
 }
 
 void MambaGatedDetector::extract_fpn_embeddings_ptr(uintptr_t d_boxes_xyxy, int num_dets, uintptr_t d_out_embs) {
