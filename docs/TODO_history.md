@@ -681,3 +681,28 @@ uv run scripts/train/temporal_yolo/train_mamba_gt.py --data-root datasets/MOT17 
 
 - **FP 模組 C：bank_weighted_mean（待測）**：以 quality_score 加權 bank 樣本均值，降低低品質 embedding 影響；
   只在 `--appearance-bank` 開啟時有效，ReID stack 測試待排。
+
+### Cheb-GR Re-ranking — Standalone Gate（2026-06-03，方法正確性結案）
+
+Cheb-GR（CVPR 2025, Yang et al.）＝ Chebyshev's Theorem-guided Graph Re-ranking，offline
+retrieval re-ranking，propagation-only（免訓練）。核心 `src/saccade/perception/reid/cheb_gr.py`：
+距離域 `D_ij=||f_i−f_j||₂`、per-node `μ_i/σ_i`、Chebyshev 自適應門檻 `T_i=μ_i−λσ_i`（取距離
+**小於**門檻的近鄰，取代固定 k）、graph-conv 精修 + k-reciprocal Jaccard。GPU 全向量化
+（`cheb_gr_kreciprocal()`），harness `scripts/eval/cheb_gr_osnet_gate.py --cheb-krecip`。
+
+**結論（Market-1501，強特徵 `marketaju_siglip2_reid`，baseline mAP 81.31%）：**
+
+| 方法 | best Δ mAP | 備註 |
+| :--- | :---: | :--- |
+| Standard fixed-k k-reciprocal (Zhong CVPR2017) | **+10.03** | k1=20 k2=6 λ=0.1，對照基準 |
+| Cheb-GR capped (max_fwd=20, =fixed-k) | +9.56 | cap 綁定，Chebyshev 門檻未生效 |
+| **Cheb-GR 純自適應 (max_fwd=0, sweep λ)** | **+8.76** | **λ=4 fuse0.7**；λ 真生效但 λ=5/fuse1.0 over-sparse 崩 −2.81 |
+
+→ Chebyshev 自適應機制**成立、有效（~+9pp）**，但在強特徵 Market 上**未勝過經典 fixed-k**。
+方法正確性 gate 結案。feature-propagation 變體（`F=W̃F`）與 Jaccard-without-QE 變體均負向
+（漏 query expansion 是主因）。⚠️ 教訓：必須 GPU torch 向量化（numpy CPU 雙迴圈跑飛 34min）；
+VRAM 優化見 commit（in-place dist + support-gather Jaccard，active 7.45→~4.3GB）。
+
+**下一步＝路徑 2（offline tracklet merge / MOT17）**：standalone 既不優於 fixed-k，Cheb-GR
+唯一可能加值處在 tracklet 縫合（AssA 64.7% 為瓶頸），用 `cheb_gr_kreciprocal()` 當 tracklet
+相似度，驗收 IDF1/AssA > ±0.3pp 才 GO。flag 全 default off。

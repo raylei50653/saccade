@@ -127,6 +127,34 @@ def compute_embeddings(
     return all_embs
 
 
+def cheb_gr_score_matrix(
+    q_embs: np.ndarray,
+    g_embs: np.ndarray,
+    *,
+    cheb_lambda: float,
+    gconv_layers: int,
+    residual_gamma: float,
+    k_max: int,
+    fuse_lambda: float,
+    device: torch.device,
+) -> np.ndarray:
+    """Cheb-GR re-ranked similarity scores [Nq, Ng] (higher = better)."""
+    from saccade.perception.reid.cheb_gr import cheb_gr_rerank_distance
+
+    q = torch.from_numpy(q_embs).to(device)
+    g = torch.from_numpy(g_embs).to(device)
+    dist = cheb_gr_rerank_distance(
+        q,
+        g,
+        cheb_lambda=cheb_lambda,
+        gconv_layers=gconv_layers,
+        residual_gamma=residual_gamma,
+        k_max=k_max,
+        fuse_lambda=fuse_lambda,
+    )
+    return (-dist).cpu().numpy()
+
+
 def compute_mAP_cmc(
     q_embs: np.ndarray,
     g_embs: np.ndarray,
@@ -135,9 +163,11 @@ def compute_mAP_cmc(
     q_cams: np.ndarray,
     g_cams: np.ndarray,
     max_rank: int = 50,
+    score_matrix: np.ndarray | None = None,
 ) -> dict[str, float]:
     n_q, _ = len(q_embs), len(g_embs)
-    sim = q_embs @ g_embs.T
+    # `sim` is any higher-is-better score; default cosine, override for re-ranking.
+    sim = score_matrix if score_matrix is not None else q_embs @ g_embs.T
     indices = np.argsort(-sim, axis=1)
 
     aps: list[float] = []
@@ -155,14 +185,11 @@ def compute_mAP_cmc(
             | ((g_pids[ranked] == pid) & (g_cams[ranked] == cam))
         )
 
-        ng = good.sum()
-        if ng == 0:
-            continue
         valid = ~junk
-        good_cumsum = np.cumsum(good & valid)
-        hit_ranks = np.where(good_cumsum > 0, good_cumsum, 0)
+        good_filtered = good[valid]
+        good_cumsum = np.cumsum(good_filtered)
         for k in range(max_rank):
-            if hit_ranks[k] > 0:
+            if k < len(good_cumsum) and good_cumsum[k] > 0:
                 cmc[k] += 1
 
         selected = valid
@@ -196,6 +223,18 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--workers", type=int, default=0)
     parser.add_argument("--no-gallery-preload", action="store_true")
+    # ── Cheb-GR re-ranking (CVPR 2025) ──────────────────────────────────────
+    parser.add_argument(
+        "--rerank",
+        choices=["none", "cheb_gr"],
+        default="none",
+        help="Re-ranking method applied before mAP/CMC (default: none).",
+    )
+    parser.add_argument("--cheb-lambda", type=float, default=1.0)
+    parser.add_argument("--gconv-layers", type=int, default=2)
+    parser.add_argument("--residual-gamma", type=float, default=0.0)
+    parser.add_argument("--k-max", type=int, default=0)
+    parser.add_argument("--fuse-lambda", type=float, default=1.0)
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -294,18 +333,46 @@ def main() -> None:
         f"  {g_embs.shape[0]} gallery, {g_embs.shape[1]}-dim in {time.perf_counter() - t1:.1f}s"
     )
 
-    # Evaluate
+    # Evaluate (always report the raw-cosine baseline)
     print("\n[Phase 5] Computing mAP and CMC...")
     t1 = time.perf_counter()
     metrics = compute_mAP_cmc(q_embs, g_embs, q_pids, g_pids, q_cams, g_cams)
     print(f"  Evaluation done in {time.perf_counter() - t1:.1f}s\n")
 
     print("=" * 50)
-    print("Market-1501 ReID Results — Raw YOLO FPN (Zero-Training)")
+    print("Market-1501 ReID Results — Raw YOLO FPN (cosine baseline)")
     print("=" * 50)
     for k, v in metrics.items():
         print(f"  {k:>10s}: {v:6.2f}%")
     print("=" * 50)
+
+    if args.rerank == "cheb_gr":
+        print("\n[Phase 6] Cheb-GR re-ranking...")
+        t1 = time.perf_counter()
+        scores = cheb_gr_score_matrix(
+            q_embs,
+            g_embs,
+            cheb_lambda=args.cheb_lambda,
+            gconv_layers=args.gconv_layers,
+            residual_gamma=args.residual_gamma,
+            k_max=args.k_max,
+            fuse_lambda=args.fuse_lambda,
+            device=device,
+        )
+        rr_metrics = compute_mAP_cmc(
+            q_embs, g_embs, q_pids, g_pids, q_cams, g_cams, score_matrix=scores
+        )
+        print(f"  Re-rank + eval done in {time.perf_counter() - t1:.1f}s\n")
+        print("=" * 50)
+        print(
+            f"Market-1501 — Cheb-GR (lambda={args.cheb_lambda} L={args.gconv_layers} "
+            f"gamma={args.residual_gamma} k_max={args.k_max} fuse={args.fuse_lambda})"
+        )
+        print("=" * 50)
+        for k, v in rr_metrics.items():
+            delta = v - metrics.get(k, 0.0)
+            print(f"  {k:>10s}: {v:6.2f}%  ({delta:+.2f})")
+        print("=" * 50)
 
 
 if __name__ == "__main__":
