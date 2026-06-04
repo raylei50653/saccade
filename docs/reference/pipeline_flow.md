@@ -4,7 +4,7 @@
 
 - 穩定架構邊界：看 [README.md](../architecture/README.md)
 - 開發入口與 source-of-truth：看 [DEVELOPMENT.md](../../DEVELOPMENT.md)
-- 事件 / API / storage schema：看 [api_spec.md](api_spec.md)
+- 事件 / API / storage schema：看 [api_spec.md](../modules/storage/api_spec.md)
 
 ---
 
@@ -321,7 +321,7 @@
 - 目前同時存在：
   - Redis List `saccade:events`
   - Redis Stream `saccade:stream`
-- schema 以 [api_spec.md](api_spec.md) 為準
+- schema 以 [api_spec.md](../modules/storage/api_spec.md) 為準
 
 ### 4.2 Cognition / Memory
 
@@ -373,7 +373,7 @@
 - 穩定架構責任邊界的完整定義
   - 看 [README.md](../architecture/README.md)
 - 事件 / API schema 細節
-  - 看 [api_spec.md](api_spec.md)
+  - 看 [api_spec.md](../modules/storage/api_spec.md)
 - 實驗結果與 backlog 排序
   - 看 [TODO.md](../TODO.md)
 

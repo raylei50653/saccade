@@ -1,7 +1,7 @@
 # Temporal YOLO — 設計文件索引
 
 > Option D（Track-Conditioned YOLO）已於 2026-05-19 結案 NO-GO，設計文件移至
-> [docs/archive/option-d/](../../archive/option-d/) 保留供歷史參考。
+> [docs/archive/option-d/](../../archive/option-d) 保留供歷史參考。
 
 本目錄保留**當前 active** 的 Temporal YOLO 設計：
 
@@ -82,5 +82,45 @@ Phase 3 — SAVE     checkpoint 由 training_utils.save_checkpoint() 統一處�
 
 ## 歷史文件
 
-- Option D 完整設計 (4 文件) → [docs/archive/option-d/](../../archive/option-d/)
+- Option D 完整設計 (4 文件) → [docs/archive/option-d/](../../archive/option-d)
 - Option D 訓練產物：`runs/conditioned_p1_v2/best.ckpt`、`runs/conditioned_p2/best.ckpt`
+
+# Detection Module (偵測模組)
+
+## 📐 模組職責
+負責前級 YOLO 圖像目標偵測、Mamba Head 時空特徵融合與 NMS 抑制，為後續追蹤提供高置信度的 Object Box。
+
+## 🟢 目前現況
+* **Mamba SSM Head** 已作為 `mamba_optimal` 生產配置落地，採用 PixelShuffle 上取樣與 Stretch-Resize 域一致性。評測幀率達到 93.8–110.2 FPS（精度 MOTA 76.6% / IDF1 71.3%）。
+* **Flow-Gated 特徵調製機制**：取代了 Option E-v2 中使用 `F.grid_sample` 對低解析度 FPN 特徵圖（如 $20 	imes 20$ P5）進行空間 Warp 導致鋸齒偽影與精度下降（MOTA -2.1pp）的問題。當前方案在 `mamba_head.py` 中將累計 GMC Affine matrix 轉成稠密流場 (Dense Flow) 後，以 `torch.cat([x_up, flow_i], dim=1)` 的通道拼接形式與特徵圖融合，並利用卷積層自適應學習空間門控調製 `(1.0 + gate)`，避開了特徵插值扭曲。
+* **CUDA Graph 推理優化**：
+  * 解決了自訂 CUDA 算子 `selective_scan_fwd` 運行於 Legacy Default Stream 導致 CUDA Graph 捕獲丟失 Scan Kernel 的重大 Bug（目前使用 `torch.cuda.current_stream().cuda_stream` 強制流綁定）。
+  * 實現了圖安全 (Graph-Safe) 的檢測後處理解碼，使用預先計算的 Anchor 網格（`_precompute_anchor_grid`）替換了不可捕獲的 `torch.arange` / `torch.full` 動態分配算子，推理提速達 15%。
+
+## 🔗 I/O & Dataflow
+
+| | |
+|---|---|
+| **Pipeline stage** | `[3] detect` + `[4] postprocess`（6 sub-stages，見 [pipeline_flow.md](../../reference/pipeline_flow.md)） |
+| **輸入** | preprocessed frame tensor（`native_960` 960×960，或 tiled `960p_2x2/3x2`）；Mamba head 額外吃 FPN 特徵 + geometry 的 GMC dense flow（時序 gate） |
+| **輸出** | fused `boxes / scores / classes`（filter→NMS→cross-tile merge→quality/birth gate 後） |
+| **上游 → 下游** | `streaming/[2] preprocess → [3] detect (YOLO26 + Mamba head) → [4] postprocess → [11] tracker` |
+
+## ⚖️ GO / NO-GO 決策
+
+> 完整脈絡見 [TODO_history.md](../../TODO_history.md)；近期待辦見 [TODO.md](TODO.md)。
+
+| 日期 | 項目 | 結論 |
+|------|------|------|
+| 2026-05-27 | Option F Mamba Gated Detector（PixelShuffle + Cross-Scan + Flow-Gated） | ✅ GO，當前 preset `mamba_optimal` |
+| 2026-06-02 | mamba_head CUDA graph（stream-bind fix） | ✅ GO，+15% FPS，已 default |
+| 2026-05-22 | Option E-v2 Quality-Gated Temporal Fusion | ✅ GO（後被 Option F 取代） |
+| — | ST-Mamba 時序 buffer | ⏸️ 單幀持平、時序不 work → 轉 VGT-Mamba |
+| 2026-05-19 | Option D Track-Conditioned YOLO | ❌ NO-GO（IDF1 31.7%，gate 無貢獻） |
+| 2026-05-18 | Horizontal-flip TTA | ❌ NO-GO（精度雜訊內） |
+| 2026-06-01 | MOT20 混訓 | ❌ NO-GO（domain shift 退步） |
+| 2026-05-10~11 | Pose box expansion / P5 birth gates / stage2 quality gate | ❌ NO-GO（靜態 FP 無法靠 spatial 區分） |
+
+## 📋 模組 TODO
+
+詳見 [TODO.md](TODO.md)。

@@ -8,7 +8,7 @@ L1 是 Saccade 的「視網膜與視覺中樞」，負責處理最即時、高�
 - **預處理器 (Preprocessor)**: 在 GPU 內執行 NV12 到 RGB 的轉換、Resize 與 Normalize。
 - **偵測器 (Detector)**: 使用 YOLO26 (TensorRT, NMS-Free) 進行物件偵測。
 - **追蹤器 (GPUByteTracker + SmartTracker)**:
-    - **GPUByteTracker (C++/CUDA)**: 雙階段匹配（high/low score + Sinkhorn）、ReID 融合代價矩陣、Strong ReID Gate、GPU Kalman Filter。[詳細技術解析請見 GPUByteTracker 專頁](gpubytetracker_deep_dive.md)
+    - **GPUByteTracker (C++/CUDA)**: 雙階段匹配（high/low score + Sinkhorn）、ReID 融合代價矩陣、Strong ReID Gate、GPU Kalman Filter。[詳細技術解析請見 GPUByteTracker 專頁](tracker_deep_dive.md)
     - **SmartTracker (Python)**: 協調層，負責 GMC（全域運動補償）、光線自適應係數計算、Saccade Heartbeat（每 10 幀更新一次 SigLIP 2 特徵）。
     - **自適應壽命 (Adaptive TTL)**: 在 L6 指令下，可將 `track_buffer` 從 30 幀縮減至 10 幀。
     - **目標清理 (Target Culling)**: 緊急模式下自動銷毀低置信度目標以釋放 VRAM。

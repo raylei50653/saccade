@@ -19,7 +19,7 @@
 - engine: `models/yolo/yolo26s_960_batch1.engine`
 - validate: 65 FPS, 15.4ms
 
-詳細規格見 [reference/PIPELINE_REFERENCE.md](../reference/PIPELINE_REFERENCE.md)。
+詳細規格見 [PIPELINE_REFERENCE.md](../PIPELINE_REFERENCE.md)。
 
 ## 維護
 

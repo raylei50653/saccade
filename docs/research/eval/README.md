@@ -9,5 +9,5 @@
 
 目前文件：
 
-- [Rerank Phase 2 (`rerank_phase2.md`)](./rerank_phase2.md)
-- [MOT17 FP/FN Distribution Snapshot (`mot17_fp_fn_distribution_20260514.md`)](./mot17_fp_fn_distribution_20260514.md)
+- [Rerank Phase 2 (`rerank_phase2.md`)](../../archive/rerank_phase2.md)
+- [MOT17 FP/FN Distribution Snapshot (`mot17_fp_fn_distribution_20260514.md`)](../../archive/mot17_fp_fn_distribution_20260514.md)

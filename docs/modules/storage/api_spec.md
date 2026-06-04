@@ -430,4 +430,4 @@ Response shape:
 - 修改 FastAPI request/response shape
 - 修改 health checker 的輸出合約
 
-若只是實驗性欄位掃描，先記在 [TODO.md](../TODO.md) 或實驗文件；當欄位成為穩定介面時，再回寫此規範。
+若只是實驗性欄位掃描，先記在 [TODO.md](TODO.md) 或實驗文件；當欄位成為穩定介面時，再回寫此規範。

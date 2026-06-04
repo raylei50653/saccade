@@ -28,8 +28,8 @@
   (on#2 = IDF1 73.8/MOTA 77.8/FP 5392,落在 off 帶 73.8–74.0 / 77.8–78.0 / 5158–5343);
   FPS 95.5→110.2(+15%);nsys graph-on `cudaLaunchKernel` ~172/幀(head 收成單一 graph launch)。
 
-相關:[detect 歸因 memory](../../../) · `mamba_head.py` · `mamba_gated_detector.py` ·
-ADR/research [eval 並發](../../reference/concurrent_eval.md)
+相關:[detect 歸因 memory](../../..) · `mamba_head.py` · `mamba_gated_detector.py` ·
+ADR/research [eval 並發](../../../reference/concurrent_eval.md)
 
 ---
 

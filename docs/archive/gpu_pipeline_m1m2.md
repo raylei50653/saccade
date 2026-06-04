@@ -2,7 +2,7 @@
 
 Date: 2026-04-29
 
-> 後續 `M4-a / M4-b` 的 runner / relink / output-path 收斂，另見 [docs/experiments/pipeline/gpu_pipeline_m4ab.md](/docs/experiments/pipeline/gpu_pipeline_m4ab.md)。
+> 後續 `M4-a / M4-b` 的 runner / relink / output-path 收斂，另見 [docs/archive/gpu_pipeline_m4ab.md](/docs/archive/gpu_pipeline_m4ab.md)。
 
 ## 目標
 

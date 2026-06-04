@@ -7,9 +7,9 @@
 
 | 目錄 | 內容 | 封存原因 |
 |------|------|----------|
-| [option-d/](option-d/) | Option D 設計文檔 (4 files) | 已實作訓練完成，但 gate 無實質貢獻 (∆ <0.2pp)，IDF1 31.7% vs baseline 52.0%。2026-05-19 結案 NO-GO。 |
-| [adr/](adr/) | 已廢棄的 ADR (2 files) | Route map 已被後續 ADR 取代：`refactor_tracker.md` → ADR 013/015/016；`yolo26_siglip2_integration.md` → ADR 005。 |
-| [history/](history/) | 歷史 TODO 記錄 | 從 `docs/TODO_history.md` 移出的舊結案 workstreams。 |
+| [option-d/](option-d) | Option D 設計文檔 (4 files) | 已實作訓練完成，但 gate 無實質貢獻 (∆ <0.2pp)，IDF1 31.7% vs baseline 52.0%。2026-05-19 結案 NO-GO。 |
+| [adr/](adr) | 已廢棄的 ADR (2 files) | Route map 已被後續 ADR 取代：`refactor_tracker.md` → ADR 013/015/016；`yolo26_siglip2_integration.md` → ADR 005。 |
+| [TODO_history.md](../TODO_history.md) | 歷史 TODO 記錄 | 從 `docs/TODO_history.md` 移出的舊結案 workstreams。 |
 
 ## 為何保留而非刪除
 

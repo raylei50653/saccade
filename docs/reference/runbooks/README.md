@@ -4,9 +4,8 @@
 
 ## 文件索引
 
-- [hot_swap_model.md](hot_swap_model.md): 模型熱切換流程與回滾方式。
-- [stream_recovery.md](stream_recovery.md): 串流斷線恢復流程。
-- [vram_oom.md](vram_oom.md): VRAM OOM 緊急處置與降級策略。
+- [stream_recovery.md](../../modules/streaming/runbooks/stream_recovery.md): 串流斷線恢復流程。
+- [vram_oom.md](../../modules/resource/runbooks/vram_oom.md): VRAM OOM 緊急處置與降級策略。
 
 ## 維護原則
 

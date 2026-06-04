@@ -30,8 +30,8 @@ rtsp://127.0.0.1:8554/detected
 
 ## Source Of Truth
 
-- helper module: [src/saccade/media/rtsp.py](/home/ray/developer/ai/saccade/src/saccade/media/rtsp.py)
-- server config: [infra/mediamtx.yml](/home/ray/developer/ai/saccade/infra/mediamtx.yml)
+- helper module: [src/saccade/media/rtsp.py](../../../../src/saccade/media/rtsp.py)
+- server config: [infra/mediamtx.yml](../../../../infra/mediamtx.yml)
 
 新程式不要直接手寫 RTSP URL，優先用 helper：
 

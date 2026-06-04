@@ -4,8 +4,6 @@
 
 ## 索引
 
-- [ADR 002: MediaMTX Gateway](002-mediamtx-gateway.md)
-- [ADR 003: Zero-Copy Pipeline](003-zero-copy-pipeline.md)
 - [ADR 004: YOLO26 Perception (L1) Upgrade](004-yolo26-perception.md)
 - [ADR 005: YOLO26 + SigLIP 2 整合升級](005-yolo26-siglip2-upgrade.md)
 - [ADR 006: Native TensorRT YOLO](006-native-trt-yolo.md)
@@ -17,7 +15,7 @@
 - [ADR 013: GPUByteTracker 與 Saccade Heartbeat](013-gpubytetracker-saccade-heartbeat.md)
 - [ADR 014: Agentic RAG — LlamaIndex 整合](014-agentic-rag-llama-index.md)
 
-> ADR 001、010 未建立（對應決策已直接合併至後續 ADR 中）。
+> ADR 001、002、003、010 未建立（對應決策已直接合併至後續 ADR 中）。
 
 ## 使用方式
 

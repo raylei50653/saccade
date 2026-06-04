@@ -634,7 +634,7 @@ Checkpoints 保留：`runs/conditioned_p1_v2/best.ckpt`、`runs/conditioned_p2/b
 
 ### ✅ Option E-v2 — Quality-Gated Temporal Feature Fusion（GO，2026-05-22 結案；後被 Option F 取代為 preset）
 
-設計文件：[docs/architecture/temporal_yolo/option-e-v2-design.md](architecture/temporal_yolo/option-e-v2-design.md)。
+設計文件：[docs/architecture/temporal_yolo/option-e-v2-design.md](modules/detection/option-e-v2-design.md)。
 直接利用 t-1 的 FPN 特徵加上 α_tier（per-track-state）加權做時序融合，無需重訓，從 gated_det_v1 熱啟動。
 最終結果（MOT17 train，7 SDP，yolo26s）：**MOTA 54.2%（+1.7pp），FP 2932（-21%），Rcll 57.3%（+1.1pp）**。
 - P0 ✅ α=0 與 baseline 一致 / P1 ✅ Fixed α sweep（α=0.15 最佳）/ P2 ❌ GMC warp NO-GO（sparse flow 精度不足）

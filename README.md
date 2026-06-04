@@ -8,10 +8,10 @@ infrastructure。
 
 如果你要開發這個 repo，請用這個閱讀順序進入：
 
-1. [DEVELOPMENT.md](/DEVELOPMENT.md)
-2. [docs/architecture.md](/docs/architecture.md)
-3. [docs/pipeline_flow.md](/docs/pipeline_flow.md)
-4. [docs/api_spec.md](/docs/api_spec.md)
+1. [DEVELOPMENT.md](DEVELOPMENT.md)
+2. [docs/architecture/README.md](/docs/architecture/README.md)
+3. [docs/reference/pipeline_flow.md](/docs/reference/pipeline_flow.md)
+4. [docs/modules/storage/api_spec.md](/docs/modules/storage/api_spec.md)
 5. [docs/TODO.md](/docs/TODO.md)
 
 這個 repo 目前以 **MOT17 為中心的 evaluation 與 tuning workflow** 為主，
@@ -164,16 +164,16 @@ uv run python scripts/eval/compare_framework_ultralytics.py \
 
 ## Development and Documentation
 
-- [DEVELOPMENT.md](/DEVELOPMENT.md)
+- [DEVELOPMENT.md](DEVELOPMENT.md)
   - 開發主入口
 
-- [docs/architecture.md](/docs/architecture.md)
+- [docs/architecture/README.md](/docs/architecture/README.md)
   - 穩定架構邊界
 
-- [docs/pipeline_flow.md](/docs/pipeline_flow.md)
+- [docs/reference/pipeline_flow.md](/docs/reference/pipeline_flow.md)
   - 目前實作主路徑 flow
 
-- [docs/api_spec.md](/docs/api_spec.md)
+- [docs/modules/storage/api_spec.md](/docs/modules/storage/api_spec.md)
   - API / event / storage contract
 
 - [docs/TODO.md](/docs/TODO.md)
@@ -187,7 +187,7 @@ uv run python scripts/eval/compare_framework_ultralytics.py \
 uv run pytest
 ```
 
-詳細覆蓋率報告：[docs/TEST_COVERAGE.md](/docs/TEST_COVERAGE.md)
+詳細覆蓋率報告：[docs/TESTING.md](/docs/TESTING.md)
 
 常用驗證指令：
 

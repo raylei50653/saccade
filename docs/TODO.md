@@ -36,16 +36,17 @@
 
 ---
 
-## 當前 Baseline（2026-05-28 更新）
+## 當前 Baseline（2026-06-03 更新）
 
 | preset | IDF1 | MOTA | IDs | Rcll | FP | FPS | 備註 |
 |--------|------|------|-----|------|-----|-----|------|
+| **mamba_whole_graph** | **73.3%** | **77.1%** | **536** | 81.0% | 3797 | **157.1** | **當前 baseline**，整圖 CUDA graph，ReID off；HOTA 66.7/DetA 69.9/AssA 63.9 |
 | **speed**（yolo26s） | **52.0%** | **41.6%** | **475** | 55.0% | 14687 | **97.9** | Baseline s |
 | **baseline**（yolo26m） | **51.4%** | **43.5%** | **502** | 59.0% | — | ~85 | Baseline m |
 | **gated_det_v1**（Option E） | **56.9%** | **52.5%** | **515** | 56.2% | 3712 | ~71 | |
 | **e-v2 α_tier**（Option E-v2） | **55.6%** | **54.2%** | **545** | 57.3% | **2932** | ~37 | |
 | **mamba_optimal**（Option F, P1 PixelShuffle） | **71.2%** | **76.3%** | 665 | 82.3% | 6050 | **100.9** | 單向掃描 |
-| **mamba_optimal**（P2 Cross-Scan 並行） | 71.3% | **76.6%** | **614** | 82.0% | 5391 | 93.8 | **當前 preset** |
+| **mamba_optimal**（head-only graph，前身） | **73.4%** | **77.1%** | **533** | 81.0% | 3774 | 116.7 | whole_graph 前身（同精度、無整圖加速）；HOTA 66.7/AssA 64.0 |
 | **P3 Hybrid** (conv P3 + Mamba P4/P5) | **72.8%** | 75.6% | 652 | 82.0% | 6503 | 77.6 | 最高 IDF1 |
 | **P2-ST** (Spatio-Temporal) T=1 eval | 71.6% | 75.4% | 689 | 81.9% | 6543 | 92.0 | 時序頭，單幀推理 |
 | **VGT Flow-Gated** (GMC flow gate) T=1 | **72.9%** | 76.1% | 659 | **82.5%** | 6454 | 85.6 | **歷史最高 IDF1**，flow 為輸入非 warp |
@@ -55,12 +56,26 @@
 
 ---
 
-## 待辦事項
+## 模組 TODO 索引
+
+> 模組專屬待辦已物理拆分至各 `docs/modules/<name>/TODO.md`。**狀態一覽（哪些 active / 收斂）見 [DEVELOPMENT.md §6 模組現狀總覽](../DEVELOPMENT.md)**——本表只提供連結，摘要不在此重複，避免兩處 drift。
+
+| 模組 | TODO | 模組 | TODO |
+|------|------|------|------|
+| detection | [↗](modules/detection/TODO.md) | semantic | [↗](modules/semantic/TODO.md) |
+| geometry | [↗](modules/geometry/TODO.md) | trigger | [↗](modules/trigger/TODO.md) |
+| motion | [↗](modules/motion/TODO.md) | streaming | [↗](modules/streaming/TODO.md) |
+| reid | [↗](modules/reid/TODO.md) | storage | [↗](modules/storage/TODO.md) |
+| lifecycle | [↗](modules/lifecycle/TODO.md) | cognition | [↗](modules/cognition/TODO.md) |
+| | | resource | [↗](modules/resource/TODO.md) |
+
+---
+
+## 跨模組待辦
 
 | 優先 | 項目 | 行動 | 預期收益 |
 |------|------|------|---------|
-| P2 | **測試覆蓋率提升（66% → 70%+）** | 見下方覆蓋率任務清單 | 穩定性、CI 保護、開發信心 |
-| P3 | **Detector 訓練資料改善** | pred_h = 61.4% of gt_h，77% 近似 FP 有真實 GT；需補足腿/腳標注 | 根本解決 FN 問題；目前所有 score-gate 手段天花板已見 |
+| P2 | **測試覆蓋率提升（66% → 70%+）** | 見下方覆蓋率任務清單；按模組落地（如 lifecycle 切片見 [lifecycle/TODO.md](modules/lifecycle/TODO.md)） | 穩定性、CI 保護、開發信心 |
 
 ### 測試覆蓋率任務清單（P2）
 
@@ -77,8 +92,6 @@
 
 ---
 
----
-
 ## 算法方向探索（已結案，詳見 history）
 
 > 背景：2026-05-17 yolo26s 參數優化觸天花板（threshold 調整 MOTA 波動 <0.5pp）→「需要新架構而非調參」。後續 Option D/E/F 探索結論已歸檔至 [TODO_history.md](/docs/TODO_history.md) 的「Algorithm Direction Exploration」節：
@@ -86,44 +99,13 @@
 > - **Option D**（Track-Conditioned YOLO）❌ NO-GO（2026-05-19）：IDF1 31.7%，gate 無貢獻、recall 天花板。
 > - **Option E-v2**（Quality-Gated Temporal Fusion）✅ GO（2026-05-22）：MOTA 54.2% / FP -21%；後被 Option F 取代。
 > - **Option F**（Mamba Gated Detector）✅ 結案（2026-05-27）→ **當前 production preset `mamba_optimal`**：PixelShuffle 上取樣 + Stretch-Resize 域一致 → IDF1 71.2% / MOTA 76.3% / Rcll 82.3%。訓練流程、breakthrough 與 3 項核心精調（`match_thresh=0.50`、`interpolate_max_gap=35`、`gmc_downscale=4`）見 history。當前指標見上方 baseline 表。
-
----
-
-## Mamba 檢測頭中長期優化待辦（2026-05-27 新增）
-
-> 已完成項（Pixel-Shuffle、Cross-Scan，均已設為當前 preset）已歸檔至 [TODO_history.md](/docs/TODO_history.md)。
-
-| 優先 | 項目 | 具體思路 | 預期收益 | 狀態 |
-| :---: | :--- | :--- | :--- | :---: |
-| **P2** | **時空聯合 Mamba (Spatio-Temporal SSM)** | 將連續 T 幀的 FPN 特徵做空間 cross-scan 後再做時間軸 SSM 掃描。**已訓練（stride=1, clip_len=3），單幀推理與 cross-scan 持平，時序 buffer 因固定位置掃描無法追蹤移動物體而不 work。** | 未達預期，需 GMC/Kalman 引導的對齊機制（見 VGT-Mamba）。 | 🔴 VGT 進行中 |
-| **P2-VGT** | **VGT-Mamba (Velocity-Guided Temporal)** | 用 GMC affine flow 將歷史幀 FPN 特徵 warp 對齊到當前幀後再做 temporal Mamba。GMC 已預計算（127 KB），訓練中（Phase 1）。 | 根治時序對齊，從源頭降低遮擋 FN | 🔄 訓練中 |
-| **P3** | **混合 Head 架構 (Hybrid Mamba-ViT)** | 在低層 FPN (P3) 採用硬體效率極高的 **EfficientViT-style CGA** 卷積頭；在高層 FPN (P5) 採用 **Mamba 頭** 捕捉全局語義。 | 兼顧 Mamba 的全局上下文建模優勢與 EfficientViT 對 TensorRT / GPU 架構極友好的推論速度。 | 📋 待實作 |
-| ~~**P1**~~ | ~~**mamba_head CUDA graph(修 eval 整合 bug)**~~ | ✅ **完成(2026-06-02)**。真因:custom `selective_scan_fwd` CUDA op 跑在 legacy default stream(stream 0)→ CUDA-graph capture 不錄 → replay 缺 scan kernel → cls 飽和 → ~10× FP → MOTA 崩。修法:pybind binding 加 `stream_ptr` + op 傳 `torch.cuda.current_stream().cuda_stream` + graph path 改 `torch.cuda.make_graphed_callables`。隔離 bit-exact、full-SDP parity(噪音內)、FPS 95.5→110.2(+15%)。詳見 [research](research/pipeline/mamba_head_cuda_graph_eval_bug_20260602.md)。 | **+15% FPS 達成,精度持平** | ✅ 已 default(`use_cuda_graph: true`) |
-
----
-
-### 📋 中長期 Backlog
-
-#### 2. ReID + Appearance Bank
-
-| 項目 | 內容 |
-|------|------|
-| **問題** | 遮擋後若無視覺特徵，僅靠 motion 預測容易匹配失敗 |
-| **思路** | 啟用 ReID stack（siglip2 或更輕量 model），在遮擋後使用 embedding 尋回身份 |
-| **狀態** | 📋 暫緩，待 Temporal YOLO 驗證後再評估是否需要疊加 |
-
-#### 3. Detector 資料集補強與微調
-
-| 項目 | 內容 |
-|------|------|
-| **問題** | yolo26s 對於被遮擋或只有腿/腳的行人檢測能力弱 |
-| **思路** | 針對遮擋與小目標，使用包含更多半身/肢體標註的資料集重新微調 YOLO |
-| **狀態** | 📋 暫緩，將優先觀察 Temporal YOLO 是否能透過時序資訊彌補此缺陷 |
+>
+> Mamba 檢測頭中長期優化（ST-Mamba / VGT-Mamba / Hybrid Mamba-ViT / CUDA-graph✅）已拆分至 [detection/TODO.md](modules/detection/TODO.md)。
 
 ---
 
 ## Historical Links
 
 - 歷史 TODO / 設計規範 / C++ 路線圖：[TODO_history.md](TODO_history.md)
-- Tracking base 與 relink sweep：[fp_fn_recovery_and_gmc.md](research/tracking/fp_fn_recovery_and_gmc.md)
-- ReID backbone refresh 歸檔：[semantic_relink_and_crop.md](research/reid/semantic_relink_and_crop.md)
+- Tracking base 與 relink sweep：[fp_fn_recovery_and_gmc.md](modules/geometry/research/fp_fn_recovery_and_gmc.md)
+- ReID backbone refresh 歸檔：[semantic_relink_and_crop.md](modules/reid/research/semantic_relink_and_crop.md)

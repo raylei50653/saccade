@@ -35,9 +35,9 @@ Key diagnosis:
 
 Recommended reading with this update:
 
-- For pipeline shape: [pipeline_flow.md](../../reference/pipeline_flow.md)
-- For detector / postprocess code: [L1_perception.md](../../architecture/L1_perception.md)
-- For CLI entry point: [scripts/eval/](../../scripts/eval/)
+- For pipeline shape: [pipeline_flow.md](../../../reference/pipeline_flow.md)
+- For detector / postprocess code: [architecture_tracker.md](../architecture_tracker.md)
+- For CLI entry point: [scripts/eval/](../../../../scripts/eval/)
 
 ## Summary
 

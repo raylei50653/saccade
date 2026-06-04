@@ -198,7 +198,7 @@ Frame_t → YOLO26s Backbone (layers 0~10)
 CUDA kernel 在 `src/tracking/mamba_scan.cu`。純 Python S6 block 在 `mamba_head.py`。
 
 **next steps**：distillation（YOLO Detect head → Mamba head）→ fine-tune on GT。
-詳見 [option-f-mamba-head.md](option-f-mamba-head.md)。
+詳見 [option-f-mamba-head.md](../../modules/detection/option-f-mamba-head.md)。
 
 ---
 

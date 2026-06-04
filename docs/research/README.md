@@ -1,6 +1,6 @@
 # Experiments
 
-活躍的實驗設計與分析。一次性數據報告歸檔至 [../archive/](../archive/)。
+活躍的實驗設計與分析。一次性數據報告歸檔至 [../archive/](../archive)。
 
 ## pipeline/
 
@@ -12,16 +12,16 @@
 
 | 文件 | 內容 |
 |------|------|
-| [fp_fn_recovery_and_gmc.md](tracking/fp_fn_recovery_and_gmc.md) | FP/FN recovery + GMC 診斷 |
-| [tentative_confirmed_state.md](tracking/tentative_confirmed_state.md) | Tentative/Confirmed 狀態機設計 |
+| [fp_fn_recovery_and_gmc.md](../modules/geometry/research/fp_fn_recovery_and_gmc.md) | FP/FN recovery + GMC 診斷 |
+| [tentative_confirmed_state.md](../modules/lifecycle/research/tentative_confirmed_state.md) | Tentative/Confirmed 狀態機設計 |
 
 ## reid/
 
 | 文件 | 內容 |
 |------|------|
-| [dynamic_trigger.md](reid/dynamic_trigger.md) | 動態 ReID 觸發機制設計 |
-| [last_vit_integration_analysis.md](reid/last_vit_integration_analysis.md) | LaSt-ViT frequency-domain 診斷 |
-| [semantic_relink_and_crop.md](reid/semantic_relink_and_crop.md) | Semantic relink + SigLIP2 crop 實驗 |
+| [dynamic_trigger.md](../modules/trigger/research/dynamic_trigger.md) | 動態 ReID 觸發機制設計 |
+| [last_vit_integration_analysis.md](../modules/reid/research/last_vit_integration_analysis.md) | LaSt-ViT frequency-domain 診斷 |
+| [semantic_relink_and_crop.md](../modules/reid/research/semantic_relink_and_crop.md) | Semantic relink + SigLIP2 crop 實驗 |
 
 ## eval/
 
