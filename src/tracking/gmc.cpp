@@ -142,8 +142,11 @@ void GMC::ensure_gpu_resources(int w, int h) {
     
     cufftPlan2d(&plan_r2c_, h, w, CUFFT_R2C);
     cufftPlan2d(&plan_c2r_, h, w, CUFFT_C2R);
-    cufftSetStream(plan_r2c_, gmc_stream_);
-    cufftSetStream(plan_c2r_, gmc_stream_);
+    // Freshly created plans default to stream 0; bind them to the internal
+    // stream and prime the cache. set_cufft_stream() will re-bind on demand
+    // when a different caller stream is used (e.g. estimate_into_direct).
+    cufft_stream_ = nullptr;
+    set_cufft_stream(gmc_stream_);
     
     size_t size_gray = w * h * sizeof(float);
     // cuFFT R2C output for h×w input: h rows × (w/2+1) complex columns
@@ -174,6 +177,13 @@ void GMC::ensure_gpu_resources(int w, int h) {
     plans_created_ = true;
 }
 
+void GMC::set_cufft_stream(cudaStream_t stream) {
+    if (cufft_stream_ == stream) return;  // no-op inside captured replay
+    cufftSetStream(plan_r2c_, stream);
+    cufftSetStream(plan_c2r_, stream);
+    cufft_stream_ = stream;
+}
+
 std::vector<float> GMC::estimate(const float* frame_gpu_ptr, int width, int height, cudaStream_t stream, bool use_gpu_phase_corr) {
     int dst_w = width / downscale_;
     int dst_h = height / downscale_;
@@ -193,6 +203,7 @@ std::vector<float> GMC::estimate(const float* frame_gpu_ptr, int width, int heig
     
     if (use_gpu_phase_corr) {
         ensure_gpu_resources(dst_w, dst_h);
+        set_cufft_stream(gmc_stream_);
         orig_w_ = width; orig_h_ = height;
 
         // Apply foreground mask before FFT if boxes were provided this frame.
@@ -314,6 +325,7 @@ void GMC::estimate_into(
     }
 
     ensure_gpu_resources(dst_w, dst_h);
+    set_cufft_stream(gmc_stream_);
     orig_w_ = width;
     orig_h_ = height;
 
@@ -468,6 +480,50 @@ std::vector<float> GMC::estimate_mat(const cv::Mat& frame, int downscale_overrid
 
     prev_gray_ = curr_gray.clone();
     return warp;
+}
+
+void GMC::estimate_into_direct(
+    const float* frame_gpu_ptr, int width, int height,
+    cudaStream_t stream, float* d_out_warp)
+{
+    int dst_w = width / downscale_, dst_h = height / downscale_;
+    size_t needed = dst_w * dst_h * sizeof(float);
+    if (d_gray_small_ == nullptr || gray_small_size_ < needed) {
+        if (d_gray_small_) cudaFree(d_gray_small_);
+        cudaMalloc(&d_gray_small_, needed);
+        gray_small_size_ = needed;
+    }
+    ensure_gpu_resources(dst_w, dst_h);
+    orig_w_ = width; orig_h_ = height;
+    launch_grayscale_downscale(frame_gpu_ptr, (float*)d_gray_small_,
+                               width, height, dst_w, dst_h, stream);
+    if (n_fg_boxes_ > 0) {
+        launch_zero_fg_rects((float*)d_gray_small_, dst_w, dst_h,
+                             d_fg_boxes_, n_fg_boxes_,
+                             (float)width, (float)height, stream);
+        n_fg_boxes_ = 0;
+    }
+    set_cufft_stream(stream);
+    launch_phase_correlation_into_warp(
+        (const float*)d_prev_gray_, (const float*)d_gray_small_,
+        dst_w, dst_h, d_out_warp,
+        d_tmp_complex_a_, d_tmp_complex_b_, d_tmp_float_,
+        d_peak_x_, d_peak_y_, d_peak_val_, d_pcr_score_,
+        plan_r2c_, plan_c2r_, stream, static_cast<float>(downscale_));
+    cudaMemcpyAsync(d_prev_gray_, d_gray_small_, needed,
+                    cudaMemcpyDeviceToDevice, stream);
+}
+
+void GMC::set_fg_mask_boxes_gpu(const float* d_boxes, int n_boxes) {
+    if (n_boxes <= 0) { n_fg_boxes_ = 0; return; }
+    size_t needed = static_cast<size_t>(n_boxes) * 4 * sizeof(float);
+    if (d_fg_boxes_ == nullptr || fg_boxes_cap_ < needed) {
+        if (d_fg_boxes_) cudaFree(d_fg_boxes_);
+        cudaMalloc(&d_fg_boxes_, needed);
+        fg_boxes_cap_ = needed;
+    }
+    cudaMemcpy(d_fg_boxes_, d_boxes, needed, cudaMemcpyDeviceToDevice);
+    n_fg_boxes_ = n_boxes;
 }
 
 } // namespace saccade

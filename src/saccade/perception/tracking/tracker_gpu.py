@@ -733,6 +733,10 @@ class GPUByteTracker:
         track_ids: torch.Tensor,
         keypoints: torch.Tensor,
     ) -> None:
+        """[Reserved] Push per-track keypoints for biometric profile construction.
+
+        Not yet implemented in C++ tracker. Always no-op.
+        """
         push = getattr(self.tracker, "push_keypoints", None)
         if push is None or track_ids.numel() == 0 or keypoints.numel() == 0:
             return
@@ -749,6 +753,10 @@ class GPUByteTracker:
         )
 
     def get_biometric(self, track_id: int) -> Optional[dict[str, float]]:
+        """[Reserved] Return per-track biometric profile (leg/shoulder/head ratios).
+
+        Not yet implemented in C++ tracker. Always returns None.
+        """
         get_bio = getattr(self.tracker, "get_biometric", None)
         if get_bio is None:
             return None

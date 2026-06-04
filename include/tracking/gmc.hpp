@@ -68,6 +68,19 @@ public:
         bool sync_caller_stream = true);
 
     /**
+     * @brief Like estimate_into but runs ALL GPU kernels on the caller stream
+     * directly. No internal gmc_stream_, no cross-stream event sync.
+     * Intended for CUDA graph capture.
+     * Note: cuFFT calls inside may not be graph-capturable.
+     */
+    void estimate_into_direct(
+        const float* frame_gpu_ptr,
+        int width,
+        int height,
+        cudaStream_t stream,
+        float* d_out_warp);
+
+    /**
      * @brief Insert a dependency into `stream` that waits for the most recent
      *   estimate_into() to complete.  Call this after detect+postproc when
      *   estimate_into() was launched with sync_caller_stream=false.
@@ -80,6 +93,12 @@ public:
      * Call before estimate() to suppress foreground bias.
      */
     void set_fg_mask_boxes(const std::vector<float>& boxes_xyxy);
+
+    /**
+     * @brief Set foreground bounding boxes from GPU memory (no D2H roundtrip).
+     * Accepts a raw GPU pointer to flat [x1,y1,x2,y2, ...] in original-frame coords.
+     */
+    void set_fg_mask_boxes_gpu(const float* d_boxes, int n_boxes);
 
     /** @brief PCR (peak-to-RMS ratio) from the most recent completed GPU phase correlation. */
     float pcr_score();
@@ -126,6 +145,11 @@ private:
     cufftHandle plan_c2r_ = 0;
     bool plans_created_ = false;
     int last_w_ = 0, last_h_ = 0;
+    // Stream the cuFFT plans are currently bound to. cufftSetStream is only
+    // re-issued when the desired stream differs, so a captured replay (whose
+    // stream already matches after warmup) never executes setStream inside the
+    // capture region. nullptr = unbound / unknown.
+    cudaStream_t cufft_stream_ = nullptr;
 
     // Foreground mask boxes (optional, set each frame before estimate())
     float* d_fg_boxes_ = nullptr;
@@ -134,6 +158,7 @@ private:
     int orig_w_ = 0, orig_h_ = 0;
 
     void ensure_gpu_resources(int w, int h);
+    void set_cufft_stream(cudaStream_t stream);
     void refresh_pcr_score();
 
     cudaStream_t gmc_stream_ = nullptr;

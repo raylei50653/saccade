@@ -1034,6 +1034,14 @@ def detect_single_patch_640(
     preprocess_modes: List[str],
     detector_box_format: str = "xyxy",
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    _use_whole = (
+        getattr(detector, "use_whole_graph", False)
+        and getattr(detector, "_trt_backbone", None) is not None
+    )
+    if _use_whole and "letterbox" not in preprocess_modes:
+        raw_dets = detector.detect_raw(pool.frame_buffer.unsqueeze(0))
+        return raw_dets[0, :, :4], raw_dets[0, :, 4], raw_dets[0, :, 5]
+
     if "letterbox" in preprocess_modes:
         r = 640.0 / max(h_orig, w_orig)
         h_new, w_new = int(h_orig * r), int(w_orig * r)

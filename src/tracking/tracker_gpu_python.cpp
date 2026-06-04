@@ -21,6 +21,7 @@
 #include "tracking/workbench.hpp"
 #include "tracking/mamba_scan.cuh"
 #include "tracking/quality_filter.cuh"
+#include "tracking/copy_pad.cuh"
 #include "tracking/kalman_gpu.cuh"
 #include "perception/feature_extractor.hpp"
 #include "perception/preprocessor.hpp"
@@ -2264,6 +2265,16 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         }, py::arg("frame_ptr"), py::arg("width"), py::arg("height"),
            py::arg("stream_ptr"), py::arg("out_warp_ptr"),
            py::arg("use_gpu_phase_corr") = true, py::arg("sync_caller_stream") = true)
+        .def("estimate_into_direct", [](GMC& self, uintptr_t frame_ptr, int width, int height,
+                                         uintptr_t stream_ptr, uintptr_t out_warp_ptr) {
+            py::gil_scoped_release release;
+            self.estimate_into_direct(
+                reinterpret_cast<const float*>(frame_ptr),
+                width, height,
+                reinterpret_cast<cudaStream_t>(stream_ptr),
+                reinterpret_cast<float*>(out_warp_ptr));
+        }, py::arg("frame_ptr"), py::arg("width"), py::arg("height"),
+           py::arg("stream_ptr"), py::arg("out_warp_ptr"))
         .def("sync_to_stream", [](GMC& self, uintptr_t stream_ptr) {
             self.sync_to_stream(reinterpret_cast<cudaStream_t>(stream_ptr));
         }, py::arg("stream_ptr"))
@@ -2310,7 +2321,13 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             self.set_fg_mask_boxes(v);
         }, py::arg("boxes_flat"),
            "Set foreground boxes [x1,y1,x2,y2,...] to zero before phase correlation. "
-           "Call once per frame before estimate().");
+           "Call once per frame before estimate().")
+        .def("set_fg_mask_boxes_gpu", [](GMC& self, uintptr_t boxes_ptr, int n_boxes) {
+            py::gil_scoped_release release;
+            self.set_fg_mask_boxes_gpu(
+                reinterpret_cast<const float*>(boxes_ptr), n_boxes);
+        }, py::arg("boxes_ptr"), py::arg("n_boxes"),
+           "Set foreground boxes from GPU memory. No D2H roundtrip.");
 
     m.def(
         "merge_cross_tile_duplicates",
@@ -2710,6 +2727,70 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             py::arg("priors_ptr") = 0, py::arg("prior_classes_ptr") = 0,
             py::arg("num_priors") = 0, py::arg("prior_iou_threshold") = 0.50f,
             py::arg("stream_ptr"))
+        .def("process_detections_graph",
+            [](PerceptionPipeline& self,
+               uintptr_t boxes_ptr, uintptr_t scores_ptr, uintptr_t classes_ptr,
+               int n_in, int frame_w, int frame_h, bool is_tiled,
+               uintptr_t out_boxes, uintptr_t out_scores, uintptr_t out_classes,
+               uintptr_t out_suspect, uintptr_t out_count,
+               uintptr_t priors_ptr, uintptr_t prior_classes_ptr,
+               int num_priors, float prior_iou_threshold,
+               uintptr_t stream_ptr) {
+                py::gil_scoped_release release;
+                self.process_detections_graph(
+                    reinterpret_cast<const float*>(boxes_ptr),
+                    reinterpret_cast<const float*>(scores_ptr),
+                    reinterpret_cast<const int*>(classes_ptr),
+                    n_in, frame_w, frame_h, is_tiled,
+                    reinterpret_cast<float*>(out_boxes),
+                    reinterpret_cast<float*>(out_scores),
+                    reinterpret_cast<int*>(out_classes),
+                    reinterpret_cast<bool*>(out_suspect),
+                    reinterpret_cast<int*>(out_count),
+                    reinterpret_cast<const float*>(priors_ptr),
+                    reinterpret_cast<const int*>(prior_classes_ptr),
+                    num_priors, prior_iou_threshold,
+                    reinterpret_cast<cudaStream_t>(stream_ptr));
+            },
+            py::arg("boxes_ptr"), py::arg("scores_ptr"), py::arg("classes_ptr"),
+            py::arg("n_in"), py::arg("frame_w"), py::arg("frame_h"),
+            py::arg("is_tiled"),
+            py::arg("out_boxes"), py::arg("out_scores"), py::arg("out_classes"),
+            py::arg("out_suspect"), py::arg("out_count"),
+            py::arg("priors_ptr") = 0, py::arg("prior_classes_ptr") = 0,
+            py::arg("num_priors") = 0, py::arg("prior_iou_threshold") = 0.50f,
+            py::arg("stream_ptr"))
+        .def("process_detections_interleaved_graph",
+            [](PerceptionPipeline& self,
+               uintptr_t det_6d,
+               int n_in,
+               uintptr_t split_boxes, uintptr_t split_scores, uintptr_t split_classes,
+               int frame_w, int frame_h, bool is_tiled,
+               uintptr_t out_boxes, uintptr_t out_scores, uintptr_t out_classes,
+               uintptr_t out_suspect, uintptr_t out_count,
+               uintptr_t stream_ptr) {
+                py::gil_scoped_release release;
+                self.process_detections_interleaved_graph(
+                    reinterpret_cast<const float*>(det_6d),
+                    n_in,
+                    reinterpret_cast<float*>(split_boxes),
+                    reinterpret_cast<float*>(split_scores),
+                    reinterpret_cast<int*>(split_classes),
+                    frame_w, frame_h, is_tiled,
+                    reinterpret_cast<float*>(out_boxes),
+                    reinterpret_cast<float*>(out_scores),
+                    reinterpret_cast<int*>(out_classes),
+                    reinterpret_cast<bool*>(out_suspect),
+                    reinterpret_cast<int*>(out_count),
+                    reinterpret_cast<cudaStream_t>(stream_ptr));
+            },
+            py::arg("det_6d"),
+            py::arg("n_in"), py::arg("frame_w"), py::arg("frame_h"),
+            py::arg("is_tiled"),
+            py::arg("split_boxes"), py::arg("split_scores"), py::arg("split_classes"),
+            py::arg("out_boxes"), py::arg("out_scores"), py::arg("out_classes"),
+            py::arg("out_suspect"), py::arg("out_count"),
+            py::arg("stream_ptr"))
         .def("extract_reid",
             [](PerceptionPipeline& self,
                uintptr_t frame_ptr, int frame_h, int frame_w,
@@ -2923,6 +3004,30 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         py::arg("stream_ptr") = 0,
         "Compact-filter detections removing very-low-score and large+uncertain boxes. "
         "Returns count of kept detections. GPU equivalent of _apply_fp_hard_filter().");
+
+    m.def("copy_pad_detections",
+        [](uintptr_t src_boxes, uintptr_t src_scores, uintptr_t src_classes,
+           int n_copy,
+           uintptr_t dst_boxes, uintptr_t dst_scores, uintptr_t dst_classes,
+           int padded_n, uintptr_t stream_ptr) {
+            py::gil_scoped_release release;
+            copy_pad_detections(
+                reinterpret_cast<const float*>(src_boxes),
+                reinterpret_cast<const float*>(src_scores),
+                reinterpret_cast<const int*>(src_classes),
+                n_copy,
+                reinterpret_cast<float*>(dst_boxes),
+                reinterpret_cast<float*>(dst_scores),
+                reinterpret_cast<int*>(dst_classes),
+                padded_n,
+                reinterpret_cast<cudaStream_t>(stream_ptr));
+        },
+        py::arg("src_boxes"), py::arg("src_scores"), py::arg("src_classes"),
+        py::arg("n_copy"),
+        py::arg("dst_boxes"), py::arg("dst_scores"), py::arg("dst_classes"),
+        py::arg("padded_n"), py::arg("stream_ptr") = 0,
+        "Copy N detections to padded output, zero-fill tail. "
+        "Single kernel replaces copy+zero_ pairs for graph-NMS input prep.");
 
     m.def("auction_solve_cpp",
         [](py::array_t<float, py::array::c_style | py::array::forcecast> cost_matrix, float epsilon) {

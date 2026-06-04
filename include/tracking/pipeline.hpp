@@ -178,6 +178,48 @@ public:
         float prior_iou_threshold,
         cudaStream_t stream);
 
+    /**
+     * @brief Graph-capture-safe NMS: always uses the large path, skips all
+     * D2H sync points. Input must be zero-padded to n_in.
+     */
+    void process_detections_graph(
+        const float* boxes_ptr,
+        const float* scores_ptr,
+        const int*   classes_ptr,
+        int n_in,
+        int frame_w, int frame_h,
+        bool is_tiled,
+        float* out_boxes,
+        float* out_scores,
+        int*   out_classes,
+        bool*  out_suspect,
+        int*   out_count,
+        const float* priors_ptr,
+        const int* prior_classes_ptr,
+        int num_priors,
+        float prior_iou_threshold,
+        cudaStream_t stream);
+
+    /**
+     * @brief Combined interleaved→split→NMS graph. Takes a (N,6) interleaved
+     * source (x1,y1,x2,y2,score,class), splits to intermediate buffers, then
+     * runs graph-safe NMS. All fixed-size — safe for CUDA graph capture.
+     */
+    void process_detections_interleaved_graph(
+        const float* det_6d,
+        int n_in,
+        float* split_boxes,
+        float* split_scores,
+        int*   split_classes,
+        int frame_w, int frame_h,
+        bool is_tiled,
+        float* out_boxes,
+        float* out_scores,
+        int*   out_classes,
+        bool*  out_suspect,
+        int*   out_count,
+        cudaStream_t stream);
+
     const Config& get_config() const { return cfg_; }
 
     /**

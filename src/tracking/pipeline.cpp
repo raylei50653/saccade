@@ -1,5 +1,6 @@
 #include "tracking/pipeline.hpp"
 #include "tracking/tracker_gpu.hpp"
+#include "tracking/copy_pad.cuh"
 #include <cuda_runtime.h>
 #include <algorithm>
 #include <chrono>
@@ -512,6 +513,107 @@ int PerceptionPipeline::process_detections_n_fixed(
     // Caller feeds this directly to GraphedTrackerUpdate; zero-score slots are gated
     // by track_thresh inside the tracker kernels without any CPU synchronisation.
     return n_in;
+}
+
+void PerceptionPipeline::process_detections_graph(
+    const float* boxes_ptr,
+    const float* scores_ptr,
+    const int*   classes_ptr,
+    int n_in,
+    int frame_w, int frame_h,
+    bool is_tiled,
+    float* out_boxes,
+    float* out_scores,
+    int*   out_classes,
+    bool*  out_suspect,
+    int*   out_count,
+    const float* priors_ptr,
+    const int* prior_classes_ptr,
+    int num_priors,
+    float prior_iou_threshold,
+    cudaStream_t stream)
+{
+    if (n_in <= 0) { cudaMemsetAsync(out_count, 0, sizeof(int), stream); return; }
+    ensure_scratch(n_in, stream);
+
+    cudaMemsetAsync(d_filter_count_, 0, sizeof(int), stream);
+    filter_detections_cuda(
+        boxes_ptr, scores_ptr, classes_ptr, n_in,
+        d_filter_keep_indices_, d_filter_suspect_flags_, nullptr, d_filter_count_,
+        cfg_.score_threshold,
+        cfg_.person_only, cfg_.person_class,
+        is_tiled, frame_w, frame_h,
+        cfg_.person_geometry_prior, cfg_.geometry_suspect_support,
+        cfg_.person_min_height_ratio,
+        cfg_.person_min_aspect, cfg_.person_max_aspect,
+        cfg_.person_min_area_ratio, cfg_.person_max_area_ratio,
+        stream);
+
+    gather_compact3_counted_cuda(
+        boxes_ptr, scores_ptr, classes_ptr,
+        out_boxes, out_scores, out_classes,
+        d_filter_keep_indices_, d_filter_count_, n_in, stream);
+
+    copy_bool_counted_cuda(
+        d_filter_suspect_flags_, out_suspect, d_filter_count_, n_in, stream);
+
+    const int col_blocks = (n_in + 63) / 64;
+    cudaMemsetAsync(d_nms_suppression_, 0, (size_t)n_in * col_blocks * sizeof(uint64_t), stream);
+    cudaMemsetAsync(d_nms_remv_, 0, col_blocks * sizeof(uint64_t), stream);
+    cudaMemsetAsync(d_nms_count_, 0, sizeof(int), stream);
+
+    argsort_scores_descending_cuda(
+        out_scores, n_in,
+        d_nms_order_, d_sort_keys_in_, d_sort_keys_out_,
+        d_cub_sort_tmp_, cub_sort_tmp_bytes_, stream);
+
+    nms_counted_cuda(
+        out_boxes, out_scores, out_classes, d_nms_order_,
+        n_in, d_filter_count_, d_nms_keep_, d_nms_suppression_, d_nms_remv_,
+        d_nms_count_, cfg_.nms_threshold, false,
+        priors_ptr, prior_classes_ptr, num_priors, prior_iou_threshold,
+        d_nms_immunity_mask_,
+        stream);
+
+    gather_compact4_counted_cuda(
+        out_boxes, out_scores, out_classes, out_suspect,
+        d_compact_boxes_, d_compact_scores_, d_compact_classes_, d_compact_suspect_,
+        d_nms_keep_, d_nms_count_, n_in, stream);
+
+    cudaMemcpyAsync(out_boxes,   d_compact_boxes_,   n_in * 4 * sizeof(float), cudaMemcpyDeviceToDevice, stream);
+    cudaMemcpyAsync(out_scores,  d_compact_scores_,  n_in *     sizeof(float), cudaMemcpyDeviceToDevice, stream);
+    cudaMemcpyAsync(out_classes, d_compact_classes_, n_in *     sizeof(int),   cudaMemcpyDeviceToDevice, stream);
+    cudaMemcpyAsync(out_suspect, d_compact_suspect_, n_in *     sizeof(bool),  cudaMemcpyDeviceToDevice, stream);
+    cudaMemcpyAsync(out_count, d_nms_count_, sizeof(int), cudaMemcpyDeviceToDevice, stream);
+
+    if (cfg_.geometry_suspect_support && cfg_.geometry_suspect_support_score > 0.0f) {
+        penalize_suspect_scores_cuda(
+            out_scores, out_suspect, out_count,
+            cfg_.geometry_suspect_support_score, n_in, stream);
+    }
+}
+
+void PerceptionPipeline::process_detections_interleaved_graph(
+    const float* det_6d,
+    int n_in,
+    float* split_boxes,
+    float* split_scores,
+    int*   split_classes,
+    int frame_w, int frame_h,
+    bool is_tiled,
+    float* out_boxes,
+    float* out_scores,
+    int*   out_classes,
+    bool*  out_suspect,
+    int*   out_count,
+    cudaStream_t stream)
+{
+    interleaved_to_split(det_6d, n_in, split_boxes, split_scores, split_classes, stream);
+    process_detections_graph(
+        split_boxes, split_scores, split_classes, n_in,
+        frame_w, frame_h, is_tiled,
+        out_boxes, out_scores, out_classes, out_suspect, out_count,
+        nullptr, nullptr, 0, 0.0f, stream);
 }
 
 void PerceptionPipeline::extract_reid(

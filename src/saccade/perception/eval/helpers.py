@@ -65,6 +65,96 @@ def materialize_gpu_track_results(
     }
 
 
+def materialize_gpu_track_results_pinned(
+    result_buffers: Any,
+    pinned: dict[str, torch.Tensor],
+    *,
+    default_class_id: int | None = None,
+    include_det_idx: bool = True,
+) -> HostTrackResultView:
+    pinned["count"].copy_(result_buffers["count"], non_blocking=True)
+    torch.cuda.synchronize()
+    count = int(pinned["count"].item())
+    if count <= 0:
+        return {
+            "count": 0,
+            "boxes": torch.empty((0, 4), dtype=torch.float32),
+            "scores": torch.empty((0,), dtype=torch.float32),
+            "ids": torch.empty((0,), dtype=torch.int32),
+            "classes": (
+                None
+                if default_class_id is not None
+                else torch.empty((0,), dtype=torch.int32)
+            ),
+            "det_idx": (
+                torch.empty((0,), dtype=torch.int32) if include_det_idx else None
+            ),
+        }
+
+    pinned["boxes"][:count].copy_(result_buffers["boxes"][:count], non_blocking=True)
+    pinned["scores"][:count].copy_(result_buffers["scores"][:count], non_blocking=True)
+    pinned["ids"][:count].copy_(result_buffers["ids"][:count], non_blocking=True)
+    if default_class_id is None:
+        pinned["classes"][:count].copy_(
+            result_buffers["classes"][:count], non_blocking=True
+        )
+    if include_det_idx:
+        pinned["det_idx"][:count].copy_(
+            result_buffers["det_idx"][:count], non_blocking=True
+        )
+    torch.cuda.synchronize()
+
+    boxes = pinned["boxes"][:count]
+    scores = pinned["scores"][:count]
+    ids = pinned["ids"][:count]
+
+    if default_class_id is not None:
+        classes = torch.full_like(ids, int(default_class_id), dtype=torch.int32)
+    else:
+        classes = pinned["classes"][:count]
+
+    det_idx = pinned["det_idx"][:count] if include_det_idx else None
+
+    return {
+        "count": count,
+        "boxes": boxes,
+        "scores": scores,
+        "ids": ids,
+        "classes": classes,
+        "det_idx": det_idx,
+    }
+
+
+def fast_emit_mot_lines(
+    *,
+    track_results: HostTrackResultView,
+    global_id_mapper: Any,
+    seq: str,
+    frame_id: int,
+    frame_w: int,
+    frame_h: int,
+) -> list[str]:
+    count = track_results["count"]
+    if count <= 0:
+        return []
+
+    boxes_np = track_results["boxes"][:count].numpy()
+    scores_np = track_results["scores"][:count].numpy()
+    ids_np = track_results["ids"][:count].numpy()
+
+    lines = [""] * count
+    for i in range(count):
+        gid = global_id_mapper.map(seq, int(ids_np[i]))
+        x1, y1, x2, y2 = boxes_np[i]
+        s = float(scores_np[i])
+        w = x2 - x1
+        h = y2 - y1
+        lines[i] = (
+            f"{frame_id},{gid},{x1:.2f},{y1:.2f},{w:.2f},{h:.2f},{s:.4f},-1,-1,-1"
+        )
+    return lines
+
+
 def build_dynamic_reid_observations(
     track_ids: list[int],
     track_boxes: list[tuple[float, float, float, float]],
@@ -96,16 +186,20 @@ def prepare_host_track_batch(
     dynamic_reid_enabled: bool,
     person_class: int,
 ) -> HostTrackBatch:
-    boxes = [tuple(box) for box in track_results["boxes"].tolist()]
-    scores = [float(score) for score in track_results["scores"].tolist()]
-    ids = [int(obj_id) for obj_id in track_results["ids"].tolist()]
+    count = track_results["count"]
+    boxes_np = track_results["boxes"][:count].numpy()
+    scores_np = track_results["scores"][:count].numpy()
+    ids_np = track_results["ids"][:count].numpy()
+    boxes = [tuple(row.astype(float)) for row in boxes_np]
+    scores = [float(s) for s in scores_np.tolist()]
+    ids = [int(i) for i in ids_np.tolist()]
     classes = (
-        [int(class_id) for class_id in track_results["classes"].tolist()]
+        [int(c) for c in track_results["classes"][:count].numpy().tolist()]
         if track_results["classes"] is not None
         else None
     )
     det_idx = (
-        [int(det_index) for det_index in track_results["det_idx"].tolist()]
+        [int(d) for d in track_results["det_idx"][:count].numpy().tolist()]
         if track_results["det_idx"] is not None
         else None
     )
@@ -121,7 +215,7 @@ def prepare_host_track_batch(
         else None
     )
     return HostTrackBatch(
-        boxes_gpu=tracker_result_buffers["boxes"][: track_results["count"]],
+        boxes_gpu=tracker_result_buffers["boxes"][:count],
         boxes=boxes,
         scores=scores,
         ids=ids,
