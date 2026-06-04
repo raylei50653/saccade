@@ -97,47 +97,35 @@ CPU 邏輯驗證後搬進零同步 GPU 核（spec §4），**擴充既有 relink
 
 ## 實驗設定：人工遮擋 (Synthetic occlusion)
 
-原始 `custom_seq` demo **無障礙物**，行人不被遮擋、軌跡乾淨，沒有長 gap 可測重連。為了反覆比較重連/門控效果，用 `scripts/tools/add_occlusion_to_seq.py` **手動注入一根中央遮擋柱**，製造真實的遮擋丟失：
+原始素材 **無障礙物**，行人不被遮擋、軌跡乾淨，沒有長 gap 可測重連。為了反覆比較重連/門控效果，用 `scripts/tools/add_occlusion_to_seq.py` **手動注入一根中央遮擋柱**，製造真實的遮擋丟失。eval **寫死讀 `<seq>/img1`**（不看 `seqinfo.ini` 的 imdir），所以乾淨/遮擋各做成**獨立 sequence**，直接 `--sequences` 對比、輸出兩個可比對檔，免每次 cp：
 
-```bash
-uv run scripts/tools/add_occlusion_to_seq.py \
-  --img-dir datasets/demo/custom_seq/img1 \
-  --width-ratio 0.125 --color 60,60,60
-```
+| sequence | `img1` 內容 | 中央像素驗證 |
+|---|---|---|
+| `custom_seq_clean` | 無遮擋（從 mp4 重抽） | `[127,111,99]` 真實場景 |
+| `custom_seq_occ` | 含中央遮擋柱 | `[60,60,60]` 遮擋框 |
 
-- 遮擋框：畫面正中、寬 = `width_ratio × W`（0.125→480px @4K，x≈1680–2160）、高 = 55%×H、置中。行人穿越中央時會被吞掉 → 產生 gap → 觸發重連博弈。
-- **這就是 ID4 的成因**：id4 在 cx≈1619 往右走、撞進遮擋柱（左緣 x≈1680）後丟失；理想是在柱子另一側（前方）重連回來，而非被左邊另一個人接走。方向/速度閘門正是防這個。
+- 遮擋框：畫面正中、寬 = `width_ratio × W`（0.125→480px @4K，x≈1680–2160）、高 = 55%×H、置中。行人穿越中央時被吞掉 → gap → 觸發重連博弈。
+- **這就是 ID4 的成因**（在 `custom_seq_occ`）：id4 在 cx≈1619 往右走、撞進遮擋柱（左緣 x≈1680）後丟失；理想是在柱子另一側（前方）重連回來，而非被左邊另一個人接走。方向/速度閘門正是防這個。
 
-> ⚠️ **此工具就地覆寫 `img1`、不備份**。乾淨來源是
-> `datasets/demo/15779246_3840_2160_60fps.mp4`（22MB，正好 821 幀 @3840×2160、59.94fps，對得上 `seqinfo.ini`）。
->
-> **本機已備好兩套幀**（各 821 幀；驗證：clean 中央像素=真實場景、occlusion 中央=BGR 60,60,60）：
-> | 目錄 | 內容 |
-> |---|---|
-> | `custom_seq/img1_clean` | 無遮擋（從 mp4 重抽） |
-> | `custom_seq/img1_occlusion` | 含中央遮擋柱 |
->
-> `img1` 本身**已移除**以免歧義（eval 讀 `seqinfo.ini` 的 `imdir=img1`，但不固定指向哪版）。**跑之前先選一套 cp 成 `img1`**：
+> 重新生成（乾淨來源 = `datasets/demo/15779246_3840_2160_60fps.mp4`，22MB，正好 821 幀 @3840×2160、59.94fps）：
 > ```bash
-> cd datasets/demo/custom_seq
-> rm -rf img1 && cp -r img1_clean img1        # 無遮擋對照組
-> rm -rf img1 && cp -r img1_occlusion img1    # 含遮擋實驗組
-> ```
-> 同一組幀跑「門控 off vs on」才是公平比較。
-> 重新生成乾淨幀（萬一 img1_clean 也被汙染）：
-> ```bash
+> # 乾淨幀
 > ffmpeg -i datasets/demo/15779246_3840_2160_60fps.mp4 -start_number 1 -q:v 2 \
->   datasets/demo/custom_seq/img1_clean/%06d.jpg
+>   datasets/demo/custom_seq_clean/img1/%06d.jpg
+> # 遮擋幀（先複製乾淨幀，再就地注入）
+> cp -r datasets/demo/custom_seq_clean/img1 datasets/demo/custom_seq_occ/img1
+> uv run scripts/tools/add_occlusion_to_seq.py \
+>   --img-dir datasets/demo/custom_seq_occ/img1 --width-ratio 0.125 --color 60,60,60
 > ```
-> `datasets/` 整個被 `.gitignore` 涵蓋（mp4、img1、img1_clean、img1_occlusion 皆不入庫；fresh clone 無 demo 資料，需自備）。
+> `datasets/` 整個被 `.gitignore` 涵蓋（mp4 與兩個 sequence 皆不入庫；fresh clone 無 demo 資料，需自備）。
 
 ## 快速重現 (Quick repro)
 
-Phase 0 全開（卡方 + 方向 + 物理雪茄雲 + 速度上限），custom_seq demo（已注入遮擋）：
+Phase 0 全開（卡方 + 方向 + 物理雪茄雲 + 速度上限），遮擋實驗組 + 乾淨對照組**一次跑兩個 sequence**：
 
 ```bash
 uv run scripts/eval/mot17.py --data-root datasets/demo --split . \
-  --sequences custom_seq --preset mamba_whole_graph --reid-mode semantic \
+  --sequences custom_seq_occ,custom_seq_clean --preset mamba_whole_graph --reid-mode semantic \
   --semantic-ttl 120 --semantic-spatial-gate 0.45 --semantic-min-iou 0.0 \
   --semantic-threshold 0.85 \
   --semantic-kalman-gate --semantic-kalman-chi2 9.4877 \
@@ -147,15 +135,15 @@ uv run scripts/eval/mot17.py --data-root datasets/demo --split . \
   --visualize
 ```
 
-> `--semantic-kalman-fps` 預設 0 = **每序列自動解析**（`seqinfo.ini` frameRate → `.mp4` 探測 → 30）；custom_seq 自動取 60。需要時才用 `--semantic-kalman-fps <n>` 覆寫。
+> `--semantic-kalman-fps` 預設 0 = **每序列自動解析**（`seqinfo.ini` frameRate → `.mp4` 探測 → 30）；兩個 sequence 都自動取 60。需要時才用 `--semantic-kalman-fps <n>` 覆寫。
 
-ID4 回歸檢查（無物理不可能跳變；輸出 MOT 檔在 `results/MOT17_eval/custom_seq.txt`）：
+ID4 回歸檢查（遮擋組不應有物理不可能跳變；輸出在 `results/MOT17_eval/custom_seq_occ.txt`）：
 
 ```bash
 # 抓某 id 的每幀位移，>120px 視為可疑跳變
 awk -F, '$2==4 {cx=$3+$5/2; if(p!=""){d=cx-pcx; if(d<0)d=-d;
   if(d>120) printf "JUMP f%d->f%d move_x=%.0f\n",pf,$1,d} p=1;pf=$1;pcx=cx}' \
-  results/MOT17_eval/custom_seq.txt
+  results/MOT17_eval/custom_seq_occ.txt
 ```
 
 **回歸基準**：Phase 0 全開時 id4 應止於 ~f510（中央往右的人偵測消失處），**無**跨畫面跳變；左邊的人保留自身 id（不被併吞）。relink report 應見 `reject_speed>0`。對照組（拿掉 `--semantic-kalman-*`）id4 會被內插出一條 153px/frame 的鬼軌跡飛到最左邊。
