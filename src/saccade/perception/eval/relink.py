@@ -79,6 +79,17 @@ class PythonSemanticRelinker:
         experimental_mode: str = "standard",
         appearance_first_sim_threshold: float = 0.95,
         appearance_first_margin: float = 0.03,
+        # Kalman probabilistic relink gate
+        kalman_gate: bool = False,
+        kalman_chi2: float = 9.4877,
+        kalman_penalty_weight: float = 0.0,
+        kalman_dir_min_cos: float = -1.0,
+        kalman_dir_min_speed: float = 1.0,
+        kalman_person_height_m: float = 0.0,
+        kalman_accel_long: float = 2.0,
+        kalman_accel_lat: float = 1.0,
+        kalman_fps: float = 30.0,
+        kalman_max_speed_mps: float = 0.0,
         # Motion-based relinking params
         motion_vel_alpha: float = 0.3,
         motion_acc_alpha: float = 0.15,
@@ -145,6 +156,28 @@ class PythonSemanticRelinker:
             0.0, float(appearance_first_sim_threshold)
         )
         self.appearance_first_margin = max(0.0, float(appearance_first_margin))
+        # Kalman probabilistic gate: replace static center/IoU spatial gate with a
+        # chi-square test against the lost track's velocity-extrapolated, covariance-
+        # inflated Kalman distribution (mirrors the C++ relinker).
+        self.kalman_gate = bool(kalman_gate)
+        self.kalman_chi2 = float(kalman_chi2)
+        self.kalman_penalty_weight = max(0.0, float(kalman_penalty_weight))
+        # Velocity-direction gate: reject candidates that lie "behind" the lost
+        # track's motion (cos(displacement, velocity) < min_cos) so a person leaving
+        # frame isn't relinked to someone entering behind them. <=-1 disables.
+        self.kalman_dir_min_cos = float(kalman_dir_min_cos)
+        self.kalman_dir_min_speed = max(0.0, float(kalman_dir_min_speed))
+        # Physically-grounded, inertia-aware diffusion: assume real person height to
+        # get px/m scale, bound human acceleration (longitudinal vs lateral) so the
+        # cloud stretches along motion (inertia) and stays tight sideways. >0 enables.
+        self.kalman_person_height_m = max(0.0, float(kalman_person_height_m))
+        self.kalman_accel_long = max(0.0, float(kalman_accel_long))
+        self.kalman_accel_lat = max(0.0, float(kalman_accel_lat))
+        self.kalman_fps = kalman_fps if kalman_fps > 0.0 else 30.0
+        # Physical reachability cap: reject relink if the implied average speed
+        # (dist / time, scaled to m/s via person height) exceeds human limits.
+        # Snapshot-independent → always applies, closing the no-snapshot fallback.
+        self.kalman_max_speed_mps = max(0.0, float(kalman_max_speed_mps))
         self.clean_score_threshold = clean_score_threshold
         self.clean_margin_ratio = clean_margin_ratio
         self.clean_min_aspect = clean_min_aspect
@@ -180,6 +213,7 @@ class PythonSemanticRelinker:
         self.last_seen: Dict[int, int] = {}
         self.last_boxes: Dict[int, torch.Tensor] = {}
         self.motion: Dict[int, Any] = {}
+        self.motion_frame: Dict[int, int] = {}
         self.stats: Dict[str, int] = {
             "attempts": 0,
             "accepted": 0,
@@ -192,6 +226,9 @@ class PythonSemanticRelinker:
             "reject_similarity": 0,
             "reject_consistency": 0,
             "reject_margin": 0,
+            "reject_kalman": 0,
+            "reject_direction": 0,
+            "reject_speed": 0,
             "reject_quality": 0,
             "reject_quality_score": 0,
             "reject_quality_margin": 0,
@@ -265,19 +302,184 @@ class PythonSemanticRelinker:
         iou = float(inter / (area + old_area - inter + 1e-6))
         return center_norm, iou
 
-    def update_motion_snapshots(self, snapshots: List[Any]) -> None:
+    def update_motion_snapshots(self, snapshots: List[Any], frame_id: int = -1) -> None:
         for snap in snapshots:
             canonical = self.alias.get(snap.obj_id, snap.obj_id)
             self.motion[canonical] = snap
+            self.motion_frame[canonical] = frame_id
+
+    def _kalman_predict_np(
+        self, x: np.ndarray, P: np.ndarray
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """One Kalman predict step (constant velocity F + process noise Q).
+
+        Mirrors ``kf_gpu::predict``: advance the mean by velocity then inflate the
+        covariance with Q (built from the post-predict height x[3]).
+        """
+        x = x.copy()
+        P = P.copy()
+        x[0] += x[4]
+        x[1] += x[5]
+        x[2] += x[6]
+        x[3] += x[7]
+        F = np.eye(8, dtype=np.float64)
+        F[0, 4] = F[1, 5] = F[2, 6] = F[3, 7] = 1.0
+        P = F @ P @ F.T
+        h = max(float(x[3]), 1e-6)
+        pos = h / 20.0
+        vel = h / 160.0
+        Q = np.diag(
+            [
+                pos * pos,
+                pos * pos,
+                1e-4,
+                pos * pos,
+                vel * vel,
+                vel * vel,
+                1e-10,
+                vel * vel,
+            ]
+        ).astype(np.float64)
+        return x, P + Q
+
+    def _predict_phys_np(
+        self, x: np.ndarray, P: np.ndarray
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Physically-grounded, inertia-aware predict step (mirrors C++ predict_phys).
+
+        Mean advances at constant velocity (momentum). Acceleration noise is derived
+        from assumed person height (px/m scale) and bounded human acceleration,
+        decomposed along the velocity direction: longitudinal (speed change) vs
+        lateral (turning), so the cloud stretches along motion and stays tight
+        sideways.
+        """
+        x = x.copy()
+        P = P.copy()
+        x[0] += x[4]
+        x[1] += x[5]
+        x[2] += x[6]
+        x[3] += x[7]
+        F = np.eye(8, dtype=np.float64)
+        F[0, 4] = F[1, 5] = F[2, 6] = F[3, 7] = 1.0
+        P = F @ P @ F.T
+
+        px_per_m = max(float(x[3]), 1e-3) / max(self.kalman_person_height_m, 1e-3)
+        inv_fps2 = 1.0 / max(self.kalman_fps * self.kalman_fps, 1e-6)
+        sl = self.kalman_accel_long * px_per_m * inv_fps2
+        st = self.kalman_accel_lat * px_per_m * inv_fps2
+        sl2, st2 = sl * sl, st * st
+        vx, vy = float(x[4]), float(x[5])
+        speed = (vx * vx + vy * vy) ** 0.5
+        if speed > 1e-6:
+            ux, uy = vx / speed, vy / speed
+        else:
+            ux, uy = 1.0, 0.0
+            sl2 = st2  # no heading → isotropic
+        # Sigma_a = sl2*(u u^T) + st2*(p p^T), p=(-uy,ux)
+        sa00 = sl2 * ux * ux + st2 * uy * uy
+        sa01 = (sl2 - st2) * ux * uy
+        sa11 = sl2 * uy * uy + st2 * ux * ux
+        sa = np.array([[sa00, sa01], [sa01, sa11]], dtype=np.float64)
+        pos_idx = (0, 1)
+        vel_idx = (4, 5)
+        for a in range(2):
+            for b in range(2):
+                P[pos_idx[a], pos_idx[b]] += 0.25 * sa[a, b]
+                P[pos_idx[a], vel_idx[b]] += 0.5 * sa[a, b]
+                P[vel_idx[a], pos_idx[b]] += 0.5 * sa[a, b]
+                P[vel_idx[a], vel_idx[b]] += sa[a, b]
+        # modest noise on aspect & height for conditioning (matches kf_gpu get_Q)
+        h = max(float(x[3]), 1e-6)
+        P[2, 2] += 1e-4
+        P[6, 6] += 1e-10
+        P[3, 3] += (h / 20.0) ** 2
+        P[7, 7] += (h / 160.0) ** 2
+        return x, P
+
+    def _exceeds_max_speed(
+        self, box: torch.Tensor, last_box: torch.Tensor, age: int
+    ) -> bool:
+        """True if relinking would imply an above-human average speed (new person).
+
+        Snapshot-independent (uses last_box + age), so it also guards the path where
+        no Kalman snapshot is available. dist/time = average velocity → the physical
+        meaning a positional cloud alone lacks. Mirrors C++ ``exceeds_max_speed``.
+        """
+        if self.kalman_max_speed_mps <= 0.0 or self.kalman_person_height_m <= 0.0:
+            return False
+        lcx = float((last_box[0] + last_box[2]) * 0.5)
+        lcy = float((last_box[1] + last_box[3]) * 0.5)
+        lh = float(last_box[3] - last_box[1])
+        zcx = float((box[0] + box[2]) * 0.5)
+        zcy = float((box[1] + box[3]) * 0.5)
+        zh = float(box[3] - box[1])
+        dpx = ((zcx - lcx) ** 2 + (zcy - lcy) ** 2) ** 0.5
+        dt_s = max(age, 1) / max(self.kalman_fps, 1e-6)
+        px_per_m = 0.5 * (max(lh, 1e-3) + max(zh, 1e-3)) / self.kalman_person_height_m
+        speed_mps = dpx / dt_s / max(px_per_m, 1e-6)
+        return bool(speed_mps > self.kalman_max_speed_mps)
+
+    def _direction_behind(self, box: torch.Tensor, snapshot: Any) -> bool:
+        """True if ``box`` lies behind the lost track's velocity direction.
+
+        Mirrors the C++ ``direction_behind``: covariance inflation grows the gate
+        symmetrically, so this culls candidates whose displacement from the last
+        position opposes the velocity (e.g. someone entering as the track leaves).
+        Skipped for near-stationary tracks where direction is just noise.
+        """
+        if self.kalman_dir_min_cos <= -1.0:
+            return False
+        state = np.asarray(snapshot.state, dtype=np.float64).reshape(-1)
+        vx, vy = float(state[4]), float(state[5])
+        speed = (vx * vx + vy * vy) ** 0.5
+        if speed < self.kalman_dir_min_speed:
+            return False
+        zcx = float((box[0] + box[2]) * 0.5)
+        zcy = float((box[1] + box[3]) * 0.5)
+        dx = zcx - float(state[0])
+        dy = zcy - float(state[1])
+        dist = (dx * dx + dy * dy) ** 0.5
+        if dist < 1e-3:
+            return False
+        cosang = (dx * vx + dy * vy) / (speed * dist)
+        return bool(cosang < self.kalman_dir_min_cos)
+
+    def _kalman_gate_dist(self, box: torch.Tensor, snapshot: Any, delta: int) -> float:
+        """Squared Mahalanobis distance of ``box`` to the lost track's Kalman cloud,
+        self-extrapolated ``delta`` frames forward (covariance inflation)."""
+        x = np.asarray(snapshot.state, dtype=np.float64).reshape(-1)[:8].copy()
+        P = np.asarray(snapshot.covariance, dtype=np.float64).reshape(8, 8).copy()
+        phys = self.kalman_person_height_m > 0.0
+        for _ in range(max(0, delta)):
+            x, P = (
+                self._predict_phys_np(x, P) if phys else self._kalman_predict_np(x, P)
+            )
+        h = max(float(x[3]), 1e-6)
+        pos = h / 20.0
+        r = np.diag([pos * pos, pos * pos, 1e-2, pos * pos]).astype(np.float64)
+        s = P[:4, :4] + r
+        residual = self._measurement(box).astype(np.float64) - x[:4]
+        try:
+            solved = np.linalg.solve(s, residual)
+        except np.linalg.LinAlgError:
+            solved = np.linalg.pinv(s) @ residual
+        return float(residual @ solved)
 
     def motion_candidate_ids(self, frame_id: int = -1) -> List[int]:
-        if self.mahalanobis_threshold <= 0.0 and not self.debug:
+        if (
+            self.mahalanobis_threshold <= 0.0
+            and not self.kalman_gate
+            and not self.debug
+        ):
             return []
+        # Kalman gate needs fresh snapshots of still-active lost tracks (age>=0) so it
+        # can capture a clean farewell state before the tracker deactivates them.
+        min_age = 0 if self.kalman_gate else self.min_lost_frames
         ids: List[int] = []
         for cid in self.features:
             if frame_id >= 0:
                 age = frame_id - self.last_seen.get(cid, -(10**9))
-                if age < self.min_lost_frames or age > self.ttl:
+                if age < min_age or age > self.ttl:
                     continue
             ids.append(cid)
         return ids
@@ -550,6 +752,11 @@ class PythonSemanticRelinker:
                     continue
                 self.age_gate_pass_ages.append(age)
                 last_box = self.last_boxes[cid]
+                # Physical reachability gate (always-on, snapshot-independent).
+                if self._exceeds_max_speed(box, last_box, age):
+                    self.stats["reject_speed"] += 1
+                    self.age_gate_pass_outcomes.append((age, "speed"))
+                    continue
                 center_norm, iou = self._spatial_metrics(box, last_box, w, h)
 
                 # Motion evidence: C++ Kalman motion box
@@ -588,7 +795,26 @@ class PythonSemanticRelinker:
                         motion_ok = False
                         self.stats["motion_consistency_fail"] += 1
 
-                spatial_failed = center_norm > self.spatial_gate or iou < self.min_iou
+                # Kalman probabilistic gate: when a snapshot exists, gate by chi-square
+                # distance to the extrapolated/inflated distribution instead of the
+                # static center/IoU gate. Falls back to static gate otherwise.
+                kalman_d2 = -1.0
+                kalman_gated = False
+                if self.kalman_gate and snapshot is not None:
+                    if self._direction_behind(box, snapshot):
+                        self.stats["reject_direction"] += 1
+                        self.age_gate_pass_outcomes.append((age, "direction"))
+                        continue
+                    delta = frame_id - self.motion_frame.get(cid, frame_id)
+                    kalman_d2 = self._kalman_gate_dist(box, snapshot, delta)
+                    if kalman_d2 > self.kalman_chi2:
+                        self.stats["reject_kalman"] += 1
+                        self.age_gate_pass_outcomes.append((age, "kalman"))
+                        continue
+                    kalman_gated = True
+                spatial_failed = (not kalman_gated) and (
+                    center_norm > self.spatial_gate or iou < self.min_iou
+                )
                 maha = 0.0
                 if self.mahalanobis_threshold > 0.0:
                     snapshot = self.motion.get(cid)
@@ -614,6 +840,7 @@ class PythonSemanticRelinker:
                         spatial_failed,
                         motion_iou_ema,
                         motion_ok,
+                        kalman_d2 if kalman_gated else -1.0,
                     )
                 )
 
@@ -645,6 +872,7 @@ class PythonSemanticRelinker:
                 spatial_failed,
                 motion_iou_ema,
                 motion_ok,
+                kalman_d2,
             ) in candidates_to_score:
                 if self.buffer_size > 1:
                     sim = self._buffer_sim(cid, emb)
@@ -720,6 +948,13 @@ class PythonSemanticRelinker:
                     )
                 else:
                     joint = sim + motion_bonus
+
+                # Spatial probability penalty: cost = 1 - exp(-D^2/2); closer to the
+                # predicted cloud center costs less.
+                if self.kalman_penalty_weight > 0.0 and kalman_d2 >= 0.0:
+                    joint -= self.kalman_penalty_weight * (
+                        1.0 - float(np.exp(-0.5 * kalman_d2))
+                    )
 
                 if joint > best_joint:
                     if best_id is not None:
@@ -934,7 +1169,10 @@ class PythonSemanticRelinker:
             "reject_age={reject_age} reject_assigned={reject_assigned} "
             "reject_spatial={reject_spatial} reject_mahalanobis={reject_mahalanobis} "
             "reject_similarity={reject_similarity} reject_margin={reject_margin} "
-            "reject_biometric={reject_biometric}".format(**self.stats)
+            "reject_kalman={reject_kalman} reject_direction={reject_direction} "
+            "reject_speed={reject_speed} reject_biometric={reject_biometric}".format(
+                **self.stats
+            )
         )
         print(
             "  reject_age_fresh={reject_age_too_fresh} reject_age_old={reject_age_too_old} "

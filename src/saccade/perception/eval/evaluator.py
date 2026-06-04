@@ -991,6 +991,22 @@ def run_eval_cpp(
         f"({n_threads} threads)"
     )
 
+    # Cheb-GR offline tracklet merge (path 2): build the siglip2_reid extractor
+    # once. C++ eval emits no per-det embedding, so tracklet crops are re-cut
+    # from img1 inside the post-process loop.
+    cheb_gr_extractor = None
+    if cfg.cheb_gr_merge_enabled:
+        from .cheb_gr_merge import (
+            cheb_gr_merge_output_tracklets,
+            extract_tracklet_embeddings,
+        )
+
+        cheb_gr_extractor = TRTFeatureExtractor(
+            engine_path=cfg.cheb_gr_engine,
+            model_type="siglip2_reid",
+            max_batch=64,
+        )
+
     # ── Per-sequence post-processing ──────────────────────────────────────────
     for seq in cfg.seqs:
         if seq not in cpp_results:
@@ -1027,6 +1043,32 @@ def run_eval_cpp(
             max_cost=cfg.post_lifecycle_max_cost,
             appearance_bank=None,
         )
+
+        if cheb_gr_extractor is not None:
+            seq_img_dir = str(_Path(cfg.data_root) / cfg.split / seq / "img1")
+            cheb_embeddings = extract_tracklet_embeddings(
+                results_lines,
+                seq_img_dir,
+                cheb_gr_extractor,
+                n_samples=cfg.cheb_gr_merge_n_samples,
+            )
+            results_lines, cheb_stats = cheb_gr_merge_output_tracklets(
+                results_lines,
+                cheb_embeddings,
+                enabled=True,
+                max_cost=cfg.cheb_gr_merge_max_cost,
+                max_gap=cfg.cheb_gr_merge_max_gap,
+                min_overlap_frames=cfg.cheb_gr_merge_min_overlap,
+                pool_frac=cfg.cheb_gr_pool_frac,
+                cheb_lambda=cfg.cheb_gr_lambda,
+                k2=cfg.cheb_gr_k2,
+                max_fwd=cfg.cheb_gr_max_fwd,
+                fuse_lambda=cfg.cheb_gr_fuse_lambda,
+            )
+            print(
+                f"  {seq}: cheb-gr merge {cheb_stats['ids_before']}→"
+                f"{cheb_stats['ids_after']} ({cheb_stats['merges']} merges)"
+            )
 
         results_lines, quality_stats = filter_low_quality_tracklets(
             results_lines,
@@ -1427,6 +1469,20 @@ def run_eval(
 
     all_seq_profile: list[dict] = []
 
+    # Cheb-GR offline tracklet merge (path 2): siglip2_reid extractor built once.
+    cheb_gr_extractor = None
+    if cfg.cheb_gr_merge_enabled:
+        from .cheb_gr_merge import (
+            cheb_gr_merge_output_tracklets,
+            extract_tracklet_embeddings,
+        )
+
+        cheb_gr_extractor = TRTFeatureExtractor(
+            engine_path=cfg.cheb_gr_engine,
+            model_type="siglip2_reid",
+            max_batch=64,
+        )
+
     for seq in cfg.seqs:
         wb = None
         wb_scene_policy = None
@@ -1558,6 +1614,15 @@ def run_eval(
         )
         if _fpn_reid_mode and hasattr(detector.tracker, "set_reid_min_candidates"):
             detector.tracker.set_reid_min_candidates(1)
+        if cfg.relink_enabled and hasattr(detector.tracker, "set_relink_params"):
+            detector.tracker.set_relink_params(
+                enabled=True,
+                bank_cap=cfg.relink_bank_cap,
+                sim_thresh=cfg.relink_sim_thresh,
+                cheb_lambda=cfg.relink_lambda,
+                spatial_gate=cfg.relink_spatial_gate,
+                max_age=cfg.relink_max_age,
+            )
 
         if hasattr(detector.tracker, "set_unified_score_params"):
             detector.tracker.set_unified_score_params(
@@ -1582,6 +1647,18 @@ def run_eval(
             min_lost_frames=cfg.kwargs.get("semantic_min_lost_frames", 2),
             min_iou=cfg.kwargs.get("semantic_min_iou", 0.20),
             mahalanobis_threshold=cfg.kwargs.get("semantic_mahalanobis_threshold", 0.0),
+            kalman_gate=cfg.kwargs.get("semantic_kalman_gate", False),
+            kalman_chi2=cfg.kwargs.get("semantic_kalman_chi2", 9.4877),
+            kalman_penalty_weight=cfg.kwargs.get("semantic_kalman_penalty_weight", 0.0),
+            kalman_dir_min_cos=cfg.kwargs.get("semantic_kalman_dir_min_cos", -1.0),
+            kalman_dir_min_speed=cfg.kwargs.get("semantic_kalman_dir_min_speed", 1.0),
+            kalman_person_height_m=cfg.kwargs.get(
+                "semantic_kalman_person_height_m", 0.0
+            ),
+            kalman_accel_long=cfg.kwargs.get("semantic_kalman_accel_long", 2.0),
+            kalman_accel_lat=cfg.kwargs.get("semantic_kalman_accel_lat", 1.0),
+            kalman_fps=cfg.kwargs.get("semantic_kalman_fps", 30.0),
+            kalman_max_speed_mps=cfg.kwargs.get("semantic_kalman_max_speed_mps", 0.0),
             buffer_size=cfg.semantic_buffer_size,
             min_consistency=cfg.semantic_min_consistency,
             rerank_mode=cfg.semantic_rerank_mode,
@@ -1863,11 +1940,18 @@ def run_eval(
         )
 
         gtu: Any = None
-        if cfg.kwargs.get("use_tracker_graph", False):
+        # GraphedTrackerUpdate.copy_inputs does not feed per-detection embeddings,
+        # so the captured graph path cannot do appearance association / relink.
+        # Fall back to direct update_into (which passes embeddings) when relink is on.
+        if cfg.kwargs.get("use_tracker_graph", False) and not cfg.relink_enabled:
             from saccade.perception.tracking.tracker_gpu import GraphedTrackerUpdate
 
             gtu = GraphedTrackerUpdate(detector.tracker)
             print(f"🕯️ [TrackerGraph] Captured tracker update for seq {seq}")
+        elif cfg.relink_enabled and cfg.kwargs.get("use_tracker_graph", False):
+            print(
+                "ℹ️  [Relink] tracker graph disabled (relink needs embeddings via update_into)"
+            )
 
         # Inter-frame pipelining: relink_write for frame N runs in background while
         # frame N+1 runs detect+postprocess on the main thread. All GPU tensors are
@@ -1976,7 +2060,7 @@ def run_eval(
         ) -> "tuple[list[str], set[int], dict[int, int], dict[int, dict[str, float | int]]]":
             # motion snapshot update (pre-computed in main thread)
             if relinker and _motion_candidate_ids and _motion_snapshots is not None:
-                relinker.update_motion_snapshots(_motion_snapshots)
+                relinker.update_motion_snapshots(_motion_snapshots, _frame_id)
 
             prepared_candidates = _prepare_track_candidates(
                 frame_id=_frame_id,
@@ -3959,7 +4043,8 @@ def run_eval(
                         relinker.update_motion_snapshots(
                             detector.tracker.get_motion_snapshots_for_track_ids(
                                 motion_candidate_ids
-                            )
+                            ),
+                            frame_id,
                         )
 
                 host_track_batch = _prepare_host_track_batch(
@@ -4104,6 +4189,13 @@ def run_eval(
         else:
             fps_summary_lines.append(f"{seq}\tfps=n/a\tmean_ms=n/a\tframes=0")
 
+        if cfg.relink_enabled and hasattr(detector.tracker, "get_relink_debug"):
+            _rd = detector.tracker.get_relink_debug()
+            print(
+                f"🔗 Relink debug {seq}: archived={_rd[0]} "
+                f"birth_candidates={_rd[1]} revived={_rd[2]}"
+            )
+
         results_lines, post_merge_stats = post_merge_output_tracklets(
             results_lines,
             enabled=cfg.post_lifecycle_merge,
@@ -4124,6 +4216,33 @@ def run_eval(
             consistency_weight=cfg.post_lifecycle_consistency_weight,
             missing_appearance_cost=cfg.post_lifecycle_missing_appearance_cost,
         )
+
+        if cheb_gr_extractor is not None:
+            seq_img_dir = str(Path(cfg.data_root) / cfg.split / seq / "img1")
+            cheb_embeddings = extract_tracklet_embeddings(
+                results_lines,
+                seq_img_dir,
+                cheb_gr_extractor,
+                n_samples=cfg.cheb_gr_merge_n_samples,
+            )
+            results_lines, cheb_stats = cheb_gr_merge_output_tracklets(
+                results_lines,
+                cheb_embeddings,
+                enabled=True,
+                max_cost=cfg.cheb_gr_merge_max_cost,
+                max_gap=cfg.cheb_gr_merge_max_gap,
+                min_overlap_frames=cfg.cheb_gr_merge_min_overlap,
+                pool_frac=cfg.cheb_gr_pool_frac,
+                cheb_lambda=cfg.cheb_gr_lambda,
+                k2=cfg.cheb_gr_k2,
+                max_fwd=cfg.cheb_gr_max_fwd,
+                fuse_lambda=cfg.cheb_gr_fuse_lambda,
+            )
+            print(
+                f"🧬 Cheb-GR Merge: ids={cheb_stats['ids_before']}->"
+                f"{cheb_stats['ids_after']} ({cheb_stats['merges']} merges)"
+            )
+
         if cfg.post_lifecycle_merge:
             print(
                 "🔗 Post Lifecycle Merge: "

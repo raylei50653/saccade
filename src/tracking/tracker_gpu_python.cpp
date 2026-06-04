@@ -21,6 +21,7 @@
 #include "tracking/workbench.hpp"
 #include "tracking/mamba_scan.cuh"
 #include "tracking/quality_filter.cuh"
+#include "tracking/kalman_gpu.cuh"
 #include "perception/feature_extractor.hpp"
 #include "perception/preprocessor.hpp"
 #include <opencv2/opencv.hpp>
@@ -401,8 +402,9 @@ struct RelinkBox {
 };
 
 struct RelinkMotionSnapshot {
-    std::array<float, 4> state{};
-    std::array<float, 16> covariance{};
+    std::array<float, 8> state{};       // [cx, cy, a, h, vx, vy, va, vh]
+    std::array<float, 64> covariance{}; // row-major 8x8 Kalman covariance
+    int frame = -1;                     // frame the snapshot was captured at
 };
 
 struct RelinkStats {
@@ -416,6 +418,9 @@ struct RelinkStats {
     int reject_consistency = 0;
     int reject_margin = 0;
     int reject_quality = 0;
+    int reject_kalman = 0;
+    int reject_direction = 0;
+    int reject_speed = 0;
     int new_ids = 0;
 };
 
@@ -447,7 +452,17 @@ public:
         float iou_weight = 0.0f,
         float mahalanobis_weight = 0.0f,
         float dynamic_margin_crowd = 0.0f,
-        float dynamic_margin_age = 0.0f
+        float dynamic_margin_age = 0.0f,
+        bool kalman_gate = false,
+        float kalman_chi2 = 9.4877f,
+        float kalman_penalty_weight = 0.0f,
+        float kalman_dir_min_cos = -1.0f,
+        float kalman_dir_min_speed = 1.0f,
+        float kalman_person_height_m = 0.0f,
+        float kalman_accel_long = 2.0f,
+        float kalman_accel_lat = 1.0f,
+        float kalman_fps = 30.0f,
+        float kalman_max_speed_mps = 0.0f
     )
         : sim_threshold_(sim_threshold),
           ttl_(ttl),
@@ -474,32 +489,41 @@ public:
           iou_weight_(std::max(0.0f, iou_weight)),
           mahalanobis_weight_(std::max(0.0f, mahalanobis_weight)),
           dynamic_margin_crowd_(std::max(0.0f, dynamic_margin_crowd)),
-          dynamic_margin_age_(std::max(0.0f, dynamic_margin_age)) {}
+          dynamic_margin_age_(std::max(0.0f, dynamic_margin_age)),
+          kalman_gate_(kalman_gate),
+          kalman_chi2_(kalman_chi2),
+          kalman_penalty_weight_(std::max(0.0f, kalman_penalty_weight)),
+          kalman_dir_min_cos_(kalman_dir_min_cos),
+          kalman_dir_min_speed_(std::max(0.0f, kalman_dir_min_speed)),
+          kalman_person_height_m_(std::max(0.0f, kalman_person_height_m)),
+          kalman_accel_long_(std::max(0.0f, kalman_accel_long)),
+          kalman_accel_lat_(std::max(0.0f, kalman_accel_lat)),
+          kalman_fps_(kalman_fps > 0.0f ? kalman_fps : 30.0f),
+          kalman_max_speed_mps_(std::max(0.0f, kalman_max_speed_mps)) {}
 
-    void update_motion_snapshots(const std::vector<TrackStateSnapshot>& snapshots) {
+    void update_motion_snapshots(const std::vector<TrackStateSnapshot>& snapshots, int frame_id = -1) {
         for (const auto& snap : snapshots) {
             const int canonical = alias_.count(snap.obj_id) ? alias_.at(snap.obj_id) : snap.obj_id;
             RelinkMotionSnapshot out;
             for (size_t i = 0; i < out.state.size() && i < snap.state.size(); ++i) {
                 out.state[i] = snap.state[i];
             }
-            for (int r = 0; r < 4; ++r) {
-                for (int c = 0; c < 4; ++c) {
-                    const size_t src = static_cast<size_t>(r * 8 + c);
-                    const size_t dst = static_cast<size_t>(r * 4 + c);
-                    if (src < snap.covariance.size()) {
-                        out.covariance[dst] = snap.covariance[src];
-                    }
-                }
+            for (size_t i = 0; i < out.covariance.size() && i < snap.covariance.size(); ++i) {
+                out.covariance[i] = snap.covariance[i];
             }
+            out.frame = frame_id;
             motion_[canonical] = out;
         }
     }
 
     std::vector<int> motion_candidate_ids(int frame_id = -1) const {
-        if (mahalanobis_threshold_ <= 0.0f) {
+        if (mahalanobis_threshold_ <= 0.0f && !kalman_gate_) {
             return {};
         }
+        // Kalman gate needs the freshest snapshot of still-active lost tracks so it
+        // can capture a clean "farewell" state before the tracker deactivates them;
+        // include age>=0 candidates (the tracker only returns the active subset).
+        const int min_age = kalman_gate_ ? 0 : min_lost_frames_;
         std::vector<int> ids;
         ids.reserve(feature_order_.size());
         for (int cid : feature_order_) {
@@ -513,7 +537,7 @@ public:
                     continue;
                 }
                 const int age = frame_id - seen_it->second;
-                if (age < min_lost_frames_ || age > ttl_) {
+                if (age < min_age || age > ttl_) {
                     continue;
                 }
             }
@@ -635,8 +659,34 @@ public:
                     stats_.reject_age += 1;
                     continue;
                 }
+                // Physical reachability gate (always-on, snapshot-independent).
+                if (exceeds_max_speed(box, last_boxes_.at(cid), age, kalman_person_height_m_, kalman_fps_, kalman_max_speed_mps_)) {
+                    stats_.reject_speed += 1;
+                    continue;
+                }
                 auto [center_norm, iou] = spatial_metrics(box, last_boxes_.at(cid), frame_w, frame_h);
-                if (center_norm > spatial_gate_ || iou < min_iou_) {
+                bool kalman_gated = false;
+                if (kalman_gate_) {
+                    const auto motion_it = motion_.find(cid);
+                    if (motion_it != motion_.end()) {
+                        if (direction_behind(box, motion_it->second, kalman_dir_min_cos_, kalman_dir_min_speed_)) {
+                            stats_.reject_direction += 1;
+                            continue;
+                        }
+                        const int delta = motion_it->second.frame >= 0
+                                              ? (frame_id - motion_it->second.frame)
+                                              : 0;
+                        const float kalman_d2 = kalman_gate_dist(
+                            box, motion_it->second, delta, kalman_person_height_m_,
+                            kalman_accel_long_, kalman_accel_lat_, kalman_fps_);
+                        if (kalman_d2 > kalman_chi2_) {
+                            stats_.reject_kalman += 1;
+                            continue;
+                        }
+                        kalman_gated = true;
+                    }
+                }
+                if (!kalman_gated && (center_norm > spatial_gate_ || iou < min_iou_)) {
                     stats_.reject_spatial += 1;
                     continue;
                 }
@@ -821,6 +871,9 @@ public:
         out["reject_consistency"] = stats_.reject_consistency;
         out["reject_margin"] = stats_.reject_margin;
         out["reject_quality"] = stats_.reject_quality;
+        out["reject_kalman"] = stats_.reject_kalman;
+        out["reject_direction"] = stats_.reject_direction;
+        out["reject_speed"] = stats_.reject_speed;
         out["new_ids"] = stats_.new_ids;
         return out;
     }
@@ -837,7 +890,10 @@ public:
             " reject_mahalanobis=" + std::to_string(stats_.reject_mahalanobis) +
             " reject_similarity=" + std::to_string(stats_.reject_similarity) +
             " reject_margin=" + std::to_string(stats_.reject_margin) +
-            " reject_quality=" + std::to_string(stats_.reject_quality)
+            " reject_quality=" + std::to_string(stats_.reject_quality) +
+            " reject_kalman=" + std::to_string(stats_.reject_kalman) +
+            " reject_direction=" + std::to_string(stats_.reject_direction) +
+            " reject_speed=" + std::to_string(stats_.reject_speed)
         );
         if (!accept_sims_.empty()) {
             py::print(
@@ -902,6 +958,7 @@ public:
                 float iou;
                 float center_norm;
                 float maha;
+                float kalman_d2;  // <0 when Kalman gate inactive for this candidate
             };
             std::vector<CandidateInfo> candidates_to_score;
 
@@ -911,8 +968,36 @@ public:
                 if (assigned.count(cid)) { stats_.reject_assigned += 1; continue; }
                 const int age = frame_id - last_seen_.at(cid);
                 if (age < min_lost_frames_ || age > ttl_) { stats_.reject_age += 1; continue; }
+                // Physical reachability gate (always-on, snapshot-independent).
+                if (exceeds_max_speed(box, last_boxes_.at(cid), age, kalman_person_height_m_, kalman_fps_, kalman_max_speed_mps_)) {
+                    stats_.reject_speed += 1; continue;
+                }
                 auto [center_norm, iou] = spatial_metrics(box, last_boxes_.at(cid), frame_w, frame_h);
-                if (center_norm > spatial_gate_ || iou < min_iou_) { stats_.reject_spatial += 1; continue; }
+                // Kalman probabilistic gate: when a motion snapshot is available, gate
+                // by chi-square distance to the extrapolated/inflated distribution
+                // instead of the static center/IoU gate. Falls back to static gate when
+                // no snapshot exists for this candidate.
+                float kalman_d2 = -1.0f;
+                bool kalman_gated = false;
+                if (kalman_gate_) {
+                    const auto motion_it = motion_.find(cid);
+                    if (motion_it != motion_.end()) {
+                        if (direction_behind(box, motion_it->second, kalman_dir_min_cos_, kalman_dir_min_speed_)) {
+                            stats_.reject_direction += 1; continue;
+                        }
+                        const int delta = motion_it->second.frame >= 0
+                                              ? (frame_id - motion_it->second.frame)
+                                              : 0;
+                        kalman_d2 = kalman_gate_dist(
+                            box, motion_it->second, delta, kalman_person_height_m_,
+                            kalman_accel_long_, kalman_accel_lat_, kalman_fps_);
+                        if (kalman_d2 > kalman_chi2_) { stats_.reject_kalman += 1; continue; }
+                        kalman_gated = true;
+                    }
+                }
+                if (!kalman_gated && (center_norm > spatial_gate_ || iou < min_iou_)) {
+                    stats_.reject_spatial += 1; continue;
+                }
                 float maha = 0.0f;
                 if (mahalanobis_threshold_ > 0.0f) {
                     const auto motion_it = motion_.find(cid);
@@ -923,7 +1008,7 @@ public:
                 if (min_consistency_ > 0.0f && buffer_size_ > 1) {
                     if (buffer_consistency(cid) < min_consistency_) { stats_.reject_consistency += 1; continue; }
                 }
-                candidates_to_score.push_back({cid, age, iou, center_norm, maha});
+                candidates_to_score.push_back({cid, age, iou, center_norm, maha, kalman_gated ? kalman_d2 : -1.0f});
             }
 
             int n_gate_passed = static_cast<int>(candidates_to_score.size());
@@ -983,6 +1068,12 @@ public:
                     joint = sim + iou_weight_ * cand.iou + mahalanobis_weight_ * maha_score;
                 } else {
                     joint = sim;
+                }
+
+                // Spatial probability penalty: closer to the predicted cloud center
+                // (smaller D^2) costs less. cost = 1 - exp(-D^2/2).
+                if (kalman_penalty_weight_ > 0.0f && cand.kalman_d2 >= 0.0f) {
+                    joint -= kalman_penalty_weight_ * (1.0f - std::exp(-0.5f * cand.kalman_d2));
                 }
 
                 if (joint > best_joint) {
@@ -1163,7 +1254,7 @@ private:
         const float r_diag[4] = {pos_std * pos_std, pos_std * pos_std, 1e-2f, pos_std * pos_std};
         for (int r = 0; r < 4; ++r) {
             for (int c = 0; c < 4; ++c) {
-                aug[r][c] = snap.covariance[static_cast<size_t>(r * 4 + c)] + (r == c ? r_diag[r] : 0.0f);
+                aug[r][c] = snap.covariance[static_cast<size_t>(r * 8 + c)] + (r == c ? r_diag[r] : 0.0f);
             }
             aug[r][4] = residual[static_cast<size_t>(r)];
         }
@@ -1201,6 +1292,169 @@ private:
             out += residual[static_cast<size_t>(i)] * aug[i][4];
         }
         return out;
+    }
+
+    // Physical reachability gate: returns true if relinking the candidate to the
+    // lost track would require an implied average speed above human limits, so the
+    // candidate must be a different (new) person. Snapshot-independent — uses the
+    // lost track's last box + age only — so it also covers the case where no Kalman
+    // motion snapshot is available (where the cloud gate would otherwise fall back
+    // to the loose static spatial gate). dist/time gives the average velocity, the
+    // physical meaning the positional cloud alone lacks.
+    static bool exceeds_max_speed(
+        const RelinkBox& box, const RelinkBox& last_box, int age,
+        float person_height_m, float fps, float max_speed_mps) {
+        if (max_speed_mps <= 0.0f || person_height_m <= 0.0f) return false;
+        const float lcx = (last_box.x1 + last_box.x2) * 0.5f;
+        const float lcy = (last_box.y1 + last_box.y2) * 0.5f;
+        const float lh = last_box.y2 - last_box.y1;
+        const float zcx = (box.x1 + box.x2) * 0.5f;
+        const float zcy = (box.y1 + box.y2) * 0.5f;
+        const float zh = box.y2 - box.y1;
+        const float dpx = std::sqrt((zcx - lcx) * (zcx - lcx) + (zcy - lcy) * (zcy - lcy));
+        const float dt_s = std::max(age, 1) / std::max(fps, 1e-6f);
+        // px/m scale averaged over both endpoints (perspective robustness)
+        const float px_per_m = 0.5f * (std::max(lh, 1e-3f) + std::max(zh, 1e-3f)) / person_height_m;
+        const float speed_mps = dpx / dt_s / std::max(px_per_m, 1e-6f);
+        return speed_mps > max_speed_mps;
+    }
+
+    // Velocity-direction gate: returns true if the candidate detection lies
+    // "behind" the lost track's motion direction and should be rejected. Covariance
+    // inflation grows the gating cloud symmetrically, so a person who just left the
+    // frame moving forward can still match someone entering behind them; this culls
+    // candidates whose displacement from the last position opposes the velocity.
+    // Skipped for near-stationary tracks (speed < min_speed) where direction is noise.
+    static bool direction_behind(
+        const RelinkBox& box, const RelinkMotionSnapshot& snap, float min_cos, float min_speed) {
+        if (min_cos <= -1.0f) return false;  // gate disabled
+        const float vx = snap.state[4];
+        const float vy = snap.state[5];
+        const float speed = std::sqrt(vx * vx + vy * vy);
+        if (speed < min_speed) return false;
+        const float zcx = (box.x1 + box.x2) * 0.5f;
+        const float zcy = (box.y1 + box.y2) * 0.5f;
+        const float dx = zcx - snap.state[0];
+        const float dy = zcy - snap.state[1];
+        const float dist = std::sqrt(dx * dx + dy * dy);
+        if (dist < 1e-3f) return false;
+        const float cosang = (dx * vx + dy * vy) / (speed * dist);
+        return cosang < min_cos;
+    }
+
+    // Physically-grounded, inertia-aware predict step (white-noise-acceleration).
+    // The mean advances at constant velocity (momentum), and the process noise is
+    // derived from an assumed real-world person height + bounded human acceleration:
+    //   px_per_m = h_px / person_height_m   (monocular metric scale from box height)
+    //   sigma_a  = max_accel[m/s^2] * px_per_m / fps^2   (px/frame^2)
+    // The acceleration covariance is anisotropic, decomposed along the velocity
+    // direction: longitudinal (speed up / slow down) vs lateral (turning), with
+    // accel_long >= accel_lat so the cloud stretches *along* the motion (velocity
+    // inertia) and stays tight sideways. This replaces the unbounded h/160 velocity
+    // noise that implied implausible accelerations / reversals.
+    static void predict_phys(
+        float x[8], float P[64], float person_height_m, float accel_long, float accel_lat, float fps) {
+        // 1. constant-velocity mean (inertia)
+        x[0] += x[4];
+        x[1] += x[5];
+        x[2] += x[6];
+        x[3] += x[7];
+        // 2. P = F P F^T  (F = [[I, I], [0, I]])
+        float Pn[64];
+        for (int i = 0; i < 4; ++i) {
+            for (int j = 0; j < 4; ++j) {
+                Pn[i * 8 + j] = P[i * 8 + j] + P[i * 8 + j + 4] + P[(i + 4) * 8 + j] + P[(i + 4) * 8 + j + 4];
+                Pn[i * 8 + j + 4] = P[i * 8 + j + 4] + P[(i + 4) * 8 + j + 4];
+                Pn[(i + 4) * 8 + j] = P[(i + 4) * 8 + j] + P[(i + 4) * 8 + j + 4];
+                Pn[(i + 4) * 8 + j + 4] = P[(i + 4) * 8 + j + 4];
+            }
+        }
+        for (int k = 0; k < 64; ++k) P[k] = Pn[k];
+        // 3. anisotropic acceleration noise on the planar (cx,cy,vx,vy) sub-state
+        const float px_per_m = std::max(x[3], 1e-3f) / std::max(person_height_m, 1e-3f);
+        const float inv_fps2 = 1.0f / std::max(fps * fps, 1e-6f);
+        const float sl = accel_long * px_per_m * inv_fps2;  // longitudinal sigma_a
+        const float st = accel_lat * px_per_m * inv_fps2;   // lateral sigma_a
+        float sl2 = sl * sl;
+        float st2 = st * st;
+        const float vx = x[4];
+        const float vy = x[5];
+        const float speed = std::sqrt(vx * vx + vy * vy);
+        float ux = 1.0f, uy = 0.0f;
+        if (speed > 1e-6f) {
+            ux = vx / speed;
+            uy = vy / speed;
+        } else {
+            // no heading → isotropic (use lateral magnitude both ways)
+            sl2 = st2;
+        }
+        // Sigma_a = sl2 * (u u^T) + st2 * (p p^T),  p = (-uy, ux)
+        const float Saa00 = sl2 * ux * ux + st2 * uy * uy;
+        const float Saa01 = (sl2 - st2) * ux * uy;
+        const float Saa11 = sl2 * uy * uy + st2 * ux * ux;
+        // DWNA blocks (dt=1): pos-pos *1/4, pos-vel *1/2, vel-vel *1
+        const int px[2] = {0, 1};   // cx, cy
+        const int vix[2] = {4, 5};  // vx, vy
+        const float Sa[2][2] = {{Saa00, Saa01}, {Saa01, Saa11}};
+        for (int a = 0; a < 2; ++a) {
+            for (int b = 0; b < 2; ++b) {
+                P[px[a] * 8 + px[b]] += 0.25f * Sa[a][b];
+                P[px[a] * 8 + vix[b]] += 0.5f * Sa[a][b];
+                P[vix[a] * 8 + px[b]] += 0.5f * Sa[a][b];
+                P[vix[a] * 8 + vix[b]] += Sa[a][b];
+            }
+        }
+        // 4. keep modest noise on aspect & height so S stays well-conditioned
+        float Q[64];
+        saccade::kf_gpu::get_Q(x[3], Q);
+        P[2 * 8 + 2] += Q[2 * 8 + 2];
+        P[6 * 8 + 6] += Q[6 * 8 + 6];
+        P[3 * 8 + 3] += Q[3 * 8 + 3];
+        P[7 * 8 + 7] += Q[7 * 8 + 7];
+    }
+
+    // Squared Mahalanobis distance of a detection box against a lost track's
+    // Kalman distribution, self-extrapolated `delta` frames forward. When
+    // person_height_m > 0 the diffusion uses the physically-grounded, inertia-aware
+    // model (predict_phys); otherwise it falls back to the tracker's kf_gpu Q.
+    static float kalman_gate_dist(
+        const RelinkBox& box, const RelinkMotionSnapshot& snap, int delta,
+        float person_height_m, float accel_long, float accel_lat, float fps) {
+        float x[8];
+        float P[64];
+        for (int i = 0; i < 8; ++i) x[i] = snap.state[static_cast<size_t>(i)];
+        for (int i = 0; i < 64; ++i) P[i] = snap.covariance[static_cast<size_t>(i)];
+        const int steps = std::max(0, delta);
+        const bool phys = person_height_m > 0.0f;
+        for (int s = 0; s < steps; ++s) {
+            if (phys) {
+                predict_phys(x, P, person_height_m, accel_long, accel_lat, fps);
+            } else {
+                saccade::kf_gpu::predict(x, P);
+            }
+        }
+        // S = H P H^T + R = P[:4,:4] + R(h)
+        float R[16];
+        saccade::kf_gpu::get_R(x[3], R);
+        float S[16];
+        for (int i = 0; i < 4; ++i)
+            for (int j = 0; j < 4; ++j)
+                S[i * 4 + j] = P[i * 8 + j] + R[i * 4 + j];
+        float S_inv[16];
+        saccade::kf_gpu::invert4x4(S, S_inv);
+
+        const float bw = std::max(1e-6f, box.x2 - box.x1);
+        const float bh = std::max(1e-6f, box.y2 - box.y1);
+        const float z[4] = {(box.x1 + box.x2) * 0.5f, (box.y1 + box.y2) * 0.5f, bw / bh, bh};
+        float y[4];
+        for (int i = 0; i < 4; ++i) y[i] = z[i] - x[i];
+        float d2 = 0.0f;
+        for (int i = 0; i < 4; ++i) {
+            float si = 0.0f;
+            for (int j = 0; j < 4; ++j) si += S_inv[i * 4 + j] * y[j];
+            d2 += y[i] * si;
+        }
+        return d2;
     }
 
     std::vector<float> buffer_mean(int cid) const {
@@ -1262,6 +1516,16 @@ private:
     float mahalanobis_weight_;
     float dynamic_margin_crowd_;
     float dynamic_margin_age_;
+    bool kalman_gate_;
+    float kalman_chi2_;
+    float kalman_penalty_weight_;
+    float kalman_dir_min_cos_;
+    float kalman_dir_min_speed_;
+    float kalman_person_height_m_;
+    float kalman_accel_long_;
+    float kalman_accel_lat_;
+    float kalman_fps_;
+    float kalman_max_speed_mps_;
 
     std::unordered_map<int, int> alias_;
     std::unordered_map<int, std::vector<float>> features_;
@@ -1722,6 +1986,13 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         .def("set_reid_params", &GPUByteTracker::set_reid_params,
              py::arg("cos_threshold"), py::arg("iou_low"), py::arg("iou_high"), py::arg("weight"),
              py::arg("cost_cos_w") = 0.55f, py::arg("cost_iou_w") = 0.30f, py::arg("cost_score_w") = 0.15f)
+        .def("set_relink_params", &GPUByteTracker::set_relink_params,
+             py::arg("enabled"), py::arg("bank_cap") = 256, py::arg("sim_thresh") = 0.6f,
+             py::arg("cheb_lambda") = 2.5f, py::arg("spatial_gate") = 4.0f, py::arg("max_age") = 300,
+             "Birth-time lost-bank ReID relink: revive a lost identity at spawn instead "
+             "of minting a new id. Precision-first (high sim threshold + spatial gate).")
+        .def("get_relink_debug", &GPUByteTracker::get_relink_debug,
+             "Returns (archived, birth_candidates, revived) relink counters.")
         .def("set_oao_params", &GPUByteTracker::set_oao_params,
              py::arg("tau"),
              "OA-SORT OAO penalty weight [0, 1]. 0 = disabled. "
@@ -1864,7 +2135,7 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         }, "Raw C++ pointer to this GPUByteTracker (for Workbench construction)");
 
     py::class_<SemanticRelinkerCpp>(m, "SemanticRelinker")
-        .def(py::init<float, int, float, float, int, float, float, int, float, std::string, float, bool, float, float, float, float, float, float, float, float, float, float, float, float, float, float>(),
+        .def(py::init<float, int, float, float, int, float, float, int, float, std::string, float, bool, float, float, float, float, float, float, float, float, float, float, float, float, float, float, bool, float, float, float, float, float, float, float, float, float>(),
              py::arg("sim_threshold") = 0.985f,
              py::arg("ttl") = 45,
              py::arg("ema_beta") = 0.83f,
@@ -1890,8 +2161,19 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
              py::arg("iou_weight") = 0.0f,
              py::arg("mahalanobis_weight") = 0.0f,
              py::arg("dynamic_margin_crowd") = 0.0f,
-             py::arg("dynamic_margin_age") = 0.0f)
-        .def("update_motion_snapshots", &SemanticRelinkerCpp::update_motion_snapshots, py::arg("snapshots"))
+             py::arg("dynamic_margin_age") = 0.0f,
+             py::arg("kalman_gate") = false,
+             py::arg("kalman_chi2") = 9.4877f,
+             py::arg("kalman_penalty_weight") = 0.0f,
+             py::arg("kalman_dir_min_cos") = -1.0f,
+             py::arg("kalman_dir_min_speed") = 1.0f,
+             py::arg("kalman_person_height_m") = 0.0f,
+             py::arg("kalman_accel_long") = 2.0f,
+             py::arg("kalman_accel_lat") = 1.0f,
+             py::arg("kalman_fps") = 30.0f,
+             py::arg("kalman_max_speed_mps") = 0.0f)
+        .def("update_motion_snapshots", &SemanticRelinkerCpp::update_motion_snapshots,
+             py::arg("snapshots"), py::arg("frame_id") = -1)
         .def("motion_candidate_ids", &SemanticRelinkerCpp::motion_candidate_ids, py::arg("frame_id") = -1)
         .def("inject_reference", &SemanticRelinkerCpp::inject_reference,
              py::arg("canonical_id"), py::arg("embedding"))

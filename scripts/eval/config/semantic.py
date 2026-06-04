@@ -19,6 +19,17 @@ class SemanticConfig:
     semantic_min_lost_frames: int = 2
     semantic_min_iou: float = 0.20
     semantic_mahalanobis_threshold: float = 0.0
+    # Kalman probabilistic relink gate
+    semantic_kalman_gate: bool = False
+    semantic_kalman_chi2: float = 9.4877
+    semantic_kalman_penalty_weight: float = 0.0
+    semantic_kalman_dir_min_cos: float = -1.0
+    semantic_kalman_dir_min_speed: float = 1.0
+    semantic_kalman_person_height_m: float = 0.0
+    semantic_kalman_accel_long: float = 2.0
+    semantic_kalman_accel_lat: float = 1.0
+    semantic_kalman_fps: float = 30.0
+    semantic_kalman_max_speed_mps: float = 0.0
     semantic_debug: bool = False
     # Reference buffer
     semantic_buffer_size: int = 10
@@ -138,6 +149,109 @@ def add_semantic_args(parser: argparse.ArgumentParser) -> None:
         default=0.0,
         help=_help(
             "Optional motion gate for semantic relink; 0 disables.", range_hint=">=0"
+        ),
+    )
+    grp.add_argument(
+        "--semantic-kalman-gate",
+        action="store_true",
+        help=(
+            "Replace the static spatial gate with a Kalman chi-square gate: lost "
+            "tracks are velocity-extrapolated and their covariance inflated with "
+            "time, gating relink candidates by Mahalanobis distance to that cloud."
+        ),
+    )
+    grp.add_argument(
+        "--semantic-kalman-chi2",
+        type=float,
+        default=9.4877,
+        help=_help(
+            "Chi-square gate threshold for the Kalman relink gate "
+            "(4 DoF: 9.4877=95%, 13.28=99%).",
+            range_hint=">0",
+        ),
+    )
+    grp.add_argument(
+        "--semantic-kalman-penalty-weight",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Weight of the spatial probability penalty 1-exp(-D^2/2) added to the "
+            "joint relink score (0 = pure hard gate).",
+            range_hint=">=0",
+        ),
+    )
+    grp.add_argument(
+        "--semantic-kalman-dir-min-cos",
+        type=float,
+        default=-1.0,
+        help=_help(
+            "Velocity-direction gate: reject relink candidates whose displacement "
+            "from the lost track has cos(angle, velocity) below this (e.g. 0.0 "
+            "rejects anything >90 deg behind). <=-1 disables. Needs --semantic-kalman-gate.",
+            range_hint="-1..1",
+        ),
+    )
+    grp.add_argument(
+        "--semantic-kalman-dir-min-speed",
+        type=float,
+        default=1.0,
+        help=_help(
+            "Minimum track speed (px/frame) before the direction gate applies; "
+            "near-stationary tracks have unreliable direction.",
+            range_hint=">=0",
+        ),
+    )
+    grp.add_argument(
+        "--semantic-kalman-person-height-m",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Assumed real person height (m) for physically-grounded covariance "
+            "diffusion: px/m scale = box_height/this. >0 enables the physical model "
+            "(replaces tracker Q). Needs --semantic-kalman-gate.",
+            range_hint=">=0",
+        ),
+    )
+    grp.add_argument(
+        "--semantic-kalman-accel-long",
+        type=float,
+        default=2.0,
+        help=_help(
+            "Max longitudinal (speed-change) human acceleration (m/s^2) for the "
+            "physical diffusion; larger → cloud stretches more along motion.",
+            range_hint=">=0",
+        ),
+    )
+    grp.add_argument(
+        "--semantic-kalman-accel-lat",
+        type=float,
+        default=1.0,
+        help=_help(
+            "Max lateral (turning) human acceleration (m/s^2); smaller than "
+            "accel-long encodes velocity inertia (tight sideways).",
+            range_hint=">=0",
+        ),
+    )
+    grp.add_argument(
+        "--semantic-kalman-fps",
+        type=float,
+        default=30.0,
+        help=_help(
+            "Sequence frame rate used to convert m/s^2 acceleration to px/frame^2 "
+            "for the physical diffusion.",
+            range_hint=">0",
+        ),
+    )
+    grp.add_argument(
+        "--semantic-kalman-max-speed-mps",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Physical reachability cap (m/s): reject a relink whose implied average "
+            "speed (dist/time via person-height px/m scale) exceeds this (human "
+            "sprint ~8). Snapshot-independent, always on. 0 disables. Needs "
+            "--semantic-kalman-person-height-m and --semantic-kalman-fps.",
+            range_hint=">=0",
         ),
     )
     grp.add_argument(
