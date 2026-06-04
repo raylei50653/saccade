@@ -95,9 +95,29 @@ CPU 邏輯驗證後搬進零同步 GPU 核（spec §4），**擴充既有 relink
 - GPU 各向異性 Q 增加 predict 成本；限 relink bank（數量少），非全 active track。
 - 全程 default off，逐階段 ablation 後才動 preset。
 
+## 實驗設定：人工遮擋 (Synthetic occlusion)
+
+原始 `custom_seq` demo **無障礙物**，行人不被遮擋、軌跡乾淨，沒有長 gap 可測重連。為了反覆比較重連/門控效果，用 `scripts/tools/add_occlusion_to_seq.py` **手動注入一根中央遮擋柱**，製造真實的遮擋丟失：
+
+```bash
+uv run scripts/tools/add_occlusion_to_seq.py \
+  --img-dir datasets/demo/custom_seq/img1 \
+  --width-ratio 0.125 --color 60,60,60
+```
+
+- 遮擋框：畫面正中、寬 = `width_ratio × W`（0.125→480px @4K，x≈1680–2160）、高 = 55%×H、置中。行人穿越中央時會被吞掉 → 產生 gap → 觸發重連博弈。
+- **這就是 ID4 的成因**：id4 在 cx≈1619 往右走、撞進遮擋柱（左緣 x≈1680）後丟失；理想是在柱子另一側（前方）重連回來，而非被左邊另一個人接走。方向/速度閘門正是防這個。
+
+> ⚠️ **此工具就地覆寫 `img1`、不備份**。要反覆比較必須先留一份乾淨原圖：
+> ```bash
+> cp -r datasets/demo/custom_seq/img1 datasets/demo/custom_seq/img1_clean   # 一次性備份
+> # 還原：rm -rf img1 && cp -r img1_clean img1
+> ```
+> 建議 A/B 流程：① 備份乾淨圖 → ② 注入遮擋 → ③ 同一組遮擋圖跑「門控 off vs on」對比（避免每次重注入造成框位/壓縮差異）。
+
 ## 快速重現 (Quick repro)
 
-Phase 0 全開（卡方 + 方向 + 物理雪茄雲 + 速度上限），custom_seq demo：
+Phase 0 全開（卡方 + 方向 + 物理雪茄雲 + 速度上限），custom_seq demo（已注入遮擋）：
 
 ```bash
 uv run scripts/eval/mot17.py --data-root datasets/demo --split . \
