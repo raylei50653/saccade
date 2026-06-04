@@ -30,6 +30,7 @@ and lets the evaluator adapter own the (heavier, integration-y) extraction.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import torch
@@ -288,7 +289,7 @@ def cheb_gr_merge_output_tracklets(
 def extract_tracklet_embeddings(
     results_lines: list[str],
     seq_dir: str,
-    extractor,
+    extractor: Any,
     *,
     n_samples: int = 50,
     crop_hw: tuple[int, int] = (224, 224),
@@ -310,7 +311,7 @@ def extract_tracklet_embeddings(
     from PIL import Image
 
     records = _parse_mot_lines(results_lines)
-    by_id: dict[int, list] = defaultdict(list)
+    by_id: dict[int, list[Any]] = defaultdict(list)
     for r in records:
         by_id[r.track_id].append(r)
 
@@ -346,7 +347,7 @@ def extract_tracklet_embeddings(
             )
             if box[2] <= box[0] or box[3] <= box[1]:
                 box = (0, 0, fw, fh)
-            crop = img.crop(box).resize((out_w, out_h), Image.BILINEAR)
+            crop = img.crop(box).resize((out_w, out_h), Image.BILINEAR)  # type: ignore[attr-defined]
             crop_arrs[si] = np.asarray(crop, dtype=np.uint8).transpose(2, 0, 1)
 
     device = getattr(extractor, "device", "cuda")

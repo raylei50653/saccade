@@ -101,7 +101,7 @@ class EntropyTrigger:
         cache = await self._ensure_cache()
         assert cache.client is not None
         try:
-            await cache.client.rpush("saccade:events", json.dumps(event_data))
+            await cache.client.rpush("saccade:events", json.dumps(event_data))  # type: ignore[misc]
             await cache.client.expire("saccade:events", 3600)
 
             print(

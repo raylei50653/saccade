@@ -17,7 +17,7 @@ class SigLIP2TextEncoder:
         self.processor = cast(Any, AutoProcessor).from_pretrained(model_id)
         self.model.eval()
 
-    @torch.no_grad()  # type: ignore[untyped-decorator]
+    @torch.no_grad()
     def encode(self, texts: List[str]) -> torch.Tensor:
         """
         將文本轉換為 Embedding 向量

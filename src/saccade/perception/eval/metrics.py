@@ -25,7 +25,7 @@ def _evaluate_single_sequence(
     import motmetrics as mm
 
     if not hasattr(np, "asfarray"):
-        np.asfarray = lambda a, dtype=float: np.asarray(a, dtype=dtype)
+        np.asfarray = lambda a, dtype=float: np.asarray(a, dtype=dtype)  # type: ignore[attr-defined]
 
     gt = mm.io.loadtxt(gt_path, fmt="mot15-2D", min_confidence=1)
     ts = mm.io.loadtxt(ts_path, fmt="mot15-2D", min_confidence=-1.0)
@@ -107,7 +107,7 @@ def run_motmetrics_evaluation(
 
     # Force NumPy 2.0 compatibility
     if not hasattr(np, "asfarray"):
-        np.asfarray = lambda a, dtype=float: np.asarray(a, dtype=dtype)
+        np.asfarray = lambda a, dtype=float: np.asarray(a, dtype=dtype)  # type: ignore[attr-defined]
 
     gt_folder = os.path.join(data_root, split)
     gtfiles = glob.glob(os.path.join(gt_folder, "*/gt/gt.txt"))

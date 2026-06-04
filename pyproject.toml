@@ -63,7 +63,7 @@ override-dependencies = [
 [tool.mypy]
 strict = true
 ignore_missing_imports = true
-exclude = ["tests/", "build/", "build-native-coverage/", "storage/", "runs/", "results/", "train/"]
+exclude = ["tests/", "build/", "build-native-coverage/", "storage/", "runs/", "results/", "train/", "scratch/", "third_party/"]
 mypy_path = "src"
 
 [[tool.mypy.overrides]]
@@ -83,10 +83,13 @@ module = [
     "build_fpn_reid",
     "debug_eval",
     "saccade.media.dali_pipeline",
+    "saccade.media.rtsp_dali_pipeline",
     "saccade.perception.detector_trt",
     "saccade.perception.eval.detection",
+    "saccade.perception.eval.streaming",
     "saccade.perception.tracking.fpn_reid",
     "saccade.perception.tracking.fpn_reid_cuda",
+    "saccade.perception.workbench",
 ]
 ignore_errors = true
 

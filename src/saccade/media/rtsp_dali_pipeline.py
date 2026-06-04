@@ -5,7 +5,7 @@ import nvidia.dali.types as types
 from nvidia.dali.pipeline import Pipeline
 
 
-class RTSPDALIPipeline(Pipeline):  # type: ignore[misc]
+class RTSPDALIPipeline(Pipeline):
     def __init__(
         self,
         batch_size: int = 1,

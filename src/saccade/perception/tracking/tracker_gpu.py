@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 from dataclasses import dataclass
-from typing import List, Any, cast, Optional, TypedDict
+from typing import List, Any, cast, Optional, TypedDict, Callable
 
 try:
     from saccade_tracking_ext import GPUByteTracker as CppGPUByteTracker, TrackResult
@@ -869,7 +869,7 @@ class GraphedTrackerUpdate:
         self.out_det_idx = torch.zeros(max_objs, dtype=torch.int32, device=device)
         self.out_count = torch.zeros((), dtype=torch.int32, device=device)
 
-        self._graphed_callable = None
+        self._graphed_callable: Callable[..., None] | None = None
 
     def _warmup(self) -> None:
         with torch.no_grad():
@@ -943,7 +943,9 @@ class GraphedTrackerUpdate:
             self.out_det_idx,
             self.out_count,
         )
-        self._graphed_callable = torch.cuda.make_graphed_callables(_graph_fn, sample)
+        self._graphed_callable = cast(
+            "Callable[..., None]", torch.cuda.make_graphed_callables(_graph_fn, sample)
+        )
 
     def copy_inputs(
         self,
@@ -969,6 +971,7 @@ class GraphedTrackerUpdate:
     def replay(self) -> dict[str, torch.Tensor]:
         if self._graphed_callable is None:
             self._capture()
+        assert self._graphed_callable is not None
         self._graphed_callable(
             self.d_boxes,
             self.d_scores,
@@ -993,7 +996,7 @@ class GraphedTrackerUpdate:
     def read_outputs(self, target: dict[str, torch.Tensor]) -> None:
         """Copy internal output buffers into the caller-provided result dict."""
         target["count"].copy_(self.out_count, non_blocking=True)
-        count = self.out_count.item()
+        count = int(self.out_count.item())
         if count > 0:
             target["boxes"][:count].copy_(self.out_boxes[:count], non_blocking=True)
             target["scores"][:count].copy_(self.out_scores[:count], non_blocking=True)

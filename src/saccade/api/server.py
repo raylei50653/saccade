@@ -11,29 +11,29 @@ redis_cache = RedisCache()
 chroma_store = ChromaStore()
 
 
-class SearchQuery(BaseModel):  # type: ignore[misc]
+class SearchQuery(BaseModel):
     text: str
     n_results: Optional[int] = 5
     start_time: Optional[float] = None
     is_anomaly: Optional[bool] = None
 
 
-@app.on_event("startup")  # type: ignore[untyped-decorator]
+@app.on_event("startup")
 async def startup() -> None:
     await redis_cache.connect()
 
 
-@app.on_event("shutdown")  # type: ignore[untyped-decorator]
+@app.on_event("shutdown")
 async def shutdown() -> None:
     await redis_cache.disconnect()
 
 
-@app.get("/")  # type: ignore[untyped-decorator]
+@app.get("/")
 async def root() -> Dict[str, str]:
     return {"status": "online", "system": "Saccade", "api_version": "1.0"}
 
 
-@app.get("/objects")  # type: ignore[untyped-decorator]
+@app.get("/objects")
 async def list_active_objects() -> Dict[str, Any]:
     """獲取目前所有活躍 (最近 5 分鐘內出現) 的目標 ID"""
     try:
@@ -43,7 +43,7 @@ async def list_active_objects() -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/objects/{obj_id}")  # type: ignore[untyped-decorator]
+@app.get("/objects/{obj_id}")
 async def get_object_history(obj_id: int) -> Dict[str, Any]:
     """獲取特定物件的詳細時空紀錄與軌跡"""
     history = await redis_cache.get_object_history(obj_id)
@@ -59,7 +59,7 @@ async def get_object_history(obj_id: int) -> Dict[str, Any]:
     return history
 
 
-@app.post("/search")  # type: ignore[untyped-decorator]
+@app.post("/search")
 async def semantic_search(query: SearchQuery) -> Dict[str, Any]:
     """
     執行時空語義檢索
