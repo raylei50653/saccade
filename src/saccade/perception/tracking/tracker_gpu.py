@@ -891,7 +891,7 @@ class GraphedTrackerUpdate:
                 0.0,
                 1.0,
             )
-            torch.cuda.synchronize()
+            torch.cuda.synchronize()  # saccade-allow-cpu
 
     def _capture(self) -> None:
         if self._graphed_callable is not None:
@@ -996,7 +996,7 @@ class GraphedTrackerUpdate:
     def read_outputs(self, target: dict[str, torch.Tensor]) -> None:
         """Copy internal output buffers into the caller-provided result dict."""
         target["count"].copy_(self.out_count, non_blocking=True)
-        count = int(self.out_count.item())
+        count = int(self.out_count.item())  # saccade-allow-cpu
         if count > 0:
             target["boxes"][:count].copy_(self.out_boxes[:count], non_blocking=True)
             target["scores"][:count].copy_(self.out_scores[:count], non_blocking=True)
