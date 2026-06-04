@@ -2,14 +2,14 @@ name: C++ Core Build
 
 on:
   push:
-    branches: [ dev, main, feat/option-f-mamba ]
+    branches: [ main ]
     paths:
       - 'src/**'
       - 'include/**'
       - 'CMakeLists.txt'
       - '.github/workflows/cpp_build.yml'
   pull_request:
-    branches: [ dev, main ]
+    branches: [ main ]
     paths:
       - 'src/**'
       - 'include/**'

@@ -123,7 +123,7 @@ uv run scripts/eval/mot17.py --preset speed --detector SDP               # 舊 y
 
 跨模組待辦（測試覆蓋率）見 [docs/TODO.md](docs/TODO.md) 的「跨模組待辦」節。
 
-### 🔄 Option F — Mamba SSM Detection Head（當前 branch `feat/option-f-mamba`）
+### 🔄 Option F — Mamba SSM Detection Head
 
 - 設計文件：[docs/modules/detection/option-f-mamba-head.md](docs/modules/detection/option-f-mamba-head.md)
 - 訓練腳本：`scripts/train/temporal_yolo/`
@@ -237,24 +237,22 @@ MLflow 或 Optuna 未啟動時不影嚮 eval — `log_eval_run()` 會印 warning
 
 ## 9. Branching Policy
 
-- `main`：穩定 / 發佈分支。只放已驗證、可回滾的內容；原則上只透過 PR 從 `dev` 合入。
-- `dev`：主要開發分支。日常整合、文件更新、效能優化與功能開發都先回到 `dev`。
-- `feat/*`、`fix/*`、`perf/*`：功能分支。從 `dev` 拉出，完成後以 PR 合回 `dev`，合併後立即刪除。
+- `main`：單一主分支。所有功能開發、修正、文件更新最終都合回 `main`。
+- `feat/*`、`fix/*`、`perf/*`：工作分支。從 `main` 拉出，完成後以 PR 合回 `main`，合併後立即刪除。
 
 ### 分支工作流
 
 1. 先在 `docs/TODO.md` 寫清楚要做的工作、目的與驗證方式。
-2. 從 `dev` 建立工作分支。
+2. 從 `main` 建立工作分支。
 3. 在工作分支開發與提交。
-4. 推到遠端後，開 PR 指向 `dev`。
-5. CI 通過後合併到 `dev`，並刪除工作分支。
-6. 需要發佈時，再從 `dev` 開 PR 到 `main`。
+4. 推到遠端後，開 PR 指向 `main`。
+5. CI 通過後合併到 `main`，並刪除工作分支。
 
 ### 規則
 
-- 不直接 push 到受保護分支 `dev` / `main`。
+- 不直接 push 到 `main`。
 - 預設所有改動都走 PR，即使是單人倉庫也保留 CI 與變更紀錄。
-- 調整預設開發分支時，必須同步更新 `.github/workflows/` 的 `push` / `pull_request` 觸發條件。
+- 調整 CI 觸發分支時，必須同步更新 `.github/workflows/` 的 `push` / `pull_request` 觸發條件。
 - 工作樹有未提交變更時，不做分支整理、批次 merge 或預設分支切換。
 
 ---

@@ -2,9 +2,9 @@ name: CI (Lint, Type Check, Test)
 
 on:
   push:
-    branches: [ dev, main, feat/option-f-mamba ]
+    branches: [ main ]
   pull_request:
-    branches: [ dev, main ]
+    branches: [ main ]
   workflow_dispatch:
 
 env:
