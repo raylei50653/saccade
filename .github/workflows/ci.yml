@@ -29,6 +29,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends \
+            libcairo2-dev \
+            libgirepository1.0-dev \
+            pkg-config
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
@@ -47,6 +54,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends \
+            libcairo2-dev \
+            libgirepository1.0-dev \
+            pkg-config
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
@@ -63,6 +77,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends \
+            libcairo2-dev \
+            libgirepository1.0-dev \
+            pkg-config
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
