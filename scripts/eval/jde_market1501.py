@@ -164,14 +164,11 @@ def compute_mAP_cmc(
         )
 
         # CMC
-        ng = good.sum()
-        if ng == 0:
-            continue
         valid = ~junk
-        good_cumsum = np.cumsum(good & valid)
-        hit_ranks = np.where(good_cumsum > 0, good_cumsum, 0)
+        good_filtered = good[valid]
+        good_cumsum = np.cumsum(good_filtered)
         for k in range(max_rank):
-            if hit_ranks[k] > 0:
+            if k < len(good_cumsum) and good_cumsum[k] > 0:
                 cmc[k] += 1
 
         # AP — exclude junk; use ALL gallery items

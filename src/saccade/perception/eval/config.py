@@ -202,6 +202,27 @@ class EvalConfig:
     post_lifecycle_consistency_weight: float
     post_lifecycle_missing_appearance_cost: float
 
+    # Cheb-GR offline tracklet merge (path 2; default off)
+    cheb_gr_merge_enabled: bool
+    cheb_gr_merge_max_cost: float
+    cheb_gr_merge_max_gap: int
+    cheb_gr_merge_min_overlap: int
+    cheb_gr_merge_n_samples: int
+    cheb_gr_pool_frac: float
+    cheb_gr_lambda: float
+    cheb_gr_k2: int
+    cheb_gr_max_fwd: int
+    cheb_gr_fuse_lambda: float
+    cheb_gr_engine: str
+
+    # Birth-time lost-bank ReID relink (online, GPU; default off)
+    relink_enabled: bool
+    relink_bank_cap: int
+    relink_sim_thresh: float
+    relink_lambda: float
+    relink_spatial_gate: float
+    relink_max_age: int
+
     min_tracklet_len: int
     min_tracklet_score: float
     interpolate_tracklets: bool
@@ -597,6 +618,23 @@ def parse_eval_config(
         post_lifecycle_missing_appearance_cost=float(
             kwargs.get("post_lifecycle_missing_appearance_cost", 0.5)
         ),
+        cheb_gr_merge_enabled=bool(kwargs.get("cheb_gr_merge_enabled", False)),
+        cheb_gr_merge_max_cost=float(kwargs.get("cheb_gr_merge_max_cost", 0.55)),
+        cheb_gr_merge_max_gap=int(kwargs.get("cheb_gr_merge_max_gap", 60)),
+        cheb_gr_merge_min_overlap=int(kwargs.get("cheb_gr_merge_min_overlap", 1)),
+        cheb_gr_merge_n_samples=int(kwargs.get("cheb_gr_merge_n_samples", 50)),
+        cheb_gr_pool_frac=float(kwargs.get("cheb_gr_pool_frac", 0.3)),
+        cheb_gr_lambda=float(kwargs.get("cheb_gr_lambda", 2.0)),
+        cheb_gr_k2=int(kwargs.get("cheb_gr_k2", 6)),
+        cheb_gr_max_fwd=int(kwargs.get("cheb_gr_max_fwd", 50)),
+        cheb_gr_fuse_lambda=float(kwargs.get("cheb_gr_fuse_lambda", 0.3)),
+        cheb_gr_engine=str(kwargs.get("cheb_gr_engine", "") or ""),
+        relink_enabled=bool(kwargs.get("relink_enabled", False)),
+        relink_bank_cap=int(kwargs.get("relink_bank_cap", 256)),
+        relink_sim_thresh=float(kwargs.get("relink_sim_thresh", 0.6)),
+        relink_lambda=float(kwargs.get("relink_lambda", 2.5)),
+        relink_spatial_gate=float(kwargs.get("relink_spatial_gate", 4.0)),
+        relink_max_age=int(kwargs.get("relink_max_age", 300)),
         min_tracklet_len=max(1, int(kwargs.get("min_tracklet_len", 1))),
         min_tracklet_score=float(kwargs.get("min_tracklet_score", 0.0)),
         interpolate_tracklets=bool(kwargs.get("interpolate_tracklets", True)),

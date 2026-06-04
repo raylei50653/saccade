@@ -54,6 +54,28 @@ class LifecycleConfig:
     post_lifecycle_gap_uncertainty_weight: float = 0.0
     post_lifecycle_consistency_weight: float = 0.0
     post_lifecycle_missing_appearance_cost: float = 0.5
+    # Cheb-GR offline tracklet merge (path 2; appearance stitching for AssA). Default off.
+    cheb_gr_merge_enabled: bool = False
+    cheb_gr_merge_max_cost: float = 0.55
+    cheb_gr_merge_max_gap: int = 60
+    cheb_gr_merge_min_overlap: int = 1
+    cheb_gr_merge_n_samples: int = 50
+    cheb_gr_pool_frac: float = 0.3
+    cheb_gr_lambda: float = 2.0
+    cheb_gr_k2: int = 6
+    cheb_gr_max_fwd: int = 50
+    cheb_gr_fuse_lambda: float = 0.3
+    cheb_gr_engine: str = ""
+    # Birth-time lost-bank ReID relink (online, GPU). Revive a lost identity at
+    # spawn time instead of minting a new id. Precision-first: ID consistency is
+    # protected by a high sim threshold + spatial gate (a wrong revive = merging
+    # two people = worse than a fragment). Default off.
+    relink_enabled: bool = False
+    relink_bank_cap: int = 256
+    relink_sim_thresh: float = 0.6
+    relink_lambda: float = 2.5
+    relink_spatial_gate: float = 4.0
+    relink_max_age: int = 300
     # Duplicate suppression: remove near-duplicate detections within the same frame
     # (detector artifact where multiple overlapping boxes are produced for the same person)
     duplicate_suppression_enabled: bool = False
@@ -563,5 +585,146 @@ def add_lifecycle_args(parser: argparse.ArgumentParser) -> None:
             "Minimum track observations required before gaps are interpolated.",
             range_hint=">=2",
             edge="too low interpolates noisy short tracks",
+        ),
+    )
+    grp.add_argument(
+        "--cheb-gr-merge-enabled",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Cheb-GR offline tracklet merge (path 2): stitch temporally-disjoint "
+        "tracklets by appearance to recover AssA. Re-crops img1 + siglip2_reid.",
+    )
+    grp.add_argument(
+        "--cheb-gr-merge-max-cost",
+        type=float,
+        default=0.55,
+        help=_help(
+            "Max Cheb-GR distance accepted for a tracklet merge.", range_hint="0-1"
+        ),
+    )
+    grp.add_argument(
+        "--cheb-gr-merge-max-gap",
+        type=int,
+        default=60,
+        help=_help(
+            "Max frame gap between an earlier tracklet's end and a later one's start.",
+            range_hint=">=1",
+        ),
+    )
+    grp.add_argument(
+        "--cheb-gr-merge-min-overlap",
+        type=int,
+        default=1,
+        help=_help(
+            "Tracklets overlapping by more than this many frames never merge.",
+            range_hint=">=0",
+        ),
+    )
+    grp.add_argument(
+        "--cheb-gr-merge-n-samples",
+        type=int,
+        default=50,
+        help=_help(
+            "Temporally-distributed appearance samples kept per tracklet (20-100).",
+            range_hint=">=1",
+        ),
+    )
+    grp.add_argument(
+        "--cheb-gr-pool-frac",
+        type=float,
+        default=0.3,
+        help=_help(
+            "Tracklet distance = mean of smallest this-fraction of cross-sample distances.",
+            range_hint="0-1",
+        ),
+    )
+    grp.add_argument(
+        "--cheb-gr-lambda",
+        type=float,
+        default=2.0,
+        help=_help(
+            "Chebyshev threshold lambda for the sample-level graph.", range_hint=">0"
+        ),
+    )
+    grp.add_argument(
+        "--cheb-gr-k2",
+        type=int,
+        default=6,
+        help=_help(
+            "k2 local query expansion for k-reciprocal re-ranking.", range_hint=">=1"
+        ),
+    )
+    grp.add_argument(
+        "--cheb-gr-max-fwd",
+        type=int,
+        default=50,
+        help=_help(
+            "Cap on forward neighbours per sample (0 = pure adaptive).",
+            range_hint=">=0",
+        ),
+    )
+    grp.add_argument(
+        "--cheb-gr-fuse-lambda",
+        type=float,
+        default=0.3,
+        help=_help(
+            "Weight on the Jaccard term vs original distance.", range_hint="0-1"
+        ),
+    )
+    grp.add_argument(
+        "--cheb-gr-engine",
+        default="",
+        help="Optional ReID engine path for tracklet crops (default: siglip2_reid).",
+    )
+    grp.add_argument(
+        "--relink-enabled",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Birth-time lost-bank ReID relink: revive a lost identity at spawn "
+        "instead of minting a new id (online, GPU). Needs reid embeddings on.",
+    )
+    grp.add_argument(
+        "--relink-bank-cap",
+        type=int,
+        default=256,
+        help=_help(
+            "Capacity (LRU ring) of the lost-identity embedding bank.", range_hint=">=1"
+        ),
+    )
+    grp.add_argument(
+        "--relink-sim-thresh",
+        type=float,
+        default=0.6,
+        help=_help(
+            "Cosine floor to revive a lost id. High = precision-first (avoid merging two people).",
+            range_hint="0-1",
+        ),
+    )
+    grp.add_argument(
+        "--relink-lambda",
+        type=float,
+        default=2.5,
+        help=_help(
+            "Chebyshev threshold lambda: revive only if distance <= mu - lambda*sigma "
+            "(statistically exclusive match). Higher = stricter/fewer revives.",
+            range_hint="2.0-3.0",
+        ),
+    )
+    grp.add_argument(
+        "--relink-spatial-gate",
+        type=float,
+        default=4.0,
+        help=_help(
+            "Base radius gamma (track-height units); full gate is gamma*h + 0.8*|v|*lost_age.",
+            range_hint=">0",
+        ),
+    )
+    grp.add_argument(
+        "--relink-max-age",
+        type=int,
+        default=300,
+        help=_help(
+            "Hard cap (frames) a lost identity stays revivable; bounds false cross-time revives.",
+            range_hint=">=1",
         ),
     )
