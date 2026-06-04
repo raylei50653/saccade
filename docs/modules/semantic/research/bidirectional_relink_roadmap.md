@@ -108,12 +108,19 @@ uv run scripts/tools/add_occlusion_to_seq.py \
 - 遮擋框：畫面正中、寬 = `width_ratio × W`（0.125→480px @4K，x≈1680–2160）、高 = 55%×H、置中。行人穿越中央時會被吞掉 → 產生 gap → 觸發重連博弈。
 - **這就是 ID4 的成因**：id4 在 cx≈1619 往右走、撞進遮擋柱（左緣 x≈1680）後丟失；理想是在柱子另一側（前方）重連回來，而非被左邊另一個人接走。方向/速度閘門正是防這個。
 
-> ⚠️ **此工具就地覆寫 `img1`、不備份**。要反覆比較必須先留一份乾淨原圖：
+> ⚠️ **此工具就地覆寫 `img1`、不備份**，且目前 `img1` 已是含遮擋版。乾淨來源是
+> `datasets/demo/15779246_3840_2160_60fps.mp4`（22MB，正好 821 幀 @3840×2160、59.94fps，
+> 對得上 `seqinfo.ini`）。從 mp4 重抽乾淨幀：
 > ```bash
-> cp -r datasets/demo/custom_seq/img1 datasets/demo/custom_seq/img1_clean   # 一次性備份
-> # 還原：rm -rf img1 && cp -r img1_clean img1
+> # 1) 從 mp4 還原乾淨幀（覆寫遮擋版）
+> ffmpeg -i datasets/demo/15779246_3840_2160_60fps.mp4 -start_number 1 -q:v 2 \
+>   datasets/demo/custom_seq/img1/%06d.jpg
+> # 2) 一次性備份乾淨圖，之後 A/B 直接從備份還原（比 ffmpeg 快）
+> cp -r datasets/demo/custom_seq/img1 datasets/demo/custom_seq/img1_clean
+> # 注入遮擋前還原：rm -rf datasets/demo/custom_seq/img1 && \
+> #   cp -r datasets/demo/custom_seq/img1_clean datasets/demo/custom_seq/img1
 > ```
-> 建議 A/B 流程：① 備份乾淨圖 → ② 注入遮擋 → ③ 同一組遮擋圖跑「門控 off vs on」對比（避免每次重注入造成框位/壓縮差異）。
+> 建議 A/B 流程：① mp4 重抽 + 備份乾淨圖 → ② 注入遮擋 → ③ 同一組遮擋圖跑「門控 off vs on」對比（避免每次重注入造成框位/JPEG 壓縮差異污染比較）。`datasets/` 已被 `.gitignore` 涵蓋（含 mp4、img1、`img1_clean`），皆不入庫。
 
 ## 快速重現 (Quick repro)
 
