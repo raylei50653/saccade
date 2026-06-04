@@ -114,16 +114,16 @@ uv run scripts/tools/add_occlusion_to_seq.py \
 > **本機已備好兩套幀**（各 821 幀；驗證：clean 中央像素=真實場景、occlusion 中央=BGR 60,60,60）：
 > | 目錄 | 內容 |
 > |---|---|
-> | `custom_seq/img1` | eval 實際讀取的工作目錄（`seqinfo.ini` imdir=img1） |
 > | `custom_seq/img1_clean` | 無遮擋（從 mp4 重抽） |
 > | `custom_seq/img1_occlusion` | 含中央遮擋柱 |
 >
-> **A/B 切換**（覆蓋工作目錄；同一組幀跑「門控 off vs on」才公平）：
+> `img1` 本身**已移除**以免歧義（eval 讀 `seqinfo.ini` 的 `imdir=img1`，但不固定指向哪版）。**跑之前先選一套 cp 成 `img1`**：
 > ```bash
 > cd datasets/demo/custom_seq
 > rm -rf img1 && cp -r img1_clean img1        # 無遮擋對照組
 > rm -rf img1 && cp -r img1_occlusion img1    # 含遮擋實驗組
 > ```
+> 同一組幀跑「門控 off vs on」才是公平比較。
 > 重新生成乾淨幀（萬一 img1_clean 也被汙染）：
 > ```bash
 > ffmpeg -i datasets/demo/15779246_3840_2160_60fps.mp4 -start_number 1 -q:v 2 \
