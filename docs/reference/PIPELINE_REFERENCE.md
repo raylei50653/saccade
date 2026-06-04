@@ -53,10 +53,50 @@
         +-----------------------------------+
         |
         v
+[ Postprocess ]                [ON]
+    filter -> NMS -> cross-tile merge
+    ├─ detection quality scaling
+    ├─ FP hard filter           [OFF, --fp-hard-filter]
+    ├─ per-frame det cap        [OFF, --per-frame-detection-cap]
+    ├─ stage2 quality gate      [OFF, --stage2-quality-gate]
+    ├─ consecutive birth gate   [OFF, --consecutive-birth-gate]
+    ├─ birth quality gate       [OFF, --birth-quality-gate]
+    └─ multi-birth manager      [OFF, --multi-birth]
+         |
+         v
+[ ReID Bank Sync ]             [OFF]
+    appearance bank → tracker    └─ --appearance-bank
+         |
+         v
+[ ReID Budget ]                [OFF]
+    budget selection             └─ --reid-mode
+         |
+         v
+[ ReID Crop ]                  [OFF]
+    ROI crop (Python only)       └─ --reid-mode
+         |
+         v
+[ ReID Extract ]               [OFF]
+    siglip2 / other backbones    └─ --reid-mode
+         |
+         v
+[ Lazy ReID ]                  [OFF, profiling only]
+    self-sim profiling           └─ --profile-lazy-reid
+         |
+         v
+[ GMC ]                        [ON*]
+    gpu / cpu                    └── --gmc
+    └── --gmc-fg-mask            [OFF]
+         |
+         v
+[ Tracker Update ]             [ON]
+    association + Kalman         └─ (always ON)
+         |
+         v
 [ Materialize ]                [ON]
-   GPU -> host view             └─ (always ON)
-        |
-        v
+    GPU -> host view             └─ (always ON)
+         |
+         v
 [ BG Relink Wait ]             [OFF]
    wait for bg relink           └─ --pipeline-relink
         |
