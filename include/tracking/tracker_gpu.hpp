@@ -93,6 +93,9 @@ public:
     void set_reid_params(float cos_threshold, float iou_low, float iou_high, float weight,
                          float cost_cos_w = 0.55f, float cost_iou_w = 0.30f, float cost_score_w = 0.15f);
     void set_reid_min_candidates(int min_candidates);
+    void set_relink_params(bool enabled, int bank_cap, float sim_thresh,
+                           float cheb_lambda, float spatial_gate, int max_age);
+    std::vector<int> get_relink_debug();
 
     /**
      * @brief OA-SORT Occlusion-Aware Offset (OAO) penalty weight.

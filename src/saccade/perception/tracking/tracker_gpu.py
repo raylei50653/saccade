@@ -488,6 +488,23 @@ class GPUByteTracker:
         if setter is not None:
             setter(min_candidates)
 
+    def set_relink_params(
+        self,
+        enabled: bool = False,
+        bank_cap: int = 256,
+        sim_thresh: float = 0.6,
+        cheb_lambda: float = 2.5,
+        spatial_gate: float = 4.0,
+        max_age: int = 300,
+    ) -> None:
+        setter = getattr(self.tracker, "set_relink_params", None)
+        if setter is not None:
+            setter(enabled, bank_cap, sim_thresh, cheb_lambda, spatial_gate, max_age)
+
+    def get_relink_debug(self) -> list[int]:
+        getter = getattr(self.tracker, "get_relink_debug", None)
+        return list(getter()) if getter is not None else [0, 0, 0]
+
     def set_oao_params(self, tau: float = 0.0) -> None:
         """OA-SORT Occlusion-Aware Offset (OAO) penalty.
 

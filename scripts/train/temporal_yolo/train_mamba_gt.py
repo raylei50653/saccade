@@ -288,6 +288,13 @@ def main() -> None:
         "No hidden state → no train/eval mismatch. Use with --add-temporal.",
     )
     parser.add_argument(
+        "--use-pixel-shuffle",
+        action="store_true",
+        help="Override checkpoint's use_pixel_shuffle — replace bilinear "
+        "upsampling with Conv2d + PixelShuffle learned upsampler "
+        "(+10–15% less active GPU time; requires retraining).",
+    )
+    parser.add_argument(
         "--t1-weight",
         type=float,
         default=0.0,
@@ -359,6 +366,8 @@ def main() -> None:
         # Force per-channel A; the shared-A base ckpt warm-starts via broadcast
         # inside MambaDetectionHead.load_state_dict (init == base, then fine-tune).
         mamba_args["per_channel_a"] = True
+    if args.use_pixel_shuffle:
+        mamba_args["use_pixel_shuffle"] = True
 
     mamba = MambaDetectionHead(
         in_channels=(128, 256, 512),
