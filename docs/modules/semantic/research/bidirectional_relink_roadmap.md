@@ -81,7 +81,7 @@ CPU 邏輯驗證後搬進零同步 GPU 核（spec §4），**擴充既有 relink
 
 ## 橫向工作（Cross-cutting 對接點）
 
-- **fps 自動接線**：從 `seqinfo.ini` frameRate 餵 `kalman_fps`（物理模型對 fps 平方敏感，目前手動）。
+- **fps 自動接線** ✅：`_resolve_kalman_fps`（`evaluator.py`）每序列 seqinfo.ini → .mp4 探測 → 30；`--semantic-kalman-fps 0`=auto。
 - **lifecycle merger 補閘門**：把速度上限/方向/雙向加到 `TrackletLifecycleMergerCpp`（第二層目前裸奔）。
 - **三層收斂**：釐清 ID4 類事件實際由哪層產生，確保門控覆蓋。
 - **Ablation harness**：每階段 baseline vs on，含 GT 序列比 HOTA/AssA/IDF1/IDs；非 ±0.3pp 雜訊才升 default。
@@ -105,11 +105,13 @@ uv run scripts/eval/mot17.py --data-root datasets/demo --split . \
   --semantic-ttl 120 --semantic-spatial-gate 0.45 --semantic-min-iou 0.0 \
   --semantic-threshold 0.85 \
   --semantic-kalman-gate --semantic-kalman-chi2 9.4877 \
-  --semantic-kalman-person-height-m 1.65 --semantic-kalman-fps 60 \
+  --semantic-kalman-person-height-m 1.65 \
   --semantic-kalman-accel-long 2.0 --semantic-kalman-accel-lat 1.0 \
   --semantic-kalman-dir-min-cos 0.0 --semantic-kalman-max-speed-mps 8.0 \
   --visualize
 ```
+
+> `--semantic-kalman-fps` 預設 0 = **每序列自動解析**（`seqinfo.ini` frameRate → `.mp4` 探測 → 30）；custom_seq 自動取 60。需要時才用 `--semantic-kalman-fps <n>` 覆寫。
 
 ID4 回歸檢查（無物理不可能跳變；輸出 MOT 檔在 `results/MOT17_eval/custom_seq.txt`）：
 
@@ -122,7 +124,7 @@ awk -F, '$2==4 {cx=$3+$5/2; if(p!=""){d=cx-pcx; if(d<0)d=-d;
 
 **回歸基準**：Phase 0 全開時 id4 應止於 ~f510（中央往右的人偵測消失處），**無**跨畫面跳變；左邊的人保留自身 id（不被併吞）。relink report 應見 `reject_speed>0`。對照組（拿掉 `--semantic-kalman-*`）id4 會被內插出一條 153px/frame 的鬼軌跡飛到最左邊。
 
-> ⚠️ `--semantic-kalman-fps` 必須等於序列實際 fps（custom_seq=60）；物理模型對 fps 平方敏感，設錯會讓雲過大/過小。Phase 1+ 應改為從 `seqinfo.ini` 自動讀取。
+> ✅ fps 已自動接線（`_resolve_kalman_fps` @ `evaluator.py`）：每序列依 `seqinfo.ini` frameRate（configparser 大小寫不敏感，`framerate`/`frameRate` 皆可）→ 同層/上層 `.mp4` 探測（cv2）→ 30。物理模型對 fps 平方敏感，故必須對齊真實來源。
 
 ## 參數速查 / 建議起始值
 
@@ -136,7 +138,7 @@ awk -F, '$2==4 {cx=$3+$5/2; if(p!=""){d=cx-pcx; if(d<0)d=-d;
 | `semantic_kalman_person_height_m` | 0(off) | 1.65 | 開啟物理雪茄雲 + scale anchoring |
 | `semantic_kalman_accel_long` | 2.0 | 2.0 m/s² | 縱向（加減速）最大加速度 |
 | `semantic_kalman_accel_lat` | 1.0 | 1.0 m/s² | 橫向（轉彎）最大加速度，`< long` 才有慣性 |
-| `semantic_kalman_fps` | 30 | =序列 fps | m/s²→px/frame² 換算 |
+| `semantic_kalman_fps` | 0(auto) | 0（自動讀 seqinfo/mp4） | m/s²→px/frame² 換算；>0 覆寫 |
 | `semantic_kalman_max_speed_mps` | 0(off) | 8.0（人類衝刺） | 隱含平均速度上限，超過→判新 id |
 
 ## 相關

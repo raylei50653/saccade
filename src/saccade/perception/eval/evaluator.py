@@ -1105,6 +1105,41 @@ def run_eval_cpp(
     )
 
 
+def _resolve_kalman_fps(explicit_fps: float, seq_path: "Path") -> float:
+    """Resolve the fps used by the physical Kalman relink model.
+
+    Priority: explicit flag (>0) → seqinfo.ini frameRate → sibling/parent .mp4
+    probe (cv2) → 30.0. The physical diffusion converts m/s² to px/frame² and is
+    sensitive to fps², so it must match the real source rather than a hard default.
+    """
+    if explicit_fps and explicit_fps > 0.0:
+        return float(explicit_fps)
+    # 1. seqinfo.ini (MOT-standard; configparser lowercases keys so "framerate"
+    #    and "frameRate" both match)
+    seqinfo = seq_path / "seqinfo.ini"
+    if seqinfo.exists():
+        cp = configparser.ConfigParser()
+        cp.read(str(seqinfo))
+        fr = cp.getfloat("Sequence", "frameRate", fallback=0.0)
+        if fr > 0.0:
+            return float(fr)
+    # 2. probe a video file (mp4/mov/...) in the seq dir or its parent
+    try:
+        import cv2  # type: ignore
+
+        for base in (seq_path, seq_path.parent):
+            for vid in sorted(base.glob("*.mp4")) + sorted(base.glob("*.mov")):
+                cap = cv2.VideoCapture(str(vid))
+                fps = cap.get(cv2.CAP_PROP_FPS)
+                cap.release()
+                if fps and fps > 0.0:
+                    return float(fps)
+    except Exception:
+        pass
+    # 3. fallback
+    return 30.0
+
+
 def run_eval(
     engine: str,
     output: str,
@@ -1657,7 +1692,10 @@ def run_eval(
             ),
             kalman_accel_long=cfg.kwargs.get("semantic_kalman_accel_long", 2.0),
             kalman_accel_lat=cfg.kwargs.get("semantic_kalman_accel_lat", 1.0),
-            kalman_fps=cfg.kwargs.get("semantic_kalman_fps", 30.0),
+            kalman_fps=_resolve_kalman_fps(
+                cfg.kwargs.get("semantic_kalman_fps", 0.0),
+                Path(cfg.data_root) / cfg.split / seq,
+            ),
             kalman_max_speed_mps=cfg.kwargs.get("semantic_kalman_max_speed_mps", 0.0),
             buffer_size=cfg.semantic_buffer_size,
             min_consistency=cfg.semantic_min_consistency,

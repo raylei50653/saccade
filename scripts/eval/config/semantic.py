@@ -28,7 +28,7 @@ class SemanticConfig:
     semantic_kalman_person_height_m: float = 0.0
     semantic_kalman_accel_long: float = 2.0
     semantic_kalman_accel_lat: float = 1.0
-    semantic_kalman_fps: float = 30.0
+    semantic_kalman_fps: float = 0.0
     semantic_kalman_max_speed_mps: float = 0.0
     semantic_debug: bool = False
     # Reference buffer
@@ -235,11 +235,12 @@ def add_semantic_args(parser: argparse.ArgumentParser) -> None:
     grp.add_argument(
         "--semantic-kalman-fps",
         type=float,
-        default=30.0,
+        default=0.0,
         help=_help(
-            "Sequence frame rate used to convert m/s^2 acceleration to px/frame^2 "
-            "for the physical diffusion.",
-            range_hint=">0",
+            "Frame rate to convert m/s^2 acceleration to px/frame^2 for the physical "
+            "diffusion. 0 = auto-resolve per sequence (seqinfo.ini frameRate → .mp4 "
+            "probe → 30). Set >0 to override.",
+            range_hint=">=0",
         ),
     )
     grp.add_argument(
