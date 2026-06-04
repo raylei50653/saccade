@@ -62,6 +62,10 @@ _CATEGORY_EXPERIMENTS: dict[str, list[_ExperimentSpec]] = {
         ("nms=0.60", "nms060", ["--nms-iou-threshold", "0.60"]),
     ],
     "association": [
+        ("oao_tau=0.1", "oao_tau01", ["--oao-tau", "0.1"]),
+        ("oao_tau=0.2", "oao_tau02", ["--oao-tau", "0.2"]),
+        ("oao_tau=0.3", "oao_tau03", ["--oao-tau", "0.3"]),
+        ("oao_tau=0.4", "oao_tau04", ["--oao-tau", "0.4"]),
         ("high=0.45", "high045", ["--high-thresh", "0.45"]),
         ("high=0.55", "high055", ["--high-thresh", "0.55"]),
         ("new-track=0.35", "newtrack035", ["--new-track-thresh", "0.35"]),

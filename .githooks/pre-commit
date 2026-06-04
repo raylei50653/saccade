@@ -13,8 +13,8 @@ if [[ ${#STAGED_PY_FILES[@]} -eq 0 ]]; then
 fi
 
 echo "pre-commit: ruff format on staged Python files"
-uv run ruff format "${STAGED_PY_FILES[@]}"
+uv run ruff format --force-exclude "${STAGED_PY_FILES[@]}"
 git add -- "${STAGED_PY_FILES[@]}"
 
 echo "pre-commit: ruff check on staged Python files"
-uv run ruff check "${STAGED_PY_FILES[@]}"
+uv run ruff check --force-exclude "${STAGED_PY_FILES[@]}"

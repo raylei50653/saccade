@@ -1,0 +1,20 @@
+# mamba_detector — MambaGatedDetector pipeline parameters
+# Override mamba_ckpt and fpn_backbone_engine in each preset.
+
+# --- Checkpoint paths (must override in preset) ---
+mamba_ckpt: ~
+mamba_teacher_ckpt: ~
+fpn_backbone_engine: models/yolo/yolo26s_backbone_640_best.engine
+
+# --- Detection pipeline ---
+tiling: native_640
+conf_threshold: 0.001
+detection_quality_scaling: false
+reid_mode: "off"
+
+# --- GMC override for Mamba (higher res for accurate motion at low match_thresh) ---
+gmc_downscale: 4
+
+# --- Temporal inference mode ---
+no_temporal: false
+use_recurrent: false

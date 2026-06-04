@@ -1,62 +1,19 @@
 # Saccade TODO History
 
-> 從 [docs/TODO.md](/docs/TODO.md) 拆出的歷史/脈絡內容。保留已完成項、設計規範與 C++ 化路線圖，避免主 TODO 被長篇歷史淹沒。
+> 從 [docs/TODO.md](/docs/TODO.md) 拆出的歷史/脈絡內容。保留歷史決策、已完成 workstreams、延後方向與實驗檔案，避免主 TODO 被長篇背景淹沒。
 
 ---
 
-## 已收斂結論（2026-05-09 ~ 05-11）
+## History Map
 
-### P2 L1：match × new-track Sweep（2026-05-09，yolo26m）
-
-| 組合 | IDF1 | MOTA | IDs | FP | FN | FPS |
-|:-----|:-----|:-----|:----|:---|:---|:----|
-| **最佳 accuracy** `0.70/0.30` | **48.9%** | 40.5% | 583 | 14676 | **51510** | 118.3 |
-| **最平衡** `0.70/0.35` | 48.5% | **40.8%** | **514** | 13347 | 53002 | 119.5 |
-| **推薦 baseline** `0.72/0.35` | 48.6% | **40.8%** | 564 | **13116** | 52818 | **118.9** |
-| 舊預設 `0.78/0.45` | 45.1% | 39.8% | 597 | 11218 | 55778 | 117.4 |
-
-結論：`match=0.66, new-track=0.28` 納入 speed preset；`match=0.72, new-track=0.35` 為 accuracy 最優。
-
-### FPS anomaly：match ≥ 0.73（2026-05-09 發現 → 2026-05-11 結案）
-
-- 原症狀：`match=0.72` ~119 FPS；`match ≥ 0.73` FPS 驟降 ~28（+2.65ms/frame）
-- Step 1（bench）：孤立 C++ tracker 無異常（1.3–1.5ms 全平）→ 根因在 Python
-- Step 2（全量實測 7-seq）：0.72 vs 0.73 差距僅 0.16ms/frame，`bg_relink_wait=0.00ms`
-- **結論：anomaly 已被 2026-05-07 pipeline 優化消除（async_reid + fused letterbox）。`match=0.72` 安全邊界已解除。**
-
-### P5-1：Multi-signal Birth Policy（2026-05-11 ❌ NO-GO）
-
-- `MultiSignalBirthManager`（`multi_birth.py`）加權 evidence = score × streak × motion × geometry
-- 7-seq speed preset：IDF1 ±0，IDs +12，FP +453，FN -530，FPS **-20**
-- 根因：Python-side O(K×C) IoU matching 每幀開銷；sub-threshold TP 比例太低
-- `--multi-birth-enabled` 保留（預設 off）
-
-### P5-2：Stage 2 Quality Gate（2026-05-10 ❌ NO-GO）
-
-- 與 `detection_quality_scaling=True` 完全重疊，零效果
-- 只在 `--no-detection-quality-scaling` 時有意義
-
-### P5-3：Consecutive-Frame Birth Gate（2026-05-10 ❌ NO-GO）
-
-- Motion gate 有效過濾靜態 FP（椅子、標誌、陰影），但殘餘 FP 仍為移動背景（車輛反射）
-- 最佳測試（n=3, iou=0.50, boost=0.15, min_score=0.25, min_motion=12px）：IDF1 +0.1pp — 統計中性
-- 根本限制：`quality_scaling + new_track_thresh=0.35` 已處理大多數弱偵測，剩下的 sub-threshold TP 比例太低
-
-### P5-4：Scene Adaptive Policy — narrow_bonus 策略（2026-05-11 ❌ NO-GO）
-
-- `SceneAdaptivePolicy` 分類正確（只有 MOT17-02 觸發 `crowded_narrow`：avg_aspect=1.97 最低）
-- 7-seq speed preset：IDF1 -0.1pp，FPS **-8**，MOT17-02 IDF1 -0.6pp（預期 +1.4pp）
-- 根因：speed preset `new_track_thresh=0.28`；bonus=0.05 把 score 0.23-0.27 低品質框推過門檻，FP 增加 > FN 改善
-- 框架 `SceneAdaptivePolicy` 保留（`--scene-adapt-enabled`，預設 off）；narrow_bonus 策略不啟用
-
-### Pose-Guided Box Expansion（2026-05-10 ❌ NO-GO）
-
-- IDF1 不退但 FPS -60%（pose engine 每幀都跑）；box 擴展引發 ID switches
-- 根本解是 detector training data，不是 post-processing
+- **Deferred Directions**：見下方「Deferred Directions」。
+- **Archived GO / NO-GO Decisions**：見下方「Archived Decisions（2026-05-06 ~ 05-14）」。
+- **Completed Workstreams**：保留已完成的架構 / 工程主線與大模組落地。
+- **Historical Experiment Series**：保留 A/B/CXX 系列與細節掃描，供未來重新啟動時回查。
 
 ---
 
-## ❌ 放棄 / Deferred（2026-05-05）
+## Deferred Directions
 
 ### D3：Tiled Detector 流程修補（2026-05-05）
 
@@ -87,9 +44,22 @@
 - **P3-B（Dormant Bank + HNSW 長期 ReID）**：D1 診斷確認放棄。match_gap ≥ 91f 僅佔 26/664（3.9%）ID switches，天花板過低，實作成本不值。
 - B1 P0→P2 Bank Zero-Copy 已完成（5.8×/11.9× 增益）；P3 確認不列入近期計畫。
 
+### Detector 訓練資料改善（延後歸檔，2026-05-14）
+
+- 原主 TODO 項：pred_h = 61.4% of gt_h，77% 近似 FP 有真實 GT；需補足腿/腳標注
+- 判斷：方向本身仍合理，但不屬於目前已排定的近期實作；先自主 TODO 移出，避免主表同時混放 active work 與中長期方向
+- 若之後重啟，應以「資料來源、標注策略、驗證集與 detector retrain protocol」重新開成具體待辦，而不是沿用一句高層描述
+
 ---
 
-## ✅ 已完成（2026-04-25）
+## Completed Workstreams
+
+### 測試覆蓋率提升 Phase 1（已完成，2026-05）
+
+- 完成了 `dispatcher.py` (94%)、`helpers.py` (91%)、`detection.py` (49%)、`relink.py` (88%)、`drift_handler.py` (100%)、`redis_cache.py` (99%)、`calibrator.py` (96%)、`cropper.py` (77%)、`quality.py` (100%)、`reporting.py` (93%) 等模組的覆蓋。
+- 總覆蓋率從 56% 提升至 66%。新增了針對核心模組的大量整合與單元測試。詳細覆蓋率見 `docs/TESTING.md`。
+
+### 核心能力完成（2026-04-25）
 
 ### P0 — GPUByteTracker 核心強化（ADR 013）
 - [x] **ReID 融合代價矩陣**：`tracker_gpu.cu` cost matrix 改為 `(1-w)*IoU + w*CosSim`，預設 w=0.5，crowded 場景 w=0.8
@@ -118,7 +88,9 @@
 
 ---
 
-## 精度提升 — 算法改進 (2026-04-27)
+## Historical Experiment Series
+
+### 精度提升 — 算法改進 (2026-04-27)
 
 基於 Saccade vs Ultralytics 對比分析，Prcn 落後 ~4pp，FP 過多。以下為針對性算法改進。
 
@@ -156,7 +128,7 @@
 
 ---
 
-## ReID 強化與 Association 重構（規範 2026-04-27）
+### ReID 強化與 Association 重構（規範 2026-04-27）
 
 目標：IDF1 ↑ 3~6pp、IDs ↓ 20~40%。核心：將 ReID 從「事後修正」提升為「決策核心」，確保進入 ReID 的 embedding 乾淨且穩定。
 
@@ -207,7 +179,7 @@
 
 ---
 
-## C++ 化路線圖（2026-04-27）
+### C++ 化路線圖（2026-04-27）
 
 目標：Python 保留 CLI / experiment orchestration / motmetrics 報表，per-frame perception 熱路徑逐步移到 C++/CUDA。
 
@@ -245,7 +217,69 @@
 
 ---
 
-## ✅ B1 Bank Zero-Copy + A1–A8 Ablation Series（2026-05-01 ~ 2026-05-05）
+### E — Cascade Filter：Stage 1 Rule + Stage 2 Logistic（2026-05-14）
+
+目標：結合 rule baseline 的零成本過濾與 logistic classifier 的 fine-grained 判斷。
+
+#### 設計
+
+```
+Detection Output → Stage 1 (Rule Baseline) → Stage 2 (Logistic Model)
+                         │                          │
+                    零成本過濾              在 Stage 1 輸出上訓練
+                    砍掉低分+小框           避免 distribution shift
+```
+
+#### CrowdHuman 結果
+
+| 階段 | Precision | Recall | FP kept | FP reduction |
+|------|-----------|--------|---------|-------------|
+| 原始 | 15.0% | 100% | 386,652 | 0% |
+| Stage 1 (rule) | 52.4% | 76.8% | 47,661 | 87.7% |
+| Stage 2 (cascade) | **59.6%** | **72.4%** | **33,533** | **91.3%** |
+
+最佳參數：`log_threshold=0.25, log_max_score=0.25, no penalty`
+- Stage 2 僅對 ~100K rows 推理（Stage 1 輸出），FPS 影響極小
+- TP 損失：15,872 → 19,729（+3,857 via Stage 2）
+- FP 減少：338,991 → 352,211（+13,220 via Stage 2）
+
+#### MOT17 結果（分析與結論）
+
+MOT17 的 FP 分佈與 CrowdHuman 截然不同：
+
+| 特徵 | CrowdHuman FP | MOT17 FP |
+|------|---------------|----------|
+| score 中位數 | 0.008 | **0.269** |
+| height 中位數 | 66px | **122px**（比 TP 高） |
+| score TP/FP 差距 | 0.457 | **0.116** |
+| FP 重疊度 | 極低 | **幾乎完全重疊** |
+
+MOT17 各 score 分區的 precision 都在 2-4% 之間，**沒有低分 FP 集中區**：
+
+| 分區 | TP | FP | P |
+|------|----|----|---|
+| score < 0.10 | 349 | 16,770 | 2.0% |
+| 0.10-0.15 | 228 | 7,484 | 3.0% |
+| 0.15-0.20 | 176 | 4,740 | 3.6% |
+| 0.20-0.30 | 258 | 6,551 | 3.8% |
+| score ≥ 0.30 | 1,375 | 32,031 | 4.1% |
+
+Rule baseline 在 MOT17 僅砍掉 13.3% FP（vs CrowdHuman 87.7%）。
+Cascade model（CrowdHuman-trained）泛用效果：P=4.5%, R=84.4%, FPrem=37.2%。
+
+**結論**：MOT17 的 YOLO FP 品質遠高於 CrowdHuman（分數與 TP 重疊嚴重），Rule-based 方法完全無效。任何零訓練的泛用 filter 在 MOT17 均不適用。
+
+#### 實作檔案
+
+- `src/saccade/perception/eval/external_fp_model.py`：`CascadeFilterConfig`, `CascadeMetrics`, `apply_cascade_filter()`, `train_cascade_stage2_model()`, `apply_cascade_from_json()`
+- `scripts/eval/train_cascade_stage2.py`：訓練 Stage 2 logistic model
+- `scripts/eval/analyze_external_fp_rows.py`：新增 `--cascade-model` 參數
+- `tests/test_external_fp_model.py`：3 個 cascade 測試
+- `models/external_fp/cascade_stage2_logistic.json`：CrowdHuman-trained model
+
+---
+
+### B1 Bank Zero-Copy + A1–A8 Ablation Series（2026-05-01 ~ 2026-05-05）
 
 ### B1：Bank Retrieval Zero-Copy Optimization
 
@@ -371,7 +405,14 @@
 
 ---
 
-## 歸檔：2026-05-06 ~ 05-11 已結案項目
+## Archived Decisions（2026-05-06 ~ 05-14）
+
+### Archived GO
+
+#### fuse_score_weight=0.4（已設為 default，2026-05-11）
+- botsort-style：cost = 1 − IoU × (1 − 0.4 × score)，讓低信心 det 更難匹配
+- 7-seq SDP baseline preset：IDF1 +1.7pp → 51.4%，MOTA +1.6pp → 43.5%，FP **-13%**，Rcll -0.6pp，IDs -1
+- 0.4 為 Pareto 最優；≥0.75 會讓 IDs 翻倍
 
 ### Async ReID Pipelining（已完成，2026-05-07，設為 default）
 
@@ -420,6 +461,46 @@
 - `--kalman-r-scale 0.75`：accuracy 無損（±0.1pp noise），FPS 差異 noise 範圍（-1.4%）
 - 舊 50% FPS 退化已確認為 build artifact；**已設為 default。**
 
+### D 系列（D1/D2，已完成，2026-05-05）
+
+- D1：60.5% IDs 為 primary association 震盪，不是 ReID 問題；P3-B 天花板僅 3.9%，放棄
+- D2-B：new_track_thresh 調優；D2-C：CUDA Tentative Track Isolation（state=2/1），IDs -3.6%，已設為 default
+- D2-A-1（關閉 A6）：IDF1 +0.1pp，MOTA -4.1pp — A6 不是 IDF1 缺口根因
+
+### Archived NO-GO / Closed
+
+#### Motion-based Relinking + Better Association Cost（NO-GO，2026-05-17）
+- **思路**：用 Kalman + CT-RNN motion model 做 long-term gap closure。
+- **結果**：Baseline run-to-run 波動 ±0.3pp，motion 增益無法確定為真實訊號。89% relink candidates 被 age gate 攔截，motion 僅對 74/863 candidates 生效。
+- **結論**：NO-GO，code 保留（`motion_model.py` 等），flag `default=off`。
+
+#### Test-Time Augmentation (TTA) for Detection（NO-GO，2026-05-18）
+- **思路**：對同一幀做 flip/mirror TTA，merge 結果。
+- **結果**：IDF1/MOTA 0 Δ，FP +26 輕微負面，IDs/FN 改善在雜訊內。生產環境不穩定且 COCO 無左右方向偏差。
+- **結論**：NO-GO，code 保留。
+
+#### FP 模組 A：stage2_match_thresh（NO-GO，2026-05-11）
+- `max_cost` 是上限；提高 = 更寬鬆 = FP 增加。0.5 在 fuse_score_weight=0.4 下已適當。
+- 參數已暴露，保留為可調，但不調整 default。
+
+#### P5-5 Proximity Birth Gate（NO-GO，2026-05-18）
+- **目標**：抑制 NMS 漏網的 ghost track。
+- **結果**：FP 減少但 FN 暴增，真實人群互相靠近時被誤殺。
+- **結論**：空間接近性不能作為 ghost 判斷依據，NMS 後的 ghost 需從 detector 訓練或更高層過濾解決。
+
+#### FP 模組 B：birth_low_score_thresh（微小增益，2026-05-11）
+- 最佳 blst=0.28 → FP -63、IDs -3、IDF1 +0.1pp。
+- 效益太小，保留為可調，不設為 default。
+
+#### Pose-Guided Box Expansion（NO-GO，2026-05-10）
+- IDF1 不退但 FPS -60%，box 擴展引發 ID switches。detector training data 才是根本解。
+
+### FPS anomaly（match ≥ 0.73）根因（已結案，歸檔於 2026-05-14）
+
+- 全量實測（7 seq + profile-stages）確認 `match=0.72` vs `0.73` 差距僅 0.16ms/frame（82.3 vs 81.3 FPS），`bg_relink_wait=0.00ms`
+- anomaly 已消失；推測 2026-05-07 的 async_reid + pipeline_relink + fused letterbox 等優化讓原本的臨界條件不再觸發
+- 結論：`match=0.72` 安全邊界解除，此項不再列入主 TODO
+
 ### MOT17-02 FN 診斷與窄人加分（結案，2026-05-06 ~ 05-11）
 
 - FN 根因：raw 階段已有窄人正確框，但在 post_filter 前後因低分被淘汰
@@ -434,12 +515,6 @@
 - Phase 2：SemanticRelinkerCpp 加 bio gate（veto only），`--semantic-biometric-threshold`
 - Phase 3 評估（Biometric relinker）：gate 觸發（3 veto / 7-seq），接受量太低（4 relinks），FPS -47%
 - no-ReID baseline 已 52.0%，semantic 組合無法超越；**不納入 default。**
-
-### D 系列（D1/D2，已完成，2026-05-05）
-
-- D1：60.5% IDs 為 primary association 震盪，不是 ReID 問題；P3-B 天花板僅 3.9%，放棄
-- D2-B：new_track_thresh 調優；D2-C：CUDA Tentative Track Isolation（state=2/1），IDs -3.6%，已設為 default
-- D2-A-1（關閉 A6）：IDF1 +0.1pp，MOTA -4.1pp — A6 不是 IDF1 缺口根因
 
 ### Semantic Relink 診斷（結案，2026-05-08）
 
@@ -461,3 +536,173 @@
 - P5-4 Scene Adaptive（narrow_bonus）：SceneAdaptivePolicy 分類正確，但策略與 speed preset 不相容
 - 根本限制：sub-threshold 區域 FP 密度過高，任何 birth policy 均被 FP 抵消；需 detector 訓練資料改善
 
+### E: Cascade Filter Generalization to MOT17（結案，2026-05-14）
+
+Cascade filter 在 CrowdHuman 上驗證有效，但在 MOT17 上完全失效。
+
+**MOT17 FP 分佈分析**（3 seq, 95,390 rows）：
+
+| 特徵 | CrowdHuman FP | MOT17 FP |
+|------|---------------|----------|
+| score 中位數 | 0.008 | **0.269**（34x） |
+| height 中位數 | 66px | **122px**（比 TP 高） |
+| score TP/FP 差距 | 0.457 | **0.116**（4x 差異） |
+| FP 重疊度 | 極低 | **幾乎完全重疊** |
+
+MOT17 不存在低分 FP 區：
+- score < 0.10：349 TP / 16,770 FP → P=2.0%
+- score ≥ 0.30：1,375 TP / 32,031 FP → P=4.1%
+
+Rule baseline 在 MOT17 僅砍掉 13.3% FP（vs CrowdHuman 87.7%）。
+Cascade model（CrowdHuman-trained）泛用效果：P=4.5%, R=84.4%, FPrem=37.2%。
+
+**結論**：
+- 零訓練的泛用 filter 對 MOT17 無效
+- MOT17 的 YOLO FP 品質遠高於 CrowdHuman，FP 分數與 TP 重疊嚴重
+- 若要在 MOT17 上應用 cascade，需重新訓練 Stage 2 model（使用 MOT17 detector output）
+- 不升格為 default
+
+---
+
+### F: multi_birth Strategy Scan — A/B/C 參數掃描（2026-05-14）
+
+**目標**：評估 A/B/C 三種優化策略對 MOT17-02/10-SDP 的影響，尋找最佳參數組合。
+
+**掃描範圍**（33 configs + 5-run avg 驗證）：
+
+| 策略 | 配置空間 | 參數數 | 結果 |
+|------|---------|--------|------|
+| A: dup suppress | IoU × ratio | 4×4=16 | 最佳：`iou=0.90 ratio=1.03` → MOTA 34.1%, FP 5240, FPS 117.8 |
+| B: replace mode | evidence × replace | 3×3=9 | 最佳：`e=0.75 r=0.85` → MOTA 34.1%, FP 5240, FPS 92.0 |
+| C: evidence only | threshold | 5 | 最佳：`e=0.70` 和 `e=0.80` → MOTA 34.0%（與 baseline 持平） |
+| 組合 | A+C / A+B | 3 | 不如單獨使用（重疊處理同一批檢測） |
+
+**5-run 平均驗證**（Top 6 configs）：
+
+| 配置 | MOTA (avg ± std) | FP | FPS |
+|------|-------------------|-----|-----|
+| Baseline | 33.94±0.05 | 5281 | 119.3 |
+| C: e=0.80 | 33.94±0.09 | 5270 | 92.3 |
+| C: e=0.70 | 33.88±0.08 | 5286 | 93.0 |
+| B: e=0.75 r=0.85 | 33.84±0.25 | 5311 | 92.0 |
+| A: iou=0.90 ratio=1.03 | 33.82±0.24 | 5315 | 117.8 |
+
+**關鍵發現**：
+
+1. **差異不顯著**：所有配置 MOTA 在 33.8–34.1%（run-to-run 波動 ±0.15–0.25%）
+2. **最佳單策略**：A `iou=0.90 ratio=1.03`（FPS 117.8，唯一不降 FPS）
+3. **組合策略不互補**：A+B 和 A+C 都更差（重疊處理同一批 sub-threshold 檢測）
+4. **關鍵陷阱**：`C: e=0.75` 是唯一糟糕點 (MOTA 33.3%, FP 5500)
+5. **Boosted rows 100% dropped**：856 筆全部 dropped
+   - 65.2% 高 MOT IoU (>0.7, center dist ~1.4px)
+   - 17.1% 中等 MOT IoU (0.1–0.7, center dist ~27.3px)
+   - 17.8% 真正 missed (<0.1, center dist ~87.8px)
+   - 根因：detector 產生 2-3 個重疊 box，高分者已入 tracker，boosted 的是低分重疊者
+
+**結論**：
+- 後處理層面提升 <0.2%，在統計誤差內，不抵銷 multi_birth 開銷
+- 需從**檢測層面**下手（YOLO 模型升級、NMS 調優）
+- 17.8% 真正 missed rows 值得進一步 spatial/time 分析
+
+**實作狀態**：
+- A: `_suppress_duplicate_detections()` in `evaluator.py` ✅
+- B: `replace_mode` in `MultiSignalBirthManager` + CLI ✅（但 replace_mask 未實際抑制 competing detection）
+- C: CLI `--multi-birth-evidence-threshold` ✅
+- Debug: `--debug-birth-csv` + `label_boosted_birth_rows.py` + 56 tests ✅
+- 報告：`docs/archive/multibirth_scan_summary.md` ✅
+
+**相關文件**：
+- 主 TODO 更新：[docs/TODO.md](/docs/TODO.md)（P5-1 更新）
+- 詳細報告：[docs/archive/multibirth_scan_summary.md](/docs/archive/multibirth_scan_summary.md)
+- 修改檔案：`evaluator.py`, `multi_birth.py`, `config.py`, `config/lifecycle.py`
+
+---
+
+## Algorithm Direction Exploration — Option D / E-v2 / F + Mamba Head（2026-05-17 ~ 06-02，歸檔於 2026-06-02）
+
+> 從主 TODO 拆出。背景：2026-05-17 speed preset（yolo26s）7-seq SDP 全量評估，參數優化觸天花板
+> （IDF1 52.4% / MOTA 41.7% / Rcll 55.2% / FPS 131.8）；threshold 調整 MOTA 波動 <0.5pp，
+> 結論「需要新算法架構，而非參數調校」。後續 Option D/E/F 即此脈絡下的探索。當前 production
+> preset 為 **Option F `mamba_optimal`**（見主 TODO baseline 表與 [configs/presets/mamba_optimal.yaml](/configs/presets/mamba_optimal.yaml)）。
+
+### ❌ Option D — Track-Conditioned YOLO（NO-GO，2026-05-19 結案）
+
+Phase 2（50 epochs）eval 完成。IDF1 31.7% / MOTA 24.5% vs baseline 52.0% / 41.6%，差距 -20pp。
+Gate ablation 確認 gate 無貢獻（gate-on 38.3% vs gate-off 38.2%，∆<0.2pp）。
+根因：100 queries recall 天花板（34.9% vs baseline 55%）+ Phase 2 gt_ratio→0 使 decoder 繞過 gate。
+Checkpoints 保留：`runs/conditioned_p1_v2/best.ckpt`、`runs/conditioned_p2/best.ckpt`。
+
+### ✅ Option E-v2 — Quality-Gated Temporal Feature Fusion（GO，2026-05-22 結案；後被 Option F 取代為 preset）
+
+設計文件：[docs/architecture/temporal_yolo/option-e-v2-design.md](modules/detection/option-e-v2-design.md)。
+直接利用 t-1 的 FPN 特徵加上 α_tier（per-track-state）加權做時序融合，無需重訓，從 gated_det_v1 熱啟動。
+最終結果（MOT17 train，7 SDP，yolo26s）：**MOTA 54.2%（+1.7pp），FP 2932（-21%），Rcll 57.3%（+1.1pp）**。
+- P0 ✅ α=0 與 baseline 一致 / P1 ✅ Fixed α sweep（α=0.15 最佳）/ P2 ❌ GMC warp NO-GO（sparse flow 精度不足）
+- P3 ✅ α_tier 分層（MOTA 54.2%, FP -21%, Prcn 95.6%）/ P4 ✅ Lock-in 檢測通過
+- 最佳配置：`--temporal-fusion --fusion-alpha 1.0`（不 warp）；Code：`temporal_yolo/temporal_fusion.py`
+- 未完成：detector score heatmap、per-scale α_tier tuning、FPS 優化、訓練腳本
+
+### ✅ Option F — Mamba Gated Detector & Tracker Optimization（2026-05-27 結案，當前 preset）
+
+設計預設檔：[configs/presets/mamba_optimal.yaml](/configs/presets/mamba_optimal.yaml)。徹底挖掘 Mamba 檢測頭，
+移除無效益 ReID，協同精調動態關聯 / GMC 對齊 / 軌跡插值。
+
+**🚀 PixelShuffle Breakthrough（2026-05-27）**：Mamba 頭以 **PixelShuffle 上取樣**取代無參數 `F.interpolate`，
+配合 Stretch-Resize 預處理：**IDF1 71.2%（+6.3pp），MOTA 76.3%（+14.3pp），Rcll 82.3%（+15.0pp）**。
+關鍵發現：
+1. **預處理域一致性是決定性的**：Teacher FPN 若受 Letterbox 灰邊污染，Mamba 頭定位崩潰（IDF1 23.3%）；
+   Stretch-Resize（`preprocess: none`）恢復純淨域後完全恢復。
+2. `use_letterbox=False` 是訓練預設正確決策（推理 `--preset mamba_optimal` 對應 `preprocess: none`，域一致）。
+3. 特徵快取：`--precompute-dir`/`--cache-dir` 使 Phase 1 蒸餾每 epoch 從數分鐘降至 ~15 秒。
+
+最終訓練流程（~10min）：
+```bash
+# 1. 預計算 Teacher FPN 特徵（一次性，~97s）
+uv run scripts/train/temporal_yolo/train_mamba_head.py --data-root datasets/MOT17 --use-pixel-shuffle --precompute-dir runs/trt_feat_cache_v2
+# 2. Phase 1 蒸餾（~5min）
+uv run scripts/train/temporal_yolo/train_mamba_head.py --data-root datasets/MOT17 --use-pixel-shuffle --cache-dir runs/trt_feat_cache_v2 --run-dir runs/mamba_distill_pixelshuffle_correct --epochs 20 --batch-size 8
+# 3. Phase 2 GT 微調（~15min）
+uv run scripts/train/temporal_yolo/train_mamba_gt.py --data-root datasets/MOT17 --mamba-ckpt runs/mamba_distill_pixelshuffle_correct/best.ckpt --run-dir runs/mamba_gt_pixelshuffle_correct --epochs 30 --batch-size 4
+```
+
+三項核心精調結論：
+1. **Mamba 專屬 IoU 門檻 `match_thresh=0.50`**：適配信心分佈，相比 0.66 顯著挽救斷軌。
+2. **軌跡插值鎖定 `interpolate_max_gap=35`**：容忍 ~1.17s 完全遮擋，Recall +1.3pp。
+3. **高精度 GMC `gmc_downscale=4`**：GPU FFT 相位相關估計極精準，以零速度代價壓 IDs。
+
+### Mamba 檢測頭優化 — 已完成項（歸檔）
+
+| 項目 | 結論 | 狀態 |
+| :--- | :--- | :---: |
+| **特徵還原層（Pixel-Shuffle）** | 取代 `F.interpolate`。MOTA +14.3pp, IDF1 +6.3pp, Rcll +15.0pp | ✅ 已完工 (2026-05-27) |
+| **2D 多向掃描 (Cross-Scan)** | row-major 單向改四向交叉掃描融合，零參數增長（共享 MambaBlocks），消除方向偏見 | ✅ 已實作 (2026-05-27，當前 preset) |
+
+### Recent Ablation Conclusions（2026-05-10 ~ 05-11，歸檔）
+
+- **FP 模組 C：bank_weighted_mean（待測）**：以 quality_score 加權 bank 樣本均值，降低低品質 embedding 影響；
+  只在 `--appearance-bank` 開啟時有效，ReID stack 測試待排。
+
+### Cheb-GR Re-ranking — Standalone Gate（2026-06-03，方法正確性結案）
+
+Cheb-GR（CVPR 2025, Yang et al.）＝ Chebyshev's Theorem-guided Graph Re-ranking，offline
+retrieval re-ranking，propagation-only（免訓練）。核心 `src/saccade/perception/reid/cheb_gr.py`：
+距離域 `D_ij=||f_i−f_j||₂`、per-node `μ_i/σ_i`、Chebyshev 自適應門檻 `T_i=μ_i−λσ_i`（取距離
+**小於**門檻的近鄰，取代固定 k）、graph-conv 精修 + k-reciprocal Jaccard。GPU 全向量化
+（`cheb_gr_kreciprocal()`），harness `scripts/eval/cheb_gr_osnet_gate.py --cheb-krecip`。
+
+**結論（Market-1501，強特徵 `marketaju_siglip2_reid`，baseline mAP 81.31%）：**
+
+| 方法 | best Δ mAP | 備註 |
+| :--- | :---: | :--- |
+| Standard fixed-k k-reciprocal (Zhong CVPR2017) | **+10.03** | k1=20 k2=6 λ=0.1，對照基準 |
+| Cheb-GR capped (max_fwd=20, =fixed-k) | +9.56 | cap 綁定，Chebyshev 門檻未生效 |
+| **Cheb-GR 純自適應 (max_fwd=0, sweep λ)** | **+8.76** | **λ=4 fuse0.7**；λ 真生效但 λ=5/fuse1.0 over-sparse 崩 −2.81 |
+
+→ Chebyshev 自適應機制**成立、有效（~+9pp）**，但在強特徵 Market 上**未勝過經典 fixed-k**。
+方法正確性 gate 結案。feature-propagation 變體（`F=W̃F`）與 Jaccard-without-QE 變體均負向
+（漏 query expansion 是主因）。⚠️ 教訓：必須 GPU torch 向量化（numpy CPU 雙迴圈跑飛 34min）；
+VRAM 優化見 commit（in-place dist + support-gather Jaccard，active 7.45→~4.3GB）。
+
+**下一步＝路徑 2（offline tracklet merge / MOT17）**：standalone 既不優於 fixed-k，Cheb-GR
+唯一可能加值處在 tracklet 縫合（AssA 64.7% 為瓶頸），用 `cheb_gr_kreciprocal()` 當 tracklet
+相似度，驗收 IDF1/AssA > ±0.3pp 才 GO。flag 全 default off。

@@ -143,7 +143,7 @@ def get_vram_frag() -> float:
     allocated = torch.cuda.memory_allocated(0)
     if reserved == 0:
         return 0.0
-    return (1.0 - (allocated / reserved)) * 100
+    return float((1.0 - (allocated / reserved)) * 100)
 
 
 # ── Aggregator ────────────────────────────────────────────────────────────────

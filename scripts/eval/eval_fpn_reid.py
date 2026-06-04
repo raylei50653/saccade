@@ -1,0 +1,575 @@
+#!/usr/bin/env python3
+"""MOT evaluation with FPN-based ReID (raw or 1×1 Conv head).
+
+Supports two modes:
+  --head-ckpt runs/.../best.ckpt    Trained DimReduceHead (128-dim, fast)
+  (no --head-ckpt)                  Raw 896-dim FPN (zero-training)
+
+Single YOLO forward pass per frame: detection + FPN feature caching.
+Appearance bank maintains per-track embeddings with EMA.
+
+Usage:
+    # Trained head (128-dim, ~55 FPS expected):
+    uv run scripts/eval/eval_fpn_reid.py \
+        --mamba-ckpt runs/mamba_gt_960_v2/best.ckpt \
+        --head-ckpt runs/jde_market_v9b/best.ckpt \
+        --seq MOT17-04-SDP --max-frames 200
+
+    # Raw FPN (896-dim, zero-training):
+    uv run scripts/eval/eval_fpn_reid.py \
+        --mamba-ckpt runs/mamba_gt_960_v2/best.ckpt \
+        --seq MOT17-04-SDP --max-frames 200
+
+    # Baseline without ReID:
+    uv run scripts/eval/eval_fpn_reid.py \
+        --mamba-ckpt runs/mamba_gt_960_v2/best.ckpt \
+        --seq MOT17-04-SDP --max-frames 200 --no-reid
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+import time
+from pathlib import Path
+
+import torch
+import torch.nn.functional as F
+
+project_root = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(project_root))
+sys.path.insert(0, str(project_root / "src"))
+sys.path.insert(0, str(project_root / "build"))
+
+# Force cuBLAS and PyTorch CUDA context initialization
+_ = torch.zeros(1, device="cuda") @ torch.zeros(1, device="cuda")
+
+import saccade_tracking_ext  # noqa: F401, E402
+
+try:
+    import saccade_perception_ext
+except ImportError:
+    saccade_perception_ext = None
+
+from saccade.perception.temporal_yolo.mamba_gated_detector import (  # noqa: E402
+    build_mamba_gated_detector,
+)
+from saccade.perception.tracking.tracker_gpu import (  # noqa: E402
+    GPUByteTracker,
+)
+from saccade.perception.temporal_yolo.data_pipeline import (  # noqa: E402
+    resize_stretch_batch_gpu,
+)
+from saccade.perception.temporal_yolo.yolo_gated_detector import (  # noqa: E402
+    _GATE_LAYER_IDX,
+)
+from saccade.perception.tracking.fpn_reid import DimReduceHead  # noqa: E402
+from saccade.perception.tracking.fpn_reid_cuda import (  # noqa: E402
+    fpn_reid_extract_cuda,
+)
+from saccade.perception.eval.metrics import run_motmetrics_evaluation  # noqa: E402
+
+IMG_SIZE = 640
+
+
+# ── Top-K multi-sample appearance bank ──
+
+
+class TopKAppearanceBank:
+    """Per-track Top-K embedding pool with EMA smoothing and consistency gating.
+
+    Stores up to K latest matched embeddings per track for consistency checking.
+    The representative used for matching is an EMA-smoothed embedding (like
+    Ultralytics BOTSORT, alpha=0.9): new sample blended with exponential
+    moving average to reduce single-frame noise.
+
+    A track is "clean" (ready for ReID) when it has >= min_samples AND its
+    top-K mean L2 norm exceeds the consistency threshold.
+    """
+
+    def __init__(
+        self,
+        max_samples: int = 5,
+        min_samples: int = 2,
+        consistency_threshold: float = 0.85,
+        ema_alpha: float = 0.9,
+    ):
+        self.max_samples = max_samples
+        self.min_samples = min_samples
+        self.consistency_threshold = consistency_threshold
+        self.ema_alpha = ema_alpha
+        self._pools: dict[int, list[torch.Tensor]] = {}
+        self._means: dict[int, torch.Tensor] = {}  # cached L2-normalised mean
+        self._ema_reps: dict[int, torch.Tensor] = {}  # EMA-smoothed representatives
+        self._use_ema = ema_alpha > 0.0
+
+    def update(self, tid: int, emb: torch.Tensor) -> None:
+        pool = self._pools.setdefault(tid, [])
+        new_emb = emb.detach().cpu()
+        pool.append(new_emb)
+        if len(pool) > self.max_samples:
+            pool.pop(0)
+        self._refresh(tid, new_emb)
+
+    def _refresh(self, tid: int, new_emb: torch.Tensor | None = None) -> None:
+        pool = self._pools[tid]
+        if not pool:
+            self._means.pop(tid, None)
+            self._ema_reps.pop(tid, None)
+            return
+        stacked = torch.stack(pool)  # (N, D)
+        mean = stacked.mean(dim=0)
+        self._means[tid] = F.normalize(mean, dim=0)
+
+        if self._use_ema and new_emb is not None:
+            if tid in self._ema_reps:
+                ema_unnorm = (
+                    self.ema_alpha * self._ema_reps[tid]
+                    + (1.0 - self.ema_alpha) * new_emb
+                )
+            else:
+                ema_unnorm = new_emb
+            self._ema_reps[tid] = F.normalize(ema_unnorm, dim=0)
+
+    def representatives(
+        self, device: torch.device | str = "cuda"
+    ) -> dict[int, torch.Tensor]:
+        source = self._ema_reps if self._use_ema else self._means
+        return {tid: m.to(device, non_blocking=True) for tid, m in source.items()}
+
+    def clean_ids(self) -> set[int]:
+        result: set[int] = set()
+        for tid in self._means:
+            if len(self._pools.get(tid, [])) < self.min_samples:
+                continue
+            norm = self._means[tid].norm().item()
+            if norm >= self.consistency_threshold:
+                result.add(tid)
+        return result
+
+    def prune(self, active_tids: set[int]) -> None:
+        for tid in list(self._pools.keys()):
+            if tid not in active_tids:
+                del self._pools[tid]
+                self._means.pop(tid, None)
+                self._ema_reps.pop(tid, None)
+
+    def __len__(self) -> int:
+        return len(self._means)
+
+
+# ── Sequence loading ──
+
+
+def load_sequence_frames(seq_name: str, data_root: str, max_frames: int):
+    import cv2
+
+    seq_dir = Path(data_root) / "MOT17" / "train" / seq_name
+    img_dir = seq_dir / "img1"
+    paths = sorted(img_dir.glob("*.jpg"))
+    if max_frames > 0:
+        paths = paths[:max_frames]
+
+    frames = []
+    for p in paths:
+        img = cv2.imread(str(p))
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        frames.append(img)
+
+    return frames
+
+
+def _get_teacher_feats(teacher, yolo_model, frame):
+    layers = yolo_model.model
+    save = set(yolo_model.save)
+    y: list[torch.Tensor | None] = []
+    x = frame
+    for i in range(23):
+        m = layers[i]
+        if m.f != -1:
+            if isinstance(m.f, int):
+                x = y[m.f]
+            else:
+                x = [x if j == -1 else y[j] for j in m.f]
+        x = m(x)
+        y.append(x if i in save else None)
+    fpn_indices = [_GATE_LAYER_IDX[s] for s in ("p3", "p4", "p5")]
+    return [y[i] for i in fpn_indices]
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--yolo-weights", default="models/yolo/yolo26s.pt")
+    parser.add_argument("--teacher-ckpt", default="runs/gated_det_v1/best.ckpt")
+    parser.add_argument("--mamba-ckpt", default="runs/mamba_gt_960_v2/best.ckpt")
+    parser.add_argument("--data-root", default="datasets")
+    parser.add_argument("--seq", default="MOT17-04-SDP")
+    parser.add_argument("--max-frames", type=int, default=100)
+    parser.add_argument("--img-size", type=int, default=IMG_SIZE)
+    parser.add_argument(
+        "--output",
+        default="output/fpn_reid",
+        help="Output directory for MOT txt and metrics",
+    )
+    parser.add_argument(
+        "--split", default="train", help="Data split subdirectory (e.g. train, test)"
+    )
+    parser.add_argument(
+        "--cost-cos-w", type=float, default=0.10, help="Appearance cost: cos_sim weight"
+    )
+    parser.add_argument(
+        "--cost-iou-w", type=float, default=0.75, help="Appearance cost: IoU weight"
+    )
+    parser.add_argument(
+        "--cost-score-w",
+        type=float,
+        default=0.15,
+        help="Appearance cost: detection score weight",
+    )
+    parser.add_argument("--conf-thresh", type=float, default=0.05)
+    parser.add_argument("--reid-weight", type=float, default=0.10)
+    parser.add_argument("--cos-threshold", type=float, default=0.55)
+    parser.add_argument("--iou-low", type=float, default=0.30)
+    parser.add_argument("--iou-high", type=float, default=0.60)
+    parser.add_argument(
+        "--no-reid",
+        action="store_true",
+        help="Disable FPN ReID for baseline comparison",
+    )
+    parser.add_argument(
+        "--head-ckpt",
+        default="",
+        help="Trained DimReduceHead checkpoint (128-dim, recommended)",
+    )
+    parser.add_argument(
+        "--trt-engine",
+        default="",
+        help="Path to TensorRT backbone engine for YOLO (e.g. models/yolo/yolo26s_backbone_640.engine)",
+    )
+    parser.add_argument(
+        "--bank-k", type=int, default=5, help="Appearance bank max samples per track"
+    )
+    parser.add_argument(
+        "--bank-alpha",
+        type=float,
+        default=0.8,
+        help="EMA decay for per-track embedding average",
+    )
+    parser.add_argument(
+        "--use-cpp",
+        action="store_true",
+        help="Use 100% C++ LibTorch + TensorRT detector head",
+    )
+    args = parser.parse_args()
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Device: {device}")
+
+    # Load sequence
+    print(f"\nLoading {args.seq}...")
+    frames = load_sequence_frames(args.seq, args.data_root, args.max_frames)
+    h_orig, w_orig = frames[0].shape[:2]
+    print(f"  Frames: {len(frames)}  Resolution: {w_orig}×{h_orig}")
+
+    # Build MambaGatedDetector
+    if args.use_cpp:
+        if saccade_perception_ext is None:
+            raise ImportError(
+                "saccade_perception_ext module not found. Build C++ codebase first."
+            )
+        print("\nBuilding C++ LibTorch + TensorRT MambaGatedDetector...")
+        trt_path = (
+            args.trt_engine
+            if args.trt_engine
+            else "models/yolo/yolo26s_backbone_640_best.engine"
+        )
+        mamba_path = "models/yolo/mamba_head_best.pt"
+        detector = saccade_perception_ext.MambaGatedDetector(
+            trt_backbone_path=str((project_root / trt_path).resolve()),
+            mamba_head_script_path=str((project_root / mamba_path).resolve()),
+            img_size=args.img_size,
+            conf_thr=args.conf_thresh,
+        )
+        fpn_dim = detector.fpn_dim
+        reid_head = None
+    else:
+        print("\nBuilding MambaGatedDetector...")
+        detector = build_mamba_gated_detector(
+            yolo_pt_path=str((project_root / args.yolo_weights).resolve()),
+            teacher_ckpt=str((project_root / args.teacher_ckpt).resolve()),
+            mamba_ckpt=str((project_root / args.mamba_ckpt).resolve()),
+            img_size=args.img_size,
+            device=device,
+            trt_backbone_engine=args.trt_engine,
+            emb_dim=128,
+        )
+        detector.eval()
+        teacher = detector.teacher
+
+        # Probe FPN dimension
+        dummy = torch.zeros(1, 3, args.img_size, args.img_size).to(device)
+        detector.forward(dummy.float(), gate_input=None)
+
+    # ── Load trained head if provided ──
+    reid_head: DimReduceHead | None = None
+    head_scales: str = "p3p4p5"
+    if args.head_ckpt:
+        head_path = Path(args.head_ckpt)
+        if not head_path.is_absolute():
+            head_path = project_root / head_path
+        head_ckpt = torch.load(head_path, map_location="cpu", weights_only=False)
+        in_channels = head_ckpt.get("in_channels", [128, 256, 512])
+        head_scales = head_ckpt.get("scales", "p3p4p5")
+        reid_head = DimReduceHead(in_channels, out_dim=128).to(device)
+        reid_head.load_state_dict(head_ckpt["head"])
+        reid_head.eval()
+        fpn_dim = 128
+        print(
+            f"  Loaded DimReduceHead ({head_scales}): {sum(p.numel() for p in reid_head.parameters()):,} params, {fpn_dim}-dim"
+        )
+
+        # Extract weights for CUDA kernel
+        conv_weights = [reid_head.convs[i].weight.data for i in range(len(in_channels))]
+        has_proj = hasattr(reid_head.proj, "__getitem__") and hasattr(
+            reid_head.proj[0], "weight"
+        )
+        proj_weight = reid_head.proj[0].weight.data if has_proj else None
+        if has_proj and len(reid_head.proj) > 1:
+            bn = reid_head.proj[1]
+            running_mean = bn.running_mean.data
+            running_var = bn.running_var.data
+        else:
+            running_mean = running_var = None
+    elif not args.use_cpp:
+        fpn_dim = detector.extract_fpn_embeddings(
+            None, torch.zeros(1, 4).to(device)
+        ).shape[1]
+        print(f"  Raw FPN embedding dim: {fpn_dim}")
+    else:
+        print(f"  C++ Detector FPN embedding dim: {fpn_dim}")
+
+    # Tracker — use correct embedding dimension
+    tracker = GPUByteTracker(max_objects=2048, embedding_dim=fpn_dim)
+    tracker.set_params(
+        track_thresh=0.05,
+        high_thresh=0.45,
+        match_thresh=0.66,
+        track_buffer=30,
+        mid_thresh=0.10,
+        new_track_thresh=0.28,
+    )
+    tracker.set_reid_params(
+        cos_threshold=args.cos_threshold,
+        iou_low=args.iou_low,
+        iou_high=args.iou_high,
+        weight=args.reid_weight,
+        cost_cos_w=args.cost_cos_w,
+        cost_iou_w=args.cost_iou_w,
+        cost_score_w=args.cost_score_w,
+    )
+
+    result_bufs = tracker.allocate_result_buffers()
+
+    bank = TopKAppearanceBank(
+        max_samples=args.bank_k,
+        min_samples=2,
+        consistency_threshold=0.85,
+        ema_alpha=args.bank_alpha,
+    )
+
+    print(f"\nRunning tracking on {len(frames)} frames...")
+    print(
+        f"  Config: conf={args.conf_thresh} reid_w={args.reid_weight} "
+        f"cos={args.cos_threshold} iou=({args.iou_low},{args.iou_high})"
+    )
+    if not args.no_reid:
+        print(f"  FPN dim: {fpn_dim}  bank sync every frame")
+
+    t0 = time.perf_counter()
+
+    mot_lines: list[str] = []
+
+    # Pre-allocate pointer buffers if using C++ detector
+    if args.use_cpp:
+        max_dets = 1000
+        d_out_dets = torch.empty((max_dets, 6), dtype=torch.float32, device=device)
+        d_out_embs = torch.empty(
+            (max_dets, fpn_dim), dtype=torch.float32, device=device
+        )
+
+    with torch.inference_mode():
+        for frame_idx, frame_np in enumerate(frames):
+            frame_uint8 = (
+                torch.from_numpy(frame_np).permute(2, 0, 1).unsqueeze(0).to(device)
+            )
+            frame_640 = resize_stretch_batch_gpu(frame_uint8, args.img_size, device)
+
+            # ── Detect (caches raw FPN internally) ──
+            if args.use_cpp:
+                n_dets = detector.forward_ptr(
+                    frame_640.data_ptr(), d_out_dets.data_ptr()
+                )
+                detections_raw = d_out_dets[:n_dets]
+            else:
+                detections_raw, _extra = detector.forward(
+                    frame_640.float(), gate_input=None
+                )
+
+                if isinstance(detections_raw, list):
+                    detections_raw = detections_raw[0]
+                if detections_raw.dim() == 3:
+                    detections_raw = detections_raw.squeeze(0)
+                if detections_raw.numel() > 0:
+                    valid = (detections_raw[:, 4] > args.conf_thresh) & (
+                        (detections_raw[:, 2] - detections_raw[:, 0]) > 0
+                    )
+                    detections_raw = detections_raw[valid]
+                if detections_raw.numel() > 0:
+                    from torchvision.ops import nms
+
+                    keep = nms(detections_raw[:, :4], detections_raw[:, 4], 0.5)
+                    detections_raw = detections_raw[keep]
+                if detections_raw.numel() == 0:
+                    detections_raw = torch.zeros(0, 6, device=device)
+
+            boxes = detections_raw[:, :4]
+            scores = detections_raw[:, 4]
+            class_ids = (
+                detections_raw[:, 5].long()
+                if detections_raw.shape[1] >= 6
+                else torch.zeros(len(detections_raw), dtype=torch.long, device=device)
+            )
+            n_dets = boxes.shape[0]
+
+            # Rescale boxes from 640 space to original resolution
+            scale_x = float(w_orig) / args.img_size
+            scale_y = float(h_orig) / args.img_size
+            boxes_track = boxes.clone()
+            boxes_track[:, 0] *= scale_x
+            boxes_track[:, 1] *= scale_y
+            boxes_track[:, 2] *= scale_x
+            boxes_track[:, 3] *= scale_y
+
+            # ── FPN embeddings ──
+            embeddings = None
+            if n_dets > 0 and not args.no_reid:
+                if reid_head is not None:
+                    if getattr(detector, "_trt_feat_cache", None):
+                        fpn = [detector._trt_feat_cache[s] for s in ("p3", "p4", "p5")]
+                    else:
+                        fpn = [
+                            teacher._gate_layers[s]._feat_cache[s]
+                            for s in ("p3", "p4", "p5")
+                        ]
+                    if head_scales == "p5":
+                        fpn = [fpn[2]]
+                    with torch.no_grad():
+                        embeddings = fpn_reid_extract_cuda(
+                            fpn,
+                            conv_weights,
+                            boxes,
+                            args.img_size,
+                            proj_weight=proj_weight,
+                            running_mean=running_mean,
+                            running_var=running_var,
+                        )
+                elif args.use_cpp:
+                    detector.extract_fpn_embeddings_ptr(
+                        boxes.data_ptr(), n_dets, d_out_embs.data_ptr()
+                    )
+                    embeddings = d_out_embs[:n_dets]
+                else:
+                    embeddings = detector.extract_fpn_embeddings(None, boxes)
+
+                # ── Push bank to tracker (every frame) ──
+                if len(bank) > 0 and not args.no_reid:
+                    reps = bank.representatives(device)
+                    _ids_list = sorted(reps.keys())
+                    _ids = torch.tensor(_ids_list, device=device, dtype=torch.int32)
+                    _feats = torch.stack([reps[k] for k in _ids_list])
+                    tracker.update_reference_features(_ids, _feats)
+                    _clean = bank.clean_ids()
+                    if _clean:
+                        _cids = torch.tensor(
+                            sorted(_clean), device=device, dtype=torch.int32
+                        )
+                        tracker.set_clean_embedding_flags(
+                            _cids,
+                            torch.ones(len(_clean), device=device, dtype=torch.bool),
+                        )
+
+            # ── Track ──
+            tracker.update_into(
+                boxes_track,
+                scores,
+                class_ids,
+                result_bufs,
+                embeddings=embeddings,
+            )
+
+            # ── Update bank: store latest embedding per track ──
+            count = result_bufs["count"].item()
+            for i in range(count):
+                x1 = result_bufs["boxes"][i, 0].item()
+                y1 = result_bufs["boxes"][i, 1].item()
+                x2 = result_bufs["boxes"][i, 2].item()
+                y2 = result_bufs["boxes"][i, 3].item()
+                tid = result_bufs["ids"][i].item()
+                score = result_bufs["scores"][i].item()
+                w, h = x2 - x1, y2 - y1
+                mot_lines.append(
+                    f"{frame_idx + 1},{tid},{x1:.2f},{y1:.2f},{w:.2f},{h:.2f},{score:.4f},-1,-1,-1"
+                )
+            active_tids: set[int] = set()
+            if count > 0 and embeddings is not None and not args.no_reid:
+                track_ids = result_bufs["ids"][:count]
+                det_indices = result_bufs["det_idx"][:count]
+                matched = (det_indices >= 0) & (det_indices < n_dets)
+                active_tids.update(int(t) for t in track_ids.tolist())
+                if matched.any():
+                    for tid, didx in zip(
+                        track_ids[matched].tolist(), det_indices[matched].tolist()
+                    ):
+                        bank.update(int(tid), embeddings[int(didx)])
+
+            if bank:
+                bank.prune(active_tids)
+
+            if frame_idx % 20 == 0 or frame_idx == len(frames) - 1:
+                print(
+                    f"  frame {frame_idx:4d}: {n_dets} dets, "
+                    f"{count} tracks, bank={len(bank)}",
+                    flush=True,
+                )
+
+    elapsed = time.perf_counter() - t0
+    fps = len(frames) / elapsed
+    print(f"\nDone. {len(frames)} frames in {elapsed:.1f}s ({fps:.1f} FPS)")
+
+    output_dir = Path(args.output)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    seq_output = output_dir / f"{args.seq}.txt"
+    seq_output.write_text("\n".join(mot_lines))
+    print(f"Saved {len(mot_lines)} MOT lines to {seq_output}")
+
+    try:
+        metrics = run_motmetrics_evaluation(
+            data_root=str(Path(args.data_root) / "MOT17"),
+            split=args.split,
+            output=str(output_dir),
+            sequences=args.seq,
+            detector=None,
+        )
+        if metrics:
+            print("\n=== METRICS ===")
+            for k, v in metrics.items():
+                if isinstance(v, float):
+                    print(f"  {k}: {v:.4f}")
+                else:
+                    print(f"  {k}: {v}")
+    except Exception as e:
+        print(f"\n[Warn] motmetrics failed: {e}")
+
+
+if __name__ == "__main__":
+    main()

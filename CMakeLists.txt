@@ -6,13 +6,14 @@ cmake_policy(SET CMP0169 OLD)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CUDA_STANDARD 17)
+set(CMAKE_CUDA_ARCHITECTURES "native")
 
 option(ENABLE_NATIVE_TESTS "Build native C++ tests" ON)
 option(ENABLE_NATIVE_COVERAGE "Enable coverage instrumentation for native C++ test targets" OFF)
 
 # 1. 全局編譯配置
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -fvisibility=hidden -O3 -Wall")
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3 -Xcompiler -fPIC")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -fvisibility=hidden -O3 -Wall -fno-lto")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3 -Xcompiler -fPIC,-fno-lto")
 
 # 設置 RPATH 以支持動態連結
 set(CMAKE_SKIP_BUILD_RPATH FALSE)
@@ -54,6 +55,35 @@ endif()
 
 find_package(Python3 3.12 EXACT REQUIRED COMPONENTS Interpreter Development.Module)
 
+# ─── Find LibTorch ───
+execute_process(
+    COMMAND ${Python3_EXECUTABLE} -c "import torch; print(torch.utils.cmake_prefix_path)"
+    OUTPUT_VARIABLE TORCH_CMAKE_DIR
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+list(APPEND CMAKE_PREFIX_PATH "${TORCH_CMAKE_DIR}")
+find_package(Torch REQUIRED)
+
+# Find PyTorch Python bindings library (torch_python) for pybind11 at::Tensor type-casting
+execute_process(
+    COMMAND ${Python3_EXECUTABLE} -c "import torch, os; print(os.path.join(os.path.dirname(torch.__file__), 'lib'))"
+    OUTPUT_VARIABLE TORCH_LIB_DIR
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+find_library(TORCH_PYTHON_LIBRARY
+    NAMES torch_python libtorch_python.so
+    PATHS ${TORCH_LIB_DIR}
+    NO_DEFAULT_PATH
+    REQUIRED
+)
+
+# LibTorch/Caffe2 injects -flto=auto into CMAKE_CXX_FLAGS which causes LTO
+# version mismatches when linking pybind11 modules. Strip it out immediately.
+string(REPLACE "-flto=auto" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+string(REPLACE "-fno-fat-lto-objects" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}" CACHE STRING "CXX compiler flags" FORCE)
+
+
 # 4. TensorRT 依賴處理 (方案 B: 自動下載頭文件 + 使用 Python 庫)
 include(FetchContent)
 FetchContent_Declare(
@@ -94,24 +124,31 @@ include_directories(
 include_directories(SYSTEM ${TENSORRT_INCLUDE_DIR})
 
 # 6. 定義 Perception 模組 (Dynamic Library)
-add_library(saccade_perception SHARED
+add_library(saccade_perception STATIC
     src/perception/trt_engine.cpp
     src/perception/preprocessor.cpp
     src/perception/preprocessor_gpu.cu
     src/perception/letterbox_kernel.cu
     src/perception/feature_extractor.cpp
+    src/perception/mamba_gated_detector.cpp
+    src/perception/batched_mamba_detector.cpp
 )
 # 設定導出宏
 target_compile_definitions(saccade_perception PRIVATE SACCADE_EXPORT_PERCEPTION)
 
 # 7. 定義 Tracking 模組 (Dynamic Library)
-add_library(saccade_tracking SHARED
+add_library(saccade_tracking STATIC
     src/tracking/tracker_gpu.cu
     src/tracking/gmc.cpp
     src/tracking/gmc_kernel.cu
     src/tracking/pipeline.cpp
+    src/tracking/workbench.cpp
+    src/tracking/quality_filter.cu
+    src/tracking/mamba_scan.cu
+    src/tracking/seq_runner.cpp
+    src/tracking/eval_pool.cpp
 )
-set_target_properties(saccade_tracking PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+set_target_properties(saccade_tracking PROPERTIES CUDA_SEPARABLE_COMPILATION OFF)
 target_link_libraries(saccade_tracking
     CUDA::cudart
     CUDA::cufft
@@ -121,7 +158,7 @@ target_link_libraries(saccade_tracking
 target_compile_definitions(saccade_tracking PRIVATE SACCADE_EXPORT_TRACKING)
 
 # 8. 定義 Media 模組 (Dynamic Library)
-add_library(saccade_media SHARED
+add_library(saccade_media STATIC
     src/media/gst_client.cpp
 )
 target_link_libraries(saccade_media
@@ -137,6 +174,10 @@ execute_process(
     OUTPUT_VARIABLE pybind11_DIR
     OUTPUT_STRIP_TRAILING_WHITESPACE
 )
+find_package(Python3 REQUIRED COMPONENTS Interpreter Development.Module)
+set(Python_EXECUTABLE "${Python3_EXECUTABLE}")
+set(Python_ROOT_DIR "${PROJECT_SOURCE_DIR}/.venv")
+find_package(Python REQUIRED COMPONENTS Interpreter Development)
 find_package(pybind11 REQUIRED PATHS ${pybind11_DIR})
 
 set(SACCADE_BUILD_RPATH
@@ -151,6 +192,7 @@ set(SACCADE_INSTALL_RPATH
 target_link_libraries(saccade_perception
     ${TENSORRT_NVINFER_LIBRARY}
     ${TENSORRT_NVINFER_PLUGIN_LIBRARY}
+    ${TORCH_LIBRARIES}
     CUDA::cudart
     CUDA::cufft
     ${OpenCV_LIBS}
@@ -164,32 +206,47 @@ set_target_properties(
         INSTALL_RPATH "${SACCADE_INSTALL_RPATH}"
 )
 
-pybind11_add_module(saccade_media_ext src/media/gst_client_python.cpp)
+pybind11_add_module(saccade_media_ext NO_EXTRAS src/media/gst_client_python.cpp)
 target_link_libraries(saccade_media_ext PRIVATE 
     saccade_media
     ${GSTREAMER_LIBRARIES}
     CUDA::cudart
 )
+target_compile_options(saccade_media_ext PRIVATE -fno-lto)
 
 
-pybind11_add_module(saccade_tracking_ext src/tracking/tracker_gpu_python.cpp)
-target_link_libraries(saccade_tracking_ext PRIVATE 
+pybind11_add_module(saccade_tracking_ext NO_EXTRAS src/tracking/tracker_gpu_python.cpp)
+target_link_libraries(saccade_tracking_ext PRIVATE
     saccade_tracking
     CUDA::cudart
 )
+target_compile_options(saccade_tracking_ext PRIVATE -fno-lto)
 
-pybind11_add_module(saccade_perception_ext src/perception/perception_python.cpp)
-target_link_libraries(saccade_perception_ext PRIVATE 
+pybind11_add_module(saccade_eval_ext NO_EXTRAS src/tracking/eval_python.cpp)
+target_link_libraries(saccade_eval_ext PRIVATE
+    saccade_tracking
     saccade_perception
     CUDA::cudart
 )
+target_compile_options(saccade_eval_ext PRIVATE -fno-lto)
+
+pybind11_add_module(saccade_perception_ext NO_EXTRAS src/perception/perception_python.cpp)
+target_link_libraries(saccade_perception_ext PRIVATE
+    saccade_perception
+    CUDA::cudart
+    ${TORCH_PYTHON_LIBRARY}
+)
+target_compile_options(saccade_perception_ext PRIVATE -fno-lto)
 set_target_properties(
     saccade_media_ext
     saccade_tracking_ext
+    saccade_eval_ext
     saccade_perception_ext
     PROPERTIES
         BUILD_RPATH "${SACCADE_BUILD_RPATH}"
         INSTALL_RPATH "${SACCADE_INSTALL_RPATH}"
+        CXX_VISIBILITY_PRESET "default"
+        VISIBILITY_INLINES_HIDDEN OFF
 )
 
 # 7. 主程式

@@ -3,5 +3,6 @@
 # Tracking params identical to baseline; engine is the only difference.
 
 engine: models/yolo/yolo26l_960_batch1.engine
+tiling: native_960
 match_thresh: 0.72
 new_track_thresh: 0.35

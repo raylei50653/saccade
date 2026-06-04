@@ -16,8 +16,11 @@ class DetectionConfig:
     gamma: float = 0.8
     gamma_luma_threshold: float = 0.35
     contrast: float = 1.2
-    # Tiling
-    tiling: str = "native_960"
+    # Tiling / TTA
+    tiling: str = "native_960"  # NO-GO: tiled detection yields FP ~2x native_960 (PIPELINE_REFERENCE §Known Issues)
+    tta: bool = (
+        False  # NO-GO (2026-05-18): IDF1/MOTA 0 Δ, FP +26轻微负面, 生产环境不稳定
+    )
     cross_tile_merge: bool = True
     cross_tile_score_penalty: float = 1.0
     tile_diagnostics: bool = False
@@ -40,6 +43,11 @@ class DetectionConfig:
     fp_hard_filter_min_score: float = 0.10
     fp_hard_filter_max_suspicious_area: int = 40000
     fp_hard_filter_max_suspicious_score: float = 0.40
+    external_fp_filter_mode: str = "rule"
+    external_fp_logistic_threshold: float = 0.5
+    external_fp_max_score: float = 0.18
+    external_fp_penalty: float = 1.0
+    external_fp_softmax_min_scale: float = 0.7
     # Narrow person score bonus
     narrow_person_score_bonus: float = 0.0
     narrow_person_max_width_ratio: float = 0.018
@@ -47,9 +55,13 @@ class DetectionConfig:
     narrow_person_min_aspect: float = 2.0
     narrow_person_max_aspect: float = 4.8
     # Per-frame detection cap
-    per_frame_detection_cap: int = 0
+    per_frame_detection_cap: int = (
+        0  # NO-GO: adaptive cap压至~21 in dense scenes,破坏recall (PIPELINE_REFERENCE)
+    )
     detection_cap_rank_method: str = "fp_filter_quality"
-    adaptive_detection_cap: bool = False
+    adaptive_detection_cap: bool = (
+        False  # NO-GO: "dense = more FP" assumption reversed in MOT17
+    )
     adaptive_cap_base: int = 40
     adaptive_cap_max: int = 60
     adaptive_cap_min: int = 15
@@ -112,9 +124,21 @@ def add_detection_args(parser: argparse.ArgumentParser) -> None:
     )
     grp.add_argument(
         "--tiling",
-        choices=["960p_2x2", "960p_3x2", "native_960", "sahi_960p_2x2"],
+        choices=[
+            "960p_2x2",
+            "960p_3x2",
+            "native_960",
+            "native_640",
+            "sahi_960p_2x2",
+        ],
         default="native_960",
-        help="Inference tiling preset.",
+        help="NO-GO: Inference tiling preset. Tiled detection yields FP ~2x native_960 (see PIPELINE_REFERENCE).",
+    )
+    grp.add_argument(
+        "--tta",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="NO-GO (2026-05-18): Horizontal-flip TTA. IDF1/MOTA 0 Δ, FP +26, ~2× detect cost.",
     )
     grp.add_argument(
         "--cross-tile-merge",
@@ -260,6 +284,53 @@ def add_detection_args(parser: argparse.ArgumentParser) -> None:
         ),
     )
     grp.add_argument(
+        "--external-fp-filter-mode",
+        choices=["off", "rule", "rule_score", "logistic", "softmax3"],
+        default="rule",
+        help="Apply an external-only FP filter before tracking.",
+    )
+    grp.add_argument(
+        "--external-fp-logistic-model",
+        default="",
+        help="Path to a JSON external FP model from train_external_fp_classifier.py.",
+    )
+    grp.add_argument(
+        "--external-fp-logistic-threshold",
+        type=float,
+        default=0.5,
+        help=_help(
+            "Probability threshold for keeping detections in logistic FP mode.",
+            range_hint="0-1",
+        ),
+    )
+    grp.add_argument(
+        "--external-fp-max-score",
+        type=float,
+        default=0.18,
+        help=_help(
+            "Only apply external FP filtering to detections at or below this score.",
+            range_hint="0-1",
+        ),
+    )
+    grp.add_argument(
+        "--external-fp-penalty",
+        type=float,
+        default=1.0,
+        help=_help(
+            "When <1, rescore low-score detections that fail the external FP gate instead of always dropping them.",
+            range_hint="0-1",
+        ),
+    )
+    grp.add_argument(
+        "--external-fp-softmax-min-scale",
+        type=float,
+        default=0.7,
+        help=_help(
+            "Minimum score scale applied by external_fp_filter_mode=softmax3.",
+            range_hint="0-1",
+        ),
+    )
+    grp.add_argument(
         "--narrow-person-score-bonus",
         type=float,
         default=0.0,
@@ -306,7 +377,10 @@ def add_detection_args(parser: argparse.ArgumentParser) -> None:
         "--per-frame-detection-cap",
         type=int,
         default=0,
-        help=_help("Maximum detections kept per frame (0=off).", range_hint=">=0"),
+        help=_help(
+            "NO-GO: Maximum detections kept per frame (0=off). Adaptive cap压至~21 in dense scenes,破坏recall.",
+            range_hint=">=0",
+        ),
     )
     grp.add_argument(
         "--detection-cap-rank-method",
@@ -317,7 +391,7 @@ def add_detection_args(parser: argparse.ArgumentParser) -> None:
     grp.add_argument(
         "--adaptive-detection-cap",
         action="store_true",
-        help="Enable adaptive per-frame detection cap based on scene density.",
+        help="NO-GO: Adaptive per-frame detection cap. 'dense=more FP' assumption reversed in MOT17.",
     )
     grp.add_argument(
         "--adaptive-cap-base",

@@ -22,79 +22,90 @@
 
 ---
 
-## 當前 Baseline（2026-05-11，最後更新）
+## 系統模組實作進度表
 
-| preset | IDF1 | MOTA | IDs | Rcll | FPS |
-|--------|------|------|-----|------|-----|
-| **speed**（yolo26s） | **52.0%** | **41.6%** | **475** | 55.0% | **97.9** |
-| **baseline**（yolo26m） | **51.4%** | **43.5%** | **502** | 59.0% | ~85 |
+| 系統分層/模組 | 當前實作狀態 | 關鍵特徵與已完成里程碑 |
+|---|---|---|
+| **Media & Streaming** (媒體接入) | 🟢 高效能工業級 | Canonical RTSP 規範與讀寫分離、GstClient C++ 零拷貝解碼 (5-Buffer 狀態機 + Per-buffer CUDA Stream)、DALI GPU 預處理、 Watchdog 自動斷線恢復 |
+| **L1 Perception** (感測/追蹤) | 🟢 穩定落地 | YOLO26s/m/l TRT 偵測推理、GPUByteTracker 雙階段關聯、GMC 運動補償與光線自適應、動態預測協方差 R 矩陣 |
+| **L2 Deduplication** (去重) | 🟢 穩定落地 | SigLIP 2 特徵提取、Saccade Heartbeat 影格更新隔離、AsyncEmbeddingDispatcher 雙串流、FeatureBank 向量記憶庫 |
+| **L3–L4 Storage** (快取/儲存) | 🟢 穩定運行 | Redis RPUSH + Pipelining 批次寫入、Micro-batching (100ms 聚合，降低 90% QPS)、ChromaDB 混合向量語意查詢、資料過期快取清理與冷備份 |
+| **L5 Cognition** (認知推理) | 🟢 穩定落地 | LlamaIndex + local BAAI 嵌入 + llama3 邊緣 Agentic RAG 本地推理、高熵事件觸發、視覺二次查詢與跨鏡頭 ReID 關聯 |
+| **L6 Resource** (資源調度) | 🟢 穩定運行 | ResourceManager 階梯式資源降級管理（NORMAL → REDUCED → FAST_PATH → EMERGENCY）、滯後控制（Hysteresis）預防切換震盪 |
+| **Infra & CI/CD** (基礎設施) | 🟢 維運完備 | Systemd modular user 服務生命週期管理 (`saccade-*`)、Github Action (Ruff / Mypy / Pytest / C++ CUDA 容器自動編譯與推送 GHCR) |
+
+---
+
+## 當前 Baseline（2026-06-03 更新）
+
+| preset | IDF1 | MOTA | IDs | Rcll | FP | FPS | 備註 |
+|--------|------|------|-----|------|-----|-----|------|
+| **mamba_whole_graph** | **73.3%** | **77.1%** | **536** | 81.0% | 3797 | **157.1** | **當前 baseline**，整圖 CUDA graph，ReID off；HOTA 66.7/DetA 69.9/AssA 63.9 |
+| **speed**（yolo26s） | **52.0%** | **41.6%** | **475** | 55.0% | 14687 | **97.9** | Baseline s |
+| **baseline**（yolo26m） | **51.4%** | **43.5%** | **502** | 59.0% | — | ~85 | Baseline m |
+| **gated_det_v1**（Option E） | **56.9%** | **52.5%** | **515** | 56.2% | 3712 | ~71 | |
+| **e-v2 α_tier**（Option E-v2） | **55.6%** | **54.2%** | **545** | 57.3% | **2932** | ~37 | |
+| **mamba_optimal**（Option F, P1 PixelShuffle） | **71.2%** | **76.3%** | 665 | 82.3% | 6050 | **100.9** | 單向掃描 |
+| **mamba_optimal**（head-only graph，前身） | **73.4%** | **77.1%** | **533** | 81.0% | 3774 | 116.7 | whole_graph 前身（同精度、無整圖加速）；HOTA 66.7/AssA 64.0 |
+| **P3 Hybrid** (conv P3 + Mamba P4/P5) | **72.8%** | 75.6% | 652 | 82.0% | 6503 | 77.6 | 最高 IDF1 |
+| **P2-ST** (Spatio-Temporal) T=1 eval | 71.6% | 75.4% | 689 | 81.9% | 6543 | 92.0 | 時序頭，單幀推理 |
+| **VGT Flow-Gated** (GMC flow gate) T=1 | **72.9%** | 76.1% | 659 | **82.5%** | 6454 | 85.6 | **歷史最高 IDF1**，flow 為輸入非 warp |
+| VGT T=3 (buffer) | 41.0% | 40.2% | 1603 | 68.7% | 30378 | 40.8 | 時序 buffer 不 work，訓練/推理時序不一致 |
 
 已 default 的 flag：`fuse_score_weight=0.4`、`interp`、`fp_hard_filter`（area=40000）、`kalman_r_scale=0.75`、`async_reid`、`pipeline_relink`、`gmc gpu`、`detection_quality_scaling`。
 
 ---
 
-## 待辦事項
+## 模組 TODO 索引
 
-| 優先 | 項目 | 行動 | 預期收益 |
-|------|------|------|---------|
-| ~~P1~~ | ~~FPS anomaly 根因（match ≥ 0.73）~~ | **✅ 已結案（2026-05-11）**：全量實測（7 seq + profile-stages）確認 match=0.72 vs 0.73 差距僅 0.16ms/frame（82.3 vs 81.3 FPS），`bg_relink_wait=0.00ms`，**anomaly 已消失**。推測 2026-05-07 的 async_reid + pipeline_relink + fused letterbox 等優化將 frame total 從 ~8.4ms 壓至 12ms（其中 detect 佔 6ms），原本的臨界條件不再觸發。**`match=0.72` 安全邊界解除**。 | ✅ 已完成 |
-| P3 | **Detector 訓練資料改善** | pred_h = 61.4% of gt_h，77% 近似 FP 有真實 GT；需補足腿/腳標注 | 根本解決 FN 問題；目前所有 score-gate 手段天花板已見 |
+> 模組專屬待辦已物理拆分至各 `docs/modules/<name>/TODO.md`。**狀態一覽（哪些 active / 收斂）見 [DEVELOPMENT.md §6 模組現狀總覽](../DEVELOPMENT.md)**——本表只提供連結，摘要不在此重複，避免兩處 drift。
+
+| 模組 | TODO | 模組 | TODO |
+|------|------|------|------|
+| detection | [↗](modules/detection/TODO.md) | semantic | [↗](modules/semantic/TODO.md) |
+| geometry | [↗](modules/geometry/TODO.md) | trigger | [↗](modules/trigger/TODO.md) |
+| motion | [↗](modules/motion/TODO.md) | streaming | [↗](modules/streaming/TODO.md) |
+| reid | [↗](modules/reid/TODO.md) | storage | [↗](modules/storage/TODO.md) |
+| lifecycle | [↗](modules/lifecycle/TODO.md) | cognition | [↗](modules/cognition/TODO.md) |
+| | | resource | [↗](modules/resource/TODO.md) |
 
 ---
 
-## Recent Ablation Conclusions（2026-05-10 ~ 05-11）
+## 跨模組待辦
 
-- **fuse_score_weight=0.4（2026-05-11）✅ 已設為 default（baseline preset）**
-  - botsort-style：cost = 1 − IoU × (1 − 0.4 × score)，讓低信心 det 更難匹配
-  - 7-seq SDP baseline preset：IDF1 +1.7pp → 51.4%，MOTA +1.6pp → 43.5%，FP **-13%**，Rcll -0.6pp，IDs -1
-  - 0.4 為 Pareto 最優；≥0.75 會讓 IDs 翻倍
+| 優先 | 項目 | 行動 | 預期收益 |
+|------|------|------|---------|
+| P2 | **測試覆蓋率提升（66% → 70%+）** | 見下方覆蓋率任務清單；按模組落地（如 lifecycle 切片見 [lifecycle/TODO.md](modules/lifecycle/TODO.md)） | 穩定性、CI 保護、開發信心 |
 
-- **FP 模組 A：stage2_match_thresh（2026-05-11）❌ 語意反向，no-go for tuning**
-  - `max_cost` 是上限；提高 = 更寬鬆 = FP 增加。0.5 在 fuse_score_weight=0.4 下已適當。
-  - 參數已暴露（`--stage2-match-thresh`），保留為可調，但不調整 default。
+### 測試覆蓋率任務清單（P2）
 
-- **FP 模組 B：birth_low_score_thresh（2026-05-11）微小增益，不設 default**
-  - 出生分數 < thresh 的 track 需多一次 confirm；最佳 blst=0.28 → FP -63、IDs -3、IDF1 +0.1pp
-  - 效益太小；`--birth-low-score-thresh`（default 0.0=off）保留為可調。
+> 詳細報告：[docs/TESTING.md](/docs/TESTING.md)
 
-- **FP 模組 C：bank_weighted_mean（待測）**
-  - 以 quality_score 加權 bank 樣本均值，降低低品質 embedding 影響
-  - 只在 `--appearance-bank` 開啟時有效；ReID stack 測試待排。
+| 優先 | 模組 | 覆蓋率 | 未覆蓋行 | 狀態 |
+|------|------|--------|----------|------|
+| P2-1 | `perception/eval/evaluator.py` | 40% | 734 | **待實作** |
 
-- **P5-4 Per-sequence scene adaptive policy（2026-05-11）❌ NO-GO（narrow_bonus 策略）**
-  - `SceneAdaptivePolicy` 分類邏輯正確（只有 MOT17-02 觸發 `crowded_narrow`：avg_aspect=1.97，最低）
-  - 7-seq SDP speed preset：IDF1 -0.1pp，MOTA -0.2pp，IDs +5，FP +201，FN -107，FPS **-8**
-  - MOT17-02 單序列：IDF1 -0.6pp（預期 +1.4pp）— 根因：speed preset `new_track_thresh=0.28` 低，bonus=0.05 把低品質框推過門檻
-  - 舊版 +1.4pp 是在 `new_track_thresh=0.35` 下測得，不適用 speed preset
-  - 框架保留 `--scene-adapt-enabled`（預設 off），classification 邏輯可供未來其他策略重用
+**目標**：
+- 🔄 短期 v4：`perception/eval/evaluator.py` (40%)
+- 📋 中期：`perception/eval/evaluator.py` (40%), `perception/eval/detection.py` (49%)
+- 📋 長期：API 模組、media 模組、native 測試
 
-- **P5-1 Multi-signal birth policy（2026-05-11）❌ NO-GO**
-  - 7-seq speed preset：IDF1 ±0，IDs +12，FP +453，FN -530，FPS **-20**
-  - 根因：Python-side O(K×C) IoU matching 每幀開銷；sub-threshold TP 比例太低
-  - `--multi-birth-enabled` 保留（預設 off）
+---
 
-- **P5-2 Stage 2 Quality Gate（2026-05-10）❌ NO-GO**
-  - 與 `detection_quality_scaling=True` 完全重疊，零效果。只在 `--no-detection-quality-scaling` 時有意義。
+## 算法方向探索（已結案，詳見 history）
 
-- **P5-3 Consecutive-Frame Birth Gate（2026-05-10）❌ NO-GO**
-  - Motion gate 有效過濾靜態 FP，但最佳結果統計中性（IDF1 +0.1pp）。sub-threshold TP 比例太低。
-
-- **Tracklet Interpolation（2026-05-10）✅ 已設為 default**
-  - `max_gap=20, min_track_len=5`：speed IDF1 +0.3pp，IDs -34，Rcll +2.0pp，FPS 不變
-
-- **Pose-Guided Box Expansion（2026-05-10）❌ No-Go**
-  - IDF1 不退但 FPS -60%（pose engine 每幀都跑），box 擴展引發 ID switches。detector training data 才是根本解。
-
-- **FPS anomaly：match ≥ 0.73 時 FPS 驟降（2026-05-09）✅ 已結案（2026-05-11）**
-  - 原症狀：`match=0.72` ~119 FPS；`match ≥ 0.73` FPS -28（+2.65ms），全 seq 受影響
-  - Step 1（bench）：孤立 C++ tracker 無異常（1.3–1.5ms 全平）→ 根因在 Python
-  - Step 2（實測）：7 seq `--profile-stages` 確認 0.72 vs 0.73 差距僅 0.16ms/frame，`bg_relink_wait=0.00ms`
-  - **結論：anomaly 已被 2026-05-07 pipeline 優化消除（async_reid + fused letterbox）。`match=0.72` 安全邊界已解除。**
+> 背景：2026-05-17 yolo26s 參數優化觸天花板（threshold 調整 MOTA 波動 <0.5pp）→「需要新架構而非調參」。後續 Option D/E/F 探索結論已歸檔至 [TODO_history.md](/docs/TODO_history.md) 的「Algorithm Direction Exploration」節：
+>
+> - **Option D**（Track-Conditioned YOLO）❌ NO-GO（2026-05-19）：IDF1 31.7%，gate 無貢獻、recall 天花板。
+> - **Option E-v2**（Quality-Gated Temporal Fusion）✅ GO（2026-05-22）：MOTA 54.2% / FP -21%；後被 Option F 取代。
+> - **Option F**（Mamba Gated Detector）✅ 結案（2026-05-27）→ **當前 production preset `mamba_optimal`**：PixelShuffle 上取樣 + Stretch-Resize 域一致 → IDF1 71.2% / MOTA 76.3% / Rcll 82.3%。訓練流程、breakthrough 與 3 項核心精調（`match_thresh=0.50`、`interpolate_max_gap=35`、`gmc_downscale=4`）見 history。當前指標見上方 baseline 表。
+>
+> Mamba 檢測頭中長期優化（ST-Mamba / VGT-Mamba / Hybrid Mamba-ViT / CUDA-graph✅）已拆分至 [detection/TODO.md](modules/detection/TODO.md)。
 
 ---
 
 ## Historical Links
 
-- 歷史 TODO / 設計規範 / C++ 路線圖：[docs/TODO_history.md](/docs/TODO_history.md)
-- Tracking base 與 relink sweep：[docs/experiments/tracking/fp_fn_recovery_and_gmc.md](/docs/experiments/tracking/fp_fn_recovery_and_gmc.md)
-- ReID backbone refresh 歸檔：[docs/experiments/reid/semantic_relink_and_crop.md](/docs/experiments/reid/semantic_relink_and_crop.md)
+- 歷史 TODO / 設計規範 / C++ 路線圖：[TODO_history.md](TODO_history.md)
+- Tracking base 與 relink sweep：[fp_fn_recovery_and_gmc.md](modules/geometry/research/fp_fn_recovery_and_gmc.md)
+- ReID backbone refresh 歸檔：[semantic_relink_and_crop.md](modules/reid/research/semantic_relink_and_crop.md)

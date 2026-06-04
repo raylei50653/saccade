@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <iostream>
 #include <limits>
@@ -13,9 +14,14 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include "tracking/auction.hpp"
 #include "tracking/tracker_gpu.hpp"
 #include "tracking/gmc.hpp"
 #include "tracking/pipeline.hpp"
+#include "tracking/workbench.hpp"
+#include "tracking/mamba_scan.cuh"
+#include "tracking/quality_filter.cuh"
+#include "tracking/kalman_gpu.cuh"
 #include "perception/feature_extractor.hpp"
 #include "perception/preprocessor.hpp"
 #include <opencv2/opencv.hpp>
@@ -396,8 +402,9 @@ struct RelinkBox {
 };
 
 struct RelinkMotionSnapshot {
-    std::array<float, 4> state{};
-    std::array<float, 16> covariance{};
+    std::array<float, 8> state{};       // [cx, cy, a, h, vx, vy, va, vh]
+    std::array<float, 64> covariance{}; // row-major 8x8 Kalman covariance
+    int frame = -1;                     // frame the snapshot was captured at
 };
 
 struct RelinkStats {
@@ -411,6 +418,9 @@ struct RelinkStats {
     int reject_consistency = 0;
     int reject_margin = 0;
     int reject_quality = 0;
+    int reject_kalman = 0;
+    int reject_direction = 0;
+    int reject_speed = 0;
     int new_ids = 0;
 };
 
@@ -442,7 +452,17 @@ public:
         float iou_weight = 0.0f,
         float mahalanobis_weight = 0.0f,
         float dynamic_margin_crowd = 0.0f,
-        float dynamic_margin_age = 0.0f
+        float dynamic_margin_age = 0.0f,
+        bool kalman_gate = false,
+        float kalman_chi2 = 9.4877f,
+        float kalman_penalty_weight = 0.0f,
+        float kalman_dir_min_cos = -1.0f,
+        float kalman_dir_min_speed = 1.0f,
+        float kalman_person_height_m = 0.0f,
+        float kalman_accel_long = 2.0f,
+        float kalman_accel_lat = 1.0f,
+        float kalman_fps = 30.0f,
+        float kalman_max_speed_mps = 0.0f
     )
         : sim_threshold_(sim_threshold),
           ttl_(ttl),
@@ -469,32 +489,41 @@ public:
           iou_weight_(std::max(0.0f, iou_weight)),
           mahalanobis_weight_(std::max(0.0f, mahalanobis_weight)),
           dynamic_margin_crowd_(std::max(0.0f, dynamic_margin_crowd)),
-          dynamic_margin_age_(std::max(0.0f, dynamic_margin_age)) {}
+          dynamic_margin_age_(std::max(0.0f, dynamic_margin_age)),
+          kalman_gate_(kalman_gate),
+          kalman_chi2_(kalman_chi2),
+          kalman_penalty_weight_(std::max(0.0f, kalman_penalty_weight)),
+          kalman_dir_min_cos_(kalman_dir_min_cos),
+          kalman_dir_min_speed_(std::max(0.0f, kalman_dir_min_speed)),
+          kalman_person_height_m_(std::max(0.0f, kalman_person_height_m)),
+          kalman_accel_long_(std::max(0.0f, kalman_accel_long)),
+          kalman_accel_lat_(std::max(0.0f, kalman_accel_lat)),
+          kalman_fps_(kalman_fps > 0.0f ? kalman_fps : 30.0f),
+          kalman_max_speed_mps_(std::max(0.0f, kalman_max_speed_mps)) {}
 
-    void update_motion_snapshots(const std::vector<TrackStateSnapshot>& snapshots) {
+    void update_motion_snapshots(const std::vector<TrackStateSnapshot>& snapshots, int frame_id = -1) {
         for (const auto& snap : snapshots) {
             const int canonical = alias_.count(snap.obj_id) ? alias_.at(snap.obj_id) : snap.obj_id;
             RelinkMotionSnapshot out;
             for (size_t i = 0; i < out.state.size() && i < snap.state.size(); ++i) {
                 out.state[i] = snap.state[i];
             }
-            for (int r = 0; r < 4; ++r) {
-                for (int c = 0; c < 4; ++c) {
-                    const size_t src = static_cast<size_t>(r * 8 + c);
-                    const size_t dst = static_cast<size_t>(r * 4 + c);
-                    if (src < snap.covariance.size()) {
-                        out.covariance[dst] = snap.covariance[src];
-                    }
-                }
+            for (size_t i = 0; i < out.covariance.size() && i < snap.covariance.size(); ++i) {
+                out.covariance[i] = snap.covariance[i];
             }
+            out.frame = frame_id;
             motion_[canonical] = out;
         }
     }
 
     std::vector<int> motion_candidate_ids(int frame_id = -1) const {
-        if (mahalanobis_threshold_ <= 0.0f) {
+        if (mahalanobis_threshold_ <= 0.0f && !kalman_gate_) {
             return {};
         }
+        // Kalman gate needs the freshest snapshot of still-active lost tracks so it
+        // can capture a clean "farewell" state before the tracker deactivates them;
+        // include age>=0 candidates (the tracker only returns the active subset).
+        const int min_age = kalman_gate_ ? 0 : min_lost_frames_;
         std::vector<int> ids;
         ids.reserve(feature_order_.size());
         for (int cid : feature_order_) {
@@ -508,7 +537,7 @@ public:
                     continue;
                 }
                 const int age = frame_id - seen_it->second;
-                if (age < min_lost_frames_ || age > ttl_) {
+                if (age < min_age || age > ttl_) {
                     continue;
                 }
             }
@@ -630,8 +659,34 @@ public:
                     stats_.reject_age += 1;
                     continue;
                 }
+                // Physical reachability gate (always-on, snapshot-independent).
+                if (exceeds_max_speed(box, last_boxes_.at(cid), age, kalman_person_height_m_, kalman_fps_, kalman_max_speed_mps_)) {
+                    stats_.reject_speed += 1;
+                    continue;
+                }
                 auto [center_norm, iou] = spatial_metrics(box, last_boxes_.at(cid), frame_w, frame_h);
-                if (center_norm > spatial_gate_ || iou < min_iou_) {
+                bool kalman_gated = false;
+                if (kalman_gate_) {
+                    const auto motion_it = motion_.find(cid);
+                    if (motion_it != motion_.end()) {
+                        if (direction_behind(box, motion_it->second, kalman_dir_min_cos_, kalman_dir_min_speed_)) {
+                            stats_.reject_direction += 1;
+                            continue;
+                        }
+                        const int delta = motion_it->second.frame >= 0
+                                              ? (frame_id - motion_it->second.frame)
+                                              : 0;
+                        const float kalman_d2 = kalman_gate_dist(
+                            box, motion_it->second, delta, kalman_person_height_m_,
+                            kalman_accel_long_, kalman_accel_lat_, kalman_fps_);
+                        if (kalman_d2 > kalman_chi2_) {
+                            stats_.reject_kalman += 1;
+                            continue;
+                        }
+                        kalman_gated = true;
+                    }
+                }
+                if (!kalman_gated && (center_norm > spatial_gate_ || iou < min_iou_)) {
                     stats_.reject_spatial += 1;
                     continue;
                 }
@@ -816,6 +871,9 @@ public:
         out["reject_consistency"] = stats_.reject_consistency;
         out["reject_margin"] = stats_.reject_margin;
         out["reject_quality"] = stats_.reject_quality;
+        out["reject_kalman"] = stats_.reject_kalman;
+        out["reject_direction"] = stats_.reject_direction;
+        out["reject_speed"] = stats_.reject_speed;
         out["new_ids"] = stats_.new_ids;
         return out;
     }
@@ -832,7 +890,10 @@ public:
             " reject_mahalanobis=" + std::to_string(stats_.reject_mahalanobis) +
             " reject_similarity=" + std::to_string(stats_.reject_similarity) +
             " reject_margin=" + std::to_string(stats_.reject_margin) +
-            " reject_quality=" + std::to_string(stats_.reject_quality)
+            " reject_quality=" + std::to_string(stats_.reject_quality) +
+            " reject_kalman=" + std::to_string(stats_.reject_kalman) +
+            " reject_direction=" + std::to_string(stats_.reject_direction) +
+            " reject_speed=" + std::to_string(stats_.reject_speed)
         );
         if (!accept_sims_.empty()) {
             py::print(
@@ -897,6 +958,7 @@ public:
                 float iou;
                 float center_norm;
                 float maha;
+                float kalman_d2;  // <0 when Kalman gate inactive for this candidate
             };
             std::vector<CandidateInfo> candidates_to_score;
 
@@ -906,8 +968,36 @@ public:
                 if (assigned.count(cid)) { stats_.reject_assigned += 1; continue; }
                 const int age = frame_id - last_seen_.at(cid);
                 if (age < min_lost_frames_ || age > ttl_) { stats_.reject_age += 1; continue; }
+                // Physical reachability gate (always-on, snapshot-independent).
+                if (exceeds_max_speed(box, last_boxes_.at(cid), age, kalman_person_height_m_, kalman_fps_, kalman_max_speed_mps_)) {
+                    stats_.reject_speed += 1; continue;
+                }
                 auto [center_norm, iou] = spatial_metrics(box, last_boxes_.at(cid), frame_w, frame_h);
-                if (center_norm > spatial_gate_ || iou < min_iou_) { stats_.reject_spatial += 1; continue; }
+                // Kalman probabilistic gate: when a motion snapshot is available, gate
+                // by chi-square distance to the extrapolated/inflated distribution
+                // instead of the static center/IoU gate. Falls back to static gate when
+                // no snapshot exists for this candidate.
+                float kalman_d2 = -1.0f;
+                bool kalman_gated = false;
+                if (kalman_gate_) {
+                    const auto motion_it = motion_.find(cid);
+                    if (motion_it != motion_.end()) {
+                        if (direction_behind(box, motion_it->second, kalman_dir_min_cos_, kalman_dir_min_speed_)) {
+                            stats_.reject_direction += 1; continue;
+                        }
+                        const int delta = motion_it->second.frame >= 0
+                                              ? (frame_id - motion_it->second.frame)
+                                              : 0;
+                        kalman_d2 = kalman_gate_dist(
+                            box, motion_it->second, delta, kalman_person_height_m_,
+                            kalman_accel_long_, kalman_accel_lat_, kalman_fps_);
+                        if (kalman_d2 > kalman_chi2_) { stats_.reject_kalman += 1; continue; }
+                        kalman_gated = true;
+                    }
+                }
+                if (!kalman_gated && (center_norm > spatial_gate_ || iou < min_iou_)) {
+                    stats_.reject_spatial += 1; continue;
+                }
                 float maha = 0.0f;
                 if (mahalanobis_threshold_ > 0.0f) {
                     const auto motion_it = motion_.find(cid);
@@ -918,7 +1008,7 @@ public:
                 if (min_consistency_ > 0.0f && buffer_size_ > 1) {
                     if (buffer_consistency(cid) < min_consistency_) { stats_.reject_consistency += 1; continue; }
                 }
-                candidates_to_score.push_back({cid, age, iou, center_norm, maha});
+                candidates_to_score.push_back({cid, age, iou, center_norm, maha, kalman_gated ? kalman_d2 : -1.0f});
             }
 
             int n_gate_passed = static_cast<int>(candidates_to_score.size());
@@ -978,6 +1068,12 @@ public:
                     joint = sim + iou_weight_ * cand.iou + mahalanobis_weight_ * maha_score;
                 } else {
                     joint = sim;
+                }
+
+                // Spatial probability penalty: closer to the predicted cloud center
+                // (smaller D^2) costs less. cost = 1 - exp(-D^2/2).
+                if (kalman_penalty_weight_ > 0.0f && cand.kalman_d2 >= 0.0f) {
+                    joint -= kalman_penalty_weight_ * (1.0f - std::exp(-0.5f * cand.kalman_d2));
                 }
 
                 if (joint > best_joint) {
@@ -1158,7 +1254,7 @@ private:
         const float r_diag[4] = {pos_std * pos_std, pos_std * pos_std, 1e-2f, pos_std * pos_std};
         for (int r = 0; r < 4; ++r) {
             for (int c = 0; c < 4; ++c) {
-                aug[r][c] = snap.covariance[static_cast<size_t>(r * 4 + c)] + (r == c ? r_diag[r] : 0.0f);
+                aug[r][c] = snap.covariance[static_cast<size_t>(r * 8 + c)] + (r == c ? r_diag[r] : 0.0f);
             }
             aug[r][4] = residual[static_cast<size_t>(r)];
         }
@@ -1196,6 +1292,169 @@ private:
             out += residual[static_cast<size_t>(i)] * aug[i][4];
         }
         return out;
+    }
+
+    // Physical reachability gate: returns true if relinking the candidate to the
+    // lost track would require an implied average speed above human limits, so the
+    // candidate must be a different (new) person. Snapshot-independent — uses the
+    // lost track's last box + age only — so it also covers the case where no Kalman
+    // motion snapshot is available (where the cloud gate would otherwise fall back
+    // to the loose static spatial gate). dist/time gives the average velocity, the
+    // physical meaning the positional cloud alone lacks.
+    static bool exceeds_max_speed(
+        const RelinkBox& box, const RelinkBox& last_box, int age,
+        float person_height_m, float fps, float max_speed_mps) {
+        if (max_speed_mps <= 0.0f || person_height_m <= 0.0f) return false;
+        const float lcx = (last_box.x1 + last_box.x2) * 0.5f;
+        const float lcy = (last_box.y1 + last_box.y2) * 0.5f;
+        const float lh = last_box.y2 - last_box.y1;
+        const float zcx = (box.x1 + box.x2) * 0.5f;
+        const float zcy = (box.y1 + box.y2) * 0.5f;
+        const float zh = box.y2 - box.y1;
+        const float dpx = std::sqrt((zcx - lcx) * (zcx - lcx) + (zcy - lcy) * (zcy - lcy));
+        const float dt_s = std::max(age, 1) / std::max(fps, 1e-6f);
+        // px/m scale averaged over both endpoints (perspective robustness)
+        const float px_per_m = 0.5f * (std::max(lh, 1e-3f) + std::max(zh, 1e-3f)) / person_height_m;
+        const float speed_mps = dpx / dt_s / std::max(px_per_m, 1e-6f);
+        return speed_mps > max_speed_mps;
+    }
+
+    // Velocity-direction gate: returns true if the candidate detection lies
+    // "behind" the lost track's motion direction and should be rejected. Covariance
+    // inflation grows the gating cloud symmetrically, so a person who just left the
+    // frame moving forward can still match someone entering behind them; this culls
+    // candidates whose displacement from the last position opposes the velocity.
+    // Skipped for near-stationary tracks (speed < min_speed) where direction is noise.
+    static bool direction_behind(
+        const RelinkBox& box, const RelinkMotionSnapshot& snap, float min_cos, float min_speed) {
+        if (min_cos <= -1.0f) return false;  // gate disabled
+        const float vx = snap.state[4];
+        const float vy = snap.state[5];
+        const float speed = std::sqrt(vx * vx + vy * vy);
+        if (speed < min_speed) return false;
+        const float zcx = (box.x1 + box.x2) * 0.5f;
+        const float zcy = (box.y1 + box.y2) * 0.5f;
+        const float dx = zcx - snap.state[0];
+        const float dy = zcy - snap.state[1];
+        const float dist = std::sqrt(dx * dx + dy * dy);
+        if (dist < 1e-3f) return false;
+        const float cosang = (dx * vx + dy * vy) / (speed * dist);
+        return cosang < min_cos;
+    }
+
+    // Physically-grounded, inertia-aware predict step (white-noise-acceleration).
+    // The mean advances at constant velocity (momentum), and the process noise is
+    // derived from an assumed real-world person height + bounded human acceleration:
+    //   px_per_m = h_px / person_height_m   (monocular metric scale from box height)
+    //   sigma_a  = max_accel[m/s^2] * px_per_m / fps^2   (px/frame^2)
+    // The acceleration covariance is anisotropic, decomposed along the velocity
+    // direction: longitudinal (speed up / slow down) vs lateral (turning), with
+    // accel_long >= accel_lat so the cloud stretches *along* the motion (velocity
+    // inertia) and stays tight sideways. This replaces the unbounded h/160 velocity
+    // noise that implied implausible accelerations / reversals.
+    static void predict_phys(
+        float x[8], float P[64], float person_height_m, float accel_long, float accel_lat, float fps) {
+        // 1. constant-velocity mean (inertia)
+        x[0] += x[4];
+        x[1] += x[5];
+        x[2] += x[6];
+        x[3] += x[7];
+        // 2. P = F P F^T  (F = [[I, I], [0, I]])
+        float Pn[64];
+        for (int i = 0; i < 4; ++i) {
+            for (int j = 0; j < 4; ++j) {
+                Pn[i * 8 + j] = P[i * 8 + j] + P[i * 8 + j + 4] + P[(i + 4) * 8 + j] + P[(i + 4) * 8 + j + 4];
+                Pn[i * 8 + j + 4] = P[i * 8 + j + 4] + P[(i + 4) * 8 + j + 4];
+                Pn[(i + 4) * 8 + j] = P[(i + 4) * 8 + j] + P[(i + 4) * 8 + j + 4];
+                Pn[(i + 4) * 8 + j + 4] = P[(i + 4) * 8 + j + 4];
+            }
+        }
+        for (int k = 0; k < 64; ++k) P[k] = Pn[k];
+        // 3. anisotropic acceleration noise on the planar (cx,cy,vx,vy) sub-state
+        const float px_per_m = std::max(x[3], 1e-3f) / std::max(person_height_m, 1e-3f);
+        const float inv_fps2 = 1.0f / std::max(fps * fps, 1e-6f);
+        const float sl = accel_long * px_per_m * inv_fps2;  // longitudinal sigma_a
+        const float st = accel_lat * px_per_m * inv_fps2;   // lateral sigma_a
+        float sl2 = sl * sl;
+        float st2 = st * st;
+        const float vx = x[4];
+        const float vy = x[5];
+        const float speed = std::sqrt(vx * vx + vy * vy);
+        float ux = 1.0f, uy = 0.0f;
+        if (speed > 1e-6f) {
+            ux = vx / speed;
+            uy = vy / speed;
+        } else {
+            // no heading → isotropic (use lateral magnitude both ways)
+            sl2 = st2;
+        }
+        // Sigma_a = sl2 * (u u^T) + st2 * (p p^T),  p = (-uy, ux)
+        const float Saa00 = sl2 * ux * ux + st2 * uy * uy;
+        const float Saa01 = (sl2 - st2) * ux * uy;
+        const float Saa11 = sl2 * uy * uy + st2 * ux * ux;
+        // DWNA blocks (dt=1): pos-pos *1/4, pos-vel *1/2, vel-vel *1
+        const int px[2] = {0, 1};   // cx, cy
+        const int vix[2] = {4, 5};  // vx, vy
+        const float Sa[2][2] = {{Saa00, Saa01}, {Saa01, Saa11}};
+        for (int a = 0; a < 2; ++a) {
+            for (int b = 0; b < 2; ++b) {
+                P[px[a] * 8 + px[b]] += 0.25f * Sa[a][b];
+                P[px[a] * 8 + vix[b]] += 0.5f * Sa[a][b];
+                P[vix[a] * 8 + px[b]] += 0.5f * Sa[a][b];
+                P[vix[a] * 8 + vix[b]] += Sa[a][b];
+            }
+        }
+        // 4. keep modest noise on aspect & height so S stays well-conditioned
+        float Q[64];
+        saccade::kf_gpu::get_Q(x[3], Q);
+        P[2 * 8 + 2] += Q[2 * 8 + 2];
+        P[6 * 8 + 6] += Q[6 * 8 + 6];
+        P[3 * 8 + 3] += Q[3 * 8 + 3];
+        P[7 * 8 + 7] += Q[7 * 8 + 7];
+    }
+
+    // Squared Mahalanobis distance of a detection box against a lost track's
+    // Kalman distribution, self-extrapolated `delta` frames forward. When
+    // person_height_m > 0 the diffusion uses the physically-grounded, inertia-aware
+    // model (predict_phys); otherwise it falls back to the tracker's kf_gpu Q.
+    static float kalman_gate_dist(
+        const RelinkBox& box, const RelinkMotionSnapshot& snap, int delta,
+        float person_height_m, float accel_long, float accel_lat, float fps) {
+        float x[8];
+        float P[64];
+        for (int i = 0; i < 8; ++i) x[i] = snap.state[static_cast<size_t>(i)];
+        for (int i = 0; i < 64; ++i) P[i] = snap.covariance[static_cast<size_t>(i)];
+        const int steps = std::max(0, delta);
+        const bool phys = person_height_m > 0.0f;
+        for (int s = 0; s < steps; ++s) {
+            if (phys) {
+                predict_phys(x, P, person_height_m, accel_long, accel_lat, fps);
+            } else {
+                saccade::kf_gpu::predict(x, P);
+            }
+        }
+        // S = H P H^T + R = P[:4,:4] + R(h)
+        float R[16];
+        saccade::kf_gpu::get_R(x[3], R);
+        float S[16];
+        for (int i = 0; i < 4; ++i)
+            for (int j = 0; j < 4; ++j)
+                S[i * 4 + j] = P[i * 8 + j] + R[i * 4 + j];
+        float S_inv[16];
+        saccade::kf_gpu::invert4x4(S, S_inv);
+
+        const float bw = std::max(1e-6f, box.x2 - box.x1);
+        const float bh = std::max(1e-6f, box.y2 - box.y1);
+        const float z[4] = {(box.x1 + box.x2) * 0.5f, (box.y1 + box.y2) * 0.5f, bw / bh, bh};
+        float y[4];
+        for (int i = 0; i < 4; ++i) y[i] = z[i] - x[i];
+        float d2 = 0.0f;
+        for (int i = 0; i < 4; ++i) {
+            float si = 0.0f;
+            for (int j = 0; j < 4; ++j) si += S_inv[i * 4 + j] * y[j];
+            d2 += y[i] * si;
+        }
+        return d2;
     }
 
     std::vector<float> buffer_mean(int cid) const {
@@ -1257,6 +1516,16 @@ private:
     float mahalanobis_weight_;
     float dynamic_margin_crowd_;
     float dynamic_margin_age_;
+    bool kalman_gate_;
+    float kalman_chi2_;
+    float kalman_penalty_weight_;
+    float kalman_dir_min_cos_;
+    float kalman_dir_min_speed_;
+    float kalman_person_height_m_;
+    float kalman_accel_long_;
+    float kalman_accel_lat_;
+    float kalman_fps_;
+    float kalman_max_speed_mps_;
 
     std::unordered_map<int, int> alias_;
     std::unordered_map<int, std::vector<float>> features_;
@@ -1712,9 +1981,22 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
              py::arg("vel_dir_weight") = 0.0f,
              py::arg("fuse_score_weight") = 0.0f,
              py::arg("stage2_match_thresh") = 0.5f,
-             py::arg("birth_low_score_thresh") = 0.0f)
+             py::arg("birth_low_score_thresh") = 0.0f,
+             py::arg("birth_prox_norm_thresh") = 0.0f)
         .def("set_reid_params", &GPUByteTracker::set_reid_params,
-             py::arg("cos_threshold"), py::arg("iou_low"), py::arg("iou_high"), py::arg("weight"))
+             py::arg("cos_threshold"), py::arg("iou_low"), py::arg("iou_high"), py::arg("weight"),
+             py::arg("cost_cos_w") = 0.55f, py::arg("cost_iou_w") = 0.30f, py::arg("cost_score_w") = 0.15f)
+        .def("set_relink_params", &GPUByteTracker::set_relink_params,
+             py::arg("enabled"), py::arg("bank_cap") = 256, py::arg("sim_thresh") = 0.6f,
+             py::arg("cheb_lambda") = 2.5f, py::arg("spatial_gate") = 4.0f, py::arg("max_age") = 300,
+             "Birth-time lost-bank ReID relink: revive a lost identity at spawn instead "
+             "of minting a new id. Precision-first (high sim threshold + spatial gate).")
+        .def("get_relink_debug", &GPUByteTracker::get_relink_debug,
+             "Returns (archived, birth_candidates, revived) relink counters.")
+        .def("set_oao_params", &GPUByteTracker::set_oao_params,
+             py::arg("tau"),
+             "OA-SORT OAO penalty weight [0, 1]. 0 = disabled. "
+             "Tracks occluded by other tracks receive cost += tau * overlap_iou.")
         .def("set_quality_params", &GPUByteTracker::set_quality_params,
              py::arg("enabled"), py::arg("w_aspect") = 0.50f, py::arg("w_center") = 0.30f, py::arg("w_area") = 0.20f)
         .def("set_frame_size", &GPUByteTracker::set_frame_size,
@@ -1728,6 +2010,15 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
                 self.set_homography(h.data());
             }
         }, py::arg("h"))
+        .def("set_unified_score_params", [](GPUByteTracker& self, float w_sim_base, float w_iou_base, float w_maha_base, float shift_ambiguity, float shift_lost_age) {
+            UnifiedScoreParams p;
+            p.w_sim_base = w_sim_base;
+            p.w_iou_base = w_iou_base;
+            p.w_maha_base = w_maha_base;
+            p.shift_ambiguity = shift_ambiguity;
+            p.shift_lost_age = shift_lost_age;
+            self.set_unified_score_params(p);
+        }, py::arg("w_sim_base"), py::arg("w_iou_base"), py::arg("w_maha_base"), py::arg("shift_ambiguity"), py::arg("shift_lost_age"))
         .def("set_unified_score_params", &GPUByteTracker::set_unified_score_params, py::arg("params"))
         .def("update_reference_features", [](GPUByteTracker& self, uintptr_t ids_ptr, uintptr_t features_ptr, int num, uintptr_t stream_ptr) {
             self.update_reference_features(
@@ -1768,6 +2059,10 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
                                uintptr_t out_boxes_ptr, uintptr_t out_scores_ptr, uintptr_t out_ids_ptr, uintptr_t out_classes_ptr,
                                uintptr_t out_det_idx_ptr, uintptr_t out_count_ptr,
                                uintptr_t embeddings_ptr, uintptr_t gmc_ptr, float light_factor, float mid_thresh_scale) {
+            // All args are raw pointers / primitives — no Python objects accessed.
+            // Releasing the GIL lets sibling worker threads make Python progress
+            // while this tracker's C++ work (1–3 ms/frame) runs on its stream.
+            py::gil_scoped_release release;
             self.update_into(
                 reinterpret_cast<float*>(boxes_ptr),
                 reinterpret_cast<float*>(scores_ptr),
@@ -1834,10 +2129,13 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             );
         },
         py::arg("ids_ptr"), py::arg("flags_ptr"), py::arg("n"), py::arg("stream_ptr"),
-        "Same as set_clean_embedding_flags but takes host (CPU) pointers — skips the D2H round-trip for IDs");
+        "Same as set_clean_embedding_flags but takes host (CPU) pointers — skips the D2H round-trip for IDs")
+        .def_property_readonly("cpp_ptr", [](GPUByteTracker& self) {
+            return reinterpret_cast<uintptr_t>(&self);
+        }, "Raw C++ pointer to this GPUByteTracker (for Workbench construction)");
 
     py::class_<SemanticRelinkerCpp>(m, "SemanticRelinker")
-        .def(py::init<float, int, float, float, int, float, float, int, float, std::string, float, bool, float, float, float, float, float, float, float, float, float, float, float, float, float, float>(),
+        .def(py::init<float, int, float, float, int, float, float, int, float, std::string, float, bool, float, float, float, float, float, float, float, float, float, float, float, float, float, float, bool, float, float, float, float, float, float, float, float, float>(),
              py::arg("sim_threshold") = 0.985f,
              py::arg("ttl") = 45,
              py::arg("ema_beta") = 0.83f,
@@ -1863,8 +2161,19 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
              py::arg("iou_weight") = 0.0f,
              py::arg("mahalanobis_weight") = 0.0f,
              py::arg("dynamic_margin_crowd") = 0.0f,
-             py::arg("dynamic_margin_age") = 0.0f)
-        .def("update_motion_snapshots", &SemanticRelinkerCpp::update_motion_snapshots, py::arg("snapshots"))
+             py::arg("dynamic_margin_age") = 0.0f,
+             py::arg("kalman_gate") = false,
+             py::arg("kalman_chi2") = 9.4877f,
+             py::arg("kalman_penalty_weight") = 0.0f,
+             py::arg("kalman_dir_min_cos") = -1.0f,
+             py::arg("kalman_dir_min_speed") = 1.0f,
+             py::arg("kalman_person_height_m") = 0.0f,
+             py::arg("kalman_accel_long") = 2.0f,
+             py::arg("kalman_accel_lat") = 1.0f,
+             py::arg("kalman_fps") = 30.0f,
+             py::arg("kalman_max_speed_mps") = 0.0f)
+        .def("update_motion_snapshots", &SemanticRelinkerCpp::update_motion_snapshots,
+             py::arg("snapshots"), py::arg("frame_id") = -1)
         .def("motion_candidate_ids", &SemanticRelinkerCpp::motion_candidate_ids, py::arg("frame_id") = -1)
         .def("inject_reference", &SemanticRelinkerCpp::inject_reference,
              py::arg("canonical_id"), py::arg("embedding"))
@@ -1942,15 +2251,22 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             if (warp.empty()) return py::none().cast<py::object>();
             return py::cast(warp);
         }, py::arg("frame_ptr"), py::arg("width"), py::arg("height"), py::arg("stream_ptr"), py::arg("use_gpu_phase_corr") = true)
-        .def("estimate_into", [](GMC& self, uintptr_t frame_ptr, int width, int height, uintptr_t stream_ptr, uintptr_t out_warp_ptr, bool use_gpu_phase_corr) {
+        .def("estimate_into", [](GMC& self, uintptr_t frame_ptr, int width, int height,
+                                  uintptr_t stream_ptr, uintptr_t out_warp_ptr,
+                                  bool use_gpu_phase_corr, bool sync_caller_stream) {
+            py::gil_scoped_release release;
             self.estimate_into(
                 reinterpret_cast<const float*>(frame_ptr),
-                width,
-                height,
+                width, height,
                 reinterpret_cast<cudaStream_t>(stream_ptr),
                 reinterpret_cast<float*>(out_warp_ptr),
-                use_gpu_phase_corr);
-        }, py::arg("frame_ptr"), py::arg("width"), py::arg("height"), py::arg("stream_ptr"), py::arg("out_warp_ptr"), py::arg("use_gpu_phase_corr") = true)
+                use_gpu_phase_corr, sync_caller_stream);
+        }, py::arg("frame_ptr"), py::arg("width"), py::arg("height"),
+           py::arg("stream_ptr"), py::arg("out_warp_ptr"),
+           py::arg("use_gpu_phase_corr") = true, py::arg("sync_caller_stream") = true)
+        .def("sync_to_stream", [](GMC& self, uintptr_t stream_ptr) {
+            self.sync_to_stream(reinterpret_cast<cudaStream_t>(stream_ptr));
+        }, py::arg("stream_ptr"))
         .def("estimate_mat", [](GMC& self, py::array_t<uint8_t> frame, int downscale) {
             py::buffer_info info = frame.request();
             if (info.ndim != 2 && info.ndim != 3) {
@@ -2256,6 +2572,7 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         .def_readwrite("nms_threshold",             &PerceptionPipeline::Config::nms_threshold)
         .def_readwrite("person_geometry_prior",     &PerceptionPipeline::Config::person_geometry_prior)
         .def_readwrite("geometry_suspect_support",  &PerceptionPipeline::Config::geometry_suspect_support)
+        .def_readwrite("geometry_suspect_support_score", &PerceptionPipeline::Config::geometry_suspect_support_score)
         .def_readwrite("person_min_height_ratio",   &PerceptionPipeline::Config::person_min_height_ratio)
         .def_readwrite("person_min_aspect",         &PerceptionPipeline::Config::person_min_aspect)
         .def_readwrite("person_max_aspect",         &PerceptionPipeline::Config::person_max_aspect)
@@ -2326,11 +2643,80 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             py::arg("priors_ptr") = 0, py::arg("prior_classes_ptr") = 0,
             py::arg("num_priors") = 0, py::arg("prior_iou_threshold") = 0.50f,
             py::arg("stream_ptr"))
+        // GIL-free synchronous variant: releases GIL for the entire filter+NMS+sync
+        // sequence so concurrent Python threads can make progress during GPU execution.
+        .def("process_detections_n",
+            [](PerceptionPipeline& self,
+               uintptr_t boxes_ptr, uintptr_t scores_ptr, uintptr_t classes_ptr,
+               int n_in, int frame_w, int frame_h, bool is_tiled,
+               uintptr_t out_boxes, uintptr_t out_scores, uintptr_t out_classes,
+               uintptr_t out_suspect,
+               uintptr_t priors_ptr, uintptr_t prior_classes_ptr,
+               int num_priors, float prior_iou_threshold,
+               uintptr_t stream_ptr) -> int {
+                py::gil_scoped_release release;
+                return self.process_detections_n(
+                    reinterpret_cast<const float*>(boxes_ptr),
+                    reinterpret_cast<const float*>(scores_ptr),
+                    reinterpret_cast<const int*>(classes_ptr),
+                    n_in, frame_w, frame_h, is_tiled,
+                    reinterpret_cast<float*>(out_boxes),
+                    reinterpret_cast<float*>(out_scores),
+                    reinterpret_cast<int*>(out_classes),
+                    reinterpret_cast<bool*>(out_suspect),
+                    reinterpret_cast<const float*>(priors_ptr),
+                    reinterpret_cast<const int*>(prior_classes_ptr),
+                    num_priors, prior_iou_threshold,
+                    reinterpret_cast<cudaStream_t>(stream_ptr));
+            },
+            py::arg("boxes_ptr"), py::arg("scores_ptr"), py::arg("classes_ptr"),
+            py::arg("n_in"), py::arg("frame_w"), py::arg("frame_h"),
+            py::arg("is_tiled"),
+            py::arg("out_boxes"), py::arg("out_scores"), py::arg("out_classes"),
+            py::arg("out_suspect"),
+            py::arg("priors_ptr") = 0, py::arg("prior_classes_ptr") = 0,
+            py::arg("num_priors") = 0, py::arg("prior_iou_threshold") = 0.50f,
+            py::arg("stream_ptr"))
+        .def("process_detections_n_fixed",
+            [](PerceptionPipeline& self,
+               uintptr_t boxes_ptr, uintptr_t scores_ptr, uintptr_t classes_ptr,
+               int n_in, int frame_w, int frame_h, bool is_tiled,
+               uintptr_t out_boxes, uintptr_t out_scores, uintptr_t out_classes,
+               uintptr_t out_suspect,
+               uintptr_t priors_ptr, uintptr_t prior_classes_ptr,
+               int num_priors, float prior_iou_threshold,
+               uintptr_t stream_ptr) -> int {
+                // GIL released: all work is async GPU + D2D, no CPU sync.
+                py::gil_scoped_release release;
+                return self.process_detections_n_fixed(
+                    reinterpret_cast<const float*>(boxes_ptr),
+                    reinterpret_cast<const float*>(scores_ptr),
+                    reinterpret_cast<const int*>(classes_ptr),
+                    n_in, frame_w, frame_h, is_tiled,
+                    reinterpret_cast<float*>(out_boxes),
+                    reinterpret_cast<float*>(out_scores),
+                    reinterpret_cast<int*>(out_classes),
+                    reinterpret_cast<bool*>(out_suspect),
+                    reinterpret_cast<const float*>(priors_ptr),
+                    reinterpret_cast<const int*>(prior_classes_ptr),
+                    num_priors, prior_iou_threshold,
+                    reinterpret_cast<cudaStream_t>(stream_ptr));
+            },
+            py::arg("boxes_ptr"), py::arg("scores_ptr"), py::arg("classes_ptr"),
+            py::arg("n_in"), py::arg("frame_w"), py::arg("frame_h"),
+            py::arg("is_tiled"),
+            py::arg("out_boxes"), py::arg("out_scores"), py::arg("out_classes"),
+            py::arg("out_suspect"),
+            py::arg("priors_ptr") = 0, py::arg("prior_classes_ptr") = 0,
+            py::arg("num_priors") = 0, py::arg("prior_iou_threshold") = 0.50f,
+            py::arg("stream_ptr"))
         .def("extract_reid",
             [](PerceptionPipeline& self,
                uintptr_t frame_ptr, int frame_h, int frame_w,
                uintptr_t boxes_ptr, int n_boxes,
                uintptr_t out_embeds, uintptr_t stream_ptr) {
+                // All args are raw pointers / primitives — safe to release GIL.
+                py::gil_scoped_release release;
                 self.extract_reid(
                     reinterpret_cast<const float*>(frame_ptr),
                     frame_h, frame_w,
@@ -2358,7 +2744,98 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
                 out["images"] = stats.images;
                 return out;
             })
-        .def_property_readonly("embed_dim", &PerceptionPipeline::get_embed_dim);
+        .def("set_postprocess_profiling_enabled", &PerceptionPipeline::set_postprocess_profiling_enabled, py::arg("enabled"))
+        .def("reset_postprocess_profile_stats", &PerceptionPipeline::reset_postprocess_profile_stats)
+        .def("get_postprocess_profile_stats",
+            [](const PerceptionPipeline& self) {
+                const auto stats = self.get_postprocess_profile_stats();
+                py::dict out;
+                out["filter_ms"] = stats.filter_ms;
+                out["nms_ms"] = stats.nms_ms;
+                out["count_d2h_ms"] = stats.count_d2h_ms;
+                out["total_ms"] = stats.total_ms;
+                out["native_filter_gather_ms"] = stats.native_filter_gather_ms;
+                out["native_filter_kernel_ms"] = stats.native_filter_kernel_ms;
+                out["native_gather_compact3_ms"] = stats.native_gather_compact3_ms;
+                out["native_copy_suspect_ms"] = stats.native_copy_suspect_ms;
+                out["native_filter_count_sync_ms"] = stats.native_filter_count_sync_ms;
+                out["native_small_nms_ms"] = stats.native_small_nms_ms;
+                out["native_suspect_penalty_ms"] = stats.native_suspect_penalty_ms;
+                out["native_large_sort_nms_ms"] = stats.native_large_sort_nms_ms;
+                out["native_large_argsort_ms"] = stats.native_large_argsort_ms;
+                out["native_large_nms_ms"] = stats.native_large_nms_ms;
+                out["native_compact_copy_ms"] = stats.native_compact_copy_ms;
+                out["native_large_gather4_ms"] = stats.native_large_gather4_ms;
+                out["native_large_copyback_ms"] = stats.native_large_copyback_ms;
+                out["input_boxes"] = stats.input_boxes;
+                out["filtered_boxes"] = stats.filtered_boxes;
+                out["output_boxes"] = stats.output_boxes;
+                return out;
+            })
+        .def_property_readonly("embed_dim", &PerceptionPipeline::get_embed_dim)
+        .def_property_readonly("cpp_ptr", [](PerceptionPipeline& self) {
+            return reinterpret_cast<uintptr_t>(&self);
+        }, "Raw C++ pointer to this PerceptionPipeline (for Workbench construction)");
+
+    // Workbench: per-thread isolated workspace for the post-YOLO hot path.
+    // See include/tracking/workbench.hpp for the full architectural intent.
+    py::class_<Workbench>(m, "Workbench")
+        .def(py::init([](uintptr_t pipeline_ptr, uintptr_t tracker_ptr,
+                         uintptr_t stream_ptr, int max_dets, int max_tracks) {
+                return new Workbench(
+                    reinterpret_cast<PerceptionPipeline*>(pipeline_ptr),
+                    reinterpret_cast<GPUByteTracker*>(tracker_ptr),
+                    reinterpret_cast<cudaStream_t>(stream_ptr),
+                    max_dets, max_tracks);
+             }),
+             py::arg("pipeline_ptr"), py::arg("tracker_ptr"), py::arg("stream_ptr"),
+             py::arg("max_dets") = 2048, py::arg("max_tracks") = 256,
+             "Borrow pipeline + tracker (must be per-workbench instances, not shared) "
+             "and a CUDA stream. Allocates per-workbench post-NMS scratch.")
+        .def("process_frame_postyolo",
+            [](Workbench& self,
+               uintptr_t raw_boxes, uintptr_t raw_scores, uintptr_t raw_classes,
+               int n_in, int frame_w, int frame_h, bool is_tiled,
+               uintptr_t priors_ptr, uintptr_t prior_classes_ptr,
+               int num_priors, float prior_iou_threshold,
+               uintptr_t embeddings_ptr, uintptr_t gmc_ptr,
+               float light_factor, float mid_thresh_scale,
+               uintptr_t out_boxes, uintptr_t out_scores,
+               uintptr_t out_ids, uintptr_t out_classes,
+               uintptr_t out_det_idx, uintptr_t out_count) -> int {
+                // Single GIL release for the entire ~3-6 ms hot path. All
+                // inputs are raw GPU pointers / primitives; nothing accesses
+                // Python state inside, so sibling worker threads can make
+                // Python progress (incl. their own next-frame submission)
+                // while this thread's C++ kernels run on its CUDA stream.
+                py::gil_scoped_release release;
+                return self.process_frame_postyolo(
+                    reinterpret_cast<const float*>(raw_boxes),
+                    reinterpret_cast<const float*>(raw_scores),
+                    reinterpret_cast<const int*>(raw_classes),
+                    n_in, frame_w, frame_h, is_tiled,
+                    reinterpret_cast<const float*>(priors_ptr),
+                    reinterpret_cast<const int*>(prior_classes_ptr),
+                    num_priors, prior_iou_threshold,
+                    reinterpret_cast<const float*>(embeddings_ptr),
+                    reinterpret_cast<const float*>(gmc_ptr),
+                    light_factor, mid_thresh_scale,
+                    reinterpret_cast<float*>(out_boxes),
+                    reinterpret_cast<float*>(out_scores),
+                    reinterpret_cast<int*>(out_ids),
+                    reinterpret_cast<int*>(out_classes),
+                    reinterpret_cast<int*>(out_det_idx),
+                    reinterpret_cast<int*>(out_count));
+            },
+            py::arg("raw_boxes_ptr"), py::arg("raw_scores_ptr"), py::arg("raw_classes_ptr"),
+            py::arg("n_in"), py::arg("frame_w"), py::arg("frame_h"), py::arg("is_tiled"),
+            py::arg("priors_ptr") = 0, py::arg("prior_classes_ptr") = 0,
+            py::arg("num_priors") = 0, py::arg("prior_iou_threshold") = 0.5f,
+            py::arg("embeddings_ptr") = 0, py::arg("gmc_ptr") = 0,
+            py::arg("light_factor") = 0.0f, py::arg("mid_thresh_scale") = 1.0f,
+            py::arg("out_boxes_ptr"), py::arg("out_scores_ptr"),
+            py::arg("out_ids_ptr"), py::arg("out_classes_ptr"),
+            py::arg("out_det_idx_ptr"), py::arg("out_count_ptr"));
 
     // Fused letterbox: bilinear resize + pad in one CUDA kernel.
     // Replaces: interpolate → fill_ → copy_ (3 ops) with a single kernel launch.
@@ -2380,4 +2857,166 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
     py::arg("pad_val") = 114.0f / 255.0f,
     py::arg("stream_ptr") = 0,
     "Fused letterbox: bilinear resize + constant pad into a square canvas in one kernel.");
+
+    // ── GPU Quality Filter ops (ports of quality.py / workbench.py) ──────────
+
+    m.def("quality_scale_scores",
+        [](uintptr_t scores_ptr, uintptr_t boxes_ptr, int n,
+           int frame_w, int frame_h,
+           float w_aspect, float w_center, float w_area,
+           uintptr_t stream_ptr) {
+            py::gil_scoped_release release;
+            quality_scale_scores(
+                reinterpret_cast<float*>(scores_ptr),
+                reinterpret_cast<const float*>(boxes_ptr),
+                n, frame_w, frame_h, w_aspect, w_center, w_area,
+                reinterpret_cast<cudaStream_t>(stream_ptr));
+        },
+        py::arg("scores_ptr"), py::arg("boxes_ptr"), py::arg("n"),
+        py::arg("frame_w"), py::arg("frame_h"),
+        py::arg("w_aspect") = 0.50f, py::arg("w_center") = 0.30f, py::arg("w_area") = 0.20f,
+        py::arg("stream_ptr") = 0,
+        "Multiply scores in-place by detection geometry quality (aspect/center/area). "
+        "GPU equivalent of compute_detection_quality_batch().");
+
+    m.def("narrow_bonus_scores",
+        [](uintptr_t scores_ptr, uintptr_t boxes_ptr, uintptr_t classes_ptr, int n,
+           float bonus, int person_class,
+           float narrow_aspect_thresh, float narrow_height_thresh,
+           int frame_h, uintptr_t stream_ptr) {
+            py::gil_scoped_release release;
+            narrow_bonus_scores(
+                reinterpret_cast<float*>(scores_ptr),
+                reinterpret_cast<const float*>(boxes_ptr),
+                reinterpret_cast<const int*>(classes_ptr),
+                n, bonus, person_class,
+                narrow_aspect_thresh, narrow_height_thresh, frame_h,
+                reinterpret_cast<cudaStream_t>(stream_ptr));
+        },
+        py::arg("scores_ptr"), py::arg("boxes_ptr"), py::arg("classes_ptr"), py::arg("n"),
+        py::arg("bonus"), py::arg("person_class") = 0,
+        py::arg("narrow_aspect_thresh") = 2.1f, py::arg("narrow_height_thresh") = 0.5f,
+        py::arg("frame_h") = 1080, py::arg("stream_ptr") = 0,
+        "Add score bonus to narrow/tall person detections in-place. "
+        "GPU equivalent of _apply_narrow_bonus().");
+
+    m.def("fp_hard_filter",
+        [](uintptr_t boxes_in, uintptr_t scores_in, uintptr_t classes_in, int n,
+           float min_score, float max_area, float max_suspicious_score,
+           uintptr_t boxes_out, uintptr_t scores_out, uintptr_t classes_out,
+           uintptr_t stream_ptr) -> int {
+            py::gil_scoped_release release;
+            return fp_hard_filter(
+                reinterpret_cast<const float*>(boxes_in),
+                reinterpret_cast<const float*>(scores_in),
+                reinterpret_cast<const int*>(classes_in),
+                n, min_score, max_area, max_suspicious_score,
+                reinterpret_cast<float*>(boxes_out),
+                reinterpret_cast<float*>(scores_out),
+                reinterpret_cast<int*>(classes_out),
+                reinterpret_cast<cudaStream_t>(stream_ptr));
+        },
+        py::arg("boxes_in"), py::arg("scores_in"), py::arg("classes_in"), py::arg("n"),
+        py::arg("min_score") = 0.25f, py::arg("max_area") = 10000.0f,
+        py::arg("max_suspicious_score") = 0.45f,
+        py::arg("boxes_out"), py::arg("scores_out"), py::arg("classes_out"),
+        py::arg("stream_ptr") = 0,
+        "Compact-filter detections removing very-low-score and large+uncertain boxes. "
+        "Returns count of kept detections. GPU equivalent of _apply_fp_hard_filter().");
+
+    m.def("auction_solve_cpp",
+        [](py::array_t<float, py::array::c_style | py::array::forcecast> cost_matrix, float epsilon) {
+            if (cost_matrix.ndim() != 2) {
+                throw std::invalid_argument("cost_matrix must be 2D");
+            }
+            int n_bidders = static_cast<int>(cost_matrix.shape(0));
+            int n_items = static_cast<int>(cost_matrix.shape(1));
+            
+            std::vector<std::vector<float>> profit_matrix(n_bidders, std::vector<float>(n_items, 0.0f));
+            auto buf = cost_matrix.unchecked<2>();
+            for (int i = 0; i < n_bidders; ++i) {
+                for (int j = 0; j < n_items; ++j) {
+                    profit_matrix[i][j] = -buf(i, j); // profit = -cost
+                }
+            }
+            
+            std::vector<int> assignment;
+            // release GIL for auction algorithm execution
+            {
+                py::gil_scoped_release release;
+                saccade::AuctionAlgorithm::Solve(profit_matrix, assignment, epsilon);
+            }
+            
+            std::vector<int> row_ind;
+            std::vector<int> col_ind;
+            for (int i = 0; i < n_bidders; ++i) {
+                if (assignment[i] != -1) {
+                    row_ind.push_back(i);
+                    col_ind.push_back(assignment[i]);
+                }
+            }
+            
+            return py::make_tuple(row_ind, col_ind);
+        },
+        py::arg("cost_matrix"), py::arg("epsilon") = 0.01f,
+        "Solve linear assignment problem using C++ Auction Algorithm (minimizing cost_matrix).");
+
+    m.def("selective_scan_fwd",
+        [](
+            uintptr_t u_ptr, uintptr_t delta_ptr, uintptr_t A_ptr,
+            uintptr_t B_ptr, uintptr_t C_ptr, uintptr_t D_ptr, uintptr_t y_ptr,
+            int B_dim, int L_dim, int D_dim, int N_dim, int has_D,
+            int a_per_channel, bool is_half, uintptr_t stream_ptr
+        ) {
+            SelectiveScanParams params;
+            params.B = B_dim;
+            params.L = L_dim;
+            params.D = D_dim;
+            params.N = N_dim;
+            params.has_D = has_D;
+            params.a_per_channel = a_per_channel;
+
+            // Launch on the caller's CUDA stream (PyTorch's current stream).
+            // Defaulting to the legacy default stream (stream 0) makes the
+            // kernel invisible to CUDA-graph capture, which never records work
+            // on the capture stream — replay then leaves y unfilled and the
+            // head output saturates. See mamba_head_cuda_graph_eval_bug doc.
+            void* stream = reinterpret_cast<void*>(stream_ptr);
+
+            {
+                py::gil_scoped_release release;
+                if (is_half) {
+                    selective_scan_fwd_half(
+                        reinterpret_cast<const void*>(u_ptr),
+                        reinterpret_cast<const void*>(delta_ptr),
+                        reinterpret_cast<const void*>(A_ptr),
+                        reinterpret_cast<const void*>(B_ptr),
+                        reinterpret_cast<const void*>(C_ptr),
+                        has_D ? reinterpret_cast<const void*>(D_ptr) : nullptr,
+                        reinterpret_cast<void*>(y_ptr),
+                        params,
+                        stream
+                    );
+                } else {
+                    selective_scan_fwd(
+                        reinterpret_cast<const float*>(u_ptr),
+                        reinterpret_cast<const float*>(delta_ptr),
+                        reinterpret_cast<const float*>(A_ptr),
+                        reinterpret_cast<const float*>(B_ptr),
+                        reinterpret_cast<const float*>(C_ptr),
+                        has_D ? reinterpret_cast<const float*>(D_ptr) : nullptr,
+                        reinterpret_cast<float*>(y_ptr),
+                        params,
+                        stream
+                    );
+                }
+            }
+        },
+        py::arg("u_ptr"), py::arg("delta_ptr"), py::arg("A_ptr"),
+        py::arg("B_ptr"), py::arg("C_ptr"), py::arg("D_ptr"), py::arg("y_ptr"),
+        py::arg("B_dim"), py::arg("L_dim"), py::arg("D_dim"),
+        py::arg("N_dim"), py::arg("has_D"),
+        py::arg("a_per_channel") = 0, py::arg("is_half") = false,
+        py::arg("stream_ptr") = 0,
+        "CUDA selective scan (Mamba SSM kernel) supporting both float and half.");
 }

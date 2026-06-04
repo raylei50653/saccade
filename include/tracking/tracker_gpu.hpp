@@ -1,3 +1,5 @@
+#pragma once
+
 #include "saccade/common.hpp"
 #include <cstdint>
 #include <utility>
@@ -85,9 +87,24 @@ public:
         float vel_dir_weight = 0.0f,
         float fuse_score_weight = 0.0f,
         float stage2_match_thresh = 0.5f,
-        float birth_low_score_thresh = 0.0f
+        float birth_low_score_thresh = 0.0f,
+        float birth_prox_norm_thresh = 0.0f
     );
-    void set_reid_params(float cos_threshold, float iou_low, float iou_high, float weight);
+    void set_reid_params(float cos_threshold, float iou_low, float iou_high, float weight,
+                         float cost_cos_w = 0.55f, float cost_iou_w = 0.30f, float cost_score_w = 0.15f);
+    void set_reid_min_candidates(int min_candidates);
+    void set_relink_params(bool enabled, int bank_cap, float sim_thresh,
+                           float cheb_lambda, float spatial_gate, int max_age);
+    std::vector<int> get_relink_debug();
+
+    /**
+     * @brief OA-SORT Occlusion-Aware Offset (OAO) penalty weight.
+     * @param tau Cost penalty scale in [0, 1]. 0 = disabled (default).
+     *            When > 0, tracks whose predicted boxes overlap other tracks get
+     *            a cost increase of tau * IoU_overlap, reducing incorrect associations
+     *            during occlusion (cost confusion).
+     */
+    void set_oao_params(float tau);
 
     /**
      * @brief Set Detection Quality Scaling (A6) parameters.
@@ -269,6 +286,9 @@ void SACCADE_TRACKING_API gather_compact4_counted_cuda(
 
 void SACCADE_TRACKING_API copy_bool_counted_cuda(
     const bool* src, bool* dst, const int* count_ptr, int max_n, cudaStream_t stream);
+
+void SACCADE_TRACKING_API penalize_suspect_scores_cuda(
+    float* scores, const bool* suspect, const int* count_ptr, float penalty_score, int max_n, cudaStream_t stream);
 
 // Merged compact+sort+NMS with grid spatial indexing (#1,#2,#3,#5 optimizations)
 void SACCADE_TRACKING_API compact_grid_nms_cuda(

@@ -236,13 +236,19 @@ std::vector<float> GMC::estimate(const float* frame_gpu_ptr, int width, int heig
     }
 }
 
+void GMC::sync_to_stream(cudaStream_t stream) {
+    if (gmc_done_event_ != nullptr)
+        cudaStreamWaitEvent(stream, gmc_done_event_, 0);
+}
+
 void GMC::estimate_into(
     const float* frame_gpu_ptr,
     int width,
     int height,
     cudaStream_t stream,
     float* d_out_warp,
-    bool use_gpu_phase_corr) {
+    bool use_gpu_phase_corr,
+    bool sync_caller_stream) {
     refresh_pcr_score();
     if (profiling_enabled_) {
         reset_profile_stats();
@@ -295,7 +301,8 @@ void GMC::estimate_into(
         pcr_pending_ = false;
         if (h_pcr_score_async_) *h_pcr_score_async_ = 0.0f;
         cudaEventRecord(gmc_done_event_, gmc_stream_);
-        cudaStreamWaitEvent(stream, gmc_done_event_, 0);
+        if (sync_caller_stream)
+            cudaStreamWaitEvent(stream, gmc_done_event_, 0);
         if (profiling_enabled_) {
             last_profile_stats_.total_ms =
                 last_profile_stats_.gray_downscale_ms
@@ -365,7 +372,8 @@ void GMC::estimate_into(
         pcr_pending_ = true;
         cudaEventRecord(gmc_done_event_, gmc_stream_);
     });
-    cudaStreamWaitEvent(stream, gmc_done_event_, 0);
+    if (sync_caller_stream)
+        cudaStreamWaitEvent(stream, gmc_done_event_, 0);
     if (profiling_enabled_) {
         last_profile_stats_.total_ms =
             last_profile_stats_.gray_downscale_ms

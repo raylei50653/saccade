@@ -49,7 +49,10 @@ class FeatureBank:
             return self._slot_map[key]
         slot = self.ptr
         # Evict stale entry if this slot was previously occupied
-        old_key = (int(self.id_map[slot].item()), int(self.stream_map[slot].item()))
+        old_key = (
+            int(self.id_map[slot].item()),
+            int(self.stream_map[slot].item()),
+        )  # saccade-allow-cpu
         if old_key in self._slot_map and self._slot_map[old_key] == slot:
             del self._slot_map[old_key]
         self._slot_map[key] = slot
@@ -80,7 +83,8 @@ class FeatureBank:
             return
         embeddings_norm = F.normalize(embeddings, dim=-1)
         target_indices: List[int] = [
-            self._alloc_slot(int(track_ids[i].item()), stream_id) for i in range(n)
+            self._alloc_slot(int(track_ids[i].item()), stream_id)
+            for i in range(n)  # saccade-allow-cpu
         ]
         idxs = torch.tensor(target_indices, dtype=torch.long, device=self.device)
         self.features[idxs] = embeddings_norm
@@ -122,7 +126,7 @@ class FeatureBank:
         results = {}
         for i in range(queries.shape[0]):
             if max_sims[i] > self.threshold:
-                results[i] = valid_ids[int(max_idxs[i].item())]
+                results[i] = valid_ids[int(max_idxs[i].item())]  # saccade-allow-cpu
 
         return results
 
@@ -160,9 +164,13 @@ class FeatureBank:
         results = {}
         for i in range(queries.shape[0]):
             if max_sims[i] > strict_threshold:
-                best_match_idx = valid_indices[int(max_idxs[i].item())]
-                match_stream = self.stream_map[best_match_idx].item()
-                match_id = self.id_map[best_match_idx].item()
+                best_match_idx = valid_indices[
+                    int(max_idxs[i].item())
+                ]  # saccade-allow-cpu
+                match_stream = self.stream_map[
+                    best_match_idx
+                ].item()  # saccade-allow-cpu
+                match_id = self.id_map[best_match_idx].item()  # saccade-allow-cpu
                 results[i] = (int(match_stream), int(match_id))
 
         return results

@@ -36,6 +36,14 @@ fp_hard_filter_min_score: 0.20
 fp_hard_filter_max_suspicious_area: 15000
 fp_hard_filter_max_suspicious_score: 0.40
 
+# External FP post-processing (rule = zero-cost structural filter)
+external_fp_filter_mode: rule
+# external_fp_logistic_model: models/external_fp/cascade_stage2_logistic.json
+external_fp_logistic_threshold: 0.50
+external_fp_max_score: 0.18
+external_fp_penalty: 1.0
+external_fp_softmax_min_scale: 0.7
+
 # Narrow person score bonus (0 = off)
 narrow_person_score_bonus: 0.0
 narrow_person_max_width_ratio: 0.018

@@ -99,7 +99,7 @@ class PipelineOrchestrator:
             self.visual_tool = FunctionTool.from_defaults(fn=visual_requery)
 
             # 建立包含視覺重查能力的 Agent
-            self.agent = ReActAgent.from_tools(  # type: ignore
+            self.agent = ReActAgent.from_tools(  # type: ignore[attr-defined]
                 [self.visual_tool], llm=Settings.llm, verbose=True
             )
 

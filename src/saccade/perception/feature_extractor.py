@@ -9,6 +9,7 @@ _IMAGENET_STD = [0.229, 0.224, 0.225]
 
 _DEFAULT_ENGINE: Dict[str, str] = {
     "siglip2": "models/embedding/google_siglip2-base-patch16-224.engine",
+    "siglip2_reid": "models/embedding/marketaju_siglip2_reid_224.engine",
     "dinov2": "models/embedding/facebook_dinov2-base.engine",
     "transreid": "models/embedding/transreid_256x128.engine",
     "osnet": "models/embedding/osnet_x1_0_256x128.engine",
@@ -97,6 +98,7 @@ class TRTFeatureExtractor:
         if HAS_CPP_EXT:
             cpp_type_map = {
                 "siglip2": ModelType.SIGLIP2,
+                "siglip2_reid": ModelType.SIGLIP2,
                 "dinov2": ModelType.DINOV2,
                 "transreid": ModelType.TRANSREID,
                 "osnet": ModelType.OSNET,
@@ -198,7 +200,7 @@ class TRTFeatureExtractor:
     def _normalize(self, x: torch.Tensor) -> torch.Tensor:
         """Apply model-specific input normalisation (in-place friendly, returns contiguous)."""
         x = x.to(torch.float32)
-        if self.model_type == "siglip2":
+        if self.model_type in {"siglip2", "siglip2_reid"}:
             # SigLIP vision_model expects pixel_values in [-1, 1].
             return x.mul(2.0).sub(1.0).contiguous()
 
@@ -320,7 +322,7 @@ class TRTFeatureExtractor:
             chunk = input_tensor[start : start + self.max_batch]
             bs = chunk.size(0)
             self._extract_chunk(chunk)
-            torch.cuda.synchronize()
+            torch.cuda.synchronize()  # saccade-allow-cpu
             lhs = self.output_buffers["last_hidden_state"][:bs].float().clone()
             embed_chunk, scores_gate = _last_vit_dual(
                 lhs, sigma_embed, sigma_gate, top_k_ratio

@@ -1,20 +1,13 @@
-# MediaMTX 基礎配置 (通用版本)
+# MediaMTX RTSP baseline for local development.
+# Canonical defaults are documented in `src/saccade/media/rtsp.py`.
+# This profile intentionally exposes RTSP only, to avoid unrelated port
+# conflicts from HLS / WebRTC listeners during local multi-stream testing.
 paths:
   all:
-    # 允許發布推流的帳號密碼
     publishUser: publisher
     publishPass: pubpass123
-    # 允許讀取串流的帳號密碼
     readUser: reader
     readPass: readpass123
 
-# 監聽所有網路介面
 rtspAddress: :8554
-hlsAddress: :8888
-webrtcAddress: :8889
-
-# 強制使用 TCP 以提高穩定性
 rtspTransports: [tcp]
-
-# 允許來自任何 IP 的連線
-# 注意：在較新版本中此欄位可能不在全域，我們改用最簡約配置

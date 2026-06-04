@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 from dataclasses import dataclass
-from typing import List, Any, cast, Optional, TypedDict
+from typing import List, Any, cast, Optional, TypedDict, Callable
 
 try:
     from saccade_tracking_ext import GPUByteTracker as CppGPUByteTracker, TrackResult
@@ -94,7 +94,13 @@ class GPUTrackResultBuffers(TypedDict):
 
 
 class TrackAppearanceBank:
-    """Per-track Top-K clean appearance sample bank (Phase 1)."""
+    """Per-track Top-K clean appearance sample bank with EMA smoothing (Phase 1).
+
+    Stores up to K quality-sorted samples per track for consistency checking.
+    The representative used for matching is an EMA-smoothed embedding (like
+    Ultralytics BOTSORT, alpha=0.9): each new matched detection is blended
+    with the exponential moving average to reduce single-frame noise.
+    """
 
     MIN_SCORE: float = 0.45
     MIN_IOU: float = 0.35
@@ -110,6 +116,7 @@ class TrackAppearanceBank:
         min_aspect: float = 1.2,
         max_aspect: float = 4.5,
         bank_weighted_mean: bool = False,
+        ema_alpha: float = 0.8,
     ) -> None:
         self.k = max(1, k)
         self.min_score = float(min_score)
@@ -119,11 +126,14 @@ class TrackAppearanceBank:
         self.min_aspect = float(min_aspect)
         self.max_aspect = float(max_aspect)
         self._bank_weighted_mean = bank_weighted_mean
+        self.ema_alpha = float(ema_alpha)
+        self._use_ema = ema_alpha > 0.0
         self._banks: dict[int, list[AppearanceSample]] = {}
         self._representatives: dict[int, torch.Tensor] = {}
         self._consistency: dict[int, float] = {}
         self._clean_ids: set[int] = set()
         self._high_quality_reps: dict[int, torch.Tensor] = {}
+        self._ema_reps: dict[int, torch.Tensor] = {}
 
     @staticmethod
     def _rank_key(s: "AppearanceSample") -> tuple[float, int]:
@@ -156,8 +166,18 @@ class TrackAppearanceBank:
         ):
             return
         emb = F.normalize(
-            embedding.detach().to(device="cpu", dtype=torch.float32), dim=0
+            embedding.detach().to(device="cpu", dtype=torch.float32),
+            dim=0,  # saccade-allow-cpu
         )
+        if self._use_ema:
+            if track_id in self._ema_reps:
+                ema_unnorm = (
+                    self.ema_alpha * self._ema_reps[track_id]
+                    + (1.0 - self.ema_alpha) * emb
+                )
+            else:
+                ema_unnorm = emb
+            self._ema_reps[track_id] = F.normalize(ema_unnorm, dim=0)
         bank = self._banks.setdefault(track_id, [])
         bank.append(
             AppearanceSample(emb, det_score, iou, frame_id, aspect_ratio, quality_score)
@@ -192,8 +212,18 @@ class TrackAppearanceBank:
             ):
                 continue
             emb = F.normalize(
-                embedding.detach().to(device="cpu", dtype=torch.float32), dim=0
+                embedding.detach().to(device="cpu", dtype=torch.float32),
+                dim=0,  # saccade-allow-cpu
             )
+            if self._use_ema:
+                if track_id in self._ema_reps:
+                    ema_unnorm = (
+                        self.ema_alpha * self._ema_reps[track_id]
+                        + (1.0 - self.ema_alpha) * emb
+                    )
+                else:
+                    ema_unnorm = emb
+                self._ema_reps[track_id] = F.normalize(ema_unnorm, dim=0)
             bank = self._banks.setdefault(track_id, [])
             bank.append(
                 AppearanceSample(
@@ -226,10 +256,14 @@ class TrackAppearanceBank:
         return self.consistency(track_id) >= self.consistency_threshold
 
     def representative(self, track_id: int) -> Optional[torch.Tensor]:
+        if self._use_ema:
+            return self._ema_reps.get(track_id)
         return self._representatives.get(track_id)
 
     def representatives(self) -> dict[int, torch.Tensor]:
         """Returns {track_id: representative_embedding} for all tracks with a clean bank."""
+        if self._use_ema:
+            return dict(self._ema_reps)
         return dict(self._representatives)
 
     def clean_ids(self) -> set[int]:
@@ -243,6 +277,7 @@ class TrackAppearanceBank:
             self._consistency.pop(tid, None)
             self._clean_ids.discard(tid)
             self._high_quality_reps.pop(tid, None)
+            self._ema_reps.pop(tid, None)
 
     def _refresh_track(self, track_id: int) -> None:
         bank = self._banks.get(track_id, [])
@@ -251,6 +286,7 @@ class TrackAppearanceBank:
             self._consistency.pop(track_id, None)
             self._clean_ids.discard(track_id)
             self._high_quality_reps.pop(track_id, None)
+            self._ema_reps.pop(track_id, None)
             return
 
         embs = torch.stack([sample.embedding for sample in bank])
@@ -273,7 +309,7 @@ class TrackAppearanceBank:
         else:
             # mean pairwise cosine = (n * ||mean_unnorm||² - 1) / (n - 1)
             # derivation: sum_ij sim_ij = n²*||mean_unnorm||², subtract n diagonal
-            q = float(torch.dot(mean_unnorm, mean_unnorm).item())
+            q = float(torch.dot(mean_unnorm, mean_unnorm).item())  # saccade-allow-cpu
             consistency = (n * q - 1.0) / (n - 1)
 
         self._representatives[track_id] = representative
@@ -309,7 +345,7 @@ class TrackAppearanceBank:
                     mean_hq = (w_hq.unsqueeze(1) * stacked_hq).sum(0)
                 else:
                     mean_hq = stacked_hq.mean(dim=0)
-                q_hq = float(torch.dot(mean_hq, mean_hq).item())
+                q_hq = float(torch.dot(mean_hq, mean_hq).item())  # saccade-allow-cpu
                 hq_consistency = (n_hq * q_hq - 1.0) / (n_hq - 1)
                 if hq_consistency >= self.consistency_threshold:
                     self._high_quality_reps[track_id] = F.normalize(mean_hq, dim=0)
@@ -402,6 +438,7 @@ class GPUByteTracker:
         fuse_score_weight: float = 0.0,
         stage2_match_thresh: float = 0.5,
         birth_low_score_thresh: float = 0.0,
+        birth_prox_norm_thresh: float = 0.0,
     ) -> None:
         """調整追蹤器門檻與參數。"""
         self.tracker.set_params(
@@ -420,6 +457,7 @@ class GPUByteTracker:
             fuse_score_weight,
             stage2_match_thresh,
             birth_low_score_thresh,
+            birth_prox_norm_thresh,
         )
 
     def set_reid_params(
@@ -428,11 +466,54 @@ class GPUByteTracker:
         iou_low: float = 0.30,
         iou_high: float = 0.60,
         weight: float = 0.40,
+        cost_cos_w: float = 0.55,
+        cost_iou_w: float = 0.30,
+        cost_score_w: float = 0.15,
     ) -> None:
-        """調整 C++ ReID fusion 門檻。"""
+        """Set ReID fusion thresholds and appearance cost blend weights."""
         set_reid_params = getattr(self.tracker, "set_reid_params", None)
         if set_reid_params is not None:
-            set_reid_params(cos_threshold, iou_low, iou_high, weight)
+            set_reid_params(
+                cos_threshold,
+                iou_low,
+                iou_high,
+                weight,
+                cost_cos_w,
+                cost_iou_w,
+                cost_score_w,
+            )
+
+    def set_reid_min_candidates(self, min_candidates: int = 1) -> None:
+        setter = getattr(self.tracker, "set_reid_min_candidates", None)
+        if setter is not None:
+            setter(min_candidates)
+
+    def set_relink_params(
+        self,
+        enabled: bool = False,
+        bank_cap: int = 256,
+        sim_thresh: float = 0.6,
+        cheb_lambda: float = 2.5,
+        spatial_gate: float = 4.0,
+        max_age: int = 300,
+    ) -> None:
+        setter = getattr(self.tracker, "set_relink_params", None)
+        if setter is not None:
+            setter(enabled, bank_cap, sim_thresh, cheb_lambda, spatial_gate, max_age)
+
+    def get_relink_debug(self) -> list[int]:
+        getter = getattr(self.tracker, "get_relink_debug", None)
+        return list(getter()) if getter is not None else [0, 0, 0]
+
+    def set_oao_params(self, tau: float = 0.0) -> None:
+        """OA-SORT Occlusion-Aware Offset (OAO) penalty.
+
+        tau in [0, 1]: cost += tau * inter_track_IoU for each occluded track.
+        0 (default) = disabled.  Recommended sweep: 0.1 – 0.4.
+        """
+        set_oao = getattr(self.tracker, "set_oao_params", None)
+        if set_oao is not None:
+            set_oao(float(tau))
 
     def set_quality_params(
         self,
@@ -498,8 +579,8 @@ class GPUByteTracker:
         if num == 0:
             return
 
-        ids_contig = track_ids.to(torch.int32).contiguous()
-        features_contig = features.to(torch.float32).contiguous()
+        ids_contig = track_ids.to(torch.int32).cuda().contiguous()
+        features_contig = features.to(torch.float32).cuda().contiguous()
         stream = torch.cuda.current_stream().cuda_stream
 
         self.tracker.update_reference_features(
@@ -692,8 +773,10 @@ class GPUByteTracker:
         stream = torch.cuda.current_stream().cuda_stream
         set_flags_host = getattr(self.tracker, "set_clean_embedding_flags_host", None)
         if set_flags_host is not None:
-            ids_contig = track_ids.to(torch.int32).contiguous()  # stays on CPU
-            flags_contig = flags.to(torch.bool).contiguous()  # stays on CPU
+            ids_contig = (
+                track_ids.to(torch.int32).cpu().contiguous()
+            )  # saccade-allow-cpu
+            flags_contig = flags.to(torch.bool).cpu().contiguous()  # saccade-allow-cpu
             set_flags_host(
                 ids_contig.data_ptr(),
                 flags_contig.data_ptr(),
@@ -737,3 +820,188 @@ class GPUByteTracker:
             [bank_reps[tid] for tid in valid_tids]
         ).cuda()  # [n, D] GPU
         self._bank_slot_features[slots] = stacked
+
+
+class GraphedTrackerUpdate:
+    """CUDA-graph-captured ``update_into`` for the GPU byte tracker.
+
+    Pre-allocates fixed-size input/output buffers (box/scores padded to
+    ``max_assoc``) and lazy-captures the C++ :meth:`update_into` call via
+    :func:`torch.cuda.make_graphed_callables`.  The tracker's
+    ``run_update_device`` has been modified to always launch every kernel
+    with fixed grids — zero-padded detection slots are naturally filtered
+    by score/IoU gates inside the kernels.
+
+    Usage::
+
+        gtu = GraphedTrackerUpdate(tracker, max_assoc=1024)
+        # Per frame:
+        gtu.copy_inputs(boxes, scores, classes, gmc)
+        result = gtu.replay()
+        gtu.read_outputs(boxes_out, scores_out, ...)  # or use result dict
+    """
+
+    def __init__(
+        self,
+        tracker: GPUByteTracker,
+        max_assoc: int = 1024,
+        max_objs: int = 2048,
+    ):
+        self._tracker = tracker
+        self._max_assoc = max_assoc
+        self._max_objs = max_objs
+
+        device = torch.device("cuda")
+
+        self.d_boxes = torch.zeros(max_assoc, 4, dtype=torch.float32, device=device)
+        self.d_scores = torch.zeros(max_assoc, dtype=torch.float32, device=device)
+        self.d_classes = torch.zeros(max_assoc, dtype=torch.int32, device=device)
+        self.d_gmc = (
+            torch.eye(2, 3, dtype=torch.float32, device=device)
+            .flatten()[:6]
+            .contiguous()
+        )
+
+        self.out_boxes = torch.zeros(max_objs, 4, dtype=torch.float32, device=device)
+        self.out_scores = torch.zeros(max_objs, dtype=torch.float32, device=device)
+        self.out_ids = torch.zeros(max_objs, dtype=torch.int32, device=device)
+        self.out_classes = torch.zeros(max_objs, dtype=torch.int32, device=device)
+        self.out_det_idx = torch.zeros(max_objs, dtype=torch.int32, device=device)
+        self.out_count = torch.zeros((), dtype=torch.int32, device=device)
+
+        self._graphed_callable: Callable[..., None] | None = None
+
+    def _warmup(self) -> None:
+        with torch.no_grad():
+            stream = torch.cuda.current_stream().cuda_stream
+            self._tracker.tracker.update_into(
+                self.d_boxes.data_ptr(),
+                self.d_scores.data_ptr(),
+                self.d_classes.data_ptr(),
+                self._max_assoc,
+                stream,
+                self.out_boxes.data_ptr(),
+                self.out_scores.data_ptr(),
+                self.out_ids.data_ptr(),
+                self.out_classes.data_ptr(),
+                self.out_det_idx.data_ptr(),
+                self.out_count.data_ptr(),
+                0,
+                self.d_gmc.data_ptr(),
+                0.0,
+                1.0,
+            )
+            torch.cuda.synchronize()  # saccade-allow-cpu
+
+    def _capture(self) -> None:
+        if self._graphed_callable is not None:
+            return
+        self._warmup()
+
+        def _graph_fn(
+            boxes: torch.Tensor,
+            scores: torch.Tensor,
+            classes: torch.Tensor,
+            d_gmc: torch.Tensor,
+            out_boxes: torch.Tensor,
+            out_scores: torch.Tensor,
+            out_ids: torch.Tensor,
+            out_classes: torch.Tensor,
+            out_det_idx: torch.Tensor,
+            out_count: torch.Tensor,
+        ) -> tuple[torch.Tensor, ...]:
+            tracker_cpp = self._tracker.tracker
+            stream = torch.cuda.current_stream().cuda_stream
+            tracker_cpp.update_into(
+                boxes.data_ptr(),
+                scores.data_ptr(),
+                classes.data_ptr(),
+                self._max_assoc,
+                stream,
+                out_boxes.data_ptr(),
+                out_scores.data_ptr(),
+                out_ids.data_ptr(),
+                out_classes.data_ptr(),
+                out_det_idx.data_ptr(),
+                out_count.data_ptr(),
+                0,
+                d_gmc.data_ptr(),
+                0.0,
+                1.0,
+            )
+            return (out_boxes, out_scores, out_ids, out_classes, out_det_idx, out_count)
+
+        sample = (
+            self.d_boxes,
+            self.d_scores,
+            self.d_classes,
+            self.d_gmc,
+            self.out_boxes,
+            self.out_scores,
+            self.out_ids,
+            self.out_classes,
+            self.out_det_idx,
+            self.out_count,
+        )
+        self._graphed_callable = cast(
+            "Callable[..., None]", torch.cuda.make_graphed_callables(_graph_fn, sample)
+        )
+
+    def copy_inputs(
+        self,
+        boxes: torch.Tensor,
+        scores: torch.Tensor,
+        classes: torch.Tensor,
+        gmc: torch.Tensor | None = None,
+    ) -> None:
+        n = min(boxes.shape[0], self._max_assoc)
+        if n > 0:
+            self.d_boxes[:n].copy_(boxes[:n].float())
+            self.d_scores[:n].copy_(scores[:n].float())
+            self.d_classes[:n].copy_(classes[:n].int())
+        # Only zero the tail beyond valid dets — the tracker gates on score,
+        # so stale data in slots [n:] must be cleared to avoid ghost associations.
+        if n < self._max_assoc:
+            self.d_boxes[n:].zero_()
+            self.d_scores[n:].zero_()
+            self.d_classes[n:].zero_()
+        if gmc is not None:
+            self.d_gmc.copy_(gmc.flatten()[:6].float().contiguous())
+
+    def replay(self) -> dict[str, torch.Tensor]:
+        if self._graphed_callable is None:
+            self._capture()
+        assert self._graphed_callable is not None
+        self._graphed_callable(
+            self.d_boxes,
+            self.d_scores,
+            self.d_classes,
+            self.d_gmc,
+            self.out_boxes,
+            self.out_scores,
+            self.out_ids,
+            self.out_classes,
+            self.out_det_idx,
+            self.out_count,
+        )
+        return {
+            "boxes": self.out_boxes,
+            "scores": self.out_scores,
+            "ids": self.out_ids,
+            "classes": self.out_classes,
+            "det_idx": self.out_det_idx,
+            "count": self.out_count,
+        }
+
+    def read_outputs(self, target: dict[str, torch.Tensor]) -> None:
+        """Copy internal output buffers into the caller-provided result dict."""
+        target["count"].copy_(self.out_count, non_blocking=True)
+        count = int(self.out_count.item())  # saccade-allow-cpu
+        if count > 0:
+            target["boxes"][:count].copy_(self.out_boxes[:count], non_blocking=True)
+            target["scores"][:count].copy_(self.out_scores[:count], non_blocking=True)
+            target["ids"][:count].copy_(self.out_ids[:count], non_blocking=True)
+            target["classes"][:count].copy_(self.out_classes[:count], non_blocking=True)
+            target["det_idx"][:count].copy_(self.out_det_idx[:count], non_blocking=True)
+        else:
+            target["count"].zero_()

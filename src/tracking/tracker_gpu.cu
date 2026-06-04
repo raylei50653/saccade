@@ -31,6 +31,7 @@ namespace saccade {
 namespace {
 constexpr int TRACK_EMPTY = 0;
 constexpr int TRACK_TENTATIVE = 1;
+constexpr int TRACK_CONFIRMED = 2;
 
 bool env_flag_enabled(const char* name, bool default_value) {
     const char* value = std::getenv(name);
@@ -66,6 +67,7 @@ __global__ void predict_kernel(float* states, float* covs, bool* active, int* ag
 }
 
 __global__ void gmc_kernel(float* states, float* covs, bool* active, const float* gmc, int max_objs) {
+    if (!gmc) return;
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= max_objs) return;
     if (active[idx]) {
@@ -89,7 +91,55 @@ __global__ void gmc_kernel(float* states, float* covs, bool* active, const float
     }
 }
 
-// Kalman update for matched (track, detection) pairs — keeps d_covs_ on GPU.
+// Fused predict + GMC + innovation S_inv — single pass over tracks.
+__global__ void predict_gmc_sinv_fused_kernel(
+    float* states, float* covs, bool* active, int* age,
+    const float* gmc, float* s_inv_out,
+    int max_objs, int max_age)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= max_objs) return;
+
+    if (!active[idx]) {
+        for (int i = 0; i < 16; ++i) s_inv_out[idx * 16 + i] = 0.0f;
+        return;
+    }
+
+    kf_gpu::predict(states + idx * 8, covs + idx * 64);
+    age[idx]++;
+    if (age[idx] >= max_age) {
+        active[idx] = false;
+        for (int i = 0; i < 16; ++i) s_inv_out[idx * 16 + i] = 0.0f;
+        return;
+    }
+
+    if (gmc) {
+        float* x = states + idx * 8;
+        float* P = covs + idx * 64;
+        float H00 = gmc[0], H01 = gmc[1], H02 = gmc[2], H10 = gmc[3], H11 = gmc[4], H12 = gmc[5];
+        float old_cx = x[0], old_cy = x[1];
+        x[0] = H00 * old_cx + H01 * old_cy + H02;
+        x[1] = H10 * old_cx + H11 * old_cy + H12;
+        float old_vx = x[4], old_vy = x[5];
+        x[4] = H00 * old_vx + H01 * old_vy;
+        x[5] = H10 * old_vx + H11 * old_vy;
+
+        float p00 = P[0], p01 = P[1], p10 = P[8], p11 = P[9];
+        float mp00 = H00 * p00 + H01 * p10, mp01 = H00 * p01 + H01 * p11;
+        float mp10 = H10 * p00 + H11 * p10, mp11 = H10 * p01 + H11 * p11;
+        P[0] = mp00 * H00 + mp01 * H01; P[1] = mp00 * H10 + mp01 * H11;
+        P[8] = mp10 * H00 + mp11 * H01; P[9] = mp10 * H10 + mp11 * H11;
+
+        float* P2 = P + 36;
+        p00 = P2[0]; p01 = P2[1]; p10 = P2[8]; p11 = P2[9];
+        mp00 = H00 * p00 + H01 * p10; mp01 = H00 * p01 + H01 * p11;
+        mp10 = H10 * p00 + H11 * p10; mp11 = H10 * p01 + H11 * p11;
+        P2[0] = mp00 * H00 + mp01 * H01; P2[1] = mp00 * H10 + mp01 * H11;
+        P2[8] = mp10 * H00 + mp11 * H01; P2[9] = mp10 * H10 + mp11 * H11;
+    }
+
+    kf_gpu::compute_S_inv(states + idx * 8, covs + idx * 64, s_inv_out + idx * 16);
+}
 // matched_pairs: [n_matched × 2] interleaved (track_slot, det_box_idx).
 __global__ void kalman_update_kernel(
     float* states, float* covs, const float* det_boxes,
@@ -246,13 +296,107 @@ __global__ void count_stage1_candidates_kernel(
     if (pass) atomicAdd(&candidate_count[t], 1);
 }
 
-// Two-stage conditional cost matrix.
-// Stage 1 gate: IoU > iou_gate OR Mahalanobis^2 < maha_gate; else hard reject (cost=1).
-// Stage 2: if candidate_count[t] >= 2 AND has_clean_embedding[t] AND det embedding valid (norm>0.25):
-//            cost = 1 - (0.55*CosSim + 0.30*IoU + 0.15*det_score)
-//          else:
-//            cost = 1 - IoU  (stable IoU-only fallback — also used for budget-zero detections)
-// OC-SORT: optional vel_dir_weight penalises matches where detection direction opposes track velocity.
+// OA-SORT: per-track occlusion coefficient = max IoU of predicted box with all other active
+// track predicted boxes. Cheap O(n²) kernel; n_active is typically ≤ 128.
+__global__ void compute_track_occlusion_kernel(
+    const float* states, const bool* active, float* occ_coeff, int max_objs, float oao_tau)
+{
+    if (oao_tau <= 0.0f) return;
+    int t = blockIdx.x * blockDim.x + threadIdx.x;
+    if (t >= max_objs) return;
+    if (!active[t]) { occ_coeff[t] = 0.0f; return; }
+
+    const float* st = states + t * 8;
+    float tw = st[2] * st[3], th = st[3];
+    float tx1 = st[0] - tw * 0.5f, ty1 = st[1] - th * 0.5f;
+    float tx2 = st[0] + tw * 0.5f, ty2 = st[1] + th * 0.5f;
+    float t_area = (tx2 - tx1) * (ty2 - ty1);
+
+    float max_occ = 0.0f;
+    for (int j = 0; j < max_objs; ++j) {
+        if (j == t || !active[j]) continue;
+        const float* sj = states + j * 8;
+        float jw = sj[2] * sj[3], jh = sj[3];
+        float jx1 = sj[0] - jw * 0.5f, jy1 = sj[1] - jh * 0.5f;
+        float jx2 = sj[0] + jw * 0.5f, jy2 = sj[1] + jh * 0.5f;
+        float j_area = (jx2 - jx1) * (jy2 - jy1);
+        float ix1 = fmaxf(tx1, jx1), iy1 = fmaxf(ty1, jy1);
+        float ix2 = fminf(tx2, jx2), iy2 = fminf(ty2, jy2);
+        float inter = fmaxf(0.0f, ix2 - ix1) * fmaxf(0.0f, iy2 - iy1);
+        if (inter <= 0.0f) continue;
+        float iou = inter / (t_area + j_area - inter + 1e-6f);
+        max_occ = fmaxf(max_occ, iou);
+    }
+    occ_coeff[t] = max_occ;
+}
+
+// Fused stage-1 gate + cost computation for the no-ReID fast path.
+// When embeddings are null, candidate_count is needed only for the appearance
+// branch (which is disabled), so the count and cost can be safely fused into
+// a single kernel pass.
+__global__ void stage1_cost_fused_kernel(
+    const float* trk_states, const float* det_boxes,
+    int* candidate_count,
+    const float* trk_s_inv, const float* homography,
+    float* cost_matrix,
+    int n_trk, int n_det, float iou_gate, float maha_gate,
+    float vel_dir_weight, float fuse_score_weight,
+    const float* det_scores,
+    const float* d_occ_coeff, float oao_tau)
+{
+    int t = blockIdx.y * blockDim.y + threadIdx.y;
+    int d = blockIdx.x * blockDim.x + threadIdx.x;
+    if (t >= n_trk || d >= n_det) return;
+
+    float* cost = cost_matrix + t * n_det + d;
+
+    const float* st = trk_states + t * 8;
+    float tw = st[2] * st[3], th = st[3];
+    float b1_x1 = st[0] - tw * 0.5f, b1_y1 = st[1] - th * 0.5f;
+    float b1_x2 = st[0] + tw * 0.5f, b1_y2 = st[1] + th * 0.5f;
+    const float* b2 = det_boxes + d * 4;
+
+    float ix1 = fmaxf(b1_x1, b2[0]), iy1 = fmaxf(b1_y1, b2[1]);
+    float ix2 = fminf(b1_x2, b2[2]), iy2 = fminf(b1_y2, b2[3]);
+    float inter = fmaxf(0.0f, ix2 - ix1) * fmaxf(0.0f, iy2 - iy1);
+    float area1 = (b1_x2 - b1_x1) * (b1_y2 - b1_y1);
+    float area2 = (b2[2] - b2[0]) * (b2[3] - b2[1]);
+    float iou = inter / (area1 + area2 - inter + 1e-6f);
+
+    bool pass_iou = (iou > iou_gate);
+    if (!pass_iou) {
+        bool pass_maha = trk_s_inv && (mahal_sq_det(st, b2, trk_s_inv + t * 16, homography) < maha_gate);
+        if (!pass_maha) {
+            *cost = 1.0f;
+            return;
+        }
+    }
+
+    atomicAdd(&candidate_count[t], 1);
+
+    float ds = det_scores ? det_scores[d] : 0.5f;
+    float fused_iou = iou * (1.0f - fuse_score_weight * ds);
+    float iou_cost_val = 1.0f - fused_iou;
+
+    if (d_occ_coeff && oao_tau > 0.0f)
+        iou_cost_val = fminf(1.0f, iou_cost_val + oao_tau * d_occ_coeff[t]);
+
+    if (vel_dir_weight > 0.0f) {
+        float vx = st[4], vy = st[5];
+        float vel_sq = vx * vx + vy * vy;
+        if (vel_sq > 1.0f) {
+            float det_cx = (b2[0] + b2[2]) * 0.5f, det_cy = (b2[1] + b2[3]) * 0.5f;
+            float dx = det_cx - st[0], dy = det_cy - st[1];
+            float dist_sq = dx * dx + dy * dy;
+            if (dist_sq > 1e-6f) {
+                float cos_dir = (vx * dx + vy * dy) / sqrtf(vel_sq * dist_sq);
+                iou_cost_val += vel_dir_weight * fmaxf(0.0f, -cos_dir);
+            }
+        }
+    }
+
+    *cost = fminf(1.0f, iou_cost_val);
+}
 __global__ void compute_conditional_cost_kernel(
     const float* trk_states, const float* det_boxes,
     const float* trk_embeds, const float* det_embeds,
@@ -261,7 +405,11 @@ __global__ void compute_conditional_cost_kernel(
     const float* trk_s_inv, const float* homography,
     float* cost_matrix,
     int n_trk, int n_det, int embed_dim, float iou_gate, float maha_gate,
-    float vel_dir_weight, float fuse_score_weight)
+    float vel_dir_weight, float fuse_score_weight,
+    float cost_cos_w, float cost_iou_w, float cost_score_w,
+    float cos_threshold, float iou_low,
+    int reid_min_candidates,
+    const float* d_occ_coeff, float oao_tau)
 {
     int t = blockIdx.y * blockDim.y + threadIdx.y;
     int d = blockIdx.x * blockDim.x + threadIdx.x;
@@ -291,8 +439,9 @@ __global__ void compute_conditional_cost_kernel(
 
     float ds = det_scores ? det_scores[d] : 0.5f;
     float fused_iou = iou * (1.0f - fuse_score_weight * ds);
+    float iou_cost = 1.0f - fused_iou;
     float cost;
-    bool try_appearance = (candidate_count[t] >= 2 && has_clean_embedding[t] && trk_embeds && det_embeds);
+    bool try_appearance = (candidate_count[t] >= reid_min_candidates && has_clean_embedding[t] && trk_embeds && det_embeds);
     if (try_appearance) {
         const float* e1 = trk_embeds + t * embed_dim;
         const float* e2 = det_embeds + d * embed_dim;
@@ -301,14 +450,19 @@ __global__ void compute_conditional_cost_kernel(
             cos_sim += e1[k] * e2[k];
             norm_sq += e2[k] * e2[k];
         }
-        if (norm_sq > 0.0625f) {  // det embedding valid (non-zero budget slot)
+        if (norm_sq > 0.0625f) {
             cos_sim = fmaxf(0.0f, cos_sim);
-            cost = 1.0f - (0.55f * cos_sim + 0.30f * fused_iou + 0.15f * ds);
+            if (cos_sim >= cos_threshold && fused_iou >= iou_low) {
+                float app_cost = 1.0f - (cost_cos_w * cos_sim + cost_iou_w * fused_iou + cost_score_w * ds);
+                cost = fminf(iou_cost, app_cost);
+            } else {
+                cost = iou_cost;
+            }
         } else {
-            cost = 1.0f - fused_iou;
+            cost = iou_cost;
         }
     } else {
-        cost = 1.0f - fused_iou;
+        cost = iou_cost;
     }
 
     // OC-SORT velocity direction penalty
@@ -324,6 +478,11 @@ __global__ void compute_conditional_cost_kernel(
                 cost += vel_dir_weight * fmaxf(0.0f, -cos_dir);
             }
         }
+    }
+
+    // OA-SORT OAO: tracks occluded by other tracks get a cost penalty to prevent cost confusion
+    if (oao_tau > 0.0f && d_occ_coeff) {
+        cost = fminf(1.0f, cost + oao_tau * d_occ_coeff[t]);
     }
 
     cost_matrix[t * n_det + d] = fminf(1.0f, fmaxf(0.0f, cost));
@@ -482,6 +641,7 @@ __global__ void fused_sinkhorn_topk_kernel(
 __global__ void parallel_auction_shmem_kernel(
     const int* topk_indices, const float* topk_probs,
     uint64_t* g_prices, int* trk_to_det, int* det_to_trk,
+    int* pending_det, uint64_t* pending_bid,
     int n_trk, int n_det, int K, float epsilon)
 {
     extern __shared__ uint64_t s_prices_u64[];
@@ -514,7 +674,7 @@ __global__ void parallel_auction_shmem_kernel(
                                                     : (best_val - second_best_val + epsilon);
             float current_price = __int_as_float((int)(s_prices_u64[best_det] >> 32));
             bid = current_price + inc;
-            
+
             uint32_t bid_float_bits = __float_as_uint(bid);
             uint32_t tie_breaker = n_trk - t;
             uint64_t bid_u64 = ((uint64_t)bid_float_bits << 32) | (uint64_t)tie_breaker;
@@ -525,19 +685,39 @@ __global__ void parallel_auction_shmem_kernel(
     }
     __syncthreads();
 
-    // Level 2: block winner commits to global memory
+    // Level 2: block winner commits bid to global prices.
+    // Assignments are written by commit_auction_results_kernel after all blocks
+    // finish, avoiding the inter-block race where two winners write det_to_trk
+    // in undefined order and create an inconsistent trk_to_det/det_to_trk pair.
     if (best_det >= 0) {
         uint32_t bid_float_bits = __float_as_uint(bid);
         uint32_t tie_breaker = n_trk - t;
         uint64_t bid_u64 = ((uint64_t)bid_float_bits << 32) | (uint64_t)tie_breaker;
 
         if (s_prices_u64[best_det] == bid_u64) {
-            unsigned long long prev = atomicMax((unsigned long long*)&g_prices[best_det], (unsigned long long)bid_u64);
-            if (bid_u64 > prev) {
-                trk_to_det[t] = best_det;
-                det_to_trk[best_det] = t;
-            }
+            atomicMax((unsigned long long*)&g_prices[best_det], (unsigned long long)bid_u64);
+            pending_det[t]  = best_det;
+            pending_bid[t]  = bid_u64;
         }
+    }
+}
+
+// Resolves auction results after all blocks have committed bids to g_prices.
+// bid_u64 encodes (price_float_bits << 32 | tie_breaker), making it globally
+// unique per track — so exactly one track satisfies g_prices[d] == pending_bid[t].
+__global__ void commit_auction_results_kernel(
+    const uint64_t* g_prices,
+    const int* pending_det, const uint64_t* pending_bid,
+    int* trk_to_det, int* det_to_trk,
+    int n_trk)
+{
+    int t = blockIdx.x * blockDim.x + threadIdx.x;
+    if (t >= n_trk) return;
+    int d = pending_det[t];
+    if (d < 0) return;
+    if (g_prices[d] == pending_bid[t]) {
+        trk_to_det[t] = d;
+        det_to_trk[d] = t;
     }
 }
 
@@ -625,14 +805,168 @@ __global__ void inline_kalman_update_kernel(
 __global__ void collect_free_slots_kernel(
     const bool* active, int max_objs, int* free_slots, int* n_free)
 {
-    if (threadIdx.x != 0 || blockIdx.x != 0) return;
-    int count = 0;
-    for (int i = 0; i < max_objs; ++i) {
-        if (!active[i]) {
-            free_slots[count++] = i;
+    int tid = threadIdx.x;
+    __shared__ int s_counts[256];
+    __shared__ int s_offsets[256];
+
+    int local_slots[8];
+    int local_count = 0;
+    
+    int start_idx = tid * 8;
+    for (int step = 0; step < 8; ++step) {
+        int i = start_idx + step;
+        if (i < max_objs) {
+            if (!active[i]) {
+                local_slots[local_count++] = i;
+            }
         }
     }
-    *n_free = count;
+
+    s_counts[tid] = local_count;
+    __syncthreads();
+
+    if (tid == 0) {
+        int offset = 0;
+        for (int i = 0; i < 256; ++i) {
+            s_offsets[i] = offset;
+            offset += s_counts[i];
+        }
+        *n_free = offset;
+    }
+    __syncthreads();
+
+    int global_offset = s_offsets[tid];
+    for (int step = 0; step < local_count; ++step) {
+        free_slots[global_offset + step] = local_slots[step];
+    }
+}
+
+// ── Birth-time lost-bank ReID relink ───────────────────────────────────────
+// A confirmed track that is about to expire (age hits max_age) deposits its
+// reference embedding + last position + id into a capacity-bounded ring (LRU).
+// At spawn time an unmatched detection can revive that identity instead of
+// minting a new id. Decoupled from the (graph-captured) fused predict kernel:
+// runs as its own kernels on the same stream. Precision-first — a wrong revive
+// merges two people, which is worse for ID consistency than a fragment.
+
+// Archive confirmed tracks that will be deactivated by predict THIS frame
+// (predict does age++ then drops on age>=max_age, so expiry set is age>=max_age-1).
+__global__ void archive_expiring_tracks_kernel(
+    const bool* active, const int* state, const int* age, const bool* has_clean,
+    const float* states, const float* features, const int* track_ids,
+    int max_objs, int max_age, int embed_dim, int cap,
+    float* relink_feats, int* relink_ids, float* relink_pos,
+    int* relink_lostage, int* relink_valid, int* relink_cursor)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= max_objs) return;
+    if (!active[idx] || state[idx] != TRACK_CONFIRMED) return;
+    if (age[idx] < max_age - 1) return;
+    (void)has_clean;  // clean flag is cleared once a track goes lost; gate on the
+                      // stored reference embedding norm instead (it survives loss).
+
+    const float* src = features + idx * embed_dim;
+    float norm = 0.0f;
+    for (int k = 0; k < embed_dim; ++k) norm += src[k] * src[k];
+    if (norm < 1e-6f) return;  // never had a clean reference embedding
+
+    int slot = atomicAdd(relink_cursor, 1) % cap;
+    float* dst = relink_feats + slot * embed_dim;
+    for (int k = 0; k < embed_dim; ++k) dst[k] = src[k];
+    relink_ids[slot] = track_ids[idx];
+    relink_pos[slot * 5 + 0] = states[idx * 8 + 0];  // cx
+    relink_pos[slot * 5 + 1] = states[idx * 8 + 1];  // cy
+    relink_pos[slot * 5 + 2] = states[idx * 8 + 3];  // h
+    relink_pos[slot * 5 + 3] = states[idx * 8 + 4];  // vx (last Kalman velocity)
+    relink_pos[slot * 5 + 4] = states[idx * 8 + 5];  // vy
+    relink_lostage[slot] = 0;
+    relink_valid[slot] = 1;
+}
+
+__global__ void age_relink_bank_kernel(int* lostage, int* valid, int cap, int max_age) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= cap || !valid[i]) return;
+    lostage[i] += 1;
+    if (lostage[i] > max_age) valid[i] = 0;
+}
+
+// Cheb-GR two-pass relink (one thread per detection, no sort):
+//   Pass 1 — accumulate S1=ΣD, S2=ΣD² over all valid lost entries (cosine
+//            distance D = 1 - cos), then μ, σ → Chebyshev threshold T = μ - λσ.
+//   Pass 2 — among entries inside the velocity-aware spatial radius AND with
+//            D ≤ T (statistically exclusive "鐵桿唯一"), pick the closest and
+//            claim it via atomicCAS. A fixed sim floor + N_valid guard keep
+//            precision (a wrong revive merges two identities).
+__global__ void relink_births_kernel(
+    const int* det_to_trk, const float* det_boxes, const float* det_scores,
+    const float* det_embeds, int n_det, float new_track_thresh, int embed_dim,
+    int cap, const float* relink_feats, const int* relink_ids, const float* relink_pos,
+    const int* relink_lostage, int* relink_valid,
+    float sim_thresh, float cheb_lambda, float gamma_gate,
+    int* det_revive_id, int* dbg)
+{
+    int d = blockIdx.x * blockDim.x + threadIdx.x;
+    if (d >= n_det) return;
+    det_revive_id[d] = -1;
+    if (det_to_trk[d] >= 0 || det_scores[d] < new_track_thresh) return;
+    if (dbg) atomicAdd(&dbg[0], 1);  // birth candidate entering relink
+
+    const float* e2 = det_embeds + d * embed_dim;
+    float n2 = 0.f;
+    for (int k = 0; k < embed_dim; ++k) n2 += e2[k] * e2[k];
+    if (n2 < 1e-6f) return;
+    float inv_n2 = rsqrtf(n2);
+
+    const float* b = det_boxes + d * 4;
+    float dcx = (b[0] + b[2]) * 0.5f, dcy = (b[1] + b[3]) * 0.5f;
+    const float kEta = 0.8f;  // velocity-confidence decay
+
+    // Pass 1: distance distribution over all valid entries.
+    float s1 = 0.f, s2 = 0.f;
+    int n_valid = 0;
+    for (int e = 0; e < cap; ++e) {
+        if (!relink_valid[e]) continue;
+        const float* e1 = relink_feats + e * embed_dim;
+        float dot = 0.f, n1 = 0.f;
+        for (int k = 0; k < embed_dim; ++k) { dot += e1[k] * e2[k]; n1 += e1[k] * e1[k]; }
+        if (n1 < 1e-6f) continue;
+        float dval = 1.0f - dot * rsqrtf(n1) * inv_n2;
+        s1 += dval;
+        s2 += dval * dval;
+        n_valid++;
+    }
+    if (n_valid < 3) return;  // σ unreliable on a tiny bank → do not revive
+    float mu = s1 / n_valid;
+    float var = fmaxf(0.0f, s2 / n_valid - mu * mu);
+    float t_cheb = mu - cheb_lambda * sqrtf(var);
+    float d_floor = 1.0f - sim_thresh;  // absolute distance ceiling (sim floor)
+
+    // Pass 2: spatial + Chebyshev edge culling, keep the closest survivor.
+    float best_d = 1e30f;
+    int best_e = -1;
+    for (int e = 0; e < cap; ++e) {
+        if (!relink_valid[e]) continue;
+        float lcx = relink_pos[e * 5 + 0], lcy = relink_pos[e * 5 + 1];
+        float lh = fmaxf(relink_pos[e * 5 + 2], 1e-3f);
+        float vx = relink_pos[e * 5 + 3], vy = relink_pos[e * 5 + 4];
+        float dt = (float)relink_lostage[e];
+        float r_max = gamma_gate * lh + kEta * sqrtf(vx * vx + vy * vy) * dt;
+        float dist = sqrtf((dcx - lcx) * (dcx - lcx) + (dcy - lcy) * (dcy - lcy));
+        if (dist > r_max) continue;
+        const float* e1 = relink_feats + e * embed_dim;
+        float dot = 0.f, n1 = 0.f;
+        for (int k = 0; k < embed_dim; ++k) { dot += e1[k] * e2[k]; n1 += e1[k] * e1[k]; }
+        if (n1 < 1e-6f) continue;
+        float dval = 1.0f - dot * rsqrtf(n1) * inv_n2;
+        if (dval <= t_cheb && dval <= d_floor && dval < best_d) {
+            best_d = dval;
+            best_e = e;
+        }
+    }
+    if (best_e >= 0 && atomicCAS(&relink_valid[best_e], 1, 0) == 1) {
+        det_revive_id[d] = relink_ids[best_e];
+        if (dbg) atomicAdd(&dbg[1], 1);  // revived
+    }
 }
 
 __global__ void spawn_new_tracks_kernel(
@@ -647,42 +981,118 @@ __global__ void spawn_new_tracks_kernel(
     float* d_trk_scores, int* d_classes,
     int*   d_hit_streak, int* d_confirm_req, float* d_score_sum,
     int* d_track_id_ctr, int* d_slot_cursor,
-    int confirm_streak, float birth_low_score_thresh)
+    int confirm_streak, float birth_low_score_thresh,
+    int max_objs, float birth_prox_norm_thresh,
+    const int* d_det_revive_id, float* d_covs)
 {
-    if (threadIdx.x != 0 || blockIdx.x != 0) return;
-    int cursor = *d_slot_cursor;
+    int tid = threadIdx.x;
+    __shared__ int s_counts[256];
+    __shared__ int s_offsets[256];
+
+    int chunk = (n_det + 255) / 256;
+    if (chunk < 1) chunk = 1;
+
+    // 8 slots handles up to 2048 detections with 256 threads (chunk ≤ 8).
+    int local_dets[8];
+    int local_count = 0;
+
+    int start_d = tid * chunk;
+    int end_d = start_d + chunk;
+    if (end_d > n_det) end_d = n_det;
+
+    for (int d = start_d; d < end_d; ++d) {
+        bool valid = true;
+        if (d_det_to_trk[d] >= 0) valid = false;
+        if (valid && d_det_scores[d] < new_track_thresh) valid = false;
+
+        if (valid && birth_prox_norm_thresh > 0.0f) {
+            const float* det_box = d_det_boxes + d * 4;
+            float det_cx = (det_box[0] + det_box[2]) * 0.5f;
+            float det_cy = (det_box[1] + det_box[3]) * 0.5f;
+            float det_h  = det_box[3] - det_box[1];
+            bool too_close = false;
+            for (int t = 0; t < max_objs && !too_close; ++t) {
+                if (!d_active[t] || d_state[t] != 2) continue;
+                float trk_cx = d_states[t * 8 + 0];
+                float trk_cy = d_states[t * 8 + 1];
+                float trk_h  = d_states[t * 8 + 3];
+                float dx = det_cx - trk_cx;
+                float dy = det_cy - trk_cy;
+                float dist = sqrtf(dx * dx + dy * dy);
+                float ref_h = fmaxf(fmaxf(det_h, trk_h), 1.0f);
+                too_close = (dist < birth_prox_norm_thresh * ref_h);
+            }
+            if (too_close) valid = false;
+        }
+
+        if (valid && local_count < 8) {
+            local_dets[local_count++] = d;
+        }
+    }
+
+    s_counts[tid] = local_count;
+    __syncthreads();
+
+    if (tid == 0) {
+        int offset = 0;
+        for (int i = 0; i < 256; ++i) {
+            s_offsets[i] = offset;
+            offset += s_counts[i];
+        }
+        s_counts[0] = offset;
+    }
+    __syncthreads();
+
+    int total_to_spawn = s_counts[0];
+    int start_cursor = *d_slot_cursor;
     int n_free = *d_n_free;
     int id_ctr = *d_track_id_ctr;
 
-    for (int d = 0; d < n_det; ++d) {
-        if (d_det_to_trk[d] >= 0) continue;
-        if (d_det_scores[d] < new_track_thresh) continue;
+    int global_offset = s_offsets[tid];
+    for (int step = 0; step < local_count; ++step) {
+        int cursor = start_cursor + global_offset + step;
+        if (cursor < n_free) {
+            int slot = d_free_slots[cursor];
+            int det_idx = local_dets[step];
 
-        if (cursor >= n_free) break;
-        int slot = d_free_slots[cursor++];
+            const float* box = d_det_boxes + det_idx * 4;
+            float bh = fmaxf(box[3] - box[1], 1e-6f);
+            d_states[slot*8+0] = (box[0] + box[2]) * 0.5f;
+            d_states[slot*8+1] = (box[1] + box[3]) * 0.5f;
+            d_states[slot*8+2] = (box[2] - box[0]) / bh;
+            d_states[slot*8+3] = bh;
+            d_states[slot*8+4] = 0.0f; d_states[slot*8+5] = 0.0f; d_states[slot*8+6] = 0.0f; d_states[slot*8+7] = 0.0f;
 
-        const float* box = d_det_boxes + d * 4;
-        float bh = fmaxf(box[3] - box[1], 1e-6f);
-        d_states[slot*8+0] = (box[0] + box[2]) * 0.5f;
-        d_states[slot*8+1] = (box[1] + box[3]) * 0.5f;
-        d_states[slot*8+2] = (box[2] - box[0]) / bh;
-        d_states[slot*8+3] = bh;
-        d_states[slot*8+4] = 0.0f; d_states[slot*8+5] = 0.0f; d_states[slot*8+6] = 0.0f; d_states[slot*8+7] = 0.0f;
-
-        d_track_ids[slot]   = id_ctr++;
-        d_age[slot]         = 0;
-        d_state[slot]       = 1; // TRACK_TENTATIVE
-        d_hit_streak[slot]  = 1;
-        d_confirm_req[slot] = (birth_low_score_thresh > 0.0f && d_det_scores[d] < birth_low_score_thresh)
-            ? (confirm_streak + 1) : 0;
-        d_score_sum[slot]   = d_det_scores[d];
-        d_trk_scores[slot]  = d_det_scores[d];
-        d_classes[slot]     = d_det_classes[d];
-        d_active[slot]      = true;
+            int revive = d_det_revive_id ? d_det_revive_id[det_idx] : -1;
+            if (revive >= 0) {
+                // Reviving a lost identity: keep its id and treat it as already
+                // confirmed (it was confirmed when archived).
+                d_track_ids[slot]   = revive;
+                d_state[slot]       = 2; // TRACK_CONFIRMED
+                d_hit_streak[slot]  = confirm_streak;
+                d_confirm_req[slot] = 0;
+                kf_gpu::init_covariance(d_covs + slot * 64);  // fresh slot
+            } else {
+                d_track_ids[slot]   = id_ctr + global_offset + step;
+                d_state[slot]       = 1; // TRACK_TENTATIVE
+                d_hit_streak[slot]  = 1;
+                d_confirm_req[slot] = (birth_low_score_thresh > 0.0f && d_det_scores[det_idx] < birth_low_score_thresh)
+                    ? (confirm_streak + 1) : 0;
+            }
+            d_age[slot]         = 0;
+            d_score_sum[slot]   = d_det_scores[det_idx];
+            d_trk_scores[slot]  = d_det_scores[det_idx];
+            d_classes[slot]     = d_det_classes[det_idx];
+            d_active[slot]      = true;
+        }
     }
 
-    *d_slot_cursor = cursor;
-    *d_track_id_ctr = id_ctr;
+    __syncthreads();
+    if (tid == 0) {
+        int final_spawned = min(total_to_spawn, n_free - start_cursor);
+        *d_slot_cursor = start_cursor + final_spawned;
+        *d_track_id_ctr = id_ctr + final_spawned;
+    }
 }
 
 // Initialise covariance for every slot that is active+tentative+hit_streak==1 (freshly spawned).
@@ -710,23 +1120,54 @@ __global__ void compact_results_kernel(
     int* out_ids, int* out_classes, int* out_det_idx,
     int* out_count)
 {
-    if (threadIdx.x != 0 || blockIdx.x != 0) return;
-    int k = 0;
-    for (int i = 0; i < max_objs; ++i) {
-        if (!d_active[i] || d_state[i] != 2 || d_age[i] != 0) continue;
+    int tid = threadIdx.x;
+    __shared__ int s_counts[256];
+    __shared__ int s_offsets[256];
+
+    int local_slots[8];
+    int local_count = 0;
+
+    int start_idx = tid * 8;
+    for (int step = 0; step < 8; ++step) {
+        int i = start_idx + step;
+        if (i < max_objs) {
+            if (d_active[i] && d_state[i] == 2 && d_age[i] == 0) {
+                local_slots[local_count++] = i;
+            }
+        }
+    }
+
+    s_counts[tid] = local_count;
+    __syncthreads();
+
+    if (tid == 0) {
+        int offset = 0;
+        for (int i = 0; i < 256; ++i) {
+            s_offsets[i] = offset;
+            offset += s_counts[i];
+        }
+        *out_count = offset;
+    }
+    __syncthreads();
+
+    int global_offset = s_offsets[tid];
+    for (int step = 0; step < local_count; ++step) {
+        int i = local_slots[step];
+        int dest = global_offset + step;
+        
         float cx = d_states[i*8+0], cy = d_states[i*8+1];
         float a  = d_states[i*8+2], h  = d_states[i*8+3], w = a * h;
-        out_boxes[k*4+0] = cx - w * 0.5f;
-        out_boxes[k*4+1] = cy - h * 0.5f;
-        out_boxes[k*4+2] = cx + w * 0.5f;
-        out_boxes[k*4+3] = cy + h * 0.5f;
-        out_scores[k]   = d_scores[i];
-        out_ids[k]      = d_track_ids[i];
-        out_classes[k]  = d_classes[i];
-        out_det_idx[k]  = d_trk_to_det[i];
-        k++;
+        
+        out_boxes[dest*4+0] = cx - w * 0.5f;
+        out_boxes[dest*4+1] = cy - h * 0.5f;
+        out_boxes[dest*4+2] = cx + w * 0.5f;
+        out_boxes[dest*4+3] = cy + h * 0.5f;
+        
+        out_scores[dest]   = d_scores[i];
+        out_ids[dest]      = d_track_ids[i];
+        out_classes[dest]  = d_classes[i];
+        out_det_idx[dest]  = d_trk_to_det[i];
     }
-    *out_count = k;
 }
 
 // ── M1 GPU compaction helpers ──────────────────────────────────────────────
@@ -912,6 +1353,27 @@ void gather_compact4_counted_cuda(
         indices, count_ptr, max_n);
 }
 
+
+__global__ void penalize_suspect_scores_kernel(
+    float* scores, const bool* suspect, const int* count_ptr, float penalty_score, int max_n)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int count = *count_ptr;
+    if (i < count && i < max_n) {
+        if (suspect[i] && scores[i] > penalty_score) {
+            scores[i] = penalty_score;
+        }
+    }
+}
+
+void penalize_suspect_scores_cuda(
+    float* scores, const bool* suspect, const int* count_ptr, float penalty_score, int max_n, cudaStream_t stream)
+{
+    if (max_n <= 0) return;
+    const int thr = 256, blk = (max_n + thr - 1) / thr;
+    penalize_suspect_scores_kernel<<<blk, thr, 0, stream>>>(scores, suspect, count_ptr, penalty_score, max_n);
+}
+
 void copy_bool_counted_cuda(
     const bool* src, bool* dst, const int* count_ptr, int max_n, cudaStream_t stream)
 {
@@ -984,6 +1446,12 @@ public:
         checkCuda(cudaMalloc(&d_s_inv_, max_objs_ * 16 * sizeof(float)));
         checkCuda(cudaMalloc(&d_homography_, 9 * sizeof(float)));
         checkCuda(cudaMemset(d_homography_, 0, 9 * sizeof(float)));
+        checkCuda(cudaMalloc(&d_occ_coeff_, max_objs_ * sizeof(float)));
+        checkCuda(cudaMemset(d_occ_coeff_, 0, max_objs_ * sizeof(float)));
+
+        // Auction pending buffers (used by commit_auction_results_kernel)
+        checkCuda(cudaMalloc(&d_pending_det_, max_objs_ * sizeof(int)));
+        checkCuda(cudaMalloc(&d_pending_bid_, max_objs_ * sizeof(uint64_t)));
 
         // M2: GPU spawn + compact result buffers
         checkCuda(cudaMalloc(&d_free_slots_,    max_objs_ * sizeof(int)));
@@ -1023,9 +1491,42 @@ public:
         h_hit_streak_.resize(max_objs_, 0);
         h_confirm_streak_required_.resize(max_objs_, 0);
         h_score_sum_.resize(max_objs_, 0.0f);
+
+        // Register host caches as page-locked (pinned) memory for true async D2H.
+        // Without pinning, cudaMemcpyAsync to std::vector pageable memory falls
+        // back to synchronous behaviour, serialising every D2H transfer and
+        // inflating the reported cudaStreamSynchronize cost.
+        checkCuda(cudaHostRegister(h_active_raw_.data(),            max_objs_ * sizeof(uint8_t), cudaHostRegisterDefault));
+        checkCuda(cudaHostRegister(h_states_.data(),                max_objs_ * 8 * sizeof(float), cudaHostRegisterDefault));
+        checkCuda(cudaHostRegister(h_covs_.data(),                  max_objs_ * 64 * sizeof(float), cudaHostRegisterDefault));
+        checkCuda(cudaHostRegister(h_track_ids_.data(),             max_objs_ * sizeof(int), cudaHostRegisterDefault));
+        checkCuda(cudaHostRegister(h_scores_.data(),                max_objs_ * sizeof(float), cudaHostRegisterDefault));
+        checkCuda(cudaHostRegister(h_classes_.data(),               max_objs_ * sizeof(int), cudaHostRegisterDefault));
+        checkCuda(cudaHostRegister(h_age_.data(),                   max_objs_ * sizeof(int), cudaHostRegisterDefault));
+        checkCuda(cudaHostRegister(h_state_.data(),                 max_objs_ * sizeof(int), cudaHostRegisterDefault));
+        checkCuda(cudaHostRegister(h_hit_streak_.data(),            max_objs_ * sizeof(int), cudaHostRegisterDefault));
+        checkCuda(cudaHostRegister(h_confirm_streak_required_.data(), max_objs_ * sizeof(int), cudaHostRegisterDefault));
+        checkCuda(cudaHostRegister(h_score_sum_.data(),             max_objs_ * sizeof(float), cudaHostRegisterDefault));
+        checkCuda(cudaHostRegister(h_has_clean_embedding_.data(),   max_objs_ * sizeof(uint8_t), cudaHostRegisterDefault));
+
+        enable_dda_ = env_flag_enabled("SACCADE_ENABLE_DDA", true);
+        dda_max_cost_ = env_float_value("SACCADE_DDA_MAX_COST", 0.12f);
     }
 
     ~Impl() {
+        cudaHostUnregister(h_active_raw_.data());
+        cudaHostUnregister(h_states_.data());
+        cudaHostUnregister(h_covs_.data());
+        cudaHostUnregister(h_track_ids_.data());
+        cudaHostUnregister(h_scores_.data());
+        cudaHostUnregister(h_classes_.data());
+        cudaHostUnregister(h_age_.data());
+        cudaHostUnregister(h_state_.data());
+        cudaHostUnregister(h_hit_streak_.data());
+        cudaHostUnregister(h_confirm_streak_required_.data());
+        cudaHostUnregister(h_score_sum_.data());
+        cudaHostUnregister(h_has_clean_embedding_.data());
+
         cudaFree(d_states_); cudaFree(d_covs_); cudaFree(d_active_);
         cudaFree(d_age_); cudaFree(d_scores_); cudaFree(d_classes_);
         cudaFree(d_track_ids_);
@@ -1039,11 +1540,19 @@ public:
         cudaFree(d_has_clean_embedding_); cudaFree(d_candidate_count_);
         cudaFree(d_s_inv_);
         cudaFree(d_homography_);
+        cudaFree(d_occ_coeff_);
+        cudaFree(d_pending_det_); cudaFree(d_pending_bid_);
         // M2
         cudaFree(d_free_slots_); cudaFree(d_n_free_); cudaFree(d_slot_cursor_);
         cudaFree(d_track_id_ctr_);
         cudaFree(d_res_boxes_); cudaFree(d_res_scores_); cudaFree(d_res_ids_);
         cudaFree(d_res_classes_); cudaFree(d_res_det_idx_); cudaFree(d_res_count_);
+        // Relink lost-bank (allocated lazily in set_relink_params)
+        if (d_relink_feats_) {
+            cudaFree(d_relink_feats_); cudaFree(d_relink_ids_); cudaFree(d_relink_pos_);
+            cudaFree(d_relink_lostage_); cudaFree(d_relink_valid_); cudaFree(d_relink_cursor_);
+            cudaFree(d_det_revive_id_); cudaFree(d_relink_dbg_);
+        }
     }
 
     std::vector<TrackResult> update(float* d_boxes, float* d_scores, int* d_classes, int num_dets,
@@ -1098,201 +1607,246 @@ public:
         float* d_boxes, float* d_scores, int* d_classes, int num_dets,
         cudaStream_t stream, float* d_embeddings, float* d_gmc,
         float light_factor, float mid_thresh_scale) {
-        
-        if (num_dets > 0 && enable_quality_scaling_) {
-            int threads = 256;
-            int blocks = (num_dets + threads - 1) / threads;
-            apply_detection_quality_scaling_kernel<<<blocks, threads, 0, stream>>>(
-                d_scores, d_boxes, num_dets, frame_w_, frame_h_,
-                q_w_aspect_, q_w_center_, q_w_area_);
-        }
 
         int threads = 256;
+
+        // Quality scaling: always launch; kernel guards with i < num_dets
+        int blocks_qs = (max_assoc_ + threads - 1) / threads;
+        apply_detection_quality_scaling_kernel<<<blocks_qs, threads, 0, stream>>>(
+            d_scores, d_boxes, num_dets, frame_w_, frame_h_,
+            q_w_aspect_, q_w_center_, q_w_area_);
+
         int blocks = (max_objs_ + threads - 1) / threads;
-        predict_kernel<<<blocks, threads, 0, stream>>>(d_states_, d_covs_, d_active_, d_age_, max_objs_, max_age_);
-        if (d_gmc) gmc_kernel<<<blocks, threads, 0, stream>>>(d_states_, d_covs_, d_active_, d_gmc, max_objs_);
+        // Relink: archive confirmed tracks expiring THIS frame before predict
+        // deactivates them; age the lost bank.
+        if (relink_enabled_ && d_embeddings) {
+            archive_expiring_tracks_kernel<<<blocks, threads, 0, stream>>>(
+                d_active_, d_state_, d_age_, d_has_clean_embedding_,
+                d_states_, d_features_, d_track_ids_,
+                max_objs_, max_age_, embed_dim_, relink_bank_cap_,
+                d_relink_feats_, d_relink_ids_, d_relink_pos_,
+                d_relink_lostage_, d_relink_valid_, d_relink_cursor_);
+            age_relink_bank_kernel<<<(relink_bank_cap_ + threads - 1) / threads, threads, 0, stream>>>(
+                d_relink_lostage_, d_relink_valid_, relink_bank_cap_, relink_max_age_);
+        }
+        predict_gmc_sinv_fused_kernel<<<blocks, threads, 0, stream>>>(
+            d_states_, d_covs_, d_active_, d_age_, d_gmc, d_s_inv_, max_objs_, max_age_);
 
-        // Phase 2: compute per-track S^-1 from post-predict covariance for Mahalanobis gating
-        kernel::compute_innovation_sinv_kernel<<<blocks, threads, 0, stream>>>(
-            d_states_, d_covs_, d_active_, d_s_inv_, max_objs_);
+        // Association: always launch with fixed grid; kernels guard with
+        // idx >= num_dets or tau == 0.
+        nvtxRangePushA("Association");
+        dim3 b_size(16, 16);
+        dim3 g_size((max_assoc_ + 15) / 16, (max_objs_ + 15) / 16);
 
-        if (num_dets > 0) {
-            nvtxRangePushA("Association");
-            dim3 b_size(16, 16);
-            dim3 g_size((num_dets + 15) / 16, (max_objs_ + 15) / 16);
+        kernel::compute_track_occlusion_kernel<<<blocks, threads, 0, stream>>>(
+            d_states_, d_active_, d_occ_coeff_, max_objs_, oao_tau_);
 
-            // Stage 1: count candidates passing IoU gate OR Mahalanobis gate
-            nvtxRangePushA("Assoc/CostMatrix");
+        nvtxRangePushA("Assoc/CostMatrix");
+        if (d_embeddings) {
             checkCuda(cudaMemsetAsync(d_candidate_count_, 0, max_objs_ * sizeof(int), stream));
             kernel::count_stage1_candidates_kernel<<<g_size, b_size, 0, stream>>>(
                 d_states_, d_boxes, d_active_, d_candidate_count_,
                 d_s_inv_, d_homography_, max_objs_, num_dets, iou_stage1_gate_, maha_gate_);
-
-            // Conditional cost: IoU-only fallback, appearance only for ambiguous + clean tracks
             kernel::compute_conditional_cost_kernel<<<g_size, b_size, 0, stream>>>(
                 d_states_, d_boxes, d_features_, d_embeddings, d_scores,
                 d_candidate_count_, d_has_clean_embedding_,
                 d_s_inv_, d_homography_, d_cost_matrix_, max_objs_, num_dets, embed_dim_, iou_stage1_gate_, maha_gate_,
-                vel_dir_weight_, fuse_score_weight_);
-            nvtxRangePop(); // Assoc/CostMatrix
+                vel_dir_weight_, fuse_score_weight_,
+                reid_cost_cos_w_, reid_cost_iou_w_, reid_cost_score_w_,
+                reid_cos_threshold_, reid_iou_low_,
+                reid_min_candidates_,
+                oao_tau_ > 0.0f ? d_occ_coeff_ : nullptr, oao_tau_);
+        } else {
+            checkCuda(cudaMemsetAsync(d_candidate_count_, 0, max_objs_ * sizeof(int), stream));
+            kernel::stage1_cost_fused_kernel<<<g_size, b_size, 0, stream>>>(
+                d_states_, d_boxes, d_candidate_count_,
+                d_s_inv_, d_homography_, d_cost_matrix_,
+                max_objs_, num_dets, iou_stage1_gate_, maha_gate_,
+                vel_dir_weight_, fuse_score_weight_,
+                d_scores,
+                oao_tau_ > 0.0f ? d_occ_coeff_ : nullptr, oao_tau_);
+        }
+        nvtxRangePop();
 
-            kernel::track_state_update_pre_kernel<<<blocks, threads, 0, stream>>>(
-                d_active_, d_state_, d_hit_streak_, d_confirm_streak_required_, d_score_sum_, max_objs_);
+        kernel::track_state_update_pre_kernel<<<blocks, threads, 0, stream>>>(
+            d_active_, d_state_, d_hit_streak_, d_confirm_streak_required_, d_score_sum_, max_objs_);
 
-            checkCuda(cudaMemsetAsync(d_det_to_trk_, -1, num_dets * sizeof(int), stream));
-            checkCuda(cudaMemsetAsync(d_trk_to_det_, -1, max_objs_ * sizeof(int), stream));
-            const int shmem_auction = num_dets * static_cast<int>(sizeof(uint64_t));
-            dim3 auc_b(32); dim3 auc_g((max_objs_ + 31) / 32);
+        checkCuda(cudaMemsetAsync(d_det_to_trk_, -1, max_assoc_ * sizeof(int), stream));
+        checkCuda(cudaMemsetAsync(d_trk_to_det_, -1, max_objs_ * sizeof(int), stream));
+        const int shmem_auction = max_assoc_ * static_cast<int>(sizeof(uint64_t));
+        dim3 auc_b(32); dim3 auc_g((max_objs_ + 31) / 32);
 
-            const float effective_mid_thresh = std::clamp(
-                mid_thresh_ * std::max(mid_thresh_scale, 0.01f),
-                track_thresh_,
-                high_thresh_
-            );
-            const float effective_new_track_thresh = std::clamp(
-                new_track_thresh_ * std::max(mid_thresh_scale, 0.01f),
-                track_thresh_,
-                high_thresh_
-            );
-            static const bool enable_dda = env_flag_enabled("SACCADE_ENABLE_DDA", true);
-            static const float dda_max_cost = env_float_value("SACCADE_DDA_MAX_COST", 0.12f);
-            const int* matched_det_mask = nullptr;
+        const float effective_mid_thresh = std::clamp(
+            mid_thresh_ * std::max(mid_thresh_scale, 0.01f),
+            track_thresh_,
+            high_thresh_
+        );
+        const int* matched_det_mask = nullptr;
 
-            if (enable_dda) {
-                // Stage 0: Decomposed Data Association (DDA) - Unambiguous Matching
-                // Match isolated/obvious targets first using a very strict cost threshold.
-                nvtxRangePushA("Assoc/S0_Unambiguous");
-                kernel::fused_sinkhorn_topk_kernel<<<max_objs_, 128, 0, stream>>>(
-                    d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
-                    max_objs_, num_dets, 30.0f, dda_max_cost,
-                    high_thresh_, 1.1f, 2,
-                    nullptr,
-                    d_topk_indices_, d_topk_probs_
-                );
-                checkCuda(cudaMemsetAsync(d_auction_prices_, 0, num_dets * sizeof(uint64_t), stream));
-                kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
-                    d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
-                    max_objs_, num_dets, 3, 0.01f);
-                nvtxRangePop(); // Assoc/S0_Unambiguous
-                matched_det_mask = d_det_to_trk_;
-            }
-
-            // Stage 1: High-conf dets -> Confirmed tracks first (D2-C)
-            nvtxRangePushA("Assoc/S1_HiConf");
+        if (enable_dda_) {
+            nvtxRangePushA("Assoc/S0_Unambiguous");
             kernel::fused_sinkhorn_topk_kernel<<<max_objs_, 128, 0, stream>>>(
                 d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
-                max_objs_, num_dets, 30.0f, match_thresh_,
-                high_thresh_, 1.1f, 2, // TRACK_CONFIRMED only
-                matched_det_mask,
-                d_topk_indices_, d_topk_probs_
+                max_objs_, num_dets, 30.0f, dda_max_cost_,
+                high_thresh_, 1.1f, 2,
+                nullptr, d_topk_indices_, d_topk_probs_
             );
-            checkCuda(cudaMemsetAsync(d_auction_prices_, 0, num_dets * sizeof(uint64_t), stream));
+            checkCuda(cudaMemsetAsync(d_auction_prices_, 0, max_assoc_ * sizeof(uint64_t), stream));
+            checkCuda(cudaMemsetAsync(d_pending_det_, -1, max_objs_ * sizeof(int), stream));
             kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
                 d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
-                max_objs_, num_dets, 3, 0.01f);
-            nvtxRangePop(); // Assoc/S1_HiConf
-
-            // Stage 1b: Mid-conf dets -> Unmatched confirmed tracks (D2-C)
-            nvtxRangePushA("Assoc/S1b_MidConf");
-            kernel::fused_sinkhorn_topk_kernel<<<max_objs_, 128, 0, stream>>>(
-                d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
-                max_objs_, num_dets, 30.0f, match_thresh_,
-                effective_mid_thresh, high_thresh_, 2, // TRACK_CONFIRMED only
-                matched_det_mask,
-                d_topk_indices_, d_topk_probs_
-            );
-            checkCuda(cudaMemsetAsync(d_auction_prices_, 0, num_dets * sizeof(uint64_t), stream));
-            kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
-                d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
-                max_objs_, num_dets, 3, 0.01f);
-            nvtxRangePop(); // Assoc/S1b_MidConf
-
-            // Stage 1c: Unmatched high+mid-conf dets -> Tentative tracks (D2-C isolation)
-            nvtxRangePushA("Assoc/S1c_Tentative");
-            kernel::fused_sinkhorn_topk_kernel<<<max_objs_, 128, 0, stream>>>(
-                d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
-                max_objs_, num_dets, 30.0f, match_thresh_,
-                effective_mid_thresh, 1.1f, 1, // TRACK_TENTATIVE only
-                matched_det_mask,
-                d_topk_indices_, d_topk_probs_
-            );
-            checkCuda(cudaMemsetAsync(d_auction_prices_, 0, num_dets * sizeof(uint64_t), stream));
-            kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
-                d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
-                max_objs_, num_dets, 3, 0.01f);
-            nvtxRangePop(); // Assoc/S1c_Tentative
-
-            // Stage 2: Low-conf dets -> Unmatched confirmed tracks only
-            nvtxRangePushA("Assoc/S2_LoConf");
-            kernel::fused_sinkhorn_topk_kernel<<<max_objs_, 128, 0, stream>>>(
-                d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
-                max_objs_, num_dets, 30.0f, stage2_match_thresh_,
-                track_thresh_, effective_mid_thresh, 2, // TRACK_CONFIRMED = 2
-                nullptr,
-                d_topk_indices_, d_topk_probs_
-            );
-            checkCuda(cudaMemsetAsync(d_auction_prices_, 0, num_dets * sizeof(uint64_t), stream));
-            kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
-                d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
-                max_objs_, num_dets, 3, 0.01f);
-            nvtxRangePop(); // Assoc/S2_LoConf
-
-            nvtxRangePushA("Assoc/StateUpdate");
-            kernel::track_state_update_post_kernel<<<blocks, threads, 0, stream>>>(
-                d_active_, d_state_, d_age_, d_scores_, d_classes_,
-                d_hit_streak_, d_confirm_streak_required_, d_score_sum_,
-                d_trk_to_det_, d_scores, d_classes,
-                confirm_streak_, confirm_score_thresh_, max_objs_
-            );
-
-            kernel::inline_kalman_update_kernel<<<blocks, threads, 0, stream>>>(
-                d_states_, d_covs_, d_boxes, d_trk_to_det_, d_active_, max_objs_, light_factor,
-                d_scores, nsa_kalman_, r_scale_
-            );
-            nvtxRangePop(); // Assoc/StateUpdate
-
+                d_pending_det_, d_pending_bid_, max_objs_, num_dets, 3, 0.01f);
+            kernel::commit_auction_results_kernel<<<auc_g, auc_b, 0, stream>>>(
+                d_auction_prices_, d_pending_det_, d_pending_bid_,
+                d_trk_to_det_, d_det_to_trk_, max_objs_);
             nvtxRangePop();
+            matched_det_mask = d_det_to_trk_;
         }
 
-        // M2: GPU spawn new tracks
-        if (num_dets > 0) {
-            const float effective_new_track_thresh = std::clamp(
-                new_track_thresh_ * std::max(mid_thresh_scale, 0.01f),
-                track_thresh_, high_thresh_);
-            cudaMemsetAsync(d_n_free_,      0, sizeof(int), stream);
-            cudaMemsetAsync(d_slot_cursor_, 0, sizeof(int), stream);
-            collect_free_slots_kernel<<<(max_objs_ + 255) / 256, 256, 0, stream>>>(
-                d_active_, max_objs_, d_free_slots_, d_n_free_);
-            spawn_new_tracks_kernel<<<(num_dets + 255) / 256, 256, 0, stream>>>(
-                d_det_to_trk_, d_boxes, d_scores, d_classes, num_dets,
-                effective_new_track_thresh,
-                d_free_slots_, d_n_free_,
-                d_active_, d_states_, d_state_,
-                d_track_ids_, d_age_, d_scores_, d_classes_,
-                d_hit_streak_, d_confirm_streak_required_, d_score_sum_,
-                d_track_id_ctr_, d_slot_cursor_,
-                confirm_streak_, birth_low_score_thresh_);
-            init_covariance_if_new_kernel<<<(max_objs_ + 255) / 256, 256, 0, stream>>>(
-                d_active_, d_state_, d_hit_streak_, d_covs_, max_objs_);
-        }
+        nvtxRangePushA("Assoc/S1_HiConf");
+        kernel::fused_sinkhorn_topk_kernel<<<max_objs_, 128, 0, stream>>>(
+            d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
+            max_objs_, num_dets, 30.0f, match_thresh_,
+            high_thresh_, 1.1f, 2,
+            matched_det_mask,
+            d_topk_indices_, d_topk_probs_
+        );
+        checkCuda(cudaMemsetAsync(d_auction_prices_, 0, max_assoc_ * sizeof(uint64_t), stream));
+        checkCuda(cudaMemsetAsync(d_pending_det_, -1, max_objs_ * sizeof(int), stream));
+        kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
+            d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
+            d_pending_det_, d_pending_bid_, max_objs_, num_dets, 3, 0.01f);
+        kernel::commit_auction_results_kernel<<<auc_g, auc_b, 0, stream>>>(
+            d_auction_prices_, d_pending_det_, d_pending_bid_,
+            d_trk_to_det_, d_det_to_trk_, max_objs_);
+        nvtxRangePop();
 
-        // M2: GPU compact results — write only confirmed+updated tracks
+        nvtxRangePushA("Assoc/S1b_MidConf");
+        kernel::fused_sinkhorn_topk_kernel<<<max_objs_, 128, 0, stream>>>(
+            d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
+            max_objs_, num_dets, 30.0f, match_thresh_,
+            effective_mid_thresh - 0.001f, 1.1f, 2,
+            d_det_to_trk_,
+            d_topk_indices_, d_topk_probs_
+        );
+        checkCuda(cudaMemsetAsync(d_auction_prices_, 0, max_assoc_ * sizeof(uint64_t), stream));
+        checkCuda(cudaMemsetAsync(d_pending_det_, -1, max_objs_ * sizeof(int), stream));
+        kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
+            d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
+            d_pending_det_, d_pending_bid_, max_objs_, num_dets, 3, 0.01f);
+        kernel::commit_auction_results_kernel<<<auc_g, auc_b, 0, stream>>>(
+            d_auction_prices_, d_pending_det_, d_pending_bid_,
+            d_trk_to_det_, d_det_to_trk_, max_objs_);
+        nvtxRangePop();
+
+        nvtxRangePushA("Assoc/S1c_Tentative");
+        kernel::fused_sinkhorn_topk_kernel<<<max_objs_, 128, 0, stream>>>(
+            d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
+            max_objs_, num_dets, 30.0f, match_thresh_,
+            effective_mid_thresh, 1.1f, 1,
+            matched_det_mask,
+            d_topk_indices_, d_topk_probs_
+        );
+        checkCuda(cudaMemsetAsync(d_auction_prices_, 0, max_assoc_ * sizeof(uint64_t), stream));
+        checkCuda(cudaMemsetAsync(d_pending_det_, -1, max_objs_ * sizeof(int), stream));
+        kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
+            d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
+            d_pending_det_, d_pending_bid_, max_objs_, num_dets, 3, 0.01f);
+        kernel::commit_auction_results_kernel<<<auc_g, auc_b, 0, stream>>>(
+            d_auction_prices_, d_pending_det_, d_pending_bid_,
+            d_trk_to_det_, d_det_to_trk_, max_objs_);
+        nvtxRangePop();
+
+        nvtxRangePushA("Assoc/S2_LoConf");
+        kernel::fused_sinkhorn_topk_kernel<<<max_objs_, 128, 0, stream>>>(
+            d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
+            max_objs_, num_dets, 30.0f, stage2_match_thresh_,
+            track_thresh_, effective_mid_thresh, 2,
+            nullptr,
+            d_topk_indices_, d_topk_probs_
+        );
+        checkCuda(cudaMemsetAsync(d_auction_prices_, 0, max_assoc_ * sizeof(uint64_t), stream));
+        checkCuda(cudaMemsetAsync(d_pending_det_, -1, max_objs_ * sizeof(int), stream));
+        kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
+            d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
+            d_pending_det_, d_pending_bid_, max_objs_, num_dets, 3, 0.01f);
+        kernel::commit_auction_results_kernel<<<auc_g, auc_b, 0, stream>>>(
+            d_auction_prices_, d_pending_det_, d_pending_bid_,
+            d_trk_to_det_, d_det_to_trk_, max_objs_);
+        nvtxRangePop();
+
+        nvtxRangePushA("Assoc/StateUpdate");
+        kernel::track_state_update_post_kernel<<<blocks, threads, 0, stream>>>(
+            d_active_, d_state_, d_age_, d_scores_, d_classes_,
+            d_hit_streak_, d_confirm_streak_required_, d_score_sum_,
+            d_trk_to_det_, d_scores, d_classes,
+            confirm_streak_, confirm_score_thresh_, max_objs_
+        );
+
+        kernel::inline_kalman_update_kernel<<<blocks, threads, 0, stream>>>(
+            d_states_, d_covs_, d_boxes, d_trk_to_det_, d_active_, max_objs_, light_factor,
+            d_scores, nsa_kalman_, r_scale_
+        );
+        nvtxRangePop();
+
+        nvtxRangePop();
+
+        // Spawn: always launch; kernels guard with idx >= num_dets or
+        // free slots exhausted.
+        const float effective_new_track_thresh_spawn = std::clamp(
+            new_track_thresh_ * std::max(mid_thresh_scale, 0.01f),
+            track_thresh_, high_thresh_);
+        cudaMemsetAsync(d_n_free_,      0, sizeof(int), stream);
+        cudaMemsetAsync(d_slot_cursor_, 0, sizeof(int), stream);
+        collect_free_slots_kernel<<<1, 256, 0, stream>>>(
+            d_active_, max_objs_, d_free_slots_, d_n_free_);
+        // Relink: try to revive a lost identity for each unmatched birth candidate
+        // before spawn assigns fresh ids.
+        const int* d_revive = nullptr;
+        if (relink_enabled_ && d_embeddings) {
+            // Fixed grid (max_assoc_) so the launch config is stable under CUDA
+            // graph capture; the kernel guards with d >= n_det.
+            relink_births_kernel<<<(max_assoc_ + threads - 1) / threads, threads, 0, stream>>>(
+                d_det_to_trk_, d_boxes, d_scores, d_embeddings, num_dets,
+                effective_new_track_thresh_spawn, embed_dim_,
+                relink_bank_cap_, d_relink_feats_, d_relink_ids_, d_relink_pos_,
+                d_relink_lostage_, d_relink_valid_,
+                relink_sim_thresh_, relink_lambda_, relink_spatial_gate_,
+                d_det_revive_id_, d_relink_dbg_);
+            d_revive = d_det_revive_id_;
+        }
+        spawn_new_tracks_kernel<<<1, 256, 0, stream>>>(
+            d_det_to_trk_, d_boxes, d_scores, d_classes, num_dets,
+            effective_new_track_thresh_spawn,
+            d_free_slots_, d_n_free_,
+            d_active_, d_states_, d_state_,
+            d_track_ids_, d_age_, d_scores_, d_classes_,
+            d_hit_streak_, d_confirm_streak_required_, d_score_sum_,
+            d_track_id_ctr_, d_slot_cursor_,
+            confirm_streak_, birth_low_score_thresh_,
+            max_objs_, birth_prox_norm_thresh_,
+            d_revive, d_covs_);
+        init_covariance_if_new_kernel<<<(max_objs_ + 255) / 256, 256, 0, stream>>>(
+            d_active_, d_state_, d_hit_streak_, d_covs_, max_objs_);
+
+        // Compact: always launch
         cudaMemsetAsync(d_res_count_, 0, sizeof(int), stream);
-        compact_results_kernel<<<(max_objs_ + 255) / 256, 256, 0, stream>>>(
+        compact_results_kernel<<<1, 256, 0, stream>>>(
             d_active_, d_state_, d_age_,
             d_states_, d_track_ids_, d_scores_, d_classes_,
             d_trk_to_det_, max_objs_,
             d_res_boxes_, d_res_scores_, d_res_ids_, d_res_classes_, d_res_det_idx_,
             d_res_count_);
-        h_dirty_ = true;           // host arrays are stale until next lazy sync
-        h_slot_map_dirty_ = true;  // tid→slot map must be rebuilt before next scatter
+        h_dirty_ = true;
+        h_slot_map_dirty_ = true;
     }
 
     void set_params(float track_thresh, float high_thresh, float match_thresh, int track_buffer,
                     float mid_thresh, int confirm_streak, float confirm_score_thresh,
                     bool adaptive_confirmation, float new_track_thresh, bool nsa_kalman,
                     float r_scale = 1.0f, float vel_dir_weight = 0.0f, float fuse_score_weight = 0.0f,
-                    float stage2_match_thresh = 0.5f, float birth_low_score_thresh = 0.0f) {
+                    float stage2_match_thresh = 0.5f, float birth_low_score_thresh = 0.0f,
+                    float birth_prox_norm_thresh = 0.0f) {
         track_thresh_ = track_thresh; high_thresh_ = high_thresh; match_thresh_ = match_thresh; max_age_ = track_buffer;
         mid_thresh_ = mid_thresh;
         new_track_thresh_ = new_track_thresh >= 0.0f ? new_track_thresh : mid_thresh;
@@ -1305,9 +1859,49 @@ public:
         fuse_score_weight_ = std::clamp(fuse_score_weight, 0.0f, 1.0f);
         stage2_match_thresh_ = std::clamp(stage2_match_thresh, 0.0f, 1.0f);
         birth_low_score_thresh_ = fmaxf(0.0f, birth_low_score_thresh);
+        birth_prox_norm_thresh_ = fmaxf(0.0f, birth_prox_norm_thresh);
     }
-    void set_reid_params(float cos_threshold, float iou_low, float iou_high, float weight) {
+    void set_reid_params(float cos_threshold, float iou_low, float iou_high, float weight,
+                         float cost_cos_w = 0.55f, float cost_iou_w = 0.30f, float cost_score_w = 0.15f) {
         reid_cos_threshold_ = cos_threshold; reid_iou_low_ = iou_low; reid_iou_high_ = iou_high; reid_weight_ = weight;
+        reid_cost_cos_w_ = cost_cos_w; reid_cost_iou_w_ = cost_iou_w; reid_cost_score_w_ = cost_score_w;
+    }
+    void set_reid_min_candidates(int min_candidates) {
+        reid_min_candidates_ = max(1, min_candidates);
+    }
+    void set_relink_params(bool enabled, int bank_cap, float sim_thresh,
+                           float cheb_lambda, float spatial_gate, int max_age) {
+        relink_enabled_ = enabled;
+        relink_bank_cap_ = std::max(1, bank_cap);
+        relink_sim_thresh_ = sim_thresh;
+        relink_lambda_ = std::max(0.0f, cheb_lambda);
+        relink_spatial_gate_ = std::max(0.0f, spatial_gate);
+        relink_max_age_ = std::max(1, max_age);
+        if (enabled && d_relink_feats_ == nullptr) {
+            int cap = relink_bank_cap_;
+            checkCuda(cudaMalloc(&d_relink_feats_, (size_t)cap * embed_dim_ * sizeof(float)));
+            checkCuda(cudaMalloc(&d_relink_ids_, cap * sizeof(int)));
+            checkCuda(cudaMalloc(&d_relink_pos_, cap * 5 * sizeof(float)));
+            checkCuda(cudaMalloc(&d_relink_lostage_, cap * sizeof(int)));
+            checkCuda(cudaMalloc(&d_relink_valid_, cap * sizeof(int)));
+            checkCuda(cudaMalloc(&d_relink_cursor_, sizeof(int)));
+            checkCuda(cudaMalloc(&d_det_revive_id_, max_assoc_ * sizeof(int)));
+            checkCuda(cudaMalloc(&d_relink_dbg_, 2 * sizeof(int)));
+            checkCuda(cudaMemset(d_relink_valid_, 0, cap * sizeof(int)));
+            checkCuda(cudaMemset(d_relink_lostage_, 0, cap * sizeof(int)));
+            checkCuda(cudaMemset(d_relink_cursor_, 0, sizeof(int)));
+            checkCuda(cudaMemset(d_relink_dbg_, 0, 2 * sizeof(int)));
+        }
+    }
+    // Debug: (archived, birth_candidates, revived) accumulated over the sequence.
+    std::vector<int> get_relink_debug() {
+        std::vector<int> out(3, 0);
+        if (d_relink_cursor_) checkCuda(cudaMemcpy(out.data(), d_relink_cursor_, sizeof(int), cudaMemcpyDeviceToHost));
+        if (d_relink_dbg_) checkCuda(cudaMemcpy(out.data() + 1, d_relink_dbg_, 2 * sizeof(int), cudaMemcpyDeviceToHost));
+        return out;
+    }
+    void set_oao_params(float tau) {
+        oao_tau_ = std::clamp(tau, 0.0f, 1.0f);
     }
     void set_quality_params(bool enabled, float w_aspect, float w_center, float w_area) {
         enable_quality_scaling_ = enabled;
@@ -1600,7 +2194,24 @@ private:
     int max_objs_, embed_dim_, max_assoc_;
     float track_thresh_ = 0.1f, high_thresh_ = 0.5f, match_thresh_ = 0.8f, mid_thresh_ = 0.40f, new_track_thresh_ = 0.40f;
     float reid_cos_threshold_ = 0.90f, reid_iou_low_ = 0.3f, reid_iou_high_ = 0.6f, reid_weight_ = 0.4f;
-    
+    float reid_cost_cos_w_ = 0.55f, reid_cost_iou_w_ = 0.30f, reid_cost_score_w_ = 0.15f;
+    int reid_min_candidates_ = 2;
+
+    // Birth-time lost-bank ReID relink (default off → zero overhead).
+    bool relink_enabled_ = false;
+    int relink_bank_cap_ = 256;
+    float relink_sim_thresh_ = 0.6f, relink_age_alpha_ = 0.1f, relink_spatial_gate_ = 4.0f;
+    float relink_lambda_ = 2.5f;  // Chebyshev T = mu - lambda*sigma
+    int relink_max_age_ = 300;
+    float* d_relink_feats_ = nullptr;
+    int*   d_relink_ids_ = nullptr;
+    float* d_relink_pos_ = nullptr;
+    int*   d_relink_lostage_ = nullptr;
+    int*   d_relink_valid_ = nullptr;
+    int*   d_relink_cursor_ = nullptr;
+    int*   d_det_revive_id_ = nullptr;
+    int*   d_relink_dbg_ = nullptr;  // [0]=birth candidates, [1]=revived (debug)
+
     bool enable_quality_scaling_ = false;
     float q_w_aspect_ = 0.50f;
     float q_w_center_ = 0.30f;
@@ -1619,7 +2230,12 @@ private:
     float fuse_score_weight_ = 0.0f;
     float stage2_match_thresh_ = 0.5f;
     float birth_low_score_thresh_ = 0.0f;
+    float birth_prox_norm_thresh_ = 0.0f;
+    float oao_tau_ = 0.0f;
+    bool enable_dda_ = false;
+    float dda_max_cost_ = 0.12f;
     float *d_states_, *d_covs_, *d_scores_, *d_features_;
+    float* d_occ_coeff_ = nullptr;
     float *d_cost_matrix_, *d_sinkhorn_v_, *d_topk_probs_;
     uint64_t *d_auction_prices_;
     int *d_topk_indices_, *d_trk_to_det_, *d_det_to_trk_;
@@ -1632,6 +2248,9 @@ private:
     float* d_s_inv_;
     float* d_homography_;
     int *d_age_, *d_classes_, *d_track_ids_;
+    // Auction pending buffers
+    int*      d_pending_det_ = nullptr;
+    uint64_t* d_pending_bid_ = nullptr;
     // M2: GPU spawn
     int *d_free_slots_  = nullptr;
     int *d_n_free_      = nullptr;
@@ -1669,11 +2288,24 @@ void GPUByteTracker::set_params(float track_thresh, float high_thresh, float mat
                                 float mid_thresh, int confirm_streak, float confirm_score_thresh,
                                 bool adaptive_confirmation, float new_track_thresh, bool nsa_kalman,
                                 float r_scale, float vel_dir_weight, float fuse_score_weight,
-                                float stage2_match_thresh, float birth_low_score_thresh) {
-    pimpl_->set_params(track_thresh, high_thresh, match_thresh, track_buffer, mid_thresh, confirm_streak, confirm_score_thresh, adaptive_confirmation, new_track_thresh, nsa_kalman, r_scale, vel_dir_weight, fuse_score_weight, stage2_match_thresh, birth_low_score_thresh);
+                                float stage2_match_thresh, float birth_low_score_thresh,
+                                float birth_prox_norm_thresh) {
+    pimpl_->set_params(track_thresh, high_thresh, match_thresh, track_buffer, mid_thresh, confirm_streak, confirm_score_thresh, adaptive_confirmation, new_track_thresh, nsa_kalman, r_scale, vel_dir_weight, fuse_score_weight, stage2_match_thresh, birth_low_score_thresh, birth_prox_norm_thresh);
 }
-void GPUByteTracker::set_reid_params(float cos_threshold, float iou_low, float iou_high, float weight) {
-    pimpl_->set_reid_params(cos_threshold, iou_low, iou_high, weight);
+void GPUByteTracker::set_reid_params(float cos_threshold, float iou_low, float iou_high, float weight,
+                                     float cost_cos_w, float cost_iou_w, float cost_score_w) {
+    pimpl_->set_reid_params(cos_threshold, iou_low, iou_high, weight, cost_cos_w, cost_iou_w, cost_score_w);
+}
+void GPUByteTracker::set_reid_min_candidates(int min_candidates) {
+    pimpl_->set_reid_min_candidates(min_candidates);
+}
+void GPUByteTracker::set_relink_params(bool enabled, int bank_cap, float sim_thresh,
+                                       float cheb_lambda, float spatial_gate, int max_age) {
+    pimpl_->set_relink_params(enabled, bank_cap, sim_thresh, cheb_lambda, spatial_gate, max_age);
+}
+std::vector<int> GPUByteTracker::get_relink_debug() { return pimpl_->get_relink_debug(); }
+void GPUByteTracker::set_oao_params(float tau) {
+    pimpl_->set_oao_params(tau);
 }
 
 void GPUByteTracker::set_quality_params(bool enabled, float w_aspect, float w_center, float w_area) {
@@ -1997,7 +2629,7 @@ __global__ void filter_detections_kernel(
     }
 }
 
-constexpr int NMS_BLOCK_SIZE = 32;
+constexpr int NMS_BLOCK_SIZE = 64;
 
 // ============================================================================
 // 5 Optimizations merged into one kernel:
@@ -2438,6 +3070,9 @@ void filter_detections_cuda(
     if (num_dets <= 0) {
         return;
     }
+    // Clear any stale error before kernel launch so cudaGetLastError below
+    // reports only errors from THIS kernel.
+    cudaGetLastError();
     const int threads = 256;
     const int blocks = (num_dets + threads - 1) / threads;
     filter_detections_kernel<<<blocks, threads, 0, stream>>>(
@@ -2463,7 +3098,16 @@ void filter_detections_cuda(
         person_min_area_ratio,
         person_max_area_ratio
     );
-    checkCuda(cudaGetLastError());
+    {
+        cudaError_t _err = cudaGetLastError();
+        if (_err != cudaSuccess) {
+            std::stringstream _ss;
+            _ss << "CUDA Error: " << cudaGetErrorString(_err)
+                << " (code=" << static_cast<int>(_err) << ")"
+                << " at " << __FILE__ << ":" << __LINE__;
+            throw std::runtime_error(_ss.str());
+        }
+    }
 }
 
 void nms_cuda(

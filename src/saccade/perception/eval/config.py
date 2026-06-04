@@ -13,8 +13,11 @@ class EvalConfig:
     debug_dump_seq: str
     debug_dump_frames: str
     debug_dump_csv: str
+    debug_birth_csv: str
     profile_stages: bool
     latency_only: bool
+    workbench: bool
+    threads: int
 
     reid_mode: str
     reid_enabled: bool
@@ -88,6 +91,11 @@ class EvalConfig:
     birth_consecutive_min_score: float
     birth_consecutive_min_motion: float
 
+    # Duplicate suppression: remove near-duplicate detections within the same frame
+    duplicate_suppression: bool
+    duplicate_suppression_iou_threshold: float
+    duplicate_suppression_min_score_ratio: float
+    # Multi-signal birth policy (P5-1): joint evidence over score × streak × motion × geometry
     multi_birth_enabled: bool
     multi_birth_min_score: float
     multi_birth_min_frames: int
@@ -101,6 +109,9 @@ class EvalConfig:
     multi_birth_w_streak: float
     multi_birth_min_aspect: float
     multi_birth_max_area_px: int
+    # Multi-birth replace mode: suppress competing detection when evidence is high
+    multi_birth_replace_mode: bool
+    multi_birth_replace_evidence_threshold: float
 
     crowd_low_score_mode: bool
     crowd_low_score_trigger: int
@@ -191,6 +202,27 @@ class EvalConfig:
     post_lifecycle_consistency_weight: float
     post_lifecycle_missing_appearance_cost: float
 
+    # Cheb-GR offline tracklet merge (path 2; default off)
+    cheb_gr_merge_enabled: bool
+    cheb_gr_merge_max_cost: float
+    cheb_gr_merge_max_gap: int
+    cheb_gr_merge_min_overlap: int
+    cheb_gr_merge_n_samples: int
+    cheb_gr_pool_frac: float
+    cheb_gr_lambda: float
+    cheb_gr_k2: int
+    cheb_gr_max_fwd: int
+    cheb_gr_fuse_lambda: float
+    cheb_gr_engine: str
+
+    # Birth-time lost-bank ReID relink (online, GPU; default off)
+    relink_enabled: bool
+    relink_bank_cap: int
+    relink_sim_thresh: float
+    relink_lambda: float
+    relink_spatial_gate: float
+    relink_max_age: int
+
     min_tracklet_len: int
     min_tracklet_score: float
     interpolate_tracklets: bool
@@ -202,6 +234,8 @@ class EvalConfig:
     fuse_score_weight: float
     stage2_match_thresh: float
     birth_low_score_thresh: float
+    birth_prox_norm_thresh: float
+    oao_tau: float
 
     # Temporal consistency filter
     temporal_consistency_min_frames: int
@@ -219,7 +253,12 @@ class EvalConfig:
     fp_hard_filter_min_score: float
     fp_hard_filter_max_suspicious_area: int
     fp_hard_filter_max_suspicious_score: float
-
+    external_fp_filter_mode: str
+    external_fp_logistic_model: str
+    external_fp_logistic_threshold: float
+    external_fp_max_score: float
+    external_fp_penalty: float
+    external_fp_softmax_min_scale: float
     appearance_bank_enabled: bool
     appearance_bank_size: int
     appearance_bank_min_score: float
@@ -300,11 +339,18 @@ def parse_eval_config(
         max(mid_thresh - 1e-4, track_thresh + 1e-4),
     )
 
-    seqs = (
-        sequences.split(",")
-        if sequences
-        else [d.name for d in (Path(data_root) / split).iterdir() if d.is_dir()]
-    )
+    _detector_suffixes = {"SDP", "DPM", "FRCNN"}
+    if sequences:
+        filters = [s.strip() for s in sequences.split(",")]
+        if all(f in _detector_suffixes for f in filters):
+            _all = sorted(
+                d.name for d in (Path(data_root) / split).iterdir() if d.is_dir()
+            )
+            seqs = [d for d in _all if any(d.endswith(f"-{f}") for f in filters)]
+        else:
+            seqs = filters
+    else:
+        seqs = sorted(d.name for d in (Path(data_root) / split).iterdir() if d.is_dir())
 
     tiling = kwargs.get("tiling", "960p_2x2")
     _nms_default = 0.35 if tiling == "960p_3x2" else 0.5
@@ -328,8 +374,11 @@ def parse_eval_config(
         debug_dump_seq=str(kwargs.get("debug_dump_seq", "")).strip(),
         debug_dump_frames=str(kwargs.get("debug_dump_frames", "")).strip(),
         debug_dump_csv=str(kwargs.get("debug_dump_csv", "")).strip(),
+        debug_birth_csv=str(kwargs.get("debug_birth_csv", "")).strip(),
         profile_stages=profile_stages,
         latency_only=bool(kwargs.get("latency_only", False)),
+        workbench=bool(kwargs.get("workbench", False)),
+        threads=int(kwargs.get("threads", 1)),
         reid_mode=reid_mode,
         reid_enabled=reid_enabled,
         reid_model=reid_model,
@@ -424,6 +473,14 @@ def parse_eval_config(
         birth_consecutive_min_motion=float(
             kwargs.get("birth_consecutive_min_motion", 0.0)
         ),
+        # Duplicate suppression
+        duplicate_suppression=bool(kwargs.get("duplicate_suppression", False)),
+        duplicate_suppression_iou_threshold=float(
+            kwargs.get("duplicate_suppression_iou_threshold", 0.85)
+        ),
+        duplicate_suppression_min_score_ratio=float(
+            kwargs.get("duplicate_suppression_min_score_ratio", 1.05)
+        ),
         multi_birth_enabled=bool(kwargs.get("multi_birth_enabled", False)),
         multi_birth_min_score=float(kwargs.get("multi_birth_min_score", 0.12)),
         multi_birth_min_frames=max(2, int(kwargs.get("multi_birth_min_frames", 3))),
@@ -439,6 +496,10 @@ def parse_eval_config(
         multi_birth_w_streak=float(kwargs.get("multi_birth_w_streak", 0.15)),
         multi_birth_min_aspect=float(kwargs.get("multi_birth_min_aspect", 0.0)),
         multi_birth_max_area_px=int(kwargs.get("multi_birth_max_area_px", 0)),
+        multi_birth_replace_mode=bool(kwargs.get("multi_birth_replace_mode", False)),
+        multi_birth_replace_evidence_threshold=float(
+            kwargs.get("multi_birth_replace_evidence_threshold", 0.85)
+        ),
         crowd_low_score_mode=bool(kwargs.get("crowd_low_score_mode", False)),
         crowd_low_score_trigger=int(kwargs.get("crowd_low_score_trigger", 25)),
         crowd_conf_threshold=float(kwargs.get("crowd_conf_threshold", 0.02)),
@@ -557,6 +618,23 @@ def parse_eval_config(
         post_lifecycle_missing_appearance_cost=float(
             kwargs.get("post_lifecycle_missing_appearance_cost", 0.5)
         ),
+        cheb_gr_merge_enabled=bool(kwargs.get("cheb_gr_merge_enabled", False)),
+        cheb_gr_merge_max_cost=float(kwargs.get("cheb_gr_merge_max_cost", 0.55)),
+        cheb_gr_merge_max_gap=int(kwargs.get("cheb_gr_merge_max_gap", 60)),
+        cheb_gr_merge_min_overlap=int(kwargs.get("cheb_gr_merge_min_overlap", 1)),
+        cheb_gr_merge_n_samples=int(kwargs.get("cheb_gr_merge_n_samples", 50)),
+        cheb_gr_pool_frac=float(kwargs.get("cheb_gr_pool_frac", 0.3)),
+        cheb_gr_lambda=float(kwargs.get("cheb_gr_lambda", 2.0)),
+        cheb_gr_k2=int(kwargs.get("cheb_gr_k2", 6)),
+        cheb_gr_max_fwd=int(kwargs.get("cheb_gr_max_fwd", 50)),
+        cheb_gr_fuse_lambda=float(kwargs.get("cheb_gr_fuse_lambda", 0.3)),
+        cheb_gr_engine=str(kwargs.get("cheb_gr_engine", "") or ""),
+        relink_enabled=bool(kwargs.get("relink_enabled", False)),
+        relink_bank_cap=int(kwargs.get("relink_bank_cap", 256)),
+        relink_sim_thresh=float(kwargs.get("relink_sim_thresh", 0.6)),
+        relink_lambda=float(kwargs.get("relink_lambda", 2.5)),
+        relink_spatial_gate=float(kwargs.get("relink_spatial_gate", 4.0)),
+        relink_max_age=int(kwargs.get("relink_max_age", 300)),
         min_tracklet_len=max(1, int(kwargs.get("min_tracklet_len", 1))),
         min_tracklet_score=float(kwargs.get("min_tracklet_score", 0.0)),
         interpolate_tracklets=bool(kwargs.get("interpolate_tracklets", True)),
@@ -570,6 +648,8 @@ def parse_eval_config(
         fuse_score_weight=float(kwargs.get("fuse_score_weight", 0.0)),
         stage2_match_thresh=float(kwargs.get("stage2_match_thresh", 0.5)),
         birth_low_score_thresh=float(kwargs.get("birth_low_score_thresh", 0.0)),
+        birth_prox_norm_thresh=float(kwargs.get("birth_prox_norm_thresh", 0.0)),
+        oao_tau=float(kwargs.get("oao_tau", 0.0)),
         temporal_consistency_min_frames=int(
             kwargs.get("temporal_consistency_min_frames", 3)
         ),
@@ -589,6 +669,16 @@ def parse_eval_config(
         ),
         fp_hard_filter_max_suspicious_score=float(
             kwargs.get("fp_hard_filter_max_suspicious_score", 0.40)
+        ),
+        external_fp_filter_mode=str(kwargs.get("external_fp_filter_mode", "off")),
+        external_fp_logistic_model=str(kwargs.get("external_fp_logistic_model", "")),
+        external_fp_logistic_threshold=float(
+            kwargs.get("external_fp_logistic_threshold", 0.5)
+        ),
+        external_fp_max_score=float(kwargs.get("external_fp_max_score", 0.18)),
+        external_fp_penalty=float(kwargs.get("external_fp_penalty", 1.0)),
+        external_fp_softmax_min_scale=float(
+            kwargs.get("external_fp_softmax_min_scale", 0.7)
         ),
         appearance_bank_enabled=bool(kwargs.get("appearance_bank", False)),
         appearance_bank_size=max(1, int(kwargs.get("appearance_bank_size", 5))),

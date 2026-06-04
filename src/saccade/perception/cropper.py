@@ -234,13 +234,13 @@ if __name__ == "__main__":
 
     # 預熱 CUDA
     _ = cropper.process(dummy_frame, dummy_boxes)
-    torch.cuda.synchronize()
+    torch.cuda.synchronize()  # saccade-allow-cpu
 
     # 測速
     start = time.perf_counter()
     for i in range(100):
         out_crops = cropper.process(dummy_frame, dummy_boxes)
-    torch.cuda.synchronize()
+    torch.cuda.synchronize()  # saccade-allow-cpu
     latency = (time.perf_counter() - start) / 100 * 1000 * 1000  # 轉換為微秒 (µs)
 
     print(f"✅ Cropped Tensor Shape: {out_crops.shape} (N, C, H, W)")

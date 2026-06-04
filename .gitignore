@@ -78,3 +78,14 @@ htmlcov/
 .DS_Store
 Thumbs.db
 build-native-coverage/
+
+# Root-level one-off scripts and profiling artifacts
+/patch_*.py
+/test_*.py
+/trt_bench.py
+*.prof
+*.nsys-rep
+*.sqlite
+scratch/nsys_profiles/
+storage/mlflow_artifacts/
+output/

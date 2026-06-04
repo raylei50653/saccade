@@ -4,9 +4,10 @@ import time
 import uuid
 import asyncio
 import os
-import redis.asyncio as redis
-from typing import List, Optional, Any, cast, Awaitable
+from typing import List, Any
 from dotenv import load_dotenv
+from saccade.media.rtsp import build_rtsp_url, DEFAULT_RTSP_SINGLE_STREAM_PATH
+from saccade.storage.redis_cache import RedisCache
 
 load_dotenv()
 
@@ -25,15 +26,14 @@ class EntropyTrigger:
     ):
         self.threshold = threshold
         self.redis_url = redis_url
-        self.redis_client: Optional[redis.Redis] = None
+        self.cache = RedisCache(redis_url)
         self.last_emit_time = 0.0
         self.cooldown = cooldown
 
-    async def _ensure_redis(self) -> redis.Redis:
-        """確保 Redis 連線已建立"""
-        if self.redis_client is None:
-            self.redis_client = redis.from_url(self.redis_url)
-        return self.redis_client
+    async def _ensure_cache(self) -> RedisCache:
+        if self.cache.client is None:
+            await self.cache.connect()
+        return self.cache
 
     def calculate_entropy(self, detections: List[Any], density_max: int = 10) -> float:
         """
@@ -98,14 +98,11 @@ class EntropyTrigger:
             },
         }
 
-        r = await self._ensure_redis()
+        cache = await self._ensure_cache()
+        assert cache.client is not None
         try:
-            # 推送到 Redis List (saccade:events)
-            await cast(
-                Awaitable[Any], r.rpush("saccade:events", json.dumps(event_data))
-            )
-            # 設定過期時間 (TTL)，防止 Redis 記憶體溢出
-            await cast(Awaitable[Any], r.expire("saccade:events", 3600))
+            await cache.client.rpush("saccade:events", json.dumps(event_data))  # type: ignore[misc]
+            await cache.client.expire("saccade:events", 3600)
 
             print(
                 f"📡 Event emitted: {event_id} (Entropy: {entropy_value:.2f}, Frame: {frame_id})"
@@ -137,9 +134,7 @@ class EntropyTrigger:
         return False
 
     async def close(self) -> None:
-        """關閉連線"""
-        if self.redis_client:
-            await self.redis_client.aclose()
+        await self.cache.disconnect()
 
 
 async def main() -> None:
@@ -149,7 +144,7 @@ async def main() -> None:
     await trigger.process_frame(
         frame_id=1001,
         detections=["person", "car", "dog"],
-        source_path="rtsp://localhost:8554/live",
+        source_path=build_rtsp_url(DEFAULT_RTSP_SINGLE_STREAM_PATH),
     )
     await trigger.close()
 

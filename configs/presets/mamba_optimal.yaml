@@ -1,0 +1,52 @@
+# Mamba Optimal Evaluation Config Preset
+# Replicates the optimal configuration discovered during parameter sweep on MOT17 SDP.
+# High-efficiency, Mamba-only tracking with zero ReID overhead.
+# Load with: --preset mamba_optimal
+
+# --- Detection & Tiling ---
+tiling: native_640
+preprocess: none
+track_person_only: false
+person_geometry_prior: false
+detection_quality_scaling: false
+
+# --- Mamba Detector ---
+mamba_ckpt: runs/mamba_gt_vgt_mamba_v14/best.ckpt
+fpn_backbone_engine: models/yolo/yolo26s_backbone_640_best.engine
+# CUDA-graph replay of the Mamba head via torch.cuda.make_graphed_callables.
+# Collapses ~278 eager kernel launches/frame into one replay (detect is
+# launch-bound). The prior hand-rolled capture corrupted cls outputs because
+# the selective_scan CUDA op launched on the legacy default stream (invisible
+# to capture); the op now launches on PyTorch's current stream, so replay is
+# bit-exact. Verified full-eval MOTA parity vs eager.
+# See docs/research/pipeline/mamba_head_cuda_graph_eval_bug_20260602.md.
+use_cuda_graph: true
+
+# CUDA-graph capture of the GPU tracker (run_update_device with fixed
+# max_assoc_ grids). Experimental — defaults off until full MOTA parity
+# validation.
+use_tracker_graph: false
+
+# --- GMC ---
+# Highly critical when match_thresh is low to compensate for camera motion
+gmc: true
+gmc_downscale: 4         # Preserve higher background texture resolution for ultra-precise motion correlation
+gmc_fg_mask: false       # Keep disabled to achieve highest speed (100.9 FPS) and best IDF1 consistency
+
+# --- ReID ---
+# Disabled to achieve maximum speed (~108 FPS) since FPN ReID had near-zero accuracy contribution
+reid_mode: "off"
+
+# --- Tracker Parameters ---
+match_thresh: 0.50       # Low threshold optimized for Mamba detector box confidence & IoU distributions
+new_track_thresh: 0.28   # Keep standard baseline new track threshold
+kalman_r_scale: 2.8      # r_scale>1 trusts Kalman prediction more → smoother trajectory → better stage-2 re-association → IDF1 +1.9pp IDs -84 vs r_scale=1.0
+confirm_streak: 3
+confirm_score_thresh: 0.50
+fuse_score_weight: 0.0
+id_stability_filter: false
+per_seq_adapt: false
+geometry_suspect_support: false
+interpolate_tracklets: true
+interpolate_max_gap: 35
+interpolate_min_track_len: 5

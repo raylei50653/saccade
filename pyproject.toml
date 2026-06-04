@@ -43,9 +43,12 @@ dependencies = [
     "motmetrics>=1.4.0",
     "llama-index>=0.14.21",
     "llama-index-vector-stores-chroma>=0.5.5",
-    "asyncpg>=0.30.0",
     "sqlalchemy>=2.0.38",
+    "psycopg2-binary>=2.9.10",
     "sahi>=0.11.36",
+    "mlflow>=3.2.0",
+    "pycocotools>=2.0.11",
+    "tabulate>=0.10.0",
 ]
 
 [tool.setuptools]
@@ -60,7 +63,7 @@ override-dependencies = [
 [tool.mypy]
 strict = true
 ignore_missing_imports = true
-exclude = ["tests/", "build/", "build-native-coverage/"]
+exclude = ["tests/", "build/", "build-native-coverage/", "storage/", "runs/", "results/", "train/", "scratch/", "third_party/"]
 mypy_path = "src"
 
 [[tool.mypy.overrides]]
@@ -68,19 +71,36 @@ module = ["scripts.*"]
 ignore_errors = true
 
 [[tool.mypy.overrides]]
+module = ["train.*"]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = ["saccade.perception.temporal_yolo.*"]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
 module = [
+    "build_fpn_reid",
     "debug_eval",
     "saccade.media.dali_pipeline",
+    "saccade.media.rtsp_dali_pipeline",
     "saccade.perception.detector_trt",
     "saccade.perception.eval.detection",
+    "saccade.perception.eval.streaming",
+    "saccade.perception.tracking.fpn_reid",
+    "saccade.perception.tracking.fpn_reid_cuda",
+    "saccade.perception.workbench",
 ]
 ignore_errors = true
 
 [tool.ruff]
-exclude = ["tests/benchmarks/archive"]
+exclude = ["tests/benchmarks/archive", "storage/", "runs/", "results/", "third_party/", "scratch/"]
 
 [tool.ruff.lint]
 ignore = ["E701"]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/**" = ["E402"]
 
 [tool.pytest.ini_options]
 addopts = "--cov=saccade --cov-report=term-missing"

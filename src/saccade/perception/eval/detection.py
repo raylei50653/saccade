@@ -63,7 +63,10 @@ def _prepare_canvas_960p(
         )
     else:
         img_resized = torch.nn.functional.interpolate(
-            pool.frame_buffer.unsqueeze(0), size=(h_new, w_new)
+            pool.frame_buffer.unsqueeze(0),
+            size=(h_new, w_new),
+            mode="bilinear",
+            align_corners=False,
         ).squeeze(0)
         pool.canvas_960p.fill_(114.0 / 255.0)
         pool.canvas_960p[:, y_off : y_off + h_new, x_off : x_off + w_new].copy_(
@@ -1053,7 +1056,10 @@ def detect_single_patch_640(
             )
         else:
             img_resized = torch.nn.functional.interpolate(
-                pool.frame_buffer.unsqueeze(0), size=(h_new, w_new)
+                pool.frame_buffer.unsqueeze(0),
+                size=(h_new, w_new),
+                mode="bilinear",
+                align_corners=False,
             ).squeeze(0)
             pool.canvas_640p.fill_(114.0 / 255.0)
             pool.canvas_640p[:, y_off : y_off + h_new, x_off : x_off + w_new].copy_(
@@ -1070,8 +1076,12 @@ def detect_single_patch_640(
         return boxes, scores, classes
 
     img_input = torch.nn.functional.interpolate(
-        pool.frame_buffer.unsqueeze(0), size=(640, 640)
+        pool.frame_buffer.unsqueeze(0),
+        size=(640, 640),
+        mode="bilinear",
+        align_corners=False,
     )
+    pool.canvas_640p.copy_(img_input[0])
     raw_dets = detector.detect_raw(img_input)
     boxes = _decode_detector_boxes(raw_dets[0, :, :4], detector_box_format)
     scores = raw_dets[0, :, 4]
@@ -1114,8 +1124,12 @@ def detect_single_patch_960(
         return boxes, scores, classes, keypoints
 
     img_input = torch.nn.functional.interpolate(
-        pool.frame_buffer.unsqueeze(0), size=(960, 960)
+        pool.frame_buffer.unsqueeze(0),
+        size=(960, 960),
+        mode="bilinear",
+        align_corners=False,
     )
+    pool.canvas_960p.copy_(img_input[0])
     keypoints = None
     if hasattr(detector, "pose"):
         boxes, scores, classes, keypoints = detector.detect(
@@ -1149,6 +1163,72 @@ def detect_native_960(
         detector, pool, h_orig, w_orig, preprocess_modes, detector_box_format
     )
     return boxes, scores, classes, False, keypoints
+
+
+def detect_native_960_tta(
+    detector: Any,
+    pool: Any,
+    h_orig: int,
+    w_orig: int,
+    preprocess_modes: List[str],
+    detector_box_format: str = "xyxy",
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, bool, Optional[torch.Tensor]]:
+    """Horizontal-flip TTA: runs detector twice (forward + mirror), merges outputs.
+
+    Boxes from the flipped pass are un-mirrored back to original coords before
+    concatenation.  Downstream NMS deduplicates the doubled candidate set.
+    FPS cost: ~2× detect stage (~30% overall based on detect≈40% of frame_total).
+    """
+    if "letterbox" not in preprocess_modes:
+        raise RuntimeError("TTA requires letterbox preprocessing")
+
+    r, _h_new, _w_new, y_off, x_off = _prepare_canvas_960p(pool, h_orig, w_orig)
+
+    # Forward pass
+    raw_fwd = detector.detect_raw(pool.canvas_960p.unsqueeze(0))
+    boxes_fwd = _decode_detector_boxes(raw_fwd[0, :, :4], detector_box_format)
+    scores_fwd = raw_fwd[0, :, 4]
+    classes_fwd = raw_fwd[0, :, 5]
+    boxes_fwd[:, [0, 2]] = (boxes_fwd[:, [0, 2]] - x_off) / r
+    boxes_fwd[:, [1, 3]] = (boxes_fwd[:, [1, 3]] - y_off) / r
+
+    # Flipped pass — flip along W (dim=2) into pre-allocated buffer
+    pool.canvas_960p_flip.copy_(pool.canvas_960p.flip(2))
+    raw_flip = detector.detect_raw(pool.canvas_960p_flip.unsqueeze(0))
+    boxes_flip = _decode_detector_boxes(raw_flip[0, :, :4], detector_box_format)
+    scores_flip = raw_flip[0, :, 4]
+    classes_flip = raw_flip[0, :, 5]
+    # Un-mirror: canvas x_back = 960 - x_flip, then undo letterbox
+    x1_back = (960.0 - boxes_flip[:, 2] - x_off) / r
+    x2_back = (960.0 - boxes_flip[:, 0] - x_off) / r
+    boxes_flip = torch.stack(
+        [
+            x1_back,
+            (boxes_flip[:, 1] - y_off) / r,
+            x2_back,
+            (boxes_flip[:, 3] - y_off) / r,
+        ],
+        dim=1,
+    )
+
+    boxes = torch.cat([boxes_fwd, boxes_flip], dim=0)
+    scores = torch.cat([scores_fwd, scores_flip], dim=0)
+    classes = torch.cat([classes_fwd, classes_flip], dim=0)
+    return boxes, scores, classes, False, None
+
+
+def detect_native_640(
+    detector: Any,
+    pool: Any,
+    h_orig: int,
+    w_orig: int,
+    preprocess_modes: List[str],
+    detector_box_format: str = "xyxy",
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, bool, Optional[torch.Tensor]]:
+    boxes, scores, classes = detect_single_patch_640(
+        detector, pool, h_orig, w_orig, preprocess_modes, detector_box_format
+    )
+    return boxes, scores, classes, False, None
 
 
 def _detect_tiles(detector: Any, tiles_batch: torch.Tensor) -> torch.Tensor:

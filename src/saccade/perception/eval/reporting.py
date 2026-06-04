@@ -5,6 +5,139 @@ from pathlib import Path
 from typing import Any
 
 
+POST_GPU_STAGE = "post_gpu_elapsed"
+
+
+def _breakdown_display_names(breakdown_stage_names: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(
+        name
+        for name in breakdown_stage_names
+        if name != POST_GPU_STAGE
+        and not name.startswith("native_")
+        and not name.startswith("post_seg_")
+    )
+
+
+def _native_breakdown_names(breakdown_stage_names: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(name for name in breakdown_stage_names if name.startswith("native_"))
+
+
+def _postprocess_attribution_from_means(
+    stage_means: dict[str, float],
+    postprocess_wall_ms: float,
+) -> dict[str, float]:
+    gpu_ms = float(stage_means.get(POST_GPU_STAGE, 0.0))
+    has_native_breakdown = any(k.startswith("native_") for k in stage_means)
+    excluded_native_stages: set[str] = set()
+    if any(
+        stage_means.get(name, 0.0) > 0.0
+        for name in (
+            "native_filter_kernel",
+            "native_gather_compact3",
+            "native_copy_suspect",
+        )
+    ):
+        excluded_native_stages.add("native_filter_gather")
+    if any(
+        stage_means.get(name, 0.0) > 0.0
+        for name in ("native_large_argsort", "native_large_nms")
+    ):
+        excluded_native_stages.add("native_large_sort_nms")
+    if any(
+        stage_means.get(name, 0.0) > 0.0
+        for name in ("native_large_gather4", "native_large_copyback")
+    ):
+        excluded_native_stages.add("native_compact_copy")
+    excluded_post_stages = (
+        {"post_filter", "post_nms"} if has_native_breakdown else set()
+    )
+    known_gpu_ms = float(
+        sum(
+            v
+            for k, v in stage_means.items()
+            if (
+                (
+                    k.startswith("post_")
+                    and k != POST_GPU_STAGE
+                    and k not in excluded_post_stages
+                    and not k.startswith("post_seg_")
+                )
+                or (k.startswith("native_") and k not in excluded_native_stages)
+            )
+        )
+    )
+    unattributed_gpu_ms = max(0.0, gpu_ms - known_gpu_ms)
+    overhead_ms = max(0.0, postprocess_wall_ms - gpu_ms)
+    return {
+        "wall_ms": postprocess_wall_ms,
+        "gpu_ms": gpu_ms,
+        "unattributed_gpu_ms": unattributed_gpu_ms,
+        "overhead_ms": overhead_ms,
+    }
+
+
+def _print_postprocess_gpu_attribution(attribution: dict[str, float]) -> None:
+    if attribution["wall_ms"] <= 0.0 and attribution["gpu_ms"] <= 0.0:
+        return
+    print("\n| Postprocess GPU Attribution | Mean (ms/frame) |")
+    print("| :--- | :--- |")
+    print(f"| postprocess_wall | {attribution['wall_ms']:.2f} |")
+    print(f"| postprocess_gpu | {attribution['gpu_ms']:.2f} |")
+    print(f"| post_unattributed_gpu | {attribution['unattributed_gpu_ms']:.2f} |")
+    print(f"| post_overhead | {attribution['overhead_ms']:.2f} |")
+
+
+def _print_postprocess_segment_span(
+    segment_names: tuple[str, ...],
+    segment_samples: dict[str, list[float]],
+    gpu_ms: float,
+) -> None:
+    """Print the sync-free CUDA-event partition of the postprocess GPU span.
+
+    Per-frame samples → Mean/Std/P95/P99 per segment (tail latency, not just the
+    mean). Σ of segment means should ≈ post_gpu_elapsed (gpu_ms). Locates which
+    segment holds the otherwise-unattributed GPU time.
+    """
+    if not any(segment_samples.get(name) for name in segment_names):
+        return
+    print(
+        "\n| Postprocess Segment Span (CUDA events) | "
+        "Mean (ms) | Std (ms) | P95 (ms) | P99 (ms) |"
+    )
+    print("| :--- | :--- | :--- | :--- | :--- |")
+    seg_sum = 0.0
+    for name in segment_names:
+        samples = segment_samples.get(name)
+        if not samples:
+            continue
+        arr = np.array(samples, dtype=np.float64)
+        seg_sum += float(arr.mean())
+        print(
+            f"| {name} | {arr.mean():.2f} | {arr.std():.2f} | "
+            f"{np.percentile(arr, 95):.2f} | {np.percentile(arr, 99):.2f} |"
+        )
+    print(f"| Σ segments (mean) | {seg_sum:.2f} | | | |")
+    print(f"| post_gpu_elapsed (ref) | {gpu_ms:.2f} | | | |")
+
+
+def _print_native_postprocess_breakdown(
+    breakdown_names: tuple[str, ...],
+    stage_totals: dict[str, float],
+    profiled_frames: int,
+) -> None:
+    if profiled_frames <= 0:
+        return
+    if not any(stage_totals.get(name, 0.0) > 0.0 for name in breakdown_names):
+        return
+    print("\n| Native Postprocess Breakdown | Mean (ms/frame) |")
+    print("| :--- | :--- |")
+    for stage_name in breakdown_names:
+        total_ms = stage_totals.get(stage_name, 0.0)
+        if total_ms <= 0.0:
+            continue
+        print(f"| {stage_name} | {total_ms / profiled_frames:.2f} |")
+
+
 def _print_stage_waterfall(
     stage_means: dict[str, float],
     frame_total_ms: float,
@@ -54,6 +187,8 @@ def print_overall_summary(
     overall_post_counts: dict[str, int],
     gmc_breakdown_names: tuple[str, ...],
     overall_gmc_samples: dict[str, list[float]],
+    segment_breakdown_names: tuple[str, ...],
+    overall_segment_samples: dict[str, list[float]],
     overall_lazy_reid_frames: int,
     overall_lazy_reid_candidates: int,
     overall_lazy_reid_crops: int,
@@ -64,6 +199,8 @@ def print_overall_summary(
     overall_lazy_reid_arbiter_approve: int,
     debug_dump_csv: str,
     debug_stage_dump_rows: list[dict[str, float | int | str]],
+    debug_birth_csv: str,
+    debug_birth_rows: list[dict[str, float | int | str | bool]],
     all_seq_profile: list[dict[str, Any]] | None = None,
 ) -> None:
     if fps_summary_lines:
@@ -89,11 +226,13 @@ def print_overall_summary(
         print("| Stage | Mean (ms) | Std (ms) | P95 (ms) | P99 (ms) |")
         print("| :--- | :--- | :--- | :--- | :--- |")
         stage_summary_lines.append(f"[OVERALL] frames={overall_profiled_frames}")
+        overall_top_level_means: dict[str, float] = {}
         for stage_name in top_level_stage_names:
             samples = overall_stage_samples[stage_name]
             if not samples:
                 continue
             arr = np.array(samples, dtype=np.float64)
+            overall_top_level_means[stage_name] = float(arr.mean())
             print(
                 f"| {stage_name} | {arr.mean():.2f} | {arr.std():.2f} | "
                 f"{np.percentile(arr, 95):.2f} | {np.percentile(arr, 99):.2f} |"
@@ -103,10 +242,12 @@ def print_overall_summary(
                 f"p95_ms={np.percentile(arr, 95):.2f}\tp99_ms={np.percentile(arr, 99):.2f}\t"
                 f"samples={len(samples)}"
             )
-        if any(overall_stage_totals[name] > 0.0 for name in breakdown_stage_names):
+        display_breakdown_names = _breakdown_display_names(breakdown_stage_names)
+        native_breakdown_names = _native_breakdown_names(breakdown_stage_names)
+        if any(overall_stage_totals[name] > 0.0 for name in display_breakdown_names):
             print("\n| Postprocess Breakdown | Mean (ms/frame) |")
             print("| :--- | :--- |")
-            for stage_name in breakdown_stage_names:
+            for stage_name in display_breakdown_names:
                 total_ms = overall_stage_totals[stage_name]
                 if total_ms <= 0.0:
                     continue
@@ -114,6 +255,34 @@ def print_overall_summary(
                 stage_summary_lines.append(
                     f"{stage_name}\tmean_ms={total_ms / overall_profiled_frames:.2f}\ttotal_ms={total_ms:.2f}"
                 )
+        overall_breakdown_means = {
+            stage_name: overall_stage_totals[stage_name] / overall_profiled_frames
+            for stage_name in breakdown_stage_names
+            if overall_stage_totals.get(stage_name, 0.0) > 0.0
+            and overall_profiled_frames > 0
+        }
+        overall_post_attr = _postprocess_attribution_from_means(
+            overall_breakdown_means,
+            overall_top_level_means.get("postprocess", 0.0),
+        )
+        _print_postprocess_gpu_attribution(overall_post_attr)
+        _print_postprocess_segment_span(
+            segment_breakdown_names,
+            overall_segment_samples,
+            overall_post_attr["gpu_ms"],
+        )
+        _print_native_postprocess_breakdown(
+            native_breakdown_names,
+            overall_stage_totals,
+            overall_profiled_frames,
+        )
+        stage_summary_lines.append(
+            "postprocess_gpu_attribution\t"
+            f"wall_ms={overall_post_attr['wall_ms']:.2f}\t"
+            f"gpu_ms={overall_post_attr['gpu_ms']:.2f}\t"
+            f"unattributed_gpu_ms={overall_post_attr['unattributed_gpu_ms']:.2f}\t"
+            f"overhead_ms={overall_post_attr['overhead_ms']:.2f}"
+        )
         if any(overall_gmc_samples[name] for name in gmc_breakdown_names):
             print("\n| GMC Breakdown | Mean (ms) | Std (ms) | P95 (ms) | P99 (ms) |")
             print("| :--- | :--- | :--- | :--- | :--- |")
@@ -202,10 +371,6 @@ def print_overall_summary(
             samp = overall_stage_samples.get(sn, [])
             if samp:
                 overall_means[sn] = float(np.mean(np.array(samp, dtype=np.float64)))
-        for sn in breakdown_stage_names:
-            tot = overall_stage_totals.get(sn, 0.0)
-            if tot > 0.0 and overall_profiled_frames > 0:
-                overall_means[sn] = tot / overall_profiled_frames
         _print_stage_waterfall(overall_means, ft_ms)
 
         # JSON profile output
@@ -220,6 +385,17 @@ def print_overall_summary(
                     "p95_ms": float(np.percentile(arr, 95)),
                     "p99_ms": float(np.percentile(arr, 99)),
                 }
+        if "postprocess" in overall_stage_json:
+            overall_stage_json["postprocess"].update(
+                {
+                    "mean_wall_ms": overall_post_attr["wall_ms"],
+                    "mean_gpu_ms": overall_post_attr["gpu_ms"],
+                    "mean_unattributed_gpu_ms": overall_post_attr[
+                        "unattributed_gpu_ms"
+                    ],
+                    "mean_overhead_ms": overall_post_attr["overhead_ms"],
+                }
+            )
         for sn in breakdown_stage_names:
             tot = overall_stage_totals.get(sn, 0.0)
             if tot > 0.0 and overall_profiled_frames > 0:
@@ -237,7 +413,30 @@ def print_overall_summary(
             "sequences": {
                 e["seq"]: {
                     "frames": e["frames"],
-                    **{k: v for k, v in e["stages"].items()},
+                    **{
+                        # Backward-compatible: older seq entries may not carry
+                        # postprocess_attribution yet.
+                        k: (
+                            v
+                            | {
+                                "mean_wall_ms": e.get(
+                                    "postprocess_attribution", {}
+                                ).get("wall_ms", v.get("mean_ms", 0.0)),
+                                "mean_gpu_ms": e.get("postprocess_attribution", {}).get(
+                                    "gpu_ms", 0.0
+                                ),
+                                "mean_unattributed_gpu_ms": e.get(
+                                    "postprocess_attribution", {}
+                                ).get("unattributed_gpu_ms", 0.0),
+                                "mean_overhead_ms": e.get(
+                                    "postprocess_attribution", {}
+                                ).get("overhead_ms", 0.0),
+                            }
+                            if k == "postprocess"
+                            else v
+                        )
+                        for k, v in e["stages"].items()
+                    },
                 }
                 for e in (all_seq_profile or [])
             },
@@ -272,6 +471,40 @@ def print_overall_summary(
             f"path={debug_dump_path}"
         )
 
+    if debug_birth_csv:
+        debug_birth_path = Path(debug_birth_csv)
+        debug_birth_path.parent.mkdir(parents=True, exist_ok=True)
+        fieldnames = [
+            "seq",
+            "frame",
+            "policy",
+            "det_idx",
+            "score_before",
+            "score_after",
+            "x1",
+            "y1",
+            "x2",
+            "y2",
+            "w",
+            "h",
+            "output_emitted",
+            "output_local_track_id",
+            "output_track_id",
+            "output_score",
+            "output_x1",
+            "output_y1",
+            "output_x2",
+            "output_y2",
+        ]
+        with debug_birth_path.open("w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(debug_birth_rows)
+        print(
+            f"\n🪲 Birth promotion dump: rows={len(debug_birth_rows)} "
+            f"path={debug_birth_path}"
+        )
+
 
 def print_sequence_summary(
     cfg: Any,
@@ -290,6 +523,9 @@ def print_sequence_summary(
     gmc_breakdown_names: tuple[str, ...],
     seq_gmc_samples: dict[str, list[float]],
     overall_gmc_samples: dict[str, list[float]],
+    segment_breakdown_names: tuple[str, ...],
+    seq_segment_samples: dict[str, list[float]],
+    overall_segment_samples: dict[str, list[float]],
     seq_post_counts: dict[str, int],
     overall_post_counts: dict[str, int],
     seq_lazy_reid_frames: int,
@@ -333,12 +569,14 @@ def print_sequence_summary(
         print(f"\n🧪 Stage Jitter Report for {seq} (exclusive top-level stages):")
         print("| Stage | Mean (ms) | Std (ms) | P95 (ms) | P99 (ms) |")
         print("| :--- | :--- | :--- | :--- | :--- |")
+        seq_top_level_means: dict[str, float] = {}
         for stage_name in top_level_stage_names:
             samples = seq_stage_samples[stage_name]
             if not samples:
                 continue
             arr = np.array(samples, dtype=np.float64)
             mean_ms = float(arr.mean())
+            seq_top_level_means[stage_name] = mean_ms
             std_ms = float(arr.std())
             p95_ms = float(np.percentile(arr, 95))
             p99_ms = float(np.percentile(arr, 99))
@@ -348,16 +586,48 @@ def print_sequence_summary(
             )
             overall_stage_totals[stage_name] += float(arr.sum())
             overall_stage_samples[stage_name].extend(samples)
-        if any(seq_stage_totals[name] > 0.0 for name in breakdown_stage_names):
+        display_breakdown_names = _breakdown_display_names(breakdown_stage_names)
+        native_breakdown_names = _native_breakdown_names(breakdown_stage_names)
+        if any(seq_stage_totals[name] > 0.0 for name in display_breakdown_names):
             print("\n| Postprocess Breakdown | Mean (ms/frame) |")
             print("| :--- | :--- |")
-            for stage_name in breakdown_stage_names:
+            for stage_name in display_breakdown_names:
                 total_ms = seq_stage_totals[stage_name]
                 if total_ms <= 0.0:
                     continue
                 mean_ms = total_ms / seq_profiled_frames
                 print(f"| {stage_name} | {mean_ms:.2f} |")
                 overall_stage_totals[stage_name] += total_ms
+        for stage_name in breakdown_stage_names:
+            if stage_name in display_breakdown_names:
+                continue
+            total_ms = seq_stage_totals[stage_name]
+            if total_ms > 0.0:
+                overall_stage_totals[stage_name] += total_ms
+        seq_breakdown_means = {
+            stage_name: seq_stage_totals[stage_name] / seq_profiled_frames
+            for stage_name in breakdown_stage_names
+            if seq_stage_totals.get(stage_name, 0.0) > 0.0
+        }
+        seq_post_attr = _postprocess_attribution_from_means(
+            seq_breakdown_means,
+            seq_top_level_means.get("postprocess", 0.0),
+        )
+        _print_postprocess_gpu_attribution(seq_post_attr)
+        _print_postprocess_segment_span(
+            segment_breakdown_names,
+            seq_segment_samples,
+            seq_post_attr["gpu_ms"],
+        )
+        for _seg_name in segment_breakdown_names:
+            overall_segment_samples[_seg_name].extend(
+                seq_segment_samples.get(_seg_name, [])
+            )
+        _print_native_postprocess_breakdown(
+            native_breakdown_names,
+            seq_stage_totals,
+            seq_profiled_frames,
+        )
         if any(seq_native_reid_samples[name] for name in native_reid_breakdown_names):
             print(
                 "\n| ReID Extract Breakdown | Mean (ms) | Std (ms) | P95 (ms) | P99 (ms) |"
@@ -448,6 +718,13 @@ def print_sequence_summary(
             stage_summary_lines.append(
                 f"{stage_name}\tmean_ms={total_ms / seq_profiled_frames:.2f}\ttotal_ms={total_ms:.2f}"
             )
+        stage_summary_lines.append(
+            "postprocess_gpu_attribution\t"
+            f"wall_ms={seq_post_attr['wall_ms']:.2f}\t"
+            f"gpu_ms={seq_post_attr['gpu_ms']:.2f}\t"
+            f"unattributed_gpu_ms={seq_post_attr['unattributed_gpu_ms']:.2f}\t"
+            f"overhead_ms={seq_post_attr['overhead_ms']:.2f}"
+        )
         for stage_name in native_reid_breakdown_names:
             samples = seq_native_reid_samples[stage_name]
             if not samples:

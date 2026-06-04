@@ -24,7 +24,9 @@ class BottleneckAnnealer:
         self.gpu_handle = pynvml.nvmlDeviceGetHandleByIndex(0)
 
         # 初始化全鏈路
-        self.detector = TRTYoloDetector()
+        self.detector = TRTYoloDetector(
+            engine_path="models/yolo/yolo26m_960_batch16.engine"
+        )
         self.extractor = TRTFeatureExtractor(max_batch=64)
         self.redis_cache = RedisCache()
         self.resource_manager = ResourceManager()
@@ -47,7 +49,11 @@ class BottleneckAnnealer:
         執行單一負載步進，測量系統穩定性
         """
         dispatcher = AsyncDispatcher(
-            self.detector, self.resource_manager, max_batch=yolo_batch
+            self.detector,
+            self.resource_manager,
+            max_batch=yolo_batch,
+            input_hw=(960, 960),
+            batch_timeout_ms=3.0,
         )
         embed_dispatcher = AsyncEmbeddingDispatcher(
             self.extractor, max_batch=embed_batch
@@ -68,7 +74,7 @@ class BottleneckAnnealer:
             t_f = time.perf_counter()
             for s in range(num_streams):
                 # 模擬 L1 影格
-                frame = torch.randn(3, 640, 640, device="cuda")
+                frame = torch.randn(3, 960, 960, device="cuda")
                 await dispatcher.put_frame(f"s_{s}", frame, t_f)
 
                 # 模擬 L2 裁切圖 (直接推入以測試後端壓力)
@@ -97,6 +103,7 @@ class BottleneckAnnealer:
         print(
             f"📊 Result: Latency={avg_lat:.2f}ms, GPU={gpu_util}%, Mem={mem_usage:.1f}%, Queue={queue_len}"
         )
+        print(f"📈 Dispatcher Stats: {dispatcher.get_stats()}")
 
         await dispatcher.stop()
         embed_dispatcher.stop()

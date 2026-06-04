@@ -11,10 +11,13 @@ from ._helpers import _help, _tier
 
 @dataclasses.dataclass
 class CoreConfig:
-    # I/O
+    # I/O and dataset scope
     engine: str = "models/yolo/yolo26m_960_batch1.engine"
     pose_engine: str | None = None
     output: str = "results/MOT17_eval"
+    workbench: bool = False
+    threads: int = 1
+    cpp_threads: int = 0
     data_root: str = "datasets/MOT17"
     split: str = "train"
     sequences: str = ""
@@ -22,6 +25,7 @@ class CoreConfig:
     debug_dump_seq: str = ""
     debug_dump_frames: str = ""
     debug_dump_csv: str = ""
+    debug_birth_csv: str = ""
     detector: str | None = None
     config: str | None = None
     preset: str | None = None
@@ -45,6 +49,10 @@ class CoreConfig:
     warmup_frames: int = 50
     profile_stages: bool = False
     latency_only: bool = False
+    # MLflow tracking
+    mlflow_uri: str = "http://localhost:5000"
+    mlflow_experiment: str = "mot17"
+    mlflow_run_name: str | None = None
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> "CoreConfig":
@@ -77,6 +85,24 @@ def add_core_args(parser: argparse.ArgumentParser) -> None:
         "--output",
         default="results/MOT17_eval",
         help="Directory for outputs, metrics, and dumps.",
+    )
+    io.add_argument(
+        "--workbench",
+        action="store_true",
+        help="Use the C++ Workbench hot-path (avoids GIL contention for scaling)",
+    )
+    io.add_argument(
+        "--threads",
+        type=int,
+        default=1,
+        help="Number of concurrent Workbench instances to run (only applies if --workbench is set)",
+    )
+    io.add_argument(
+        "--cpp-threads",
+        type=int,
+        default=0,
+        dest="cpp_threads",
+        help="Run C++ multi-threaded evaluation with N threads (0 = disabled, uses Python path).",
     )
     io.add_argument("--data-root", default="datasets/MOT17", help="MOT17 dataset root.")
     io.add_argument(
@@ -115,6 +141,11 @@ def add_core_args(parser: argparse.ArgumentParser) -> None:
         help="CSV path for raw/post_filter/post_nms/post_merge box dumps.",
     )
     io.add_argument(
+        "--debug-birth-csv",
+        default="",
+        help="CSV path for birth-promotion debug rows.",
+    )
+    io.add_argument(
         "--detector",
         choices=["SDP", "DPM", "FRCNN"],
         default=None,
@@ -128,7 +159,14 @@ def add_core_args(parser: argparse.ArgumentParser) -> None:
     )
     io.add_argument(
         "--preset",
-        choices=("baseline", "accuracy", "speed"),
+        choices=(
+            "baseline",
+            "accuracy",
+            "speed",
+            "mamba_optimal",
+            "mamba_whole_graph",
+            "fpn_reid_baseline",
+        ),
         default=None,
         help="Built-in preset from configs/presets/<name>.yaml.",
     )
@@ -174,6 +212,12 @@ def add_core_args(parser: argparse.ArgumentParser) -> None:
         default=None,
         metavar="PATH",
         help="YAML for lifecycle merge, post-merge, tracklet cleanup (Experimental).",
+    )
+    mod.add_argument(
+        "--module-motion",
+        default=None,
+        metavar="PATH",
+        help="YAML for motion-based relinking params (EMA, motion bonus, motion-only fallback).",
     )
 
     core = parser.add_argument_group(_tier("Core tracking and thresholds", "Tier 1"))
@@ -302,4 +346,39 @@ def add_core_args(parser: argparse.ArgumentParser) -> None:
         "--latency-only",
         action="store_true",
         help="Skip MOTMetrics and .txt result writing; output latency profile only.",
+    )
+    core.add_argument(
+        "--mlflow-uri",
+        default="http://localhost:5000",
+        help="MLflow tracking server URI.",
+    )
+    core.add_argument(
+        "--mlflow-experiment",
+        default="mot17",
+        help="MLflow experiment name.",
+    )
+    core.add_argument(
+        "--mlflow-run-name",
+        default=None,
+        help="MLflow run name (auto-generated if not set).",
+    )
+    core.add_argument(
+        "--mamba-ckpt",
+        default="",
+        help="Path to MambaDetectionHead checkpoint for eval with Mamba head.",
+    )
+    core.add_argument(
+        "--mamba-teacher-ckpt",
+        default="runs/gated_det_v1/best.ckpt",
+        help="Path to teacher (GatedYOLODetector) checkpoint for Mamba eval.",
+    )
+    core.add_argument(
+        "--no-temporal",
+        action="store_true",
+        help="Disable temporal buffer in MambaGatedDetector (force T=1 inference).",
+    )
+    core.add_argument(
+        "--use-cuda-graph",
+        action="store_true",
+        help="Enable CUDA Graph capture and replay in MambaDetectionHead.",
     )

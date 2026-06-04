@@ -5,6 +5,7 @@
 # Results (7-seq SDP): IDF1 51.2% / MOTA 43.4% / IDs 505 / Rcll 58.5% / ~90 FPS
 
 engine: models/yolo/yolo26m_960_batch1.engine
+tiling: native_960
 match_thresh: 0.66
 new_track_thresh: 0.28
 fuse_score_weight: 0.4

@@ -241,7 +241,15 @@ def run_optuna_a1(args, base_args):
         # Maximize IDF1 primarily
         return metrics["idf1"]
 
-    study = optuna.create_study(direction="maximize", study_name="A1_Unified_Score")
+    study = optuna.create_study(
+        direction="maximize",
+        study_name="A1_Unified_Score",
+        storage=os.getenv(
+            "OPTUNA_STORAGE",
+            "postgresql://saccade:saccade@localhost:5432/optuna",
+        ),
+        load_if_exists=True,
+    )
     study.optimize(objective, n_trials=args.optuna_trials)
 
     print(f"{'=' * 88}")
@@ -312,7 +320,15 @@ def run_optuna_a2(args, base_args):
         # Maximize IDF1
         return metrics["idf1"]
 
-    study = optuna.create_study(direction="maximize", study_name="A2_Reference_Quality")
+    study = optuna.create_study(
+        direction="maximize",
+        study_name="A2_Reference_Quality",
+        storage=os.getenv(
+            "OPTUNA_STORAGE",
+            "postgresql://saccade:saccade@localhost:5432/optuna",
+        ),
+        load_if_exists=True,
+    )
     study.optimize(objective, n_trials=args.optuna_trials)
 
     print(f"{'=' * 88}")
@@ -363,7 +379,15 @@ def run_optuna_a3(args, base_args):
         # Maximize IDF1
         return metrics["idf1"]
 
-    study = optuna.create_study(direction="maximize", study_name="A3_Budgeted_ReID")
+    study = optuna.create_study(
+        direction="maximize",
+        study_name="A3_Budgeted_ReID",
+        storage=os.getenv(
+            "OPTUNA_STORAGE",
+            "postgresql://saccade:saccade@localhost:5432/optuna",
+        ),
+        load_if_exists=True,
+    )
     study.optimize(objective, n_trials=args.optuna_trials)
 
     print(f"{'=' * 88}")
@@ -428,7 +452,15 @@ def run_optuna_a6(args, base_args):
 
         return metrics["idf1"]
 
-    study = optuna.create_study(direction="maximize", study_name="A6_Bank_Quality")
+    study = optuna.create_study(
+        direction="maximize",
+        study_name="A6_Bank_Quality",
+        storage=os.getenv(
+            "OPTUNA_STORAGE",
+            "postgresql://saccade:saccade@localhost:5432/optuna",
+        ),
+        load_if_exists=True,
+    )
     study.optimize(objective, n_trials=args.optuna_trials)
 
     print(f"{'=' * 88}")
@@ -466,6 +498,17 @@ def main() -> None:
         default=None,
         help="Run Bayesian optimization for a specific module.",
     )
+    parser.add_argument("--optuna-trials", type=int, default=20)
+    parser.add_argument(
+        "--mlflow-uri",
+        default="http://localhost:5000",
+        help="MLflow tracking server URI.",
+    )
+    parser.add_argument(
+        "--mlflow-experiment",
+        default="mot17-ablation",
+        help="MLflow experiment name for ablation runs.",
+    )
     parser.add_argument(
         "--optuna-trials", type=int, default=20, help="Number of trials for Optuna."
     )
@@ -476,6 +519,12 @@ def main() -> None:
         base_args += ["--sequences", args.sequences]
     if args.max_frames:
         base_args += ["--max-frames", str(args.max_frames)]
+    base_args += [
+        "--mlflow-uri",
+        args.mlflow_uri,
+        "--mlflow-experiment",
+        args.mlflow_experiment,
+    ]
 
     if args.optuna == "a1":
         run_optuna_a1(args, base_args)

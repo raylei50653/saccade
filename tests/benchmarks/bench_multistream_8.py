@@ -11,6 +11,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 from saccade.perception.detector_trt import TRTYoloDetector  # noqa: E402  # noqa: E402
 from saccade.perception.dispatcher import AsyncDispatcher  # noqa: E402  # noqa: E402
+from saccade.resource.resource_manager import ResourceManager  # noqa: E402
 
 
 # 🚀 最佳化：預載圖片到 GPU 記憶體以減少 I/O 影響
@@ -19,7 +20,7 @@ def preload_sequence(seq_name, limit_frames=100):
     if not os.path.exists(seq_dir):
         # 如果路徑不存在，生成模擬數據
         print(f"⚠️ {seq_dir} not found. Generating dummy tensors for benchmarking...")
-        return [torch.randn(1, 3, 640, 640, device="cuda") for _ in range(limit_frames)]
+        return [torch.randn(3, 960, 960, device="cuda") for _ in range(limit_frames)]
 
     images = sorted([f for f in os.listdir(seq_dir) if f.endswith(".jpg")])[
         :limit_frames
@@ -31,8 +32,8 @@ def preload_sequence(seq_name, limit_frames=100):
         img_path = os.path.join(seq_dir, img_name)
         frame_cv = cv2.imread(img_path)
         frame_rgb = cv2.cvtColor(frame_cv, cv2.COLOR_BGR2RGB)
-        frame_resized = cv2.resize(frame_rgb, (640, 640))
-        # [H, W, C] -> [3, 640, 640]
+        frame_resized = cv2.resize(frame_rgb, (960, 960))
+        # [H, W, C] -> [3, 960, 960]
         frame_tensor = (
             torch.from_numpy(frame_resized).to("cuda").permute(2, 0, 1).float() / 255.0
         )
@@ -70,10 +71,17 @@ async def run_multistream_8path_optimized(num_streams=8, limit_frames=500):
         f"🔥 Starting Optimized 8-stream Benchmark ({num_streams} streams, {limit_frames} frames)..."
     )
 
-    detector = TRTYoloDetector()
+    detector = TRTYoloDetector(engine_path="models/yolo/yolo26m_960_batch16.engine")
+    resource_manager = ResourceManager()
     # 啟動分發器，設定最大批次為 num_streams
-    dispatcher = AsyncDispatcher(detector, max_batch=num_streams)
-    dispatcher.start()
+    dispatcher = AsyncDispatcher(
+        detector,
+        resource_manager,
+        max_batch=num_streams,
+        input_hw=(960, 960),
+        batch_timeout_ms=3.0,
+    )
+    await dispatcher.start()
 
     # 預載數據
     preloaded_tensors = preload_sequence("MOT20-04", limit_frames)
@@ -124,7 +132,9 @@ async def run_multistream_8path_optimized(num_streams=8, limit_frames=500):
     )
     print("═" * 80)
 
-    dispatcher.stop()
+    print(f"📈 Dispatcher Stats: {dispatcher.get_stats()}")
+    await dispatcher.stop()
+    resource_manager.close()
 
 
 if __name__ == "__main__":

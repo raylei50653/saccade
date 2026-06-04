@@ -33,6 +33,29 @@ public:
         int images = 0;
     };
 
+    struct PostprocessProfileStats {
+        double filter_ms = 0.0;
+        double nms_ms = 0.0;
+        double count_d2h_ms = 0.0;
+        double total_ms = 0.0;
+        double native_filter_gather_ms = 0.0;
+        double native_filter_kernel_ms = 0.0;
+        double native_gather_compact3_ms = 0.0;
+        double native_copy_suspect_ms = 0.0;
+        double native_filter_count_sync_ms = 0.0;
+        double native_small_nms_ms = 0.0;
+        double native_suspect_penalty_ms = 0.0;
+        double native_large_sort_nms_ms = 0.0;
+        double native_large_argsort_ms = 0.0;
+        double native_large_nms_ms = 0.0;
+        double native_compact_copy_ms = 0.0;
+        double native_large_gather4_ms = 0.0;
+        double native_large_copyback_ms = 0.0;
+        int input_boxes = 0;
+        int filtered_boxes = 0;
+        int output_boxes = 0;
+    };
+
     struct Config {
         float score_threshold       = 0.05f;
         int   person_class          = 0;
@@ -40,6 +63,7 @@ public:
         float nms_threshold         = 0.50f;
         bool  person_geometry_prior = true;
         bool  geometry_suspect_support = true;
+        float geometry_suspect_support_score = 0.25f;
         float person_min_height_ratio = 0.018f;
         float person_min_aspect       = 1.0f;
         float person_max_aspect       = 5.5f;
@@ -101,6 +125,62 @@ public:
         cudaStream_t stream);
 
     /**
+     * @brief Like process_detections_into() but fully synchronous and returns
+     *        the post-NMS count directly.  Python binding uses
+     *        py::gil_scoped_release so GIL is released for the entire call
+     *        (including the internal stream syncs), allowing other Python
+     *        threads to make progress during GPU execution.
+     */
+    int process_detections_n(
+        const float* boxes_ptr,
+        const float* scores_ptr,
+        const int*   classes_ptr,
+        int n_in,
+        int frame_w, int frame_h,
+        bool is_tiled,
+        float* out_boxes,
+        float* out_scores,
+        int*   out_classes,
+        bool*  out_suspect,
+        const float* priors_ptr,
+        const int* prior_classes_ptr,
+        int num_priors,
+        float prior_iou_threshold,
+        cudaStream_t stream);
+
+    /**
+     * @brief Sync-free variant of process_detections_n.
+     *
+     * Runs the same filter + NMS pipeline but skips both D2H count syncs
+     * (filter_count path-selection and final n_post read).  Output buffers
+     * are always n_in elements: valid detections are compacted to the front,
+     * remaining slots are zero-padded by the gather kernels.  Returns n_in
+     * (the raw input count) so the caller can use a fixed-size tensor.
+     *
+     * Callers MUST NOT slice output by the returned count; instead rely on
+     * the tracker's score gate (track_thresh > 0) to ignore zero-score slots.
+     * This allows a direct feed into GraphedTrackerUpdate without a CPU sync.
+     */
+    int process_detections_n_fixed(
+        const float* boxes_ptr,
+        const float* scores_ptr,
+        const int*   classes_ptr,
+        int n_in,
+        int frame_w, int frame_h,
+        bool is_tiled,
+        float* out_boxes,
+        float* out_scores,
+        int*   out_classes,
+        bool*  out_suspect,
+        const float* priors_ptr,
+        const int* prior_classes_ptr,
+        int num_priors,
+        float prior_iou_threshold,
+        cudaStream_t stream);
+
+    const Config& get_config() const { return cfg_; }
+
+    /**
      * @brief Crop boxes from frame_ptr and extract ReID embeddings.
      *
      * @param frame_ptr   [3, H, W] float32 GPU (CHW, [0,1])
@@ -122,6 +202,9 @@ public:
     void set_reid_profiling_enabled(bool enabled);
     void reset_reid_profile_stats();
     ReIDProfileStats get_reid_profile_stats() const;
+    void set_postprocess_profiling_enabled(bool enabled);
+    void reset_postprocess_profile_stats();
+    PostprocessProfileStats get_postprocess_profile_stats() const;
 
 private:
     FeatureExtractor* reid_;
@@ -156,6 +239,8 @@ private:
     void ensure_crop_buf(int n_boxes);
     bool reid_profiling_enabled_ = false;
     ReIDProfileStats last_reid_profile_stats_{};
+    bool postprocess_profiling_enabled_ = false;
+    PostprocessProfileStats last_postprocess_profile_stats_{};
 };
 
 } // namespace saccade

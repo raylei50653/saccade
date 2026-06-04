@@ -25,6 +25,7 @@ high_thresh: 0.45
 mid_thresh: 0.10
 confirm_streak: 1
 fuse_score_weight: 0.4   # botsort-style: IoU×(1-0.4×score); FP -12%, MOTA +1.6pp, Rcll -0.5pp
+oao_tau: 0.0             # OA-SORT OAO penalty (0=disabled); sweep 0.1-0.4
 
 # --- GMC ---
 gmc: true
@@ -46,3 +47,16 @@ semantic_bank_inject: false
 id_stability_filter: true
 per_seq_adapt: true
 geometry_suspect_support: true
+
+# --- Motion-based relinking ---
+motion:
+  vel_alpha: 0.3
+  acc_alpha: 0.15
+  min_motion_observations: 2
+  w_motion_iou: 0.3
+  motion_consistency_check: true
+  consistency_tol: 2.0
+  enable_motion_only: true
+  motion_only_lost_frames: 5
+  motion_only_iou_threshold: 0.15
+  motion_only_min_lost_frames: 1

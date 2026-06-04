@@ -90,7 +90,35 @@
 
 ---
 
-## 3. 現行工具設定
+## 3. 測試覆蓋率
+
+目前總體 **66%**（647 passing tests，7,751 statements）。
+
+| 模組 | 覆蓋率 |
+|------|--------|
+| `perception/eval/` | ~40% |
+| `perception/tracking/` | ~85% |
+| `perception/temporal_yolo/` | ~50% |
+| `storage/` | ~80% |
+
+### 查看覆蓋率
+
+```bash
+# 執行測試並顯示覆蓋率
+uv run pytest --cov=saccade --cov-report=term-missing
+
+# 產生 HTML 報告
+uv run coverage html
+# 開啟：htmlcov/index.html
+```
+
+### 覆蓋率成長
+
+| 日期 | 覆蓋率 |
+|------|--------|
+| 2026-05-15 | 56% |
+
+## 4. 現行工具設定
 
 目前工具設定以 `/pyproject.toml` 為準。
 
