@@ -88,7 +88,7 @@ By default the code prints results to the screen, saves results out as both a su
 
 The code can be run in one of two ways:
 
- - From the terminal via one of the scripts [here](scripts/). See each script for instructions and arguments, hopefully this is self-explanatory.
+ - From the terminal via one of the scripts [here](scripts). See each script for instructions and arguments, hopefully this is self-explanatory.
  - Directly by importing this package into your code, see the same scripts above for how. 
 
 ## Quickly evaluate on supported benchmarks
@@ -102,7 +102,7 @@ The data for PersonPath22 is separate and can be found here: [person_path_22_dat
 
 The easiest way to begin is to extract this zip into the repository root folder such that the file paths look like: TrackEval/data/gt/...
 
-This then corresponds to the default paths in the code. You can now run each of the scripts [here](scripts/) without providing any arguments and they will by default evaluate all trackers present in the supplied file structure. To evaluate your own tracking results, simply copy your files as a new tracker folder into the file structure at the same level as the example trackers (MPNTrack, CIWT, track_rcnn, qdtrack, ags, Tracktor++, STEm_Seg), ensuring the same file structure for your trackers as in the example.
+This then corresponds to the default paths in the code. You can now run each of the scripts [here](scripts) without providing any arguments and they will by default evaluate all trackers present in the supplied file structure. To evaluate your own tracking results, simply copy your files as a new tracker folder into the file structure at the same level as the example trackers (MPNTrack, CIWT, track_rcnn, qdtrack, ags, Tracktor++, STEm_Seg), ensuring the same file structure for your trackers as in the example.
 
 Of course, if your ground-truth and tracker files are located somewhere else you can simply use the script arguments to point the code toward your data.
 

@@ -7,7 +7,7 @@
 
 | 目錄 | 方向 | 狀態 |
 |------|------|------|
-| [temporal_yolo/](temporal_yolo/) | YOLO + Track Queries 時序追蹤 | Option C ✅  Option D 實作中 |
+| [temporal_yolo/](temporal_yolo) | YOLO + Track Queries 時序追蹤 | Option C ✅  Option D 實作中 |
 
 ## 設計原則
 

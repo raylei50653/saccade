@@ -21,6 +21,12 @@ def main():
         default="60,60,60",
         help="BGR color of the box (comma-separated)",
     )
+    parser.add_argument(
+        "--width-ratio",
+        type=float,
+        default=0.125,
+        help="Ratio of occlusion box width to image width (default 0.125, half of original 0.25)",
+    )
     args = parser.parse_args()
 
     if not args.img_dir.exists():
@@ -54,8 +60,8 @@ def main():
     h, w, _ = first_img.shape
 
     # Calculate central box coordinates
-    # Box size: width = 25% of image width, height = 55% of image height
-    box_w = int(w * 0.25)
+    # Box size: width = configured ratio of image width, height = 55% of image height
+    box_w = int(w * args.width_ratio)
     box_h = int(h * 0.55)
 
     x1 = (w - box_w) // 2

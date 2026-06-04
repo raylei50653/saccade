@@ -73,6 +73,15 @@ echo "── API layer audit"
 uv run python3 scripts/tools/check_api_layers.py 2>&1 || true
 ok "API layer audit (warnings only)"
 
+# ── 4.7 doc link check ───────────────────────────────────────────────────────
+echo "── doc link check"
+if uv run python3 scripts/tools/check_doc_links.py 2>&1; then
+    ok "doc links"
+else
+    fail "doc links — broken relative link(s) in docs/"
+    ERRORS=$((ERRORS + 1))
+fi
+
 # ── 5. pytest ────────────────────────────────────────────────────────────────
 echo "── pytest"
 if uv run pytest tests/ -q --ignore=tests/benchmarks 2>&1; then

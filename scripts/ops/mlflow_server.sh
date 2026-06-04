@@ -16,7 +16,7 @@ echo "  Artifacts: ${ARTIFACT_ROOT}"
 echo "  UI:       http://localhost:${MLFLOW_PORT}"
 echo ""
 
-exec mlflow server \
+exec uv run mlflow server \
     --backend-store-uri "${BACKEND_URI}" \
     --default-artifact-root "${ARTIFACT_ROOT}" \
     --host 0.0.0.0 \

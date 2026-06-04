@@ -1,0 +1,21 @@
+[Unit]
+Description=Saccade MLflow Tracking Server
+# PostgreSQL backend runs via `docker compose up db -d` (saccade_db, network_mode: host).
+# Not hard-Required because the DB is started manually; Restart=always retries until 5432 is up.
+After=network.target docker.service
+
+[Service]
+Type=simple
+User=ray
+WorkingDirectory=/home/ray/developer/ai/saccade
+# uv lives at /usr/sbin/uv; ensure it (and docker) resolve under systemd's minimal PATH.
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# Optional overrides (defaults shown): DB_HOST/DB_PORT/DB_USER/DB_PASSWORD, MLFLOW_PORT, ARTIFACT_ROOT
+# Environment=MLFLOW_PORT=5000
+ExecStart=/home/ray/developer/ai/saccade/scripts/ops/mlflow_server.sh
+
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
