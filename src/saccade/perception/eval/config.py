@@ -447,7 +447,8 @@ def parse_eval_config(
             kwargs.get("cross_tile_seam_min_overlap_ratio", 0.45)
         ),
         force_python_relinker=bool(kwargs.get("force_python_relinker", False)),
-        use_semantic_mode=reid_mode in {"semantic", "hybrid"},
+        use_semantic_mode=reid_mode in {"semantic", "hybrid"}
+        or bool(kwargs.get("semantic_kalman_gate", False)),
         use_tracker_reid=reid_mode in {"tracker", "hybrid"},
         person_class=int(kwargs.get("person_class", 0)),
         track_person_only=bool(kwargs.get("track_person_only", True)),

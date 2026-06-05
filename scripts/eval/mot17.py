@@ -10,7 +10,7 @@ sys.path.insert(0, str(project_root))
 src_path = project_root / "src"
 if src_path.exists():
     sys.path.insert(0, str(src_path))
-build_path = project_root / "build"
+build_path = Path(os.environ.get("SACCADE_BUILD_PATH", project_root / "build"))
 if build_path.exists():
     sys.path.insert(0, str(build_path))
 

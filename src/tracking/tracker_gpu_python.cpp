@@ -422,7 +422,16 @@ struct RelinkStats {
     int reject_kalman = 0;
     int reject_direction = 0;
     int reject_speed = 0;
+    int delayed_claim_pending = 0;
+    int delayed_claim_ready = 0;
+    int delayed_claim_accepted = 0;
     int new_ids = 0;
+};
+
+struct PendingClaim {
+    int first = -1;
+    int last = -1;
+    int hits = 0;
 };
 
 class SemanticRelinkerCpp {
@@ -463,7 +472,9 @@ public:
         float kalman_accel_long = 2.0f,
         float kalman_accel_lat = 1.0f,
         float kalman_fps = 30.0f,
-        float kalman_max_speed_mps = 0.0f
+        float kalman_max_speed_mps = 0.0f,
+        bool delayed_claim = false,
+        int claim_warmup_frames = 3
     )
         : sim_threshold_(sim_threshold),
           ttl_(ttl),
@@ -500,7 +511,9 @@ public:
           kalman_accel_long_(std::max(0.0f, kalman_accel_long)),
           kalman_accel_lat_(std::max(0.0f, kalman_accel_lat)),
           kalman_fps_(kalman_fps > 0.0f ? kalman_fps : 30.0f),
-          kalman_max_speed_mps_(std::max(0.0f, kalman_max_speed_mps)) {}
+          kalman_max_speed_mps_(std::max(0.0f, kalman_max_speed_mps)),
+          delayed_claim_(delayed_claim),
+          claim_warmup_frames_(std::max(1, claim_warmup_frames)) {}
 
     void update_motion_snapshots(const std::vector<TrackStateSnapshot>& snapshots, int frame_id = -1) {
         for (const auto& snap : snapshots) {
@@ -604,6 +617,39 @@ public:
         return features_.find(canonical_id) != features_.end();
     }
 
+    py::dict get_deferred_alias() const {
+        py::dict out;
+        for (const auto& [k, v] : deferred_alias_) {
+            out[py::int_(k)] = py::int_(v);
+        }
+        return out;
+    }
+
+    bool mark_pending_claim(int raw_id, int frame_id) {
+        if (!delayed_claim_) return false;
+        auto& pending = pending_claims_[raw_id];
+        if (pending.hits == 0) {
+            pending.first = frame_id;
+            pending.last = frame_id;
+            pending.hits = 1;
+        } else if (pending.last != frame_id) {
+            pending.last = frame_id;
+            pending.hits += 1;
+        }
+        const bool ready = pending.hits >= claim_warmup_frames_;
+        if (ready) {
+            stats_.delayed_claim_ready += 1;
+        } else {
+            stats_.delayed_claim_pending += 1;
+        }
+        return !ready;
+    }
+
+    bool pending_ready(int raw_id) const {
+        auto it = pending_claims_.find(raw_id);
+        return it != pending_claims_.end() && it->second.hits >= claim_warmup_frames_;
+    }
+
     int resolve(
         int raw_id,
         py::object embedding,
@@ -636,7 +682,16 @@ public:
         }
         float current_sim_thresh = is_clean ? sim_threshold_ : strict_sim_threshold_;
 
-        if (!alias_.count(raw_id)) {
+        if (delayed_claim_ && pending_claims_.count(raw_id) && canonical_id(raw_id) == raw_id) {
+            mark_pending_claim(raw_id, frame_id);
+        }
+        const bool claim_ready = pending_ready(raw_id);
+        const bool first_claim = !alias_.count(raw_id);
+        const bool delayed_self_claim = delayed_claim_ && claim_ready && canonical_id(raw_id) == raw_id;
+
+        if (first_claim && mark_pending_claim(raw_id, frame_id)) {
+            alias_[raw_id] = raw_id;
+        } else if (first_claim || delayed_self_claim) {
             stats_.attempts += 1;
             int best_id = -1;
             float best_sim = current_sim_thresh;
@@ -646,6 +701,9 @@ public:
             float best_maha = 0.0f;
 
             for (int cid : feature_order_) {
+                if (delayed_claim_ && cid == raw_id) {
+                    continue;
+                }
                 const auto feature_it = features_.find(cid);
                 if (feature_it == features_.end()) {
                     continue;
@@ -743,6 +801,11 @@ public:
 
             if (best_id >= 0) {
                 stats_.accepted += 1;
+                if (delayed_claim_ && raw_id != best_id) {
+                    stats_.delayed_claim_accepted += 1;
+                    deferred_alias_[raw_id] = best_id;
+                    pending_claims_.erase(raw_id);
+                }
                 accept_sims_.push_back(best_sim);
                 accept_ious_.push_back(best_iou);
                 accept_center_dists_.push_back(best_center);
@@ -751,6 +814,9 @@ public:
             } else {
                 stats_.new_ids += 1;
                 alias_[raw_id] = raw_id;
+                if (delayed_claim_ && claim_ready) {
+                    pending_claims_.erase(raw_id);
+                }
             }
         }
 
@@ -875,6 +941,9 @@ public:
         out["reject_kalman"] = stats_.reject_kalman;
         out["reject_direction"] = stats_.reject_direction;
         out["reject_speed"] = stats_.reject_speed;
+        out["delayed_claim_pending"] = stats_.delayed_claim_pending;
+        out["delayed_claim_ready"] = stats_.delayed_claim_ready;
+        out["delayed_claim_accepted"] = stats_.delayed_claim_accepted;
         out["new_ids"] = stats_.new_ids;
         return out;
     }
@@ -908,6 +977,14 @@ public:
             py::print(
                 "  buffer_size=" + std::to_string(buffer_size_) +
                 " reject_consistency=" + std::to_string(stats_.reject_consistency)
+            );
+        }
+        if (delayed_claim_) {
+            py::print(
+                "  delayed_claim pending_checks=" + std::to_string(stats_.delayed_claim_pending) +
+                " ready_checks=" + std::to_string(stats_.delayed_claim_ready) +
+                " accepted=" + std::to_string(stats_.delayed_claim_accepted) +
+                " deferred_aliases=" + std::to_string(deferred_alias_.size())
             );
         }
     }
@@ -945,7 +1022,16 @@ public:
         }
         float current_sim_thresh = is_clean ? sim_threshold_ : strict_sim_threshold_;
 
-        if (!alias_.count(raw_id)) {
+        if (delayed_claim_ && pending_claims_.count(raw_id) && canonical_id(raw_id) == raw_id) {
+            mark_pending_claim(raw_id, frame_id);
+        }
+        const bool claim_ready = pending_ready(raw_id);
+        const bool first_claim = !alias_.count(raw_id);
+        const bool delayed_self_claim = delayed_claim_ && claim_ready && canonical_id(raw_id) == raw_id;
+
+        if (first_claim && mark_pending_claim(raw_id, frame_id)) {
+            alias_[raw_id] = raw_id;
+        } else if (first_claim || delayed_self_claim) {
             stats_.attempts += 1;
             int best_id = -1;
             float best_joint = -1.0f;
@@ -964,6 +1050,9 @@ public:
             std::vector<CandidateInfo> candidates_to_score;
 
             for (int cid : feature_order_) {
+                if (delayed_claim_ && cid == raw_id) {
+                    continue;
+                }
                 const auto feature_it = features_.find(cid);
                 if (feature_it == features_.end()) continue;
                 if (assigned.count(cid)) { stats_.reject_assigned += 1; continue; }
@@ -1112,6 +1201,11 @@ public:
 
             if (best_id >= 0) {
                 stats_.accepted += 1;
+                if (delayed_claim_ && raw_id != best_id) {
+                    stats_.delayed_claim_accepted += 1;
+                    deferred_alias_[raw_id] = best_id;
+                    pending_claims_.erase(raw_id);
+                }
                 accept_sims_.push_back(best_sim_raw);
                 accept_ious_.push_back(best_iou);
                 accept_center_dists_.push_back(best_center);
@@ -1120,6 +1214,9 @@ public:
             } else {
                 stats_.new_ids += 1;
                 alias_[raw_id] = raw_id;
+                if (delayed_claim_ && claim_ready) {
+                    pending_claims_.erase(raw_id);
+                }
             }
         }
 
@@ -1527,8 +1624,12 @@ private:
     float kalman_accel_lat_;
     float kalman_fps_;
     float kalman_max_speed_mps_;
+    bool delayed_claim_;
+    int claim_warmup_frames_;
 
     std::unordered_map<int, int> alias_;
+    std::unordered_map<int, PendingClaim> pending_claims_;
+    std::unordered_map<int, int> deferred_alias_;
     std::unordered_map<int, std::vector<float>> features_;
     std::unordered_map<int, std::vector<std::vector<float>>> buffers_;
     std::unordered_map<int, int> last_seen_;
@@ -2136,7 +2237,7 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         }, "Raw C++ pointer to this GPUByteTracker (for Workbench construction)");
 
     py::class_<SemanticRelinkerCpp>(m, "SemanticRelinker")
-        .def(py::init<float, int, float, float, int, float, float, int, float, std::string, float, bool, float, float, float, float, float, float, float, float, float, float, float, float, float, float, bool, float, float, float, float, float, float, float, float, float>(),
+        .def(py::init<float, int, float, float, int, float, float, int, float, std::string, float, bool, float, float, float, float, float, float, float, float, float, float, float, float, float, float, bool, float, float, float, float, float, float, float, float, float, bool, int>(),
              py::arg("sim_threshold") = 0.985f,
              py::arg("ttl") = 45,
              py::arg("ema_beta") = 0.83f,
@@ -2172,7 +2273,9 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
              py::arg("kalman_accel_long") = 2.0f,
              py::arg("kalman_accel_lat") = 1.0f,
              py::arg("kalman_fps") = 30.0f,
-             py::arg("kalman_max_speed_mps") = 0.0f)
+             py::arg("kalman_max_speed_mps") = 0.0f,
+             py::arg("delayed_claim") = false,
+             py::arg("claim_warmup_frames") = 3)
         .def("update_motion_snapshots", &SemanticRelinkerCpp::update_motion_snapshots,
              py::arg("snapshots"), py::arg("frame_id") = -1)
         .def("motion_candidate_ids", &SemanticRelinkerCpp::motion_candidate_ids, py::arg("frame_id") = -1)
@@ -2208,6 +2311,7 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
              py::arg("w"),
              py::arg("h"))
         .def_property_readonly("alias", &SemanticRelinkerCpp::get_alias)
+        .def_property_readonly("deferred_alias", &SemanticRelinkerCpp::get_deferred_alias)
         .def_property_readonly("features", &SemanticRelinkerCpp::get_features)
         .def_property_readonly("stats", &SemanticRelinkerCpp::stats)
         .def("report", &SemanticRelinkerCpp::report);

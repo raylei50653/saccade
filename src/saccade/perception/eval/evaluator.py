@@ -38,6 +38,7 @@ from .utils import (
 from .output_bank import OutputAppearanceBank
 from .post_merge import (
     post_merge_output_tracklets,
+    apply_deferred_alias,
     filter_low_quality_tracklets,
     interpolate_tracklets,
 )
@@ -1696,8 +1697,13 @@ def run_eval(
                 shift_lost_age=cfg.semantic_shift_lost_age,
             )
 
+        _semantic_delayed_claim = bool(cfg.kwargs.get("semantic_delayed_claim", False))
+        _semantic_bidirectional = bool(cfg.kwargs.get("semantic_bidirectional", False))
         _use_python_relinker = (
-            cfg.force_python_relinker or cfg.semantic_rerank_mode != "mean"
+            cfg.force_python_relinker
+            or cfg.semantic_rerank_mode != "mean"
+            or _semantic_delayed_claim
+            or _semantic_bidirectional
         )
         _relinker_cls = (
             PythonSemanticRelinker if _use_python_relinker else SemanticRelinker
@@ -1745,6 +1751,16 @@ def run_eval(
             dynamic_margin_age=cfg.semantic_dynamic_margin_age,
             debug=cfg.kwargs.get("semantic_debug", False),
         )
+        if _semantic_delayed_claim:
+            _relinker_common_kwargs.update(
+                delayed_claim=True,
+                claim_warmup_frames=cfg.kwargs.get("semantic_claim_warmup_frames", 3),
+            )
+        if _semantic_bidirectional:
+            _relinker_common_kwargs.update(
+                bidirectional=True,
+                bridge_chi2=cfg.kwargs.get("semantic_bridge_px", 1.5),
+            )
         if _use_python_relinker:
             _relinker_common_kwargs.update(
                 experimental_mode=str(
@@ -1778,9 +1794,57 @@ def run_eval(
                     "motion_motion_only_min_lost_frames", 1
                 ),
             )
-        relinker = (
-            _relinker_cls(**_relinker_common_kwargs) if cfg.use_semantic_mode else None
-        )
+        relinker = None
+        if cfg.use_semantic_mode:
+            try:
+                relinker = _relinker_cls(**_relinker_common_kwargs)
+            except TypeError:
+                if (
+                    not _semantic_delayed_claim
+                    or _relinker_cls is PythonSemanticRelinker
+                ):
+                    raise
+                _fallback_kwargs = dict(_relinker_common_kwargs)
+                _fallback_kwargs.update(
+                    experimental_mode=str(
+                        cfg.kwargs.get("semantic_experimental_mode", "standard")
+                    ),
+                    appearance_first_sim_threshold=float(
+                        cfg.kwargs.get("semantic_appearance_first_sim_threshold", 0.95)
+                    ),
+                    appearance_first_margin=float(
+                        cfg.kwargs.get("semantic_appearance_first_margin", 0.03)
+                    ),
+                    motion_vel_alpha=cfg.kwargs.get("motion_vel_alpha", 0.3),
+                    motion_acc_alpha=cfg.kwargs.get("motion_acc_alpha", 0.15),
+                    motion_min_observations=cfg.kwargs.get(
+                        "motion_min_observations", 2
+                    ),
+                    motion_w_iou=cfg.kwargs.get("motion_w_iou", 0.3),
+                    motion_consistency_check=cfg.kwargs.get(
+                        "motion_consistency_check", True
+                    ),
+                    motion_consistency_tol=cfg.kwargs.get(
+                        "motion_consistency_tol", 2.0
+                    ),
+                    motion_enable_motion_only=cfg.kwargs.get(
+                        "motion_enable_motion_only", True
+                    ),
+                    motion_motion_only_lost_frames=cfg.kwargs.get(
+                        "motion_motion_only_lost_frames", 5
+                    ),
+                    motion_motion_only_iou_threshold=cfg.kwargs.get(
+                        "motion_motion_only_iou_threshold", 0.15
+                    ),
+                    motion_motion_only_min_lost_frames=cfg.kwargs.get(
+                        "motion_motion_only_min_lost_frames", 1
+                    ),
+                )
+                print(
+                    "ℹ️  [Semantic] C++ relinker lacks delayed-claim kwargs; "
+                    "falling back to Python relinker"
+                )
+                relinker = PythonSemanticRelinker(**_fallback_kwargs)
 
         if relinker is not None:
             if (
@@ -4622,6 +4686,28 @@ def run_eval(
                 f"reject_app_consistency={post_merge_stats['reject_appearance_consistency']} "
                 f"reject_cost={post_merge_stats['reject_cost']}"
             )
+
+        if relinker is not None and cfg.kwargs.get("semantic_delayed_claim", False):
+            local_alias = getattr(relinker, "deferred_alias", {})
+            if local_alias:
+                global_alias = {
+                    int(global_id_mapper.map(seq, int(raw_id))): int(
+                        global_id_mapper.map(seq, int(canonical_id))
+                    )
+                    for raw_id, canonical_id in dict(local_alias).items()
+                    if int(raw_id) != int(canonical_id)
+                }
+                results_lines, deferred_stats = apply_deferred_alias(
+                    results_lines,
+                    global_alias,
+                )
+                if deferred_stats["lines_remapped"] > 0:
+                    print(
+                        "🔁 Deferred Claim Remap: "
+                        f"aliases={deferred_stats['aliases']} "
+                        f"lines={deferred_stats['lines_remapped']} "
+                        f"ids={deferred_stats['ids_before']}->{deferred_stats['ids_after']}"
+                    )
 
         results_lines, quality_stats = filter_low_quality_tracklets(
             results_lines,

@@ -30,6 +30,10 @@ class SemanticConfig:
     semantic_kalman_accel_lat: float = 1.0
     semantic_kalman_fps: float = 0.0
     semantic_kalman_max_speed_mps: float = 0.0
+    semantic_delayed_claim: bool = False
+    semantic_claim_warmup_frames: int = 3
+    semantic_bidirectional: bool = False
+    semantic_bridge_px: float = 1.5
     semantic_debug: bool = False
     # Reference buffer
     semantic_buffer_size: int = 10
@@ -252,6 +256,47 @@ def add_semantic_args(parser: argparse.ArgumentParser) -> None:
             "speed (dist/time via person-height px/m scale) exceeds this (human "
             "sprint ~8). Snapshot-independent, always on. 0 disables. Needs "
             "--semantic-kalman-person-height-m and --semantic-kalman-fps.",
+            range_hint=">=0",
+        ),
+    )
+    grp.add_argument(
+        "--semantic-delayed-claim",
+        action="store_true",
+        help=(
+            "Delay first-time semantic relink claims for new raw track IDs until "
+            "they have survived the warmup window, then retroactively remap output "
+            "lines before interpolation. Default off."
+        ),
+    )
+    grp.add_argument(
+        "--semantic-claim-warmup-frames",
+        type=int,
+        default=3,
+        help=_help(
+            "Frames a new raw ID must survive before semantic delayed-claim "
+            "arbitration runs.",
+            range_hint=">=1",
+        ),
+    )
+    grp.add_argument(
+        "--semantic-bidirectional",
+        action="store_true",
+        help=(
+            "Bidirectional Kalman gate: in addition to the forward cloud (lost track "
+            "→ candidate), also check the backward cloud (candidate → lost track's "
+            "last position). Both chi-square tests must pass. "
+            "Needs --semantic-kalman-gate."
+        ),
+    )
+    grp.add_argument(
+        "--semantic-bridge-px",
+        type=float,
+        default=350.0,
+        help=_help(
+            "Bidirectional midpoint bridge gate (px): forward and backward Kalman "
+            "clouds are each propagated to gap/2 through the full predict model, "
+            "and the Euclidean distance between the two foot-point centres is "
+            "compared against this threshold.",
             range_hint=">=0",
         ),
     )
