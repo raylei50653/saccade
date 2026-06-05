@@ -1,7 +1,7 @@
 # 雙向時空收斂幾何重連 — 長期路線圖
 
 > Bidirectional Space-Time Convergent Kinematic Relink Roadmap
-> 狀態：Phase 0 已落地（default off）；Phase 1 CPU 延遲認領骨架已落地（default off，待 MOT17/ID4 ablation）；Phase 2–4 規劃中。最後更新 2026-06-04。
+> 狀態：Phase 0 已落地（default off）；Phase 1 CPU 延遲認領骨架已落地（default off，待 MOT17/ID4 ablation）；Phase 2 中點橋接雙向閘已落地 + 首個 MOT17-SDP ablation 為正（default off）；Phase 3–4 規劃中。最後更新 2026-06-05。
 
 ## 背景 (Context)
 
@@ -69,7 +69,7 @@ spec §2/§3。認領須**正向∩逆向**雙過。
 - **框高歸一化**：每 track 維護 EMA 框高（`α=0.05`，≈60 幀衰減窗），中點距離除以 lost/cand 平均框高，消除透視 bias（遠小近大）。
 - **foot history**：每 track 保留最近 8 個 foot-centre（`_foot_history`），resolve / motion_only 兩路徑皆更新。
 - CLI flags：`--semantic-bidirectional`、`--semantic-bridge-px`（1.5，框高倍數）。
-- Stats：`reject_backward`、`accept_bidir`。
+- Stats：`reject_backward`、`accept_bidir`、`relink_split_collision`（per-frame 唯一性 split 次數，見下）。
 - 不依賴 Kalman snapshot（`snapshot is not None` 條件已移除），純幾何模式可獨立運作（`--reid-mode off --pipeline-relink`）。
 
 設計取捨：
@@ -109,6 +109,31 @@ custom_seq_occ 對照（`--bridge-gate-px 120`）：
 **ReID 式品質閘 EMA bank（`--velocity-mode bank`）。** 丟失前數幀框不穩（遮擋起點→縮框/截斷），直接從 tail 估速/估幾何不可靠。借鑑 ReID reference-quality bank：`quality_bank()` 前→後走訪，維護幾何 EMA，只收「尺寸撐過 running EMA × ratio + score 過閘」的高品質幀；不穩尾幀自動落選。velocity/geometry 取最後一段穩定 stretch，diffusion 從**最後可信 snapshot**（`last_frame`=最後穩定幀，非 raw last）外推、自然跨過不穩尾。合成測試：20 穩定幀 +5 縮框尾 → anchor 止於 f20、EMA h 保 200（非污染 60）、vx≈10。把固定 `velocity_offset=13` 變成自適應（實際有幾幀不穩就跳幾幀）。Flags：`--quality-score-thr`（score 閘，<0 如 GT 恆過）、`--bank-alpha`（EMA 率 0.1）。對接 Phase 1 spawn 速度（穩定 Kalman snapshot）；真 relinker 有 appearance 時 bank 可再掛 embedding tier。
 
 **透視/深度修正已接（`--perspective-scale`，default off）。** `predicted_height()` 用地平面 pinhole proxy（apparent height ∝ image row，horizon 近似 y=0）：`h_pred = h · (foot_y_pred / foot_y_ref)`，ratio clamp 到 `[1/3, 3]` 防高處塌陷。開啟後 `scale_h` 改用 `h_pred`：目標往畫面下方（近）走→預測框高放大→velocity-range σ 隨之放大；往上（遠）走則收緊。正向 lost cloud 與逆向 candidate cloud 各用自身 `foot_y_ref→pred_foot_y`。default off（改變數值），先 A/B 再決定。下一槓桿：把同一 `predicted_height` 套到 scale-acceptance check（candidate.h vs 預測 source.h），修正久丟期間 source 尺度漂移。
+
+#### per-frame ID 唯一性修復 + 首個 MOT17-SDP ablation（2026-06-05）
+
+開 bidirectional 跑 MOT17-SDP 時 TrackEval 直接報錯 `predicts the same ID more than once in a single timestep`（MOT17-02 f203, id 29）→ HOTA 算不出來。
+
+**根因（合併邏輯）**：online relink 把 `alias[raw]→canonical` **永久**寫死。per-frame 去重的 `assigned` set 只擋**匹配路徑**（`resolve()` 候選迴圈 `if cid in assigned`），但**已 commit 的 alias 走 fast-path 直接吐 `canonical`、完全不檢查 `assigned`**。於是當某 raw（高信心軌道）很早被 relink 到 canonical 29、而**原生 raw-29 在久丟後復活**（f203 一塊 conf 0.1 的低信心碎片），兩者同幀都 fast-path 到 29 → 同一 timestep 出現兩列 id=29。線上情境無法預知原生 ID 會復活，故「合併時做時間重疊檢查」退化為下面的事後唯一性保護。
+
+**修復（`relink.py`，always-on 正確性）**：`_split_on_collision()` — 取得最終 `canonical` 後若本幀已被別 raw 吐過,當前 raw 永久 split 到 surrogate id（`>= 1_000_000`，寫回 `alias` 使 split 跨幀穩定）。`resolve()` 與 `_resolve_motion_only()` 皆加閘。只在「本來就非法」的幀觸發,對合法幀零影響。
+
+**incumbent 保留（`_frame_order()`，僅 bidirectional）**：同幀按 score 由高到低處理，讓長期在位的高信心軌道先 claim canonical、復活的低信心碎片才 split；輸出順序還原。非 bidirectional baseline 維持 bit-identical。新增 `relink_split_collision` stat。
+
+**Ablation（mamba_whole_graph / SDP，`--pipeline-relink --semantic-ttl 120 --semantic-kalman-gate --semantic-kalman-person-height-m 1.65 --semantic-bidirectional --semantic-bridge-px 0.5`）**：
+
+| | IDF1 | MOTA | HOTA | DetA | AssA | IDs |
+|---|---|---|---|---|---|---|
+| baseline `mamba_whole_graph` | 73.3 | 77.1 | 66.7 | 71.2 | 64.7 | 503 |
+| bidirectional（修復後） | **74.5** | **77.7** | **67.5** | 69.8 | **65.4** | 495 |
+| Δ | +1.2 | +0.6 | +0.8 | −1.4 | +0.7 | −8 |
+
+- **AssA +0.7pp** 印證雙向 relink 確實改善關聯（其本意）；IDF1/HOTA 增益超過 ±0.3pp 雜訊。
+- 修復前那次 IDF1 75.2% 是被重複框灌水的假數,真實為 74.5%。
+- 全 7 序列共 44 次 split_collision（6/0/5/1/14/4/14）= 假合併被正確拆回；輸出已無任何重複 `(frame,id)`。
+- DetA −1.4pp（split 出的碎片變獨立短軌,輕微拉低偵測關聯）為唯一退步面,淨 HOTA 仍 +0.8。
+- 回歸測試：`tests/extended/test_relink_collision_split.py`（4 tests）；既有 80 個 relink 測試全過。
+- **default 暫不改**（沿用專案慣例,單次正向 ablation 先入庫,待多組確認再動 preset）。
 
 ### Phase 3 — Chebyshev 統計門 + N_valid fallback
 
