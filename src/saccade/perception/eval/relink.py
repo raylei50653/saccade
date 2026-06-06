@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.nn.functional as F
 import numpy as np
@@ -186,6 +187,23 @@ class PythonSemanticRelinker:
         self.claim_warmup_frames = max(1, int(claim_warmup_frames))
         self.bidirectional = bool(bidirectional)
         self.bridge_px = float(bridge_chi2)
+        # GPU relink-gate (A/B): offload the O(n_query*n_cand) per-pair gate
+        # computation to a CUDA kernel; Python keeps all decision logic and reads
+        # gate quantities from the per-frame table. Toggle for bit-exact A/B.
+        self.gpu_relink_gate = bool(
+            int(os.environ.get("SACCADE_GPU_RELINK_GATE", "0") or "0")
+        )
+        self._gate_ext = None
+        self._gate_tbl: Optional[np.ndarray] = None  # [n_query, n_cand, 6] host
+        self._gate_row: Dict[int, int] = {}
+        self._gate_col: Dict[int, int] = {}
+        if self.gpu_relink_gate:
+            try:
+                import saccade_tracking_ext as _ext
+
+                self._gate_ext = _ext
+            except Exception:
+                self.gpu_relink_gate = False
         self.clean_score_threshold = clean_score_threshold
         self.clean_margin_ratio = clean_margin_ratio
         self.clean_min_aspect = clean_min_aspect
@@ -910,12 +928,23 @@ class PythonSemanticRelinker:
                     continue
                 self.age_gate_pass_ages.append(age)
                 last_box = self.last_boxes[cid]
+                # GPU gate table for this (query, candidate) pair, or None to fall
+                # back to per-pair Python computation (A/B-toggled, bit-faithful).
+                gate = self._gate_lookup(raw_id, cid) if self.gpu_relink_gate else None
                 # Physical reachability gate (always-on, snapshot-independent).
-                if self._exceeds_max_speed(box, last_box, age):
+                speed_exceeds = (
+                    bool(gate[4] > 0.5)
+                    if gate is not None
+                    else self._exceeds_max_speed(box, last_box, age)
+                )
+                if speed_exceeds:
                     self.stats["reject_speed"] += 1
                     self.age_gate_pass_outcomes.append((age, "speed"))
                     continue
-                center_norm, iou = self._spatial_metrics(box, last_box, w, h)
+                if gate is not None:
+                    center_norm, iou = float(gate[2]), float(gate[3])
+                else:
+                    center_norm, iou = self._spatial_metrics(box, last_box, w, h)
 
                 # Motion evidence: C++ Kalman motion box
                 motion_box = None
@@ -959,14 +988,22 @@ class PythonSemanticRelinker:
                 kalman_d2 = -1.0
                 kalman_gated = False
                 if self.kalman_gate and snapshot is not None:
-                    if self._direction_behind(box, snapshot):
+                    dir_behind = (
+                        bool(gate[5] > 0.5)
+                        if gate is not None
+                        else self._direction_behind(box, snapshot)
+                    )
+                    if dir_behind:
                         self.stats["reject_direction"] += 1
                         self.age_gate_pass_outcomes.append((age, "direction"))
                         continue
-                    delta = frame_id - self.motion_frame.get(cid, frame_id)
-                    kalman_d2 = self._kalman_gate_dist(
-                        box, snapshot, delta, dims=2 if self.bidirectional else 4
-                    )
+                    if gate is not None:
+                        kalman_d2 = float(gate[0])
+                    else:
+                        delta = frame_id - self.motion_frame.get(cid, frame_id)
+                        kalman_d2 = self._kalman_gate_dist(
+                            box, snapshot, delta, dims=2 if self.bidirectional else 4
+                        )
                     if kalman_d2 > self.kalman_chi2:
                         self.stats["reject_kalman"] += 1
                         self.age_gate_pass_outcomes.append((age, "kalman"))
@@ -975,10 +1012,15 @@ class PythonSemanticRelinker:
 
                 bridge_dist = -1.0
                 if self.bidirectional and cid in self._foot_history:
-                    cx = (float(box[0]) + float(box[2])) * 0.5
-                    cy = (float(box[1]) + float(box[3])) * 0.5
-                    gap = frame_id - self.last_seen.get(cid, frame_id)
-                    bridge_dist = self._midpoint_bridge_dist(cid, raw_id, gap, cx, cy)
+                    if gate is not None:
+                        bridge_dist = float(gate[1])
+                    else:
+                        cx = (float(box[0]) + float(box[2])) * 0.5
+                        cy = (float(box[1]) + float(box[3])) * 0.5
+                        gap = frame_id - self.last_seen.get(cid, frame_id)
+                        bridge_dist = self._midpoint_bridge_dist(
+                            cid, raw_id, gap, cx, cy
+                        )
                     if bridge_dist > self.bridge_px:
                         self.stats["reject_backward"] += 1
                         self.age_gate_pass_outcomes.append((age, "backward"))
@@ -1248,6 +1290,148 @@ class PythonSemanticRelinker:
         assigned.add(canonical)
         return canonical
 
+    def _build_gpu_gate_table(
+        self,
+        row_rawids: List[int],
+        row_boxes: List[torch.Tensor],
+        frame_id: int,
+        w: int,
+        h: int,
+    ) -> None:
+        """Fill self._gate_tbl [n_query, n_cand, 6] via the GPU kernel for this
+        frame. Columns: kalman_d2, bridge_dist, center_norm, iou, speed_exceeds,
+        dir_behind. Candidate set == self.features keys (same as resolve())."""
+        self._gate_tbl = None
+        self._gate_row = {}
+        self._gate_col = {}
+        ext = self._gate_ext
+        if ext is None or not hasattr(ext, "relink_gate_batch"):
+            return
+        cand_ids = list(self.features.keys())
+        nq, nc = len(row_rawids), len(cand_ids)
+        if nq == 0 or nc == 0:
+            return
+
+        c_last = np.zeros((nc, 4), np.float32)
+        c_mean = np.zeros((nc, 6), np.float32)
+        c_cov = np.zeros((nc, 10), np.float32)
+        c_foot = np.zeros((nc, 8), np.float32)
+        c_footn = np.zeros(nc, np.int32)
+        c_emah = np.ones(nc, np.float32)
+        c_gap = np.zeros(nc, np.int32)
+        c_delta = np.zeros(nc, np.int32)
+        c_has = np.zeros(nc, np.int32)
+        for j, cid in enumerate(cand_ids):
+            self._gate_col[cid] = j
+            lb = self.last_boxes.get(cid)
+            if lb is not None:
+                c_last[j] = [float(lb[0]), float(lb[1]), float(lb[2]), float(lb[3])]
+            c_emah[j] = float(self._ema_h.get(cid, 1.0))
+            c_gap[j] = frame_id - self.last_seen.get(cid, frame_id)
+            hist = self._foot_history.get(cid)
+            if hist:
+                last4 = list(hist)[-4:]
+                for k, (fx, fy) in enumerate(last4):
+                    c_foot[j, k * 2] = fx
+                    c_foot[j, k * 2 + 1] = fy
+                c_footn[j] = len(last4)
+            snap = self.motion.get(cid)
+            if snap is not None:
+                c_has[j] = 1
+                c_delta[j] = frame_id - self.motion_frame.get(cid, frame_id)
+                st = np.asarray(snap.state, dtype=np.float32).reshape(-1)
+                c_mean[j] = [st[0], st[1], st[3], st[4], st[5], st[7]]
+                P = np.asarray(snap.covariance, dtype=np.float32).reshape(8, 8)
+                c_cov[j] = [
+                    P[0, 0],
+                    P[0, 1],
+                    P[0, 4],
+                    P[0, 5],
+                    P[1, 1],
+                    P[1, 4],
+                    P[1, 5],
+                    P[4, 4],
+                    P[4, 5],
+                    P[5, 5],
+                ]
+
+        q_box = np.zeros((nq, 4), np.float32)
+        q_foot = np.zeros((nq, 8), np.float32)
+        q_footn = np.zeros(nq, np.int32)
+        q_emah = np.ones(nq, np.float32)
+        for i, (rid, box) in enumerate(zip(row_rawids, row_boxes)):
+            self._gate_row[rid] = i
+            q_box[i] = [float(box[0]), float(box[1]), float(box[2]), float(box[3])]
+            q_emah[i] = float(self._ema_h.get(rid, 1.0))
+            cx = (float(box[0]) + float(box[2])) * 0.5
+            cy = (float(box[1]) + float(box[3])) * 0.5
+            hist = list(self._foot_history.get(rid, []))
+            hist.append((cx, cy))
+            for k, (fx, fy) in enumerate(hist[:4]):
+                q_foot[i, k * 2] = fx
+                q_foot[i, k * 2 + 1] = fy
+            q_footn[i] = min(len(hist), 4)
+
+        dev = self.device
+
+        def _t(a: np.ndarray) -> torch.Tensor:
+            return torch.from_numpy(a).to(dev)
+
+        tq = [_t(q_box), _t(q_foot), _t(q_footn), _t(q_emah)]
+        tc = [
+            _t(c_last),
+            _t(c_mean),
+            _t(c_cov),
+            _t(c_foot),
+            _t(c_footn),
+            _t(c_emah),
+            _t(c_gap),
+            _t(c_delta),
+            _t(c_has),
+        ]
+        tbl = torch.zeros((nq, nc, 6), dtype=torch.float32, device=dev)
+        dims = 2 if self.bidirectional else 4
+        ext.relink_gate_batch(
+            nq,
+            nc,
+            int(w),
+            int(h),
+            dims,
+            float(self.kalman_fps),
+            float(self.kalman_person_height_m),
+            float(self.kalman_max_speed_mps),
+            float(self.kalman_accel_long),
+            float(self.kalman_accel_lat),
+            float(self.kalman_dir_min_cos),
+            float(self.kalman_dir_min_speed),
+            tq[0].data_ptr(),
+            tq[1].data_ptr(),
+            tq[2].data_ptr(),
+            tq[3].data_ptr(),
+            tc[0].data_ptr(),
+            tc[1].data_ptr(),
+            tc[2].data_ptr(),
+            tc[3].data_ptr(),
+            tc[4].data_ptr(),
+            tc[5].data_ptr(),
+            tc[6].data_ptr(),
+            tc[7].data_ptr(),
+            tc[8].data_ptr(),
+            tbl.data_ptr(),
+            0,
+        )
+        torch.cuda.synchronize(dev)
+        self._gate_tbl = tbl.cpu().numpy()
+
+    def _gate_lookup(self, raw_id: int, cid: int) -> Optional[np.ndarray]:
+        if self._gate_tbl is None:
+            return None
+        i = self._gate_row.get(raw_id)
+        j = self._gate_col.get(cid)
+        if i is None or j is None:
+            return None
+        return self._gate_tbl[i, j]
+
     def resolve_many(
         self,
         candidates: List[
@@ -1265,6 +1449,10 @@ class PythonSemanticRelinker:
     ) -> List[int]:
         assigned: Set[int] = set()
         order = self._frame_order([c[3] for c in candidates])
+        if self.gpu_relink_gate and self.bidirectional:
+            self._build_gpu_gate_table(
+                [c[0] for c in candidates], [c[2] for c in candidates], frame_id, w, h
+            )
         out: List[int] = [0] * len(candidates)
         for i in order:
             raw_id, embedding, box, score = candidates[i]
@@ -1297,6 +1485,8 @@ class PythonSemanticRelinker:
     ) -> List[int]:
         assigned: Set[int] = set()
         order = self._frame_order(scores)
+        if self.gpu_relink_gate and self.bidirectional:
+            self._build_gpu_gate_table(list(raw_ids), list(boxes), frame_id, w, h)
         out: List[int] = [0] * len(raw_ids)
         for i in order:
             out[i] = self.resolve(

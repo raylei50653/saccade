@@ -22,6 +22,7 @@
 #include "tracking/mamba_scan.cuh"
 #include "tracking/quality_filter.cuh"
 #include "tracking/copy_pad.cuh"
+#include "tracking/relink_gate.hpp"
 #include "tracking/kalman_gpu.cuh"
 #include "perception/feature_extractor.hpp"
 #include "perception/preprocessor.hpp"
@@ -3108,6 +3109,52 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         py::arg("stream_ptr") = 0,
         "Compact-filter detections removing very-low-score and large+uncertain boxes. "
         "Returns count of kept detections. GPU equivalent of _apply_fp_hard_filter().");
+
+    m.def("relink_gate_batch",
+        [](int n_query, int n_cand, int w, int h, int dims,
+           float fps, float person_height_m, float max_speed_mps,
+           float accel_long, float accel_lat, float dir_min_cos, float dir_min_speed,
+           uintptr_t query_boxes, uintptr_t query_foot, uintptr_t query_foot_n,
+           uintptr_t query_emah,
+           uintptr_t cand_last_box, uintptr_t cand_mean, uintptr_t cand_cov,
+           uintptr_t cand_foot, uintptr_t cand_foot_n, uintptr_t cand_emah,
+           uintptr_t cand_gap, uintptr_t cand_delta, uintptr_t cand_has_snap,
+           uintptr_t table, uintptr_t stream_ptr) {
+            py::gil_scoped_release release;
+            saccade::relink_gate::GateParams p{
+                n_query, n_cand, w, h, dims, fps, person_height_m, max_speed_mps,
+                accel_long, accel_lat, dir_min_cos, dir_min_speed};
+            saccade::relink_gate::launch(
+                p,
+                reinterpret_cast<const float*>(query_boxes),
+                reinterpret_cast<const float*>(query_foot),
+                reinterpret_cast<const int*>(query_foot_n),
+                reinterpret_cast<const float*>(query_emah),
+                reinterpret_cast<const float*>(cand_last_box),
+                reinterpret_cast<const float*>(cand_mean),
+                reinterpret_cast<const float*>(cand_cov),
+                reinterpret_cast<const float*>(cand_foot),
+                reinterpret_cast<const int*>(cand_foot_n),
+                reinterpret_cast<const float*>(cand_emah),
+                reinterpret_cast<const int*>(cand_gap),
+                reinterpret_cast<const int*>(cand_delta),
+                reinterpret_cast<const int*>(cand_has_snap),
+                reinterpret_cast<float*>(table),
+                reinterpret_cast<void*>(stream_ptr));
+        },
+        py::arg("n_query"), py::arg("n_cand"), py::arg("w"), py::arg("h"), py::arg("dims"),
+        py::arg("fps"), py::arg("person_height_m"), py::arg("max_speed_mps"),
+        py::arg("accel_long"), py::arg("accel_lat"),
+        py::arg("dir_min_cos"), py::arg("dir_min_speed"),
+        py::arg("query_boxes"), py::arg("query_foot"), py::arg("query_foot_n"),
+        py::arg("query_emah"),
+        py::arg("cand_last_box"), py::arg("cand_mean"), py::arg("cand_cov"),
+        py::arg("cand_foot"), py::arg("cand_foot_n"), py::arg("cand_emah"),
+        py::arg("cand_gap"), py::arg("cand_delta"), py::arg("cand_has_snap"),
+        py::arg("table"), py::arg("stream_ptr") = 0,
+        "Batched per-(query,candidate) relink gate table. Fills table "
+        "[n_query*n_cand*6] = {kalman_d2,bridge_dist,center_norm,iou,speed_exceeds,"
+        "dir_behind}. All device pointers. Thresholds stay Python-side.");
 
     m.def("copy_pad_detections",
         [](uintptr_t src_boxes, uintptr_t src_scores, uintptr_t src_classes,

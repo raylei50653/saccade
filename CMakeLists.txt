@@ -139,6 +139,7 @@ target_compile_definitions(saccade_perception PRIVATE SACCADE_EXPORT_PERCEPTION)
 # 7. 定義 Tracking 模組 (Dynamic Library)
 add_library(saccade_tracking STATIC
     src/tracking/tracker_gpu.cu
+    src/tracking/relink_gate.cu
     src/tracking/gmc.cpp
     src/tracking/gmc_kernel.cu
     src/tracking/pipeline.cpp
