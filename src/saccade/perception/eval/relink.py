@@ -95,6 +95,7 @@ class PythonSemanticRelinker:
         claim_warmup_frames: int = 3,
         bidirectional: bool = False,
         bridge_chi2: float = 1.5,
+        bridge_px: float | None = None,
         # Motion-based relinking params
         motion_vel_alpha: float = 0.3,
         motion_acc_alpha: float = 0.15,
@@ -186,7 +187,7 @@ class PythonSemanticRelinker:
         self.delayed_claim = bool(delayed_claim)
         self.claim_warmup_frames = max(1, int(claim_warmup_frames))
         self.bidirectional = bool(bidirectional)
-        self.bridge_px = float(bridge_chi2)
+        self.bridge_px = float(bridge_px if bridge_px is not None else bridge_chi2)
         # GPU relink-gate (A/B): offload the O(n_query*n_cand) per-pair gate
         # computation to a CUDA kernel; Python keeps all decision logic and reads
         # gate quantities from the per-frame table. Toggle for bit-exact A/B.

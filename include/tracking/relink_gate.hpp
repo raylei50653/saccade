@@ -70,5 +70,39 @@ void launch(const GateParams& p,
             const int* cand_gap, const int* cand_delta, const int* cand_has_snap,
             float* table, void* stream);
 
+// Gather tracker Kalman state into relink gate format (GPU→GPU).
+// Extracts 6-element mean {cx,cy,h,vx,vy,vh} and 10-element covariance
+// (symmetric 4x4 over {cx,cy,vx,vy}) from the tracker's dense buffers.
+void gather_tracker_state(const float* src_states, const float* src_covs,
+                          const int* slots, int n_cand,
+                          float* dst_mean, float* dst_cov, void* stream);
+
+// Batch dot product: computes dot(queries[i], candidates[j]) for all pairs.
+void batch_dot(const float* queries, const float* candidates,
+               int n_query, int n_cand, int dim,
+               float* out, void* stream);
+
+// Scoring parameters for the relink joint-score kernel.
+struct ScoringParams {
+    int   n_cand = 0;
+    int   ttl = 45;
+    float sim_threshold = 0.85f;
+    float w_sim_base = 0.0f, w_iou_base = 0.0f, w_maha_base = 0.0f;
+    float shift_ambiguity = 0.0f, shift_lost_age = 0.0f;
+    float mahalanobis_threshold = 0.0f;
+    float kalman_penalty_weight = 0.0f;
+    float reciprocal_margin = 0.0f;
+    float dynamic_margin_crowd = 0.0f, dynamic_margin_age = 0.0f;
+    float iou_weight = 0.0f, mahalanobis_weight = 0.0f;
+};
+
+// Batch joint-score computation: one block per query, computes dynamic
+// weighted scores for all candidates, reduces to top 2 per query.
+void launch_relink_scoring(
+    const float* gate_tbl, const float* sim_tbl,
+    const int* cand_ids, const int* cand_ages, const float* cand_maha,
+    int n_query, ScoringParams params,
+    int* best_ids, float* best_scores, float* second_scores, void* stream);
+
 }  // namespace relink_gate
 }  // namespace saccade

@@ -162,10 +162,22 @@ __global__ void gate_kernel(GateParams p,
             float S11 = cc[4] + r2;     // P11 + r
             float rx = qcx - m[0];
             float ry = qcy - m[1];
-            float det = S00 * S11 - S01 * S01;
-            // residual^T S^-1 residual
-            kalman_d2 = (rx * rx * S11 - 2.0f * rx * ry * S01 + ry * ry * S00)
-                        / (det != 0.0f ? det : 1e-12f);
+
+            // Cholesky whitewashing for S = L L^T.  Forward-substitute L w = y,
+            // then D² = w^T w.  Default to 1e9f (invalid) with guard clauses
+            // to keep the warp flat and avoid NaN from degenerates.
+            kalman_d2 = 1e9f;
+            float l00 = sqrtf(S00);
+            if (l00 >= 1e-5f) {
+                float l10 = S01 / l00;
+                float inner = S11 - l10 * l10;
+                if (inner >= 1e-5f) {
+                    float l11 = sqrtf(inner);
+                    float w0 = rx / l00;
+                    float w1 = (ry - l10 * w0) / l11;
+                    kalman_d2 = w0 * w0 + w1 * w1;
+                }
+            }
         }
     }
 
@@ -211,6 +223,215 @@ void launch(const GateParams& p,
         p, query_boxes, query_foot, query_foot_n,
         cand_last_box, cand_mean, cand_cov, cand_foot, cand_foot_n, cand_emah,
         cand_gap, cand_delta, cand_has_snap, query_emah, table);
+}
+
+// Gather tracker Kalman state into relink gate table format.
+// Extracts {x0,x1,x3,x4,x5,x7} from each 8D state and the symmetric 4x4
+// covariance sub-block {0,1,4,5} from each 8x8 row-major covariance.
+__global__ void gather_tracker_state_kernel(
+    const float* src_states, const float* src_covs,
+    const int* slots, int n_cand,
+    float* dst_mean, float* dst_cov) {
+    int j = blockIdx.x * blockDim.x + threadIdx.x;
+    if (j >= n_cand) return;
+    int slot = slots[j];
+    if (slot < 0) return;
+    int src_s = slot * 8;
+    int src_c = slot * 64;
+    int dst_m = j * 6;
+    dst_mean[dst_m + 0] = src_states[src_s + 0];
+    dst_mean[dst_m + 1] = src_states[src_s + 1];
+    dst_mean[dst_m + 2] = src_states[src_s + 3];
+    dst_mean[dst_m + 3] = src_states[src_s + 4];
+    dst_mean[dst_m + 4] = src_states[src_s + 5];
+    dst_mean[dst_m + 5] = src_states[src_s + 7];
+    int dst_c = j * 10;
+    dst_cov[dst_c + 0] = src_covs[src_c + 0];
+    dst_cov[dst_c + 1] = src_covs[src_c + 1];
+    dst_cov[dst_c + 2] = src_covs[src_c + 4];
+    dst_cov[dst_c + 3] = src_covs[src_c + 5];
+    dst_cov[dst_c + 4] = src_covs[src_c + 9];
+    dst_cov[dst_c + 5] = src_covs[src_c + 12];
+    dst_cov[dst_c + 6] = src_covs[src_c + 13];
+    dst_cov[dst_c + 7] = src_covs[src_c + 36];
+    dst_cov[dst_c + 8] = src_covs[src_c + 37];
+    dst_cov[dst_c + 9] = src_covs[src_c + 45];
+}
+
+void gather_tracker_state(const float* src_states, const float* src_covs,
+                           const int* slots, int n_cand,
+                           float* dst_mean, float* dst_cov, void* stream) {
+    if (n_cand <= 0) return;
+    int block = 256;
+    int grid = (n_cand + block - 1) / block;
+    gather_tracker_state_kernel<<<grid, block, 0, (cudaStream_t)stream>>>(
+        src_states, src_covs, slots, n_cand, dst_mean, dst_cov);
+}
+
+// Batch cosine similarity: computes dot(q_i, c_j) for all query-candidate pairs.
+__global__ void batch_dot_kernel(
+    const float* queries, const float* candidates,
+    int n_query, int n_cand, int dim,
+    float* out) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = n_query * n_cand;
+    if (idx >= total) return;
+    int i = idx / n_cand;
+    int j = idx % n_cand;
+    const float* q = queries + i * dim;
+    const float* c = candidates + j * dim;
+    float dot = 0.0f;
+    for (int k = 0; k < dim; ++k) dot += q[k] * c[k];
+    out[idx] = dot;
+}
+
+void batch_dot(const float* queries, const float* candidates,
+               int n_query, int n_cand, int dim,
+               float* out, void* stream) {
+    if (n_query <= 0 || n_cand <= 0) return;
+    int total = n_query * n_cand;
+    int block = 256;
+    int grid = (total + block - 1) / block;
+    batch_dot_kernel<<<grid, block, 0, (cudaStream_t)stream>>>(
+        queries, candidates, n_query, n_cand, dim, out);
+}
+
+// ── relink scoring kernel ──────────────────────────────────────────
+// One block per query.  Phase 1 counts gate-passing candidates.
+// Phase 2 computes per-candidate joint score with dynamic weights
+// derived from the gate count and candidate age, then reduces to the
+// best two.  The final margin check is done on the GPU so the CPU
+// path can read the answer directly.
+
+__global__ void relink_scoring_kernel(
+    const float* __restrict__ gate_tbl,    // [n_query, n_cand, 6]
+    const float* __restrict__ sim_tbl,     // [n_query, n_cand]
+    const int*   __restrict__ cand_ids,    // [n_cand]
+    const int*   __restrict__ cand_ages,   // [n_cand]
+    const float* __restrict__ cand_maha,   // [n_cand]
+    ScoringParams p,
+    int*   __restrict__ best_ids,          // [n_query]  output, -1 = none
+    float* __restrict__ best_scores,       // [n_query]
+    float* __restrict__ second_scores) {   // [n_query]
+
+    int q = blockIdx.x;
+    int tid = threadIdx.x;
+    int n = p.n_cand;
+
+    const float* gq = gate_tbl + static_cast<size_t>(q) * n * 6;
+    const float* sq = sim_tbl  + static_cast<size_t>(q) * n;
+
+    __shared__ int s_cnt;
+    if (tid == 0) s_cnt = 0;
+    __syncthreads();
+
+    // Phase 1: count candidates that pass the sim gate
+    for (int c = tid; c < n; c += blockDim.x) {
+        if (sq[c] >= p.sim_threshold)
+            atomicAdd(&s_cnt, 1);
+    }
+    __syncthreads();
+    int n_passed = s_cnt;
+
+    // Dynamic weight shifts (same for all candidates of this query)
+    bool use_unified = p.w_sim_base > 0.0f || p.w_iou_base > 0.0f || p.w_maha_base > 0.0f;
+    bool use_legacy = p.iou_weight > 0.0f || p.mahalanobis_weight > 0.0f;
+    float amb_factor = (n_passed > 1) ? fminf(1.0f, float(n_passed - 1) / 8.0f) : 0.0f;
+    float w_sim_dyn = p.w_sim_base + p.shift_ambiguity * amb_factor;
+    float w_iou_dyn = p.w_iou_base - p.shift_ambiguity * amb_factor;
+
+    float local_best = -1e9f, local_second = -1e9f;
+    int   local_best_id = -1;
+
+    for (int c = tid; c < n; c += blockDim.x) {
+        float sim = sq[c];
+        if (sim < p.sim_threshold) continue;
+
+        float kalman_d2 = gq[c * 6 + 0];
+        float iou       = gq[c * 6 + 3];
+
+        float maha = cand_maha[c];
+        float maha_score = 0.0f;
+        if (p.mahalanobis_threshold > 0.0f && maha > 0.0f)
+            maha_score = fmaxf(0.0f, 1.0f - maha / p.mahalanobis_threshold);
+
+        float joint;
+        if (use_unified) {
+            float lost_factor = fminf(1.0f, float(cand_ages[c]) / fmaxf(1, p.ttl));
+            float ws = w_sim_dyn + p.shift_lost_age * lost_factor;
+            float wi = w_iou_dyn - p.shift_lost_age * lost_factor;
+            float wm = p.w_maha_base;
+            ws = fmaxf(0.0f, ws); wi = fmaxf(0.0f, wi); wm = fmaxf(0.0f, wm);
+            float sw = ws + wi + wm;
+            if (sw > 0.0f) { ws /= sw; wi /= sw; wm /= sw; }
+            joint = ws * sim + wi * iou + wm * maha_score;
+        } else if (use_legacy) {
+            joint = sim + p.iou_weight * iou + p.mahalanobis_weight * maha_score;
+        } else {
+            joint = sim;
+        }
+
+        if (p.kalman_penalty_weight > 0.0f && kalman_d2 >= 0.0f)
+            joint -= p.kalman_penalty_weight * (1.0f - expf(-0.5f * kalman_d2));
+
+        if (joint > local_best) {
+            local_second = local_best;
+            local_best = joint;
+            local_best_id = cand_ids[c];
+        } else if (joint > local_second) {
+            local_second = joint;
+        }
+    }
+
+    // Tree reduction to find block-wide best & second best
+    __shared__ float s_j[256], s_s[256];
+    __shared__ int   s_i[256];
+    s_j[tid] = local_best; s_s[tid] = local_second; s_i[tid] = local_best_id;
+    __syncthreads();
+
+    for (int stride = blockDim.x / 2; stride > 0; stride >>= 1) {
+        if (tid < stride) {
+            int o = tid + stride;
+            if (s_j[o] > s_j[tid]) {
+                s_s[tid] = fmaxf(s_j[tid], s_s[o]);
+                s_j[tid] = s_j[o];
+                s_i[tid] = s_i[o];
+            } else {
+                if (s_j[o] > s_s[tid]) s_s[tid] = s_j[o];
+                if (s_s[o] > s_s[tid]) s_s[tid] = s_s[o];
+            }
+        }
+        __syncthreads();
+    }
+
+    // Thread 0: margin check, dynamic margin, write output
+    if (tid == 0) {
+        if (s_i[0] >= 0) {
+            float margin = p.reciprocal_margin;
+            if (p.dynamic_margin_crowd > 0.0f && n_passed > 1)
+                margin += p.dynamic_margin_crowd * fminf(1.0f, float(n_passed - 1) / 8.0f);
+            // dynamic_margin_age needs the best candidate's age — we look it up
+            // after the kernel on CPU, so only apply static+crowd margin on GPU
+            if (margin > 0.0f && s_j[0] - s_s[0] < margin) {
+                s_i[0] = -1;
+                s_j[0] = p.sim_threshold;
+            }
+        }
+        best_ids[q]    = s_i[0];
+        best_scores[q] = s_j[0];
+        second_scores[q] = s_s[0];
+    }
+}
+
+void launch_relink_scoring(
+    const float* gate_tbl, const float* sim_tbl,
+    const int* cand_ids, const int* cand_ages, const float* cand_maha,
+    int n_query, ScoringParams params,
+    int* best_ids, float* best_scores, float* second_scores, void* stream) {
+    if (n_query <= 0 || params.n_cand <= 0) return;
+    relink_scoring_kernel<<<n_query, 256, 0, (cudaStream_t)stream>>>(
+        gate_tbl, sim_tbl, cand_ids, cand_ages, cand_maha,
+        params, best_ids, best_scores, second_scores);
 }
 
 }  // namespace relink_gate

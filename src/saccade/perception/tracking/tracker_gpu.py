@@ -496,14 +496,45 @@ class GPUByteTracker:
         cheb_lambda: float = 2.5,
         spatial_gate: float = 4.0,
         max_age: int = 300,
+        bidirectional: bool = False,
+        bridge_px: float = 0.25,
+        bridge_at: int = 4,
+        bridge_min_lost: int = 2,
+        bridge_ttl: int = 120,
+        bridge_max_speed: float = 0.0,
+        bridge_person_height: float = 1.65,
+        bridge_fps: float = 30.0,
+        bridge_margin: float = 0.0,
+        bridge_spatial_gate: float = 0.0,
+        bridge_anchor: int = 0,
+        bridge_anchor_rate: float = 0.0,
     ) -> None:
         setter = getattr(self.tracker, "set_relink_params", None)
         if setter is not None:
-            setter(enabled, bank_cap, sim_thresh, cheb_lambda, spatial_gate, max_age)
+            setter(
+                enabled,
+                bank_cap,
+                sim_thresh,
+                cheb_lambda,
+                spatial_gate,
+                max_age,
+                bidirectional,
+                bridge_px,
+                bridge_at,
+                bridge_min_lost,
+                bridge_ttl,
+                bridge_max_speed,
+                bridge_person_height,
+                bridge_fps,
+                bridge_margin,
+                bridge_spatial_gate,
+                bridge_anchor,
+                bridge_anchor_rate,
+            )
 
     def get_relink_debug(self) -> list[int]:
         getter = getattr(self.tracker, "get_relink_debug", None)
-        return list(getter()) if getter is not None else [0, 0, 0]
+        return list(getter()) if getter is not None else [0, 0, 0, 0, 0]
 
     def set_oao_params(self, tau: float = 0.0) -> None:
         """OA-SORT Occlusion-Aware Offset (OAO) penalty.

@@ -54,6 +54,41 @@
 
 ## Completed Workstreams
 
+### GPU tracker-core 雙向 foot-bridge relink（GO，2026-06-07）
+
+- **落地**：把 Kalman-free 雙向 relink「下沉」進 GPU tracker core（`src/tracking/tracker_gpu.cu`：`update_foot_history_kernel` + `relink_bidir_propose_kernel`/`relink_bidir_commit_kernel` 兩 pass），年輕軌剛穩定（`hit_streak==bridge_at`）時直接接走仍活著的 lost 軌 id（4 點 foot 回歸 `v=(3p₃+p₂−p₁−3p₀)/10`、兩端外推 gap/2、框高正規化中點距離 vs `bridge_px`）。score-keyed `atomicMax` 決定性 tie-break（高分候選勝）。
+- **CLI**：`--relink-bridge-enabled`（獨立於 `--relink-enabled` bank-ReID 路徑，無需 embeddings）+ `--relink-bridge-px/-at/-min-lost/-ttl/-max-speed/-person-height/-fps/-margin/-spatial-gate`。default off → 與 baseline **bit-identical**（實測 73.3/77.1/66.7/63.9/537 完全重現）；CUDA-graph on/off bit-exact。
+- **MOT17-SDP ablation（mamba_whole_graph，全 7 序列）**：
+
+  | px | IDF1 | MOTA | HOTA | AssA | IDs | FP | FN |
+  |---|---|---|---|---|---|---|---|
+  | baseline | 73.3 | 77.1 | 66.7 | 63.9 | 537 | 3779 | 21350 |
+  | 0.15 | 73.9 | 77.6 | 67.3 | 64.9 | 496 | 3572 | 21096 |
+  | 0.20 | 73.9 | 77.8 | 67.3 | 64.8 | 487 | 3445 | 21016 |
+  | **0.30（最佳）** | **74.1** | **77.8** | **67.4** | **65.2** | 496 | 3378 | 21032 |
+  | 0.40 | 72.8 | 77.9 | 66.6 | 63.5 | 492 | 3407 | 20948 |
+
+- **結論**：清晰倒 U，峰值 px=0.30：**IDF1 +0.8 / MOTA +0.7 / HOTA +0.7 / AssA +1.3 / IDs −50（−9.3%）/ FP −401**，遠超 ±0.3pp 雜訊帶。px≥0.4 過度橋接（錯誤接管）IDF1 跌破 baseline。比舊版遺失實作（僅 HOTA +0.2/IDs −17）強得多。eval-layer default px 設為 0.30。default 仍 off（保守入庫）。
+
+#### 錨點研究 — foot / adaptive / 形變閘（NEUTRAL vs center，2026-06-07）
+
+把 foot ring 改存 `(cx,cy,h)`（stride 3），新增 `--relink-bridge-anchor {center,foot,adaptive}` + `--relink-bridge-anchor-rate`（形變閘）。動機：bridge 名為 foot 實際橋的是 box center，遮擋時單邊被吃會污染 center。
+
+- **center**（legacy）重現 stride-2 版 px=0.30 數字**完全一致**（74.1/77.8/67.4/65.2/496/3378/21032）→ stride-3 + 殘差加權改寫行為保持。
+- **foot**（純下緣 cy+h/2）：略差，AssA −0.4 / FP +84（底部截斷反咬）。
+- **adaptive**（殘差加權上下緣，等權自動退化成 center）：px=0.30 給最佳關聯 74.2/67.5/65.3/IDs 494，但 **FP +184**（3562 vs 3378）。adaptive 自身 px sweep 也峰在 0.30。
+- **形變閘 `--relink-bridge-anchor-rate`**（mean|Δh|/h̄ 低於門檻就保持 center，只在真形變時換邊）：**有效**——rate=0.03~0.05 strictly dominate ungated adaptive（FP 3562→3501、FN 20979→20928）；rate=1.0 完全退回 center（FP 3378，驗證 plumbing）。basin 非單調（0.07 掉到 73.9，雜訊）。
+
+  | anchor/rate (px=0.30) | IDF1 | MOTA | HOTA | AssA | IDs | FP | FN |
+  |---|---|---|---|---|---|---|---|
+  | center | 74.1 | 77.8 | 67.4 | 65.2 | 496 | 3378 | 21032 |
+  | adaptive rate=0 | 74.2 | 77.7 | 67.5 | 65.3 | 494 | 3562 | 20979 |
+  | adaptive rate=0.03 | 74.2 | 77.8 | 67.5 | 65.3 | 493 | 3501 | 20951 |
+  | adaptive rate=0.05 | 74.2 | 77.8 | 67.5 | 65.2 | 495 | 3508 | 20928 |
+
+- **結論（誠實）**：你（user）的形變閘想法**機制上成立且實作正確**——它確實把製造 FP 的壞 re-anchor 和幫 AssA 的好 re-anchor 部分分開（FP 收回 ~60、FN 再降）。adaptive+閘 對 plain center 的淨增益落在 ±0.1~0.3pp 雜訊帶內（MOT17-SDP 的 SDP 框本來就乾淨，foot-anchor 巧思 headroom 小），但 strictly dominate ungated adaptive 且 IDs 最低（493）。**eval-layer default 採 user 決定 = `adaptive` + `anchor_rate=0.03`**（C++/pybind/wrapper API default 仍 center/0，保持 unit test bit-identical）。bridge 整體仍 default-off。
+- **修掉一個 plumbing bug**：Python wrapper `set_relink_params` 接了 `bridge_anchor_rate` 但 forward 到 pybind 時漏傳 → kernel 永遠收到 0（7 個 rate 值輸出 byte-identical 才抓到）；kernel printf 確認 `rate_gate=0.0000` 後修復。
+
 ### 測試覆蓋率提升 Phase 1（已完成，2026-05）
 
 - 完成了 `dispatcher.py` (94%)、`helpers.py` (91%)、`detection.py` (49%)、`relink.py` (88%)、`drift_handler.py` (100%)、`redis_cache.py` (99%)、`calibrator.py` (96%)、`cropper.py` (77%)、`quality.py` (100%)、`reporting.py` (93%) 等模組的覆蓋。

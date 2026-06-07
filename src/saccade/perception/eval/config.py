@@ -223,6 +223,20 @@ class EvalConfig:
     relink_spatial_gate: float
     relink_max_age: int
 
+    # GPU tracker-core bidirectional foot-bridge relink (Kalman-free; default off)
+    relink_bridge_enabled: bool
+    relink_bridge_px: float
+    relink_bridge_at: int
+    relink_bridge_min_lost: int
+    relink_bridge_ttl: int
+    relink_bridge_max_speed: float
+    relink_bridge_person_height: float
+    relink_bridge_fps: float
+    relink_bridge_margin: float
+    relink_bridge_spatial_gate: float
+    relink_bridge_anchor: str
+    relink_bridge_anchor_rate: float
+
     min_tracklet_len: int
     min_tracklet_score: float
     interpolate_tracklets: bool
@@ -636,6 +650,20 @@ def parse_eval_config(
         relink_lambda=float(kwargs.get("relink_lambda", 2.5)),
         relink_spatial_gate=float(kwargs.get("relink_spatial_gate", 4.0)),
         relink_max_age=int(kwargs.get("relink_max_age", 300)),
+        relink_bridge_enabled=bool(kwargs.get("relink_bridge_enabled", False)),
+        relink_bridge_px=float(kwargs.get("relink_bridge_px", 0.3)),
+        relink_bridge_at=int(kwargs.get("relink_bridge_at", 4)),
+        relink_bridge_min_lost=int(kwargs.get("relink_bridge_min_lost", 2)),
+        relink_bridge_ttl=int(kwargs.get("relink_bridge_ttl", 120)),
+        relink_bridge_max_speed=float(kwargs.get("relink_bridge_max_speed", 0.0)),
+        relink_bridge_person_height=float(
+            kwargs.get("relink_bridge_person_height", 1.65)
+        ),
+        relink_bridge_fps=float(kwargs.get("relink_bridge_fps", 30.0)),
+        relink_bridge_margin=float(kwargs.get("relink_bridge_margin", 0.0)),
+        relink_bridge_spatial_gate=float(kwargs.get("relink_bridge_spatial_gate", 0.0)),
+        relink_bridge_anchor=str(kwargs.get("relink_bridge_anchor", "adaptive")),
+        relink_bridge_anchor_rate=float(kwargs.get("relink_bridge_anchor_rate", 0.03)),
         min_tracklet_len=max(1, int(kwargs.get("min_tracklet_len", 1))),
         min_tracklet_score=float(kwargs.get("min_tracklet_score", 0.0)),
         interpolate_tracklets=bool(kwargs.get("interpolate_tracklets", True)),

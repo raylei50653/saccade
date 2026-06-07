@@ -2,6 +2,7 @@
 import configparser
 import json
 import os
+import threading
 import time
 from collections import OrderedDict, deque
 import dataclasses
@@ -71,6 +72,32 @@ _SOFTMAX3_TORCH_CACHE: dict[
     tuple[int, str],
     tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
 ] = {}
+
+
+# Cross-thread coordination handles for multi-stream eval. They are populated by
+# MultiStreamRunner (see multi_stream.py) before workers are submitted and reset
+# to None afterwards; they must exist at module scope so workers can read them
+# without AttributeError even when multi-stream is not in use.
+_worker_init_lock: "threading.Lock | None" = None
+_worker_init_barrier: "threading.Barrier | None" = None
+_graph_capture_lock: "threading.Lock | None" = None
+
+
+def _release_worker_init_lock() -> None:
+    """Release the per-wave worker-init lock if this thread holds it.
+
+    Safe to call multiple times and when the lock is absent or already
+    released, so it can be used both as an explicit hand-off point and as a
+    finally-block safety net.
+    """
+    lock = _worker_init_lock
+    if lock is None:
+        return
+    try:
+        lock.release()
+    except RuntimeError:
+        # Lock was not held (already released or never acquired) — no-op.
+        pass
 
 
 def _record_profile_scope(name: str):
@@ -1678,14 +1705,31 @@ def run_eval(
         )
         if _fpn_reid_mode and hasattr(detector.tracker, "set_reid_min_candidates"):
             detector.tracker.set_reid_min_candidates(1)
-        if cfg.relink_enabled and hasattr(detector.tracker, "set_relink_params"):
+        _bridge_enabled = bool(getattr(cfg, "relink_bridge_enabled", False))
+        if (cfg.relink_enabled or _bridge_enabled) and hasattr(
+            detector.tracker, "set_relink_params"
+        ):
             detector.tracker.set_relink_params(
-                enabled=True,
+                enabled=cfg.relink_enabled,
                 bank_cap=cfg.relink_bank_cap,
                 sim_thresh=cfg.relink_sim_thresh,
                 cheb_lambda=cfg.relink_lambda,
                 spatial_gate=cfg.relink_spatial_gate,
                 max_age=cfg.relink_max_age,
+                bidirectional=_bridge_enabled,
+                bridge_px=cfg.relink_bridge_px,
+                bridge_at=cfg.relink_bridge_at,
+                bridge_min_lost=cfg.relink_bridge_min_lost,
+                bridge_ttl=cfg.relink_bridge_ttl,
+                bridge_max_speed=cfg.relink_bridge_max_speed,
+                bridge_person_height=cfg.relink_bridge_person_height,
+                bridge_fps=cfg.relink_bridge_fps,
+                bridge_margin=cfg.relink_bridge_margin,
+                bridge_spatial_gate=cfg.relink_bridge_spatial_gate,
+                bridge_anchor={"center": 0, "foot": 1, "adaptive": 2}.get(
+                    cfg.relink_bridge_anchor, 0
+                ),
+                bridge_anchor_rate=cfg.relink_bridge_anchor_rate,
             )
 
         if hasattr(detector.tracker, "set_unified_score_params"):
@@ -1703,7 +1747,6 @@ def run_eval(
             cfg.force_python_relinker
             or cfg.semantic_rerank_mode != "mean"
             or _semantic_delayed_claim
-            or _semantic_bidirectional
         )
         _relinker_cls = (
             PythonSemanticRelinker if _use_python_relinker else SemanticRelinker
@@ -1759,7 +1802,7 @@ def run_eval(
         if _semantic_bidirectional:
             _relinker_common_kwargs.update(
                 bidirectional=True,
-                bridge_chi2=cfg.kwargs.get("semantic_bridge_px", 1.5),
+                bridge_px=cfg.kwargs.get("semantic_bridge_px", 1.5),
             )
         if _use_python_relinker:
             _relinker_common_kwargs.update(
@@ -2245,6 +2288,48 @@ def run_eval(
                 bank_quality_w_center=cfg.bank_quality_w_center,
                 bank_quality_w_area=cfg.bank_quality_w_area,
             )
+            if (
+                int(os.environ.get("SACCADE_GPU_RELINK_GATE", "1") or "1")
+                and relinker is not None
+                and hasattr(relinker, "build_gate_table")
+            ):
+                tracker_kwargs = {}
+                if hasattr(detector.tracker, "get_gpu_buffers"):
+                    states, covs, tids, maxn = detector.tracker.get_gpu_buffers()
+                    tracker_kwargs = dict(
+                        tracker_states=int(states),
+                        tracker_covs=int(covs),
+                        tracker_tids=int(tids),
+                        tracker_max_objs=int(maxn),
+                    )
+                # Row-aligned query embeddings: one row per candidate in the
+                # same order as local_track_id / box, with a zero row where a
+                # candidate has no embedding. Filtering out the None rows would
+                # desync the row index from raw_ids and trip the n_q==n_query
+                # guard in build_gate_table, silently disabling the GPU scoring
+                # path for the whole frame. A zero row yields sim=0 for that
+                # query, so an embedding-less detection is simply not relinked.
+                _cand_embs = [c.embedding for c in prepared_candidates]
+                _ref_emb = next((e for e in _cand_embs if e is not None), None)
+                _query_embs = None
+                if _ref_emb is not None:
+                    _zero_emb = torch.zeros_like(_ref_emb)
+                    _query_embs = (
+                        torch.stack(
+                            [e if e is not None else _zero_emb for e in _cand_embs]
+                        )
+                        .float()
+                        .cpu()
+                    )
+                relinker.build_gate_table(
+                    [c.local_track_id for c in prepared_candidates],
+                    [c.box for c in prepared_candidates],
+                    _frame_id,
+                    w_orig,
+                    h_orig,
+                    **tracker_kwargs,
+                    query_embs=_query_embs,
+                )
             resolved_tracks = _resolve_frame_tracks(
                 frame_id=_frame_id,
                 frame_w=w_orig,
@@ -4621,11 +4706,14 @@ def run_eval(
         else:
             fps_summary_lines.append(f"{seq}\tfps=n/a\tmean_ms=n/a\tframes=0")
 
-        if cfg.relink_enabled and hasattr(detector.tracker, "get_relink_debug"):
+        if (cfg.relink_enabled or _bridge_enabled) and hasattr(
+            detector.tracker, "get_relink_debug"
+        ):
             _rd = detector.tracker.get_relink_debug()
             print(
                 f"🔗 Relink debug {seq}: archived={_rd[0]} "
-                f"birth_candidates={_rd[1]} revived={_rd[2]}"
+                f"birth_candidates={_rd[1]} revived={_rd[2]} "
+                f"bridge_attempts={_rd[3]} bridge_accepts={_rd[4]}"
             )
 
         results_lines, post_merge_stats = post_merge_output_tracklets(

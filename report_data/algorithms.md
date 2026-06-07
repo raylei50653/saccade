@@ -314,7 +314,11 @@ a - 1 & 1.0 \le a < 2.0 \\
 
 ## 6. Semantic Relink — Identity Resolution
 
-**來源**：`relink.py:1–1595`
+**來源**：`relink.py:1–1595`、`tracker_gpu_python.cpp:438–1645`（C++ `SemanticRelinkerCpp`）
+
+> **C++ 移植 （2026-06）**：`SemanticRelinker` 自 `relink.py` 遷移至 `tracker_gpu_python.cpp`（`SemanticRelinkerCpp`，行 438–1645），
+> 包含雙向重鏈接（bidirectional）、物理卡爾曼閘、碰撞拆分等全部功能。
+> 遷移後 C++ 路徑於 MOT17-SDP 全量結果與 Python 位級对齐（MOTA 77.7%，ID 差 1）。
 
 ### 6.1 Feature EMA
 
@@ -375,9 +379,11 @@ B_{\text{motion}} = w_{\text{motion\_iou}} \cdot \operatorname{IoU}(\text{pred}_
 
 當 `experimental_mode == "appearance_first"` 時，高相似度候選人 (\( \cos \ge \tau_{\text{af}} \)) 可繞過 spatial gate（appearance-first bypass）。
 
-### 6.6 Bidirectional Relink
+### 6.6 Bidirectional Relink（Python + C++）
 
-雙向重鏈接檢查：對每一對 (lost_id, cand_id)，以 4 幀 regressed velocity 推算中點距離：
+雙向重鏈接檢查：對每一對 (lost_id, cand_id)，以 4 幀 regressed velocity 推算中點距離。
+
+C++ 實作見 `SemanticRelinkerCpp::midpoint_bridge_dist()` 與 `regress_velocity_4()`（`tracker_gpu_python.cpp:1057–1098`）。
 
 \[
 \begin{aligned}
@@ -451,4 +457,4 @@ CUDA 加速的 IoU-NMS：
 
 ---
 
-*最後更新：2026-06-06，摘自 saccade 主線程式碼*
+*最後更新：2026-06-06，摘自 saccade 主線程式碼。C++ 語義重鏈接移植完成。*

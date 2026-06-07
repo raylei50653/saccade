@@ -76,6 +76,22 @@ class LifecycleConfig:
     relink_lambda: float = 2.5
     relink_spatial_gate: float = 4.0
     relink_max_age: int = 300
+    # GPU tracker-core bidirectional foot-bridge relink (Kalman-free, no ReID).
+    # A young track that just stabilized adopts a still-live lost track's id by
+    # regressing both ends' last/first 4 foot points and bridging at the midpoint.
+    # Independent of relink_enabled (the bank-ReID path). Default off (bit-identical).
+    relink_bridge_enabled: bool = False
+    relink_bridge_px: float = 0.3
+    relink_bridge_at: int = 4
+    relink_bridge_min_lost: int = 2
+    relink_bridge_ttl: int = 120
+    relink_bridge_max_speed: float = 0.0
+    relink_bridge_person_height: float = 1.65
+    relink_bridge_fps: float = 30.0
+    relink_bridge_margin: float = 0.0
+    relink_bridge_spatial_gate: float = 0.0
+    relink_bridge_anchor: str = "adaptive"
+    relink_bridge_anchor_rate: float = 0.03
     # Duplicate suppression: remove near-duplicate detections within the same frame
     # (detector artifact where multiple overlapping boxes are produced for the same person)
     duplicate_suppression_enabled: bool = False
@@ -726,5 +742,119 @@ def add_lifecycle_args(parser: argparse.ArgumentParser) -> None:
         help=_help(
             "Hard cap (frames) a lost identity stays revivable; bounds false cross-time revives.",
             range_hint=">=1",
+        ),
+    )
+    grp.add_argument(
+        "--relink-bridge-enabled",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="GPU tracker-core bidirectional foot-bridge relink (Kalman-free, no "
+        "ReID): a young track that just stabilized adopts a still-live lost id by "
+        "regressing both ends' 4 foot points and bridging at the midpoint. "
+        "Independent of --relink-enabled.",
+    )
+    grp.add_argument(
+        "--relink-bridge-px",
+        type=float,
+        default=0.3,
+        help=_help(
+            "Box-height-normalized meeting distance to accept a bridge. Smaller = "
+            "stricter. MOT17-SDP optimum is 0.3 (IDF1 +0.8/HOTA +0.7/AssA +1.3/IDs "
+            "-50 vs baseline); >=0.4 over-bridges and drops below baseline.",
+            range_hint=">0, suggested 0.2-0.3",
+        ),
+    )
+    grp.add_argument(
+        "--relink-bridge-at",
+        type=int,
+        default=4,
+        help=_help(
+            "hit_streak at which a young track first attempts a bridge (fires once).",
+            range_hint=">=1",
+        ),
+    )
+    grp.add_argument(
+        "--relink-bridge-min-lost",
+        type=int,
+        default=2,
+        help=_help(
+            "Minimum coasting age of a lost track to be a bridge target.",
+            range_hint=">=1",
+        ),
+    )
+    grp.add_argument(
+        "--relink-bridge-ttl",
+        type=int,
+        default=120,
+        help=_help(
+            "Maximum coasting age of a lost track to remain a bridge target.",
+            range_hint=">=1",
+        ),
+    )
+    grp.add_argument(
+        "--relink-bridge-max-speed",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Physical speed gate (m/s) on the bridge endpoints. 0 disables.",
+            range_hint=">=0",
+        ),
+    )
+    grp.add_argument(
+        "--relink-bridge-person-height",
+        type=float,
+        default=1.65,
+        help=_help(
+            "Assumed person height (m) for px-per-m in the speed gate.",
+            range_hint=">0",
+        ),
+    )
+    grp.add_argument(
+        "--relink-bridge-fps",
+        type=float,
+        default=30.0,
+        help=_help(
+            "Sequence FPS used by the speed gate to convert age to seconds.",
+            range_hint=">0",
+        ),
+    )
+    grp.add_argument(
+        "--relink-bridge-margin",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Reciprocal margin: reject if (2nd-best - best) bridge distance is below "
+            "this (ambiguous). 0 disables.",
+            range_hint=">=0",
+        ),
+    )
+    grp.add_argument(
+        "--relink-bridge-spatial-gate",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Optional center-distance/h_ref gate before the bridge test. 0 disables.",
+            range_hint=">=0",
+        ),
+    )
+    grp.add_argument(
+        "--relink-bridge-anchor",
+        choices=["center", "foot", "adaptive"],
+        default="adaptive",
+        help="Foot-bridge anchor point: 'center' (box centre, legacy), 'foot' "
+        "(bottom edge / ground-contact), or 'adaptive' (default; residual-weighted "
+        "blend of top/bottom edges so an occlusion-clipped edge is down-weighted; "
+        "degrades to centre when neither edge deforms).",
+    )
+    grp.add_argument(
+        "--relink-bridge-anchor-rate",
+        type=float,
+        default=0.03,
+        help=_help(
+            "Adaptive-anchor deformation gate: only re-anchor on edges when a "
+            "window's mean |Δh|/h̄ exceeds this; stable boxes keep the centre "
+            "(reduces FP from perturbing clean detections). 0 = always-on. "
+            "MOT17-SDP sweet spot 0.03 (dominates the un-gated anchor on FP+FN).",
+            range_hint=">=0, suggested 0.02-0.10",
         ),
     )

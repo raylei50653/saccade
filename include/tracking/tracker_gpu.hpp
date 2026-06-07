@@ -45,6 +45,13 @@ struct UnifiedScoreParams {
     float shift_lost_age = 0.0f;
 };
 
+struct TrackerGPUBuffers {
+    uintptr_t states;     // float*,  device pointer [max_objs * 8]
+    uintptr_t covs;       // float*,  device pointer [max_objs * 64]
+    uintptr_t track_ids;  // int*,    device pointer [max_objs]
+    int max_objs;
+};
+
 /**
  * @brief ITracker 接口
  */
@@ -94,7 +101,13 @@ public:
                          float cost_cos_w = 0.55f, float cost_iou_w = 0.30f, float cost_score_w = 0.15f);
     void set_reid_min_candidates(int min_candidates);
     void set_relink_params(bool enabled, int bank_cap, float sim_thresh,
-                           float cheb_lambda, float spatial_gate, int max_age);
+                           float cheb_lambda, float spatial_gate, int max_age,
+                           bool bidirectional = false, float bridge_px = 0.25f,
+                           int bridge_at = 4, int bridge_min_lost = 2, int bridge_ttl = 120,
+                           float bridge_max_speed = 0.0f, float bridge_person_height = 1.65f,
+                           float bridge_fps = 30.0f, float bridge_margin = 0.0f,
+                           float bridge_spatial_gate = 0.0f, int bridge_anchor = 0,
+                           float bridge_anchor_rate = 0.0f);
     std::vector<int> get_relink_debug();
 
     /**
@@ -137,6 +150,7 @@ public:
         const std::vector<int>& track_ids,
         cudaStream_t stream
     );
+    TrackerGPUBuffers get_gpu_buffers() const;
     std::vector<TrackCandidateSnapshot> get_tentative_candidates(cudaStream_t stream);
     void update_into(
         float* boxes_ptr,

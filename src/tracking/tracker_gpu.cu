@@ -983,7 +983,8 @@ __global__ void spawn_new_tracks_kernel(
     int* d_track_id_ctr, int* d_slot_cursor,
     int confirm_streak, float birth_low_score_thresh,
     int max_objs, float birth_prox_norm_thresh,
-    const int* d_det_revive_id, float* d_covs)
+    const int* d_det_revive_id, float* d_covs,
+    int* d_foot_len, float* d_ema_h, int* d_track_revived)  // bridge foot-state reset (null when off)
 {
     int tid = threadIdx.x;
     __shared__ int s_counts[256];
@@ -1084,6 +1085,13 @@ __global__ void spawn_new_tracks_kernel(
             d_trk_scores[slot]  = d_det_scores[det_idx];
             d_classes[slot]     = d_det_classes[det_idx];
             d_active[slot]      = true;
+            // Bridge: a recycled slot must start with clean foot history so the
+            // new identity does not inherit the previous track's footprint.
+            if (d_foot_len) {
+                d_foot_len[slot]      = 0;
+                d_ema_h[slot]         = 0.0f;
+                d_track_revived[slot] = 0;
+            }
         }
     }
 
@@ -1104,6 +1112,234 @@ __global__ void init_covariance_if_new_kernel(
     if (i >= max_objs) return;
     if (!active[i] || state[i] != 1 || hit_streak[i] != 1) return;
     kf_gpu::init_covariance(covs + i * 64);
+}
+
+// ── Phase-4 bidirectional foot-bridge (Kalman-free) ──────────────────────────
+// Closed-form 4-point foot regression v = (3p3 + p2 − p1 − 3p0)/10 (mirrors
+// relink_gate.cu:17-25). `pts` is 4 chronological (x,y) pairs.
+__device__ __forceinline__ void bridge_regress4(const float* pts, float& vx, float& vy) {
+    float x0 = pts[0], y0 = pts[1], x1 = pts[2], y1 = pts[3];
+    float x2 = pts[4], y2 = pts[5], x3 = pts[6], y3 = pts[7];
+    vx = (3.0f * x3 + x2 - x1 - 3.0f * x0) / 10.0f;
+    vy = (3.0f * y3 + y2 - y1 - 3.0f * y0) / 10.0f;
+}
+
+// Closed-form per-frame velocity from 4 equally-spaced 1-D samples (same kernel
+// as bridge_regress4 but scalar): v = (3y3 + y2 − y1 − 3y0)/10.
+__device__ __forceinline__ float bridge_vel4(const float* y) {
+    return (3.0f * y[3] + y[2] - y[1] - 3.0f * y[0]) / 10.0f;
+}
+
+// Sum of squared residuals of 4 equally-spaced samples vs their least-squares
+// line (x = 0,1,2,3 → mean 1.5, Sxx = 5). A box edge that is being clipped by an
+// occluder deviates from constant velocity → large residual; a free edge stays
+// near-linear → small residual. Used to weight which edge anchors the bridge.
+__device__ __forceinline__ float bridge_linres4(const float* y) {
+    float ybar = 0.25f * (y[0] + y[1] + y[2] + y[3]);
+    float sxy = -1.5f * (y[0] - ybar) - 0.5f * (y[1] - ybar)
+                + 0.5f * (y[2] - ybar) + 1.5f * (y[3] - ybar);
+    float slope = sxy / 5.0f;
+    float res = 0.0f;
+#pragma unroll
+    for (int i = 0; i < 4; ++i) {
+        float fit = ybar + slope * ((float)i - 1.5f);
+        float d = y[i] - fit;
+        res += d * d;
+    }
+    return res;
+}
+
+// Reduce a 4-point window (foot ring, stride 3: cx, cy, h) into an anchor
+// endpoint (ax, ay) + per-frame velocity (vx, vy) under the chosen anchor mode.
+//   mode 0 (center)   : y-anchor = box centre cy            (legacy behaviour)
+//   mode 1 (foot)     : y-anchor = bottom edge cy + h/2     (ground-contact point)
+//   mode 2 (adaptive) : y-anchor = residual-weighted blend of top/bottom edges,
+//                       so an occlusion-clipped edge is down-weighted automatically
+//                       (equal weights ⇒ exactly the centre, so it degrades to
+//                       mode 0 when neither edge deforms). Residuals normalised by
+//                       mean h² → scale-invariant, no extra tunable threshold.
+// `endpoint_idx` selects which of the 4 samples is the "current" point (3 for a
+// lost track's last-4, 0 for a candidate's head-4). x always uses the centre.
+// `rate_gate` (adaptive only): mean |Δh|/h̄ below this ⇒ the box is stable, keep
+// the centre anchor (don't perturb clean detections — guards against extra FP).
+// 0 ⇒ always residual-weighted; >0 ⇒ only deform on genuinely clipped boxes.
+__device__ __forceinline__ void bridge_anchor4(
+    const float* p, int anchor_mode, float rate_gate, int endpoint_idx,
+    float& ax, float& ay, float& vx, float& vy)
+{
+    float cx[4], cy[4], yt[4], yb[4], hbar = 0.0f;
+#pragma unroll
+    for (int i = 0; i < 4; ++i) {
+        float x = p[i * 3 + 0], c = p[i * 3 + 1], h = p[i * 3 + 2];
+        cx[i] = x; cy[i] = c; yt[i] = c - 0.5f * h; yb[i] = c + 0.5f * h;
+        hbar += 0.25f * h;
+    }
+    vx = bridge_vel4(cx);
+    ax = cx[endpoint_idx];
+    bool use_edges = (anchor_mode == 2);
+    if (use_edges && rate_gate > 0.0f) {  // deformation gate: skip stable boxes
+        float dh = (fabsf(p[1 * 3 + 2] - p[0 * 3 + 2])
+                    + fabsf(p[2 * 3 + 2] - p[1 * 3 + 2])
+                    + fabsf(p[3 * 3 + 2] - p[2 * 3 + 2])) / 3.0f;
+        if (dh / (hbar + 1e-3f) <= rate_gate) use_edges = false;
+    }
+    if (anchor_mode == 1) {            // foot: bottom edge
+        vy = bridge_vel4(yb);
+        ay = yb[endpoint_idx];
+    } else if (use_edges) {            // adaptive: residual-weighted top/bottom
+        float hn = hbar * hbar + 1e-3f;
+        float wt = 1.0f / (bridge_linres4(yt) / hn + 0.01f);  // floor ≈ (0.1·h)² residual
+        float wb = 1.0f / (bridge_linres4(yb) / hn + 0.01f);
+        float ws = wt + wb;
+        vy = (wt * bridge_vel4(yt) + wb * bridge_vel4(yb)) / ws;
+        ay = (wt * yt[endpoint_idx] + wb * yb[endpoint_idx]) / ws;
+    } else {                           // center (default / gated-out adaptive)
+        vy = bridge_vel4(cy);
+        ay = cy[endpoint_idx];
+    }
+}
+
+// Per-track foot-centre ring + EMA box height. Updates every slot that was
+// observed this frame (active, non-empty, age==0 → matched or freshly spawned);
+// coasting lost tracks (age>0) keep a frozen history.
+__global__ void update_foot_history_kernel(
+    const bool* active, const int* state, const int* age, const float* states,
+    int max_objs, int ring_cap, float* foot_ring, int* foot_len, float* ema_h)
+{
+    int t = blockIdx.x * blockDim.x + threadIdx.x;
+    if (t >= max_objs) return;
+    if (!active[t] || state[t] == TRACK_EMPTY || age[t] != 0) return;
+
+    float fx = states[t * 8 + 0];
+    float fy = states[t * 8 + 1];
+    float bh = states[t * 8 + 3];
+    int n = foot_len[t];
+    float* ring = foot_ring + (size_t)t * ring_cap * 3;  // stride 3: cx, cy, h
+    if (n < ring_cap) {
+        ring[n * 3 + 0] = fx;
+        ring[n * 3 + 1] = fy;
+        ring[n * 3 + 2] = bh;
+        foot_len[t] = n + 1;
+    } else {  // full: shift-left by one (keep chronological order), append
+        for (int k = 1; k < ring_cap; ++k) {
+            ring[(k - 1) * 3 + 0] = ring[k * 3 + 0];
+            ring[(k - 1) * 3 + 1] = ring[k * 3 + 1];
+            ring[(k - 1) * 3 + 2] = ring[k * 3 + 2];
+        }
+        ring[(ring_cap - 1) * 3 + 0] = fx;
+        ring[(ring_cap - 1) * 3 + 1] = fy;
+        ring[(ring_cap - 1) * 3 + 2] = bh;
+    }
+    ema_h[t] = (n == 0) ? bh : (0.95f * ema_h[t] + 0.05f * bh);  // alpha=0.05, seed=first bh
+}
+
+// Pass 1 (propose): one thread per candidate track that first hits hit_streak==
+// bridge_at. Scan live lost tracks, foot-bridge each, keep the closest under
+// bridge_px (with optional speed/spatial/margin gates), then claim the chosen
+// lost slot via a score-keyed atomicMax (higher detection score wins ties).
+__global__ void relink_bidir_propose_kernel(
+    const bool* active, const int* state, const int* age, const int* hit_streak,
+    const int* trk_to_det, const int* track_ids, const float* states, const float* trk_scores,
+    const float* foot_ring, const int* foot_len, const float* ema_h,
+    int max_objs, int ring_cap,
+    float bridge_px, int bridge_at, int bridge_min_lost, int bridge_ttl,
+    float bridge_max_speed, float bridge_person_height, float bridge_fps,
+    float bridge_margin, float bridge_spatial_gate, int bridge_anchor,
+    float bridge_anchor_rate,
+    int* track_revived, int* bridge_claim, int* bridge_cand_lost, int* dbg)
+{
+    int cand = blockIdx.x * blockDim.x + threadIdx.x;
+    if (cand >= max_objs) return;
+    bridge_cand_lost[cand] = -1;
+    if (!active[cand] || trk_to_det[cand] < 0) return;
+    if (hit_streak[cand] != bridge_at || track_revived[cand]) return;
+    if (foot_len[cand] < 4) return;
+
+    if (dbg) atomicAdd(&dbg[2], 1);  // bridge attempt
+    track_revived[cand] = 1;         // fire once per track life
+
+    const float* cring = foot_ring + (size_t)cand * ring_cap * 3;  // stride 3
+    float vxc, vyc, cx0, cy0;
+    bridge_anchor4(cring, bridge_anchor, bridge_anchor_rate, 0, cx0, cy0, vxc, vyc);  // cand head-4
+    float cand_cx = states[cand * 8 + 0], cand_cy = states[cand * 8 + 1];
+    float cand_h = states[cand * 8 + 3], ema_cand = ema_h[cand];
+
+    float best_dist = 1e30f, second_dist = 1e30f;
+    int best_lost = -1;
+    for (int lost = 0; lost < max_objs; ++lost) {
+        if (lost == cand) continue;
+        if (!active[lost] || trk_to_det[lost] >= 0) continue;   // must be lost this frame
+        if (state[lost] != TRACK_CONFIRMED) continue;
+        int la = age[lost];
+        if (la < bridge_min_lost || la > bridge_ttl) continue;
+        if (track_ids[lost] < 0) continue;
+        int ln = foot_len[lost];
+        if (ln < 1) continue;
+
+        const float* lring = foot_ring + (size_t)lost * ring_cap * 3;  // stride 3
+        float vxl = 0.0f, vyl = 0.0f, lx, ly;
+        if (ln >= 4) {
+            bridge_anchor4(lring + (ln - 4) * 3, bridge_anchor, bridge_anchor_rate, 3,
+                           lx, ly, vxl, vyl);  // lost last-4
+        } else {  // too short to regress: anchor the last point, zero velocity
+            float lc = lring[(ln - 1) * 3 + 1], lh = lring[(ln - 1) * 3 + 2];
+            lx = lring[(ln - 1) * 3 + 0];
+            ly = (bridge_anchor == 1) ? (lc + 0.5f * lh) : lc;  // foot vs centre
+        }
+        float lost_h = states[lost * 8 + 3], ema_lost = ema_h[lost];
+        float h_ref = fmaxf((ema_lost + ema_cand) * 0.5f, 1.0f);
+
+        // Physical speed gate (disabled when bridge_max_speed<=0).
+        if (bridge_max_speed > 0.0f && bridge_person_height > 0.0f) {
+            float lcx = states[lost * 8 + 0], lcy = states[lost * 8 + 1];
+            float dpx = sqrtf((cand_cx - lcx) * (cand_cx - lcx) + (cand_cy - lcy) * (cand_cy - lcy));
+            float dt_s = fmaxf((float)la, 1.0f) / fmaxf(bridge_fps, 1e-6f);
+            float px_per_m = 0.5f * (fmaxf(lost_h, 1e-3f) + fmaxf(cand_h, 1e-3f)) / bridge_person_height;
+            float speed = dpx / dt_s / fmaxf(px_per_m, 1e-6f);
+            if (speed > bridge_max_speed) continue;
+        }
+        // Optional spatial gate (center distance / h_ref).
+        if (bridge_spatial_gate > 0.0f) {
+            float lcx = states[lost * 8 + 0], lcy = states[lost * 8 + 1];
+            float cdist = sqrtf((cand_cx - lcx) * (cand_cx - lcx) + (cand_cy - lcy) * (cand_cy - lcy)) / h_ref;
+            if (cdist > bridge_spatial_gate) continue;
+        }
+        // Foot-bridge: lost forward + candidate backward by gap/2.
+        float half = la * 0.5f;
+        float xl = lx + vxl * half, yl = ly + vyl * half;
+        float xc = cx0 - vxc * half, yc = cy0 - vyc * half;
+        float bdist = sqrtf((xl - xc) * (xl - xc) + (yl - yc) * (yl - yc)) / h_ref;
+        if (bdist > bridge_px) continue;
+        if (bdist < best_dist) { second_dist = best_dist; best_dist = bdist; best_lost = lost; }
+        else if (bdist < second_dist) { second_dist = bdist; }
+    }
+    if (best_lost < 0) return;
+    if (bridge_margin > 0.0f && (second_dist - best_dist) < bridge_margin) return;  // ambiguous
+
+    bridge_cand_lost[cand] = best_lost;
+    // Higher detection score wins the lost id (deterministic); cand index breaks ties.
+    // Quantize score to 15 bits so the packed key stays positive (signed int32):
+    // max key = (32767<<16)|65535 = INT_MAX, never overflows atomicMax.
+    int sq = (int)(fminf(fmaxf(trk_scores[cand], 0.0f), 1.0f) * 32767.0f);
+    int key = (sq << 16) | (cand & 0xFFFF);
+    atomicMax(&bridge_claim[best_lost], key);
+}
+
+// Pass 2 (commit): each proposing candidate that won its lost slot's atomicMax
+// adopts the lost id and deactivates the lost slot. Candidate and lost sets are
+// disjoint (trk_to_det>=0 vs <0), so adoptions never race.
+__global__ void relink_bidir_commit_kernel(
+    bool* active, int* track_ids, int max_objs,
+    const int* bridge_claim, const int* bridge_cand_lost, int* dbg)
+{
+    int cand = blockIdx.x * blockDim.x + threadIdx.x;
+    if (cand >= max_objs) return;
+    int lost = bridge_cand_lost[cand];
+    if (lost < 0) return;
+    if ((bridge_claim[lost] & 0xFFFF) != (cand & 0xFFFF)) return;  // a higher-score candidate won
+    track_ids[cand] = track_ids[lost];
+    active[lost] = false;
+    if (dbg) atomicAdd(&dbg[3], 1);  // bridge accept
 }
 
 __global__ void compact_results_kernel(
@@ -1441,6 +1677,19 @@ public:
         checkCuda(cudaMalloc(&d_confirm_streak_required_, max_objs_ * sizeof(int)));
         checkCuda(cudaMalloc(&d_score_sum_, max_objs_ * sizeof(float)));
 
+        // Phase-4 bridge per-track state (allocated unconditionally; small, and
+        // only touched when bidirectional_ is on → bit-identical default-off).
+        checkCuda(cudaMalloc(&d_foot_ring_, (size_t)max_objs_ * FOOT_RING_CAP * 3 * sizeof(float)));
+        checkCuda(cudaMalloc(&d_foot_len_, max_objs_ * sizeof(int)));
+        checkCuda(cudaMalloc(&d_ema_h_, max_objs_ * sizeof(float)));
+        checkCuda(cudaMalloc(&d_track_revived_, max_objs_ * sizeof(int)));
+        checkCuda(cudaMalloc(&d_bridge_claim_, max_objs_ * sizeof(int)));
+        checkCuda(cudaMalloc(&d_bridge_cand_lost_, max_objs_ * sizeof(int)));
+        checkCuda(cudaMemset(d_foot_len_, 0, max_objs_ * sizeof(int)));
+        checkCuda(cudaMemset(d_ema_h_, 0, max_objs_ * sizeof(float)));
+        checkCuda(cudaMemset(d_track_revived_, 0, max_objs_ * sizeof(int)));
+        checkCuda(cudaMemset(d_bridge_claim_, 0, max_objs_ * sizeof(int)));
+
         checkCuda(cudaMalloc(&d_has_clean_embedding_, max_objs_ * sizeof(bool)));
         checkCuda(cudaMalloc(&d_candidate_count_, max_objs_ * sizeof(int)));
         checkCuda(cudaMalloc(&d_s_inv_, max_objs_ * 16 * sizeof(float)));
@@ -1537,6 +1786,8 @@ public:
         cudaFree(d_matched_pairs_); cudaFree(d_new_slots_);
         cudaFree(d_state_); cudaFree(d_hit_streak_); cudaFree(d_confirm_streak_required_);
         cudaFree(d_score_sum_);
+        cudaFree(d_foot_ring_); cudaFree(d_foot_len_); cudaFree(d_ema_h_);
+        cudaFree(d_track_revived_); cudaFree(d_bridge_claim_); cudaFree(d_bridge_cand_lost_);
         cudaFree(d_has_clean_embedding_); cudaFree(d_candidate_count_);
         cudaFree(d_s_inv_);
         cudaFree(d_homography_);
@@ -1825,9 +2076,37 @@ public:
             d_track_id_ctr_, d_slot_cursor_,
             confirm_streak_, birth_low_score_thresh_,
             max_objs_, birth_prox_norm_thresh_,
-            d_revive, d_covs_);
+            d_revive, d_covs_,
+            bidirectional_ ? d_foot_len_ : nullptr,
+            bidirectional_ ? d_ema_h_ : nullptr,
+            bidirectional_ ? d_track_revived_ : nullptr);
         init_covariance_if_new_kernel<<<(max_objs_ + 255) / 256, 256, 0, stream>>>(
             d_active_, d_state_, d_hit_streak_, d_covs_, max_objs_);
+
+        // Phase-4 bidirectional foot-bridge relink (Kalman-free; default off →
+        // no kernel runs → bit-identical). Foot history must update after spawn
+        // (so newly-spawned candidates record this frame) and before the bridge;
+        // the bridge adopts the lost id before compact writes output ids. Both
+        // kernels use fixed grids + no host sync → CUDA-graph capture-safe.
+        if (bidirectional_) {
+            int grid = (max_objs_ + 255) / 256;
+            update_foot_history_kernel<<<grid, 256, 0, stream>>>(
+                d_active_, d_state_, d_age_, d_states_,
+                max_objs_, FOOT_RING_CAP, d_foot_ring_, d_foot_len_, d_ema_h_);
+            cudaMemsetAsync(d_bridge_claim_, 0, max_objs_ * sizeof(int), stream);
+            relink_bidir_propose_kernel<<<grid, 256, 0, stream>>>(
+                d_active_, d_state_, d_age_, d_hit_streak_,
+                d_trk_to_det_, d_track_ids_, d_states_, d_scores_,
+                d_foot_ring_, d_foot_len_, d_ema_h_,
+                max_objs_, FOOT_RING_CAP,
+                bridge_px_, bridge_at_, bridge_min_lost_, bridge_ttl_,
+                bridge_max_speed_, bridge_person_height_, bridge_fps_,
+                bridge_margin_, bridge_spatial_gate_, bridge_anchor_, bridge_anchor_rate_,
+                d_track_revived_, d_bridge_claim_, d_bridge_cand_lost_, d_relink_dbg_);
+            relink_bidir_commit_kernel<<<grid, 256, 0, stream>>>(
+                d_active_, d_track_ids_, max_objs_,
+                d_bridge_claim_, d_bridge_cand_lost_, d_relink_dbg_);
+        }
 
         // Compact: always launch
         cudaMemsetAsync(d_res_count_, 0, sizeof(int), stream);
@@ -1870,13 +2149,38 @@ public:
         reid_min_candidates_ = max(1, min_candidates);
     }
     void set_relink_params(bool enabled, int bank_cap, float sim_thresh,
-                           float cheb_lambda, float spatial_gate, int max_age) {
+                           float cheb_lambda, float spatial_gate, int max_age,
+                           bool bidirectional = false, float bridge_px = 0.25f,
+                           int bridge_at = 4, int bridge_min_lost = 2, int bridge_ttl = 120,
+                           float bridge_max_speed = 0.0f, float bridge_person_height = 1.65f,
+                           float bridge_fps = 30.0f, float bridge_margin = 0.0f,
+                           float bridge_spatial_gate = 0.0f, int bridge_anchor = 0,
+                           float bridge_anchor_rate = 0.0f) {
         relink_enabled_ = enabled;
         relink_bank_cap_ = std::max(1, bank_cap);
         relink_sim_thresh_ = sim_thresh;
         relink_lambda_ = std::max(0.0f, cheb_lambda);
         relink_spatial_gate_ = std::max(0.0f, spatial_gate);
         relink_max_age_ = std::max(1, max_age);
+        // Phase-4 bidirectional foot-bridge params.
+        bidirectional_ = bidirectional;
+        bridge_px_ = std::max(0.0f, bridge_px);
+        bridge_at_ = std::max(1, bridge_at);
+        bridge_min_lost_ = std::max(0, bridge_min_lost);
+        bridge_ttl_ = std::max(1, bridge_ttl);
+        bridge_max_speed_ = std::max(0.0f, bridge_max_speed);
+        bridge_person_height_ = std::max(0.0f, bridge_person_height);
+        bridge_fps_ = bridge_fps > 0.0f ? bridge_fps : 30.0f;
+        bridge_margin_ = std::max(0.0f, bridge_margin);
+        bridge_spatial_gate_ = std::max(0.0f, bridge_spatial_gate);
+        bridge_anchor_ = (bridge_anchor < 0 || bridge_anchor > 2) ? 0 : bridge_anchor;
+        bridge_anchor_rate_ = std::max(0.0f, bridge_anchor_rate);
+        // The bridge writes bridge_attempts/accepts into d_relink_dbg_[2..3]; make
+        // sure the debug buffer exists even if the appearance bank is disabled.
+        if (bidirectional_ && d_relink_dbg_ == nullptr) {
+            checkCuda(cudaMalloc(&d_relink_dbg_, 4 * sizeof(int)));
+            checkCuda(cudaMemset(d_relink_dbg_, 0, 4 * sizeof(int)));
+        }
         if (enabled && d_relink_feats_ == nullptr) {
             int cap = relink_bank_cap_;
             checkCuda(cudaMalloc(&d_relink_feats_, (size_t)cap * embed_dim_ * sizeof(float)));
@@ -1886,18 +2190,21 @@ public:
             checkCuda(cudaMalloc(&d_relink_valid_, cap * sizeof(int)));
             checkCuda(cudaMalloc(&d_relink_cursor_, sizeof(int)));
             checkCuda(cudaMalloc(&d_det_revive_id_, max_assoc_ * sizeof(int)));
-            checkCuda(cudaMalloc(&d_relink_dbg_, 2 * sizeof(int)));
+            if (d_relink_dbg_ == nullptr) {  // may already exist if bidirectional was enabled first
+                checkCuda(cudaMalloc(&d_relink_dbg_, 4 * sizeof(int)));
+                checkCuda(cudaMemset(d_relink_dbg_, 0, 4 * sizeof(int)));
+            }
             checkCuda(cudaMemset(d_relink_valid_, 0, cap * sizeof(int)));
             checkCuda(cudaMemset(d_relink_lostage_, 0, cap * sizeof(int)));
             checkCuda(cudaMemset(d_relink_cursor_, 0, sizeof(int)));
-            checkCuda(cudaMemset(d_relink_dbg_, 0, 2 * sizeof(int)));
         }
     }
-    // Debug: (archived, birth_candidates, revived) accumulated over the sequence.
+    // Debug accumulated over the sequence:
+    //   [0]=archived(cursor) [1]=births [2]=revived [3]=bridge_attempts [4]=bridge_accepts
     std::vector<int> get_relink_debug() {
-        std::vector<int> out(3, 0);
+        std::vector<int> out(5, 0);
         if (d_relink_cursor_) checkCuda(cudaMemcpy(out.data(), d_relink_cursor_, sizeof(int), cudaMemcpyDeviceToHost));
-        if (d_relink_dbg_) checkCuda(cudaMemcpy(out.data() + 1, d_relink_dbg_, 2 * sizeof(int), cudaMemcpyDeviceToHost));
+        if (d_relink_dbg_) checkCuda(cudaMemcpy(out.data() + 1, d_relink_dbg_, 4 * sizeof(int), cudaMemcpyDeviceToHost));
         return out;
     }
     void set_oao_params(float tau) {
@@ -2182,6 +2489,13 @@ public:
         return candidates;
     }
 
+    TrackerGPUBuffers get_gpu_buffers() const {
+        return {reinterpret_cast<uintptr_t>(d_states_),
+                reinterpret_cast<uintptr_t>(d_covs_),
+                reinterpret_cast<uintptr_t>(d_track_ids_),
+                max_objs_};
+    }
+
 private:
     int required_confirm_streak_for_detection(float score, float mid_thresh_scale) const {
         if (!adaptive_confirmation_) return confirm_streak_;
@@ -2210,7 +2524,28 @@ private:
     int*   d_relink_valid_ = nullptr;
     int*   d_relink_cursor_ = nullptr;
     int*   d_det_revive_id_ = nullptr;
-    int*   d_relink_dbg_ = nullptr;  // [0]=birth candidates, [1]=revived (debug)
+    int*   d_relink_dbg_ = nullptr;  // [0]=births [1]=revived [2]=bridge_attempts [3]=bridge_accepts
+
+    // Phase-4 bidirectional foot-bridge relink (Kalman-free; default off → no work).
+    static constexpr int FOOT_RING_CAP = 8;
+    bool  bidirectional_        = false;
+    float bridge_px_            = 0.25f;
+    int   bridge_at_            = 4;
+    int   bridge_min_lost_      = 2;
+    int   bridge_ttl_           = 120;
+    float bridge_max_speed_     = 0.0f;
+    float bridge_person_height_ = 1.65f;
+    float bridge_fps_           = 30.0f;
+    float bridge_margin_        = 0.0f;
+    float bridge_spatial_gate_  = 0.0f;
+    int   bridge_anchor_        = 0;    // 0=center 1=foot 2=adaptive (residual-weighted)
+    float bridge_anchor_rate_   = 0.0f; // adaptive deformation gate (mean |Δh|/h̄); 0=always-on
+    float* d_foot_ring_     = nullptr;  // [max_objs * FOOT_RING_CAP * 3]  (cx,cy,h) chronological
+    int*   d_foot_len_      = nullptr;  // [max_objs]  saturating count (cap FOOT_RING_CAP)
+    float* d_ema_h_         = nullptr;  // [max_objs]  EMA box height (0 = unseeded)
+    int*   d_track_revived_ = nullptr;  // [max_objs]  fire-once flag per track life
+    int*   d_bridge_claim_  = nullptr;  // [max_objs]  per-frame atomicMax claim key on a lost slot
+    int*   d_bridge_cand_lost_ = nullptr;  // [max_objs]  per-frame: candidate's chosen lost slot (-1)
 
     bool enable_quality_scaling_ = false;
     float q_w_aspect_ = 0.50f;
@@ -2300,8 +2635,16 @@ void GPUByteTracker::set_reid_min_candidates(int min_candidates) {
     pimpl_->set_reid_min_candidates(min_candidates);
 }
 void GPUByteTracker::set_relink_params(bool enabled, int bank_cap, float sim_thresh,
-                                       float cheb_lambda, float spatial_gate, int max_age) {
-    pimpl_->set_relink_params(enabled, bank_cap, sim_thresh, cheb_lambda, spatial_gate, max_age);
+                                       float cheb_lambda, float spatial_gate, int max_age,
+                                       bool bidirectional, float bridge_px, int bridge_at,
+                                       int bridge_min_lost, int bridge_ttl, float bridge_max_speed,
+                                       float bridge_person_height, float bridge_fps,
+                                       float bridge_margin, float bridge_spatial_gate,
+                                       int bridge_anchor, float bridge_anchor_rate) {
+    pimpl_->set_relink_params(enabled, bank_cap, sim_thresh, cheb_lambda, spatial_gate, max_age,
+                              bidirectional, bridge_px, bridge_at, bridge_min_lost, bridge_ttl,
+                              bridge_max_speed, bridge_person_height, bridge_fps, bridge_margin,
+                              bridge_spatial_gate, bridge_anchor, bridge_anchor_rate);
 }
 std::vector<int> GPUByteTracker::get_relink_debug() { return pimpl_->get_relink_debug(); }
 void GPUByteTracker::set_oao_params(float tau) {
@@ -2339,6 +2682,7 @@ std::vector<TrackStateSnapshot> GPUByteTracker::get_state_snapshots(cudaStream_t
 std::vector<TrackStateSnapshot> GPUByteTracker::get_motion_snapshots_for_track_ids(const std::vector<int>& track_ids, cudaStream_t stream) {
     return pimpl_->get_motion_snapshots_for_track_ids(track_ids, stream);
 }
+TrackerGPUBuffers GPUByteTracker::get_gpu_buffers() const { return pimpl_->get_gpu_buffers(); }
 std::vector<TrackCandidateSnapshot> GPUByteTracker::get_tentative_candidates(cudaStream_t stream) { return pimpl_->get_tentative_candidates(stream); }
 
 __device__ float get_iou_device(const float* b1, const float* b2) {
