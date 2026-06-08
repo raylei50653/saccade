@@ -488,6 +488,9 @@ __global__ void compute_conditional_cost_kernel(
     cost_matrix[t * n_det + d] = fminf(1.0f, fmaxf(0.0f, cost));
 }
 
+#define SINKHORN_NUM_STAGES 5
+#define SINKHORN_NUM_TOPK   3
+
 __device__ __forceinline__ void merge_top3_fixed(float* a_v, int* a_idx, const float* b_v, const int* b_idx) {
     float res_v[3]; int res_idx[3];
     int i = 0, j = 0;
@@ -546,81 +549,123 @@ __global__ void compute_cost_matrix_kernel(
     cost_matrix[t * n_det + d] = cost;
 }
 
-// 128-thread TopK kernel with shared-memory tree reduction.
-// Replaces the 1-warp design to improve GPU occupancy and cut scheduling jitter.
-// Shared memory layout: s_vals[3][128] + s_idxs[3][128] = 3 KiB per block.
-__global__ void fused_sinkhorn_topk_kernel(
+// Fused multi-stage Sinkhorn top-k kernel: computes Top-K for all 5 association
+// stages in a single pass over the cost matrix, eliminating 4 redundant rescans.
+//
+// Stage definitions (matching the original 5-stage cascade):
+//   Stage 0 (S0 DDA):        trk_state==2, det_score in [high_thresh, 1.1), cost <= dda_max_cost
+//   Stage 1 (S1 HiConf):     trk_state==2, det_score in [high_thresh, 1.1), cost <= match_thresh
+//   Stage 2 (S1b MidConf):   trk_state==2, det_score in [mid_thresh, high_thresh), cost <= match_thresh
+//   Stage 3 (S1c Tentative): trk_state==1, det_score in [mid_thresh, 1.1), cost <= match_thresh
+//   Stage 4 (S2 LoConf):     trk_state==2, det_score in [track_thresh, mid_thresh), cost <= stage2_match_thresh
+//
+// Output layout: out_indices[stage * n_trk * 3 + t * 3 + k]
+//                out_probs[stage * n_trk * 3 + t * 3 + k]
+__global__ void fused_sinkhorn_multistage_kernel(
     const float* cost_matrix, const float* det_scores, const float* det_boxes,
     const int* trk_states, const bool* trk_active, const int* trk_to_det,
-    int n_trk, int n_det, float lambda, float max_cost,
-    float min_det_score, float max_det_score, int required_trk_state,
-    const int* det_to_trk,
+    int n_trk, int n_det, float lambda,
+    float dda_max_cost, float match_thresh, float stage2_match_thresh,
+    float high_thresh, float mid_thresh, float track_thresh,
+    int stage_stride,
     int* out_indices, float* out_probs)
 {
-    __shared__ float s_vals[3][128];
-    __shared__ int   s_idxs[3][128];
+    enum { NS = SINKHORN_NUM_STAGES, NK = SINKHORN_NUM_TOPK, WARP = 128 };
+    __shared__ float s_vals[NS * NK][WARP];
+    __shared__ int   s_idxs[NS * NK][WARP];
 
     int t = blockIdx.x; if (t >= n_trk) return;
     int tid = threadIdx.x;
 
-    float lv0 = -1e9f, lv1 = -1e9f, lv2 = -1e9f;
-    int   li0 = -1,    li1 = -1,    li2 = -1;
+    float lv[NS * NK]; int li[NS * NK];
+    #pragma unroll
+    for (int i = 0; i < NS * NK; ++i) { lv[i] = -1e9f; li[i] = -1; }
 
     bool valid_trk = trk_active[t] && (trk_to_det[t] == -1);
-    if (required_trk_state != -1 && trk_states[t] != required_trk_state) valid_trk = false;
+    int st = valid_trk ? trk_states[t] : 0;
+    bool st2 = (st == 2), st1 = (st == 1);
 
     if (valid_trk) {
-        for (int d = tid; d < n_det; d += 128) {
-            if (det_to_trk && det_to_trk[d] != -1) continue;
+        for (int d = tid; d < n_det; d += WARP) {
             float score = det_scores[d];
-            if (score < min_det_score || score >= max_det_score) continue;
-            
             float cost = cost_matrix[t * n_det + d];
-            if (cost > max_cost) continue;
 
-            // ADR 017: Quality-Aware Sinkhorn Prior (Winning Strategy: v2_aspect_only_soft)
             float aspect_penalty = 1.0f;
             if (det_boxes) {
                 const float* b2 = det_boxes + d * 4;
-                // Note: aspect_wh is width/height (w/h), which is the reciprocal of the
-                // aspect ratio (h/w) defined in quality_filter.cu.
                 float aspect_wh = (b2[2] - b2[0]) / (b2[3] - b2[1] + 1e-6f);
-                // Pedestrian aspect ratio penalty: penalize abnormal shapes (e.g., highly occluded / truncated)
-                // Typical pedestrian is around 0.3~0.5.
                 if (aspect_wh > 0.8f) aspect_penalty = fmaxf(0.5f, 1.0f - (aspect_wh - 0.8f));
                 else if (aspect_wh < 0.15f) aspect_penalty = fmaxf(0.5f, 1.0f - (0.15f - aspect_wh) * 5.0f);
             }
-
             float p = expf(-lambda * cost) * aspect_penalty;
-            if (p > lv0) {
-                lv2 = lv1; li2 = li1; lv1 = lv0; li1 = li0; lv0 = p; li0 = d;
-            } else if (p > lv1) {
-                lv2 = lv1; li2 = li1; lv1 = p; li1 = d;
-            } else if (p > lv2) {
-                lv2 = p; li2 = d;
+
+            if (score >= high_thresh && score < 1.1f) {
+                if (st2 && cost <= dda_max_cost) {
+                    if (p > lv[0*NK+0]) { lv[0*NK+2]=lv[0*NK+1];li[0*NK+2]=li[0*NK+1];lv[0*NK+1]=lv[0*NK+0];li[0*NK+1]=li[0*NK+0];lv[0*NK+0]=p;li[0*NK+0]=d; }
+                    else if (p > lv[0*NK+1]) { lv[0*NK+2]=lv[0*NK+1];li[0*NK+2]=li[0*NK+1];lv[0*NK+1]=p;li[0*NK+1]=d; }
+                    else if (p > lv[0*NK+2]) { lv[0*NK+2]=p;li[0*NK+2]=d; }
+                }
+                if (st2 && cost <= match_thresh) {
+                    if (p > lv[1*NK+0]) { lv[1*NK+2]=lv[1*NK+1];li[1*NK+2]=li[1*NK+1];lv[1*NK+1]=lv[1*NK+0];li[1*NK+1]=li[1*NK+0];lv[1*NK+0]=p;li[1*NK+0]=d; }
+                    else if (p > lv[1*NK+1]) { lv[1*NK+2]=lv[1*NK+1];li[1*NK+2]=li[1*NK+1];lv[1*NK+1]=p;li[1*NK+1]=d; }
+                    else if (p > lv[1*NK+2]) { lv[1*NK+2]=p;li[1*NK+2]=d; }
+                }
+                if (st1 && cost <= match_thresh) {
+                    if (p > lv[3*NK+0]) { lv[3*NK+2]=lv[3*NK+1];li[3*NK+2]=li[3*NK+1];lv[3*NK+1]=lv[3*NK+0];li[3*NK+1]=li[3*NK+0];lv[3*NK+0]=p;li[3*NK+0]=d; }
+                    else if (p > lv[3*NK+1]) { lv[3*NK+2]=lv[3*NK+1];li[3*NK+2]=li[3*NK+1];lv[3*NK+1]=p;li[3*NK+1]=d; }
+                    else if (p > lv[3*NK+2]) { lv[3*NK+2]=p;li[3*NK+2]=d; }
+                }
+            } else if (score >= mid_thresh) {
+                if (st2 && cost <= match_thresh) {
+                    if (p > lv[2*NK+0]) { lv[2*NK+2]=lv[2*NK+1];li[2*NK+2]=li[2*NK+1];lv[2*NK+1]=lv[2*NK+0];li[2*NK+1]=li[2*NK+0];lv[2*NK+0]=p;li[2*NK+0]=d; }
+                    else if (p > lv[2*NK+1]) { lv[2*NK+2]=lv[2*NK+1];li[2*NK+2]=li[2*NK+1];lv[2*NK+1]=p;li[2*NK+1]=d; }
+                    else if (p > lv[2*NK+2]) { lv[2*NK+2]=p;li[2*NK+2]=d; }
+                }
+                if (st1 && cost <= match_thresh) {
+                    if (p > lv[3*NK+0]) { lv[3*NK+2]=lv[3*NK+1];li[3*NK+2]=li[3*NK+1];lv[3*NK+1]=lv[3*NK+0];li[3*NK+1]=li[3*NK+0];lv[3*NK+0]=p;li[3*NK+0]=d; }
+                    else if (p > lv[3*NK+1]) { lv[3*NK+2]=lv[3*NK+1];li[3*NK+2]=li[3*NK+1];lv[3*NK+1]=p;li[3*NK+1]=d; }
+                    else if (p > lv[3*NK+2]) { lv[3*NK+2]=p;li[3*NK+2]=d; }
+                }
+            } else if (score >= track_thresh) {
+                if (st2 && cost <= stage2_match_thresh) {
+                    if (p > lv[4*NK+0]) { lv[4*NK+2]=lv[4*NK+1];li[4*NK+2]=li[4*NK+1];lv[4*NK+1]=lv[4*NK+0];li[4*NK+1]=li[4*NK+0];lv[4*NK+0]=p;li[4*NK+0]=d; }
+                    else if (p > lv[4*NK+1]) { lv[4*NK+2]=lv[4*NK+1];li[4*NK+2]=li[4*NK+1];lv[4*NK+1]=p;li[4*NK+1]=d; }
+                    else if (p > lv[4*NK+2]) { lv[4*NK+2]=p;li[4*NK+2]=d; }
+                }
             }
         }
     }
 
-    s_vals[0][tid] = lv0; s_idxs[0][tid] = li0;
-    s_vals[1][tid] = lv1; s_idxs[1][tid] = li1;
-    s_vals[2][tid] = lv2; s_idxs[2][tid] = li2;
+    #pragma unroll
+    for (int s = 0; s < NS; ++s) {
+        #pragma unroll
+        for (int k = 0; k < NK; ++k) {
+            s_vals[s * NK + k][tid] = lv[s * NK + k];
+            s_idxs[s * NK + k][tid] = li[s * NK + k];
+        }
+    }
     __syncthreads();
 
-    // Tree reduction: 128 → 64 → 32 → 16 → 8 → 4 → 2 → 1
     #pragma unroll
     for (int stride = 64; stride > 0; stride >>= 1) {
         if (tid < stride) {
-            float av[3], bv[3]; int ai[3], bi[3];
             #pragma unroll
-            for (int i = 0; i < 3; ++i) {
-                av[i] = s_vals[i][tid];          ai[i] = s_idxs[i][tid];
-                bv[i] = s_vals[i][tid + stride]; bi[i] = s_idxs[i][tid + stride];
-            }
-            merge_top3_fixed(av, ai, bv, bi);
-            #pragma unroll
-            for (int i = 0; i < 3; ++i) {
-                s_vals[i][tid] = av[i]; s_idxs[i][tid] = ai[i];
+            for (int s = 0; s < NS; ++s) {
+                int base = s * NK;
+                float av[NK], bv[NK]; int ai[NK], bi[NK];
+                #pragma unroll
+                for (int k = 0; k < NK; ++k) {
+                    av[k] = s_vals[base + k][tid];
+                    ai[k] = s_idxs[base + k][tid];
+                    bv[k] = s_vals[base + k][tid + stride];
+                    bi[k] = s_idxs[base + k][tid + stride];
+                }
+                int i = 0, j = 0;
+                #pragma unroll
+                for (int k = 0; k < NK; ++k) {
+                    if (av[i] >= bv[j]) { s_vals[base + k][tid] = av[i]; s_idxs[base + k][tid] = ai[i]; i++; }
+                    else { s_vals[base + k][tid] = bv[j]; s_idxs[base + k][tid] = bi[j]; j++; }
+                }
             }
         }
         __syncthreads();
@@ -628,9 +673,14 @@ __global__ void fused_sinkhorn_topk_kernel(
 
     if (tid == 0) {
         #pragma unroll
-        for (int i = 0; i < 3; ++i) {
-            out_indices[t * 3 + i] = s_idxs[i][0];
-            out_probs[t * 3 + i]   = s_vals[i][0];
+        for (int s = 0; s < NS; ++s) {
+            int base = s * NK;
+            int out_off = s * stage_stride + t * NK;
+            #pragma unroll
+            for (int k = 0; k < NK; ++k) {
+                out_indices[out_off + k] = s_idxs[base + k][0];
+                out_probs[out_off + k]   = s_vals[base + k][0];
+            }
         }
     }
 }
@@ -663,6 +713,7 @@ __global__ void parallel_auction_shmem_kernel(
         for (int k = 0; k < K; ++k) {
             int d = topk_indices[t * K + k];
             if (d < 0 || d >= n_det) continue;
+            if (det_to_trk && det_to_trk[d] != -1) continue;
             float current_price = __int_as_float((int)(s_prices_u64[d] >> 32));
             float val = topk_probs[t * K + k] - current_price;
             if (val > best_val) {
@@ -1665,10 +1716,14 @@ public:
         d_features_owned_ = true;
         
         max_assoc_ = 1024;
+        // 128-byte alignment per stage: pad stage_stride to 32-element multiple
+        // (32 elems × 4 bytes = 128 bytes per stage)
+        sinkhorn_stage_stride_ = ((max_objs_ * 3 + 31) / 32) * 32;
+        int topk_total = SINKHORN_NUM_STAGES * sinkhorn_stage_stride_;
         checkCuda(cudaMalloc(&d_cost_matrix_, max_objs_ * max_assoc_ * sizeof(float)));
         checkCuda(cudaMalloc(&d_sinkhorn_v_, max_assoc_ * sizeof(float)));
-        checkCuda(cudaMalloc(&d_topk_indices_, max_objs_ * 3 * sizeof(int)));
-        checkCuda(cudaMalloc(&d_topk_probs_, max_objs_ * 3 * sizeof(float)));
+        checkCuda(cudaMalloc(&d_topk_indices_, topk_total * sizeof(int)));
+        checkCuda(cudaMalloc(&d_topk_probs_, topk_total * sizeof(float)));
         checkCuda(cudaMalloc(&d_auction_prices_, max_assoc_ * sizeof(uint64_t)));
         checkCuda(cudaMalloc(&d_trk_to_det_, max_objs_ * sizeof(int)));
         checkCuda(cudaMalloc(&d_det_to_trk_, max_assoc_ * sizeof(int)));
@@ -1934,99 +1989,38 @@ public:
             track_thresh_,
             high_thresh_
         );
-        const int* matched_det_mask = nullptr;
 
-        if (enable_dda_) {
-            nvtxRangePushA("Assoc/S0_Unambiguous");
-            kernel::fused_sinkhorn_topk_kernel<<<max_objs_, 128, 0, stream>>>(
-                d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
-                max_objs_, num_dets, 30.0f, dda_max_cost_,
-                high_thresh_, 1.1f, 2,
-                nullptr, d_topk_indices_, d_topk_probs_
-            );
+        nvtxRangePushA("Assoc/SinkhornMultistage");
+        kernel::fused_sinkhorn_multistage_kernel<<<max_objs_, 128, 0, stream>>>(
+            d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
+            max_objs_, num_dets, 30.0f,
+            dda_max_cost_, match_thresh_, stage2_match_thresh_,
+            high_thresh_, effective_mid_thresh, track_thresh_,
+            sinkhorn_stage_stride_,
+            d_topk_indices_, d_topk_probs_);
+        nvtxRangePop();
+
+        auto run_stage = [&](int stage, const char* label) {
+            if (stage == 0 && !enable_dda_) return;
+            int off = stage * sinkhorn_stage_stride_;
+            nvtxRangePushA(label);
             checkCuda(cudaMemsetAsync(d_auction_prices_, 0, max_assoc_ * sizeof(uint64_t), stream));
             checkCuda(cudaMemsetAsync(d_pending_det_, -1, max_objs_ * sizeof(int), stream));
             kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
-                d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
+                d_topk_indices_ + off, d_topk_probs_ + off, d_auction_prices_,
+                d_trk_to_det_, d_det_to_trk_,
                 d_pending_det_, d_pending_bid_, max_objs_, num_dets, 3, 0.01f);
             kernel::commit_auction_results_kernel<<<auc_g, auc_b, 0, stream>>>(
                 d_auction_prices_, d_pending_det_, d_pending_bid_,
                 d_trk_to_det_, d_det_to_trk_, max_objs_);
             nvtxRangePop();
-            matched_det_mask = d_det_to_trk_;
-        }
+        };
 
-        nvtxRangePushA("Assoc/S1_HiConf");
-        kernel::fused_sinkhorn_topk_kernel<<<max_objs_, 128, 0, stream>>>(
-            d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
-            max_objs_, num_dets, 30.0f, match_thresh_,
-            high_thresh_, 1.1f, 2,
-            matched_det_mask,
-            d_topk_indices_, d_topk_probs_
-        );
-        checkCuda(cudaMemsetAsync(d_auction_prices_, 0, max_assoc_ * sizeof(uint64_t), stream));
-        checkCuda(cudaMemsetAsync(d_pending_det_, -1, max_objs_ * sizeof(int), stream));
-        kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
-            d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
-            d_pending_det_, d_pending_bid_, max_objs_, num_dets, 3, 0.01f);
-        kernel::commit_auction_results_kernel<<<auc_g, auc_b, 0, stream>>>(
-            d_auction_prices_, d_pending_det_, d_pending_bid_,
-            d_trk_to_det_, d_det_to_trk_, max_objs_);
-        nvtxRangePop();
-
-        nvtxRangePushA("Assoc/S1b_MidConf");
-        kernel::fused_sinkhorn_topk_kernel<<<max_objs_, 128, 0, stream>>>(
-            d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
-            max_objs_, num_dets, 30.0f, match_thresh_,
-            effective_mid_thresh - 0.001f, 1.1f, 2,
-            d_det_to_trk_,
-            d_topk_indices_, d_topk_probs_
-        );
-        checkCuda(cudaMemsetAsync(d_auction_prices_, 0, max_assoc_ * sizeof(uint64_t), stream));
-        checkCuda(cudaMemsetAsync(d_pending_det_, -1, max_objs_ * sizeof(int), stream));
-        kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
-            d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
-            d_pending_det_, d_pending_bid_, max_objs_, num_dets, 3, 0.01f);
-        kernel::commit_auction_results_kernel<<<auc_g, auc_b, 0, stream>>>(
-            d_auction_prices_, d_pending_det_, d_pending_bid_,
-            d_trk_to_det_, d_det_to_trk_, max_objs_);
-        nvtxRangePop();
-
-        nvtxRangePushA("Assoc/S1c_Tentative");
-        kernel::fused_sinkhorn_topk_kernel<<<max_objs_, 128, 0, stream>>>(
-            d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
-            max_objs_, num_dets, 30.0f, match_thresh_,
-            effective_mid_thresh, 1.1f, 1,
-            matched_det_mask,
-            d_topk_indices_, d_topk_probs_
-        );
-        checkCuda(cudaMemsetAsync(d_auction_prices_, 0, max_assoc_ * sizeof(uint64_t), stream));
-        checkCuda(cudaMemsetAsync(d_pending_det_, -1, max_objs_ * sizeof(int), stream));
-        kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
-            d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
-            d_pending_det_, d_pending_bid_, max_objs_, num_dets, 3, 0.01f);
-        kernel::commit_auction_results_kernel<<<auc_g, auc_b, 0, stream>>>(
-            d_auction_prices_, d_pending_det_, d_pending_bid_,
-            d_trk_to_det_, d_det_to_trk_, max_objs_);
-        nvtxRangePop();
-
-        nvtxRangePushA("Assoc/S2_LoConf");
-        kernel::fused_sinkhorn_topk_kernel<<<max_objs_, 128, 0, stream>>>(
-            d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
-            max_objs_, num_dets, 30.0f, stage2_match_thresh_,
-            track_thresh_, effective_mid_thresh, 2,
-            nullptr,
-            d_topk_indices_, d_topk_probs_
-        );
-        checkCuda(cudaMemsetAsync(d_auction_prices_, 0, max_assoc_ * sizeof(uint64_t), stream));
-        checkCuda(cudaMemsetAsync(d_pending_det_, -1, max_objs_ * sizeof(int), stream));
-        kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
-            d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
-            d_pending_det_, d_pending_bid_, max_objs_, num_dets, 3, 0.01f);
-        kernel::commit_auction_results_kernel<<<auc_g, auc_b, 0, stream>>>(
-            d_auction_prices_, d_pending_det_, d_pending_bid_,
-            d_trk_to_det_, d_det_to_trk_, max_objs_);
-        nvtxRangePop();
+        run_stage(0, "Assoc/S0_Unambiguous");
+        run_stage(1, "Assoc/S1_HiConf");
+        run_stage(2, "Assoc/S1b_MidConf");
+        run_stage(3, "Assoc/S1c_Tentative");
+        run_stage(4, "Assoc/S2_LoConf");
 
         nvtxRangePushA("Assoc/StateUpdate");
         kernel::track_state_update_post_kernel<<<blocks, threads, 0, stream>>>(
@@ -2576,6 +2570,7 @@ private:
     float *d_cost_matrix_, *d_sinkhorn_v_, *d_topk_probs_;
     uint64_t *d_auction_prices_;
     int *d_topk_indices_, *d_trk_to_det_, *d_det_to_trk_;
+    int sinkhorn_stage_stride_ = 0;
     int *d_matched_pairs_, *d_new_slots_;
     int *d_state_, *d_hit_streak_, *d_confirm_streak_required_;
     float *d_score_sum_;
