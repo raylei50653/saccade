@@ -15,6 +15,13 @@ try:
     from saccade_tracking_ext import GPUByteTracker
 except ImportError:
     GPUByteTracker = Any
+
+try:
+    from saccade_tracking_ext import nv12_to_chw_letterbox as _nv12_letterbox_kernel
+except ImportError:
+    _nv12_letterbox_kernel = None
+
+from saccade.perception.zero_copy import Nv12Frame
 from saccade.resource.resource_manager import (
     DegradationLevel,
     ResourceManager,
@@ -43,7 +50,7 @@ class _QueuedFrame:
 class _StreamFrame:
     """Frame for per-stream queues (latest-wins overflow)."""
 
-    frame: torch.Tensor
+    frame: torch.Tensor | Any  # RGB [H,W,3] uint8 or Nv12Frame
     timestamp: float
     enqueued_at: float
 
@@ -96,6 +103,7 @@ class _WorkbenchWorker(threading.Thread):
         input_size: tuple[int, int],
         stats_window: deque[float],
         queue_wait_window: deque[float],
+        use_nv12: bool = False,
     ):
         super().__init__(daemon=True, name=f"wb-{stream_id}")
         self.stream_id = stream_id
@@ -107,6 +115,7 @@ class _WorkbenchWorker(threading.Thread):
         self.input_size = input_size
         self.stats_window = stats_window
         self.queue_wait_window = queue_wait_window
+        self.use_nv12 = use_nv12
 
     def run(self) -> None:
         while True:
@@ -120,27 +129,74 @@ class _WorkbenchWorker(threading.Thread):
 
             t_start = time.perf_counter()
 
-            # Preprocess: normalize to [0,1] and letterbox to input_size
-            frame_hwc = item.frame
-            frame_chw = frame_hwc.permute(2, 0, 1).float() / 255.0
-            # Letterbox to input_size
-            w, h = frame_chw.shape[2], frame_chw.shape[1]
-            scale = min(self.input_size[0] / w, self.input_size[1] / h)
-            new_w, new_h = int(round(w * scale)), int(round(h * scale))
-            letterbox = torch.nn.functional.interpolate(
-                frame_chw.unsqueeze(0),
-                size=(new_h, new_w),
-                mode="bilinear",
-                align_corners=False,
-            ).squeeze(0)
-            padded = torch.zeros(
-                3,
-                self.input_size[1],
-                self.input_size[0],
-                dtype=torch.float32,
-                device=letterbox.device,
-            )
-            padded[:, :new_h, :new_w] = letterbox
+            if self.use_nv12:
+                if _nv12_letterbox_kernel is None:
+                    raise RuntimeError(
+                        "WorkbenchPool NV12 mode requires nv12_to_chw_letterbox "
+                        "from saccade_tracking_ext to be available."
+                    )
+                if not isinstance(item.frame, Nv12Frame):
+                    raise TypeError("WorkbenchPool NV12 mode expects Nv12Frame inputs.")
+                nv12_frame: Nv12Frame = item.frame
+                src_w = nv12_frame.width
+                src_h = nv12_frame.height
+                y_pitch = nv12_frame.y_pitch
+                uv_pitch = nv12_frame.uv_pitch
+                nv12_buf = nv12_frame.buf
+
+                dst_w, dst_h = self.input_size
+                scale = min(dst_w / src_w, dst_h / src_h)
+                new_w = int(round(src_w * scale))
+                new_h = int(round(src_h * scale))
+                x_off = (dst_w - new_w) // 2
+                y_off = (dst_h - new_h) // 2
+
+                padded = torch.zeros(
+                    3,
+                    dst_h,
+                    dst_w,
+                    dtype=torch.float32,
+                    device=nv12_buf.device,
+                )
+                stream = torch.cuda.current_stream().cuda_stream
+                _nv12_letterbox_kernel(
+                    nv12_buf.data_ptr(),
+                    y_pitch,
+                    nv12_buf.data_ptr() + nv12_buf.element_size() * src_h * y_pitch,
+                    uv_pitch,
+                    src_w,
+                    src_h,
+                    padded.data_ptr(),
+                    dst_w,
+                    x_off,
+                    y_off,
+                    new_w,
+                    new_h,
+                    114.0 / 255.0,
+                    stream,
+                )
+            else:
+                # Preprocess: normalize to [0,1] and letterbox to input_size
+                frame_hwc = item.frame
+                frame_chw = frame_hwc.permute(2, 0, 1).float() / 255.0
+                # Letterbox to input_size
+                w, h = frame_chw.shape[2], frame_chw.shape[1]
+                scale = min(self.input_size[0] / w, self.input_size[1] / h)
+                new_w, new_h = int(round(w * scale)), int(round(h * scale))
+                letterbox = torch.nn.functional.interpolate(
+                    frame_chw.unsqueeze(0),
+                    size=(new_h, new_w),
+                    mode="bilinear",
+                    align_corners=False,
+                ).squeeze(0)
+                padded = torch.zeros(
+                    3,
+                    self.input_size[1],
+                    self.input_size[0],
+                    dtype=torch.float32,
+                    device=letterbox.device,
+                )
+                padded[:, :new_h, :new_w] = letterbox
 
             # Process frame through Workbench
             result = self.workbench.process_frame(
@@ -188,6 +244,7 @@ class WorkbenchPool:
         max_dets: int = 2048,
         max_tracks: int = 256,
         stats_window: int = 512,
+        use_nv12: bool = False,
     ):
         self.engine_path = engine_path
         self.n_streams = n_streams
@@ -196,6 +253,7 @@ class WorkbenchPool:
         self.frame_size = frame_size
         self.max_dets = max_dets
         self.max_tracks = max_tracks
+        self.use_nv12 = use_nv12
 
         self._running = False
         self._loop: Optional[asyncio.AbstractEventLoop] = None
@@ -212,6 +270,12 @@ class WorkbenchPool:
         """Start the pool: create batcher, workbenches, and worker threads."""
         self._running = True
         self._loop = asyncio.get_event_loop()
+
+        if self.use_nv12 and _nv12_letterbox_kernel is None:
+            raise RuntimeError(
+                "WorkbenchPool NV12 mode requires nv12_to_chw_letterbox from "
+                "saccade_tracking_ext to be available."
+            )
 
         # Create shared batching detector
         self._batcher = BatchingTRTDetector(self.engine_path, batch_size=self.n_streams)
@@ -280,6 +344,7 @@ class WorkbenchPool:
                 input_size=self.input_hw,
                 stats_window=stats_w,
                 queue_wait_window=wait_w,
+                use_nv12=self.use_nv12,
             )
             worker.start()
             self._workers.append(worker)
@@ -289,7 +354,9 @@ class WorkbenchPool:
             f"sharing {self.engine_path}"
         )
 
-    def put_frame(self, stream_id: str, frame: torch.Tensor, timestamp: float) -> None:
+    def put_frame(
+        self, stream_id: str, frame: torch.Tensor | Any, timestamp: float
+    ) -> None:
         """Enqueue a frame for the given stream. Latest-wins on overflow."""
         idx = int(stream_id.split("_")[-1]) if "_" in stream_id else 0
         if idx >= len(self._queues):

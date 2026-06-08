@@ -129,6 +129,8 @@ def add_detection_args(parser: argparse.ArgumentParser) -> None:
             "960p_3x2",
             "native_960",
             "native_640",
+            "native_1024",
+            "native_1280",
             "sahi_960p_2x2",
         ],
         default="native_960",
@@ -381,6 +383,12 @@ def add_detection_args(parser: argparse.ArgumentParser) -> None:
             "NO-GO: Maximum detections kept per frame (0=off). Adaptive cap压至~21 in dense scenes,破坏recall.",
             range_hint=">=0",
         ),
+    )
+    grp.add_argument(
+        "--max-det",
+        type=int,
+        default=300,
+        help="Max detections per frame before NMS in Mamba head (default: 300).",
     )
     grp.add_argument(
         "--detection-cap-rank-method",

@@ -18,6 +18,7 @@ from saccade.perception.eval.detection import (
     match_keypoints_to_boxes,
     _tile_seam_mask_for_boxes,
     _get_detector_static_batch_size,
+    detect_single_patch_640,
 )
 
 
@@ -79,6 +80,61 @@ def test_decode_boxes_empty() -> None:
     result = _decode_detector_boxes(boxes, "xyxy")
     assert result.shape == (0, 4)
     assert torch.equal(result, boxes)
+
+
+def test_detect_single_patch_640_nv12_whole_graph_uses_preprocessed_fast_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _FakeStream:
+        cuda_stream = 0
+
+    class _FakePool:
+        use_nv12 = True
+
+        def __init__(self) -> None:
+            self.frame_buffer_nv12 = torch.zeros(640 * 480 * 3 // 2, dtype=torch.uint8)
+            self.canvas_640p = torch.zeros((3, 640, 640), dtype=torch.float32)
+
+        def as_rgb_chw(self) -> torch.Tensor:
+            raise AssertionError("legacy RGB fallback should not be used")
+
+        def prepare_canvas_640_stretch(self, h_orig: int, w_orig: int) -> torch.Tensor:
+            assert (h_orig, w_orig) == (480, 640)
+            return self.canvas_640p
+
+    class _FakeDetector:
+        use_whole_graph = True
+        _trt_backbone = object()
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def detect_raw_preprocessed(self, input_tensor: torch.Tensor) -> torch.Tensor:
+            self.calls += 1
+            assert tuple(input_tensor.shape) == (1, 3, 640, 640)
+            raw = torch.zeros((1, 300, 6), dtype=torch.float32)
+            raw[0, 0, :4] = torch.tensor([10.0, 90.0, 110.0, 190.0])
+            raw[0, 0, 4] = 0.9
+            raw[0, 0, 5] = 1.0
+            return raw
+
+    monkeypatch.setattr(torch.cuda, "current_stream", lambda: _FakeStream())
+
+    pool = _FakePool()
+    detector = _FakeDetector()
+    boxes, scores, classes = detect_single_patch_640(
+        detector=detector,
+        pool=pool,
+        h_orig=480,
+        w_orig=640,
+        preprocess_modes=[],
+        detector_box_format="xyxy",
+    )
+
+    assert detector.calls == 1
+    assert torch.allclose(boxes[0], torch.tensor([10.0, 67.5, 110.0, 142.5]))
+    assert scores[0].item() == pytest.approx(0.9)
+    assert classes[0].item() == pytest.approx(1.0)
 
 
 # ── expand_boxes_with_ankle_keypoints ──────────────────────────────────

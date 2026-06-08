@@ -582,11 +582,13 @@ __global__ void fused_sinkhorn_topk_kernel(
             float aspect_penalty = 1.0f;
             if (det_boxes) {
                 const float* b2 = det_boxes + d * 4;
-                float aspect = (b2[2] - b2[0]) / (b2[3] - b2[1] + 1e-6f);
+                // Note: aspect_wh is width/height (w/h), which is the reciprocal of the
+                // aspect ratio (h/w) defined in quality_filter.cu.
+                float aspect_wh = (b2[2] - b2[0]) / (b2[3] - b2[1] + 1e-6f);
                 // Pedestrian aspect ratio penalty: penalize abnormal shapes (e.g., highly occluded / truncated)
                 // Typical pedestrian is around 0.3~0.5.
-                if (aspect > 0.8f) aspect_penalty = fmaxf(0.5f, 1.0f - (aspect - 0.8f));
-                else if (aspect < 0.15f) aspect_penalty = fmaxf(0.5f, 1.0f - (0.15f - aspect) * 5.0f);
+                if (aspect_wh > 0.8f) aspect_penalty = fmaxf(0.5f, 1.0f - (aspect_wh - 0.8f));
+                else if (aspect_wh < 0.15f) aspect_penalty = fmaxf(0.5f, 1.0f - (0.15f - aspect_wh) * 5.0f);
             }
 
             float p = expf(-lambda * cost) * aspect_penalty;

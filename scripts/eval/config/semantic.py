@@ -56,6 +56,10 @@ class SemanticConfig:
     semantic_experimental_mode: str = "standard"
     semantic_appearance_first_sim_threshold: float = 0.95
     semantic_appearance_first_margin: float = 0.03
+    # Experimental density gating controls
+    semantic_exp_density_gating: bool = False
+    semantic_exp_density_k: float = 2.0
+    semantic_exp_density_eta: float = 0.15
     # Appearance bank
     semantic_bank_inject: bool = False
     appearance_bank: bool = False
@@ -595,4 +599,21 @@ def add_semantic_args(parser: argparse.ArgumentParser) -> None:
             "Similarity threshold for low-quality observations (0=use sim_threshold).",
             range_hint="0-1",
         ),
+    )
+    grp.add_argument(
+        "--semantic-exp-density-gating",
+        action="store_true",
+        help="Enable experimental crowd-density adaptive Mahalanobis gating.",
+    )
+    grp.add_argument(
+        "--semantic-exp-density-k",
+        type=float,
+        default=2.0,
+        help="Crowd-density window multiplier of pedestrian height.",
+    )
+    grp.add_argument(
+        "--semantic-exp-density-eta",
+        type=float,
+        default=0.15,
+        help="Crowd-density exponential decay multiplier for Mahalanobis threshold.",
     )

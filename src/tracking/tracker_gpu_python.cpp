@@ -481,7 +481,10 @@ public:
         bool delayed_claim = false,
         int claim_warmup_frames = 3,
         bool bidirectional = false,
-        float bridge_px = 1.5f
+        float bridge_px = 1.5f,
+        bool exp_density_gating = false,
+        float exp_density_k = 2.0f,
+        float exp_density_eta = 0.15f
     )
         : sim_threshold_(sim_threshold),
           ttl_(ttl),
@@ -490,6 +493,9 @@ public:
           min_lost_frames_(min_lost_frames),
           min_iou_(min_iou),
           mahalanobis_threshold_(mahalanobis_threshold),
+          exp_density_gating_(exp_density_gating),
+          exp_density_k_(exp_density_k),
+          exp_density_eta_(exp_density_eta),
           buffer_size_(std::max(1, buffer_size)),
           min_consistency_(min_consistency),
           rerank_mode_(std::move(rerank_mode)),
@@ -519,7 +525,7 @@ public:
           kalman_accel_lat_(std::max(0.0f, kalman_accel_lat)),
           kalman_fps_(kalman_fps > 0.0f ? kalman_fps : 30.0f),
           kalman_max_speed_mps_(std::max(0.0f, kalman_max_speed_mps)),
-           delayed_claim_(delayed_claim),
+          delayed_claim_(delayed_claim),
           claim_warmup_frames_(std::max(1, claim_warmup_frames)),
           bidirectional_(bidirectional),
           bridge_px_(bridge_px),
@@ -1230,7 +1236,8 @@ public:
                         continue;
                     }
                     maha = mahalanobis(box, motion_it->second);
-                    if (maha > mahalanobis_threshold_) {
+                    float dynamic_thresh = get_dynamic_mahalanobis_threshold(cid);
+                    if (maha > dynamic_thresh) {
                         stats_.reject_mahalanobis += 1;
                         continue;
                     }
@@ -1793,7 +1800,8 @@ public:
                     const auto motion_it = motion_.find(cid);
                     if (motion_it == motion_.end()) { stats_.reject_mahalanobis += 1; continue; }
                     maha = mahalanobis(box, motion_it->second);
-                    if (maha > mahalanobis_threshold_) { stats_.reject_mahalanobis += 1; continue; }
+                    float dynamic_thresh = get_dynamic_mahalanobis_threshold(cid);
+                    if (maha > dynamic_thresh) { stats_.reject_mahalanobis += 1; continue; }
                 }
                 if (min_consistency_ > 0.0f && buffer_size_ > 1) {
                     if (buffer_consistency(cid) < min_consistency_) { stats_.reject_consistency += 1; continue; }
@@ -1833,8 +1841,9 @@ public:
                 }
 
                 float maha_score = 0.0f;
-                if (mahalanobis_threshold_ > 0.0f && cand.maha > 0.0f) {
-                    maha_score = std::max(0.0f, 1.0f - cand.maha / mahalanobis_threshold_);
+                float dynamic_thresh = get_dynamic_mahalanobis_threshold(cand.cid);
+                if (dynamic_thresh > 0.0f && cand.maha > 0.0f) {
+                    maha_score = std::max(0.0f, 1.0f - cand.maha / dynamic_thresh);
                 }
 
                 float joint;
@@ -2054,6 +2063,31 @@ private:
         const float old_area = std::max(0.0f, old_box.x2 - old_box.x1) * std::max(0.0f, old_box.y2 - old_box.y1);
         const float iou = inter / std::max(area + old_area - inter, 1e-6f);
         return {center_norm, iou};
+    }
+
+    float get_dynamic_mahalanobis_threshold(int cid) const {
+        if (!exp_density_gating_ || mahalanobis_threshold_ <= 0.0f) {
+            return mahalanobis_threshold_;
+        }
+        auto it = last_boxes_.find(cid);
+        if (it == last_boxes_.end()) return mahalanobis_threshold_;
+        const RelinkBox& box_t = it->second;
+        const float cx_t = (box_t.x1 + box_t.x2) * 0.5f;
+        const float cy_t = (box_t.y1 + box_t.y2) * 0.5f;
+        const float h_t = box_t.y2 - box_t.y1;
+        if (h_t <= 0.0f) return mahalanobis_threshold_;
+
+        int density = 0;
+        for (const auto& [other_id, box_j] : last_boxes_) {
+            if (other_id == cid) continue;
+            const float cx_j = (box_j.x1 + box_j.x2) * 0.5f;
+            const float cy_j = (box_j.y1 + box_j.y2) * 0.5f;
+            const float dist = std::sqrt((cx_t - cx_j) * (cx_t - cx_j) + (cy_t - cy_j) * (cy_t - cy_j));
+            if (dist < exp_density_k_ * h_t) {
+                density++;
+            }
+        }
+        return mahalanobis_threshold_ * std::exp(-exp_density_eta_ * static_cast<float>(density));
     }
 
     static float mahalanobis(const RelinkBox& box, const RelinkMotionSnapshot& snap) {
@@ -2375,6 +2409,9 @@ private:
     int min_lost_frames_;
     float min_iou_;
     float mahalanobis_threshold_;
+    bool exp_density_gating_ = false;
+    float exp_density_k_ = 2.0f;
+    float exp_density_eta_ = 0.15f;
     int buffer_size_;
     float min_consistency_;
     std::string rerank_mode_;
@@ -3053,7 +3090,7 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         }, "Raw C++ pointer to this GPUByteTracker (for Workbench construction)");
 
     py::class_<SemanticRelinkerCpp>(m, "SemanticRelinker")
-        .def(py::init<float, int, float, float, int, float, float, int, float, std::string, float, bool, float, float, float, float, float, float, float, float, float, float, float, float, float, float, bool, float, float, float, float, float, float, float, float, float, bool, int, bool, float>(),
+        .def(py::init<float, int, float, float, int, float, float, int, float, std::string, float, bool, float, float, float, float, float, float, float, float, float, float, float, float, float, float, bool, float, float, float, float, float, float, float, float, float, bool, int, bool, float, bool, float, float>(),
              py::arg("sim_threshold") = 0.985f,
              py::arg("ttl") = 45,
              py::arg("ema_beta") = 0.83f,
@@ -3093,7 +3130,10 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
              py::arg("delayed_claim") = false,
              py::arg("claim_warmup_frames") = 3,
              py::arg("bidirectional") = false,
-             py::arg("bridge_px") = 1.5f)
+             py::arg("bridge_px") = 1.5f,
+             py::arg("exp_density_gating") = false,
+             py::arg("exp_density_k") = 2.0f,
+             py::arg("exp_density_eta") = 0.15f)
         .def("update_motion_snapshots", &SemanticRelinkerCpp::update_motion_snapshots,
              py::arg("snapshots"), py::arg("frame_id") = -1)
         .def("motion_candidate_ids", &SemanticRelinkerCpp::motion_candidate_ids, py::arg("frame_id") = -1)

@@ -59,6 +59,9 @@ class EvalConfig:
     semantic_clean_min_aspect: float
     semantic_clean_max_aspect: float
     semantic_strict_sim_threshold: float
+    semantic_exp_density_gating: bool
+    semantic_exp_density_k: float
+    semantic_exp_density_eta: float
 
     cross_tile_score_penalty: float
     tile_diagnostics: bool
@@ -90,6 +93,7 @@ class EvalConfig:
     birth_consecutive_boost: float
     birth_consecutive_min_score: float
     birth_consecutive_min_motion: float
+    exp_velocity_aligned_bank: bool
 
     # Duplicate suppression: remove near-duplicate detections within the same frame
     duplicate_suppression: bool
@@ -445,6 +449,11 @@ def parse_eval_config(
         semantic_strict_sim_threshold=float(
             kwargs.get("semantic_strict_sim_threshold", 0.0)
         ),
+        semantic_exp_density_gating=bool(
+            kwargs.get("semantic_exp_density_gating", False)
+        ),
+        semantic_exp_density_k=float(kwargs.get("semantic_exp_density_k", 2.0)),
+        semantic_exp_density_eta=float(kwargs.get("semantic_exp_density_eta", 0.15)),
         cross_tile_score_penalty=float(kwargs.get("cross_tile_score_penalty", 1.0)),
         tile_diagnostics=bool(kwargs.get("tile_diagnostics", False)),
         tile_seam_score_penalty=float(kwargs.get("tile_seam_score_penalty", 1.0)),
@@ -515,6 +524,7 @@ def parse_eval_config(
         multi_birth_replace_evidence_threshold=float(
             kwargs.get("multi_birth_replace_evidence_threshold", 0.85)
         ),
+        exp_velocity_aligned_bank=bool(kwargs.get("exp_velocity_aligned_bank", False)),
         crowd_low_score_mode=bool(kwargs.get("crowd_low_score_mode", False)),
         crowd_low_score_trigger=int(kwargs.get("crowd_low_score_trigger", 25)),
         crowd_conf_threshold=float(kwargs.get("crowd_conf_threshold", 0.02)),

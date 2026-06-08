@@ -390,7 +390,12 @@ class MambaGatedDetector(nn.Module):
             self._trt_backbone = TRTYoloBackbone(trt_backbone_engine)
 
         if self.use_whole_graph and self._trt_backbone is not None:
-            FEAT_SHAPES = [(1, 128, 80, 80), (1, 256, 40, 40), (1, 512, 20, 20)]
+            _s = self.img_size
+            FEAT_SHAPES = [
+                (1, 128, _s // 8, _s // 8),
+                (1, 256, _s // 16, _s // 16),
+                (1, 512, _s // 32, _s // 32),
+            ]
             self._whole_graph_anchors, self._whole_graph_anchor_strides = (
                 _precompute_anchor_grid(self.stride, FEAT_SHAPES)
             )
@@ -543,6 +548,22 @@ class MambaGatedDetector(nn.Module):
         detections = graphed(frame)
         return detections, {}
 
+    @torch.no_grad()
+    def _forward_whole_graph_preprocessed(self, frame: Tensor) -> Tensor:
+        key = (
+            "preprocessed",
+            tuple(frame.shape),
+            self._whole_graph_nms_pad,
+        )
+        if key not in self._whole_graphed_callables:
+            if not self._whole_graph_warm:
+                self._whole_graph_warmup_preprocessed(frame)
+            self._whole_graph_capture_preprocessed(frame)
+
+        graphed = self._whole_graphed_callables[key]
+        detections = graphed(frame)
+        return detections, {}
+
     def _whole_graph_fn(self, frame: Tensor) -> Tensor:
         frame_640 = F.interpolate(
             frame,
@@ -569,10 +590,34 @@ class MambaGatedDetector(nn.Module):
         detections[:, :, self._whole_graph_y_idx] *= self._whole_graph_sy
         return detections
 
+    def _whole_graph_fn_preprocessed(self, frame: Tensor) -> Tensor:
+        backbone = self._trt_backbone
+        p3, p4, p5 = backbone.infer_graph(frame)
+        cls_preds, reg_preds = self.mamba_head._forward_eager(
+            [p3, p4, p5],
+            return_embeddings=False,
+        )
+        return _postprocess_mamba_fixed(
+            cls_preds,
+            reg_preds,
+            self.stride,
+            self.conf_thr,
+            max(self.max_det, self._whole_graph_nms_pad),
+            anchors=self._whole_graph_anchors,
+            anchor_strides=self._whole_graph_anchor_strides,
+        )
+
     def _whole_graph_warmup(self, frame: Tensor) -> None:
         with torch.no_grad():
             warm = frame.clone()
             _ = self._whole_graph_fn(warm)
+            torch.cuda.synchronize()
+        self._whole_graph_warm = True
+
+    def _whole_graph_warmup_preprocessed(self, frame: Tensor) -> None:
+        with torch.no_grad():
+            warm = frame.clone()
+            _ = self._whole_graph_fn_preprocessed(warm)
             torch.cuda.synchronize()
         self._whole_graph_warm = True
 
@@ -590,6 +635,24 @@ class MambaGatedDetector(nn.Module):
         )
         sample = frame.clone()
         graphed = torch.cuda.make_graphed_callables(self._whole_graph_fn, (sample,))
+        self._whole_graphed_callables[key] = graphed
+
+    def _whole_graph_capture_preprocessed(self, frame: Tensor) -> None:
+        if len(self._whole_graphed_callables) >= 10:
+            self._whole_graphed_callables.clear()
+        key = (
+            "preprocessed",
+            tuple(frame.shape),
+            self._whole_graph_nms_pad,
+        )
+        print(
+            f"🕯️ [WholeDetectGraph] Capturing graphed callable for "
+            f"preprocessed shape {tuple(frame.shape)}"
+        )
+        sample = frame.clone()
+        graphed = torch.cuda.make_graphed_callables(
+            self._whole_graph_fn_preprocessed, (sample,)
+        )
         self._whole_graphed_callables[key] = graphed
 
     @torch.no_grad()
@@ -887,6 +950,15 @@ class MambaGatedDetector(nn.Module):
 
     def detect_raw(self, input_tensor: Tensor) -> Tensor:
         detections, _ = self.forward(input_tensor, gate_input=None)
+        self._last_detections_ptr = detections.data_ptr()
+        return detections
+
+    def detect_raw_preprocessed(self, input_tensor: Tensor) -> Tensor:
+        if not self.use_whole_graph or self._trt_backbone is None:
+            raise RuntimeError(
+                "detect_raw_preprocessed requires whole-graph TRT backbone mode."
+            )
+        detections, _ = self._forward_whole_graph_preprocessed(input_tensor)
         self._last_detections_ptr = detections.data_ptr()
         return detections
 

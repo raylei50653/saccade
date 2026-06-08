@@ -456,6 +456,7 @@ def build_prepared_candidates(
                         suspect_box=_suspect,
                         aspect_ratio=aspect_ratio,
                         bank_quality_score=_bq,
+                        box=_det_box,
                     )
                 )
         prepared.append(
@@ -735,6 +736,7 @@ def prepare_track_candidates(
                     update.suspect_box,
                     update.aspect_ratio,
                     update.bank_quality_score,
+                    update.box,
                 )
                 for update in appearance_updates
             ]

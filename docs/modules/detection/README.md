@@ -9,6 +9,7 @@
 |------|------|------|
 | [option-e-v2-design.md](option-e-v2-design.md) | Quality-Gated Temporal Feature Fusion | GO (MOTA 54.2%) |
 | [option-f-mamba-head.md](option-f-mamba-head.md) | Mamba SSM Detection Head | active prototype |
+| [mamba-head-training.md](mamba-head-training.md) | Mamba head 完整訓練流程（distill→GT-ft、版本譜系、高解析重訓）| reference |
 
 ## 設計演進總覽
 

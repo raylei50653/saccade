@@ -108,10 +108,16 @@ class PythonSemanticRelinker:
         motion_motion_only_iou_threshold: float = 0.15,
         motion_motion_only_min_lost_frames: int = 1,
         device: str | None = None,
+        exp_density_gating: bool = False,
+        exp_density_k: float = 2.0,
+        exp_density_eta: float = 0.15,
     ) -> None:
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
         self.device = torch.device(device)
+        self.exp_density_gating = exp_density_gating
+        self.exp_density_k = exp_density_k
+        self.exp_density_eta = exp_density_eta
         self.sim_threshold = sim_threshold
         self.ttl = ttl
         self.ema_beta = ema_beta
@@ -1031,13 +1037,38 @@ class PythonSemanticRelinker:
                     center_norm > self.spatial_gate or iou < self.min_iou
                 )
                 maha = 0.0
+                current_threshold = self.mahalanobis_threshold
                 if self.mahalanobis_threshold > 0.0:
                     snapshot = self.motion.get(cid)
                     if snapshot is None:
                         self.stats["reject_mahalanobis"] += 1
                         continue
                     maha = self._mahalanobis(box, snapshot)
-                    if maha > self.mahalanobis_threshold:
+                    if self.exp_density_gating:
+                        box_t = self.last_boxes.get(cid)
+                        if box_t is not None:
+                            cx_t = (float(box_t[0]) + float(box_t[2])) * 0.5
+                            cy_t = (float(box_t[1]) + float(box_t[3])) * 0.5
+                            h_t = float(box_t[3]) - float(box_t[1])
+                            if h_t > 0.0:
+                                density = 0
+                                for other_id, box_j in self.last_boxes.items():
+                                    if other_id == cid:
+                                        continue
+                                    cx_j = (float(box_j[0]) + float(box_j[2])) * 0.5
+                                    cy_j = (float(box_j[1]) + float(box_j[3])) * 0.5
+                                    dist = (
+                                        (cx_t - cx_j) ** 2 + (cy_t - cy_j) ** 2
+                                    ) ** 0.5
+                                    if dist < self.exp_density_k * h_t:
+                                        density += 1
+                                import math
+
+                                current_threshold = (
+                                    self.mahalanobis_threshold
+                                    * math.exp(-self.exp_density_eta * density)
+                                )
+                    if maha > current_threshold:
                         self.stats["reject_mahalanobis"] += 1
                         continue
                 if self.min_consistency > 0.0 and self.buffer_size > 1:
@@ -1057,6 +1088,7 @@ class PythonSemanticRelinker:
                         motion_ok,
                         kalman_d2 if kalman_gated else -1.0,
                         bridge_dist,
+                        current_threshold,
                     )
                 )
 
@@ -1091,6 +1123,7 @@ class PythonSemanticRelinker:
                 motion_ok,
                 kalman_d2,
                 bridge_dist,
+                current_threshold,
             ) in candidates_to_score:
                 if emb is None:
                     sim = 0.0
@@ -1123,8 +1156,8 @@ class PythonSemanticRelinker:
                     continue
 
                 maha_score = 0.0
-                if self.mahalanobis_threshold > 0.0 and maha > 0.0:
-                    maha_score = max(0.0, 1.0 - maha / self.mahalanobis_threshold)
+                if current_threshold > 0.0 and maha > 0.0:
+                    maha_score = max(0.0, 1.0 - maha / current_threshold)
 
                 # Motion evidence bonus: add motion IoU as soft evidence
                 motion_bonus = 0.0

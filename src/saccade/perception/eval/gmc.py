@@ -123,8 +123,8 @@ class PyGraphedGMC:
             self.h_ds, self.w_ds, dtype=torch.float32, device=d
         )
 
-        hh = torch.hann_window(self.h_ds, device=d, dtype=torch.float32)
-        hw = torch.hann_window(self.w_ds, device=d, dtype=torch.float32)
+        hh = torch.hann_window(self.h_ds, periodic=False, device=d, dtype=torch.float32)
+        hw = torch.hann_window(self.w_ds, periodic=False, device=d, dtype=torch.float32)
         self.hann = (hh.unsqueeze(1) * hw.unsqueeze(0)).contiguous()
 
         self.warp_out = torch.zeros(6, dtype=torch.float32, device=d)

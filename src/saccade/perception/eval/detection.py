@@ -1039,8 +1039,18 @@ def detect_single_patch_640(
         and getattr(detector, "_trt_backbone", None) is not None
     )
     if _use_whole and "letterbox" not in preprocess_modes:
-        raw_dets = detector.detect_raw(pool.frame_buffer.unsqueeze(0))
-        return raw_dets[0, :, :4], raw_dets[0, :, 4], raw_dets[0, :, 5]
+        if getattr(pool, "use_nv12", False):
+            canvas = pool.prepare_canvas_640_stretch(h_orig, w_orig)
+            raw_dets = detector.detect_raw_preprocessed(canvas.unsqueeze(0))
+            boxes = _decode_detector_boxes(raw_dets[0, :, :4], detector_box_format)
+            scores = raw_dets[0, :, 4]
+            classes = raw_dets[0, :, 5]
+            boxes[:, [0, 2]] /= 640.0 / w_orig
+            boxes[:, [1, 3]] /= 640.0 / h_orig
+            return boxes, scores, classes
+        else:
+            raw_dets = detector.detect_raw(pool.frame_buffer.unsqueeze(0))
+            return raw_dets[0, :, :4], raw_dets[0, :, 4], raw_dets[0, :, 5]
 
     if "letterbox" in preprocess_modes:
         r = 640.0 / max(h_orig, w_orig)
@@ -1108,6 +1118,17 @@ def detect_single_patch_960(
     preprocess_modes: List[str],
     detector_box_format: str = "xyxy",
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+    # Whole-graph detector resizes to its own img_size internally and maps boxes
+    # back to original-frame coords via set_whole_graph_img_dims (sx/sy). Pass the
+    # full-res frame straight through; do NOT pre-resize or rescale here.
+    _use_whole = (
+        getattr(detector, "use_whole_graph", False)
+        and getattr(detector, "_trt_backbone", None) is not None
+    )
+    if _use_whole and "letterbox" not in preprocess_modes:
+        raw_dets = detector.detect_raw(pool.frame_buffer.unsqueeze(0))
+        return raw_dets[0, :, :4], raw_dets[0, :, 4], raw_dets[0, :, 5], None
+
     if "letterbox" in preprocess_modes:
         r, _h_new, _w_new, y_off, x_off = _prepare_canvas_960p(pool, h_orig, w_orig)
 
@@ -1131,13 +1152,15 @@ def detect_single_patch_960(
             keypoints[:, :, 1] = (keypoints[:, :, 1] - y_off) / r
         return boxes, scores, classes, keypoints
 
+    sz = int(getattr(detector, "img_size", 960))
     img_input = torch.nn.functional.interpolate(
         pool.frame_buffer.unsqueeze(0),
-        size=(960, 960),
+        size=(sz, sz),
         mode="bilinear",
         align_corners=False,
     )
-    pool.canvas_960p.copy_(img_input[0])
+    if pool.canvas_960p.shape[-1] == sz:
+        pool.canvas_960p.copy_(img_input[0])
     keypoints = None
     if hasattr(detector, "pose"):
         boxes, scores, classes, keypoints = detector.detect(
@@ -1150,12 +1173,12 @@ def detect_single_patch_960(
         scores = raw_dets[0, :, 4]
         classes = raw_dets[0, :, 5]
 
-    boxes[:, [0, 2]] /= 960.0 / w_orig
-    boxes[:, [1, 3]] /= 960.0 / h_orig
+    boxes[:, [0, 2]] /= sz / w_orig
+    boxes[:, [1, 3]] /= sz / h_orig
     if keypoints is not None:
         keypoints = keypoints.clone()
-        keypoints[:, :, 0] /= 960.0 / w_orig
-        keypoints[:, :, 1] /= 960.0 / h_orig
+        keypoints[:, :, 0] /= sz / w_orig
+        keypoints[:, :, 1] /= sz / h_orig
     return boxes, scores, classes, keypoints
 
 

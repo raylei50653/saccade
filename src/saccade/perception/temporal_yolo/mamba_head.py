@@ -33,7 +33,13 @@ def _selective_scan(
     # CUDA tensors — CPU inputs (and the case where the extension is unavailable)
     # fall back to the pure-PyTorch scan instead of feeding host pointers to the
     # kernel (which corrupts the CUDA context with an illegal memory access).
-    if not u.is_cuda:
+    # The CUDA op (saccade::selective_scan_fwd) registers no autograd formula, so
+    # it is inference-only. When grad is required (training), fall back to the
+    # pure-PyTorch differentiable scan. Eval/inference is unaffected.
+    grad_needed = torch.is_grad_enabled() and (
+        u.requires_grad or delta.requires_grad or A.requires_grad
+    )
+    if not u.is_cuda or grad_needed:
         return _selective_scan_jit(u, delta, A, B, C, D)
     try:
         return _selective_scan_cuda(u, delta, A, B, C, D)

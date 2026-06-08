@@ -738,7 +738,11 @@ from saccade.perception.eval.detection import (  # noqa: E402
 )
 from saccade.perception.eval.gmc import SparseOpticalFlowGMC, PyGraphedGMC  # noqa: E402
 from saccade.perception.eval.multi_birth import MultiSignalBirthManager  # noqa: E402
-from saccade.perception.eval.pool import AdaptiveFramePool  # noqa: E402
+from saccade.perception.eval.pool import (  # noqa: E402
+    AdaptiveFramePool,
+    rgb_chw_to_nv12_gpu,
+    rgb_hwc_to_nv12_gpu,
+)
 from saccade.perception.eval.preprocess import (  # noqa: E402
     GeometryScaleState,
     apply_frame_preprocess,
@@ -1357,7 +1361,7 @@ def run_eval(
         detect_fn = detect_sahi_960p_2x2
     elif cfg.tiling == "native_640":
         detect_fn = detect_native_640
-    elif cfg.tiling == "native_960" or cfg.tiling == "mamba_960":
+    elif cfg.tiling in ("native_960", "mamba_960", "native_1024", "native_1280"):
         detect_fn = (
             detect_native_960_tta if getattr(cfg, "tta", False) else detect_native_960
         )
@@ -1793,6 +1797,9 @@ def run_eval(
             dynamic_margin_crowd=cfg.semantic_dynamic_margin_crowd,
             dynamic_margin_age=cfg.semantic_dynamic_margin_age,
             debug=cfg.kwargs.get("semantic_debug", False),
+            exp_density_gating=cfg.semantic_exp_density_gating,
+            exp_density_k=cfg.semantic_exp_density_k,
+            exp_density_eta=cfg.semantic_exp_density_eta,
         )
         if _semantic_delayed_claim:
             _relinker_common_kwargs.update(
@@ -1959,6 +1966,9 @@ def run_eval(
         )
 
         pool = AdaptiveFramePool(h_orig, w_orig)
+        if os.environ.get("SACCADE_NV12_BUFFER") == "1":
+            pool.use_nv12 = True
+        nv12_direct_from_hwc = pool.use_nv12 and not cfg.preprocess_modes
         # SACCADE_GPU_DECODE=1 routes JPEG decode to the GPU's NVJPG hardware
         # engine (torchvision/nvJPEG) instead of CPU (DALI), offloading decode
         # off the CPU. Both yield [H, W, C] uint8 CUDA frames.
@@ -1987,6 +1997,7 @@ def run_eval(
                 min_aspect=cfg.appearance_bank_min_aspect,
                 max_aspect=cfg.appearance_bank_max_aspect,
                 bank_weighted_mean=cfg.bank_weighted_mean,
+                exp_velocity_aligned_bank=cfg.exp_velocity_aligned_bank,
             )
             if cfg.appearance_bank_enabled
             else None
@@ -2406,8 +2417,34 @@ def run_eval(
                 _, _ = time_stage(
                     seq_stage_totals,
                     "ingest_preprocess",
-                    lambda: pool.frame_buffer.copy_(
-                        frame_gpu.permute(2, 0, 1).float() / 255.0
+                    lambda: (
+                        (
+                            pool.frame_buffer_nv12.copy_(
+                                rgb_hwc_to_nv12_gpu(frame_gpu)
+                            ),
+                            pool.mark_nv12_current(),
+                        )
+                        if nv12_direct_from_hwc
+                        else (
+                            pool.frame_buffer.copy_(
+                                frame_gpu.permute(2, 0, 1).float() / 255.0
+                            ),
+                            apply_frame_preprocess(
+                                pool.frame_buffer,
+                                cfg.preprocess_modes,
+                                cfg.gamma,
+                                cfg.gamma_luma_threshold,
+                                cfg.contrast,
+                            ),
+                            pool.mark_rgb_current(),
+                            (
+                                pool.frame_buffer_nv12.copy_(
+                                    rgb_chw_to_nv12_gpu(pool.frame_buffer)
+                                )
+                                if pool.use_nv12
+                                else None
+                            ),
+                        )
                     ),
                     sync_cuda=False,
                 )
@@ -2427,7 +2464,7 @@ def run_eval(
                     seq_stage_totals,
                     "detect",
                     lambda: wb.process_frame(
-                        pool.frame_buffer,
+                        pool.as_rgb_chw(),
                         frame_w=w_orig,
                         frame_h=h_orig,
                         priors=priors_tensor if enable_onms else None,
@@ -2470,16 +2507,33 @@ def run_eval(
                         seq_stage_totals,
                         "ingest_preprocess",
                         lambda: (
-                            pool.frame_buffer.copy_(
-                                frame_gpu.permute(2, 0, 1).float() / 255.0
-                            ),
-                            apply_frame_preprocess(
-                                pool.frame_buffer,
-                                cfg.preprocess_modes,
-                                cfg.gamma,
-                                cfg.gamma_luma_threshold,
-                                cfg.contrast,
-                            ),
+                            (
+                                pool.frame_buffer_nv12.copy_(
+                                    rgb_hwc_to_nv12_gpu(frame_gpu)
+                                ),
+                                pool.mark_nv12_current(),
+                            )
+                            if nv12_direct_from_hwc
+                            else (
+                                pool.frame_buffer.copy_(
+                                    frame_gpu.permute(2, 0, 1).float() / 255.0
+                                ),
+                                apply_frame_preprocess(
+                                    pool.frame_buffer,
+                                    cfg.preprocess_modes,
+                                    cfg.gamma,
+                                    cfg.gamma_luma_threshold,
+                                    cfg.contrast,
+                                ),
+                                pool.mark_rgb_current(),
+                                (
+                                    pool.frame_buffer_nv12.copy_(
+                                        rgb_chw_to_nv12_gpu(pool.frame_buffer)
+                                    )
+                                    if pool.use_nv12
+                                    else None
+                                ),
+                            )
                         ),
                         sync_cuda=True,
                     )
@@ -2544,7 +2598,7 @@ def run_eval(
                             fused_classes,
                             frame_w=w_orig,
                             frame_h=h_orig,
-                            frame_chw=pool.frame_buffer,
+                            frame_chw=pool.as_rgb_chw(),
                             frame_id=frame_id,
                             last_reid_frame=last_reid_frame,
                             prev_gray=prev_gray,
@@ -2636,30 +2690,39 @@ def run_eval(
                     seq_stage_totals["materialize"] += 0.0
 
                     # Save gray frame for GMC in next frame
-                    prev_gray = (
-                        (
-                            0.299 * pool.frame_buffer[2]
-                            + 0.587 * pool.frame_buffer[1]
-                            + 0.114 * pool.frame_buffer[0]
-                        )
-                        .unsqueeze(0)
-                        .clone()
-                    )
+                    prev_gray = pool.get_frame_luma().clone()
                 else:
                     _, _ = time_stage(
                         seq_stage_totals,
                         "ingest_preprocess",
                         lambda: (
-                            pool.frame_buffer.copy_(
-                                frame_gpu.permute(2, 0, 1).float() / 255.0
-                            ),
-                            apply_frame_preprocess(
-                                pool.frame_buffer,
-                                cfg.preprocess_modes,
-                                cfg.gamma,
-                                cfg.gamma_luma_threshold,
-                                cfg.contrast,
-                            ),
+                            (
+                                pool.frame_buffer_nv12.copy_(
+                                    rgb_hwc_to_nv12_gpu(frame_gpu)
+                                ),
+                                pool.mark_nv12_current(),
+                            )
+                            if nv12_direct_from_hwc
+                            else (
+                                pool.frame_buffer.copy_(
+                                    frame_gpu.permute(2, 0, 1).float() / 255.0
+                                ),
+                                apply_frame_preprocess(
+                                    pool.frame_buffer,
+                                    cfg.preprocess_modes,
+                                    cfg.gamma,
+                                    cfg.gamma_luma_threshold,
+                                    cfg.contrast,
+                                ),
+                                pool.mark_rgb_current(),
+                                (
+                                    pool.frame_buffer_nv12.copy_(
+                                        rgb_chw_to_nv12_gpu(pool.frame_buffer)
+                                    )
+                                    if pool.use_nv12
+                                    else None
+                                ),
+                            )
                         ),
                         sync_cuda=True,
                     )
@@ -3953,9 +4016,9 @@ def run_eval(
                                     native_reid_available
                                     and perception_pipeline is not None
                                 ):
-                                    frame_hwc = pool.frame_buffer.permute(
-                                        1, 2, 0
-                                    ).contiguous()
+                                    frame_hwc = (
+                                        pool.as_rgb_chw().permute(1, 2, 0).contiguous()
+                                    )
                                     budget_embeddings = torch.empty(
                                         (budget_indices.numel(), extractor.feature_dim),
                                         device=fused_boxes.device,
@@ -4049,7 +4112,7 @@ def run_eval(
                                                 )
                                         embeddings[budget_indices] = budget_embeddings
                                 else:
-                                    frame_batch = pool.frame_buffer.unsqueeze(0)
+                                    frame_batch = pool.as_rgb_chw().unsqueeze(0)
                                     if cfg.reid_crop_layout == "parts":
                                         if profile_stages:
                                             torch.cuda.synchronize()
@@ -4145,6 +4208,15 @@ def run_eval(
                     )
                     gmc_warp = None
                     gmc_uncertain = False
+                    # GMC estimator takes luma from frame_buffer (RGB path)
+                    # or from NV12 Y-plane directly (NV12 path).
+                    # C++ GMC estimator expects [3, H, W] — clone luma to 3 channels in NV12 mode.
+                    if pool.use_nv12:
+                        _luma = pool.get_frame_luma()
+                        _frame_gmc = _luma.repeat(3, 1, 1)
+                    else:
+                        _frame_gmc = pool.frame_buffer
+
                     if gmc_estimator is not None:
 
                         def _run_gmc() -> tuple[torch.Tensor | None, bool]:
@@ -4173,17 +4245,17 @@ def run_eval(
 
                             if isinstance(gmc_estimator, PyGraphedGMC):
                                 gmc_estimator.estimate_into_direct(
-                                    pool.frame_buffer,
+                                    _frame_gmc,
                                     _shared_gmc_warp,
                                 )
                                 local_gmc_warp = _shared_gmc_warp
                             elif _use_direct_gmc:
-                                _w = pool.frame_buffer.shape[2]
-                                _h = pool.frame_buffer.shape[1]
+                                _w = _frame_gmc.shape[2]
+                                _h = _frame_gmc.shape[1]
                                 if not _gmc_graphable or cfg.gmc_fg_mask:
                                     # FG mask varies per frame → eager (non-graph) path.
                                     gmc_estimator.estimate_into_direct(
-                                        pool.frame_buffer.data_ptr(),
+                                        _frame_gmc.data_ptr(),
                                         _w,
                                         _h,
                                         torch.cuda.current_stream().cuda_stream,
@@ -4193,7 +4265,7 @@ def run_eval(
                                     # Warmup once on the fixed input buffer, then capture.
                                     # d_prev_gray_ state carries across replays
                                     # (verified bit-exact by test_gmc_cudagraph.py).
-                                    _gmc_frame_buf.copy_(pool.frame_buffer)
+                                    _gmc_frame_buf.copy_(_frame_gmc)
                                     gmc_estimator.estimate_into_direct(
                                         _gmc_frame_buf.data_ptr(),
                                         _w,
@@ -4220,7 +4292,7 @@ def run_eval(
                                 else:
                                     # Steady state: copy new frame into the captured
                                     # input buffer and replay the recorded graph.
-                                    _gmc_frame_buf.copy_(pool.frame_buffer)
+                                    _gmc_frame_buf.copy_(_frame_gmc)
                                     _gmc_cuda_graph[0].replay()
                                 local_gmc_warp = _shared_gmc_warp
                             elif hasattr(gmc_estimator, "estimate_into"):
@@ -4228,22 +4300,22 @@ def run_eval(
                                     6, dtype=torch.float32, device=fused_boxes.device
                                 )
                                 gmc_estimator.estimate_into(
-                                    pool.frame_buffer.data_ptr(),
-                                    pool.frame_buffer.shape[2],
-                                    pool.frame_buffer.shape[1],
+                                    _frame_gmc.data_ptr(),
+                                    _frame_gmc.shape[2],
+                                    _frame_gmc.shape[1],
                                     torch.cuda.current_stream().cuda_stream,
                                     local_gmc_warp.data_ptr(),
                                 )
                             elif hasattr(gmc_estimator, "estimate_mat"):
                                 # C++ version or GlobalMotionCompensator
                                 _raw_warp = gmc_estimator.estimate(
-                                    pool.frame_buffer.data_ptr(),
+                                    _frame_gmc.data_ptr(),
                                     w_orig,
                                     h_orig,
                                     torch.cuda.current_stream().cuda_stream,
                                 )
                             else:
-                                _raw_warp = gmc_estimator.estimate(pool.frame_buffer)
+                                _raw_warp = gmc_estimator.estimate(_frame_gmc)
 
                             if _raw_warp is not None:
                                 if isinstance(_raw_warp, list):
@@ -4422,7 +4494,7 @@ def run_eval(
                             dtype=torch.float32,
                         )
                         crops = cropper.process(
-                            pool.frame_buffer.unsqueeze(0), cand_boxes
+                            pool.as_rgb_chw().unsqueeze(0), cand_boxes
                         )
                         if crops.numel() == 0:
                             return 0, 0, 0, 0.0, 0, 0, set()
