@@ -54,6 +54,8 @@ from .external_fp_model import (
 from .helpers import (
     materialize_gpu_track_results as _materialize_gpu_track_results,
     materialize_gpu_track_results_pinned as _materialize_gpu_track_results_pinned,
+    materialize_gpu_track_results_async as _materialize_gpu_track_results_async,
+    read_deferred_result as _read_deferred_result,
     fast_emit_mot_lines as _fast_emit_mot_lines,
     prepare_host_track_batch as _prepare_host_track_batch,
     resolve_frame_tracks as _resolve_frame_tracks,
@@ -2138,6 +2140,13 @@ def run_eval(
             "count": torch.empty((), dtype=torch.int32, pin_memory=True),
         }
         _use_pinned_materialize = not cfg.pipeline_relink
+        _defer_emit = (
+            relinker is None
+            and id_stability_filter is None
+            and primary_appearance_bank is None
+            and dynamic_reid is None
+            and bool(_use_pinned_materialize)
+        )
         _shared_gmc_warp = torch.zeros(6, dtype=torch.float32, device="cuda")
         _post_bufs: dict[str, torch.Tensor] = {
             "boxes": torch.empty((2048, 4), dtype=torch.float32, device="cuda"),
@@ -2390,7 +2399,31 @@ def run_eval(
         _bg_future: "Future[tuple[list[str], set[int], dict[int, int], dict[int, dict[str, float | int]]]] | None" = None
         _bg_birth_events: list[dict[str, float | int | str | bool]] | None = None
 
+        _defer_emit_event: torch.cuda.Event | None = None
+        _defer_emit_fid: int = 0
+
         for frame_id in range(1, frame_end + 1):
+            if _defer_emit and _defer_emit_event is not None:
+                _track_results = _read_deferred_result(
+                    _defer_emit_event,
+                    _pinned_result_bufs,
+                    default_class_id=cfg.person_class
+                    if cfg.track_person_only
+                    else None,
+                    include_det_idx=False,
+                )
+                if _track_results["count"] > 0:
+                    _lines = _fast_emit_mot_lines(
+                        track_results=_track_results,
+                        global_id_mapper=global_id_mapper,
+                        seq=seq,
+                        frame_id=_defer_emit_fid,
+                        frame_w=w_orig,
+                        frame_h=h_orig,
+                    )
+                    results_lines.extend(_lines)
+                prev_track_ids = set(int(x) for x in _track_results["ids"].tolist())
+                _defer_emit_event = None
             current_stage_sample_active = frame_id > warmup_frames
             current_frame_stage_elapsed = (
                 {name: 0.0 for name in top_level_stage_names}
@@ -4415,35 +4448,54 @@ def run_eval(
                             ),
                             sync_cuda=True,
                         )
-                    track_results, _ = time_stage(
-                        seq_stage_totals,
-                        "materialize",
-                        lambda: (
-                            _materialize_gpu_track_results_pinned(
-                                tracker_result_buffers,
-                                _pinned_result_bufs,
-                                default_class_id=cfg.person_class
-                                if cfg.track_person_only
-                                else None,
-                                include_det_idx=(
-                                    embeddings is not None
-                                    or aligned_keypoints is not None
-                                ),
-                            )
-                            if _use_pinned_materialize
-                            else _materialize_gpu_track_results(
-                                tracker_result_buffers,
-                                default_class_id=cfg.person_class
-                                if cfg.track_person_only
-                                else None,
-                                include_det_idx=(
-                                    embeddings is not None
-                                    or aligned_keypoints is not None
-                                ),
-                            )
-                        ),
-                        sync_cuda=True,
-                    )
+                    if _defer_emit:
+                        _defer_emit_event, _ = _materialize_gpu_track_results_async(
+                            tracker_result_buffers,
+                            _pinned_result_bufs,
+                            default_class_id=cfg.person_class
+                            if cfg.track_person_only
+                            else None,
+                            include_det_idx=False,
+                        )
+                        _defer_emit_fid = frame_id
+                        track_results = {
+                            "count": 0,
+                            "boxes": torch.empty((0, 4)),
+                            "scores": torch.empty((0,)),
+                            "ids": torch.empty((0,), dtype=torch.int32),
+                            "classes": None,
+                            "det_idx": None,
+                        }
+                    else:
+                        track_results, _ = time_stage(
+                            seq_stage_totals,
+                            "materialize",
+                            lambda: (
+                                _materialize_gpu_track_results_pinned(
+                                    tracker_result_buffers,
+                                    _pinned_result_bufs,
+                                    default_class_id=cfg.person_class
+                                    if cfg.track_person_only
+                                    else None,
+                                    include_det_idx=(
+                                        embeddings is not None
+                                        or aligned_keypoints is not None
+                                    ),
+                                )
+                                if _use_pinned_materialize
+                                else _materialize_gpu_track_results(
+                                    tracker_result_buffers,
+                                    default_class_id=cfg.person_class
+                                    if cfg.track_person_only
+                                    else None,
+                                    include_det_idx=(
+                                        embeddings is not None
+                                        or aligned_keypoints is not None
+                                    ),
+                                )
+                            ),
+                            sync_cuda=True,
+                        )
 
             if (
                 aligned_keypoints is not None
@@ -4742,6 +4794,26 @@ def run_eval(
                 seq_profiled_frames += 1
             if frame_id % 100 == 0:
                 print(f"🎬 {seq} [{frame_id}/{frame_end}]")
+
+        # Flush deferred materialize from the last frame.
+        if _defer_emit and _defer_emit_event is not None:
+            _track_results = _read_deferred_result(
+                _defer_emit_event,
+                _pinned_result_bufs,
+                default_class_id=cfg.person_class if cfg.track_person_only else None,
+                include_det_idx=False,
+            )
+            if _track_results["count"] > 0:
+                _lines = _fast_emit_mot_lines(
+                    track_results=_track_results,
+                    global_id_mapper=global_id_mapper,
+                    seq=seq,
+                    frame_id=_defer_emit_fid,
+                    frame_w=w_orig,
+                    frame_h=h_orig,
+                )
+                results_lines.extend(_lines)
+            _defer_emit_event = None
 
         # Flush any last background relink_write future before post-processing results.
         if _bg_future is not None:

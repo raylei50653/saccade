@@ -65,6 +65,79 @@ def materialize_gpu_track_results(
     }
 
 
+def materialize_gpu_track_results_async(
+    result_buffers: Any,
+    pinned: dict[str, torch.Tensor],
+    *,
+    default_class_id: int | None = None,
+    include_det_idx: bool = True,
+) -> tuple[torch.cuda.Event, dict[str, torch.Tensor]]:
+    """Async D2H: launch non-blocking copies then record a CUDA event.
+    Call read_deferred_result(event, pinned, ...) after the event completes.
+
+    Copies full MAX_TRACKS (pinned buffer capacity) so no count-dependent
+    slicing is needed. The count is copied first so its non-blocking copy
+    is guaranteed to be in-flight before subsequent copies are issued.
+    """
+    pinned["count"].copy_(result_buffers["count"], non_blocking=True)
+    pinned["boxes"].copy_(result_buffers["boxes"], non_blocking=True)
+    pinned["scores"].copy_(result_buffers["scores"], non_blocking=True)
+    pinned["ids"].copy_(result_buffers["ids"], non_blocking=True)
+    if default_class_id is None:
+        pinned["classes"].copy_(result_buffers["classes"], non_blocking=True)
+    if include_det_idx:
+        pinned["det_idx"].copy_(result_buffers["det_idx"], non_blocking=True)
+    event = torch.cuda.Event(enable_timing=False)
+    event.record(torch.cuda.current_stream())
+    return event, pinned
+
+
+def read_deferred_result(
+    event: torch.cuda.Event,
+    pinned: dict[str, torch.Tensor],
+    *,
+    default_class_id: int | None = None,
+    include_det_idx: bool = True,
+) -> HostTrackResultView:
+    event.synchronize()
+    count = int(pinned["count"].item())
+    if count <= 0:
+        return {
+            "count": 0,
+            "boxes": torch.empty((0, 4), dtype=torch.float32),
+            "scores": torch.empty((0,), dtype=torch.float32),
+            "ids": torch.empty((0,), dtype=torch.int32),
+            "classes": (
+                None
+                if default_class_id is not None
+                else torch.empty((0,), dtype=torch.int32)
+            ),
+            "det_idx": (
+                torch.empty((0,), dtype=torch.int32) if include_det_idx else None
+            ),
+        }
+
+    boxes = pinned["boxes"][:count]
+    scores = pinned["scores"][:count]
+    ids = pinned["ids"][:count]
+
+    if default_class_id is not None:
+        classes = torch.full_like(ids, int(default_class_id), dtype=torch.int32)
+    else:
+        classes = pinned["classes"][:count]
+
+    det_idx = pinned["det_idx"][:count] if include_det_idx else None
+
+    return {
+        "count": count,
+        "boxes": boxes,
+        "scores": scores,
+        "ids": ids,
+        "classes": classes,
+        "det_idx": det_idx,
+    }
+
+
 def materialize_gpu_track_results_pinned(
     result_buffers: Any,
     pinned: dict[str, torch.Tensor],
