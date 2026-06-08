@@ -89,6 +89,11 @@ def _load_config_defaults(project_root: Path) -> dict:
 
 if __name__ == "__main__":
     parser = build_parser()
+    parser.add_argument(
+        "--no-compile",
+        action="store_true",
+        help="Disable torch.compile on detection head and postprocess",
+    )
     config_defaults = _load_config_defaults(project_root)
     if config_defaults:
         parser.set_defaults(**config_defaults)
@@ -266,6 +271,17 @@ if __name__ == "__main__":
             use_whole_graph=getattr(args, "use_whole_graph", False)
             and not (getattr(args, "cpp_threads", 0) > 0),
         )
+
+        if not getattr(args, "no_compile", False):
+            from saccade.perception.temporal_yolo.mamba_gated_detector import (
+                set_postprocess_compile,
+            )
+
+            set_postprocess_compile(True)
+            mamba_detector.mamba_head.set_head_compile(True)
+            # P3 deferred: torch.compile on MambaBlock degrades selective_scan
+            # from 3→12 launches (Inductor un-batches cross_scan dimensions).
+            # Replaced by native kernel optimization in mamba_scan.cu.
 
         eval_kwargs["detector"] = mamba_detector
         eval_kwargs["tiling"] = _tiling

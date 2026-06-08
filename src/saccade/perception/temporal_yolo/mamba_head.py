@@ -104,7 +104,7 @@ try:
         a_per_channel: int,
         is_half: bool,
     ) -> torch.Tensor:
-        return torch.empty_like(u)
+        return torch.empty(u.shape, dtype=u.dtype, device=u.device)
 
 except Exception:
     # Fallback to direct call in case custom_op is not supported or errors out
@@ -557,6 +557,10 @@ class MambaDetectionHead(nn.Module):
             self.upsample = None
 
         self.use_cuda_graph = use_cuda_graph
+        self._head_compile_enabled: bool = False
+        self._head_modules_original: dict[str, nn.Module] = {}
+        self._block_compile_enabled: bool = False
+        self._block_modules_original: nn.ModuleList | None = None
         # Lazily-captured ``torch.cuda.make_graphed_callables``, keyed by
         # (input shapes, return_embeddings). make_graphed_callables owns the
         # graph pool + capture stream + static I/O, so its replay is robust to
@@ -615,6 +619,56 @@ class MambaDetectionHead(nn.Module):
     def clear_cuda_graphs(self) -> None:
         """Drop all graphed callables (releases their captured graph mempools)."""
         self._graphed_callables.clear()
+
+    def set_head_compile(self, enabled: bool) -> None:
+        """Enable or disable ``torch.compile`` on cls_head / reg_head modules.
+
+        Each ``nn.Sequential`` (Conv2d → SiLU → Conv2d) is individually
+        compiled with ``mode="default"`` so the fused kernel graph can be
+        captured by the outer ``make_graphed_callables`` in the whole-graph
+        path.
+        """
+        if enabled and not self._head_compile_enabled:
+            self._head_modules_original["cls_head"] = self.cls_head
+            self._head_modules_original["reg_head"] = self.reg_head
+            self.cls_head = nn.ModuleList(
+                [torch.compile(m, mode="default") for m in self.cls_head]
+            )
+            self.reg_head = nn.ModuleList(
+                [torch.compile(m, mode="default") for m in self.reg_head]
+            )
+            self._head_compile_enabled = True
+        elif not enabled and self._head_compile_enabled:
+            if "cls_head" in self._head_modules_original:
+                self.cls_head = self._head_modules_original.pop("cls_head")
+            if "reg_head" in self._head_modules_original:
+                self.reg_head = self._head_modules_original.pop("reg_head")
+            self._head_compile_enabled = False
+
+    def set_block_compile(self, enabled: bool) -> None:
+        """Enable or disable ``torch.compile`` on MambaBlock modules.
+
+        Compiles each ``MambaBlock.forward`` with ``mode="default"``. The
+        custom ``selective_scan_fwd`` CUDA op is registered via
+        ``@torch.library.custom_op`` so torch.compile treats it as a
+        passthrough, fusing only the surrounding PyTorch ops.
+        """
+        if enabled and not self._block_compile_enabled:
+            self._block_modules_original = self.mamba_blocks
+            compiled_blocks = nn.ModuleList()
+            for scale_blocks in self.mamba_blocks:
+                compiled_blocks.append(
+                    nn.ModuleList(
+                        [torch.compile(b, mode="default") for b in scale_blocks]
+                    )
+                )
+            self.mamba_blocks = compiled_blocks
+            self._block_compile_enabled = True
+        elif not enabled and self._block_compile_enabled:
+            if self._block_modules_original is not None:
+                self.mamba_blocks = self._block_modules_original
+                self._block_modules_original = None
+            self._block_compile_enabled = False
 
     def forward(
         self,

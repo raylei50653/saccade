@@ -76,6 +76,20 @@ def build_engine(
     input_name = network.get_input(0).name
     print(f"🔍 Input Node Name: {input_name}")
 
+    # ── NHWC output: eliminate nchwToNhwc boundary reformats inside TRT ──
+    # TRT FP16 mode internally uses NHWC for tensor-core convs.  By default
+    # the I/O stays LINEAR (NCHW) and TRT inserts silent reformat layers at
+    # every boundary — 22 nchwToNhwc + 11 nhwcToNchw kernel launches per
+    # frame that show up in nsys.  Marking every I/O tensor as HWC8 lets TRT
+    # elide the boundary reformats entirely.  The consumer
+    # (TRTYoloBackbone / Mamba head) must allocate channels_last buffers
+    # and accept NHWC input.
+    nhwc_mask = 1 << int(trt.TensorFormat.HWC8) | 1 << int(trt.TensorFormat.LINEAR)
+    for i in range(network.num_outputs):
+        out = network.get_output(i)
+        out.allowed_formats = nhwc_mask
+        print(f"🔧 Output '{out.name}' allowed_formats = HWC8|LINEAR")
+
     profile.set_shape(
         input_name,
         (min_batch, 3, img_size, img_size),

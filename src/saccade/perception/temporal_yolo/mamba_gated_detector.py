@@ -120,6 +120,47 @@ def _postprocess_mamba_fixed(
     *,
     anchors: Tensor | None = None,
     anchor_strides: Tensor | None = None,
+    _compile: bool | None = None,
+) -> Tensor:
+    """Decode Mamba head outputs to (B, max_det, 6) detections.
+
+    Set ``_compile=False`` to force eager execution (e.g. for correctness
+    checks). By default, uses ``torch.compile`` when available (PyTorch ≥ 2.0)
+    to fuse the pointwise decode chain.
+    """
+    if _compile is None:
+        _compile = _POSTPROCESS_COMPILE_ENABLED
+    if _compile:
+        compiled = _get_compiled_postprocess()
+        return compiled(
+            cls_preds,
+            reg_preds,
+            strides,
+            conf_thr,
+            max_det,
+            anchors=anchors,
+            anchor_strides=anchor_strides,
+        )
+    return _postprocess_mamba_fixed_eager(
+        cls_preds,
+        reg_preds,
+        strides,
+        conf_thr,
+        max_det,
+        anchors=anchors,
+        anchor_strides=anchor_strides,
+    )
+
+
+def _postprocess_mamba_fixed_eager(
+    cls_preds: list[Tensor],
+    reg_preds: list[Tensor],
+    strides: Tensor,
+    conf_thr: float,
+    max_det: int,
+    *,
+    anchors: Tensor | None = None,
+    anchor_strides: Tensor | None = None,
 ) -> Tensor:
     from ultralytics.utils.tal import dist2bbox
 
@@ -150,6 +191,33 @@ def _postprocess_mamba_fixed(
         results[b, :, 4] = topk_scores
         results[b, :, 5] = class_ids[b][topk_idx].float()
     return results
+
+
+# Compiled variant (created lazily on first call).
+_postprocess_mamba_fixed_compiled: Any = None
+_POSTPROCESS_COMPILE_ENABLED: bool = True
+
+
+def _get_compiled_postprocess() -> Any:
+    global _postprocess_mamba_fixed_compiled
+    if _postprocess_mamba_fixed_compiled is None and _POSTPROCESS_COMPILE_ENABLED:
+        try:
+            _postprocess_mamba_fixed_compiled = torch.compile(
+                _postprocess_mamba_fixed_eager,
+                mode="default",
+                fullgraph=False,
+            )
+        except Exception:
+            _postprocess_mamba_fixed_compiled = _postprocess_mamba_fixed_eager
+    return _postprocess_mamba_fixed_compiled
+
+
+def set_postprocess_compile(enabled: bool) -> None:
+    """Enable or disable ``torch.compile`` on the detection postprocess."""
+    global _POSTPROCESS_COMPILE_ENABLED, _postprocess_mamba_fixed_compiled
+    _POSTPROCESS_COMPILE_ENABLED = enabled
+    if not enabled:
+        _postprocess_mamba_fixed_compiled = None
 
 
 # ---------------------------------------------------------------------------
