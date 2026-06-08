@@ -363,6 +363,8 @@ ReID 不僅零增益，還**降低** IDF1（可能因為 semantic relink 在強 
 
 ## 8. 優化空間
 
+> **深入分析**：whole_graph 的 kernel 級剖析(每幀 372 kernel、SM Issue 僅 22%、碎片化來源、fp16/channels_last NO-GO 實測)見 [whole-graph-kernel-fragmentation.md](research/whole-graph-kernel-fragmentation.md)。重點:detect 路徑是 **latency/碎片化-bound**(非 compute/memory-bound),最大可動槓桿為「融合 104 個 torch pointwise kernel」與「selective_scan block-size 重構」。
+
 ### 8.1 立即可行（不改架構）
 
 | 方向 | 估計收益 | 方法 |
