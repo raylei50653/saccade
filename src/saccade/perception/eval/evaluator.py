@@ -4556,7 +4556,17 @@ def run_eval(
                         ):
                             lazy_reid_prev_embeddings.pop(stale_id, None)
 
-            if cfg.pipeline_relink and not getattr(cfg, "workbench", False):
+            _needs_emit_pipeline = (
+                relinker is not None
+                or id_stability_filter is not None
+                or primary_appearance_bank is not None
+                or dynamic_reid is not None
+            )
+            if (
+                cfg.pipeline_relink
+                and not getattr(cfg, "workbench", False)
+                and _needs_emit_pipeline
+            ):
                 # Pre-materialize: host_track_batch + motion snapshots (need main CUDA stream)
                 # then D2H-copy GPU tensors so background thread stays off CUDA streams.
                 _pm_host_batch = _prepare_host_track_batch(
@@ -4617,7 +4627,7 @@ def run_eval(
                         )
 
                 _use_fast_emit = (
-                    not cfg.pipeline_relink
+                    not _needs_emit_pipeline
                     and cfg.reid_mode == "off"
                     and not bool(cfg.kwargs.get("id_stability_filter", False))
                 )
@@ -4869,16 +4879,19 @@ def run_eval(
                         f"ids={deferred_stats['ids_before']}->{deferred_stats['ids_after']}"
                     )
 
-        results_lines, quality_stats = filter_low_quality_tracklets(
-            results_lines,
-            min_len=cfg.min_tracklet_len,
-            min_score=cfg.min_tracklet_score,
-        )
-        if quality_stats["removed"] > 0:
-            print(
-                f"🧹 Quality Filter: removed={quality_stats['removed']} "
-                f"ids={quality_stats['before']}->{quality_stats['after']}"
+        if cfg.min_tracklet_len > 1 or cfg.min_tracklet_score > 0.0:
+            results_lines, quality_stats = filter_low_quality_tracklets(
+                results_lines,
+                min_len=cfg.min_tracklet_len,
+                min_score=cfg.min_tracklet_score,
             )
+            if quality_stats["removed"] > 0:
+                print(
+                    f"🧹 Quality Filter: removed={quality_stats['removed']} "
+                    f"ids={quality_stats['before']}->{quality_stats['after']}"
+                )
+        else:
+            quality_stats = {"removed": 0, "before": 0, "after": 0}
 
         if cfg.interpolate_tracklets:
             results_lines, interp_stats = interpolate_tracklets(
