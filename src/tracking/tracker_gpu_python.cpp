@@ -1547,14 +1547,19 @@ public:
         if (hl != ema_h_.end()) h_lost = hl->second;
         auto hc = ema_h_.find(cand_id);
         if (hc != ema_h_.end()) h_cand = hc->second;
-        float half = static_cast<float>(gap) * 0.5f;
-        float x_l = lost_hist.back().first + vx_l * half;
-        float y_l = lost_hist.back().second + vy_l * half;
-        float x_c = cand_hist[0].first - vx_c * half;
-        float y_c = cand_hist[0].second - vy_c * half;
-        float dist_px = std::hypot(x_l - x_c, y_l - y_c);
         float h_ref = std::max((h_lost + h_cand) * 0.5f, 1.0f);
-        return dist_px / h_ref;
+        float lx = lost_hist.back().first, ly = lost_hist.back().second;
+        float cxf = cand_hist[0].first, cyf = cand_hist[0].second;
+        // Speed-weighted foot-bridge score: symmetric full extrapolation 0.5*(fwd+bwd)
+        // blended with spatial proximity dist_h, velocity weighted by exit speed.
+        // See docs/modules/semantic/research/offline_relink_candidate_analysis.md §6c-d.
+        float g = static_cast<float>(gap);
+        float fwd_r = std::hypot(lx + vx_l * g - cxf, ly + vy_l * g - cyf) / h_ref;
+        float bwd_r = std::hypot(cxf - vx_c * g - lx, cyf - vy_c * g - ly) / h_ref;
+        float dist_h = std::hypot(lx - cxf, ly - cyf) / h_ref;
+        float s_lost = std::hypot(vx_l, vy_l) / h_ref;
+        float w = std::sqrt(std::clamp(s_lost / 0.12f, 0.0f, 1.0f));
+        return w * 0.5f * (fwd_r + bwd_r) + (1.0f - w) * dist_h;
     }
 
     // Squared Mahalanobis distance for 2-DoF (center-only), used by the

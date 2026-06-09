@@ -14,6 +14,13 @@ Per-candidate analysis of the bidirectional bridge-relink attempts on **MOT17 tr
 Correctness label per attempt is derived by mapping `lost_id` / `cand_id` to GT IDs via the
 MOT output (`map_track_to_gt`): **same-GT = should-link**, **diff-GT = should-reject**.
 
+> **⚠️ Context, not contradiction.** The "AUC ≈ 0.55" here is the **hard-case** number
+> (candidates inside the gate's operating region). On the *full* offline candidate pool
+> `bridge_dist` AUC ≈ 0.895 — but that power is just rejecting obviously-far candidates; inside
+> the gate region (`bridge_dist ≤ 1`) it falls back to ~0.65, consistent with this doc. Both are
+> correct (different pools). See
+> [`offline_relink_candidate_analysis.md`](offline_relink_candidate_analysis.md).
+
 ## Headline finding
 
 **Pure geometry/motion cannot separate true from false bridge links.** Across 13 537

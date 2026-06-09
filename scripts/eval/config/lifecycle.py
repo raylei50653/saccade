@@ -81,7 +81,7 @@ class LifecycleConfig:
     # regressing both ends' last/first 4 foot points and bridging at the midpoint.
     # Independent of relink_enabled (the bank-ReID path). Default off (bit-identical).
     relink_bridge_enabled: bool = False
-    relink_bridge_px: float = 0.3
+    relink_bridge_px: float = 0.25
     relink_bridge_at: int = 4
     relink_bridge_min_lost: int = 2
     relink_bridge_ttl: int = 120
@@ -756,12 +756,13 @@ def add_lifecycle_args(parser: argparse.ArgumentParser) -> None:
     grp.add_argument(
         "--relink-bridge-px",
         type=float,
-        default=0.3,
+        default=0.25,
         help=_help(
-            "Box-height-normalized meeting distance to accept a bridge. Smaller = "
-            "stricter. MOT17-SDP optimum is 0.3 (IDF1 +0.8/HOTA +0.7/AssA +1.3/IDs "
-            "-50 vs baseline); >=0.4 over-bridges and drops below baseline.",
-            range_hint=">0, suggested 0.2-0.3",
+            "Box-height-normalized meeting distance to accept a speed-weighted "
+            "foot-bridge. Smaller = stricter. MOT17-SDP optimum is a 0.25-0.30 "
+            "plateau (IDF1 74.8/HOTA 68.0/AssA 66.2 at 0.25); <=0.2 over-tightens, "
+            ">=0.4 over-bridges. See offline_relink_candidate_analysis.md §6d.",
+            range_hint=">0, suggested 0.25-0.3",
         ),
     )
     grp.add_argument(

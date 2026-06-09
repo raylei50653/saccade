@@ -36,6 +36,8 @@
 | 文件 | 內容 |
 |------|------|
 | [research/bidirectional_relink_roadmap.md](research/bidirectional_relink_roadmap.md) | 雙向時空收斂幾何重連長期路線圖（Phase 0 已落地，1–4 規劃） |
+| [research/offline_relink_candidate_analysis.md](research/offline_relink_candidate_analysis.md) | relink-off/interp-off 離線候選分析：bridge 全池 AUC 0.895 但**門作用區僅 ~0.65**（與舊文 0.55 一致，easy-pool vs hard-pool）；瓶頸＝base rate；面積率穩健閘；轉向=projected-normal 噪聲；reach-gate 速度項實測死重（2026-06-09） |
+| [research/bidir_relink_data_analysis.md](research/bidir_relink_data_analysis.md) | 線上 bridge 候選 per-attempt 分析（hard-case AUC≈0.55，與上文難區 0.65 一致） |
 
 ## 📋 模組 TODO
 

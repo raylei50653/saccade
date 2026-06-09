@@ -372,31 +372,35 @@ B_{\text{motion}} = w_{\text{motion\_iou}} \cdot \operatorname{IoU}(\text{pred}_
 4. **Kalman probabilistic gate**：\(D^2_M(\text{extrapolated}, b_q) \le \chi^2_{\text{crit}}\)
 5. **Velocity direction gate**：\(\cos(\mathbf{v}, \mathbf{p}_q - \mathbf{p}_{\text{last}}) \ge \cos_{\text{min}}\)
 6. **Similarity gate**：\(\cos(\mathbf{e}_c, \mathbf{e}_q) \ge \tau_{\text{sim}}\)
-7. **Bidirectional midpoint bridge**：以線性回歸速度推斷消失/重現的中點距離
+7. **Speed-weighted foot-bridge**：對稱完整外推殘差與空間鄰近的速度加權混合（見 6.6）
 8. **Reciprocal margin**：\(S_{\text{best}} - S_{\text{second}} \ge \tau_{\text{margin}} + \Delta_{\text{crowd}} + \Delta_{\text{age}}\)
 
 ### 6.5 Appearance-First 模式
 
 當 `experimental_mode == "appearance_first"` 時，高相似度候選人 (\( \cos \ge \tau_{\text{af}} \)) 可繞過 spatial gate（appearance-first bypass）。
 
-### 6.6 Bidirectional Relink（Python + C++）
+### 6.6 Speed-Weighted Foot-Bridge Relink（Python + C++）
 
-雙向重鏈接檢查：對每一對 (lost_id, cand_id)，以 4 幀 regressed velocity 推算中點距離。
+雙向重鏈接：對每一對 (lost_id, cand_id)，以 4 幀 regressed velocity 計算「對稱完整外推殘差」與「空間鄰近」，並依 lost 退出速度做凸組合。速度向量在 MOT17 慢速行人下是噪聲（per-frame 中位 ~0.01 h/f，低於 box 抖動），故只在快速軌道才信任外推；慢速退化為純空間鄰近。
 
-C++ 實作見 `SemanticRelinkerCpp::midpoint_bridge_dist()` 與 `regress_velocity_4()`（`tracker_gpu_python.cpp:1057–1098`）。
+GPU 實作見 `relink_bidir_propose_kernel`（`tracker_gpu.cu`），C++/CPU 見 `SemanticRelinkerCpp::midpoint_bridge_dist()` 與 `regress_velocity_4()`（`tracker_gpu_python.cpp`）。
 
 \[
 \begin{aligned}
-\mathbf{v}_{\text{lost}} &= \operatorname{Regress4}(\mathbf{p}_{-4}, \mathbf{p}_{-3}, \mathbf{p}_{-2}, \mathbf{p}_{-1}) \\
-\mathbf{v}_{\text{cand}} &= \operatorname{Regress4}(\mathbf{p}_{0}, \mathbf{p}_{1}, \mathbf{p}_{2}, \mathbf{p}_{3}) \\
-d_{\text{bridge}} &= \frac{\|\mathbf{p}_{\text{lost}}^{\text{mid}} - \mathbf{p}_{\text{cand}}^{\text{mid}}\|}{h_{\text{ref}}}
+\mathbf{v}_{\text{lost}} &= \operatorname{Regress4}(\mathbf{p}_{-4}, \dots, \mathbf{p}_{-1}), \quad
+\mathbf{v}_{\text{cand}} = \operatorname{Regress4}(\mathbf{p}_{0}, \dots, \mathbf{p}_{3}) \\
+r_{\text{fwd}} &= \tfrac{\|(\mathbf{p}_{\text{lost}} + \mathbf{v}_{\text{lost}}\,g) - \mathbf{p}_{\text{cand}}\|}{h_{\text{ref}}}, \quad
+r_{\text{bwd}} = \tfrac{\|(\mathbf{p}_{\text{cand}} - \mathbf{v}_{\text{cand}}\,g) - \mathbf{p}_{\text{lost}}\|}{h_{\text{ref}}} \\
+d_{\text{spatial}} &= \frac{\|\mathbf{p}_{\text{lost}} - \mathbf{p}_{\text{cand}}\|}{h_{\text{ref}}}, \quad
+s_{\text{lost}} = \frac{\|\mathbf{v}_{\text{lost}}\|}{h_{\text{ref}}}, \quad
+w = \operatorname{clip}\!\Big(\sqrt{s_{\text{lost}}/0.12},\, 0,\, 1\Big) \\
+d_{\text{bridge}} &= w \cdot \tfrac{1}{2}(r_{\text{fwd}} + r_{\text{bwd}}) + (1 - w)\, d_{\text{spatial}}
 \end{aligned}
 \]
 
-4 幀速度回歸（closed form）：
-\[
-v_x = (3x_3 + x_2 - x_1 - 3x_0) / 10
-\]
+接受條件 \(d_{\text{bridge}} \le \texttt{bridge\_px}\)（預設 0.25，最佳 0.25–0.30 平台）。\(g\) 為 gap（幀）。4 幀速度回歸（closed form）：\(v_x = (3x_3 + x_2 - x_1 - 3x_0)/10\)。
+
+線上驗證（MOT17 train SDP, `mamba_whole_graph`, `--relink-bridge-enabled`）：較舊 gap/2 中點評分 **IDF1 +0.6 / HOTA +0.5 / AssA +1.0 / IDs −14**（74.8 / 68.0 / 66.2 / 483）；詳見 `docs/modules/semantic/research/offline_relink_candidate_analysis.md`。
 
 ---
 

@@ -661,7 +661,7 @@ def parse_eval_config(
         relink_spatial_gate=float(kwargs.get("relink_spatial_gate", 4.0)),
         relink_max_age=int(kwargs.get("relink_max_age", 300)),
         relink_bridge_enabled=bool(kwargs.get("relink_bridge_enabled", False)),
-        relink_bridge_px=float(kwargs.get("relink_bridge_px", 0.3)),
+        relink_bridge_px=float(kwargs.get("relink_bridge_px", 0.25)),
         relink_bridge_at=int(kwargs.get("relink_bridge_at", 4)),
         relink_bridge_min_lost=int(kwargs.get("relink_bridge_min_lost", 2)),
         relink_bridge_ttl=int(kwargs.get("relink_bridge_ttl", 120)),

@@ -1357,11 +1357,19 @@ __global__ void relink_bidir_propose_kernel(
             float cdist = sqrtf((cand_cx - lcx) * (cand_cx - lcx) + (cand_cy - lcy) * (cand_cy - lcy)) / h_ref;
             if (cdist > bridge_spatial_gate) continue;
         }
-        // Foot-bridge: lost forward + candidate backward by gap/2.
-        float half = la * 0.5f;
-        float xl = lx + vxl * half, yl = ly + vyl * half;
-        float xc = cx0 - vxc * half, yc = cy0 - vyc * half;
-        float bdist = sqrtf((xl - xc) * (xl - xc) + (yl - yc) * (yl - yc)) / h_ref;
+        // Speed-weighted foot-bridge score (offline-optimised + online-validated, see
+        // docs/modules/semantic/research/offline_relink_candidate_analysis.md §6c-d):
+        // symmetric full extrapolation 0.5*(fwd+bwd) blended with spatial proximity
+        // dist_h, the velocity term weighted by exit speed so it is trusted only for
+        // fast tracks (heading is noise for slow ones). +0.6 IDF1/+1.0 AssA on SDP.
+        float fwd_x = lx + vxl * la, fwd_y = ly + vyl * la;             // lost fwd full gap
+        float bwd_x = cx0 - vxc * la, bwd_y = cy0 - vyc * la;           // cand bwd full gap
+        float fwd_r = sqrtf((fwd_x - cx0) * (fwd_x - cx0) + (fwd_y - cy0) * (fwd_y - cy0)) / h_ref;
+        float bwd_r = sqrtf((bwd_x - lx) * (bwd_x - lx) + (bwd_y - ly) * (bwd_y - ly)) / h_ref;
+        float dist_h = sqrtf((lx - cx0) * (lx - cx0) + (ly - cy0) * (ly - cy0)) / h_ref;
+        float s_lost = sqrtf(vxl * vxl + vyl * vyl) / h_ref;           // exit speed (h/f)
+        float w = sqrtf(fminf(fmaxf(s_lost / 0.12f, 0.0f), 1.0f));
+        float bdist = w * 0.5f * (fwd_r + bwd_r) + (1.0f - w) * dist_h;
         if (bdist > bridge_px) continue;
         if (bdist < best_dist) { second_dist = best_dist; best_dist = bdist; best_lost = lost; }
         else if (bdist < second_dist) { second_dist = bdist; }
