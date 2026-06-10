@@ -1730,6 +1730,126 @@ def _run_native_tensor_prep(
     )
 
 
+def _run_post_nms_finalize(
+    state: SeqState,
+    fctx: FrameCtx,
+    *,
+    n_post: int,
+    source_boxes_for_keypoints: "torch.Tensor | None",
+    source_keypoints: "torch.Tensor | None",
+    current_stage_sample_active: bool,
+    post_seg_events: list,
+) -> tuple[
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    "torch.Tensor | None",
+    int,
+    int,
+]:
+    """Slice native-NMS outputs to n_post, align keypoints, quality-scale (extracted).
+
+    Final postprocess tail on the perception_pipeline path: slices the fixed output
+    buffers down to the kept count, matches source keypoints to the kept boxes, and
+    (CPU-tracker only) multiplies in per-detection quality factors. Returns
+    ``(fused_boxes, fused_scores, fused_classes, geometry_suspect_mask,
+    aligned_keypoints, after_filter_count, after_nms_count)``. The per-frame
+    profiling locals (``current_stage_sample_active`` flag, ``post_seg_events``
+    marker list which is appended in place) are threaded through unchanged.
+    """
+    cfg = state.cfg
+    w_orig = state.w_orig
+    h_orig = state.h_orig
+    detector = state.detector
+    profile_stages = state.profile_stages
+    seq_stage_totals = state.seq_stage_totals
+    post_boxes = fctx.post_boxes
+    post_scores = fctx.post_scores
+    post_classes = fctx.post_classes
+    geometry_suspect_mask = fctx.geometry_suspect_mask
+    t_output_slicing_start = None
+    if profile_stages:
+        torch.cuda.synchronize()
+        t_output_slicing_start = time.perf_counter()
+    with _record_profile_scope("post.output_slicing"):
+        fused_boxes = post_boxes[:n_post]
+        fused_scores = post_scores[:n_post]
+        fused_classes = post_classes[:n_post]
+        geometry_suspect_mask = geometry_suspect_mask[:n_post]
+    if (
+        profile_stages
+        and current_stage_sample_active
+        and t_output_slicing_start is not None
+    ):
+        torch.cuda.synchronize()
+        seq_stage_totals["post_output_slicing"] += (
+            time.perf_counter() - t_output_slicing_start
+        ) * 1000
+    t_keypoint_align_start = None
+    if profile_stages:
+        torch.cuda.synchronize()
+        t_keypoint_align_start = time.perf_counter()
+    aligned_keypoints = match_keypoints_to_boxes(
+        fused_boxes,
+        source_boxes_for_keypoints,
+        source_keypoints,
+    )
+    if (
+        profile_stages
+        and current_stage_sample_active
+        and t_keypoint_align_start is not None
+    ):
+        torch.cuda.synchronize()
+        seq_stage_totals["post_keypoint_align"] += (
+            time.perf_counter() - t_keypoint_align_start
+        ) * 1000
+
+    t_quality_scale_start = None
+    if profile_stages:
+        torch.cuda.synchronize()
+        t_quality_scale_start = time.perf_counter()
+    with _record_profile_scope("post.quality_scale"):
+        if (
+            cfg.detection_quality_scaling
+            and n_post > 0
+            and not getattr(detector.tracker, "is_cuda", False)
+        ):
+            quality_factors = _compute_detection_quality_batch(
+                fused_boxes,
+                w_orig,
+                h_orig,
+                w_aspect=cfg.detection_quality_w_aspect,
+                w_center=cfg.detection_quality_w_center,
+                w_area=cfg.detection_quality_w_area,
+            )
+            fused_scores = fused_scores * quality_factors
+    if (
+        profile_stages
+        and current_stage_sample_active
+        and t_quality_scale_start is not None
+    ):
+        torch.cuda.synchronize()
+        seq_stage_totals["post_quality_scale"] += (
+            time.perf_counter() - t_quality_scale_start
+        ) * 1000
+    if profile_stages and current_stage_sample_active:
+        _seg_ev = torch.cuda.Event(enable_timing=True)
+        _seg_ev.record(torch.cuda.current_stream())
+        post_seg_events.append(("post_seg_slice_quality", _seg_ev))
+    after_filter_count = int(n_post)
+    after_nms_count = int(n_post)
+    return (
+        fused_boxes,
+        fused_scores,
+        fused_classes,
+        geometry_suspect_mask,
+        aligned_keypoints,
+        after_filter_count,
+        after_nms_count,
+    )
+
+
 def run_eval(
     engine: str,
     output: str,
@@ -3472,10 +3592,6 @@ def run_eval(
                         raw_boxes_contig = _fctx.raw_boxes_contig
                         raw_scores_contig = _fctx.raw_scores_contig
                         raw_classes_contig = _fctx.raw_classes_contig
-                        post_boxes = _fctx.post_boxes
-                        post_scores = _fctx.post_scores
-                        post_classes = _fctx.post_classes
-                        geometry_suspect_mask = _fctx.geometry_suspect_mask
                         num_priors = _fctx.num_priors
                         if (
                             profile_stages
@@ -3564,77 +3680,23 @@ def run_eval(
                             _seg_ev = torch.cuda.Event(enable_timing=True)
                             _seg_ev.record(torch.cuda.current_stream())
                             post_seg_events.append(("post_seg_native", _seg_ev))
-                        t_output_slicing_start = None
-                        if profile_stages:
-                            torch.cuda.synchronize()
-                            t_output_slicing_start = time.perf_counter()
-                        with _record_profile_scope("post.output_slicing"):
-                            fused_boxes = post_boxes[:n_post]
-                            fused_scores = post_scores[:n_post]
-                            fused_classes = post_classes[:n_post]
-                            geometry_suspect_mask = geometry_suspect_mask[:n_post]
-                        if (
-                            profile_stages
-                            and current_stage_sample_active
-                            and t_output_slicing_start is not None
-                        ):
-                            torch.cuda.synchronize()
-                            seq_stage_totals["post_output_slicing"] += (
-                                time.perf_counter() - t_output_slicing_start
-                            ) * 1000
-                        t_keypoint_align_start = None
-                        if profile_stages:
-                            torch.cuda.synchronize()
-                            t_keypoint_align_start = time.perf_counter()
-                        aligned_keypoints = match_keypoints_to_boxes(
+                        (
                             fused_boxes,
-                            source_boxes_for_keypoints,
-                            source_keypoints,
+                            fused_scores,
+                            fused_classes,
+                            geometry_suspect_mask,
+                            aligned_keypoints,
+                            after_filter_count,
+                            after_nms_count,
+                        ) = _run_post_nms_finalize(
+                            _seq_state,
+                            _fctx,
+                            n_post=n_post,
+                            source_boxes_for_keypoints=source_boxes_for_keypoints,
+                            source_keypoints=source_keypoints,
+                            current_stage_sample_active=current_stage_sample_active,
+                            post_seg_events=post_seg_events,
                         )
-                        if (
-                            profile_stages
-                            and current_stage_sample_active
-                            and t_keypoint_align_start is not None
-                        ):
-                            torch.cuda.synchronize()
-                            seq_stage_totals["post_keypoint_align"] += (
-                                time.perf_counter() - t_keypoint_align_start
-                            ) * 1000
-
-                        t_quality_scale_start = None
-                        if profile_stages:
-                            torch.cuda.synchronize()
-                            t_quality_scale_start = time.perf_counter()
-                        with _record_profile_scope("post.quality_scale"):
-                            if (
-                                cfg.detection_quality_scaling
-                                and n_post > 0
-                                and not getattr(detector.tracker, "is_cuda", False)
-                            ):
-                                quality_factors = _compute_detection_quality_batch(
-                                    fused_boxes,
-                                    w_orig,
-                                    h_orig,
-                                    w_aspect=cfg.detection_quality_w_aspect,
-                                    w_center=cfg.detection_quality_w_center,
-                                    w_area=cfg.detection_quality_w_area,
-                                )
-                                fused_scores = fused_scores * quality_factors
-                        if (
-                            profile_stages
-                            and current_stage_sample_active
-                            and t_quality_scale_start is not None
-                        ):
-                            torch.cuda.synchronize()
-                            seq_stage_totals["post_quality_scale"] += (
-                                time.perf_counter() - t_quality_scale_start
-                            ) * 1000
-                        if profile_stages and current_stage_sample_active:
-                            _seg_ev = torch.cuda.Event(enable_timing=True)
-                            _seg_ev.record(torch.cuda.current_stream())
-                            post_seg_events.append(("post_seg_slice_quality", _seg_ev))
-                        after_filter_count = int(n_post)
-                        after_nms_count = int(n_post)
                     else:
                         fused_scores = _apply_narrow_person_score_bonus(
                             fused_boxes,
