@@ -1356,6 +1356,10 @@ class EvalPipeline:
     onms_min_track_score: Any = None
     onms_prior_iou_threshold: Any = None
     top_level_stage_names: Any = None
+    append_birth_event_rows: Any = None
+    seq_post_counts: Any = None
+    seq_tile_diag: Any = None
+    seq_narrow_bonus: float = 0.0
 
 
 @dataclasses.dataclass
@@ -2495,6 +2499,1658 @@ def _run_detection_filters(
         aligned_keypoints,
         after_merge_count,
     )
+
+
+def _run_frame(state: "EvalPipeline", *, frame_id: int) -> bool:
+    """Execute one frame. Returns False to stop iteration, True to continue."""
+    # --- unpack pure-input fields ---
+    _annotate_birth_events = state.annotate_birth_events
+    _append_birth_event_rows = state.append_birth_event_rows
+    _consec_birth_window = state._consec_birth_window
+    _defer_emit = state.defer_emit
+    _fpn_backbone = state._fpn_backbone
+    _fpn_img_size = state._fpn_img_size
+    _fpn_reid_conv_weights = state._fpn_reid_conv_weights
+    _fpn_reid_dim = state._fpn_reid_dim
+    _fpn_reid_mode = state._fpn_reid_mode
+    _fpn_reid_proj_weight = state._fpn_reid_proj_weight
+    _fpn_reid_running_mean = state._fpn_reid_running_mean
+    _fpn_reid_running_var = state._fpn_reid_running_var
+    _multi_birth_manager = state._multi_birth_manager
+    _pinned_result_bufs = state.pinned_result_bufs
+    _scene_policy = state._scene_policy
+    _use_direct_gmc = state.use_direct_gmc
+    cfg = state.cfg
+    cropper = state.cropper
+    debug_dump_frames = state.debug_dump_frames
+    debug_dump_seq = state.debug_dump_seq
+    debug_stage_dump_rows = state.debug_stage_dump_rows
+    detect_fn = state.detect_fn
+    detector = state.detector
+    detector_box_format = state.detector_box_format
+    dynamic_reid = state.dynamic_reid
+    enable_onms = state.enable_onms
+    extractor = state.extractor
+    frame_end = state.frame_end
+    frame_latencies = state.frame_latencies
+    geometry_scale_state = state.geometry_scale_state
+    global_id_mapper = state.global_id_mapper
+    gmc_estimator = state.gmc_estimator
+    h_orig = state.h_orig
+    lazy_reid_prev_embeddings = state.lazy_reid_prev_embeddings
+    native_reid_available = state.native_reid_available
+    nv12_direct_from_hwc = state.nv12_direct_from_hwc
+    onms_min_track_age = state.onms_min_track_age
+    onms_min_track_score = state.onms_min_track_score
+    onms_prior_iou_threshold = state.onms_prior_iou_threshold
+    perception_pipeline = state.perception_pipeline
+    pool = state.pool
+    primary_appearance_bank = state.primary_appearance_bank
+    profile_stages = state.profile_stages
+    record_stage_sample = state.record_stage_sample
+    reid_main_ready = state.reid_main_ready
+    reid_side_event = state.reid_side_event
+    reid_side_stream = state.reid_side_stream
+    results_lines = state.results_lines
+    seq = state.seq
+    seq_native_reid_samples = state.seq_native_reid_samples
+    seq_post_counts = state.seq_post_counts
+    seq_reid_interval = state.seq_reid_interval
+    seq_segment_samples = state.seq_segment_samples
+    seq_stage_samples = state.seq_stage_samples
+    seq_stage_totals = state.seq_stage_totals
+    seq_tile_diag = state.seq_tile_diag
+    seq_track_buffer = state.seq_track_buffer
+    stream_iter = state.stream_iter
+    time_stage = state.time_stage
+    top_level_stage_names = state.top_level_stage_names
+    w_orig = state.w_orig
+    warmup_frames = state.warmup_frames
+    wb = state.wb
+    wb_scene_policy = state.wb_scene_policy
+    # -----------------------------------------------
+    if _defer_emit and state.defer_emit_event is not None:
+        _lines, state.prev_track_ids = _flush_deferred_emit(
+            state.defer_emit_event,
+            _pinned_result_bufs,
+            default_class_id=cfg.person_class if cfg.track_person_only else None,
+            global_id_mapper=global_id_mapper,
+            seq=seq,
+            frame_id=state.defer_emit_fid,
+            frame_w=w_orig,
+            frame_h=h_orig,
+        )
+        results_lines.extend(_lines)
+        state.defer_emit_event = None
+    current_stage_sample_active = frame_id > warmup_frames
+    current_frame_stage_elapsed = (
+        {name: 0.0 for name in top_level_stage_names}
+        if current_stage_sample_active
+        else None
+    )
+    t_e2e_start = time.perf_counter()
+    _reid_side_pending = False
+    _reid_async_embeddings: torch.Tensor | None = None
+    _reid_async_indices: torch.Tensor | None = None
+    _reid_frame_hwc_ref: torch.Tensor | None = None
+    try:
+        frame_gpu, _fetch_ms = time_stage(
+            seq_stage_totals,
+            "fetch",
+            lambda: next(stream_iter),
+            sync_cuda=False,
+        )
+    except StopIteration:
+        return False
+    t_frame_start = time.perf_counter()
+
+    if getattr(cfg, "workbench", False) and wb is not None:
+        _, _ = time_stage(
+            seq_stage_totals,
+            "ingest_preprocess",
+            lambda: (
+                (
+                    pool.frame_buffer_nv12.copy_(rgb_hwc_to_nv12_gpu(frame_gpu)),
+                    pool.mark_nv12_current(),
+                )
+                if nv12_direct_from_hwc
+                else (
+                    pool.frame_buffer.copy_(frame_gpu.permute(2, 0, 1).float() / 255.0),
+                    apply_frame_preprocess(
+                        pool.frame_buffer,
+                        cfg.preprocess_modes,
+                        cfg.gamma,
+                        cfg.gamma_luma_threshold,
+                        cfg.contrast,
+                    ),
+                    pool.mark_rgb_current(),
+                    (
+                        pool.frame_buffer_nv12.copy_(
+                            rgb_chw_to_nv12_gpu(pool.frame_buffer)
+                        )
+                        if pool.use_nv12
+                        else None
+                    ),
+                )
+            ),
+            sync_cuda=False,
+        )
+
+        # Fetch priors for ONMS if enabled
+        priors_tensor, prior_classes_tensor = None, None
+        if enable_onms:
+            priors_tensor, prior_classes_tensor = _build_active_track_priors(
+                detector.tracker,
+                pool.frame_buffer.device,
+                min_track_age=onms_min_track_age,
+                min_track_score=onms_min_track_score,
+            )
+
+        # Process frame
+        wb_result, _ = time_stage(
+            seq_stage_totals,
+            "detect",
+            lambda: wb.process_frame(
+                pool.as_rgb_chw(),
+                frame_w=w_orig,
+                frame_h=h_orig,
+                priors=priors_tensor if enable_onms else None,
+                prior_classes=prior_classes_tensor if enable_onms else None,
+            ),
+            sync_cuda=True,
+        )
+
+        track_results = {
+            "count": len(wb_result.ids),
+            "ids": wb_result.ids,
+            "boxes": wb_result.boxes,
+            "scores": wb_result.scores,
+            "classes": wb_result.classes,
+            "det_idx": wb_result.det_idx,
+        }
+
+        # Mock missing variables
+        fused_boxes = wb_result.boxes
+        fused_scores = wb_result.scores
+        fused_classes = wb_result.classes
+        geometry_suspect_mask = torch.zeros(
+            len(fused_boxes), dtype=torch.bool, device=fused_boxes.device
+        )
+        embeddings = None
+        state.gmc_warp = None
+        aligned_keypoints = None
+        raw_dump_boxes = fused_boxes
+        raw_dump_scores = fused_scores
+        raw_dump_classes = fused_classes
+
+        # Update seq_stage_totals for the skipped stages to match legacy timing expectations
+        seq_stage_totals["postprocess"] += 0.0
+        seq_stage_totals["track"] += 0.0
+        seq_stage_totals["materialize"] += 0.0
+    else:
+        if getattr(cfg, "workbench", False) and wb is not None:
+            # Step 1: ingest + preprocess (same as non-workbench path)
+            _, _ = time_stage(
+                seq_stage_totals,
+                "ingest_preprocess",
+                lambda: (
+                    (
+                        pool.frame_buffer_nv12.copy_(rgb_hwc_to_nv12_gpu(frame_gpu)),
+                        pool.mark_nv12_current(),
+                    )
+                    if nv12_direct_from_hwc
+                    else (
+                        pool.frame_buffer.copy_(
+                            frame_gpu.permute(2, 0, 1).float() / 255.0
+                        ),
+                        apply_frame_preprocess(
+                            pool.frame_buffer,
+                            cfg.preprocess_modes,
+                            cfg.gamma,
+                            cfg.gamma_luma_threshold,
+                            cfg.contrast,
+                        ),
+                        pool.mark_rgb_current(),
+                        (
+                            pool.frame_buffer_nv12.copy_(
+                                rgb_chw_to_nv12_gpu(pool.frame_buffer)
+                            )
+                            if pool.use_nv12
+                            else None
+                        ),
+                    )
+                ),
+                sync_cuda=True,
+            )
+
+            # Step 2: YOLO detection via detect_fn — produces boxes in original coords
+            (
+                (
+                    fused_boxes,
+                    fused_scores,
+                    fused_classes,
+                    is_tiled,
+                    source_keypoints,
+                ),
+                _,
+            ) = time_stage(
+                seq_stage_totals,
+                "detect",
+                lambda: detect_fn(
+                    detector,
+                    pool,
+                    h_orig,
+                    w_orig,
+                    cfg.preprocess_modes,
+                    detector_box_format,
+                ),
+                sync_cuda=True,
+            )
+
+            # ── Scene-adapt: observe & classify on first frames ────────
+            if wb_scene_policy is not None and not wb_scene_policy.is_classified:
+                wb_scene_policy.observe(fused_boxes, fused_scores, w_orig, h_orig)
+                if wb_scene_policy.is_classified and wb_scene_policy.stats is not None:
+                    st = wb_scene_policy.stats
+                    if st.scene_type == "crowded_narrow":
+                        state.seq_narrow_bonus = cfg.narrow_person_score_bonus
+                    wb.narrow_bonus = state.seq_narrow_bonus
+                    print(
+                        f"  [scene_adapt] {seq} @ frame {frame_id}: {st}"
+                        + (
+                            f" → narrow_bonus={state.seq_narrow_bonus:.2f}"
+                            if cfg.scene_adapt_enabled
+                            and cfg.narrow_person_score_bonus > 0
+                            else ""
+                        )
+                    )
+
+            # ── Quality-aware processing (baseline-aligned pipeline) ────
+            wb_result, _ = time_stage(
+                seq_stage_totals,
+                "postprocess",
+                lambda: wb.process_detections_quality_aware(
+                    fused_boxes,
+                    fused_scores,
+                    fused_classes,
+                    frame_w=w_orig,
+                    frame_h=h_orig,
+                    frame_chw=pool.as_rgb_chw(),
+                    frame_id=frame_id,
+                    last_reid_frame=state.last_reid_frame,
+                    prev_gray=state.prev_gray,
+                    is_tiled=is_tiled,
+                ),
+                sync_cuda=True,
+            )
+            # Update scene-adapt narrow bonus from workbench
+            state.seq_narrow_bonus = wb.narrow_bonus
+            state.last_reid_frame = wb.last_reid_frame
+
+            # D2H once, share across tracker_result_buffers, track_results, and
+            # MOT line writing — avoids 10 redundant device syncs (was 13 .cpu()
+            # calls per frame × 7 threads = 91 syncs/cycle; now 5).
+            wb_count = int(len(wb_result.ids))
+            _wb_boxes_cpu = wb_result.boxes.cpu()
+            _wb_scores_cpu = wb_result.scores.cpu()
+            _wb_ids_cpu = wb_result.ids.cpu()
+            _wb_classes_cpu = wb_result.classes.cpu()
+            _wb_det_idx_cpu = wb_result.det_idx.cpu()
+
+            state.tracker_result_buffers = {
+                "count": torch.tensor([wb_count], dtype=torch.int32, device="cpu"),
+                "boxes": _wb_boxes_cpu,
+                "scores": _wb_scores_cpu,
+                "ids": _wb_ids_cpu,
+                "classes": _wb_classes_cpu,
+                "det_idx": _wb_det_idx_cpu,
+            }
+            track_results = {
+                "count": wb_count,
+                "boxes": _wb_boxes_cpu,
+                "scores": _wb_scores_cpu,
+                "ids": _wb_ids_cpu,
+                "classes": _wb_classes_cpu,
+                "det_idx": _wb_det_idx_cpu,
+            }
+
+            # Write MOT result lines for workbench path (C++ already tracked).
+            # Build lines: "frame_id, global_tid, x1, y1, w, h, score, -1, -1, -1"
+            wb_mot_lines: list[str] = []
+            if wb_count > 0:
+                wb_ids_np = _wb_ids_cpu.numpy().astype(int)
+                wb_boxes_np = _wb_boxes_cpu.numpy()
+                wb_scores_np = _wb_scores_cpu.numpy()
+                for i in range(wb_count):
+                    global_tid = int(global_id_mapper.map(seq, wb_ids_np[i]))
+                    box = (
+                        float(wb_boxes_np[i, 0]),
+                        float(wb_boxes_np[i, 1]),
+                        float(wb_boxes_np[i, 2]),
+                        float(wb_boxes_np[i, 3]),
+                    )
+                    score = float(wb_scores_np[i])
+                    wb_mot_lines.append(
+                        _mot_result_line(
+                            frame_id, global_tid, box, score, w_orig, h_orig
+                        )
+                    )
+
+            # Add MOT lines to results_lines so they go through post-processing
+            if wb_mot_lines:
+                results_lines.extend(wb_mot_lines)
+
+            # Update prev_track_ids for downstream (lazy ReID, etc.)
+            if wb_count > 0:
+                state.prev_track_ids = set(wb_ids_np.tolist())
+
+            # Mock missing variables for downstream compatibility
+            fused_boxes = wb_result.boxes
+            fused_scores = wb_result.scores
+            fused_classes = wb_result.classes
+            geometry_suspect_mask = torch.zeros(
+                len(fused_boxes), dtype=torch.bool, device=fused_boxes.device
+            )
+            embeddings = None
+            state.gmc_warp = None
+            aligned_keypoints = None
+            raw_dump_boxes = fused_boxes
+            raw_dump_scores = fused_scores
+            raw_dump_classes = fused_classes
+            frame_birth_events = []
+
+            # Update seq_stage_totals for the skipped stages
+            seq_stage_totals["postprocess"] += 0.0
+            seq_stage_totals["track"] += 0.0
+            seq_stage_totals["materialize"] += 0.0
+
+            # Save gray frame for GMC in next frame
+            state.prev_gray = pool.get_frame_luma().clone()
+        else:
+            (
+                fused_boxes,
+                fused_scores,
+                fused_classes,
+                is_tiled,
+                source_keypoints,
+            ) = _run_detect(
+                state,
+                pool=pool,
+                frame_gpu=frame_gpu,
+                nv12_direct_from_hwc=nv12_direct_from_hwc,
+                detect_fn=detect_fn,
+                detector_box_format=detector_box_format,
+            )
+
+            if _fpn_backbone is not None and fused_boxes.numel() > 0:
+                _fpn_in = pool.canvas_960p.unsqueeze(0)
+                if _fpn_in.shape[2] != _fpn_img_size:
+                    _fpn_in = torch.nn.functional.interpolate(
+                        _fpn_in,
+                        size=(_fpn_img_size, _fpn_img_size),
+                        mode="bilinear",
+                        align_corners=False,
+                    )
+                p3, p4, p5 = _fpn_backbone.infer(_fpn_in)
+                _fpn_cache = {"p3": p3, "p4": p4, "p5": p5}
+
+            source_boxes_for_keypoints = fused_boxes
+            debug_dump_active = _debug_frame_selected(
+                seq,
+                frame_id,
+                debug_dump_seq,
+                debug_dump_frames,
+            )
+            raw_dump_boxes = fused_boxes
+            raw_dump_scores = fused_scores
+            raw_dump_classes = fused_classes
+
+            # P5-4: scene-adaptive observation and one-shot classification.
+            if _scene_policy is not None and not _scene_policy.is_classified:
+                _scene_policy.observe(fused_boxes, fused_scores, w_orig, h_orig)
+                if _scene_policy.is_classified and _scene_policy.stats is not None:
+                    st = _scene_policy.stats
+                    if st.scene_type == "crowded_narrow":
+                        state.seq_narrow_bonus = cfg.narrow_person_score_bonus
+                    print(
+                        f"  [scene_adapt] {seq} @ frame {frame_id}: {st}"
+                        + (
+                            f" → narrow_bonus={state.seq_narrow_bonus:.2f}"
+                            if cfg.scene_adapt_enabled
+                            and cfg.narrow_person_score_bonus > 0
+                            else ""
+                        )
+                    )
+
+            if fused_boxes.numel() == 0:
+                if debug_dump_active:
+                    _append_stage_dump_rows(
+                        debug_stage_dump_rows,
+                        seq=seq,
+                        frame_id=frame_id,
+                        stage="raw",
+                        boxes=raw_dump_boxes,
+                        scores=raw_dump_scores,
+                        classes=raw_dump_classes,
+                    )
+                if frame_id > warmup_frames:
+                    frame_latencies.append((time.perf_counter() - t_frame_start) * 1000)
+                if profile_stages and frame_id > warmup_frames:
+                    seq_stage_totals["frame_total"] += (
+                        time.perf_counter() - t_e2e_start
+                    ) * 1000
+                    state.seq_profiled_frames += 1
+                if frame_id % 100 == 0:
+                    print(f"🎬 {seq} [{frame_id}/{frame_end}]")
+                return True
+
+            t_keypoint_align_start = None
+            if profile_stages:
+                torch.cuda.synchronize()
+                t_keypoint_align_start = time.perf_counter()
+            aligned_keypoints = match_keypoints_to_boxes(
+                fused_boxes,
+                source_boxes_for_keypoints,
+                source_keypoints,
+            )
+            if (
+                profile_stages
+                and current_stage_sample_active
+                and t_keypoint_align_start is not None
+            ):
+                torch.cuda.synchronize()
+                seq_stage_totals["post_keypoint_align"] += (
+                    time.perf_counter() - t_keypoint_align_start
+                ) * 1000
+
+            # Keep low-score boxes down to cfg.track_thresh so ByteTrack's
+            # second-stage association can actually use them.
+            post_gpu_start_event = None
+            post_gpu_end_event = None
+            # Sync-free CUDA-event markers partitioning the postprocess GPU span
+            # (post_gpu_elapsed) into contiguous segments. Each entry carries the
+            # name of the segment ENDING at that marker; the residual from the last
+            # marker to post_gpu_end_event is attributed to "post_seg_python_tail".
+            # No torch.cuda.synchronize() is inserted between markers, so timing is
+            # not distorted. Used only to locate the "unattributed GPU" residual.
+            post_seg_events: list[tuple[str, "torch.cuda.Event"]] = []
+            if profile_stages:
+                torch.cuda.synchronize()
+                t_post_start = time.perf_counter()
+                post_gpu_start_event = torch.cuda.Event(enable_timing=True)
+                post_gpu_end_event = torch.cuda.Event(enable_timing=True)
+                post_gpu_start_event.record(torch.cuda.current_stream())
+            raw_box_count = int(fused_scores.numel())
+
+            if perception_pipeline is not None:
+                t_native_prep_start = None
+                if profile_stages:
+                    torch.cuda.synchronize()
+                    t_native_prep_start = time.perf_counter()
+                _fctx = _run_native_tensor_prep(
+                    state,
+                    fused_boxes=fused_boxes,
+                    fused_scores=fused_scores,
+                    fused_classes=fused_classes,
+                    seq_narrow_bonus=state.seq_narrow_bonus,
+                    enable_onms=enable_onms,
+                    onms_min_track_age=onms_min_track_age,
+                    onms_min_track_score=onms_min_track_score,
+                    raw_box_count=raw_box_count,
+                )
+                raw_boxes_contig = _fctx.raw_boxes_contig
+                raw_scores_contig = _fctx.raw_scores_contig
+                raw_classes_contig = _fctx.raw_classes_contig
+                num_priors = _fctx.num_priors
+                if (
+                    profile_stages
+                    and current_stage_sample_active
+                    and t_native_prep_start is not None
+                ):
+                    torch.cuda.synchronize()
+                    seq_stage_totals["post_tensor_prep"] += (
+                        time.perf_counter() - t_native_prep_start
+                    ) * 1000
+                if profile_stages and current_stage_sample_active:
+                    _seg_ev = torch.cuda.Event(enable_timing=True)
+                    _seg_ev.record(torch.cuda.current_stream())
+                    post_seg_events.append(("post_seg_prep", _seg_ev))
+
+                n_post, state.nms_graph = _run_nms(
+                    state,
+                    raw_boxes_contig=raw_boxes_contig,
+                    raw_scores_contig=raw_scores_contig,
+                    raw_classes_contig=raw_classes_contig,
+                    raw_box_count=raw_box_count,
+                    num_priors=num_priors,
+                    is_tiled=is_tiled,
+                    nms_graph=state.nms_graph,
+                )
+                if profile_stages and current_stage_sample_active:
+                    _post_stats = perception_pipeline.get_postprocess_profile_stats()
+                    _post_filter_ms = float(_post_stats.get("filter_ms", 0.0))
+                    _post_nms_ms = float(_post_stats.get("nms_ms", 0.0))
+                    _post_count_sync_ms = float(_post_stats.get("count_d2h_ms", 0.0))
+                    _post_total_ms = float(_post_stats.get("total_ms", 0.0))
+                    seq_stage_totals["post_filter"] += float(_post_filter_ms)
+                    seq_stage_totals["post_nms"] += float(_post_nms_ms)
+                    seq_stage_totals["post_count_sync"] += _post_count_sync_ms
+                    seq_stage_totals["native_filter_gather"] += float(
+                        _post_stats.get("native_filter_gather_ms", 0.0)
+                    )
+                    seq_stage_totals["native_filter_kernel"] += float(
+                        _post_stats.get("native_filter_kernel_ms", 0.0)
+                    )
+                    seq_stage_totals["native_gather_compact3"] += float(
+                        _post_stats.get("native_gather_compact3_ms", 0.0)
+                    )
+                    seq_stage_totals["native_copy_suspect"] += float(
+                        _post_stats.get("native_copy_suspect_ms", 0.0)
+                    )
+                    seq_stage_totals["native_filter_count_sync"] += float(
+                        _post_stats.get("native_filter_count_sync_ms", 0.0)
+                    )
+                    seq_stage_totals["native_small_nms"] += float(
+                        _post_stats.get("native_small_nms_ms", 0.0)
+                    )
+                    seq_stage_totals["native_suspect_penalty"] += float(
+                        _post_stats.get("native_suspect_penalty_ms", 0.0)
+                    )
+                    seq_stage_totals["native_large_sort_nms"] += float(
+                        _post_stats.get("native_large_sort_nms_ms", 0.0)
+                    )
+                    seq_stage_totals["native_large_argsort"] += float(
+                        _post_stats.get("native_large_argsort_ms", 0.0)
+                    )
+                    seq_stage_totals["native_large_nms"] += float(
+                        _post_stats.get("native_large_nms_ms", 0.0)
+                    )
+                    seq_stage_totals["native_compact_copy"] += float(
+                        _post_stats.get("native_compact_copy_ms", 0.0)
+                    )
+                    seq_stage_totals["native_large_gather4"] += float(
+                        _post_stats.get("native_large_gather4_ms", 0.0)
+                    )
+                    seq_stage_totals["native_large_copyback"] += float(
+                        _post_stats.get("native_large_copyback_ms", 0.0)
+                    )
+                    seq_stage_totals["post_native_other"] += max(
+                        0.0,
+                        _post_total_ms
+                        - _post_filter_ms
+                        - _post_nms_ms
+                        - _post_count_sync_ms,
+                    )
+                if profile_stages and current_stage_sample_active:
+                    _seg_ev = torch.cuda.Event(enable_timing=True)
+                    _seg_ev.record(torch.cuda.current_stream())
+                    post_seg_events.append(("post_seg_native", _seg_ev))
+                (
+                    fused_boxes,
+                    fused_scores,
+                    fused_classes,
+                    geometry_suspect_mask,
+                    aligned_keypoints,
+                    after_filter_count,
+                    after_nms_count,
+                ) = _run_post_nms_finalize(
+                    state,
+                    _fctx,
+                    n_post=n_post,
+                    source_boxes_for_keypoints=source_boxes_for_keypoints,
+                    source_keypoints=source_keypoints,
+                    current_stage_sample_active=current_stage_sample_active,
+                    post_seg_events=post_seg_events,
+                )
+            else:
+                fused_scores = _apply_narrow_person_score_bonus(
+                    fused_boxes,
+                    fused_scores,
+                    fused_classes,
+                    frame_w=w_orig,
+                    frame_h=h_orig,
+                    person_class=cfg.person_class,
+                    bonus=state.seq_narrow_bonus,
+                    max_width_ratio=cfg.narrow_person_max_width_ratio,
+                    min_height_ratio=cfg.narrow_person_min_height_ratio,
+                    min_aspect=cfg.narrow_person_min_aspect,
+                    max_aspect=cfg.narrow_person_max_aspect,
+                )
+                t_sub_start = time.perf_counter()
+                keep_indices, geometry_suspect_mask, _ = filter_detections_fast(
+                    fused_boxes,
+                    fused_scores,
+                    fused_classes,
+                    score_threshold=min(
+                        cfg.conf_threshold,
+                        cfg.track_thresh,
+                        cfg.crowd_conf_threshold
+                        if cfg.crowd_low_score_mode
+                        else cfg.conf_threshold,
+                        cfg.crowd_track_thresh
+                        if cfg.crowd_low_score_mode
+                        else cfg.track_thresh,
+                    ),
+                    track_person_only=cfg.track_person_only,
+                    person_class=cfg.person_class,
+                    is_tiled=is_tiled,
+                    frame_w=w_orig,
+                    frame_h=h_orig,
+                    person_geometry_prior=cfg.person_geometry_prior,
+                    geometry_suspect_support=cfg.geometry_suspect_support,
+                    person_min_height_ratio=cfg.person_min_height_ratio,
+                    person_min_aspect=cfg.person_min_aspect,
+                    person_max_aspect=cfg.person_max_aspect,
+                    person_min_area_ratio=cfg.person_min_area_ratio,
+                    person_max_area_ratio=cfg.person_max_area_ratio,
+                )
+                fused_boxes = fused_boxes[keep_indices]
+                fused_scores = fused_scores[keep_indices]
+                fused_classes = fused_classes[keep_indices]
+                if aligned_keypoints is not None:
+                    aligned_keypoints = aligned_keypoints[keep_indices]
+
+                if _fpn_reid_mode and fused_boxes.numel() > 0:
+                    valid_w = (fused_boxes[:, 2] - fused_boxes[:, 0]) > 0
+                    if not valid_w.all():
+                        fused_boxes = fused_boxes[valid_w]
+                        fused_scores = fused_scores[valid_w]
+                        fused_classes = fused_classes[valid_w]
+                        if geometry_suspect_mask.numel() > 0:
+                            geometry_suspect_mask = geometry_suspect_mask[valid_w]
+
+                if cfg.detection_quality_scaling and fused_boxes.numel() > 0:
+                    quality_factors = _compute_detection_quality_batch(
+                        fused_boxes,
+                        w_orig,
+                        h_orig,
+                        w_aspect=cfg.detection_quality_w_aspect,
+                        w_center=cfg.detection_quality_w_center,
+                        w_area=cfg.detection_quality_w_area,
+                    )
+                    fused_scores = fused_scores * quality_factors
+                elif cfg.geometry_suspect_support and geometry_suspect_mask.any():
+                    fused_scores = fused_scores.clone()
+                    fused_scores[geometry_suspect_mask] = torch.minimum(
+                        fused_scores[geometry_suspect_mask],
+                        torch.full_like(
+                            fused_scores[geometry_suspect_mask],
+                            cfg.geometry_suspect_support_score,
+                        ),
+                    )
+                if profile_stages:
+                    torch.cuda.synchronize()
+                    elapsed_ms = (time.perf_counter() - t_sub_start) * 1000
+                    seq_stage_totals["post_filter"] += elapsed_ms
+                after_filter_count = int(fused_scores.numel())
+
+            if debug_dump_active:
+                _append_stage_dump_rows(
+                    debug_stage_dump_rows,
+                    seq=seq,
+                    frame_id=frame_id,
+                    stage="raw",
+                    boxes=raw_dump_boxes,
+                    scores=raw_dump_scores,
+                    classes=raw_dump_classes,
+                )
+                _append_stage_dump_rows(
+                    debug_stage_dump_rows,
+                    seq=seq,
+                    frame_id=frame_id,
+                    stage="post_filter",
+                    boxes=fused_boxes,
+                    scores=fused_scores,
+                    classes=fused_classes,
+                )
+
+            if fused_boxes.numel() == 0:
+                if frame_id > warmup_frames:
+                    frame_latencies.append((time.perf_counter() - t_frame_start) * 1000)
+                if profile_stages and frame_id > warmup_frames:
+                    seq_stage_totals["frame_total"] += (
+                        time.perf_counter() - t_e2e_start
+                    ) * 1000
+                    state.seq_profiled_frames += 1
+                if frame_id % 100 == 0:
+                    print(f"🎬 {seq} [{frame_id}/{frame_end}]")
+                return True
+
+            if (
+                perception_pipeline is None
+                and (is_tiled or cfg.nms_iou_threshold is not None)
+                and fused_boxes.numel() > 0
+            ):
+                if profile_stages:
+                    torch.cuda.synchronize()
+                    t_sub_start = time.perf_counter()
+
+                # Fetch priors for Occlusion-aware NMS
+                priors = None
+                prior_classes = None
+                if enable_onms:
+                    priors, prior_classes = _build_active_track_priors(
+                        detector.tracker,
+                        fused_boxes.device,
+                        min_track_age=onms_min_track_age,
+                        min_track_score=onms_min_track_score,
+                    )
+
+                keep = nms_fast(
+                    fused_boxes,
+                    fused_scores,
+                    fused_classes,
+                    cfg.nms_iou_threshold,
+                    class_aware=not cfg.track_person_only,
+                    priors=priors,
+                    prior_classes=prior_classes,
+                    prior_iou_threshold=onms_prior_iou_threshold,
+                )
+                fused_boxes = fused_boxes[keep]
+                fused_scores = fused_scores[keep]
+                fused_classes = fused_classes[keep]
+                geometry_suspect_mask = geometry_suspect_mask[keep]
+                if aligned_keypoints is not None:
+                    aligned_keypoints = aligned_keypoints[keep]
+                if profile_stages:
+                    torch.cuda.synchronize()
+                    elapsed_ms = (time.perf_counter() - t_sub_start) * 1000
+                    seq_stage_totals["post_nms"] += elapsed_ms
+            if perception_pipeline is None:
+                after_nms_count = int(fused_scores.numel())
+            if debug_dump_active:
+                _append_stage_dump_rows(
+                    debug_stage_dump_rows,
+                    seq=seq,
+                    frame_id=frame_id,
+                    stage="post_nms",
+                    boxes=fused_boxes,
+                    scores=fused_scores,
+                    classes=fused_classes,
+                )
+
+            if cfg.tile_diagnostics and is_tiled:
+                seq_tile_diag["frames_tiled"] += 1
+                seq_tile_diag["pre_merge_seam_boxes"] += _count_tile_seam_boxes(
+                    fused_boxes,
+                    tiling=cfg.tiling,
+                    h_orig=h_orig,
+                    w_orig=w_orig,
+                )
+
+            use_repo_cross_tile_merge = (
+                cfg.cross_tile_merge
+                and is_tiled
+                and cfg.tiling != "sahi_960p_2x2"
+                and fused_boxes.numel() > 1
+            )
+            if use_repo_cross_tile_merge:
+                if profile_stages:
+                    torch.cuda.synchronize()
+                    t_sub_start = time.perf_counter()
+                fused_boxes, fused_scores, fused_classes, _merge_counts = (
+                    merge_cross_tile_duplicates_fast(
+                        fused_boxes,
+                        fused_scores,
+                        fused_classes,
+                        tiling=cfg.tiling,
+                        frame_w=w_orig,
+                        frame_h=h_orig,
+                        seam_margin_canvas_px=cfg.tile_seam_margin_canvas_px,
+                        seam_center_scale=cfg.cross_tile_seam_center_scale,
+                        seam_area_ratio_threshold=cfg.cross_tile_seam_area_ratio_threshold,
+                        seam_min_overlap_ratio=cfg.cross_tile_seam_min_overlap_ratio,
+                    )
+                )
+                # MOT17-b: penalise boxes that were merged from multiple tiles.
+                # Merged boxes have uncertain positions; lowering their score makes
+                # ByteTracker treat them more conservatively during association.
+                if cfg.cross_tile_score_penalty < 1.0:
+                    merged_mask = _merge_counts > 1
+                    if merged_mask.any():
+                        fused_scores = fused_scores.clone()
+                        fused_scores[merged_mask] = (
+                            fused_scores[merged_mask] * cfg.cross_tile_score_penalty
+                        )
+                if cfg.tile_diagnostics:
+                    merged_mask = _merge_counts > 1
+                    seq_tile_diag["merged_clusters"] += int(merged_mask.sum().item())
+                    seq_tile_diag["merged_members"] += int(
+                        _merge_counts[merged_mask].sum().item()
+                    )
+                    seq_tile_diag["merged_outputs"] += int(_merge_counts.numel())
+                geometry_suspect_mask = torch.zeros_like(fused_scores, dtype=torch.bool)
+                aligned_keypoints = None
+                if profile_stages:
+                    torch.cuda.synchronize()
+                    elapsed_ms = (time.perf_counter() - t_sub_start) * 1000
+                    seq_stage_totals["post_merge"] += elapsed_ms
+            after_merge_count = int(fused_scores.numel())
+            crowd_low_active = (
+                cfg.crowd_low_score_mode
+                and after_merge_count >= cfg.crowd_low_score_trigger
+            )
+            frame_conf_threshold = (
+                cfg.crowd_conf_threshold if crowd_low_active else cfg.conf_threshold
+            )
+            frame_track_thresh = (
+                cfg.crowd_track_thresh if crowd_low_active else cfg.track_thresh
+            )
+            frame_mid_thresh = (
+                cfg.crowd_mid_thresh if crowd_low_active else cfg.mid_thresh
+            )
+            frame_new_track_thresh = (
+                cfg.crowd_new_track_thresh if crowd_low_active else cfg.new_track_thresh
+            )
+            frame_score_floor = min(frame_conf_threshold, frame_track_thresh)
+            base_score_floor = min(cfg.conf_threshold, cfg.track_thresh)
+            (
+                fused_boxes,
+                fused_scores,
+                fused_classes,
+                geometry_suspect_mask,
+                aligned_keypoints,
+                after_merge_count,
+            ) = _run_detection_filters(
+                state,
+                fused_boxes=fused_boxes,
+                fused_scores=fused_scores,
+                fused_classes=fused_classes,
+                geometry_suspect_mask=geometry_suspect_mask,
+                aligned_keypoints=aligned_keypoints,
+                after_merge_count=after_merge_count,
+                frame_score_floor=frame_score_floor,
+                base_score_floor=base_score_floor,
+                frame_id=frame_id,
+                current_stage_sample_active=current_stage_sample_active,
+                post_seg_events=post_seg_events,
+                debug_dump_active=debug_dump_active,
+                debug_stage_dump_rows=debug_stage_dump_rows,
+            )
+
+            # === Stage 2 Quality Gate ===
+            # Remove mid-score-band detections with poor geometry before the tracker's
+            # Stage 2 association step, preventing bad lost-track assignments → IDs.
+            if cfg.stage2_quality_gate and fused_scores.numel() > 0:
+                _s2_quality = _compute_detection_quality_batch(
+                    fused_boxes,
+                    w_orig,
+                    h_orig,
+                    w_aspect=cfg.detection_quality_w_aspect,
+                    w_center=cfg.detection_quality_w_center,
+                    w_area=cfg.detection_quality_w_area,
+                )
+                (
+                    fused_boxes,
+                    fused_scores,
+                    fused_classes,
+                    geometry_suspect_mask,
+                    aligned_keypoints,
+                ) = _apply_stage2_quality_gate(
+                    fused_boxes,
+                    fused_scores,
+                    fused_classes,
+                    geometry_suspect_mask,
+                    aligned_keypoints,
+                    track_thresh=frame_track_thresh,
+                    mid_thresh=frame_mid_thresh,
+                    quality_min=cfg.stage2_quality_min,
+                    quality=_s2_quality,
+                )
+                after_merge_count = int(fused_scores.numel())
+
+            frame_birth_events: list[dict[str, float | int | str | bool]] = []
+
+            # === Consecutive-Frame Birth Gate ===
+            # Boost sub-threshold detections that have appeared in the last N frames.
+            # More selective than birth_quality_gate: requires temporal evidence, not
+            # just per-frame geometry quality.
+            if cfg.birth_consecutive_gate and fused_scores.numel() > 0:
+                if len(_consec_birth_window) >= cfg.birth_consecutive_frames - 1:
+                    below_birth = fused_scores < frame_new_track_thresh
+                    if below_birth.any():
+                        sub_boxes = fused_boxes[below_birth]
+                        confirmed = _consecutive_birth_check(
+                            sub_boxes,
+                            list(_consec_birth_window),
+                            cfg.birth_consecutive_iou,
+                            min_motion_px=cfg.birth_consecutive_min_motion,
+                        )
+                        if confirmed.any():
+                            boost_idx = below_birth.nonzero(as_tuple=True)[0][confirmed]
+                            # Only boost detections that are close enough to new_track_thresh
+                            # (above min_score) — prevents very-low-score noise from crossing
+                            eligible = (
+                                fused_scores[boost_idx]
+                                >= cfg.birth_consecutive_min_score
+                            )
+                            boost_idx = boost_idx[eligible]
+                            if boost_idx.numel() > 0:
+                                score_before = fused_scores[boost_idx].clone()
+                                fused_scores = fused_scores.clone()
+                                fused_scores[boost_idx] = torch.clamp(
+                                    fused_scores[boost_idx]
+                                    + cfg.birth_consecutive_boost,
+                                    max=cfg.high_thresh,
+                                )
+                                _append_birth_event_rows(
+                                    frame_birth_events,
+                                    _policy="birth_consecutive_gate",
+                                    _det_indices=boost_idx,
+                                    _score_before=score_before,
+                                    _score_after=fused_scores[boost_idx],
+                                    _boxes=fused_boxes[boost_idx],
+                                )
+            # Only keep sub-threshold boxes in window: prevents boosting detections
+            # that match against already-tracked (high-score) detections from prior frames.
+            _sub_thresh_boxes = fused_boxes[fused_scores < frame_new_track_thresh]
+            _consec_birth_window.append(_sub_thresh_boxes.detach())
+
+            # === Birth quality gate ===
+            # Boost scores of high-quality detections that fall below new_track_thresh
+            # so they can spawn new tracks without globally lowering the score floor.
+            # Only detections with quality above birth_min_quality receive a boost.
+            # Scores are capped at high_thresh to avoid Stage-1 promotion side effects.
+            if (
+                cfg.birth_quality_gate
+                and fused_scores.numel() > 0
+                and cfg.birth_quality_score_bias > 0.0
+            ):
+                birth_quality = _compute_detection_quality_batch(
+                    fused_boxes,
+                    w_orig,
+                    h_orig,
+                    w_aspect=cfg.detection_quality_w_aspect,
+                    w_center=cfg.detection_quality_w_center,
+                    w_area=cfg.detection_quality_w_area,
+                )
+                below_birth = fused_scores < frame_new_track_thresh
+                high_quality = birth_quality > cfg.birth_min_quality
+                boost_mask = below_birth & high_quality
+                if boost_mask.any():
+                    boost_idx = boost_mask.nonzero(as_tuple=True)[0]
+                    score_before = fused_scores[boost_idx].clone()
+                    boost = (
+                        birth_quality[boost_mask] - cfg.birth_min_quality
+                    ) * cfg.birth_quality_score_bias
+                    fused_scores = fused_scores.clone()
+                    fused_scores[boost_mask] = torch.clamp(
+                        fused_scores[boost_mask] + boost,
+                        max=cfg.high_thresh,
+                    )
+                    _append_birth_event_rows(
+                        frame_birth_events,
+                        _policy="birth_quality_gate",
+                        _det_indices=boost_idx,
+                        _score_before=score_before,
+                        _score_after=fused_scores[boost_idx],
+                        _boxes=fused_boxes[boost_idx],
+                    )
+
+            # === Multi-signal birth policy (P5-1) ===
+            # Joint evidence (score × streak × motion × geometry) selectively promotes
+            # sub-threshold detections that have accumulated enough multi-frame evidence.
+            if _multi_birth_manager is not None and fused_scores.numel() > 0:
+                below_birth = fused_scores < frame_new_track_thresh
+                above_min = fused_scores >= cfg.multi_birth_min_score
+                cand_mask = below_birth & above_min
+                if cand_mask.any():
+                    promote_mask, replace_mask = _multi_birth_manager.update(
+                        frame_id,
+                        fused_boxes[cand_mask],
+                        fused_scores[cand_mask],
+                    )
+                    if promote_mask.any():
+                        boost_idx = cand_mask.nonzero(as_tuple=True)[0][promote_mask]
+                        score_before = fused_scores[boost_idx].clone()
+                        fused_scores = fused_scores.clone()
+                        fused_scores[boost_idx] = frame_new_track_thresh + 0.01
+                        _append_birth_event_rows(
+                            frame_birth_events,
+                            _policy="multi_birth",
+                            _det_indices=boost_idx,
+                            _score_before=score_before,
+                            _score_after=fused_scores[boost_idx],
+                            _boxes=fused_boxes[boost_idx],
+                        )
+                else:
+                    _multi_birth_manager.update(
+                        frame_id, fused_boxes[:0], fused_scores[:0]
+                    )
+
+            frame_tracker_thresholds = (
+                frame_track_thresh,
+                frame_mid_thresh,
+                frame_new_track_thresh,
+            )
+            if frame_tracker_thresholds != state.active_tracker_thresholds:
+                detector.tracker.set_params(
+                    track_thresh=frame_track_thresh,
+                    high_thresh=cfg.high_thresh,
+                    match_thresh=cfg.match_thresh,
+                    track_buffer=seq_track_buffer,
+                    mid_thresh=frame_mid_thresh,
+                    confirm_streak=int(cfg.kwargs.get("confirm_streak", 1)),
+                    confirm_score_thresh=float(
+                        cfg.kwargs.get("confirm_score_thresh", 0.0)
+                    ),
+                    adaptive_confirmation=bool(
+                        cfg.kwargs.get("adaptive_confirmation", False)
+                    ),
+                    new_track_thresh=frame_new_track_thresh,
+                    nsa_kalman=cfg.nsa_kalman,
+                    r_scale=cfg.kalman_r_scale,
+                    vel_dir_weight=cfg.vel_dir_weight,
+                    fuse_score_weight=cfg.fuse_score_weight,
+                    stage2_match_thresh=cfg.stage2_match_thresh,
+                    birth_low_score_thresh=cfg.birth_low_score_thresh,
+                    birth_prox_norm_thresh=cfg.birth_prox_norm_thresh,
+                )
+                state.active_tracker_thresholds = frame_tracker_thresholds
+            if cfg.tile_diagnostics and is_tiled:
+                seq_tile_diag["post_merge_seam_boxes"] += _count_tile_seam_boxes(
+                    fused_boxes,
+                    tiling=cfg.tiling,
+                    h_orig=h_orig,
+                    w_orig=w_orig,
+                    seam_margin_canvas_px=cfg.tile_seam_margin_canvas_px,
+                )
+            if (
+                cfg.tile_seam_score_penalty < 1.0
+                and is_tiled
+                and fused_boxes.numel() > 0
+            ):
+                seam_mask = _tile_seam_mask(
+                    fused_boxes,
+                    tiling=cfg.tiling,
+                    h_orig=h_orig,
+                    w_orig=w_orig,
+                    seam_margin_canvas_px=cfg.tile_seam_margin_canvas_px,
+                )
+                if seam_mask.any():
+                    fused_scores = fused_scores.clone()
+                    fused_scores[seam_mask] = (
+                        fused_scores[seam_mask] * cfg.tile_seam_score_penalty
+                    )
+            if profile_stages:
+                if post_gpu_end_event is not None:
+                    post_gpu_end_event.record(torch.cuda.current_stream())
+                torch.cuda.synchronize()
+                elapsed_ms = (time.perf_counter() - t_post_start) * 1000
+                seq_stage_totals["postprocess"] += elapsed_ms
+                record_stage_sample("postprocess", elapsed_ms)
+                if (
+                    current_stage_sample_active
+                    and post_gpu_start_event is not None
+                    and post_gpu_end_event is not None
+                ):
+                    seq_stage_totals["post_gpu_elapsed"] += float(
+                        post_gpu_start_event.elapsed_time(post_gpu_end_event)
+                    )
+                    # Partition the GPU span into contiguous segments. Each marker
+                    # carries the name of the segment ending at it; the residual to
+                    # post_gpu_end_event is the Python tail (gates 2814-3147).
+                    _prev_ev = post_gpu_start_event
+                    for _seg_name, _seg_ev in post_seg_events:
+                        _seg_ms = float(_prev_ev.elapsed_time(_seg_ev))
+                        seq_stage_totals[_seg_name] += _seg_ms
+                        seq_segment_samples[_seg_name].append(_seg_ms)
+                        _prev_ev = _seg_ev
+                    _tail_ms = float(_prev_ev.elapsed_time(post_gpu_end_event))
+                    seq_stage_totals["post_seg_python_tail"] += _tail_ms
+                    seq_segment_samples["post_seg_python_tail"].append(_tail_ms)
+                if frame_id > warmup_frames:
+                    seq_post_counts["raw_boxes"] += raw_box_count
+                    seq_post_counts["after_filter"] += after_filter_count
+                    seq_post_counts["after_nms"] += after_nms_count
+                    seq_post_counts["after_merge"] += after_merge_count
+            # Sync previous frame's background relink_write before accessing shared
+            # mutable state (dynamic_reid, primary_appearance_bank, relinker).
+            if state.bg_future is not None:
+                if profile_stages:
+                    t_bg_wait_start = time.perf_counter()
+                (
+                    _bg_rw_lines,
+                    state.prev_track_ids,
+                    _bg_det_idx_to_local_id,
+                    _bg_output_by_local,
+                ) = state.bg_future.result()
+                if profile_stages:
+                    elapsed_ms = (time.perf_counter() - t_bg_wait_start) * 1000
+                    seq_stage_totals["bg_relink_wait"] += elapsed_ms
+                    record_stage_sample("bg_relink_wait", elapsed_ms)
+                results_lines.extend(_bg_rw_lines)
+                if state.bg_birth_events is not None:
+                    _annotate_birth_events(
+                        state.bg_birth_events,
+                        _det_idx_to_local_id=_bg_det_idx_to_local_id,
+                        _output_by_local=_bg_output_by_local,
+                    )
+                state.bg_future = None
+                state.bg_birth_events = None
+
+            embeddings = None
+            _fpn_ready = _fpn_reid_mode and fused_boxes.numel() > 0
+            _do_reid = _fpn_ready or (
+                cfg.reid_work_enabled
+                and extractor is not None
+                and cropper is not None
+                and fused_boxes.numel() > 0
+            )
+            if _do_reid:
+                if not _fpn_ready:
+                    MIN_REID_GAP = 2
+                    time_since_last_reid = frame_id - state.last_reid_frame
+
+                    if time_since_last_reid < MIN_REID_GAP:
+                        _do_reid = False
+                    elif cfg.need_reid_enabled:
+                        if dynamic_reid is not None:
+                            _do_reid = dynamic_reid.should_reid(after_merge_count)
+                        else:
+                            _do_reid = need_reid_frame(
+                                state.prev_track_ids, after_merge_count
+                            )
+                    else:
+                        _do_reid = frame_id % seq_reid_interval == 0
+
+                if _do_reid:
+                    state.last_reid_frame = frame_id
+                    if primary_appearance_bank is not None:
+                        if profile_stages:
+                            torch.cuda.synchronize()
+                            t_reid_bank_sync_start = time.perf_counter()
+                        bank_reps = primary_appearance_bank.representatives()
+                        if bank_reps:
+                            detector.tracker.set_reference_features_from_bank(bank_reps)
+                        clean_ids = primary_appearance_bank.clean_ids()
+                        if clean_ids:
+                            _clean_ids_list = list(clean_ids)
+                            _ids_t = torch.tensor(_clean_ids_list, dtype=torch.int32)
+                            _flags_t = torch.ones(
+                                len(_clean_ids_list), dtype=torch.bool
+                            )
+                            detector.tracker.set_clean_embedding_flags(_ids_t, _flags_t)
+                        else:
+                            detector.tracker.set_clean_embedding_flags(
+                                torch.zeros(0, dtype=torch.int32),
+                                torch.zeros(0, dtype=torch.bool),
+                            )
+                        if profile_stages:
+                            torch.cuda.synchronize()
+                            elapsed_ms = (
+                                time.perf_counter() - t_reid_bank_sync_start
+                            ) * 1000
+                            seq_stage_totals["reid_bank_sync"] += elapsed_ms
+                            record_stage_sample("reid_bank_sync", elapsed_ms)
+
+            if cfg.reid_enabled and _do_reid:
+                # ── FPN ReID fast path ──
+                if _fpn_reid_mode and fused_boxes.shape[0] > 0:
+                    _trt_feat_cache = getattr(detector, "_trt_feat_cache", None)
+                    if _fpn_cache:
+                        _img_sz = _fpn_img_size
+                    elif _trt_feat_cache:
+                        _p3_cache = _trt_feat_cache.get("p3")
+                        _img_sz = (
+                            int(_p3_cache.shape[2] * 8)
+                            if _p3_cache is not None
+                            else 640
+                        )
+                    elif hasattr(detector, "teacher"):
+                        _p3_cache = detector.teacher._gate_layers["p3"]._feat_cache.get(
+                            "p3"
+                        )
+                        _img_sz = (
+                            int(_p3_cache.shape[2] * 8)
+                            if _p3_cache is not None
+                            else 640
+                        )
+                    else:
+                        _img_sz = 960
+                    boxes_rescaled = fused_boxes.clone()
+                    sx = _img_sz / w_orig
+                    sy = _img_sz / h_orig
+                    boxes_rescaled[:, 0] *= sx
+                    boxes_rescaled[:, 1] *= sy
+                    boxes_rescaled[:, 2] *= sx
+                    boxes_rescaled[:, 3] *= sy
+                    if _trt_feat_cache:
+                        fpn = [_trt_feat_cache[s] for s in ("p3", "p4", "p5")]
+                    elif hasattr(detector, "teacher"):
+                        fpn = [
+                            detector.teacher._gate_layers[s]._feat_cache[s]
+                            for s in ("p3", "p4", "p5")
+                        ]
+                    elif _fpn_cache:
+                        fpn = [_fpn_cache[s] for s in ("p3", "p4", "p5")]
+                    else:
+                        fpn = None
+                    if fpn is not None:
+                        if _fpn_reid_conv_weights is not None:
+                            from saccade.perception.tracking.fpn_reid_cuda import (
+                                fpn_reid_extract_cuda,
+                            )
+
+                            embeddings = fpn_reid_extract_cuda(
+                                fpn,
+                                _fpn_reid_conv_weights,
+                                boxes_rescaled,
+                                img_size=_img_sz,
+                                proj_weight=_fpn_reid_proj_weight,
+                                running_mean=_fpn_reid_running_mean,
+                                running_var=_fpn_reid_running_var,
+                            )
+                        else:
+                            embeddings = detector.extract_fpn_embeddings(
+                                None, boxes_rescaled
+                            )
+                else:
+                    if profile_stages:
+                        torch.cuda.synchronize()
+                        t_reid_budget_start = time.perf_counter()
+
+                    num_dets = fused_boxes.shape[0]
+                    if cfg.reid_budget_raw >= 1.0:
+                        actual_budget = int(cfg.reid_budget_raw)
+                    elif cfg.reid_budget_raw > 0.0:
+                        actual_budget = max(1, int(cfg.reid_budget_raw * num_dets))
+                    else:
+                        actual_budget = (
+                            0  # Unlimited or handled by _budget_reid_candidates
+                        )
+
+                    budget_indices = _budget_reid_candidates(
+                        fused_boxes,
+                        fused_scores,
+                        actual_budget,
+                        dynamic_reid=dynamic_reid,
+                        gmc_warp=state.gmc_warp if cfg.gmc_enabled else None,
+                        gmc_uncertain=state.gmc_uncertain,
+                    )
+
+                    if profile_stages:
+                        torch.cuda.synchronize()
+                        elapsed_ms = (time.perf_counter() - t_reid_budget_start) * 1000
+                        seq_stage_totals["reid_budget"] += elapsed_ms
+                        record_stage_sample("reid_budget", elapsed_ms)
+
+                    _reid_feat_dim = (
+                        _fpn_reid_dim if _fpn_reid_mode else extractor.feature_dim
+                    )
+                    # Initialize full embeddings with zeros. Detections without budget
+                    # will have neutral features for association.
+                    embeddings = torch.zeros(
+                        (fused_boxes.shape[0], _reid_feat_dim),
+                        device=fused_boxes.device,
+                        dtype=torch.float32,
+                    )
+
+                    if budget_indices.numel() > 0:
+                        budgeted_boxes = fused_boxes[budget_indices].contiguous()
+
+                        if native_reid_available and perception_pipeline is not None:
+                            frame_hwc = pool.as_rgb_chw().permute(1, 2, 0).contiguous()
+                            budget_embeddings = torch.empty(
+                                (budget_indices.numel(), extractor.feature_dim),
+                                device=fused_boxes.device,
+                                dtype=torch.float32,
+                            )
+
+                            if cfg.async_reid and reid_side_stream is not None:
+                                reid_main_ready.record()
+                                with torch.cuda.stream(reid_side_stream):
+                                    reid_side_stream.wait_event(reid_main_ready)
+                                    perception_pipeline.extract_reid(
+                                        frame_hwc.data_ptr(),
+                                        h_orig,
+                                        w_orig,
+                                        budgeted_boxes.data_ptr(),
+                                        int(budgeted_boxes.shape[0]),
+                                        budget_embeddings.data_ptr(),
+                                        reid_side_stream.cuda_stream,
+                                    )
+                                reid_side_event.record(reid_side_stream)
+                                _reid_side_pending = True
+                                _reid_async_embeddings = budget_embeddings
+                                _reid_async_indices = budget_indices
+                                _reid_frame_hwc_ref = frame_hwc
+                            else:
+                                if profile_stages:
+                                    perception_pipeline.reset_reid_profile_stats()
+                                    torch.cuda.synchronize()
+                                    t_reid_extract_start = time.perf_counter()
+
+                                perception_pipeline.extract_reid(
+                                    frame_hwc.data_ptr(),
+                                    h_orig,
+                                    w_orig,
+                                    budgeted_boxes.data_ptr(),
+                                    int(budgeted_boxes.shape[0]),
+                                    budget_embeddings.data_ptr(),
+                                    torch.cuda.current_stream().cuda_stream,
+                                )
+
+                                if profile_stages:
+                                    torch.cuda.synchronize()
+                                    elapsed_ms = (
+                                        time.perf_counter() - t_reid_extract_start
+                                    ) * 1000
+                                    seq_stage_totals["reid_extract"] += elapsed_ms
+                                    record_stage_sample("reid_extract", elapsed_ms)
+                                    if current_stage_sample_active:
+                                        native_stats = (
+                                            perception_pipeline.get_reid_profile_stats()
+                                        )
+                                        seq_native_reid_samples[
+                                            "native_reid_crop"
+                                        ].append(
+                                            float(native_stats.get("crop_ms", 0.0))
+                                        )
+                                        seq_native_reid_samples[
+                                            "native_reid_pre_normalize"
+                                        ].append(
+                                            float(
+                                                native_stats.get(
+                                                    "extract_pre_normalize_ms",
+                                                    0.0,
+                                                )
+                                            )
+                                        )
+                                        seq_native_reid_samples[
+                                            "native_reid_trt_enqueue"
+                                        ].append(
+                                            float(
+                                                native_stats.get(
+                                                    "extract_trt_enqueue_ms",
+                                                    0.0,
+                                                )
+                                            )
+                                        )
+                                        seq_native_reid_samples[
+                                            "native_reid_l2_normalize"
+                                        ].append(
+                                            float(
+                                                native_stats.get(
+                                                    "extract_l2_normalize_ms",
+                                                    0.0,
+                                                )
+                                            )
+                                        )
+                                embeddings[budget_indices] = budget_embeddings
+                        else:
+                            frame_batch = pool.as_rgb_chw().unsqueeze(0)
+                            if cfg.reid_crop_layout == "parts":
+                                if profile_stages:
+                                    torch.cuda.synchronize()
+                                    t_reid_crop_start = time.perf_counter()
+                                crops = cropper.process_parts(
+                                    frame_batch, budgeted_boxes
+                                )
+                                if profile_stages:
+                                    torch.cuda.synchronize()
+                                    elapsed_ms = (
+                                        time.perf_counter() - t_reid_crop_start
+                                    ) * 1000
+                                    seq_stage_totals["reid_crop"] += elapsed_ms
+                                    record_stage_sample("reid_crop", elapsed_ms)
+
+                                if crops.numel() > 0:
+                                    if profile_stages:
+                                        torch.cuda.synchronize()
+                                        t_reid_extract_start = time.perf_counter()
+                                    budget_embeddings = extractor.extract_parts_fused(
+                                        crops
+                                    )
+                                    if profile_stages:
+                                        torch.cuda.synchronize()
+                                        elapsed_ms = (
+                                            time.perf_counter() - t_reid_extract_start
+                                        ) * 1000
+                                        seq_stage_totals["reid_extract"] += elapsed_ms
+                                        record_stage_sample("reid_extract", elapsed_ms)
+                                    embeddings[budget_indices] = budget_embeddings
+                            else:
+                                if profile_stages:
+                                    torch.cuda.synchronize()
+                                    t_reid_crop_start = time.perf_counter()
+                                crops = cropper.process(frame_batch, budgeted_boxes)
+                                if profile_stages:
+                                    torch.cuda.synchronize()
+                                    elapsed_ms = (
+                                        time.perf_counter() - t_reid_crop_start
+                                    ) * 1000
+                                    seq_stage_totals["reid_crop"] += elapsed_ms
+                                    record_stage_sample("reid_crop", elapsed_ms)
+
+                                if crops.numel() > 0:
+                                    if profile_stages:
+                                        torch.cuda.synchronize()
+                                        t_reid_extract_start = time.perf_counter()
+                                    budget_embeddings = extractor.extract(crops)
+                                    if profile_stages:
+                                        torch.cuda.synchronize()
+                                        elapsed_ms = (
+                                            time.perf_counter() - t_reid_extract_start
+                                        ) * 1000
+                                        seq_stage_totals["reid_extract"] += elapsed_ms
+                                        record_stage_sample("reid_extract", elapsed_ms)
+                                    embeddings[budget_indices] = budget_embeddings
+
+            mid_thresh_scale = geometry_mid_thresh_scale(
+                fused_boxes,
+                fused_classes,
+                h_orig,
+                enabled=cfg.geometry_mid_scale,
+                person_class=cfg.person_class,
+                track_person_only=cfg.track_person_only,
+                ref_height_ratio=cfg.geometry_ref_height_ratio,
+                min_scale=cfg.geometry_min_scale,
+                max_scale=cfg.geometry_max_scale,
+                ema_beta=cfg.geometry_ema_beta,
+                loosen_step=cfg.geometry_loosen_step,
+                tighten_step=cfg.geometry_tighten_step,
+                min_samples=cfg.geometry_min_samples,
+                state=geometry_scale_state,
+            )
+            state.gmc_warp = None
+            state.gmc_uncertain = False
+            # GMC estimator takes luma from frame_buffer (RGB path)
+            # or from NV12 Y-plane directly (NV12 path).
+            # C++ GMC estimator expects [3, H, W] — clone luma to 3 channels in NV12 mode.
+            if pool.use_nv12:
+                _luma = pool.get_frame_luma()
+                _frame_gmc = _luma.repeat(3, 1, 1)
+            else:
+                _frame_gmc = pool.frame_buffer
+
+            if gmc_estimator is not None:
+                (state.gmc_warp, state.gmc_uncertain), _ = time_stage(
+                    seq_stage_totals,
+                    "gmc",
+                    lambda: _run_gmc_estimate(
+                        state,
+                        fused_boxes=fused_boxes,
+                        _frame_gmc=_frame_gmc,
+                    ),
+                    # Only the pure-CPU estimators need a host sync for timing;
+                    # the GPU direct/graph and PyGraphed paths feed the tracker
+                    # (which syncs) so an extra sync here only stalls overlap.
+                    sync_cuda=not _use_direct_gmc
+                    and not isinstance(gmc_estimator, PyGraphedGMC),
+                )
+                if hasattr(detector, "set_gmc_warp"):
+                    detector.set_gmc_warp(state.gmc_warp, h_orig, w_orig)
+            # Async ReID: sync side stream and inject fresh embeddings right before
+            # tracker.update_into so the cost matrix still has detection-side appearance.
+            # GMC on main stream overlapped with reid on side stream during the gap above.
+            if _reid_side_pending and reid_side_event is not None:
+                if profile_stages:
+                    torch.cuda.synchronize()
+                    t_reid_extract_start = time.perf_counter()
+                reid_side_event.synchronize()
+                if profile_stages:
+                    elapsed_ms = (time.perf_counter() - t_reid_extract_start) * 1000
+                    seq_stage_totals["reid_extract"] += elapsed_ms
+                    record_stage_sample("reid_extract", elapsed_ms)
+                embeddings[_reid_async_indices] = _reid_async_embeddings
+                _reid_side_pending = False
+                _reid_frame_hwc_ref = None
+
+            state.tracker_result_buffers = _run_track(
+                state,
+                fused_boxes=fused_boxes,
+                fused_scores=fused_scores,
+                fused_classes=fused_classes,
+                gmc_warp=state.gmc_warp,
+                embeddings=embeddings,
+                mid_thresh_scale=mid_thresh_scale,
+                tracker_result_buffers=state.tracker_result_buffers,
+            )
+            track_results = _run_materialize(
+                state,
+                tracker_result_buffers=state.tracker_result_buffers,
+                embeddings=embeddings,
+                aligned_keypoints=aligned_keypoints,
+                frame_id=frame_id,
+            )
+
+    if (
+        aligned_keypoints is not None
+        and track_results["det_idx"] is not None
+        and track_results["count"] > 0
+    ):
+        det_idx = track_results["det_idx"]
+        valid = (det_idx >= 0) & (det_idx < aligned_keypoints.shape[0])
+        if valid.any():
+            detector.tracker.push_keypoints(
+                track_results["ids"][valid].to(
+                    device=aligned_keypoints.device, dtype=torch.int32
+                ),
+                aligned_keypoints[det_idx[valid]],
+            )
+
+    if cfg.profile_lazy_reid_candidates:
+        candidates = detector.tracker.get_tentative_candidates()
+        ready_candidates = [
+            c
+            for c in candidates
+            if c.hit_streak >= cfg.lazy_reid_min_hit_streak
+            and c.hit_streak < c.required_confirm_streak
+        ]
+        state.seq_lazy_reid_candidates += len(ready_candidates)
+        state.seq_lazy_reid_frames += 1
+        if cfg.profile_lazy_reid_embeddings and extractor and cropper and candidates:
+            ready_ids = {int(c.obj_id) for c in ready_candidates}
+
+            def _profile_lazy_reid_embeddings() -> tuple[
+                int, int, int, float, int, int, set[int]
+            ]:
+                embed_candidates = [
+                    c
+                    for c in candidates
+                    if int(c.class_id) == cfg.person_class and c.hit_streak >= 1
+                ]
+                if not embed_candidates:
+                    return 0, 0, 0, 0.0, 0, 0, set()
+                cand_boxes = torch.tensor(
+                    [[c.x1, c.y1, c.x2, c.y2] for c in embed_candidates],
+                    device=pool.frame_buffer.device,
+                    dtype=torch.float32,
+                )
+                crops = cropper.process(pool.as_rgb_chw().unsqueeze(0), cand_boxes)
+                if crops.numel() == 0:
+                    return 0, 0, 0, 0.0, 0, 0, set()
+                cand_embeddings = extractor.extract(crops)
+                pairs, passed, sim_sum = 0, 0, 0.0
+                arbiter_checks, arbiter_approve = 0, 0
+                seen_ids: set[int] = set()
+                for cand, emb in zip(embed_candidates, cand_embeddings):
+                    tid = int(cand.obj_id)
+                    seen_ids.add(tid)
+                    prev = lazy_reid_prev_embeddings.get(tid)
+                    if prev is not None:
+                        sim = float(torch.dot(prev, emb).item())
+                        pairs += 1
+                        sim_sum += sim
+                        if sim >= cfg.lazy_reid_self_threshold:
+                            passed += 1
+                        if tid in ready_ids:
+                            arbiter_checks += 1
+                            if sim >= cfg.lazy_reid_self_threshold:
+                                arbiter_approve += 1
+                    lazy_reid_prev_embeddings[tid] = emb.detach()
+                return (
+                    len(embed_candidates),
+                    pairs,
+                    passed,
+                    sim_sum,
+                    arbiter_checks,
+                    arbiter_approve,
+                    seen_ids,
+                )
+
+            (
+                (
+                    crop_count,
+                    pair_count,
+                    pass_count,
+                    sim_sum,
+                    arbiter_checks,
+                    arbiter_approve,
+                    seen_ids,
+                ),
+                _,
+            ) = time_stage(
+                seq_stage_totals,
+                "lazy_reid",
+                _profile_lazy_reid_embeddings,
+                sync_cuda=True,
+            )
+            state.seq_lazy_reid_crops += crop_count
+            state.seq_lazy_reid_self_pairs += pair_count
+            state.seq_lazy_reid_self_pass += pass_count
+            state.seq_lazy_reid_self_sim_sum += sim_sum
+            state.seq_lazy_reid_arbiter_checks += arbiter_checks
+            state.seq_lazy_reid_arbiter_approve += arbiter_approve
+            if seen_ids:
+                for stale_id in set(lazy_reid_prev_embeddings.keys()) - seen_ids:
+                    lazy_reid_prev_embeddings.pop(stale_id, None)
+
+    (
+        state.prev_track_ids,
+        _emit_lines,
+    ) = _run_emit(
+        state,
+        track_results=track_results,
+        tracker_result_buffers=state.tracker_result_buffers,
+        fused_boxes=fused_boxes,
+        fused_scores=fused_scores,
+        geometry_suspect_mask=geometry_suspect_mask,
+        embeddings=embeddings,
+        gmc_warp=state.gmc_warp,
+        frame_birth_events=frame_birth_events,
+        frame_id=frame_id,
+        prev_track_ids=state.prev_track_ids,
+    )
+    results_lines.extend(_emit_lines)
+
+    if frame_id > warmup_frames:
+        frame_latencies.append((time.perf_counter() - t_frame_start) * 1000)
+    if profile_stages and frame_id > warmup_frames:
+        elapsed_ms = (time.perf_counter() - t_frame_start) * 1000
+        seq_stage_totals["frame_total"] += elapsed_ms
+        record_stage_sample("frame_total", elapsed_ms)
+        if current_frame_stage_elapsed is not None:
+            for (
+                stage_name,
+                stage_elapsed,
+            ) in current_frame_stage_elapsed.items():
+                seq_stage_samples[stage_name].append(stage_elapsed)
+        state.seq_profiled_frames += 1
+    if frame_id % 100 == 0:
+        print(f"🎬 {seq} [{frame_id}/{frame_end}]")
+    return True
 
 
 def run_eval(
@@ -3753,1703 +5409,14 @@ def run_eval(
         _seq_state.onms_min_track_score = onms_min_track_score
         _seq_state.onms_prior_iou_threshold = onms_prior_iou_threshold
         _seq_state.top_level_stage_names = top_level_stage_names
+        _seq_state.append_birth_event_rows = _append_birth_event_rows
+        _seq_state.seq_post_counts = seq_post_counts
+        _seq_state.seq_tile_diag = seq_tile_diag
+        _seq_state.seq_narrow_bonus = seq_narrow_bonus
 
         for frame_id in range(1, frame_end + 1):
-            if _defer_emit and _seq_state.defer_emit_event is not None:
-                _lines, _seq_state.prev_track_ids = _flush_deferred_emit(
-                    _seq_state.defer_emit_event,
-                    _pinned_result_bufs,
-                    default_class_id=cfg.person_class
-                    if cfg.track_person_only
-                    else None,
-                    global_id_mapper=global_id_mapper,
-                    seq=seq,
-                    frame_id=_seq_state.defer_emit_fid,
-                    frame_w=w_orig,
-                    frame_h=h_orig,
-                )
-                results_lines.extend(_lines)
-                _seq_state.defer_emit_event = None
-            current_stage_sample_active = frame_id > warmup_frames
-            current_frame_stage_elapsed = (
-                {name: 0.0 for name in top_level_stage_names}
-                if current_stage_sample_active
-                else None
-            )
-            t_e2e_start = time.perf_counter()
-            _reid_side_pending = False
-            _reid_async_embeddings: torch.Tensor | None = None
-            _reid_async_indices: torch.Tensor | None = None
-            _reid_frame_hwc_ref: torch.Tensor | None = None
-            try:
-                frame_gpu, _fetch_ms = time_stage(
-                    seq_stage_totals,
-                    "fetch",
-                    lambda: next(stream_iter),
-                    sync_cuda=False,
-                )
-            except StopIteration:
+            if not _run_frame(_seq_state, frame_id=frame_id):
                 break
-            t_frame_start = time.perf_counter()
-
-            if getattr(cfg, "workbench", False) and wb is not None:
-                _, _ = time_stage(
-                    seq_stage_totals,
-                    "ingest_preprocess",
-                    lambda: (
-                        (
-                            pool.frame_buffer_nv12.copy_(
-                                rgb_hwc_to_nv12_gpu(frame_gpu)
-                            ),
-                            pool.mark_nv12_current(),
-                        )
-                        if nv12_direct_from_hwc
-                        else (
-                            pool.frame_buffer.copy_(
-                                frame_gpu.permute(2, 0, 1).float() / 255.0
-                            ),
-                            apply_frame_preprocess(
-                                pool.frame_buffer,
-                                cfg.preprocess_modes,
-                                cfg.gamma,
-                                cfg.gamma_luma_threshold,
-                                cfg.contrast,
-                            ),
-                            pool.mark_rgb_current(),
-                            (
-                                pool.frame_buffer_nv12.copy_(
-                                    rgb_chw_to_nv12_gpu(pool.frame_buffer)
-                                )
-                                if pool.use_nv12
-                                else None
-                            ),
-                        )
-                    ),
-                    sync_cuda=False,
-                )
-
-                # Fetch priors for ONMS if enabled
-                priors_tensor, prior_classes_tensor = None, None
-                if enable_onms:
-                    priors_tensor, prior_classes_tensor = _build_active_track_priors(
-                        detector.tracker,
-                        pool.frame_buffer.device,
-                        min_track_age=onms_min_track_age,
-                        min_track_score=onms_min_track_score,
-                    )
-
-                # Process frame
-                wb_result, _ = time_stage(
-                    seq_stage_totals,
-                    "detect",
-                    lambda: wb.process_frame(
-                        pool.as_rgb_chw(),
-                        frame_w=w_orig,
-                        frame_h=h_orig,
-                        priors=priors_tensor if enable_onms else None,
-                        prior_classes=prior_classes_tensor if enable_onms else None,
-                    ),
-                    sync_cuda=True,
-                )
-
-                track_results = {
-                    "count": len(wb_result.ids),
-                    "ids": wb_result.ids,
-                    "boxes": wb_result.boxes,
-                    "scores": wb_result.scores,
-                    "classes": wb_result.classes,
-                    "det_idx": wb_result.det_idx,
-                }
-
-                # Mock missing variables
-                fused_boxes = wb_result.boxes
-                fused_scores = wb_result.scores
-                fused_classes = wb_result.classes
-                geometry_suspect_mask = torch.zeros(
-                    len(fused_boxes), dtype=torch.bool, device=fused_boxes.device
-                )
-                embeddings = None
-                _seq_state.gmc_warp = None
-                aligned_keypoints = None
-                raw_dump_boxes = fused_boxes
-                raw_dump_scores = fused_scores
-                raw_dump_classes = fused_classes
-
-                # Update seq_stage_totals for the skipped stages to match legacy timing expectations
-                seq_stage_totals["postprocess"] += 0.0
-                seq_stage_totals["track"] += 0.0
-                seq_stage_totals["materialize"] += 0.0
-            else:
-                if getattr(cfg, "workbench", False) and wb is not None:
-                    # Step 1: ingest + preprocess (same as non-workbench path)
-                    _, _ = time_stage(
-                        seq_stage_totals,
-                        "ingest_preprocess",
-                        lambda: (
-                            (
-                                pool.frame_buffer_nv12.copy_(
-                                    rgb_hwc_to_nv12_gpu(frame_gpu)
-                                ),
-                                pool.mark_nv12_current(),
-                            )
-                            if nv12_direct_from_hwc
-                            else (
-                                pool.frame_buffer.copy_(
-                                    frame_gpu.permute(2, 0, 1).float() / 255.0
-                                ),
-                                apply_frame_preprocess(
-                                    pool.frame_buffer,
-                                    cfg.preprocess_modes,
-                                    cfg.gamma,
-                                    cfg.gamma_luma_threshold,
-                                    cfg.contrast,
-                                ),
-                                pool.mark_rgb_current(),
-                                (
-                                    pool.frame_buffer_nv12.copy_(
-                                        rgb_chw_to_nv12_gpu(pool.frame_buffer)
-                                    )
-                                    if pool.use_nv12
-                                    else None
-                                ),
-                            )
-                        ),
-                        sync_cuda=True,
-                    )
-
-                    # Step 2: YOLO detection via detect_fn — produces boxes in original coords
-                    (
-                        (
-                            fused_boxes,
-                            fused_scores,
-                            fused_classes,
-                            is_tiled,
-                            source_keypoints,
-                        ),
-                        _,
-                    ) = time_stage(
-                        seq_stage_totals,
-                        "detect",
-                        lambda: detect_fn(
-                            detector,
-                            pool,
-                            h_orig,
-                            w_orig,
-                            cfg.preprocess_modes,
-                            detector_box_format,
-                        ),
-                        sync_cuda=True,
-                    )
-
-                    # ── Scene-adapt: observe & classify on first frames ────────
-                    if (
-                        wb_scene_policy is not None
-                        and not wb_scene_policy.is_classified
-                    ):
-                        wb_scene_policy.observe(
-                            fused_boxes, fused_scores, w_orig, h_orig
-                        )
-                        if (
-                            wb_scene_policy.is_classified
-                            and wb_scene_policy.stats is not None
-                        ):
-                            st = wb_scene_policy.stats
-                            if st.scene_type == "crowded_narrow":
-                                seq_narrow_bonus = cfg.narrow_person_score_bonus
-                            wb.narrow_bonus = seq_narrow_bonus
-                            print(
-                                f"  [scene_adapt] {seq} @ frame {frame_id}: {st}"
-                                + (
-                                    f" → narrow_bonus={seq_narrow_bonus:.2f}"
-                                    if cfg.scene_adapt_enabled
-                                    and cfg.narrow_person_score_bonus > 0
-                                    else ""
-                                )
-                            )
-
-                    # ── Quality-aware processing (baseline-aligned pipeline) ────
-                    wb_result, _ = time_stage(
-                        seq_stage_totals,
-                        "postprocess",
-                        lambda: wb.process_detections_quality_aware(
-                            fused_boxes,
-                            fused_scores,
-                            fused_classes,
-                            frame_w=w_orig,
-                            frame_h=h_orig,
-                            frame_chw=pool.as_rgb_chw(),
-                            frame_id=frame_id,
-                            last_reid_frame=_seq_state.last_reid_frame,
-                            prev_gray=_seq_state.prev_gray,
-                            is_tiled=is_tiled,
-                        ),
-                        sync_cuda=True,
-                    )
-                    # Update scene-adapt narrow bonus from workbench
-                    seq_narrow_bonus = wb.narrow_bonus
-                    _seq_state.last_reid_frame = wb.last_reid_frame
-
-                    # D2H once, share across tracker_result_buffers, track_results, and
-                    # MOT line writing — avoids 10 redundant device syncs (was 13 .cpu()
-                    # calls per frame × 7 threads = 91 syncs/cycle; now 5).
-                    wb_count = int(len(wb_result.ids))
-                    _wb_boxes_cpu = wb_result.boxes.cpu()
-                    _wb_scores_cpu = wb_result.scores.cpu()
-                    _wb_ids_cpu = wb_result.ids.cpu()
-                    _wb_classes_cpu = wb_result.classes.cpu()
-                    _wb_det_idx_cpu = wb_result.det_idx.cpu()
-
-                    _seq_state.tracker_result_buffers = {
-                        "count": torch.tensor(
-                            [wb_count], dtype=torch.int32, device="cpu"
-                        ),
-                        "boxes": _wb_boxes_cpu,
-                        "scores": _wb_scores_cpu,
-                        "ids": _wb_ids_cpu,
-                        "classes": _wb_classes_cpu,
-                        "det_idx": _wb_det_idx_cpu,
-                    }
-                    track_results = {
-                        "count": wb_count,
-                        "boxes": _wb_boxes_cpu,
-                        "scores": _wb_scores_cpu,
-                        "ids": _wb_ids_cpu,
-                        "classes": _wb_classes_cpu,
-                        "det_idx": _wb_det_idx_cpu,
-                    }
-
-                    # Write MOT result lines for workbench path (C++ already tracked).
-                    # Build lines: "frame_id, global_tid, x1, y1, w, h, score, -1, -1, -1"
-                    wb_mot_lines: list[str] = []
-                    if wb_count > 0:
-                        wb_ids_np = _wb_ids_cpu.numpy().astype(int)
-                        wb_boxes_np = _wb_boxes_cpu.numpy()
-                        wb_scores_np = _wb_scores_cpu.numpy()
-                        for i in range(wb_count):
-                            global_tid = int(global_id_mapper.map(seq, wb_ids_np[i]))
-                            box = (
-                                float(wb_boxes_np[i, 0]),
-                                float(wb_boxes_np[i, 1]),
-                                float(wb_boxes_np[i, 2]),
-                                float(wb_boxes_np[i, 3]),
-                            )
-                            score = float(wb_scores_np[i])
-                            wb_mot_lines.append(
-                                _mot_result_line(
-                                    frame_id, global_tid, box, score, w_orig, h_orig
-                                )
-                            )
-
-                    # Add MOT lines to results_lines so they go through post-processing
-                    if wb_mot_lines:
-                        results_lines.extend(wb_mot_lines)
-
-                    # Update prev_track_ids for downstream (lazy ReID, etc.)
-                    if wb_count > 0:
-                        _seq_state.prev_track_ids = set(wb_ids_np.tolist())
-
-                    # Mock missing variables for downstream compatibility
-                    fused_boxes = wb_result.boxes
-                    fused_scores = wb_result.scores
-                    fused_classes = wb_result.classes
-                    geometry_suspect_mask = torch.zeros(
-                        len(fused_boxes), dtype=torch.bool, device=fused_boxes.device
-                    )
-                    embeddings = None
-                    _seq_state.gmc_warp = None
-                    aligned_keypoints = None
-                    raw_dump_boxes = fused_boxes
-                    raw_dump_scores = fused_scores
-                    raw_dump_classes = fused_classes
-                    frame_birth_events = []
-
-                    # Update seq_stage_totals for the skipped stages
-                    seq_stage_totals["postprocess"] += 0.0
-                    seq_stage_totals["track"] += 0.0
-                    seq_stage_totals["materialize"] += 0.0
-
-                    # Save gray frame for GMC in next frame
-                    _seq_state.prev_gray = pool.get_frame_luma().clone()
-                else:
-                    (
-                        fused_boxes,
-                        fused_scores,
-                        fused_classes,
-                        is_tiled,
-                        source_keypoints,
-                    ) = _run_detect(
-                        _seq_state,
-                        pool=pool,
-                        frame_gpu=frame_gpu,
-                        nv12_direct_from_hwc=nv12_direct_from_hwc,
-                        detect_fn=detect_fn,
-                        detector_box_format=detector_box_format,
-                    )
-
-                    if _fpn_backbone is not None and fused_boxes.numel() > 0:
-                        _fpn_in = pool.canvas_960p.unsqueeze(0)
-                        if _fpn_in.shape[2] != _fpn_img_size:
-                            _fpn_in = torch.nn.functional.interpolate(
-                                _fpn_in,
-                                size=(_fpn_img_size, _fpn_img_size),
-                                mode="bilinear",
-                                align_corners=False,
-                            )
-                        p3, p4, p5 = _fpn_backbone.infer(_fpn_in)
-                        _fpn_cache = {"p3": p3, "p4": p4, "p5": p5}
-
-                    source_boxes_for_keypoints = fused_boxes
-                    debug_dump_active = _debug_frame_selected(
-                        seq,
-                        frame_id,
-                        debug_dump_seq,
-                        debug_dump_frames,
-                    )
-                    raw_dump_boxes = fused_boxes
-                    raw_dump_scores = fused_scores
-                    raw_dump_classes = fused_classes
-
-                    # P5-4: scene-adaptive observation and one-shot classification.
-                    if _scene_policy is not None and not _scene_policy.is_classified:
-                        _scene_policy.observe(fused_boxes, fused_scores, w_orig, h_orig)
-                        if (
-                            _scene_policy.is_classified
-                            and _scene_policy.stats is not None
-                        ):
-                            st = _scene_policy.stats
-                            if st.scene_type == "crowded_narrow":
-                                seq_narrow_bonus = cfg.narrow_person_score_bonus
-                            print(
-                                f"  [scene_adapt] {seq} @ frame {frame_id}: {st}"
-                                + (
-                                    f" → narrow_bonus={seq_narrow_bonus:.2f}"
-                                    if cfg.scene_adapt_enabled
-                                    and cfg.narrow_person_score_bonus > 0
-                                    else ""
-                                )
-                            )
-
-                    if fused_boxes.numel() == 0:
-                        if debug_dump_active:
-                            _append_stage_dump_rows(
-                                debug_stage_dump_rows,
-                                seq=seq,
-                                frame_id=frame_id,
-                                stage="raw",
-                                boxes=raw_dump_boxes,
-                                scores=raw_dump_scores,
-                                classes=raw_dump_classes,
-                            )
-                        if frame_id > warmup_frames:
-                            frame_latencies.append(
-                                (time.perf_counter() - t_frame_start) * 1000
-                            )
-                        if profile_stages and frame_id > warmup_frames:
-                            seq_stage_totals["frame_total"] += (
-                                time.perf_counter() - t_e2e_start
-                            ) * 1000
-                            _seq_state.seq_profiled_frames += 1
-                        if frame_id % 100 == 0:
-                            print(f"🎬 {seq} [{frame_id}/{frame_end}]")
-                        continue
-
-                    t_keypoint_align_start = None
-                    if profile_stages:
-                        torch.cuda.synchronize()
-                        t_keypoint_align_start = time.perf_counter()
-                    aligned_keypoints = match_keypoints_to_boxes(
-                        fused_boxes,
-                        source_boxes_for_keypoints,
-                        source_keypoints,
-                    )
-                    if (
-                        profile_stages
-                        and current_stage_sample_active
-                        and t_keypoint_align_start is not None
-                    ):
-                        torch.cuda.synchronize()
-                        seq_stage_totals["post_keypoint_align"] += (
-                            time.perf_counter() - t_keypoint_align_start
-                        ) * 1000
-
-                    # Keep low-score boxes down to cfg.track_thresh so ByteTrack's
-                    # second-stage association can actually use them.
-                    post_gpu_start_event = None
-                    post_gpu_end_event = None
-                    # Sync-free CUDA-event markers partitioning the postprocess GPU span
-                    # (post_gpu_elapsed) into contiguous segments. Each entry carries the
-                    # name of the segment ENDING at that marker; the residual from the last
-                    # marker to post_gpu_end_event is attributed to "post_seg_python_tail".
-                    # No torch.cuda.synchronize() is inserted between markers, so timing is
-                    # not distorted. Used only to locate the "unattributed GPU" residual.
-                    post_seg_events: list[tuple[str, "torch.cuda.Event"]] = []
-                    if profile_stages:
-                        torch.cuda.synchronize()
-                        t_post_start = time.perf_counter()
-                        post_gpu_start_event = torch.cuda.Event(enable_timing=True)
-                        post_gpu_end_event = torch.cuda.Event(enable_timing=True)
-                        post_gpu_start_event.record(torch.cuda.current_stream())
-                    raw_box_count = int(fused_scores.numel())
-
-                    if perception_pipeline is not None:
-                        t_native_prep_start = None
-                        if profile_stages:
-                            torch.cuda.synchronize()
-                            t_native_prep_start = time.perf_counter()
-                        _fctx = _run_native_tensor_prep(
-                            _seq_state,
-                            fused_boxes=fused_boxes,
-                            fused_scores=fused_scores,
-                            fused_classes=fused_classes,
-                            seq_narrow_bonus=seq_narrow_bonus,
-                            enable_onms=enable_onms,
-                            onms_min_track_age=onms_min_track_age,
-                            onms_min_track_score=onms_min_track_score,
-                            raw_box_count=raw_box_count,
-                        )
-                        raw_boxes_contig = _fctx.raw_boxes_contig
-                        raw_scores_contig = _fctx.raw_scores_contig
-                        raw_classes_contig = _fctx.raw_classes_contig
-                        num_priors = _fctx.num_priors
-                        if (
-                            profile_stages
-                            and current_stage_sample_active
-                            and t_native_prep_start is not None
-                        ):
-                            torch.cuda.synchronize()
-                            seq_stage_totals["post_tensor_prep"] += (
-                                time.perf_counter() - t_native_prep_start
-                            ) * 1000
-                        if profile_stages and current_stage_sample_active:
-                            _seg_ev = torch.cuda.Event(enable_timing=True)
-                            _seg_ev.record(torch.cuda.current_stream())
-                            post_seg_events.append(("post_seg_prep", _seg_ev))
-
-                        n_post, _seq_state.nms_graph = _run_nms(
-                            _seq_state,
-                            raw_boxes_contig=raw_boxes_contig,
-                            raw_scores_contig=raw_scores_contig,
-                            raw_classes_contig=raw_classes_contig,
-                            raw_box_count=raw_box_count,
-                            num_priors=num_priors,
-                            is_tiled=is_tiled,
-                            nms_graph=_seq_state.nms_graph,
-                        )
-                        if profile_stages and current_stage_sample_active:
-                            _post_stats = (
-                                perception_pipeline.get_postprocess_profile_stats()
-                            )
-                            _post_filter_ms = float(_post_stats.get("filter_ms", 0.0))
-                            _post_nms_ms = float(_post_stats.get("nms_ms", 0.0))
-                            _post_count_sync_ms = float(
-                                _post_stats.get("count_d2h_ms", 0.0)
-                            )
-                            _post_total_ms = float(_post_stats.get("total_ms", 0.0))
-                            seq_stage_totals["post_filter"] += float(_post_filter_ms)
-                            seq_stage_totals["post_nms"] += float(_post_nms_ms)
-                            seq_stage_totals["post_count_sync"] += _post_count_sync_ms
-                            seq_stage_totals["native_filter_gather"] += float(
-                                _post_stats.get("native_filter_gather_ms", 0.0)
-                            )
-                            seq_stage_totals["native_filter_kernel"] += float(
-                                _post_stats.get("native_filter_kernel_ms", 0.0)
-                            )
-                            seq_stage_totals["native_gather_compact3"] += float(
-                                _post_stats.get("native_gather_compact3_ms", 0.0)
-                            )
-                            seq_stage_totals["native_copy_suspect"] += float(
-                                _post_stats.get("native_copy_suspect_ms", 0.0)
-                            )
-                            seq_stage_totals["native_filter_count_sync"] += float(
-                                _post_stats.get("native_filter_count_sync_ms", 0.0)
-                            )
-                            seq_stage_totals["native_small_nms"] += float(
-                                _post_stats.get("native_small_nms_ms", 0.0)
-                            )
-                            seq_stage_totals["native_suspect_penalty"] += float(
-                                _post_stats.get("native_suspect_penalty_ms", 0.0)
-                            )
-                            seq_stage_totals["native_large_sort_nms"] += float(
-                                _post_stats.get("native_large_sort_nms_ms", 0.0)
-                            )
-                            seq_stage_totals["native_large_argsort"] += float(
-                                _post_stats.get("native_large_argsort_ms", 0.0)
-                            )
-                            seq_stage_totals["native_large_nms"] += float(
-                                _post_stats.get("native_large_nms_ms", 0.0)
-                            )
-                            seq_stage_totals["native_compact_copy"] += float(
-                                _post_stats.get("native_compact_copy_ms", 0.0)
-                            )
-                            seq_stage_totals["native_large_gather4"] += float(
-                                _post_stats.get("native_large_gather4_ms", 0.0)
-                            )
-                            seq_stage_totals["native_large_copyback"] += float(
-                                _post_stats.get("native_large_copyback_ms", 0.0)
-                            )
-                            seq_stage_totals["post_native_other"] += max(
-                                0.0,
-                                _post_total_ms
-                                - _post_filter_ms
-                                - _post_nms_ms
-                                - _post_count_sync_ms,
-                            )
-                        if profile_stages and current_stage_sample_active:
-                            _seg_ev = torch.cuda.Event(enable_timing=True)
-                            _seg_ev.record(torch.cuda.current_stream())
-                            post_seg_events.append(("post_seg_native", _seg_ev))
-                        (
-                            fused_boxes,
-                            fused_scores,
-                            fused_classes,
-                            geometry_suspect_mask,
-                            aligned_keypoints,
-                            after_filter_count,
-                            after_nms_count,
-                        ) = _run_post_nms_finalize(
-                            _seq_state,
-                            _fctx,
-                            n_post=n_post,
-                            source_boxes_for_keypoints=source_boxes_for_keypoints,
-                            source_keypoints=source_keypoints,
-                            current_stage_sample_active=current_stage_sample_active,
-                            post_seg_events=post_seg_events,
-                        )
-                    else:
-                        fused_scores = _apply_narrow_person_score_bonus(
-                            fused_boxes,
-                            fused_scores,
-                            fused_classes,
-                            frame_w=w_orig,
-                            frame_h=h_orig,
-                            person_class=cfg.person_class,
-                            bonus=seq_narrow_bonus,
-                            max_width_ratio=cfg.narrow_person_max_width_ratio,
-                            min_height_ratio=cfg.narrow_person_min_height_ratio,
-                            min_aspect=cfg.narrow_person_min_aspect,
-                            max_aspect=cfg.narrow_person_max_aspect,
-                        )
-                        t_sub_start = time.perf_counter()
-                        keep_indices, geometry_suspect_mask, _ = filter_detections_fast(
-                            fused_boxes,
-                            fused_scores,
-                            fused_classes,
-                            score_threshold=min(
-                                cfg.conf_threshold,
-                                cfg.track_thresh,
-                                cfg.crowd_conf_threshold
-                                if cfg.crowd_low_score_mode
-                                else cfg.conf_threshold,
-                                cfg.crowd_track_thresh
-                                if cfg.crowd_low_score_mode
-                                else cfg.track_thresh,
-                            ),
-                            track_person_only=cfg.track_person_only,
-                            person_class=cfg.person_class,
-                            is_tiled=is_tiled,
-                            frame_w=w_orig,
-                            frame_h=h_orig,
-                            person_geometry_prior=cfg.person_geometry_prior,
-                            geometry_suspect_support=cfg.geometry_suspect_support,
-                            person_min_height_ratio=cfg.person_min_height_ratio,
-                            person_min_aspect=cfg.person_min_aspect,
-                            person_max_aspect=cfg.person_max_aspect,
-                            person_min_area_ratio=cfg.person_min_area_ratio,
-                            person_max_area_ratio=cfg.person_max_area_ratio,
-                        )
-                        fused_boxes = fused_boxes[keep_indices]
-                        fused_scores = fused_scores[keep_indices]
-                        fused_classes = fused_classes[keep_indices]
-                        if aligned_keypoints is not None:
-                            aligned_keypoints = aligned_keypoints[keep_indices]
-
-                        if _fpn_reid_mode and fused_boxes.numel() > 0:
-                            valid_w = (fused_boxes[:, 2] - fused_boxes[:, 0]) > 0
-                            if not valid_w.all():
-                                fused_boxes = fused_boxes[valid_w]
-                                fused_scores = fused_scores[valid_w]
-                                fused_classes = fused_classes[valid_w]
-                                if geometry_suspect_mask.numel() > 0:
-                                    geometry_suspect_mask = geometry_suspect_mask[
-                                        valid_w
-                                    ]
-
-                        if cfg.detection_quality_scaling and fused_boxes.numel() > 0:
-                            quality_factors = _compute_detection_quality_batch(
-                                fused_boxes,
-                                w_orig,
-                                h_orig,
-                                w_aspect=cfg.detection_quality_w_aspect,
-                                w_center=cfg.detection_quality_w_center,
-                                w_area=cfg.detection_quality_w_area,
-                            )
-                            fused_scores = fused_scores * quality_factors
-                        elif (
-                            cfg.geometry_suspect_support and geometry_suspect_mask.any()
-                        ):
-                            fused_scores = fused_scores.clone()
-                            fused_scores[geometry_suspect_mask] = torch.minimum(
-                                fused_scores[geometry_suspect_mask],
-                                torch.full_like(
-                                    fused_scores[geometry_suspect_mask],
-                                    cfg.geometry_suspect_support_score,
-                                ),
-                            )
-                        if profile_stages:
-                            torch.cuda.synchronize()
-                            elapsed_ms = (time.perf_counter() - t_sub_start) * 1000
-                            seq_stage_totals["post_filter"] += elapsed_ms
-                        after_filter_count = int(fused_scores.numel())
-
-                    if debug_dump_active:
-                        _append_stage_dump_rows(
-                            debug_stage_dump_rows,
-                            seq=seq,
-                            frame_id=frame_id,
-                            stage="raw",
-                            boxes=raw_dump_boxes,
-                            scores=raw_dump_scores,
-                            classes=raw_dump_classes,
-                        )
-                        _append_stage_dump_rows(
-                            debug_stage_dump_rows,
-                            seq=seq,
-                            frame_id=frame_id,
-                            stage="post_filter",
-                            boxes=fused_boxes,
-                            scores=fused_scores,
-                            classes=fused_classes,
-                        )
-
-                    if fused_boxes.numel() == 0:
-                        if frame_id > warmup_frames:
-                            frame_latencies.append(
-                                (time.perf_counter() - t_frame_start) * 1000
-                            )
-                        if profile_stages and frame_id > warmup_frames:
-                            seq_stage_totals["frame_total"] += (
-                                time.perf_counter() - t_e2e_start
-                            ) * 1000
-                            _seq_state.seq_profiled_frames += 1
-                        if frame_id % 100 == 0:
-                            print(f"🎬 {seq} [{frame_id}/{frame_end}]")
-                        continue
-
-                    if (
-                        perception_pipeline is None
-                        and (is_tiled or cfg.nms_iou_threshold is not None)
-                        and fused_boxes.numel() > 0
-                    ):
-                        if profile_stages:
-                            torch.cuda.synchronize()
-                            t_sub_start = time.perf_counter()
-
-                        # Fetch priors for Occlusion-aware NMS
-                        priors = None
-                        prior_classes = None
-                        if enable_onms:
-                            priors, prior_classes = _build_active_track_priors(
-                                detector.tracker,
-                                fused_boxes.device,
-                                min_track_age=onms_min_track_age,
-                                min_track_score=onms_min_track_score,
-                            )
-
-                        keep = nms_fast(
-                            fused_boxes,
-                            fused_scores,
-                            fused_classes,
-                            cfg.nms_iou_threshold,
-                            class_aware=not cfg.track_person_only,
-                            priors=priors,
-                            prior_classes=prior_classes,
-                            prior_iou_threshold=onms_prior_iou_threshold,
-                        )
-                        fused_boxes = fused_boxes[keep]
-                        fused_scores = fused_scores[keep]
-                        fused_classes = fused_classes[keep]
-                        geometry_suspect_mask = geometry_suspect_mask[keep]
-                        if aligned_keypoints is not None:
-                            aligned_keypoints = aligned_keypoints[keep]
-                        if profile_stages:
-                            torch.cuda.synchronize()
-                            elapsed_ms = (time.perf_counter() - t_sub_start) * 1000
-                            seq_stage_totals["post_nms"] += elapsed_ms
-                    if perception_pipeline is None:
-                        after_nms_count = int(fused_scores.numel())
-                    if debug_dump_active:
-                        _append_stage_dump_rows(
-                            debug_stage_dump_rows,
-                            seq=seq,
-                            frame_id=frame_id,
-                            stage="post_nms",
-                            boxes=fused_boxes,
-                            scores=fused_scores,
-                            classes=fused_classes,
-                        )
-
-                    if cfg.tile_diagnostics and is_tiled:
-                        seq_tile_diag["frames_tiled"] += 1
-                        seq_tile_diag["pre_merge_seam_boxes"] += _count_tile_seam_boxes(
-                            fused_boxes,
-                            tiling=cfg.tiling,
-                            h_orig=h_orig,
-                            w_orig=w_orig,
-                        )
-
-                    use_repo_cross_tile_merge = (
-                        cfg.cross_tile_merge
-                        and is_tiled
-                        and cfg.tiling != "sahi_960p_2x2"
-                        and fused_boxes.numel() > 1
-                    )
-                    if use_repo_cross_tile_merge:
-                        if profile_stages:
-                            torch.cuda.synchronize()
-                            t_sub_start = time.perf_counter()
-                        fused_boxes, fused_scores, fused_classes, _merge_counts = (
-                            merge_cross_tile_duplicates_fast(
-                                fused_boxes,
-                                fused_scores,
-                                fused_classes,
-                                tiling=cfg.tiling,
-                                frame_w=w_orig,
-                                frame_h=h_orig,
-                                seam_margin_canvas_px=cfg.tile_seam_margin_canvas_px,
-                                seam_center_scale=cfg.cross_tile_seam_center_scale,
-                                seam_area_ratio_threshold=cfg.cross_tile_seam_area_ratio_threshold,
-                                seam_min_overlap_ratio=cfg.cross_tile_seam_min_overlap_ratio,
-                            )
-                        )
-                        # MOT17-b: penalise boxes that were merged from multiple tiles.
-                        # Merged boxes have uncertain positions; lowering their score makes
-                        # ByteTracker treat them more conservatively during association.
-                        if cfg.cross_tile_score_penalty < 1.0:
-                            merged_mask = _merge_counts > 1
-                            if merged_mask.any():
-                                fused_scores = fused_scores.clone()
-                                fused_scores[merged_mask] = (
-                                    fused_scores[merged_mask]
-                                    * cfg.cross_tile_score_penalty
-                                )
-                        if cfg.tile_diagnostics:
-                            merged_mask = _merge_counts > 1
-                            seq_tile_diag["merged_clusters"] += int(
-                                merged_mask.sum().item()
-                            )
-                            seq_tile_diag["merged_members"] += int(
-                                _merge_counts[merged_mask].sum().item()
-                            )
-                            seq_tile_diag["merged_outputs"] += int(
-                                _merge_counts.numel()
-                            )
-                        geometry_suspect_mask = torch.zeros_like(
-                            fused_scores, dtype=torch.bool
-                        )
-                        aligned_keypoints = None
-                        if profile_stages:
-                            torch.cuda.synchronize()
-                            elapsed_ms = (time.perf_counter() - t_sub_start) * 1000
-                            seq_stage_totals["post_merge"] += elapsed_ms
-                    after_merge_count = int(fused_scores.numel())
-                    crowd_low_active = (
-                        cfg.crowd_low_score_mode
-                        and after_merge_count >= cfg.crowd_low_score_trigger
-                    )
-                    frame_conf_threshold = (
-                        cfg.crowd_conf_threshold
-                        if crowd_low_active
-                        else cfg.conf_threshold
-                    )
-                    frame_track_thresh = (
-                        cfg.crowd_track_thresh if crowd_low_active else cfg.track_thresh
-                    )
-                    frame_mid_thresh = (
-                        cfg.crowd_mid_thresh if crowd_low_active else cfg.mid_thresh
-                    )
-                    frame_new_track_thresh = (
-                        cfg.crowd_new_track_thresh
-                        if crowd_low_active
-                        else cfg.new_track_thresh
-                    )
-                    frame_score_floor = min(frame_conf_threshold, frame_track_thresh)
-                    base_score_floor = min(cfg.conf_threshold, cfg.track_thresh)
-                    (
-                        fused_boxes,
-                        fused_scores,
-                        fused_classes,
-                        geometry_suspect_mask,
-                        aligned_keypoints,
-                        after_merge_count,
-                    ) = _run_detection_filters(
-                        _seq_state,
-                        fused_boxes=fused_boxes,
-                        fused_scores=fused_scores,
-                        fused_classes=fused_classes,
-                        geometry_suspect_mask=geometry_suspect_mask,
-                        aligned_keypoints=aligned_keypoints,
-                        after_merge_count=after_merge_count,
-                        frame_score_floor=frame_score_floor,
-                        base_score_floor=base_score_floor,
-                        frame_id=frame_id,
-                        current_stage_sample_active=current_stage_sample_active,
-                        post_seg_events=post_seg_events,
-                        debug_dump_active=debug_dump_active,
-                        debug_stage_dump_rows=debug_stage_dump_rows,
-                    )
-
-                    # === Stage 2 Quality Gate ===
-                    # Remove mid-score-band detections with poor geometry before the tracker's
-                    # Stage 2 association step, preventing bad lost-track assignments → IDs.
-                    if cfg.stage2_quality_gate and fused_scores.numel() > 0:
-                        _s2_quality = _compute_detection_quality_batch(
-                            fused_boxes,
-                            w_orig,
-                            h_orig,
-                            w_aspect=cfg.detection_quality_w_aspect,
-                            w_center=cfg.detection_quality_w_center,
-                            w_area=cfg.detection_quality_w_area,
-                        )
-                        (
-                            fused_boxes,
-                            fused_scores,
-                            fused_classes,
-                            geometry_suspect_mask,
-                            aligned_keypoints,
-                        ) = _apply_stage2_quality_gate(
-                            fused_boxes,
-                            fused_scores,
-                            fused_classes,
-                            geometry_suspect_mask,
-                            aligned_keypoints,
-                            track_thresh=frame_track_thresh,
-                            mid_thresh=frame_mid_thresh,
-                            quality_min=cfg.stage2_quality_min,
-                            quality=_s2_quality,
-                        )
-                        after_merge_count = int(fused_scores.numel())
-
-                    frame_birth_events: list[dict[str, float | int | str | bool]] = []
-
-                    # === Consecutive-Frame Birth Gate ===
-                    # Boost sub-threshold detections that have appeared in the last N frames.
-                    # More selective than birth_quality_gate: requires temporal evidence, not
-                    # just per-frame geometry quality.
-                    if cfg.birth_consecutive_gate and fused_scores.numel() > 0:
-                        if (
-                            len(_consec_birth_window)
-                            >= cfg.birth_consecutive_frames - 1
-                        ):
-                            below_birth = fused_scores < frame_new_track_thresh
-                            if below_birth.any():
-                                sub_boxes = fused_boxes[below_birth]
-                                confirmed = _consecutive_birth_check(
-                                    sub_boxes,
-                                    list(_consec_birth_window),
-                                    cfg.birth_consecutive_iou,
-                                    min_motion_px=cfg.birth_consecutive_min_motion,
-                                )
-                                if confirmed.any():
-                                    boost_idx = below_birth.nonzero(as_tuple=True)[0][
-                                        confirmed
-                                    ]
-                                    # Only boost detections that are close enough to new_track_thresh
-                                    # (above min_score) — prevents very-low-score noise from crossing
-                                    eligible = (
-                                        fused_scores[boost_idx]
-                                        >= cfg.birth_consecutive_min_score
-                                    )
-                                    boost_idx = boost_idx[eligible]
-                                    if boost_idx.numel() > 0:
-                                        score_before = fused_scores[boost_idx].clone()
-                                        fused_scores = fused_scores.clone()
-                                        fused_scores[boost_idx] = torch.clamp(
-                                            fused_scores[boost_idx]
-                                            + cfg.birth_consecutive_boost,
-                                            max=cfg.high_thresh,
-                                        )
-                                        _append_birth_event_rows(
-                                            frame_birth_events,
-                                            _policy="birth_consecutive_gate",
-                                            _det_indices=boost_idx,
-                                            _score_before=score_before,
-                                            _score_after=fused_scores[boost_idx],
-                                            _boxes=fused_boxes[boost_idx],
-                                        )
-                    # Only keep sub-threshold boxes in window: prevents boosting detections
-                    # that match against already-tracked (high-score) detections from prior frames.
-                    _sub_thresh_boxes = fused_boxes[
-                        fused_scores < frame_new_track_thresh
-                    ]
-                    _consec_birth_window.append(_sub_thresh_boxes.detach())
-
-                    # === Birth quality gate ===
-                    # Boost scores of high-quality detections that fall below new_track_thresh
-                    # so they can spawn new tracks without globally lowering the score floor.
-                    # Only detections with quality above birth_min_quality receive a boost.
-                    # Scores are capped at high_thresh to avoid Stage-1 promotion side effects.
-                    if (
-                        cfg.birth_quality_gate
-                        and fused_scores.numel() > 0
-                        and cfg.birth_quality_score_bias > 0.0
-                    ):
-                        birth_quality = _compute_detection_quality_batch(
-                            fused_boxes,
-                            w_orig,
-                            h_orig,
-                            w_aspect=cfg.detection_quality_w_aspect,
-                            w_center=cfg.detection_quality_w_center,
-                            w_area=cfg.detection_quality_w_area,
-                        )
-                        below_birth = fused_scores < frame_new_track_thresh
-                        high_quality = birth_quality > cfg.birth_min_quality
-                        boost_mask = below_birth & high_quality
-                        if boost_mask.any():
-                            boost_idx = boost_mask.nonzero(as_tuple=True)[0]
-                            score_before = fused_scores[boost_idx].clone()
-                            boost = (
-                                birth_quality[boost_mask] - cfg.birth_min_quality
-                            ) * cfg.birth_quality_score_bias
-                            fused_scores = fused_scores.clone()
-                            fused_scores[boost_mask] = torch.clamp(
-                                fused_scores[boost_mask] + boost,
-                                max=cfg.high_thresh,
-                            )
-                            _append_birth_event_rows(
-                                frame_birth_events,
-                                _policy="birth_quality_gate",
-                                _det_indices=boost_idx,
-                                _score_before=score_before,
-                                _score_after=fused_scores[boost_idx],
-                                _boxes=fused_boxes[boost_idx],
-                            )
-
-                    # === Multi-signal birth policy (P5-1) ===
-                    # Joint evidence (score × streak × motion × geometry) selectively promotes
-                    # sub-threshold detections that have accumulated enough multi-frame evidence.
-                    if _multi_birth_manager is not None and fused_scores.numel() > 0:
-                        below_birth = fused_scores < frame_new_track_thresh
-                        above_min = fused_scores >= cfg.multi_birth_min_score
-                        cand_mask = below_birth & above_min
-                        if cand_mask.any():
-                            promote_mask, replace_mask = _multi_birth_manager.update(
-                                frame_id,
-                                fused_boxes[cand_mask],
-                                fused_scores[cand_mask],
-                            )
-                            if promote_mask.any():
-                                boost_idx = cand_mask.nonzero(as_tuple=True)[0][
-                                    promote_mask
-                                ]
-                                score_before = fused_scores[boost_idx].clone()
-                                fused_scores = fused_scores.clone()
-                                fused_scores[boost_idx] = frame_new_track_thresh + 0.01
-                                _append_birth_event_rows(
-                                    frame_birth_events,
-                                    _policy="multi_birth",
-                                    _det_indices=boost_idx,
-                                    _score_before=score_before,
-                                    _score_after=fused_scores[boost_idx],
-                                    _boxes=fused_boxes[boost_idx],
-                                )
-                        else:
-                            _multi_birth_manager.update(
-                                frame_id, fused_boxes[:0], fused_scores[:0]
-                            )
-
-                    frame_tracker_thresholds = (
-                        frame_track_thresh,
-                        frame_mid_thresh,
-                        frame_new_track_thresh,
-                    )
-                    if frame_tracker_thresholds != _seq_state.active_tracker_thresholds:
-                        detector.tracker.set_params(
-                            track_thresh=frame_track_thresh,
-                            high_thresh=cfg.high_thresh,
-                            match_thresh=cfg.match_thresh,
-                            track_buffer=seq_track_buffer,
-                            mid_thresh=frame_mid_thresh,
-                            confirm_streak=int(cfg.kwargs.get("confirm_streak", 1)),
-                            confirm_score_thresh=float(
-                                cfg.kwargs.get("confirm_score_thresh", 0.0)
-                            ),
-                            adaptive_confirmation=bool(
-                                cfg.kwargs.get("adaptive_confirmation", False)
-                            ),
-                            new_track_thresh=frame_new_track_thresh,
-                            nsa_kalman=cfg.nsa_kalman,
-                            r_scale=cfg.kalman_r_scale,
-                            vel_dir_weight=cfg.vel_dir_weight,
-                            fuse_score_weight=cfg.fuse_score_weight,
-                            stage2_match_thresh=cfg.stage2_match_thresh,
-                            birth_low_score_thresh=cfg.birth_low_score_thresh,
-                            birth_prox_norm_thresh=cfg.birth_prox_norm_thresh,
-                        )
-                        _seq_state.active_tracker_thresholds = frame_tracker_thresholds
-                    if cfg.tile_diagnostics and is_tiled:
-                        seq_tile_diag["post_merge_seam_boxes"] += (
-                            _count_tile_seam_boxes(
-                                fused_boxes,
-                                tiling=cfg.tiling,
-                                h_orig=h_orig,
-                                w_orig=w_orig,
-                                seam_margin_canvas_px=cfg.tile_seam_margin_canvas_px,
-                            )
-                        )
-                    if (
-                        cfg.tile_seam_score_penalty < 1.0
-                        and is_tiled
-                        and fused_boxes.numel() > 0
-                    ):
-                        seam_mask = _tile_seam_mask(
-                            fused_boxes,
-                            tiling=cfg.tiling,
-                            h_orig=h_orig,
-                            w_orig=w_orig,
-                            seam_margin_canvas_px=cfg.tile_seam_margin_canvas_px,
-                        )
-                        if seam_mask.any():
-                            fused_scores = fused_scores.clone()
-                            fused_scores[seam_mask] = (
-                                fused_scores[seam_mask] * cfg.tile_seam_score_penalty
-                            )
-                    if profile_stages:
-                        if post_gpu_end_event is not None:
-                            post_gpu_end_event.record(torch.cuda.current_stream())
-                        torch.cuda.synchronize()
-                        elapsed_ms = (time.perf_counter() - t_post_start) * 1000
-                        seq_stage_totals["postprocess"] += elapsed_ms
-                        record_stage_sample("postprocess", elapsed_ms)
-                        if (
-                            current_stage_sample_active
-                            and post_gpu_start_event is not None
-                            and post_gpu_end_event is not None
-                        ):
-                            seq_stage_totals["post_gpu_elapsed"] += float(
-                                post_gpu_start_event.elapsed_time(post_gpu_end_event)
-                            )
-                            # Partition the GPU span into contiguous segments. Each marker
-                            # carries the name of the segment ending at it; the residual to
-                            # post_gpu_end_event is the Python tail (gates 2814-3147).
-                            _prev_ev = post_gpu_start_event
-                            for _seg_name, _seg_ev in post_seg_events:
-                                _seg_ms = float(_prev_ev.elapsed_time(_seg_ev))
-                                seq_stage_totals[_seg_name] += _seg_ms
-                                seq_segment_samples[_seg_name].append(_seg_ms)
-                                _prev_ev = _seg_ev
-                            _tail_ms = float(_prev_ev.elapsed_time(post_gpu_end_event))
-                            seq_stage_totals["post_seg_python_tail"] += _tail_ms
-                            seq_segment_samples["post_seg_python_tail"].append(_tail_ms)
-                        if frame_id > warmup_frames:
-                            seq_post_counts["raw_boxes"] += raw_box_count
-                            seq_post_counts["after_filter"] += after_filter_count
-                            seq_post_counts["after_nms"] += after_nms_count
-                            seq_post_counts["after_merge"] += after_merge_count
-                    # Sync previous frame's background relink_write before accessing shared
-                    # mutable state (dynamic_reid, primary_appearance_bank, relinker).
-                    if _seq_state.bg_future is not None:
-                        if profile_stages:
-                            t_bg_wait_start = time.perf_counter()
-                        (
-                            _bg_rw_lines,
-                            _seq_state.prev_track_ids,
-                            _bg_det_idx_to_local_id,
-                            _bg_output_by_local,
-                        ) = _seq_state.bg_future.result()
-                        if profile_stages:
-                            elapsed_ms = (time.perf_counter() - t_bg_wait_start) * 1000
-                            seq_stage_totals["bg_relink_wait"] += elapsed_ms
-                            record_stage_sample("bg_relink_wait", elapsed_ms)
-                        results_lines.extend(_bg_rw_lines)
-                        if _seq_state.bg_birth_events is not None:
-                            _annotate_birth_events(
-                                _seq_state.bg_birth_events,
-                                _det_idx_to_local_id=_bg_det_idx_to_local_id,
-                                _output_by_local=_bg_output_by_local,
-                            )
-                        _seq_state.bg_future = None
-                        _seq_state.bg_birth_events = None
-
-                    embeddings = None
-                    _fpn_ready = _fpn_reid_mode and fused_boxes.numel() > 0
-                    _do_reid = _fpn_ready or (
-                        cfg.reid_work_enabled
-                        and extractor is not None
-                        and cropper is not None
-                        and fused_boxes.numel() > 0
-                    )
-                    if _do_reid:
-                        if not _fpn_ready:
-                            MIN_REID_GAP = 2
-                            time_since_last_reid = frame_id - _seq_state.last_reid_frame
-
-                            if time_since_last_reid < MIN_REID_GAP:
-                                _do_reid = False
-                            elif cfg.need_reid_enabled:
-                                if dynamic_reid is not None:
-                                    _do_reid = dynamic_reid.should_reid(
-                                        after_merge_count
-                                    )
-                                else:
-                                    _do_reid = need_reid_frame(
-                                        _seq_state.prev_track_ids, after_merge_count
-                                    )
-                            else:
-                                _do_reid = frame_id % seq_reid_interval == 0
-
-                        if _do_reid:
-                            _seq_state.last_reid_frame = frame_id
-                            if primary_appearance_bank is not None:
-                                if profile_stages:
-                                    torch.cuda.synchronize()
-                                    t_reid_bank_sync_start = time.perf_counter()
-                                bank_reps = primary_appearance_bank.representatives()
-                                if bank_reps:
-                                    detector.tracker.set_reference_features_from_bank(
-                                        bank_reps
-                                    )
-                                clean_ids = primary_appearance_bank.clean_ids()
-                                if clean_ids:
-                                    _clean_ids_list = list(clean_ids)
-                                    _ids_t = torch.tensor(
-                                        _clean_ids_list, dtype=torch.int32
-                                    )
-                                    _flags_t = torch.ones(
-                                        len(_clean_ids_list), dtype=torch.bool
-                                    )
-                                    detector.tracker.set_clean_embedding_flags(
-                                        _ids_t, _flags_t
-                                    )
-                                else:
-                                    detector.tracker.set_clean_embedding_flags(
-                                        torch.zeros(0, dtype=torch.int32),
-                                        torch.zeros(0, dtype=torch.bool),
-                                    )
-                                if profile_stages:
-                                    torch.cuda.synchronize()
-                                    elapsed_ms = (
-                                        time.perf_counter() - t_reid_bank_sync_start
-                                    ) * 1000
-                                    seq_stage_totals["reid_bank_sync"] += elapsed_ms
-                                    record_stage_sample("reid_bank_sync", elapsed_ms)
-
-                    if cfg.reid_enabled and _do_reid:
-                        # ── FPN ReID fast path ──
-                        if _fpn_reid_mode and fused_boxes.shape[0] > 0:
-                            _trt_feat_cache = getattr(detector, "_trt_feat_cache", None)
-                            if _fpn_cache:
-                                _img_sz = _fpn_img_size
-                            elif _trt_feat_cache:
-                                _p3_cache = _trt_feat_cache.get("p3")
-                                _img_sz = (
-                                    int(_p3_cache.shape[2] * 8)
-                                    if _p3_cache is not None
-                                    else 640
-                                )
-                            elif hasattr(detector, "teacher"):
-                                _p3_cache = detector.teacher._gate_layers[
-                                    "p3"
-                                ]._feat_cache.get("p3")
-                                _img_sz = (
-                                    int(_p3_cache.shape[2] * 8)
-                                    if _p3_cache is not None
-                                    else 640
-                                )
-                            else:
-                                _img_sz = 960
-                            boxes_rescaled = fused_boxes.clone()
-                            sx = _img_sz / w_orig
-                            sy = _img_sz / h_orig
-                            boxes_rescaled[:, 0] *= sx
-                            boxes_rescaled[:, 1] *= sy
-                            boxes_rescaled[:, 2] *= sx
-                            boxes_rescaled[:, 3] *= sy
-                            if _trt_feat_cache:
-                                fpn = [_trt_feat_cache[s] for s in ("p3", "p4", "p5")]
-                            elif hasattr(detector, "teacher"):
-                                fpn = [
-                                    detector.teacher._gate_layers[s]._feat_cache[s]
-                                    for s in ("p3", "p4", "p5")
-                                ]
-                            elif _fpn_cache:
-                                fpn = [_fpn_cache[s] for s in ("p3", "p4", "p5")]
-                            else:
-                                fpn = None
-                            if fpn is not None:
-                                if _fpn_reid_conv_weights is not None:
-                                    from saccade.perception.tracking.fpn_reid_cuda import (
-                                        fpn_reid_extract_cuda,
-                                    )
-
-                                    embeddings = fpn_reid_extract_cuda(
-                                        fpn,
-                                        _fpn_reid_conv_weights,
-                                        boxes_rescaled,
-                                        img_size=_img_sz,
-                                        proj_weight=_fpn_reid_proj_weight,
-                                        running_mean=_fpn_reid_running_mean,
-                                        running_var=_fpn_reid_running_var,
-                                    )
-                                else:
-                                    embeddings = detector.extract_fpn_embeddings(
-                                        None, boxes_rescaled
-                                    )
-                        else:
-                            if profile_stages:
-                                torch.cuda.synchronize()
-                                t_reid_budget_start = time.perf_counter()
-
-                            num_dets = fused_boxes.shape[0]
-                            if cfg.reid_budget_raw >= 1.0:
-                                actual_budget = int(cfg.reid_budget_raw)
-                            elif cfg.reid_budget_raw > 0.0:
-                                actual_budget = max(
-                                    1, int(cfg.reid_budget_raw * num_dets)
-                                )
-                            else:
-                                actual_budget = (
-                                    0  # Unlimited or handled by _budget_reid_candidates
-                                )
-
-                            budget_indices = _budget_reid_candidates(
-                                fused_boxes,
-                                fused_scores,
-                                actual_budget,
-                                dynamic_reid=dynamic_reid,
-                                gmc_warp=_seq_state.gmc_warp
-                                if cfg.gmc_enabled
-                                else None,
-                                gmc_uncertain=_seq_state.gmc_uncertain,
-                            )
-
-                            if profile_stages:
-                                torch.cuda.synchronize()
-                                elapsed_ms = (
-                                    time.perf_counter() - t_reid_budget_start
-                                ) * 1000
-                                seq_stage_totals["reid_budget"] += elapsed_ms
-                                record_stage_sample("reid_budget", elapsed_ms)
-
-                            _reid_feat_dim = (
-                                _fpn_reid_dim
-                                if _fpn_reid_mode
-                                else extractor.feature_dim
-                            )
-                            # Initialize full embeddings with zeros. Detections without budget
-                            # will have neutral features for association.
-                            embeddings = torch.zeros(
-                                (fused_boxes.shape[0], _reid_feat_dim),
-                                device=fused_boxes.device,
-                                dtype=torch.float32,
-                            )
-
-                            if budget_indices.numel() > 0:
-                                budgeted_boxes = fused_boxes[
-                                    budget_indices
-                                ].contiguous()
-
-                                if (
-                                    native_reid_available
-                                    and perception_pipeline is not None
-                                ):
-                                    frame_hwc = (
-                                        pool.as_rgb_chw().permute(1, 2, 0).contiguous()
-                                    )
-                                    budget_embeddings = torch.empty(
-                                        (budget_indices.numel(), extractor.feature_dim),
-                                        device=fused_boxes.device,
-                                        dtype=torch.float32,
-                                    )
-
-                                    if cfg.async_reid and reid_side_stream is not None:
-                                        reid_main_ready.record()
-                                        with torch.cuda.stream(reid_side_stream):
-                                            reid_side_stream.wait_event(reid_main_ready)
-                                            perception_pipeline.extract_reid(
-                                                frame_hwc.data_ptr(),
-                                                h_orig,
-                                                w_orig,
-                                                budgeted_boxes.data_ptr(),
-                                                int(budgeted_boxes.shape[0]),
-                                                budget_embeddings.data_ptr(),
-                                                reid_side_stream.cuda_stream,
-                                            )
-                                        reid_side_event.record(reid_side_stream)
-                                        _reid_side_pending = True
-                                        _reid_async_embeddings = budget_embeddings
-                                        _reid_async_indices = budget_indices
-                                        _reid_frame_hwc_ref = frame_hwc
-                                    else:
-                                        if profile_stages:
-                                            perception_pipeline.reset_reid_profile_stats()
-                                            torch.cuda.synchronize()
-                                            t_reid_extract_start = time.perf_counter()
-
-                                        perception_pipeline.extract_reid(
-                                            frame_hwc.data_ptr(),
-                                            h_orig,
-                                            w_orig,
-                                            budgeted_boxes.data_ptr(),
-                                            int(budgeted_boxes.shape[0]),
-                                            budget_embeddings.data_ptr(),
-                                            torch.cuda.current_stream().cuda_stream,
-                                        )
-
-                                        if profile_stages:
-                                            torch.cuda.synchronize()
-                                            elapsed_ms = (
-                                                time.perf_counter()
-                                                - t_reid_extract_start
-                                            ) * 1000
-                                            seq_stage_totals["reid_extract"] += (
-                                                elapsed_ms
-                                            )
-                                            record_stage_sample(
-                                                "reid_extract", elapsed_ms
-                                            )
-                                            if current_stage_sample_active:
-                                                native_stats = perception_pipeline.get_reid_profile_stats()
-                                                seq_native_reid_samples[
-                                                    "native_reid_crop"
-                                                ].append(
-                                                    float(
-                                                        native_stats.get("crop_ms", 0.0)
-                                                    )
-                                                )
-                                                seq_native_reid_samples[
-                                                    "native_reid_pre_normalize"
-                                                ].append(
-                                                    float(
-                                                        native_stats.get(
-                                                            "extract_pre_normalize_ms",
-                                                            0.0,
-                                                        )
-                                                    )
-                                                )
-                                                seq_native_reid_samples[
-                                                    "native_reid_trt_enqueue"
-                                                ].append(
-                                                    float(
-                                                        native_stats.get(
-                                                            "extract_trt_enqueue_ms",
-                                                            0.0,
-                                                        )
-                                                    )
-                                                )
-                                                seq_native_reid_samples[
-                                                    "native_reid_l2_normalize"
-                                                ].append(
-                                                    float(
-                                                        native_stats.get(
-                                                            "extract_l2_normalize_ms",
-                                                            0.0,
-                                                        )
-                                                    )
-                                                )
-                                        embeddings[budget_indices] = budget_embeddings
-                                else:
-                                    frame_batch = pool.as_rgb_chw().unsqueeze(0)
-                                    if cfg.reid_crop_layout == "parts":
-                                        if profile_stages:
-                                            torch.cuda.synchronize()
-                                            t_reid_crop_start = time.perf_counter()
-                                        crops = cropper.process_parts(
-                                            frame_batch, budgeted_boxes
-                                        )
-                                        if profile_stages:
-                                            torch.cuda.synchronize()
-                                            elapsed_ms = (
-                                                time.perf_counter() - t_reid_crop_start
-                                            ) * 1000
-                                            seq_stage_totals["reid_crop"] += elapsed_ms
-                                            record_stage_sample("reid_crop", elapsed_ms)
-
-                                        if crops.numel() > 0:
-                                            if profile_stages:
-                                                torch.cuda.synchronize()
-                                                t_reid_extract_start = (
-                                                    time.perf_counter()
-                                                )
-                                            budget_embeddings = (
-                                                extractor.extract_parts_fused(crops)
-                                            )
-                                            if profile_stages:
-                                                torch.cuda.synchronize()
-                                                elapsed_ms = (
-                                                    time.perf_counter()
-                                                    - t_reid_extract_start
-                                                ) * 1000
-                                                seq_stage_totals["reid_extract"] += (
-                                                    elapsed_ms
-                                                )
-                                                record_stage_sample(
-                                                    "reid_extract", elapsed_ms
-                                                )
-                                            embeddings[budget_indices] = (
-                                                budget_embeddings
-                                            )
-                                    else:
-                                        if profile_stages:
-                                            torch.cuda.synchronize()
-                                            t_reid_crop_start = time.perf_counter()
-                                        crops = cropper.process(
-                                            frame_batch, budgeted_boxes
-                                        )
-                                        if profile_stages:
-                                            torch.cuda.synchronize()
-                                            elapsed_ms = (
-                                                time.perf_counter() - t_reid_crop_start
-                                            ) * 1000
-                                            seq_stage_totals["reid_crop"] += elapsed_ms
-                                            record_stage_sample("reid_crop", elapsed_ms)
-
-                                        if crops.numel() > 0:
-                                            if profile_stages:
-                                                torch.cuda.synchronize()
-                                                t_reid_extract_start = (
-                                                    time.perf_counter()
-                                                )
-                                            budget_embeddings = extractor.extract(crops)
-                                            if profile_stages:
-                                                torch.cuda.synchronize()
-                                                elapsed_ms = (
-                                                    time.perf_counter()
-                                                    - t_reid_extract_start
-                                                ) * 1000
-                                                seq_stage_totals["reid_extract"] += (
-                                                    elapsed_ms
-                                                )
-                                                record_stage_sample(
-                                                    "reid_extract", elapsed_ms
-                                                )
-                                            embeddings[budget_indices] = (
-                                                budget_embeddings
-                                            )
-
-                    mid_thresh_scale = geometry_mid_thresh_scale(
-                        fused_boxes,
-                        fused_classes,
-                        h_orig,
-                        enabled=cfg.geometry_mid_scale,
-                        person_class=cfg.person_class,
-                        track_person_only=cfg.track_person_only,
-                        ref_height_ratio=cfg.geometry_ref_height_ratio,
-                        min_scale=cfg.geometry_min_scale,
-                        max_scale=cfg.geometry_max_scale,
-                        ema_beta=cfg.geometry_ema_beta,
-                        loosen_step=cfg.geometry_loosen_step,
-                        tighten_step=cfg.geometry_tighten_step,
-                        min_samples=cfg.geometry_min_samples,
-                        state=geometry_scale_state,
-                    )
-                    _seq_state.gmc_warp = None
-                    _seq_state.gmc_uncertain = False
-                    # GMC estimator takes luma from frame_buffer (RGB path)
-                    # or from NV12 Y-plane directly (NV12 path).
-                    # C++ GMC estimator expects [3, H, W] — clone luma to 3 channels in NV12 mode.
-                    if pool.use_nv12:
-                        _luma = pool.get_frame_luma()
-                        _frame_gmc = _luma.repeat(3, 1, 1)
-                    else:
-                        _frame_gmc = pool.frame_buffer
-
-                    if gmc_estimator is not None:
-                        (_seq_state.gmc_warp, _seq_state.gmc_uncertain), _ = time_stage(
-                            seq_stage_totals,
-                            "gmc",
-                            lambda: _run_gmc_estimate(
-                                _seq_state,
-                                fused_boxes=fused_boxes,
-                                _frame_gmc=_frame_gmc,
-                            ),
-                            # Only the pure-CPU estimators need a host sync for timing;
-                            # the GPU direct/graph and PyGraphed paths feed the tracker
-                            # (which syncs) so an extra sync here only stalls overlap.
-                            sync_cuda=not _use_direct_gmc
-                            and not isinstance(gmc_estimator, PyGraphedGMC),
-                        )
-                        if hasattr(detector, "set_gmc_warp"):
-                            detector.set_gmc_warp(_seq_state.gmc_warp, h_orig, w_orig)
-                    # Async ReID: sync side stream and inject fresh embeddings right before
-                    # tracker.update_into so the cost matrix still has detection-side appearance.
-                    # GMC on main stream overlapped with reid on side stream during the gap above.
-                    if _reid_side_pending and reid_side_event is not None:
-                        if profile_stages:
-                            torch.cuda.synchronize()
-                            t_reid_extract_start = time.perf_counter()
-                        reid_side_event.synchronize()
-                        if profile_stages:
-                            elapsed_ms = (
-                                time.perf_counter() - t_reid_extract_start
-                            ) * 1000
-                            seq_stage_totals["reid_extract"] += elapsed_ms
-                            record_stage_sample("reid_extract", elapsed_ms)
-                        embeddings[_reid_async_indices] = _reid_async_embeddings
-                        _reid_side_pending = False
-                        _reid_frame_hwc_ref = None
-
-                    _seq_state.tracker_result_buffers = _run_track(
-                        _seq_state,
-                        fused_boxes=fused_boxes,
-                        fused_scores=fused_scores,
-                        fused_classes=fused_classes,
-                        gmc_warp=_seq_state.gmc_warp,
-                        embeddings=embeddings,
-                        mid_thresh_scale=mid_thresh_scale,
-                        tracker_result_buffers=_seq_state.tracker_result_buffers,
-                    )
-                    track_results = _run_materialize(
-                        _seq_state,
-                        tracker_result_buffers=_seq_state.tracker_result_buffers,
-                        embeddings=embeddings,
-                        aligned_keypoints=aligned_keypoints,
-                        frame_id=frame_id,
-                    )
-
-            if (
-                aligned_keypoints is not None
-                and track_results["det_idx"] is not None
-                and track_results["count"] > 0
-            ):
-                det_idx = track_results["det_idx"]
-                valid = (det_idx >= 0) & (det_idx < aligned_keypoints.shape[0])
-                if valid.any():
-                    detector.tracker.push_keypoints(
-                        track_results["ids"][valid].to(
-                            device=aligned_keypoints.device, dtype=torch.int32
-                        ),
-                        aligned_keypoints[det_idx[valid]],
-                    )
-
-            if cfg.profile_lazy_reid_candidates:
-                candidates = detector.tracker.get_tentative_candidates()
-                ready_candidates = [
-                    c
-                    for c in candidates
-                    if c.hit_streak >= cfg.lazy_reid_min_hit_streak
-                    and c.hit_streak < c.required_confirm_streak
-                ]
-                _seq_state.seq_lazy_reid_candidates += len(ready_candidates)
-                _seq_state.seq_lazy_reid_frames += 1
-                if (
-                    cfg.profile_lazy_reid_embeddings
-                    and extractor
-                    and cropper
-                    and candidates
-                ):
-                    ready_ids = {int(c.obj_id) for c in ready_candidates}
-
-                    def _profile_lazy_reid_embeddings() -> tuple[
-                        int, int, int, float, int, int, set[int]
-                    ]:
-                        embed_candidates = [
-                            c
-                            for c in candidates
-                            if int(c.class_id) == cfg.person_class and c.hit_streak >= 1
-                        ]
-                        if not embed_candidates:
-                            return 0, 0, 0, 0.0, 0, 0, set()
-                        cand_boxes = torch.tensor(
-                            [[c.x1, c.y1, c.x2, c.y2] for c in embed_candidates],
-                            device=pool.frame_buffer.device,
-                            dtype=torch.float32,
-                        )
-                        crops = cropper.process(
-                            pool.as_rgb_chw().unsqueeze(0), cand_boxes
-                        )
-                        if crops.numel() == 0:
-                            return 0, 0, 0, 0.0, 0, 0, set()
-                        cand_embeddings = extractor.extract(crops)
-                        pairs, passed, sim_sum = 0, 0, 0.0
-                        arbiter_checks, arbiter_approve = 0, 0
-                        seen_ids: set[int] = set()
-                        for cand, emb in zip(embed_candidates, cand_embeddings):
-                            tid = int(cand.obj_id)
-                            seen_ids.add(tid)
-                            prev = lazy_reid_prev_embeddings.get(tid)
-                            if prev is not None:
-                                sim = float(torch.dot(prev, emb).item())
-                                pairs += 1
-                                sim_sum += sim
-                                if sim >= cfg.lazy_reid_self_threshold:
-                                    passed += 1
-                                if tid in ready_ids:
-                                    arbiter_checks += 1
-                                    if sim >= cfg.lazy_reid_self_threshold:
-                                        arbiter_approve += 1
-                            lazy_reid_prev_embeddings[tid] = emb.detach()
-                        return (
-                            len(embed_candidates),
-                            pairs,
-                            passed,
-                            sim_sum,
-                            arbiter_checks,
-                            arbiter_approve,
-                            seen_ids,
-                        )
-
-                    (
-                        (
-                            crop_count,
-                            pair_count,
-                            pass_count,
-                            sim_sum,
-                            arbiter_checks,
-                            arbiter_approve,
-                            seen_ids,
-                        ),
-                        _,
-                    ) = time_stage(
-                        seq_stage_totals,
-                        "lazy_reid",
-                        _profile_lazy_reid_embeddings,
-                        sync_cuda=True,
-                    )
-                    _seq_state.seq_lazy_reid_crops += crop_count
-                    _seq_state.seq_lazy_reid_self_pairs += pair_count
-                    _seq_state.seq_lazy_reid_self_pass += pass_count
-                    _seq_state.seq_lazy_reid_self_sim_sum += sim_sum
-                    _seq_state.seq_lazy_reid_arbiter_checks += arbiter_checks
-                    _seq_state.seq_lazy_reid_arbiter_approve += arbiter_approve
-                    if seen_ids:
-                        for stale_id in (
-                            set(lazy_reid_prev_embeddings.keys()) - seen_ids
-                        ):
-                            lazy_reid_prev_embeddings.pop(stale_id, None)
-
-            (
-                _seq_state.prev_track_ids,
-                _emit_lines,
-            ) = _run_emit(
-                _seq_state,
-                track_results=track_results,
-                tracker_result_buffers=_seq_state.tracker_result_buffers,
-                fused_boxes=fused_boxes,
-                fused_scores=fused_scores,
-                geometry_suspect_mask=geometry_suspect_mask,
-                embeddings=embeddings,
-                gmc_warp=_seq_state.gmc_warp,
-                frame_birth_events=frame_birth_events,
-                frame_id=frame_id,
-                prev_track_ids=_seq_state.prev_track_ids,
-            )
-            results_lines.extend(_emit_lines)
-
-            if frame_id > warmup_frames:
-                frame_latencies.append((time.perf_counter() - t_frame_start) * 1000)
-            if profile_stages and frame_id > warmup_frames:
-                elapsed_ms = (time.perf_counter() - t_frame_start) * 1000
-                seq_stage_totals["frame_total"] += elapsed_ms
-                record_stage_sample("frame_total", elapsed_ms)
-                if current_frame_stage_elapsed is not None:
-                    for (
-                        stage_name,
-                        stage_elapsed,
-                    ) in current_frame_stage_elapsed.items():
-                        seq_stage_samples[stage_name].append(stage_elapsed)
-                _seq_state.seq_profiled_frames += 1
-            if frame_id % 100 == 0:
-                print(f"🎬 {seq} [{frame_id}/{frame_end}]")
 
         # Flush deferred materialize from the last frame.
         if _defer_emit and _seq_state.defer_emit_event is not None:
