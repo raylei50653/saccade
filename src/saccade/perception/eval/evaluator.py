@@ -1278,6 +1278,9 @@ class SeqState:
     bg_relink_write: Any
     collect_output_metadata: Any
     annotate_birth_events: Any
+    # --- detection tail-filters ---
+    external_fp_rule_config: Any
+    external_fp_logistic_model: Any
 
 
 @dataclasses.dataclass
@@ -2199,6 +2202,223 @@ def _run_emit(
             seq_stage_totals["relink_write"] += elapsed_ms
             record_stage_sample("relink_write", elapsed_ms)
     return prev_track_ids, _bg_future, _bg_birth_events, _lines_out
+
+
+def _run_detection_filters(
+    state: SeqState,
+    *,
+    fused_boxes: torch.Tensor,
+    fused_scores: torch.Tensor,
+    fused_classes: torch.Tensor,
+    geometry_suspect_mask: torch.Tensor,
+    aligned_keypoints: "torch.Tensor | None",
+    after_merge_count: int,
+    frame_score_floor: float,
+    base_score_floor: float,
+    frame_id: int,
+    current_stage_sample_active: bool,
+    post_seg_events: list,
+    debug_dump_active: bool,
+    debug_stage_dump_rows: list,
+) -> tuple[
+    torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, "torch.Tensor | None", int
+]:
+    """Detection tail-filters for one frame (extracted from run_eval).
+
+    The trap-free first half of the post-merge tail: per-frame score-floor filter,
+    external FP filter, FP-hard mask-in-place, duplicate suppression, and per-frame
+    detection cap. Each is an independent ``if cfg.<feature>:`` step mutating the
+    fused detections (and keeping geometry_suspect_mask / keypoints aligned), with
+    debug dumps and segment-event markers preserved. Returns the (possibly filtered)
+    ``(fused_boxes, fused_scores, fused_classes, geometry_suspect_mask,
+    aligned_keypoints, after_merge_count)``; after_merge_count passes through
+    unchanged when no filter fires. The birth gates + tracker config that follow
+    stay inline (they carry cross-frame state).
+    """
+    cfg = state.cfg
+    seq = state.seq
+    w_orig = state.w_orig
+    h_orig = state.h_orig
+    profile_stages = state.profile_stages
+    seq_stage_totals = state.seq_stage_totals
+    external_fp_rule_config = state.external_fp_rule_config
+    external_fp_logistic_model = state.external_fp_logistic_model
+    t_tail_filtering_start = None
+    if profile_stages:
+        torch.cuda.synchronize()
+        t_tail_filtering_start = time.perf_counter()
+    with _record_profile_scope("post.tail_filtering"):
+        if frame_score_floor > base_score_floor and fused_scores.numel() > 0:
+            floor_keep = fused_scores > frame_score_floor
+            fused_boxes = fused_boxes[floor_keep]
+            fused_scores = fused_scores[floor_keep]
+            fused_classes = fused_classes[floor_keep]
+            geometry_suspect_mask = geometry_suspect_mask[floor_keep]
+            if aligned_keypoints is not None:
+                aligned_keypoints = aligned_keypoints[floor_keep]
+            after_merge_count = int(fused_scores.numel())
+    if (
+        profile_stages
+        and current_stage_sample_active
+        and t_tail_filtering_start is not None
+    ):
+        torch.cuda.synchronize()
+        seq_stage_totals["post_tail_filtering"] += (
+            time.perf_counter() - t_tail_filtering_start
+        ) * 1000
+    if profile_stages and current_stage_sample_active:
+        _seg_ev = torch.cuda.Event(enable_timing=True)
+        _seg_ev.record(torch.cuda.current_stream())
+        post_seg_events.append(("post_seg_tail_filter", _seg_ev))
+    if debug_dump_active:
+        _append_stage_dump_rows(
+            debug_stage_dump_rows,
+            seq=seq,
+            frame_id=frame_id,
+            stage="post_merge",
+            boxes=fused_boxes,
+            scores=fused_scores,
+            classes=fused_classes,
+        )
+
+    if cfg.external_fp_filter_mode != "off" and fused_scores.numel() > 0:
+        fused_boxes, fused_scores, fused_classes = _apply_external_fp_filter(
+            fused_boxes,
+            fused_scores,
+            fused_classes,
+            image_width=w_orig,
+            image_height=h_orig,
+            mode=cfg.external_fp_filter_mode,
+            rule_config=external_fp_rule_config,
+            logistic_model=external_fp_logistic_model,
+            logistic_threshold=cfg.external_fp_logistic_threshold,
+            max_score=cfg.external_fp_max_score,
+            penalty=cfg.external_fp_penalty,
+            min_score=frame_score_floor,
+            softmax_min_scale=cfg.external_fp_softmax_min_scale,
+        )
+        after_merge_count = int(fused_scores.numel())
+        if debug_dump_active:
+            _append_stage_dump_rows(
+                debug_stage_dump_rows,
+                seq=seq,
+                frame_id=frame_id,
+                stage=f"external_fp_{cfg.external_fp_filter_mode}",
+                boxes=fused_boxes,
+                scores=fused_scores,
+                classes=fused_classes,
+            )
+
+    # === FP hard filter ===
+    # Removes extremely suspicious low-score large-area detections
+    # that are likely false positives based on FP analysis.
+    if cfg.fp_hard_filter_enabled and fused_scores.numel() > 0:
+        # Mask-in-place (fixed shape, sync-free): set rejected scores
+        # below all tracker thresholds rather than compacting. The GPU
+        # tracker's score gate drops them without a host .nonzero()
+        # sync, and geometry_suspect_mask / keypoints stay aligned.
+        _fp_reject = _fp_hard_reject_mask(
+            fused_boxes,
+            fused_scores,
+            min_score=cfg.fp_hard_filter_min_score,
+            max_suspicious_area=cfg.fp_hard_filter_max_suspicious_area,
+            max_suspicious_score=cfg.fp_hard_filter_max_suspicious_score,
+        )
+        fused_scores = fused_scores.masked_fill(_fp_reject, _FP_HARD_REJECT_SCORE)
+        after_merge_count = int(fused_scores.numel())
+        if debug_dump_active:
+            _append_stage_dump_rows(
+                debug_stage_dump_rows,
+                seq=seq,
+                frame_id=frame_id,
+                stage="fp_hard_filter",
+                boxes=fused_boxes,
+                scores=fused_scores,
+                classes=fused_classes,
+            )
+    if profile_stages and current_stage_sample_active:
+        _seg_ev = torch.cuda.Event(enable_timing=True)
+        _seg_ev.record(torch.cuda.current_stream())
+        post_seg_events.append(("post_seg_fp_hard", _seg_ev))
+
+    # === Duplicate suppression ===
+    # Remove near-duplicate detections within the same frame before
+    # birth gates / multi_birth / detection cap. This eliminates detector
+    # artifacts where the same person is detected at slightly different
+    # positions with different scores.
+    if cfg.duplicate_suppression and fused_scores.numel() > 0:
+        dup_keep = _suppress_duplicate_detections(
+            fused_boxes,
+            fused_scores,
+            iou_threshold=cfg.duplicate_suppression_iou_threshold,
+            min_score_ratio=cfg.duplicate_suppression_min_score_ratio,
+        )
+        if not dup_keep.all():
+            fused_boxes = fused_boxes[dup_keep]
+            fused_scores = fused_scores[dup_keep]
+            fused_classes = fused_classes[dup_keep]
+            geometry_suspect_mask = geometry_suspect_mask[dup_keep]
+            if aligned_keypoints is not None:
+                aligned_keypoints = aligned_keypoints[dup_keep]
+            after_merge_count = int(fused_scores.numel())
+            if debug_dump_active:
+                _append_stage_dump_rows(
+                    debug_stage_dump_rows,
+                    seq=seq,
+                    frame_id=frame_id,
+                    stage="duplicate_suppression",
+                    boxes=fused_boxes,
+                    scores=fused_scores,
+                    classes=fused_classes,
+                )
+
+            # === Per-frame detection cap ===
+    # Cap detections per frame to prevent overwhelming association.
+    # Uses FP-filter-aware ranking to preferentially keep high-score,
+    # appropriately-sized detections while filtering suspicious large boxes.
+    if cfg.per_frame_detection_cap > 0 and fused_scores.numel() > 0:
+        quality_factors_for_cap = None
+        if cfg.detection_quality_scaling and fused_scores.numel() > 0:
+            quality_factors_for_cap = _compute_detection_quality_batch(
+                fused_boxes,
+                w_orig,
+                h_orig,
+                w_aspect=cfg.detection_quality_w_aspect,
+                w_center=cfg.detection_quality_w_center,
+                w_area=cfg.detection_quality_w_area,
+            )
+
+        # Compute adaptive cap if enabled
+        max_det = cfg.per_frame_detection_cap
+        if cfg.adaptive_detection_cap:
+            max_det = _compute_adaptive_cap(
+                fused_boxes,
+                fused_scores,
+                base_cap=cfg.adaptive_cap_base,
+                max_cap=cfg.adaptive_cap_max,
+                min_cap=cfg.adaptive_cap_min,
+            )
+
+        rank_method = cfg.detection_cap_rank_method
+        # Only apply cap if we have more detections than the cap
+        if fused_scores.numel() > max_det:
+            fused_boxes, fused_scores, fused_classes = _apply_detection_cap(
+                fused_boxes,
+                fused_scores,
+                fused_classes,
+                max_detections=max_det,
+                quality_factors=quality_factors_for_cap,
+                rank_method=rank_method,
+            )
+        after_merge_count = int(fused_scores.numel())
+    return (
+        fused_boxes,
+        fused_scores,
+        fused_classes,
+        geometry_suspect_mask,
+        aligned_keypoints,
+        after_merge_count,
+    )
 
 
 def run_eval(
@@ -3429,6 +3649,8 @@ def run_eval(
             bg_relink_write=_bg_relink_write,
             collect_output_metadata=_collect_output_metadata,
             annotate_birth_events=_annotate_birth_events,
+            external_fp_rule_config=external_fp_rule_config,
+            external_fp_logistic_model=external_fp_logistic_model,
         )
 
         for frame_id in range(1, frame_end + 1):
@@ -4251,186 +4473,29 @@ def run_eval(
                     )
                     frame_score_floor = min(frame_conf_threshold, frame_track_thresh)
                     base_score_floor = min(cfg.conf_threshold, cfg.track_thresh)
-                    t_tail_filtering_start = None
-                    if profile_stages:
-                        torch.cuda.synchronize()
-                        t_tail_filtering_start = time.perf_counter()
-                    with _record_profile_scope("post.tail_filtering"):
-                        if (
-                            frame_score_floor > base_score_floor
-                            and fused_scores.numel() > 0
-                        ):
-                            floor_keep = fused_scores > frame_score_floor
-                            fused_boxes = fused_boxes[floor_keep]
-                            fused_scores = fused_scores[floor_keep]
-                            fused_classes = fused_classes[floor_keep]
-                            geometry_suspect_mask = geometry_suspect_mask[floor_keep]
-                            if aligned_keypoints is not None:
-                                aligned_keypoints = aligned_keypoints[floor_keep]
-                            after_merge_count = int(fused_scores.numel())
-                    if (
-                        profile_stages
-                        and current_stage_sample_active
-                        and t_tail_filtering_start is not None
-                    ):
-                        torch.cuda.synchronize()
-                        seq_stage_totals["post_tail_filtering"] += (
-                            time.perf_counter() - t_tail_filtering_start
-                        ) * 1000
-                    if profile_stages and current_stage_sample_active:
-                        _seg_ev = torch.cuda.Event(enable_timing=True)
-                        _seg_ev.record(torch.cuda.current_stream())
-                        post_seg_events.append(("post_seg_tail_filter", _seg_ev))
-                    if debug_dump_active:
-                        _append_stage_dump_rows(
-                            debug_stage_dump_rows,
-                            seq=seq,
-                            frame_id=frame_id,
-                            stage="post_merge",
-                            boxes=fused_boxes,
-                            scores=fused_scores,
-                            classes=fused_classes,
-                        )
-
-                    if (
-                        cfg.external_fp_filter_mode != "off"
-                        and fused_scores.numel() > 0
-                    ):
-                        fused_boxes, fused_scores, fused_classes = (
-                            _apply_external_fp_filter(
-                                fused_boxes,
-                                fused_scores,
-                                fused_classes,
-                                image_width=w_orig,
-                                image_height=h_orig,
-                                mode=cfg.external_fp_filter_mode,
-                                rule_config=external_fp_rule_config,
-                                logistic_model=external_fp_logistic_model,
-                                logistic_threshold=cfg.external_fp_logistic_threshold,
-                                max_score=cfg.external_fp_max_score,
-                                penalty=cfg.external_fp_penalty,
-                                min_score=frame_score_floor,
-                                softmax_min_scale=cfg.external_fp_softmax_min_scale,
-                            )
-                        )
-                        after_merge_count = int(fused_scores.numel())
-                        if debug_dump_active:
-                            _append_stage_dump_rows(
-                                debug_stage_dump_rows,
-                                seq=seq,
-                                frame_id=frame_id,
-                                stage=f"external_fp_{cfg.external_fp_filter_mode}",
-                                boxes=fused_boxes,
-                                scores=fused_scores,
-                                classes=fused_classes,
-                            )
-
-                    # === FP hard filter ===
-                    # Removes extremely suspicious low-score large-area detections
-                    # that are likely false positives based on FP analysis.
-                    if cfg.fp_hard_filter_enabled and fused_scores.numel() > 0:
-                        # Mask-in-place (fixed shape, sync-free): set rejected scores
-                        # below all tracker thresholds rather than compacting. The GPU
-                        # tracker's score gate drops them without a host .nonzero()
-                        # sync, and geometry_suspect_mask / keypoints stay aligned.
-                        _fp_reject = _fp_hard_reject_mask(
-                            fused_boxes,
-                            fused_scores,
-                            min_score=cfg.fp_hard_filter_min_score,
-                            max_suspicious_area=cfg.fp_hard_filter_max_suspicious_area,
-                            max_suspicious_score=cfg.fp_hard_filter_max_suspicious_score,
-                        )
-                        fused_scores = fused_scores.masked_fill(
-                            _fp_reject, _FP_HARD_REJECT_SCORE
-                        )
-                        after_merge_count = int(fused_scores.numel())
-                        if debug_dump_active:
-                            _append_stage_dump_rows(
-                                debug_stage_dump_rows,
-                                seq=seq,
-                                frame_id=frame_id,
-                                stage="fp_hard_filter",
-                                boxes=fused_boxes,
-                                scores=fused_scores,
-                                classes=fused_classes,
-                            )
-                    if profile_stages and current_stage_sample_active:
-                        _seg_ev = torch.cuda.Event(enable_timing=True)
-                        _seg_ev.record(torch.cuda.current_stream())
-                        post_seg_events.append(("post_seg_fp_hard", _seg_ev))
-
-                    # === Duplicate suppression ===
-                    # Remove near-duplicate detections within the same frame before
-                    # birth gates / multi_birth / detection cap. This eliminates detector
-                    # artifacts where the same person is detected at slightly different
-                    # positions with different scores.
-                    if cfg.duplicate_suppression and fused_scores.numel() > 0:
-                        dup_keep = _suppress_duplicate_detections(
-                            fused_boxes,
-                            fused_scores,
-                            iou_threshold=cfg.duplicate_suppression_iou_threshold,
-                            min_score_ratio=cfg.duplicate_suppression_min_score_ratio,
-                        )
-                        if not dup_keep.all():
-                            fused_boxes = fused_boxes[dup_keep]
-                            fused_scores = fused_scores[dup_keep]
-                            fused_classes = fused_classes[dup_keep]
-                            geometry_suspect_mask = geometry_suspect_mask[dup_keep]
-                            if aligned_keypoints is not None:
-                                aligned_keypoints = aligned_keypoints[dup_keep]
-                            after_merge_count = int(fused_scores.numel())
-                            if debug_dump_active:
-                                _append_stage_dump_rows(
-                                    debug_stage_dump_rows,
-                                    seq=seq,
-                                    frame_id=frame_id,
-                                    stage="duplicate_suppression",
-                                    boxes=fused_boxes,
-                                    scores=fused_scores,
-                                    classes=fused_classes,
-                                )
-
-                            # === Per-frame detection cap ===
-                    # Cap detections per frame to prevent overwhelming association.
-                    # Uses FP-filter-aware ranking to preferentially keep high-score,
-                    # appropriately-sized detections while filtering suspicious large boxes.
-                    if cfg.per_frame_detection_cap > 0 and fused_scores.numel() > 0:
-                        quality_factors_for_cap = None
-                        if cfg.detection_quality_scaling and fused_scores.numel() > 0:
-                            quality_factors_for_cap = _compute_detection_quality_batch(
-                                fused_boxes,
-                                w_orig,
-                                h_orig,
-                                w_aspect=cfg.detection_quality_w_aspect,
-                                w_center=cfg.detection_quality_w_center,
-                                w_area=cfg.detection_quality_w_area,
-                            )
-
-                        # Compute adaptive cap if enabled
-                        max_det = cfg.per_frame_detection_cap
-                        if cfg.adaptive_detection_cap:
-                            max_det = _compute_adaptive_cap(
-                                fused_boxes,
-                                fused_scores,
-                                base_cap=cfg.adaptive_cap_base,
-                                max_cap=cfg.adaptive_cap_max,
-                                min_cap=cfg.adaptive_cap_min,
-                            )
-
-                        rank_method = cfg.detection_cap_rank_method
-                        # Only apply cap if we have more detections than the cap
-                        if fused_scores.numel() > max_det:
-                            fused_boxes, fused_scores, fused_classes = (
-                                _apply_detection_cap(
-                                    fused_boxes,
-                                    fused_scores,
-                                    fused_classes,
-                                    max_detections=max_det,
-                                    quality_factors=quality_factors_for_cap,
-                                    rank_method=rank_method,
-                                )
-                            )
-                        after_merge_count = int(fused_scores.numel())
+                    (
+                        fused_boxes,
+                        fused_scores,
+                        fused_classes,
+                        geometry_suspect_mask,
+                        aligned_keypoints,
+                        after_merge_count,
+                    ) = _run_detection_filters(
+                        _seq_state,
+                        fused_boxes=fused_boxes,
+                        fused_scores=fused_scores,
+                        fused_classes=fused_classes,
+                        geometry_suspect_mask=geometry_suspect_mask,
+                        aligned_keypoints=aligned_keypoints,
+                        after_merge_count=after_merge_count,
+                        frame_score_floor=frame_score_floor,
+                        base_score_floor=base_score_floor,
+                        frame_id=frame_id,
+                        current_stage_sample_active=current_stage_sample_active,
+                        post_seg_events=post_seg_events,
+                        debug_dump_active=debug_dump_active,
+                        debug_stage_dump_rows=debug_stage_dump_rows,
+                    )
 
                     # === Stage 2 Quality Gate ===
                     # Remove mid-score-band detections with poor geometry before the tracker's
