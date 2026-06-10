@@ -1227,14 +1227,18 @@ def _flush_deferred_emit(
 
 
 @dataclasses.dataclass
-class SeqState:
-    """Per-sequence state threaded into run_eval's extracted stage functions.
+class EvalPipeline:
+    """Per-sequence evaluation pipeline state.
 
     Holds references to the per-sequence locals (buffers, estimators, profiling
     accumulators) so each stage helper takes ``state`` instead of a dozen
     explicit params. Buffers are mutated in place exactly as before — this is a
-    passing convenience, not a second source of truth. Grows as more stages are
-    extracted.
+    passing convenience, not a second source of truth.
+
+    This is the nucleus of the eval pipeline object: stage helpers will migrate
+    onto it as methods and the per-frame cross-frame loop-locals (gmc_warp,
+    last_reid_frame, prev_track_ids, bg_future/bg_birth_events, deferred-emit
+    state) will become fields, dissolving the hand-threaded in/out plumbing.
     """
 
     cfg: Any
@@ -1287,7 +1291,7 @@ class SeqState:
 class FrameCtx:
     """Per-frame working tensors produced by the postprocess stage helpers.
 
-    Companion to SeqState (per-sequence): collects the outputs an extracted
+    Companion to EvalPipeline (per-sequence): collects the outputs an extracted
     postprocess stage hands back to the frame loop, so a stage returns one
     object instead of a long tuple. Grows as more postprocess sub-stages move
     out. Only the values the loop actually consumes downstream are carried —
@@ -1306,7 +1310,7 @@ class FrameCtx:
 
 
 def _run_gmc_estimate(
-    state: SeqState,
+    state: EvalPipeline,
     *,
     fused_boxes: torch.Tensor,
     _frame_gmc: torch.Tensor,
@@ -1454,7 +1458,7 @@ def _run_gmc_estimate(
 
 
 def _run_materialize(
-    state: SeqState,
+    state: EvalPipeline,
     *,
     tracker_result_buffers: Any,
     embeddings: "torch.Tensor | None",
@@ -1526,7 +1530,7 @@ def _run_materialize(
 
 
 def _run_track(
-    state: SeqState,
+    state: EvalPipeline,
     *,
     fused_boxes: torch.Tensor,
     fused_scores: torch.Tensor,
@@ -1582,7 +1586,7 @@ def _run_track(
 
 
 def _run_nms(
-    state: SeqState,
+    state: EvalPipeline,
     *,
     raw_boxes_contig: torch.Tensor,
     raw_scores_contig: torch.Tensor,
@@ -1673,7 +1677,7 @@ def _run_nms(
 
 
 def _run_native_tensor_prep(
-    state: SeqState,
+    state: EvalPipeline,
     *,
     fused_boxes: torch.Tensor,
     fused_scores: torch.Tensor,
@@ -1749,7 +1753,7 @@ def _run_native_tensor_prep(
 
 
 def _run_post_nms_finalize(
-    state: SeqState,
+    state: EvalPipeline,
     fctx: FrameCtx,
     *,
     n_post: int,
@@ -1869,7 +1873,7 @@ def _run_post_nms_finalize(
 
 
 def _run_detect(
-    state: SeqState,
+    state: EvalPipeline,
     *,
     pool: Any,
     frame_gpu: torch.Tensor,
@@ -1986,7 +1990,7 @@ def _build_gmc_estimator(
 
 
 def _run_emit(
-    state: SeqState,
+    state: EvalPipeline,
     *,
     track_results: Any,
     tracker_result_buffers: Any,
@@ -2205,7 +2209,7 @@ def _run_emit(
 
 
 def _run_detection_filters(
-    state: SeqState,
+    state: EvalPipeline,
     *,
     fused_boxes: torch.Tensor,
     fused_scores: torch.Tensor,
@@ -3612,7 +3616,7 @@ def run_eval(
 
         # Per-sequence state bundle for the extracted stage helpers. References
         # the locals above; grows as more stages move out of the frame loop.
-        _seq_state = SeqState(
+        _seq_state = EvalPipeline(
             cfg=cfg,
             seq=seq,
             w_orig=w_orig,
