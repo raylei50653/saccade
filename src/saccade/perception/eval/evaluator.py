@@ -1291,6 +1291,22 @@ class EvalPipeline:
     defer_emit_fid: int = 0
     bg_future: Any = None
     bg_birth_events: Any = None
+    # --- loop-carried frame state (read in frame N having been set in N-1;
+    #     must live on the object so the value survives the loop->method move) ---
+    nms_graph: Any = None
+    active_tracker_thresholds: Any = None
+    gmc_uncertain: bool = False
+    last_reid_frame: int = -100
+    prev_gray: "torch.Tensor | None" = None
+    seq_profiled_frames: int = 0
+    seq_lazy_reid_candidates: int = 0
+    seq_lazy_reid_frames: int = 0
+    seq_lazy_reid_crops: int = 0
+    seq_lazy_reid_self_pairs: int = 0
+    seq_lazy_reid_self_pass: int = 0
+    seq_lazy_reid_self_sim_sum: float = 0.0
+    seq_lazy_reid_arbiter_checks: int = 0
+    seq_lazy_reid_arbiter_approve: int = 0
 
 
 @dataclasses.dataclass
@@ -3333,20 +3349,8 @@ def run_eval(
                 "merged_outputs",
             )
         )
-        seq_lazy_reid_candidates = 0
-        seq_lazy_reid_frames = 0
-        seq_lazy_reid_crops = 0
-        seq_lazy_reid_self_pairs = 0
-        seq_lazy_reid_self_pass = 0
-        seq_lazy_reid_self_sim_sum = 0.0
-        seq_lazy_reid_arbiter_checks = 0
-        seq_lazy_reid_arbiter_approve = 0
         lazy_reid_prev_embeddings: dict[int, torch.Tensor] = {}
-        seq_profiled_frames = 0
-        last_reid_frame = -100
         gmc_warp = None
-        gmc_uncertain = False
-        prev_gray: torch.Tensor | None = None  # for GMC (workbench path)
         tracker_result_buffers = detector.tracker.allocate_result_buffers(
             device=pool.frame_buffer.device
         )
@@ -3378,7 +3382,6 @@ def run_eval(
             "scores": torch.empty((2048,), dtype=torch.float32, device="cuda"),
             "classes": torch.empty((2048,), dtype=torch.int32, device="cuda"),
         }
-        _nms_graph = None
         _NMS_FIXED_N = 2048
 
         gtu: Any = None
@@ -3656,6 +3659,7 @@ def run_eval(
             annotate_birth_events=_annotate_birth_events,
             external_fp_rule_config=external_fp_rule_config,
             external_fp_logistic_model=external_fp_logistic_model,
+            active_tracker_thresholds=active_tracker_thresholds,
         )
 
         for frame_id in range(1, frame_end + 1):
@@ -3883,15 +3887,15 @@ def run_eval(
                             frame_h=h_orig,
                             frame_chw=pool.as_rgb_chw(),
                             frame_id=frame_id,
-                            last_reid_frame=last_reid_frame,
-                            prev_gray=prev_gray,
+                            last_reid_frame=_seq_state.last_reid_frame,
+                            prev_gray=_seq_state.prev_gray,
                             is_tiled=is_tiled,
                         ),
                         sync_cuda=True,
                     )
                     # Update scene-adapt narrow bonus from workbench
                     seq_narrow_bonus = wb.narrow_bonus
-                    last_reid_frame = wb.last_reid_frame
+                    _seq_state.last_reid_frame = wb.last_reid_frame
 
                     # D2H once, share across tracker_result_buffers, track_results, and
                     # MOT line writing — avoids 10 redundant device syncs (was 13 .cpu()
@@ -3973,7 +3977,7 @@ def run_eval(
                     seq_stage_totals["materialize"] += 0.0
 
                     # Save gray frame for GMC in next frame
-                    prev_gray = pool.get_frame_luma().clone()
+                    _seq_state.prev_gray = pool.get_frame_luma().clone()
                 else:
                     (
                         fused_boxes,
@@ -4052,7 +4056,7 @@ def run_eval(
                             seq_stage_totals["frame_total"] += (
                                 time.perf_counter() - t_e2e_start
                             ) * 1000
-                            seq_profiled_frames += 1
+                            _seq_state.seq_profiled_frames += 1
                         if frame_id % 100 == 0:
                             print(f"🎬 {seq} [{frame_id}/{frame_end}]")
                         continue
@@ -4129,7 +4133,7 @@ def run_eval(
                             _seg_ev.record(torch.cuda.current_stream())
                             post_seg_events.append(("post_seg_prep", _seg_ev))
 
-                        n_post, _nms_graph = _run_nms(
+                        n_post, _seq_state.nms_graph = _run_nms(
                             _seq_state,
                             raw_boxes_contig=raw_boxes_contig,
                             raw_scores_contig=raw_scores_contig,
@@ -4137,7 +4141,7 @@ def run_eval(
                             raw_box_count=raw_box_count,
                             num_priors=num_priors,
                             is_tiled=is_tiled,
-                            nms_graph=_nms_graph,
+                            nms_graph=_seq_state.nms_graph,
                         )
                         if profile_stages and current_stage_sample_active:
                             _post_stats = (
@@ -4334,7 +4338,7 @@ def run_eval(
                             seq_stage_totals["frame_total"] += (
                                 time.perf_counter() - t_e2e_start
                             ) * 1000
-                            seq_profiled_frames += 1
+                            _seq_state.seq_profiled_frames += 1
                         if frame_id % 100 == 0:
                             print(f"🎬 {seq} [{frame_id}/{frame_end}]")
                         continue
@@ -4666,7 +4670,7 @@ def run_eval(
                         frame_mid_thresh,
                         frame_new_track_thresh,
                     )
-                    if frame_tracker_thresholds != active_tracker_thresholds:
+                    if frame_tracker_thresholds != _seq_state.active_tracker_thresholds:
                         detector.tracker.set_params(
                             track_thresh=frame_track_thresh,
                             high_thresh=cfg.high_thresh,
@@ -4689,7 +4693,7 @@ def run_eval(
                             birth_low_score_thresh=cfg.birth_low_score_thresh,
                             birth_prox_norm_thresh=cfg.birth_prox_norm_thresh,
                         )
-                        active_tracker_thresholds = frame_tracker_thresholds
+                        _seq_state.active_tracker_thresholds = frame_tracker_thresholds
                     if cfg.tile_diagnostics and is_tiled:
                         seq_tile_diag["post_merge_seam_boxes"] += (
                             _count_tile_seam_boxes(
@@ -4785,7 +4789,7 @@ def run_eval(
                     if _do_reid:
                         if not _fpn_ready:
                             MIN_REID_GAP = 2
-                            time_since_last_reid = frame_id - last_reid_frame
+                            time_since_last_reid = frame_id - _seq_state.last_reid_frame
 
                             if time_since_last_reid < MIN_REID_GAP:
                                 _do_reid = False
@@ -4802,7 +4806,7 @@ def run_eval(
                                 _do_reid = frame_id % seq_reid_interval == 0
 
                         if _do_reid:
-                            last_reid_frame = frame_id
+                            _seq_state.last_reid_frame = frame_id
                             if primary_appearance_bank is not None:
                                 if profile_stages:
                                     torch.cuda.synchronize()
@@ -4921,7 +4925,7 @@ def run_eval(
                                 actual_budget,
                                 dynamic_reid=dynamic_reid,
                                 gmc_warp=gmc_warp if cfg.gmc_enabled else None,
-                                gmc_uncertain=gmc_uncertain,
+                                gmc_uncertain=_seq_state.gmc_uncertain,
                             )
 
                             if profile_stages:
@@ -5145,7 +5149,7 @@ def run_eval(
                         state=geometry_scale_state,
                     )
                     gmc_warp = None
-                    gmc_uncertain = False
+                    _seq_state.gmc_uncertain = False
                     # GMC estimator takes luma from frame_buffer (RGB path)
                     # or from NV12 Y-plane directly (NV12 path).
                     # C++ GMC estimator expects [3, H, W] — clone luma to 3 channels in NV12 mode.
@@ -5156,7 +5160,7 @@ def run_eval(
                         _frame_gmc = pool.frame_buffer
 
                     if gmc_estimator is not None:
-                        (gmc_warp, gmc_uncertain), _ = time_stage(
+                        (gmc_warp, _seq_state.gmc_uncertain), _ = time_stage(
                             seq_stage_totals,
                             "gmc",
                             lambda: _run_gmc_estimate(
@@ -5231,8 +5235,8 @@ def run_eval(
                     if c.hit_streak >= cfg.lazy_reid_min_hit_streak
                     and c.hit_streak < c.required_confirm_streak
                 ]
-                seq_lazy_reid_candidates += len(ready_candidates)
-                seq_lazy_reid_frames += 1
+                _seq_state.seq_lazy_reid_candidates += len(ready_candidates)
+                _seq_state.seq_lazy_reid_frames += 1
                 if (
                     cfg.profile_lazy_reid_embeddings
                     and extractor
@@ -5307,12 +5311,12 @@ def run_eval(
                         _profile_lazy_reid_embeddings,
                         sync_cuda=True,
                     )
-                    seq_lazy_reid_crops += crop_count
-                    seq_lazy_reid_self_pairs += pair_count
-                    seq_lazy_reid_self_pass += pass_count
-                    seq_lazy_reid_self_sim_sum += sim_sum
-                    seq_lazy_reid_arbiter_checks += arbiter_checks
-                    seq_lazy_reid_arbiter_approve += arbiter_approve
+                    _seq_state.seq_lazy_reid_crops += crop_count
+                    _seq_state.seq_lazy_reid_self_pairs += pair_count
+                    _seq_state.seq_lazy_reid_self_pass += pass_count
+                    _seq_state.seq_lazy_reid_self_sim_sum += sim_sum
+                    _seq_state.seq_lazy_reid_arbiter_checks += arbiter_checks
+                    _seq_state.seq_lazy_reid_arbiter_approve += arbiter_approve
                     if seen_ids:
                         for stale_id in (
                             set(lazy_reid_prev_embeddings.keys()) - seen_ids
@@ -5349,7 +5353,7 @@ def run_eval(
                         stage_elapsed,
                     ) in current_frame_stage_elapsed.items():
                         seq_stage_samples[stage_name].append(stage_elapsed)
-                seq_profiled_frames += 1
+                _seq_state.seq_profiled_frames += 1
             if frame_id % 100 == 0:
                 print(f"🎬 {seq} [{frame_id}/{frame_end}]")
 
@@ -5544,7 +5548,7 @@ def run_eval(
             seq=seq,
             seq_tile_diag=seq_tile_diag,
             profile_stages=profile_stages,
-            seq_profiled_frames=seq_profiled_frames,
+            seq_profiled_frames=_seq_state.seq_profiled_frames,
             top_level_stage_names=top_level_stage_names,
             seq_stage_samples=seq_stage_samples,
             overall_stage_totals=overall_stage_totals,
@@ -5561,8 +5565,8 @@ def run_eval(
             overall_segment_samples=overall_segment_samples,
             seq_post_counts=seq_post_counts,
             overall_post_counts=overall_post_counts,
-            seq_lazy_reid_frames=seq_lazy_reid_frames,
-            seq_lazy_reid_candidates=seq_lazy_reid_candidates,
+            seq_lazy_reid_frames=_seq_state.seq_lazy_reid_frames,
+            seq_lazy_reid_candidates=_seq_state.seq_lazy_reid_candidates,
             overall_lazy_reid_candidates=overall_lazy_reid_candidates,
             overall_lazy_reid_frames=overall_lazy_reid_frames,
             overall_lazy_reid_crops=overall_lazy_reid_crops,
@@ -5571,19 +5575,23 @@ def run_eval(
             overall_lazy_reid_self_sim_sum=overall_lazy_reid_self_sim_sum,
             overall_lazy_reid_arbiter_checks=overall_lazy_reid_arbiter_checks,
             overall_lazy_reid_arbiter_approve=overall_lazy_reid_arbiter_approve,
-            seq_lazy_reid_crops=seq_lazy_reid_crops,
-            seq_lazy_reid_self_pairs=seq_lazy_reid_self_pairs,
-            seq_lazy_reid_self_pass=seq_lazy_reid_self_pass,
-            seq_lazy_reid_self_sim_sum=seq_lazy_reid_self_sim_sum,
-            seq_lazy_reid_arbiter_checks=seq_lazy_reid_arbiter_checks,
-            seq_lazy_reid_arbiter_approve=seq_lazy_reid_arbiter_approve,
+            seq_lazy_reid_crops=_seq_state.seq_lazy_reid_crops,
+            seq_lazy_reid_self_pairs=_seq_state.seq_lazy_reid_self_pairs,
+            seq_lazy_reid_self_pass=_seq_state.seq_lazy_reid_self_pass,
+            seq_lazy_reid_self_sim_sum=_seq_state.seq_lazy_reid_self_sim_sum,
+            seq_lazy_reid_arbiter_checks=_seq_state.seq_lazy_reid_arbiter_checks,
+            seq_lazy_reid_arbiter_approve=_seq_state.seq_lazy_reid_arbiter_approve,
             overall_profiled_frames=overall_profiled_frames,
             stage_summary_lines=stage_summary_lines,
         )
 
-        overall_profiled_frames += seq_profiled_frames
-        if profile_stages and seq_profiled_frames > 0:
-            seq_entry: dict = {"seq": seq, "frames": seq_profiled_frames, "stages": {}}
+        overall_profiled_frames += _seq_state.seq_profiled_frames
+        if profile_stages and _seq_state.seq_profiled_frames > 0:
+            seq_entry: dict = {
+                "seq": seq,
+                "frames": _seq_state.seq_profiled_frames,
+                "stages": {},
+            }
             for _sn in top_level_stage_names:
                 _samp = seq_stage_samples.get(_sn, [])
                 if _samp:
@@ -5597,9 +5605,11 @@ def run_eval(
             for _sn in breakdown_stage_names:
                 _tot = seq_stage_totals.get(_sn, 0.0)
                 if _tot > 0.0:
-                    seq_entry["stages"][_sn] = {"mean_ms": _tot / seq_profiled_frames}
+                    seq_entry["stages"][_sn] = {
+                        "mean_ms": _tot / _seq_state.seq_profiled_frames
+                    }
             _seq_post_means = {
-                _sn: seq_stage_totals[_sn] / seq_profiled_frames
+                _sn: seq_stage_totals[_sn] / _seq_state.seq_profiled_frames
                 for _sn in breakdown_stage_names
                 if seq_stage_totals.get(_sn, 0.0) > 0.0
             }
