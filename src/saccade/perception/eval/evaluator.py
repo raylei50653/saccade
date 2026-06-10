@@ -1258,6 +1258,11 @@ class SeqState:
     # --- tracker ---
     detector: Any
     gtu: Any
+    # --- postprocess / NMS ---
+    perception_pipeline: Any
+    nms_in: Any
+    post_bufs: Any
+    nms_fixed_n: int
 
 
 def _run_gmc_estimate(
@@ -1534,6 +1539,97 @@ def _run_track(
             sync_cuda=True,
         )
     return tracker_result_buffers
+
+
+def _run_nms(
+    state: SeqState,
+    *,
+    raw_boxes_contig: torch.Tensor,
+    raw_scores_contig: torch.Tensor,
+    raw_classes_contig: torch.Tensor,
+    raw_box_count: int,
+    num_priors: int,
+    is_tiled: bool,
+    nms_graph: Any,
+) -> tuple[int, Any]:
+    """Graph-captured NMS + detection filter for one frame (extracted).
+
+    Pads detections into the fixed NMS input buffer then runs the native
+    ``process_detections_graph`` (captured into a CUDA graph on first call,
+    replayed after). Returns ``(n_post, nms_graph)`` — nms_graph is the captured
+    graph (created on the first frame, passed through thereafter).
+    """
+    perception_pipeline = state.perception_pipeline
+    _nms_in = state.nms_in
+    _post_bufs = state.post_bufs
+    _NMS_FIXED_N = state.nms_fixed_n
+    w_orig = state.w_orig
+    h_orig = state.h_orig
+    _nms_graph = nms_graph
+    # process_detections_n releases GIL for the full filter+NMS+sync
+    # sequence so sibling threads can run Python while GPU is busy.
+    _use_graph_nms = perception_pipeline is not None and num_priors == 0
+    if _use_graph_nms:
+        copy_pad_detections(
+            raw_boxes_contig.data_ptr(),
+            raw_scores_contig.data_ptr(),
+            raw_classes_contig.data_ptr(),
+            min(raw_box_count, _NMS_FIXED_N),
+            _nms_in["boxes"].data_ptr(),
+            _nms_in["scores"].data_ptr(),
+            _nms_in["classes"].data_ptr(),
+            _NMS_FIXED_N,
+            torch.cuda.current_stream().cuda_stream,
+        )
+
+    if _nms_graph is None:
+        out_count_buf = torch.zeros(1, dtype=torch.int32, device="cuda")
+        perception_pipeline.process_detections_graph(
+            _nms_in["boxes"].data_ptr(),
+            _nms_in["scores"].data_ptr(),
+            _nms_in["classes"].data_ptr(),
+            _NMS_FIXED_N,
+            w_orig,
+            h_orig,
+            is_tiled,
+            _post_bufs["boxes"].data_ptr(),
+            _post_bufs["scores"].data_ptr(),
+            _post_bufs["classes"].data_ptr(),
+            _post_bufs["suspect"].data_ptr(),
+            out_count_buf.data_ptr(),
+            0,
+            0,
+            0,
+            0.0,
+            torch.cuda.current_stream().cuda_stream,
+        )
+        torch.cuda.synchronize()
+        _nms_graph = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(_nms_graph):
+            perception_pipeline.process_detections_graph(
+                _nms_in["boxes"].data_ptr(),
+                _nms_in["scores"].data_ptr(),
+                _nms_in["classes"].data_ptr(),
+                _NMS_FIXED_N,
+                w_orig,
+                h_orig,
+                is_tiled,
+                _post_bufs["boxes"].data_ptr(),
+                _post_bufs["scores"].data_ptr(),
+                _post_bufs["classes"].data_ptr(),
+                _post_bufs["suspect"].data_ptr(),
+                out_count_buf.data_ptr(),
+                0,
+                0,
+                0,
+                0.0,
+                torch.cuda.current_stream().cuda_stream,
+            )
+        print("🕯️ [NMSGraph] Captured NMS graph")
+    else:
+        _nms_graph.replay()
+    n_post = _NMS_FIXED_N
+    return n_post, _nms_graph
 
 
 def run_eval(
@@ -2773,6 +2869,10 @@ def run_eval(
             defer_emit=_defer_emit,
             detector=detector,
             gtu=gtu,
+            perception_pipeline=perception_pipeline,
+            nms_in=_nms_in,
+            post_bufs=_post_bufs,
+            nms_fixed_n=_NMS_FIXED_N,
         )
 
         for frame_id in range(1, frame_end + 1):
@@ -3323,73 +3423,16 @@ def run_eval(
                             _seg_ev.record(torch.cuda.current_stream())
                             post_seg_events.append(("post_seg_prep", _seg_ev))
 
-                        # process_detections_n releases GIL for the full filter+NMS+sync
-                        # sequence so sibling threads can run Python while GPU is busy.
-                        _use_graph_nms = (
-                            perception_pipeline is not None and num_priors == 0
+                        n_post, _nms_graph = _run_nms(
+                            _seq_state,
+                            raw_boxes_contig=raw_boxes_contig,
+                            raw_scores_contig=raw_scores_contig,
+                            raw_classes_contig=raw_classes_contig,
+                            raw_box_count=raw_box_count,
+                            num_priors=num_priors,
+                            is_tiled=is_tiled,
+                            nms_graph=_nms_graph,
                         )
-                        if _use_graph_nms:
-                            copy_pad_detections(
-                                raw_boxes_contig.data_ptr(),
-                                raw_scores_contig.data_ptr(),
-                                raw_classes_contig.data_ptr(),
-                                min(raw_box_count, _NMS_FIXED_N),
-                                _nms_in["boxes"].data_ptr(),
-                                _nms_in["scores"].data_ptr(),
-                                _nms_in["classes"].data_ptr(),
-                                _NMS_FIXED_N,
-                                torch.cuda.current_stream().cuda_stream,
-                            )
-
-                        if _nms_graph is None:
-                            out_count_buf = torch.zeros(
-                                1, dtype=torch.int32, device="cuda"
-                            )
-                            perception_pipeline.process_detections_graph(
-                                _nms_in["boxes"].data_ptr(),
-                                _nms_in["scores"].data_ptr(),
-                                _nms_in["classes"].data_ptr(),
-                                _NMS_FIXED_N,
-                                w_orig,
-                                h_orig,
-                                is_tiled,
-                                _post_bufs["boxes"].data_ptr(),
-                                _post_bufs["scores"].data_ptr(),
-                                _post_bufs["classes"].data_ptr(),
-                                _post_bufs["suspect"].data_ptr(),
-                                out_count_buf.data_ptr(),
-                                0,
-                                0,
-                                0,
-                                0.0,
-                                torch.cuda.current_stream().cuda_stream,
-                            )
-                            torch.cuda.synchronize()
-                            _nms_graph = torch.cuda.CUDAGraph()
-                            with torch.cuda.graph(_nms_graph):
-                                perception_pipeline.process_detections_graph(
-                                    _nms_in["boxes"].data_ptr(),
-                                    _nms_in["scores"].data_ptr(),
-                                    _nms_in["classes"].data_ptr(),
-                                    _NMS_FIXED_N,
-                                    w_orig,
-                                    h_orig,
-                                    is_tiled,
-                                    _post_bufs["boxes"].data_ptr(),
-                                    _post_bufs["scores"].data_ptr(),
-                                    _post_bufs["classes"].data_ptr(),
-                                    _post_bufs["suspect"].data_ptr(),
-                                    out_count_buf.data_ptr(),
-                                    0,
-                                    0,
-                                    0,
-                                    0.0,
-                                    torch.cuda.current_stream().cuda_stream,
-                                )
-                            print("🕯️ [NMSGraph] Captured NMS graph")
-                        else:
-                            _nms_graph.replay()
-                        n_post = _NMS_FIXED_N
                         if profile_stages and current_stage_sample_active:
                             _post_stats = (
                                 perception_pipeline.get_postprocess_profile_stats()
