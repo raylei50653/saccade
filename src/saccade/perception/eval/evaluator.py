@@ -1264,6 +1264,20 @@ class SeqState:
     nms_in: Any
     post_bufs: Any
     nms_fixed_n: int
+    # --- emit / relink-write ---
+    relinker: Any
+    id_stability_filter: Any
+    primary_appearance_bank: Any
+    output_appearance_bank: Any
+    dynamic_reid: Any
+    lifecycle_merger: Any
+    identity_resolver: Any
+    global_id_mapper: Any
+    rw_executor: Any
+    record_stage_sample: Any
+    bg_relink_write: Any
+    collect_output_metadata: Any
+    annotate_birth_events: Any
 
 
 @dataclasses.dataclass
@@ -1966,6 +1980,225 @@ def _build_gmc_estimator(
     _gmc_graphable = _use_direct_gmc and not isinstance(gmc_estimator, PyGraphedGMC)
     _gmc_cuda_graph = [None]  # mutable for closure capture
     return gmc_estimator, _use_direct_gmc, _gmc_graphable, _gmc_cuda_graph
+
+
+def _run_emit(
+    state: SeqState,
+    *,
+    track_results: Any,
+    tracker_result_buffers: Any,
+    fused_boxes: torch.Tensor,
+    fused_scores: torch.Tensor,
+    geometry_suspect_mask: torch.Tensor,
+    embeddings: "torch.Tensor | None",
+    gmc_warp: "torch.Tensor | None",
+    frame_birth_events: list,
+    frame_id: int,
+    prev_track_ids: set,
+    bg_future: Any,
+    bg_birth_events: Any,
+) -> tuple[set, Any, Any, list]:
+    """Emit MOT lines for one frame's tracker result (extracted from run_eval).
+
+    Either submits the relink-write pipeline to the background executor (when
+    pipeline_relink + semantic work is active) or runs the synchronous emit path
+    (fast emit, or full prepare/resolve/emit + lifecycle prune + side-effect
+    finalize). Returns ``(prev_track_ids, bg_future, bg_birth_events, lines)``:
+    the background path passes prev_track_ids through and hands back the new
+    future/birth-events with no lines this frame; the synchronous path returns the
+    updated prev_track_ids, leaves the bg cells untouched, and returns the emitted
+    lines for the caller to extend into the run-level accumulator.
+    """
+    cfg = state.cfg
+    detector = state.detector
+    seq = state.seq
+    w_orig = state.w_orig
+    h_orig = state.h_orig
+    profile_stages = state.profile_stages
+    seq_stage_totals = state.seq_stage_totals
+    relinker = state.relinker
+    id_stability_filter = state.id_stability_filter
+    primary_appearance_bank = state.primary_appearance_bank
+    output_appearance_bank = state.output_appearance_bank
+    dynamic_reid = state.dynamic_reid
+    lifecycle_merger = state.lifecycle_merger
+    identity_resolver = state.identity_resolver
+    global_id_mapper = state.global_id_mapper
+    _rw_executor = state.rw_executor
+    record_stage_sample = state.record_stage_sample
+    _bg_relink_write = state.bg_relink_write
+    _collect_output_metadata = state.collect_output_metadata
+    _annotate_birth_events = state.annotate_birth_events
+    _lines_out: list[str] = []
+    _bg_future = bg_future
+    _bg_birth_events = bg_birth_events
+    _needs_emit_pipeline = (
+        relinker is not None
+        or id_stability_filter is not None
+        or primary_appearance_bank is not None
+        or dynamic_reid is not None
+    )
+    if (
+        cfg.pipeline_relink
+        and not getattr(cfg, "workbench", False)
+        and _needs_emit_pipeline
+    ):
+        # Pre-materialize: host_track_batch + motion snapshots (need main CUDA stream)
+        # then D2H-copy GPU tensors so background thread stays off CUDA streams.
+        _pm_host_batch = _prepare_host_track_batch(
+            track_results,
+            tracker_result_buffers,
+            dynamic_reid_enabled=dynamic_reid is not None,
+            person_class=cfg.person_class,
+        )
+        _pm_motion_cids: list[int] = []
+        _pm_motion_snaps = None
+        if relinker:
+            _pm_motion_cids = relinker.motion_candidate_ids(frame_id)
+            if _pm_motion_cids:
+                _pm_motion_snaps = detector.tracker.get_motion_snapshots_for_track_ids(
+                    _pm_motion_cids
+                )
+        _pm_host_batch_cpu = dataclasses.replace(
+            _pm_host_batch, boxes_gpu=_pm_host_batch.boxes_gpu.cpu()
+        )
+        _pm_fused_boxes = fused_boxes.cpu()
+        _pm_fused_scores = fused_scores.cpu()
+        _pm_geom_mask = geometry_suspect_mask.cpu()
+        _pm_embeddings = embeddings.cpu() if embeddings is not None else None
+        _pm_gmc = (
+            gmc_warp.cpu()
+            if (gmc_warp is not None and gmc_warp.device.type == "cuda")
+            else gmc_warp
+        )
+        _bg_future = _rw_executor.submit(  # type: ignore[union-attr]
+            _bg_relink_write,
+            frame_id,
+            track_results,
+            _pm_host_batch_cpu,
+            _pm_fused_boxes,
+            _pm_fused_scores,
+            _pm_geom_mask,
+            _pm_embeddings,
+            _pm_gmc,
+            _pm_motion_cids,
+            _pm_motion_snaps,
+            prev_track_ids,
+        )
+        _bg_birth_events = frame_birth_events
+    else:
+        if profile_stages:
+            torch.cuda.synchronize()
+            t_relink_write_start = time.perf_counter()
+        if relinker:
+            motion_candidate_ids = relinker.motion_candidate_ids(frame_id)
+            if motion_candidate_ids:
+                relinker.update_motion_snapshots(
+                    detector.tracker.get_motion_snapshots_for_track_ids(
+                        motion_candidate_ids
+                    ),
+                    frame_id,
+                )
+
+        _use_fast_emit = (
+            not _needs_emit_pipeline
+            and cfg.reid_mode == "off"
+            and not bool(cfg.kwargs.get("id_stability_filter", False))
+        )
+        if _use_fast_emit:
+            frame_result_lines = _fast_emit_mot_lines(
+                track_results=track_results,
+                global_id_mapper=global_id_mapper,
+                seq=seq,
+                frame_id=frame_id,
+                frame_w=w_orig,
+                frame_h=h_orig,
+            )
+            curr_track_ids = set(int(x) for x in track_results["ids"].tolist())
+        else:
+            host_track_batch = _prepare_host_track_batch(
+                track_results,
+                tracker_result_buffers,
+                dynamic_reid_enabled=dynamic_reid is not None,
+                person_class=cfg.person_class,
+            )
+
+            prepared_candidates = _prepare_track_candidates(
+                frame_id=frame_id,
+                track_results=track_results,
+                host_batch=host_track_batch,
+                person_class=cfg.person_class,
+                track_person_only=cfg.track_person_only,
+                geometry_suspect_support=cfg.geometry_suspect_support,
+                geometry_suspect_support_score=cfg.geometry_suspect_support_score,
+                id_stability_filter=id_stability_filter,
+                embeddings=embeddings,
+                fused_boxes=fused_boxes,
+                fused_scores=fused_scores,
+                geometry_suspect_mask=geometry_suspect_mask,
+                primary_appearance_bank=primary_appearance_bank,
+                frame_w=w_orig,
+                frame_h=h_orig,
+                bank_quality_v2=cfg.bank_quality_v2,
+                bank_quality_w_det=cfg.bank_quality_w_det,
+                bank_quality_w_iou=cfg.bank_quality_w_iou,
+                bank_quality_w_aspect=cfg.bank_quality_w_aspect,
+                bank_quality_w_center=cfg.bank_quality_w_center,
+                bank_quality_w_area=cfg.bank_quality_w_area,
+            )
+            resolved_tracks = _resolve_frame_tracks(
+                frame_id=frame_id,
+                frame_w=w_orig,
+                frame_h=h_orig,
+                prepared_candidates=prepared_candidates,
+                lifecycle_merger=lifecycle_merger,
+                identity_resolver=identity_resolver,
+            )
+            frame_result_lines = _emit_resolved_tracks(
+                seq=seq,
+                frame_id=frame_id,
+                frame_w=w_orig,
+                frame_h=h_orig,
+                resolved_tracks=resolved_tracks,
+                global_id_mapper=global_id_mapper,
+                output_appearance_bank=output_appearance_bank,
+            )
+            det_idx_to_local_id = {
+                int(det_idx): int(local_id)
+                for local_id, det_idx in zip(
+                    host_track_batch.ids,
+                    host_track_batch.det_idx or [],
+                )
+                if int(det_idx) >= 0
+            }
+            output_by_local = _collect_output_metadata(resolved_tracks)
+            _annotate_birth_events(
+                frame_birth_events,
+                _det_idx_to_local_id=det_idx_to_local_id,
+                _output_by_local=output_by_local,
+            )
+            curr_track_ids = set(host_track_batch.ids)
+        _lines_out = frame_result_lines
+        lifecycle_merger.prune(frame_id)
+        prev_track_ids = _finalize_frame_side_effects(
+            curr_track_ids=curr_track_ids,
+            prev_track_ids=prev_track_ids,
+            relinker=relinker,
+            semantic_bank_inject=cfg.semantic_bank_inject,
+            primary_appearance_bank=primary_appearance_bank,
+            dynamic_reid=dynamic_reid,
+            person_observations=(
+                host_track_batch.person_observations if not _use_fast_emit else []
+            ),
+            gmc_warp=gmc_warp,
+            gmc_enabled=cfg.gmc_enabled,
+        )
+        if profile_stages:
+            torch.cuda.synchronize()
+            elapsed_ms = (time.perf_counter() - t_relink_write_start) * 1000
+            seq_stage_totals["relink_write"] += elapsed_ms
+            record_stage_sample("relink_write", elapsed_ms)
+    return prev_track_ids, _bg_future, _bg_birth_events, _lines_out
 
 
 def run_eval(
@@ -3183,6 +3416,19 @@ def run_eval(
             nms_in=_nms_in,
             post_bufs=_post_bufs,
             nms_fixed_n=_NMS_FIXED_N,
+            relinker=relinker,
+            id_stability_filter=id_stability_filter,
+            primary_appearance_bank=primary_appearance_bank,
+            output_appearance_bank=output_appearance_bank,
+            dynamic_reid=dynamic_reid,
+            lifecycle_merger=lifecycle_merger,
+            identity_resolver=identity_resolver,
+            global_id_mapper=global_id_mapper,
+            rw_executor=_rw_executor,
+            record_stage_sample=record_stage_sample,
+            bg_relink_write=_bg_relink_write,
+            collect_output_metadata=_collect_output_metadata,
+            annotate_birth_events=_annotate_birth_events,
         )
 
         for frame_id in range(1, frame_end + 1):
@@ -5007,176 +5253,27 @@ def run_eval(
                         ):
                             lazy_reid_prev_embeddings.pop(stale_id, None)
 
-            _needs_emit_pipeline = (
-                relinker is not None
-                or id_stability_filter is not None
-                or primary_appearance_bank is not None
-                or dynamic_reid is not None
+            (
+                prev_track_ids,
+                _bg_future,
+                _bg_birth_events,
+                _emit_lines,
+            ) = _run_emit(
+                _seq_state,
+                track_results=track_results,
+                tracker_result_buffers=tracker_result_buffers,
+                fused_boxes=fused_boxes,
+                fused_scores=fused_scores,
+                geometry_suspect_mask=geometry_suspect_mask,
+                embeddings=embeddings,
+                gmc_warp=gmc_warp,
+                frame_birth_events=frame_birth_events,
+                frame_id=frame_id,
+                prev_track_ids=prev_track_ids,
+                bg_future=_bg_future,
+                bg_birth_events=_bg_birth_events,
             )
-            if (
-                cfg.pipeline_relink
-                and not getattr(cfg, "workbench", False)
-                and _needs_emit_pipeline
-            ):
-                # Pre-materialize: host_track_batch + motion snapshots (need main CUDA stream)
-                # then D2H-copy GPU tensors so background thread stays off CUDA streams.
-                _pm_host_batch = _prepare_host_track_batch(
-                    track_results,
-                    tracker_result_buffers,
-                    dynamic_reid_enabled=dynamic_reid is not None,
-                    person_class=cfg.person_class,
-                )
-                _pm_motion_cids: list[int] = []
-                _pm_motion_snaps = None
-                if relinker:
-                    _pm_motion_cids = relinker.motion_candidate_ids(frame_id)
-                    if _pm_motion_cids:
-                        _pm_motion_snaps = (
-                            detector.tracker.get_motion_snapshots_for_track_ids(
-                                _pm_motion_cids
-                            )
-                        )
-                _pm_host_batch_cpu = dataclasses.replace(
-                    _pm_host_batch, boxes_gpu=_pm_host_batch.boxes_gpu.cpu()
-                )
-                _pm_fused_boxes = fused_boxes.cpu()
-                _pm_fused_scores = fused_scores.cpu()
-                _pm_geom_mask = geometry_suspect_mask.cpu()
-                _pm_embeddings = embeddings.cpu() if embeddings is not None else None
-                _pm_gmc = (
-                    gmc_warp.cpu()
-                    if (gmc_warp is not None and gmc_warp.device.type == "cuda")
-                    else gmc_warp
-                )
-                _bg_future = _rw_executor.submit(  # type: ignore[union-attr]
-                    _bg_relink_write,
-                    frame_id,
-                    track_results,
-                    _pm_host_batch_cpu,
-                    _pm_fused_boxes,
-                    _pm_fused_scores,
-                    _pm_geom_mask,
-                    _pm_embeddings,
-                    _pm_gmc,
-                    _pm_motion_cids,
-                    _pm_motion_snaps,
-                    prev_track_ids,
-                )
-                _bg_birth_events = frame_birth_events
-            else:
-                if profile_stages:
-                    torch.cuda.synchronize()
-                    t_relink_write_start = time.perf_counter()
-                if relinker:
-                    motion_candidate_ids = relinker.motion_candidate_ids(frame_id)
-                    if motion_candidate_ids:
-                        relinker.update_motion_snapshots(
-                            detector.tracker.get_motion_snapshots_for_track_ids(
-                                motion_candidate_ids
-                            ),
-                            frame_id,
-                        )
-
-                _use_fast_emit = (
-                    not _needs_emit_pipeline
-                    and cfg.reid_mode == "off"
-                    and not bool(cfg.kwargs.get("id_stability_filter", False))
-                )
-                if _use_fast_emit:
-                    frame_result_lines = _fast_emit_mot_lines(
-                        track_results=track_results,
-                        global_id_mapper=global_id_mapper,
-                        seq=seq,
-                        frame_id=frame_id,
-                        frame_w=w_orig,
-                        frame_h=h_orig,
-                    )
-                    curr_track_ids = set(int(x) for x in track_results["ids"].tolist())
-                else:
-                    host_track_batch = _prepare_host_track_batch(
-                        track_results,
-                        tracker_result_buffers,
-                        dynamic_reid_enabled=dynamic_reid is not None,
-                        person_class=cfg.person_class,
-                    )
-
-                    prepared_candidates = _prepare_track_candidates(
-                        frame_id=frame_id,
-                        track_results=track_results,
-                        host_batch=host_track_batch,
-                        person_class=cfg.person_class,
-                        track_person_only=cfg.track_person_only,
-                        geometry_suspect_support=cfg.geometry_suspect_support,
-                        geometry_suspect_support_score=cfg.geometry_suspect_support_score,
-                        id_stability_filter=id_stability_filter,
-                        embeddings=embeddings,
-                        fused_boxes=fused_boxes,
-                        fused_scores=fused_scores,
-                        geometry_suspect_mask=geometry_suspect_mask,
-                        primary_appearance_bank=primary_appearance_bank,
-                        frame_w=w_orig,
-                        frame_h=h_orig,
-                        bank_quality_v2=cfg.bank_quality_v2,
-                        bank_quality_w_det=cfg.bank_quality_w_det,
-                        bank_quality_w_iou=cfg.bank_quality_w_iou,
-                        bank_quality_w_aspect=cfg.bank_quality_w_aspect,
-                        bank_quality_w_center=cfg.bank_quality_w_center,
-                        bank_quality_w_area=cfg.bank_quality_w_area,
-                    )
-                    resolved_tracks = _resolve_frame_tracks(
-                        frame_id=frame_id,
-                        frame_w=w_orig,
-                        frame_h=h_orig,
-                        prepared_candidates=prepared_candidates,
-                        lifecycle_merger=lifecycle_merger,
-                        identity_resolver=identity_resolver,
-                    )
-                    frame_result_lines = _emit_resolved_tracks(
-                        seq=seq,
-                        frame_id=frame_id,
-                        frame_w=w_orig,
-                        frame_h=h_orig,
-                        resolved_tracks=resolved_tracks,
-                        global_id_mapper=global_id_mapper,
-                        output_appearance_bank=output_appearance_bank,
-                    )
-                    det_idx_to_local_id = {
-                        int(det_idx): int(local_id)
-                        for local_id, det_idx in zip(
-                            host_track_batch.ids,
-                            host_track_batch.det_idx or [],
-                        )
-                        if int(det_idx) >= 0
-                    }
-                    output_by_local = _collect_output_metadata(resolved_tracks)
-                    _annotate_birth_events(
-                        frame_birth_events,
-                        _det_idx_to_local_id=det_idx_to_local_id,
-                        _output_by_local=output_by_local,
-                    )
-                    curr_track_ids = set(host_track_batch.ids)
-                results_lines.extend(frame_result_lines)
-                lifecycle_merger.prune(frame_id)
-                prev_track_ids = _finalize_frame_side_effects(
-                    curr_track_ids=curr_track_ids,
-                    prev_track_ids=prev_track_ids,
-                    relinker=relinker,
-                    semantic_bank_inject=cfg.semantic_bank_inject,
-                    primary_appearance_bank=primary_appearance_bank,
-                    dynamic_reid=dynamic_reid,
-                    person_observations=(
-                        host_track_batch.person_observations
-                        if not _use_fast_emit
-                        else []
-                    ),
-                    gmc_warp=gmc_warp,
-                    gmc_enabled=cfg.gmc_enabled,
-                )
-                if profile_stages:
-                    torch.cuda.synchronize()
-                    elapsed_ms = (time.perf_counter() - t_relink_write_start) * 1000
-                    seq_stage_totals["relink_write"] += elapsed_ms
-                    record_stage_sample("relink_write", elapsed_ms)
+            results_lines.extend(_emit_lines)
 
             if frame_id > warmup_frames:
                 frame_latencies.append((time.perf_counter() - t_frame_start) * 1000)
