@@ -1187,6 +1187,355 @@ def _resolve_kalman_fps(explicit_fps: float, seq_path: "Path") -> float:
     return 30.0
 
 
+def _flush_deferred_emit(
+    event: "torch.cuda.Event",
+    pinned: dict[str, torch.Tensor],
+    *,
+    default_class_id: int | None,
+    global_id_mapper: Any,
+    seq: str,
+    frame_id: int,
+    frame_w: int,
+    frame_h: int,
+) -> tuple[list[str], set[int]]:
+    """Read one deferred async-materialize result and emit its MOT lines.
+
+    Mirrors the inline ``_defer_emit`` read that runs at the top of frame N+1
+    (and once more after the loop to flush the final frame). Returns the emitted
+    lines plus the track-id set the caller assigns to ``prev_track_ids`` (the
+    end-of-sequence flush discards it).
+    """
+    track_results = _read_deferred_result(
+        event,
+        pinned,
+        default_class_id=default_class_id,
+        include_det_idx=False,
+    )
+    lines: list[str] = []
+    if track_results["count"] > 0:
+        lines = _fast_emit_mot_lines(
+            track_results=track_results,
+            global_id_mapper=global_id_mapper,
+            seq=seq,
+            frame_id=frame_id,
+            frame_w=frame_w,
+            frame_h=frame_h,
+        )
+    track_ids = set(int(x) for x in track_results["ids"].tolist())
+    return lines, track_ids
+
+
+@dataclasses.dataclass
+class SeqState:
+    """Per-sequence state threaded into run_eval's extracted stage functions.
+
+    Holds references to the per-sequence locals (buffers, estimators, profiling
+    accumulators) so each stage helper takes ``state`` instead of a dozen
+    explicit params. Buffers are mutated in place exactly as before — this is a
+    passing convenience, not a second source of truth. Grows as more stages are
+    extracted.
+    """
+
+    cfg: Any
+    seq: str
+    w_orig: int
+    h_orig: int
+    profile_stages: bool
+    # --- GMC ---
+    gmc_estimator: Any
+    shared_gmc_warp: torch.Tensor
+    use_direct_gmc: bool
+    gmc_graphable: bool
+    gmc_cuda_graph: list[Any]
+    gmc_frame_buf: torch.Tensor | None
+    seq_gmc_samples: Any
+    # --- timing / materialize ---
+    seq_stage_totals: Any
+    time_stage: Any
+    pinned_result_bufs: Any
+    use_pinned_materialize: bool
+    defer_emit: bool
+    # --- tracker ---
+    detector: Any
+    gtu: Any
+
+
+def _run_gmc_estimate(
+    state: SeqState,
+    *,
+    fused_boxes: torch.Tensor,
+    _frame_gmc: torch.Tensor,
+) -> tuple[torch.Tensor | None, bool]:
+    """Estimate the per-frame GMC affine warp (extracted from run_eval).
+
+    Returns ``(gmc_warp, gmc_uncertain)``. Mutates the caller-owned graph cell
+    ``state.gmc_cuda_graph[0]`` and the reused ``state.shared_gmc_warp`` /
+    ``state.gmc_frame_buf`` buffers in place, exactly as the original closure.
+    """
+    cfg = state.cfg
+    gmc_estimator = state.gmc_estimator
+    _shared_gmc_warp = state.shared_gmc_warp
+    _use_direct_gmc = state.use_direct_gmc
+    _gmc_graphable = state.gmc_graphable
+    _gmc_cuda_graph = state.gmc_cuda_graph
+    _gmc_frame_buf = state.gmc_frame_buf
+    seq = state.seq
+    w_orig = state.w_orig
+    h_orig = state.h_orig
+    profile_stages = state.profile_stages
+    seq_gmc_samples = state.seq_gmc_samples
+    local_gmc_warp: torch.Tensor | None = None
+    local_gmc_uncertain = False
+    _raw_warp = None
+    if cfg.gmc_fg_mask and hasattr(gmc_estimator, "set_fg_mask_boxes_tensor"):
+        if fused_boxes.numel() > 0:
+            gmc_estimator.set_fg_mask_boxes_tensor(fused_boxes)
+    elif cfg.gmc_fg_mask and hasattr(gmc_estimator, "set_fg_mask_boxes_gpu"):
+        if fused_boxes.numel() > 0:
+            gmc_estimator.set_fg_mask_boxes_gpu(
+                fused_boxes.data_ptr(),
+                fused_boxes.shape[0],
+            )
+    elif cfg.gmc_fg_mask and hasattr(gmc_estimator, "set_fg_mask_boxes"):
+        if fused_boxes.numel() > 0:
+            _flat = fused_boxes.detach().cpu().view(-1).tolist()
+            gmc_estimator.set_fg_mask_boxes(_flat)
+
+    if isinstance(gmc_estimator, PyGraphedGMC):
+        gmc_estimator.estimate_into_direct(
+            _frame_gmc,
+            _shared_gmc_warp,
+        )
+        local_gmc_warp = _shared_gmc_warp
+    elif _use_direct_gmc:
+        _w = _frame_gmc.shape[2]
+        _h = _frame_gmc.shape[1]
+        if not _gmc_graphable or cfg.gmc_fg_mask:
+            # FG mask varies per frame → eager (non-graph) path.
+            gmc_estimator.estimate_into_direct(
+                _frame_gmc.data_ptr(),
+                _w,
+                _h,
+                torch.cuda.current_stream().cuda_stream,
+                _shared_gmc_warp.data_ptr(),
+            )
+        elif _gmc_cuda_graph[0] is None:
+            # Warmup once on the fixed input buffer, then capture.
+            # d_prev_gray_ state carries across replays
+            # (verified bit-exact by test_gmc_cudagraph.py).
+            _gmc_frame_buf.copy_(_frame_gmc)
+            gmc_estimator.estimate_into_direct(
+                _gmc_frame_buf.data_ptr(),
+                _w,
+                _h,
+                torch.cuda.current_stream().cuda_stream,
+                _shared_gmc_warp.data_ptr(),
+            )
+            torch.cuda.synchronize()
+            _g = torch.cuda.CUDAGraph()
+            with torch.cuda.graph(_g):
+                gmc_estimator.estimate_into_direct(
+                    _gmc_frame_buf.data_ptr(),
+                    _w,
+                    _h,
+                    torch.cuda.current_stream().cuda_stream,
+                    _shared_gmc_warp.data_ptr(),
+                )
+            _gmc_cuda_graph[0] = _g
+            print(
+                f"🕯️ [GMCGraph] Captured C++ cuFFT GMC graph "
+                f"for seq {seq} (img={_h}×{_w} "
+                f"ds={cfg.gmc_downscale})"
+            )
+        else:
+            # Steady state: copy new frame into the captured
+            # input buffer and replay the recorded graph.
+            _gmc_frame_buf.copy_(_frame_gmc)
+            _gmc_cuda_graph[0].replay()
+        local_gmc_warp = _shared_gmc_warp
+    elif hasattr(gmc_estimator, "estimate_into"):
+        local_gmc_warp = torch.empty(6, dtype=torch.float32, device=fused_boxes.device)
+        gmc_estimator.estimate_into(
+            _frame_gmc.data_ptr(),
+            _frame_gmc.shape[2],
+            _frame_gmc.shape[1],
+            torch.cuda.current_stream().cuda_stream,
+            local_gmc_warp.data_ptr(),
+        )
+    elif hasattr(gmc_estimator, "estimate_mat"):
+        # C++ version or GlobalMotionCompensator
+        _raw_warp = gmc_estimator.estimate(
+            _frame_gmc.data_ptr(),
+            w_orig,
+            h_orig,
+            torch.cuda.current_stream().cuda_stream,
+        )
+    else:
+        _raw_warp = gmc_estimator.estimate(_frame_gmc)
+
+    if _raw_warp is not None:
+        if isinstance(_raw_warp, list):
+            local_gmc_warp = torch.tensor(
+                _raw_warp,
+                dtype=torch.float32,
+                device=fused_boxes.device,
+            )
+        else:
+            local_gmc_warp = _raw_warp.to(fused_boxes.device)
+
+    # A4: PCR quality feedback — flag marginal motion estimates so the
+    # ReID budget function widens appearance coverage on uncertain frames.
+    if hasattr(gmc_estimator, "pcr_score"):
+        _pcr = gmc_estimator.pcr_score()
+        local_gmc_uncertain = (
+            local_gmc_warp is not None and 0.0 < _pcr < cfg.gmc_pcr_uncertain_thresh
+        )
+    if profile_stages and hasattr(gmc_estimator, "get_profile_stats"):
+        _gmc_stats = gmc_estimator.get_profile_stats()
+        if _gmc_stats:
+            seq_gmc_samples["gmc_gray_downscale"].append(
+                float(_gmc_stats.get("gray_downscale_ms", 0.0))
+            )
+            seq_gmc_samples["gmc_fg_mask"].append(
+                float(_gmc_stats.get("fg_mask_ms", 0.0))
+            )
+            seq_gmc_samples["gmc_phase_corr"].append(
+                float(_gmc_stats.get("phase_corr_ms", 0.0))
+            )
+            seq_gmc_samples["gmc_handoff"].append(
+                float(_gmc_stats.get("handoff_ms", 0.0))
+            )
+    return local_gmc_warp, local_gmc_uncertain
+
+
+def _run_materialize(
+    state: SeqState,
+    *,
+    tracker_result_buffers: Any,
+    embeddings: "torch.Tensor | None",
+    aligned_keypoints: "torch.Tensor | None",
+    frame_id: int,
+    defer_emit_event: "torch.cuda.Event | None",
+    defer_emit_fid: int,
+) -> tuple[Any, "torch.cuda.Event | None", int]:
+    """Materialize tracker results for one frame (extracted from run_eval).
+
+    Defer mode launches the async D2H + records the event; otherwise reads the
+    pinned/host result synchronously. Returns (track_results, defer_emit_event,
+    defer_emit_fid) — the defer event/fid pass through unchanged on the
+    non-defer path.
+    """
+    _defer_emit = state.defer_emit
+    cfg = state.cfg
+    _pinned_result_bufs = state.pinned_result_bufs
+    _use_pinned_materialize = state.use_pinned_materialize
+    seq_stage_totals = state.seq_stage_totals
+    time_stage = state.time_stage
+    _defer_emit_event = defer_emit_event
+    _defer_emit_fid = defer_emit_fid
+    if _defer_emit:
+        _defer_emit_event, _ = _materialize_gpu_track_results_async(
+            tracker_result_buffers,
+            _pinned_result_bufs,
+            default_class_id=cfg.person_class if cfg.track_person_only else None,
+            include_det_idx=False,
+        )
+        _defer_emit_fid = frame_id
+        track_results = {
+            "count": 0,
+            "boxes": torch.empty((0, 4)),
+            "scores": torch.empty((0,)),
+            "ids": torch.empty((0,), dtype=torch.int32),
+            "classes": None,
+            "det_idx": None,
+        }
+    else:
+        track_results, _ = time_stage(
+            seq_stage_totals,
+            "materialize",
+            lambda: (
+                _materialize_gpu_track_results_pinned(
+                    tracker_result_buffers,
+                    _pinned_result_bufs,
+                    default_class_id=cfg.person_class
+                    if cfg.track_person_only
+                    else None,
+                    include_det_idx=(
+                        embeddings is not None or aligned_keypoints is not None
+                    ),
+                )
+                if _use_pinned_materialize
+                else _materialize_gpu_track_results(
+                    tracker_result_buffers,
+                    default_class_id=cfg.person_class
+                    if cfg.track_person_only
+                    else None,
+                    include_det_idx=(
+                        embeddings is not None or aligned_keypoints is not None
+                    ),
+                )
+            ),
+            sync_cuda=True,
+        )
+    return track_results, _defer_emit_event, _defer_emit_fid
+
+
+def _run_track(
+    state: SeqState,
+    *,
+    fused_boxes: torch.Tensor,
+    fused_scores: torch.Tensor,
+    fused_classes: torch.Tensor,
+    gmc_warp: "torch.Tensor | None",
+    embeddings: "torch.Tensor | None",
+    mid_thresh_scale: float,
+    tracker_result_buffers: Any,
+) -> Any:
+    """Tracker update for one frame (extracted from run_eval).
+
+    Uses the captured GraphedTrackerUpdate replay when available, else the
+    direct ``update_into``. Returns the result buffers (the graph path returns
+    fresh ``gtu.out_*`` tensors; the direct path writes in place).
+    """
+    gtu = state.gtu
+    detector = state.detector
+    cfg = state.cfg
+    seq_stage_totals = state.seq_stage_totals
+    time_stage = state.time_stage
+    if gtu is not None:
+        gtu.copy_inputs(
+            fused_boxes,
+            fused_scores,
+            fused_classes.to(torch.int32),
+            gmc=gmc_warp,
+        )
+        # replay() returns gtu.out_* tensors directly; use them as
+        # tracker_result_buffers to skip the extra D2D copy + item() sync
+        # that read_outputs() would introduce.
+        tracker_result_buffers, _ = time_stage(
+            seq_stage_totals,
+            "track",
+            lambda: gtu.replay(),
+            sync_cuda=True,
+        )
+    else:
+        _, _ = time_stage(
+            seq_stage_totals,
+            "track",
+            lambda: detector.tracker.update_into(
+                fused_boxes,
+                fused_scores,
+                fused_classes.to(torch.int32),
+                tracker_result_buffers,
+                embeddings=embeddings if cfg.use_tracker_reid else None,
+                gmc=gmc_warp,
+                mid_thresh_scale=mid_thresh_scale,
+            ),
+            sync_cuda=True,
+        )
+    return tracker_result_buffers
+
+
 def run_eval(
     engine: str,
     output: str,
@@ -2402,27 +2751,45 @@ def run_eval(
         _defer_emit_event: torch.cuda.Event | None = None
         _defer_emit_fid: int = 0
 
+        # Per-sequence state bundle for the extracted stage helpers. References
+        # the locals above; grows as more stages move out of the frame loop.
+        _seq_state = SeqState(
+            cfg=cfg,
+            seq=seq,
+            w_orig=w_orig,
+            h_orig=h_orig,
+            profile_stages=profile_stages,
+            gmc_estimator=gmc_estimator,
+            shared_gmc_warp=_shared_gmc_warp,
+            use_direct_gmc=_use_direct_gmc,
+            gmc_graphable=_gmc_graphable,
+            gmc_cuda_graph=_gmc_cuda_graph,
+            gmc_frame_buf=_gmc_frame_buf,
+            seq_gmc_samples=seq_gmc_samples,
+            seq_stage_totals=seq_stage_totals,
+            time_stage=time_stage,
+            pinned_result_bufs=_pinned_result_bufs,
+            use_pinned_materialize=_use_pinned_materialize,
+            defer_emit=_defer_emit,
+            detector=detector,
+            gtu=gtu,
+        )
+
         for frame_id in range(1, frame_end + 1):
             if _defer_emit and _defer_emit_event is not None:
-                _track_results = _read_deferred_result(
+                _lines, prev_track_ids = _flush_deferred_emit(
                     _defer_emit_event,
                     _pinned_result_bufs,
                     default_class_id=cfg.person_class
                     if cfg.track_person_only
                     else None,
-                    include_det_idx=False,
+                    global_id_mapper=global_id_mapper,
+                    seq=seq,
+                    frame_id=_defer_emit_fid,
+                    frame_w=w_orig,
+                    frame_h=h_orig,
                 )
-                if _track_results["count"] > 0:
-                    _lines = _fast_emit_mot_lines(
-                        track_results=_track_results,
-                        global_id_mapper=global_id_mapper,
-                        seq=seq,
-                        frame_id=_defer_emit_fid,
-                        frame_w=w_orig,
-                        frame_h=h_orig,
-                    )
-                    results_lines.extend(_lines)
-                prev_track_ids = set(int(x) for x in _track_results["ids"].tolist())
+                results_lines.extend(_lines)
                 _defer_emit_event = None
             current_stage_sample_active = frame_id > warmup_frames
             current_frame_stage_elapsed = (
@@ -4251,146 +4618,14 @@ def run_eval(
                         _frame_gmc = pool.frame_buffer
 
                     if gmc_estimator is not None:
-
-                        def _run_gmc() -> tuple[torch.Tensor | None, bool]:
-                            local_gmc_warp: torch.Tensor | None = None
-                            local_gmc_uncertain = False
-                            _raw_warp = None
-                            if cfg.gmc_fg_mask and hasattr(
-                                gmc_estimator, "set_fg_mask_boxes_tensor"
-                            ):
-                                if fused_boxes.numel() > 0:
-                                    gmc_estimator.set_fg_mask_boxes_tensor(fused_boxes)
-                            elif cfg.gmc_fg_mask and hasattr(
-                                gmc_estimator, "set_fg_mask_boxes_gpu"
-                            ):
-                                if fused_boxes.numel() > 0:
-                                    gmc_estimator.set_fg_mask_boxes_gpu(
-                                        fused_boxes.data_ptr(),
-                                        fused_boxes.shape[0],
-                                    )
-                            elif cfg.gmc_fg_mask and hasattr(
-                                gmc_estimator, "set_fg_mask_boxes"
-                            ):
-                                if fused_boxes.numel() > 0:
-                                    _flat = fused_boxes.detach().cpu().view(-1).tolist()
-                                    gmc_estimator.set_fg_mask_boxes(_flat)
-
-                            if isinstance(gmc_estimator, PyGraphedGMC):
-                                gmc_estimator.estimate_into_direct(
-                                    _frame_gmc,
-                                    _shared_gmc_warp,
-                                )
-                                local_gmc_warp = _shared_gmc_warp
-                            elif _use_direct_gmc:
-                                _w = _frame_gmc.shape[2]
-                                _h = _frame_gmc.shape[1]
-                                if not _gmc_graphable or cfg.gmc_fg_mask:
-                                    # FG mask varies per frame → eager (non-graph) path.
-                                    gmc_estimator.estimate_into_direct(
-                                        _frame_gmc.data_ptr(),
-                                        _w,
-                                        _h,
-                                        torch.cuda.current_stream().cuda_stream,
-                                        _shared_gmc_warp.data_ptr(),
-                                    )
-                                elif _gmc_cuda_graph[0] is None:
-                                    # Warmup once on the fixed input buffer, then capture.
-                                    # d_prev_gray_ state carries across replays
-                                    # (verified bit-exact by test_gmc_cudagraph.py).
-                                    _gmc_frame_buf.copy_(_frame_gmc)
-                                    gmc_estimator.estimate_into_direct(
-                                        _gmc_frame_buf.data_ptr(),
-                                        _w,
-                                        _h,
-                                        torch.cuda.current_stream().cuda_stream,
-                                        _shared_gmc_warp.data_ptr(),
-                                    )
-                                    torch.cuda.synchronize()
-                                    _g = torch.cuda.CUDAGraph()
-                                    with torch.cuda.graph(_g):
-                                        gmc_estimator.estimate_into_direct(
-                                            _gmc_frame_buf.data_ptr(),
-                                            _w,
-                                            _h,
-                                            torch.cuda.current_stream().cuda_stream,
-                                            _shared_gmc_warp.data_ptr(),
-                                        )
-                                    _gmc_cuda_graph[0] = _g
-                                    print(
-                                        f"🕯️ [GMCGraph] Captured C++ cuFFT GMC graph "
-                                        f"for seq {seq} (img={_h}×{_w} "
-                                        f"ds={cfg.gmc_downscale})"
-                                    )
-                                else:
-                                    # Steady state: copy new frame into the captured
-                                    # input buffer and replay the recorded graph.
-                                    _gmc_frame_buf.copy_(_frame_gmc)
-                                    _gmc_cuda_graph[0].replay()
-                                local_gmc_warp = _shared_gmc_warp
-                            elif hasattr(gmc_estimator, "estimate_into"):
-                                local_gmc_warp = torch.empty(
-                                    6, dtype=torch.float32, device=fused_boxes.device
-                                )
-                                gmc_estimator.estimate_into(
-                                    _frame_gmc.data_ptr(),
-                                    _frame_gmc.shape[2],
-                                    _frame_gmc.shape[1],
-                                    torch.cuda.current_stream().cuda_stream,
-                                    local_gmc_warp.data_ptr(),
-                                )
-                            elif hasattr(gmc_estimator, "estimate_mat"):
-                                # C++ version or GlobalMotionCompensator
-                                _raw_warp = gmc_estimator.estimate(
-                                    _frame_gmc.data_ptr(),
-                                    w_orig,
-                                    h_orig,
-                                    torch.cuda.current_stream().cuda_stream,
-                                )
-                            else:
-                                _raw_warp = gmc_estimator.estimate(_frame_gmc)
-
-                            if _raw_warp is not None:
-                                if isinstance(_raw_warp, list):
-                                    local_gmc_warp = torch.tensor(
-                                        _raw_warp,
-                                        dtype=torch.float32,
-                                        device=fused_boxes.device,
-                                    )
-                                else:
-                                    local_gmc_warp = _raw_warp.to(fused_boxes.device)
-
-                            # A4: PCR quality feedback — flag marginal motion estimates so the
-                            # ReID budget function widens appearance coverage on uncertain frames.
-                            if hasattr(gmc_estimator, "pcr_score"):
-                                _pcr = gmc_estimator.pcr_score()
-                                local_gmc_uncertain = (
-                                    local_gmc_warp is not None
-                                    and 0.0 < _pcr < cfg.gmc_pcr_uncertain_thresh
-                                )
-                            if profile_stages and hasattr(
-                                gmc_estimator, "get_profile_stats"
-                            ):
-                                _gmc_stats = gmc_estimator.get_profile_stats()
-                                if _gmc_stats:
-                                    seq_gmc_samples["gmc_gray_downscale"].append(
-                                        float(_gmc_stats.get("gray_downscale_ms", 0.0))
-                                    )
-                                    seq_gmc_samples["gmc_fg_mask"].append(
-                                        float(_gmc_stats.get("fg_mask_ms", 0.0))
-                                    )
-                                    seq_gmc_samples["gmc_phase_corr"].append(
-                                        float(_gmc_stats.get("phase_corr_ms", 0.0))
-                                    )
-                                    seq_gmc_samples["gmc_handoff"].append(
-                                        float(_gmc_stats.get("handoff_ms", 0.0))
-                                    )
-                            return local_gmc_warp, local_gmc_uncertain
-
                         (gmc_warp, gmc_uncertain), _ = time_stage(
                             seq_stage_totals,
                             "gmc",
-                            _run_gmc,
+                            lambda: _run_gmc_estimate(
+                                _seq_state,
+                                fused_boxes=fused_boxes,
+                                _frame_gmc=_frame_gmc,
+                            ),
                             # Only the pure-CPU estimators need a host sync for timing;
                             # the GPU direct/graph and PyGraphed paths feed the tracker
                             # (which syncs) so an extra sync here only stalls overlap.
@@ -4417,85 +4652,27 @@ def run_eval(
                         _reid_side_pending = False
                         _reid_frame_hwc_ref = None
 
-                    if gtu is not None:
-                        gtu.copy_inputs(
-                            fused_boxes,
-                            fused_scores,
-                            fused_classes.to(torch.int32),
-                            gmc=gmc_warp,
+                    tracker_result_buffers = _run_track(
+                        _seq_state,
+                        fused_boxes=fused_boxes,
+                        fused_scores=fused_scores,
+                        fused_classes=fused_classes,
+                        gmc_warp=gmc_warp,
+                        embeddings=embeddings,
+                        mid_thresh_scale=mid_thresh_scale,
+                        tracker_result_buffers=tracker_result_buffers,
+                    )
+                    track_results, _defer_emit_event, _defer_emit_fid = (
+                        _run_materialize(
+                            _seq_state,
+                            tracker_result_buffers=tracker_result_buffers,
+                            embeddings=embeddings,
+                            aligned_keypoints=aligned_keypoints,
+                            frame_id=frame_id,
+                            defer_emit_event=_defer_emit_event,
+                            defer_emit_fid=_defer_emit_fid,
                         )
-                        # replay() returns gtu.out_* tensors directly; use them as
-                        # tracker_result_buffers to skip the extra D2D copy + item() sync
-                        # that read_outputs() would introduce.
-                        tracker_result_buffers, _ = time_stage(
-                            seq_stage_totals,
-                            "track",
-                            lambda: gtu.replay(),
-                            sync_cuda=True,
-                        )
-                    else:
-                        _, _ = time_stage(
-                            seq_stage_totals,
-                            "track",
-                            lambda: detector.tracker.update_into(
-                                fused_boxes,
-                                fused_scores,
-                                fused_classes.to(torch.int32),
-                                tracker_result_buffers,
-                                embeddings=embeddings if cfg.use_tracker_reid else None,
-                                gmc=gmc_warp,
-                                mid_thresh_scale=mid_thresh_scale,
-                            ),
-                            sync_cuda=True,
-                        )
-                    if _defer_emit:
-                        _defer_emit_event, _ = _materialize_gpu_track_results_async(
-                            tracker_result_buffers,
-                            _pinned_result_bufs,
-                            default_class_id=cfg.person_class
-                            if cfg.track_person_only
-                            else None,
-                            include_det_idx=False,
-                        )
-                        _defer_emit_fid = frame_id
-                        track_results = {
-                            "count": 0,
-                            "boxes": torch.empty((0, 4)),
-                            "scores": torch.empty((0,)),
-                            "ids": torch.empty((0,), dtype=torch.int32),
-                            "classes": None,
-                            "det_idx": None,
-                        }
-                    else:
-                        track_results, _ = time_stage(
-                            seq_stage_totals,
-                            "materialize",
-                            lambda: (
-                                _materialize_gpu_track_results_pinned(
-                                    tracker_result_buffers,
-                                    _pinned_result_bufs,
-                                    default_class_id=cfg.person_class
-                                    if cfg.track_person_only
-                                    else None,
-                                    include_det_idx=(
-                                        embeddings is not None
-                                        or aligned_keypoints is not None
-                                    ),
-                                )
-                                if _use_pinned_materialize
-                                else _materialize_gpu_track_results(
-                                    tracker_result_buffers,
-                                    default_class_id=cfg.person_class
-                                    if cfg.track_person_only
-                                    else None,
-                                    include_det_idx=(
-                                        embeddings is not None
-                                        or aligned_keypoints is not None
-                                    ),
-                                )
-                            ),
-                            sync_cuda=True,
-                        )
+                    )
 
             if (
                 aligned_keypoints is not None
@@ -4797,22 +4974,17 @@ def run_eval(
 
         # Flush deferred materialize from the last frame.
         if _defer_emit and _defer_emit_event is not None:
-            _track_results = _read_deferred_result(
+            _lines, _ = _flush_deferred_emit(
                 _defer_emit_event,
                 _pinned_result_bufs,
                 default_class_id=cfg.person_class if cfg.track_person_only else None,
-                include_det_idx=False,
+                global_id_mapper=global_id_mapper,
+                seq=seq,
+                frame_id=_defer_emit_fid,
+                frame_w=w_orig,
+                frame_h=h_orig,
             )
-            if _track_results["count"] > 0:
-                _lines = _fast_emit_mot_lines(
-                    track_results=_track_results,
-                    global_id_mapper=global_id_mapper,
-                    seq=seq,
-                    frame_id=_defer_emit_fid,
-                    frame_w=w_orig,
-                    frame_h=h_orig,
-                )
-                results_lines.extend(_lines)
+            results_lines.extend(_lines)
             _defer_emit_event = None
 
         # Flush any last background relink_write future before post-processing results.
