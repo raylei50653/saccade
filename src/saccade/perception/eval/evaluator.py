@@ -7,7 +7,7 @@ import time
 from collections import OrderedDict, deque
 import dataclasses
 from contextlib import nullcontext
-from concurrent.futures import ThreadPoolExecutor, Future
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -1285,6 +1285,12 @@ class EvalPipeline:
     # --- detection tail-filters ---
     external_fp_rule_config: Any
     external_fp_logistic_model: Any
+    # --- per-frame cross-frame state (persists across frames within a seq;
+    #     fresh per-seq via these defaults since a new pipeline is built per seq) ---
+    defer_emit_event: "torch.cuda.Event | None" = None
+    defer_emit_fid: int = 0
+    bg_future: Any = None
+    bg_birth_events: Any = None
 
 
 @dataclasses.dataclass
@@ -1464,15 +1470,13 @@ def _run_materialize(
     embeddings: "torch.Tensor | None",
     aligned_keypoints: "torch.Tensor | None",
     frame_id: int,
-    defer_emit_event: "torch.cuda.Event | None",
-    defer_emit_fid: int,
-) -> tuple[Any, "torch.cuda.Event | None", int]:
+) -> Any:
     """Materialize tracker results for one frame (extracted from run_eval).
 
     Defer mode launches the async D2H + records the event; otherwise reads the
-    pinned/host result synchronously. Returns (track_results, defer_emit_event,
-    defer_emit_fid) — the defer event/fid pass through unchanged on the
-    non-defer path.
+    pinned/host result synchronously. Returns ``track_results``. The deferred
+    emit event/fid are carried on ``state`` (set on the defer path, left
+    untouched on the non-defer path) and drained by the frame loop.
     """
     _defer_emit = state.defer_emit
     cfg = state.cfg
@@ -1480,8 +1484,8 @@ def _run_materialize(
     _use_pinned_materialize = state.use_pinned_materialize
     seq_stage_totals = state.seq_stage_totals
     time_stage = state.time_stage
-    _defer_emit_event = defer_emit_event
-    _defer_emit_fid = defer_emit_fid
+    _defer_emit_event = state.defer_emit_event
+    _defer_emit_fid = state.defer_emit_fid
     if _defer_emit:
         _defer_emit_event, _ = _materialize_gpu_track_results_async(
             tracker_result_buffers,
@@ -1526,7 +1530,9 @@ def _run_materialize(
             ),
             sync_cuda=True,
         )
-    return track_results, _defer_emit_event, _defer_emit_fid
+    state.defer_emit_event = _defer_emit_event
+    state.defer_emit_fid = _defer_emit_fid
+    return track_results
 
 
 def _run_track(
@@ -2002,19 +2008,18 @@ def _run_emit(
     frame_birth_events: list,
     frame_id: int,
     prev_track_ids: set,
-    bg_future: Any,
-    bg_birth_events: Any,
-) -> tuple[set, Any, Any, list]:
+) -> tuple[set, list]:
     """Emit MOT lines for one frame's tracker result (extracted from run_eval).
 
     Either submits the relink-write pipeline to the background executor (when
     pipeline_relink + semantic work is active) or runs the synchronous emit path
     (fast emit, or full prepare/resolve/emit + lifecycle prune + side-effect
-    finalize). Returns ``(prev_track_ids, bg_future, bg_birth_events, lines)``:
-    the background path passes prev_track_ids through and hands back the new
-    future/birth-events with no lines this frame; the synchronous path returns the
-    updated prev_track_ids, leaves the bg cells untouched, and returns the emitted
-    lines for the caller to extend into the run-level accumulator.
+    finalize). Returns ``(prev_track_ids, lines)``: the background path passes
+    prev_track_ids through and stashes the new future/birth-events on ``state``
+    with no lines this frame; the synchronous path returns the updated
+    prev_track_ids, leaves the bg cells on ``state`` untouched, and returns the
+    emitted lines for the caller to extend into the run-level accumulator. The
+    bg future/birth-events live on ``state`` and are drained by the frame loop.
     """
     cfg = state.cfg
     detector = state.detector
@@ -2037,8 +2042,8 @@ def _run_emit(
     _collect_output_metadata = state.collect_output_metadata
     _annotate_birth_events = state.annotate_birth_events
     _lines_out: list[str] = []
-    _bg_future = bg_future
-    _bg_birth_events = bg_birth_events
+    _bg_future = state.bg_future
+    _bg_birth_events = state.bg_birth_events
     _needs_emit_pipeline = (
         relinker is not None
         or id_stability_filter is not None
@@ -2205,7 +2210,9 @@ def _run_emit(
             elapsed_ms = (time.perf_counter() - t_relink_write_start) * 1000
             seq_stage_totals["relink_write"] += elapsed_ms
             record_stage_sample("relink_write", elapsed_ms)
-    return prev_track_ids, _bg_future, _bg_birth_events, _lines_out
+    state.bg_future = _bg_future
+    state.bg_birth_events = _bg_birth_events
+    return prev_track_ids, _lines_out
 
 
 def _run_detection_filters(
@@ -3608,12 +3615,6 @@ def run_eval(
                 output_by_local,
             )
 
-        _bg_future: "Future[tuple[list[str], set[int], dict[int, int], dict[int, dict[str, float | int]]]] | None" = None
-        _bg_birth_events: list[dict[str, float | int | str | bool]] | None = None
-
-        _defer_emit_event: torch.cuda.Event | None = None
-        _defer_emit_fid: int = 0
-
         # Per-sequence state bundle for the extracted stage helpers. References
         # the locals above; grows as more stages move out of the frame loop.
         _seq_state = EvalPipeline(
@@ -3658,21 +3659,21 @@ def run_eval(
         )
 
         for frame_id in range(1, frame_end + 1):
-            if _defer_emit and _defer_emit_event is not None:
+            if _defer_emit and _seq_state.defer_emit_event is not None:
                 _lines, prev_track_ids = _flush_deferred_emit(
-                    _defer_emit_event,
+                    _seq_state.defer_emit_event,
                     _pinned_result_bufs,
                     default_class_id=cfg.person_class
                     if cfg.track_person_only
                     else None,
                     global_id_mapper=global_id_mapper,
                     seq=seq,
-                    frame_id=_defer_emit_fid,
+                    frame_id=_seq_state.defer_emit_fid,
                     frame_w=w_orig,
                     frame_h=h_orig,
                 )
                 results_lines.extend(_lines)
-                _defer_emit_event = None
+                _seq_state.defer_emit_event = None
             current_stage_sample_active = frame_id > warmup_frames
             current_frame_stage_elapsed = (
                 {name: 0.0 for name in top_level_stage_names}
@@ -4750,7 +4751,7 @@ def run_eval(
                             seq_post_counts["after_merge"] += after_merge_count
                     # Sync previous frame's background relink_write before accessing shared
                     # mutable state (dynamic_reid, primary_appearance_bank, relinker).
-                    if _bg_future is not None:
+                    if _seq_state.bg_future is not None:
                         if profile_stages:
                             t_bg_wait_start = time.perf_counter()
                         (
@@ -4758,20 +4759,20 @@ def run_eval(
                             prev_track_ids,
                             _bg_det_idx_to_local_id,
                             _bg_output_by_local,
-                        ) = _bg_future.result()
+                        ) = _seq_state.bg_future.result()
                         if profile_stages:
                             elapsed_ms = (time.perf_counter() - t_bg_wait_start) * 1000
                             seq_stage_totals["bg_relink_wait"] += elapsed_ms
                             record_stage_sample("bg_relink_wait", elapsed_ms)
                         results_lines.extend(_bg_rw_lines)
-                        if _bg_birth_events is not None:
+                        if _seq_state.bg_birth_events is not None:
                             _annotate_birth_events(
-                                _bg_birth_events,
+                                _seq_state.bg_birth_events,
                                 _det_idx_to_local_id=_bg_det_idx_to_local_id,
                                 _output_by_local=_bg_output_by_local,
                             )
-                        _bg_future = None
-                        _bg_birth_events = None
+                        _seq_state.bg_future = None
+                        _seq_state.bg_birth_events = None
 
                     embeddings = None
                     _fpn_ready = _fpn_reid_mode and fused_boxes.numel() > 0
@@ -5199,16 +5200,12 @@ def run_eval(
                         mid_thresh_scale=mid_thresh_scale,
                         tracker_result_buffers=tracker_result_buffers,
                     )
-                    track_results, _defer_emit_event, _defer_emit_fid = (
-                        _run_materialize(
-                            _seq_state,
-                            tracker_result_buffers=tracker_result_buffers,
-                            embeddings=embeddings,
-                            aligned_keypoints=aligned_keypoints,
-                            frame_id=frame_id,
-                            defer_emit_event=_defer_emit_event,
-                            defer_emit_fid=_defer_emit_fid,
-                        )
+                    track_results = _run_materialize(
+                        _seq_state,
+                        tracker_result_buffers=tracker_result_buffers,
+                        embeddings=embeddings,
+                        aligned_keypoints=aligned_keypoints,
+                        frame_id=frame_id,
                     )
 
             if (
@@ -5324,8 +5321,6 @@ def run_eval(
 
             (
                 prev_track_ids,
-                _bg_future,
-                _bg_birth_events,
                 _emit_lines,
             ) = _run_emit(
                 _seq_state,
@@ -5339,8 +5334,6 @@ def run_eval(
                 frame_birth_events=frame_birth_events,
                 frame_id=frame_id,
                 prev_track_ids=prev_track_ids,
-                bg_future=_bg_future,
-                bg_birth_events=_bg_birth_events,
             )
             results_lines.extend(_emit_lines)
 
@@ -5361,37 +5354,37 @@ def run_eval(
                 print(f"🎬 {seq} [{frame_id}/{frame_end}]")
 
         # Flush deferred materialize from the last frame.
-        if _defer_emit and _defer_emit_event is not None:
+        if _defer_emit and _seq_state.defer_emit_event is not None:
             _lines, _ = _flush_deferred_emit(
-                _defer_emit_event,
+                _seq_state.defer_emit_event,
                 _pinned_result_bufs,
                 default_class_id=cfg.person_class if cfg.track_person_only else None,
                 global_id_mapper=global_id_mapper,
                 seq=seq,
-                frame_id=_defer_emit_fid,
+                frame_id=_seq_state.defer_emit_fid,
                 frame_w=w_orig,
                 frame_h=h_orig,
             )
             results_lines.extend(_lines)
-            _defer_emit_event = None
+            _seq_state.defer_emit_event = None
 
         # Flush any last background relink_write future before post-processing results.
-        if _bg_future is not None:
+        if _seq_state.bg_future is not None:
             (
                 _bg_rw_lines,
                 prev_track_ids,
                 _bg_det_idx_to_local_id,
                 _bg_output_by_local,
-            ) = _bg_future.result()
+            ) = _seq_state.bg_future.result()
             results_lines.extend(_bg_rw_lines)
-            if _bg_birth_events is not None:
+            if _seq_state.bg_birth_events is not None:
                 _annotate_birth_events(
-                    _bg_birth_events,
+                    _seq_state.bg_birth_events,
                     _det_idx_to_local_id=_bg_det_idx_to_local_id,
                     _output_by_local=_bg_output_by_local,
                 )
-            _bg_future = None
-            _bg_birth_events = None
+            _seq_state.bg_future = None
+            _seq_state.bg_birth_events = None
 
         if frame_latencies:
             lats = np.array(frame_latencies)
