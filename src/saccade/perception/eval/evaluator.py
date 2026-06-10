@@ -1307,6 +1307,10 @@ class EvalPipeline:
     seq_lazy_reid_self_sim_sum: float = 0.0
     seq_lazy_reid_arbiter_checks: int = 0
     seq_lazy_reid_arbiter_approve: int = 0
+    # stage-threaded carried vars (flow in/out of _run_* helpers as kwargs/returns)
+    gmc_warp: "torch.Tensor | None" = None
+    prev_track_ids: set = dataclasses.field(default_factory=set)
+    tracker_result_buffers: Any = None
 
 
 @dataclasses.dataclass
@@ -3282,7 +3286,6 @@ def run_eval(
         if wb is not None:
             wb.dynamic_reid = dynamic_reid
 
-        prev_track_ids: set[int] = set()
         _consec_birth_window: deque[torch.Tensor] = deque(
             maxlen=max(1, cfg.birth_consecutive_frames - 1)
         )
@@ -3350,7 +3353,6 @@ def run_eval(
             )
         )
         lazy_reid_prev_embeddings: dict[int, torch.Tensor] = {}
-        gmc_warp = None
         tracker_result_buffers = detector.tracker.allocate_result_buffers(
             device=pool.frame_buffer.device
         )
@@ -3660,11 +3662,12 @@ def run_eval(
             external_fp_rule_config=external_fp_rule_config,
             external_fp_logistic_model=external_fp_logistic_model,
             active_tracker_thresholds=active_tracker_thresholds,
+            tracker_result_buffers=tracker_result_buffers,
         )
 
         for frame_id in range(1, frame_end + 1):
             if _defer_emit and _seq_state.defer_emit_event is not None:
-                _lines, prev_track_ids = _flush_deferred_emit(
+                _lines, _seq_state.prev_track_ids = _flush_deferred_emit(
                     _seq_state.defer_emit_event,
                     _pinned_result_bufs,
                     default_class_id=cfg.person_class
@@ -3777,7 +3780,7 @@ def run_eval(
                     len(fused_boxes), dtype=torch.bool, device=fused_boxes.device
                 )
                 embeddings = None
-                gmc_warp = None
+                _seq_state.gmc_warp = None
                 aligned_keypoints = None
                 raw_dump_boxes = fused_boxes
                 raw_dump_scores = fused_scores
@@ -3907,7 +3910,7 @@ def run_eval(
                     _wb_classes_cpu = wb_result.classes.cpu()
                     _wb_det_idx_cpu = wb_result.det_idx.cpu()
 
-                    tracker_result_buffers = {
+                    _seq_state.tracker_result_buffers = {
                         "count": torch.tensor(
                             [wb_count], dtype=torch.int32, device="cpu"
                         ),
@@ -3954,7 +3957,7 @@ def run_eval(
 
                     # Update prev_track_ids for downstream (lazy ReID, etc.)
                     if wb_count > 0:
-                        prev_track_ids = set(wb_ids_np.tolist())
+                        _seq_state.prev_track_ids = set(wb_ids_np.tolist())
 
                     # Mock missing variables for downstream compatibility
                     fused_boxes = wb_result.boxes
@@ -3964,7 +3967,7 @@ def run_eval(
                         len(fused_boxes), dtype=torch.bool, device=fused_boxes.device
                     )
                     embeddings = None
-                    gmc_warp = None
+                    _seq_state.gmc_warp = None
                     aligned_keypoints = None
                     raw_dump_boxes = fused_boxes
                     raw_dump_scores = fused_scores
@@ -4760,7 +4763,7 @@ def run_eval(
                             t_bg_wait_start = time.perf_counter()
                         (
                             _bg_rw_lines,
-                            prev_track_ids,
+                            _seq_state.prev_track_ids,
                             _bg_det_idx_to_local_id,
                             _bg_output_by_local,
                         ) = _seq_state.bg_future.result()
@@ -4800,7 +4803,7 @@ def run_eval(
                                     )
                                 else:
                                     _do_reid = need_reid_frame(
-                                        prev_track_ids, after_merge_count
+                                        _seq_state.prev_track_ids, after_merge_count
                                     )
                             else:
                                 _do_reid = frame_id % seq_reid_interval == 0
@@ -4924,7 +4927,9 @@ def run_eval(
                                 fused_scores,
                                 actual_budget,
                                 dynamic_reid=dynamic_reid,
-                                gmc_warp=gmc_warp if cfg.gmc_enabled else None,
+                                gmc_warp=_seq_state.gmc_warp
+                                if cfg.gmc_enabled
+                                else None,
                                 gmc_uncertain=_seq_state.gmc_uncertain,
                             )
 
@@ -5148,7 +5153,7 @@ def run_eval(
                         min_samples=cfg.geometry_min_samples,
                         state=geometry_scale_state,
                     )
-                    gmc_warp = None
+                    _seq_state.gmc_warp = None
                     _seq_state.gmc_uncertain = False
                     # GMC estimator takes luma from frame_buffer (RGB path)
                     # or from NV12 Y-plane directly (NV12 path).
@@ -5160,7 +5165,7 @@ def run_eval(
                         _frame_gmc = pool.frame_buffer
 
                     if gmc_estimator is not None:
-                        (gmc_warp, _seq_state.gmc_uncertain), _ = time_stage(
+                        (_seq_state.gmc_warp, _seq_state.gmc_uncertain), _ = time_stage(
                             seq_stage_totals,
                             "gmc",
                             lambda: _run_gmc_estimate(
@@ -5175,7 +5180,7 @@ def run_eval(
                             and not isinstance(gmc_estimator, PyGraphedGMC),
                         )
                         if hasattr(detector, "set_gmc_warp"):
-                            detector.set_gmc_warp(gmc_warp, h_orig, w_orig)
+                            detector.set_gmc_warp(_seq_state.gmc_warp, h_orig, w_orig)
                     # Async ReID: sync side stream and inject fresh embeddings right before
                     # tracker.update_into so the cost matrix still has detection-side appearance.
                     # GMC on main stream overlapped with reid on side stream during the gap above.
@@ -5194,19 +5199,19 @@ def run_eval(
                         _reid_side_pending = False
                         _reid_frame_hwc_ref = None
 
-                    tracker_result_buffers = _run_track(
+                    _seq_state.tracker_result_buffers = _run_track(
                         _seq_state,
                         fused_boxes=fused_boxes,
                         fused_scores=fused_scores,
                         fused_classes=fused_classes,
-                        gmc_warp=gmc_warp,
+                        gmc_warp=_seq_state.gmc_warp,
                         embeddings=embeddings,
                         mid_thresh_scale=mid_thresh_scale,
-                        tracker_result_buffers=tracker_result_buffers,
+                        tracker_result_buffers=_seq_state.tracker_result_buffers,
                     )
                     track_results = _run_materialize(
                         _seq_state,
-                        tracker_result_buffers=tracker_result_buffers,
+                        tracker_result_buffers=_seq_state.tracker_result_buffers,
                         embeddings=embeddings,
                         aligned_keypoints=aligned_keypoints,
                         frame_id=frame_id,
@@ -5324,20 +5329,20 @@ def run_eval(
                             lazy_reid_prev_embeddings.pop(stale_id, None)
 
             (
-                prev_track_ids,
+                _seq_state.prev_track_ids,
                 _emit_lines,
             ) = _run_emit(
                 _seq_state,
                 track_results=track_results,
-                tracker_result_buffers=tracker_result_buffers,
+                tracker_result_buffers=_seq_state.tracker_result_buffers,
                 fused_boxes=fused_boxes,
                 fused_scores=fused_scores,
                 geometry_suspect_mask=geometry_suspect_mask,
                 embeddings=embeddings,
-                gmc_warp=gmc_warp,
+                gmc_warp=_seq_state.gmc_warp,
                 frame_birth_events=frame_birth_events,
                 frame_id=frame_id,
-                prev_track_ids=prev_track_ids,
+                prev_track_ids=_seq_state.prev_track_ids,
             )
             results_lines.extend(_emit_lines)
 
@@ -5376,7 +5381,7 @@ def run_eval(
         if _seq_state.bg_future is not None:
             (
                 _bg_rw_lines,
-                prev_track_ids,
+                _seq_state.prev_track_ids,
                 _bg_det_idx_to_local_id,
                 _bg_output_by_local,
             ) = _seq_state.bg_future.result()
