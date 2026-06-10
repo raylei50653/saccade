@@ -1928,6 +1928,46 @@ def _run_detect(
     return fused_boxes, fused_scores, fused_classes, is_tiled, source_keypoints
 
 
+def _build_gmc_estimator(
+    cfg: Any, profile_stages: bool
+) -> tuple[Any, bool, bool, list[Any]]:
+    """Construct the per-sequence GMC estimator and its graph-capture flags.
+
+    Picks the C++ cuFFT GMC (default gpu mode), falling back to PyGraphedGMC then
+    SparseOpticalFlowGMC if the native extension is unavailable. Returns
+    ``(gmc_estimator, use_direct_gmc, gmc_graphable, gmc_cuda_graph)`` where
+    gmc_cuda_graph is the single-cell mutable list the frame loop captures into.
+    """
+    # A8: Uniform CMC & 2D MMD
+    gmc_estimator = None
+    if cfg.gmc_enabled:
+        if cfg.gmc_mode == "gpu":
+            # Default: C++ cuFFT GMC, graph-captured in the frame loop below.
+            # Falls back to the pure-Python PyGraphedGMC (also graph-capturable)
+            # only if the native extension is unavailable.
+            try:
+                from saccade_tracking_ext import GMC as CppGMC
+
+                gmc_estimator = CppGMC(downscale=cfg.gmc_downscale)
+                if hasattr(gmc_estimator, "set_profiling_enabled"):
+                    gmc_estimator.set_profiling_enabled(profile_stages)
+            except (ImportError, AttributeError):
+                try:
+                    gmc_estimator = PyGraphedGMC(downscale=cfg.gmc_downscale)
+                except Exception:
+                    gmc_estimator = SparseOpticalFlowGMC(downscale=cfg.gmc_downscale)
+        else:
+            gmc_estimator = SparseOpticalFlowGMC(downscale=cfg.gmc_downscale)
+    _use_direct_gmc = hasattr(gmc_estimator, "estimate_into_direct")
+    # C++ estimate_into_direct is CUDA-graph-capturable (PyGraphedGMC self-graphs
+    # via make_graphed_callables, so it is excluded here). Capture lazily on the
+    # first eligible frame; replay thereafter. FG mask (variable box count) is
+    # not graph-compatible, so those runs stay eager.
+    _gmc_graphable = _use_direct_gmc and not isinstance(gmc_estimator, PyGraphedGMC)
+    _gmc_cuda_graph = [None]  # mutable for closure capture
+    return gmc_estimator, _use_direct_gmc, _gmc_graphable, _gmc_cuda_graph
+
+
 def run_eval(
     engine: str,
     output: str,
@@ -2356,35 +2396,9 @@ def run_eval(
 
         geometry_scale_state = GeometryScaleState()
 
-        # A8: Uniform CMC & 2D MMD
-        gmc_estimator = None
-        if cfg.gmc_enabled:
-            if cfg.gmc_mode == "gpu":
-                # Default: C++ cuFFT GMC, graph-captured in the frame loop below.
-                # Falls back to the pure-Python PyGraphedGMC (also graph-capturable)
-                # only if the native extension is unavailable.
-                try:
-                    from saccade_tracking_ext import GMC as CppGMC
-
-                    gmc_estimator = CppGMC(downscale=cfg.gmc_downscale)
-                    if hasattr(gmc_estimator, "set_profiling_enabled"):
-                        gmc_estimator.set_profiling_enabled(profile_stages)
-                except (ImportError, AttributeError):
-                    try:
-                        gmc_estimator = PyGraphedGMC(downscale=cfg.gmc_downscale)
-                    except Exception:
-                        gmc_estimator = SparseOpticalFlowGMC(
-                            downscale=cfg.gmc_downscale
-                        )
-            else:
-                gmc_estimator = SparseOpticalFlowGMC(downscale=cfg.gmc_downscale)
-        _use_direct_gmc = hasattr(gmc_estimator, "estimate_into_direct")
-        # C++ estimate_into_direct is CUDA-graph-capturable (PyGraphedGMC self-graphs
-        # via make_graphed_callables, so it is excluded here). Capture lazily on the
-        # first eligible frame; replay thereafter. FG mask (variable box count) is
-        # not graph-compatible, so those runs stay eager.
-        _gmc_graphable = _use_direct_gmc and not isinstance(gmc_estimator, PyGraphedGMC)
-        _gmc_cuda_graph = [None]  # mutable for closure capture
+        gmc_estimator, _use_direct_gmc, _gmc_graphable, _gmc_cuda_graph = (
+            _build_gmc_estimator(cfg, profile_stages)
+        )
 
         # Set scene-adapt policy on workbench
         if wb is not None:
