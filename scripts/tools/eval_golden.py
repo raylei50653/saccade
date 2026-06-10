@@ -31,10 +31,13 @@ GOLDEN_DIR = ROOT / "tests/golden/eval"
 # Cover distinct detect/postprocess branches so refactors of either are gated:
 #   - mamba_whole_graph: whole-detect CUDA graph (backbone+head+decode fused)
 #   - mamba_optimal:      head-only graph + the separate eager postprocess block
+#   - speed:              native_960 detect_fn (detect_native_960) — a distinct
+#                         detect path + ingest sub-branch from the native_640 presets
 CASES: list[tuple[str, str, str, int]] = [
     ("whole_graph_mot02", "mamba_whole_graph", "MOT17-02-SDP", 120),
     ("whole_graph_mot04", "mamba_whole_graph", "MOT17-04-SDP", 120),
     ("optimal_mot02", "mamba_optimal", "MOT17-02-SDP", 120),
+    ("speed_mot02", "speed", "MOT17-02-SDP", 120),
 ]
 
 

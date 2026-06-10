@@ -1132,6 +1132,7 @@ def run_eval_cpp(
                 results_lines,
                 max_gap=cfg.interpolate_max_gap,
                 min_track_len=cfg.interpolate_min_track_len,
+                min_h=cfg.interpolate_min_h,
             )
             print(
                 f"  {seq}: interpolation gaps={interp_stats['gaps_filled']} "
@@ -1848,6 +1849,83 @@ def _run_post_nms_finalize(
         after_filter_count,
         after_nms_count,
     )
+
+
+def _run_detect(
+    state: SeqState,
+    *,
+    pool: Any,
+    frame_gpu: torch.Tensor,
+    nv12_direct_from_hwc: bool,
+    detect_fn: Any,
+    detector_box_format: Any,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, bool, "torch.Tensor | None"]:
+    """Ingest+preprocess the frame then run YOLO detection (extracted).
+
+    Copies the frame into the pool's working buffer (NV12-direct, or RGB →
+    preprocess → optional NV12) and dispatches the configured ``detect_fn`` (tiled
+    vs native, chosen once at setup; opaque here). Returns ``(fused_boxes,
+    fused_scores, fused_classes, is_tiled, source_keypoints)`` in original-image
+    coordinates. This is the non-workbench detect path only.
+    """
+    cfg = state.cfg
+    detector = state.detector
+    h_orig = state.h_orig
+    w_orig = state.w_orig
+    seq_stage_totals = state.seq_stage_totals
+    time_stage = state.time_stage
+    _, _ = time_stage(
+        seq_stage_totals,
+        "ingest_preprocess",
+        lambda: (
+            (
+                pool.frame_buffer_nv12.copy_(rgb_hwc_to_nv12_gpu(frame_gpu)),
+                pool.mark_nv12_current(),
+            )
+            if nv12_direct_from_hwc
+            else (
+                pool.frame_buffer.copy_(frame_gpu.permute(2, 0, 1).float() / 255.0),
+                apply_frame_preprocess(
+                    pool.frame_buffer,
+                    cfg.preprocess_modes,
+                    cfg.gamma,
+                    cfg.gamma_luma_threshold,
+                    cfg.contrast,
+                ),
+                pool.mark_rgb_current(),
+                (
+                    pool.frame_buffer_nv12.copy_(rgb_chw_to_nv12_gpu(pool.frame_buffer))
+                    if pool.use_nv12
+                    else None
+                ),
+            )
+        ),
+        sync_cuda=True,
+    )
+
+    (
+        (
+            fused_boxes,
+            fused_scores,
+            fused_classes,
+            is_tiled,
+            source_keypoints,
+        ),
+        _,
+    ) = time_stage(
+        seq_stage_totals,
+        "detect",
+        lambda: detect_fn(
+            detector,
+            pool,
+            h_orig,
+            w_orig,
+            cfg.preprocess_modes,
+            detector_box_format,
+        ),
+        sync_cuda=True,
+    )
+    return fused_boxes, fused_scores, fused_classes, is_tiled, source_keypoints
 
 
 def run_eval(
@@ -3410,62 +3488,19 @@ def run_eval(
                     # Save gray frame for GMC in next frame
                     prev_gray = pool.get_frame_luma().clone()
                 else:
-                    _, _ = time_stage(
-                        seq_stage_totals,
-                        "ingest_preprocess",
-                        lambda: (
-                            (
-                                pool.frame_buffer_nv12.copy_(
-                                    rgb_hwc_to_nv12_gpu(frame_gpu)
-                                ),
-                                pool.mark_nv12_current(),
-                            )
-                            if nv12_direct_from_hwc
-                            else (
-                                pool.frame_buffer.copy_(
-                                    frame_gpu.permute(2, 0, 1).float() / 255.0
-                                ),
-                                apply_frame_preprocess(
-                                    pool.frame_buffer,
-                                    cfg.preprocess_modes,
-                                    cfg.gamma,
-                                    cfg.gamma_luma_threshold,
-                                    cfg.contrast,
-                                ),
-                                pool.mark_rgb_current(),
-                                (
-                                    pool.frame_buffer_nv12.copy_(
-                                        rgb_chw_to_nv12_gpu(pool.frame_buffer)
-                                    )
-                                    if pool.use_nv12
-                                    else None
-                                ),
-                            )
-                        ),
-                        sync_cuda=True,
-                    )
-
                     (
-                        (
-                            fused_boxes,
-                            fused_scores,
-                            fused_classes,
-                            is_tiled,
-                            source_keypoints,
-                        ),
-                        _,
-                    ) = time_stage(
-                        seq_stage_totals,
-                        "detect",
-                        lambda: detect_fn(
-                            detector,
-                            pool,
-                            h_orig,
-                            w_orig,
-                            cfg.preprocess_modes,
-                            detector_box_format,
-                        ),
-                        sync_cuda=True,
+                        fused_boxes,
+                        fused_scores,
+                        fused_classes,
+                        is_tiled,
+                        source_keypoints,
+                    ) = _run_detect(
+                        _seq_state,
+                        pool=pool,
+                        frame_gpu=frame_gpu,
+                        nv12_direct_from_hwc=nv12_direct_from_hwc,
+                        detect_fn=detect_fn,
+                        detector_box_format=detector_box_format,
                     )
 
                     if _fpn_backbone is not None and fused_boxes.numel() > 0:
@@ -5315,6 +5350,7 @@ def run_eval(
                 results_lines,
                 max_gap=cfg.interpolate_max_gap,
                 min_track_len=cfg.interpolate_min_track_len,
+                min_h=cfg.interpolate_min_h,
             )
             print(
                 f"🔀 Interpolation: tracks={interp_stats['tracks_interpolated']} "
