@@ -1265,6 +1265,28 @@ class SeqState:
     nms_fixed_n: int
 
 
+@dataclasses.dataclass
+class FrameCtx:
+    """Per-frame working tensors produced by the postprocess stage helpers.
+
+    Companion to SeqState (per-sequence): collects the outputs an extracted
+    postprocess stage hands back to the frame loop, so a stage returns one
+    object instead of a long tuple. Grows as more postprocess sub-stages move
+    out. Only the values the loop actually consumes downstream are carried —
+    e.g. native_tensor_prep's priors_tensor/prior_classes_tensor stay internal
+    and only num_priors escapes.
+    """
+
+    raw_boxes_contig: torch.Tensor
+    raw_scores_contig: torch.Tensor
+    raw_classes_contig: torch.Tensor
+    post_boxes: torch.Tensor
+    post_scores: torch.Tensor
+    post_classes: torch.Tensor
+    geometry_suspect_mask: torch.Tensor
+    num_priors: int
+
+
 def _run_gmc_estimate(
     state: SeqState,
     *,
@@ -1630,6 +1652,82 @@ def _run_nms(
         _nms_graph.replay()
     n_post = _NMS_FIXED_N
     return n_post, _nms_graph
+
+
+def _run_native_tensor_prep(
+    state: SeqState,
+    *,
+    fused_boxes: torch.Tensor,
+    fused_scores: torch.Tensor,
+    fused_classes: torch.Tensor,
+    seq_narrow_bonus: float,
+    enable_onms: bool,
+    onms_min_track_age: int,
+    onms_min_track_score: float,
+    raw_box_count: int,
+) -> FrameCtx:
+    """Cast detections to native NMS dtypes + slice output buffers (extracted).
+
+    Casts the fused detections to the contiguous float32/int32 layout the native
+    NMS expects, applies the narrow-person score bonus, slices the reusable
+    post-process output buffers, and (when ONMS is enabled) builds the active-track
+    priors. Returns a FrameCtx with the values the postprocess tail consumes;
+    priors_tensor/prior_classes_tensor stay internal (only num_priors escapes).
+    """
+    cfg = state.cfg
+    w_orig = state.w_orig
+    h_orig = state.h_orig
+    detector = state.detector
+    _post_bufs = state.post_bufs
+    with _record_profile_scope("post.native_tensor_prep"):
+        raw_boxes_contig = fused_boxes.to(torch.float32).contiguous()
+        raw_scores_contig = fused_scores.to(torch.float32).contiguous()
+        raw_classes_contig = fused_classes.to(torch.int32).contiguous()
+        raw_scores_contig = _apply_narrow_person_score_bonus(
+            raw_boxes_contig,
+            raw_scores_contig,
+            raw_classes_contig,
+            frame_w=w_orig,
+            frame_h=h_orig,
+            person_class=cfg.person_class,
+            bonus=seq_narrow_bonus,
+            max_width_ratio=cfg.narrow_person_max_width_ratio,
+            min_height_ratio=cfg.narrow_person_min_height_ratio,
+            min_aspect=cfg.narrow_person_min_aspect,
+            max_aspect=cfg.narrow_person_max_aspect,
+        )
+        post_boxes = _post_bufs["boxes"][:raw_box_count]
+        post_scores = _post_bufs["scores"][:raw_box_count]
+        post_classes = _post_bufs["classes"][:raw_box_count]
+        geometry_suspect_mask = _post_bufs["suspect"][:raw_box_count]
+
+        # Fetch priors for Occlusion-aware NMS
+        priors_tensor = None
+        prior_classes_tensor = None
+        num_priors = 0
+        if enable_onms:
+            priors_tensor, prior_classes_tensor = _build_active_track_priors(
+                detector.tracker,
+                raw_boxes_contig.device,
+                min_track_age=onms_min_track_age,
+                min_track_score=onms_min_track_score,
+            )
+        if (
+            enable_onms
+            and priors_tensor is not None
+            and prior_classes_tensor is not None
+        ):
+            num_priors = priors_tensor.size(0)
+    return FrameCtx(
+        raw_boxes_contig=raw_boxes_contig,
+        raw_scores_contig=raw_scores_contig,
+        raw_classes_contig=raw_classes_contig,
+        post_boxes=post_boxes,
+        post_scores=post_scores,
+        post_classes=post_classes,
+        geometry_suspect_mask=geometry_suspect_mask,
+        num_priors=num_priors,
+    )
 
 
 def run_eval(
@@ -3360,55 +3458,25 @@ def run_eval(
                         if profile_stages:
                             torch.cuda.synchronize()
                             t_native_prep_start = time.perf_counter()
-                        with _record_profile_scope("post.native_tensor_prep"):
-                            raw_boxes_contig = fused_boxes.to(
-                                torch.float32
-                            ).contiguous()
-                            raw_scores_contig = fused_scores.to(
-                                torch.float32
-                            ).contiguous()
-                            raw_classes_contig = fused_classes.to(
-                                torch.int32
-                            ).contiguous()
-                            raw_scores_contig = _apply_narrow_person_score_bonus(
-                                raw_boxes_contig,
-                                raw_scores_contig,
-                                raw_classes_contig,
-                                frame_w=w_orig,
-                                frame_h=h_orig,
-                                person_class=cfg.person_class,
-                                bonus=seq_narrow_bonus,
-                                max_width_ratio=cfg.narrow_person_max_width_ratio,
-                                min_height_ratio=cfg.narrow_person_min_height_ratio,
-                                min_aspect=cfg.narrow_person_min_aspect,
-                                max_aspect=cfg.narrow_person_max_aspect,
-                            )
-                            post_boxes = _post_bufs["boxes"][:raw_box_count]
-                            post_scores = _post_bufs["scores"][:raw_box_count]
-                            post_classes = _post_bufs["classes"][:raw_box_count]
-                            geometry_suspect_mask = _post_bufs["suspect"][
-                                :raw_box_count
-                            ]
-
-                            # Fetch priors for Occlusion-aware NMS
-                            priors_tensor = None
-                            prior_classes_tensor = None
-                            num_priors = 0
-                            if enable_onms:
-                                priors_tensor, prior_classes_tensor = (
-                                    _build_active_track_priors(
-                                        detector.tracker,
-                                        raw_boxes_contig.device,
-                                        min_track_age=onms_min_track_age,
-                                        min_track_score=onms_min_track_score,
-                                    )
-                                )
-                            if (
-                                enable_onms
-                                and priors_tensor is not None
-                                and prior_classes_tensor is not None
-                            ):
-                                num_priors = priors_tensor.size(0)
+                        _fctx = _run_native_tensor_prep(
+                            _seq_state,
+                            fused_boxes=fused_boxes,
+                            fused_scores=fused_scores,
+                            fused_classes=fused_classes,
+                            seq_narrow_bonus=seq_narrow_bonus,
+                            enable_onms=enable_onms,
+                            onms_min_track_age=onms_min_track_age,
+                            onms_min_track_score=onms_min_track_score,
+                            raw_box_count=raw_box_count,
+                        )
+                        raw_boxes_contig = _fctx.raw_boxes_contig
+                        raw_scores_contig = _fctx.raw_scores_contig
+                        raw_classes_contig = _fctx.raw_classes_contig
+                        post_boxes = _fctx.post_boxes
+                        post_scores = _fctx.post_scores
+                        post_classes = _fctx.post_classes
+                        geometry_suspect_mask = _fctx.geometry_suspect_mask
+                        num_priors = _fctx.num_priors
                         if (
                             profile_stages
                             and current_stage_sample_active
