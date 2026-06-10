@@ -1311,6 +1311,51 @@ class EvalPipeline:
     gmc_warp: "torch.Tensor | None" = None
     prev_track_ids: set = dataclasses.field(default_factory=set)
     tracker_result_buffers: Any = None
+    # --- per-seq setup context (Phase 5: populated post-construction; maps to
+    #     self.X = X in a future __init__ so _run_frame can unpack from self) ---
+    _consec_birth_window: Any = None
+    _multi_birth_manager: Any = None
+    _scene_policy: Any = None
+    wb: Any = None
+    wb_scene_policy: Any = None
+    geometry_scale_state: Any = None
+    nv12_direct_from_hwc: Any = None
+    pool: Any = None
+    stream_iter: Any = None
+    frame_end: Any = None
+    frame_latencies: Any = None
+    results_lines: Any = None
+    seq_track_buffer: Any = None
+    seq_reid_interval: Any = None
+    warmup_frames: Any = None
+    seq_stage_samples: Any = None
+    seq_segment_samples: Any = None
+    seq_native_reid_samples: Any = None
+    lazy_reid_prev_embeddings: Any = None
+    reid_main_ready: Any = None
+    reid_side_event: Any = None
+    reid_side_stream: Any = None
+    _fpn_backbone: Any = None
+    _fpn_img_size: Any = None
+    _fpn_reid_conv_weights: Any = None
+    _fpn_reid_dim: Any = None
+    _fpn_reid_mode: Any = None
+    _fpn_reid_proj_weight: Any = None
+    _fpn_reid_running_mean: Any = None
+    _fpn_reid_running_var: Any = None
+    cropper: Any = None
+    debug_dump_frames: Any = None
+    debug_dump_seq: Any = None
+    debug_stage_dump_rows: Any = None
+    detect_fn: Any = None
+    detector_box_format: Any = None
+    enable_onms: Any = None
+    extractor: Any = None
+    native_reid_available: Any = None
+    onms_min_track_age: Any = None
+    onms_min_track_score: Any = None
+    onms_prior_iou_threshold: Any = None
+    top_level_stage_names: Any = None
 
 
 @dataclasses.dataclass
@@ -3664,6 +3709,50 @@ def run_eval(
             active_tracker_thresholds=active_tracker_thresholds,
             tracker_result_buffers=tracker_result_buffers,
         )
+        # Phase 5: bind per-seq setup context onto the pipeline object.
+        _seq_state._consec_birth_window = _consec_birth_window
+        _seq_state._multi_birth_manager = _multi_birth_manager
+        _seq_state._scene_policy = _scene_policy
+        _seq_state.wb = wb
+        _seq_state.wb_scene_policy = wb_scene_policy
+        _seq_state.geometry_scale_state = geometry_scale_state
+        _seq_state.nv12_direct_from_hwc = nv12_direct_from_hwc
+        _seq_state.pool = pool
+        _seq_state.stream_iter = stream_iter
+        _seq_state.frame_end = frame_end
+        _seq_state.frame_latencies = frame_latencies
+        _seq_state.results_lines = results_lines
+        _seq_state.seq_track_buffer = seq_track_buffer
+        _seq_state.seq_reid_interval = seq_reid_interval
+        _seq_state.warmup_frames = warmup_frames
+        _seq_state.seq_stage_samples = seq_stage_samples
+        _seq_state.seq_segment_samples = seq_segment_samples
+        _seq_state.seq_native_reid_samples = seq_native_reid_samples
+        _seq_state.lazy_reid_prev_embeddings = lazy_reid_prev_embeddings
+        _seq_state.reid_main_ready = reid_main_ready
+        _seq_state.reid_side_event = reid_side_event
+        _seq_state.reid_side_stream = reid_side_stream
+        _seq_state._fpn_backbone = _fpn_backbone
+        _seq_state._fpn_img_size = _fpn_img_size
+        _seq_state._fpn_reid_conv_weights = _fpn_reid_conv_weights
+        _seq_state._fpn_reid_dim = _fpn_reid_dim
+        _seq_state._fpn_reid_mode = _fpn_reid_mode
+        _seq_state._fpn_reid_proj_weight = _fpn_reid_proj_weight
+        _seq_state._fpn_reid_running_mean = _fpn_reid_running_mean
+        _seq_state._fpn_reid_running_var = _fpn_reid_running_var
+        _seq_state.cropper = cropper
+        _seq_state.debug_dump_frames = debug_dump_frames
+        _seq_state.debug_dump_seq = debug_dump_seq
+        _seq_state.debug_stage_dump_rows = debug_stage_dump_rows
+        _seq_state.detect_fn = detect_fn
+        _seq_state.detector_box_format = detector_box_format
+        _seq_state.enable_onms = enable_onms
+        _seq_state.extractor = extractor
+        _seq_state.native_reid_available = native_reid_available
+        _seq_state.onms_min_track_age = onms_min_track_age
+        _seq_state.onms_min_track_score = onms_min_track_score
+        _seq_state.onms_prior_iou_threshold = onms_prior_iou_threshold
+        _seq_state.top_level_stage_names = top_level_stage_names
 
         for frame_id in range(1, frame_end + 1):
             if _defer_emit and _seq_state.defer_emit_event is not None:
