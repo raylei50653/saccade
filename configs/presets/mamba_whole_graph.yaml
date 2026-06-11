@@ -35,6 +35,8 @@ gmc_fg_mask: false
 # --- ReID ---
 reid_mode: "off"
 
+relink_bridge_enabled: true
+
 # --- Tracker Parameters ---
 match_thresh: 0.50
 new_track_thresh: 0.28
@@ -48,3 +50,4 @@ geometry_suspect_support: false
 interpolate_tracklets: true
 interpolate_max_gap: 35
 interpolate_min_track_len: 5
+interpolate_min_h: 0

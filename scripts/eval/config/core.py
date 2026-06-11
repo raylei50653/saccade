@@ -165,6 +165,8 @@ def add_core_args(parser: argparse.ArgumentParser) -> None:
             "speed",
             "mamba_optimal",
             "mamba_whole_graph",
+            "mamba_eager_1024",
+            "mamba_eager_1024_full",
             "fpn_reid_baseline",
         ),
         default=None,
