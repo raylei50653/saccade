@@ -196,7 +196,7 @@ __global__ void gate_kernel(GateParams p,
         float xl = lx + vxl * half, yl = ly + vyl * half;
         float xc = cx0 - vxc * half, yc = cy0 - vyc * half;
         float dpx = sqrtf((xl - xc) * (xl - xc) + (yl - yc) * (yl - yc));
-        float h_ref = fmaxf((cemah[c] + qemah[q]) * 0.5f, 1.0f);
+        float h_ref = fmaxf(cemah[c], 1.0f);
         bridge_dist = dpx / h_ref;
     }
 

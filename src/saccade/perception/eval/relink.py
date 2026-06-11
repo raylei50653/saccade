@@ -496,14 +496,13 @@ class PythonSemanticRelinker:
         vx_l, vy_l = self._regress_velocity_4(lost_hist[-4:])
         vx_c, vy_c = self._regress_velocity_4(cand_hist[:4])
         h_lost = self._ema_h.get(lost_id, 1.0)
-        h_cand = self._ema_h.get(cand_id, 1.0)
         half = gap * 0.5
         x_l = lost_hist[-1][0] + vx_l * half if lost_hist else 0.0
         y_l = lost_hist[-1][1] + vy_l * half if lost_hist else 0.0
         x_c = cand_hist[0][0] - vx_c * half if cand_hist else 0.0
         y_c = cand_hist[0][1] - vy_c * half if cand_hist else 0.0
         dist_px = float(np.hypot(x_l - x_c, y_l - y_c))
-        h_ref = max((h_lost + h_cand) * 0.5, 1.0)
+        h_ref = max(h_lost, 1.0)
         return dist_px / h_ref
 
     def _exceeds_max_speed(

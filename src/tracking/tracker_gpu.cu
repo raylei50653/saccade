@@ -1340,7 +1340,7 @@ __global__ void relink_bidir_propose_kernel(
             ly = (bridge_anchor == 1) ? (lc + 0.5f * lh) : lc;  // foot vs centre
         }
         float lost_h = states[lost * 8 + 3], ema_lost = ema_h[lost];
-        float h_ref = fmaxf((ema_lost + ema_cand) * 0.5f, 1.0f);
+        float h_ref = fmaxf(ema_lost, 1.0f);
 
         // Physical speed gate (disabled when bridge_max_speed<=0).
         if (bridge_max_speed > 0.0f && bridge_person_height > 0.0f) {
