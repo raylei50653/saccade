@@ -80,10 +80,10 @@ P_new[(i+4)*8+(j+4)] = P[(i+4)*8+(j+4)];                                        
    $$\text{PCR} = \frac{\max(r)}{\text{RMS}(r)} \ge 5.0$$
    若小於 $5.0$，則將此幀 warp 標記為 uncertain（使用 identity 仿射矩陣）。
 
-### 3.2 文檔與實作差異 (Discrepancy)
+### 3.2 一致性確認
 > [!NOTE]
-> **Hanning 窗邊界處理差異**
-> 在 Python 的 [PyGraphedGMC](file:///home/ray/developer/ai/saccade/src/saccade/perception/eval/gmc.py#L126-L128) 中，使用的是 `torch.hann_window`，其預設行為為 `periodic=True`，公式對應 $\cos(2\pi n / N)$。而 C++ 中使用的是對稱的 `periodic=False` 對應分母為 $N-1$。此處存在微小邊界數值差異，但在 $960/4 = 240$ 像素寬度下，該數值漂移對 GMC Warp 估計結果的影響在 $10^{-5}$ 級別以內，屬於可接受的數值近似。
+> **Hanning 窗實作一致**
+> 經檢查 [PyGraphedGMC](file:///home/ray/developer/ai/saccade/src/saccade/perception/eval/gmc.py#L126) 原始碼，Python 實作已顯式指定 `torch.hann_window(..., periodic=False)`，與 C++ 的對稱 Hanning 窗公式 $w_n = 0.5\left(1 - \cos\frac{2\pi n}{N-1}\right)$ 完全一致。兩者皆使用對稱窗（symmetric window），不存在邊界數值差異。
 
 ---
 

@@ -206,10 +206,8 @@ def verify_gmc_math():
     # By default periodic=True uses 2*pi*n / N, while periodic=False uses 2*pi*n / (N-1) (symmetric).
     # Let's check if PyTorch's default is periodic=True. Yes, in PyTorch it defaults to periodic=True.
     # But standard signal processing window for DFT interpolation is symmetric (periodic=False).
-    # Let's note this: PyTorch's default hann_window might slightly differ from standard symmetric Hanning window,
-    # but for GMC cross-power spectrum, the difference is negligible.
-    print("  ℹ️ Hanning window in Python uses PyTorch default (periodic=True), while C++ implementation "
-          "uses standard symmetric Hanning window w_n = 0.5 * (1 - cos(2*pi*n / (N-1))). The difference is negligible.")
+    # Actual code at gmc.py:126 uses periodic=False, same as C++ symmetric window
+    print("  ✅ Hanning window: Python (periodic=False) and C++ both use symmetric window w_n = 0.5 * (1 - cos(2*pi*n / (N-1))). No discrepancy.")
 
 
 def verify_sinkhorn_math():

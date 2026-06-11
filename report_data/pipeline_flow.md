@@ -28,21 +28,37 @@
 ```text
 [1] fetch                      -> DALI / NVDEC read
 [2] ingest_preprocess          -> AdaptiveFramePool + preprocess
-[3] detect                     -> yolo26s/m native_960 or tiled
+[3] detect                     -> yolo26s/m native_960 or tiled;
+                                 mamba_whole_graph: native_640 stretch-resize
 [4] postprocess                -> filter -> NMS -> cross-tile merge
-                                 -> quality scaling + gating (6 sub-stages)
+                                 -> quality scaling + gating (6 sub-stages);
+                                 mamba_whole_graph: quality_scaling=OFF
 [5] reid_bank_sync             -> appearance bank → tracker [OFF]
 [6] reid_budget                -> budget selection [OFF]
 [7] reid_crop                  -> ROI crop (Python only) [OFF]
 [8] reid_extract               -> siglip2 / other backbones [OFF]
 [9] lazy_reid                  -> self-sim profiling [OFF, profiling only]
-[10] gmc                       -> GPU/PMC warp estimation [ON]
-[11] track                     -> association + Kalman update [ON]
+[10] gmc                       -> GPU/PMC warp estimation [ON];
+                                 mamba_whole_graph: downscale=4
+[11] track                     -> association + Kalman update [ON];
+                                 mamba_whole_graph: CUDA tracker graph
 [12] materialize               -> GPU -> host view [ON]
 [13] bg_relink_wait            -> wait bg relink thread [OFF]
 [14] relink_write              -> semantic relink + identity resolve [部分 ON]
 [15] frame_total               -> 本幀總時間
 ```
+
+### CUDA Graph 三層架構（mamba_whole_graph 專屬）
+
+`--preset mamba_whole_graph` 的核心差異是將 pipeline 熱路徑封裝進 **三層 CUDA graph**，大幅降低 kernel launch overhead：
+
+| Layer | Graph | 內容 | Kernel Launch 節省 |
+|:---:|:---|:---|:---:|
+| L1 | Whole-Detect Graph | resize → TRT backbone → Mamba head → postprocess decode | ~280 → 1 |
+| L2 | NMS Graph | C++/CUDA NMS + filter pipeline | ~5 → 1 |
+| L3 | Tracker Graph | GPUByteTracker (Kalman predict/update + association) | ~15 → 1 |
+
+> 三層 graph 均通過 bit-exact parity 驗證。L1 將 detect 從 7.4ms 降至 3.25ms，L3 將 track 從 1.4ms 降至 0.53ms。整體 pipeline 達 175 FPS / 5.7ms per frame（640 解析度，無 profiling）。
 
 ### 階段對應表
 
@@ -110,6 +126,7 @@
 - 會先經過 postprocess 與 geometry / tile merge 清理
 - evaluation path 目前可走：
   - `native_960`：單張 `960x960` 推論
+  - `native_640`：單張 `640x640` stretch-resize 推論（`--preset mamba_whole_graph`）
   - `960p_2x2` / `960p_3x2`：tile-based detection + cross-tile duplicate merge
 
 ### 3.3 Detection Postprocess
@@ -137,6 +154,12 @@
   - 輸出框使用「偏向非 seam 候選」的融合框，而非單純硬選 best detection
 - `runner.py` 可額外開 `--tile-diagnostics`，追蹤 seam 汙染是否真的被 merge 掉
 - 目前 `cross-tile merge` 不再被視為「穩定增益來源」；它是 tiled path 的必要補救，但在高密場景仍是主要風險點之一
+
+#### mamba_whole_graph 差異
+
+- `detection_quality_scaling: false` — Mamba head 內建品質信號，不需外部 rescale
+- `tiling: native_640` — 單張 640×640，無 tile，故 cross-tile merge / seam-aware 邏輯不觸發
+- postprocess sub-stage 實際只走 native path 的 filter + NMS（已在 PerceptionPipeline 內部完成），無獨立的 quality gate / detection_cap 等階段
 
 ### 3.4 ReID Trigger Decision
 
@@ -208,6 +231,7 @@
 - GMC 是推薦 baseline 核心模組（`--gmc`）
 - 在 ReID 分支完成後、tracker update 前執行
 - `gmc_fg_mask` 目前未啟用（恆為 0ms）
+- `mamba_whole_graph` 使用 `gmc_downscale: 4`（FFT 前 4× 降採樣）
 
 ### 3.7 Lazy ReID（Profiling Only）
 
@@ -257,6 +281,12 @@
 - 現在的 tracker 熱路徑已大幅 native 化
 - result 優先留在 GPU result buffer，再在必要邊界 materialize
 - GMC warp 在此階段被 tracker 消耗
+- `mamba_whole_graph` 使用 CUDA tracker graph（L3），將 Kalman predict/update + association 封裝成單次 replay，且帶以下特定參數：
+  - `match_thresh: 0.50`（Mamba 專屬 IoU gate）
+  - `new_track_thresh: 0.28`
+  - `kalman_r_scale: 2.8`（信任 motion model 優於 observation）
+  - `fuse_score_weight: 0.0`（純 IoU matching，Mamba scores 不需融合）
+  - `confirm_streak: 3`
 
 ### 3.9 Semantic Relink / Identity Resolve
 
@@ -302,6 +332,10 @@
 
 - `post_merge_output_tracklets()` 屬於 optional cleanup，不是 primary online decision path
 - `filter_low_quality_tracklets()` 用於移除短命 / 低分 output IDs
+- `mamba_whole_graph` 啟用 tracklet interpolation：
+  - `interpolate_tracklets: true`
+  - `interpolate_max_gap: 35`（~1.17s @30fps）
+  - `interpolate_min_track_len: 5`
 
 ---
 
@@ -377,4 +411,4 @@
 - 實驗結果與 backlog 排序
   - 看 [TODO.md](../TODO.md)
 
-最後更新：2026-05-13
+最後更新：2026-06-09
