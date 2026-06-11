@@ -24,6 +24,18 @@ __device__ __forceinline__ void regress4(const float* fxy, int n, float& vx, flo
     vy = (3.0f * y3 + y2 - y1 - 3.0f * y0) / 10.0f;
 }
 
+// 8-frame OLS regression velocity.  t=0..7, t̄=3.5, Stt=42.
+// Falls back to regress4 when n < 8.  Buffer fxy must have 16 floats (stride 16).
+__device__ __forceinline__ void regress8(const float* fxy, int n, float& vx, float& vy) {
+    if (n < 8) { regress4(fxy, n, vx, vy); return; }
+    float x0=fxy[0], y0=fxy[1], x1=fxy[2], y1=fxy[3];
+    float x2=fxy[4], y2=fxy[5], x3=fxy[6], y3=fxy[7];
+    float x4=fxy[8], y4=fxy[9], x5=fxy[10],y5=fxy[11];
+    float x6=fxy[12],y6=fxy[13],x7=fxy[14],y7=fxy[15];
+    vx = (-7.f*x0-5.f*x1-3.f*x2-x3+x4+3.f*x5+5.f*x6+7.f*x7)/84.f;
+    vy = (-7.f*y0-5.f*y1-3.f*y2-y3+y4+3.f*y5+5.f*y6+7.f*y7)/84.f;
+}
+
 // One physical (inertia-aware) predict step on the reduced {0,1,4,5} system.
 // mean: (x0,x1,x3,x4,x5,x7) packed; cov: symmetric 4x4 over {0,1,4,5} packed as
 //   00,01,04,05, 11,14,15, 44,45, 55  (10 entries).

@@ -1183,6 +1183,13 @@ __device__ __forceinline__ float bridge_vel4(const float* y) {
     return (3.0f * y[3] + y[2] - y[1] - 3.0f * y[0]) / 10.0f;
 }
 
+// Closed-form per-frame OLS velocity from 8 equally-spaced 1-D samples.
+// t=0..7, t̄=3.5, Stt=42 → v = (−7y0−5y1−3y2−y3+y4+3y5+5y6+7y7)/84.
+__device__ __forceinline__ float bridge_vel8(const float* y) {
+    return (-7.0f*y[0] - 5.0f*y[1] - 3.0f*y[2] - y[3]
+            + y[4] + 3.0f*y[5] + 5.0f*y[6] + 7.0f*y[7]) / 84.0f;
+}
+
 // Sum of squared residuals of 4 equally-spaced samples vs their least-squares
 // line (x = 0,1,2,3 → mean 1.5, Sxx = 5). A box edge that is being clipped by an
 // occluder deviates from constant velocity → large residual; a free edge stays
@@ -1196,6 +1203,22 @@ __device__ __forceinline__ float bridge_linres4(const float* y) {
 #pragma unroll
     for (int i = 0; i < 4; ++i) {
         float fit = ybar + slope * ((float)i - 1.5f);
+        float d = y[i] - fit;
+        res += d * d;
+    }
+    return res;
+}
+
+// Sum of squared residuals for 8 equally-spaced samples (t̄=3.5, Stt=42).
+__device__ __forceinline__ float bridge_linres8(const float* y) {
+    float ybar = 0.125f * (y[0]+y[1]+y[2]+y[3]+y[4]+y[5]+y[6]+y[7]);
+    float sxy = -3.5f*(y[0]-ybar) - 2.5f*(y[1]-ybar) - 1.5f*(y[2]-ybar) - 0.5f*(y[3]-ybar)
+                + 0.5f*(y[4]-ybar) + 1.5f*(y[5]-ybar) + 2.5f*(y[6]-ybar) + 3.5f*(y[7]-ybar);
+    float slope = sxy / 42.0f;
+    float res = 0.0f;
+#pragma unroll
+    for (int i = 0; i < 8; ++i) {
+        float fit = ybar + slope * ((float)i - 3.5f);
         float d = y[i] - fit;
         res += d * d;
     }
@@ -1252,6 +1275,47 @@ __device__ __forceinline__ void bridge_anchor4(
     }
 }
 
+// 8-frame version of bridge_anchor4.  Uses bridge_vel8/bridge_linres8; falls back
+// to bridge_anchor4 behaviour when fewer than 8 frames are available (caller
+// guarantees n >= 8 before calling this).  endpoint_idx: 7 for lost last-8, 0
+// for candidate head-8.
+__device__ __forceinline__ void bridge_anchor8(
+    const float* p, int anchor_mode, float rate_gate, int endpoint_idx,
+    float& ax, float& ay, float& vx, float& vy)
+{
+    float cx[8], cy[8], yt[8], yb[8], hbar = 0.0f;
+#pragma unroll
+    for (int i = 0; i < 8; ++i) {
+        float x = p[i * 3 + 0], c = p[i * 3 + 1], h = p[i * 3 + 2];
+        cx[i] = x; cy[i] = c; yt[i] = c - 0.5f * h; yb[i] = c + 0.5f * h;
+        hbar += 0.125f * h;
+    }
+    vx = bridge_vel8(cx);
+    ax = cx[endpoint_idx];
+    bool use_edges = (anchor_mode == 2);
+    if (use_edges && rate_gate > 0.0f) {
+        float dh = 0.0f;
+#pragma unroll
+        for (int i = 0; i < 7; ++i) dh += fabsf(p[(i+1)*3+2] - p[i*3+2]);
+        dh /= 7.0f;
+        if (dh / (hbar + 1e-3f) <= rate_gate) use_edges = false;
+    }
+    if (anchor_mode == 1) {
+        vy = bridge_vel8(yb);
+        ay = yb[endpoint_idx];
+    } else if (use_edges) {
+        float hn = hbar * hbar + 1e-3f;
+        float wt = 1.0f / (bridge_linres8(yt) / hn + 0.01f);
+        float wb = 1.0f / (bridge_linres8(yb) / hn + 0.01f);
+        float ws = wt + wb;
+        vy = (wt * bridge_vel8(yt) + wb * bridge_vel8(yb)) / ws;
+        ay = (wt * yt[endpoint_idx] + wb * yb[endpoint_idx]) / ws;
+    } else {
+        vy = bridge_vel8(cy);
+        ay = cy[endpoint_idx];
+    }
+}
+
 // Per-track foot-centre ring + EMA box height. Updates every slot that was
 // observed this frame (active, non-empty, age==0 → matched or freshly spawned);
 // coasting lost tracks (age>0) keep a frozen history.
@@ -1286,6 +1350,80 @@ __global__ void update_foot_history_kernel(
     ema_h[t] = (n == 0) ? bh : (0.95f * ema_h[t] + 0.05f * bh);  // alpha=0.05, seed=first bh
 }
 
+// Gap-path occupancy grid: coarse per-frame bitmap of confirmed output boxes,
+// kept as a ring over the last OCC_RING frames. The bridge gate samples the
+// straight lost→cand path across the gap and asks "was this point covered by
+// another track?" — true relinks have HIGHER coverage (occlusion explains the
+// disappearance). Offline: hard AUC 0.625, corr 0.003 with bridge_dist, only
+// informative for long gaps (short-gap AUC 0.44 → gated by occ_gap_min).
+constexpr int OCC_GW = 64, OCC_GH = 36;          // ~30x30 px cells at 1080p
+constexpr int OCC_WORDS = OCC_GW * OCC_GH / 32;  // 72 words per frame slice
+constexpr int OCC_RING = 256;                    // frames of history (~72 KB total)
+
+// Single block; the frame counter lives on-device so the launch is CUDA-graph
+// capture-safe (args are baked at capture, the counter is not).
+__global__ void occupancy_update_kernel(
+    const bool* active, const int* state, const int* age, const float* states,
+    int max_objs, int frame_w, int frame_h,
+    unsigned int* occ_grid, int* occ_frame)
+{
+    __shared__ int s_f;
+    if (threadIdx.x == 0) s_f = ++(*occ_frame);
+    __syncthreads();
+    unsigned int* slice = occ_grid + (size_t)(s_f & (OCC_RING - 1)) * OCC_WORDS;
+    for (int w = threadIdx.x; w < OCC_WORDS; w += blockDim.x) slice[w] = 0u;
+    __syncthreads();
+    float inv_cw = (float)OCC_GW / fmaxf((float)frame_w, 1.0f);
+    float inv_ch = (float)OCC_GH / fmaxf((float)frame_h, 1.0f);
+    for (int t = threadIdx.x; t < max_objs; t += blockDim.x) {
+        if (!active[t] || state[t] != TRACK_CONFIRMED || age[t] != 0) continue;
+        float cx = states[t * 8 + 0], cy = states[t * 8 + 1];
+        float h = states[t * 8 + 3], bw = states[t * 8 + 2] * h;
+        int gx0 = max(0, (int)((cx - 0.5f * bw) * inv_cw));
+        int gx1 = min(OCC_GW - 1, (int)((cx + 0.5f * bw) * inv_cw));
+        int gy0 = max(0, (int)((cy - 0.5f * h) * inv_ch));
+        int gy1 = min(OCC_GH - 1, (int)((cy + 0.5f * h) * inv_ch));
+        for (int gy = gy0; gy <= gy1; ++gy)
+            for (int gx = gx0; gx <= gx1; ++gx) {
+                int bit = gy * OCC_GW + gx;
+                atomicOr(&slice[bit >> 5], 1u << (bit & 31));
+            }
+    }
+}
+
+__device__ inline bool occ_test(const unsigned int* slice, float px, float py,
+                                float inv_cw, float inv_ch)
+{
+    int gx = (int)(px * inv_cw), gy = (int)(py * inv_ch);
+    if (gx < 0 || gx >= OCC_GW || gy < 0 || gy >= OCC_GH) return false;
+    int bit = gy * OCC_GW + gx;
+    return (slice[bit >> 5] >> (bit & 31)) & 1u;
+}
+
+// Fraction of sampled gap frames whose interpolated foot point is covered by
+// another track's box. Returns -1 when no valid sample (gate passes through).
+__device__ float occ_gap_cover(
+    const unsigned int* occ_grid, int fcur,
+    float lfx, float lfy, float cfx, float cfy, int f_lost, int f_cand,
+    float inv_cw, float inv_ch)
+{
+    int gap = f_cand - f_lost;
+    int n_int = gap - 1;
+    if (n_int < 1) return -1.0f;
+    int step = max(1, n_int / 16);
+    int n = 0, cov = 0;
+    for (int f = f_lost + 1; f < f_cand; f += step) {
+        if (f <= 0 || fcur - f >= OCC_RING) continue;  // pre-start or stale slice
+        float alpha = (float)(f - f_lost) / (float)gap;
+        float px = lfx + alpha * (cfx - lfx);
+        float py = lfy + alpha * (cfy - lfy);
+        const unsigned int* slice = occ_grid + (size_t)(f & (OCC_RING - 1)) * OCC_WORDS;
+        ++n;
+        if (occ_test(slice, px, py, inv_cw, inv_ch)) ++cov;
+    }
+    return n > 0 ? (float)cov / (float)n : -1.0f;
+}
+
 // Pass 1 (propose): one thread per candidate track that first hits hit_streak==
 // bridge_at. Scan live lost tracks, foot-bridge each, keep the closest under
 // bridge_px (with optional speed/spatial/margin gates), then claim the chosen
@@ -1299,6 +1437,9 @@ __global__ void relink_bidir_propose_kernel(
     float bridge_max_speed, float bridge_person_height, float bridge_fps,
     float bridge_margin, float bridge_spatial_gate, int bridge_anchor,
     float bridge_anchor_rate, float bridge_h_lo, float bridge_h_hi,
+    const unsigned int* occ_grid, const int* occ_frame,
+    float occ_gate_cover, int occ_gap_min, float occ_expand_px, float occ_expand_cover,
+    int frame_w, int frame_h,
     int* track_revived, int* bridge_claim, int* bridge_cand_lost, int* dbg)
 {
     int cand = blockIdx.x * blockDim.x + threadIdx.x;
@@ -1316,6 +1457,12 @@ __global__ void relink_bidir_propose_kernel(
     bridge_anchor4(cring, bridge_anchor, bridge_anchor_rate, 0, cx0, cy0, vxc, vyc);  // cand head-4
     float cand_cx = states[cand * 8 + 0], cand_cy = states[cand * 8 + 1];
     float cand_h = states[cand * 8 + 3], ema_cand = ema_h[cand];
+    // Gap-occupancy gate context (anchor-mode independent: explicit foot points,
+    // matching the offline validation in scripts/tools/gap_occupancy_features.py).
+    int occ_fcur = occ_grid ? *occ_frame : 0;
+    float occ_inv_cw = (float)OCC_GW / fmaxf((float)frame_w, 1.0f);
+    float occ_inv_ch = (float)OCC_GH / fmaxf((float)frame_h, 1.0f);
+    float cand_fx = cring[0], cand_fy = cring[1] + 0.5f * cring[2];  // entry foot
 
     float best_dist = 1e30f, second_dist = 1e30f;
     int best_lost = -1;
@@ -1376,7 +1523,25 @@ __global__ void relink_bidir_propose_kernel(
         float s_lost = sqrtf(vxl * vxl + vyl * vyl) / h_ref;           // exit speed (h/f)
         float w = sqrtf(fminf(fmaxf(s_lost / 0.12f, 0.0f), 1.0f));
         float bdist = w * 0.5f * (fwd_r + bwd_r) + (1.0f - w) * dist_h;
-        if (bdist > bridge_px) continue;
+        // Gap-occupancy gate (long gaps only). Veto: an unexplained long-gap
+        // bridge (path not covered by another track) is likely a different
+        // person. Tiered expansion: a highly-covered path unlocks a looser
+        // bridge_px. occ<0 (no valid sample) passes through both.
+        bool ok = bdist <= bridge_px;
+        int gap_len = la - bridge_at + 1;
+        if (occ_grid && gap_len >= occ_gap_min) {
+            bool expandable = !ok && occ_expand_px > bridge_px && bdist <= occ_expand_px;
+            if (occ_gate_cover > 0.0f || expandable) {
+                float lfx = lring[(ln - 1) * 3 + 0];                      // exit foot
+                float lfy = lring[(ln - 1) * 3 + 1] + 0.5f * lring[(ln - 1) * 3 + 2];
+                float occ = occ_gap_cover(occ_grid, occ_fcur, lfx, lfy, cand_fx, cand_fy,
+                                          occ_fcur - la, occ_fcur - bridge_at + 1,
+                                          occ_inv_cw, occ_inv_ch);
+                if (occ_gate_cover > 0.0f && occ >= 0.0f && occ < occ_gate_cover) continue;
+                if (expandable && occ >= occ_expand_cover) ok = true;
+            }
+        }
+        if (!ok) continue;
         if (bdist < best_dist) { second_dist = best_dist; best_dist = bdist; best_lost = lost; }
         else if (bdist < second_dist) { second_dist = bdist; }
     }
@@ -1859,6 +2024,8 @@ public:
         cudaFree(d_score_sum_);
         cudaFree(d_foot_ring_); cudaFree(d_foot_len_); cudaFree(d_ema_h_);
         cudaFree(d_track_revived_); cudaFree(d_bridge_claim_); cudaFree(d_bridge_cand_lost_);
+        if (d_occ_grid_) cudaFree(d_occ_grid_);
+        if (d_occ_frame_) cudaFree(d_occ_frame_);
         cudaFree(d_has_clean_embedding_); cudaFree(d_candidate_count_);
         cudaFree(d_s_inv_);
         cudaFree(d_homography_);
@@ -2103,6 +2270,17 @@ public:
             update_foot_history_kernel<<<grid, 256, 0, stream>>>(
                 d_active_, d_state_, d_age_, d_states_,
                 max_objs_, FOOT_RING_CAP, d_foot_ring_, d_foot_len_, d_ema_h_);
+            // Gap-occupancy grid (only when an occ gate is enabled; otherwise no
+            // kernel runs and the propose kernel sees occ_grid==nullptr →
+            // bit-identical). Rasterizes this frame's output set (confirmed,
+            // age==0), which the bridge commit below does not change.
+            bool occ_on = d_occ_grid_ != nullptr &&
+                          (occ_gate_cover_ > 0.0f || occ_expand_px_ > 0.0f);
+            if (occ_on) {
+                occupancy_update_kernel<<<1, 256, 0, stream>>>(
+                    d_active_, d_state_, d_age_, d_states_,
+                    max_objs_, frame_w_, frame_h_, d_occ_grid_, d_occ_frame_);
+            }
             cudaMemsetAsync(d_bridge_claim_, 0, max_objs_ * sizeof(int), stream);
             relink_bidir_propose_kernel<<<grid, 256, 0, stream>>>(
                 d_active_, d_state_, d_age_, d_hit_streak_,
@@ -2113,6 +2291,9 @@ public:
                 bridge_max_speed_, bridge_person_height_, bridge_fps_,
                 bridge_margin_, bridge_spatial_gate_, bridge_anchor_, bridge_anchor_rate_,
                 bridge_h_lo_, bridge_h_hi_,
+                occ_on ? d_occ_grid_ : nullptr, occ_on ? d_occ_frame_ : nullptr,
+                occ_gate_cover_, occ_gap_min_, occ_expand_px_, occ_expand_cover_,
+                frame_w_, frame_h_,
                 d_track_revived_, d_bridge_claim_, d_bridge_cand_lost_, d_relink_dbg_);
             relink_bidir_commit_kernel<<<grid, 256, 0, stream>>>(
                 d_active_, d_track_ids_, max_objs_,
@@ -2167,7 +2348,9 @@ public:
                            float bridge_fps = 30.0f, float bridge_margin = 0.0f,
                            float bridge_spatial_gate = 0.0f, int bridge_anchor = 0,
                            float bridge_anchor_rate = 0.0f,
-                           float bridge_h_lo = 0.0f, float bridge_h_hi = 0.0f) {
+                           float bridge_h_lo = 0.0f, float bridge_h_hi = 0.0f,
+                           float occ_gate_cover = 0.0f, int occ_gap_min = 30,
+                           float occ_expand_px = 0.0f, float occ_expand_cover = 0.9f) {
         relink_enabled_ = enabled;
         relink_bank_cap_ = std::max(1, bank_cap);
         relink_sim_thresh_ = sim_thresh;
@@ -2189,6 +2372,18 @@ public:
         bridge_anchor_rate_ = std::max(0.0f, bridge_anchor_rate);
         bridge_h_lo_ = std::max(0.0f, bridge_h_lo);
         bridge_h_hi_ = std::max(0.0f, bridge_h_hi);
+        occ_gate_cover_ = std::clamp(occ_gate_cover, 0.0f, 1.0f);
+        occ_gap_min_ = std::max(1, occ_gap_min);
+        occ_expand_px_ = std::max(0.0f, occ_expand_px);
+        occ_expand_cover_ = std::clamp(occ_expand_cover, 0.0f, 1.0f);
+        // Occupancy ring (~72 KB): lazily allocated only when an occ gate is on.
+        if (bidirectional_ && (occ_gate_cover_ > 0.0f || occ_expand_px_ > 0.0f) &&
+            d_occ_grid_ == nullptr) {
+            checkCuda(cudaMalloc(&d_occ_grid_, (size_t)OCC_RING * OCC_WORDS * sizeof(unsigned int)));
+            checkCuda(cudaMalloc(&d_occ_frame_, sizeof(int)));
+            checkCuda(cudaMemset(d_occ_grid_, 0, (size_t)OCC_RING * OCC_WORDS * sizeof(unsigned int)));
+            checkCuda(cudaMemset(d_occ_frame_, 0, sizeof(int)));
+        }
         // The bridge writes bridge_attempts/accepts into d_relink_dbg_[2..3]; make
         // sure the debug buffer exists even if the appearance bank is disabled.
         if (bidirectional_ && d_relink_dbg_ == nullptr) {
@@ -2556,12 +2751,18 @@ private:
     float bridge_anchor_rate_   = 0.0f; // adaptive deformation gate (mean |Δh|/h̄); 0=always-on
     float bridge_h_lo_          = 0.0f; // scale gate: min ema_lost/ema_cand ratio
     float bridge_h_hi_          = 0.0f; // scale gate: max ratio (<=0 disables the gate)
+    float occ_gate_cover_       = 0.0f; // gap-occupancy veto: min occ_cover (0=off)
+    int   occ_gap_min_          = 30;   // occ gates apply only to gaps >= this (short-gap occ is noise)
+    float occ_expand_px_        = 0.0f; // tiered expansion: looser bridge_px when occ high (0=off)
+    float occ_expand_cover_     = 0.9f; // min occ_cover to unlock the expanded threshold
     float* d_foot_ring_     = nullptr;  // [max_objs * FOOT_RING_CAP * 3]  (cx,cy,h) chronological
     int*   d_foot_len_      = nullptr;  // [max_objs]  saturating count (cap FOOT_RING_CAP)
     float* d_ema_h_         = nullptr;  // [max_objs]  EMA box height (0 = unseeded)
     int*   d_track_revived_ = nullptr;  // [max_objs]  fire-once flag per track life
     int*   d_bridge_claim_  = nullptr;  // [max_objs]  per-frame atomicMax claim key on a lost slot
     int*   d_bridge_cand_lost_ = nullptr;  // [max_objs]  per-frame: candidate's chosen lost slot (-1)
+    unsigned int* d_occ_grid_  = nullptr;  // [OCC_RING * OCC_WORDS]  per-frame occupancy bitmaps
+    int*   d_occ_frame_        = nullptr;  // device frame counter for the occupancy ring
 
     bool enable_quality_scaling_ = false;
     float q_w_aspect_ = 0.50f;
@@ -2658,12 +2859,15 @@ void GPUByteTracker::set_relink_params(bool enabled, int bank_cap, float sim_thr
                                        float bridge_person_height, float bridge_fps,
                                        float bridge_margin, float bridge_spatial_gate,
                                        int bridge_anchor, float bridge_anchor_rate,
-                                       float bridge_h_lo, float bridge_h_hi) {
+                                       float bridge_h_lo, float bridge_h_hi,
+                                       float occ_gate_cover, int occ_gap_min,
+                                       float occ_expand_px, float occ_expand_cover) {
     pimpl_->set_relink_params(enabled, bank_cap, sim_thresh, cheb_lambda, spatial_gate, max_age,
                               bidirectional, bridge_px, bridge_at, bridge_min_lost, bridge_ttl,
                               bridge_max_speed, bridge_person_height, bridge_fps, bridge_margin,
                               bridge_spatial_gate, bridge_anchor, bridge_anchor_rate,
-                              bridge_h_lo, bridge_h_hi);
+                              bridge_h_lo, bridge_h_hi,
+                              occ_gate_cover, occ_gap_min, occ_expand_px, occ_expand_cover);
 }
 std::vector<int> GPUByteTracker::get_relink_debug() { return pimpl_->get_relink_debug(); }
 void GPUByteTracker::set_oao_params(float tau) {

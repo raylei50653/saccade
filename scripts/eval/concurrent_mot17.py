@@ -186,7 +186,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--preset",
-        choices=["speed", "baseline", "accuracy"],
+        choices=["speed", "baseline", "accuracy", "mamba_whole_graph"],
         default=None,
         help="Built-in preset config",
     )

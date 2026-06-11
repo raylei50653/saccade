@@ -1490,6 +1490,10 @@ class EvalPipeline:
                 bridge_anchor_rate=cfg.relink_bridge_anchor_rate,
                 bridge_h_lo=cfg.relink_bridge_h_lo,
                 bridge_h_hi=cfg.relink_bridge_h_hi,
+                occ_gate_cover=cfg.relink_bridge_occ_gate_cover,
+                occ_gap_min=cfg.relink_bridge_occ_gap_min,
+                occ_expand_px=cfg.relink_bridge_occ_expand_px,
+                occ_expand_cover=cfg.relink_bridge_occ_expand_cover,
             )
 
         if hasattr(detector.tracker, "set_unified_score_params"):
@@ -1677,11 +1681,12 @@ class EvalPipeline:
 
         # F-1: Per-sequence adaptive params — scale temporal params by fps/30
         seq_reid_interval = cfg.reid_interval
-        seq_track_buffer = 30
+        _track_buffer_base = int(cfg.kwargs.get("track_buffer", 30))
+        seq_track_buffer = _track_buffer_base
         if cfg.per_seq_adapt and seq_fps != 30:
             fps_scale = seq_fps / 30.0
             seq_reid_interval = max(1, round(cfg.reid_interval * fps_scale))
-            seq_track_buffer = max(10, round(30 * fps_scale))
+            seq_track_buffer = max(10, round(_track_buffer_base * fps_scale))
         if hasattr(detector, "set_whole_graph_img_dims"):
             detector.set_whole_graph_img_dims(h_orig, w_orig)
         detector.tracker.set_frame_size(w_orig, h_orig)

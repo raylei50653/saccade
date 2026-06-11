@@ -174,7 +174,7 @@ def add_semantic_args(parser: argparse.ArgumentParser) -> None:
         default=9.4877,
         help=_help(
             "Chi-square gate threshold for the Kalman relink gate "
-            "(4 DoF: 9.4877=95%, 13.28=99%).",
+            "(4 DoF: 9.4877=95%%, 13.28=99%%).",
             range_hint=">0",
         ),
     )

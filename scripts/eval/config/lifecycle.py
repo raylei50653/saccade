@@ -66,6 +66,10 @@ class LifecycleConfig:
     cheb_gr_max_fwd: int = 50
     cheb_gr_fuse_lambda: float = 0.3
     cheb_gr_engine: str = ""
+    # Lost-track memory (ByteTrack track_buffer): frames a lost track survives in
+    # the tracker (and stays available for association + bridge relink) before
+    # removal. Per-seq fps-scaled when per_seq_adapt is on.
+    track_buffer: int = 30
     # Birth-time lost-bank ReID relink (online, GPU). Revive a lost identity at
     # spawn time instead of minting a new id. Precision-first: ID consistency is
     # protected by a high sim threshold + spatial gate (a wrong revive = merging
@@ -94,6 +98,13 @@ class LifecycleConfig:
     relink_bridge_anchor_rate: float = 0.03
     relink_bridge_h_lo: float = 0.75
     relink_bridge_h_hi: float = 1.33
+    # Gap-occupancy gates (long-gap bridges only): occ_cover = fraction of the
+    # interpolated lost→cand gap path covered by other tracks' boxes. True
+    # relinks have HIGHER coverage (occlusion explains the disappearance).
+    relink_bridge_occ_gate_cover: float = 0.0
+    relink_bridge_occ_gap_min: int = 30
+    relink_bridge_occ_expand_px: float = 0.0
+    relink_bridge_occ_expand_cover: float = 0.9
     # Duplicate suppression: remove near-duplicate detections within the same frame
     # (detector artifact where multiple overlapping boxes are produced for the same person)
     duplicate_suppression_enabled: bool = False
@@ -140,6 +151,18 @@ def add_lifecycle_args(parser: argparse.ArgumentParser) -> None:
     grp.description = (
         "Late-stage identity stitching, birth gates, and output pruning. "
         "Load with: --module-lifecycle configs/modules/lifecycle.yaml"
+    )
+    grp.add_argument(
+        "--track-buffer",
+        type=int,
+        default=30,
+        help=_help(
+            "Lost-track memory (ByteTrack track_buffer): frames a lost track "
+            "survives for association and bridge relink before removal. "
+            "Per-seq fps-scaled when per-seq adaptation is on.",
+            range_hint=">=1, default 30",
+            edge="longer memory lets stale lost tracks steal associations",
+        ),
     )
     grp.add_argument(
         "--birth-quality-gate",
@@ -892,5 +915,48 @@ def add_lifecycle_args(parser: argparse.ArgumentParser) -> None:
             "ratio exceeds this. 0 disables the gate.",
             range_hint="0 or >=1, suggested 1.33",
             edge="lost TPs are all gap>=37 long-gap bridges near the band edge",
+        ),
+    )
+    grp.add_argument(
+        "--relink-bridge-occ-gate-cover",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Gap-occupancy veto: reject long-gap bridges whose interpolated gap "
+            "path has occ_cover below this (an unexplained disappearance is "
+            "likely a different person). Offline @0.5: -53 wrong / -1 correct. "
+            "0 disables.",
+            range_hint="0-1, suggested 0.5",
+        ),
+    )
+    grp.add_argument(
+        "--relink-bridge-occ-gap-min",
+        type=int,
+        default=30,
+        help=_help(
+            "Occupancy gates apply only to gaps >= this many frames; short-gap "
+            "occ_cover is noise (crowd AUC 0.44, would kill true positives).",
+            range_hint=">=1, suggested 30",
+        ),
+    )
+    grp.add_argument(
+        "--relink-bridge-occ-expand-px",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Tiered expansion: long-gap bridges with occ_cover >= "
+            "--relink-bridge-occ-expand-cover are accepted up to this looser "
+            "bridge score instead of --relink-bridge-px. Offline tiered "
+            "(0.3/1.0 @ occ>=0.9): +15 correct at held precision. 0 disables.",
+            range_hint="> bridge_px, suggested 0.5-1.0",
+        ),
+    )
+    grp.add_argument(
+        "--relink-bridge-occ-expand-cover",
+        type=float,
+        default=0.9,
+        help=_help(
+            "Minimum occ_cover to unlock the expanded bridge threshold.",
+            range_hint="0-1, suggested 0.9",
         ),
     )
