@@ -116,6 +116,66 @@ def _velocity(seg):
     return (vx / n, vy / n) if n else (0.0, 0.0)
 
 
+def _vel_ols(traj, n: int, forward: bool = True) -> tuple[float, float]:
+    """OLS velocity from the last/first `n` frames of a trajectory.
+
+    Uses actual frame numbers (handles detection gaps correctly).
+    Returns (vx, vy) in px/frame pointing in the direction of motion.
+    Falls back to _velocity on < 2 usable frames.
+    """
+    seg = traj[-n:] if forward else traj[:n]
+    if len(seg) < 2:
+        return _velocity(traj[-4:] if forward else traj[:4])
+    frames = np.array([r[0] for r in seg], dtype=np.float64)
+    fps = np.array([_foot(r[1], r[2], r[3]) for r in seg], dtype=np.float64)
+    t_mean = frames.mean()
+    Stt = ((frames - t_mean) ** 2).sum()
+    if Stt < 1e-9:
+        return 0.0, 0.0
+    vx = float(((frames - t_mean) * fps[:, 0]).sum() / Stt)
+    vy = float(((frames - t_mean) * fps[:, 1]).sum() / Stt)
+    return vx, vy
+
+
+def _vel_long_baseline(
+    traj, T: int, W: int, forward: bool = True
+) -> tuple[float, float]:
+    """Long-baseline windowed velocity: (mean(anchor_W) − mean(base_W)) / T.
+
+    For the lost track (forward=True):
+        anchor = last W frames  (recent end)
+        base   = W frames starting T frames before the anchor
+        v = (anchor_mean − base_mean) / T   [points forward]
+
+    For the candidate track (forward=False):
+        anchor = first W frames  (early end)
+        base   = W frames starting T frames after the anchor
+        v = (base_mean − anchor_mean) / T   [points forward = entry direction]
+
+    Falls back to _vel_ols(n=4) when the track is too short.
+    """
+    if forward:
+        anchor_seg = traj[-W:] if len(traj) >= W else traj
+        base_seg = traj[-(T + W) : -T] if len(traj) >= T + W else []
+    else:
+        anchor_seg = traj[:W] if len(traj) >= W else traj
+        base_seg = traj[T : T + W] if len(traj) >= T + W else []
+
+    if len(base_seg) < 1:
+        return _vel_ols(traj, n=4, forward=forward)
+
+    def _mean_foot(seg):
+        pts = np.array([_foot(r[1], r[2], r[3]) for r in seg], dtype=np.float64)
+        return pts.mean(axis=0)
+
+    a = _mean_foot(anchor_seg)
+    b = _mean_foot(base_seg)
+    if forward:
+        return float((a[0] - b[0]) / T), float((a[1] - b[1]) / T)
+    else:
+        return float((b[0] - a[0]) / T), float((b[1] - a[1]) / T)
+
+
 def _h_trim(traj, window: int = 4, skip: int = 1) -> float:
     """Average height over `window` frames, skipping `skip` terminal frames."""
     seg = traj[-(window + skip) : -skip] if len(traj) > skip else traj[:-1]
@@ -180,8 +240,8 @@ def pair_features(traj_a, traj_b, anchor=4):
     ax, ay = _foot(la_cx, la_cy, la_h)  # lost exit foot
     bx, by = _foot(fb_cx, fb_cy, fb_h)  # cand entry foot
 
-    vax, vay = _velocity(traj_a[-anchor:])  # lost exit velocity
-    vbx, vby = _velocity(traj_b[:anchor])  # cand entry velocity
+    vax, vay = _velocity(traj_a[-anchor:])  # lost exit velocity (current default)
+    vbx, vby = _velocity(traj_b[:anchor])  # cand entry velocity (current default)
 
     # forward: extrapolate lost to cand's first frame
     fx, fy = ax + vax * gap, ay + vay * gap
@@ -204,6 +264,57 @@ def pair_features(traj_a, traj_b, anchor=4):
     # own exit/entry speeds (heights/frame) for the reach-gate model
     lost_exit_speed = nv / h_ref
     cand_entry_speed = np.hypot(vbx, vby) / h_ref
+
+    # ── velocity variant columns ──────────────────────────────────────────────
+    # Each variant stores fwd_r, bwd_r (normalised residuals, same h_ref) and
+    # s_lost (exit speed in h/frame) so sweep_velocity_variants.py can reconstruct
+    # the full bridge score without needing to re-read trajectories.
+    # Naming: fwd_{tag}, bwd_{tag}, sl_{tag}
+    def _vel_feats(vl, vc, tag):
+        """Compute fwd/bwd residuals and s_lost for a given (lost, cand) velocity pair."""
+        fx_ = ax + vl[0] * gap
+        fy_ = ay + vl[1] * gap
+        rx_ = bx - vc[0] * gap
+        ry_ = by - vc[1] * gap
+        return {
+            f"fwd_{tag}": np.hypot(fx_ - bx, fy_ - by) / h_ref,
+            f"bwd_{tag}": np.hypot(rx_ - ax, ry_ - ay) / h_ref,
+            f"sl_{tag}": np.hypot(vl[0], vl[1]) / h_ref,
+        }
+
+    # v4_ols: 4-frame OLS (matches GPU bridge_vel4 formula)
+    v4l = _vel_ols(traj_a, n=4, forward=True)
+    v4c = _vel_ols(traj_b, n=4, forward=False)
+    # v8_ols: 8-frame OLS (fits current FOOT_RING_CAP=8, no GPU change)
+    v8l = _vel_ols(traj_a, n=8, forward=True)
+    v8c = _vel_ols(traj_b, n=8, forward=False)
+    # v16_ols: 16-frame OLS (ring_cap=16 needed)
+    v16l = _vel_ols(traj_a, n=16, forward=True)
+    v16c = _vel_ols(traj_b, n=16, forward=False)
+    # v32_ols: 32-frame OLS (ring_cap=32 needed)
+    v32l = _vel_ols(traj_a, n=32, forward=True)
+    v32c = _vel_ols(traj_b, n=32, forward=False)
+    # lb_T10_W4: long baseline T=10, W=4 (ring_cap=14 needed)
+    lb10l = _vel_long_baseline(traj_a, T=10, W=4, forward=True)
+    lb10c = _vel_long_baseline(traj_b, T=10, W=4, forward=False)
+    # lb_T20_W5: long baseline T=20, W=5 (ring_cap=25 needed)
+    lb20l = _vel_long_baseline(traj_a, T=20, W=5, forward=True)
+    lb20c = _vel_long_baseline(traj_b, T=20, W=5, forward=False)
+    # lb_T30_W10: user's proposal T=30, W=10 (ring_cap=40 needed)
+    lb30l = _vel_long_baseline(traj_a, T=30, W=10, forward=True)
+    lb30c = _vel_long_baseline(traj_b, T=30, W=10, forward=False)
+
+    vel_variants = {}
+    for tag, vl, vc in [
+        ("v4ols", v4l, v4c),
+        ("v8ols", v8l, v8c),
+        ("v16ols", v16l, v16c),
+        ("v32ols", v32l, v32c),
+        ("lb10", lb10l, lb10c),
+        ("lb20", lb20l, lb20c),
+        ("lb30", lb30l, lb30c),
+    ]:
+        vel_variants.update(_vel_feats(vl, vc, tag))
 
     return {
         "gap": gap,
@@ -235,6 +346,7 @@ def pair_features(traj_a, traj_b, anchor=4):
         "h_cand_win6": h_cand_win6,
         "h_lost_extrap": h_lost_extrap,
         "h_cand_extrap": h_cand_extrap,
+        **vel_variants,
     }
 
 
@@ -322,6 +434,30 @@ COLS = [
     "h_cand_win6",
     "h_lost_extrap",
     "h_cand_extrap",
+    # velocity variant columns: fwd_{tag}, bwd_{tag}, sl_{tag}
+    # tag legend: v4ep=current(endpoint-diff), v4ols=GPU-matched OLS, v8ols, v16ols, v32ols,
+    #             lb10=long-baseline T=10 W=4, lb20=T=20 W=5, lb30=T=30 W=10
+    "fwd_v4ols",
+    "bwd_v4ols",
+    "sl_v4ols",
+    "fwd_v8ols",
+    "bwd_v8ols",
+    "sl_v8ols",
+    "fwd_v16ols",
+    "bwd_v16ols",
+    "sl_v16ols",
+    "fwd_v32ols",
+    "bwd_v32ols",
+    "sl_v32ols",
+    "fwd_lb10",
+    "bwd_lb10",
+    "sl_lb10",
+    "fwd_lb20",
+    "bwd_lb20",
+    "sl_lb20",
+    "fwd_lb30",
+    "bwd_lb30",
+    "sl_lb30",
 ]
 
 
