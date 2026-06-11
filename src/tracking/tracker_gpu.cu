@@ -1298,7 +1298,7 @@ __global__ void relink_bidir_propose_kernel(
     float bridge_px, int bridge_at, int bridge_min_lost, int bridge_ttl,
     float bridge_max_speed, float bridge_person_height, float bridge_fps,
     float bridge_margin, float bridge_spatial_gate, int bridge_anchor,
-    float bridge_anchor_rate,
+    float bridge_anchor_rate, float bridge_h_lo, float bridge_h_hi,
     int* track_revived, int* bridge_claim, int* bridge_cand_lost, int* dbg)
 {
     int cand = blockIdx.x * blockDim.x + threadIdx.x;
@@ -1342,6 +1342,12 @@ __global__ void relink_bidir_propose_kernel(
         float lost_h = states[lost * 8 + 3], ema_lost = ema_h[lost];
         float h_ref = fmaxf(ema_lost, 1.0f);
 
+        // Scale gate (disabled when bridge_h_hi<=0): lost/cand height ratio must
+        // stay inside [h_lo, h_hi]; large size jumps across the gap are bogus.
+        if (bridge_h_hi > 0.0f) {
+            float hr = fmaxf(ema_lost, 1e-3f) / fmaxf(ema_cand, 1e-3f);
+            if (hr < bridge_h_lo || hr > bridge_h_hi) continue;
+        }
         // Physical speed gate (disabled when bridge_max_speed<=0).
         if (bridge_max_speed > 0.0f && bridge_person_height > 0.0f) {
             float lcx = states[lost * 8 + 0], lcy = states[lost * 8 + 1];
@@ -2106,6 +2112,7 @@ public:
                 bridge_px_, bridge_at_, bridge_min_lost_, bridge_ttl_,
                 bridge_max_speed_, bridge_person_height_, bridge_fps_,
                 bridge_margin_, bridge_spatial_gate_, bridge_anchor_, bridge_anchor_rate_,
+                bridge_h_lo_, bridge_h_hi_,
                 d_track_revived_, d_bridge_claim_, d_bridge_cand_lost_, d_relink_dbg_);
             relink_bidir_commit_kernel<<<grid, 256, 0, stream>>>(
                 d_active_, d_track_ids_, max_objs_,
@@ -2159,7 +2166,8 @@ public:
                            float bridge_max_speed = 0.0f, float bridge_person_height = 1.65f,
                            float bridge_fps = 30.0f, float bridge_margin = 0.0f,
                            float bridge_spatial_gate = 0.0f, int bridge_anchor = 0,
-                           float bridge_anchor_rate = 0.0f) {
+                           float bridge_anchor_rate = 0.0f,
+                           float bridge_h_lo = 0.0f, float bridge_h_hi = 0.0f) {
         relink_enabled_ = enabled;
         relink_bank_cap_ = std::max(1, bank_cap);
         relink_sim_thresh_ = sim_thresh;
@@ -2179,6 +2187,8 @@ public:
         bridge_spatial_gate_ = std::max(0.0f, bridge_spatial_gate);
         bridge_anchor_ = (bridge_anchor < 0 || bridge_anchor > 2) ? 0 : bridge_anchor;
         bridge_anchor_rate_ = std::max(0.0f, bridge_anchor_rate);
+        bridge_h_lo_ = std::max(0.0f, bridge_h_lo);
+        bridge_h_hi_ = std::max(0.0f, bridge_h_hi);
         // The bridge writes bridge_attempts/accepts into d_relink_dbg_[2..3]; make
         // sure the debug buffer exists even if the appearance bank is disabled.
         if (bidirectional_ && d_relink_dbg_ == nullptr) {
@@ -2544,6 +2554,8 @@ private:
     float bridge_spatial_gate_  = 0.0f;
     int   bridge_anchor_        = 0;    // 0=center 1=foot 2=adaptive (residual-weighted)
     float bridge_anchor_rate_   = 0.0f; // adaptive deformation gate (mean |Δh|/h̄); 0=always-on
+    float bridge_h_lo_          = 0.0f; // scale gate: min ema_lost/ema_cand ratio
+    float bridge_h_hi_          = 0.0f; // scale gate: max ratio (<=0 disables the gate)
     float* d_foot_ring_     = nullptr;  // [max_objs * FOOT_RING_CAP * 3]  (cx,cy,h) chronological
     int*   d_foot_len_      = nullptr;  // [max_objs]  saturating count (cap FOOT_RING_CAP)
     float* d_ema_h_         = nullptr;  // [max_objs]  EMA box height (0 = unseeded)
@@ -2645,11 +2657,13 @@ void GPUByteTracker::set_relink_params(bool enabled, int bank_cap, float sim_thr
                                        int bridge_min_lost, int bridge_ttl, float bridge_max_speed,
                                        float bridge_person_height, float bridge_fps,
                                        float bridge_margin, float bridge_spatial_gate,
-                                       int bridge_anchor, float bridge_anchor_rate) {
+                                       int bridge_anchor, float bridge_anchor_rate,
+                                       float bridge_h_lo, float bridge_h_hi) {
     pimpl_->set_relink_params(enabled, bank_cap, sim_thresh, cheb_lambda, spatial_gate, max_age,
                               bidirectional, bridge_px, bridge_at, bridge_min_lost, bridge_ttl,
                               bridge_max_speed, bridge_person_height, bridge_fps, bridge_margin,
-                              bridge_spatial_gate, bridge_anchor, bridge_anchor_rate);
+                              bridge_spatial_gate, bridge_anchor, bridge_anchor_rate,
+                              bridge_h_lo, bridge_h_hi);
 }
 std::vector<int> GPUByteTracker::get_relink_debug() { return pimpl_->get_relink_debug(); }
 void GPUByteTracker::set_oao_params(float tau) {

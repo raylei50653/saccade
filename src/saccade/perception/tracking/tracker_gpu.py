@@ -614,6 +614,8 @@ class GPUByteTracker:
         bridge_spatial_gate: float = 0.0,
         bridge_anchor: int = 0,
         bridge_anchor_rate: float = 0.0,
+        bridge_h_lo: float = 0.0,
+        bridge_h_hi: float = 0.0,
     ) -> None:
         setter = getattr(self.tracker, "set_relink_params", None)
         if setter is not None:
@@ -636,6 +638,8 @@ class GPUByteTracker:
                 bridge_spatial_gate,
                 bridge_anchor,
                 bridge_anchor_rate,
+                bridge_h_lo,
+                bridge_h_hi,
             )
 
     def get_relink_debug(self) -> list[int]:

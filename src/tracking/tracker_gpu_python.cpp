@@ -482,6 +482,8 @@ public:
         int claim_warmup_frames = 3,
         bool bidirectional = false,
         float bridge_px = 1.5f,
+        float bridge_h_lo = 0.0f,
+        float bridge_h_hi = 0.0f,
         bool exp_density_gating = false,
         float exp_density_k = 2.0f,
         float exp_density_eta = 0.15f
@@ -529,6 +531,8 @@ public:
           claim_warmup_frames_(std::max(1, claim_warmup_frames)),
           bidirectional_(bidirectional),
           bridge_px_(bridge_px),
+          bridge_h_lo_(std::max(0.0f, bridge_h_lo)),
+          bridge_h_hi_(std::max(0.0f, bridge_h_hi)),
           split_counter_(0) {}
 
     void update_motion_snapshots(const std::vector<TrackStateSnapshot>& snapshots, int frame_id = -1) {
@@ -1046,6 +1050,7 @@ public:
             }
         }
         if (bidirectional_) {
+            if (!bridge_scale_gate_ok(cid, raw_id)) return false;
             if (gate[1] >= 0.0f) {
                 if (gate[1] > bridge_px_) return false;    // backward bridge
             } else {
@@ -1211,6 +1216,10 @@ public:
                 }
                 // Bidirectional midpoint bridge gate.
                 if (bidirectional_) {
+                    if (!bridge_scale_gate_ok(cid, raw_id)) {
+                        stats_.reject_backward += 1;
+                        continue;
+                    }
                     auto fh = foot_history_.find(cid);
                     if (fh != foot_history_.end()) {
                         float b_cx = (box.x1 + box.x2) * 0.5f;
@@ -1523,6 +1532,17 @@ public:
                 (3.0f * y3 + y2 - y1 - 3.0f * y0) / 10.0f};
     }
 
+    // Scale gate (disabled when bridge_h_hi<=0): lost/cand EMA-height ratio must
+    // stay inside [h_lo, h_hi]; large size jumps across the gap are bogus bridges.
+    bool bridge_scale_gate_ok(int lost_id, int cand_id) const {
+        if (bridge_h_hi_ <= 0.0f) return true;
+        auto hl = ema_h_.find(lost_id);
+        auto hc = ema_h_.find(cand_id);
+        if (hl == ema_h_.end() || hc == ema_h_.end()) return true;
+        float hr = std::max(hl->second, 1e-3f) / std::max(hc->second, 1e-3f);
+        return hr >= bridge_h_lo_ && hr <= bridge_h_hi_;
+    }
+
     // Bidirectional midpoint bridge distance. Propagates both lost track and
     // candidate through half the gap using regressed velocities, then measures
     // Euclidean distance between the two midpoints, normalized by average height.
@@ -1542,11 +1562,9 @@ public:
         auto [vx_c, vy_c] = regress_velocity_4(
             std::vector<std::pair<float, float>>(
                 cand_hist.begin(), cand_hist.begin() + std::min((int)cand_hist.size(), 4)));
-        float h_lost = 1.0f, h_cand = 1.0f;
+        float h_lost = 1.0f;
         auto hl = ema_h_.find(lost_id);
         if (hl != ema_h_.end()) h_lost = hl->second;
-        auto hc = ema_h_.find(cand_id);
-        if (hc != ema_h_.end()) h_cand = hc->second;
         float h_ref = std::max(h_lost, 1.0f);
         float lx = lost_hist.back().first, ly = lost_hist.back().second;
         float cxf = cand_hist[0].first, cyf = cand_hist[0].second;
@@ -1779,6 +1797,10 @@ public:
                 // Bidirectional midpoint bridge gate: both clouds must intersect
                 // at the midpoint within bridge_px * h_ref.
                 if (bidirectional_) {
+                    if (!bridge_scale_gate_ok(cid, raw_id)) {
+                        stats_.reject_backward += 1;
+                        continue;
+                    }
                     if (gate && gate[1] >= 0.0f) {
                         if (gate[1] > bridge_px_) { stats_.reject_backward += 1; continue; }
                         stats_.accept_bidir += 1;
@@ -2450,6 +2472,8 @@ private:
     int claim_warmup_frames_;
     bool bidirectional_;
     float bridge_px_;
+    float bridge_h_lo_;
+    float bridge_h_hi_;
     int split_counter_;
 
     std::unordered_map<int, int> alias_;
@@ -2943,6 +2967,7 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
              py::arg("bridge_fps") = 30.0f, py::arg("bridge_margin") = 0.0f,
              py::arg("bridge_spatial_gate") = 0.0f, py::arg("bridge_anchor") = 0,
              py::arg("bridge_anchor_rate") = 0.0f,
+             py::arg("bridge_h_lo") = 0.0f, py::arg("bridge_h_hi") = 0.0f,
              "Birth-time lost-bank ReID relink: revive a lost identity at spawn instead "
              "of minting a new id. Precision-first (high sim threshold + spatial gate). "
              "The bridge_* args enable the Phase-4 Kalman-free bidirectional foot-bridge "
@@ -3095,7 +3120,7 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         }, "Raw C++ pointer to this GPUByteTracker (for Workbench construction)");
 
     py::class_<SemanticRelinkerCpp>(m, "SemanticRelinker")
-        .def(py::init<float, int, float, float, int, float, float, int, float, std::string, float, bool, float, float, float, float, float, float, float, float, float, float, float, float, float, float, bool, float, float, float, float, float, float, float, float, float, bool, int, bool, float, bool, float, float>(),
+        .def(py::init<float, int, float, float, int, float, float, int, float, std::string, float, bool, float, float, float, float, float, float, float, float, float, float, float, float, float, float, bool, float, float, float, float, float, float, float, float, float, bool, int, bool, float, float, float, bool, float, float>(),
              py::arg("sim_threshold") = 0.985f,
              py::arg("ttl") = 45,
              py::arg("ema_beta") = 0.83f,
@@ -3136,6 +3161,8 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
              py::arg("claim_warmup_frames") = 3,
              py::arg("bidirectional") = false,
              py::arg("bridge_px") = 1.5f,
+             py::arg("bridge_h_lo") = 0.0f,
+             py::arg("bridge_h_hi") = 0.0f,
              py::arg("exp_density_gating") = false,
              py::arg("exp_density_k") = 2.0f,
              py::arg("exp_density_eta") = 0.15f)

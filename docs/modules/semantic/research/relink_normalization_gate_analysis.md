@@ -189,6 +189,24 @@ ratio 剛好壓在邊界外 (1.41, 0.67, 0.67, 0.69)。**短缺口 (<37) 的 TP 
 
 **建議操作點：[0.75, 1.33] — 殺掉 53% 錯誤 relink，TP 損失與 [0.7,1.4] 相同。**
 
+### 8.3 線上 Ablation (MOT17-SDP train, mamba_whole_graph, 2026-06-11)
+
+實作 `relink_bridge_h_lo/h_hi`（EMA 高度比閘，default off，golden gate bit-exact）後
+與 baseline 對照（同 commit、確定性 pipeline，差異非隨機雜訊）：
+
+| 指標 | baseline | gate [0.75,1.33] | Δ |
+|------|----------|------------------|---|
+| IDF1 | 74.4% | 74.6% | +0.2 |
+| HOTA | 67.6% | 67.7% | +0.1 |
+| AssA | 65.5% | 65.7% | +0.2 |
+| IDs | 495 | 489 | −6 |
+| FP | 3634 | 3560 | −74 |
+| FN | 21008 | 21055 | +47 |
+
+所有關聯指標一致正向、無單一指標明顯退步；幅度小於 +0.3pp 慣例門檻，
+但方向與 §8.2 離線模擬吻合（殺錯誤 relink → FP↓ IDs↓ AssA↑）。
+是否進 preset default 待定（train-set 幅度小，泛化未驗）。
+
 ---
 
 ## 9. 產出圖表

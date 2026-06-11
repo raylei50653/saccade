@@ -96,6 +96,8 @@ class PythonSemanticRelinker:
         bidirectional: bool = False,
         bridge_chi2: float = 1.5,
         bridge_px: float | None = None,
+        bridge_h_lo: float = 0.0,
+        bridge_h_hi: float = 0.0,
         # Motion-based relinking params
         motion_vel_alpha: float = 0.3,
         motion_acc_alpha: float = 0.15,
@@ -194,6 +196,10 @@ class PythonSemanticRelinker:
         self.claim_warmup_frames = max(1, int(claim_warmup_frames))
         self.bidirectional = bool(bidirectional)
         self.bridge_px = float(bridge_px if bridge_px is not None else bridge_chi2)
+        # Scale gate (disabled when bridge_h_hi<=0): lost/cand EMA-height ratio
+        # must stay inside [h_lo, h_hi]; large size jumps across the gap are bogus.
+        self.bridge_h_lo = max(0.0, float(bridge_h_lo))
+        self.bridge_h_hi = max(0.0, float(bridge_h_hi))
         # GPU relink-gate (A/B): offload the O(n_query*n_cand) per-pair gate
         # computation to a CUDA kernel; Python keeps all decision logic and reads
         # gate quantities from the per-frame table. Toggle for bit-exact A/B.
@@ -481,6 +487,18 @@ class PythonSemanticRelinker:
         return (3.0 * x3 + x2 - x1 - 3.0 * x0) / 10.0, (
             3.0 * y3 + y2 - y1 - 3.0 * y0
         ) / 10.0
+
+    def _bridge_scale_gate_ok(self, lost_id: int, cand_id: int) -> bool:
+        """Scale gate (disabled when bridge_h_hi<=0): lost/cand EMA-height ratio
+        must stay inside [h_lo, h_hi]; large size jumps across the gap are bogus."""
+        if self.bridge_h_hi <= 0.0:
+            return True
+        h_lost = self._ema_h.get(lost_id)
+        h_cand = self._ema_h.get(cand_id)
+        if h_lost is None or h_cand is None:
+            return True
+        ratio = max(h_lost, 1e-3) / max(h_cand, 1e-3)
+        return self.bridge_h_lo <= ratio <= self.bridge_h_hi
 
     def _midpoint_bridge_dist(
         self,
@@ -1017,6 +1035,10 @@ class PythonSemanticRelinker:
                     kalman_gated = True
 
                 bridge_dist = -1.0
+                if self.bidirectional and not self._bridge_scale_gate_ok(cid, raw_id):
+                    self.stats["reject_backward"] += 1
+                    self.age_gate_pass_outcomes.append((age, "backward"))
+                    continue
                 if self.bidirectional and cid in self._foot_history:
                     if gate is not None:
                         bridge_dist = float(gate[1])

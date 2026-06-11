@@ -240,6 +240,8 @@ class EvalConfig:
     relink_bridge_spatial_gate: float
     relink_bridge_anchor: str
     relink_bridge_anchor_rate: float
+    relink_bridge_h_lo: float
+    relink_bridge_h_hi: float
 
     min_tracklet_len: int
     min_tracklet_score: float
@@ -675,6 +677,8 @@ def parse_eval_config(
         relink_bridge_spatial_gate=float(kwargs.get("relink_bridge_spatial_gate", 0.0)),
         relink_bridge_anchor=str(kwargs.get("relink_bridge_anchor", "adaptive")),
         relink_bridge_anchor_rate=float(kwargs.get("relink_bridge_anchor_rate", 0.03)),
+        relink_bridge_h_lo=float(kwargs.get("relink_bridge_h_lo", 0.0)),
+        relink_bridge_h_hi=float(kwargs.get("relink_bridge_h_hi", 0.0)),
         min_tracklet_len=max(1, int(kwargs.get("min_tracklet_len", 1))),
         min_tracklet_score=float(kwargs.get("min_tracklet_score", 0.0)),
         interpolate_tracklets=bool(kwargs.get("interpolate_tracklets", True)),

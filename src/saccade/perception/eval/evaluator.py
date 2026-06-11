@@ -1488,6 +1488,8 @@ class EvalPipeline:
                     cfg.relink_bridge_anchor, 0
                 ),
                 bridge_anchor_rate=cfg.relink_bridge_anchor_rate,
+                bridge_h_lo=cfg.relink_bridge_h_lo,
+                bridge_h_hi=cfg.relink_bridge_h_hi,
             )
 
         if hasattr(detector.tracker, "set_unified_score_params"):
@@ -1564,6 +1566,8 @@ class EvalPipeline:
             _relinker_common_kwargs.update(
                 bidirectional=True,
                 bridge_px=cfg.kwargs.get("semantic_bridge_px", 1.5),
+                bridge_h_lo=cfg.relink_bridge_h_lo,
+                bridge_h_hi=cfg.relink_bridge_h_hi,
             )
         if _use_python_relinker:
             _relinker_common_kwargs.update(

@@ -92,6 +92,8 @@ class LifecycleConfig:
     relink_bridge_spatial_gate: float = 0.0
     relink_bridge_anchor: str = "adaptive"
     relink_bridge_anchor_rate: float = 0.03
+    relink_bridge_h_lo: float = 0.0
+    relink_bridge_h_hi: float = 0.0
     # Duplicate suppression: remove near-duplicate detections within the same frame
     # (detector artifact where multiple overlapping boxes are produced for the same person)
     duplicate_suppression_enabled: bool = False
@@ -868,5 +870,27 @@ def add_lifecycle_args(parser: argparse.ArgumentParser) -> None:
             "(reduces FP from perturbing clean detections). 0 = always-on. "
             "MOT17-SDP sweet spot 0.03 (dominates the un-gated anchor on FP+FN).",
             range_hint=">=0, suggested 0.02-0.10",
+        ),
+    )
+    grp.add_argument(
+        "--relink-bridge-h-lo",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Bridge scale gate lower bound: reject when lost/cand EMA-height "
+            "ratio falls below this. Offline: [0.75,1.33] kills 53%% of wrong "
+            "relinks at zero short-gap TP loss.",
+            range_hint="0-1, suggested 0.75; needs --relink-bridge-h-hi",
+        ),
+    )
+    grp.add_argument(
+        "--relink-bridge-h-hi",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Bridge scale gate upper bound: reject when lost/cand EMA-height "
+            "ratio exceeds this. 0 disables the gate.",
+            range_hint="0 or >=1, suggested 1.33",
+            edge="lost TPs are all gap>=37 long-gap bridges near the band edge",
         ),
     )

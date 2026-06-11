@@ -107,7 +107,8 @@ public:
                            float bridge_max_speed = 0.0f, float bridge_person_height = 1.65f,
                            float bridge_fps = 30.0f, float bridge_margin = 0.0f,
                            float bridge_spatial_gate = 0.0f, int bridge_anchor = 0,
-                           float bridge_anchor_rate = 0.0f);
+                           float bridge_anchor_rate = 0.0f,
+                           float bridge_h_lo = 0.0f, float bridge_h_hi = 0.0f);
     std::vector<int> get_relink_debug();
 
     /**
