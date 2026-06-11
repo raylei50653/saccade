@@ -1547,7 +1547,7 @@ public:
         if (hl != ema_h_.end()) h_lost = hl->second;
         auto hc = ema_h_.find(cand_id);
         if (hc != ema_h_.end()) h_cand = hc->second;
-        float h_ref = std::max((h_lost + h_cand) * 0.5f, 1.0f);
+        float h_ref = std::max(h_lost, 1.0f);
         float lx = lost_hist.back().first, ly = lost_hist.back().second;
         float cxf = cand_hist[0].first, cyf = cand_hist[0].second;
         // Speed-weighted foot-bridge score: symmetric full extrapolation 0.5*(fwd+bwd)
@@ -4149,4 +4149,52 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         py::arg("a_per_channel") = 0, py::arg("is_half") = false,
         py::arg("stream_ptr") = 0,
         "CUDA selective scan (Mamba SSM kernel) supporting both float and half.");
+
+    m.def("selective_scan_bwd",
+        [](
+            uintptr_t grad_y_ptr, uintptr_t u_ptr, uintptr_t delta_ptr,
+            uintptr_t A_ptr, uintptr_t B_ptr, uintptr_t C_ptr, uintptr_t D_ptr,
+            uintptr_t h_buf_ptr, uintptr_t du_ptr, uintptr_t ddelta_ptr,
+            uintptr_t dA_ptr, uintptr_t dB_ptr, uintptr_t dC_ptr, uintptr_t dD_ptr,
+            int B_dim, int L_dim, int D_dim, int N_dim, int has_D,
+            int a_per_channel, uintptr_t stream_ptr
+        ) {
+            SelectiveScanParams params;
+            params.B = B_dim;
+            params.L = L_dim;
+            params.D = D_dim;
+            params.N = N_dim;
+            params.has_D = has_D;
+            params.a_per_channel = a_per_channel;
+
+            void* stream = reinterpret_cast<void*>(stream_ptr);
+            {
+                py::gil_scoped_release release;
+                selective_scan_bwd(
+                    reinterpret_cast<const float*>(grad_y_ptr),
+                    reinterpret_cast<const float*>(u_ptr),
+                    reinterpret_cast<const float*>(delta_ptr),
+                    reinterpret_cast<const float*>(A_ptr),
+                    reinterpret_cast<const float*>(B_ptr),
+                    reinterpret_cast<const float*>(C_ptr),
+                    has_D ? reinterpret_cast<const float*>(D_ptr) : nullptr,
+                    reinterpret_cast<float*>(h_buf_ptr),
+                    reinterpret_cast<float*>(du_ptr),
+                    reinterpret_cast<float*>(ddelta_ptr),
+                    reinterpret_cast<float*>(dA_ptr),
+                    reinterpret_cast<float*>(dB_ptr),
+                    reinterpret_cast<float*>(dC_ptr),
+                    has_D ? reinterpret_cast<float*>(dD_ptr) : nullptr,
+                    params,
+                    stream
+                );
+            }
+        },
+        py::arg("grad_y_ptr"), py::arg("u_ptr"), py::arg("delta_ptr"),
+        py::arg("A_ptr"), py::arg("B_ptr"), py::arg("C_ptr"), py::arg("D_ptr"),
+        py::arg("h_buf_ptr"), py::arg("du_ptr"), py::arg("ddelta_ptr"),
+        py::arg("dA_ptr"), py::arg("dB_ptr"), py::arg("dC_ptr"), py::arg("dD_ptr"),
+        py::arg("B_dim"), py::arg("L_dim"), py::arg("D_dim"), py::arg("N_dim"),
+        py::arg("has_D"), py::arg("a_per_channel") = 0, py::arg("stream_ptr") = 0,
+        "CUDA backward of the selective scan (fp32 training path).");
 }

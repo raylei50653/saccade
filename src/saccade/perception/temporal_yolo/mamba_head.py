@@ -11,10 +11,16 @@ Reference:
 
 from __future__ import annotations
 
+import os
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
+
+# Escape hatch: force the differentiable training scan back onto the pure-Python
+# JIT loop (e.g. to A/B against the CUDA backward kernel).
+_DISABLE_CUDA_SCAN_BWD = os.environ.get("SACCADE_DISABLE_CUDA_SCAN_BWD", "0") == "1"
 
 
 # ---------------------------------------------------------------------------
@@ -37,9 +43,23 @@ def _selective_scan(
     # it is inference-only. When grad is required (training), fall back to the
     # pure-PyTorch differentiable scan. Eval/inference is unaffected.
     grad_needed = torch.is_grad_enabled() and (
-        u.requires_grad or delta.requires_grad or A.requires_grad
+        u.requires_grad
+        or delta.requires_grad
+        or A.requires_grad
+        or B.requires_grad
+        or C.requires_grad
     )
-    if not u.is_cuda or grad_needed:
+    if grad_needed:
+        # Training: use the analytic CUDA fwd/bwd kernels (the JIT scan is a
+        # launch-bound Python loop). Falls back to JIT on CPU or if the C++
+        # extension is unavailable.
+        if u.is_cuda and not _DISABLE_CUDA_SCAN_BWD:
+            try:
+                return _SelectiveScanCudaFn.apply(u, delta, A, B, C, D)
+            except (ImportError, RuntimeError):
+                return _selective_scan_jit(u, delta, A, B, C, D)
+        return _selective_scan_jit(u, delta, A, B, C, D)
+    if not u.is_cuda:
         return _selective_scan_jit(u, delta, A, B, C, D)
     try:
         return _selective_scan_cuda(u, delta, A, B, C, D)
@@ -206,6 +226,114 @@ def _selective_scan_jit(
     if D is not None:
         ys = ys + u * D
     return ys
+
+
+class _SelectiveScanCudaFn(torch.autograd.Function):
+    """Differentiable selective scan backed by the C++ CUDA fwd/bwd kernels.
+
+    Forward calls ``selective_scan_fwd``; backward calls ``selective_scan_bwd``
+    (analytic reverse-time gradient). This replaces the pure-Python JIT scan on
+    the training path — the JIT loop is launch-bound (one tiny kernel per
+    sequence step), while these kernels run the whole recurrence on-device.
+
+    delta is RAW (pre-softplus); softplus is applied inside both kernels. A is
+    (1, N) shared or (D, N) per-channel. C may be rank-1 (..., 1) — it is
+    broadcast to N for the kernel and the gradient summed back.
+    """
+
+    @staticmethod
+    def forward(ctx, u, delta, A, B, C, D):  # type: ignore[override]
+        import saccade_tracking_ext
+
+        N = A.shape[-1]
+        D_dim = u.shape[2]
+        a_per_channel = 1 if (A.dim() == 2 and A.shape[0] == D_dim) else 0
+        c_rank1 = C.shape[-1] < N
+
+        u = u.contiguous()
+        delta = delta.contiguous()
+        A = A.contiguous()
+        B = B.contiguous()
+        C_full = C.expand(*C.shape[:-1], N).contiguous() if c_rank1 else C.contiguous()
+        has_D = D is not None and D.numel() > 0
+        D_t = (
+            D.contiguous() if has_D else torch.empty(0, dtype=u.dtype, device=u.device)
+        )
+
+        y = torch.empty_like(u)
+        stream = torch.cuda.current_stream(u.device).cuda_stream
+        saccade_tracking_ext.selective_scan_fwd(
+            u.data_ptr(),
+            delta.data_ptr(),
+            A.data_ptr(),
+            B.data_ptr(),
+            C_full.data_ptr(),
+            D_t.data_ptr() if has_D else 0,
+            y.data_ptr(),
+            u.shape[0],
+            u.shape[1],
+            D_dim,
+            N,
+            1 if has_D else 0,
+            a_per_channel,
+            False,
+            stream,
+        )
+
+        ctx.save_for_backward(u, delta, A, B, C_full, D_t)
+        ctx.a_per_channel = a_per_channel
+        ctx.has_D = has_D
+        ctx.c_rank1 = c_rank1
+        ctx.c_orig_rank = C.shape[-1]
+        return y
+
+    @staticmethod
+    def backward(ctx, grad_y):  # type: ignore[override]
+        import saccade_tracking_ext
+
+        u, delta, A, B, C_full, D_t = ctx.saved_tensors
+        Bb, L, D_dim = u.shape
+        N = A.shape[-1]
+        grad_y = grad_y.contiguous()
+
+        du = torch.empty_like(u)
+        ddelta = torch.empty_like(delta)
+        dA = torch.zeros_like(A)
+        dB = torch.zeros_like(B)
+        dC = torch.zeros_like(C_full)
+        dD = torch.zeros_like(D_t) if ctx.has_D else torch.empty(0, device=u.device)
+        h_buf = torch.empty(Bb, L, D_dim, N, dtype=u.dtype, device=u.device)
+
+        stream = torch.cuda.current_stream(u.device).cuda_stream
+        saccade_tracking_ext.selective_scan_bwd(
+            grad_y.data_ptr(),
+            u.data_ptr(),
+            delta.data_ptr(),
+            A.data_ptr(),
+            B.data_ptr(),
+            C_full.data_ptr(),
+            D_t.data_ptr() if ctx.has_D else 0,
+            h_buf.data_ptr(),
+            du.data_ptr(),
+            ddelta.data_ptr(),
+            dA.data_ptr(),
+            dB.data_ptr(),
+            dC.data_ptr(),
+            dD.data_ptr() if ctx.has_D else 0,
+            Bb,
+            L,
+            D_dim,
+            N,
+            1 if ctx.has_D else 0,
+            ctx.a_per_channel,
+            stream,
+        )
+
+        # Fold rank-1 C gradient back to its original last-dim size.
+        if ctx.c_rank1:
+            dC = dC.sum(dim=-1, keepdim=True)
+        dD_out = dD if ctx.has_D else None
+        return du, ddelta, dA, dB, dC, dD_out
 
 
 # ---------------------------------------------------------------------------
