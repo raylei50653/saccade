@@ -153,7 +153,45 @@ true median 1.045→1.135, p90 1.33→1.62。舊 gate 閾值不再適用。
 
 ---
 
-## 8. 產出圖表
+## 8. Live-Accept 模擬與 P0 復核 (2026-06-11)
+
+腳本：`scratch/pipeline_math_validation/scripts/validate_p0p1_gate.py`
+（從 results txt 重建每軌高度史後重算，hard pool 定義 bridge_dist ≤ 1 得 1,032 對 / 102 pos，
+與 §1 的 2,694 不同 — 早期分析的 pool 切法不可考，以下數字以本腳本可重現版本為準。）
+
+### 8.1 P0 復核：L_med 增益無法重現
+
+| Strategy | Full AUC | Hard AUC |
+|----------|----------|----------|
+| avg(last,first)（= CSV dist_h） | 0.8508 | **0.7121** |
+| L_med skip3 (P0) | 0.8499 | 0.6995 |
+| lost_last only | 0.8329 | 0.6977 |
+
+**L_med 在重現分析中反而低於雙側平均** (−0.013 hard)，與 §5.1 結論相反。
+P0 降級為「未驗證」，不建議實作；已 commit 的 lost-only h_ref 改動（b605ac3e）
+同樣顯示離線 ranking 略差，需在 MOT17 ablation 中確認是否保留。
+
+### 8.2 P1 模擬：對線上已接受的 relink 套 scale gate
+
+對 live scorer 實際 accept 的 53 TP / 388 FP（pair precision 僅 12%）套用
+`h_lost_last / h_cand_first` 比率閘：
+
+| Gate | TP | FP | Precision |
+|------|----|----|-----------|
+| 無 gate | 53 | 388 | 0.120 |
+| [0.7, 1.4] | 47 | 203 | 0.188 |
+| **[0.75, 1.33]** | **47** | **182** | **0.205** |
+| [0.8, 1.25] | 45 | 155 | 0.225 |
+
+被殺掉的 6 個 TP 全部是 gap ≥ 37 幀的長缺口（37/40/62/90/194/236），其中 4 個
+ratio 剛好壓在邊界外 (1.41, 0.67, 0.67, 0.69)。**短缺口 (<37) 的 TP 零損失**。
+後續可考慮 gap-adaptive band（長缺口放寬），但先驗證固定 gate。
+
+**建議操作點：[0.75, 1.33] — 殺掉 53% 錯誤 relink，TP 損失與 [0.7,1.4] 相同。**
+
+---
+
+## 9. 產出圖表
 
 所有圖表位於 `scratch/pipeline_math_validation/output/`：
 
