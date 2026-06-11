@@ -361,11 +361,13 @@ def interpolate_tracklets(
     *,
     max_gap: int = 20,
     min_track_len: int = 5,
+    min_h: float = 0.0,
 ) -> tuple[list[str], dict[str, int]]:
     """Fill gaps ≤ max_gap in confirmed tracklets with linear interpolation.
 
     Only operates on tracks with ≥ min_track_len observations (shorter tracklets
     are likely noise and shouldn't be extrapolated).
+    If min_h > 0, only interpolates gaps where both bounding boxes have height ≥ min_h.
     Uses pandas + numpy for fast vectorized parse/format.
     """
     stats: dict[str, int] = {
@@ -404,6 +406,8 @@ def interpolate_tracklets(
     same_tid = vals[:-1, 1] == vals[1:, 1]
     gap_frames = np.where(same_tid, vals[1:, 0] - vals[:-1, 0] - 1, 0)
     valid = (gap_frames >= 1) & (gap_frames <= max_gap)
+    if min_h > 0:
+        valid &= (vals[:-1, 5] >= min_h) & (vals[1:, 5] >= min_h)
     gap_idx = np.where(valid)[0]
 
     stats["gaps_filled"] = int(valid.sum())

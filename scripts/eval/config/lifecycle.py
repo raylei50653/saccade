@@ -118,6 +118,7 @@ class LifecycleConfig:
     interpolate_tracklets: bool = True
     interpolate_max_gap: int = 20
     interpolate_min_track_len: int = 5
+    interpolate_min_h: float = 0.0
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> "LifecycleConfig":
@@ -601,6 +602,16 @@ def add_lifecycle_args(parser: argparse.ArgumentParser) -> None:
             "Minimum track observations required before gaps are interpolated.",
             range_hint=">=2",
             edge="too low interpolates noisy short tracks",
+        ),
+    )
+    grp.add_argument(
+        "--interpolate-min-h",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Minimum box height (px) for both sides of a gap to be interpolated.",
+            range_hint="0-500",
+            edge="100 filters ~77% of wrong interpolations",
         ),
     )
     grp.add_argument(

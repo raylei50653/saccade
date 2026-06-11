@@ -246,6 +246,7 @@ class EvalConfig:
     interpolate_tracklets: bool
     interpolate_max_gap: int
     interpolate_min_track_len: int
+    interpolate_min_h: float
     nsa_kalman: bool
     kalman_r_scale: float
     vel_dir_weight: float
@@ -681,6 +682,7 @@ def parse_eval_config(
         interpolate_min_track_len=max(
             1, int(kwargs.get("interpolate_min_track_len", 5))
         ),
+        interpolate_min_h=float(kwargs.get("interpolate_min_h", 0.0)),
         nsa_kalman=bool(kwargs.get("nsa_kalman", False)),
         kalman_r_scale=float(kwargs.get("kalman_r_scale", 1.0)),
         vel_dir_weight=float(kwargs.get("vel_dir_weight", 0.0)),
