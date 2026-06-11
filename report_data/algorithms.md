@@ -400,7 +400,7 @@ d_{\text{bridge}} &= w \cdot \tfrac{1}{2}(r_{\text{fwd}} + r_{\text{bwd}}) + (1 
 
 接受條件 \(d_{\text{bridge}} \le \texttt{bridge\_px}\)（預設 0.25，最佳 0.25–0.30 平台）。\(g\) 為 gap（幀）。4 幀速度回歸（closed form）：\(v_x = (3x_3 + x_2 - x_1 - 3x_0)/10\)。
 
-線上驗證（MOT17 train SDP, `mamba_whole_graph`, `--relink-bridge-enabled`）：較舊 gap/2 中點評分 **IDF1 +0.6 / HOTA +0.5 / AssA +1.0 / IDs −14**（74.8 / 68.0 / 66.2 / 483）；詳見 `docs/modules/semantic/research/offline_relink_candidate_analysis.md`。
+線上驗證（MOT17 train SDP, `mamba_whole_graph`, `--relink-bridge-enabled`，含 `margin=0.05` + scale gate `[0.75, 1.33]`）：**IDF1 75.1 / HOTA 68.2 / AssA 66.6 / IDs 482**（vs. no-bridge baseline 73.3 / 66.7 / 64.7）；詳見 `docs/modules/semantic/research/offline_relink_candidate_analysis.md`。
 
 ---
 

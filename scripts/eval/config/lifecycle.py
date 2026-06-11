@@ -88,12 +88,12 @@ class LifecycleConfig:
     relink_bridge_max_speed: float = 0.0
     relink_bridge_person_height: float = 1.65
     relink_bridge_fps: float = 30.0
-    relink_bridge_margin: float = 0.0
+    relink_bridge_margin: float = 0.05
     relink_bridge_spatial_gate: float = 0.0
     relink_bridge_anchor: str = "adaptive"
     relink_bridge_anchor_rate: float = 0.03
-    relink_bridge_h_lo: float = 0.0
-    relink_bridge_h_hi: float = 0.0
+    relink_bridge_h_lo: float = 0.75
+    relink_bridge_h_hi: float = 1.33
     # Duplicate suppression: remove near-duplicate detections within the same frame
     # (detector artifact where multiple overlapping boxes are produced for the same person)
     duplicate_suppression_enabled: bool = False

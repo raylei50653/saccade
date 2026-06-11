@@ -228,10 +228,20 @@ saturation × shape × normalisation, ranked by AP, validated leave-one-sequence
 
 ```
 score = -( w·sym_fb + (1-w)·dist_h )
-  sym_fb = 0.5·(fwd_resid + bwd_resid)        # symmetric full extrapolation > gap/2 midpoint
-  w      = clip( sqrt(s_lost / 0.12), 0, 1 )  # sqrt ramp, saturates ~0.12–0.2 h/f
-  s_lost = lost-track exit speed (multi-frame anchor)
+  sym_fb     = 0.5·(fwd_resid + bwd_resid)        # symmetric full extrapolation > gap/2 midpoint
+  fwd_resid  = ‖(lx + vxl·G) − cx0‖ / h_ref       # lost fwd-extrapolated to cand head position
+  bwd_resid  = ‖cx0 − vxc·G) − lx‖ / h_ref        # cand bwd-extrapolated to lost tail position
+  dist_h     = ‖(lx,ly) − (cx0,cy0)‖ / h_ref      # direct spatial distance, normalised
+  h_ref      = avg(ema_h_lost, ema_h_cand)          # EMA box height of both endpoints (see §6e)
+  w          = clip( sqrt(s_lost / 0.12), 0, 1 )   # sqrt ramp, saturates ~0.12–0.2 h/f
+  s_lost     = ‖(vxl, vyl)‖ / h_ref                # lost-track exit speed in heights/frame
 ```
+
+`h_ref` is the **reference scale** that converts all pixel distances into body-height units,
+making the threshold `bridge_px` invariant to camera zoom and subject distance. Using the
+average of the EMA heights of *both* endpoints rather than one alone keeps the normalisation
+symmetric: if the candidate re-enters the frame closer (larger box), the shared scale still
+reflects the true scene geometry at the gap midpoint rather than one extreme.
 
 | gate | LOSO-CV AP (hard region, held-out) |
 |---|---|
@@ -265,6 +275,81 @@ IDs rise), ≥0.4 over-admits. **Speed-weighted vs legacy bridge: IDF1 +0.6, HOT
 +1.0, IDs −14** — above the ±0.3 pp noise band, and AssA (the HOTA bottleneck) is where it lands.
 mode-0 re-run reproduces 74.2 exactly (bit-identity confirmed). The offline analysis translated
 cleanly to an online win; remaining headroom is base-rate (appearance).
+
+## 6e. h_ref regression and revert (2026-06-11)
+
+After §6d was validated, commit `b605ac3e` changed `h_ref` from `avg(ema_lost, ema_cand)` to
+`ema_lost` only across all three bridge paths (GPU kernel, C++ semantic relinker, Python relinker).
+The stated rationale was to prevent the candidate's size from inflating the gate when the two
+tracks differ in scale. However this regressed online performance:
+
+| h_ref formula | IDF1 | HOTA | AssA | IDs |
+|---|---|---|---|---|
+| avg (original) | **74.8** | **68.0** | **66.2** | **483** |
+| lost-only (`b605ac3e`) | 74.4 | 67.6 | 65.5 | 495 |
+
+Root cause: `bridge_px = 0.25` is a normalised threshold; switching from avg to lost-only shifts
+the effective gate asymmetrically. When the candidate is *larger* than the lost track (person
+walking toward camera during the gap), `h_ref` shrinks → normalised distances grow → some true
+bridges are incorrectly rejected. When the candidate is *smaller*, `h_ref` grows → distances
+shrink → the gate becomes slightly looser. The net effect is a precision drop (IDs +12) without
+any recall benefit.
+
+The "inflate" concern is also made redundant by the scale gate introduced later (§6f): if the
+lost/cand height ratio falls outside [0.75, 1.33] the pair is already rejected before the
+distance is computed.
+
+**Revert:** `b605ac3e` was reverted in all three paths (`tracker_gpu.cu`, `relink_gate.cu`,
+`relink.py`). Golden gate (`eval_golden.py check`) passes bit-exactly on the default-off path.
+
+## 6f. Precision gate ablation (2026-06-11)
+
+Three gates were tested on the speed-weighted bridge (h_ref = avg, `bridge_px = 0.25`):
+
+**Scale gate** (`bridge_h_lo / bridge_h_hi`): rejects pairs whose lost/cand EMA-height ratio
+falls outside `[h_lo, h_hi]`. Motivated by §4: 8-frame cumulative scale is 0.78–1.48×, so a
+symmetric ±33 % tolerance `[0.75, 1.33]` matches the natural pre-loss range and cuts large
+size-jumping false links. Offline simulation on live-accepted pairs: kills **53 % of false
+bridges** at zero short-gap TP loss (rejected TPs all have gap ≥ 37 frames). Implemented in all
+three bridge paths.
+
+**Margin** (`bridge_margin`): rejects the best candidate when `second_best_dist − best_dist < margin`,
+i.e. the match is ambiguous. Prevents committing to a bridge in crowded scenes where two lost
+tracks are nearly equidistant. Analogous to `reciprocal_margin` in the semantic relinker.
+
+**Spatial pre-filter** (`bridge_spatial_gate`): rejects pairs whose centre distance / `h_ref`
+exceeds the threshold *before* computing the velocity-extrapolated score. Intended as a cheap
+coarse filter to skip obviously-impossible pairs.
+
+Online ablation results (MOT17 train SDP, `mamba_whole_graph`, h_ref = avg, all gates isolated
+then combined):
+
+| config | IDF1 | HOTA | AssA | IDs | FP | FN |
+|---|---|---|---|---|---|---|
+| bridge, speed-weighted (h_ref avg) | 74.8 | 68.0 | 66.2 | 483 | 3541 | 20994 |
+| + scale gate [0.75, 1.33] only | 74.9 | 68.0 | 66.2 | 482 | 3516 | 21056 |
+| + margin = 0.05 only | **75.1** | **68.2** | **66.6** | 483 | 3528 | 21040 |
+| + spatial_gate = 3.0 | 74.8 | 68.0 | 66.2 | 483 | 3541 | 20994 |
+| **+ scale + margin = 0.05 (combined)** | **75.1** | **68.2** | **66.6** | **482** | **3514** | 21082 |
+
+Key findings:
+
+- **Margin = 0.05** is the dominant gate with avg h_ref (+0.3 IDF1, +0.4 AssA, FP −13). Rejecting
+  ambiguous bridges (second-best within 0.05 of best) directly reduces false relinks in crowded
+  scenes. Values beyond 0.05 give identical metrics — the ambiguous-pair population is exhausted.
+- **Scale gate [0.75, 1.33]** contributes a smaller but independent gain on top (IDs −1, FP −14
+  vs margin-only). With avg h_ref the gate's marginal value is lower than with lost-only h_ref:
+  avg normalization already partially penalises size-mismatched pairs, so fewer pairs survive to
+  be killed by the explicit ratio check.
+- **Spatial pre-filter** (`bridge_spatial_gate = 3.0` or `5.0`) is **bit-identical** to the
+  baseline. `bridge_px = 0.25` is already a tight gate; any pair that passes the speed-weighted
+  score also has a centre distance well within a few `h_ref` units.
+- Combined (scale + margin): negligible over margin-only in IDF1/HOTA/AssA; FP −14 more vs
+  margin-only. Kept as default because the scale gate is near-free and blocks a distinct failure
+  mode (teleporting tracks) that the margin test does not cover.
+
+**Defaults set to**: `bridge_margin = 0.05`, `bridge_h_lo = 0.75`, `bridge_h_hi = 1.33`.
+`bridge_spatial_gate` left at 0 (disabled). These are in `lifecycle.py` and `eval/config.py`.
 
 ## 7. Artifacts & reproduction
 

@@ -116,12 +116,66 @@ def _velocity(seg):
     return (vx / n, vy / n) if n else (0.0, 0.0)
 
 
+def _h_trim(traj, window: int = 4, skip: int = 1) -> float:
+    """Average height over `window` frames, skipping `skip` terminal frames."""
+    seg = traj[-(window + skip) : -skip] if len(traj) > skip else traj[:-1]
+    if not seg:
+        return float(traj[-1][3])
+    return float(np.mean([t[3] for t in seg]))
+
+
+def _h_extrap(
+    traj, gap_half: float, window: int = 4, skip: int = 1, forward: bool = True
+) -> float:
+    """Linear-extrapolate height to the gap midpoint.
+
+    For the lost track (forward=True) extrapolate `gap_half` frames ahead of the
+    last observed frame.  For the candidate (forward=False) extrapolate `gap_half`
+    frames *before* the first observed frame.  Uses last/first `window` frames
+    (excluding `skip` terminal/initial frames) for the trend fit.
+    """
+    if forward:
+        seg = traj[-(window + skip) : -skip] if len(traj) > skip else traj[:-1]
+    else:
+        seg = traj[skip : skip + window] if len(traj) > skip else traj[1:]
+    if len(seg) < 2:
+        return float(traj[-1 if forward else 0][3])
+    frames = np.array([t[0] for t in seg], dtype=np.float64)
+    heights = np.array([t[3] for t in seg], dtype=np.float64)
+    f0 = frames[0]
+    x = frames - f0
+    sx = x.sum()
+    sy = heights.sum()
+    sxy = (x * heights).sum()
+    sx2 = (x**2).sum()
+    n = len(x)
+    denom = n * sx2 - sx**2
+    if abs(denom) < 1e-6:
+        rate = 0.0
+    else:
+        rate = (n * sxy - sx * sy) / denom
+    h_anchor = float(heights[-1]) if forward else float(heights[0])
+    h_mid = h_anchor + rate * (gap_half if forward else -gap_half)
+    return max(h_mid, 1.0)
+
+
 def pair_features(traj_a, traj_b, anchor=4):
     """Compute relink features for lost A -> candidate B."""
     la_f, la_cx, la_cy, la_h = traj_a[-1]
     fb_f, fb_cx, fb_cy, fb_h = traj_b[0]
     gap = fb_f - la_f
     h_ref = max((la_h + fb_h) * 0.5, 1.0)
+
+    # h_ref variant columns
+    h_lost_raw = float(la_h)
+    h_cand_raw = float(fb_h)
+    h_lost_trim1 = _h_trim(traj_a, window=4, skip=1)
+    h_cand_trim1 = _h_trim(traj_b[::-1], window=4, skip=1)  # skip first by reversing
+    h_lost_win6 = _h_trim(traj_a, window=6, skip=1)
+    h_cand_win6 = _h_trim(traj_b[::-1], window=6, skip=1)
+    half = gap * 0.5
+    h_lost_extrap = _h_extrap(traj_a, half, window=4, skip=1, forward=True)
+    h_cand_extrap = _h_extrap(traj_b, half, window=4, skip=1, forward=False)
 
     ax, ay = _foot(la_cx, la_cy, la_h)  # lost exit foot
     bx, by = _foot(fb_cx, fb_cy, fb_h)  # cand entry foot
@@ -135,8 +189,6 @@ def pair_features(traj_a, traj_b, anchor=4):
     # backward: extrapolate cand back to lost's last frame
     rx, ry = bx - vbx * gap, by - vby * gap
     bwd_resid = np.hypot(rx - ax, ry - ay) / h_ref
-    # midpoint foot-bridge (mirrors relink_bidir_propose_kernel)
-    half = gap * 0.5
     mlx, mly = ax + vax * half, ay + vay * half
     mcx, mcy = bx - vbx * half, by - vby * half
     bridge_dist = np.hypot(mlx - mcx, mly - mcy) / h_ref
@@ -174,6 +226,15 @@ def pair_features(traj_a, traj_b, anchor=4):
         "cand_foot_x": bx,
         "cand_foot_y": by,
         "h_ref": h_ref,
+        # h_ref variant columns (raw pixel distances recoverable via * h_ref)
+        "h_lost_raw": h_lost_raw,
+        "h_cand_raw": h_cand_raw,
+        "h_lost_trim1": h_lost_trim1,
+        "h_cand_trim1": h_cand_trim1,
+        "h_lost_win6": h_lost_win6,
+        "h_cand_win6": h_cand_win6,
+        "h_lost_extrap": h_lost_extrap,
+        "h_cand_extrap": h_cand_extrap,
     }
 
 
@@ -253,6 +314,14 @@ COLS = [
     "cand_foot_x",
     "cand_foot_y",
     "h_ref",
+    "h_lost_raw",
+    "h_cand_raw",
+    "h_lost_trim1",
+    "h_cand_trim1",
+    "h_lost_win6",
+    "h_cand_win6",
+    "h_lost_extrap",
+    "h_cand_extrap",
 ]
 
 

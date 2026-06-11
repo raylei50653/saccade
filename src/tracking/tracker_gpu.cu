@@ -1340,7 +1340,7 @@ __global__ void relink_bidir_propose_kernel(
             ly = (bridge_anchor == 1) ? (lc + 0.5f * lh) : lc;  // foot vs centre
         }
         float lost_h = states[lost * 8 + 3], ema_lost = ema_h[lost];
-        float h_ref = fmaxf(ema_lost, 1.0f);
+        float h_ref = fmaxf((ema_lost + ema_cand) * 0.5f, 1.0f);
 
         // Scale gate (disabled when bridge_h_hi<=0): lost/cand height ratio must
         // stay inside [h_lo, h_hi]; large size jumps across the gap are bogus.
