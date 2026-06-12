@@ -97,6 +97,12 @@ jobs:
       - name: API Layer Audit
         run: uv run python scripts/tools/check_api_layers.py
 
+  lint-typecheck:
+    needs: [ruff, mypy]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "lint and type check passed"
+
   pytest:
     needs: lockfile
     runs-on: ubuntu-latest

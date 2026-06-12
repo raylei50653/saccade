@@ -120,6 +120,47 @@ def _postprocess_mamba_fixed(
     *,
     anchors: Tensor | None = None,
     anchor_strides: Tensor | None = None,
+    _compile: bool | None = None,
+) -> Tensor:
+    """Decode Mamba head outputs to (B, max_det, 6) detections.
+
+    Set ``_compile=False`` to force eager execution (e.g. for correctness
+    checks). By default, uses ``torch.compile`` when available (PyTorch ≥ 2.0)
+    to fuse the pointwise decode chain.
+    """
+    if _compile is None:
+        _compile = _POSTPROCESS_COMPILE_ENABLED
+    if _compile:
+        compiled = _get_compiled_postprocess()
+        return compiled(
+            cls_preds,
+            reg_preds,
+            strides,
+            conf_thr,
+            max_det,
+            anchors=anchors,
+            anchor_strides=anchor_strides,
+        )
+    return _postprocess_mamba_fixed_eager(
+        cls_preds,
+        reg_preds,
+        strides,
+        conf_thr,
+        max_det,
+        anchors=anchors,
+        anchor_strides=anchor_strides,
+    )
+
+
+def _postprocess_mamba_fixed_eager(
+    cls_preds: list[Tensor],
+    reg_preds: list[Tensor],
+    strides: Tensor,
+    conf_thr: float,
+    max_det: int,
+    *,
+    anchors: Tensor | None = None,
+    anchor_strides: Tensor | None = None,
 ) -> Tensor:
     from ultralytics.utils.tal import dist2bbox
 
@@ -150,6 +191,33 @@ def _postprocess_mamba_fixed(
         results[b, :, 4] = topk_scores
         results[b, :, 5] = class_ids[b][topk_idx].float()
     return results
+
+
+# Compiled variant (created lazily on first call).
+_postprocess_mamba_fixed_compiled: Any = None
+_POSTPROCESS_COMPILE_ENABLED: bool = True
+
+
+def _get_compiled_postprocess() -> Any:
+    global _postprocess_mamba_fixed_compiled
+    if _postprocess_mamba_fixed_compiled is None and _POSTPROCESS_COMPILE_ENABLED:
+        try:
+            _postprocess_mamba_fixed_compiled = torch.compile(
+                _postprocess_mamba_fixed_eager,
+                mode="default",
+                fullgraph=False,
+            )
+        except Exception:
+            _postprocess_mamba_fixed_compiled = _postprocess_mamba_fixed_eager
+    return _postprocess_mamba_fixed_compiled
+
+
+def set_postprocess_compile(enabled: bool) -> None:
+    """Enable or disable ``torch.compile`` on the detection postprocess."""
+    global _POSTPROCESS_COMPILE_ENABLED, _postprocess_mamba_fixed_compiled
+    _POSTPROCESS_COMPILE_ENABLED = enabled
+    if not enabled:
+        _postprocess_mamba_fixed_compiled = None
 
 
 # ---------------------------------------------------------------------------
@@ -322,10 +390,20 @@ class MambaGatedDetector(nn.Module):
         self._stream_state = StreamState.create(temporal_T)
 
         self.use_whole_graph = use_whole_graph
+        self._whole_graph_nms_pad = 0  # set to 2048 to pad whole-graph output for NMS
         self._whole_graph_anchors: Tensor | None = None
         self._whole_graph_anchor_strides: Tensor | None = None
         self._whole_graphed_callables: dict = {}
         self._whole_graph_warm = False
+        self._whole_graph_sx: Tensor = torch.ones(1, device="cuda")
+        self._whole_graph_sy: Tensor = torch.ones(1, device="cuda")
+        self._whole_graph_x_idx: Tensor = torch.tensor(
+            [0, 2], device="cuda", dtype=torch.long
+        )
+        self._whole_graph_y_idx: Tensor = torch.tensor(
+            [1, 3], device="cuda", dtype=torch.long
+        )
+        self._whole_graph_img_shape: tuple[int, int] = (0, 0)
 
         self.teacher = build_gated_yolo_detector(
             yolo_pt_path,
@@ -380,7 +458,12 @@ class MambaGatedDetector(nn.Module):
             self._trt_backbone = TRTYoloBackbone(trt_backbone_engine)
 
         if self.use_whole_graph and self._trt_backbone is not None:
-            FEAT_SHAPES = [(1, 128, 80, 80), (1, 256, 40, 40), (1, 512, 20, 20)]
+            _s = self.img_size
+            FEAT_SHAPES = [
+                (1, 128, _s // 8, _s // 8),
+                (1, 256, _s // 16, _s // 16),
+                (1, 512, _s // 32, _s // 32),
+            ]
             self._whole_graph_anchors, self._whole_graph_anchor_strides = (
                 _precompute_anchor_grid(self.stride, FEAT_SHAPES)
             )
@@ -399,6 +482,15 @@ class MambaGatedDetector(nn.Module):
         self._emb_projector.load_state_dict(proj_state)
         self._emb_projector.eval()
         print(f"[JDE] Loaded embedding projector from {ckpt_path}")
+
+    def set_whole_graph_img_dims(self, h_orig: int, w_orig: int) -> None:
+        if (h_orig, w_orig) == self._whole_graph_img_shape:
+            return
+        self._whole_graph_img_shape = (h_orig, w_orig)
+        self._whole_graph_sx.fill_(w_orig / self.img_size)
+        self._whole_graph_sy.fill_(h_orig / self.img_size)
+        self._whole_graphed_callables.clear()
+        self._whole_graph_warm = False
 
     @property
     def device(self) -> torch.device:
@@ -509,11 +601,12 @@ class MambaGatedDetector(nn.Module):
         return self._detect_from_feats(feats, self._stream_state)
 
     @torch.no_grad()
-    def _forward_whole_graph(
-        self,
-        frame: Tensor,
-    ) -> tuple[Tensor, dict[str, Any]]:
-        key = tuple(frame.shape)
+    def _forward_whole_graph(self, frame: Tensor) -> Tensor:
+        key = (
+            tuple(frame.shape)
+            + self._whole_graph_img_shape
+            + (self._whole_graph_nms_pad,)
+        )
         if key not in self._whole_graphed_callables:
             if not self._whole_graph_warm:
                 self._whole_graph_warmup(frame)
@@ -523,7 +616,49 @@ class MambaGatedDetector(nn.Module):
         detections = graphed(frame)
         return detections, {}
 
+    @torch.no_grad()
+    def _forward_whole_graph_preprocessed(self, frame: Tensor) -> Tensor:
+        key = (
+            "preprocessed",
+            tuple(frame.shape),
+            self._whole_graph_nms_pad,
+        )
+        if key not in self._whole_graphed_callables:
+            if not self._whole_graph_warm:
+                self._whole_graph_warmup_preprocessed(frame)
+            self._whole_graph_capture_preprocessed(frame)
+
+        graphed = self._whole_graphed_callables[key]
+        detections = graphed(frame)
+        return detections, {}
+
     def _whole_graph_fn(self, frame: Tensor) -> Tensor:
+        frame_640 = F.interpolate(
+            frame,
+            size=(self.img_size, self.img_size),
+            mode="bilinear",
+            align_corners=False,
+        )
+        backbone = self._trt_backbone
+        p3, p4, p5 = backbone.infer_graph(frame_640)
+        cls_preds, reg_preds = self.mamba_head._forward_eager(
+            [p3, p4, p5],
+            return_embeddings=False,
+        )
+        detections = _postprocess_mamba_fixed(
+            cls_preds,
+            reg_preds,
+            self.stride,
+            self.conf_thr,
+            max(self.max_det, self._whole_graph_nms_pad),
+            anchors=self._whole_graph_anchors,
+            anchor_strides=self._whole_graph_anchor_strides,
+        )
+        detections[:, :, self._whole_graph_x_idx] *= self._whole_graph_sx
+        detections[:, :, self._whole_graph_y_idx] *= self._whole_graph_sy
+        return detections
+
+    def _whole_graph_fn_preprocessed(self, frame: Tensor) -> Tensor:
         backbone = self._trt_backbone
         p3, p4, p5 = backbone.infer_graph(frame)
         cls_preds, reg_preds = self.mamba_head._forward_eager(
@@ -535,7 +670,7 @@ class MambaGatedDetector(nn.Module):
             reg_preds,
             self.stride,
             self.conf_thr,
-            self.max_det,
+            max(self.max_det, self._whole_graph_nms_pad),
             anchors=self._whole_graph_anchors,
             anchor_strides=self._whole_graph_anchor_strides,
         )
@@ -547,13 +682,45 @@ class MambaGatedDetector(nn.Module):
             torch.cuda.synchronize()
         self._whole_graph_warm = True
 
+    def _whole_graph_warmup_preprocessed(self, frame: Tensor) -> None:
+        with torch.no_grad():
+            warm = frame.clone()
+            _ = self._whole_graph_fn_preprocessed(warm)
+            torch.cuda.synchronize()
+        self._whole_graph_warm = True
+
     def _whole_graph_capture(self, frame: Tensor) -> None:
         if len(self._whole_graphed_callables) >= 10:
             self._whole_graphed_callables.clear()
-        key = tuple(frame.shape)
-        print(f"🕯️ [WholeDetectGraph] Capturing graphed callable for shape {key}")
+        key = (
+            tuple(frame.shape)
+            + self._whole_graph_img_shape
+            + (self._whole_graph_nms_pad,)
+        )
+        print(
+            f"🕯️ [WholeDetectGraph] Capturing graphed callable for "
+            f"shape {tuple(frame.shape)} img={self._whole_graph_img_shape}"
+        )
         sample = frame.clone()
         graphed = torch.cuda.make_graphed_callables(self._whole_graph_fn, (sample,))
+        self._whole_graphed_callables[key] = graphed
+
+    def _whole_graph_capture_preprocessed(self, frame: Tensor) -> None:
+        if len(self._whole_graphed_callables) >= 10:
+            self._whole_graphed_callables.clear()
+        key = (
+            "preprocessed",
+            tuple(frame.shape),
+            self._whole_graph_nms_pad,
+        )
+        print(
+            f"🕯️ [WholeDetectGraph] Capturing graphed callable for "
+            f"preprocessed shape {tuple(frame.shape)}"
+        )
+        sample = frame.clone()
+        graphed = torch.cuda.make_graphed_callables(
+            self._whole_graph_fn_preprocessed, (sample,)
+        )
         self._whole_graphed_callables[key] = graphed
 
     @torch.no_grad()
@@ -851,6 +1018,16 @@ class MambaGatedDetector(nn.Module):
 
     def detect_raw(self, input_tensor: Tensor) -> Tensor:
         detections, _ = self.forward(input_tensor, gate_input=None)
+        self._last_detections_ptr = detections.data_ptr()
+        return detections
+
+    def detect_raw_preprocessed(self, input_tensor: Tensor) -> Tensor:
+        if not self.use_whole_graph or self._trt_backbone is None:
+            raise RuntimeError(
+                "detect_raw_preprocessed requires whole-graph TRT backbone mode."
+            )
+        detections, _ = self._forward_whole_graph_preprocessed(input_tensor)
+        self._last_detections_ptr = detections.data_ptr()
         return detections
 
     def set_gmc_warp(

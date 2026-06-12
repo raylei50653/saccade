@@ -69,6 +69,7 @@ class AppearanceSample:
     frame_id: int
     aspect_ratio: float = 0.0  # h/w of detection box; 0.0 = unknown
     quality_score: float = 0.0  # A6 composite score; 0.0 → fall back to legacy formula
+    box: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
 
 
 @dataclass(frozen=True)
@@ -117,6 +118,7 @@ class TrackAppearanceBank:
         max_aspect: float = 4.5,
         bank_weighted_mean: bool = False,
         ema_alpha: float = 0.8,
+        exp_velocity_aligned_bank: bool = False,
     ) -> None:
         self.k = max(1, k)
         self.min_score = float(min_score)
@@ -128,6 +130,7 @@ class TrackAppearanceBank:
         self._bank_weighted_mean = bank_weighted_mean
         self.ema_alpha = float(ema_alpha)
         self._use_ema = ema_alpha > 0.0
+        self.exp_velocity_aligned_bank = exp_velocity_aligned_bank
         self._banks: dict[int, list[AppearanceSample]] = {}
         self._representatives: dict[int, torch.Tensor] = {}
         self._consistency: dict[int, float] = {}
@@ -157,6 +160,7 @@ class TrackAppearanceBank:
         suspect_box: bool = False,
         aspect_ratio: float = 0.0,
         quality_score: float = 0.0,
+        box: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0),
     ) -> None:
         if (
             det_score < self.min_score
@@ -165,6 +169,46 @@ class TrackAppearanceBank:
             or suspect_box
         ):
             return
+
+        if self.exp_velocity_aligned_bank and track_id in self._banks:
+            samples = self._banks[track_id]
+            chron_samples = sorted(samples, key=lambda s: s.frame_id)
+            if len(chron_samples) >= 2:
+                s_prev2 = chron_samples[-2]
+                s_prev1 = chron_samples[-1]
+                dt1 = s_prev1.frame_id - s_prev2.frame_id
+                dt2 = frame_id - s_prev1.frame_id
+                if dt1 > 0 and dt2 > 0:
+                    if (
+                        s_prev2.box != (0.0, 0.0, 0.0, 0.0)
+                        and s_prev1.box != (0.0, 0.0, 0.0, 0.0)
+                        and box != (0.0, 0.0, 0.0, 0.0)
+                    ):
+                        c_prev2 = (
+                            (s_prev2.box[0] + s_prev2.box[2]) * 0.5,
+                            (s_prev2.box[1] + s_prev2.box[3]) * 0.5,
+                        )
+                        c_prev1 = (
+                            (s_prev1.box[0] + s_prev1.box[2]) * 0.5,
+                            (s_prev1.box[1] + s_prev1.box[3]) * 0.5,
+                        )
+                        c_curr = ((box[0] + box[2]) * 0.5, (box[1] + box[3]) * 0.5)
+
+                        vx_prev = (c_prev1[0] - c_prev2[0]) / dt1
+                        vy_prev = (c_prev1[1] - c_prev2[1]) / dt1
+                        vx_curr = (c_curr[0] - c_prev1[0]) / dt2
+                        vy_curr = (c_curr[1] - c_prev1[1]) / dt2
+
+                        mag_prev = (vx_prev**2 + vy_prev**2) ** 0.5
+                        mag_curr = (vx_curr**2 + vy_curr**2) ** 0.5
+
+                        if mag_prev > 1.0 and mag_curr > 1.0:
+                            cos_theta = (vx_curr * vx_prev + vy_curr * vy_prev) / (
+                                mag_curr * mag_prev + 1e-6
+                            )
+                            if cos_theta < 0.5:
+                                return  # Reject update
+
         emb = F.normalize(
             embedding.detach().to(device="cpu", dtype=torch.float32),
             dim=0,  # saccade-allow-cpu
@@ -180,7 +224,9 @@ class TrackAppearanceBank:
             self._ema_reps[track_id] = F.normalize(ema_unnorm, dim=0)
         bank = self._banks.setdefault(track_id, [])
         bank.append(
-            AppearanceSample(emb, det_score, iou, frame_id, aspect_ratio, quality_score)
+            AppearanceSample(
+                emb, det_score, iou, frame_id, aspect_ratio, quality_score, box
+            )
         )
         bank.sort(key=self._rank_key, reverse=True)
         del bank[self.k :]
@@ -188,22 +234,36 @@ class TrackAppearanceBank:
 
     def update_many(
         self,
-        updates: list[
-            tuple[int, torch.Tensor, float, float, int, bool, bool, float, float]
-        ],
+        updates: list[Any],
     ) -> None:
         touched_track_ids: set[int] = set()
-        for (
-            track_id,
-            embedding,
-            det_score,
-            iou,
-            frame_id,
-            geometry_clean,
-            suspect_box,
-            aspect_ratio,
-            bank_quality_score,
-        ) in updates:
+        for update in updates:
+            if len(update) == 9:
+                (
+                    track_id,
+                    embedding,
+                    det_score,
+                    iou,
+                    frame_id,
+                    geometry_clean,
+                    suspect_box,
+                    aspect_ratio,
+                    bank_quality_score,
+                ) = update
+                box = (0.0, 0.0, 0.0, 0.0)
+            else:
+                (
+                    track_id,
+                    embedding,
+                    det_score,
+                    iou,
+                    frame_id,
+                    geometry_clean,
+                    suspect_box,
+                    aspect_ratio,
+                    bank_quality_score,
+                    box,
+                ) = update
             if (
                 det_score < self.min_score
                 or iou < self.min_iou
@@ -211,6 +271,46 @@ class TrackAppearanceBank:
                 or suspect_box
             ):
                 continue
+
+            if self.exp_velocity_aligned_bank and track_id in self._banks:
+                samples = self._banks[track_id]
+                chron_samples = sorted(samples, key=lambda s: s.frame_id)
+                if len(chron_samples) >= 2:
+                    s_prev2 = chron_samples[-2]
+                    s_prev1 = chron_samples[-1]
+                    dt1 = s_prev1.frame_id - s_prev2.frame_id
+                    dt2 = frame_id - s_prev1.frame_id
+                    if dt1 > 0 and dt2 > 0:
+                        if (
+                            s_prev2.box != (0.0, 0.0, 0.0, 0.0)
+                            and s_prev1.box != (0.0, 0.0, 0.0, 0.0)
+                            and box != (0.0, 0.0, 0.0, 0.0)
+                        ):
+                            c_prev2 = (
+                                (s_prev2.box[0] + s_prev2.box[2]) * 0.5,
+                                (s_prev2.box[1] + s_prev2.box[3]) * 0.5,
+                            )
+                            c_prev1 = (
+                                (s_prev1.box[0] + s_prev1.box[2]) * 0.5,
+                                (s_prev1.box[1] + s_prev1.box[3]) * 0.5,
+                            )
+                            c_curr = ((box[0] + box[2]) * 0.5, (box[1] + box[3]) * 0.5)
+
+                            vx_prev = (c_prev1[0] - c_prev2[0]) / dt1
+                            vy_prev = (c_prev1[1] - c_prev2[1]) / dt1
+                            vx_curr = (c_curr[0] - c_prev1[0]) / dt2
+                            vy_curr = (c_curr[1] - c_prev1[1]) / dt2
+
+                            mag_prev = (vx_prev**2 + vy_prev**2) ** 0.5
+                            mag_curr = (vx_curr**2 + vy_curr**2) ** 0.5
+
+                            if mag_prev > 1.0 and mag_curr > 1.0:
+                                cos_theta = (vx_curr * vx_prev + vy_curr * vy_prev) / (
+                                    mag_curr * mag_prev + 1e-6
+                                )
+                                if cos_theta < 0.5:
+                                    continue  # Reject update
+
             emb = F.normalize(
                 embedding.detach().to(device="cpu", dtype=torch.float32),
                 dim=0,  # saccade-allow-cpu
@@ -227,7 +327,13 @@ class TrackAppearanceBank:
             bank = self._banks.setdefault(track_id, [])
             bank.append(
                 AppearanceSample(
-                    emb, det_score, iou, frame_id, aspect_ratio, bank_quality_score
+                    emb,
+                    det_score,
+                    iou,
+                    frame_id,
+                    aspect_ratio,
+                    bank_quality_score,
+                    box,
                 )
             )
             touched_track_ids.add(track_id)
@@ -496,14 +602,63 @@ class GPUByteTracker:
         cheb_lambda: float = 2.5,
         spatial_gate: float = 4.0,
         max_age: int = 300,
+        bidirectional: bool = False,
+        bridge_px: float = 0.25,
+        bridge_at: int = 4,
+        bridge_min_lost: int = 2,
+        bridge_ttl: int = 120,
+        bridge_max_speed: float = 0.0,
+        bridge_person_height: float = 1.65,
+        bridge_fps: float = 30.0,
+        bridge_margin: float = 0.0,
+        bridge_spatial_gate: float = 0.0,
+        bridge_anchor: int = 0,
+        bridge_anchor_rate: float = 0.0,
+        bridge_h_lo: float = 0.0,
+        bridge_h_hi: float = 0.0,
+        occ_gate_cover: float = 0.0,
+        occ_gap_min: int = 30,
+        occ_expand_px: float = 0.0,
+        occ_expand_cover: float = 0.9,
     ) -> None:
         setter = getattr(self.tracker, "set_relink_params", None)
         if setter is not None:
-            setter(enabled, bank_cap, sim_thresh, cheb_lambda, spatial_gate, max_age)
+            base_args = (
+                enabled,
+                bank_cap,
+                sim_thresh,
+                cheb_lambda,
+                spatial_gate,
+                max_age,
+                bidirectional,
+                bridge_px,
+                bridge_at,
+                bridge_min_lost,
+                bridge_ttl,
+                bridge_max_speed,
+                bridge_person_height,
+                bridge_fps,
+                bridge_margin,
+                bridge_spatial_gate,
+                bridge_anchor,
+                bridge_anchor_rate,
+                bridge_h_lo,
+                bridge_h_hi,
+            )
+            try:
+                setter(
+                    *base_args,
+                    occ_gate_cover,
+                    occ_gap_min,
+                    occ_expand_px,
+                    occ_expand_cover,
+                )
+            except TypeError:
+                setter(*base_args)
 
     def get_relink_debug(self) -> list[int]:
         getter = getattr(self.tracker, "get_relink_debug", None)
-        return list(getter()) if getter is not None else [0, 0, 0]
+        return list(getter()) if getter is not None else [0, 0, 0, 0, 0]
 
     def set_oao_params(self, tau: float = 0.0) -> None:
         """OA-SORT Occlusion-Aware Offset (OAO) penalty.
@@ -733,6 +888,10 @@ class GPUByteTracker:
         track_ids: torch.Tensor,
         keypoints: torch.Tensor,
     ) -> None:
+        """[Reserved] Push per-track keypoints for biometric profile construction.
+
+        Not yet implemented in C++ tracker. Always no-op.
+        """
         push = getattr(self.tracker, "push_keypoints", None)
         if push is None or track_ids.numel() == 0 or keypoints.numel() == 0:
             return
@@ -749,6 +908,10 @@ class GPUByteTracker:
         )
 
     def get_biometric(self, track_id: int) -> Optional[dict[str, float]]:
+        """[Reserved] Return per-track biometric profile (leg/shoulder/head ratios).
+
+        Not yet implemented in C++ tracker. Always returns None.
+        """
         get_bio = getattr(self.tracker, "get_biometric", None)
         if get_bio is None:
             return None

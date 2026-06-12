@@ -12,7 +12,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 
-from saccade.perception.dispatcher import AsyncDispatcher, _match_keypoints_to_tracks
+from saccade.perception.dispatcher import (
+    AsyncDispatcher,
+    WorkbenchPool,
+    _match_keypoints_to_tracks,
+)
 from saccade.resource.resource_manager import ResourceManager, DegradationLevel
 
 
@@ -181,6 +185,18 @@ def test_init_with_extractor() -> None:
         extractor=extractor,
     )
     assert dispatcher.extractor is extractor
+
+
+@pytest.mark.asyncio
+async def test_workbench_pool_nv12_requires_kernel() -> None:
+    with patch("saccade.perception.dispatcher._nv12_letterbox_kernel", None):
+        pool = WorkbenchPool(
+            engine_path="dummy.engine",
+            n_streams=1,
+            use_nv12=True,
+        )
+        with pytest.raises(RuntimeError, match="nv12_to_chw_letterbox"):
+            await pool.start()
 
 
 # ── Tracker management ─────────────────────────────────────────────────

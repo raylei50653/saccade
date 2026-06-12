@@ -307,16 +307,67 @@ def filter_low_quality_tracklets(
     return _format_mot_records(filtered), stats
 
 
+def apply_deferred_alias(
+    lines: list[str],
+    alias: dict[int, int],
+) -> tuple[list[str], dict[str, int]]:
+    """Apply finalized delayed-claim aliases to already-emitted MOT lines."""
+    stats = {
+        "aliases": 0,
+        "aliases_skipped_overlap": 0,
+        "lines_remapped": 0,
+        "ids_before": 0,
+        "ids_after": 0,
+    }
+    if not lines or not alias:
+        return lines, stats
+
+    records = _parse_mot_lines(lines)
+    stats["ids_before"] = len({record.track_id for record in records})
+    remap = {int(k): int(v) for k, v in alias.items() if int(k) != int(v)}
+    if not remap:
+        stats["ids_after"] = stats["ids_before"]
+        return lines, stats
+
+    frames_by_id: dict[int, set[int]] = {}
+    for record in records:
+        frames_by_id.setdefault(record.track_id, set()).add(record.frame)
+
+    safe_remap: dict[int, int] = {}
+    for raw_id, canonical_id in remap.items():
+        raw_frames = frames_by_id.get(raw_id, set())
+        canonical_frames = frames_by_id.get(canonical_id, set())
+        if (
+            raw_frames
+            and canonical_frames
+            and raw_frames.intersection(canonical_frames)
+        ):
+            stats["aliases_skipped_overlap"] += 1
+            continue
+        safe_remap[raw_id] = canonical_id
+
+    stats["aliases"] = len(safe_remap)
+    for record in records:
+        new_id = safe_remap.get(record.track_id)
+        if new_id is not None:
+            record.track_id = new_id
+            stats["lines_remapped"] += 1
+    stats["ids_after"] = len({record.track_id for record in records})
+    return _format_mot_records(records), stats
+
+
 def interpolate_tracklets(
     lines: list[str],
     *,
     max_gap: int = 20,
     min_track_len: int = 5,
+    min_h: float = 0.0,
 ) -> tuple[list[str], dict[str, int]]:
     """Fill gaps ≤ max_gap in confirmed tracklets with linear interpolation.
 
     Only operates on tracks with ≥ min_track_len observations (shorter tracklets
     are likely noise and shouldn't be extrapolated).
+    If min_h > 0, only interpolates gaps where both bounding boxes have height ≥ min_h.
     Uses pandas + numpy for fast vectorized parse/format.
     """
     stats: dict[str, int] = {
@@ -355,6 +406,8 @@ def interpolate_tracklets(
     same_tid = vals[:-1, 1] == vals[1:, 1]
     gap_frames = np.where(same_tid, vals[1:, 0] - vals[:-1, 0] - 1, 0)
     valid = (gap_frames >= 1) & (gap_frames <= max_gap)
+    if min_h > 0:
+        valid &= (vals[:-1, 5] >= min_h) & (vals[1:, 5] >= min_h)
     gap_idx = np.where(valid)[0]
 
     stats["gaps_filled"] = int(valid.sum())

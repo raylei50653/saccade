@@ -1,0 +1,40 @@
+# Eager-backbone 1024 eval for full-ft head (runs/mamba_gt_vgt_1024_full).
+# (eager-pt vs TRT cosine 0.878 at 1024 vs 1.0 at 640; the 1024 ONNX/engine is a
+# bad export). Uses the eager PyTorch teacher backbone = the head's native feature
+# source. Slower (no TRT) but correct. Inherits mamba_optimal tracker settings.
+
+# --- Detection & Tiling ---
+tiling: native_1024
+preprocess: none
+track_person_only: false
+person_geometry_prior: false
+detection_quality_scaling: false
+
+# --- Mamba Detector (eager backbone) ---
+mamba_ckpt: runs/mamba_gt_vgt_1024_v2/best.ckpt
+fpn_backbone_engine: ""        # empty → eager PyTorch backbone (_forward_pytorch_backbone)
+use_whole_graph: false         # whole-graph needs a TRT backbone
+use_cuda_graph: false
+use_tracker_graph: false
+
+# --- GMC ---
+gmc: true
+gmc_downscale: 4
+gmc_fg_mask: false
+
+# --- ReID ---
+reid_mode: "off"
+
+# --- Tracker Parameters ---
+match_thresh: 0.50
+new_track_thresh: 0.28
+kalman_r_scale: 2.8
+confirm_streak: 3
+confirm_score_thresh: 0.50
+fuse_score_weight: 0.0
+id_stability_filter: false
+per_seq_adapt: false
+geometry_suspect_support: false
+interpolate_tracklets: true
+interpolate_max_gap: 35
+interpolate_min_track_len: 5

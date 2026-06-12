@@ -89,3 +89,8 @@ build-native-coverage/
 scratch/nsys_profiles/
 storage/mlflow_artifacts/
 output/
+
+# Analysis script outputs (generated plots, candidate CSVs, sweep data)
+scripts/tools/out/
+scratch/pipeline_math_validation/data/
+scratch/pipeline_math_validation/output/

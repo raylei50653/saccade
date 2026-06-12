@@ -14,7 +14,6 @@ All tests are skipped without CUDA / the C++ extension / model artifacts.
 from __future__ import annotations
 
 import ctypes
-import importlib.util
 import sys
 import threading
 from pathlib import Path
@@ -39,7 +38,12 @@ import pytest  # noqa: E402
 CKPT = Path("runs/mamba_gt_vgt_mamba_v14/best.ckpt")
 YOLO = Path("models/yolo/yolo26s.pt")
 BACKBONE_B4 = Path("models/yolo/yolo26s_backbone_640_batch4.engine")
-_HAS_EXT = importlib.util.find_spec("saccade_perception_ext") is not None
+try:
+    import saccade_perception_ext as _spe  # noqa: F401
+
+    _HAS_EXT = True
+except Exception:
+    _HAS_EXT = False
 
 pytestmark = [
     pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA GPU required"),

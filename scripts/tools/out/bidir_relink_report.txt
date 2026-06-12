@@ -1,0 +1,291 @@
+BIDIRECTIONAL BRIDGE-RELINK ANALYSIS  (mamba_whole_graph SDP)
+
+==============================================================================
+MOT17-02-SDP: 2457 attempts, 117 pred tracks, 105 mapped to GT
+
+(1) UNHANDLED candidates (no accepted proposal): 37 missed-relink, 7 correct-reject, 64 unmapped
+    cand  ->lost  gap  fwd_eucl bwd_eucl  fwd_maha  bwd_maha  reason       cand_len
+       24     11    3      1.59     1.49     186.5     264.9  rej_bridge     67
+       55     34    3      2.23     2.37     101.5    4146.5  rej_bridge     49
+       80      1    3      0.39     0.44       8.0      24.9  rej_bridge    105
+       28     17    5      1.07     1.05      24.0     211.0  rej_bridge     27
+       53     31    9      1.02     0.84       8.3     141.2  rej_bridge      4
+       72      3   12      3.38     3.32     155.6    1090.1  rej_bridge    220
+      107     84   12      2.20     2.18      39.1     692.9  rej_bridge     61
+      112    101   13      5.03     5.98    1393.4    1720.8  rej_bridge     46
+       43     16   14      1.51     1.80      52.3     199.3  rej_bridge     26
+       84     10   15      2.76     3.14      42.7    2508.3  rej_bridge     50
+       44     16   17      6.34     6.54     170.9    6348.3  rej_bridge    354
+      111     84   17      1.05     1.14       5.0     171.7  rej_bridge     11
+       34     17   18      0.48     0.47       1.7      14.4  rej_bridge    228
+       46     16   18      2.50     3.34      45.7    1019.9  rej_bridge     32
+       48     34   21      2.58     2.78       8.4    5136.3  rej_bridge     80
+       57     44   21      1.04     0.09       0.4       1.1  rej_bridge    119
+       58     44   26      1.54     0.87       2.2      49.7  rej_bridge     89
+       95     48   26      2.78     4.71      60.3     866.3  rej_bridge     70
+       49     16   28      5.79     6.06      75.8    4037.7  rej_bridge     59
+       92     10   29      2.50     2.99      10.8    1822.1  rej_bridge      3
+       56     31   31      0.73     0.29      -1.0      10.2  rej_bridge    132
+       97     48   33      0.15     1.48      -1.0     261.6  rej_bridge     21
+      115     84   36      1.08     1.32      -1.0     241.3  rej_bridge     24
+       64     34   38      1.32     0.75      -1.0    1147.3  rej_bridge     44
+       59     34   39      1.77     1.93      -1.0    2833.5  rej_bridge     75
+      117     84   40      2.70     4.57      -1.0    1098.6  rej_bridge      9
+       66     34   46      1.16     0.75      -1.0     393.1  rej_bridge     36
+       41     17   48      1.06     1.37      -1.0     605.5  rej_bridge    153
+       31     11   52      0.83     0.66      -1.0      46.7  rej_bridge    248
+       70     34   52      1.39     0.95      -1.0    1259.2  rej_bridge     12
+       71     34   52      1.31     0.77      -1.0     866.8  rej_bridge     12
+       76     44   75      1.18     3.40      -1.0    1612.4  rej_bridge     85
+       77     44   76      1.05     1.41      -1.0     179.1  rej_bridge    194
+       87     34   78      1.48     1.32      -1.0    2501.1  rej_bridge      3
+       40     11   85      0.79     0.18      -1.0       4.2  rej_bridge     63
+       89     44   91      2.86     1.19      -1.0     217.6  rej_bridge     58
+       75     16  116      0.52     0.31      -1.0       9.3  rej_bridge     94
+
+(2) Forward vs backward residual distributions (per attempt):
+    fwd_eucl  same-GT: n= 196 mean=   3.72 p25=  1.48 p50=  3.37 p75=  5.48 p90=  7.03
+    fwd_eucl  diff-GT: n= 384 mean=   4.11 p25=  1.62 p50=  3.59 p75=  5.88 p90=  8.10   Cohen_d=+0.14
+    bwd_eucl  same-GT: n= 196 mean=   3.86 p25=  1.43 p50=  3.51 p75=  5.81 p90=  7.14
+    bwd_eucl  diff-GT: n= 384 mean=   3.90 p25=  1.55 p50=  3.66 p75=  5.67 p90=  7.52   Cohen_d=+0.01
+    fwd_maha  same-GT: n=  71 mean= 436.42 p25= 16.69 p50= 61.88 p75=255.57 p90=686.10
+    fwd_maha  diff-GT: n= 143 mean= 444.70 p25=  8.22 p50= 44.35 p75=142.84 p90=933.95   Cohen_d=+0.01
+    bwd_maha  same-GT: n= 196 mean=3749.86 p25=432.57 p50=2194.14 p75=5526.96 p90=8606.74
+    bwd_maha  diff-GT: n= 384 mean=6574.21 p25=369.30 p50=2097.63 p75=7086.44 p90=15557.52   Cohen_d=+0.26
+
+(3) Accept/Reject x correctness by gap-bin:
+    gap-bin   acc_same acc_diff acc_unm | rej_same rej_diff rej_unm
+    2-5              1        1       1 |       20       27     104
+    6-15             0        0       1 |       22       54     212
+    16-30            0        1       1 |       29       63     250
+    31-45            1        1       1 |       27       42     206
+    46-120           0        0       5 |       96      195    1096
+
+(4) Behaviour by candidate track lifespan (frames in MOT output):
+    bucket        n_att  accept%  same-GT%  fwd_eucl bwd_eucl
+    short<20       1998     0.6     46.0      3.64     3.64
+    med20-100       337     0.3     31.1      4.01     4.03
+    long>=100       122     0.8     26.7      3.85     3.59
+
+==============================================================================
+MOT17-04-SDP: 550 attempts, 105 pred tracks, 99 mapped to GT
+
+(1) UNHANDLED candidates (no accepted proposal): 13 missed-relink, 17 correct-reject, 44 unmapped
+    cand  ->lost  gap  fwd_eucl bwd_eucl  fwd_maha  bwd_maha  reason       cand_len
+      176    174    2      0.78     0.82      29.6     103.7  rej_bridge    695
+      133    121    3      1.88     1.82     128.0     557.8  rej_bridge   1048
+      158    121    3      0.69     0.69      22.6      64.1  rej_bridge    799
+      148    141    4      0.97     1.14      39.0     231.5  rej_bridge     73
+      131    126    6      7.31     7.20    1507.7    5957.4  rej_bridge    677
+      160    121    6      1.39     1.36      32.4     314.4  rej_bridge    518
+      170    121    9      2.54     2.43      67.1     944.5  rej_bridge      4
+      136    121   10      0.22     0.16       0.3       3.3  rej_dir       456
+      139    121   19      7.32     7.24     154.4    9322.5  rej_bridge   1048
+      174    121   44      0.26     0.29      -1.0      10.9  rej_bridge    718
+      179    121   56      2.84     2.76      -1.0    1371.7  rej_bridge    642
+      180    135   93      6.98     4.74      -1.0    3186.6  rej_bridge     31
+      182    121   99      1.33     1.37      -1.0     271.3  rej_bridge    605
+
+(2) Forward vs backward residual distributions (per attempt):
+    fwd_eucl  same-GT: n=  17 mean=   2.80 p25=  0.97 p50=  1.88 p75=  2.84 p90=  7.12
+    fwd_eucl  diff-GT: n=  45 mean=   3.29 p25=  1.43 p50=  2.42 p75=  4.00 p90=  7.47   Cohen_d=+0.20
+    bwd_eucl  same-GT: n=  17 mean=   2.67 p25=  1.14 p50=  1.82 p75=  2.76 p90=  7.22
+    bwd_eucl  diff-GT: n=  45 mean=   3.03 p25=  1.34 p50=  2.29 p75=  4.18 p90=  6.89   Cohen_d=+0.14
+    fwd_maha  same-GT: n=  12 mean= 198.12 p25= 31.68 p50= 53.06 p75=157.59 p90=191.81
+    fwd_maha  diff-GT: n=  14 mean= 647.43 p25=  7.82 p50= 69.71 p75=606.23 p90=2634.79   Cohen_d=+0.48
+    bwd_maha  same-GT: n=  17 mean=2099.05 p25=231.50 p50=549.29 p75=1371.67 p90=7303.42
+    bwd_maha  diff-GT: n=  45 mean=2162.78 p25=163.89 p50=689.77 p75=3164.25 p90=6126.09   Cohen_d=+0.02
+
+(3) Accept/Reject x correctness by gap-bin:
+    gap-bin   acc_same acc_diff acc_unm | rej_same rej_diff rej_unm
+    2-5              0        0       0 |        5        6      51
+    6-15             0        0       2 |        5        4      48
+    16-30            0        0       2 |        2        4      65
+    31-45            0        0       2 |        1        2      52
+    46-120           0        0       2 |        4       29     264
+
+(4) Behaviour by candidate track lifespan (frames in MOT output):
+    bucket        n_att  accept%  same-GT%  fwd_eucl bwd_eucl
+    short<20        309     1.6     25.0      5.08     5.21
+    med20-100        19     0.0     28.6      5.16     4.81
+    long>=100       222     1.4     27.5      4.38     4.26
+
+==============================================================================
+MOT17-05-SDP: 2657 attempts, 144 pred tracks, 115 mapped to GT
+
+(1) UNHANDLED candidates (no accepted proposal): 6 missed-relink, 2 correct-reject, 120 unmapped
+    cand  ->lost  gap  fwd_eucl bwd_eucl  fwd_maha  bwd_maha  reason       cand_len
+      230    228    3      1.65     1.45      65.2     142.7  rej_bridge      8
+      231    228    4      0.19     0.09       0.5       0.9  rej_dir         3
+      235    228   14      0.56     0.30       0.3      10.6  rej_dir       289
+      237    228   19      1.75     0.78       8.3      51.4  rej_bridge      7
+      241    228   24      1.26     1.76       0.6     117.2  rej_bridge    101
+      242    228   29      0.92     2.44       0.0     521.0  rej_bridge     82
+
+(2) Forward vs backward residual distributions (per attempt):
+    fwd_eucl  same-GT: n=  10 mean=   1.42 p25=  0.94 p50=  1.46 p75=  1.73 p90=  2.23
+    fwd_eucl  diff-GT: n=0   Cohen_d=+nan
+    bwd_eucl  same-GT: n=  10 mean=   1.42 p25=  0.83 p50=  1.49 p75=  2.00 p90=  2.48
+    bwd_eucl  diff-GT: n=0   Cohen_d=+nan
+    fwd_maha  same-GT: n=  10 mean=  44.05 p25=  0.57 p50= 16.83 p75= 74.28 p90=112.47
+    fwd_maha  diff-GT: n=0   Cohen_d=+nan
+    bwd_maha  same-GT: n=  10 mean= 336.25 p25= 46.98 p50=129.95 p75=518.57 p90=743.15
+    bwd_maha  diff-GT: n=0   Cohen_d=+nan
+
+(3) Accept/Reject x correctness by gap-bin:
+    gap-bin   acc_same acc_diff acc_unm | rej_same rej_diff rej_unm
+    2-5              0        0       1 |        5        0     188
+    6-15             0        0       9 |        2        0     332
+    16-30            0        0       6 |        3        0     368
+    31-45            0        0       1 |        0        0     382
+    46-120           0        0       2 |        0        0    1358
+
+(4) Behaviour by candidate track lifespan (frames in MOT output):
+    bucket        n_att  accept%  same-GT%  fwd_eucl bwd_eucl
+    short<20       2487     0.7    100.0      3.55     2.79
+    med20-100        57     1.8    100.0      3.31     2.78
+    long>=100       113     0.0    100.0      3.95     3.42
+
+==============================================================================
+MOT17-09-SDP: 213 attempts, 37 pred tracks, 33 mapped to GT
+
+(1) UNHANDLED candidates (no accepted proposal): 0 missed-relink, 0 correct-reject, 31 unmapped
+
+(2) Forward vs backward residual distributions (per attempt):
+    fwd_eucl  same-GT: n=0
+    fwd_eucl  diff-GT: n=0   Cohen_d=+nan
+    bwd_eucl  same-GT: n=0
+    bwd_eucl  diff-GT: n=0   Cohen_d=+nan
+    fwd_maha  same-GT: n=0
+    fwd_maha  diff-GT: n=0   Cohen_d=+nan
+    bwd_maha  same-GT: n=0
+    bwd_maha  diff-GT: n=0   Cohen_d=+nan
+
+(3) Accept/Reject x correctness by gap-bin:
+    gap-bin   acc_same acc_diff acc_unm | rej_same rej_diff rej_unm
+    2-5              0        0       1 |        0        0      19
+    6-15             0        0       0 |        0        0      30
+    16-30            0        0       1 |        0        0      31
+    31-45            0        0       0 |        0        0      24
+    46-120           0        0       1 |        0        0     106
+
+(4) Behaviour by candidate track lifespan (frames in MOT output):
+    bucket        n_att  accept%  same-GT%  fwd_eucl bwd_eucl
+    short<20        213     1.4      nan      2.44     2.68
+    med20-100         0
+    long>=100         0
+
+==============================================================================
+MOT17-10-SDP: 2762 attempts, 127 pred tracks, 104 mapped to GT
+
+(1) UNHANDLED candidates (no accepted proposal): 6 missed-relink, 18 correct-reject, 109 unmapped
+    cand  ->lost  gap  fwd_eucl bwd_eucl  fwd_maha  bwd_maha  reason       cand_len
+      426    409   13      8.32     5.65      49.5   10760.8  rej_bridge      5
+      505    413   37      4.24     3.98      -1.0     676.8  rej_bridge    214
+      516    413   49      5.22     6.40      -1.0    4382.1  rej_bridge     50
+      517    413   52      8.64     6.26      -1.0    2191.3  rej_bridge     39
+      519    413   53      5.88     3.38      -1.0    1242.2  rej_bridge     69
+      529    413   65      6.84     6.37      -1.0    5725.6  rej_bridge     45
+
+(2) Forward vs backward residual distributions (per attempt):
+    fwd_eucl  same-GT: n=  11 mean=   7.44 p25=  5.55 p50=  8.12 p75=  8.81 p90=  9.90
+    fwd_eucl  diff-GT: n=  66 mean=   4.55 p25=  2.20 p50=  4.37 p75=  6.27 p90=  8.90   Cohen_d=-0.97
+    bwd_eucl  same-GT: n=  11 mean=   5.89 p25=  5.06 p50=  6.26 p75=  6.59 p90=  7.33
+    bwd_eucl  diff-GT: n=  66 mean=   4.37 p25=  2.10 p50=  4.52 p75=  6.24 p90=  7.77   Cohen_d=-0.58
+    fwd_maha  same-GT: n=   5 mean=  71.34 p25= 21.61 p50= 49.52 p75= 51.94 p90=150.48
+    fwd_maha  diff-GT: n=  33 mean= 685.32 p25=  2.35 p50=120.87 p75=312.48 p90=2945.37   Cohen_d=+0.45
+    bwd_maha  same-GT: n=  11 mean=4825.05 p25=1716.76 p50=4203.17 p75=5983.92 p90=10760.82
+    bwd_maha  diff-GT: n=  66 mean=3792.26 p25=483.00 p50=2733.59 p75=4708.23 p90=10250.30   Cohen_d=-0.24
+
+(3) Accept/Reject x correctness by gap-bin:
+    gap-bin   acc_same acc_diff acc_unm | rej_same rej_diff rej_unm
+    2-5              0        0       7 |        0        6     195
+    6-15             0        0       7 |        2       17     343
+    16-30            0        1       1 |        3       10     340
+    31-45            0        0       0 |        2       12     310
+    46-120           0        0       2 |        4       20    1480
+
+(4) Behaviour by candidate track lifespan (frames in MOT output):
+    bucket        n_att  accept%  same-GT%  fwd_eucl bwd_eucl
+    short<20       2233     0.6     11.1      4.63     4.51
+    med20-100       290     0.3     19.0      6.14     5.18
+    long>=100       239     1.3      7.7      5.14     4.37
+
+==============================================================================
+MOT17-11-SDP: 629 attempts, 86 pred tracks, 77 mapped to GT
+
+(1) UNHANDLED candidates (no accepted proposal): 0 missed-relink, 0 correct-reject, 70 unmapped
+
+(2) Forward vs backward residual distributions (per attempt):
+    fwd_eucl  same-GT: n=0
+    fwd_eucl  diff-GT: n=0   Cohen_d=+nan
+    bwd_eucl  same-GT: n=0
+    bwd_eucl  diff-GT: n=0   Cohen_d=+nan
+    fwd_maha  same-GT: n=0
+    fwd_maha  diff-GT: n=0   Cohen_d=+nan
+    bwd_maha  same-GT: n=0
+    bwd_maha  diff-GT: n=0   Cohen_d=+nan
+
+(3) Accept/Reject x correctness by gap-bin:
+    gap-bin   acc_same acc_diff acc_unm | rej_same rej_diff rej_unm
+    2-5              0        0       2 |        0        0      48
+    6-15             0        0       2 |        0        0      82
+    16-30            0        0       3 |        0        0      87
+    31-45            0        0       0 |        0        0      67
+    46-120           0        0       1 |        0        0     337
+
+(4) Behaviour by candidate track lifespan (frames in MOT output):
+    bucket        n_att  accept%  same-GT%  fwd_eucl bwd_eucl
+    short<20        629     1.3      nan      3.55     2.75
+    med20-100         0
+    long>=100         0
+
+==============================================================================
+MOT17-13-SDP: 4269 attempts, 141 pred tracks, 117 mapped to GT
+
+(1) UNHANDLED candidates (no accepted proposal): 10 missed-relink, 16 correct-reject, 152 unmapped
+    cand  ->lost  gap  fwd_eucl bwd_eucl  fwd_maha  bwd_maha  reason       cand_len
+      728    726    6      0.71     0.34       1.0      14.7  rej_dir        52
+      735    726   12      2.11     0.27       4.1       7.5  rej_bridge     39
+      664    648   15      5.76     4.10      45.2   13323.0  rej_bridge      3
+      663    651   23      4.77     3.07      19.1   28660.4  rej_bridge     72
+      643    627   29     15.48    19.61    1365.5   17951.9  rej_bridge     15
+      644    627   30     15.96    24.33      -1.0   32843.8  rej_bridge     27
+      668    648   30      9.75     5.32      -1.0   22450.3  rej_bridge      3
+      662    647   44     14.37     8.47      -1.0   76302.2  rej_bridge      4
+      647    627   54     19.36    34.15      -1.0   68822.3  rej_bridge     17
+      658    625   96     23.94    34.93      -1.0  934195.9  rej_bridge     89
+
+(2) Forward vs backward residual distributions (per attempt):
+    fwd_eucl  same-GT: n=  16 mean=  12.14 p25=  5.00 p50= 14.93 p75= 18.50 p90= 20.14
+    fwd_eucl  diff-GT: n=  83 mean=  14.73 p25=  9.17 p50= 15.19 p75= 21.12 p90= 24.77   Cohen_d=+0.33
+    bwd_eucl  same-GT: n=  16 mean=  10.86 p25=  3.06 p50=  7.70 p75= 12.17 p90= 29.24
+    bwd_eucl  diff-GT: n=  83 mean=  14.26 p25=  6.69 p50= 10.01 p75= 17.79 p90= 33.01   Cohen_d=+0.27
+    fwd_maha  same-GT: n=   6 mean= 239.38 p25=  2.09 p50= 11.60 p75= 38.69 p90=705.33
+    fwd_maha  diff-GT: n=  26 mean= 745.91 p25=106.82 p50=178.69 p75=613.01 p90=1624.43   Cohen_d=+0.31
+    bwd_maha  same-GT: n=  16 mean=101196.13 p25=10631.66 p50=30752.13 p75=82090.26 p90=124686.46
+    bwd_maha  diff-GT: n=  83 mean=111012.14 p25=14221.61 p50=52598.74 p75=138600.20 p90=254139.36   Cohen_d=+0.06
+
+(3) Accept/Reject x correctness by gap-bin:
+    gap-bin   acc_same acc_diff acc_unm | rej_same rej_diff rej_unm
+    2-5              1        0      12 |        0        6     394
+    6-15             0        0       4 |        3        6     536
+    16-30            0        0       2 |        4       14     582
+    31-45            0        0       1 |        1        9     514
+    46-120           0        0       0 |        7       48    2125
+
+(4) Behaviour by candidate track lifespan (frames in MOT output):
+    bucket        n_att  accept%  same-GT%  fwd_eucl bwd_eucl
+    short<20       3950     0.5     32.1      9.66     8.16
+    med20-100       228     0.4     12.7     14.75    24.16
+    long>=100        91     0.0      0.0      9.77    14.12
+
+==============================================================================
+AGGREGATE (7 seqs): 13537 attempts | unhandled missed-relink=72 correct-reject=60
+  feature   same-GT mean   diff-GT mean   Cohen_d (separation of false from true)
+  fwd_eucl           4.27           5.62   +0.27
+  bwd_eucl           4.22           5.37   +0.20
+  fwd_maha         342.28         530.86   +0.14
+  bwd_maha        9784.93       20910.24   +0.16
+
+[plots] fig1_residual_dist.png, fig2_fwd_vs_bwd_scatter.png, fig3_gate_roc.png, fig4_lifespan.png

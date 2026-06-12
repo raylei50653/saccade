@@ -44,6 +44,8 @@ class ReIDConfig:
     # Profiling
     profile_lazy_reid_candidates: bool = False
     profile_lazy_reid_embeddings: bool = False
+    # Experimental
+    exp_velocity_aligned_bank: bool = False
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> "ReIDConfig":
@@ -266,4 +268,9 @@ def add_reid_args(parser: argparse.ArgumentParser) -> None:
         "--profile-lazy-reid-embeddings",
         action="store_true",
         help="Profile embedding extraction for lazy ReID triggering.",
+    )
+    grp.add_argument(
+        "--exp-velocity-aligned-bank",
+        action="store_true",
+        help="[Experimental] Only update Appearance Bank when the detection's instantaneous motion direction is aligned with its history.",
     )

@@ -5,12 +5,21 @@ gi.require_version("GstApp", "1.0")  # noqa: E402
 from gi.repository import Gst, GstApp  # noqa: E402
 import torch  # noqa: E402
 import numpy as np  # noqa: E402
-from typing import Optional  # noqa: E402
+import os  # noqa: E402
+from typing import Optional, NamedTuple  # noqa: E402
 import threading  # noqa: E402
 from saccade.media.rtsp import build_reader_url, DEFAULT_RTSP_SINGLE_STREAM_PATH  # noqa: E402
 
 # 初始化 GStreamer
 Gst.init([])
+
+
+class Nv12Frame(NamedTuple):
+    buf: torch.Tensor
+    width: int
+    height: int
+    y_pitch: int
+    uv_pitch: int
 
 
 class GstZeroCopyDecoder:
@@ -20,12 +29,16 @@ class GstZeroCopyDecoder:
     1. 使用 NVDEC (nvh264dec) 進行硬體解碼。
     2. 直接輸出 NV12 格式 (YUV420) 以減少匯流排頻寬佔用。
     3. 在 GPU (PyTorch) 中進行色彩空間轉換 (NV12 -> RGB)，實現真正的 100% Zero-Copy。
+
+    SACCADE_NV12_BUFFER=1: store raw NV12 on GPU, skip PyTorch RGB conversion.
+    Consumer uses nv12_to_chw_letterbox from saccade_tracking_ext for fused decode+letterbox.
     """
 
     def __init__(self, source_url: str) -> None:
         self.source_url = source_url
         self.decoder_name = self._get_best_decoder()
         self.pipeline_str = self._build_pipeline_str()
+        self._nv12_buffer = os.environ.get("SACCADE_NV12_BUFFER") == "1"
 
         print(f"🛠️  Selected Decoder: {self.decoder_name}")
         print(f"🛠️  Generated Pipeline: {self.pipeline_str}")
@@ -40,8 +53,12 @@ class GstZeroCopyDecoder:
         self.bus.connect("message", self._on_bus_message)
 
         self.last_tensor: Optional[torch.Tensor] = None
+        self._nv12_frame: Optional[Nv12Frame] = None
         self._lock = threading.Lock()
         self._running = False
+
+        if self._nv12_buffer:
+            print("  NV12_BUFFER mode: storing raw NV12, consumer uses fused kernel")
 
     def _get_best_decoder(self) -> str:
         """偵測 GStreamer 註冊表，回傳最佳解碼器名稱"""
@@ -141,15 +158,26 @@ class GstZeroCopyDecoder:
                 ).to("cuda")
 
                 if fmt == "NV12":
-                    # 執行高效能 GPU 轉換
-                    rgb_tensor = self._nv12_to_rgb_gpu(raw_data, height, width)
+                    if self._nv12_buffer:
+                        with self._lock:
+                            self._nv12_frame = Nv12Frame(
+                                buf=raw_data,
+                                width=width,
+                                height=height,
+                                y_pitch=width,
+                                uv_pitch=width,
+                            )
+                            self.last_tensor = raw_data
+                    else:
+                        rgb_tensor = self._nv12_to_rgb_gpu(raw_data, height, width)
+                        with self._lock:
+                            self.last_tensor = rgb_tensor
                 else:
                     # 如果已經是 RGB (CPU 備援路徑)
                     stride = len(map_info.data) // height
                     rgb_tensor = raw_data.view(height, stride // 3, 3)[:, :width, :]
-
-                with self._lock:
-                    self.last_tensor = rgb_tensor
+                    with self._lock:
+                        self.last_tensor = rgb_tensor
             finally:
                 buffer.unmap(map_info)
 
@@ -158,13 +186,18 @@ class GstZeroCopyDecoder:
     def start(self) -> None:
         self._running = True
         self.pipeline.set_state(Gst.State.PLAYING)
-        print(
-            f"🚀 GStreamer Pipeline started (NV12-to-RGB GPU mode): {self.source_url}"
-        )
+        mode = "NV12 buffer" if self._nv12_buffer else "NV12-to-RGB GPU"
+        print(f"🚀 GStreamer Pipeline started ({mode} mode): {self.source_url}")
 
     def grab_frame_tensor(self) -> Optional[torch.Tensor]:
         with self._lock:
             return self.last_tensor
+
+    def grab_nv12_frame(self) -> Optional[Nv12Frame]:
+        if not self._nv12_buffer:
+            return None
+        with self._lock:
+            return self._nv12_frame
 
     def stop(self) -> None:
         self._running = False

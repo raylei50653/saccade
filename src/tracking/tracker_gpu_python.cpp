@@ -21,10 +21,13 @@
 #include "tracking/workbench.hpp"
 #include "tracking/mamba_scan.cuh"
 #include "tracking/quality_filter.cuh"
+#include "tracking/copy_pad.cuh"
+#include "tracking/relink_gate.hpp"
 #include "tracking/kalman_gpu.cuh"
 #include "perception/feature_extractor.hpp"
 #include "perception/preprocessor.hpp"
 #include <opencv2/opencv.hpp>
+#include <Eigen/Dense>
 
 namespace py = pybind11;
 using namespace saccade;
@@ -421,7 +424,19 @@ struct RelinkStats {
     int reject_kalman = 0;
     int reject_direction = 0;
     int reject_speed = 0;
+    int delayed_claim_pending = 0;
+    int delayed_claim_ready = 0;
+    int delayed_claim_accepted = 0;
     int new_ids = 0;
+    int reject_backward = 0;
+    int accept_bidir = 0;
+    int relink_split_collision = 0;
+};
+
+struct PendingClaim {
+    int first = -1;
+    int last = -1;
+    int hits = 0;
 };
 
 class SemanticRelinkerCpp {
@@ -462,7 +477,16 @@ public:
         float kalman_accel_long = 2.0f,
         float kalman_accel_lat = 1.0f,
         float kalman_fps = 30.0f,
-        float kalman_max_speed_mps = 0.0f
+        float kalman_max_speed_mps = 0.0f,
+        bool delayed_claim = false,
+        int claim_warmup_frames = 3,
+        bool bidirectional = false,
+        float bridge_px = 1.5f,
+        float bridge_h_lo = 0.0f,
+        float bridge_h_hi = 0.0f,
+        bool exp_density_gating = false,
+        float exp_density_k = 2.0f,
+        float exp_density_eta = 0.15f
     )
         : sim_threshold_(sim_threshold),
           ttl_(ttl),
@@ -471,6 +495,9 @@ public:
           min_lost_frames_(min_lost_frames),
           min_iou_(min_iou),
           mahalanobis_threshold_(mahalanobis_threshold),
+          exp_density_gating_(exp_density_gating),
+          exp_density_k_(exp_density_k),
+          exp_density_eta_(exp_density_eta),
           buffer_size_(std::max(1, buffer_size)),
           min_consistency_(min_consistency),
           rerank_mode_(std::move(rerank_mode)),
@@ -499,7 +526,14 @@ public:
           kalman_accel_long_(std::max(0.0f, kalman_accel_long)),
           kalman_accel_lat_(std::max(0.0f, kalman_accel_lat)),
           kalman_fps_(kalman_fps > 0.0f ? kalman_fps : 30.0f),
-          kalman_max_speed_mps_(std::max(0.0f, kalman_max_speed_mps)) {}
+          kalman_max_speed_mps_(std::max(0.0f, kalman_max_speed_mps)),
+          delayed_claim_(delayed_claim),
+          claim_warmup_frames_(std::max(1, claim_warmup_frames)),
+          bidirectional_(bidirectional),
+          bridge_px_(bridge_px),
+          bridge_h_lo_(std::max(0.0f, bridge_h_lo)),
+          bridge_h_hi_(std::max(0.0f, bridge_h_hi)),
+          split_counter_(0) {}
 
     void update_motion_snapshots(const std::vector<TrackStateSnapshot>& snapshots, int frame_id = -1) {
         for (const auto& snap : snapshots) {
@@ -603,6 +637,480 @@ public:
         return features_.find(canonical_id) != features_.end();
     }
 
+    bool is_bidirectional() const {
+        return bidirectional_;
+    }
+
+    // GPU-accelerated gate table: pre-compute all per-pair gate quantities
+    // in one CUDA launch. Called once per frame before the candidate loop.
+    // Returns the number of query-candidate pairs computed.
+    int build_gate_table(py::sequence raw_ids, py::sequence boxes,
+                          int frame_id, int frame_w, int frame_h,
+                          uintptr_t tracker_states = 0, uintptr_t tracker_covs = 0,
+                          uintptr_t tracker_tids = 0, int tracker_max_objs = 0,
+                          py::object query_embs = py::none()) {
+        gate_tbl_.clear();
+        gate_row_.clear();
+        gate_col_.clear();
+        gate_n_query_ = gate_n_cand_ = 0;
+
+        const int n_query = static_cast<int>(py::len(raw_ids));
+        if (n_query == 0) return 0;
+
+        std::vector<int> cand_ids;
+        for (int cid : feature_order_) {
+            if (features_.find(cid) != features_.end()) cand_ids.push_back(cid);
+        }
+        const int n_cand = static_cast<int>(cand_ids.size());
+        if (n_cand == 0) return 0;
+
+        gate_n_query_ = n_query;
+        gate_n_cand_ = n_cand;
+
+        // Build query data on CPU
+        std::vector<float> q_box(n_query * 4, 0.0f);
+        std::vector<float> q_foot(n_query * 8, 0.0f);
+        std::vector<int>   q_footn(n_query, 0);
+        std::vector<float> q_emah(n_query, 1.0f);
+        for (int i = 0; i < n_query; ++i) {
+            int rid = raw_ids[i].cast<int>();
+            gate_row_[rid] = i;
+            py::sequence b = boxes[i].cast<py::sequence>();
+            q_box[i * 4 + 0] = b[0].cast<float>();
+            q_box[i * 4 + 1] = b[1].cast<float>();
+            q_box[i * 4 + 2] = b[2].cast<float>();
+            q_box[i * 4 + 3] = b[3].cast<float>();
+            auto eh = ema_h_.find(rid);
+            q_emah[i] = (eh != ema_h_.end()) ? eh->second : 1.0f;
+            float cx = (q_box[i * 4 + 0] + q_box[i * 4 + 2]) * 0.5f;
+            float cy = (q_box[i * 4 + 1] + q_box[i * 4 + 3]) * 0.5f;
+            auto fh = foot_history_.find(rid);
+            int k = 0;
+            if (fh != foot_history_.end()) {
+                for (const auto& p : fh->second) {
+                    if (k >= 4) break;
+                    q_foot[i * 8 + k * 2] = p.first;
+                    q_foot[i * 8 + k * 2 + 1] = p.second;
+                    ++k;
+                }
+            }
+            if (k < 4) {
+                q_foot[i * 8 + k * 2] = cx;
+                q_foot[i * 8 + k * 2 + 1] = cy;
+                ++k;
+            }
+            q_footn[i] = k;
+        }
+
+        // Build candidate data on CPU
+        std::vector<float> c_last(n_cand * 4, 0.0f);
+        std::vector<float> c_mean(n_cand * 6, 0.0f);
+        std::vector<float> c_cov(n_cand * 10, 0.0f);
+        std::vector<float> c_foot(n_cand * 8, 0.0f);
+        std::vector<int>   c_footn(n_cand, 0);
+        std::vector<float> c_emah(n_cand, 1.0f);
+        std::vector<int>   c_gap(n_cand, 0);
+        std::vector<int>   c_delta(n_cand, 0);
+        std::vector<int>   c_has(n_cand, 0);
+        for (int j = 0; j < n_cand; ++j) {
+            int cid = cand_ids[j];
+            gate_col_[cid] = j;
+            auto lb = last_boxes_.find(cid);
+            if (lb != last_boxes_.end()) {
+                c_last[j * 4 + 0] = lb->second.x1;
+                c_last[j * 4 + 1] = lb->second.y1;
+                c_last[j * 4 + 2] = lb->second.x2;
+                c_last[j * 4 + 3] = lb->second.y2;
+            }
+            auto eh = ema_h_.find(cid);
+            c_emah[j] = (eh != ema_h_.end()) ? eh->second : 1.0f;
+            auto ls = last_seen_.find(cid);
+            c_gap[j] = (ls != last_seen_.end()) ? (frame_id - ls->second) : 0;
+            auto fh = foot_history_.find(cid);
+            int k = 0;
+            if (fh != foot_history_.end()) {
+                int total = (int)fh->second.size();
+                for (int p = std::max(0, total - 4); p < total && k < 4; ++p) {
+                    c_foot[j * 8 + k * 2] = fh->second[p].first;
+                    c_foot[j * 8 + k * 2 + 1] = fh->second[p].second;
+                    ++k;
+                }
+            }
+            c_footn[j] = k;
+            auto ms = motion_.find(cid);
+            if (ms != motion_.end()) {
+                c_has[j] = 1;
+                c_delta[j] = (ms->second.frame >= 0) ? (frame_id - ms->second.frame) : 0;
+                const auto& st = ms->second.state;
+                c_mean[j * 6 + 0] = st[0];
+                c_mean[j * 6 + 1] = st[1];
+                c_mean[j * 6 + 2] = st[3];
+                c_mean[j * 6 + 3] = st[4];
+                c_mean[j * 6 + 4] = st[5];
+                c_mean[j * 6 + 5] = st[7];
+                const auto& P = ms->second.covariance;
+                c_cov[j * 10 + 0] = P[0];  c_cov[j * 10 + 1] = P[1];
+                c_cov[j * 10 + 2] = P[4];  c_cov[j * 10 + 3] = P[5];
+                c_cov[j * 10 + 4] = P[9];  c_cov[j * 10 + 5] = P[12];
+                c_cov[j * 10 + 6] = P[13]; c_cov[j * 10 + 7] = P[36];
+                c_cov[j * 10 + 8] = P[37]; c_cov[j * 10 + 9] = P[45];
+            }
+        }
+
+        // GPU allocation + launch
+        float *d_table = nullptr, *d_qbox = nullptr, *d_qfoot = nullptr, *d_qemah = nullptr;
+        float *d_clast = nullptr, *d_cmean = nullptr, *d_ccov = nullptr, *d_cfoot = nullptr;
+        float *d_cemah = nullptr;
+        int *d_qfootn = nullptr, *d_cfootn = nullptr, *d_cgap = nullptr, *d_cdelta = nullptr, *d_chas = nullptr;
+
+        const size_t tsz = static_cast<size_t>(n_query) * n_cand * 6 * sizeof(float);
+        cudaMalloc(&d_table, tsz);
+        cudaMalloc(&d_qbox,  n_query * 4 * sizeof(float));
+        cudaMalloc(&d_qfoot, n_query * 8 * sizeof(float));
+        cudaMalloc(&d_qemah, n_query * sizeof(float));
+        cudaMalloc(&d_qfootn, n_query * sizeof(int));
+        cudaMalloc(&d_clast,  n_cand * 4 * sizeof(float));
+        cudaMalloc(&d_cmean,  n_cand * 6 * sizeof(float));
+        cudaMalloc(&d_ccov,   n_cand * 10 * sizeof(float));
+        cudaMalloc(&d_cfoot,  n_cand * 8 * sizeof(float));
+        cudaMalloc(&d_cemah,  n_cand * sizeof(float));
+        cudaMalloc(&d_cfootn, n_cand * sizeof(int));
+        cudaMalloc(&d_cgap,   n_cand * sizeof(int));
+        cudaMalloc(&d_cdelta, n_cand * sizeof(int));
+        cudaMalloc(&d_chas,   n_cand * sizeof(int));
+
+        // H2D copies for query data and non-state candidate data
+        cudaMemcpy(d_qbox,  q_box.data(),  n_query * 4 * sizeof(float),  cudaMemcpyHostToDevice);
+        cudaMemcpy(d_qfoot, q_foot.data(), n_query * 8 * sizeof(float),  cudaMemcpyHostToDevice);
+        cudaMemcpy(d_qemah, q_emah.data(), n_query * sizeof(float),      cudaMemcpyHostToDevice);
+        cudaMemcpy(d_qfootn,q_footn.data(),n_query * sizeof(int),        cudaMemcpyHostToDevice);
+        cudaMemcpy(d_clast, c_last.data(), n_cand * 4 * sizeof(float),   cudaMemcpyHostToDevice);
+        cudaMemcpy(d_cfoot, c_foot.data(), n_cand * 8 * sizeof(float),   cudaMemcpyHostToDevice);
+        cudaMemcpy(d_cemah, c_emah.data(), n_cand * sizeof(float),       cudaMemcpyHostToDevice);
+        cudaMemcpy(d_cfootn,c_footn.data(),n_cand * sizeof(int),         cudaMemcpyHostToDevice);
+        cudaMemcpy(d_cgap,  c_gap.data(),  n_cand * sizeof(int),         cudaMemcpyHostToDevice);
+
+        // Baseline candidate Kalman state from the CPU-sourced motion snapshot.
+        // This must happen unconditionally so candidates that are NOT present in
+        // the tracker GPU buffer (slot=-1) still have valid mean/cov; the D2D
+        // gather below only overwrites the in-buffer slots and the gather kernel
+        // early-returns for slot<0, leaving d_cmean/d_ccov untouched there.
+        cudaMemcpy(d_cmean, c_mean.data(), n_cand * 6 * sizeof(float),   cudaMemcpyHostToDevice);
+        cudaMemcpy(d_ccov,  c_cov.data(),  n_cand * 10 * sizeof(float),  cudaMemcpyHostToDevice);
+
+        // Candidate Kalman state: use D2D gather from tracker GPU buffers when
+        // available (avoid H2D copy), otherwise fall back to CPU-sourced H2D.
+        bool used_tracker_state = false;
+        if (tracker_states && tracker_covs && tracker_tids && tracker_max_objs > 0) {
+            std::vector<int> h_tids(tracker_max_objs);
+            cudaMemcpy(h_tids.data(), reinterpret_cast<const int*>(tracker_tids),
+                       tracker_max_objs * sizeof(int), cudaMemcpyDeviceToHost);
+            std::unordered_map<int, int> tid_to_slot;
+            for (int s = 0; s < tracker_max_objs; ++s)
+                if (h_tids[s] != 0) tid_to_slot[h_tids[s]] = s;
+
+            std::vector<int> slots(n_cand, -1);
+            std::vector<int> h_delta(n_cand, 0);
+            std::vector<int> h_has(n_cand, 0);
+            int n_in_buffer = 0;
+            for (int j = 0; j < n_cand; ++j) {
+                auto it = tid_to_slot.find(cand_ids[j]);
+                if (it != tid_to_slot.end()) {
+                    slots[j] = it->second;
+                    h_delta[j] = 0;
+                    h_has[j] = 1;
+                    ++n_in_buffer;
+                } else {
+                    h_delta[j] = c_delta[j];
+                    h_has[j] = c_has[j];
+                }
+            }
+            if (n_in_buffer > 0) {
+                int* d_slots;
+                cudaMalloc(&d_slots, n_cand * sizeof(int));
+                cudaMemcpy(d_slots, slots.data(), n_cand * sizeof(int), cudaMemcpyHostToDevice);
+                saccade::relink_gate::gather_tracker_state(
+                    reinterpret_cast<const float*>(tracker_states),
+                    reinterpret_cast<const float*>(tracker_covs),
+                    d_slots, n_cand, d_cmean, d_ccov, nullptr);
+                cudaDeviceSynchronize();
+                cudaFree(d_slots);
+                used_tracker_state = true;
+            }
+            // Update delta/has from the mixed CPU-tracker arrays
+            cudaMemcpy(d_cdelta, h_delta.data(), n_cand * sizeof(int), cudaMemcpyHostToDevice);
+            cudaMemcpy(d_chas,   h_has.data(),   n_cand * sizeof(int), cudaMemcpyHostToDevice);
+        }
+        if (!used_tracker_state) {
+            // No tracker buffer in play: delta/has come straight from the CPU
+            // snapshot (mean/cov already uploaded above).
+            cudaMemcpy(d_cdelta,c_delta.data(),n_cand * sizeof(int),         cudaMemcpyHostToDevice);
+            cudaMemcpy(d_chas,  c_has.data(),  n_cand * sizeof(int),         cudaMemcpyHostToDevice);
+        }
+
+        const int dims = bidirectional_ ? 2 : 4;
+        saccade::relink_gate::GateParams p{n_query, n_cand, frame_w, frame_h, dims,
+            kalman_fps_, kalman_person_height_m_, kalman_max_speed_mps_,
+            kalman_accel_long_, kalman_accel_lat_, kalman_dir_min_cos_, kalman_dir_min_speed_};
+        saccade::relink_gate::launch(p, d_qbox, d_qfoot, d_qfootn, d_qemah,
+            d_clast, d_cmean, d_ccov, d_cfoot, d_cfootn, d_cemah,
+            d_cgap, d_cdelta, d_chas, d_table, nullptr);
+
+        cudaDeviceSynchronize();
+
+        // GPU batch dot + scoring (runs when query embeddings are available)
+        float* d_sim = nullptr;
+        sim_tbl_.clear();
+        scoring_ids_.clear(); scoring_scores_.clear(); scoring_second_.clear();
+        if (!query_embs.is_none()) {
+            py::array_t<float, py::array::c_style | py::array::forcecast> qarr(
+                query_embs.attr("detach")().attr("float")().attr("cpu")().attr("numpy")());
+            int dim = qarr.ndim() >= 2 ? (int)qarr.shape(1) : (int)qarr.shape(0);
+            int n_q = qarr.ndim() >= 2 ? (int)qarr.shape(0) : 1;
+            if (n_q == n_query && dim > 0) {
+                int feat_dim = 0;
+                for (int cid : cand_ids) {
+                    auto it = features_.find(cid);
+                    if (it != features_.end() && (int)it->second.size() > feat_dim)
+                        feat_dim = (int)it->second.size();
+                }
+                if (feat_dim > 0 && feat_dim == dim) {
+                    std::vector<float> cand_feats(n_cand * dim, 0.0f);
+                    for (int j = 0; j < n_cand; ++j) {
+                        auto it = features_.find(cand_ids[j]);
+                        if (it != features_.end()) {
+                            // feat_dim is the MAX feature size; a candidate
+                            // registered with a shorter placeholder vector must
+                            // not be read past its own length (heap OOB). The
+                            // remaining entries stay 0 -> near-zero similarity.
+                            const int csz = std::min(dim, (int)it->second.size());
+                            for (int k = 0; k < csz; ++k)
+                                cand_feats[j * dim + k] = it->second[k];
+                        }
+                    }
+                    float *d_qembs = nullptr, *d_cfeats = nullptr;
+                    cudaMalloc(&d_qembs, n_query * dim * sizeof(float));
+                    cudaMalloc(&d_cfeats, n_cand * dim * sizeof(float));
+                    cudaMalloc(&d_sim,   n_query * n_cand * sizeof(float));
+                    cudaMemcpy(d_qembs, qarr.data(), n_query * dim * sizeof(float), cudaMemcpyHostToDevice);
+                    cudaMemcpy(d_cfeats, cand_feats.data(), n_cand * dim * sizeof(float), cudaMemcpyHostToDevice);
+                    saccade::relink_gate::batch_dot(d_qembs, d_cfeats, n_query, n_cand, dim, d_sim, nullptr);
+                    cudaDeviceSynchronize();
+                    sim_tbl_.resize(static_cast<size_t>(n_query) * n_cand);
+                    cudaMemcpy(sim_tbl_.data(), d_sim, sim_tbl_.size() * sizeof(float), cudaMemcpyDeviceToHost);
+                    cudaFree(d_qembs); cudaFree(d_cfeats);
+
+                    // Scoring kernel: uses gate table + sim table on GPU
+                    std::vector<int> cand_ages_vec(n_cand);
+                    std::vector<float> cand_maha_vec(n_cand, 0.0f);
+                    for (int j = 0; j < n_cand; ++j) {
+                        auto ls = last_seen_.find(cand_ids[j]);
+                        cand_ages_vec[j] = (ls != last_seen_.end()) ? (frame_id - ls->second) : 0;
+                        auto ms = motion_.find(cand_ids[j]);
+                        if (ms != motion_.end()) {
+                            auto lb = last_boxes_.find(cand_ids[j]);
+                            if (lb != last_boxes_.end())
+                                cand_maha_vec[j] = mahalanobis(lb->second, ms->second);
+                        }
+                    }
+                    int *d_cids = nullptr, *d_cages = nullptr, *d_best = nullptr;
+                    float *d_cmaha = nullptr, *d_bscore = nullptr, *d_sscore = nullptr;
+                    cudaMalloc(&d_cids, n_cand * sizeof(int));
+                    cudaMalloc(&d_cages, n_cand * sizeof(int));
+                    cudaMalloc(&d_cmaha, n_cand * sizeof(float));
+                    cudaMalloc(&d_best, n_query * sizeof(int));
+                    cudaMalloc(&d_bscore, n_query * sizeof(float));
+                    cudaMalloc(&d_sscore, n_query * sizeof(float));
+                    cudaMemcpy(d_cids, cand_ids.data(), n_cand * sizeof(int), cudaMemcpyHostToDevice);
+                    cudaMemcpy(d_cages, cand_ages_vec.data(), n_cand * sizeof(int), cudaMemcpyHostToDevice);
+                    cudaMemcpy(d_cmaha, cand_maha_vec.data(), n_cand * sizeof(float), cudaMemcpyHostToDevice);
+
+                    saccade::relink_gate::ScoringParams sp;
+                    sp.n_cand = n_cand; sp.ttl = ttl_;
+                    sp.sim_threshold = sim_threshold_;
+                    sp.w_sim_base = w_sim_base_; sp.w_iou_base = w_iou_base_; sp.w_maha_base = w_maha_base_;
+                    sp.shift_ambiguity = shift_ambiguity_; sp.shift_lost_age = shift_lost_age_;
+                    sp.mahalanobis_threshold = mahalanobis_threshold_;
+                    sp.kalman_penalty_weight = kalman_penalty_weight_;
+                    sp.reciprocal_margin = reciprocal_margin_;
+                    sp.dynamic_margin_crowd = dynamic_margin_crowd_; sp.dynamic_margin_age = dynamic_margin_age_;
+                    sp.iou_weight = iou_weight_; sp.mahalanobis_weight = mahalanobis_weight_;
+
+                    saccade::relink_gate::launch_relink_scoring(
+                        d_table, d_sim, d_cids, d_cages, d_cmaha,
+                        n_query, sp, d_best, d_bscore, d_sscore, nullptr);
+                    cudaDeviceSynchronize();
+
+                    scoring_ids_.resize(n_query);
+                    scoring_scores_.resize(n_query);
+                    scoring_second_.resize(n_query);
+                    cudaMemcpy(scoring_ids_.data(), d_best, n_query * sizeof(int), cudaMemcpyDeviceToHost);
+                    cudaMemcpy(scoring_scores_.data(), d_bscore, n_query * sizeof(float), cudaMemcpyDeviceToHost);
+                    cudaMemcpy(scoring_second_.data(), d_sscore, n_query * sizeof(float), cudaMemcpyDeviceToHost);
+
+                    cudaFree(d_cids); cudaFree(d_cages); cudaFree(d_cmaha);
+                    cudaFree(d_best); cudaFree(d_bscore); cudaFree(d_sscore);
+                    cudaFree(d_sim); d_sim = nullptr;
+                }
+            }
+        }
+
+        gate_tbl_.resize(static_cast<size_t>(n_query) * n_cand * 6);
+        cudaMemcpy(gate_tbl_.data(), d_table, tsz, cudaMemcpyDeviceToHost);
+        if (d_sim) cudaFree(d_sim);
+
+        cudaFree(d_table); cudaFree(d_qbox); cudaFree(d_qfoot); cudaFree(d_qemah);
+        cudaFree(d_qfootn); cudaFree(d_clast); cudaFree(d_cmean); cudaFree(d_ccov);
+        cudaFree(d_cfoot); cudaFree(d_cemah); cudaFree(d_cfootn);
+        cudaFree(d_cgap); cudaFree(d_cdelta); cudaFree(d_chas);
+
+        return n_query * n_cand;
+    }
+
+    void clear_gate_table() {
+        gate_tbl_.clear();
+        sim_tbl_.clear();
+        scoring_ids_.clear();
+        scoring_scores_.clear();
+        scoring_second_.clear();
+        gate_row_.clear();
+        gate_col_.clear();
+        gate_n_query_ = gate_n_cand_ = 0;
+    }
+
+    const float* gate_lookup(int raw_id, int cid) const {
+        if (gate_tbl_.empty()) return nullptr;
+        auto ri = gate_row_.find(raw_id);
+        auto ci = gate_col_.find(cid);
+        if (ri == gate_row_.end() || ci == gate_col_.end()) return nullptr;
+        int idx = (ri->second * gate_n_cand_ + ci->second) * 6;
+        return &gate_tbl_[idx];
+    }
+
+    float sim_lookup(int raw_id, int cid) const {
+        if (sim_tbl_.empty()) return -2.0f;
+        auto ri = gate_row_.find(raw_id);
+        auto ci = gate_col_.find(cid);
+        if (ri == gate_row_.end() || ci == gate_col_.end()) return -2.0f;
+        int idx = ri->second * gate_n_cand_ + ci->second;
+        return sim_tbl_[idx];
+    }
+
+    // Verify a GPU-scored winner against the SAME hard gates the inline
+    // candidate loop enforces. The relink_scoring_kernel only filters on the
+    // lenient sim_threshold and folds Kalman distance into a soft penalty, so
+    // it can return a candidate the CPU path would hard-reject (age window,
+    // physical speed, spatial reach, Kalman chi-square, direction-behind,
+    // bidirectional bridge, Mahalanobis, buffer consistency, or strict
+    // similarity for non-clean boxes). Returns true only when the candidate
+    // would also be admitted by the inline loop; on false the caller leaves
+    // best_* pristine and falls through to that loop. Because the GPU winner is
+    // a global argmax, a passing winner equals the inline-loop pick, so the
+    // fast-path stays consistent with the CPU path.
+    bool gpu_winner_passes_gates(int raw_id, int cid, const RelinkBox& box,
+                                 int frame_id, float current_sim_thresh,
+                                 float best_sim_raw) const {
+        const auto ls = last_seen_.find(cid);
+        if (ls == last_seen_.end()) return false;
+        const int age = frame_id - ls->second;
+        if (age < min_lost_frames_ || age > ttl_) return false;
+
+        const float* gate = gate_lookup(raw_id, cid);
+        if (!gate) return false;  // no precomputed gate row -> defer to inline loop
+
+        if (gate[4] > 0.5f) return false;        // physical speed gate
+        const float center_norm = gate[2];
+        const float iou = gate[3];
+        if (center_norm > 1.0f) return false;    // coarse spatial pre-filter
+
+        bool kalman_gated = false;
+        if (kalman_gate_) {
+            if (gate[0] >= 0.0f) {
+                if (gate[5] > 0.5f) return false;          // direction-behind
+                if (gate[0] > kalman_chi2_) return false;  // Kalman chi-square
+                kalman_gated = true;
+            } else {
+                const auto mit = motion_.find(cid);
+                if (mit != motion_.end()) {
+                    if (direction_behind(box, mit->second, kalman_dir_min_cos_,
+                                         kalman_dir_min_speed_)) return false;
+                    const int delta = mit->second.frame >= 0
+                                          ? (frame_id - mit->second.frame) : 0;
+                    const int dims = bidirectional_ ? 2 : 4;
+                    const float kd2 = (dims <= 2)
+                        ? kalman_gate_dist_2d(box, mit->second, delta,
+                              kalman_person_height_m_, kalman_accel_long_,
+                              kalman_accel_lat_, kalman_fps_)
+                        : kalman_gate_dist(box, mit->second, delta,
+                              kalman_person_height_m_, kalman_accel_long_,
+                              kalman_accel_lat_, kalman_fps_);
+                    if (kd2 > kalman_chi2_) return false;
+                    kalman_gated = true;
+                }
+            }
+        }
+        if (bidirectional_) {
+            if (!bridge_scale_gate_ok(cid, raw_id)) return false;
+            if (gate[1] >= 0.0f) {
+                if (gate[1] > bridge_px_) return false;    // backward bridge
+            } else {
+                const auto fh = foot_history_.find(cid);
+                if (fh != foot_history_.end()) {
+                    const float b_cx = (box.x1 + box.x2) * 0.5f;
+                    const float b_cy = (box.y1 + box.y2) * 0.5f;
+                    const int gap = frame_id - ls->second;
+                    if (midpoint_bridge_dist(cid, raw_id, gap, b_cx, b_cy) > bridge_px_)
+                        return false;
+                }
+            }
+        }
+        if (!kalman_gated && (center_norm > spatial_gate_ || iou < min_iou_))
+            return false;
+        if (mahalanobis_threshold_ > 0.0f) {
+            const auto mit = motion_.find(cid);
+            if (mit == motion_.end()) return false;
+            if (mahalanobis(box, mit->second) > mahalanobis_threshold_) return false;
+        }
+        if (min_consistency_ > 0.0f && buffer_size_ > 1) {
+            if (buffer_consistency(cid) < min_consistency_) return false;
+        }
+        if (best_sim_raw < current_sim_thresh) return false;  // strict/lenient sim
+        return true;
+    }
+
+    py::dict get_deferred_alias() const {
+        py::dict out;
+        for (const auto& [k, v] : deferred_alias_) {
+            out[py::int_(k)] = py::int_(v);
+        }
+        return out;
+    }
+
+    bool mark_pending_claim(int raw_id, int frame_id) {
+        if (!delayed_claim_) return false;
+        auto& pending = pending_claims_[raw_id];
+        if (pending.hits == 0) {
+            pending.first = frame_id;
+            pending.last = frame_id;
+            pending.hits = 1;
+        } else if (pending.last != frame_id) {
+            pending.last = frame_id;
+            pending.hits += 1;
+        }
+        const bool ready = pending.hits >= claim_warmup_frames_;
+        if (ready) {
+            stats_.delayed_claim_ready += 1;
+        } else {
+            stats_.delayed_claim_pending += 1;
+        }
+        return !ready;
+    }
+
+    bool pending_ready(int raw_id) const {
+        auto it = pending_claims_.find(raw_id);
+        return it != pending_claims_.end() && it->second.hits >= claim_warmup_frames_;
+    }
+
     int resolve(
         int raw_id,
         py::object embedding,
@@ -613,12 +1121,12 @@ public:
         int frame_h,
         py::set assigned
     ) {
-        if (embedding.is_none()) {
-            auto it = alias_.find(raw_id);
-            return it == alias_.end() ? raw_id : it->second;
+        std::vector<float> emb;
+        bool has_emb = !embedding.is_none();
+        if (has_emb) {
+            emb = normalize(extract_embedding(embedding));
         }
 
-        std::vector<float> emb = normalize(extract_embedding(embedding));
         const RelinkBox box = parse_box(box_obj);
         bool is_clean = true;
         if (clean_score_threshold_ > 0.0f || clean_margin_ratio_ > 0.0f) {
@@ -635,7 +1143,16 @@ public:
         }
         float current_sim_thresh = is_clean ? sim_threshold_ : strict_sim_threshold_;
 
-        if (!alias_.count(raw_id)) {
+        if (delayed_claim_ && pending_claims_.count(raw_id) && canonical_id(raw_id) == raw_id) {
+            mark_pending_claim(raw_id, frame_id);
+        }
+        const bool claim_ready = pending_ready(raw_id);
+        const bool first_claim = !alias_.count(raw_id);
+        const bool delayed_self_claim = delayed_claim_ && claim_ready && canonical_id(raw_id) == raw_id;
+
+        if (first_claim && mark_pending_claim(raw_id, frame_id)) {
+            alias_[raw_id] = raw_id;
+        } else if (first_claim || delayed_self_claim) {
             stats_.attempts += 1;
             int best_id = -1;
             float best_sim = current_sim_thresh;
@@ -645,6 +1162,9 @@ public:
             float best_maha = 0.0f;
 
             for (int cid : feature_order_) {
+                if (delayed_claim_ && cid == raw_id) {
+                    continue;
+                }
                 const auto feature_it = features_.find(cid);
                 if (feature_it == features_.end()) {
                     continue;
@@ -665,6 +1185,9 @@ public:
                     continue;
                 }
                 auto [center_norm, iou] = spatial_metrics(box, last_boxes_.at(cid), frame_w, frame_h);
+                // Coarse spatial pre-filter: skip clearly-too-far candidates
+                // before the expensive Kalman predict loop.
+                if (center_norm > 1.0f) { stats_.reject_spatial += 1; continue; }
                 bool kalman_gated = false;
                 if (kalman_gate_) {
                     const auto motion_it = motion_.find(cid);
@@ -676,14 +1199,38 @@ public:
                         const int delta = motion_it->second.frame >= 0
                                               ? (frame_id - motion_it->second.frame)
                                               : 0;
-                        const float kalman_d2 = kalman_gate_dist(
-                            box, motion_it->second, delta, kalman_person_height_m_,
-                            kalman_accel_long_, kalman_accel_lat_, kalman_fps_);
+                        const int dims = bidirectional_ ? 2 : 4;
+                        const float kalman_d2 = (dims <= 2)
+                            ? kalman_gate_dist_2d(
+                                  box, motion_it->second, delta, kalman_person_height_m_,
+                                  kalman_accel_long_, kalman_accel_lat_, kalman_fps_)
+                            : kalman_gate_dist(
+                                  box, motion_it->second, delta, kalman_person_height_m_,
+                                  kalman_accel_long_, kalman_accel_lat_, kalman_fps_);
                         if (kalman_d2 > kalman_chi2_) {
                             stats_.reject_kalman += 1;
                             continue;
                         }
                         kalman_gated = true;
+                    }
+                }
+                // Bidirectional midpoint bridge gate.
+                if (bidirectional_) {
+                    if (!bridge_scale_gate_ok(cid, raw_id)) {
+                        stats_.reject_backward += 1;
+                        continue;
+                    }
+                    auto fh = foot_history_.find(cid);
+                    if (fh != foot_history_.end()) {
+                        float b_cx = (box.x1 + box.x2) * 0.5f;
+                        float b_cy = (box.y1 + box.y2) * 0.5f;
+                        int gap = frame_id - last_seen_.at(cid);
+                        float dist = midpoint_bridge_dist(cid, raw_id, gap, b_cx, b_cy);
+                        if (dist > bridge_px_) {
+                            stats_.reject_backward += 1;
+                            continue;
+                        }
+                        stats_.accept_bidir += 1;
                     }
                 }
                 if (!kalman_gated && (center_norm > spatial_gate_ || iou < min_iou_)) {
@@ -698,7 +1245,8 @@ public:
                         continue;
                     }
                     maha = mahalanobis(box, motion_it->second);
-                    if (maha > mahalanobis_threshold_) {
+                    float dynamic_thresh = get_dynamic_mahalanobis_threshold(cid);
+                    if (maha > dynamic_thresh) {
                         stats_.reject_mahalanobis += 1;
                         continue;
                     }
@@ -742,6 +1290,11 @@ public:
 
             if (best_id >= 0) {
                 stats_.accepted += 1;
+                if (delayed_claim_ && raw_id != best_id) {
+                    stats_.delayed_claim_accepted += 1;
+                    deferred_alias_[raw_id] = best_id;
+                    pending_claims_.erase(raw_id);
+                }
                 accept_sims_.push_back(best_sim);
                 accept_ious_.push_back(best_iou);
                 accept_center_dists_.push_back(best_center);
@@ -750,13 +1303,16 @@ public:
             } else {
                 stats_.new_ids += 1;
                 alias_[raw_id] = raw_id;
+                if (delayed_claim_ && claim_ready) {
+                    pending_claims_.erase(raw_id);
+                }
             }
         }
 
-        const int canonical = alias_.at(raw_id);
+        int canonical = alias_.at(raw_id);
         if (!is_clean) {
             stats_.reject_quality += 1;
-        } else {
+        } else if (has_emb) {
             if (buffer_size_ > 1) {
                 auto& buf = buffers_[canonical];
                 buf.push_back(emb);
@@ -776,12 +1332,27 @@ public:
                     features_[canonical] = normalize(updated);
                 }
             }
+        } else if (features_.find(canonical) == features_.end()) {
+            features_[canonical] = std::vector<float>{0.0f};
         }
         if (std::find(feature_order_.begin(), feature_order_.end(), canonical) == feature_order_.end()) {
             feature_order_.push_back(canonical);
         }
         last_seen_[canonical] = frame_id;
         last_boxes_[canonical] = box;
+        float bh = box.y2 - box.y1;
+        auto old_h = ema_h_.find(canonical);
+        ema_h_[canonical] = (old_h == ema_h_.end()) ? bh : 0.95f * old_h->second + 0.05f * bh;
+        float enc_cx = (box.x1 + box.x2) * 0.5f;
+        float enc_cy = (box.y1 + box.y2) * 0.5f;
+        auto& hist = foot_history_[canonical];
+        hist.push_back({enc_cx, enc_cy});
+        if (hist.size() > 8) hist.erase(hist.begin());
+        // Per-frame uniqueness guard
+        py::int_ py_canonical(canonical);
+        if (PySet_Contains(assigned.ptr(), py_canonical.ptr()) == 1) {
+            canonical = split_on_collision(raw_id);
+        }
         assigned.add(py::int_(canonical));
         return canonical;
     }
@@ -792,24 +1363,31 @@ public:
         int frame_w,
         int frame_h
     ) {
-        py::set assigned;
-        py::list out;
+        struct C { int raw_id; py::object emb; py::sequence box; float score; };
+        std::vector<C> cands;
         for (py::handle item : candidates) {
-            py::tuple candidate = py::reinterpret_borrow<py::tuple>(item);
-            if (candidate.size() != 4) {
+            py::tuple t = py::reinterpret_borrow<py::tuple>(item);
+            if (t.size() != 4)
                 throw std::runtime_error("resolve_many expects (raw_id, embedding, box, score) tuples");
-            }
-            out.append(resolve(
-                candidate[0].cast<int>(),
-                py::reinterpret_borrow<py::object>(candidate[1]),
-                candidate[2].cast<py::sequence>(),
-                candidate[3].cast<float>(),
-                frame_id,
-                frame_w,
-                frame_h,
-                assigned
-            ));
+            cands.push_back({t[0].cast<int>(), py::reinterpret_borrow<py::object>(t[1]),
+                             t[2].cast<py::sequence>(), t[3].cast<float>()});
         }
+        size_t n = cands.size();
+        std::vector<size_t> order(n);
+        for (size_t i = 0; i < n; ++i) order[i] = i;
+        if (bidirectional_ && n > 0) {
+            std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+                return cands[a].score > cands[b].score;
+            });
+        }
+        py::set assigned;
+        std::vector<int> results(n);
+        for (size_t i : order) {
+            results[i] = resolve(cands[i].raw_id, cands[i].emb, cands[i].box,
+                                 cands[i].score, frame_id, frame_w, frame_h, assigned);
+        }
+        py::list out;
+        for (size_t i = 0; i < n; ++i) out.append(results[i]);
         return out;
     }
 
@@ -826,10 +1404,19 @@ public:
         if (py::len(embeddings) != n || py::len(boxes) != n || py::len(scores) != n) {
             throw std::runtime_error("resolve_many_packed expects equally sized raw_ids/embeddings/boxes/scores");
         }
+        std::vector<size_t> order(n);
+        for (size_t i = 0; i < n; ++i) order[i] = i;
+        if (bidirectional_ && n > 0) {
+            std::vector<float> s(n);
+            for (size_t i = 0; i < n; ++i) s[i] = scores[i].cast<float>();
+            std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+                return s[a] > s[b];
+            });
+        }
         py::set assigned;
-        py::list out;
-        for (size_t i = 0; i < n; ++i) {
-            out.append(resolve(
+        std::vector<int> results(n);
+        for (size_t i : order) {
+            results[i] = resolve(
                 raw_ids[i].cast<int>(),
                 py::reinterpret_borrow<py::object>(embeddings[i]),
                 boxes[i].cast<py::sequence>(),
@@ -838,8 +1425,10 @@ public:
                 frame_w,
                 frame_h,
                 assigned
-            ));
+            );
         }
+        py::list out;
+        for (size_t i = 0; i < n; ++i) out.append(results[i]);
         return out;
     }
 
@@ -874,7 +1463,13 @@ public:
         out["reject_kalman"] = stats_.reject_kalman;
         out["reject_direction"] = stats_.reject_direction;
         out["reject_speed"] = stats_.reject_speed;
+        out["delayed_claim_pending"] = stats_.delayed_claim_pending;
+        out["delayed_claim_ready"] = stats_.delayed_claim_ready;
+        out["delayed_claim_accepted"] = stats_.delayed_claim_accepted;
         out["new_ids"] = stats_.new_ids;
+        out["reject_backward"] = stats_.reject_backward;
+        out["accept_bidir"] = stats_.accept_bidir;
+        out["relink_split_collision"] = stats_.relink_split_collision;
         return out;
     }
 
@@ -893,7 +1488,10 @@ public:
             " reject_quality=" + std::to_string(stats_.reject_quality) +
             " reject_kalman=" + std::to_string(stats_.reject_kalman) +
             " reject_direction=" + std::to_string(stats_.reject_direction) +
-            " reject_speed=" + std::to_string(stats_.reject_speed)
+            " reject_speed=" + std::to_string(stats_.reject_speed) +
+            " reject_backward=" + std::to_string(stats_.reject_backward) +
+            " accept_bidir=" + std::to_string(stats_.accept_bidir) +
+            " split_collision=" + std::to_string(stats_.relink_split_collision)
         );
         if (!accept_sims_.empty()) {
             py::print(
@@ -909,6 +1507,116 @@ public:
                 " reject_consistency=" + std::to_string(stats_.reject_consistency)
             );
         }
+        if (delayed_claim_) {
+            py::print(
+                "  delayed_claim pending_checks=" + std::to_string(stats_.delayed_claim_pending) +
+                " ready_checks=" + std::to_string(stats_.delayed_claim_ready) +
+                " accepted=" + std::to_string(stats_.delayed_claim_accepted) +
+                " deferred_aliases=" + std::to_string(deferred_alias_.size())
+            );
+        }
+    }
+
+    // Closed-form linear regression velocity from 4 equally-spaced foot positions.
+    // For frames t ∈ {0,1,2,3} with centres (x_i, y_i):
+    //   v_x = (3·x₃ + x₂ − x₁ − 3·x₀) / 10
+    //   v_y = (3·y₃ + y₂ − y₁ − 3·y₀) / 10
+    static std::pair<float, float> regress_velocity_4(
+        const std::vector<std::pair<float, float>>& positions) {
+        if (positions.size() < 4) return {0.0f, 0.0f};
+        float x0 = positions[0].first, y0 = positions[0].second;
+        float x1 = positions[1].first, y1 = positions[1].second;
+        float x2 = positions[2].first, y2 = positions[2].second;
+        float x3 = positions[3].first, y3 = positions[3].second;
+        return {(3.0f * x3 + x2 - x1 - 3.0f * x0) / 10.0f,
+                (3.0f * y3 + y2 - y1 - 3.0f * y0) / 10.0f};
+    }
+
+    // Scale gate (disabled when bridge_h_hi<=0): lost/cand EMA-height ratio must
+    // stay inside [h_lo, h_hi]; large size jumps across the gap are bogus bridges.
+    bool bridge_scale_gate_ok(int lost_id, int cand_id) const {
+        if (bridge_h_hi_ <= 0.0f) return true;
+        auto hl = ema_h_.find(lost_id);
+        auto hc = ema_h_.find(cand_id);
+        if (hl == ema_h_.end() || hc == ema_h_.end()) return true;
+        float hr = std::max(hl->second, 1e-3f) / std::max(hc->second, 1e-3f);
+        return hr >= bridge_h_lo_ && hr <= bridge_h_hi_;
+    }
+
+    // Bidirectional midpoint bridge distance. Propagates both lost track and
+    // candidate through half the gap using regressed velocities, then measures
+    // Euclidean distance between the two midpoints, normalized by average height.
+    float midpoint_bridge_dist(
+        int lost_id, int cand_id, int gap, float cand_cx, float cand_cy) const {
+        auto lost_it = foot_history_.find(lost_id);
+        auto cand_it = foot_history_.find(cand_id);
+        if (lost_it == foot_history_.end()) return 1e9f;
+        const auto& lost_hist = lost_it->second;
+        if (lost_hist.empty()) return 1e9f;
+        std::vector<std::pair<float, float>> cand_hist;
+        if (cand_it != foot_history_.end()) cand_hist = cand_it->second;
+        cand_hist.push_back({cand_cx, cand_cy});
+        auto [vx_l, vy_l] = regress_velocity_4(
+            std::vector<std::pair<float, float>>(
+                lost_hist.end() - std::min((int)lost_hist.size(), 4), lost_hist.end()));
+        auto [vx_c, vy_c] = regress_velocity_4(
+            std::vector<std::pair<float, float>>(
+                cand_hist.begin(), cand_hist.begin() + std::min((int)cand_hist.size(), 4)));
+        float h_lost = 1.0f;
+        auto hl = ema_h_.find(lost_id);
+        if (hl != ema_h_.end()) h_lost = hl->second;
+        float h_ref = std::max(h_lost, 1.0f);
+        float lx = lost_hist.back().first, ly = lost_hist.back().second;
+        float cxf = cand_hist[0].first, cyf = cand_hist[0].second;
+        // Speed-weighted foot-bridge score: symmetric full extrapolation 0.5*(fwd+bwd)
+        // blended with spatial proximity dist_h, velocity weighted by exit speed.
+        // See docs/modules/semantic/research/offline_relink_candidate_analysis.md §6c-d.
+        float g = static_cast<float>(gap);
+        float fwd_r = std::hypot(lx + vx_l * g - cxf, ly + vy_l * g - cyf) / h_ref;
+        float bwd_r = std::hypot(cxf - vx_c * g - lx, cyf - vy_c * g - ly) / h_ref;
+        float dist_h = std::hypot(lx - cxf, ly - cyf) / h_ref;
+        float s_lost = std::hypot(vx_l, vy_l) / h_ref;
+        float w = std::sqrt(std::clamp(s_lost / 0.12f, 0.0f, 1.0f));
+        return w * 0.5f * (fwd_r + bwd_r) + (1.0f - w) * dist_h;
+    }
+
+    // Squared Mahalanobis distance for 2-DoF (center-only), used by the
+    // bidirectional gate where only the positional sub-state is gated.
+    static float kalman_gate_dist_2d(
+        const RelinkBox& box, const RelinkMotionSnapshot& snap, int delta,
+        float person_height_m, float accel_long, float accel_lat, float fps) {
+        float x[8];
+        float P[64];
+        for (int i = 0; i < 8; ++i) x[i] = snap.state[i];
+        for (int i = 0; i < 64; ++i) P[i] = snap.covariance[i];
+        const int steps = std::max(0, delta);
+        if (steps > 0) {
+            if (person_height_m > 0.0f)
+                predict_phys_delta(x, P, steps, person_height_m, accel_long, accel_lat, fps);
+            else
+                predict_delta(x, P, steps);
+        }
+        float h = std::max(x[3], 1e-6f);
+        float pos_sq = (h / 20.0f) * (h / 20.0f);
+        Eigen::Matrix2f S;
+        S(0, 0) = P[0] + pos_sq;   S(0, 1) = P[1];
+        S(1, 0) = P[8];            S(1, 1) = P[9] + pos_sq;
+        float zx = (box.x1 + box.x2) * 0.5f;
+        float zy = (box.y1 + box.y2) * 0.5f;
+        Eigen::Vector2f y(zx - x[0], zy - x[1]);
+        Eigen::LLT<Eigen::Matrix2f> llt(S);
+        if (llt.info() != Eigen::Success) return 1e9f;
+        Eigen::Vector2f w = llt.matrixL().solve(y);
+        return w.squaredNorm();
+    }
+
+    // Per-frame uniqueness guard: split a colliding raw_id onto a fresh surrogate.
+    int split_on_collision(int raw_id) {
+        split_counter_ += 1;
+        int surrogate = 1000000 + split_counter_;
+        alias_[raw_id] = surrogate;
+        stats_.relink_split_collision += 1;
+        return surrogate;
     }
 
     // Internal C++ resolve — takes pre-normalized embedding and C++ box.
@@ -924,11 +1632,6 @@ public:
         int frame_h,
         std::unordered_set<int>& assigned
     ) {
-        if (!has_emb) {
-            auto it = alias_.find(raw_id);
-            return it == alias_.end() ? raw_id : it->second;
-        }
-
         bool is_clean = true;
         if (clean_score_threshold_ > 0.0f || clean_margin_ratio_ > 0.0f) {
             float bw = box.x2 - box.x1;
@@ -944,13 +1647,81 @@ public:
         }
         float current_sim_thresh = is_clean ? sim_threshold_ : strict_sim_threshold_;
 
-        if (!alias_.count(raw_id)) {
+        if (delayed_claim_ && pending_claims_.count(raw_id) && canonical_id(raw_id) == raw_id) {
+            mark_pending_claim(raw_id, frame_id);
+        }
+        const bool claim_ready = pending_ready(raw_id);
+        const bool first_claim = !alias_.count(raw_id);
+        const bool delayed_self_claim = delayed_claim_ && claim_ready && canonical_id(raw_id) == raw_id;
+
+        if (first_claim && mark_pending_claim(raw_id, frame_id)) {
+            alias_[raw_id] = raw_id;
+        } else if (first_claim || delayed_self_claim) {
             stats_.attempts += 1;
+
+            // GPU scoring fast-path: use pre-computed best from the scoring
+            // kernel (runs once per frame after build_gate_table).
             int best_id = -1;
             float best_joint = -1.0f;
             float best_sim_raw = 0.0f;
             float second_best_joint = -2.0f;
             float best_iou = 0.0f, best_center = 0.0f, best_maha = 0.0f;
+            bool gpu_scored = false;
+
+            if (!scoring_ids_.empty()) {
+                auto ri = gate_row_.find(raw_id);
+                if (ri != gate_row_.end() && ri->second < (int)scoring_ids_.size()) {
+                    int q = ri->second;
+                    int gpu_best = scoring_ids_[q];
+                    // Check assigned — the GPU doesn't handle per-frame uniqueness
+                    if (gpu_best >= 0 && !assigned.count(gpu_best)) {
+                        float gpu_joint = scoring_scores_[q];
+                        bool accept = true;
+                        // Apply dynamic_margin_age (GPU only applies static+crowd)
+                        if (dynamic_margin_age_ > 0.0f) {
+                            auto ls = last_seen_.find(gpu_best);
+                            int lost_frames = (ls != last_seen_.end()) ? (frame_id - ls->second) : 0;
+                            float age_factor = std::min(1.0f, static_cast<float>(lost_frames) / std::max(1, ttl_));
+                            float extra_margin = dynamic_margin_age_ * age_factor;
+                            float second = scoring_second_[q];
+                            if (gpu_joint - second < extra_margin) accept = false;
+                        }
+                        if (accept) {
+                            float sim_raw = sim_lookup(raw_id, gpu_best);
+                            if (sim_raw < -1.5f) sim_raw = 0.0f;
+                            // The scoring kernel only filtered on the lenient
+                            // sim_threshold; verify the winner against the full
+                            // hard-gate set (age/speed/spatial/Kalman-chi2/
+                            // direction/bridge/Mahalanobis/consistency/strict-sim)
+                            // before trusting it. On failure leave best_* pristine
+                            // and fall through to the authoritative inline loop.
+                            if (gpu_winner_passes_gates(raw_id, gpu_best, box, frame_id,
+                                                        current_sim_thresh, sim_raw)) {
+                                best_id = gpu_best;
+                                best_joint = gpu_joint;
+                                best_sim_raw = sim_raw;
+                                gpu_scored = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (gpu_scored) {
+                // Use fast-path: skip the O(n_cand) loop
+                stats_.accepted += 1;
+                if (delayed_claim_ && raw_id != best_id) {
+                    stats_.delayed_claim_accepted += 1;
+                    deferred_alias_[raw_id] = best_id;
+                    pending_claims_.erase(raw_id);
+                }
+                accept_sims_.push_back(best_sim_raw);
+                accept_ious_.push_back(best_iou);
+                accept_center_dists_.push_back(best_center);
+                accept_mahas_.push_back(best_maha);
+                alias_[raw_id] = best_id;
+            } else {
+            // Fall-through to inline candidate loop
 
             struct CandidateInfo {
                 int cid;
@@ -963,16 +1734,32 @@ public:
             std::vector<CandidateInfo> candidates_to_score;
 
             for (int cid : feature_order_) {
+                if (delayed_claim_ && cid == raw_id) {
+                    continue;
+                }
                 const auto feature_it = features_.find(cid);
                 if (feature_it == features_.end()) continue;
                 if (assigned.count(cid)) { stats_.reject_assigned += 1; continue; }
                 const int age = frame_id - last_seen_.at(cid);
                 if (age < min_lost_frames_ || age > ttl_) { stats_.reject_age += 1; continue; }
+
+                const float* gate = gate_lookup(raw_id, cid);
+
                 // Physical reachability gate (always-on, snapshot-independent).
-                if (exceeds_max_speed(box, last_boxes_.at(cid), age, kalman_person_height_m_, kalman_fps_, kalman_max_speed_mps_)) {
-                    stats_.reject_speed += 1; continue;
-                }
-                auto [center_norm, iou] = spatial_metrics(box, last_boxes_.at(cid), frame_w, frame_h);
+                bool speed_exceeds = gate ? (gate[4] > 0.5f) :
+                    exceeds_max_speed(box, last_boxes_.at(cid), age, kalman_person_height_m_, kalman_fps_, kalman_max_speed_mps_);
+                if (speed_exceeds) { stats_.reject_speed += 1; continue; }
+
+                float center_norm, iou;
+                if (gate) { center_norm = gate[2]; iou = gate[3]; }
+                else { auto sp = spatial_metrics(box, last_boxes_.at(cid), frame_w, frame_h); center_norm = sp.first; iou = sp.second; }
+
+                // Coarse spatial pre-filter: reject candidates more than
+                // one frame diagonal away before the expensive Kalman predict.
+                // Even with 120 frames of maximum inflation, no pedestrian
+                // cloud reaches across the entire frame.
+                if (center_norm > 1.0f) { stats_.reject_spatial += 1; continue; }
+
                 // Kalman probabilistic gate: when a motion snapshot is available, gate
                 // by chi-square distance to the extrapolated/inflated distribution
                 // instead of the static center/IoU gate. Falls back to static gate when
@@ -980,19 +1767,56 @@ public:
                 float kalman_d2 = -1.0f;
                 bool kalman_gated = false;
                 if (kalman_gate_) {
-                    const auto motion_it = motion_.find(cid);
-                    if (motion_it != motion_.end()) {
-                        if (direction_behind(box, motion_it->second, kalman_dir_min_cos_, kalman_dir_min_speed_)) {
-                            stats_.reject_direction += 1; continue;
-                        }
-                        const int delta = motion_it->second.frame >= 0
-                                              ? (frame_id - motion_it->second.frame)
-                                              : 0;
-                        kalman_d2 = kalman_gate_dist(
-                            box, motion_it->second, delta, kalman_person_height_m_,
-                            kalman_accel_long_, kalman_accel_lat_, kalman_fps_);
+                    if (gate && gate[0] >= 0.0f) {
+                        if (gate[5] > 0.5f) { stats_.reject_direction += 1; continue; }
+                        kalman_d2 = gate[0];
                         if (kalman_d2 > kalman_chi2_) { stats_.reject_kalman += 1; continue; }
                         kalman_gated = true;
+                    } else {
+                        const auto motion_it = motion_.find(cid);
+                        if (motion_it != motion_.end()) {
+                            if (direction_behind(box, motion_it->second, kalman_dir_min_cos_, kalman_dir_min_speed_)) {
+                                stats_.reject_direction += 1; continue;
+                            }
+                            const int delta = motion_it->second.frame >= 0
+                                                  ? (frame_id - motion_it->second.frame)
+                                                  : 0;
+                            const int dims = bidirectional_ ? 2 : 4;
+                            kalman_d2 = (dims <= 2)
+                                ? kalman_gate_dist_2d(
+                                      box, motion_it->second, delta, kalman_person_height_m_,
+                                      kalman_accel_long_, kalman_accel_lat_, kalman_fps_)
+                                : kalman_gate_dist(
+                                      box, motion_it->second, delta, kalman_person_height_m_,
+                                      kalman_accel_long_, kalman_accel_lat_, kalman_fps_);
+                            if (kalman_d2 > kalman_chi2_) { stats_.reject_kalman += 1; continue; }
+                            kalman_gated = true;
+                        }
+                    }
+                }
+                // Bidirectional midpoint bridge gate: both clouds must intersect
+                // at the midpoint within bridge_px * h_ref.
+                if (bidirectional_) {
+                    if (!bridge_scale_gate_ok(cid, raw_id)) {
+                        stats_.reject_backward += 1;
+                        continue;
+                    }
+                    if (gate && gate[1] >= 0.0f) {
+                        if (gate[1] > bridge_px_) { stats_.reject_backward += 1; continue; }
+                        stats_.accept_bidir += 1;
+                    } else {
+                        auto fh = foot_history_.find(cid);
+                        if (fh != foot_history_.end()) {
+                            float b_cx = (box.x1 + box.x2) * 0.5f;
+                            float b_cy = (box.y1 + box.y2) * 0.5f;
+                            int gap = frame_id - last_seen_.at(cid);
+                            float dist = midpoint_bridge_dist(cid, raw_id, gap, b_cx, b_cy);
+                            if (dist > bridge_px_) {
+                                stats_.reject_backward += 1;
+                                continue;
+                            }
+                            stats_.accept_bidir += 1;
+                        }
                     }
                 }
                 if (!kalman_gated && (center_norm > spatial_gate_ || iou < min_iou_)) {
@@ -1003,7 +1827,8 @@ public:
                     const auto motion_it = motion_.find(cid);
                     if (motion_it == motion_.end()) { stats_.reject_mahalanobis += 1; continue; }
                     maha = mahalanobis(box, motion_it->second);
-                    if (maha > mahalanobis_threshold_) { stats_.reject_mahalanobis += 1; continue; }
+                    float dynamic_thresh = get_dynamic_mahalanobis_threshold(cid);
+                    if (maha > dynamic_thresh) { stats_.reject_mahalanobis += 1; continue; }
                 }
                 if (min_consistency_ > 0.0f && buffer_size_ > 1) {
                     if (buffer_consistency(cid) < min_consistency_) { stats_.reject_consistency += 1; continue; }
@@ -1022,19 +1847,30 @@ public:
 
             for (const auto& cand : candidates_to_score) {
                 int cid = cand.cid;
-                const auto feature_it = features_.find(cid);
-                std::vector<float> ref = buffer_size_ > 1 ? buffer_mean(cid) : feature_it->second;
-                if (ref.empty()) ref = feature_it->second;
-                const float sim = dot(emb, ref);
+                float sim;
+                if (has_emb) {
+                    float pre_sim = sim_lookup(raw_id, cid);
+                    if (pre_sim > -2.0f) {
+                        sim = pre_sim;
+                    } else {
+                        const auto feature_it = features_.find(cid);
+                        std::vector<float> ref = buffer_size_ > 1 ? buffer_mean(cid) : feature_it->second;
+                        if (ref.empty()) ref = feature_it->second;
+                        sim = dot(emb, ref);
+                    }
+                } else {
+                    sim = 0.0f;
+                }
 
-                if (sim < current_sim_thresh) {
+                if (has_emb && sim < current_sim_thresh) {
                     stats_.reject_similarity += 1;
                     continue;
                 }
 
                 float maha_score = 0.0f;
-                if (mahalanobis_threshold_ > 0.0f && cand.maha > 0.0f) {
-                    maha_score = std::max(0.0f, 1.0f - cand.maha / mahalanobis_threshold_);
+                float dynamic_thresh = get_dynamic_mahalanobis_threshold(cand.cid);
+                if (dynamic_thresh > 0.0f && cand.maha > 0.0f) {
+                    maha_score = std::max(0.0f, 1.0f - cand.maha / dynamic_thresh);
                 }
 
                 float joint;
@@ -1111,6 +1947,11 @@ public:
 
             if (best_id >= 0) {
                 stats_.accepted += 1;
+                if (delayed_claim_ && raw_id != best_id) {
+                    stats_.delayed_claim_accepted += 1;
+                    deferred_alias_[raw_id] = best_id;
+                    pending_claims_.erase(raw_id);
+                }
                 accept_sims_.push_back(best_sim_raw);
                 accept_ious_.push_back(best_iou);
                 accept_center_dists_.push_back(best_center);
@@ -1119,13 +1960,17 @@ public:
             } else {
                 stats_.new_ids += 1;
                 alias_[raw_id] = raw_id;
+                if (delayed_claim_ && claim_ready) {
+                    pending_claims_.erase(raw_id);
+                }
             }
+            } // closes GPU-scored else { fall-through to inline loop }
         }
 
-        const int canonical = alias_.at(raw_id);
+        int canonical = alias_.at(raw_id);
         if (!is_clean) {
             stats_.reject_quality += 1;
-        } else {
+        } else if (has_emb) {
             if (buffer_size_ > 1) {
                 auto& buf = buffers_[canonical];
                 buf.push_back(emb);
@@ -1142,11 +1987,24 @@ public:
                     features_[canonical] = normalize(updated);
                 }
             }
+        } else if (features_.find(canonical) == features_.end()) {
+            features_[canonical] = std::vector<float>{0.0f};
         }
         if (std::find(feature_order_.begin(), feature_order_.end(), canonical) == feature_order_.end())
             feature_order_.push_back(canonical);
         last_seen_[canonical] = frame_id;
         last_boxes_[canonical] = box;
+        float bh = box.y2 - box.y1;
+        auto old_h = ema_h_.find(canonical);
+        ema_h_[canonical] = (old_h == ema_h_.end()) ? bh : 0.95f * old_h->second + 0.05f * bh;
+        float enc_cx = (box.x1 + box.x2) * 0.5f;
+        float enc_cy = (box.y1 + box.y2) * 0.5f;
+        auto& hist = foot_history_[canonical];
+        hist.push_back({enc_cx, enc_cy});
+        if (hist.size() > 8) hist.erase(hist.begin());
+        if (assigned.count(canonical)) {
+            canonical = split_on_collision(raw_id);
+        }
         assigned.insert(canonical);
         return canonical;
     }
@@ -1234,64 +2092,50 @@ private:
         return {center_norm, iou};
     }
 
+    float get_dynamic_mahalanobis_threshold(int cid) const {
+        if (!exp_density_gating_ || mahalanobis_threshold_ <= 0.0f) {
+            return mahalanobis_threshold_;
+        }
+        auto it = last_boxes_.find(cid);
+        if (it == last_boxes_.end()) return mahalanobis_threshold_;
+        const RelinkBox& box_t = it->second;
+        const float cx_t = (box_t.x1 + box_t.x2) * 0.5f;
+        const float cy_t = (box_t.y1 + box_t.y2) * 0.5f;
+        const float h_t = box_t.y2 - box_t.y1;
+        if (h_t <= 0.0f) return mahalanobis_threshold_;
+
+        int density = 0;
+        for (const auto& [other_id, box_j] : last_boxes_) {
+            if (other_id == cid) continue;
+            const float cx_j = (box_j.x1 + box_j.x2) * 0.5f;
+            const float cy_j = (box_j.y1 + box_j.y2) * 0.5f;
+            const float dist = std::sqrt((cx_t - cx_j) * (cx_t - cx_j) + (cy_t - cy_j) * (cy_t - cy_j));
+            if (dist < exp_density_k_ * h_t) {
+                density++;
+            }
+        }
+        return mahalanobis_threshold_ * std::exp(-exp_density_eta_ * static_cast<float>(density));
+    }
+
     static float mahalanobis(const RelinkBox& box, const RelinkMotionSnapshot& snap) {
         const float bw = std::max(1e-6f, box.x2 - box.x1);
         const float bh = std::max(1e-6f, box.y2 - box.y1);
-        const std::array<float, 4> measurement = {
-            (box.x1 + box.x2) * 0.5f,
-            (box.y1 + box.y2) * 0.5f,
-            bw / bh,
-            bh,
-        };
-        std::array<float, 4> residual{};
-        for (size_t i = 0; i < residual.size(); ++i) {
-            residual[i] = measurement[i] - snap.state[i];
-        }
-
-        std::array<std::array<float, 5>, 4> aug{};
+        Eigen::Vector4f z(
+            (box.x1 + box.x2) * 0.5f, (box.y1 + box.y2) * 0.5f, bw / bh, bh);
+        Eigen::Vector4f x(
+            snap.state[0], snap.state[1], snap.state[2], snap.state[3]);
+        Eigen::Vector4f residual = z - x;
         const float h = std::max(snap.state[3], 1e-6f);
         const float pos_std = h / 20.0f;
-        const float r_diag[4] = {pos_std * pos_std, pos_std * pos_std, 1e-2f, pos_std * pos_std};
-        for (int r = 0; r < 4; ++r) {
-            for (int c = 0; c < 4; ++c) {
-                aug[r][c] = snap.covariance[static_cast<size_t>(r * 8 + c)] + (r == c ? r_diag[r] : 0.0f);
-            }
-            aug[r][4] = residual[static_cast<size_t>(r)];
-        }
-
-        for (int col = 0; col < 4; ++col) {
-            int pivot = col;
-            for (int r = col + 1; r < 4; ++r) {
-                if (std::fabs(aug[r][col]) > std::fabs(aug[pivot][col])) {
-                    pivot = r;
-                }
-            }
-            if (std::fabs(aug[pivot][col]) < 1e-8f) {
-                return std::numeric_limits<float>::infinity();
-            }
-            if (pivot != col) {
-                std::swap(aug[pivot], aug[col]);
-            }
-            const float denom = aug[col][col];
-            for (int c = col; c < 5; ++c) {
-                aug[col][c] /= denom;
-            }
-            for (int r = 0; r < 4; ++r) {
-                if (r == col) {
-                    continue;
-                }
-                const float factor = aug[r][col];
-                for (int c = col; c < 5; ++c) {
-                    aug[r][c] -= factor * aug[col][c];
-                }
-            }
-        }
-
-        float out = 0.0f;
-        for (int i = 0; i < 4; ++i) {
-            out += residual[static_cast<size_t>(i)] * aug[i][4];
-        }
-        return out;
+        Eigen::Map<const Eigen::Matrix<float, 8, 8, Eigen::RowMajor>> P_full(snap.covariance.data());
+        Eigen::Matrix4f S = P_full.topLeftCorner<4, 4>();
+        S(0, 0) += pos_std * pos_std; S(1, 1) += pos_std * pos_std;
+        S(2, 2) += 1e-2f;            S(3, 3) += pos_std * pos_std;
+        Eigen::LLT<Eigen::Matrix4f> llt(S);
+        if (llt.info() != Eigen::Success)
+            return std::numeric_limits<float>::infinity();
+        Eigen::Vector4f w = llt.matrixL().solve(residual);
+        return w.squaredNorm();
     }
 
     // Physical reachability gate: returns true if relinking the candidate to the
@@ -1352,65 +2196,168 @@ private:
     // accel_long >= accel_lat so the cloud stretches *along* the motion (velocity
     // inertia) and stays tight sideways. This replaces the unbounded h/160 velocity
     // noise that implied implausible accelerations / reversals.
-    static void predict_phys(
-        float x[8], float P[64], float person_height_m, float accel_long, float accel_lat, float fps) {
-        // 1. constant-velocity mean (inertia)
-        x[0] += x[4];
-        x[1] += x[5];
-        x[2] += x[6];
-        x[3] += x[7];
-        // 2. P = F P F^T  (F = [[I, I], [0, I]])
-        float Pn[64];
-        for (int i = 0; i < 4; ++i) {
-            for (int j = 0; j < 4; ++j) {
-                Pn[i * 8 + j] = P[i * 8 + j] + P[i * 8 + j + 4] + P[(i + 4) * 8 + j] + P[(i + 4) * 8 + j + 4];
-                Pn[i * 8 + j + 4] = P[i * 8 + j + 4] + P[(i + 4) * 8 + j + 4];
-                Pn[(i + 4) * 8 + j] = P[(i + 4) * 8 + j] + P[(i + 4) * 8 + j + 4];
-                Pn[(i + 4) * 8 + j + 4] = P[(i + 4) * 8 + j + 4];
-            }
-        }
-        for (int k = 0; k < 64; ++k) P[k] = Pn[k];
-        // 3. anisotropic acceleration noise on the planar (cx,cy,vx,vy) sub-state
-        const float px_per_m = std::max(x[3], 1e-3f) / std::max(person_height_m, 1e-3f);
+    // Eigen-based constant-velocity Kalman predict (F*P*F^T + standard Q).
+    // Uses block structure of F = [[I, I], [0, I]] to avoid full 8x8 multiply.
+    static void predict_eigen(float x[8], float P[64]) {
+        for (int i = 0; i < 4; ++i) x[i] += x[i + 4];
+        Eigen::Map<Eigen::Matrix<float, 8, 8, Eigen::RowMajor>> Pm(P);
+        Eigen::Matrix4f TL = Pm.topLeftCorner<4, 4>();
+        Eigen::Matrix4f TR = Pm.topRightCorner<4, 4>();
+        Eigen::Matrix4f BL = Pm.bottomLeftCorner<4, 4>();
+        const auto& BR = Pm.bottomRightCorner<4, 4>();
+        Pm.topLeftCorner<4, 4>()     = TL + TR + BL + BR;
+        Pm.topRightCorner<4, 4>()    = TR + BR;
+        Pm.bottomLeftCorner<4, 4>()  = BL + BR;
+        // bottomRight stays BR
+        float h = std::max(x[3], 1e-6f);
+        float Q[64];
+        saccade::kf_gpu::get_Q(h, Q);
+        for (int i = 0; i < 64; ++i) Pm.data()[i] += Q[i];
+    }
+
+    // One-shot k-step constant-velocity propagation.
+    // P_k = F^k * P_0 * (F^k)^T + sum_{i=0}^{k-1} F^i * Q * (F^i)^T.
+    // Uses the block structure of F^k = [[I, k*I], [0, I]] and the closed-form
+    // sums of i (k(k-1)/2) and i² (k(k-1)(2k-1)/6) to compute Q accumulation.
+    static void predict_delta(float x[8], float P[64], int k) {
+        if (k <= 0) return;
+        float fk = static_cast<float>(k);
+        for (int i = 0; i < 4; ++i) x[i] += fk * x[i + 4];
+
+        Eigen::Map<Eigen::Matrix<float, 8, 8, Eigen::RowMajor>> Pm(P);
+        Eigen::Matrix4f TL = Pm.topLeftCorner<4, 4>();
+        Eigen::Matrix4f TR = Pm.topRightCorner<4, 4>();
+        Eigen::Matrix4f BL = Pm.bottomLeftCorner<4, 4>();
+        Eigen::Matrix4f BR = Pm.bottomRightCorner<4, 4>();
+
+        // F^k * P * (F^k)^T
+        float fk2 = fk * fk;
+        Pm.topLeftCorner<4, 4>()     = TL + fk * (TR + BL) + fk2 * BR;
+        Pm.topRightCorner<4, 4>()    = TR + fk * BR;
+        Pm.bottomLeftCorner<4, 4>()  = BL + fk * BR;
+
+        // Q accumulation: sum_{i=0}^{k-1} F^i * Q * (F^i)^T
+        // For diagonal Q = [Pq, Pq, aq, Pq, Vq, Vq, vq, Vq]:
+        //   Pq_acc = k*Pq + k(k-1)(2k-1)/6 * Vq
+        //   Vq_acc = k * Vq
+        //   XV_acc  = k(k-1)/2 * Vq  (pos-vel cross term)
+        float h = std::max(x[3], 1e-6f);
+        float pos_sq = (h / 20.0f) * (h / 20.0f);
+        float vel_sq = (h / 160.0f) * (h / 160.0f);
+        float s1 = fk * (fk - 1.0f) / 2.0f;                       // sum i
+        float s2 = fk * (fk - 1.0f) * (2.0f * fk - 1.0f) / 6.0f;  // sum i²
+        float pos_acc = fk * pos_sq + s2 * vel_sq;
+        float vel_acc = fk * vel_sq;
+        float xv_acc  = s1 * vel_sq;
+
+        Pm(0, 0) += pos_acc; Pm(0, 4) += xv_acc; Pm(4, 0) += xv_acc; Pm(4, 4) += vel_acc;
+        Pm(1, 1) += pos_acc; Pm(1, 5) += xv_acc; Pm(5, 1) += xv_acc; Pm(5, 5) += vel_acc;
+        Pm(2, 2) += fk * 1e-4f;   Pm(6, 6) += fk * 1e-10f;
+        Pm(3, 3) += pos_acc;      Pm(3, 7) += xv_acc; Pm(7, 3) += xv_acc; Pm(7, 7) += vel_acc;
+    }
+
+    // One-shot k-step physically-grounded propagation with anisotropic
+    // acceleration noise. Mean advances at constant velocity; covariance uses
+    // closed-form sums of the DWNA pos-vel blocks: pos~k(4k²-1)/12, xv~k²/2,
+    // vel~k. Aspect/height noise uses the standard Q accumulation.
+    static void predict_phys_delta(
+        float x[8], float P[64], int k,
+        float person_height_m, float accel_long, float accel_lat, float fps) {
+        if (k <= 0) return;
+        float fk = static_cast<float>(k);
+        for (int i = 0; i < 4; ++i) x[i] += fk * x[i + 4];
+
+        Eigen::Map<Eigen::Matrix<float, 8, 8, Eigen::RowMajor>> Pm(P);
+        Eigen::Matrix4f TL = Pm.topLeftCorner<4, 4>();
+        Eigen::Matrix4f TR = Pm.topRightCorner<4, 4>();
+        Eigen::Matrix4f BL = Pm.bottomLeftCorner<4, 4>();
+        Eigen::Matrix4f BR = Pm.bottomRightCorner<4, 4>();
+        float fk2 = fk * fk;
+        Pm.topLeftCorner<4, 4>()     = TL + fk * (TR + BL) + fk2 * BR;
+        Pm.topRightCorner<4, 4>()    = TR + fk * BR;
+        Pm.bottomLeftCorner<4, 4>()  = BL + fk * BR;
+
+        // Anisotropic acceleration noise (single-step Sa, accumulated in closed form)
+        const float h = std::max(x[3], 1e-3f);
+        const float px_per_m = h / std::max(person_height_m, 1e-3f);
         const float inv_fps2 = 1.0f / std::max(fps * fps, 1e-6f);
-        const float sl = accel_long * px_per_m * inv_fps2;  // longitudinal sigma_a
-        const float st = accel_lat * px_per_m * inv_fps2;   // lateral sigma_a
-        float sl2 = sl * sl;
-        float st2 = st * st;
-        const float vx = x[4];
-        const float vy = x[5];
+        const float sl = accel_long * px_per_m * inv_fps2;
+        const float st = accel_lat * px_per_m * inv_fps2;
+        float sl2 = sl * sl, st2 = st * st;
+        const float vx = x[4], vy = x[5];
         const float speed = std::sqrt(vx * vx + vy * vy);
         float ux = 1.0f, uy = 0.0f;
-        if (speed > 1e-6f) {
-            ux = vx / speed;
-            uy = vy / speed;
-        } else {
-            // no heading → isotropic (use lateral magnitude both ways)
-            sl2 = st2;
-        }
-        // Sigma_a = sl2 * (u u^T) + st2 * (p p^T),  p = (-uy, ux)
+        if (speed > 1e-6f) { ux = vx / speed; uy = vy / speed; }
+        else { sl2 = st2; }
         const float Saa00 = sl2 * ux * ux + st2 * uy * uy;
         const float Saa01 = (sl2 - st2) * ux * uy;
         const float Saa11 = sl2 * uy * uy + st2 * ux * ux;
-        // DWNA blocks (dt=1): pos-pos *1/4, pos-vel *1/2, vel-vel *1
-        const int px[2] = {0, 1};   // cx, cy
-        const int vix[2] = {4, 5};  // vx, vy
-        const float Sa[2][2] = {{Saa00, Saa01}, {Saa01, Saa11}};
-        for (int a = 0; a < 2; ++a) {
-            for (int b = 0; b < 2; ++b) {
-                P[px[a] * 8 + px[b]] += 0.25f * Sa[a][b];
-                P[px[a] * 8 + vix[b]] += 0.5f * Sa[a][b];
-                P[vix[a] * 8 + px[b]] += 0.5f * Sa[a][b];
-                P[vix[a] * 8 + vix[b]] += Sa[a][b];
-            }
-        }
+        Eigen::Matrix2f Sa;
+        Sa << Saa00, Saa01, Saa01, Saa11;
+
+        // Closed-form DWNA accumulation: pos~k(4k²-1)/12, xv~k²/2, vel~k
+        float pos_f = fk * (4.0f * fk2 - 1.0f) / 12.0f;
+        float xv_f  = 0.5f * fk2;
+        float vel_f = fk;
+        Pm.block<2, 2>(0, 0) += pos_f * Sa;
+        Pm.block<2, 2>(0, 4) += xv_f  * Sa;
+        Pm.block<2, 2>(4, 0) += xv_f  * Sa;
+        Pm.block<2, 2>(4, 4) += vel_f * Sa;
+
+        // Aspect/height Q noise (standard accumulation)
+        float Q[64];
+        saccade::kf_gpu::get_Q(x[3], Q);
+        float s1 = fk * (fk - 1.0f) / 2.0f;
+        float s2 = fk * (fk - 1.0f) * (2.0f * fk - 1.0f) / 6.0f;
+        float pos_sq = (h / 20.0f) * (h / 20.0f);
+        float vel_sq = (h / 160.0f) * (h / 160.0f);
+        Pm(2, 2) += Q[2 * 8 + 2] * fk;  Pm(6, 6) += Q[6 * 8 + 6] * fk;
+        Pm(3, 3) += fk * pos_sq + s2 * vel_sq;
+        Pm(3, 7) += s1 * vel_sq; Pm(7, 3) += s1 * vel_sq;
+        Pm(7, 7) += fk * vel_sq;
+    }
+
+    static void predict_phys(
+        float x[8], float P[64], float person_height_m, float accel_long, float accel_lat, float fps) {
+        // 1. constant-velocity mean (inertia)
+        for (int i = 0; i < 4; ++i) x[i] += x[i + 4];
+
+        // 2. P = F P F^T  (F = [[I, I], [0, I]]) — block-structured to avoid 8x8 multiply
+        Eigen::Map<Eigen::Matrix<float, 8, 8, Eigen::RowMajor>> Pm(P);
+        Eigen::Matrix4f TL = Pm.topLeftCorner<4, 4>();
+        Eigen::Matrix4f TR = Pm.topRightCorner<4, 4>();
+        Eigen::Matrix4f BL = Pm.bottomLeftCorner<4, 4>();
+        const auto& BR = Pm.bottomRightCorner<4, 4>();
+        Pm.topLeftCorner<4, 4>()     = TL + TR + BL + BR;
+        Pm.topRightCorner<4, 4>()    = TR + BR;
+        Pm.bottomLeftCorner<4, 4>()  = BL + BR;
+
+        // 3. anisotropic acceleration noise on (cx,cy,vx,vy) sub-state
+        const float px_per_m = std::max(x[3], 1e-3f) / std::max(person_height_m, 1e-3f);
+        const float inv_fps2 = 1.0f / std::max(fps * fps, 1e-6f);
+        const float sl = accel_long * px_per_m * inv_fps2;
+        const float st = accel_lat * px_per_m * inv_fps2;
+        float sl2 = sl * sl, st2 = st * st;
+        const float vx = x[4], vy = x[5];
+        const float speed = std::sqrt(vx * vx + vy * vy);
+        float ux = 1.0f, uy = 0.0f;
+        if (speed > 1e-6f) { ux = vx / speed; uy = vy / speed; }
+        else { sl2 = st2; }
+        const float Saa00 = sl2 * ux * ux + st2 * uy * uy;
+        const float Saa01 = (sl2 - st2) * ux * uy;
+        const float Saa11 = sl2 * uy * uy + st2 * ux * ux;
+        Eigen::Matrix2f Sa;
+        Sa << Saa00, Saa01, Saa01, Saa11;
+        Pm.block<2, 2>(0, 0) += 0.25f * Sa;
+        Pm.block<2, 2>(0, 4) += 0.5f * Sa;
+        Pm.block<2, 2>(4, 0) += 0.5f * Sa;
+        Pm.block<2, 2>(4, 4) += Sa;
+
         // 4. keep modest noise on aspect & height so S stays well-conditioned
         float Q[64];
         saccade::kf_gpu::get_Q(x[3], Q);
-        P[2 * 8 + 2] += Q[2 * 8 + 2];
-        P[6 * 8 + 6] += Q[6 * 8 + 6];
-        P[3 * 8 + 3] += Q[3 * 8 + 3];
-        P[7 * 8 + 7] += Q[7 * 8 + 7];
+        Pm(2, 2) += Q[2 * 8 + 2]; Pm(6, 6) += Q[6 * 8 + 6];
+        Pm(3, 3) += Q[3 * 8 + 3]; Pm(7, 7) += Q[7 * 8 + 7];
     }
 
     // Squared Mahalanobis distance of a detection box against a lost track's
@@ -1425,36 +2372,28 @@ private:
         for (int i = 0; i < 8; ++i) x[i] = snap.state[static_cast<size_t>(i)];
         for (int i = 0; i < 64; ++i) P[i] = snap.covariance[static_cast<size_t>(i)];
         const int steps = std::max(0, delta);
-        const bool phys = person_height_m > 0.0f;
-        for (int s = 0; s < steps; ++s) {
-            if (phys) {
-                predict_phys(x, P, person_height_m, accel_long, accel_lat, fps);
-            } else {
-                saccade::kf_gpu::predict(x, P);
-            }
+        if (steps > 0) {
+            if (person_height_m > 0.0f)
+                predict_phys_delta(x, P, steps, person_height_m, accel_long, accel_lat, fps);
+            else
+                predict_delta(x, P, steps);
         }
-        // S = H P H^T + R = P[:4,:4] + R(h)
         float R[16];
         saccade::kf_gpu::get_R(x[3], R);
-        float S[16];
+        Eigen::Map<const Eigen::Matrix<float, 8, 8, Eigen::RowMajor>> Pm_full(P);
+        Eigen::Matrix4f S = Pm_full.topLeftCorner<4, 4>();
         for (int i = 0; i < 4; ++i)
             for (int j = 0; j < 4; ++j)
-                S[i * 4 + j] = P[i * 8 + j] + R[i * 4 + j];
-        float S_inv[16];
-        saccade::kf_gpu::invert4x4(S, S_inv);
-
+                S(i, j) += R[i * 4 + j];
         const float bw = std::max(1e-6f, box.x2 - box.x1);
         const float bh = std::max(1e-6f, box.y2 - box.y1);
-        const float z[4] = {(box.x1 + box.x2) * 0.5f, (box.y1 + box.y2) * 0.5f, bw / bh, bh};
-        float y[4];
-        for (int i = 0; i < 4; ++i) y[i] = z[i] - x[i];
-        float d2 = 0.0f;
-        for (int i = 0; i < 4; ++i) {
-            float si = 0.0f;
-            for (int j = 0; j < 4; ++j) si += S_inv[i * 4 + j] * y[j];
-            d2 += y[i] * si;
-        }
-        return d2;
+        Eigen::Vector4f z(
+            (box.x1 + box.x2) * 0.5f, (box.y1 + box.y2) * 0.5f, bw / bh, bh);
+        Eigen::Vector4f y = z - Eigen::Vector4f(x[0], x[1], x[2], x[3]);
+        Eigen::LLT<Eigen::Matrix4f> llt(S);
+        if (llt.info() != Eigen::Success) return 1e9f;
+        Eigen::Vector4f w = llt.matrixL().solve(y);
+        return w.squaredNorm();
     }
 
     std::vector<float> buffer_mean(int cid) const {
@@ -1497,6 +2436,9 @@ private:
     int min_lost_frames_;
     float min_iou_;
     float mahalanobis_threshold_;
+    bool exp_density_gating_ = false;
+    float exp_density_k_ = 2.0f;
+    float exp_density_eta_ = 0.15f;
     int buffer_size_;
     float min_consistency_;
     std::string rerank_mode_;
@@ -1526,19 +2468,43 @@ private:
     float kalman_accel_lat_;
     float kalman_fps_;
     float kalman_max_speed_mps_;
+    bool delayed_claim_;
+    int claim_warmup_frames_;
+    bool bidirectional_;
+    float bridge_px_;
+    float bridge_h_lo_;
+    float bridge_h_hi_;
+    int split_counter_;
 
     std::unordered_map<int, int> alias_;
+    std::unordered_map<int, PendingClaim> pending_claims_;
+    std::unordered_map<int, int> deferred_alias_;
     std::unordered_map<int, std::vector<float>> features_;
     std::unordered_map<int, std::vector<std::vector<float>>> buffers_;
     std::unordered_map<int, int> last_seen_;
     std::unordered_map<int, RelinkBox> last_boxes_;
     std::unordered_map<int, RelinkMotionSnapshot> motion_;
+    std::unordered_map<int, std::vector<std::pair<float, float>>> foot_history_;
+    std::unordered_map<int, float> ema_h_;
     std::vector<int> feature_order_;
     RelinkStats stats_;
     std::vector<float> accept_sims_;
     std::vector<float> accept_ious_;
     std::vector<float> accept_center_dists_;
     std::vector<float> accept_mahas_;
+
+    // GPU relink gate table: pre-computed per-pair gate quantities
+    std::vector<float> gate_tbl_;
+    int gate_n_query_ = 0;
+    int gate_n_cand_ = 0;
+    std::unordered_map<int, int> gate_row_;
+    std::unordered_map<int, int> gate_col_;
+    // GPU batch dot table: per-pair cosine similarities
+    std::vector<float> sim_tbl_;
+    // GPU scoring results: per-query best candidate
+    std::vector<int> scoring_ids_;
+    std::vector<float> scoring_scores_;
+    std::vector<float> scoring_second_;
 };
 
 // ============================================================
@@ -1859,9 +2825,15 @@ public:
         // Stage 1: semantic relink (all candidates share one assigned set)
         std::vector<int> relinked(static_cast<size_t>(n));
         {
+            std::vector<size_t> order(static_cast<size_t>(n));
+            for (size_t i = 0; i < static_cast<size_t>(n); ++i) order[i] = i;
+            if (relinker_->is_bidirectional() && n > 0) {
+                std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+                    return scores_v[a] > scores_v[b];
+                });
+            }
             std::unordered_set<int> assigned;
-            for (py::ssize_t i = 0; i < n; ++i) {
-                const size_t idx = static_cast<size_t>(i);
+            for (size_t idx : order) {
                 relinked[idx] = relinker_->resolve_cpp(
                     ids_v[idx], embs_v[idx], has_emb_v[idx],
                     boxes_v[idx], scores_v[idx],
@@ -1989,10 +2961,21 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         .def("set_relink_params", &GPUByteTracker::set_relink_params,
              py::arg("enabled"), py::arg("bank_cap") = 256, py::arg("sim_thresh") = 0.6f,
              py::arg("cheb_lambda") = 2.5f, py::arg("spatial_gate") = 4.0f, py::arg("max_age") = 300,
+             py::arg("bidirectional") = false, py::arg("bridge_px") = 0.25f,
+             py::arg("bridge_at") = 4, py::arg("bridge_min_lost") = 2, py::arg("bridge_ttl") = 120,
+             py::arg("bridge_max_speed") = 0.0f, py::arg("bridge_person_height") = 1.65f,
+             py::arg("bridge_fps") = 30.0f, py::arg("bridge_margin") = 0.0f,
+             py::arg("bridge_spatial_gate") = 0.0f, py::arg("bridge_anchor") = 0,
+             py::arg("bridge_anchor_rate") = 0.0f,
+             py::arg("bridge_h_lo") = 0.0f, py::arg("bridge_h_hi") = 0.0f,
+             py::arg("occ_gate_cover") = 0.0f, py::arg("occ_gap_min") = 30,
+             py::arg("occ_expand_px") = 0.0f, py::arg("occ_expand_cover") = 0.9f,
              "Birth-time lost-bank ReID relink: revive a lost identity at spawn instead "
-             "of minting a new id. Precision-first (high sim threshold + spatial gate).")
+             "of minting a new id. Precision-first (high sim threshold + spatial gate). "
+             "The bridge_* args enable the Phase-4 Kalman-free bidirectional foot-bridge "
+             "(adopt a still-live lost id when a young track's foot path bridges to it).")
         .def("get_relink_debug", &GPUByteTracker::get_relink_debug,
-             "Returns (archived, birth_candidates, revived) relink counters.")
+             "Returns (archived, births, revived, bridge_attempts, bridge_accepts) counters.")
         .def("set_oao_params", &GPUByteTracker::set_oao_params,
              py::arg("tau"),
              "OA-SORT OAO penalty weight [0, 1]. 0 = disabled. "
@@ -2037,6 +3020,10 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             return self.get_active_tid_slot_pairs();
         }, "Return list of (track_id, slot_index) for all active tracks. "
            "Shares the lazy-sync cache with update_reference_features / set_clean_embedding_flags.")
+        .def("get_gpu_buffers", [](GPUByteTracker& self) {
+            auto buf = self.get_gpu_buffers();
+            return py::make_tuple(buf.states, buf.covs, buf.track_ids, buf.max_objs);
+        }, "Return (states_ptr, covs_ptr, track_ids_ptr, max_objs) device pointers.")
         .def("update", [](GPUByteTracker& self, uintptr_t boxes_ptr, uintptr_t scores_ptr, uintptr_t classes_ptr, int num_dets, uintptr_t stream_ptr,
                           uintptr_t embeddings_ptr, uintptr_t gmc_ptr, float light_factor, float mid_thresh_scale) {
             return self.update(
@@ -2135,7 +3122,7 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         }, "Raw C++ pointer to this GPUByteTracker (for Workbench construction)");
 
     py::class_<SemanticRelinkerCpp>(m, "SemanticRelinker")
-        .def(py::init<float, int, float, float, int, float, float, int, float, std::string, float, bool, float, float, float, float, float, float, float, float, float, float, float, float, float, float, bool, float, float, float, float, float, float, float, float, float>(),
+        .def(py::init<float, int, float, float, int, float, float, int, float, std::string, float, bool, float, float, float, float, float, float, float, float, float, float, float, float, float, float, bool, float, float, float, float, float, float, float, float, float, bool, int, bool, float, float, float, bool, float, float>(),
              py::arg("sim_threshold") = 0.985f,
              py::arg("ttl") = 45,
              py::arg("ema_beta") = 0.83f,
@@ -2171,7 +3158,16 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
              py::arg("kalman_accel_long") = 2.0f,
              py::arg("kalman_accel_lat") = 1.0f,
              py::arg("kalman_fps") = 30.0f,
-             py::arg("kalman_max_speed_mps") = 0.0f)
+             py::arg("kalman_max_speed_mps") = 0.0f,
+             py::arg("delayed_claim") = false,
+             py::arg("claim_warmup_frames") = 3,
+             py::arg("bidirectional") = false,
+             py::arg("bridge_px") = 1.5f,
+             py::arg("bridge_h_lo") = 0.0f,
+             py::arg("bridge_h_hi") = 0.0f,
+             py::arg("exp_density_gating") = false,
+             py::arg("exp_density_k") = 2.0f,
+             py::arg("exp_density_eta") = 0.15f)
         .def("update_motion_snapshots", &SemanticRelinkerCpp::update_motion_snapshots,
              py::arg("snapshots"), py::arg("frame_id") = -1)
         .def("motion_candidate_ids", &SemanticRelinkerCpp::motion_candidate_ids, py::arg("frame_id") = -1)
@@ -2207,9 +3203,22 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
              py::arg("w"),
              py::arg("h"))
         .def_property_readonly("alias", &SemanticRelinkerCpp::get_alias)
+        .def_property_readonly("deferred_alias", &SemanticRelinkerCpp::get_deferred_alias)
         .def_property_readonly("features", &SemanticRelinkerCpp::get_features)
         .def_property_readonly("stats", &SemanticRelinkerCpp::stats)
-        .def("report", &SemanticRelinkerCpp::report);
+        .def("report", &SemanticRelinkerCpp::report)
+        .def("build_gate_table", &SemanticRelinkerCpp::build_gate_table,
+             py::arg("raw_ids"), py::arg("boxes"), py::arg("frame_id"), py::arg("w"), py::arg("h"),
+             py::arg("tracker_states") = 0, py::arg("tracker_covs") = 0,
+             py::arg("tracker_tids") = 0, py::arg("tracker_max_objs") = 0,
+             py::arg("query_embs") = py::none(),
+             "Build GPU-accelerated per-pair gate table for this frame. "
+             "When tracker GPU pointers are provided, candidate Kalman state is "
+             "copied device-to-device instead of H2D. "
+             "When query_embs is a [N, D] tensor, batch cosine similarity is "
+             "computed on GPU and used to skip CPU dot products.")
+        .def("clear_gate_table", &SemanticRelinkerCpp::clear_gate_table,
+             "Release the GPU gate table, reverting to inline gate computation.");
 
     py::class_<TrackletLifecycleMergerCpp>(m, "TrackletLifecycleMerger")
         .def(py::init<bool, int, int, float, float, float, bool, float>(),
@@ -2264,6 +3273,16 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         }, py::arg("frame_ptr"), py::arg("width"), py::arg("height"),
            py::arg("stream_ptr"), py::arg("out_warp_ptr"),
            py::arg("use_gpu_phase_corr") = true, py::arg("sync_caller_stream") = true)
+        .def("estimate_into_direct", [](GMC& self, uintptr_t frame_ptr, int width, int height,
+                                         uintptr_t stream_ptr, uintptr_t out_warp_ptr) {
+            py::gil_scoped_release release;
+            self.estimate_into_direct(
+                reinterpret_cast<const float*>(frame_ptr),
+                width, height,
+                reinterpret_cast<cudaStream_t>(stream_ptr),
+                reinterpret_cast<float*>(out_warp_ptr));
+        }, py::arg("frame_ptr"), py::arg("width"), py::arg("height"),
+           py::arg("stream_ptr"), py::arg("out_warp_ptr"))
         .def("sync_to_stream", [](GMC& self, uintptr_t stream_ptr) {
             self.sync_to_stream(reinterpret_cast<cudaStream_t>(stream_ptr));
         }, py::arg("stream_ptr"))
@@ -2310,7 +3329,13 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             self.set_fg_mask_boxes(v);
         }, py::arg("boxes_flat"),
            "Set foreground boxes [x1,y1,x2,y2,...] to zero before phase correlation. "
-           "Call once per frame before estimate().");
+           "Call once per frame before estimate().")
+        .def("set_fg_mask_boxes_gpu", [](GMC& self, uintptr_t boxes_ptr, int n_boxes) {
+            py::gil_scoped_release release;
+            self.set_fg_mask_boxes_gpu(
+                reinterpret_cast<const float*>(boxes_ptr), n_boxes);
+        }, py::arg("boxes_ptr"), py::arg("n_boxes"),
+           "Set foreground boxes from GPU memory. No D2H roundtrip.");
 
     m.def(
         "merge_cross_tile_duplicates",
@@ -2710,6 +3735,70 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             py::arg("priors_ptr") = 0, py::arg("prior_classes_ptr") = 0,
             py::arg("num_priors") = 0, py::arg("prior_iou_threshold") = 0.50f,
             py::arg("stream_ptr"))
+        .def("process_detections_graph",
+            [](PerceptionPipeline& self,
+               uintptr_t boxes_ptr, uintptr_t scores_ptr, uintptr_t classes_ptr,
+               int n_in, int frame_w, int frame_h, bool is_tiled,
+               uintptr_t out_boxes, uintptr_t out_scores, uintptr_t out_classes,
+               uintptr_t out_suspect, uintptr_t out_count,
+               uintptr_t priors_ptr, uintptr_t prior_classes_ptr,
+               int num_priors, float prior_iou_threshold,
+               uintptr_t stream_ptr) {
+                py::gil_scoped_release release;
+                self.process_detections_graph(
+                    reinterpret_cast<const float*>(boxes_ptr),
+                    reinterpret_cast<const float*>(scores_ptr),
+                    reinterpret_cast<const int*>(classes_ptr),
+                    n_in, frame_w, frame_h, is_tiled,
+                    reinterpret_cast<float*>(out_boxes),
+                    reinterpret_cast<float*>(out_scores),
+                    reinterpret_cast<int*>(out_classes),
+                    reinterpret_cast<bool*>(out_suspect),
+                    reinterpret_cast<int*>(out_count),
+                    reinterpret_cast<const float*>(priors_ptr),
+                    reinterpret_cast<const int*>(prior_classes_ptr),
+                    num_priors, prior_iou_threshold,
+                    reinterpret_cast<cudaStream_t>(stream_ptr));
+            },
+            py::arg("boxes_ptr"), py::arg("scores_ptr"), py::arg("classes_ptr"),
+            py::arg("n_in"), py::arg("frame_w"), py::arg("frame_h"),
+            py::arg("is_tiled"),
+            py::arg("out_boxes"), py::arg("out_scores"), py::arg("out_classes"),
+            py::arg("out_suspect"), py::arg("out_count"),
+            py::arg("priors_ptr") = 0, py::arg("prior_classes_ptr") = 0,
+            py::arg("num_priors") = 0, py::arg("prior_iou_threshold") = 0.50f,
+            py::arg("stream_ptr"))
+        .def("process_detections_interleaved_graph",
+            [](PerceptionPipeline& self,
+               uintptr_t det_6d,
+               int n_in,
+               uintptr_t split_boxes, uintptr_t split_scores, uintptr_t split_classes,
+               int frame_w, int frame_h, bool is_tiled,
+               uintptr_t out_boxes, uintptr_t out_scores, uintptr_t out_classes,
+               uintptr_t out_suspect, uintptr_t out_count,
+               uintptr_t stream_ptr) {
+                py::gil_scoped_release release;
+                self.process_detections_interleaved_graph(
+                    reinterpret_cast<const float*>(det_6d),
+                    n_in,
+                    reinterpret_cast<float*>(split_boxes),
+                    reinterpret_cast<float*>(split_scores),
+                    reinterpret_cast<int*>(split_classes),
+                    frame_w, frame_h, is_tiled,
+                    reinterpret_cast<float*>(out_boxes),
+                    reinterpret_cast<float*>(out_scores),
+                    reinterpret_cast<int*>(out_classes),
+                    reinterpret_cast<bool*>(out_suspect),
+                    reinterpret_cast<int*>(out_count),
+                    reinterpret_cast<cudaStream_t>(stream_ptr));
+            },
+            py::arg("det_6d"),
+            py::arg("n_in"), py::arg("frame_w"), py::arg("frame_h"),
+            py::arg("is_tiled"),
+            py::arg("split_boxes"), py::arg("split_scores"), py::arg("split_classes"),
+            py::arg("out_boxes"), py::arg("out_scores"), py::arg("out_classes"),
+            py::arg("out_suspect"), py::arg("out_count"),
+            py::arg("stream_ptr"))
         .def("extract_reid",
             [](PerceptionPipeline& self,
                uintptr_t frame_ptr, int frame_h, int frame_w,
@@ -2924,6 +4013,76 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         "Compact-filter detections removing very-low-score and large+uncertain boxes. "
         "Returns count of kept detections. GPU equivalent of _apply_fp_hard_filter().");
 
+    m.def("relink_gate_batch",
+        [](int n_query, int n_cand, int w, int h, int dims,
+           float fps, float person_height_m, float max_speed_mps,
+           float accel_long, float accel_lat, float dir_min_cos, float dir_min_speed,
+           uintptr_t query_boxes, uintptr_t query_foot, uintptr_t query_foot_n,
+           uintptr_t query_emah,
+           uintptr_t cand_last_box, uintptr_t cand_mean, uintptr_t cand_cov,
+           uintptr_t cand_foot, uintptr_t cand_foot_n, uintptr_t cand_emah,
+           uintptr_t cand_gap, uintptr_t cand_delta, uintptr_t cand_has_snap,
+           uintptr_t table, uintptr_t stream_ptr) {
+            py::gil_scoped_release release;
+            saccade::relink_gate::GateParams p{
+                n_query, n_cand, w, h, dims, fps, person_height_m, max_speed_mps,
+                accel_long, accel_lat, dir_min_cos, dir_min_speed};
+            saccade::relink_gate::launch(
+                p,
+                reinterpret_cast<const float*>(query_boxes),
+                reinterpret_cast<const float*>(query_foot),
+                reinterpret_cast<const int*>(query_foot_n),
+                reinterpret_cast<const float*>(query_emah),
+                reinterpret_cast<const float*>(cand_last_box),
+                reinterpret_cast<const float*>(cand_mean),
+                reinterpret_cast<const float*>(cand_cov),
+                reinterpret_cast<const float*>(cand_foot),
+                reinterpret_cast<const int*>(cand_foot_n),
+                reinterpret_cast<const float*>(cand_emah),
+                reinterpret_cast<const int*>(cand_gap),
+                reinterpret_cast<const int*>(cand_delta),
+                reinterpret_cast<const int*>(cand_has_snap),
+                reinterpret_cast<float*>(table),
+                reinterpret_cast<void*>(stream_ptr));
+        },
+        py::arg("n_query"), py::arg("n_cand"), py::arg("w"), py::arg("h"), py::arg("dims"),
+        py::arg("fps"), py::arg("person_height_m"), py::arg("max_speed_mps"),
+        py::arg("accel_long"), py::arg("accel_lat"),
+        py::arg("dir_min_cos"), py::arg("dir_min_speed"),
+        py::arg("query_boxes"), py::arg("query_foot"), py::arg("query_foot_n"),
+        py::arg("query_emah"),
+        py::arg("cand_last_box"), py::arg("cand_mean"), py::arg("cand_cov"),
+        py::arg("cand_foot"), py::arg("cand_foot_n"), py::arg("cand_emah"),
+        py::arg("cand_gap"), py::arg("cand_delta"), py::arg("cand_has_snap"),
+        py::arg("table"), py::arg("stream_ptr") = 0,
+        "Batched per-(query,candidate) relink gate table. Fills table "
+        "[n_query*n_cand*6] = {kalman_d2,bridge_dist,center_norm,iou,speed_exceeds,"
+        "dir_behind}. All device pointers. Thresholds stay Python-side.");
+
+    m.def("copy_pad_detections",
+        [](uintptr_t src_boxes, uintptr_t src_scores, uintptr_t src_classes,
+           int n_copy,
+           uintptr_t dst_boxes, uintptr_t dst_scores, uintptr_t dst_classes,
+           int padded_n, uintptr_t stream_ptr) {
+            py::gil_scoped_release release;
+            copy_pad_detections(
+                reinterpret_cast<const float*>(src_boxes),
+                reinterpret_cast<const float*>(src_scores),
+                reinterpret_cast<const int*>(src_classes),
+                n_copy,
+                reinterpret_cast<float*>(dst_boxes),
+                reinterpret_cast<float*>(dst_scores),
+                reinterpret_cast<int*>(dst_classes),
+                padded_n,
+                reinterpret_cast<cudaStream_t>(stream_ptr));
+        },
+        py::arg("src_boxes"), py::arg("src_scores"), py::arg("src_classes"),
+        py::arg("n_copy"),
+        py::arg("dst_boxes"), py::arg("dst_scores"), py::arg("dst_classes"),
+        py::arg("padded_n"), py::arg("stream_ptr") = 0,
+        "Copy N detections to padded output, zero-fill tail. "
+        "Single kernel replaces copy+zero_ pairs for graph-NMS input prep.");
+
     m.def("auction_solve_cpp",
         [](py::array_t<float, py::array::c_style | py::array::forcecast> cost_matrix, float epsilon) {
             if (cost_matrix.ndim() != 2) {
@@ -3019,4 +4178,52 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         py::arg("a_per_channel") = 0, py::arg("is_half") = false,
         py::arg("stream_ptr") = 0,
         "CUDA selective scan (Mamba SSM kernel) supporting both float and half.");
+
+    m.def("selective_scan_bwd",
+        [](
+            uintptr_t grad_y_ptr, uintptr_t u_ptr, uintptr_t delta_ptr,
+            uintptr_t A_ptr, uintptr_t B_ptr, uintptr_t C_ptr, uintptr_t D_ptr,
+            uintptr_t h_buf_ptr, uintptr_t du_ptr, uintptr_t ddelta_ptr,
+            uintptr_t dA_ptr, uintptr_t dB_ptr, uintptr_t dC_ptr, uintptr_t dD_ptr,
+            int B_dim, int L_dim, int D_dim, int N_dim, int has_D,
+            int a_per_channel, uintptr_t stream_ptr
+        ) {
+            SelectiveScanParams params;
+            params.B = B_dim;
+            params.L = L_dim;
+            params.D = D_dim;
+            params.N = N_dim;
+            params.has_D = has_D;
+            params.a_per_channel = a_per_channel;
+
+            void* stream = reinterpret_cast<void*>(stream_ptr);
+            {
+                py::gil_scoped_release release;
+                selective_scan_bwd(
+                    reinterpret_cast<const float*>(grad_y_ptr),
+                    reinterpret_cast<const float*>(u_ptr),
+                    reinterpret_cast<const float*>(delta_ptr),
+                    reinterpret_cast<const float*>(A_ptr),
+                    reinterpret_cast<const float*>(B_ptr),
+                    reinterpret_cast<const float*>(C_ptr),
+                    has_D ? reinterpret_cast<const float*>(D_ptr) : nullptr,
+                    reinterpret_cast<float*>(h_buf_ptr),
+                    reinterpret_cast<float*>(du_ptr),
+                    reinterpret_cast<float*>(ddelta_ptr),
+                    reinterpret_cast<float*>(dA_ptr),
+                    reinterpret_cast<float*>(dB_ptr),
+                    reinterpret_cast<float*>(dC_ptr),
+                    has_D ? reinterpret_cast<float*>(dD_ptr) : nullptr,
+                    params,
+                    stream
+                );
+            }
+        },
+        py::arg("grad_y_ptr"), py::arg("u_ptr"), py::arg("delta_ptr"),
+        py::arg("A_ptr"), py::arg("B_ptr"), py::arg("C_ptr"), py::arg("D_ptr"),
+        py::arg("h_buf_ptr"), py::arg("du_ptr"), py::arg("ddelta_ptr"),
+        py::arg("dA_ptr"), py::arg("dB_ptr"), py::arg("dC_ptr"), py::arg("dD_ptr"),
+        py::arg("B_dim"), py::arg("L_dim"), py::arg("D_dim"), py::arg("N_dim"),
+        py::arg("has_D"), py::arg("a_per_channel") = 0, py::arg("stream_ptr") = 0,
+        "CUDA backward of the selective scan (fp32 training path).");
 }

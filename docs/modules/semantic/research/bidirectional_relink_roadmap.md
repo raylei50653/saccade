@@ -1,7 +1,7 @@
 # 雙向時空收斂幾何重連 — 長期路線圖
 
 > Bidirectional Space-Time Convergent Kinematic Relink Roadmap
-> 狀態：Phase 0 已落地（default off），Phase 1–4 規劃中。最後更新 2026-06-04。
+> 狀態：Phase 0 已落地（default off）；Phase 1 CPU 延遲認領骨架已落地（default off，待 MOT17/ID4 ablation）；Phase 2 中點橋接雙向閘已落地 + 首個 MOT17-SDP ablation 為正（default off）；Phase 3–4 規劃中。最後更新 2026-06-05。
 
 ## 背景 (Context)
 
@@ -43,7 +43,7 @@ relinker CPU 路徑（C++ `SemanticRelinkerCpp` @ `src/tracking/tracker_gpu_pyth
 
 ## 路線圖
 
-### Phase 1 — 速度取得 + 延遲認領骨架（CPU）
+### Phase 1 — 速度取得 + 延遲認領骨架（CPU）✅ skeleton landed / default off
 
 新框**不再首現即認領**，先緩衝 K(≈confirm_streak=3) 幀讓 Kalman 收斂出穩定 `v_spawn`。
 
@@ -52,16 +52,88 @@ relinker CPU 路徑（C++ `SemanticRelinkerCpp` @ `src/tracking/tracker_gpu_pyth
 - **對接點**：relinker 暴露 `deferred_alias: {new_id→claimed_old_id}`；evaluator 在 `interpolate_tracklets` 前對 `results_lines` 套用 remap（新工具 `apply_deferred_alias`，緊鄰 `filter_low_quality_tracklets`）。
 - Flags：`--semantic-delayed-claim`、`--semantic-claim-warmup-frames`(3)。
 
-### Phase 2 — 反向傳播 + 雙向聯合門控（CPU）
+實作快照（2026-06-04）：
+- Python relinker 已支援 pending warmup + `deferred_alias`。
+- evaluator 會在 `filter_low_quality_tracklets` / `interpolate_tracklets` 前套用 `apply_deferred_alias`。
+- `--semantic-delayed-claim` 目前強制走 Python relinker，避免尚未重建的舊 C++ extension 收到新 kwargs；C++ `SemanticRelinkerCpp` source 已同步鏡像，待本機 CUDA/OpenCV toolchain 可重建後切回預設 C++ 路徑驗證。
+- 已補 focused tests：warmup 前保留 raw id、warmup 後產生 deferred alias、MOT lines remap。
+
+### Phase 2 — 反向傳播 + 雙向聯合門控（CPU）✅ skeleton landed / default off
 
 spec §2/§3。認領須**正向∩逆向**雙過。
 
-- 逆向外推：`x_backward = x_spawn − v_spawn·Δt`、`P_backward = P_spawn + Σ predict_phys(逆向)`（Δt=lostage，重用 `predict_phys` 以 −v 建雲）。
-- 雙向馬氏：`D_forward²`（已有）+ `D_backward²`（新軌雲倒推 vs lost 凍結位置）。
-- 斷邊：任一 `D²>chi2` 或 `cosθ<0` → 代價 ∞。
-- 聯合代價：`Cost = Cost_fwd + Cost_bwd + Cost_shape`，接 relinker best-joint + `reciprocal_margin`（模糊→偏新 id）。
-- 死區修補：認領成功沿用 `interpolate_tracklets` 補 [t_lost, t_spawn]。
-- Flags：`--semantic-bidirectional`、`--semantic-w-shape`；stats：`reject_backward` / `accept_bidir`。
+實作快照（2026-06-05）：
+- Python relinker 已具備 `--semantic-bidirectional` 開關，預設關閉。
+- **中點橋接閘（線性代數，無 Kalman 依賴）**：lost 方取 tail 4 幀 foot-centre 線性回歸得速度、candidate 方取 head 4 幀同公式反向得速度，各線性外推至 gap/2，取兩預測點歐氏距離除以平均 EMA 框高，與 `--semantic-bridge-px`（框高歸一化單位，預設 1.5）比較。
+- **速度回歸閉式解**（4 幀等間隔）：`v = (3p₃ + p₂ − p₁ − 3p₀) / 10`，不需 Kalman snapshot、不需 `predict_phys` 迭代、不需協方差矩陣。
+- **框高歸一化**：每 track 維護 EMA 框高（`α=0.05`，≈60 幀衰減窗），中點距離除以 lost/cand 平均框高，消除透視 bias（遠小近大）。
+- **foot history**：每 track 保留最近 8 個 foot-centre（`_foot_history`），resolve / motion_only 兩路徑皆更新。
+- CLI flags：`--semantic-bidirectional`、`--semantic-bridge-px`（1.5，框高倍數）。
+- Stats：`reject_backward`、`accept_bidir`、`relink_split_collision`（per-frame 唯一性 split 次數，見下）。
+- 不依賴 Kalman snapshot（`snapshot is not None` 條件已移除），純幾何模式可獨立運作（`--reid-mode off --pipeline-relink`）。
+
+設計取捨：
+- 不用 Mahalanobis D²：長 gap 時協方差膨脹過大，D² 失去鑑別力（真/假配對 D² 值接近）。
+- 不用 Kalman 反向傳播：candidate 方 Kalman 未收斂（僅 4–5 幀），回歸速度更可靠。
+- 不用完整 bridge_overlap（Bhattacharyya）：中點等面積比較已足夠，閉式解省去矩陣運算。
+
+#### 離線 bridge 驗證（`scripts/tools/render_diffusion_debug.py`，2026-06-04）
+
+雙向夾擊的核心量＝「lost 軌跡正向擴散的腳點」對「candidate 逆向外推的腳點」之距離（`bridge`，L600–619）。先用離線 diagnostic tool 把這個量視覺化、掃 source 速度估計器，再決定要不要進 relinker。
+
+**關鍵發現：source 速度應取「丟失前一段乾淨窗」，而非緊貼 tail 的位移。** tail 末端常已減速/被遮擋汙染，直接估速會低估真實 `v_spawn`，正向腳點落不到 candidate 那側。新估計器（`estimate_model`，`velocity_mode=pre_tail` / `velocity_stat=endpoint`）改從 stable anchor 往前 `velocity_offset` 幀、取 `velocity_window` 幀的 first→last endpoint 斜率：
+
+- 起手值：`velocity_mode=pre_tail`、`velocity_stat=endpoint`、`velocity_offset=13`、`velocity_window=30`。
+
+custom_seq_occ 對照（`--bridge-gate-px 120`）：
+
+| link | bridge | 判定 |
+|---|---|---|
+| `#2 → #5`（真實重連） | 117.5px | pass |
+| `#4 → #5` | 498.1px | reject |
+| `#5 → #7` | 428.5px | reject |
+
+兩類分離很寬（117 vs 428/498），方向上驗證了 bridge 量可分真/假重連。原 `--bridge-gate-px 120` 真實 link 只低 2.5px、裕度太薄，已將 distance-mode default **抬到 200**：真實 #2→#5（117.5px）有 ~82px headroom，rejects 皆 >400px 仍安全落在門外。⇒ Phase 2 正向腳點速度建議沿用 pre_tail/endpoint 估計器。
+
+**bridge 已從硬距離升級成概率波重疊（`--bridge-mode overlap`，default）。** 原本 `bridge = hypot(Δfoot)` 對固定 px 門，丟掉兩端各向異性「雪茄雲」的協方差。新版把正向/逆向各建 2D 高斯 `Σ = R(θ)·diag(σ_long²,σ_lat²)·Rᵀ`（`cloud_cov`），以兩量門控（`bridge_overlap`）：
+
+- **Mahalanobis 相遇檢定**：`D² = δᵀ(Σ_f+Σ_b)⁻¹δ`，卡方 2DoF 門（`--bridge-chi2` 5.991=95%）。scale-adaptive——遠處兩朵大雲容許較大 px 間距，近處兩朵小雲收緊，取代固定 px。
+- **Bhattacharyya 重疊權重**：閉式高斯重疊係數 ∈(0,1]（`--bridge-min-overlap`，0=off），其行列式項同時懲罰形狀/尺度不匹配，部分吸收既有 scale check。
+
+`--bridge-mode distance` 保留舊硬距離行為供 A/B。⇒ Phase 2 正式門控採概率重疊，非固定 px。
+
+**速度倍率範圍補償（`--vel-range-frac`，default 0.2）。** 原 σ 只來自 `base_size + accel·dt²`，完全不看物體實際速度——快速新 ID 拿到跟靜止 ID 一樣緊的範圍，門失去參考意義。每端（正向 lost cloud + 逆向 candidate cloud）航向 σ 各加 velocity-range 項：快軌得到正比於自身速度×gap 的更寬接受範圍，慢/靜止軌維持收緊。**關鍵：candidate（新 ID）範圍須按新 ID 自身速度補正，非沿用 lost 軌速度。** 0=off 退回 base+accel。
+
+**速度單位＝框高（box-height），非 m/s。** 框高就是「就地量到的透視尺度」，省掉 `person_height_m` 假設（`px_per_m = h/1.65`，框高與 m/s 僅差此常數）。式子寫成 `vel_long = frac · (speed·gap / h) · scale_h`：`heights_travelled = speed·gap/h` 為框高歸一化位移、`scale_h` 為回投 px 的尺度（目前 = 當前 h）。數值與直接 px 等價（h 抵消），但語意變「走過幾個框高的 frac」＋把 `scale_h` 顯式化——**這正是透視/深度修正的掛鉤點：把 `scale_h` 換成相遇點的預測框高，雲就自帶深度修正**（近大遠小）。
+
+**ReID 式品質閘 EMA bank（`--velocity-mode bank`）。** 丟失前數幀框不穩（遮擋起點→縮框/截斷），直接從 tail 估速/估幾何不可靠。借鑑 ReID reference-quality bank：`quality_bank()` 前→後走訪，維護幾何 EMA，只收「尺寸撐過 running EMA × ratio + score 過閘」的高品質幀；不穩尾幀自動落選。velocity/geometry 取最後一段穩定 stretch，diffusion 從**最後可信 snapshot**（`last_frame`=最後穩定幀，非 raw last）外推、自然跨過不穩尾。合成測試：20 穩定幀 +5 縮框尾 → anchor 止於 f20、EMA h 保 200（非污染 60）、vx≈10。把固定 `velocity_offset=13` 變成自適應（實際有幾幀不穩就跳幾幀）。Flags：`--quality-score-thr`（score 閘，<0 如 GT 恆過）、`--bank-alpha`（EMA 率 0.1）。對接 Phase 1 spawn 速度（穩定 Kalman snapshot）；真 relinker 有 appearance 時 bank 可再掛 embedding tier。
+
+**透視/深度修正已接（`--perspective-scale`，default off）。** `predicted_height()` 用地平面 pinhole proxy（apparent height ∝ image row，horizon 近似 y=0）：`h_pred = h · (foot_y_pred / foot_y_ref)`，ratio clamp 到 `[1/3, 3]` 防高處塌陷。開啟後 `scale_h` 改用 `h_pred`：目標往畫面下方（近）走→預測框高放大→velocity-range σ 隨之放大；往上（遠）走則收緊。正向 lost cloud 與逆向 candidate cloud 各用自身 `foot_y_ref→pred_foot_y`。default off（改變數值），先 A/B 再決定。下一槓桿：把同一 `predicted_height` 套到 scale-acceptance check（candidate.h vs 預測 source.h），修正久丟期間 source 尺度漂移。
+
+#### per-frame ID 唯一性修復 + 首個 MOT17-SDP ablation（2026-06-05）
+
+開 bidirectional 跑 MOT17-SDP 時 TrackEval 直接報錯 `predicts the same ID more than once in a single timestep`（MOT17-02 f203, id 29）→ HOTA 算不出來。
+
+**根因（合併邏輯）**：online relink 把 `alias[raw]→canonical` **永久**寫死。per-frame 去重的 `assigned` set 只擋**匹配路徑**（`resolve()` 候選迴圈 `if cid in assigned`），但**已 commit 的 alias 走 fast-path 直接吐 `canonical`、完全不檢查 `assigned`**。於是當某 raw（高信心軌道）很早被 relink 到 canonical 29、而**原生 raw-29 在久丟後復活**（f203 一塊 conf 0.1 的低信心碎片），兩者同幀都 fast-path 到 29 → 同一 timestep 出現兩列 id=29。線上情境無法預知原生 ID 會復活，故「合併時做時間重疊檢查」退化為下面的事後唯一性保護。
+
+**修復（`relink.py`，always-on 正確性）**：`_split_on_collision()` — 取得最終 `canonical` 後若本幀已被別 raw 吐過,當前 raw 永久 split 到 surrogate id（`>= 1_000_000`，寫回 `alias` 使 split 跨幀穩定）。`resolve()` 與 `_resolve_motion_only()` 皆加閘。只在「本來就非法」的幀觸發,對合法幀零影響。
+
+**incumbent 保留（`_frame_order()`，僅 bidirectional）**：同幀按 score 由高到低處理，讓長期在位的高信心軌道先 claim canonical、復活的低信心碎片才 split；輸出順序還原。非 bidirectional baseline 維持 bit-identical。新增 `relink_split_collision` stat。
+
+**Ablation（mamba_whole_graph / SDP，`--pipeline-relink --semantic-ttl 120 --semantic-kalman-gate --semantic-kalman-person-height-m 1.65 --semantic-bidirectional --semantic-bridge-px 0.5`）**：
+
+| | IDF1 | MOTA | HOTA | DetA | AssA | IDs |
+|---|---|---|---|---|---|---|
+| baseline `mamba_whole_graph` | 73.3 | 77.1 | 66.7 | 71.2 | 64.7 | 503 |
+| bidirectional（修復後） | **74.5** | **77.7** | **67.5** | 69.8 | **65.4** | 495 |
+| Δ | +1.2 | +0.6 | +0.8 | −1.4 | +0.7 | −8 |
+
+- **AssA +0.7pp** 印證雙向 relink 確實改善關聯（其本意）；IDF1/HOTA 增益超過 ±0.3pp 雜訊。
+- 修復前那次 IDF1 75.2% 是被重複框灌水的假數,真實為 74.5%。
+- 全 7 序列共 44 次 split_collision（6/0/5/1/14/4/14）= 假合併被正確拆回；輸出已無任何重複 `(frame,id)`。
+- DetA −1.4pp（split 出的碎片變獨立短軌,輕微拉低偵測關聯）為唯一退步面,淨 HOTA 仍 +0.8。
+- 回歸測試：`tests/extended/test_relink_collision_split.py`（4 tests）；既有 80 個 relink 測試全過。
+- **default 暫不改**（沿用專案慣例,單次正向 ablation 先入庫,待多組確認再動 preset）。
 
 ### Phase 3 — Chebyshev 統計門 + N_valid fallback
 
@@ -164,6 +236,8 @@ awk -F, '$2==4 {cx=$3+$5/2; if(p!=""){d=cx-pcx; if(d<0)d=-d;
 | `semantic_kalman_accel_lat` | 1.0 | 1.0 m/s² | 橫向（轉彎）最大加速度，`< long` 才有慣性 |
 | `semantic_kalman_fps` | 0(auto) | 0（自動讀 seqinfo/mp4） | m/s²→px/frame² 換算；>0 覆寫 |
 | `semantic_kalman_max_speed_mps` | 0(off) | 8.0（人類衝刺） | 隱含平均速度上限，超過→判新 id |
+| `semantic_bidirectional` | off | on | 啟用中點橋接雙向閘 |
+| `semantic_bridge_px` | 1.5 | 1.5（框高倍數） | 中點雲心距離 ÷ 平均框高，越小越嚴 |
 
 ## 相關
 

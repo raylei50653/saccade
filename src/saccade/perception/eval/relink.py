@@ -1,8 +1,9 @@
+import os
 import torch
 import torch.nn.functional as F
 import numpy as np
 from dataclasses import dataclass
-from typing import Dict, List, Tuple, Optional, Any, Set
+from typing import Dict, List, Tuple, Optional, Any, Set, cast
 
 from .motion_model import MotionModel, MotionModelRegistry
 
@@ -90,6 +91,13 @@ class PythonSemanticRelinker:
         kalman_accel_lat: float = 1.0,
         kalman_fps: float = 30.0,
         kalman_max_speed_mps: float = 0.0,
+        delayed_claim: bool = False,
+        claim_warmup_frames: int = 3,
+        bidirectional: bool = False,
+        bridge_chi2: float = 1.5,
+        bridge_px: float | None = None,
+        bridge_h_lo: float = 0.0,
+        bridge_h_hi: float = 0.0,
         # Motion-based relinking params
         motion_vel_alpha: float = 0.3,
         motion_acc_alpha: float = 0.15,
@@ -102,10 +110,16 @@ class PythonSemanticRelinker:
         motion_motion_only_iou_threshold: float = 0.15,
         motion_motion_only_min_lost_frames: int = 1,
         device: str | None = None,
+        exp_density_gating: bool = False,
+        exp_density_k: float = 2.0,
+        exp_density_eta: float = 0.15,
     ) -> None:
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
         self.device = torch.device(device)
+        self.exp_density_gating = exp_density_gating
+        self.exp_density_k = exp_density_k
+        self.exp_density_eta = exp_density_eta
         self.sim_threshold = sim_threshold
         self.ttl = ttl
         self.ema_beta = ema_beta
@@ -178,6 +192,31 @@ class PythonSemanticRelinker:
         # (dist / time, scaled to m/s via person height) exceeds human limits.
         # Snapshot-independent → always applies, closing the no-snapshot fallback.
         self.kalman_max_speed_mps = max(0.0, float(kalman_max_speed_mps))
+        self.delayed_claim = bool(delayed_claim)
+        self.claim_warmup_frames = max(1, int(claim_warmup_frames))
+        self.bidirectional = bool(bidirectional)
+        self.bridge_px = float(bridge_px if bridge_px is not None else bridge_chi2)
+        # Scale gate (disabled when bridge_h_hi<=0): lost/cand EMA-height ratio
+        # must stay inside [h_lo, h_hi]; large size jumps across the gap are bogus.
+        self.bridge_h_lo = max(0.0, float(bridge_h_lo))
+        self.bridge_h_hi = max(0.0, float(bridge_h_hi))
+        # GPU relink-gate (A/B): offload the O(n_query*n_cand) per-pair gate
+        # computation to a CUDA kernel; Python keeps all decision logic and reads
+        # gate quantities from the per-frame table. Toggle for bit-exact A/B.
+        self.gpu_relink_gate = bool(
+            int(os.environ.get("SACCADE_GPU_RELINK_GATE", "0") or "0")
+        )
+        self._gate_ext = None
+        self._gate_tbl: Optional[np.ndarray] = None  # [n_query, n_cand, 6] host
+        self._gate_row: Dict[int, int] = {}
+        self._gate_col: Dict[int, int] = {}
+        if self.gpu_relink_gate:
+            try:
+                import saccade_tracking_ext as _ext
+
+                self._gate_ext = _ext
+            except Exception:
+                self.gpu_relink_gate = False
         self.clean_score_threshold = clean_score_threshold
         self.clean_margin_ratio = clean_margin_ratio
         self.clean_min_aspect = clean_min_aspect
@@ -208,12 +247,24 @@ class PythonSemanticRelinker:
         )
 
         self.alias: Dict[int, int] = {}
+        # Per-frame uniqueness: a canonical id may be emitted at most once per
+        # timestep. Online relink commits ``alias[raw]→canonical`` permanently, so
+        # a relinked alias can collide with the *original* canonical when the
+        # original re-appears after a long absence. When that happens we split the
+        # losing raw track onto a fresh surrogate id (>= ``_split_alias_base``) so
+        # the MOT output never contains a duplicate id in one frame.
+        self._split_alias_base = 1_000_000
+        self._split_counter = 0
         self.features: Dict[int, torch.Tensor] = {}
         self.buffers: Dict[int, List[torch.Tensor]] = {}
         self.last_seen: Dict[int, int] = {}
         self.last_boxes: Dict[int, torch.Tensor] = {}
         self.motion: Dict[int, Any] = {}
         self.motion_frame: Dict[int, int] = {}
+        self._ema_h: Dict[int, float] = {}
+        self._foot_history: Dict[int, List[Tuple[float, float]]] = {}
+        self._pending_claims: Dict[int, Dict[str, int]] = {}
+        self._deferred_alias: Dict[int, int] = {}
         self.stats: Dict[str, int] = {
             "attempts": 0,
             "accepted": 0,
@@ -229,6 +280,11 @@ class PythonSemanticRelinker:
             "reject_kalman": 0,
             "reject_direction": 0,
             "reject_speed": 0,
+            "reject_backward": 0,
+            "accept_bidir": 0,
+            "delayed_claim_pending": 0,
+            "delayed_claim_ready": 0,
+            "delayed_claim_accepted": 0,
             "reject_quality": 0,
             "reject_quality_score": 0,
             "reject_quality_margin": 0,
@@ -237,6 +293,7 @@ class PythonSemanticRelinker:
             "appearance_first_bypass": 0,
             "new_ids": 0,
             "reject_biometric": 0,
+            "relink_split_collision": 0,
             # Motion-based relinking stats
             "motion_bonus": 0,
             "motion_only_match": 0,
@@ -272,6 +329,20 @@ class PythonSemanticRelinker:
             if k in pa and k in pb:
                 dist += abs(pa[k] - pb[k])
         return dist
+
+    def _split_on_collision(self, raw_id: int) -> int:
+        """Resolve a same-frame id collision by splitting ``raw_id`` off.
+
+        The canonical id ``raw_id`` currently resolves to was already emitted this
+        frame by a different raw track. Assign ``raw_id`` a fresh surrogate id and
+        persist it in ``alias`` so the split is stable across subsequent frames
+        (the false merge stays undone from here on). Returns the surrogate id.
+        """
+        self._split_counter += 1
+        surrogate = self._split_alias_base + self._split_counter
+        self.alias[raw_id] = surrogate
+        self.stats["relink_split_collision"] += 1
+        return surrogate
 
     def _normalize(self, embedding: torch.Tensor) -> torch.Tensor:
         return F.normalize(embedding.float().to(self.device), dim=0)
@@ -396,6 +467,63 @@ class PythonSemanticRelinker:
         P[7, 7] += (h / 160.0) ** 2
         return x, P
 
+    @staticmethod
+    def _regress_velocity_4(
+        positions: List[Tuple[float, float]],
+    ) -> Tuple[float, float]:
+        """Closed-form linear regression velocity from 4 equally-spaced frames.
+
+        For frames t ∈ {0,1,2,3} with centres (x_i, y_i)::
+
+            v_x = (3·x₃ + x₂ − x₁ − 3·x₀) / 10
+            v_y = (3·y₃ + y₂ − y₁ − 3·y₀) / 10
+        """
+        if len(positions) < 4:
+            return 0.0, 0.0
+        x0, y0 = positions[0]
+        x1, y1 = positions[1]
+        x2, y2 = positions[2]
+        x3, y3 = positions[3]
+        return (3.0 * x3 + x2 - x1 - 3.0 * x0) / 10.0, (
+            3.0 * y3 + y2 - y1 - 3.0 * y0
+        ) / 10.0
+
+    def _bridge_scale_gate_ok(self, lost_id: int, cand_id: int) -> bool:
+        """Scale gate (disabled when bridge_h_hi<=0): lost/cand EMA-height ratio
+        must stay inside [h_lo, h_hi]; large size jumps across the gap are bogus."""
+        if self.bridge_h_hi <= 0.0:
+            return True
+        h_lost = self._ema_h.get(lost_id)
+        h_cand = self._ema_h.get(cand_id)
+        if h_lost is None or h_cand is None:
+            return True
+        ratio = max(h_lost, 1e-3) / max(h_cand, 1e-3)
+        return self.bridge_h_lo <= ratio <= self.bridge_h_hi
+
+    def _midpoint_bridge_dist(
+        self,
+        lost_id: int,
+        cand_id: int,
+        gap: int,
+        cand_cx: float = 0.0,
+        cand_cy: float = 0.0,
+    ) -> float:
+        lost_hist = self._foot_history.get(lost_id, [])
+        cand_hist = list(self._foot_history.get(cand_id, []))
+        cand_hist.append((cand_cx, cand_cy))
+        vx_l, vy_l = self._regress_velocity_4(lost_hist[-4:])
+        vx_c, vy_c = self._regress_velocity_4(cand_hist[:4])
+        h_lost = self._ema_h.get(lost_id, 1.0)
+        h_cand = self._ema_h.get(cand_id, 1.0)
+        half = gap * 0.5
+        x_l = lost_hist[-1][0] + vx_l * half if lost_hist else 0.0
+        y_l = lost_hist[-1][1] + vy_l * half if lost_hist else 0.0
+        x_c = cand_hist[0][0] - vx_c * half if cand_hist else 0.0
+        y_c = cand_hist[0][1] - vy_c * half if cand_hist else 0.0
+        dist_px = float(np.hypot(x_l - x_c, y_l - y_c))
+        h_ref = max((h_lost + h_cand) * 0.5, 1.0)
+        return dist_px / h_ref
+
     def _exceeds_max_speed(
         self, box: torch.Tensor, last_box: torch.Tensor, age: int
     ) -> bool:
@@ -444,7 +572,9 @@ class PythonSemanticRelinker:
         cosang = (dx * vx + dy * vy) / (speed * dist)
         return bool(cosang < self.kalman_dir_min_cos)
 
-    def _kalman_gate_dist(self, box: torch.Tensor, snapshot: Any, delta: int) -> float:
+    def _kalman_gate_dist(
+        self, box: torch.Tensor, snapshot: Any, delta: int, dims: int = 4
+    ) -> float:
         """Squared Mahalanobis distance of ``box`` to the lost track's Kalman cloud,
         self-extrapolated ``delta`` frames forward (covariance inflation)."""
         x = np.asarray(snapshot.state, dtype=np.float64).reshape(-1)[:8].copy()
@@ -454,11 +584,24 @@ class PythonSemanticRelinker:
             x, P = (
                 self._predict_phys_np(x, P) if phys else self._kalman_predict_np(x, P)
             )
-        h = max(float(x[3]), 1e-6)
-        pos = h / 20.0
-        r = np.diag([pos * pos, pos * pos, 1e-2, pos * pos]).astype(np.float64)
-        s = P[:4, :4] + r
-        residual = self._measurement(box).astype(np.float64) - x[:4]
+        if dims <= 2:
+            h = max(float(x[3]), 1e-6)
+            r = np.diag([(h / 20.0) ** 2, (h / 20.0) ** 2]).astype(np.float64)
+            s = P[:2, :2] + r
+            meas = np.array(
+                [
+                    (float(box[0]) + float(box[2])) * 0.5,
+                    (float(box[1]) + float(box[3])) * 0.5,
+                ],
+                dtype=np.float64,
+            )
+            residual = meas - x[:2]
+        else:
+            h = max(float(x[3]), 1e-6)
+            pos = h / 20.0
+            r = np.diag([pos * pos, pos * pos, 1e-2, pos * pos]).astype(np.float64)
+            s = P[:4, :4] + r
+            residual = self._measurement(box).astype(np.float64) - x[:4]
         try:
             solved = np.linalg.solve(s, residual)
         except np.linalg.LinAlgError:
@@ -584,6 +727,28 @@ class PythonSemanticRelinker:
     def has_feature(self, canonical_id: int) -> bool:
         return canonical_id in self.features
 
+    @property
+    def deferred_alias(self) -> Dict[int, int]:
+        return dict(self._deferred_alias)
+
+    def _mark_pending_claim(self, raw_id: int, frame_id: int) -> bool:
+        if not self.delayed_claim:
+            return False
+        pending = self._pending_claims.get(raw_id)
+        if pending is None:
+            pending = {"first": frame_id, "last": frame_id, "hits": 1}
+            self._pending_claims[raw_id] = pending
+        elif pending["last"] != frame_id:
+            pending["last"] = frame_id
+            pending["hits"] += 1
+        ready = pending["hits"] >= self.claim_warmup_frames
+        self.stats["delayed_claim_ready" if ready else "delayed_claim_pending"] += 1
+        return not ready
+
+    def _is_pending_ready(self, raw_id: int) -> bool:
+        pending = self._pending_claims.get(raw_id)
+        return bool(pending and pending["hits"] >= self.claim_warmup_frames)
+
     def _update_motion_model(
         self, canonical_id: int, box: torch.Tensor, frame_id: int
     ) -> None:
@@ -673,6 +838,23 @@ class PythonSemanticRelinker:
             self.stats["new_ids"] += 1
             self.alias[raw_id] = raw_id
 
+        canonical = self.alias[raw_id]
+        # Per-frame uniqueness guard (see resolve()).
+        if canonical in assigned:
+            canonical = self._split_on_collision(raw_id)
+        self.last_seen.setdefault(canonical, frame_id)
+        self.last_boxes.setdefault(canonical, box)
+        bh = float(box[3] - box[1])
+        old_h = self._ema_h.get(canonical)
+        self._ema_h[canonical] = bh if old_h is None else 0.95 * old_h + 0.05 * bh
+        if canonical not in self.features:
+            self.features[canonical] = torch.zeros(1, device=self.device)
+        cx = (float(box[0]) + float(box[2])) * 0.5
+        cy = (float(box[1]) + float(box[3])) * 0.5
+        hist = self._foot_history.setdefault(canonical, [])
+        hist.append((cx, cy))
+        if len(hist) > 8:
+            hist.pop(0)
         return self.alias[raw_id]
 
     def resolve(
@@ -687,12 +869,14 @@ class PythonSemanticRelinker:
         assigned: Set[int],
     ) -> int:
         if embedding is None:
-            # Motion-only fallback: try to match based on motion prediction alone
-            if self.motion_cfg.enable_motion_only:
+            if self.motion_cfg.enable_motion_only and not self.bidirectional:
                 return self._resolve_motion_only(raw_id, box, frame_id, w, h, assigned)
-            return self.alias.get(raw_id, raw_id)
+            emb = None
 
-        emb = self._normalize(embedding)
+        if embedding is not None:
+            emb = self._normalize(embedding)
+        else:
+            emb = None
 
         is_clean = True
         quality_score_fail = False
@@ -726,7 +910,22 @@ class PythonSemanticRelinker:
             self.sim_threshold if is_clean else self.strict_sim_threshold
         )
 
-        if raw_id not in self.alias:
+        if (
+            self.delayed_claim
+            and raw_id in self._pending_claims
+            and self.alias.get(raw_id, raw_id) == raw_id
+        ):
+            self._mark_pending_claim(raw_id, frame_id)
+        claim_ready = self._is_pending_ready(raw_id)
+        first_claim = raw_id not in self.alias
+        delayed_self_claim = (
+            self.delayed_claim
+            and claim_ready
+            and self.alias.get(raw_id, raw_id) == raw_id
+        )
+        if first_claim and self._mark_pending_claim(raw_id, frame_id):
+            self.alias[raw_id] = raw_id
+        elif first_claim or delayed_self_claim:
             self.stats["attempts"] += 1
             best_id = None
             best_joint = -1.0  # Sentinel for normalized joint score
@@ -737,6 +936,8 @@ class PythonSemanticRelinker:
 
             candidates_to_score = []
             for cid in self.features:
+                if self.delayed_claim and cid == raw_id:
+                    continue
                 age = frame_id - self.last_seen.get(cid, -(10**9))
                 if cid in assigned:
                     self.stats["reject_assigned"] += 1
@@ -752,12 +953,23 @@ class PythonSemanticRelinker:
                     continue
                 self.age_gate_pass_ages.append(age)
                 last_box = self.last_boxes[cid]
+                # GPU gate table for this (query, candidate) pair, or None to fall
+                # back to per-pair Python computation (A/B-toggled, bit-faithful).
+                gate = self._gate_lookup(raw_id, cid) if self.gpu_relink_gate else None
                 # Physical reachability gate (always-on, snapshot-independent).
-                if self._exceeds_max_speed(box, last_box, age):
+                speed_exceeds = (
+                    bool(gate[4] > 0.5)
+                    if gate is not None
+                    else self._exceeds_max_speed(box, last_box, age)
+                )
+                if speed_exceeds:
                     self.stats["reject_speed"] += 1
                     self.age_gate_pass_outcomes.append((age, "speed"))
                     continue
-                center_norm, iou = self._spatial_metrics(box, last_box, w, h)
+                if gate is not None:
+                    center_norm, iou = float(gate[2]), float(gate[3])
+                else:
+                    center_norm, iou = self._spatial_metrics(box, last_box, w, h)
 
                 # Motion evidence: C++ Kalman motion box
                 motion_box = None
@@ -801,28 +1013,84 @@ class PythonSemanticRelinker:
                 kalman_d2 = -1.0
                 kalman_gated = False
                 if self.kalman_gate and snapshot is not None:
-                    if self._direction_behind(box, snapshot):
+                    dir_behind = (
+                        bool(gate[5] > 0.5)
+                        if gate is not None
+                        else self._direction_behind(box, snapshot)
+                    )
+                    if dir_behind:
                         self.stats["reject_direction"] += 1
                         self.age_gate_pass_outcomes.append((age, "direction"))
                         continue
-                    delta = frame_id - self.motion_frame.get(cid, frame_id)
-                    kalman_d2 = self._kalman_gate_dist(box, snapshot, delta)
+                    if gate is not None:
+                        kalman_d2 = float(gate[0])
+                    else:
+                        delta = frame_id - self.motion_frame.get(cid, frame_id)
+                        kalman_d2 = self._kalman_gate_dist(
+                            box, snapshot, delta, dims=2 if self.bidirectional else 4
+                        )
                     if kalman_d2 > self.kalman_chi2:
                         self.stats["reject_kalman"] += 1
                         self.age_gate_pass_outcomes.append((age, "kalman"))
                         continue
                     kalman_gated = True
+
+                bridge_dist = -1.0
+                if self.bidirectional and not self._bridge_scale_gate_ok(cid, raw_id):
+                    self.stats["reject_backward"] += 1
+                    self.age_gate_pass_outcomes.append((age, "backward"))
+                    continue
+                if self.bidirectional and cid in self._foot_history:
+                    if gate is not None:
+                        bridge_dist = float(gate[1])
+                    else:
+                        cx = (float(box[0]) + float(box[2])) * 0.5
+                        cy = (float(box[1]) + float(box[3])) * 0.5
+                        gap = frame_id - self.last_seen.get(cid, frame_id)
+                        bridge_dist = self._midpoint_bridge_dist(
+                            cid, raw_id, gap, cx, cy
+                        )
+                    if bridge_dist > self.bridge_px:
+                        self.stats["reject_backward"] += 1
+                        self.age_gate_pass_outcomes.append((age, "backward"))
+                        continue
+                    self.stats["accept_bidir"] += 1
                 spatial_failed = (not kalman_gated) and (
                     center_norm > self.spatial_gate or iou < self.min_iou
                 )
                 maha = 0.0
+                current_threshold = self.mahalanobis_threshold
                 if self.mahalanobis_threshold > 0.0:
                     snapshot = self.motion.get(cid)
                     if snapshot is None:
                         self.stats["reject_mahalanobis"] += 1
                         continue
                     maha = self._mahalanobis(box, snapshot)
-                    if maha > self.mahalanobis_threshold:
+                    if self.exp_density_gating:
+                        box_t = self.last_boxes.get(cid)
+                        if box_t is not None:
+                            cx_t = (float(box_t[0]) + float(box_t[2])) * 0.5
+                            cy_t = (float(box_t[1]) + float(box_t[3])) * 0.5
+                            h_t = float(box_t[3]) - float(box_t[1])
+                            if h_t > 0.0:
+                                density = 0
+                                for other_id, box_j in self.last_boxes.items():
+                                    if other_id == cid:
+                                        continue
+                                    cx_j = (float(box_j[0]) + float(box_j[2])) * 0.5
+                                    cy_j = (float(box_j[1]) + float(box_j[3])) * 0.5
+                                    dist = (
+                                        (cx_t - cx_j) ** 2 + (cy_t - cy_j) ** 2
+                                    ) ** 0.5
+                                    if dist < self.exp_density_k * h_t:
+                                        density += 1
+                                import math
+
+                                current_threshold = (
+                                    self.mahalanobis_threshold
+                                    * math.exp(-self.exp_density_eta * density)
+                                )
+                    if maha > current_threshold:
                         self.stats["reject_mahalanobis"] += 1
                         continue
                 if self.min_consistency > 0.0 and self.buffer_size > 1:
@@ -841,6 +1109,8 @@ class PythonSemanticRelinker:
                         motion_iou_ema,
                         motion_ok,
                         kalman_d2 if kalman_gated else -1.0,
+                        bridge_dist,
+                        current_threshold,
                     )
                 )
 
@@ -855,7 +1125,8 @@ class PythonSemanticRelinker:
                 second_best_joint = current_sim_thresh - 1.0
 
             # Batch similarity: one matmul + one D2H instead of N dot-products
-            if candidates_to_score and self.buffer_size == 1:
+            _sim_iter = None
+            if emb is not None and candidates_to_score and self.buffer_size == 1:
                 _cand_ids = [c[0] for c in candidates_to_score]
                 _bank = torch.stack([self.features[cid] for cid in _cand_ids]).to(
                     self.device
@@ -873,14 +1144,19 @@ class PythonSemanticRelinker:
                 motion_iou_ema,
                 motion_ok,
                 kalman_d2,
+                bridge_dist,
+                current_threshold,
             ) in candidates_to_score:
-                if self.buffer_size > 1:
+                if emb is None:
+                    sim = 0.0
+                elif self.buffer_size > 1:
                     sim = self._buffer_sim(cid, emb)
                 else:
+                    assert _sim_iter is not None
                     sim = next(_sim_iter)
 
                 # Hard appearance gate: raw cosine must still pass sim_threshold.
-                if sim < current_sim_thresh:
+                if emb is not None and sim < current_sim_thresh:
                     self.stats["reject_similarity"] += 1
                     self.age_gate_pass_outcomes.append((age, "similarity"))
                     continue
@@ -903,8 +1179,8 @@ class PythonSemanticRelinker:
                     continue
 
                 maha_score = 0.0
-                if self.mahalanobis_threshold > 0.0 and maha > 0.0:
-                    maha_score = max(0.0, 1.0 - maha / self.mahalanobis_threshold)
+                if current_threshold > 0.0 and maha > 0.0:
+                    maha_score = max(0.0, 1.0 - maha / current_threshold)
 
                 # Motion evidence bonus: add motion IoU as soft evidence
                 motion_bonus = 0.0
@@ -1007,11 +1283,22 @@ class PythonSemanticRelinker:
                 # Update motion model with matched position (always, not just when motion_iou_ema > 0)
                 self._update_motion_model(best_id, box, frame_id)
                 self.alias[raw_id] = best_id
+                if self.delayed_claim and raw_id != best_id:
+                    self.stats["delayed_claim_accepted"] += 1
+                    self._deferred_alias[raw_id] = best_id
+                    self._pending_claims.pop(raw_id, None)
             else:
                 self.stats["new_ids"] += 1
                 self.alias[raw_id] = raw_id
+                if self.delayed_claim and claim_ready:
+                    self._pending_claims.pop(raw_id, None)
 
         canonical = self.alias[raw_id]
+        # Per-frame uniqueness guard: never emit the same canonical id twice in one
+        # timestep. Triggered when a relinked alias collides with the original id
+        # re-appearing (fast-path emits skip the matching `assigned` check above).
+        if canonical in assigned:
+            canonical = self._split_on_collision(raw_id)
         if not is_clean:
             self.stats["reject_quality"] += 1
             if quality_score_fail:
@@ -1023,30 +1310,184 @@ class PythonSemanticRelinker:
             if quality_aspect_high_fail:
                 self.stats["reject_quality_aspect_high"] += 1
         else:
-            if self.buffer_size > 1:
-                buf = self.buffers.setdefault(canonical, [])
-                buf.append(emb.detach())
-                if len(buf) > self.buffer_size:
-                    buf.pop(0)
-                self.features[canonical] = F.normalize(
-                    torch.stack(buf).mean(dim=0), dim=0
-                ).detach()
-            else:
-                old = self.features.get(canonical)
-                if old is not None:
-                    old = old.to(self.device)
-                updated = (
-                    emb
-                    if old is None
-                    else F.normalize(
-                        self.ema_beta * old + (1.0 - self.ema_beta) * emb, dim=0
+            if emb is not None:
+                if self.buffer_size > 1:
+                    buf = self.buffers.setdefault(canonical, [])
+                    buf.append(emb.detach())
+                    if len(buf) > self.buffer_size:
+                        buf.pop(0)
+                    self.features[canonical] = F.normalize(
+                        torch.stack(buf).mean(dim=0), dim=0
+                    ).detach()
+                else:
+                    old = self.features.get(canonical)
+                    if old is not None:
+                        old = old.to(self.device)
+                    updated = (
+                        emb
+                        if old is None
+                        else F.normalize(
+                            self.ema_beta * old + (1.0 - self.ema_beta) * emb, dim=0
+                        )
                     )
-                )
-                self.features[canonical] = updated.detach()
+                    self.features[canonical] = updated.detach()
+            elif canonical not in self.features:
+                self.features[canonical] = torch.zeros(1, device=self.device)
         self.last_seen[canonical] = frame_id
         self.last_boxes[canonical] = box
+        bh = float(box[3] - box[1])
+        old_h = self._ema_h.get(canonical)
+        self._ema_h[canonical] = bh if old_h is None else 0.95 * old_h + 0.05 * bh
+        cx = (float(box[0]) + float(box[2])) * 0.5
+        cy = (float(box[1]) + float(box[3])) * 0.5
+        hist = self._foot_history.setdefault(canonical, [])
+        hist.append((cx, cy))
+        if len(hist) > 8:
+            hist.pop(0)
         assigned.add(canonical)
         return canonical
+
+    def _build_gpu_gate_table(
+        self,
+        row_rawids: List[int],
+        row_boxes: List[torch.Tensor],
+        frame_id: int,
+        w: int,
+        h: int,
+    ) -> None:
+        """Fill self._gate_tbl [n_query, n_cand, 6] via the GPU kernel for this
+        frame. Columns: kalman_d2, bridge_dist, center_norm, iou, speed_exceeds,
+        dir_behind. Candidate set == self.features keys (same as resolve())."""
+        self._gate_tbl = None
+        self._gate_row = {}
+        self._gate_col = {}
+        ext = self._gate_ext
+        if ext is None or not hasattr(ext, "relink_gate_batch"):
+            return
+        cand_ids = list(self.features.keys())
+        nq, nc = len(row_rawids), len(cand_ids)
+        if nq == 0 or nc == 0:
+            return
+
+        c_last = np.zeros((nc, 4), np.float32)
+        c_mean = np.zeros((nc, 6), np.float32)
+        c_cov = np.zeros((nc, 10), np.float32)
+        c_foot = np.zeros((nc, 8), np.float32)
+        c_footn = np.zeros(nc, np.int32)
+        c_emah = np.ones(nc, np.float32)
+        c_gap = np.zeros(nc, np.int32)
+        c_delta = np.zeros(nc, np.int32)
+        c_has = np.zeros(nc, np.int32)
+        for j, cid in enumerate(cand_ids):
+            self._gate_col[cid] = j
+            lb = self.last_boxes.get(cid)
+            if lb is not None:
+                c_last[j] = [float(lb[0]), float(lb[1]), float(lb[2]), float(lb[3])]
+            c_emah[j] = float(self._ema_h.get(cid, 1.0))
+            c_gap[j] = frame_id - self.last_seen.get(cid, frame_id)
+            hist = self._foot_history.get(cid)
+            if hist:
+                last4 = list(hist)[-4:]
+                for k, (fx, fy) in enumerate(last4):
+                    c_foot[j, k * 2] = fx
+                    c_foot[j, k * 2 + 1] = fy
+                c_footn[j] = len(last4)
+            snap = self.motion.get(cid)
+            if snap is not None:
+                c_has[j] = 1
+                c_delta[j] = frame_id - self.motion_frame.get(cid, frame_id)
+                st = np.asarray(snap.state, dtype=np.float32).reshape(-1)
+                c_mean[j] = [st[0], st[1], st[3], st[4], st[5], st[7]]
+                P = np.asarray(snap.covariance, dtype=np.float32).reshape(8, 8)
+                c_cov[j] = [
+                    P[0, 0],
+                    P[0, 1],
+                    P[0, 4],
+                    P[0, 5],
+                    P[1, 1],
+                    P[1, 4],
+                    P[1, 5],
+                    P[4, 4],
+                    P[4, 5],
+                    P[5, 5],
+                ]
+
+        q_box = np.zeros((nq, 4), np.float32)
+        q_foot = np.zeros((nq, 8), np.float32)
+        q_footn = np.zeros(nq, np.int32)
+        q_emah = np.ones(nq, np.float32)
+        for i, (rid, box) in enumerate(zip(row_rawids, row_boxes)):
+            self._gate_row[rid] = i
+            q_box[i] = [float(box[0]), float(box[1]), float(box[2]), float(box[3])]
+            q_emah[i] = float(self._ema_h.get(rid, 1.0))
+            cx = (float(box[0]) + float(box[2])) * 0.5
+            cy = (float(box[1]) + float(box[3])) * 0.5
+            hist = list(self._foot_history.get(rid, []))
+            hist.append((cx, cy))
+            for k, (fx, fy) in enumerate(hist[:4]):
+                q_foot[i, k * 2] = fx
+                q_foot[i, k * 2 + 1] = fy
+            q_footn[i] = min(len(hist), 4)
+
+        dev = self.device
+
+        def _t(a: np.ndarray) -> torch.Tensor:
+            return torch.from_numpy(a).to(dev)
+
+        tq = [_t(q_box), _t(q_foot), _t(q_footn), _t(q_emah)]
+        tc = [
+            _t(c_last),
+            _t(c_mean),
+            _t(c_cov),
+            _t(c_foot),
+            _t(c_footn),
+            _t(c_emah),
+            _t(c_gap),
+            _t(c_delta),
+            _t(c_has),
+        ]
+        tbl = torch.zeros((nq, nc, 6), dtype=torch.float32, device=dev)
+        dims = 2 if self.bidirectional else 4
+        ext.relink_gate_batch(
+            nq,
+            nc,
+            int(w),
+            int(h),
+            dims,
+            float(self.kalman_fps),
+            float(self.kalman_person_height_m),
+            float(self.kalman_max_speed_mps),
+            float(self.kalman_accel_long),
+            float(self.kalman_accel_lat),
+            float(self.kalman_dir_min_cos),
+            float(self.kalman_dir_min_speed),
+            tq[0].data_ptr(),
+            tq[1].data_ptr(),
+            tq[2].data_ptr(),
+            tq[3].data_ptr(),
+            tc[0].data_ptr(),
+            tc[1].data_ptr(),
+            tc[2].data_ptr(),
+            tc[3].data_ptr(),
+            tc[4].data_ptr(),
+            tc[5].data_ptr(),
+            tc[6].data_ptr(),
+            tc[7].data_ptr(),
+            tc[8].data_ptr(),
+            tbl.data_ptr(),
+            0,
+        )
+        torch.cuda.synchronize(dev)
+        self._gate_tbl = tbl.cpu().numpy()
+
+    def _gate_lookup(self, raw_id: int, cid: int) -> Optional[np.ndarray]:
+        if self._gate_tbl is None:
+            return None
+        i = self._gate_row.get(raw_id)
+        j = self._gate_col.get(cid)
+        if i is None or j is None:
+            return None
+        return cast(np.ndarray, self._gate_tbl[i, j])
 
     def resolve_many(
         self,
@@ -1064,10 +1505,29 @@ class PythonSemanticRelinker:
         h: int,
     ) -> List[int]:
         assigned: Set[int] = set()
-        return [
-            self.resolve(raw_id, embedding, box, score, frame_id, w, h, assigned)
-            for raw_id, embedding, box, score in candidates
-        ]
+        order = self._frame_order([c[3] for c in candidates])
+        if self.gpu_relink_gate and self.bidirectional:
+            self._build_gpu_gate_table(
+                [c[0] for c in candidates], [c[2] for c in candidates], frame_id, w, h
+            )
+        out: List[int] = [0] * len(candidates)
+        for i in order:
+            raw_id, embedding, box, score = candidates[i]
+            out[i] = self.resolve(
+                raw_id, embedding, box, score, frame_id, w, h, assigned
+            )
+        return out
+
+    def _frame_order(self, scores: List[float]) -> List[int]:
+        """Per-frame resolution order. With bidirectional relink, process higher
+        confidence detections first so the long-lived incumbent claims its
+        canonical id before a low-confidence re-appearing fragment, which then
+        splits via the uniqueness guard. Otherwise keep detector order so tuned
+        non-bidirectional baselines stay bit-identical.
+        """
+        if not self.bidirectional:
+            return list(range(len(scores)))
+        return sorted(range(len(scores)), key=lambda i: -float(scores[i]))
 
     def resolve_many_packed(
         self,
@@ -1081,10 +1541,22 @@ class PythonSemanticRelinker:
         h: int,
     ) -> List[int]:
         assigned: Set[int] = set()
-        return [
-            self.resolve(raw_id, embedding, box, score, frame_id, w, h, assigned)
-            for raw_id, embedding, box, score in zip(raw_ids, embeddings, boxes, scores)
-        ]
+        order = self._frame_order(scores)
+        if self.gpu_relink_gate and self.bidirectional:
+            self._build_gpu_gate_table(list(raw_ids), list(boxes), frame_id, w, h)
+        out: List[int] = [0] * len(raw_ids)
+        for i in order:
+            out[i] = self.resolve(
+                raw_ids[i],
+                embeddings[i],
+                boxes[i],
+                scores[i],
+                frame_id,
+                w,
+                h,
+                assigned,
+            )
+        return out
 
     def report(self) -> None:
         def _histogram(
@@ -1170,7 +1642,8 @@ class PythonSemanticRelinker:
             "reject_spatial={reject_spatial} reject_mahalanobis={reject_mahalanobis} "
             "reject_similarity={reject_similarity} reject_margin={reject_margin} "
             "reject_kalman={reject_kalman} reject_direction={reject_direction} "
-            "reject_speed={reject_speed} reject_biometric={reject_biometric}".format(
+            "reject_speed={reject_speed} reject_backward={reject_backward} accept_bidir={accept_bidir} "
+            "reject_biometric={reject_biometric} split_collision={relink_split_collision}".format(
                 **self.stats
             )
         )
@@ -1179,7 +1652,10 @@ class PythonSemanticRelinker:
             "reject_quality_score={reject_quality_score} reject_quality_margin={reject_quality_margin} "
             "reject_quality_aspect_low={reject_quality_aspect_low} "
             "reject_quality_aspect_high={reject_quality_aspect_high} "
-            "appearance_first_bypass={appearance_first_bypass}".format(**self.stats)
+            "appearance_first_bypass={appearance_first_bypass} "
+            "delayed_claim_pending={delayed_claim_pending} "
+            "delayed_claim_ready={delayed_claim_ready} "
+            "delayed_claim_accepted={delayed_claim_accepted}".format(**self.stats)
         )
         print(
             "  motion={motion_bonus_total} bonus_motion_ok={motion_iou_gate_pass} "

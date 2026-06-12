@@ -66,6 +66,10 @@ class LifecycleConfig:
     cheb_gr_max_fwd: int = 50
     cheb_gr_fuse_lambda: float = 0.3
     cheb_gr_engine: str = ""
+    # Lost-track memory (ByteTrack track_buffer): frames a lost track survives in
+    # the tracker (and stays available for association + bridge relink) before
+    # removal. Per-seq fps-scaled when per_seq_adapt is on.
+    track_buffer: int = 30
     # Birth-time lost-bank ReID relink (online, GPU). Revive a lost identity at
     # spawn time instead of minting a new id. Precision-first: ID consistency is
     # protected by a high sim threshold + spatial gate (a wrong revive = merging
@@ -76,6 +80,31 @@ class LifecycleConfig:
     relink_lambda: float = 2.5
     relink_spatial_gate: float = 4.0
     relink_max_age: int = 300
+    # GPU tracker-core bidirectional foot-bridge relink (Kalman-free, no ReID).
+    # A young track that just stabilized adopts a still-live lost track's id by
+    # regressing both ends' last/first 4 foot points and bridging at the midpoint.
+    # Independent of relink_enabled (the bank-ReID path). Default off (bit-identical).
+    relink_bridge_enabled: bool = False
+    relink_bridge_px: float = 0.25
+    relink_bridge_at: int = 4
+    relink_bridge_min_lost: int = 2
+    relink_bridge_ttl: int = 120
+    relink_bridge_max_speed: float = 0.0
+    relink_bridge_person_height: float = 1.65
+    relink_bridge_fps: float = 30.0
+    relink_bridge_margin: float = 0.05
+    relink_bridge_spatial_gate: float = 0.0
+    relink_bridge_anchor: str = "adaptive"
+    relink_bridge_anchor_rate: float = 0.03
+    relink_bridge_h_lo: float = 0.75
+    relink_bridge_h_hi: float = 1.33
+    # Gap-occupancy gates (long-gap bridges only): occ_cover = fraction of the
+    # interpolated lost→cand gap path covered by other tracks' boxes. True
+    # relinks have HIGHER coverage (occlusion explains the disappearance).
+    relink_bridge_occ_gate_cover: float = 0.0
+    relink_bridge_occ_gap_min: int = 30
+    relink_bridge_occ_expand_px: float = 0.0
+    relink_bridge_occ_expand_cover: float = 0.9
     # Duplicate suppression: remove near-duplicate detections within the same frame
     # (detector artifact where multiple overlapping boxes are produced for the same person)
     duplicate_suppression_enabled: bool = False
@@ -102,6 +131,7 @@ class LifecycleConfig:
     interpolate_tracklets: bool = True
     interpolate_max_gap: int = 20
     interpolate_min_track_len: int = 5
+    interpolate_min_h: float = 0.0
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> "LifecycleConfig":
@@ -121,6 +151,18 @@ def add_lifecycle_args(parser: argparse.ArgumentParser) -> None:
     grp.description = (
         "Late-stage identity stitching, birth gates, and output pruning. "
         "Load with: --module-lifecycle configs/modules/lifecycle.yaml"
+    )
+    grp.add_argument(
+        "--track-buffer",
+        type=int,
+        default=30,
+        help=_help(
+            "Lost-track memory (ByteTrack track_buffer): frames a lost track "
+            "survives for association and bridge relink before removal. "
+            "Per-seq fps-scaled when per-seq adaptation is on.",
+            range_hint=">=1, default 30",
+            edge="longer memory lets stale lost tracks steal associations",
+        ),
     )
     grp.add_argument(
         "--birth-quality-gate",
@@ -588,6 +630,16 @@ def add_lifecycle_args(parser: argparse.ArgumentParser) -> None:
         ),
     )
     grp.add_argument(
+        "--interpolate-min-h",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Minimum box height (px) for both sides of a gap to be interpolated.",
+            range_hint="0-500",
+            edge="100 filters ~77% of wrong interpolations",
+        ),
+    )
+    grp.add_argument(
         "--cheb-gr-merge-enabled",
         action=argparse.BooleanOptionalAction,
         default=False,
@@ -726,5 +778,185 @@ def add_lifecycle_args(parser: argparse.ArgumentParser) -> None:
         help=_help(
             "Hard cap (frames) a lost identity stays revivable; bounds false cross-time revives.",
             range_hint=">=1",
+        ),
+    )
+    grp.add_argument(
+        "--relink-bridge-enabled",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="GPU tracker-core bidirectional foot-bridge relink (Kalman-free, no "
+        "ReID): a young track that just stabilized adopts a still-live lost id by "
+        "regressing both ends' 4 foot points and bridging at the midpoint. "
+        "Independent of --relink-enabled.",
+    )
+    grp.add_argument(
+        "--relink-bridge-px",
+        type=float,
+        default=0.25,
+        help=_help(
+            "Box-height-normalized meeting distance to accept a speed-weighted "
+            "foot-bridge. Smaller = stricter. MOT17-SDP optimum is a 0.25-0.30 "
+            "plateau (IDF1 74.8/HOTA 68.0/AssA 66.2 at 0.25); <=0.2 over-tightens, "
+            ">=0.4 over-bridges. See offline_relink_candidate_analysis.md §6d.",
+            range_hint=">0, suggested 0.25-0.3",
+        ),
+    )
+    grp.add_argument(
+        "--relink-bridge-at",
+        type=int,
+        default=4,
+        help=_help(
+            "hit_streak at which a young track first attempts a bridge (fires once).",
+            range_hint=">=1",
+        ),
+    )
+    grp.add_argument(
+        "--relink-bridge-min-lost",
+        type=int,
+        default=2,
+        help=_help(
+            "Minimum coasting age of a lost track to be a bridge target.",
+            range_hint=">=1",
+        ),
+    )
+    grp.add_argument(
+        "--relink-bridge-ttl",
+        type=int,
+        default=120,
+        help=_help(
+            "Maximum coasting age of a lost track to remain a bridge target.",
+            range_hint=">=1",
+        ),
+    )
+    grp.add_argument(
+        "--relink-bridge-max-speed",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Physical speed gate (m/s) on the bridge endpoints. 0 disables.",
+            range_hint=">=0",
+        ),
+    )
+    grp.add_argument(
+        "--relink-bridge-person-height",
+        type=float,
+        default=1.65,
+        help=_help(
+            "Assumed person height (m) for px-per-m in the speed gate.",
+            range_hint=">0",
+        ),
+    )
+    grp.add_argument(
+        "--relink-bridge-fps",
+        type=float,
+        default=30.0,
+        help=_help(
+            "Sequence FPS used by the speed gate to convert age to seconds.",
+            range_hint=">0",
+        ),
+    )
+    grp.add_argument(
+        "--relink-bridge-margin",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Reciprocal margin: reject if (2nd-best - best) bridge distance is below "
+            "this (ambiguous). 0 disables.",
+            range_hint=">=0",
+        ),
+    )
+    grp.add_argument(
+        "--relink-bridge-spatial-gate",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Optional center-distance/h_ref gate before the bridge test. 0 disables.",
+            range_hint=">=0",
+        ),
+    )
+    grp.add_argument(
+        "--relink-bridge-anchor",
+        choices=["center", "foot", "adaptive"],
+        default="adaptive",
+        help="Foot-bridge anchor point: 'center' (box centre, legacy), 'foot' "
+        "(bottom edge / ground-contact), or 'adaptive' (default; residual-weighted "
+        "blend of top/bottom edges so an occlusion-clipped edge is down-weighted; "
+        "degrades to centre when neither edge deforms).",
+    )
+    grp.add_argument(
+        "--relink-bridge-anchor-rate",
+        type=float,
+        default=0.03,
+        help=_help(
+            "Adaptive-anchor deformation gate: only re-anchor on edges when a "
+            "window's mean |Δh|/h̄ exceeds this; stable boxes keep the centre "
+            "(reduces FP from perturbing clean detections). 0 = always-on. "
+            "MOT17-SDP sweet spot 0.03 (dominates the un-gated anchor on FP+FN).",
+            range_hint=">=0, suggested 0.02-0.10",
+        ),
+    )
+    grp.add_argument(
+        "--relink-bridge-h-lo",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Bridge scale gate lower bound: reject when lost/cand EMA-height "
+            "ratio falls below this. Offline: [0.75,1.33] kills 53%% of wrong "
+            "relinks at zero short-gap TP loss.",
+            range_hint="0-1, suggested 0.75; needs --relink-bridge-h-hi",
+        ),
+    )
+    grp.add_argument(
+        "--relink-bridge-h-hi",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Bridge scale gate upper bound: reject when lost/cand EMA-height "
+            "ratio exceeds this. 0 disables the gate.",
+            range_hint="0 or >=1, suggested 1.33",
+            edge="lost TPs are all gap>=37 long-gap bridges near the band edge",
+        ),
+    )
+    grp.add_argument(
+        "--relink-bridge-occ-gate-cover",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Gap-occupancy veto: reject long-gap bridges whose interpolated gap "
+            "path has occ_cover below this (an unexplained disappearance is "
+            "likely a different person). Offline @0.5: -53 wrong / -1 correct. "
+            "0 disables.",
+            range_hint="0-1, suggested 0.5",
+        ),
+    )
+    grp.add_argument(
+        "--relink-bridge-occ-gap-min",
+        type=int,
+        default=30,
+        help=_help(
+            "Occupancy gates apply only to gaps >= this many frames; short-gap "
+            "occ_cover is noise (crowd AUC 0.44, would kill true positives).",
+            range_hint=">=1, suggested 30",
+        ),
+    )
+    grp.add_argument(
+        "--relink-bridge-occ-expand-px",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Tiered expansion: long-gap bridges with occ_cover >= "
+            "--relink-bridge-occ-expand-cover are accepted up to this looser "
+            "bridge score instead of --relink-bridge-px. Offline tiered "
+            "(0.3/1.0 @ occ>=0.9): +15 correct at held precision. 0 disables.",
+            range_hint="> bridge_px, suggested 0.5-1.0",
+        ),
+    )
+    grp.add_argument(
+        "--relink-bridge-occ-expand-cover",
+        type=float,
+        default=0.9,
+        help=_help(
+            "Minimum occ_cover to unlock the expanded bridge threshold.",
+            range_hint="0-1, suggested 0.9",
         ),
     )

@@ -4,7 +4,7 @@ import numpy as np
 import os
 import shutil
 import time
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch, AsyncMock, MagicMock
 from gi.repository import GLib
 from saccade.media.mediamtx_client import MediaMTXClient  # noqa: E402
 from saccade.media.rtsp import (  # noqa: E402
@@ -413,3 +413,16 @@ def test_gst_decoder_rtsp_pipeline_prefers_tcp_and_cpu_decode():
     assert "video/x-raw,format=RGB" in pipeline
     assert "sync=false" in pipeline
     assert "nvh264dec" not in pipeline
+
+
+def test_gst_decoder_start_sets_pipeline_playing():
+    decoder = GstZeroCopyDecoder.__new__(GstZeroCopyDecoder)
+    decoder._nv12_buffer = False
+    decoder._running = False
+    decoder.source_url = build_rtsp_url("test")
+    decoder.pipeline = MagicMock()
+
+    decoder.start()
+
+    assert decoder._running is True
+    decoder.pipeline.set_state.assert_called_once()

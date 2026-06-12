@@ -10,7 +10,7 @@ sys.path.insert(0, str(project_root))
 src_path = project_root / "src"
 if src_path.exists():
     sys.path.insert(0, str(src_path))
-build_path = project_root / "build"
+build_path = Path(os.environ.get("SACCADE_BUILD_PATH", project_root / "build"))
 if build_path.exists():
     sys.path.insert(0, str(build_path))
 
@@ -89,12 +89,34 @@ def _load_config_defaults(project_root: Path) -> dict:
 
 if __name__ == "__main__":
     parser = build_parser()
+    parser.add_argument(
+        "--no-compile",
+        action="store_true",
+        help="Disable torch.compile on detection head and postprocess",
+    )
     config_defaults = _load_config_defaults(project_root)
     if config_defaults:
         parser.set_defaults(**config_defaults)
     args = parser.parse_args()
     if not getattr(args, "no_gpu_decode", False):
         os.environ["SACCADE_GPU_DECODE"] = "1"
+    if os.environ.get("SACCADE_NV12_BUFFER") == "1":
+        _nv_lib = project_root / ".venv/lib/python3.12/site-packages/nvidia/cu13/lib"
+        _ld_preload = os.environ.get("LD_PRELOAD", "")
+        _cublas = str(_nv_lib / "libcublas.so.13")
+        _cublaslt = str(_nv_lib / "libcublasLt.so.13")
+        _preloads = [p for p in _ld_preload.split(":") if p]
+        _need_restart = False
+        if _cublas not in _preloads:
+            _preloads.insert(0, _cublas)
+            _need_restart = True
+        if _cublaslt not in _preloads:
+            _preloads.insert(0, _cublaslt)
+            _need_restart = True
+        if _need_restart and not os.environ.get("_SACCADE_NV12_RESTARTED"):
+            os.environ["LD_PRELOAD"] = ":".join(_preloads)
+            os.environ["_SACCADE_NV12_RESTARTED"] = "1"
+            os.execve(sys.executable, [sys.executable] + sys.argv, os.environ)
     if args.detector and not args.sequences:
         from pathlib import Path as _Path
 
@@ -219,7 +241,14 @@ if __name__ == "__main__":
         print(f"\n🧠 [Mamba] Loading Mamba head from {args.mamba_ckpt}")
 
         _tiling = getattr(args, "tiling", "native_640")
-        _img_sz = 960 if "960" in _tiling else 640
+        if "1280" in _tiling:
+            _img_sz = 1280
+        elif "1024" in _tiling:
+            _img_sz = 1024
+        elif "960" in _tiling:
+            _img_sz = 960
+        else:
+            _img_sz = 640
 
         # Single-stream MambaGatedDetector (Python, batch-1). For concurrent
         # multi-stream serving see scripts/benchmarks/multistream_mamba.py.
@@ -234,7 +263,7 @@ if __name__ == "__main__":
             img_size=_img_sz,
             device="cuda",
             conf_thr=0.001,
-            max_det=300,
+            max_det=getattr(args, "max_det", 300),
             trt_backbone_engine=getattr(args, "fpn_backbone_engine", ""),
             temporal_T_override=0 if getattr(args, "no_temporal", False) else None,
             use_cuda_graph=getattr(args, "use_cuda_graph", False)
@@ -242,6 +271,17 @@ if __name__ == "__main__":
             use_whole_graph=getattr(args, "use_whole_graph", False)
             and not (getattr(args, "cpp_threads", 0) > 0),
         )
+
+        if not getattr(args, "no_compile", False):
+            from saccade.perception.temporal_yolo.mamba_gated_detector import (
+                set_postprocess_compile,
+            )
+
+            set_postprocess_compile(True)
+            mamba_detector.mamba_head.set_head_compile(True)
+            # P3 deferred: torch.compile on MambaBlock degrades selective_scan
+            # from 3→12 launches (Inductor un-batches cross_scan dimensions).
+            # Replaced by native kernel optimization in mamba_scan.cu.
 
         eval_kwargs["detector"] = mamba_detector
         eval_kwargs["tiling"] = _tiling

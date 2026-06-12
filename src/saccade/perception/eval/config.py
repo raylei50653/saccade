@@ -59,6 +59,9 @@ class EvalConfig:
     semantic_clean_min_aspect: float
     semantic_clean_max_aspect: float
     semantic_strict_sim_threshold: float
+    semantic_exp_density_gating: bool
+    semantic_exp_density_k: float
+    semantic_exp_density_eta: float
 
     cross_tile_score_penalty: float
     tile_diagnostics: bool
@@ -90,6 +93,7 @@ class EvalConfig:
     birth_consecutive_boost: float
     birth_consecutive_min_score: float
     birth_consecutive_min_motion: float
+    exp_velocity_aligned_bank: bool
 
     # Duplicate suppression: remove near-duplicate detections within the same frame
     duplicate_suppression: bool
@@ -223,11 +227,32 @@ class EvalConfig:
     relink_spatial_gate: float
     relink_max_age: int
 
+    # GPU tracker-core bidirectional foot-bridge relink (Kalman-free; default off)
+    relink_bridge_enabled: bool
+    relink_bridge_px: float
+    relink_bridge_at: int
+    relink_bridge_min_lost: int
+    relink_bridge_ttl: int
+    relink_bridge_max_speed: float
+    relink_bridge_person_height: float
+    relink_bridge_fps: float
+    relink_bridge_margin: float
+    relink_bridge_spatial_gate: float
+    relink_bridge_anchor: str
+    relink_bridge_anchor_rate: float
+    relink_bridge_h_lo: float
+    relink_bridge_h_hi: float
+    relink_bridge_occ_gate_cover: float
+    relink_bridge_occ_gap_min: int
+    relink_bridge_occ_expand_px: float
+    relink_bridge_occ_expand_cover: float
+
     min_tracklet_len: int
     min_tracklet_score: float
     interpolate_tracklets: bool
     interpolate_max_gap: int
     interpolate_min_track_len: int
+    interpolate_min_h: float
     nsa_kalman: bool
     kalman_r_scale: float
     vel_dir_weight: float
@@ -431,6 +456,11 @@ def parse_eval_config(
         semantic_strict_sim_threshold=float(
             kwargs.get("semantic_strict_sim_threshold", 0.0)
         ),
+        semantic_exp_density_gating=bool(
+            kwargs.get("semantic_exp_density_gating", False)
+        ),
+        semantic_exp_density_k=float(kwargs.get("semantic_exp_density_k", 2.0)),
+        semantic_exp_density_eta=float(kwargs.get("semantic_exp_density_eta", 0.15)),
         cross_tile_score_penalty=float(kwargs.get("cross_tile_score_penalty", 1.0)),
         tile_diagnostics=bool(kwargs.get("tile_diagnostics", False)),
         tile_seam_score_penalty=float(kwargs.get("tile_seam_score_penalty", 1.0)),
@@ -447,7 +477,8 @@ def parse_eval_config(
             kwargs.get("cross_tile_seam_min_overlap_ratio", 0.45)
         ),
         force_python_relinker=bool(kwargs.get("force_python_relinker", False)),
-        use_semantic_mode=reid_mode in {"semantic", "hybrid"},
+        use_semantic_mode=reid_mode in {"semantic", "hybrid"}
+        or bool(kwargs.get("semantic_kalman_gate", False)),
         use_tracker_reid=reid_mode in {"tracker", "hybrid"},
         person_class=int(kwargs.get("person_class", 0)),
         track_person_only=bool(kwargs.get("track_person_only", True)),
@@ -500,6 +531,7 @@ def parse_eval_config(
         multi_birth_replace_evidence_threshold=float(
             kwargs.get("multi_birth_replace_evidence_threshold", 0.85)
         ),
+        exp_velocity_aligned_bank=bool(kwargs.get("exp_velocity_aligned_bank", False)),
         crowd_low_score_mode=bool(kwargs.get("crowd_low_score_mode", False)),
         crowd_low_score_trigger=int(kwargs.get("crowd_low_score_trigger", 25)),
         crowd_conf_threshold=float(kwargs.get("crowd_conf_threshold", 0.02)),
@@ -635,6 +667,32 @@ def parse_eval_config(
         relink_lambda=float(kwargs.get("relink_lambda", 2.5)),
         relink_spatial_gate=float(kwargs.get("relink_spatial_gate", 4.0)),
         relink_max_age=int(kwargs.get("relink_max_age", 300)),
+        relink_bridge_enabled=bool(kwargs.get("relink_bridge_enabled", False)),
+        relink_bridge_px=float(kwargs.get("relink_bridge_px", 0.25)),
+        relink_bridge_at=int(kwargs.get("relink_bridge_at", 4)),
+        relink_bridge_min_lost=int(kwargs.get("relink_bridge_min_lost", 2)),
+        relink_bridge_ttl=int(kwargs.get("relink_bridge_ttl", 120)),
+        relink_bridge_max_speed=float(kwargs.get("relink_bridge_max_speed", 0.0)),
+        relink_bridge_person_height=float(
+            kwargs.get("relink_bridge_person_height", 1.65)
+        ),
+        relink_bridge_fps=float(kwargs.get("relink_bridge_fps", 30.0)),
+        relink_bridge_margin=float(kwargs.get("relink_bridge_margin", 0.05)),
+        relink_bridge_spatial_gate=float(kwargs.get("relink_bridge_spatial_gate", 0.0)),
+        relink_bridge_anchor=str(kwargs.get("relink_bridge_anchor", "adaptive")),
+        relink_bridge_anchor_rate=float(kwargs.get("relink_bridge_anchor_rate", 0.03)),
+        relink_bridge_h_lo=float(kwargs.get("relink_bridge_h_lo", 0.75)),
+        relink_bridge_h_hi=float(kwargs.get("relink_bridge_h_hi", 1.33)),
+        relink_bridge_occ_gate_cover=float(
+            kwargs.get("relink_bridge_occ_gate_cover", 0.0)
+        ),
+        relink_bridge_occ_gap_min=int(kwargs.get("relink_bridge_occ_gap_min", 30)),
+        relink_bridge_occ_expand_px=float(
+            kwargs.get("relink_bridge_occ_expand_px", 0.0)
+        ),
+        relink_bridge_occ_expand_cover=float(
+            kwargs.get("relink_bridge_occ_expand_cover", 0.9)
+        ),
         min_tracklet_len=max(1, int(kwargs.get("min_tracklet_len", 1))),
         min_tracklet_score=float(kwargs.get("min_tracklet_score", 0.0)),
         interpolate_tracklets=bool(kwargs.get("interpolate_tracklets", True)),
@@ -642,6 +700,7 @@ def parse_eval_config(
         interpolate_min_track_len=max(
             1, int(kwargs.get("interpolate_min_track_len", 5))
         ),
+        interpolate_min_h=float(kwargs.get("interpolate_min_h", 0.0)),
         nsa_kalman=bool(kwargs.get("nsa_kalman", False)),
         kalman_r_scale=float(kwargs.get("kalman_r_scale", 1.0)),
         vel_dir_weight=float(kwargs.get("vel_dir_weight", 0.0)),

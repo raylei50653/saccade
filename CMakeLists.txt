@@ -94,6 +94,15 @@ FetchContent_Declare(
 FetchContent_Populate(tensorrt_oss)
 set(TENSORRT_INCLUDE_DIR "${tensorrt_oss_SOURCE_DIR}/include")
 
+# Eigen 3.4 (header-only linear algebra)
+FetchContent_Declare(
+    eigen
+    URL https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.tar.gz
+    DOWNLOAD_EXTRACT_TIMESTAMP NEW
+)
+FetchContent_Populate(eigen)
+set(EIGEN_INCLUDE_DIR "${eigen_SOURCE_DIR}")
+
 execute_process(
     COMMAND ${Python3_EXECUTABLE} -c "import tensorrt_libs; print(tensorrt_libs.__path__[0])"
     OUTPUT_VARIABLE TENSORRT_LIB_DIR
@@ -122,6 +131,8 @@ include_directories(
 )
 # TensorRT headers as SYSTEM to suppress third-party deprecation warnings
 include_directories(SYSTEM ${TENSORRT_INCLUDE_DIR})
+# Eigen headers as SYSTEM
+include_directories(SYSTEM ${EIGEN_INCLUDE_DIR})
 
 # 6. 定義 Perception 模組 (Dynamic Library)
 add_library(saccade_perception STATIC
@@ -139,11 +150,13 @@ target_compile_definitions(saccade_perception PRIVATE SACCADE_EXPORT_PERCEPTION)
 # 7. 定義 Tracking 模組 (Dynamic Library)
 add_library(saccade_tracking STATIC
     src/tracking/tracker_gpu.cu
+    src/tracking/relink_gate.cu
     src/tracking/gmc.cpp
     src/tracking/gmc_kernel.cu
     src/tracking/pipeline.cpp
     src/tracking/workbench.cpp
     src/tracking/quality_filter.cu
+    src/tracking/copy_pad.cu
     src/tracking/mamba_scan.cu
     src/tracking/seq_runner.cpp
     src/tracking/eval_pool.cpp

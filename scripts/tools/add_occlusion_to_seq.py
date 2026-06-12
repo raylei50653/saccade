@@ -13,7 +13,13 @@ def main():
         "--img-dir",
         type=Path,
         default=Path("datasets/demo/custom_seq/img1"),
-        help="Path to sequence img1 folder",
+        help="Path to output img1 folder (occluded frames will be written here)",
+    )
+    parser.add_argument(
+        "--source-img-dir",
+        type=Path,
+        default=None,
+        help="Path to clean source img1 folder (if different from --img-dir). If not set, frames are read from --img-dir (in-place).",
     )
     parser.add_argument(
         "--color",
@@ -27,11 +33,36 @@ def main():
         default=0.125,
         help="Ratio of occlusion box width to image width (default 0.125, half of original 0.25)",
     )
+    parser.add_argument(
+        "--height-ratio",
+        type=float,
+        default=0.55,
+        help="Ratio of occlusion box height to image height (default 0.55)",
+    )
+    parser.add_argument(
+        "--x-offset",
+        type=int,
+        default=0,
+        help="Horizontal offset from center in pixels (positive = right, negative = left)",
+    )
+    parser.add_argument(
+        "--y-offset",
+        type=int,
+        default=0,
+        help="Vertical offset from center in pixels (positive = down, negative = up)",
+    )
     args = parser.parse_args()
 
     if not args.img_dir.exists():
         print(f"❌ Image directory not found: {args.img_dir}")
         sys.exit(1)
+
+    source_dir = args.source_img_dir if args.source_img_dir else args.img_dir
+    if not source_dir.exists():
+        print(f"❌ Source image directory not found: {source_dir}")
+        sys.exit(1)
+
+    args.img_dir.mkdir(parents=True, exist_ok=True)
 
     # Parse color
     try:
@@ -42,9 +73,9 @@ def main():
         print("❌ Invalid color format. Use BGR 'B,G,R' e.g. '60,60,60'")
         sys.exit(1)
 
-    frame_files = sorted(args.img_dir.glob("*.jpg"))
+    frame_files = sorted(source_dir.glob("*.jpg"))
     if not frame_files:
-        frame_files = sorted(args.img_dir.glob("*.png"))
+        frame_files = sorted(source_dir.glob("*.png"))
     if not frame_files:
         print("❌ No images found in directory.")
         sys.exit(1)
@@ -62,10 +93,10 @@ def main():
     # Calculate central box coordinates
     # Box size: width = configured ratio of image width, height = 55% of image height
     box_w = int(w * args.width_ratio)
-    box_h = int(h * 0.55)
+    box_h = int(h * args.height_ratio)
 
-    x1 = (w - box_w) // 2
-    y1 = (h - box_h) // 2
+    x1 = (w - box_w) // 2 + args.x_offset
+    y1 = (h - box_h) // 2 + args.y_offset
     x2 = x1 + box_w
     y2 = y1 + box_h
 
@@ -82,8 +113,9 @@ def main():
         # Draw solid rectangle in the center
         cv2.rectangle(img, (x1, y1), (x2, y2), color, -1)
 
-        # Write back to the same file
-        cv2.imwrite(str(fpath), img, [cv2.IMWRITE_JPEG_QUALITY, 90])
+        # Write to output directory
+        out_path = args.img_dir / fpath.name
+        cv2.imwrite(str(out_path), img, [cv2.IMWRITE_JPEG_QUALITY, 90])
 
         if (idx + 1) % 50 == 0 or (idx + 1) == len(frame_files):
             print(f"  Processed {idx + 1}/{len(frame_files)} frames...", end="\r")

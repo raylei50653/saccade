@@ -488,6 +488,9 @@ __global__ void compute_conditional_cost_kernel(
     cost_matrix[t * n_det + d] = fminf(1.0f, fmaxf(0.0f, cost));
 }
 
+#define SINKHORN_NUM_STAGES 5
+#define SINKHORN_NUM_TOPK   3
+
 __device__ __forceinline__ void merge_top3_fixed(float* a_v, int* a_idx, const float* b_v, const int* b_idx) {
     float res_v[3]; int res_idx[3];
     int i = 0, j = 0;
@@ -546,79 +549,123 @@ __global__ void compute_cost_matrix_kernel(
     cost_matrix[t * n_det + d] = cost;
 }
 
-// 128-thread TopK kernel with shared-memory tree reduction.
-// Replaces the 1-warp design to improve GPU occupancy and cut scheduling jitter.
-// Shared memory layout: s_vals[3][128] + s_idxs[3][128] = 3 KiB per block.
-__global__ void fused_sinkhorn_topk_kernel(
+// Fused multi-stage Sinkhorn top-k kernel: computes Top-K for all 5 association
+// stages in a single pass over the cost matrix, eliminating 4 redundant rescans.
+//
+// Stage definitions (matching the original 5-stage cascade):
+//   Stage 0 (S0 DDA):        trk_state==2, det_score in [high_thresh, 1.1), cost <= dda_max_cost
+//   Stage 1 (S1 HiConf):     trk_state==2, det_score in [high_thresh, 1.1), cost <= match_thresh
+//   Stage 2 (S1b MidConf):   trk_state==2, det_score in [mid_thresh, high_thresh), cost <= match_thresh
+//   Stage 3 (S1c Tentative): trk_state==1, det_score in [mid_thresh, 1.1), cost <= match_thresh
+//   Stage 4 (S2 LoConf):     trk_state==2, det_score in [track_thresh, mid_thresh), cost <= stage2_match_thresh
+//
+// Output layout: out_indices[stage * n_trk * 3 + t * 3 + k]
+//                out_probs[stage * n_trk * 3 + t * 3 + k]
+__global__ void fused_sinkhorn_multistage_kernel(
     const float* cost_matrix, const float* det_scores, const float* det_boxes,
     const int* trk_states, const bool* trk_active, const int* trk_to_det,
-    int n_trk, int n_det, float lambda, float max_cost,
-    float min_det_score, float max_det_score, int required_trk_state,
-    const int* det_to_trk,
+    int n_trk, int n_det, float lambda,
+    float dda_max_cost, float match_thresh, float stage2_match_thresh,
+    float high_thresh, float mid_thresh, float track_thresh,
+    int stage_stride,
     int* out_indices, float* out_probs)
 {
-    __shared__ float s_vals[3][128];
-    __shared__ int   s_idxs[3][128];
+    enum { NS = SINKHORN_NUM_STAGES, NK = SINKHORN_NUM_TOPK, WARP = 128 };
+    __shared__ float s_vals[NS * NK][WARP];
+    __shared__ int   s_idxs[NS * NK][WARP];
 
     int t = blockIdx.x; if (t >= n_trk) return;
     int tid = threadIdx.x;
 
-    float lv0 = -1e9f, lv1 = -1e9f, lv2 = -1e9f;
-    int   li0 = -1,    li1 = -1,    li2 = -1;
+    float lv[NS * NK]; int li[NS * NK];
+    #pragma unroll
+    for (int i = 0; i < NS * NK; ++i) { lv[i] = -1e9f; li[i] = -1; }
 
     bool valid_trk = trk_active[t] && (trk_to_det[t] == -1);
-    if (required_trk_state != -1 && trk_states[t] != required_trk_state) valid_trk = false;
+    int st = valid_trk ? trk_states[t] : 0;
+    bool st2 = (st == 2), st1 = (st == 1);
 
     if (valid_trk) {
-        for (int d = tid; d < n_det; d += 128) {
-            if (det_to_trk && det_to_trk[d] != -1) continue;
+        for (int d = tid; d < n_det; d += WARP) {
             float score = det_scores[d];
-            if (score < min_det_score || score >= max_det_score) continue;
-            
             float cost = cost_matrix[t * n_det + d];
-            if (cost > max_cost) continue;
 
-            // ADR 017: Quality-Aware Sinkhorn Prior (Winning Strategy: v2_aspect_only_soft)
             float aspect_penalty = 1.0f;
             if (det_boxes) {
                 const float* b2 = det_boxes + d * 4;
-                float aspect = (b2[2] - b2[0]) / (b2[3] - b2[1] + 1e-6f);
-                // Pedestrian aspect ratio penalty: penalize abnormal shapes (e.g., highly occluded / truncated)
-                // Typical pedestrian is around 0.3~0.5.
-                if (aspect > 0.8f) aspect_penalty = fmaxf(0.5f, 1.0f - (aspect - 0.8f));
-                else if (aspect < 0.15f) aspect_penalty = fmaxf(0.5f, 1.0f - (0.15f - aspect) * 5.0f);
+                float aspect_wh = (b2[2] - b2[0]) / (b2[3] - b2[1] + 1e-6f);
+                if (aspect_wh > 0.8f) aspect_penalty = fmaxf(0.5f, 1.0f - (aspect_wh - 0.8f));
+                else if (aspect_wh < 0.15f) aspect_penalty = fmaxf(0.5f, 1.0f - (0.15f - aspect_wh) * 5.0f);
             }
-
             float p = expf(-lambda * cost) * aspect_penalty;
-            if (p > lv0) {
-                lv2 = lv1; li2 = li1; lv1 = lv0; li1 = li0; lv0 = p; li0 = d;
-            } else if (p > lv1) {
-                lv2 = lv1; li2 = li1; lv1 = p; li1 = d;
-            } else if (p > lv2) {
-                lv2 = p; li2 = d;
+
+            if (score >= high_thresh && score < 1.1f) {
+                if (st2 && cost <= dda_max_cost) {
+                    if (p > lv[0*NK+0]) { lv[0*NK+2]=lv[0*NK+1];li[0*NK+2]=li[0*NK+1];lv[0*NK+1]=lv[0*NK+0];li[0*NK+1]=li[0*NK+0];lv[0*NK+0]=p;li[0*NK+0]=d; }
+                    else if (p > lv[0*NK+1]) { lv[0*NK+2]=lv[0*NK+1];li[0*NK+2]=li[0*NK+1];lv[0*NK+1]=p;li[0*NK+1]=d; }
+                    else if (p > lv[0*NK+2]) { lv[0*NK+2]=p;li[0*NK+2]=d; }
+                }
+                if (st2 && cost <= match_thresh) {
+                    if (p > lv[1*NK+0]) { lv[1*NK+2]=lv[1*NK+1];li[1*NK+2]=li[1*NK+1];lv[1*NK+1]=lv[1*NK+0];li[1*NK+1]=li[1*NK+0];lv[1*NK+0]=p;li[1*NK+0]=d; }
+                    else if (p > lv[1*NK+1]) { lv[1*NK+2]=lv[1*NK+1];li[1*NK+2]=li[1*NK+1];lv[1*NK+1]=p;li[1*NK+1]=d; }
+                    else if (p > lv[1*NK+2]) { lv[1*NK+2]=p;li[1*NK+2]=d; }
+                }
+                if (st1 && cost <= match_thresh) {
+                    if (p > lv[3*NK+0]) { lv[3*NK+2]=lv[3*NK+1];li[3*NK+2]=li[3*NK+1];lv[3*NK+1]=lv[3*NK+0];li[3*NK+1]=li[3*NK+0];lv[3*NK+0]=p;li[3*NK+0]=d; }
+                    else if (p > lv[3*NK+1]) { lv[3*NK+2]=lv[3*NK+1];li[3*NK+2]=li[3*NK+1];lv[3*NK+1]=p;li[3*NK+1]=d; }
+                    else if (p > lv[3*NK+2]) { lv[3*NK+2]=p;li[3*NK+2]=d; }
+                }
+            } else if (score >= mid_thresh) {
+                if (st2 && cost <= match_thresh) {
+                    if (p > lv[2*NK+0]) { lv[2*NK+2]=lv[2*NK+1];li[2*NK+2]=li[2*NK+1];lv[2*NK+1]=lv[2*NK+0];li[2*NK+1]=li[2*NK+0];lv[2*NK+0]=p;li[2*NK+0]=d; }
+                    else if (p > lv[2*NK+1]) { lv[2*NK+2]=lv[2*NK+1];li[2*NK+2]=li[2*NK+1];lv[2*NK+1]=p;li[2*NK+1]=d; }
+                    else if (p > lv[2*NK+2]) { lv[2*NK+2]=p;li[2*NK+2]=d; }
+                }
+                if (st1 && cost <= match_thresh) {
+                    if (p > lv[3*NK+0]) { lv[3*NK+2]=lv[3*NK+1];li[3*NK+2]=li[3*NK+1];lv[3*NK+1]=lv[3*NK+0];li[3*NK+1]=li[3*NK+0];lv[3*NK+0]=p;li[3*NK+0]=d; }
+                    else if (p > lv[3*NK+1]) { lv[3*NK+2]=lv[3*NK+1];li[3*NK+2]=li[3*NK+1];lv[3*NK+1]=p;li[3*NK+1]=d; }
+                    else if (p > lv[3*NK+2]) { lv[3*NK+2]=p;li[3*NK+2]=d; }
+                }
+            } else if (score >= track_thresh) {
+                if (st2 && cost <= stage2_match_thresh) {
+                    if (p > lv[4*NK+0]) { lv[4*NK+2]=lv[4*NK+1];li[4*NK+2]=li[4*NK+1];lv[4*NK+1]=lv[4*NK+0];li[4*NK+1]=li[4*NK+0];lv[4*NK+0]=p;li[4*NK+0]=d; }
+                    else if (p > lv[4*NK+1]) { lv[4*NK+2]=lv[4*NK+1];li[4*NK+2]=li[4*NK+1];lv[4*NK+1]=p;li[4*NK+1]=d; }
+                    else if (p > lv[4*NK+2]) { lv[4*NK+2]=p;li[4*NK+2]=d; }
+                }
             }
         }
     }
 
-    s_vals[0][tid] = lv0; s_idxs[0][tid] = li0;
-    s_vals[1][tid] = lv1; s_idxs[1][tid] = li1;
-    s_vals[2][tid] = lv2; s_idxs[2][tid] = li2;
+    #pragma unroll
+    for (int s = 0; s < NS; ++s) {
+        #pragma unroll
+        for (int k = 0; k < NK; ++k) {
+            s_vals[s * NK + k][tid] = lv[s * NK + k];
+            s_idxs[s * NK + k][tid] = li[s * NK + k];
+        }
+    }
     __syncthreads();
 
-    // Tree reduction: 128 → 64 → 32 → 16 → 8 → 4 → 2 → 1
     #pragma unroll
     for (int stride = 64; stride > 0; stride >>= 1) {
         if (tid < stride) {
-            float av[3], bv[3]; int ai[3], bi[3];
             #pragma unroll
-            for (int i = 0; i < 3; ++i) {
-                av[i] = s_vals[i][tid];          ai[i] = s_idxs[i][tid];
-                bv[i] = s_vals[i][tid + stride]; bi[i] = s_idxs[i][tid + stride];
-            }
-            merge_top3_fixed(av, ai, bv, bi);
-            #pragma unroll
-            for (int i = 0; i < 3; ++i) {
-                s_vals[i][tid] = av[i]; s_idxs[i][tid] = ai[i];
+            for (int s = 0; s < NS; ++s) {
+                int base = s * NK;
+                float av[NK], bv[NK]; int ai[NK], bi[NK];
+                #pragma unroll
+                for (int k = 0; k < NK; ++k) {
+                    av[k] = s_vals[base + k][tid];
+                    ai[k] = s_idxs[base + k][tid];
+                    bv[k] = s_vals[base + k][tid + stride];
+                    bi[k] = s_idxs[base + k][tid + stride];
+                }
+                int i = 0, j = 0;
+                #pragma unroll
+                for (int k = 0; k < NK; ++k) {
+                    if (av[i] >= bv[j]) { s_vals[base + k][tid] = av[i]; s_idxs[base + k][tid] = ai[i]; i++; }
+                    else { s_vals[base + k][tid] = bv[j]; s_idxs[base + k][tid] = bi[j]; j++; }
+                }
             }
         }
         __syncthreads();
@@ -626,9 +673,14 @@ __global__ void fused_sinkhorn_topk_kernel(
 
     if (tid == 0) {
         #pragma unroll
-        for (int i = 0; i < 3; ++i) {
-            out_indices[t * 3 + i] = s_idxs[i][0];
-            out_probs[t * 3 + i]   = s_vals[i][0];
+        for (int s = 0; s < NS; ++s) {
+            int base = s * NK;
+            int out_off = s * stage_stride + t * NK;
+            #pragma unroll
+            for (int k = 0; k < NK; ++k) {
+                out_indices[out_off + k] = s_idxs[base + k][0];
+                out_probs[out_off + k]   = s_vals[base + k][0];
+            }
         }
     }
 }
@@ -661,6 +713,7 @@ __global__ void parallel_auction_shmem_kernel(
         for (int k = 0; k < K; ++k) {
             int d = topk_indices[t * K + k];
             if (d < 0 || d >= n_det) continue;
+            if (det_to_trk && det_to_trk[d] != -1) continue;
             float current_price = __int_as_float((int)(s_prices_u64[d] >> 32));
             float val = topk_probs[t * K + k] - current_price;
             if (val > best_val) {
@@ -983,7 +1036,8 @@ __global__ void spawn_new_tracks_kernel(
     int* d_track_id_ctr, int* d_slot_cursor,
     int confirm_streak, float birth_low_score_thresh,
     int max_objs, float birth_prox_norm_thresh,
-    const int* d_det_revive_id, float* d_covs)
+    const int* d_det_revive_id, float* d_covs,
+    int* d_foot_len, float* d_ema_h, int* d_track_revived)  // bridge foot-state reset (null when off)
 {
     int tid = threadIdx.x;
     __shared__ int s_counts[256];
@@ -1084,6 +1138,13 @@ __global__ void spawn_new_tracks_kernel(
             d_trk_scores[slot]  = d_det_scores[det_idx];
             d_classes[slot]     = d_det_classes[det_idx];
             d_active[slot]      = true;
+            // Bridge: a recycled slot must start with clean foot history so the
+            // new identity does not inherit the previous track's footprint.
+            if (d_foot_len) {
+                d_foot_len[slot]      = 0;
+                d_ema_h[slot]         = 0.0f;
+                d_track_revived[slot] = 0;
+            }
         }
     }
 
@@ -1104,6 +1165,413 @@ __global__ void init_covariance_if_new_kernel(
     if (i >= max_objs) return;
     if (!active[i] || state[i] != 1 || hit_streak[i] != 1) return;
     kf_gpu::init_covariance(covs + i * 64);
+}
+
+// ── Phase-4 bidirectional foot-bridge (Kalman-free) ──────────────────────────
+// Closed-form 4-point foot regression v = (3p3 + p2 − p1 − 3p0)/10 (mirrors
+// relink_gate.cu:17-25). `pts` is 4 chronological (x,y) pairs.
+__device__ __forceinline__ void bridge_regress4(const float* pts, float& vx, float& vy) {
+    float x0 = pts[0], y0 = pts[1], x1 = pts[2], y1 = pts[3];
+    float x2 = pts[4], y2 = pts[5], x3 = pts[6], y3 = pts[7];
+    vx = (3.0f * x3 + x2 - x1 - 3.0f * x0) / 10.0f;
+    vy = (3.0f * y3 + y2 - y1 - 3.0f * y0) / 10.0f;
+}
+
+// Closed-form per-frame velocity from 4 equally-spaced 1-D samples (same kernel
+// as bridge_regress4 but scalar): v = (3y3 + y2 − y1 − 3y0)/10.
+__device__ __forceinline__ float bridge_vel4(const float* y) {
+    return (3.0f * y[3] + y[2] - y[1] - 3.0f * y[0]) / 10.0f;
+}
+
+// Closed-form per-frame OLS velocity from 8 equally-spaced 1-D samples.
+// t=0..7, t̄=3.5, Stt=42 → v = (−7y0−5y1−3y2−y3+y4+3y5+5y6+7y7)/84.
+__device__ __forceinline__ float bridge_vel8(const float* y) {
+    return (-7.0f*y[0] - 5.0f*y[1] - 3.0f*y[2] - y[3]
+            + y[4] + 3.0f*y[5] + 5.0f*y[6] + 7.0f*y[7]) / 84.0f;
+}
+
+// Sum of squared residuals of 4 equally-spaced samples vs their least-squares
+// line (x = 0,1,2,3 → mean 1.5, Sxx = 5). A box edge that is being clipped by an
+// occluder deviates from constant velocity → large residual; a free edge stays
+// near-linear → small residual. Used to weight which edge anchors the bridge.
+__device__ __forceinline__ float bridge_linres4(const float* y) {
+    float ybar = 0.25f * (y[0] + y[1] + y[2] + y[3]);
+    float sxy = -1.5f * (y[0] - ybar) - 0.5f * (y[1] - ybar)
+                + 0.5f * (y[2] - ybar) + 1.5f * (y[3] - ybar);
+    float slope = sxy / 5.0f;
+    float res = 0.0f;
+#pragma unroll
+    for (int i = 0; i < 4; ++i) {
+        float fit = ybar + slope * ((float)i - 1.5f);
+        float d = y[i] - fit;
+        res += d * d;
+    }
+    return res;
+}
+
+// Sum of squared residuals for 8 equally-spaced samples (t̄=3.5, Stt=42).
+__device__ __forceinline__ float bridge_linres8(const float* y) {
+    float ybar = 0.125f * (y[0]+y[1]+y[2]+y[3]+y[4]+y[5]+y[6]+y[7]);
+    float sxy = -3.5f*(y[0]-ybar) - 2.5f*(y[1]-ybar) - 1.5f*(y[2]-ybar) - 0.5f*(y[3]-ybar)
+                + 0.5f*(y[4]-ybar) + 1.5f*(y[5]-ybar) + 2.5f*(y[6]-ybar) + 3.5f*(y[7]-ybar);
+    float slope = sxy / 42.0f;
+    float res = 0.0f;
+#pragma unroll
+    for (int i = 0; i < 8; ++i) {
+        float fit = ybar + slope * ((float)i - 3.5f);
+        float d = y[i] - fit;
+        res += d * d;
+    }
+    return res;
+}
+
+// Reduce a 4-point window (foot ring, stride 3: cx, cy, h) into an anchor
+// endpoint (ax, ay) + per-frame velocity (vx, vy) under the chosen anchor mode.
+//   mode 0 (center)   : y-anchor = box centre cy            (legacy behaviour)
+//   mode 1 (foot)     : y-anchor = bottom edge cy + h/2     (ground-contact point)
+//   mode 2 (adaptive) : y-anchor = residual-weighted blend of top/bottom edges,
+//                       so an occlusion-clipped edge is down-weighted automatically
+//                       (equal weights ⇒ exactly the centre, so it degrades to
+//                       mode 0 when neither edge deforms). Residuals normalised by
+//                       mean h² → scale-invariant, no extra tunable threshold.
+// `endpoint_idx` selects which of the 4 samples is the "current" point (3 for a
+// lost track's last-4, 0 for a candidate's head-4). x always uses the centre.
+// `rate_gate` (adaptive only): mean |Δh|/h̄ below this ⇒ the box is stable, keep
+// the centre anchor (don't perturb clean detections — guards against extra FP).
+// 0 ⇒ always residual-weighted; >0 ⇒ only deform on genuinely clipped boxes.
+__device__ __forceinline__ void bridge_anchor4(
+    const float* p, int anchor_mode, float rate_gate, int endpoint_idx,
+    float& ax, float& ay, float& vx, float& vy)
+{
+    float cx[4], cy[4], yt[4], yb[4], hbar = 0.0f;
+#pragma unroll
+    for (int i = 0; i < 4; ++i) {
+        float x = p[i * 3 + 0], c = p[i * 3 + 1], h = p[i * 3 + 2];
+        cx[i] = x; cy[i] = c; yt[i] = c - 0.5f * h; yb[i] = c + 0.5f * h;
+        hbar += 0.25f * h;
+    }
+    vx = bridge_vel4(cx);
+    ax = cx[endpoint_idx];
+    bool use_edges = (anchor_mode == 2);
+    if (use_edges && rate_gate > 0.0f) {  // deformation gate: skip stable boxes
+        float dh = (fabsf(p[1 * 3 + 2] - p[0 * 3 + 2])
+                    + fabsf(p[2 * 3 + 2] - p[1 * 3 + 2])
+                    + fabsf(p[3 * 3 + 2] - p[2 * 3 + 2])) / 3.0f;
+        if (dh / (hbar + 1e-3f) <= rate_gate) use_edges = false;
+    }
+    if (anchor_mode == 1) {            // foot: bottom edge
+        vy = bridge_vel4(yb);
+        ay = yb[endpoint_idx];
+    } else if (use_edges) {            // adaptive: residual-weighted top/bottom
+        float hn = hbar * hbar + 1e-3f;
+        float wt = 1.0f / (bridge_linres4(yt) / hn + 0.01f);  // floor ≈ (0.1·h)² residual
+        float wb = 1.0f / (bridge_linres4(yb) / hn + 0.01f);
+        float ws = wt + wb;
+        vy = (wt * bridge_vel4(yt) + wb * bridge_vel4(yb)) / ws;
+        ay = (wt * yt[endpoint_idx] + wb * yb[endpoint_idx]) / ws;
+    } else {                           // center (default / gated-out adaptive)
+        vy = bridge_vel4(cy);
+        ay = cy[endpoint_idx];
+    }
+}
+
+// 8-frame version of bridge_anchor4.  Uses bridge_vel8/bridge_linres8; falls back
+// to bridge_anchor4 behaviour when fewer than 8 frames are available (caller
+// guarantees n >= 8 before calling this).  endpoint_idx: 7 for lost last-8, 0
+// for candidate head-8.
+__device__ __forceinline__ void bridge_anchor8(
+    const float* p, int anchor_mode, float rate_gate, int endpoint_idx,
+    float& ax, float& ay, float& vx, float& vy)
+{
+    float cx[8], cy[8], yt[8], yb[8], hbar = 0.0f;
+#pragma unroll
+    for (int i = 0; i < 8; ++i) {
+        float x = p[i * 3 + 0], c = p[i * 3 + 1], h = p[i * 3 + 2];
+        cx[i] = x; cy[i] = c; yt[i] = c - 0.5f * h; yb[i] = c + 0.5f * h;
+        hbar += 0.125f * h;
+    }
+    vx = bridge_vel8(cx);
+    ax = cx[endpoint_idx];
+    bool use_edges = (anchor_mode == 2);
+    if (use_edges && rate_gate > 0.0f) {
+        float dh = 0.0f;
+#pragma unroll
+        for (int i = 0; i < 7; ++i) dh += fabsf(p[(i+1)*3+2] - p[i*3+2]);
+        dh /= 7.0f;
+        if (dh / (hbar + 1e-3f) <= rate_gate) use_edges = false;
+    }
+    if (anchor_mode == 1) {
+        vy = bridge_vel8(yb);
+        ay = yb[endpoint_idx];
+    } else if (use_edges) {
+        float hn = hbar * hbar + 1e-3f;
+        float wt = 1.0f / (bridge_linres8(yt) / hn + 0.01f);
+        float wb = 1.0f / (bridge_linres8(yb) / hn + 0.01f);
+        float ws = wt + wb;
+        vy = (wt * bridge_vel8(yt) + wb * bridge_vel8(yb)) / ws;
+        ay = (wt * yt[endpoint_idx] + wb * yb[endpoint_idx]) / ws;
+    } else {
+        vy = bridge_vel8(cy);
+        ay = cy[endpoint_idx];
+    }
+}
+
+// Per-track foot-centre ring + EMA box height. Updates every slot that was
+// observed this frame (active, non-empty, age==0 → matched or freshly spawned);
+// coasting lost tracks (age>0) keep a frozen history.
+__global__ void update_foot_history_kernel(
+    const bool* active, const int* state, const int* age, const float* states,
+    int max_objs, int ring_cap, float* foot_ring, int* foot_len, float* ema_h)
+{
+    int t = blockIdx.x * blockDim.x + threadIdx.x;
+    if (t >= max_objs) return;
+    if (!active[t] || state[t] == TRACK_EMPTY || age[t] != 0) return;
+
+    float fx = states[t * 8 + 0];
+    float fy = states[t * 8 + 1];
+    float bh = states[t * 8 + 3];
+    int n = foot_len[t];
+    float* ring = foot_ring + (size_t)t * ring_cap * 3;  // stride 3: cx, cy, h
+    if (n < ring_cap) {
+        ring[n * 3 + 0] = fx;
+        ring[n * 3 + 1] = fy;
+        ring[n * 3 + 2] = bh;
+        foot_len[t] = n + 1;
+    } else {  // full: shift-left by one (keep chronological order), append
+        for (int k = 1; k < ring_cap; ++k) {
+            ring[(k - 1) * 3 + 0] = ring[k * 3 + 0];
+            ring[(k - 1) * 3 + 1] = ring[k * 3 + 1];
+            ring[(k - 1) * 3 + 2] = ring[k * 3 + 2];
+        }
+        ring[(ring_cap - 1) * 3 + 0] = fx;
+        ring[(ring_cap - 1) * 3 + 1] = fy;
+        ring[(ring_cap - 1) * 3 + 2] = bh;
+    }
+    ema_h[t] = (n == 0) ? bh : (0.95f * ema_h[t] + 0.05f * bh);  // alpha=0.05, seed=first bh
+}
+
+// Gap-path occupancy grid: coarse per-frame bitmap of confirmed output boxes,
+// kept as a ring over the last OCC_RING frames. The bridge gate samples the
+// straight lost→cand path across the gap and asks "was this point covered by
+// another track?" — true relinks have HIGHER coverage (occlusion explains the
+// disappearance). Offline: hard AUC 0.625, corr 0.003 with bridge_dist, only
+// informative for long gaps (short-gap AUC 0.44 → gated by occ_gap_min).
+constexpr int OCC_GW = 64, OCC_GH = 36;          // ~30x30 px cells at 1080p
+constexpr int OCC_WORDS = OCC_GW * OCC_GH / 32;  // 72 words per frame slice
+constexpr int OCC_RING = 256;                    // frames of history (~72 KB total)
+
+// Single block; the frame counter lives on-device so the launch is CUDA-graph
+// capture-safe (args are baked at capture, the counter is not).
+__global__ void occupancy_update_kernel(
+    const bool* active, const int* state, const int* age, const float* states,
+    int max_objs, int frame_w, int frame_h,
+    unsigned int* occ_grid, int* occ_frame)
+{
+    __shared__ int s_f;
+    if (threadIdx.x == 0) s_f = ++(*occ_frame);
+    __syncthreads();
+    unsigned int* slice = occ_grid + (size_t)(s_f & (OCC_RING - 1)) * OCC_WORDS;
+    for (int w = threadIdx.x; w < OCC_WORDS; w += blockDim.x) slice[w] = 0u;
+    __syncthreads();
+    float inv_cw = (float)OCC_GW / fmaxf((float)frame_w, 1.0f);
+    float inv_ch = (float)OCC_GH / fmaxf((float)frame_h, 1.0f);
+    for (int t = threadIdx.x; t < max_objs; t += blockDim.x) {
+        if (!active[t] || state[t] != TRACK_CONFIRMED || age[t] != 0) continue;
+        float cx = states[t * 8 + 0], cy = states[t * 8 + 1];
+        float h = states[t * 8 + 3], bw = states[t * 8 + 2] * h;
+        int gx0 = max(0, (int)((cx - 0.5f * bw) * inv_cw));
+        int gx1 = min(OCC_GW - 1, (int)((cx + 0.5f * bw) * inv_cw));
+        int gy0 = max(0, (int)((cy - 0.5f * h) * inv_ch));
+        int gy1 = min(OCC_GH - 1, (int)((cy + 0.5f * h) * inv_ch));
+        for (int gy = gy0; gy <= gy1; ++gy)
+            for (int gx = gx0; gx <= gx1; ++gx) {
+                int bit = gy * OCC_GW + gx;
+                atomicOr(&slice[bit >> 5], 1u << (bit & 31));
+            }
+    }
+}
+
+__device__ inline bool occ_test(const unsigned int* slice, float px, float py,
+                                float inv_cw, float inv_ch)
+{
+    int gx = (int)(px * inv_cw), gy = (int)(py * inv_ch);
+    if (gx < 0 || gx >= OCC_GW || gy < 0 || gy >= OCC_GH) return false;
+    int bit = gy * OCC_GW + gx;
+    return (slice[bit >> 5] >> (bit & 31)) & 1u;
+}
+
+// Fraction of sampled gap frames whose interpolated foot point is covered by
+// another track's box. Returns -1 when no valid sample (gate passes through).
+__device__ float occ_gap_cover(
+    const unsigned int* occ_grid, int fcur,
+    float lfx, float lfy, float cfx, float cfy, int f_lost, int f_cand,
+    float inv_cw, float inv_ch)
+{
+    int gap = f_cand - f_lost;
+    int n_int = gap - 1;
+    if (n_int < 1) return -1.0f;
+    int step = max(1, n_int / 16);
+    int n = 0, cov = 0;
+    for (int f = f_lost + 1; f < f_cand; f += step) {
+        if (f <= 0 || fcur - f >= OCC_RING) continue;  // pre-start or stale slice
+        float alpha = (float)(f - f_lost) / (float)gap;
+        float px = lfx + alpha * (cfx - lfx);
+        float py = lfy + alpha * (cfy - lfy);
+        const unsigned int* slice = occ_grid + (size_t)(f & (OCC_RING - 1)) * OCC_WORDS;
+        ++n;
+        if (occ_test(slice, px, py, inv_cw, inv_ch)) ++cov;
+    }
+    return n > 0 ? (float)cov / (float)n : -1.0f;
+}
+
+// Pass 1 (propose): one thread per candidate track that first hits hit_streak==
+// bridge_at. Scan live lost tracks, foot-bridge each, keep the closest under
+// bridge_px (with optional speed/spatial/margin gates), then claim the chosen
+// lost slot via a score-keyed atomicMax (higher detection score wins ties).
+__global__ void relink_bidir_propose_kernel(
+    const bool* active, const int* state, const int* age, const int* hit_streak,
+    const int* trk_to_det, const int* track_ids, const float* states, const float* trk_scores,
+    const float* foot_ring, const int* foot_len, const float* ema_h,
+    int max_objs, int ring_cap,
+    float bridge_px, int bridge_at, int bridge_min_lost, int bridge_ttl,
+    float bridge_max_speed, float bridge_person_height, float bridge_fps,
+    float bridge_margin, float bridge_spatial_gate, int bridge_anchor,
+    float bridge_anchor_rate, float bridge_h_lo, float bridge_h_hi,
+    const unsigned int* occ_grid, const int* occ_frame,
+    float occ_gate_cover, int occ_gap_min, float occ_expand_px, float occ_expand_cover,
+    int frame_w, int frame_h,
+    int* track_revived, int* bridge_claim, int* bridge_cand_lost, int* dbg)
+{
+    int cand = blockIdx.x * blockDim.x + threadIdx.x;
+    if (cand >= max_objs) return;
+    bridge_cand_lost[cand] = -1;
+    if (!active[cand] || trk_to_det[cand] < 0) return;
+    if (hit_streak[cand] != bridge_at || track_revived[cand]) return;
+    if (foot_len[cand] < 4) return;
+
+    if (dbg) atomicAdd(&dbg[2], 1);  // bridge attempt
+    track_revived[cand] = 1;         // fire once per track life
+
+    const float* cring = foot_ring + (size_t)cand * ring_cap * 3;  // stride 3
+    float vxc, vyc, cx0, cy0;
+    bridge_anchor4(cring, bridge_anchor, bridge_anchor_rate, 0, cx0, cy0, vxc, vyc);  // cand head-4
+    float cand_cx = states[cand * 8 + 0], cand_cy = states[cand * 8 + 1];
+    float cand_h = states[cand * 8 + 3], ema_cand = ema_h[cand];
+    // Gap-occupancy gate context (anchor-mode independent: explicit foot points,
+    // matching the offline validation in scripts/tools/gap_occupancy_features.py).
+    int occ_fcur = occ_grid ? *occ_frame : 0;
+    float occ_inv_cw = (float)OCC_GW / fmaxf((float)frame_w, 1.0f);
+    float occ_inv_ch = (float)OCC_GH / fmaxf((float)frame_h, 1.0f);
+    float cand_fx = cring[0], cand_fy = cring[1] + 0.5f * cring[2];  // entry foot
+
+    float best_dist = 1e30f, second_dist = 1e30f;
+    int best_lost = -1;
+    for (int lost = 0; lost < max_objs; ++lost) {
+        if (lost == cand) continue;
+        if (!active[lost] || trk_to_det[lost] >= 0) continue;   // must be lost this frame
+        if (state[lost] != TRACK_CONFIRMED) continue;
+        int la = age[lost];
+        if (la < bridge_min_lost || la > bridge_ttl) continue;
+        if (track_ids[lost] < 0) continue;
+        int ln = foot_len[lost];
+        if (ln < 1) continue;
+
+        const float* lring = foot_ring + (size_t)lost * ring_cap * 3;  // stride 3
+        float vxl = 0.0f, vyl = 0.0f, lx, ly;
+        if (ln >= 4) {
+            bridge_anchor4(lring + (ln - 4) * 3, bridge_anchor, bridge_anchor_rate, 3,
+                           lx, ly, vxl, vyl);  // lost last-4
+        } else {  // too short to regress: anchor the last point, zero velocity
+            float lc = lring[(ln - 1) * 3 + 1], lh = lring[(ln - 1) * 3 + 2];
+            lx = lring[(ln - 1) * 3 + 0];
+            ly = (bridge_anchor == 1) ? (lc + 0.5f * lh) : lc;  // foot vs centre
+        }
+        float lost_h = states[lost * 8 + 3], ema_lost = ema_h[lost];
+        float h_ref = fmaxf((ema_lost + ema_cand) * 0.5f, 1.0f);
+
+        // Scale gate (disabled when bridge_h_hi<=0): lost/cand height ratio must
+        // stay inside [h_lo, h_hi]; large size jumps across the gap are bogus.
+        if (bridge_h_hi > 0.0f) {
+            float hr = fmaxf(ema_lost, 1e-3f) / fmaxf(ema_cand, 1e-3f);
+            if (hr < bridge_h_lo || hr > bridge_h_hi) continue;
+        }
+        // Physical speed gate (disabled when bridge_max_speed<=0).
+        if (bridge_max_speed > 0.0f && bridge_person_height > 0.0f) {
+            float lcx = states[lost * 8 + 0], lcy = states[lost * 8 + 1];
+            float dpx = sqrtf((cand_cx - lcx) * (cand_cx - lcx) + (cand_cy - lcy) * (cand_cy - lcy));
+            float dt_s = fmaxf((float)la, 1.0f) / fmaxf(bridge_fps, 1e-6f);
+            float px_per_m = 0.5f * (fmaxf(lost_h, 1e-3f) + fmaxf(cand_h, 1e-3f)) / bridge_person_height;
+            float speed = dpx / dt_s / fmaxf(px_per_m, 1e-6f);
+            if (speed > bridge_max_speed) continue;
+        }
+        // Optional spatial gate (center distance / h_ref).
+        if (bridge_spatial_gate > 0.0f) {
+            float lcx = states[lost * 8 + 0], lcy = states[lost * 8 + 1];
+            float cdist = sqrtf((cand_cx - lcx) * (cand_cx - lcx) + (cand_cy - lcy) * (cand_cy - lcy)) / h_ref;
+            if (cdist > bridge_spatial_gate) continue;
+        }
+        // Speed-weighted foot-bridge score (offline-optimised + online-validated, see
+        // docs/modules/semantic/research/offline_relink_candidate_analysis.md §6c-d):
+        // symmetric full extrapolation 0.5*(fwd+bwd) blended with spatial proximity
+        // dist_h, the velocity term weighted by exit speed so it is trusted only for
+        // fast tracks (heading is noise for slow ones). +0.6 IDF1/+1.0 AssA on SDP.
+        float fwd_x = lx + vxl * la, fwd_y = ly + vyl * la;             // lost fwd full gap
+        float bwd_x = cx0 - vxc * la, bwd_y = cy0 - vyc * la;           // cand bwd full gap
+        float fwd_r = sqrtf((fwd_x - cx0) * (fwd_x - cx0) + (fwd_y - cy0) * (fwd_y - cy0)) / h_ref;
+        float bwd_r = sqrtf((bwd_x - lx) * (bwd_x - lx) + (bwd_y - ly) * (bwd_y - ly)) / h_ref;
+        float dist_h = sqrtf((lx - cx0) * (lx - cx0) + (ly - cy0) * (ly - cy0)) / h_ref;
+        float s_lost = sqrtf(vxl * vxl + vyl * vyl) / h_ref;           // exit speed (h/f)
+        float w = sqrtf(fminf(fmaxf(s_lost / 0.12f, 0.0f), 1.0f));
+        float bdist = w * 0.5f * (fwd_r + bwd_r) + (1.0f - w) * dist_h;
+        // Gap-occupancy gate (long gaps only). Veto: an unexplained long-gap
+        // bridge (path not covered by another track) is likely a different
+        // person. Tiered expansion: a highly-covered path unlocks a looser
+        // bridge_px. occ<0 (no valid sample) passes through both.
+        bool ok = bdist <= bridge_px;
+        int gap_len = la - bridge_at + 1;
+        if (occ_grid && gap_len >= occ_gap_min) {
+            bool expandable = !ok && occ_expand_px > bridge_px && bdist <= occ_expand_px;
+            if (occ_gate_cover > 0.0f || expandable) {
+                float lfx = lring[(ln - 1) * 3 + 0];                      // exit foot
+                float lfy = lring[(ln - 1) * 3 + 1] + 0.5f * lring[(ln - 1) * 3 + 2];
+                float occ = occ_gap_cover(occ_grid, occ_fcur, lfx, lfy, cand_fx, cand_fy,
+                                          occ_fcur - la, occ_fcur - bridge_at + 1,
+                                          occ_inv_cw, occ_inv_ch);
+                if (occ_gate_cover > 0.0f && occ >= 0.0f && occ < occ_gate_cover) continue;
+                if (expandable && occ >= occ_expand_cover) ok = true;
+            }
+        }
+        if (!ok) continue;
+        if (bdist < best_dist) { second_dist = best_dist; best_dist = bdist; best_lost = lost; }
+        else if (bdist < second_dist) { second_dist = bdist; }
+    }
+    if (best_lost < 0) return;
+    if (bridge_margin > 0.0f && (second_dist - best_dist) < bridge_margin) return;  // ambiguous
+
+    bridge_cand_lost[cand] = best_lost;
+    // Higher detection score wins the lost id (deterministic); cand index breaks ties.
+    // Quantize score to 15 bits so the packed key stays positive (signed int32):
+    // max key = (32767<<16)|65535 = INT_MAX, never overflows atomicMax.
+    int sq = (int)(fminf(fmaxf(trk_scores[cand], 0.0f), 1.0f) * 32767.0f);
+    int key = (sq << 16) | (cand & 0xFFFF);
+    atomicMax(&bridge_claim[best_lost], key);
+}
+
+// Pass 2 (commit): each proposing candidate that won its lost slot's atomicMax
+// adopts the lost id and deactivates the lost slot. Candidate and lost sets are
+// disjoint (trk_to_det>=0 vs <0), so adoptions never race.
+__global__ void relink_bidir_commit_kernel(
+    bool* active, int* track_ids, int max_objs,
+    const int* bridge_claim, const int* bridge_cand_lost, int* dbg)
+{
+    int cand = blockIdx.x * blockDim.x + threadIdx.x;
+    if (cand >= max_objs) return;
+    int lost = bridge_cand_lost[cand];
+    if (lost < 0) return;
+    if ((bridge_claim[lost] & 0xFFFF) != (cand & 0xFFFF)) return;  // a higher-score candidate won
+    track_ids[cand] = track_ids[lost];
+    active[lost] = false;
+    if (dbg) atomicAdd(&dbg[3], 1);  // bridge accept
 }
 
 __global__ void compact_results_kernel(
@@ -1427,10 +1895,14 @@ public:
         d_features_owned_ = true;
         
         max_assoc_ = 1024;
+        // 128-byte alignment per stage: pad stage_stride to 32-element multiple
+        // (32 elems × 4 bytes = 128 bytes per stage)
+        sinkhorn_stage_stride_ = ((max_objs_ * 3 + 31) / 32) * 32;
+        int topk_total = SINKHORN_NUM_STAGES * sinkhorn_stage_stride_;
         checkCuda(cudaMalloc(&d_cost_matrix_, max_objs_ * max_assoc_ * sizeof(float)));
         checkCuda(cudaMalloc(&d_sinkhorn_v_, max_assoc_ * sizeof(float)));
-        checkCuda(cudaMalloc(&d_topk_indices_, max_objs_ * 3 * sizeof(int)));
-        checkCuda(cudaMalloc(&d_topk_probs_, max_objs_ * 3 * sizeof(float)));
+        checkCuda(cudaMalloc(&d_topk_indices_, topk_total * sizeof(int)));
+        checkCuda(cudaMalloc(&d_topk_probs_, topk_total * sizeof(float)));
         checkCuda(cudaMalloc(&d_auction_prices_, max_assoc_ * sizeof(uint64_t)));
         checkCuda(cudaMalloc(&d_trk_to_det_, max_objs_ * sizeof(int)));
         checkCuda(cudaMalloc(&d_det_to_trk_, max_assoc_ * sizeof(int)));
@@ -1440,6 +1912,19 @@ public:
         checkCuda(cudaMalloc(&d_hit_streak_, max_objs_ * sizeof(int)));
         checkCuda(cudaMalloc(&d_confirm_streak_required_, max_objs_ * sizeof(int)));
         checkCuda(cudaMalloc(&d_score_sum_, max_objs_ * sizeof(float)));
+
+        // Phase-4 bridge per-track state (allocated unconditionally; small, and
+        // only touched when bidirectional_ is on → bit-identical default-off).
+        checkCuda(cudaMalloc(&d_foot_ring_, (size_t)max_objs_ * FOOT_RING_CAP * 3 * sizeof(float)));
+        checkCuda(cudaMalloc(&d_foot_len_, max_objs_ * sizeof(int)));
+        checkCuda(cudaMalloc(&d_ema_h_, max_objs_ * sizeof(float)));
+        checkCuda(cudaMalloc(&d_track_revived_, max_objs_ * sizeof(int)));
+        checkCuda(cudaMalloc(&d_bridge_claim_, max_objs_ * sizeof(int)));
+        checkCuda(cudaMalloc(&d_bridge_cand_lost_, max_objs_ * sizeof(int)));
+        checkCuda(cudaMemset(d_foot_len_, 0, max_objs_ * sizeof(int)));
+        checkCuda(cudaMemset(d_ema_h_, 0, max_objs_ * sizeof(float)));
+        checkCuda(cudaMemset(d_track_revived_, 0, max_objs_ * sizeof(int)));
+        checkCuda(cudaMemset(d_bridge_claim_, 0, max_objs_ * sizeof(int)));
 
         checkCuda(cudaMalloc(&d_has_clean_embedding_, max_objs_ * sizeof(bool)));
         checkCuda(cudaMalloc(&d_candidate_count_, max_objs_ * sizeof(int)));
@@ -1537,6 +2022,10 @@ public:
         cudaFree(d_matched_pairs_); cudaFree(d_new_slots_);
         cudaFree(d_state_); cudaFree(d_hit_streak_); cudaFree(d_confirm_streak_required_);
         cudaFree(d_score_sum_);
+        cudaFree(d_foot_ring_); cudaFree(d_foot_len_); cudaFree(d_ema_h_);
+        cudaFree(d_track_revived_); cudaFree(d_bridge_claim_); cudaFree(d_bridge_cand_lost_);
+        if (d_occ_grid_) cudaFree(d_occ_grid_);
+        if (d_occ_frame_) cudaFree(d_occ_frame_);
         cudaFree(d_has_clean_embedding_); cudaFree(d_candidate_count_);
         cudaFree(d_s_inv_);
         cudaFree(d_homography_);
@@ -1681,99 +2170,38 @@ public:
             track_thresh_,
             high_thresh_
         );
-        const int* matched_det_mask = nullptr;
 
-        if (enable_dda_) {
-            nvtxRangePushA("Assoc/S0_Unambiguous");
-            kernel::fused_sinkhorn_topk_kernel<<<max_objs_, 128, 0, stream>>>(
-                d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
-                max_objs_, num_dets, 30.0f, dda_max_cost_,
-                high_thresh_, 1.1f, 2,
-                nullptr, d_topk_indices_, d_topk_probs_
-            );
+        nvtxRangePushA("Assoc/SinkhornMultistage");
+        kernel::fused_sinkhorn_multistage_kernel<<<max_objs_, 128, 0, stream>>>(
+            d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
+            max_objs_, num_dets, 30.0f,
+            dda_max_cost_, match_thresh_, stage2_match_thresh_,
+            high_thresh_, effective_mid_thresh, track_thresh_,
+            sinkhorn_stage_stride_,
+            d_topk_indices_, d_topk_probs_);
+        nvtxRangePop();
+
+        auto run_stage = [&](int stage, const char* label) {
+            if (stage == 0 && !enable_dda_) return;
+            int off = stage * sinkhorn_stage_stride_;
+            nvtxRangePushA(label);
             checkCuda(cudaMemsetAsync(d_auction_prices_, 0, max_assoc_ * sizeof(uint64_t), stream));
             checkCuda(cudaMemsetAsync(d_pending_det_, -1, max_objs_ * sizeof(int), stream));
             kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
-                d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
+                d_topk_indices_ + off, d_topk_probs_ + off, d_auction_prices_,
+                d_trk_to_det_, d_det_to_trk_,
                 d_pending_det_, d_pending_bid_, max_objs_, num_dets, 3, 0.01f);
             kernel::commit_auction_results_kernel<<<auc_g, auc_b, 0, stream>>>(
                 d_auction_prices_, d_pending_det_, d_pending_bid_,
                 d_trk_to_det_, d_det_to_trk_, max_objs_);
             nvtxRangePop();
-            matched_det_mask = d_det_to_trk_;
-        }
+        };
 
-        nvtxRangePushA("Assoc/S1_HiConf");
-        kernel::fused_sinkhorn_topk_kernel<<<max_objs_, 128, 0, stream>>>(
-            d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
-            max_objs_, num_dets, 30.0f, match_thresh_,
-            high_thresh_, 1.1f, 2,
-            matched_det_mask,
-            d_topk_indices_, d_topk_probs_
-        );
-        checkCuda(cudaMemsetAsync(d_auction_prices_, 0, max_assoc_ * sizeof(uint64_t), stream));
-        checkCuda(cudaMemsetAsync(d_pending_det_, -1, max_objs_ * sizeof(int), stream));
-        kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
-            d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
-            d_pending_det_, d_pending_bid_, max_objs_, num_dets, 3, 0.01f);
-        kernel::commit_auction_results_kernel<<<auc_g, auc_b, 0, stream>>>(
-            d_auction_prices_, d_pending_det_, d_pending_bid_,
-            d_trk_to_det_, d_det_to_trk_, max_objs_);
-        nvtxRangePop();
-
-        nvtxRangePushA("Assoc/S1b_MidConf");
-        kernel::fused_sinkhorn_topk_kernel<<<max_objs_, 128, 0, stream>>>(
-            d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
-            max_objs_, num_dets, 30.0f, match_thresh_,
-            effective_mid_thresh - 0.001f, 1.1f, 2,
-            d_det_to_trk_,
-            d_topk_indices_, d_topk_probs_
-        );
-        checkCuda(cudaMemsetAsync(d_auction_prices_, 0, max_assoc_ * sizeof(uint64_t), stream));
-        checkCuda(cudaMemsetAsync(d_pending_det_, -1, max_objs_ * sizeof(int), stream));
-        kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
-            d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
-            d_pending_det_, d_pending_bid_, max_objs_, num_dets, 3, 0.01f);
-        kernel::commit_auction_results_kernel<<<auc_g, auc_b, 0, stream>>>(
-            d_auction_prices_, d_pending_det_, d_pending_bid_,
-            d_trk_to_det_, d_det_to_trk_, max_objs_);
-        nvtxRangePop();
-
-        nvtxRangePushA("Assoc/S1c_Tentative");
-        kernel::fused_sinkhorn_topk_kernel<<<max_objs_, 128, 0, stream>>>(
-            d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
-            max_objs_, num_dets, 30.0f, match_thresh_,
-            effective_mid_thresh, 1.1f, 1,
-            matched_det_mask,
-            d_topk_indices_, d_topk_probs_
-        );
-        checkCuda(cudaMemsetAsync(d_auction_prices_, 0, max_assoc_ * sizeof(uint64_t), stream));
-        checkCuda(cudaMemsetAsync(d_pending_det_, -1, max_objs_ * sizeof(int), stream));
-        kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
-            d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
-            d_pending_det_, d_pending_bid_, max_objs_, num_dets, 3, 0.01f);
-        kernel::commit_auction_results_kernel<<<auc_g, auc_b, 0, stream>>>(
-            d_auction_prices_, d_pending_det_, d_pending_bid_,
-            d_trk_to_det_, d_det_to_trk_, max_objs_);
-        nvtxRangePop();
-
-        nvtxRangePushA("Assoc/S2_LoConf");
-        kernel::fused_sinkhorn_topk_kernel<<<max_objs_, 128, 0, stream>>>(
-            d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
-            max_objs_, num_dets, 30.0f, stage2_match_thresh_,
-            track_thresh_, effective_mid_thresh, 2,
-            nullptr,
-            d_topk_indices_, d_topk_probs_
-        );
-        checkCuda(cudaMemsetAsync(d_auction_prices_, 0, max_assoc_ * sizeof(uint64_t), stream));
-        checkCuda(cudaMemsetAsync(d_pending_det_, -1, max_objs_ * sizeof(int), stream));
-        kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
-            d_topk_indices_, d_topk_probs_, d_auction_prices_, d_trk_to_det_, d_det_to_trk_,
-            d_pending_det_, d_pending_bid_, max_objs_, num_dets, 3, 0.01f);
-        kernel::commit_auction_results_kernel<<<auc_g, auc_b, 0, stream>>>(
-            d_auction_prices_, d_pending_det_, d_pending_bid_,
-            d_trk_to_det_, d_det_to_trk_, max_objs_);
-        nvtxRangePop();
+        run_stage(0, "Assoc/S0_Unambiguous");
+        run_stage(1, "Assoc/S1_HiConf");
+        run_stage(2, "Assoc/S1b_MidConf");
+        run_stage(3, "Assoc/S1c_Tentative");
+        run_stage(4, "Assoc/S2_LoConf");
 
         nvtxRangePushA("Assoc/StateUpdate");
         kernel::track_state_update_post_kernel<<<blocks, threads, 0, stream>>>(
@@ -1825,9 +2253,52 @@ public:
             d_track_id_ctr_, d_slot_cursor_,
             confirm_streak_, birth_low_score_thresh_,
             max_objs_, birth_prox_norm_thresh_,
-            d_revive, d_covs_);
+            d_revive, d_covs_,
+            bidirectional_ ? d_foot_len_ : nullptr,
+            bidirectional_ ? d_ema_h_ : nullptr,
+            bidirectional_ ? d_track_revived_ : nullptr);
         init_covariance_if_new_kernel<<<(max_objs_ + 255) / 256, 256, 0, stream>>>(
             d_active_, d_state_, d_hit_streak_, d_covs_, max_objs_);
+
+        // Phase-4 bidirectional foot-bridge relink (Kalman-free; default off →
+        // no kernel runs → bit-identical). Foot history must update after spawn
+        // (so newly-spawned candidates record this frame) and before the bridge;
+        // the bridge adopts the lost id before compact writes output ids. Both
+        // kernels use fixed grids + no host sync → CUDA-graph capture-safe.
+        if (bidirectional_) {
+            int grid = (max_objs_ + 255) / 256;
+            update_foot_history_kernel<<<grid, 256, 0, stream>>>(
+                d_active_, d_state_, d_age_, d_states_,
+                max_objs_, FOOT_RING_CAP, d_foot_ring_, d_foot_len_, d_ema_h_);
+            // Gap-occupancy grid (only when an occ gate is enabled; otherwise no
+            // kernel runs and the propose kernel sees occ_grid==nullptr →
+            // bit-identical). Rasterizes this frame's output set (confirmed,
+            // age==0), which the bridge commit below does not change.
+            bool occ_on = d_occ_grid_ != nullptr &&
+                          (occ_gate_cover_ > 0.0f || occ_expand_px_ > 0.0f);
+            if (occ_on) {
+                occupancy_update_kernel<<<1, 256, 0, stream>>>(
+                    d_active_, d_state_, d_age_, d_states_,
+                    max_objs_, frame_w_, frame_h_, d_occ_grid_, d_occ_frame_);
+            }
+            cudaMemsetAsync(d_bridge_claim_, 0, max_objs_ * sizeof(int), stream);
+            relink_bidir_propose_kernel<<<grid, 256, 0, stream>>>(
+                d_active_, d_state_, d_age_, d_hit_streak_,
+                d_trk_to_det_, d_track_ids_, d_states_, d_scores_,
+                d_foot_ring_, d_foot_len_, d_ema_h_,
+                max_objs_, FOOT_RING_CAP,
+                bridge_px_, bridge_at_, bridge_min_lost_, bridge_ttl_,
+                bridge_max_speed_, bridge_person_height_, bridge_fps_,
+                bridge_margin_, bridge_spatial_gate_, bridge_anchor_, bridge_anchor_rate_,
+                bridge_h_lo_, bridge_h_hi_,
+                occ_on ? d_occ_grid_ : nullptr, occ_on ? d_occ_frame_ : nullptr,
+                occ_gate_cover_, occ_gap_min_, occ_expand_px_, occ_expand_cover_,
+                frame_w_, frame_h_,
+                d_track_revived_, d_bridge_claim_, d_bridge_cand_lost_, d_relink_dbg_);
+            relink_bidir_commit_kernel<<<grid, 256, 0, stream>>>(
+                d_active_, d_track_ids_, max_objs_,
+                d_bridge_claim_, d_bridge_cand_lost_, d_relink_dbg_);
+        }
 
         // Compact: always launch
         cudaMemsetAsync(d_res_count_, 0, sizeof(int), stream);
@@ -1870,13 +2341,55 @@ public:
         reid_min_candidates_ = max(1, min_candidates);
     }
     void set_relink_params(bool enabled, int bank_cap, float sim_thresh,
-                           float cheb_lambda, float spatial_gate, int max_age) {
+                           float cheb_lambda, float spatial_gate, int max_age,
+                           bool bidirectional = false, float bridge_px = 0.25f,
+                           int bridge_at = 4, int bridge_min_lost = 2, int bridge_ttl = 120,
+                           float bridge_max_speed = 0.0f, float bridge_person_height = 1.65f,
+                           float bridge_fps = 30.0f, float bridge_margin = 0.0f,
+                           float bridge_spatial_gate = 0.0f, int bridge_anchor = 0,
+                           float bridge_anchor_rate = 0.0f,
+                           float bridge_h_lo = 0.0f, float bridge_h_hi = 0.0f,
+                           float occ_gate_cover = 0.0f, int occ_gap_min = 30,
+                           float occ_expand_px = 0.0f, float occ_expand_cover = 0.9f) {
         relink_enabled_ = enabled;
         relink_bank_cap_ = std::max(1, bank_cap);
         relink_sim_thresh_ = sim_thresh;
         relink_lambda_ = std::max(0.0f, cheb_lambda);
         relink_spatial_gate_ = std::max(0.0f, spatial_gate);
         relink_max_age_ = std::max(1, max_age);
+        // Phase-4 bidirectional foot-bridge params.
+        bidirectional_ = bidirectional;
+        bridge_px_ = std::max(0.0f, bridge_px);
+        bridge_at_ = std::max(1, bridge_at);
+        bridge_min_lost_ = std::max(0, bridge_min_lost);
+        bridge_ttl_ = std::max(1, bridge_ttl);
+        bridge_max_speed_ = std::max(0.0f, bridge_max_speed);
+        bridge_person_height_ = std::max(0.0f, bridge_person_height);
+        bridge_fps_ = bridge_fps > 0.0f ? bridge_fps : 30.0f;
+        bridge_margin_ = std::max(0.0f, bridge_margin);
+        bridge_spatial_gate_ = std::max(0.0f, bridge_spatial_gate);
+        bridge_anchor_ = (bridge_anchor < 0 || bridge_anchor > 2) ? 0 : bridge_anchor;
+        bridge_anchor_rate_ = std::max(0.0f, bridge_anchor_rate);
+        bridge_h_lo_ = std::max(0.0f, bridge_h_lo);
+        bridge_h_hi_ = std::max(0.0f, bridge_h_hi);
+        occ_gate_cover_ = std::clamp(occ_gate_cover, 0.0f, 1.0f);
+        occ_gap_min_ = std::max(1, occ_gap_min);
+        occ_expand_px_ = std::max(0.0f, occ_expand_px);
+        occ_expand_cover_ = std::clamp(occ_expand_cover, 0.0f, 1.0f);
+        // Occupancy ring (~72 KB): lazily allocated only when an occ gate is on.
+        if (bidirectional_ && (occ_gate_cover_ > 0.0f || occ_expand_px_ > 0.0f) &&
+            d_occ_grid_ == nullptr) {
+            checkCuda(cudaMalloc(&d_occ_grid_, (size_t)OCC_RING * OCC_WORDS * sizeof(unsigned int)));
+            checkCuda(cudaMalloc(&d_occ_frame_, sizeof(int)));
+            checkCuda(cudaMemset(d_occ_grid_, 0, (size_t)OCC_RING * OCC_WORDS * sizeof(unsigned int)));
+            checkCuda(cudaMemset(d_occ_frame_, 0, sizeof(int)));
+        }
+        // The bridge writes bridge_attempts/accepts into d_relink_dbg_[2..3]; make
+        // sure the debug buffer exists even if the appearance bank is disabled.
+        if (bidirectional_ && d_relink_dbg_ == nullptr) {
+            checkCuda(cudaMalloc(&d_relink_dbg_, 4 * sizeof(int)));
+            checkCuda(cudaMemset(d_relink_dbg_, 0, 4 * sizeof(int)));
+        }
         if (enabled && d_relink_feats_ == nullptr) {
             int cap = relink_bank_cap_;
             checkCuda(cudaMalloc(&d_relink_feats_, (size_t)cap * embed_dim_ * sizeof(float)));
@@ -1886,18 +2399,21 @@ public:
             checkCuda(cudaMalloc(&d_relink_valid_, cap * sizeof(int)));
             checkCuda(cudaMalloc(&d_relink_cursor_, sizeof(int)));
             checkCuda(cudaMalloc(&d_det_revive_id_, max_assoc_ * sizeof(int)));
-            checkCuda(cudaMalloc(&d_relink_dbg_, 2 * sizeof(int)));
+            if (d_relink_dbg_ == nullptr) {  // may already exist if bidirectional was enabled first
+                checkCuda(cudaMalloc(&d_relink_dbg_, 4 * sizeof(int)));
+                checkCuda(cudaMemset(d_relink_dbg_, 0, 4 * sizeof(int)));
+            }
             checkCuda(cudaMemset(d_relink_valid_, 0, cap * sizeof(int)));
             checkCuda(cudaMemset(d_relink_lostage_, 0, cap * sizeof(int)));
             checkCuda(cudaMemset(d_relink_cursor_, 0, sizeof(int)));
-            checkCuda(cudaMemset(d_relink_dbg_, 0, 2 * sizeof(int)));
         }
     }
-    // Debug: (archived, birth_candidates, revived) accumulated over the sequence.
+    // Debug accumulated over the sequence:
+    //   [0]=archived(cursor) [1]=births [2]=revived [3]=bridge_attempts [4]=bridge_accepts
     std::vector<int> get_relink_debug() {
-        std::vector<int> out(3, 0);
+        std::vector<int> out(5, 0);
         if (d_relink_cursor_) checkCuda(cudaMemcpy(out.data(), d_relink_cursor_, sizeof(int), cudaMemcpyDeviceToHost));
-        if (d_relink_dbg_) checkCuda(cudaMemcpy(out.data() + 1, d_relink_dbg_, 2 * sizeof(int), cudaMemcpyDeviceToHost));
+        if (d_relink_dbg_) checkCuda(cudaMemcpy(out.data() + 1, d_relink_dbg_, 4 * sizeof(int), cudaMemcpyDeviceToHost));
         return out;
     }
     void set_oao_params(float tau) {
@@ -2182,6 +2698,13 @@ public:
         return candidates;
     }
 
+    TrackerGPUBuffers get_gpu_buffers() const {
+        return {reinterpret_cast<uintptr_t>(d_states_),
+                reinterpret_cast<uintptr_t>(d_covs_),
+                reinterpret_cast<uintptr_t>(d_track_ids_),
+                max_objs_};
+    }
+
 private:
     int required_confirm_streak_for_detection(float score, float mid_thresh_scale) const {
         if (!adaptive_confirmation_) return confirm_streak_;
@@ -2210,7 +2733,36 @@ private:
     int*   d_relink_valid_ = nullptr;
     int*   d_relink_cursor_ = nullptr;
     int*   d_det_revive_id_ = nullptr;
-    int*   d_relink_dbg_ = nullptr;  // [0]=birth candidates, [1]=revived (debug)
+    int*   d_relink_dbg_ = nullptr;  // [0]=births [1]=revived [2]=bridge_attempts [3]=bridge_accepts
+
+    // Phase-4 bidirectional foot-bridge relink (Kalman-free; default off → no work).
+    static constexpr int FOOT_RING_CAP = 8;
+    bool  bidirectional_        = false;
+    float bridge_px_            = 0.25f;
+    int   bridge_at_            = 4;
+    int   bridge_min_lost_      = 2;
+    int   bridge_ttl_           = 120;
+    float bridge_max_speed_     = 0.0f;
+    float bridge_person_height_ = 1.65f;
+    float bridge_fps_           = 30.0f;
+    float bridge_margin_        = 0.0f;
+    float bridge_spatial_gate_  = 0.0f;
+    int   bridge_anchor_        = 0;    // 0=center 1=foot 2=adaptive (residual-weighted)
+    float bridge_anchor_rate_   = 0.0f; // adaptive deformation gate (mean |Δh|/h̄); 0=always-on
+    float bridge_h_lo_          = 0.0f; // scale gate: min ema_lost/ema_cand ratio
+    float bridge_h_hi_          = 0.0f; // scale gate: max ratio (<=0 disables the gate)
+    float occ_gate_cover_       = 0.0f; // gap-occupancy veto: min occ_cover (0=off)
+    int   occ_gap_min_          = 30;   // occ gates apply only to gaps >= this (short-gap occ is noise)
+    float occ_expand_px_        = 0.0f; // tiered expansion: looser bridge_px when occ high (0=off)
+    float occ_expand_cover_     = 0.9f; // min occ_cover to unlock the expanded threshold
+    float* d_foot_ring_     = nullptr;  // [max_objs * FOOT_RING_CAP * 3]  (cx,cy,h) chronological
+    int*   d_foot_len_      = nullptr;  // [max_objs]  saturating count (cap FOOT_RING_CAP)
+    float* d_ema_h_         = nullptr;  // [max_objs]  EMA box height (0 = unseeded)
+    int*   d_track_revived_ = nullptr;  // [max_objs]  fire-once flag per track life
+    int*   d_bridge_claim_  = nullptr;  // [max_objs]  per-frame atomicMax claim key on a lost slot
+    int*   d_bridge_cand_lost_ = nullptr;  // [max_objs]  per-frame: candidate's chosen lost slot (-1)
+    unsigned int* d_occ_grid_  = nullptr;  // [OCC_RING * OCC_WORDS]  per-frame occupancy bitmaps
+    int*   d_occ_frame_        = nullptr;  // device frame counter for the occupancy ring
 
     bool enable_quality_scaling_ = false;
     float q_w_aspect_ = 0.50f;
@@ -2239,6 +2791,7 @@ private:
     float *d_cost_matrix_, *d_sinkhorn_v_, *d_topk_probs_;
     uint64_t *d_auction_prices_;
     int *d_topk_indices_, *d_trk_to_det_, *d_det_to_trk_;
+    int sinkhorn_stage_stride_ = 0;
     int *d_matched_pairs_, *d_new_slots_;
     int *d_state_, *d_hit_streak_, *d_confirm_streak_required_;
     float *d_score_sum_;
@@ -2300,8 +2853,21 @@ void GPUByteTracker::set_reid_min_candidates(int min_candidates) {
     pimpl_->set_reid_min_candidates(min_candidates);
 }
 void GPUByteTracker::set_relink_params(bool enabled, int bank_cap, float sim_thresh,
-                                       float cheb_lambda, float spatial_gate, int max_age) {
-    pimpl_->set_relink_params(enabled, bank_cap, sim_thresh, cheb_lambda, spatial_gate, max_age);
+                                       float cheb_lambda, float spatial_gate, int max_age,
+                                       bool bidirectional, float bridge_px, int bridge_at,
+                                       int bridge_min_lost, int bridge_ttl, float bridge_max_speed,
+                                       float bridge_person_height, float bridge_fps,
+                                       float bridge_margin, float bridge_spatial_gate,
+                                       int bridge_anchor, float bridge_anchor_rate,
+                                       float bridge_h_lo, float bridge_h_hi,
+                                       float occ_gate_cover, int occ_gap_min,
+                                       float occ_expand_px, float occ_expand_cover) {
+    pimpl_->set_relink_params(enabled, bank_cap, sim_thresh, cheb_lambda, spatial_gate, max_age,
+                              bidirectional, bridge_px, bridge_at, bridge_min_lost, bridge_ttl,
+                              bridge_max_speed, bridge_person_height, bridge_fps, bridge_margin,
+                              bridge_spatial_gate, bridge_anchor, bridge_anchor_rate,
+                              bridge_h_lo, bridge_h_hi,
+                              occ_gate_cover, occ_gap_min, occ_expand_px, occ_expand_cover);
 }
 std::vector<int> GPUByteTracker::get_relink_debug() { return pimpl_->get_relink_debug(); }
 void GPUByteTracker::set_oao_params(float tau) {
@@ -2339,6 +2905,7 @@ std::vector<TrackStateSnapshot> GPUByteTracker::get_state_snapshots(cudaStream_t
 std::vector<TrackStateSnapshot> GPUByteTracker::get_motion_snapshots_for_track_ids(const std::vector<int>& track_ids, cudaStream_t stream) {
     return pimpl_->get_motion_snapshots_for_track_ids(track_ids, stream);
 }
+TrackerGPUBuffers GPUByteTracker::get_gpu_buffers() const { return pimpl_->get_gpu_buffers(); }
 std::vector<TrackCandidateSnapshot> GPUByteTracker::get_tentative_candidates(cudaStream_t stream) { return pimpl_->get_tentative_candidates(stream); }
 
 __device__ float get_iou_device(const float* b1, const float* b2) {

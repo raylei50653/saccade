@@ -72,6 +72,7 @@ class CandidateAppearanceUpdate:
     suspect_box: bool
     aspect_ratio: float = 0.0
     bank_quality_score: float = 0.0
+    box: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
 
 
 @dataclass(frozen=True)

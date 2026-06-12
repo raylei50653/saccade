@@ -449,3 +449,34 @@ def test_interpolate_multiple_tracks() -> None:
     result, stats = interpolate_tracklets(lines, max_gap=5, min_track_len=2)
     # Track 1 has gap, track 2 does not
     assert stats["tracks_interpolated"] >= 0
+
+
+def test_interpolate_min_h_filter() -> None:
+    lines = [
+        "1,1,0.0,0.0,10.0,100.0,0.9",
+        "5,1,40.0,20.0,10.0,100.0,0.9",
+        "1,2,0.0,0.0,10.0,30.0,0.9",
+        "5,2,40.0,20.0,10.0,30.0,0.9",
+    ]
+    result, stats = interpolate_tracklets(lines, max_gap=5, min_track_len=2, min_h=60)
+    # Track 1 (h=100) should be interpolated, Track 2 (h=30 < 60) should not
+    assert stats["gaps_filled"] == 1
+    assert stats["tracks_interpolated"] == 1
+
+
+def test_interpolate_min_h_both_sides() -> None:
+    lines = [
+        "1,1,0.0,0.0,10.0,100.0,0.9",
+        "5,1,40.0,20.0,10.0,30.0,0.9",
+    ]
+    result, stats = interpolate_tracklets(lines, max_gap=5, min_track_len=2, min_h=60)
+    assert stats["gaps_filled"] == 0
+
+
+def test_interpolate_min_h_zero_default() -> None:
+    lines = [
+        "1,1,0.0,0.0,10.0,30.0,0.9",
+        "5,1,40.0,20.0,10.0,30.0,0.9",
+    ]
+    result, stats = interpolate_tracklets(lines, max_gap=5, min_track_len=2)
+    assert stats["gaps_filled"] == 1
