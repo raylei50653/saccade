@@ -28,6 +28,7 @@ def test_run_sequence_worker_releases_init_lock_on_success(monkeypatch) -> None:
         "saccade.perception.multistream_mamba_server.MambaStreamProxy",
         _FakeProxy,
     )
+    monkeypatch.setattr(multi_stream.torch.cuda, "Stream", lambda: object())
     monkeypatch.setattr(
         multi_stream.torch.cuda, "stream", lambda _stream: nullcontext()
     )
@@ -55,6 +56,7 @@ def test_run_sequence_worker_releases_init_lock_on_error(monkeypatch) -> None:
         "saccade.perception.multistream_mamba_server.MambaStreamProxy",
         _FakeProxy,
     )
+    monkeypatch.setattr(multi_stream.torch.cuda, "Stream", lambda: object())
     monkeypatch.setattr(
         multi_stream.torch.cuda, "stream", lambda _stream: nullcontext()
     )

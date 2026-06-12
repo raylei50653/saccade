@@ -254,6 +254,8 @@ class TestNv12Kernel:
 
     def test_y_plane_equals_bt601_luma(self) -> None:
         """Verify Y plane == BT.601 luma (0.299R + 0.587G + 0.114B)."""
+        if not torch.cuda.is_available():
+            pytest.skip("CUDA required")
         h, w = 256, 256
         rgb_src = _build_test_rgb(h, w)
         nv12_buf, y_pitch, _, _, _ = _rgb_to_nv12(rgb_src)
