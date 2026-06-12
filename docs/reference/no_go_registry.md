@@ -1,8 +1,7 @@
-# Saccade NO-GO 全局登記表 (Global NO-GO Registry)
+# Saccade NO-GO / 已結案方向總結
 
-> **用途**：跨模組「已結案/已踩雷方向」總覽，避免重複探索。每列只記結論一行，數據細節以對應模組的 `research/` 或 `decisions/` ADR 為準。
-> 彙整自 `decisions/`、`modules/*/README.md`、`archive/`、`reference/PIPELINE_REFERENCE.md`、`TODO.md`（路徑相對 `docs/`）。
-> 最後更新：2026-06-12
+> 彙整自 `docs/decisions/`、`docs/modules/*/README.md`、`docs/archive/`、`PIPELINE_REFERENCE.md`、`docs/TODO.md`
+> 最後更新：2026-06-06
 
 ---
 
@@ -45,9 +44,6 @@
 | 28 | Mamba temporal block (SSM, v15/17) | 2026-05-31 | ❌ NO-GO | R1→R2 grad 崩潰無法收斂 |
 | 29 | Per-channel SSM A + MOT20 mix | 2026-06-01 | ❌ NO-GO | DetA 退化 -1.8pp（domain shift） |
 | 30 | Cheb-GR standalone (Market-1501) | 2026-06-03 | ❌ 方法成立但不優於 fixed-k | +8.76pp vs classic +10.03pp |
-| 31 | Relink bridge **scale gate** (speed 方向) | 2026-06-11 | ❌ NO-GO | MOT17-SDP 小幅正向但速度方向全線死；P0 L_med 復核不重現 |
-| 32 | **Appearance relink gate**（顏色直方圖 + OSNet hard pool） | 2026-06-11 | ❌ **結案** | 全 gate AUC≈0.50、短 gap 反向 0.33；外觀方向結案 |
-| 33 | **occ_cover live relink**（gap-path 占用門） | 2026-06-11 | ❌ NO-GO | live accepts 全 gap≤1；長 gap 族群被 track_buffer=30 結構性消滅；tb90 解鎖反 −0.8 IDF1 |
 
 ## NO-GO 的結構性根因
 
@@ -58,8 +54,6 @@
 3. **「密集 = FP 多」假設錯誤**：MOT17 中高密度場景是真實人多，非 FP。以 density 為信號的 filtering 策略必然傷 recall。
 
 4. **時序資訊難進特徵層**：Mamba temporal block（v15/v17）、per-channel SSM A 全部退步。R1→R2 grad 崩潰無法收斂。
-
-5. **Relink gate 的訊號天花板**：幾何/運動殘差對「真 vs 假橋接」AUC≈0.55（近隨機），外觀 gate AUC≈0.50；scale/occ/appearance gate 一律死在門作用區或被 `track_buffer=30` 結構性消滅。長 gap（80+）目前無單一可靠訊號 — 唯一已驗證正向是 GPU 雙向橋接本身（見 GO 表）。
 
 ---
 
@@ -72,7 +66,6 @@
 | **GPUByteTracker + Sinkhorn-Auction** | ✅ default ON | 關聯延遲 0.67ms (10x 提升) |
 | **Async ReID** | ✅ default ON | +2.6% FPS, 零精度損失 |
 | **Pipeline Relink** | ✅ default ON | +2.5% FPS |
-| **GPU 雙向橋接 Relink** (px=0.25 + scale gate) | ✅ preset default ON | IDF1 +2.1, AssA +2.8, IDs −13.6%, FP −14%（06-11 全指標嚴格優勢） |
 | **FP Hard Filter** (area=40000) | ✅ default ON | FP 移除 9021, TP 移除僅 153 |
 | **Kalman R Scale** (0.75) | ✅ default ON | — |
 | **Detection Quality Scaling** | ✅ default ON | geometry-aware score boost |

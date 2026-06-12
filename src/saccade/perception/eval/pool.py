@@ -1,5 +1,6 @@
+from typing import Any, Union
+
 import torch
-from typing import Union
 
 
 def rgb_hwc_to_nv12_gpu(rgb: torch.Tensor) -> torch.Tensor:
@@ -105,7 +106,7 @@ class AdaptiveFramePool:
             [0.0, 0.0, 0.0, 320.0, 320.0, 320.0], device=device, dtype=torch.float32
         ).view(6, 1, 1)
 
-    def _import_nv12_ops(self) -> tuple[object | None, object | None]:
+    def _import_nv12_ops(self) -> tuple[Any | None, Any | None]:
         try:
             from saccade_tracking_ext import (
                 nv12_to_chw_letterbox,

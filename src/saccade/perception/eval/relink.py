@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 from dataclasses import dataclass
-from typing import Dict, List, Tuple, Optional, Any, Set
+from typing import Dict, List, Tuple, Optional, Any, Set, cast
 
 from .motion_model import MotionModel, MotionModelRegistry
 
@@ -1152,6 +1152,7 @@ class PythonSemanticRelinker:
                 elif self.buffer_size > 1:
                     sim = self._buffer_sim(cid, emb)
                 else:
+                    assert _sim_iter is not None
                     sim = next(_sim_iter)
 
                 # Hard appearance gate: raw cosine must still pass sim_threshold.
@@ -1486,7 +1487,7 @@ class PythonSemanticRelinker:
         j = self._gate_col.get(cid)
         if i is None or j is None:
             return None
-        return self._gate_tbl[i, j]
+        return cast(np.ndarray, self._gate_tbl[i, j])
 
     def resolve_many(
         self,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, cast
+from typing import Any, Callable, Optional, cast
 
 import cv2
 import numpy as np
@@ -99,11 +99,11 @@ class PyGraphedGMC:
         self._captured = False
         self.h_orig = 0
         self.w_orig = 0
-        self.prev_gray = None
-        self.warp_out = None
-        self._graphed = None
+        self.prev_gray: Optional[torch.Tensor] = None
+        self.warp_out: Optional[torch.Tensor] = None
+        self._graphed: Optional[Callable[..., Any]] = None
         self._last_pcr = 0.0
-        self._fg_boxes = None
+        self._fg_boxes: Optional[torch.Tensor] = None
 
     def ensure_buffers(self, h_orig: int, w_orig: int, device: torch.device) -> None:
         if self._captured and self.h_orig == h_orig and self.w_orig == w_orig:
@@ -175,7 +175,9 @@ class PyGraphedGMC:
             torch.cuda.synchronize()
             pg.zero_()
 
-            def _graph_fn(frame_chw, pg_in, warp_out):
+            def _graph_fn(
+                frame_chw: torch.Tensor, pg_in: torch.Tensor, warp_out: torch.Tensor
+            ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
                 gray_ds = F.interpolate(
                     frame_chw.unsqueeze(0), size=(hds, wds), mode="nearest"
                 ).squeeze(0)
@@ -257,6 +259,11 @@ class PyGraphedGMC:
                     self._frame_buf[:, iy1 : iy2 + 1, ix1 : ix2 + 1] = 0.0
             self._fg_boxes = None
 
+        assert (
+            self._graphed is not None
+            and self.prev_gray is not None
+            and self.warp_out is not None
+        )
         warp_out, pg_out, ratio_out = self._graphed(
             self._frame_buf, self.prev_gray, self.warp_out
         )
@@ -267,13 +274,18 @@ class PyGraphedGMC:
     def estimate(self, frame_tensor: torch.Tensor) -> Optional[torch.Tensor]:
         h, w = frame_tensor.shape[-2], frame_tensor.shape[-1]
         self.ensure_buffers(h, w, frame_tensor.device)
+        assert (
+            self._graphed is not None
+            and self.prev_gray is not None
+            and self.warp_out is not None
+        )
         self._frame_buf.copy_(frame_tensor)
         warp_out, pg_out, ratio_out = self._graphed(
             self._frame_buf, self.prev_gray, self.warp_out
         )
         self.prev_gray.copy_(pg_out)
         self._last_pcr = ratio_out.item()
-        return warp_out.clone()
+        return cast(torch.Tensor, warp_out.clone())
 
     def apply(self, frame_tensor: torch.Tensor) -> Optional[torch.Tensor]:
         return self.estimate(frame_tensor)

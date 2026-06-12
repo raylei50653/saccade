@@ -87,7 +87,7 @@ def materialize_gpu_track_results_async(
         pinned["classes"].copy_(result_buffers["classes"], non_blocking=True)
     if include_det_idx:
         pinned["det_idx"].copy_(result_buffers["det_idx"], non_blocking=True)
-    event = torch.cuda.Event(enable_timing=False)
+    event = torch.cuda.Event(enable_timing=False)  # type: ignore[no-untyped-call]
     event.record(torch.cuda.current_stream())
     return event, pinned
 

@@ -83,7 +83,7 @@ def _run_sequence_worker(
     from saccade.perception.multistream_mamba_server import MambaStreamProxy
 
     proxy = MambaStreamProxy(server, stream_id=seq)
-    worker_stream = proxy.stream or torch.cuda.Stream()
+    worker_stream = proxy.stream or torch.cuda.Stream()  # type: ignore[no-untyped-call]
 
     import saccade.perception.eval.evaluator as _eval_mod
 
@@ -93,7 +93,7 @@ def _run_sequence_worker(
     try:
         with torch.cuda.stream(worker_stream):
             result = run_eval_single(
-                detector=proxy,
+                detector=proxy,  # type: ignore[arg-type]
                 sequences=seq,
                 profile_stages=profile_stages,
                 **{
@@ -216,7 +216,7 @@ class MultiStreamRunner:
 
         import saccade.perception.eval.evaluator as _eval_mod
 
-        _eval_mod._graph_capture_lock = _graph_capture_lock
+        _eval_mod._graph_capture_lock = _graph_capture_lock  # type: ignore[assignment]
         _eval_mod._worker_init_lock = threading.Lock()
         try:
             for wave_idx, wave in enumerate(
@@ -272,7 +272,6 @@ class MultiStreamRunner:
             split=_ek.get("split", "train"),
             output=str(_ek.get("output", "results/MOT17_eval")),
             sequences=all_seqs,
-            max_frames=_ek.get("max_frames"),
         )
         if metrics:
             print("\n=== OVERALL METRICS ===")

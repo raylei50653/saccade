@@ -623,7 +623,7 @@ class GPUByteTracker:
     ) -> None:
         setter = getattr(self.tracker, "set_relink_params", None)
         if setter is not None:
-            setter(
+            base_args = (
                 enabled,
                 bank_cap,
                 sim_thresh,
@@ -644,11 +644,17 @@ class GPUByteTracker:
                 bridge_anchor_rate,
                 bridge_h_lo,
                 bridge_h_hi,
-                occ_gate_cover,
-                occ_gap_min,
-                occ_expand_px,
-                occ_expand_cover,
             )
+            try:
+                setter(
+                    *base_args,
+                    occ_gate_cover,
+                    occ_gap_min,
+                    occ_expand_px,
+                    occ_expand_cover,
+                )
+            except TypeError:
+                setter(*base_args)
 
     def get_relink_debug(self) -> list[int]:
         getter = getattr(self.tracker, "get_relink_debug", None)
