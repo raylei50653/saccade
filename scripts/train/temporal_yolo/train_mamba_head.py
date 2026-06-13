@@ -51,6 +51,7 @@ from saccade.perception.temporal_yolo.yolo_gated_detector import (  # noqa: E402
 )
 from saccade.perception.temporal_yolo.mamba_head import MambaDetectionHead  # noqa: E402
 from saccade.perception.temporal_yolo.training_utils import (  # noqa: E402
+    build_warmup_cosine_scheduler,
     seed_everything,
     sha256_file,
 )
@@ -577,6 +578,12 @@ def main() -> None:
     )
     parser.add_argument("--resume", default="")
     parser.add_argument(
+        "--warmup-epochs",
+        type=int,
+        default=5,
+        help="Linear warmup epochs before cosine decay (0 = no warmup)",
+    )
+    parser.add_argument(
         "--precompute-dir",
         default="",
         help="Precompute teacher FPN features for all frames and exit",
@@ -657,8 +664,10 @@ def main() -> None:
     # Optimizer
     # ------------------------------------------------------------------
     optimizer = torch.optim.AdamW(student.parameters(), lr=args.lr, weight_decay=1e-4)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=args.epochs, eta_min=args.lr * 0.01
+    scheduler = build_warmup_cosine_scheduler(
+        optimizer,
+        total_epochs=args.epochs,
+        warmup_epochs=args.warmup_epochs,
     )
     start_epoch = 1
     best_loss = float("inf")
@@ -674,11 +683,6 @@ def main() -> None:
         best_loss = ckpt.get("best_loss", float("inf"))
         if "scheduler" in ckpt:
             scheduler.load_state_dict(ckpt["scheduler"])
-            if scheduler.T_max != args.epochs:
-                print(
-                    f"[Resume] Overriding scheduler.T_max from {scheduler.T_max} to {args.epochs}"
-                )
-                scheduler.T_max = args.epochs
         else:
             scheduler.last_epoch = start_epoch - 1
         print(
@@ -777,6 +781,7 @@ def main() -> None:
     accum = args.accum_steps
     for epoch in range(start_epoch, args.epochs + 1):
         epoch_loss = 0.0
+        epoch_lr = optimizer.param_groups[0]["lr"]
         t0 = time.time()
 
         optimizer.zero_grad(set_to_none=True)
@@ -866,6 +871,10 @@ def main() -> None:
                         )
 
             batch_loss = batch_loss / (T * accum)
+            if not torch.isfinite(batch_loss):
+                raise FloatingPointError(
+                    f"Non-finite loss at epoch={epoch} batch={i + 1}"
+                )
             batch_loss.backward()
 
             if (i + 1) % accum == 0:
@@ -890,7 +899,7 @@ def main() -> None:
         dt = time.time() - t0
         print(
             f"  epoch {epoch:3d}  loss={avg_loss:.4f}  time={dt:.0f}s  "
-            f"lr={scheduler.get_last_lr()[0]:.2e}"
+            f"lr={epoch_lr:.2e}"
         )
 
         is_best = avg_loss < best_loss
@@ -904,6 +913,8 @@ def main() -> None:
                 "optimizer": optimizer.state_dict(),
                 "scheduler": scheduler.state_dict(),
                 "best_loss": best_loss,
+                "epoch_loss": avg_loss,
+                "epoch_lr": epoch_lr,
                 "args": vars(args),
                 "mamba_args": {
                     "d_model": args.d_model,
