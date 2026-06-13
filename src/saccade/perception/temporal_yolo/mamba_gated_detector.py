@@ -450,6 +450,7 @@ class MambaGatedDetector(nn.Module):
             detail_channels=mamba_args.get("detail_channels", 32),
             detail_patch_size=mamba_args.get("detail_patch_size", 3),
             detail_feature_channels=mamba_args.get("detail_feature_channels", 0),
+            use_flatten=mamba_args.get("use_flatten", False),
         ).to(device)
         sd = {
             k.replace("._orig_mod.", "."): v for k, v in mamba_state["student"].items()

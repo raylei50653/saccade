@@ -698,6 +698,7 @@ class MambaDetectionHead(nn.Module):
         per_channel_a: bool = False,  # per-channel SSM A (d_inner, N); warm-starts from shared (1, N)
         scan_stop_grad: bool = False,  # detach scan output (v14 frozen-SSM training regime)
         use_cuda_graph: bool = False,  # enable CUDA Graph capture and replay
+        use_flatten: bool = False,  # skip downsample/upsample — flatten full FPN resolution
         use_detail_fusion: bool = False,
         detail_channels: int = 32,
         detail_patch_size: int = 3,
@@ -718,17 +719,21 @@ class MambaDetectionHead(nn.Module):
         self.per_channel_a = per_channel_a
         self.scan_stop_grad = scan_stop_grad
         self.use_detail_fusion = use_detail_fusion
-        self.upsample_loaded = (
-            use_pixel_shuffle  # Default to True if initialized to use it
-        )
+        self.use_flatten = use_flatten
+        self.upsample_loaded = use_pixel_shuffle and not use_flatten
 
         self.input_proj = nn.ModuleList([nn.Conv2d(c, d_model, 1) for c in in_channels])
-        self.downsample = nn.ModuleList(
-            [
-                nn.Conv2d(d_model, d_model, spatial_reduction, stride=spatial_reduction)
-                for _ in range(self.nl)
-            ]
-        )
+        if not use_flatten:
+            self.downsample = nn.ModuleList(
+                [
+                    nn.Conv2d(
+                        d_model, d_model, spatial_reduction, stride=spatial_reduction
+                    )
+                    for _ in range(self.nl)
+                ]
+            )
+        else:
+            self.downsample = nn.ModuleList([nn.Identity() for _ in range(self.nl)])
 
         self.mamba_blocks = nn.ModuleList(
             [
@@ -842,7 +847,9 @@ class MambaDetectionHead(nn.Module):
             )
 
         # P1: PixelShuffle learned upsampler layer (with 3x3 conv for spatial feature integration)
-        if use_pixel_shuffle:
+        if use_flatten:
+            self.upsample = nn.ModuleList([nn.Identity() for _ in range(self.nl)])
+        elif use_pixel_shuffle:
             self.upsample = nn.ModuleList(
                 [
                     nn.Sequential(
@@ -1132,9 +1139,13 @@ class MambaDetectionHead(nn.Module):
                     x_seq = block(x_seq) + x_seq
                 x_up = x_seq.transpose(1, 2).reshape(B_merged, -1, Hs, Ws)
 
-            if self.use_pixel_shuffle and getattr(self, "upsample_loaded", False):
+            if (
+                self.use_pixel_shuffle
+                and getattr(self, "upsample_loaded", False)
+                and not self.use_flatten
+            ):
                 x_up = self.upsample[i](x_up)
-            else:
+            elif not self.use_flatten:
                 x_up = F.interpolate(
                     x_up, size=(H, W), mode="bilinear", align_corners=False
                 )

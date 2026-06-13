@@ -576,6 +576,11 @@ def main() -> None:
         help="Detach the selective-scan output during training (v14 historical "
         "regime: SSM internals frozen at init; only gate/readout/heads learn).",
     )
+    parser.add_argument(
+        "--flatten",
+        action="store_true",
+        help="Skip downsample/upsample — flatten full FPN resolution into Mamba.",
+    )
     parser.add_argument("--resume", default="")
     parser.add_argument(
         "--warmup-epochs",
@@ -653,6 +658,7 @@ def main() -> None:
         use_temporal_mamba=args.use_temporal_mamba,
         scan_stop_grad=args.scan_stop_grad,
         use_temporal_attention=getattr(args, "use_temporal_attention", False),
+        use_flatten=args.flatten,
     ).to(device)
     student.train()
 
@@ -930,6 +936,7 @@ def main() -> None:
                         args, "use_temporal_attention", False
                     ),
                     "scan_stop_grad": args.scan_stop_grad,
+                    "use_flatten": args.flatten,
                 },
             },
             run_dir,

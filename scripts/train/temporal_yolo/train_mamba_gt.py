@@ -257,6 +257,11 @@ def main() -> None:
     parser.add_argument("--detail-channels", type=int, default=32)
     parser.add_argument("--detail-patch-size", type=int, default=3)
     parser.add_argument(
+        "--flatten",
+        action="store_true",
+        help="Skip downsample/upsample — flatten full FPN resolution into Mamba.",
+    )
+    parser.add_argument(
         "--per-channel-a",
         action="store_true",
         help="Per-channel SSM A (d_inner, N) instead of shared (1, N). "
@@ -450,6 +455,7 @@ def main() -> None:
     use_detail_fusion = args.detail_source != "none"
     mamba_args["use_detail_fusion"] = use_detail_fusion
     mamba_args["detail_source"] = args.detail_source
+    mamba_args["use_flatten"] = args.flatten
     if use_detail_fusion:
         mamba_args["detail_channels"] = args.detail_channels
         mamba_args["detail_patch_size"] = args.detail_patch_size
@@ -482,6 +488,7 @@ def main() -> None:
         detail_channels=mamba_args.get("detail_channels", 32),
         detail_patch_size=mamba_args.get("detail_patch_size", 3),
         detail_feature_channels=mamba_args.get("detail_feature_channels", 0),
+        use_flatten=mamba_args.get("use_flatten", False),
     ).to(device)
     sd = _strip_compiled_keys(mamba_state["student"])
     # per_channel_a from a shared-A base warm-starts via A_log broadcast; relax
@@ -921,6 +928,7 @@ def main() -> None:
                         "detail_feature_channels": mamba_args.get(
                             "detail_feature_channels", 0
                         ),
+                        "use_flatten": mamba_args.get("use_flatten", False),
                         "detail_height": mamba_args.get(
                             "detail_height", args.detail_height
                         ),
