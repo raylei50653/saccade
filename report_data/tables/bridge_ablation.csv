@@ -1,0 +1,5 @@
+experiment,description,IDF1,MOTA,HOTA,DetA,AssA,IDs,FP,FN,FPS,result_dir
+bridge_off,"interpolation on, bridge relink off",73.026,76.814,66.548,69.747,63.770,558,4092,21387,222.35,results/MOT17_bridge_off
+bridge_on,speed-weighted bridge with scale and margin gates,75.144,77.668,68.187,70.044,66.648,482,3514,21082,223.01,results/MOT17_bridge_on
+scale_gate_baseline,bridge baseline before scale gate,74.439,77.616,67.561,70.013,65.462,495,3634,21008,181.17,results/MOT17_baseline_rerun
+scale_gate_on,bridge plus height-ratio scale gate,74.580,77.645,67.701,70.039,65.705,489,3560,21055,176.90,results/MOT17_ablation_scale_gate

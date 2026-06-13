@@ -10,6 +10,7 @@
 | [option-e-v2-design.md](option-e-v2-design.md) | Quality-Gated Temporal Feature Fusion | GO (MOTA 54.2%) |
 | [option-f-mamba-head.md](option-f-mamba-head.md) | Mamba SSM Detection Head | active prototype |
 | [mamba-head-training.md](mamba-head-training.md) | Mamba head 完整訓練流程（distill→GT-ft、版本譜系、高解析重訓）| reference |
+| [mamba-v14r-training-protocol.md](mamba-v14r-training-protocol.md) | v14-R canonical protocol、split/seed、選模與 provenance 規範 | canonical |
 | [research/mamba-dual-resolution-original-detail-plan.md](research/mamba-dual-resolution-original-detail-plan.md) | 640 Mamba global + 原始解析度 detail branch 研究計畫 | proposed |
 
 ## 設計演進總覽
@@ -56,7 +57,7 @@ Option B  →  Option C  →  Option D  →  Option E  →  Option E-v2  →  Op
 
 | 模組 | 內容 |
 |------|------|
-| `training_utils.py` | `save_checkpoint`, `load_checkpoint`, `strip_compiled_keys` |
+| `training_utils.py` | checkpoint、seed/split、warmup+cosine、RNG resume、artifact hash |
 | `box_utils.py` | `xyxy_to_cxcywh_norm`, `make_yolo_batch`, `build_gate_inputs` |
 | `train_config.py` | `TrainingConfig`, `add_common_training_args`, `build_optimizer_and_scheduler` |
 | `data_pipeline.py` | `DataPreloader`, `FeatureCache`, `resize_letterbox_float` |

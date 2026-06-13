@@ -1026,6 +1026,21 @@ def merge_cross_tile_duplicates_fast(
     )
 
 
+def _detect_raw_with_optional_detail(
+    detector: Any,
+    model_input: torch.Tensor,
+    original_frame: torch.Tensor,
+) -> torch.Tensor:
+    if not getattr(detector, "use_detail_fusion", False):
+        return detector.detect_raw(model_input)
+    if (
+        getattr(detector, "use_whole_graph", False)
+        and getattr(detector, "_trt_backbone", None) is not None
+    ):
+        return detector.detect_raw(original_frame)
+    return detector.detect_raw_with_detail(model_input, original_frame)
+
+
 def detect_single_patch_640(
     detector: Any,
     pool: Any,
@@ -1039,6 +1054,9 @@ def detect_single_patch_640(
         and getattr(detector, "_trt_backbone", None) is not None
     )
     if _use_whole and "letterbox" not in preprocess_modes:
+        if getattr(detector, "use_detail_fusion", False):
+            raw_dets = detector.detect_raw(pool.frame_buffer.unsqueeze(0))
+            return raw_dets[0, :, :4], raw_dets[0, :, 4], raw_dets[0, :, 5]
         if getattr(pool, "use_nv12", False):
             canvas = pool.prepare_canvas_640_stretch(h_orig, w_orig)
             raw_dets = detector.detect_raw_preprocessed(canvas.unsqueeze(0))
@@ -1084,7 +1102,11 @@ def detect_single_patch_640(
                 img_resized
             )
 
-        raw_dets = detector.detect_raw(pool.canvas_640p.unsqueeze(0))
+        raw_dets = _detect_raw_with_optional_detail(
+            detector,
+            pool.canvas_640p.unsqueeze(0),
+            pool.frame_buffer.unsqueeze(0),
+        )
         boxes = _decode_detector_boxes(raw_dets[0, :, :4], detector_box_format)
         scores = raw_dets[0, :, 4]
         classes = raw_dets[0, :, 5]
@@ -1100,7 +1122,11 @@ def detect_single_patch_640(
         align_corners=False,
     )
     pool.canvas_640p.copy_(img_input[0])
-    raw_dets = detector.detect_raw(img_input)
+    raw_dets = _detect_raw_with_optional_detail(
+        detector,
+        img_input,
+        pool.frame_buffer.unsqueeze(0),
+    )
     boxes = _decode_detector_boxes(raw_dets[0, :, :4], detector_box_format)
     scores = raw_dets[0, :, 4]
     classes = raw_dets[0, :, 5]
@@ -1139,7 +1165,11 @@ def detect_single_patch_960(
                 conf_threshold=0.0,
             )
         else:
-            raw_dets = detector.detect_raw(pool.canvas_960p.unsqueeze(0))
+            raw_dets = _detect_raw_with_optional_detail(
+                detector,
+                pool.canvas_960p.unsqueeze(0),
+                pool.frame_buffer.unsqueeze(0),
+            )
             boxes = _decode_detector_boxes(raw_dets[0, :, :4], detector_box_format)
             scores = raw_dets[0, :, 4]
             classes = raw_dets[0, :, 5]
@@ -1168,7 +1198,11 @@ def detect_single_patch_960(
             conf_threshold=0.0,
         )
     else:
-        raw_dets = detector.detect_raw(img_input)
+        raw_dets = _detect_raw_with_optional_detail(
+            detector,
+            img_input,
+            pool.frame_buffer.unsqueeze(0),
+        )
         boxes = _decode_detector_boxes(raw_dets[0, :, :4], detector_box_format)
         scores = raw_dets[0, :, 4]
         classes = raw_dets[0, :, 5]

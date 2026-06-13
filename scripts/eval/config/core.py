@@ -167,6 +167,8 @@ def add_core_args(parser: argparse.ArgumentParser) -> None:
             "mamba_whole_graph",
             "mamba_eager_1024",
             "mamba_eager_1024_full",
+            "mamba_detail_b2_native_p3",
+            "mamba_eager_temporal_probe",
             "fpn_reid_baseline",
         ),
         default=None,

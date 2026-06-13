@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 from saccade.perception.temporal_yolo.mamba_head import MambaDetectionHead
 
 
@@ -87,3 +88,184 @@ def test_mamba_head_state_dict_fallback():
     cls_preds, reg_preds = model_new(feats)
     assert cls_preds[0].shape == (B, 80, 80, 80)
     assert reg_preds[0].shape == (B, 4, 80, 80)
+
+
+def test_detail_fusion_is_identity_at_initialization():
+    torch.manual_seed(7)
+    base = MambaDetectionHead(
+        in_channels=(8, 16, 32),
+        d_model=8,
+        d_state=4,
+        num_blocks=1,
+        num_classes=1,
+        spatial_reduction=2,
+    )
+    detail = MambaDetectionHead(
+        in_channels=(8, 16, 32),
+        d_model=8,
+        d_state=4,
+        num_blocks=1,
+        num_classes=1,
+        spatial_reduction=2,
+        use_detail_fusion=True,
+        detail_channels=8,
+    )
+    detail.load_state_dict(base.state_dict(), strict=False)
+    base.eval()
+    detail.eval()
+
+    feats = [
+        torch.randn(2, 8, 16, 16),
+        torch.randn(2, 16, 8, 8),
+        torch.randn(2, 32, 4, 4),
+    ]
+    detail_images = torch.randn(2, 3, 48, 80)
+    valid_hw = torch.tensor([[48, 80], [32, 64]])
+
+    with torch.no_grad():
+        base_cls, base_reg = base(feats)
+        detail_cls, detail_reg = detail(
+            feats,
+            detail_images=detail_images,
+            detail_valid_hw=valid_hw,
+        )
+
+    for expected, actual in zip(base_cls + base_reg, detail_cls + detail_reg):
+        torch.testing.assert_close(actual, expected)
+
+
+def test_detail_fusion_projection_receives_gradients():
+    model = MambaDetectionHead(
+        in_channels=(8, 16, 32),
+        d_model=8,
+        d_state=4,
+        num_blocks=1,
+        num_classes=1,
+        spatial_reduction=2,
+        use_detail_fusion=True,
+        detail_channels=8,
+    )
+    feats = [
+        torch.randn(1, 8, 16, 16),
+        torch.randn(1, 16, 8, 8),
+        torch.randn(1, 32, 4, 4),
+    ]
+    detail_images = torch.randn(1, 3, 48, 80)
+    cls_preds, reg_preds = model(
+        feats,
+        detail_images=detail_images,
+        detail_valid_hw=torch.tensor([[40, 64]]),
+    )
+    (cls_preds[0].sum() + reg_preds[0].sum()).backward()
+
+    assert model.detail_fusion is not None
+    assert model.detail_fusion.cls_proj.weight.grad is not None
+    assert model.detail_fusion.reg_proj.weight.grad is not None
+    assert model.detail_fusion.cls_proj.weight.grad.abs().sum() > 0
+    assert model.detail_fusion.reg_proj.weight.grad.abs().sum() > 0
+
+
+def test_detail_encoder_can_copy_matching_yolo_stem():
+    class Stem(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.conv = nn.Conv2d(3, 8, 3, stride=2, padding=1, bias=False)
+            self.bn = nn.BatchNorm2d(8)
+
+    model = MambaDetectionHead(
+        in_channels=(8, 16, 32),
+        d_model=8,
+        d_state=4,
+        num_blocks=1,
+        use_detail_fusion=True,
+        detail_channels=8,
+    )
+    stem = Stem()
+    with torch.no_grad():
+        stem.conv.weight.fill_(0.25)
+        stem.bn.weight.fill_(0.75)
+
+    assert model.initialize_detail_from_yolo_stem(stem)
+    assert model.detail_fusion is not None
+    torch.testing.assert_close(model.detail_fusion.encoder[0].weight, stem.conv.weight)
+    torch.testing.assert_close(model.detail_fusion.encoder[1].weight, stem.bn.weight)
+
+
+def test_wide_detail_encoder_preserves_yolo_stem_warm_start():
+    class Stem(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.conv = nn.Conv2d(3, 32, 3, stride=2, padding=1, bias=False)
+            self.bn = nn.BatchNorm2d(32)
+
+    model = MambaDetectionHead(
+        in_channels=(8, 16, 32),
+        d_model=8,
+        d_state=4,
+        num_blocks=1,
+        use_detail_fusion=True,
+        detail_channels=64,
+    )
+    stem = Stem()
+
+    assert model.initialize_detail_from_yolo_stem(stem)
+    assert model.detail_fusion is not None
+    assert model.detail_fusion.encoder[0].out_channels == 32
+    assert model.detail_fusion.encoder[3].in_channels == 32
+    assert model.detail_fusion.encoder[3].out_channels == 64
+    torch.testing.assert_close(model.detail_fusion.encoder[0].weight, stem.conv.weight)
+
+
+def test_external_p3_detail_feature_path_is_identity_and_trainable():
+    base = MambaDetectionHead(
+        in_channels=(8, 16, 32),
+        d_model=8,
+        d_state=4,
+        num_blocks=1,
+        num_classes=1,
+        spatial_reduction=2,
+    )
+    oracle = MambaDetectionHead(
+        in_channels=(8, 16, 32),
+        d_model=8,
+        d_state=4,
+        num_blocks=1,
+        num_classes=1,
+        spatial_reduction=2,
+        use_detail_fusion=True,
+        detail_channels=8,
+        detail_feature_channels=12,
+    )
+    oracle.load_state_dict(base.state_dict(), strict=False)
+    feats = [
+        torch.randn(1, 8, 16, 16),
+        torch.randn(1, 16, 8, 8),
+        torch.randn(1, 32, 4, 4),
+    ]
+    native_p3 = torch.randn(1, 12, 12, 20)
+    valid_hw = torch.tensor([[80, 144]])
+
+    base.eval()
+    oracle.eval()
+    with torch.no_grad():
+        expected_cls, expected_reg = base(feats)
+        actual_cls, actual_reg = oracle(
+            feats,
+            detail_features=native_p3,
+            detail_valid_hw=valid_hw,
+            detail_feature_stride=8,
+        )
+    for expected, actual in zip(expected_cls + expected_reg, actual_cls + actual_reg):
+        torch.testing.assert_close(actual, expected)
+
+    oracle.train()
+    cls_preds, reg_preds = oracle(
+        feats,
+        detail_features=native_p3,
+        detail_valid_hw=valid_hw,
+        detail_feature_stride=8,
+    )
+    (cls_preds[0].sum() + reg_preds[0].sum()).backward()
+    assert oracle.detail_fusion is not None
+    assert oracle.detail_fusion.feature_adapter is not None
+    assert oracle.detail_fusion.cls_proj.weight.grad is not None

@@ -19,6 +19,8 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
+import shlex
 import sys
 import time
 from pathlib import Path
@@ -48,6 +50,15 @@ from saccade.perception.temporal_yolo.yolo_gated_detector import (  # noqa: E402
     _GATE_LAYER_IDX,
 )
 from saccade.perception.temporal_yolo.mamba_head import MambaDetectionHead  # noqa: E402
+from saccade.perception.temporal_yolo.training_utils import (  # noqa: E402
+    seed_everything,
+    sha256_file,
+)
+
+
+CACHE_SCHEMA = "mamba-teacher-cache-v2"
+CACHE_SCALES = ("p3", "p4", "p5")
+CACHE_MANIFEST = "manifest.json"
 
 
 # ---------------------------------------------------------------------------
@@ -72,18 +83,105 @@ def _strip_compiled_keys(sd: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Feature precomputation
 # ---------------------------------------------------------------------------
+def _cache_required_keys() -> set[str]:
+    return {
+        key for scale in CACHE_SCALES for key in (scale, f"cls_{scale}", f"reg_{scale}")
+    }
+
+
+def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    tmp_path.replace(path)
+
+
+def _validate_cache_manifest(
+    cache_dir: Path,
+    expected: dict[str, Any],
+    *,
+    require_complete: bool,
+) -> dict[str, Any]:
+    manifest_path = cache_dir / CACHE_MANIFEST
+    if not manifest_path.is_file():
+        raise ValueError(
+            f"Missing cache manifest: {manifest_path}. Legacy feature-only caches "
+            "are not accepted; rebuild with build_mamba_teacher_cache.sh."
+        )
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    mismatches = {
+        key: (manifest.get(key), value)
+        for key, value in expected.items()
+        if manifest.get(key) != value
+    }
+    if mismatches:
+        raise ValueError(f"Cache manifest mismatch: {mismatches}")
+    if require_complete and manifest.get("status") != "complete":
+        raise ValueError(f"Cache is not complete: status={manifest.get('status')!r}")
+    return manifest
+
+
+def _forward_teacher_backbone(
+    teacher: nn.Module,
+    frame: torch.Tensor,
+) -> list[torch.Tensor]:
+    """Run YOLO through P5 without executing the Detect layer."""
+    layers = teacher.yolo_model.model
+    save: set[int] = set(teacher.yolo_model.save)
+    saved: list[torch.Tensor | None] = []
+    x: Any = frame
+    for i in range(23):
+        layer = layers[i]
+        if layer.f != -1:
+            if isinstance(layer.f, int):
+                x = saved[layer.f]
+            else:
+                x = [x if source == -1 else saved[source] for source in layer.f]
+        x = layer(x)
+        saved.append(x if i in save else None)
+    return [saved[_GATE_LAYER_IDX[scale]] for scale in CACHE_SCALES]  # type: ignore[list-item]
+
+
 def _precompute_teacher_features(
     loader: Any,
     out_dir: Path,
     device: torch.device,
     teacher: nn.Module,
-    fpn_feats: dict[str, torch.Tensor],
+    manifest_base: dict[str, Any],
 ) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     dataset: Any = loader.dataset
     img_cache: dict = dataset._img_cache
     frame_lists: dict = dataset._frame_lists
     sequences: list[str] = dataset.sequences
+    detect_head = teacher.yolo_model.model[-1]
+    expected_manifest = {
+        **manifest_base,
+        "schema": CACHE_SCHEMA,
+        "sequences": sequences,
+    }
+    manifest_path = out_dir / CACHE_MANIFEST
+    existing_files = any(out_dir.glob("*/*.pt"))
+    if manifest_path.exists():
+        _validate_cache_manifest(
+            out_dir,
+            expected_manifest,
+            require_complete=False,
+        )
+    elif existing_files:
+        raise ValueError(
+            f"{out_dir} contains cache files without {CACHE_MANIFEST}. "
+            "Use a new cache directory to avoid mixing lineages."
+        )
+    _write_json_atomic(
+        manifest_path,
+        {
+            **expected_manifest,
+            "status": "building",
+        },
+    )
 
     total = sum(len(paths) for paths in frame_lists.values())
     done = 0
@@ -99,24 +197,27 @@ def _precompute_teacher_features(
             fid = int(fpath.stem)
             cache_path = out_dir / seq / f"{fid:06d}.pt"
             if cache_path.exists():
-                skipped += 1
-                continue
+                existing = torch.load(cache_path, map_location="cpu", weights_only=True)
+                if _cache_required_keys().issubset(existing):
+                    skipped += 1
+                    continue
 
             img = seq_imgs[i].float().to(device) / 255.0
             img = img.unsqueeze(0)
 
             with torch.no_grad():
-                fpn_feats.clear()
-                _ = teacher(img, gate_input=None)
+                features = _forward_teacher_backbone(teacher, img)
+                teacher_cls = [detect_head.cv3[si](features[si]) for si in range(3)]
+                teacher_reg = [detect_head.cv2[si](features[si]) for si in range(3)]
 
-            torch.save(
-                {
-                    "p3": fpn_feats["p3"].squeeze(0).cpu().half(),
-                    "p4": fpn_feats["p4"].squeeze(0).cpu().half(),
-                    "p5": fpn_feats["p5"].squeeze(0).cpu().half(),
-                },
-                cache_path,
-            )
+            cached = {
+                scale: features[si].squeeze(0).cpu().half()
+                for si, scale in enumerate(CACHE_SCALES)
+            }
+            for si, scale in enumerate(CACHE_SCALES):
+                cached[f"cls_{scale}"] = teacher_cls[si].squeeze(0).cpu().half()
+                cached[f"reg_{scale}"] = teacher_reg[si].squeeze(0).cpu().half()
+            torch.save(cached, cache_path)
 
             done += 1
             if done % 100 == 0 or done == 1:
@@ -130,6 +231,22 @@ def _precompute_teacher_features(
                 )
 
     elapsed = time.time() - t0
+    frame_counts = {seq: len(list((out_dir / seq).glob("*.pt"))) for seq in sequences}
+    expected_counts = {seq: len(frame_lists[seq]) for seq in sequences}
+    if frame_counts != expected_counts:
+        raise RuntimeError(
+            f"Cache frame-count mismatch: actual={frame_counts}, "
+            f"expected={expected_counts}"
+        )
+    _write_json_atomic(
+        manifest_path,
+        {
+            **expected_manifest,
+            "status": "complete",
+            "frame_counts": frame_counts,
+            "total_frames": sum(frame_counts.values()),
+        },
+    )
     print(
         f"  [Precompute] Done: {done} new + {skipped} skipped in {elapsed:.0f}s "
         f"-> {out_dir}"
@@ -139,9 +256,7 @@ def _precompute_teacher_features(
 # ---------------------------------------------------------------------------
 # Feature loading helper (shared by temporal and per-frame training)
 # ---------------------------------------------------------------------------
-_feature_ram_cache: dict[
-    str, dict[int, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]
-] = {}
+_feature_ram_cache: dict[str, dict[int, dict[str, torch.Tensor]]] = {}
 _gmc_cache: dict[str, torch.Tensor] = {}  # seq -> (N, 2, 3) affine matrices
 _flow_grid_cache: dict[tuple[int, int], torch.Tensor] = {}  # (H,W) -> (3, H*W) coords
 _affine_cum_cache: dict[
@@ -262,11 +377,12 @@ def _preload_feature_cache(cache_dir: Path, device: torch.device) -> None:
         except Exception:
             pass
 
-    # We need at least 20 GB of VRAM to hold 14.8 GB of features and train safely.
-    # If total VRAM is less than 20 GB (e.g. 12 GB), cache in CPU RAM directly to prevent OOM.
-    if total_vram > 0 and total_vram < 20 * 1024**3:
+    # The full 640 cache is about 28 GB with FPN features and teacher targets.
+    # Keep it in CPU RAM unless the GPU has room for the cache plus training.
+    if total_vram > 0 and total_vram < 40 * 1024**3:
         print(
-            f"[FeatureCache] GPU VRAM ({total_vram / 1024**3:.1f} GB) is < 20 GB. Defaulting to CPU RAM to prevent OOM/swapping."
+            f"[FeatureCache] GPU VRAM ({total_vram / 1024**3:.1f} GB) is "
+            "< 40 GB. Defaulting to CPU RAM to prevent OOM/swapping."
         )
         target_device = torch.device("cpu")
     else:
@@ -276,13 +392,13 @@ def _preload_feature_cache(cache_dir: Path, device: torch.device) -> None:
     try:
         for sd in seq_dirs:
             seq_name = sd.name
-            seq_cache: dict[int, tuple[torch.Tensor, torch.Tensor, torch.Tensor]] = {}
+            seq_cache: dict[int, dict[str, torch.Tensor]] = {}
             for pt_file in sorted(sd.glob("*.pt")):
                 fid = int(pt_file.stem)
                 feat = torch.load(
                     pt_file, map_location=target_device, weights_only=True
                 )
-                seq_cache[fid] = (feat["p3"], feat["p4"], feat["p5"])
+                seq_cache[fid] = feat
                 done += 1
                 if done % 500 == 0:
                     print(f"  {done}/{total}", flush=True)
@@ -310,7 +426,7 @@ def _preload_feature_cache(cache_dir: Path, device: torch.device) -> None:
                 for pt_file in sorted(sd.glob("*.pt")):
                     fid = int(pt_file.stem)
                     feat = torch.load(pt_file, map_location="cpu", weights_only=True)
-                    seq_cache[fid] = (feat["p3"], feat["p4"], feat["p5"])
+                    seq_cache[fid] = feat
                     done += 1
                     if done % 500 == 0:
                         print(f"  {done}/{total}", flush=True)
@@ -323,53 +439,78 @@ def _preload_feature_cache(cache_dir: Path, device: torch.device) -> None:
             raise e
 
 
-def _load_or_forward_feats(
+def _split_cached_teacher_frame(
+    cached: dict[str, torch.Tensor],
+) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
+    missing = sorted(_cache_required_keys().difference(cached))
+    if missing:
+        raise ValueError(
+            "Feature cache is missing precomputed teacher targets "
+            f"{missing}. Regenerate it with --precompute-dir; cached training "
+            "must not run the YOLO Detect head each epoch."
+        )
+    return (
+        [cached[scale] for scale in CACHE_SCALES],
+        [cached[f"cls_{scale}"] for scale in CACHE_SCALES],
+        [cached[f"reg_{scale}"] for scale in CACHE_SCALES],
+    )
+
+
+def _load_or_forward_teacher(
     batch: dict[str, Any],
     t: int,
     cache_dir: Path | None,
     device: torch.device,
     teacher: nn.Module,
-    fpn_feats: dict[str, torch.Tensor],
-) -> list[torch.Tensor]:
+    detect_head: nn.Module,
+) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
     B = batch["frames"].shape[0]
     if cache_dir is not None and _feature_ram_cache:
-        p3s, p4s, p5s = [], [], []
+        batch_cached: list[dict[str, torch.Tensor]] = []
         for b in range(B):
             seq: str = batch["seq"][b]  # type: ignore[index]
             fid: int = batch["frame_ids"][b][t]  # type: ignore[index]
-            p3, p4, p5 = _feature_ram_cache[seq][fid]
-            p3s.append(p3)
-            p4s.append(p4)
-            p5s.append(p5)
-        return [
-            torch.stack(p3s).to(device, dtype=torch.float32),
-            torch.stack(p4s).to(device, dtype=torch.float32),
-            torch.stack(p5s).to(device, dtype=torch.float32),
-        ]
+            batch_cached.append(_feature_ram_cache[seq][fid])
     elif cache_dir is not None:
-        p3s, p4s, p5s = [], [], []
+        batch_cached = []
         for b in range(B):
             seq = batch["seq"][b]  # type: ignore[index]
             fid = batch["frame_ids"][b][t]  # type: ignore[index]
-            feat = torch.load(
-                cache_dir / seq / f"{fid:06d}.pt",
-                map_location="cpu",
-                weights_only=True,
+            batch_cached.append(
+                torch.load(
+                    cache_dir / seq / f"{fid:06d}.pt",
+                    map_location="cpu",
+                    weights_only=True,
+                )
             )
-            p3s.append(feat["p3"])
-            p4s.append(feat["p4"])
-            p5s.append(feat["p5"])
-        return [
-            torch.stack(p3s).to(device, dtype=torch.float32),
-            torch.stack(p4s).to(device, dtype=torch.float32),
-            torch.stack(p5s).to(device, dtype=torch.float32),
-        ]
     else:
         frame = batch["frames"][:, t].to(device, dtype=torch.float32) / 255.0
-        fpn_feats.clear()
         with torch.no_grad():
-            _ = teacher(frame, gate_input=None)
-        return [fpn_feats[s] for s in ("p3", "p4", "p5")]
+            features = _forward_teacher_backbone(teacher, frame)
+            teacher_cls = [
+                detect_head.cv3[si](features[si]) for si in range(len(features))
+            ]
+            teacher_reg = [
+                detect_head.cv2[si](features[si]) for si in range(len(features))
+            ]
+        return features, teacher_cls, teacher_reg
+
+    split = [_split_cached_teacher_frame(cached) for cached in batch_cached]
+    feature_samples, cls_samples, reg_samples = zip(*split, strict=True)
+
+    def stack_scales(samples: tuple[list[torch.Tensor], ...]) -> list[torch.Tensor]:
+        return [
+            torch.stack([sample[si] for sample in samples]).to(
+                device, dtype=torch.float32
+            )
+            for si in range(3)
+        ]
+
+    return (
+        stack_scales(feature_samples),
+        stack_scales(cls_samples),
+        stack_scales(reg_samples),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -386,6 +527,13 @@ def main() -> None:
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--img-size", type=int, default=640)
     parser.add_argument("--clip-len", type=int, default=1)
+    parser.add_argument(
+        "--clip-stride",
+        type=int,
+        default=0,
+        help="Clip start stride. 0 uses 1 for temporal Mamba, otherwise clip_len.",
+    )
+    parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--spatial-reduction", type=int, default=4)
     parser.add_argument("--d-model", type=int, default=128)
     parser.add_argument("--d-state", type=int, default=16)
@@ -421,6 +569,12 @@ def main() -> None:
         action="store_true",
         help="spatio-temporal SSM across T frames",
     )
+    parser.add_argument(
+        "--scan-stop-grad",
+        action="store_true",
+        help="Detach the selective-scan output during training (v14 historical "
+        "regime: SSM internals frozen at init; only gate/readout/heads learn).",
+    )
     parser.add_argument("--resume", default="")
     parser.add_argument(
         "--precompute-dir",
@@ -440,6 +594,10 @@ def main() -> None:
 
     args = parser.parse_args()
 
+    if args.clip_stride < 0:
+        parser.error("--clip-stride must be >= 0")
+    seed_everything(args.seed)
+
     if args.use_temporal_mamba and args.clip_len < 2:
         args.clip_len = 3
         print(f"[Temporal] Auto-setting --clip-len={args.clip_len}")
@@ -457,11 +615,12 @@ def main() -> None:
         freeze_backbone=True,
         img_size=args.img_size,
     )
+    teacher_ckpt = project_root / args.teacher_ckpt if args.teacher_ckpt else None
     teacher = build_gated_yolo_detector(
         str(project_root / args.yolo_weights),
         cfg=cfg,
         device=device,
-        weights_path=str(project_root / args.teacher_ckpt),
+        weights_path=str(teacher_ckpt) if teacher_ckpt is not None else "",
     )
     teacher.eval()
     for p in teacher.parameters():
@@ -485,6 +644,7 @@ def main() -> None:
         use_cross_scan=args.use_cross_scan,
         use_hybrid_head=args.use_hybrid_head,
         use_temporal_mamba=args.use_temporal_mamba,
+        scan_stop_grad=args.scan_stop_grad,
         use_temporal_attention=getattr(args, "use_temporal_attention", False),
     ).to(device)
     student.train()
@@ -492,17 +652,6 @@ def main() -> None:
     n_params = sum(p.numel() for p in student.parameters())
     n_trainable = sum(p.numel() for p in student.parameters() if p.requires_grad)
     print(f"  Params: {n_params:,} total  {n_trainable:,} trainable")
-
-    # Hooks to capture FPN features from teacher forward pass
-    fpn_feats: dict[str, torch.Tensor] = {}
-    _hooks = []
-    for scale in ("p3", "p4", "p5"):
-        idx = _GATE_LAYER_IDX[scale]
-
-        def _capture(_m: nn.Module, _i: Any, _o: torch.Tensor, s: str = scale) -> None:
-            fpn_feats[s] = _o
-
-        _hooks.append(teacher.yolo_model.model[idx].register_forward_hook(_capture))
 
     # ------------------------------------------------------------------
     # Optimizer
@@ -548,24 +697,39 @@ def main() -> None:
         clip_len=args.clip_len,
         img_size=args.img_size,
         batch_size=args.batch_size,
-        stride=1 if args.use_temporal_mamba else args.clip_len * 2,
+        stride=args.clip_stride or (1 if args.use_temporal_mamba else args.clip_len),
         shuffle=not args.use_temporal_mamba,
         seqs=args.seqs.split(",") if args.seqs else None,
+        preload_to_ram=not bool(args.cache_dir),
+        load_images=not bool(args.cache_dir),
+        seed=args.seed,
     )
 
     # ------------------------------------------------------------------
     # Precompute mode: extract and cache teacher FPN features, then exit
     # ------------------------------------------------------------------
     if args.precompute_dir:
+        yolo_weights = project_root / args.yolo_weights
+        manifest_base = {
+            "img_size": args.img_size,
+            "resize_mode": "stretch",
+            "gate_input": None,
+            "dtype": "float16",
+            "base_yolo_path": args.yolo_weights,
+            "base_yolo_sha256": sha256_file(yolo_weights),
+            "teacher_checkpoint_path": args.teacher_ckpt,
+            "teacher_checkpoint_sha256": (
+                sha256_file(teacher_ckpt) if teacher_ckpt is not None else ""
+            ),
+            "command": shlex.join(sys.argv),
+        }
         _precompute_teacher_features(
             loader,
             project_root / args.precompute_dir,
             device,
             teacher,
-            fpn_feats,
+            manifest_base,
         )
-        for h in _hooks:
-            h.remove()
         return
 
     # ------------------------------------------------------------------
@@ -573,6 +737,31 @@ def main() -> None:
     # ------------------------------------------------------------------
     cache_dir = Path(args.cache_dir) if args.cache_dir else None
     if cache_dir:
+        if not cache_dir.is_absolute():
+            cache_dir = project_root / cache_dir
+        expected_manifest = {
+            "schema": CACHE_SCHEMA,
+            "img_size": args.img_size,
+            "resize_mode": "stretch",
+            "gate_input": None,
+            "dtype": "float16",
+            "base_yolo_path": args.yolo_weights,
+            "base_yolo_sha256": sha256_file(project_root / args.yolo_weights),
+            "teacher_checkpoint_path": args.teacher_ckpt,
+            "teacher_checkpoint_sha256": (
+                sha256_file(teacher_ckpt) if teacher_ckpt is not None else ""
+            ),
+            "sequences": list(loader.dataset.sequences),  # type: ignore[attr-defined]
+        }
+        manifest = _validate_cache_manifest(
+            cache_dir,
+            expected_manifest,
+            require_complete=True,
+        )
+        print(
+            f"[Cache] Verified {manifest['total_frames']} frames, "
+            f"schema={manifest['schema']}"
+        )
         print(f"[Cache] Loading precomputed teacher features from {cache_dir}")
         _preload_feature_cache(cache_dir, device)
         gmc_path = cache_dir / "gmc_matrices_cpp.pt"
@@ -604,13 +793,18 @@ def main() -> None:
                 all_t_reg: list[list[torch.Tensor]] = [[], [], []]
 
                 for t in range(T):
-                    feats = _load_or_forward_feats(
-                        batch, t, cache_dir, device, teacher, fpn_feats
+                    feats, t_cls, t_reg = _load_or_forward_teacher(
+                        batch,
+                        t,
+                        cache_dir,
+                        device,
+                        teacher,
+                        detect_head,
                     )
                     for si in range(3):
                         all_feats[si].append(feats[si])
-                        all_t_cls[si].append(detect_head.cv3[si](feats[si]))
-                        all_t_reg[si].append(detect_head.cv2[si](feats[si]))
+                        all_t_cls[si].append(t_cls[si])
+                        all_t_reg[si].append(t_reg[si])
 
                 if _gmc_cache:
                     last_t = T - 1
@@ -654,12 +848,14 @@ def main() -> None:
                         )
             else:
                 for t in range(T):
-                    feats = _load_or_forward_feats(
-                        batch, t, cache_dir, device, teacher, fpn_feats
+                    feats, t_cls, t_reg = _load_or_forward_teacher(
+                        batch,
+                        t,
+                        cache_dir,
+                        device,
+                        teacher,
+                        detect_head,
                     )
-
-                    t_cls = [detect_head.cv3[si](feats[si]) for si in range(len(feats))]
-                    t_reg = [detect_head.cv2[si](feats[si]) for si in range(len(feats))]
 
                     s_cls, s_reg = student(feats)
 
@@ -722,6 +918,7 @@ def main() -> None:
                     "use_temporal_attention": getattr(
                         args, "use_temporal_attention", False
                     ),
+                    "scan_stop_grad": args.scan_stop_grad,
                 },
             },
             run_dir,
@@ -729,8 +926,6 @@ def main() -> None:
             is_best,
         )
 
-    for h in _hooks:
-        h.remove()
     print(f"Done. Best loss: {best_loss:.4f}")
 
 

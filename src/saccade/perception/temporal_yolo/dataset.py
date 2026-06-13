@@ -49,7 +49,9 @@ class MOT17TemporalClip(
         seqs: list[str] | None = None,
         detector: str | None = "SDP",
         preload_to_ram: bool = True,
+        load_images: bool = True,
         use_letterbox: bool = False,
+        detail_size: tuple[int, int] | None = None,
     ):
         self.data_root = Path(data_root)
         self.split = split
@@ -57,6 +59,10 @@ class MOT17TemporalClip(
         self.img_size = img_size
         self.stride = stride
         self.use_letterbox = use_letterbox
+        self.detail_size = detail_size
+        self.load_images = load_images
+        if not load_images and detail_size is not None:
+            raise ValueError("detail_size requires load_images=True")
 
         split_dir = self.data_root / split
         if seqs is not None:
@@ -156,7 +162,7 @@ class MOT17TemporalClip(
 
         # Preload all frames as uint8 (3, H, W) — eliminates JPEG decode at getitem time.
         self._img_cache: dict[str, list[torch.Tensor]] | None = None
-        if preload_to_ram:
+        if preload_to_ram and load_images:
             self._img_cache = self._preload_images()
 
     def _preload_images(self) -> dict[str, list[torch.Tensor]]:
@@ -238,6 +244,8 @@ class MOT17TemporalClip(
         gt_boxes_list: list[torch.Tensor] = []
         gt_ids_list: list[torch.Tensor] = []
         fids: list[int] = []
+        detail_frames_list: list[torch.Tensor] = []
+        detail_valid_hw_list: list[torch.Tensor] = []
 
         frame_paths = self._frame_lists[seq]
         if self.use_letterbox:
@@ -248,18 +256,34 @@ class MOT17TemporalClip(
         for t in range(self.clip_len):
             frame_id = int(frame_paths[start + t].stem)
 
-            if self._img_cache is not None:
-                img = self._img_cache[seq][start + t]  # uint8 (3, H, W)
-            else:
-                if self.use_letterbox:
-                    img = _load_and_resize(
-                        frame_paths[start + t], self.img_size, True, scale, pad_h, pad_w
-                    )
+            if self.load_images:
+                if self._img_cache is not None:
+                    img = self._img_cache[seq][start + t]  # uint8 (3, H, W)
                 else:
-                    img = _load_and_resize(
-                        frame_paths[start + t], self.img_size, False, scale_h, scale_w
-                    )
-            frames_list.append(img)
+                    if self.use_letterbox:
+                        img = _load_and_resize(
+                            frame_paths[start + t],
+                            self.img_size,
+                            True,
+                            scale,
+                            pad_h,
+                            pad_w,
+                        )
+                    else:
+                        img = _load_and_resize(
+                            frame_paths[start + t],
+                            self.img_size,
+                            False,
+                            scale_h,
+                            scale_w,
+                        )
+                frames_list.append(img)
+            if self.detail_size is not None:
+                detail_img, valid_hw = _load_detail_view(
+                    frame_paths[start + t], self.detail_size
+                )
+                detail_frames_list.append(detail_img)
+                detail_valid_hw_list.append(valid_hw)
 
             gt = self._gt[seq].get(
                 frame_id, (torch.zeros(0, 4), torch.zeros(0, dtype=torch.int64))
@@ -276,13 +300,21 @@ class MOT17TemporalClip(
             gt_ids_list.append(gt[1])
             fids.append(frame_id)
 
-        return {
-            "frames": torch.stack(frames_list),
+        sample: dict[str, torch.Tensor | list[torch.Tensor] | list[int] | str] = {
+            "frames": (
+                torch.stack(frames_list)
+                if frames_list
+                else torch.empty(self.clip_len, 0, 0, 0, dtype=torch.uint8)
+            ),
             "gt_boxes": gt_boxes_list,
             "gt_ids": gt_ids_list,
             "frame_ids": fids,
             "seq": seq,
         }
+        if detail_frames_list:
+            sample["detail_frames"] = torch.stack(detail_frames_list)
+            sample["detail_valid_hw"] = torch.stack(detail_valid_hw_list)
+        return sample
 
 
 def _load_and_resize(
@@ -324,14 +356,45 @@ def _load_and_resize(
         return img_resized
 
 
+def _load_detail_view(
+    path: Path, detail_size: tuple[int, int]
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Load an aspect-preserving detail image padded at the right and bottom."""
+    import torch.nn.functional as F
+    import torchvision.io as tv_io
+    import torchvision.transforms.functional as TF
+
+    target_h, target_w = detail_size
+    img = tv_io.read_image(str(path))
+    _, orig_h, orig_w = img.shape
+    scale = min(target_h / orig_h, target_w / orig_w)
+    valid_h = max(1, min(target_h, int(round(orig_h * scale))))
+    valid_w = max(1, min(target_w, int(round(orig_w * scale))))
+    resized = TF.resize(img, [valid_h, valid_w], antialias=True)
+    padded = F.pad(
+        resized,
+        (0, target_w - valid_w, 0, target_h - valid_h),
+        value=114,
+    )
+    return padded, torch.tensor([valid_h, valid_w], dtype=torch.int64)
+
+
 def collate_fn(batch: list[dict[str, object]]) -> dict[str, object]:
-    return {
+    collated = {
         "frames": torch.stack([b["frames"] for b in batch]),  # type: ignore[misc]
         "gt_boxes": [b["gt_boxes"] for b in batch],
         "gt_ids": [b["gt_ids"] for b in batch],
         "frame_ids": [b["frame_ids"] for b in batch],
         "seq": [b["seq"] for b in batch],
     }
+    if "detail_frames" in batch[0]:
+        collated["detail_frames"] = torch.stack(
+            [b["detail_frames"] for b in batch]  # type: ignore[misc]
+        )
+        collated["detail_valid_hw"] = torch.stack(
+            [b["detail_valid_hw"] for b in batch]  # type: ignore[misc]
+        )
+    return collated
 
 
 def build_mot17_dataloader(
@@ -345,7 +408,10 @@ def build_mot17_dataloader(
     detector: str = "SDP",
     shuffle: bool = True,
     preload_to_ram: bool = True,
+    load_images: bool = True,
     use_letterbox: bool = False,
+    detail_size: tuple[int, int] | None = None,
+    seed: int | None = None,
 ) -> DataLoader[dict[str, object]]:
     dataset = MOT17TemporalClip(
         data_root=data_root,
@@ -356,7 +422,9 @@ def build_mot17_dataloader(
         seqs=seqs,
         detector=detector,
         preload_to_ram=preload_to_ram,
+        load_images=load_images,
         use_letterbox=use_letterbox,
+        detail_size=detail_size,
     )
     print(f"[Dataset] {len(dataset)} clips from {len(dataset.sequences)} sequences")
     # num_workers > 0 with multiprocessing_context='spawn': avoids CUDA fork deadlock
@@ -364,6 +432,10 @@ def build_mot17_dataloader(
     # persistent_workers=True keeps workers alive between epochs to avoid re-init overhead.
     # pin_memory=True is only effective when num_workers > 0; enables DMA H2D transfers.
     use_mp_ctx = "spawn" if num_workers > 0 else None
+    generator = None
+    if seed is not None:
+        generator = torch.Generator()
+        generator.manual_seed(seed)
     return DataLoader(
         dataset,  # type: ignore[arg-type]
         batch_size=batch_size,
@@ -373,4 +445,5 @@ def build_mot17_dataloader(
         pin_memory=num_workers > 0,
         multiprocessing_context=use_mp_ctx,
         persistent_workers=num_workers > 0,
+        generator=generator,
     )

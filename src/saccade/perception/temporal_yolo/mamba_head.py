@@ -350,6 +350,7 @@ class MambaBlock(nn.Module):
         expand: int = 2,
         full_rank_c: bool = False,
         per_channel_a: bool = False,
+        scan_stop_grad: bool = False,
     ):
         super().__init__()
         self.d_model = d_model
@@ -358,6 +359,7 @@ class MambaBlock(nn.Module):
         self.expand = expand
         self.full_rank_c = full_rank_c
         self.per_channel_a = per_channel_a
+        self.scan_stop_grad = scan_stop_grad
         d_inner = d_model * expand
 
         self.in_proj = nn.Linear(d_model, d_inner * 2, bias=False)
@@ -420,6 +422,13 @@ class MambaBlock(nn.Module):
             C_ssm,
             D=self.D,
         )
+
+        # v14 historical regime: the raw CUDA scan had no grad_fn, so conv1d /
+        # x_proj / dt_proj / A_log / D (and the x half of in_proj) stayed at
+        # init; only the z gate and out_proj learned. detach reproduces that
+        # gradient topology with the correct N=16 forward.
+        if self.scan_stop_grad:
+            y = y.detach()
 
         y = y * F.silu(z)
         y = self.out_proj(y)
@@ -504,6 +513,157 @@ def _cross_scan_mamba(
     ).mean(dim=0)
 
 
+class P3DetailFusion(nn.Module):
+    """Encode a high-resolution image and align local 3x3 patches to P3."""
+
+    def __init__(
+        self,
+        d_model: int,
+        channels: int = 32,
+        patch_size: int = 3,
+        feature_channels: int = 0,
+    ):
+        super().__init__()
+        if patch_size % 2 == 0:
+            raise ValueError("detail patch_size must be odd")
+        self.patch_size = patch_size
+        # Keep the first stage compatible with the 32-channel YOLO stem while
+        # allowing the second stage to test wider detail representations.
+        hidden = min(channels, 32)
+        self.encoder = nn.Sequential(
+            nn.Conv2d(3, hidden, 3, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(hidden),
+            nn.SiLU(),
+            nn.Conv2d(hidden, channels, 3, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(channels),
+            nn.SiLU(),
+        )
+        self.feature_adapter: nn.Module | None = None
+        if feature_channels > 0:
+            self.feature_adapter = nn.Conv2d(feature_channels, channels, 1)
+        token_channels = channels * patch_size * patch_size
+        self.cls_proj = nn.Conv2d(token_channels, d_model, 1)
+        self.reg_proj = nn.Conv2d(token_channels, d_model, 1)
+        self.cls_gate = nn.Sequential(nn.Conv2d(d_model, d_model, 1), nn.Sigmoid())
+        self.reg_gate = nn.Sequential(nn.Conv2d(d_model, d_model, 1), nn.Sigmoid())
+
+        # Exact v14 identity at initialization. The first optimizer step trains
+        # these output projections; gradients then propagate into the encoder.
+        nn.init.zeros_(self.cls_proj.weight)
+        nn.init.zeros_(self.cls_proj.bias)
+        nn.init.zeros_(self.reg_proj.weight)
+        nn.init.zeros_(self.reg_proj.bias)
+
+    @torch.no_grad()
+    def initialize_from_yolo_stem(self, stem: nn.Module) -> bool:
+        """Copy the first YOLO Conv+BN when its channel layout matches."""
+        source_conv = getattr(stem, "conv", None)
+        source_bn = getattr(stem, "bn", None)
+        target_conv = self.encoder[0]
+        target_bn = self.encoder[1]
+        if (
+            not isinstance(source_conv, nn.Conv2d)
+            or not isinstance(source_bn, nn.BatchNorm2d)
+            or source_conv.weight.shape != target_conv.weight.shape
+            or source_bn.weight.shape != target_bn.weight.shape
+        ):
+            return False
+        target_conv.weight.copy_(source_conv.weight)
+        target_bn.load_state_dict(source_bn.state_dict())
+        return True
+
+    def _sample_tokens(
+        self,
+        detail_feat: Tensor,
+        output_hw: tuple[int, int],
+        valid_hw: Tensor | None,
+        source_stride: int,
+    ) -> Tensor:
+        batch, channels, feat_h, feat_w = detail_feat.shape
+        out_h, out_w = output_hw
+        patch = self.patch_size
+
+        if valid_hw is None:
+            valid_hw = detail_feat.new_tensor(
+                [[feat_h * source_stride, feat_w * source_stride]],
+                dtype=torch.float32,
+            ).expand(batch, -1)
+        elif valid_hw.shape != (batch, 2):
+            raise ValueError(
+                f"detail_valid_hw must have shape ({batch}, 2), got {tuple(valid_hw.shape)}"
+            )
+        valid_hw = valid_hw.to(device=detail_feat.device, dtype=torch.float32)
+        valid_feat_h = torch.ceil(valid_hw[:, 0] / source_stride).clamp_(1, feat_h)
+        valid_feat_w = torch.ceil(valid_hw[:, 1] / source_stride).clamp_(1, feat_w)
+
+        y_fraction = (
+            torch.arange(out_h * patch, device=detail_feat.device, dtype=torch.float32)
+            + 0.5
+        ) / (out_h * patch)
+        x_fraction = (
+            torch.arange(out_w * patch, device=detail_feat.device, dtype=torch.float32)
+            + 0.5
+        ) / (out_w * patch)
+        grid_y = (
+            2.0 * (y_fraction[None, :, None] * valid_feat_h[:, None, None] / feat_h)
+            - 1.0
+        )
+        grid_x = (
+            2.0 * (x_fraction[None, None, :] * valid_feat_w[:, None, None] / feat_w)
+            - 1.0
+        )
+        grid = torch.stack(
+            [
+                grid_x.expand(-1, out_h * patch, -1),
+                grid_y.expand(-1, -1, out_w * patch),
+            ],
+            dim=-1,
+        ).to(dtype=detail_feat.dtype)
+
+        sampled = F.grid_sample(
+            detail_feat,
+            grid,
+            mode="bilinear",
+            padding_mode="zeros",
+            align_corners=False,
+        )
+        return (
+            sampled.view(batch, channels, out_h, patch, out_w, patch)
+            .permute(0, 1, 3, 5, 2, 4)
+            .reshape(batch, channels * patch * patch, out_h, out_w)
+        )
+
+    def forward(
+        self,
+        detail_images: Tensor | None,
+        global_context: Tensor,
+        valid_hw: Tensor | None = None,
+        detail_features: Tensor | None = None,
+        feature_stride: int = 8,
+    ) -> tuple[Tensor, Tensor]:
+        if detail_features is not None:
+            if self.feature_adapter is None:
+                raise ValueError(
+                    "detail_features were provided without detail_feature_channels"
+                )
+            detail_feat = self.feature_adapter(detail_features)
+            source_stride = feature_stride
+        else:
+            if detail_images is None:
+                raise ValueError("detail_images or detail_features must be provided")
+            detail_feat = self.encoder(detail_images)
+            source_stride = 4
+        tokens = self._sample_tokens(
+            detail_feat,
+            global_context.shape[-2:],
+            valid_hw,
+            source_stride,
+        )
+        cls_delta = self.cls_proj(tokens) * self.cls_gate(global_context)
+        reg_delta = self.reg_proj(tokens) * self.reg_gate(global_context)
+        return cls_delta, reg_delta
+
+
 # ---------------------------------------------------------------------------
 # Mamba detection head
 # ---------------------------------------------------------------------------
@@ -536,7 +696,12 @@ class MambaDetectionHead(nn.Module):
         use_temporal_mamba: bool = False,  # spatio-temporal SSM across T frames (P2 ST optimization)
         use_temporal_attention: bool = False,  # T=4 self-attention over frames (replaces SSM, no flow gate)
         per_channel_a: bool = False,  # per-channel SSM A (d_inner, N); warm-starts from shared (1, N)
+        scan_stop_grad: bool = False,  # detach scan output (v14 frozen-SSM training regime)
         use_cuda_graph: bool = False,  # enable CUDA Graph capture and replay
+        use_detail_fusion: bool = False,
+        detail_channels: int = 32,
+        detail_patch_size: int = 3,
+        detail_feature_channels: int = 0,
     ):
         super().__init__()
         self.nl = len(in_channels)
@@ -551,6 +716,8 @@ class MambaDetectionHead(nn.Module):
         self.use_hybrid_head = use_hybrid_head
         self.use_temporal_mamba = use_temporal_mamba
         self.per_channel_a = per_channel_a
+        self.scan_stop_grad = scan_stop_grad
+        self.use_detail_fusion = use_detail_fusion
         self.upsample_loaded = (
             use_pixel_shuffle  # Default to True if initialized to use it
         )
@@ -567,7 +734,12 @@ class MambaDetectionHead(nn.Module):
             [
                 nn.ModuleList(
                     [
-                        MambaBlock(d_model, d_state, per_channel_a=per_channel_a)
+                        MambaBlock(
+                            d_model,
+                            d_state,
+                            per_channel_a=per_channel_a,
+                            scan_stop_grad=scan_stop_grad,
+                        )
                         for _ in range(num_blocks)
                     ]
                 )
@@ -601,6 +773,7 @@ class MambaDetectionHead(nn.Module):
                                 d_state,
                                 full_rank_c=True,
                                 per_channel_a=per_channel_a,
+                                scan_stop_grad=scan_stop_grad,
                             )
                             for _ in range(1)
                         ]
@@ -684,6 +857,15 @@ class MambaDetectionHead(nn.Module):
         else:
             self.upsample = None
 
+        self.detail_fusion: P3DetailFusion | None = None
+        if use_detail_fusion:
+            self.detail_fusion = P3DetailFusion(
+                d_model=d_model,
+                channels=detail_channels,
+                patch_size=detail_patch_size,
+                feature_channels=detail_feature_channels,
+            )
+
         self.use_cuda_graph = use_cuda_graph
         self._head_compile_enabled: bool = False
         self._head_modules_original: dict[str, nn.Module] = {}
@@ -697,6 +879,11 @@ class MambaDetectionHead(nn.Module):
         # cls outputs in the full eval pipeline — see
         # docs/research/pipeline/mamba_head_cuda_graph_eval_bug_20260602.md.
         self._graphed_callables: dict = {}
+
+    def initialize_detail_from_yolo_stem(self, stem: nn.Module) -> bool:
+        if self.detail_fusion is None:
+            return False
+        return self.detail_fusion.initialize_from_yolo_stem(stem)
 
     def load_state_dict(self, state_dict, strict=True):
         # Check if the keys of state_dict contain 'upsample' parameters.
@@ -804,6 +991,10 @@ class MambaDetectionHead(nn.Module):
         return_embeddings: bool = False,
         T: int | None = None,
         flows: list[Tensor] | None = None,
+        detail_images: Tensor | None = None,
+        detail_valid_hw: Tensor | None = None,
+        detail_features: Tensor | None = None,
+        detail_feature_stride: int = 8,
     ) -> (
         tuple[list[Tensor], list[Tensor]]
         | tuple[list[Tensor], list[Tensor], list[Tensor]]
@@ -833,8 +1024,19 @@ class MambaDetectionHead(nn.Module):
             # left eager.
             or T is not None
             or flows is not None
+            or detail_images is not None
+            or detail_features is not None
         ):
-            return self._forward_eager(feats, return_embeddings, T, flows)
+            return self._forward_eager(
+                feats,
+                return_embeddings,
+                T,
+                flows,
+                detail_images,
+                detail_valid_hw,
+                detail_features,
+                detail_feature_stride,
+            )
 
         return self._graphed_forward(feats, return_embeddings)
 
@@ -896,6 +1098,10 @@ class MambaDetectionHead(nn.Module):
         return_embeddings: bool = False,
         T: int | None = None,
         flows: list[Tensor] | None = None,
+        detail_images: Tensor | None = None,
+        detail_valid_hw: Tensor | None = None,
+        detail_features: Tensor | None = None,
+        detail_feature_stride: int = 8,
     ) -> (
         tuple[list[Tensor], list[Tensor]]
         | tuple[list[Tensor], list[Tensor], list[Tensor]]
@@ -969,11 +1175,40 @@ class MambaDetectionHead(nn.Module):
                 x_up_t = self.temporal_attn_blocks[i](x_up_t)
                 x_up = x_up_t.reshape(B, H, W, T_frames, -1).permute(0, 3, 4, 1, 2)
                 x_up = x_up.reshape(B_merged, -1, H, W)
-            x_cat = torch.cat([x_proj, x_up], dim=1)
-            cls_preds.append(self.cls_head[i](x_cat))
-            reg_preds.append(self.reg_head[i](x_cat))
+            x_cls_proj = x_proj
+            x_reg_proj = x_proj
+            if i == 0 and (detail_images is not None or detail_features is not None):
+                if self.detail_fusion is None:
+                    raise ValueError(
+                        "detail input was provided but use_detail_fusion is disabled"
+                    )
+                detail_batch = (
+                    detail_features.shape[0]
+                    if detail_features is not None
+                    else detail_images.shape[0]  # type: ignore[union-attr]
+                )
+                if detail_batch != B_merged:
+                    raise ValueError(
+                        "detail input batch must match the merged feature batch: "
+                        f"{detail_batch} != {B_merged}"
+                    )
+                cls_delta, reg_delta = self.detail_fusion(
+                    detail_images,
+                    x_up,
+                    detail_valid_hw,
+                    detail_features=detail_features,
+                    feature_stride=detail_feature_stride,
+                )
+                x_cls_proj = x_proj + cls_delta
+                x_reg_proj = x_proj + reg_delta
+
+            x_cls = torch.cat([x_cls_proj, x_up], dim=1)
+            x_reg = torch.cat([x_reg_proj, x_up], dim=1)
+            cls_preds.append(self.cls_head[i](x_cls))
+            reg_preds.append(self.reg_head[i](x_reg))
             if self.emb_head is not None:
-                emb_preds.append(self.emb_head[i](x_cat))
+                x_emb = torch.cat([x_proj, x_up], dim=1)
+                emb_preds.append(self.emb_head[i](x_emb))
 
         if return_embeddings and self.emb_head is not None:
             return cls_preds, reg_preds, emb_preds

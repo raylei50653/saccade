@@ -1,6 +1,6 @@
 # Saccade Pipeline Mathematical Verification Report
 
-本報告對 Saccade 核心管線的數學邏輯進行獨立驗證。為確保「程式實作不依賴文檔描述」，本報告的所有公式均直接從 Python / C++ / CUDA 原始碼中提取，並與 [algorithms.md](file:///home/ray/developer/ai/saccade/report_data/algorithms.md) 進行交叉對照，指出實際程式實作中的細節、常數、與文檔的不一致處（Discrepancies）。
+本報告對 Saccade 核心管線的數學邏輯進行獨立驗證。為確保「程式實作不依賴文檔描述」，本報告的所有公式均直接從 Python / C++ / CUDA 原始碼中提取，並與 [pipeline_algorithms_reference.md](pipeline_algorithms_reference.md) 進行交叉對照，指出實際程式實作中的細節、常數、與文檔的不一致處（Discrepancies）。
 
 ---
 
@@ -23,12 +23,12 @@
 4. **組合品質分數 ($Q$)**：
    $$Q = w_{\text{aspect}} \cdot Q_{\text{asp}} + w_{\text{center}} \cdot Q_{\text{ctr}} + w_{\text{area}} \cdot Q_{\text{area}}$$
 
-### 1.2 文檔與實作差異 (Discrepancy)
-> [!WARNING]
-> **文檔公式未包含 Clamp 限制**
-> 文檔 [algorithms.md](file:///home/ray/developer/ai/saccade/report_data/algorithms.md) 中描述的公式為 $Q_{\text{ctr}} = 4 \cdot \min(c_x, 1-c_x, c_y, 1-c_y)$。
-> 若檢測框位於畫面正中央（$c_x = 0.5, c_y = 0.5$），該公式計算值為 $4 \cdot 0.5 = 2.0$。
-> 然而，實際 Python 程式碼中有 `center_q.clamp(0.0, 1.0)`，CUDA 程式碼中有 `fminf(fmaxf(edge * 4.0f, 0.0f), 1.0f)`。實作將 $Q_{\text{ctr}}$ 限制在 $[0, 1]$ 區間。因此，中央區域（距離邊緣 $\ge 25\%$ 的範圍）的 $Q_{\text{ctr}}$ 均固定為 $1.0$。
+### 1.2 文檔一致性
+
+[pipeline_algorithms_reference.md](pipeline_algorithms_reference.md) 已補上
+$\operatorname{clip}(\cdot,0,1)$，目前與 Python 的
+`center_q.clamp(0.0, 1.0)` 及 CUDA 的
+`fminf(fmaxf(edge * 4.0f, 0.0f), 1.0f)` 一致。
 
 ---
 
@@ -196,7 +196,7 @@ $$S = w_{\text{sim\_norm}} \cdot \cos(\mathbf{e}_c, \mathbf{e}_q) + w_{\text{iou
   Actual Quality Score (Python Code): 0.687634
   Numerical difference: 2.76e-08
   ✅ Python implementation matches mathematical model.
-  📝 Discrepancy Note: The algorithms.md describes Q_ctr = 4 * min(c_x, 1-c_x, c_y, 1-c_y), which would yield 2.0 at the center (cx=0.5, cy=0.5). However, the actual code (Python & CUDA) clamps it to 1.0. Thus, the implementation caps the center boost at 1.0, rather than scaling to 2.0.
+  📝 Documentation note: the pipeline reference now includes the same [0, 1] clamp used by the Python and CUDA implementations.
 
 --- 2. Verification of Kalman Filter Math ---
   Initial Height: 100.0 | Predicted Height: 100.5
