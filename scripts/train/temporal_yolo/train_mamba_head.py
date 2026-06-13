@@ -300,7 +300,7 @@ def _get_cum_affine(
     cache_key = (seq, fid_from, fid_to)
     if cache_key in _affine_cum_cache:
         return _affine_cum_cache[cache_key]
-    cumulative = torch.eye(2, 3, device=device)
+    cumulative = torch.eye(3, device=device)
     for fid in range(fid_from, fid_to):
         idx = fid - 1
         if idx < 0 or idx >= n_mats:
@@ -308,7 +308,7 @@ def _get_cum_affine(
         m = gmc_mats[idx]
         m3 = torch.eye(3, device=device)
         m3[:2, :] = m
-        cumulative = m @ m3
+        cumulative = cumulative @ m3
     _affine_cum_cache[cache_key] = cumulative[:2]
     return cumulative[:2]
 
