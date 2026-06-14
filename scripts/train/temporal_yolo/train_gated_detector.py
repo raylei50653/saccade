@@ -177,6 +177,16 @@ def train_one_epoch(  # type: ignore[no-untyped-def]
                 f"Non-finite loss at batch {batch_idx + 1}/{len(loader)}"
             )
 
+        if not batch_loss.requires_grad:
+            # Frozen-YOLO teacher: the only trainable params are the gate alphas,
+            # which enter the graph solely through gate_input. When the gt_ratio
+            # draw skips the gate for every frame of the clip, the loss has no
+            # grad path. Log it and move on (no-op step). With a trainable YOLO
+            # (lr-yolo>0) this never triggers — the weights always carry grad.
+            total_loss += batch_loss.detach().item()
+            n_steps += 1
+            continue
+
         scaler.scale(batch_loss / accum_steps).backward()
         acc_batches += 1
         if acc_batches == accum_steps:

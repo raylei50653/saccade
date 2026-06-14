@@ -200,10 +200,20 @@ class GatedYOLODetector(nn.Module):
             _inject_gate(self.yolo_model.model[idx], gl)
 
     def train(self, mode: bool = True) -> GatedYOLODetector:
-        """Keep a frozen YOLO in eval mode while training the gate."""
+        """Train the gate while keeping a frozen YOLO's weights and BN stats fixed.
+
+        The YOLO submodule stays in *training* mode so its Detect head still emits
+        the one2many/one2one training dict the loss consumes; only its BatchNorm
+        layers are forced to eval so running stats stay frozen. (Calling
+        ``yolo_model.eval()`` here would flip the head to inference-tuple output
+        and break ``out["one2many"]`` in the teacher training loop.)
+        """
         super().train(mode)
         if mode and self.cfg.freeze_backbone:
-            self.yolo_model.eval()
+            self.yolo_model.train()
+            for m in self.yolo_model.modules():
+                if isinstance(m, nn.modules.batchnorm._BatchNorm):
+                    m.eval()
             self.gate.train()
             if self.fusion is not None:
                 self.fusion.train()
