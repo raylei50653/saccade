@@ -267,6 +267,13 @@ def main() -> None:
         help="YOLO backbone+detect LR. 0 freezes weights and BatchNorm stats.",
     )
     parser.add_argument(
+        "--adapt-bn",
+        action="store_true",
+        help="With --lr-yolo 0: keep BN in train mode so running stats adapt to "
+        "MOT while weights + BN affine stay frozen. Isolates BN domain-shift "
+        "recalibration from weight learning. No-op when lr-yolo>0.",
+    )
+    parser.add_argument(
         "--gt-ratio",
         type=float,
         default=0.5,
@@ -326,6 +333,7 @@ def main() -> None:
         gate_sigma_scale=0.5,
         gate_min_score=0.5,
         freeze_backbone=(args.lr_yolo == 0.0),
+        adapt_bn_stats=args.adapt_bn,
         img_size=args.img_size,
     )
     yolo_weights = project_root / args.yolo_weights
@@ -353,14 +361,14 @@ def main() -> None:
     )
     print(f"[GatedDet] gate params: {n_gate}  (alphas × {len(scales)} scales)")
     yolo_frozen = args.lr_yolo == 0.0
-    print(
-        "[GatedDet] YOLO "
-        + (
-            "FROZEN (weights + BatchNorm stats)"
-            if yolo_frozen
-            else f"TRAINABLE (lr={args.lr_yolo:.2e}, BatchNorm train mode)"
-        )
-    )
+    bn_frozen = yolo_frozen and not args.adapt_bn
+    if not yolo_frozen:
+        yolo_state = f"TRAINABLE (lr={args.lr_yolo:.2e}, BatchNorm train mode)"
+    elif args.adapt_bn:
+        yolo_state = "FROZEN weights + affine, BatchNorm stats ADAPTING to MOT"
+    else:
+        yolo_state = "FROZEN (weights + BatchNorm stats)"
+    print("[GatedDet] YOLO " + yolo_state)
 
     # ── Resume ──
     start_epoch = 1
@@ -492,7 +500,7 @@ def main() -> None:
         "base_yolo_path": args.yolo_weights,
         "base_yolo_sha256": sha256_file(yolo_weights),
         "yolo_weights_frozen": yolo_frozen,
-        "yolo_bn_frozen": yolo_frozen,
+        "yolo_bn_frozen": bn_frozen,
         "parent_checkpoint_path": args.resume,
         "parent_checkpoint_sha256": (sha256_file(resume_path) if args.resume else ""),
     }
