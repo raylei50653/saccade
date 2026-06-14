@@ -363,3 +363,34 @@ Key findings:
 | `figures/speed_turn_dist.png` | npz post-plot (see script header) |
 | `scripts/tools/out/reach_gate.png` | `validate_reach_gate.py` |
 | speed-weight grid + LOSO CV (stdout) | `optimize_relink_weight.py` |
+
+## 8. Same ceiling reconfirmed from live-association side: occlusion crossing-swaps (2026-06-13)
+
+An independent probe from the live-association direction
+([`mamba-score-distribution-20260613.md`](../../detection/research/mamba-score-distribution-20260613.md)
+§7–8) quantified where the AssA bottleneck hits: **109 occlusion crossing-swaps =
+22% of baseline IDs (496)**. Two confirmed tracks mutually occlude (track-track IoU ≥ 0.5)
+producing only one surviving bounding box; when they separate 1–2 frames later the two ids
+swap — a live-association counterpart to the bridge-relink hard pool.
+
+An occlusion-gated velocity-direction lock that penalised detections inconsistent with the
+frozen pre-occlusion motion was implemented and measured on the MOT17 train SDP
+(`mamba_whole_graph`). Even with the correct speed-weighting from §6c (height-normalised,
+sqrt-ramp saturating 0.12 h/f), the feature is **monotonically harmful** across all tested
+weights (0.15–1.0): the smallest tested weight pushes IDF1 −0.1 / AssA −0.4, and higher
+weights collapse AssA by −5.3.
+
+**Root cause (already documented in §4/§5):** MOT17 per-frame foot speed is at the
+box-jitter floor (median 0.01 h/f); velocity direction is noise for the slow bulk, and even
+the fast minority's direction is not discriminative in the gate's operating region (§3,
+§6c hard-pool AUC ~0.65). Only appearance can separate true/false identity matches at this
+scale, and appearance in the MOT17 embedding space is a documented ceiling (registry
+[#2](../../reference/no_go_registry.md) / [#32](../../reference/no_go_registry.md) /
+[#35](../../reference/no_go_registry.md)).
+
+**Verdict:** the geometry/motion ceiling identified in §3–§6b is **reconfirmed** from the
+live crossing-swap door — same base-rate wall, same appearance-only headroom. The
+quantification (109 swaps = 22% of IDs, 1–2 frame gap, 100% recoverable at reappearance)
+sharpens the target for any future appearance revival. The C++ feature was implemented and
+reverted after measurement.
+

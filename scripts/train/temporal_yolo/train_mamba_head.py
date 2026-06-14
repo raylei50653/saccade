@@ -145,6 +145,20 @@ def _forward_teacher_backbone(
     return [saved[_GATE_LAYER_IDX[scale]] for scale in CACHE_SCALES]  # type: ignore[list-item]
 
 
+def _infer_fpn_channels(
+    teacher: nn.Module,
+    img_size: int,
+    device: torch.device,
+) -> tuple[int, ...]:
+    with torch.no_grad():
+        sample = torch.zeros(1, 3, img_size, img_size, device=device)
+        features = _forward_teacher_backbone(teacher, sample)
+    channels = tuple(int(feature.shape[1]) for feature in features)
+    if len(channels) != len(CACHE_SCALES):
+        raise RuntimeError(f"Expected three FPN levels, got channels={channels}")
+    return channels
+
+
 def _precompute_teacher_features(
     loader: Any,
     out_dir: Path,
@@ -500,10 +514,14 @@ def _load_or_forward_teacher(
     feature_samples, cls_samples, reg_samples = zip(*split, strict=True)
 
     def stack_scales(samples: tuple[list[torch.Tensor], ...]) -> list[torch.Tensor]:
+        # Transfer the half-precision cache to the GPU (2 bytes/elem), then widen
+        # to fp32 on-device. half->fp32 is an exact widening, so the result is
+        # bit-identical to a CPU-side cast while halving the H2D bytes and moving
+        # the cast off the CPU. non_blocking pairs with pinned staging (follow-up).
         return [
-            torch.stack([sample[si] for sample in samples]).to(
-                device, dtype=torch.float32
-            )
+            torch.stack([sample[si] for sample in samples])
+            .to(device, non_blocking=True)
+            .float()
             for si in range(3)
         ]
 
@@ -525,6 +543,12 @@ def main() -> None:
     parser.add_argument("--run-dir", default="runs/mamba_distill")
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--batch-size", type=int, default=8)
+    parser.add_argument(
+        "--max-batches-per-epoch",
+        type=int,
+        default=0,
+        help="Limit batches per epoch for smoke tests; 0 runs the full epoch.",
+    )
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--img-size", type=int, default=640)
     parser.add_argument("--clip-len", type=int, default=1)
@@ -577,9 +601,10 @@ def main() -> None:
         "regime: SSM internals frozen at init; only gate/readout/heads learn).",
     )
     parser.add_argument(
-        "--flatten",
+        "--legacy-n1-scan",
         action="store_true",
-        help="Skip downsample/upsample — flatten full FPN resolution into Mamba.",
+        help="Reproduce the pre-v14 N=1 CUDA launch and flattened rank-16 B "
+        "indexing while retaining d_state=16 tensors and rank-1 C.",
     )
     parser.add_argument("--resume", default="")
     parser.add_argument(
@@ -608,6 +633,8 @@ def main() -> None:
 
     if args.clip_stride < 0:
         parser.error("--clip-stride must be >= 0")
+    if args.max_batches_per_epoch < 0:
+        parser.error("--max-batches-per-epoch must be >= 0")
     seed_everything(args.seed)
 
     if args.use_temporal_mamba and args.clip_len < 2:
@@ -639,13 +666,15 @@ def main() -> None:
         p.requires_grad_(False)
 
     nc = teacher.yolo_model.model[-1].nc  # number of classes (80)
+    in_channels = _infer_fpn_channels(teacher, args.img_size, device)
+    print(f"  FPN channels: {dict(zip(CACHE_SCALES, in_channels, strict=True))}")
 
     # ------------------------------------------------------------------
     # Student: MambaDetectionHead
     # ------------------------------------------------------------------
     print("Building Mamba head...")
     student = MambaDetectionHead(
-        in_channels=(128, 256, 512),
+        in_channels=in_channels,
         d_model=args.d_model,
         d_state=args.d_state,
         num_blocks=args.num_blocks,
@@ -657,8 +686,8 @@ def main() -> None:
         use_hybrid_head=args.use_hybrid_head,
         use_temporal_mamba=args.use_temporal_mamba,
         scan_stop_grad=args.scan_stop_grad,
+        legacy_n1_scan=args.legacy_n1_scan,
         use_temporal_attention=getattr(args, "use_temporal_attention", False),
-        use_flatten=args.flatten,
     ).to(device)
     student.train()
 
@@ -731,6 +760,7 @@ def main() -> None:
             "teacher_checkpoint_sha256": (
                 sha256_file(teacher_ckpt) if teacher_ckpt is not None else ""
             ),
+            "fpn_channels": list(in_channels),
             "command": shlex.join(sys.argv),
         }
         _precompute_teacher_features(
@@ -768,6 +798,12 @@ def main() -> None:
             expected_manifest,
             require_complete=True,
         )
+        cached_channels = tuple(manifest.get("fpn_channels", in_channels))
+        if cached_channels != in_channels:
+            raise ValueError(
+                "Cache FPN channels do not match the selected YOLO model: "
+                f"cache={cached_channels}, model={in_channels}"
+            )
         print(
             f"[Cache] Verified {manifest['total_frames']} frames, "
             f"schema={manifest['schema']}"
@@ -786,13 +822,18 @@ def main() -> None:
     print(f"\nTraining {args.epochs} epochs...")
     accum = args.accum_steps
     for epoch in range(start_epoch, args.epochs + 1):
-        epoch_loss = 0.0
+        # Accumulate loss and the non-finite flag on-device so neither forces a
+        # per-step CUDA sync; both are read back at most once per 50 batches.
+        epoch_loss_dev = torch.zeros((), device=device)
+        nan_flag = torch.zeros((), dtype=torch.bool, device=device)
         epoch_lr = optimizer.param_groups[0]["lr"]
         t0 = time.time()
 
         optimizer.zero_grad(set_to_none=True)
 
         for i, batch in enumerate(loader):
+            if args.max_batches_per_epoch > 0 and i >= args.max_batches_per_epoch:
+                break
             B = batch["frames"].shape[0]
             T = batch["frames"].shape[1]
 
@@ -877,10 +918,11 @@ def main() -> None:
                         )
 
             batch_loss = batch_loss / (T * accum)
-            if not torch.isfinite(batch_loss):
-                raise FloatingPointError(
-                    f"Non-finite loss at epoch={epoch} batch={i + 1}"
-                )
+            # Defer the finiteness check to the periodic sync below — no per-step
+            # raise (and thus no per-step sync). A NaN poisons every later loss,
+            # so it is still caught within 50 batches; epoch-boundary checkpoints
+            # stay clean because they are only saved after a passing epoch.
+            nan_flag |= ~torch.isfinite(batch_loss)
             batch_loss.backward()
 
             if (i + 1) % accum == 0:
@@ -888,20 +930,31 @@ def main() -> None:
                 optimizer.step()
                 optimizer.zero_grad(set_to_none=True)
 
-            epoch_loss += batch_loss.item() * accum
+            epoch_loss_dev += batch_loss.detach() * accum
 
             if (i + 1) % 50 == 0:
+                if bool(nan_flag):  # single sync per 50 batches
+                    raise FloatingPointError(
+                        f"Non-finite loss in batches ..{i + 1} at epoch={epoch}"
+                    )
                 print(
                     f"  epoch {epoch:3d}  batch {i + 1:4d}  loss={batch_loss.item() * accum:.4f}"
                 )
 
-        if len(loader) % accum != 0:
+        effective_batches = (
+            min(len(loader), args.max_batches_per_epoch)
+            if args.max_batches_per_epoch > 0
+            else len(loader)
+        )
+        if effective_batches % accum != 0:
             nn.utils.clip_grad_norm_(student.parameters(), max_norm=1.0)
             optimizer.step()
             optimizer.zero_grad(set_to_none=True)
 
         scheduler.step()
-        avg_loss = epoch_loss / max(len(loader), 1)
+        if bool(nan_flag):  # catch a NaN in the final (<50) batches of the epoch
+            raise FloatingPointError(f"Non-finite loss at epoch={epoch}")
+        avg_loss = (epoch_loss_dev / max(effective_batches, 1)).item()
         dt = time.time() - t0
         print(
             f"  epoch {epoch:3d}  loss={avg_loss:.4f}  time={dt:.0f}s  "
@@ -923,6 +976,12 @@ def main() -> None:
                 "epoch_lr": epoch_lr,
                 "args": vars(args),
                 "mamba_args": {
+                    "in_channels": list(in_channels),
+                    "base_yolo_path": args.yolo_weights,
+                    "base_yolo_sha256": sha256_file(project_root / args.yolo_weights),
+                    "teacher_checkpoint_sha256": (
+                        sha256_file(teacher_ckpt) if teacher_ckpt is not None else ""
+                    ),
                     "d_model": args.d_model,
                     "d_state": args.d_state,
                     "num_blocks": args.num_blocks,
@@ -936,7 +995,8 @@ def main() -> None:
                         args, "use_temporal_attention", False
                     ),
                     "scan_stop_grad": args.scan_stop_grad,
-                    "use_flatten": args.flatten,
+                    "legacy_n1_scan": args.legacy_n1_scan,
+                    "legacy_n1_source": "77fcc262^" if args.legacy_n1_scan else "",
                 },
             },
             run_dir,

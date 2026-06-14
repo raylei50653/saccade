@@ -728,6 +728,7 @@ from saccade.perception.feature_extractor import TRTFeatureExtractor  # noqa: E4
 
 from saccade.perception.eval.detection import (  # noqa: E402
     detect_adaptive_960_tiled,
+    detect_mamba_global_2x2,
     detect_960p_3x2_tiled,
     detect_native_640,
     detect_native_960,
@@ -5201,7 +5202,9 @@ def run_eval(
     if cfg.reid_crop_layout not in {"full", "parts"}:
         raise ValueError(f"Unsupported reid_crop_layout: {cfg.reid_crop_layout}")
 
-    if cfg.tiling == "960p_3x2":
+    if cfg.tiling == "mamba_global_2x2":
+        detect_fn = detect_mamba_global_2x2
+    elif cfg.tiling == "960p_3x2":
         detect_fn = detect_960p_3x2_tiled
     elif cfg.tiling == "sahi_960p_2x2":
         detect_fn = detect_sahi_960p_2x2

@@ -1,6 +1,58 @@
 import torch
 import torch.nn as nn
-from saccade.perception.temporal_yolo.mamba_head import MambaDetectionHead
+from saccade.perception.temporal_yolo.mamba_head import (
+    MambaBlock,
+    MambaDetectionHead,
+    _selective_scan_legacy_n1,
+    _gather_strip_pixels,
+)
+
+
+def test_legacy_n1_scan_reproduces_flattened_stride_bug():
+    u = torch.tensor([[[1.0], [2.0]], [[3.0], [4.0]]])
+    delta = torch.zeros_like(u)
+    a = torch.tensor([[-1.0, -2.0, -3.0]])
+    b = torch.arange(12, dtype=torch.float32).reshape(2, 2, 3) + 1
+    c = (torch.arange(4, dtype=torch.float32).reshape(2, 2, 1) + 1) / 10
+
+    actual = _selective_scan_legacy_n1(u, delta, a, b, c)
+
+    softplus_zero = torch.log(torch.tensor(2.0))
+    b_flat = b.flatten()[:4].reshape(2, 2)
+    c_flat = c.flatten()[:4].reshape(2, 2)
+    expected = torch.zeros_like(u)
+    h = torch.zeros(2, 1)
+    for t in range(2):
+        h = (
+            torch.exp(softplus_zero * a.flatten()[0]) * h
+            + softplus_zero * b_flat[:, t : t + 1] * u[:, t]
+        )
+        expected[:, t] = h * c_flat[:, t : t + 1]
+
+    torch.testing.assert_close(actual, expected)
+    assert b_flat[1, 0].item() == b[0, 0, 2].item()
+    torch.testing.assert_close(c_flat, c.squeeze(-1))
+
+
+def test_legacy_n1_flag_propagates_to_spatial_and_temporal_blocks():
+    model = MambaDetectionHead(
+        in_channels=(8, 16, 32),
+        d_model=8,
+        d_state=4,
+        num_blocks=1,
+        use_temporal_mamba=True,
+        legacy_n1_scan=True,
+    )
+
+    assert model.legacy_n1_scan
+    assert all(block.legacy_n1_scan for level in model.mamba_blocks for block in level)
+    assert model.temporal_blocks is not None
+    assert all(
+        block.legacy_n1_scan for level in model.temporal_blocks for block in level
+    )
+    temporal = model.temporal_blocks[0][0]
+    assert temporal.x_proj.out_features == temporal.d_state * 2 + 1
+    assert isinstance(model.mamba_blocks[0][0], MambaBlock)
 
 
 def test_mamba_head_creation():
@@ -269,3 +321,102 @@ def test_external_p3_detail_feature_path_is_identity_and_trainable():
     assert oracle.detail_fusion is not None
     assert oracle.detail_fusion.feature_adapter is not None
     assert oracle.detail_fusion.cls_proj.weight.grad is not None
+
+
+def test_strip_detail_gather_has_fixed_four_direction_shape_and_reversals():
+    image = torch.arange(3 * 8 * 8, dtype=torch.float32).reshape(1, 3, 8, 8)
+    positions = torch.tensor([[[0, 0], [3, 3]]])
+
+    strips = _gather_strip_pixels(
+        image,
+        positions,
+        output_hw=(4, 4),
+        valid_hw=torch.tensor([[8, 8]]),
+        strip_length=4,
+        strip_width=3,
+    ).reshape(1, 2, 4, 3, 12)
+
+    assert strips.shape == (1, 2, 4, 3, 12)
+    torch.testing.assert_close(strips[:, :, 1], strips[:, :, 0].flip(-1))
+    torch.testing.assert_close(strips[:, :, 3], strips[:, :, 2].flip(-1))
+
+
+def test_strip_detail_is_identity_at_initialization_and_receives_gradients():
+    torch.manual_seed(11)
+    base = MambaDetectionHead(
+        in_channels=(8, 16, 32),
+        d_model=8,
+        d_state=4,
+        num_blocks=1,
+        num_classes=1,
+        spatial_reduction=2,
+    )
+    strip = MambaDetectionHead(
+        in_channels=(8, 16, 32),
+        d_model=8,
+        d_state=4,
+        num_blocks=1,
+        num_classes=1,
+        spatial_reduction=2,
+        use_strip_detail=True,
+        strip_stem_channels=4,
+        strip_length=8,
+        strip_width=3,
+    )
+    strip.load_state_dict(base.state_dict(), strict=False)
+    feats = [
+        torch.randn(1, 8, 16, 16),
+        torch.randn(1, 16, 8, 8),
+        torch.randn(1, 32, 4, 4),
+    ]
+    detail_images = torch.randn(1, 3, 48, 80)
+    positions = torch.tensor([[[0, 0], [8, 9], [15, 15]]])
+    position_mask = torch.tensor([[True, True, False]])
+
+    base.eval()
+    strip.eval()
+    with torch.no_grad():
+        expected_cls, expected_reg = base(feats)
+        actual_cls, actual_reg = strip(
+            feats,
+            detail_images=detail_images,
+            detail_valid_hw=torch.tensor([[40, 64]]),
+            detail_positions=positions,
+            detail_position_mask=position_mask,
+        )
+    for expected, actual in zip(expected_cls + expected_reg, actual_cls + actual_reg):
+        torch.testing.assert_close(actual, expected)
+
+    strip.train()
+    cls_preds, reg_preds = strip(
+        feats,
+        detail_images=detail_images,
+        detail_valid_hw=torch.tensor([[40, 64]]),
+        detail_positions=positions,
+        detail_position_mask=position_mask,
+    )
+    (cls_preds[0].sum() + reg_preds[0].sum()).backward()
+    assert strip.strip_detail_fusion is not None
+    assert strip.strip_detail_fusion.cls_proj.weight.grad is not None
+    assert strip.strip_detail_fusion.reg_proj.weight.grad is not None
+    assert strip.strip_detail_fusion.cls_proj.weight.grad.abs().sum() > 0
+    assert strip.strip_detail_fusion.reg_proj.weight.grad.abs().sum() > 0
+
+    # Zero-init projections intentionally block stem/Mamba gradients on the
+    # first step. Once the projections move, gradients reach the full branch.
+    strip.zero_grad(set_to_none=True)
+    with torch.no_grad():
+        strip.strip_detail_fusion.cls_proj.weight.fill_(0.01)
+        strip.strip_detail_fusion.reg_proj.weight.fill_(0.01)
+    cls_preds, reg_preds = strip(
+        feats,
+        detail_images=detail_images,
+        detail_valid_hw=torch.tensor([[40, 64]]),
+        detail_positions=positions,
+        detail_position_mask=position_mask,
+    )
+    (cls_preds[0].sum() + reg_preds[0].sum()).backward()
+    assert strip.strip_detail_fusion.stem[0].weight.grad is not None
+    assert strip.strip_detail_fusion.stem[0].weight.grad.abs().sum() > 0
+    assert strip.strip_detail_fusion.mamba.in_proj.weight.grad is not None
+    assert strip.strip_detail_fusion.mamba.in_proj.weight.grad.abs().sum() > 0

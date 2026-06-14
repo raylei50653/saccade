@@ -216,6 +216,46 @@ def train_one_epoch(  # type: ignore[no-untyped-def]
     return total_loss / max(n_steps, 1)
 
 
+@torch.no_grad()
+def recalibrate_bn(
+    model: GatedYOLODetector,
+    loader: Any,
+    device: torch.device,
+    img_size: int,
+    n_batches: int,
+) -> None:
+    """AdaBN: recompute YOLO BN running stats on MOT, then freeze them.
+
+    Weights and BN affine stay at the COCO prior; only running_mean/var are
+    replaced with MOT-domain statistics (momentum=None => cumulative average
+    over the seen batches). Isolates BN domain-shift recalibration from weight
+    learning, and avoids the train-mode batch-stat instability that NaNs a
+    frozen COCO head on small batches.
+    """
+    bns = [
+        m
+        for m in model.yolo_model.modules()
+        if isinstance(m, nn.modules.batchnorm._BatchNorm)
+    ]
+    saved_momentum = [m.momentum for m in bns]
+    for m in bns:
+        m.reset_running_stats()
+        m.momentum = None  # cumulative moving average
+        m.train()
+    seen = 0
+    for batch in loader:
+        frames = batch["frames"].to(device, dtype=torch.float32) / 255.0
+        for t in range(frames.shape[1]):
+            model(frames[:, t], gate_input=None)
+        seen += 1
+        if seen >= n_batches:
+            break
+    for m, mom in zip(bns, saved_momentum, strict=True):
+        m.eval()
+        m.momentum = mom
+    print(f"[GatedDet] AdaBN recalibrated {len(bns)} BN layers over {seen} batches")
+
+
 def _git_state() -> dict[str, str]:
     def run(*args: str) -> str:
         result = subprocess.run(
@@ -269,9 +309,15 @@ def main() -> None:
     parser.add_argument(
         "--adapt-bn",
         action="store_true",
-        help="With --lr-yolo 0: keep BN in train mode so running stats adapt to "
-        "MOT while weights + BN affine stay frozen. Isolates BN domain-shift "
-        "recalibration from weight learning. No-op when lr-yolo>0.",
+        help="With --lr-yolo 0: AdaBN — recompute BN running stats on MOT "
+        "(forward-only), then freeze them, while weights + BN affine stay frozen. "
+        "Isolates BN domain-shift recalibration from weight learning.",
+    )
+    parser.add_argument(
+        "--adapt-bn-batches",
+        type=int,
+        default=500,
+        help="Number of batches for the AdaBN recalibration pass.",
     )
     parser.add_argument(
         "--gt-ratio",
@@ -333,7 +379,6 @@ def main() -> None:
         gate_sigma_scale=0.5,
         gate_min_score=0.5,
         freeze_backbone=(args.lr_yolo == 0.0),
-        adapt_bn_stats=args.adapt_bn,
         img_size=args.img_size,
     )
     yolo_weights = project_root / args.yolo_weights
@@ -365,7 +410,9 @@ def main() -> None:
     if not yolo_frozen:
         yolo_state = f"TRAINABLE (lr={args.lr_yolo:.2e}, BatchNorm train mode)"
     elif args.adapt_bn:
-        yolo_state = "FROZEN weights + affine, BatchNorm stats ADAPTING to MOT"
+        yolo_state = (
+            "FROZEN weights + affine, BatchNorm stats AdaBN-recalibrated to MOT"
+        )
     else:
         yolo_state = "FROZEN (weights + BatchNorm stats)"
     print("[GatedDet] YOLO " + yolo_state)
@@ -507,6 +554,12 @@ def main() -> None:
     if args.dry_run:
         print(f"[DryRun] provenance={provenance}")
         return
+
+    # ── AdaBN recalibration (BN-only domain adaptation) ──
+    # Recompute BN running stats on MOT with frozen weights, then freeze them.
+    # On resume the recalibrated stats already live in the checkpoint.
+    if args.adapt_bn and start_epoch == 1:
+        recalibrate_bn(model, loader, device, args.img_size, args.adapt_bn_batches)
 
     # ── Training loop ──
     for epoch in range(start_epoch, args.epochs + 1):

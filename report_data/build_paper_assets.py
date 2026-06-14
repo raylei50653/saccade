@@ -9,7 +9,7 @@ import hashlib
 import io
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping, TypedDict
 
 import matplotlib
 
@@ -236,15 +236,15 @@ def _read_latency(result_dir: Path) -> dict[str, Any]:
     return latency
 
 
-def _counts_to_metrics(counts: dict[str, int]) -> dict[str, float | int]:
-    idtp = counts["idtp"]
-    idfp = counts["idfp"]
-    idfn = counts["idfn"]
-    fp = counts["num_false_positives"]
-    fn = counts["num_misses"]
-    ids = counts["num_switches"]
-    objects = max(counts["num_objects"], 1)
-    predictions = max(counts["num_predictions"], 1)
+def _counts_to_metrics(counts: Mapping[str, float | int]) -> dict[str, float | int]:
+    idtp = int(counts["idtp"])
+    idfp = int(counts["idfp"])
+    idfn = int(counts["idfn"])
+    fp = int(counts["num_false_positives"])
+    fn = int(counts["num_misses"])
+    ids = int(counts["num_switches"])
+    objects = max(int(counts["num_objects"]), 1)
+    predictions = max(int(counts["num_predictions"]), 1)
     idf1_den = 2 * idtp + idfp + idfn
     return {
         "IDF1": 100.0 * 2 * idtp / idf1_den if idf1_den else 0.0,
@@ -488,7 +488,14 @@ def main() -> None:
         row["interpretation"] = experiment["interpretation"]
         boundary_rows.append(row)
 
-    pair_specs = [
+    class _PairSpec(TypedDict):
+        label: str
+        plain: str
+        shaped: str
+        paired: bool
+        reason: str
+
+    pair_specs: list[_PairSpec] = [
         {
             "label": "unpaired_original",
             "plain": "replica_20260612",

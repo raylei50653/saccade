@@ -381,7 +381,21 @@ ReID 不僅零增益，還**降低** IDF1（可能因為 semantic relink 在強 
 | Postprocess all-native | postprocess −0.17ms | 消除 python_tail 段，完全 C++/CUDA |
 | 合併 postprocess 到 whole-detect graph | postprocess 1.84→0 | 將目前獨立的 postprocess 也納入 whole-detect graph（目前已有 NMS graph，但非 fully merged） |
 
-### 8.3 長期（架構變更）
+### 8.3 Mamba Head TRT 現狀 (2026-06-06 快照)
+
+**已完成：**
+- SelectiveScan TRT Plugin (`src/tracking/mamba_scan_plugin.cpp`) — 自定義 TensorRT IPluginV3，包裝 `selective_scan_fwd` CUDA kernel
+- Plugin 共享庫 (`build/libsaccade_scan_plugin.so`) — 匯出 `getCreators`/`setLoggerFinder` 供 TRT 載入
+- ONNX 匯出 (`scripts/model/export_mamba_head_onnx.py`) — PyTorch MambaHead → ONNX，custom op 透過 `torch.autograd.Function.symbolic()` 映射到 `saccade::SelectiveScan`
+- TRT Engine 建置 (`scripts/model/build_mamba_head_trt.py`) — ONNX → TRT FP16 engine (`models/yolo/mamba_head.engine`)
+
+**尚未完成：**
+- Engine 正確性驗證 (parity check vs PyTorch eager)
+- 整合到現有 inference pipeline 中 (backbone engine → mamba head engine → postprocess)
+- INT8 量化路徑
+- Dynamic batching 支援
+
+### 8.4 長期（架構變更）
 
 | 方向 | 說明 |
 |------|------|

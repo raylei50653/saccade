@@ -256,6 +256,7 @@ class EvalConfig:
     nsa_kalman: bool
     kalman_r_scale: float
     vel_dir_weight: float
+    occ_vel_weight: float
     fuse_score_weight: float
     stage2_match_thresh: float
     birth_low_score_thresh: float
@@ -704,6 +705,7 @@ def parse_eval_config(
         nsa_kalman=bool(kwargs.get("nsa_kalman", False)),
         kalman_r_scale=float(kwargs.get("kalman_r_scale", 1.0)),
         vel_dir_weight=float(kwargs.get("vel_dir_weight", 0.0)),
+        occ_vel_weight=float(kwargs.get("occ_vel_weight", 0.0)),
         fuse_score_weight=float(kwargs.get("fuse_score_weight", 0.0)),
         stage2_match_thresh=float(kwargs.get("stage2_match_thresh", 0.5)),
         birth_low_score_thresh=float(kwargs.get("birth_low_score_thresh", 0.0)),

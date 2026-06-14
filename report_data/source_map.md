@@ -23,8 +23,7 @@ and negative results.
 | `docs/modules/detection/research/mamba-cuda-graph-bug.md` | Correctness issue and stream-binding fix |
 | `docs/modules/detection/research/whole-graph-kernel-fragmentation.md` | Runtime bottleneck analysis |
 | `docs/modules/detection/research/kernel-fusion-plan.md` | Pointwise fusion plan and measured speedup |
-| `docs/modules/detection/mamba_whole_graph_analysis.md` | Whole-pipeline graph architecture |
-| `report_data/mamba_whole_graph_analysis.md` | Paper-facing runtime summary |
+| `docs/modules/detection/mamba_whole_graph_analysis.md` | Whole-pipeline graph architecture + paper-facing runtime summary（含 TRT plugin 實作記錄）|
 
 ## Supporting tracking ablations
 

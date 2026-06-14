@@ -3,15 +3,28 @@
 > Option D（Track-Conditioned YOLO）已於 2026-05-19 結案 NO-GO，設計文件移至
 > [docs/archive/option-d/](../../archive/option-d) 保留供歷史參考。
 
-本目錄保留**當前 active** 的 Temporal YOLO 設計：
+### 設計 / 訓練協議（頂層）
 
 | 文件 | 內容 | 狀態 |
 |------|------|------|
-| [option-e-v2-design.md](option-e-v2-design.md) | Quality-Gated Temporal Feature Fusion | GO (MOTA 54.2%) |
-| [option-f-mamba-head.md](option-f-mamba-head.md) | Mamba SSM Detection Head | active prototype |
+| [option-f-mamba-head.md](option-f-mamba-head.md) | Mamba SSM Detection Head（當前 baseline 路線）| active |
 | [mamba-head-training.md](mamba-head-training.md) | Mamba head 完整訓練流程（distill→GT-ft、版本譜系、高解析重訓）| reference |
 | [mamba-v14r-training-protocol.md](mamba-v14r-training-protocol.md) | v14-R canonical protocol、split/seed、選模與 provenance 規範 | canonical |
+| [mamba-v14-replication-protocol.md](mamba-v14-replication-protocol.md) | legacy v14 復刻協議（刻意保留 02 洩漏結構，驗證 recipe 可重現性）| reference |
+| [mamba_whole_graph_analysis.md](mamba_whole_graph_analysis.md) | mamba_whole_graph production baseline 深度分析報告 | analysis |
+| [option-e-v2-design.md](option-e-v2-design.md) | Quality-Gated Temporal Feature Fusion（已被 Option F 取代）| superseded |
+
+### research/ — 分析與計畫
+
+| 文件 | 內容 | 狀態 |
+|------|------|------|
+| [research/mamba-t3t1-curriculum-20260613.md](research/mamba-t3t1-curriculum-20260613.md) | T3→T1 temporal-consistency curriculum（首超 v14，IDF1 75.4）| ✅ GO |
+| [research/mamba-score-distribution-20260613.md](research/mamba-score-distribution-20260613.md) | 分數分佈歸因（95k GT）：飽和左尾、框高主導、人群密度走漏檢非壓分；門檻 sweep → ntt0.20 過擬合撤回(維持0.28)、框高條件化雙向 NO-GO（registry #38） | ❌ 結案 |
+| [research/mamba-cuda-graph-bug.md](research/mamba-cuda-graph-bug.md) | CUDA-graph eval bug 根因（selective_scan stream-bind fix）| ✅ 已修 |
+| [research/whole-graph-kernel-fragmentation.md](research/whole-graph-kernel-fragmentation.md) | nsys kernel fragmentation 分析（~372 kernels/frame，fragmentation-bound）| analysis |
+| [research/kernel-fusion-plan.md](research/kernel-fusion-plan.md) | elementwise kernel fusion 計畫（對應上文 fragmentation）| proposed |
 | [research/mamba-dual-resolution-original-detail-plan.md](research/mamba-dual-resolution-original-detail-plan.md) | 640 Mamba global + 原始解析度 detail branch 研究計畫 | proposed |
+| [research/mamba-strip-detail-routing-design.md](research/mamba-strip-detail-routing-design.md) | 小目標 strip detail routing 設計（registry #36 ROI NO-GO，parked）| ⏸ parked |
 
 ## 設計演進總覽
 
@@ -117,12 +130,15 @@ Phase 3 — SAVE     checkpoint 由 training_utils.save_checkpoint() 統一處�
 |------|------|------|
 | 2026-05-27 | Option F Mamba Gated Detector（PixelShuffle + Cross-Scan + Flow-Gated） | ✅ GO，當前 preset `mamba_optimal` |
 | 2026-06-02 | mamba_head CUDA graph（stream-bind fix） | ✅ GO，+15% FPS，已 default |
+| 2026-06-13 | T3→T1 temporal-shaping curriculum | 🔄 進行中（未結案，復現 v14 過程衍生）：困難序列方向一致（12/12 正向），但增益 marginal 且種子相依（+0.4~2.2），best run 75.4 ≈ legacy v14 75.1；待 conv-head 對照 + 多種子 + strict-clean split 才能定生死。見 [research/mamba-t3t1-curriculum-20260613.md](research/mamba-t3t1-curriculum-20260613.md) |
+| 2026-06-12 | v14 全鏈復刻（recipe 可重現性驗證） | ✅ 結案：replica IDF1 73.4 vs legacy 75.1，殘差 ~2pp = seed/scheduler 不可恢復因素；v14 非 lucky checkpoint。**衍生**兩條未結案線（T3→T1 上、frozen-SSM「unfreeze 無明顯變化」）。見 [mamba-v14-replication-protocol.md](mamba-v14-replication-protocol.md) |
 | 2026-05-22 | Option E-v2 Quality-Gated Temporal Fusion | ✅ GO（後被 Option F 取代） |
 | — | ST-Mamba 時序 buffer | ⏸️ 單幀持平、時序不 work → 轉 VGT-Mamba |
 | 2026-05-19 | Option D Track-Conditioned YOLO | ❌ NO-GO（IDF1 31.7%，gate 無貢獻） |
 | 2026-05-18 | Horizontal-flip TTA | ❌ NO-GO（精度雜訊內） |
 | 2026-06-01 | MOT20 混訓 | ❌ NO-GO（domain shift 退步） |
 | 2026-05-10~11 | Pose box expansion / P5 birth gates / stage2 quality gate | ❌ NO-GO（靜態 FP 無法靠 spatial 區分） |
+| 2026-06-13 | 小目標高解析度恢復（B1-H dense / 1024 unified / strip-oracle routing） | 🔻 ROI NO-GO（成本判定 · parked，registry [#36](../../reference/no_go_registry.md)）；增益天花板 <0.5pp IDF1 vs 高解析度部署成本，strip Phase 1 已實作 default off，設計見 [research/](research/mamba-strip-detail-routing-design.md) |
 
 ## 📋 模組 TODO
 

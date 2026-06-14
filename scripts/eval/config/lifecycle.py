@@ -636,7 +636,7 @@ def add_lifecycle_args(parser: argparse.ArgumentParser) -> None:
         help=_help(
             "Minimum box height (px) for both sides of a gap to be interpolated.",
             range_hint="0-500",
-            edge="100 filters ~77% of wrong interpolations",
+            edge="100 filters ~77%% of wrong interpolations",
         ),
     )
     grp.add_argument(

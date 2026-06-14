@@ -33,6 +33,14 @@ The former full-pipeline formula collection is retained as
 [pipeline_algorithms_reference.md](pipeline_algorithms_reference.md). It is a
 tracker implementation reference, not the paper's proposed algorithm.
 
+Runtime dataflow for the deployed production baseline is documented in
+[mamba_whole_graph_dataflow.md](mamba_whole_graph_dataflow.md) (per-stage
+latency, Nsight kernel verification) and
+[mamba_whole_graph_pipeline_flow.md](mamba_whole_graph_pipeline_flow.md)
+(three-layer CUDA-graph architecture). These describe the `mamba_whole_graph`
+preset specifically; the generic `speed`/`baseline` versions live under
+`docs/reference/pipeline_flow.md` and `docs/DATAFLOW.md`.
+
 ## Evidence classes
 
 | Class | Meaning | Current material |

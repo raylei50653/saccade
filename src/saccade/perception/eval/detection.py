@@ -26,7 +26,11 @@ _nms_cuda_workspace: Dict[Tuple[int], Dict[str, Any]] = {}
 _duplicate_merge_cuda_workspace: Dict[
     Tuple[int, torch.dtype, torch.dtype], Dict[str, Any]
 ] = {}
-_SAHI_2X2_TILINGS = {"960p_2x2", "sahi_960p_2x2"}
+_SAHI_2X2_TILINGS = {
+    "960p_2x2",
+    "sahi_960p_2x2",
+    "mamba_global_2x2",
+}
 
 
 def _is_2x2_tiling(tiling: str | None) -> bool:
@@ -1381,6 +1385,59 @@ def detect_adaptive_960_tiled(
         all_boxes.reshape(-1, 4),
         raw_dets[:, :, 4].reshape(-1),
         raw_dets[:, :, 5].reshape(-1),
+        True,
+        None,
+    )
+
+
+def detect_mamba_global_2x2(
+    detector: Any,
+    pool: Any,
+    h_orig: int,
+    w_orig: int,
+    preprocess_modes: List[str],
+    detector_box_format: str = "xyxy",
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, bool, Optional[torch.Tensor]]:
+    """Run one full-frame Mamba pass plus four 640px tiles on a 960px canvas."""
+    if not (
+        getattr(detector, "use_whole_graph", False)
+        and getattr(detector, "_trt_backbone", None) is not None
+        and hasattr(detector, "detect_raw_preprocessed")
+    ):
+        raise RuntimeError(
+            "tiling=mamba_global_2x2 requires the Mamba whole-graph TRT detector"
+        )
+    if "letterbox" in preprocess_modes:
+        raise RuntimeError(
+            "tiling=mamba_global_2x2 manages its own tile letterbox canvas"
+        )
+
+    global_raw = detector.detect_raw(pool.frame_buffer.unsqueeze(0)).clone()
+    global_boxes = _decode_detector_boxes(global_raw[0, :, :4], detector_box_format)
+
+    # _prepare_canvas_960p sets pool.tile_dx/tile_dy as a side effect; those
+    # offsets are required below to map tile-space boxes back to canvas coords.
+    r, _h_new, _w_new, y_off, x_off = _prepare_canvas_960p(pool, h_orig, w_orig)
+    pool.tiles_batch4[0].copy_(pool.canvas_960p[:, 0:640, 0:640])
+    pool.tiles_batch4[1].copy_(pool.canvas_960p[:, 0:640, 320:960])
+    pool.tiles_batch4[2].copy_(pool.canvas_960p[:, 320:960, 0:640])
+    pool.tiles_batch4[3].copy_(pool.canvas_960p[:, 320:960, 320:960])
+
+    tile_raw = torch.cat(
+        [
+            detector.detect_raw_preprocessed(pool.tiles_batch4[i : i + 1]).clone()
+            for i in range(4)
+        ],
+        dim=0,
+    )
+    tile_boxes = _decode_detector_boxes(tile_raw[:, :, :4], detector_box_format)
+    tile_boxes[:, :, [0, 2]] = (tile_boxes[:, :, [0, 2]] + pool.tile_dx - x_off) / r
+    tile_boxes[:, :, [1, 3]] = (tile_boxes[:, :, [1, 3]] + pool.tile_dy - y_off) / r
+
+    return (
+        torch.cat([global_boxes, tile_boxes.reshape(-1, 4)], dim=0),
+        torch.cat([global_raw[0, :, 4], tile_raw[:, :, 4].reshape(-1)], dim=0),
+        torch.cat([global_raw[0, :, 5], tile_raw[:, :, 5].reshape(-1)], dim=0),
         True,
         None,
     )

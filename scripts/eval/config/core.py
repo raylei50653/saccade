@@ -377,6 +377,22 @@ def add_core_args(parser: argparse.ArgumentParser) -> None:
         help="Path to teacher (GatedYOLODetector) checkpoint for Mamba eval.",
     )
     core.add_argument(
+        "--mamba-yolo-weights",
+        default="models/yolo/yolo26s.pt",
+        help="Base YOLO weights matching the Mamba/teacher lineage.",
+    )
+    core.add_argument(
+        "--mamba-small-p3-max-threshold",
+        type=float,
+        default=0.0,
+        help=(
+            "Experimental: below this detector-input short-side size (px), use "
+            "P3 box coordinates with max aligned P3/P4/P5 score (0=off). "
+            "Threshold is at detector input resolution (e.g. 640px); whole-graph "
+            "mode scales to original-image size via box_scale_x/y."
+        ),
+    )
+    core.add_argument(
         "--no-temporal",
         action="store_true",
         help="Disable temporal buffer in MambaGatedDetector (force T=1 inference).",

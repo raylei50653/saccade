@@ -29,6 +29,9 @@ from saccade.perception.temporal_yolo.mamba_gated_detector import (  # noqa: E40
     build_mamba_gated_detector,
     set_postprocess_compile,
 )
+from saccade.perception.temporal_yolo.mamba_head import (  # noqa: E402
+    build_strip_oracle_positions,
+)
 
 ORIGINAL_HEIGHT_BINS = (
     ("h_lt32", 0.0, 32.0),
@@ -286,6 +289,26 @@ def main() -> None:
                     else _load_frame(frame_path, args.device)
                 )
                 pool.frame_buffer.copy_(frame)
+                frame_gt = ground_truths.get(frame_id, [])
+                if detector.use_strip_detail:
+                    resized_gt = torch.tensor(
+                        [item["bbox"] for item in frame_gt],
+                        device=args.device,
+                        dtype=torch.float32,
+                    ).reshape(-1, 4)
+                    if resized_gt.numel() > 0:
+                        resized_gt[:, [0, 2]] *= 640.0 / orig_w
+                        resized_gt[:, [1, 3]] *= 640.0 / orig_h
+                    route_positions, route_mask = build_strip_oracle_positions(
+                        [resized_gt],
+                        p3_hw=(80, 80),
+                        img_size=640,
+                        budget=detector.strip_route_budget,
+                        small_threshold=detector.strip_small_threshold,
+                        device=torch.device(args.device),
+                        generator=torch.Generator().manual_seed(20260613 + frame_id),
+                    )
+                    detector.set_strip_detail_positions(route_positions, route_mask)
                 boxes, scores, classes = detect_single_patch_640(
                     detector,
                     pool,
@@ -302,7 +325,6 @@ def main() -> None:
                     boxes = boxes[keep]
                     scores = scores[keep]
 
-                frame_gt = ground_truths.get(frame_id, [])
                 gt_boxes = torch.tensor(
                     [item["bbox"] for item in frame_gt],
                     dtype=torch.float32,

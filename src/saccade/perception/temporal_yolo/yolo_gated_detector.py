@@ -36,11 +36,6 @@ class GatedDetConfig:
     gate_sigma_scale: float = 0.5
     gate_min_score: float = 0.5
     freeze_backbone: bool = False
-    # When freeze_backbone is set, BN layers default to eval (running stats fixed
-    # at the COCO prior). Set adapt_bn_stats to instead leave BN in train mode so
-    # running_mean/var adapt to the MOT domain while weights + BN affine stay
-    # frozen — isolates BN domain-shift recalibration from weight learning.
-    adapt_bn_stats: bool = False
     img_size: int = 640
 
     enable_temporal_fusion: bool = False
@@ -216,13 +211,13 @@ class GatedYOLODetector(nn.Module):
         super().train(mode)
         if mode and self.cfg.freeze_backbone:
             self.yolo_model.train()
-            if not self.cfg.adapt_bn_stats:
-                # Freeze BN running stats at the COCO prior. With adapt_bn_stats
-                # set, BN stays in train mode so running_mean/var adapt to MOT
-                # (BN affine params remain frozen via requires_grad=False).
-                for m in self.yolo_model.modules():
-                    if isinstance(m, nn.modules.batchnorm._BatchNorm):
-                        m.eval()
+            # Freeze BN running stats; train-mode batch-stat normalization of a
+            # frozen COCO head on small MOT batches is unstable. MOT BN adaptation
+            # is done via an explicit AdaBN recalibration pass (forward-only,
+            # then frozen) before training, not by keeping BN in train mode.
+            for m in self.yolo_model.modules():
+                if isinstance(m, nn.modules.batchnorm._BatchNorm):
+                    m.eval()
             self.gate.train()
             if self.fusion is not None:
                 self.fusion.train()

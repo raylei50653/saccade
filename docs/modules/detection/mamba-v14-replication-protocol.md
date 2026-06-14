@@ -8,6 +8,43 @@
 > 因為復刻的對象就是含洩漏的歷史流程；不得當成 holdout 實驗報告。
 > strict holdout 實驗見 [mamba-v14r-training-protocol.md](mamba-v14r-training-protocol.md)。
 
+## 完整 e30 teacher 重建（2026-06-14）
+
+目前指定的主實驗不是歷史 e12 teacher replica，而是 teacher 必須實際完成
+30 epochs，並固定使用 `epoch_0030.ckpt`。一鍵流程：
+
+```bash
+scripts/train/temporal_yolo/run_v14_full_e30_replication.sh
+```
+
+先檢查完整命令而不執行：
+
+```bash
+scripts/train/temporal_yolo/run_v14_full_e30_replication.sh --print-only
+```
+
+流程固定為：
+
+```text
+yolo26s.pt
+  -> gated teacher epoch 30
+  -> immutable 7-sequence teacher cache
+  -> Cross-Scan + PixelShuffle distill (legacy N=1, frozen SSM)
+  -> live-teacher GT1 (legacy N=1, gt_ratio=0.5)
+  -> cached GT2 (fixed N=16, frozen SSM)
+  -> MOT17-02 size recall + seven-sequence tracking eval
+```
+
+所有產物使用 `v14_full_e30` 前綴，不覆蓋既有歷史或 replica runs。runner
+會驗證 teacher 確實為 epoch 30，並依 `latest.ckpt` 續跑未完成 stage；
+若 teacher 在 epoch 30 前 non-finite，流程直接失敗，禁止拿較早 epoch
+替代。這是完整的 **e30 teacher 變體重建**，不是歷史 checkpoint 的
+bit-level replay：歷史 teacher 最終只保留到 e12，且原始 seed 不可恢復。
+
+後三段刻意重現歷史 runtime curriculum：distill/GT1 使用 `77fcc262^`
+的 N=1 launch 與 flattened-B indexing，GT2 才切換至 fixed N=16。T3->T1
+不屬於 v14 歷史主線，因此不包含在此 runner。
+
 ## 核心機制（frozen-SSM regime）
 
 依 [frozen-SSM audit](../../../report_data/mamba_v14_frozen_ssm_audit.md)：
@@ -287,6 +324,73 @@ box/score 穩定性（IoU 路徑）傳導，特徵空間不攜帶個體身分。
 下的 production 候選維持 T3→T1（`runs/mamba_gt_v14replica_t3_t1`）；
 MOTA/recall 優先場景可選 T3T1→ssmft（79.4/71.0）。
 
+### v14 直接轉換對照（零訓練，2026-06-13）
+
+用三點拆分 runtime 轉換與後續 GT 訓練：
+
+```bash
+scripts/eval/run_v14_conversion_ablation.sh
+```
+
+1. parent 權重 + `77fcc262^` 歷史 N=1 runtime；
+2. 完全相同 parent 權重 + `77fcc262` fixed N=16 runtime；
+3. 最終 `mamba_gt_vgt_mamba_v14/best.ckpt` + N=16 runtime。
+
+`1→2` 是純 runtime 轉換增益，無 optimizer step、無 teacher/cache 重建；
+`2→3` 才是後續 GT run 的殘餘增益。legacy runtime 精確保留 rank-16 B
+在 kernel N=1 下的 flattened stride=1 讀取；C 使用當時的 rank-1 layout。
+
+同一個現行 `mamba_whole_graph` tracker/evaluator 口徑：
+
+| checkpoint/runtime | IDF1 | MOTA | HOTA | DetA | AssA | FP | FN |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| parent + legacy N=1 | 72.4 | 74.4 | 65.3 | 67.5 | 63.5 | 3175 | 25127 |
+| same parent + fixed N=16 | 72.5 | 74.2 | 65.2 | 67.5 | 63.2 | 3296 | 25218 |
+| final v14 + N=16 | **75.1** | **77.7** | **68.2** | **70.0** | **66.6** | 3514 | **21082** |
+
+MOT17-02 detector recall@0.25（all / 4–8px）依序為
+93.26/85.21、93.18/85.04、**94.01/87.07**。
+
+**結論：直接 N=1→N=16 轉換不是 v14 最佳的主因。** 同權重切 runtime
+只有 +0.1 IDF1，且 MOTA/HOTA/AssA 微退；真正躍升發生在 fixed N=16
+之後的 GT run（+2.6 IDF1、+3.5 MOTA、+3.0 HOTA、FN −4136）。因此 v14
+應解讀為：既有 Cross-Scan + PixelShuffle parent 在修正後的 N=16 forward
+座標系上，透過後續可訓 readout/gate/heads 重新適應；SSM 內部仍保持 frozen
+init。歷史「不重訓即 72.2、最終 72.4」數字與本次差異來自當時 evaluator/
+tracker 口徑，不能用來歸因 checkpoint 本身。
+
+### Controlled frozen-SSM N=16 refit（2026-06-13）
+
+直接從歷史 parent `mamba_gt_pixelshuffle_crossscan/best.ckpt`，沿正確 lineage
+只重播最後一條 edge：
+
+```text
+mamba_gt_pixelshuffle_crossscan
+  → fixed N=16
+  → --scan-stop-grad GT fine-tune (30 epochs)
+```
+
+固定 `gated_det_v1`、歷史 `trt_feat_cache_v2`、7 條 MOT17、T=4、
+LR 1e-4、seed 42；不重建 teacher/distill、不加入 temporal。產物：
+`runs/mamba_gt_v14_parent_n16_frozen_refit/best.ckpt`（epoch 29）。
+
+| | parent fixed N=16 | controlled refit | legacy v14 |
+|---|---:|---:|---:|
+| IDF1 | 72.5 | **75.0** | 75.1 |
+| MOTA | 74.2 | **77.8** | 77.7 |
+| HOTA | 65.2 | **68.5** | 68.2 |
+| DetA | 67.5 | **71.3** | 70.0 |
+| AssA | 63.2 | **66.1** | 66.6 |
+| IDs | 444 | 449 | 482 |
+| FP / FN | 3296 / 25218 | **3250 / 21245** | 3514 / 21082 |
+| 02 recall@0.25 all / 4–8px | 93.18 / 85.04 | **94.37 / 88.27** | 94.01 / 87.07 |
+
+Tensor audit：SSM 內部 21 tensors（A_log/D/conv1d/x_proj/dt_proj）相對
+parent **逐 bit 相同**；其餘 48/69 tensors 更新。這證明 v14 的可重現
+主因是 **fixed N=16 forward 下的 frozen structured mixer + 外圍
+gate/readout/upsampling/detection heads GT 適應**，不是 runtime 轉換本身，
+也不需要歷史偶然 seed 或 temporal 分支。
+
 ## 成功因素歸納（為什麼這條訓練路徑有效）
 
 基於復刻 + 歸因實驗的因果整理，按重要性排列：
@@ -315,6 +419,28 @@ artifact；「lucky checkpoint」= multi-seed 0.4pp 帶寬否證；「train loss
 teacher），只訓練低容量讀出層，用課程從稠密模仿漸進到稀疏 GT；
 T3→T1 是同一哲學的延伸 —— 用訓練時的結構約束塑形特徵，而非增加
 部署容量。**
+
+## YOLO26m 容量對照
+
+`yolo26m` 不能直接替換現有 `yolo26s` backbone：其 P3/P4/P5 通道為
+`(256, 512, 512)`，而 `yolo26s` 為 `(128, 256, 512)`。訓練與推理現在
+會把實際 `in_channels`、base YOLO path/hash 寫入 Mamba checkpoint；
+cache manifest 會驗證 YOLO/teacher lineage，runtime 會驗證 checkpoint SHA，
+TRT engine 則驗證 FPN 通道，避免誤用 `yolo26s` artifacts。
+
+完整同配方容量對照：
+
+```bash
+scripts/train/temporal_yolo/run_v14replica_yolo26m.sh
+```
+
+流程保留 teacher 的 30-epoch scheduler 並固定取 epoch 12，接著依序執行
+全 7-seq cache、distill、GT1、plain GT2 control、T3→T1、teacher-backbone
+TRT export 與同口徑 eval。唯一刻意變因是 base YOLO/FPN 容量；Mamba
+`d_model/d_state/blocks`、seed、資料、epoch 與 tracker preset 均不變。
+
+目前 C++ Mamba detector 仍固定 `yolo26s` 通道；`yolo26m` 對照必須使用
+Python whole-graph 路徑。若誤開 C++ path，runtime 會明確拒絕。
 
 ## 與歷史的已知偏差
 

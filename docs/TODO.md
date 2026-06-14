@@ -36,11 +36,11 @@
 
 ---
 
-## 當前 Baseline（2026-06-03 更新）
+## 當前 Baseline（2026-06-13 更新）
 
 | preset | IDF1 | MOTA | IDs | Rcll | FP | FPS | 備註 |
 |--------|------|------|-----|------|-----|-----|------|
-| **mamba_whole_graph** | **73.3%** | **77.1%** | **536** | 81.0% | 3797 | **157.1** | **當前 baseline**，整圖 CUDA graph，ReID off；HOTA 66.7/DetA 69.9/AssA 63.9 |
+| **mamba_whole_graph** | **75.1%** | **77.7%** | **482** | 81.2% | 3514 | **223.2** | **當前 baseline**，整圖 CUDA graph + bidir bridge relink 預設開 + GMC cuFFT graph，ReID off；HOTA 68.2/DetA 70.0/AssA 66.6/FN 21082/Prcn 96.3 |
 | **speed**（yolo26s） | **52.0%** | **41.6%** | **475** | 55.0% | 14687 | **97.9** | Baseline s |
 | **baseline**（yolo26m） | **51.4%** | **43.5%** | **502** | 59.0% | — | ~85 | Baseline m |
 | **gated_det_v1**（Option E） | **56.9%** | **52.5%** | **515** | 56.2% | 3712 | ~71 | |
