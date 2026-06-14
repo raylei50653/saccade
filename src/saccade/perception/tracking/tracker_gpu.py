@@ -670,6 +670,101 @@ class GPUByteTracker:
         if set_oao is not None:
             set_oao(float(tau))
 
+    def set_occ_params(
+        self,
+        enabled: bool = True,
+        iou_thresh: float = 0.45,
+        foot_gap: float = 0.15,
+        ttl: int = 4,
+        cost_weight: float = 0.50,
+    ) -> None:
+        """Depth-gated occlusion-state machine (Occluded(by=A)); default off.
+
+        Holds an occludee behind its occluder and depth-biases re-acquisition to
+        resolve occlusion crossing-swaps. No-op on bindings that predate the feature.
+        """
+        setter = getattr(self.tracker, "set_occ_params", None)
+        if setter is not None:
+            setter(
+                bool(enabled),
+                float(iou_thresh),
+                float(foot_gap),
+                int(ttl),
+                float(cost_weight),
+            )
+
+    def get_occ_front_info(self) -> list[int] | None:
+        """Read back front-ttl and partner-slot arrays (max_objs × 2 ints).
+
+        Returns None when the binding predates this feature or occ_state is off.
+        """
+        getter = getattr(self.tracker, "get_occ_front_info", None)
+        return getter() if getter is not None else None
+
+    def _occ_log_maybe(
+        self, frame: int, states: list, track_ids: list, num_dets: int, seq: str = ""
+    ) -> None:
+        """Env-gated diagnostic: log fresh front-flag events to SACCADE_OCC_LOG file.
+
+        Called once per frame after update(). Writes one CSV line per track that is freshly
+        front-flagged (ttl == occ_ttl, i.e. just entered the latch): frame, track_id,
+        partner_track_id, num_dets, foot_y, foot_y_partner, predict_IoU.
+        No-op when SACCADE_OCC_LOG is not set or get_occ_front_info returns None.
+        """
+        import os
+
+        path = os.environ.get("SACCADE_OCC_LOG", "")
+        if not path:
+            return
+        info = self.get_occ_front_info()
+        if info is None:
+            return
+        n = len(info) // 2
+        ttl_arr = info[:n]
+        partner_arr = info[n:]
+        ids = track_ids
+        st = states
+        for t in range(n):
+            fttl = ttl_arr[t]
+            if fttl <= 0 or partner_arr[t] < 0:
+                continue
+            # Compute predict-box IoU from Kalman states (cx,cy,w=a*h,h,v*)
+            cx_t, cy_t, a_t, h_t = (
+                st[t * 8],
+                st[t * 8 + 1],
+                st[t * 8 + 2],
+                st[t * 8 + 3],
+            )
+            w_t = a_t * h_t
+            p = partner_arr[t]
+            if p >= len(st) // 8:
+                continue
+            cx_p, cy_p, a_p, h_p = (
+                st[p * 8],
+                st[p * 8 + 1],
+                st[p * 8 + 2],
+                st[p * 8 + 3],
+            )
+            w_p = a_p * h_p
+            ix1, iy1 = (
+                max(cx_t - w_t * 0.5, cx_p - w_p * 0.5),
+                max(cy_t - h_t * 0.5, cy_p - h_p * 0.5),
+            )
+            ix2, iy2 = (
+                min(cx_t + w_t * 0.5, cx_p + w_p * 0.5),
+                min(cy_t + h_t * 0.5, cy_p + h_p * 0.5),
+            )
+            iw, ih = max(0.0, ix2 - ix1), max(0.0, iy2 - iy1)
+            inter = iw * ih
+            pred_iou = (
+                inter / (w_t * h_t + w_p * h_p - inter + 1e-6) if inter > 0 else 0.0
+            )
+            with open(path, "a") as f:
+                f.write(
+                    f"{seq},{frame},{ids[t]},{ids[p]},{num_dets},"
+                    f"{cy_t + h_t:.1f},{cy_p + h_p:.1f},{pred_iou:.3f}\n"
+                )
+
     def set_quality_params(
         self,
         enabled: bool,

@@ -298,13 +298,26 @@ __global__ void count_stage1_candidates_kernel(
 
 // OA-SORT: per-track occlusion coefficient = max IoU of predicted box with all other active
 // track predicted boxes. Cheap O(n²) kernel; n_active is typically ≤ 128.
+//
+// When occ_front_ttl != nullptr (occluder-side depth mutual-exclusion enabled), it also
+// latches whether THIS track is the confident *front* (occluder) of an overlapping pair:
+// high track-track IoU AND its foot decisively lower (closer to camera) than the argmax
+// partner's. The latch (ttl frames) keeps the flag alive through the 1-2 frame separation
+// where the swap actually happens (occlusion IoU has dropped by then).
 __global__ void compute_track_occlusion_kernel(
-    const float* states, const bool* active, float* occ_coeff, int max_objs, float oao_tau)
+    const float* states, const bool* active, float* occ_coeff, int max_objs, float oao_tau,
+    int* occ_front_ttl, float occ_iou_thresh, float occ_foot_gap, int occ_ttl,
+    int* occ_partner)
 {
-    if (oao_tau <= 0.0f) return;
+    if (oao_tau <= 0.0f && !occ_front_ttl) return;
     int t = blockIdx.x * blockDim.x + threadIdx.x;
     if (t >= max_objs) return;
-    if (!active[t]) { occ_coeff[t] = 0.0f; return; }
+    if (!active[t]) {
+        occ_coeff[t] = 0.0f;
+        if (occ_front_ttl) occ_front_ttl[t] = 0;
+        if (occ_partner) occ_partner[t] = -1;
+        return;
+    }
 
     const float* st = states + t * 8;
     float tw = st[2] * st[3], th = st[3];
@@ -313,6 +326,7 @@ __global__ void compute_track_occlusion_kernel(
     float t_area = (tx2 - tx1) * (ty2 - ty1);
 
     float max_occ = 0.0f;
+    int arg_partner = -1;
     for (int j = 0; j < max_objs; ++j) {
         if (j == t || !active[j]) continue;
         const float* sj = states + j * 8;
@@ -325,9 +339,26 @@ __global__ void compute_track_occlusion_kernel(
         float inter = fmaxf(0.0f, ix2 - ix1) * fmaxf(0.0f, iy2 - iy1);
         if (inter <= 0.0f) continue;
         float iou = inter / (t_area + j_area - inter + 1e-6f);
-        max_occ = fmaxf(max_occ, iou);
+        if (iou > max_occ) { max_occ = iou; arg_partner = j; }
     }
     occ_coeff[t] = max_occ;
+
+    if (occ_front_ttl) {
+        bool is_front = false;
+        if (max_occ >= occ_iou_thresh && arg_partner >= 0) {
+            const float* sp = states + arg_partner * 8;
+            float footy_t = st[1] + st[3] * 0.5f;
+            float footy_p = sp[1] + sp[3] * 0.5f;
+            float h_ref = 0.5f * (st[3] + sp[3]);
+            // Same-height gate: only flag when tracks are at similar depth
+            // (true occlusion crossing, not projection overlap at different distances).
+            // t is FRONT iff it is lower (closer to camera) within the same-depth band.
+            float gap_h = (footy_t - footy_p) / fmaxf(h_ref, 1e-3f);
+            is_front = fabsf(gap_h) <= occ_foot_gap && footy_t > footy_p;
+        }
+        occ_front_ttl[t] = is_front ? occ_ttl : max(0, occ_front_ttl[t] - 1);
+        if (occ_partner) occ_partner[t] = is_front ? arg_partner : -1;
+    }
 }
 
 // Fused stage-1 gate + cost computation for the no-ReID fast path.
@@ -342,7 +373,8 @@ __global__ void stage1_cost_fused_kernel(
     int n_trk, int n_det, float iou_gate, float maha_gate,
     float vel_dir_weight, float fuse_score_weight,
     const float* det_scores,
-    const float* d_occ_coeff, float oao_tau)
+    const float* d_occ_coeff, float oao_tau,
+    const int* occ_front_ttl, float occ_cost_weight)
 {
     int t = blockIdx.y * blockDim.y + threadIdx.y;
     int d = blockIdx.x * blockDim.x + threadIdx.x;
@@ -395,6 +427,16 @@ __global__ void stage1_cost_fused_kernel(
         }
     }
 
+    // Occluder-side depth mutual-exclusion: a latched front (occluder) track must keep
+    // its own frontal box and NOT absorb the back partner's box. Penalise it for matching
+    // a detection whose foot is above its own (more distal) → frees the back box for the
+    // occludee. (occ_front_ttl==nullptr when off → bit-identical.)
+    if (occ_front_ttl && occ_front_ttl[t] > 0 && occ_cost_weight > 0.0f) {
+        float footy_t = st[1] + st[3] * 0.5f;
+        float under = (footy_t - b2[3]) / fmaxf(st[3], 1e-3f);
+        if (under > 0.0f) iou_cost_val = fminf(1.0f, iou_cost_val + occ_cost_weight * under);
+    }
+
     *cost = fminf(1.0f, iou_cost_val);
 }
 __global__ void compute_conditional_cost_kernel(
@@ -409,7 +451,8 @@ __global__ void compute_conditional_cost_kernel(
     float cost_cos_w, float cost_iou_w, float cost_score_w,
     float cos_threshold, float iou_low,
     int reid_min_candidates,
-    const float* d_occ_coeff, float oao_tau)
+    const float* d_occ_coeff, float oao_tau,
+    const int* occ_front_ttl, float occ_cost_weight)
 {
     int t = blockIdx.y * blockDim.y + threadIdx.y;
     int d = blockIdx.x * blockDim.x + threadIdx.x;
@@ -483,6 +526,13 @@ __global__ void compute_conditional_cost_kernel(
     // OA-SORT OAO: tracks occluded by other tracks get a cost penalty to prevent cost confusion
     if (oao_tau > 0.0f && d_occ_coeff) {
         cost = fminf(1.0f, cost + oao_tau * d_occ_coeff[t]);
+    }
+
+    // Occluder-side depth mutual-exclusion (see stage1_cost_fused_kernel).
+    if (occ_front_ttl && occ_front_ttl[t] > 0 && occ_cost_weight > 0.0f) {
+        float footy_t = st[1] + st[3] * 0.5f;
+        float under = (footy_t - b2[3]) / fmaxf(st[3], 1e-3f);
+        if (under > 0.0f) cost = fminf(1.0f, cost + occ_cost_weight * under);
     }
 
     cost_matrix[t * n_det + d] = fminf(1.0f, fmaxf(0.0f, cost));
@@ -1933,6 +1983,10 @@ public:
         checkCuda(cudaMemset(d_homography_, 0, 9 * sizeof(float)));
         checkCuda(cudaMalloc(&d_occ_coeff_, max_objs_ * sizeof(float)));
         checkCuda(cudaMemset(d_occ_coeff_, 0, max_objs_ * sizeof(float)));
+        checkCuda(cudaMalloc(&d_occ_front_ttl_, max_objs_ * sizeof(int)));
+        checkCuda(cudaMemset(d_occ_front_ttl_, 0, max_objs_ * sizeof(int)));
+        checkCuda(cudaMalloc(&d_occ_partner_, max_objs_ * sizeof(int)));
+        checkCuda(cudaMemset(d_occ_partner_, -1, max_objs_ * sizeof(int)));
 
         // Auction pending buffers (used by commit_auction_results_kernel)
         checkCuda(cudaMalloc(&d_pending_det_, max_objs_ * sizeof(int)));
@@ -1957,6 +2011,8 @@ public:
         checkCuda(cudaMemset(d_age_, 0, max_objs_ * sizeof(int)));
         checkCuda(cudaMemset(d_features_, 0, max_objs_ * embed_dim_ * sizeof(float)));
         checkCuda(cudaMemset(d_state_, 0, max_objs_ * sizeof(int)));
+        checkCuda(cudaMemset(d_occ_front_ttl_, 0, max_objs_ * sizeof(int)));
+        checkCuda(cudaMemset(d_occ_partner_, -1, max_objs_ * sizeof(int)));
         checkCuda(cudaMemset(d_hit_streak_, 0, max_objs_ * sizeof(int)));
         checkCuda(cudaMemset(d_confirm_streak_required_, 0, max_objs_ * sizeof(int)));
         checkCuda(cudaMemset(d_score_sum_, 0, max_objs_ * sizeof(float)));
@@ -2030,6 +2086,8 @@ public:
         cudaFree(d_s_inv_);
         cudaFree(d_homography_);
         cudaFree(d_occ_coeff_);
+        cudaFree(d_occ_front_ttl_);
+        cudaFree(d_occ_partner_);
         cudaFree(d_pending_det_); cudaFree(d_pending_bid_);
         // M2
         cudaFree(d_free_slots_); cudaFree(d_n_free_); cudaFree(d_slot_cursor_);
@@ -2128,7 +2186,10 @@ public:
         dim3 g_size((max_assoc_ + 15) / 16, (max_objs_ + 15) / 16);
 
         kernel::compute_track_occlusion_kernel<<<blocks, threads, 0, stream>>>(
-            d_states_, d_active_, d_occ_coeff_, max_objs_, oao_tau_);
+            d_states_, d_active_, d_occ_coeff_, max_objs_, oao_tau_,
+            occ_state_enabled_ ? d_occ_front_ttl_ : nullptr,
+            occ_iou_thresh_, occ_foot_gap_, occ_ttl_,
+            occ_state_enabled_ ? d_occ_partner_ : nullptr);
 
         nvtxRangePushA("Assoc/CostMatrix");
         if (d_embeddings) {
@@ -2144,7 +2205,8 @@ public:
                 reid_cost_cos_w_, reid_cost_iou_w_, reid_cost_score_w_,
                 reid_cos_threshold_, reid_iou_low_,
                 reid_min_candidates_,
-                oao_tau_ > 0.0f ? d_occ_coeff_ : nullptr, oao_tau_);
+                oao_tau_ > 0.0f ? d_occ_coeff_ : nullptr, oao_tau_,
+                occ_state_enabled_ ? d_occ_front_ttl_ : nullptr, occ_cost_weight_);
         } else {
             checkCuda(cudaMemsetAsync(d_candidate_count_, 0, max_objs_ * sizeof(int), stream));
             kernel::stage1_cost_fused_kernel<<<g_size, b_size, 0, stream>>>(
@@ -2153,7 +2215,8 @@ public:
                 max_objs_, num_dets, iou_stage1_gate_, maha_gate_,
                 vel_dir_weight_, fuse_score_weight_,
                 d_scores,
-                oao_tau_ > 0.0f ? d_occ_coeff_ : nullptr, oao_tau_);
+                oao_tau_ > 0.0f ? d_occ_coeff_ : nullptr, oao_tau_,
+                occ_state_enabled_ ? d_occ_front_ttl_ : nullptr, occ_cost_weight_);
         }
         nvtxRangePop();
 
@@ -2418,6 +2481,21 @@ public:
     }
     void set_oao_params(float tau) {
         oao_tau_ = std::clamp(tau, 0.0f, 1.0f);
+    }
+    void set_occ_params(bool enabled, float iou_thresh, float foot_gap, int ttl, float cost_weight) {
+        occ_state_enabled_ = enabled;
+        occ_iou_thresh_ = std::clamp(iou_thresh, 0.0f, 1.0f);
+        occ_foot_gap_ = std::max(0.0f, foot_gap);
+        occ_ttl_ = std::max(1, ttl);
+        occ_cost_weight_ = std::max(0.0f, cost_weight);
+    }
+    /// Read back front-ttl and partner-slot arrays to host (env-gated diagnostic; only
+    /// called when occ_state_enabled_ is true and SACCADE_OCC_LOG is set).
+    std::vector<int> get_occ_front_info() {
+        std::vector<int> out(max_objs_ * 2);
+        if (d_occ_front_ttl_) checkCuda(cudaMemcpy(out.data(), d_occ_front_ttl_, max_objs_ * sizeof(int), cudaMemcpyDeviceToHost));
+        if (d_occ_partner_)  checkCuda(cudaMemcpy(out.data() + max_objs_, d_occ_partner_, max_objs_ * sizeof(int), cudaMemcpyDeviceToHost));
+        return out;
     }
     void set_quality_params(bool enabled, float w_aspect, float w_center, float w_area) {
         enable_quality_scaling_ = enabled;
@@ -2784,10 +2862,18 @@ private:
     float birth_low_score_thresh_ = 0.0f;
     float birth_prox_norm_thresh_ = 0.0f;
     float oao_tau_ = 0.0f;
+    // Occluder-side depth mutual-exclusion (default off → bit-identical).
+    bool  occ_state_enabled_ = false;
+    float occ_iou_thresh_    = 0.45f;
+    float occ_foot_gap_      = 0.15f;  // same-height gate: flag only at similar depth
+    int   occ_ttl_           = 4;
+    float occ_cost_weight_   = 0.50f;
     bool enable_dda_ = false;
     float dda_max_cost_ = 0.12f;
     float *d_states_, *d_covs_, *d_scores_, *d_features_;
     float* d_occ_coeff_ = nullptr;
+    int* d_occ_front_ttl_ = nullptr;  // [max_objs] latched "is confident occluder/front" counter
+    int* d_occ_partner_    = nullptr;  // [max_objs] argmax partner slot when front-flag is active (-1)
     float *d_cost_matrix_, *d_sinkhorn_v_, *d_topk_probs_;
     uint64_t *d_auction_prices_;
     int *d_topk_indices_, *d_trk_to_det_, *d_det_to_trk_;
@@ -2872,6 +2958,15 @@ void GPUByteTracker::set_relink_params(bool enabled, int bank_cap, float sim_thr
 std::vector<int> GPUByteTracker::get_relink_debug() { return pimpl_->get_relink_debug(); }
 void GPUByteTracker::set_oao_params(float tau) {
     pimpl_->set_oao_params(tau);
+}
+
+void GPUByteTracker::set_occ_params(bool enabled, float iou_thresh, float foot_gap,
+                                    int ttl, float cost_weight) {
+    pimpl_->set_occ_params(enabled, iou_thresh, foot_gap, ttl, cost_weight);
+}
+
+std::vector<int> GPUByteTracker::get_occ_front_info() {
+    return pimpl_->get_occ_front_info();
 }
 
 void GPUByteTracker::set_quality_params(bool enabled, float w_aspect, float w_center, float w_area) {

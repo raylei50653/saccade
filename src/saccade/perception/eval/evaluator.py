@@ -1721,6 +1721,13 @@ class EvalPipeline:
             birth_prox_norm_thresh=cfg.birth_prox_norm_thresh,
         )
         detector.tracker.set_oao_params(cfg.oao_tau)
+        detector.tracker.set_occ_params(
+            enabled=cfg.occ_state_enabled,
+            iou_thresh=cfg.occ_iou_thresh,
+            foot_gap=cfg.occ_foot_gap,
+            ttl=cfg.occ_ttl,
+            cost_weight=cfg.occ_cost_weight,
+        )
         active_tracker_thresholds = (
             cfg.track_thresh,
             cfg.mid_thresh,
@@ -5464,6 +5471,16 @@ def run_eval(
         for frame_id in range(1, _seq_state.frame_end + 1):
             if not _run_frame(_seq_state, frame_id=frame_id):
                 break
+            import os as _os  # noqa: E402
+
+            if _os.environ.get("SACCADE_OCC_LOG", ""):
+                _trk = detector.tracker
+                _buf = _seq_state.tracker_result_buffers
+                if hasattr(_trk, "_occ_log_maybe") and _buf is not None:
+                    _snaps = _trk.get_state_snapshots()
+                    _ids = [s.obj_id for s in _snaps]
+                    _sts = [v for s in _snaps for v in s.state]
+                    _trk._occ_log_maybe(frame_id, _sts, _ids, _buf["count"].item(), seq)
 
         # Flush deferred materialize from the last frame.
         if _seq_state.defer_emit and _seq_state.defer_emit_event is not None:
