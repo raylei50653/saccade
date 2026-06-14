@@ -442,6 +442,48 @@ TRT export 與同口徑 eval。唯一刻意變因是 base YOLO/FPN 容量；Mamb
 目前 C++ Mamba detector 仍固定 `yolo26s` 通道；`yolo26m` 對照必須使用
 Python whole-graph 路徑。若誤開 C++ path，runtime 會明確拒絕。
 
+### 結果（2026-06-14）— recall/MOTA win at IDF1 parity
+
+m-T3T1 同口徑 7-seq tracking + MOT17-02 size recall（vs s-T3T1，後者為
+protocol 文件數字，不同 commit）：
+
+| 指標 | s-T3T1 | m-T3T1（default bridge） | **m-best（relaxed bridge）** |
+|---|---:|---:|---:|
+| IDF1 | 75.4 | 74.6 | **74.9**（−0.5，~噪聲內） |
+| MOTA | 77.6 | 78.4 | **78.4**（+0.8） |
+| HOTA | 67.7 | 65.9 | 66.2 |
+| DetA | 69.7 | 69.3 | 69.1 |
+| AssA | 66.0 | 63.0 | 63.6（−2.4） |
+| IDs / FP | 496 / 3272 | 459 / 2809 | **442 / 2756** |
+| 02 recall@0.25 **min_4to8** | 0.826 | **0.900** | 0.900（**+7pp robust**） |
+
+**判定：m = detection/小目標 recall win，不是 IDF1 win。** 大容量 FPN
+（256/512/512）把小目標 recall 拉到 0.900（全 lineage 最高；frozen 0.378
+/replica 0.826/legacy 0.871），MOTA/FP/IDs 全優；但增益沿已知
+**DetA↔AssA 權衡軸**被關聯吃掉，net IDF1 持平偏負。
+
+**AssA 損失歸因（eval-time 關聯參數 sweep，within-commit clean）：部分
+config、大部分結構性。** s-tuned 的 relink bridge gate 對 m 的小框（高度
+估計噪聲大）太嚴：放寬 `relink_bridge_h_lo/hi [0.75,1.33]→[0.6,1.7]`
++ `relink_bridge_px 0.25→0.4` 乾淨 **+0.6 AssA / +0.3 IDF1 / −17 IDs**（無
+下行）= m-best。但雙向已 bracket bridge 最優：再放寬 `[0.5,2.0]/0.6` →
+false-merge，AssA 跌 62.4；鬆 primary assoc（`match_thresh 0.45` +
+`confirm_streak 2`）→ IDs +148 反效果。**只救回 ~20% 的 −3 AssA gap；殘餘
+~−2.4 非 eval-tunable = 結構性（m 撈回的小目標破碎，bridge 無法全縫而不
+誤併）**，閉合須 training-side（m T3T1 重塑 / multi-seed / 特徵級關聯）。
+relink debug 顯示 archive/revive 全程為 0（僅 bridge 活，長 gap relink 受
+`track_buffer` 結構限制）。
+
+部署解讀：**recall/MOTA/小目標優先場景採 m-best**（m checkpoint + 上述
+bridge override）；IDF1/HOTA 北極星維持 s-T3T1。
+
+eval 復跑備忘（env，非模型）：(1) m lineage 的 teacher-backbone TRT export
+段 `import saccade_tracking_ext` 會撞 cublas symbol 衝突 → eval 前
+`LD_LIBRARY_PATH` prepend `.venv/.../nvidia/cu13/lib`；(2) `mamba_size_binned_recall.py`
+/ `mot17.py` 的 `--trt-backbone-engine` / `--fpn-backbone-engine` 預設指向
+**yolo26s** engine，m 必須傳空字串 `""` 走 PyTorch backbone。teacher e29
+non-finite 為 runner 預期行為（自動 fallback 取 e12）。
+
 ## 與歷史的已知偏差
 
 | 項目 | 歷史 | replica | 理由 |
