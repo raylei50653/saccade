@@ -1,5 +1,8 @@
 # Depth-ordering probe — front/back is recoverable for crossing-swaps (2026-06-14)
 
+> Part of the relink / crossing-swap / AssA investigation; hub =
+> [`offline_relink_candidate_analysis.md`](offline_relink_candidate_analysis.md) §0/§8.
+
 **Verdict: GO signal.** Pre-occlusion box geometry (`foot_y` primary, `area` fallback)
 predicts which of two mutually-occluding tracks is in **front** at **~90 % accuracy
 (97 % when the cue is decisive)**, across **all 7 MOT17-SDP train sequences** — passing
@@ -62,6 +65,24 @@ cross (separated → IoU ≥ `iou_hi` → separated), short occlusion (≤ `max_
 - **Decisiveness gate is the key actionable**: combo accuracy by `foot_gap/height` —
   `<0.10h` → 77.8 % (n=36), `≥0.10h` → **96.7 %** (n=62). ⇒ **apply the depth-lock only
   when a cue is decisive, abstain otherwise** (let the auction handle near-equal depth).
+
+### Discrimination AUC (the GO-vs-appearance evidence) — `scripts/tools/depth_ordering_auc.py`, n=98
+
+Accuracy alone does not say the signal *separates*; the AUC (rank form) does, and lets us
+compare directly against the appearance hard-pool studies that were NO-GO.
+
+| metric | AUC | reading |
+|---|---|---|
+| **front/back discrimination — `foot_y`** | **0.898** | P(foot_y ranks GT-front above GT-back); = the 89.8 % accuracy in ROC form |
+| front/back discrimination — `area` (fallback) | 0.827 | closer person is bigger; carries the horizontal cameras |
+| **decisiveness — `\|foot_gap\|/h` → cue-correct** | **0.804** | larger gap ⇒ more likely correct (correct median 0.17h vs wrong 0.04h, n_wrong=10) |
+| appearance hard-pool (registry #2/#32/#35), reference | **≈0.50** | random — *why this is geometry, not ReID* |
+
+Two things this nails down: (1) the depth signal is **genuinely discriminative (0.90 vs 0.50)**,
+unlike appearance on the same population; (2) the decisiveness gate is **not over-fit** — the
+`foot_gap` magnitude monotonically predicts correctness (AUC 0.80), and the few wrong predictions
+sit at near-zero gap (same-depth ambiguous), which is exactly what the `|foot_gap| ≤ 0.15h`
+same-height gate and the abstain band are built to handle.
 
 ## Design implied (occlusion-aware depth-lock association policy)
 
@@ -308,4 +329,13 @@ above. Bit-exact golden ALL PASS.
 **Promoted to default** in CLI/mamba_whole_graph preset (2026-06-14).
 Research closes. Registry #39 remains for the occludee-side NO-GO (now superseded
 by this working occluder-side same-height mechanism).
+
+**Re-validation on current production ckpt (2026-06-15).** A provenance check found the
+*oracle* substrate (`results/mamba_whole_graph_current_7seq_recheck`, base 75.1) was generated
+by a `mamba_gt_v14replica_t3_t1/best.ckpt` that was subsequently overwritten — so the oracle
+*ceiling* (+4.1/+4.4) is from a stale weight snapshot and is a headroom upper-bound only. The
+load-bearing **end-to-end on/off ablation was re-run on the live preset ckpt** (`mamba_gt_v14replica_t3_t1/best.ckpt`,
+md5 `bd336e3f2898`) and **reproduces the GO bit-for-bit**: OFF 75.4/66.0/496/3272/21372 →
+ON 75.9/66.4/484/3032/21202 (IDF1/AssA/IDs/FP/FN). Default-on confirmed on the canonical
+production checkpoint.
 

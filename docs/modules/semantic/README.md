@@ -38,8 +38,9 @@
 
 | 文件 | 內容 |
 |------|------|
+| 🧭 **[research/offline_relink_candidate_analysis.md](research/offline_relink_candidate_analysis.md)** | **relink / crossing-swap / AssA 調查的主入口（hub §0）**。離線候選分析：bridge 全池 AUC 0.895 但**門作用區僅 ~0.65**（easy-pool vs hard-pool）；瓶頸＝base rate；面積率穩健閘；reach-gate 速度項死重；§8 接 occlusion crossing-swap（2026-06-09） |
+| [research/depth_ordering_crossing_swap.md](research/depth_ordering_crossing_swap.md) | occlusion crossing-swap 深度排序：foot_y 判別 front/back **AUC 0.898**（vs 外觀 ≈0.50）；same-height gate **GO default-on**（+0.5 IDF1，commit c418872b）（2026-06-14） |
 | [research/bidirectional_relink_roadmap.md](research/bidirectional_relink_roadmap.md) | 雙向時空收斂幾何重連長期路線圖（Phase 0 已落地，1–4 規劃） |
-| [research/offline_relink_candidate_analysis.md](research/offline_relink_candidate_analysis.md) | relink-off/interp-off 離線候選分析：bridge 全池 AUC 0.895 但**門作用區僅 ~0.65**（與舊文 0.55 一致，easy-pool vs hard-pool）；瓶頸＝base rate；面積率穩健閘；轉向=projected-normal 噪聲；reach-gate 速度項實測死重（2026-06-09） |
 | [research/bidir_relink_data_analysis.md](research/bidir_relink_data_analysis.md) | 線上 bridge 候選 per-attempt 分析（hard-case AUC≈0.55，與上文難區 0.65 一致） |
 
 ## 📋 模組 TODO

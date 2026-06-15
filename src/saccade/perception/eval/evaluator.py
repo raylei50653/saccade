@@ -5473,14 +5473,20 @@ def run_eval(
                 break
             import os as _os  # noqa: E402
 
-            if _os.environ.get("SACCADE_OCC_LOG", ""):
+            if _os.environ.get("SACCADE_OCC_LOG", "") or _os.environ.get(
+                "SACCADE_OCC_DUMP", ""
+            ):
                 _trk = detector.tracker
                 _buf = _seq_state.tracker_result_buffers
-                if hasattr(_trk, "_occ_log_maybe") and _buf is not None:
+                if _buf is not None:
                     _snaps = _trk.get_state_snapshots()
                     _ids = [s.obj_id for s in _snaps]
                     _sts = [v for s in _snaps for v in s.state]
-                    _trk._occ_log_maybe(frame_id, _sts, _ids, _buf["count"].item(), seq)
+                    _ndet = _buf["count"].item()
+                    if hasattr(_trk, "_occ_log_maybe"):
+                        _trk._occ_log_maybe(frame_id, _sts, _ids, _ndet, seq)
+                    if hasattr(_trk, "_occ_dump_maybe"):
+                        _trk._occ_dump_maybe(frame_id, _sts, _ids, seq)
 
         # Flush deferred materialize from the last frame.
         if _seq_state.defer_emit and _seq_state.defer_emit_event is not None:
