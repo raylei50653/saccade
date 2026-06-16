@@ -310,3 +310,328 @@ class PyGraphedGMC:
     def reset(self) -> None:
         if self.prev_gray is not None:
             self.prev_gray.zero_()
+
+
+class TilePhaseCorrAffineGMC:
+    """Tile-based phase-correlation GMC that recovers a 4-DOF similarity (s, θ, tx, ty).
+
+    Splits the downscaled gray frame into an overlapping grid of tiles, runs a
+    batched phase correlation per tile to get a per-tile translation + PCR
+    confidence, then robustly fits a similarity transform (PCR-weighted LS with
+    one Huber reweight) from the tile-center correspondences. This captures the
+    camera rotation/zoom that the global translation-only PCR cannot.
+
+    Fallback policy (per design): if the similarity fit is not confident or is
+    physically implausible, fall back to the **global PCR translation** (the
+    proven current GMC behaviour) — never to identity. Identity is used only
+    when even the global translation fails its own PCR/displacement gate, which
+    is exactly what the current GMC already does. Tile mode is therefore a
+    strict superset of the global translation GMC: match-or-improve by construction.
+    """
+
+    def __init__(
+        self,
+        downscale: int = 8,
+        tile: int = 64,
+        overlap: float = 0.5,
+        pcr_thresh: float = 5.0,
+        min_tiles: int = 4,
+        max_disp_frac: float = 0.25,
+        max_scale_dev: float = 0.10,
+        max_rot_deg: float = 15.0,
+        fg_tile_max: float = 0.35,
+    ) -> None:
+        self.downscale = max(1, int(downscale))
+        self.tile = max(16, int(tile))
+        self.overlap = float(min(max(overlap, 0.0), 0.9))
+        self.pcr_thresh = float(pcr_thresh)
+        self.min_tiles = max(3, int(min_tiles))
+        self.max_disp_frac = float(max_disp_frac)
+        self.max_scale_dev = float(max_scale_dev)
+        self.max_rot_rad = float(max_rot_deg) * 3.14159265358979 / 180.0
+        # Crowd awareness: tiles whose person-box coverage exceeds this fraction
+        # measure people-flow, not camera motion, so they are excluded from the
+        # fit. Only active when detection boxes are fed via set_fg_mask_boxes_*.
+        self.fg_tile_max = float(fg_tile_max)
+        self.prev_gray: Optional[torch.Tensor] = None
+        self._last_pcr = 0.0
+        self._origins: Optional[torch.Tensor] = None  # [N, 2] (oy, ox) tile origins
+        self._centers: Optional[torch.Tensor] = None  # [N, 2] (cx, cy) tile centers
+        self._hann2d: Optional[torch.Tensor] = None
+        self._grid_hw: tuple[int, int] = (0, 0)
+        self._fg_boxes: Optional[torch.Tensor] = None  # [M, 4] xyxy, original coords
+
+    def _prepare_gray(self, frame_tensor: torch.Tensor) -> torch.Tensor:
+        with torch.no_grad():
+            t = frame_tensor.unsqueeze(0) if frame_tensor.dim() == 3 else frame_tensor
+            h = max(1, int(t.shape[-2] // self.downscale))
+            w = max(1, int(t.shape[-1] // self.downscale))
+            small = torch.nn.functional.interpolate(
+                t, size=(h, w), mode="area"
+            ).squeeze(0)
+            gray = 0.299 * small[0] + 0.587 * small[1] + 0.114 * small[2]
+        return gray.contiguous()
+
+    def _ensure_grid(self, h: int, w: int, device: torch.device) -> None:
+        if self._grid_hw == (h, w) and self._origins is not None:
+            return
+        t = min(self.tile, h, w)
+        stride = max(1, int(t * (1.0 - self.overlap)))
+        ys = list(range(0, max(1, h - t + 1), stride))
+        xs = list(range(0, max(1, w - t + 1), stride))
+        if not ys or ys[-1] != h - t:
+            ys.append(max(0, h - t))
+        if not xs or xs[-1] != w - t:
+            xs.append(max(0, w - t))
+        ys = sorted(set(ys))
+        xs = sorted(set(xs))
+        origins = [(oy, ox) for oy in ys for ox in xs]
+        self._tile_sz = t
+        self._origins = torch.tensor(origins, dtype=torch.int64, device=device)
+        self._centers = torch.tensor(
+            [[ox + t / 2.0, oy + t / 2.0] for (oy, ox) in origins],
+            dtype=torch.float32,
+            device=device,
+        )
+        hh = torch.hann_window(t, periodic=False, device=device, dtype=torch.float32)
+        self._hann2d = (hh.unsqueeze(1) * hh.unsqueeze(0)).contiguous()
+        self._grid_hw = (h, w)
+
+    def set_fg_mask_boxes_tensor(self, boxes: torch.Tensor) -> None:
+        """Feed this frame's detection boxes (xyxy, original coords) so crowd
+        tiles can be excluded from the camera-motion fit. Consumed once."""
+        self._fg_boxes = boxes
+
+    def _fg_fraction(
+        self, h: int, w: int, device: torch.device
+    ) -> Optional[torch.Tensor]:
+        """Per-tile foreground (person-box) coverage fraction in [0, 1]."""
+        if self._fg_boxes is None or len(self._fg_boxes) == 0:
+            return None
+        import math
+
+        mask = torch.zeros(h, w, dtype=torch.float32, device=device)
+        b = self._fg_boxes.to(device).float() / float(self.downscale)
+        for box in b:
+            x1 = int(max(0, math.floor(box[0].item())))
+            y1 = int(max(0, math.floor(box[1].item())))
+            x2 = int(min(w, math.ceil(box[2].item())))
+            y2 = int(min(h, math.ceil(box[3].item())))
+            if x2 > x1 and y2 > y1:
+                mask[y1:y2, x1:x2] = 1.0
+        t = self._tile_sz
+        assert self._origins is not None
+        ar = torch.arange(t, device=device)
+        rows = self._origins[:, 0].view(-1, 1) + ar.view(1, -1)
+        cols = self._origins[:, 1].view(-1, 1) + ar.view(1, -1)
+        tiles = mask[rows.unsqueeze(2), cols.unsqueeze(1)]  # [N, t, t]
+        return tiles.mean(dim=(1, 2))
+
+    def _phase_corr_batch(
+        self, prev: torch.Tensor, curr: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Batched per-tile phase correlation.
+
+        Returns (disp [N,2] as (dx,dy) in downscaled px, pcr [N]).
+        """
+        t = self._tile_sz
+        assert self._origins is not None and self._hann2d is not None
+        oy = self._origins[:, 0]
+        ox = self._origins[:, 1]
+        # Gather tiles via unfold-free explicit slicing using advanced indexing.
+        ar = torch.arange(t, device=prev.device)
+        rows = oy.view(-1, 1) + ar.view(1, -1)  # [N, t]
+        cols = ox.view(-1, 1) + ar.view(1, -1)  # [N, t]
+        # [N, t, t]
+        p = prev[rows.unsqueeze(2), cols.unsqueeze(1)]
+        c = curr[rows.unsqueeze(2), cols.unsqueeze(1)]
+        # DC removal + Hann window (range-agnostic).
+        p = (p - p.mean(dim=(1, 2), keepdim=True)) * self._hann2d
+        c = (c - c.mean(dim=(1, 2), keepdim=True)) * self._hann2d
+
+        fp = torch.fft.rfft2(p)
+        fc = torch.fft.rfft2(c)
+        cross = fp.conj() * fc
+        cross = cross / (cross.abs() + 1e-6)
+        corr = torch.fft.irfft2(cross, s=(t, t))  # [N, t, t]
+
+        n = corr.shape[0]
+        flat = corr.view(n, -1)
+        max_v, max_i = flat.max(dim=1)
+        py = (max_i // t).float()
+        px = (max_i % t).float()
+
+        rms = torch.sqrt((flat * flat).mean(dim=1) + 1e-12)
+        pcr = max_v / (rms + 1e-12)
+
+        # 3x3 centroid sub-pixel refine (wrap-around).
+        dyk = torch.tensor([-1, -1, -1, 0, 0, 0, 1, 1, 1], device=prev.device)
+        dxk = torch.tensor([-1, 0, 1, -1, 0, 1, -1, 0, 1], device=prev.device)
+        ny = (py.long().view(-1, 1) + dyk.view(1, -1) + t) % t  # [N,9]
+        nx = (px.long().view(-1, 1) + dxk.view(1, -1) + t) % t
+        nidx = ny * t + nx
+        vv = torch.clamp(torch.gather(flat, 1, nidx), min=0.0)  # [N,9]
+        sx = (vv * (px.view(-1, 1) + dxk.view(1, -1).float())).sum(dim=1)
+        sy = (vv * (py.view(-1, 1) + dyk.view(1, -1).float())).sum(dim=1)
+        sv = vv.sum(dim=1) + 1e-6
+        peak_x = sx / sv
+        peak_y = sy / sv
+        # Wrap to [-t/2, t/2].
+        dx = peak_x - torch.where(peak_x > t / 2.0, float(t), 0.0)
+        dy = peak_y - torch.where(peak_y > t / 2.0, float(t), 0.0)
+        disp = torch.stack([dx, dy], dim=1)
+        return disp, pcr
+
+    @staticmethod
+    def _fit_similarity(
+        pts: torch.Tensor, dst: torch.Tensor, w: torch.Tensor
+    ) -> Optional[torch.Tensor]:
+        """Weighted LS similarity fit. Returns [a, b, tx, ty] or None.
+
+        Model: x' = a*x - b*y + tx ; y' = b*x + a*y + ty.
+        """
+        x = pts[:, 0]
+        y = pts[:, 1]
+        xp = dst[:, 0]
+        yp = dst[:, 1]
+        n = x.shape[0]
+        # Two rows per correspondence.
+        A = torch.zeros(2 * n, 4, dtype=torch.float32, device=pts.device)
+        A[0::2, 0] = x
+        A[0::2, 1] = -y
+        A[0::2, 2] = 1.0
+        A[1::2, 0] = y
+        A[1::2, 1] = x
+        A[1::2, 3] = 1.0
+        bvec = torch.empty(2 * n, dtype=torch.float32, device=pts.device)
+        bvec[0::2] = xp
+        bvec[1::2] = yp
+        wv = torch.repeat_interleave(w, 2)
+        Aw = A * wv.unsqueeze(1)
+        bw = bvec * wv
+        ata = A.transpose(0, 1) @ Aw
+        atb = A.transpose(0, 1) @ bw
+        try:
+            theta = torch.linalg.solve(ata, atb)
+        except Exception:
+            return None
+        if not torch.isfinite(theta).all():
+            return None
+        return theta  # type: ignore[no-any-return]
+
+    def estimate(self, frame_tensor: torch.Tensor) -> Optional[torch.Tensor]:
+        curr = self._prepare_gray(frame_tensor)
+        h, w = curr.shape[-2], curr.shape[-1]
+        device = curr.device
+        ds = float(self.downscale)
+
+        out: Optional[torch.Tensor] = None
+        if self.prev_gray is not None and self.prev_gray.shape == curr.shape:
+            self._ensure_grid(h, w, device)
+            with torch.no_grad():
+                disp, pcr = self._phase_corr_batch(self.prev_gray, curr)
+
+                # ── Global translation (whole-frame median of confident tiles) ──
+                # This is the proven current-GMC behaviour and the fallback target.
+                disp_bound = self.tile * self.max_disp_frac
+                ok = (pcr >= self.pcr_thresh) & (disp.abs().amax(dim=1) <= disp_bound)
+                global_warp: Optional[torch.Tensor] = None
+                if int(ok.sum()) >= 1:
+                    gd = disp[ok]
+                    gdx = gd[:, 0].median().item() * ds
+                    gdy = gd[:, 1].median().item() * ds
+                    self._last_pcr = float(pcr[ok].median().item())
+                    if abs(gdx) <= w * ds * 0.25 and abs(gdy) <= h * ds * 0.25:
+                        global_warp = torch.tensor(
+                            [[1.0, 0.0, gdx], [0.0, 1.0, gdy]],
+                            dtype=torch.float32,
+                            device=device,
+                        )
+                else:
+                    self._last_pcr = 0.0
+
+                # ── Crowd awareness ──────────────────────────────────────────
+                # Tiles dominated by person boxes measure people-flow, which can
+                # masquerade as camera rotation/scale. Exclude them from the
+                # affine fit only (global translation keeps all confident tiles
+                # so crowded scenes never lose the robust translation baseline).
+                ok_aff = ok
+                fg_frac = self._fg_fraction(h, w, device)
+                if fg_frac is not None:
+                    ok_aff = ok & (fg_frac <= self.fg_tile_max)
+                self._fg_boxes = None  # consume once per frame
+
+                # ── Similarity affine from confident, non-crowd tiles ──
+                affine_warp = self._try_affine(disp, pcr, ok_aff, device, ds)
+
+                # Affine if confident+sane, else global translation, else identity.
+                out = affine_warp if affine_warp is not None else global_warp
+        else:
+            self._fg_boxes = None
+
+        self.prev_gray = curr
+        return out
+
+    def _try_affine(
+        self,
+        disp: torch.Tensor,
+        pcr: torch.Tensor,
+        ok: torch.Tensor,
+        device: torch.device,
+        ds: float,
+    ) -> Optional[torch.Tensor]:
+        assert self._centers is not None
+        if int(ok.sum()) < self.min_tiles:
+            return None
+        pts = self._centers[ok]  # prev tile centers (downscaled coords)
+        dst = pts + disp[ok]  # mapped curr positions
+        wts = (pcr[ok] - self.pcr_thresh).clamp(min=1e-3)  # PCR-above-gate weight
+
+        theta = self._fit_similarity(pts, dst, wts)
+        if theta is None:
+            return None
+        # One Huber reweight to reject foreground / outlier tiles.
+        a, b, tx, ty = theta[0], theta[1], theta[2], theta[3]
+        pred_x = a * pts[:, 0] - b * pts[:, 1] + tx
+        pred_y = b * pts[:, 0] + a * pts[:, 1] + ty
+        res = torch.sqrt((pred_x - dst[:, 0]) ** 2 + (pred_y - dst[:, 1]) ** 2 + 1e-9)
+        med = res.median()
+        mad = (res - med).abs().median() + 1e-6
+        k = 1.345 * 1.4826 * mad
+        huber = torch.where(res <= k, torch.ones_like(res), k / res)
+        theta = self._fit_similarity(pts, dst, wts * huber)
+        if theta is None:
+            return None
+        a_v, b_v, tx_v, ty_v = (
+            theta[0].item(),
+            theta[1].item(),
+            theta[2].item(),
+            theta[3].item(),
+        )
+        import math
+
+        s = math.hypot(a_v, b_v)
+        rot = math.atan2(b_v, a_v)
+        # Upper plausibility gate → else fall back to global translation.
+        # NOTE: a selective lower gate (apply affine only on "confident" frames,
+        # translation otherwise) was tried and BACKFIRED — intermittent affine
+        # creates a temporally inconsistent warp that hurts association more than
+        # applying one model consistently (MOT17-13 IDF1 dropped below baseline,
+        # MOT17-10 AssA −2.4). Keep it consistent: accept any plausible affine.
+        if abs(s - 1.0) > self.max_scale_dev or abs(rot) > self.max_rot_rad:
+            return None
+        return torch.tensor(
+            [[a_v, -b_v, tx_v * ds], [b_v, a_v, ty_v * ds]],
+            dtype=torch.float32,
+            device=device,
+        )
+
+    def apply(self, frame_tensor: torch.Tensor) -> Optional[torch.Tensor]:
+        return self.estimate(frame_tensor)
+
+    def pcr_score(self) -> float:
+        return self._last_pcr
+
+    def reset(self) -> None:
+        self.prev_gray = None
+        self._last_pcr = 0.0

@@ -197,7 +197,7 @@ def main() -> None:
     total_fn_det = 0
     for k, tl in by_id.items():
         tracked_frames = [r["frame"] for r in tl if r["tracked"]]
-        first_present = tl[0]["frame"]
+        tl[0]["frame"]
         ever_tracked = len(tracked_frames) > 0
         for j, r in enumerate(tl):
             if r["tracked"]:
