@@ -94,3 +94,6 @@ output/
 scripts/tools/out/
 scratch/pipeline_math_validation/data/
 scratch/pipeline_math_validation/output/
+
+# Generated report data (recall curves, benchmark JSONs)
+report_data/*.json
