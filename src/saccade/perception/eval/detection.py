@@ -46,7 +46,10 @@ def _prepare_canvas_960p(
     h_orig: int,
     w_orig: int,
 ) -> tuple[float, int, int, int, int]:
-    r = 960.0 / max(h_orig, w_orig)
+    max_dim = max(h_orig, w_orig)
+    if max_dim <= 0:
+        raise ValueError(f"Invalid frame dimensions: {w_orig}x{h_orig}")
+    r = 960.0 / max_dim
     h_new, w_new = int(h_orig * r), int(w_orig * r)
     y_off = (960 - h_new) // 2
     x_off = (960 - w_new) // 2

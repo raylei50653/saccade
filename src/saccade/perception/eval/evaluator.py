@@ -71,7 +71,7 @@ from .scene_adapt import SceneAdaptivePolicy
 
 
 _SOFTMAX3_TORCH_CACHE: dict[
-    tuple[int, str],
+    tuple[int, int, int, int, int, str],
     tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
 ] = {}
 
@@ -473,7 +473,14 @@ def _get_softmax3_torch_params(
     device: torch.device,
     dtype: torch.dtype,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-    cache_key = (id(model), f"{device.type}:{device.index}:{dtype}")
+    cache_key = (
+        len(model.weights),
+        len(model.weights[0]) if model.weights else 0,
+        len(model.bias),
+        len(model.mean),
+        len(model.std),
+        f"{device.type}:{device.index}:{dtype}",
+    )
     cached = _SOFTMAX3_TORCH_CACHE.get(cache_key)
     if cached is not None:
         return cached
@@ -739,7 +746,11 @@ from saccade.perception.eval.detection import (  # noqa: E402
     merge_cross_tile_duplicates_fast,
     nms_fast,
 )
-from saccade.perception.eval.gmc import SparseOpticalFlowGMC, PyGraphedGMC  # noqa: E402
+from saccade.perception.eval.gmc import (  # noqa: E402
+    SparseOpticalFlowGMC,
+    PyGraphedGMC,
+    TilePhaseCorrAffineGMC,
+)
 from saccade.perception.eval.multi_birth import MultiSignalBirthManager  # noqa: E402
 from saccade.perception.eval.pool import (  # noqa: E402
     AdaptiveFramePool,
@@ -2895,6 +2906,11 @@ def _build_gmc_estimator(
                     gmc_estimator = PyGraphedGMC(downscale=cfg.gmc_downscale)
                 except Exception:
                     gmc_estimator = SparseOpticalFlowGMC(downscale=cfg.gmc_downscale)
+        elif cfg.gmc_mode == "tile":
+            # Tile-based phase-correlation similarity GMC (4-DOF: s, θ, tx, ty).
+            # Eager Python prototype; falls back to global PCR translation when
+            # the affine fit is not confident/plausible (never to identity).
+            gmc_estimator = TilePhaseCorrAffineGMC(downscale=cfg.gmc_downscale)
         else:
             gmc_estimator = SparseOpticalFlowGMC(downscale=cfg.gmc_downscale)
     _use_direct_gmc = hasattr(gmc_estimator, "estimate_into_direct")
@@ -5525,9 +5541,13 @@ def run_eval(
             lats = np.array(_seq_state.frame_latencies)
             mean_ms = float(np.mean(lats))
             fps = 1000.0 / mean_ms
+            p95_ms = float(np.percentile(lats, 95))
+            p99_ms = float(np.percentile(lats, 99))
             print(f"\n📊 Production Latency Report for {seq}:")
             print(f"  - FPS:  {fps:.2f}")
             print(f"  - Mean latency: {mean_ms:.2f} ms")
+            print(f"  - P95: {p95_ms:.2f} ms")
+            print(f"  - P99: {p99_ms:.2f} ms")
             fps_summary_lines.append(
                 f"{seq}\tfps={fps:.2f}\tmean_ms={mean_ms:.2f}\tframes={len(_seq_state.frame_latencies)}"
             )
@@ -5538,8 +5558,8 @@ def run_eval(
                 "fps": round(fps, 4),
                 "mean_ms": round(mean_ms, 6),
                 "std_ms": round(float(np.std(lats)), 6),
-                "p95_ms": round(float(np.percentile(lats, 95)), 6),
-                "p99_ms": round(float(np.percentile(lats, 99)), 6),
+                "p95_ms": round(p95_ms, 6),
+                "p99_ms": round(p99_ms, 6),
                 "samples_ms": [round(float(x), 6) for x in _seq_state.frame_latencies],
             }
             (output_root / "_latency_profile.json").write_text(

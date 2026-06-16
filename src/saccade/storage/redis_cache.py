@@ -183,12 +183,9 @@ class RedisCache:
                     print(
                         f"⚠️ [RedisCache] Memory {used_memory_mb:.1f}MB exceeds limit {max_memory_mb}MB. Initiating cleanup..."
                     )
-                    # 獲取所有物件鍵
-                    keys = await cast(
-                        Awaitable[List[bytes]], self.client.keys("saccade:obj:*")
-                    )
+                    # 使用 SCAN 避免阻塞 Redis server
+                    keys = [k async for k in self.client.scan_iter("saccade:obj:*")]
                     if keys:
-                        # 隨機抽樣或直接刪除一半的鍵 (因為已經有 TTL 300s，這裡僅作緊急記憶體釋放)
                         keys_to_delete = keys[: len(keys) // 2]
                         await cast(Awaitable[Any], self.client.delete(*keys_to_delete))
                         print(
@@ -215,8 +212,8 @@ class RedisCache:
             await self.connect()
         assert self.client is not None
 
-        # 掃描所有符合模式的鍵
-        keys = await cast(Awaitable[List[str]], self.client.keys("saccade:obj:*"))
+        # 使用 SCAN 避免阻塞 Redis server
+        keys = [k async for k in self.client.scan_iter("saccade:obj:*")]
         obj_ids = []
         for key in keys:
             try:

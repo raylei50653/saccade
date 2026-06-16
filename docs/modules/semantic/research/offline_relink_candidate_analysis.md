@@ -405,8 +405,8 @@ box-jitter floor (median 0.01 h/f); velocity direction is noise for the slow bul
 the fast minority's direction is not discriminative in the gate's operating region (§3,
 §6c hard-pool AUC ~0.65). Only appearance can separate true/false identity matches at this
 scale, and appearance in the MOT17 embedding space is a documented ceiling (registry
-[#2](../../reference/no_go_registry.md) / [#32](../../reference/no_go_registry.md) /
-[#35](../../reference/no_go_registry.md)).
+[#2](../../../reference/no_go_registry.md) / [#32](../../../reference/no_go_registry.md) /
+[#35](../../../reference/no_go_registry.md)).
 
 **Verdict:** the *velocity/motion-direction* ceiling identified in §3–§6b is **reconfirmed**
 from the live crossing-swap door — same base-rate wall for that lever. The quantification

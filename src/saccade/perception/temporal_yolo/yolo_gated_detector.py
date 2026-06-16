@@ -216,7 +216,7 @@ class GatedYOLODetector(nn.Module):
             # is done via an explicit AdaBN recalibration pass (forward-only,
             # then frozen) before training, not by keeping BN in train mode.
             for m in self.yolo_model.modules():
-                if isinstance(m, nn.modules.batchnorm._BatchNorm):
+                if isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)):
                     m.eval()
             self.gate.train()
             if self.fusion is not None:

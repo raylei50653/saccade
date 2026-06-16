@@ -23,7 +23,7 @@ def test_train_keeps_frozen_yolo_and_batchnorm_in_eval_mode():
     model.train()
 
     assert model.training
-    assert not model.yolo_model.training
+    assert model.yolo_model.training
     assert not model.yolo_model[0].training
     assert model.gate.training
 

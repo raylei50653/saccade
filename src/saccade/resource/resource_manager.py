@@ -111,21 +111,20 @@ class ResourceManager:
 
 
 _SHM_NAME = "saccade_vram_level"
-_SHM_SIZE = 1  # single byte: DegradationLevel value (0–3)
+_SHM_SIZE = 1
 
 
 class VRAMLevelWriter:
     """Dispatcher 端：建立具名 shared memory 並廣播目前降級等級。"""
 
     def __init__(self) -> None:
-        # Unlink stale segment left by a previous crash before creating.
         try:
+            self._shm = SharedMemory(name=_SHM_NAME, create=True, size=_SHM_SIZE)
+        except FileExistsError:
             stale = SharedMemory(name=_SHM_NAME, create=False, size=_SHM_SIZE)
             stale.close()
             stale.unlink()
-        except FileNotFoundError:
-            pass
-        self._shm = SharedMemory(name=_SHM_NAME, create=True, size=_SHM_SIZE)
+            self._shm = SharedMemory(name=_SHM_NAME, create=True, size=_SHM_SIZE)
         self._shm.buf[0] = 0  # type: ignore[index]
 
     def write(self, level: DegradationLevel) -> None:

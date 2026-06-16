@@ -19,7 +19,7 @@ class TRTLogger : public nvinfer1::ILogger {
 
 class TRTEngine::Impl {
 public:
-    Impl(const std::string& model_path) {
+    Impl(const std::string& model_path) : internal_stream_(nullptr) {
         std::ifstream file(model_path, std::ios::binary);
         if (!file.good()) {
             throw std::runtime_error("❌ [TRTEngine] Model not found: " + model_path);
@@ -33,16 +33,28 @@ public:
         file.read(model_data.data(), size);
         file.close();
 
-        runtime_.reset(nvinfer1::createInferRuntime(gLogger));
-        if (!runtime_) throw std::runtime_error("❌ Failed to create TRT Runtime");
+        cudaStreamCreateWithFlags(&internal_stream_, cudaStreamNonBlocking);
 
-        engine_.reset(runtime_->deserializeCudaEngine(model_data.data(), size));
-        if (!engine_) throw std::runtime_error("❌ Failed to deserialize engine");
+        try {
+            runtime_.reset(nvinfer1::createInferRuntime(gLogger));
+            if (!runtime_) throw std::runtime_error("❌ Failed to create TRT Runtime");
+
+            engine_.reset(runtime_->deserializeCudaEngine(model_data.data(), size));
+            if (!engine_) throw std::runtime_error("❌ Failed to deserialize engine");
+        } catch (...) {
+            cudaStreamDestroy(internal_stream_);
+            internal_stream_ = nullptr;
+            throw;
+        }
 
         // context_ is created lazily on first infer()/enqueueV3() call so that
         // callers that only query metadata (tensor shapes, engine ptr) or use
         // infer_with_context() with their own context don't pay the VRAM cost.
         std::cout << "✅ [TRTEngine] Pimpl Loaded: " << model_path << std::endl;
+    }
+
+    ~Impl() {
+        if (internal_stream_) cudaStreamDestroy(internal_stream_);
     }
 
     nvinfer1::IExecutionContext* ensure_context() {
@@ -54,6 +66,7 @@ public:
     }
 
     bool infer(const std::vector<void*>& bindings, cudaStream_t stream) {
+        cudaStream_t s = stream ? stream : internal_stream_;
         auto* ctx = ensure_context();
         int nbTensors = engine_->getNbIOTensors();
         for (int i = 0; i < nbTensors; ++i) {
@@ -61,7 +74,7 @@ public:
             const char* name = engine_->getIOTensorName(i);
             ctx->setTensorAddress(name, bindings[i]);
         }
-        return ctx->enqueueV3(stream);
+        return ctx->enqueueV3(s);
     }
 
     bool setTensorAddress(const char* name, void* ptr) {
@@ -69,7 +82,7 @@ public:
     }
 
     bool enqueueV3(cudaStream_t stream) {
-        return ensure_context()->enqueueV3(stream);
+        return ensure_context()->enqueueV3(stream ? stream : internal_stream_);
     }
 
     nvinfer1::Dims getTensorDims(const char* name) const {
@@ -112,16 +125,18 @@ public:
     bool infer_with_context(nvinfer1::IExecutionContext* ctx,
                             const std::vector<void*>& bindings,
                             cudaStream_t stream) {
+        cudaStream_t s = stream ? stream : internal_stream_;
         int nbTensors = engine_->getNbIOTensors();
         for (int i = 0; i < nbTensors; ++i) {
             if (i >= (int)bindings.size()) continue;
             const char* name = engine_->getIOTensorName(i);
             ctx->setTensorAddress(name, bindings[i]);
         }
-        return ctx->enqueueV3(stream);
+        return ctx->enqueueV3(s);
     }
 
 private:
+    cudaStream_t internal_stream_;
     std::unique_ptr<nvinfer1::IRuntime> runtime_;
     std::unique_ptr<nvinfer1::ICudaEngine> engine_;
     std::unique_ptr<nvinfer1::IExecutionContext> context_;

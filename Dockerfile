@@ -1,5 +1,5 @@
-# 使用 NVIDIA CUDA 13.2 鏡像 (含 cuDNN，對應 2026 年最新感知架構)
-FROM nvidia/cuda:13.2.0-cudnn-devel-ubuntu22.04
+# 使用 NVIDIA CUDA 12.2 鏡像 (含 cuDNN，與 tensorrt-cu12 / torch 2.11 相容)
+FROM nvidia/cuda:12.2.2-cudnn-devel-ubuntu22.04
 
 # 避免安裝過程中的互動式詢問
 ENV DEBIAN_FRONTEND=noninteractive

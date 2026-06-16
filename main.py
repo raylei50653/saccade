@@ -30,8 +30,16 @@ import asyncio
 import time
 
 import argparse
+import sys
+from pathlib import Path
 import torch
 import numpy as np
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "build"))
+
+torch.set_float32_matmul_precision("high")
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True
 
 try:
     import uvloop
@@ -39,23 +47,22 @@ try:
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
     print("⚡ [System] Fast Event Loop (uvloop) & Single-thread NumPy config enabled.")
 except ImportError:
-    pass
+    print("⚠️  [System] uvloop not available, falling back to default event loop.")
 
-from typing import Optional, List, Dict, Any, Tuple, cast
-from saccade.perception.detector_trt import TRTYoloDetector
-from saccade.perception.cropper import ZeroCopyCropper
-from saccade.perception.feature_extractor import TRTFeatureExtractor
-from saccade.media.mediamtx_client import MediaMTXClient
-from saccade.media.dali_pipeline import DALIMediaClient
-from saccade.perception.dispatcher import AsyncDispatcher
-from saccade.perception.embedding_dispatcher import (
+from typing import Optional, List, Dict, Any, cast  # noqa: E402
+from saccade.perception.detector_trt import TRTYoloDetector  # noqa: E402
+from saccade.perception.feature_extractor import TRTFeatureExtractor  # noqa: E402
+from saccade.media.mediamtx_client import MediaMTXClient  # noqa: E402
+from saccade.media.dali_pipeline import DALIMediaClient  # noqa: E402
+from saccade.perception.dispatcher import AsyncDispatcher  # noqa: E402
+from saccade.perception.embedding_dispatcher import (  # noqa: E402
     AsyncEmbeddingDispatcher as EmbeddingDispatcher,
 )
-from saccade.perception.drift_handler import SemanticDriftHandler
-from saccade.resource.resource_manager import ResourceManager
-from saccade.storage.redis_cache import RedisCache
-from saccade.cognition.orchestrator import PipelineOrchestrator
-from dotenv import load_dotenv
+from saccade.perception.drift_handler import SemanticDriftHandler  # noqa: E402
+from saccade.resource.resource_manager import ResourceManager  # noqa: E402
+from saccade.storage.redis_cache import RedisCache  # noqa: E402
+from saccade.cognition.orchestrator import PipelineOrchestrator  # noqa: E402
+from dotenv import load_dotenv  # noqa: E402
 
 load_dotenv()
 
@@ -63,41 +70,18 @@ load_dotenv()
 resource_manager = ResourceManager()
 redis_cache = RedisCache()
 drift_handler = SemanticDriftHandler()
-cropper = ZeroCopyCropper(output_size=(224, 224))
 
 
 async def on_detection_finished(
     stream_id: str,
-    results: Tuple[torch.Tensor, torch.Tensor, torch.Tensor, Any],
-    frame_tensor: torch.Tensor,
-    timestamp: float,
+    ts: float,
+    ids: torch.Tensor,
+    boxes: torch.Tensor,
+    classes: torch.Tensor,
+    kps: Optional[torch.Tensor],
 ) -> None:
-    """
-    橋接回調：L1 (YOLO) -> L2 (Embedding)
-    """
-    boxes, scores, classes, _ = results
-    if boxes.size(0) == 0:
-        return
-
-    # 1. 執行 L2 過濾 (漂移檢測)
-    # 這裡我們在主 Loop 中進行快速過濾，決定哪些物件需要「重度嵌入」
-
-    # 為了簡化展示，我們假設所有物件都送去嵌入，
-    # 實際生產環境會在這裡調用 drift_handler.filter_for_batch
-
-    # 2. 執行零拷貝裁切 [N, 3, 224, 224]
-    # 注意：frame_tensor 需為 [1, 3, H, W]
-    crops = cropper.process(frame_tensor.unsqueeze(0), boxes)
-
-    # 3. 推入 Embedding 分發器
-    metadata = [
-        {"frame_id": int(timestamp * 1000), "cls": str(cls.item()), "track_id": i}
-        for i, cls in enumerate(classes)
-    ]
-
-    # 取得全域的 embedding_dispatcher (在 run_perception 中初始化)
-    if _embedding_dispatcher is not None:
-        await _embedding_dispatcher.put_crops(stream_id, crops, metadata)
+    """橋接回調：L1 (YOLO) -> downstream. Embedding 路徑由 EmbeddingDispatcher 獨立處理。"""
+    pass
 
 
 async def on_embeddings_ready(
@@ -191,7 +175,6 @@ async def run_perception() -> None:
     print("🚀 Initializing Multi-stream Perception Pipeline...")
 
     detector = TRTYoloDetector()
-    resource_manager = ResourceManager()
 
     # L2 ReID 組件（選配，缺少 engine 時退化為純 IoU）
     extractor: Optional[TRTFeatureExtractor] = None
@@ -213,6 +196,7 @@ async def run_perception() -> None:
         extractor=extractor,
         heartbeat_interval=10,
         max_batch=8,
+        on_track_result=on_detection_finished,
     )
     # Note: in perception/dispatcher.py, start() is async and doesn't take callback.
     # It calls on_track_result which we can set in __init__.
@@ -237,6 +221,14 @@ async def run_perception() -> None:
         print("🛑 Perception Pipeline shutting down...")
 
 
+async def run_full() -> None:
+    print("💡 Running in full mode - starting perception + orchestrator.")
+    await asyncio.gather(
+        run_perception(),
+        PipelineOrchestrator().run(),
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Saccade - Dual-Track Video Perception"
@@ -252,9 +244,7 @@ def main() -> None:
         orchestrator = PipelineOrchestrator()
         asyncio.run(orchestrator.run())
     else:
-        print("💡 Running in full mode - starting orchestrator.")
-        orchestrator = PipelineOrchestrator()
-        asyncio.run(orchestrator.run())
+        asyncio.run(run_full())
 
 
 if __name__ == "__main__":

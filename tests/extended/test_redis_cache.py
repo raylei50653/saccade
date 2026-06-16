@@ -192,6 +192,11 @@ async def test_batcher_add_serializes_json() -> None:
 # ─── RedisCache ──────────────────────────────────────────────────────────────
 
 
+async def _empty_scan_iter(match=None):
+    return
+    yield  # type: ignore[unreachable]
+
+
 def _make_mock_client() -> MagicMock:
     """Create a MagicMock with AsyncMock methods."""
     mock = MagicMock()
@@ -199,7 +204,7 @@ def _make_mock_client() -> MagicMock:
     mock.xadd = AsyncMock(return_value="0000-0")
     mock.xreadgroup = AsyncMock(return_value=[])
     mock.xack = AsyncMock()
-    mock.keys = AsyncMock(return_value=[])
+    mock.scan_iter = MagicMock(side_effect=_empty_scan_iter)
     mock.delete = AsyncMock()
     mock.info = AsyncMock(return_value={"used_memory": 0})
     mock.set = AsyncMock()
@@ -496,7 +501,7 @@ async def test_cleanup_expired_objects_below_threshold() -> None:
         await cache.connect()
 
         await cache.cleanup_expired_objects(max_memory_mb=500)
-        mock_client.keys.assert_not_called()
+        mock_client.scan_iter.assert_not_called()
         mock_client.delete.assert_not_called()
 
 
@@ -506,20 +511,24 @@ async def test_cleanup_expired_objects_above_threshold() -> None:
     with patch("saccade.storage.redis_cache.redis") as mock_redis:
         mock_client = _make_mock_client()
         mock_client.info = AsyncMock(return_value={"used_memory": 600 * 1024 * 1024})
-        mock_client.keys = AsyncMock(
-            return_value=[
-                b"saccade:obj:1",
-                b"saccade:obj:2",
-                b"saccade:obj:3",
-                b"saccade:obj:4",
-            ]
-        )
+        scan_keys = [
+            b"saccade:obj:1",
+            b"saccade:obj:2",
+            b"saccade:obj:3",
+            b"saccade:obj:4",
+        ]
+
+        async def _scan(match=None):
+            for k in scan_keys:
+                yield k
+
+        mock_client.scan_iter.side_effect = _scan
         mock_redis.from_url = MagicMock(return_value=mock_client)
         cache = RedisCache(url="redis://test:6379/0")
         await cache.connect()
 
         await cache.cleanup_expired_objects(max_memory_mb=500)
-        mock_client.keys.assert_called_once_with("saccade:obj:*")
+        mock_client.scan_iter.assert_called_once_with("saccade:obj:*")
         mock_client.delete.assert_called_once()
         # Should delete half: [1, 2] from [1, 2, 3, 4]
         call_args = mock_client.delete.call_args
@@ -532,7 +541,7 @@ async def test_cleanup_expired_objects_no_keys() -> None:
     with patch("saccade.storage.redis_cache.redis") as mock_redis:
         mock_client = _make_mock_client()
         mock_client.info = AsyncMock(return_value={"used_memory": 600 * 1024 * 1024})
-        mock_client.keys = AsyncMock(return_value=[])
+        mock_client.scan_iter.side_effect = _empty_scan_iter
         mock_redis.from_url = MagicMock(return_value=mock_client)
         cache = RedisCache(url="redis://test:6379/0")
         await cache.connect()
@@ -552,7 +561,7 @@ async def test_cleanup_expired_objects_error_handled() -> None:
         await cache.connect()
 
         await cache.cleanup_expired_objects()  # should not raise
-        mock_client.keys.assert_not_called()
+        mock_client.scan_iter.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -587,13 +596,17 @@ async def test_get_active_objects_returns_ids() -> None:
     """get_active_objects() scans keys and returns valid object IDs."""
     with patch("saccade.storage.redis_cache.redis") as mock_redis:
         mock_client = _make_mock_client()
-        mock_client.keys = AsyncMock(
-            return_value=[
-                "saccade:obj:1",
-                "saccade:obj:2",
-                "saccade:obj:3",
-            ]
-        )
+        scan_keys: list[str] = [
+            "saccade:obj:1",
+            "saccade:obj:2",
+            "saccade:obj:3",
+        ]
+
+        async def _scan(match=None):
+            for k in scan_keys:
+                yield k
+
+        mock_client.scan_iter.side_effect = _scan
         mock_redis.from_url = MagicMock(return_value=mock_client)
         cache = RedisCache(url="redis://test:6379/0")
         await cache.connect()
@@ -607,13 +620,17 @@ async def test_get_active_objects_skips_invalid_keys() -> None:
     """get_active_objects() skips malformed keys."""
     with patch("saccade.storage.redis_cache.redis") as mock_redis:
         mock_client = _make_mock_client()
-        mock_client.keys = AsyncMock(
-            return_value=[
-                "saccade:obj:42",
-                "saccade:obj:bad",  # not an int
-                "saccade:obj:",  # empty
-            ]
-        )
+        scan_keys = [
+            "saccade:obj:42",
+            "saccade:obj:bad",  # not an int
+            "saccade:obj:",  # empty
+        ]
+
+        async def _scan(match=None):
+            for k in scan_keys:
+                yield k
+
+        mock_client.scan_iter.side_effect = _scan
         mock_redis.from_url = MagicMock(return_value=mock_client)
         cache = RedisCache(url="redis://test:6379/0")
         await cache.connect()
@@ -627,7 +644,7 @@ async def test_get_active_objects_empty() -> None:
     """get_active_objects() returns [] when no keys match."""
     with patch("saccade.storage.redis_cache.redis") as mock_redis:
         mock_client = _make_mock_client()
-        mock_client.keys = AsyncMock(return_value=[])
+        mock_client.scan_iter.side_effect = _empty_scan_iter
         mock_redis.from_url = MagicMock(return_value=mock_client)
         cache = RedisCache(url="redis://test:6379/0")
         await cache.connect()
