@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.18)
 project(Saccade CXX CUDA)
 
 # Suppress deprecation warning for FetchContent_Populate (we only need headers, not build TensorRT targets)
+# no-op: trigger CI cpp_build for PR #20
 cmake_policy(SET CMP0169 OLD)
 
 set(CMAKE_CXX_STANDARD 17)
