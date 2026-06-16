@@ -5,7 +5,10 @@ import pytest
 import torch
 import torch.nn as nn
 
-from scripts.train.temporal_yolo import train_mamba_head
+try:
+    from scripts.train.temporal_yolo import train_mamba_head
+except ModuleNotFoundError:
+    pytest.skip("saccade_tracking_ext not available", allow_module_level=True)
 
 
 def _complete_cache() -> dict[str, torch.Tensor]:
