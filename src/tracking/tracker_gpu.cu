@@ -32,6 +32,7 @@ namespace {
 constexpr int TRACK_EMPTY = 0;
 constexpr int TRACK_TENTATIVE = 1;
 constexpr int TRACK_CONFIRMED = 2;
+constexpr int K_MAX_CANDIDATES = 16;
 
 bool env_flag_enabled(const char* name, bool default_value) {
     const char* value = std::getenv(name);
@@ -374,7 +375,9 @@ __global__ void stage1_cost_fused_kernel(
     float vel_dir_weight, float fuse_score_weight,
     const float* det_scores,
     const float* d_occ_coeff, float oao_tau,
-    const int* occ_front_ttl, float occ_cost_weight)
+    const int* occ_front_ttl, float occ_cost_weight,
+    int* cand_n, float* cand_costs, int* cand_indices, int cand_stride,
+    float cand_cost_cap)
 {
     int t = blockIdx.y * blockDim.y + threadIdx.y;
     int d = blockIdx.x * blockDim.x + threadIdx.x;
@@ -427,17 +430,26 @@ __global__ void stage1_cost_fused_kernel(
         }
     }
 
-    // Occluder-side depth mutual-exclusion: a latched front (occluder) track must keep
-    // its own frontal box and NOT absorb the back partner's box. Penalise it for matching
-    // a detection whose foot is above its own (more distal) → frees the back box for the
-    // occludee. (occ_front_ttl==nullptr when off → bit-identical.)
     if (occ_front_ttl && occ_front_ttl[t] > 0 && occ_cost_weight > 0.0f) {
         float footy_t = st[1] + st[3] * 0.5f;
         float under = (footy_t - b2[3]) / fmaxf(st[3], 1e-3f);
         if (under > 0.0f) iou_cost_val = fminf(1.0f, iou_cost_val + occ_cost_weight * under);
     }
 
-    *cost = fminf(1.0f, iou_cost_val);
+    float final_cost = fminf(1.0f, iou_cost_val);
+    *cost = final_cost;
+
+    // Only enqueue candidates the Sinkhorn could actually select (cost within the
+    // loosest stage threshold). Without this cap the maha-gate admits many high-cost,
+    // non-overlapping detections in crowds that race for the K_MAX_CANDIDATES slots
+    // and evict the true low-cost match → association fails → tracks never confirm.
+    if (final_cost <= cand_cost_cap) {
+        int slot = atomicAdd(&cand_n[t], 1);
+        if (slot < K_MAX_CANDIDATES) {
+            cand_indices[t * cand_stride + slot] = d;
+            cand_costs[t * cand_stride + slot] = final_cost;
+        }
+    }
 }
 __global__ void compute_conditional_cost_kernel(
     const float* trk_states, const float* det_boxes,
@@ -452,7 +464,9 @@ __global__ void compute_conditional_cost_kernel(
     float cos_threshold, float iou_low,
     int reid_min_candidates,
     const float* d_occ_coeff, float oao_tau,
-    const int* occ_front_ttl, float occ_cost_weight)
+    const int* occ_front_ttl, float occ_cost_weight,
+    int* cand_n, float* cand_costs, int* cand_indices, int cand_stride,
+    float cand_cost_cap)
 {
     int t = blockIdx.y * blockDim.y + threadIdx.y;
     int d = blockIdx.x * blockDim.x + threadIdx.x;
@@ -535,7 +549,17 @@ __global__ void compute_conditional_cost_kernel(
         if (under > 0.0f) cost = fminf(1.0f, cost + occ_cost_weight * under);
     }
 
-    cost_matrix[t * n_det + d] = fminf(1.0f, fmaxf(0.0f, cost));
+    float final_cost = fminf(1.0f, fmaxf(0.0f, cost));
+    cost_matrix[t * n_det + d] = final_cost;
+
+    // See stage1_cost_fused_kernel: only enqueue Sinkhorn-selectable candidates.
+    if (final_cost <= cand_cost_cap) {
+        int slot = atomicAdd(&cand_n[t], 1);
+        if (slot < K_MAX_CANDIDATES) {
+            cand_indices[t * cand_stride + slot] = d;
+            cand_costs[t * cand_stride + slot] = final_cost;
+        }
+    }
 }
 
 #define SINKHORN_NUM_STAGES 5
@@ -599,8 +623,10 @@ __global__ void compute_cost_matrix_kernel(
     cost_matrix[t * n_det + d] = cost;
 }
 
-// Fused multi-stage Sinkhorn top-k kernel: computes Top-K for all 5 association
-// stages in a single pass over the cost matrix, eliminating 4 redundant rescans.
+// Fused multi-stage top-k kernel using sparse candidate list.
+// Reads compact per-track candidate arrays (costs + detection indices) instead of
+// scanning the full dense cost matrix.  Typically K_MAX_CANDIDATES (16) vs num_dets (100-500+)
+// reduces sinkhorn memory reads by 10-50x.
 //
 // Stage definitions (matching the original 5-stage cascade):
 //   Stage 0 (S0 DDA):        trk_state==2, det_score in [high_thresh, 1.1), cost <= dda_max_cost
@@ -608,13 +634,11 @@ __global__ void compute_cost_matrix_kernel(
 //   Stage 2 (S1b MidConf):   trk_state==2, det_score in [mid_thresh, high_thresh), cost <= match_thresh
 //   Stage 3 (S1c Tentative): trk_state==1, det_score in [mid_thresh, 1.1), cost <= match_thresh
 //   Stage 4 (S2 LoConf):     trk_state==2, det_score in [track_thresh, mid_thresh), cost <= stage2_match_thresh
-//
-// Output layout: out_indices[stage * n_trk * 3 + t * 3 + k]
-//                out_probs[stage * n_trk * 3 + t * 3 + k]
 __global__ void fused_sinkhorn_multistage_kernel(
-    const float* cost_matrix, const float* det_scores, const float* det_boxes,
+    const float* cand_costs, const int* cand_indices, const int* cand_n,
+    int cand_stride, const float* det_scores, const float* det_boxes,
     const int* trk_states, const bool* trk_active, const int* trk_to_det,
-    int n_trk, int n_det, float lambda,
+    int n_trk, float lambda,
     float dda_max_cost, float match_thresh, float stage2_match_thresh,
     float high_thresh, float mid_thresh, float track_thresh,
     int stage_stride,
@@ -636,9 +660,11 @@ __global__ void fused_sinkhorn_multistage_kernel(
     bool st2 = (st == 2), st1 = (st == 1);
 
     if (valid_trk) {
-        for (int d = tid; d < n_det; d += WARP) {
+        int n_cands = cand_n[t];
+        for (int k = tid; k < n_cands && k < K_MAX_CANDIDATES; k += WARP) {
+            int d = cand_indices[t * cand_stride + k];
+            float cost = cand_costs[t * cand_stride + k];
             float score = det_scores[d];
-            float cost = cost_matrix[t * n_det + d];
 
             float aspect_penalty = 1.0f;
             if (det_boxes) {
@@ -1978,6 +2004,10 @@ public:
 
         checkCuda(cudaMalloc(&d_has_clean_embedding_, max_objs_ * sizeof(bool)));
         checkCuda(cudaMalloc(&d_candidate_count_, max_objs_ * sizeof(int)));
+        cand_stride_ = ((K_MAX_CANDIDATES + 31) / 32) * 32;
+        checkCuda(cudaMalloc(&d_cand_costs_,   max_objs_ * cand_stride_ * sizeof(float)));
+        checkCuda(cudaMalloc(&d_cand_indices_, max_objs_ * cand_stride_ * sizeof(int)));
+        checkCuda(cudaMalloc(&d_cand_n_,        max_objs_ * sizeof(int)));
         checkCuda(cudaMalloc(&d_s_inv_, max_objs_ * 16 * sizeof(float)));
         checkCuda(cudaMalloc(&d_homography_, 9 * sizeof(float)));
         checkCuda(cudaMemset(d_homography_, 0, 9 * sizeof(float)));
@@ -2018,6 +2048,7 @@ public:
         checkCuda(cudaMemset(d_score_sum_, 0, max_objs_ * sizeof(float)));
         checkCuda(cudaMemset(d_has_clean_embedding_, 0, max_objs_ * sizeof(bool)));
         checkCuda(cudaMemset(d_candidate_count_, 0, max_objs_ * sizeof(int)));
+        checkCuda(cudaMemset(d_cand_n_, 0, max_objs_ * sizeof(int)));
         checkCuda(cudaMemset(d_s_inv_, 0, max_objs_ * 16 * sizeof(float)));
 
         h_active_raw_.resize(max_objs_, 0);
@@ -2083,6 +2114,7 @@ public:
         if (d_occ_grid_) cudaFree(d_occ_grid_);
         if (d_occ_frame_) cudaFree(d_occ_frame_);
         cudaFree(d_has_clean_embedding_); cudaFree(d_candidate_count_);
+        cudaFree(d_cand_costs_); cudaFree(d_cand_indices_); cudaFree(d_cand_n_);
         cudaFree(d_s_inv_);
         cudaFree(d_homography_);
         cudaFree(d_occ_coeff_);
@@ -2192,8 +2224,15 @@ public:
             occ_state_enabled_ ? d_occ_partner_ : nullptr);
 
         nvtxRangePushA("Assoc/CostMatrix");
+        // Sparse-candidate cap: a candidate is selectable by SOME Sinkhorn stage iff
+        // its cost is within the loosest stage threshold. Capping the append here keeps
+        // the per-track candidate list to genuinely overlapping detections (<< K_MAX),
+        // so the race-ordered slots can never evict the true match.
+        const float cand_cost_cap =
+            std::max(dda_max_cost_, std::max(match_thresh_, stage2_match_thresh_));
         if (d_embeddings) {
             checkCuda(cudaMemsetAsync(d_candidate_count_, 0, max_objs_ * sizeof(int), stream));
+            checkCuda(cudaMemsetAsync(d_cand_n_, 0, max_objs_ * sizeof(int), stream));
             kernel::count_stage1_candidates_kernel<<<g_size, b_size, 0, stream>>>(
                 d_states_, d_boxes, d_active_, d_candidate_count_,
                 d_s_inv_, d_homography_, max_objs_, num_dets, iou_stage1_gate_, maha_gate_);
@@ -2206,9 +2245,11 @@ public:
                 reid_cos_threshold_, reid_iou_low_,
                 reid_min_candidates_,
                 oao_tau_ > 0.0f ? d_occ_coeff_ : nullptr, oao_tau_,
-                occ_state_enabled_ ? d_occ_front_ttl_ : nullptr, occ_cost_weight_);
+                occ_state_enabled_ ? d_occ_front_ttl_ : nullptr, occ_cost_weight_,
+                d_cand_n_, d_cand_costs_, d_cand_indices_, cand_stride_, cand_cost_cap);
         } else {
             checkCuda(cudaMemsetAsync(d_candidate_count_, 0, max_objs_ * sizeof(int), stream));
+            checkCuda(cudaMemsetAsync(d_cand_n_, 0, max_objs_ * sizeof(int), stream));
             kernel::stage1_cost_fused_kernel<<<g_size, b_size, 0, stream>>>(
                 d_states_, d_boxes, d_candidate_count_,
                 d_s_inv_, d_homography_, d_cost_matrix_,
@@ -2216,7 +2257,8 @@ public:
                 vel_dir_weight_, fuse_score_weight_,
                 d_scores,
                 oao_tau_ > 0.0f ? d_occ_coeff_ : nullptr, oao_tau_,
-                occ_state_enabled_ ? d_occ_front_ttl_ : nullptr, occ_cost_weight_);
+                occ_state_enabled_ ? d_occ_front_ttl_ : nullptr, occ_cost_weight_,
+                d_cand_n_, d_cand_costs_, d_cand_indices_, cand_stride_, cand_cost_cap);
         }
         nvtxRangePop();
 
@@ -2236,8 +2278,9 @@ public:
 
         nvtxRangePushA("Assoc/SinkhornMultistage");
         kernel::fused_sinkhorn_multistage_kernel<<<max_objs_, 128, 0, stream>>>(
-            d_cost_matrix_, d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
-            max_objs_, num_dets, 30.0f,
+            d_cand_costs_, d_cand_indices_, d_cand_n_, cand_stride_,
+            d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
+            max_objs_, 30.0f,
             dda_max_cost_, match_thresh_, stage2_match_thresh_,
             high_thresh_, effective_mid_thresh, track_thresh_,
             sinkhorn_stage_stride_,
@@ -2884,6 +2927,10 @@ private:
     bool* d_active_;
     bool* d_has_clean_embedding_;
     int* d_candidate_count_;
+    int   cand_stride_ = 0;
+    float* d_cand_costs_ = nullptr;
+    int*   d_cand_indices_ = nullptr;
+    int*   d_cand_n_ = nullptr;
     float* d_s_inv_;
     float* d_homography_;
     int *d_age_, *d_classes_, *d_track_ids_;

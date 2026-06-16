@@ -280,9 +280,7 @@ if __name__ == "__main__":
 
             set_postprocess_compile(True)
             mamba_detector.mamba_head.set_head_compile(True)
-            # P3 deferred: torch.compile on MambaBlock degrades selective_scan
-            # from 3→12 launches (Inductor un-batches cross_scan dimensions).
-            # Replaced by native kernel optimization in mamba_scan.cu.
+            mamba_detector.mamba_head.set_block_compile(True)
 
         eval_kwargs["detector"] = mamba_detector
         eval_kwargs["tiling"] = _tiling

@@ -310,7 +310,7 @@ class TRTYoloBackbone(nn.Module):
         super().__init__()
         import tensorrt as trt
 
-        self.logger = trt.Logger(trt.Logger.WARNING)
+        self.logger = trt.Logger(trt.Logger.ERROR)
         with open(engine_path, "rb") as f:
             runtime = trt.Runtime(self.logger)
             self.engine = runtime.deserialize_cuda_engine(f.read())

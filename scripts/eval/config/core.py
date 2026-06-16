@@ -318,9 +318,11 @@ def add_core_args(parser: argparse.ArgumentParser) -> None:
     )
     core.add_argument(
         "--gmc-mode",
-        choices=["cpu", "gpu"],
+        choices=["cpu", "gpu", "tile"],
         default="gpu",
-        help="GMC algorithm mode. 'cpu' uses OpenCV LK; 'gpu' uses cuFFT phase correlation.",
+        help="GMC algorithm mode. 'cpu' uses OpenCV LK; 'gpu' uses cuFFT phase "
+        "correlation (translation-only); 'tile' fits a 4-DOF similarity from "
+        "per-tile phase correlation, falling back to global PCR translation.",
     )
     core.add_argument(
         "--gmc-downscale",
