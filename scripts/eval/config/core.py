@@ -165,8 +165,11 @@ def add_core_args(parser: argparse.ArgumentParser) -> None:
             "speed",
             "mamba_optimal",
             "mamba_whole_graph",
+            "mamba_whole_graph_m",
             "mamba_eager_1024",
             "mamba_eager_1024_full",
+            "mamba_detail_b2_native_p3",
+            "mamba_eager_temporal_probe",
             "fpn_reid_baseline",
         ),
         default=None,
@@ -315,9 +318,11 @@ def add_core_args(parser: argparse.ArgumentParser) -> None:
     )
     core.add_argument(
         "--gmc-mode",
-        choices=["cpu", "gpu"],
+        choices=["cpu", "gpu", "tile"],
         default="gpu",
-        help="GMC algorithm mode. 'cpu' uses OpenCV LK; 'gpu' uses cuFFT phase correlation.",
+        help="GMC algorithm mode. 'cpu' uses OpenCV LK; 'gpu' uses cuFFT phase "
+        "correlation (translation-only); 'tile' fits a 4-DOF similarity from "
+        "per-tile phase correlation, falling back to global PCR translation.",
     )
     core.add_argument(
         "--gmc-downscale",
@@ -373,6 +378,22 @@ def add_core_args(parser: argparse.ArgumentParser) -> None:
         "--mamba-teacher-ckpt",
         default="runs/gated_det_v1/best.ckpt",
         help="Path to teacher (GatedYOLODetector) checkpoint for Mamba eval.",
+    )
+    core.add_argument(
+        "--mamba-yolo-weights",
+        default="models/yolo/yolo26s.pt",
+        help="Base YOLO weights matching the Mamba/teacher lineage.",
+    )
+    core.add_argument(
+        "--mamba-small-p3-max-threshold",
+        type=float,
+        default=0.0,
+        help=(
+            "Experimental: below this detector-input short-side size (px), use "
+            "P3 box coordinates with max aligned P3/P4/P5 score (0=off). "
+            "Threshold is at detector input resolution (e.g. 640px); whole-graph "
+            "mode scales to original-image size via box_scale_x/y."
+        ),
     )
     core.add_argument(
         "--no-temporal",

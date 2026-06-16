@@ -18,7 +18,11 @@ void launch_batch_crop_resize(
 Preprocessor::Preprocessor(int target_width, int target_height)
     : target_width_(target_width), target_height_(target_height) {
     rgb_buffer_size_ = target_width_ * target_height_ * 3;
-    cudaMalloc(&d_rgb_interleaved_, rgb_buffer_size_);
+    cudaError_t err = cudaMalloc(&d_rgb_interleaved_, rgb_buffer_size_);
+    if (err != cudaSuccess) {
+        std::cerr << "[Preprocessor] cudaMalloc failed: " << cudaGetErrorString(err) << std::endl;
+        d_rgb_interleaved_ = nullptr;
+    }
 }
 
 Preprocessor::~Preprocessor() {
@@ -26,12 +30,12 @@ Preprocessor::~Preprocessor() {
 }
 
 void Preprocessor::process_gpu(void* input_cuda_ptr, int src_width, int src_height, void* output_cuda_ptr, cudaStream_t stream) {
-    // 這裡我們暫時假設 input_cuda_ptr 已經由 NPP 處理過 Resize 或格式轉換
-    // 實際上應在這裡插入 nppiNV12ToRGB_8u_P2C3R 等呼叫
-    
-    // 呼叫 .cu 中的 CUDA Kernel
+    if (!input_cuda_ptr) {
+        std::cerr << "[Preprocessor] input_cuda_ptr is null" << std::endl;
+        return;
+    }
     launch_normalize_chw(
-        (uint8_t*)d_rgb_interleaved_, (float*)output_cuda_ptr, target_width_, target_height_, stream);
+        (uint8_t*)input_cuda_ptr, (float*)output_cuda_ptr, target_width_, target_height_, stream);
 }
 
 void Preprocessor::process(void* input_ptr, int width, int height, void* output_cuda_ptr, cudaStream_t stream) {

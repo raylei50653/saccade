@@ -132,6 +132,7 @@ def add_detection_args(parser: argparse.ArgumentParser) -> None:
             "native_1024",
             "native_1280",
             "sahi_960p_2x2",
+            "mamba_global_2x2",
         ],
         default="native_960",
         help="NO-GO: Inference tiling preset. Tiled detection yields FP ~2x native_960 (see PIPELINE_REFERENCE).",

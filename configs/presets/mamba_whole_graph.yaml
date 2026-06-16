@@ -17,7 +17,12 @@ person_geometry_prior: false
 detection_quality_scaling: false
 
 # --- Mamba Detector ---
-mamba_ckpt: runs/mamba_gt_vgt_mamba_v14/best.ckpt
+# T3→T1 GT2 curriculum (v14replica lineage): matched-seed validated > implicit
+# all-frames baseline by +1.8 IDF1 / +3.0 AssA (pure association, survives no-post);
+# see docs/modules/detection/research/mamba-t3t1-curriculum-20260613.md §6.
+# Trained with gt-ratio 0 → deploys gate-free, so the null mamba_teacher_ckpt
+# (backbone-only) is consistent. Previous: runs/mamba_gt_vgt_mamba_v14/best.ckpt (legacy).
+mamba_ckpt: runs/mamba_gt_v14replica_t3_t1/best.ckpt
 fpn_backbone_engine: models/yolo/yolo26s_backbone_640_best.engine
 
 # Whole-detect CUDA graph — captures TRT backbone + Mamba head + postprocess
@@ -44,6 +49,9 @@ relink_bridge_spatial_gate: 0.0
 
 # --- Tracker Parameters ---
 match_thresh: 0.50
+# new_track_thresh: 0.28 retained. 0.20 looked +0.1 IDF1 on the 7-seq aggregate
+# but per-seq it is 2/7 pos / 3/7 neg, carried entirely by MOT17-09 (+2.9) —
+# fails the cross-seq consistency GO criterion (overfit, registry #38).
 new_track_thresh: 0.28
 kalman_r_scale: 2.8
 confirm_streak: 3

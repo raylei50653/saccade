@@ -223,7 +223,7 @@ if __name__ == "__main__":
         "module_trigger",
         "module_lifecycle",
     }
-    _MAMBA_KEYS = {"mamba_ckpt", "mamba_teacher_ckpt"}
+    _MAMBA_KEYS = {"mamba_ckpt", "mamba_teacher_ckpt", "mamba_yolo_weights"}
     _VIS_KEYS = {
         "visualize",
         "visualize_scale",
@@ -257,7 +257,7 @@ if __name__ == "__main__":
         )
 
         mamba_detector = build_mamba_gated_detector(
-            yolo_pt_path="models/yolo/yolo26s.pt",
+            yolo_pt_path=args.mamba_yolo_weights,
             teacher_ckpt=args.mamba_teacher_ckpt,
             mamba_ckpt=args.mamba_ckpt,
             img_size=_img_sz,
@@ -270,6 +270,7 @@ if __name__ == "__main__":
             and not (getattr(args, "cpp_threads", 0) > 0),
             use_whole_graph=getattr(args, "use_whole_graph", False)
             and not (getattr(args, "cpp_threads", 0) > 0),
+            small_p3_max_threshold=getattr(args, "mamba_small_p3_max_threshold", 0.0),
         )
 
         if not getattr(args, "no_compile", False):
@@ -279,9 +280,7 @@ if __name__ == "__main__":
 
             set_postprocess_compile(True)
             mamba_detector.mamba_head.set_head_compile(True)
-            # P3 deferred: torch.compile on MambaBlock degrades selective_scan
-            # from 3→12 launches (Inductor un-batches cross_scan dimensions).
-            # Replaced by native kernel optimization in mamba_scan.cu.
+            mamba_detector.mamba_head.set_block_compile(True)
 
         eval_kwargs["detector"] = mamba_detector
         eval_kwargs["tiling"] = _tiling

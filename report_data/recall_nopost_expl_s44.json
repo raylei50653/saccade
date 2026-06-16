@@ -1,0 +1,206 @@
+{
+  "label": "mamba_gt_v14replica_t3_t1_shared_s44",
+  "checkpoint": "runs/mamba_gt_v14replica_t3_t1_shared_s44/best.ckpt",
+  "conf_floor": 0.001,
+  "score_thresholds": [
+    0.001,
+    0.1,
+    0.25
+  ],
+  "nms_iou": 0.5,
+  "match_iou": 0.5,
+  "sequences": {
+    "MOT17-02-SDP": {
+      "frames": 600,
+      "original_hw": [
+        1080,
+        1920
+      ],
+      "thresholds": {
+        "0.001": {
+          "predictions": 23322,
+          "bins": {
+            "all": {
+              "gt": 10993,
+              "matched": 10528,
+              "fn": 465,
+              "recall": 0.9577003547712181,
+              "matched_mean_iou": 0.8833433729016129
+            },
+            "h_ge128": {
+              "gt": 3626,
+              "matched": 3557,
+              "fn": 69,
+              "recall": 0.9809707666850525,
+              "matched_mean_iou": 0.9216070129591861
+            },
+            "min_ge16": {
+              "gt": 3860,
+              "matched": 3782,
+              "fn": 78,
+              "recall": 0.9797927461139896,
+              "matched_mean_iou": 0.9205502143995526
+            },
+            "h_64to128": {
+              "gt": 5365,
+              "matched": 5206,
+              "fn": 159,
+              "recall": 0.970363466915191,
+              "matched_mean_iou": 0.8778272460755412
+            },
+            "min_8to16": {
+              "gt": 4874,
+              "matched": 4745,
+              "fn": 129,
+              "recall": 0.973533032416906,
+              "matched_mean_iou": 0.8804045879175088
+            },
+            "h_32to64": {
+              "gt": 1958,
+              "matched": 1751,
+              "fn": 207,
+              "recall": 0.8942798774259448,
+              "matched_mean_iou": 0.8244622805539299
+            },
+            "min_4to8": {
+              "gt": 2259,
+              "matched": 2001,
+              "fn": 258,
+              "recall": 0.8857901726427623,
+              "matched_mean_iou": 0.8199891801001965
+            },
+            "h_lt32": {
+              "gt": 44,
+              "matched": 14,
+              "fn": 30,
+              "recall": 0.3181818181818182,
+              "matched_mean_iou": 0.5771991780826023
+            }
+          }
+        },
+        "0.1": {
+          "predictions": 11908,
+          "bins": {
+            "all": {
+              "gt": 10993,
+              "matched": 10352,
+              "fn": 641,
+              "recall": 0.9416901664695716,
+              "matched_mean_iou": 0.8864756164182743
+            },
+            "h_ge128": {
+              "gt": 3626,
+              "matched": 3514,
+              "fn": 112,
+              "recall": 0.9691119691119691,
+              "matched_mean_iou": 0.9244183148249483
+            },
+            "min_ge16": {
+              "gt": 3860,
+              "matched": 3729,
+              "fn": 131,
+              "recall": 0.9660621761658031,
+              "matched_mean_iou": 0.9239492691148219
+            },
+            "h_64to128": {
+              "gt": 5365,
+              "matched": 5095,
+              "fn": 270,
+              "recall": 0.9496738117427772,
+              "matched_mean_iou": 0.8816274730918218
+            },
+            "min_8to16": {
+              "gt": 4874,
+              "matched": 4654,
+              "fn": 220,
+              "recall": 0.954862535904801,
+              "matched_mean_iou": 0.8835593404358019
+            },
+            "h_32to64": {
+              "gt": 1958,
+              "matched": 1729,
+              "fn": 229,
+              "recall": 0.883043922369765,
+              "matched_mean_iou": 0.826152029480115
+            },
+            "min_4to8": {
+              "gt": 2259,
+              "matched": 1969,
+              "fn": 290,
+              "recall": 0.8716246126604692,
+              "matched_mean_iou": 0.8223989772699762
+            },
+            "h_lt32": {
+              "gt": 44,
+              "matched": 14,
+              "fn": 30,
+              "recall": 0.3181818181818182,
+              "matched_mean_iou": 0.5771991780826023
+            }
+          }
+        },
+        "0.25": {
+          "predictions": 10884,
+          "bins": {
+            "all": {
+              "gt": 10993,
+              "matched": 10169,
+              "fn": 824,
+              "recall": 0.9250432093150186,
+              "matched_mean_iou": 0.8891737049502109
+            },
+            "h_ge128": {
+              "gt": 3626,
+              "matched": 3492,
+              "fn": 134,
+              "recall": 0.9630446773303916,
+              "matched_mean_iou": 0.9256821794164413
+            },
+            "min_ge16": {
+              "gt": 3860,
+              "matched": 3708,
+              "fn": 152,
+              "recall": 0.960621761658031,
+              "matched_mean_iou": 0.9250757086302728
+            },
+            "h_64to128": {
+              "gt": 5365,
+              "matched": 4992,
+              "fn": 373,
+              "recall": 0.930475302889096,
+              "matched_mean_iou": 0.8847424324530249
+            },
+            "min_8to16": {
+              "gt": 4874,
+              "matched": 4556,
+              "fn": 318,
+              "recall": 0.9347558473533032,
+              "matched_mean_iou": 0.886622677504022
+            },
+            "h_32to64": {
+              "gt": 1958,
+              "matched": 1671,
+              "fn": 287,
+              "recall": 0.8534218590398366,
+              "matched_mean_iou": 0.8287314325660236
+            },
+            "min_4to8": {
+              "gt": 2259,
+              "matched": 1905,
+              "fn": 354,
+              "recall": 0.8432934926958832,
+              "matched_mean_iou": 0.8253930495167029
+            },
+            "h_lt32": {
+              "gt": 44,
+              "matched": 14,
+              "fn": 30,
+              "recall": 0.3181818181818182,
+              "matched_mean_iou": 0.5771991780826023
+            }
+          }
+        }
+      }
+    }
+  }
+}

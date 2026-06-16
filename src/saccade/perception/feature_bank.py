@@ -82,9 +82,9 @@ class FeatureBank:
         if n == 0:
             return
         embeddings_norm = F.normalize(embeddings, dim=-1)
+        ids_cpu = track_ids.tolist()  # saccade-allow-cpu
         target_indices: List[int] = [
-            self._alloc_slot(int(track_ids[i].item()), stream_id)
-            for i in range(n)  # saccade-allow-cpu
+            self._alloc_slot(tid, stream_id) for tid in ids_cpu
         ]
         idxs = torch.tensor(target_indices, dtype=torch.long, device=self.device)
         self.features[idxs] = embeddings_norm

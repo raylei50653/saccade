@@ -67,6 +67,68 @@ def _selective_scan(
         return _selective_scan_jit(u, delta, A, B, C, D)
 
 
+def _selective_scan_legacy_n1(
+    u: Tensor,
+    delta: Tensor,
+    A: Tensor,
+    B: Tensor,
+    C: Tensor,
+    D: Tensor | None = None,
+) -> Tensor:
+    """Reproduce the pre-v14 CUDA launch bug exactly.
+
+    The historical wrapper passed ``A.shape[0]`` as the state dimension. With
+    shared A shaped ``(1, N)``, the kernel therefore launched with N=1 while B
+    retained its original rank-N contiguous layout. This changed B's batch/time
+    stride to one; selecting ``B[..., :1]`` would not reproduce it. Historical
+    C was already rank-1, so its flattened stride remained correct.
+    """
+    if not u.is_cuda:
+        return _selective_scan_legacy_n1_jit(u, delta, A, B, C, D)
+    try:
+        return _selective_scan_legacy_n1_cuda(u, delta, A, B, C, D)
+    except ImportError:
+        return _selective_scan_legacy_n1_jit(u, delta, A, B, C, D)
+
+
+def _selective_scan_legacy_n1_cuda(
+    u: Tensor,
+    delta: Tensor,
+    A: Tensor,
+    B: Tensor,
+    C: Tensor,
+    D: Tensor | None = None,
+) -> Tensor:
+    import saccade_tracking_ext
+
+    u = u.contiguous()
+    delta = delta.contiguous()
+    A = A.contiguous()
+    B = B.contiguous()
+    C = C.contiguous()
+    D_t = D.contiguous() if D is not None else None
+
+    y = torch.empty_like(u)
+    saccade_tracking_ext.selective_scan_fwd(
+        u.data_ptr(),
+        delta.data_ptr(),
+        A.data_ptr(),
+        B.data_ptr(),
+        C.data_ptr(),
+        D_t.data_ptr() if D_t is not None else 0,
+        y.data_ptr(),
+        u.shape[0],
+        u.shape[1],
+        u.shape[2],
+        1,
+        1 if D_t is not None else 0,
+        0,
+        u.dtype == torch.float16,
+        torch.cuda.current_stream(u.device).cuda_stream,
+    )
+    return y
+
+
 # Custom operator registration for traceability in PyTorch 2.x / torch.compile / torch.export
 try:
 
@@ -228,6 +290,40 @@ def _selective_scan_jit(
     return ys
 
 
+@torch.jit.script
+def _selective_scan_legacy_n1_jit(
+    u: Tensor,
+    delta: Tensor,
+    A: Tensor,
+    B: Tensor,
+    C: Tensor,
+    D: Tensor | None = None,
+) -> Tensor:
+    batch, length, channels = u.shape
+    delta = F.softplus(delta)
+
+    # The old kernel indexed B as ((b * L + t) * 1), even though its physical
+    # last dimension was 16. Preserve that flattened access, including the
+    # historical cross-batch overlap. C was rank-1 in 77fcc262^.
+    b_legacy = B.contiguous().reshape(-1)[: batch * length].reshape(batch, length)
+    c_legacy = C.contiguous().reshape(-1)[: batch * length].reshape(batch, length)
+    a_legacy = A.contiguous().reshape(-1)[0]
+
+    h = torch.zeros(batch, channels, device=u.device, dtype=u.dtype)
+    ys = torch.zeros(batch, length, channels, device=u.device, dtype=u.dtype)
+    for t in range(length):
+        delta_t = delta[:, t]
+        h = (
+            torch.exp(delta_t * a_legacy) * h
+            + delta_t * b_legacy[:, t].unsqueeze(-1) * u[:, t]
+        )
+        ys[:, t] = h * c_legacy[:, t].unsqueeze(-1)
+
+    if D is not None:
+        ys = ys + u * D
+    return ys
+
+
 class _SelectiveScanCudaFn(torch.autograd.Function):
     """Differentiable selective scan backed by the C++ CUDA fwd/bwd kernels.
 
@@ -350,6 +446,8 @@ class MambaBlock(nn.Module):
         expand: int = 2,
         full_rank_c: bool = False,
         per_channel_a: bool = False,
+        scan_stop_grad: bool = False,
+        legacy_n1_scan: bool = False,
     ):
         super().__init__()
         self.d_model = d_model
@@ -358,6 +456,8 @@ class MambaBlock(nn.Module):
         self.expand = expand
         self.full_rank_c = full_rank_c
         self.per_channel_a = per_channel_a
+        self.scan_stop_grad = scan_stop_grad
+        self.legacy_n1_scan = legacy_n1_scan
         d_inner = d_model * expand
 
         self.in_proj = nn.Linear(d_model, d_inner * 2, bias=False)
@@ -412,14 +512,15 @@ class MambaBlock(nn.Module):
 
         A = -torch.exp(self.A_log.float())  # (1, N) shared or (d_inner, N) per-channel
 
-        y = _selective_scan(
-            x_t,
-            dt,
-            A,
-            B_ssm,
-            C_ssm,
-            D=self.D,
-        )
+        scan = _selective_scan_legacy_n1 if self.legacy_n1_scan else _selective_scan
+        y = scan(x_t, dt, A, B_ssm, C_ssm, D=self.D)
+
+        # v14 historical regime: the raw CUDA scan had no grad_fn, so conv1d /
+        # x_proj / dt_proj / A_log / D (and the x half of in_proj) stayed at
+        # init; only the z gate and out_proj learned. detach reproduces that
+        # gradient topology with the correct N=16 forward.
+        if self.scan_stop_grad:
+            y = y.detach()
 
         y = y * F.silu(z)
         y = self.out_proj(y)
@@ -504,9 +605,591 @@ def _cross_scan_mamba(
     ).mean(dim=0)
 
 
+class P3DetailFusion(nn.Module):
+    """Encode a high-resolution image and align local 3x3 patches to P3."""
+
+    def __init__(
+        self,
+        d_model: int,
+        channels: int = 32,
+        patch_size: int = 3,
+        feature_channels: int = 0,
+    ):
+        super().__init__()
+        if patch_size % 2 == 0:
+            raise ValueError("detail patch_size must be odd")
+        self.patch_size = patch_size
+        # Keep the first stage compatible with the 32-channel YOLO stem while
+        # allowing the second stage to test wider detail representations.
+        hidden = min(channels, 32)
+        self.encoder = nn.Sequential(
+            nn.Conv2d(3, hidden, 3, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(hidden),
+            nn.SiLU(),
+            nn.Conv2d(hidden, channels, 3, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(channels),
+            nn.SiLU(),
+        )
+        self.feature_adapter: nn.Module | None = None
+        if feature_channels > 0:
+            self.feature_adapter = nn.Conv2d(feature_channels, channels, 1)
+        token_channels = channels * patch_size * patch_size
+        self.cls_proj = nn.Conv2d(token_channels, d_model, 1)
+        self.reg_proj = nn.Conv2d(token_channels, d_model, 1)
+        self.cls_gate = nn.Sequential(nn.Conv2d(d_model, d_model, 1), nn.Sigmoid())
+        self.reg_gate = nn.Sequential(nn.Conv2d(d_model, d_model, 1), nn.Sigmoid())
+
+        # Exact v14 identity at initialization. The first optimizer step trains
+        # these output projections; gradients then propagate into the encoder.
+        nn.init.zeros_(self.cls_proj.weight)
+        nn.init.zeros_(self.cls_proj.bias)
+        nn.init.zeros_(self.reg_proj.weight)
+        nn.init.zeros_(self.reg_proj.bias)
+
+    @torch.no_grad()
+    def initialize_from_yolo_stem(self, stem: nn.Module) -> bool:
+        """Copy the first YOLO Conv+BN when its channel layout matches."""
+        source_conv = getattr(stem, "conv", None)
+        source_bn = getattr(stem, "bn", None)
+        target_conv = self.encoder[0]
+        target_bn = self.encoder[1]
+        if (
+            not isinstance(source_conv, nn.Conv2d)
+            or not isinstance(source_bn, nn.BatchNorm2d)
+            or source_conv.weight.shape != target_conv.weight.shape
+            or source_bn.weight.shape != target_bn.weight.shape
+        ):
+            return False
+        target_conv.weight.copy_(source_conv.weight)
+        target_bn.load_state_dict(source_bn.state_dict())
+        return True
+
+    def _sample_tokens(
+        self,
+        detail_feat: Tensor,
+        output_hw: tuple[int, int],
+        valid_hw: Tensor | None,
+        source_stride: int,
+    ) -> Tensor:
+        batch, channels, feat_h, feat_w = detail_feat.shape
+        out_h, out_w = output_hw
+        patch = self.patch_size
+
+        if valid_hw is None:
+            valid_hw = detail_feat.new_tensor(
+                [[feat_h * source_stride, feat_w * source_stride]],
+                dtype=torch.float32,
+            ).expand(batch, -1)
+        elif valid_hw.shape != (batch, 2):
+            raise ValueError(
+                f"detail_valid_hw must have shape ({batch}, 2), got {tuple(valid_hw.shape)}"
+            )
+        valid_hw = valid_hw.to(device=detail_feat.device, dtype=torch.float32)
+        valid_feat_h = torch.ceil(valid_hw[:, 0] / source_stride).clamp_(1, feat_h)
+        valid_feat_w = torch.ceil(valid_hw[:, 1] / source_stride).clamp_(1, feat_w)
+
+        y_fraction = (
+            torch.arange(out_h * patch, device=detail_feat.device, dtype=torch.float32)
+            + 0.5
+        ) / (out_h * patch)
+        x_fraction = (
+            torch.arange(out_w * patch, device=detail_feat.device, dtype=torch.float32)
+            + 0.5
+        ) / (out_w * patch)
+        grid_y = (
+            2.0 * (y_fraction[None, :, None] * valid_feat_h[:, None, None] / feat_h)
+            - 1.0
+        )
+        grid_x = (
+            2.0 * (x_fraction[None, None, :] * valid_feat_w[:, None, None] / feat_w)
+            - 1.0
+        )
+        grid = torch.stack(
+            [
+                grid_x.expand(-1, out_h * patch, -1),
+                grid_y.expand(-1, -1, out_w * patch),
+            ],
+            dim=-1,
+        ).to(dtype=detail_feat.dtype)
+
+        sampled = F.grid_sample(
+            detail_feat,
+            grid,
+            mode="bilinear",
+            padding_mode="zeros",
+            align_corners=False,
+        )
+        return (
+            sampled.view(batch, channels, out_h, patch, out_w, patch)
+            .permute(0, 1, 3, 5, 2, 4)
+            .reshape(batch, channels * patch * patch, out_h, out_w)
+        )
+
+    def forward(
+        self,
+        detail_images: Tensor | None,
+        global_context: Tensor,
+        valid_hw: Tensor | None = None,
+        detail_features: Tensor | None = None,
+        feature_stride: int = 8,
+    ) -> tuple[Tensor, Tensor]:
+        if detail_features is not None:
+            if self.feature_adapter is None:
+                raise ValueError(
+                    "detail_features were provided without detail_feature_channels"
+                )
+            detail_feat = self.feature_adapter(detail_features)
+            source_stride = feature_stride
+        else:
+            if detail_images is None:
+                raise ValueError("detail_images or detail_features must be provided")
+            detail_feat = self.encoder(detail_images)
+            source_stride = 4
+        tokens = self._sample_tokens(
+            detail_feat,
+            global_context.shape[-2:],
+            valid_hw,
+            source_stride,
+        )
+        cls_delta = self.cls_proj(tokens) * self.cls_gate(global_context)
+        reg_delta = self.reg_proj(tokens) * self.reg_gate(global_context)
+        return cls_delta, reg_delta
+
+
+def _gather_strip_pixels(
+    detail_images: Tensor,
+    positions: Tensor,
+    output_hw: tuple[int, int],
+    valid_hw: Tensor | None,
+    strip_length: int,
+    strip_width: int,
+) -> Tensor:
+    """Return horizontal/vertical strips and their reversals as (4*B*K, 3, L*W)."""
+    batch, channels, image_h, image_w = detail_images.shape
+    if channels != 3:
+        raise ValueError(f"detail_images must have 3 channels, got {channels}")
+    if positions.ndim != 3 or positions.shape[0] != batch or positions.shape[2] != 2:
+        raise ValueError(
+            f"detail_positions must have shape (B, K, 2), got {tuple(positions.shape)}"
+        )
+    out_h, out_w = output_hw
+    if valid_hw is None:
+        valid_hw = positions.new_tensor([[image_h, image_w]]).expand(batch, -1)
+    elif valid_hw.shape != (batch, 2):
+        raise ValueError(
+            f"detail_valid_hw must have shape ({batch}, 2), got {tuple(valid_hw.shape)}"
+        )
+
+    positions = positions.to(device=detail_images.device, dtype=torch.long)
+    valid_hw = valid_hw.to(device=detail_images.device, dtype=torch.long)
+    valid_h = valid_hw[:, 0].clamp(1, image_h)
+    valid_w = valid_hw[:, 1].clamp(1, image_w)
+
+    y = positions[..., 0].clamp(0, out_h - 1)
+    x = positions[..., 1].clamp(0, out_w - 1)
+    center_y = torch.minimum(
+        ((2 * y + 1) * valid_h[:, None] // (2 * out_h)).clamp_min(0),
+        valid_h[:, None] - 1,
+    )
+    center_x = torch.minimum(
+        ((2 * x + 1) * valid_w[:, None] // (2 * out_w)).clamp_min(0),
+        valid_w[:, None] - 1,
+    )
+
+    length_offsets = (
+        torch.arange(strip_length, device=detail_images.device, dtype=torch.long)
+        - strip_length // 2
+    )
+    width_offsets = (
+        torch.arange(strip_width, device=detail_images.device, dtype=torch.long)
+        - strip_width // 2
+    )
+
+    horizontal_y = torch.minimum(
+        (center_y[..., None, None] + width_offsets[None, None, :, None]).clamp_min(0),
+        valid_h[:, None, None, None] - 1,
+    )
+    horizontal_x = torch.minimum(
+        (center_x[..., None, None] + length_offsets[None, None, None, :]).clamp_min(0),
+        valid_w[:, None, None, None] - 1,
+    )
+    vertical_y = torch.minimum(
+        (center_y[..., None, None] + length_offsets[None, None, :, None]).clamp_min(0),
+        valid_h[:, None, None, None] - 1,
+    )
+    vertical_x = torch.minimum(
+        (center_x[..., None, None] + width_offsets[None, None, None, :]).clamp_min(0),
+        valid_w[:, None, None, None] - 1,
+    )
+
+    horizontal_y = horizontal_y.expand(-1, -1, -1, strip_length)
+    horizontal_x = horizontal_x.expand(-1, -1, strip_width, -1)
+    vertical_y = vertical_y.expand(-1, -1, -1, strip_width)
+    vertical_x = vertical_x.expand(-1, -1, strip_length, -1)
+
+    flat_images = detail_images.flatten(2)
+    horizontal_indices = (horizontal_y * image_w + horizontal_x).flatten(1)
+    vertical_indices = (vertical_y * image_w + vertical_x).flatten(1)
+    horizontal = flat_images.gather(
+        2, horizontal_indices[:, None].expand(-1, channels, -1)
+    ).reshape(batch, channels, positions.shape[1], strip_width, strip_length)
+    vertical = flat_images.gather(
+        2, vertical_indices[:, None].expand(-1, channels, -1)
+    ).reshape(batch, channels, positions.shape[1], strip_length, strip_width)
+    horizontal = horizontal.permute(0, 2, 1, 3, 4)
+    vertical = vertical.permute(0, 2, 1, 3, 4)
+    horizontal = horizontal.flatten(-2)
+    vertical = vertical.flatten(-2)
+    directions = torch.stack(
+        [
+            horizontal,
+            horizontal.flip(-1),
+            vertical,
+            vertical.flip(-1),
+        ],
+        dim=2,
+    )
+    strips = directions.reshape(
+        batch * positions.shape[1] * 4,
+        channels,
+        strip_width * strip_length,
+    )
+    # Normalize here so callers can gather from a uint8 frame kept on GPU: the
+    # full original-resolution clip stays ~45 MiB uint8 instead of a 180 MiB
+    # float32 copy plus the transient out-of-place /255 peak. Only the tiny
+    # gathered strips (budget x 4 x L*W) are cast to float. Inference passes
+    # already-normalized float frames, which pass through unchanged.
+    if strips.dtype == torch.uint8:
+        return strips.to(torch.float32).div_(255.0)
+    return strips.to(torch.float32)
+
+
+class P3StripDetailFusion(nn.Module):
+    """Encode fixed-budget high-resolution pixel strips for selected P3 cells."""
+
+    def __init__(
+        self,
+        d_model: int,
+        d_state: int = 16,
+        stem_channels: int = 32,
+        strip_length: int = 32,
+        strip_width: int = 3,
+        route_chunk_size: int = 16,
+        per_channel_a: bool = False,
+        scan_stop_grad: bool = False,
+        legacy_n1_scan: bool = False,
+    ):
+        super().__init__()
+        if strip_length <= 0:
+            raise ValueError("strip_length must be positive")
+        if strip_width <= 0 or strip_width % 2 == 0:
+            raise ValueError("strip_width must be a positive odd number")
+        if route_chunk_size <= 0:
+            raise ValueError("route_chunk_size must be positive")
+        self.strip_length = strip_length
+        self.strip_width = strip_width
+        self.route_chunk_size = route_chunk_size
+        self.stem = nn.Sequential(
+            nn.Conv1d(3, stem_channels, 5, stride=2, padding=2),
+            nn.SiLU(),
+            nn.Conv1d(stem_channels, d_model, 3, padding=1),
+        )
+        self.mamba = MambaBlock(
+            d_model,
+            d_state,
+            per_channel_a=per_channel_a,
+            scan_stop_grad=scan_stop_grad,
+            legacy_n1_scan=legacy_n1_scan,
+        )
+        self.cls_proj = nn.Linear(d_model, d_model)
+        self.reg_proj = nn.Linear(d_model, d_model)
+        nn.init.zeros_(self.cls_proj.weight)
+        nn.init.zeros_(self.cls_proj.bias)
+        nn.init.zeros_(self.reg_proj.weight)
+        nn.init.zeros_(self.reg_proj.bias)
+
+    def forward(
+        self,
+        detail_images: Tensor,
+        positions: Tensor,
+        output_hw: tuple[int, int],
+        valid_hw: Tensor | None = None,
+        position_mask: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor]:
+        batch, routed = positions.shape[:2]
+        vector_chunks: list[Tensor] = []
+        for start in range(0, routed, self.route_chunk_size):
+            end = min(start + self.route_chunk_size, routed)
+            strips = _gather_strip_pixels(
+                detail_images,
+                positions[:, start:end],
+                output_hw,
+                valid_hw,
+                self.strip_length,
+                self.strip_width,
+            )
+            sequence = self.stem(strips).transpose(1, 2)
+            sequence = self.mamba(sequence) + sequence
+            vector_chunks.append(
+                sequence[:, -1].reshape(batch, end - start, 4, -1).mean(dim=2)
+            )
+        vectors = torch.cat(vector_chunks, dim=1)
+        cls_delta = self.cls_proj(vectors)
+        reg_delta = self.reg_proj(vectors)
+        if position_mask is not None:
+            if position_mask.shape != (batch, routed):
+                raise ValueError(
+                    "detail_position_mask must have shape "
+                    f"({batch}, {routed}), got {tuple(position_mask.shape)}"
+                )
+            mask = position_mask.to(device=vectors.device, dtype=vectors.dtype)
+            cls_delta = cls_delta * mask.unsqueeze(-1)
+            reg_delta = reg_delta * mask.unsqueeze(-1)
+        return cls_delta, reg_delta
+
+
+class P3AttentionStripDetailFusion(nn.Module):
+    """Encode fixed-budget high-resolution pixel strips using Cross-Attention with global features."""
+
+    def __init__(
+        self,
+        d_model: int,
+        stem_channels: int = 32,
+        strip_length: int = 32,
+        strip_width: int = 3,
+        route_chunk_size: int = 16,
+        num_heads: int = 4,
+    ):
+        super().__init__()
+        if strip_length <= 0:
+            raise ValueError("strip_length must be positive")
+        if strip_width <= 0 or strip_width % 2 == 0:
+            raise ValueError("strip_width must be a positive odd number")
+        if route_chunk_size <= 0:
+            raise ValueError("route_chunk_size must be positive")
+        self.strip_length = strip_length
+        self.strip_width = strip_width
+        self.route_chunk_size = route_chunk_size
+        self.d_model = d_model
+
+        self.stem = nn.Sequential(
+            nn.Conv1d(3, stem_channels, 5, stride=2, padding=2),
+            nn.SiLU(),
+            nn.Conv1d(stem_channels, d_model, 3, padding=1),
+        )
+
+        self.attn = nn.MultiheadAttention(
+            embed_dim=d_model,
+            num_heads=num_heads,
+            batch_first=True,
+        )
+
+        self.cls_proj = nn.Linear(d_model, d_model)
+        self.reg_proj = nn.Linear(d_model, d_model)
+        nn.init.zeros_(self.cls_proj.weight)
+        nn.init.zeros_(self.cls_proj.bias)
+        nn.init.zeros_(self.reg_proj.weight)
+        nn.init.zeros_(self.reg_proj.bias)
+
+    def forward(
+        self,
+        detail_images: Tensor,
+        positions: Tensor,
+        output_hw: tuple[int, int],
+        x_proj: Tensor,  # Global feature map: (batch, d_model, out_h, out_w)
+        valid_hw: Tensor | None = None,
+        position_mask: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor]:
+        batch, routed = positions.shape[:2]
+        out_h, out_w = output_hw
+
+        # 1. Extract Query Q from x_proj at positions
+        y_indices = positions[..., 0].clamp(0, out_h - 1).unsqueeze(-1)
+        x_indices = positions[..., 1].clamp(0, out_w - 1).unsqueeze(-1)
+        flat_indices = y_indices * out_w + x_indices  # (batch, routed, 1)
+
+        x_proj_flat = x_proj.flatten(2)  # (batch, d_model, out_h * out_w)
+        gather_indices = flat_indices.transpose(1, 2).expand(-1, self.d_model, -1)
+
+        # q shape: (batch, routed, d_model)
+        q = x_proj_flat.gather(2, gather_indices).transpose(1, 2)
+
+        vector_chunks: list[Tensor] = []
+        for start in range(0, routed, self.route_chunk_size):
+            end = min(start + self.route_chunk_size, routed)
+            k_chunk = end - start
+
+            # Slice Query chunk and expand to 4 directions
+            q_chunk = q[:, start:end]  # (batch, k_chunk, d_model)
+            q_expanded = q_chunk.unsqueeze(2).expand(
+                -1, -1, 4, -1
+            )  # (batch, k_chunk, 4, d_model)
+            q_queries = q_expanded.reshape(batch * k_chunk * 4, 1, self.d_model)
+
+            strips = _gather_strip_pixels(
+                detail_images,
+                positions[:, start:end],
+                output_hw,
+                valid_hw,
+                self.strip_length,
+                self.strip_width,
+            )
+            # sequence (Key/Value) shape: (batch * k_chunk * 4, L_downsampled, d_model)
+            sequence = self.stem(strips).transpose(1, 2)
+
+            # Cross-Attention
+            attn_out, _ = self.attn(
+                query=q_queries,
+                key=sequence,
+                value=sequence,
+            )  # (batch * k_chunk * 4, 1, d_model)
+
+            # Average over the 4 directions
+            attn_out = attn_out.reshape(batch, k_chunk, 4, self.d_model).mean(
+                dim=2
+            )  # (batch, k_chunk, d_model)
+            vector_chunks.append(attn_out)
+
+        vectors = torch.cat(vector_chunks, dim=1)
+        cls_delta = self.cls_proj(vectors)
+        reg_delta = self.reg_proj(vectors)
+
+        if position_mask is not None:
+            mask = position_mask.to(device=vectors.device, dtype=vectors.dtype)
+            cls_delta = cls_delta * mask.unsqueeze(-1)
+            reg_delta = reg_delta * mask.unsqueeze(-1)
+
+        return cls_delta, reg_delta
+
+
+def build_strip_oracle_positions(
+    gt_boxes_list: list[Tensor],
+    *,
+    p3_hw: tuple[int, int],
+    img_size: int,
+    budget: int,
+    small_threshold: float,
+    device: torch.device,
+    generator: torch.Generator | None = None,
+) -> tuple[Tensor, Tensor]:
+    """Build fixed-budget P3 routes, prioritizing cells covered by small GT."""
+    p3_h, p3_w = p3_hw
+    total_cells = p3_h * p3_w
+    if budget <= 0:
+        raise ValueError("strip route budget must be positive")
+    route_count = min(budget, total_cells)
+    stride_y = img_size / p3_h
+    stride_x = img_size / p3_w
+    positions_batch: list[Tensor] = []
+    masks_batch: list[Tensor] = []
+
+    for boxes in gt_boxes_list:
+        priorities: dict[int, float] = {}
+        if boxes.numel() > 0:
+            boxes_cpu = boxes.detach().to(device="cpu", dtype=torch.float32)
+            sizes = boxes_cpu[:, 2:4] - boxes_cpu[:, 0:2]
+            for box, size in zip(boxes_cpu, sizes):
+                if float(size.min()) >= small_threshold:
+                    continue
+                x1, y1, x2, y2 = (float(value) for value in box)
+                center_x = (x1 + x2) * 0.5 / stride_x - 0.5
+                center_y = (y1 + y2) * 0.5 / stride_y - 0.5
+                cell_x0 = max(0, min(p3_w - 1, int(x1 // stride_x)))
+                cell_y0 = max(0, min(p3_h - 1, int(y1 // stride_y)))
+                cell_x1 = max(0, min(p3_w - 1, int(max(x2 - 1e-6, x1) // stride_x)))
+                cell_y1 = max(0, min(p3_h - 1, int(max(y2 - 1e-6, y1) // stride_y)))
+                for cell_y in range(cell_y0, cell_y1 + 1):
+                    for cell_x in range(cell_x0, cell_x1 + 1):
+                        linear = cell_y * p3_w + cell_x
+                        distance = (cell_y - center_y) ** 2 + (cell_x - center_x) ** 2
+                        priorities[linear] = min(
+                            priorities.get(linear, distance), distance
+                        )
+
+        selected = [
+            linear for linear, _ in sorted(priorities.items(), key=lambda item: item[1])
+        ][:route_count]
+        selected_set = set(selected)
+
+        for linear in list(selected):
+            cell_y, cell_x = divmod(linear, p3_w)
+            for dy in (-1, 0, 1):
+                for dx in (-1, 0, 1):
+                    neighbor_y = cell_y + dy
+                    neighbor_x = cell_x + dx
+                    if not (0 <= neighbor_y < p3_h and 0 <= neighbor_x < p3_w):
+                        continue
+                    neighbor = neighbor_y * p3_w + neighbor_x
+                    if neighbor not in selected_set:
+                        selected.append(neighbor)
+                        selected_set.add(neighbor)
+                    if len(selected) >= route_count:
+                        break
+                if len(selected) >= route_count:
+                    break
+            if len(selected) >= route_count:
+                break
+
+        selected = selected[:route_count]
+
+        if len(selected) < route_count:
+            remaining = torch.tensor(
+                [index for index in range(total_cells) if index not in selected_set],
+                dtype=torch.long,
+            )
+            if remaining.numel() > 0:
+                order = torch.randperm(remaining.numel(), generator=generator)
+                selected.extend(
+                    remaining[order[: route_count - len(selected)]].tolist()
+                )
+
+        valid_count = len(selected)
+        if valid_count < budget:
+            selected.extend([0] * (budget - valid_count))
+        positions = torch.tensor(
+            [(linear // p3_w, linear % p3_w) for linear in selected],
+            device=device,
+            dtype=torch.long,
+        )
+        mask = torch.zeros(budget, device=device, dtype=torch.bool)
+        mask[:valid_count] = True
+        positions_batch.append(positions)
+        masks_batch.append(mask)
+
+    return torch.stack(positions_batch), torch.stack(masks_batch)
+
+
 # ---------------------------------------------------------------------------
 # Mamba detection head
 # ---------------------------------------------------------------------------
+DEFAULT_MAMBA_IN_CHANNELS = (128, 256, 512)
+
+
+def resolve_mamba_in_channels(checkpoint: dict) -> tuple[int, ...]:
+    """Resolve FPN input channels from checkpoint metadata or projection weights."""
+    configured = checkpoint.get("mamba_args", {}).get("in_channels")
+    if configured is not None:
+        channels = tuple(int(value) for value in configured)
+        if not channels or any(value <= 0 for value in channels):
+            raise ValueError(f"Invalid Mamba in_channels metadata: {configured!r}")
+        return channels
+
+    state = checkpoint.get("student", {})
+    channels: list[int] = []
+    index = 0
+    while True:
+        weight = state.get(f"input_proj.{index}.weight")
+        if weight is None:
+            weight = state.get(f"input_proj.{index}._orig_mod.weight")
+        if weight is None:
+            break
+        channels.append(int(weight.shape[1]))
+        index += 1
+    if channels:
+        return tuple(channels)
+    return DEFAULT_MAMBA_IN_CHANNELS
+
+
 class MambaDetectionHead(nn.Module):
     """Multi-scale Mamba head for YOLO-style detection.
 
@@ -521,7 +1204,7 @@ class MambaDetectionHead(nn.Module):
 
     def __init__(
         self,
-        in_channels: tuple[int, ...] = (128, 256, 512),
+        in_channels: tuple[int, ...] = DEFAULT_MAMBA_IN_CHANNELS,
         d_model: int = 128,
         d_state: int = 16,
         num_blocks: int = 2,
@@ -536,10 +1219,27 @@ class MambaDetectionHead(nn.Module):
         use_temporal_mamba: bool = False,  # spatio-temporal SSM across T frames (P2 ST optimization)
         use_temporal_attention: bool = False,  # T=4 self-attention over frames (replaces SSM, no flow gate)
         per_channel_a: bool = False,  # per-channel SSM A (d_inner, N); warm-starts from shared (1, N)
+        scan_stop_grad: bool = False,  # detach scan output (v14 frozen-SSM training regime)
+        legacy_n1_scan: bool = False,  # exact pre-v14 N=1 launch/indexing bug
         use_cuda_graph: bool = False,  # enable CUDA Graph capture and replay
+        use_detail_fusion: bool = False,
+        detail_channels: int = 32,
+        detail_patch_size: int = 3,
+        detail_feature_channels: int = 0,
+        use_strip_detail: bool = False,
+        strip_detail_type: str = "mamba",
+        strip_stem_channels: int = 32,
+        strip_length: int = 32,
+        strip_width: int = 3,
+        strip_route_chunk_size: int = 16,
     ):
         super().__init__()
+        if use_detail_fusion and use_strip_detail:
+            raise ValueError(
+                "dense detail fusion and strip detail are mutually exclusive"
+            )
         self.nl = len(in_channels)
+        self.d_model = d_model
         self.num_classes = num_classes
         self.reg_max = reg_max
         self.stride = torch.tensor(strides, dtype=torch.float32)
@@ -551,6 +1251,11 @@ class MambaDetectionHead(nn.Module):
         self.use_hybrid_head = use_hybrid_head
         self.use_temporal_mamba = use_temporal_mamba
         self.per_channel_a = per_channel_a
+        self.scan_stop_grad = scan_stop_grad
+        self.legacy_n1_scan = legacy_n1_scan
+        self.use_detail_fusion = use_detail_fusion
+        self.use_strip_detail = use_strip_detail
+        self.strip_detail_type = strip_detail_type
         self.upsample_loaded = (
             use_pixel_shuffle  # Default to True if initialized to use it
         )
@@ -567,7 +1272,13 @@ class MambaDetectionHead(nn.Module):
             [
                 nn.ModuleList(
                     [
-                        MambaBlock(d_model, d_state, per_channel_a=per_channel_a)
+                        MambaBlock(
+                            d_model,
+                            d_state,
+                            per_channel_a=per_channel_a,
+                            scan_stop_grad=scan_stop_grad,
+                            legacy_n1_scan=legacy_n1_scan,
+                        )
                         for _ in range(num_blocks)
                     ]
                 )
@@ -599,8 +1310,13 @@ class MambaDetectionHead(nn.Module):
                             MambaBlock(
                                 d_model,
                                 d_state,
-                                full_rank_c=True,
+                                # 77fcc262 introduced full-rank temporal C in
+                                # the same commit that fixed N=1 to N=16. The
+                                # historical N=1 parent used rank-1 C here.
+                                full_rank_c=not legacy_n1_scan,
                                 per_channel_a=per_channel_a,
+                                scan_stop_grad=scan_stop_grad,
+                                legacy_n1_scan=legacy_n1_scan,
                             )
                             for _ in range(1)
                         ]
@@ -684,6 +1400,37 @@ class MambaDetectionHead(nn.Module):
         else:
             self.upsample = None
 
+        self.detail_fusion: P3DetailFusion | None = None
+        if use_detail_fusion:
+            self.detail_fusion = P3DetailFusion(
+                d_model=d_model,
+                channels=detail_channels,
+                patch_size=detail_patch_size,
+                feature_channels=detail_feature_channels,
+            )
+        self.strip_detail_fusion: nn.Module | None = None
+        if use_strip_detail:
+            if strip_detail_type == "attention":
+                self.strip_detail_fusion = P3AttentionStripDetailFusion(
+                    d_model=d_model,
+                    stem_channels=strip_stem_channels,
+                    strip_length=strip_length,
+                    strip_width=strip_width,
+                    route_chunk_size=strip_route_chunk_size,
+                )
+            else:
+                self.strip_detail_fusion = P3StripDetailFusion(
+                    d_model=d_model,
+                    d_state=d_state,
+                    stem_channels=strip_stem_channels,
+                    strip_length=strip_length,
+                    strip_width=strip_width,
+                    route_chunk_size=strip_route_chunk_size,
+                    per_channel_a=per_channel_a,
+                    scan_stop_grad=scan_stop_grad,
+                    legacy_n1_scan=legacy_n1_scan,
+                )
+
         self.use_cuda_graph = use_cuda_graph
         self._head_compile_enabled: bool = False
         self._head_modules_original: dict[str, nn.Module] = {}
@@ -697,6 +1444,11 @@ class MambaDetectionHead(nn.Module):
         # cls outputs in the full eval pipeline — see
         # docs/research/pipeline/mamba_head_cuda_graph_eval_bug_20260602.md.
         self._graphed_callables: dict = {}
+
+    def initialize_detail_from_yolo_stem(self, stem: nn.Module) -> bool:
+        if self.detail_fusion is None:
+            return False
+        return self.detail_fusion.initialize_from_yolo_stem(stem)
 
     def load_state_dict(self, state_dict, strict=True):
         # Check if the keys of state_dict contain 'upsample' parameters.
@@ -804,6 +1556,12 @@ class MambaDetectionHead(nn.Module):
         return_embeddings: bool = False,
         T: int | None = None,
         flows: list[Tensor] | None = None,
+        detail_images: Tensor | None = None,
+        detail_valid_hw: Tensor | None = None,
+        detail_features: Tensor | None = None,
+        detail_feature_stride: int = 8,
+        detail_positions: Tensor | None = None,
+        detail_position_mask: Tensor | None = None,
     ) -> (
         tuple[list[Tensor], list[Tensor]]
         | tuple[list[Tensor], list[Tensor], list[Tensor]]
@@ -833,8 +1591,22 @@ class MambaDetectionHead(nn.Module):
             # left eager.
             or T is not None
             or flows is not None
+            or detail_images is not None
+            or detail_features is not None
+            or detail_positions is not None
         ):
-            return self._forward_eager(feats, return_embeddings, T, flows)
+            return self._forward_eager(
+                feats,
+                return_embeddings,
+                T,
+                flows,
+                detail_images,
+                detail_valid_hw,
+                detail_features,
+                detail_feature_stride,
+                detail_positions,
+                detail_position_mask,
+            )
 
         return self._graphed_forward(feats, return_embeddings)
 
@@ -896,6 +1668,12 @@ class MambaDetectionHead(nn.Module):
         return_embeddings: bool = False,
         T: int | None = None,
         flows: list[Tensor] | None = None,
+        detail_images: Tensor | None = None,
+        detail_valid_hw: Tensor | None = None,
+        detail_features: Tensor | None = None,
+        detail_feature_stride: int = 8,
+        detail_positions: Tensor | None = None,
+        detail_position_mask: Tensor | None = None,
     ) -> (
         tuple[list[Tensor], list[Tensor]]
         | tuple[list[Tensor], list[Tensor], list[Tensor]]
@@ -969,11 +1747,87 @@ class MambaDetectionHead(nn.Module):
                 x_up_t = self.temporal_attn_blocks[i](x_up_t)
                 x_up = x_up_t.reshape(B, H, W, T_frames, -1).permute(0, 3, 4, 1, 2)
                 x_up = x_up.reshape(B_merged, -1, H, W)
-            x_cat = torch.cat([x_proj, x_up], dim=1)
-            cls_preds.append(self.cls_head[i](x_cat))
-            reg_preds.append(self.reg_head[i](x_cat))
+            x_cls_proj = x_proj
+            x_reg_proj = x_proj
+            if i == 0 and detail_positions is not None:
+                if detail_images is None:
+                    raise ValueError("strip detail requires detail_images")
+                if self.strip_detail_fusion is None:
+                    raise ValueError(
+                        "detail_positions were provided but use_strip_detail is disabled"
+                    )
+                if detail_images.shape[0] != B_merged:
+                    raise ValueError(
+                        "detail image batch must match the merged feature batch: "
+                        f"{detail_images.shape[0]} != {B_merged}"
+                    )
+                if self.strip_detail_type == "attention":
+                    cls_vectors, reg_vectors = self.strip_detail_fusion(
+                        detail_images,
+                        detail_positions,
+                        (H, W),
+                        x_proj,
+                        detail_valid_hw,
+                        detail_position_mask,
+                    )
+                else:
+                    cls_vectors, reg_vectors = self.strip_detail_fusion(
+                        detail_images,
+                        detail_positions,
+                        (H, W),
+                        detail_valid_hw,
+                        detail_position_mask,
+                    )
+                flat_positions = detail_positions.to(device=x.device, dtype=torch.long)
+                flat_indices = flat_positions[..., 0].clamp(
+                    0, H - 1
+                ) * W + flat_positions[..., 1].clamp(0, W - 1)
+                cls_dense = x_proj.new_zeros(B_merged, self.d_model, H * W)
+                reg_dense = x_proj.new_zeros(B_merged, self.d_model, H * W)
+                scatter_indices = flat_indices[:, None, :].expand(
+                    -1, cls_dense.shape[1], -1
+                )
+                cls_dense = cls_dense.scatter_add(
+                    2, scatter_indices, cls_vectors.transpose(1, 2)
+                )
+                reg_dense = reg_dense.scatter_add(
+                    2, scatter_indices, reg_vectors.transpose(1, 2)
+                )
+                x_cls_proj = x_proj + cls_dense.reshape(B_merged, -1, H, W)
+                x_reg_proj = x_proj + reg_dense.reshape(B_merged, -1, H, W)
+            elif i == 0 and (detail_images is not None or detail_features is not None):
+                if self.detail_fusion is None:
+                    raise ValueError(
+                        "detail input was provided but use_detail_fusion is disabled"
+                    )
+                else:
+                    detail_batch = (
+                        detail_features.shape[0]
+                        if detail_features is not None
+                        else detail_images.shape[0]  # type: ignore[union-attr]
+                    )
+                    if detail_batch != B_merged:
+                        raise ValueError(
+                            "detail input batch must match the merged feature batch: "
+                            f"{detail_batch} != {B_merged}"
+                        )
+                    cls_delta, reg_delta = self.detail_fusion(
+                        detail_images,
+                        x_up,
+                        detail_valid_hw,
+                        detail_features=detail_features,
+                        feature_stride=detail_feature_stride,
+                    )
+                    x_cls_proj = x_proj + cls_delta
+                    x_reg_proj = x_proj + reg_delta
+
+            x_cls = torch.cat([x_cls_proj, x_up], dim=1)
+            x_reg = torch.cat([x_reg_proj, x_up], dim=1)
+            cls_preds.append(self.cls_head[i](x_cls))
+            reg_preds.append(self.reg_head[i](x_reg))
             if self.emb_head is not None:
-                emb_preds.append(self.emb_head[i](x_cat))
+                x_emb = torch.cat([x_proj, x_up], dim=1)
+                emb_preds.append(self.emb_head[i](x_emb))
 
         if return_embeddings and self.emb_head is not None:
             return cls_preds, reg_preds, emb_preds

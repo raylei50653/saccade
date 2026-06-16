@@ -2980,6 +2980,16 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
              py::arg("tau"),
              "OA-SORT OAO penalty weight [0, 1]. 0 = disabled. "
              "Tracks occluded by other tracks receive cost += tau * overlap_iou.")
+        .def("set_occ_params", &GPUByteTracker::set_occ_params,
+             py::arg("enabled") = true, py::arg("iou_thresh") = 0.45f,
+             py::arg("foot_gap") = 0.15f, py::arg("ttl") = 4,
+             py::arg("cost_weight") = 0.50f,
+             "Depth-gated occlusion-state machine (default off → bit-identical). "
+             "Holds an occludee behind its occluder and depth-biases re-acquisition "
+             "to resolve occlusion crossing-swaps.")
+        .def("get_occ_front_info", &GPUByteTracker::get_occ_front_info,
+             "Read back front-ttl and partner-slot arrays (env-gated diagnostic). "
+             "Returns [max_objs] ttl values followed by [max_objs] partner slots.")
         .def("set_quality_params", &GPUByteTracker::set_quality_params,
              py::arg("enabled"), py::arg("w_aspect") = 0.50f, py::arg("w_center") = 0.30f, py::arg("w_area") = 0.20f)
         .def("set_frame_size", &GPUByteTracker::set_frame_size,

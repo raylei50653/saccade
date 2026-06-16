@@ -24,6 +24,7 @@ from saccade.perception.eval.detection import (
 def test_is_2x2_tiling_960p() -> None:
     assert _is_2x2_tiling("960p_2x2") is True
     assert _is_2x2_tiling("sahi_960p_2x2") is True
+    assert _is_2x2_tiling("mamba_global_2x2") is True
     assert _is_2x2_tiling("960p_3x2") is False
     assert _is_2x2_tiling(None) is False
     assert _is_2x2_tiling("") is False

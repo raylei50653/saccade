@@ -4,13 +4,10 @@
 #include <ATen/cuda/CUDAContext.h>
 #include <iostream>
 #include <stdexcept>
-#include <mutex>
 
 namespace saccade {
 
 namespace {
-
-std::mutex g_mamba_head_mutex;
 
 torch::Tensor nms_gpu(torch::Tensor bboxes, torch::Tensor scores, float iou_threshold) {
     if (bboxes.size(0) == 0) {
@@ -23,35 +20,36 @@ torch::Tensor nms_gpu(torch::Tensor bboxes, torch::Tensor scores, float iou_thre
     auto y2 = bboxes.select(1, 3);
     auto areas = (x2 - x1) * (y2 - y1);
 
-    auto order = scores.argsort(-1, true); // descending sort order
+    auto order = scores.argsort(-1, true);
 
     std::vector<int64_t> keep;
-    while (order.numel() > 0) {
-        int64_t i = order[0].item<int64_t>();
-        keep.push_back(i);
+    while (order.size(0) > 0) {
+        auto top = order[0];
+        int64_t idx = top.item<int64_t>();
+        keep.push_back(idx);
 
-        if (order.numel() == 1) {
+        if (order.size(0) == 1) {
             break;
         }
 
-        auto idx = order.slice(0, 1, order.numel()); // remaining indices
-        
-        auto xx1 = torch::clamp_min(x1.index({idx}), x1[i]);
-        auto yy1 = torch::clamp_min(y1.index({idx}), y1[i]);
-        auto xx2 = torch::clamp_max(x2.index({idx}), x2[i]);
-        auto yy2 = torch::clamp_max(y2.index({idx}), y2[i]);
+        auto remaining = order.slice(0, 1, order.size(0));
+
+        auto xx1 = torch::clamp_min(x1.index({remaining}), x1[idx]);
+        auto yy1 = torch::clamp_min(y1.index({remaining}), y1[idx]);
+        auto xx2 = torch::clamp_max(x2.index({remaining}), x2[idx]);
+        auto yy2 = torch::clamp_max(y2.index({remaining}), y2[idx]);
 
         auto w = torch::clamp_min(xx2 - xx1, 0.0f);
         auto h = torch::clamp_min(yy2 - yy1, 0.0f);
         auto inter = w * h;
 
-        auto ovr = inter / (areas[i] + areas.index({idx}) - inter);
+        auto ovr = inter / (areas[idx] + areas.index({remaining}) - inter);
         auto mask = ovr <= iou_threshold;
-        
+
         if (!mask.any().item<bool>()) {
             break;
         }
-        order = idx.index({mask});
+        order = remaining.index({mask});
     }
 
     return torch::tensor(keep, torch::TensorOptions().dtype(torch::kLong).device(bboxes.device()));
@@ -67,11 +65,11 @@ struct ThreadState {
     bool has_mamba_head = false;
 
     ~ThreadState() {
-        if (d_p3) cudaFree(d_p3);
-        if (d_p4) cudaFree(d_p4);
-        if (d_p5) cudaFree(d_p5);
-        if (stream) cudaStreamDestroy(stream);
-        if (ctx) TRTEngine::delete_context(ctx);
+        if (d_p3) { cudaFree(d_p3); d_p3 = nullptr; }
+        if (d_p4) { cudaFree(d_p4); d_p4 = nullptr; }
+        if (d_p5) { cudaFree(d_p5); d_p5 = nullptr; }
+        if (stream) { cudaStreamDestroy(stream); stream = nullptr; }
+        if (ctx) { TRTEngine::delete_context(ctx); ctx = nullptr; }
     }
 };
 

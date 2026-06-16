@@ -35,6 +35,7 @@ def build_engine(
     img_size: int = 640,
     precision: str = "fp16",
     int8_cache: str = "",
+    linear_outputs: bool = False,
 ) -> None:
     print(
         f"🚀 Starting TensorRT Build Process for {onnx_file_path} ({precision.upper()})..."
@@ -84,11 +85,14 @@ def build_engine(
     # elide the boundary reformats entirely.  The consumer
     # (TRTYoloBackbone / Mamba head) must allocate channels_last buffers
     # and accept NHWC input.
-    nhwc_mask = 1 << int(trt.TensorFormat.HWC8) | 1 << int(trt.TensorFormat.LINEAR)
+    output_mask = 1 << int(trt.TensorFormat.LINEAR)
+    if not linear_outputs:
+        output_mask |= 1 << int(trt.TensorFormat.HWC8)
     for i in range(network.num_outputs):
         out = network.get_output(i)
-        out.allowed_formats = nhwc_mask
-        print(f"🔧 Output '{out.name}' allowed_formats = HWC8|LINEAR")
+        out.allowed_formats = output_mask
+        output_formats = "LINEAR" if linear_outputs else "HWC8|LINEAR"
+        print(f"🔧 Output '{out.name}' allowed_formats = {output_formats}")
 
     profile.set_shape(
         input_name,
@@ -138,6 +142,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--int8-cache", type=str, default="", help="Path to INT8 calibration cache file"
     )
+    parser.add_argument(
+        "--linear-outputs",
+        action="store_true",
+        help="Restrict outputs to LINEAR format. Use when the installed TensorRT "
+        "rejects FP32 network outputs with HWC8 enabled.",
+    )
 
     args = parser.parse_args()
 
@@ -151,6 +161,7 @@ if __name__ == "__main__":
             img_size=args.img_size,
             precision=args.precision,
             int8_cache=args.int8_cache,
+            linear_outputs=args.linear_outputs,
         )
     else:
         print(f"❌ ONNX file not found: {args.onnx}")

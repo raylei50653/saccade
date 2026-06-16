@@ -28,6 +28,8 @@
 | — | NSA-Kalman（Noise Scale Adaptive） | ❌ NO-GO（無效） |
 | 2026-05 | gmc_fg_mask | ❌ NO-GO（背景紋理主導 PCR peak）；保留 PCR uncertain thr=8.0 作保護 |
 | 2026-06-01 | vel_dir gate | ❌ NO-GO |
+| 2026-06-12 | GMC box-residual 共模修正（innovation 自迴饋） | ❌ NO-GO（全 4 模式負，最佳 lost-only 74.7 vs 75.1）；GT affine 共模上限不轉移到 innovation 空間，registry [#34](../../reference/no_go_registry.md) |
+| 2026-06-12 | GMC 旋轉系列（LK affine / box-residual probe） | ❌ NO-GO（LK affine −0.8）；tile phase-corr→affine 為唯一未否證路線 |
 | 2026-06-01 | MOT 輸出框 clip | ⚠️ 禁止（GT 大量出界，clip 打斷 IoU → MOTA -6.9pp） |
 
 ## 📋 模組 TODO

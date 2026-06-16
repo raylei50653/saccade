@@ -1,0 +1,4 @@
+label,plain,shaped,paired,reason,plain_seed,shaped_seed,delta_IDF1,delta_MOTA,delta_HOTA,delta_DetA,delta_AssA,delta_IDs,delta_FP,delta_FN,delta_FPS
+unpaired_original,replica_20260612,t3t1_seed42,False,plain seed 20260612; T3-to-T1 seed 42,20260612,42,2.061,0.355,2.461,0.672,4.064,-109,-830,540,-3.01
+seed_20260613,replica_20260613,t3t1_20260613,True,same student-chain seed and same GT1 lineage,20260613,20260613,2.268,1.388,2.038,1.426,2.573,-94,-1364,-101,3.73
+seed_20260614,replica_20260614,t3t1_20260614,True,same student-chain seed and same GT1 lineage,20260614,20260614,0.415,1.033,0.255,0.787,-0.254,-88,-962,-110,-0.79

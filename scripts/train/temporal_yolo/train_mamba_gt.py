@@ -23,6 +23,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import random
 import sys
 import time
@@ -32,6 +33,7 @@ from typing import Any
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 project_root = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
@@ -41,13 +43,23 @@ sys.path.insert(0, str(project_root / "build"))
 import saccade_tracking_ext  # noqa: F401, E402
 
 from saccade.perception.temporal_yolo.dataset import build_mot17_dataloader  # noqa: E402
+from saccade.perception.temporal_yolo.training_utils import (  # noqa: E402
+    build_warmup_cosine_scheduler,
+    resolve_training_sequences,
+    seed_everything,
+    sha256_file,
+)
 from saccade.perception.temporal_yolo.yolo_conditioned import TrackerGateInput  # noqa: E402
 from saccade.perception.temporal_yolo.yolo_gated_detector import (  # noqa: E402
     GatedDetConfig,
     build_gated_yolo_detector,
     _GATE_LAYER_IDX,
 )
-from saccade.perception.temporal_yolo.mamba_head import MambaDetectionHead  # noqa: E402
+from saccade.perception.temporal_yolo.mamba_head import (  # noqa: E402
+    MambaDetectionHead,
+    build_strip_oracle_positions,
+    resolve_mamba_in_channels,
+)
 from ultralytics.utils.loss import v8DetectionLoss  # noqa: E402
 
 
@@ -77,7 +89,9 @@ def _strip_compiled_keys(sd: dict[str, Any]) -> dict[str, Any]:
 # B*T synchronous torch.load() calls from disk — that starves the GPU (util
 # ~30%). Preloading the (only the used) cached features into RAM/VRAM once
 # turns per-step loading into a dict lookup + H2D copy.
-_feature_ram_cache: dict[int, tuple[torch.Tensor, torch.Tensor, torch.Tensor]] = {}
+_feature_ram_cache: dict[
+    tuple[str, int], tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+] = {}
 
 
 def _preload_feature_cache(
@@ -208,6 +222,60 @@ def _build_preds_dict(
     return {"boxes": reg_cat, "scores": cls_cat, "feats": feats}
 
 
+def _temporal_consistency_loss(
+    s_cls_T: list[torch.Tensor],
+    gt_boxes_batch: list[list[torch.Tensor]],
+    gt_ids_batch: list[list[torch.Tensor]],
+    T: int,
+    B: int,
+    img_size: int,
+) -> torch.Tensor:
+    """Cross-frame classification-score consistency at matched-track GT centers.
+
+    Route 3 of the T3→T1 study (mamba-t3t1-curriculum-20260613.md §5): the proven
+    AssA gain is box/score cross-frame stability, but the per-frame v8 detection
+    loss has no term protecting it — so full-grad training erases the shaping
+    (§4.1). This penalises the L2 distance between the predicted P3 classification
+    logit of the *same track id* in adjacent frames, sampled at each frame's own
+    GT box centre. The ROI follows the box, so motion is compensated by
+    construction (no GMC/flow needed). Classification-only by design: box geometry
+    legitimately moves frame-to-frame, but a track's objectness should be stable.
+
+    s_cls_T layout is batch-major (B*T, nc, H, W); frame t of item b is row b*T+t.
+    """
+    cls_p3 = s_cls_T[0]  # finest scale (stride 8); spans the full image
+    losses: list[torch.Tensor] = []
+    for b in range(B):
+        for t in range(1, T):
+            ids_prev = gt_ids_batch[b][t - 1]
+            ids_cur = gt_ids_batch[b][t]
+            if ids_prev.numel() == 0 or ids_cur.numel() == 0:
+                continue
+            match = ids_prev[:, None] == ids_cur[None, :]  # (Np, Nc)
+            pi, ci = torch.where(match)
+            if pi.numel() == 0:
+                continue
+            boxes_prev = gt_boxes_batch[b][t - 1].to(cls_p3.device)[pi]
+            boxes_cur = gt_boxes_batch[b][t].to(cls_p3.device)[ci]
+            cen_prev = (boxes_prev[:, :2] + boxes_prev[:, 2:]) * 0.5
+            cen_cur = (boxes_cur[:, :2] + boxes_cur[:, 2:]) * 0.5
+
+            def _grid(cen: torch.Tensor) -> torch.Tensor:
+                # px centre -> grid_sample coords in [-1, 1] over the image extent
+                g = cen / img_size * 2.0 - 1.0
+                return g.view(1, -1, 1, 2)
+
+            map_prev = cls_p3[b * T + (t - 1)].unsqueeze(0)  # (1, nc, H, W)
+            map_cur = cls_p3[b * T + t].unsqueeze(0)
+            logit_prev = F.grid_sample(map_prev, _grid(cen_prev), align_corners=False)
+            logit_cur = F.grid_sample(map_cur, _grid(cen_cur), align_corners=False)
+            losses.append(F.mse_loss(logit_cur, logit_prev))
+
+    if not losses:
+        return cls_p3.new_zeros(())
+    return torch.stack(losses).mean()
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -221,16 +289,47 @@ def main() -> None:
     parser.add_argument("--resume", default="")
     parser.add_argument("--epochs", type=int, default=30)
     parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument(
+        "--max-batches-per-epoch",
+        type=int,
+        default=0,
+        help="Limit batches per epoch for smoke tests; 0 runs the full epoch.",
+    )
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--lr-gate", type=float, default=0.0)
     parser.add_argument("--cls-weight", type=float, default=0.5)
     parser.add_argument("--img-size", type=int, default=640)
     parser.add_argument("--clip-len", type=int, default=4)
+    parser.add_argument(
+        "--clip-stride",
+        type=int,
+        default=0,
+        help="Clip start stride. 0 uses clip-len, covering nearly every frame once.",
+    )
     parser.add_argument("--gt-ratio", type=float, default=0.5)
+    parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--spatial-reduction", type=int, default=4)
     parser.add_argument("--d-model", type=int, default=128)
     parser.add_argument("--d-state", type=int, default=16)
     parser.add_argument("--num-blocks", type=int, default=1)
+    parser.add_argument(
+        "--detail-source",
+        choices=("none", "global", "high", "native-p3", "strip-oracle"),
+        default="none",
+        help="none=v14, global=640 control, high=shallow high-res, "
+        "native-p3=frozen YOLO high-res P3 oracle, "
+        "strip-oracle=fixed-budget GT-routed Detail Mamba",
+    )
+    parser.add_argument("--detail-height", type=int, default=768)
+    parser.add_argument("--detail-width", type=int, default=1280)
+    parser.add_argument("--detail-channels", type=int, default=32)
+    parser.add_argument("--detail-patch-size", type=int, default=3)
+    parser.add_argument("--strip-route-budget", type=int, default=640)
+    parser.add_argument("--strip-small-threshold", type=float, default=8.0)
+    parser.add_argument("--strip-length", type=int, default=32)
+    parser.add_argument("--strip-width", type=int, default=3)
+    parser.add_argument("--strip-stem-channels", type=int, default=32)
+    parser.add_argument("--strip-route-chunk-size", type=int, default=16)
     parser.add_argument(
         "--per-channel-a",
         action="store_true",
@@ -238,7 +337,20 @@ def main() -> None:
         "Warm-starts from a shared-A checkpoint (broadcast → init == base).",
     )
     parser.add_argument("--seqs", default="")
+    parser.add_argument(
+        "--holdout-seqs",
+        default="",
+        help="Comma-separated sequences excluded from training for external "
+        "detector-recall/HOTA checkpoint selection.",
+    )
     parser.add_argument("--save-every", type=int, default=5)
+    parser.add_argument(
+        "--best-by",
+        choices=("none", "train-loss"),
+        default="none",
+        help="none saves candidates without claiming a best model. train-loss is "
+        "diagnostic only and writes best.ckpt from training loss.",
+    )
     parser.add_argument("--freeze-teacher", type=bool, default=True)
     parser.add_argument(
         "--compile", action="store_true", help="torch.compile teacher (mode=default)"
@@ -248,6 +360,12 @@ def main() -> None:
     )
     parser.add_argument(
         "--warmup-epochs", type=int, default=5, help="linear LR warmup epochs"
+    )
+    parser.add_argument(
+        "--resume-reset-optimizer",
+        action="store_true",
+        help="Load model/epoch from --resume but start a fresh optimizer and LR "
+        "schedule. Required when changing LR or extending an old checkpoint.",
     )
     parser.add_argument(
         "--clip-grad", type=float, default=1.0, help="gradient clipping max_norm"
@@ -292,7 +410,30 @@ def main() -> None:
         action="store_true",
         help="Override checkpoint's use_pixel_shuffle — replace bilinear "
         "upsampling with Conv2d + PixelShuffle learned upsampler "
-        "(+10–15% less active GPU time; requires retraining).",
+        "(+10–15%% less active GPU time; requires retraining).",
+    )
+    parser.add_argument(
+        "--scan-stop-grad",
+        action="store_true",
+        help="Detach the selective-scan output during training (v14 historical "
+        "regime: SSM internals frozen at init; only gate/readout/heads learn).",
+    )
+    parser.add_argument(
+        "--no-scan-stop-grad",
+        action="store_true",
+        help="Force full scan gradients even when the warm-start checkpoint's "
+        "mamba_args carry scan_stop_grad=True (un-freeze SSM internals).",
+    )
+    parser.add_argument(
+        "--legacy-n1-scan",
+        action="store_true",
+        help="Reproduce the historical pre-v14 N=1 CUDA launch and flattened "
+        "rank-16 B indexing bug while retaining d_state=16 tensors and rank-1 C.",
+    )
+    parser.add_argument(
+        "--no-legacy-n1-scan",
+        action="store_true",
+        help="Disable legacy N=1 scan semantics inherited from a warm-start checkpoint.",
     )
     parser.add_argument(
         "--t1-weight",
@@ -302,8 +443,37 @@ def main() -> None:
         "Prevents spatial path from drifting toward temporal-dependent features. "
         "1.0 = equal weight to the full T-clip loss. Requires --add-temporal.",
     )
+    parser.add_argument(
+        "--consistency-weight",
+        type=float,
+        default=0.0,
+        help="Weight for the cross-frame classification-score consistency term "
+        "(route 3 of mamba-t3t1-curriculum-20260613.md). Penalises L2 between the "
+        "predicted P3 cls logit of the same track id in adjacent frames, sampled at "
+        "each frame's GT box centre. Explicitly protects the T3→T1 shaping during "
+        "full-grad training. 0 = off. Requires --add-temporal (T>1).",
+    )
     args = parser.parse_args()
 
+    if args.clip_stride < 0:
+        parser.error("--clip-stride must be >= 0")
+    if args.max_batches_per_epoch < 0:
+        parser.error("--max-batches-per-epoch must be >= 0")
+    if not 0.0 <= args.gt_ratio <= 1.0:
+        parser.error("--gt-ratio must be between 0 and 1")
+    if args.cache_dir and args.gt_ratio > 0.0:
+        parser.error(
+            "--cache-dir contains precomputed ungated FPN features, so --gt-ratio "
+            "must be 0. Use eager teacher features when training with gate feedback."
+        )
+    if args.resume_reset_optimizer and not args.resume:
+        parser.error("--resume-reset-optimizer requires --resume")
+    if args.consistency_weight > 0.0 and not args.add_temporal:
+        parser.error("--consistency-weight requires --add-temporal (needs T>1 clips)")
+    if args.t1_weight > 0.0 and not args.add_temporal:
+        parser.error("--t1-weight requires --add-temporal (needs T>1 clips)")
+
+    seed_everything(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     run_dir = project_root / args.run_dir
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -312,8 +482,12 @@ def main() -> None:
     # Teacher: frozen GatedYOLODetector
     # ------------------------------------------------------------------
     print("Loading teacher...")
-    teacher_ckpt = project_root / args.teacher_ckpt
-    teacher_raw = torch.load(teacher_ckpt, map_location="cpu", weights_only=False)
+    teacher_ckpt = project_root / args.teacher_ckpt if args.teacher_ckpt else None
+    teacher_raw = (
+        torch.load(teacher_ckpt, map_location="cpu", weights_only=False)
+        if teacher_ckpt is not None
+        else {}
+    )
     train_args = teacher_raw.get("args", {})
     scales = tuple(s.strip() for s in train_args.get("scales", "p3,p4,p5").split(","))
 
@@ -328,7 +502,7 @@ def main() -> None:
         str(project_root / args.yolo_weights),
         cfg=cfg,
         device=device,
-        weights_path=str(teacher_ckpt),
+        weights_path=str(teacher_ckpt) if teacher_ckpt is not None else "",
     )
     teacher.eval()
 
@@ -346,6 +520,26 @@ def main() -> None:
     mamba_ckpt = project_root / args.mamba_ckpt
     mamba_state = torch.load(mamba_ckpt, map_location="cpu", weights_only=False)
     mamba_args = mamba_state.get("mamba_args", {})
+    in_channels = resolve_mamba_in_channels(mamba_state)
+    mamba_args["in_channels"] = list(in_channels)
+    mamba_args.setdefault("base_yolo_path", args.yolo_weights)
+    expected_yolo_sha = mamba_args.get("base_yolo_sha256")
+    actual_yolo_sha = sha256_file(project_root / args.yolo_weights)
+    if expected_yolo_sha and expected_yolo_sha != actual_yolo_sha:
+        raise ValueError(
+            "Mamba checkpoint was trained with different YOLO weights: "
+            f"checkpoint={mamba_args.get('base_yolo_path')!r}, "
+            f"selected={args.yolo_weights!r}"
+        )
+    mamba_args["base_yolo_sha256"] = actual_yolo_sha
+    actual_teacher_sha = sha256_file(teacher_ckpt) if teacher_ckpt is not None else ""
+    expected_teacher_sha = mamba_args.get("teacher_checkpoint_sha256")
+    if expected_teacher_sha and expected_teacher_sha != actual_teacher_sha:
+        raise ValueError(
+            "Mamba checkpoint was trained with a different teacher checkpoint: "
+            f"selected={args.teacher_ckpt!r}"
+        )
+    mamba_args["teacher_checkpoint_sha256"] = actual_teacher_sha
     mamba_args_default = {
         "d_model": args.d_model,
         "d_state": args.d_state,
@@ -368,9 +562,47 @@ def main() -> None:
         mamba_args["per_channel_a"] = True
     if args.use_pixel_shuffle:
         mamba_args["use_pixel_shuffle"] = True
+    if args.scan_stop_grad and args.no_scan_stop_grad:
+        parser.error("--scan-stop-grad and --no-scan-stop-grad are exclusive")
+    if args.legacy_n1_scan and args.no_legacy_n1_scan:
+        parser.error("--legacy-n1-scan and --no-legacy-n1-scan are exclusive")
+    if args.scan_stop_grad:
+        mamba_args["scan_stop_grad"] = True
+    if args.no_scan_stop_grad:
+        mamba_args["scan_stop_grad"] = False
+    if args.legacy_n1_scan:
+        mamba_args["legacy_n1_scan"] = True
+        mamba_args["legacy_n1_source"] = "77fcc262^"
+    if args.no_legacy_n1_scan:
+        mamba_args["legacy_n1_scan"] = False
+        mamba_args.pop("legacy_n1_source", None)
+    use_strip_detail = args.detail_source == "strip-oracle"
+    use_detail_fusion = args.detail_source not in {"none", "strip-oracle"}
+    mamba_args["use_detail_fusion"] = use_detail_fusion
+    mamba_args["use_strip_detail"] = use_strip_detail
+    mamba_args["detail_source"] = args.detail_source
+    if use_detail_fusion or use_strip_detail:
+        mamba_args["detail_channels"] = args.detail_channels
+        mamba_args["detail_patch_size"] = args.detail_patch_size
+        mamba_args["detail_feature_channels"] = (
+            in_channels[0] if args.detail_source == "native-p3" else 0
+        )
+        mamba_args["detail_height"] = (
+            args.img_size if args.detail_source == "global" else args.detail_height
+        )
+        mamba_args["detail_width"] = (
+            args.img_size if args.detail_source == "global" else args.detail_width
+        )
+    if use_strip_detail:
+        mamba_args["strip_route_budget"] = args.strip_route_budget
+        mamba_args["strip_small_threshold"] = args.strip_small_threshold
+        mamba_args["strip_length"] = args.strip_length
+        mamba_args["strip_width"] = args.strip_width
+        mamba_args["strip_stem_channels"] = args.strip_stem_channels
+        mamba_args["strip_route_chunk_size"] = args.strip_route_chunk_size
 
     mamba = MambaDetectionHead(
-        in_channels=(128, 256, 512),
+        in_channels=in_channels,
         d_model=mamba_args["d_model"],
         d_state=mamba_args["d_state"],
         num_blocks=mamba_args["num_blocks"],
@@ -383,20 +615,61 @@ def main() -> None:
         use_temporal_mamba=mamba_args.get("use_temporal_mamba", False),
         use_temporal_attention=mamba_args.get("use_temporal_attention", False),
         per_channel_a=mamba_args.get("per_channel_a", False),
+        scan_stop_grad=mamba_args.get("scan_stop_grad", False),
+        legacy_n1_scan=mamba_args.get("legacy_n1_scan", False),
+        use_detail_fusion=mamba_args.get("use_detail_fusion", False),
+        detail_channels=mamba_args.get("detail_channels", 32),
+        detail_patch_size=mamba_args.get("detail_patch_size", 3),
+        detail_feature_channels=mamba_args.get("detail_feature_channels", 0),
+        use_strip_detail=mamba_args.get("use_strip_detail", False),
+        strip_stem_channels=mamba_args.get("strip_stem_channels", 32),
+        strip_length=mamba_args.get("strip_length", 32),
+        strip_width=mamba_args.get("strip_width", 3),
+        strip_route_chunk_size=mamba_args.get("strip_route_chunk_size", 16),
     ).to(device)
     sd = _strip_compiled_keys(mamba_state["student"])
     # per_channel_a from a shared-A base warm-starts via A_log broadcast; relax
     # strict so any incidental layout drift is tolerated alongside it.
     base_per_channel = mamba_state.get("mamba_args", {}).get("per_channel_a", False)
-    strict = not args.add_temporal and not (args.per_channel_a and not base_per_channel)
+    strict = (
+        not args.add_temporal
+        and not (args.per_channel_a and not base_per_channel)
+        and not use_detail_fusion
+        and not use_strip_detail
+    )
     missing, unexpected = mamba.load_state_dict(sd, strict=strict)
     mamba.to(device)  # ensure new temporal keys are on correct device
+    if args.detail_source == "native-p3" and mamba.detail_fusion is not None:
+        for parameter in mamba.detail_fusion.encoder.parameters():
+            parameter.requires_grad_(False)
+        print(
+            "  Detail initialization: external P3 adapter/gates=random, "
+            "cls/reg projection=zero-init, shallow encoder=frozen/unused"
+        )
+    if (
+        use_detail_fusion
+        and args.detail_source != "native-p3"
+        and not any(k.startswith("detail_fusion.") for k in sd)
+    ):
+        copied = mamba.initialize_detail_from_yolo_stem(teacher.yolo_model.model[0])
+        init_name = "YOLO Conv+BN" if copied else "random"
+        print(f"  Detail encoder initialization: {init_name}")
     if missing:
         temporal_keys = [k for k in missing if "temporal" in k or "flow_gate" in k]
-        other_missing = [k for k in missing if k not in temporal_keys]
-        print(f"  New temporal keys (random init): {len(temporal_keys)}")
-        if other_missing:
-            print(f"  WARNING: other missing keys: {other_missing}")
+        detail_keys = [k for k in missing if k.startswith("detail_fusion.")]
+        strip_keys = [k for k in missing if k.startswith("strip_detail_fusion.")]
+        expected_keys = set(temporal_keys + detail_keys + strip_keys)
+        unexpected_missing = [k for k in missing if k not in expected_keys]
+        if temporal_keys:
+            print(f"  New temporal keys (random init): {len(temporal_keys)}")
+        if detail_keys:
+            print(f"  New detail keys (expected warm-start): {len(detail_keys)}")
+        if strip_keys:
+            print(f"  New strip detail keys (random/zero init): {len(strip_keys)}")
+        if unexpected_missing:
+            print(f"  WARNING: unexpected missing keys: {unexpected_missing}")
+    if unexpected:
+        print(f"  WARNING: unexpected checkpoint keys: {unexpected}")
     mamba.train()
 
     if args.freeze_temporal:
@@ -426,6 +699,7 @@ def main() -> None:
     n_params = sum(p.numel() for p in mamba.parameters())
     n_trainable = sum(p.numel() for p in mamba.parameters() if p.requires_grad)
     print(f"  Mamba params: {n_params:,}  trainable: {n_trainable:,}")
+    print(f"  FPN channels: {in_channels}")
 
     # FPN feature capture hooks
     fpn_feats: dict[str, torch.Tensor] = {}
@@ -460,67 +734,127 @@ def main() -> None:
     # ------------------------------------------------------------------
     # Optimizer
     # ------------------------------------------------------------------
-    optimizer = torch.optim.AdamW(mamba.parameters(), lr=args.lr, weight_decay=1e-4)
-
     start_epoch = 1
     best_loss = float("inf")
+    resume_ckpt: dict[str, Any] | None = None
 
     if args.resume:
-        ckpt = torch.load(
+        resume_ckpt = torch.load(
             project_root / args.resume, map_location="cpu", weights_only=False
         )
-        sd_resume = _strip_compiled_keys(ckpt["student"])
+        sd_resume = _strip_compiled_keys(resume_ckpt["student"])
         mamba.load_state_dict(sd_resume, strict=True)
-        try:
-            optimizer.load_state_dict(ckpt["optimizer"])
-        except Exception:
-            print("[Warn] Optimizer state not loaded — full restart at new LR")
-            for pg, lr_val in zip(optimizer.param_groups, [args.lr]):
-                pg["lr"] = lr_val
-        start_epoch = ckpt.get("epoch", 0) + 1
-        best_loss = ckpt.get("best_loss", float("inf"))
+        start_epoch = resume_ckpt.get("epoch", 0) + 1
+        best_loss = resume_ckpt.get("best_loss", float("inf"))
         print(f"[Resume] epoch={start_epoch}  best_loss={best_loss:.4f}")
+
+    optimizer = torch.optim.AdamW(mamba.parameters(), lr=args.lr, weight_decay=1e-4)
+    schedule_epochs = (
+        max(args.epochs - start_epoch + 1, 1)
+        if args.resume_reset_optimizer
+        else args.epochs
+    )
+    schedule_warmup = min(args.warmup_epochs, schedule_epochs)
+    scheduler = build_warmup_cosine_scheduler(
+        optimizer,
+        total_epochs=schedule_epochs,
+        warmup_epochs=schedule_warmup,
+    )
+
+    if resume_ckpt is not None:
+        if args.resume_reset_optimizer:
+            print(
+                f"[Resume] Reset optimizer/scheduler at lr={args.lr:.2e} for "
+                f"{schedule_epochs} remaining epoch(s)"
+            )
+        else:
+            missing_state = [
+                key for key in ("optimizer", "scheduler") if key not in resume_ckpt
+            ]
+            if missing_state:
+                raise ValueError(
+                    "Exact resume requires optimizer and scheduler state; missing "
+                    f"{missing_state}. Use --resume-reset-optimizer for legacy "
+                    "checkpoints or a new LR schedule."
+                )
+            optimizer.load_state_dict(resume_ckpt["optimizer"])
+            scheduler.load_state_dict(resume_ckpt["scheduler"])
+            loaded_lr = optimizer.param_groups[0]["lr"]
+            print(f"[Resume] Restored optimizer/scheduler at lr={loaded_lr:.2e}")
 
     if args.compile:
         print("[Compile] torch.compile teacher (mode=default) — ~30s cold-start")
         teacher.yolo_model = torch.compile(teacher.yolo_model, mode="default")
 
-    remaining = max(args.epochs - start_epoch + 1, 1)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=remaining, eta_min=args.lr * 0.01
-    )
-    warmup_scheduler: Any = None
-    if args.warmup_epochs > 0:
-        warmup_scheduler = torch.optim.lr_scheduler.LambdaLR(
-            optimizer,
-            lr_lambda=lambda e: (
-                (e + 1) / args.warmup_epochs if e < args.warmup_epochs else 1.0
-            ),
-        )
-
     # ------------------------------------------------------------------
     # Data
     # ------------------------------------------------------------------
-    seqs = args.seqs.split(",") if args.seqs else None
+    data_root = project_root / args.data_root
+    seqs, holdout_seqs = resolve_training_sequences(
+        data_root, args.seqs, args.holdout_seqs
+    )
+    clip_stride = args.clip_stride or args.clip_len
     # In cache mode the backbone never runs, so raw frame pixels are unused —
     # skip RAM preload to allow large mixes (e.g. MOT17+MOT20) without OOM.
     preload = args.cache_dir == ""
+    detail_size = (
+        (args.detail_height, args.detail_width)
+        if args.detail_source in {"high", "native-p3", "strip-oracle"}
+        else None
+    )
     loader = build_mot17_dataloader(
-        data_root=project_root / args.data_root,
+        data_root=data_root,
         clip_len=args.clip_len,
         img_size=args.img_size,
         batch_size=args.batch_size,
-        stride=args.clip_len * 2,
+        stride=clip_stride,
         shuffle=True,
         seqs=seqs,
         preload_to_ram=preload,
+        load_images=preload or detail_size is not None,
+        detail_size=detail_size,
+        seed=args.seed,
     )
     print(
-        f"[MambaGT] {len(loader)} batches/epoch  gt_ratio={args.gt_ratio}  lr={args.lr}"
+        f"[MambaGT] {len(loader)} batches/epoch  gt_ratio={args.gt_ratio}  "
+        f"lr={args.lr}  detail={args.detail_source}  seed={args.seed}  "
+        f"clip_stride={clip_stride}"
     )
+    if holdout_seqs:
+        print(
+            f"[Split] holdout={','.join(holdout_seqs)} "
+            "(external detector recall/HOTA selection)"
+        )
 
     cache_dir = Path(args.cache_dir) if args.cache_dir else None
     if cache_dir:
+        if not cache_dir.is_absolute():
+            cache_dir = project_root / cache_dir
+        manifest_path = cache_dir / "manifest.json"
+        if not manifest_path.is_file():
+            raise ValueError(
+                f"Missing teacher-cache manifest: {manifest_path}. "
+                "Rebuild the cache for this YOLO/teacher lineage."
+            )
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        cached_channels = tuple(manifest.get("fpn_channels", in_channels))
+        if cached_channels != in_channels:
+            raise ValueError(
+                "Teacher-cache FPN channels do not match the Mamba checkpoint: "
+                f"cache={cached_channels}, checkpoint={in_channels}"
+            )
+        if manifest.get("base_yolo_sha256") != actual_yolo_sha:
+            raise ValueError(
+                "Teacher cache was built from different YOLO weights: "
+                f"cache={manifest.get('base_yolo_path')!r}, "
+                f"selected={args.yolo_weights!r}"
+            )
+        if manifest.get("teacher_checkpoint_sha256") != actual_teacher_sha:
+            raise ValueError(
+                "Teacher cache checkpoint does not match --teacher-ckpt: "
+                f"cache={manifest.get('teacher_checkpoint_path')!r}, "
+                f"selected={args.teacher_ckpt!r}"
+            )
         print(f"[Cache] Loading precomputed teacher features from {cache_dir}")
         if not args.no_preload_cache:
             _preload_feature_cache(cache_dir, list(loader.dataset.sequences), device)  # type: ignore[attr-defined]
@@ -536,7 +870,12 @@ def main() -> None:
     accum = args.accum_steps
     for epoch in range(start_epoch, args.epochs + 1):
         mamba.train()
+        epoch_lr = optimizer.param_groups[0]["lr"]
         epoch_total_loss = 0.0
+        epoch_cons_sum = 0.0
+        epoch_cons_n = 0
+        epoch_t1_sum = 0.0
+        epoch_t1_n = 0
         n_steps = 0
         acc_batches = 0
         t0 = time.perf_counter()
@@ -544,15 +883,48 @@ def main() -> None:
         optimizer.zero_grad()
 
         for batch_idx, batch in enumerate(loader):
+            if (
+                args.max_batches_per_epoch > 0
+                and batch_idx >= args.max_batches_per_epoch
+            ):
+                break
             frames = batch["frames"].to(device, dtype=torch.float32) / 255.0
             gt_boxes_batch = batch["gt_boxes"]
+            gt_ids_batch = batch["gt_ids"]
             B, T = frames.shape[:2]
+            detail_frames = None
+            detail_valid_hw = None
+            if args.detail_source == "global":
+                detail_frames = frames
+                detail_valid_hw = torch.full(
+                    (B, T, 2),
+                    args.img_size,
+                    device=device,
+                    dtype=torch.int64,
+                )
+            elif args.detail_source == "high":
+                detail_frames = (
+                    batch["detail_frames"].to(device, dtype=torch.float32) / 255.0
+                )
+                detail_valid_hw = batch["detail_valid_hw"].to(device)
+            elif args.detail_source == "native-p3":
+                detail_frames = (
+                    batch["detail_frames"].to(device, dtype=torch.float32) / 255.0
+                )
+                detail_valid_hw = batch["detail_valid_hw"].to(device)
+            elif args.detail_source == "strip-oracle":
+                # Keep uint8 on GPU; the strip gather reads <10% of pixels and
+                # normalizes only the gathered strips (see _gather_strip_pixels).
+                # Avoids materializing a 180 MiB float32 copy of the full clip.
+                detail_frames = batch["detail_frames"].to(device)
+                detail_valid_hw = batch["detail_valid_hw"].to(device)
 
             # Collect features for all T frames, then forward as one temporal clip.
             # This ensures temporal blocks see actual frame-to-frame context during
             # training (instead of per-frame independent passes that never activate
             # the temporal SSM). All-frames loss prevents temporal hallucination.
             all_feats: list[list[torch.Tensor]] = [[], [], []]
+            all_detail_feats: list[torch.Tensor] = []
             all_gt: list[list[torch.Tensor]] = []
 
             for t in range(T):
@@ -596,6 +968,11 @@ def main() -> None:
                 for si in range(3):
                     all_feats[si].append(feats_t[si])
 
+                if args.detail_source == "native-p3":
+                    fpn_feats.clear()
+                    _ = teacher(detail_frames[:, t], gate_input=None)
+                    all_detail_feats.append(fpn_feats["p3"])
+
             # Stack T frames in batch-major order: (B*T, C, H, W) per scale.
             # MambaDetectionHead.forward() uses reshape(B, T, ...) which requires
             # [b0t0, b0t1, ..., b0tT, b1t0, ...] ordering so each SSM sequence
@@ -607,8 +984,45 @@ def main() -> None:
                 for si in range(3)
             ]
 
+            detail_T = None
+            detail_features_T = None
+            detail_valid_hw_T = None
+            detail_positions_T = None
+            detail_position_mask_T = None
+            if detail_frames is not None and detail_valid_hw is not None:
+                if args.detail_source == "native-p3":
+                    detail_features_T = torch.stack(all_detail_feats, dim=1).reshape(
+                        B * T, *all_detail_feats[0].shape[1:]
+                    )
+                else:
+                    detail_T = detail_frames.reshape(B * T, *detail_frames.shape[2:])
+                detail_valid_hw_T = detail_valid_hw.reshape(B * T, 2)
+            if args.detail_source == "strip-oracle":
+                flattened_gt = [
+                    gt_boxes_batch[b][t] for b in range(B) for t in range(T)
+                ]
+                detail_positions_T, detail_position_mask_T = (
+                    build_strip_oracle_positions(
+                        flattened_gt,
+                        p3_hw=tuple(feats_T[0].shape[-2:]),
+                        img_size=args.img_size,
+                        budget=args.strip_route_budget,
+                        small_threshold=args.strip_small_threshold,
+                        device=device,
+                    )
+                )
+
             # Temporal forward — T_frames activates temporal blocks
-            s_cls_T, s_reg_T = mamba(feats_T, T=T)
+            s_cls_T, s_reg_T = mamba(
+                feats_T,
+                T=T,
+                detail_images=detail_T,
+                detail_valid_hw=detail_valid_hw_T,
+                detail_features=detail_features_T,
+                detail_feature_stride=8,
+                detail_positions=detail_positions_T,
+                detail_position_mask=detail_position_mask_T,
+            )
 
             # All-frames loss: every frame supervised with its own GT.
             # Batch-major layout: [b0t0, b0t1, ..., b0tT, b1t0, ...]
@@ -624,6 +1038,44 @@ def main() -> None:
                 batch_loss = batch_loss + step_loss_vec.sum()
             batch_loss = batch_loss / (T * accum)
 
+            if args.t1_weight > 0.0 and T > 1:
+                # Joint loss (route 2): also supervise the pure-spatial T=1 forward
+                # (temporal blocks bypassed) on the same frames, so the spatial path
+                # stays deploy-good while the T-clip loss keeps cross-frame pressure —
+                # simultaneously every step, not sequentially (vs T3→T1 staging). The
+                # B*T frames are treated as independent single-frame samples; GT is
+                # flattened batch-major to match feats_T's [b0t0,b0t1,...,b1t0,...].
+                s_cls_1, s_reg_1 = mamba(
+                    feats_T,
+                    T=1,
+                    detail_images=detail_T,
+                    detail_valid_hw=detail_valid_hw_T,
+                    detail_features=detail_features_T,
+                    detail_feature_stride=8,
+                    detail_positions=detail_positions_T,
+                    detail_position_mask=detail_position_mask_T,
+                )
+                flat_gt = [all_gt[t][b] for b in range(B) for t in range(T)]
+                preds_1 = _build_preds_dict(s_cls_1, s_reg_1, feats_T)
+                yolo_batch_1 = _make_yolo_batch(flat_gt, args.img_size, device)
+                t1_loss_vec, _ = criterion(preds_1, yolo_batch_1)
+                t1_loss = t1_loss_vec.sum() / (B * T)
+                batch_loss = batch_loss + (args.t1_weight * t1_loss) / accum
+                epoch_t1_sum += t1_loss.detach().item()
+                epoch_t1_n += 1
+
+            if args.consistency_weight > 0.0 and T > 1:
+                cons_loss = _temporal_consistency_loss(
+                    s_cls_T, gt_boxes_batch, gt_ids_batch, T, B, args.img_size
+                )
+                batch_loss = batch_loss + (args.consistency_weight * cons_loss) / accum
+                epoch_cons_sum += cons_loss.detach().item()
+                epoch_cons_n += 1
+
+            if not torch.isfinite(batch_loss):
+                raise FloatingPointError(
+                    f"Non-finite loss at epoch={epoch} batch={batch_idx + 1}"
+                )
             batch_loss.backward()
             acc_batches += 1
 
@@ -634,19 +1086,23 @@ def main() -> None:
                 acc_batches = 0
 
             step_loss = batch_loss.detach().item() * accum
-            if torch.isfinite(batch_loss):
-                epoch_total_loss += step_loss
-                n_steps += 1
+            epoch_total_loss += step_loss
+            n_steps += 1
 
+            effective_batches = (
+                min(n_batches, args.max_batches_per_epoch)
+                if args.max_batches_per_epoch > 0
+                else n_batches
+            )
             eta_s = (
-                (n_batches - batch_idx - 1)
+                (effective_batches - batch_idx - 1)
                 * (time.perf_counter() - t0)
                 / max(batch_idx + 1, 1)
             )
-            pct = (batch_idx + 1) / n_batches * 100
+            pct = (batch_idx + 1) / effective_batches * 100
             print(
                 f"\r  epoch {epoch:3d}/{args.epochs}  "
-                f"[{pct:5.1f}%  {batch_idx + 1:4d}/{n_batches}]  "
+                f"[{pct:5.1f}%  {batch_idx + 1:4d}/{effective_batches}]  "
                 f"loss={step_loss:7.2f}  ETA {eta_s:5.0f}s",
                 end="",
                 flush=True,
@@ -658,23 +1114,25 @@ def main() -> None:
             optimizer.zero_grad()
 
         scheduler.step()
-        if (
-            warmup_scheduler is not None
-            and epoch <= start_epoch + args.warmup_epochs - 1
-        ):
-            warmup_scheduler.step()
-            current_lr = optimizer.param_groups[0]["lr"]
-        else:
-            current_lr = scheduler.get_last_lr()[0]
         avg_loss = epoch_total_loss / max(n_steps, 1)
         dt = time.perf_counter() - t0
         vram_gb = torch.cuda.max_memory_allocated() / 1e9
-        is_best = avg_loss < best_loss
+        is_best = args.best_by == "train-loss" and avg_loss < best_loss
         best_loss = min(best_loss, avg_loss)
         best_marker = " [BEST]" if is_best else ""
+        cons_marker = (
+            f"  cons={epoch_cons_sum / epoch_cons_n:.3f}(×{args.consistency_weight:g})"
+            if epoch_cons_n > 0
+            else ""
+        )
+        t1_marker = (
+            f"  t1={epoch_t1_sum / epoch_t1_n:.3f}(×{args.t1_weight:g})"
+            if epoch_t1_n > 0
+            else ""
+        )
         print(
             f"\r  epoch {epoch:3d}/{args.epochs}  "
-            f"loss={avg_loss:7.2f}  lr={current_lr:.2e}  "
+            f"loss={avg_loss:7.2f}{t1_marker}{cons_marker}  lr={epoch_lr:.2e}  "
             f"VRAM={vram_gb:.1f}GB  {dt / 60:.1f}min{best_marker}"
         )
 
@@ -684,9 +1142,29 @@ def main() -> None:
                     "epoch": epoch,
                     "student": mamba.state_dict(),
                     "optimizer": optimizer.state_dict(),
+                    "scheduler": scheduler.state_dict(),
                     "best_loss": best_loss,
+                    "epoch_loss": avg_loss,
+                    "epoch_lr": epoch_lr,
+                    "selection": {
+                        "best_by": args.best_by,
+                        "holdout_seqs": holdout_seqs,
+                        "status": (
+                            "diagnostic_train_loss"
+                            if args.best_by == "train-loss"
+                            else "candidate_requires_external_selection"
+                        ),
+                    },
                     "args": vars(args),
                     "mamba_args": {
+                        "in_channels": list(in_channels),
+                        "base_yolo_path": mamba_args.get(
+                            "base_yolo_path", args.yolo_weights
+                        ),
+                        "base_yolo_sha256": mamba_args["base_yolo_sha256"],
+                        "teacher_checkpoint_sha256": mamba_args.get(
+                            "teacher_checkpoint_sha256", ""
+                        ),
                         "d_model": mamba_args["d_model"],
                         "d_state": mamba_args["d_state"],
                         "num_blocks": mamba_args["num_blocks"],
@@ -701,7 +1179,43 @@ def main() -> None:
                         "use_temporal_attention": mamba_args.get(
                             "use_temporal_attention", False
                         ),
+                        "scan_stop_grad": mamba_args.get("scan_stop_grad", False),
+                        "legacy_n1_scan": mamba_args.get("legacy_n1_scan", False),
+                        "legacy_n1_source": mamba_args.get("legacy_n1_source", ""),
                         "per_channel_a": mamba_args.get("per_channel_a", False),
+                        "use_detail_fusion": mamba_args.get("use_detail_fusion", False),
+                        "use_strip_detail": mamba_args.get("use_strip_detail", False),
+                        "detail_source": mamba_args.get("detail_source", "none"),
+                        "detail_channels": mamba_args.get("detail_channels", 32),
+                        "detail_patch_size": mamba_args.get("detail_patch_size", 3),
+                        "detail_feature_channels": mamba_args.get(
+                            "detail_feature_channels", 0
+                        ),
+                        "detail_height": mamba_args.get(
+                            "detail_height", args.detail_height
+                        ),
+                        "detail_width": mamba_args.get(
+                            "detail_width", args.detail_width
+                        ),
+                        "strip_route_budget": mamba_args.get(
+                            "strip_route_budget", args.strip_route_budget
+                        ),
+                        "strip_small_threshold": mamba_args.get(
+                            "strip_small_threshold", args.strip_small_threshold
+                        ),
+                        "strip_length": mamba_args.get(
+                            "strip_length", args.strip_length
+                        ),
+                        "strip_width": mamba_args.get("strip_width", args.strip_width),
+                        "strip_detail_type": mamba_args.get(
+                            "strip_detail_type", "mamba"
+                        ),
+                        "strip_stem_channels": mamba_args.get(
+                            "strip_stem_channels", args.strip_stem_channels
+                        ),
+                        "strip_route_chunk_size": mamba_args.get(
+                            "strip_route_chunk_size", args.strip_route_chunk_size
+                        ),
                     },
                 },
                 run_dir,

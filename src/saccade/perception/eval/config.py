@@ -256,11 +256,19 @@ class EvalConfig:
     nsa_kalman: bool
     kalman_r_scale: float
     vel_dir_weight: float
+    occ_vel_weight: float
     fuse_score_weight: float
     stage2_match_thresh: float
     birth_low_score_thresh: float
     birth_prox_norm_thresh: float
     oao_tau: float
+
+    # Depth-gated occlusion-state machine (Occluded(by=A)); default off.
+    occ_state_enabled: bool
+    occ_iou_thresh: float
+    occ_foot_gap: float
+    occ_ttl: int
+    occ_cost_weight: float
 
     # Temporal consistency filter
     temporal_consistency_min_frames: int
@@ -704,11 +712,17 @@ def parse_eval_config(
         nsa_kalman=bool(kwargs.get("nsa_kalman", False)),
         kalman_r_scale=float(kwargs.get("kalman_r_scale", 1.0)),
         vel_dir_weight=float(kwargs.get("vel_dir_weight", 0.0)),
+        occ_vel_weight=float(kwargs.get("occ_vel_weight", 0.0)),
         fuse_score_weight=float(kwargs.get("fuse_score_weight", 0.0)),
         stage2_match_thresh=float(kwargs.get("stage2_match_thresh", 0.5)),
         birth_low_score_thresh=float(kwargs.get("birth_low_score_thresh", 0.0)),
         birth_prox_norm_thresh=float(kwargs.get("birth_prox_norm_thresh", 0.0)),
         oao_tau=float(kwargs.get("oao_tau", 0.0)),
+        occ_state_enabled=bool(kwargs.get("occ_state_enabled", True)),
+        occ_iou_thresh=float(kwargs.get("occ_iou_thresh", 0.45)),
+        occ_foot_gap=float(kwargs.get("occ_foot_gap", 0.15)),
+        occ_ttl=int(kwargs.get("occ_ttl", 4)),
+        occ_cost_weight=float(kwargs.get("occ_cost_weight", 0.50)),
         temporal_consistency_min_frames=int(
             kwargs.get("temporal_consistency_min_frames", 3)
         ),

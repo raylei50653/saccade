@@ -123,6 +123,19 @@ public:
     void set_oao_params(float tau);
 
     /**
+     * @brief Configure the depth-gated occlusion-state machine (default off).
+     *
+     * When enabled, a confirmed track that loses its detection behind a higher-IoU
+     * partner whose foot is decisively lower (closer to camera) is held in an
+     * OCCLUDED state bound to that occluder, and a depth-consistency cost term biases
+     * its re-acquisition toward the depth-consistent re-emerging box — resolving
+     * occlusion crossing-swaps without appearance or velocity-direction cues.
+     */
+    void set_occ_params(bool enabled, float iou_thresh, float foot_gap, int ttl,
+                        float cost_weight);
+    std::vector<int> get_occ_front_info();
+
+    /**
      * @brief Set Detection Quality Scaling (A6) parameters.
      * @param enabled Enable scaling
      * @param w_aspect Weight for aspect ratio quality

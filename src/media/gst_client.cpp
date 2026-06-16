@@ -93,9 +93,13 @@ private:
         GstBuffer* buffer = gst_sample_get_buffer(sample);
         GstCaps* caps = gst_sample_get_caps(sample);
         GstStructure* struct_caps = gst_caps_get_structure(caps, 0);
-        int w, h;
-        gst_structure_get_int(struct_caps, "width", &w);
-        gst_structure_get_int(struct_caps, "height", &h);
+        int w = 0, h = 0;
+        if (!gst_structure_get_int(struct_caps, "width", &w)) w = 0;
+        if (!gst_structure_get_int(struct_caps, "height", &h)) h = 0;
+        if (w <= 0 || h <= 0) {
+            gst_sample_unref(sample);
+            return GST_FLOW_ERROR;
+        }
 
         GstMapInfo map;
         if (gst_buffer_map(buffer, &map, GST_MAP_READ)) {

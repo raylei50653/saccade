@@ -1,0 +1,37 @@
+# B2 dual-resolution semantic oracle.
+# Global stream: 640 TensorRT YOLO P3/P4/P5 + v14 Mamba.
+# Detail stream: aspect-preserving 1280x768 view + frozen PyTorch YOLO P3.
+
+tiling: native_640
+preprocess: none
+track_person_only: false
+person_geometry_prior: false
+detection_quality_scaling: false
+
+mamba_ckpt: runs/mamba_detail_b2_native_p3/best.ckpt
+fpn_backbone_engine: models/yolo/yolo26s_backbone_640_best.engine
+
+# The detail backbone is a second dynamic input and is not part of the current
+# C++/TorchScript or CUDA-graph export path.
+use_whole_graph: false
+use_cuda_graph: false
+use_tracker_graph: false
+
+gmc: true
+gmc_downscale: 4
+gmc_fg_mask: false
+
+reid_mode: "off"
+
+match_thresh: 0.50
+new_track_thresh: 0.28
+kalman_r_scale: 2.8
+confirm_streak: 3
+confirm_score_thresh: 0.50
+fuse_score_weight: 0.0
+id_stability_filter: false
+per_seq_adapt: false
+geometry_suspect_support: false
+interpolate_tracklets: true
+interpolate_max_gap: 35
+interpolate_min_track_len: 5

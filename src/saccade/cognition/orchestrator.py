@@ -1,6 +1,7 @@
 import asyncio
 import time
-from typing import Dict, Any, List, Tuple, Optional
+import traceback
+from typing import Dict, Any, List, Tuple, Optional, Set
 from saccade.storage.chroma_store import ChromaStore
 from saccade.storage.redis_cache import RedisCache
 from saccade.pipeline.health import HealthChecker, render
@@ -40,6 +41,8 @@ class PipelineOrchestrator:
         self.semaphore = asyncio.Semaphore(32)
         self.batch_size = 50
 
+        self._background_tasks: Set[asyncio.Task[Any]] = set()
+
         self.rag_engine: Optional[Any] = None
         if HAS_LLAMA_INDEX:
             self._setup_rag()
@@ -75,13 +78,28 @@ class PipelineOrchestrator:
                 It fetches the visual embedding (SigLIP) and searches ChromaDB for past appearances.
                 """
                 print(f"👁️ [Visual Re-query] Initiated for Track ID {track_id}")
-                # 實務上應從 Redis (saccade:feat:{track_id}) 或共用記憶體拉取 FeatureBank 的特徵
-                # 這裡為雛型展示，假設我們從 ChromaDB 的 hybrid_query 進行純向量搜尋
-                # 假設我們已經拿到 embedding (這裡用 dummy vector 模擬)
-                dummy_embedding = [0.0] * 768
+                # 嘗試從 Redis 拉取實際嵌入特徵，fallback 使用 ChromaDB metadata
+                feat_key = f"saccade:feat:{track_id}"
+                try:
+                    import asyncio as _aio
+
+                    loop = _aio.get_event_loop()
+                    raw = (
+                        loop.run_until_complete(self.redis_cache.client.get(feat_key))
+                        if self.redis_cache.client
+                        else None
+                    )
+                    import json as _json
+
+                    embedding = _json.loads(raw) if raw else None
+                except Exception:
+                    embedding = None
+
+                if embedding is None:
+                    return f"No feature embedding found for track {track_id}. Feature bank may not be active."
 
                 results = self.memory_store.hybrid_query(
-                    query_embedding=dummy_embedding, n_results=3
+                    query_embedding=embedding, n_results=3
                 )
 
                 if (
@@ -108,6 +126,7 @@ class PipelineOrchestrator:
             )
         except Exception as e:
             print(f"⚠️ [RAG Setup Error] {e}")
+            traceback.print_exc()
 
     def _generate_scene_description(self, objects: List[str], entropy: float) -> str:
         """基於 YOLO 標籤生成結構化的場景描述"""
@@ -116,7 +135,8 @@ class PipelineOrchestrator:
 
         obj_counts: Dict[str, int] = {}
         for obj in objects:
-            obj_counts[obj] = obj_counts.get(obj, 0) + 1
+            key = str(obj).lower() if isinstance(obj, str) else str(obj)
+            obj_counts[key] = obj_counts.get(key, 0) + 1
 
         desc_parts = []
         for obj, count in obj_counts.items():
@@ -178,25 +198,27 @@ class PipelineOrchestrator:
                 # 5. 觸發 RAG 查詢 (VRAM <92% 且場景複雜/異常時)
                 if not skip_rag and HAS_LLAMA_INDEX and (is_anomaly or entropy > 0.9):
                     query = f"The current scene has high entropy ({entropy:.2f}) and contains {yolo_objects}. Are there any similar patterns in the past 5 minutes?"
-                    asyncio.create_task(self._trigger_rag_analysis(query))
+                    task = asyncio.create_task(self._trigger_rag_analysis(query))
+                    self._background_tasks.add(task)
+                    task.add_done_callback(self._background_tasks.discard)
 
             except Exception as e:
                 print(f"❌ [Storage Error] {e}")
+                traceback.print_exc()
 
     async def process_event_batch(
         self, batch: List[Tuple[str, Dict[str, Any]]]
     ) -> None:
         """處理從 Redis 讀取的批次事件"""
         tasks = []
+        message_ids = []
         for msg_id, event in batch:
             tasks.append(self.handle_cognitive_event(event))
-            # 確認訊息已處理
-            if self.redis_cache.client:
-                await self.redis_cache.client.xack(
-                    self.redis_cache.stream_name, "orchestrator_group", msg_id
-                )
+            message_ids.append(msg_id)
         if tasks:
             await asyncio.gather(*tasks)
+        if message_ids:
+            await self.redis_cache.acknowledge(message_ids)
 
     async def start_cognition_loop(self) -> None:
         print(
@@ -211,7 +233,9 @@ class PipelineOrchestrator:
 
                 if batch:
                     # 2. 異步處理該批次
-                    asyncio.create_task(self.process_event_batch(batch))
+                    task = asyncio.create_task(self.process_event_batch(batch))
+                    self._background_tasks.add(task)
+                    task.add_done_callback(self._background_tasks.discard)
                 else:
                     # 沒資料時稍微休息
                     await asyncio.sleep(0.1)

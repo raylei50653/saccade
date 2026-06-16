@@ -13,7 +13,7 @@ from ._helpers import _tier
 class MotionConfig:
     """Motion-based relinking configuration.
 
-    NO-GO (2026-05-17): 89% relink candidates blocked by age gate;
+    NO-GO (2026-05-17): 89%% relink candidates blocked by age gate;
     motion-only gain indistinguishable from run-to-run noise (±0.3pp).
     Code retained, default=off.
     """

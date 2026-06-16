@@ -6,9 +6,22 @@ from saccade.storage.chroma_store import ChromaStore
 
 app = FastAPI(title="Saccade Spatiotemporal Retrieval API")
 
-# 初始化存儲組件
-redis_cache = RedisCache()
-chroma_store = ChromaStore()
+_redis_cache: Optional[RedisCache] = None
+_chroma_store: Optional[ChromaStore] = None
+
+
+def _get_redis_cache() -> RedisCache:
+    global _redis_cache
+    if _redis_cache is None:
+        _redis_cache = RedisCache()
+    return _redis_cache
+
+
+def _get_chroma_store() -> ChromaStore:
+    global _chroma_store
+    if _chroma_store is None:
+        _chroma_store = ChromaStore()
+    return _chroma_store
 
 
 class SearchQuery(BaseModel):
@@ -20,12 +33,12 @@ class SearchQuery(BaseModel):
 
 @app.on_event("startup")
 async def startup() -> None:
-    await redis_cache.connect()
+    await _get_redis_cache().connect()
 
 
 @app.on_event("shutdown")
 async def shutdown() -> None:
-    await redis_cache.disconnect()
+    await _get_redis_cache().disconnect()
 
 
 @app.get("/")
@@ -37,7 +50,7 @@ async def root() -> Dict[str, str]:
 async def list_active_objects() -> Dict[str, Any]:
     """獲取目前所有活躍 (最近 5 分鐘內出現) 的目標 ID"""
     try:
-        object_ids = await redis_cache.get_active_objects()
+        object_ids = await _get_redis_cache().get_active_objects()
         return {"count": len(object_ids), "active_objects": object_ids}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -46,15 +59,16 @@ async def list_active_objects() -> Dict[str, Any]:
 @app.get("/objects/{obj_id}")
 async def get_object_history(obj_id: int) -> Dict[str, Any]:
     """獲取特定物件的詳細時空紀錄與軌跡"""
-    history = await redis_cache.get_object_history(obj_id)
+    history = await _get_redis_cache().get_object_history(obj_id)
     if not history:
         raise HTTPException(
             status_code=404, detail=f"Object {obj_id} not found or expired."
         )
 
     # 計算停留時間 (Dwell Time)
-    duration = history["last_seen"] - history["first_seen"]
-    history["dwell_time_seconds"] = round(duration, 2)
+    if "last_seen" in history and "first_seen" in history:
+        duration = history["last_seen"] - history["first_seen"]
+        history["dwell_time_seconds"] = round(duration, 2)
 
     return history
 
@@ -70,7 +84,7 @@ async def semantic_search(query: SearchQuery) -> Dict[str, Any]:
     )
 
     try:
-        results = chroma_store.hybrid_query(
+        results = _get_chroma_store().hybrid_query(
             query_text=query.text,
             n_results=query.n_results or 5,
             start_time=query.start_time,

@@ -28,6 +28,26 @@ the honest framing is easy-pool vs hard-pool AUC.)
 
 ---
 
+## 0. Hub — the relink / crossing-swap / AssA investigations
+
+This file is the **entry point** for the association-recovery (relink + crossing-swap)
+bottleneck. It holds the offline discriminability + pre-loss kinematics study (§1–§8); the
+sibling investigations below each own one thread and keep their own data/verdict. Read this
+first, then follow out.
+
+| investigation | doc | scope | verdict |
+|---|---|---|---|
+| **Offline relink discriminability + kinematics** | *(this file)* | bridge AUC easy/hard pool, pre-loss motion, speed×turn, reach-gate, precision gate | geometry/motion **ceiling** (base-rate wall); one speed-weighted term survives (§6c GO) |
+| **Bridge motion-residual AUC** | [`bidir_relink_data_analysis.md`](bidir_relink_data_analysis.md) | pure-geometry residual ranking on the bridge pool | AUC ≈ 0.55 (hard pool) — reconciled in this file's intro |
+| **Bidirectional bridge relink** | [`bidirectional_relink_roadmap.md`](bidirectional_relink_roadmap.md) | mid-point bridge design + roadmap | default-on GO (+2.1 IDF1) |
+| **Relink normalization gate** | [`relink_normalization_gate_analysis.md`](relink_normalization_gate_analysis.md) | scale/normalization gating | see doc |
+| **Occlusion crossing-swap depth ordering** | [`depth_ordering_crossing_swap.md`](depth_ordering_crossing_swap.md) | foot_y/depth front-back signal (probe AUC **0.898** vs appearance ≈0.50), oracle, same-height gate | **GO**, default-on (+0.5 IDF1; commit `c418872b`) — see §8 |
+| **Live-association crossing-swap quantification** | [`mamba-score-distribution-20260613.md`](../../detection/research/mamba-score-distribution-20260613.md) §7–8 | 109 swaps = 22% of IDs, the live counterpart | source of the §8 target |
+
+> The §3–§6 base-rate ceiling is specific to **bridge-relink / velocity-direction**, *not* a
+> universal wall on the crossing-swap door — the depth-ordering channel cracks it (§8 + its
+> doc). Keep that distinction when citing "the AssA ceiling."
+
 ## 1. The no-relink / no-interp substrate
 
 All three relink paths are off by default in this preset and were confirmed inactive:
@@ -230,7 +250,7 @@ saturation × shape × normalisation, ranked by AP, validated leave-one-sequence
 score = -( w·sym_fb + (1-w)·dist_h )
   sym_fb     = 0.5·(fwd_resid + bwd_resid)        # symmetric full extrapolation > gap/2 midpoint
   fwd_resid  = ‖(lx + vxl·G) − cx0‖ / h_ref       # lost fwd-extrapolated to cand head position
-  bwd_resid  = ‖cx0 − vxc·G) − lx‖ / h_ref        # cand bwd-extrapolated to lost tail position
+  bwd_resid  = ‖(cx0 − vxc·G) − lx‖ / h_ref        # cand bwd-extrapolated to lost tail position
   dist_h     = ‖(lx,ly) − (cx0,cy0)‖ / h_ref      # direct spatial distance, normalised
   h_ref      = avg(ema_h_lost, ema_h_cand)          # EMA box height of both endpoints (see §6e)
   w          = clip( sqrt(s_lost / 0.12), 0, 1 )   # sqrt ramp, saturates ~0.12–0.2 h/f
@@ -363,3 +383,44 @@ Key findings:
 | `figures/speed_turn_dist.png` | npz post-plot (see script header) |
 | `scripts/tools/out/reach_gate.png` | `validate_reach_gate.py` |
 | speed-weight grid + LOSO CV (stdout) | `optimize_relink_weight.py` |
+
+## 8. Same ceiling reconfirmed from live-association side: occlusion crossing-swaps (2026-06-13)
+
+An independent probe from the live-association direction
+([`mamba-score-distribution-20260613.md`](../../detection/research/mamba-score-distribution-20260613.md)
+§7–8) quantified where the AssA bottleneck hits: **109 occlusion crossing-swaps =
+22% of baseline IDs (496)**. Two confirmed tracks mutually occlude (track-track IoU ≥ 0.5)
+producing only one surviving bounding box; when they separate 1–2 frames later the two ids
+swap — a live-association counterpart to the bridge-relink hard pool.
+
+An occlusion-gated velocity-direction lock that penalised detections inconsistent with the
+frozen pre-occlusion motion was implemented and measured on the MOT17 train SDP
+(`mamba_whole_graph`). Even with the correct speed-weighting from §6c (height-normalised,
+sqrt-ramp saturating 0.12 h/f), the feature is **monotonically harmful** across all tested
+weights (0.15–1.0): the smallest tested weight pushes IDF1 −0.1 / AssA −0.4, and higher
+weights collapse AssA by −5.3.
+
+**Root cause (already documented in §4/§5):** MOT17 per-frame foot speed is at the
+box-jitter floor (median 0.01 h/f); velocity direction is noise for the slow bulk, and even
+the fast minority's direction is not discriminative in the gate's operating region (§3,
+§6c hard-pool AUC ~0.65). Only appearance can separate true/false identity matches at this
+scale, and appearance in the MOT17 embedding space is a documented ceiling (registry
+[#2](../../../reference/no_go_registry.md) / [#32](../../../reference/no_go_registry.md) /
+[#35](../../../reference/no_go_registry.md)).
+
+**Verdict:** the *velocity/motion-direction* ceiling identified in §3–§6b is **reconfirmed**
+from the live crossing-swap door — same base-rate wall for that lever. The quantification
+(109 swaps = 22% of IDs, 1–2 frame gap, 100% recoverable at reappearance) sharpens the
+target. The velocity-lock C++ feature was implemented and reverted after measurement.
+
+> **Update (2026-06-14) — "appearance-only headroom" was wrong; a *different* geometry
+> channel cracks it.** This section concluded only appearance could separate the crossing-swap
+> pool. That holds for *velocity direction*, but not for *depth ordering*. The follow-up
+> probe ([`depth_ordering_crossing_swap.md`](depth_ordering_crossing_swap.md)) showed
+> pre-occlusion `foot_y` discriminates GT-front from GT-back at **AUC 0.898** (area 0.827)
+> vs the appearance hard-pool's **≈0.50** — geometry, not ReID, is the live lever here. A
+> same-height (`|foot_gap| ≤ 0.15h`) occluder-side depth mutual-exclusion gate is now
+> **default-on GO** (+0.5 IDF1 / +0.4 AssA, 6/7 seqs non-negative; commit `c418872b`). The
+> base-rate wall in §3–§6 is specific to bridge-relink/velocity, not a universal ceiling on
+> the crossing-swap door.
+

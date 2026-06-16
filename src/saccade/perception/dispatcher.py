@@ -393,9 +393,9 @@ class WorkbenchPool:
         print("🛑 [WorkbenchPool] Stopped.")
 
     def get_stats(self) -> dict[str, Any]:
-        """Return current stats."""
-        drops = self._drop_count
-        self._drop_count = 0
+        """Return current stats. Does not reset counters."""
+        with self._lock:
+            drops = self._drop_count
 
         stats = list(self._stats_window)
         wait = list(self._queue_wait_window)
@@ -412,6 +412,11 @@ class WorkbenchPool:
             "queue_wait_ms_p95": round(_percentile(wait, 95), 2) if wait else 0.0,
             "queue_wait_ms_p99": round(_percentile(wait, 99), 2) if wait else 0.0,
         }
+
+    def reset_stats(self) -> None:
+        """Reset the drop counter."""
+        with self._lock:
+            self._drop_count = 0
 
 
 class AsyncDispatcher:

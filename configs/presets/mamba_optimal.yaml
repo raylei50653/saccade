@@ -11,7 +11,10 @@ person_geometry_prior: false
 detection_quality_scaling: false
 
 # --- Mamba Detector ---
-mamba_ckpt: runs/mamba_gt_vgt_mamba_v14/best.ckpt
+# T3→T1 GT2 curriculum (v14replica): matched-seed > implicit +1.8 IDF1 / +3.0 AssA
+# (mamba-t3t1-curriculum-20260613.md §6). gt-ratio 0 → gate-free deploy on raw
+# yolo26s backbone. Previous: runs/mamba_gt_vgt_mamba_v14/best.ckpt (legacy).
+mamba_ckpt: runs/mamba_gt_v14replica_t3_t1/best.ckpt
 fpn_backbone_engine: models/yolo/yolo26s_backbone_640_best.engine
 # CUDA-graph replay of the Mamba head via torch.cuda.make_graphed_callables.
 # Collapses ~278 eager kernel launches/frame into one replay (detect is
@@ -39,7 +42,7 @@ reid_mode: "off"
 
 # --- Tracker Parameters ---
 match_thresh: 0.50       # Low threshold optimized for Mamba detector box confidence & IoU distributions
-new_track_thresh: 0.28   # Keep standard baseline new track threshold
+new_track_thresh: 0.28   # 0.20 overfit to MOT17-09 (per-seq 2/7 pos/3/7 neg), reverted — fails cross-seq GO criterion (registry #38)
 kalman_r_scale: 2.8      # r_scale>1 trusts Kalman prediction more → smoother trajectory → better stage-2 re-association → IDF1 +1.9pp IDs -84 vs r_scale=1.0
 confirm_streak: 3
 confirm_score_thresh: 0.50

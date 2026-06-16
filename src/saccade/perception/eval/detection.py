@@ -26,7 +26,11 @@ _nms_cuda_workspace: Dict[Tuple[int], Dict[str, Any]] = {}
 _duplicate_merge_cuda_workspace: Dict[
     Tuple[int, torch.dtype, torch.dtype], Dict[str, Any]
 ] = {}
-_SAHI_2X2_TILINGS = {"960p_2x2", "sahi_960p_2x2"}
+_SAHI_2X2_TILINGS = {
+    "960p_2x2",
+    "sahi_960p_2x2",
+    "mamba_global_2x2",
+}
 
 
 def _is_2x2_tiling(tiling: str | None) -> bool:
@@ -42,7 +46,10 @@ def _prepare_canvas_960p(
     h_orig: int,
     w_orig: int,
 ) -> tuple[float, int, int, int, int]:
-    r = 960.0 / max(h_orig, w_orig)
+    max_dim = max(h_orig, w_orig)
+    if max_dim <= 0:
+        raise ValueError(f"Invalid frame dimensions: {w_orig}x{h_orig}")
+    r = 960.0 / max_dim
     h_new, w_new = int(h_orig * r), int(w_orig * r)
     y_off = (960 - h_new) // 2
     x_off = (960 - w_new) // 2
@@ -1026,6 +1033,21 @@ def merge_cross_tile_duplicates_fast(
     )
 
 
+def _detect_raw_with_optional_detail(
+    detector: Any,
+    model_input: torch.Tensor,
+    original_frame: torch.Tensor,
+) -> torch.Tensor:
+    if not getattr(detector, "use_detail_fusion", False):
+        return detector.detect_raw(model_input)
+    if (
+        getattr(detector, "use_whole_graph", False)
+        and getattr(detector, "_trt_backbone", None) is not None
+    ):
+        return detector.detect_raw(original_frame)
+    return detector.detect_raw_with_detail(model_input, original_frame)
+
+
 def detect_single_patch_640(
     detector: Any,
     pool: Any,
@@ -1039,6 +1061,9 @@ def detect_single_patch_640(
         and getattr(detector, "_trt_backbone", None) is not None
     )
     if _use_whole and "letterbox" not in preprocess_modes:
+        if getattr(detector, "use_detail_fusion", False):
+            raw_dets = detector.detect_raw(pool.frame_buffer.unsqueeze(0))
+            return raw_dets[0, :, :4], raw_dets[0, :, 4], raw_dets[0, :, 5]
         if getattr(pool, "use_nv12", False):
             canvas = pool.prepare_canvas_640_stretch(h_orig, w_orig)
             raw_dets = detector.detect_raw_preprocessed(canvas.unsqueeze(0))
@@ -1084,7 +1109,11 @@ def detect_single_patch_640(
                 img_resized
             )
 
-        raw_dets = detector.detect_raw(pool.canvas_640p.unsqueeze(0))
+        raw_dets = _detect_raw_with_optional_detail(
+            detector,
+            pool.canvas_640p.unsqueeze(0),
+            pool.frame_buffer.unsqueeze(0),
+        )
         boxes = _decode_detector_boxes(raw_dets[0, :, :4], detector_box_format)
         scores = raw_dets[0, :, 4]
         classes = raw_dets[0, :, 5]
@@ -1100,7 +1129,11 @@ def detect_single_patch_640(
         align_corners=False,
     )
     pool.canvas_640p.copy_(img_input[0])
-    raw_dets = detector.detect_raw(img_input)
+    raw_dets = _detect_raw_with_optional_detail(
+        detector,
+        img_input,
+        pool.frame_buffer.unsqueeze(0),
+    )
     boxes = _decode_detector_boxes(raw_dets[0, :, :4], detector_box_format)
     scores = raw_dets[0, :, 4]
     classes = raw_dets[0, :, 5]
@@ -1139,7 +1172,11 @@ def detect_single_patch_960(
                 conf_threshold=0.0,
             )
         else:
-            raw_dets = detector.detect_raw(pool.canvas_960p.unsqueeze(0))
+            raw_dets = _detect_raw_with_optional_detail(
+                detector,
+                pool.canvas_960p.unsqueeze(0),
+                pool.frame_buffer.unsqueeze(0),
+            )
             boxes = _decode_detector_boxes(raw_dets[0, :, :4], detector_box_format)
             scores = raw_dets[0, :, 4]
             classes = raw_dets[0, :, 5]
@@ -1168,7 +1205,11 @@ def detect_single_patch_960(
             conf_threshold=0.0,
         )
     else:
-        raw_dets = detector.detect_raw(img_input)
+        raw_dets = _detect_raw_with_optional_detail(
+            detector,
+            img_input,
+            pool.frame_buffer.unsqueeze(0),
+        )
         boxes = _decode_detector_boxes(raw_dets[0, :, :4], detector_box_format)
         scores = raw_dets[0, :, 4]
         classes = raw_dets[0, :, 5]
@@ -1347,6 +1388,59 @@ def detect_adaptive_960_tiled(
         all_boxes.reshape(-1, 4),
         raw_dets[:, :, 4].reshape(-1),
         raw_dets[:, :, 5].reshape(-1),
+        True,
+        None,
+    )
+
+
+def detect_mamba_global_2x2(
+    detector: Any,
+    pool: Any,
+    h_orig: int,
+    w_orig: int,
+    preprocess_modes: List[str],
+    detector_box_format: str = "xyxy",
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, bool, Optional[torch.Tensor]]:
+    """Run one full-frame Mamba pass plus four 640px tiles on a 960px canvas."""
+    if not (
+        getattr(detector, "use_whole_graph", False)
+        and getattr(detector, "_trt_backbone", None) is not None
+        and hasattr(detector, "detect_raw_preprocessed")
+    ):
+        raise RuntimeError(
+            "tiling=mamba_global_2x2 requires the Mamba whole-graph TRT detector"
+        )
+    if "letterbox" in preprocess_modes:
+        raise RuntimeError(
+            "tiling=mamba_global_2x2 manages its own tile letterbox canvas"
+        )
+
+    global_raw = detector.detect_raw(pool.frame_buffer.unsqueeze(0)).clone()
+    global_boxes = _decode_detector_boxes(global_raw[0, :, :4], detector_box_format)
+
+    # _prepare_canvas_960p sets pool.tile_dx/tile_dy as a side effect; those
+    # offsets are required below to map tile-space boxes back to canvas coords.
+    r, _h_new, _w_new, y_off, x_off = _prepare_canvas_960p(pool, h_orig, w_orig)
+    pool.tiles_batch4[0].copy_(pool.canvas_960p[:, 0:640, 0:640])
+    pool.tiles_batch4[1].copy_(pool.canvas_960p[:, 0:640, 320:960])
+    pool.tiles_batch4[2].copy_(pool.canvas_960p[:, 320:960, 0:640])
+    pool.tiles_batch4[3].copy_(pool.canvas_960p[:, 320:960, 320:960])
+
+    tile_raw = torch.cat(
+        [
+            detector.detect_raw_preprocessed(pool.tiles_batch4[i : i + 1]).clone()
+            for i in range(4)
+        ],
+        dim=0,
+    )
+    tile_boxes = _decode_detector_boxes(tile_raw[:, :, :4], detector_box_format)
+    tile_boxes[:, :, [0, 2]] = (tile_boxes[:, :, [0, 2]] + pool.tile_dx - x_off) / r
+    tile_boxes[:, :, [1, 3]] = (tile_boxes[:, :, [1, 3]] + pool.tile_dy - y_off) / r
+
+    return (
+        torch.cat([global_boxes, tile_boxes.reshape(-1, 4)], dim=0),
+        torch.cat([global_raw[0, :, 4], tile_raw[:, :, 4].reshape(-1)], dim=0),
+        torch.cat([global_raw[0, :, 5], tile_raw[:, :, 5].reshape(-1)], dim=0),
         True,
         None,
     )

@@ -343,6 +343,59 @@ def add_geometry_args(parser: argparse.ArgumentParser) -> None:
             edge="too high increases cost for dense scenes, hurts recall",
         ),
     )
+    # Depth-gated occlusion-state machine (Occluded(by=A)); default off → bit-identical.
+    grp.add_argument(
+        "--occ-state-enabled",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        dest="occ_state_enabled",
+        help=_help(
+            "Same-height occlusion gate: when two confirmed tracks overlap with similar "
+            "foot depths, penalise the front (lower-foot) track for matching the back box "
+            "to resolve crossing-swaps (no appearance/velocity cue).",
+        ),
+    )
+    grp.add_argument(
+        "--occ-iou-thresh",
+        type=float,
+        default=0.45,
+        dest="occ_iou_thresh",
+        help=_help(
+            "Min track-track IoU for the same-height gate to activate.",
+            range_hint="0.4-0.5",
+        ),
+    )
+    grp.add_argument(
+        "--occ-foot-gap",
+        type=float,
+        default=0.15,
+        dest="occ_foot_gap",
+        help=_help(
+            "Max normalized foot-y gap for tracks to be at the *same depth* "
+            "(occlusion crossing) — smaller = only true depth-plane collisions.",
+            range_hint="0.10-0.20",
+        ),
+    )
+    grp.add_argument(
+        "--occ-ttl",
+        type=int,
+        default=4,
+        dest="occ_ttl",
+        help=_help(
+            "Frames the front-track flag persists after the triggering overlap is gone.",
+            range_hint="2-6",
+        ),
+    )
+    grp.add_argument(
+        "--occ-cost-weight",
+        type=float,
+        default=0.50,
+        dest="occ_cost_weight",
+        help=_help(
+            "Penalty weight keeping the front occluder on its own box at re-acquisition.",
+            range_hint="0.3-0.7",
+        ),
+    )
     grp.add_argument(
         "--stage2-match-thresh",
         type=float,

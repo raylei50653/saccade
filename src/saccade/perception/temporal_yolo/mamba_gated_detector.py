@@ -15,6 +15,7 @@ Architecture:
 from __future__ import annotations
 
 from collections import deque
+import hashlib
 
 import torch
 import torch.nn as nn
@@ -28,8 +29,61 @@ from .yolo_gated_detector import (
     build_gated_yolo_detector,
     _GATE_LAYER_IDX,
 )
-from .mamba_head import MambaDetectionHead, EmbeddingProjector
+from .mamba_head import (
+    DEFAULT_MAMBA_IN_CHANNELS,
+    EmbeddingProjector,
+    MambaDetectionHead,
+    resolve_mamba_in_channels,
+)
 from .yolo_conditioned import TrackerGateInput
+
+
+def _sha256_file(path: str | Path) -> str:
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _fuse_small_p3_scores(
+    scores_max: Tensor,
+    boxes_xyxy: Tensor,
+    cls_preds: list[Tensor],
+    threshold: float,
+    *,
+    box_scale_x: Tensor | None = None,
+    box_scale_y: Tensor | None = None,
+) -> Tensor:
+    """Use P3 boxes with the strongest aligned P3/P4/P5 score for small boxes."""
+    level_counts = [pred.shape[-2] * pred.shape[-1] for pred in cls_preds]
+    level_scores = scores_max.split(level_counts, dim=1)
+    level_boxes = boxes_xyxy.split(level_counts, dim=1)
+    p3_h, p3_w = cls_preds[0].shape[-2:]
+
+    aligned_scores = [level_scores[0].reshape(-1, 1, p3_h, p3_w)]
+    for score, pred in zip(level_scores[1:], cls_preds[1:]):
+        score_map = score.reshape(-1, 1, pred.shape[-2], pred.shape[-1])
+        aligned_scores.append(
+            F.interpolate(score_map, size=(p3_h, p3_w), mode="nearest")
+        )
+    fused_p3 = torch.stack(aligned_scores, dim=0).amax(dim=0).flatten(1)
+
+    routed_scores: list[Tensor] = []
+    for level, (score, boxes) in enumerate(zip(level_scores, level_boxes)):
+        box_wh = boxes[..., 2:4] - boxes[..., :2]
+        width = box_wh[..., 0]
+        height = box_wh[..., 1]
+        if box_scale_x is not None:
+            width = width * box_scale_x
+        if box_scale_y is not None:
+            height = height * box_scale_y
+        small = torch.minimum(width, height) < threshold
+        if level == 0:
+            routed_scores.append(torch.where(small, fused_p3, score))
+        else:
+            routed_scores.append(score.masked_fill(small, -1.0))
+    return torch.cat(routed_scores, dim=1)
 
 
 def _postprocess_mamba(
@@ -38,6 +92,7 @@ def _postprocess_mamba(
     strides: Tensor,
     conf_thr: float,
     max_det: int,
+    small_p3_max_threshold: float = 0.0,
 ) -> Tensor:
     from ultralytics.utils.tal import make_anchors, dist2bbox
 
@@ -60,6 +115,10 @@ def _postprocess_mamba(
 
     scores = cls_all.sigmoid()
     scores_max, class_ids = scores.max(dim=1)
+    if small_p3_max_threshold > 0:
+        scores_max = _fuse_small_p3_scores(
+            scores_max, boxes_xyxy, cls_preds, small_p3_max_threshold
+        )
 
     results = boxes_xyxy.new_zeros(B, max_det, 6)
     for b in range(B):
@@ -120,6 +179,9 @@ def _postprocess_mamba_fixed(
     *,
     anchors: Tensor | None = None,
     anchor_strides: Tensor | None = None,
+    small_p3_max_threshold: float = 0.0,
+    box_scale_x: Tensor | None = None,
+    box_scale_y: Tensor | None = None,
     _compile: bool | None = None,
 ) -> Tensor:
     """Decode Mamba head outputs to (B, max_det, 6) detections.
@@ -140,6 +202,9 @@ def _postprocess_mamba_fixed(
             max_det,
             anchors=anchors,
             anchor_strides=anchor_strides,
+            small_p3_max_threshold=small_p3_max_threshold,
+            box_scale_x=box_scale_x,
+            box_scale_y=box_scale_y,
         )
     return _postprocess_mamba_fixed_eager(
         cls_preds,
@@ -149,6 +214,9 @@ def _postprocess_mamba_fixed(
         max_det,
         anchors=anchors,
         anchor_strides=anchor_strides,
+        small_p3_max_threshold=small_p3_max_threshold,
+        box_scale_x=box_scale_x,
+        box_scale_y=box_scale_y,
     )
 
 
@@ -161,6 +229,9 @@ def _postprocess_mamba_fixed_eager(
     *,
     anchors: Tensor | None = None,
     anchor_strides: Tensor | None = None,
+    small_p3_max_threshold: float = 0.0,
+    box_scale_x: Tensor | None = None,
+    box_scale_y: Tensor | None = None,
 ) -> Tensor:
     from ultralytics.utils.tal import dist2bbox
 
@@ -183,6 +254,15 @@ def _postprocess_mamba_fixed_eager(
 
     scores = cls_all.sigmoid()
     scores_max, class_ids = scores.max(dim=1)
+    if small_p3_max_threshold > 0:
+        scores_max = _fuse_small_p3_scores(
+            scores_max,
+            boxes_xyxy,
+            cls_preds,
+            small_p3_max_threshold,
+            box_scale_x=box_scale_x,
+            box_scale_y=box_scale_y,
+        )
 
     results = boxes_xyxy.new_zeros(cls_all.shape[0], max_det, 6)
     for b in range(cls_all.shape[0]):
@@ -230,7 +310,7 @@ class TRTYoloBackbone(nn.Module):
         super().__init__()
         import tensorrt as trt
 
-        self.logger = trt.Logger(trt.Logger.WARNING)
+        self.logger = trt.Logger(trt.Logger.ERROR)
         with open(engine_path, "rb") as f:
             runtime = trt.Runtime(self.logger)
             self.engine = runtime.deserialize_cuda_engine(f.read())
@@ -240,6 +320,9 @@ class TRTYoloBackbone(nn.Module):
         self.output_names = [
             self.engine.get_tensor_name(i) for i in range(1, self.engine.num_io_tensors)
         ]
+        self.output_channels = tuple(
+            int(self.engine.get_tensor_shape(name)[1]) for name in self.output_names
+        )
         self._stream = torch.cuda.Stream()
         self._output_bufs: list[Tensor] | None = None
         self._last_batch = -1
@@ -372,6 +455,7 @@ class MambaGatedDetector(nn.Module):
         temporal_T: int = 0,
         use_cuda_graph: bool = False,
         use_whole_graph: bool = False,
+        small_p3_max_threshold: float = 0.0,
     ):
         super().__init__()
         if cfg is None:
@@ -390,18 +474,19 @@ class MambaGatedDetector(nn.Module):
         self._stream_state = StreamState.create(temporal_T)
 
         self.use_whole_graph = use_whole_graph
+        self.small_p3_max_threshold = float(small_p3_max_threshold)
         self._whole_graph_nms_pad = 0  # set to 2048 to pad whole-graph output for NMS
         self._whole_graph_anchors: Tensor | None = None
         self._whole_graph_anchor_strides: Tensor | None = None
         self._whole_graphed_callables: dict = {}
         self._whole_graph_warm = False
-        self._whole_graph_sx: Tensor = torch.ones(1, device="cuda")
-        self._whole_graph_sy: Tensor = torch.ones(1, device="cuda")
+        self._whole_graph_sx: Tensor = torch.ones(1, device=device)
+        self._whole_graph_sy: Tensor = torch.ones(1, device=device)
         self._whole_graph_x_idx: Tensor = torch.tensor(
-            [0, 2], device="cuda", dtype=torch.long
+            [0, 2], device=device, dtype=torch.long
         )
         self._whole_graph_y_idx: Tensor = torch.tensor(
-            [1, 3], device="cuda", dtype=torch.long
+            [1, 3], device=device, dtype=torch.long
         )
         self._whole_graph_img_shape: tuple[int, int] = (0, 0)
 
@@ -419,9 +504,45 @@ class MambaGatedDetector(nn.Module):
 
         mamba_state = torch.load(mamba_ckpt, map_location="cpu", weights_only=False)
         mamba_args = mamba_state["mamba_args"]
+        self.in_channels = resolve_mamba_in_channels(mamba_state)
+        expected_yolo_sha = mamba_args.get("base_yolo_sha256")
+        if expected_yolo_sha and _sha256_file(yolo_pt_path) != expected_yolo_sha:
+            raise ValueError(
+                "Base YOLO weights do not match the Mamba checkpoint lineage: "
+                f"checkpoint={mamba_args.get('base_yolo_path')!r}, "
+                f"selected={yolo_pt_path!r}"
+            )
+        expected_teacher_sha = mamba_args.get("teacher_checkpoint_sha256")
+        if (
+            expected_teacher_sha
+            and teacher_ckpt
+            and _sha256_file(teacher_ckpt) != expected_teacher_sha
+        ):
+            raise ValueError(
+                "Teacher checkpoint does not match the Mamba checkpoint lineage: "
+                f"selected={teacher_ckpt!r}"
+            )
+        dense_detail_fusion = mamba_args.get("use_detail_fusion", False)
+        self.use_strip_detail = mamba_args.get("use_strip_detail", False)
+        self.strip_detail_type = mamba_args.get("strip_detail_type", "mamba")
+        self.strip_route_budget = int(mamba_args.get("strip_route_budget", 640))
+        self.strip_small_threshold = float(mamba_args.get("strip_small_threshold", 8.0))
+        self.use_detail_fusion = dense_detail_fusion or self.use_strip_detail
+        self.detail_source = mamba_args.get("detail_source", "high")
+        self.detail_size = (
+            int(mamba_args.get("detail_height", 768)),
+            int(mamba_args.get("detail_width", 1280)),
+        )
+        if self.use_detail_fusion and temporal_T > 0:
+            raise ValueError(
+                "detail fusion inference currently supports spatial v14 only "
+                "(temporal_T must be 0)"
+            )
+        self._strip_detail_positions: Tensor | None = None
+        self._strip_detail_position_mask: Tensor | None = None
 
         self.mamba_head = MambaDetectionHead(
-            in_channels=(128, 256, 512),
+            in_channels=self.in_channels,
             d_model=mamba_args["d_model"],
             d_state=mamba_args["d_state"],
             num_blocks=mamba_args["num_blocks"],
@@ -434,7 +555,18 @@ class MambaGatedDetector(nn.Module):
             use_hybrid_head=mamba_args.get("use_hybrid_head", False),
             use_temporal_mamba=mamba_args.get("use_temporal_mamba", False),
             per_channel_a=mamba_args.get("per_channel_a", False),
+            legacy_n1_scan=mamba_args.get("legacy_n1_scan", False),
             use_cuda_graph=use_cuda_graph,
+            use_detail_fusion=dense_detail_fusion,
+            detail_channels=mamba_args.get("detail_channels", 32),
+            detail_patch_size=mamba_args.get("detail_patch_size", 3),
+            detail_feature_channels=mamba_args.get("detail_feature_channels", 0),
+            use_strip_detail=self.use_strip_detail,
+            strip_detail_type=self.strip_detail_type,
+            strip_stem_channels=mamba_args.get("strip_stem_channels", 32),
+            strip_length=mamba_args.get("strip_length", 32),
+            strip_width=mamba_args.get("strip_width", 3),
+            strip_route_chunk_size=mamba_args.get("strip_route_chunk_size", 16),
         ).to(device)
         sd = {
             k.replace("._orig_mod.", "."): v for k, v in mamba_state["student"].items()
@@ -456,13 +588,27 @@ class MambaGatedDetector(nn.Module):
 
         if trt_backbone_engine:
             self._trt_backbone = TRTYoloBackbone(trt_backbone_engine)
+            if self._trt_backbone.output_channels != self.in_channels:
+                raise ValueError(
+                    "TRT backbone FPN channels do not match the Mamba checkpoint: "
+                    f"engine={self._trt_backbone.output_channels}, "
+                    f"checkpoint={self.in_channels}"
+                )
 
         if self.use_whole_graph and self._trt_backbone is not None:
+            if (
+                self.detail_source in {"native-p3", "strip-oracle"}
+                or self.use_strip_detail
+            ):
+                raise RuntimeError(
+                    f"{self.detail_source} is Python-eager only; "
+                    "whole-graph TRT is unsupported"
+                )
             _s = self.img_size
             FEAT_SHAPES = [
-                (1, 128, _s // 8, _s // 8),
-                (1, 256, _s // 16, _s // 16),
-                (1, 512, _s // 32, _s // 32),
+                (1, self.in_channels[0], _s // 8, _s // 8),
+                (1, self.in_channels[1], _s // 16, _s // 16),
+                (1, self.in_channels[2], _s // 32, _s // 32),
             ]
             self._whole_graph_anchors, self._whole_graph_anchor_strides = (
                 _precompute_anchor_grid(self.stride, FEAT_SHAPES)
@@ -498,6 +644,16 @@ class MambaGatedDetector(nn.Module):
 
     @property
     def cpp_ptr(self) -> int:
+        if self.use_detail_fusion:
+            raise RuntimeError(
+                "C++ Mamba detector does not yet support the dual-resolution detail input"
+            )
+        if self.in_channels != DEFAULT_MAMBA_IN_CHANNELS:
+            raise RuntimeError(
+                "C++ Mamba detector currently assumes yolo26s FPN channels "
+                f"{DEFAULT_MAMBA_IN_CHANNELS}; checkpoint uses {self.in_channels}. "
+                "Use the Python whole-graph path for yolo26m/yolo26l."
+            )
         if not hasattr(self, "_cpp_detector") or self._cpp_detector is None:
             from saccade_perception_ext import (
                 MambaGatedDetector as CppMambaGatedDetector,
@@ -548,6 +704,29 @@ class MambaGatedDetector(nn.Module):
         fpn_indices = [_GATE_LAYER_IDX[s] for s in ("p3", "p4", "p5")]
         return [y[i] for i in fpn_indices]  # type: ignore[return-value]
 
+    def _prepare_detail_view(self, frame: Tensor) -> tuple[Tensor, Tensor]:
+        """Resize with preserved aspect ratio and pad right/bottom to the bucket."""
+        target_h, target_w = self.detail_size
+        src_h, src_w = frame.shape[-2:]
+        scale = min(target_h / src_h, target_w / src_w)
+        valid_h = max(1, min(target_h, int(round(src_h * scale))))
+        valid_w = max(1, min(target_w, int(round(src_w * scale))))
+        detail = F.interpolate(
+            frame,
+            size=(valid_h, valid_w),
+            mode="bilinear",
+            align_corners=False,
+        )
+        detail = F.pad(
+            detail, (0, target_w - valid_w, 0, target_h - valid_h), value=114.0 / 255.0
+        )
+        valid_hw = torch.tensor(
+            [valid_h, valid_w],
+            device=frame.device,
+            dtype=torch.int64,
+        ).expand(frame.shape[0], -1)
+        return detail, valid_hw
+
     def _apply_gate(
         self,
         feats: list[Tensor],
@@ -578,9 +757,51 @@ class MambaGatedDetector(nn.Module):
         self,
         frame: Tensor,
         gate_input: TrackerGateInput | list[TrackerGateInput] | None = None,
+        detail_frame: Tensor | None = None,
     ) -> tuple[Tensor, dict[str, Any]]:
         if self.use_whole_graph and self._trt_backbone is not None:
+            if detail_frame is not None:
+                raise ValueError(
+                    "whole-graph detail fusion uses the original frame argument; "
+                    "do not pass detail_frame separately"
+                )
             return self._forward_whole_graph(frame)
+        detail_images = None
+        detail_valid_hw = None
+        detail_features = None
+        if self.use_detail_fusion:
+            if self.detail_source == "global":
+                detail_images = frame
+                detail_valid_hw = torch.tensor(
+                    frame.shape[-2:],
+                    device=frame.device,
+                    dtype=torch.int64,
+                ).expand(frame.shape[0], -1)
+            elif detail_frame is None:
+                raise ValueError(
+                    "detail fusion requires the original-resolution detail_frame"
+                )
+            else:
+                detail_images, detail_valid_hw = self._prepare_detail_view(detail_frame)
+                if self.detail_source == "native-p3":
+                    detail_features = self._forward_pytorch_backbone(detail_images)[0]
+                    detail_images = None
+        if self.use_strip_detail and self._strip_detail_positions is None:
+            batch_size = frame.shape[0]
+            device = frame.device
+            budget = self.strip_route_budget
+            cols = max(1, int(budget**0.5))
+            dummy_pos = torch.zeros(
+                (batch_size, budget, 2), device=device, dtype=torch.long
+            )
+            for j in range(budget):
+                dummy_pos[:, j, 0] = 40 + (j // cols)
+                dummy_pos[:, j, 1] = 40 + (j % cols)
+            self._strip_detail_positions = dummy_pos
+            self._strip_detail_position_mask = torch.ones(
+                (batch_size, budget), device=device, dtype=torch.bool
+            )
+
         if self._trt_backbone is not None:
             p3, p4, p5 = self._trt_backbone.infer(frame)
             self._trt_feat_cache = {"p3": p3, "p4": p4, "p5": p5}
@@ -598,7 +819,22 @@ class MambaGatedDetector(nn.Module):
             for gl in gls.values():
                 gl._gate_input = None
 
-        return self._detect_from_feats(feats, self._stream_state)
+        res = self._detect_from_feats(
+            feats,
+            self._stream_state,
+            detail_images=detail_images,
+            detail_valid_hw=detail_valid_hw,
+            detail_features=detail_features,
+            detail_feature_stride=8,
+            detail_positions=self._strip_detail_positions,
+            detail_position_mask=self._strip_detail_position_mask,
+        )
+
+        if self.use_strip_detail:
+            self._strip_detail_positions = None
+            self._strip_detail_position_mask = None
+
+        return res
 
     @torch.no_grad()
     def _forward_whole_graph(self, frame: Tensor) -> Tensor:
@@ -641,9 +877,24 @@ class MambaGatedDetector(nn.Module):
         )
         backbone = self._trt_backbone
         p3, p4, p5 = backbone.infer_graph(frame_640)
+        detail_images = None
+        detail_valid_hw = None
+        if self.use_detail_fusion:
+            if self.detail_source == "global":
+                detail_images = frame_640
+                detail_valid_hw = torch.full(
+                    (frame.shape[0], 2),
+                    self.img_size,
+                    device=frame.device,
+                    dtype=torch.int64,
+                )
+            else:
+                detail_images, detail_valid_hw = self._prepare_detail_view(frame)
         cls_preds, reg_preds = self.mamba_head._forward_eager(
             [p3, p4, p5],
             return_embeddings=False,
+            detail_images=detail_images,
+            detail_valid_hw=detail_valid_hw,
         )
         detections = _postprocess_mamba_fixed(
             cls_preds,
@@ -653,12 +904,19 @@ class MambaGatedDetector(nn.Module):
             max(self.max_det, self._whole_graph_nms_pad),
             anchors=self._whole_graph_anchors,
             anchor_strides=self._whole_graph_anchor_strides,
+            small_p3_max_threshold=self.small_p3_max_threshold,
+            box_scale_x=self._whole_graph_sx,
+            box_scale_y=self._whole_graph_sy,
         )
         detections[:, :, self._whole_graph_x_idx] *= self._whole_graph_sx
         detections[:, :, self._whole_graph_y_idx] *= self._whole_graph_sy
         return detections
 
     def _whole_graph_fn_preprocessed(self, frame: Tensor) -> Tensor:
+        if self.use_detail_fusion:
+            raise RuntimeError(
+                "preprocessed whole-graph input has no original-resolution detail frame"
+            )
         backbone = self._trt_backbone
         p3, p4, p5 = backbone.infer_graph(frame)
         cls_preds, reg_preds = self.mamba_head._forward_eager(
@@ -673,6 +931,7 @@ class MambaGatedDetector(nn.Module):
             max(self.max_det, self._whole_graph_nms_pad),
             anchors=self._whole_graph_anchors,
             anchor_strides=self._whole_graph_anchor_strides,
+            small_p3_max_threshold=self.small_p3_max_threshold,
         )
 
     def _whole_graph_warmup(self, frame: Tensor) -> None:
@@ -728,6 +987,12 @@ class MambaGatedDetector(nn.Module):
         self,
         feats: list[Tensor],
         state: StreamState,
+        detail_images: Tensor | None = None,
+        detail_valid_hw: Tensor | None = None,
+        detail_features: Tensor | None = None,
+        detail_feature_stride: int = 8,
+        detail_positions: Tensor | None = None,
+        detail_position_mask: Tensor | None = None,
     ) -> tuple[Tensor, dict[str, Any]]:
         """Temporal-window assembly + Mamba head + post-process for one frame.
 
@@ -772,14 +1037,28 @@ class MambaGatedDetector(nn.Module):
             reg_preds = [r[(T_buf - 1) * B :] for r in reg_preds]
         else:
             want_emb = self.mamba_head.emb_head is not None
-            head_out = self.mamba_head(feats, return_embeddings=want_emb)
+            head_out = self.mamba_head(
+                feats,
+                return_embeddings=want_emb,
+                detail_images=detail_images,
+                detail_valid_hw=detail_valid_hw,
+                detail_features=detail_features,
+                detail_feature_stride=detail_feature_stride,
+                detail_positions=detail_positions,
+                detail_position_mask=detail_position_mask,
+            )
             if want_emb:
                 cls_preds, reg_preds, emb_preds = head_out
             else:
                 cls_preds, reg_preds = head_out
 
         detections = _postprocess_mamba(
-            cls_preds, reg_preds, self.stride, self.conf_thr, self.max_det
+            cls_preds,
+            reg_preds,
+            self.stride,
+            self.conf_thr,
+            self.max_det,
+            self.small_p3_max_threshold,
         )
 
         extra: dict[str, Any] = {}
@@ -813,6 +1092,14 @@ class MambaGatedDetector(nn.Module):
         """
         n = len(feats_list)
         assert n > 0 and n == len(states)
+        if self.use_detail_fusion:
+            raise RuntimeError(
+                "batched multi-stream detail fusion requires per-stream original frames"
+            )
+        if self.use_strip_detail:
+            raise RuntimeError(
+                "batched multi-stream detection does not support strip detail fusion"
+            )
         want_emb = self.mamba_head.emb_head is not None
         temporal = states[0].temporal_buffer is not None
 
@@ -892,7 +1179,12 @@ class MambaGatedDetector(nn.Module):
             cls_b = [c[b : b + 1] for c in cls_last]
             reg_b = [r[b : b + 1] for r in reg_last]
             dets = _postprocess_mamba(
-                cls_b, reg_b, self.stride, self.conf_thr, self.max_det
+                cls_b,
+                reg_b,
+                self.stride,
+                self.conf_thr,
+                self.max_det,
+                self.small_p3_max_threshold,
             )
             extra: dict[str, Any] = {}
             if emb_last is not None:
@@ -1021,6 +1313,34 @@ class MambaGatedDetector(nn.Module):
         self._last_detections_ptr = detections.data_ptr()
         return detections
 
+    def set_strip_detail_positions(
+        self,
+        positions: Tensor,
+        position_mask: Tensor | None = None,
+    ) -> None:
+        """Set fixed-budget P3 routes consumed by the next oracle inference."""
+        if not self.use_strip_detail:
+            raise RuntimeError("loaded checkpoint does not use strip detail")
+        self._strip_detail_positions = positions.to(
+            device=self._device, dtype=torch.long
+        )
+        self._strip_detail_position_mask = (
+            None
+            if position_mask is None
+            else position_mask.to(device=self._device, dtype=torch.bool)
+        )
+
+    def detect_raw_with_detail(
+        self, input_tensor: Tensor, detail_tensor: Tensor
+    ) -> Tensor:
+        detections, _ = self.forward(
+            input_tensor,
+            gate_input=None,
+            detail_frame=detail_tensor,
+        )
+        self._last_detections_ptr = detections.data_ptr()
+        return detections
+
     def detect_raw_preprocessed(self, input_tensor: Tensor) -> Tensor:
         if not self.use_whole_graph or self._trt_backbone is None:
             raise RuntimeError(
@@ -1091,6 +1411,7 @@ def build_mamba_gated_detector(
     temporal_T_override: int | None = None,
     use_cuda_graph: bool = False,
     use_whole_graph: bool = False,
+    small_p3_max_threshold: float = 0.0,
 ) -> MambaGatedDetector:
     if teacher_ckpt and Path(teacher_ckpt).exists():
         teacher_raw = torch.load(teacher_ckpt, map_location="cpu", weights_only=False)
@@ -1120,6 +1441,25 @@ def build_mamba_gated_detector(
     temporal_T = 3 if mamba_args.get("use_temporal_mamba", False) else 0
     if temporal_T_override is not None:
         temporal_T = temporal_T_override
+    if mamba_args.get("use_temporal_mamba", False):
+        if temporal_T > 0 and use_whole_graph:
+            print(
+                f"🧊 [MambaBuilder] temporal checkpoint, temporal_T={temporal_T}, "
+                "but whole-graph forward is single-frame — temporal blocks "
+                "BYPASSED (effective T=1)."
+            )
+        elif temporal_T > 0:
+            print(
+                f"⚠️ [MambaBuilder] temporal checkpoint: STREAMING temporal path "
+                f"ACTIVE (T={temporal_T}, sliding feature window; train/eval "
+                "mismatch risk). For pure T=1 eval pass --no-temporal / "
+                "temporal_T_override=0."
+            )
+        else:
+            print(
+                "🧊 [MambaBuilder] temporal checkpoint, temporal_T=0 — temporal "
+                "blocks BYPASSED (pure T=1)."
+            )
 
     model = MambaGatedDetector(
         yolo_pt_path=str(Path(yolo_pt_path).resolve()),
@@ -1137,5 +1477,6 @@ def build_mamba_gated_detector(
         temporal_T=temporal_T,
         use_cuda_graph=use_cuda_graph,
         use_whole_graph=use_whole_graph,
+        small_p3_max_threshold=small_p3_max_threshold,
     )
     return model.to(device)

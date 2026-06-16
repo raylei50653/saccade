@@ -11,6 +11,9 @@ Import:
 
 from __future__ import annotations
 
+import hashlib
+import math
+import random
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +25,119 @@ def strip_compiled_keys(sd: dict[str, Any]) -> dict[str, Any]:
     """Remove _orig_mod. prefix inserted by torch.compile, making
     checkpoints compile-agnostic."""
     return {k.replace("._orig_mod.", "."): v for k, v in sd.items()}
+
+
+def seed_everything(seed: int) -> None:
+    """Seed Python and PyTorch without forcing unsupported deterministic kernels."""
+    random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    if torch.backends.cudnn.is_available():
+        torch.backends.cudnn.benchmark = False
+
+
+def parse_sequence_list(value: str) -> list[str]:
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def resolve_training_sequences(
+    data_root: Path,
+    requested: str,
+    holdout: str,
+    *,
+    detector: str = "SDP",
+) -> tuple[list[str] | None, list[str]]:
+    """Resolve an explicit training split and remove held-out sequences."""
+    holdout_seqs = parse_sequence_list(holdout)
+    if requested:
+        train_seqs = parse_sequence_list(requested)
+    elif holdout_seqs:
+        split_dir = data_root / "train"
+        train_seqs = sorted(
+            path.name
+            for path in split_dir.iterdir()
+            if path.is_dir() and path.name.endswith(f"-{detector}")
+        )
+    else:
+        return None, []
+
+    all_requested = sorted(set(train_seqs) | set(holdout_seqs))
+    missing = [seq for seq in all_requested if not (data_root / "train" / seq).is_dir()]
+    if missing:
+        raise ValueError(f"Unknown MOT sequences: {missing}")
+
+    overlap = sorted(set(train_seqs) & set(holdout_seqs))
+    train_seqs = [seq for seq in train_seqs if seq not in holdout_seqs]
+    if not train_seqs:
+        raise ValueError("No training sequences remain after applying --holdout-seqs")
+    if overlap:
+        print(f"[Split] Removed held-out sequences from training: {overlap}")
+    return train_seqs, holdout_seqs
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def capture_rng_state(
+    data_generator: torch.Generator | None = None,
+) -> dict[str, Any]:
+    state: dict[str, Any] = {
+        "python": random.getstate(),
+        "torch": torch.get_rng_state(),
+    }
+    if torch.cuda.is_available():
+        state["cuda"] = torch.cuda.get_rng_state_all()
+    if data_generator is not None:
+        state["dataloader"] = data_generator.get_state()
+    return state
+
+
+def restore_rng_state(
+    state: dict[str, Any],
+    data_generator: torch.Generator | None = None,
+) -> None:
+    random.setstate(state["python"])
+    torch.set_rng_state(state["torch"])
+    if torch.cuda.is_available() and "cuda" in state:
+        torch.cuda.set_rng_state_all(state["cuda"])
+    if data_generator is not None and "dataloader" in state:
+        data_generator.set_state(state["dataloader"])
+
+
+def build_warmup_cosine_scheduler(
+    optimizer: torch.optim.Optimizer,
+    *,
+    total_epochs: int,
+    warmup_epochs: int,
+    min_lr_ratio: float = 0.01,
+) -> torch.optim.lr_scheduler.LambdaLR:
+    """Build one LR schedule: linear warmup followed by cosine decay."""
+    if total_epochs < 1:
+        raise ValueError("total_epochs must be >= 1")
+    if not 0 <= warmup_epochs <= total_epochs:
+        raise ValueError("warmup_epochs must be between 0 and total_epochs")
+    if not 0.0 <= min_lr_ratio <= 1.0:
+        raise ValueError("min_lr_ratio must be between 0 and 1")
+
+    decay_epochs = max(total_epochs - warmup_epochs, 1)
+
+    def lr_lambda(epoch_index: int) -> float:
+        if warmup_epochs > 0 and epoch_index < warmup_epochs:
+            return (epoch_index + 1) / warmup_epochs
+        progress = min(
+            max((epoch_index - warmup_epochs + 1) / decay_epochs, 0.0),
+            1.0,
+        )
+        cosine = 0.5 * (1.0 + math.cos(math.pi * progress))
+        return min_lr_ratio + (1.0 - min_lr_ratio) * cosine
+
+    return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
 
 
 def save_checkpoint(

@@ -5,11 +5,12 @@
 
 // Number of D-dim channels processed per thread block.
 // With N=16 states, this gives K*N threads per block:
-//   K=4  →  64 threads (2 warps)  was 16 (0.5 warp)
+//   K=1  →  16 threads (0.5 warp) — original, low occupancy
+//   K=4  →  64 threads (2 warps)  — current (nsys-verified SM Issue 22% → target ~35%)
 //   K=8  → 128 threads (4 warps)
 //   K=16 → 256 threads (8 warps)
 #ifndef MAMBA_CHANNELS_PER_BLOCK
-#define MAMBA_CHANNELS_PER_BLOCK 1
+#define MAMBA_CHANNELS_PER_BLOCK 4
 #endif
 
 __device__ inline float softplus_f32(float x) {

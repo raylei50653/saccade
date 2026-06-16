@@ -85,4 +85,4 @@ async def test_orchestrator_process_event_batch():
         args, kwargs = mock_chroma.add_memory.call_args
         assert "knife" in kwargs["content"]
         assert kwargs["metadata"]["is_anomaly"] == 1
-        assert mock_redis.client.xack.called
+        assert mock_redis.acknowledge.called

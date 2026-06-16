@@ -94,3 +94,36 @@ def test_load_and_resize_letterbox(mock_read_image):
     assert torch.all(img_padded[:, 140:499, :] == 255)
     # Pixels in the bottom pad region (rows 500 to 639) should be padded with constant 114
     assert torch.all(img_padded[:, 500:639, :] == 114)
+
+
+def test_metadata_only_dataset_does_not_decode_images(tmp_path):
+    seq_dir = tmp_path / "train" / "MOT17-04-SDP"
+    img_dir = seq_dir / "img1"
+    gt_dir = seq_dir / "gt"
+    img_dir.mkdir(parents=True)
+    gt_dir.mkdir()
+    (seq_dir / "seqinfo.ini").write_text(
+        "[Sequence]\nimHeight=1080\nimWidth=1920\n",
+        encoding="utf-8",
+    )
+    (gt_dir / "gt.txt").write_text(
+        "1,1,10,20,30,40,1,1,1.0\n",
+        encoding="utf-8",
+    )
+    for frame_id in range(1, 5):
+        (img_dir / f"{frame_id:06d}.jpg").touch()
+
+    dataset = MOT17TemporalClip(
+        data_root=tmp_path,
+        clip_len=4,
+        stride=4,
+        seqs=["MOT17-04-SDP"],
+        preload_to_ram=False,
+        load_images=False,
+    )
+    with patch("torchvision.io.read_image") as read_image:
+        sample = dataset[0]
+
+    read_image.assert_not_called()
+    assert sample["frames"].shape == (4, 0, 0, 0)
+    assert sample["frame_ids"] == [1, 2, 3, 4]

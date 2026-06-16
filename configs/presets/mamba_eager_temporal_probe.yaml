@@ -1,0 +1,55 @@
+# Eager Mamba preset for streaming-temporal probes.
+# Identical tracker/GMC/relink config to mamba_whole_graph, but with all CUDA
+# graphs disabled so the streaming temporal path (FPN ring buffer, T>1) in
+# MambaGatedDetector._detect_from_feats actually engages — whole-graph forward
+# is single-frame and silently bypasses temporal blocks.
+# Use with a temporal checkpoint to evaluate T=3 streaming inference, and with
+# --no-temporal for the paired T=1 control.
+# Load with: --preset mamba_eager_temporal_probe
+
+# --- Detection & Tiling ---
+tiling: native_640
+preprocess: none
+track_person_only: false
+person_geometry_prior: false
+detection_quality_scaling: false
+
+# --- Mamba Detector ---
+mamba_ckpt: runs/mamba_gt_vgt_mamba_v14/best.ckpt
+fpn_backbone_engine: models/yolo/yolo26s_backbone_640_best.engine
+
+# All graphs off: streaming temporal buffer requires the eager per-frame path,
+# and the head input shape changes while the ring buffer fills (T=1,2,3).
+use_whole_graph: false
+use_cuda_graph: false
+use_tracker_graph: false
+
+# --- GMC ---
+gmc: true
+gmc_downscale: 4
+gmc_fg_mask: false
+
+# --- ReID ---
+reid_mode: "off"
+
+relink_bridge_enabled: true
+relink_bridge_px: 0.25
+relink_bridge_margin: 0.05
+relink_bridge_h_lo: 0.75
+relink_bridge_h_hi: 1.33
+relink_bridge_spatial_gate: 0.0
+
+# --- Tracker Parameters ---
+match_thresh: 0.50
+new_track_thresh: 0.28
+kalman_r_scale: 2.8
+confirm_streak: 3
+confirm_score_thresh: 0.50
+fuse_score_weight: 0.0
+id_stability_filter: false
+per_seq_adapt: false
+geometry_suspect_support: false
+interpolate_tracklets: true
+interpolate_max_gap: 35
+interpolate_min_track_len: 5
+interpolate_min_h: 0

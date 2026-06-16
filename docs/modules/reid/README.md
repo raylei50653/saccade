@@ -34,6 +34,8 @@
 | 2026-05-02 | LaSt-ViT pre-hoc embedding quality | ❌ NO-GO（+0.09pp，SigLIP2 未訓練無區分力）；kernels 保留 |
 | 2026-05-19 | ROI FPN embedding ReID | ❌ NO-GO（cos_thr 全設定 IDs↑、IDF1 持平） |
 | 2026-06-03 | **Appearance 能力上限調查（5 模型 + 4 機制 + SR + 域訓練）** | ❌ **NO-GO 結案**：MOT17 身份在 embedding 空間本質難分（清晰 200+px 框 rank-1 僅 57%、intra-inter gap ~0.03、長 gap rank-1 崩 10–37%）；換模型/加機制/SR 皆撞同一上限。細節：[appearance_ceiling_mot17](../../research/reid/appearance_ceiling_mot17.md) |
+| 2026-06-11 | Appearance relink gate（顏色直方圖 + OSNet hard pool） | ❌ NO-GO（全 gate AUC≈0.50、短 gap 反向 0.33；長 gap 80+ 唯一正訊號 0.66）；外觀方向結案，registry [#32](../../reference/no_go_registry.md) |
+| 2026-06-13 | Mamba head 特徵作 relink embedding（含 T3→T1 一致性特徵） | ❌ NO-GO（hard pool AUC 0.438；consistency ≠ discriminability，detection 特徵對個體無區分力，與 ROI FPN 一致），registry [#35](../../reference/no_go_registry.md) |
 | — | ReID stack 疊加 | ⏸️ 暫緩，待 **MOT-域訓練的 ReID 特徵**（非 Market）；先過 `reid_id_benchmark.py` gate |
 
 ## 📋 模組 TODO

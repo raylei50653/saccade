@@ -170,8 +170,6 @@ class GatedYOLODetector(nn.Module):
         for p in self.yolo_model.parameters():
             p.requires_grad_(not cfg.freeze_backbone)
 
-        _ = self._probe_feat_channels(device)
-
         self.gate = TrackSpatialGate(
             scales=tuple(cfg.scales),
             sigma_scale=cfg.gate_sigma_scale,
@@ -201,6 +199,30 @@ class GatedYOLODetector(nn.Module):
             self._gate_layers[scale] = gl
             _inject_gate(self.yolo_model.model[idx], gl)
 
+    def train(self, mode: bool = True) -> GatedYOLODetector:
+        """Train the gate while keeping a frozen YOLO's weights and BN stats fixed.
+
+        The YOLO submodule stays in *training* mode so its Detect head still emits
+        the one2many/one2one training dict the loss consumes; only its BatchNorm
+        layers are forced to eval so running stats stay frozen. (Calling
+        ``yolo_model.eval()`` here would flip the head to inference-tuple output
+        and break ``out["one2many"]`` in the teacher training loop.)
+        """
+        super().train(mode)
+        if mode and self.cfg.freeze_backbone:
+            self.yolo_model.train()
+            # Freeze BN running stats; train-mode batch-stat normalization of a
+            # frozen COCO head on small MOT batches is unstable. MOT BN adaptation
+            # is done via an explicit AdaBN recalibration pass (forward-only,
+            # then frozen) before training, not by keeping BN in train mode.
+            for m in self.yolo_model.modules():
+                if isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)):
+                    m.eval()
+            self.gate.train()
+            if self.fusion is not None:
+                self.fusion.train()
+        return self
+
     # ------------------------------------------------------------------
     # Feature cache access (for ROI ReID)
     # ------------------------------------------------------------------
@@ -226,26 +248,6 @@ class GatedYOLODetector(nn.Module):
         for gl in self._gate_layers.values():
             gl._det_boxes_prev = boxes
             gl._det_scores_prev = scores
-
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-    def _probe_feat_channels(self, device: str | torch.device) -> dict[str, int]:
-        channels: dict[str, int] = {}
-        tmp_hooks = []
-        for scale in self.cfg.scales:
-            idx = _GATE_LAYER_IDX[scale]
-
-            def _h(m: nn.Module, i: Any, o: torch.Tensor, s: str = scale) -> None:
-                channels[s] = o.shape[1]
-
-            tmp_hooks.append(self.yolo_model.model[idx].register_forward_hook(_h))
-        with torch.no_grad():
-            dummy = torch.zeros(1, 3, 640, 640, device=device)
-            self.yolo_model(dummy)
-        for h in tmp_hooks:
-            h.remove()
-        return channels
 
     # ------------------------------------------------------------------
     # Forward

@@ -1,0 +1,206 @@
+{
+  "label": "mamba_gt_v14replica_t3_t1",
+  "checkpoint": "runs/mamba_gt_v14replica_t3_t1/best.ckpt",
+  "conf_floor": 0.001,
+  "score_thresholds": [
+    0.001,
+    0.1,
+    0.25
+  ],
+  "nms_iou": 0.5,
+  "match_iou": 0.5,
+  "sequences": {
+    "MOT17-02-SDP": {
+      "frames": 600,
+      "original_hw": [
+        1080,
+        1920
+      ],
+      "thresholds": {
+        "0.001": {
+          "predictions": 23566,
+          "bins": {
+            "all": {
+              "gt": 10993,
+              "matched": 10543,
+              "fn": 450,
+              "recall": 0.9590648594560175,
+              "matched_mean_iou": 0.883536569971316
+            },
+            "h_ge128": {
+              "gt": 3626,
+              "matched": 3565,
+              "fn": 61,
+              "recall": 0.983177054605626,
+              "matched_mean_iou": 0.922028087298967
+            },
+            "min_ge16": {
+              "gt": 3860,
+              "matched": 3791,
+              "fn": 69,
+              "recall": 0.9821243523316062,
+              "matched_mean_iou": 0.9209914767657255
+            },
+            "h_64to128": {
+              "gt": 5365,
+              "matched": 5204,
+              "fn": 161,
+              "recall": 0.969990680335508,
+              "matched_mean_iou": 0.879035150782591
+            },
+            "min_8to16": {
+              "gt": 4874,
+              "matched": 4743,
+              "fn": 131,
+              "recall": 0.9731226918342224,
+              "matched_mean_iou": 0.8814242395725327
+            },
+            "h_32to64": {
+              "gt": 1958,
+              "matched": 1754,
+              "fn": 204,
+              "recall": 0.8958120531154239,
+              "matched_mean_iou": 0.8223108068499353
+            },
+            "min_4to8": {
+              "gt": 2259,
+              "matched": 2009,
+              "fn": 250,
+              "recall": 0.8893315626383356,
+              "matched_mean_iou": 0.8178457941743139
+            },
+            "h_lt32": {
+              "gt": 44,
+              "matched": 20,
+              "fn": 24,
+              "recall": 0.45454545454545453,
+              "matched_mean_iou": 0.5631923049688339
+            }
+          }
+        },
+        "0.1": {
+          "predictions": 11910,
+          "bins": {
+            "all": {
+              "gt": 10993,
+              "matched": 10376,
+              "fn": 617,
+              "recall": 0.9438733739652506,
+              "matched_mean_iou": 0.8865553212963165
+            },
+            "h_ge128": {
+              "gt": 3626,
+              "matched": 3524,
+              "fn": 102,
+              "recall": 0.9718698290126861,
+              "matched_mean_iou": 0.9248507081718098
+            },
+            "min_ge16": {
+              "gt": 3860,
+              "matched": 3746,
+              "fn": 114,
+              "recall": 0.9704663212435233,
+              "matched_mean_iou": 0.9238994396980345
+            },
+            "h_64to128": {
+              "gt": 5365,
+              "matched": 5099,
+              "fn": 266,
+              "recall": 0.9504193849021435,
+              "matched_mean_iou": 0.8825436201743646
+            },
+            "min_8to16": {
+              "gt": 4874,
+              "matched": 4650,
+              "fn": 224,
+              "recall": 0.9540418547394337,
+              "matched_mean_iou": 0.8847507706637023
+            },
+            "h_32to64": {
+              "gt": 1958,
+              "matched": 1733,
+              "fn": 225,
+              "recall": 0.8850868232890705,
+              "matched_mean_iou": 0.8242183224493138
+            },
+            "min_4to8": {
+              "gt": 2259,
+              "matched": 1980,
+              "fn": 279,
+              "recall": 0.8764940239043825,
+              "matched_mean_iou": 0.8201412268058218
+            },
+            "h_lt32": {
+              "gt": 44,
+              "matched": 20,
+              "fn": 24,
+              "recall": 0.45454545454545453,
+              "matched_mean_iou": 0.5631923049688339
+            }
+          }
+        },
+        "0.25": {
+          "predictions": 10894,
+          "bins": {
+            "all": {
+              "gt": 10993,
+              "matched": 10205,
+              "fn": 788,
+              "recall": 0.9283180205585373,
+              "matched_mean_iou": 0.8891330856543321
+            },
+            "h_ge128": {
+              "gt": 3626,
+              "matched": 3501,
+              "fn": 125,
+              "recall": 0.9655267512410369,
+              "matched_mean_iou": 0.9261224964999091
+            },
+            "min_ge16": {
+              "gt": 3860,
+              "matched": 3720,
+              "fn": 140,
+              "recall": 0.9637305699481865,
+              "matched_mean_iou": 0.925473291723318
+            },
+            "h_64to128": {
+              "gt": 5365,
+              "matched": 5004,
+              "fn": 361,
+              "recall": 0.9327120223671947,
+              "matched_mean_iou": 0.8856678385909894
+            },
+            "min_8to16": {
+              "gt": 4874,
+              "matched": 4558,
+              "fn": 316,
+              "recall": 0.9351661879359868,
+              "matched_mean_iou": 0.8875298594607236
+            },
+            "h_32to64": {
+              "gt": 1958,
+              "matched": 1680,
+              "fn": 278,
+              "recall": 0.8580183861082737,
+              "matched_mean_iou": 0.8262515288378511
+            },
+            "min_4to8": {
+              "gt": 2259,
+              "matched": 1927,
+              "fn": 332,
+              "recall": 0.8530323151837096,
+              "matched_mean_iou": 0.8227718705084266
+            },
+            "h_lt32": {
+              "gt": 44,
+              "matched": 20,
+              "fn": 24,
+              "recall": 0.45454545454545453,
+              "matched_mean_iou": 0.5631923049688339
+            }
+          }
+        }
+      }
+    }
+  }
+}

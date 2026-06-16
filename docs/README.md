@@ -9,7 +9,7 @@
 Saccade 的文檔庫採用「模組化物理結構」配合「全局共享目錄」的組織形式：
 
 * 📦 **[modules/](modules)**：**核心模組化文檔庫**。物理上按系統功能與 `mot17.py` 評測模組劃分，包含各自的設計、決策 (ADR) 與實驗分析。
-* 📊 **[reference/](reference)**：全局評測基準 (benchmarks)、多進程並行評測手冊與跨模組共享的流程規範。
+* 📊 **[reference/](reference)**：全局評測基準 (benchmarks)、多進程並行評測手冊與跨模組共享的流程規範。亦含 **[NO-GO 全局登記表](reference/no_go_registry.md)**（已結案/已踩雷方向總覽，探索新方向前先查）。
 * 📦 **[archive/](archive)**：過時或已完成的歷史參考資料（如 Option D 探索結論）。
 * 🔬 **[research/](research)**：全局性的評測與訓練流程（如 evaluator 分析或訓練共享設施）。
 
@@ -23,7 +23,7 @@ Saccade 的文檔庫採用「模組化物理結構」配合「全局共享目錄
 
 | 模組名稱 | 核心職責 | 主要文檔連結 |
 |---|---|---|
-| 🔍 **[detection/](modules/detection)** | YOLO偵測、Mamba Head 網絡、NMS 抑制、影像預處理與 Tiling | * [Mamba Head 設計與 PixelShuffle](modules/detection/option-f-mamba-head.md)<br>* [CUDA Graph Capture 重大 Bug 分析](modules/detection/research/mamba-cuda-graph-bug.md) |
+| 🔍 **[detection/](modules/detection)** | YOLO偵測、Mamba Head 網絡、NMS 抑制、影像預處理與 Tiling | * [Mamba Head 設計與 PixelShuffle](modules/detection/option-f-mamba-head.md)<br>* [v14-R 訓練規範](modules/detection/mamba-v14r-training-protocol.md)<br>* [CUDA Graph Capture 重大 Bug 分析](modules/detection/research/mamba-cuda-graph-bug.md) |
 | 📐 **[geometry/](modules/geometry)** | GMC 全局運動補償、卡爾曼濾波協方差、寬高比限制與幾何優先級 | * [GPU Tracker 深度解析](modules/geometry/tracker_deep_dive.md)<br>* [GMC 與卡爾曼濾波消融實驗](modules/geometry/research/fp_fn_recovery_and_gmc.md) |
 | 🌀 **[motion/](modules/motion)** | 軌跡速度/加速度 EMA 平滑、運動一致性檢查 (z-score) 與運動 Fallback | * [Motion 參數配置說明](modules/motion/README.md) |
 | 🧬 **[reid/](modules/reid)** | SigLIP 2 特徵提取、Feature Bank 外觀庫更新與去重、裁剪影格邊緣 | * [ReID 與 Feature Bank 架構](modules/reid/architecture.md)<br>* [SigLIP 2 升級決策](decisions/005-yolo26-siglip2-upgrade.md) |

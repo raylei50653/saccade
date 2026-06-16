@@ -79,12 +79,12 @@ MOT / tracking / relink 主線開發從這些檔案出發：
 
 | preset | engine | IDF1 | MOTA | HOTA | IDs | FPS |
 |--------|--------|------|------|------|-----|-----|
-| **mamba_whole_graph**（當前 baseline，ReID off） | mamba v14 + yolo26s_640 | **73.3%** | **77.1%** | **66.7%** | **536** | **157.1** |
+| **mamba_whole_graph**（當前 baseline，ReID off） | mamba v14 + yolo26s_640 | **75.1%** | **77.7%** | **68.2%** | **482** | **223.2** |
 | mamba_optimal（head-only graph，前身） | mamba v14 + yolo26s_640 | 73.4% | 77.1% | 66.7% | 533 | 116.7 |
 | speed（舊 yolo26 路線，參考） | yolo26s_960 | 52.3% | 41.8% | — | 473 | 138.9 |
 | baseline（舊 yolo26 路線，參考） | yolo26m_960 | 51.4% | 43.5% | — | 501 | 113.2 |
 
-`mamba_whole_graph` 完整指標：DetA 69.9% / AssA 63.9% / FP 3797 / FN 21333 / Rcll 81.0% / Prcn 96.0%（2026-06-03 SDP train，AssA 為瓶頸）。
+`mamba_whole_graph` 完整指標：DetA 70.0% / AssA 66.6% / FP 3514 / FN 21082 / Rcll 81.2% / Prcn 96.3%（2026-06-13 SDP train，含 bidir bridge relink 預設開 + GMC cuFFT graph；AssA 仍為瓶頸）。
 
 使用方式：
 ```bash
