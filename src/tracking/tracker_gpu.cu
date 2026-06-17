@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <cstdio>
 #include <cmath>
 #include <sstream>
 #include <unordered_map>
@@ -92,7 +93,10 @@ __global__ void gmc_kernel(float* states, float* covs, bool* active, const float
     }
 }
 
-// Fused predict + GMC + innovation S_inv — single pass over tracks.
+// Fused predict + GMC control input + innovation S_inv — single pass over tracks.
+// GMC translation is fed as a deterministic control input into the Kalman predict
+// step (x_pos += v + gmc_disp), so the velocity state learns only object motion,
+// not camera motion. This avoids the GMC+Kalman double-counting from post-hoc warp.
 __global__ void predict_gmc_sinv_fused_kernel(
     float* states, float* covs, bool* active, int* age,
     const float* gmc, float* s_inv_out,
@@ -106,37 +110,41 @@ __global__ void predict_gmc_sinv_fused_kernel(
         return;
     }
 
-    kf_gpu::predict(states + idx * 8, covs + idx * 64);
-    age[idx]++;
-    if (age[idx] >= max_age) {
-        active[idx] = false;
-        for (int i = 0; i < 16; ++i) s_inv_out[idx * 16 + i] = 0.0f;
-        return;
-    }
-
+    // GMC translation as control input: feed camera displacement into the
+    // position state BEFORE Kalman predict, so the velocity state learns
+    // only the residual (object) motion.
     if (gmc) {
         float* x = states + idx * 8;
-        float* P = covs + idx * 64;
-        float H00 = gmc[0], H01 = gmc[1], H02 = gmc[2], H10 = gmc[3], H11 = gmc[4], H12 = gmc[5];
-        float old_cx = x[0], old_cy = x[1];
-        x[0] = H00 * old_cx + H01 * old_cy + H02;
-        x[1] = H10 * old_cx + H11 * old_cy + H12;
+        float dx = gmc[2];  // translation x
+        float dy = gmc[5];  // translation y
+        x[0] += dx;         // add camera motion to position
+        x[1] += dy;
+        // Rotation/scale components: apply to velocity (coordinate transform)
+        float H00 = gmc[0], H01 = gmc[1], H10 = gmc[3], H11 = gmc[4];
         float old_vx = x[4], old_vy = x[5];
         x[4] = H00 * old_vx + H01 * old_vy;
         x[5] = H10 * old_vx + H11 * old_vy;
-
+        // Covariance rotation
+        float* P = covs + idx * 64;
         float p00 = P[0], p01 = P[1], p10 = P[8], p11 = P[9];
         float mp00 = H00 * p00 + H01 * p10, mp01 = H00 * p01 + H01 * p11;
         float mp10 = H10 * p00 + H11 * p10, mp11 = H10 * p01 + H11 * p11;
         P[0] = mp00 * H00 + mp01 * H01; P[1] = mp00 * H10 + mp01 * H11;
         P[8] = mp10 * H00 + mp11 * H01; P[9] = mp10 * H10 + mp11 * H11;
-
         float* P2 = P + 36;
         p00 = P2[0]; p01 = P2[1]; p10 = P2[8]; p11 = P2[9];
         mp00 = H00 * p00 + H01 * p10; mp01 = H00 * p01 + H01 * p11;
         mp10 = H10 * p00 + H11 * p10; mp11 = H10 * p01 + H11 * p11;
         P2[0] = mp00 * H00 + mp01 * H01; P2[1] = mp00 * H10 + mp01 * H11;
         P2[8] = mp10 * H00 + mp11 * H01; P2[9] = mp10 * H10 + mp11 * H11;
+    }
+
+    kf_gpu::predict(states + idx * 8, covs + idx * 64);
+    age[idx]++;
+    if (age[idx] >= max_age) {
+        active[idx] = false;
+        for (int i = 0; i < 16; ++i) s_inv_out[idx * 16 + i] = 0.0f;
+        return;
     }
 
     kf_gpu::compute_S_inv(states + idx * 8, covs + idx * 64, s_inv_out + idx * 16);
@@ -308,7 +316,8 @@ __global__ void count_stage1_candidates_kernel(
 __global__ void compute_track_occlusion_kernel(
     const float* states, const bool* active, float* occ_coeff, int max_objs, float oao_tau,
     int* occ_front_ttl, float occ_iou_thresh, float occ_foot_gap, int occ_ttl,
-    int* occ_partner)
+    int* occ_partner, int* occ_partner_all, int oao_occ_mode, float oao_crowd_radius,
+    float oao_height_gate, float oao_foot_gate, int* occ_duration, float oao_ramp_frames)
 {
     if (oao_tau <= 0.0f && !occ_front_ttl) return;
     int t = blockIdx.x * blockDim.x + threadIdx.x;
@@ -317,6 +326,8 @@ __global__ void compute_track_occlusion_kernel(
         occ_coeff[t] = 0.0f;
         if (occ_front_ttl) occ_front_ttl[t] = 0;
         if (occ_partner) occ_partner[t] = -1;
+        if (occ_partner_all) occ_partner_all[t] = -1;
+        if (occ_duration) occ_duration[t] = 0;
         return;
     }
 
@@ -326,11 +337,39 @@ __global__ void compute_track_occlusion_kernel(
     float tx2 = st[0] + tw * 0.5f, ty2 = st[1] + th * 0.5f;
     float t_area = (tx2 - tx1) * (ty2 - ty1);
 
+    // Union-coverage mode rasterises box t into an 8x8 grid; a cell is "covered"
+    // when its centre falls inside any other active box. coverage = covered/64 in
+    // [0,1], counting multi-overlap once (unlike max, which sees only the single
+    // worst partner, or sum, which double-counts). Captures "how crowded around t".
+    constexpr int GRID = 8;
+    const bool use_union = (oao_occ_mode == 1);
+    const float cw = (tx2 - tx1) / GRID, ch = (ty2 - ty1) / GRID;
+    unsigned long long covered = 0ULL;
+    // Local crowd count: other tracks whose centre is within oao_crowd_radius*h of t.
+    const bool use_crowd = (oao_crowd_radius > 0.0f);
+    const float crowd_r2 = (oao_crowd_radius * th) * (oao_crowd_radius * th);
+    int crowd_n = 0;
+    // Same-height gate: only SAME-DEPTH partners (|h_t - h_j| <= gate * max(h))
+    // contribute to the OAO signal, so projection overlaps between near/far people
+    // (different heights) don't trigger a penalty. max_occ/arg_partner stay ungated
+    // (feed occ_front/occ_state, which has its own foot-gap gate → bit-exact there).
+    const bool use_hgate = (oao_height_gate > 0.0f);
+    // Same-foot gate: only same-DEPTH partners (|footy_t - footy_j| <= gate * h_ref)
+    // contribute. Foot-line is a truer depth proxy than height (independent of how
+    // tall each person is), matching the proven occ_front foot-gap signal.
+    const bool use_fgate = (oao_foot_gate > 0.0f);
+    float max_occ_g = 0.0f;
+    unsigned long long covered_g = 0ULL;
+
     float max_occ = 0.0f;
     int arg_partner = -1;
     for (int j = 0; j < max_objs; ++j) {
         if (j == t || !active[j]) continue;
         const float* sj = states + j * 8;
+        if (use_crowd) {
+            float ddx = sj[0] - st[0], ddy = sj[1] - st[1];
+            if (ddx * ddx + ddy * ddy < crowd_r2) ++crowd_n;
+        }
         float jw = sj[2] * sj[3], jh = sj[3];
         float jx1 = sj[0] - jw * 0.5f, jy1 = sj[1] - jh * 0.5f;
         float jx2 = sj[0] + jw * 0.5f, jy2 = sj[1] + jh * 0.5f;
@@ -341,8 +380,49 @@ __global__ void compute_track_occlusion_kernel(
         if (inter <= 0.0f) continue;
         float iou = inter / (t_area + j_area - inter + 1e-6f);
         if (iou > max_occ) { max_occ = iou; arg_partner = j; }
+        bool h_ok = true;
+        if (use_hgate) h_ok = (fabsf(th - jh) <= oao_height_gate * fmaxf(th, jh));
+        if (use_fgate) {
+            float fref = 0.5f * (th + jh);
+            h_ok = h_ok && (fabsf(jy2 - ty2) <= oao_foot_gate * fmaxf(fref, 1e-3f));
+        }
+        if (h_ok && iou > max_occ_g) max_occ_g = iou;
+        if (use_union && cw > 0.0f && ch > 0.0f) {
+            // Cells whose centre (tx1+(gx+0.5)*cw) lies within [ix1,ix2].
+            int gx0 = max(0, (int)ceilf((ix1 - tx1) / cw - 0.5f));
+            int gx1 = min(GRID - 1, (int)floorf((ix2 - tx1) / cw - 0.5f));
+            int gy0 = max(0, (int)ceilf((iy1 - ty1) / ch - 0.5f));
+            int gy1 = min(GRID - 1, (int)floorf((iy2 - ty1) / ch - 0.5f));
+            for (int gy = gy0; gy <= gy1; ++gy)
+                for (int gx = gx0; gx <= gx1; ++gx) {
+                    unsigned long long bit = (1ULL << (gy * GRID + gx));
+                    covered |= bit;
+                    if (h_ok) covered_g |= bit;
+                }
+        }
     }
-    occ_coeff[t] = max_occ;
+    bool use_gate = use_hgate || use_fgate;
+    unsigned long long cov_sel = use_gate ? covered_g : covered;
+    float max_sel = use_gate ? max_occ_g : max_occ;
+    float occ_base = use_union ? (__popcll(cov_sel) / (float)(GRID * GRID)) : max_sel;
+    // Crowd multiplier (1 - 1/N), N = local people incl. self: isolated→0, pair→0.5,
+    // crowd→~1. Down-weights sparse overlaps (real side-by-side) vs dense crowds.
+    if (use_crowd) occ_base *= (1.0f - 1.0f / (float)(crowd_n + 1));
+    // Duration ramp: a per-track counter of consecutive overlapped frames. Persistent
+    // overlaps (dense crowds) ramp to the full penalty; transient crossings (sparse
+    // scenes) get a reduced penalty so the real track survives the brief overlap.
+    if (occ_duration) {
+        bool overlapped = (occ_base > 0.0f);
+        int dur = overlapped ? (occ_duration[t] + 1) : 0;
+        occ_duration[t] = dur;
+        if (oao_ramp_frames > 0.0f && overlapped)
+            occ_base *= fminf(1.0f, (float)dur / oao_ramp_frames);
+    }
+    occ_coeff[t] = occ_base;
+    // Unconditional max-overlap partner (NOT depth/front-gated): used by the
+    // contention-gated OAO to test whether a detection is also claimed by the
+    // track that overlaps t most.
+    if (occ_partner_all) occ_partner_all[t] = (max_occ > 0.0f) ? arg_partner : -1;
 
     if (occ_front_ttl) {
         bool is_front = false;
@@ -362,6 +442,46 @@ __global__ void compute_track_occlusion_kernel(
     }
 }
 
+// Soft score weighting for the OA-SORT OAO penalty. Plain OAO applies the full
+// penalty to EVERY overlapped detection regardless of confidence — but suppressed
+// FPs are systematically lower-score than suppressed TPs, so the harm (tipping a
+// real box out of the gate) lands on higher-score detections. Rather than cut them
+// entirely (which would also kill the high-score re-routing that makes dense static
+// scenes win), scale the penalty DOWN for confident detections:
+//   scale = 1 - oao_score_w * det_score   (clamped to >= 0)
+//   oao_score_w = 0   → scale 1 (plain OAO, bit-exact legacy)
+//   oao_score_w = 0.5 → a score-1.0 det gets half penalty; a score-0 det gets full
+//   oao_score_w = 1.0 → a score-1.0 det gets zero penalty
+__device__ __forceinline__ float oao_score_scale(float det_score, float oao_score_w)
+{
+    if (oao_score_w <= 0.0f) return 1.0f;
+    return fmaxf(0.0f, 1.0f - oao_score_w * det_score);
+}
+
+// Contention gate: when oao_contest_thresh >= 0, only penalise a detection that is
+// ALSO claimed by the track overlapping t most (partner-pred IoU >= thresh) — a
+// genuine assignment ambiguity, not an uncontested 1:1 match.
+__device__ __forceinline__ bool oao_penalize_match(
+    const float* trk_states, const int* occ_partner_all,
+    int t, const float* det_box, float oao_contest_thresh)
+{
+    if (oao_contest_thresh < 0.0f) return true;   // plain OAO (bit-exact legacy)
+    if (!occ_partner_all) return false;
+    int p = occ_partner_all[t];
+    if (p < 0) return false;
+    const float* sp = trk_states + p * 8;
+    float pw = sp[2] * sp[3], ph = sp[3];
+    float px1 = sp[0] - pw * 0.5f, py1 = sp[1] - ph * 0.5f;
+    float px2 = sp[0] + pw * 0.5f, py2 = sp[1] + ph * 0.5f;
+    float ix1 = fmaxf(px1, det_box[0]), iy1 = fmaxf(py1, det_box[1]);
+    float ix2 = fminf(px2, det_box[2]), iy2 = fminf(py2, det_box[3]);
+    float inter = fmaxf(0.0f, ix2 - ix1) * fmaxf(0.0f, iy2 - iy1);
+    float pa = (px2 - px1) * (py2 - py1);
+    float ba = (det_box[2] - det_box[0]) * (det_box[3] - det_box[1]);
+    float iou = inter / (pa + ba - inter + 1e-6f);
+    return iou >= oao_contest_thresh;
+}
+
 // Fused stage-1 gate + cost computation for the no-ReID fast path.
 // When embeddings are null, candidate_count is needed only for the appearance
 // branch (which is disabled), so the count and cost can be safely fused into
@@ -375,6 +495,7 @@ __global__ void stage1_cost_fused_kernel(
     float vel_dir_weight, float fuse_score_weight,
     const float* det_scores,
     const float* d_occ_coeff, float oao_tau,
+    const int* occ_partner_all, float oao_contest_thresh, float oao_score_w,
     const int* occ_front_ttl, float occ_cost_weight,
     int* cand_n, float* cand_costs, int* cand_indices, int cand_stride,
     float cand_cost_cap)
@@ -410,11 +531,12 @@ __global__ void stage1_cost_fused_kernel(
     atomicAdd(&candidate_count[t], 1);
 
     float ds = det_scores ? det_scores[d] : 0.5f;
-    float fused_iou = iou * (1.0f - fuse_score_weight * ds);
+    float fused_iou = iou * (1.0f - fuse_score_weight * (1.0f - ds));
     float iou_cost_val = 1.0f - fused_iou;
 
-    if (d_occ_coeff && oao_tau > 0.0f)
-        iou_cost_val = fminf(1.0f, iou_cost_val + oao_tau * d_occ_coeff[t]);
+    if (d_occ_coeff && oao_tau > 0.0f &&
+        oao_penalize_match(trk_states, occ_partner_all, t, b2, oao_contest_thresh))
+        iou_cost_val = fminf(1.0f, iou_cost_val + oao_tau * d_occ_coeff[t] * oao_score_scale(ds, oao_score_w));
 
     if (vel_dir_weight > 0.0f) {
         float vx = st[4], vy = st[5];
@@ -464,6 +586,7 @@ __global__ void compute_conditional_cost_kernel(
     float cos_threshold, float iou_low,
     int reid_min_candidates,
     const float* d_occ_coeff, float oao_tau,
+    const int* occ_partner_all, float oao_contest_thresh, float oao_score_w,
     const int* occ_front_ttl, float occ_cost_weight,
     int* cand_n, float* cand_costs, int* cand_indices, int cand_stride,
     float cand_cost_cap)
@@ -495,7 +618,7 @@ __global__ void compute_conditional_cost_kernel(
     }
 
     float ds = det_scores ? det_scores[d] : 0.5f;
-    float fused_iou = iou * (1.0f - fuse_score_weight * ds);
+    float fused_iou = iou * (1.0f - fuse_score_weight * (1.0f - ds));
     float iou_cost = 1.0f - fused_iou;
     float cost;
     bool try_appearance = (candidate_count[t] >= reid_min_candidates && has_clean_embedding[t] && trk_embeds && det_embeds);
@@ -538,8 +661,9 @@ __global__ void compute_conditional_cost_kernel(
     }
 
     // OA-SORT OAO: tracks occluded by other tracks get a cost penalty to prevent cost confusion
-    if (oao_tau > 0.0f && d_occ_coeff) {
-        cost = fminf(1.0f, cost + oao_tau * d_occ_coeff[t]);
+    if (oao_tau > 0.0f && d_occ_coeff &&
+        oao_penalize_match(trk_states, occ_partner_all, t, b2, oao_contest_thresh)) {
+        cost = fminf(1.0f, cost + oao_tau * d_occ_coeff[t] * oao_score_scale(ds, oao_score_w));
     }
 
     // Occluder-side depth mutual-exclusion (see stage1_cost_fused_kernel).
@@ -770,7 +894,10 @@ __global__ void parallel_auction_shmem_kernel(
     const int* topk_indices, const float* topk_probs,
     uint64_t* g_prices, int* trk_to_det, int* det_to_trk,
     int* pending_det, uint64_t* pending_bid,
-    int n_trk, int n_det, int K, float epsilon)
+    int n_trk, int n_det, int K, float epsilon,
+    const int* age, float freshness_w,
+    const int* hit_streak, float history_w,
+    const float* states, const float* det_boxes, float stability_w)
 {
     extern __shared__ uint64_t s_prices_u64[];
 
@@ -803,6 +930,23 @@ __global__ void parallel_auction_shmem_kernel(
                                                     : (best_val - second_best_val + epsilon);
             float current_price = __int_as_float((int)(s_prices_u64[best_det] >> 32));
             bid = current_price + inc;
+            // Freshness bias: tracks matched more recently (smaller time_since_update
+            // = age) bid higher, so a continuously-tracked incumbent beats a staler
+            // re-acquiring track for a contested detection. Added to the absolute bid
+            // (not the val) because a per-track val offset cancels in the best-vs-second
+            // margin and most contests are single-candidate (margin == epsilon).
+            if (freshness_w > 0.0f && age)
+                bid += freshness_w / (1.0f + (float)age[t]);
+            // Stability bias: tracks whose predicted height matches the
+            // detection height closely bid higher (raw |trk_h - det_h|/det_h).
+            if (stability_w > 0.0f && states && det_boxes && best_det >= 0) {
+                float trk_h = fmaxf(states[t * 8 + 3], 1e-3f);
+                float det_h = det_boxes[best_det * 4 + 3] - det_boxes[best_det * 4 + 1];
+                if (det_h > 1e-3f) {
+                    float dh_rel = fabsf(trk_h - det_h) / det_h;
+                    bid += stability_w / (1.0f + dh_rel);
+                }
+            }
 
             uint32_t bid_float_bits = __float_as_uint(bid);
             uint32_t tie_breaker = n_trk - t;
@@ -2017,6 +2161,10 @@ public:
         checkCuda(cudaMemset(d_occ_front_ttl_, 0, max_objs_ * sizeof(int)));
         checkCuda(cudaMalloc(&d_occ_partner_, max_objs_ * sizeof(int)));
         checkCuda(cudaMemset(d_occ_partner_, -1, max_objs_ * sizeof(int)));
+        checkCuda(cudaMalloc(&d_occ_partner_all_, max_objs_ * sizeof(int)));
+        checkCuda(cudaMemset(d_occ_partner_all_, -1, max_objs_ * sizeof(int)));
+        checkCuda(cudaMalloc(&d_occ_duration_, max_objs_ * sizeof(int)));
+        checkCuda(cudaMemset(d_occ_duration_, 0, max_objs_ * sizeof(int)));
 
         // Auction pending buffers (used by commit_auction_results_kernel)
         checkCuda(cudaMalloc(&d_pending_det_, max_objs_ * sizeof(int)));
@@ -2043,6 +2191,8 @@ public:
         checkCuda(cudaMemset(d_state_, 0, max_objs_ * sizeof(int)));
         checkCuda(cudaMemset(d_occ_front_ttl_, 0, max_objs_ * sizeof(int)));
         checkCuda(cudaMemset(d_occ_partner_, -1, max_objs_ * sizeof(int)));
+        checkCuda(cudaMemset(d_occ_partner_all_, -1, max_objs_ * sizeof(int)));
+        checkCuda(cudaMemset(d_occ_duration_, 0, max_objs_ * sizeof(int)));
         checkCuda(cudaMemset(d_hit_streak_, 0, max_objs_ * sizeof(int)));
         checkCuda(cudaMemset(d_confirm_streak_required_, 0, max_objs_ * sizeof(int)));
         checkCuda(cudaMemset(d_score_sum_, 0, max_objs_ * sizeof(float)));
@@ -2120,6 +2270,8 @@ public:
         cudaFree(d_occ_coeff_);
         cudaFree(d_occ_front_ttl_);
         cudaFree(d_occ_partner_);
+        cudaFree(d_occ_partner_all_);
+        cudaFree(d_occ_duration_);
         cudaFree(d_pending_det_); cudaFree(d_pending_bid_);
         // M2
         cudaFree(d_free_slots_); cudaFree(d_n_free_); cudaFree(d_slot_cursor_);
@@ -2217,11 +2369,15 @@ public:
         dim3 b_size(16, 16);
         dim3 g_size((max_assoc_ + 15) / 16, (max_objs_ + 15) / 16);
 
+        const bool oao_contest_on = (oao_tau_ > 0.0f && oao_contest_thresh_ >= 0.0f);
         kernel::compute_track_occlusion_kernel<<<blocks, threads, 0, stream>>>(
             d_states_, d_active_, d_occ_coeff_, max_objs_, oao_tau_,
             occ_state_enabled_ ? d_occ_front_ttl_ : nullptr,
             occ_iou_thresh_, occ_foot_gap_, occ_ttl_,
-            occ_state_enabled_ ? d_occ_partner_ : nullptr);
+            occ_state_enabled_ ? d_occ_partner_ : nullptr,
+            oao_contest_on ? d_occ_partner_all_ : nullptr, oao_occ_mode_, oao_crowd_radius_,
+            oao_height_gate_, oao_foot_gate_,
+            oao_ramp_frames_ > 0.0f ? d_occ_duration_ : nullptr, oao_ramp_frames_);
 
         nvtxRangePushA("Assoc/CostMatrix");
         // Sparse-candidate cap: a candidate is selectable by SOME Sinkhorn stage iff
@@ -2245,6 +2401,7 @@ public:
                 reid_cos_threshold_, reid_iou_low_,
                 reid_min_candidates_,
                 oao_tau_ > 0.0f ? d_occ_coeff_ : nullptr, oao_tau_,
+                oao_contest_on ? d_occ_partner_all_ : nullptr, oao_contest_thresh_, oao_score_w_,
                 occ_state_enabled_ ? d_occ_front_ttl_ : nullptr, occ_cost_weight_,
                 d_cand_n_, d_cand_costs_, d_cand_indices_, cand_stride_, cand_cost_cap);
         } else {
@@ -2257,6 +2414,7 @@ public:
                 vel_dir_weight_, fuse_score_weight_,
                 d_scores,
                 oao_tau_ > 0.0f ? d_occ_coeff_ : nullptr, oao_tau_,
+                oao_contest_on ? d_occ_partner_all_ : nullptr, oao_contest_thresh_, oao_score_w_,
                 occ_state_enabled_ ? d_occ_front_ttl_ : nullptr, occ_cost_weight_,
                 d_cand_n_, d_cand_costs_, d_cand_indices_, cand_stride_, cand_cost_cap);
         }
@@ -2287,6 +2445,29 @@ public:
             d_topk_indices_, d_topk_probs_);
         nvtxRangePop();
 
+        // Freshness bid weight (env SACCADE_FRESHNESS_W, default 0 = bit-identical).
+        // Read once; biases the auction toward recently-matched (fresh) tracks.
+        static const float freshness_w = []() {
+            const char* v = std::getenv("SACCADE_FRESHNESS_W");
+            return v ? std::strtof(v, nullptr) : 0.0f;
+        }();
+
+        // History bid weight (env SACCADE_HISTORY_W, default 0 = off).
+        // Tracks with longer consistent hit-streak bid higher in auction,
+        // so established tracks beat newly-reacquired ones.
+        static const float history_w = []() {
+            const char* v = std::getenv("SACCADE_HISTORY_W");
+            return v ? std::strtof(v, nullptr) : 0.0f;
+        }();
+
+        // Stability bid weight (env SACCADE_STABILITY_W, default 0.1).
+        // Tracks whose predicted height closely matches the detection height
+        // bid higher, favouring consistent tracks. IDs −42, IDF1 neutral.
+        static const float stability_w = []() {
+            const char* v = std::getenv("SACCADE_STABILITY_W");
+            return v ? std::strtof(v, nullptr) : 0.1f;
+        }();
+
         auto run_stage = [&](int stage, const char* label) {
             if (stage == 0 && !enable_dda_) return;
             int off = stage * sinkhorn_stage_stride_;
@@ -2296,7 +2477,9 @@ public:
             kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
                 d_topk_indices_ + off, d_topk_probs_ + off, d_auction_prices_,
                 d_trk_to_det_, d_det_to_trk_,
-                d_pending_det_, d_pending_bid_, max_objs_, num_dets, 3, 0.01f);
+                d_pending_det_, d_pending_bid_, max_objs_, num_dets, 3, 0.01f,
+                d_age_, freshness_w, d_hit_streak_, history_w,
+                d_states_, d_boxes, stability_w);
             kernel::commit_auction_results_kernel<<<auc_g, auc_b, 0, stream>>>(
                 d_auction_prices_, d_pending_det_, d_pending_bid_,
                 d_trk_to_det_, d_det_to_trk_, max_objs_);
@@ -2308,6 +2491,69 @@ public:
         run_stage(2, "Assoc/S1b_MidConf");
         run_stage(3, "Assoc/S1c_Tentative");
         run_stage(4, "Assoc/S2_LoConf");
+
+        // --- Debug: association/candidate dump (env SACCADE_ASSOC_DUMP=<csv>) ---
+        // Captures, per active track at this frame: predicted box (post predict+GMC,
+        // pre Kalman-update), n_cands, best_cost, assigned det, plus one CND row per
+        // gated candidate (det box + cost). Lets offline analysis test whether the
+        // GT-correct det was in the track's candidate list and at what cost.
+        // NOTE: incompatible with CUDA-graph capture (host I/O). Run with tracker
+        // graph disabled. No-op unless the env var is set.
+        {
+            static const char* dump_path = std::getenv("SACCADE_ASSOC_DUMP");
+            if (dump_path) {
+                checkCuda(cudaStreamSynchronize(stream));
+                std::vector<int>   h_state(max_objs_), h_age(max_objs_),
+                                   h_tid(max_objs_), h_t2d(max_objs_), h_cn(max_objs_);
+                std::vector<unsigned char> h_act(max_objs_);
+                std::vector<float> h_st(max_objs_ * 8);
+                std::vector<float> h_cc(max_objs_ * cand_stride_);
+                std::vector<int>   h_ci(max_objs_ * cand_stride_);
+                std::vector<float> h_db(num_dets * 4);
+                cudaMemcpy(h_state.data(), d_state_, max_objs_ * sizeof(int), cudaMemcpyDeviceToHost);
+                cudaMemcpy(h_age.data(),   d_age_,   max_objs_ * sizeof(int), cudaMemcpyDeviceToHost);
+                cudaMemcpy(h_tid.data(),   d_track_ids_, max_objs_ * sizeof(int), cudaMemcpyDeviceToHost);
+                cudaMemcpy(h_t2d.data(),   d_trk_to_det_, max_objs_ * sizeof(int), cudaMemcpyDeviceToHost);
+                cudaMemcpy(h_cn.data(),    d_cand_n_, max_objs_ * sizeof(int), cudaMemcpyDeviceToHost);
+                cudaMemcpy(h_act.data(),   d_active_, max_objs_ * sizeof(bool), cudaMemcpyDeviceToHost);
+                cudaMemcpy(h_st.data(),    d_states_, max_objs_ * 8 * sizeof(float), cudaMemcpyDeviceToHost);
+                cudaMemcpy(h_cc.data(),    d_cand_costs_,   max_objs_ * cand_stride_ * sizeof(float), cudaMemcpyDeviceToHost);
+                cudaMemcpy(h_ci.data(),    d_cand_indices_, max_objs_ * cand_stride_ * sizeof(int),   cudaMemcpyDeviceToHost);
+                if (num_dets > 0) cudaMemcpy(h_db.data(), d_boxes, num_dets * 4 * sizeof(float), cudaMemcpyDeviceToHost);
+                // GMC homography (2x3 affine: [h00,h01,h02; h10,h11,h12])
+                float h_gmc[6];
+                cudaMemcpy(h_gmc, d_gmc, 6 * sizeof(float), cudaMemcpyDeviceToHost);
+                float gm_dx = h_gmc[2], gm_dy = h_gmc[5];
+                float gm_mag = sqrtf(gm_dx * gm_dx + gm_dy * gm_dy);
+                FILE* fp = std::fopen(dump_path, "a");
+                if (fp) {
+                    std::fprintf(fp, "GMC,%ld,%.3f,%.3f,%.3f\n",
+                        assoc_dump_frame_, gm_dx, gm_dy, gm_mag);
+                    for (int t = 0; t < max_objs_; ++t) {
+                        if (!h_act[t]) continue;
+                        float cx = h_st[t*8+0], cy = h_st[t*8+1], a = h_st[t*8+2], h = h_st[t*8+3];
+                        float w = a * h;
+                        int nc = h_cn[t];
+                        float best = 1e9f;
+                        for (int k = 0; k < nc && k < cand_stride_; ++k)
+                            best = std::min(best, h_cc[t*cand_stride_+k]);
+                        std::fprintf(fp, "TRK,%ld,%d,%d,%d,%.1f,%.1f,%.1f,%.1f,%d,%.4f,%d\n",
+                            assoc_dump_frame_, h_tid[t], h_state[t], h_age[t],
+                            cx, cy, w, h, nc, (best>1e8f?-1.0f:best), h_t2d[t]);
+                        for (int k = 0; k < nc && k < cand_stride_; ++k) {
+                            int d = h_ci[t*cand_stride_+k];
+                            if (d < 0 || d >= num_dets) continue;
+                            float* b = &h_db[d*4];
+                            std::fprintf(fp, "CND,%ld,%d,%d,%.4f,%.1f,%.1f,%.1f,%.1f\n",
+                                assoc_dump_frame_, h_tid[t], d, h_cc[t*cand_stride_+k],
+                                b[0], b[1], b[2]-b[0], b[3]-b[1]);
+                        }
+                    }
+                    std::fclose(fp);
+                }
+            }
+        }
+        assoc_dump_frame_++;
 
         nvtxRangePushA("Assoc/StateUpdate");
         kernel::track_state_update_post_kernel<<<blocks, threads, 0, stream>>>(
@@ -2522,8 +2768,23 @@ public:
         if (d_relink_dbg_) checkCuda(cudaMemcpy(out.data() + 1, d_relink_dbg_, 4 * sizeof(int), cudaMemcpyDeviceToHost));
         return out;
     }
-    void set_oao_params(float tau) {
+    void set_oao_params(float tau, float contest_thresh, float score_w, int occ_mode,
+                        float crowd_radius, float height_gate, float foot_gate,
+                        float ramp_frames) {
         oao_tau_ = std::clamp(tau, 0.0f, 1.0f);
+        // contest_thresh < 0 keeps plain OAO (bit-exact); clamp the active range.
+        oao_contest_thresh_ = (contest_thresh < 0.0f) ? -1.0f : std::clamp(contest_thresh, 0.0f, 1.0f);
+        // score_w <= 0 → no score weighting (full penalty); clamp to [0,1] otherwise.
+        oao_score_w_ = std::clamp(score_w, 0.0f, 1.0f);
+        oao_occ_mode_ = (occ_mode == 1) ? 1 : 0;
+        // crowd_radius <= 0 → off (multiplier 1); otherwise radius in units of box height.
+        oao_crowd_radius_ = std::max(0.0f, crowd_radius);
+        // height_gate <= 0 → off; otherwise relative height-diff tolerance for same-depth.
+        oao_height_gate_ = std::max(0.0f, height_gate);
+        // foot_gate <= 0 → off; otherwise relative foot-line gap tolerance for same-depth.
+        oao_foot_gate_ = std::max(0.0f, foot_gate);
+        // ramp_frames <= 0 → off; otherwise frames to ramp the penalty from 0 to full.
+        oao_ramp_frames_ = std::max(0.0f, ramp_frames);
     }
     void set_occ_params(bool enabled, float iou_thresh, float foot_gap, int ttl, float cost_weight) {
         occ_state_enabled_ = enabled;
@@ -2905,6 +3166,31 @@ private:
     float birth_low_score_thresh_ = 0.0f;
     float birth_prox_norm_thresh_ = 0.0f;
     float oao_tau_ = 0.0f;
+    // OAO contention gate: < 0 → plain OAO (bit-exact legacy); >= 0 → apply the
+    // penalty only when the detection is also claimed by t's max-overlap partner
+    // (partner-pred IoU >= thresh). Spares uncontested side-by-side real tracks.
+    float oao_contest_thresh_ = -1.0f;
+    // OAO soft score weight: <= 0 → off (full penalty); penalty is scaled by
+    // (1 - oao_score_w * det_score), so confident detections get a reduced penalty
+    // (e.g. w=0.5 → high-score boxes keep half the penalty) without cutting it
+    // entirely, preserving the high-score re-routing benefit in dense static scenes.
+    float oao_score_w_ = -1.0f;
+    // OAO occlusion signal: 0 = max single inter-track IoU (default, bit-exact);
+    // 1 = union coverage (fraction of t covered by union of other boxes, 8x8 grid).
+    int oao_occ_mode_ = 0;
+    // OAO crowd multiplier: <= 0 → off; > 0 → scale penalty by (1 - 1/N) where N is
+    // the count of tracks (incl. self) within oao_crowd_radius * h of t. Sparse
+    // overlaps (real side-by-side) get a small N → reduced penalty; crowds → full.
+    float oao_crowd_radius_ = 0.0f;
+    // OAO same-height gate: <= 0 → off; > 0 → only partners with |h_t - h_j| <=
+    // gate * max(h) contribute to occ_coeff (same-depth occlusions only).
+    float oao_height_gate_ = 0.0f;
+    // OAO same-foot gate: <= 0 → off; > 0 → only partners with |footy_t - footy_j|
+    // <= gate * h_ref contribute (truer same-depth proxy than height).
+    float oao_foot_gate_ = 0.0f;
+    // OAO duration ramp: <= 0 → off; > 0 → penalty *= min(1, overlap_frames/ramp).
+    // Transient crossings (sparse scenes) damped; persistent crowds reach full penalty.
+    float oao_ramp_frames_ = 0.0f;
     // Occluder-side depth mutual-exclusion (default off → bit-identical).
     bool  occ_state_enabled_ = false;
     float occ_iou_thresh_    = 0.45f;
@@ -2917,6 +3203,8 @@ private:
     float* d_occ_coeff_ = nullptr;
     int* d_occ_front_ttl_ = nullptr;  // [max_objs] latched "is confident occluder/front" counter
     int* d_occ_partner_    = nullptr;  // [max_objs] argmax partner slot when front-flag is active (-1)
+    int* d_occ_partner_all_ = nullptr; // [max_objs] unconditional argmax partner slot (-1 if no overlap)
+    int* d_occ_duration_ = nullptr;    // [max_objs] consecutive overlapped-frame counter for duration ramp
     float *d_cost_matrix_, *d_sinkhorn_v_, *d_topk_probs_;
     uint64_t *d_auction_prices_;
     int *d_topk_indices_, *d_trk_to_det_, *d_det_to_trk_;
@@ -2928,6 +3216,7 @@ private:
     bool* d_has_clean_embedding_;
     int* d_candidate_count_;
     int   cand_stride_ = 0;
+    long  assoc_dump_frame_ = 0;  // debug: SACCADE_ASSOC_DUMP frame counter
     float* d_cand_costs_ = nullptr;
     int*   d_cand_indices_ = nullptr;
     int*   d_cand_n_ = nullptr;
@@ -3003,8 +3292,11 @@ void GPUByteTracker::set_relink_params(bool enabled, int bank_cap, float sim_thr
                               occ_gate_cover, occ_gap_min, occ_expand_px, occ_expand_cover);
 }
 std::vector<int> GPUByteTracker::get_relink_debug() { return pimpl_->get_relink_debug(); }
-void GPUByteTracker::set_oao_params(float tau) {
-    pimpl_->set_oao_params(tau);
+void GPUByteTracker::set_oao_params(float tau, float contest_thresh, float score_w, int occ_mode,
+                                    float crowd_radius, float height_gate, float foot_gate,
+                                    float ramp_frames) {
+    pimpl_->set_oao_params(tau, contest_thresh, score_w, occ_mode, crowd_radius, height_gate,
+                           foot_gate, ramp_frames);
 }
 
 void GPUByteTracker::set_occ_params(bool enabled, float iou_thresh, float foot_gap,

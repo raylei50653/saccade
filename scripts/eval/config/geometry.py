@@ -343,6 +343,100 @@ def add_geometry_args(parser: argparse.ArgumentParser) -> None:
             edge="too high increases cost for dense scenes, hurts recall",
         ),
     )
+    grp.add_argument(
+        "--oao-contest-thresh",
+        type=float,
+        default=-1.0,
+        dest="oao_contest_thresh",
+        help=_help(
+            "Contention gate for OAO. <0 (default) = plain OAO (penalise every "
+            "detection of an overlapped track). >=0 = only penalise detections "
+            "also claimed by the track's max-overlap partner (partner-pred IoU "
+            ">= thresh), sparing uncontested side-by-side real pedestrians.",
+            range_hint="-1 (off) or 0.3-0.5",
+            edge="too low penalises almost everything (≈plain OAO); too high never fires",
+        ),
+    )
+    grp.add_argument(
+        "--oao-score-w",
+        type=float,
+        default=-1.0,
+        dest="oao_score_w",
+        help=_help(
+            "Soft score weighting for OAO. <=0 (default) = full penalty. >0 = "
+            "scale penalty by (1 - score_w * det_score), so confident detections "
+            "get a reduced (not cut) penalty. 0.5 halves the penalty for a "
+            "score-1.0 box; 1.0 zeroes it.",
+            range_hint="-1 (off) or 0.3-0.7",
+            edge="too high over-spares low-FP-density seqs; too low ≈ plain OAO",
+        ),
+    )
+    grp.add_argument(
+        "--oao-occ-mode",
+        type=int,
+        default=0,
+        choices=[0, 1],
+        dest="oao_occ_mode",
+        help=_help(
+            "OAO occlusion signal. 0 (default) = max single inter-track IoU. "
+            "1 = union coverage (fraction of the track covered by the union of "
+            "other boxes, 8x8 grid), amplifying dense crowds vs sparse overlaps.",
+            range_hint="0 (max) or 1 (union)",
+            edge="union raises penalty magnitude — pair with a lower oao-tau",
+        ),
+    )
+    grp.add_argument(
+        "--oao-crowd-radius",
+        type=float,
+        default=0.0,
+        dest="oao_crowd_radius",
+        help=_help(
+            "OAO crowd multiplier radius (units of box height). <=0 (default) = off. "
+            ">0 = scale penalty by (1 - 1/N), N = tracks within radius*h of t (incl. "
+            "self): sparse overlaps (real side-by-side) damped, dense crowds full.",
+            range_hint="0 (off) or ~0.5-1.0",
+            edge="too small N→1 kills penalty everywhere; too large = no damping",
+        ),
+    )
+    grp.add_argument(
+        "--oao-height-gate",
+        type=float,
+        default=0.0,
+        dest="oao_height_gate",
+        help=_help(
+            "OAO same-height gate. <=0 (default) = off. >0 = only partners with "
+            "|h_t - h_j| <= gate*max(h) contribute to the OAO signal (same-depth "
+            "occlusions only), sparing near/far projection overlaps.",
+            range_hint="0 (off) or ~0.2-0.4",
+            edge="too tight drops real same-depth occlusions; too loose ≈ no gate",
+        ),
+    )
+    grp.add_argument(
+        "--oao-foot-gate",
+        type=float,
+        default=0.0,
+        dest="oao_foot_gate",
+        help=_help(
+            "OAO same-foot gate. <=0 (default) = off. >0 = only partners with "
+            "|footy_t - footy_j| <= gate*h_ref contribute (truer same-depth proxy "
+            "than height; matches the proven occ_front foot-gap signal).",
+            range_hint="0 (off) or ~0.15-0.3",
+            edge="too tight drops real same-depth occlusions; too loose ≈ no gate",
+        ),
+    )
+    grp.add_argument(
+        "--oao-ramp-frames",
+        type=float,
+        default=0.0,
+        dest="oao_ramp_frames",
+        help=_help(
+            "OAO duration ramp. <=0 (default) = off. >0 = scale penalty by "
+            "min(1, overlap_frames/ramp): transient crossings (sparse scenes) get "
+            "a reduced penalty, persistent overlaps (crowds) reach the full penalty.",
+            range_hint="0 (off) or ~15-30",
+            edge="too small = no damping; too large over-spares medium crossings",
+        ),
+    )
     # Depth-gated occlusion-state machine (Occluded(by=A)); default off → bit-identical.
     grp.add_argument(
         "--occ-state-enabled",

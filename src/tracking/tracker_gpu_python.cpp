@@ -2977,9 +2977,25 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         .def("get_relink_debug", &GPUByteTracker::get_relink_debug,
              "Returns (archived, births, revived, bridge_attempts, bridge_accepts) counters.")
         .def("set_oao_params", &GPUByteTracker::set_oao_params,
-             py::arg("tau"),
+             py::arg("tau"), py::arg("contest_thresh") = -1.0f, py::arg("score_w") = -1.0f,
+             py::arg("occ_mode") = 0, py::arg("crowd_radius") = 0.0f, py::arg("height_gate") = 0.0f,
+             py::arg("foot_gate") = 0.0f, py::arg("ramp_frames") = 0.0f,
              "OA-SORT OAO penalty weight [0, 1]. 0 = disabled. "
-             "Tracks occluded by other tracks receive cost += tau * overlap_iou.")
+             "Tracks occluded by other tracks receive cost += tau * overlap_iou. "
+             "contest_thresh < 0 = plain OAO; >= 0 = only penalise detections also "
+             "claimed by t's max-overlap partner (partner-pred IoU >= thresh). "
+             "score_w <= 0 = off; > 0 = scale the penalty by (1 - score_w * det_score) "
+             "so confident detections get a reduced (not cut) penalty. "
+             "occ_mode 0 = max single inter-track IoU (default); 1 = union coverage "
+             "(fraction of the track covered by the union of other boxes). "
+             "crowd_radius <= 0 = off; > 0 = scale penalty by (1 - 1/N), N = tracks "
+             "within crowd_radius*h of t (incl. self): sparse overlaps damped, crowds full. "
+             "height_gate <= 0 = off; > 0 = only same-depth partners (|h_t-h_j| <= "
+             "gate*max(h)) contribute, sparing near/far projection overlaps. "
+             "foot_gate <= 0 = off; > 0 = only same-foot-line partners (|footy_t-"
+             "footy_j| <= gate*h_ref) contribute (truer depth proxy than height). "
+             "ramp_frames <= 0 = off; > 0 = scale penalty by min(1, overlap_frames/"
+             "ramp_frames): transient crossings damped, persistent crowds reach full.")
         .def("set_occ_params", &GPUByteTracker::set_occ_params,
              py::arg("enabled") = true, py::arg("iou_thresh") = 0.45f,
              py::arg("foot_gap") = 0.15f, py::arg("ttl") = 4,

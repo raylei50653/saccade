@@ -660,15 +660,45 @@ class GPUByteTracker:
         getter = getattr(self.tracker, "get_relink_debug", None)
         return list(getter()) if getter is not None else [0, 0, 0, 0, 0]
 
-    def set_oao_params(self, tau: float = 0.0) -> None:
+    def set_oao_params(
+        self,
+        tau: float = 0.0,
+        contest_thresh: float = -1.0,
+        score_w: float = -1.0,
+        occ_mode: int = 0,
+        crowd_radius: float = 0.0,
+        height_gate: float = 0.0,
+        foot_gate: float = 0.0,
+        ramp_frames: float = 0.0,
+    ) -> None:
         """OA-SORT Occlusion-Aware Offset (OAO) penalty.
 
         tau in [0, 1]: cost += tau * inter_track_IoU for each occluded track.
         0 (default) = disabled.  Recommended sweep: 0.1 – 0.4.
+
+        contest_thresh < 0 (default) = plain OAO (penalise every detection of an
+        overlapped track). contest_thresh >= 0 = contention-gated OAO: only
+        penalise detections also claimed by the track's max-overlap partner
+        (partner-predicted-box IoU >= thresh).
+
+        score_w <= 0 (default) = off (full penalty). score_w > 0 = soft score
+        weighting: the penalty is scaled by (1 - score_w * det_score), so confident
+        detections receive a reduced (not cut) penalty. score_w=0.5 halves the
+        penalty for a score-1.0 box; score_w=1.0 zeroes it. Spares higher-score TPs
+        while keeping the high-score re-routing benefit in dense static scenes.
         """
         set_oao = getattr(self.tracker, "set_oao_params", None)
         if set_oao is not None:
-            set_oao(float(tau))
+            set_oao(
+                float(tau),
+                float(contest_thresh),
+                float(score_w),
+                int(occ_mode),
+                float(crowd_radius),
+                float(height_gate),
+                float(foot_gate),
+                float(ramp_frames),
+            )
 
     def set_occ_params(
         self,

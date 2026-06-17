@@ -72,7 +72,8 @@ __global__ void cross_power_spectrum_kernel(cuComplex* a, const cuComplex* b, in
 #define PEAK_BLOCK 256
 __global__ void find_peak_subpixel_kernel(
     const float* data, int w, int h,
-    float* peak_x, float* peak_y, float* peak_val, float* pcr_score)
+    float* peak_x, float* peak_y, float* peak_val, float* pcr_score,
+    float pcr_thresh)
 {
     __shared__ float s_max[PEAK_BLOCK];
     __shared__ int   s_idx[PEAK_BLOCK];
@@ -115,16 +116,12 @@ __global__ void find_peak_subpixel_kernel(
 
     *peak_val = max_v;
 
-    const float kPCRThresh = 5.0f;
     float rms   = sqrtf(sum_sq / n + 1e-12f);
     float ratio = max_v / (rms + 1e-12f);
     *pcr_score  = ratio;
 
-    if (ratio < kPCRThresh) {
-        *peak_x = __int_as_float(0x7fc00000u);  // NaN
-        *peak_y = __int_as_float(0x7fc00000u);
-        return;
-    }
+    // Always compute the peak, even when ratio is low.
+    // The caller applies soft scaling by confidence = clamp(ratio / pcr_thresh, 0, 1).
 
     int py = max_i / w;
     int px = max_i % w;
@@ -168,30 +165,47 @@ extern "C" void launch_phase_correlation(
     cufftExecC2R(plan_c2r, (cufftComplex*)d_tmp_complex_a, (cufftReal*)d_tmp_float);
 
     // 4. Find peak with sub-pixel accuracy and PCR quality check
+    static const float pcr_thresh = []() {
+        const char* v = std::getenv("SACCADE_GMC_PCR_THRESH");
+        return v ? std::strtof(v, nullptr) : 5.0f;
+    }();
     find_peak_subpixel_kernel<<<1, 256, 0, stream>>>(
-        (float*)d_tmp_float, w, h, d_peak_x, d_peak_y, d_peak_val, d_pcr_score);
+        (float*)d_tmp_float, w, h, d_peak_x, d_peak_y, d_peak_val, d_pcr_score,
+        pcr_thresh);
 
-    float h_peak_x = 0.0f, h_peak_y = 0.0f;
+    float h_peak_x = 0.0f, h_peak_y = 0.0f, h_pcr_score = 0.0f;
     cudaMemcpyAsync(&h_peak_x, d_peak_x, sizeof(float), cudaMemcpyDeviceToHost, stream);
     cudaMemcpyAsync(&h_peak_y, d_peak_y, sizeof(float), cudaMemcpyDeviceToHost, stream);
+    cudaMemcpyAsync(&h_pcr_score, d_pcr_score, sizeof(float), cudaMemcpyDeviceToHost, stream);
     cudaStreamSynchronize(stream);
-
-    // NaN from PCR check → unreliable shift, propagate to caller
-    if (isnan(h_peak_x) || isnan(h_peak_y)) {
-        *dx = h_peak_x;
-        *dy = h_peak_y;
-        return;
-    }
 
     float fpx = h_peak_x;
     float fpy = h_peak_y;
 
-    // Shift to [-w/2, w/2]
+    // Shift to [-w/2, w/2] (FFT wraparound) BEFORE the plausibility cap.
+    // The peak index lives in [0, w); a negative shift -d appears at w-d, so the
+    // cap MUST be applied to the wrapped displacement, not the raw index —
+    // otherwise every negative displacement (raw index > w/2) is wrongly
+    // rejected. Mirrors peak_to_translation_warp_kernel.
     if (fpx > w / 2.0f) fpx -= w;
     if (fpy > h / 2.0f) fpy -= h;
 
-    *dx = fpx;
-    *dy = fpy;
+    // 25%-dimension displacement cap (implausible shift). Return the wrapped
+    // displacement so the caller's own cap rejects it (no correction applied).
+    if (fabsf(fpx) > w * 0.25f || fabsf(fpy) > h * 0.25f) {
+        *dx = fpx;
+        *dy = fpy;
+        return;
+    }
+
+    // Soft confidence scaling
+    float confidence = 1.0f;
+    if (h_pcr_score < pcr_thresh) {
+        confidence = fmaxf(0.0f, fminf(h_pcr_score / pcr_thresh, 1.0f));
+    }
+
+    *dx = fpx * confidence;
+    *dy = fpy * confidence;
 }
 
 __global__ void write_identity_warp_kernel(float* out_warp) {
@@ -207,9 +221,11 @@ __global__ void write_identity_warp_kernel(float* out_warp) {
 __global__ void peak_to_translation_warp_kernel(
     const float* peak_x,
     const float* peak_y,
+    const float* pcr_score,
     int w,
     int h,
     float downscale,
+    float pcr_thresh,
     float* out_warp)
 {
     if (threadIdx.x != 0 || blockIdx.x != 0) return;
@@ -230,6 +246,16 @@ __global__ void peak_to_translation_warp_kernel(
         tx = fpx * downscale;
         ty = fpy * downscale;
     }
+
+    // Soft confidence scaling: low PCR score → proportionally less correction.
+    // Replaces the all-or-nothing hard threshold with a smooth falloff.
+    float score = *pcr_score;
+    float confidence = 1.0f;
+    if (pcr_thresh > 0.01f && score < pcr_thresh) {
+        confidence = fmaxf(0.0f, fminf(score / pcr_thresh, 1.0f));
+    }
+    tx *= confidence;
+    ty *= confidence;
 
     out_warp[0] = 1.0f;
     out_warp[1] = 0.0f;
@@ -263,11 +289,16 @@ extern "C" void launch_phase_correlation_into_warp(
 
     cufftExecC2R(plan_c2r, (cufftComplex*)d_tmp_complex_a, (cufftReal*)d_tmp_float);
 
+    static const float pcr_thresh2 = []() {
+        const char* v = std::getenv("SACCADE_GMC_PCR_THRESH");
+        return v ? std::strtof(v, nullptr) : 5.0f;
+    }();
     find_peak_subpixel_kernel<<<1, 256, 0, stream>>>(
-        (float*)d_tmp_float, w, h, d_peak_x, d_peak_y, d_peak_val, d_pcr_score);
+        (float*)d_tmp_float, w, h, d_peak_x, d_peak_y, d_peak_val, d_pcr_score,
+        pcr_thresh2);
 
     peak_to_translation_warp_kernel<<<1, 1, 0, stream>>>(
-        d_peak_x, d_peak_y, w, h, downscale, out_warp);
+        d_peak_x, d_peak_y, d_pcr_score, w, h, downscale, pcr_thresh2, out_warp);
 }
 
 // ── Phase Correlation Sub-step Launchers (for per-stage profiling) ────────
@@ -303,10 +334,15 @@ extern "C" void launch_peak_and_warp(
     float* d_peak_x, float* d_peak_y, float* d_peak_val, float* d_pcr_score,
     float downscale, float* out_warp, cudaStream_t stream)
 {
+    static const float pcr_thresh3 = []() {
+        const char* v = std::getenv("SACCADE_GMC_PCR_THRESH");
+        return v ? std::strtof(v, nullptr) : 5.0f;
+    }();
     find_peak_subpixel_kernel<<<1, 256, 0, stream>>>(
-        d_float, w, h, d_peak_x, d_peak_y, d_peak_val, d_pcr_score);
+        d_float, w, h, d_peak_x, d_peak_y, d_peak_val, d_pcr_score,
+        pcr_thresh3);
     peak_to_translation_warp_kernel<<<1, 1, 0, stream>>>(
-        d_peak_x, d_peak_y, w, h, downscale, out_warp);
+        d_peak_x, d_peak_y, d_pcr_score, w, h, downscale, pcr_thresh3, out_warp);
 }
 
 // ── Foreground Mask Kernel ─────────────────────────────────────────────────

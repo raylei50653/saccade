@@ -262,6 +262,13 @@ class EvalConfig:
     birth_low_score_thresh: float
     birth_prox_norm_thresh: float
     oao_tau: float
+    oao_contest_thresh: float
+    oao_score_w: float
+    oao_occ_mode: int
+    oao_crowd_radius: float
+    oao_height_gate: float
+    oao_foot_gate: float
+    oao_ramp_frames: float
 
     # Depth-gated occlusion-state machine (Occluded(by=A)); default off.
     occ_state_enabled: bool
@@ -718,6 +725,13 @@ def parse_eval_config(
         birth_low_score_thresh=float(kwargs.get("birth_low_score_thresh", 0.0)),
         birth_prox_norm_thresh=float(kwargs.get("birth_prox_norm_thresh", 0.0)),
         oao_tau=float(kwargs.get("oao_tau", 0.0)),
+        oao_contest_thresh=float(kwargs.get("oao_contest_thresh", -1.0)),
+        oao_score_w=float(kwargs.get("oao_score_w", -1.0)),
+        oao_occ_mode=int(kwargs.get("oao_occ_mode", 0)),
+        oao_crowd_radius=float(kwargs.get("oao_crowd_radius", 0.0)),
+        oao_height_gate=float(kwargs.get("oao_height_gate", 0.0)),
+        oao_foot_gate=float(kwargs.get("oao_foot_gate", 0.0)),
+        oao_ramp_frames=float(kwargs.get("oao_ramp_frames", 0.0)),
         occ_state_enabled=bool(kwargs.get("occ_state_enabled", True)),
         occ_iou_thresh=float(kwargs.get("occ_iou_thresh", 0.45)),
         occ_foot_gap=float(kwargs.get("occ_foot_gap", 0.15)),

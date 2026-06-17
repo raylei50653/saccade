@@ -1731,7 +1731,16 @@ class EvalPipeline:
             birth_low_score_thresh=cfg.birth_low_score_thresh,
             birth_prox_norm_thresh=cfg.birth_prox_norm_thresh,
         )
-        detector.tracker.set_oao_params(cfg.oao_tau)
+        detector.tracker.set_oao_params(
+            cfg.oao_tau,
+            cfg.oao_contest_thresh,
+            cfg.oao_score_w,
+            cfg.oao_occ_mode,
+            cfg.oao_crowd_radius,
+            cfg.oao_height_gate,
+            cfg.oao_foot_gate,
+            cfg.oao_ramp_frames,
+        )
         detector.tracker.set_occ_params(
             enabled=cfg.occ_state_enabled,
             iou_thresh=cfg.occ_iou_thresh,

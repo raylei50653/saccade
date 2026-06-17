@@ -8,6 +8,7 @@
 
 Saccade 的文檔庫採用「模組化物理結構」配合「全局共享目錄」的組織形式：
 
+* 🧭 **[PIPELINE.md](PIPELINE.md)**：**演算法主線精煉（單檔入口）**。按處理流程 `前處理 → ssm-head → 後處理 → GMC → ID分配 → relink` 走一遍，每階段只留「現行最優 / GO / NO-GO」結論，細節下沉到下列 modules/ 與 registry。**想快速掌握全鏈先讀這份。**
 * 📦 **[modules/](modules)**：**核心模組化文檔庫**。物理上按系統功能與 `mot17.py` 評測模組劃分，包含各自的設計、決策 (ADR) 與實驗分析。
 * 📊 **[reference/](reference)**：全局評測基準 (benchmarks)、多進程並行評測手冊與跨模組共享的流程規範。亦含 **[NO-GO 全局登記表](reference/no_go_registry.md)**（已結案/已踩雷方向總覽，探索新方向前先查）。
 * 📦 **[archive/](archive)**：過時或已完成的歷史參考資料（如 Option D 探索結論）。
