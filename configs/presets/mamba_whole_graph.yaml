@@ -64,3 +64,20 @@ interpolate_tracklets: true
 interpolate_max_gap: 35
 interpolate_min_track_len: 5
 interpolate_min_h: 0
+
+# --- OA-SORT OAO occlusion penalty (duration-ramped) ---
+# cost[t][d] += tau * occ_coeff[t] * min(1, overlap_frames / ramp_frames), where
+# occ_coeff[t] = max inter-track IoU. The duration ramp is the key: persistent
+# overlaps (dense crowds, e.g. MOT17-04 ~49-frame runs) reach the full penalty and
+# get the anti-confusion / re-routing benefit, while transient crossings (sparse
+# scenes, e.g. MOT17-05 ~10-frame runs) get a damped penalty so the real track
+# survives the brief overlap instead of being suppressed (FN).
+#
+# Pareto-dominates plain OAO (tau=0.25, no ramp) on every metric: IDF1 77.5→77.6,
+# HOTA 69.7→69.9, AssA 68.8→69.1, ex-04 AssA 54.5→55.3, and halves the only
+# structural regression (MOT17-05 IDF1 70.6→72.3 vs baseline 73.9). Free (one
+# per-track counter). Duration was the only axis that separates 05 (transient) from
+# 04 (persistent); 6 spatial signals (contention/score/union/crowd/height/foot) all
+# failed — see docs/reference/no_go_registry.md.
+oao_tau: 0.30
+oao_ramp_frames: 25

@@ -120,7 +120,9 @@ public:
      *            a cost increase of tau * IoU_overlap, reducing incorrect associations
      *            during occlusion (cost confusion).
      */
-    void set_oao_params(float tau);
+    void set_oao_params(float tau, float contest_thresh = -1.0f, float score_w = -1.0f,
+                        int occ_mode = 0, float crowd_radius = 0.0f, float height_gate = 0.0f,
+                        float foot_gate = 0.0f, float ramp_frames = 0.0f);
 
     /**
      * @brief Configure the depth-gated occlusion-state machine (default off).
