@@ -88,7 +88,10 @@ build-native-coverage/
 *.sqlite
 scratch/nsys_profiles/
 storage/mlflow_artifacts/
+storage/postgres_data/
 output/
+out/
+scratch/root_artifacts_*/
 
 # Analysis script outputs (generated plots, candidate CSVs, sweep data)
 scripts/tools/out/
