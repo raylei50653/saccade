@@ -25,7 +25,7 @@ _CUDA_COPY_STREAM: "torch.cuda.Stream | None" = None
 def _get_copy_stream() -> torch.cuda.Stream:
     global _CUDA_COPY_STREAM
     if _CUDA_COPY_STREAM is None:
-        _CUDA_COPY_STREAM = torch.cuda.Stream()
+        _CUDA_COPY_STREAM = torch.cuda.Stream()  # type: ignore[no-untyped-call]
     return _CUDA_COPY_STREAM
 
 
@@ -91,7 +91,7 @@ def materialize_gpu_track_results_async(
     slicing is needed. The copy stream is isolated from the default (compute)
     stream so the GPU can start the next frame while DMA is still in flight.
     """
-    compute_done = torch.cuda.Event()
+    compute_done = torch.cuda.Event()  # type: ignore[no-untyped-call]
     compute_done.record(torch.cuda.current_stream())
 
     copy_stream = _get_copy_stream()
@@ -105,7 +105,7 @@ def materialize_gpu_track_results_async(
             pinned["classes"].copy_(result_buffers["classes"], non_blocking=True)
         if include_det_idx:
             pinned["det_idx"].copy_(result_buffers["det_idx"], non_blocking=True)
-        event = torch.cuda.Event()
+        event = torch.cuda.Event()  # type: ignore[no-untyped-call]
         event.record(copy_stream)
     return event, pinned
 
@@ -169,7 +169,7 @@ def materialize_gpu_track_results_pinned(
     is free to start the next frame before DMA completes.  Only the copy
     stream's event is synchronized — ``torch.cuda.synchronize()`` is avoided.
     """
-    compute_done = torch.cuda.Event()
+    compute_done = torch.cuda.Event()  # type: ignore[no-untyped-call]
     compute_done.record(torch.cuda.current_stream())
 
     copy_stream = _get_copy_stream()
@@ -183,7 +183,7 @@ def materialize_gpu_track_results_pinned(
             pinned["classes"].copy_(result_buffers["classes"], non_blocking=True)
         if include_det_idx:
             pinned["det_idx"].copy_(result_buffers["det_idx"], non_blocking=True)
-        copy_done = torch.cuda.Event()
+        copy_done = torch.cuda.Event()  # type: ignore[no-untyped-call]
         copy_done.record(copy_stream)
 
     copy_done.synchronize()
