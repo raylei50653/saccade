@@ -155,3 +155,15 @@ def test_bidirectional_bridge_prefers_higher_score_candidate() -> None:
     assert outputs[12] == [2, 1]
     assert debug[3] >= debug[4]
     assert debug[4] == 1
+
+
+def test_cost_mode_settings_do_not_leak_between_trackers() -> None:
+    other = _tracker(bidirectional=False)
+    other.set_multiplicative_cost(True)
+    other.set_stability_cost_w(10.0)
+    other.set_sinkhorn_lambda(7.0)
+
+    outputs, _debug = _run_sequence(bidirectional=False)
+
+    assert outputs[11] == [2]
+    assert outputs[12] == [2]

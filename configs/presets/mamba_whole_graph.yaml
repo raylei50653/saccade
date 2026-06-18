@@ -79,5 +79,13 @@ interpolate_min_h: 0
 # per-track counter). Duration was the only axis that separates 05 (transient) from
 # 04 (persistent); 6 spatial signals (contention/score/union/crowd/height/foot) all
 # failed — see docs/reference/no_go_registry.md.
-oao_tau: 0.30
+oao_tau: 0.50
 oao_ramp_frames: 25
+
+# --- Multiplicative (log-linear) cost form ---
+# Replaces the additive clamp chain with cost = 1 - IoU * exp(-Σ penalty).
+# No clamp between terms; supports reward signals (negative beta).
+# Parameters retuned for multiplicative form (differs from additive by ~1.67x).
+multiplicative_cost: true
+sinkhorn_lambda: 10
+stability_cost_w: 0.20

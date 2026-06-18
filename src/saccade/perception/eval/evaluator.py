@@ -1748,6 +1748,15 @@ class EvalPipeline:
             ttl=cfg.occ_ttl,
             cost_weight=cfg.occ_cost_weight,
         )
+        if getattr(cfg, "multiplicative_cost", False):
+            detector.tracker.set_multiplicative_cost(enabled=True)
+            lam = float(getattr(cfg, "sinkhorn_lambda", 30.0))
+            detector.tracker.set_sinkhorn_lambda(lam)
+            stab_w = float(getattr(cfg, "stability_cost_w", 0.0))
+            if stab_w > 0:
+                setter = getattr(detector.tracker, "set_stability_cost_w", None)
+                if setter:
+                    setter(stab_w)
         active_tracker_thresholds = (
             cfg.track_thresh,
             cfg.mid_thresh,

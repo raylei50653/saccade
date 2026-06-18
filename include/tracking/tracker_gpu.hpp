@@ -138,6 +138,32 @@ public:
     std::vector<int> get_occ_front_info();
 
     /**
+     * @brief Enable multiplicative log-linear cost form (default off).
+     *
+     * When enabled, cost = 1 - quality * exp(-Σ penalty) instead of the
+     * additive clamp chain. The value is kept per tracker instance and passed
+     * to each cost-kernel launch.
+     */
+    void set_multiplicative_cost(bool enabled);
+
+    /**
+     * @brief Set stability reward weight for multiplicative cost form.
+     *
+     * When >0, size-consistent matches get reduced cost via
+     * penalty -= w / (1 + |h_diff|/h_det). Default 0 (off).
+     */
+    void set_stability_cost_w(float w);
+
+    /**
+     * @brief Set Sinkhorn lambda (cost→prob scaling, default 30.0).
+     *
+     * Lower values (10-15) give softer discrimination and room for reward
+     * terms to influence auction outcomes. Higher values sharpen the
+     * transition but leave no room for small cost differences.
+     */
+    void set_sinkhorn_lambda(float lambda);
+
+    /**
      * @brief Set Detection Quality Scaling (A6) parameters.
      * @param enabled Enable scaling
      * @param w_aspect Weight for aspect ratio quality

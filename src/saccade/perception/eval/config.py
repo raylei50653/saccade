@@ -276,6 +276,9 @@ class EvalConfig:
     occ_foot_gap: float
     occ_ttl: int
     occ_cost_weight: float
+    multiplicative_cost: bool
+    sinkhorn_lambda: float
+    stability_cost_w: float
 
     # Temporal consistency filter
     temporal_consistency_min_frames: int
@@ -737,6 +740,9 @@ def parse_eval_config(
         occ_foot_gap=float(kwargs.get("occ_foot_gap", 0.15)),
         occ_ttl=int(kwargs.get("occ_ttl", 4)),
         occ_cost_weight=float(kwargs.get("occ_cost_weight", 0.50)),
+        multiplicative_cost=bool(kwargs.get("multiplicative_cost", False)),
+        sinkhorn_lambda=float(kwargs.get("sinkhorn_lambda", 30.0)),
+        stability_cost_w=float(kwargs.get("stability_cost_w", 0.0)),
         temporal_consistency_min_frames=int(
             kwargs.get("temporal_consistency_min_frames", 3)
         ),

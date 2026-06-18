@@ -93,12 +93,27 @@ fi
 
 # ── 6. C++ build check ───────────────────────────────────────────────────────
 echo "── C++ change detection"
-CPP_CHANGED=$(git diff --name-only HEAD -- 'src/**' 'include/**' 'CMakeLists.txt' 2>/dev/null || true)
-# Also check against main/master
+CHANGED_FILES=$(
+    {
+        git diff --name-only -- 'src/' 'include/' 'CMakeLists.txt' 2>/dev/null || true
+        git diff --cached --name-only -- 'src/' 'include/' 'CMakeLists.txt' 2>/dev/null || true
+    } | sort -u
+)
+# Also check committed changes against main/master.
 BASE=$(git rev-parse --verify origin/main 2>/dev/null || git rev-parse --verify origin/master 2>/dev/null || echo "")
 if [[ -n "$BASE" ]]; then
-    CPP_CHANGED=$(git diff --name-only "$BASE"...HEAD -- 'src/' 'include/' 'CMakeLists.txt' 2>/dev/null || true)
+    CHANGED_FILES=$(
+        {
+            printf '%s\n' "$CHANGED_FILES"
+            git diff --name-only "$BASE"...HEAD -- 'src/' 'include/' 'CMakeLists.txt' 2>/dev/null || true
+        } | sort -u
+    )
 fi
+CPP_CHANGED=$(
+    printf '%s\n' "$CHANGED_FILES" |
+        grep -E '^(CMakeLists\.txt|src/.*\.(c|cc|cpp|cxx|cu|cuh|h|hh|hpp|hxx)|include/.*\.(cuh|h|hh|hpp|hxx))$' ||
+        true
+)
 
 if [[ -n "$CPP_CHANGED" ]]; then
     warn "C++ files changed — CI will compile. Verify local build:"

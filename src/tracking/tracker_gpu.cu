@@ -497,6 +497,7 @@ __global__ void stage1_cost_fused_kernel(
     const float* d_occ_coeff, float oao_tau,
     const int* occ_partner_all, float oao_contest_thresh, float oao_score_w,
     const int* occ_front_ttl, float occ_cost_weight,
+    bool use_multiplicative_cost, float stability_cost_w, float sinkhorn_lambda,
     int* cand_n, float* cand_costs, int* cand_indices, int cand_stride,
     float cand_cost_cap)
 {
@@ -532,30 +533,71 @@ __global__ void stage1_cost_fused_kernel(
 
     float ds = det_scores ? det_scores[d] : 0.5f;
     float fused_iou = iou * (1.0f - fuse_score_weight * (1.0f - ds));
-    float iou_cost_val = 1.0f - fused_iou;
+    float iou_cost_val;
 
-    if (d_occ_coeff && oao_tau > 0.0f &&
-        oao_penalize_match(trk_states, occ_partner_all, t, b2, oao_contest_thresh))
-        iou_cost_val = fminf(1.0f, iou_cost_val + oao_tau * d_occ_coeff[t] * oao_score_scale(ds, oao_score_w));
+    if (use_multiplicative_cost) {
+        float penalty = 0.0f;
 
-    if (vel_dir_weight > 0.0f) {
-        float vx = st[4], vy = st[5];
-        float vel_sq = vx * vx + vy * vy;
-        if (vel_sq > 1.0f) {
-            float det_cx = (b2[0] + b2[2]) * 0.5f, det_cy = (b2[1] + b2[3]) * 0.5f;
-            float dx = det_cx - st[0], dy = det_cy - st[1];
-            float dist_sq = dx * dx + dy * dy;
-            if (dist_sq > 1e-6f) {
-                float cos_dir = (vx * dx + vy * dy) / sqrtf(vel_sq * dist_sq);
-                iou_cost_val += vel_dir_weight * fmaxf(0.0f, -cos_dir);
+        if (d_occ_coeff && oao_tau > 0.0f &&
+            oao_penalize_match(trk_states, occ_partner_all, t, b2, oao_contest_thresh))
+            penalty += oao_tau * d_occ_coeff[t] * oao_score_scale(ds, oao_score_w);
+
+        if (vel_dir_weight > 0.0f) {
+            float vx = st[4], vy = st[5];
+            float vel_sq = vx * vx + vy * vy;
+            if (vel_sq > 1.0f) {
+                float det_cx = (b2[0] + b2[2]) * 0.5f, det_cy = (b2[1] + b2[3]) * 0.5f;
+                float dx = det_cx - st[0], dy = det_cy - st[1];
+                float dist_sq = dx * dx + dy * dy;
+                if (dist_sq > 1e-6f) {
+                    float cos_dir = (vx * dx + vy * dy) / sqrtf(vel_sq * dist_sq);
+                    penalty += vel_dir_weight * fmaxf(0.0f, -cos_dir);
+                }
             }
         }
-    }
 
-    if (occ_front_ttl && occ_front_ttl[t] > 0 && occ_cost_weight > 0.0f) {
-        float footy_t = st[1] + st[3] * 0.5f;
-        float under = (footy_t - b2[3]) / fmaxf(st[3], 1e-3f);
-        if (under > 0.0f) iou_cost_val = fminf(1.0f, iou_cost_val + occ_cost_weight * under);
+        if (occ_front_ttl && occ_front_ttl[t] > 0 && occ_cost_weight > 0.0f) {
+            float footy_t = st[1] + st[3] * 0.5f;
+            float under = (footy_t - b2[3]) / fmaxf(st[3], 1e-3f);
+            if (under > 0.0f) penalty += occ_cost_weight * under;
+        }
+
+        // Stability reward normalized by λ → bid boost exp(stab) independent of λ.
+        if (stability_cost_w > 0.0f) {
+            float h_det = b2[3] - b2[1];
+            float h_diff = fabsf(st[3] - h_det);
+            float lam = fmaxf(sinkhorn_lambda, 1.0f);
+            penalty -= (stability_cost_w / lam) / (1.0f + h_diff / fmaxf(h_det, 1e-3f));
+        }
+
+        iou_cost_val = 1.0f - fused_iou * expf(-penalty);
+        iou_cost_val = fminf(1.0f, fmaxf(0.0f, iou_cost_val));
+    } else {
+        iou_cost_val = 1.0f - fused_iou;
+
+        if (d_occ_coeff && oao_tau > 0.0f &&
+            oao_penalize_match(trk_states, occ_partner_all, t, b2, oao_contest_thresh))
+            iou_cost_val = fminf(1.0f, iou_cost_val + oao_tau * d_occ_coeff[t] * oao_score_scale(ds, oao_score_w));
+
+        if (vel_dir_weight > 0.0f) {
+            float vx = st[4], vy = st[5];
+            float vel_sq = vx * vx + vy * vy;
+            if (vel_sq > 1.0f) {
+                float det_cx = (b2[0] + b2[2]) * 0.5f, det_cy = (b2[1] + b2[3]) * 0.5f;
+                float dx = det_cx - st[0], dy = det_cy - st[1];
+                float dist_sq = dx * dx + dy * dy;
+                if (dist_sq > 1e-6f) {
+                    float cos_dir = (vx * dx + vy * dy) / sqrtf(vel_sq * dist_sq);
+                    iou_cost_val += vel_dir_weight * fmaxf(0.0f, -cos_dir);
+                }
+            }
+        }
+
+        if (occ_front_ttl && occ_front_ttl[t] > 0 && occ_cost_weight > 0.0f) {
+            float footy_t = st[1] + st[3] * 0.5f;
+            float under = (footy_t - b2[3]) / fmaxf(st[3], 1e-3f);
+            if (under > 0.0f) iou_cost_val = fminf(1.0f, iou_cost_val + occ_cost_weight * under);
+        }
     }
 
     float final_cost = fminf(1.0f, iou_cost_val);
@@ -588,6 +630,7 @@ __global__ void compute_conditional_cost_kernel(
     const float* d_occ_coeff, float oao_tau,
     const int* occ_partner_all, float oao_contest_thresh, float oao_score_w,
     const int* occ_front_ttl, float occ_cost_weight,
+    bool use_multiplicative_cost, float stability_cost_w, float sinkhorn_lambda,
     int* cand_n, float* cand_costs, int* cand_indices, int cand_stride,
     float cand_cost_cap)
 {
@@ -645,32 +688,106 @@ __global__ void compute_conditional_cost_kernel(
         cost = iou_cost;
     }
 
-    // OC-SORT velocity direction penalty
-    if (vel_dir_weight > 0.0f) {
-        float vx = st[4], vy = st[5];
-        float vel_sq = vx * vx + vy * vy;
-        if (vel_sq > 1.0f) {
-            float det_cx = (b2[0] + b2[2]) * 0.5f, det_cy = (b2[1] + b2[3]) * 0.5f;
-            float dx = det_cx - st[0], dy = det_cy - st[1];
-            float dist_sq = dx * dx + dy * dy;
-            if (dist_sq > 1e-6f) {
-                float cos_dir = (vx * dx + vy * dy) / sqrtf(vel_sq * dist_sq);
-                cost += vel_dir_weight * fmaxf(0.0f, -cos_dir);
+    if (use_multiplicative_cost) {
+        // Multiplicative: accumulate penalties in log-space, then cost = 1 - Q * exp(-penalty)
+        float penalty = 0.0f;
+        float base_quality = fused_iou;
+        if (try_appearance) {
+            const float* e1 = trk_embeds + t * embed_dim;
+            const float* e2 = det_embeds + d * embed_dim;
+            float cos_sim = 0.0f, norm_sq = 0.0f;
+            for (int k = 0; k < embed_dim; ++k) {
+                cos_sim += e1[k] * e2[k];
+                norm_sq += e2[k] * e2[k];
+            }
+            if (norm_sq > 0.0625f) {
+                cos_sim = fmaxf(0.0f, cos_sim);
+                if (cos_sim >= cos_threshold && fused_iou >= iou_low)
+                    base_quality = cost_cos_w * cos_sim + cost_iou_w * fused_iou + cost_score_w * ds;
             }
         }
-    }
+        if (vel_dir_weight > 0.0f) {
+            float vx = st[4], vy = st[5];
+            float vel_sq = vx * vx + vy * vy;
+            if (vel_sq > 1.0f) {
+                float det_cx = (b2[0] + b2[2]) * 0.5f, det_cy = (b2[1] + b2[3]) * 0.5f;
+                float dx = det_cx - st[0], dy = det_cy - st[1];
+                float dist_sq = dx * dx + dy * dy;
+                if (dist_sq > 1e-6f) {
+                    float cos_dir = (vx * dx + vy * dy) / sqrtf(vel_sq * dist_sq);
+                    penalty += vel_dir_weight * fmaxf(0.0f, -cos_dir);
+                }
+            }
+        }
+        if (oao_tau > 0.0f && d_occ_coeff &&
+            oao_penalize_match(trk_states, occ_partner_all, t, b2, oao_contest_thresh))
+            penalty += oao_tau * d_occ_coeff[t] * oao_score_scale(ds, oao_score_w);
+        if (occ_front_ttl && occ_front_ttl[t] > 0 && occ_cost_weight > 0.0f) {
+            float footy_t = st[1] + st[3] * 0.5f;
+            float under = (footy_t - b2[3]) / fmaxf(st[3], 1e-3f);
+            if (under > 0.0f) penalty += occ_cost_weight * under;
+        }
+        // Stability reward term (λ-normalized, see stage1_cost_fused_kernel)
+        if (stability_cost_w > 0.0f) {
+            float h_det = b2[3] - b2[1];
+            float h_diff = fabsf(st[3] - h_det);
+            float lam = fmaxf(sinkhorn_lambda, 1.0f);
+            penalty -= (stability_cost_w / lam) / (1.0f + h_diff / fmaxf(h_det, 1e-3f));
+        }
+        cost = 1.0f - base_quality * expf(-penalty);
+        cost = fminf(1.0f, fmaxf(0.0f, cost));
+    } else {
+        // Legacy additive form (bit-identical)
+        if (try_appearance) {
+            const float* e1 = trk_embeds + t * embed_dim;
+            const float* e2 = det_embeds + d * embed_dim;
+            float cos_sim = 0.0f, norm_sq = 0.0f;
+            for (int k = 0; k < embed_dim; ++k) {
+                cos_sim += e1[k] * e2[k];
+                norm_sq += e2[k] * e2[k];
+            }
+            if (norm_sq > 0.0625f) {
+                cos_sim = fmaxf(0.0f, cos_sim);
+                if (cos_sim >= cos_threshold && fused_iou >= iou_low) {
+                    float app_cost = 1.0f - (cost_cos_w * cos_sim + cost_iou_w * fused_iou + cost_score_w * ds);
+                    cost = fminf(iou_cost, app_cost);
+                } else {
+                    cost = iou_cost;
+                }
+            } else {
+                cost = iou_cost;
+            }
+        } else {
+            cost = iou_cost;
+        }
 
-    // OA-SORT OAO: tracks occluded by other tracks get a cost penalty to prevent cost confusion
-    if (oao_tau > 0.0f && d_occ_coeff &&
-        oao_penalize_match(trk_states, occ_partner_all, t, b2, oao_contest_thresh)) {
-        cost = fminf(1.0f, cost + oao_tau * d_occ_coeff[t] * oao_score_scale(ds, oao_score_w));
-    }
+        // OC-SORT velocity direction penalty
+        if (vel_dir_weight > 0.0f) {
+            float vx = st[4], vy = st[5];
+            float vel_sq = vx * vx + vy * vy;
+            if (vel_sq > 1.0f) {
+                float det_cx = (b2[0] + b2[2]) * 0.5f, det_cy = (b2[1] + b2[3]) * 0.5f;
+                float dx = det_cx - st[0], dy = det_cy - st[1];
+                float dist_sq = dx * dx + dy * dy;
+                if (dist_sq > 1e-6f) {
+                    float cos_dir = (vx * dx + vy * dy) / sqrtf(vel_sq * dist_sq);
+                    cost += vel_dir_weight * fmaxf(0.0f, -cos_dir);
+                }
+            }
+        }
 
-    // Occluder-side depth mutual-exclusion (see stage1_cost_fused_kernel).
-    if (occ_front_ttl && occ_front_ttl[t] > 0 && occ_cost_weight > 0.0f) {
-        float footy_t = st[1] + st[3] * 0.5f;
-        float under = (footy_t - b2[3]) / fmaxf(st[3], 1e-3f);
-        if (under > 0.0f) cost = fminf(1.0f, cost + occ_cost_weight * under);
+        // OA-SORT OAO: tracks occluded by other tracks get a cost penalty to prevent cost confusion
+        if (oao_tau > 0.0f && d_occ_coeff &&
+            oao_penalize_match(trk_states, occ_partner_all, t, b2, oao_contest_thresh)) {
+            cost = fminf(1.0f, cost + oao_tau * d_occ_coeff[t] * oao_score_scale(ds, oao_score_w));
+        }
+
+        // Occluder-side depth mutual-exclusion (see stage1_cost_fused_kernel).
+        if (occ_front_ttl && occ_front_ttl[t] > 0 && occ_cost_weight > 0.0f) {
+            float footy_t = st[1] + st[3] * 0.5f;
+            float under = (footy_t - b2[3]) / fmaxf(st[3], 1e-3f);
+            if (under > 0.0f) cost = fminf(1.0f, cost + occ_cost_weight * under);
+        }
     }
 
     float final_cost = fminf(1.0f, fmaxf(0.0f, cost));
@@ -2294,20 +2411,24 @@ public:
             d_boxes, d_scores, d_classes, num_dets, stream, d_embeddings, d_gmc,
             light_factor, mid_thresh_scale);
 
-        // Single blocking D2H: waits for all prior stream work
+        // D2H reads must be ordered on the caller's stream. A plain cudaMemcpy
+        // uses the default stream and does not reliably wait for PyTorch's
+        // non-default current stream before host result materialization.
         int n_res = 0;
-        checkCuda(cudaMemcpy(&n_res, d_res_count_, sizeof(int), cudaMemcpyDeviceToHost));
+        checkCuda(cudaMemcpyAsync(&n_res, d_res_count_, sizeof(int), cudaMemcpyDeviceToHost, stream));
+        checkCuda(cudaStreamSynchronize(stream));
 
         std::vector<TrackResult> results(static_cast<size_t>(n_res));
         if (n_res > 0) {
             std::vector<float> hb(n_res * 4);
             std::vector<float> hs(n_res);
             std::vector<int>   hi(n_res), hc(n_res), hd(n_res);
-            checkCuda(cudaMemcpy(hb.data(), d_res_boxes_,   n_res * 4 * sizeof(float), cudaMemcpyDeviceToHost));
-            checkCuda(cudaMemcpy(hs.data(), d_res_scores_,  n_res *     sizeof(float), cudaMemcpyDeviceToHost));
-            checkCuda(cudaMemcpy(hi.data(), d_res_ids_,     n_res *     sizeof(int),   cudaMemcpyDeviceToHost));
-            checkCuda(cudaMemcpy(hc.data(), d_res_classes_, n_res *     sizeof(int),   cudaMemcpyDeviceToHost));
-            checkCuda(cudaMemcpy(hd.data(), d_res_det_idx_, n_res *     sizeof(int),   cudaMemcpyDeviceToHost));
+            checkCuda(cudaMemcpyAsync(hb.data(), d_res_boxes_,   n_res * 4 * sizeof(float), cudaMemcpyDeviceToHost, stream));
+            checkCuda(cudaMemcpyAsync(hs.data(), d_res_scores_,  n_res *     sizeof(float), cudaMemcpyDeviceToHost, stream));
+            checkCuda(cudaMemcpyAsync(hi.data(), d_res_ids_,     n_res *     sizeof(int),   cudaMemcpyDeviceToHost, stream));
+            checkCuda(cudaMemcpyAsync(hc.data(), d_res_classes_, n_res *     sizeof(int),   cudaMemcpyDeviceToHost, stream));
+            checkCuda(cudaMemcpyAsync(hd.data(), d_res_det_idx_, n_res *     sizeof(int),   cudaMemcpyDeviceToHost, stream));
+            checkCuda(cudaStreamSynchronize(stream));
             for (int i = 0; i < n_res; ++i)
                 results[i] = {hb[i*4], hb[i*4+1], hb[i*4+2], hb[i*4+3],
                                hi[i], hs[i], hc[i], hd[i]};
@@ -2403,6 +2524,7 @@ public:
                 oao_tau_ > 0.0f ? d_occ_coeff_ : nullptr, oao_tau_,
                 oao_contest_on ? d_occ_partner_all_ : nullptr, oao_contest_thresh_, oao_score_w_,
                 occ_state_enabled_ ? d_occ_front_ttl_ : nullptr, occ_cost_weight_,
+                multiplicative_cost_, stability_cost_w_, sinkhorn_lambda_,
                 d_cand_n_, d_cand_costs_, d_cand_indices_, cand_stride_, cand_cost_cap);
         } else {
             checkCuda(cudaMemsetAsync(d_candidate_count_, 0, max_objs_ * sizeof(int), stream));
@@ -2416,6 +2538,7 @@ public:
                 oao_tau_ > 0.0f ? d_occ_coeff_ : nullptr, oao_tau_,
                 oao_contest_on ? d_occ_partner_all_ : nullptr, oao_contest_thresh_, oao_score_w_,
                 occ_state_enabled_ ? d_occ_front_ttl_ : nullptr, occ_cost_weight_,
+                multiplicative_cost_, stability_cost_w_, sinkhorn_lambda_,
                 d_cand_n_, d_cand_costs_, d_cand_indices_, cand_stride_, cand_cost_cap);
         }
         nvtxRangePop();
@@ -2438,7 +2561,7 @@ public:
         kernel::fused_sinkhorn_multistage_kernel<<<max_objs_, 128, 0, stream>>>(
             d_cand_costs_, d_cand_indices_, d_cand_n_, cand_stride_,
             d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
-            max_objs_, 30.0f,
+            max_objs_, sinkhorn_lambda_,
             dda_max_cost_, match_thresh_, stage2_match_thresh_,
             high_thresh_, effective_mid_thresh, track_thresh_,
             sinkhorn_stage_stride_,
@@ -2792,6 +2915,15 @@ public:
         occ_foot_gap_ = std::max(0.0f, foot_gap);
         occ_ttl_ = std::max(1, ttl);
         occ_cost_weight_ = std::max(0.0f, cost_weight);
+    }
+    void set_multiplicative_cost_pub(bool enabled) {
+        multiplicative_cost_ = enabled;
+    }
+    void set_stability_cost_w_pub(float w) {
+        stability_cost_w_ = w;
+    }
+    void set_sinkhorn_lambda(float lambda) {
+        sinkhorn_lambda_ = std::max(1.0f, lambda);
     }
     /// Read back front-ttl and partner-slot arrays to host (env-gated diagnostic; only
     /// called when occ_state_enabled_ is true and SACCADE_OCC_LOG is set).
@@ -3197,6 +3329,9 @@ private:
     float occ_foot_gap_      = 0.15f;  // same-height gate: flag only at similar depth
     int   occ_ttl_           = 4;
     float occ_cost_weight_   = 0.50f;
+    bool  multiplicative_cost_ = false;
+    float stability_cost_w_    = 0.0f;
+    float sinkhorn_lambda_     = 30.0f;  // Sinkhorn temperature (cost→prob scaling)
     bool enable_dda_ = false;
     float dda_max_cost_ = 0.12f;
     float *d_states_, *d_covs_, *d_scores_, *d_features_;
@@ -3302,6 +3437,18 @@ void GPUByteTracker::set_oao_params(float tau, float contest_thresh, float score
 void GPUByteTracker::set_occ_params(bool enabled, float iou_thresh, float foot_gap,
                                     int ttl, float cost_weight) {
     pimpl_->set_occ_params(enabled, iou_thresh, foot_gap, ttl, cost_weight);
+}
+
+void GPUByteTracker::set_multiplicative_cost(bool enabled) {
+    pimpl_->set_multiplicative_cost_pub(enabled);
+}
+
+void GPUByteTracker::set_stability_cost_w(float w) {
+    pimpl_->set_stability_cost_w_pub(w);
+}
+
+void GPUByteTracker::set_sinkhorn_lambda(float lambda) {
+    pimpl_->set_sinkhorn_lambda(lambda);
 }
 
 std::vector<int> GPUByteTracker::get_occ_front_info() {

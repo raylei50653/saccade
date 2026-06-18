@@ -2,11 +2,26 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 from dataclasses import dataclass
+from pathlib import Path
+import sys
 from typing import List, Any, cast, Optional, TypedDict, Callable
 
 try:
     from saccade_tracking_ext import GPUByteTracker as CppGPUByteTracker, TrackResult
 except ImportError:
+    _build_dir = Path(__file__).resolve().parents[4] / "build"
+    if _build_dir.exists():
+        sys.path.insert(0, str(_build_dir))
+    try:
+        from saccade_tracking_ext import (
+            GPUByteTracker as CppGPUByteTracker,
+            TrackResult,
+        )
+    except ImportError:
+        CppGPUByteTracker = None
+        TrackResult = None
+
+if CppGPUByteTracker is None:
     # Fallback for environments where the extension is not available or has library conflicts
     class TrackResult:  # type: ignore
         def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -699,6 +714,37 @@ class GPUByteTracker:
                 float(foot_gate),
                 float(ramp_frames),
             )
+
+    def set_multiplicative_cost(self, enabled: bool = True) -> None:
+        """Enable log-linear cost form: cost = 1 - IoU * exp(-Σ penalty).
+
+        Replaces the additive clamp chain with a multiplicative form that keeps
+        cost naturally in [0,1] and supports reward terms (negative beta).
+        Default off for bit-identical backward compat.
+        """
+        setter = getattr(self.tracker, "set_multiplicative_cost", None)
+        if setter is not None:
+            setter(bool(enabled))
+
+    def set_stability_cost_w(self, w: float) -> None:
+        """Stability reward weight for multiplicative cost form.
+
+        A size-consistent match gets reduced cost: penalty -= w/(1+|h_diff|/h_det).
+        Only active when multiplicative_cost is enabled.
+        """
+        setter = getattr(self.tracker, "set_stability_cost_w", None)
+        if setter is not None:
+            setter(float(w))
+
+    def set_sinkhorn_lambda(self, lam: float) -> None:
+        """Sinkhorn exponential lambda (cost→prob scaling, default 30).
+
+        Lower values (10-15) give softer discrimination and room for reward
+        terms to affect auction outcomes.
+        """
+        setter = getattr(self.tracker, "set_sinkhorn_lambda", None)
+        if setter is not None:
+            setter(float(lam))
 
     def set_occ_params(
         self,

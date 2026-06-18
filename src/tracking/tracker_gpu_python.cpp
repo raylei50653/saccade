@@ -3008,6 +3008,15 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
              "Returns [max_objs] ttl values followed by [max_objs] partner slots.")
         .def("set_quality_params", &GPUByteTracker::set_quality_params,
              py::arg("enabled"), py::arg("w_aspect") = 0.50f, py::arg("w_center") = 0.30f, py::arg("w_area") = 0.20f)
+        .def("set_multiplicative_cost", &GPUByteTracker::set_multiplicative_cost,
+             py::arg("enabled"),
+             "Enable log-linear cost: cost = 1 - IoU * exp(-Σ penalty).")
+        .def("set_stability_cost_w", &GPUByteTracker::set_stability_cost_w,
+             py::arg("w"),
+             "Stability reward weight for multiplicative cost form.")
+        .def("set_sinkhorn_lambda", &GPUByteTracker::set_sinkhorn_lambda,
+             py::arg("lambda"),
+             "Sinkhorn exponential lambda (cost→prob, default 30).")
         .def("set_frame_size", &GPUByteTracker::set_frame_size,
              py::arg("w"), py::arg("h"))
         .def("set_homography", [](GPUByteTracker& self, py::object h_obj) {
