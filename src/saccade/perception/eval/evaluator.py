@@ -15,6 +15,7 @@ import torch
 
 from typing import Any
 
+from saccade.perception.box_ops import torch_box_iou_matrix
 from .types import (
     HostTrackResultView,
     HostTrackBatch,
@@ -189,29 +190,15 @@ def _consecutive_birth_check(
     """
     n = sub_boxes.shape[0]
     confirmed = torch.ones(n, dtype=torch.bool, device=sub_boxes.device)
-    sx1 = sub_boxes[:, 0].unsqueeze(1)
-    sy1 = sub_boxes[:, 1].unsqueeze(1)
-    sx2 = sub_boxes[:, 2].unsqueeze(1)
-    sy2 = sub_boxes[:, 3].unsqueeze(1)
-    sa = ((sx2 - sx1) * (sy2 - sy1)).clamp(min=1.0)
     oldest_match_cx: "torch.Tensor | None" = None
     oldest_match_cy: "torch.Tensor | None" = None
     for frame_idx, prev_boxes in enumerate(window):
         if prev_boxes.numel() == 0:
             confirmed[:] = False
             break
-        px1 = prev_boxes[:, 0].unsqueeze(0)
-        py1 = prev_boxes[:, 1].unsqueeze(0)
-        px2 = prev_boxes[:, 2].unsqueeze(0)
-        py2 = prev_boxes[:, 3].unsqueeze(0)
-        pa = ((px2 - px1) * (py2 - py1)).clamp(min=1.0)
-        ix1 = torch.maximum(sx1, px1)
-        iy1 = torch.maximum(sy1, py1)
-        ix2 = torch.minimum(sx2, px2)
-        iy2 = torch.minimum(sy2, py2)
-        inter = (ix2 - ix1).clamp(min=0) * (iy2 - iy1).clamp(min=0)
-        union = sa + pa - inter
-        iou = inter / union.clamp(min=1e-6)
+        iou = torch_box_iou_matrix(
+            sub_boxes, prev_boxes, union_mode="clamp", area_min=1.0
+        )
         max_iou, best_idx = iou.max(dim=1)
         confirmed &= max_iou >= iou_thresh
         if frame_idx == 0 and min_motion_px > 0:
@@ -259,23 +246,7 @@ def _suppress_duplicate_detections(
     keep = torch.ones(n, dtype=torch.bool, device=fused_boxes.device)
     scores = fused_scores.clone()
 
-    # Compute IoU matrix
-    ax1, ay1, ax2, ay2 = (
-        fused_boxes[:, 0],
-        fused_boxes[:, 1],
-        fused_boxes[:, 2],
-        fused_boxes[:, 3],
-    )
-    areas = (ax2 - ax1) * (ay2 - ay1)
-
-    ix1 = torch.maximum(ax1.unsqueeze(1), ax1.unsqueeze(0))
-    iy1 = torch.maximum(ay1.unsqueeze(1), ay1.unsqueeze(0))
-    ix2 = torch.minimum(ax2.unsqueeze(1), ax2.unsqueeze(0))
-    iy2 = torch.minimum(ay2.unsqueeze(1), ay2.unsqueeze(0))
-    inter = (ix2 - ix1).clamp(min=0) * (iy2 - iy1).clamp(min=0)
-    iou_matrix = inter / (areas.unsqueeze(1) + areas.unsqueeze(0) - inter).clamp(
-        min=1e-6
-    )
+    iou_matrix = torch_box_iou_matrix(fused_boxes, fused_boxes, union_mode="clamp")
 
     # Sort by score descending, process highest-score first
     sorted_idx = torch.argsort(scores, descending=True)

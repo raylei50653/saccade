@@ -15,6 +15,7 @@
 #include <string>
 #include <vector>
 #include "tracking/auction.hpp"
+#include "tracking/box_ops.hpp"
 #include "tracking/tracker_gpu.hpp"
 #include "tracking/gmc.hpp"
 #include "tracking/pipeline.hpp"
@@ -43,19 +44,6 @@ void launch_letterbox_gpu(
 
 namespace {
 
-float compute_iou(const float* a, const float* b) {
-    const float x1 = std::max(a[0], b[0]);
-    const float y1 = std::max(a[1], b[1]);
-    const float x2 = std::min(a[2], b[2]);
-    const float y2 = std::min(a[3], b[3]);
-    const float w = std::max(0.0f, x2 - x1);
-    const float h = std::max(0.0f, y2 - y1);
-    const float inter = w * h;
-    const float area_a = std::max(0.0f, a[2] - a[0]) * std::max(0.0f, a[3] - a[1]);
-    const float area_b = std::max(0.0f, b[2] - b[0]) * std::max(0.0f, b[3] - b[1]);
-    return inter / (area_a + area_b - inter + 1e-6f);
-}
-
 bool is_box_near_tiled_seam_cpu(
     const float* box,
     int tiling_mode,
@@ -63,32 +51,9 @@ bool is_box_near_tiled_seam_cpu(
     int frame_h,
     float seam_margin_canvas_px
 ) {
-    if (tiling_mode <= 0 || frame_w <= 0 || frame_h <= 0) return false;
-    const float r = 960.0f / std::max((float)frame_h, (float)frame_w);
-    const int h_new = static_cast<int>((float)frame_h * r);
-    const int w_new = static_cast<int>((float)frame_w * r);
-    const float y_off = (float)((960 - h_new) / 2);
-    const float x_off = (float)((960 - w_new) / 2);
-    const float seam_margin_orig = seam_margin_canvas_px / std::max(r, 1e-6f);
-    const float cx = 0.5f * (box[0] + box[2]);
-    const float cy = 0.5f * (box[1] + box[3]);
-
-    const std::array<float, 4> seam_xs{{160.0f, 320.0f, 640.0f, 800.0f}};
-    const int seam_x_start = tiling_mode == 2 ? 0 : 1;
-    const int seam_x_count = tiling_mode == 2 ? 4 : 2;
-    for (int i = seam_x_start; i < seam_x_start + seam_x_count; ++i) {
-        const float sx_canvas = seam_xs[static_cast<size_t>(i)];
-        if (!(x_off < sx_canvas && sx_canvas < x_off + (float)w_new)) continue;
-        const float sx = (sx_canvas - x_off) / r;
-        if ((box[0] <= sx && box[2] >= sx) || std::fabs(cx - sx) <= seam_margin_orig) return true;
-    }
-    const std::array<float, 2> seam_ys{{320.0f, 640.0f}};
-    for (float sy_canvas : seam_ys) {
-        if (!(y_off < sy_canvas && sy_canvas < y_off + (float)h_new)) continue;
-        const float sy = (sy_canvas - y_off) / r;
-        if ((box[1] <= sy && box[3] >= sy) || std::fabs(cy - sy) <= seam_margin_orig) return true;
-    }
-    return false;
+    return tracking::is_box_near_tiled_seam(
+        tracking::load_box4(box), tiling_mode, frame_w, frame_h, seam_margin_canvas_px
+    );
 }
 
 py::tuple merge_cross_tile_duplicates_cpu(
@@ -108,6 +73,18 @@ py::tuple merge_cross_tile_duplicates_cpu(
 ) {
     constexpr float kTiledSeamCoordWeight = 0.35f;
     constexpr float kTiledBestBlend = 0.25f;
+    const tracking::DuplicateMergeParams params{
+        iou_threshold,
+        center_threshold,
+        area_ratio_threshold,
+        tiling_mode,
+        frame_w,
+        frame_h,
+        seam_margin_canvas_px,
+        seam_center_scale,
+        seam_area_ratio_threshold,
+        seam_min_overlap_ratio,
+    };
     if (boxes.ndim() != 2 || boxes.shape(1) != 4) {
         throw std::invalid_argument("boxes must have shape [N, 4]");
     }
@@ -153,11 +130,7 @@ py::tuple merge_cross_tile_duplicates_cpu(
             boxes_in(anchor_idx, 2),
             boxes_in(anchor_idx, 3),
         };
-        const float anchor_w = std::max(1e-6f, anchor_box[2] - anchor_box[0]);
-        const float anchor_h = std::max(1e-6f, anchor_box[3] - anchor_box[1]);
-        const float anchor_area = anchor_w * anchor_h;
-        const float anchor_cx = 0.5f * (anchor_box[0] + anchor_box[2]);
-        const float anchor_cy = 0.5f * (anchor_box[1] + anchor_box[3]);
+        const tracking::Box4f anchor = tracking::load_box4(anchor_box);
 
         std::vector<int> cluster_indices;
         cluster_indices.reserve(4);
@@ -175,45 +148,7 @@ py::tuple merge_cross_tile_duplicates_cpu(
                 boxes_in(candidate_idx, 2),
                 boxes_in(candidate_idx, 3),
             };
-            const float iou = compute_iou(anchor_box, candidate_box);
-            const float candidate_w = std::max(1e-6f, candidate_box[2] - candidate_box[0]);
-            const float candidate_h = std::max(1e-6f, candidate_box[3] - candidate_box[1]);
-            const float candidate_area = candidate_w * candidate_h;
-            const float min_w = std::min(anchor_w, candidate_w);
-            const float min_h = std::min(anchor_h, candidate_h);
-            const float center_gate = std::sqrt(min_w * min_w + min_h * min_h) * center_threshold;
-            const float candidate_cx = 0.5f * (candidate_box[0] + candidate_box[2]);
-            const float candidate_cy = 0.5f * (candidate_box[1] + candidate_box[3]);
-            const float center_dx = candidate_cx - anchor_cx;
-            const float center_dy = candidate_cy - anchor_cy;
-            const float center_dist = std::sqrt(center_dx * center_dx + center_dy * center_dy);
-            const float area_ratio = std::min(
-                candidate_area / std::max(anchor_area, 1e-6f),
-                anchor_area / std::max(candidate_area, 1e-6f)
-            );
-
-            const float x1 = std::max(anchor_box[0], candidate_box[0]);
-            const float y1 = std::max(anchor_box[1], candidate_box[1]);
-            const float x2 = std::min(anchor_box[2], candidate_box[2]);
-            const float y2 = std::min(anchor_box[3], candidate_box[3]);
-            const float inter_w = std::max(0.0f, x2 - x1);
-            const float inter_h = std::max(0.0f, y2 - y1);
-            const float overlap_ratio_x = inter_w / std::max(min_w, 1e-6f);
-            const float overlap_ratio_y = inter_h / std::max(min_h, 1e-6f);
-            const bool anchor_is_seam = is_box_near_tiled_seam_cpu(
-                anchor_box, tiling_mode, frame_w, frame_h, seam_margin_canvas_px
-            );
-            const bool candidate_is_seam = is_box_near_tiled_seam_cpu(
-                candidate_box, tiling_mode, frame_w, frame_h, seam_margin_canvas_px
-            );
-            const bool seam_duplicate =
-                (anchor_is_seam || candidate_is_seam) &&
-                center_dist <= center_gate * seam_center_scale &&
-                area_ratio >= seam_area_ratio_threshold &&
-                overlap_ratio_x >= seam_min_overlap_ratio &&
-                overlap_ratio_y >= seam_min_overlap_ratio;
-
-            if (iou >= iou_threshold || (center_dist <= center_gate && area_ratio >= area_ratio_threshold) || seam_duplicate) {
+            if (tracking::duplicate_match(anchor, tracking::load_box4(candidate_box), params)) {
                 cluster_indices.push_back(candidate_idx);
             }
         }
@@ -326,6 +261,21 @@ py::tuple filter_detections_cpu(
     if (scores.shape(0) != num || classes.shape(0) != num) {
         throw std::invalid_argument("boxes, scores, and classes must have the same length");
     }
+    const tracking::DetectionFilterParams params{
+        score_threshold,
+        track_person_only,
+        person_class,
+        is_tiled,
+        frame_w,
+        frame_h,
+        person_geometry_prior,
+        geometry_suspect_support,
+        person_min_height_ratio,
+        person_min_aspect,
+        person_max_aspect,
+        person_min_area_ratio,
+        person_max_area_ratio,
+    };
 
     auto boxes_in = boxes.unchecked<2>();
     auto scores_in = scores.unchecked<1>();
@@ -335,43 +285,14 @@ py::tuple filter_detections_cpu(
     keep_indices.reserve(static_cast<size_t>(num));
     suspect_flags.reserve(static_cast<size_t>(num));
 
-    const float frame_area = std::max(static_cast<float>(frame_w * frame_h), 1.0f);
     for (ssize_t i = 0; i < num; ++i) {
-        bool keep = scores_in(i) > score_threshold;
-        if (track_person_only) {
-            keep = keep && classes_in(i) == person_class;
-        }
-        if (is_tiled) {
-            const float cx = (boxes_in(i, 0) + boxes_in(i, 2)) * 0.5f;
-            const float cy = (boxes_in(i, 1) + boxes_in(i, 3)) * 0.5f;
-            keep = keep && cx >= 0.0f && cx < frame_w && cy >= 0.0f && cy < frame_h;
-        }
-
         bool geometry_clean = true;
-        if (person_geometry_prior) {
-            const float box_w = std::max(boxes_in(i, 2) - boxes_in(i, 0), 1e-6f);
-            const float box_h = std::max(boxes_in(i, 3) - boxes_in(i, 1), 1e-6f);
-            const float aspect = box_h / box_w;
-            const float area_ratio = (box_w * box_h) / frame_area;
-            if (person_min_height_ratio > 0.0f) {
-                geometry_clean = geometry_clean && box_h >= frame_h * person_min_height_ratio;
-            }
-            if (person_min_aspect > 0.0f) {
-                geometry_clean = geometry_clean && aspect >= person_min_aspect;
-            }
-            if (person_max_aspect > 0.0f) {
-                geometry_clean = geometry_clean && aspect <= person_max_aspect;
-            }
-            if (person_min_area_ratio > 0.0f) {
-                geometry_clean = geometry_clean && area_ratio >= person_min_area_ratio;
-            }
-            if (person_max_area_ratio > 0.0f) {
-                geometry_clean = geometry_clean && area_ratio <= person_max_area_ratio;
-            }
-            if (!geometry_suspect_support) {
-                keep = keep && geometry_clean;
-            }
-        }
+        const float raw_box[4] = {
+            boxes_in(i, 0), boxes_in(i, 1), boxes_in(i, 2), boxes_in(i, 3),
+        };
+        const bool keep = tracking::detection_keep(
+            tracking::load_box4(raw_box), scores_in(i), classes_in(i), params, geometry_clean
+        );
 
         if (keep) {
             keep_indices.push_back(static_cast<int>(i));
@@ -404,6 +325,10 @@ struct RelinkBox {
     float y2;
 };
 
+tracking::Box4f to_box4(const RelinkBox& box) {
+    return {box.x1, box.y1, box.x2, box.y2};
+}
+
 struct RelinkMotionSnapshot {
     std::array<float, 8> state{};       // [cx, cy, a, h, vx, vy, va, vh]
     std::array<float, 64> covariance{}; // row-major 8x8 Kalman covariance
@@ -431,6 +356,15 @@ struct RelinkStats {
     int reject_backward = 0;
     int accept_bidir = 0;
     int relink_split_collision = 0;
+};
+
+struct RelinkCandidateGates {
+    int cid = -1;
+    int age = 0;
+    float iou = 0.0f;
+    float center_norm = 0.0f;
+    float maha = 0.0f;
+    float kalman_d2 = -1.0f;  // <0 when Kalman gate inactive for this candidate
 };
 
 struct PendingClaim {
@@ -1009,70 +943,18 @@ public:
     // fast-path stays consistent with the CPU path.
     bool gpu_winner_passes_gates(int raw_id, int cid, const RelinkBox& box,
                                  int frame_id, float current_sim_thresh,
-                                 float best_sim_raw) const {
+                                 float best_sim_raw) {
         const auto ls = last_seen_.find(cid);
         if (ls == last_seen_.end()) return false;
-        const int age = frame_id - ls->second;
-        if (age < min_lost_frames_ || age > ttl_) return false;
 
         const float* gate = gate_lookup(raw_id, cid);
         if (!gate) return false;  // no precomputed gate row -> defer to inline loop
 
-        if (gate[4] > 0.5f) return false;        // physical speed gate
-        const float center_norm = gate[2];
-        const float iou = gate[3];
-        if (center_norm > 1.0f) return false;    // coarse spatial pre-filter
-
-        bool kalman_gated = false;
-        if (kalman_gate_) {
-            if (gate[0] >= 0.0f) {
-                if (gate[5] > 0.5f) return false;          // direction-behind
-                if (gate[0] > kalman_chi2_) return false;  // Kalman chi-square
-                kalman_gated = true;
-            } else {
-                const auto mit = motion_.find(cid);
-                if (mit != motion_.end()) {
-                    if (direction_behind(box, mit->second, kalman_dir_min_cos_,
-                                         kalman_dir_min_speed_)) return false;
-                    const int delta = mit->second.frame >= 0
-                                          ? (frame_id - mit->second.frame) : 0;
-                    const int dims = bidirectional_ ? 2 : 4;
-                    const float kd2 = (dims <= 2)
-                        ? kalman_gate_dist_2d(box, mit->second, delta,
-                              kalman_person_height_m_, kalman_accel_long_,
-                              kalman_accel_lat_, kalman_fps_)
-                        : kalman_gate_dist(box, mit->second, delta,
-                              kalman_person_height_m_, kalman_accel_long_,
-                              kalman_accel_lat_, kalman_fps_);
-                    if (kd2 > kalman_chi2_) return false;
-                    kalman_gated = true;
-                }
-            }
-        }
-        if (bidirectional_) {
-            if (!bridge_scale_gate_ok(cid, raw_id)) return false;
-            if (gate[1] >= 0.0f) {
-                if (gate[1] > bridge_px_) return false;    // backward bridge
-            } else {
-                const auto fh = foot_history_.find(cid);
-                if (fh != foot_history_.end()) {
-                    const float b_cx = (box.x1 + box.x2) * 0.5f;
-                    const float b_cy = (box.y1 + box.y2) * 0.5f;
-                    const int gap = frame_id - ls->second;
-                    if (midpoint_bridge_dist(cid, raw_id, gap, b_cx, b_cy) > bridge_px_)
-                        return false;
-                }
-            }
-        }
-        if (!kalman_gated && (center_norm > spatial_gate_ || iou < min_iou_))
+        RelinkCandidateGates gates;
+        if (!evaluate_candidate_gates(
+                raw_id, cid, box, frame_id, 0, 0, gate, gates,
+                false, false)) {
             return false;
-        if (mahalanobis_threshold_ > 0.0f) {
-            const auto mit = motion_.find(cid);
-            if (mit == motion_.end()) return false;
-            if (mahalanobis(box, mit->second) > mahalanobis_threshold_) return false;
-        }
-        if (min_consistency_ > 0.0f && buffer_size_ > 1) {
-            if (buffer_consistency(cid) < min_consistency_) return false;
         }
         if (best_sim_raw < current_sim_thresh) return false;  // strict/lenient sim
         return true;
@@ -1128,20 +1010,8 @@ public:
         }
 
         const RelinkBox box = parse_box(box_obj);
-        bool is_clean = true;
-        if (clean_score_threshold_ > 0.0f || clean_margin_ratio_ > 0.0f) {
-            float bw = box.x2 - box.x1;
-            float bh = box.y2 - box.y1;
-            float aspect = bw > 0 ? bh / bw : 0.0f;
-            float margin_w = frame_w * clean_margin_ratio_;
-            float margin_h = frame_h * clean_margin_ratio_;
-            if (score < clean_score_threshold_ || 
-                box.x1 < margin_w || box.y1 < margin_h || box.x2 > frame_w - margin_w || box.y2 > frame_h - margin_h ||
-                aspect < clean_min_aspect_ || aspect > clean_max_aspect_) {
-                is_clean = false;
-            }
-        }
-        float current_sim_thresh = is_clean ? sim_threshold_ : strict_sim_threshold_;
+        const bool is_clean = is_clean_observation(box, score, frame_w, frame_h);
+        const float current_sim_thresh = is_clean ? sim_threshold_ : strict_sim_threshold_;
 
         if (delayed_claim_ && pending_claims_.count(raw_id) && canonical_id(raw_id) == raw_id) {
             mark_pending_claim(raw_id, frame_id);
@@ -1174,89 +1044,9 @@ public:
                     stats_.reject_assigned += 1;
                     continue;
                 }
-                const int age = frame_id - last_seen_.at(cid);
-                if (age < min_lost_frames_ || age > ttl_) {
-                    stats_.reject_age += 1;
+                RelinkCandidateGates gates;
+                if (!evaluate_candidate_gates(raw_id, cid, box, frame_id, frame_w, frame_h, nullptr, gates)) {
                     continue;
-                }
-                // Physical reachability gate (always-on, snapshot-independent).
-                if (exceeds_max_speed(box, last_boxes_.at(cid), age, kalman_person_height_m_, kalman_fps_, kalman_max_speed_mps_)) {
-                    stats_.reject_speed += 1;
-                    continue;
-                }
-                auto [center_norm, iou] = spatial_metrics(box, last_boxes_.at(cid), frame_w, frame_h);
-                // Coarse spatial pre-filter: skip clearly-too-far candidates
-                // before the expensive Kalman predict loop.
-                if (center_norm > 1.0f) { stats_.reject_spatial += 1; continue; }
-                bool kalman_gated = false;
-                if (kalman_gate_) {
-                    const auto motion_it = motion_.find(cid);
-                    if (motion_it != motion_.end()) {
-                        if (direction_behind(box, motion_it->second, kalman_dir_min_cos_, kalman_dir_min_speed_)) {
-                            stats_.reject_direction += 1;
-                            continue;
-                        }
-                        const int delta = motion_it->second.frame >= 0
-                                              ? (frame_id - motion_it->second.frame)
-                                              : 0;
-                        const int dims = bidirectional_ ? 2 : 4;
-                        const float kalman_d2 = (dims <= 2)
-                            ? kalman_gate_dist_2d(
-                                  box, motion_it->second, delta, kalman_person_height_m_,
-                                  kalman_accel_long_, kalman_accel_lat_, kalman_fps_)
-                            : kalman_gate_dist(
-                                  box, motion_it->second, delta, kalman_person_height_m_,
-                                  kalman_accel_long_, kalman_accel_lat_, kalman_fps_);
-                        if (kalman_d2 > kalman_chi2_) {
-                            stats_.reject_kalman += 1;
-                            continue;
-                        }
-                        kalman_gated = true;
-                    }
-                }
-                // Bidirectional midpoint bridge gate.
-                if (bidirectional_) {
-                    if (!bridge_scale_gate_ok(cid, raw_id)) {
-                        stats_.reject_backward += 1;
-                        continue;
-                    }
-                    auto fh = foot_history_.find(cid);
-                    if (fh != foot_history_.end()) {
-                        float b_cx = (box.x1 + box.x2) * 0.5f;
-                        float b_cy = (box.y1 + box.y2) * 0.5f;
-                        int gap = frame_id - last_seen_.at(cid);
-                        float dist = midpoint_bridge_dist(cid, raw_id, gap, b_cx, b_cy);
-                        if (dist > bridge_px_) {
-                            stats_.reject_backward += 1;
-                            continue;
-                        }
-                        stats_.accept_bidir += 1;
-                    }
-                }
-                if (!kalman_gated && (center_norm > spatial_gate_ || iou < min_iou_)) {
-                    stats_.reject_spatial += 1;
-                    continue;
-                }
-                float maha = 0.0f;
-                if (mahalanobis_threshold_ > 0.0f) {
-                    const auto motion_it = motion_.find(cid);
-                    if (motion_it == motion_.end()) {
-                        stats_.reject_mahalanobis += 1;
-                        continue;
-                    }
-                    maha = mahalanobis(box, motion_it->second);
-                    float dynamic_thresh = get_dynamic_mahalanobis_threshold(cid);
-                    if (maha > dynamic_thresh) {
-                        stats_.reject_mahalanobis += 1;
-                        continue;
-                    }
-                }
-                if (min_consistency_ > 0.0f && buffer_size_ > 1) {
-                    const float consistency = buffer_consistency(cid);
-                    if (consistency < min_consistency_) {
-                        stats_.reject_consistency += 1;
-                        continue;
-                    }
                 }
 
                 std::vector<float> ref = buffer_size_ > 1 ? buffer_mean(cid) : feature_it->second;
@@ -1270,9 +1060,9 @@ public:
                     }
                     best_id = cid;
                     best_sim = sim;
-                    best_iou = iou;
-                    best_center = center_norm;
-                    best_maha = maha;
+                    best_iou = gates.iou;
+                    best_center = gates.center_norm;
+                    best_maha = gates.maha;
                 } else {
                     if (sim > second_best_sim) {
                         second_best_sim = sim;
@@ -1289,65 +1079,14 @@ public:
             }
 
             if (best_id >= 0) {
-                stats_.accepted += 1;
-                if (delayed_claim_ && raw_id != best_id) {
-                    stats_.delayed_claim_accepted += 1;
-                    deferred_alias_[raw_id] = best_id;
-                    pending_claims_.erase(raw_id);
-                }
-                accept_sims_.push_back(best_sim);
-                accept_ious_.push_back(best_iou);
-                accept_center_dists_.push_back(best_center);
-                accept_mahas_.push_back(best_maha);
-                alias_[raw_id] = best_id;
+                record_relink_accept(raw_id, best_id, best_sim, best_iou, best_center, best_maha);
             } else {
-                stats_.new_ids += 1;
-                alias_[raw_id] = raw_id;
-                if (delayed_claim_ && claim_ready) {
-                    pending_claims_.erase(raw_id);
-                }
+                record_new_identity(raw_id, claim_ready);
             }
         }
 
         int canonical = alias_.at(raw_id);
-        if (!is_clean) {
-            stats_.reject_quality += 1;
-        } else if (has_emb) {
-            if (buffer_size_ > 1) {
-                auto& buf = buffers_[canonical];
-                buf.push_back(emb);
-                if (static_cast<int>(buf.size()) > buffer_size_) {
-                    buf.erase(buf.begin());
-                }
-                features_[canonical] = buffer_mean(canonical);
-            } else {
-                auto old = features_.find(canonical);
-                if (old == features_.end()) {
-                    features_[canonical] = emb;
-                } else {
-                    std::vector<float> updated(emb.size(), 0.0f);
-                    for (size_t i = 0; i < emb.size(); ++i) {
-                        updated[i] = ema_beta_ * old->second[i] + (1.0f - ema_beta_) * emb[i];
-                    }
-                    features_[canonical] = normalize(updated);
-                }
-            }
-        } else if (features_.find(canonical) == features_.end()) {
-            features_[canonical] = std::vector<float>{0.0f};
-        }
-        if (std::find(feature_order_.begin(), feature_order_.end(), canonical) == feature_order_.end()) {
-            feature_order_.push_back(canonical);
-        }
-        last_seen_[canonical] = frame_id;
-        last_boxes_[canonical] = box;
-        float bh = box.y2 - box.y1;
-        auto old_h = ema_h_.find(canonical);
-        ema_h_[canonical] = (old_h == ema_h_.end()) ? bh : 0.95f * old_h->second + 0.05f * bh;
-        float enc_cx = (box.x1 + box.x2) * 0.5f;
-        float enc_cy = (box.y1 + box.y2) * 0.5f;
-        auto& hist = foot_history_[canonical];
-        hist.push_back({enc_cx, enc_cy});
-        if (hist.size() > 8) hist.erase(hist.begin());
+        commit_reference_state(canonical, box, emb, has_emb, is_clean, frame_id);
         // Per-frame uniqueness guard
         py::int_ py_canonical(canonical);
         if (PySet_Contains(assigned.ptr(), py_canonical.ptr()) == 1) {
@@ -1632,20 +1371,8 @@ public:
         int frame_h,
         std::unordered_set<int>& assigned
     ) {
-        bool is_clean = true;
-        if (clean_score_threshold_ > 0.0f || clean_margin_ratio_ > 0.0f) {
-            float bw = box.x2 - box.x1;
-            float bh = box.y2 - box.y1;
-            float aspect = bw > 0 ? bh / bw : 0.0f;
-            float margin_w = frame_w * clean_margin_ratio_;
-            float margin_h = frame_h * clean_margin_ratio_;
-            if (score < clean_score_threshold_ || 
-                box.x1 < margin_w || box.y1 < margin_h || box.x2 > frame_w - margin_w || box.y2 > frame_h - margin_h ||
-                aspect < clean_min_aspect_ || aspect > clean_max_aspect_) {
-                is_clean = false;
-            }
-        }
-        float current_sim_thresh = is_clean ? sim_threshold_ : strict_sim_threshold_;
+        const bool is_clean = is_clean_observation(box, score, frame_w, frame_h);
+        const float current_sim_thresh = is_clean ? sim_threshold_ : strict_sim_threshold_;
 
         if (delayed_claim_ && pending_claims_.count(raw_id) && canonical_id(raw_id) == raw_id) {
             mark_pending_claim(raw_id, frame_id);
@@ -1709,29 +1436,11 @@ public:
 
             if (gpu_scored) {
                 // Use fast-path: skip the O(n_cand) loop
-                stats_.accepted += 1;
-                if (delayed_claim_ && raw_id != best_id) {
-                    stats_.delayed_claim_accepted += 1;
-                    deferred_alias_[raw_id] = best_id;
-                    pending_claims_.erase(raw_id);
-                }
-                accept_sims_.push_back(best_sim_raw);
-                accept_ious_.push_back(best_iou);
-                accept_center_dists_.push_back(best_center);
-                accept_mahas_.push_back(best_maha);
-                alias_[raw_id] = best_id;
+                record_relink_accept(raw_id, best_id, best_sim_raw, best_iou, best_center, best_maha);
             } else {
             // Fall-through to inline candidate loop
 
-            struct CandidateInfo {
-                int cid;
-                int age;
-                float iou;
-                float center_norm;
-                float maha;
-                float kalman_d2;  // <0 when Kalman gate inactive for this candidate
-            };
-            std::vector<CandidateInfo> candidates_to_score;
+            std::vector<RelinkCandidateGates> candidates_to_score;
 
             for (int cid : feature_order_) {
                 if (delayed_claim_ && cid == raw_id) {
@@ -1740,100 +1449,13 @@ public:
                 const auto feature_it = features_.find(cid);
                 if (feature_it == features_.end()) continue;
                 if (assigned.count(cid)) { stats_.reject_assigned += 1; continue; }
-                const int age = frame_id - last_seen_.at(cid);
-                if (age < min_lost_frames_ || age > ttl_) { stats_.reject_age += 1; continue; }
 
                 const float* gate = gate_lookup(raw_id, cid);
-
-                // Physical reachability gate (always-on, snapshot-independent).
-                bool speed_exceeds = gate ? (gate[4] > 0.5f) :
-                    exceeds_max_speed(box, last_boxes_.at(cid), age, kalman_person_height_m_, kalman_fps_, kalman_max_speed_mps_);
-                if (speed_exceeds) { stats_.reject_speed += 1; continue; }
-
-                float center_norm, iou;
-                if (gate) { center_norm = gate[2]; iou = gate[3]; }
-                else { auto sp = spatial_metrics(box, last_boxes_.at(cid), frame_w, frame_h); center_norm = sp.first; iou = sp.second; }
-
-                // Coarse spatial pre-filter: reject candidates more than
-                // one frame diagonal away before the expensive Kalman predict.
-                // Even with 120 frames of maximum inflation, no pedestrian
-                // cloud reaches across the entire frame.
-                if (center_norm > 1.0f) { stats_.reject_spatial += 1; continue; }
-
-                // Kalman probabilistic gate: when a motion snapshot is available, gate
-                // by chi-square distance to the extrapolated/inflated distribution
-                // instead of the static center/IoU gate. Falls back to static gate when
-                // no snapshot exists for this candidate.
-                float kalman_d2 = -1.0f;
-                bool kalman_gated = false;
-                if (kalman_gate_) {
-                    if (gate && gate[0] >= 0.0f) {
-                        if (gate[5] > 0.5f) { stats_.reject_direction += 1; continue; }
-                        kalman_d2 = gate[0];
-                        if (kalman_d2 > kalman_chi2_) { stats_.reject_kalman += 1; continue; }
-                        kalman_gated = true;
-                    } else {
-                        const auto motion_it = motion_.find(cid);
-                        if (motion_it != motion_.end()) {
-                            if (direction_behind(box, motion_it->second, kalman_dir_min_cos_, kalman_dir_min_speed_)) {
-                                stats_.reject_direction += 1; continue;
-                            }
-                            const int delta = motion_it->second.frame >= 0
-                                                  ? (frame_id - motion_it->second.frame)
-                                                  : 0;
-                            const int dims = bidirectional_ ? 2 : 4;
-                            kalman_d2 = (dims <= 2)
-                                ? kalman_gate_dist_2d(
-                                      box, motion_it->second, delta, kalman_person_height_m_,
-                                      kalman_accel_long_, kalman_accel_lat_, kalman_fps_)
-                                : kalman_gate_dist(
-                                      box, motion_it->second, delta, kalman_person_height_m_,
-                                      kalman_accel_long_, kalman_accel_lat_, kalman_fps_);
-                            if (kalman_d2 > kalman_chi2_) { stats_.reject_kalman += 1; continue; }
-                            kalman_gated = true;
-                        }
-                    }
+                RelinkCandidateGates gates;
+                if (!evaluate_candidate_gates(raw_id, cid, box, frame_id, frame_w, frame_h, gate, gates)) {
+                    continue;
                 }
-                // Bidirectional midpoint bridge gate: both clouds must intersect
-                // at the midpoint within bridge_px * h_ref.
-                if (bidirectional_) {
-                    if (!bridge_scale_gate_ok(cid, raw_id)) {
-                        stats_.reject_backward += 1;
-                        continue;
-                    }
-                    if (gate && gate[1] >= 0.0f) {
-                        if (gate[1] > bridge_px_) { stats_.reject_backward += 1; continue; }
-                        stats_.accept_bidir += 1;
-                    } else {
-                        auto fh = foot_history_.find(cid);
-                        if (fh != foot_history_.end()) {
-                            float b_cx = (box.x1 + box.x2) * 0.5f;
-                            float b_cy = (box.y1 + box.y2) * 0.5f;
-                            int gap = frame_id - last_seen_.at(cid);
-                            float dist = midpoint_bridge_dist(cid, raw_id, gap, b_cx, b_cy);
-                            if (dist > bridge_px_) {
-                                stats_.reject_backward += 1;
-                                continue;
-                            }
-                            stats_.accept_bidir += 1;
-                        }
-                    }
-                }
-                if (!kalman_gated && (center_norm > spatial_gate_ || iou < min_iou_)) {
-                    stats_.reject_spatial += 1; continue;
-                }
-                float maha = 0.0f;
-                if (mahalanobis_threshold_ > 0.0f) {
-                    const auto motion_it = motion_.find(cid);
-                    if (motion_it == motion_.end()) { stats_.reject_mahalanobis += 1; continue; }
-                    maha = mahalanobis(box, motion_it->second);
-                    float dynamic_thresh = get_dynamic_mahalanobis_threshold(cid);
-                    if (maha > dynamic_thresh) { stats_.reject_mahalanobis += 1; continue; }
-                }
-                if (min_consistency_ > 0.0f && buffer_size_ > 1) {
-                    if (buffer_consistency(cid) < min_consistency_) { stats_.reject_consistency += 1; continue; }
-                }
-                candidates_to_score.push_back({cid, age, iou, center_norm, maha, kalman_gated ? kalman_d2 : -1.0f});
+                candidates_to_score.push_back(gates);
             }
 
             int n_gate_passed = static_cast<int>(candidates_to_score.size());
@@ -1946,62 +1568,15 @@ public:
             }
 
             if (best_id >= 0) {
-                stats_.accepted += 1;
-                if (delayed_claim_ && raw_id != best_id) {
-                    stats_.delayed_claim_accepted += 1;
-                    deferred_alias_[raw_id] = best_id;
-                    pending_claims_.erase(raw_id);
-                }
-                accept_sims_.push_back(best_sim_raw);
-                accept_ious_.push_back(best_iou);
-                accept_center_dists_.push_back(best_center);
-                accept_mahas_.push_back(best_maha);
-                alias_[raw_id] = best_id;
+                record_relink_accept(raw_id, best_id, best_sim_raw, best_iou, best_center, best_maha);
             } else {
-                stats_.new_ids += 1;
-                alias_[raw_id] = raw_id;
-                if (delayed_claim_ && claim_ready) {
-                    pending_claims_.erase(raw_id);
-                }
+                record_new_identity(raw_id, claim_ready);
             }
             } // closes GPU-scored else { fall-through to inline loop }
         }
 
         int canonical = alias_.at(raw_id);
-        if (!is_clean) {
-            stats_.reject_quality += 1;
-        } else if (has_emb) {
-            if (buffer_size_ > 1) {
-                auto& buf = buffers_[canonical];
-                buf.push_back(emb);
-                if (static_cast<int>(buf.size()) > buffer_size_) buf.erase(buf.begin());
-                features_[canonical] = buffer_mean(canonical);
-            } else {
-                auto old_it = features_.find(canonical);
-                if (old_it == features_.end()) {
-                    features_[canonical] = emb;
-                } else {
-                    std::vector<float> updated(emb.size(), 0.0f);
-                    for (size_t i = 0; i < emb.size(); ++i)
-                        updated[i] = ema_beta_ * old_it->second[i] + (1.0f - ema_beta_) * emb[i];
-                    features_[canonical] = normalize(updated);
-                }
-            }
-        } else if (features_.find(canonical) == features_.end()) {
-            features_[canonical] = std::vector<float>{0.0f};
-        }
-        if (std::find(feature_order_.begin(), feature_order_.end(), canonical) == feature_order_.end())
-            feature_order_.push_back(canonical);
-        last_seen_[canonical] = frame_id;
-        last_boxes_[canonical] = box;
-        float bh = box.y2 - box.y1;
-        auto old_h = ema_h_.find(canonical);
-        ema_h_[canonical] = (old_h == ema_h_.end()) ? bh : 0.95f * old_h->second + 0.05f * bh;
-        float enc_cx = (box.x1 + box.x2) * 0.5f;
-        float enc_cy = (box.y1 + box.y2) * 0.5f;
-        auto& hist = foot_history_[canonical];
-        hist.push_back({enc_cx, enc_cy});
-        if (hist.size() > 8) hist.erase(hist.begin());
+        commit_reference_state(canonical, box, emb, has_emb, is_clean, frame_id);
         if (assigned.count(canonical)) {
             canonical = split_on_collision(raw_id);
         }
@@ -2067,29 +1642,256 @@ private:
         return out;
     }
 
+    bool is_clean_observation(const RelinkBox& box, float score, int frame_w, int frame_h) const {
+        if (clean_score_threshold_ <= 0.0f && clean_margin_ratio_ <= 0.0f) {
+            return true;
+        }
+        const float bw = box.x2 - box.x1;
+        const float bh = box.y2 - box.y1;
+        const float aspect = bw > 0.0f ? bh / bw : 0.0f;
+        const float margin_w = frame_w * clean_margin_ratio_;
+        const float margin_h = frame_h * clean_margin_ratio_;
+        return score >= clean_score_threshold_ &&
+               box.x1 >= margin_w &&
+               box.y1 >= margin_h &&
+               box.x2 <= frame_w - margin_w &&
+               box.y2 <= frame_h - margin_h &&
+               aspect >= clean_min_aspect_ &&
+               aspect <= clean_max_aspect_;
+    }
+
+    void record_relink_accept(
+        int raw_id,
+        int best_id,
+        float sim,
+        float iou,
+        float center_dist,
+        float maha
+    ) {
+        stats_.accepted += 1;
+        if (delayed_claim_ && raw_id != best_id) {
+            stats_.delayed_claim_accepted += 1;
+            deferred_alias_[raw_id] = best_id;
+            pending_claims_.erase(raw_id);
+        }
+        accept_sims_.push_back(sim);
+        accept_ious_.push_back(iou);
+        accept_center_dists_.push_back(center_dist);
+        accept_mahas_.push_back(maha);
+        alias_[raw_id] = best_id;
+    }
+
+    void record_new_identity(int raw_id, bool claim_ready) {
+        stats_.new_ids += 1;
+        alias_[raw_id] = raw_id;
+        if (delayed_claim_ && claim_ready) {
+            pending_claims_.erase(raw_id);
+        }
+    }
+
+    bool evaluate_candidate_gates(
+        int raw_id,
+        int cid,
+        const RelinkBox& box,
+        int frame_id,
+        int frame_w,
+        int frame_h,
+        const float* gate,
+        RelinkCandidateGates& out,
+        bool record_stats = true,
+        bool record_bidir_accept = true
+    ) {
+        const int age = frame_id - last_seen_.at(cid);
+        if (age < min_lost_frames_ || age > ttl_) {
+            if (record_stats) stats_.reject_age += 1;
+            return false;
+        }
+
+        const bool speed_exceeds = gate ? (gate[4] > 0.5f)
+            : exceeds_max_speed(
+                  box, last_boxes_.at(cid), age, kalman_person_height_m_,
+                  kalman_fps_, kalman_max_speed_mps_);
+        if (speed_exceeds) {
+            if (record_stats) stats_.reject_speed += 1;
+            return false;
+        }
+
+        float center_norm = 0.0f;
+        float iou = 0.0f;
+        if (gate) {
+            center_norm = gate[2];
+            iou = gate[3];
+        } else {
+            auto sp = spatial_metrics(box, last_boxes_.at(cid), frame_w, frame_h);
+            center_norm = sp.first;
+            iou = sp.second;
+        }
+
+        if (center_norm > 1.0f) {
+            if (record_stats) stats_.reject_spatial += 1;
+            return false;
+        }
+
+        float kalman_d2 = -1.0f;
+        bool kalman_gated = false;
+        if (kalman_gate_) {
+            if (gate && gate[0] >= 0.0f) {
+                if (gate[5] > 0.5f) {
+                    if (record_stats) stats_.reject_direction += 1;
+                    return false;
+                }
+                kalman_d2 = gate[0];
+                if (kalman_d2 > kalman_chi2_) {
+                    if (record_stats) stats_.reject_kalman += 1;
+                    return false;
+                }
+                kalman_gated = true;
+            } else {
+                const auto motion_it = motion_.find(cid);
+                if (motion_it != motion_.end()) {
+                    if (direction_behind(box, motion_it->second, kalman_dir_min_cos_, kalman_dir_min_speed_)) {
+                        if (record_stats) stats_.reject_direction += 1;
+                        return false;
+                    }
+                    const int delta = motion_it->second.frame >= 0
+                                          ? (frame_id - motion_it->second.frame)
+                                          : 0;
+                    const int dims = bidirectional_ ? 2 : 4;
+                    kalman_d2 = (dims <= 2)
+                        ? kalman_gate_dist_2d(
+                              box, motion_it->second, delta, kalman_person_height_m_,
+                              kalman_accel_long_, kalman_accel_lat_, kalman_fps_)
+                        : kalman_gate_dist(
+                              box, motion_it->second, delta, kalman_person_height_m_,
+                              kalman_accel_long_, kalman_accel_lat_, kalman_fps_);
+                    if (kalman_d2 > kalman_chi2_) {
+                        if (record_stats) stats_.reject_kalman += 1;
+                        return false;
+                    }
+                    kalman_gated = true;
+                }
+            }
+        }
+
+        if (bidirectional_) {
+            if (!bridge_scale_gate_ok(cid, raw_id)) {
+                if (record_stats) stats_.reject_backward += 1;
+                return false;
+            }
+            if (gate && gate[1] >= 0.0f) {
+                if (gate[1] > bridge_px_) {
+                    if (record_stats) stats_.reject_backward += 1;
+                    return false;
+                }
+                if (record_bidir_accept) stats_.accept_bidir += 1;
+            } else {
+                auto fh = foot_history_.find(cid);
+                if (fh != foot_history_.end()) {
+                    const float b_cx = (box.x1 + box.x2) * 0.5f;
+                    const float b_cy = (box.y1 + box.y2) * 0.5f;
+                    const int gap = frame_id - last_seen_.at(cid);
+                    const float dist = midpoint_bridge_dist(cid, raw_id, gap, b_cx, b_cy);
+                    if (dist > bridge_px_) {
+                        if (record_stats) stats_.reject_backward += 1;
+                        return false;
+                    }
+                    if (record_bidir_accept) stats_.accept_bidir += 1;
+                }
+            }
+        }
+
+        if (!kalman_gated && (center_norm > spatial_gate_ || iou < min_iou_)) {
+            if (record_stats) stats_.reject_spatial += 1;
+            return false;
+        }
+
+        float maha = 0.0f;
+        if (mahalanobis_threshold_ > 0.0f) {
+            const auto motion_it = motion_.find(cid);
+            if (motion_it == motion_.end()) {
+                if (record_stats) stats_.reject_mahalanobis += 1;
+                return false;
+            }
+            maha = mahalanobis(box, motion_it->second);
+            const float dynamic_thresh = get_dynamic_mahalanobis_threshold(cid);
+            if (maha > dynamic_thresh) {
+                if (record_stats) stats_.reject_mahalanobis += 1;
+                return false;
+            }
+        }
+
+        if (min_consistency_ > 0.0f && buffer_size_ > 1) {
+            if (buffer_consistency(cid) < min_consistency_) {
+                if (record_stats) stats_.reject_consistency += 1;
+                return false;
+            }
+        }
+
+        out = {cid, age, iou, center_norm, maha, kalman_gated ? kalman_d2 : -1.0f};
+        return true;
+    }
+
+    void commit_reference_state(
+        int canonical,
+        const RelinkBox& box,
+        const std::vector<float>& emb,
+        bool has_emb,
+        bool is_clean,
+        int frame_id
+    ) {
+        if (!is_clean) {
+            stats_.reject_quality += 1;
+        } else if (has_emb) {
+            if (buffer_size_ > 1) {
+                auto& buf = buffers_[canonical];
+                buf.push_back(emb);
+                if (static_cast<int>(buf.size()) > buffer_size_) {
+                    buf.erase(buf.begin());
+                }
+                features_[canonical] = buffer_mean(canonical);
+            } else {
+                auto old_it = features_.find(canonical);
+                if (old_it == features_.end()) {
+                    features_[canonical] = emb;
+                } else {
+                    std::vector<float> updated(emb.size(), 0.0f);
+                    for (size_t i = 0; i < emb.size(); ++i) {
+                        updated[i] = ema_beta_ * old_it->second[i] + (1.0f - ema_beta_) * emb[i];
+                    }
+                    features_[canonical] = normalize(updated);
+                }
+            }
+        } else if (features_.find(canonical) == features_.end()) {
+            features_[canonical] = std::vector<float>{0.0f};
+        }
+
+        if (std::find(feature_order_.begin(), feature_order_.end(), canonical) == feature_order_.end()) {
+            feature_order_.push_back(canonical);
+        }
+        last_seen_[canonical] = frame_id;
+        last_boxes_[canonical] = box;
+        const float bh = box.y2 - box.y1;
+        auto old_h = ema_h_.find(canonical);
+        ema_h_[canonical] = (old_h == ema_h_.end()) ? bh : 0.95f * old_h->second + 0.05f * bh;
+        const float enc_cx = (box.x1 + box.x2) * 0.5f;
+        const float enc_cy = (box.y1 + box.y2) * 0.5f;
+        auto& hist = foot_history_[canonical];
+        hist.push_back({enc_cx, enc_cy});
+        if (hist.size() > 8) {
+            hist.erase(hist.begin());
+        }
+    }
+
     static std::pair<float, float> spatial_metrics(
         const RelinkBox& box,
         const RelinkBox& old_box,
         int frame_w,
         int frame_h
     ) {
-        const float cx = (box.x1 + box.x2) * 0.5f;
-        const float cy = (box.y1 + box.y2) * 0.5f;
-        const float ocx = (old_box.x1 + old_box.x2) * 0.5f;
-        const float ocy = (old_box.y1 + old_box.y2) * 0.5f;
-        const float dx = cx - ocx;
-        const float dy = cy - ocy;
-        const float center_norm = std::sqrt(dx * dx + dy * dy) / std::max({frame_w, frame_h, 1});
-
-        const float ix1 = std::max(box.x1, old_box.x1);
-        const float iy1 = std::max(box.y1, old_box.y1);
-        const float ix2 = std::min(box.x2, old_box.x2);
-        const float iy2 = std::min(box.y2, old_box.y2);
-        const float inter = std::max(0.0f, ix2 - ix1) * std::max(0.0f, iy2 - iy1);
-        const float area = std::max(0.0f, box.x2 - box.x1) * std::max(0.0f, box.y2 - box.y1);
-        const float old_area = std::max(0.0f, old_box.x2 - old_box.x1) * std::max(0.0f, old_box.y2 - old_box.y1);
-        const float iou = inter / std::max(area + old_area - inter, 1e-6f);
-        return {center_norm, iou};
+        const tracking::SpatialMetrics metrics = tracking::spatial_metrics(
+            to_box4(box), to_box4(old_box), frame_w, frame_h
+        );
+        return {metrics.center_norm, metrics.iou};
     }
 
     float get_dynamic_mahalanobis_threshold(int cid) const {
@@ -2755,18 +2557,10 @@ private:
     static std::pair<float, float> spatial_metrics_lc(
         const RelinkBox& box, const RelinkBox& old_box, int w, int h
     ) {
-        const float cx  = (box.x1 + box.x2) * 0.5f,  cy  = (box.y1 + box.y2) * 0.5f;
-        const float ocx = (old_box.x1 + old_box.x2) * 0.5f, ocy = (old_box.y1 + old_box.y2) * 0.5f;
-        const float center_norm =
-            std::sqrt((cx - ocx) * (cx - ocx) + (cy - ocy) * (cy - ocy))
-            / static_cast<float>(std::max({w, h, 1}));
-        const float ix1 = std::max(box.x1, old_box.x1), iy1 = std::max(box.y1, old_box.y1);
-        const float ix2 = std::min(box.x2, old_box.x2), iy2 = std::min(box.y2, old_box.y2);
-        const float inter = std::max(0.0f, ix2 - ix1) * std::max(0.0f, iy2 - iy1);
-        const float area_a = std::max(0.0f, box.x2 - box.x1) * std::max(0.0f, box.y2 - box.y1);
-        const float area_b =
-            std::max(0.0f, old_box.x2 - old_box.x1) * std::max(0.0f, old_box.y2 - old_box.y1);
-        return {center_norm, inter / std::max(area_a + area_b - inter, 1e-6f)};
+        const tracking::SpatialMetrics metrics = tracking::spatial_metrics(
+            to_box4(box), to_box4(old_box), w, h
+        );
+        return {metrics.center_norm, metrics.iou};
     }
 
     bool enabled_;

@@ -1,4 +1,5 @@
 #include "tracking/tracker_gpu.hpp"
+#include "tracking/box_ops.hpp"
 #include <cuda_runtime.h>
 #include <cub/cub.cuh>
 #include <nvtx3/nvToolsExt.h>
@@ -272,6 +273,17 @@ __device__ __forceinline__ float mahal_sq_det(
     return d2;
 }
 
+__device__ __forceinline__ tracking::Box4f state_box4(const float* state) {
+    const float w = state[2] * state[3];
+    const float h = state[3];
+    return {
+        state[0] - w * 0.5f,
+        state[1] - h * 0.5f,
+        state[0] + w * 0.5f,
+        state[1] + h * 0.5f,
+    };
+}
+
 // Counts per-track how many detections pass the Stage 1 gate:
 //   IoU > iou_gate  OR  Mahalanobis^2 < maha_gate
 __global__ void count_stage1_candidates_kernel(
@@ -285,17 +297,8 @@ __global__ void count_stage1_candidates_kernel(
     if (t >= n_trk || d >= n_det || !trk_active[t]) return;
 
     const float* st = trk_states + t * 8;
-    float tw = st[2] * st[3], th = st[3];
-    float b1_x1 = st[0] - tw * 0.5f, b1_y1 = st[1] - th * 0.5f;
-    float b1_x2 = st[0] + tw * 0.5f, b1_y2 = st[1] + th * 0.5f;
     const float* b2 = det_boxes + d * 4;
-
-    float ix1 = fmaxf(b1_x1, b2[0]), iy1 = fmaxf(b1_y1, b2[1]);
-    float ix2 = fminf(b1_x2, b2[2]), iy2 = fminf(b1_y2, b2[3]);
-    float inter = fmaxf(0.0f, ix2 - ix1) * fmaxf(0.0f, iy2 - iy1);
-    float area1 = (b1_x2 - b1_x1) * (b1_y2 - b1_y1);
-    float area2 = (b2[2] - b2[0]) * (b2[3] - b2[1]);
-    float iou = inter / (area1 + area2 - inter + 1e-6f);
+    float iou = tracking::iou(state_box4(st), tracking::load_box4(b2));
 
     bool pass = (iou > iou_gate);
     if (!pass && trk_s_inv) {
@@ -335,7 +338,7 @@ __global__ void compute_track_occlusion_kernel(
     float tw = st[2] * st[3], th = st[3];
     float tx1 = st[0] - tw * 0.5f, ty1 = st[1] - th * 0.5f;
     float tx2 = st[0] + tw * 0.5f, ty2 = st[1] + th * 0.5f;
-    float t_area = (tx2 - tx1) * (ty2 - ty1);
+    const tracking::Box4f t_box{tx1, ty1, tx2, ty2};
 
     // Union-coverage mode rasterises box t into an 8x8 grid; a cell is "covered"
     // when its centre falls inside any other active box. coverage = covered/64 in
@@ -373,12 +376,11 @@ __global__ void compute_track_occlusion_kernel(
         float jw = sj[2] * sj[3], jh = sj[3];
         float jx1 = sj[0] - jw * 0.5f, jy1 = sj[1] - jh * 0.5f;
         float jx2 = sj[0] + jw * 0.5f, jy2 = sj[1] + jh * 0.5f;
-        float j_area = (jx2 - jx1) * (jy2 - jy1);
         float ix1 = fmaxf(tx1, jx1), iy1 = fmaxf(ty1, jy1);
         float ix2 = fminf(tx2, jx2), iy2 = fminf(ty2, jy2);
-        float inter = fmaxf(0.0f, ix2 - ix1) * fmaxf(0.0f, iy2 - iy1);
-        if (inter <= 0.0f) continue;
-        float iou = inter / (t_area + j_area - inter + 1e-6f);
+        const tracking::Box4f j_box{jx1, jy1, jx2, jy2};
+        float iou = tracking::iou(t_box, j_box);
+        if (iou <= 0.0f) continue;
         if (iou > max_occ) { max_occ = iou; arg_partner = j; }
         bool h_ok = true;
         if (use_hgate) h_ok = (fabsf(th - jh) <= oao_height_gate * fmaxf(th, jh));
@@ -470,15 +472,7 @@ __device__ __forceinline__ bool oao_penalize_match(
     int p = occ_partner_all[t];
     if (p < 0) return false;
     const float* sp = trk_states + p * 8;
-    float pw = sp[2] * sp[3], ph = sp[3];
-    float px1 = sp[0] - pw * 0.5f, py1 = sp[1] - ph * 0.5f;
-    float px2 = sp[0] + pw * 0.5f, py2 = sp[1] + ph * 0.5f;
-    float ix1 = fmaxf(px1, det_box[0]), iy1 = fmaxf(py1, det_box[1]);
-    float ix2 = fminf(px2, det_box[2]), iy2 = fminf(py2, det_box[3]);
-    float inter = fmaxf(0.0f, ix2 - ix1) * fmaxf(0.0f, iy2 - iy1);
-    float pa = (px2 - px1) * (py2 - py1);
-    float ba = (det_box[2] - det_box[0]) * (det_box[3] - det_box[1]);
-    float iou = inter / (pa + ba - inter + 1e-6f);
+    float iou = tracking::iou(state_box4(sp), tracking::load_box4(det_box));
     return iou >= oao_contest_thresh;
 }
 
@@ -508,17 +502,8 @@ __global__ void stage1_cost_fused_kernel(
     float* cost = cost_matrix + t * n_det + d;
 
     const float* st = trk_states + t * 8;
-    float tw = st[2] * st[3], th = st[3];
-    float b1_x1 = st[0] - tw * 0.5f, b1_y1 = st[1] - th * 0.5f;
-    float b1_x2 = st[0] + tw * 0.5f, b1_y2 = st[1] + th * 0.5f;
     const float* b2 = det_boxes + d * 4;
-
-    float ix1 = fmaxf(b1_x1, b2[0]), iy1 = fmaxf(b1_y1, b2[1]);
-    float ix2 = fminf(b1_x2, b2[2]), iy2 = fminf(b1_y2, b2[3]);
-    float inter = fmaxf(0.0f, ix2 - ix1) * fmaxf(0.0f, iy2 - iy1);
-    float area1 = (b1_x2 - b1_x1) * (b1_y2 - b1_y1);
-    float area2 = (b2[2] - b2[0]) * (b2[3] - b2[1]);
-    float iou = inter / (area1 + area2 - inter + 1e-6f);
+    float iou = tracking::iou(state_box4(st), tracking::load_box4(b2));
 
     bool pass_iou = (iou > iou_gate);
     if (!pass_iou) {
@@ -639,17 +624,8 @@ __global__ void compute_conditional_cost_kernel(
     if (t >= n_trk || d >= n_det) return;
 
     const float* st = trk_states + t * 8;
-    float tw = st[2] * st[3], th = st[3];
-    float b1_x1 = st[0] - tw * 0.5f, b1_y1 = st[1] - th * 0.5f;
-    float b1_x2 = st[0] + tw * 0.5f, b1_y2 = st[1] + th * 0.5f;
     const float* b2 = det_boxes + d * 4;
-
-    float ix1 = fmaxf(b1_x1, b2[0]), iy1 = fmaxf(b1_y1, b2[1]);
-    float ix2 = fminf(b1_x2, b2[2]), iy2 = fminf(b1_y2, b2[3]);
-    float inter = fmaxf(0.0f, ix2 - ix1) * fmaxf(0.0f, iy2 - iy1);
-    float area1 = (b1_x2 - b1_x1) * (b1_y2 - b1_y1);
-    float area2 = (b2[2] - b2[0]) * (b2[3] - b2[1]);
-    float iou = inter / (area1 + area2 - inter + 1e-6f);
+    float iou = tracking::iou(state_box4(st), tracking::load_box4(b2));
 
     bool pass_iou = (iou > iou_gate);
     if (!pass_iou) {
@@ -829,8 +805,7 @@ __global__ void compute_cost_matrix_kernel(
     if (t >= n_trk || d >= n_det) return;
 
     const float* st = trk_states + t * 8;
-    float tw = st[2] * st[3], th = st[3];
-    float b1[4] = {st[0] - tw/2.0f, st[1] - th/2.0f, st[0] + tw/2.0f, st[1] + th/2.0f};
+    const tracking::Box4f b1 = state_box4(st);
     const float* b2 = det_boxes + d * 4;
 
     float dx = st[0] - (b2[0] + b2[2]) * 0.5f;
@@ -842,10 +817,7 @@ __global__ void compute_cost_matrix_kernel(
         cost_matrix[t * n_det + d] = 1.0f; return;
     }
 
-    float x1 = fmaxf(b1[0], b2[0]), y1 = fmaxf(b1[1], b2[1]), x2 = fminf(b1[2], b2[2]), y2 = fminf(b1[3], b2[3]);
-    float inter = fmaxf(0.0f, x2 - x1) * fmaxf(0.0f, y2 - y1);
-    float area1 = (b1[2] - b1[0]) * (b1[3] - b1[1]), area2 = (b2[2] - b2[0]) * (b2[3] - b2[1]);
-    float iou = inter / (area1 + area2 - inter + 1e-6f);
+    float iou = tracking::iou(b1, tracking::load_box4(b2));
 
     float cos_sim = 0.0f;
     if (trk_embeds && det_embeds) {
@@ -3490,14 +3462,7 @@ TrackerGPUBuffers GPUByteTracker::get_gpu_buffers() const { return pimpl_->get_g
 std::vector<TrackCandidateSnapshot> GPUByteTracker::get_tentative_candidates(cudaStream_t stream) { return pimpl_->get_tentative_candidates(stream); }
 
 __device__ float get_iou_device(const float* b1, const float* b2) {
-    const float x1 = fmaxf(b1[0], b2[0]);
-    const float y1 = fmaxf(b1[1], b2[1]);
-    const float x2 = fminf(b1[2], b2[2]);
-    const float y2 = fminf(b1[3], b2[3]);
-    const float inter = fmaxf(0.0f, x2 - x1) * fmaxf(0.0f, y2 - y1);
-    const float area1 = fmaxf(0.0f, b1[2] - b1[0]) * fmaxf(0.0f, b1[3] - b1[1]);
-    const float area2 = fmaxf(0.0f, b2[2] - b2[0]) * fmaxf(0.0f, b2[3] - b2[1]);
-    return inter / (area1 + area2 - inter + 1e-6f);
+    return tracking::iou(tracking::load_box4(b1), tracking::load_box4(b2));
 }
 
 __device__ bool is_box_near_tiled_seam_device(
@@ -3507,48 +3472,16 @@ __device__ bool is_box_near_tiled_seam_device(
     int frame_h,
     float seam_margin_canvas_px
 ) {
-    if (tiling_mode <= 0 || frame_w <= 0 || frame_h <= 0) return false;
-    const float r = 960.0f / fmaxf((float)frame_h, (float)frame_w);
-    const int h_new = (int)((float)frame_h * r);
-    const int w_new = (int)((float)frame_w * r);
-    const float y_off = (float)((960 - h_new) / 2);
-    const float x_off = (float)((960 - w_new) / 2);
-    const float seam_margin_orig = seam_margin_canvas_px / fmaxf(r, 1e-6f);
-    const float cx = 0.5f * (box[0] + box[2]);
-    const float cy = 0.5f * (box[1] + box[3]);
-    const float seam_xs[4] = {160.0f, 320.0f, 640.0f, 800.0f};
-    const int seam_x_count = (tiling_mode == 2) ? 4 : 2;
-    const int seam_x_start = (tiling_mode == 2) ? 0 : 1;
-    for (int i = seam_x_start; i < seam_x_start + seam_x_count; ++i) {
-        const float sx_canvas = seam_xs[i];
-        if (!(x_off < sx_canvas && sx_canvas < x_off + (float)w_new)) continue;
-        const float sx = (sx_canvas - x_off) / r;
-        if ((box[0] <= sx && box[2] >= sx) || fabsf(cx - sx) <= seam_margin_orig) return true;
-    }
-    const float seam_ys[2] = {320.0f, 640.0f};
-    for (int i = 0; i < 2; ++i) {
-        const float sy_canvas = seam_ys[i];
-        if (!(y_off < sy_canvas && sy_canvas < y_off + (float)h_new)) continue;
-        const float sy = (sy_canvas - y_off) / r;
-        if ((box[1] <= sy && box[3] >= sy) || fabsf(cy - sy) <= seam_margin_orig) return true;
-    }
-    return false;
+    return tracking::is_box_near_tiled_seam(
+        tracking::load_box4(box), tiling_mode, frame_w, frame_h, seam_margin_canvas_px
+    );
 }
 
 __global__ void assign_duplicate_anchor_kernel(
     const float* boxes,
     const int* classes,
     int num_dets,
-    float iou_threshold,
-    float center_threshold,
-    float area_ratio_threshold,
-    int tiling_mode,
-    int frame_w,
-    int frame_h,
-    float seam_margin_canvas_px,
-    float seam_center_scale,
-    float seam_area_ratio_threshold,
-    float seam_min_overlap_ratio,
+    tracking::DuplicateMergeParams params,
     int* anchor_indices
 ) {
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -3556,45 +3489,11 @@ __global__ void assign_duplicate_anchor_kernel(
     const float* candidate = boxes + idx * 4;
     const int candidate_class = classes[idx];
     int anchor = idx;
-    const float candidate_w = fmaxf(candidate[2] - candidate[0], 1e-6f);
-    const float candidate_h = fmaxf(candidate[3] - candidate[1], 1e-6f);
-    const float candidate_area = candidate_w * candidate_h;
-    const float candidate_cx = 0.5f * (candidate[0] + candidate[2]);
-    const float candidate_cy = 0.5f * (candidate[1] + candidate[3]);
-    const bool candidate_is_seam = is_box_near_tiled_seam_device(
-        candidate, tiling_mode, frame_w, frame_h, seam_margin_canvas_px
-    );
+    const tracking::Box4f candidate_box = tracking::load_box4(candidate);
     for (int prev = 0; prev < idx; ++prev) {
         if (classes[prev] != candidate_class) continue;
         const float* other = boxes + prev * 4;
-        const float iou = get_iou_device(candidate, other);
-        const float other_w = fmaxf(other[2] - other[0], 1e-6f), other_h = fmaxf(other[3] - other[1], 1e-6f);
-        const float other_area = other_w * other_h;
-        const float min_w = fminf(candidate_w, other_w), min_h = fminf(candidate_h, other_h);
-        const float center_gate = sqrtf(min_w * min_w + min_h * min_h) * center_threshold;
-        const float other_cx = 0.5f * (other[0] + other[2]), other_cy = 0.5f * (other[1] + other[3]);
-        const float center_dx = other_cx - candidate_cx, center_dy = other_cy - candidate_cy;
-        const float center_dist = sqrtf(center_dx * center_dx + center_dy * center_dy);
-        const float area_ratio = fminf(candidate_area / fmaxf(other_area, 1e-6f), other_area / fmaxf(candidate_area, 1e-6f));
-        const float x1 = fmaxf(candidate[0], other[0]);
-        const float y1 = fmaxf(candidate[1], other[1]);
-        const float x2 = fminf(candidate[2], other[2]);
-        const float y2 = fminf(candidate[3], other[3]);
-        const float inter_w = fmaxf(0.0f, x2 - x1);
-        const float inter_h = fmaxf(0.0f, y2 - y1);
-        const float overlap_ratio_x = inter_w / fmaxf(min_w, 1e-6f);
-        const float overlap_ratio_y = inter_h / fmaxf(min_h, 1e-6f);
-        const bool other_is_seam = is_box_near_tiled_seam_device(
-            other, tiling_mode, frame_w, frame_h, seam_margin_canvas_px
-        );
-        const bool seam_pair = candidate_is_seam || other_is_seam;
-        const bool seam_duplicate =
-            seam_pair &&
-            center_dist <= center_gate * seam_center_scale &&
-            area_ratio >= seam_area_ratio_threshold &&
-            overlap_ratio_x >= seam_min_overlap_ratio &&
-            overlap_ratio_y >= seam_min_overlap_ratio;
-        if (iou >= iou_threshold || (center_dist <= center_gate && area_ratio >= area_ratio_threshold) || seam_duplicate) {
+        if (tracking::duplicate_match(candidate_box, tracking::load_box4(other), params)) {
             anchor = prev; break;
         }
     }
@@ -3607,10 +3506,7 @@ __global__ void aggregate_duplicate_clusters_kernel(
     const int* classes,
     const int* anchor_indices,
     int num_dets,
-    int tiling_mode,
-    int frame_w,
-    int frame_h,
-    float seam_margin_canvas_px,
+    tracking::DuplicateMergeParams params,
     float* box_sums,
     float* score_sums,
     int* score_bits_max,
@@ -3624,17 +3520,18 @@ __global__ void aggregate_duplicate_clusters_kernel(
     const int anchor = anchor_indices[idx];
     const float score = scores[idx];
     const bool is_seam = is_box_near_tiled_seam_device(
-        boxes + idx * 4, tiling_mode, frame_w, frame_h, seam_margin_canvas_px
+        boxes + idx * 4, params.tiling_mode, params.frame_w, params.frame_h,
+        params.seam_margin_canvas_px
     );
     const float coord_weight =
-        score * ((tiling_mode > 0 && is_seam) ? kTiledSeamCoordWeight : 1.0f);
+        score * ((params.tiling_mode > 0 && is_seam) ? kTiledSeamCoordWeight : 1.0f);
     atomicAdd(score_sums + anchor, coord_weight);
     atomicAdd(cluster_counts + anchor, 1);
     atomicMax(score_bits_max + anchor, __float_as_int(score));
     for (int k = 0; k < 4; ++k) {
         atomicAdd(box_sums + anchor * 4 + k, boxes[idx * 4 + k] * coord_weight);
     }
-    const int key_bonus = (!is_seam && tiling_mode > 0) ? 0x40000000 : 0;
+    const int key_bonus = (!is_seam && params.tiling_mode > 0) ? 0x40000000 : 0;
     const int key = __float_as_int(score) + key_bonus;
     const int prev_key = atomicMax(best_key_bits + anchor, key);
     if (key > prev_key) {
@@ -3695,75 +3592,35 @@ __global__ void filter_detections_kernel(
     bool* suspect_flags,
     float* quality_scores,
     int* out_count,
-    float score_threshold,
-    bool track_person_only,
-    int person_class,
-    bool is_tiled,
-    int frame_w,
-    int frame_h,
-    bool person_geometry_prior,
-    bool geometry_suspect_support,
-    float person_min_height_ratio,
-    float person_min_aspect,
-    float person_max_aspect,
-    float person_min_area_ratio,
-    float person_max_area_ratio
+    tracking::DetectionFilterParams params
 ) {
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= num_dets) return;
 
     const float* box = boxes + idx * 4;
     const float score = scores[idx];
-    bool keep = score > score_threshold;
-    if (track_person_only) {
-        keep = keep && classes[idx] == person_class;
-    }
-    const float cx = (box[0] + box[2]) * 0.5f;
-    const float cy = (box[1] + box[3]) * 0.5f;
-    if (is_tiled) {
-        keep = keep && cx >= 0.0f && cx < static_cast<float>(frame_w) && cy >= 0.0f && cy < static_cast<float>(frame_h);
-    }
-
+    const tracking::Box4f box4 = tracking::load_box4(box);
     const float box_w = fmaxf(box[2] - box[0], 1e-6f);
     const float box_h = fmaxf(box[3] - box[1], 1e-6f);
     const float aspect = box_h / box_w;
-    const float frame_area = fmaxf(static_cast<float>(frame_w) * static_cast<float>(frame_h), 1.0f);
+    const float frame_area = fmaxf(
+        static_cast<float>(params.frame_w) * static_cast<float>(params.frame_h), 1.0f);
     const float area_ratio = (box_w * box_h) / frame_area;
-
     bool geometry_clean = true;
-    if (person_geometry_prior) {
-        if (person_min_height_ratio > 0.0f) {
-            geometry_clean = geometry_clean && box_h >= static_cast<float>(frame_h) * person_min_height_ratio;
-        }
-        if (person_min_aspect > 0.0f) {
-            geometry_clean = geometry_clean && aspect >= person_min_aspect;
-        }
-        if (person_max_aspect > 0.0f) {
-            geometry_clean = geometry_clean && aspect <= person_max_aspect;
-        }
-        if (person_min_area_ratio > 0.0f) {
-            geometry_clean = geometry_clean && area_ratio >= person_min_area_ratio;
-        }
-        if (person_max_area_ratio > 0.0f) {
-            geometry_clean = geometry_clean && area_ratio <= person_max_area_ratio;
-        }
-        if (!geometry_suspect_support) {
-            keep = keep && geometry_clean;
-        }
-    }
+    const bool keep = tracking::detection_keep(box4, score, classes[idx], params, geometry_clean);
 
     if (keep) {
         const int out_idx = atomicAdd(out_count, 1);
         keep_indices[out_idx] = idx;
-        suspect_flags[out_idx] = person_geometry_prior && geometry_suspect_support && !geometry_clean;
+        suspect_flags[out_idx] = params.person_geometry_prior && params.geometry_suspect_support && !geometry_clean;
         
         // A6: Continuous Quality Score (Aspect + Center + Area)
         // 1. Aspect: Gaussian peak at 2.5
         float aspect_q = expf(-0.5f * powf((aspect - 2.5f) / 1.2f, 2.0f));
         
         // 2. Center: 1.0 at center, 0.0 at boundary (proxy for truncation)
-        float cx_norm = cx / fmaxf(static_cast<float>(frame_w), 1.0f);
-        float cy_norm = cy / fmaxf(static_cast<float>(frame_h), 1.0f);
+        float cx_norm = tracking::center_x(box4) / fmaxf(static_cast<float>(params.frame_w), 1.0f);
+        float cy_norm = tracking::center_y(box4) / fmaxf(static_cast<float>(params.frame_h), 1.0f);
         float center_q = fminf(fminf(cx_norm, 1.0f - cx_norm), fminf(cy_norm, 1.0f - cy_norm)) * 4.0f;
         center_q = fmaxf(0.0f, fminf(1.0f, center_q));
         
@@ -3786,17 +3643,6 @@ constexpr int NMS_BLOCK_SIZE = 64;
 //   #3 Filter-NMS Overlap: Single kernel replaces filter+gather+sort+NMS
 //   #5 Remove immunity: No dead-code branch in compact path
 // ============================================================================
-
-__device__ __forceinline__ float compute_iou_inline(const float* b1, const float* b2) {
-    const float x1 = fmaxf(b1[0], b2[0]);
-    const float y1 = fmaxf(b1[1], b2[1]);
-    const float x2 = fminf(b1[2], b2[2]);
-    const float y2 = fminf(b1[3], b2[3]);
-    const float inter = fmaxf(0.0f, x2 - x1) * fmaxf(0.0f, y2 - y1);
-    const float a1 = fmaxf(0.0f, b1[2] - b1[0]) * fmaxf(0.0f, b1[3] - b1[1]);
-    const float a2 = fmaxf(0.0f, b2[2] - b2[0]) * fmaxf(0.0f, b2[3] - b2[1]);
-    return inter / (a1 + a2 - inter + 1e-6f);
-}
 
 __global__ void compact_grid_nms_kernel(
     const float* boxes, const float* scores, const int* classes,
@@ -3915,7 +3761,7 @@ __global__ void compact_grid_nms_kernel(
             if (gx1 >= gx2 || gy1 >= gy2) continue;  // No spatial overlap
 
             // (#5) No immunity_mask - clean exact IoU computation
-            if (compute_iou_inline(rb, cb) > iou_threshold) {
+            if (tracking::iou(tracking::load_box4(rb), tracking::load_box4(cb)) > iou_threshold) {
                 suppressed[j] = 1;
             }
         }
@@ -4166,6 +4012,18 @@ void merge_cross_tile_duplicates_cuda(
     cudaStream_t stream
 ) {
     if (num_dets <= 0) { checkCuda(cudaMemsetAsync(out_count_ptr, 0, sizeof(int), stream)); return; }
+    const tracking::DuplicateMergeParams params{
+        iou_threshold,
+        center_threshold,
+        area_ratio_threshold,
+        tiling_mode,
+        frame_w,
+        frame_h,
+        seam_margin_canvas_px,
+        seam_center_scale,
+        seam_area_ratio_threshold,
+        seam_min_overlap_ratio,
+    };
     checkCuda(cudaMemsetAsync(box_sums_ptr, 0, num_dets * 4 * sizeof(float), stream));
     checkCuda(cudaMemsetAsync(score_sums_ptr, 0, num_dets * sizeof(float), stream));
     checkCuda(cudaMemsetAsync(score_bits_max_ptr, 0, num_dets * sizeof(int), stream));
@@ -4174,13 +4032,11 @@ void merge_cross_tile_duplicates_cuda(
     checkCuda(cudaMemsetAsync(cluster_counts_ptr, 0, num_dets * sizeof(int), stream));
     const int threads = 256; const int blocks = (num_dets + threads - 1) / threads;
     assign_duplicate_anchor_kernel<<<blocks, threads, 0, stream>>>(
-        boxes_ptr, classes_ptr, num_dets, iou_threshold, center_threshold, area_ratio_threshold,
-        tiling_mode, frame_w, frame_h, seam_margin_canvas_px, seam_center_scale,
-        seam_area_ratio_threshold, seam_min_overlap_ratio, anchor_indices_ptr
+        boxes_ptr, classes_ptr, num_dets, params, anchor_indices_ptr
     );
     aggregate_duplicate_clusters_kernel<<<blocks, threads, 0, stream>>>(
         boxes_ptr, scores_ptr, classes_ptr, anchor_indices_ptr, num_dets,
-        tiling_mode, frame_w, frame_h, seam_margin_canvas_px,
+        params,
         box_sums_ptr, score_sums_ptr, score_bits_max_ptr, best_boxes_ptr, best_key_bits_ptr, cluster_counts_ptr
     );
     compact_duplicate_clusters_kernel<<<1, 1, 0, stream>>>(
@@ -4218,6 +4074,21 @@ void filter_detections_cuda(
     if (num_dets <= 0) {
         return;
     }
+    const tracking::DetectionFilterParams params{
+        score_threshold,
+        track_person_only,
+        person_class,
+        is_tiled,
+        frame_w,
+        frame_h,
+        person_geometry_prior,
+        geometry_suspect_support,
+        person_min_height_ratio,
+        person_min_aspect,
+        person_max_aspect,
+        person_min_area_ratio,
+        person_max_area_ratio,
+    };
     // Clear any stale error before kernel launch so cudaGetLastError below
     // reports only errors from THIS kernel.
     cudaGetLastError();
@@ -4232,19 +4103,7 @@ void filter_detections_cuda(
         suspect_flags_ptr,
         quality_scores_ptr,
         out_count_ptr,
-        score_threshold,
-        track_person_only,
-        person_class,
-        is_tiled,
-        frame_w,
-        frame_h,
-        person_geometry_prior,
-        geometry_suspect_support,
-        person_min_height_ratio,
-        person_min_aspect,
-        person_max_aspect,
-        person_min_area_ratio,
-        person_max_area_ratio
+        params
     );
     {
         cudaError_t _err = cudaGetLastError();

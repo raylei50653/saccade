@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import sys
 from typing import List, Any, cast, Optional, TypedDict, Callable
+from saccade.perception.box_ops import box_iou
 
 try:
     from saccade_tracking_ext import GPUByteTracker as CppGPUByteTracker, TrackResult
@@ -827,18 +828,20 @@ class GPUByteTracker:
                 st[p * 8 + 3],
             )
             w_p = a_p * h_p
-            ix1, iy1 = (
-                max(cx_t - w_t * 0.5, cx_p - w_p * 0.5),
-                max(cy_t - h_t * 0.5, cy_p - h_p * 0.5),
-            )
-            ix2, iy2 = (
-                min(cx_t + w_t * 0.5, cx_p + w_p * 0.5),
-                min(cy_t + h_t * 0.5, cy_p + h_p * 0.5),
-            )
-            iw, ih = max(0.0, ix2 - ix1), max(0.0, iy2 - iy1)
-            inter = iw * ih
-            pred_iou = (
-                inter / (w_t * h_t + w_p * h_p - inter + 1e-6) if inter > 0 else 0.0
+            pred_iou = box_iou(
+                (
+                    cx_t - w_t * 0.5,
+                    cy_t - h_t * 0.5,
+                    cx_t + w_t * 0.5,
+                    cy_t + h_t * 0.5,
+                ),
+                (
+                    cx_p - w_p * 0.5,
+                    cy_p - h_p * 0.5,
+                    cx_p + w_p * 0.5,
+                    cy_p + h_p * 0.5,
+                ),
+                union_mode="add",
             )
             with open(path, "a") as f:
                 f.write(
@@ -881,20 +884,16 @@ class GPUByteTracker:
         rows = []
         for t in range(n):
             tx1, ty1, tx2, ty2, h_t = boxes[t]
-            t_area = (tx2 - tx1) * (ty2 - ty1)
             peak_iou, arg_p = 0.0, -1
             for j in range(n):
                 if j == t:
                     continue
                 jx1, jy1, jx2, jy2, _ = boxes[j]
-                ix1, iy1 = max(tx1, jx1), max(ty1, jy1)
-                ix2, iy2 = min(tx2, jx2), min(ty2, jy2)
-                iw, ih = max(0.0, ix2 - ix1), max(0.0, iy2 - iy1)
-                inter = iw * ih
-                if inter <= 0.0:
-                    continue
-                j_area = (jx2 - jx1) * (jy2 - jy1)
-                iou = inter / (t_area + j_area - inter + 1e-6)
+                iou = box_iou(
+                    (tx1, ty1, tx2, ty2),
+                    (jx1, jy1, jx2, jy2),
+                    union_mode="add",
+                )
                 if iou > peak_iou:
                     peak_iou, arg_p = iou, j
             if arg_p < 0:

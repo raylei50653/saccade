@@ -1,7 +1,6 @@
-import math
-
 import torch
 import torch.nn.functional as F
+from saccade.perception.box_ops import box_iou, center_distance_norm, center_shift_ratio
 from .types import (
     IdStabilityState,
     TrackletLifecycleState,
@@ -30,30 +29,14 @@ class IdStabilityFilter:
     def _iou(
         a: tuple[float, float, float, float], b: tuple[float, float, float, float]
     ) -> float:
-        x1 = max(a[0], b[0])
-        y1 = max(a[1], b[1])
-        x2 = min(a[2], b[2])
-        y2 = min(a[3], b[3])
-        inter = max(0.0, x2 - x1) * max(0.0, y2 - y1)
-        area_a = max(0.0, a[2] - a[0]) * max(0.0, a[3] - a[1])
-        area_b = max(0.0, b[2] - b[0]) * max(0.0, b[3] - b[1])
-        return inter / max(area_a + area_b - inter, 1e-6)
+        return box_iou(a, b, union_mode="clamp")
 
     @staticmethod
     def _center_shift_ratio(
         a: tuple[float, float, float, float],
         b: tuple[float, float, float, float],
     ) -> float:
-        acx = (a[0] + a[2]) * 0.5
-        acy = (a[1] + a[3]) * 0.5
-        bcx = (b[0] + b[2]) * 0.5
-        bcy = (b[1] + b[3]) * 0.5
-        aw = max(a[2] - a[0], 1e-6)
-        ah = max(a[3] - a[1], 1e-6)
-        bw = max(b[2] - b[0], 1e-6)
-        bh = max(b[3] - b[1], 1e-6)
-        scale = max((math.sqrt(aw * ah) + math.sqrt(bw * bh)) * 0.5, 1e-6)
-        return math.sqrt((acx - bcx) ** 2 + (acy - bcy) ** 2) / scale
+        return center_shift_ratio(a, b)
 
     def accept(
         self,
@@ -128,14 +111,7 @@ class TrackletLifecycleMerger:
     def _iou(
         a: tuple[float, float, float, float], b: tuple[float, float, float, float]
     ) -> float:
-        x1 = max(a[0], b[0])
-        y1 = max(a[1], b[1])
-        x2 = min(a[2], b[2])
-        y2 = min(a[3], b[3])
-        inter = max(0.0, x2 - x1) * max(0.0, y2 - y1)
-        area_a = max(0.0, a[2] - a[0]) * max(0.0, a[3] - a[1])
-        area_b = max(0.0, b[2] - b[0]) * max(0.0, b[3] - b[1])
-        return inter / max(area_a + area_b - inter, 1e-6)
+        return box_iou(a, b, union_mode="clamp")
 
     @staticmethod
     def _center_gate(
@@ -144,12 +120,7 @@ class TrackletLifecycleMerger:
         frame_w: int,
         frame_h: int,
     ) -> float:
-        acx = (a[0] + a[2]) * 0.5
-        acy = (a[1] + a[3]) * 0.5
-        bcx = (b[0] + b[2]) * 0.5
-        bcy = (b[1] + b[3]) * 0.5
-        dist = math.sqrt((acx - bcx) ** 2 + (acy - bcy) ** 2)
-        return dist / max(float(frame_w), float(frame_h), 1.0)
+        return center_distance_norm(a, b, frame_w, frame_h)
 
     @staticmethod
     def _normalize(embedding: torch.Tensor | None) -> torch.Tensor | None:

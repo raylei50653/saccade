@@ -1,4 +1,5 @@
 #include "tracking/multi_signal_birth_pool.hpp"
+#include "tracking/box_ops.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -9,19 +10,6 @@
 namespace saccade {
 
 namespace {
-
-__device__ inline float box_iou(const float* a, const float* b) {
-    const float x1 = fmaxf(a[0], b[0]);
-    const float y1 = fmaxf(a[1], b[1]);
-    const float x2 = fminf(a[2], b[2]);
-    const float y2 = fminf(a[3], b[3]);
-    const float w = fmaxf(0.0f, x2 - x1);
-    const float h = fmaxf(0.0f, y2 - y1);
-    const float inter = w * h;
-    const float area_a = fmaxf(0.0f, a[2] - a[0]) * fmaxf(0.0f, a[3] - a[1]);
-    const float area_b = fmaxf(0.0f, b[2] - b[0]) * fmaxf(0.0f, b[3] - b[1]);
-    return inter / fmaxf(area_a + area_b - inter, 1e-6f);
-}
 
 __global__ void multi_signal_iou_match_kernel(
     const float* __restrict__ boxes,
@@ -54,7 +42,7 @@ __global__ void multi_signal_iou_match_kernel(
 
     for (int c = 0; c < num_candidates; ++c) {
         const float* cand_box = cand_boxes + static_cast<size_t>(c) * 4;
-        const float iou = box_iou(box, cand_box);
+        const float iou = tracking::iou(tracking::load_box4(box), tracking::load_box4(cand_box));
         if (iou > best_i) {
             best_i = iou;
             best_c = c;

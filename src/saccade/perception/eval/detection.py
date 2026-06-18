@@ -2,6 +2,11 @@
 import torch
 import numpy as np
 from typing import Dict, Tuple, Any, List, Optional, cast
+from saccade.perception.box_ops import (
+    torch_box_iou_matrix,
+    torch_box_iou_pairwise_diag,
+    torch_box_iou_single,
+)
 
 try:
     from saccade_tracking_ext import (
@@ -352,39 +357,19 @@ def _tile_seam_mask_for_boxes(
 
 
 def _box_iou_single(box: torch.Tensor, boxes: torch.Tensor) -> torch.Tensor:
-    lt = torch.maximum(box[:2], boxes[:, :2])
-    rb = torch.minimum(box[2:], boxes[:, 2:])
-    wh = (rb - lt).clamp(min=0)
-    inter = wh[:, 0] * wh[:, 1]
-    area = (box[2] - box[0]) * (box[3] - box[1])
-    areas = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
-    return inter / (area + areas - inter + 1e-6)
+    return torch_box_iou_single(box, boxes, union_mode="add")
 
 
 def _box_iou_pairwise_diag(
     boxes_a: torch.Tensor, boxes_b: torch.Tensor
 ) -> torch.Tensor:
     """IoU between boxes_a[i] and boxes_b[i] for each i. Both (N,4). Returns (N,) on same device."""
-    lt = torch.maximum(boxes_a[:, :2], boxes_b[:, :2])
-    rb = torch.minimum(boxes_a[:, 2:], boxes_b[:, 2:])
-    inter = (rb - lt).clamp(min=0).prod(dim=1)
-    area_a = (boxes_a[:, 2] - boxes_a[:, 0]) * (boxes_a[:, 3] - boxes_a[:, 1])
-    area_b = (boxes_b[:, 2] - boxes_b[:, 0]) * (boxes_b[:, 3] - boxes_b[:, 1])
-    return inter / (area_a + area_b - inter + 1e-6)
+    return torch_box_iou_pairwise_diag(boxes_a, boxes_b, union_mode="add")
 
 
 def _box_iou_matrix(boxes_a: torch.Tensor, boxes_b: torch.Tensor) -> torch.Tensor:
     """Full (N,M) IoU matrix between N and M boxes. Both on same device."""
-    lt = torch.maximum(boxes_a[:, None, :2], boxes_b[None, :, :2])
-    rb = torch.minimum(boxes_a[:, None, 2:], boxes_b[None, :, 2:])
-    inter = (rb - lt).clamp(min=0).prod(dim=2)
-    area_a = ((boxes_a[:, 2] - boxes_a[:, 0]) * (boxes_a[:, 3] - boxes_a[:, 1]))[
-        :, None
-    ]
-    area_b = ((boxes_b[:, 2] - boxes_b[:, 0]) * (boxes_b[:, 3] - boxes_b[:, 1]))[
-        None, :
-    ]
-    return inter / (area_a + area_b - inter + 1e-6)
+    return torch_box_iou_matrix(boxes_a, boxes_b, union_mode="add")
 
 
 def filter_detections_fast(

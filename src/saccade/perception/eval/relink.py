@@ -5,6 +5,7 @@ import numpy as np
 from dataclasses import dataclass
 from typing import Dict, List, Tuple, Optional, Any, Set, cast
 
+from saccade.perception.box_ops import spatial_metrics as box_spatial_metrics
 from .motion_model import MotionModel, MotionModelRegistry
 
 
@@ -350,28 +351,7 @@ class PythonSemanticRelinker:
     def _spatial_metrics(
         self, box: torch.Tensor, old_box: torch.Tensor, w: int, h: int
     ) -> Tuple[float, float]:
-        cx = (box[0] + box[2]) * 0.5
-        cy = (box[1] + box[3]) * 0.5
-        ocx = (old_box[0] + old_box[2]) * 0.5
-        ocy = (old_box[1] + old_box[3]) * 0.5
-        dist = ((cx - ocx) ** 2 + (cy - ocy) ** 2) ** 0.5
-        center_norm = float(dist / max(w, h))
-
-        ix1, iy1 = (
-            max(float(box[0]), float(old_box[0])),
-            max(float(box[1]), float(old_box[1])),
-        )
-        ix2, iy2 = (
-            min(float(box[2]), float(old_box[2])),
-            min(float(box[3]), float(old_box[3])),
-        )
-        inter = max(0.0, ix2 - ix1) * max(0.0, iy2 - iy1)
-        area = max(0.0, float(box[2] - box[0])) * max(0.0, float(box[3] - box[1]))
-        old_area = max(0.0, float(old_box[2] - old_box[0])) * max(
-            0.0, float(old_box[3] - old_box[1])
-        )
-        iou = float(inter / (area + old_area - inter + 1e-6))
-        return center_norm, iou
+        return box_spatial_metrics(box, old_box, w, h, union_mode="add")
 
     def update_motion_snapshots(self, snapshots: List[Any], frame_id: int = -1) -> None:
         for snap in snapshots:

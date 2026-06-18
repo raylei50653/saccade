@@ -23,6 +23,7 @@ from __future__ import annotations
 import dataclasses
 
 import torch
+from saccade.perception.box_ops import torch_box_iou_matrix
 
 
 @dataclasses.dataclass
@@ -33,16 +34,7 @@ class _Candidate:
 
 def _box_iou_nm(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
     """IoU between every (a_i, b_j) pair.  a: (N,4)  b: (M,4) -> (N,M)."""
-    ax1, ay1, ax2, ay2 = a[:, 0], a[:, 1], a[:, 2], a[:, 3]
-    bx1, by1, bx2, by2 = b[:, 0], b[:, 1], b[:, 2], b[:, 3]
-    ix1 = torch.maximum(ax1.unsqueeze(1), bx1.unsqueeze(0))
-    iy1 = torch.maximum(ay1.unsqueeze(1), by1.unsqueeze(0))
-    ix2 = torch.minimum(ax2.unsqueeze(1), bx2.unsqueeze(0))
-    iy2 = torch.minimum(ay2.unsqueeze(1), by2.unsqueeze(0))
-    inter = (ix2 - ix1).clamp(min=0) * (iy2 - iy1).clamp(min=0)
-    aa = ((ax2 - ax1) * (ay2 - ay1)).unsqueeze(1)
-    ba = ((bx2 - bx1) * (by2 - by1)).unsqueeze(0)
-    return inter / (aa + ba - inter).clamp(min=1e-6)
+    return torch_box_iou_matrix(a, b, union_mode="clamp")
 
 
 class MultiSignalBirthManager:
