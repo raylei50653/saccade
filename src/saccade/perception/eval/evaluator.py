@@ -1918,7 +1918,6 @@ class EvalPipeline:
             and id_stability_filter is None
             and primary_appearance_bank is None
             and dynamic_reid is None
-            and bool(_use_pinned_materialize)
         )
         _shared_gmc_warp = torch.zeros(6, dtype=torch.float32, device="cuda")
         _post_bufs: dict[str, torch.Tensor] = {

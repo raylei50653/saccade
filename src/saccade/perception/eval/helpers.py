@@ -19,6 +19,16 @@ from saccade.perception.eval.detection import (
 )
 
 
+_CUDA_COPY_STREAM: "torch.cuda.Stream | None" = None
+
+
+def _get_copy_stream() -> torch.cuda.Stream:
+    global _CUDA_COPY_STREAM
+    if _CUDA_COPY_STREAM is None:
+        _CUDA_COPY_STREAM = torch.cuda.Stream()  # type: ignore[no-untyped-call]
+    return _CUDA_COPY_STREAM
+
+
 def materialize_gpu_track_results(
     result_buffers: Any,
     *,
@@ -72,23 +82,31 @@ def materialize_gpu_track_results_async(
     default_class_id: int | None = None,
     include_det_idx: bool = True,
 ) -> tuple[torch.cuda.Event, dict[str, torch.Tensor]]:
-    """Async D2H: launch non-blocking copies then record a CUDA event.
-    Call read_deferred_result(event, pinned, ...) after the event completes.
+    """Async D2H: launch non-blocking copies on a dedicated copy stream.
+
+    Records a CUDA event that fires when all copies land in host memory.
+    Call ``read_deferred_result(event, pinned, ...)`` after the event completes.
 
     Copies full MAX_TRACKS (pinned buffer capacity) so no count-dependent
-    slicing is needed. The count is copied first so its non-blocking copy
-    is guaranteed to be in-flight before subsequent copies are issued.
+    slicing is needed. The copy stream is isolated from the default (compute)
+    stream so the GPU can start the next frame while DMA is still in flight.
     """
-    pinned["count"].copy_(result_buffers["count"], non_blocking=True)
-    pinned["boxes"].copy_(result_buffers["boxes"], non_blocking=True)
-    pinned["scores"].copy_(result_buffers["scores"], non_blocking=True)
-    pinned["ids"].copy_(result_buffers["ids"], non_blocking=True)
-    if default_class_id is None:
-        pinned["classes"].copy_(result_buffers["classes"], non_blocking=True)
-    if include_det_idx:
-        pinned["det_idx"].copy_(result_buffers["det_idx"], non_blocking=True)
-    event = torch.cuda.Event(enable_timing=False)  # type: ignore[no-untyped-call]
-    event.record(torch.cuda.current_stream())
+    compute_done = torch.cuda.Event()  # type: ignore[no-untyped-call]
+    compute_done.record(torch.cuda.current_stream())
+
+    copy_stream = _get_copy_stream()
+    copy_stream.wait_event(compute_done)
+    with torch.cuda.stream(copy_stream):
+        pinned["count"].copy_(result_buffers["count"], non_blocking=True)
+        pinned["boxes"].copy_(result_buffers["boxes"], non_blocking=True)
+        pinned["scores"].copy_(result_buffers["scores"], non_blocking=True)
+        pinned["ids"].copy_(result_buffers["ids"], non_blocking=True)
+        if default_class_id is None:
+            pinned["classes"].copy_(result_buffers["classes"], non_blocking=True)
+        if include_det_idx:
+            pinned["det_idx"].copy_(result_buffers["det_idx"], non_blocking=True)
+        event = torch.cuda.Event()  # type: ignore[no-untyped-call]
+        event.record(copy_stream)
     return event, pinned
 
 
@@ -145,8 +163,30 @@ def materialize_gpu_track_results_pinned(
     default_class_id: int | None = None,
     include_det_idx: bool = True,
 ) -> HostTrackResultView:
-    pinned["count"].copy_(result_buffers["count"], non_blocking=True)
-    torch.cuda.synchronize()
+    """Blocking read of pinned D2H results via a dedicated copy stream.
+
+    Launches copies on a non-default stream so the default (compute) stream
+    is free to start the next frame before DMA completes.  Only the copy
+    stream's event is synchronized — ``torch.cuda.synchronize()`` is avoided.
+    """
+    compute_done = torch.cuda.Event()  # type: ignore[no-untyped-call]
+    compute_done.record(torch.cuda.current_stream())
+
+    copy_stream = _get_copy_stream()
+    copy_stream.wait_event(compute_done)
+    with torch.cuda.stream(copy_stream):
+        pinned["count"].copy_(result_buffers["count"], non_blocking=True)
+        pinned["boxes"].copy_(result_buffers["boxes"], non_blocking=True)
+        pinned["scores"].copy_(result_buffers["scores"], non_blocking=True)
+        pinned["ids"].copy_(result_buffers["ids"], non_blocking=True)
+        if default_class_id is None:
+            pinned["classes"].copy_(result_buffers["classes"], non_blocking=True)
+        if include_det_idx:
+            pinned["det_idx"].copy_(result_buffers["det_idx"], non_blocking=True)
+        copy_done = torch.cuda.Event()  # type: ignore[no-untyped-call]
+        copy_done.record(copy_stream)
+
+    copy_done.synchronize()
     count = int(pinned["count"].item())
     if count <= 0:
         return {
@@ -163,19 +203,6 @@ def materialize_gpu_track_results_pinned(
                 torch.empty((0,), dtype=torch.int32) if include_det_idx else None
             ),
         }
-
-    pinned["boxes"][:count].copy_(result_buffers["boxes"][:count], non_blocking=True)
-    pinned["scores"][:count].copy_(result_buffers["scores"][:count], non_blocking=True)
-    pinned["ids"][:count].copy_(result_buffers["ids"][:count], non_blocking=True)
-    if default_class_id is None:
-        pinned["classes"][:count].copy_(
-            result_buffers["classes"][:count], non_blocking=True
-        )
-    if include_det_idx:
-        pinned["det_idx"][:count].copy_(
-            result_buffers["det_idx"][:count], non_blocking=True
-        )
-    torch.cuda.synchronize()
 
     boxes = pinned["boxes"][:count]
     scores = pinned["scores"][:count]
