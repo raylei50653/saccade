@@ -273,14 +273,16 @@ if __name__ == "__main__":
             small_p3_max_threshold=getattr(args, "mamba_small_p3_max_threshold", 0.0),
         )
 
-        if not getattr(args, "no_compile", False):
-            from saccade.perception.temporal_yolo.mamba_gated_detector import (
-                set_postprocess_compile,
-            )
+        from saccade.perception.temporal_yolo.mamba_gated_detector import (
+            set_postprocess_compile,
+        )
 
+        if not getattr(args, "no_compile", False):
             set_postprocess_compile(True)
             mamba_detector.mamba_head.set_head_compile(True)
             mamba_detector.mamba_head.set_block_compile(True)
+        else:
+            set_postprocess_compile(False)
 
         eval_kwargs["detector"] = mamba_detector
         eval_kwargs["tiling"] = _tiling
