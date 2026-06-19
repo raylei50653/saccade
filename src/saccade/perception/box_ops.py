@@ -7,7 +7,7 @@ from typing import Literal, Sequence
 
 import torch
 
-BoxLike = Sequence[float]
+BoxLike = Sequence[float] | torch.Tensor
 UnionMode = Literal["clamp", "add", "zero"]
 
 
