@@ -1237,6 +1237,25 @@ class FPNConfig:
     running_var: Any = None
 
 
+@dataclasses.dataclass(frozen=True)
+class ReidRuntime:
+    """Run-level ReID/FPN objects shared by every sequence in one eval."""
+
+    extractor: Any
+    cropper: Any
+    contract: DetectionContract
+    fpn: FPNConfig
+
+
+@dataclasses.dataclass(frozen=True)
+class NativePipelineRuntime:
+    """Native postprocess/ReID pipeline state created once per eval run."""
+
+    native_cfg: Any
+    perception_pipeline: Any
+    native_reid_available: bool
+
+
 class EvalPipeline:
     """Per-sequence evaluation pipeline state.
 
@@ -2954,6 +2973,222 @@ def _build_gmc_estimator(
     _gmc_graphable = _use_direct_gmc and not isinstance(gmc_estimator, PyGraphedGMC)
     _gmc_cuda_graph = [None]  # mutable for closure capture
     return gmc_estimator, _use_direct_gmc, _gmc_graphable, _gmc_cuda_graph
+
+
+def _resolve_eval_detector(
+    *,
+    detector: Any,
+    engine: str,
+    pose_engine: str | None,
+    tiling: str,
+) -> Any:
+    """Return the detector object run_eval should use.
+
+    Existing detector/proxy instances pass through. When run_eval receives no
+    compatible detector, preserve the old tiling-specific engine fallback before
+    constructing the TRT or two-stage detector.
+    """
+    if isinstance(
+        detector,
+        (
+            TRTYoloDetector,
+            TwostageDetector,
+            ConcurrentDetectorProxy,
+            BatchedDetectorProxy,
+        ),
+    ):
+        return detector
+
+    from saccade.perception.multistream_mamba_server import MambaStreamProxy
+    from saccade.perception.temporal_yolo.mamba_gated_detector import MambaGatedDetector
+
+    if isinstance(detector, (MambaGatedDetector, MambaStreamProxy)):
+        return detector
+
+    candidate_engine = engine
+    if tiling in {"960p_2x2", "sahi_960p_2x2"} and "_960_batch1" in engine:
+        candidate = engine.replace("_960_batch1", "_batch4")
+        if os.path.exists(candidate):
+            candidate_engine = candidate
+    elif tiling == "960p_3x2" and "_960_batch1" in engine:
+        candidate = engine.replace("_960_batch1", "_batch6")
+        if os.path.exists(candidate):
+            candidate_engine = candidate
+    elif tiling == "native_640" and "_960_batch1" in engine:
+        candidate = engine.replace("_960_batch1", "_batch4")
+        if os.path.exists(candidate):
+            candidate_engine = candidate
+
+    if pose_engine:
+        return TwostageDetector(det_engine=candidate_engine, pose_engine=pose_engine)
+    return TRTYoloDetector(engine_path=candidate_engine)
+
+
+def _build_reid_runtime(
+    *,
+    cfg: Any,
+    detector: Any,
+    extractor: Any,
+    reid_model: str,
+    kwargs: dict[str, Any],
+) -> ReidRuntime:
+    """Build the run-level ReID/FPN runtime objects."""
+    fpn_reid_mode = reid_model in {"fpn_raw", "fpn_trained"}
+    fpn_reid_conv_weights = None
+    fpn_reid_proj_weight = fpn_reid_running_mean = fpn_reid_running_var = None
+    fpn_reid_dim = 0
+    fpn_backbone = None
+    fpn_img_size = 640
+
+    if fpn_reid_mode:
+        fpn_reid_ckpt = kwargs.get("fpn_reid_ckpt", "")
+        if reid_model == "fpn_trained" and fpn_reid_ckpt:
+            fpn_reid_dim = 128
+            ckpt_path = Path(fpn_reid_ckpt)
+            if not ckpt_path.is_absolute():
+                ckpt_path = Path.cwd() / ckpt_path
+            ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+            in_channels = ckpt.get("in_channels", [128, 256, 512])
+            fpn_reid_conv_weights = [
+                ckpt["head"][f"convs.{i}.weight"].to(device="cuda")
+                for i in range(len(in_channels))
+            ]
+            mid_dim = 128 * len(in_channels)
+            if mid_dim != 128:
+                fpn_reid_proj_weight = ckpt["head"]["proj.0.weight"].to(device="cuda")
+                fpn_reid_running_mean = ckpt["head"]["proj.1.running_mean"].to(
+                    device="cuda"
+                )
+                fpn_reid_running_var = ckpt["head"]["proj.1.running_var"].to(
+                    device="cuda"
+                )
+        else:
+            fpn_reid_dim = 896
+        extractor = None
+        cropper = None
+        if not hasattr(detector, "teacher"):
+            backbone_engine = kwargs.get("fpn_backbone_engine", "")
+            if backbone_engine:
+                from saccade.perception.temporal_yolo.mamba_gated_detector import (
+                    TRTYoloBackbone as _TRTYoloBackbone,
+                )
+
+                fpn_backbone = _TRTYoloBackbone(str(Path(backbone_engine).resolve()))
+                print(f"  FPN backbone engine: {backbone_engine}")
+                fpn_img_size = 960 if "960" in backbone_engine else 640
+    elif extractor is None and cfg.reid_work_enabled:
+        extractor = TRTFeatureExtractor(
+            engine_path=cfg.reid_engine,
+            model_type=reid_model,
+            max_batch=64,
+        )
+        cropper = ZeroCopyCropper(
+            output_size=cfg.crop_hw,
+            mode=cfg.reid_crop_mode,
+            padding=cfg.reid_crop_padding,
+        )
+    else:
+        cropper = (
+            ZeroCopyCropper(
+                output_size=cfg.crop_hw,
+                mode=cfg.reid_crop_mode,
+                padding=cfg.reid_crop_padding,
+            )
+            if cfg.reid_work_enabled
+            else None
+        )
+
+    return ReidRuntime(
+        extractor=extractor,
+        cropper=cropper,
+        contract=DetectionContract(
+            feature_dim=fpn_reid_dim,
+            fpn_reid_mode=fpn_reid_mode,
+        ),
+        fpn=FPNConfig(
+            backbone=fpn_backbone,
+            img_size=fpn_img_size,
+            conv_weights=fpn_reid_conv_weights,
+            proj_weight=fpn_reid_proj_weight,
+            running_mean=fpn_reid_running_mean,
+            running_var=fpn_reid_running_var,
+        ),
+    )
+
+
+def _select_detect_fn(cfg: Any) -> Any:
+    """Choose the detector dispatch function for the configured tiling mode."""
+    if cfg.tiling == "mamba_global_2x2":
+        return detect_mamba_global_2x2
+    if cfg.tiling == "960p_3x2":
+        return detect_960p_3x2_tiled
+    if cfg.tiling == "sahi_960p_2x2":
+        return detect_sahi_960p_2x2
+    if cfg.tiling == "native_640":
+        return detect_native_640
+    if cfg.tiling in ("native_960", "mamba_960", "native_1024", "native_1280"):
+        return (
+            detect_native_960_tta if getattr(cfg, "tta", False) else detect_native_960
+        )
+    return detect_adaptive_960_tiled
+
+
+def _build_native_pipeline_runtime(
+    *,
+    cfg: Any,
+    conf_threshold: float,
+    extractor: Any,
+    cropper: Any,
+    profile_stages: bool,
+) -> NativePipelineRuntime:
+    """Build native postprocess/ReID pipeline state when the extension exists."""
+    extractor_cpp_ptr = _safe_cpp_ptr(extractor) if extractor is not None else 0
+    cropper_cpp_ptr = _safe_cpp_ptr(cropper) if cropper is not None else 0
+    native_postprocess_available = (
+        PerceptionPipeline is not None and PerceptionPipelineConfig is not None
+    )
+    native_reid_available = (
+        native_postprocess_available
+        and extractor_cpp_ptr != 0
+        and cropper_cpp_ptr != 0
+        and cfg.reid_crop_layout == "full"
+    )
+    native_cfg = None
+    perception_pipeline = None
+    if native_postprocess_available:
+        native_cfg = PerceptionPipelineConfig()
+        native_cfg.score_threshold = min(
+            conf_threshold,
+            cfg.track_thresh,
+            cfg.crowd_conf_threshold if cfg.crowd_low_score_mode else conf_threshold,
+            cfg.crowd_track_thresh if cfg.crowd_low_score_mode else cfg.track_thresh,
+        )
+        native_cfg.person_class = cfg.person_class
+        native_cfg.person_only = cfg.track_person_only
+        native_cfg.nms_threshold = cfg.nms_iou_threshold
+        native_cfg.person_geometry_prior = cfg.person_geometry_prior
+        native_cfg.geometry_suspect_support = cfg.geometry_suspect_support
+        native_cfg.geometry_suspect_support_score = cfg.geometry_suspect_support_score
+        native_cfg.person_min_height_ratio = cfg.person_min_height_ratio
+        native_cfg.person_min_aspect = cfg.person_min_aspect
+        native_cfg.person_max_aspect = cfg.person_max_aspect
+        native_cfg.person_min_area_ratio = cfg.person_min_area_ratio
+        native_cfg.person_max_area_ratio = cfg.person_max_area_ratio
+        native_cfg.max_detections = 2048
+        perception_pipeline = PerceptionPipeline(
+            extractor_cpp_ptr if native_reid_available else 0,
+            cropper_cpp_ptr if native_reid_available else 0,
+            native_cfg,
+        )
+        perception_pipeline.set_postprocess_profiling_enabled(profile_stages)
+        if native_reid_available:
+            perception_pipeline.set_reid_profiling_enabled(profile_stages)
+
+    return NativePipelineRuntime(
+        native_cfg=native_cfg,
+        perception_pipeline=perception_pipeline,
+        native_reid_available=native_reid_available,
+    )
 
 
 def _run_emit(
@@ -5141,193 +5376,42 @@ def run_eval(
             )
         external_fp_logistic_model = load_logistic_model(model_path)
 
-    if not isinstance(
-        detector,
-        (
-            TRTYoloDetector,
-            TwostageDetector,
-            ConcurrentDetectorProxy,
-            BatchedDetectorProxy,
-        ),
-    ):
-        from saccade.perception.temporal_yolo.mamba_gated_detector import (
-            MambaGatedDetector,
-        )
-        from saccade.perception.multistream_mamba_server import (
-            MambaStreamProxy,
-        )
-
-        if isinstance(detector, (MambaGatedDetector, MambaStreamProxy)):
-            pass
-        else:
-            import os as _os
-
-            tiling = kwargs.get("tiling", "native_960")
-            if tiling in {"960p_2x2", "sahi_960p_2x2"} and "_960_batch1" in engine:
-                candidate = engine.replace("_960_batch1", "_batch4")
-                if _os.path.exists(candidate):
-                    engine = candidate
-            elif tiling == "960p_3x2" and "_960_batch1" in engine:
-                candidate = engine.replace("_960_batch1", "_batch6")
-                if _os.path.exists(candidate):
-                    engine = candidate
-            elif tiling == "native_640" and "_960_batch1" in engine:
-                candidate = engine.replace("_960_batch1", "_batch4")
-                if _os.path.exists(candidate):
-                    engine = candidate
-            if pose_engine:
-                detector = TwostageDetector(det_engine=engine, pose_engine=pose_engine)
-            else:
-                detector = TRTYoloDetector(engine_path=engine)
+    detector = _resolve_eval_detector(
+        detector=detector,
+        engine=engine,
+        pose_engine=pose_engine,
+        tiling=kwargs.get("tiling", "native_960"),
+    )
 
     if reid_mode not in {"off", "tracker", "semantic", "hybrid"}:
         raise ValueError(f"Unsupported reid_mode: {reid_mode}")
 
-    _fpn_reid_mode = reid_model in {"fpn_raw", "fpn_trained"}
-    _fpn_reid_conv_weights = None
-    _fpn_reid_proj_weight = _fpn_reid_running_mean = _fpn_reid_running_var = None
-    _fpn_reid_dim = 0
-    _fpn_backbone = None
-    _fpn_cache: dict[str, torch.Tensor] = {}
-    _fpn_img_size = 640
-
-    if _fpn_reid_mode:
-        fpn_reid_ckpt = kwargs.get("fpn_reid_ckpt", "")
-        if reid_model == "fpn_trained" and fpn_reid_ckpt:
-            _fpn_reid_dim = 128
-            ckpt_path = Path(fpn_reid_ckpt)
-            if not ckpt_path.is_absolute():
-                ckpt_path = Path.cwd() / ckpt_path
-            _ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
-            in_channels = _ckpt.get("in_channels", [128, 256, 512])
-            _fpn_reid_conv_weights = [
-                _ckpt["head"][f"convs.{i}.weight"].to(device="cuda")
-                for i in range(len(in_channels))
-            ]
-            mid_dim = 128 * len(in_channels)
-            if mid_dim != 128:
-                _fpn_reid_proj_weight = _ckpt["head"]["proj.0.weight"].to(device="cuda")
-                _fpn_reid_running_mean = _ckpt["head"]["proj.1.running_mean"].to(
-                    device="cuda"
-                )
-                _fpn_reid_running_var = _ckpt["head"]["proj.1.running_var"].to(
-                    device="cuda"
-                )
-        else:
-            _fpn_reid_dim = 896
-        extractor = None
-        cropper = None
-        _fpn_backbone = None
-        _fpn_cache: dict[str, torch.Tensor] = {}
-        if not hasattr(detector, "teacher"):
-            _bb_engine = kwargs.get("fpn_backbone_engine", "")
-            if _bb_engine:
-                from saccade.perception.temporal_yolo.mamba_gated_detector import (
-                    TRTYoloBackbone as _TRTYoloBackbone,
-                )
-
-                _fpn_backbone = _TRTYoloBackbone(str(Path(_bb_engine).resolve()))
-                print(f"  FPN backbone engine: {_bb_engine}")
-                _fpn_img_size = 960 if "960" in _bb_engine else 640
-
-    elif extractor is None and cfg.reid_work_enabled:
-        extractor = TRTFeatureExtractor(
-            engine_path=cfg.reid_engine,
-            model_type=reid_model,
-            max_batch=64,
-        )
-        cropper = (
-            ZeroCopyCropper(
-                output_size=cfg.crop_hw,
-                mode=cfg.reid_crop_mode,
-                padding=cfg.reid_crop_padding,
-            )
-            if cfg.reid_work_enabled
-            else None
-        )
-    else:
-        cropper = (
-            ZeroCopyCropper(
-                output_size=cfg.crop_hw,
-                mode=cfg.reid_crop_mode,
-                padding=cfg.reid_crop_padding,
-            )
-            if cfg.reid_work_enabled
-            else None
-        )
+    reid_runtime = _build_reid_runtime(
+        cfg=cfg,
+        detector=detector,
+        extractor=extractor,
+        reid_model=reid_model,
+        kwargs=kwargs,
+    )
+    extractor = reid_runtime.extractor
+    cropper = reid_runtime.cropper
+    contract = reid_runtime.contract
+    fpn = reid_runtime.fpn
 
     if cfg.reid_crop_layout not in {"full", "parts"}:
         raise ValueError(f"Unsupported reid_crop_layout: {cfg.reid_crop_layout}")
 
-    if cfg.tiling == "mamba_global_2x2":
-        detect_fn = detect_mamba_global_2x2
-    elif cfg.tiling == "960p_3x2":
-        detect_fn = detect_960p_3x2_tiled
-    elif cfg.tiling == "sahi_960p_2x2":
-        detect_fn = detect_sahi_960p_2x2
-    elif cfg.tiling == "native_640":
-        detect_fn = detect_native_640
-    elif cfg.tiling in ("native_960", "mamba_960", "native_1024", "native_1280"):
-        detect_fn = (
-            detect_native_960_tta if getattr(cfg, "tta", False) else detect_native_960
-        )
-    else:
-        detect_fn = detect_adaptive_960_tiled
-
-    contract = DetectionContract(
-        feature_dim=_fpn_reid_dim,
-        fpn_reid_mode=_fpn_reid_mode,
+    detect_fn = _select_detect_fn(cfg)
+    native_runtime = _build_native_pipeline_runtime(
+        cfg=cfg,
+        conf_threshold=conf_threshold,
+        extractor=extractor,
+        cropper=cropper,
+        profile_stages=profile_stages,
     )
-    fpn = FPNConfig(
-        backbone=_fpn_backbone,
-        img_size=_fpn_img_size,
-        conv_weights=_fpn_reid_conv_weights,
-        proj_weight=_fpn_reid_proj_weight,
-        running_mean=_fpn_reid_running_mean,
-        running_var=_fpn_reid_running_var,
-    )
-
-    extractor_cpp_ptr = _safe_cpp_ptr(extractor) if extractor is not None else 0
-    cropper_cpp_ptr = _safe_cpp_ptr(cropper) if cropper is not None else 0
-    native_postprocess_available = (
-        PerceptionPipeline is not None and PerceptionPipelineConfig is not None
-    )
-    native_reid_available = (
-        native_postprocess_available
-        and extractor_cpp_ptr != 0
-        and cropper_cpp_ptr != 0
-        and cfg.reid_crop_layout == "full"
-    )
-    native_cfg = None
-    perception_pipeline = None
-    if native_postprocess_available:
-        native_cfg = PerceptionPipelineConfig()
-        native_cfg.score_threshold = min(
-            conf_threshold,
-            cfg.track_thresh,
-            cfg.crowd_conf_threshold if cfg.crowd_low_score_mode else conf_threshold,
-            cfg.crowd_track_thresh if cfg.crowd_low_score_mode else cfg.track_thresh,
-        )
-        native_cfg.person_class = cfg.person_class
-        native_cfg.person_only = cfg.track_person_only
-        native_cfg.nms_threshold = cfg.nms_iou_threshold
-        native_cfg.person_geometry_prior = cfg.person_geometry_prior
-        native_cfg.geometry_suspect_support = cfg.geometry_suspect_support
-        native_cfg.geometry_suspect_support_score = cfg.geometry_suspect_support_score
-        native_cfg.person_min_height_ratio = cfg.person_min_height_ratio
-        native_cfg.person_min_aspect = cfg.person_min_aspect
-        native_cfg.person_max_aspect = cfg.person_max_aspect
-        native_cfg.person_min_area_ratio = cfg.person_min_area_ratio
-        native_cfg.person_max_area_ratio = cfg.person_max_area_ratio
-        native_cfg.max_detections = 2048
-        perception_pipeline = PerceptionPipeline(
-            extractor_cpp_ptr if native_reid_available else 0,
-            cropper_cpp_ptr if native_reid_available else 0,
-            native_cfg,
-        )
-        perception_pipeline.set_postprocess_profiling_enabled(profile_stages)
-        if native_reid_available:
-            perception_pipeline.set_reid_profiling_enabled(profile_stages)
+    native_cfg = native_runtime.native_cfg
+    perception_pipeline = native_runtime.perception_pipeline
+    native_reid_available = native_runtime.native_reid_available
     enable_onms = _env_flag_enabled("SACCADE_ENABLE_ONMS", False)
     onms_prior_iou_threshold = 0.70
     onms_min_track_age = 2
