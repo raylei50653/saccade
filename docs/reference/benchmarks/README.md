@@ -24,4 +24,4 @@
 ## 維護
 
 - 更新時附上 GPU、解析度、模型版本
-- 重大優化同步回寫 `progress/` 或對應 ADR
+- 重大優化同步回寫 [TODO.md](../../TODO.md)、[PIPELINE.md](../../PIPELINE.md)、對應 ADR，或本目錄下的 benchmark note

@@ -126,7 +126,7 @@ A 線「per-seq 表」、B 線「per-seq error budget」、報告「重現 headl
 | 報告骨架表 | per-seq HOTA/AssA/IDF1 = Experiments 章 per-sequence delta 表骨架 + ex-04(6-seq)真實成色 |
 | 餵 B 線 | per-seq 表暴露非-04 最大 headroom 序列 = error-budget 第一攻擊目標 |
 
-凍結狀態:`configs/presets/mamba_whole_graph.yaml` 已 commit 在 HEAD(`oao_tau 0.30 / oao_ramp_frames 25 / relink_bridge_px 0.25 / fuse_score_weight 0.0`),已可作為基準凍結點。
+凍結狀態:`configs/presets/mamba_whole_graph.yaml` 已 commit 在 HEAD(`oao_tau 0.50 / oao_ramp_frames 25 / relink_bridge_px 0.25 / fuse_score_weight 0.0`),已可作為基準凍結點。
 
 **✅ 已執行(2026-06-18,output `out/frozen_v1/`):** headline 完全同源重現 — IDF1 77.6 / MOTA 78.3 / HOTA 69.9 / DetA 70.8 / AssA 69.1 / IDs 430 / Rcll 80.8 / Prcn 97.4 / **221.59 FPS (4.51 ms)**。222 FPS 在 eval 脈絡下可重現(§5 注 1 的 latency_log 40–71 為不同量測脈絡,須標清協定)。per-seq 表見 §6。
 
@@ -183,4 +183,4 @@ A 線「per-seq 表」、B 線「per-seq error budget」、報告「重現 headl
 ## 7. Release 策略(兩層)
 
 - **主研究倉**:保留全部(`src/ scripts/ tests/ docs/ configs/ archive/` + `no_go_registry.md`)= research workspace + extended NO-GO archive。**不硬清**,NO-GO 本身有價值。
-- **release / demo 倉**:乾淨展示(`README` + `configs/` + `src/` + `docs/{overview,results,architecture,association_recovery}.md` + `docs/appendix/` + `scripts/eval_mot17.py` + `examples/rtsp_demo/`)。首頁 headline:`4.50 ms E2E · 5.22 ms P99 · 222 FPS · IDF1 77.6 / HOTA 69.9 · MOT17-04 IDF1 90.6 / IDs 28`。
+- **release / demo 倉**:乾淨展示(`README` + `configs/` + `src/` + `docs/{overview,results,architecture,association_recovery}.md` + appendix docs + `scripts/eval/mot17.py` + `examples/rtsp_demo/`)。首頁 headline:`4.50 ms E2E · 5.22 ms P99 · 222 FPS · IDF1 77.6 / HOTA 69.9 · MOT17-04 IDF1 90.6 / IDs 28`。

@@ -42,4 +42,8 @@
     - 實作複雜度提高。
 
 ## 驗證指標
-- 通過 `tests/benchmarks/bench_core_transport.py` 驗證影格流失率與同步正確性。
+- 通過 bench_core_transport.py 驗證影格流失率與同步正確性。
+
+> Current tree note (2026-06-19): bench_core_transport.py is no longer present.
+> Treat this as the original ADR validation target, not a
+> currently runnable verification command.

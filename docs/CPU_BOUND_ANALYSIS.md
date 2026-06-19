@@ -36,7 +36,7 @@
 
 ## 1. Per-Frame CPU Operations (Hot Loop)
 
-The per-frame loop is in `src/saccade/perception/eval/evaluator.py:2393`.
+The per-frame loop is in [evaluator.py](../src/saccade/perception/eval/evaluator.py).
 
 ### 1.1 Fetch + Ingest + Preprocess
 

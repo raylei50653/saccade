@@ -183,7 +183,7 @@ cv2[i], cv3[i] (Frozen)            │
 
 ## 生產環境預設配置 (Production Presets)
 
-在生產部署中，最佳評估配置定義在 `configs/presets/mamba_optimal.yaml` 中，其針對 Mamba 的預測分佈調整了關聯匹配參數：
+`mamba_optimal` 是 Option F head-CUDA-graph lineage 的舊 production preset。現行 headline eval preset 已升到 `configs/presets/mamba_whole_graph.yaml`：沿用 Mamba head lineage，但改成 whole-detect CUDA graph、`native_640`、ReID off，並使用 T3→T1 checkpoint lineage。此處保留 `mamba_optimal` 片段作為 Option F 設計上下文：
 
 ```yaml
 # configs/presets/mamba_optimal.yaml
@@ -197,13 +197,13 @@ new_track_thresh: 0.28
 confirm_streak: 3
 ```
 
-此配置能在相機劇烈晃動下保持極其穩定且精準的動態邊框追蹤，且完全不引入額外的 ReID 特徵提取延遲。
+這條 lineage 能在相機劇烈晃動下保持穩定的動態邊框追蹤，且完全不引入額外的 ReID 特徵提取延遲。現行 headline 數字請以 [mot17_default_config.md](../../reference/mot17_default_config.md) 與 [TODO.md](../../TODO.md) 為準。
 
 ---
 
 ## 各元件實測增益 (MOT17-SDP Ablation)
 
-> 基準：yolo26s baseline tracker，IDF1 ≈ 52%。所有 Mamba 結果使用 `mamba_optimal` preset (match_thresh=0.50, confirm_streak=3, interpolate=true)。
+> Historical baseline：yolo26s baseline tracker，IDF1 ≈ 52%。本節 Mamba ablation 使用當時的 `mamba_optimal` preset (match_thresh=0.50, confirm_streak=3, interpolate=true)，不是目前 `mamba_whole_graph` headline preset。
 
 ### 當前最佳：**v14 — N=16 Cross-Scan**（2026-05-31）
 

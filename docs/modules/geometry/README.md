@@ -5,17 +5,17 @@
 
 ## 🟢 目前現況
 * **GPU GMC (全局運動補償)** 已全面落地。相機運動對齊全階段均在 GPU (CUDA) 上完成：包括 GPU 影像傅立葉變換 (FFT)、相位互相關 (Phase Correlation)、以及將原先單線程 $O(N)$ 複雜度改為 256 線程並行 Reduction 運算的 **Peak Find 尋峰算子**。這使單幀 GMC 耗時從 0.71ms 壓減至 0.28ms（加速 12.5×），避免了 Host 端與 Device 端的數據頻繁拷貝。
-* **幾何先驗硬限制與自適應檢測品質縮放 (Detection Quality Scaling)** 已設為預設開啟。
+* **幾何先驗硬限制與自適應檢測品質縮放 (Detection Quality Scaling)** 仍保留為模組能力；現行 `mamba_whole_graph` headline preset 關閉 `detection_quality_scaling` 與 `id_stability_filter`，避免和 Mamba 分佈重校準重疊。
 * **時序流對齊引導**：GMC 生成的仿射變換矩陣現在會被寫入 `StreamState.gmc_mat_buffer` 隊列中，供 `detection` 模組的 `_gmc_matrices_to_flow` 算子調用，融合成時序流場。
 
 ## 🔗 I/O & Dataflow
 
 | | |
 |---|---|
-| **Pipeline stage** | `[10] gmc`（獨立階段）+ `[4] postprocess` 幾何先驗 + `[11] track` Kalman（見 [pipeline_flow.md](../../reference/pipeline_flow.md)） |
-| **輸入** | 當前 + 前一幀（GMC 的 FFT / phase-correlation）；detections（幾何先驗縮放、id_stability） |
-| **輸出** | `gmc_warp` + `gmc_uncertain`（→ tracker 消耗、→ detection Mamba flow gate）；geometry quality scaling（→ postprocess）；Kalman predict/update 協方差 |
-| **上游 → 下游** | `prev/cur frame → [10] GMC (GPU FFT→PCR→peak-find) → gmc_warp → [11] tracker；detections → 幾何先驗 → [4] postprocess` |
+| **Pipeline stage** | `gmc`（獨立階段）+ `postprocess` 幾何先驗 + `track` Kalman（見 [pipeline_flow.md](../../reference/pipeline_flow.md)） |
+| **輸入** | 當前 + 前一幀（GMC 的 FFT / phase-correlation）；detections（可選幾何先驗縮放、id_stability） |
+| **輸出** | `gmc_warp` + `gmc_uncertain`（→ tracker 消耗、→ detection Mamba flow gate）；可選 geometry quality scaling（→ postprocess）；Kalman predict/update 協方差 |
+| **上游 → 下游** | `prev/cur frame → gmc (GPU FFT→PCR→peak-find) → gmc_warp → track；detections → 幾何先驗 → postprocess` |
 
 ## ⚖️ GO / NO-GO 決策
 

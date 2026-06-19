@@ -37,7 +37,7 @@
 | # | 項目 | 時間 | 結論 | 關鍵數據 |
 |---|------|------|------|----------|
 | 6 | Motion-based Relinking | 2026-05-17 | ❌ NO-GO | 89% 候選被 age gate 攔截，增益 ≈ 雜訊 |
-| 7 | OA-SORT OAO | 2026-05-20 / 06-12 / **06-17 復活** | ✅ **GO（duration-ramp）** | 舊：⚪ 被遮蔽（整列加 cost；舊 baseline ±0.3pp、06-12 新 baseline −1.1pp）。**06-17：新 baseline（whole_graph+bidir bridge）plain OAO tau0.25 翻盤 +1.6 IDF1/+2.6 AssA，但集中 MOT17-04（42% 權重）且 05 −3.4**。6 空間判別信號（contention/score_w/union/crowd/height-gate/foot-gate）全 NO-GO（05 害與 10/13 益在空間軸纏結不可分）；**破牆=時間軸**：05 重疊短暫~10f、04 持久~49f → duration-ramp `tau·occ·min(1,frames/ramp)` 保 04 抑 05。**tau0.30+ramp25 Pareto 支配 plain**（每指標 ≥，ex-04 AssA +0.8，05 70.6→72.3）。[復活分析](../research/eval/oao_duration_ramp_revival_20260617.md) |
+| 7 | OA-SORT OAO | 2026-05-20 / 06-12 / **06-17 復活** | ✅ **GO（duration-ramp）** | 舊：⚪ 被遮蔽（整列加 cost；舊 baseline ±0.3pp、06-12 新 baseline −1.1pp）。**06-17：new whole-graph+bidir bridge baseline 下 plain OAO tau0.25 翻盤 +1.6 IDF1/+2.6 AssA，但集中 MOT17-04（42% 權重）且 05 −3.4**。6 空間判別信號（contention/score_w/union/crowd/height-gate/foot-gate）全 NO-GO（05 害與 10/13 益在空間軸纏結不可分）；**破牆=時間軸**：05 重疊短暫~10f、04 持久~49f → duration-ramp `tau·occ·min(1,frames/ramp)` 保 04 抑 05。06-17 evidence 使用 tau0.30+ramp25 且 Pareto 支配 plain（每指標 ≥，ex-04 AssA +0.8，05 70.6→72.3）；目前 preset 已 retune 為 `oao_tau=0.50`, `oao_ramp_frames=25`。 [復活分析](../research/eval/oao_duration_ramp_revival_20260617.md) |
 | 8 | NSA-Kalman (Noise Scale Adaptive) | 2026-04-27 / **06-12 歸因+重校準** | ⚪ 被遮蔽 | 前提成立（Spearman −0.52，低分框殘差 5×）但與 `kalman_r_scale=2.8` 雙重補償；新 baseline 端到端 −3.2pp。**06-12 重校準驗證**：f(score) v2（只放大、s0=0.9305 錨定）IDF1 **+1.5** / AssA +0.86（6/7 seq 正）— score 訊號可轉化；但 DetA −1.44 / MOTA −0.4，移動相機 05/13 嚴格退步（13: MOTA −3.4/IDs +33），per-seq CI 含 0 → default 不開。g(h) 形狀修正單獨 **−0.4**（h 代理假說反證：score 是主訊號）。[歸因分析](../research/eval/neutral_nogo_signal_attribution_20260612.md) |
 | 9 | PostMerge | 2026-04-27 / **06-12 歸因** | ⚪ 被遮蔽 | combined AUC 0.868 但 base rate 2.4% → 作用點 precision ~20%（FP +1308）；default 路徑因強制 appearance gate + ReID off **失能**；direction 分量 AUC 0.487 純噪聲。[歸因分析](../research/eval/neutral_nogo_signal_attribution_20260612.md) |
 | 10 | Per-frame Detection Cap / Adaptive Cap | — | ❌ NO-GO | 密集場景 adaptive cap 壓至 ~21，破壞 recall |
@@ -110,7 +110,7 @@
 |---|------|---------|----------|
 | 3 | Semantic Relink | age gate 拒 86.8% 候選 | 候選生成結構改變（已部分由 bidir bridge 實現） |
 | 6 | Motion-based Relinking | age gate 攔 89% 候選 | 同上（已由 bidir bridge 復活） |
-| 7 | OA-SORT OAO | 整列加 cost 不改排序（舊）；新 baseline 下空間判別信號 6/6 不可分離 05 害 vs 10/13 益 | **已復活（06-17）**：duration-ramp（時間軸 = 唯一分離 05 短暫 / 04 持久的軸），tau0.30+ramp25 |
+| 7 | OA-SORT OAO | 整列加 cost 不改排序（舊）；new whole-graph baseline 下空間判別信號 6/6 不可分離 05 害 vs 10/13 益 | **已復活（06-17）**：duration-ramp（時間軸 = 唯一分離 05 短暫 / 04 持久的軸）。06-17 evidence：tau0.30+ramp25；目前 preset：tau0.50+ramp25 |
 | 33 | occ_cover live relink | `track_buffer=30` 結構性消滅長 gap 族群；base rate 1.3% | bridge 專用過期檔案庫（不靠延長全局記憶 — tb90 已證 −0.8 IDF1） |
 | 23 | Birth-time lost-bank relink | 長 gap rank-1 僅 13–33%（接近結構性，但混雜短 gap 易池） | 若有可靠長 gap 訊號源（外觀方向已結案，需新模態) |
 | 8 | NSA-Kalman | 前提真（ρ=−0.52）但與 r_scale=2.8 雙重補償。**06-12 重校準已測**：f(score) v2 IDF1 +1.5/AssA +0.86 證實訊號可用，剩餘 blocker = 濾波態輸出的 localization 損失（DetA −1.44，集中移動相機 05/13）+ per-seq CI 含 0 | score-conditioned R 只作用於 association/gating、輸出箱改用量測（或 GMC 品質條件化啟用）；flags `--kalman-nsa-s0` 已 plumbed default off |
@@ -128,13 +128,13 @@
 | 模組 | 狀態 | 貢獻 |
 |------|------|------|
 | **GPU GMC** (phase correlation) | ✅ default ON | IDF1 +2.8pp, IDs −133 |
-| **Option F** (Mamba Gated Detector) | ✅ production preset | IDF1 71.2%, MOTA 76.3%, Rcll 82.3% |
+| **Option F / Mamba Whole-Graph** | ✅ production preset | 現行 headline preset 為 `mamba_whole_graph`（native_640, ReID off）：IDF1 77.6 / MOTA 78.3 / HOTA 69.9 / AssA 69.1 / IDs 430 / 221.59 FPS |
 | **GPUByteTracker + Sinkhorn-Auction** | ✅ default ON | 關聯延遲 0.67ms (10x 提升) |
-| **Async ReID** | ✅ default ON | +2.6% FPS, 零精度損失 |
-| **Pipeline Relink** | ✅ default ON | +2.5% FPS |
+| **Async ReID** | ✅ legacy speed feature | 舊 pipeline speed optimization；現行 headline baseline ReID off |
+| **Pipeline Relink** | ✅ legacy speed feature | 舊 pipeline speed optimization；accuracy headline 由 GPU 雙向橋接 relink / tracker path 決定 |
 | **GPU 雙向橋接 Relink** (px=0.25 + scale gate) | ✅ preset default ON | IDF1 +2.1, AssA +2.8, IDs −13.6%, FP −14%（06-11 全指標嚴格優勢） |
 | **FP Hard Filter** (area=40000) | ✅ default ON | FP 移除 9021, TP 移除僅 153 |
-| **Kalman R Scale** (0.75) | ✅ default ON | — |
-| **Detection Quality Scaling** | ✅ default ON | geometry-aware score boost |
+| **Kalman R Scale** (`kalman_r_scale=2.8`) | ✅ current preset | 見 `configs/presets/mamba_whole_graph.yaml` |
+| **Detection Quality Scaling** | ✅ legacy / non-headline | 現行 `mamba_whole_graph` headline preset 為 `detection_quality_scaling=false` |
 | **Interpolation** (max_gap=35) | ✅ default ON | — |
-| **OA-SORT OAO duration-ramp** (tau=0.30, ramp_frames=25) | ✅ preset default ON（06-17） | Pareto 支配 plain OAO：IDF1 77.5→77.6 / HOTA 69.7→69.9 / AssA 68.8→69.1 / ex-04 AssA +0.8 / MOT17-05 70.6→72.3；零速度成本（一個 per-track 計數器）。registry #7 復活 |
+| **OA-SORT OAO duration-ramp** (current preset: tau=0.50, ramp_frames=25) | ✅ preset default ON | 06-17 evidence（tau0.30+ramp25）Pareto 支配 plain OAO：IDF1 77.5→77.6 / HOTA 69.7→69.9 / AssA 68.8→69.1 / ex-04 AssA +0.8 / MOT17-05 70.6→72.3；目前 config retune 為 tau0.50+ramp25。registry #7 復活 |

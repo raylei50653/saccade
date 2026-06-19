@@ -5,35 +5,37 @@
 >
 > 配套文件分工：
 > - **演算法決策精煉（本檔）** → 按流程讀「現在用什麼、為什麼、哪些死路」
-> - **[stage 計時 / 延遲剖析](reference/pipeline_flow.md)** → `time_stage()` 實際串行順序與每階段耗時
+> - **[stage source map](reference/pipeline_flow.md)** → `time_stage()` 實際 stage 名稱與 source 對照
 > - **[NO-GO 全局登記表](reference/no_go_registry.md)** → 每條死路的完整數據與歸因（本檔以 `#N` 引用）
 > - **[模組物理文檔庫](README.md)** → 各模組 architecture / research / ADR
 >
-> 最後更新：2026-06-17
+> 最後更新：2026-06-19
 
 ---
 
 ## 0. 全鏈一覽
 
-實際串行順序（對應 `evaluator.py` 的 `time_stage()`，6 個演算法階段）：
+實際串行順序（對應 `evaluator.py` 的 `time_stage()`；此處合併成 6 個演算法階段）：
 
 ```text
-[前處理]    fetch + ingest_preprocess   DALI/NVDEC 解碼 → letterbox → AdaptiveFramePool
+[前處理]    fetch + ingest_preprocess   frame source → reusable GPU buffers
      │
-[ssm-head]  detect                      YOLO26 backbone + Mamba gated head
+[ssm-head]  detect                      YOLO26 backbone + Mamba gated head（whole-graph preset）
      │
 [後處理]    postprocess                 filter → NMS → cross-tile merge → FP/quality gating
+     │
+[可選ReID]  reid_budget/crop/extract     only when reid_mode != off; before GMC
      │
 [GMC]       gmc                         GPU phase-correlation warp（相機運動）
      │
 [ID分配]    track                       GPUByteTracker + Kalman + Sinkhorn-Auction
      │
-[relink]    relink_write                GPU 雙向橋接 relink + identity resolve
+[relink]    materialize + relink_write   tracker buffer readback + fast emit / identity resolve
      │
 [output]    MOT txt / metrics
 ```
 
-> ⚠️ ReID 分支（bank_sync→budget→crop→extract）在計時上位於 GMC **之前**，但**預設全關**（見 §6），故精煉上歸入 relink 一併討論。
+> ⚠️ ReID 分支（bank_sync→budget→crop→extract）在計時上位於 GMC **之前**。若 native ReID + `async_reid` 啟用，ReID extraction 會在 side CUDA stream 上和 GMC overlap，並在 `track` 前同步；current `mamba_whole_graph` headline preset 為 `reid_mode=off`，所以這條分支不參與 headline。
 
 **現行 production 疊加帳（每步相對前一步的裸增益）：**
 
@@ -43,11 +45,12 @@
 | +1 | **GPU GMC** | IDF1 **+2.8pp**、IDs −133（唯一壓倒性貢獻模組） |
 | +2 | **GPU 雙向橋接 relink** | IDF1 **+2.1**、AssA +2.8、IDs −13.6%、FP −14% |
 | +3 | **depth 同高遮擋 gate** | IDF1 +0.5、AssA +0.4（crossing-swap） |
+| +4 | **OAO duration-ramp occlusion penalty** | IDF1 75.9→77.6、HOTA 68.1→69.9、AssA 66.2→69.1 |
 
-現行最優 ≈ **IDF1 ~75.9 / MOTA ~78 / HOTA ~68 / AssA ~66.4**（Option F mamba whole-graph + 上表三疊加，7-seq MOT17-SDP）。
+現行最優 = **IDF1 77.6 / MOTA 78.3 / HOTA 69.9 / AssA 69.1 / IDs 430 / 221.59 FPS**（`mamba_whole_graph` frozen run，7-seq MOT17-SDP；見 [ADR 018](decisions/018-project-main-line-direction.md)）。
 
 **結構性鐵律（先讀，省得重蹈）：**
-1. **GMC 壓倒性主導** —— 開啟後其他關聯類模組多半冗余（∆<0.4pp）。調參一律以 `tracker_core_gmc` 為基準。
+1. **GMC 壓倒性主導** —— 開啟後其他關聯類模組多半冗余（∆<0.4pp）。現行調參以 `mamba_whole_graph` preset 為基準；legacy `tracker_core_gmc` 只作歷史對照。
 2. **Appearance 天花板** —— MOT17 身份在 embedding 空間本質難分（5 模型 × 4 機制 × SR × 域訓練全撞同一上限，清晰 200px 框 rank-1 僅 57%）。外觀方向已結案。
 3. **「上限不轉移」反覆出現** —— GT/oracle 算得出的增益，到了 innovation / 輸出 / 特徵空間就蒸發（#5/#34/#38/#41）。離線 oracle 漂亮 ≠ 端到端 GO。
 4. **時序難進特徵層** —— Mamba temporal block、per-channel SSM A 全因 grad 崩潰退步；時序一致性只能當 emergent/soft，不能硬編 loss（#28/#29/#37）。
@@ -60,8 +63,9 @@
 **職責**：從 frame source 取影格（DALI/NVDEC 解碼）→ letterbox/gamma/contrast → AdaptiveFramePool → 備妥 detector tensor。**幾乎純效能議題，無精度 GO/NO-GO**。
 
 **現行最優**：
-- 解碼走 **NVJPG 硬體引擎**（jpg util ~55%）；瓶頸是**逐張阻塞呼叫餵不滿引擎（per-call bubble）**，非 CPU/IDCT/color。batched 2×（1300fps）、雙 thread 1.65× 可填 bubble。
-- **letterbox_gpu fused kernel** + `async_reid` + `pipeline_relink` default ON → e2e ~107 FPS / 9.29ms/frame。
+- `mamba_whole_graph` evaluation preset 走 `native_640` + `preprocess: none`，主要效能來自 whole-detect CUDA graph（TRT backbone + Mamba head + decode）與 GPU tracker hot path。
+- source 對照：`fetch` 只取 frame；`ingest_preprocess` 才把 frame 複製進 `AdaptiveFramePool` 並依 preset 做 preprocess。`preprocess: none` 代表跳過 gamma/contrast/letterbox mode list，而不是跳過 pool copy。
+- 舊 `native_960` / JPEG decode profiling 仍可作為效能研究參考，但不再是 headline baseline。
 - 訓練側同型瓶頸：teacher-cache H2D `stack_scales` 45% + per-step sync 23%（非 launch-bound）；半精傳輸 + GPU 累積消 sync 得 3.0× bit-exact。
 
 **關鍵 GO**：letterbox_gpu fused kernel、e2e latency opt（async + pipeline relink）、batched JPEG decode。
@@ -81,9 +85,9 @@
 **職責**：YOLO26 backbone + Mamba gated detection head 產出 raw `boxes/scores/classes`（清理在 §3 後處理）。
 
 **現行最優**：
-- **Option F Mamba Gated Detector**（production preset）：IDF1 71.2% / MOTA 76.3% / Rcll 82.3%（偵測層貢獻）。
-- engine `yolo26s_960`、`--tiling native_960`、PixelShuffle head、v14 配方。
-- **whole-graph CUDA graph** eval = 最優純加速（157 FPS、bit-exact、+15% FPS）；曾有 capture 漏錄 `selective_scan` 的 bug，已修（傳 current_stream + `make_graphed_callables`）。
+- **Option F / v14replica T3→T1 Mamba head** 是 production lineage；current preset `mamba_whole_graph` 使用 `mamba_ckpt: runs/mamba_gt_v14replica_t3_t1/best.ckpt`、`fpn_backbone_engine: models/yolo/yolo26s_backbone_640_best.engine`。
+- **whole-detect CUDA graph** eval = 目前 headline runtime path；2026-06-18 frozen run 為 221.59 FPS / 4.51ms eval-context throughput。
+- source 對照：`scripts/eval/mot17.py` 載入 preset 後將 `use_whole_graph=true` 傳進 detector；`evaluator.py` 每 frame 的 `detect` stage 只看到 `detect_fn(...)`，whole-graph 優先權在 detector / detection helper 內決定。
 - v14 內部 SSM（A_log/D/conv1d/x_proj/dt_proj）**從未被訓練**（scan 無 grad_fn）；「N=1 curriculum」是 eval artifact。
 - 分數分佈：飽和左尾、median 0.93、門檻坐 0.3% 薄尾、框高主導。
 
@@ -107,8 +111,10 @@
 **職責**：清理 detector raw 輸出 —— filter → NMS → cross-tile merge → FP/quality gating。內含 **6+ 隱藏 sub-stages**（均計入 postprocess 時間）。
 
 **現行最優**：
-- 主路徑優先走 native `PerceptionPipeline.process_detections_into()`，否則 Python fallback。
-- default ON：`fp_hard_filter`（area=40000，移除 9021 FP / 僅 153 TP）、`detection_quality_scaling`（geometry-aware score boost）、`cross_tile_merge`（seam-aware：seam-near 放寬 dup 判定、降座標融合權重）。
+- 主路徑優先走 native `PerceptionPipeline` / graphable NMS path，否則 Python fallback。
+- current `mamba_whole_graph` preset 為 `native_640`，`detection_quality_scaling=false`、`person_geometry_prior=false`、`geometry_suspect_support=false`；`fp_hard_filter` 仍由 raw defaults 開啟。
+- source 對照：native path 和 Python fallback 都計入同一個 `postprocess` top-level stage；細項才拆成 `post_filter`、`post_nms`、`post_merge`、`post_seg_python_tail` 等 profiling breakdown。
+- `cross_tile_merge` 是 tiled path 的修補機制；current headline preset 不依賴 tiled detection reconstruction。
 - 延遲：postprocess ~3.16ms 主因 raw_boxes=300 全量 NMS；1.87ms unattributed 實為 Python tail（CPU/launch-bound，非可砍 GPU）。
 - ⚠️ cross-tile merge **不再視為穩定增益來源**，僅 tiled path 的必要補救，高密場景仍是風險點。
 
@@ -131,7 +137,8 @@
 **職責**：估計幀間相機運動 warp，補償後再給 tracker 做關聯。
 
 **現行最優**：
-- **GPU phase-correlation**（cuFFT）、`--gmc-mode gpu`、`--gmc-downscale 8`、CUDA-graph 化（`cufftSetStream` cache）。**default ON**。
+- **GPU phase-correlation**（cuFFT）、`--gmc-mode gpu`、current preset `gmc_downscale: 4`、CUDA-graph 化（`cufftSetStream` cache）。**default ON in current preset**。
+- source 對照：`_build_gmc_estimator()` 優先建 C++ `saccade_tracking_ext.GMC`，不可用時才 fallback 到 `PyGraphedGMC` / `SparseOpticalFlowGMC`；`gmc_fg_mask` 會關掉 direct graph-capture path。
 - 貢獻 **IDF1 +2.8pp、IDs −133** —— 全 pipeline 唯一顯著貢獻模組。
 - PCR quality feedback：`0 < pcr < threshold` 標 uncertain（影響 ReID budget）。
 
@@ -156,13 +163,15 @@
 
 **現行最優**：
 - **GPUByteTracker + Sinkhorn-Auction 混合關聯** —— 關聯延遲 0.67ms（10× 提升）。default ON。
-- preset 參數：`match=0.66`、`new_track=0.28`（IDF1/MOTA/Rcll 三者 Pareto 最優；CLI raw default 為 0.75/0.35）。
-- **Kalman R scale 0.75** default ON；歷史最優 2.8 版（IDF1 +1.9/IDs −82）為另一支線。
-- default ON：`interpolation`（max_gap 35）、`id_stability_filter`、`geometry_suspect_support`。
+- current `mamba_whole_graph` preset 參數：`match=0.50`、`new_track=0.28`、`kalman_r_scale=2.8`、`multiplicative_cost=true`、`sinkhorn_lambda=10`、`stability_cost_w=0.20`。
+- default ON in current preset：`interpolation`（max_gap 35）、same-height occlusion state、OAO duration-ramp penalty。
+- current preset 明確關閉：`id_stability_filter`、`geometry_suspect_support`、`per_seq_adapt`。
+- source 對照：這些值在每個 sequence setup 階段透過 `set_params()`、`set_oao_params()`、`set_occ_params()`、`set_multiplicative_cost()` 下到 C++ tracker；不是只存在 YAML。
 - 生命週期：`lifecycle_merge` 預設 **OFF**（GMC 下冗余）。
 - **depth 同高遮擋 gate**（commit c418872b，**第一個純幾何/無外觀修復**，default ON）—— 修 crossing-swap（佔 22% IDs）：同高 occlusion gate（`|foot_gap|≤0.15h`），IDF1 75.4→75.9 / AssA 66.0→66.4 / MOTA→78.0。
+- **OA-SORT OAO duration-ramp**（current preset `oao_tau=0.50`, `oao_ramp_frames=25`）—— persistent overlap 給 full penalty、transient crossing damped；frozen run headline 77.6 / HOTA 69.9 / AssA 69.1。
 
-**關鍵 GO**：GPUByteTracker、Sinkhorn-Auction、Kalman R scale、interpolation、ID stability filter、depth 同高 gate。
+**關鍵 GO**：GPUByteTracker、Sinkhorn-Auction、Kalman R scale、interpolation、depth 同高 gate、OAO duration-ramp。
 
 **關鍵 NO-GO**：
 - **NSA-Kalman**（#8 ⚪ 被遮蔽）—— 前提真（ρ=−0.52）但與 r_scale 雙重補償；f(score) v2 重校準證訊號可用（IDF1 +1.5）但 DetA −1.44、移動相機退步，default 不開。
@@ -183,8 +192,10 @@
 
 **現行最優**：
 - **GPU 雙向中點橋接 relink**（px=0.25 + scale gate）—— **preset default ON**：IDF1 **+2.1**、AssA +2.8、IDs −13.6%、FP −14%（06-11 全指標嚴格優勢）。專案級大增益。
+- source 對照：bridge 參數透過 `detector.tracker.set_relink_params(..., bidirectional=True, bridge_*)` 進 tracker core。這和 Python `SemanticRelinker` 是兩條路；current headline 不啟用 semantic appearance relink。
 - 機制關鍵：**farewell archive + 中點外推**改變候選生成，**繞過 age gate 結構**（age gate 原本拒掉 86–89% relink 候選 —— 這正是 motion/semantic relink 單獨測試中性的根因）。
-- `async_reid` + `pipeline_relink` default ON（純 FPS，零精度損失）。
+- `async_reid` + `pipeline_relink` 是可用的吞吐優化，但 current `mamba_whole_graph` headline 為 `reid_mode=off`；不要把它們記成精度來源。
+- source 對照：`relink_write` 在 headline path 會走 `_fast_emit_mot_lines()`，因為 relinker / appearance bank / dynamic ReID / id-stability filter 都不存在。只有這些 emit-stage component 開啟時，才會走完整 prepare/resolve/emit pipeline；`pipeline_relink` 可把完整 emit pipeline 丟到背景 thread，但 `--profile-stages` 會關掉它。
 - semantic relink / appearance bank：default **OFF**（GMC 下冗余）。
 
 **關鍵 GO**：GPU 雙向橋接 relink、async_reid、pipeline_relink。

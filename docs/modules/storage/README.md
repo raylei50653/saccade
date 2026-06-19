@@ -9,9 +9,9 @@
   * 利用 `xadd` 的 `approximate=True` 與 `maxlen=10000` 進行極限寫入，防止 Stream 無限增長並消除阻礙。
   * `MicroBatcher` 緩衝器：利用非同步鎖（`asyncio.Lock`）將 100ms 或 50 條數據打包，透過 `rpush` 批次寫入快取。
 * **ChromaStore L4 向量存儲實現**：
-  * 使用 `PersistentClient` 連接 `./storage/chroma_db`。
+  * 使用 `PersistentClient` 連接 runtime-created storage/chroma_db。
   * 實作 `hybrid_query` 方法，支援合併語意搜尋、視覺向量（SigLIP 2）、時間戳（`$gte` 語意限制）、以及 `is_anomaly` 等多維 metadata 過濾。
-  * 支援 `backup()` 冷備份，自動將向量庫目錄壓縮成 zip Snapshot，並寫入 `./storage/backups`。
+  * 支援 `backup()` 冷備份，自動將向量庫目錄壓縮成 zip Snapshot，並寫入 runtime-created storage/backups。
 
 ## 🔗 I/O & Dataflow
 

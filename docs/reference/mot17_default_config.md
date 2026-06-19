@@ -1,240 +1,148 @@
-# MOT17 Default Configuration
+# MOT17 Evaluation Configuration
 
-> **最後更新：2026-05-11**
+> Last updated: 2026-06-19.
 >
-> 本文檔記錄 MOT17 evaluation pipeline 的實際默認值與推薦配置。
-> 所有數值均來自 `mot17_args.py`（CLI defaults）及 `config.py`（parse_eval_config fallbacks）。
->
-> **2026-05-08 更新**：CLI defaults 已改為新 baseline（`tracker_core_gmc`）：
-> `--reid-mode` = `off`，`--appearance-bank` = `False`，`--semantic-bank-inject` = `False`。
-> **2026-05-10 更新**：`--interpolate-tracklets`、`--fp-hard-filter-enabled` 設為 default（True）；
-> `--async-reid`、`--pipeline-relink` 也為 default True。
+> This file distinguishes the argparse / YAML fallback defaults from the current
+> recommended MOT17 baseline. The production evaluation baseline is a preset,
+> not the raw CLI fallback.
 
 ---
 
-## 1. CLI Defaults 總覽
+## 1. Recommended Baseline
 
-| 參數 | CLI Default | 備註 |
-|:-----|:----------:|:-----|
-| `--match-thresh` | **0.75** | — |
-| `--new-track-thresh` | **0.35** | — |
-| `--high-thresh` | 0.45 | — |
-| `--track-thresh` | 0.05 | — |
-| `--mid-thresh` | 0.10 | — |
-| `--conf-threshold` | 0.05 | — |
-| `--gmc` | **True** | 預設開啟 |
-| `--gmc-mode` | gpu | — |
-| `--detection-quality-scaling` | **True** | 預設開啟 |
-| `--cross-tile-merge` | **True** | 預設開啟 |
-| `--appearance-bank` | **False** | 預設關閉（新 baseline） |
-| `--semantic-bank-inject` | **False** | 預設關閉（新 baseline） |
-| `--id-stability-filter` | **True** | 預設開啟 |
-| `--per-seq-adapt` | **True** | 預設開啟 |
-| `--geometry-suspect-support` | **True** | 預設開啟 |
-| `--async-reid` | **True** | 預設開啟（2026-05-07） |
-| `--pipeline-relink` | **True** | 預設開啟（2026-05-07） |
-| `--reid-mode` | **off** | 預設關閉 ReID（新 baseline） |
-| `--interpolate-tracklets` | **True** | 預設開啟（2026-05-10） |
-| `--interpolate-max-gap` | 20 | — |
-| `--interpolate-min-track-len` | 5 | — |
-| `--fp-hard-filter-enabled` | **True** | 預設開啟（2026-05-10） |
-| `--fp-hard-filter-max-suspicious-area` | 40000 | — |
-| `--tiling` | native_960 | — |
-| `--engine` | models/yolo/yolo26s_960_batch1.engine | — |
-
-> **注意**：直接執行 `mot17.py --detector SDP` 使用 CLI defaults（match=0.75, ntt=0.35）。
-> 使用 `--preset speed/baseline/accuracy` 可套用調參後的最佳值（match=0.66, ntt=0.28）。
-
----
-
-## 2. 推薦 Baseline 配置（`tracker_core_gmc`）
-
-> **CLI defaults 已更新為新 baseline（2026-05-08）。**
-> `uv run scripts/eval/mot17.py --detector SDP` 預設即為 `tracker_core_gmc`。
+Use `mamba_whole_graph` for current MOT17-SDP module work and headline numbers:
 
 ```bash
-uv run python scripts/eval/mot17.py --detector SDP
+uv run scripts/eval/mot17.py --preset mamba_whole_graph --detector SDP
 ```
 
-### 預期結果（7-seq SDP）
+Authoritative sources:
 
-| Metric | 數值 |
-|:-------|:-----|
-| IDF1 | **48.8%** |
-| MOTA | **40.6%** |
-| IDs | **570** |
-| FP | 11019 |
-| FN | 55100 |
-| FPS | 112.0 |
+- Preset: `configs/presets/mamba_whole_graph.yaml`
+- Entry point: `scripts/eval/mot17.py`
+- Config parser: `src/saccade/perception/eval/config.py`
+- Stage order: `src/saccade/perception/eval/evaluator.py`
+
+Frozen run recorded in [ADR 018](../decisions/018-project-main-line-direction.md):
+
+| Metric | Value |
+|:--|--:|
+| IDF1 | **77.6** |
+| MOTA | **78.3** |
+| HOTA | **69.9** |
+| DetA | **70.8** |
+| AssA | **69.1** |
+| IDs | **430** |
+| Recall | **80.8** |
+| Precision | **97.4** |
+| Eval FPS | **221.59** |
+
+The FPS above is eval-context throughput for the frozen run. Older benchmark
+records under `reference/benchmarks/` may use different protocols such as
+short sequence subsets, profiling syncs, different engines, or module-only
+benchmarks; do not mix those numbers without naming the protocol.
 
 ---
 
-## 3. Full Pipeline 配置（`full_default`）
+## 2. Current Preset Shape
 
-啟用完整 pipeline（GMC + semantic relink + appearance bank + async_reid + pipeline_relink）。
+`configs/presets/mamba_whole_graph.yaml` currently overrides the raw CLI
+fallback in these important ways:
 
-```bash
-uv run python scripts/eval/mot17.py \
-  --detector SDP \
-  --reid-mode semantic \
-  --appearance-bank \
-  --semantic-bank-inject \
-  --async-reid \
-  --pipeline-relink \
-  --semantic-threshold 0.93
+| Area | Current preset |
+|:--|:--|
+| Detection | `tiling: native_640`, `preprocess: none`, `use_whole_graph: true`, `use_cuda_graph: true` |
+| Backbone/head | `fpn_backbone_engine: models/yolo/yolo26s_backbone_640_best.engine`, `mamba_ckpt: runs/mamba_gt_v14replica_t3_t1/best.ckpt` |
+| ReID | `reid_mode: off` |
+| GMC | `gmc: true`, `gmc_downscale: 4`, `gmc_fg_mask: false` |
+| Tracker | `match_thresh: 0.50`, `new_track_thresh: 0.28`, `kalman_r_scale: 2.8`, `fuse_score_weight: 0.0` |
+| Relink | `relink_bridge_enabled: true`, `relink_bridge_px: 0.25`, height gate `[0.75, 1.33]`, `relink_bridge_dir_bonus: 0.8` |
+| Occlusion | `oao_tau: 0.50`, `oao_ramp_frames: 25`, `occ_state_enabled: true` |
+| Output cleanup | `interpolate_tracklets: true`, `interpolate_max_gap: 35`, `interpolate_min_track_len: 5` |
+| Disabled vs legacy baseline | `track_person_only: false`, `person_geometry_prior: false`, `detection_quality_scaling: false`, `id_stability_filter: false`, `per_seq_adapt: false`, `geometry_suspect_support: false` |
+
+Notes:
+
+- `use_tracker_graph: true` is present in the preset. The evaluator disables the
+  captured tracker graph only when semantic relink needs per-detection embeddings
+  through `relink_enabled`; bridge relink does not require that fallback.
+- `async_reid` and `pipeline_relink` are CLI flags and config fields, but with
+  `reid_mode: off` they are not the source of the current headline accuracy.
+- Semantic relink, appearance bank, lifecycle merge, Cheb-GR merge, multi-birth,
+  and scene adapt are not part of the current recommended baseline.
+
+---
+
+## 3. Raw CLI / Fallback Defaults
+
+There are four default layers in source:
+
+1. argparse defaults from `scripts/eval/config/*.py`;
+2. file defaults from `configs/mot17_baseline.yaml` when no `--preset` is supplied;
+3. module YAML / preset overrides loaded by `scripts/eval/mot17.py` and applied
+   via `parser.set_defaults(...)`;
+4. final fallbacks in `src/saccade/perception/eval/config.py` when a key is
+   still absent.
+
+The raw parser / baseline-file path still describes a legacy `native_960`
+comparison. Treat it as a tracker-core comparison point, not the current
+production baseline.
+
+Key raw/fallback defaults:
+
+| Parameter | Raw parser / fallback role |
+|:--|:--|
+| `--engine` | Raw parser: `models/yolo/yolo26m_960_batch1.engine` |
+| `--tiling` | Raw parser: `native_960` |
+| `--match-thresh` | Raw parser: `0.75`; `configs/mot17_baseline.yaml`: `0.66` |
+| `--new-track-thresh` | Raw parser: `0.35`; `configs/mot17_baseline.yaml`: `0.28` |
+| `--gmc` | Raw parser default ON |
+| `--gmc-downscale` | Raw parser: `8` |
+| `--reid-mode` | Raw parser default `off` |
+| `--cross-tile-merge` | Raw parser default ON, mainly relevant to tiled modes |
+| `--detection-quality-scaling` | Raw parser default ON; current `mamba_whole_graph` turns it OFF |
+| `--id-stability-filter` | Raw parser default ON; current `mamba_whole_graph` turns it OFF |
+| `--fp-hard-filter-enabled` | Raw parser default ON |
+| `--async-reid` | argparse action is `store_true`, but module/config fallback is `true`; only matters when ReID work exists |
+| `--pipeline-relink` | argparse action is `store_true`, module/config fallback is `true`, and `parse_eval_config` disables it when `--profile-stages` is active |
+
+Use `--preset baseline` or `--preset speed` only when you intentionally need the
+legacy `native_960` comparison, not for current headline reporting.
+
+---
+
+## 4. Stage Names
+
+`evaluator.py` currently profiles these top-level stage names:
+
+```text
+fetch
+ingest_preprocess
+detect
+postprocess
+reid_bank_sync
+reid_budget
+reid_crop
+reid_extract
+lazy_reid
+gmc
+track
+materialize
+bg_relink_wait
+relink_write
+frame_total
 ```
 
-> 注意：`--gmc`、`--cross-tile-merge`、`--id-stability-filter` 等已為 CLI 默認值，無需手動指定。
-
-### 預期結果（7-seq SDP）
-
-| Metric | 數值 |
-|:-------|:-----|
-| IDF1 | 48.8% |
-| MOTA | 40.6% |
-| IDs | 564 |
-| FP | 11072 |
-| FN | 55074 |
-| FPS | 107.4 |
-
-### Full vs Baseline 差異
-
-| Metric | Baseline | Full Pipeline | Δ |
-|:-------|:--------:|:-------------:|:-:|
-| IDF1 | 48.8% | 48.8% | ~0pp |
-| MOTA | 40.6% | 40.6% | ~0pp |
-| IDs | 570 | 564 | -6 |
-| FPS | 112.0 | 107.4 | -4.6 |
-
-> **結論**：semantic relink + async_reid + pipeline_relink 的總和增量僅 ~0.1pp IDF1，性價比大幅下降。
+Postprocess, native ReID, GMC, and CUDA-event segment breakdowns are nested
+diagnostics under those top-level stages.
 
 ---
 
-## 4. 參數詳細說明
+## 5. Update Rules
 
-### 4.1 關聯（Association）參數
+When changing defaults or headline numbers:
 
-| 參數 | 默認值 | 說明 |
-|:-----|:------:|:-----|
-| `--track-thresh` | 0.05 | 低閾值關聯下界 |
-| `--mid-thresh` | 0.10 | 中間閾值 |
-| `--high-thresh` | 0.45 | 高閾值匹配 |
-| `--new-track-thresh` | **0.35** | 新 track 分數閾值 |
-| `--match-thresh` | **0.75** | 關聯相似度門控 |
-| `--confirm-streak` | 1 | 確認 track 所需命中次數 |
-| `--confirm-score-thresh` | 0.0 | 確認所需最小分數 |
-
-### 4.2 GMC（Global Motion Compensation）
-
-| 參數 | 默認值 | 說明 |
-|:-----|:------:|:-----|
-| `--gmc` | **True** | 啟用 GMC |
-| `--gmc-mode` | gpu | GPU (cuFFT) 或 CPU (OpenCV LK) |
-| `--gmc-downscale` | 8 | GMC 估計下採樣因子 |
-| `--gmc-fg-mask` | False | GMC 前景遮罩 |
-| `--gmc-pcr-uncertain-thresh` | 8.0 | PCR 不確定性閾值 |
-
-### 4.3 ReID / Appearance
-
-| 參數 | 默認值 | 說明 |
-|:-----|:------:|:-----|
-| `--reid-mode` | semantic | off/tracker/semantic/hybrid |
-| `--reid-model` | siglip2 | embedding model |
-| `--reid-budget` | 0.2 | ReID 每幀最大處理比例 |
-| `--reid-interval` | 20 | ReID 固定心跳間隔 |
-| `--reid-cos-threshold` | 0.90 | 餘弦相似度門控 |
-| `--reid-weight` | 0.80 | appearance 在匹配成本中的權重 |
-| `--async-reid` | **True** | 非同步 ReID 提取 |
-| `--pipeline-relink` | **True** | pipeline relink |
-
-### 4.4 Semantic Relink
-
-| 參數 | 默認值 | 說明 |
-|:-----|:------:|:-----|
-| `--semantic-threshold` | 0.91 | semantic relink 相似度門控 |
-| `--semantic-ttl` | 45 | lost track 在 semantic memory 中的存活幀數 |
-| `--semantic-ema` | 0.83 | semantic appearance EMA 衰減 |
-| `--semantic-spatial-gate` | 0.20 | spatial gate for relink candidates |
-| `--semantic-min-lost-frames` | 2 | lost frames 閾值才考慮 relink |
-| `--semantic-min-iou` | 0.20 | semantic relink 最小 IoU |
-| `--semantic-buffer-size` | 10 | semantic reference buffer size |
-| `--appearance-bank` | **False** | appearance bank（新 baseline 關閉） |
-| `--appearance-bank-size` | 5 | per-track bank sample count |
-| `--appearance-bank-min-score` | 0.45 | bank sample 最小 detection score |
-| `--appearance-bank-min-iou` | 0.35 | bank sample 最小 IoU |
-| `--semantic-bank-inject` | **False** | track death 時 inject bank reference（新 baseline 關閉） |
-
-### 4.5 Detection / Tiling
-
-| 參數 | 默認值 | 說明 |
-|:-----|:------:|:-----|
-| `--engine` | models/yolo/yolo26s_960_batch1.engine | detector engine |
-| `--tiling` | native_960 | 推理 tiling preset |
-| `--conf-threshold` | 0.05 | detector confidence floor |
-| `--cross-tile-merge` | **True** | tile boundary 重複 detection merge |
-| `--cross-tile-score-penalty` | 1.0 | cross-tile merge score penalty |
-| `--nms-iou-threshold` | None | override detector NMS IoU |
-| `--detection-quality-scaling` | **True** | detection quality factor scaling |
-
-### 4.6 Geometry Priors
-
-| 參數 | 默認值 | 說明 |
-|:-----|:------:|:-----|
-| `--person-geometry-prior` | True | hard geometric filtering |
-| `--person-min-height-ratio` | 0.018 | 最小 bbox height 比例 |
-| `--person-min-aspect` | 1.0 | 最小 h/w aspect ratio |
-| `--person-max-aspect` | 5.5 | 最大 h/w aspect ratio |
-| `--person-min-area-ratio` | 0.00006 | 最小 bbox area 比例 |
-| `--geometry-suspect-support` | True | suspect geometry 額外支援 |
-| `--kalman-r-scale` | 0.75 | Kalman measurement noise scale |
-
-### 4.7 ID Stability
-
-| 參數 | 默認值 | 說明 |
-|:-----|:------:|:-----|
-| `--id-stability-filter` | **True** | unstable ID handoff 過濾 |
-| `--id-stability-min-hits` | 2 | stability check 最小命中數 |
-| `--id-stability-min-iou` | 0.05 | stable continuation 最小 IoU |
-| `--id-stability-max-center-shift` | 2.0 | stable continuation 最大中心偏移 |
-| `--id-stability-max-gap` | 1 | short-term stable 最大 gap |
-| `--id-stability-score-ema` | 0.70 | stability confidence EMA |
-| `--id-stability-min-score-ema` | 0.15 | stability 最小 EMA score |
-
-### 4.8 Lifecycle Merge
-
-| 參數 | 默認值 | 說明 |
-|:-----|:------:|:-----|
-| `--lifecycle-merge` | **False** | pre-output lifecycle merge |
-| `--lifecycle-ttl` | 45 | mergeable dead track 存活幀數 |
-| `--lifecycle-min-gap` | 2 | lifecycle merge 最小 gap |
-| `--lifecycle-spatial-gate` | 0.08 | lifecycle merge spatial gate |
-| `--lifecycle-sim-threshold` | 0.90 | lifecycle merge 相似度閾值 |
-| `--post-lifecycle-merge` | **False** | post-output lifecycle merge |
-
----
-
-## 5. 快速參考：Baseline vs Full Pipeline
-
-| 模組 | Baseline (`tracker_core_gmc`) | Full Pipeline (`full_default`) |
-|:-----|:---:|:---:|
-| GMC | ✅ | ✅ |
-| Semantic Relink | ❌ | ✅ |
-| Appearance Bank | ❌ | ✅ |
-| Bank Inject | ❌ | ✅ |
-| Async ReID | ✅ | ✅ |
-| Pipeline Relink | ✅ | ✅ |
-| Lifecycle Merge | ❌ | ❌ |
-| Post Lifecycle Merge | ❌ | ❌ |
-| **IDF1** | **48.8%** | 48.8% |
-| **MOTA** | **40.6%** | 40.6% |
-| **IDs** | **570** | 564 |
-| **FPS** | **112.0** | 107.4 |
-| **CLI 命令** | `mot17.py --detector SDP` | `--reid-mode semantic --appearance-bank --semantic-bank-inject --async-reid --pipeline-relink` |
-
----
-
-## 6. 開發建議
-
-1. **調參時以 `tracker_core_gmc` 為基準線**，避免調出一套只在無 GMC 時有效的參數。
-2. **GMC 之外的高 ROI 方向**：Pose biometric、Tracklet merge、Detection 品質微調。
-3. **Semantic relink 診斷結論**：在 GMC 開啟下，`reject_age` = 86.8%，semantic relink 基本是冗余的。
+1. Update `configs/presets/mamba_whole_graph.yaml` first if the baseline really changes.
+2. Re-run or cite a same-run MOT17 result before editing headline metrics.
+3. Update [PIPELINE.md](../PIPELINE.md), [TODO.md](../TODO.md), and this file together.
+4. Keep legacy `speed` / `baseline` numbers labelled as legacy comparisons.

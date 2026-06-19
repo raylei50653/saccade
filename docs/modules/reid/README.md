@@ -16,10 +16,10 @@
 
 | | |
 |---|---|
-| **Pipeline stage** | `[5] reid_bank_sync` → `[6] budget` → `[7] crop` → `[8] extract`（目前 default OFF，見 [pipeline_flow.md](../../reference/pipeline_flow.md)） |
+| **Pipeline stage** | `reid_bank_sync` → `reid_budget` → `reid_crop` → `reid_extract`（目前 default OFF，見 [pipeline_flow.md](../../reference/pipeline_flow.md)） |
 | **輸入** | detections + 原圖（ROI crop） |
 | **輸出** | appearance embedding（SigLIP 2，384-d）→ Feature Bank + tracker association |
-| **上游 → 下游** | `detections →(trigger 決策)→ [7] crop → [8] SigLIP2 extract → embedding → bank / semantic 關聯`；⚠️ 整條 ReID 分支在 GMC 之前 |
+| **上游 → 下游** | `detections →(trigger 決策)→ reid_crop → reid_extract (SigLIP2) → embedding → bank / semantic 關聯`；⚠️ 整條 ReID 分支在 GMC 之前 |
 
 > 職責分界：**reid** = 特徵抽取 + Feature Bank；用這些特徵做關聯 / rerank 的是 [semantic](../semantic/README.md)，觸發決策是 [trigger](../trigger/README.md)。
 

@@ -1,5 +1,7 @@
 # L1: 感知層 (Perception Layer)
 
+> **Legacy architecture snapshot**：本文保留早期 L1 / industrial streaming 架構脈絡。現行 MOT17 eval baseline 與 stage 名稱請以 [DATAFLOW.md](../../DATAFLOW.md)、[PIPELINE.md](../../PIPELINE.md)、[mot17_default_config.md](../../reference/mot17_default_config.md) 為準；其中 headline preset 是 `mamba_whole_graph`（native_640），不是下方 2026-05 tiling comparison。
+
 ## 1. 定義與目標
 L1 是 Saccade 的「視網膜與視覺中樞」，負責處理最即時、高頻率的視覺數據。目標是在極低延遲下完成物件偵測與持續追蹤，並過濾出具備「語義價值」的區域供 L2 處理。
 
@@ -32,7 +34,7 @@ MOT17/MOT20 評估邏輯統一放在 `perception/eval/` package，`scripts/eval/
 
 | 模組 | 職責 |
 | :--- | :--- |
-| `runner.py` | `run_eval()` 主流程（序列迴圈、profiling、結果輸出） |
+| `evaluator.py` | `run_eval()` 主流程（序列迴圈、profiling、結果輸出）；`runner.py` 只是 compatibility shim |
 | `detection.py` | `detect_adaptive_960_tiled`、`detect_native_960`、tiled NMS / cross-tile duplicate merge / tile diagnostics 工具函式 |
 | `pool.py` | `AdaptiveFramePool` GPU buffer 管理 |
 | `preprocess.py` | `parse_preprocess`、`geometry_mid_thresh_scale` |
@@ -47,9 +49,9 @@ MOT17/MOT20 評估邏輯統一放在 `perception/eval/` package，`scripts/eval/
 - **YOLO Inference**: ~3.12 ms。
 - **Drop Frame Rate**: 在高負載下自動 Drop，優先保證「最新幀」實時性。
 
-## 7. 2026-05 Detection / Tiling 現況
+## 7. 2026-05 Detection / Tiling Legacy Snapshot
 
-- `scripts/eval/mot17.py` 現在支援四條 detector evaluation 路徑：
+- 2026-05 時 `scripts/eval/mot17.py` 支援多條 detector evaluation 路徑；目前 headline baseline 改為 `mamba_whole_graph` / `native_640`，下列內容只作 tiling NO-GO 追溯：
   - `--tiling 960p_2x2`
   - `--tiling 960p_3x2`
   - `--tiling native_960`
