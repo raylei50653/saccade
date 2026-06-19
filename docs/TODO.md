@@ -85,7 +85,7 @@ legacy `native_960` presets (`speed` / `baseline`) remain useful for comparison,
 
 | 優先 | 模組 | 覆蓋率 | 未覆蓋行 | 狀態 |
 |------|------|--------|----------|------|
-| P2-1 | `perception/eval/evaluator.py` | 40% | 734 | **待實作** |
+| P2-1 | `perception/eval/evaluator.py` | 40% | 734 | **部分完成**：lifecycle helper slice 已補；剩餘 `run_eval` branch coverage |
 
 **目標**：
 - 🔄 短期 v4：`perception/eval/evaluator.py` (40%)

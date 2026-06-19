@@ -109,5 +109,6 @@ python_files = ["test_*.py"]
 asyncio_mode = "strict"
 pythonpath = ["src"]
 markers = [
+    "gpu: tests that require a CUDA device or GPU-only native extension path",
     "dali: tests that require a CUDA device and nvidia-dali (NVDEC decode path)",
 ]

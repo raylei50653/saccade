@@ -16,6 +16,7 @@ import torch
 train_mamba_gt = pytest.importorskip(
     "scripts.train.temporal_yolo.train_mamba_gt",
     reason="train_mamba_gt requires the saccade_tracking_ext C++ extension",
+    exc_type=ImportError,
 )
 
 _consistency_loss = train_mamba_gt._temporal_consistency_loss

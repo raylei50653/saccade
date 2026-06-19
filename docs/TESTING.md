@@ -88,7 +88,21 @@
 - benchmark 檔名使用 `bench_*.py`
 - 新 benchmark 不應放進 `tests/test_*.py`
 
-### 2.3 優先補哪些測試
+### 2.3 GPU 測試
+
+- 需要 CUDA device、TensorRT / DALI GPU path、或 GPU-only native extension path 的測試必須標記 `@pytest.mark.gpu`。
+- 一般 `pytest` 會自動偵測 CUDA；沒有 GPU 時跳過 `gpu` 測試，有 GPU 時照常執行。
+- `dali` 測試同時屬於 GPU 測試，應同時標記 `gpu` 與 `dali`。
+
+```bash
+# 自動偵測 GPU；無 GPU 時跳過 GPU 測試
+uv run pytest
+
+# 只跑 GPU 測試（仍會在無 CUDA 時 skip）
+uv run pytest -m gpu
+```
+
+### 2.4 優先補哪些測試
 
 若改 tracking / relink / runner 主路徑，優先補：
 

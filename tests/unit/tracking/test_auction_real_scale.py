@@ -6,7 +6,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT / "build"))
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
-saccade_tracking_ext = pytest.importorskip("saccade_tracking_ext")
+saccade_tracking_ext = pytest.importorskip("saccade_tracking_ext", exc_type=ImportError)
 
 
 def test_auction_real_values():

@@ -8,8 +8,12 @@ Run:  pytest tests/test_dali_pipeline.py -m dali -v
 import pytest
 import torch
 
+pytestmark = [pytest.mark.gpu, pytest.mark.dali]
+
 # Skip the entire module when CUDA or DALI is unavailable.
-pytest.importorskip("nvidia.dali", reason="nvidia-dali not installed")
+pytest.importorskip(
+    "nvidia.dali", reason="nvidia-dali not installed", exc_type=ImportError
+)
 if not torch.cuda.is_available():
     pytest.skip("CUDA not available", allow_module_level=True)
 

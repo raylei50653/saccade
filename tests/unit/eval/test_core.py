@@ -158,6 +158,7 @@ def test_chroma_store_operations():
 # --- Tracking Tests ---
 
 
+@pytest.mark.gpu
 def test_tracker_initialization():
     try:
         gpu_tracker = GPUByteTracker()
@@ -183,6 +184,7 @@ def test_need_reid_frame_uses_count_heuristic():
     assert need_reid_frame(set(range(8)), 8) is True
 
 
+@pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="GPU required")
 def test_track_appearance_bank_caches_consistency_and_prunes():
     bank = TrackAppearanceBank(k=3)
@@ -203,6 +205,7 @@ def test_track_appearance_bank_caches_consistency_and_prunes():
     assert 7 not in bank.clean_ids()
 
 
+@pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="GPU required")
 def test_track_appearance_bank_consistency_threshold_is_configurable():
     emb_a = torch.tensor([1.0, 0.0, 0.0], dtype=torch.float32)
@@ -357,6 +360,7 @@ def test_dynamic_reid_controller_score_ema_respects_persist_frames():
     assert controller.should_reid(1) is True
 
 
+@pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="GPU required")
 def test_tracker_update_basic():
     tracker = GPUByteTracker()

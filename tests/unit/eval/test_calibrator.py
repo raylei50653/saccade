@@ -32,6 +32,7 @@ def _has_gpu() -> bool:
     not _has_gpu(),
     reason="No NVIDIA GPU available (required for INT8 calibrator)",
 )
+@pytest.mark.gpu
 class TestSaccadeInt8CalibratorInit:
     """Test __init__ parameter storage."""
 
@@ -106,6 +107,7 @@ class TestSaccadeInt8CalibratorInit:
     not _has_gpu(),
     reason="No NVIDIA GPU available (required for INT8 calibrator)",
 )
+@pytest.mark.gpu
 class TestCalibratorBatchSize:
     """Test get_batch_size."""
 
@@ -122,6 +124,7 @@ class TestCalibratorBatchSize:
     not _has_gpu(),
     reason="No NVIDIA GPU available (required for INT8 calibrator)",
 )
+@pytest.mark.gpu
 class TestCalibratorCacheFileIO:
     """Test read_calibration_cache / write_calibration_cache."""
 
@@ -172,6 +175,7 @@ class TestCalibratorCacheFileIO:
     not _has_gpu(),
     reason="No NVIDIA GPU available (required for INT8 calibrator)",
 )
+@pytest.mark.gpu
 class TestCalibratorGetBatch:
     """Test get_batch with mocked images."""
 
@@ -240,6 +244,7 @@ class TestCalibratorGetBatch:
     not _has_gpu(),
     reason="No NVIDIA GPU available (required for INT8 calibrator)",
 )
+@pytest.mark.gpu
 class TestCalibratorWithMockedCUDA:
     """Test that init allocates CUDA memory."""
 

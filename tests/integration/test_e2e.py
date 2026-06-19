@@ -35,6 +35,8 @@ skip_no_dataset = pytest.mark.skipif(
     not (DATA_ROOT / "train" / SEQ).exists(), reason="MOT17 dataset not found"
 )
 
+pytestmark = pytest.mark.gpu
+
 
 def _run_eval(tmp_path, *, max_frames, reid_mode, seq=SEQ):
     from saccade.perception.detector_trt import TRTYoloDetector  # noqa: F401 — must precede torchvision
