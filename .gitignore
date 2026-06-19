@@ -100,3 +100,14 @@ scratch/pipeline_math_validation/output/
 
 # Generated report data (recall curves, benchmark JSONs)
 report_data/*.json
+
+# graphify generated (reproducible via graphify export)
+graphify-out/cache/
+graphify-out/manifest.json
+graphify-out/cost.json
+graphify-out/.graphify_*
+graphify-out/graph.json
+
+# Build artifacts accidentally committed
+src/tracking/topk_test
+src/tracking/topk_test_fixed

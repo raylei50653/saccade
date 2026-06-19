@@ -1,0 +1,56 @@
+# Virtual environments
+.venv/
+.uv/
+
+# Build artifacts
+build/
+build_ci/
+build_trt_venv/
+build-native-coverage/
+dist/
+wheels/
+*.egg-info
+*.so
+*.so.*
+
+# AI Models
+models/
+
+# Data & Media
+datasets/
+results/
+runs/
+output/
+out/
+logs/
+
+# Cache & temp
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+htmlcov/
+.coverage
+.codex
+.gemini/
+.agents/
+
+# Storage
+storage/mlflow_artifacts/
+storage/postgres_data/
+
+# Scratch / generated
+scratch/
+report_data/
+scripts/tools/out/
+scripts/eval/output/
+
+# Editor & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# LLM temp
+*.gguf.tmp
+*.bin.tmp
