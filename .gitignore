@@ -107,3 +107,7 @@ graphify-out/manifest.json
 graphify-out/cost.json
 graphify-out/.graphify_*
 graphify-out/graph.json
+
+# Build artifacts accidentally committed
+src/tracking/topk_test
+src/tracking/topk_test_fixed
