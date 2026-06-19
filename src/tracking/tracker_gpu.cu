@@ -1746,6 +1746,7 @@ __global__ void relink_bidir_propose_kernel(
     float bridge_max_speed, float bridge_person_height, float bridge_fps,
     float bridge_margin, float bridge_spatial_gate, int bridge_anchor,
     float bridge_anchor_rate, float bridge_h_lo, float bridge_h_hi,
+    float bridge_dir_bonus,
     const unsigned int* occ_grid, const int* occ_frame,
     float occ_gate_cover, int occ_gap_min, float occ_expand_px, float occ_expand_cover,
     int frame_w, int frame_h,
@@ -1832,12 +1833,44 @@ __global__ void relink_bidir_propose_kernel(
         float s_lost = sqrtf(vxl * vxl + vyl * vyl) / h_ref;           // exit speed (h/f)
         float w = sqrtf(fminf(fmaxf(s_lost / 0.12f, 0.0f), 1.0f));
         float bdist = w * 0.5f * (fwd_r + bwd_r) + (1.0f - w) * dist_h;
+        // Directional bridge: when velocities point the same way, speed
+        // mismatch along the track may be due to acceleration.  Decompose
+        // forward/backward extrapolation errors into along-track and cross-track
+        // components; blend towards cross-track-only distance.
+        // Activation scales with speed — slow tracks have noisy direction.
+        if (bridge_dir_bonus > 0.0f) {
+            float sl = sqrtf(vxl * vxl + vyl * vyl);
+            float sc = sqrtf(vxc * vxc + vyc * vyc);
+            float min_speed = fminf(sl, sc);
+            float speed_trust = fminf(min_speed / fmaxf(h_ref * 0.005f, 1e-3f), 1.0f);
+            if (speed_trust > 0.0f) {
+                float cos_sim = (vxl * vxc + vyl * vyc) / fmaxf(sl * sc, 1e-9f);
+                if (cos_sim > 0.5f) {
+                    float ux = vxl / sl + vxc / sc;
+                    float uy = vyl / sl + vyc / sc;
+                    float un = sqrtf(ux * ux + uy * uy);
+                    ux /= un; uy /= un;
+                    float px = -uy, py = ux;
+                    float fe_x = (lx + vxl * la) - cx0;
+                    float fe_y = (ly + vyl * la) - cy0;
+                    float fwd_cross = fabsf(fe_x * px + fe_y * py) / h_ref;
+                    float be_x = (cx0 - vxc * la) - lx;
+                    float be_y = (cy0 - vyc * la) - ly;
+                    float bwd_cross = fabsf(be_x * px + be_y * py) / h_ref;
+                    float bdist_dir = 0.5f * (fwd_cross + bwd_cross);
+                    float gap_scale = fminf((float)la / 30.0f, 1.0f);
+                    float alpha = bridge_dir_bonus * cos_sim * cos_sim * speed_trust * gap_scale;
+                    alpha = fminf(alpha, 1.0f);
+                    bdist = bdist * (1.0f - alpha) + bdist_dir * alpha;
+                }
+            }
+        }
+        bool ok = bdist <= bridge_px;
+        int gap_len = la - bridge_at + 1;
         // Gap-occupancy gate (long gaps only). Veto: an unexplained long-gap
         // bridge (path not covered by another track) is likely a different
         // person. Tiered expansion: a highly-covered path unlocks a looser
         // bridge_px. occ<0 (no valid sample) passes through both.
-        bool ok = bdist <= bridge_px;
-        int gap_len = la - bridge_at + 1;
         if (occ_grid && gap_len >= occ_gap_min) {
             bool expandable = !ok && occ_expand_px > bridge_px && bdist <= occ_expand_px;
             if (occ_gate_cover > 0.0f || expandable) {
@@ -2738,6 +2771,7 @@ public:
                 bridge_max_speed_, bridge_person_height_, bridge_fps_,
                 bridge_margin_, bridge_spatial_gate_, bridge_anchor_, bridge_anchor_rate_,
                 bridge_h_lo_, bridge_h_hi_,
+                bridge_dir_bonus_,
                 occ_on ? d_occ_grid_ : nullptr, occ_on ? d_occ_frame_ : nullptr,
                 occ_gate_cover_, occ_gap_min_, occ_expand_px_, occ_expand_cover_,
                 frame_w_, frame_h_,
@@ -2796,6 +2830,7 @@ public:
                            float bridge_spatial_gate = 0.0f, int bridge_anchor = 0,
                            float bridge_anchor_rate = 0.0f,
                            float bridge_h_lo = 0.0f, float bridge_h_hi = 0.0f,
+                           float bridge_dir_bonus = 0.0f,
                            float occ_gate_cover = 0.0f, int occ_gap_min = 30,
                            float occ_expand_px = 0.0f, float occ_expand_cover = 0.9f) {
         relink_enabled_ = enabled;
@@ -2819,6 +2854,7 @@ public:
         bridge_anchor_rate_ = std::max(0.0f, bridge_anchor_rate);
         bridge_h_lo_ = std::max(0.0f, bridge_h_lo);
         bridge_h_hi_ = std::max(0.0f, bridge_h_hi);
+        bridge_dir_bonus_ = std::max(0.0f, bridge_dir_bonus);
         occ_gate_cover_ = std::clamp(occ_gate_cover, 0.0f, 1.0f);
         occ_gap_min_ = std::max(1, occ_gap_min);
         occ_expand_px_ = std::max(0.0f, occ_expand_px);
@@ -3237,6 +3273,7 @@ private:
     float bridge_anchor_rate_   = 0.0f; // adaptive deformation gate (mean |Δh|/h̄); 0=always-on
     float bridge_h_lo_          = 0.0f; // scale gate: min ema_lost/ema_cand ratio
     float bridge_h_hi_          = 0.0f; // scale gate: max ratio (<=0 disables the gate)
+    float bridge_dir_bonus_     = 0.0f; // directional consistency relaxation multiplier
     float occ_gate_cover_       = 0.0f; // gap-occupancy veto: min occ_cover (0=off)
     int   occ_gap_min_          = 30;   // occ gates apply only to gaps >= this (short-gap occ is noise)
     float occ_expand_px_        = 0.0f; // tiered expansion: looser bridge_px when occ high (0=off)
@@ -3389,13 +3426,14 @@ void GPUByteTracker::set_relink_params(bool enabled, int bank_cap, float sim_thr
                                        float bridge_margin, float bridge_spatial_gate,
                                        int bridge_anchor, float bridge_anchor_rate,
                                        float bridge_h_lo, float bridge_h_hi,
+                                       float bridge_dir_bonus,
                                        float occ_gate_cover, int occ_gap_min,
                                        float occ_expand_px, float occ_expand_cover) {
     pimpl_->set_relink_params(enabled, bank_cap, sim_thresh, cheb_lambda, spatial_gate, max_age,
                               bidirectional, bridge_px, bridge_at, bridge_min_lost, bridge_ttl,
                               bridge_max_speed, bridge_person_height, bridge_fps, bridge_margin,
                               bridge_spatial_gate, bridge_anchor, bridge_anchor_rate,
-                              bridge_h_lo, bridge_h_hi,
+                              bridge_h_lo, bridge_h_hi, bridge_dir_bonus,
                               occ_gate_cover, occ_gap_min, occ_expand_px, occ_expand_cover);
 }
 std::vector<int> GPUByteTracker::get_relink_debug() { return pimpl_->get_relink_debug(); }

@@ -1473,6 +1473,7 @@ class EvalPipeline:
                 bridge_anchor_rate=cfg.relink_bridge_anchor_rate,
                 bridge_h_lo=cfg.relink_bridge_h_lo,
                 bridge_h_hi=cfg.relink_bridge_h_hi,
+                bridge_dir_bonus=cfg.relink_bridge_dir_bonus,
                 occ_gate_cover=cfg.relink_bridge_occ_gate_cover,
                 occ_gap_min=cfg.relink_bridge_occ_gap_min,
                 occ_expand_px=cfg.relink_bridge_occ_expand_px,

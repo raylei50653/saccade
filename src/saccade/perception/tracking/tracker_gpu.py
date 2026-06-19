@@ -632,6 +632,7 @@ class GPUByteTracker:
         bridge_anchor_rate: float = 0.0,
         bridge_h_lo: float = 0.0,
         bridge_h_hi: float = 0.0,
+        bridge_dir_bonus: float = 0.0,
         occ_gate_cover: float = 0.0,
         occ_gap_min: int = 30,
         occ_expand_px: float = 0.0,
@@ -660,6 +661,7 @@ class GPUByteTracker:
                 bridge_anchor_rate,
                 bridge_h_lo,
                 bridge_h_hi,
+                bridge_dir_bonus,
             )
             try:
                 setter(

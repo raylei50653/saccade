@@ -46,6 +46,7 @@ relink_bridge_margin: 0.05
 relink_bridge_h_lo: 0.75
 relink_bridge_h_hi: 1.33
 relink_bridge_spatial_gate: 0.0
+relink_bridge_dir_bonus: 0.8
 
 # --- Tracker Parameters ---
 match_thresh: 0.50

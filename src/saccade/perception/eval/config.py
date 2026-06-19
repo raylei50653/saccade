@@ -242,6 +242,7 @@ class EvalConfig:
     relink_bridge_anchor_rate: float
     relink_bridge_h_lo: float
     relink_bridge_h_hi: float
+    relink_bridge_dir_bonus: float
     relink_bridge_occ_gate_cover: float
     relink_bridge_occ_gap_min: int
     relink_bridge_occ_expand_px: float
@@ -701,6 +702,7 @@ def parse_eval_config(
         relink_bridge_anchor_rate=float(kwargs.get("relink_bridge_anchor_rate", 0.03)),
         relink_bridge_h_lo=float(kwargs.get("relink_bridge_h_lo", 0.75)),
         relink_bridge_h_hi=float(kwargs.get("relink_bridge_h_hi", 1.33)),
+        relink_bridge_dir_bonus=float(kwargs.get("relink_bridge_dir_bonus", 0.0)),
         relink_bridge_occ_gate_cover=float(
             kwargs.get("relink_bridge_occ_gate_cover", 0.0)
         ),

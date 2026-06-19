@@ -98,6 +98,10 @@ class LifecycleConfig:
     relink_bridge_anchor_rate: float = 0.03
     relink_bridge_h_lo: float = 0.75
     relink_bridge_h_hi: float = 1.33
+    # Directional consistency bonus: relax bridge_px when lost and candidate
+    # velocities point in the same direction (cos_sim^2 * gap_scale). 0 = off.
+    # Suggested 0.3-1.0; higher values are increasingly permissive.
+    relink_bridge_dir_bonus: float = 0.0
     # Gap-occupancy gates (long-gap bridges only): occ_cover = fraction of the
     # interpolated lost→cand gap path covered by other tracks' boxes. True
     # relinks have HIGHER coverage (occlusion explains the disappearance).
@@ -915,6 +919,17 @@ def add_lifecycle_args(parser: argparse.ArgumentParser) -> None:
             "ratio exceeds this. 0 disables the gate.",
             range_hint="0 or >=1, suggested 1.33",
             edge="lost TPs are all gap>=37 long-gap bridges near the band edge",
+        ),
+    )
+    grp.add_argument(
+        "--relink-bridge-dir-bonus",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Directional consistency bonus for bridge px threshold. When lost "
+            "and candidate velocities point in the same direction, the effective "
+            "bridge_px is relaxed by bonus * cos_sim^2 * gap_scale. 0 = off.",
+            range_hint=">=0, suggested 0.3-1.0",
         ),
     )
     grp.add_argument(

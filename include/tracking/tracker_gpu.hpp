@@ -108,7 +108,8 @@ public:
                            float bridge_fps = 30.0f, float bridge_margin = 0.0f,
                            float bridge_spatial_gate = 0.0f, int bridge_anchor = 0,
                            float bridge_anchor_rate = 0.0f,
-                           float bridge_h_lo = 0.0f, float bridge_h_hi = 0.0f,
+                            float bridge_h_lo = 0.0f, float bridge_h_hi = 0.0f,
+                            float bridge_dir_bonus = 0.0f,
                            float occ_gate_cover = 0.0f, int occ_gap_min = 30,
                            float occ_expand_px = 0.0f, float occ_expand_cover = 0.9f);
     std::vector<int> get_relink_debug();
