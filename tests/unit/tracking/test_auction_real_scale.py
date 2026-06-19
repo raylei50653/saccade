@@ -3,7 +3,9 @@ import pytest
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(PROJECT_ROOT / "build"))
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
 saccade_tracking_ext = pytest.importorskip("saccade_tracking_ext")
 
 
@@ -15,29 +17,41 @@ def test_auction_real_values():
     # Min Cost ~ 5*0.6 + 2*0.8 - 0.1 = 3.0 + 1.6 - 0.1 = 4.5
 
     Q, GT = 100, 20
+    rng = np.random.default_rng(0)
     # Random costs around 4.0 - 8.0
-    cost = np.random.uniform(4.0, 8.0, (Q, GT)).astype(np.float32)
+    cost = rng.uniform(4.0, 8.0, (Q, GT)).astype(np.float32)
 
     # Force some low values to simulate potential matches
     cost[0, 0] = 0.5
     cost[1, 1] = 1.0
     cost[2, 2] = 2.0
 
-    print(f"Testing with {Q}x{GT} cost matrix, values 4-8, with few low values.")
     row_idx, col_idx = saccade_tracking_ext.auction_solve_cpp(cost, 0.01)
-    print(f"Matches: {len(row_idx)}")
+    matches = dict(zip(row_idx, col_idx))
+    assert len(row_idx) == GT
+    assert matches[0] == 0
+    assert matches[1] == 1
+    assert matches[2] == 2
 
     # Testing with values ALL around 4.0
-    cost_all_high = np.random.uniform(4.0, 5.0, (Q, GT)).astype(np.float32)
-    print(f"Testing with {Q}x{GT} all high (4-5):")
+    cost_all_high = rng.uniform(4.0, 5.0, (Q, GT)).astype(np.float32)
     row_idx2, col_idx2 = saccade_tracking_ext.auction_solve_cpp(cost_all_high, 0.01)
-    print(f"Matches: {len(row_idx2)}")
+    assert len(row_idx2) == GT
+    assert len(set(row_idx2)) == GT
+    assert len(set(col_idx2)) == GT
 
-    # Testing with negative values (just in case it's a reward maximizer)
-    cost_neg = -cost
-    print("Testing with negative costs (all -8 to -4):")
+    # Negative costs are still costs: the solver should minimize them directly,
+    # not reinterpret them as rewards.
+    cost_neg = rng.uniform(-8.0, -4.0, (Q, GT)).astype(np.float32)
+    cost_neg[0, 0] = -20.0
+    cost_neg[1, 1] = -19.0
+    cost_neg[2, 2] = -18.0
     row_idx3, col_idx3 = saccade_tracking_ext.auction_solve_cpp(cost_neg, 0.01)
-    print(f"Matches: {len(row_idx3)}")
+    matches3 = dict(zip(row_idx3, col_idx3))
+    assert len(row_idx3) == GT
+    assert matches3[0] == 0
+    assert matches3[1] == 1
+    assert matches3[2] == 2
 
 
 if __name__ == "__main__":

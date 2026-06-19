@@ -3921,11 +3921,18 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             int n_bidders = static_cast<int>(cost_matrix.shape(0));
             int n_items = static_cast<int>(cost_matrix.shape(1));
             
-            std::vector<std::vector<float>> profit_matrix(n_bidders, std::vector<float>(n_items, 0.0f));
             auto buf = cost_matrix.unchecked<2>();
+            float max_cost = 0.0f;
             for (int i = 0; i < n_bidders; ++i) {
                 for (int j = 0; j < n_items; ++j) {
-                    profit_matrix[i][j] = -buf(i, j); // profit = -cost
+                    max_cost = std::max(max_cost, buf(i, j));
+                }
+            }
+
+            std::vector<std::vector<float>> profit_matrix(n_bidders, std::vector<float>(n_items, 0.0f));
+            for (int i = 0; i < n_bidders; ++i) {
+                for (int j = 0; j < n_items; ++j) {
+                    profit_matrix[i][j] = max_cost - buf(i, j) + 1.0f;
                 }
             }
             

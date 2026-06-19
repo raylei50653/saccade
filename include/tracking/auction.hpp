@@ -104,7 +104,14 @@ public:
                     prices[j] = item_max_bid[j]; // 價格推高
                 }
             }
-            
+
+            // 這一輪有出價但沒有贏到商品的競標者仍需留在下一輪。
+            for (int i : unassigned) {
+                if (bid_owner[i] == -1) {
+                    newly_unassigned.push_back(i);
+                }
+            }
+
             // 防死鎖：如果一整輪沒有任何有效的競標變更，提早結束
             if (newly_unassigned.size() == unassigned.size()) {
                 bool stuck = true;
