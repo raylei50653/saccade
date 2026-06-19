@@ -1256,6 +1256,88 @@ class NativePipelineRuntime:
     native_reid_available: bool
 
 
+@dataclasses.dataclass
+class SequenceIOState:
+    """Per-sequence input/output and frame-shape state."""
+
+    seq_path: Path
+    w_orig: int
+    h_orig: int
+    frame_end: int
+    seq_fps: int
+    seq_reid_interval: int
+    seq_track_buffer: int
+    pool: Any
+    stream_iter: Any
+    nv12_direct_from_hwc: bool
+    results_lines: list[str]
+    frame_latencies: list[float]
+    warmup_frames: int
+    start_time: float
+
+
+@dataclasses.dataclass
+class SequenceTrackerRuntime:
+    """Tracker-side runtime state configured for one sequence."""
+
+    wb: Any
+    wb_scene_policy: Any
+    geometry_scale_state: Any
+    gmc_estimator: Any
+    use_direct_gmc: bool
+    gmc_graphable: bool
+    gmc_cuda_graph: list[Any]
+    gmc_frame_buf: torch.Tensor | None
+    bridge_enabled: bool
+    active_tracker_thresholds: tuple[float, float, float]
+
+
+@dataclasses.dataclass
+class SequenceAssociationRuntime:
+    """Association, relinking, ReID trigger, and birth-manager state."""
+
+    relinker: Any
+    id_stability_filter: Any
+    primary_appearance_bank: Any
+    output_appearance_bank: Any
+    dynamic_reid: Any
+    lifecycle_merger: Any
+    identity_resolver: Any
+    consec_birth_window: deque[torch.Tensor]
+    multi_birth_manager: Any
+    scene_policy: Any
+    seq_narrow_bonus: float
+
+
+@dataclasses.dataclass
+class SequenceBufferRuntime:
+    """Reusable per-sequence GPU/host buffers and graph handles."""
+
+    tracker_result_buffers: Any
+    pinned_result_bufs: dict[str, torch.Tensor]
+    use_pinned_materialize: bool
+    defer_emit: bool
+    shared_gmc_warp: torch.Tensor
+    post_bufs: dict[str, torch.Tensor]
+    nms_in: dict[str, torch.Tensor]
+    nms_fixed_n: int
+    gtu: Any
+    lazy_reid_prev_embeddings: dict[int, torch.Tensor]
+
+
+@dataclasses.dataclass
+class SequenceProfilingState:
+    """Per-sequence profiling accumulators."""
+
+    seq_stage_totals: OrderedDict
+    seq_stage_samples: OrderedDict
+    seq_native_reid_samples: OrderedDict
+    seq_gmc_samples: OrderedDict
+    seq_segment_samples: OrderedDict
+    seq_post_counts: OrderedDict
+    seq_tile_diag: OrderedDict
+
+
 class EvalPipeline:
     """Per-sequence evaluation pipeline state.
 
@@ -1362,429 +1444,56 @@ class EvalPipeline:
         self.prev_track_ids: set = set()
         self.current_frame_id: int = 0
         # ── per-seq setup ─────────────────────────────────────────────
-        wb = None
-        wb_scene_policy = None
-        if getattr(cfg, "workbench", False):
-            from saccade.perception.workbench import Workbench
-
-            # Build workbench with quality/ReID/GMC components (baseline-aligned)
-            wb = Workbench(
-                detector,
-                native_cfg,
-                device=str(detector.device),
-                max_dets=2048,
-                max_tracks=256,
-                # Quality/ReID/GMC components
-                extractor=extractor,
-                cropper=cropper,
-                gmc_estimator=None,  # set below after gmc_estimator is created
-                narrow_bonus=0.0,
-                # Quality filter params
-                quality_weights=(
-                    cfg.detection_quality_w_aspect,
-                    cfg.detection_quality_w_center,
-                    cfg.detection_quality_w_area,
-                )
-                if cfg.detection_quality_scaling
-                else (0.5, 0.3, 0.2),
-                max_detections=cfg.per_frame_detection_cap or 30,
-                fp_hard_filter=cfg.fp_hard_filter_enabled,
-                fp_min_score=cfg.fp_hard_filter_min_score,
-                fp_max_suspicious_area=cfg.fp_hard_filter_max_suspicious_area,
-                fp_max_suspicious_score=cfg.fp_hard_filter_max_suspicious_score,
-                # ReID params
-                reid_budget_raw=cfg.reid_budget_raw,
-                reid_interval=cfg.reid_interval,
-                need_reid=cfg.need_reid_enabled,
-                dynamic_reid=None,
-                gmc_uncertain=False,
-            )
-        else:
-            if contract.fpn_reid_mode:
-                from saccade.perception.tracking import GPUByteTracker
-
-                detector.tracker = GPUByteTracker(
-                    max_objects=2048, embedding_dim=contract.feature_dim
-                )
-            else:
-                detector.reset_tracker()
-
-        geometry_scale_state = GeometryScaleState()
-
-        gmc_estimator, _use_direct_gmc, _gmc_graphable, _gmc_cuda_graph = (
-            _build_gmc_estimator(cfg, profile_stages)
+        io_state = _build_sequence_io_state(cfg, seq=seq, max_frames=max_frames)
+        tracker_runtime = _build_sequence_tracker_runtime(
+            cfg,
+            seq=seq,
+            profile_stages=profile_stages,
+            contract=contract,
+            detector=detector,
+            native_cfg=native_cfg,
+            extractor=extractor,
+            cropper=cropper,
+            io_state=io_state,
         )
+        wb = tracker_runtime.wb
+        wb_scene_policy = tracker_runtime.wb_scene_policy
+        geometry_scale_state = tracker_runtime.geometry_scale_state
+        gmc_estimator = tracker_runtime.gmc_estimator
+        _use_direct_gmc = tracker_runtime.use_direct_gmc
+        _gmc_graphable = tracker_runtime.gmc_graphable
+        _gmc_cuda_graph = tracker_runtime.gmc_cuda_graph
+        _gmc_frame_buf = tracker_runtime.gmc_frame_buf
+        _bridge_enabled = tracker_runtime.bridge_enabled
+        active_tracker_thresholds = tracker_runtime.active_tracker_thresholds
 
-        # Set scene-adapt policy on workbench
-        if wb is not None:
-            wb_scene_policy = (
-                SceneAdaptivePolicy(
-                    window=cfg.scene_adapt_window,
-                    crowd_box_thresh=cfg.scene_adapt_crowd_thresh,
-                    narrow_aspect_thresh=cfg.scene_adapt_narrow_aspect_thresh,
-                    narrow_width_thresh=cfg.scene_adapt_narrow_width_thresh,
-                )
-                if cfg.scene_adapt_enabled
-                else None
-            )
-            wb.scene_adapt_policy = wb_scene_policy
+        association = _build_sequence_association_runtime(
+            cfg,
+            seq_path=io_state.seq_path,
+            wb=wb,
+        )
+        relinker = association.relinker
+        id_stability_filter = association.id_stability_filter
+        primary_appearance_bank = association.primary_appearance_bank
+        output_appearance_bank = association.output_appearance_bank
+        dynamic_reid = association.dynamic_reid
+        lifecycle_merger = association.lifecycle_merger
+        identity_resolver = association.identity_resolver
+        _consec_birth_window = association.consec_birth_window
+        _multi_birth_manager = association.multi_birth_manager
+        _scene_policy = association.scene_policy
+        seq_narrow_bonus = association.seq_narrow_bonus
 
-        # Set GMC estimator on workbench (after gmc_estimator is created)
-        if wb is not None and gmc_estimator is not None:
-            wb.gmc_estimator = gmc_estimator
-
-        # Load homography if provided (ADR 017)
-        if cfg.homography_root:
-            h_path = Path(cfg.homography_root) / f"{seq}.txt"
-            if h_path.exists():
-                try:
-                    h_mat = np.loadtxt(h_path).astype(np.float32).flatten()
-                    if h_mat.size == 9:
-                        detector.tracker.set_homography(h_mat)
-                except Exception:
-                    detector.tracker.set_homography(None)
-            else:
-                detector.tracker.set_homography(None)
-        else:
-            detector.tracker.set_homography(None)
-
-        id_stability_filter = (
-            IdStabilityFilter(
-                min_hits=cfg.id_stability_min_hits,
-                min_iou=cfg.id_stability_min_iou,
-                max_center_shift=cfg.id_stability_max_center_shift,
-                max_gap=cfg.id_stability_max_gap,
-                score_ema=cfg.id_stability_score_ema,
-                min_score_ema=cfg.id_stability_min_score_ema,
-            )
-            if cfg.id_stability_filter_enabled
-            else None
-        )
-        lifecycle_merger = (_LIFECYCLE_CLS or TrackletLifecycleMerger)(
-            enabled=cfg.lifecycle_merge_enabled,
-            ttl=cfg.lifecycle_ttl,
-            min_gap=cfg.lifecycle_min_gap,
-            spatial_gate=cfg.lifecycle_spatial_gate,
-            min_iou=cfg.lifecycle_min_iou,
-            sim_threshold=cfg.lifecycle_sim_threshold,
-            require_embedding=cfg.lifecycle_require_embedding,
-            ema=cfg.lifecycle_ema,
-        )
-        detector.tracker.set_reid_params(
-            cos_threshold=float(cfg.kwargs.get("reid_cos_threshold", 0.90)),
-            iou_low=float(cfg.kwargs.get("reid_iou_low", 0.30)),
-            iou_high=float(cfg.kwargs.get("reid_iou_high", 0.60)),
-            weight=float(cfg.kwargs.get("reid_weight", 0.80)),
-            cost_cos_w=float(cfg.kwargs.get("reid_cost_cos_w", 0.55)),
-            cost_iou_w=float(cfg.kwargs.get("reid_cost_iou_w", 0.30)),
-            cost_score_w=float(cfg.kwargs.get("reid_cost_score_w", 0.15)),
-        )
-        if contract.fpn_reid_mode and hasattr(
-            detector.tracker, "set_reid_min_candidates"
-        ):
-            detector.tracker.set_reid_min_candidates(1)
-        _bridge_enabled = bool(getattr(cfg, "relink_bridge_enabled", False))
-        if (cfg.relink_enabled or _bridge_enabled) and hasattr(
-            detector.tracker, "set_relink_params"
-        ):
-            detector.tracker.set_relink_params(
-                enabled=cfg.relink_enabled,
-                bank_cap=cfg.relink_bank_cap,
-                sim_thresh=cfg.relink_sim_thresh,
-                cheb_lambda=cfg.relink_lambda,
-                spatial_gate=cfg.relink_spatial_gate,
-                max_age=cfg.relink_max_age,
-                bidirectional=_bridge_enabled,
-                bridge_px=cfg.relink_bridge_px,
-                bridge_at=cfg.relink_bridge_at,
-                bridge_min_lost=cfg.relink_bridge_min_lost,
-                bridge_ttl=cfg.relink_bridge_ttl,
-                bridge_max_speed=cfg.relink_bridge_max_speed,
-                bridge_person_height=cfg.relink_bridge_person_height,
-                bridge_fps=cfg.relink_bridge_fps,
-                bridge_margin=cfg.relink_bridge_margin,
-                bridge_spatial_gate=cfg.relink_bridge_spatial_gate,
-                bridge_anchor={"center": 0, "foot": 1, "adaptive": 2}.get(
-                    cfg.relink_bridge_anchor, 0
-                ),
-                bridge_anchor_rate=cfg.relink_bridge_anchor_rate,
-                bridge_h_lo=cfg.relink_bridge_h_lo,
-                bridge_h_hi=cfg.relink_bridge_h_hi,
-                bridge_dir_bonus=cfg.relink_bridge_dir_bonus,
-                occ_gate_cover=cfg.relink_bridge_occ_gate_cover,
-                occ_gap_min=cfg.relink_bridge_occ_gap_min,
-                occ_expand_px=cfg.relink_bridge_occ_expand_px,
-                occ_expand_cover=cfg.relink_bridge_occ_expand_cover,
-            )
-
-        if hasattr(detector.tracker, "set_unified_score_params"):
-            detector.tracker.set_unified_score_params(
-                w_sim_base=cfg.semantic_w_sim_base,
-                w_iou_base=cfg.semantic_w_iou_base,
-                w_maha_base=cfg.semantic_w_maha_base,
-                shift_ambiguity=cfg.semantic_shift_ambiguity,
-                shift_lost_age=cfg.semantic_shift_lost_age,
-            )
-
-        _semantic_delayed_claim = bool(cfg.kwargs.get("semantic_delayed_claim", False))
-        _semantic_bidirectional = bool(cfg.kwargs.get("semantic_bidirectional", False))
-        _use_python_relinker = (
-            cfg.force_python_relinker
-            or cfg.semantic_rerank_mode != "mean"
-            or _semantic_delayed_claim
-        )
-        _relinker_cls = (
-            PythonSemanticRelinker if _use_python_relinker else SemanticRelinker
-        )
-        _relinker_common_kwargs: dict = dict(
-            sim_threshold=cfg.kwargs.get("semantic_threshold", 0.90),
-            ttl=cfg.kwargs.get("semantic_ttl", 45),
-            ema_beta=cfg.kwargs.get("semantic_ema", 0.83),
-            spatial_gate=cfg.kwargs.get("semantic_spatial_gate", 0.20),
-            min_lost_frames=cfg.kwargs.get("semantic_min_lost_frames", 2),
-            min_iou=cfg.kwargs.get("semantic_min_iou", 0.20),
-            mahalanobis_threshold=cfg.kwargs.get("semantic_mahalanobis_threshold", 0.0),
-            kalman_gate=cfg.kwargs.get("semantic_kalman_gate", False),
-            kalman_chi2=cfg.kwargs.get("semantic_kalman_chi2", 9.4877),
-            kalman_penalty_weight=cfg.kwargs.get("semantic_kalman_penalty_weight", 0.0),
-            kalman_dir_min_cos=cfg.kwargs.get("semantic_kalman_dir_min_cos", -1.0),
-            kalman_dir_min_speed=cfg.kwargs.get("semantic_kalman_dir_min_speed", 1.0),
-            kalman_person_height_m=cfg.kwargs.get(
-                "semantic_kalman_person_height_m", 0.0
-            ),
-            kalman_accel_long=cfg.kwargs.get("semantic_kalman_accel_long", 2.0),
-            kalman_accel_lat=cfg.kwargs.get("semantic_kalman_accel_lat", 1.0),
-            kalman_fps=_resolve_kalman_fps(
-                cfg.kwargs.get("semantic_kalman_fps", 0.0),
-                Path(cfg.data_root) / cfg.split / seq,
-            ),
-            kalman_max_speed_mps=cfg.kwargs.get("semantic_kalman_max_speed_mps", 0.0),
-            buffer_size=cfg.semantic_buffer_size,
-            min_consistency=cfg.semantic_min_consistency,
-            rerank_mode=cfg.semantic_rerank_mode,
-            reciprocal_margin=cfg.semantic_reciprocal_margin,
-            clean_score_threshold=cfg.semantic_clean_score_threshold,
-            clean_margin_ratio=cfg.semantic_clean_margin_ratio,
-            clean_min_aspect=cfg.semantic_clean_min_aspect,
-            clean_max_aspect=cfg.semantic_clean_max_aspect,
-            strict_sim_threshold=cfg.semantic_strict_sim_threshold,
-            w_sim_base=cfg.semantic_w_sim_base,
-            w_iou_base=cfg.semantic_w_iou_base,
-            w_maha_base=cfg.semantic_w_maha_base,
-            shift_ambiguity=cfg.semantic_shift_ambiguity,
-            shift_lost_age=cfg.semantic_shift_lost_age,
-            iou_weight=cfg.semantic_iou_weight,
-            mahalanobis_weight=cfg.semantic_mahalanobis_weight,
-            dynamic_margin_crowd=cfg.semantic_dynamic_margin_crowd,
-            dynamic_margin_age=cfg.semantic_dynamic_margin_age,
-            debug=cfg.kwargs.get("semantic_debug", False),
-            exp_density_gating=cfg.semantic_exp_density_gating,
-            exp_density_k=cfg.semantic_exp_density_k,
-            exp_density_eta=cfg.semantic_exp_density_eta,
-        )
-        if _semantic_delayed_claim:
-            _relinker_common_kwargs.update(
-                delayed_claim=True,
-                claim_warmup_frames=cfg.kwargs.get("semantic_claim_warmup_frames", 3),
-            )
-        if _semantic_bidirectional:
-            _relinker_common_kwargs.update(
-                bidirectional=True,
-                bridge_px=cfg.kwargs.get("semantic_bridge_px", 1.5),
-                bridge_h_lo=cfg.relink_bridge_h_lo,
-                bridge_h_hi=cfg.relink_bridge_h_hi,
-            )
-        if _use_python_relinker:
-            _relinker_common_kwargs.update(
-                experimental_mode=str(
-                    cfg.kwargs.get("semantic_experimental_mode", "standard")
-                ),
-                appearance_first_sim_threshold=float(
-                    cfg.kwargs.get("semantic_appearance_first_sim_threshold", 0.95)
-                ),
-                appearance_first_margin=float(
-                    cfg.kwargs.get("semantic_appearance_first_margin", 0.03)
-                ),
-                # Motion-based relinking (PythonSemanticRelinker only)
-                motion_vel_alpha=cfg.kwargs.get("motion_vel_alpha", 0.3),
-                motion_acc_alpha=cfg.kwargs.get("motion_acc_alpha", 0.15),
-                motion_min_observations=cfg.kwargs.get("motion_min_observations", 2),
-                motion_w_iou=cfg.kwargs.get("motion_w_iou", 0.3),
-                motion_consistency_check=cfg.kwargs.get(
-                    "motion_consistency_check", True
-                ),
-                motion_consistency_tol=cfg.kwargs.get("motion_consistency_tol", 2.0),
-                motion_enable_motion_only=cfg.kwargs.get(
-                    "motion_enable_motion_only", True
-                ),
-                motion_motion_only_lost_frames=cfg.kwargs.get(
-                    "motion_motion_only_lost_frames", 5
-                ),
-                motion_motion_only_iou_threshold=cfg.kwargs.get(
-                    "motion_motion_only_iou_threshold", 0.15
-                ),
-                motion_motion_only_min_lost_frames=cfg.kwargs.get(
-                    "motion_motion_only_min_lost_frames", 1
-                ),
-            )
-        relinker = None
-        if cfg.use_semantic_mode:
-            try:
-                relinker = _relinker_cls(**_relinker_common_kwargs)
-            except TypeError:
-                if (
-                    not _semantic_delayed_claim
-                    or _relinker_cls is PythonSemanticRelinker
-                ):
-                    raise
-                _fallback_kwargs = dict(_relinker_common_kwargs)
-                _fallback_kwargs.update(
-                    experimental_mode=str(
-                        cfg.kwargs.get("semantic_experimental_mode", "standard")
-                    ),
-                    appearance_first_sim_threshold=float(
-                        cfg.kwargs.get("semantic_appearance_first_sim_threshold", 0.95)
-                    ),
-                    appearance_first_margin=float(
-                        cfg.kwargs.get("semantic_appearance_first_margin", 0.03)
-                    ),
-                    motion_vel_alpha=cfg.kwargs.get("motion_vel_alpha", 0.3),
-                    motion_acc_alpha=cfg.kwargs.get("motion_acc_alpha", 0.15),
-                    motion_min_observations=cfg.kwargs.get(
-                        "motion_min_observations", 2
-                    ),
-                    motion_w_iou=cfg.kwargs.get("motion_w_iou", 0.3),
-                    motion_consistency_check=cfg.kwargs.get(
-                        "motion_consistency_check", True
-                    ),
-                    motion_consistency_tol=cfg.kwargs.get(
-                        "motion_consistency_tol", 2.0
-                    ),
-                    motion_enable_motion_only=cfg.kwargs.get(
-                        "motion_enable_motion_only", True
-                    ),
-                    motion_motion_only_lost_frames=cfg.kwargs.get(
-                        "motion_motion_only_lost_frames", 5
-                    ),
-                    motion_motion_only_iou_threshold=cfg.kwargs.get(
-                        "motion_motion_only_iou_threshold", 0.15
-                    ),
-                    motion_motion_only_min_lost_frames=cfg.kwargs.get(
-                        "motion_motion_only_min_lost_frames", 1
-                    ),
-                )
-                print(
-                    "ℹ️  [Semantic] C++ relinker lacks delayed-claim kwargs; "
-                    "falling back to Python relinker"
-                )
-                relinker = PythonSemanticRelinker(**_fallback_kwargs)
-
-        if relinker is not None:
-            if (
-                _CppIdentityResolver is not None
-                and _LIFECYCLE_CLS is not None
-                and isinstance(lifecycle_merger, _LIFECYCLE_CLS)
-                and not isinstance(relinker, PythonSemanticRelinker)
-            ):
-                identity_resolver = _CppIdentityResolver(relinker, lifecycle_merger)
-            else:
-                identity_resolver = IdentityResolver(relinker, lifecycle_merger)
-        else:
-            identity_resolver = None
-
-        seq_path = Path(cfg.data_root) / cfg.split / seq
-        config = configparser.ConfigParser()
-        config.read(seq_path / "seqinfo.ini")
-        w_orig = config.getint("Sequence", "imWidth")
-        h_orig = config.getint("Sequence", "imHeight")
-        frame_end = min(max_frames or int(1e9), config.getint("Sequence", "seqLength"))
-        seq_fps = config.getint("Sequence", "frameRate", fallback=30)
-
-        # F-1: Per-sequence adaptive params — scale temporal params by fps/30
-        seq_reid_interval = cfg.reid_interval
-        _track_buffer_base = int(cfg.kwargs.get("track_buffer", 30))
-        seq_track_buffer = _track_buffer_base
-        if cfg.per_seq_adapt and seq_fps != 30:
-            fps_scale = seq_fps / 30.0
-            seq_reid_interval = max(1, round(cfg.reid_interval * fps_scale))
-            seq_track_buffer = max(10, round(_track_buffer_base * fps_scale))
-        if hasattr(detector, "set_whole_graph_img_dims"):
-            detector.set_whole_graph_img_dims(h_orig, w_orig)
-        detector.tracker.set_frame_size(w_orig, h_orig)
-        _gmc_frame_buf = None
-        if _use_direct_gmc:
-            _gmc_frame_buf = torch.zeros(
-                3, h_orig, w_orig, dtype=torch.float32, device="cuda"
-            )
-        detector.tracker.set_quality_params(
-            enabled=cfg.detection_quality_scaling,
-            w_aspect=cfg.detection_quality_w_aspect,
-            w_center=cfg.detection_quality_w_center,
-            w_area=cfg.detection_quality_w_area,
-        )
-        detector.tracker.set_params(
-            track_thresh=cfg.track_thresh,
-            high_thresh=cfg.high_thresh,
-            match_thresh=cfg.match_thresh,
-            track_buffer=seq_track_buffer,
-            mid_thresh=cfg.mid_thresh,
-            confirm_streak=int(cfg.kwargs.get("confirm_streak", 1)),
-            confirm_score_thresh=float(cfg.kwargs.get("confirm_score_thresh", 0.0)),
-            adaptive_confirmation=bool(cfg.kwargs.get("adaptive_confirmation", False)),
-            new_track_thresh=cfg.new_track_thresh,
-            nsa_kalman=cfg.nsa_kalman,
-            r_scale=cfg.kalman_r_scale,
-            vel_dir_weight=cfg.vel_dir_weight,
-            fuse_score_weight=cfg.fuse_score_weight,
-            stage2_match_thresh=cfg.stage2_match_thresh,
-            birth_low_score_thresh=cfg.birth_low_score_thresh,
-            birth_prox_norm_thresh=cfg.birth_prox_norm_thresh,
-        )
-        detector.tracker.set_oao_params(
-            cfg.oao_tau,
-            cfg.oao_contest_thresh,
-            cfg.oao_score_w,
-            cfg.oao_occ_mode,
-            cfg.oao_crowd_radius,
-            cfg.oao_height_gate,
-            cfg.oao_foot_gate,
-            cfg.oao_ramp_frames,
-        )
-        detector.tracker.set_occ_params(
-            enabled=cfg.occ_state_enabled,
-            iou_thresh=cfg.occ_iou_thresh,
-            foot_gap=cfg.occ_foot_gap,
-            ttl=cfg.occ_ttl,
-            cost_weight=cfg.occ_cost_weight,
-        )
-        if getattr(cfg, "multiplicative_cost", False):
-            detector.tracker.set_multiplicative_cost(enabled=True)
-            lam = float(getattr(cfg, "sinkhorn_lambda", 30.0))
-            detector.tracker.set_sinkhorn_lambda(lam)
-            stab_w = float(getattr(cfg, "stability_cost_w", 0.0))
-            if stab_w > 0:
-                setter = getattr(detector.tracker, "set_stability_cost_w", None)
-                if setter:
-                    setter(stab_w)
-        active_tracker_thresholds = (
-            cfg.track_thresh,
-            cfg.mid_thresh,
-            cfg.new_track_thresh,
-        )
-
-        pool = AdaptiveFramePool(h_orig, w_orig)
-        if os.environ.get("SACCADE_NV12_BUFFER") == "1":
-            pool.use_nv12 = True
-        nv12_direct_from_hwc = pool.use_nv12 and not cfg.preprocess_modes
-        # SACCADE_GPU_DECODE=1 routes JPEG decode to the GPU's NVJPG hardware
-        # engine (torchvision/nvJPEG) instead of CPU (DALI), offloading decode
-        # off the CPU. Both yield [H, W, C] uint8 CUDA frames.
-        if os.environ.get("SACCADE_GPU_DECODE") == "1":
-            streamer: Any = TorchvisionGpuStreamer(seq_path / "img1")
-        else:
-            streamer = DALIStreamerStream(seq_path / "img1")
-        stream_iter = iter(streamer)
-        results_lines, frame_latencies = [], []
+        w_orig = io_state.w_orig
+        h_orig = io_state.h_orig
+        frame_end = io_state.frame_end
+        seq_reid_interval = io_state.seq_reid_interval
+        seq_track_buffer = io_state.seq_track_buffer
+        pool = io_state.pool
+        nv12_direct_from_hwc = io_state.nv12_direct_from_hwc
+        stream_iter = io_state.stream_iter
+        results_lines = io_state.results_lines
+        frame_latencies = io_state.frame_latencies
         output_appearance_bank = (
             OutputAppearanceBank(
                 max_samples=cfg.post_lifecycle_appearance_max_samples,
@@ -1890,80 +1599,39 @@ class EvalPipeline:
         seq_narrow_bonus: float = (
             0.0 if cfg.scene_adapt_enabled else cfg.narrow_person_score_bonus
         )
-        start_time = time.time()
-        warmup_frames = int(cfg.kwargs.get("warmup_frames", 50))
-        seq_stage_totals = OrderedDict(
-            (name, 0.0) for name in overall_stage_totals.keys()
+        profiling = _build_sequence_profiling_state(
+            overall_stage_totals=overall_stage_totals,
+            top_level_stage_names=top_level_stage_names,
+            native_reid_breakdown_names=native_reid_breakdown_names,
+            gmc_breakdown_names=gmc_breakdown_names,
+            segment_breakdown_names=segment_breakdown_names,
         )
-        seq_stage_samples = OrderedDict((name, []) for name in top_level_stage_names)
-        seq_native_reid_samples = OrderedDict(
-            (name, []) for name in native_reid_breakdown_names
-        )
-        seq_gmc_samples = OrderedDict((name, []) for name in gmc_breakdown_names)
-        seq_segment_samples: "OrderedDict[str, list[float]]" = OrderedDict(
-            (name, []) for name in segment_breakdown_names
-        )
-        seq_post_counts = OrderedDict(
-            (name, 0)
-            for name in ("raw_boxes", "after_filter", "after_nms", "after_merge")
-        )
-        seq_tile_diag = OrderedDict(
-            (name, 0)
-            for name in (
-                "frames_tiled",
-                "pre_merge_seam_boxes",
-                "post_merge_seam_boxes",
-                "merged_clusters",
-                "merged_members",
-                "merged_outputs",
-            )
-        )
-        lazy_reid_prev_embeddings: dict[int, torch.Tensor] = {}
-        tracker_result_buffers = detector.tracker.allocate_result_buffers(
-            device=pool.frame_buffer.device
-        )
-        _pinned_result_bufs: dict[str, torch.Tensor] = {
-            "boxes": torch.empty((2048, 4), dtype=torch.float32, pin_memory=True),
-            "scores": torch.empty((2048,), dtype=torch.float32, pin_memory=True),
-            "ids": torch.empty((2048,), dtype=torch.int32, pin_memory=True),
-            "classes": torch.empty((2048,), dtype=torch.int32, pin_memory=True),
-            "det_idx": torch.empty((2048,), dtype=torch.int32, pin_memory=True),
-            "count": torch.empty((), dtype=torch.int32, pin_memory=True),
-        }
-        _use_pinned_materialize = not cfg.pipeline_relink
-        _defer_emit = (
-            relinker is None
-            and id_stability_filter is None
-            and primary_appearance_bank is None
-            and dynamic_reid is None
-        )
-        _shared_gmc_warp = torch.zeros(6, dtype=torch.float32, device="cuda")
-        _post_bufs: dict[str, torch.Tensor] = {
-            "boxes": torch.empty((2048, 4), dtype=torch.float32, device="cuda"),
-            "scores": torch.empty((2048,), dtype=torch.float32, device="cuda"),
-            "classes": torch.empty((2048,), dtype=torch.int32, device="cuda"),
-            "suspect": torch.empty((2048,), dtype=torch.bool, device="cuda"),
-        }
-        _nms_in: dict[str, torch.Tensor] = {
-            "boxes": torch.empty((2048, 4), dtype=torch.float32, device="cuda"),
-            "scores": torch.empty((2048,), dtype=torch.float32, device="cuda"),
-            "classes": torch.empty((2048,), dtype=torch.int32, device="cuda"),
-        }
-        _NMS_FIXED_N = 2048
+        seq_stage_totals = profiling.seq_stage_totals
+        seq_stage_samples = profiling.seq_stage_samples
+        seq_native_reid_samples = profiling.seq_native_reid_samples
+        seq_gmc_samples = profiling.seq_gmc_samples
+        seq_segment_samples = profiling.seq_segment_samples
+        seq_post_counts = profiling.seq_post_counts
+        seq_tile_diag = profiling.seq_tile_diag
 
-        gtu: Any = None
-        # GraphedTrackerUpdate.copy_inputs does not feed per-detection embeddings,
-        # so the captured graph path cannot do appearance association / relink.
-        # Fall back to direct update_into (which passes embeddings) when relink is on.
-        if cfg.kwargs.get("use_tracker_graph", False) and not cfg.relink_enabled:
-            from saccade.perception.tracking.tracker_gpu import GraphedTrackerUpdate
-
-            gtu = GraphedTrackerUpdate(detector.tracker)
-            print(f"🕯️ [TrackerGraph] Captured tracker update for seq {seq}")
-        elif cfg.relink_enabled and cfg.kwargs.get("use_tracker_graph", False):
-            print(
-                "ℹ️  [Relink] tracker graph disabled (relink needs embeddings via update_into)"
-            )
+        buffers = _build_sequence_buffer_runtime(
+            cfg,
+            detector=detector,
+            pool=pool,
+            association=association,
+        )
+        tracker_result_buffers = buffers.tracker_result_buffers
+        _pinned_result_bufs = buffers.pinned_result_bufs
+        _use_pinned_materialize = buffers.use_pinned_materialize
+        _defer_emit = buffers.defer_emit
+        _shared_gmc_warp = buffers.shared_gmc_warp
+        _post_bufs = buffers.post_bufs
+        _nms_in = buffers.nms_in
+        _NMS_FIXED_N = buffers.nms_fixed_n
+        gtu = buffers.gtu
+        lazy_reid_prev_embeddings = buffers.lazy_reid_prev_embeddings
+        start_time = io_state.start_time
+        warmup_frames = io_state.warmup_frames
 
         # Inter-frame pipelining: relink_write for frame N runs in background while
         # frame N+1 runs detect+postprocess on the main thread. All GPU tensors are
@@ -1971,19 +1639,11 @@ class EvalPipeline:
         def _collect_output_metadata(
             _resolved_tracks: list,
         ) -> dict[int, dict[str, float | int]]:
-            output_by_local: dict[int, dict[str, float | int]] = {}
-            for _track in _resolved_tracks:
-                _global_tid = global_id_mapper.map(seq, _track.resolved_track_id)
-                output_by_local[int(_track.local_track_id)] = {
-                    "output_local_track_id": int(_track.local_track_id),
-                    "output_track_id": int(_global_tid),
-                    "output_score": float(_track.score),
-                    "output_x1": float(_track.box[0]),
-                    "output_y1": float(_track.box[1]),
-                    "output_x2": float(_track.box[2]),
-                    "output_y2": float(_track.box[3]),
-                }
-            return output_by_local
+            return _collect_output_metadata_for_seq(
+                seq=seq,
+                global_id_mapper=global_id_mapper,
+                resolved_tracks=_resolved_tracks,
+            )
 
         def _annotate_birth_events(
             _frame_birth_events: list[dict[str, float | int | str | bool]],
@@ -1991,33 +1651,12 @@ class EvalPipeline:
             _det_idx_to_local_id: dict[int, int],
             _output_by_local: dict[int, dict[str, float | int]],
         ) -> None:
-            if not _frame_birth_events:
-                return
-            for _event in _frame_birth_events:
-                _det_idx = int(_event["det_idx"])
-                _local_id = _det_idx_to_local_id.get(_det_idx, -1)
-                _meta = _output_by_local.get(_local_id)
-                if _meta is None:
-                    _event.update(
-                        {
-                            "output_emitted": False,
-                            "output_local_track_id": _local_id,
-                            "output_track_id": -1,
-                            "output_score": float("nan"),
-                            "output_x1": float("nan"),
-                            "output_y1": float("nan"),
-                            "output_x2": float("nan"),
-                            "output_y2": float("nan"),
-                        }
-                    )
-                else:
-                    _event.update(
-                        {
-                            "output_emitted": True,
-                            **_meta,
-                        }
-                    )
-                debug_birth_rows.append(_event)
+            _annotate_birth_events_for_seq(
+                debug_birth_rows,
+                _frame_birth_events,
+                det_idx_to_local_id=_det_idx_to_local_id,
+                output_by_local=_output_by_local,
+            )
 
         def _append_birth_event_rows(
             _frame_birth_events: list[dict[str, float | int | str | bool]],
@@ -2028,34 +1667,16 @@ class EvalPipeline:
             _score_after: torch.Tensor,
             _boxes: torch.Tensor,
         ) -> None:
-            if _det_indices.numel() == 0:
-                return
-            _idx_cpu = _det_indices.detach().to(torch.int64).cpu().tolist()
-            _before_cpu = _score_before.detach().to(torch.float32).cpu().tolist()
-            _after_cpu = _score_after.detach().to(torch.float32).cpu().tolist()
-            _boxes_cpu = _boxes.detach().to(torch.float32).cpu().tolist()
-            for _det_idx, _before, _after, _box in zip(
-                _idx_cpu,
-                _before_cpu,
-                _after_cpu,
-                _boxes_cpu,
-            ):
-                _frame_birth_events.append(
-                    {
-                        "seq": seq,
-                        "frame": int(self.current_frame_id),
-                        "policy": _policy,
-                        "det_idx": int(_det_idx),
-                        "score_before": float(_before),
-                        "score_after": float(_after),
-                        "x1": float(_box[0]),
-                        "y1": float(_box[1]),
-                        "x2": float(_box[2]),
-                        "y2": float(_box[3]),
-                        "w": float(_box[2] - _box[0]),
-                        "h": float(_box[3] - _box[1]),
-                    }
-                )
+            _append_birth_event_rows_for_seq(
+                _frame_birth_events,
+                seq=seq,
+                frame_id=self.current_frame_id,
+                policy=_policy,
+                det_indices=_det_indices,
+                score_before=_score_before,
+                score_after=_score_after,
+                boxes=_boxes,
+            )
 
         def _bg_relink_write(
             _frame_id: int,
@@ -2240,6 +1861,785 @@ class EvalPipeline:
         self.w_orig = w_orig
         self.h_orig = h_orig
         self.start_time = start_time
+
+
+def _build_sequence_io_state(
+    cfg: Any,
+    *,
+    seq: str,
+    max_frames: int | None,
+) -> SequenceIOState:
+    seq_path = Path(cfg.data_root) / cfg.split / seq
+    config = configparser.ConfigParser()
+    config.read(seq_path / "seqinfo.ini")
+    w_orig = config.getint("Sequence", "imWidth")
+    h_orig = config.getint("Sequence", "imHeight")
+    frame_end = min(max_frames or int(1e9), config.getint("Sequence", "seqLength"))
+    seq_fps = config.getint("Sequence", "frameRate", fallback=30)
+
+    seq_reid_interval = cfg.reid_interval
+    track_buffer_base = int(cfg.kwargs.get("track_buffer", 30))
+    seq_track_buffer = track_buffer_base
+    if cfg.per_seq_adapt and seq_fps != 30:
+        fps_scale = seq_fps / 30.0
+        seq_reid_interval = max(1, round(cfg.reid_interval * fps_scale))
+        seq_track_buffer = max(10, round(track_buffer_base * fps_scale))
+
+    pool = AdaptiveFramePool(h_orig, w_orig)
+    if os.environ.get("SACCADE_NV12_BUFFER") == "1":
+        pool.use_nv12 = True
+    nv12_direct_from_hwc = pool.use_nv12 and not cfg.preprocess_modes
+    if os.environ.get("SACCADE_GPU_DECODE") == "1":
+        streamer: Any = TorchvisionGpuStreamer(seq_path / "img1")
+    else:
+        streamer = DALIStreamerStream(seq_path / "img1")
+
+    return SequenceIOState(
+        seq_path=seq_path,
+        w_orig=w_orig,
+        h_orig=h_orig,
+        frame_end=frame_end,
+        seq_fps=seq_fps,
+        seq_reid_interval=seq_reid_interval,
+        seq_track_buffer=seq_track_buffer,
+        pool=pool,
+        stream_iter=iter(streamer),
+        nv12_direct_from_hwc=nv12_direct_from_hwc,
+        results_lines=[],
+        frame_latencies=[],
+        warmup_frames=int(cfg.kwargs.get("warmup_frames", 50)),
+        start_time=time.time(),
+    )
+
+
+def _build_sequence_workbench(
+    cfg: Any,
+    *,
+    detector: Any,
+    native_cfg: Any,
+    extractor: Any,
+    cropper: Any,
+) -> Any:
+    if not getattr(cfg, "workbench", False):
+        return None
+    from saccade.perception.workbench import Workbench
+
+    return Workbench(
+        detector,
+        native_cfg,
+        device=str(detector.device),
+        max_dets=2048,
+        max_tracks=256,
+        extractor=extractor,
+        cropper=cropper,
+        gmc_estimator=None,
+        narrow_bonus=0.0,
+        quality_weights=(
+            cfg.detection_quality_w_aspect,
+            cfg.detection_quality_w_center,
+            cfg.detection_quality_w_area,
+        )
+        if cfg.detection_quality_scaling
+        else (0.5, 0.3, 0.2),
+        max_detections=cfg.per_frame_detection_cap or 30,
+        fp_hard_filter=cfg.fp_hard_filter_enabled,
+        fp_min_score=cfg.fp_hard_filter_min_score,
+        fp_max_suspicious_area=cfg.fp_hard_filter_max_suspicious_area,
+        fp_max_suspicious_score=cfg.fp_hard_filter_max_suspicious_score,
+        reid_budget_raw=cfg.reid_budget_raw,
+        reid_interval=cfg.reid_interval,
+        need_reid=cfg.need_reid_enabled,
+        dynamic_reid=None,
+        gmc_uncertain=False,
+    )
+
+
+def _apply_sequence_homography(cfg: Any, *, seq: str, detector: Any) -> None:
+    if cfg.homography_root:
+        h_path = Path(cfg.homography_root) / f"{seq}.txt"
+        if h_path.exists():
+            try:
+                h_mat = np.loadtxt(h_path).astype(np.float32).flatten()
+                if h_mat.size == 9:
+                    detector.tracker.set_homography(h_mat)
+                    return
+            except Exception:
+                pass
+        detector.tracker.set_homography(None)
+    else:
+        detector.tracker.set_homography(None)
+
+
+def _configure_tracker_params(
+    cfg: Any,
+    *,
+    detector: Any,
+    contract: DetectionContract,
+    io_state: SequenceIOState,
+) -> tuple[bool, tuple[float, float, float]]:
+    detector.tracker.set_reid_params(
+        cos_threshold=float(cfg.kwargs.get("reid_cos_threshold", 0.90)),
+        iou_low=float(cfg.kwargs.get("reid_iou_low", 0.30)),
+        iou_high=float(cfg.kwargs.get("reid_iou_high", 0.60)),
+        weight=float(cfg.kwargs.get("reid_weight", 0.80)),
+        cost_cos_w=float(cfg.kwargs.get("reid_cost_cos_w", 0.55)),
+        cost_iou_w=float(cfg.kwargs.get("reid_cost_iou_w", 0.30)),
+        cost_score_w=float(cfg.kwargs.get("reid_cost_score_w", 0.15)),
+    )
+    if contract.fpn_reid_mode and hasattr(detector.tracker, "set_reid_min_candidates"):
+        detector.tracker.set_reid_min_candidates(1)
+
+    bridge_enabled = bool(getattr(cfg, "relink_bridge_enabled", False))
+    if (cfg.relink_enabled or bridge_enabled) and hasattr(
+        detector.tracker, "set_relink_params"
+    ):
+        detector.tracker.set_relink_params(
+            enabled=cfg.relink_enabled,
+            bank_cap=cfg.relink_bank_cap,
+            sim_thresh=cfg.relink_sim_thresh,
+            cheb_lambda=cfg.relink_lambda,
+            spatial_gate=cfg.relink_spatial_gate,
+            max_age=cfg.relink_max_age,
+            bidirectional=bridge_enabled,
+            bridge_px=cfg.relink_bridge_px,
+            bridge_at=cfg.relink_bridge_at,
+            bridge_min_lost=cfg.relink_bridge_min_lost,
+            bridge_ttl=cfg.relink_bridge_ttl,
+            bridge_max_speed=cfg.relink_bridge_max_speed,
+            bridge_person_height=cfg.relink_bridge_person_height,
+            bridge_fps=cfg.relink_bridge_fps,
+            bridge_margin=cfg.relink_bridge_margin,
+            bridge_spatial_gate=cfg.relink_bridge_spatial_gate,
+            bridge_anchor={"center": 0, "foot": 1, "adaptive": 2}.get(
+                cfg.relink_bridge_anchor, 0
+            ),
+            bridge_anchor_rate=cfg.relink_bridge_anchor_rate,
+            bridge_h_lo=cfg.relink_bridge_h_lo,
+            bridge_h_hi=cfg.relink_bridge_h_hi,
+            bridge_dir_bonus=cfg.relink_bridge_dir_bonus,
+            occ_gate_cover=cfg.relink_bridge_occ_gate_cover,
+            occ_gap_min=cfg.relink_bridge_occ_gap_min,
+            occ_expand_px=cfg.relink_bridge_occ_expand_px,
+            occ_expand_cover=cfg.relink_bridge_occ_expand_cover,
+        )
+
+    if hasattr(detector.tracker, "set_unified_score_params"):
+        detector.tracker.set_unified_score_params(
+            w_sim_base=cfg.semantic_w_sim_base,
+            w_iou_base=cfg.semantic_w_iou_base,
+            w_maha_base=cfg.semantic_w_maha_base,
+            shift_ambiguity=cfg.semantic_shift_ambiguity,
+            shift_lost_age=cfg.semantic_shift_lost_age,
+        )
+
+    detector.tracker.set_frame_size(io_state.w_orig, io_state.h_orig)
+    detector.tracker.set_quality_params(
+        enabled=cfg.detection_quality_scaling,
+        w_aspect=cfg.detection_quality_w_aspect,
+        w_center=cfg.detection_quality_w_center,
+        w_area=cfg.detection_quality_w_area,
+    )
+    detector.tracker.set_params(
+        track_thresh=cfg.track_thresh,
+        high_thresh=cfg.high_thresh,
+        match_thresh=cfg.match_thresh,
+        track_buffer=io_state.seq_track_buffer,
+        mid_thresh=cfg.mid_thresh,
+        confirm_streak=int(cfg.kwargs.get("confirm_streak", 1)),
+        confirm_score_thresh=float(cfg.kwargs.get("confirm_score_thresh", 0.0)),
+        adaptive_confirmation=bool(cfg.kwargs.get("adaptive_confirmation", False)),
+        new_track_thresh=cfg.new_track_thresh,
+        nsa_kalman=cfg.nsa_kalman,
+        r_scale=cfg.kalman_r_scale,
+        vel_dir_weight=cfg.vel_dir_weight,
+        fuse_score_weight=cfg.fuse_score_weight,
+        stage2_match_thresh=cfg.stage2_match_thresh,
+        birth_low_score_thresh=cfg.birth_low_score_thresh,
+        birth_prox_norm_thresh=cfg.birth_prox_norm_thresh,
+    )
+    detector.tracker.set_oao_params(
+        cfg.oao_tau,
+        cfg.oao_contest_thresh,
+        cfg.oao_score_w,
+        cfg.oao_occ_mode,
+        cfg.oao_crowd_radius,
+        cfg.oao_height_gate,
+        cfg.oao_foot_gate,
+        cfg.oao_ramp_frames,
+    )
+    detector.tracker.set_occ_params(
+        enabled=cfg.occ_state_enabled,
+        iou_thresh=cfg.occ_iou_thresh,
+        foot_gap=cfg.occ_foot_gap,
+        ttl=cfg.occ_ttl,
+        cost_weight=cfg.occ_cost_weight,
+    )
+    if getattr(cfg, "multiplicative_cost", False):
+        detector.tracker.set_multiplicative_cost(enabled=True)
+        lam = float(getattr(cfg, "sinkhorn_lambda", 30.0))
+        detector.tracker.set_sinkhorn_lambda(lam)
+        stab_w = float(getattr(cfg, "stability_cost_w", 0.0))
+        if stab_w > 0:
+            setter = getattr(detector.tracker, "set_stability_cost_w", None)
+            if setter:
+                setter(stab_w)
+
+    return bridge_enabled, (cfg.track_thresh, cfg.mid_thresh, cfg.new_track_thresh)
+
+
+def _build_sequence_tracker_runtime(
+    cfg: Any,
+    *,
+    seq: str,
+    profile_stages: bool,
+    contract: DetectionContract,
+    detector: Any,
+    native_cfg: Any,
+    extractor: Any,
+    cropper: Any,
+    io_state: SequenceIOState,
+) -> SequenceTrackerRuntime:
+    wb = _build_sequence_workbench(
+        cfg,
+        detector=detector,
+        native_cfg=native_cfg,
+        extractor=extractor,
+        cropper=cropper,
+    )
+    if wb is None:
+        if contract.fpn_reid_mode:
+            from saccade.perception.tracking import GPUByteTracker
+
+            detector.tracker = GPUByteTracker(
+                max_objects=2048, embedding_dim=contract.feature_dim
+            )
+        else:
+            detector.reset_tracker()
+
+    geometry_scale_state = GeometryScaleState()
+    gmc_estimator, use_direct_gmc, gmc_graphable, gmc_cuda_graph = _build_gmc_estimator(
+        cfg, profile_stages
+    )
+    wb_scene_policy = None
+    if wb is not None:
+        wb_scene_policy = (
+            SceneAdaptivePolicy(
+                window=cfg.scene_adapt_window,
+                crowd_box_thresh=cfg.scene_adapt_crowd_thresh,
+                narrow_aspect_thresh=cfg.scene_adapt_narrow_aspect_thresh,
+                narrow_width_thresh=cfg.scene_adapt_narrow_width_thresh,
+            )
+            if cfg.scene_adapt_enabled
+            else None
+        )
+        wb.scene_adapt_policy = wb_scene_policy
+        if gmc_estimator is not None:
+            wb.gmc_estimator = gmc_estimator
+
+    _apply_sequence_homography(cfg, seq=seq, detector=detector)
+    if hasattr(detector, "set_whole_graph_img_dims"):
+        detector.set_whole_graph_img_dims(io_state.h_orig, io_state.w_orig)
+    bridge_enabled, active_tracker_thresholds = _configure_tracker_params(
+        cfg,
+        detector=detector,
+        contract=contract,
+        io_state=io_state,
+    )
+    gmc_frame_buf = (
+        torch.zeros(
+            3,
+            io_state.h_orig,
+            io_state.w_orig,
+            dtype=torch.float32,
+            device="cuda",
+        )
+        if use_direct_gmc
+        else None
+    )
+    return SequenceTrackerRuntime(
+        wb=wb,
+        wb_scene_policy=wb_scene_policy,
+        geometry_scale_state=geometry_scale_state,
+        gmc_estimator=gmc_estimator,
+        use_direct_gmc=use_direct_gmc,
+        gmc_graphable=gmc_graphable,
+        gmc_cuda_graph=gmc_cuda_graph,
+        gmc_frame_buf=gmc_frame_buf,
+        bridge_enabled=bridge_enabled,
+        active_tracker_thresholds=active_tracker_thresholds,
+    )
+
+
+def _build_semantic_relinker(cfg: Any, *, seq_path: Path) -> Any:
+    semantic_delayed_claim = bool(cfg.kwargs.get("semantic_delayed_claim", False))
+    semantic_bidirectional = bool(cfg.kwargs.get("semantic_bidirectional", False))
+    use_python_relinker = (
+        cfg.force_python_relinker
+        or cfg.semantic_rerank_mode != "mean"
+        or semantic_delayed_claim
+    )
+    relinker_cls = PythonSemanticRelinker if use_python_relinker else SemanticRelinker
+    relinker_kwargs: dict = dict(
+        sim_threshold=cfg.kwargs.get("semantic_threshold", 0.90),
+        ttl=cfg.kwargs.get("semantic_ttl", 45),
+        ema_beta=cfg.kwargs.get("semantic_ema", 0.83),
+        spatial_gate=cfg.kwargs.get("semantic_spatial_gate", 0.20),
+        min_lost_frames=cfg.kwargs.get("semantic_min_lost_frames", 2),
+        min_iou=cfg.kwargs.get("semantic_min_iou", 0.20),
+        mahalanobis_threshold=cfg.kwargs.get("semantic_mahalanobis_threshold", 0.0),
+        kalman_gate=cfg.kwargs.get("semantic_kalman_gate", False),
+        kalman_chi2=cfg.kwargs.get("semantic_kalman_chi2", 9.4877),
+        kalman_penalty_weight=cfg.kwargs.get("semantic_kalman_penalty_weight", 0.0),
+        kalman_dir_min_cos=cfg.kwargs.get("semantic_kalman_dir_min_cos", -1.0),
+        kalman_dir_min_speed=cfg.kwargs.get("semantic_kalman_dir_min_speed", 1.0),
+        kalman_person_height_m=cfg.kwargs.get("semantic_kalman_person_height_m", 0.0),
+        kalman_accel_long=cfg.kwargs.get("semantic_kalman_accel_long", 2.0),
+        kalman_accel_lat=cfg.kwargs.get("semantic_kalman_accel_lat", 1.0),
+        kalman_fps=_resolve_kalman_fps(
+            cfg.kwargs.get("semantic_kalman_fps", 0.0),
+            seq_path,
+        ),
+        kalman_max_speed_mps=cfg.kwargs.get("semantic_kalman_max_speed_mps", 0.0),
+        buffer_size=cfg.semantic_buffer_size,
+        min_consistency=cfg.semantic_min_consistency,
+        rerank_mode=cfg.semantic_rerank_mode,
+        reciprocal_margin=cfg.semantic_reciprocal_margin,
+        clean_score_threshold=cfg.semantic_clean_score_threshold,
+        clean_margin_ratio=cfg.semantic_clean_margin_ratio,
+        clean_min_aspect=cfg.semantic_clean_min_aspect,
+        clean_max_aspect=cfg.semantic_clean_max_aspect,
+        strict_sim_threshold=cfg.semantic_strict_sim_threshold,
+        w_sim_base=cfg.semantic_w_sim_base,
+        w_iou_base=cfg.semantic_w_iou_base,
+        w_maha_base=cfg.semantic_w_maha_base,
+        shift_ambiguity=cfg.semantic_shift_ambiguity,
+        shift_lost_age=cfg.semantic_shift_lost_age,
+        iou_weight=cfg.semantic_iou_weight,
+        mahalanobis_weight=cfg.semantic_mahalanobis_weight,
+        dynamic_margin_crowd=cfg.semantic_dynamic_margin_crowd,
+        dynamic_margin_age=cfg.semantic_dynamic_margin_age,
+        debug=cfg.kwargs.get("semantic_debug", False),
+        exp_density_gating=cfg.semantic_exp_density_gating,
+        exp_density_k=cfg.semantic_exp_density_k,
+        exp_density_eta=cfg.semantic_exp_density_eta,
+    )
+    if semantic_delayed_claim:
+        relinker_kwargs.update(
+            delayed_claim=True,
+            claim_warmup_frames=cfg.kwargs.get("semantic_claim_warmup_frames", 3),
+        )
+    if semantic_bidirectional:
+        relinker_kwargs.update(
+            bidirectional=True,
+            bridge_px=cfg.kwargs.get("semantic_bridge_px", 1.5),
+            bridge_h_lo=cfg.relink_bridge_h_lo,
+            bridge_h_hi=cfg.relink_bridge_h_hi,
+        )
+    if use_python_relinker:
+        relinker_kwargs.update(
+            experimental_mode=str(
+                cfg.kwargs.get("semantic_experimental_mode", "standard")
+            ),
+            appearance_first_sim_threshold=float(
+                cfg.kwargs.get("semantic_appearance_first_sim_threshold", 0.95)
+            ),
+            appearance_first_margin=float(
+                cfg.kwargs.get("semantic_appearance_first_margin", 0.03)
+            ),
+            motion_vel_alpha=cfg.kwargs.get("motion_vel_alpha", 0.3),
+            motion_acc_alpha=cfg.kwargs.get("motion_acc_alpha", 0.15),
+            motion_min_observations=cfg.kwargs.get("motion_min_observations", 2),
+            motion_w_iou=cfg.kwargs.get("motion_w_iou", 0.3),
+            motion_consistency_check=cfg.kwargs.get("motion_consistency_check", True),
+            motion_consistency_tol=cfg.kwargs.get("motion_consistency_tol", 2.0),
+            motion_enable_motion_only=cfg.kwargs.get("motion_enable_motion_only", True),
+            motion_motion_only_lost_frames=cfg.kwargs.get(
+                "motion_motion_only_lost_frames", 5
+            ),
+            motion_motion_only_iou_threshold=cfg.kwargs.get(
+                "motion_motion_only_iou_threshold", 0.15
+            ),
+            motion_motion_only_min_lost_frames=cfg.kwargs.get(
+                "motion_motion_only_min_lost_frames", 1
+            ),
+        )
+
+    if not cfg.use_semantic_mode:
+        return None
+    try:
+        return relinker_cls(**relinker_kwargs)
+    except TypeError:
+        if not semantic_delayed_claim or relinker_cls is PythonSemanticRelinker:
+            raise
+        fallback_kwargs = dict(relinker_kwargs)
+        fallback_kwargs.update(
+            experimental_mode=str(
+                cfg.kwargs.get("semantic_experimental_mode", "standard")
+            ),
+            appearance_first_sim_threshold=float(
+                cfg.kwargs.get("semantic_appearance_first_sim_threshold", 0.95)
+            ),
+            appearance_first_margin=float(
+                cfg.kwargs.get("semantic_appearance_first_margin", 0.03)
+            ),
+            motion_vel_alpha=cfg.kwargs.get("motion_vel_alpha", 0.3),
+            motion_acc_alpha=cfg.kwargs.get("motion_acc_alpha", 0.15),
+            motion_min_observations=cfg.kwargs.get("motion_min_observations", 2),
+            motion_w_iou=cfg.kwargs.get("motion_w_iou", 0.3),
+            motion_consistency_check=cfg.kwargs.get("motion_consistency_check", True),
+            motion_consistency_tol=cfg.kwargs.get("motion_consistency_tol", 2.0),
+            motion_enable_motion_only=cfg.kwargs.get("motion_enable_motion_only", True),
+            motion_motion_only_lost_frames=cfg.kwargs.get(
+                "motion_motion_only_lost_frames", 5
+            ),
+            motion_motion_only_iou_threshold=cfg.kwargs.get(
+                "motion_motion_only_iou_threshold", 0.15
+            ),
+            motion_motion_only_min_lost_frames=cfg.kwargs.get(
+                "motion_motion_only_min_lost_frames", 1
+            ),
+        )
+        print(
+            "ℹ️  [Semantic] C++ relinker lacks delayed-claim kwargs; "
+            "falling back to Python relinker"
+        )
+        return PythonSemanticRelinker(**fallback_kwargs)
+
+
+def _build_sequence_association_runtime(
+    cfg: Any,
+    *,
+    seq_path: Path,
+    wb: Any,
+) -> SequenceAssociationRuntime:
+    id_stability_filter = (
+        IdStabilityFilter(
+            min_hits=cfg.id_stability_min_hits,
+            min_iou=cfg.id_stability_min_iou,
+            max_center_shift=cfg.id_stability_max_center_shift,
+            max_gap=cfg.id_stability_max_gap,
+            score_ema=cfg.id_stability_score_ema,
+            min_score_ema=cfg.id_stability_min_score_ema,
+        )
+        if cfg.id_stability_filter_enabled
+        else None
+    )
+    lifecycle_merger = (_LIFECYCLE_CLS or TrackletLifecycleMerger)(
+        enabled=cfg.lifecycle_merge_enabled,
+        ttl=cfg.lifecycle_ttl,
+        min_gap=cfg.lifecycle_min_gap,
+        spatial_gate=cfg.lifecycle_spatial_gate,
+        min_iou=cfg.lifecycle_min_iou,
+        sim_threshold=cfg.lifecycle_sim_threshold,
+        require_embedding=cfg.lifecycle_require_embedding,
+        ema=cfg.lifecycle_ema,
+    )
+    relinker = _build_semantic_relinker(cfg, seq_path=seq_path)
+    if relinker is not None:
+        if (
+            _CppIdentityResolver is not None
+            and _LIFECYCLE_CLS is not None
+            and isinstance(lifecycle_merger, _LIFECYCLE_CLS)
+            and not isinstance(relinker, PythonSemanticRelinker)
+        ):
+            identity_resolver = _CppIdentityResolver(relinker, lifecycle_merger)
+        else:
+            identity_resolver = IdentityResolver(relinker, lifecycle_merger)
+    else:
+        identity_resolver = None
+
+    output_appearance_bank = (
+        OutputAppearanceBank(
+            max_samples=cfg.post_lifecycle_appearance_max_samples,
+            min_score=cfg.post_lifecycle_appearance_min_score,
+            min_consistency=cfg.post_lifecycle_appearance_min_consistency,
+        )
+        if cfg.post_lifecycle_appearance_gate
+        else None
+    )
+    primary_appearance_bank = (
+        TrackAppearanceBank(
+            k=cfg.appearance_bank_size,
+            min_score=cfg.appearance_bank_min_score,
+            min_iou=cfg.appearance_bank_min_iou,
+            consistency_threshold=cfg.appearance_bank_consistency_threshold,
+            high_quality_min_score=cfg.appearance_bank_high_quality_min_score,
+            min_aspect=cfg.appearance_bank_min_aspect,
+            max_aspect=cfg.appearance_bank_max_aspect,
+            bank_weighted_mean=cfg.bank_weighted_mean,
+            exp_velocity_aligned_bank=cfg.exp_velocity_aligned_bank,
+        )
+        if cfg.appearance_bank_enabled
+        else None
+    )
+    dynamic_reid = (
+        DynamicReIDController(
+            history_size=max(2, int(cfg.kwargs.get("reid_history_size", 5))),
+            mode=str(cfg.kwargs.get("reid_trigger_mode", "event_any")),
+            long_memory_decay=float(cfg.kwargs.get("reid_long_memory_decay", 0.80)),
+            long_memory_trigger=float(cfg.kwargs.get("reid_long_memory_trigger", 1.25)),
+            score_decay=float(cfg.kwargs.get("reid_score_decay", 0.80)),
+            score_threshold=float(cfg.kwargs.get("reid_score_threshold", 2.0)),
+            score_threshold_low=float(
+                cfg.kwargs["reid_score_threshold_low"]
+                if cfg.kwargs.get("reid_score_threshold_low") is not None
+                else 2.0
+            ),
+            weight_new=float(cfg.kwargs.get("reid_weight_new", 1.0)),
+            weight_lost=float(cfg.kwargs.get("reid_weight_lost", 1.4)),
+            weight_geom=float(cfg.kwargs.get("reid_weight_geom", 0.5)),
+            weight_conf=float(cfg.kwargs.get("reid_weight_conf", 0.5)),
+            birth_death_boost=float(cfg.kwargs.get("reid_birth_death_boost", 1.0)),
+            lost_age_cap=int(cfg.kwargs.get("reid_lost_age_cap", 30)),
+            unstable_shift_weight=float(
+                cfg.kwargs.get("reid_unstable_shift_weight", 1.0)
+            ),
+            unstable_iou_weight=float(cfg.kwargs.get("reid_unstable_iou_weight", 1.0)),
+            conf_jitter_gate=float(cfg.kwargs.get("reid_conf_jitter_gate", 0.10)),
+            trigger_persist_frames=int(
+                cfg.kwargs.get("reid_trigger_persist_frames", 2)
+            ),
+            cooldown_frames=int(cfg.kwargs.get("reid_cooldown_frames", 4)),
+            birth_death_lost_min=float(
+                cfg.kwargs.get("reid_birth_death_lost_min", 0.1)
+            ),
+        )
+        if cfg.need_reid_enabled
+        else None
+    )
+    if wb is not None:
+        wb.dynamic_reid = dynamic_reid
+
+    multi_birth_manager = (
+        MultiSignalBirthManager(
+            new_track_thresh=cfg.new_track_thresh,
+            min_score=cfg.multi_birth_min_score,
+            min_frames=cfg.multi_birth_min_frames,
+            target_motion_px=cfg.multi_birth_target_motion,
+            evidence_threshold=cfg.multi_birth_evidence_threshold,
+            iou_match=cfg.multi_birth_iou_match,
+            ttl_frames=cfg.multi_birth_ttl_frames,
+            w_score=cfg.multi_birth_w_score,
+            w_motion=cfg.multi_birth_w_motion,
+            w_quality=cfg.multi_birth_w_quality,
+            w_streak=cfg.multi_birth_w_streak,
+            min_aspect=cfg.multi_birth_min_aspect,
+            max_area_px=cfg.multi_birth_max_area_px,
+        )
+        if cfg.multi_birth_enabled
+        else None
+    )
+    scene_policy = (
+        SceneAdaptivePolicy(
+            window=cfg.scene_adapt_window,
+            crowd_box_thresh=cfg.scene_adapt_crowd_thresh,
+            narrow_aspect_thresh=cfg.scene_adapt_narrow_aspect_thresh,
+            narrow_width_thresh=cfg.scene_adapt_narrow_width_thresh,
+        )
+        if cfg.scene_adapt_enabled
+        else None
+    )
+    return SequenceAssociationRuntime(
+        relinker=relinker,
+        id_stability_filter=id_stability_filter,
+        primary_appearance_bank=primary_appearance_bank,
+        output_appearance_bank=output_appearance_bank,
+        dynamic_reid=dynamic_reid,
+        lifecycle_merger=lifecycle_merger,
+        identity_resolver=identity_resolver,
+        consec_birth_window=deque(maxlen=max(1, cfg.birth_consecutive_frames - 1)),
+        multi_birth_manager=multi_birth_manager,
+        scene_policy=scene_policy,
+        seq_narrow_bonus=(
+            0.0 if cfg.scene_adapt_enabled else cfg.narrow_person_score_bonus
+        ),
+    )
+
+
+def _build_sequence_profiling_state(
+    *,
+    overall_stage_totals: Any,
+    top_level_stage_names: Any,
+    native_reid_breakdown_names: Any,
+    gmc_breakdown_names: Any,
+    segment_breakdown_names: Any,
+) -> SequenceProfilingState:
+    return SequenceProfilingState(
+        seq_stage_totals=OrderedDict((name, 0.0) for name in overall_stage_totals),
+        seq_stage_samples=OrderedDict((name, []) for name in top_level_stage_names),
+        seq_native_reid_samples=OrderedDict(
+            (name, []) for name in native_reid_breakdown_names
+        ),
+        seq_gmc_samples=OrderedDict((name, []) for name in gmc_breakdown_names),
+        seq_segment_samples=OrderedDict((name, []) for name in segment_breakdown_names),
+        seq_post_counts=OrderedDict(
+            (name, 0)
+            for name in ("raw_boxes", "after_filter", "after_nms", "after_merge")
+        ),
+        seq_tile_diag=OrderedDict(
+            (name, 0)
+            for name in (
+                "frames_tiled",
+                "pre_merge_seam_boxes",
+                "post_merge_seam_boxes",
+                "merged_clusters",
+                "merged_members",
+                "merged_outputs",
+            )
+        ),
+    )
+
+
+def _build_sequence_buffer_runtime(
+    cfg: Any,
+    *,
+    detector: Any,
+    pool: Any,
+    association: SequenceAssociationRuntime,
+) -> SequenceBufferRuntime:
+    tracker_result_buffers = detector.tracker.allocate_result_buffers(
+        device=pool.frame_buffer.device
+    )
+    pinned_result_bufs: dict[str, torch.Tensor] = {
+        "boxes": torch.empty((2048, 4), dtype=torch.float32, pin_memory=True),
+        "scores": torch.empty((2048,), dtype=torch.float32, pin_memory=True),
+        "ids": torch.empty((2048,), dtype=torch.int32, pin_memory=True),
+        "classes": torch.empty((2048,), dtype=torch.int32, pin_memory=True),
+        "det_idx": torch.empty((2048,), dtype=torch.int32, pin_memory=True),
+        "count": torch.empty((), dtype=torch.int32, pin_memory=True),
+    }
+    post_bufs: dict[str, torch.Tensor] = {
+        "boxes": torch.empty((2048, 4), dtype=torch.float32, device="cuda"),
+        "scores": torch.empty((2048,), dtype=torch.float32, device="cuda"),
+        "classes": torch.empty((2048,), dtype=torch.int32, device="cuda"),
+        "suspect": torch.empty((2048,), dtype=torch.bool, device="cuda"),
+    }
+    nms_in: dict[str, torch.Tensor] = {
+        "boxes": torch.empty((2048, 4), dtype=torch.float32, device="cuda"),
+        "scores": torch.empty((2048,), dtype=torch.float32, device="cuda"),
+        "classes": torch.empty((2048,), dtype=torch.int32, device="cuda"),
+    }
+    gtu: Any = None
+    if cfg.kwargs.get("use_tracker_graph", False) and not cfg.relink_enabled:
+        from saccade.perception.tracking.tracker_gpu import GraphedTrackerUpdate
+
+        gtu = GraphedTrackerUpdate(detector.tracker)
+        print("🕯️ [TrackerGraph] Captured tracker update")
+    elif cfg.relink_enabled and cfg.kwargs.get("use_tracker_graph", False):
+        print(
+            "ℹ️  [Relink] tracker graph disabled (relink needs embeddings via update_into)"
+        )
+
+    return SequenceBufferRuntime(
+        tracker_result_buffers=tracker_result_buffers,
+        pinned_result_bufs=pinned_result_bufs,
+        use_pinned_materialize=not cfg.pipeline_relink,
+        defer_emit=(
+            association.relinker is None
+            and association.id_stability_filter is None
+            and association.primary_appearance_bank is None
+            and association.dynamic_reid is None
+        ),
+        shared_gmc_warp=torch.zeros(6, dtype=torch.float32, device="cuda"),
+        post_bufs=post_bufs,
+        nms_in=nms_in,
+        nms_fixed_n=2048,
+        gtu=gtu,
+        lazy_reid_prev_embeddings={},
+    )
+
+
+def _collect_output_metadata_for_seq(
+    *,
+    seq: str,
+    global_id_mapper: Any,
+    resolved_tracks: list,
+) -> dict[int, dict[str, float | int]]:
+    output_by_local: dict[int, dict[str, float | int]] = {}
+    for track in resolved_tracks:
+        global_tid = global_id_mapper.map(seq, track.resolved_track_id)
+        output_by_local[int(track.local_track_id)] = {
+            "output_local_track_id": int(track.local_track_id),
+            "output_track_id": int(global_tid),
+            "output_score": float(track.score),
+            "output_x1": float(track.box[0]),
+            "output_y1": float(track.box[1]),
+            "output_x2": float(track.box[2]),
+            "output_y2": float(track.box[3]),
+        }
+    return output_by_local
+
+
+def _annotate_birth_events_for_seq(
+    debug_birth_rows: list[dict[str, float | int | str | bool]],
+    frame_birth_events: list[dict[str, float | int | str | bool]],
+    *,
+    det_idx_to_local_id: dict[int, int],
+    output_by_local: dict[int, dict[str, float | int]],
+) -> None:
+    if not frame_birth_events:
+        return
+    for event in frame_birth_events:
+        det_idx = int(event["det_idx"])
+        local_id = det_idx_to_local_id.get(det_idx, -1)
+        meta = output_by_local.get(local_id)
+        if meta is None:
+            event.update(
+                {
+                    "output_emitted": False,
+                    "output_local_track_id": local_id,
+                    "output_track_id": -1,
+                    "output_score": float("nan"),
+                    "output_x1": float("nan"),
+                    "output_y1": float("nan"),
+                    "output_x2": float("nan"),
+                    "output_y2": float("nan"),
+                }
+            )
+        else:
+            event.update({"output_emitted": True, **meta})
+        debug_birth_rows.append(event)
+
+
+def _append_birth_event_rows_for_seq(
+    frame_birth_events: list[dict[str, float | int | str | bool]],
+    *,
+    seq: str,
+    frame_id: int,
+    policy: str,
+    det_indices: torch.Tensor,
+    score_before: torch.Tensor,
+    score_after: torch.Tensor,
+    boxes: torch.Tensor,
+) -> None:
+    if det_indices.numel() == 0:
+        return
+    idx_cpu = det_indices.detach().to(torch.int64).cpu().tolist()
+    before_cpu = score_before.detach().to(torch.float32).cpu().tolist()
+    after_cpu = score_after.detach().to(torch.float32).cpu().tolist()
+    boxes_cpu = boxes.detach().to(torch.float32).cpu().tolist()
+    for det_idx, before, after, box in zip(
+        idx_cpu,
+        before_cpu,
+        after_cpu,
+        boxes_cpu,
+    ):
+        frame_birth_events.append(
+            {
+                "seq": seq,
+                "frame": int(frame_id),
+                "policy": policy,
+                "det_idx": int(det_idx),
+                "score_before": float(before),
+                "score_after": float(after),
+                "x1": float(box[0]),
+                "y1": float(box[1]),
+                "x2": float(box[2]),
+                "y2": float(box[3]),
+                "w": float(box[2] - box[0]),
+                "h": float(box[3] - box[1]),
+            }
+        )
 
 
 @dataclasses.dataclass
