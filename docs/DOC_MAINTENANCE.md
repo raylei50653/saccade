@@ -7,18 +7,19 @@
 
 ## 路徑連結規範
 
-所有文檔內連結使用**相對於 `docs/` 的路徑**：
+所有文檔內連結使用**相對於目前文件所在位置的相對路徑**。不要使用
+`/docs/...`、`/src/...` 這類 repo-root 絕對 Markdown links。
 
-```
-[架構 v2](architecture/v2-gmc.md)      ← 正確
-[ADR 004](decisions/004-yolo26.md)     ← 正確
-[README](../README.md)                 ← 正確（從 docs/ 子目錄往上）
+```text
+架構入口: architecture/README.md
+ADR 004: decisions/004-yolo26-perception.md
+tracker_gpu.py from docs/modules/geometry/README.md: ../../../src/saccade/perception/tracking/tracker_gpu.py
 ```
 
 不對：
-```
-[架構](../architecture/v2-gmc.md)      ← 不對：多餘 `../`
-[ADR](/docs/decisions/004.md)         ← 不對：絕對路徑
+```text
+../architecture/README.md       ← docs/README.md 內不對：多餘 `../`
+/docs/decisions/004.md          ← 不對：repo-root 絕對路徑
 ```
 
 ---
@@ -41,12 +42,14 @@ Proposed → Accepted → (必要時) Superseded by ADR XXX
 
 ---
 
-## progress/ 維護規範
+## TODO / research / archive 維護規範
 
 - 完成項目時立即勾選 `[x]`
-- 全部完成後移至 `decisions/archive/`
-- `progress/` 不寫架構說明（放 `layers/` 或 `architecture/`）
-- `progress/` 不寫操作步驟（放 `runbooks/`）
+- 已完成、收斂或放棄的長篇脈絡移至 [TODO_history.md](TODO_history.md) 或 [archive/](archive/)
+- 實驗、ablation、訓練記錄放 `research/` 或 `modules/<name>/research/`
+- 穩定架構說明放 `architecture/` 或 `modules/<name>/architecture.md`
+- 操作步驟放 `reference/runbooks/` 或 `modules/<name>/runbooks/`
+- 目前沒有 `progress/`、`layers/` 或 `modules/<name>/decisions/` 目錄；不要在文件中指向這些路徑
 
 ---
 
@@ -66,6 +69,6 @@ Proposed → Accepted → (必要時) Superseded by ADR XXX
 □ 系統模組實作進度表與代碼一致？
 □ ADR 狀態正確？
 □ TODO.md 已完成項目已勾選？
-□ 通過 check_gpu_contract.py 靜態效能合約檢查？
+□ 必要時通過 scripts/tools/check_gpu_contract.py 靜態效能合約檢查？
 □ 無失效連結或舊模型名稱？
 ```

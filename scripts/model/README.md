@@ -1,0 +1,88 @@
+# scripts/model
+
+Model export, ONNX transformation, TensorRT engine build, and engine inspection
+helpers.
+
+Review pass: 2026-06-18. No files were moved or deleted in this pass; this
+README is the classification index for later cleanup.
+
+## Rules
+
+- Keep export/build pairs together. If an ONNX export path changes, update the
+  matching TensorRT build helper and docs in the same change.
+- Scripts cited by protocol docs or run scripts are path-sensitive.
+- ReID/embedding builders are legacy relative to the current ReID-free main
+  line, but keep them while docs still cite their negative-result provenance.
+- Generated model artifacts belong under ignored `models/`, `runs/`, or
+  experiment output paths, not in this directory.
+
+## Referenced / Path-Sensitive
+
+| Script | Role | Reference |
+|---|---|---|
+| `build_mamba_head_trt.py` | Build TensorRT engine from Mamba Head ONNX and selective-scan plugin | `docs/modules/detection/mamba_whole_graph_analysis.md` |
+| `build_osnet.py` | Discoverable OSNet TensorRT build wrapper | ReID docs / history |
+| `build_yolo.py` | Generic YOLO TensorRT builder | `scripts/train/temporal_yolo/run_v14replica_yolo26m.sh` |
+| `export_mamba_head_onnx.py` | Export Mamba Head ONNX with custom selective-scan op | `docs/modules/detection/mamba_whole_graph_analysis.md` |
+| `export_yolo_backbone_ckpt.py` | Export YOLO backbone ONNX from gated-detector checkpoint | Detection docs and v14 yolo26m runner |
+| `export_yolo_person.py` | Export person-only YOLO top-k ONNX | Throughput benchmark docs |
+
+## Mamba / Temporal YOLO Export
+
+| Script | Role |
+|---|---|
+| `build_mamba_head_trt.py` | TensorRT build for exported Mamba Head ONNX |
+| `compile_mamba_head_aot.py` | AOTInductor native-library experiment for Mamba Head |
+| `export_mamba_head.py` | Export Mamba Head to TorchScript |
+| `export_mamba_head_onnx.py` | Export Mamba Head to ONNX with custom op |
+| `export_yolo_backbone.py` | Export YOLO backbone FPN features from base weights |
+| `export_yolo_backbone_ckpt.py` | Export YOLO backbone FPN features from gated-detector checkpoint |
+
+## YOLO / TensorRT Build
+
+| Script | Role |
+|---|---|
+| `build_yolo.py` | Generic YOLO TensorRT engine builder |
+| `calibrate_yolo_int8.py` | ONNX Runtime static INT8 QDQ calibration for YOLO ONNX |
+| `export_yolo_person.py` | Person-class top-k YOLO ONNX export |
+| `export_yolo_pose.py` | YOLO pose top-k ONNX export |
+| `export_yoloe_embedding.py` | YOLOE top-k detection embedding export |
+
+## Embedding / ReID Legacy
+
+| Script | Role |
+|---|---|
+| `build_osnet.py` | OSNet-specific wrapper over generic ReID TensorRT build |
+| `build_reid.py` | Generic TensorRT FP16 builder for ReID ONNX models |
+| `build_siglip.py` | TensorRT builder for SigLIP ONNX |
+| `export_dinov2.py` | Export DINOv2 CLS embedding model to ONNX |
+| `export_siglip.py` | Export SigLIP2 vision model to ONNX |
+| `export_transreid.py` | Export TransReID-compatible ViT model to ONNX |
+
+## Utilities
+
+| Script | Role |
+|---|---|
+| `__init__.py` | Package marker for `scripts.model` imports |
+| `README.md` | This classification index |
+| `inspect_engine.py` | Print TensorRT engine I/O tensors and optimization profiles |
+| `make_onnx_dynamic.py` | Rewrite ONNX first batch dimensions to dynamic |
+
+## Cleanup Candidates
+
+These had no external references in the first scan. Keep them only if still used
+manually or if their outputs support a retained report.
+
+| Script | Suggested treatment |
+|---|---|
+| `build_siglip.py` | Move with embedding/ReID legacy scripts or remove after docs confirm unused |
+| `calibrate_yolo_int8.py` | Keep if INT8 YOLO build is still a supported experiment |
+| `compile_mamba_head_aot.py` | Archive with Mamba native/AOT experiments; also remove hard-coded local path before reuse |
+| `export_dinov2.py` | Move with embedding/ReID legacy scripts or remove after docs confirm unused |
+| `export_mamba_head.py` | Keep only if TorchScript export remains useful beside ONNX/TRT path |
+| `export_siglip.py` | Move with embedding/ReID legacy scripts or remove after docs confirm unused |
+| `export_transreid.py` | Move with embedding/ReID legacy scripts or remove after docs confirm unused |
+| `export_yolo_pose.py` | Keep only if pose export is still in active benchmark scope |
+| `export_yoloe_embedding.py` | Keep only if YOLOE embedding export remains active |
+| `inspect_engine.py` | Keep as a small stable utility unless replaced by another engine inspector |
+| `make_onnx_dynamic.py` | Keep as a small ONNX utility unless folded into export scripts |

@@ -1,8 +1,10 @@
 # Saccade Pipeline Reference
 
+> **Legacy snapshot**：這份文件保留 2026-05 的 pipeline delta ledger 與歷史 baseline 數字，供追溯 module ablation 使用。現行 MOT17 baseline 與資料流請以 [mot17_default_config.md](mot17_default_config.md)、[DATAFLOW.md](../DATAFLOW.md)、[PIPELINE.md](../PIPELINE.md) 為準。
+
 這份文件定義兩件事：
 
-1. 目前的高層 reference Dataflow
+1. 2026-05 當時的高層 reference Dataflow
 2. 各主模組貢獻的 sequential delta ledger 記帳規則
 
 除非特別標註，所有模組 delta 都必須沿同一條 cumulative path 記錄。

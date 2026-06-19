@@ -1,4 +1,5 @@
 #include "tracking/tracker_gpu.hpp"
+#include "tracking/box_ops.hpp"
 #include <cuda_runtime.h>
 #include <cub/cub.cuh>
 #include <nvtx3/nvToolsExt.h>
@@ -100,7 +101,7 @@ __global__ void gmc_kernel(float* states, float* covs, bool* active, const float
 __global__ void predict_gmc_sinv_fused_kernel(
     float* states, float* covs, bool* active, int* age,
     const float* gmc, float* s_inv_out,
-    int max_objs, int max_age)
+    int max_objs, int max_age, float r_scale)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= max_objs) return;
@@ -147,27 +148,8 @@ __global__ void predict_gmc_sinv_fused_kernel(
         return;
     }
 
-    kf_gpu::compute_S_inv(states + idx * 8, covs + idx * 64, s_inv_out + idx * 16);
+    kf_gpu::compute_S_inv(states + idx * 8, covs + idx * 64, s_inv_out + idx * 16, 0.0f, r_scale);
 }
-// matched_pairs: [n_matched × 2] interleaved (track_slot, det_box_idx).
-__global__ void kalman_update_kernel(
-    float* states, float* covs, const float* det_boxes,
-    const int* matched_pairs, int n_matched, float light_factor)
-{
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= n_matched) return;
-    int t = matched_pairs[i * 2];
-    int d = matched_pairs[i * 2 + 1];
-    const float* box = det_boxes + d * 4;
-    float z[4] = {
-        (box[0] + box[2]) * 0.5f,
-        (box[1] + box[3]) * 0.5f,
-        (box[2] - box[0]) / fmaxf(box[3] - box[1], 1e-6f),
-        box[3] - box[1]
-    };
-    kf_gpu::update(states + t * 8, covs + t * 64, z, light_factor);
-}
-
 // Initialize covariance for newly spawned tracks.
 __global__ void init_covariance_kernel(float* covs, const int* new_slots, int n_new) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -214,22 +196,6 @@ __global__ void apply_detection_quality_scaling_kernel(
 
 namespace kernel {
 
-// Compute per-track S^-1 (innovation covariance inverse) after predict+GMC, before association.
-// Stores 16 floats (row-major 4x4) per track in s_inv_out.
-__global__ void compute_innovation_sinv_kernel(
-    const float* states, const float* covs, const bool* active,
-    float* s_inv_out, int max_objs)
-{
-    int t = blockIdx.x * blockDim.x + threadIdx.x;
-    if (t >= max_objs) return;
-    float* s_inv = s_inv_out + t * 16;
-    if (!active[t]) {
-        for (int i = 0; i < 16; ++i) s_inv[i] = 0.0f;
-        return;
-    }
-    kf_gpu::compute_S_inv(states + t * 8, covs + t * 64, s_inv);
-}
-
 // Returns Mahalanobis^2 between a detection (x1,y1,x2,y2) and a track predicted state.
 // If homography is provided, projects bottom-center to ground plane first (2D MMD).
 __device__ __forceinline__ float mahal_sq_det(
@@ -272,6 +238,17 @@ __device__ __forceinline__ float mahal_sq_det(
     return d2;
 }
 
+__device__ __forceinline__ tracking::Box4f state_box4(const float* state) {
+    const float w = state[2] * state[3];
+    const float h = state[3];
+    return {
+        state[0] - w * 0.5f,
+        state[1] - h * 0.5f,
+        state[0] + w * 0.5f,
+        state[1] + h * 0.5f,
+    };
+}
+
 // Counts per-track how many detections pass the Stage 1 gate:
 //   IoU > iou_gate  OR  Mahalanobis^2 < maha_gate
 __global__ void count_stage1_candidates_kernel(
@@ -285,17 +262,8 @@ __global__ void count_stage1_candidates_kernel(
     if (t >= n_trk || d >= n_det || !trk_active[t]) return;
 
     const float* st = trk_states + t * 8;
-    float tw = st[2] * st[3], th = st[3];
-    float b1_x1 = st[0] - tw * 0.5f, b1_y1 = st[1] - th * 0.5f;
-    float b1_x2 = st[0] + tw * 0.5f, b1_y2 = st[1] + th * 0.5f;
     const float* b2 = det_boxes + d * 4;
-
-    float ix1 = fmaxf(b1_x1, b2[0]), iy1 = fmaxf(b1_y1, b2[1]);
-    float ix2 = fminf(b1_x2, b2[2]), iy2 = fminf(b1_y2, b2[3]);
-    float inter = fmaxf(0.0f, ix2 - ix1) * fmaxf(0.0f, iy2 - iy1);
-    float area1 = (b1_x2 - b1_x1) * (b1_y2 - b1_y1);
-    float area2 = (b2[2] - b2[0]) * (b2[3] - b2[1]);
-    float iou = inter / (area1 + area2 - inter + 1e-6f);
+    float iou = tracking::iou(state_box4(st), tracking::load_box4(b2));
 
     bool pass = (iou > iou_gate);
     if (!pass && trk_s_inv) {
@@ -335,7 +303,7 @@ __global__ void compute_track_occlusion_kernel(
     float tw = st[2] * st[3], th = st[3];
     float tx1 = st[0] - tw * 0.5f, ty1 = st[1] - th * 0.5f;
     float tx2 = st[0] + tw * 0.5f, ty2 = st[1] + th * 0.5f;
-    float t_area = (tx2 - tx1) * (ty2 - ty1);
+    const tracking::Box4f t_box{tx1, ty1, tx2, ty2};
 
     // Union-coverage mode rasterises box t into an 8x8 grid; a cell is "covered"
     // when its centre falls inside any other active box. coverage = covered/64 in
@@ -373,12 +341,11 @@ __global__ void compute_track_occlusion_kernel(
         float jw = sj[2] * sj[3], jh = sj[3];
         float jx1 = sj[0] - jw * 0.5f, jy1 = sj[1] - jh * 0.5f;
         float jx2 = sj[0] + jw * 0.5f, jy2 = sj[1] + jh * 0.5f;
-        float j_area = (jx2 - jx1) * (jy2 - jy1);
         float ix1 = fmaxf(tx1, jx1), iy1 = fmaxf(ty1, jy1);
         float ix2 = fminf(tx2, jx2), iy2 = fminf(ty2, jy2);
-        float inter = fmaxf(0.0f, ix2 - ix1) * fmaxf(0.0f, iy2 - iy1);
-        if (inter <= 0.0f) continue;
-        float iou = inter / (t_area + j_area - inter + 1e-6f);
+        const tracking::Box4f j_box{jx1, jy1, jx2, jy2};
+        float iou = tracking::iou(t_box, j_box);
+        if (iou <= 0.0f) continue;
         if (iou > max_occ) { max_occ = iou; arg_partner = j; }
         bool h_ok = true;
         if (use_hgate) h_ok = (fabsf(th - jh) <= oao_height_gate * fmaxf(th, jh));
@@ -470,15 +437,7 @@ __device__ __forceinline__ bool oao_penalize_match(
     int p = occ_partner_all[t];
     if (p < 0) return false;
     const float* sp = trk_states + p * 8;
-    float pw = sp[2] * sp[3], ph = sp[3];
-    float px1 = sp[0] - pw * 0.5f, py1 = sp[1] - ph * 0.5f;
-    float px2 = sp[0] + pw * 0.5f, py2 = sp[1] + ph * 0.5f;
-    float ix1 = fmaxf(px1, det_box[0]), iy1 = fmaxf(py1, det_box[1]);
-    float ix2 = fminf(px2, det_box[2]), iy2 = fminf(py2, det_box[3]);
-    float inter = fmaxf(0.0f, ix2 - ix1) * fmaxf(0.0f, iy2 - iy1);
-    float pa = (px2 - px1) * (py2 - py1);
-    float ba = (det_box[2] - det_box[0]) * (det_box[3] - det_box[1]);
-    float iou = inter / (pa + ba - inter + 1e-6f);
+    float iou = tracking::iou(state_box4(sp), tracking::load_box4(det_box));
     return iou >= oao_contest_thresh;
 }
 
@@ -497,6 +456,7 @@ __global__ void stage1_cost_fused_kernel(
     const float* d_occ_coeff, float oao_tau,
     const int* occ_partner_all, float oao_contest_thresh, float oao_score_w,
     const int* occ_front_ttl, float occ_cost_weight,
+    bool use_multiplicative_cost, float stability_cost_w, float sinkhorn_lambda,
     int* cand_n, float* cand_costs, int* cand_indices, int cand_stride,
     float cand_cost_cap)
 {
@@ -507,17 +467,8 @@ __global__ void stage1_cost_fused_kernel(
     float* cost = cost_matrix + t * n_det + d;
 
     const float* st = trk_states + t * 8;
-    float tw = st[2] * st[3], th = st[3];
-    float b1_x1 = st[0] - tw * 0.5f, b1_y1 = st[1] - th * 0.5f;
-    float b1_x2 = st[0] + tw * 0.5f, b1_y2 = st[1] + th * 0.5f;
     const float* b2 = det_boxes + d * 4;
-
-    float ix1 = fmaxf(b1_x1, b2[0]), iy1 = fmaxf(b1_y1, b2[1]);
-    float ix2 = fminf(b1_x2, b2[2]), iy2 = fminf(b1_y2, b2[3]);
-    float inter = fmaxf(0.0f, ix2 - ix1) * fmaxf(0.0f, iy2 - iy1);
-    float area1 = (b1_x2 - b1_x1) * (b1_y2 - b1_y1);
-    float area2 = (b2[2] - b2[0]) * (b2[3] - b2[1]);
-    float iou = inter / (area1 + area2 - inter + 1e-6f);
+    float iou = tracking::iou(state_box4(st), tracking::load_box4(b2));
 
     bool pass_iou = (iou > iou_gate);
     if (!pass_iou) {
@@ -532,30 +483,71 @@ __global__ void stage1_cost_fused_kernel(
 
     float ds = det_scores ? det_scores[d] : 0.5f;
     float fused_iou = iou * (1.0f - fuse_score_weight * (1.0f - ds));
-    float iou_cost_val = 1.0f - fused_iou;
+    float iou_cost_val;
 
-    if (d_occ_coeff && oao_tau > 0.0f &&
-        oao_penalize_match(trk_states, occ_partner_all, t, b2, oao_contest_thresh))
-        iou_cost_val = fminf(1.0f, iou_cost_val + oao_tau * d_occ_coeff[t] * oao_score_scale(ds, oao_score_w));
+    if (use_multiplicative_cost) {
+        float penalty = 0.0f;
 
-    if (vel_dir_weight > 0.0f) {
-        float vx = st[4], vy = st[5];
-        float vel_sq = vx * vx + vy * vy;
-        if (vel_sq > 1.0f) {
-            float det_cx = (b2[0] + b2[2]) * 0.5f, det_cy = (b2[1] + b2[3]) * 0.5f;
-            float dx = det_cx - st[0], dy = det_cy - st[1];
-            float dist_sq = dx * dx + dy * dy;
-            if (dist_sq > 1e-6f) {
-                float cos_dir = (vx * dx + vy * dy) / sqrtf(vel_sq * dist_sq);
-                iou_cost_val += vel_dir_weight * fmaxf(0.0f, -cos_dir);
+        if (d_occ_coeff && oao_tau > 0.0f &&
+            oao_penalize_match(trk_states, occ_partner_all, t, b2, oao_contest_thresh))
+            penalty += oao_tau * d_occ_coeff[t] * oao_score_scale(ds, oao_score_w);
+
+        if (vel_dir_weight > 0.0f) {
+            float vx = st[4], vy = st[5];
+            float vel_sq = vx * vx + vy * vy;
+            if (vel_sq > 1.0f) {
+                float det_cx = (b2[0] + b2[2]) * 0.5f, det_cy = (b2[1] + b2[3]) * 0.5f;
+                float dx = det_cx - st[0], dy = det_cy - st[1];
+                float dist_sq = dx * dx + dy * dy;
+                if (dist_sq > 1e-6f) {
+                    float cos_dir = (vx * dx + vy * dy) / sqrtf(vel_sq * dist_sq);
+                    penalty += vel_dir_weight * fmaxf(0.0f, -cos_dir);
+                }
             }
         }
-    }
 
-    if (occ_front_ttl && occ_front_ttl[t] > 0 && occ_cost_weight > 0.0f) {
-        float footy_t = st[1] + st[3] * 0.5f;
-        float under = (footy_t - b2[3]) / fmaxf(st[3], 1e-3f);
-        if (under > 0.0f) iou_cost_val = fminf(1.0f, iou_cost_val + occ_cost_weight * under);
+        if (occ_front_ttl && occ_front_ttl[t] > 0 && occ_cost_weight > 0.0f) {
+            float footy_t = st[1] + st[3] * 0.5f;
+            float under = (footy_t - b2[3]) / fmaxf(st[3], 1e-3f);
+            if (under > 0.0f) penalty += occ_cost_weight * under;
+        }
+
+        // Stability reward normalized by λ → bid boost exp(stab) independent of λ.
+        if (stability_cost_w > 0.0f) {
+            float h_det = b2[3] - b2[1];
+            float h_diff = fabsf(st[3] - h_det);
+            float lam = fmaxf(sinkhorn_lambda, 1.0f);
+            penalty -= (stability_cost_w / lam) / (1.0f + h_diff / fmaxf(h_det, 1e-3f));
+        }
+
+        iou_cost_val = 1.0f - fused_iou * expf(-penalty);
+        iou_cost_val = fminf(1.0f, fmaxf(0.0f, iou_cost_val));
+    } else {
+        iou_cost_val = 1.0f - fused_iou;
+
+        if (d_occ_coeff && oao_tau > 0.0f &&
+            oao_penalize_match(trk_states, occ_partner_all, t, b2, oao_contest_thresh))
+            iou_cost_val = fminf(1.0f, iou_cost_val + oao_tau * d_occ_coeff[t] * oao_score_scale(ds, oao_score_w));
+
+        if (vel_dir_weight > 0.0f) {
+            float vx = st[4], vy = st[5];
+            float vel_sq = vx * vx + vy * vy;
+            if (vel_sq > 1.0f) {
+                float det_cx = (b2[0] + b2[2]) * 0.5f, det_cy = (b2[1] + b2[3]) * 0.5f;
+                float dx = det_cx - st[0], dy = det_cy - st[1];
+                float dist_sq = dx * dx + dy * dy;
+                if (dist_sq > 1e-6f) {
+                    float cos_dir = (vx * dx + vy * dy) / sqrtf(vel_sq * dist_sq);
+                    iou_cost_val += vel_dir_weight * fmaxf(0.0f, -cos_dir);
+                }
+            }
+        }
+
+        if (occ_front_ttl && occ_front_ttl[t] > 0 && occ_cost_weight > 0.0f) {
+            float footy_t = st[1] + st[3] * 0.5f;
+            float under = (footy_t - b2[3]) / fmaxf(st[3], 1e-3f);
+            if (under > 0.0f) iou_cost_val = fminf(1.0f, iou_cost_val + occ_cost_weight * under);
+        }
     }
 
     float final_cost = fminf(1.0f, iou_cost_val);
@@ -588,6 +580,7 @@ __global__ void compute_conditional_cost_kernel(
     const float* d_occ_coeff, float oao_tau,
     const int* occ_partner_all, float oao_contest_thresh, float oao_score_w,
     const int* occ_front_ttl, float occ_cost_weight,
+    bool use_multiplicative_cost, float stability_cost_w, float sinkhorn_lambda,
     int* cand_n, float* cand_costs, int* cand_indices, int cand_stride,
     float cand_cost_cap)
 {
@@ -596,17 +589,8 @@ __global__ void compute_conditional_cost_kernel(
     if (t >= n_trk || d >= n_det) return;
 
     const float* st = trk_states + t * 8;
-    float tw = st[2] * st[3], th = st[3];
-    float b1_x1 = st[0] - tw * 0.5f, b1_y1 = st[1] - th * 0.5f;
-    float b1_x2 = st[0] + tw * 0.5f, b1_y2 = st[1] + th * 0.5f;
     const float* b2 = det_boxes + d * 4;
-
-    float ix1 = fmaxf(b1_x1, b2[0]), iy1 = fmaxf(b1_y1, b2[1]);
-    float ix2 = fminf(b1_x2, b2[2]), iy2 = fminf(b1_y2, b2[3]);
-    float inter = fmaxf(0.0f, ix2 - ix1) * fmaxf(0.0f, iy2 - iy1);
-    float area1 = (b1_x2 - b1_x1) * (b1_y2 - b1_y1);
-    float area2 = (b2[2] - b2[0]) * (b2[3] - b2[1]);
-    float iou = inter / (area1 + area2 - inter + 1e-6f);
+    float iou = tracking::iou(state_box4(st), tracking::load_box4(b2));
 
     bool pass_iou = (iou > iou_gate);
     if (!pass_iou) {
@@ -645,32 +629,106 @@ __global__ void compute_conditional_cost_kernel(
         cost = iou_cost;
     }
 
-    // OC-SORT velocity direction penalty
-    if (vel_dir_weight > 0.0f) {
-        float vx = st[4], vy = st[5];
-        float vel_sq = vx * vx + vy * vy;
-        if (vel_sq > 1.0f) {
-            float det_cx = (b2[0] + b2[2]) * 0.5f, det_cy = (b2[1] + b2[3]) * 0.5f;
-            float dx = det_cx - st[0], dy = det_cy - st[1];
-            float dist_sq = dx * dx + dy * dy;
-            if (dist_sq > 1e-6f) {
-                float cos_dir = (vx * dx + vy * dy) / sqrtf(vel_sq * dist_sq);
-                cost += vel_dir_weight * fmaxf(0.0f, -cos_dir);
+    if (use_multiplicative_cost) {
+        // Multiplicative: accumulate penalties in log-space, then cost = 1 - Q * exp(-penalty)
+        float penalty = 0.0f;
+        float base_quality = fused_iou;
+        if (try_appearance) {
+            const float* e1 = trk_embeds + t * embed_dim;
+            const float* e2 = det_embeds + d * embed_dim;
+            float cos_sim = 0.0f, norm_sq = 0.0f;
+            for (int k = 0; k < embed_dim; ++k) {
+                cos_sim += e1[k] * e2[k];
+                norm_sq += e2[k] * e2[k];
+            }
+            if (norm_sq > 0.0625f) {
+                cos_sim = fmaxf(0.0f, cos_sim);
+                if (cos_sim >= cos_threshold && fused_iou >= iou_low)
+                    base_quality = cost_cos_w * cos_sim + cost_iou_w * fused_iou + cost_score_w * ds;
             }
         }
-    }
+        if (vel_dir_weight > 0.0f) {
+            float vx = st[4], vy = st[5];
+            float vel_sq = vx * vx + vy * vy;
+            if (vel_sq > 1.0f) {
+                float det_cx = (b2[0] + b2[2]) * 0.5f, det_cy = (b2[1] + b2[3]) * 0.5f;
+                float dx = det_cx - st[0], dy = det_cy - st[1];
+                float dist_sq = dx * dx + dy * dy;
+                if (dist_sq > 1e-6f) {
+                    float cos_dir = (vx * dx + vy * dy) / sqrtf(vel_sq * dist_sq);
+                    penalty += vel_dir_weight * fmaxf(0.0f, -cos_dir);
+                }
+            }
+        }
+        if (oao_tau > 0.0f && d_occ_coeff &&
+            oao_penalize_match(trk_states, occ_partner_all, t, b2, oao_contest_thresh))
+            penalty += oao_tau * d_occ_coeff[t] * oao_score_scale(ds, oao_score_w);
+        if (occ_front_ttl && occ_front_ttl[t] > 0 && occ_cost_weight > 0.0f) {
+            float footy_t = st[1] + st[3] * 0.5f;
+            float under = (footy_t - b2[3]) / fmaxf(st[3], 1e-3f);
+            if (under > 0.0f) penalty += occ_cost_weight * under;
+        }
+        // Stability reward term (λ-normalized, see stage1_cost_fused_kernel)
+        if (stability_cost_w > 0.0f) {
+            float h_det = b2[3] - b2[1];
+            float h_diff = fabsf(st[3] - h_det);
+            float lam = fmaxf(sinkhorn_lambda, 1.0f);
+            penalty -= (stability_cost_w / lam) / (1.0f + h_diff / fmaxf(h_det, 1e-3f));
+        }
+        cost = 1.0f - base_quality * expf(-penalty);
+        cost = fminf(1.0f, fmaxf(0.0f, cost));
+    } else {
+        // Legacy additive form (bit-identical)
+        if (try_appearance) {
+            const float* e1 = trk_embeds + t * embed_dim;
+            const float* e2 = det_embeds + d * embed_dim;
+            float cos_sim = 0.0f, norm_sq = 0.0f;
+            for (int k = 0; k < embed_dim; ++k) {
+                cos_sim += e1[k] * e2[k];
+                norm_sq += e2[k] * e2[k];
+            }
+            if (norm_sq > 0.0625f) {
+                cos_sim = fmaxf(0.0f, cos_sim);
+                if (cos_sim >= cos_threshold && fused_iou >= iou_low) {
+                    float app_cost = 1.0f - (cost_cos_w * cos_sim + cost_iou_w * fused_iou + cost_score_w * ds);
+                    cost = fminf(iou_cost, app_cost);
+                } else {
+                    cost = iou_cost;
+                }
+            } else {
+                cost = iou_cost;
+            }
+        } else {
+            cost = iou_cost;
+        }
 
-    // OA-SORT OAO: tracks occluded by other tracks get a cost penalty to prevent cost confusion
-    if (oao_tau > 0.0f && d_occ_coeff &&
-        oao_penalize_match(trk_states, occ_partner_all, t, b2, oao_contest_thresh)) {
-        cost = fminf(1.0f, cost + oao_tau * d_occ_coeff[t] * oao_score_scale(ds, oao_score_w));
-    }
+        // OC-SORT velocity direction penalty
+        if (vel_dir_weight > 0.0f) {
+            float vx = st[4], vy = st[5];
+            float vel_sq = vx * vx + vy * vy;
+            if (vel_sq > 1.0f) {
+                float det_cx = (b2[0] + b2[2]) * 0.5f, det_cy = (b2[1] + b2[3]) * 0.5f;
+                float dx = det_cx - st[0], dy = det_cy - st[1];
+                float dist_sq = dx * dx + dy * dy;
+                if (dist_sq > 1e-6f) {
+                    float cos_dir = (vx * dx + vy * dy) / sqrtf(vel_sq * dist_sq);
+                    cost += vel_dir_weight * fmaxf(0.0f, -cos_dir);
+                }
+            }
+        }
 
-    // Occluder-side depth mutual-exclusion (see stage1_cost_fused_kernel).
-    if (occ_front_ttl && occ_front_ttl[t] > 0 && occ_cost_weight > 0.0f) {
-        float footy_t = st[1] + st[3] * 0.5f;
-        float under = (footy_t - b2[3]) / fmaxf(st[3], 1e-3f);
-        if (under > 0.0f) cost = fminf(1.0f, cost + occ_cost_weight * under);
+        // OA-SORT OAO: tracks occluded by other tracks get a cost penalty to prevent cost confusion
+        if (oao_tau > 0.0f && d_occ_coeff &&
+            oao_penalize_match(trk_states, occ_partner_all, t, b2, oao_contest_thresh)) {
+            cost = fminf(1.0f, cost + oao_tau * d_occ_coeff[t] * oao_score_scale(ds, oao_score_w));
+        }
+
+        // Occluder-side depth mutual-exclusion (see stage1_cost_fused_kernel).
+        if (occ_front_ttl && occ_front_ttl[t] > 0 && occ_cost_weight > 0.0f) {
+            float footy_t = st[1] + st[3] * 0.5f;
+            float under = (footy_t - b2[3]) / fmaxf(st[3], 1e-3f);
+            if (under > 0.0f) cost = fminf(1.0f, cost + occ_cost_weight * under);
+        }
     }
 
     float final_cost = fminf(1.0f, fmaxf(0.0f, cost));
@@ -689,16 +747,23 @@ __global__ void compute_conditional_cost_kernel(
 #define SINKHORN_NUM_STAGES 5
 #define SINKHORN_NUM_TOPK   3
 
-__device__ __forceinline__ void merge_top3_fixed(float* a_v, int* a_idx, const float* b_v, const int* b_idx) {
-    float res_v[3]; int res_idx[3];
-    int i = 0, j = 0;
+template <int NK>
+__device__ __forceinline__ void insert_topk_fixed(
+    float* vals, int* idxs, int stage, float val, int idx)
+{
+    int base = stage * NK;
     #pragma unroll
-    for (int k = 0; k < 3; ++k) {
-        if (a_v[i] >= b_v[j]) { res_v[k] = a_v[i]; res_idx[k] = a_idx[i]; i++; }
-        else { res_v[k] = b_v[j]; res_idx[k] = b_idx[j]; j++; }
+    for (int pos = 0; pos < NK; ++pos) {
+        if (val <= vals[base + pos]) continue;
+        #pragma unroll
+        for (int shift = NK - 1; shift > pos; --shift) {
+            vals[base + shift] = vals[base + shift - 1];
+            idxs[base + shift] = idxs[base + shift - 1];
+        }
+        vals[base + pos] = val;
+        idxs[base + pos] = idx;
+        break;
     }
-    #pragma unroll
-    for (int k = 0; k < 3; ++k) { a_v[k] = res_v[k]; a_idx[k] = res_idx[k]; }
 }
 
 __global__ void compute_cost_matrix_kernel(
@@ -712,8 +777,7 @@ __global__ void compute_cost_matrix_kernel(
     if (t >= n_trk || d >= n_det) return;
 
     const float* st = trk_states + t * 8;
-    float tw = st[2] * st[3], th = st[3];
-    float b1[4] = {st[0] - tw/2.0f, st[1] - th/2.0f, st[0] + tw/2.0f, st[1] + th/2.0f};
+    const tracking::Box4f b1 = state_box4(st);
     const float* b2 = det_boxes + d * 4;
 
     float dx = st[0] - (b2[0] + b2[2]) * 0.5f;
@@ -725,10 +789,7 @@ __global__ void compute_cost_matrix_kernel(
         cost_matrix[t * n_det + d] = 1.0f; return;
     }
 
-    float x1 = fmaxf(b1[0], b2[0]), y1 = fmaxf(b1[1], b2[1]), x2 = fminf(b1[2], b2[2]), y2 = fminf(b1[3], b2[3]);
-    float inter = fmaxf(0.0f, x2 - x1) * fmaxf(0.0f, y2 - y1);
-    float area1 = (b1[2] - b1[0]) * (b1[3] - b1[1]), area2 = (b2[2] - b2[0]) * (b2[3] - b2[1]);
-    float iou = inter / (area1 + area2 - inter + 1e-6f);
+    float iou = tracking::iou(b1, tracking::load_box4(b2));
 
     float cos_sim = 0.0f;
     if (trk_embeds && det_embeds) {
@@ -801,36 +862,24 @@ __global__ void fused_sinkhorn_multistage_kernel(
 
             if (score >= high_thresh && score < 1.1f) {
                 if (st2 && cost <= dda_max_cost) {
-                    if (p > lv[0*NK+0]) { lv[0*NK+2]=lv[0*NK+1];li[0*NK+2]=li[0*NK+1];lv[0*NK+1]=lv[0*NK+0];li[0*NK+1]=li[0*NK+0];lv[0*NK+0]=p;li[0*NK+0]=d; }
-                    else if (p > lv[0*NK+1]) { lv[0*NK+2]=lv[0*NK+1];li[0*NK+2]=li[0*NK+1];lv[0*NK+1]=p;li[0*NK+1]=d; }
-                    else if (p > lv[0*NK+2]) { lv[0*NK+2]=p;li[0*NK+2]=d; }
+                    insert_topk_fixed<NK>(lv, li, 0, p, d);
                 }
                 if (st2 && cost <= match_thresh) {
-                    if (p > lv[1*NK+0]) { lv[1*NK+2]=lv[1*NK+1];li[1*NK+2]=li[1*NK+1];lv[1*NK+1]=lv[1*NK+0];li[1*NK+1]=li[1*NK+0];lv[1*NK+0]=p;li[1*NK+0]=d; }
-                    else if (p > lv[1*NK+1]) { lv[1*NK+2]=lv[1*NK+1];li[1*NK+2]=li[1*NK+1];lv[1*NK+1]=p;li[1*NK+1]=d; }
-                    else if (p > lv[1*NK+2]) { lv[1*NK+2]=p;li[1*NK+2]=d; }
+                    insert_topk_fixed<NK>(lv, li, 1, p, d);
                 }
                 if (st1 && cost <= match_thresh) {
-                    if (p > lv[3*NK+0]) { lv[3*NK+2]=lv[3*NK+1];li[3*NK+2]=li[3*NK+1];lv[3*NK+1]=lv[3*NK+0];li[3*NK+1]=li[3*NK+0];lv[3*NK+0]=p;li[3*NK+0]=d; }
-                    else if (p > lv[3*NK+1]) { lv[3*NK+2]=lv[3*NK+1];li[3*NK+2]=li[3*NK+1];lv[3*NK+1]=p;li[3*NK+1]=d; }
-                    else if (p > lv[3*NK+2]) { lv[3*NK+2]=p;li[3*NK+2]=d; }
+                    insert_topk_fixed<NK>(lv, li, 3, p, d);
                 }
             } else if (score >= mid_thresh) {
                 if (st2 && cost <= match_thresh) {
-                    if (p > lv[2*NK+0]) { lv[2*NK+2]=lv[2*NK+1];li[2*NK+2]=li[2*NK+1];lv[2*NK+1]=lv[2*NK+0];li[2*NK+1]=li[2*NK+0];lv[2*NK+0]=p;li[2*NK+0]=d; }
-                    else if (p > lv[2*NK+1]) { lv[2*NK+2]=lv[2*NK+1];li[2*NK+2]=li[2*NK+1];lv[2*NK+1]=p;li[2*NK+1]=d; }
-                    else if (p > lv[2*NK+2]) { lv[2*NK+2]=p;li[2*NK+2]=d; }
+                    insert_topk_fixed<NK>(lv, li, 2, p, d);
                 }
                 if (st1 && cost <= match_thresh) {
-                    if (p > lv[3*NK+0]) { lv[3*NK+2]=lv[3*NK+1];li[3*NK+2]=li[3*NK+1];lv[3*NK+1]=lv[3*NK+0];li[3*NK+1]=li[3*NK+0];lv[3*NK+0]=p;li[3*NK+0]=d; }
-                    else if (p > lv[3*NK+1]) { lv[3*NK+2]=lv[3*NK+1];li[3*NK+2]=li[3*NK+1];lv[3*NK+1]=p;li[3*NK+1]=d; }
-                    else if (p > lv[3*NK+2]) { lv[3*NK+2]=p;li[3*NK+2]=d; }
+                    insert_topk_fixed<NK>(lv, li, 3, p, d);
                 }
             } else if (score >= track_thresh) {
                 if (st2 && cost <= stage2_match_thresh) {
-                    if (p > lv[4*NK+0]) { lv[4*NK+2]=lv[4*NK+1];li[4*NK+2]=li[4*NK+1];lv[4*NK+1]=lv[4*NK+0];li[4*NK+1]=li[4*NK+0];lv[4*NK+0]=p;li[4*NK+0]=d; }
-                    else if (p > lv[4*NK+1]) { lv[4*NK+2]=lv[4*NK+1];li[4*NK+2]=li[4*NK+1];lv[4*NK+1]=p;li[4*NK+1]=d; }
-                    else if (p > lv[4*NK+2]) { lv[4*NK+2]=p;li[4*NK+2]=d; }
+                    insert_topk_fixed<NK>(lv, li, 4, p, d);
                 }
             }
         }
@@ -1657,6 +1706,7 @@ __global__ void relink_bidir_propose_kernel(
     float bridge_max_speed, float bridge_person_height, float bridge_fps,
     float bridge_margin, float bridge_spatial_gate, int bridge_anchor,
     float bridge_anchor_rate, float bridge_h_lo, float bridge_h_hi,
+    float bridge_dir_bonus,
     const unsigned int* occ_grid, const int* occ_frame,
     float occ_gate_cover, int occ_gap_min, float occ_expand_px, float occ_expand_cover,
     int frame_w, int frame_h,
@@ -1743,12 +1793,44 @@ __global__ void relink_bidir_propose_kernel(
         float s_lost = sqrtf(vxl * vxl + vyl * vyl) / h_ref;           // exit speed (h/f)
         float w = sqrtf(fminf(fmaxf(s_lost / 0.12f, 0.0f), 1.0f));
         float bdist = w * 0.5f * (fwd_r + bwd_r) + (1.0f - w) * dist_h;
+        // Directional bridge: when velocities point the same way, speed
+        // mismatch along the track may be due to acceleration.  Decompose
+        // forward/backward extrapolation errors into along-track and cross-track
+        // components; blend towards cross-track-only distance.
+        // Activation scales with speed — slow tracks have noisy direction.
+        if (bridge_dir_bonus > 0.0f) {
+            float sl = sqrtf(vxl * vxl + vyl * vyl);
+            float sc = sqrtf(vxc * vxc + vyc * vyc);
+            float min_speed = fminf(sl, sc);
+            float speed_trust = fminf(min_speed / fmaxf(h_ref * 0.005f, 1e-3f), 1.0f);
+            if (speed_trust > 0.0f) {
+                float cos_sim = (vxl * vxc + vyl * vyc) / fmaxf(sl * sc, 1e-9f);
+                if (cos_sim > 0.5f) {
+                    float ux = vxl / sl + vxc / sc;
+                    float uy = vyl / sl + vyc / sc;
+                    float un = sqrtf(ux * ux + uy * uy);
+                    ux /= un; uy /= un;
+                    float px = -uy, py = ux;
+                    float fe_x = (lx + vxl * la) - cx0;
+                    float fe_y = (ly + vyl * la) - cy0;
+                    float fwd_cross = fabsf(fe_x * px + fe_y * py) / h_ref;
+                    float be_x = (cx0 - vxc * la) - lx;
+                    float be_y = (cy0 - vyc * la) - ly;
+                    float bwd_cross = fabsf(be_x * px + be_y * py) / h_ref;
+                    float bdist_dir = 0.5f * (fwd_cross + bwd_cross);
+                    float gap_scale = fminf((float)la / 30.0f, 1.0f);
+                    float alpha = bridge_dir_bonus * cos_sim * cos_sim * speed_trust * gap_scale;
+                    alpha = fminf(alpha, 1.0f);
+                    bdist = bdist * (1.0f - alpha) + bdist_dir * alpha;
+                }
+            }
+        }
+        bool ok = bdist <= bridge_px;
+        int gap_len = la - bridge_at + 1;
         // Gap-occupancy gate (long gaps only). Veto: an unexplained long-gap
         // bridge (path not covered by another track) is likely a different
         // person. Tiered expansion: a highly-covered path unlocks a looser
         // bridge_px. occ<0 (no valid sample) passes through both.
-        bool ok = bdist <= bridge_px;
-        int gap_len = la - bridge_at + 1;
         if (occ_grid && gap_len >= occ_gap_min) {
             bool expandable = !ok && occ_expand_px > bridge_px && bdist <= occ_expand_px;
             if (occ_gate_cover > 0.0f || expandable) {
@@ -2117,7 +2199,7 @@ public:
         max_assoc_ = 1024;
         // 128-byte alignment per stage: pad stage_stride to 32-element multiple
         // (32 elems × 4 bytes = 128 bytes per stage)
-        sinkhorn_stage_stride_ = ((max_objs_ * 3 + 31) / 32) * 32;
+        sinkhorn_stage_stride_ = ((max_objs_ * SINKHORN_NUM_TOPK + 31) / 32) * 32;
         int topk_total = SINKHORN_NUM_STAGES * sinkhorn_stage_stride_;
         checkCuda(cudaMalloc(&d_cost_matrix_, max_objs_ * max_assoc_ * sizeof(float)));
         checkCuda(cudaMalloc(&d_sinkhorn_v_, max_assoc_ * sizeof(float)));
@@ -2278,12 +2360,16 @@ public:
         cudaFree(d_track_id_ctr_);
         cudaFree(d_res_boxes_); cudaFree(d_res_scores_); cudaFree(d_res_ids_);
         cudaFree(d_res_classes_); cudaFree(d_res_det_idx_); cudaFree(d_res_count_);
-        // Relink lost-bank (allocated lazily in set_relink_params)
-        if (d_relink_feats_) {
-            cudaFree(d_relink_feats_); cudaFree(d_relink_ids_); cudaFree(d_relink_pos_);
-            cudaFree(d_relink_lostage_); cudaFree(d_relink_valid_); cudaFree(d_relink_cursor_);
-            cudaFree(d_det_revive_id_); cudaFree(d_relink_dbg_);
-        }
+        // Relink lost-bank/debug buffers are allocated lazily and independently:
+        // bidirectional bridge can allocate only d_relink_dbg_.
+        if (d_relink_feats_) cudaFree(d_relink_feats_);
+        if (d_relink_ids_) cudaFree(d_relink_ids_);
+        if (d_relink_pos_) cudaFree(d_relink_pos_);
+        if (d_relink_lostage_) cudaFree(d_relink_lostage_);
+        if (d_relink_valid_) cudaFree(d_relink_valid_);
+        if (d_relink_cursor_) cudaFree(d_relink_cursor_);
+        if (d_det_revive_id_) cudaFree(d_det_revive_id_);
+        if (d_relink_dbg_) cudaFree(d_relink_dbg_);
     }
 
     std::vector<TrackResult> update(float* d_boxes, float* d_scores, int* d_classes, int num_dets,
@@ -2294,20 +2380,24 @@ public:
             d_boxes, d_scores, d_classes, num_dets, stream, d_embeddings, d_gmc,
             light_factor, mid_thresh_scale);
 
-        // Single blocking D2H: waits for all prior stream work
+        // D2H reads must be ordered on the caller's stream. A plain cudaMemcpy
+        // uses the default stream and does not reliably wait for PyTorch's
+        // non-default current stream before host result materialization.
         int n_res = 0;
-        checkCuda(cudaMemcpy(&n_res, d_res_count_, sizeof(int), cudaMemcpyDeviceToHost));
+        checkCuda(cudaMemcpyAsync(&n_res, d_res_count_, sizeof(int), cudaMemcpyDeviceToHost, stream));
+        checkCuda(cudaStreamSynchronize(stream));
 
         std::vector<TrackResult> results(static_cast<size_t>(n_res));
         if (n_res > 0) {
             std::vector<float> hb(n_res * 4);
             std::vector<float> hs(n_res);
             std::vector<int>   hi(n_res), hc(n_res), hd(n_res);
-            checkCuda(cudaMemcpy(hb.data(), d_res_boxes_,   n_res * 4 * sizeof(float), cudaMemcpyDeviceToHost));
-            checkCuda(cudaMemcpy(hs.data(), d_res_scores_,  n_res *     sizeof(float), cudaMemcpyDeviceToHost));
-            checkCuda(cudaMemcpy(hi.data(), d_res_ids_,     n_res *     sizeof(int),   cudaMemcpyDeviceToHost));
-            checkCuda(cudaMemcpy(hc.data(), d_res_classes_, n_res *     sizeof(int),   cudaMemcpyDeviceToHost));
-            checkCuda(cudaMemcpy(hd.data(), d_res_det_idx_, n_res *     sizeof(int),   cudaMemcpyDeviceToHost));
+            checkCuda(cudaMemcpyAsync(hb.data(), d_res_boxes_,   n_res * 4 * sizeof(float), cudaMemcpyDeviceToHost, stream));
+            checkCuda(cudaMemcpyAsync(hs.data(), d_res_scores_,  n_res *     sizeof(float), cudaMemcpyDeviceToHost, stream));
+            checkCuda(cudaMemcpyAsync(hi.data(), d_res_ids_,     n_res *     sizeof(int),   cudaMemcpyDeviceToHost, stream));
+            checkCuda(cudaMemcpyAsync(hc.data(), d_res_classes_, n_res *     sizeof(int),   cudaMemcpyDeviceToHost, stream));
+            checkCuda(cudaMemcpyAsync(hd.data(), d_res_det_idx_, n_res *     sizeof(int),   cudaMemcpyDeviceToHost, stream));
+            checkCuda(cudaStreamSynchronize(stream));
             for (int i = 0; i < n_res; ++i)
                 results[i] = {hb[i*4], hb[i*4+1], hb[i*4+2], hb[i*4+3],
                                hi[i], hs[i], hc[i], hd[i]};
@@ -2361,7 +2451,7 @@ public:
                 d_relink_lostage_, d_relink_valid_, relink_bank_cap_, relink_max_age_);
         }
         predict_gmc_sinv_fused_kernel<<<blocks, threads, 0, stream>>>(
-            d_states_, d_covs_, d_active_, d_age_, d_gmc, d_s_inv_, max_objs_, max_age_);
+            d_states_, d_covs_, d_active_, d_age_, d_gmc, d_s_inv_, max_objs_, max_age_, r_scale_);
 
         // Association: always launch with fixed grid; kernels guard with
         // idx >= num_dets or tau == 0.
@@ -2403,6 +2493,7 @@ public:
                 oao_tau_ > 0.0f ? d_occ_coeff_ : nullptr, oao_tau_,
                 oao_contest_on ? d_occ_partner_all_ : nullptr, oao_contest_thresh_, oao_score_w_,
                 occ_state_enabled_ ? d_occ_front_ttl_ : nullptr, occ_cost_weight_,
+                multiplicative_cost_, stability_cost_w_, sinkhorn_lambda_,
                 d_cand_n_, d_cand_costs_, d_cand_indices_, cand_stride_, cand_cost_cap);
         } else {
             checkCuda(cudaMemsetAsync(d_candidate_count_, 0, max_objs_ * sizeof(int), stream));
@@ -2416,6 +2507,7 @@ public:
                 oao_tau_ > 0.0f ? d_occ_coeff_ : nullptr, oao_tau_,
                 oao_contest_on ? d_occ_partner_all_ : nullptr, oao_contest_thresh_, oao_score_w_,
                 occ_state_enabled_ ? d_occ_front_ttl_ : nullptr, occ_cost_weight_,
+                multiplicative_cost_, stability_cost_w_, sinkhorn_lambda_,
                 d_cand_n_, d_cand_costs_, d_cand_indices_, cand_stride_, cand_cost_cap);
         }
         nvtxRangePop();
@@ -2438,7 +2530,7 @@ public:
         kernel::fused_sinkhorn_multistage_kernel<<<max_objs_, 128, 0, stream>>>(
             d_cand_costs_, d_cand_indices_, d_cand_n_, cand_stride_,
             d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
-            max_objs_, 30.0f,
+            max_objs_, sinkhorn_lambda_,
             dda_max_cost_, match_thresh_, stage2_match_thresh_,
             high_thresh_, effective_mid_thresh, track_thresh_,
             sinkhorn_stage_stride_,
@@ -2477,7 +2569,7 @@ public:
             kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
                 d_topk_indices_ + off, d_topk_probs_ + off, d_auction_prices_,
                 d_trk_to_det_, d_det_to_trk_,
-                d_pending_det_, d_pending_bid_, max_objs_, num_dets, 3, 0.01f,
+                d_pending_det_, d_pending_bid_, max_objs_, num_dets, SINKHORN_NUM_TOPK, 0.01f,
                 d_age_, freshness_w, d_hit_streak_, history_w,
                 d_states_, d_boxes, stability_w);
             kernel::commit_auction_results_kernel<<<auc_g, auc_b, 0, stream>>>(
@@ -2643,6 +2735,7 @@ public:
                 bridge_max_speed_, bridge_person_height_, bridge_fps_,
                 bridge_margin_, bridge_spatial_gate_, bridge_anchor_, bridge_anchor_rate_,
                 bridge_h_lo_, bridge_h_hi_,
+                bridge_dir_bonus_,
                 occ_on ? d_occ_grid_ : nullptr, occ_on ? d_occ_frame_ : nullptr,
                 occ_gate_cover_, occ_gap_min_, occ_expand_px_, occ_expand_cover_,
                 frame_w_, frame_h_,
@@ -2701,6 +2794,7 @@ public:
                            float bridge_spatial_gate = 0.0f, int bridge_anchor = 0,
                            float bridge_anchor_rate = 0.0f,
                            float bridge_h_lo = 0.0f, float bridge_h_hi = 0.0f,
+                           float bridge_dir_bonus = 0.0f,
                            float occ_gate_cover = 0.0f, int occ_gap_min = 30,
                            float occ_expand_px = 0.0f, float occ_expand_cover = 0.9f) {
         relink_enabled_ = enabled;
@@ -2724,6 +2818,7 @@ public:
         bridge_anchor_rate_ = std::max(0.0f, bridge_anchor_rate);
         bridge_h_lo_ = std::max(0.0f, bridge_h_lo);
         bridge_h_hi_ = std::max(0.0f, bridge_h_hi);
+        bridge_dir_bonus_ = std::max(0.0f, bridge_dir_bonus);
         occ_gate_cover_ = std::clamp(occ_gate_cover, 0.0f, 1.0f);
         occ_gap_min_ = std::max(1, occ_gap_min);
         occ_expand_px_ = std::max(0.0f, occ_expand_px);
@@ -2736,11 +2831,21 @@ public:
             checkCuda(cudaMemset(d_occ_grid_, 0, (size_t)OCC_RING * OCC_WORDS * sizeof(unsigned int)));
             checkCuda(cudaMemset(d_occ_frame_, 0, sizeof(int)));
         }
-        // The bridge writes bridge_attempts/accepts into d_relink_dbg_[2..3]; make
-        // sure the debug buffer exists even if the appearance bank is disabled.
-        if (bidirectional_ && d_relink_dbg_ == nullptr) {
+        // Appearance relink writes births/revives into d_relink_dbg_[0..1], and
+        // bridge relink writes attempts/accepts into d_relink_dbg_[2..3].
+        if ((enabled || bidirectional_) && d_relink_dbg_ == nullptr) {
             checkCuda(cudaMalloc(&d_relink_dbg_, 4 * sizeof(int)));
             checkCuda(cudaMemset(d_relink_dbg_, 0, 4 * sizeof(int)));
+        }
+        if (enabled && d_relink_feats_ != nullptr && relink_alloc_cap_ < relink_bank_cap_) {
+            cudaFree(d_relink_feats_); d_relink_feats_ = nullptr;
+            cudaFree(d_relink_ids_); d_relink_ids_ = nullptr;
+            cudaFree(d_relink_pos_); d_relink_pos_ = nullptr;
+            cudaFree(d_relink_lostage_); d_relink_lostage_ = nullptr;
+            cudaFree(d_relink_valid_); d_relink_valid_ = nullptr;
+            cudaFree(d_relink_cursor_); d_relink_cursor_ = nullptr;
+            cudaFree(d_det_revive_id_); d_det_revive_id_ = nullptr;
+            relink_alloc_cap_ = 0;
         }
         if (enabled && d_relink_feats_ == nullptr) {
             int cap = relink_bank_cap_;
@@ -2751,13 +2856,10 @@ public:
             checkCuda(cudaMalloc(&d_relink_valid_, cap * sizeof(int)));
             checkCuda(cudaMalloc(&d_relink_cursor_, sizeof(int)));
             checkCuda(cudaMalloc(&d_det_revive_id_, max_assoc_ * sizeof(int)));
-            if (d_relink_dbg_ == nullptr) {  // may already exist if bidirectional was enabled first
-                checkCuda(cudaMalloc(&d_relink_dbg_, 4 * sizeof(int)));
-                checkCuda(cudaMemset(d_relink_dbg_, 0, 4 * sizeof(int)));
-            }
             checkCuda(cudaMemset(d_relink_valid_, 0, cap * sizeof(int)));
             checkCuda(cudaMemset(d_relink_lostage_, 0, cap * sizeof(int)));
             checkCuda(cudaMemset(d_relink_cursor_, 0, sizeof(int)));
+            relink_alloc_cap_ = cap;
         }
     }
     // Debug accumulated over the sequence:
@@ -2792,6 +2894,15 @@ public:
         occ_foot_gap_ = std::max(0.0f, foot_gap);
         occ_ttl_ = std::max(1, ttl);
         occ_cost_weight_ = std::max(0.0f, cost_weight);
+    }
+    void set_multiplicative_cost_pub(bool enabled) {
+        multiplicative_cost_ = enabled;
+    }
+    void set_stability_cost_w_pub(float w) {
+        stability_cost_w_ = w;
+    }
+    void set_sinkhorn_lambda(float lambda) {
+        sinkhorn_lambda_ = std::max(1.0f, lambda);
     }
     /// Read back front-ttl and partner-slot arrays to host (env-gated diagnostic; only
     /// called when occ_state_enabled_ is true and SACCADE_OCC_LOG is set).
@@ -3108,6 +3219,7 @@ private:
     float relink_sim_thresh_ = 0.6f, relink_age_alpha_ = 0.1f, relink_spatial_gate_ = 4.0f;
     float relink_lambda_ = 2.5f;  // Chebyshev T = mu - lambda*sigma
     int relink_max_age_ = 300;
+    int relink_alloc_cap_ = 0;
     float* d_relink_feats_ = nullptr;
     int*   d_relink_ids_ = nullptr;
     float* d_relink_pos_ = nullptr;
@@ -3133,6 +3245,7 @@ private:
     float bridge_anchor_rate_   = 0.0f; // adaptive deformation gate (mean |Δh|/h̄); 0=always-on
     float bridge_h_lo_          = 0.0f; // scale gate: min ema_lost/ema_cand ratio
     float bridge_h_hi_          = 0.0f; // scale gate: max ratio (<=0 disables the gate)
+    float bridge_dir_bonus_     = 0.0f; // directional consistency relaxation multiplier
     float occ_gate_cover_       = 0.0f; // gap-occupancy veto: min occ_cover (0=off)
     int   occ_gap_min_          = 30;   // occ gates apply only to gaps >= this (short-gap occ is noise)
     float occ_expand_px_        = 0.0f; // tiered expansion: looser bridge_px when occ high (0=off)
@@ -3197,6 +3310,9 @@ private:
     float occ_foot_gap_      = 0.15f;  // same-height gate: flag only at similar depth
     int   occ_ttl_           = 4;
     float occ_cost_weight_   = 0.50f;
+    bool  multiplicative_cost_ = false;
+    float stability_cost_w_    = 0.0f;
+    float sinkhorn_lambda_     = 30.0f;  // Sinkhorn temperature (cost→prob scaling)
     bool enable_dda_ = false;
     float dda_max_cost_ = 0.12f;
     float *d_states_, *d_covs_, *d_scores_, *d_features_;
@@ -3282,13 +3398,14 @@ void GPUByteTracker::set_relink_params(bool enabled, int bank_cap, float sim_thr
                                        float bridge_margin, float bridge_spatial_gate,
                                        int bridge_anchor, float bridge_anchor_rate,
                                        float bridge_h_lo, float bridge_h_hi,
+                                       float bridge_dir_bonus,
                                        float occ_gate_cover, int occ_gap_min,
                                        float occ_expand_px, float occ_expand_cover) {
     pimpl_->set_relink_params(enabled, bank_cap, sim_thresh, cheb_lambda, spatial_gate, max_age,
                               bidirectional, bridge_px, bridge_at, bridge_min_lost, bridge_ttl,
                               bridge_max_speed, bridge_person_height, bridge_fps, bridge_margin,
                               bridge_spatial_gate, bridge_anchor, bridge_anchor_rate,
-                              bridge_h_lo, bridge_h_hi,
+                              bridge_h_lo, bridge_h_hi, bridge_dir_bonus,
                               occ_gate_cover, occ_gap_min, occ_expand_px, occ_expand_cover);
 }
 std::vector<int> GPUByteTracker::get_relink_debug() { return pimpl_->get_relink_debug(); }
@@ -3302,6 +3419,18 @@ void GPUByteTracker::set_oao_params(float tau, float contest_thresh, float score
 void GPUByteTracker::set_occ_params(bool enabled, float iou_thresh, float foot_gap,
                                     int ttl, float cost_weight) {
     pimpl_->set_occ_params(enabled, iou_thresh, foot_gap, ttl, cost_weight);
+}
+
+void GPUByteTracker::set_multiplicative_cost(bool enabled) {
+    pimpl_->set_multiplicative_cost_pub(enabled);
+}
+
+void GPUByteTracker::set_stability_cost_w(float w) {
+    pimpl_->set_stability_cost_w_pub(w);
+}
+
+void GPUByteTracker::set_sinkhorn_lambda(float lambda) {
+    pimpl_->set_sinkhorn_lambda(lambda);
 }
 
 std::vector<int> GPUByteTracker::get_occ_front_info() {
@@ -3343,14 +3472,7 @@ TrackerGPUBuffers GPUByteTracker::get_gpu_buffers() const { return pimpl_->get_g
 std::vector<TrackCandidateSnapshot> GPUByteTracker::get_tentative_candidates(cudaStream_t stream) { return pimpl_->get_tentative_candidates(stream); }
 
 __device__ float get_iou_device(const float* b1, const float* b2) {
-    const float x1 = fmaxf(b1[0], b2[0]);
-    const float y1 = fmaxf(b1[1], b2[1]);
-    const float x2 = fminf(b1[2], b2[2]);
-    const float y2 = fminf(b1[3], b2[3]);
-    const float inter = fmaxf(0.0f, x2 - x1) * fmaxf(0.0f, y2 - y1);
-    const float area1 = fmaxf(0.0f, b1[2] - b1[0]) * fmaxf(0.0f, b1[3] - b1[1]);
-    const float area2 = fmaxf(0.0f, b2[2] - b2[0]) * fmaxf(0.0f, b2[3] - b2[1]);
-    return inter / (area1 + area2 - inter + 1e-6f);
+    return tracking::iou(tracking::load_box4(b1), tracking::load_box4(b2));
 }
 
 __device__ bool is_box_near_tiled_seam_device(
@@ -3360,48 +3482,16 @@ __device__ bool is_box_near_tiled_seam_device(
     int frame_h,
     float seam_margin_canvas_px
 ) {
-    if (tiling_mode <= 0 || frame_w <= 0 || frame_h <= 0) return false;
-    const float r = 960.0f / fmaxf((float)frame_h, (float)frame_w);
-    const int h_new = (int)((float)frame_h * r);
-    const int w_new = (int)((float)frame_w * r);
-    const float y_off = (float)((960 - h_new) / 2);
-    const float x_off = (float)((960 - w_new) / 2);
-    const float seam_margin_orig = seam_margin_canvas_px / fmaxf(r, 1e-6f);
-    const float cx = 0.5f * (box[0] + box[2]);
-    const float cy = 0.5f * (box[1] + box[3]);
-    const float seam_xs[4] = {160.0f, 320.0f, 640.0f, 800.0f};
-    const int seam_x_count = (tiling_mode == 2) ? 4 : 2;
-    const int seam_x_start = (tiling_mode == 2) ? 0 : 1;
-    for (int i = seam_x_start; i < seam_x_start + seam_x_count; ++i) {
-        const float sx_canvas = seam_xs[i];
-        if (!(x_off < sx_canvas && sx_canvas < x_off + (float)w_new)) continue;
-        const float sx = (sx_canvas - x_off) / r;
-        if ((box[0] <= sx && box[2] >= sx) || fabsf(cx - sx) <= seam_margin_orig) return true;
-    }
-    const float seam_ys[2] = {320.0f, 640.0f};
-    for (int i = 0; i < 2; ++i) {
-        const float sy_canvas = seam_ys[i];
-        if (!(y_off < sy_canvas && sy_canvas < y_off + (float)h_new)) continue;
-        const float sy = (sy_canvas - y_off) / r;
-        if ((box[1] <= sy && box[3] >= sy) || fabsf(cy - sy) <= seam_margin_orig) return true;
-    }
-    return false;
+    return tracking::is_box_near_tiled_seam(
+        tracking::load_box4(box), tiling_mode, frame_w, frame_h, seam_margin_canvas_px
+    );
 }
 
 __global__ void assign_duplicate_anchor_kernel(
     const float* boxes,
     const int* classes,
     int num_dets,
-    float iou_threshold,
-    float center_threshold,
-    float area_ratio_threshold,
-    int tiling_mode,
-    int frame_w,
-    int frame_h,
-    float seam_margin_canvas_px,
-    float seam_center_scale,
-    float seam_area_ratio_threshold,
-    float seam_min_overlap_ratio,
+    tracking::DuplicateMergeParams params,
     int* anchor_indices
 ) {
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -3409,45 +3499,11 @@ __global__ void assign_duplicate_anchor_kernel(
     const float* candidate = boxes + idx * 4;
     const int candidate_class = classes[idx];
     int anchor = idx;
-    const float candidate_w = fmaxf(candidate[2] - candidate[0], 1e-6f);
-    const float candidate_h = fmaxf(candidate[3] - candidate[1], 1e-6f);
-    const float candidate_area = candidate_w * candidate_h;
-    const float candidate_cx = 0.5f * (candidate[0] + candidate[2]);
-    const float candidate_cy = 0.5f * (candidate[1] + candidate[3]);
-    const bool candidate_is_seam = is_box_near_tiled_seam_device(
-        candidate, tiling_mode, frame_w, frame_h, seam_margin_canvas_px
-    );
+    const tracking::Box4f candidate_box = tracking::load_box4(candidate);
     for (int prev = 0; prev < idx; ++prev) {
         if (classes[prev] != candidate_class) continue;
         const float* other = boxes + prev * 4;
-        const float iou = get_iou_device(candidate, other);
-        const float other_w = fmaxf(other[2] - other[0], 1e-6f), other_h = fmaxf(other[3] - other[1], 1e-6f);
-        const float other_area = other_w * other_h;
-        const float min_w = fminf(candidate_w, other_w), min_h = fminf(candidate_h, other_h);
-        const float center_gate = sqrtf(min_w * min_w + min_h * min_h) * center_threshold;
-        const float other_cx = 0.5f * (other[0] + other[2]), other_cy = 0.5f * (other[1] + other[3]);
-        const float center_dx = other_cx - candidate_cx, center_dy = other_cy - candidate_cy;
-        const float center_dist = sqrtf(center_dx * center_dx + center_dy * center_dy);
-        const float area_ratio = fminf(candidate_area / fmaxf(other_area, 1e-6f), other_area / fmaxf(candidate_area, 1e-6f));
-        const float x1 = fmaxf(candidate[0], other[0]);
-        const float y1 = fmaxf(candidate[1], other[1]);
-        const float x2 = fminf(candidate[2], other[2]);
-        const float y2 = fminf(candidate[3], other[3]);
-        const float inter_w = fmaxf(0.0f, x2 - x1);
-        const float inter_h = fmaxf(0.0f, y2 - y1);
-        const float overlap_ratio_x = inter_w / fmaxf(min_w, 1e-6f);
-        const float overlap_ratio_y = inter_h / fmaxf(min_h, 1e-6f);
-        const bool other_is_seam = is_box_near_tiled_seam_device(
-            other, tiling_mode, frame_w, frame_h, seam_margin_canvas_px
-        );
-        const bool seam_pair = candidate_is_seam || other_is_seam;
-        const bool seam_duplicate =
-            seam_pair &&
-            center_dist <= center_gate * seam_center_scale &&
-            area_ratio >= seam_area_ratio_threshold &&
-            overlap_ratio_x >= seam_min_overlap_ratio &&
-            overlap_ratio_y >= seam_min_overlap_ratio;
-        if (iou >= iou_threshold || (center_dist <= center_gate && area_ratio >= area_ratio_threshold) || seam_duplicate) {
+        if (tracking::duplicate_match(candidate_box, tracking::load_box4(other), params)) {
             anchor = prev; break;
         }
     }
@@ -3460,10 +3516,7 @@ __global__ void aggregate_duplicate_clusters_kernel(
     const int* classes,
     const int* anchor_indices,
     int num_dets,
-    int tiling_mode,
-    int frame_w,
-    int frame_h,
-    float seam_margin_canvas_px,
+    tracking::DuplicateMergeParams params,
     float* box_sums,
     float* score_sums,
     int* score_bits_max,
@@ -3477,17 +3530,18 @@ __global__ void aggregate_duplicate_clusters_kernel(
     const int anchor = anchor_indices[idx];
     const float score = scores[idx];
     const bool is_seam = is_box_near_tiled_seam_device(
-        boxes + idx * 4, tiling_mode, frame_w, frame_h, seam_margin_canvas_px
+        boxes + idx * 4, params.tiling_mode, params.frame_w, params.frame_h,
+        params.seam_margin_canvas_px
     );
     const float coord_weight =
-        score * ((tiling_mode > 0 && is_seam) ? kTiledSeamCoordWeight : 1.0f);
+        score * ((params.tiling_mode > 0 && is_seam) ? kTiledSeamCoordWeight : 1.0f);
     atomicAdd(score_sums + anchor, coord_weight);
     atomicAdd(cluster_counts + anchor, 1);
     atomicMax(score_bits_max + anchor, __float_as_int(score));
     for (int k = 0; k < 4; ++k) {
         atomicAdd(box_sums + anchor * 4 + k, boxes[idx * 4 + k] * coord_weight);
     }
-    const int key_bonus = (!is_seam && tiling_mode > 0) ? 0x40000000 : 0;
+    const int key_bonus = (!is_seam && params.tiling_mode > 0) ? 0x40000000 : 0;
     const int key = __float_as_int(score) + key_bonus;
     const int prev_key = atomicMax(best_key_bits + anchor, key);
     if (key > prev_key) {
@@ -3548,75 +3602,35 @@ __global__ void filter_detections_kernel(
     bool* suspect_flags,
     float* quality_scores,
     int* out_count,
-    float score_threshold,
-    bool track_person_only,
-    int person_class,
-    bool is_tiled,
-    int frame_w,
-    int frame_h,
-    bool person_geometry_prior,
-    bool geometry_suspect_support,
-    float person_min_height_ratio,
-    float person_min_aspect,
-    float person_max_aspect,
-    float person_min_area_ratio,
-    float person_max_area_ratio
+    tracking::DetectionFilterParams params
 ) {
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= num_dets) return;
 
     const float* box = boxes + idx * 4;
     const float score = scores[idx];
-    bool keep = score > score_threshold;
-    if (track_person_only) {
-        keep = keep && classes[idx] == person_class;
-    }
-    const float cx = (box[0] + box[2]) * 0.5f;
-    const float cy = (box[1] + box[3]) * 0.5f;
-    if (is_tiled) {
-        keep = keep && cx >= 0.0f && cx < static_cast<float>(frame_w) && cy >= 0.0f && cy < static_cast<float>(frame_h);
-    }
-
+    const tracking::Box4f box4 = tracking::load_box4(box);
     const float box_w = fmaxf(box[2] - box[0], 1e-6f);
     const float box_h = fmaxf(box[3] - box[1], 1e-6f);
     const float aspect = box_h / box_w;
-    const float frame_area = fmaxf(static_cast<float>(frame_w) * static_cast<float>(frame_h), 1.0f);
+    const float frame_area = fmaxf(
+        static_cast<float>(params.frame_w) * static_cast<float>(params.frame_h), 1.0f);
     const float area_ratio = (box_w * box_h) / frame_area;
-
     bool geometry_clean = true;
-    if (person_geometry_prior) {
-        if (person_min_height_ratio > 0.0f) {
-            geometry_clean = geometry_clean && box_h >= static_cast<float>(frame_h) * person_min_height_ratio;
-        }
-        if (person_min_aspect > 0.0f) {
-            geometry_clean = geometry_clean && aspect >= person_min_aspect;
-        }
-        if (person_max_aspect > 0.0f) {
-            geometry_clean = geometry_clean && aspect <= person_max_aspect;
-        }
-        if (person_min_area_ratio > 0.0f) {
-            geometry_clean = geometry_clean && area_ratio >= person_min_area_ratio;
-        }
-        if (person_max_area_ratio > 0.0f) {
-            geometry_clean = geometry_clean && area_ratio <= person_max_area_ratio;
-        }
-        if (!geometry_suspect_support) {
-            keep = keep && geometry_clean;
-        }
-    }
+    const bool keep = tracking::detection_keep(box4, score, classes[idx], params, geometry_clean);
 
     if (keep) {
         const int out_idx = atomicAdd(out_count, 1);
         keep_indices[out_idx] = idx;
-        suspect_flags[out_idx] = person_geometry_prior && geometry_suspect_support && !geometry_clean;
+        suspect_flags[out_idx] = params.person_geometry_prior && params.geometry_suspect_support && !geometry_clean;
         
         // A6: Continuous Quality Score (Aspect + Center + Area)
         // 1. Aspect: Gaussian peak at 2.5
         float aspect_q = expf(-0.5f * powf((aspect - 2.5f) / 1.2f, 2.0f));
         
         // 2. Center: 1.0 at center, 0.0 at boundary (proxy for truncation)
-        float cx_norm = cx / fmaxf(static_cast<float>(frame_w), 1.0f);
-        float cy_norm = cy / fmaxf(static_cast<float>(frame_h), 1.0f);
+        float cx_norm = tracking::center_x(box4) / fmaxf(static_cast<float>(params.frame_w), 1.0f);
+        float cy_norm = tracking::center_y(box4) / fmaxf(static_cast<float>(params.frame_h), 1.0f);
         float center_q = fminf(fminf(cx_norm, 1.0f - cx_norm), fminf(cy_norm, 1.0f - cy_norm)) * 4.0f;
         center_q = fmaxf(0.0f, fminf(1.0f, center_q));
         
@@ -3639,17 +3653,6 @@ constexpr int NMS_BLOCK_SIZE = 64;
 //   #3 Filter-NMS Overlap: Single kernel replaces filter+gather+sort+NMS
 //   #5 Remove immunity: No dead-code branch in compact path
 // ============================================================================
-
-__device__ __forceinline__ float compute_iou_inline(const float* b1, const float* b2) {
-    const float x1 = fmaxf(b1[0], b2[0]);
-    const float y1 = fmaxf(b1[1], b2[1]);
-    const float x2 = fminf(b1[2], b2[2]);
-    const float y2 = fminf(b1[3], b2[3]);
-    const float inter = fmaxf(0.0f, x2 - x1) * fmaxf(0.0f, y2 - y1);
-    const float a1 = fmaxf(0.0f, b1[2] - b1[0]) * fmaxf(0.0f, b1[3] - b1[1]);
-    const float a2 = fmaxf(0.0f, b2[2] - b2[0]) * fmaxf(0.0f, b2[3] - b2[1]);
-    return inter / (a1 + a2 - inter + 1e-6f);
-}
 
 __global__ void compact_grid_nms_kernel(
     const float* boxes, const float* scores, const int* classes,
@@ -3768,7 +3771,7 @@ __global__ void compact_grid_nms_kernel(
             if (gx1 >= gx2 || gy1 >= gy2) continue;  // No spatial overlap
 
             // (#5) No immunity_mask - clean exact IoU computation
-            if (compute_iou_inline(rb, cb) > iou_threshold) {
+            if (tracking::iou(tracking::load_box4(rb), tracking::load_box4(cb)) > iou_threshold) {
                 suppressed[j] = 1;
             }
         }
@@ -4019,6 +4022,18 @@ void merge_cross_tile_duplicates_cuda(
     cudaStream_t stream
 ) {
     if (num_dets <= 0) { checkCuda(cudaMemsetAsync(out_count_ptr, 0, sizeof(int), stream)); return; }
+    const tracking::DuplicateMergeParams params{
+        iou_threshold,
+        center_threshold,
+        area_ratio_threshold,
+        tiling_mode,
+        frame_w,
+        frame_h,
+        seam_margin_canvas_px,
+        seam_center_scale,
+        seam_area_ratio_threshold,
+        seam_min_overlap_ratio,
+    };
     checkCuda(cudaMemsetAsync(box_sums_ptr, 0, num_dets * 4 * sizeof(float), stream));
     checkCuda(cudaMemsetAsync(score_sums_ptr, 0, num_dets * sizeof(float), stream));
     checkCuda(cudaMemsetAsync(score_bits_max_ptr, 0, num_dets * sizeof(int), stream));
@@ -4027,13 +4042,11 @@ void merge_cross_tile_duplicates_cuda(
     checkCuda(cudaMemsetAsync(cluster_counts_ptr, 0, num_dets * sizeof(int), stream));
     const int threads = 256; const int blocks = (num_dets + threads - 1) / threads;
     assign_duplicate_anchor_kernel<<<blocks, threads, 0, stream>>>(
-        boxes_ptr, classes_ptr, num_dets, iou_threshold, center_threshold, area_ratio_threshold,
-        tiling_mode, frame_w, frame_h, seam_margin_canvas_px, seam_center_scale,
-        seam_area_ratio_threshold, seam_min_overlap_ratio, anchor_indices_ptr
+        boxes_ptr, classes_ptr, num_dets, params, anchor_indices_ptr
     );
     aggregate_duplicate_clusters_kernel<<<blocks, threads, 0, stream>>>(
         boxes_ptr, scores_ptr, classes_ptr, anchor_indices_ptr, num_dets,
-        tiling_mode, frame_w, frame_h, seam_margin_canvas_px,
+        params,
         box_sums_ptr, score_sums_ptr, score_bits_max_ptr, best_boxes_ptr, best_key_bits_ptr, cluster_counts_ptr
     );
     compact_duplicate_clusters_kernel<<<1, 1, 0, stream>>>(
@@ -4071,6 +4084,21 @@ void filter_detections_cuda(
     if (num_dets <= 0) {
         return;
     }
+    const tracking::DetectionFilterParams params{
+        score_threshold,
+        track_person_only,
+        person_class,
+        is_tiled,
+        frame_w,
+        frame_h,
+        person_geometry_prior,
+        geometry_suspect_support,
+        person_min_height_ratio,
+        person_min_aspect,
+        person_max_aspect,
+        person_min_area_ratio,
+        person_max_area_ratio,
+    };
     // Clear any stale error before kernel launch so cudaGetLastError below
     // reports only errors from THIS kernel.
     cudaGetLastError();
@@ -4085,19 +4113,7 @@ void filter_detections_cuda(
         suspect_flags_ptr,
         quality_scores_ptr,
         out_count_ptr,
-        score_threshold,
-        track_person_only,
-        person_class,
-        is_tiled,
-        frame_w,
-        frame_h,
-        person_geometry_prior,
-        geometry_suspect_support,
-        person_min_height_ratio,
-        person_min_aspect,
-        person_max_aspect,
-        person_min_area_ratio,
-        person_max_area_ratio
+        params
     );
     {
         cudaError_t _err = cudaGetLastError();

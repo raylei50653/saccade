@@ -7,7 +7,7 @@
 
 | 文件 | 內容 | 狀態 |
 |------|------|------|
-| [option-f-mamba-head.md](option-f-mamba-head.md) | Mamba SSM Detection Head（當前 baseline 路線）| active |
+| [option-f-mamba-head.md](option-f-mamba-head.md) | Mamba SSM Detection Head lineage（現行 baseline 已升到 `mamba_whole_graph`）| active |
 | [mamba-head-training.md](mamba-head-training.md) | Mamba head 完整訓練流程（distill→GT-ft、版本譜系、高解析重訓）| reference |
 | [mamba-v14r-training-protocol.md](mamba-v14r-training-protocol.md) | v14-R canonical protocol、split/seed、選模與 provenance 規範 | canonical |
 | [mamba-v14-replication-protocol.md](mamba-v14-replication-protocol.md) | legacy v14 復刻協議（刻意保留 02 洩漏結構，驗證 recipe 可重現性）| reference |
@@ -99,7 +99,7 @@ Phase 3 — SAVE     checkpoint 由 training_utils.save_checkpoint() 統一處�
 ## 歷史文件
 
 - Option D 完整設計 (4 文件) → [docs/archive/option-d/](../../archive/option-d)
-- Option D 訓練產物：`runs/conditioned_p1_v2/best.ckpt`、`runs/conditioned_p2/best.ckpt`
+- Option D historical training artifacts：runs/conditioned_p1_v2/best.ckpt、runs/conditioned_p2/best.ckpt（目前不在 tree）
 
 # Detection Module (偵測模組)
 
@@ -107,7 +107,7 @@ Phase 3 — SAVE     checkpoint 由 training_utils.save_checkpoint() 統一處�
 負責前級 YOLO 圖像目標偵測、Mamba Head 時空特徵融合與 NMS 抑制，為後續追蹤提供高置信度的 Object Box。
 
 ## 🟢 目前現況
-* **Mamba SSM Head** 已作為 `mamba_optimal` 生產配置落地，採用 PixelShuffle 上取樣與 Stretch-Resize 域一致性。評測幀率達到 93.8–110.2 FPS（精度 MOTA 76.6% / IDF1 71.3%）。
+* **Mamba SSM Head** 是現行 `mamba_whole_graph` baseline 的 detector lineage。`mamba_optimal` 是其上一代 head-CUDA-graph preset；目前 headline preset 改用 whole-detect CUDA graph、`native_640`、ReID off，凍結指標為 IDF1 77.6 / MOTA 78.3 / HOTA 69.9 / AssA 69.1 / IDs 430 / 221.59 FPS。
 * **Flow-Gated 特徵調製機制**：取代了 Option E-v2 中使用 `F.grid_sample` 對低解析度 FPN 特徵圖（如 $20 	imes 20$ P5）進行空間 Warp 導致鋸齒偽影與精度下降（MOTA -2.1pp）的問題。當前方案在 `mamba_head.py` 中將累計 GMC Affine matrix 轉成稠密流場 (Dense Flow) 後，以 `torch.cat([x_up, flow_i], dim=1)` 的通道拼接形式與特徵圖融合，並利用卷積層自適應學習空間門控調製 `(1.0 + gate)`，避開了特徵插值扭曲。
 * **CUDA Graph 推理優化**：
   * 解決了自訂 CUDA 算子 `selective_scan_fwd` 運行於 Legacy Default Stream 導致 CUDA Graph 捕獲丟失 Scan Kernel 的重大 Bug（目前使用 `torch.cuda.current_stream().cuda_stream` 強制流綁定）。
@@ -117,10 +117,10 @@ Phase 3 — SAVE     checkpoint 由 training_utils.save_checkpoint() 統一處�
 
 | | |
 |---|---|
-| **Pipeline stage** | `[3] detect` + `[4] postprocess`（6 sub-stages，見 [pipeline_flow.md](../../reference/pipeline_flow.md)） |
-| **輸入** | preprocessed frame tensor（`native_960` 960×960，或 tiled `960p_2x2/3x2`）；Mamba head 額外吃 FPN 特徵 + geometry 的 GMC dense flow（時序 gate） |
+| **Pipeline stage** | `detect` + `postprocess`（現行 stage name 見 [pipeline_flow.md](../../reference/pipeline_flow.md)） |
+| **輸入** | 現行 `mamba_whole_graph` baseline 使用 `native_640` / `preprocess=none`；`native_960` 與 tiled `960p_2x2/3x2` 是 legacy comparison / ablation 路線。Mamba head 額外吃 FPN 特徵 + geometry 的 GMC dense flow（時序 gate） |
 | **輸出** | fused `boxes / scores / classes`（filter→NMS→cross-tile merge→quality/birth gate 後） |
-| **上游 → 下游** | `streaming/[2] preprocess → [3] detect (YOLO26 + Mamba head) → [4] postprocess → [11] tracker` |
+| **上游 → 下游** | `streaming/ingest_preprocess → detect (YOLO26 + Mamba head) → postprocess → track` |
 
 ## ⚖️ GO / NO-GO 決策
 
@@ -128,9 +128,10 @@ Phase 3 — SAVE     checkpoint 由 training_utils.save_checkpoint() 統一處�
 
 | 日期 | 項目 | 結論 |
 |------|------|------|
-| 2026-05-27 | Option F Mamba Gated Detector（PixelShuffle + Cross-Scan + Flow-Gated） | ✅ GO，當前 preset `mamba_optimal` |
+| 2026-06-18 | `mamba_whole_graph` production baseline | ✅ headline preset：whole-detect CUDA graph + T3→T1 ckpt lineage，native_640，ReID off |
+| 2026-05-27 | Option F Mamba Gated Detector（PixelShuffle + Cross-Scan + Flow-Gated） | ✅ GO，`mamba_optimal` lineage；已被 `mamba_whole_graph` supersede |
 | 2026-06-02 | mamba_head CUDA graph（stream-bind fix） | ✅ GO，+15% FPS，已 default |
-| 2026-06-13 | T3→T1 temporal-shaping curriculum | 🔄 進行中（未結案，復現 v14 過程衍生）：困難序列方向一致（12/12 正向），但增益 marginal 且種子相依（+0.4~2.2），best run 75.4 ≈ legacy v14 75.1；待 conv-head 對照 + 多種子 + strict-clean split 才能定生死。見 [research/mamba-t3t1-curriculum-20260613.md](research/mamba-t3t1-curriculum-20260613.md) |
+| 2026-06-13 | T3→T1 temporal-shaping curriculum | ✅ promoted into current `mamba_whole_graph` lineage via `runs/mamba_gt_v14replica_t3_t1/best.ckpt`; 原始 research note 仍保留當時的 multi-seed/clean-split caveat。見 [research/mamba-t3t1-curriculum-20260613.md](research/mamba-t3t1-curriculum-20260613.md) |
 | 2026-06-12 | v14 全鏈復刻（recipe 可重現性驗證） | ✅ 結案：replica IDF1 73.4 vs legacy 75.1，殘差 ~2pp = seed/scheduler 不可恢復因素；v14 非 lucky checkpoint。**衍生**兩條未結案線（T3→T1 上、frozen-SSM「unfreeze 無明顯變化」）。見 [mamba-v14-replication-protocol.md](mamba-v14-replication-protocol.md) |
 | 2026-05-22 | Option E-v2 Quality-Gated Temporal Fusion | ✅ GO（後被 Option F 取代） |
 | — | ST-Mamba 時序 buffer | ⏸️ 單幀持平、時序不 work → 轉 VGT-Mamba |

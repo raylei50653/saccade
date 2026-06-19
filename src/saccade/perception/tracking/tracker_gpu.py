@@ -2,11 +2,27 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 from dataclasses import dataclass
+from pathlib import Path
+import sys
 from typing import List, Any, cast, Optional, TypedDict, Callable
+from saccade.perception.box_ops import box_iou
 
 try:
     from saccade_tracking_ext import GPUByteTracker as CppGPUByteTracker, TrackResult
 except ImportError:
+    _build_dir = Path(__file__).resolve().parents[4] / "build"
+    if _build_dir.exists():
+        sys.path.insert(0, str(_build_dir))
+    try:
+        from saccade_tracking_ext import (
+            GPUByteTracker as CppGPUByteTracker,
+            TrackResult,
+        )
+    except ImportError:
+        CppGPUByteTracker = None
+        TrackResult = None
+
+if CppGPUByteTracker is None:
     # Fallback for environments where the extension is not available or has library conflicts
     class TrackResult:  # type: ignore
         def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -616,6 +632,7 @@ class GPUByteTracker:
         bridge_anchor_rate: float = 0.0,
         bridge_h_lo: float = 0.0,
         bridge_h_hi: float = 0.0,
+        bridge_dir_bonus: float = 0.0,
         occ_gate_cover: float = 0.0,
         occ_gap_min: int = 30,
         occ_expand_px: float = 0.0,
@@ -644,6 +661,7 @@ class GPUByteTracker:
                 bridge_anchor_rate,
                 bridge_h_lo,
                 bridge_h_hi,
+                bridge_dir_bonus,
             )
             try:
                 setter(
@@ -699,6 +717,37 @@ class GPUByteTracker:
                 float(foot_gate),
                 float(ramp_frames),
             )
+
+    def set_multiplicative_cost(self, enabled: bool = True) -> None:
+        """Enable log-linear cost form: cost = 1 - IoU * exp(-Σ penalty).
+
+        Replaces the additive clamp chain with a multiplicative form that keeps
+        cost naturally in [0,1] and supports reward terms (negative beta).
+        Default off for bit-identical backward compat.
+        """
+        setter = getattr(self.tracker, "set_multiplicative_cost", None)
+        if setter is not None:
+            setter(bool(enabled))
+
+    def set_stability_cost_w(self, w: float) -> None:
+        """Stability reward weight for multiplicative cost form.
+
+        A size-consistent match gets reduced cost: penalty -= w/(1+|h_diff|/h_det).
+        Only active when multiplicative_cost is enabled.
+        """
+        setter = getattr(self.tracker, "set_stability_cost_w", None)
+        if setter is not None:
+            setter(float(w))
+
+    def set_sinkhorn_lambda(self, lam: float) -> None:
+        """Sinkhorn exponential lambda (cost→prob scaling, default 30).
+
+        Lower values (10-15) give softer discrimination and room for reward
+        terms to affect auction outcomes.
+        """
+        setter = getattr(self.tracker, "set_sinkhorn_lambda", None)
+        if setter is not None:
+            setter(float(lam))
 
     def set_occ_params(
         self,
@@ -781,18 +830,20 @@ class GPUByteTracker:
                 st[p * 8 + 3],
             )
             w_p = a_p * h_p
-            ix1, iy1 = (
-                max(cx_t - w_t * 0.5, cx_p - w_p * 0.5),
-                max(cy_t - h_t * 0.5, cy_p - h_p * 0.5),
-            )
-            ix2, iy2 = (
-                min(cx_t + w_t * 0.5, cx_p + w_p * 0.5),
-                min(cy_t + h_t * 0.5, cy_p + h_p * 0.5),
-            )
-            iw, ih = max(0.0, ix2 - ix1), max(0.0, iy2 - iy1)
-            inter = iw * ih
-            pred_iou = (
-                inter / (w_t * h_t + w_p * h_p - inter + 1e-6) if inter > 0 else 0.0
+            pred_iou = box_iou(
+                (
+                    cx_t - w_t * 0.5,
+                    cy_t - h_t * 0.5,
+                    cx_t + w_t * 0.5,
+                    cy_t + h_t * 0.5,
+                ),
+                (
+                    cx_p - w_p * 0.5,
+                    cy_p - h_p * 0.5,
+                    cx_p + w_p * 0.5,
+                    cy_p + h_p * 0.5,
+                ),
+                union_mode="add",
             )
             with open(path, "a") as f:
                 f.write(
@@ -835,20 +886,16 @@ class GPUByteTracker:
         rows = []
         for t in range(n):
             tx1, ty1, tx2, ty2, h_t = boxes[t]
-            t_area = (tx2 - tx1) * (ty2 - ty1)
             peak_iou, arg_p = 0.0, -1
             for j in range(n):
                 if j == t:
                     continue
                 jx1, jy1, jx2, jy2, _ = boxes[j]
-                ix1, iy1 = max(tx1, jx1), max(ty1, jy1)
-                ix2, iy2 = min(tx2, jx2), min(ty2, jy2)
-                iw, ih = max(0.0, ix2 - ix1), max(0.0, iy2 - iy1)
-                inter = iw * ih
-                if inter <= 0.0:
-                    continue
-                j_area = (jx2 - jx1) * (jy2 - jy1)
-                iou = inter / (t_area + j_area - inter + 1e-6)
+                iou = box_iou(
+                    (tx1, ty1, tx2, ty2),
+                    (jx1, jy1, jx2, jy2),
+                    union_mode="add",
+                )
                 if iou > peak_iou:
                     peak_iou, arg_p = iou, j
             if arg_p < 0:

@@ -27,18 +27,18 @@
 
 ## MOT17 SDP End-to-End Tracking A/B (2026-04-26)
 
-評估命令使用 `scripts/eval/mot17.py`（CLI wrapper，主邏輯位於 `perception/eval/runner.py`），YOLO engine 為 `models/yolo/yolo26s_batch4.engine`，ReID 關閉，序列為 MOT17 train split 的 7 個 SDP sequence。
+評估命令使用 `scripts/eval/mot17.py`（CLI wrapper，主邏輯位於 `perception/eval/evaluator.py`；`runner.py` 只是 compatibility shim），YOLO engine 為 `models/yolo/yolo26s_batch4.engine`，ReID 關閉，序列為 MOT17 train split 的 7 個 SDP sequence。
 
 | Config | Output | IDF1 | Rcll | Prcn | FP | FN | IDs | MOTA | FPS |
 | :--- | :--- | :--- | :--- | :--- | ---: | ---: | ---: | :--- | ---: |
-| Baseline off | `results/reid_sdp_off` | 44.6% | 44.4% | 80.1% | 12,432 | 62,396 | 604 | 32.8% | 154.67 |
-| Tentative default probe (`mid=0.25`, `confirm_score=0.40`) | `results/tentative_sdp_off` | 45.8% | 48.5% | 75.2% | 17,959 | 57,872 | 656 | 31.9% | 151.75 |
-| Tentative tuned default (`mid=0.40`, `confirm_score=0.50`) | `results/tentative_sdp_m040_c050` | 45.5% | 45.9% | 78.6% | 14,005 | 60,786 | 575 | 32.9% | 149.94 |
-| Tentative geometry scale (`mid=0.40`, `confirm_score=0.50`, median-height scale) | `results/tentative_sdp_geometry` | 45.0% | 45.5% | 78.8% | 13,724 | 61,199 | 548 | 32.8% | 153.29 |
-| Tentative geometry EMA (`beta=0.80`, `max_step=0.05`) | `results/tentative_sdp_geometry_ema` | 44.8% | 45.3% | 78.9% | 13,610 | 61,408 | 551 | 32.7% | 146.88 |
-| Tentative median EMA (`beta=0.80`, `loosen=0.08`, `tighten=0.03`, `min_samples=5`) | `results/tentative_sdp_geometry_median_ema` | 44.7% | 45.3% | 78.9% | 13,609 | 61,460 | 545 | 32.7% | 144.77 |
-| Adaptive confirmation, fixed threshold | `results/tentative_sdp_adaptive_fixed` | 45.3% | 45.5% | 78.7% | 13,863 | 61,172 | 563 | 32.7% | 148.94 |
-| Adaptive confirmation + geometry | `results/tentative_sdp_geometry_adaptive_v2` | 44.7% | 45.1% | 78.9% | 13,567 | 61,697 | 541 | 32.5% | 144.52 |
+| Baseline off | results/reid_sdp_off | 44.6% | 44.4% | 80.1% | 12,432 | 62,396 | 604 | 32.8% | 154.67 |
+| Tentative default probe (`mid=0.25`, `confirm_score=0.40`) | results/tentative_sdp_off | 45.8% | 48.5% | 75.2% | 17,959 | 57,872 | 656 | 31.9% | 151.75 |
+| Tentative tuned default (`mid=0.40`, `confirm_score=0.50`) | results/tentative_sdp_m040_c050 | 45.5% | 45.9% | 78.6% | 14,005 | 60,786 | 575 | 32.9% | 149.94 |
+| Tentative geometry scale (`mid=0.40`, `confirm_score=0.50`, median-height scale) | results/tentative_sdp_geometry | 45.0% | 45.5% | 78.8% | 13,724 | 61,199 | 548 | 32.8% | 153.29 |
+| Tentative geometry EMA (`beta=0.80`, `max_step=0.05`) | results/tentative_sdp_geometry_ema | 44.8% | 45.3% | 78.9% | 13,610 | 61,408 | 551 | 32.7% | 146.88 |
+| Tentative median EMA (`beta=0.80`, `loosen=0.08`, `tighten=0.03`, `min_samples=5`) | results/tentative_sdp_geometry_median_ema | 44.7% | 45.3% | 78.9% | 13,609 | 61,460 | 545 | 32.7% | 144.77 |
+| Adaptive confirmation, fixed threshold | results/tentative_sdp_adaptive_fixed | 45.3% | 45.5% | 78.7% | 13,863 | 61,172 | 563 | 32.7% | 148.94 |
+| Adaptive confirmation + geometry | results/tentative_sdp_geometry_adaptive_v2 | 44.7% | 45.1% | 78.9% | 13,567 | 61,697 | 541 | 32.5% | 144.52 |
 
 結論：收緊後的 Tentative/Confirmed 狀態機小幅提升 MOTA、提升 IDF1，並降低 ID switches；原始 `mid=0.25` 能提高 Recall，但 FP 增幅過大，不適合作為預設值。
 幾何縮放模式可作為 ID-stability profile：IDs 最低、吞吐接近 baseline，但 IDF1/MOTA 較 tuned default 低。

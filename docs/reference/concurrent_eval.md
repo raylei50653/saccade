@@ -114,7 +114,8 @@ torch.cuda.current_stream().wait_event(wb_done)  # calling 等 workbench
 | `scripts/eval/mot17.py` | 主入口，`--workbench --threads N` 路徑 |
 | `src/saccade/perception/detector_trt.py` | `BatchingTRTDetector` + `BatchedDetectorProxy` |
 | `src/saccade/perception/workbench.py` | `Workbench`（Python wrapper over C++ `_WorkbenchExt`） |
-| `src/saccade/perception/eval/runner.py` | `run_eval()` 共用 entry point |
+| `src/saccade/perception/eval/evaluator.py` | `run_eval()` implementation source of truth |
+| `src/saccade/perception/eval/runner.py` | compatibility shim；re-exports `run_eval()` |
 
 ## 實作狀態（2026-05-16）
 

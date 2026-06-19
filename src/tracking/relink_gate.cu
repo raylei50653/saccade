@@ -5,6 +5,7 @@
 // _exceeds_max_speed, _direction_behind) and report_data/algorithms.md 6.4/6.6.
 // Only raw quantities are emitted; all thresholds remain on the Python side.
 #include "tracking/relink_gate.hpp"
+#include "tracking/box_ops.hpp"
 
 #include <cuda_runtime.h>
 #include <cmath>
@@ -121,13 +122,11 @@ __global__ void gate_kernel(GateParams p,
 
     // --- spatial metrics (center_norm, iou) ---
     float dist = sqrtf((qcx - lcx) * (qcx - lcx) + (qcy - lcy) * (qcy - lcy));
-    float center_norm = dist / (float)max(p.w, p.h);
-    float ix1 = fmaxf(qb[0], lb[0]), iy1 = fmaxf(qb[1], lb[1]);
-    float ix2 = fminf(qb[2], lb[2]), iy2 = fminf(qb[3], lb[3]);
-    float inter = fmaxf(0.0f, ix2 - ix1) * fmaxf(0.0f, iy2 - iy1);
-    float area  = qw * qh;
-    float larea = fmaxf(0.0f, lb[2] - lb[0]) * fmaxf(0.0f, lb[3] - lb[1]);
-    float iou = inter / (area + larea - inter + 1e-6f);
+    const tracking::SpatialMetrics spatial = tracking::spatial_metrics(
+        tracking::load_box4(qb), tracking::load_box4(lb), p.w, p.h
+    );
+    float center_norm = spatial.center_norm;
+    float iou = spatial.iou;
 
     // --- physical speed gate (snapshot-independent) ---
     float speed_exceeds = 0.0f;

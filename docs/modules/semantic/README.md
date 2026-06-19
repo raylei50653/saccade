@@ -4,16 +4,16 @@
 負責基於外觀相似度的匈牙利算法關聯匹配、重排 (Rerank) 以過濾 False-Accept，以及跨鏡頭/長失聯身份關聯。
 
 ## 🟢 目前現況
-* 實現 Sinkhorn Auction 混合關聯機制與 Rerank Phase 3 重排，有效解決相似衣著行人的 ID 混淆（default=0.91）。
+* 實現 Sinkhorn Auction 混合關聯機制與 Rerank Phase 3 重排；appearance / ReID relink 能力保留，但現行 `mamba_whole_graph` headline baseline 使用 `reid_mode: "off"`，主要 identity 修復來自 GPU 雙向橋接 relink 與 tracker core。
 
 ## 🔗 I/O & Dataflow
 
 | | |
 |---|---|
-| **Pipeline stage** | `[13] bg_relink_wait` + `[14] relink_write`（見 [pipeline_flow.md](../../reference/pipeline_flow.md)） |
+| **Pipeline stage** | `bg_relink_wait` + `relink_write`（見 [pipeline_flow.md](../../reference/pipeline_flow.md)） |
 | **輸入** | track candidates + embeddings（來自 [reid](../reid/README.md)）+ motion snapshots |
 | **輸出** | resolved stable identities（local track id → 穩定 identity output） |
-| **上游 → 下游** | `[12] materialize → IdentityResolver.resolve_pass (semantic relink + lifecycle merge) → emit`；GMC ON 下 semantic relink 基本冗余 |
+| **上游 → 下游** | `materialize → IdentityResolver.resolve_pass (semantic relink + lifecycle merge) → emit`；GMC ON 下 semantic relink 基本冗余 |
 
 > 職責分界：用 [reid](../reid/README.md) 的 embedding 做匈牙利關聯 / rerank / false-accept 過濾，是本模組；特徵抽取本身在 reid。
 
@@ -23,7 +23,7 @@
 
 | 日期 | 項目 | 結論 |
 |------|------|------|
-| — | Sinkhorn Auction 混合關聯 + Rerank Phase 3 | ✅ GO，default `semantic_threshold=0.91` |
+| — | Sinkhorn Auction 混合關聯 + Rerank Phase 3 | ✅ module-level GO；appearance path 非 current headline preset（`mamba_whole_graph` ReID off） |
 | 2026-04-27 | Relink threshold 調優 | ✅ thr=0.90 Pareto 最優 |
 | 2026-05-03 | Post-merge（A5 soft appearance cost + gap uncertainty） | ⚠️ 有害→中性偏正；default off |
 | 2026-06-03 | Cheb-GR re-ranking — standalone 方法 gate（Market-1501 / SigLIP2） | ✅ 方法成立：GPU Cheb-GR k-reciprocal +9.56pp（純自適應 λ=4 +8.76pp），但**不優於**經典 fixed-k（+10.03pp）；feature-propagation / Jaccard-w/o-QE 變體負向 |

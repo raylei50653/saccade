@@ -242,6 +242,7 @@ class EvalConfig:
     relink_bridge_anchor_rate: float
     relink_bridge_h_lo: float
     relink_bridge_h_hi: float
+    relink_bridge_dir_bonus: float
     relink_bridge_occ_gate_cover: float
     relink_bridge_occ_gap_min: int
     relink_bridge_occ_expand_px: float
@@ -276,6 +277,9 @@ class EvalConfig:
     occ_foot_gap: float
     occ_ttl: int
     occ_cost_weight: float
+    multiplicative_cost: bool
+    sinkhorn_lambda: float
+    stability_cost_w: float
 
     # Temporal consistency filter
     temporal_consistency_min_frames: int
@@ -698,6 +702,7 @@ def parse_eval_config(
         relink_bridge_anchor_rate=float(kwargs.get("relink_bridge_anchor_rate", 0.03)),
         relink_bridge_h_lo=float(kwargs.get("relink_bridge_h_lo", 0.75)),
         relink_bridge_h_hi=float(kwargs.get("relink_bridge_h_hi", 1.33)),
+        relink_bridge_dir_bonus=float(kwargs.get("relink_bridge_dir_bonus", 0.0)),
         relink_bridge_occ_gate_cover=float(
             kwargs.get("relink_bridge_occ_gate_cover", 0.0)
         ),
@@ -737,6 +742,9 @@ def parse_eval_config(
         occ_foot_gap=float(kwargs.get("occ_foot_gap", 0.15)),
         occ_ttl=int(kwargs.get("occ_ttl", 4)),
         occ_cost_weight=float(kwargs.get("occ_cost_weight", 0.50)),
+        multiplicative_cost=bool(kwargs.get("multiplicative_cost", False)),
+        sinkhorn_lambda=float(kwargs.get("sinkhorn_lambda", 30.0)),
+        stability_cost_w=float(kwargs.get("stability_cost_w", 0.0)),
         temporal_consistency_min_frames=int(
             kwargs.get("temporal_consistency_min_frames", 3)
         ),

@@ -12,8 +12,8 @@
 
 目前只有兩個核心入口：
 
-- `/scripts/eval/mot17.py`
-- `/scripts/eval/ablation_mot17.py`
+- `scripts/eval/mot17.py`
+- `scripts/eval/ablation_mot17.py`
 
 ### 1.2 腳本分類
 
@@ -28,19 +28,19 @@
 
 目前目錄分層建議如下：
 
-- `/scripts/eval/`
+- `scripts/eval/`
   - 主 eval / ablation workflow
-- `/scripts/benchmarks/`
+- `scripts/benchmarks/`
   - 延遲、吞吐量、壓力測試腳本
-- `/scripts/native/`
+- `scripts/native/`
   - native build / rebuild / coverage helpers
-- `/scripts/model/`
+- `scripts/model/`
   - 模型匯出、建模與 engine 工具
-- `/scripts/ops/`
+- `scripts/ops/`
   - 本地串流、服務控制、demo 操作腳本
-- `/scripts/tools/`
+- `scripts/tools/`
   - 環境檢查與輔助 shell / utility
-- `/scripts/`
+- `scripts/`
   - 只保留少量通用入口或 build / test shell scripts
 
 ### 1.3 命名與放置
@@ -54,12 +54,12 @@
 
 新增、移動、刪除腳本後，至少同步更新：
 
-- `/scripts/eval/README.md`
-- `/README.md`
+- `scripts/eval/README.md`
+- `README.md`
 - 必要時：
-  - `/docs/README.md`
-  - `/DEVELOPMENT.md`
-  - `/docs/TODO.md`
+  - `docs/README.md`
+  - `DEVELOPMENT.md`
+  - `docs/TODO.md`
 
 ---
 
@@ -67,8 +67,16 @@
 
 ### 2.1 目錄分工
 
-- `tests/test_*.py`
-  - 單元 / 整合 / parity / e2e 測試
+- `tests/unit/`
+  - 單元測試
+- `tests/extended/`
+  - 跨模組 helper / edge-case 測試
+- `tests/integration/`
+  - 整合、pipeline、parity、e2e 測試
+- `tests/golden/`
+  - golden fixtures / reference data
+- `tests/experimental/`
+  - 實驗性或研究輔助測試；不作為一般主線覆蓋率判讀依據
 - `tests/native/`
   - C++ / native tests
 - `tests/benchmarks/`
@@ -92,7 +100,7 @@
 
 ## 3. 測試覆蓋率
 
-目前總體 **66%**（647 passing tests，7,751 statements）。
+最近一次手動記錄的總體覆蓋率為 **66%**（647 passing tests，7,751 statements）。實際數字以當次 `uv run pytest --cov=saccade --cov-report=term-missing` 輸出為準。
 
 | 模組 | 覆蓋率 |
 |------|--------|
@@ -120,26 +128,26 @@ uv run coverage html
 
 ## 4. 現行工具設定
 
-目前工具設定以 `/pyproject.toml` 為準。
+目前工具設定以 `pyproject.toml` 為準。
 
-### 3.1 Pytest
+### 4.1 Pytest
 
 - `testpaths = ["tests"]`
 - `python_files = ["test_*.py"]`
 - `asyncio_mode = "strict"`
 - 預設帶 coverage
 
-### 3.2 Mypy
+### 4.2 Mypy
 
 - 目前排除 `tests/`
 
-### 3.3 Ruff
+### 4.3 Ruff
 
-- 目前排除 `tests/benchmarks/archive`
+- 目前沒有 tests/benchmarks/archive；若未來重新加入 benchmark archive，預設應排除。
 
 ---
 
-## 4. 最低驗證要求
+## 5. 最低驗證要求
 
 ### 改 Python 主邏輯
 
@@ -173,7 +181,7 @@ scripts/test_native.sh
 
 ---
 
-## 5. 常用指令
+## 6. 常用指令
 
 ```bash
 uv run pytest
@@ -185,7 +193,7 @@ uv run python scripts/eval/ablation_mot17.py ...
 
 ---
 
-## 6. 原則
+## 7. 原則
 
 - 不要只新增腳本，不更新入口文件
 - 不要把 benchmark 混進一般單元測試

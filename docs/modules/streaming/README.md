@@ -15,10 +15,10 @@
 
 | | |
 |---|---|
-| **Pipeline stage** | `[1] fetch` + `[2] ingest_preprocess`（見 [pipeline_flow.md](../../reference/pipeline_flow.md)） |
+| **Pipeline stage** | `fetch` + `ingest_preprocess`（見 [pipeline_flow.md](../../reference/pipeline_flow.md)） |
 | **輸入** | RTSP H.264 流（NVDEC 硬解） |
 | **輸出** | GPU RGB tensor（zero-copy）→ `AdaptiveFramePool` → detector |
-| **上游 → 下游** | `RTSP → NVDEC(NV12) → _nv12_to_rgb_gpu → GstClient 5-buffer pool → [2] preprocess → [3] detect` |
+| **上游 → 下游** | `RTSP → NVDEC(NV12) → _nv12_to_rgb_gpu → GstClient 5-buffer pool → ingest_preprocess → detect` |
 
 ## ⚖️ GO / NO-GO 決策
 

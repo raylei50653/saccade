@@ -113,6 +113,17 @@ void test_auction_rectangular_matrix() {
     expect_true(assignment[2] == -1, "auction rectangular expected unmatched row");
 }
 
+void test_auction_contested_loser_rebids() {
+    std::vector<std::vector<float>> profit_matrix{
+        {10.0f, 9.0f},
+        {10.0f, 1.0f},
+    };
+    std::vector<int> assignment;
+    saccade::AuctionAlgorithm::Solve(profit_matrix, assignment, 0.01f);
+
+    expect_assignment(assignment, {1, 0}, "auction contested loser rebids");
+}
+
 void test_auction_empty_columns() {
     std::vector<std::vector<float>> profit_matrix{
         {},
@@ -168,6 +179,7 @@ int main() {
 
     test_auction_square_matrix();
     test_auction_rectangular_matrix();
+    test_auction_contested_loser_rebids();
     test_auction_empty_columns();
 
     test_sinkhorn_square_matrix();

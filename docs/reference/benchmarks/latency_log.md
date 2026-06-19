@@ -1,9 +1,11 @@
-# Current Recommended Baseline
+# Legacy Module-Benchmark Baseline
 
-Before reading the historical profiling notes below, use this as the default
-comparison point for current module-level work:
+This file records the 2026-05 module-benchmark baseline and profiling notes.
+For current MOT17 headline baseline numbers, use [mot17_default_config.md](../mot17_default_config.md)
+and [DATAFLOW.md](../../DATAFLOW.md). Use the native_960 baseline below only when comparing
+against the legacy module-benchmark harness:
 
-- Baseline directory: `results/module_benchmark/baseline_native_960`
+- Baseline directory: `results/module_benchmark/20260615_141731`
 - Entry point: `./scripts/eval/module_benchmark.sh --mode all`
 - Detector: `SDP`
 - Sequences: `MOT17-04-SDP,MOT17-10-SDP`
@@ -11,15 +13,15 @@ comparison point for current module-level work:
 - Tiling: `native_960`
 - Max frames: `100`
 
-Current baseline summary:
+Legacy module-benchmark summary:
 
 - validate: `65.12 FPS`, `15.36 ms`, `IDF1 9.4%`, `MOTA 4.5%`
 - profile main stages: `detect 4.53 ms`, `postprocess 1.40 ms`, `track 1.10 ms`, `reid_extract 1.88 ms`, `relink_write 3.46 ms`
 - best current ablation signal: `geometry mid-scale` (`IDF1 9.9%`, `MOTA 4.7%`, `IDs 14`)
 
-Use `results/module_benchmark/baseline_native_960/notes.md` and
-`results/module_benchmark/baseline_native_960/experiment_matrix.md` as the
-live baseline record. The sections below remain useful as historical profiling
+Use `results/module_benchmark/20260615_141731/notes.md` and
+`results/module_benchmark/20260615_141731/experiment_matrix.md` as the
+legacy module-benchmark record. The sections below remain useful as historical profiling
 context and optimization notes.
 
 # 2026-05-06 Inter-Frame Relink Pipelining (`--pipeline-relink`)
@@ -65,7 +67,7 @@ Expected gain grows with heavier relink_write (more tracks, longer sequences).
 - Profiled `native_960` path on `MOT17-04-SDP` (1000 frames, `--profile-stages`).
 - Establishing per-stage baseline before implementing async ReID pipelining.
 
-## E2E Stage Breakdown — Current Baseline (native_960, MOT17-04-SDP, 2026-05-06)
+## E2E Stage Breakdown — Legacy Baseline (native_960, MOT17-04-SDP, 2026-05-06)
 
 | Stage | Mean | Std | P95 | P99 |
 |-------|------|-----|-----|-----|
@@ -109,7 +111,7 @@ serializing all GPU work and eliminating parallelism benefit. Profile measuremen
 of async-reid show overhead rather than gain; compare without `--profile-stages`.
 
 Implementation: `--async-reid` flag in `scripts/eval/mot17.py`; internal via
-`async_reid=True` kwarg in `runner.py`.
+`async_reid=True` config in `evaluator.py` (`runner.py` re-exports `run_eval`).
 
 ---
 
@@ -189,7 +191,7 @@ O(K²·D) → O(D) (D=768), verified numerically for K=2..5 to <1e-5 error.
 
 Same fix applied to HQ representative consistency block.
 
-### Fix 2: `_build_prepared_candidates` — batch D2H (`runner.py:1067`)
+### Fix 2: `_build_prepared_candidates` — batch D2H (historical runner-era location)
 
 **Problem**: Phase 3 loop called `float(fused_scores[det_idx])`, `bool(geometry_suspect_mask[det_idx])`,
 `fused_boxes[det_idx].tolist()` per candidate — 3 separate GPU→CPU syncs per track.

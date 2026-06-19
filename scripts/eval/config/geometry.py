@@ -491,6 +491,40 @@ def add_geometry_args(parser: argparse.ArgumentParser) -> None:
         ),
     )
     grp.add_argument(
+        "--multiplicative-cost",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        dest="multiplicative_cost",
+        help=_help(
+            "Use log-linear cost form: cost = 1 - IoU * exp(-Σ penalty). "
+            "No clamp between terms, supports reward signals via negative beta. "
+            "Default off (additive, bit-identical backward compat).",
+        ),
+    )
+    grp.add_argument(
+        "--sinkhorn-lambda",
+        type=float,
+        default=30.0,
+        dest="sinkhorn_lambda",
+        help=_help(
+            "Sinkhorn exponential temperature. Lower (10-15) gives softer "
+            "discrimination; default 30. Only meaningful with --multiplicative-cost.",
+            range_hint="5-30",
+        ),
+    )
+    grp.add_argument(
+        "--stability-cost-w",
+        type=float,
+        default=0.0,
+        dest="stability_cost_w",
+        help=_help(
+            "Stability reward weight for multiplicative cost form. "
+            "λ-normalized: effective bid boost = exp(stab_w). "
+            "0.20 is the current best value.",
+            range_hint="0.0-0.5",
+        ),
+    )
+    grp.add_argument(
         "--stage2-match-thresh",
         type=float,
         default=0.5,

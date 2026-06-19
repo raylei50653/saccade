@@ -1,6 +1,7 @@
 from typing import Any
 
 import torch
+from saccade.perception.box_ops import box_iou
 from .types import MotRecord
 
 
@@ -79,14 +80,7 @@ def box_iou_tuple(
     a: tuple[float, float, float, float],
     b: tuple[float, float, float, float],
 ) -> float:
-    x1 = max(a[0], b[0])
-    y1 = max(a[1], b[1])
-    x2 = min(a[2], b[2])
-    y2 = min(a[3], b[3])
-    inter = max(0.0, x2 - x1) * max(0.0, y2 - y1)
-    area_a = max(0.0, a[2] - a[0]) * max(0.0, a[3] - a[1])
-    area_b = max(0.0, b[2] - b[0]) * max(0.0, b[3] - b[1])
-    return inter / max(area_a + area_b - inter, 1e-6)
+    return box_iou(a, b, union_mode="clamp")
 
 
 def box_center(box: tuple[float, float, float, float]) -> tuple[float, float]:

@@ -108,7 +108,8 @@ public:
                            float bridge_fps = 30.0f, float bridge_margin = 0.0f,
                            float bridge_spatial_gate = 0.0f, int bridge_anchor = 0,
                            float bridge_anchor_rate = 0.0f,
-                           float bridge_h_lo = 0.0f, float bridge_h_hi = 0.0f,
+                            float bridge_h_lo = 0.0f, float bridge_h_hi = 0.0f,
+                            float bridge_dir_bonus = 0.0f,
                            float occ_gate_cover = 0.0f, int occ_gap_min = 30,
                            float occ_expand_px = 0.0f, float occ_expand_cover = 0.9f);
     std::vector<int> get_relink_debug();
@@ -136,6 +137,32 @@ public:
     void set_occ_params(bool enabled, float iou_thresh, float foot_gap, int ttl,
                         float cost_weight);
     std::vector<int> get_occ_front_info();
+
+    /**
+     * @brief Enable multiplicative log-linear cost form (default off).
+     *
+     * When enabled, cost = 1 - quality * exp(-Σ penalty) instead of the
+     * additive clamp chain. The value is kept per tracker instance and passed
+     * to each cost-kernel launch.
+     */
+    void set_multiplicative_cost(bool enabled);
+
+    /**
+     * @brief Set stability reward weight for multiplicative cost form.
+     *
+     * When >0, size-consistent matches get reduced cost via
+     * penalty -= w / (1 + |h_diff|/h_det). Default 0 (off).
+     */
+    void set_stability_cost_w(float w);
+
+    /**
+     * @brief Set Sinkhorn lambda (cost→prob scaling, default 30.0).
+     *
+     * Lower values (10-15) give softer discrimination and room for reward
+     * terms to influence auction outcomes. Higher values sharpen the
+     * transition but leave no room for small cost differences.
+     */
+    void set_sinkhorn_lambda(float lambda);
 
     /**
      * @brief Set Detection Quality Scaling (A6) parameters.

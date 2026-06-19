@@ -82,10 +82,8 @@ class AuctionMatcher:
         )
 
     def match_from_cost(self, cost: torch.Tensor) -> tuple[list[int], list[int]]:
-        """傳入 CPU 上的 cost matrix 並求解。注意：C++ Solver 是 Reward Maximizer。"""
-        # 取負號：將 Minimization 轉為 Maximization
-        reward = -cost.numpy()
-        return _auction_solve(reward, epsilon=self.epsilon)
+        """傳入 cost matrix 並以 CPU auction solver 求解。"""
+        return _auction_solve(cost.detach().cpu().numpy(), epsilon=self.epsilon)
 
 
 _SavedBatch = tuple[

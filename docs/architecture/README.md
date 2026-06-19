@@ -24,12 +24,12 @@ Saccade 目前以 **GPU-first 的 MOT / tracking / relink pipeline** 為核心�
 
 | 層級 | 名稱 | 主要責任 | 主要位置 |
 | :--- | :--- | :--- | :--- |
-| **L1** | **Perception / Tracking** | detection、postprocess、tracking、GMC、association | `src/saccade/perception/`, `src/tracking/`, `include/tracking/` |
-| **L2** | **Appearance / ReID** | crop、embedding、appearance bank、semantic relink | `src/saccade/perception/tracking/`, `src/saccade/perception/eval/relink.py` |
-| **L3** | **Streaming / Buffering** | Redis queue / stream、microbatch、event buffering | `src/saccade/storage/`, `src/saccade/pipeline/` |
-| **L4** | **Vector Storage** | Chroma memory、metadata filter、hybrid query | `src/saccade/storage/` |
-| **L5** | **Cognition / Retrieval** | orchestrator、RAG trigger、query / visual requery | `src/saccade/cognition/`, `src/saccade/api/` |
-| **L6** | **Resource / Health** | VRAM 監控、階梯降級、跨進程 VRAM 狀態廣播、service health | `src/saccade/resource/`, `src/saccade/pipeline/health.py` |
+| **L1** | **Eval Hot Path / Perception** | frame ingest、detection、postprocess、GMC、tracking、MOT output | `src/saccade/perception/eval/`, `scripts/eval/`, `src/tracking/`, `include/tracking/` |
+| **L2** | **Tracker Core / Native Facades** | GPUByteTracker、Kalman、auction/Sinkhorn、native postprocess/GMC/ReID facades | `src/tracking/`, `include/tracking/`, `src/saccade/perception/tracking/` |
+| **L3** | **Appearance / ReID / Relink Options** | crop、embedding、appearance bank、semantic relink、optional identity resolve | `src/saccade/perception/tracking/`, `src/saccade/perception/eval/relink.py`, `src/saccade/perception/eval/output_bank.py` |
+| **L4** | **Runtime Streaming / Dispatch** | multistream dispatcher、zero-copy helpers、frame pool / eval streaming adapters | `src/saccade/perception/dispatcher.py`, `src/saccade/perception/zero_copy.py`, `src/saccade/perception/eval/streaming.py`, `src/saccade/perception/eval/pool.py` |
+| **L5** | **Storage / Event Memory** | Redis microbatch、Chroma memory、metadata filter、hybrid query | `src/saccade/storage/` |
+| **L6** | **Cognition / API / Resource Health** | orchestrator、RAG trigger、API、VRAM degradation、service health | `src/saccade/cognition/`, `src/saccade/api/`, `src/saccade/resource/`, `src/saccade/pipeline/health.py` |
 
 ---
 
@@ -37,19 +37,25 @@ Saccade 目前以 **GPU-first 的 MOT / tracking / relink pipeline** 為核心�
 
 目前最活躍、最常被維護的主路徑是 **MOT17-centered evaluation path**：
 
-- [scripts/eval/mot17.py](/scripts/eval/mot17.py)
-- [src/saccade/perception/eval/runner.py](/src/saccade/perception/eval/runner.py)
+- [scripts/eval/mot17.py](../../scripts/eval/mot17.py)
+- [src/saccade/perception/eval/evaluator.py](../../src/saccade/perception/eval/evaluator.py)
+
+[runner.py](../../src/saccade/perception/eval/runner.py) remains as a compatibility
+shim that re-exports `run_eval`; do not treat it as the implementation source of
+truth.
 
 在這條路徑上，主要資料流如下：
 
 ```text
 Frame Source
-  -> preprocess / detection
-  -> detection postprocess
-  -> optional ReID extract
+  -> fetch / ingest_preprocess
+  -> detect
+  -> postprocess
+  -> optional ReID budget / crop / extract
+  -> GMC
   -> GPU tracker update
-  -> semantic relink / identity resolve
-  -> optional post-merge cleanup
+  -> materialize
+  -> fast MOT emit or optional identity resolve
   -> eval output
 ```
 
@@ -58,6 +64,11 @@ Frame Source
 - tracking / relink / trigger 的決策品質
 - native / GPU path 的穩定性
 - default evaluation path 的可重現性
+
+Current headline preset is `mamba_whole_graph`: `native_640`, whole-detect CUDA
+graph, GPU GMC, tracker graph, bidirectional bridge relink, ReID off. Raw parser
+defaults and older module configs are still useful for ablations, but they are
+not the headline architecture.
 
 ---
 
@@ -73,16 +84,16 @@ Frame Source
 
 主要位置：
 
-- [src/saccade/perception/eval/detection.py](/src/saccade/perception/eval/detection.py)
-- [include/tracking/pipeline.hpp](/include/tracking/pipeline.hpp)
-- [src/tracking/pipeline.cpp](/src/tracking/pipeline.cpp)
+- [src/saccade/perception/eval/detection.py](../../src/saccade/perception/eval/detection.py)
+- [include/tracking/pipeline.hpp](../../include/tracking/pipeline.hpp)
+- [src/tracking/pipeline.cpp](../../src/tracking/pipeline.cpp)
 
 目前架構重點：
 
 - 盡量走 native facade / CUDA fast path
-- letterbox / resize 已換為 fused CUDA kernel（`src/perception/letterbox_kernel.cu`），單次 detect 節省 ~1ms
-- Python wrapper 保留 orchestration 與 fallback
-- detection quality 仍有進一步演算法空間，但責任邊界已固定
+- `mamba_whole_graph` 以 `native_640` + `preprocess: none` 作 headline path；tiled / `native_960` 是 legacy comparison 或 ablation path
+- native `PerceptionPipeline` 可承接 tensor prep / filter / NMS；Python wrapper 保留 orchestration、debug dump 與 fallback
+- `detection_quality_scaling`、`person_geometry_prior`、`geometry_suspect_support` 在 current headline preset 關閉，避免和 Mamba 分佈重校準重疊
 
 ### 4.2 GPU Tracker
 
@@ -96,16 +107,17 @@ Frame Source
 
 主要位置：
 
-- [src/tracking/tracker_gpu.cu](/src/tracking/tracker_gpu.cu)
-- [include/tracking/tracker_gpu.hpp](/include/tracking/tracker_gpu.hpp)
-- [src/saccade/perception/tracking/tracker_gpu.py](/src/saccade/perception/tracking/tracker_gpu.py)
+- [src/tracking/tracker_gpu.cu](../../src/tracking/tracker_gpu.cu)
+- [include/tracking/tracker_gpu.hpp](../../include/tracking/tracker_gpu.hpp)
+- [src/saccade/perception/tracking/tracker_gpu.py](../../src/saccade/perception/tracking/tracker_gpu.py)
 
 目前架構重點：
 
 - result path 優先走 GPU-side buffers，再在必要邊界 materialize
 - GMC（Global Motion Compensation）走 GPU phase correlation；`estimate_into()` 直寫 device buffer，避免 host roundtrip；sub-stage profiling 可追蹤 FFT / cross_power / IFFT / peak_find 分段耗時
-- association 允許 appearance 參與，但仍保留穩定 fallback
-- deterministic assignment 與 native identity resolve 已完成收斂
+- current preset 透過 `set_params()`、`set_oao_params()`、`set_occ_params()`、`set_relink_params()` 將 YAML 值下到 C++ tracker
+- association 允許 appearance 參與，但 current headline preset 是 ReID off；主要 identity 修復在 tracker-core bidirectional bridge relink
+- result buffers 由 `track` 寫入，`materialize` 才在 MOT output boundary 做必要 readback
 
 ### 4.3 Appearance / ReID
 
@@ -118,15 +130,15 @@ Frame Source
 
 主要位置：
 
-- [src/saccade/perception/tracking/tracker_gpu.py](/src/saccade/perception/tracking/tracker_gpu.py)
-- [src/saccade/perception/eval/relink.py](/src/saccade/perception/eval/relink.py)
-- [src/saccade/perception/feature_extractor.py](/src/saccade/perception/feature_extractor.py)
+- [src/saccade/perception/tracking/tracker_gpu.py](../../src/saccade/perception/tracking/tracker_gpu.py)
+- [src/saccade/perception/eval/relink.py](../../src/saccade/perception/eval/relink.py)
+- [src/saccade/perception/feature_extractor.py](../../src/saccade/perception/feature_extractor.py)
 
 目前架構重點：
 
-- reference quality 與 false-accept filtering 是當前主優化方向
-- ReID 不是每幀必做；它是受 trigger / budget 控制的昂貴決策資源（`async_reid=True` 為預設，走 side CUDA stream，不阻塞主追蹤循環）
-- inter-frame relink 預設走 `pipeline_relink=True`（ThreadPoolExecutor overlap）
+- reference quality 與 false-accept filtering 是保留能力，但不是 current headline preset 的精度來源
+- ReID 不是每幀必做；它是受 trigger / budget 控制的昂貴決策資源。當 ReID 開啟且 native backend 可用時，`async_reid=True` 會走 side CUDA stream，並和 GMC overlap，再於 `track` 前同步
+- inter-frame `pipeline_relink=True` 只在完整 emit pipeline active 且沒有 `--profile-stages` 時把 `relink_write` 丟到 background executor
 - noisy reference 不應污染 bank
 
 ### 4.4 Storage / Eventing
@@ -139,8 +151,8 @@ Frame Source
 
 主要位置：
 
-- [src/saccade/storage/redis_cache.py](/src/saccade/storage/redis_cache.py)
-- [src/saccade/storage/chroma_store.py](/src/saccade/storage/chroma_store.py)
+- [src/saccade/storage/redis_cache.py](../../src/saccade/storage/redis_cache.py)
+- [src/saccade/storage/chroma_store.py](../../src/saccade/storage/chroma_store.py)
 
 目前架構重點：
 
@@ -158,8 +170,8 @@ Frame Source
 
 主要位置：
 
-- [src/saccade/resource/resource_manager.py](/src/saccade/resource/resource_manager.py)
-- [src/saccade/perception/dispatcher.py](/src/saccade/perception/dispatcher.py)
+- [src/saccade/resource/resource_manager.py](../../src/saccade/resource/resource_manager.py)
+- [src/saccade/perception/dispatcher.py](../../src/saccade/perception/dispatcher.py)
 
 目前架構重點：
 
@@ -187,9 +199,9 @@ Frame Source
 
 主要位置：
 
-- [src/saccade/cognition/orchestrator.py](/src/saccade/cognition/orchestrator.py)
-- [src/saccade/api/server.py](/src/saccade/api/server.py)
-- [src/saccade/pipeline/health.py](/src/saccade/pipeline/health.py)
+- [src/saccade/cognition/orchestrator.py](../../src/saccade/cognition/orchestrator.py)
+- [src/saccade/api/server.py](../../src/saccade/api/server.py)
+- [src/saccade/pipeline/health.py](../../src/saccade/pipeline/health.py)
 
 目前架構重點：
 
@@ -220,7 +232,7 @@ Frame Source
 
 ### 5.4 Storage / API 合約
 
-- Redis key / stream / event schema / Chroma metadata 屬於明確合約，變更時需同步更新 `reference/api_spec.md`
+- Redis key / stream / event schema / Chroma metadata 屬於明確合約，變更時需同步更新 [api_spec.md](../modules/storage/api_spec.md)
 - 外部查詢 API 與 internal health output contract 不可混用
 
 ---
@@ -229,14 +241,12 @@ Frame Source
 
 以下方向已在主路徑上基本收斂：
 
-- Pipeline GPU 化主線完成，主熱路徑已大量 native 化
-- deterministic assignment 已落地
-- current documented default path 維持：
-  - `--cross-tile-merge`
-  - `--match-thresh 0.78`
-  - `--semantic-threshold 0.91`
-  - `async_reid=True`、`pipeline_relink=True`（非同步 side-stream + inter-frame relink overlap）
-- GPU GMC 已收斂：phase correlation pipeline 全段 GPU；peak_find 改為 256-thread parallel reduction（原 single-thread O(N) → 12.5× 加速）；frame total 0.71 → 0.28 ms
+- Pipeline GPU 化主線完成，主熱路徑已大量 native 化。
+- deterministic assignment / GPUByteTracker hot path 已落地。
+- current headline preset 維持 `mamba_whole_graph`：`native_640`、whole-detect CUDA graph、GPU GMC、tracker graph、bidirectional bridge relink、ReID off。
+- current tracker preset 值：`match_thresh=0.50`、`new_track_thresh=0.28`、`kalman_r_scale=2.8`、`oao_tau=0.50`、`oao_ramp_frames=25`、`multiplicative_cost=true`。
+- GPU GMC 已收斂：phase correlation pipeline 全段 GPU；C++ GMC / PyGraphedGMC / SparseOpticalFlow fallback 順序由 `_build_gmc_estimator()` 決定。
+- `async_reid`、`pipeline_relink` 是 optional throughput mechanisms；current headline preset ReID off，因此它們不是 headline 精度來源。
 
 這些屬於目前穩定系統形狀的一部分，不應在日常小改動中隨意漂移。
 

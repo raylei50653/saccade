@@ -1,6 +1,6 @@
 # Saccade TODO History
 
-> 從 [docs/TODO.md](/docs/TODO.md) 拆出的歷史/脈絡內容。保留歷史決策、已完成 workstreams、延後方向與實驗檔案，避免主 TODO 被長篇背景淹沒。
+> 從 [docs/TODO.md](TODO.md) 拆出的歷史/脈絡內容。保留歷史決策、已完成 workstreams、延後方向與實驗檔案，避免主 TODO 被長篇背景淹沒。
 
 ---
 
@@ -149,7 +149,7 @@
 - [x] ~~Score Decay~~ — 分析確認 unmatched confirmed tracks 的 `age>0` 條件已阻止其輸出，Score Decay 對 FP 無影響，放棄。
 
 ### E — Semantic Relinker 閾值調優 ✅
-- [x] **ReID 預設基線重設**：`--semantic-threshold 0.90` 與 primary appearance bank (`--appearance-bank-consistency-threshold 0.75`) 已升格為新 base；最新 `scripts/eval/ablation_relink.py --detector SDP` 重跑結果為 IDF1 45.4%、MOTA 34.7%、IDs 837、FP 16,687、FN 55,765。
+- [x] **ReID 預設基線重設**：`--semantic-threshold 0.90` 與 primary appearance bank (`--appearance-bank-consistency-threshold 0.75`) 已升格為新 base；歷史 ablation_relink.py command（目前 tree 已無此入口）重跑結果為 IDF1 45.4%、MOTA 34.7%、IDs 837、FP 16,687、FN 55,765。
 - [x] **Post-lifecycle merge（motion-only）確認有害**：IDF1 最多跌 2.5pp，設計缺陷為缺乏 appearance gate，不建議啟用。
 
 ### F — 後續延伸（已完成 / 已收斂）
@@ -159,7 +159,7 @@
 - [x] **Per-sequence 參數自適應**：讀取 `seqinfo.ini` 的 `frameRate`，自動 scale `reid_interval`（∝ fps/30）與 `track_buffer`；`--per-seq-adapt` / `--no-per-seq-adapt` flag（預設啟用）。
 - [x] **換 ReID 模型（OSNet / FastReID TRT）framework 支援**：已加入 `ModelType.OSNET` / `ModelType.FASTREID` enum（C++ + Python），預設 engine 路徑已設定，ImageNet normalize 共用 DINOv2/TransReID 路徑；crop size 自動 256×128。
   - OSNet build path 已整理：預設 ONNX `models/embedding/osnet_x1_0_256x128.onnx`，預設 engine `models/embedding/osnet_x1_0_256x128.engine`
-  - OSNet ONNX / TensorRT engine 已建立，`scripts/model/build_osnet.py` 可重建；`scripts/eval/ablation_reid_models.py` 已完成 `siglip2 / transreid / osnet` backbone 對比
+  - OSNet ONNX / TensorRT engine 已建立，`scripts/model/build_osnet.py` 可重建；歷史 ablation_reid_models.py script（目前 tree 已無此入口）已完成 `siglip2 / transreid / osnet` backbone 對比
 
 ---
 
@@ -309,7 +309,7 @@ Cascade model（CrowdHuman-trained）泛用效果：P=4.5%, R=84.4%, FPrem=37.2%
 - `src/saccade/perception/eval/external_fp_model.py`：`CascadeFilterConfig`, `CascadeMetrics`, `apply_cascade_filter()`, `train_cascade_stage2_model()`, `apply_cascade_from_json()`
 - `scripts/eval/train_cascade_stage2.py`：訓練 Stage 2 logistic model
 - `scripts/eval/analyze_external_fp_rows.py`：新增 `--cascade-model` 參數
-- `tests/test_external_fp_model.py`：3 個 cascade 測試
+- `tests/experimental/test_external_fp_model.py`：3 個 cascade 測試
 - `models/external_fp/cascade_stage2_logistic.json`：CrowdHuman-trained model
 
 ---
@@ -364,9 +364,9 @@ Cascade model（CrowdHuman-trained）泛用效果：P=4.5%, R=84.4%, FPrem=37.2%
 ### A2-L：Pre-hoc Embedding Quality — LaSt-ViT CUDA Kernel（CLOSED No-Go 2026-05-02）
 
 - [x] **結論：** SigLIP2 未以 LaSt-ViT 目標訓練，`last_hidden_state` 的前景/背景穩定性無法區分（stab ~0.12 均勻，p=0.386），inference-time post-processing 的 IDF1 增益僅 **+0.09pp**（MOT17-04-SDP 全序列），遠低於 +1.0pp go/no-go 門檻。
-- 落地產出（保留）：CUDA kernel `preprocessor_gpu.cu`、C++ API `FeatureExtractor::extract_with_stability()`、cuFFT 正規化 bug fix、驗證腳本 `scripts/eval/validate_last_vit_phase0.py`、`tests/test_last_vit_cpp_vs_python.py`（18 tests）。
+- 落地產出（保留）：CUDA kernel `preprocessor_gpu.cu`、C++ API `FeatureExtractor::extract_with_stability()`、cuFFT 正規化 bug fix；歷史驗證腳本 validate_last_vit_phase0.py / test_last_vit_cpp_vs_python.py 目前已不在 tree。
 - **根本限制：** LaSt-ViT 增益來自訓練期骨幹校正，非 inference formula。若要啟用需重訓 SigLIP2 with LaSt-ViT 聚合層。
-- 詳細分析：`docs/experiments/reid/last_vit_integration_analysis.md` §9
+- 詳細分析：[last_vit_integration_analysis.md](modules/reid/research/last_vit_integration_analysis.md) §9
 
 ### A3：Track-Level Budgeted ReID Sweep（已完成 2026-05-01）
 
@@ -647,8 +647,8 @@ Cascade model（CrowdHuman-trained）泛用效果：P=4.5%, R=84.4%, FPrem=37.2%
 - 報告：`docs/archive/multibirth_scan_summary.md` ✅
 
 **相關文件**：
-- 主 TODO 更新：[docs/TODO.md](/docs/TODO.md)（P5-1 更新）
-- 詳細報告：[docs/archive/multibirth_scan_summary.md](/docs/archive/multibirth_scan_summary.md)
+- 主 TODO 更新：[docs/TODO.md](TODO.md)（P5-1 更新）
+- 詳細報告：[docs/archive/multibirth_scan_summary.md](archive/multibirth_scan_summary.md)
 - 修改檔案：`evaluator.py`, `multi_birth.py`, `config.py`, `config/lifecycle.py`
 
 ---
@@ -658,14 +658,14 @@ Cascade model（CrowdHuman-trained）泛用效果：P=4.5%, R=84.4%, FPrem=37.2%
 > 從主 TODO 拆出。背景：2026-05-17 speed preset（yolo26s）7-seq SDP 全量評估，參數優化觸天花板
 > （IDF1 52.4% / MOTA 41.7% / Rcll 55.2% / FPS 131.8）；threshold 調整 MOTA 波動 <0.5pp，
 > 結論「需要新算法架構，而非參數調校」。後續 Option D/E/F 即此脈絡下的探索。當前 production
-> preset 為 **Option F `mamba_optimal`**（見主 TODO baseline 表與 [configs/presets/mamba_optimal.yaml](/configs/presets/mamba_optimal.yaml)）。
+> preset 為 **Option F `mamba_optimal`**（見主 TODO baseline 表與 [configs/presets/mamba_optimal.yaml](../configs/presets/mamba_optimal.yaml)）。
 
 ### ❌ Option D — Track-Conditioned YOLO（NO-GO，2026-05-19 結案）
 
 Phase 2（50 epochs）eval 完成。IDF1 31.7% / MOTA 24.5% vs baseline 52.0% / 41.6%，差距 -20pp。
 Gate ablation 確認 gate 無貢獻（gate-on 38.3% vs gate-off 38.2%，∆<0.2pp）。
 根因：100 queries recall 天花板（34.9% vs baseline 55%）+ Phase 2 gt_ratio→0 使 decoder 繞過 gate。
-Checkpoints 保留：`runs/conditioned_p1_v2/best.ckpt`、`runs/conditioned_p2/best.ckpt`。
+Historical checkpoints：runs/conditioned_p1_v2/best.ckpt、runs/conditioned_p2/best.ckpt（目前不在 tree）。
 
 ### ✅ Option E-v2 — Quality-Gated Temporal Feature Fusion（GO，2026-05-22 結案；後被 Option F 取代為 preset）
 
@@ -679,7 +679,7 @@ Checkpoints 保留：`runs/conditioned_p1_v2/best.ckpt`、`runs/conditioned_p2/b
 
 ### ✅ Option F — Mamba Gated Detector & Tracker Optimization（2026-05-27 結案，當前 preset）
 
-設計預設檔：[configs/presets/mamba_optimal.yaml](/configs/presets/mamba_optimal.yaml)。徹底挖掘 Mamba 檢測頭，
+設計預設檔：[configs/presets/mamba_optimal.yaml](../configs/presets/mamba_optimal.yaml)。徹底挖掘 Mamba 檢測頭，
 移除無效益 ReID，協同精調動態關聯 / GMC 對齊 / 軌跡插值。
 
 **🚀 PixelShuffle Breakthrough（2026-05-27）**：Mamba 頭以 **PixelShuffle 上取樣**取代無參數 `F.interpolate`，

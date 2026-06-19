@@ -14,4 +14,4 @@
 
 - ✅ **mamba_head CUDA graph eval bug（2026-06-02）**：真因為 custom `selective_scan_fwd` CUDA op 跑在 legacy default stream（stream 0）→ CUDA-graph capture 不錄 scan kernel → replay 缺 scan → cls 飽和 → ~10× FP → MOTA 崩。修法：pybind binding 加 `stream_ptr` + op 傳 `torch.cuda.current_stream().cuda_stream`，graph path 改 `torch.cuda.make_graphed_callables`。隔離 bit-exact、full-SDP parity（噪音內）、FPS 95.5→110.2（+15%）。已 default `use_cuda_graph: true`。詳見 [research/mamba-cuda-graph-bug.md](research/mamba-cuda-graph-bug.md)。
 - ⏸️ **ST-Mamba (Spatio-Temporal SSM)**：已訓練（stride=1, clip_len=3），單幀推理與 cross-scan 持平；時序 buffer 因固定位置掃描無法追蹤移動物體而不 work（T=3 IDF1 41.0% 崩）。已由 VGT-Mamba 取代。
-- ✅ **Option F（Mamba Gated Detector）結案（2026-05-27）**→ 當前 production preset `mamba_optimal`。設計與精調見 [option-f-mamba-head.md](option-f-mamba-head.md)，歷史脈絡見 [TODO_history.md](../../TODO_history.md)。
+- ✅ **Option F（Mamba Gated Detector）結案（2026-05-27）**→ `mamba_optimal` 是 Mamba head lineage；目前 production headline preset 已升到 `mamba_whole_graph`（whole-detect CUDA graph + T3→T1 ckpt lineage）。設計與精調見 [option-f-mamba-head.md](option-f-mamba-head.md)，歷史脈絡見 [TODO_history.md](../../TODO_history.md)。

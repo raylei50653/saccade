@@ -12,4 +12,4 @@ Saccade 依賴穩定影像源。當 RTSP 斷流或 MediaMTX 重啟時，系統�
 3. **狀態清除**: 斷流期間，`SmartTracker` 會清除所有遺失超過 10 秒的物件 ID。
 
 ## 3. 測試恢復
-執行 `./scripts/stream_test.sh` 模擬斷流情況，檢查系統是否在 10 秒內恢復推流。
+使用 streaming smoke harness（例如 `scripts/ops/run_8stream_perception.py`）模擬斷流情況，檢查系統是否在 10 秒內恢復推流；舊的 scripts/stream_test.sh 目前已不在 tree。

@@ -29,6 +29,8 @@ from typing import Iterator, Optional
 
 import torch
 
+from saccade.perception.box_ops import box_iou
+
 
 @dataclass(frozen=False)
 class MotionModel:
@@ -121,22 +123,7 @@ class MotionModel:
     @staticmethod
     def compute_iou(box_a: torch.Tensor, box_b: torch.Tensor) -> float:
         """Compute IoU between two [x1, y1, x2, y2] boxes."""
-        ix1 = max(float(box_a[0]), float(box_b[0]))
-        iy1 = max(float(box_a[1]), float(box_b[1]))
-        ix2 = min(float(box_a[2]), float(box_b[2]))
-        iy2 = min(float(box_a[3]), float(box_b[3]))
-
-        inter = max(0.0, ix2 - ix1) * max(0.0, iy2 - iy1)
-        area_a = max(0.0, float(box_a[2] - box_a[0])) * max(
-            0.0, float(box_a[3] - box_a[1])
-        )
-        area_b = max(0.0, float(box_b[2] - box_b[0])) * max(
-            0.0, float(box_b[3] - box_b[1])
-        )
-        union = area_a + area_b - inter
-        if union < 1e-6:
-            return 0.0
-        return float(inter / union)
+        return box_iou(box_a, box_b, union_mode="zero")
 
     def motion_iou(self, box: torch.Tensor, offset: int = 1) -> float:
         """IoU between a detection box and the predicted box."""

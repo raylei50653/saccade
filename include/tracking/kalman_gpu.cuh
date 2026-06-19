@@ -281,11 +281,13 @@ __host__ __device__ __forceinline__ void update(float x[8], float P[64], const f
 // Compute innovation covariance S = H*P*H^T + R and its inverse in one pass.
 // Used for Mahalanobis gating before association (Phase 2).
 // S is the 4x4 top-left block of P plus R.
+// r_scale: global R scale factor; applied consistently with kf_gpu::update
+// so the gate is not tighter than the measurement update.
 __host__ __device__ __forceinline__ void compute_S_inv(
-    const float x[8], const float P[64], float S_inv[16], float light_factor = 0.0f)
+    const float x[8], const float P[64], float S_inv[16], float light_factor = 0.0f, float r_scale = 1.0f)
 {
     float R[16];
-    get_R(x[3], R, light_factor, 1.0f);
+    get_R(x[3], R, light_factor, 1.0f, r_scale);
     float S[16];
     for (int i = 0; i < 4; ++i)
         for (int j = 0; j < 4; ++j)

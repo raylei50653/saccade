@@ -15,15 +15,15 @@
 
 此規範主要對應下列檔案：
 
-- [src/saccade/media/rtsp.py](/src/saccade/media/rtsp.py)
-- [src/saccade/media/mediamtx_client.py](/src/saccade/media/mediamtx_client.py)
-- [src/saccade/media/ffmpeg_utils.py](/src/saccade/media/ffmpeg_utils.py)
-- [src/saccade/perception/entropy.py](/src/saccade/perception/entropy.py)
-- [src/saccade/storage/redis_cache.py](/src/saccade/storage/redis_cache.py)
-- [src/saccade/storage/chroma_store.py](/src/saccade/storage/chroma_store.py)
-- [src/saccade/cognition/orchestrator.py](/src/saccade/cognition/orchestrator.py)
-- [src/saccade/api/server.py](/src/saccade/api/server.py)
-- [src/saccade/pipeline/health.py](/src/saccade/pipeline/health.py)
+- [src/saccade/media/rtsp.py](../../../src/saccade/media/rtsp.py)
+- [src/saccade/media/mediamtx_client.py](../../../src/saccade/media/mediamtx_client.py)
+- [src/saccade/media/ffmpeg_utils.py](../../../src/saccade/media/ffmpeg_utils.py)
+- [src/saccade/perception/entropy.py](../../../src/saccade/perception/entropy.py)
+- [src/saccade/storage/redis_cache.py](../../../src/saccade/storage/redis_cache.py)
+- [src/saccade/storage/chroma_store.py](../../../src/saccade/storage/chroma_store.py)
+- [src/saccade/cognition/orchestrator.py](../../../src/saccade/cognition/orchestrator.py)
+- [src/saccade/api/server.py](../../../src/saccade/api/server.py)
+- [src/saccade/pipeline/health.py](../../../src/saccade/pipeline/health.py)
 
 ---
 
@@ -97,7 +97,7 @@ rtsp://127.0.0.1:8554/detected
 
 ## 3. Redis Event Queue
 
-### 2.1 Queue Key
+### 3.1 Queue Key
 
 - Key: `saccade:events`
 - Type: Redis List
@@ -107,7 +107,7 @@ rtsp://127.0.0.1:8554/detected
 - Retention:
   - TTL `3600s`
 
-### 2.2 Event Schema
+### 3.2 Event Schema
 
 目前 `entropy.py` 實際發送格式如下：
 
@@ -125,7 +125,7 @@ rtsp://127.0.0.1:8554/detected
 }
 ```
 
-### 2.3 Field Contract
+### 3.3 Field Contract
 
 - `event_id`
   - type: `string`
@@ -149,7 +149,7 @@ rtsp://127.0.0.1:8554/detected
   - type: `list[string]`
   - contract: detected object labels
 
-### 2.4 Notes
+### 3.4 Notes
 
 - `is_anomaly` 不是目前 perception event producer 的必填欄位。
 - `is_anomaly` 目前主要在 cognition / storage 寫入 Chroma metadata 時推導產生。
@@ -159,7 +159,7 @@ rtsp://127.0.0.1:8554/detected
 
 ## 4. Redis Stream Contract
 
-### 3.1 Stream Key
+### 4.1 Stream Key
 
 - Key: `saccade:stream`
 - Type: Redis Stream
@@ -170,7 +170,7 @@ rtsp://127.0.0.1:8554/detected
   - group: `orchestrator_group`
   - consumer: currently `worker_1`
 
-### 3.2 Stream Payload
+### 4.2 Stream Payload
 
 `RedisCache` 目前將事件包成單欄位 payload：
 
@@ -180,9 +180,9 @@ rtsp://127.0.0.1:8554/detected
 }
 ```
 
-其中 `data` 反序列化後的內容，應沿用第 2 節的 event schema。
+其中 `data` 反序列化後的內容，應沿用第 3 節的 event schema。
 
-### 3.3 Consumption Contract
+### 4.3 Consumption Contract
 
 - reader:
   - `RedisCache.read_stream_batch(count=..., timeout_ms=...)`
@@ -192,24 +192,24 @@ rtsp://127.0.0.1:8554/detected
 - retention:
   - approximate `MAXLEN=10000`
 
-### 3.4 Notes
+### 4.4 Notes
 
 - 目前 repo 同時存在 Redis List 與 Redis Stream 兩條事件入口。
 - 若未來正式統一為 Stream-only，需更新：
   - `entropy.py`
-  - `tests/test_pipeline.py`
+  - `tests/integration/test_pipeline.py`
   - 本文件
 
 ---
 
 ## 5. Chroma Memory Contract
 
-### 4.1 Collection
+### 5.1 Collection
 
-- default path: `./storage/chroma_db`
+- default path: storage/chroma_db (runtime-created; not committed)
 - default collection: `saccade_memories`
 
-### 4.2 Insert Contract
+### 5.2 Insert Contract
 
 `ChromaStore.add_memory()` 目前接受：
 
@@ -222,7 +222,7 @@ add_memory(
 ) -> str
 ```
 
-### 4.3 Stored Metadata
+### 5.3 Stored Metadata
 
 目前 orchestrator 實際寫入的 metadata 典型欄位：
 
@@ -245,7 +245,7 @@ add_memory(
 - `is_anomaly`: `0 | 1`
 - `timestamp`: `float`
 
-### 4.4 Query Contract
+### 5.4 Query Contract
 
 `ChromaStore.hybrid_query()` 目前支援：
 
@@ -272,9 +272,9 @@ add_memory(
 
 ## 6. FastAPI Retrieval API
 
-對應檔案：[src/saccade/api/server.py](/src/saccade/api/server.py)
+對應檔案：[src/saccade/api/server.py](../../../src/saccade/api/server.py)
 
-### 5.1 `GET /`
+### 6.1 `GET /`
 
 Response:
 
@@ -286,7 +286,7 @@ Response:
 }
 ```
 
-### 5.2 `GET /objects`
+### 6.2 `GET /objects`
 
 用途：
 
@@ -301,7 +301,7 @@ Response:
 }
 ```
 
-### 5.3 `GET /objects/{obj_id}`
+### 6.3 `GET /objects/{obj_id}`
 
 用途：
 
@@ -318,7 +318,7 @@ Response:
 - `server.py` 與 `redis_cache.py` 之間目前存在資料合約缺口
 - 若要正式對外使用此 endpoint，需先補齊 object history schema
 
-### 5.4 `POST /search`
+### 6.4 `POST /search`
 
 Request body:
 
@@ -362,11 +362,11 @@ Response shape:
 
 ---
 
-## 6. Health Contract
+## 7. Health Contract
 
-對應檔案：[src/saccade/pipeline/health.py](/src/saccade/pipeline/health.py)
+對應檔案：[src/saccade/pipeline/health.py](../../../src/saccade/pipeline/health.py)
 
-### 6.1 Checked Services
+### 7.1 Checked Services
 
 - systemd user services:
   - `yolo-perception`
@@ -382,7 +382,7 @@ Response shape:
   - redis queue depth
   - torch-reported VRAM fragmentation
 
-### 6.2 Health Output Contract
+### 7.2 Health Output Contract
 
 `HealthChecker.run()` returns:
 
@@ -397,7 +397,7 @@ Response shape:
 
 ---
 
-## 7. Concurrency / I/O Rules
+## 8. Concurrency / I/O Rules
 
 - Redis list writes:
   - use `redis.asyncio`
@@ -411,7 +411,7 @@ Response shape:
 
 ---
 
-## 8. Known Gaps
+## 9. Known Gaps
 
 - `EntropyTrigger.calculate_entropy()` is still placeholder logic and not a stable semantic contract yet.
 - Redis List event path and Redis Stream path are both present; long-term canonical path is not fully unified.
@@ -420,7 +420,7 @@ Response shape:
 
 ---
 
-## 9. Update Rules
+## 10. Update Rules
 
 更新本文件的時機：
 

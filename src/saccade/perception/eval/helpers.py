@@ -747,15 +747,7 @@ def budget_reid_candidates(
     t_boxes = torch.tensor(warped_track_boxes, device=fused_boxes.device)
     t_priorities = torch.tensor(priorities_list, device=fused_boxes.device)
 
-    lt = torch.max(fused_boxes[:, None, :2], t_boxes[None, :, :2])
-    rb = torch.min(fused_boxes[:, None, 2:], t_boxes[None, :, 2:])
-    wh = (rb - lt).clamp(min=0)
-    inter = wh[:, :, 0] * wh[:, :, 1]
-    area_a = (fused_boxes[:, 2] - fused_boxes[:, 0]) * (
-        fused_boxes[:, 3] - fused_boxes[:, 1]
-    )
-    area_b = (t_boxes[:, 2] - t_boxes[:, 0]) * (t_boxes[:, 3] - t_boxes[:, 1])
-    iou = inter / (area_a[:, None] + area_b[None, :] - inter).clamp(min=1e-6)
+    iou = _box_iou_matrix(fused_boxes, t_boxes)
 
     track_contribution, _ = torch.max(t_priorities[None, :] * iou, dim=1)
     det_priorities = fused_scores + track_contribution

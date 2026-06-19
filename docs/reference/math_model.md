@@ -1,0 +1,1040 @@
+# Saccade 全局數學模型參考
+
+> 最後 source audit：2026-06-19。
+>
+> 範圍：目前 MOT17 baseline：
+> `uv run scripts/eval/mot17.py --preset mamba_whole_graph --detector SDP`。
+> 這份文件描述已落地的實作，不是 proposal。主要 source anchors：
+> [configs/presets/mamba_whole_graph.yaml](../../configs/presets/mamba_whole_graph.yaml)、
+> [src/saccade/perception/eval/evaluator.py](../../src/saccade/perception/eval/evaluator.py)、
+> [src/tracking/tracker_gpu.cu](../../src/tracking/tracker_gpu.cu)、
+> [include/tracking/kalman_gpu.cuh](../../include/tracking/kalman_gpu.cuh)、
+> [src/tracking/gmc_kernel.cu](../../src/tracking/gmc_kernel.cu)、
+> [src/tracking/relink_gate.cu](../../src/tracking/relink_gate.cu)。
+
+---
+
+## 1. 現行 Baseline 合約
+
+目前推薦 baseline 是 `mamba_whole_graph`。核心啟用條件如下：
+
+| 區域 | baseline 值 | 實際效果 |
+|:--|:--|:--|
+| Detector input | `tiling: native_640`, `preprocess: none` | 單一路徑 native 640 detector，不做 gamma/contrast preprocessing |
+| Detector model | `mamba_ckpt: runs/mamba_gt_v14replica_t3_t1/best.ckpt` | preset 使用的 Mamba head checkpoint |
+| Graph capture | `use_whole_graph: true`, `use_cuda_graph: true`, `use_tracker_graph: true` | whole detect graph；可用時也使用 tracker graph |
+| GMC | `gmc: true`, `gmc_downscale: 4`, `gmc_fg_mask: false` | GPU phase-correlation 估計相機平移 |
+| Appearance | `reid_mode: "off"` | baseline 不使用 per-frame appearance association |
+| Bridge relink | `relink_bridge_enabled: true` | tracker-core bidirectional foot bridge 啟用 |
+| Main association | `match_thresh: 0.50`, `new_track_thresh: 0.28` | ByteTrack-like 多階段 gate |
+| Kalman noise | `kalman_r_scale: 2.8` | GPU Kalman measurement noise scale |
+| OAO | `oao_tau: 0.50`, `oao_ramp_frames: 25` | duration-ramped occlusion-aware association penalty |
+| Cost form | `multiplicative_cost: true`, `sinkhorn_lambda: 10`, `stability_cost_w: 0.20` | log-linear cost，加上 size-stability reward |
+
+幾個容易誤讀的分支：
+
+- `reid_mode: off` 代表 headline cost matrix 不使用 appearance embedding。
+  ReID-capable kernel 仍存在，但不是這個 baseline 的主路徑。
+- `id_stability_filter: false`、`person_geometry_prior: false`、
+  `detection_quality_scaling: false`、`geometry_suspect_support: false`
+  讓 hot path 集中在 detector output、GMC、tracker association、bridge relink。
+- `relink_enabled` 與 `relink_bridge_enabled` 是不同機制。baseline 使用
+  tracker-core bridge，不是 birth-time appearance lost-bank relinker。
+
+---
+
+## 2. Frame-Level Dataflow
+
+對每個 frame `f`，`evaluator.py` 目前 profile 的 top-level stages：
+
+```text
+fetch
+ingest_preprocess
+detect
+postprocess
+reid_bank_sync
+reid_budget
+reid_crop
+reid_extract
+lazy_reid
+gmc
+track
+materialize
+bg_relink_wait
+relink_write
+frame_total
+```
+
+在目前 no-ReID baseline 中，實際主線可讀成：
+
+```text
+frame tensor
+  -> detect
+  -> postprocess
+  -> GMC warp
+  -> GPU tracker update
+  -> materialize output
+  -> relink_write / MOT rows
+```
+
+source 注意事項：
+
+- 真正的 eval implementation source of truth 是
+  [evaluator.py](../../src/saccade/perception/eval/evaluator.py)。
+  [runner.py](../../src/saccade/perception/eval/runner.py) 只是 re-export
+  `run_eval`。
+- ReID 啟用時，ReID work 會先排到 side CUDA stream，並在 `track` 前同步；
+  但 `reid_mode: off` 時這些 stage 只是結構上存在，baseline 不使用。
+- 經 source 查證的資料流與 stage source map 見 [DATAFLOW.md](../DATAFLOW.md)
+  與 [pipeline_flow.md](pipeline_flow.md)。
+
+---
+
+## 3. 符號
+
+Frame 與 detection：
+
+| 符號 | 意義 |
+|:--|:--|
+| `f` | 目前 frame index |
+| `I_f` | 目前 RGB/CHW frame tensor |
+| `D_f = {d_j}` | frame `f` postprocess 後的 detection set |
+| `b_j = (x1_j, y1_j, x2_j, y2_j)` | detection box，座標在 original-frame pixels |
+| `s_j` | detection confidence score |
+| `cls_j` | detection class id |
+| `T_f = {t_i}` | association 前 active 或 lost tracker slots |
+| `x_i` | track slot `i` 的 8D Kalman state |
+| `P_i` | track slot `i` 的 8x8 covariance |
+| `W_f` | GMC 產生的 2x3 camera warp；GPU phase-correlation path 是 `[1,0,tx;0,1,ty]` |
+
+Tracker state：
+
+| 符號 | 意義 |
+|:--|:--|
+| `x = (cx, cy, a, h, vx, vy, va, vh)` | center、aspect ratio、height 與對應速度 |
+| `w = a * h` | state implied box width |
+| `B(x)` | 從 state 還原的 box：`(cx-w/2, cy-h/2, cx+w/2, cy+h/2)` |
+| `z = (cx, cy, a, h)` | detection box 轉成的 Kalman measurement |
+| `M` | Kalman measurement matrix，等於 `[I4, 0]` |
+| `IoU(i,j)` | `B(x_i)` 與 `b_j` 的 IoU |
+| `c_ij` | track `i` 與 detection `j` 的 final association cost |
+| `p_ij` | 從 cost 轉成的 auction probability/value |
+| `A_ij` | association base quality；避免與 Kalman process noise matrix `Q` 混用 |
+
+---
+
+## 4. Detection 與 Postprocess 模型
+
+Detector 輸出 raw boxes、scores、classes。Native postprocess 由
+[PerceptionPipeline](../../include/tracking/pipeline.hpp) 提供，C++ implementation
+在 [src/tracking/pipeline.cpp](../../src/tracking/pipeline.cpp)。核心 contract：
+
+```text
+(raw boxes, raw scores, raw classes)
+  -> score/class/geometry filtering
+  -> compact/gather
+  -> NMS
+  -> fixed or counted output buffers
+```
+
+目前 preset 中：
+
+- `track_person_only: false`：tracking 前不把所有 class collapse 成 person。
+- `person_geometry_prior: false`：strict person-shape prior 關閉。
+- `detection_quality_scaling: false`：不以 geometry quality 乘 detection score。
+- `geometry_suspect_support: false`：headline baseline 不使用 suspect-support logic。
+
+因此 tracker 直接消費 post-NMS boxes/scores，並由 tracker stage score gates
+決定各 detection 進入哪一段 association：
+
+```text
+track_thresh <= low-score boxes considered by the last association stage
+mid_thresh   <= mid-confidence stage lower bound
+high_thresh  <= high-confidence stage lower bound
+new_track_thresh <= unmatched detection may spawn a new track
+```
+
+實際 thresholds 由 [evaluator.py](../../src/saccade/perception/eval/evaluator.py)
+呼叫 `set_params(...)` 注入，並在 [tracker_gpu.cu](../../src/tracking/tracker_gpu.cu)
+中 clamp/store。
+
+---
+
+## 5. GMC：Camera Motion Compensation
+
+GPU GMC path 用 phase correlation 估計 frame-to-frame translation。實作在
+[src/tracking/gmc_kernel.cu](../../src/tracking/gmc_kernel.cu)，wrapper 在
+[include/tracking/gmc.hpp](../../include/tracking/gmc.hpp)。
+
+### 5.1 Grayscale Downscale
+
+輸入是 CHW float `[0,1]`。對 downscaled pixel `(x,y)`：
+
+$$
+s_x = \left\lfloor x \cdot \frac{W_{\mathrm{src}}}{W_{\mathrm{dst}}} \right\rfloor,
+\qquad
+s_y = \left\lfloor y \cdot \frac{H_{\mathrm{src}}}{H_{\mathrm{dst}}} \right\rfloor
+$$
+
+$$
+G(x,y) = 0.299 R(s_x,s_y) + 0.587 G_c(s_x,s_y) + 0.114 B(s_x,s_y)
+$$
+
+FFT 前套 Hanning window：
+
+$$
+w_x = \frac{1}{2}\left(1-\cos\frac{2\pi x}{W_{\mathrm{dst}}-1}\right),
+\qquad
+w_y = \frac{1}{2}\left(1-\cos\frac{2\pi y}{H_{\mathrm{dst}}-1}\right)
+$$
+
+$$
+G_w(x,y) = G(x,y) w_x w_y
+$$
+
+> **注意**：C++ GMC 使用上述 floor-based 降採樣。Python fallback path
+> (`PyGraphedGMC`) 使用 `F.interpolate(mode="nearest")`，與 floor 公式
+> 在邊界行為上不等價，但實務差異可忽略。
+
+### 5.2 Cross-Power Spectrum
+
+令 `A = FFT(prev_gray)`、`B = FFT(curr_gray)`。kernel 計算：
+
+$$
+C(k) = \overline{A(k)} B(k),
+\qquad
+R(k) = \frac{C(k)}{|C(k)| + 10^{-6}},
+\qquad
+r = \mathrm{IFFT}(R)
+$$
+
+`r` 的 peak 給出 wrapped displacement。若 `peak_x > w/2` 則減去 `w`；
+若 `peak_y > h/2` 則減去 `h`。
+
+### 5.3 Confidence And Warp
+
+phase-correlation score：
+
+$$
+\mathrm{PCR} = \frac{\max r}{\mathrm{RMS}(r)}
+$$
+
+$$
+\gamma_{\mathrm{gmc}} =
+\begin{cases}
+\mathrm{clamp}(\mathrm{PCR}/\tau_{\mathrm{PCR}}, 0, 1), & \mathrm{PCR} < \tau_{\mathrm{PCR}} \\
+1, & \mathrm{otherwise}
+\end{cases}
+$$
+
+若 wrapped displacement 任一方向超過 downscaled image dimension 的 25%，該
+位移視為不可信。處置方式因路徑而異：
+
+- C++ `peak_to_translation_warp_kernel`（graph path，經由
+  `launch_phase_correlation_into_warp` 進入）：輸出 identity warp（`t_x=t_y=0`）。
+- C++ `launch_phase_correlation`（standalone path）：kernel 回傳原始 wrapped
+  displacement，由 host 端 `GMC::estimate()` 進行二次檢查後回傳空 result，
+  eval 端等同該 frame 無 GMC warp。
+- Python `PyGraphedGMC`：沒有 25% displacement cap，僅依賴 PCR gate。
+- Python `TilePhaseCorrAffineGMC`：若沒有 affine/global fallback 會回 `None`，
+  等同無 GMC warp。
+
+否則：
+
+$$
+t_x = p_x \cdot d \cdot \gamma_{\mathrm{gmc}},
+\qquad
+t_y = p_y \cdot d \cdot \gamma_{\mathrm{gmc}}
+$$
+
+$$
+W_f =
+\begin{bmatrix}
+1 & 0 & t_x \\
+0 & 1 & t_y
+\end{bmatrix}
+$$
+
+> **注意**：Python fallback `PyGraphedGMC` 僅使用 hard PCR gate
+> （`valid = ratio >= 5.0`，等價於 `γ_gmc ∈ {0, 1}`），沒有上述軟
+> confidence scaling；且 PCR gate threshold 無法從環境變數配置
+> （C++ 可透過 `SACCADE_GMC_PCR_THRESH` 調整，預設 `5.0`）。
+
+sign convention：`W_f` 是 prev-frame predicted track 到 current-frame coordinates
+的 warp。positive `t_x` 代表把 predicted track center 往 current frame 右方推。
+這與 [tracker_gpu.cu](../../src/tracking/tracker_gpu.cu) 的
+`predict_gmc_sinv_fused_kernel(...)` 一致：GMC translation 先作為 deterministic
+control input 加到 position，再做 Kalman predict，讓 velocity state 只學 object
+residual motion，而不是相機運動。
+
+---
+
+## 6. Kalman 模型
+
+GPU Kalman 參考實作：[include/tracking/kalman_gpu.cuh](../../include/tracking/kalman_gpu.cuh)。
+state 與 measurement：
+
+$$
+x = (c_x, c_y, a, h, v_x, v_y, v_a, v_h)^T,
+\qquad
+z = (c_x, c_y, a, h)^T
+$$
+
+### 6.1 Prediction
+
+Transition 是 constant velocity：
+
+$$
+F =
+\begin{bmatrix}
+I_4 & I_4 \\
+0 & I_4
+\end{bmatrix},
+\qquad
+x' = Fx,
+\qquad
+P' = FPF^T + Q(h^-)
+$$
+
+程式中等價於：
+
+```text
+cx += vx
+cy += vy
+a  += va
+h  += vh
+```
+
+這裡 $h^-$ 是 prediction 後 state height；`get_Q(...)` 使用的是呼叫
+`predict(...)` 後的 `x[3]`。process noise 隨 $h^-$ 縮放：
+
+$$
+\sigma_p = \frac{h^-}{20},
+\qquad
+\sigma_v = \frac{h^-}{160}
+$$
+
+$$
+\operatorname{diag}(Q) =
+(\sigma_p^2, \sigma_p^2, 10^{-4}, \sigma_p^2,
+ \sigma_v^2, \sigma_v^2, 10^{-10}, \sigma_v^2)
+$$
+
+### 6.2 Measurement Update
+
+measurement matrix：
+
+$$
+M = \begin{bmatrix} I_4 & 0 \end{bmatrix}
+$$
+
+measurement noise 使用 update 前 track state 的 predicted height $h^-$，不是
+detection height。`light_factor` 在目前 MOT17 baseline path 由 caller 傳 `0.0`；
+因此下面的 $\lambda_{\mathrm{light}}=0$。NSA Kalman 停用時
+`m_NSA = 1`。
+
+$$
+m_R = r_{\mathrm{scale}} \cdot m_{\mathrm{NSA}} \cdot
+(1 + 2\lambda_{\mathrm{light}})
+$$
+
+$$
+\operatorname{diag}(R) =
+\left(
+\left(\frac{h^-}{20}\right)^2m_R,
+\left(\frac{h^-}{20}\right)^2m_R,
+10^{-2}m_R,
+\left(\frac{h^-}{20}\right)^2m_R
+\right)
+$$
+
+更新方程：
+
+$$
+S = MPM^T + R,
+\qquad
+K = PM^T S^{-1},
+\qquad
+y = z - Mx
+$$
+
+$$
+x \leftarrow x + Ky,
+\qquad
+P \leftarrow (I - KM)P
+$$
+
+baseline preset 設定 `kalman_r_scale: 2.8`。NSA Kalman 是可配置分支；
+停用時 `nsa_multiplier = 1`。
+
+### 6.3 Mahalanobis Gate
+
+對 detection measurement `z_j`，即使 IoU 弱，只要 Mahalanobis distance
+小於 `maha_gate` 仍可進入 candidate：
+
+$$
+d^2_{ij} = (z_j - M\tilde{x}_i)^T S_i^{-1}(z_j - M\tilde{x}_i)
+$$
+
+其中 $\tilde{x}_i$ 是已套用 GMC control input 並完成 predict 後的 state。
+IoU gate 也使用同一個 $\tilde{x}_i$：
+
+$$
+\mathrm{IoU}_{ij} = \mathrm{IoU}(B(\tilde{x}_i), b_j)
+$$
+
+因此 association candidate gate 是：
+
+$$
+\mathrm{candidate}_{ij} \iff
+\mathrm{IoU}_{ij} > \tau_{\mathrm{iou}}
+\;\lor\;
+d^2_{ij} < \tau_{\mathrm{maha}}
+$$
+
+source path 是 [tracker_gpu.cu](../../src/tracking/tracker_gpu.cu) 中的
+`predict_gmc_sinv_fused_kernel(...)`、`compute_S_inv(...)` 與 `mahal_sq_det(...)`。
+gate 的 $S_i^{-1}$ 由 `compute_S_inv` 計算，`r_scale` 參數由
+`predict_gmc_sinv_fused_kernel` 傳入（與 §6.2 update 使用相同的
+`kalman_r_scale`）。
+
+---
+
+## 7. Association Cost
+
+目前 headline path 是 no-ReID fast path：
+
+- [stage1_cost_fused_kernel](../../src/tracking/tracker_gpu.cu)：IoU /
+  Mahalanobis gating 與 cost 一次完成。
+- [compute_conditional_cost_kernel](../../src/tracking/tracker_gpu.cu)：appearance
+  embeddings 啟用時使用的變體。
+
+### 7.1 Candidate Gate
+
+對每個 track `i` 與 detection `j`：
+
+$$
+\mathrm{IoU}_{ij} = \mathrm{IoU}(B(\tilde{x}_i), b_j)
+$$
+
+$$
+\mathrm{candidate}_{ij} \iff
+\mathrm{IoU}_{ij} > \tau_{\mathrm{iou}}
+\;\lor\;
+d^2_{ij} < \tau_{\mathrm{maha}}
+$$
+
+若兩個 gate 都不過：
+
+$$
+c_{ij} = 1
+$$
+
+sparse candidate list 只 enqueue 最終 cost 落在最寬鬆 association threshold
+內的 candidate：
+
+$$
+c_{\max} =
+\max(c_{\mathrm{DDA}}, \tau_{\mathrm{match}}, \tau_{\mathrm{stage2}})
+$$
+
+$$
+\mathrm{enqueue}_{ij} \iff c_{ij} \le c_{\max}
+$$
+
+這點很重要：auction 讀的是 per-track compact top candidates，不是完整 dense
+matrix。
+
+### 7.2 Base Quality
+
+detection score fusion：
+
+$$
+q^{\mathrm{iou}}_{ij}
+= \mathrm{IoU}_{ij}\left(1 - w_{\mathrm{fuse}}(1-s_j)\right)
+$$
+
+baseline `fuse_score_weight: 0.0`，所以 `q_iou = IoU_ij`。
+
+無 ReID 時：
+
+$$
+A_{ij} = q^{\mathrm{iou}}_{ij}
+$$
+
+ReID 啟用且 embedding 乾淨時：
+
+$$
+\cos_{ij} = \max(0, e_i^T e_j)
+$$
+
+$$
+A_{ij} =
+\begin{cases}
+w_{\cos}\cos_{ij} + w_{\mathrm{iou}}q^{\mathrm{iou}}_{ij} + w_s s_j,
+& \cos_{ij} \ge \tau_{\cos} \land q^{\mathrm{iou}}_{ij} \ge \tau_{\mathrm{iou,low}} \\
+q^{\mathrm{iou}}_{ij},
+& \mathrm{otherwise}
+\end{cases}
+$$
+
+[scripts/eval/config/reid.py](../../scripts/eval/config/reid.py) 中預設 appearance
+blend 是 `w_cos=0.55`、`w_iou=0.30`、`w_score=0.15`，但目前
+`reid_mode: off` baseline 不使用。
+
+### 7.3 Multiplicative Cost
+
+目前 preset 啟用：
+
+```yaml
+multiplicative_cost: true
+sinkhorn_lambda: 10
+stability_cost_w: 0.20
+```
+
+active cost form：
+
+$$
+c_{ij} =
+\mathrm{clamp}\left(1 - A_{ij}e^{-\Pi_{ij}}, 0, 1\right)
+$$
+
+`Penalty_ij` 是正 penalty 與負 reward 的總和：
+
+$$
+\Pi_{ij}
+= P_{\mathrm{OAO}}(i,j)
++ P_{\mathrm{vel}}(i,j)
++ P_{\mathrm{occ\_front}}(i,j)
+- R_{\mathrm{stability}}(i,j)
+$$
+
+legacy additive path 仍存在：
+
+$$
+c_{ij} = 1 - A_{ij} + \sum_k P_k
+$$
+
+但 baseline 不使用。
+
+### 7.4 OAO Penalty
+
+OAO coefficient 由 [compute_track_occlusion_kernel](../../src/tracking/tracker_gpu.cu)
+根據 predicted track-track overlap 計算。
+
+預設 max-overlap mode：
+
+$$
+o^{\mathrm{base}}_i
+= \max_{k \ne i,\; k\ \mathrm{active}}
+\mathrm{IoU}\left(B(x_i), B(x_k)\right)
+$$
+
+optional union mode 會把 track box rasterize 成 8x8 grid 並量測 covered cells。
+crowd、height、foot gates 也存在，但 baseline 只設定 `oao_tau` 與
+`oao_ramp_frames`。
+
+duration ramp：
+
+$$
+d_i \leftarrow \text{consecutive frames with } o^{\mathrm{base}}_i > 0
+$$
+
+$$
+o_i = o^{\mathrm{base}}_i
+\min\left(1, \frac{d_i}{N_{\mathrm{ramp}}}\right)
+$$
+
+matching penalty：
+
+$$
+P_{\mathrm{OAO}}(i,j)
+= \tau_{\mathrm{OAO}}\, o_i\, g_s(s_j)
+$$
+
+$$
+g_s(s_j) =
+\begin{cases}
+1, & w_{\mathrm{OAO,score}} \le 0 \\
+\max(0, 1 - w_{\mathrm{OAO,score}}s_j), & \mathrm{otherwise}
+\end{cases}
+$$
+
+baseline：
+
+```text
+oao_tau = 0.50
+oao_ramp_frames = 25
+oao_score_w = default/off unless set elsewhere
+```
+
+### 7.5 Velocity Direction Penalty
+
+若 `vel_dir_weight > 0` 且 predicted velocity 有意義：
+
+$$
+v_i = (v_{x,i}, v_{y,i}),
+\qquad
+\Delta_{ij} = \mathrm{center}(b_j) - (c_{x,i}, c_{y,i})
+$$
+
+$$
+\cos\theta_{ij}
+= \frac{v_i^T\Delta_{ij}}{\lVert v_i\rVert \lVert\Delta_{ij}\rVert}
+$$
+
+$$
+P_{\mathrm{vel}}(i,j)
+= w_{\mathrm{vel}}\max(0, -\cos\theta_{ij})
+$$
+
+baseline preset 未啟用 `vel_dir_weight`，但 kernel 中保留此 term。
+
+### 7.6 Front-Occluder Cost
+
+optional occlusion-state machine 啟用時，front-occluder TTL 可加入 depth
+consistency penalty：
+
+$$
+y^{\mathrm{foot}}_i = c_{y,i} + \frac{h_i}{2}
+$$
+
+$$
+u_{ij} =
+\frac{y^{\mathrm{foot}}_i - y_{2,j}}{\max(h_i, 10^{-3})}
+$$
+
+$$
+P_{\mathrm{occ\_front}}(i,j)
+= w_{\mathrm{occ}}\max(0, u_{ij})
+$$
+
+baseline 沒有設定 `occ_state_enabled`，因此除非另行配置，這個分支關閉。
+
+### 7.7 Stability Reward
+
+active baseline 使用 size-consistency reward：
+
+$$
+h_j = y_{2,j} - y_{1,j},
+\qquad
+\Delta h_{ij} = |h_i - h_j|,
+\qquad
+\lambda_{\mathrm{eff}} = \max(\lambda, 1)
+$$
+
+$$
+R_{\mathrm{stability}}(i,j)
+=
+\frac{w_{\mathrm{stab}}/\lambda_{\mathrm{eff}}}
+{1 + \Delta h_{ij}/\max(h_j, 10^{-3})}
+$$
+
+因為 reward 除以 `lambda`，進入 `exp(-lambda * cost)` 後，bid boost
+大致不會隨 `lambda` 改變而失衡。
+
+---
+
+## 8. Sparse Top-K 與 Auction Assignment
+
+assignment implementation 不是 full dense Sinkhorn solve。active GPU path：
+
+```text
+cost candidates per track
+  -> fused multi-stage sparse top-k
+  -> auction over top-k probabilities
+  -> commit winners
+```
+
+### 8.1 Stage Definitions
+
+[fused_sinkhorn_multistage_kernel](../../src/tracking/tracker_gpu.cu) 對五個 stage
+輸出 top-k detection candidates：
+
+| Stage | Track state | Detection score range | Cost cap |
+|:--|:--|:--|:--|
+| S0 DDA | confirmed (`state == 2`) | `[high_thresh, 1.1)` | `dda_max_cost` |
+| S1 high | confirmed | `[high_thresh, 1.1)` | `match_thresh` |
+| S1b mid | confirmed | `[mid_thresh, high_thresh)` | `match_thresh` |
+| S1c tentative | tentative (`state == 1`) | `[mid_thresh, 1.1)` | `match_thresh` |
+| S2 low | confirmed | `[track_thresh, mid_thresh)` | `stage2_match_thresh` |
+
+DDA 是 source 中的歷史 stage label，不在程式裡展開全名；數學合約是：
+confirmed tracks 對 high-score detections 先經過一個更緊的 Stage 0，
+`cost <= dda_max_cost`。它由 `SACCADE_ENABLE_DDA` 控制，`dda_max_cost`
+預設來自 `SACCADE_DDA_MAX_COST`，未設定時為 `0.12`。
+
+放入 top-k 的 value：
+
+$$
+p_{ij} = e^{-\lambda c_{ij}} G_{\mathrm{aspect}}(b_j)
+$$
+
+aspect penalty：
+
+$$
+r_j = \frac{\mathrm{width}_j}{\mathrm{height}_j}
+$$
+
+$$
+G_{\mathrm{aspect}}(b_j) =
+\begin{cases}
+\max(0.5, 1 - (r_j - 0.8)), & r_j > 0.8 \\
+\max(0.5, 1 - 5(0.15-r_j)), & r_j < 0.15 \\
+1, & \mathrm{otherwise}
+\end{cases}
+$$
+
+### 8.2 Auction Bid
+
+auction 讀取 top-k probabilities。對 track `i` 與 candidate detection `j`，
+給定 detection 目前 price `rho_j`：
+
+$$
+v_{ij} = p_{ij} - \rho_j
+$$
+
+$$
+j^* = \arg\max_j v_{ij},
+\qquad
+v^{(2)}_i = \operatorname{secondmax}_j v_{ij}
+$$
+
+$$
+\Delta\rho_i =
+\begin{cases}
+\epsilon, & \text{no second candidate} \\
+v_{ij^*} - v^{(2)}_i + \epsilon, & \text{otherwise}
+\end{cases}
+$$
+
+$$
+\mathrm{bid}_i = \rho_{j^*} + \Delta\rho_i
+$$
+
+optional bid biases：
+
+$$
+\mathrm{bid}_i \mathrel{+}=
+\frac{w_{\mathrm{fresh}}}{1+\mathrm{age}_i}
+$$
+
+$$
+\mathrm{bid}_i \mathrel{+}=
+\frac{w_{\mathrm{stab,bid}}}{1 + |h_i-h_j|/h_j}
+$$
+
+實作細節：
+
+- shared-memory price cache 做 intra-block conflict resolution。
+- block winners 用 global `atomicMax`。
+- packed `(float_bid_bits, tie_breaker)` keys 確保 deterministic commit。
+- 另外用 commit kernel 避免 `trk_to_det` / `det_to_trk` race 造成不一致。
+
+---
+
+## 9. Track Lifecycle 與 Birth
+
+assignment 後 tracker 更新 state：
+
+```text
+matched confirmed/tentative track
+  -> Kalman update with detection z_j
+  -> hit streak increments
+  -> age/time_since_update resets
+
+unmatched active track
+  -> remains active/lost while age <= track_buffer
+  -> removed after max age
+
+unmatched detection with score >= new_track_thresh
+  -> creates tentative track
+```
+
+baseline 使用：
+
+```text
+new_track_thresh = 0.28
+confirm_streak = 3
+confirm_score_thresh = 0.50
+track_buffer = 30
+per_seq_adapt = false
+```
+
+`confirm_streak` 與 `confirm_score_thresh` 代表新的 tentative track 必須累積足夠
+連續 evidence，才會被視為 confirmed output。若干 birth-gate experiments 位於
+[scripts/eval/config/lifecycle.py](../../scripts/eval/config/lifecycle.py)，但目前
+preset 沒有啟用。
+
+---
+
+## 10. Bridge Relink 模型
+
+active baseline 啟用 tracker-core bidirectional bridge relink：
+
+```yaml
+relink_bridge_enabled: true
+relink_bridge_px: 0.25
+relink_bridge_margin: 0.05
+relink_bridge_h_lo: 0.75
+relink_bridge_h_hi: 1.33
+relink_bridge_spatial_gate: 0.0
+relink_bridge_dir_bonus: 0.8
+```
+
+注意：`relink_bridge_px` 是歷史命名；baseline 的 `0.25` 不是 0.25 pixel。
+它會與下方的 $d_{\mathrm{bridge}}$ 比較，而 $d_{\mathrm{bridge}}$ 已除以
+`h_ref`，所以單位是 reference-height-normalized distance。
+
+實作在 [tracker_gpu.cu](../../src/tracking/tracker_gpu.cu)。它不同於
+[relink_gate.cu](../../src/tracking/relink_gate.cu) 的 appearance gate table。
+
+### 10.1 Foot History
+
+每個 observed slot 保存 foot-center history ring：
+
+$$
+\mathrm{sample}_i = (c_{x,i}, c_{y,i}, h_i)
+$$
+
+$$
+\bar{h}_i \leftarrow 0.95\bar{h}_i + 0.05h_i
+$$
+
+只有 observed tracks（`age == 0`）更新 history；coasting lost tracks 保留最後
+的 history。
+
+### 10.2 Candidate And Lost Pair
+
+新穩定的 candidate track 可在以下條件下採用 lost confirmed track id：
+
+```text
+candidate hit_streak == bridge_at
+candidate has at least 4 foot samples
+lost track is active but unmatched this frame
+lost state == confirmed
+bridge_min_lost <= lost_age <= bridge_ttl
+```
+
+### 10.3 Velocity Regression
+
+對四個 sample `(p0, p1, p2, p3)`，4-point regression velocity：
+
+$$
+v = \frac{3p_3 + p_2 - p_1 - 3p_0}{10}
+$$
+
+bridge 會計算：
+
+$$
+\ell = \text{lost exit anchor},\qquad
+c = \text{candidate entry anchor}
+$$
+
+$$
+v_\ell = \text{lost-side velocity},\qquad
+v_c = \text{candidate-side velocity},\qquad
+g = \mathrm{lost\_age}
+$$
+
+$$
+h_{\mathrm{ref}} =
+\max\left(\frac{\bar{h}_{\ell}+\bar{h}_c}{2}, 1\right)
+$$
+
+full-gap extrapolation residuals：
+
+$$
+r_{\mathrm{fwd}} =
+\frac{\lVert(\ell + v_\ell g) - c\rVert}{h_{\mathrm{ref}}},
+\qquad
+r_{\mathrm{bwd}} =
+\frac{\lVert(c - v_c g) - \ell\rVert}{h_{\mathrm{ref}}}
+$$
+
+$$
+d_h = \frac{\lVert \ell - c\rVert}{h_{\mathrm{ref}}},
+\qquad
+s_\ell = \frac{\lVert v_\ell\rVert}{h_{\mathrm{ref}}},
+\qquad
+w = \sqrt{\mathrm{clamp}(s_\ell/0.12, 0, 1)}
+$$
+
+$$
+d_{\mathrm{bridge}}
+= w\frac{r_{\mathrm{fwd}} + r_{\mathrm{bwd}}}{2}
++ (1-w)d_h
+$$
+
+### 10.4 Direction Bonus
+
+`relink_bridge_dir_bonus > 0` 時，如果 lost 與 candidate velocity 方向相近
+（`cos_sim > 0.5`），bridge 可往 cross-track error 方向 blend：
+
+$$
+\eta_v =
+\mathrm{clamp}
+\left(
+\frac{\min(\lVert v_\ell\rVert,\lVert v_c\rVert)}
+{\max(0.005h_{\mathrm{ref}}, 10^{-3})},
+0, 1
+\right)
+$$
+
+$$
+\eta_g = \mathrm{clamp}(g/30, 0, 1)
+$$
+
+$$
+\alpha =
+\min(w_{\mathrm{dir}}\cos^2\theta \,\eta_v\,\eta_g, 1)
+$$
+
+$$
+d_{\mathrm{bridge}}
+\leftarrow
+(1-\alpha)d_{\mathrm{bridge}}
++ \alpha d_{\mathrm{cross}}
+$$
+
+baseline 設定 `bridge_dir_bonus: 0.8`。
+
+### 10.5 Gates And Commit
+
+bridge 接受條件：
+
+$$
+d_{\mathrm{bridge}} \le \tau_{\mathrm{bridge}}
+$$
+
+$$
+\frac{\bar{h}_{\ell}}{\bar{h}_c}
+\in [h_{\mathrm{lo}}, h_{\mathrm{hi}}]
+$$
+
+$$
+d^{(2)}_{\mathrm{bridge}} - d^{(1)}_{\mathrm{bridge}}
+\ge m_{\mathrm{bridge}}
+\quad \text{if margin is enabled}
+$$
+
+optional physical speed、spatial、gap-occupancy gates 也存在。baseline
+`bridge_spatial_gate: 0.0`，且不啟用 occupancy expansion。
+
+接受後，candidate 採用 lost track id，lost slot 被 deactivate。若多個
+candidate claim 同一個 lost id，較高 detection score 贏，candidate index
+作 tie-breaker。
+
+---
+
+## 11. Semantic Relink Gate 模型
+
+目前 baseline 不使用 semantic appearance relink，但若要延伸 relink 行為，仍需
+理解 GPU gate。
+
+[relink_gate.cu](../../src/tracking/relink_gate.cu) 每個 query/candidate pair
+輸出六欄：
+
+| Column | Quantity |
+|:--|:--|
+| `kalman_d2` | squared Mahalanobis distance；bidirectional mode 預設 2D |
+| `bridge_dist` | midpoint bridge distance，依 reference height normalize |
+| `center_norm` | `spatial_metrics(...)` 的 normalized center distance |
+| `iou` | query box 與 candidate last box 的 IoU |
+| `speed_exceeds` | physical speed gate violation |
+| `dir_behind` | query 位於 candidate velocity 後方 |
+
+scoring kernel 計算：
+
+$$
+s_{\mathrm{maha}}
+= \max\left(0, 1 - \frac{d^2_{\mathrm{maha}}}{\tau_{\mathrm{maha}}}\right)
+$$
+
+unified dynamic score 啟用時：
+
+$$
+a =
+\begin{cases}
+\min(1, (n_{\mathrm{passed}}-1)/8), & n_{\mathrm{passed}} > 1 \\
+0, & \mathrm{otherwise}
+\end{cases}
+$$
+
+$$
+w_{\mathrm{sim}} =
+w^{0}_{\mathrm{sim}} + \Delta_{\mathrm{amb}}a + \Delta_{\mathrm{age}}r_{\mathrm{lost}}
+$$
+
+$$
+w_{\mathrm{iou}} =
+w^{0}_{\mathrm{iou}} - \Delta_{\mathrm{amb}}a - \Delta_{\mathrm{age}}r_{\mathrm{lost}},
+\qquad
+w_{\mathrm{maha}} = w^{0}_{\mathrm{maha}}
+$$
+
+weights clamp 成非負後 normalize，joint score：
+
+$$
+S_{\mathrm{joint}}
+= w_{\mathrm{sim}}S_{\mathrm{sim}}
++ w_{\mathrm{iou}}\mathrm{IoU}
++ w_{\mathrm{maha}}s_{\mathrm{maha}}
+$$
+
+optional Kalman penalty：
+
+$$
+S_{\mathrm{joint}}
+\leftarrow
+S_{\mathrm{joint}}
+- w_K\left(1-e^{-0.5d^2_K}\right)
+$$
+
+reciprocal margin 會拒絕 best-vs-second 不夠明確的 match。這仍不是 headline
+baseline，除非啟用 semantic/hybrid relink。
+
+---
+
+## 12. Output 與 Offline Postprocessing
+
+`materialize` 在 output boundary 讀 GPU result buffers。`relink_write` 接著 emit
+MOT rows 或執行配置好的 identity-resolution side effects。current fast path：
+
+```text
+no semantic relinker
+no appearance bank injection
+no dynamic ReID
+no ID-stability filter
+```
+
+所以 `relink_write` 可使用 fast MOT emit path。
+
+sequence 處理完後可能執行 output-level operations：
+
+- `interpolate_tracklets: true`
+- `interpolate_max_gap: 35`
+- `interpolate_min_track_len: 5`
+- `interpolate_min_h: 0`
+
+這些是 output cleanup/interpolation，不是 online association terms。現行 eval
+在寫出 sequence result file 前會修改 `results_lines`，因此用這些 result files
+計算的 reported MOT metrics 包含 interpolation 後處理。
+
+---
+
+## 13. 實作 Source Map
+
+| 模型區塊 | Source |
+|:--|:--|
+| Preset values | [configs/presets/mamba_whole_graph.yaml](../../configs/presets/mamba_whole_graph.yaml) |
+| Config parsing | [src/saccade/perception/eval/config.py](../../src/saccade/perception/eval/config.py), [scripts/eval/config](../../scripts/eval/config) |
+| Eval stage order | [src/saccade/perception/eval/evaluator.py](../../src/saccade/perception/eval/evaluator.py) |
+| Native postprocess facade | [include/tracking/pipeline.hpp](../../include/tracking/pipeline.hpp), [src/tracking/pipeline.cpp](../../src/tracking/pipeline.cpp) |
+| GMC math | [src/tracking/gmc_kernel.cu](../../src/tracking/gmc_kernel.cu), [include/tracking/gmc.hpp](../../include/tracking/gmc.hpp) |
+| Kalman math | [include/tracking/kalman_gpu.cuh](../../include/tracking/kalman_gpu.cuh) |
+| Cost, sparse top-k, auction, bridge | [src/tracking/tracker_gpu.cu](../../src/tracking/tracker_gpu.cu), [include/tracking/tracker_gpu.hpp](../../include/tracking/tracker_gpu.hpp) |
+| Python tracker wrapper | [src/saccade/perception/tracking/tracker_gpu.py](../../src/saccade/perception/tracking/tracker_gpu.py) |
+| Semantic relink / gate | [src/saccade/perception/eval/relink.py](../../src/saccade/perception/eval/relink.py), [src/tracking/relink_gate.cu](../../src/tracking/relink_gate.cu), [include/tracking/relink_gate.hpp](../../include/tracking/relink_gate.hpp) |
+
+具體修改流程見 [math_model_implementation.md](math_model_implementation.md)。
