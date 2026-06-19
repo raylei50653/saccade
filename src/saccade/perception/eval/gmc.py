@@ -94,8 +94,9 @@ class PyGraphedGMC:
     mathematically identical to C++ cuFFT GMC.
     """
 
-    def __init__(self, downscale: int = 4) -> None:
+    def __init__(self, downscale: int = 4, pcr_thresh: float = 5.0) -> None:
         self.downscale = downscale
+        self.pcr_thresh = float(pcr_thresh)
         self._captured = False
         self.h_orig = 0
         self.w_orig = 0
@@ -118,6 +119,9 @@ class PyGraphedGMC:
         self.w_ds = w_orig // self.downscale
         self._ds_tensor = torch.tensor(
             [float(self.downscale)], dtype=torch.float32, device=d
+        )
+        self._pcr_thresh_tensor = torch.tensor(
+            self.pcr_thresh, dtype=torch.float32, device=d
         )
         self.prev_gray = torch.zeros(
             self.h_ds, self.w_ds, dtype=torch.float32, device=d
@@ -143,6 +147,7 @@ class PyGraphedGMC:
 
         hds, wds = self.h_ds, self.w_ds
         ds_t = self._ds_tensor
+        pcr_thresh = self._pcr_thresh_tensor
         hann = self.hann
         pg = self.prev_gray
         warp_id = self._warp_id
@@ -215,14 +220,20 @@ class PyGraphedGMC:
                 peak_x = sum_x / (sum_v + 1e-6)
                 peak_y = sum_y / (sum_v + 1e-6)
 
-                valid = ratio >= 5.0
-
                 px_f = peak_x - torch.where(peak_x > wds / 2.0, float(wds), 0.0)
                 py_f = peak_y - torch.where(peak_y > hds / 2.0, float(hds), 0.0)
 
+                # 25% displacement plausibility cap (matches C++ gmc_kernel.cu)
+                displ_ok = (px_f.abs() <= wds * 0.25) & (py_f.abs() <= hds * 0.25)
+
+                # Soft confidence scaling (matches C++ gmc_kernel.cu)
+                confidence = torch.where(
+                    ratio < pcr_thresh, torch.clamp(ratio / pcr_thresh, 0.0, 1.0), 1.0
+                )
+
                 warp_out.copy_(warp_id)
-                tx = torch.where(valid, px_f * ds_t, 0.0)
-                ty = torch.where(valid, py_f * ds_t, 0.0)
+                tx = torch.where(displ_ok, px_f * ds_t * confidence, 0.0)
+                ty = torch.where(displ_ok, py_f * ds_t * confidence, 0.0)
 
                 updates = torch.cat([tx.view(1), ty.view(1)])
                 warp_out.scatter_(0, self.update_indices, updates)
