@@ -101,7 +101,7 @@ __global__ void gmc_kernel(float* states, float* covs, bool* active, const float
 __global__ void predict_gmc_sinv_fused_kernel(
     float* states, float* covs, bool* active, int* age,
     const float* gmc, float* s_inv_out,
-    int max_objs, int max_age)
+    int max_objs, int max_age, float r_scale)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= max_objs) return;
@@ -148,27 +148,8 @@ __global__ void predict_gmc_sinv_fused_kernel(
         return;
     }
 
-    kf_gpu::compute_S_inv(states + idx * 8, covs + idx * 64, s_inv_out + idx * 16);
+    kf_gpu::compute_S_inv(states + idx * 8, covs + idx * 64, s_inv_out + idx * 16, 0.0f, r_scale);
 }
-// matched_pairs: [n_matched × 2] interleaved (track_slot, det_box_idx).
-__global__ void kalman_update_kernel(
-    float* states, float* covs, const float* det_boxes,
-    const int* matched_pairs, int n_matched, float light_factor)
-{
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= n_matched) return;
-    int t = matched_pairs[i * 2];
-    int d = matched_pairs[i * 2 + 1];
-    const float* box = det_boxes + d * 4;
-    float z[4] = {
-        (box[0] + box[2]) * 0.5f,
-        (box[1] + box[3]) * 0.5f,
-        (box[2] - box[0]) / fmaxf(box[3] - box[1], 1e-6f),
-        box[3] - box[1]
-    };
-    kf_gpu::update(states + t * 8, covs + t * 64, z, light_factor);
-}
-
 // Initialize covariance for newly spawned tracks.
 __global__ void init_covariance_kernel(float* covs, const int* new_slots, int n_new) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -214,22 +195,6 @@ __global__ void apply_detection_quality_scaling_kernel(
 }
 
 namespace kernel {
-
-// Compute per-track S^-1 (innovation covariance inverse) after predict+GMC, before association.
-// Stores 16 floats (row-major 4x4) per track in s_inv_out.
-__global__ void compute_innovation_sinv_kernel(
-    const float* states, const float* covs, const bool* active,
-    float* s_inv_out, int max_objs)
-{
-    int t = blockIdx.x * blockDim.x + threadIdx.x;
-    if (t >= max_objs) return;
-    float* s_inv = s_inv_out + t * 16;
-    if (!active[t]) {
-        for (int i = 0; i < 16; ++i) s_inv[i] = 0.0f;
-        return;
-    }
-    kf_gpu::compute_S_inv(states + t * 8, covs + t * 64, s_inv);
-}
 
 // Returns Mahalanobis^2 between a detection (x1,y1,x2,y2) and a track predicted state.
 // If homography is provided, projects bottom-center to ground plane first (2D MMD).
@@ -782,16 +747,23 @@ __global__ void compute_conditional_cost_kernel(
 #define SINKHORN_NUM_STAGES 5
 #define SINKHORN_NUM_TOPK   3
 
-__device__ __forceinline__ void merge_top3_fixed(float* a_v, int* a_idx, const float* b_v, const int* b_idx) {
-    float res_v[3]; int res_idx[3];
-    int i = 0, j = 0;
+template <int NK>
+__device__ __forceinline__ void insert_topk_fixed(
+    float* vals, int* idxs, int stage, float val, int idx)
+{
+    int base = stage * NK;
     #pragma unroll
-    for (int k = 0; k < 3; ++k) {
-        if (a_v[i] >= b_v[j]) { res_v[k] = a_v[i]; res_idx[k] = a_idx[i]; i++; }
-        else { res_v[k] = b_v[j]; res_idx[k] = b_idx[j]; j++; }
+    for (int pos = 0; pos < NK; ++pos) {
+        if (val <= vals[base + pos]) continue;
+        #pragma unroll
+        for (int shift = NK - 1; shift > pos; --shift) {
+            vals[base + shift] = vals[base + shift - 1];
+            idxs[base + shift] = idxs[base + shift - 1];
+        }
+        vals[base + pos] = val;
+        idxs[base + pos] = idx;
+        break;
     }
-    #pragma unroll
-    for (int k = 0; k < 3; ++k) { a_v[k] = res_v[k]; a_idx[k] = res_idx[k]; }
 }
 
 __global__ void compute_cost_matrix_kernel(
@@ -890,36 +862,24 @@ __global__ void fused_sinkhorn_multistage_kernel(
 
             if (score >= high_thresh && score < 1.1f) {
                 if (st2 && cost <= dda_max_cost) {
-                    if (p > lv[0*NK+0]) { lv[0*NK+2]=lv[0*NK+1];li[0*NK+2]=li[0*NK+1];lv[0*NK+1]=lv[0*NK+0];li[0*NK+1]=li[0*NK+0];lv[0*NK+0]=p;li[0*NK+0]=d; }
-                    else if (p > lv[0*NK+1]) { lv[0*NK+2]=lv[0*NK+1];li[0*NK+2]=li[0*NK+1];lv[0*NK+1]=p;li[0*NK+1]=d; }
-                    else if (p > lv[0*NK+2]) { lv[0*NK+2]=p;li[0*NK+2]=d; }
+                    insert_topk_fixed<NK>(lv, li, 0, p, d);
                 }
                 if (st2 && cost <= match_thresh) {
-                    if (p > lv[1*NK+0]) { lv[1*NK+2]=lv[1*NK+1];li[1*NK+2]=li[1*NK+1];lv[1*NK+1]=lv[1*NK+0];li[1*NK+1]=li[1*NK+0];lv[1*NK+0]=p;li[1*NK+0]=d; }
-                    else if (p > lv[1*NK+1]) { lv[1*NK+2]=lv[1*NK+1];li[1*NK+2]=li[1*NK+1];lv[1*NK+1]=p;li[1*NK+1]=d; }
-                    else if (p > lv[1*NK+2]) { lv[1*NK+2]=p;li[1*NK+2]=d; }
+                    insert_topk_fixed<NK>(lv, li, 1, p, d);
                 }
                 if (st1 && cost <= match_thresh) {
-                    if (p > lv[3*NK+0]) { lv[3*NK+2]=lv[3*NK+1];li[3*NK+2]=li[3*NK+1];lv[3*NK+1]=lv[3*NK+0];li[3*NK+1]=li[3*NK+0];lv[3*NK+0]=p;li[3*NK+0]=d; }
-                    else if (p > lv[3*NK+1]) { lv[3*NK+2]=lv[3*NK+1];li[3*NK+2]=li[3*NK+1];lv[3*NK+1]=p;li[3*NK+1]=d; }
-                    else if (p > lv[3*NK+2]) { lv[3*NK+2]=p;li[3*NK+2]=d; }
+                    insert_topk_fixed<NK>(lv, li, 3, p, d);
                 }
             } else if (score >= mid_thresh) {
                 if (st2 && cost <= match_thresh) {
-                    if (p > lv[2*NK+0]) { lv[2*NK+2]=lv[2*NK+1];li[2*NK+2]=li[2*NK+1];lv[2*NK+1]=lv[2*NK+0];li[2*NK+1]=li[2*NK+0];lv[2*NK+0]=p;li[2*NK+0]=d; }
-                    else if (p > lv[2*NK+1]) { lv[2*NK+2]=lv[2*NK+1];li[2*NK+2]=li[2*NK+1];lv[2*NK+1]=p;li[2*NK+1]=d; }
-                    else if (p > lv[2*NK+2]) { lv[2*NK+2]=p;li[2*NK+2]=d; }
+                    insert_topk_fixed<NK>(lv, li, 2, p, d);
                 }
                 if (st1 && cost <= match_thresh) {
-                    if (p > lv[3*NK+0]) { lv[3*NK+2]=lv[3*NK+1];li[3*NK+2]=li[3*NK+1];lv[3*NK+1]=lv[3*NK+0];li[3*NK+1]=li[3*NK+0];lv[3*NK+0]=p;li[3*NK+0]=d; }
-                    else if (p > lv[3*NK+1]) { lv[3*NK+2]=lv[3*NK+1];li[3*NK+2]=li[3*NK+1];lv[3*NK+1]=p;li[3*NK+1]=d; }
-                    else if (p > lv[3*NK+2]) { lv[3*NK+2]=p;li[3*NK+2]=d; }
+                    insert_topk_fixed<NK>(lv, li, 3, p, d);
                 }
             } else if (score >= track_thresh) {
                 if (st2 && cost <= stage2_match_thresh) {
-                    if (p > lv[4*NK+0]) { lv[4*NK+2]=lv[4*NK+1];li[4*NK+2]=li[4*NK+1];lv[4*NK+1]=lv[4*NK+0];li[4*NK+1]=li[4*NK+0];lv[4*NK+0]=p;li[4*NK+0]=d; }
-                    else if (p > lv[4*NK+1]) { lv[4*NK+2]=lv[4*NK+1];li[4*NK+2]=li[4*NK+1];lv[4*NK+1]=p;li[4*NK+1]=d; }
-                    else if (p > lv[4*NK+2]) { lv[4*NK+2]=p;li[4*NK+2]=d; }
+                    insert_topk_fixed<NK>(lv, li, 4, p, d);
                 }
             }
         }
@@ -2239,7 +2199,7 @@ public:
         max_assoc_ = 1024;
         // 128-byte alignment per stage: pad stage_stride to 32-element multiple
         // (32 elems × 4 bytes = 128 bytes per stage)
-        sinkhorn_stage_stride_ = ((max_objs_ * 3 + 31) / 32) * 32;
+        sinkhorn_stage_stride_ = ((max_objs_ * SINKHORN_NUM_TOPK + 31) / 32) * 32;
         int topk_total = SINKHORN_NUM_STAGES * sinkhorn_stage_stride_;
         checkCuda(cudaMalloc(&d_cost_matrix_, max_objs_ * max_assoc_ * sizeof(float)));
         checkCuda(cudaMalloc(&d_sinkhorn_v_, max_assoc_ * sizeof(float)));
@@ -2400,12 +2360,16 @@ public:
         cudaFree(d_track_id_ctr_);
         cudaFree(d_res_boxes_); cudaFree(d_res_scores_); cudaFree(d_res_ids_);
         cudaFree(d_res_classes_); cudaFree(d_res_det_idx_); cudaFree(d_res_count_);
-        // Relink lost-bank (allocated lazily in set_relink_params)
-        if (d_relink_feats_) {
-            cudaFree(d_relink_feats_); cudaFree(d_relink_ids_); cudaFree(d_relink_pos_);
-            cudaFree(d_relink_lostage_); cudaFree(d_relink_valid_); cudaFree(d_relink_cursor_);
-            cudaFree(d_det_revive_id_); cudaFree(d_relink_dbg_);
-        }
+        // Relink lost-bank/debug buffers are allocated lazily and independently:
+        // bidirectional bridge can allocate only d_relink_dbg_.
+        if (d_relink_feats_) cudaFree(d_relink_feats_);
+        if (d_relink_ids_) cudaFree(d_relink_ids_);
+        if (d_relink_pos_) cudaFree(d_relink_pos_);
+        if (d_relink_lostage_) cudaFree(d_relink_lostage_);
+        if (d_relink_valid_) cudaFree(d_relink_valid_);
+        if (d_relink_cursor_) cudaFree(d_relink_cursor_);
+        if (d_det_revive_id_) cudaFree(d_det_revive_id_);
+        if (d_relink_dbg_) cudaFree(d_relink_dbg_);
     }
 
     std::vector<TrackResult> update(float* d_boxes, float* d_scores, int* d_classes, int num_dets,
@@ -2487,7 +2451,7 @@ public:
                 d_relink_lostage_, d_relink_valid_, relink_bank_cap_, relink_max_age_);
         }
         predict_gmc_sinv_fused_kernel<<<blocks, threads, 0, stream>>>(
-            d_states_, d_covs_, d_active_, d_age_, d_gmc, d_s_inv_, max_objs_, max_age_);
+            d_states_, d_covs_, d_active_, d_age_, d_gmc, d_s_inv_, max_objs_, max_age_, r_scale_);
 
         // Association: always launch with fixed grid; kernels guard with
         // idx >= num_dets or tau == 0.
@@ -2605,7 +2569,7 @@ public:
             kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
                 d_topk_indices_ + off, d_topk_probs_ + off, d_auction_prices_,
                 d_trk_to_det_, d_det_to_trk_,
-                d_pending_det_, d_pending_bid_, max_objs_, num_dets, 3, 0.01f,
+                d_pending_det_, d_pending_bid_, max_objs_, num_dets, SINKHORN_NUM_TOPK, 0.01f,
                 d_age_, freshness_w, d_hit_streak_, history_w,
                 d_states_, d_boxes, stability_w);
             kernel::commit_auction_results_kernel<<<auc_g, auc_b, 0, stream>>>(
@@ -2867,11 +2831,21 @@ public:
             checkCuda(cudaMemset(d_occ_grid_, 0, (size_t)OCC_RING * OCC_WORDS * sizeof(unsigned int)));
             checkCuda(cudaMemset(d_occ_frame_, 0, sizeof(int)));
         }
-        // The bridge writes bridge_attempts/accepts into d_relink_dbg_[2..3]; make
-        // sure the debug buffer exists even if the appearance bank is disabled.
-        if (bidirectional_ && d_relink_dbg_ == nullptr) {
+        // Appearance relink writes births/revives into d_relink_dbg_[0..1], and
+        // bridge relink writes attempts/accepts into d_relink_dbg_[2..3].
+        if ((enabled || bidirectional_) && d_relink_dbg_ == nullptr) {
             checkCuda(cudaMalloc(&d_relink_dbg_, 4 * sizeof(int)));
             checkCuda(cudaMemset(d_relink_dbg_, 0, 4 * sizeof(int)));
+        }
+        if (enabled && d_relink_feats_ != nullptr && relink_alloc_cap_ < relink_bank_cap_) {
+            cudaFree(d_relink_feats_); d_relink_feats_ = nullptr;
+            cudaFree(d_relink_ids_); d_relink_ids_ = nullptr;
+            cudaFree(d_relink_pos_); d_relink_pos_ = nullptr;
+            cudaFree(d_relink_lostage_); d_relink_lostage_ = nullptr;
+            cudaFree(d_relink_valid_); d_relink_valid_ = nullptr;
+            cudaFree(d_relink_cursor_); d_relink_cursor_ = nullptr;
+            cudaFree(d_det_revive_id_); d_det_revive_id_ = nullptr;
+            relink_alloc_cap_ = 0;
         }
         if (enabled && d_relink_feats_ == nullptr) {
             int cap = relink_bank_cap_;
@@ -2882,13 +2856,10 @@ public:
             checkCuda(cudaMalloc(&d_relink_valid_, cap * sizeof(int)));
             checkCuda(cudaMalloc(&d_relink_cursor_, sizeof(int)));
             checkCuda(cudaMalloc(&d_det_revive_id_, max_assoc_ * sizeof(int)));
-            if (d_relink_dbg_ == nullptr) {  // may already exist if bidirectional was enabled first
-                checkCuda(cudaMalloc(&d_relink_dbg_, 4 * sizeof(int)));
-                checkCuda(cudaMemset(d_relink_dbg_, 0, 4 * sizeof(int)));
-            }
             checkCuda(cudaMemset(d_relink_valid_, 0, cap * sizeof(int)));
             checkCuda(cudaMemset(d_relink_lostage_, 0, cap * sizeof(int)));
             checkCuda(cudaMemset(d_relink_cursor_, 0, sizeof(int)));
+            relink_alloc_cap_ = cap;
         }
     }
     // Debug accumulated over the sequence:
@@ -3248,6 +3219,7 @@ private:
     float relink_sim_thresh_ = 0.6f, relink_age_alpha_ = 0.1f, relink_spatial_gate_ = 4.0f;
     float relink_lambda_ = 2.5f;  // Chebyshev T = mu - lambda*sigma
     int relink_max_age_ = 300;
+    int relink_alloc_cap_ = 0;
     float* d_relink_feats_ = nullptr;
     int*   d_relink_ids_ = nullptr;
     float* d_relink_pos_ = nullptr;
