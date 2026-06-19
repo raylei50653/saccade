@@ -1209,6 +1209,34 @@ def _flush_deferred_emit(
     return lines, track_ids
 
 
+@dataclasses.dataclass(frozen=True)
+class DetectionContract:
+    """Immutable contract between detection pipeline and tracking consumers.
+
+    Captures the data-format assumptions that downstream modules (kalman gate,
+    relink, tracker) depend on.  When the detection pipeline configuration
+    changes (e.g. different FPN backbone, different feature dim), this
+    contract must be updated so that validation in _run_track catches
+    mismatches before silent corruption.
+    """
+
+    feature_dim: int
+    fpn_reid_mode: bool
+    box_format: str = "xyxy"
+
+
+@dataclasses.dataclass(frozen=True)
+class FPNConfig:
+    """FPN backbone runtime configuration (only meaningful when fpn_reid_mode)."""
+
+    backbone: Any = None
+    img_size: int = 640
+    conv_weights: Any = None
+    proj_weight: Any = None
+    running_mean: Any = None
+    running_var: Any = None
+
+
 class EvalPipeline:
     """Per-sequence evaluation pipeline state.
 
@@ -1223,63 +1251,57 @@ class EvalPipeline:
     state) will become fields, dissolving the hand-threaded in/out plumbing.
     """
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         *,
         cfg: Any,
         seq: str,
         profile_stages: bool,
+        contract: DetectionContract,
         detector: Any,
         cropper: Any,
         extractor: Any,
-        debug_birth_rows: Any,
-        global_id_mapper: Any,
-        gmc_breakdown_names: Any,
-        max_frames: int | None,
-        native_cfg: Any,
-        native_reid_breakdown_names: Any,
-        overall_stage_totals: Any,
-        segment_breakdown_names: Any,
-        top_level_stage_names: Any,
-        _fpn_reid_dim: Any,
-        _fpn_reid_mode: Any,
-        time_stage: Any,
-        record_stage_sample: Any,
-        _rw_executor: Any,
-        perception_pipeline: Any,
-        reid_main_ready: Any,
-        reid_side_event: Any,
-        reid_side_stream: Any,
-        _fpn_backbone: Any,
-        _fpn_img_size: Any,
-        _fpn_reid_conv_weights: Any,
-        _fpn_reid_proj_weight: Any,
-        _fpn_reid_running_mean: Any,
-        _fpn_reid_running_var: Any,
-        debug_dump_frames: Any,
-        debug_dump_seq: Any,
-        debug_stage_dump_rows: Any,
-        detect_fn: Any,
-        detector_box_format: Any,
-        enable_onms: Any,
-        onms_min_track_age: Any,
-        onms_min_track_score: Any,
-        onms_prior_iou_threshold: Any,
-        native_reid_available: Any,
-        external_fp_rule_config: Any,
-        external_fp_logistic_model: Any,
+        fpn: FPNConfig | None = None,
+        debug_birth_rows: Any = None,
+        global_id_mapper: Any = None,
+        gmc_breakdown_names: Any = None,
+        max_frames: int | None = None,
+        native_cfg: Any = None,
+        native_reid_breakdown_names: Any = None,
+        overall_stage_totals: Any = None,
+        segment_breakdown_names: Any = None,
+        top_level_stage_names: Any = None,
+        time_stage: Any = None,
+        record_stage_sample: Any = None,
+        _rw_executor: Any = None,
+        perception_pipeline: Any = None,
+        reid_main_ready: Any = None,
+        reid_side_event: Any = None,
+        reid_side_stream: Any = None,
+        debug_dump_frames: Any = None,
+        debug_dump_seq: Any = None,
+        debug_stage_dump_rows: Any = None,
+        detect_fn: Any = None,
+        detector_box_format: Any = None,
+        enable_onms: Any = None,
+        onms_min_track_age: Any = None,
+        onms_min_track_score: Any = None,
+        onms_prior_iou_threshold: Any = None,
+        native_reid_available: Any = None,
+        external_fp_rule_config: Any = None,
+        external_fp_logistic_model: Any = None,
     ) -> None:
         # ── params that aren't computed by setup ──────────────────────
         self.cfg = cfg
         self.seq = seq
         self.profile_stages = profile_stages
+        self.contract = contract
         self.detector = detector
         self.cropper = cropper
         self.extractor = extractor
+        self.fpn = fpn if fpn is not None else FPNConfig()
         self.global_id_mapper = global_id_mapper
         self.top_level_stage_names = top_level_stage_names
-        self._fpn_reid_mode = _fpn_reid_mode
-        self._fpn_reid_dim = _fpn_reid_dim
         self.time_stage = time_stage
         self.record_stage_sample = record_stage_sample
         self.rw_executor = _rw_executor
@@ -1287,12 +1309,6 @@ class EvalPipeline:
         self.reid_main_ready = reid_main_ready
         self.reid_side_event = reid_side_event
         self.reid_side_stream = reid_side_stream
-        self._fpn_backbone = _fpn_backbone
-        self._fpn_img_size = _fpn_img_size
-        self._fpn_reid_conv_weights = _fpn_reid_conv_weights
-        self._fpn_reid_proj_weight = _fpn_reid_proj_weight
-        self._fpn_reid_running_mean = _fpn_reid_running_mean
-        self._fpn_reid_running_var = _fpn_reid_running_var
         self.debug_dump_frames = debug_dump_frames
         self.debug_dump_seq = debug_dump_seq
         self.debug_stage_dump_rows = debug_stage_dump_rows
@@ -1365,11 +1381,11 @@ class EvalPipeline:
                 gmc_uncertain=False,
             )
         else:
-            if _fpn_reid_mode:
+            if contract.fpn_reid_mode:
                 from saccade.perception.tracking import GPUByteTracker
 
                 detector.tracker = GPUByteTracker(
-                    max_objects=2048, embedding_dim=_fpn_reid_dim
+                    max_objects=2048, embedding_dim=contract.feature_dim
                 )
             else:
                 detector.reset_tracker()
@@ -1444,7 +1460,9 @@ class EvalPipeline:
             cost_iou_w=float(cfg.kwargs.get("reid_cost_iou_w", 0.30)),
             cost_score_w=float(cfg.kwargs.get("reid_cost_score_w", 0.15)),
         )
-        if _fpn_reid_mode and hasattr(detector.tracker, "set_reid_min_candidates"):
+        if contract.fpn_reid_mode and hasattr(
+            detector.tracker, "set_reid_min_candidates"
+        ):
             detector.tracker.set_reid_min_candidates(1)
         _bridge_enabled = bool(getattr(cfg, "relink_bridge_enabled", False))
         if (cfg.relink_enabled or _bridge_enabled) and hasattr(
@@ -2215,6 +2233,10 @@ class FrameCtx:
     out. Only the values the loop actually consumes downstream are carried —
     e.g. native_tensor_prep's priors_tensor/prior_classes_tensor stay internal
     and only num_priors escapes.
+
+    feature_dim carries the active FPN embedding dimension so downstream
+    consumers (kalman gate, relink, tracker) can validate input shapes
+    against the detection pipeline's current configuration.
     """
 
     raw_boxes_contig: torch.Tensor
@@ -2225,6 +2247,7 @@ class FrameCtx:
     post_classes: torch.Tensor
     geometry_suspect_mask: torch.Tensor
     num_priors: int
+    feature_dim: int
 
 
 def _run_gmc_estimate(
@@ -2469,6 +2492,21 @@ def _run_track(
     cfg = state.cfg
     seq_stage_totals = state.seq_stage_totals
     time_stage = state.time_stage
+    if embeddings is not None:
+        expected_dim = (
+            state.contract.feature_dim
+            if state.contract.fpn_reid_mode
+            else (state.extractor.feature_dim if state.extractor is not None else 0)
+        )
+        actual_dim = embeddings.shape[1]
+        if actual_dim != expected_dim:
+            raise ValueError(
+                f"Embedding dimension mismatch in _run_track: "
+                f"got {actual_dim}, expected {expected_dim} "
+                f"(fpn_reid_mode={state.contract.fpn_reid_mode}). "
+                f"The detection FPN config has likely changed — "
+                f"update kalman gate r_scale and tracker embedding_dim accordingly."
+            )
     if gtu is not None:
         gtu.copy_inputs(
             fused_boxes,
@@ -2658,6 +2696,11 @@ def _run_native_tensor_prep(
             and prior_classes_tensor is not None
         ):
             num_priors = priors_tensor.size(0)
+    feature_dim = (
+        state.contract.feature_dim
+        if state.contract.fpn_reid_mode
+        else (state.extractor.feature_dim if state.extractor is not None else 0)
+    )
     return FrameCtx(
         raw_boxes_contig=raw_boxes_contig,
         raw_scores_contig=raw_scores_contig,
@@ -2667,6 +2710,7 @@ def _run_native_tensor_prep(
         post_classes=post_classes,
         geometry_suspect_mask=geometry_suspect_mask,
         num_priors=num_priors,
+        feature_dim=feature_dim,
     )
 
 
@@ -3521,13 +3565,13 @@ def _run_reid_and_gmc(
     current_stage_sample_active: bool,
     _fpn_cache: "dict[str, torch.Tensor]",
 ) -> "tuple[torch.Tensor | None, float]":
-    _fpn_reid_mode = state._fpn_reid_mode
-    _fpn_img_size = state._fpn_img_size
-    _fpn_reid_conv_weights = state._fpn_reid_conv_weights
-    _fpn_reid_dim = state._fpn_reid_dim
-    _fpn_reid_proj_weight = state._fpn_reid_proj_weight
-    _fpn_reid_running_mean = state._fpn_reid_running_mean
-    _fpn_reid_running_var = state._fpn_reid_running_var
+    _fpn_reid_mode = state.contract.fpn_reid_mode
+    _fpn_img_size = state.fpn.img_size
+    _fpn_reid_conv_weights = state.fpn.conv_weights
+    _fpn_reid_dim = state.contract.feature_dim
+    _fpn_reid_proj_weight = state.fpn.proj_weight
+    _fpn_reid_running_mean = state.fpn.running_mean
+    _fpn_reid_running_var = state.fpn.running_var
     cfg = state.cfg
     cropper = state.cropper
     detector = state.detector
@@ -3905,14 +3949,14 @@ def _run_frame(state: "EvalPipeline", *, frame_id: int) -> bool:
     _append_birth_event_rows = state.append_birth_event_rows
     _consec_birth_window = state._consec_birth_window
     _defer_emit = state.defer_emit
-    _fpn_backbone = state._fpn_backbone
-    _fpn_img_size = state._fpn_img_size
-    _fpn_reid_conv_weights = state._fpn_reid_conv_weights
-    _fpn_reid_dim = state._fpn_reid_dim
-    _fpn_reid_mode = state._fpn_reid_mode
-    _fpn_reid_proj_weight = state._fpn_reid_proj_weight
-    _fpn_reid_running_mean = state._fpn_reid_running_mean
-    _fpn_reid_running_var = state._fpn_reid_running_var
+    _fpn_backbone = state.fpn.backbone
+    _fpn_img_size = state.fpn.img_size
+    _fpn_reid_conv_weights = state.fpn.conv_weights
+    _fpn_reid_dim = state.contract.feature_dim
+    _fpn_reid_mode = state.contract.fpn_reid_mode
+    _fpn_reid_proj_weight = state.fpn.proj_weight
+    _fpn_reid_running_mean = state.fpn.running_mean
+    _fpn_reid_running_var = state.fpn.running_var
     _multi_birth_manager = state._multi_birth_manager
     _pinned_result_bufs = state.pinned_result_bufs
     _scene_policy = state._scene_policy
@@ -5185,6 +5229,7 @@ def run_eval(
                 _fpn_backbone = _TRTYoloBackbone(str(Path(_bb_engine).resolve()))
                 print(f"  FPN backbone engine: {_bb_engine}")
                 _fpn_img_size = 960 if "960" in _bb_engine else 640
+
     elif extractor is None and cfg.reid_work_enabled:
         extractor = TRTFeatureExtractor(
             engine_path=cfg.reid_engine,
@@ -5228,6 +5273,19 @@ def run_eval(
         )
     else:
         detect_fn = detect_adaptive_960_tiled
+
+    contract = DetectionContract(
+        feature_dim=_fpn_reid_dim,
+        fpn_reid_mode=_fpn_reid_mode,
+    )
+    fpn = FPNConfig(
+        backbone=_fpn_backbone,
+        img_size=_fpn_img_size,
+        conv_weights=_fpn_reid_conv_weights,
+        proj_weight=_fpn_reid_proj_weight,
+        running_mean=_fpn_reid_running_mean,
+        running_var=_fpn_reid_running_var,
+    )
 
     extractor_cpp_ptr = _safe_cpp_ptr(extractor) if extractor is not None else 0
     cropper_cpp_ptr = _safe_cpp_ptr(cropper) if cropper is not None else 0
@@ -5433,9 +5491,11 @@ def run_eval(
             cfg=cfg,
             seq=seq,
             profile_stages=profile_stages,
+            contract=contract,
             detector=detector,
             cropper=cropper,
             extractor=extractor,
+            fpn=fpn,
             debug_birth_rows=debug_birth_rows,
             global_id_mapper=global_id_mapper,
             gmc_breakdown_names=gmc_breakdown_names,
@@ -5445,8 +5505,6 @@ def run_eval(
             overall_stage_totals=overall_stage_totals,
             segment_breakdown_names=segment_breakdown_names,
             top_level_stage_names=top_level_stage_names,
-            _fpn_reid_dim=_fpn_reid_dim,
-            _fpn_reid_mode=_fpn_reid_mode,
             time_stage=time_stage,
             record_stage_sample=record_stage_sample,
             _rw_executor=_rw_executor,
@@ -5454,12 +5512,6 @@ def run_eval(
             reid_main_ready=reid_main_ready,
             reid_side_event=reid_side_event,
             reid_side_stream=reid_side_stream,
-            _fpn_backbone=_fpn_backbone,
-            _fpn_img_size=_fpn_img_size,
-            _fpn_reid_conv_weights=_fpn_reid_conv_weights,
-            _fpn_reid_proj_weight=_fpn_reid_proj_weight,
-            _fpn_reid_running_mean=_fpn_reid_running_mean,
-            _fpn_reid_running_var=_fpn_reid_running_var,
             debug_dump_frames=debug_dump_frames,
             debug_dump_seq=debug_dump_seq,
             debug_stage_dump_rows=debug_stage_dump_rows,
