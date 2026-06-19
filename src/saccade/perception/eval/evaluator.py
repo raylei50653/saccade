@@ -1903,12 +1903,23 @@ class EvalPipeline:
         tracker_result_buffers = detector.tracker.allocate_result_buffers(
             device=pool.frame_buffer.device
         )
+        _TRACK_RESULT_CAP = int(getattr(detector.tracker, "max_objects", 2048))
         _pinned_result_bufs: dict[str, torch.Tensor] = {
-            "boxes": torch.empty((2048, 4), dtype=torch.float32, pin_memory=True),
-            "scores": torch.empty((2048,), dtype=torch.float32, pin_memory=True),
-            "ids": torch.empty((2048,), dtype=torch.int32, pin_memory=True),
-            "classes": torch.empty((2048,), dtype=torch.int32, pin_memory=True),
-            "det_idx": torch.empty((2048,), dtype=torch.int32, pin_memory=True),
+            "boxes": torch.empty(
+                (_TRACK_RESULT_CAP, 4), dtype=torch.float32, pin_memory=True
+            ),
+            "scores": torch.empty(
+                (_TRACK_RESULT_CAP,), dtype=torch.float32, pin_memory=True
+            ),
+            "ids": torch.empty(
+                (_TRACK_RESULT_CAP,), dtype=torch.int32, pin_memory=True
+            ),
+            "classes": torch.empty(
+                (_TRACK_RESULT_CAP,), dtype=torch.int32, pin_memory=True
+            ),
+            "det_idx": torch.empty(
+                (_TRACK_RESULT_CAP,), dtype=torch.int32, pin_memory=True
+            ),
             "count": torch.empty((), dtype=torch.int32, pin_memory=True),
         }
         _use_pinned_materialize = not cfg.pipeline_relink
@@ -1919,18 +1930,18 @@ class EvalPipeline:
             and dynamic_reid is None
         )
         _shared_gmc_warp = torch.zeros(6, dtype=torch.float32, device="cuda")
+        _NMS_FIXED_N = int(getattr(detector.tracker, "max_assoc", 1024))
         _post_bufs: dict[str, torch.Tensor] = {
-            "boxes": torch.empty((2048, 4), dtype=torch.float32, device="cuda"),
-            "scores": torch.empty((2048,), dtype=torch.float32, device="cuda"),
-            "classes": torch.empty((2048,), dtype=torch.int32, device="cuda"),
-            "suspect": torch.empty((2048,), dtype=torch.bool, device="cuda"),
+            "boxes": torch.empty((_NMS_FIXED_N, 4), dtype=torch.float32, device="cuda"),
+            "scores": torch.empty((_NMS_FIXED_N,), dtype=torch.float32, device="cuda"),
+            "classes": torch.empty((_NMS_FIXED_N,), dtype=torch.int32, device="cuda"),
+            "suspect": torch.empty((_NMS_FIXED_N,), dtype=torch.bool, device="cuda"),
         }
         _nms_in: dict[str, torch.Tensor] = {
-            "boxes": torch.empty((2048, 4), dtype=torch.float32, device="cuda"),
-            "scores": torch.empty((2048,), dtype=torch.float32, device="cuda"),
-            "classes": torch.empty((2048,), dtype=torch.int32, device="cuda"),
+            "boxes": torch.empty((_NMS_FIXED_N, 4), dtype=torch.float32, device="cuda"),
+            "scores": torch.empty((_NMS_FIXED_N,), dtype=torch.float32, device="cuda"),
+            "classes": torch.empty((_NMS_FIXED_N,), dtype=torch.int32, device="cuda"),
         }
-        _NMS_FIXED_N = 2048
 
         gtu: Any = None
         # GraphedTrackerUpdate.copy_inputs does not feed per-detection embeddings,
@@ -2285,6 +2296,7 @@ def _run_gmc_estimate(
             gmc_estimator.set_fg_mask_boxes_gpu(
                 fused_boxes.data_ptr(),
                 fused_boxes.shape[0],
+                torch.cuda.current_stream().cuda_stream,
             )
     elif cfg.gmc_fg_mask and hasattr(gmc_estimator, "set_fg_mask_boxes"):
         if fused_boxes.numel() > 0:

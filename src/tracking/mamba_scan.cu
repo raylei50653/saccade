@@ -19,6 +19,15 @@ __device__ inline float softplus_f32(float x) {
     return logf(1.0f + expf(x));
 }
 
+inline bool valid_scan_state_count(int N) {
+    return N > 0 && N <= 32 && (N & (N - 1)) == 0;
+}
+
+__device__ inline unsigned scan_mask_for_n(int N, int channel_in_warp) {
+    unsigned base = (N == 32) ? 0xffffffffu : ((1u << N) - 1u);
+    return N == 32 ? base : (base << (channel_in_warp * N));
+}
+
 template <typename T>
 __global__ void selective_scan_fwd_kernel(
     const T* __restrict__ u,
@@ -49,7 +58,7 @@ __global__ void selective_scan_fwd_kernel(
     // Compute the mask for __shfl_xor_sync using warp-local lane.
     int lane = tid % 32;
     int channel_in_warp = lane / N;
-    unsigned mask = ((1u << N) - 1u) << (channel_in_warp * N);
+    unsigned mask = scan_mask_for_n(N, channel_in_warp);
 
     for (int t = 0; t < L; t++) {
         float u_btd = static_cast<float>(u[((b * L + t) * D_dim) + d]);
@@ -124,7 +133,7 @@ __global__ void selective_scan_bwd_kernel(
     if (d >= D_dim || b >= B) return;
 
     int n = threadIdx.x;  // 0 .. N-1, all lanes within one warp
-    unsigned mask = (1u << N) - 1u;
+    unsigned mask = scan_mask_for_n(N, 0);
 
     float A_n = A[a_per_channel ? (d * N + n) : n];
 
@@ -222,8 +231,8 @@ void selective_scan_bwd(
     void* stream
 ) {
     int B = params.B, L = params.L, D_dim = params.D, N = params.N;
-    if (N > 32) {
-        fprintf(stderr, "[mamba_scan] bwd requires N<=32 (warp reduce), got %d\n", N);
+    if (!valid_scan_state_count(N)) {
+        fprintf(stderr, "[mamba_scan] bwd requires power-of-two N in [1,32], got %d\n", N);
         return;
     }
     dim3 grid(B, D_dim);
@@ -250,8 +259,8 @@ void selective_scan_fwd(
     constexpr int K = MAMBA_CHANNELS_PER_BLOCK;
     int B = params.B, L = params.L, D_dim = params.D, N = params.N;
 
-    if (N > 1024 || K * N > 1024) {
-        fprintf(stderr, "[mamba_scan] K*N=%d exceeds block thread limit 1024\n", K * N);
+    if (!valid_scan_state_count(N) || K * N > 1024) {
+        fprintf(stderr, "[mamba_scan] fwd requires power-of-two N in [1,32] and K*N<=1024, got N=%d K*N=%d\n", N, K * N);
         return;
     }
 
@@ -280,8 +289,8 @@ void selective_scan_fwd_half(
     constexpr int K = MAMBA_CHANNELS_PER_BLOCK;
     int B = params.B, L = params.L, D_dim = params.D, N = params.N;
 
-    if (N > 1024 || K * N > 1024) {
-        fprintf(stderr, "[mamba_scan] K*N=%d exceeds block thread limit 1024\n", K * N);
+    if (!valid_scan_state_count(N) || K * N > 1024) {
+        fprintf(stderr, "[mamba_scan] fwd_half requires power-of-two N in [1,32] and K*N<=1024, got N=%d K*N=%d\n", N, K * N);
         return;
     }
 

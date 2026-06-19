@@ -514,10 +514,16 @@ class GPUByteTracker:
     直接對接 C++ / CUDA 實作，確保 Zero-Copy。
     """
 
-    def __init__(self, max_objects: int = 2048, embedding_dim: int = 768) -> None:
+    def __init__(
+        self,
+        max_objects: int = 2048,
+        embedding_dim: int = 768,
+        max_assoc: int = 1024,
+    ) -> None:
         self.max_objects = max_objects
         self.embedding_dim = embedding_dim
-        self.tracker = CppGPUByteTracker(max_objects, embedding_dim)
+        self.max_assoc = max(1, int(max_assoc))
+        self.tracker = CppGPUByteTracker(max_objects, embedding_dim, self.max_assoc)
         # Check if we are using the real C++ implementation
         self.is_cuda = not self.tracker.__class__.__name__.startswith(
             "dummy"
@@ -528,6 +534,7 @@ class GPUByteTracker:
             import saccade_tracking_ext
 
             self.is_cuda = isinstance(self.tracker, saccade_tracking_ext.GPUByteTracker)
+            self.max_assoc = int(getattr(self.tracker, "max_assoc", self.max_assoc))
         except ImportError:
             self.is_cuda = False
 
@@ -541,6 +548,14 @@ class GPUByteTracker:
         else:
             self._bank_slot_features = torch.zeros(
                 (max_objects, embedding_dim), dtype=torch.float32
+            )
+
+    def _validate_num_dets(self, num_dets: int) -> None:
+        if num_dets > self.max_assoc:
+            raise ValueError(
+                f"GPUByteTracker received {num_dets} detections, "
+                f"but max_assoc is {self.max_assoc}. "
+                "Run NMS/top-k before tracking or construct the tracker with a larger max_assoc."
             )
 
     def set_params(
@@ -999,6 +1014,7 @@ class GPUByteTracker:
         更新追蹤器狀態。
         """
         num_dets = boxes.size(0)
+        self._validate_num_dets(num_dets)
 
         # 💡 重要：必須保留這些 Tensor 的引用，防止在 data_ptr() 使用期間 be GC
         boxes_contig = boxes.to(torch.float32).contiguous()
@@ -1068,6 +1084,13 @@ class GPUByteTracker:
         mid_thresh_scale: float = 1.0,
     ) -> GPUTrackResultBuffers:
         num_dets = boxes.size(0)
+        self._validate_num_dets(num_dets)
+        out_capacity = int(result_buffers["boxes"].shape[0])
+        if out_capacity < self.max_objects:
+            raise ValueError(
+                f"tracker result buffer capacity {out_capacity} is smaller than "
+                f"tracker max_objects {self.max_objects}"
+            )
 
         boxes_contig = boxes.to(torch.float32).contiguous()
         scores_contig = scores.to(torch.float32).contiguous()
@@ -1100,6 +1123,7 @@ class GPUByteTracker:
             gmc_ptr,
             light_factor,
             mid_thresh_scale,
+            out_capacity,
         )
         return result_buffers
 
@@ -1250,29 +1274,35 @@ class GraphedTrackerUpdate:
     def __init__(
         self,
         tracker: GPUByteTracker,
-        max_assoc: int = 1024,
-        max_objs: int = 2048,
+        max_assoc: int | None = None,
+        max_objs: int | None = None,
     ):
         self._tracker = tracker
-        self._max_assoc = max_assoc
-        self._max_objs = max_objs
+        self._max_assoc = int(max_assoc if max_assoc is not None else tracker.max_assoc)
+        self._max_objs = int(max_objs if max_objs is not None else tracker.max_objects)
 
         device = torch.device("cuda")
 
-        self.d_boxes = torch.zeros(max_assoc, 4, dtype=torch.float32, device=device)
-        self.d_scores = torch.zeros(max_assoc, dtype=torch.float32, device=device)
-        self.d_classes = torch.zeros(max_assoc, dtype=torch.int32, device=device)
+        self.d_boxes = torch.zeros(
+            self._max_assoc, 4, dtype=torch.float32, device=device
+        )
+        self.d_scores = torch.zeros(self._max_assoc, dtype=torch.float32, device=device)
+        self.d_classes = torch.zeros(self._max_assoc, dtype=torch.int32, device=device)
         self.d_gmc = (
             torch.eye(2, 3, dtype=torch.float32, device=device)
             .flatten()[:6]
             .contiguous()
         )
 
-        self.out_boxes = torch.zeros(max_objs, 4, dtype=torch.float32, device=device)
-        self.out_scores = torch.zeros(max_objs, dtype=torch.float32, device=device)
-        self.out_ids = torch.zeros(max_objs, dtype=torch.int32, device=device)
-        self.out_classes = torch.zeros(max_objs, dtype=torch.int32, device=device)
-        self.out_det_idx = torch.zeros(max_objs, dtype=torch.int32, device=device)
+        self.out_boxes = torch.zeros(
+            self._max_objs, 4, dtype=torch.float32, device=device
+        )
+        self.out_scores = torch.zeros(
+            self._max_objs, dtype=torch.float32, device=device
+        )
+        self.out_ids = torch.zeros(self._max_objs, dtype=torch.int32, device=device)
+        self.out_classes = torch.zeros(self._max_objs, dtype=torch.int32, device=device)
+        self.out_det_idx = torch.zeros(self._max_objs, dtype=torch.int32, device=device)
         self.out_count = torch.zeros((), dtype=torch.int32, device=device)
 
         self._graphed_callable: Callable[..., None] | None = None
@@ -1296,6 +1326,7 @@ class GraphedTrackerUpdate:
                 self.d_gmc.data_ptr(),
                 0.0,
                 1.0,
+                self._max_objs,
             )
             torch.cuda.synchronize()  # saccade-allow-cpu
 
@@ -1334,6 +1365,7 @@ class GraphedTrackerUpdate:
                 d_gmc.data_ptr(),
                 0.0,
                 1.0,
+                self._max_objs,
             )
             return (out_boxes, out_scores, out_ids, out_classes, out_det_idx, out_count)
 

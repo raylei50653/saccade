@@ -98,7 +98,7 @@ public:
      * @brief Set foreground bounding boxes from GPU memory (no D2H roundtrip).
      * Accepts a raw GPU pointer to flat [x1,y1,x2,y2, ...] in original-frame coords.
      */
-    void set_fg_mask_boxes_gpu(const float* d_boxes, int n_boxes);
+    void set_fg_mask_boxes_gpu(const float* d_boxes, int n_boxes, cudaStream_t stream = nullptr);
 
     /** @brief PCR (peak-to-RMS ratio) from the most recent completed GPU phase correlation. */
     float pcr_score();

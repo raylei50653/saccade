@@ -76,7 +76,7 @@ public:
  */
 class SACCADE_TRACKING_API GPUByteTracker : public ITracker {
 public:
-    GPUByteTracker(int max_objects = 2048, int embedding_dim = 768);
+    GPUByteTracker(int max_objects = 2048, int embedding_dim = 768, int max_assoc = 1024);
     ~GPUByteTracker();
 
     void set_params(
@@ -196,6 +196,8 @@ public:
         cudaStream_t stream
     );
     TrackerGPUBuffers get_gpu_buffers() const;
+    int max_objects() const;
+    int max_assoc() const;
     std::vector<TrackCandidateSnapshot> get_tentative_candidates(cudaStream_t stream);
     void update_into(
         float* boxes_ptr,
@@ -212,7 +214,8 @@ public:
         float* embeddings_ptr = nullptr,
         float* gmc_ptr = nullptr,
         float light_factor = 0.0f,
-        float mid_thresh_scale = 1.0f
+        float mid_thresh_scale = 1.0f,
+        int out_capacity = -1
     );
 
     std::vector<TrackResult> update(

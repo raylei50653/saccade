@@ -195,6 +195,7 @@ class Workbench:
             int(self.stream.cuda_stream),
             max_dets,
             max_tracks,
+            output_capacity,
         )
 
     def process_frame(

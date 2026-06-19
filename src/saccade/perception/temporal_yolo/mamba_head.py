@@ -23,6 +23,13 @@ from torch import Tensor
 _DISABLE_CUDA_SCAN_BWD = os.environ.get("SACCADE_DISABLE_CUDA_SCAN_BWD", "0") == "1"
 
 
+def _validate_cuda_scan_state_count(n: int) -> None:
+    if n <= 0 or n > 32 or (n & (n - 1)) != 0:
+        raise ValueError(
+            f"CUDA selective_scan requires power-of-two state dim in [1, 32], got {n}"
+        )
+
+
 # ---------------------------------------------------------------------------
 # Selective SSM scan (pure PyTorch — no CUDA kernel dependency)
 # ---------------------------------------------------------------------------
@@ -101,6 +108,7 @@ def _selective_scan_legacy_n1_cuda(
 ) -> Tensor:
     import saccade_tracking_ext
 
+    _validate_cuda_scan_state_count(1)
     u = u.contiguous()
     delta = delta.contiguous()
     A = A.contiguous()
@@ -145,6 +153,7 @@ try:
     ) -> torch.Tensor:
         import saccade_tracking_ext
 
+        _validate_cuda_scan_state_count(A.shape[-1])
         u = u.contiguous()
         delta = delta.contiguous()
         A = A.contiguous()
@@ -202,6 +211,7 @@ except Exception:
     ) -> torch.Tensor:
         import saccade_tracking_ext
 
+        _validate_cuda_scan_state_count(A.shape[-1])
         D_ptr = D.data_ptr() if D.numel() > 0 else 0
         y = torch.empty_like(u)
         saccade_tracking_ext.selective_scan_fwd(
@@ -236,6 +246,7 @@ def _selective_scan_cuda(
     # per-channel dynamics. N (state dim) is always the last axis; the kernel
     # indexes A[d * N + n] when per-channel.
     N = A.shape[-1]
+    _validate_cuda_scan_state_count(N)
     D_dim = u.shape[2]
     a_per_channel = 1 if (A.dim() == 2 and A.shape[0] == D_dim) else 0
 
@@ -342,6 +353,7 @@ class _SelectiveScanCudaFn(torch.autograd.Function):
         import saccade_tracking_ext
 
         N = A.shape[-1]
+        _validate_cuda_scan_state_count(N)
         D_dim = u.shape[2]
         a_per_channel = 1 if (A.dim() == 2 and A.shape[0] == D_dim) else 0
         c_rank1 = C.shape[-1] < N

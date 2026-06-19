@@ -14,6 +14,7 @@
 #include <cstdio>
 #include <cmath>
 #include <sstream>
+#include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
 #include "tracking/sinkhorn.hpp"
@@ -58,6 +59,13 @@ float env_float_value(const char* name, float default_value) {
 }
 
 // --- CUDA Kernels ---
+
+__global__ void clamp_count_kernel(const int* src_count, int* dst_count, int capacity) {
+    if (threadIdx.x != 0 || blockIdx.x != 0) return;
+    int count = *src_count;
+    if (count < 0) count = 0;
+    *dst_count = count < capacity ? count : capacity;
+}
 
 __global__ void predict_kernel(float* states, float* covs, bool* active, int* age, int max_objs, int max_age) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -2177,8 +2185,10 @@ void argsort_scores_descending_cuda(
 
 class GPUByteTracker::Impl {
 public:
-    Impl(int max_objects, int embedding_dim)
-        : max_objs_(max_objects), embed_dim_(embedding_dim) {
+    Impl(int max_objects, int embedding_dim, int max_assoc)
+        : max_objs_(max_objects),
+          embed_dim_(embedding_dim),
+          max_assoc_(std::max(1, max_assoc)) {
         enable_quality_scaling_ = false;
         q_w_aspect_ = 0.50f;
         q_w_center_ = 0.30f;
@@ -2196,7 +2206,6 @@ public:
         checkCuda(cudaMalloc(&d_features_, max_objs_ * embed_dim_ * sizeof(float)));
         d_features_owned_ = true;
         
-        max_assoc_ = 1024;
         // 128-byte alignment per stage: pad stage_stride to 32-element multiple
         // (32 elems × 4 bytes = 128 bytes per stage)
         sinkhorn_stage_stride_ = ((max_objs_ * SINKHORN_NUM_TOPK + 31) / 32) * 32;
@@ -2406,28 +2415,46 @@ public:
         return results;
     }
 
+    int max_objects() const { return max_objs_; }
+    int max_assoc() const { return max_assoc_; }
+
     void update_into(
         float* d_boxes, float* d_scores, int* d_classes, int num_dets,
         cudaStream_t stream,
         float* out_boxes, float* out_scores, int* out_ids, int* out_classes, int* out_det_idx, int* out_count,
         float* d_embeddings, float* d_gmc,
-        float light_factor, float mid_thresh_scale) {
+        float light_factor, float mid_thresh_scale, int out_capacity) {
         nvtxRangePushA("Tracker::UpdateInto");
         run_update_device(
             d_boxes, d_scores, d_classes, num_dets, stream, d_embeddings, d_gmc,
             light_factor, mid_thresh_scale);
-        checkCuda(cudaMemcpyAsync(out_boxes,   d_res_boxes_,   max_objs_ * 4 * sizeof(float), cudaMemcpyDeviceToDevice, stream));
-        checkCuda(cudaMemcpyAsync(out_scores,  d_res_scores_,  max_objs_ *     sizeof(float), cudaMemcpyDeviceToDevice, stream));
-        checkCuda(cudaMemcpyAsync(out_ids,     d_res_ids_,     max_objs_ *     sizeof(int),   cudaMemcpyDeviceToDevice, stream));
-        checkCuda(cudaMemcpyAsync(out_classes, d_res_classes_, max_objs_ *     sizeof(int),   cudaMemcpyDeviceToDevice, stream));
-        checkCuda(cudaMemcpyAsync(out_det_idx, d_res_det_idx_, max_objs_ *     sizeof(int),   cudaMemcpyDeviceToDevice, stream));
-        checkCuda(cudaMemcpyAsync(out_count,   d_res_count_,   sizeof(int),                    cudaMemcpyDeviceToDevice, stream));
+        const int copy_capacity =
+            out_capacity < 0 ? max_objs_ : std::max(0, std::min(out_capacity, max_objs_));
+        if (copy_capacity > 0) {
+            checkCuda(cudaMemcpyAsync(out_boxes,   d_res_boxes_,   copy_capacity * 4 * sizeof(float), cudaMemcpyDeviceToDevice, stream));
+            checkCuda(cudaMemcpyAsync(out_scores,  d_res_scores_,  copy_capacity *     sizeof(float), cudaMemcpyDeviceToDevice, stream));
+            checkCuda(cudaMemcpyAsync(out_ids,     d_res_ids_,     copy_capacity *     sizeof(int),   cudaMemcpyDeviceToDevice, stream));
+            checkCuda(cudaMemcpyAsync(out_classes, d_res_classes_, copy_capacity *     sizeof(int),   cudaMemcpyDeviceToDevice, stream));
+            checkCuda(cudaMemcpyAsync(out_det_idx, d_res_det_idx_, copy_capacity *     sizeof(int),   cudaMemcpyDeviceToDevice, stream));
+        }
+        if (out_capacity < 0 || out_capacity >= max_objs_) {
+            checkCuda(cudaMemcpyAsync(out_count, d_res_count_, sizeof(int), cudaMemcpyDeviceToDevice, stream));
+        } else {
+            clamp_count_kernel<<<1, 1, 0, stream>>>(d_res_count_, out_count, copy_capacity);
+            checkCuda(cudaGetLastError());
+        }
         nvtxRangePop();
     }
     void run_update_device(
         float* d_boxes, float* d_scores, int* d_classes, int num_dets,
         cudaStream_t stream, float* d_embeddings, float* d_gmc,
         float light_factor, float mid_thresh_scale) {
+        if (num_dets < 0) {
+            throw std::invalid_argument("GPUByteTracker::update num_dets must be non-negative");
+        }
+        if (num_dets > max_assoc_) {
+            throw std::invalid_argument("GPUByteTracker::update num_dets exceeds max_assoc");
+        }
 
         int threads = 256;
 
@@ -3373,7 +3400,8 @@ private:
     std::vector<float>    h_score_sum_;
 };
 
-GPUByteTracker::GPUByteTracker(int max_objs, int embedding_dim) : pimpl_(std::make_unique<Impl>(max_objs, embedding_dim)) {}
+GPUByteTracker::GPUByteTracker(int max_objs, int embedding_dim, int max_assoc)
+    : pimpl_(std::make_unique<Impl>(max_objs, embedding_dim, max_assoc)) {}
 GPUByteTracker::~GPUByteTracker() = default;
 void GPUByteTracker::set_params(float track_thresh, float high_thresh, float match_thresh, int track_buffer,
                                 float mid_thresh, int confirm_streak, float confirm_score_thresh,
@@ -3455,11 +3483,11 @@ std::vector<std::pair<int,int>> GPUByteTracker::get_active_tid_slot_pairs() { re
 void GPUByteTracker::update_into(
     float* b, float* s, int* c, int n, cudaStream_t stream,
     float* out_boxes, float* out_scores, int* out_ids, int* out_classes, int* out_det_idx, int* out_count,
-    float* e, float* g, float l, float m) {
+    float* e, float* g, float l, float m, int out_capacity) {
     pimpl_->update_into(
         b, s, c, n, stream,
         out_boxes, out_scores, out_ids, out_classes, out_det_idx, out_count,
-        e, g, l, m);
+        e, g, l, m, out_capacity);
 }
 std::vector<TrackResult> GPUByteTracker::update(float* b, float* s, int* c, int n, cudaStream_t stream, float* e, float* g, float l, float m) {
     return pimpl_->update(b, s, c, n, stream, e, g, l, m);
@@ -3469,6 +3497,8 @@ std::vector<TrackStateSnapshot> GPUByteTracker::get_motion_snapshots_for_track_i
     return pimpl_->get_motion_snapshots_for_track_ids(track_ids, stream);
 }
 TrackerGPUBuffers GPUByteTracker::get_gpu_buffers() const { return pimpl_->get_gpu_buffers(); }
+int GPUByteTracker::max_objects() const { return pimpl_->max_objects(); }
+int GPUByteTracker::max_assoc() const { return pimpl_->max_assoc(); }
 std::vector<TrackCandidateSnapshot> GPUByteTracker::get_tentative_candidates(cudaStream_t stream) { return pimpl_->get_tentative_candidates(stream); }
 
 __device__ float get_iou_device(const float* b1, const float* b2) {
