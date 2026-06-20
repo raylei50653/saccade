@@ -49,6 +49,12 @@ class MotionRelinkingConfig:
 
 
 class PythonSemanticRelinker:
+    # NOTE on w_sim_base / w_iou_base / w_maha_base defaults below:
+    # these are appearance-only STANDALONE defaults (1.0 / 0 / 0). They do NOT
+    # reflect the eval runtime, which drives fused scoring with the config
+    # values (semantic_w_sim_base=0.80 / w_iou_base=0.34 / w_maha_base=0.31,
+    # see scripts/eval/config/semantic.py) passed explicitly by the evaluator.
+    # Reading these defaults alone gives a wrong picture of production behaviour.
     def __init__(
         self,
         sim_threshold: float = 0.985,

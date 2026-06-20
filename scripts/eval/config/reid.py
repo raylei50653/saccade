@@ -34,9 +34,13 @@ class ReIDConfig:
     # Lazy ReID
     lazy_reid_min_hit_streak: int = 2
     lazy_reid_self_threshold: float = 0.85
-    # Async pipeline
-    async_reid: bool = True
-    pipeline_relink: bool = True
+    # Async pipeline.
+    # NOTE: defaults mirror the live argparse defaults (store_true => False).
+    # The runtime reads the argparse namespace, not these fields; keep in sync
+    # (tests/unit/test_config_consistency.py enforces it). Whether these *should*
+    # default on (perf-only, see project_e2e_latency_opt) is a separate decision.
+    async_reid: bool = False
+    pipeline_relink: bool = False
     # Advanced GMC (appearance-aware controls)
     gmc_fg_mask: bool = False
     gmc_pcr_uncertain_thresh: float = 8.0

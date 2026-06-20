@@ -14,7 +14,20 @@ from .lifecycle import LifecycleConfig
 
 @dataclasses.dataclass
 class PipelineConfig:
-    """Composes all module configs into a flat dict for run_eval."""
+    """Typed *partial* view over the module configs.
+
+    WARNING — this is NOT the runtime config path. ``scripts/eval/mot17.py``
+    feeds ``vars(args)`` (the raw argparse namespace) straight into ``run_eval``;
+    nothing in the runtime calls ``from_args`` / ``to_flat_dict``.
+
+    It is also INCOMPLETE: a number of tracking knobs are declared only as
+    argparse arguments (in the ``add_*_args`` functions) and have no
+    corresponding dataclass field, so ``to_flat_dict`` silently omits them —
+    e.g. ``occ_*``, ``oao_*``, ``sinkhorn_lambda``, ``multiplicative_cost``,
+    ``stability_cost_w``, ``multi_birth_replace_*``. Do not treat the result as
+    a faithful snapshot of a run; use ``scripts/eval/print_assoc_basis.py``
+    (which resolves the argparse namespace) for that.
+    """
 
     core: CoreConfig = dataclasses.field(default_factory=CoreConfig)
     detection: DetectionConfig = dataclasses.field(default_factory=DetectionConfig)
