@@ -6,6 +6,8 @@ from pathlib import Path
 
 import yaml
 
+from saccade.perception.eval.assoc_basis import PERSON_HEIGHT_M, SCENE_FPS
+
 from ._helpers import _help, _tier
 
 
@@ -90,14 +92,14 @@ class LifecycleConfig:
     relink_bridge_min_lost: int = 2
     relink_bridge_ttl: int = 120
     relink_bridge_max_speed: float = 0.0
-    relink_bridge_person_height: float = 1.65
-    relink_bridge_fps: float = 30.0
-    relink_bridge_margin: float = 0.05
+    relink_bridge_person_height: float = PERSON_HEIGHT_M
+    relink_bridge_fps: float = SCENE_FPS
+    relink_bridge_margin: float = 0.0
     relink_bridge_spatial_gate: float = 0.0
     relink_bridge_anchor: str = "adaptive"
     relink_bridge_anchor_rate: float = 0.03
-    relink_bridge_h_lo: float = 0.75
-    relink_bridge_h_hi: float = 1.33
+    relink_bridge_h_lo: float = 0.0
+    relink_bridge_h_hi: float = 0.0
     # Directional consistency bonus: relax bridge_px when lost and candidate
     # velocities point in the same direction (cos_sim^2 * gap_scale). 0 = off.
     # Suggested 0.3-1.0; higher values are increasingly permissive.
@@ -844,7 +846,7 @@ def add_lifecycle_args(parser: argparse.ArgumentParser) -> None:
     grp.add_argument(
         "--relink-bridge-person-height",
         type=float,
-        default=1.65,
+        default=PERSON_HEIGHT_M,
         help=_help(
             "Assumed person height (m) for px-per-m in the speed gate.",
             range_hint=">0",
@@ -853,7 +855,7 @@ def add_lifecycle_args(parser: argparse.ArgumentParser) -> None:
     grp.add_argument(
         "--relink-bridge-fps",
         type=float,
-        default=30.0,
+        default=SCENE_FPS,
         help=_help(
             "Sequence FPS used by the speed gate to convert age to seconds.",
             range_hint=">0",

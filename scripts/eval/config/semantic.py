@@ -33,7 +33,7 @@ class SemanticConfig:
     semantic_delayed_claim: bool = False
     semantic_claim_warmup_frames: int = 3
     semantic_bidirectional: bool = False
-    semantic_bridge_px: float = 1.5
+    semantic_bridge_px: float = 350.0
     semantic_debug: bool = False
     # Reference buffer
     semantic_buffer_size: int = 10

@@ -6,6 +6,8 @@ from pathlib import Path
 
 import yaml
 
+from saccade.perception.eval.assoc_basis import REF_HEIGHT_RATIO
+
 from ._helpers import _help, _tier
 
 
@@ -17,7 +19,7 @@ class GeometryConfig:
     crowd_new_track_thresh: float = 0.25
     # Adaptive geometry scaling
     geometry_mid_scale: bool = False
-    geometry_ref_height_ratio: float = 0.12
+    geometry_ref_height_ratio: float = REF_HEIGHT_RATIO
     geometry_min_scale: float = 0.875
     geometry_max_scale: float = 1.20
     geometry_ema_beta: float = 0.80
@@ -104,7 +106,7 @@ def add_geometry_args(parser: argparse.ArgumentParser) -> None:
     grp.add_argument(
         "--geometry-ref-height-ratio",
         type=float,
-        default=0.12,
+        default=REF_HEIGHT_RATIO,
         help=_help(
             "Reference person height ratio for geometry normalization.",
             range_hint="0-1",

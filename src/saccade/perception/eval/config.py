@@ -2,6 +2,11 @@ from dataclasses import dataclass
 from typing import Any
 from pathlib import Path
 from saccade.perception.eval.preprocess import parse_preprocess
+from saccade.perception.eval.assoc_basis import (
+    PERSON_HEIGHT_M,
+    REF_HEIGHT_RATIO,
+    SCENE_FPS,
+)
 
 
 @dataclass
@@ -570,7 +575,9 @@ def parse_eval_config(
         nms_iou_threshold=float(kwargs.get("nms_iou_threshold") or _nms_default),
         cross_tile_merge=bool(kwargs.get("cross_tile_merge", False)),
         geometry_mid_scale=bool(kwargs.get("geometry_mid_scale", False)),
-        geometry_ref_height_ratio=float(kwargs.get("geometry_ref_height_ratio", 0.12)),
+        geometry_ref_height_ratio=float(
+            kwargs.get("geometry_ref_height_ratio", REF_HEIGHT_RATIO)
+        ),
         geometry_min_scale=float(kwargs.get("geometry_min_scale", 0.875)),
         geometry_max_scale=float(kwargs.get("geometry_max_scale", 1.20)),
         geometry_ema_beta=float(kwargs.get("geometry_ema_beta", 0.80)),
@@ -693,9 +700,9 @@ def parse_eval_config(
         relink_bridge_ttl=int(kwargs.get("relink_bridge_ttl", 120)),
         relink_bridge_max_speed=float(kwargs.get("relink_bridge_max_speed", 0.0)),
         relink_bridge_person_height=float(
-            kwargs.get("relink_bridge_person_height", 1.65)
+            kwargs.get("relink_bridge_person_height", PERSON_HEIGHT_M)
         ),
-        relink_bridge_fps=float(kwargs.get("relink_bridge_fps", 30.0)),
+        relink_bridge_fps=float(kwargs.get("relink_bridge_fps", SCENE_FPS)),
         relink_bridge_margin=float(kwargs.get("relink_bridge_margin", 0.05)),
         relink_bridge_spatial_gate=float(kwargs.get("relink_bridge_spatial_gate", 0.0)),
         relink_bridge_anchor=str(kwargs.get("relink_bridge_anchor", "adaptive")),
