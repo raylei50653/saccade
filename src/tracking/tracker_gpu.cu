@@ -642,18 +642,18 @@ __global__ void compute_conditional_cost_kernel(
     float iou_cost = 1.0f - fused_iou;
     float cost;
     bool try_appearance = (candidate_count[t] >= reid_min_candidates && has_clean_embedding[t] && trk_embeds && det_embeds);
+    float cos_sim_pre = 0.0f, norm_sq_pre = 0.0f;
     if (try_appearance) {
         const float* e1 = trk_embeds + t * embed_dim;
         const float* e2 = det_embeds + d * embed_dim;
-        float cos_sim = 0.0f, norm_sq = 0.0f;
         for (int k = 0; k < embed_dim; ++k) {
-            cos_sim += e1[k] * e2[k];
-            norm_sq += e2[k] * e2[k];
+            cos_sim_pre += e1[k] * e2[k];
+            norm_sq_pre += e2[k] * e2[k];
         }
-        if (norm_sq > 0.0625f) {
-            cos_sim = fmaxf(0.0f, cos_sim);
-            if (cos_sim >= cos_threshold && fused_iou >= iou_low) {
-                float app_cost = 1.0f - (cost_cos_w * cos_sim + cost_iou_w * fused_iou + cost_score_w * ds);
+        if (norm_sq_pre > 0.0625f) {
+            cos_sim_pre = fmaxf(0.0f, cos_sim_pre);
+            if (cos_sim_pre >= cos_threshold && fused_iou >= iou_low) {
+                float app_cost = 1.0f - (cost_cos_w * cos_sim_pre + cost_iou_w * fused_iou + cost_score_w * ds);
                 cost = fminf(iou_cost, app_cost);
             } else {
                 cost = iou_cost;
@@ -666,22 +666,10 @@ __global__ void compute_conditional_cost_kernel(
     }
 
     if (use_multiplicative_cost) {
-        // Multiplicative: accumulate penalties in log-space, then cost = 1 - Q * exp(-penalty)
         float penalty = 0.0f;
         float base_quality = fused_iou;
-        if (try_appearance) {
-            const float* e1 = trk_embeds + t * embed_dim;
-            const float* e2 = det_embeds + d * embed_dim;
-            float cos_sim = 0.0f, norm_sq = 0.0f;
-            for (int k = 0; k < embed_dim; ++k) {
-                cos_sim += e1[k] * e2[k];
-                norm_sq += e2[k] * e2[k];
-            }
-            if (norm_sq > 0.0625f) {
-                cos_sim = fmaxf(0.0f, cos_sim);
-                if (cos_sim >= cos_threshold && fused_iou >= iou_low)
-                    base_quality = cost_cos_w * cos_sim + cost_iou_w * fused_iou + cost_score_w * ds;
-            }
+        if (try_appearance && norm_sq_pre > 0.0625f && cos_sim_pre >= cos_threshold && fused_iou >= iou_low) {
+            base_quality = cost_cos_w * cos_sim_pre + cost_iou_w * fused_iou + cost_score_w * ds;
         }
         if (vel_dir_weight > 0.0f) {
             float vx = st[4], vy = st[5];
@@ -715,25 +703,9 @@ __global__ void compute_conditional_cost_kernel(
         cost = fminf(1.0f, fmaxf(0.0f, cost));
     } else {
         // Legacy additive form (bit-identical)
-        if (try_appearance) {
-            const float* e1 = trk_embeds + t * embed_dim;
-            const float* e2 = det_embeds + d * embed_dim;
-            float cos_sim = 0.0f, norm_sq = 0.0f;
-            for (int k = 0; k < embed_dim; ++k) {
-                cos_sim += e1[k] * e2[k];
-                norm_sq += e2[k] * e2[k];
-            }
-            if (norm_sq > 0.0625f) {
-                cos_sim = fmaxf(0.0f, cos_sim);
-                if (cos_sim >= cos_threshold && fused_iou >= iou_low) {
-                    float app_cost = 1.0f - (cost_cos_w * cos_sim + cost_iou_w * fused_iou + cost_score_w * ds);
-                    cost = fminf(iou_cost, app_cost);
-                } else {
-                    cost = iou_cost;
-                }
-            } else {
-                cost = iou_cost;
-            }
+        if (try_appearance && norm_sq_pre > 0.0625f && cos_sim_pre >= cos_threshold && fused_iou >= iou_low) {
+            float app_cost = 1.0f - (cost_cos_w * cos_sim_pre + cost_iou_w * fused_iou + cost_score_w * ds);
+            cost = fminf(iou_cost, app_cost);
         } else {
             cost = iou_cost;
         }

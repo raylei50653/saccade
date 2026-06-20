@@ -3476,6 +3476,7 @@ def _run_birth_config(
     frame_track_thresh: float,
     fused_boxes: "torch.Tensor",
     fused_scores: "torch.Tensor",
+    fused_quality_factors: "torch.Tensor | None" = None,
 ) -> "tuple[list[dict[str, float | int | str | bool]], torch.Tensor]":
     cfg = state.cfg
     h_orig = state.h_orig
@@ -3491,6 +3492,7 @@ def _run_birth_config(
     # Boost sub-threshold detections that have appeared in the last N frames.
     # More selective than birth_quality_gate: requires temporal evidence, not
     # just per-frame geometry quality.
+    scores_cloned = False
     if cfg.birth_consecutive_gate and fused_scores.numel() > 0:
         if len(_consec_birth_window) >= cfg.birth_consecutive_frames - 1:
             below_birth = fused_scores < frame_new_track_thresh
@@ -3504,15 +3506,15 @@ def _run_birth_config(
                 )
                 if confirmed.any():
                     boost_idx = below_birth.nonzero(as_tuple=True)[0][confirmed]
-                    # Only boost detections that are close enough to new_track_thresh
-                    # (above min_score) — prevents very-low-score noise from crossing
                     eligible = (
                         fused_scores[boost_idx] >= cfg.birth_consecutive_min_score
                     )
                     boost_idx = boost_idx[eligible]
                     if boost_idx.numel() > 0:
+                        if not scores_cloned:
+                            fused_scores = fused_scores.clone()
+                            scores_cloned = True
                         score_before = fused_scores[boost_idx].clone()
-                        fused_scores = fused_scores.clone()
                         fused_scores[boost_idx] = torch.clamp(
                             fused_scores[boost_idx] + cfg.birth_consecutive_boost,
                             max=cfg.high_thresh,
@@ -3540,24 +3542,29 @@ def _run_birth_config(
         and fused_scores.numel() > 0
         and cfg.birth_quality_score_bias > 0.0
     ):
-        birth_quality = _compute_detection_quality_batch(
-            fused_boxes,
-            w_orig,
-            h_orig,
-            w_aspect=cfg.detection_quality_w_aspect,
-            w_center=cfg.detection_quality_w_center,
-            w_area=cfg.detection_quality_w_area,
-        )
+        if fused_quality_factors is not None:
+            birth_quality = fused_quality_factors
+        else:
+            birth_quality = _compute_detection_quality_batch(
+                fused_boxes,
+                w_orig,
+                h_orig,
+                w_aspect=cfg.detection_quality_w_aspect,
+                w_center=cfg.detection_quality_w_center,
+                w_area=cfg.detection_quality_w_area,
+            )
         below_birth = fused_scores < frame_new_track_thresh
         high_quality = birth_quality > cfg.birth_min_quality
         boost_mask = below_birth & high_quality
         if boost_mask.any():
+            if not scores_cloned:
+                fused_scores = fused_scores.clone()
+                scores_cloned = True
             boost_idx = boost_mask.nonzero(as_tuple=True)[0]
             score_before = fused_scores[boost_idx].clone()
             boost = (
                 birth_quality[boost_mask] - cfg.birth_min_quality
             ) * cfg.birth_quality_score_bias
-            fused_scores = fused_scores.clone()
             fused_scores[boost_mask] = torch.clamp(
                 fused_scores[boost_mask] + boost,
                 max=cfg.high_thresh,
@@ -3585,9 +3592,11 @@ def _run_birth_config(
                 fused_scores[cand_mask],
             )
             if promote_mask.any():
+                if not scores_cloned:
+                    fused_scores = fused_scores.clone()
+                    scores_cloned = True
                 boost_idx = cand_mask.nonzero(as_tuple=True)[0][promote_mask]
                 score_before = fused_scores[boost_idx].clone()
-                fused_scores = fused_scores.clone()
                 fused_scores[boost_idx] = frame_new_track_thresh + 0.01
                 _append_birth_event_rows(
                     frame_birth_events,
@@ -4876,6 +4885,8 @@ def _run_frame(state: "EvalPipeline", *, frame_id: int) -> bool:
             # === Stage 2 Quality Gate ===
             # Remove mid-score-band detections with poor geometry before the tracker's
             # Stage 2 association step, preventing bad lost-track assignments → IDs.
+            _s2_quality = None
+            _s2_pre_n = fused_boxes.shape[0]
             if cfg.stage2_quality_gate and fused_scores.numel() > 0:
                 _s2_quality = _compute_detection_quality_batch(
                     fused_boxes,
@@ -4903,6 +4914,14 @@ def _run_frame(state: "EvalPipeline", *, frame_id: int) -> bool:
                     quality=_s2_quality,
                 )
                 after_merge_count = int(fused_scores.numel())
+            # Share quality factors with birth config when stage2 gate did not
+            # remove any boxes (most-common fast path). When boxes change, let
+            # birth_config recompute on its own.
+            _birth_quality = (
+                _s2_quality
+                if _s2_quality is not None and _s2_pre_n == fused_boxes.shape[0]
+                else None
+            )
 
             frame_birth_events, fused_scores = _run_birth_config(
                 state,
@@ -4912,6 +4931,7 @@ def _run_frame(state: "EvalPipeline", *, frame_id: int) -> bool:
                 frame_track_thresh=frame_track_thresh,
                 fused_boxes=fused_boxes,
                 fused_scores=fused_scores,
+                fused_quality_factors=_birth_quality,
             )
             if cfg.tile_diagnostics and is_tiled:
                 seq_tile_diag["post_merge_seam_boxes"] += _count_tile_seam_boxes(
