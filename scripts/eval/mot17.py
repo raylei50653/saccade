@@ -332,15 +332,21 @@ if __name__ == "__main__":
                 tags["preset"] = args.preset
             if getattr(args, "detector", None):
                 tags["detector"] = args.detector
+            # Capture the env-var escape hatches too — they bypass config and
+            # would otherwise be invisible to the run record (some default on).
+            from saccade.perception.eval.assoc_basis import resolved_env_overrides
+
+            _params = {
+                k: v
+                for k, v in vars(args).items()
+                if k not in _MODULE_KEYS and k not in _VIS_KEYS
+            }
+            _params.update({f"env.{k}": v for k, v in resolved_env_overrides().items()})
             log_eval_run(
                 uri=args.mlflow_uri,
                 experiment_name=args.mlflow_experiment,
                 run_name=args.mlflow_run_name,
-                params={
-                    k: v
-                    for k, v in vars(args).items()
-                    if k not in _MODULE_KEYS and k not in _VIS_KEYS
-                },
+                params=_params,
                 metrics=metrics,
                 tags=tags,
             )

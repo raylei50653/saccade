@@ -398,11 +398,24 @@ ENV_OVERRIDES: tuple[EnvOverride, ...] = (
     ),
     EnvOverride(
         "SACCADE_GPU_RELINK_GATE",
-        "1 (evaluator) / 0 (relink.py)",
+        "build=1 (C++) / use=0 (py)",
         "src/saccade/perception/eval/evaluator.py:2093",
-        "GPU relink-gate fast path (note: the two call sites disagree)",
+        "GPU relink-gate: evaluator builds the table (default 1, C++ relinker); "
+        "PythonSemanticRelinker's use-flag defaults 0 as the bit-exact reference",
     ),
 )
+
+
+def resolved_env_overrides() -> dict[str, str]:
+    """Map each escape-hatch env var to its effective value for this process.
+
+    Returns the literal ``os.environ`` value if set, else ``"<default>"`` so a
+    run's MLflow record captures whether a hatch was flipped (the hatches
+    otherwise bypass config logging entirely).
+    """
+    import os
+
+    return {e.env: os.environ.get(e.env, "<default>") for e in ENV_OVERRIDES}
 
 
 def format_env_overrides() -> str:
