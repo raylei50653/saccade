@@ -30,6 +30,7 @@ from saccade.perception.eval.external_fp_model import (
 )
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
 def test_nms_graph_retains_captured_count_buffer(monkeypatch):
     """The native graph keeps this raw pointer after ``_run_nms`` returns."""
 
