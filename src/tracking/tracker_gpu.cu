@@ -1264,6 +1264,40 @@ __global__ void archive_expiring_tracks_kernel(
     relink_valid[slot] = 1;
 }
 
+// Archive tracks that just became LOST (age == 1) so the birth relink can
+// revive their identity when a detection re-appears.  The original
+// archive_expiring_tracks_kernel only saves about-to-expire confirmed tracks,
+// which is too narrow — this captures every loss at the earliest opportunity.
+__global__ void archive_lost_tracks_kernel(
+    const bool* active, const int* state, const int* age,
+    const float* states, const float* features, const int* track_ids,
+    int max_objs, int embed_dim, int cap,
+    float* relink_feats, int* relink_ids, float* relink_pos,
+    int* relink_lostage, int* relink_valid, int* relink_cursor)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= max_objs) return;
+    if (!active[idx] || state[idx] != TRACK_CONFIRMED) return;
+    if (age[idx] != 1) return;
+
+    const float* src = features + idx * embed_dim;
+    float norm = 0.0f;
+    for (int k = 0; k < embed_dim; ++k) norm += src[k] * src[k];
+    if (norm < 1e-6f) return;
+
+    int slot = atomicAdd(relink_cursor, 1) % cap;
+    float* dst = relink_feats + slot * embed_dim;
+    for (int k = 0; k < embed_dim; ++k) dst[k] = src[k];
+    relink_ids[slot] = track_ids[idx];
+    relink_pos[slot * 5 + 0] = states[idx * 8 + 0];
+    relink_pos[slot * 5 + 1] = states[idx * 8 + 1];
+    relink_pos[slot * 5 + 2] = states[idx * 8 + 3];
+    relink_pos[slot * 5 + 3] = states[idx * 8 + 4];
+    relink_pos[slot * 5 + 4] = states[idx * 8 + 5];
+    relink_lostage[slot] = 0;
+    relink_valid[slot] = 1;
+}
+
 __global__ void age_relink_bank_kernel(int* lostage, int* valid, int cap, int max_age) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= cap || !valid[i]) return;
@@ -2753,6 +2787,17 @@ public:
         cudaMemsetAsync(d_slot_cursor_, 0, sizeof(int), stream);
         collect_free_slots_kernel<<<1, 256, 0, stream>>>(
             d_active_, max_objs_, d_free_slots_, d_n_free_);
+        // Relink: archive tracks that just became LOST so the birth relink can
+        // revive them when a detection re-appears (unlike expire-only archiving
+        // which only saves about-to-expire confirmed tracks).
+        if (relink_enabled_ && d_embeddings) {
+            archive_lost_tracks_kernel<<<blocks, threads, 0, stream>>>(
+                d_active_, d_state_, d_age_,
+                d_states_, d_features_, d_track_ids_,
+                max_objs_, embed_dim_, relink_bank_cap_,
+                d_relink_feats_, d_relink_ids_, d_relink_pos_,
+                d_relink_lostage_, d_relink_valid_, d_relink_cursor_);
+        }
         // Relink: try to revive a lost identity for each unmatched birth candidate
         // before spawn assigns fresh ids.
         const int* d_revive = nullptr;
