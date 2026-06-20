@@ -89,7 +89,7 @@ public:
         float confirm_score_thresh = 0.50f,
         bool adaptive_confirmation = false,
         float new_track_thresh = -1.0f,
-        bool nsa_kalman = false,
+        int kalman_adapt_mode = 0,
         float r_scale = 1.0f,
         float vel_dir_weight = 0.0f,
         float fuse_score_weight = 0.0f,

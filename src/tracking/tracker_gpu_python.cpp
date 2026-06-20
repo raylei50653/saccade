@@ -2745,7 +2745,7 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
              py::arg("confirm_score_thresh") = 0.50f,
              py::arg("adaptive_confirmation") = false,
              py::arg("new_track_thresh") = -1.0f,
-             py::arg("nsa_kalman") = false,
+             py::arg("kalman_adapt_mode") = 0,
              py::arg("r_scale") = 1.0f,
              py::arg("vel_dir_weight") = 0.0f,
              py::arg("fuse_score_weight") = 0.0f,

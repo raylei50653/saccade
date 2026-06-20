@@ -466,7 +466,8 @@ __global__ void stage1_cost_fused_kernel(
     const int* occ_front_ttl, float occ_cost_weight,
     bool use_multiplicative_cost, float stability_cost_w, float sinkhorn_lambda,
     int* cand_n, float* cand_costs, int* cand_indices, int cand_stride,
-    float cand_cost_cap)
+    float cand_cost_cap,
+    const float* trk_score_sum, const int* trk_hit_streak, int confirm_streak)
 {
     int t = blockIdx.y * blockDim.y + threadIdx.y;
     int d = blockIdx.x * blockDim.x + threadIdx.x;
@@ -490,7 +491,20 @@ __global__ void stage1_cost_fused_kernel(
     atomicAdd(&candidate_count[t], 1);
 
     float ds = det_scores ? det_scores[d] : 0.5f;
-    float fused_iou = iou * (1.0f - fuse_score_weight * (1.0f - ds));
+    float score_penalty;
+    if (fuse_score_weight > 0.0f && trk_hit_streak && trk_score_sum && trk_hit_streak[t] >= confirm_streak) {
+        float track_avg = trk_score_sum[t] / (float)trk_hit_streak[t];
+        float drop = fmaxf(0.0f, track_avg - ds);
+        float rel_penalty = drop / fmaxf(track_avg, 0.01f);
+        if (d_occ_coeff) {
+            float crowd = fminf(1.0f, d_occ_coeff[t] / 0.25f);
+            rel_penalty *= (1.0f - crowd);
+        }
+        score_penalty = rel_penalty;
+    } else {
+        score_penalty = 1.0f - ds;
+    }
+    float fused_iou = iou * (1.0f - fuse_score_weight * score_penalty);
     float iou_cost_val;
 
     if (use_multiplicative_cost) {
@@ -590,7 +604,8 @@ __global__ void compute_conditional_cost_kernel(
     const int* occ_front_ttl, float occ_cost_weight,
     bool use_multiplicative_cost, float stability_cost_w, float sinkhorn_lambda,
     int* cand_n, float* cand_costs, int* cand_indices, int cand_stride,
-    float cand_cost_cap)
+    float cand_cost_cap,
+    const float* trk_score_sum, const int* trk_hit_streak, int confirm_streak)
 {
     int t = blockIdx.y * blockDim.y + threadIdx.y;
     int d = blockIdx.x * blockDim.x + threadIdx.x;
@@ -610,7 +625,20 @@ __global__ void compute_conditional_cost_kernel(
     }
 
     float ds = det_scores ? det_scores[d] : 0.5f;
-    float fused_iou = iou * (1.0f - fuse_score_weight * (1.0f - ds));
+    float score_penalty;
+    if (fuse_score_weight > 0.0f && trk_hit_streak && trk_score_sum && trk_hit_streak[t] >= confirm_streak) {
+        float track_avg = trk_score_sum[t] / (float)trk_hit_streak[t];
+        float drop = fmaxf(0.0f, track_avg - ds);
+        float rel_penalty = drop / fmaxf(track_avg, 0.01f);
+        if (d_occ_coeff) {
+            float crowd = fminf(1.0f, d_occ_coeff[t] / 0.25f);
+            rel_penalty *= (1.0f - crowd);
+        }
+        score_penalty = rel_penalty;
+    } else {
+        score_penalty = 1.0f - ds;
+    }
+    float fused_iou = iou * (1.0f - fuse_score_weight * score_penalty);
     float iou_cost = 1.0f - fused_iou;
     float cost;
     bool try_appearance = (candidate_count[t] >= reid_min_candidates && has_clean_embedding[t] && trk_embeds && det_embeds);
@@ -1102,10 +1130,17 @@ __global__ void track_state_update_post_kernel(
     }
 }
 
+// kalman_adapt_mode:
+//   0 = off (baseline r_scale, no per-measurement adaptation)
+//   1 = score (legacy NSA: R *= max(0.05, (1-score)^2))
+//   2 = innovation (Mahalanobis d^2 outlier detection)
+//   3 = lifestage (mature tracks trust Kalman more)
+//   4 = aspect (aspect-ratio jitter gate)
 __global__ void inline_kalman_update_kernel(
     float* states, float* covs, const float* det_boxes,
     const int* trk_to_det, const bool* active, int max_objs, float light_factor,
-    const float* det_scores, bool nsa_kalman, float r_scale)
+    const float* det_scores, int kalman_adapt_mode, float r_scale,
+    const int* ages, const int* hit_streaks, int confirm_streak)
 {
     int t = blockIdx.x * blockDim.x + threadIdx.x;
     if (t >= max_objs || !active[t]) return;
@@ -1120,13 +1155,57 @@ __global__ void inline_kalman_update_kernel(
         (box[2] - box[0]) / bh,
         bh
     };
-    float nsa_mult = 1.0f;
-    if (nsa_kalman && det_scores) {
+
+    float adapt_r_mult = 1.0f;
+
+    // Mode 1: score-based (legacy NSA)
+    if (kalman_adapt_mode == 1 && det_scores) {
         float s = det_scores[d];
         float q = 1.0f - s;
-        nsa_mult = fmaxf(0.05f, q * q);
+        adapt_r_mult = fmaxf(0.05f, q * q);
     }
-    kf_gpu::update(states + t * 8, covs + t * 64, z, light_factor, nsa_mult, r_scale);
+
+    // Mode 2: innovation-based outlier detection (Variant A)
+    if (kalman_adapt_mode == 2) {
+        float* x = states + t * 8;
+        float* P = covs + t * 64;
+        // Compute S_inv = inv(H*P*H^T + R) with baseline r_scale
+        float S_inv[16];
+        kf_gpu::compute_S_inv(x, P, S_inv, light_factor, r_scale);
+        // Innovation y = z - Hx = z - x[0:4]
+        float d2 = 0.0f;
+        for (int i = 0; i < 4; ++i) {
+            float yi = z[i] - x[i];
+            d2 += yi * yi * S_inv[i * 4 + i];  // diagonal approx of y^T S^{-1} y
+        }
+        // d^2 ~ chi^2(4): 68% < 4.9, 99.7% < 16.3
+        if (d2 < 3.0f)       adapt_r_mult = 0.6f;   // very consistent → trust more
+        else if (d2 < 9.5f)  adapt_r_mult = 1.0f;   // normal
+        else if (d2 < 16.3f) adapt_r_mult = 2.5f;   // suspicious → distrust
+        else                 adapt_r_mult = 5.0f;   // outlier → heavy distrust
+    }
+
+    // Mode 3: track life-stage R scheduling (Variant B)
+    if (kalman_adapt_mode == 3 && hit_streaks) {
+        int hs = hit_streaks[t];
+        if (hs >= 10)
+            adapt_r_mult = 0.55f;  // mature → trust Kalman prediction more
+        else if (hs < confirm_streak)
+            adapt_r_mult = 1.3f;   // newborn (unconfirmed) → be more cautious
+        // else: intermediate → baseline 1.0
+    }
+
+    // Mode 4: aspect-ratio jitter gate (Variant C)
+    if (kalman_adapt_mode == 4) {
+        float* x = states + t * 8;
+        float pred_aspect = x[2];
+        float meas_aspect = z[2];
+        float rel_jitter = fabsf(meas_aspect - pred_aspect) / fmaxf(fabsf(pred_aspect), 1e-6f);
+        if (rel_jitter > 0.3f)
+            adapt_r_mult = 3.0f;  // box boundary likely occluded/truncated
+    }
+
+    kf_gpu::update(states + t * 8, covs + t * 64, z, light_factor, adapt_r_mult, r_scale);
 }
 } // namespace kernel
 
@@ -2517,11 +2596,12 @@ public:
                 reid_cost_cos_w_, reid_cost_iou_w_, reid_cost_score_w_,
                 reid_cos_threshold_, reid_iou_low_,
                 reid_min_candidates_,
-                oao_tau_ > 0.0f ? d_occ_coeff_ : nullptr, oao_tau_,
+                d_occ_coeff_, oao_tau_,
                 oao_contest_on ? d_occ_partner_all_ : nullptr, oao_contest_thresh_, oao_score_w_,
                 occ_state_enabled_ ? d_occ_front_ttl_ : nullptr, occ_cost_weight_,
                 multiplicative_cost_, stability_cost_w_, sinkhorn_lambda_,
-                d_cand_n_, d_cand_costs_, d_cand_indices_, cand_stride_, cand_cost_cap);
+                d_cand_n_, d_cand_costs_, d_cand_indices_, cand_stride_, cand_cost_cap,
+                d_score_sum_, d_hit_streak_, confirm_streak_);
         } else {
             checkCuda(cudaMemsetAsync(d_candidate_count_, 0, max_objs_ * sizeof(int), stream));
             checkCuda(cudaMemsetAsync(d_cand_n_, 0, max_objs_ * sizeof(int), stream));
@@ -2531,11 +2611,12 @@ public:
                 max_objs_, num_dets, iou_stage1_gate_, maha_gate_,
                 vel_dir_weight_, fuse_score_weight_,
                 d_scores,
-                oao_tau_ > 0.0f ? d_occ_coeff_ : nullptr, oao_tau_,
+                d_occ_coeff_, oao_tau_,
                 oao_contest_on ? d_occ_partner_all_ : nullptr, oao_contest_thresh_, oao_score_w_,
                 occ_state_enabled_ ? d_occ_front_ttl_ : nullptr, occ_cost_weight_,
                 multiplicative_cost_, stability_cost_w_, sinkhorn_lambda_,
-                d_cand_n_, d_cand_costs_, d_cand_indices_, cand_stride_, cand_cost_cap);
+                d_cand_n_, d_cand_costs_, d_cand_indices_, cand_stride_, cand_cost_cap,
+                d_score_sum_, d_hit_streak_, confirm_streak_);
         }
         nvtxRangePop();
 
@@ -2684,7 +2765,8 @@ public:
 
         kernel::inline_kalman_update_kernel<<<blocks, threads, 0, stream>>>(
             d_states_, d_covs_, d_boxes, d_trk_to_det_, d_active_, max_objs_, light_factor,
-            d_scores, nsa_kalman_, r_scale_
+            d_scores, kalman_adapt_mode_, r_scale_,
+            d_age_, d_hit_streak_, confirm_streak_
         );
         nvtxRangePop();
 
@@ -2786,7 +2868,7 @@ public:
 
     void set_params(float track_thresh, float high_thresh, float match_thresh, int track_buffer,
                     float mid_thresh, int confirm_streak, float confirm_score_thresh,
-                    bool adaptive_confirmation, float new_track_thresh, bool nsa_kalman,
+                    bool adaptive_confirmation, float new_track_thresh, int kalman_adapt_mode,
                     float r_scale = 1.0f, float vel_dir_weight = 0.0f, float fuse_score_weight = 0.0f,
                     float stage2_match_thresh = 0.5f, float birth_low_score_thresh = 0.0f,
                     float birth_prox_norm_thresh = 0.0f) {
@@ -2796,7 +2878,7 @@ public:
         confirm_streak_ = std::max(confirm_streak, 1);
         confirm_score_thresh_ = confirm_score_thresh;
         adaptive_confirmation_ = adaptive_confirmation;
-        nsa_kalman_ = nsa_kalman;
+        kalman_adapt_mode_ = kalman_adapt_mode;
         r_scale_ = std::max(0.01f, r_scale);
         vel_dir_weight_ = fmaxf(0.0f, vel_dir_weight);
         fuse_score_weight_ = std::clamp(fuse_score_weight, 0.0f, 1.0f);
@@ -3298,7 +3380,7 @@ private:
     int max_age_ = 30, confirm_streak_ = 3;
     float confirm_score_thresh_ = 0.50f;
     bool adaptive_confirmation_ = false;
-    bool nsa_kalman_ = false;
+    int kalman_adapt_mode_ = 0;
     float r_scale_ = 1.0f;
     float vel_dir_weight_ = 0.0f;
     float fuse_score_weight_ = 0.0f;
@@ -3405,11 +3487,11 @@ GPUByteTracker::GPUByteTracker(int max_objs, int embedding_dim, int max_assoc)
 GPUByteTracker::~GPUByteTracker() = default;
 void GPUByteTracker::set_params(float track_thresh, float high_thresh, float match_thresh, int track_buffer,
                                 float mid_thresh, int confirm_streak, float confirm_score_thresh,
-                                bool adaptive_confirmation, float new_track_thresh, bool nsa_kalman,
+                                bool adaptive_confirmation, float new_track_thresh, int kalman_adapt_mode,
                                 float r_scale, float vel_dir_weight, float fuse_score_weight,
                                 float stage2_match_thresh, float birth_low_score_thresh,
                                 float birth_prox_norm_thresh) {
-    pimpl_->set_params(track_thresh, high_thresh, match_thresh, track_buffer, mid_thresh, confirm_streak, confirm_score_thresh, adaptive_confirmation, new_track_thresh, nsa_kalman, r_scale, vel_dir_weight, fuse_score_weight, stage2_match_thresh, birth_low_score_thresh, birth_prox_norm_thresh);
+    pimpl_->set_params(track_thresh, high_thresh, match_thresh, track_buffer, mid_thresh, confirm_streak, confirm_score_thresh, adaptive_confirmation, new_track_thresh, kalman_adapt_mode, r_scale, vel_dir_weight, fuse_score_weight, stage2_match_thresh, birth_low_score_thresh, birth_prox_norm_thresh);
 }
 void GPUByteTracker::set_reid_params(float cos_threshold, float iou_low, float iou_high, float weight,
                                      float cost_cos_w, float cost_iou_w, float cost_score_w) {

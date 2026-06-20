@@ -205,7 +205,7 @@ std::vector<FrameResult> SequenceRunner::run(const SequenceConfig& cfg) {
         cfg.confirm_score_thresh,
         /*adaptive_confirmation=*/false,
         cfg.new_track_thresh,
-        /*nsa_kalman=*/false,
+        /*kalman_adapt_mode=*/0,
         /*r_scale=*/1.0f,
         cfg.vel_dir_weight,
         cfg.fuse_score_weight,
