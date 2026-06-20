@@ -46,6 +46,7 @@ except Exception:
     _HAS_EXT = False
 
 pytestmark = [
+    pytest.mark.gpu,
     pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA GPU required"),
     pytest.mark.skipif(not _HAS_EXT, reason="saccade_perception_ext not built"),
     pytest.mark.skipif(

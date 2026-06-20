@@ -18,6 +18,7 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   UV_LINK_MODE: copy
+  UV_EXTRA_INDEX_URL: https://pypi.nvidia.com/
 
 jobs:
   build:
@@ -84,7 +85,7 @@ jobs:
           df -h
 
       - name: Sync dependencies
-        run: uv sync
+        run: uv cache clean tensorrt-cu12-libs tensorrt-cu12 || true && uv sync --refresh-package tensorrt-cu12-libs
 
       - name: Install newer CMake
         run: uv pip install "cmake>=3.28"

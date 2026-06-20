@@ -7,12 +7,14 @@ Workbench::Workbench(PerceptionPipeline* pipeline,
                      GPUByteTracker*    tracker,
                      cudaStream_t       stream,
                      int max_dets,
-                     int max_tracks)
+                     int max_tracks,
+                     int output_capacity)
     : pipeline_(pipeline),
       tracker_(tracker),
       stream_(stream),
       max_dets_(max_dets),
-      max_tracks_(max_tracks)
+      max_tracks_(max_tracks),
+      output_capacity_(output_capacity < 0 ? max_tracks * 8 : output_capacity)
 {
     if (pipeline == nullptr || tracker == nullptr) {
         throw std::invalid_argument(
@@ -88,7 +90,8 @@ int Workbench::process_frame_postyolo(
             out_det_idx, out_count,
             const_cast<float*>(embeddings_ptr),
             const_cast<float*>(gmc_ptr),
-            light_factor, mid_thresh_scale);
+            light_factor, mid_thresh_scale,
+            output_capacity_);
     } catch (const std::exception& e) {
         return 0;
     }

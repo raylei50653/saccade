@@ -311,7 +311,9 @@ class PyGraphedGMC:
                 boxes_flat, dtype=torch.float32, device=device
             ).view(-1, 4)
 
-    def set_fg_mask_boxes_gpu(self, d_boxes_ptr: int, n_boxes: int) -> None:
+    def set_fg_mask_boxes_gpu(
+        self, d_boxes_ptr: int, n_boxes: int, stream_ptr: int = 0
+    ) -> None:
         # Pointers not supported in python; evaluator intercepts and calls set_fg_mask_boxes_tensor
         pass
 

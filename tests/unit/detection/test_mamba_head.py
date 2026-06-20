@@ -1,8 +1,10 @@
 import torch
 import torch.nn as nn
+import pytest
 from saccade.perception.temporal_yolo.mamba_head import (
     MambaBlock,
     MambaDetectionHead,
+    _validate_cuda_scan_state_count,
     _selective_scan_legacy_n1,
     _gather_strip_pixels,
 )
@@ -32,6 +34,15 @@ def test_legacy_n1_scan_reproduces_flattened_stride_bug():
     torch.testing.assert_close(actual, expected)
     assert b_flat[1, 0].item() == b[0, 0, 2].item()
     torch.testing.assert_close(c_flat, c.squeeze(-1))
+
+
+def test_cuda_scan_state_count_guard_rejects_unsupported_widths():
+    for valid in (1, 2, 4, 8, 16, 32):
+        _validate_cuda_scan_state_count(valid)
+
+    for invalid in (0, 3, 12, 33):
+        with pytest.raises(ValueError):
+            _validate_cuda_scan_state_count(invalid)
 
 
 def test_legacy_n1_flag_propagates_to_spatial_and_temporal_blocks():

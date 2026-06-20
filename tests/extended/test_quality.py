@@ -108,6 +108,7 @@ class TestComputeDetectionQualityBatch:
         # With all weight on aspect, score depends only on aspect ratio
         assert 0.0 <= aspect_heavy <= 1.0
 
+    @pytest.mark.gpu
     def test_cuda_device(self) -> None:
         """Works on CUDA if available."""
         if not torch.cuda.is_available():

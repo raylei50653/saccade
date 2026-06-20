@@ -2731,7 +2731,10 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         .def_readwrite("shift_lost_age", &UnifiedScoreParams::shift_lost_age);
 
     py::class_<GPUByteTracker>(m, "GPUByteTracker")
-        .def(py::init<int, int>(), py::arg("max_objects") = 2048, py::arg("embedding_dim") = 768)
+        .def(py::init<int, int, int>(),
+             py::arg("max_objects") = 2048,
+             py::arg("embedding_dim") = 768,
+             py::arg("max_assoc") = 1024)
         .def("set_params", &GPUByteTracker::set_params,
              py::arg("track_thresh"),
              py::arg("high_thresh"),
@@ -2742,7 +2745,7 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
              py::arg("confirm_score_thresh") = 0.50f,
              py::arg("adaptive_confirmation") = false,
              py::arg("new_track_thresh") = -1.0f,
-             py::arg("nsa_kalman") = false,
+             py::arg("kalman_adapt_mode") = 0,
              py::arg("r_scale") = 1.0f,
              py::arg("vel_dir_weight") = 0.0f,
              py::arg("fuse_score_weight") = 0.0f,
@@ -2854,6 +2857,8 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             auto buf = self.get_gpu_buffers();
             return py::make_tuple(buf.states, buf.covs, buf.track_ids, buf.max_objs);
         }, "Return (states_ptr, covs_ptr, track_ids_ptr, max_objs) device pointers.")
+        .def_property_readonly("max_objects", &GPUByteTracker::max_objects)
+        .def_property_readonly("max_assoc", &GPUByteTracker::max_assoc)
         .def("update", [](GPUByteTracker& self, uintptr_t boxes_ptr, uintptr_t scores_ptr, uintptr_t classes_ptr, int num_dets, uintptr_t stream_ptr,
                           uintptr_t embeddings_ptr, uintptr_t gmc_ptr, float light_factor, float mid_thresh_scale) {
             return self.update(
@@ -2875,7 +2880,8 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
                                uintptr_t boxes_ptr, uintptr_t scores_ptr, uintptr_t classes_ptr, int num_dets, uintptr_t stream_ptr,
                                uintptr_t out_boxes_ptr, uintptr_t out_scores_ptr, uintptr_t out_ids_ptr, uintptr_t out_classes_ptr,
                                uintptr_t out_det_idx_ptr, uintptr_t out_count_ptr,
-                               uintptr_t embeddings_ptr, uintptr_t gmc_ptr, float light_factor, float mid_thresh_scale) {
+                               uintptr_t embeddings_ptr, uintptr_t gmc_ptr, float light_factor, float mid_thresh_scale,
+                               int out_capacity) {
             // All args are raw pointers / primitives — no Python objects accessed.
             // Releasing the GIL lets sibling worker threads make Python progress
             // while this tracker's C++ work (1–3 ms/frame) runs on its stream.
@@ -2895,13 +2901,16 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
                 embeddings_ptr ? reinterpret_cast<float*>(embeddings_ptr) : nullptr,
                 gmc_ptr ? reinterpret_cast<float*>(gmc_ptr) : nullptr,
                 light_factor,
-                mid_thresh_scale
+                mid_thresh_scale,
+                out_capacity
             );
         },
         py::arg("boxes_ptr"), py::arg("scores_ptr"), py::arg("classes_ptr"), py::arg("num_dets"), py::arg("stream_ptr"),
         py::arg("out_boxes_ptr"), py::arg("out_scores_ptr"), py::arg("out_ids_ptr"), py::arg("out_classes_ptr"),
         py::arg("out_det_idx_ptr"), py::arg("out_count_ptr"),
-        py::arg("embeddings_ptr") = 0, py::arg("gmc_ptr") = 0, py::arg("light_factor") = 0.0f, py::arg("mid_thresh_scale") = 1.0f,
+        py::arg("embeddings_ptr") = 0, py::arg("gmc_ptr") = 0,
+        py::arg("light_factor") = 0.0f, py::arg("mid_thresh_scale") = 1.0f,
+        py::arg("out_capacity") = -1,
         "Update tracker and write compact results into caller-provided GPU buffers")
         .def("get_state_snapshots", [](GPUByteTracker& self, uintptr_t stream_ptr) {
             return self.get_state_snapshots(reinterpret_cast<cudaStream_t>(stream_ptr));
@@ -3160,11 +3169,13 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         }, py::arg("boxes_flat"),
            "Set foreground boxes [x1,y1,x2,y2,...] to zero before phase correlation. "
            "Call once per frame before estimate().")
-        .def("set_fg_mask_boxes_gpu", [](GMC& self, uintptr_t boxes_ptr, int n_boxes) {
+        .def("set_fg_mask_boxes_gpu", [](GMC& self, uintptr_t boxes_ptr, int n_boxes, uintptr_t stream_ptr) {
             py::gil_scoped_release release;
             self.set_fg_mask_boxes_gpu(
-                reinterpret_cast<const float*>(boxes_ptr), n_boxes);
-        }, py::arg("boxes_ptr"), py::arg("n_boxes"),
+                reinterpret_cast<const float*>(boxes_ptr),
+                n_boxes,
+                reinterpret_cast<cudaStream_t>(stream_ptr));
+        }, py::arg("boxes_ptr"), py::arg("n_boxes"), py::arg("stream_ptr") = 0,
            "Set foreground boxes from GPU memory. No D2H roundtrip.");
 
     m.def(
@@ -3700,15 +3711,17 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
     // See include/tracking/workbench.hpp for the full architectural intent.
     py::class_<Workbench>(m, "Workbench")
         .def(py::init([](uintptr_t pipeline_ptr, uintptr_t tracker_ptr,
-                         uintptr_t stream_ptr, int max_dets, int max_tracks) {
+                         uintptr_t stream_ptr, int max_dets, int max_tracks,
+                         int output_capacity) {
                 return new Workbench(
                     reinterpret_cast<PerceptionPipeline*>(pipeline_ptr),
                     reinterpret_cast<GPUByteTracker*>(tracker_ptr),
                     reinterpret_cast<cudaStream_t>(stream_ptr),
-                    max_dets, max_tracks);
+                    max_dets, max_tracks, output_capacity);
              }),
              py::arg("pipeline_ptr"), py::arg("tracker_ptr"), py::arg("stream_ptr"),
              py::arg("max_dets") = 2048, py::arg("max_tracks") = 256,
+             py::arg("output_capacity") = -1,
              "Borrow pipeline + tracker (must be per-workbench instances, not shared) "
              "and a CUDA stream. Allocates per-workbench post-NMS scratch.")
         .def("process_frame_postyolo",
@@ -3964,6 +3977,10 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             int B_dim, int L_dim, int D_dim, int N_dim, int has_D,
             int a_per_channel, bool is_half, uintptr_t stream_ptr
         ) {
+            if (N_dim <= 0 || N_dim > 32 || (N_dim & (N_dim - 1)) != 0) {
+                throw std::invalid_argument(
+                    "selective_scan_fwd requires power-of-two N_dim in [1, 32]");
+            }
             SelectiveScanParams params;
             params.B = B_dim;
             params.L = L_dim;
@@ -4025,6 +4042,10 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             int B_dim, int L_dim, int D_dim, int N_dim, int has_D,
             int a_per_channel, uintptr_t stream_ptr
         ) {
+            if (N_dim <= 0 || N_dim > 32 || (N_dim & (N_dim - 1)) != 0) {
+                throw std::invalid_argument(
+                    "selective_scan_bwd requires power-of-two N_dim in [1, 32]");
+            }
             SelectiveScanParams params;
             params.B = B_dim;
             params.L = L_dim;

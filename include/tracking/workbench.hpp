@@ -30,7 +30,8 @@ public:
               GPUByteTracker*    tracker,
               cudaStream_t       stream,
               int max_dets   = 2048,
-              int max_tracks = 256);
+              int max_tracks = 256,
+              int output_capacity = -1);
     ~Workbench();
 
     Workbench(const Workbench&) = delete;
@@ -73,6 +74,7 @@ private:
     cudaStream_t        stream_;     // borrowed
     int max_dets_;
     int max_tracks_;
+    int output_capacity_;
 
     // Per-workbench post-NMS staging — fed by pipeline_, consumed by tracker_.
     float* d_post_boxes_   = nullptr;

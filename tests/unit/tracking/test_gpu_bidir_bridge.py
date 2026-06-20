@@ -11,8 +11,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT / "build"))
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-pytest.importorskip("saccade_tracking_ext")
-pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+pytest.importorskip("saccade_tracking_ext", exc_type=ImportError)
+pytestmark = [
+    pytest.mark.gpu,
+    pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required"),
+]
 
 from saccade.perception.tracking.tracker_gpu import GPUByteTracker  # noqa: E402
 

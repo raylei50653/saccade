@@ -460,7 +460,9 @@ class AsyncDispatcher:
         self._end_to_end_ms: deque[float] = deque(maxlen=stats_window)
 
     def _make_tracker(self) -> Any:
-        return GPUByteTracker(max_objs=100, embedding_dim=768 if self.extractor else 0)
+        return GPUByteTracker(
+            max_objects=100, embedding_dim=768 if self.extractor else 0
+        )
 
     def get_tracker(self, stream_id: str) -> Any:
         if stream_id in self.trackers:

@@ -514,7 +514,7 @@ void GMC::estimate_into_direct(
                     cudaMemcpyDeviceToDevice, stream);
 }
 
-void GMC::set_fg_mask_boxes_gpu(const float* d_boxes, int n_boxes) {
+void GMC::set_fg_mask_boxes_gpu(const float* d_boxes, int n_boxes, cudaStream_t stream) {
     if (n_boxes <= 0) { n_fg_boxes_ = 0; return; }
     size_t needed = static_cast<size_t>(n_boxes) * 4 * sizeof(float);
     if (d_fg_boxes_ == nullptr || fg_boxes_cap_ < needed) {
@@ -522,7 +522,7 @@ void GMC::set_fg_mask_boxes_gpu(const float* d_boxes, int n_boxes) {
         cudaMalloc(&d_fg_boxes_, needed);
         fg_boxes_cap_ = needed;
     }
-    cudaMemcpy(d_fg_boxes_, d_boxes, needed, cudaMemcpyDeviceToDevice);
+    cudaMemcpyAsync(d_fg_boxes_, d_boxes, needed, cudaMemcpyDeviceToDevice, stream);
     n_fg_boxes_ = n_boxes;
 }
 

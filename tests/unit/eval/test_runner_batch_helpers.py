@@ -13,10 +13,16 @@ sys.path.insert(0, str(ROOT / "build"))
 from saccade.perception.eval.relink import IdentityResolver  # noqa: E402
 from saccade.perception.eval.lifecycle import IdStabilityFilter, TrackletLifecycleMerger  # noqa: E402
 from saccade.perception.eval.output_bank import OutputAppearanceBank  # noqa: E402
-from saccade.perception.eval.types import PreparedTrackCandidate  # noqa: E402
+from saccade.perception.eval.types import (  # noqa: E402
+    HostTrackBatch,
+    PreparedTrackCandidate,
+    ResolvedTrack,
+)
 from saccade.perception.eval.helpers import (  # noqa: E402
+    emit_resolved_tracks as _emit_resolved_tracks,
     finalize_frame_side_effects as _finalize_frame_side_effects,
     inject_lost_track_references as _inject_lost_track_references,
+    prepare_track_candidates as _prepare_track_candidates,
     resolve_frame_tracks as _resolve_frame_tracks,
 )
 from saccade.perception.tracking.tracker_gpu import TrackAppearanceBank  # noqa: E402
@@ -63,6 +69,47 @@ def test_id_stability_accept_many_matches_sequential_accept() -> None:
 
     assert batch_second == sequential_second == [True, True]
     assert batch_filter.states == sequential_filter.states
+
+
+def test_id_stability_resets_tentative_track_after_gap() -> None:
+    stability = IdStabilityFilter(
+        min_hits=2,
+        min_iou=0.5,
+        max_center_shift=0.2,
+        max_gap=1,
+        score_ema=0.5,
+        min_score_ema=0.6,
+    )
+
+    assert stability.accept(7, (0.0, 0.0, 10.0, 10.0), 0.9, frame_id=1) is False
+    first_state = stability.states[7]
+    assert first_state.stable_hits == 1
+    assert first_state.total_hits == 1
+
+    assert stability.accept(7, (0.2, 0.2, 10.2, 10.2), 0.9, frame_id=4) is False
+    reset_state = stability.states[7]
+    assert reset_state.frame_id == 4
+    assert reset_state.stable_hits == 1
+    assert reset_state.total_hits == 1
+
+
+def test_id_stability_requires_score_ema_before_confirming() -> None:
+    stability = IdStabilityFilter(
+        min_hits=2,
+        min_iou=0.5,
+        max_center_shift=0.2,
+        max_gap=1,
+        score_ema=0.5,
+        min_score_ema=0.6,
+    )
+
+    assert stability.accept(11, (0.0, 0.0, 10.0, 10.0), 0.4, frame_id=1) is False
+    assert stability.accept(11, (0.1, 0.1, 10.1, 10.1), 0.5, frame_id=2) is False
+    assert stability.states[11].stable_hits == 2
+    assert stability.states[11].score_ema == pytest.approx(0.45)
+
+    assert stability.accept(11, (0.2, 0.2, 10.2, 10.2), 0.9, frame_id=3) is True
+    assert stability.states[11].score_ema == pytest.approx(0.675)
 
 
 def test_output_appearance_bank_update_many_filters_and_truncates() -> None:
@@ -183,6 +230,84 @@ class _StubPrimaryAppearanceBank:
 
     def prune(self, active_ids: set[int]) -> None:
         self.pruned.append(set(active_ids))
+
+
+class _FallbackLifecycleMerger:
+    def __init__(self) -> None:
+        self.calls: list[
+            list[tuple[int, tuple[float, float, float, float], float, None]]
+        ] = []
+
+    def resolve_many(
+        self,
+        candidates: list[tuple[int, tuple[float, float, float, float], float, None]],
+        *,
+        frame_id: int,
+        frame_w: int,
+        frame_h: int,
+    ) -> list[int]:
+        assert frame_id == 12
+        assert frame_w == 640
+        assert frame_h == 480
+        self.calls.append(candidates)
+        return [local_id + 500 for local_id, *_ in candidates]
+
+
+class _CollectingAppearanceBank:
+    def __init__(self) -> None:
+        self.updated: list[tuple[int, torch.Tensor | None, float, int]] = []
+
+    def update_many(
+        self, updates: list[tuple[int, torch.Tensor | None, float, int]]
+    ) -> None:
+        self.updated.extend(updates)
+
+
+class _Mapper:
+    def map(self, seq: str, track_id: int) -> int:
+        assert seq == "MOT17-02-SDP"
+        return track_id + 10_000
+
+
+class _ConsistencyBank:
+    def __init__(self, consistent_ids: set[int]) -> None:
+        self.consistent_ids = consistent_ids
+        self.updated: list[
+            tuple[
+                int,
+                torch.Tensor,
+                float,
+                float,
+                int,
+                bool,
+                bool,
+                float,
+                float,
+                tuple[float, float, float, float],
+            ]
+        ] = []
+
+    def update_many(
+        self,
+        updates: list[
+            tuple[
+                int,
+                torch.Tensor,
+                float,
+                float,
+                int,
+                bool,
+                bool,
+                float,
+                float,
+                tuple[float, float, float, float],
+            ]
+        ],
+    ) -> None:
+        self.updated.extend(updates)
+
+    def is_consistent(self, track_id: int) -> bool:
+        return track_id in self.consistent_ids
 
 
 @pytest.mark.skipif(
@@ -450,6 +575,106 @@ def test_tracklet_lifecycle_resolve_many_packed_matches_sequential_resolve() -> 
     assert batch_merger.alias == sequential_merger.alias
 
 
+def test_tracklet_lifecycle_reuses_lost_track_within_ttl_once_per_frame() -> None:
+    merger = TrackletLifecycleMerger(
+        enabled=True,
+        ttl=5,
+        min_gap=2,
+        spatial_gate=0.4,
+        min_iou=0.1,
+        sim_threshold=0.5,
+        require_embedding=False,
+        ema=0.5,
+    )
+
+    assert merger.resolve_many(
+        [(10, (0.0, 0.0, 10.0, 10.0), 0.9, None)],
+        frame_id=1,
+        frame_w=100,
+        frame_h=100,
+    ) == [10]
+
+    resolved = merger.resolve_many(
+        [
+            (20, (0.5, 0.5, 10.5, 10.5), 0.85, None),
+            (30, (0.6, 0.6, 10.6, 10.6), 0.80, None),
+        ],
+        frame_id=3,
+        frame_w=100,
+        frame_h=100,
+    )
+
+    assert resolved == [10, 30]
+    assert merger.alias[20] == 10
+    assert merger.alias[30] == 30
+    assert merger.stats["accepted"] == 1
+    assert merger.stats["reject_assigned"] >= 1
+
+
+def test_tracklet_lifecycle_prune_evicts_expired_lost_track() -> None:
+    merger = TrackletLifecycleMerger(
+        enabled=True,
+        ttl=2,
+        min_gap=1,
+        spatial_gate=0.4,
+        min_iou=0.1,
+        sim_threshold=0.5,
+        require_embedding=False,
+        ema=0.5,
+    )
+
+    assert merger.resolve_many(
+        [(10, (0.0, 0.0, 10.0, 10.0), 0.9, None)],
+        frame_id=1,
+        frame_w=100,
+        frame_h=100,
+    ) == [10]
+
+    merger.prune(frame_id=4)
+    assert merger.states == {}
+
+    assert merger.resolve_many(
+        [(20, (0.2, 0.2, 10.2, 10.2), 0.8, None)],
+        frame_id=4,
+        frame_w=100,
+        frame_h=100,
+    ) == [20]
+    assert merger.stats["new_ids"] == 2
+
+
+def test_resolve_frame_tracks_falls_back_to_resolve_many() -> None:
+    lifecycle = _FallbackLifecycleMerger()
+
+    resolved = _resolve_frame_tracks(
+        frame_id=12,
+        frame_w=640,
+        frame_h=480,
+        prepared_candidates=[
+            PreparedTrackCandidate(
+                local_track_id=1,
+                box=(1.0, 2.0, 11.0, 22.0),
+                score=0.9,
+                embedding=torch.tensor([1.0, 0.0], dtype=torch.float32),
+            ),
+            PreparedTrackCandidate(
+                local_track_id=2,
+                box=(30.0, 40.0, 50.0, 80.0),
+                score=0.7,
+                embedding=None,
+            ),
+        ],
+        lifecycle_merger=lifecycle,
+    )
+
+    assert [track.resolved_track_id for track in resolved] == [501, 502]
+    assert lifecycle.calls == [
+        [
+            (1, (1.0, 2.0, 11.0, 22.0), 0.9, None),
+            (2, (30.0, 40.0, 50.0, 80.0), 0.7, None),
+        ]
+    ]
+
+
 def test_resolve_frame_tracks_uses_identity_resolver() -> None:
     relinker = _StubPackedResolveRelinker()
     lifecycle = _StubPackedLifecycleMerger()
@@ -476,3 +701,145 @@ def test_resolve_frame_tracks_uses_identity_resolver() -> None:
     )
 
     assert [track.resolved_track_id for track in resolved] == [311, 322]
+
+
+def test_prepare_track_candidates_holds_tentative_until_stable() -> None:
+    track_results = {
+        "count": 1,
+        "boxes": torch.tensor([[0.0, 0.0, 10.0, 10.0]], dtype=torch.float32),
+        "scores": torch.tensor([0.9], dtype=torch.float32),
+        "ids": torch.tensor([42], dtype=torch.int32),
+        "classes": torch.tensor([0], dtype=torch.int32),
+        "det_idx": torch.tensor([0], dtype=torch.int32),
+    }
+    host_batch = HostTrackBatch(
+        boxes_gpu=track_results["boxes"],
+        boxes=[(0.0, 0.0, 10.0, 10.0)],
+        scores=[0.9],
+        ids=[42],
+        classes=[0],
+        det_idx=[0],
+        person_observations=None,
+    )
+    stability = IdStabilityFilter(
+        min_hits=2,
+        min_iou=0.5,
+        max_center_shift=0.2,
+        max_gap=1,
+        score_ema=0.5,
+        min_score_ema=0.6,
+    )
+    bank = _ConsistencyBank(consistent_ids={42})
+
+    first = _prepare_track_candidates(
+        frame_id=1,
+        track_results=track_results,
+        host_batch=host_batch,
+        person_class=0,
+        track_person_only=False,
+        geometry_suspect_support=False,
+        geometry_suspect_support_score=0.0,
+        id_stability_filter=stability,
+        embeddings=torch.tensor([[1.0, 0.0]], dtype=torch.float32),
+        fused_boxes=track_results["boxes"],
+        fused_scores=track_results["scores"],
+        geometry_suspect_mask=torch.tensor([False]),
+        primary_appearance_bank=bank,
+    )
+    assert first == []
+    assert bank.updated == []
+
+    second = _prepare_track_candidates(
+        frame_id=2,
+        track_results=track_results,
+        host_batch=host_batch,
+        person_class=0,
+        track_person_only=False,
+        geometry_suspect_support=False,
+        geometry_suspect_support_score=0.0,
+        id_stability_filter=stability,
+        embeddings=torch.tensor([[1.0, 0.0]], dtype=torch.float32),
+        fused_boxes=track_results["boxes"],
+        fused_scores=track_results["scores"],
+        geometry_suspect_mask=torch.tensor([False]),
+        primary_appearance_bank=bank,
+    )
+
+    assert len(second) == 1
+    assert second[0].local_track_id == 42
+    assert second[0].embedding is not None
+    assert len(bank.updated) == 1
+    assert bank.updated[0][0] == 42
+
+
+def test_prepare_track_candidates_drops_inconsistent_embedding_after_update() -> None:
+    track_results = {
+        "count": 1,
+        "boxes": torch.tensor([[0.0, 0.0, 10.0, 10.0]], dtype=torch.float32),
+        "scores": torch.tensor([0.9], dtype=torch.float32),
+        "ids": torch.tensor([7], dtype=torch.int32),
+        "classes": torch.tensor([0], dtype=torch.int32),
+        "det_idx": torch.tensor([0], dtype=torch.int32),
+    }
+    host_batch = HostTrackBatch(
+        boxes_gpu=track_results["boxes"],
+        boxes=[(0.0, 0.0, 10.0, 10.0)],
+        scores=[0.9],
+        ids=[7],
+        classes=[0],
+        det_idx=[0],
+        person_observations=None,
+    )
+    bank = _ConsistencyBank(consistent_ids=set())
+
+    prepared = _prepare_track_candidates(
+        frame_id=5,
+        track_results=track_results,
+        host_batch=host_batch,
+        person_class=0,
+        track_person_only=False,
+        geometry_suspect_support=False,
+        geometry_suspect_support_score=0.0,
+        id_stability_filter=None,
+        embeddings=torch.tensor([[0.0, 1.0]], dtype=torch.float32),
+        fused_boxes=track_results["boxes"],
+        fused_scores=track_results["scores"],
+        geometry_suspect_mask=torch.tensor([False]),
+        primary_appearance_bank=bank,
+    )
+
+    assert len(prepared) == 1
+    assert prepared[0].local_track_id == 7
+    assert prepared[0].embedding is None
+    assert len(bank.updated) == 1
+    assert bank.updated[0][0] == 7
+
+
+def test_emit_resolved_tracks_updates_output_bank_and_formats_lines() -> None:
+    output_bank = _CollectingAppearanceBank()
+
+    lines = _emit_resolved_tracks(
+        seq="MOT17-02-SDP",
+        frame_id=8,
+        frame_w=640,
+        frame_h=480,
+        resolved_tracks=[
+            ResolvedTrack(
+                local_track_id=2,
+                resolved_track_id=20,
+                box=(10.0, 20.0, 40.0, 60.0),
+                score=0.875,
+                embedding=torch.tensor([1.0, 0.0], dtype=torch.float32),
+            )
+        ],
+        global_id_mapper=_Mapper(),
+        output_appearance_bank=output_bank,
+    )
+
+    assert lines == ["8,10020,10.00,20.00,30.00,40.00,0.8750,-1,-1,-1"]
+    assert len(output_bank.updated) == 1
+    assert output_bank.updated[0][0] == 10020
+    assert torch.equal(
+        output_bank.updated[0][1], torch.tensor([1.0, 0.0], dtype=torch.float32)
+    )
+    assert output_bank.updated[0][2:] == (0.875, 8)

@@ -168,14 +168,14 @@ __host__ __device__ __forceinline__ void get_Q(float h, float Q[64]) {
 }
 
 // 取得測量噪聲矩陣 R
-// nsa_multiplier: NSA-Kalman noise scale, = max(0.05, (1-score)^2) when enabled, else 1.0
+// adapt_r_mult: per-measurement R adaptation multiplier (1.0 = baseline, <1 trust more, >1 trust less)
 // r_scale: global R scale factor; <1 trusts measurements more (reduces near-miss drift)
-__host__ __device__ __forceinline__ void get_R(float h, float R[16], float light_factor = 0.0f, float nsa_multiplier = 1.0f, float r_scale = 1.0f) {
+__host__ __device__ __forceinline__ void get_R(float h, float R[16], float light_factor = 0.0f, float adapt_r_mult = 1.0f, float r_scale = 1.0f) {
     for (int i = 0; i < 16; ++i) R[i] = 0.0f;
     float std_weight_position = 1.0f / 20.0f;
     float pos_std = std_weight_position * h;
 
-    float multiplier = r_scale * nsa_multiplier * (1.0f + 2.0f * light_factor);
+    float multiplier = r_scale * adapt_r_mult * (1.0f + 2.0f * light_factor);
     R[0] = pos_std * pos_std * multiplier;
     R[5] = pos_std * pos_std * multiplier;
     R[10] = 1e-2f * multiplier;
@@ -214,13 +214,13 @@ __host__ __device__ __forceinline__ void predict(float x[8], float P[64]) {
 }
 
 // 卡爾曼更新步
-// nsa_multiplier: passed through to get_R for Noise Scale Adaptive Kalman
+// adapt_r_mult: per-measurement R adaptation (1.0 = baseline)
 // r_scale: global R scale factor (<1 = trust measurements more)
-__host__ __device__ __forceinline__ void update(float x[8], float P[64], const float z[4], float light_factor = 0.0f, float nsa_multiplier = 1.0f, float r_scale = 1.0f) {
+__host__ __device__ __forceinline__ void update(float x[8], float P[64], const float z[4], float light_factor = 0.0f, float adapt_r_mult = 1.0f, float r_scale = 1.0f) {
     // 1. S = H * P * H^T + R
     // 由於 H = [I, 0]，H*P*H^T 就是 P 的左上 4x4
     float R[16];
-    get_R(x[3], R, light_factor, nsa_multiplier, r_scale);
+    get_R(x[3], R, light_factor, adapt_r_mult, r_scale);
     
     float S[16];
     for(int i = 0; i < 4; ++i) {

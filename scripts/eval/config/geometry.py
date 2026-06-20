@@ -48,7 +48,9 @@ class GeometryConfig:
     geometry_suspect_support: bool = True
     geometry_suspect_score: float | None = None
     # Kalman
-    nsa_kalman: bool = False  # NO-GO (2026-04-27): no observable effect on MOT17
+    kalman_adapt_mode: int = (
+        0  # 0=off, 1=score(legacy), 2=innovation(A), 3=lifestage(B), 4=aspect(C)
+    )
     kalman_r_scale: float = 0.75
     vel_dir_weight: float = 0.0
     fuse_score_weight: float = 0.0
@@ -294,10 +296,20 @@ def add_geometry_args(parser: argparse.ArgumentParser) -> None:
         ),
     )
     grp.add_argument(
+        "--kalman-adapt-mode",
+        type=int,
+        default=0,
+        choices=[0, 1, 2, 3, 4],
+        help=_help(
+            "Kalman R adaptation mode: 0=off, 1=score(legacy NSA), "
+            "2=innovation/d^2 outlier, 3=lifestage, 4=aspect jitter"
+        ),
+    )
+    grp.add_argument(
         "--nsa-kalman",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="NO-GO (2026-04-27): Noise Scale Adaptive Kalman — scale R by (1-score)^2. No observable effect on MOT17.",
+        help="Deprecated; use --kalman-adapt-mode 1 instead. (legacy NSA: score-based R scaling)",
     )
     grp.add_argument(
         "--kalman-r-scale",
