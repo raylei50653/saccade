@@ -56,12 +56,14 @@ ENV VIRTUAL_ENV=/app/.venv
 ENV PATH="/app/.venv/bin:/usr/local/cuda/bin:${PATH}"
 ENV LD_LIBRARY_PATH="/usr/local/cuda/lib64:/usr/local/lib"
 ENV UV_LINK_MODE=copy
+ENV UV_EXTRA_INDEX_URL=https://pypi.nvidia.com/
 
 # 4. 安裝 Python 依賴 (使用 uv sync 確保一致性)
 # 將所有依賴 (torch, tensorrt, dali) 放入 pyproject.toml
 COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project
+    uv cache clean tensorrt-cu12-libs tensorrt-cu12 || true && \
+    uv sync --frozen --no-install-project --refresh-package tensorrt-cu12-libs
 
 # 5. 配置 Shell 環境 (Oh My Zsh)
 RUN sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended && \
@@ -70,6 +72,7 @@ RUN sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master
 # 6. 複製原始碼並完成專案安裝
 COPY . .
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen
+    uv cache clean tensorrt-cu12-libs tensorrt-cu12 || true && \
+    uv sync --frozen --refresh-package tensorrt-cu12-libs
 
 CMD ["/bin/zsh"]

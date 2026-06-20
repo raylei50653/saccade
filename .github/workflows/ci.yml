@@ -9,6 +9,7 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  UV_EXTRA_INDEX_URL: https://pypi.nvidia.com/
 
 jobs:
   lockfile:
@@ -43,7 +44,7 @@ jobs:
             **/uv.lock
             .github/workflows/ci.yml
       - name: Sync dependencies
-        run: uv sync
+        run: uv cache clean tensorrt-cu12-libs tensorrt-cu12 || true && uv sync --refresh-package tensorrt-cu12-libs
       - name: Ruff Check
         run: uv run ruff check .
       - name: Ruff Format Check
@@ -68,7 +69,7 @@ jobs:
             **/uv.lock
             .github/workflows/ci.yml
       - name: Sync dependencies
-        run: uv sync
+        run: uv cache clean tensorrt-cu12-libs tensorrt-cu12 || true && uv sync --refresh-package tensorrt-cu12-libs
       - name: Type Check with mypy
         run: uv run mypy .
 
@@ -91,7 +92,7 @@ jobs:
             **/uv.lock
             .github/workflows/ci.yml
       - name: Sync dependencies
-        run: uv sync
+        run: uv cache clean tensorrt-cu12-libs tensorrt-cu12 || true && uv sync --refresh-package tensorrt-cu12-libs
       - name: GPU Contract Check
         run: uv run python scripts/tools/check_gpu_contract.py
       - name: API Layer Audit
@@ -128,7 +129,7 @@ jobs:
             **/uv.lock
             .github/workflows/ci.yml
       - name: Sync dependencies
-        run: uv sync
+        run: uv cache clean tensorrt-cu12-libs tensorrt-cu12 || true && uv sync --refresh-package tensorrt-cu12-libs
       - name: Run Pytest (exclude GPU benchmarks and rely on Python fallbacks)
         run: |
           uv run pytest tests/ -v --ignore=tests/benchmarks
