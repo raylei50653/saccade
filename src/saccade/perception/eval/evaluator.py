@@ -769,6 +769,7 @@ try:
 except ImportError:
     PerceptionPipeline = None
     PerceptionPipelineConfig = None
+    copy_pad_detections = None
 
 
 # Functions moved to output_bank.py and helpers.py
@@ -1327,6 +1328,10 @@ class EvalPipeline:
         self.bg_future: Any = None
         self.bg_birth_events: Any = None
         self.nms_graph: Any = None
+        # The graph writes the post-NMS count through this pointer on every
+        # replay. It must outlive the CUDA graph; a function-local tensor may
+        # otherwise be returned to PyTorch's allocator after capture.
+        self.nms_graph_out_count: torch.Tensor | None = None
         self.gmc_uncertain: bool = False
         self.last_reid_frame: int = -100
         self.prev_gray: torch.Tensor | None = None
@@ -2595,7 +2600,10 @@ def _run_nms(
         )
 
     if _nms_graph is None:
-        out_count_buf = torch.zeros(1, dtype=torch.int32, device="cuda")
+        out_count_buf = state.nms_graph_out_count
+        if out_count_buf is None:
+            out_count_buf = torch.zeros(1, dtype=torch.int32, device="cuda")
+            state.nms_graph_out_count = out_count_buf
         perception_pipeline.process_detections_graph(
             _nms_in["boxes"].data_ptr(),
             _nms_in["scores"].data_ptr(),
@@ -2898,6 +2906,15 @@ def _run_detect(
         sync_cuda=True,
     )
 
+    # Serialise the GPU pipeline between ingest/preprocess and YOLO detection.
+    # The NVJPEG/DALI decode hardware engine and the TRT enqueue both operate
+    # outside the default CUDA stream, so ingest -> detect carries no implicit
+    # device barrier.  Without an explicit synchronize the YOLO engine can read
+    # partially-stale pool-buffer data, producing run-to-run output drift.
+    # Profiling mode masks this by synchronizing at every stage boundary; this
+    # is the minimal single-barrier fix.
+    torch.cuda.synchronize()
+
     (
         (
             fused_boxes,
@@ -2920,6 +2937,11 @@ def _run_detect(
         ),
         sync_cuda=True,
     )
+
+    # Ensure the TRT output is fully written before the postprocess stage
+    # reads the raw detection tensors (views into the shared output buffer).
+    torch.cuda.synchronize()
+
     return fused_boxes, fused_scores, fused_classes, is_tiled, source_keypoints
 
 

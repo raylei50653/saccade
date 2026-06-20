@@ -1,8 +1,11 @@
 import os
 import pytest
 import torch
+from contextlib import nullcontext
 from unittest.mock import MagicMock, patch
 from types import SimpleNamespace
+
+import saccade.perception.eval.evaluator as evaluator_mod
 
 from saccade.perception.eval.evaluator import (
     _record_profile_scope,
@@ -25,6 +28,103 @@ from saccade.perception.eval.external_fp_model import (
     LogisticModel,
     SoftmaxLinearModel,
 )
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+def test_nms_graph_retains_captured_count_buffer(monkeypatch):
+    """The native graph keeps this raw pointer after ``_run_nms`` returns."""
+
+    class _FakeGraph:
+        def __init__(self):
+            self.replay_calls = 0
+
+        def replay(self):
+            self.replay_calls += 1
+
+    class _FakePipeline:
+        def __init__(self):
+            self.out_count_ptrs: list[int] = []
+
+        def process_detections_graph(self, *args):
+            # out_count is argument 11 in the native binding contract.
+            self.out_count_ptrs.append(args[11])
+
+    class _FakeStream:
+        cuda_stream = 7
+
+    graph = _FakeGraph()
+    pipe = _FakePipeline()
+    original_zeros = torch.zeros
+
+    def _cpu_zeros(*args, **kwargs):
+        kwargs.pop("device", None)
+        return original_zeros(*args, **kwargs)
+
+    monkeypatch.setattr(evaluator_mod, "copy_pad_detections", lambda *args: None)
+    monkeypatch.setattr(evaluator_mod.torch, "zeros", _cpu_zeros)
+    monkeypatch.setattr(evaluator_mod.torch.cuda, "synchronize", lambda: None)
+    monkeypatch.setattr(
+        evaluator_mod.torch.cuda, "current_stream", lambda: _FakeStream()
+    )
+    monkeypatch.setattr(
+        evaluator_mod.torch.cuda,
+        "CUDAGraph",
+        lambda: graph,
+    )
+    monkeypatch.setattr(
+        evaluator_mod.torch.cuda,
+        "graph",
+        lambda _graph: nullcontext(),
+    )
+
+    state = SimpleNamespace(
+        perception_pipeline=pipe,
+        nms_in={
+            "boxes": torch.empty((4, 4)),
+            "scores": torch.empty(4),
+            "classes": torch.empty(4, dtype=torch.int32),
+        },
+        post_bufs={
+            "boxes": torch.empty((4, 4)),
+            "scores": torch.empty(4),
+            "classes": torch.empty(4, dtype=torch.int32),
+            "suspect": torch.empty(4, dtype=torch.bool),
+        },
+        nms_fixed_n=4,
+        w_orig=1920,
+        h_orig=1080,
+        nms_graph_out_count=None,
+    )
+    boxes = torch.empty((2, 4))
+    scores = torch.empty(2)
+    classes = torch.empty(2, dtype=torch.int32)
+
+    _, captured_graph = evaluator_mod._run_nms(
+        state,
+        raw_boxes_contig=boxes,
+        raw_scores_contig=scores,
+        raw_classes_contig=classes,
+        raw_box_count=2,
+        num_priors=0,
+        is_tiled=False,
+        nms_graph=None,
+    )
+
+    assert captured_graph is graph
+    assert state.nms_graph_out_count is not None
+    assert pipe.out_count_ptrs == [state.nms_graph_out_count.data_ptr()] * 2
+
+    evaluator_mod._run_nms(
+        state,
+        raw_boxes_contig=boxes,
+        raw_scores_contig=scores,
+        raw_classes_contig=classes,
+        raw_box_count=2,
+        num_priors=0,
+        is_tiled=False,
+        nms_graph=captured_graph,
+    )
+    assert graph.replay_calls == 1
 
 
 # Test _record_profile_scope

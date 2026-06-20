@@ -103,10 +103,10 @@ report_data/*.json
 
 # graphify generated (reproducible via graphify export)
 graphify-out/cache/
-graphify-out/manifest.json
-graphify-out/cost.json
-graphify-out/.graphify_*
-graphify-out/graph.json
+graphify-out/**/*.json
+graphify-out/**/*.js
+graphify-out/**/.graphify_*
+graphify-out/**/graph.html
 
 # Build artifacts accidentally committed
 src/tracking/topk_test
