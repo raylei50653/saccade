@@ -823,6 +823,29 @@ def _env_flag_enabled(name: str, default: bool = True) -> bool:
     return value.lower() not in {"0", "false"}
 
 
+def _detect_barrier_mode() -> str:
+    """Stream-ordering policy between the ingest / detect / postprocess stages.
+
+    The two ``torch.cuda.synchronize()`` calls in ``_run_detect`` are full-device
+    barriers added as the determinism fix for the ingest->detect stale-buffer race
+    (commit 3046ae60). They are correct but block the host ~2.9ms/frame, serialising
+    the per-frame stages and preventing cross-frame overlap.
+
+    Modes (env ``SACCADE_DETECT_BARRIER``):
+      * ``full`` (default): both full-device barriers — current, zero-risk behaviour.
+      * ``no_postproc``: drop the detect->postprocess barrier only (likely redundant
+        in whole_graph mode, where TRT + postprocess graphs share the launch stream).
+        Keeps the ingest->detect (decode-race) barrier.
+      * ``event``: ``no_postproc`` + replace the ingest->detect full sync with a
+        narrower same-stream ordering. EXPERIMENTAL.
+
+    Any non-``full`` mode is GPU-decode-determinism-sensitive and MUST pass N>=6
+    repeat runs (zero run-to-run drift) + bit-exact A/B before use; see
+    project_eval_nondeterminism_source.
+    """
+    return (os.getenv("SACCADE_DETECT_BARRIER", "full") or "full").strip().lower()
+
+
 def _build_cpp_seq_config(
     cfg: Any,
     seq: str,
@@ -2913,7 +2936,17 @@ def _run_detect(
     # partially-stale pool-buffer data, producing run-to-run output drift.
     # Profiling mode masks this by synchronizing at every stage boundary; this
     # is the minimal single-barrier fix.
-    torch.cuda.synchronize()
+    _barrier_mode = _detect_barrier_mode()
+    if _barrier_mode == "event":
+        # EXPERIMENTAL: drop the ingest->detect full barrier to probe whether the
+        # decode is already ordered w.r.t. the current (TRT) stream and to measure
+        # the recoverable host stall. The decode (nvJPEG/DALI) exposes no stream/
+        # event handle, so there is no narrow fence here yet -- this mode is only
+        # valid if N>=6 GPU-decode runs show zero drift; otherwise the decode must
+        # be fenced onto the current stream first.
+        pass
+    else:
+        torch.cuda.synchronize()
 
     (
         (
@@ -2940,7 +2973,14 @@ def _run_detect(
 
     # Ensure the TRT output is fully written before the postprocess stage
     # reads the raw detection tensors (views into the shared output buffer).
-    torch.cuda.synchronize()
+    # In whole_graph mode the TRT enqueue and the postprocess graphs both launch
+    # from the current stream, so this ordering is likely already implicit; the
+    # no_postproc/event modes drop the redundant full barrier (gated on the same
+    # N>=6 determinism check).
+    if _barrier_mode in ("no_postproc", "event"):
+        pass
+    else:
+        torch.cuda.synchronize()
 
     return fused_boxes, fused_scores, fused_classes, is_tiled, source_keypoints
 

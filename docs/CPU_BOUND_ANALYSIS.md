@@ -55,6 +55,26 @@ The per-frame loop is in [evaluator.py](../src/saccade/perception/eval/evaluator
 
 **One CUDA graph replay. CPU cost is graph launch overhead (~μs).**
 
+#### Stage barriers (`_run_detect`) — `SACCADE_DETECT_BARRIER`
+
+`_run_detect` issues two unconditional `torch.cuda.synchronize()` full-device
+barriers — ingest→detect and detect→postprocess — added as the determinism fix
+for the ingest→detect stale-buffer race (commit 3046ae60). They block the host
+and serialise the per-frame stages. The env flag `SACCADE_DETECT_BARRIER` selects
+the policy:
+
+| Value | Behaviour | FPS (MOT17-02, 200f) | Safety |
+|---|---|---|---|
+| `full` (default) | Both full barriers | 213.4 (baseline) | Correct for **all** presets |
+| `no_postproc` | Drop detect→postprocess barrier only | **217.1 (+1.7%)** | whole_graph only: keeps decode-race guard; the dropped barrier is same-stream-redundant (TRT + postprocess graphs both launch from `current_stream`) |
+| `event` | Also drop ingest→detect barrier | 220.3 (+3.2%) | Removes the decode-race guard — **not** validated across all sequences |
+
+`no_postproc` is bit-exact to `full` (CPU decode) and showed zero run-to-run drift
+across 30+ GPU-decode runs on MOT17-02. The default stays `full` because the
+detect→postprocess barrier is only redundant in whole_graph mode; non-whole-graph
+presets may route TRT on a dedicated stream where it is load-bearing. Treat
+`event` as experimental pending a full 7-sequence determinism burn-in.
+
 ### 1.3 Post-Process (NMS + Filter)
 
 | Location | Operation | Type | Notes |
