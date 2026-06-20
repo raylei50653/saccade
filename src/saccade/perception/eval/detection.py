@@ -7,6 +7,7 @@ from saccade.perception.box_ops import (
     torch_box_iou_pairwise_diag,
     torch_box_iou_single,
 )
+from saccade.perception.eval.utils import tile_seam_mask
 
 try:
     from saccade_tracking_ext import (
@@ -324,36 +325,13 @@ def _tile_seam_mask_for_boxes(
     frame_h: int,
     seam_margin_canvas_px: float,
 ) -> torch.Tensor:
-    if boxes.numel() == 0 or not _is_tiled_tiling(tiling):
-        return torch.zeros((boxes.size(0),), device=boxes.device, dtype=torch.bool)
-
-    r = 960.0 / max(frame_h, frame_w)
-    h_new = int(frame_h * r)
-    w_new = int(frame_w * r)
-    y_off = (960 - h_new) // 2
-    x_off = (960 - w_new) // 2
-
-    seam_x_canvas = [320.0, 640.0]
-    seam_y_canvas = [320.0, 640.0]
-    if tiling == "960p_3x2":
-        seam_x_canvas = [160.0, 320.0, 640.0, 800.0]
-
-    seam_margin_orig = seam_margin_canvas_px / max(r, 1e-6)
-    seam_x = [(sx - x_off) / r for sx in seam_x_canvas if x_off < sx < x_off + w_new]
-    seam_y = [(sy - y_off) / r for sy in seam_y_canvas if y_off < sy < y_off + h_new]
-    if not seam_x and not seam_y:
-        return torch.zeros((boxes.size(0),), device=boxes.device, dtype=torch.bool)
-
-    cx = (boxes[:, 0] + boxes[:, 2]) * 0.5
-    cy = (boxes[:, 1] + boxes[:, 3]) * 0.5
-    near_any = torch.zeros((boxes.size(0),), device=boxes.device, dtype=torch.bool)
-    for sx in seam_x:
-        near_any |= (boxes[:, 0] <= sx) & (boxes[:, 2] >= sx)
-        near_any |= (cx - sx).abs() <= seam_margin_orig
-    for sy in seam_y:
-        near_any |= (boxes[:, 1] <= sy) & (boxes[:, 3] >= sy)
-        near_any |= (cy - sy).abs() <= seam_margin_orig
-    return near_any
+    return tile_seam_mask(
+        boxes,
+        tiling=tiling,
+        w_orig=frame_w,
+        h_orig=frame_h,
+        seam_margin_canvas_px=seam_margin_canvas_px,
+    )
 
 
 def _box_iou_single(box: torch.Tensor, boxes: torch.Tensor) -> torch.Tensor:
@@ -772,6 +750,9 @@ def merge_cross_tile_duplicates(
         seam_margin_canvas_px=seam_margin_canvas_px,
     )
 
+    all_centers = (boxes[:, :2] + boxes[:, 2:]) * 0.5
+    all_wh = (boxes[:, 2:] - boxes[:, :2]).clamp(min=1e-6)
+
     while remaining:
         anchor_idx = remaining[0]
         anchor_box = boxes[anchor_idx]
@@ -786,12 +767,12 @@ def merge_cross_tile_duplicates(
         same_class = candidate_classes == anchor_class
         ious = _box_iou_single(anchor_box, candidate_boxes)
 
-        anchor_center = (anchor_box[:2] + anchor_box[2:]) * 0.5
-        candidate_centers = (candidate_boxes[:, :2] + candidate_boxes[:, 2:]) * 0.5
+        anchor_center = all_centers[anchor_idx]
+        candidate_centers = all_centers[candidate_indices]
         center_dist = torch.linalg.norm(candidate_centers - anchor_center, dim=1)
 
-        anchor_wh = (anchor_box[2:] - anchor_box[:2]).clamp(min=1e-6)
-        candidate_wh = (candidate_boxes[:, 2:] - candidate_boxes[:, :2]).clamp(min=1e-6)
+        anchor_wh = all_wh[anchor_idx]
+        candidate_wh = all_wh[candidate_indices]
         min_wh = torch.minimum(candidate_wh, anchor_wh.unsqueeze(0))
         center_gate = torch.linalg.norm(min_wh, dim=1) * center_threshold
 
@@ -1291,8 +1272,18 @@ def detect_native_640(
 def _detect_tiles(detector: Any, tiles_batch: torch.Tensor) -> torch.Tensor:
     """Run detect_raw on a tile batch; fall back to sequential if engine is static batch-1.
     Each slice must be cloned because detect_raw returns a reference to a shared buffer."""
-    raw = detector.detect_raw(tiles_batch)
     n_tiles = tiles_batch.shape[0]
+    # A static batch-N engine that can't take the whole tile batch can only run
+    # sequentially, so skip the wasted batched call. Dynamic engines size their
+    # input to n_tiles, so let them attempt the batched path (guarded below).
+    if not getattr(detector, "is_dynamic", False) and (
+        _get_detector_static_batch_size(detector) < n_tiles
+    ):
+        pieces = [
+            detector.detect_raw(tiles_batch[i : i + 1]).clone() for i in range(n_tiles)
+        ]
+        return torch.cat(pieces, dim=0)
+    raw = detector.detect_raw(tiles_batch)
     if raw.shape[0] == n_tiles:
         return raw
     pieces = [

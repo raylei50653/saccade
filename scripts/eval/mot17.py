@@ -98,6 +98,13 @@ if __name__ == "__main__":
     if config_defaults:
         parser.set_defaults(**config_defaults)
     args = parser.parse_args()
+    if args.double_buffer:
+        if args.detect_barrier not in {None, "event"}:
+            parser.error("--double-buffer requires --detect-barrier event")
+        os.environ["SACCADE_DOUBLE_BUFFER"] = "1"
+        os.environ["SACCADE_DETECT_BARRIER"] = "event"
+    elif args.detect_barrier is not None:
+        os.environ["SACCADE_DETECT_BARRIER"] = args.detect_barrier
     if not getattr(args, "no_gpu_decode", False):
         os.environ["SACCADE_GPU_DECODE"] = "1"
     if os.environ.get("SACCADE_NV12_BUFFER") == "1":

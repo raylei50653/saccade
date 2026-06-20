@@ -75,6 +75,37 @@ detect→postprocess barrier is only redundant in whole_graph mode; non-whole-gr
 presets may route TRT on a dedicated stream where it is load-bearing. Treat
 `event` as experimental pending a full 7-sequence determinism burn-in.
 
+#### Cross-frame double buffer
+
+The production eval loop supports the useful overlap: `detect(N) ||
+postprocess/GMC/tracker(N-1)`. Set both variables below after the required
+determinism burn-in:
+
+```bash
+uv run scripts/eval/mot17.py --preset mamba_whole_graph --detector SDP \
+  --double-buffer
+```
+
+`--double-buffer` sets `SACCADE_DOUBLE_BUFFER=1` and
+`SACCADE_DETECT_BARRIER=event` for the process. Use
+`--detect-barrier {full,no_postproc,event}` to select a barrier policy without
+enabling cross-frame overlap.
+
+It allocates two independent `AdaptiveFramePool` instances and queues one
+frame-independent detect task on a side CUDA stream. Before tracking frame N,
+the main stream waits on only that frame's CUDA event; it never changes tracker
+order. Detector outputs are cloned before the next CUDA-graph replay because
+the graph owns reusable output storage.
+
+The path intentionally falls back to serial mode for temporal detectors,
+workbench mode, stage profiling, no CUDA device, or any barrier policy other
+than `event`. The full-device barrier would erase the intended overlap, and
+temporal detection would violate the frame-independence contract.
+
+Latency and throughput are reported independently: latency is launch-to-output
+for each frame, while FPS is completed non-warmup frames divided by a separate
+wall-clock interval. It is not derived from mean latency once overlap is on.
+
 ### 1.3 Post-Process (NMS + Filter)
 
 | Location | Operation | Type | Notes |
