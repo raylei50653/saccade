@@ -202,16 +202,29 @@ def print_overall_summary(
     debug_birth_csv: str,
     debug_birth_rows: list[dict[str, float | int | str | bool]],
     all_seq_profile: list[dict[str, Any]] | None = None,
+    overall_throughput_frames: int | None = None,
+    overall_throughput_seconds: float = 0.0,
 ) -> None:
     if fps_summary_lines:
         if overall_latency_ms:
             overall_mean_ms = float(np.mean(np.array(overall_latency_ms)))
-            overall_fps = 1000.0 / max(overall_mean_ms, 1e-6)
+            if overall_throughput_frames is None:
+                # Backwards-compatible fallback for direct callers. Production
+                # passes wall-clock throughput explicitly.
+                overall_throughput_frames = len(overall_latency_ms)
+                overall_throughput_seconds = sum(overall_latency_ms) / 1000.0
+            overall_fps = (
+                overall_throughput_frames / overall_throughput_seconds
+                if overall_throughput_seconds > 0.0
+                else 0.0
+            )
             fps_summary_lines.append(
-                f"OVERALL\tfps={overall_fps:.2f}\tmean_ms={overall_mean_ms:.2f}\tframes={len(overall_latency_ms)}"
+                f"OVERALL\tfps={overall_fps:.2f}\tmean_ms={overall_mean_ms:.2f}"
+                f"\tframes={overall_throughput_frames}"
             )
             print(
-                f"\n📈 Overall throughput: {overall_fps:.2f} FPS ({overall_mean_ms:.2f} ms)"
+                f"\n📈 Overall throughput: {overall_fps:.2f} FPS"
+                f"; mean latency: {overall_mean_ms:.2f} ms"
             )
         (output_root / "_fps_summary.txt").write_text(
             "\n".join(fps_summary_lines) + "\n"

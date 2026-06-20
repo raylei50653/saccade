@@ -37,6 +37,8 @@ def base_overall_kwargs(output_root, **overrides):
         output_root=output_root,
         fps_summary_lines=[],
         overall_latency_ms=[],
+        overall_throughput_frames=0,
+        overall_throughput_seconds=0.0,
         global_id_mapper=make_mapper(),
         overall_profiled_frames=0,
         top_level_stage_names=TOP_STAGES,
@@ -75,11 +77,28 @@ def test_writes_fps_summary_file(tmp_path):
             tmp_path,
             fps_summary_lines=["SEQ1\tfps=30"],
             overall_latency_ms=[33.3, 33.3],
+            overall_throughput_frames=2,
+            overall_throughput_seconds=2.0 / 30.0,
         )
     )
     assert (tmp_path / "_fps_summary.txt").exists()
     content = (tmp_path / "_fps_summary.txt").read_text()
     assert "OVERALL" in content
+
+
+def test_fps_uses_wall_throughput_not_mean_latency(tmp_path):
+    print_overall_summary(
+        **base_overall_kwargs(
+            tmp_path,
+            fps_summary_lines=["SEQ1\tfps=30.00"],
+            overall_latency_ms=[100.0, 100.0],
+            overall_throughput_frames=30,
+            overall_throughput_seconds=1.0,
+        )
+    )
+
+    content = (tmp_path / "_fps_summary.txt").read_text()
+    assert "OVERALL\tfps=30.00\tmean_ms=100.00\tframes=30" in content
 
 
 def test_no_fps_file_when_lines_empty(tmp_path):

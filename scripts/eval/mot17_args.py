@@ -56,6 +56,25 @@ def build_parser() -> argparse.ArgumentParser:
         help="Use CPU JPEG decode (DALI) instead of GPU NVJPG engine (default: GPU decode).",
     )
 
+    runtime = parser.add_argument_group("Pipeline scheduling")
+    runtime.add_argument(
+        "--double-buffer",
+        action="store_true",
+        help=(
+            "Enable detect(N+1) || tracker(N) overlap. Sets "
+            "SACCADE_DOUBLE_BUFFER=1 and requires the event barrier."
+        ),
+    )
+    runtime.add_argument(
+        "--detect-barrier",
+        choices=("full", "no_postproc", "event"),
+        default=None,
+        help=(
+            "Override SACCADE_DETECT_BARRIER for this run. "
+            "--double-buffer requires event."
+        ),
+    )
+
     # Tracking result visualization
     vis = parser.add_argument_group("Tracking result visualization")
     vis.add_argument(

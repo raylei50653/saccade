@@ -233,6 +233,13 @@ def test_mot17_parser_accepts_sahi_tiling():
     assert args.tiling == "sahi_960p_2x2"
 
 
+def test_mot17_parser_accepts_double_buffer_flags():
+    args = build_parser().parse_args(["--double-buffer", "--detect-barrier", "event"])
+
+    assert args.double_buffer is True
+    assert args.detect_barrier == "event"
+
+
 def test_parse_eval_config_defaults_to_fixed_interval_reid(tmp_path):
     cfg = parse_eval_config(
         output=str(tmp_path),

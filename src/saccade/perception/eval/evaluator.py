@@ -1370,6 +1370,11 @@ class EvalPipeline:
         self.gmc_warp: torch.Tensor | None = None
         self.prev_track_ids: set = set()
         self.current_frame_id: int = 0
+        # Latency is frame-local; throughput is measured independently from the
+        # wall-clock interval over completed, non-warmup frames.
+        self.throughput_started_at: float | None = None
+        self.throughput_finished_at: float | None = None
+        self.throughput_frames: int = 0
         # ── per-seq setup ─────────────────────────────────────────────
         wb = None
         wb_scene_policy = None
@@ -1785,6 +1790,16 @@ class EvalPipeline:
         if os.environ.get("SACCADE_NV12_BUFFER") == "1":
             pool.use_nv12 = True
         nv12_direct_from_hwc = pool.use_nv12 and not cfg.preprocess_modes
+        # Detection owns its input buffers until its CUDA stream signals ready.
+        # Keep two independent pools so launching frame N+1 cannot overwrite the
+        # frame N pixels still consumed by GMC/ReID/tracking on the main stream.
+        double_buffer_pools = [pool]
+        double_buffer_stream = None
+        if _double_buffer_eligible(cfg, detector, profile_stages):
+            next_pool = AdaptiveFramePool(h_orig, w_orig)
+            next_pool.use_nv12 = pool.use_nv12
+            double_buffer_pools.append(next_pool)
+            double_buffer_stream = torch.cuda.Stream()
         # SACCADE_GPU_DECODE=1 routes JPEG decode to the GPU's NVJPG hardware
         # engine (torchvision/nvJPEG) instead of CPU (DALI), offloading decode
         # off the CPU. Both yield [H, W, C] uint8 CUDA frames.
@@ -2241,6 +2256,8 @@ class EvalPipeline:
         self.geometry_scale_state = geometry_scale_state
         self.nv12_direct_from_hwc = nv12_direct_from_hwc
         self.pool = pool
+        self.double_buffer_pools = double_buffer_pools
+        self.double_buffer_stream = double_buffer_stream
         self.stream_iter = stream_iter
         self.frame_end = frame_end
         self.frame_latencies = frame_latencies
@@ -2877,6 +2894,127 @@ def _run_post_nms_finalize(
     )
 
 
+@dataclasses.dataclass(frozen=True)
+class PreparedDetection:
+    """One frame's detector output, produced on the detection stream.
+
+    The tensors are clones, rather than views into the whole-graph callable's
+    static output storage.  This is the ownership boundary that permits the
+    next graph replay while the tracker is still consuming the previous frame.
+    """
+
+    frame_id: int
+    pool: Any
+    frame_gpu: torch.Tensor
+    fused_boxes: torch.Tensor
+    fused_scores: torch.Tensor
+    fused_classes: torch.Tensor
+    is_tiled: bool
+    source_keypoints: "torch.Tensor | None"
+    ready_event: "torch.cuda.Event"
+    latency_started_at: float
+
+
+def _double_buffer_eligible(cfg: Any, detector: Any, profile_stages: bool) -> bool:
+    """Return whether the safe, frame-independent overlap path can run.
+
+    CUDA graph outputs and tracker state are both mutable, so this deliberately
+    has a narrow contract.  Temporal detectors, the workbench path and stage
+    profiling retain the serial path.  The ingest->detect full-device barrier
+    also makes overlap impossible; ``event`` is the previously documented,
+    determinism-gated narrow-barrier mode.
+    """
+
+    requested = os.getenv("SACCADE_DOUBLE_BUFFER", "0").strip().lower()
+    if requested not in {"1", "true", "yes", "on"}:
+        return False
+    # Whole-graph forward bypasses the detector's temporal ring buffer even
+    # when the checkpoint advertises a temporal training configuration.
+    # Eager forward, in contrast, mutates that buffer and must stay serial.
+    frame_independent_detect = int(getattr(detector, "_temporal_T", 0)) == 0 or bool(
+        getattr(detector, "use_whole_graph", False)
+    )
+    return bool(
+        torch.cuda.is_available()
+        and not profile_stages
+        and not getattr(cfg, "workbench", False)
+        and frame_independent_detect
+        and _detect_barrier_mode() == "event"
+    )
+
+
+def _launch_double_buffer_detect(
+    state: EvalPipeline,
+    *,
+    frame_id: int,
+    pool: Any,
+    frame_gpu: torch.Tensor,
+) -> PreparedDetection:
+    """Queue detect(frame_id) on the side stream without blocking the host.
+
+    The main stream waits only on ``ready_event`` when it reaches this frame.
+    Until then it is free to run GMC/tracker/materialization for frame N-1.
+    There is intentionally one outstanding detection: that preserves detector
+    graph ownership while still providing the desired double-buffer overlap.
+    """
+
+    stream = state.double_buffer_stream
+    if stream is None:
+        raise RuntimeError("double-buffer launch requested without a CUDA stream")
+    latency_started_at = time.perf_counter()
+    # ``frame_gpu`` is produced on the caller's stream.  Establish an explicit
+    # producer→detector dependency before the side stream reads it; PyTorch does
+    # not infer ordering merely because both streams reference the same tensor.
+    main_stream = torch.cuda.current_stream()
+    input_ready = torch.cuda.Event(enable_timing=False)
+    input_ready.record(main_stream)
+    with torch.cuda.stream(stream):
+        stream.wait_event(input_ready)
+        frame_gpu.record_stream(stream)
+        (
+            fused_boxes,
+            fused_scores,
+            fused_classes,
+            is_tiled,
+            source_keypoints,
+        ) = _run_detect(
+            state,
+            pool=pool,
+            frame_gpu=frame_gpu,
+            nv12_direct_from_hwc=state.nv12_direct_from_hwc,
+            detect_fn=state.detect_fn,
+            detector_box_format=state.detector_box_format,
+            synchronize=False,
+        )
+        # Whole-graph replays return views into reusable static buffers.  Clone
+        # every tensor crossing the frame boundary before another replay can
+        # overwrite those buffers.
+        fused_boxes = fused_boxes.clone()
+        fused_scores = fused_scores.clone()
+        fused_classes = fused_classes.clone()
+        source_keypoints = (
+            source_keypoints.clone() if source_keypoints is not None else None
+        )
+        ready_event = torch.cuda.Event(enable_timing=False)
+        ready_event.record(stream)
+
+    for tensor in (fused_boxes, fused_scores, fused_classes, source_keypoints):
+        if tensor is not None:
+            tensor.record_stream(main_stream)
+    return PreparedDetection(
+        frame_id=frame_id,
+        pool=pool,
+        frame_gpu=frame_gpu,
+        fused_boxes=fused_boxes,
+        fused_scores=fused_scores,
+        fused_classes=fused_classes,
+        is_tiled=is_tiled,
+        source_keypoints=source_keypoints,
+        ready_event=ready_event,
+        latency_started_at=latency_started_at,
+    )
+
+
 def _run_detect(
     state: EvalPipeline,
     *,
@@ -2885,6 +3023,7 @@ def _run_detect(
     nv12_direct_from_hwc: bool,
     detect_fn: Any,
     detector_box_format: Any,
+    synchronize: bool = True,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, bool, "torch.Tensor | None"]:
     """Ingest+preprocess the frame then run YOLO detection (extracted).
 
@@ -2926,7 +3065,7 @@ def _run_detect(
                 ),
             )
         ),
-        sync_cuda=True,
+        sync_cuda=synchronize,
     )
 
     # Serialise the GPU pipeline between ingest/preprocess and YOLO detection.
@@ -2937,7 +3076,7 @@ def _run_detect(
     # Profiling mode masks this by synchronizing at every stage boundary; this
     # is the minimal single-barrier fix.
     _barrier_mode = _detect_barrier_mode()
-    if _barrier_mode == "event":
+    if not synchronize or _barrier_mode == "event":
         # EXPERIMENTAL: drop the ingest->detect full barrier to probe whether the
         # decode is already ordered w.r.t. the current (TRT) stream and to measure
         # the recoverable host stall. The decode (nvJPEG/DALI) exposes no stream/
@@ -2968,7 +3107,7 @@ def _run_detect(
             cfg.preprocess_modes,
             detector_box_format,
         ),
-        sync_cuda=True,
+        sync_cuda=synchronize,
     )
 
     # Ensure the TRT output is fully written before the postprocess stage
@@ -2977,7 +3116,7 @@ def _run_detect(
     # from the current stream, so this ordering is likely already implicit; the
     # no_postproc/event modes drop the redundant full barrier (gated on the same
     # N>=6 determinism check).
-    if _barrier_mode in ("no_postproc", "event"):
+    if not synchronize or _barrier_mode in ("no_postproc", "event"):
         pass
     else:
         torch.cuda.synchronize()
@@ -4024,9 +4163,29 @@ def _run_reid_and_gmc(
     return embeddings, mid_thresh_scale
 
 
-def _run_frame(state: "EvalPipeline", *, frame_id: int) -> bool:
+def _record_frame_timing(state: EvalPipeline, *, latency_started_at: float) -> None:
+    """Record latency and throughput without deriving one from the other."""
+
+    if state.current_frame_id <= state.warmup_frames:
+        return
+    completed_at = time.perf_counter()
+    state.frame_latencies.append((completed_at - latency_started_at) * 1000.0)
+    state.throughput_frames += 1
+    state.throughput_finished_at = completed_at
+
+
+def _run_frame(
+    state: "EvalPipeline",
+    *,
+    frame_id: int,
+    prepared_detection: PreparedDetection | None = None,
+) -> bool:
     """Execute one frame. Returns False to stop iteration, True to continue."""
     state.current_frame_id = frame_id
+    if frame_id == state.warmup_frames + 1:
+        # This is the start of the measured pipeline interval, independently of
+        # this frame's launch-to-output latency.
+        state.throughput_started_at = time.perf_counter()
     # --- unpack pure-input fields ---
     _annotate_birth_events = state.annotate_birth_events
     _append_birth_event_rows = state.append_birth_event_rows
@@ -4055,7 +4214,6 @@ def _run_frame(state: "EvalPipeline", *, frame_id: int) -> bool:
     enable_onms = state.enable_onms
     extractor = state.extractor
     frame_end = state.frame_end
-    frame_latencies = state.frame_latencies
     global_id_mapper = state.global_id_mapper
     h_orig = state.h_orig
     lazy_reid_prev_embeddings = state.lazy_reid_prev_embeddings
@@ -4106,16 +4264,32 @@ def _run_frame(state: "EvalPipeline", *, frame_id: int) -> bool:
     _reid_async_embeddings: torch.Tensor | None = None
     _reid_async_indices: torch.Tensor | None = None
     _reid_frame_hwc_ref: torch.Tensor | None = None
-    try:
-        frame_gpu, _fetch_ms = time_stage(
-            seq_stage_totals,
-            "fetch",
-            lambda: next(stream_iter),
-            sync_cuda=False,
-        )
-    except StopIteration:
-        return False
-    t_frame_start = time.perf_counter()
+    if prepared_detection is None:
+        try:
+            frame_gpu, _fetch_ms = time_stage(
+                seq_stage_totals,
+                "fetch",
+                lambda: next(stream_iter),
+                sync_cuda=False,
+            )
+        except StopIteration:
+            return False
+    else:
+        if prepared_detection.frame_id != frame_id:
+            raise ValueError(
+                "prepared detection frame does not match tracker frame: "
+                f"{prepared_detection.frame_id} != {frame_id}"
+            )
+        # ``wait_event`` is a stream dependency, not a host/device barrier.
+        # It makes the side-stream detector result visible before this frame's
+        # postprocess while allowing the preceding tracker update to overlap.
+        torch.cuda.current_stream().wait_event(prepared_detection.ready_event)
+        pool = prepared_detection.pool
+        state.pool = pool
+        frame_gpu = prepared_detection.frame_gpu
+        t_frame_start = prepared_detection.latency_started_at
+    if prepared_detection is None:
+        t_frame_start = time.perf_counter()
 
     if getattr(cfg, "workbench", False) and wb is not None:
         _, _ = time_stage(
@@ -4380,20 +4554,27 @@ def _run_frame(state: "EvalPipeline", *, frame_id: int) -> bool:
             # Save gray frame for GMC in next frame
             state.prev_gray = pool.get_frame_luma().clone()
         else:
-            (
-                fused_boxes,
-                fused_scores,
-                fused_classes,
-                is_tiled,
-                source_keypoints,
-            ) = _run_detect(
-                state,
-                pool=pool,
-                frame_gpu=frame_gpu,
-                nv12_direct_from_hwc=nv12_direct_from_hwc,
-                detect_fn=detect_fn,
-                detector_box_format=detector_box_format,
-            )
+            if prepared_detection is None:
+                (
+                    fused_boxes,
+                    fused_scores,
+                    fused_classes,
+                    is_tiled,
+                    source_keypoints,
+                ) = _run_detect(
+                    state,
+                    pool=pool,
+                    frame_gpu=frame_gpu,
+                    nv12_direct_from_hwc=nv12_direct_from_hwc,
+                    detect_fn=detect_fn,
+                    detector_box_format=detector_box_format,
+                )
+            else:
+                fused_boxes = prepared_detection.fused_boxes
+                fused_scores = prepared_detection.fused_scores
+                fused_classes = prepared_detection.fused_classes
+                is_tiled = prepared_detection.is_tiled
+                source_keypoints = prepared_detection.source_keypoints
 
             _fpn_cache: dict[str, torch.Tensor] = {}
             if _fpn_backbone is not None and fused_boxes.numel() > 0:
@@ -4447,8 +4628,7 @@ def _run_frame(state: "EvalPipeline", *, frame_id: int) -> bool:
                         scores=raw_dump_scores,
                         classes=raw_dump_classes,
                     )
-                if frame_id > warmup_frames:
-                    frame_latencies.append((time.perf_counter() - t_frame_start) * 1000)
+                _record_frame_timing(state, latency_started_at=t_frame_start)
                 if profile_stages and frame_id > warmup_frames:
                     seq_stage_totals["frame_total"] += (
                         time.perf_counter() - t_e2e_start
@@ -4719,8 +4899,7 @@ def _run_frame(state: "EvalPipeline", *, frame_id: int) -> bool:
                 )
 
             if fused_boxes.numel() == 0:
-                if frame_id > warmup_frames:
-                    frame_latencies.append((time.perf_counter() - t_frame_start) * 1000)
+                _record_frame_timing(state, latency_started_at=t_frame_start)
                 if profile_stages and frame_id > warmup_frames:
                     seq_stage_totals["frame_total"] += (
                         time.perf_counter() - t_e2e_start
@@ -5164,8 +5343,7 @@ def _run_frame(state: "EvalPipeline", *, frame_id: int) -> bool:
     )
     results_lines.extend(_emit_lines)
 
-    if frame_id > warmup_frames:
-        frame_latencies.append((time.perf_counter() - t_frame_start) * 1000)
+    _record_frame_timing(state, latency_started_at=t_frame_start)
     if profile_stages and frame_id > warmup_frames:
         elapsed_ms = (time.perf_counter() - t_frame_start) * 1000
         seq_stage_totals["frame_total"] += elapsed_ms
@@ -5215,6 +5393,8 @@ def run_eval(
     output_root.mkdir(parents=True, exist_ok=True)
     fps_summary_lines = []
     overall_latency_ms = []
+    overall_throughput_frames = 0
+    overall_throughput_seconds = 0.0
     debug_dump_seq = cfg.debug_dump_seq
     debug_dump_frames = _parse_debug_frame_ranges(cfg.debug_dump_frames)
     debug_dump_csv = cfg.debug_dump_csv
@@ -5619,9 +5799,8 @@ def run_eval(
             external_fp_rule_config=external_fp_rule_config,
             external_fp_logistic_model=external_fp_logistic_model,
         )
-        for frame_id in range(1, _seq_state.frame_end + 1):
-            if not _run_frame(_seq_state, frame_id=frame_id):
-                break
+
+        def _run_frame_diagnostics(frame_id: int) -> None:
             import os as _os  # noqa: E402
 
             if _os.environ.get("SACCADE_OCC_LOG", "") or _os.environ.get(
@@ -5638,6 +5817,46 @@ def run_eval(
                         _trk._occ_log_maybe(frame_id, _sts, _ids, _ndet, seq)
                     if hasattr(_trk, "_occ_dump_maybe"):
                         _trk._occ_dump_maybe(frame_id, _sts, _ids, seq)
+
+        if _seq_state.double_buffer_stream is None:
+            for frame_id in range(1, _seq_state.frame_end + 1):
+                if not _run_frame(_seq_state, frame_id=frame_id):
+                    break
+                _run_frame_diagnostics(frame_id)
+        else:
+            # Prime frame 1, then always enqueue detect(N+1) before tracking N.
+            # There is one detector task in flight and two frame pools selected
+            # by parity, so the tracker sees exactly the serial frame order.
+            print("  [double-buffer] detect(N+1) overlaps tracker(N) on a side stream")
+
+            def _schedule(frame_id: int) -> PreparedDetection | None:
+                try:
+                    frame_gpu = next(_seq_state.stream_iter)
+                except StopIteration:
+                    return None
+                pool = _seq_state.double_buffer_pools[(frame_id - 1) % 2]
+                return _launch_double_buffer_detect(
+                    _seq_state,
+                    frame_id=frame_id,
+                    pool=pool,
+                    frame_gpu=frame_gpu,
+                )
+
+            pending = _schedule(1)
+            for frame_id in range(1, _seq_state.frame_end + 1):
+                if pending is None:
+                    break
+                next_pending = (
+                    _schedule(frame_id + 1) if frame_id < _seq_state.frame_end else None
+                )
+                if not _run_frame(
+                    _seq_state,
+                    frame_id=frame_id,
+                    prepared_detection=pending,
+                ):
+                    break
+                _run_frame_diagnostics(frame_id)
+                pending = next_pending
 
         # Flush deferred materialize from the last frame.
         if _seq_state.defer_emit and _seq_state.defer_emit_event is not None:
@@ -5675,22 +5894,35 @@ def run_eval(
         if _seq_state.frame_latencies:
             lats = np.array(_seq_state.frame_latencies)
             mean_ms = float(np.mean(lats))
-            fps = 1000.0 / mean_ms
             p95_ms = float(np.percentile(lats, 95))
             p99_ms = float(np.percentile(lats, 99))
+            throughput_seconds = max(
+                0.0,
+                (_seq_state.throughput_finished_at or 0.0)
+                - (_seq_state.throughput_started_at or 0.0),
+            )
+            throughput_fps = (
+                _seq_state.throughput_frames / throughput_seconds
+                if throughput_seconds > 0.0
+                else 0.0
+            )
             print(f"\n📊 Production Latency Report for {seq}:")
-            print(f"  - FPS:  {fps:.2f}")
             print(f"  - Mean latency: {mean_ms:.2f} ms")
             print(f"  - P95: {p95_ms:.2f} ms")
             print(f"  - P99: {p99_ms:.2f} ms")
+            print(f"  - Throughput: {throughput_fps:.2f} FPS")
             fps_summary_lines.append(
-                f"{seq}\tfps={fps:.2f}\tmean_ms={mean_ms:.2f}\tframes={len(_seq_state.frame_latencies)}"
+                f"{seq}\tfps={throughput_fps:.2f}\tmean_ms={mean_ms:.2f}"
+                f"\tframes={_seq_state.throughput_frames}"
             )
             overall_latency_ms.extend(_seq_state.frame_latencies)
+            overall_throughput_frames += _seq_state.throughput_frames
+            overall_throughput_seconds += throughput_seconds
             latency_profile = {
                 "sequence": seq,
                 "frames": len(_seq_state.frame_latencies),
-                "fps": round(fps, 4),
+                "throughput_fps": round(throughput_fps, 4),
+                "throughput_seconds": round(throughput_seconds, 6),
                 "mean_ms": round(mean_ms, 6),
                 "std_ms": round(float(np.std(lats)), 6),
                 "p95_ms": round(p95_ms, 6),
@@ -5942,6 +6174,8 @@ def run_eval(
         output_root=output_root,
         fps_summary_lines=fps_summary_lines,
         overall_latency_ms=overall_latency_ms,
+        overall_throughput_frames=overall_throughput_frames,
+        overall_throughput_seconds=overall_throughput_seconds,
         global_id_mapper=global_id_mapper,
         overall_profiled_frames=overall_profiled_frames,
         top_level_stage_names=top_level_stage_names,
