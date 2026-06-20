@@ -769,6 +769,7 @@ try:
 except ImportError:
     PerceptionPipeline = None
     PerceptionPipelineConfig = None
+    copy_pad_detections = None
 
 
 # Functions moved to output_bank.py and helpers.py
