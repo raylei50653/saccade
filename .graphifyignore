@@ -54,3 +54,13 @@ Thumbs.db
 # LLM temp
 *.gguf.tmp
 *.bin.tmp
+
+# Images: the configured LLM endpoint is text-only and rejects vision
+# (image_url) content blocks, so graphify's vision extraction 400s. Skip them.
+# (slash-less pattern matches at any depth)
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.svg

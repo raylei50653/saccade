@@ -367,12 +367,6 @@ ENV_OVERRIDES: tuple[EnvOverride, ...] = (
         "auction bid += w/(1+age) — recency boost",
     ),
     EnvOverride(
-        "SACCADE_HISTORY_W",
-        "0.0 (off)",
-        "src/tracking/tracker_gpu.cu:2658",
-        "auction bid += w/(1+...) on hit_streak — track history boost",
-    ),
-    EnvOverride(
         "SACCADE_STABILITY_W",
         "0.1 (ON)",
         "src/tracking/tracker_gpu.cu:2666",

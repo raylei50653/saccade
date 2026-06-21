@@ -36,11 +36,11 @@
 
 ---
 
-## 當前 Baseline（2026-06-18 frozen run）
+## 當前 Baseline（2026-06-21 `frozen_v2` run）
 
 | preset | IDF1 | MOTA | IDs | Rcll | FP | FPS | 備註 |
 |--------|------|------|-----|------|-----|-----|------|
-| **mamba_whole_graph** | **77.6%** | **78.3%** | **430** | 80.8% | — | **221.59** | **當前 baseline**，整圖 CUDA graph + bidir bridge relink + GMC cuFFT graph + same-height occlusion gate + **OAO duration-ramp**，ReID off；HOTA 69.9/DetA 70.8/AssA 69.1/Prcn 97.4 |
+| **YOLO26s + Mamba + GPU tracker** (`mamba_whole_graph`) | **78.2%** | **78.4%** | **413** | 81.0% | 2589 | **269.47** | **當前 baseline**，`frozen_v2`、整圖 CUDA graph + double-buffer + bidir bridge relink + GMC cuFFT graph + same-height occlusion gate + **OAO duration-ramp**，ReID off；HOTA 70.2/DetA 70.9/AssA 69.7/Prcn 97.2 |
 | **speed**（yolo26s） | **52.0%** | **41.6%** | **475** | 55.0% | 14687 | **97.9** | Baseline s |
 | **baseline**（yolo26m） | **51.4%** | **43.5%** | **502** | 59.0% | — | ~85 | Baseline m |
 | **gated_det_v1**（Option E） | **56.9%** | **52.5%** | **515** | 56.2% | 3712 | ~71 | |

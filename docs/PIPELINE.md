@@ -47,7 +47,7 @@
 | +3 | **depth 同高遮擋 gate** | IDF1 +0.5、AssA +0.4（crossing-swap） |
 | +4 | **OAO duration-ramp occlusion penalty** | IDF1 75.9→77.6、HOTA 68.1→69.9、AssA 66.2→69.1 |
 
-現行最優 = **IDF1 77.6 / MOTA 78.3 / HOTA 69.9 / AssA 69.1 / IDs 430 / 221.59 FPS**（`mamba_whole_graph` frozen run，7-seq MOT17-SDP；見 [ADR 018](decisions/018-project-main-line-direction.md)）。
+現行最優 = **IDF1 78.2 / MOTA 78.4 / HOTA 70.2 / AssA 69.7 / IDs 413 / 269.47 FPS**（**YOLO26s + Mamba + C++/CUDA GPU tracker**；`mamba_whole_graph` `frozen_v2` run，7-seq MOT17-SDP、`--double-buffer`；詳見 [mot17_default_config.md](reference/mot17_default_config.md)）。
 
 **結構性鐵律（先讀，省得重蹈）：**
 1. **GMC 壓倒性主導** —— 開啟後其他關聯類模組多半冗余（∆<0.4pp）。現行調參以 `mamba_whole_graph` preset 為基準；legacy `tracker_core_gmc` 只作歷史對照。
@@ -86,7 +86,7 @@
 
 **現行最優**：
 - **Option F / v14replica T3→T1 Mamba head** 是 production lineage；current preset `mamba_whole_graph` 使用 `mamba_ckpt: runs/mamba_gt_v14replica_t3_t1/best.ckpt`、`fpn_backbone_engine: models/yolo/yolo26s_backbone_640_best.engine`。
-- **whole-detect CUDA graph** eval = 目前 headline runtime path；2026-06-18 frozen run 為 221.59 FPS / 4.51ms eval-context throughput。
+- **whole-detect CUDA graph** eval = 目前 headline runtime path；2026-06-21 `frozen_v2` run 為 269.47 FPS / 7.42ms eval-context throughput（RTX 5070 Ti Laptop GPU、`--double-buffer`）。
 - source 對照：`scripts/eval/mot17.py` 載入 preset 後將 `use_whole_graph=true` 傳進 detector；`evaluator.py` 每 frame 的 `detect` stage 只看到 `detect_fn(...)`，whole-graph 優先權在 detector / detection helper 內決定。
 - v14 內部 SSM（A_log/D/conv1d/x_proj/dt_proj）**從未被訓練**（scan 無 grad_fn）；「N=1 curriculum」是 eval artifact。
 - 分數分佈：飽和左尾、median 0.93、門檻坐 0.3% 薄尾、框高主導。
@@ -169,7 +169,7 @@
 - source 對照：這些值在每個 sequence setup 階段透過 `set_params()`、`set_oao_params()`、`set_occ_params()`、`set_multiplicative_cost()` 下到 C++ tracker；不是只存在 YAML。
 - 生命週期：`lifecycle_merge` 預設 **OFF**（GMC 下冗余）。
 - **depth 同高遮擋 gate**（commit c418872b，**第一個純幾何/無外觀修復**，default ON）—— 修 crossing-swap（佔 22% IDs）：同高 occlusion gate（`|foot_gap|≤0.15h`），IDF1 75.4→75.9 / AssA 66.0→66.4 / MOTA→78.0。
-- **OA-SORT OAO duration-ramp**（current preset `oao_tau=0.50`, `oao_ramp_frames=25`）—— persistent overlap 給 full penalty、transient crossing damped；frozen run headline 77.6 / HOTA 69.9 / AssA 69.1。
+- **OA-SORT OAO duration-ramp**（current preset `oao_tau=0.50`, `oao_ramp_frames=25`）—— persistent overlap 給 full penalty、transient crossing damped；current `frozen_v2` headline IDF1 78.2 / HOTA 70.2 / AssA 69.7。
 
 **關鍵 GO**：GPUByteTracker、Sinkhorn-Auction、Kalman R scale、interpolation、depth 同高 gate、OAO duration-ramp。
 

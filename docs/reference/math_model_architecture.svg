@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="800" viewBox="0 0 960 800" font-family="-apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#334155"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="960" height="800" fill="#ffffff"/>
+  <text x="480" y="34" text-anchor="middle" font-size="20" font-weight="700" fill="#0f172a">Saccade 系統架構與模組邊界</text>
+  <text x="480" y="56" text-anchor="middle" font-size="12" fill="#64748b">mamba_whole_graph baseline · per-frame dataflow</text>
+
+  <!-- Legend -->
+  <g font-size="11" fill="#334155">
+    <rect x="40" y="72" width="14" height="14" rx="2" fill="#dbeafe" stroke="#2563eb"/>
+    <text x="60" y="83">Python orchestration</text>
+    <rect x="190" y="72" width="14" height="14" rx="2" fill="#dcfce7" stroke="#16a34a"/>
+    <text x="210" y="83">C++ / CUDA compute</text>
+    <rect x="345" y="72" width="14" height="14" rx="2" fill="#f1f5f9" stroke="#64748b"/>
+    <text x="365" y="83">GPU buffer / data</text>
+    <rect x="480" y="72" width="14" height="14" rx="2" fill="#fef3c7" stroke="#d97706"/>
+    <text x="500" y="83">output</text>
+    <line x1="610" y1="79" x2="640" y2="79" stroke="#7c3aed" stroke-width="2" stroke-dasharray="5,4"/>
+    <text x="648" y="83">whole-detect CUDA graph</text>
+  </g>
+
+  <!-- Python orchestration layer -->
+  <rect x="60" y="104" width="840" height="56" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="480" y="128" text-anchor="middle" font-size="14" font-weight="700" fill="#1e3a8a">Python orchestration layer</text>
+  <text x="480" y="147" text-anchor="middle" font-size="12" fill="#1e40af">evaluator.py (run_eval) — 逐 frame 排程 · CUDA-graph replay · 計時</text>
+
+  <!-- frame buffer -->
+  <rect x="360" y="196" width="240" height="46" rx="8" fill="#f1f5f9" stroke="#64748b" stroke-width="1.5"/>
+  <text x="480" y="219" text-anchor="middle" font-size="13" font-weight="700" fill="#0f172a">frame buffer (GPU, CHW)</text>
+  <text x="480" y="235" text-anchor="middle" font-size="11" fill="#475569">pool.frame_buffer</text>
+
+  <!-- arrow: python -> frame buffer -->
+  <line x1="480" y1="160" x2="480" y2="194" stroke="#334155" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <text x="490" y="180" font-size="11" fill="#64748b" stroke="#ffffff" stroke-width="3.5" paint-order="stroke" stroke-linejoin="round">ingest / preprocess</text>
+
+  <!-- split arrows frame buffer -> detect / gmc -->
+  <path d="M360,232 C250,250 210,260 210,288" fill="none" stroke="#334155" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <path d="M600,232 C760,250 770,260 770,288" fill="none" stroke="#334155" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <text x="232" y="262" font-size="11" fill="#64748b" stroke="#ffffff" stroke-width="3.5" paint-order="stroke" stroke-linejoin="round">frame</text>
+  <text x="700" y="262" font-size="11" fill="#64748b" stroke="#ffffff" stroke-width="3.5" paint-order="stroke" stroke-linejoin="round">curr + prev gray</text>
+
+  <!-- detect chain (whole graph dashed) -->
+  <rect x="50" y="290" width="360" height="196" rx="10" fill="#dcfce7" stroke="#7c3aed" stroke-width="2" stroke-dasharray="6,4"/>
+  <text x="230" y="314" text-anchor="middle" font-size="14" font-weight="700" fill="#166534">detect 鏈</text>
+  <text x="230" y="332" text-anchor="middle" font-size="11" fill="#15803d">whole-detect CUDA graph · single replay</text>
+
+  <rect x="78" y="346" width="304" height="34" rx="6" fill="#ffffff" stroke="#16a34a"/>
+  <text x="230" y="368" text-anchor="middle" font-size="12" fill="#14532d">TRT backbone engine</text>
+  <rect x="78" y="388" width="304" height="34" rx="6" fill="#ffffff" stroke="#16a34a"/>
+  <text x="230" y="410" text-anchor="middle" font-size="12" fill="#14532d">→ Mamba head</text>
+  <rect x="78" y="430" width="304" height="34" rx="6" fill="#ffffff" stroke="#16a34a"/>
+  <text x="230" y="452" text-anchor="middle" font-size="12" fill="#14532d">→ postprocess decode / NMS</text>
+  <text x="230" y="478" text-anchor="middle" font-size="10.5" fill="#3f6212">detector_trt.py · pipeline.cpp / .cu</text>
+
+  <!-- GMC -->
+  <rect x="570" y="290" width="340" height="196" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+  <text x="740" y="314" text-anchor="middle" font-size="14" font-weight="700" fill="#166534">GMC</text>
+  <text x="740" y="332" text-anchor="middle" font-size="11" fill="#15803d">camera motion compensation</text>
+  <rect x="598" y="346" width="284" height="34" rx="6" fill="#ffffff" stroke="#16a34a"/>
+  <text x="740" y="368" text-anchor="middle" font-size="12" fill="#14532d">cuFFT phase correlation</text>
+  <rect x="598" y="388" width="284" height="34" rx="6" fill="#ffffff" stroke="#16a34a"/>
+  <text x="740" y="410" text-anchor="middle" font-size="12" fill="#14532d">→ 2×3 warp  W_f</text>
+  <text x="740" y="446" text-anchor="middle" font-size="10.5" fill="#3f6212">gmc_kernel.cu · eval/gmc.py 包裝</text>
+  <text x="740" y="466" text-anchor="middle" font-size="10.5" fill="#3f6212">prev_gray 跨幀保留</text>
+
+  <!-- merge arrows -> track -->
+  <path d="M230,486 C230,520 360,524 400,540" fill="none" stroke="#334155" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <path d="M740,486 C740,520 600,524 560,540" fill="none" stroke="#334155" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <text x="250" y="520" font-size="11" fill="#64748b" stroke="#ffffff" stroke-width="3.5" paint-order="stroke" stroke-linejoin="round">boxes / scores / classes (GPU)</text>
+  <text x="600" y="520" font-size="11" fill="#64748b" text-anchor="end" stroke="#ffffff" stroke-width="3.5" paint-order="stroke" stroke-linejoin="round">W_f (GPU)</text>
+
+  <!-- track -->
+  <rect x="280" y="548" width="400" height="86" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+  <text x="480" y="572" text-anchor="middle" font-size="14" font-weight="700" fill="#166534">track · GPUByteTracker</text>
+  <text x="480" y="592" text-anchor="middle" font-size="11.5" fill="#15803d">predict + GMC control → association (auction)</text>
+  <text x="480" y="609" text-anchor="middle" font-size="11.5" fill="#15803d">→ Kalman update → bridge relink</text>
+  <text x="480" y="626" text-anchor="middle" font-size="10.5" fill="#3f6212">tracker_gpu.cu  ·  device ptr + cuda_stream 邊界</text>
+
+  <!-- arrow track -> output -->
+  <line x1="480" y1="634" x2="480" y2="676" stroke="#334155" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <text x="490" y="660" font-size="11" fill="#64748b" stroke="#ffffff" stroke-width="3.5" paint-order="stroke" stroke-linejoin="round">result buffer (GPU → host)</text>
+
+  <!-- output -->
+  <rect x="280" y="678" width="400" height="56" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+  <text x="480" y="701" text-anchor="middle" font-size="13" font-weight="700" fill="#92400e">materialize → relink_write → MOT rows</text>
+  <text x="480" y="720" text-anchor="middle" font-size="11" fill="#b45309">eval/helpers.py · evaluator.py (fast emit path)</text>
+
+  <text x="480" y="768" text-anchor="middle" font-size="10.5" fill="#94a3b8">frame 內全程 GPU-resident；只有 materialize 在 output boundary 搬回 host</text>
+</svg>

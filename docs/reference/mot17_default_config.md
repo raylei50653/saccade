@@ -1,6 +1,6 @@
 # MOT17 Evaluation Configuration
 
-> Last updated: 2026-06-19.
+> Last updated: 2026-06-21.
 >
 > This file distinguishes the argparse / YAML fallback defaults from the current
 > recommended MOT17 baseline. The production evaluation baseline is a preset,
@@ -10,10 +10,16 @@
 
 ## 1. Recommended Baseline
 
-Use `mamba_whole_graph` for current MOT17-SDP module work and headline numbers:
+Use `mamba_whole_graph` for current MOT17-SDP module work and headline numbers.
+它的 display stack 是 **YOLO26s TensorRT backbone + Mamba v14-replica T3→T1 head
++ C++/CUDA `GPUByteTracker`**：
 
 ```bash
-uv run scripts/eval/mot17.py --preset mamba_whole_graph --detector SDP
+uv run scripts/eval/mot17.py \
+  --preset mamba_whole_graph \
+  --detector SDP \
+  --double-buffer \
+  --output out/frozen_v2
 ```
 
 Authoritative sources:
@@ -23,24 +29,27 @@ Authoritative sources:
 - Config parser: `src/saccade/perception/eval/config.py`
 - Stage order: `src/saccade/perception/eval/evaluator.py`
 
-Frozen run recorded in [ADR 018](../decisions/018-project-main-line-direction.md):
+`frozen_v2` run (2026-06-21; MOT17 train / SDP, seven sequences):
 
 | Metric | Value |
 |:--|--:|
-| IDF1 | **77.6** |
-| MOTA | **78.3** |
-| HOTA | **69.9** |
-| DetA | **70.8** |
-| AssA | **69.1** |
-| IDs | **430** |
-| Recall | **80.8** |
-| Precision | **97.4** |
-| Eval FPS | **221.59** |
+| IDF1 | **78.2** |
+| MOTA | **78.4** |
+| HOTA | **70.2** |
+| DetA | **70.9** |
+| AssA | **69.7** |
+| IDs | **413** |
+| Recall | **81.0** |
+| Precision | **97.2** |
+| Eval FPS | **269.47** |
+| Mean latency | **7.42 ms** |
 
-The FPS above is eval-context throughput for the frozen run. Older benchmark
-records under `reference/benchmarks/` may use different protocols such as
-short sequence subsets, profiling syncs, different engines, or module-only
-benchmarks; do not mix those numbers without naming the protocol.
+The frozen-v2 measurement ran on an NVIDIA GeForce RTX 5070 Ti Laptop GPU
+(12 GB), Driver 610.62, CUDA UMD 13.3, with `--double-buffer`. The HOTA family
+uses TrackEval; IDF1/MOTA/IDs were recomputed with `calculate_mota.py`. Older
+benchmark records under `reference/benchmarks/` may use different protocols
+such as short sequence subsets, profiling syncs, different engines, or
+module-only benchmarks; do not mix those numbers without naming the protocol.
 
 ---
 
