@@ -202,6 +202,99 @@ Tracker state：
 | `c_ij` | track `i` 與 detection `j` 的 final association cost |
 | `p_ij` | 從 cost 轉成的 auction probability/value |
 | `A_ij` | association base quality；避免與 Kalman process noise matrix `Q` 混用 |
+| `Π_ij` | 單一 track-det 的 penalty 總和（正 penalty − 負 reward），進入乘法 cost 的指數項 |
+
+### 3.1 符號 ↔ 實際名詞對照
+
+下表把上面與 §5–§11 公式中的抽象符號，鎖回真實的 config 欄位、env、代碼錨點與
+`mamba_whole_graph`（frozen_v2）baseline 值。`cu:N` 指 `src/tracking/tracker_gpu.cu:N`。
+
+**GMC（§5）**
+
+| 符號 | 用途 | config / env | 代碼錨點 | baseline |
+|:--|:--|:--|:--|:--|
+| `W_f` | 相機運動補償 warp，作為 control input 加到 predict | — | `predict_gmc_sinv_fused_kernel` | translation-only |
+| `PCR` | phase-corr 峰值可信度（peak/RMS） | — | `gmc_kernel.cu` | — |
+| `τ_PCR` / `γ_gmc` | 低可信度時縮小位移 | `SACCADE_GMC_PCR_THRESH` | `gmc_kernel.cu:169` | py fallback `5.0` |
+
+**Kalman（§6）**
+
+| 符號 | 用途 | config / env | 代碼錨點 | baseline |
+|:--|:--|:--|:--|:--|
+| `x, z, F, M` | 8D constant-velocity state / 4D measurement | — | `kalman_gpu.cuh` | — |
+| `σ_p = h⁻/20` | 位置過程噪聲隨框高縮放 | `std_weight_position`（hardcoded） | `kalman_gpu.cuh:155` | 1/20 |
+| `σ_v = h⁻/160` | 速度過程噪聲隨框高縮放 | `std_weight_velocity`（hardcoded） | `kalman_gpu.cuh:156` | 1/160 |
+| `r_scale` | 測量噪聲整體縮放 | `kalman_r_scale` | — | 2.8 |
+| `m_NSA` / `λ_light` | NSA / 亮度噪聲調節（baseline 關） | — | — | 1 / 0 |
+| `τ_maha` | IoU 弱時仍可入選的 Mahalanobis gate | `maha_gate` | `stage1_cost_fused_kernel` | 見實作 |
+
+**Association cost（§7）**
+
+| 符號 | 用途 | config / env | 代碼錨點 | baseline |
+|:--|:--|:--|:--|:--|
+| `A_ij` | IoU(+ReID) 綜合配對質量 | — | `stage1_cost_fused_kernel` | = IoU（無 ReID） |
+| `q_iou` / `w_fuse` | 低分檢測降權 | `fuse_score_weight` | `stage1_cost_fused_kernel` | 0.0（關） |
+| `c_ij` | 最終 association cost（乘法式） | `multiplicative_cost` | — | true |
+| `Π_ij` | 把 OAO/vel/occ/stability 匯成乘法指數項 | — | 代碼變數 `penalty` | — |
+| `λ` | cost→value 的 softmin 溫度 | `sinkhorn_lambda` | — | 10 |
+| `o_i` / `τ_OAO` | 被遮擋 track 降低對高分檢測的配對意願 | `oao_tau` / `oao_ramp_frames` | `compute_track_occlusion_kernel`；crowd `/0.25`@cu:500 | 0.50 / 25 |
+| `P_vel` / `w_vel` | 懲罰與預測速度反向的配對 | `vel_dir_weight` | `cu` | 關 |
+| `P_occ_front` / `w_occ` | front-occluder 深度一致懲罰 | `occ_cost_weight` | `cu` | 關 |
+| `R_stability` / `w_stab` | 高度一致 reward（**成本側**） | `stability_cost_w` | §7.7 | 0.20 |
+
+**Auction（§8）**
+
+| 符號 | 用途 | config / env | 代碼錨點 | baseline |
+|:--|:--|:--|:--|:--|
+| `p_ij` | 進入 auction 的概率值 `e^{-λc}·G_aspect` | — | `fused_sinkhorn_multistage_kernel` | — |
+| `G_aspect` / `r_j` | 抑制異常長寬比框 | （hardcoded peak/width） | `cu:186`（2.5 / 1.2） | — |
+| `Δρ_i` / `ε` | best-vs-second 競標 margin | — | `parallel_auction_shmem_kernel` | — |
+| `w_fresh` | 新鮮度 bid bias（age 越小越高） | `SACCADE_FRESHNESS_W` | `cu:2650` | 0.0（關） |
+| `w_{stab,bid}` | 高度一致 bid bias（**競標側**，≠ `w_stab`） | `SACCADE_STABILITY_W` | `cu:2666` | 0.1（**開**） |
+| S0 DDA cost cap | confirmed×high 的更緊 stage | `SACCADE_ENABLE_DDA` / `SACCADE_DDA_MAX_COST` | `cu:2404` / `cu:2405` | on / 0.12 |
+| stage thresholds | 分數級聯邊界（S1/S1b/S1c/S2） | `match_thresh` / `high_thresh` / `mid_thresh` / `track_thresh` / `stage2_match_thresh` | `run_stage` | 0.50 / 0.45 / 0.10 / 0.05 / 0.50 |
+
+**Lifecycle（§9）**
+
+| 符號 | 用途 | config / env | 代碼錨點 | baseline |
+|:--|:--|:--|:--|:--|
+| birth / confirm | tentative→confirmed 與保留條件 | `new_track_thresh` / `confirm_streak` / `confirm_score_thresh` / `track_buffer` | `cu` | 0.28 / 3 / 0.50 / 30 |
+
+**Bridge relink（§10）**
+
+| 符號 | 用途 | config / env | 代碼錨點 | baseline |
+|:--|:--|:--|:--|:--|
+| `d_bridge` / `τ_bridge` | 雙向中點外推殘差 vs 門檻（已 `h_ref` 正規化） | `relink_bridge_px` | `cu` | 0.25 |
+| `w_dir` / `α` | 方向一致時向 cross-track 誤差偏移 | `relink_bridge_dir_bonus` | §10.4 | 0.8 |
+| `h_lo` / `h_hi` | 高度比 gate | `relink_bridge_h_lo` / `_h_hi` | §10.5 | 0.75 / 1.33 |
+| `m_bridge` | best-vs-second margin | `relink_bridge_margin` | §10.5 | 0.05 |
+| spatial gate | spatial 距離 gate（baseline 關） | `relink_bridge_spatial_gate` | §10.5 | 0.0 |
+
+**Semantic relink gate（§11，baseline 關）**
+
+| 符號 | 用途 | config / env | 代碼錨點 | baseline |
+|:--|:--|:--|:--|:--|
+| `w_sim` / `w_iou` / `w_maha` | joint relink score 三項權重 | `semantic_w_sim_base` / `_iou_base` / `_maha_base` | `relink_gate.cu` | off |
+
+> 提醒：`w_stab`（§7.7，`stability_cost_w=0.20`，**成本側 reward**）與
+> `w_{stab,bid}`（§8.2，`SACCADE_STABILITY_W=0.1`，**auction bid bias**）是
+> **兩個不同的旋鈕**，數值與作用點都不同，雖然都用高度一致性 `|h_i−h_j|/h_j`。
+
+### 3.2 方法出處 / 命名對照
+
+把各機制接回命名概念，方便對照文獻：
+
+- **GMC** = phase correlation（cross-power spectrum + Hanning window），輸出 translation-only warp。
+- **Kalman** = SORT / DeepSORT 風格 constant-velocity filter，state `(c_x, c_y, a, h, ·̇)`。
+- **Assignment** = Bertsekas auction（單輪平行貪婪）跑在 softmin-temperature top-k 之上；
+  detection 分數分段 = ByteTrack 風格 low/high-score cascade。
+  注意 `sinkhorn_lambda` 是歷史命名——這裡只用 `e^{-λc}` 當 value，**不是**完整
+  Sinkhorn 迭代 solve（見 §8 開頭說明）。
+- **Aspect penalty** = 長寬比品質權重（套在 auction value）。
+- **OAO** = occlusion-aware（track-track overlap）配對抑制 + duration ramp。
+- **Bridge relink** = 雙向中點外推（bidirectional midpoint extrapolation），項目自有機制，
+  非標準 appearance ReID。
+- **Semantic relink gate** = appearance + Mahalanobis + IoU 的 joint gate（baseline 關）。
 
 ---
 
