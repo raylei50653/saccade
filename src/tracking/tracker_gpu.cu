@@ -953,7 +953,6 @@ __global__ void parallel_auction_shmem_kernel(
     int* pending_det, uint64_t* pending_bid,
     int n_trk, int n_det, int K, float epsilon,
     const int* age, float freshness_w,
-    const int* hit_streak, float history_w,
     const float* states, const float* det_boxes, float stability_w)
 {
     extern __shared__ uint64_t s_prices_u64[];
@@ -2658,14 +2657,6 @@ public:
             return v ? std::strtof(v, nullptr) : 0.0f;
         }();
 
-        // History bid weight (env SACCADE_HISTORY_W, default 0 = off).
-        // Tracks with longer consistent hit-streak bid higher in auction,
-        // so established tracks beat newly-reacquired ones.
-        static const float history_w = []() {
-            const char* v = std::getenv("SACCADE_HISTORY_W");
-            return v ? std::strtof(v, nullptr) : 0.0f;
-        }();
-
         // Stability bid weight (env SACCADE_STABILITY_W, default 0.1).
         // Tracks whose predicted height closely matches the detection height
         // bid higher, favouring consistent tracks. IDs −42, IDF1 neutral.
@@ -2684,7 +2675,7 @@ public:
                 d_topk_indices_ + off, d_topk_probs_ + off, d_auction_prices_,
                 d_trk_to_det_, d_det_to_trk_,
                 d_pending_det_, d_pending_bid_, max_objs_, num_dets, SINKHORN_NUM_TOPK, 0.01f,
-                d_age_, freshness_w, d_hit_streak_, history_w,
+                d_age_, freshness_w,
                 d_states_, d_boxes, stability_w);
             kernel::commit_auction_results_kernel<<<auc_g, auc_b, 0, stream>>>(
                 d_auction_prices_, d_pending_det_, d_pending_bid_,
