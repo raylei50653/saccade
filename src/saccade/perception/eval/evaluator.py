@@ -3061,6 +3061,7 @@ def _launch_double_buffer_detect(
     frame_gpu: torch.Tensor,
     input_ready: "torch.cuda.Event",
     ready_event: "torch.cuda.Event",
+    latency_started_at: float,
 ) -> PreparedDetection:
     """Queue detect(frame_id) on the side stream without blocking the host.
 
@@ -3068,12 +3069,14 @@ def _launch_double_buffer_detect(
     Until then it is free to run GMC/tracker/materialization for frame N-1.
     There is intentionally one outstanding detection: that preserves detector
     graph ownership while still providing the desired double-buffer overlap.
+
+    ``latency_started_at`` is captured by the caller *before* JPEG decode so the
+    reported per-frame latency is genuinely end-to-end (decode→detect→track→out).
     """
 
     stream = state.double_buffer_stream
     if stream is None:
         raise RuntimeError("double-buffer launch requested without a CUDA stream")
-    latency_started_at = time.perf_counter()
     # ``frame_gpu`` is produced on the caller's stream.  Establish an explicit
     # producer→detector dependency before the side stream reads it; PyTorch does
     # not infer ordering merely because both streams reference the same tensor.
@@ -4402,7 +4405,10 @@ def _run_frame(
         frame_gpu = prepared_detection.frame_gpu
         t_frame_start = prepared_detection.latency_started_at
     if prepared_detection is None:
-        t_frame_start = time.perf_counter()
+        # End-to-end latency: clock from before decode/ingest (t_e2e_start),
+        # not after, so the reported latency includes JPEG decode and matches
+        # the wall-clock throughput period.
+        t_frame_start = t_e2e_start
 
     if getattr(cfg, "workbench", False) and wb is not None:
         _, _ = time_stage(
@@ -5978,6 +5984,8 @@ def run_eval(
             print("  [double-buffer] detect(N+1) overlaps tracker(N) on a side stream")
 
             def _schedule(frame_id: int) -> PreparedDetection | None:
+                # Start the end-to-end latency clock before decode/ingest.
+                latency_started_at = time.perf_counter()
                 try:
                     frame_gpu = next(_seq_state.stream_iter)
                 except StopIteration:
@@ -5993,6 +6001,7 @@ def run_eval(
                     frame_gpu=frame_gpu,
                     input_ready=input_ready,
                     ready_event=ready_event,
+                    latency_started_at=latency_started_at,
                 )
 
             pending = _schedule(1)
