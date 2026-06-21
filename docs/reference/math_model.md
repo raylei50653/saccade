@@ -398,7 +398,7 @@ $$
 $$
 
 $$
-\operatorname{diag}(Q) =
+\mathrm{diag}(Q) =
 (\sigma_p^2, \sigma_p^2, 10^{-4}, \sigma_p^2,
  \sigma_v^2, \sigma_v^2, 10^{-10}, \sigma_v^2)
 $$
@@ -422,7 +422,7 @@ m_R = r_{\mathrm{scale}} \cdot m_{\mathrm{NSA}} \cdot
 $$
 
 $$
-\operatorname{diag}(R) =
+\mathrm{diag}(R) =
 \left(
 \left(\frac{h^-}{20}\right)^2m_R,
 \left(\frac{h^-}{20}\right)^2m_R,
@@ -804,7 +804,7 @@ $$
 $$
 j^* = \arg\max_j v_{ij},
 \qquad
-v^{(2)}_i = \operatorname{secondmax}_j v_{ij}
+v^{(2)}_i = \mathrm{secondmax}_j v_{ij}
 $$
 
 $$
@@ -951,7 +951,7 @@ $$
 edge：
 
 $$
-w_e = \frac{1}{\operatorname{RSS}_{\mathrm{line}}(y^e)/(\bar h^2+10^{-3})+0.01},
+w_e = \frac{1}{\mathrm{RSS}_{\mathrm{line}}(y^e)/(\bar h^2+10^{-3})+0.01},
 \qquad e\in\{\mathrm{top},\mathrm{bot}\}
 $$
 
