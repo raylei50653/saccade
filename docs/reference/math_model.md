@@ -14,6 +14,88 @@
 
 ---
 
+## 0. 系統架構與模組邊界
+
+整條 pipeline 分成兩層：**Python orchestration layer**（排程、buffer 管理、CUDA
+graph replay、eval 邏輯）與 **C++/CUDA compute layer**（detector engine、postprocess、
+GMC、tracker association）。Python 不在 hot path 上做數值計算；它把工作以 GPU tensor /
+device pointer 的形式下發到 C++/CUDA，並只在 output boundary 把結果搬回 host。
+
+關鍵：detect 與 GMC 是從**同一個 frame buffer 分岔的兩條平行支線**——GMC 吃的是
+frame 灰階影像（+ 上一幀），**不是** detect 的輸出。`track` 才把兩條支線的結果
+（detection boxes + warp `W_f`）匯合。whole-detect CUDA graph 只涵蓋 detect 鏈，
+不含 GMC。
+
+![系統架構與模組邊界](math_model_architecture.png)
+
+> 圖檔：[math_model_architecture.png](math_model_architecture.png)（GitHub 可渲染）／
+> 可縮放原始檔 [math_model_architecture.svg](math_model_architecture.svg)。
+
+文字版（同一架構）：
+
+```text
+┌──────────────────────────────────────────────────────────────────────┐
+│  Python orchestration layer                                            │
+│  evaluator.py (run_eval) — 逐 frame 排程、CUDA-graph replay、計時        │
+└──────────────────────────────┬─────────────────────────────────────────┘
+                               │ ingest/preprocess
+                               ▼
+                    frame buffer (GPU, CHW)
+                   ╱                        ╲
+   ┌──────────────────────────────┐   ┌────────────────────────┐
+   │ detect 鏈                     │   │ GMC                    │
+   │ (whole-detect CUDA graph,     │   │ default: C++ extension │
+   │  single replay)               │   │ gmc.cpp + kernel.cu    │
+   │  TRT backbone engine          │   │ prev gray + curr gray  │
+   │   → Mamba head                │   │ → 2x3 warp W_f         │
+   │   → postprocess decode/NMS    │   │ PyGraphedGMC fallback    │
+   │  detector_trt.py / pipeline.* │   │ (prev_gray 跨幀保留)    │
+   └──────────────┬───────────────┘   └───────────┬────────────┘
+       boxes/scores/classes (GPU)                 │ W_f (GPU)
+                  ╲                               ╱
+                   ▼                             ▼
+            ┌──────────────────────────────────────┐
+            │ track  GPUByteTracker (tracker_gpu.cu)│
+            │ predict+GMC control → assoc(auction)  │
+            │ → Kalman update → bridge relink       │
+            └────────────────────┬──────────────────┘
+                                 ▼ result buffer (GPU→host)
+                    materialize → relink_write → MOT rows
+```
+
+### 0.1 模組與傳遞方式
+
+| Stage | 模組（Python facade / C++·CUDA core） | 輸入 → 輸出 | 傳遞方式 |
+|:--|:--|:--|:--|
+| detect | `detector_trt.py` `TRTYoloDetector` / TRT engine + Mamba head | frame CHW tensor → raw boxes/scores/classes tensor | GPU tensor，整段 backbone+head+postprocess decode 由 whole-detect CUDA graph 單次 replay（§1） |
+| postprocess | `saccade_tracking_ext.PerceptionPipeline` (C++) / `pipeline.cpp` | raw det → 過濾/NMS 後 boxes/scores/classes | GPU buffer，留在 device |
+| GMC | `saccade_tracking_ext.GMC` / `gmc.cpp` + `gmc_kernel.cu` (cuFFT)；extension 不可用時才用 `eval/gmc.py` `PyGraphedGMC` | prev+curr gray → `2x3` warp `W_f` | GPU tensor（§5） |
+| track | `tracking/tracker_gpu.py` `GPUByteTracker` / `saccade_tracking_ext.GPUByteTracker` = `tracker_gpu.cu` | boxes/scores/classes/`W_f` → `trk_to_det` 等 GPU state | **device pointer + stream**（見 §0.2） |
+| materialize | `eval/helpers.py` `materialize_gpu_track_results*` | GPU result buffer → host rows | GPU→host，僅 output boundary 一次 copy |
+| output | `evaluator.py` `relink_write` | track rows → MOT result lines | host（fast emit path，§12） |
+
+### 0.2 Python ↔ C++ 邊界（傳遞合約）
+
+關鍵在 `track` stage 的邊界（[tracker_gpu.py](../../src/saccade/perception/tracking/tracker_gpu.py)
+`GPUByteTracker.update`）：
+
+- frame 內所有中間量都是 **GPU-resident torch tensor**，不落 host。
+- 進入 C++ tracker 時，Python 把每個 tensor `.contiguous()` 後取 `.data_ptr()`
+  （raw CUDA device pointer），連同 `torch.cuda.current_stream().cuda_stream`
+  一起傳給 `self.tracker.update(boxes_ptr, scores_ptr, classes_ptr, gmc_ptr, stream)`。
+- Python **必須保留這些 tensor 的引用**直到 kernel 下發完成，否則 `data_ptr()`
+  指向的 buffer 會被 GC 釋放。
+- C++ tracker 跨 frame 持有自己的 GPU state（Kalman `states`/`covs`、auction
+  `prices`、foot-history ring、relink bank、`trk_to_det`/`det_to_trk`），這些
+  **不每幀往返 host**；只有 `materialize` 在 output boundary 把精簡 result buffer
+  搬回 host。
+- ReID 啟用時 appearance 路徑會多排一條 side CUDA stream，在 `track` 前同步；
+  baseline `reid_mode: off` 不走（§2）。
+
+詳細的 stage 順序與 source 對照見 §2 與 §13，逐項數學見 §4–§12。
+
+---
+
 ## 1. 現行 Baseline 合約
 
 目前推薦 baseline 是 `mamba_whole_graph`。核心啟用條件如下：
@@ -192,9 +274,9 @@ $$
 G_w(x,y) = G(x,y) w_x w_y
 $$
 
-> **注意**：C++ GMC 使用上述 floor-based 降採樣。Python fallback path
-> (`PyGraphedGMC`) 使用 `F.interpolate(mode="nearest")`，與 floor 公式
-> 在邊界行為上不等價，但實務差異可忽略。
+> **注意**：C++ GMC 使用 §5.1 的 floor-based 降採樣。Python fallback
+> `PyGraphedGMC` 使用 `F.interpolate(mode="nearest")`；在此固定輸出尺寸的
+> nearest mapping 同樣是此 floor mapping，兩者取樣座標一致。
 
 ### 5.2 Cross-Power Spectrum
 
@@ -235,7 +317,8 @@ $$
 - C++ `launch_phase_correlation`（standalone path）：kernel 回傳原始 wrapped
   displacement，由 host 端 `GMC::estimate()` 進行二次檢查後回傳空 result，
   eval 端等同該 frame 無 GMC warp。
-- Python `PyGraphedGMC`：沒有 25% displacement cap，僅依賴 PCR gate。
+- Python `PyGraphedGMC`：同樣套用 25% displacement cap；不可信時寫入
+  identity warp。
 - Python `TilePhaseCorrAffineGMC`：若沒有 affine/global fallback 會回 `None`，
   等同無 GMC warp。
 
@@ -255,10 +338,10 @@ W_f =
 \end{bmatrix}
 $$
 
-> **注意**：Python fallback `PyGraphedGMC` 僅使用 hard PCR gate
-> （`valid = ratio >= 5.0`，等價於 `γ_gmc ∈ {0, 1}`），沒有上述軟
-> confidence scaling；且 PCR gate threshold 無法從環境變數配置
-> （C++ 可透過 `SACCADE_GMC_PCR_THRESH` 調整，預設 `5.0`）。
+> **注意**：Python fallback `PyGraphedGMC` 與 C++ graph path 一樣使用
+> §5.3 的軟 confidence scaling，而不是 hard PCR gate；其 constructor 可傳入
+> `pcr_thresh`（目前 evaluator fallback 以預設 `5.0` 建立）。它沒有對應
+> `SACCADE_GMC_PCR_THRESH` 的環境變數讀取；C++ path 則可由該環境變數調整。
 
 sign convention：`W_f` 是 prev-frame predicted track 到 current-frame coordinates
 的 warp。positive `t_x` 代表把 predicted track center 往 current frame 右方推。
@@ -456,6 +539,15 @@ $$
 
 baseline `fuse_score_weight: 0.0`，所以 `q_iou = IoU_ij`。
 
+> **注意**：上式是 `w_fuse > 0` 的通式裡 `s_j` 直接代入的形式，僅在 track 尚未
+> confirmed 時成立。實作中（[tracker_gpu.cu](../../src/tracking/tracker_gpu.cu)
+> `stage1_cost_fused_kernel`）若 `fuse_score_weight > 0` 且 track 已 confirmed
+> （`hit_streak >= confirm_streak`），`(1-s_j)` 會被換成相對 score-drop：
+> $\mathrm{drop} = \max(0, \bar{s}_i - s_j)$、$p_{\mathrm{rel}} = \mathrm{drop}/\max(\bar{s}_i, 0.01)$，
+> 其中 $\bar{s}_i$ 是 track 的平均 detection score；再乘上 crowd damping
+> $(1 - \min(1, o_i/0.25))$。baseline `fuse_score_weight: 0.0` 不觸發此分支，
+> 故 `q_iou = IoU_ij` 不受影響。
+
 無 ReID 時：
 
 $$
@@ -641,10 +733,25 @@ assignment implementation 不是 full dense Sinkhorn solve。active GPU path：
 
 ```text
 cost candidates per track
-  -> fused multi-stage sparse top-k
-  -> auction over top-k probabilities
-  -> commit winners
+  -> fused multi-stage sparse top-k   (一次算出 5 個 stage 的 top-k)
+  -> for stage in [S0, S1, S1b, S1c, S2]:   (依優先序串行)
+       reset prices
+       single-round parallel auction over this stage's top-k
+       commit winners (matched track/det 帶到下一 stage)
 ```
+
+關鍵結構（[tracker_gpu.cu](../../src/tracking/tracker_gpu.cu) host driver
+`run_stage(0..4)`）：
+
+- **5 個 stage 是依優先序的貪婪級聯**，不是合併成單一 auction。順序為
+  S0 → S1 → S1b → S1c → S2（見 §8.1 表）。
+- **Carry-over**：每個 stage 的 auction 只看前面 stage 還沒配掉的 track/det
+  （auction kernel 內以 `trk_to_det[t] == -1` 與 `det_to_trk[d] != -1` 過濾），
+  所以 S0 先吃掉最確定的配對，剩下的才往下流。
+- **每個 stage 只跑一輪 bid + commit**，price buffer 在每個 stage 開頭 reset 成 0，
+  沒有 price-raising 迭代到收斂。因此這實質上是**單輪平行貪婪配對**：§8.2 的
+  $\Delta\rho$（best-vs-second margin）在這裡只用來決定**同一輪內多個 track 競標
+  同一個 detection 時誰勝出**，不是跨輪累積抬價。
 
 ### 8.1 Stage Definitions
 
@@ -712,7 +819,8 @@ $$
 \mathrm{bid}_i = \rho_{j^*} + \Delta\rho_i
 $$
 
-optional bid biases：
+bid biases（每個都在 absolute bid 上相加，因為 per-track 的固定 offset 在
+best-vs-second margin 中會抵消，且多數競標是單候選 margin == ε）：
 
 $$
 \mathrm{bid}_i \mathrel{+}=
@@ -723,6 +831,25 @@ $$
 \mathrm{bid}_i \mathrel{+}=
 \frac{w_{\mathrm{stab,bid}}}{1 + |h_i-h_j|/h_j}
 $$
+
+kernel（`parallel_auction_shmem_kernel`）實際讀取的只有這兩個 bias，預設值不一致，
+**不要一律當成 off**：
+
+| Bias | env | 預設 | baseline |
+|:--|:--|:--|:--|
+| freshness $w_{\mathrm{fresh}}$ | `SACCADE_FRESHNESS_W` | `0.0` | 關 |
+| stability $w_{\mathrm{stab,bid}}$ | `SACCADE_STABILITY_W` | `0.1` | **開** |
+
+stability bid bias 在 baseline 是**開的**（`0.1`，kernel 內 `stability_w > 0`
+觸發；comment 註明 IDs −42 / IDF1 neutral），偏好 predicted height 與 detection
+height 接近的 track。
+
+> 備註：曾有第三個 env `SACCADE_HISTORY_W`（hit-streak bias，意圖讓連續命中較久的
+> track bid 較高），但 `history_w` / `hit_streak` 只被傳進 kernel 簽名、**body 從未
+> 讀取**（沒有對應的 `if (history_w > 0)` 分支），是 dead parameter。已移除整條路徑
+> （kernel 簽名、host env 讀取、host call、`assoc_basis.py` 的 `ENV_OVERRIDES`
+> registry），移除為 bit-exact no-op。auction bid bias 現在只有 freshness 與
+> stability 兩個。
 
 實作細節：
 
@@ -780,18 +907,20 @@ relink_bridge_h_lo: 0.75
 relink_bridge_h_hi: 1.33
 relink_bridge_spatial_gate: 0.0
 relink_bridge_dir_bonus: 0.8
+relink_bridge_anchor: adaptive  # effective default
+relink_bridge_anchor_rate: 0.03 # effective default
 ```
 
 注意：`relink_bridge_px` 是歷史命名；baseline 的 `0.25` 不是 0.25 pixel。
-它會與下方的 $d_{\mathrm{bridge}}$ 比較，而 $d_{\mathrm{bridge}}$ 已除以
+它會與 §10.3 的 $d_{\mathrm{bridge}}$ 比較，而 $d_{\mathrm{bridge}}$ 已除以
 `h_ref`，所以單位是 reference-height-normalized distance。
 
 實作在 [tracker_gpu.cu](../../src/tracking/tracker_gpu.cu)。它不同於
 [relink_gate.cu](../../src/tracking/relink_gate.cu) 的 appearance gate table。
 
-### 10.1 Foot History
+### 10.1 Center/Height History 與 Anchor
 
-每個 observed slot 保存 foot-center history ring：
+每個 observed slot 保存 center/height history ring：
 
 $$
 \mathrm{sample}_i = (c_{x,i}, c_{y,i}, h_i)
@@ -802,7 +931,38 @@ $$
 $$
 
 只有 observed tracks（`age == 0`）更新 history；coasting lost tracks 保留最後
-的 history。
+的 history。ring 本身不直接儲存 foot point；它儲存 `(c_x,c_y,h)`，再依 anchor
+mode 推導 bridge 使用的 $(a_x,a_y)$ 與速度。
+
+baseline 的 effective default 是 `relink_bridge_anchor: adaptive`、
+`relink_bridge_anchor_rate: 0.03`。對四個 sample，$x$ 永遠使用 center；$y$ 的
+候選序列為：
+
+$$
+y^{\mathrm{top}} = c_y - h/2,
+\qquad
+y^{\mathrm{bot}} = c_y + h/2,
+\qquad
+y^{\mathrm{ctr}} = c_y
+$$
+
+若平均相鄰 height 變化相對於平均 height 不超過 `anchor_rate`，adaptive path
+退化為 center。否則它以 top/bottom 各自的四點線性回歸殘差為權重，選擇較穩定的
+edge：
+
+$$
+w_e = \frac{1}{\operatorname{RSS}_{\mathrm{line}}(y^e)/(\bar h^2+10^{-3})+0.01},
+\qquad e\in\{\mathrm{top},\mathrm{bot}\}
+$$
+
+$$
+a_y = \frac{w_{\mathrm{top}}y^{\mathrm{top}} + w_{\mathrm{bot}}y^{\mathrm{bot}}}
+{w_{\mathrm{top}}+w_{\mathrm{bot}}}
+$$
+
+`anchor: center` 固定使用 $y^{\mathrm{ctr}}$；`anchor: foot` 固定使用
+$y^{\mathrm{bot}}$。下節的 $\ell,c,v_\ell,v_c$ 都是這個 anchor transform 後的
+量，而不是一律 box center 或 foot。
 
 ### 10.2 Candidate And Lost Pair
 
@@ -810,7 +970,7 @@ $$
 
 ```text
 candidate hit_streak == bridge_at
-candidate has at least 4 foot samples
+candidate has at least 4 history samples
 lost track is active but unmatched this frame
 lost state == confirmed
 bridge_min_lost <= lost_age <= bridge_ttl
@@ -818,7 +978,8 @@ bridge_min_lost <= lost_age <= bridge_ttl
 
 ### 10.3 Velocity Regression
 
-對四個 sample `(p0, p1, p2, p3)`，4-point regression velocity：
+對四個等時間間隔的 scalar anchor sample `(p0, p1, p2, p3)`，4-point
+regression velocity：
 
 $$
 v = \frac{3p_3 + p_2 - p_1 - 3p_0}{10}

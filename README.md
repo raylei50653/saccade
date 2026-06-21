@@ -32,16 +32,41 @@ infrastructure。
 目前記錄中的 default path 與活躍優化方向，請看
 [docs/TODO.md](docs/TODO.md)。
 
-## 0-shot Policy
+## Current Benchmark — YOLO26s + Mamba + GPU Tracker
 
-這個 repo 目前對 `FP/TP classifier` 的原則是：
+目前 headline 是 **2026-06-21 `frozen_v2` run**：MOT17 train / SDP
+七個 sequence 的 GT-weighted internal evaluation。這不是 MOTChallenge test-server
+leaderboard，也不應與不同 engine、profiling 或 subset 的吞吐數字直接比較。
 
-- **不接受**用最終 `MOT17` eval/test sequence 標註回訓 classifier
-- `MOT17` 應只作 inference / evaluation
-- 若要做 classifier 路線，應走 `external-only` 訓練資料，例如 `CrowdHuman / CityPersons`
+**Stack:** YOLO26s TensorRT backbone + Mamba v14-replica T3→T1 head + C++/CUDA
+`GPUByteTracker`（GMC、auction association、bidirectional bridge relink）。實際
+preset 名稱為 `mamba_whole_graph`。
 
-正式方向與實作計畫見
-[docs/research/eval/fp_classifier_external_only_plan.md](docs/research/eval/fp_classifier_external_only_plan.md)。
+這個 checkpoint 屬於 v14-replica training lineage；其 teacher/cache/distillation
+流程使用 MOT17 資料，歷史 replica 設定更涵蓋全部七個 sequence。因此這些數字是
+**in-domain train evaluation**，不是 holdout generalization 結果。訓練資料範圍見
+[v14 replication protocol](docs/modules/detection/mamba-v14-replication-protocol.md)。
+
+| HOTA | IDF1 | MOTA | DetA | AssA | IDs | Eval FPS |
+|---:|---:|---:|---:|---:|---:|---:|
+| **70.2** | **78.2** | **78.4** | **70.9** | **69.7** | **413** | **269.47** |
+
+重現指令：
+
+```bash
+uv run scripts/eval/mot17.py \
+  --preset mamba_whole_graph \
+  --detector SDP \
+  --double-buffer \
+  --output out/frozen_v2
+```
+
+`frozen_v2` 的量測環境：**NVIDIA GeForce RTX 5070 Ti Laptop
+GPU（12 GB）**、Driver `610.62`、CUDA UMD `13.3`。GPU 型號與量測協定會直接影響
+FPS／latency；不要把此數字與不同 GPU 或不同 profiling setup 的結果並列比較。
+
+完整 preset 與 metric protocol 見
+[MOT17 Evaluation Configuration](docs/reference/mot17_default_config.md)。
 
 ## Main Code Areas
 
