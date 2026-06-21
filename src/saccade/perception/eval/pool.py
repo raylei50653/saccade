@@ -65,22 +65,22 @@ class AdaptiveFramePool:
         self, h: int, w: int, device: Union[str, torch.device] = "cuda"
     ) -> None:
         print(f"🕯️ Allocating VRAM Buffers for adaptive 960 tiled eval ({w}x{h})...")
+        self.device = device
         self.frame_buffer = torch.zeros((3, h, w), device=device, dtype=torch.float32)
         self.canvas_640p = torch.zeros(
             (3, 640, 640), device=device, dtype=torch.float32
         )
-        self.canvas_960p = torch.zeros(
-            (3, 960, 960), device=device, dtype=torch.float32
-        )
-        self.tiles_batch4 = torch.zeros(
-            (4, 3, 640, 640), device=device, dtype=torch.float32
-        )
-        self.tiles_batch6 = torch.zeros(
-            (6, 3, 640, 640), device=device, dtype=torch.float32
-        )
-        self.canvas_960p_flip = torch.zeros(
-            (3, 960, 960), device=device, dtype=torch.float32
-        )
+
+        # Tiling / 960 / flip-TTA scratch buffers (~71 MB combined) are only
+        # touched by the high-res / tiled / TTA detection paths, never by the
+        # default 640 whole_graph path. Acquire them lazily on first access and
+        # release them via release_tiling_buffers() so single- and double-buffer
+        # 640 eval never pays for VRAM it does not use (doubled under
+        # --double-buffer, then ×--processes).
+        self._canvas_960p: torch.Tensor | None = None
+        self._canvas_960p_flip: torch.Tensor | None = None
+        self._tiles_batch4: torch.Tensor | None = None
+        self._tiles_batch6: torch.Tensor | None = None
 
         self.frame_buffer_nv12 = torch.zeros(
             (h * w * 3 // 2,), device=device, dtype=torch.uint8
@@ -105,6 +105,56 @@ class AdaptiveFramePool:
         self.tile_3x2_dy = torch.tensor(
             [0.0, 0.0, 0.0, 320.0, 320.0, 320.0], device=device, dtype=torch.float32
         ).view(6, 1, 1)
+
+    # --- Lazy tiling-buffer acquire / release ---------------------------------
+    # Each property allocates its buffer on first use (申請) and is freed by
+    # release_tiling_buffers() (釋放). The default 640 path never trips these.
+    @property
+    def canvas_960p(self) -> torch.Tensor:
+        if self._canvas_960p is None:
+            self._canvas_960p = torch.zeros(
+                (3, 960, 960), device=self.device, dtype=torch.float32
+            )
+        return self._canvas_960p
+
+    @property
+    def canvas_960p_flip(self) -> torch.Tensor:
+        if self._canvas_960p_flip is None:
+            self._canvas_960p_flip = torch.zeros(
+                (3, 960, 960), device=self.device, dtype=torch.float32
+            )
+        return self._canvas_960p_flip
+
+    @property
+    def tiles_batch4(self) -> torch.Tensor:
+        if self._tiles_batch4 is None:
+            self._tiles_batch4 = torch.zeros(
+                (4, 3, 640, 640), device=self.device, dtype=torch.float32
+            )
+        return self._tiles_batch4
+
+    @property
+    def tiles_batch6(self) -> torch.Tensor:
+        if self._tiles_batch6 is None:
+            self._tiles_batch6 = torch.zeros(
+                (6, 3, 640, 640), device=self.device, dtype=torch.float32
+            )
+        return self._tiles_batch6
+
+    def release_tiling_buffers(self, empty_cache: bool = False) -> None:
+        """Release lazily-acquired tiling/960/flip scratch buffers (~71 MB).
+
+        Safe to call any time: each buffer is re-acquired transparently on next
+        access. Pass ``empty_cache=True`` to also return the freed blocks to the
+        driver via ``torch.cuda.empty_cache()`` (otherwise the caching allocator
+        retains them for reuse).
+        """
+        self._canvas_960p = None
+        self._canvas_960p_flip = None
+        self._tiles_batch4 = None
+        self._tiles_batch6 = None
+        if empty_cache and torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
     def _import_nv12_ops(self) -> tuple[Any | None, Any | None]:
         try:

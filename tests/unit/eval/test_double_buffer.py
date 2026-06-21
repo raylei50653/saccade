@@ -103,12 +103,18 @@ def test_double_buffer_clones_reused_detector_output_before_next_replay() -> Non
         frame_id=1,
         pool=_Pool(),
         frame_gpu=torch.full((4, 4, 3), 10, device="cuda", dtype=torch.uint8),
+        input_ready=torch.cuda.Event(enable_timing=False),
+        ready_event=torch.cuda.Event(enable_timing=False),
+        latency_started_at=0.0,
     )
     second = _launch_double_buffer_detect(
         state,
         frame_id=2,
         pool=_Pool(),
         frame_gpu=torch.full((4, 4, 3), 20, device="cuda", dtype=torch.uint8),
+        input_ready=torch.cuda.Event(enable_timing=False),
+        ready_event=torch.cuda.Event(enable_timing=False),
+        latency_started_at=0.0,
     )
     main = torch.cuda.current_stream()
     main.wait_event(first.ready_event)

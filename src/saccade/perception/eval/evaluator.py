@@ -1795,11 +1795,19 @@ class EvalPipeline:
         # frame N pixels still consumed by GMC/ReID/tracking on the main stream.
         double_buffer_pools = [pool]
         double_buffer_stream = None
+        double_buffer_events: list[tuple[torch.cuda.Event, torch.cuda.Event]] = []
         if _double_buffer_eligible(cfg, detector, profile_stages):
             next_pool = AdaptiveFramePool(h_orig, w_orig)
             next_pool.use_nv12 = pool.use_nv12
             double_buffer_pools.append(next_pool)
             double_buffer_stream = torch.cuda.Stream()
+            for _ in range(2):
+                double_buffer_events.append(
+                    (
+                        torch.cuda.Event(enable_timing=False),
+                        torch.cuda.Event(enable_timing=False),
+                    )
+                )
         # SACCADE_GPU_DECODE=1 routes JPEG decode to the GPU's NVJPG hardware
         # engine (torchvision/nvJPEG) instead of CPU (DALI), offloading decode
         # off the CPU. Both yield [H, W, C] uint8 CUDA frames.
@@ -1965,6 +1973,47 @@ class EvalPipeline:
             ),
             "count": torch.empty((), dtype=torch.int32, pin_memory=True),
         }
+        # ── double-buffer tracker output pipelining ────────────────────────
+        # Parity-slotted pinned buffers so the D2H for frame N-1 can complete
+        # while the GPU runs tracker(N).  Emit/relink(N-1) executes at the
+        # start of frame N's iteration, before tracker(N) is submitted,
+        # preserving the relink→tracker ordering requirement.
+        _db_tracker_out_pinned: list[dict[str, torch.Tensor]] = []
+        _db_tracker_out_events: list[torch.cuda.Event] = []
+        _db_tracker_out_fids: list[int] = [0, 0]
+        if double_buffer_stream is not None:
+            for _ in range(2):
+                _db_tracker_out_pinned.append(
+                    {
+                        "boxes": torch.empty(
+                            (_TRACK_RESULT_CAP, 4),
+                            dtype=torch.float32,
+                            pin_memory=True,
+                        ),
+                        "scores": torch.empty(
+                            (_TRACK_RESULT_CAP,),
+                            dtype=torch.float32,
+                            pin_memory=True,
+                        ),
+                        "ids": torch.empty(
+                            (_TRACK_RESULT_CAP,),
+                            dtype=torch.int32,
+                            pin_memory=True,
+                        ),
+                        "classes": torch.empty(
+                            (_TRACK_RESULT_CAP,),
+                            dtype=torch.int32,
+                            pin_memory=True,
+                        ),
+                        "det_idx": torch.empty(
+                            (_TRACK_RESULT_CAP,),
+                            dtype=torch.int32,
+                            pin_memory=True,
+                        ),
+                        "count": torch.empty((), dtype=torch.int32, pin_memory=True),
+                    }
+                )
+                _db_tracker_out_events.append(torch.cuda.Event(enable_timing=False))
         _use_pinned_materialize = not cfg.pipeline_relink
         _defer_emit = (
             relinker is None
@@ -2258,6 +2307,15 @@ class EvalPipeline:
         self.pool = pool
         self.double_buffer_pools = double_buffer_pools
         self.double_buffer_stream = double_buffer_stream
+        self.double_buffer_events = double_buffer_events
+        self.double_buffer_tracker_out_pinned = _db_tracker_out_pinned
+        self.double_buffer_tracker_out_events = _db_tracker_out_events
+        self.double_buffer_tracker_out_fids = _db_tracker_out_fids
+        # ── deferred emit context (one pending frame at a time) ─────────
+        self.db_emit_frame_id: int = 0
+        self.db_emit_event: "torch.cuda.Event | None" = None
+        self.db_emit_parity: int = 0
+        self.db_emit_ctx: dict[str, Any] = {}
         self.stream_iter = stream_iter
         self.frame_end = frame_end
         self.frame_latencies = frame_latencies
@@ -2527,6 +2585,60 @@ def _run_materialize(
     return track_results
 
 
+def _flush_db_tracker_out(state: EvalPipeline) -> None:
+    """Flush one deferred double-buffer tracker output.
+
+    Syncs the parity D2H event, builds CPU track_results from the pinned
+    buffer, then runs the full emit/relink tail.  Called at the *start* of
+    the next frame so the CPU emit overlaps the GPU postproc+GMC+ReID work
+    while preserving relink→tracker ordering.
+    """
+
+    fid = state.db_emit_frame_id
+    ev = state.db_emit_event
+    if fid == 0 or ev is None:
+        return
+    ev.synchronize()
+    parity = state.db_emit_parity
+    pinned = state.double_buffer_tracker_out_pinned[parity]
+    count = int(pinned["count"].item())
+    track_results = {
+        "count": count,
+        "boxes": pinned["boxes"][:count].clone(),
+        "scores": pinned["scores"][:count].clone(),
+        "ids": pinned["ids"][:count].clone(),
+        "classes": pinned["classes"][:count].clone(),
+        "det_idx": pinned["det_idx"][:count].clone(),
+    }
+    ctx = state.db_emit_ctx
+    tracker_result_bufs = ctx["tracker_result_buffers"]
+    fused_boxes = ctx["fused_boxes"]
+    fused_scores = ctx["fused_scores"]
+    geometry_suspect_mask = ctx["geometry_suspect_mask"]
+    embeddings = ctx["embeddings"]
+    gmc_warp = ctx["gmc_warp"]
+    (
+        state.prev_track_ids,
+        _emit_lines,
+    ) = _run_emit(
+        state,
+        track_results=track_results,
+        tracker_result_buffers=tracker_result_bufs,
+        fused_boxes=fused_boxes,
+        fused_scores=fused_scores,
+        geometry_suspect_mask=geometry_suspect_mask,
+        embeddings=embeddings,
+        gmc_warp=gmc_warp,
+        frame_birth_events=[],
+        frame_id=fid,
+        prev_track_ids=state.prev_track_ids,
+    )
+    state.results_lines.extend(_emit_lines)
+    state.db_emit_frame_id = 0
+    state.db_emit_event = None
+    state.db_emit_ctx.clear()
+
+
 def _run_track(
     state: EvalPipeline,
     *,
@@ -2537,6 +2649,7 @@ def _run_track(
     embeddings: "torch.Tensor | None",
     mid_thresh_scale: float,
     tracker_result_buffers: Any,
+    synchronize: bool = True,
 ) -> Any:
     """Tracker update for one frame (extracted from run_eval).
 
@@ -2571,14 +2684,11 @@ def _run_track(
             fused_classes.to(torch.int32),
             gmc=gmc_warp,
         )
-        # replay() returns gtu.out_* tensors directly; use them as
-        # tracker_result_buffers to skip the extra D2D copy + item() sync
-        # that read_outputs() would introduce.
         tracker_result_buffers, _ = time_stage(
             seq_stage_totals,
             "track",
             lambda: gtu.replay(),
-            sync_cuda=True,
+            sync_cuda=synchronize,
         )
     else:
         _, _ = time_stage(
@@ -2593,7 +2703,7 @@ def _run_track(
                 gmc=gmc_warp,
                 mid_thresh_scale=mid_thresh_scale,
             ),
-            sync_cuda=True,
+            sync_cuda=synchronize,
         )
     return tracker_result_buffers
 
@@ -2949,6 +3059,9 @@ def _launch_double_buffer_detect(
     frame_id: int,
     pool: Any,
     frame_gpu: torch.Tensor,
+    input_ready: "torch.cuda.Event",
+    ready_event: "torch.cuda.Event",
+    latency_started_at: float,
 ) -> PreparedDetection:
     """Queue detect(frame_id) on the side stream without blocking the host.
 
@@ -2956,17 +3069,18 @@ def _launch_double_buffer_detect(
     Until then it is free to run GMC/tracker/materialization for frame N-1.
     There is intentionally one outstanding detection: that preserves detector
     graph ownership while still providing the desired double-buffer overlap.
+
+    ``latency_started_at`` is captured by the caller *before* JPEG decode so the
+    reported per-frame latency is genuinely end-to-end (decode→detect→track→out).
     """
 
     stream = state.double_buffer_stream
     if stream is None:
         raise RuntimeError("double-buffer launch requested without a CUDA stream")
-    latency_started_at = time.perf_counter()
     # ``frame_gpu`` is produced on the caller's stream.  Establish an explicit
     # producer→detector dependency before the side stream reads it; PyTorch does
     # not infer ordering merely because both streams reference the same tensor.
     main_stream = torch.cuda.current_stream()
-    input_ready = torch.cuda.Event(enable_timing=False)
     input_ready.record(main_stream)
     with torch.cuda.stream(stream):
         stream.wait_event(input_ready)
@@ -2995,7 +3109,6 @@ def _launch_double_buffer_detect(
         source_keypoints = (
             source_keypoints.clone() if source_keypoints is not None else None
         )
-        ready_event = torch.cuda.Event(enable_timing=False)
         ready_event.record(stream)
 
     for tensor in (fused_boxes, fused_scores, fused_classes, source_keypoints):
@@ -4186,6 +4299,9 @@ def _run_frame(
         # This is the start of the measured pipeline interval, independently of
         # this frame's launch-to-output latency.
         state.throughput_started_at = time.perf_counter()
+    # ── flush deferred tracker output from the previous frame ────────────
+    if state.db_emit_frame_id > 0 and state.db_emit_event is not None:
+        _flush_db_tracker_out(state)
     # --- unpack pure-input fields ---
     _annotate_birth_events = state.annotate_birth_events
     _append_birth_event_rows = state.append_birth_event_rows
@@ -4289,7 +4405,10 @@ def _run_frame(
         frame_gpu = prepared_detection.frame_gpu
         t_frame_start = prepared_detection.latency_started_at
     if prepared_detection is None:
-        t_frame_start = time.perf_counter()
+        # End-to-end latency: clock from before decode/ingest (t_e2e_start),
+        # not after, so the reported latency includes JPEG decode and matches
+        # the wall-clock throughput period.
+        t_frame_start = t_e2e_start
 
     if getattr(cfg, "workbench", False) and wb is not None:
         _, _ = time_stage(
@@ -5214,14 +5333,48 @@ def _run_frame(
                 embeddings=embeddings,
                 mid_thresh_scale=mid_thresh_scale,
                 tracker_result_buffers=state.tracker_result_buffers,
+                synchronize=state.double_buffer_stream is None,
             )
-            track_results = _run_materialize(
-                state,
-                tracker_result_buffers=state.tracker_result_buffers,
-                embeddings=embeddings,
-                aligned_keypoints=aligned_keypoints,
-                frame_id=frame_id,
-            )
+            if (
+                state.double_buffer_stream is not None
+                and state.double_buffer_tracker_out_pinned
+            ):
+                parity = frame_id % 2
+                pinned = state.double_buffer_tracker_out_pinned[parity]
+                db_bufs = state.tracker_result_buffers
+                for key in ("boxes", "scores", "ids", "classes", "det_idx", "count"):
+                    pinned[key].copy_(db_bufs[key], non_blocking=True)
+                ev = state.double_buffer_tracker_out_events[parity]
+                ev.record()
+                state.double_buffer_tracker_out_fids[parity] = frame_id
+                state.db_emit_frame_id = frame_id
+                state.db_emit_event = ev
+                state.db_emit_parity = parity
+                state.db_emit_ctx = {
+                    "tracker_result_buffers": db_bufs,
+                    "fused_boxes": fused_boxes,
+                    "fused_scores": fused_scores,
+                    "fused_classes": fused_classes,
+                    "geometry_suspect_mask": geometry_suspect_mask,
+                    "embeddings": embeddings,
+                    "gmc_warp": state.gmc_warp,
+                }
+                track_results = {
+                    "count": 0,
+                    "boxes": torch.empty((0, 4)),
+                    "scores": torch.empty((0,)),
+                    "ids": torch.empty((0,), dtype=torch.int32),
+                    "classes": torch.empty((0,), dtype=torch.int32),
+                    "det_idx": torch.empty((0,), dtype=torch.int32),
+                }
+            else:
+                track_results = _run_materialize(
+                    state,
+                    tracker_result_buffers=state.tracker_result_buffers,
+                    embeddings=embeddings,
+                    aligned_keypoints=aligned_keypoints,
+                    frame_id=frame_id,
+                )
 
     if (
         aligned_keypoints is not None
@@ -5325,23 +5478,24 @@ def _run_frame(
                 for stale_id in set(lazy_reid_prev_embeddings.keys()) - seen_ids:
                     lazy_reid_prev_embeddings.pop(stale_id, None)
 
-    (
-        state.prev_track_ids,
-        _emit_lines,
-    ) = _run_emit(
-        state,
-        track_results=track_results,
-        tracker_result_buffers=state.tracker_result_buffers,
-        fused_boxes=fused_boxes,
-        fused_scores=fused_scores,
-        geometry_suspect_mask=geometry_suspect_mask,
-        embeddings=embeddings,
-        gmc_warp=state.gmc_warp,
-        frame_birth_events=frame_birth_events,
-        frame_id=frame_id,
-        prev_track_ids=state.prev_track_ids,
-    )
-    results_lines.extend(_emit_lines)
+    if state.double_buffer_stream is None:
+        (
+            state.prev_track_ids,
+            _emit_lines,
+        ) = _run_emit(
+            state,
+            track_results=track_results,
+            tracker_result_buffers=state.tracker_result_buffers,
+            fused_boxes=fused_boxes,
+            fused_scores=fused_scores,
+            geometry_suspect_mask=geometry_suspect_mask,
+            embeddings=embeddings,
+            gmc_warp=state.gmc_warp,
+            frame_birth_events=frame_birth_events,
+            frame_id=frame_id,
+            prev_track_ids=state.prev_track_ids,
+        )
+        results_lines.extend(_emit_lines)
 
     _record_frame_timing(state, latency_started_at=t_frame_start)
     if profile_stages and frame_id > warmup_frames:
@@ -5830,16 +5984,24 @@ def run_eval(
             print("  [double-buffer] detect(N+1) overlaps tracker(N) on a side stream")
 
             def _schedule(frame_id: int) -> PreparedDetection | None:
+                # Start the end-to-end latency clock before decode/ingest.
+                latency_started_at = time.perf_counter()
                 try:
                     frame_gpu = next(_seq_state.stream_iter)
                 except StopIteration:
                     return None
                 pool = _seq_state.double_buffer_pools[(frame_id - 1) % 2]
+                input_ready, ready_event = _seq_state.double_buffer_events[
+                    (frame_id - 1) % 2
+                ]
                 return _launch_double_buffer_detect(
                     _seq_state,
                     frame_id=frame_id,
                     pool=pool,
                     frame_gpu=frame_gpu,
+                    input_ready=input_ready,
+                    ready_event=ready_event,
+                    latency_started_at=latency_started_at,
                 )
 
             pending = _schedule(1)
@@ -5872,6 +6034,14 @@ def run_eval(
             )
             _seq_state.results_lines.extend(_lines)
             _seq_state.defer_emit_event = None
+
+        # Flush deferred double-buffer tracker output (last frame).
+        if (
+            _seq_state.double_buffer_stream is not None
+            and _seq_state.db_emit_frame_id > 0
+            and _seq_state.db_emit_event is not None
+        ):
+            _flush_db_tracker_out(_seq_state)
 
         # Flush any last background relink_write future before post-processing results.
         if _seq_state.bg_future is not None:
