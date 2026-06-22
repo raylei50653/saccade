@@ -32,7 +32,12 @@ from pathlib import Path
 
 
 def convert_video(
-    vid: str, zf: zipfile.ZipFile, anno_dir: Path, out_dir: Path, jpeg_q: int = 2
+    vid: str,
+    zf: zipfile.ZipFile,
+    anno_dir: Path,
+    out_dir: Path,
+    jpeg_q: int = 2,
+    keep_all_frames: bool = False,
 ) -> dict:
     anno = json.loads((anno_dir / f"{vid}.json").read_text())
     meta = anno["metadata"]
@@ -81,47 +86,66 @@ def convert_video(
             check=True,
         )
         decoded = sorted(int(p.stem) for p in frames_dir.glob("*.jpg"))
-        max_decoded = decoded[-1] if decoded else -1
+        decoded_set = set(decoded)
+
+        # out_index: real frame_idx (0-based) -> 1-based MOT frame number.
+        #   keyframe-only (default): renumber keyframes 1..N (keyframe = temporal
+        #     axis for the T3→T1 curriculum; sequence is dense/frame-adjacent).
+        #   keep_all_frames (eval): every decoded frame kept at its true index
+        #     (f+1), so the tracker runs on CONSECUTIVE frames (correct IoU/motion)
+        #     while GT exists only at keyframes — score with predictions filtered
+        #     to keyframes (see scripts/eval/score_keyframe_filtered.py).
+        if keep_all_frames:
+            out_index = {f: f + 1 for f in decoded}
+            frames_to_copy = decoded
+        else:
+            out_index = {f: rank[f] for f in keyframes if f in decoded_set}
+            frames_to_copy = [f for f in keyframes if f in decoded_set]
+
         w = h = None
-        kept_frames = 0
-        for f in keyframes:
+        for f in frames_to_copy:
             src_jpg = frames_dir / f"{f:06d}.jpg"
-            if not src_jpg.exists():
-                continue  # keyframe beyond decoded range (rare container mismatch)
-            shutil.copy(src_jpg, img_dir / f"{rank[f]:06d}.jpg")
-            kept_frames += 1
+            shutil.copy(src_jpg, img_dir / f"{out_index[f]:06d}.jpg")
             if w is None:
                 from PIL import Image
 
                 with Image.open(src_jpg) as im:
                     w, h = im.size
 
-    # 4. gt.txt (only keyframes actually extracted)
-    extracted = {f for f in keyframes if (img_dir / f"{rank[f]:06d}.jpg").exists()}
+    # 4. gt.txt — boxes at each keyframe's OUTPUT index (keyframes present in img1)
+    kf_extracted = sorted(f for f in keyframes if f in out_index)
     lines = []
-    for f in sorted(extracted):
+    for f in kf_extracted:
         for pid, bb in by_frame[f]:
             x, y, bw, bh = (round(v) for v in bb)
-            lines.append(f"{rank[f]},{id_map[pid]},{x},{y},{bw},{bh},1,1,1")
+            lines.append(f"{out_index[f]},{id_map[pid]},{x},{y},{bw},{bh},1,1,1")
     (seq_dir / "gt" / "gt.txt").write_text("\n".join(lines) + "\n")
 
-    # 5. seqinfo.ini (effective keyframe rate = fps * extracted/total_frames)
-    n = len(extracted)
-    # int — MOTChallenge seqinfo parsers (TrackEval) cast frameRate to int.
-    eff_fps = max(
-        1, round(float(meta["fps"]) * n / max(float(meta["number_of_frames"]), 1))
-    )
+    # 5. seqinfo.ini — int frameRate (TrackEval casts to int).
+    if keep_all_frames:
+        seq_len = len(frames_to_copy)
+        fps = max(1, round(float(meta["fps"])))  # true frame rate
+    else:
+        seq_len = len(kf_extracted)
+        # effective keyframe rate = fps * extracted/total_frames
+        fps = max(
+            1,
+            round(
+                float(meta["fps"]) * seq_len / max(float(meta["number_of_frames"]), 1)
+            ),
+        )
     (seq_dir / "seqinfo.ini").write_text(
         "[Sequence]\n"
-        f"name={vid}\nimDir=img1\nframeRate={eff_fps}\n"
-        f"seqLength={n}\nimWidth={w}\nimHeight={h}\nimExt=.jpg\n"
+        f"name={vid}\nimDir=img1\nframeRate={fps}\n"
+        f"seqLength={seq_len}\nimWidth={w}\nimHeight={h}\nimExt=.jpg\n"
     )
     return {
         "vid": vid,
-        "keyframes": n,
+        "keyframes": len(kf_extracted),
+        "seq_len": seq_len,
         "boxes": len(lines),
         "ids": len(id_map),
-        "decoded": max_decoded + 1,
+        "decoded": len(decoded),
         "json_frames": int(meta["number_of_frames"]),
     }
 
@@ -135,6 +159,15 @@ def main() -> None:
     ap.add_argument("--out-dir", required=True)
     ap.add_argument("--vids", nargs="*", default=None, help="subset (dry-run)")
     ap.add_argument("--jpeg-q", type=int, default=2)
+    ap.add_argument(
+        "--keep-all-frames",
+        action="store_true",
+        help="EVAL mode: keep every decoded frame at its true 1-based index (GT "
+        "only at keyframes) so the tracker runs on consecutive frames — correct "
+        "IoU/motion. Score with predictions filtered to keyframes "
+        "(scripts/eval/score_keyframe_filtered.py). Default off = keyframe-only "
+        "(renumbered, for the temporal training curriculum).",
+    )
     args = ap.parse_args()
 
     anno_dir = Path(args.anno_dir)
@@ -153,7 +186,9 @@ def main() -> None:
         targets = [v for v in targets if v in in_zip]
         print(f"[info] converting {len(targets)} videos -> {out_dir}")
         for i, vid in enumerate(targets, 1):
-            r = convert_video(vid, zf, anno_dir, out_dir, args.jpeg_q)
+            r = convert_video(
+                vid, zf, anno_dir, out_dir, args.jpeg_q, args.keep_all_frames
+            )
             print(f"[{i}/{len(targets)}] {r}")
 
 

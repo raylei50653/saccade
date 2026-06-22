@@ -196,11 +196,31 @@ dataloader 相容性已驗：`build_mot17_dataloader` 吃 `<root>/<split>/<seq>/
 > 只丟掉純 `reflection`（樣本中 21 個，本就該丟）。crowd/遮擋/背景的人**沒被濾掉**。corr(密度,recall) −0.45 是
 > 偵測器對密集小目標的真實能力上限，不是標註缺失。
 
+### 稀疏 keyframe 標註的影響（2026-06-23 實測）
+
+PP22 時間上稀疏（~21%、每~5 幀），但**被標的那張幀內是窮舉的**（密集場景一張 95 框）→ **per-frame
+偵測 recall/precision 量得準**，DetA 主結論不受影響。問題只在：converter 預設把 keyframe 重編號成連續，
+tracker 每步跳~5 真實幀。
+
+加 `--keep-all-frames`（tracker 跑全幀、GT 只在真實 keyframe 索引）+ `score_keyframe_filtered.py`
+（把非 keyframe 預測濾掉再評，否則 raw Prcn 14%↘FP 灌爆）實測 MOT17-model 全 74 條：
+
+| MOT17→PP22 | keyframe-only | all-frames+filtered | Δ |
+|---|---:|---:|---:|
+| DetA / Rcll / MOTA | 29.9 / 41.5 / 22.9 | **33.6 / 46.0 / 29.7** | **+3.7 / +4.5 / +6.8** |
+| IDF1 / AssA | 39.1 / 37.0 | 38.1 / 33.9 | −1.0 / −3.1 |
+
+**結論（更正先前「稀疏低估 AssA/IDF1」的過慮）**：稀疏 keyframe 壓低的是 **recall / MOTA**（tracker 要連中
+3 個 keyframe=15 真實幀才 confirm；連續幀 3 幀就 confirm + Kalman 撐過遮擋）→ **不是關聯**（AssA 反小跌、
+IDF1 ~平、IDs/seq ≈ MOT17 同級不灌水）。∴ **2×2 矩陣的 IDF1/AssA 站得住**；被低估的是 PP22 欄的 recall/MOTA。
+跨域結論不變：MOT17 模型 DetA 70.9→33.6（−37）懸崖、PP22 模型穩。
+
 ### 復現
 
 - pipeline：`scripts/train/temporal_yolo/run_pp22_heldout_e30.sh`（teacher e30 → cache → distill → GT1 → T3 → T1）
 - eval（真 held-out）：`mot17.py --preset mamba_pyt_backbone --detector SDP --mamba-ckpt runs/mamba_gt_pp22_t3_t1_e30/best.ckpt --mamba-teacher-ckpt runs/gated_det_pp22/best.ckpt`
 - PP22 in-domain：先 `personpath22_to_mot.py --split test --out-dir datasets/PersonPath22/mot_test`，再 eval `--data-root datasets/PersonPath22 --split mot_test --sequences <...>`
+- PP22 乾淨關聯（all-frames）：`personpath22_to_mot.py --split test --keep-all-frames --out-dir .../mot_test_kf` → 跑 tracker → `score_keyframe_filtered.py --results-dir <out> --data-root datasets/PersonPath22 --split mot_test_kf`（濾掉非 keyframe 預測再評）
 
 ---
 
