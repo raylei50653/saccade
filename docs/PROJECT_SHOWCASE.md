@@ -18,8 +18,17 @@ ablation 與訊號可分性分析淘汰無效方案，再保留能同時改善�
 
 現行 `mamba_whole_graph` preset 在 MOT17 train / SDP 的七個 sequence 內部評測取得
 HOTA **70.2**、IDF1 **78.2**、MOTA **78.4**、AssA **69.7**、413 IDs 與 **269.47
-Eval FPS**；此結果是 in-domain train evaluation，**不是** MOTChallenge test-server
-排行榜成績。
+Eval FPS**。
+
+> **⚠️ 數字邊界（必讀，見 [Limitations](#專題範圍與誠實邊界)）**：detection head 的訓練資料
+> **涵蓋這同一批 7 個評測序列（in-sample / 全吃）**，因此 **78.2 是 training-set 表現，
+> 系統性高估泛化能力，不是 held-out 成績，更不是 MOTChallenge test-server 排行榜成績。**
+> 本專題**可主張的核心不是這個絕對值**，而是 **tracker 在固定 detector 上回收的貢獻**
+> （bare → full：IDF1 **+6.8** / AssA **+7.3** / IDs −53%）與 **per-mechanism 訊號可分性
+> 歸因**——這些 delta 因 tracker 無在評測序列上訓練的權重，leakage 遠輕於絕對值
+> （殘留為超參數在同序列上 sweep,亦於 Limitations 揭露）。**leakage-free 泛化數字已補上：
+> PersonPath22-trained / MOT17-tested held-out = IDF1 50.2**（vs in-sample 78.2）；該實驗並反證
+> 「域差」假說、指出真瓶頸是偵測器 recall（見 [held-out plan](modules/detection/research/holdout_generalization_plan.md)）。
 
 ## 專題要解決的問題
 
@@ -226,6 +235,7 @@ long-term memory、事件觸發 RAG，以及依 VRAM 水位進行 NORMAL → RED
 | 指標 | 值 |
 |---|---:|
 | 評測資料 | MOT17 train / SDP，七個 sequence，GT-weighted internal evaluation |
+| ⚠️ leakage | **detection head + teacher + cache 全部在這 7 個序列上訓練（in-sample）→ 此為 training-set 表現，非泛化、非 held-out**；**leakage-free held-out（PersonPath22-trained）= IDF1 50.2**，見 [held-out 計畫](modules/detection/research/holdout_generalization_plan.md) |
 | HOTA | **70.2** |
 | IDF1 | **78.2** |
 | MOTA | **78.4** |
@@ -386,18 +396,35 @@ metrics artifact；不要在口試現場首次 build TensorRT engine。
 | 為何不用 ReID？ | 不是沒有實作，而是在 GMC 開啟的此資料設定中，Appearance Bank 零增益且 FPS −17.3；因此 headline 選擇 ReID-free。 |
 | 269 FPS 是否等於 3.71 ms？ | 不可直接換算。`--double-buffer` 使工作重疊，Eval throughput 與單幀 latency 是不同量測；須附帶 protocol。 |
 | 結果是否可和公開 leaderboard 比？ | 不可直接比。結果是 MOT17 train/SDP 的 internal evaluation，未送官方 test server。 |
+| 78.2 是泛化成績嗎？ | **不是。** detection head + teacher + feature cache 全部在這同一批 7 個序列上訓練，故 78.2 是 training-set（in-sample）表現，系統性高估泛化。可主張的核心是 **tracker 在固定 detector 上的貢獻 delta**（+6.8 IDF1，無在評測序列上訓練的權重，leakage 輕）；leakage-free 的 detector 泛化數字已實測：全鏈在 PersonPath22 訓練、MOT17 完全不進訓練 → **held-out IDF1 50.2**（且實驗反證域差、指出瓶頸為偵測器 recall），見 [held-out plan](modules/detection/research/holdout_generalization_plan.md) §6。 |
 | 為何不持續加入更多 tracker heuristic？ | 每個候選先看 AUC／候選攔截率／逐序列影響；NO-GO registry 已證明許多直覺模組會傷 recall 或只在單一 sequence 有效。 |
 | 外圍 RAG 是否干擾即時追蹤？ | 不會作為主路徑依賴。它由 Redis/Chroma 異步連接，資源層在 FAST_PATH／EMERGENCY 時可跳過慢路徑。 |
 
 ## 專題範圍與誠實邊界
 
-應明確把範圍切成三層：
+**⚠️ 首要誠實邊界 — train/eval leakage：** detection head、gated teacher（MOT17-finetuned
+YOLO backbone）與 feature cache **全部在這同一批 7 個評測序列上訓練**，因此 78.2 / 70.2 等
+**絕對指標是 training-set（in-sample）表現，系統性高估泛化，不是 held-out、更非 test-server
+成績**。主動揭露這點是方法論誠信的一部分，不是弱點。應對方式：
+- **可主張的核心改以 tracker 貢獻 delta 表述**（bare → full：IDF1 +6.8 / AssA +7.3 / IDs −53%）。
+  tracker（GMC / bridge / occ-gate / OAO）無在評測序列上訓練的權重，配置間的 delta leakage 遠輕於
+  絕對值；殘留為其常數在同序列上 sweep（超參數 leakage，較輕，一併揭露）。最 leakage-robust 的
+  是 per-mechanism 訊號可分性（AUC）歸因。
+- **leakage-free 的 detector 泛化數字已實測**（2026-06-22）：全鏈在 **PersonPath22** 訓練、MOT17 完全
+  不進訓練 → **held-out IDF1 50.2 / HOTA 42.7 / AssA 46.6**（vs in-sample 78.2，−28pp = head 洩漏 −14
+  + backbone 洩漏 −14）。三個歸因實驗的收穫：(a) **association 增強會 transfer**（GMC-only vs full 僅
+  −1.2 IDF1，relink/OAO/stability 在沒看過的域仍 +2.8 AssA → 非 MOT17 過擬合）；(b) **PP22 in-domain
+  test 反證域差假說**（自己的域 recall 42.8% 反而 < MOT17 cross 53.5%）→ 真瓶頸是**偵測器 recall 弱**
+  （sparse keyframe + lr-yolo 太小、LR schedule 把學習掐死），不是域 / tracker / 訓練長度。詳見
+  [held-out generalization plan](modules/detection/research/holdout_generalization_plan.md) §6。
+
+接著把其餘範圍切成三層：
 
 1. **要答辯的核心**：SSM-FPN head、GPUByteTracker、GMC、association、occlusion、bridge
    relink、端到端 GPU runtime。
 2. **展示系統能力**：RTSP/DALI、Redis/Chroma、API、cognition、VRAM degradation。
-3. **不該過度主張**：跨攝影機 long-term ReID、官方 MOTChallenge 排名、任意硬體上相同
-   FPS，以及歷史實驗數字可直接代表現行 preset。
+3. **不該過度主張**：**把 in-sample 78.2 當泛化/SOTA-adjacent 成績**、跨攝影機 long-term ReID、
+   官方 MOTChallenge 排名、任意硬體上相同 FPS，以及歷史實驗數字可直接代表現行 preset。
 
 目前最大的風險不是技術深度不足，而是內容過多導致主貢獻失焦。報告與簡報的篇幅建議
 約 55% tracker/recovery、25% SSM-FPN、15% GPU runtime、5% 外圍部署；所有其他實驗

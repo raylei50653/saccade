@@ -42,7 +42,7 @@ single-frame  (latency-optimized)   : 144 FPS   | mean 6.34 ms/frame | p99 ~7.8 
 IDF1 78.2 | MOTA 78.4 | HOTA 70.2 | DetA 70.9 | AssA 69.7
 IDs 413   | Prcn 97.2 | Rcll 81.0
 ```
-表述:內部 MOT17 train/SDP 設定下達接近公開 SOTA tracker 量級,且具極低 E2E 延遲。**不喊 official SOTA**(未送 MOTChallenge server)。
+表述:內部 MOT17 train/SDP 設定下達接近公開 SOTA tracker 量級,且具極低 E2E 延遲。**不喊 official SOTA**(未送 MOTChallenge server)。**⚠️ 且為 in-sample**:detection head + teacher + cache 全在這 7 序列上訓練,78.2 是 training-set 表現非泛化;可主張核心改以 tracker delta(bare→full +6.8 IDF1),leakage-free 數字見 [held-out plan](../modules/detection/research/holdout_generalization_plan.md)。
 
 ### Showcase:MOT17-04
 ```

@@ -24,6 +24,8 @@
 
 `78.2` 與 `ex-04 67.8` 的 ~10 分落差全來自 MOT17-04 一條（占 ~42% GT 權重）；雙軌並列是誠信要求，04 是 showcase 非 headline。
 
+> ⚠️ **leakage：這些是 in-sample（training-set）絕對值。** detection head + teacher + cache 全在這 7 序列上訓練 → 高估泛化。本文件的**累積消融 delta（§2-§3）leakage 輕**（tracker 無在評測序列上訓練的權重），是更可主張的部分；leakage-free 的 detector 泛化數字見 [held-out plan](../../modules/detection/research/holdout_generalization_plan.md)。
+
 ### Per-sequence（`frozen_v2`）
 
 | Seq | HOTA | AssA | IDF1 |

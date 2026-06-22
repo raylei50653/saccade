@@ -52,6 +52,7 @@ class MOT17TemporalClip(
         load_images: bool = True,
         use_letterbox: bool = False,
         detail_size: tuple[int, int] | None = None,
+        augment: bool = False,
     ):
         self.data_root = Path(data_root)
         self.split = split
@@ -61,6 +62,11 @@ class MOT17TemporalClip(
         self.use_letterbox = use_letterbox
         self.detail_size = detail_size
         self.load_images = load_images
+        # Strategy B: clip-consistent geometric+photometric augmentation. One
+        # random transform is drawn per clip and applied identically to every
+        # frame, so temporal continuity (and ID correspondence) is preserved.
+        # Default off → bit-exact with the un-augmented loader.
+        self.augment = augment
         if not load_images and detail_size is not None:
             raise ValueError("detail_size requires load_images=True")
 
@@ -300,6 +306,11 @@ class MOT17TemporalClip(
             gt_ids_list.append(gt[1])
             fids.append(frame_id)
 
+        if self.augment and frames_list:
+            frames_list, gt_boxes_list, gt_ids_list = _augment_clip(
+                frames_list, gt_boxes_list, gt_ids_list, self.img_size
+            )
+
         sample: dict[str, torch.Tensor | list[torch.Tensor] | list[int] | str] = {
             "frames": (
                 torch.stack(frames_list)
@@ -315,6 +326,88 @@ class MOT17TemporalClip(
             sample["detail_frames"] = torch.stack(detail_frames_list)
             sample["detail_valid_hw"] = torch.stack(detail_valid_hw_list)
         return sample
+
+
+def _augment_clip(
+    frames_list: list[torch.Tensor],
+    gt_boxes_list: list[torch.Tensor],
+    gt_ids_list: list[torch.Tensor],
+    img_size: int,
+    *,
+    scale_range: tuple[float, float] = (0.8, 1.2),
+    translate_frac: float = 0.1,
+    hflip_p: float = 0.5,
+    brightness: float = 0.2,
+    contrast: float = 0.2,
+) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
+    """Apply ONE random transform to every frame of a clip (temporal-consistent).
+
+    Geometric (shared across the clip so GT identities stay aligned): horizontal
+    flip + isotropic scale + translation. Photometric: brightness/contrast jitter.
+    Boxes are transformed identically; boxes that leave the frame or collapse to
+    <1px are dropped together with their IDs. Frames are the square (3, S, S)
+    canvas produced by the loader (S = img_size). Strategy B (small/scale robustness).
+    """
+    import random
+
+    H = W = img_size
+    do_flip = random.random() < hflip_p
+    s = random.uniform(*scale_range)
+    max_t = translate_frac * img_size
+    tx = random.uniform(-max_t, max_t)
+    ty = random.uniform(-max_t, max_t)
+    bright = 1.0 + random.uniform(-brightness, brightness)
+    cont = 1.0 + random.uniform(-contrast, contrast)
+    cx = cy = (img_size - 1) / 2.0
+
+    # Resampling grid: output(xo,yo) reads input at xi=(xo-cx-tx)/s+cx (inverse of
+    # the forward box map below). align_corners=True matches the /(S-1)*2-1 norm.
+    ys, xs = torch.meshgrid(
+        torch.arange(H, dtype=torch.float32),
+        torch.arange(W, dtype=torch.float32),
+        indexing="ij",
+    )
+    xi = (xs - cx - tx) / s + cx
+    yi = (ys - cy - ty) / s + cy
+    gx = xi / (W - 1) * 2 - 1
+    gy = yi / (H - 1) * 2 - 1
+    grid = torch.stack([gx, gy], dim=-1).unsqueeze(0)  # (1, H, W, 2)
+
+    out_frames: list[torch.Tensor] = []
+    out_boxes: list[torch.Tensor] = []
+    out_ids: list[torch.Tensor] = []
+    for img, boxes, ids in zip(frames_list, gt_boxes_list, gt_ids_list):
+        f = torch.nn.functional.grid_sample(
+            img.float().unsqueeze(0),
+            grid,
+            mode="bilinear",
+            padding_mode="zeros",
+            align_corners=True,
+        ).squeeze(0)
+        if do_flip:
+            f = torch.flip(f, dims=[-1])
+        mean = f.mean(dim=(1, 2), keepdim=True)
+        f = ((f - mean) * cont + mean * bright).clamp(0, 255).to(torch.uint8)
+        out_frames.append(f)
+
+        if boxes.numel() > 0:
+            b = boxes.clone().float()
+            # forward box map: out = s*(in - c) + c + t  (inverse of grid above)
+            b[:, [0, 2]] = s * (b[:, [0, 2]] - cx) + cx + tx
+            b[:, [1, 3]] = s * (b[:, [1, 3]] - cy) + cy + ty
+            if do_flip:
+                x1 = W - b[:, 2].clone()
+                x2 = W - b[:, 0].clone()
+                b[:, 0], b[:, 2] = x1, x2
+            b[:, [0, 2]] = b[:, [0, 2]].clamp(0, W)
+            b[:, [1, 3]] = b[:, [1, 3]].clamp(0, H)
+            keep = (b[:, 2] - b[:, 0] > 1) & (b[:, 3] - b[:, 1] > 1)
+            out_boxes.append(b[keep])
+            out_ids.append(ids[keep])
+        else:
+            out_boxes.append(boxes)
+            out_ids.append(ids)
+    return out_frames, out_boxes, out_ids
 
 
 def _load_and_resize(
@@ -412,6 +505,8 @@ def build_mot17_dataloader(
     use_letterbox: bool = False,
     detail_size: tuple[int, int] | None = None,
     seed: int | None = None,
+    augment: bool = False,
+    balance_by_seq: bool = False,
 ) -> DataLoader[dict[str, object]]:
     dataset = MOT17TemporalClip(
         data_root=data_root,
@@ -425,8 +520,28 @@ def build_mot17_dataloader(
         load_images=load_images,
         use_letterbox=use_letterbox,
         detail_size=detail_size,
+        augment=augment,
     )
     print(f"[Dataset] {len(dataset)} clips from {len(dataset.sequences)} sequences")
+
+    # Strategy B: scene-balanced sampling. With many scenes of wildly different
+    # clip counts (PersonPath22 densities 13–96 boxes/frame), uniform shuffling
+    # lets a few long/dense sequences dominate a batch. Weight each clip by the
+    # inverse of its sequence's clip count so every scene is seen ~equally.
+    sampler = None
+    if balance_by_seq:
+        from collections import Counter
+
+        seq_of = [c[0] for c in dataset._clips]  # (seq, start) per clip
+        counts = Counter(seq_of)
+        weights = torch.tensor([1.0 / counts[s] for s in seq_of], dtype=torch.double)
+        g = torch.Generator()
+        if seed is not None:
+            g.manual_seed(seed)
+        sampler = torch.utils.data.WeightedRandomSampler(
+            weights, num_samples=len(dataset), replacement=True, generator=g
+        )
+        shuffle = False  # mutually exclusive with a sampler
     # num_workers > 0 with multiprocessing_context='spawn': avoids CUDA fork deadlock
     # (spawn starts fresh processes without inheriting the parent's CUDA context).
     # persistent_workers=True keeps workers alive between epochs to avoid re-init overhead.
@@ -439,7 +554,8 @@ def build_mot17_dataloader(
     return DataLoader(
         dataset,  # type: ignore[arg-type]
         batch_size=batch_size,
-        shuffle=shuffle,
+        shuffle=shuffle if sampler is None else False,
+        sampler=sampler,
         num_workers=num_workers,
         collate_fn=collate_fn,
         pin_memory=num_workers > 0,
