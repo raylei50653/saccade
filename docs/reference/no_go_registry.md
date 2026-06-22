@@ -2,7 +2,13 @@
 
 > **用途**：跨模組「已結案/已踩雷方向」總覽，避免重複探索。每列只記結論一行，數據細節以對應模組的 `research/` 或 `decisions/` ADR 為準。
 > 彙整自 `decisions/`、`modules/*/README.md`、`archive/`、`reference/PIPELINE_REFERENCE.md`、`TODO.md`（路徑相對 `docs/`）。
-> 最後更新：2026-06-20
+> 最後更新：2026-06-21
+
+> **🛑 專案狀態（2026-06-21）：B 線（衝 80 IDF1 支線）已停損結案。** 衝刺三類嘗試
+> （per-seq error budget / safe recall / association NO-GO revival）皆撞 appearance / 長 gap
+> ReID 牆 —— 見 #3 / #6 / #23 / #33，以及 fpn-relink（registry #47：raw backbone 特徵無個體
+> 區分力，relink revive 越多 IDF1 越低）。**`frozen_v2`（IDF1 78.2 / HOTA 70.2）即 final headline**，
+> 不再開新研究方向；本登記表作為專案資產保留，供未來有新模態（真 appearance 訊號源）時重啟參照。
 
 **死因分類**（中性結案前必須回答：訊號不存在，還是被遮蔽？）：
 
@@ -130,7 +136,7 @@
 | 模組 | 狀態 | 貢獻 |
 |------|------|------|
 | **GPU GMC** (phase correlation) | ✅ default ON | IDF1 +2.8pp, IDs −133 |
-| **Option F / Mamba Whole-Graph** | ✅ production preset | 現行 headline preset 為 `mamba_whole_graph`（native_640, ReID off）：IDF1 77.6 / MOTA 78.3 / HOTA 69.9 / AssA 69.1 / IDs 430 / 221.59 FPS |
+| **Option F / Mamba Whole-Graph** | ✅ production preset | 現行 headline preset 為 `mamba_whole_graph`（native_640, ReID off）：IDF1 78.2 / MOTA 78.4 / HOTA 70.2 / AssA 69.7 / IDs 413 / 269.47 FPS（`frozen_v2`, 2026-06-21） |
 | **GPUByteTracker + Sinkhorn-Auction** | ✅ default ON | 關聯延遲 0.67ms (10x 提升) |
 | **Async ReID** | ✅ legacy speed feature | 舊 pipeline speed optimization；現行 headline baseline ReID off |
 | **Pipeline Relink** | ✅ legacy speed feature | 舊 pipeline speed optimization；accuracy headline 由 GPU 雙向橋接 relink / tracker path 決定 |

@@ -235,7 +235,7 @@ Frozen run recorded in [ADR 018](decisions/018-project-main-line-direction.md):
 
 | Preset | IDF1 | MOTA | HOTA | DetA | AssA | IDs | Rcll | Prcn | Eval FPS |
 |:--|--:|--:|--:|--:|--:|--:|--:|--:|--:|
-| `mamba_whole_graph` | **77.6** | **78.3** | **69.9** | **70.8** | **69.1** | **430** | **80.8** | **97.4** | **221.59** |
+| `mamba_whole_graph` | **78.2** | **78.4** | **70.2** | **70.9** | **69.7** | **413** | **81.0** | **97.2** | **269.47** |
 
 Do not compare that FPS directly to older `native_960` profiling tables unless
 the measurement protocol is named. Older tables may include profiling sync,
