@@ -21,6 +21,7 @@ SEQS="$(paste -sd, datasets/PersonPath22/train_seqs.txt)"
     --lr-gate 1e-3 --lr-yolo 1e-4 --gt-ratio 0.5 --seed 20260612 \
     --warmup-epochs 5 --min-lr-ratio 0.1 \
     --augment --balance-by-seq \
+    --num-workers 16 \
     --save-every 1 --best-by train-loss --seqs "$SEQS"
 
 # Then rebuild the downstream chain on the new teacher (own cache dir):

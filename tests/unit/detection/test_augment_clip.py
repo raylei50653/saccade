@@ -114,6 +114,32 @@ def test_out_of_frame_box_dropped_with_id():
     assert ob[0].shape[0] <= 2
 
 
+def test_no_clip_keeps_out_of_frame_coords():
+    """No-clip convention: a box running past the frame edge keeps its un-clamped
+    coordinates (matching the un-augmented loader + MOT17 GT), as long as it stays
+    visible. The old code clamped to [0, S], teaching edge people as truncated boxes.
+    """
+    S = 64
+    img = torch.zeros(3, S, S, dtype=torch.uint8)
+    boxes = torch.tensor([[-5.0, 10, 5, 20]])  # x1 is 5px left of the frame edge
+    ids = torch.tensor([3])
+    # identity transform (deterministic): box must come back unchanged, NOT clamped
+    of, ob, oi = _augment_clip(
+        [img],
+        [boxes],
+        [ids],
+        S,
+        scale_range=(1.0, 1.0),
+        translate_frac=0.0,
+        hflip_p=0.0,
+        brightness=0.0,
+        contrast=0.0,
+    )
+    assert ob[0].shape[0] == 1  # kept (5px visible), not dropped
+    assert torch.allclose(ob[0][0], boxes[0], atol=1e-4)  # coords un-clamped
+    assert ob[0][0, 0].item() < 0  # x1 stays negative
+
+
 def test_frames_stay_uint8_and_shaped():
     frames, boxes, ids = _clip()
     of, ob, oi = _augment_clip(frames, boxes, ids, 64)

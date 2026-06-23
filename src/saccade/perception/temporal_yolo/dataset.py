@@ -399,9 +399,18 @@ def _augment_clip(
                 x1 = W - b[:, 2].clone()
                 x2 = W - b[:, 0].clone()
                 b[:, 0], b[:, 2] = x1, x2
-            b[:, [0, 2]] = b[:, [0, 2]].clamp(0, W)
-            b[:, [1, 3]] = b[:, [1, 3]].clamp(0, H)
-            keep = (b[:, 2] - b[:, 0] > 1) & (b[:, 3] - b[:, 1] > 1)
+            # No-clip convention: the un-augmented loader (above) and MOT17 GT both
+            # keep boxes that run past the frame edge un-clamped, and the detector is
+            # trained/deployed on that convention. Decide visibility from the clipped
+            # extent (drop a box only when <1px stays on-canvas after scale/translate
+            # pushes it off), but keep the UN-clamped coordinates as the regression
+            # target — so an edge person is not taught as a truncated-at-edge box.
+            # Clamping here was inconsistent with the rest of the pipeline and, with
+            # scale<1 + translate pushing objects edge-ward, actively undercut the
+            # small/scale-robustness goal of this augmentation.
+            vis_w = b[:, [0, 2]].clamp(0, W)
+            vis_h = b[:, [1, 3]].clamp(0, H)
+            keep = (vis_w[:, 1] - vis_w[:, 0] > 1) & (vis_h[:, 1] - vis_h[:, 0] > 1)
             out_boxes.append(b[keep])
             out_ids.append(ids[keep])
         else:
