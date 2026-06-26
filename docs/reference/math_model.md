@@ -30,6 +30,12 @@ frame 灰階影像（+ 上一幀），**不是** detect 的輸出。`track` 才�
 
 > 圖檔：[math_model_architecture.png](math_model_architecture.png)（GitHub 可渲染）／
 > 可縮放原始檔 [math_model_architecture.svg](math_model_architecture.svg)。
+>
+> Detector 細部補充圖：[yolo_model_architecture.svg](yolo_model_architecture.svg)。
+> 它是上圖 detect 鏈（`TRT backbone engine → Mamba head → postprocess decode/NMS`）
+> 的放大版，不取代整體系統架構圖。
+
+![YOLO detector detail supplement](yolo_model_architecture.svg)
 
 文字版（同一架構）：
 
@@ -299,6 +305,107 @@ Tracker state：
 ---
 
 ## 4. Detection 與 Postprocess 模型
+
+detect 鏈分兩段：detector（TRT backbone + Mamba head，§4.1，輸出 raw
+boxes/scores/classes）與 native postprocess（§4.2，過濾/NMS）。兩段都在
+whole-detect CUDA graph 內單次 replay（§1）。
+
+### 4.1 Detector 內部結構（FPN → Mamba head → Decode）
+
+放大圖見 [yolo_model_architecture.svg](yolo_model_architecture.svg)（高層模組地圖）；
+這裡用幾個小流程圖把每一段拆開看。**總覽**：
+
+```text
+frame 640×640
+   │
+[TRT backbone + neck]              YOLO26s TensorRT engine
+   │  FPN 特徵 F_3, F_4, F_5
+[Mamba head]   repeat lane ×(P3,P4,P5)    Flow B
+   │  cls_N, reg_N（per level，raw）
+[Decode]                          anchor-free dist2bbox + sigmoid，Flow D
+   │
+[filter + NMS]                    C++ postprocess，§4.2
+   │
+boxes / scores / classes
+```
+
+P3/P4/P5 三條 lane 結構**完全相同**，只差尺度常數；先把參數收進一張表，後面流程
+只畫一次（輸入固定 640，§1 `tiling: native_640`）：
+
+| level `N` | stride `s_N` | `H_N = W_N = 640/s_N` | backbone 通道 `C_N` | token 數 `L_N = (H_N/4)²` |
+|:--|:--|:--|:--|:--|
+| P3 | 8 | 80 | 128 | 400 |
+| P4 | 16 | 40 | 256 | 100 |
+| P5 | 32 | 20 | 512 | 25 |
+
+（`s_N = 2^N`、`C_N = 2^(N+4)`；源 `in_channels=(128,256,512)`、`strides=(8,16,32)`，
+[mamba_head.py](../../src/saccade/perception/temporal_yolo/mamba_head.py):1177/1225。）
+
+**Flow B — 單一 lane 內部（`d_model=128`, `spatial_reduction=4`, `num_blocks=2`,
+`d_state=16`，源 mamba_head.py:1220–1226）。** 重點是 U-Net 式的 skip：`X_N` 一邊
+進 down→Mamba→up，一邊**跳接**直接和 `U_N` concat，所以 head 輸入是 256 ch：
+
+```text
+F_N : C_N×H_N×W_N
+   │
+[Conv1x1]  input_proj, C_N→128
+   │
+   X_N : 128×H_N×W_N ───────────────────────┐  skip
+   │                                         │
+[Down4]  stride-4 conv → 128×(H_N/4)×(W_N/4) │
+   │                                         │
+[flatten]  → Z_N : L_N tokens × 128          │
+   │                                         │
+[MambaBlock] ┐                               │
+[MambaBlock] ┘ ×2   (SSM, d_state=16)        │
+   │                                         │
+[Up4]  上採樣 ×4 → U_N : 128×H_N×W_N         │
+   │                                         │
+   └────────────► concat ◄───────────────────┘
+                    │
+                  Y_N : 256×H_N×W_N   （→ Flow C）
+```
+
+先 `Down4` 把 SSM 序列壓到 `L_N ≤ 400`（控 scan 成本，coarse grid 仍保 long-range
+依賴），上採樣後再和未壓縮的 `X_N` concat 把細節補回（mamba_head.py:1208–1211）。
+
+**Flow C — Head（per level，純卷積，無 Mamba；mamba_head.py:1365–1385）。**
+
+```text
+Y_N : 256×H_N×W_N
+   ├─[cls head]  Conv3x3 256→128 → SiLU → Conv1x1 128→80  → cls_N : 80×H_N×W_N
+   └─[reg head]  Conv3x3 256→128 → SiLU → Conv1x1 128→4   → reg_N :  4×H_N×W_N
+```
+
+輸出通道 `no = nc + 4·reg_max = 80 + 4 = 84`（`reg_max=1`，box 直接是 4 維距離，
+無 DFL softmax；mamba_head.py:1258）。
+
+**Flow D — Decode（anchor-free，跨三尺度合併；
+[mamba_gated_detector.cpp](../../src/perception/mamba_gated_detector.cpp):158
+`decode_feats`）。**
+
+```text
+cls_N (80×H_N×W_N), reg_N (4×H_N×W_N)   for N∈{3,4,5}
+   │  flatten(2) + concat over levels
+   ▼
+cls_all : 80×N , reg_all : 4×N          N = 80²+40²+20² = 8400 anchors
+   │
+   │  anchor = grid 中心 (x+0.5, y+0.5)，每點帶 stride 8/16/32
+   ▼
+reg=(lt,rb) ─dist2bbox→ c=anchor+(rb−lt)/2, wh=lt+rb ─×stride→ xyxy（像素）
+cls ─sigmoid→ max over 80 類 → score, class_id（argmax）
+   │
+   ▼
+conf filter (score≥conf_thr 且 w,h>0) → NMS(IoU≥nms_thr)   （§4.2）
+   ▼
+boxes / scores / classes
+```
+
+> baseline 的 frozen Mamba head checkpoint 是
+> `runs/mamba_gt_v14replica_t3_t1/best.ckpt`（§1）；ReID embedding 支線
+> `emb_dim=0`（off），故 head 只出 cls/reg 兩支。
+
+### 4.2 Postprocess Contract
 
 Detector 輸出 raw boxes、scores、classes。Native postprocess 由
 [PerceptionPipeline](../../include/tracking/pipeline.hpp) 提供，C++ implementation
