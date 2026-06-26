@@ -4,7 +4,7 @@
 > 目的：把現行 in-sample headline（`frozen_v2`, IDF1 78.2）換成一個**leakage-free + 非過擬合**的
 > 泛化數字。設計：**在大且多樣的 PersonPath22 上訓練，在從未見過的 MOT17 上測試**。
 > 依據：[v14-R training protocol](../mamba-v14r-training-protocol.md)、[v14 replication](../mamba-v14-replication-protocol.md)、
-> [T3→T1 curriculum](research/mamba-t3t1-curriculum-20260613.md)。
+> [T3→T1 curriculum](mamba-t3t1-curriculum-20260613.md)。
 
 ---
 
