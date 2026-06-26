@@ -49,6 +49,8 @@ assets/videos/*.mp4
 *.diff
 debug_*.py
 .codex
+scratch/*.nohup
+scratch/*_sweep.txt
 
 # LLM Quantization temporary files
 *.gguf.tmp
