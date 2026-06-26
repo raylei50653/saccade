@@ -67,3 +67,10 @@ void selective_scan_bwd(
     void* stream = nullptr
 );
 
+// Broadcast a rank-1-in-the-last-dim C tensor (shape (B, L, 1)) out to
+// (B, L, N) so the selective_scan kernels (which expect full N) read the
+// same value for every state n.  Used by the SelectiveScan TRT plugin when
+// loading legacy checkpoints with c_rank=1.  Launchers are async on `stream`.
+void broadcast_C_float(const float* c_in, float* c_out, int B, int L, int N, void* stream);
+void broadcast_C_half(const void* c_in, void* c_out, int B, int L, int N, void* stream);
+

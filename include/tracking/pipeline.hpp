@@ -75,6 +75,11 @@ public:
     PerceptionPipeline(FeatureExtractor* reid, Cropper* cropper, Config cfg);
     ~PerceptionPipeline();
 
+    PerceptionPipeline(const PerceptionPipeline&) = delete;
+    PerceptionPipeline& operator=(const PerceptionPipeline&) = delete;
+    PerceptionPipeline(PerceptionPipeline&&) = delete;
+    PerceptionPipeline& operator=(PerceptionPipeline&&) = delete;
+
     /**
      * @brief Filter + NMS on flat detection arrays already on GPU.
      *
@@ -149,17 +154,20 @@ public:
         cudaStream_t stream);
 
     /**
-     * @brief Sync-free variant of process_detections_n.
+     * @brief Near-sync-free variant of process_detections_n.
      *
-     * Runs the same filter + NMS pipeline but skips both D2H count syncs
-     * (filter_count path-selection and final n_post read).  Output buffers
-     * are always n_in elements: valid detections are compacted to the front,
-     * remaining slots are zero-padded by the gather kernels.  Returns n_in
-     * (the raw input count) so the caller can use a fixed-size tensor.
+     * Runs the same filter + NMS pipeline and skips only the final n_post
+     * D2H read, returning n_in (the raw input count) instead of the actual
+     * post-NMS count.  NOTE: process_detections_into still performs one
+     * filter_count D2H sync internally to select the small/large NMS path,
+     * so this is NOT fully sync-free — use process_detections_graph() for a
+     * truly sync-free (graph-capturable) path.
+     *
+     * Output buffers are always n_in elements: valid detections are compacted
+     * to the front, remaining slots are zero-padded by the gather kernels.
      *
      * Callers MUST NOT slice output by the returned count; instead rely on
      * the tracker's score gate (track_thresh > 0) to ignore zero-score slots.
-     * This allows a direct feed into GraphedTrackerUpdate without a CPU sync.
      */
     int process_detections_n_fixed(
         const float* boxes_ptr,
