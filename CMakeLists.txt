@@ -332,4 +332,39 @@ if(ENABLE_NATIVE_TESTS)
     )
     set_target_properties(saccade_gpu_postprocess_test PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
     add_test(NAME saccade_gpu_postprocess_test COMMAND saccade_gpu_postprocess_test)
+
+    # ── tracking unit tests (link against saccade_tracking static lib) ──────
+    # These cover the OOB clamp, mamba_scan fwd + broadcast_C, fpn_reid
+    # launchers, and the GMC Hanning divide-by-zero guard.
+    function(add_tracking_native_test name source)
+        add_executable(${name} ${source})
+        target_include_directories(${name} PRIVATE ${PROJECT_SOURCE_DIR}/include)
+        target_link_libraries(${name} PRIVATE saccade_tracking CUDA::cudart)
+        enable_native_coverage(${name})
+        set_target_properties(${name} PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+        add_test(NAME ${name} COMMAND ${name})
+    endfunction()
+
+    add_tracking_native_test(saccade_temporal_birth_pool_test
+        tests/native/test_temporal_birth_pool.cpp)
+    add_tracking_native_test(saccade_mamba_scan_test
+        tests/native/test_mamba_scan.cpp)
+    add_tracking_native_test(saccade_gmc_hanning_guard_test
+        tests/native/test_gmc_hanning_guard.cpp)
+
+    # fpn_reid launchers live in fpn_reid_cuda.cu, which is NOT part of
+    # saccade_tracking (it ships as a standalone torch extension). Compile
+    # the .cu directly into the test, mirroring saccade_gpu_postprocess_test.
+    add_executable(saccade_fpn_reid_launchers_test
+        tests/native/test_fpn_reid_launchers.cpp
+        src/tracking/fpn_reid_cuda.cu
+    )
+    target_include_directories(saccade_fpn_reid_launchers_test PRIVATE
+        ${PROJECT_SOURCE_DIR}/include
+    )
+    target_link_libraries(saccade_fpn_reid_launchers_test PRIVATE CUDA::cudart)
+    set_target_properties(saccade_fpn_reid_launchers_test PROPERTIES
+        CUDA_SEPARABLE_COMPILATION ON)
+    enable_native_coverage(saccade_fpn_reid_launchers_test)
+    add_test(NAME saccade_fpn_reid_launchers_test COMMAND saccade_fpn_reid_launchers_test)
 endif()

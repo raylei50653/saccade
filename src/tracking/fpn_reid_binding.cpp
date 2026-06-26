@@ -4,22 +4,7 @@
 #include <torch/extension.h>
 #include <c10/cuda/CUDAStream.h>
 #include <cuda_runtime.h>
-
-extern "C" {
-void fpn_centre_pool(const float* feat, int C, int H, int W,
-                     const float* boxes, int N,
-                     float* pooled, int img_size, cudaStream_t stream);
-void fpn_conv1x1(const float* centre_feat, int C,
-                 const float* weight, int O,
-                 float* out, int N, cudaStream_t stream);
-void fpn_l2_normalise(float* data, int D, int N, float eps, cudaStream_t stream);
-void fpn_bn1d(float* data, int D, int N,
-              const float* running_mean, const float* running_var,
-              float eps, cudaStream_t stream);
-void fpn_linear(const float* data, int D,
-                const float* weight, int O,
-                float* out, int N, cudaStream_t stream);
-}
+#include "tracking/fpn_reid_launchers.cuh"
 
 torch::Tensor fpn_reid_extract(
     std::vector<torch::Tensor> feats,
