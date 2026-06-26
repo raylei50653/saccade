@@ -628,6 +628,14 @@ def main() -> None:
         default="",
         help="Comma-separated sequence names (empty = all -SDP under data-root/train)",
     )
+    parser.add_argument(
+        "--no-preload-cache",
+        action="store_true",
+        help="Load feature cache .pt files from disk on demand "
+        "instead of preloading everything into CPU RAM. "
+        "Necessary when the fp16 cache exceeds available RAM "
+        "(PersonPath22 ~54 GB > 32-48 GB).",
+    )
 
     args = parser.parse_args()
 
@@ -809,7 +817,10 @@ def main() -> None:
             f"schema={manifest['schema']}"
         )
         print(f"[Cache] Loading precomputed teacher features from {cache_dir}")
-        _preload_feature_cache(cache_dir, device)
+        if not args.no_preload_cache:
+            _preload_feature_cache(cache_dir, device)
+        else:
+            print("[Cache] --no-preload-cache: loading .pt files from disk on demand")
         gmc_path = cache_dir / "gmc_matrices_cpp.pt"
         if not gmc_path.exists():
             gmc_path = cache_dir / "gmc_matrices.pt"

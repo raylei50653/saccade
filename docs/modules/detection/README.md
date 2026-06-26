@@ -107,7 +107,7 @@ Phase 3 — SAVE     checkpoint 由 training_utils.save_checkpoint() 統一處�
 負責前級 YOLO 圖像目標偵測、Mamba Head 時空特徵融合與 NMS 抑制，為後續追蹤提供高置信度的 Object Box。
 
 ## 🟢 目前現況
-* **Mamba SSM Head** 是現行 `mamba_whole_graph` baseline 的 detector lineage。`mamba_optimal` 是其上一代 head-CUDA-graph preset；目前 headline preset 改用 whole-detect CUDA graph、`native_640`、ReID off，凍結指標為 IDF1 77.6 / MOTA 78.3 / HOTA 69.9 / AssA 69.1 / IDs 430 / 221.59 FPS。
+* **Mamba SSM Head** 是現行 `mamba_whole_graph` baseline 的 detector lineage。`mamba_optimal` 是其上一代 head-CUDA-graph preset；目前 headline preset 改用 whole-detect CUDA graph、`native_640`、ReID off，凍結指標為 IDF1 78.2 / MOTA 78.4 / HOTA 70.2 / AssA 69.7 / IDs 413 / 269.47 FPS（`frozen_v2`, 2026-06-21）。
 * **Flow-Gated 特徵調製機制**：取代了 Option E-v2 中使用 `F.grid_sample` 對低解析度 FPN 特徵圖（如 $20 	imes 20$ P5）進行空間 Warp 導致鋸齒偽影與精度下降（MOTA -2.1pp）的問題。當前方案在 `mamba_head.py` 中將累計 GMC Affine matrix 轉成稠密流場 (Dense Flow) 後，以 `torch.cat([x_up, flow_i], dim=1)` 的通道拼接形式與特徵圖融合，並利用卷積層自適應學習空間門控調製 `(1.0 + gate)`，避開了特徵插值扭曲。
 * **CUDA Graph 推理優化**：
   * 解決了自訂 CUDA 算子 `selective_scan_fwd` 運行於 Legacy Default Stream 導致 CUDA Graph 捕獲丟失 Scan Kernel 的重大 Bug（目前使用 `torch.cuda.current_stream().cuda_stream` 強制流綁定）。

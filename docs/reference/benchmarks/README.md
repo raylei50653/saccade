@@ -6,6 +6,7 @@
 
 | 文件 | 內容 |
 |------|------|
+| [frozen_v2_ablation.md](frozen_v2_ablation.md) | **現行 headline (`frozen_v2`) 累積消融 + per-seq + 兩操作點延遲**（showcase 附錄與 ADR 018 的可追溯佐證） |
 | [latency_log.md](latency_log.md) | 端到端延遲、分段延遲紀錄 |
 | [throughput.md](throughput.md) | 單路與多路吞吐量 |
 

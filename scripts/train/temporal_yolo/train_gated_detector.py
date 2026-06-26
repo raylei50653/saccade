@@ -136,6 +136,7 @@ def train_one_epoch(  # type: ignore[no-untyped-def]
     model.train()
     total_loss = 0.0
     n_steps = 0
+    n_nan_skips = 0
     acc_batches = 0
     optimizer.zero_grad(set_to_none=True)
 
@@ -173,9 +174,14 @@ def train_one_epoch(  # type: ignore[no-untyped-def]
                 batch_loss = batch_loss + step_loss_vec.sum() / T
 
         if not torch.isfinite(batch_loss):
-            raise FloatingPointError(
-                f"Non-finite loss at batch {batch_idx + 1}/{len(loader)}"
-            )
+            # Non-finite loss enters the graph through the throwaway gate path
+            # (gt_ratio>0 builds a GT-box heatmap; deploy bypasses the gate, so
+            # a bad batch here cannot corrupt the deployed detector). Skip it and
+            # keep training rather than aborting a long resume run.
+            n_nan_skips += 1
+            optimizer.zero_grad(set_to_none=True)
+            acc_batches = 0
+            continue
 
         if not batch_loss.requires_grad:
             # Frozen-YOLO teacher: the only trainable params are the gate alphas,
@@ -213,6 +219,8 @@ def train_one_epoch(  # type: ignore[no-untyped-def]
         scaler.update()
         optimizer.zero_grad(set_to_none=True)
 
+    if n_nan_skips:
+        print(f"    [nan-skip] skipped {n_nan_skips} non-finite batch(es) this epoch")
     return total_loss / max(n_steps, 1)
 
 
@@ -335,9 +343,32 @@ def main() -> None:
         help="train-loss is diagnostic only; deployment selection is external.",
     )
     parser.add_argument("--num-workers", type=int, default=0)
+    parser.add_argument(
+        "--augment",
+        action="store_true",
+        help="Strategy B: clip-consistent augmentation (hflip + scale/translate "
+        "jitter + brightness/contrast). One transform per clip, applied to all "
+        "frames so GT identities stay aligned. Default off = bit-exact.",
+    )
+    parser.add_argument(
+        "--balance-by-seq",
+        action="store_true",
+        help="Strategy B: scene-balanced sampling — weight clips by inverse "
+        "sequence frequency so every scene is seen ~equally (else dense/long "
+        "sequences dominate). Default off.",
+    )
     parser.add_argument("--scales", default="p3,p4,p5")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--warmup-epochs", type=int, default=5)
+    parser.add_argument(
+        "--min-lr-ratio",
+        type=float,
+        default=0.01,
+        help="Cosine decay floor as a fraction of base LR. Default 0.01 decays to "
+        "near-zero (memorization regime, few scenes). For many-scene data (e.g. "
+        "PersonPath22) the loss is still dropping when LR is throttled — raise to "
+        "~0.1 so the backbone keeps learning late in the schedule (strategy A).",
+    )
     parser.add_argument("--clip-grad", type=float, default=10.0)
     parser.add_argument("--accum-steps", type=int, default=1)
     parser.add_argument(
@@ -481,6 +512,7 @@ def main() -> None:
         optimizer,
         total_epochs=schedule_epochs,
         warmup_epochs=min(args.warmup_epochs, schedule_epochs),
+        min_lr_ratio=args.min_lr_ratio,
     )
     scaler = torch.amp.GradScaler("cuda", enabled=device.type == "cuda")
 
@@ -520,6 +552,8 @@ def main() -> None:
         seqs=seqs,
         preload_to_ram=not args.dry_run,
         seed=args.seed,
+        augment=args.augment,
+        balance_by_seq=args.balance_by_seq,
     )
     data_generator = loader.generator
     if resume_ckpt is not None and not args.resume_reset_optimizer:

@@ -49,6 +49,8 @@ assets/videos/*.mp4
 *.diff
 debug_*.py
 .codex
+scratch/*.nohup
+scratch/*_sweep.txt
 
 # LLM Quantization temporary files
 *.gguf.tmp
@@ -92,6 +94,8 @@ storage/postgres_data/
 output/
 out/
 scratch/root_artifacts_*/
+scratch/ab_runs/
+scratch/ab_smoke/
 
 # Analysis script outputs (generated plots, candidate CSVs, sweep data)
 scripts/tools/out/
