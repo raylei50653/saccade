@@ -1,0 +1,21 @@
+% L3:Bridge relink 實作錨點
+\begin{implsupp}{Bridge relink}
+\begin{itemize}
+\setlength\itemsep{1pt}
+\item \textbf{錨點}: 實作於 \texttt{tracker\_gpu.cu};與
+\texttt{relink\_gate.cu} 的 appearance gate table \textbf{不同機制}。
+\item \textbf{effective default}: \texttt{relink\_bridge\_anchor: adaptive}、
+\texttt{relink\_bridge\_anchor\_rate: 0.03}。
+\item \textbf{config 對照}: \(\tau_{\mathrm{bridge}}\)=
+\texttt{relink\_bridge\_px}(0.25,已正規化);
+\(\alpha\)=\texttt{relink\_bridge\_dir\_bonus}(0.8);
+\(h_{\mathrm{lo/hi}}\)=\texttt{relink\_bridge\_h\_lo/\_h\_hi}(0.75/1.33)。
+\item \(m_{\mathrm{bridge}}\)=\texttt{relink\_bridge\_margin}(0.05);
+spatial=\texttt{relink\_bridge\_spatial\_gate}(0.0)。
+\item \textbf{anchor mode}: \texttt{anchor: center} 固定用 \(y^{\mathrm{ctr}}\);
+\texttt{anchor: foot} 固定用 \(y^{\mathrm{bot}}\)。\Cref{eq:rl-resid} 的
+\(\ell,c,v_\ell,v_c\) 皆為 anchor transform 後的量。
+\item \textbf{relink\_enabled vs bridge}: baseline 用 tracker-core bridge,\emph{非}
+birth-time appearance lost-bank relinker(兩者為不同 config)。
+\end{itemize}
+\end{implsupp}

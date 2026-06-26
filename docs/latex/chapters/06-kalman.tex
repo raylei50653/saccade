@@ -1,0 +1,80 @@
+% ===========================================================================
+% track 主體 (1/3):Kalman 運動模型
+% ===========================================================================
+\chapter{Kalman 運動模型}\label{ch:kalman}
+
+\begin{center}\archmap{track}\end{center}
+
+\begin{contract}{Kalman(track 子機制)}
+\textbf{輸入}\; 前一幀 track state \((x,P)\)、GMC warp \(W_f\)、配對到的 detection
+measurement \(z\)\quad
+\textbf{輸出}\; predict 後 \(\tilde{x}\)(供 gate/cost)、update 後 \((x,P)\)\\
+\textbf{方法}\; SORT/DeepSORT 風格 constant-velocity filter,state
+\((c_x,c_y,a,h,\dot{\cdot})\)\quad
+\textbf{Source}\; \texttt{kalman\_gpu.cuh}\quad
+\textbf{Baseline}\; \texttt{kalman\_r\_scale: 2.8}、NSA off
+\end{contract}
+
+\noindent
+state 與 measurement:
+\begin{equation}\label{eq:kf-state}
+  x=(c_x,c_y,a,h,v_x,v_y,v_a,v_h)^{\!\top},\qquad
+  z=(c_x,c_y,a,h)^{\!\top}.
+\end{equation}
+
+\paragraph{演算法傳遞.} 每幀對每個 track 依序:predict(先吃 GMC control)→ 算
+innovation 協方差 → gate → 若入選則 update。邊上為各步傳遞的量:
+
+\begin{center}\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[node distance=14mm]
+  \node[step=Ctrk] (n1) {GMC control\\$+$ predict\\$x'{=}Fx,\ P'{=}FPF^{\!\top}{+}Q$};
+  \node[step=Ctrk, right=of n1] (n2) {innovation cov\\$S{=}MP'M^{\!\top}{+}R$};
+  \node[step=Ctrk, right=of n2] (n3) {gate\\$\mathrm{IoU}\,\lor\,d^2_{\mathrm{maha}}{<}\tau$};
+  \node[step=Ctrk, right=of n3] (n4) {gain\\$K{=}P'M^{\!\top}S^{-1}$};
+  \node[step=Ctrk, right=of n4] (n5) {update\\$x{+}Ky,\ (I{-}KM)P'$};
+  \draw[flowarr=Ctrk] (n1) -- node[flowlbl,above]{$\tilde{x},P'$} (n2);
+  \draw[flowarr=Ctrk] (n2) -- node[flowlbl,above]{$S^{-1}$}       (n3);
+  \draw[flowarr=Ctrk] (n3) -- node[flowlbl,above]{候選 $z_j$}     (n4);
+  \draw[flowarr=Ctrk] (n4) -- node[flowlbl,above]{$y{=}z{-}Mx$}   (n5);
+\end{tikzpicture}}\end{center}
+
+\section{Prediction}\label{sec:kf-predict}
+Transition 是 constant velocity,且 GMC translation 先以 control input 加到位置
+(見 \Cref{ch:gmc}),再做 predict:
+\begin{equation}\label{eq:kf-predict}
+  F=\begin{bmatrix}I_4 & I_4\\ 0 & I_4\end{bmatrix},\qquad
+  x'=Fx,\qquad P'=FPF^{\!\top}+Q(h^-).
+\end{equation}
+process noise 隨 predict 後框高 \(h^-\) 縮放:
+\begin{equation}\label{eq:kf-Q}
+  \sigma_p=\tfrac{h^-}{20},\quad \sigma_v=\tfrac{h^-}{160},\quad
+  \mathrm{diag}(Q)=(\sigma_p^2,\sigma_p^2,10^{-4},\sigma_p^2,
+                    \sigma_v^2,\sigma_v^2,10^{-10},\sigma_v^2).
+\end{equation}
+
+\section{Measurement Update}\label{sec:kf-update}
+measurement matrix \(M=[\,I_4\ \ 0\,]\)。noise 用 predict 後 \(h^-\)(非 detection
+height);baseline 下亮度/NSA 調節關閉(\(\lambda_{\mathrm{light}}{=}0,\ m_{\mathrm{NSA}}{=}1\)),
+故 \(m_R=r_{\mathrm{scale}}\):
+\begin{equation}\label{eq:kf-R}
+  \mathrm{diag}(R)=\Big(\big(\tfrac{h^-}{20}\big)^2 m_R,\ \big(\tfrac{h^-}{20}\big)^2 m_R,\
+                      10^{-2}m_R,\ \big(\tfrac{h^-}{20}\big)^2 m_R\Big).
+\end{equation}
+更新方程:
+\begin{equation}\label{eq:kf-kalman}
+\begin{aligned}
+  S&=MP'M^{\!\top}+R, & K&=P'M^{\!\top}S^{-1}, & y&=z-Mx',\\
+  x&\leftarrow x'+Ky, & P&\leftarrow(I-KM)P'.
+\end{aligned}
+\end{equation}
+
+\section{Mahalanobis Gate}\label{sec:kf-gate}
+即使 IoU 弱,只要 Mahalanobis 距離小於 \(\tau_{\mathrm{maha}}\) 仍可入選 candidate
+(\(\tilde{x}_i\) 為已套 GMC control 並 predict 後的 state):
+\begin{equation}\label{eq:kf-maha}
+  d^2_{ij}=(z_j-M\tilde{x}_i)^{\!\top}S_i^{-1}(z_j-M\tilde{x}_i),\qquad
+  \mathrm{cand}_{ij}\iff \mathrm{IoU}_{ij}>\tau_{\mathrm{iou}}\ \lor\ d^2_{ij}<\tau_{\mathrm{maha}}.
+\end{equation}
+IoU gate 與 cost(\Cref{ch:assoc})使用同一個 \(\tilde{x}_i\)。
+
+\suppinput{supp/06-kalman-impl}

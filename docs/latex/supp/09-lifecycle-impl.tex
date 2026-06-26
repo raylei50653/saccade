@@ -1,0 +1,12 @@
+% L3:Lifecycle 實作錨點
+\begin{implsupp}{Lifecycle}
+\textbf{錨點}\;\; birth/confirm/lost/remove 狀態機在 \texttt{tracker\_gpu.cu}。
+config 欄位:\texttt{new\_track\_thresh}/\texttt{confirm\_streak}/
+\texttt{confirm\_score\_thresh}/\texttt{track\_buffer}。\\
+\textbf{實驗分支}\;\; \texttt{scripts/eval/config/lifecycle.py} 含多個 birth-gate
+experiments;baseline \texttt{per\_seq\_adapt: false} 不啟用 per-sequence 自適應。\\
+\textbf{與 relink 的關係}\;\; lost track 並非立即 remove,而在 \texttt{track\_buffer}
+期間保留,供 \Cref{ch:relink} 的 bridge relink 在窗內找回 id。bridge 命中的
+新 slot 直接寫回 lost id 並標成 confirmed;一般 unmatched detection 才建立
+tentative slot。
+\end{implsupp}

@@ -1,0 +1,123 @@
+% ===========================================================================
+% Part I 唯一一章:系統總覽 = 主架構(the spine)
+% 原則:這裡只放「地圖」——架構圖、模組邊界、dataflow、baseline 合約。
+%       所有數學一律下放到 Part II。這就是「不全展開」的關鍵。
+% ===========================================================================
+\chapter{系統總覽}\label{ch:overview}
+
+整條 pipeline 分兩層:\textbf{Python orchestration}(排程、buffer 管理、
+CUDA graph replay、eval)與 \textbf{C++/CUDA compute}(detector、postprocess、
+GMC、tracker association)。Python 不在 hot path 做數值計算,只在 output
+boundary 把結果搬回 host。
+
+關鍵:detect 與 GMC 是從\textbf{同一個 frame buffer 分岔的兩條平行支線}——
+GMC 吃 frame 灰階(+上一幀),\emph{不是} detect 的輸出;\texttt{track} 才把
+兩條支線匯合。
+
+\section{架構地圖}\label{sec:archmap}
+全書各章開頭都會重畫這張圖、點亮當前模組(「你在這裡」)。總覽版全亮:
+
+\begin{center}
+  \archmap{none}
+\end{center}
+
+\section{模組職責與 I/O}\label{sec:modules}
+下表概括每個模組\textbf{吃什麼、吐什麼、解決什麼問題},以及在 pipeline 中銜接誰。
+逐項數學見 Part II 對應章;傳遞合約與 source 見 \Cref{tab:transfer}。
+
+\begin{table}[h]\small\setlength{\tabcolsep}{4pt}\renewcommand{\arraystretch}{1.35}
+\begin{tabularx}{\linewidth}{@{}l >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}X l@{}}
+\toprule
+模組 & 輸入 → 輸出 & 解決的問題 & 銜接 \\
+\midrule
+detect      & frame CHW tensor → raw boxes/scores/classes
+            & 從單張影像偵測行人(TRT backbone + Mamba head,anchor-free decode)
+            & → postprocess \\
+postprocess & raw det → 過濾/NMS 後 boxes
+            & 去除低分與重疊框,交給 tracker 乾淨的偵測集
+            & detect → track \\
+GMC         & prev+curr 灰階 → \(2\times3\) warp \(W_f\)
+            & 估相機運動補償平移,讓 Kalman 的 velocity 只學物體運動
+            & 與 detect 平行,補 track \\
+track       & boxes/scores/\(W_f\) → track states / IDs
+            & 跨幀關聯與維持 ID(分解見 \Cref{tab:track-internal})
+            & 匯合 → materialize \\
+output      & GPU state → MOT rows
+            & 搬回 host、產生 MOT 結果(含 tracklet 內插後處理)
+            & track → 終點 \\
+\bottomrule
+\end{tabularx}
+\caption{模組職責與輸入/輸出概覽。}\label{tab:modules}
+\end{table}
+
+\texttt{track} 不是單一步驟,而由數個子機制串成,各為 Part II 的一章:
+
+\begin{table}[h]\small\setlength{\tabcolsep}{4pt}\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\linewidth}{@{}l >{\raggedright\arraybackslash}X@{}}
+\toprule
+子機制 & 解決的問題 \\
+\midrule
+Kalman 模型      & constant-velocity 運動模型;每幀 predict 再用 detection update track state \\
+Association cost & 把 IoU、OAO/velocity penalty、stability reward 匯成單一配對成本 \(c_{ij}\) \\
+Auction 指派     & ByteTrack 風格分數級聯 + 單輪平行 auction,決定 track 與 detection 配對 \\
+Track lifecycle  & track 生死:tentative→confirmed 的 birth/confirm,與 lost/remove \\
+Bridge relink    & 找回短暫消失又重生的 ID(雙向中點外推,非 appearance ReID) \\
+\bottomrule
+\end{tabularx}
+\caption{\texttt{track} 內部子機制(Part II 逐章展開)。}\label{tab:track-internal}
+\end{table}
+
+傳遞合約(誰留在 GPU、source 檔)另列:
+
+\begin{table}[h]\small\setlength{\tabcolsep}{4pt}\renewcommand{\arraystretch}{1.2}
+\begin{tabularx}{\linewidth}{@{}l
+  >{\raggedright\arraybackslash}X
+  >{\raggedright\arraybackslash}X@{}}
+\toprule
+模組 & 模組(Python facade / C++·CUDA core) & 傳遞方式 \\
+\midrule
+detect      & \texttt{mamba\_gated\_detector.py} / TRT backbone + Mamba head & GPU tensor(whole-detect graph)\\
+postprocess & \texttt{PerceptionPipeline} / \texttt{pipeline.cpp} & GPU buffer,留 device \\
+GMC         & \texttt{GMC} / \texttt{gmc\_kernel.cu} (cuFFT)       & GPU tensor,$2\times3$ warp \\
+track       & \texttt{GPUByteTracker} / \texttt{tracker\_gpu.cu}   & device pointer + stream \\
+materialize & \texttt{materialize\_\allowbreak gpu\_\allowbreak track\_\allowbreak results} & GPU→host,僅一次 copy \\
+output      & \texttt{relink\_write}                               & host(fast MOT emit)\\
+\bottomrule
+\end{tabularx}
+\caption{傳遞合約與 source。}\label{tab:transfer}
+\end{table}
+
+\section{Frame-Level Dataflow}\label{sec:dataflow}
+對每個 frame \(f\),no-ReID baseline 的主線是兩條同源分支在 tracker 匯合:
+\begin{center}
+\small
+\begin{tabular}{@{}rcl@{}}
+frame tensor & \(\to\) & detect \(\to\) postprocess \(\to\) boxes \\
+frame tensor & \(\to\) & GMC warp \(W_f\) \\
+boxes \(+\ W_f\) & \(\to\) & tracker update \(\to\) materialize \\
+materialize & \(\to\) & relink\_write / MOT rows
+\end{tabular}
+\end{center}
+
+\section{Baseline 合約}\label{sec:baseline}
+本文以 \texttt{mamba\_whole\_graph} preset 為基準。關鍵啟用條件:
+
+\begin{table}[h]\small\setlength{\tabcolsep}{4pt}
+\begin{tabularx}{\linewidth}{@{}l
+  >{\raggedright\arraybackslash}p{4.8cm}
+  >{\raggedright\arraybackslash}X@{}}
+\toprule
+區域 & baseline 值 & 效果 \\
+\midrule
+Graph     & \texttt{use\_whole\_graph: true}      & whole detect graph 單次 replay \\
+GMC       & \texttt{gmc\_downscale: 4}            & GPU phase-correlation 估平移 \\
+Appearance& \texttt{reid\_mode: off}              & headline 不用 appearance \\
+Assoc     & \texttt{match\_thresh: 0.50}          & ByteTrack-like 多階段 gate \\
+Cost      & \texttt{multiplicative\_cost: true}   & log-linear cost + stability reward \\
+Relink    & \texttt{relink\_bridge\_enabled: true}& 雙向 foot bridge \\
+\bottomrule
+\end{tabularx}
+\caption{Baseline 合約摘要。完整旋鈕表見附錄 A。}\label{tab:baseline}
+\end{table}
+
+% TODO: 把 math_model.md §3 的符號↔config 大表搬進 chapters/A-symbols.tex(附錄)

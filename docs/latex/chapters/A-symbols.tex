@@ -1,0 +1,132 @@
+% ===========================================================================
+% 附錄 A:符號表 與 符號↔config 對照(math_model §3 / §3.1 / §3.2)
+% reference 性質,故置於附錄。代碼錨點(cu:N 行號)見各章 L3 實作補充(full 版)。
+% ===========================================================================
+\chapter{符號與 Config 對照}\label{app:symbols}
+
+baseline 值對應 \texttt{mamba\_whole\_graph}(frozen\_v2)。各機制的代碼錨點
+(kernel 名、\texttt{cu:N} 行號)見對應章末的 L3 實作補充。
+
+\section{基本符號}\label{app:basic}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{3.3cm}
+  >{\raggedright\arraybackslash}p{8.2cm}@{}}
+\toprule
+符號 & 意義 \\* \midrule \endhead
+\(f\) & 目前 frame index \\
+\(I_f\) & 目前 RGB/CHW frame tensor \\
+\(D_f=\{d_j\}\) & frame \(f\) postprocess 後的 detection set \\
+\(b_j=(x_1,y_1,x_2,y_2)\) & detection box(original-frame pixels) \\
+\(s_j,\ \mathrm{cls}_j\) & detection score / class id \\
+\(T_f=\{t_i\}\) & association 前 active 或 lost tracker slots \\
+\(x_i,\ P_i\) & track slot \(i\) 的 8D Kalman state / \(8\times8\) covariance \\
+\(W_f\) & GMC \(2\times3\) camera warp;translation path \([1,0,t_x;0,1,t_y]\) \\
+\midrule
+\(x=(c_x,c_y,a,h,\dot{\cdot})\) & center、aspect、height 與對應速度 \\
+\(w=a\cdot h,\ B(x)\) & state implied width / 還原的 box \\
+\(z=(c_x,c_y,a,h),\ M=[I_4\ 0]\) & Kalman measurement / measurement matrix \\
+\(\mathrm{IoU}(i,j),\ c_{ij}\) & \(B(x_i)\) 與 \(b_j\) 的 IoU / final association cost \\
+\(p_{ij},\ A_{ij},\ \Pi_{ij}\) & auction value / base quality / penalty 總和 \\
+\bottomrule
+\end{longtable}
+
+% 共用:4 欄 config 對照表的欄型(footnotesize,長名稱用 \newline 斷行)
+\section{GMC}\label{app:gmc}
+{\footnotesize\setlength{\tabcolsep}{3pt}
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{2.8cm}
+                     >{\raggedright\arraybackslash}p{2.4cm}
+                     >{\raggedright\arraybackslash}p{3.8cm}
+                     >{\raggedright\arraybackslash}p{1.6cm}@{}}
+\toprule
+符號 & 用途 & config / env & baseline \\* \midrule \endhead
+\(W_f\) & 相機運動補償 warp & — & trans-only \\
+PCR & phase-corr 峰值可信度 & — & — \\
+\(\tau_{\mathrm{PCR}}\) & 低可信度縮小位移 & \texttt{SACCADE\_GMC\_PCR\_THRESH} & py \(5.0\) \\
+\bottomrule
+\end{longtable}}
+
+\section{Kalman}\label{app:kalman}
+{\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{1.8cm}
+                     >{\raggedright\arraybackslash}p{3.0cm}
+                     >{\raggedright\arraybackslash}p{4.2cm}
+                     >{\raggedright\arraybackslash}p{1.7cm}@{}}
+\toprule
+符號 & 用途 & config / env & baseline \\* \midrule \endhead
+\(x,z,F,M\) & 8D CV state / 4D measurement & — & — \\
+\(\sigma_p{=}h^-/20\) & 位置過程噪聲 & hardcoded & 1/20 \\
+\(\sigma_v{=}h^-/160\) & 速度過程噪聲 & hardcoded & 1/160 \\
+\(r_{\mathrm{scale}}\) & 測量噪聲縮放 & \texttt{kalman\_r\_scale} & 2.8 \\
+\(m_{\mathrm{NSA}},\lambda_{\mathrm{light}}\) & NSA/亮度調節 & — & 1 / 0 \\
+\(\tau_{\mathrm{maha}}\) & Mahalanobis gate & \texttt{maha\_gate} & 見實作 \\
+\bottomrule
+\end{longtable}}
+
+\section{Association Cost}\label{app:assoc}
+{\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{1.8cm}
+                     >{\raggedright\arraybackslash}p{3.0cm}
+                     >{\raggedright\arraybackslash}p{4.2cm}
+                     >{\raggedright\arraybackslash}p{1.7cm}@{}}
+\toprule
+符號 & 用途 & config / env & baseline \\* \midrule \endhead
+\(A_{ij}\) & IoU(+ReID)綜合質量 & — & = IoU \\
+\(w_{\mathrm{fuse}}\) & 低分檢測降權 & \texttt{fuse\_score\_weight} & 0.0 \\
+\(c_{ij}\) & 乘法式 cost & \texttt{multiplicative\_cost} & true \\
+\(\lambda\) & cost\(\to\)value 溫度 & \texttt{sinkhorn\_lambda} & 10 \\
+\(o_i,\tau_{\mathrm{OAO}}\) & 遮擋配對抑制 & \texttt{oao\_tau} /\newline \texttt{oao\_ramp\_frames} & 0.50 / 25 \\
+\(w_{\mathrm{vel}}\) & 速度反向懲罰 & \texttt{vel\_dir\_weight} & 關 \\
+\(w_{\mathrm{occ}}\) & front-occluder 懲罰 & \texttt{occ\_cost\_weight} & 關 \\
+\(w_{\mathrm{stab}}\) & 高度一致 reward(成本側) & \texttt{stability\_cost\_w} & 0.20 \\
+\bottomrule
+\end{longtable}}
+
+\section{Auction}\label{app:auction}
+{\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{1.8cm}
+                     >{\raggedright\arraybackslash}p{3.0cm}
+                     >{\raggedright\arraybackslash}p{4.2cm}
+                     >{\raggedright\arraybackslash}p{1.7cm}@{}}
+\toprule
+符號 & 用途 & config / env & baseline \\* \midrule \endhead
+\(p_{ij}\) & auction 概率值 & — & — \\
+\(G_{\mathrm{aspect}}\) & 抑制異常長寬比 & hardcoded (0.8/0.15) & — \\
+\(w_{\mathrm{fresh}}\) & 新鮮度 bid bias & \texttt{SACCADE\_FRESHNESS\_W} & 0.0 \\
+\(w_{\mathrm{stab,bid}}\) & 高度一致 bid bias & \texttt{SACCADE\_STABILITY\_W} & 0.1(開) \\
+S0 DDA & confirmed×high 更緊 stage & \texttt{SACCADE\_ENABLE\_DDA} /\newline \texttt{\_DDA\_MAX\_COST} & on / 0.12 \\
+stage thr & 分數級聯邊界 & \texttt{match} / \texttt{high} / \texttt{mid} /\newline \texttt{track} / \texttt{stage2} & .50/.45/\newline.10/.05/.50 \\
+\bottomrule
+\end{longtable}}
+
+\section{Lifecycle / Bridge / Semantic relink}\label{app:rest}
+{\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{1.8cm}
+                     >{\raggedright\arraybackslash}p{3.0cm}
+                     >{\raggedright\arraybackslash}p{4.2cm}
+                     >{\raggedright\arraybackslash}p{1.7cm}@{}}
+\toprule
+符號 & 用途 & config / env & baseline \\* \midrule \endhead
+birth/\newline confirm & tentative\(\to\)confirmed & \texttt{new\_track\_thresh} /\newline \texttt{confirm\_streak} & 0.28 / 3 \\
+\(\tau_{\mathrm{bridge}}\) & 雙向外推殘差門檻 & \texttt{relink\_bridge\_px} & 0.25 \\
+\(\alpha\) & 方向一致偏移 & \texttt{relink\_bridge\_dir\_bonus} & 0.8 \\
+\(h_{\mathrm{lo}},h_{\mathrm{hi}}\) & 高度比 gate & \texttt{relink\_bridge\_h\_lo} /\newline \texttt{\_h\_hi} & 0.75/1.33 \\
+\(m_{\mathrm{bridge}}\) & best-vs-second margin & \texttt{relink\_bridge\_margin} & 0.05 \\
+\(w_{\mathrm{sim/iou}}\),\newline \(w_{\mathrm{maha}}\) & semantic joint 權重 & \texttt{semantic\_w\_*\_base} & off \\
+\bottomrule
+\end{longtable}}
+
+\section{方法出處 / 命名對照}\label{app:naming}
+\begin{itemize}\setlength\itemsep{2pt}
+  \item \textbf{GMC} = phase correlation(cross-power spectrum + Hanning window),translation-only warp。
+  \item \textbf{Kalman} = SORT/DeepSORT 風格 constant-velocity filter。
+  \item \textbf{Assignment} = Bertsekas auction(單輪平行貪婪)跑在 softmin-temperature top-k 上;
+        分數分段 = ByteTrack 風格 cascade。\texttt{sinkhorn\_lambda} 為歷史命名——只用
+        \(e^{-\lambda c}\) 當 value,\textbf{非}完整 Sinkhorn 迭代。
+  \item \textbf{OAO} = occlusion-aware(track-track overlap)配對抑制 + duration ramp。
+  \item \textbf{Bridge relink} = 雙向中點外推,項目自有機制,非標準 appearance ReID。
+  \item \textbf{Semantic relink gate} = appearance + Mahalanobis + IoU joint gate(baseline 關)。
+\end{itemize}
+
+\paragraph{提醒.} \(w_{\mathrm{stab}}\)(\Cref{sec:as-stab},成本側 reward)與
+\(w_{\mathrm{stab,bid}}\)(\Cref{sec:au-bid},auction bid bias)是\textbf{兩個不同旋鈕},
+數值與作用點皆不同,雖都用高度一致性 \(|h_i-h_j|/h_j\)。

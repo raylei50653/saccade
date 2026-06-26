@@ -1,0 +1,22 @@
+% L3:Detection 實作錨點
+\begin{implsupp}{Detection}
+\begin{itemize}
+\setlength\itemsep{1pt}
+\item \textbf{錨點}: \(\mathrm{in\_channels}{=}(128,256,512)\)、
+\(\mathrm{strides}{=}(8,16,32)\):\texttt{mamba\_head.py:1177/1225}。
+\item \textbf{lane 超參}: \(d_{\mathrm{model}}{=}128\)、
+\(\mathrm{spatial\_reduction}{=}4\)、\(\mathrm{num\_blocks}{=}2\)、
+\(d_{\mathrm{state}}{=}16\):\texttt{mamba\_head.py:1220--1226}。
+\item \textbf{U-Net skip / down-up}: \texttt{mamba\_head.py:1208--1211}
+(Down4 壓序列、Up4 上採樣後 concat)。
+\item \textbf{Head 卷積}: cls/reg,Conv3\(\times\)3\(\to\)SiLU\(\to\)Conv1\(\times\)1;
+\texttt{mamba\_head.py:1365--1385}。\ \(n_o{=}84\)、\(r_{\max}{=}1\):
+\texttt{mamba\_head.py:1258}。
+\item \textbf{Decode}: \texttt{mamba\_gated\_detector.cpp:158}
+\texttt{decode\_feats}(dist2bbox + sigmoid)。NMS/filter:\texttt{pipeline.cpp}
+(facade \texttt{pipeline.hpp})。
+\item \textbf{checkpoint / ReID}: frozen Mamba head ckpt
+\path{runs/mamba_gt_v14replica_t3_t1/best.ckpt};ReID embedding 支線
+\(\mathrm{emb\_dim}{=}0\)(off),故 head 只出 cls/reg 兩支。
+\end{itemize}
+\end{implsupp}

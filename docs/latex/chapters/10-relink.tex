@@ -1,0 +1,96 @@
+% ===========================================================================
+% track 收尾 (2/2):Bridge Relink
+% ===========================================================================
+\chapter{Bridge Relink}\label{ch:relink}
+
+\begin{center}\archmap{track}\end{center}
+
+\begin{contract}{Bridge relink(track 子機制)}
+\textbf{輸入}\; 新穩定的 candidate track、窗內未配的 lost confirmed track\quad
+\textbf{輸出}\; candidate 採用 lost track 的 id(lost slot deactivate)\\
+\textbf{方法}\; 雙向中點外推(bidirectional midpoint extrapolation),\emph{非} appearance ReID\quad
+\textbf{Source}\; \texttt{tracker\_gpu.cu}(\(\ne\) \texttt{relink\_gate.cu} 的 appearance gate)\\
+\textbf{Baseline}\; \texttt{relink\_bridge\_enabled: true}、\texttt{relink\_bridge\_px: 0.25}、
+\texttt{margin: 0.05}、\texttt{h\_lo/h\_hi: 0.75/1.33}、\texttt{dir\_bonus: 0.8}、
+anchor \texttt{adaptive}
+\end{contract}
+
+\paragraph{演算法傳遞.} 對 candidate–lost pair,先取 anchor、做 4 點速度回歸,再雙向
+外推算殘差,合成 \(d_{\mathrm{bridge}}\),經 direction bonus 與多重 gate 後 commit:
+
+\begin{center}\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[node distance=12mm]
+  \node[step=Ctrk] (n1) {candidate\\$+$ lost pair};
+  \node[step=Ctrk, right=of n1] (n2) {anchor\\$(a_x,a_y)$};
+  \node[step=Ctrk, right=of n2] (n3) {4-pt velocity\\$v_\ell,v_c$};
+  \node[step=Ctrk, right=of n3] (n4) {外推殘差\\$r_{\mathrm{fwd}},r_{\mathrm{bwd}}$};
+  \node[step=Ctrk, right=of n4] (n5) {$d_{\mathrm{bridge}}$\\$+$ dir bonus};
+  \node[step=Ctrk, right=of n5] (n6) {gates\\$+$ commit};
+  \draw[flowarr=Ctrk] (n1) -- (n2);
+  \draw[flowarr=Ctrk] (n2) -- node[flowlbl,above]{$\ell,c$} (n3);
+  \draw[flowarr=Ctrk] (n3) -- (n4);
+  \draw[flowarr=Ctrk] (n4) -- node[flowlbl,above]{$d_h$} (n5);
+  \draw[flowarr=Ctrk] (n5) -- node[flowlbl,above]{$d^{(1)}$} (n6);
+\end{tikzpicture}}\end{center}
+
+\section{History 與 Anchor}\label{sec:rl-anchor}
+每個 observed slot(\texttt{age}=0)保存 center/height history ring,並對框高做 EMA:
+\(\bar{h}\leftarrow0.95\bar{h}+0.05h\)。coasting lost track 保留最後 history。
+baseline anchor \texttt{adaptive}:\(x\) 永遠用 center;\(y\) 候選為
+\(y^{\mathrm{top}}{=}c_y{-}h/2,\ y^{\mathrm{bot}}{=}c_y{+}h/2,\ y^{\mathrm{ctr}}{=}c_y\)。
+若平均相鄰 height 變化 \(\le\)\texttt{anchor\_rate}(0.03)退化為 center;否則以 top/bottom
+各自四點線性回歸殘差為權重選較穩的 edge:
+\begin{equation}\label{eq:rl-anchor}
+  w_e=\frac{1}{\mathrm{RSS}_{\mathrm{line}}(y^e)/(\bar{h}^2+10^{-3})+0.01},\quad
+  a_y=\frac{w_{\mathrm{top}}y^{\mathrm{top}}+w_{\mathrm{bot}}y^{\mathrm{bot}}}
+           {w_{\mathrm{top}}+w_{\mathrm{bot}}}.
+\end{equation}
+
+\section{Candidate 條件}\label{sec:rl-cand}
+candidate 採用 lost id 的前置條件:
+\begin{center}\ttfamily\small
+candidate hit\_streak == bridge\_at\quad candidate 有 $\ge$4 history samples\\
+lost active 但本幀未配\quad lost state == confirmed\quad
+bridge\_min\_lost $\le$ lost\_age $\le$ bridge\_ttl
+\end{center}
+
+\section{速度回歸與 \texorpdfstring{\(d_{\mathrm{bridge}}\)}{d\_bridge}}\label{sec:rl-bridge}
+對四個等時距 scalar anchor sample \((p_0,p_1,p_2,p_3)\),4 點回歸速度
+\(v=\tfrac{3p_3+p_2-p_1-3p_0}{10}\)。令 \(\ell\)=lost exit anchor、\(c\)=candidate
+entry anchor、\(g\)=\texttt{lost\_age}、\(h_{\mathrm{ref}}=\max(\tfrac{\bar{h}_\ell+\bar{h}_c}{2},1)\):
+\begin{equation}\label{eq:rl-resid}
+  r_{\mathrm{fwd}}=\frac{\lVert(\ell+v_\ell g)-c\rVert}{h_{\mathrm{ref}}},\qquad
+  r_{\mathrm{bwd}}=\frac{\lVert(c-v_c g)-\ell\rVert}{h_{\mathrm{ref}}}.
+\end{equation}
+以 lost 端速度大小決定外推 vs 純距離的權重:
+\begin{align}\label{eq:rl-dbridge}
+  d_h&=\frac{\lVert\ell-c\rVert}{h_{\mathrm{ref}}},\\
+  w&=\sqrt{\mathrm{clamp}\!\Bigl(\tfrac{\lVert v_\ell\rVert/h_{\mathrm{ref}}}{0.12},0,1\Bigr)},\\
+  d_{\mathrm{bridge}}&=
+  w\,\frac{r_{\mathrm{fwd}}+r_{\mathrm{bwd}}}{2}+(1-w)\,d_h.
+\end{align}
+
+\section{Direction Bonus}\label{sec:rl-dir}
+\texttt{dir\_bonus}>0 且方向相近(\(\cos\theta>0.5\))時,向 cross-track 誤差 \(d_{\mathrm{cross}}\) blend:
+\begin{equation}\label{eq:rl-dir}
+  \alpha=\min\!\bigl(w_{\mathrm{dir}}\cos^2\theta\,\eta_v\,\eta_g,\,1\bigr),\qquad
+  d_{\mathrm{bridge}}\leftarrow(1-\alpha)d_{\mathrm{bridge}}+\alpha\,d_{\mathrm{cross}},
+\end{equation}
+其中 \(\eta_v=\mathrm{clamp}\bigl(\tfrac{\min(\lVert v_\ell\rVert,\lVert v_c\rVert)}
+{\max(0.005h_{\mathrm{ref}},10^{-3})},0,1\bigr)\)、\(\eta_g=\mathrm{clamp}(g/30,0,1)\)。
+baseline \texttt{dir\_bonus}=0.8。
+
+\section{Gates 與 Commit}\label{sec:rl-gate}
+接受條件:
+\begin{equation}\label{eq:rl-gate}
+  d_{\mathrm{bridge}}\le\tau_{\mathrm{bridge}},\quad
+  \frac{\bar{h}_\ell}{\bar{h}_c}\in[h_{\mathrm{lo}},h_{\mathrm{hi}}],\quad
+  d^{(2)}_{\mathrm{bridge}}-d^{(1)}_{\mathrm{bridge}}\ge m_{\mathrm{bridge}}.
+\end{equation}
+注意 \texttt{relink\_bridge\_px}=0.25 是歷史命名,\emph{非} 0.25 pixel——它與已除以
+\(h_{\mathrm{ref}}\) 的 \(d_{\mathrm{bridge}}\) 比較,單位是 reference-height-normalized
+distance。baseline \texttt{spatial\_gate}=0.0(關),不啟用 occupancy expansion。
+接受後 candidate 採用 lost id、lost slot deactivate;多 candidate 競爭同一 lost id 時,
+較高 detection score 贏,candidate index 作 tie-breaker。
+
+\suppinput{supp/10-relink-impl}
