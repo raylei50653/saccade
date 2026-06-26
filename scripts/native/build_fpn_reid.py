@@ -12,6 +12,7 @@ ext = CUDAExtension(
     name="saccade_fpn_reid_cuda",
     sources=[
         str(project_root / "src/tracking/fpn_reid_cuda.cu"),
+        str(project_root / "src/tracking/fpn_reid_binding.cpp"),
     ],
     extra_compile_args={
         "cxx": ["-O3"],

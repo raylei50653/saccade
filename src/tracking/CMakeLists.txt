@@ -6,6 +6,7 @@ find_package(Torch REQUIRED)
 
 add_library(fpn_reid_cuda SHARED
     fpn_reid_cuda.cu
+    fpn_reid_binding.cpp
 )
 
 target_compile_features(fpn_reid_cuda PUBLIC cxx_std_17)

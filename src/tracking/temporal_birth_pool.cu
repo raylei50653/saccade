@@ -47,7 +47,12 @@ __global__ void apply_temporal_birth_boost_kernel(
 
     for (int frame_idx = 0; frame_idx < required_window; ++frame_idx) {
         const int slot = (next_slot - required_window + frame_idx + window_capacity) % window_capacity;
-        const int prev_count = ring_counts[slot];
+        // store_subthreshold_boxes_kernel bumps slot_count past `capacity` (it
+        // atomicAdd-then-checks), so a stale ring_counts[slot] can exceed the
+        // allocated slot length. Clamp the read bound to avoid OOB reads of
+        // ring_boxes (the writer already drops out-of-range stores).
+        const int raw_count = ring_counts[slot];
+        const int prev_count = raw_count < capacity ? raw_count : capacity;
         if (prev_count <= 0) {
             return;
         }

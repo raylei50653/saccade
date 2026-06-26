@@ -129,17 +129,16 @@ int PerceptionPipeline::process_detections(
     cudaStream_t stream)
 {
     if (n_in <= 0) return 0;
-    int* d_out_count = nullptr;
-    cudaMalloc(&d_out_count, sizeof(int));
+    // Reuse the persistent d_nms_count_ scratch (allocated in ensure_scratch)
+    // instead of malloc/free-ing a 4-byte staging slot on every call.
     process_detections_into(
         boxes_ptr, scores_ptr, classes_ptr, n_in,
         frame_w, frame_h, is_tiled,
         out_boxes, out_scores, out_classes, out_suspect,
-        d_out_count, nullptr, nullptr, 0, 0.5f, stream);
+        d_nms_count_, nullptr, nullptr, 0, 0.5f, stream);
     int n_out = 0;
-    cudaMemcpyAsync(&n_out, d_out_count, sizeof(int), cudaMemcpyDeviceToHost, stream);
+    cudaMemcpyAsync(&n_out, d_nms_count_, sizeof(int), cudaMemcpyDeviceToHost, stream);
     cudaStreamSynchronize(stream);
-    cudaFree(d_out_count);
     return n_out;
 }
 

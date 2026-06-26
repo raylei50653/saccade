@@ -310,3 +310,49 @@ void selective_scan_fwd_half(
         B, L, D_dim, N, params.has_D ? 1 : 0, params.a_per_channel ? 1 : 0
     );
 }
+
+// ── C rank-1 broadcast helpers (used by the SelectiveScan TRT plugin) ───────
+// Expand a (B, L, 1) C tensor to (B, L, N) by replicating the single value
+// across all N states.  c_in has B*L elements; c_out has B*L*N elements.
+__global__ void broadcast_C_float_kernel(
+    const float* __restrict__ c_in, float* __restrict__ c_out,
+    int B, int L, int N)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = B * L * N;
+    if (idx >= total) return;
+    int bt = idx / N;  // (b, t) linear index into the (B, L, 1) source
+    c_out[idx] = c_in[bt];
+}
+
+__global__ void broadcast_C_half_kernel(
+    const __half* __restrict__ c_in, __half* __restrict__ c_out,
+    int B, int L, int N)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = B * L * N;
+    if (idx >= total) return;
+    int bt = idx / N;
+    c_out[idx] = c_in[bt];
+}
+
+void broadcast_C_float(const float* c_in, float* c_out, int B, int L, int N, void* stream)
+{
+    int total = B * L * N;
+    if (total <= 0) return;
+    const int threads = 256;
+    const int blocks = (total + threads - 1) / threads;
+    cudaStream_t s = static_cast<cudaStream_t>(stream);
+    broadcast_C_float_kernel<<<blocks, threads, 0, s>>>(c_in, c_out, B, L, N);
+}
+
+void broadcast_C_half(const void* c_in, void* c_out, int B, int L, int N, void* stream)
+{
+    int total = B * L * N;
+    if (total <= 0) return;
+    const int threads = 256;
+    const int blocks = (total + threads - 1) / threads;
+    cudaStream_t s = static_cast<cudaStream_t>(stream);
+    broadcast_C_half_kernel<<<blocks, threads, 0, s>>>(
+        static_cast<const __half*>(c_in), static_cast<__half*>(c_out), B, L, N);
+}

@@ -37,6 +37,11 @@ public:
         float ransac_threshold = 3.0);
     ~GMC();
 
+    GMC(const GMC&) = delete;
+    GMC& operator=(const GMC&) = delete;
+    GMC(GMC&&) = delete;
+    GMC& operator=(GMC&&) = delete;
+
     /**
      * @brief Estimate affine camera warp between previous and current frame.
      * @param frame_gpu_ptr GPU pointer (CHW float32 [0,1])

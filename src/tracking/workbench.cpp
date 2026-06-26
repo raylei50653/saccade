@@ -1,7 +1,19 @@
 #include "tracking/workbench.hpp"
+#include <cstdio>
 #include <stdexcept>
+#include <string>
 
 namespace saccade {
+
+namespace {
+void check_cuda(cudaError_t err, const char* what) {
+    if (err != cudaSuccess) {
+        throw std::runtime_error(
+            std::string("Workbench: CUDA error in ") + what + ": " +
+            cudaGetErrorString(err));
+    }
+}
+}  // namespace
 
 Workbench::Workbench(PerceptionPipeline* pipeline,
                      GPUByteTracker*    tracker,
@@ -20,11 +32,11 @@ Workbench::Workbench(PerceptionPipeline* pipeline,
         throw std::invalid_argument(
             "Workbench: pipeline and tracker pointers must be non-null");
     }
-    cudaMalloc(&d_post_boxes_,   sizeof(float) * max_dets * 4);
-    cudaMalloc(&d_post_scores_,  sizeof(float) * max_dets);
-    cudaMalloc(&d_post_classes_, sizeof(int)   * max_dets);
-    cudaMalloc(&d_post_suspect_, sizeof(bool)  * max_dets);
-    cudaMalloc(&d_post_count_,   sizeof(int));
+    check_cuda(cudaMalloc(&d_post_boxes_,   sizeof(float) * max_dets * 4), "d_post_boxes_");
+    check_cuda(cudaMalloc(&d_post_scores_,  sizeof(float) * max_dets),     "d_post_scores_");
+    check_cuda(cudaMalloc(&d_post_classes_, sizeof(int)   * max_dets),     "d_post_classes_");
+    check_cuda(cudaMalloc(&d_post_suspect_, sizeof(bool)  * max_dets),     "d_post_suspect_");
+    check_cuda(cudaMalloc(&d_post_count_,   sizeof(int)),                  "d_post_count_");
 }
 
 Workbench::~Workbench() {
@@ -93,6 +105,7 @@ int Workbench::process_frame_postyolo(
             light_factor, mid_thresh_scale,
             output_capacity_);
     } catch (const std::exception& e) {
+        fprintf(stderr, "[Workbench] tracker update_into failed: %s\n", e.what());
         return 0;
     }
 

@@ -34,9 +34,15 @@ __global__ void chw_to_grayscale_downscale_kernel(
 
         float gray = 0.299f * r + 0.587f * g + 0.114f * b;
 
-        // ADR 017: Apply Hanning Window to reduce FFT boundary artifacts
-        float win_x = 0.5f * (1.0f - cosf(2.0f * M_PI * x / (dst_w - 1)));
-        float win_y = 0.5f * (1.0f - cosf(2.0f * M_PI * y / (dst_h - 1)));
+        // ADR 017: Apply Hanning Window to reduce FFT boundary artifacts.
+        // Guard against dst_w/dst_h == 1 (degenerate downscale) where the
+        // (dim-1) denominator would divide by zero; fall back to no windowing.
+        float win_x = (dst_w > 1)
+            ? 0.5f * (1.0f - cosf(2.0f * M_PI * x / (dst_w - 1)))
+            : 1.0f;
+        float win_y = (dst_h > 1)
+            ? 0.5f * (1.0f - cosf(2.0f * M_PI * y / (dst_h - 1)))
+            : 1.0f;
 
         dst[y * dst_w + x] = gray * win_x * win_y;
     }

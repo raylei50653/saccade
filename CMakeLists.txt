@@ -158,6 +158,8 @@ add_library(saccade_tracking STATIC
     src/tracking/quality_filter.cu
     src/tracking/copy_pad.cu
     src/tracking/mamba_scan.cu
+    src/tracking/temporal_birth_pool.cu
+    src/tracking/multi_signal_birth_pool.cu
     src/tracking/seq_runner.cpp
     src/tracking/eval_pool.cpp
 )
@@ -217,6 +219,35 @@ set_target_properties(
     PROPERTIES
         BUILD_RPATH "${SACCADE_BUILD_RPATH}"
         INSTALL_RPATH "${SACCADE_INSTALL_RPATH}"
+)
+
+# 7b. SelectiveScan TensorRT plugin — shared library loaded at runtime via
+#     IPluginRegistry::loadLibrary() (see scripts/model/build_mamba_head_trt.py).
+#     Built as a MODULE so it exports initLibNvInferPlugins/getCreators.
+#     mamba_scan.cu is compiled in directly (hidden visibility) so the .so is
+#     self-contained and does not interpose symbols on saccade_tracking_ext.
+add_library(saccade_scan_plugin MODULE
+    src/tracking/mamba_scan_plugin.cpp
+    src/tracking/mamba_scan.cu
+)
+target_include_directories(saccade_scan_plugin PRIVATE ${TENSORRT_INCLUDE_DIR})
+# TENSORRT_BUILD_LIB makes NvInfer's TENSORRTAPI macro expand to
+# visibility("default") so initLibNvInferPlugins / getCreators /
+# setLoggerFinder are exported from the .so (otherwise the global
+# -fvisibility=hidden hides them and TRT loadLibrary() cannot find them).
+target_compile_definitions(saccade_scan_plugin PRIVATE TENSORRT_BUILD_LIB)
+target_link_libraries(saccade_scan_plugin PRIVATE
+    ${TENSORRT_NVINFER_LIBRARY}
+    CUDA::cudart
+)
+set_target_properties(saccade_scan_plugin PROPERTIES
+    PREFIX "lib"
+    OUTPUT_NAME "saccade_scan_plugin"
+    CUDA_SEPARABLE_COMPILATION OFF
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON
+    BUILD_RPATH "${SACCADE_BUILD_RPATH}"
+    INSTALL_RPATH "${SACCADE_INSTALL_RPATH}"
 )
 
 pybind11_add_module(saccade_media_ext NO_EXTRAS src/media/gst_client_python.cpp)
@@ -301,4 +332,39 @@ if(ENABLE_NATIVE_TESTS)
     )
     set_target_properties(saccade_gpu_postprocess_test PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
     add_test(NAME saccade_gpu_postprocess_test COMMAND saccade_gpu_postprocess_test)
+
+    # ── tracking unit tests (link against saccade_tracking static lib) ──────
+    # These cover the OOB clamp, mamba_scan fwd + broadcast_C, fpn_reid
+    # launchers, and the GMC Hanning divide-by-zero guard.
+    function(add_tracking_native_test name source)
+        add_executable(${name} ${source})
+        target_include_directories(${name} PRIVATE ${PROJECT_SOURCE_DIR}/include)
+        target_link_libraries(${name} PRIVATE saccade_tracking CUDA::cudart)
+        enable_native_coverage(${name})
+        set_target_properties(${name} PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+        add_test(NAME ${name} COMMAND ${name})
+    endfunction()
+
+    add_tracking_native_test(saccade_temporal_birth_pool_test
+        tests/native/test_temporal_birth_pool.cpp)
+    add_tracking_native_test(saccade_mamba_scan_test
+        tests/native/test_mamba_scan.cpp)
+    add_tracking_native_test(saccade_gmc_hanning_guard_test
+        tests/native/test_gmc_hanning_guard.cpp)
+
+    # fpn_reid launchers live in fpn_reid_cuda.cu, which is NOT part of
+    # saccade_tracking (it ships as a standalone torch extension). Compile
+    # the .cu directly into the test, mirroring saccade_gpu_postprocess_test.
+    add_executable(saccade_fpn_reid_launchers_test
+        tests/native/test_fpn_reid_launchers.cpp
+        src/tracking/fpn_reid_cuda.cu
+    )
+    target_include_directories(saccade_fpn_reid_launchers_test PRIVATE
+        ${PROJECT_SOURCE_DIR}/include
+    )
+    target_link_libraries(saccade_fpn_reid_launchers_test PRIVATE CUDA::cudart)
+    set_target_properties(saccade_fpn_reid_launchers_test PROPERTIES
+        CUDA_SEPARABLE_COMPILATION ON)
+    enable_native_coverage(saccade_fpn_reid_launchers_test)
+    add_test(NAME saccade_fpn_reid_launchers_test COMMAND saccade_fpn_reid_launchers_test)
 endif()
