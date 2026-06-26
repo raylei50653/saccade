@@ -1,0 +1,39 @@
+% ===========================================================================
+% main.tex —— 只是骨架。看這一檔就懂全書結構。
+%   建置:  make full   (含 L3 實作補充)
+%          make paper  (乾淨學術版,剝掉 L3)
+%   或:    xelatex "\def\IMPL{1}\input{main}"
+% ===========================================================================
+\documentclass[11pt,oneside]{ctexbook}   % 中文 → ctexbook + XeLaTeX
+\input{preamble}
+
+\title{Saccade 全局數學模型}
+\author{Ray Lei}
+
+\begin{document}
+% Keep page numbering format uniform across title, TOC, main text, and appendix.
+\maketitle
+\setcounter{page}{2}
+\tableofcontents
+
+% ---- Part I:主架構(the spine,只放地圖,不放數學)----
+\part{系統總覽}
+\include{chapters/00-overview}
+
+% ---- Part II:模組細節(一章一模組,全 pipeline 等深 L1–L2)----
+% 每章 = \archmap{...} 迷你地圖 + contract 合約框 + 核心數學
+%        + 末尾 \suppinput 掛 L3 實作補充(paper 版會自動剝掉)
+\part{模組細節}
+\include{chapters/04-detection}    % pipeline 最前段
+\include{chapters/05-gmc}          % ← 完整範例章
+\include{chapters/06-kalman}       % track 主體 1/3
+\include{chapters/07-association}  % track 主體 2/3
+\include{chapters/08-auction}      % track 主體 3/3
+\include{chapters/09-lifecycle}    % track 收尾 1/2
+\include{chapters/10-relink}       % track 收尾 2/2
+
+% ---- 附錄:reference 性質的大表(符號↔config)放這,不擋正文節奏 ----
+\appendix
+\include{chapters/A-symbols}
+
+\end{document}

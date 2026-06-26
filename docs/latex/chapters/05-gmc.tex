@@ -1,0 +1,66 @@
+% ===========================================================================
+% 細節章「樣板」:GMC。後續每章都照這個骨架寫,確保全 pipeline 等深。
+%   1) \archmap{...}  迷你地圖,點亮本模組
+%   2) contract 框    I/O / Source / Baseline,讓人不鑽公式也拿得到全貌
+%   3) L1–L2 數學     學術本體(收 paper 用這層)
+%   4) \suppinput     掛 L3 實作補充(paper 版自動剝掉)
+% ===========================================================================
+\chapter{GMC:相機運動補償}\label{ch:gmc}
+
+\begin{center}\archmap{gmc}\end{center}
+
+\begin{contract}{GMC}
+\textbf{輸入}\; prev + curr 灰階(GPU tensor, CHW float \([0,1]\))\quad
+\textbf{輸出}\; \(2\times3\) translation warp \(W_f\)\\
+\textbf{方法}\; phase correlation(cross-power spectrum + Hanning window)\quad
+\textbf{Source}\; \texttt{gmc\_kernel.cu}(cuFFT)\\
+\textbf{Baseline}\; \texttt{gmc\_downscale: 4}、translation-only、soft confidence gate
+\end{contract}
+
+\noindent
+GPU GMC 用 phase correlation 估 frame-to-frame 平移,作為 deterministic control
+input 送進 \texttt{track} 的 Kalman predict,讓 velocity state 只學物體
+residual motion 而非相機運動。
+
+\paragraph{演算法傳遞.} 本章內部依序串接下列步驟,邊上標註各步之間傳遞的量
+(對應 \Cref{sec:gmc-down,sec:gmc-cps,sec:gmc-warp}):
+
+\gmcflow
+
+\section{灰階降採樣與窗函數}\label{sec:gmc-down}
+對 downscaled pixel \((x,y)\),floor-based 取樣:
+\begin{equation}\label{eq:gmc-sample}
+  s_x=\Big\lfloor x\tfrac{W_{\mathrm{src}}}{W_{\mathrm{dst}}}\Big\rfloor,\qquad
+  s_y=\Big\lfloor y\tfrac{H_{\mathrm{src}}}{H_{\mathrm{dst}}}\Big\rfloor,\qquad
+  G=0.299R+0.587G_c+0.114B.
+\end{equation}
+FFT 前套 Hanning window \(G_w(x,y)=G(x,y)\,w_x w_y\),其中
+\(w_x=\tfrac12(1-\cos\tfrac{2\pi x}{W_{\mathrm{dst}}-1})\)(同理 \(w_y\))。
+
+\section{Cross-Power Spectrum 與位移}\label{sec:gmc-cps}
+令 \(A=\mathrm{FFT}(\text{prev})\)、\(B=\mathrm{FFT}(\text{curr})\):
+\begin{equation}\label{eq:gmc-cps}
+  C(k)=\overline{A(k)}B(k),\qquad
+  R(k)=\frac{C(k)}{|C(k)|+10^{-6}},\qquad
+  r=\mathrm{IFFT}(R).
+\end{equation}
+\(r\) 的 peak 給出 wrapped displacement(\(\text{peak}>\text{dim}/2\) 時減去該維長度)。
+
+\section{Confidence 與 Warp}\label{sec:gmc-warp}
+phase-correlation 可信度與軟縮放:
+\begin{equation}\label{eq:gmc-pcr}
+  \mathrm{PCR}=\frac{\max r}{\mathrm{RMS}(r)},\qquad
+  \gamma=\begin{cases}\mathrm{clamp}(\mathrm{PCR}/\tau,0,1),&\mathrm{PCR}<\tau\\1,&\text{otherwise.}\end{cases}
+\end{equation}
+位移超過 downscaled 尺寸 25\% 視為不可信(退回 identity)。否則
+\begin{equation}\label{eq:gmc-final}
+  t_x=p_x d\,\gamma,\quad t_y=p_y d\,\gamma,\qquad
+  W_f=\begin{bmatrix}1&0&t_x\\0&1&t_y\end{bmatrix}.
+\end{equation}
+\textbf{Sign convention}:positive \(t_x\) 把 predicted track center 往
+current frame 右方推。
+
+% ---------------------------------------------------------------------------
+% L3 實作補充:kernel 名、env、四路徑 fallback 差異。paper 版自動剝掉。
+% ---------------------------------------------------------------------------
+\suppinput{supp/05-gmc-impl}

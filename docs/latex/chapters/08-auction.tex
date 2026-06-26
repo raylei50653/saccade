@@ -1,0 +1,89 @@
+% ===========================================================================
+% track 主體 (3/3):Sparse Top-K 與 Auction Assignment
+% ===========================================================================
+\chapter{Sparse Top-K 與 Auction}\label{ch:auction}
+
+\begin{center}\archmap{track}\end{center}
+
+\begin{contract}{Auction(track 子機制)}
+\textbf{輸入}\; 每個 track 的稀疏 cost candidates \(c_{ij}\)\quad
+\textbf{輸出}\; 配對 \texttt{trk\_to\_det} / \texttt{det\_to\_trk}\\
+\textbf{方法}\; ByteTrack 風格分數級聯 \(\times\) 單輪平行 Bertsekas auction\quad
+\textbf{Source}\; \texttt{fused\_sinkhorn\_multistage\_kernel}、
+\texttt{parallel\_auction\_shmem\_kernel}\\
+\textbf{Baseline}\; 5-stage 級聯;\texttt{sinkhorn\_lambda} 僅作 \(e^{-\lambda c}\) value,
+\emph{非}完整 Sinkhorn solve
+\end{contract}
+
+\paragraph{演算法傳遞.} cost candidates 先一次算出五個 stage 的 top-k,再依優先序
+串行跑級聯;每個 stage reset 價格後跑單輪 auction 並 commit,未配掉的 track/det
+流到下一 stage:
+
+\begin{center}\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[node distance=15mm]
+  \node[step=Ctrk] (n1) {cost\\candidates};
+  \node[step=Ctrk, right=of n1] (n2) {fused top-k\\(5 stages)};
+  \node[step=Ctrk, right=of n2] (n3) {級聯\\S0$\to$S1$\to$S1b$\to$S1c$\to$S2};
+  \node[step=Ctrk, right=of n3] (n4) {per-stage\\reset price $+$ auction};
+  \node[step=Ctrk, right=of n4] (n5) {commit\\\texttt{trk\_to\_det}};
+  \draw[flowarr=Ctrk] (n1) -- node[flowlbl,above]{$c_{ij}$} (n2);
+  \draw[flowarr=Ctrk] (n2) -- node[flowlbl,above]{$p_{ij}$} (n3);
+  \draw[flowarr=Ctrk] (n3) -- node[flowlbl,above]{逐 stage} (n4);
+  \draw[flowarr=Ctrk] (n4) -- node[flowlbl,above]{winners}  (n5);
+\end{tikzpicture}}\end{center}
+
+\noindent
+這\emph{不是} full dense Sinkhorn:每 stage 只跑一輪 bid+commit,price buffer 開頭
+reset 為 0,沒有 price-raising 迭代到收斂——實質是單輪平行貪婪配對。
+
+\section{Stage 級聯與 Value}\label{sec:au-stage}
+五個 stage 依優先序貪婪,carry-over 只看前面沒配掉的 track/det:
+
+\begin{table}[h]\centering\small\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{@{}llll@{}}
+\toprule
+Stage & Track state & Detection score & Cost cap \\
+\midrule
+S0 DDA       & confirmed  & \([\text{high},1.1)\)         & \(c_{\mathrm{DDA}}\) (0.12) \\
+S1 high      & confirmed  & \([\text{high},1.1)\)         & \(\tau_{\mathrm{match}}\) \\
+S1b mid      & confirmed  & \([\text{mid},\text{high})\)  & \(\tau_{\mathrm{match}}\) \\
+S1c tentative& tentative  & \([\text{mid},1.1)\)          & \(\tau_{\mathrm{match}}\) \\
+S2 low       & confirmed  & \([\text{track},\text{mid})\) & \(\tau_{\mathrm{stage2}}\) \\
+\bottomrule
+\end{tabular}
+\caption{分數級聯(\texttt{run\_stage} 0..4)。}\label{tab:au-stage}
+\end{table}
+
+放入 top-k 的 value 與 aspect penalty:
+\begin{equation}\label{eq:au-value}
+  p_{ij}=e^{-\lambda c_{ij}}\,G_{\mathrm{aspect}}(b_j),\qquad
+  r_j=\tfrac{\mathrm{width}_j}{\mathrm{height}_j},
+\end{equation}
+\begin{equation}\label{eq:au-aspect}
+  G_{\mathrm{aspect}}=
+  \begin{cases}
+    \max(0.5,\,1-(r_j-0.8)), & r_j>0.8\\
+    \max(0.5,\,1-5(0.15-r_j)), & r_j<0.15\\
+    1, & \text{otherwise.}
+  \end{cases}
+\end{equation}
+
+\section{Auction Bid}\label{sec:au-bid}
+給定 detection 當前 price \(\rho_j\),track \(i\) 的 best/second 與 bid:
+\begin{equation}\label{eq:au-bid}
+  v_{ij}=p_{ij}-\rho_j,\quad
+  j^\ast=\arg\max_j v_{ij},\quad
+  \Delta\rho_i=v_{ij^\ast}-v^{(2)}_i+\epsilon,\quad
+  \mathrm{bid}_i=\rho_{j^\ast}+\Delta\rho_i.
+\end{equation}
+single-round 下 \(\Delta\rho\) 只用來決定同一輪內多 track 競標同一 detection 誰勝出。
+兩個 bid bias(絕對相加):
+\begin{equation}\label{eq:au-bias}
+  \mathrm{bid}_i \mathrel{+}=\frac{w_{\mathrm{fresh}}}{1+\mathrm{age}_i},\qquad
+  \mathrm{bid}_i \mathrel{+}=\frac{w_{\mathrm{stab,bid}}}{1+|h_i-h_j|/h_j}.
+\end{equation}
+預設不一致,\textbf{勿一律當 off}:freshness \(w_{\mathrm{fresh}}\)
+(\texttt{SACCADE\_FRESHNESS\_W})預設 0(關);stability bid bias
+\(w_{\mathrm{stab,bid}}\)(\texttt{SACCADE\_STABILITY\_W})預設 \(0.1\)(\textbf{開})。
+
+\suppinput{supp/08-auction-impl}

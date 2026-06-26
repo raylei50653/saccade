@@ -1,0 +1,69 @@
+% ===========================================================================
+% track 收尾 (1/2):Track Lifecycle 與 Birth
+% ===========================================================================
+\chapter{Track Lifecycle 與 Birth}\label{ch:lifecycle}
+
+\begin{center}\archmap{track}\end{center}
+
+\begin{contract}{Lifecycle(track 子機制)}
+\textbf{輸入}\; assignment 結果(matched / unmatched track / unmatched detection)\quad
+\textbf{輸出}\; 更新後的 track 集合與狀態(tentative/confirmed/lost/removed)\\
+\textbf{方法}\; hit-streak 累積 confirm、age 計數 lost/remove\quad
+\textbf{Source}\; \texttt{tracker\_gpu.cu}\\
+\textbf{Baseline}\; \texttt{new\_track\_thresh: 0.28}、\texttt{confirm\_streak: 3}、
+\texttt{confirm\_score\_thresh: 0.50}、\texttt{track\_buffer: 30}、\texttt{per\_seq\_adapt: false}
+\end{contract}
+
+\paragraph{演算法傳遞.} assignment 後依配對狀態驅動 track 狀態機;下圖為主要轉移
+(tentative 若連續未配會很快 drop,圖中略):
+
+\begin{center}\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[node distance=20mm]
+  \node[step=Ctrk] (nw) {未配 det};
+  \node[step=Ctrk, right=of nw] (te) {tentative};
+  \node[step=Ctrk, right=of te] (co) {confirmed};
+  \node[step=Ctrk, right=of co] (lo) {lost};
+  \node[step=Ctrk, right=of lo] (rm) {removed};
+  \draw[flowarr=Ctrk] (nw) -- node[flowlbl,above]{$s_j{\ge}$new\_thr} (te);
+  \draw[flowarr=Ctrk] (te) -- node[flowlbl,above]{streak${\ge}3$}    (co);
+  \draw[flowarr=Ctrk] (co) -- node[flowlbl,above]{unmatched}         (lo);
+  \draw[flowarr=Ctrk] (lo) -- node[flowlbl,above]{age${>}$buffer}    (rm);
+  \draw[flowarr=Ctrk] (lo) to[bend left=32] node[flowlbl,above]{re-match} (co);
+\end{tikzpicture}}\end{center}
+
+\section{State 轉移}\label{sec:lc-states}
+assignment 後 tracker 更新 state:
+\begin{itemize}\setlength\itemsep{2pt}
+  \item \textbf{matched}(confirmed/tentative):以 detection \(z_j\) 做 Kalman update
+        (\Cref{ch:kalman}),\texttt{hit\_streak}\(+1\),\texttt{age}/\texttt{time\_since\_update}
+        歸零。
+  \item \textbf{unmatched active track}:\texttt{age}\(\le\)\texttt{track\_buffer} 期間維持
+        active/lost,超過 max age 後 remove。
+  \item \textbf{unmatched detection}(\(s_j\ge\)\texttt{new\_track\_thresh}):生成新的
+        tentative track。
+\end{itemize}
+
+\section{Birth 與 Confirm}\label{sec:lc-confirm}
+新 tentative track 必須累積足夠連續 evidence 才會被視為 confirmed output:
+\begin{equation}\label{eq:lc-confirm}
+\begin{aligned}
+  \text{confirmed}\iff{}&
+  \texttt{hit\_streak}\ge\texttt{confirm\_streak}\\
+  &{}\land\bar{s}\ge\texttt{confirm\_score\_thresh}.
+\end{aligned}
+\end{equation}
+baseline:
+\begin{center}\small
+\begin{tabular}{@{}ll@{\qquad}ll@{}}
+\texttt{confirm\_streak} & 3 &
+\texttt{confirm\_score\_thresh} & 0.50 \\
+\texttt{new\_track\_thresh} & 0.28 &
+\texttt{track\_buffer} & 30
+\end{tabular}
+\end{center}
+若干 birth-gate experiments 位於 \path{scripts/eval/config/lifecycle.py},但目前
+preset 未啟用(\texttt{per\_seq\_adapt: false})。
+普通新生 track 以 tentative 與 \texttt{hit\_streak=1} 起跑;bridge relink 復活的
+slot 會保留 lost id 並直接回到 confirmed,不再走 tentative confirm gate。
+
+\suppinput{supp/09-lifecycle-impl}

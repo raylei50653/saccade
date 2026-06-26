@@ -1,0 +1,18 @@
+% L3:Auction 實作錨點
+\begin{implsupp}{Auction}
+\textbf{錨點}\;\; top-k:\texttt{fused\_sinkhorn\_multistage\_kernel};auction:
+\texttt{parallel\_auction\_shmem\_kernel};host driver \texttt{run\_stage(0..4)}。
+aspect peak/width 為 hardcoded \texttt{cu:186}(2.5 / 1.2)。\\
+\textbf{S0 DDA}\;\; \texttt{SACCADE\_ENABLE\_DDA} 開關;\(c_{\mathrm{DDA}}\) 來自
+\texttt{SACCADE\_DDA\_MAX\_COST}(\texttt{cu:2404/2405}),未設為 0.12。\\
+\textbf{stage thresholds}\;\; \texttt{match\_thresh}/\texttt{high\_thresh}/\texttt{mid\_thresh}/
+\texttt{track\_thresh}/\texttt{stage2\_match\_thresh} = 0.50/0.45/0.10/0.05/0.50。\\
+\textbf{bid bias env}\;\; \(w_{\mathrm{fresh}}\):\texttt{SACCADE\_FRESHNESS\_W}@\texttt{cu:2650};
+\(w_{\mathrm{stab,bid}}\):\texttt{SACCADE\_STABILITY\_W}@\texttt{cu:2666}
+(comment 註 IDs \(-42\)/IDF1 neutral)。\\
+\textbf{dead param}\;\; 舊 \texttt{SACCADE\_HISTORY\_W}(hit-streak bias)body 從未讀取,
+已整條移除(bit-exact no-op)。auction bid bias 現只有 freshness 與 stability。\\
+\textbf{determinism}\;\; shared-memory price cache 做 intra-block 衝突解析;block winner
+用 \texttt{atomicMax};packed \texttt{(bid\_bits, tie)} key 確保 deterministic commit;
+另用 commit kernel 避免 \texttt{trk\_to\_det}/\texttt{det\_to\_trk} race。
+\end{implsupp}

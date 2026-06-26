@@ -1,0 +1,24 @@
+% ===========================================================================
+% L3 實作補充:GMC。只在 `make full` 出現;`make paper` 透過 \suppinput 剝掉。
+% 這裡放會淹沒學術重點的東西:kernel 名、env var、line number、路徑差異。
+% ===========================================================================
+\begin{implsupp}{GMC}
+\textbf{程式路徑差異}(\Cref{eq:gmc-final} 的 25\% cap 處置因 path 而異):
+\begin{itemize}\setlength\itemsep{1pt}
+  \item C++ \texttt{peak\_to\_translation\_warp\_kernel}(graph path,經
+        \texttt{launch\_phase\_correlation\_into\_warp}):不可信 → identity warp。
+  \item C++ \texttt{launch\_phase\_correlation}(standalone):kernel 回原始
+        wrapped displacement,由 host \texttt{GMC::estimate()} 二次檢查後回空 result。
+  \item Python \texttt{PyGraphedGMC}:同套軟 confidence scaling(非 hard gate),
+        constructor \texttt{pcr\_thresh} 預設 \texttt{5.0};\textbf{不讀}
+        \texttt{SACCADE\_GMC\_PCR\_THRESH}(僅 C++ path 可由該 env 調整)。
+  \item Python \texttt{TilePhaseCorrAffineGMC}:無 fallback 時回 \texttt{None}。
+\end{itemize}
+
+\textbf{錨點}\;\;
+\(\tau_{\mathrm{PCR}}\): \texttt{SACCADE\_GMC\_PCR\_THRESH}, \texttt{gmc\_kernel.cu:169}
+(py fallback \texttt{5.0})。\quad
+control input 融合:\texttt{predict\_gmc\_sinv\_fused\_kernel}(\texttt{tracker\_gpu.cu})。\\
+\textbf{取樣一致性}\;\; C++ floor mapping(\Cref{eq:gmc-sample})與 Python
+\texttt{F.interpolate(mode="nearest")} 在固定輸出尺寸下取樣座標一致。
+\end{implsupp}

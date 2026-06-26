@@ -1,0 +1,14 @@
+% L3:Kalman 實作錨點
+\begin{implsupp}{Kalman}
+\textbf{錨點}\;\;
+\(\sigma_p=h^-/20\)、\(\sigma_v=h^-/160\) 為 hardcoded(\texttt{std\_weight\_position}
+/ \texttt{\_velocity}),\texttt{kalman\_gpu.cuh:155/156}。\quad
+predict + GMC control 融合於 \texttt{predict\_gmc\_sinv\_fused\_kernel};
+gate 的 \(S_i^{-1}\) 由 \texttt{compute\_S\_inv} 計算,Mahalanobis 由
+\texttt{mahal\_sq\_det}(均在 \texttt{tracker\_gpu.cu})。\\
+\textbf{r\_scale}\;\; \(r_{\mathrm{scale}}\) 即 config \texttt{kalman\_r\_scale}(baseline 2.8),
+\Cref{eq:kf-R} 的 update 與 \Cref{eq:kf-maha} 的 gate 共用同一個值
+(由 \texttt{predict\_gmc\_sinv\_fused\_kernel} 傳入)。\\
+\textbf{NSA / 亮度}\;\; \(m_{\mathrm{NSA}},\lambda_{\mathrm{light}}\) 為可配置分支;
+MOT17 baseline 由 caller 傳 \(0\),故 \(m_R=r_{\mathrm{scale}}\)。
+\end{implsupp}

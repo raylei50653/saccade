@@ -1,0 +1,164 @@
+% ===========================================================================
+% preamble.tex —— 套件、深度開關、archmap 迷你地圖、合約框
+% 引擎:XeLaTeX(中文必須)。建置見 README.md / Makefile。
+% ===========================================================================
+
+% --- 繁體中文字型(fandol 為簡體取向,缺繁體字形;改用 Noto CJK TC)---
+\setCJKmainfont{Noto Serif CJK TC}
+\setCJKsansfont{Noto Sans CJK TC}
+\setCJKmonofont{Noto Sans CJK TC}
+% ctexbook 預設 caption 是簡體;改回繁體(录→錄)。appendixname 同時管標題與頁首。
+\ctexset{contentsname=目錄, appendixname=附錄}
+% 中英混排時,允許行末額外伸縮以吸收邊際 overfull(標準作法)
+\setlength{\emergencystretch}{3em}
+
+% --- 數學 / 表格 / 引用 ---
+\usepackage{amsmath, amssymb, mathtools}
+\usepackage{booktabs}            % \toprule \midrule \bottomrule,禁直線
+\usepackage{array}
+\usepackage{tabularx}            % 自動寬度欄(職責表用)
+\usepackage{longtable}           % 可跨頁的參考表(附錄符號表用)
+\usepackage[hidelinks]{hyperref}
+\usepackage{cleveref}            % \Cref{eq:...} 就近引用
+\usepackage{xstring}             % archmap 的字串比較(跨引擎安全)
+\usepackage{fancyhdr}            % 統一頁碼位置
+
+% --- 圖 ---
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, fit, backgrounds}
+
+% --- 程式碼 / 合約框 ---
+\usepackage[most]{tcolorbox}
+\usepackage{fvextra}             % Verbatim,ASCII pipeline 圖暫存用
+
+% --- 頁碼 ---
+% ctexbook/book 的一般頁與章首頁預設 page style 不同,會讓頁碼在頁首/頁腳間跳。
+% 這裡同時覆寫一般頁型與 plain 頁型,固定頁碼在頁腳中央。
+\fancypagestyle{saccadepage}{
+  \fancyhf{}
+  \fancyfoot[C]{\thepage}
+  \renewcommand{\headrulewidth}{0pt}
+  \renewcommand{\footrulewidth}{0pt}
+}
+\fancypagestyle{plain}{
+  \fancyhf{}
+  \fancyfoot[C]{\thepage}
+  \renewcommand{\headrulewidth}{0pt}
+  \renewcommand{\footrulewidth}{0pt}
+}
+\AtBeginDocument{\pagestyle{saccadepage}}
+
+% ===========================================================================
+% 深度開關:L3 實作補充是否編入
+%   make full  -> \def\IMPL{1}  含 supp/*-impl.tex
+%   make paper -> \def\IMPL{0}  剝掉所有 L3,得乾淨學術版
+% ===========================================================================
+\providecommand{\IMPL}{1}
+\newif\ifimpl
+\ifnum\IMPL=1 \impltrue \else \implfalse \fi
+
+% \suppinput{file}:只有 full 版會把 L3 補充檔讀進來
+\newcommand{\suppinput}[1]{\ifimpl\input{#1}\fi}
+
+% L3 補充章節的統一外框(視覺上和學術本體區隔)
+\newtcolorbox{implsupp}[1]{
+  enhanced, breakable,
+  colback=orange!4, colframe=orange!55!black,
+  fonttitle=\bfseries\small, coltitle=orange!30!black,
+  title={實作補充 (L3,僅 full 版)\quad#1},
+  left=2mm, right=2mm, top=1mm, bottom=1mm}
+
+% ===========================================================================
+% 模組合約框:每個細節章開頭,濃縮 I/O / Source / Baseline
+% ===========================================================================
+\newtcolorbox{contract}[1]{
+  enhanced, breakable,
+  colback=gray!4, colframe=black!55,
+  fonttitle=\bfseries, title={模組合約:#1}}
+
+% ===========================================================================
+% \archmap{focus} —— 全書共用的「你在這裡」迷你地圖
+%   focus ∈ {none, detect, gmc, track, output}
+%   none = 全亮(總覽章用);其餘 = 點亮焦點、淡化其它
+%   track 內的子章(Kalman/association/auction/...)先一律用 track;
+%   日後要更細,可在此複製出 \trackmap 畫 track 內部子階。
+% ===========================================================================
+% 每個 stage 的代表色(改這裡就改全書配色)——用 \colorlet 建具名顏色,
+% 才能在 pgfkeys option 裡以字面名稱引用(巨集名不會被展開)。
+\colorlet{Cbuf}{teal}
+\colorlet{Cdet}{blue!65!cyan}
+\colorlet{Cgmc}{orange!90!red}
+\colorlet{Ctrk}{violet!80!blue}
+\colorlet{Cout}{green!55!black}
+
+% 全域 style:box 外型 + 三種狀態(吃顏色當 #1)+ 箭頭/標籤
+\tikzset{
+  ambox/.style  ={draw, rounded corners, align=center,
+                  minimum height=10mm, minimum width=24mm, font=\small},
+  amfull/.style ={fill=#1!25, draw=#1!85!black, line width=1pt,   text=black!88},
+  amfade/.style ={fill=#1!8,  draw=#1!35,       line width=0.6pt, text=black!40},
+  amfocus/.style={fill=#1!48, draw=#1!90!black, line width=1.9pt, text=black!92},
+  amarr/.style  ={-{Stealth}, thick},               % 直角:不加 rounded corners
+  amlbl/.style  ={font=\scriptsize, text=black!55},
+}
+
+\newcommand{\archmap}[1]{%
+  % 預設 full(總覽 none 全部上色);具名 style 都是字面,pgfkeys 吃得到
+  \tikzset{amSbuf/.style={amfull=Cbuf}, amSdet/.style={amfull=Cdet},
+           amSgmc/.style={amfull=Cgmc}, amStrk/.style={amfull=Ctrk},
+           amSout/.style={amfull=Cout}}%
+  \IfStrEq{#1}{none}{}{% 指定焦點:先全 fade,再把焦點改 focus
+    \tikzset{amSbuf/.style={amfade=Cbuf}, amSdet/.style={amfade=Cdet},
+             amSgmc/.style={amfade=Cgmc}, amStrk/.style={amfade=Ctrk},
+             amSout/.style={amfade=Cout}}%
+    \IfStrEq{#1}{detect}{\tikzset{amSdet/.style={amfocus=Cdet}}}{}%
+    \IfStrEq{#1}{gmc}{\tikzset{amSgmc/.style={amfocus=Cgmc}}}{}%
+    \IfStrEq{#1}{track}{\tikzset{amStrk/.style={amfocus=Ctrk}}}{}%
+    \IfStrEq{#1}{output}{\tikzset{amSout/.style={amfocus=Cout}}}{}%
+  }%
+  % 固定成欄寬比例再置中,避免視覺偏移
+  \resizebox{0.92\linewidth}{!}{%
+  \begin{tikzpicture}
+    % 橫式佈局:左→右流,detect/GMC 為上下兩條平行支線
+    \node[ambox, amSbuf] (buf) at (0,0)     {frame buffer\\\scriptsize(GPU, CHW)};
+    \node[ambox, amSdet] (det) at (3.2, 1)  {detect 鏈};
+    \node[ambox, amSgmc] (gmc) at (3.2,-1)  {GMC};
+    \node[ambox, amStrk] (trk) at (6.6, 0)  {track\\\scriptsize tracker\_gpu.cu};
+    \node[ambox, amSout] (out) at (9.8, 0)  {materialize\\\scriptsize→ MOT rows};
+    % 分岔:buf 拉出 bus,再直角接上下兩支線(連線染來源色)
+    \draw[amarr, Cbuf!65!black] (buf.east) -- ++(0.4,0) |- (det.west);
+    \draw[amarr, Cbuf!65!black] (buf.east) -- ++(0.4,0) |- (gmc.west);
+    % 匯合:兩支線直角收進 track
+    \draw[amarr, Cdet!65!black] (det.east) -- ++(0.4,0) node[amlbl,above]{boxes} |- (trk.west);
+    \draw[amarr, Cgmc!70!black] (gmc.east) -- ++(0.4,0) node[amlbl,below]{$W_f$} |- (trk.west);
+    \draw[amarr, Ctrk!65!black] (trk.east) -- (out.west);
+  \end{tikzpicture}}}
+
+% ===========================================================================
+% 章內「演算法傳遞圖」共用 style —— 每章自畫,顏色用該模組的 C*
+%   step=<color>     一個演算法步驟方塊
+%   flowarr=<color>  傳遞箭頭(直角時用 |- / -|)
+%   flowlbl          標在邊上的「傳了什麼」(白底壓線)
+% 用法見 chapters/05-gmc.tex 的範例。
+% ===========================================================================
+\tikzset{
+  step/.style   ={draw, rounded corners=2pt, align=center, font=\footnotesize,
+                  minimum height=10mm, minimum width=20mm, inner sep=4pt,
+                  fill=#1!14, draw=#1!70!black, text=black!88},
+  flowarr/.style={-{Stealth}, semithick, draw=#1!75!black},
+  flowlbl/.style={font=\scriptsize, text=black!60, fill=white, inner sep=1.5pt},
+}
+% 把 GMC 章內流程一行寫完的便利指令(其他章可仿照自行展開)
+\newcommand{\gmcflow}{%
+  \begin{center}\resizebox{\linewidth}{!}{%
+  \begin{tikzpicture}[node distance=13mm]
+    \node[step=Cgmc] (n1) {灰階降採樣\\+\,Hanning};
+    \node[step=Cgmc, right=of n1] (n2) {FFT\\prev / curr};
+    \node[step=Cgmc, right=of n2] (n3) {cross-power\\$R=\overline{A}B/|{\cdot}|$};
+    \node[step=Cgmc, right=of n3] (n4) {IFFT $\to$ peak\\PCR};
+    \node[step=Cgmc, right=of n4] (n5) {confidence $\gamma$\\$\to$ warp $W_f$};
+    \draw[flowarr=Cgmc] (n1) -- node[flowlbl,above]{$G_w$}        (n2);
+    \draw[flowarr=Cgmc] (n2) -- node[flowlbl,above]{$A,B$}        (n3);
+    \draw[flowarr=Cgmc] (n3) -- node[flowlbl,above]{$R(k)$}       (n4);
+    \draw[flowarr=Cgmc] (n4) -- node[flowlbl,above]{$r$ peak}     (n5);
+  \end{tikzpicture}}\end{center}}

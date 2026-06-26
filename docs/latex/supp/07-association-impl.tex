@@ -1,0 +1,15 @@
+% L3:Association cost 實作錨點
+\begin{implsupp}{Association cost}
+\textbf{錨點}\;\; cost/gate 一次完成於 \texttt{stage1\_cost\_fused\_kernel};
+ReID 啟用時走 \texttt{compute\_conditional\_cost\_kernel}。OAO 係數由
+\texttt{compute\_track\_occlusion\_kernel} 計算,crowd 分支 \texttt{/0.25}@\texttt{cu:500}。\\
+\textbf{fuse\_score\_weight 分支}\;\; 若 \(w_{\mathrm{fuse}}{>}0\) 且 track 已 confirmed
+(\texttt{hit\_streak}\(\ge\)\texttt{confirm\_streak}),\(\Cref{eq:as-q}\) 的 \((1-s_j)\)
+換成相對 score-drop \(p_{\mathrm{rel}}=\max(0,\bar{s}_i-s_j)/\max(\bar{s}_i,0.01)\),
+再乘 crowd damping \((1-\min(1,o_i/0.25))\)。baseline \(w_{\mathrm{fuse}}{=}0\) 不觸發。\\
+\textbf{baseline-off 項}\;\; \(P_{\mathrm{vel}}\):\texttt{vel\_dir\_weight};
+\(P_{\mathrm{occ\_front}}\):\texttt{occ\_state\_enabled}(footline depth penalty)。
+kernel 內保留,僅未配置。\\
+\textbf{ReID blend}\;\; \texttt{scripts/eval/config/reid.py} 預設
+\(w_{\cos}{=}0.55,w_{\mathrm{iou}}{=}0.30,w_s{=}0.15\);\texttt{reid\_mode: off} 不使用。
+\end{implsupp}

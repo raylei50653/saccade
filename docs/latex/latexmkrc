@@ -1,0 +1,6 @@
+$pdf_mode = 5;        # 用 xelatex 產生 PDF(中文必須)
+$xelatex  = 'xelatex -shell-escape -interaction=nonstopmode %O %S';
+$out_dir  = 'build';
+@default_files = ('main.tex');
+# \include 的 .aux 會寫到 build/chapters/,先建好避免首輪 clean build 報錯
+system('mkdir', '-p', 'build/chapters');

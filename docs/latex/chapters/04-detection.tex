@@ -1,0 +1,108 @@
+% ===========================================================================
+% Detection 與 Postprocess(pipeline 最前段,故置於 Part II 第一章)
+% ===========================================================================
+\chapter{Detection 與 Postprocess}\label{ch:detect}
+
+\begin{center}\archmap{detect}\end{center}
+
+\begin{contract}{detect 鏈}
+\textbf{輸入}\; frame \(640\times640\) CHW tensor\quad
+\textbf{輸出}\; boxes / scores / classes(post-NMS)\\
+\textbf{方法}\; YOLO26s TRT backbone+neck \(\to\) Mamba head(per-level lane)\(\to\)
+anchor-free decode \(\to\) NMS\quad
+\textbf{Source}\; \texttt{mamba\_gated\_detector.py}、\texttt{mamba\_head.py}、
+\texttt{mamba\_gated\_detector.cpp}、\texttt{pipeline.cpp}\\
+\textbf{Baseline}\; \texttt{tiling: native\_640}、\texttt{preprocess: none}、
+ckpt \texttt{mamba\_gt\_v14replica\_t3\_t1};整段在 whole-detect CUDA graph 單次 replay
+\end{contract}
+
+\paragraph{演算法傳遞.} detect 鏈分兩段:detector(backbone+head,出 raw)與 native
+postprocess(過濾/NMS)。邊上為各段傳遞的張量:
+
+\begin{center}\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[node distance=14mm]
+  \node[step=Cdet] (n1) {frame\\$640^2$};
+  \node[step=Cdet, right=of n1] (n2) {TRT backbone\\$+$ neck (FPN)};
+  \node[step=Cdet, right=of n2] (n3) {Mamba head\\$\times(P_3,P_4,P_5)$};
+  \node[step=Cdet, right=of n3] (n4) {decode\\anchor-free};
+  \node[step=Cdet, right=of n4] (n5) {filter $+$ NMS};
+  \draw[flowarr=Cdet] (n1) -- node[flowlbl,above]{image}              (n2);
+  \draw[flowarr=Cdet] (n2) -- node[flowlbl,above]{$F_3,F_4,F_5$}       (n3);
+  \draw[flowarr=Cdet] (n3) -- node[flowlbl,above]{$\mathrm{cls}_N,\mathrm{reg}_N$} (n4);
+  \draw[flowarr=Cdet] (n4) -- node[flowlbl,above]{8400 anchors}        (n5);
+\end{tikzpicture}}\end{center}
+
+\section{整體結構與三尺度}\label{sec:det-overall}
+P3/P4/P5 三條 lane 結構完全相同,只差尺度常數(輸入固定 640):
+
+\begin{table}[h]\centering\small\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+level \(N\) & stride \(s_N\) & \(H_N{=}W_N{=}640/s_N\) & channels \(C_N\) & tokens \(L_N{=}(H_N/4)^2\) \\
+\midrule
+P3 & 8  & 80 & 128 & 400 \\
+P4 & 16 & 40 & 256 & 100 \\
+P5 & 32 & 20 & 512 & 25  \\
+\bottomrule
+\end{tabular}
+\caption{三尺度常數(\(s_N{=}2^N,\ C_N{=}2^{N+4}\))。}\label{tab:det-levels}
+\end{table}
+
+\section{單一 Lane:Mamba Head(Flow B)}\label{sec:det-mamba}
+重點是 U-Net 式 skip:\(X_N\) 一邊進 down\(\to\)Mamba\(\to\)up,一邊\textbf{跳接}直接與
+\(U_N\) concat,故 head 輸入是 256 ch。先 \texttt{Down4} 把序列壓到 \(L_N\le400\)
+(控 scan 成本),上採樣後再補回細節:
+
+\begin{center}\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[node distance=11mm]
+  \node[step=Cdet] (f)  {$F_N$\\$C_N{\times}H_N{\times}W_N$};
+  \node[step=Cdet, right=of f]  (x)  {input\_proj\\$X_N$ (128)};
+  \node[step=Cdet, right=of x]  (d)  {Down4\\stride-4};
+  \node[step=Cdet, right=of d]  (z)  {flatten\\$Z_N$ ($L_N{\times}128$)};
+  \node[step=Cdet, right=of z]  (m)  {MambaBlock\\$\times2$ ($d_{\mathrm{state}}{=}16$)};
+  \node[step=Cdet, right=of m]  (u)  {Up4\\$U_N$ (128)};
+  \node[step=Cdet, right=of u]  (c)  {concat\\$\to Y_N$ (256)};
+  \draw[flowarr=Cdet] (f) -- (x);
+  \draw[flowarr=Cdet] (x) -- (d);
+  \draw[flowarr=Cdet] (d) -- node[flowlbl,above]{$\le400$ tok} (z);
+  \draw[flowarr=Cdet] (z) -- (m);
+  \draw[flowarr=Cdet] (m) -- (u);
+  \draw[flowarr=Cdet] (u) -- (c);
+  % U-Net skip:X_N 直接跳接到 concat(直角繞上方)
+  \draw[flowarr=Cdet, dashed] (x.north) |- ++(0,7mm) -| node[flowlbl,above,pos=0.25]{skip $X_N$} (c.north);
+\end{tikzpicture}}\end{center}
+
+\section{Head 與 Decode(Flow C/D)}\label{sec:det-decode}
+\textbf{Head}(per level,純卷積):\(Y_N(256)\) 分兩支,cls head
+\(\to\mathrm{cls}_N\,(80)\)、reg head \(\to\mathrm{reg}_N\,(4)\);輸出通道
+\(n_o=n_c+4\,r_{\max}=80+4=84\)(\(r_{\max}{=}1\),box 直接 4 維距離,無 DFL)。
+
+\textbf{Decode}(anchor-free,跨三尺度合併,\(N=80^2{+}40^2{+}20^2=8400\) anchors)。
+anchor 為 grid 中心 \((x{+}0.5,y{+}0.5)\),每點帶 stride:
+\begin{equation}\label{eq:det-decode}
+  \mathrm{reg}=(\ell t,rb)\ \xrightarrow{\text{dist2bbox}}\
+  c=\mathrm{anchor}+\tfrac{rb-\ell t}{2},\quad
+  wh=\ell t+rb\ \xrightarrow{\times s}\ \text{xyxy(像素)}.
+\end{equation}
+\begin{equation}\label{eq:det-cls}
+  \text{score},\ \text{class}=\max_{80},\ \arg\max_{80}\ \sigma(\mathrm{cls}).
+\end{equation}
+
+\section{Postprocess Contract}\label{sec:det-post}
+native postprocess(\Cref{ch:detect} 第二段)的核心 contract:
+\begin{center}\ttfamily\small
+(raw boxes/scores/classes) → score/class/geometry filter → compact/gather → NMS → output
+\end{center}
+baseline 旗標全關:
+\begin{center}\small
+\begin{tabular}{@{}ll@{\qquad}ll@{}}
+\texttt{track\_person\_only} & false &
+\texttt{person\_geometry\_prior} & false \\
+\texttt{detection\_quality\_scaling} & false &
+\texttt{geometry\_suspect\_support} & false
+\end{tabular}
+\end{center}
+tracker 直接消費 post-NMS boxes,各 detection 進哪段 association 由 tracker
+的 score gates(\(\tau_{\mathrm{track/mid/high}}\)、\texttt{new\_track\_thresh})決定。
+
+\suppinput{supp/04-detection-impl}

@@ -1,0 +1,77 @@
+% ===========================================================================
+% track 主體 (2/3):Association Cost
+% ===========================================================================
+\chapter{Association Cost}\label{ch:assoc}
+
+\begin{center}\archmap{track}\end{center}
+
+\begin{contract}{Association cost(track 子機制)}
+\textbf{輸入}\; predict 後 tracks \(\{\tilde{x}_i\}\)、detections \(\{b_j,s_j\}\)\quad
+\textbf{輸出}\; 稀疏 candidate 上的成本 \(c_{ij}\)(供 auction)\\
+\textbf{方法}\; IoU(+ReID)綜合質量 → 乘法式 cost,含 OAO/stability 調節\quad
+\textbf{Source}\; \texttt{stage1\_cost\_fused\_kernel}(\texttt{tracker\_gpu.cu})\\
+\textbf{Baseline}\; \texttt{multiplicative\_cost: true}、\texttt{sinkhorn\_lambda: 10}、
+\texttt{stability\_cost\_w: 0.20}、\texttt{reid\_mode: off}
+\end{contract}
+
+\paragraph{演算法傳遞.} gate 過的 pair 先算 base quality,再匯入 penalty,經乘法式
+轉成 cost,最後只把夠好的 enqueue 進稀疏 candidate list:
+
+\begin{center}\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[node distance=15mm]
+  \node[step=Ctrk] (n1) {candidate gate\\$\mathrm{IoU}\,\lor\,\mathrm{Maha}$};
+  \node[step=Ctrk, right=of n1] (n2) {base quality\\$A_{ij}{=}q^{\mathrm{iou}}_{ij}$};
+  \node[step=Ctrk, right=of n2] (n3) {penalties\\$\Pi{=}P_{\mathrm{OAO}}{+}P_{\mathrm{vel}}{+}P_{\mathrm{occ}}{-}R_{\mathrm{stab}}$};
+  \node[step=Ctrk, right=of n3] (n4) {mult.\ cost\\$c{=}1{-}A\,e^{-\Pi}$};
+  \node[step=Ctrk, right=of n4] (n5) {sparse top-k\\enqueue};
+  \draw[flowarr=Ctrk] (n1) -- node[flowlbl,above]{候選}        (n2);
+  \draw[flowarr=Ctrk] (n2) -- node[flowlbl,above]{$A_{ij}$}     (n3);
+  \draw[flowarr=Ctrk] (n3) -- node[flowlbl,above]{$\Pi_{ij}$}   (n4);
+  \draw[flowarr=Ctrk] (n4) -- node[flowlbl,above]{$c_{ij}$}     (n5);
+\end{tikzpicture}}\end{center}
+
+\section{Candidate Gate 與 Base Quality}\label{sec:as-gate}
+gate 同 \Cref{eq:kf-maha}。兩 gate 皆不過時 \(c_{ij}=1\)。detection score fusion:
+\begin{equation}\label{eq:as-q}
+  q^{\mathrm{iou}}_{ij}=\mathrm{IoU}_{ij}\bigl(1-w_{\mathrm{fuse}}(1-s_j)\bigr),
+  \qquad A_{ij}=q^{\mathrm{iou}}_{ij}\ \ (\text{no ReID}).
+\end{equation}
+baseline \texttt{fuse\_score\_weight}=0,故 \(q^{\mathrm{iou}}_{ij}=\mathrm{IoU}_{ij}\)。
+sparse list 只 enqueue 成本落在最寬鬆門檻內者:
+\(c_{\max}=\max(c_{\mathrm{DDA}},\tau_{\mathrm{match}},\tau_{\mathrm{stage2}})\),
+\(\mathrm{enqueue}_{ij}\iff c_{ij}\le c_{\max}\)。
+
+\section{Multiplicative Cost}\label{sec:as-cost}
+active cost form 與 penalty 匯總:
+\begin{equation}\label{eq:as-cost}
+  c_{ij}=\mathrm{clamp}\!\bigl(1-A_{ij}e^{-\Pi_{ij}},\,0,\,1\bigr),\qquad
+  \Pi_{ij}=P_{\mathrm{OAO}}+P_{\mathrm{vel}}+P_{\mathrm{occ\_front}}-R_{\mathrm{stability}}.
+\end{equation}
+legacy additive path \(c_{ij}=1-A_{ij}+\sum_k P_k\) 仍存在但 baseline 不用。
+baseline 只有 \(P_{\mathrm{OAO}}\) 與 \(R_{\mathrm{stability}}\) 起作用;
+\(P_{\mathrm{vel}}\)(\texttt{vel\_dir\_weight})與 \(P_{\mathrm{occ\_front}}\)
+(\texttt{occ\_state\_enabled})未啟用。
+
+\section{OAO Penalty}\label{sec:as-oao}
+依 predicted track-track overlap 計 occlusion 係數,並隨遮擋持續幀數 ramp:
+\begin{equation}\label{eq:as-oao}
+\begin{aligned}
+  o^{\mathrm{base}}_i&=\max_{k\ne i}\mathrm{IoU}\!\bigl(B(x_i),B(x_k)\bigr),\qquad
+  o_i=o^{\mathrm{base}}_i\min\!\Bigl(1,\tfrac{d_i}{N_{\mathrm{ramp}}}\Bigr),\\
+  P_{\mathrm{OAO}}(i,j)&=\tau_{\mathrm{OAO}}\,o_i\,g_s(s_j).
+\end{aligned}
+\end{equation}
+baseline \(\tau_{\mathrm{OAO}}=0.50\)、\(N_{\mathrm{ramp}}=25\);score 調節
+\(g_s\equiv1\)(\texttt{oao\_score\_w} 未設)。
+
+\section{Stability Reward}\label{sec:as-stab}
+高度一致的 size-consistency reward(成本側,\(\lambda_{\mathrm{eff}}=\max(\lambda,1)\)):
+\begin{equation}\label{eq:as-stab}
+  R_{\mathrm{stability}}(i,j)=
+  \frac{w_{\mathrm{stab}}/\lambda_{\mathrm{eff}}}
+       {1+|h_i-h_j|/\max(h_j,10^{-3})}.
+\end{equation}
+因 reward 除以 \(\lambda\),進入 \(e^{-\lambda c}\)(\Cref{ch:auction})後其 boost 大致不隨
+\(\lambda\) 失衡。baseline \texttt{stability\_cost\_w}=0.20。
+
+\suppinput{supp/07-association-impl}
