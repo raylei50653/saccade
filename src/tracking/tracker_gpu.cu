@@ -109,7 +109,7 @@ __global__ void gmc_kernel(float* states, float* covs, bool* active, const float
 __global__ void predict_gmc_sinv_fused_kernel(
     float* states, float* covs, bool* active, int* age,
     const float* gmc, float* s_inv_out,
-    int max_objs, int max_age, float r_scale)
+    int max_objs, int max_age, float r_scale, float gate_adapt_r_mult)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= max_objs) return;
@@ -156,7 +156,7 @@ __global__ void predict_gmc_sinv_fused_kernel(
         return;
     }
 
-    kf_gpu::compute_S_inv(states + idx * 8, covs + idx * 64, s_inv_out + idx * 16, 0.0f, r_scale);
+    kf_gpu::compute_S_inv(states + idx * 8, covs + idx * 64, s_inv_out + idx * 16, 0.0f, r_scale, gate_adapt_r_mult);
 }
 // Initialize covariance for newly spawned tracks.
 __global__ void init_covariance_kernel(float* covs, const int* new_slots, int n_new) {
@@ -206,35 +206,41 @@ namespace kernel {
 
 // Returns Mahalanobis^2 between a detection (x1,y1,x2,y2) and a track predicted state.
 // If homography is provided, projects bottom-center to ground plane first (2D MMD).
+// 4-DOF gate: χ²(4, 0.95) = 9.4877.  Relink uses separate 2/4-DOF thresholds.
 __device__ __forceinline__ float mahal_sq_det(
     const float* trk_state, const float* det_box, const float* s_inv, const float* homography)
 {
+    // #8: reject degenerate or NaN detection boxes early
+    float det_w = det_box[2] - det_box[0];
+    if (!(det_w > 0.0f)) return 1e30f;
     float det_h  = fmaxf(det_box[3] - det_box[1], 1e-6f);
     float det_cx = (det_box[0] + det_box[2]) * 0.5f;
     float det_cy = (det_box[1] + det_box[3]) * 0.5f;
     
     if (homography) {
-        // 2D MMD: Project bottom center to ground plane
-        auto project = [&](float x, float y, float& ox, float& oy) {
-            float z = homography[6] * x + homography[7] * y + homography[8];
-            float inv_z = 1.0f / (fmaxf(std::abs(z), 1e-6f));
-            ox = (homography[0] * x + homography[1] * y + homography[2]) * inv_z;
-            oy = (homography[3] * x + homography[4] * y + homography[5]) * inv_z;
-        };
-        
-        float t_gx, t_gy, d_gx, d_gy;
-        project(trk_state[0], trk_state[1] + trk_state[3] * 0.5f, t_gx, t_gy);
-        project(det_cx, det_box[3], d_gx, d_gy);
-        
-        // Simple Euclidean distance on ground plane as fallback/complement for gating
-        // In a full MMD, we'd need ground-plane KF. For now, we use a hybrid approach:
-        // If homography is provided, we use the ground-plane L2 distance for the center part of Mahalanobis.
+        // Degraded path: no ground-plane KF covariance, so use scaled L2.
+        // #5: reject points behind camera (z <= 0) instead of |z| masking.
+        float t_foot_y = trk_state[1] + trk_state[3] * 0.5f;
+        float tz = homography[6] * trk_state[0] + homography[7] * t_foot_y + homography[8];
+        float dz = homography[6] * det_cx + homography[7] * det_box[3] + homography[8];
+        if (tz <= 1e-6f || dz <= 1e-6f) return 1e30f;
+        float t_inv_z = 1.0f / tz;
+        float d_inv_z = 1.0f / dz;
+        float t_gx = (homography[0] * trk_state[0] + homography[1] * t_foot_y + homography[2]) * t_inv_z;
+        float t_gy = (homography[3] * trk_state[0] + homography[4] * t_foot_y + homography[5]) * t_inv_z;
+        float d_gx = (homography[0] * det_cx + homography[1] * det_box[3] + homography[2]) * d_inv_z;
+        float d_gy = (homography[3] * det_cx + homography[4] * det_box[3] + homography[5]) * d_inv_z;
         float dx = t_gx - d_gx;
         float dy = t_gy - d_gy;
-        return (dx * dx + dy * dy) * 0.01f; // Scaled L2 for gating
+        // TODO: implement ground-plane KF for proper 2D Mahalanobis.
+        // The 0.01 scale is an uncalibrated heuristic; the result is 2-DOF
+        // but compared against the 4-DOF maha_gate (9.4877) — too loose.
+        float d2 = (dx * dx + dy * dy) * 0.01f;
+        if (!(d2 >= 0.0f)) return 1e30f;
+        return d2;
     }
 
-    float det_ar = (det_box[2] - det_box[0]) / det_h;
+    float det_ar = det_w / det_h;
     float innov[4] = {det_cx - trk_state[0], det_cy - trk_state[1],
                       det_ar - trk_state[2], det_h  - trk_state[3]};
     float d2 = 0.0f;
@@ -243,6 +249,7 @@ __device__ __forceinline__ float mahal_sq_det(
         for (int j = 0; j < 4; ++j) tmp += s_inv[i*4+j] * innov[j];
         d2 += tmp * innov[i];
     }
+    if (!(d2 >= 0.0f)) return 1e30f;
     return d2;
 }
 
@@ -1142,7 +1149,7 @@ __global__ void inline_kalman_update_kernel(
         float* P = covs + t * 64;
         // Compute S_inv = inv(H*P*H^T + R) with baseline r_scale
         float S_inv[16];
-        kf_gpu::compute_S_inv(x, P, S_inv, light_factor, r_scale);
+        kf_gpu::compute_S_inv(x, P, S_inv, light_factor, r_scale, 1.0f);
         // Innovation y = z - Hx = z - x[0:4]
         float d2 = 0.0f;
         for (int i = 0; i < 4; ++i) {
@@ -2408,6 +2415,7 @@ public:
 
         enable_dda_ = env_flag_enabled("SACCADE_ENABLE_DDA", true);
         dda_max_cost_ = env_float_value("SACCADE_DDA_MAX_COST", 0.12f);
+        gate_adapt_r_mult_ = env_float_value("SACCADE_GATE_ADAPT_R_MULT", 1.0f);
     }
 
     ~Impl() {
@@ -2562,7 +2570,7 @@ public:
                 d_relink_lostage_, d_relink_valid_, relink_bank_cap_, relink_max_age_);
         }
         predict_gmc_sinv_fused_kernel<<<blocks, threads, 0, stream>>>(
-            d_states_, d_covs_, d_active_, d_age_, d_gmc, d_s_inv_, max_objs_, max_age_, r_scale_);
+            d_states_, d_covs_, d_active_, d_age_, d_gmc, d_s_inv_, max_objs_, max_age_, r_scale_, gate_adapt_r_mult_);
 
         // Association: always launch with fixed grid; kernels guard with
         // idx >= num_dets or tau == 0.
@@ -3384,12 +3392,19 @@ private:
     int frame_h_ = 1080;
 
     float iou_stage1_gate_ = 0.30f;
+    // 4-DOF Mahalanobis gate: χ²(4, 0.95) = 9.4877 for (cx, cy, aspect, height).
+    // #7: This is the association gate (4-DOF); relink uses separate 2/4-DOF
+    //      thresholds in tracker_gpu_python.cpp — do not confuse the two.
+    // #6: d² scales inversely with r_scale and gate_adapt_r_mult_
+    //      (S = P + r_scale * adapt * R), so changing either effectively
+    //      rescales this threshold. Tune them together.
     float maha_gate_ = 9.4877f;
     int max_age_ = 30, confirm_streak_ = 3;
     float confirm_score_thresh_ = 0.50f;
     bool adaptive_confirmation_ = false;
     int kalman_adapt_mode_ = 0;
     float r_scale_ = 1.0f;
+    float gate_adapt_r_mult_ = 1.0f;
     float vel_dir_weight_ = 0.0f;
     float fuse_score_weight_ = 0.0f;
     float stage2_match_thresh_ = 0.5f;

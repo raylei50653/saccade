@@ -120,7 +120,10 @@ __host__ __device__ __forceinline__ void invert4x4(const float m[16], float inv[
                   m[8] * m[2] * m[5];
 
     float det = m[0] * inv0 + m[1] * inv4 + m[2] * inv8 + m[3] * inv12;
-    if (fabs(det) < 1e-12f) det = 1e-12f; // 防止除以零
+    float diag_scale = fmaxf(fmaxf(fabsf(m[0]), fabsf(m[5])),
+                             fmaxf(fabsf(m[10]), fabsf(m[15])));
+    float det_eps = fmaxf(diag_scale * diag_scale * diag_scale * diag_scale * 1e-8f, 1e-12f);
+    if (fabsf(det) < det_eps) det = copysignf(det_eps, det);
     float inv_det = 1.0f / det;
 
     inv[0] = inv0 * inv_det;
@@ -182,6 +185,19 @@ __host__ __device__ __forceinline__ void get_R(float h, float R[16], float light
     R[15] = pos_std * pos_std * multiplier;
 }
 
+// Enforce P = (P + P^T) / 2 to counter float drift accumulation.
+// Kalman formulas preserve symmetry in exact arithmetic, but repeated
+// FPF^T and (I-KH)P updates in float32 drift, which can make S = P_top + R
+// non-symmetric → Cramer inverse produces spurious results (incl. d² < 0).
+__host__ __device__ __forceinline__ void symmetrize_P(float P[64]) {
+    for (int i = 0; i < 8; ++i)
+        for (int j = i + 1; j < 8; ++j) {
+            float avg = 0.5f * (P[i * 8 + j] + P[j * 8 + i]);
+            P[i * 8 + j] = avg;
+            P[j * 8 + i] = avg;
+        }
+}
+
 // 卡爾曼預測步
 __host__ __device__ __forceinline__ void predict(float x[8], float P[64]) {
     // 1. x = F * x (因 F 特殊結構，等同於 x[0:4] += x[4:8])
@@ -211,6 +227,7 @@ __host__ __device__ __forceinline__ void predict(float x[8], float P[64]) {
     for (int i = 0; i < 64; ++i) {
         P[i] = P_new[i] + Q[i];
     }
+    symmetrize_P(P);
 }
 
 // 卡爾曼更新步
@@ -276,18 +293,29 @@ __host__ __device__ __forceinline__ void update(float x[8], float P[64], const f
     }
     
     for(int i = 0; i < 64; ++i) P[i] = P_new[i];
+    symmetrize_P(P);
 }
 
 // Compute innovation covariance S = H*P*H^T + R and its inverse in one pass.
 // Used for Mahalanobis gating before association (Phase 2).
 // S is the 4x4 top-left block of P plus R.
-// r_scale: global R scale factor; applied consistently with kf_gpu::update
-// so the gate is not tighter than the measurement update.
+// r_scale: global R scale factor; applied consistently with kf_gpu::update.
+// adapt_r_mult: per-track R adaptation multiplier.  In the gating path this
+//   cannot match the per-detection adapt_r_mult used by update() (the matched
+//   detection is unknown at gate time), so the "gate not tighter than update"
+//   contract only holds when gate_adapt_r_mult >= max(update adapt_r_mult)
+//   for the active kalman_adapt_mode.  Default 1.0 = baseline; set higher
+//   (e.g. 5.0) via SACCADE_GATE_ADAPT_R_MULT if update uses heavy distrust.
+// NOTE: d² = innov^T S^{-1} innov scales inversely with r_scale and
+//   adapt_r_mult, so changing either effectively rescales the maha_gate
+//   threshold (χ²(4, 0.95) = 9.4877).  Tune r_scale, adapt_r_mult, and
+//   maha_gate together.
 __host__ __device__ __forceinline__ void compute_S_inv(
-    const float x[8], const float P[64], float S_inv[16], float light_factor = 0.0f, float r_scale = 1.0f)
+    const float x[8], const float P[64], float S_inv[16], float light_factor = 0.0f, float r_scale = 1.0f,
+    float adapt_r_mult = 1.0f)
 {
     float R[16];
-    get_R(x[3], R, light_factor, 1.0f, r_scale);
+    get_R(x[3], R, light_factor, adapt_r_mult, r_scale);
     float S[16];
     for (int i = 0; i < 4; ++i)
         for (int j = 0; j < 4; ++j)
