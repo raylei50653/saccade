@@ -109,7 +109,8 @@ __global__ void gmc_kernel(float* states, float* covs, bool* active, const float
 __global__ void predict_gmc_sinv_fused_kernel(
     float* states, float* covs, bool* active, int* age,
     const float* gmc, float* s_inv_out,
-    int max_objs, int max_age, float r_scale, float gate_adapt_r_mult)
+    int max_objs, int max_age, float r_scale, float gate_adapt_r_mult,
+    const float* occ_coeff, float occ_vel_damp, float occ_vel_occ_thresh)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= max_objs) return;
@@ -148,7 +149,26 @@ __global__ void predict_gmc_sinv_fused_kernel(
         P2[8] = mp10 * H00 + mp11 * H01; P2[9] = mp10 * H10 + mp11 * H11;
     }
 
-    kf_gpu::predict(states + idx * 8, covs + idx * 64);
+    // Occ-gated velocity damping: when this track is already coasting through a
+    // miss gap (age >= 1) and was occluded last frame (occ_coeff from the prior
+    // frame, since occlusion is computed AFTER predict), distrust the velocity for
+    // the x,y position extrapolation this frame. The velocity STATE is restored
+    // after predict so a clean re-acquisition is unaffected; covariance/Q are
+    // independent of velocity, so only the position mean changes. Empirically the
+    // sub-gate miss-gap drift is ~100% translational (scale is fine), so only the
+    // x,y velocities (x[4],x[5]) are damped — aspect/height (x[6],x[7]) untouched.
+    if (occ_vel_damp < 1.0f && age[idx] >= 1 &&
+        occ_coeff && occ_coeff[idx] >= occ_vel_occ_thresh) {
+        float* x = states + idx * 8;
+        const float vx = x[4], vy = x[5];
+        x[4] = vx * occ_vel_damp;
+        x[5] = vy * occ_vel_damp;
+        kf_gpu::predict(x, covs + idx * 64);
+        x[4] = vx;
+        x[5] = vy;
+    } else {
+        kf_gpu::predict(states + idx * 8, covs + idx * 64);
+    }
     age[idx]++;
     if (age[idx] >= max_age) {
         active[idx] = false;
@@ -1987,7 +2007,8 @@ __global__ void compact_results_kernel(
     int max_objs,
     float* out_boxes, float* out_scores,
     int* out_ids, int* out_classes, int* out_det_idx,
-    int* out_count)
+    int* out_count,
+    const float* d_det_boxes, bool use_measurement)
 {
     int tid = threadIdx.x;
     __shared__ int s_counts[256];
@@ -2024,13 +2045,25 @@ __global__ void compact_results_kernel(
         int i = local_slots[step];
         int dest = global_offset + step;
         
-        float cx = d_states[i*8+0], cy = d_states[i*8+1];
-        float a  = d_states[i*8+2], h  = d_states[i*8+3], w = a * h;
-        
-        out_boxes[dest*4+0] = cx - w * 0.5f;
-        out_boxes[dest*4+1] = cy - h * 0.5f;
-        out_boxes[dest*4+2] = cx + w * 0.5f;
-        out_boxes[dest*4+3] = cy + h * 0.5f;
+        int d = d_trk_to_det[i];
+        if (use_measurement && d_det_boxes && d >= 0) {
+            // Gating/output decouple: emit the matched measurement (detection box,
+            // xyxy) instead of the filtered state. Only matched tracks (age==0) are
+            // emitted, so d>=0 holds for genuine associations; births/revivals with
+            // d<0 fall back to the filtered state below.
+            out_boxes[dest*4+0] = d_det_boxes[d*4+0];
+            out_boxes[dest*4+1] = d_det_boxes[d*4+1];
+            out_boxes[dest*4+2] = d_det_boxes[d*4+2];
+            out_boxes[dest*4+3] = d_det_boxes[d*4+3];
+        } else {
+            float cx = d_states[i*8+0], cy = d_states[i*8+1];
+            float a  = d_states[i*8+2], h  = d_states[i*8+3], w = a * h;
+
+            out_boxes[dest*4+0] = cx - w * 0.5f;
+            out_boxes[dest*4+1] = cy - h * 0.5f;
+            out_boxes[dest*4+2] = cx + w * 0.5f;
+            out_boxes[dest*4+3] = cy + h * 0.5f;
+        }
         
         out_scores[dest]   = d_scores[i];
         out_ids[dest]      = d_track_ids[i];
@@ -2416,6 +2449,11 @@ public:
         enable_dda_ = env_flag_enabled("SACCADE_ENABLE_DDA", true);
         dda_max_cost_ = env_float_value("SACCADE_DDA_MAX_COST", 0.12f);
         gate_adapt_r_mult_ = env_float_value("SACCADE_GATE_ADAPT_R_MULT", 1.0f);
+        // Occ-gated velocity damping (default 1.0 = bit-identical no-op).
+        occ_vel_damp_ = env_float_value("SACCADE_OCC_VEL_DAMP", 1.0f);
+        occ_vel_occ_thresh_ = env_float_value("SACCADE_OCC_VEL_OCC_THRESH", 0.05f);
+        // NSA gating/output decouple: emit measurement for matched tracks (default off).
+        output_use_measurement_ = env_flag_enabled("SACCADE_OUTPUT_MEASUREMENT", false);
     }
 
     ~Impl() {
@@ -2570,7 +2608,8 @@ public:
                 d_relink_lostage_, d_relink_valid_, relink_bank_cap_, relink_max_age_);
         }
         predict_gmc_sinv_fused_kernel<<<blocks, threads, 0, stream>>>(
-            d_states_, d_covs_, d_active_, d_age_, d_gmc, d_s_inv_, max_objs_, max_age_, r_scale_, gate_adapt_r_mult_);
+            d_states_, d_covs_, d_active_, d_age_, d_gmc, d_s_inv_, max_objs_, max_age_, r_scale_, gate_adapt_r_mult_,
+            d_occ_coeff_, occ_vel_damp_, occ_vel_occ_thresh_);
 
         // Association: always launch with fixed grid; kernels guard with
         // idx >= num_dets or tau == 0.
@@ -2877,7 +2916,8 @@ public:
             d_states_, d_track_ids_, d_scores_, d_classes_,
             d_trk_to_det_, max_objs_,
             d_res_boxes_, d_res_scores_, d_res_ids_, d_res_classes_, d_res_det_idx_,
-            d_res_count_);
+            d_res_count_,
+            d_boxes, output_use_measurement_);
         h_dirty_ = true;
         h_slot_map_dirty_ = true;
     }
@@ -2895,6 +2935,11 @@ public:
         confirm_score_thresh_ = confirm_score_thresh;
         adaptive_confirmation_ = adaptive_confirmation;
         kalman_adapt_mode_ = kalman_adapt_mode;
+        // Env override for ablation (e.g. SACCADE_KALMAN_ADAPT_MODE=1 enables legacy NSA).
+        {
+            const char* v = std::getenv("SACCADE_KALMAN_ADAPT_MODE");
+            if (v && *v) kalman_adapt_mode_ = std::atoi(v);
+        }
         r_scale_ = std::max(0.01f, r_scale);
         vel_dir_weight_ = fmaxf(0.0f, vel_dir_weight);
         fuse_score_weight_ = std::clamp(fuse_score_weight, 0.0f, 1.0f);
@@ -3403,8 +3448,23 @@ private:
     float confirm_score_thresh_ = 0.50f;
     bool adaptive_confirmation_ = false;
     int kalman_adapt_mode_ = 0;
+    // NSA-Kalman gating/output decouple (registry #8 revival, ablation, default off).
+    // When true, MATCHED tracks emit their associated measurement (detection box)
+    // instead of the filtered state, so a score-conditioned R (NSA) can shape
+    // association/gating without paying the filtered-output localization loss
+    // (DetA −1.44). The filter state itself is untouched (still used for prediction
+    // and the next frame's gate). false = bit-identical (emit filtered state).
+    bool output_use_measurement_ = false;
     float r_scale_ = 1.0f;
     float gate_adapt_r_mult_ = 1.0f;
+    // Occlusion-gated velocity damping during miss-gap coasting (ablation, default off).
+    // occ_vel_damp_ scales the x,y position-mean extrapolation (velocity is preserved
+    // for clean recovery) when a track is coasting (age>=1) AND occluded last frame.
+    // 1.0 = bit-identical no-op. < 1.0 enables; 0.0 = full static hold.
+    float occ_vel_damp_ = 1.0f;
+    // occ_coeff is the (ramped) OAO occlusion confidence; a low gate keeps short-gap
+    // coasts in crowds from being suppressed by the duration ramp. Tunable via env.
+    float occ_vel_occ_thresh_ = 0.05f;
     float vel_dir_weight_ = 0.0f;
     float fuse_score_weight_ = 0.0f;
     float stage2_match_thresh_ = 0.5f;
