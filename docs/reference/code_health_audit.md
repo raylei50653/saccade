@@ -1,6 +1,6 @@
 # Code Health Audit
 
-Last updated: 2026-06-28
+Last updated: 2026-06-29
 
 ## Verified Gates
 
@@ -17,7 +17,7 @@ Current result:
 
 - `ruff`: passed
 - `mypy`: passed
-- `pytest`: 838 passed, 10 skipped, total coverage 48%
+- `pytest`: 877 passed, 10 skipped, total coverage 48%
 - native tests: 6/6 passed via `scripts/test_native.sh`
 
 ## Fixed In This Pass
@@ -120,6 +120,28 @@ Current result:
 - The eval duplicate scan now reports zero exact duplicate source groups and 31
   remaining duplicate basenames among tracked `.py`/`.sh` eval scripts outside
   generated outputs.
+- Removed the last tracked hardcoded local paths from tools scripts:
+  - `scripts/tools/gate_clean_color.py` now resolves its repo root via
+    `Path(__file__).resolve().parents[2]` instead of a hardcoded
+    `/home/ray/developer/ai/saccade`, matching the sibling
+    `probe_relink_occlusion_signal.py` idiom.
+  - `scripts/tools/analyze_kalman_h_signal.py` derives its rescreen-artifact
+    defaults from the repo root's sibling (`<repo>/../saccade-rescreen/...`)
+    rather than absolute `/home/ray/...` paths, and its usage docstring uses the
+    relative form. A grep for `/home/` across tracked `scripts/**.py`/`.sh` now
+    returns nothing.
+  - Replaced the cosmetic `cd /home/ray/developer/ai/saccade` usage line in
+    `scripts/eval/sweep_density_gating.py` with `cd <repo root>`.
+- Triaged the remaining 13 non-identical duplicate `scripts/eval` entrypoint
+  pairs into compatibility wrappers. Each root-level copy differed from its
+  canonical subdirectory implementation only in the usage docstring path and the
+  repo-root resolution method (fixed `parents[2]` vs marker-based); the
+  subdirectory copy (under `diagnostics/`, `appearance/`, `baselines/`,
+  `experiments/`) is the canonical version with marker-based root resolution.
+  The root copies now delegate through `scripts/eval/_redirect.py`. After this
+  pass, all 28 tracked duplicate eval basenames resolve to exactly one real
+  implementation plus wrappers (zero basenames with more than one real impl), and
+  `tests/unit/test_eval_script_paths.py::COMPAT_WRAPPERS` covers all 28.
 
 ## Remaining Findings
 
@@ -133,27 +155,26 @@ Current result:
   cleanup would make startup/shutdown and endpoint testing simpler.
 - `scripts/` cleanup is incomplete. Current tracked inventory is 134 files
   under `scripts/eval` and 68 under `scripts/tools`.
-- `scripts/eval` still contains 31 duplicate entrypoint basenames across root
-  and subdirectories, including diagnostics, baselines, appearance, and
-  experiment variants. Exact duplicate source bodies have been removed, 15
-  root-level legacy Python names plus one shell entrypoint are now compatibility
-  wrappers, and nested direct-execution path setup is guarded, but the remaining
-  non-identical pairs still need to be documented as wrappers, stable
-  entrypoints, or archive candidates.
+- `scripts/eval` duplicate-basename triage is complete: all 28 tracked duplicate
+  basenames now resolve to a single canonical subdirectory implementation plus a
+  root-level `_redirect` compatibility wrapper (28 wrappers + one shell wrapper).
+  No tracked eval basename has more than one real implementation. Future work is
+  limited to deciding whether any of the canonical implementations are
+  themselves archive candidates, which is a content-relevance question rather
+  than a duplication one.
 - `GET /objects/{obj_id}` still assumes richer object history than
   `RedisCache.update_object_track()` stores. This is already documented in
   `docs/modules/storage/api_spec.md`, but the endpoint remains unsuitable as a
   complete dwell-time/history API until the schema is expanded.
-- Some hardcoded local paths remain outside tracked fixes. In particular,
-  untracked `scripts/tools/gate_clean_color.py` uses
-  `/home/ray/developer/ai/saccade`; tracked
-  `scripts/tools/analyze_kalman_h_signal.py` also has absolute default paths
-  into a sibling checkout.
+- Hardcoded local paths have been removed from tracked `scripts/`. A grep for
+  `/home/` across tracked `scripts/**.py`/`.sh` returns nothing. (Rescreen-style
+  tooling still assumes a sibling `saccade-rescreen` checkout, but now resolves
+  it relative to the repo root rather than an absolute home path.)
 
 ## Suggested Next Pass
 
-1. Triage remaining non-identical duplicate `scripts/eval` names into stable
-   wrappers, diagnostics, or archive candidates.
+1. Review the canonical `scripts/eval` implementations for content relevance and
+   archive any that are obsolete (duplication itself is now resolved).
 2. Extend `feature_extractor.py` coverage around TRT/native paths using fake
    engine/context objects where practical; real engine loading remains outside
    unit-test scope.

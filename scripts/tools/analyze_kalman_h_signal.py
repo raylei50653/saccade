@@ -24,8 +24,8 @@ self-contained loaders, no saccade imports.
 
 Usage:
     .venv/bin/python scripts/tools/analyze_kalman_h_signal.py \
-        --dumps-dir /home/ray/developer/ai/saccade-rescreen/rescreen_logs/dumps \
-        --gt-root /home/ray/developer/ai/saccade-rescreen/datasets/MOT17/train
+        --dumps-dir ../saccade-rescreen/rescreen_logs/dumps \
+        --gt-root ../saccade-rescreen/datasets/MOT17/train
 """
 
 from __future__ import annotations
@@ -38,6 +38,11 @@ from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
+
+# Rescreen artifacts live in a sibling checkout next to this repo. Resolve them
+# relative to the repo root's parent so no absolute/home path is baked in.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_RESCREEN_ROOT = _REPO_ROOT.parent / "saccade-rescreen"
 
 SEQS = [
     "MOT17-02-SDP",
@@ -293,12 +298,12 @@ def main() -> None:
     ap.add_argument(
         "--dumps-dir",
         type=Path,
-        default=Path("/home/ray/developer/ai/saccade-rescreen/rescreen_logs/dumps"),
+        default=_RESCREEN_ROOT / "rescreen_logs" / "dumps",
     )
     ap.add_argument(
         "--gt-root",
         type=Path,
-        default=Path("/home/ray/developer/ai/saccade-rescreen/datasets/MOT17/train"),
+        default=_RESCREEN_ROOT / "datasets" / "MOT17" / "train",
     )
     args = ap.parse_args()
 

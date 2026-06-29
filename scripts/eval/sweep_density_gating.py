@@ -6,7 +6,7 @@ Sweep: 局部軌跡密度自適應門控 (Density-Gating) 超參數搜索
 在 MOT17-05-SDP 上比較 IDF1 / HOTA / AssA / IDs。
 
 Usage:
-    cd /home/ray/developer/ai/saccade
+    cd <repo root>
     uv run python scripts/eval/sweep_density_gating.py
 
 輸出:
