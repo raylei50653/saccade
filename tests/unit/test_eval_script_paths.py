@@ -9,22 +9,35 @@ EVAL_DIR = REPO_ROOT / "scripts" / "eval"
 
 COMPAT_WRAPPERS = {
     "analyze_assoc_fn.py": "diagnostics/analyze_assoc_fn.py",
+    "analyze_crossing_swaps.py": "diagnostics/analyze_crossing_swaps.py",
     "analyze_external_fp_rows.py": "appearance/analyze_external_fp_rows.py",
     "analyze_fn.py": "diagnostics/analyze_fn.py",
+    "analyze_front_flag_exposure.py": "diagnostics/analyze_front_flag_exposure.py",
     "analyze_near_miss_final_output.py": "diagnostics/analyze_near_miss_final_output.py",
     "analyze_near_miss_offsets.py": "diagnostics/analyze_near_miss_offsets.py",
     "analyze_near_miss_stage_attribution.py": (
         "diagnostics/analyze_near_miss_stage_attribution.py"
     ),
+    "analyze_roi_dim_importance.py": "appearance/analyze_roi_dim_importance.py",
     "analyze_score_distribution.py": "detector/analyze_score_distribution.py",
+    "cheb_gr_osnet_gate.py": "appearance/cheb_gr_osnet_gate.py",
+    "eval_conditioned.py": "baselines/eval_conditioned.py",
+    "eval_fpn_reid.py": "appearance/eval_fpn_reid.py",
+    "eval_gated_bytetrack.py": "baselines/eval_gated_bytetrack.py",
     "export_external_fp_rows.py": "appearance/export_external_fp_rows.py",
+    "jde_market1501.py": "appearance/jde_market1501.py",
     "label_boosted_birth_rows.py": "diagnostics/label_boosted_birth_rows.py",
     "mamba_size_binned_recall.py": "detector/mamba_size_binned_recall.py",
     "mot17_public.py": "baselines/mot17_public.py",
     "oracle_height_birth_ceiling.py": "experiments/oracle_height_birth_ceiling.py",
+    "oracle_occlusion_hold.py": "experiments/oracle_occlusion_hold.py",
     "oracle_small_birth_ceiling.py": "experiments/oracle_small_birth_ceiling.py",
+    "reconnect_rate.py": "diagnostics/reconnect_rate.py",
+    "reid_id_benchmark.py": "appearance/reid_id_benchmark.py",
+    "train_cascade_stage2.py": "appearance/train_cascade_stage2.py",
     "train_external_fp_classifier.py": "appearance/train_external_fp_classifier.py",
     "ultralytics_official_mot17.py": "baselines/ultralytics_official_mot17.py",
+    "validate_roi_embeddings.py": "appearance/validate_roi_embeddings.py",
 }
 
 SHELL_COMPAT_WRAPPERS = {
