@@ -1,0 +1,128 @@
+# Slim release manifest.
+#
+# Single source of truth for the deployable "slim" subset of the repo.
+# `build_slim_release.py` materializes this set from any git ref so the slim
+# tree is reproducible instead of maintained as a divergent mass-deletion
+# branch (the old release/slim-main + core/minimal-main approach).
+#
+# Curation rules:
+#   - keep_dirs       : whole directory trees (new files auto-included)
+#   - keep_root_files : explicit top-level files
+#   - keep_files      : explicit curated subsets of otherwise-pruned dirs
+#                       (scripts/ and tests/ — additions must be deliberate)
+
+keep_dirs:
+  - src
+  - include
+  - models
+  - infra
+  - configs
+
+keep_root_files:
+  - .dockerignore
+  - .env.example
+  - .gitignore
+  - .python-version
+  - CMakeLists.txt
+  - Dockerfile
+  - LICENSE
+  - README.md
+  - docker-compose.yml
+  - main.py
+  - pyproject.toml
+  - uv.lock
+
+keep_files:
+  # --- scripts: model build/export + native + ops only ---
+  - scripts/README.md
+  - scripts/__init__.py
+  - scripts/test_native.sh
+  - scripts/model/README.md
+  - scripts/model/__init__.py
+  - scripts/model/build_mamba_head_trt.py
+  - scripts/model/build_osnet.py
+  - scripts/model/build_reid.py
+  - scripts/model/build_siglip.py
+  - scripts/model/build_yolo.py
+  - scripts/model/calibrate_yolo_int8.py
+  - scripts/model/compile_mamba_head_aot.py
+  - scripts/model/export_dinov2.py
+  - scripts/model/export_mamba_head.py
+  - scripts/model/export_mamba_head_onnx.py
+  - scripts/model/export_siglip.py
+  - scripts/model/export_transreid.py
+  - scripts/model/export_yolo_backbone.py
+  - scripts/model/export_yolo_backbone_ckpt.py
+  - scripts/model/export_yolo_person.py
+  - scripts/model/export_yolo_pose.py
+  - scripts/model/export_yoloe_embedding.py
+  - scripts/model/inspect_engine.py
+  - scripts/model/make_onnx_dynamic.py
+  - scripts/native/README.md
+  - scripts/native/build_fpn_reid.py
+  - scripts/native/coverage_native.sh
+  - scripts/native/rebuild.sh
+  - scripts/ops/README.md
+  - scripts/ops/mlflow_server.sh
+  - scripts/ops/run_8stream_perception.py
+  - scripts/ops/saccade_ctl.sh
+  - scripts/ops/setup_8_streams.sh
+  # --- tests: shippable unit + native suites ---
+  - tests/__init__.py
+  - tests/conftest.py
+  - tests/native/test_assignment_algorithms.cpp
+  - tests/native/test_fpn_reid_launchers.cpp
+  - tests/native/test_gmc_hanning_guard.cpp
+  - tests/native/test_gpu_postprocess.cpp
+  - tests/native/test_mamba_scan.cpp
+  - tests/native/test_temporal_birth_pool.cpp
+  - tests/unit/api/test_server.py
+  - tests/unit/detection/__init__.py
+  - tests/unit/detection/test_augment_clip.py
+  - tests/unit/detection/test_cropper.py
+  - tests/unit/detection/test_dataset.py
+  - tests/unit/detection/test_detection.py
+  - tests/unit/detection/test_detection_extra.py
+  - tests/unit/detection/test_detector_trt.py
+  - tests/unit/detection/test_embedding_dispatcher.py
+  - tests/unit/detection/test_feature_extractor.py
+  - tests/unit/detection/test_mamba_attention_routing.py
+  - tests/unit/detection/test_mamba_checkpoint_channels.py
+  - tests/unit/detection/test_mamba_consistency_loss.py
+  - tests/unit/detection/test_mamba_head.py
+  - tests/unit/detection/test_mamba_level_routing.py
+  - tests/unit/detection/test_mamba_strip_routing.py
+  - tests/unit/detection/test_mamba_teacher_cache.py
+  - tests/unit/detection/test_temporal_dataset_detail.py
+  - tests/unit/detection/test_training_utils.py
+  - tests/unit/detection/test_yolo_gated_detector.py
+  - tests/unit/eval/__init__.py
+  - tests/unit/eval/test_calibrator.py
+  - tests/unit/eval/test_core.py
+  - tests/unit/eval/test_double_buffer.py
+  - tests/unit/eval/test_evaluator.py
+  - tests/unit/eval/test_helpers.py
+  - tests/unit/eval/test_metrics_map.py
+  - tests/unit/eval/test_multi_stream.py
+  - tests/unit/eval/test_nv12_kernel.py
+  - tests/unit/eval/test_pool_lazy_buffers.py
+  - tests/unit/eval/test_reporting.py
+  - tests/unit/eval/test_reporting_extended.py
+  - tests/unit/eval/test_runner_batch_helpers.py
+  - tests/unit/eval/test_runner_budgeting.py
+  - tests/unit/eval/test_runner_materialization.py
+  - tests/unit/media/test_ffmpeg_utils.py
+  - tests/unit/media/test_mediamtx_client.py
+  - tests/unit/media/test_rtsp_dali_pipeline.py
+  - tests/unit/reid/__init__.py
+  - tests/unit/reid/test_cheb_gr.py
+  - tests/unit/reid/test_cheb_gr_merge.py
+  - tests/unit/test_pipeline_health.py
+  - tests/unit/tracking/__init__.py
+  - tests/unit/tracking/test_auction_real_scale.py
+  - tests/unit/tracking/test_auction_simple.py
+  - tests/unit/tracking/test_feature_bank.py
+  - tests/unit/tracking/test_fpn_reid.py
+  - tests/unit/tracking/test_gmc.py
+  - tests/unit/tracking/test_gpu_bidir_bridge.py
+  - tests/unit/tracking/test_reorder.py
