@@ -17,6 +17,11 @@ _DEFAULT_ENGINE: Dict[str, str] = {
 }
 
 
+def _validate_top_k_ratio(top_k_ratio: float) -> None:
+    if not 0.0 < top_k_ratio <= 1.0:
+        raise ValueError("top_k_ratio must be in the range (0, 1]")
+
+
 try:
     from saccade_perception_ext import (
         FeatureExtractor as FeatureExtractorCpp,
@@ -36,6 +41,7 @@ def _last_vit_dual(
     top_k_ratio: float,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Python reference LaSt-ViT pipeline (V1 per-patch Top-K). [B,N,C] → ([B,C], [B,N])."""
+    _validate_top_k_ratio(top_k_ratio)
     x = lhs.float()
     B, N, C = x.shape
     K = max(1, int(N * top_k_ratio))
@@ -244,7 +250,12 @@ class TRTFeatureExtractor:
         Extract 3-part crops [3*N, 3, H, W], fuse with weights [0.5, 0.3, 0.2], and L2-normalize.
         Returns [N, feature_dim] embeddings.
         """
-        num_dets = input_tensor.size(0) // 3
+        part_count = input_tensor.size(0)
+        if part_count % 3 != 0:
+            raise ValueError(
+                "extract_parts_fused expects input_tensor batch to be a multiple of 3"
+            )
+        num_dets = part_count // 3
         if num_dets <= 0:
             return torch.empty((0, self.feature_dim), device=self.device)
         out = torch.empty(
@@ -282,6 +293,7 @@ class TRTFeatureExtractor:
         Falls back to standard extract() with ones stability if model is not SigLIP2
         or C++ extension is unavailable and last_hidden_state not in output_buffers.
         """
+        _validate_top_k_ratio(top_k_ratio)
         n = input_tensor.size(0)
         if n == 0:
             empty_e = torch.empty((0, self.feature_dim), device=self.device)

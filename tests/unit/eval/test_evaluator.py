@@ -442,6 +442,31 @@ def test_get_softmax3_torch_params():
     assert s.shape == (2,)
 
 
+def test_get_softmax3_torch_params_cache_uses_model_values():
+    evaluator_mod._SOFTMAX3_TORCH_CACHE.clear()
+    model_a = SoftmaxLinearModel(
+        feature_names=("score", "width"),
+        class_names=("tp", "fp", "np"),
+        weights=((1.0, 0.0, 0.0), (0.0, 1.0, 0.0)),
+        bias=(0.0, 0.0, 0.0),
+        mean=(0.0, 0.0),
+        std=(1.0, 1.0),
+    )
+    model_b = SoftmaxLinearModel(
+        feature_names=("score", "width"),
+        class_names=("tp", "fp", "np"),
+        weights=((0.0, 1.0, 0.0), (1.0, 0.0, 0.0)),
+        bias=(0.0, 0.0, 0.0),
+        mean=(0.0, 0.0),
+        std=(1.0, 1.0),
+    )
+
+    params_a = _get_softmax3_torch_params(model_a, torch.device("cpu"), torch.float32)
+    params_b = _get_softmax3_torch_params(model_b, torch.device("cpu"), torch.float32)
+
+    assert not torch.equal(params_a[0], params_b[0])
+
+
 # Test _predict_softmax3_probs_torch
 def test_predict_softmax3_probs_torch():
     model = SoftmaxLinearModel(
@@ -474,6 +499,31 @@ def test_predict_softmax3_probs_torch():
     )
     assert probs.shape == (2, 3)
     assert torch.allclose(probs.sum(dim=1), torch.tensor(1.0))
+
+
+def test_predict_softmax3_probs_torch_rejects_unknown_features():
+    model = SoftmaxLinearModel(
+        feature_names=("score", "unknown_feature"),
+        class_names=("tp", "fp", "np"),
+        weights=((1.0, 0.0, 0.0), (0.0, 1.0, 0.0)),
+        bias=(0.0, 0.0, 0.0),
+        mean=(0.0, 0.0),
+        std=(1.0, 1.0),
+    )
+
+    with pytest.raises(ValueError, match="unsupported feature_names"):
+        _predict_softmax3_probs_torch(
+            model,
+            subset_scores=torch.tensor([0.5], dtype=torch.float32),
+            subset_widths=torch.tensor([10.0], dtype=torch.float32),
+            subset_heights=torch.tensor([30.0], dtype=torch.float32),
+            center_x=torch.tensor([5.0], dtype=torch.float32),
+            center_y=torch.tensor([15.0], dtype=torch.float32),
+            edge_margin=torch.tensor([2.0], dtype=torch.float32),
+            touches_edge=torch.tensor([0.0], dtype=torch.float32),
+            image_width=100,
+            image_height=100,
+        )
 
 
 # Test _apply_external_fp_filter
@@ -694,6 +744,9 @@ def test_build_active_track_priors():
 
 # Test _env_flag_enabled
 def test_env_flag_enabled():
+    with patch.dict(os.environ, {}, clear=True):
+        assert _env_flag_enabled("TEST_FLAG", default=False) is False
+        assert _env_flag_enabled("TEST_FLAG", default=True) is True
     with patch.dict(os.environ, {"TEST_FLAG": "1"}):
         assert _env_flag_enabled("TEST_FLAG") is True
     with patch.dict(os.environ, {"TEST_FLAG": "0"}):
@@ -702,6 +755,12 @@ def test_env_flag_enabled():
         assert _env_flag_enabled("TEST_FLAG") is True
     with patch.dict(os.environ, {"TEST_FLAG": "false"}):
         assert _env_flag_enabled("TEST_FLAG") is False
+    with patch.dict(os.environ, {"TEST_FLAG": " no "}):
+        assert _env_flag_enabled("TEST_FLAG") is False
+    with patch.dict(os.environ, {"TEST_FLAG": "off"}):
+        assert _env_flag_enabled("TEST_FLAG") is False
+    with patch.dict(os.environ, {"TEST_FLAG": ""}):
+        assert _env_flag_enabled("TEST_FLAG", default=False) is False
 
 
 # Test _build_cpp_seq_config

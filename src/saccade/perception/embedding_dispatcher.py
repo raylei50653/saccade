@@ -50,7 +50,8 @@ class AsyncEmbeddingDispatcher:
         提交一批裁切好的物件圖進行特徵提取，並等待結果。
         """
         if crops.size(0) == 0:
-            return torch.empty((0, 768), device=crops.device)
+            feature_dim = int(getattr(self.extractor, "feature_dim", 768))
+            return torch.empty((0, feature_dim), device=crops.device)
 
         future: asyncio.Future[torch.Tensor] = (
             asyncio.get_running_loop().create_future()
@@ -190,6 +191,8 @@ class AsyncEmbeddingDispatcher:
                     future.set_exception(e)
 
     def start(self) -> None:
+        if self._running and self._worker_task is not None:
+            return
         self._running = True
         self._worker_task = asyncio.create_task(self._worker_loop())
 

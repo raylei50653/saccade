@@ -118,16 +118,22 @@ def check_vram() -> Optional[VramStatus]:
 
 
 async def check_redis() -> Tuple[ServiceStatus, int]:
-    try:
-        from typing import cast, Awaitable, Any
+    from typing import cast, Awaitable, Any
 
+    r: Any = None
+    try:
         r = aioredis.from_url(REDIS_URL, socket_timeout=3)
         await cast(Awaitable[Any], r.ping())
-        depth = await cast(Awaitable[int], r.llen("saccade:events"))
-        await cast(Awaitable[Any], r.aclose())
+        depth = await cast(Awaitable[int], r.xlen("saccade:stream"))
         return ServiceStatus(name="redis", ok=True, detail="connected"), int(depth)
     except Exception as e:
         return ServiceStatus(name="redis", ok=False, detail=str(e)), 0
+    finally:
+        if r is not None:
+            try:
+                await cast(Awaitable[Any], r.aclose())
+            except Exception:
+                pass
 
 
 async def measure_loop_latency() -> float:

@@ -33,7 +33,11 @@ from pathlib import Path
 
 import numpy as np
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = next(
+    p
+    for p in Path(__file__).resolve().parents
+    if (p / "pyproject.toml").exists() and (p / "src" / "saccade").is_dir()
+)
 sys.path.insert(0, str(PROJECT_ROOT))
 
 if not hasattr(np, "asfarray"):

@@ -3,7 +3,8 @@
 
 set -e
 
-PROJECT_DIR="/home/ray/developer/ai/YOLO_LLM"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 SYSTEMD_DIR="/etc/systemd/system"
 
 echo "🛠️  Setting up Saccade Systemd services..."
@@ -29,4 +30,4 @@ echo "♻️  Reloading Systemd daemon..."
 sudo systemctl daemon-reload
 
 echo "✅ Systemd services are now linked and ready."
-echo "👉 You can now run './scripts/saccade up' again."
+echo "👉 You can now run './scripts/ops/saccade_ctl.sh up' again."

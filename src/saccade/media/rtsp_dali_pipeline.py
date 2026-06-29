@@ -50,6 +50,9 @@ class DALIRTSPOptimizer:
     def __init__(
         self, batch_size: int = 1, device_id: int = 0, output_size: int = 640
     ) -> None:
+        if batch_size < 1:
+            raise ValueError("batch_size must be at least 1")
+
         self.batch_size = batch_size
         self.pipeline = RTSPDALIPipeline(
             batch_size=batch_size, device_id=device_id, output_size=output_size
@@ -58,6 +61,9 @@ class DALIRTSPOptimizer:
         self._primed = False
 
     def process(self, tensors: List[torch.Tensor]) -> torch.Tensor:
+        if not tensors:
+            raise ValueError("DALIRTSPOptimizer.process requires at least one tensor")
+
         # 1. 確保 Contiguous
         tensors = [t.contiguous() for t in tensors]
 

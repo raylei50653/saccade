@@ -12,7 +12,7 @@ Usage:
 import sys
 from pathlib import Path
 
-project_root = Path("/home/ray/developer/ai/saccade")
+project_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(project_root / "src"))
 
@@ -74,6 +74,7 @@ def main():
 
         # 4. Compile to standalone C++ library
         output_so = project_root / "build" / "libmamba_head_aot.so"
+        output_so.parent.mkdir(parents=True, exist_ok=True)
         print(f"Compiling exported graph to standalone C++ library: {output_so} ...")
 
         # Compile using AOTInductor

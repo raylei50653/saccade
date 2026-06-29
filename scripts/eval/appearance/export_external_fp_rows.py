@@ -9,7 +9,11 @@ from pathlib import Path
 import cv2
 import torch
 
-project_root = Path(__file__).resolve().parent.parent.parent
+project_root = next(
+    p
+    for p in Path(__file__).resolve().parents
+    if (p / "pyproject.toml").exists() and (p / "src" / "saccade").is_dir()
+)
 sys.path.insert(0, str(project_root))
 src_path = project_root / "src"
 if src_path.exists():

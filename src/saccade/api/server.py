@@ -1,10 +1,9 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, AsyncIterator
+from contextlib import asynccontextmanager
 from saccade.storage.redis_cache import RedisCache
 from saccade.storage.chroma_store import ChromaStore
-
-app = FastAPI(title="Saccade Spatiotemporal Retrieval API")
 
 _redis_cache: Optional[RedisCache] = None
 _chroma_store: Optional[ChromaStore] = None
@@ -24,21 +23,23 @@ def _get_chroma_store() -> ChromaStore:
     return _chroma_store
 
 
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    await _get_redis_cache().connect()
+    try:
+        yield
+    finally:
+        await _get_redis_cache().disconnect()
+
+
+app = FastAPI(title="Saccade Spatiotemporal Retrieval API", lifespan=lifespan)
+
+
 class SearchQuery(BaseModel):
     text: str
     n_results: Optional[int] = 5
     start_time: Optional[float] = None
     is_anomaly: Optional[bool] = None
-
-
-@app.on_event("startup")
-async def startup() -> None:
-    await _get_redis_cache().connect()
-
-
-@app.on_event("shutdown")
-async def shutdown() -> None:
-    await _get_redis_cache().disconnect()
 
 
 @app.get("/")
@@ -59,11 +60,16 @@ async def list_active_objects() -> Dict[str, Any]:
 @app.get("/objects/{obj_id}")
 async def get_object_history(obj_id: int) -> Dict[str, Any]:
     """獲取特定物件的詳細時空紀錄與軌跡"""
-    history = await _get_redis_cache().get_object_history(obj_id)
-    if not history:
-        raise HTTPException(
-            status_code=404, detail=f"Object {obj_id} not found or expired."
-        )
+    try:
+        history = await _get_redis_cache().get_object_history(obj_id)
+        if not history:
+            raise HTTPException(
+                status_code=404, detail=f"Object {obj_id} not found or expired."
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
     # 計算停留時間 (Dwell Time)
     if "last_seen" in history and "first_seen" in history:
@@ -86,7 +92,7 @@ async def semantic_search(query: SearchQuery) -> Dict[str, Any]:
     try:
         results = _get_chroma_store().hybrid_query(
             query_text=query.text,
-            n_results=query.n_results or 5,
+            n_results=query.n_results if query.n_results is not None else 5,
             start_time=query.start_time,
             is_anomaly=is_anomaly_int,
         )

@@ -71,17 +71,12 @@ module = ["scripts.*"]
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = ["train.*"]
-ignore_errors = true
-
-[[tool.mypy.overrides]]
 module = ["saccade.perception.temporal_yolo.*"]
 ignore_errors = true
 
 [[tool.mypy.overrides]]
 module = [
     "build_fpn_reid",
-    "debug_eval",
     "saccade.media.dali_pipeline",
     "saccade.media.rtsp_dali_pipeline",
     "saccade.perception.detector_trt",

@@ -6,12 +6,18 @@ from gi.repository import Gst, GstApp  # noqa: E402
 import torch  # noqa: E402
 import numpy as np  # noqa: E402
 import os  # noqa: E402
+import shlex  # noqa: E402
 from typing import Optional, NamedTuple  # noqa: E402
 import threading  # noqa: E402
 from saccade.media.rtsp import build_reader_url, DEFAULT_RTSP_SINGLE_STREAM_PATH  # noqa: E402
 
 # 初始化 GStreamer
 Gst.init([])
+
+
+def _gst_property_value(value: str) -> str:
+    """Quote values embedded into a Gst.parse_launch pipeline string."""
+    return shlex.quote(value)
 
 
 class Nv12Frame(NamedTuple):
@@ -80,13 +86,14 @@ class GstZeroCopyDecoder:
         if self.source_url.startswith("rtsp://"):
             # 舊的 NVDEC RTSP 路徑在目前 MediaMTX/testsrc 場景下不穩定，
             # 這裡跟 MediaMTXClient 對齊，優先保證 RTSP 可讀。
+            source_url = _gst_property_value(self.source_url)
             return (
-                f"rtspsrc location={self.source_url} latency=0 protocols=tcp ! "
+                f"rtspsrc location={source_url} latency=0 protocols=tcp ! "
                 f"rtph264depay ! h264parse ! avdec_h264 ! videoconvert ! "
                 f"video/x-raw,format=RGB ! {sink_path}"
             )
         else:
-            path = self.source_url.replace("file://", "")
+            path = _gst_property_value(self.source_url.replace("file://", ""))
             if self.decoder_name == "nvh264dec":
                 decoder_path = "nvh264dec ! video/x-raw,format=NV12"
             else:
@@ -144,6 +151,8 @@ class GstZeroCopyDecoder:
 
         buffer = sample.get_buffer()
         caps = sample.get_caps()
+        if not caps:
+            return Gst.FlowReturn.ERROR
         struct = caps.get_structure(0)
         width = struct.get_value("width")
         height = struct.get_value("height")

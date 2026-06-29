@@ -5,7 +5,10 @@ import os
 import shutil
 import time
 from unittest.mock import patch, AsyncMock, MagicMock
-from gi.repository import GLib
+import gi
+
+gi.require_version("Gst", "1.0")
+from gi.repository import GLib, Gst  # noqa: E402
 from saccade.media.mediamtx_client import MediaMTXClient  # noqa: E402
 from saccade.media.rtsp import (  # noqa: E402
     DEFAULT_RTSP_HOST,
@@ -417,6 +420,46 @@ def test_gst_decoder_rtsp_pipeline_prefers_tcp_and_cpu_decode():
     assert "video/x-raw,format=RGB" in pipeline
     assert "sync=false" in pipeline
     assert "nvh264dec" not in pipeline
+
+
+def test_gst_decoder_rtsp_pipeline_quotes_special_url_characters():
+    decoder = GstZeroCopyDecoder.__new__(GstZeroCopyDecoder)
+    decoder.source_url = "rtsp://reader:pa!ss word@127.0.0.1:8554/live"
+    decoder.decoder_name = "nvh264dec"
+
+    pipeline = decoder._build_pipeline_str()
+
+    assert f"location='{decoder.source_url}'" in pipeline
+    assert "protocols=tcp" in pipeline
+
+
+def test_gst_decoder_file_pipeline_quotes_paths_with_spaces():
+    decoder = GstZeroCopyDecoder.__new__(GstZeroCopyDecoder)
+    decoder.source_url = "file:///tmp/sample clip!.mp4"
+    decoder.decoder_name = "avdec_h264"
+
+    pipeline = decoder._build_pipeline_str()
+
+    assert "filesrc location='/tmp/sample clip!.mp4'" in pipeline
+    assert "qtdemux" in pipeline
+
+
+def test_gst_decoder_on_new_sample_without_caps_returns_error():
+    decoder = GstZeroCopyDecoder.__new__(GstZeroCopyDecoder)
+
+    class _Sample:
+        def get_buffer(self):
+            return object()
+
+        def get_caps(self):
+            return None
+
+    class _Sink:
+        def emit(self, name):
+            assert name == "pull-sample"
+            return _Sample()
+
+    assert decoder._on_new_sample(_Sink()) == Gst.FlowReturn.ERROR
 
 
 def test_gst_decoder_start_sets_pipeline_playing():

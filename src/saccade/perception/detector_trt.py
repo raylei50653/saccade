@@ -153,7 +153,7 @@ class TRTYoloDetector:
         return (
             torch.empty((0, 4), device=self.device),
             torch.empty((0,), device=self.device),
-            torch.empty((0,), device=self.device),
+            torch.empty((0,), dtype=torch.int32, device=self.device),
             None,
         )
 
@@ -266,7 +266,18 @@ class TRTYoloDetector:
         執行批次偵測與追蹤
         """
         batch_size = input_tensor.size(0)
+        if batch_size == 0:
+            return []
         outputs = self.infer_raw_batch(input_tensor)
+        return self._decode_outputs(outputs, batch_size, conf_threshold)
+
+    def _decode_outputs(
+        self,
+        outputs: Dict[str, torch.Tensor],
+        batch_size: int,
+        conf_threshold: float,
+    ) -> List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor, Optional[torch.Tensor]]]:
+        """Decode TensorRT raw outputs without running inference."""
         output_tensor = outputs[self.output_name]
 
         batch_results = []
@@ -736,7 +747,10 @@ class BatchedDetectorProxy:
         results = []
         for i in range(input_tensor.size(0)):
             raw = self.detect_raw(input_tensor[i : i + 1])
-            results.append(self._base.detect_batch(raw, conf_threshold)[0])
+            outputs = {self._base.output_name: raw}
+            results.append(
+                self._base._decode_outputs(outputs, raw.size(0), conf_threshold)[0]
+            )
         return results
 
     def reset_tracker(self) -> None:
