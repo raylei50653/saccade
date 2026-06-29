@@ -6,18 +6,18 @@ maintenance, but reusable library logic should move into `src/saccade/...`.
 
 ## Review Status
 
-First inventory pass: 2026-06-18.
+First inventory pass: 2026-06-18. Count refresh: 2026-06-28.
 
 | Area | Files | Current role | Review status |
 |---|---:|---|---|
-| `eval/` | 64 | MOT17 eval, ablations, diagnostics, one-off analysis | Classified; first unused archive/prototype removal pass done 2026-06-18 |
-| `tools/` | 47 | Mixed maintenance checks, analysis probes, render/remap helpers | Classified 2026-06-18; unused tools removal passes in progress |
+| `eval/` | 134 tracked files / 123 Python | MOT17 eval, ablations, diagnostics, one-off analysis | Classified; first unused archive/prototype removal pass done 2026-06-18; 28 duplicate Python basenames still need triage |
+| `tools/` | 68 tracked files / 64 Python | Mixed maintenance checks, analysis probes, render/remap helpers | Classified 2026-06-18; unused tools removal passes in progress |
 | `model/` | 21 | Model export/build/calibration helpers | Classified 2026-06-18; no files moved |
-| `benchmarks/` | 19 | Latency, stress, and profiler scripts | Classified 2026-06-18; no files moved |
-| `train/` | 5 + `temporal_yolo/` | Training entrypoints and research run scripts | Classified 2026-06-18; `temporal_yolo/` reviewed against v14 protocol |
+| `benchmarks/` | 17 | Latency, stress, and profiler scripts | Classified 2026-06-18; no files moved |
+| `train/` | 5 + 39 in `temporal_yolo/` | Training entrypoints and research run scripts | Classified 2026-06-18; `temporal_yolo/` reviewed against v14 protocol |
 | `ops/` | 5 | Local service and RTSP demo operations | Classified 2026-06-18; no files moved |
 | `native/` | 4 | Native build/coverage helpers | Reviewed 2026-06-18 |
-| root files | 5 | Stable hooks plus one historical training runner | Downloaders removed 2026-06-18 |
+| root files | 10 | Stable hooks, one historical training runner, and dataset downloaders | Downloader role needs a separate manifest/runbook decision |
 
 ## Triage Labels
 
@@ -58,18 +58,23 @@ and docs in the same change.
 |---|---|---|
 | `README.md` | This script-tree cleanup ledger | stable |
 | `__init__.py` | Package marker for scripts imports/static analysis | stable |
+| `download_crowdhuman_hf.py` | CrowdHuman dataset downloader | diagnostic; root-surface cleanup candidate |
+| `download_external_datasets.py` | CrowdHuman / CityPersons downloader | diagnostic; root-surface cleanup candidate |
+| `download_kitti_tracking.py` | KITTI tracking downloader | diagnostic; root-surface cleanup candidate |
+| `download_market1501.py` | Market1501 downloader | diagnostic; root-surface cleanup candidate |
+| `download_motsynth.py` | MOTSynth downloader | diagnostic; root-surface cleanup candidate |
 | `pre_push.sh` | Local pre-push CI mirror | stable |
 | `test_native.sh` | Native C++/CUDA coverage test entrypoint | stable |
 | `train_option_d.sh` | Historical Option-D two-phase training runner | archive-candidate; uses old `train/temporal_yolo/...` path |
 
-## Removed Dataset Downloaders
+## Dataset Downloaders
 
-The downloader scripts were removed on 2026-06-18 because they had no repo
-references and mixed data acquisition into the root script surface. Keep the
-source references here so future dataset setup can be rebuilt as a manifest or
-runbook instead of restoring ad hoc scripts.
+These root-level downloader scripts are currently tracked. They mix data
+acquisition into the root script surface; keep the source references here so a
+future cleanup can rebuild them as a manifest or runbook before moving/removing
+the scripts.
 
-| Removed script | Dataset/source references |
+| Script | Dataset/source references |
 |---|---|
 | `download_crowdhuman_hf.py` | Hugging Face dataset repo `Carles208AVL/CrowdHuman` |
 | `download_external_datasets.py` | CrowdHuman: `https://data.vision.ee.ethz.ch/cvl/rro/CrowdHuman/CrowdHuman.tar`, `https://data.vision.ee.ethz.ch/cvl/rro/CrowdHuman/CrowdHuman.zip`; CityPersons: `https://data.vision.ee.ethz.ch/CD/684804/data/CityPersons.zip`, `https://data.vision.ee.ethz.ch/CD/684804/data/CityPersonsAnnotations.zip` |

@@ -3,8 +3,7 @@
 本文件描述目前程式碼中實際存在的介面與資料合約。重點分成三類：
 
 - RTSP / MediaMTX stream contract
-- L1/L3：Perception 發出的 Redis event queue
-- L3/L5：Orchestrator 使用的 Redis stream
+- L1/L3/L5：Perception 發出、Orchestrator 消費的 Redis Stream event path
 - 外部查詢：FastAPI retrieval API
 
 若本文件與目前主路徑程式碼衝突，以程式碼為準，並應同步修正本文件。
@@ -95,21 +94,21 @@ rtsp://127.0.0.1:8554/detected
 
 ---
 
-## 3. Redis Event Queue
+## 3. Redis Event Schema
 
-### 3.1 Queue Key
+### 3.1 Transport
 
-- Key: `saccade:events`
-- Type: Redis List
+- Key: `saccade:stream`
+- Type: Redis Stream
 - Producer:
   - `EntropyTrigger.emit_event()`
-  - `RedisCache.publish_event()` + `MicroBatcher`
+  - `RedisCache.add_to_stream()`
 - Retention:
-  - TTL `3600s`
+  - approximate `MAXLEN=10000`
 
 ### 3.2 Event Schema
 
-目前 `entropy.py` 實際發送格式如下：
+目前 `entropy.py` 寫入 Stream payload `data` 欄位的 JSON 格式如下：
 
 ```json
 {
@@ -164,6 +163,7 @@ rtsp://127.0.0.1:8554/detected
 - Key: `saccade:stream`
 - Type: Redis Stream
 - Producer:
+  - `EntropyTrigger.emit_event()`
   - `RedisCache.add_to_stream()`
   - `RedisCache.add_to_stream_batch()`
 - Consumer group:
@@ -194,11 +194,7 @@ rtsp://127.0.0.1:8554/detected
 
 ### 4.4 Notes
 
-- 目前 repo 同時存在 Redis List 與 Redis Stream 兩條事件入口。
-- 若未來正式統一為 Stream-only，需更新：
-  - `entropy.py`
-  - `tests/integration/test_pipeline.py`
-  - 本文件
+- `RedisCache.publish_event()` / `MicroBatcher` 仍可用於一般 Redis List batch writes，但不是 cognition event 主路徑。
 
 ---
 
@@ -374,7 +370,7 @@ Response shape:
   - `mediamtx`
 - redis connectivity:
   - `PING`
-  - queue depth via `LLEN saccade:events`
+  - stream depth via `XLEN saccade:stream`
 - vram:
   - NVML memory usage
 - stress metrics:
@@ -399,11 +395,10 @@ Response shape:
 
 ## 8. Concurrency / I/O Rules
 
-- Redis list writes:
-  - use `redis.asyncio`
-  - high-frequency queue writes should prefer `RedisCache.publish_event()` + `MicroBatcher`
 - Redis stream writes:
-  - use `RedisCache.add_to_stream()` or batch variant
+  - cognition events should use `RedisCache.add_to_stream()` or batch variant
+- Redis list writes:
+  - `RedisCache.publish_event()` + `MicroBatcher` is available for non-cognition list queues
 - Orchestrator:
   - DB-bound tasks are limited by `asyncio.Semaphore(32)`
 - Blocking RAG calls:
@@ -414,7 +409,6 @@ Response shape:
 ## 9. Known Gaps
 
 - `EntropyTrigger.calculate_entropy()` is still placeholder logic and not a stable semantic contract yet.
-- Redis List event path and Redis Stream path are both present; long-term canonical path is not fully unified.
 - `GET /objects/{obj_id}` assumes richer object history than `RedisCache.update_object_track()` currently stores.
 - `docs/architecture/README.md` and `docs/reference/pipeline_flow.md` still describe the intended system shape at a higher level; this file describes currently implemented interface contracts.
 

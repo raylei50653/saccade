@@ -72,7 +72,7 @@ from .scene_adapt import SceneAdaptivePolicy
 
 
 _SOFTMAX3_TORCH_CACHE: dict[
-    tuple[int, int, int, int, int, str],
+    tuple[SoftmaxLinearModel, str],
     tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
 ] = {}
 
@@ -348,9 +348,7 @@ def _compute_fp_filter_ranking(
     # Size penalty: gentle penalty for large boxes (area > 4000)
     # Real persons in MOT17 are typically 2000-8000px
     # FP tend to be larger (>5000px) with moderate scores
-    _log_max = torch.tensor(
-        torch.log(torch.tensor(12000.0 / 4000.0)), device=area.device
-    )
+    _log_max = area.new_tensor(float(np.log(12000.0 / 4000.0)))
     size_penalty = torch.where(
         area > 4000,
         1.0 - 0.3 * torch.clamp(torch.log(area / 4000.0) / _log_max, 0.0, 1.0),
@@ -444,14 +442,7 @@ def _get_softmax3_torch_params(
     device: torch.device,
     dtype: torch.dtype,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-    cache_key = (
-        len(model.weights),
-        len(model.weights[0]) if model.weights else 0,
-        len(model.bias),
-        len(model.mean),
-        len(model.std),
-        f"{device.type}:{device.index}:{dtype}",
-    )
+    cache_key = (model, f"{device.type}:{device.index}:{dtype}")
     cached = _SOFTMAX3_TORCH_CACHE.get(cache_key)
     if cached is not None:
         return cached
@@ -490,6 +481,12 @@ def _predict_softmax3_probs_torch(
         / max(min(float(image_width), float(image_height)), 1.0),
         "touches_edge": touches_edge,
     }
+    unknown_features = [name for name in model.feature_names if name not in feature_map]
+    if unknown_features:
+        raise ValueError(
+            "softmax3 model has unsupported feature_names: "
+            + ", ".join(unknown_features)
+        )
     feature_matrix = torch.stack(
         [feature_map[name] for name in model.feature_names],
         dim=1,
@@ -818,9 +815,12 @@ def _build_active_track_priors(
 
 def _env_flag_enabled(name: str, default: bool = True) -> bool:
     value = os.getenv(name)
-    if not value:
+    if value is None:
         return default
-    return value.lower() not in {"0", "false"}
+    normalized = value.strip().lower()
+    if not normalized:
+        return default
+    return normalized not in {"0", "false", "no", "off"}
 
 
 def _detect_barrier_mode() -> str:

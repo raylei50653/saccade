@@ -61,7 +61,7 @@ class ChromaStore:
                 documents=[content],
                 metadatas=[metadata],
                 ids=[memory_id],
-                embeddings=[cast(Any, [embedding])],
+                embeddings=cast(Any, [embedding]),
             )
         else:
             self.collection.add(
@@ -89,7 +89,7 @@ class ChromaStore:
         """
         where_clauses: List[Dict[str, Any]] = []
 
-        if start_time:
+        if start_time is not None:
             where_clauses.append({"timestamp": {"$gte": start_time}})
         if is_anomaly is not None:
             where_clauses.append({"is_anomaly": is_anomaly})
@@ -107,7 +107,7 @@ class ChromaStore:
             query_kwargs["where"] = where
         if query_text:
             query_kwargs["query_texts"] = [query_text]
-        if query_embedding:
+        if query_embedding is not None:
             query_kwargs["query_embeddings"] = [query_embedding]
 
         results = self.collection.query(**query_kwargs)

@@ -1,4 +1,3 @@
-import json
 import math
 import time
 import uuid
@@ -99,10 +98,8 @@ class EntropyTrigger:
         }
 
         cache = await self._ensure_cache()
-        assert cache.client is not None
         try:
-            await cache.client.rpush("saccade:events", json.dumps(event_data))  # type: ignore[misc]
-            await cache.client.expire("saccade:events", 3600)
+            await cache.add_to_stream(event_data)
 
             print(
                 f"📡 Event emitted: {event_id} (Entropy: {entropy_value:.2f}, Frame: {frame_id})"

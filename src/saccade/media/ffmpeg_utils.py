@@ -1,4 +1,5 @@
 import subprocess
+import time
 import cv2
 import numpy as np
 from typing import Optional, Any
@@ -28,6 +29,9 @@ class RTSPStreamer:
 
     def start(self) -> None:
         """啟動 FFmpeg 子進程進行推流"""
+        if self.process is not None and self.process.poll() is None:
+            return
+
         # 使用更穩定的推流參數
         command = [
             "ffmpeg",
@@ -64,13 +68,14 @@ class RTSPStreamer:
         ]
 
         self.process = subprocess.Popen(command, stdin=subprocess.PIPE)
-        import time
-
         time.sleep(0.5)  # 給予 FFmpeg 握手時間
         print(f"🚀 RTSP Streamer started: {self.rtsp_url}")
 
     def push_frame(self, frame: np.ndarray) -> None:
         """將影格寫入 FFmpeg stdin"""
+        if frame.ndim != 3 or frame.shape[2] != 3:
+            raise ValueError("RTSPStreamer expects frames with shape (H, W, 3)")
+
         if self.process is None or self.process.poll() is not None:
             print("🔄 [RTSPStreamer] Restarting FFmpeg process...")
             self.start()
@@ -94,7 +99,16 @@ class RTSPStreamer:
     def stop(self) -> None:
         """停止推流"""
         if self.process:
-            if self.process.stdin:
-                self.process.stdin.close()
-            self.process.terminate()
+            process = self.process
             self.process = None
+            if process.stdin:
+                try:
+                    process.stdin.close()
+                except OSError:
+                    pass
+            process.terminate()
+            try:
+                process.wait(timeout=1.0)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=1.0)

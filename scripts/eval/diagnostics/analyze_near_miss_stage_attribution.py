@@ -9,7 +9,11 @@ from typing import Any
 
 import pandas as pd
 
-project_root = Path(__file__).resolve().parent.parent.parent
+project_root = next(
+    p
+    for p in Path(__file__).resolve().parents
+    if (p / "pyproject.toml").exists() and (p / "src" / "saccade").is_dir()
+)
 sys.path.insert(0, str(project_root))
 
 from scripts.eval.analyze_near_miss_offsets import bbox_iou_xyxy, xywh_to_xyxy  # noqa: E402

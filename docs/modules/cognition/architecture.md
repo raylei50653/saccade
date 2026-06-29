@@ -22,7 +22,7 @@ L5 是 Saccade 的「語義大腦」，負責將 L1-L4 累積的結構化視覺�
 | `visual_requery` | 從 FeatureBank 拉取 SigLIP 2 embedding → ChromaDB Image-to-Image 比對 |
 
 ## 5. 資料流向
-- **Input**: Redis `saccade:events` 佇列、FeatureBank embedding、ChromaDB 歷史向量。
+- **Input**: Redis Stream `saccade:stream`、FeatureBank embedding、ChromaDB 歷史向量。
 - **Output**: LLM Insight 文字輸出（目前 print，後續可接 API）。
 
 ## 6. 效能保護

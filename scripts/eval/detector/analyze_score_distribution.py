@@ -27,7 +27,11 @@ import cv2
 import numpy as np
 import torch
 
-project_root = Path(__file__).resolve().parent.parent.parent
+project_root = next(
+    p
+    for p in Path(__file__).resolve().parents
+    if (p / "pyproject.toml").exists() and (p / "src" / "saccade").is_dir()
+)
 sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(project_root / "src"))
 sys.path.insert(0, str(project_root / "build"))

@@ -19,14 +19,14 @@ async def test_entropy_trigger_emit_event():
         )
 
         assert success is True
-        assert mock_redis.rpush.called
+        assert mock_redis.xadd.called
 
         # Verify the event data
-        args, kwargs = mock_redis.rpush.call_args
-        queue_name = args[0]
-        event_json = args[1]
+        args, kwargs = mock_redis.xadd.call_args
+        stream_name = args[0]
+        event_json = args[1]["data"]
 
-        assert queue_name == "saccade:events"
+        assert stream_name == "saccade:stream"
         event_data = json.loads(event_json)
         assert event_data["type"] == "entropy_trigger"
         assert event_data["metadata"]["entropy_value"] == 0.65
@@ -45,12 +45,12 @@ async def test_entropy_trigger_cooldown():
         # First emit: 2 distinct classes -> shannon=1.0, density=0.2 -> entropy=0.6 >= 0.1
         success1 = await trigger.process_frame(1, ["p1", "p2"], "s")
         assert success1 is True
-        assert mock_redis.rpush.call_count == 1
+        assert mock_redis.xadd.call_count == 1
 
         # Second emit immediately after should fail due to cooldown
         success2 = await trigger.process_frame(2, ["p2"], "s")
         assert success2 is False
-        assert mock_redis.rpush.call_count == 1
+        assert mock_redis.xadd.call_count == 1
 
 
 @pytest.mark.anyio

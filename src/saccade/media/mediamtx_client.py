@@ -1,4 +1,5 @@
 import os
+import shlex
 import threading
 import time
 import asyncio
@@ -21,6 +22,11 @@ except ImportError:
 
 # 初始化 GStreamer
 Gst.init([])
+
+
+def _gst_property_value(value: str) -> str:
+    """Quote values embedded into a Gst.parse_launch pipeline string."""
+    return shlex.quote(value)
 
 
 class MediaMTXClient:
@@ -80,7 +86,7 @@ class MediaMTXClient:
         )
 
         if self.dummy_video and os.path.exists(self.dummy_video):
-            path = os.path.abspath(self.dummy_video)
+            path = _gst_property_value(os.path.abspath(self.dummy_video))
             return (
                 f"filesrc location={path} ! decodebin ! videoconvert ! "
                 f"video/x-raw,format=RGB ! {sink_path}"
@@ -91,8 +97,9 @@ class MediaMTXClient:
             # RTSP 讀流路徑優先追求穩定拿到 frame，而不是實驗性的 GPU decode。
             # MediaMTX + test publisher 在 nvh264dec 路徑下會報 internal data stream error；
             # 使用 TCP + avdec_h264/decodebin 則能穩定輸出到 appsink。
+            rtsp_url = _gst_property_value(self.rtsp_url)
             return (
-                f"rtspsrc location={self.rtsp_url} latency=0 protocols=tcp ! "
+                f"rtspsrc location={rtsp_url} latency=0 protocols=tcp ! "
                 f"rtph264depay ! h264parse ! avdec_h264 ! videoconvert ! "
                 f"video/x-raw,format=RGB ! {sink_path}"
             )
@@ -362,10 +369,19 @@ class MediaMTXClient:
         self._running = False
         if self.use_cpp and self.cpp_client:
             self.cpp_client.release()
+            self.cpp_client = None
         if self.pipeline:
             self.pipeline.set_state(Gst.State.NULL)
+            self.pipeline = None
         if self._mainloop:
             self._mainloop.quit()
+        if (
+            self._loop_thread is not None
+            and self._loop_thread.is_alive()
+            and self._loop_thread is not threading.current_thread()
+        ):
+            self._loop_thread.join(timeout=1.0)
+        self._loop_thread = None
 
 
 if __name__ == "__main__":

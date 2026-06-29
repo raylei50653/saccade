@@ -28,7 +28,11 @@ from pathlib import Path
 import numpy as np
 import torch
 
-_ROOT = Path(__file__).resolve().parents[2]
+_ROOT = next(
+    p
+    for p in Path(__file__).resolve().parents
+    if (p / "pyproject.toml").exists() and (p / "src" / "saccade").is_dir()
+)
 sys.path.insert(0, str(_ROOT))
 sys.path.insert(0, str(_ROOT / "src"))
 
