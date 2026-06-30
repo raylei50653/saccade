@@ -20,6 +20,8 @@ from saccade.perception.eval.evaluator import (
     _apply_external_fp_filter,
     _compute_adaptive_cap,
     _build_active_track_priors,
+    _apply_private_energy_margin,
+    _private_height_log_ratio,
     _env_flag_enabled,
     _build_cpp_seq_config,
 )
@@ -105,7 +107,12 @@ def test_nms_graph_retains_captured_count_buffer(monkeypatch):
         raw_scores_contig=scores,
         raw_classes_contig=classes,
         raw_box_count=2,
+        priors_tensor=None,
+        prior_classes_tensor=None,
         num_priors=0,
+        private_prior_boxes=None,
+        num_private_priors=0,
+        native_private_enabled=False,
         is_tiled=False,
         nms_graph=None,
     )
@@ -120,7 +127,12 @@ def test_nms_graph_retains_captured_count_buffer(monkeypatch):
         raw_scores_contig=scores,
         raw_classes_contig=classes,
         raw_box_count=2,
+        priors_tensor=None,
+        prior_classes_tensor=None,
         num_priors=0,
+        private_prior_boxes=None,
+        num_private_priors=0,
+        native_private_enabled=False,
         is_tiled=False,
         nms_graph=captured_graph,
     )
@@ -761,6 +773,44 @@ def test_env_flag_enabled():
         assert _env_flag_enabled("TEST_FLAG") is False
     with patch.dict(os.environ, {"TEST_FLAG": ""}):
         assert _env_flag_enabled("TEST_FLAG", default=False) is False
+
+
+def test_private_energy_margin_requires_mutual_unambiguous_best():
+    scores = torch.tensor(
+        [
+            [1.00, 0.82, 0.20],
+            [0.70, 0.81, 0.30],
+            [0.40, 0.30, 0.95],
+        ]
+    )
+
+    mask = _apply_private_energy_margin(scores, margin=0.10)
+
+    assert mask.tolist() == [
+        [True, False, False],
+        [False, False, False],
+        [False, False, True],
+    ]
+
+
+def test_private_height_log_ratio_penalizes_size_mismatch():
+    boxes = torch.tensor(
+        [
+            [0.0, 0.0, 10.0, 20.0],
+            [0.0, 0.0, 10.0, 10.0],
+        ]
+    )
+    priors = torch.tensor(
+        [
+            [0.0, 0.0, 10.0, 20.0],
+            [0.0, 0.0, 10.0, 5.0],
+        ]
+    )
+
+    height_energy = _private_height_log_ratio(boxes, priors)
+
+    expected = torch.log(torch.tensor([[1.0, 4.0], [2.0, 2.0]]))
+    assert torch.allclose(height_energy, expected)
 
 
 # Test _build_cpp_seq_config

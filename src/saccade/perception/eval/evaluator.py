@@ -171,6 +171,531 @@ def _apply_stage2_quality_gate(
     )
 
 
+def _prior_iou_and_center_distance(
+    boxes: torch.Tensor,
+    prior_boxes: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    prior_iou = torch_box_iou_matrix(boxes, prior_boxes)
+    det_centers = (boxes[:, :2] + boxes[:, 2:]) * 0.5
+    prior_centers = (prior_boxes[:, :2] + prior_boxes[:, 2:]) * 0.5
+    prior_heights = (prior_boxes[:, 3] - prior_boxes[:, 1]).clamp(min=1.0)
+    dist = torch.linalg.vector_norm(
+        det_centers[:, None, :] - prior_centers[None, :, :], dim=2
+    )
+    return prior_iou, dist / prior_heights[None, :]
+
+
+def _private_prior_pair_keep(
+    prior_iou: torch.Tensor,
+    norm_dist: torch.Tensor,
+    *,
+    iou_threshold: float,
+    center_threshold: float,
+) -> torch.Tensor:
+    if iou_threshold > 0.0 or center_threshold > 0.0:
+        pair_keep = torch.zeros_like(prior_iou, dtype=torch.bool)
+        if iou_threshold > 0.0:
+            pair_keep |= prior_iou >= iou_threshold
+        if center_threshold > 0.0:
+            pair_keep |= norm_dist <= center_threshold
+        return pair_keep
+    return (prior_iou > 0.0) | (norm_dist <= 1.0)
+
+
+def _private_height_log_ratio(
+    boxes: torch.Tensor, prior_boxes: torch.Tensor
+) -> torch.Tensor:
+    det_h = (boxes[:, 3] - boxes[:, 1]).clamp(min=1.0)
+    prior_h = (prior_boxes[:, 3] - prior_boxes[:, 1]).clamp(min=1.0)
+    return torch.abs(torch.log((det_h[:, None] / prior_h[None, :]).clamp(min=1e-3)))
+
+
+def _apply_private_energy_margin(
+    pair_scores: torch.Tensor,
+    *,
+    margin: float,
+) -> torch.Tensor:
+    if margin <= 0.0 or pair_scores.numel() == 0:
+        return torch.ones_like(pair_scores, dtype=torch.bool)
+
+    finite = torch.isfinite(pair_scores)
+    row_scores = pair_scores.masked_fill(~finite, float("-inf"))
+    row_top = torch.topk(row_scores, k=min(2, row_scores.shape[1]), dim=1)
+    row_best = row_top.values[:, 0]
+    row_idx = row_top.indices[:, 0]
+    row_second = (
+        row_top.values[:, 1]
+        if row_top.values.shape[1] > 1
+        else torch.full_like(row_best, float("-inf"))
+    )
+    row_margin = (row_best - row_second).clamp(min=0.0)
+
+    col_scores = pair_scores.masked_fill(~finite, float("-inf"))
+    col_top = torch.topk(col_scores, k=min(2, col_scores.shape[0]), dim=0)
+    col_best = col_top.values[0]
+    col_idx = col_top.indices[0]
+    col_second = (
+        col_top.values[1]
+        if col_top.values.shape[0] > 1
+        else torch.full_like(col_best, float("-inf"))
+    )
+    col_margin = (col_best - col_second).clamp(min=0.0)
+
+    rows = torch.arange(pair_scores.shape[0], device=pair_scores.device)
+    cols = torch.arange(pair_scores.shape[1], device=pair_scores.device)
+    return (
+        finite
+        & (cols[None, :] == row_idx[:, None])
+        & (rows[:, None] == col_idx[None, :])
+        & (row_margin[:, None] >= margin)
+        & (col_margin[None, :] >= margin)
+    )
+
+
+def _sparse_symmetric_detection_support(
+    candidate_boxes: torch.Tensor,
+    candidate_classes: torch.Tensor,
+    field_boxes: torch.Tensor,
+    field_scores: torch.Tensor,
+    field_classes: torch.Tensor,
+    *,
+    class_aware: bool,
+) -> torch.Tensor:
+    if candidate_boxes.numel() == 0 or field_boxes.numel() == 0:
+        return candidate_boxes.new_zeros((candidate_boxes.shape[0],))
+
+    cand_centers = (candidate_boxes[:, :2] + candidate_boxes[:, 2:]) * 0.5
+    cand_wh = (candidate_boxes[:, 2:] - candidate_boxes[:, :2]).clamp(min=1.0)
+    field_centers = (field_boxes[:, :2] + field_boxes[:, 2:]) * 0.5
+
+    min_side = cand_wh.min(dim=1).values
+    step = (0.35 * min_side).clamp(min=2.0, max=12.0)
+    sigma = (0.45 * min_side).clamp(min=2.0, max=16.0)
+    offsets = candidate_boxes.new_tensor(
+        [
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [-1.0, 0.0],
+            [0.0, 1.0],
+            [0.0, -1.0],
+            [1.0, 1.0],
+            [-1.0, -1.0],
+            [1.0, -1.0],
+            [-1.0, 1.0],
+        ]
+    )
+    sample_points = cand_centers[:, None, :] + offsets[None, :, :] * step[:, None, None]
+    delta = sample_points[:, :, None, :] - field_centers[None, None, :, :]
+    dist2 = (delta * delta).sum(dim=3)
+    weights = torch.exp(-0.5 * dist2 / (sigma[:, None, None] * sigma[:, None, None]))
+    weighted_scores = weights * field_scores[None, None, :]
+    if class_aware:
+        same_class = candidate_classes[:, None] == field_classes[None, :]
+        weighted_scores = weighted_scores.masked_fill(~same_class[:, None, :], 0.0)
+
+    support = weighted_scores.max(dim=2).values
+    center_support = support[:, 0]
+    pair_a = support[:, [1, 3, 5, 7]]
+    pair_b = support[:, [2, 4, 6, 8]]
+    pair_strength = 0.5 * (pair_a + pair_b)
+    pair_balance = torch.minimum(pair_a, pair_b) / torch.maximum(
+        torch.maximum(pair_a, pair_b), candidate_boxes.new_tensor(1e-4)
+    )
+    return (
+        0.45 * center_support
+        + 0.35 * pair_strength.mean(dim=1)
+        + 0.20 * pair_balance.mean(dim=1)
+    ).clamp(min=0.0, max=1.0)
+
+
+def _append_private_continuation_candidates(
+    *,
+    fused_boxes: torch.Tensor,
+    fused_scores: torch.Tensor,
+    fused_classes: torch.Tensor,
+    geometry_suspect_mask: torch.Tensor,
+    aligned_keypoints: "torch.Tensor | None",
+    pre_nms_boxes: torch.Tensor,
+    pre_nms_scores: torch.Tensor,
+    pre_nms_classes: torch.Tensor,
+    pre_nms_geometry_suspect_mask: torch.Tensor,
+    pre_nms_aligned_keypoints: "torch.Tensor | None",
+    baseline_keep: torch.Tensor | None,
+    baseline_nms_iou: float,
+    candidate_nms_iou: float,
+    class_aware: bool,
+    priors: "torch.Tensor | None",
+    prior_classes: "torch.Tensor | None",
+    prior_iou_threshold: float,
+    private_prior_boxes: "torch.Tensor | None",
+    private_prior_iou_threshold: float,
+    private_prior_center_threshold: float,
+    frame_track_thresh: float,
+    frame_mid_thresh: float,
+    frame_new_track_thresh: float,
+    low_stage_only: bool,
+    private_min_score: float,
+    private_max_candidates: int,
+    private_selection_mode: str,
+    private_energy_margin: float,
+    score_eps: float = 1e-4,
+) -> tuple[
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    "torch.Tensor | None",
+    int,
+]:
+    """Append wider-NMS candidates as continuation-only tracker inputs."""
+    if (
+        baseline_keep is None
+        or pre_nms_boxes.numel() == 0
+        or candidate_nms_iou <= baseline_nms_iou
+    ):
+        return (
+            fused_boxes,
+            fused_scores,
+            fused_classes,
+            geometry_suspect_mask,
+            aligned_keypoints,
+            0,
+        )
+
+    birth_ceiling = float(frame_new_track_thresh) - score_eps
+    if low_stage_only:
+        birth_ceiling = min(birth_ceiling, float(frame_mid_thresh) - score_eps)
+    if birth_ceiling <= float(frame_track_thresh):
+        return (
+            fused_boxes,
+            fused_scores,
+            fused_classes,
+            geometry_suspect_mask,
+            aligned_keypoints,
+            0,
+        )
+
+    candidate_keep = nms_fast(
+        pre_nms_boxes,
+        pre_nms_scores,
+        pre_nms_classes,
+        candidate_nms_iou,
+        class_aware=class_aware,
+        priors=priors,
+        prior_classes=prior_classes,
+        prior_iou_threshold=prior_iou_threshold,
+    )
+    if candidate_keep.numel() == 0:
+        return (
+            fused_boxes,
+            fused_scores,
+            fused_classes,
+            geometry_suspect_mask,
+            aligned_keypoints,
+            0,
+        )
+
+    baseline_mask = torch.zeros(
+        pre_nms_scores.shape[0], dtype=torch.bool, device=pre_nms_scores.device
+    )
+    baseline_mask[baseline_keep.to(torch.long)] = True
+    private_keep = candidate_keep[~baseline_mask[candidate_keep.to(torch.long)]]
+    if private_keep.numel() == 0:
+        return (
+            fused_boxes,
+            fused_scores,
+            fused_classes,
+            geometry_suspect_mask,
+            aligned_keypoints,
+            0,
+        )
+
+    private_scores = pre_nms_scores[private_keep]
+    score_floor = max(float(private_min_score), float(frame_track_thresh))
+    score_keep = private_scores >= score_floor
+    if not score_keep.any():
+        return (
+            fused_boxes,
+            fused_scores,
+            fused_classes,
+            geometry_suspect_mask,
+            aligned_keypoints,
+            0,
+        )
+    private_keep = private_keep[score_keep]
+    private_scores = private_scores[score_keep]
+
+    if (
+        private_prior_boxes is not None
+        and private_prior_boxes.numel() > 0
+        and (private_prior_iou_threshold > 0.0 or private_prior_center_threshold > 0.0)
+    ):
+        private_boxes_for_gate = pre_nms_boxes[private_keep]
+        prior_keep = torch.zeros(
+            private_boxes_for_gate.shape[0],
+            dtype=torch.bool,
+            device=private_boxes_for_gate.device,
+        )
+        prior_iou, norm_dist = _prior_iou_and_center_distance(
+            private_boxes_for_gate, private_prior_boxes
+        )
+        if private_prior_iou_threshold > 0.0:
+            prior_keep |= prior_iou.max(dim=1).values >= private_prior_iou_threshold
+        if private_prior_center_threshold > 0.0:
+            prior_keep |= norm_dist.min(dim=1).values <= private_prior_center_threshold
+        if not prior_keep.any():
+            return (
+                fused_boxes,
+                fused_scores,
+                fused_classes,
+                geometry_suspect_mask,
+                aligned_keypoints,
+                0,
+            )
+        private_keep = private_keep[prior_keep]
+        private_scores = private_scores[prior_keep]
+
+    private_selection_mode = private_selection_mode.strip().lower()
+    if private_selection_mode in {
+        "per_track",
+        "suppressor_aware",
+        "sparse_symmetric",
+        "energy",
+    }:
+        if private_selection_mode in {"sparse_symmetric", "energy"}:
+            private_boxes_for_support = pre_nms_boxes[private_keep]
+            sparse_support = _sparse_symmetric_detection_support(
+                private_boxes_for_support,
+                pre_nms_classes[private_keep],
+                pre_nms_boxes,
+                pre_nms_scores,
+                pre_nms_classes,
+                class_aware=class_aware,
+            )
+        else:
+            sparse_support = None
+        if private_prior_boxes is None or private_prior_boxes.numel() == 0:
+            if private_selection_mode != "sparse_symmetric":
+                return (
+                    fused_boxes,
+                    fused_scores,
+                    fused_classes,
+                    geometry_suspect_mask,
+                    aligned_keypoints,
+                    0,
+                )
+            rank_scores = 0.65 * sparse_support + 0.35 * private_scores
+            if (
+                private_max_candidates > 0
+                and rank_scores.numel() > private_max_candidates
+            ):
+                _, top_idx = torch.topk(rank_scores, private_max_candidates)
+                private_keep = private_keep[top_idx]
+                private_scores = private_scores[top_idx]
+            private_prior_boxes = None
+        if private_prior_boxes is None:
+            pass
+        else:
+            private_boxes_for_rank = pre_nms_boxes[private_keep]
+            prior_iou, norm_dist = _prior_iou_and_center_distance(
+                private_boxes_for_rank, private_prior_boxes
+            )
+            pair_keep = _private_prior_pair_keep(
+                prior_iou,
+                norm_dist,
+                iou_threshold=private_prior_iou_threshold,
+                center_threshold=private_prior_center_threshold,
+            )
+            if private_selection_mode == "suppressor_aware":
+                public_keep = baseline_keep.to(torch.long)
+                public_boxes = pre_nms_boxes[public_keep]
+                if public_boxes.numel() == 0:
+                    return (
+                        fused_boxes,
+                        fused_scores,
+                        fused_classes,
+                        geometry_suspect_mask,
+                        aligned_keypoints,
+                        0,
+                    )
+                suppressor_iou = torch_box_iou_matrix(
+                    private_boxes_for_rank, public_boxes
+                )
+                if class_aware:
+                    private_classes = pre_nms_classes[private_keep]
+                    public_classes = pre_nms_classes[public_keep]
+                    same_class = private_classes[:, None] == public_classes[None, :]
+                    suppressor_iou = suppressor_iou.masked_fill(
+                        ~same_class, float("-inf")
+                    )
+                suppressor_max_iou, suppressor_idx = suppressor_iou.max(dim=1)
+                has_suppressor = suppressor_max_iou >= baseline_nms_iou
+                if not has_suppressor.any():
+                    return (
+                        fused_boxes,
+                        fused_scores,
+                        fused_classes,
+                        geometry_suspect_mask,
+                        aligned_keypoints,
+                        0,
+                    )
+                suppressor_boxes = public_boxes[suppressor_idx]
+                suppressor_prior_iou, suppressor_norm_dist = (
+                    _prior_iou_and_center_distance(
+                        suppressor_boxes, private_prior_boxes
+                    )
+                )
+                suppressor_pair_keep = _private_prior_pair_keep(
+                    suppressor_prior_iou,
+                    suppressor_norm_dist,
+                    iou_threshold=private_prior_iou_threshold,
+                    center_threshold=private_prior_center_threshold,
+                )
+                suppressor_has_prior = suppressor_pair_keep.any(dim=1)
+                pair_keep &= (
+                    has_suppressor[:, None]
+                    & suppressor_has_prior[:, None]
+                    & ~suppressor_pair_keep
+                )
+            if not pair_keep.any():
+                return (
+                    fused_boxes,
+                    fused_scores,
+                    fused_classes,
+                    geometry_suspect_mask,
+                    aligned_keypoints,
+                    0,
+                )
+            center_affinity = 1.0 / (1.0 + norm_dist)
+            if private_selection_mode == "energy":
+                height_energy = _private_height_log_ratio(
+                    private_boxes_for_rank, private_prior_boxes
+                )
+                iou_energy = -torch.log(prior_iou.clamp(min=1e-4))
+                score_energy = 1.0 - private_scores[:, None].clamp(min=0.0, max=1.0)
+                support_energy = (
+                    1.0 - sparse_support[:, None].clamp(min=0.0, max=1.0)
+                    if sparse_support is not None
+                    else private_scores[:, None].new_zeros(prior_iou.shape)
+                )
+                energy = (
+                    0.60 * iou_energy
+                    + 0.25 * norm_dist
+                    + 0.20 * score_energy
+                    + 0.20 * height_energy
+                    + 0.20 * support_energy
+                )
+                pair_scores = -energy
+            elif sparse_support is None:
+                pair_scores = (
+                    0.70 * prior_iou
+                    + 0.20 * center_affinity
+                    + 0.10 * private_scores[:, None]
+                )
+            else:
+                pair_scores = (
+                    0.45 * prior_iou
+                    + 0.15 * center_affinity
+                    + 0.30 * sparse_support[:, None]
+                    + 0.10 * private_scores[:, None]
+                )
+            pair_scores = pair_scores.masked_fill(~pair_keep, float("-inf"))
+            if private_selection_mode == "energy":
+                pair_scores = pair_scores.masked_fill(
+                    ~_apply_private_energy_margin(
+                        pair_scores,
+                        margin=private_energy_margin,
+                    ),
+                    float("-inf"),
+                )
+            flat_scores_cpu = pair_scores.flatten().detach().cpu()
+            flat_order = torch.argsort(flat_scores_cpu, descending=True)
+            n_priors = int(private_prior_boxes.shape[0])
+            used_candidates: set[int] = set()
+            used_priors: set[int] = set()
+            selected_candidates: list[int] = []
+            for flat_idx in flat_order.tolist():
+                score = float(flat_scores_cpu[flat_idx].item())
+                if score == float("-inf"):
+                    break
+                cand_idx = int(flat_idx // n_priors)
+                prior_idx = int(flat_idx % n_priors)
+                if cand_idx in used_candidates or prior_idx in used_priors:
+                    continue
+                used_candidates.add(cand_idx)
+                used_priors.add(prior_idx)
+                selected_candidates.append(cand_idx)
+                if (
+                    private_max_candidates > 0
+                    and len(selected_candidates) >= private_max_candidates
+                ):
+                    break
+            if not selected_candidates:
+                return (
+                    fused_boxes,
+                    fused_scores,
+                    fused_classes,
+                    geometry_suspect_mask,
+                    aligned_keypoints,
+                    0,
+                )
+            selected = torch.tensor(
+                selected_candidates, dtype=torch.long, device=private_keep.device
+            )
+            private_keep = private_keep[selected]
+            private_scores = private_scores[selected]
+    elif private_selection_mode == "global":
+        pass
+    else:
+        raise ValueError(f"unknown private selection mode: {private_selection_mode}")
+
+    if (
+        private_selection_mode == "global"
+        and private_max_candidates > 0
+        and private_scores.numel() > private_max_candidates
+    ):
+        _, top_idx = torch.topk(private_scores, private_max_candidates)
+        private_keep = private_keep[top_idx]
+        private_scores = private_scores[top_idx]
+
+    private_scores = torch.minimum(
+        private_scores,
+        torch.full_like(private_scores, birth_ceiling),
+    )
+    if geometry_suspect_mask.shape[0] != fused_scores.shape[0]:
+        geometry_suspect_mask = torch.zeros(
+            fused_scores.shape[0], dtype=torch.bool, device=fused_scores.device
+        )
+    if (
+        aligned_keypoints is not None
+        and aligned_keypoints.shape[0] != fused_scores.shape[0]
+    ):
+        aligned_keypoints = None
+    private_boxes = pre_nms_boxes[private_keep]
+    private_classes = pre_nms_classes[private_keep]
+    private_geometry = pre_nms_geometry_suspect_mask[private_keep]
+
+    fused_boxes = torch.cat((fused_boxes, private_boxes), dim=0)
+    fused_scores = torch.cat((fused_scores, private_scores), dim=0)
+    fused_classes = torch.cat((fused_classes, private_classes), dim=0)
+    geometry_suspect_mask = torch.cat((geometry_suspect_mask, private_geometry), dim=0)
+    if aligned_keypoints is not None and pre_nms_aligned_keypoints is not None:
+        aligned_keypoints = torch.cat(
+            (aligned_keypoints, pre_nms_aligned_keypoints[private_keep]), dim=0
+        )
+    else:
+        aligned_keypoints = None
+
+    return (
+        fused_boxes,
+        fused_scores,
+        fused_classes,
+        geometry_suspect_mask,
+        aligned_keypoints,
+        int(private_scores.numel()),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Consecutive-frame birth gate: boost sub-threshold detections that appear
 # in the last N consecutive frames (rolling window IoU check).
@@ -786,6 +1311,7 @@ def _build_active_track_priors(
     device: torch.device,
     *,
     min_track_age: int = 0,
+    max_track_age: int | None = None,
     min_track_score: float = 0.0,
 ) -> tuple[torch.Tensor | None, torch.Tensor | None]:
     snapshots = tracker.get_state_snapshots()
@@ -796,6 +1322,8 @@ def _build_active_track_priors(
     prior_classes: list[int] = []
     for snap in snapshots:
         if int(snap.age) < min_track_age:
+            continue
+        if max_track_age is not None and int(snap.age) > max_track_age:
             continue
         if float(snap.score) < min_track_score:
             continue
@@ -1325,6 +1853,7 @@ class EvalPipeline:
         self.extractor = extractor
         self.fpn = fpn if fpn is not None else FPNConfig()
         self.global_id_mapper = global_id_mapper
+        self.native_cfg = native_cfg
         self.top_level_stage_names = top_level_stage_names
         self.time_stage = time_stage
         self.record_stage_sample = record_stage_sample
@@ -1771,7 +2300,15 @@ class EvalPipeline:
             ttl=cfg.occ_ttl,
             cost_weight=cfg.occ_cost_weight,
         )
-        if getattr(cfg, "multiplicative_cost", False):
+        association_scoring_mode = (
+            str(getattr(cfg, "association_scoring_mode", "baseline")).strip().lower()
+        )
+        if association_scoring_mode not in {"baseline", "energy"}:
+            raise ValueError(
+                f"unknown association_scoring_mode: {association_scoring_mode}"
+            )
+        association_energy_enabled = association_scoring_mode == "energy"
+        if getattr(cfg, "multiplicative_cost", False) or association_energy_enabled:
             detector.tracker.set_multiplicative_cost(enabled=True)
             lam = float(getattr(cfg, "sinkhorn_lambda", 30.0))
             detector.tracker.set_sinkhorn_lambda(lam)
@@ -1780,6 +2317,13 @@ class EvalPipeline:
                 setter = getattr(detector.tracker, "set_stability_cost_w", None)
                 if setter:
                     setter(stab_w)
+        energy_setter = getattr(detector.tracker, "set_association_energy_params", None)
+        if energy_setter:
+            energy_setter(
+                association_energy_enabled,
+                float(getattr(cfg, "assoc_score_cost_w", 0.0)),
+                float(getattr(cfg, "assoc_height_cost_w", 0.0)),
+            )
         active_tracker_thresholds = (
             cfg.track_thresh,
             cfg.mid_thresh,
@@ -1937,7 +2481,14 @@ class EvalPipeline:
         )
         seq_post_counts = OrderedDict(
             (name, 0)
-            for name in ("raw_boxes", "after_filter", "after_nms", "after_merge")
+            for name in (
+                "raw_boxes",
+                "after_filter",
+                "after_nms",
+                "after_merge",
+                "private_candidates",
+                "after_private",
+            )
         )
         seq_tile_diag = OrderedDict(
             (name, 0)
@@ -2345,8 +2896,8 @@ class FrameCtx:
     postprocess stage hands back to the frame loop, so a stage returns one
     object instead of a long tuple. Grows as more postprocess sub-stages move
     out. Only the values the loop actually consumes downstream are carried —
-    e.g. native_tensor_prep's priors_tensor/prior_classes_tensor stay internal
-    and only num_priors escapes.
+    Native NMS priors are carried here so the tensors stay alive until the C++
+    call consumes their raw pointers.
 
     feature_dim carries the active FPN embedding dimension so downstream
     consumers (kalman gate, relink, tracker) can validate input shapes
@@ -2360,7 +2911,12 @@ class FrameCtx:
     post_scores: torch.Tensor
     post_classes: torch.Tensor
     geometry_suspect_mask: torch.Tensor
+    priors_tensor: "torch.Tensor | None"
+    prior_classes_tensor: "torch.Tensor | None"
     num_priors: int
+    private_prior_boxes: "torch.Tensor | None"
+    num_private_priors: int
+    native_private_enabled: bool
     feature_dim: int
 
 
@@ -2715,16 +3271,20 @@ def _run_nms(
     raw_scores_contig: torch.Tensor,
     raw_classes_contig: torch.Tensor,
     raw_box_count: int,
+    priors_tensor: "torch.Tensor | None",
+    prior_classes_tensor: "torch.Tensor | None",
     num_priors: int,
+    private_prior_boxes: "torch.Tensor | None",
+    num_private_priors: int,
+    native_private_enabled: bool,
     is_tiled: bool,
     nms_graph: Any,
 ) -> tuple[int, Any]:
-    """Graph-captured NMS + detection filter for one frame (extracted).
+    """Native NMS + detection filter for one frame (extracted).
 
-    Pads detections into the fixed NMS input buffer then runs the native
-    ``process_detections_graph`` (captured into a CUDA graph on first call,
-    replayed after). Returns ``(n_post, nms_graph)`` — nms_graph is the captured
-    graph (created on the first frame, passed through thereafter).
+    Uses the fixed CUDA graph only for the no-prior/no-private fast path. ONMS
+    priors and private continuation require per-frame pointers, so they call the
+    synchronous native wrapper directly.
     """
     perception_pipeline = state.perception_pipeline
     _nms_in = state.nms_in
@@ -2733,9 +3293,70 @@ def _run_nms(
     w_orig = state.w_orig
     h_orig = state.h_orig
     _nms_graph = nms_graph
+    current_stream = torch.cuda.current_stream().cuda_stream
+    priors_ptr = (
+        priors_tensor.data_ptr() if num_priors > 0 and priors_tensor is not None else 0
+    )
+    prior_classes_ptr = (
+        prior_classes_tensor.data_ptr()
+        if num_priors > 0 and prior_classes_tensor is not None
+        else 0
+    )
+    private_priors_ptr = (
+        private_prior_boxes.data_ptr()
+        if native_private_enabled
+        and num_private_priors > 0
+        and private_prior_boxes is not None
+        else 0
+    )
+
+    if native_private_enabled:
+        n_post = perception_pipeline.process_detections_n_private(
+            raw_boxes_contig.data_ptr(),
+            raw_scores_contig.data_ptr(),
+            raw_classes_contig.data_ptr(),
+            raw_box_count,
+            w_orig,
+            h_orig,
+            is_tiled,
+            _post_bufs["boxes"].data_ptr(),
+            _post_bufs["scores"].data_ptr(),
+            _post_bufs["classes"].data_ptr(),
+            _post_bufs["suspect"].data_ptr(),
+            priors_ptr,
+            prior_classes_ptr,
+            num_priors,
+            state.onms_prior_iou_threshold,
+            private_priors_ptr,
+            num_private_priors,
+            current_stream,
+        )
+        return n_post, _nms_graph
+
+    if num_priors > 0:
+        n_post = perception_pipeline.process_detections_n(
+            raw_boxes_contig.data_ptr(),
+            raw_scores_contig.data_ptr(),
+            raw_classes_contig.data_ptr(),
+            raw_box_count,
+            w_orig,
+            h_orig,
+            is_tiled,
+            _post_bufs["boxes"].data_ptr(),
+            _post_bufs["scores"].data_ptr(),
+            _post_bufs["classes"].data_ptr(),
+            _post_bufs["suspect"].data_ptr(),
+            priors_ptr,
+            prior_classes_ptr,
+            num_priors,
+            state.onms_prior_iou_threshold,
+            current_stream,
+        )
+        return n_post, _nms_graph
+
     # process_detections_n releases GIL for the full filter+NMS+sync
     # sequence so sibling threads can run Python while GPU is busy.
-    _use_graph_nms = perception_pipeline is not None and num_priors == 0
+    _use_graph_nms = perception_pipeline is not None
     if _use_graph_nms:
         copy_pad_detections(
             raw_boxes_contig.data_ptr(),
@@ -2819,14 +3440,18 @@ def _run_native_tensor_prep(
     Casts the fused detections to the contiguous float32/int32 layout the native
     NMS expects, applies the narrow-person score bonus, slices the reusable
     post-process output buffers, and (when ONMS is enabled) builds the active-track
-    priors. Returns a FrameCtx with the values the postprocess tail consumes;
-    priors_tensor/prior_classes_tensor stay internal (only num_priors escapes).
+    priors. Returns a FrameCtx with the values the postprocess tail consumes,
+    including prior tensors whose raw pointers are passed to native NMS.
     """
     cfg = state.cfg
     w_orig = state.w_orig
     h_orig = state.h_orig
     detector = state.detector
     _post_bufs = state.post_bufs
+    native_private_enabled = bool(
+        state.native_cfg is not None
+        and getattr(state.native_cfg, "private_continuation_enabled", False)
+    )
     with _record_profile_scope("post.native_tensor_prep"):
         raw_boxes_contig = fused_boxes.to(torch.float32).contiguous()
         raw_scores_contig = fused_scores.to(torch.float32).contiguous()
@@ -2866,6 +3491,21 @@ def _run_native_tensor_prep(
             and prior_classes_tensor is not None
         ):
             num_priors = priors_tensor.size(0)
+        private_prior_boxes = None
+        num_private_priors = 0
+        if native_private_enabled and (
+            cfg.private_prior_iou_threshold > 0.0
+            or cfg.private_prior_center_threshold > 0.0
+        ):
+            private_prior_boxes, _ = _build_active_track_priors(
+                detector.tracker,
+                raw_boxes_contig.device,
+                min_track_age=0,
+                max_track_age=cfg.private_prior_max_age,
+                min_track_score=0.0,
+            )
+            if private_prior_boxes is not None:
+                num_private_priors = private_prior_boxes.size(0)
     feature_dim = (
         state.contract.feature_dim
         if state.contract.fpn_reid_mode
@@ -2879,7 +3519,12 @@ def _run_native_tensor_prep(
         post_scores=post_scores,
         post_classes=post_classes,
         geometry_suspect_mask=geometry_suspect_mask,
+        priors_tensor=priors_tensor,
+        prior_classes_tensor=prior_classes_tensor,
         num_priors=num_priors,
+        private_prior_boxes=private_prior_boxes,
+        num_private_priors=num_private_priors,
+        native_private_enabled=native_private_enabled,
         feature_dim=feature_dim,
     )
 
@@ -4794,6 +5439,7 @@ def _run_frame(
                 post_gpu_end_event = torch.cuda.Event(enable_timing=True)
                 post_gpu_start_event.record(torch.cuda.current_stream())
             raw_box_count = int(fused_scores.numel())
+            private_added_count = 0
 
             if perception_pipeline is not None:
                 t_native_prep_start = None
@@ -4835,7 +5481,12 @@ def _run_frame(
                     raw_scores_contig=raw_scores_contig,
                     raw_classes_contig=raw_classes_contig,
                     raw_box_count=raw_box_count,
+                    priors_tensor=_fctx.priors_tensor,
+                    prior_classes_tensor=_fctx.prior_classes_tensor,
                     num_priors=num_priors,
+                    private_prior_boxes=_fctx.private_prior_boxes,
+                    num_private_priors=_fctx.num_private_priors,
+                    native_private_enabled=_fctx.native_private_enabled,
                     is_tiled=is_tiled,
                     nms_graph=state.nms_graph,
                 )
@@ -4845,8 +5496,19 @@ def _run_frame(
                     _post_nms_ms = float(_post_stats.get("nms_ms", 0.0))
                     _post_count_sync_ms = float(_post_stats.get("count_d2h_ms", 0.0))
                     _post_total_ms = float(_post_stats.get("total_ms", 0.0))
+                    _native_private_candidate_nms_ms = float(
+                        _post_stats.get("native_private_candidate_nms_ms", 0.0)
+                    )
+                    _native_private_append_ms = float(
+                        _post_stats.get("native_private_append_ms", 0.0)
+                    )
+                    _native_private_ms = (
+                        _native_private_candidate_nms_ms + _native_private_append_ms
+                    )
                     seq_stage_totals["post_filter"] += float(_post_filter_ms)
-                    seq_stage_totals["post_nms"] += float(_post_nms_ms)
+                    seq_stage_totals["post_nms"] += max(
+                        0.0, float(_post_nms_ms) - _native_private_ms
+                    )
                     seq_stage_totals["post_count_sync"] += _post_count_sync_ms
                     seq_stage_totals["native_filter_gather"] += float(
                         _post_stats.get("native_filter_gather_ms", 0.0)
@@ -4887,6 +5549,13 @@ def _run_frame(
                     seq_stage_totals["native_large_copyback"] += float(
                         _post_stats.get("native_large_copyback_ms", 0.0)
                     )
+                    seq_stage_totals["native_private_candidate_nms"] += (
+                        _native_private_candidate_nms_ms
+                    )
+                    seq_stage_totals["native_private_append"] += (
+                        _native_private_append_ms
+                    )
+                    seq_stage_totals["post_private_continuation"] += _native_private_ms
                     seq_stage_totals["post_native_other"] += max(
                         0.0,
                         _post_total_ms
@@ -4894,6 +5563,7 @@ def _run_frame(
                         - _post_nms_ms
                         - _post_count_sync_ms,
                     )
+                    private_added_count = int(_post_stats.get("private_boxes", 0))
                 if profile_stages and current_stage_sample_active:
                     _seg_ev = torch.cuda.Event(enable_timing=True)
                     _seg_ev.record(torch.cuda.current_stream())
@@ -5028,6 +5698,15 @@ def _run_frame(
                     print(f"🎬 {seq} [{frame_id}/{frame_end}]")
                 return True
 
+            pre_private_boxes = None
+            pre_private_scores = None
+            pre_private_classes = None
+            pre_private_geometry_suspect_mask = None
+            pre_private_aligned_keypoints = None
+            private_baseline_keep = None
+            private_priors = None
+            private_prior_classes = None
+            private_motion_prior_boxes = None
             if (
                 perception_pipeline is None
                 and (is_tiled or cfg.nms_iou_threshold is not None)
@@ -5048,6 +5727,11 @@ def _run_frame(
                         min_track_score=onms_min_track_score,
                     )
 
+                pre_private_boxes = fused_boxes
+                pre_private_scores = fused_scores
+                pre_private_classes = fused_classes
+                pre_private_geometry_suspect_mask = geometry_suspect_mask
+                pre_private_aligned_keypoints = aligned_keypoints
                 keep = nms_fast(
                     fused_boxes,
                     fused_scores,
@@ -5058,6 +5742,9 @@ def _run_frame(
                     prior_classes=prior_classes,
                     prior_iou_threshold=onms_prior_iou_threshold,
                 )
+                private_baseline_keep = keep
+                private_priors = priors
+                private_prior_classes = prior_classes
                 fused_boxes = fused_boxes[keep]
                 fused_scores = fused_scores[keep]
                 fused_classes = fused_classes[keep]
@@ -5231,6 +5918,91 @@ def _run_frame(
                 fused_scores=fused_scores,
                 fused_quality_factors=_birth_quality,
             )
+            after_merge_count_before_private = after_merge_count
+            after_private_count = after_merge_count
+            if perception_pipeline is not None and private_added_count > 0:
+                after_merge_count_before_private = max(
+                    0, after_merge_count - private_added_count
+                )
+            if cfg.private_continuation_enabled and pre_private_boxes is not None:
+                if (
+                    cfg.private_prior_iou_threshold > 0.0
+                    or cfg.private_prior_center_threshold > 0.0
+                    or (
+                        cfg.private_selection_mode
+                        in {
+                            "per_track",
+                            "suppressor_aware",
+                            "sparse_symmetric",
+                            "energy",
+                        }
+                    )
+                ):
+                    private_motion_prior_boxes, _ = _build_active_track_priors(
+                        detector.tracker,
+                        fused_boxes.device,
+                        min_track_age=0,
+                        max_track_age=cfg.private_prior_max_age,
+                        min_track_score=0.0,
+                    )
+                t_private_start = None
+                if profile_stages:
+                    torch.cuda.synchronize()
+                    t_private_start = time.perf_counter()
+                (
+                    fused_boxes,
+                    fused_scores,
+                    fused_classes,
+                    geometry_suspect_mask,
+                    aligned_keypoints,
+                    private_added_count,
+                ) = _append_private_continuation_candidates(
+                    fused_boxes=fused_boxes,
+                    fused_scores=fused_scores,
+                    fused_classes=fused_classes,
+                    geometry_suspect_mask=geometry_suspect_mask,
+                    aligned_keypoints=aligned_keypoints,
+                    pre_nms_boxes=pre_private_boxes,
+                    pre_nms_scores=pre_private_scores,
+                    pre_nms_classes=pre_private_classes,
+                    pre_nms_geometry_suspect_mask=pre_private_geometry_suspect_mask,
+                    pre_nms_aligned_keypoints=pre_private_aligned_keypoints,
+                    baseline_keep=private_baseline_keep,
+                    baseline_nms_iou=cfg.nms_iou_threshold,
+                    candidate_nms_iou=cfg.private_candidate_nms_iou,
+                    class_aware=not cfg.track_person_only,
+                    priors=private_priors,
+                    prior_classes=private_prior_classes,
+                    prior_iou_threshold=onms_prior_iou_threshold,
+                    private_prior_boxes=private_motion_prior_boxes,
+                    private_prior_iou_threshold=cfg.private_prior_iou_threshold,
+                    private_prior_center_threshold=cfg.private_prior_center_threshold,
+                    frame_track_thresh=frame_track_thresh,
+                    frame_mid_thresh=frame_mid_thresh,
+                    frame_new_track_thresh=frame_new_track_thresh,
+                    low_stage_only=cfg.private_low_stage_only,
+                    private_min_score=cfg.private_min_score,
+                    private_max_candidates=cfg.private_max_candidates,
+                    private_selection_mode=cfg.private_selection_mode,
+                    private_energy_margin=cfg.private_energy_margin,
+                )
+                after_merge_count = int(fused_scores.numel())
+                after_private_count = after_merge_count
+                if profile_stages and t_private_start is not None:
+                    torch.cuda.synchronize()
+                    seq_stage_totals["post_private_continuation"] += (
+                        time.perf_counter() - t_private_start
+                    ) * 1000
+                if debug_dump_active:
+                    _append_stage_dump_rows(
+                        debug_stage_dump_rows,
+                        seq=seq,
+                        frame_id=frame_id,
+                        stage="post_private_continuation",
+                        boxes=fused_boxes,
+                        scores=fused_scores,
+                        classes=fused_classes,
+                    )
             if cfg.tile_diagnostics and is_tiled:
                 seq_tile_diag["post_merge_seam_boxes"] += _count_tile_seam_boxes(
                     fused_boxes,
@@ -5287,7 +6059,9 @@ def _run_frame(
                     seq_post_counts["raw_boxes"] += raw_box_count
                     seq_post_counts["after_filter"] += after_filter_count
                     seq_post_counts["after_nms"] += after_nms_count
-                    seq_post_counts["after_merge"] += after_merge_count
+                    seq_post_counts["after_merge"] += after_merge_count_before_private
+                    seq_post_counts["private_candidates"] += private_added_count
+                    seq_post_counts["after_private"] += after_private_count
             # Sync previous frame's background relink_write before accessing shared
             # mutable state (dynamic_reid, primary_appearance_bank, relinker).
             if state.bg_future is not None:
@@ -5542,9 +6316,34 @@ def run_eval(
         profile_stages=bool(kwargs.get("profile_stages", False)),
         kwargs=kwargs,
     )
+    if cfg.private_continuation_enabled:
+        if cfg.workbench:
+            raise ValueError(
+                "private continuation is not implemented for the Workbench "
+                "hot path; disable --workbench"
+            )
+        if cfg.private_candidate_nms_iou < cfg.nms_iou_threshold:
+            raise ValueError("private-candidate-nms-iou must be >= nms-iou-threshold")
 
     output_root = cfg.output_root
     output_root.mkdir(parents=True, exist_ok=True)
+    if cfg.assoc_energy_diagnostics:
+        scoring_profile = {
+            "association_scoring_mode": cfg.association_scoring_mode,
+            "multiplicative_cost": bool(
+                cfg.multiplicative_cost or cfg.association_scoring_mode == "energy"
+            ),
+            "sinkhorn_lambda": float(cfg.sinkhorn_lambda),
+            "stability_cost_w": float(cfg.stability_cost_w),
+            "assoc_score_cost_w": float(cfg.assoc_score_cost_w),
+            "assoc_height_cost_w": float(cfg.assoc_height_cost_w),
+            "private_continuation_enabled": bool(cfg.private_continuation_enabled),
+            "private_selection_mode": cfg.private_selection_mode,
+            "private_energy_margin": float(cfg.private_energy_margin),
+        }
+        (output_root / "_association_scoring_profile.json").write_text(
+            json.dumps(scoring_profile, indent=2) + "\n"
+        )
     fps_summary_lines = []
     overall_latency_ms = []
     overall_throughput_frames = 0
@@ -5720,6 +6519,34 @@ def run_eval(
     native_postprocess_available = (
         PerceptionPipeline is not None and PerceptionPipelineConfig is not None
     )
+    native_private_mode = str(cfg.private_selection_mode).strip().lower()
+    native_private_blockers: list[str] = []
+    if cfg.private_continuation_enabled:
+        if native_private_mode != "global":
+            native_private_blockers.append(f"selection_mode={native_private_mode}")
+        for _flag_name in (
+            "crowd_low_score_mode",
+            "duplicate_suppression",
+            "stage2_quality_gate",
+            "birth_consecutive_gate",
+            "birth_quality_gate",
+            "multi_birth_enabled",
+        ):
+            if bool(getattr(cfg, _flag_name, False)):
+                native_private_blockers.append(_flag_name)
+    native_private_available = bool(
+        cfg.private_continuation_enabled and not native_private_blockers
+    )
+    if (
+        cfg.private_continuation_enabled
+        and native_postprocess_available
+        and not native_private_available
+    ):
+        native_postprocess_available = False
+        print(
+            "  [private_continuation] disabled native postprocess for "
+            + ", ".join(native_private_blockers)
+        )
     native_reid_available = (
         native_postprocess_available
         and extractor_cpp_ptr != 0
@@ -5748,6 +6575,17 @@ def run_eval(
         native_cfg.person_min_area_ratio = cfg.person_min_area_ratio
         native_cfg.person_max_area_ratio = cfg.person_max_area_ratio
         native_cfg.max_detections = 2048
+        native_cfg.private_continuation_enabled = native_private_available
+        native_cfg.private_candidate_nms_iou = cfg.private_candidate_nms_iou
+        native_cfg.private_min_score = cfg.private_min_score
+        native_cfg.private_max_candidates = cfg.private_max_candidates
+        native_cfg.private_prior_iou_threshold = cfg.private_prior_iou_threshold
+        native_cfg.private_prior_center_threshold = cfg.private_prior_center_threshold
+        native_cfg.private_low_stage_only = cfg.private_low_stage_only
+        native_cfg.private_track_thresh = cfg.track_thresh
+        native_cfg.private_mid_thresh = cfg.mid_thresh
+        native_cfg.private_new_track_thresh = cfg.new_track_thresh
+        native_cfg.private_score_eps = 1e-4
         perception_pipeline = PerceptionPipeline(
             extractor_cpp_ptr if native_reid_available else 0,
             cropper_cpp_ptr if native_reid_available else 0,
@@ -5783,6 +6621,7 @@ def run_eval(
         "post_tensor_prep",
         "post_filter",
         "post_nms",
+        "post_private_continuation",
         "post_count_sync",
         "post_native_other",
         "native_filter_gather",
@@ -5798,6 +6637,8 @@ def run_eval(
         "native_compact_copy",
         "native_large_gather4",
         "native_large_copyback",
+        "native_private_candidate_nms",
+        "native_private_append",
         "post_keypoint_align",
         "post_output_slicing",
         "post_quality_scale",
@@ -5870,6 +6711,8 @@ def run_eval(
             "after_filter",
             "after_nms",
             "after_merge",
+            "private_candidates",
+            "after_private",
         )
     )
     overall_lazy_reid_candidates = 0

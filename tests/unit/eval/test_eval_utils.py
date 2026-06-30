@@ -240,6 +240,31 @@ def test_mot17_parser_accepts_double_buffer_flags():
     assert args.detect_barrier == "event"
 
 
+def test_mot17_parser_accepts_association_energy_flags():
+    args = build_parser().parse_args(
+        [
+            "--association-scoring-mode",
+            "energy",
+            "--assoc-score-cost-w",
+            "0.12",
+            "--assoc-height-cost-w",
+            "0.08",
+            "--assoc-energy-diagnostics",
+            "--private-selection-mode",
+            "energy",
+            "--private-energy-margin",
+            "0.04",
+        ]
+    )
+
+    assert args.association_scoring_mode == "energy"
+    assert args.assoc_score_cost_w == pytest.approx(0.12)
+    assert args.assoc_height_cost_w == pytest.approx(0.08)
+    assert args.assoc_energy_diagnostics is True
+    assert args.private_selection_mode == "energy"
+    assert args.private_energy_margin == pytest.approx(0.04)
+
+
 def test_parse_eval_config_defaults_to_fixed_interval_reid(tmp_path):
     cfg = parse_eval_config(
         output=str(tmp_path),
@@ -275,3 +300,31 @@ def test_parse_eval_config_preserves_sahi_tiling(tmp_path):
 
     assert cfg.tiling == "sahi_960p_2x2"
     assert cfg.nms_iou_threshold == pytest.approx(0.5)
+
+
+def test_parse_eval_config_preserves_association_energy_knobs(tmp_path):
+    cfg = parse_eval_config(
+        output=str(tmp_path),
+        data_root="datasets/MOT17",
+        split="train",
+        sequences="MOT17-04-SDP",
+        conf_threshold=0.05,
+        reid_mode="semantic",
+        reid_model="siglip2",
+        profile_stages=False,
+        kwargs={
+            "association_scoring_mode": " energy ",
+            "assoc_score_cost_w": 0.12,
+            "assoc_height_cost_w": 0.08,
+            "assoc_energy_diagnostics": True,
+            "private_selection_mode": " energy ",
+            "private_energy_margin": 0.04,
+        },
+    )
+
+    assert cfg.association_scoring_mode == "energy"
+    assert cfg.assoc_score_cost_w == pytest.approx(0.12)
+    assert cfg.assoc_height_cost_w == pytest.approx(0.08)
+    assert cfg.assoc_energy_diagnostics is True
+    assert cfg.private_selection_mode == "energy"
+    assert cfg.private_energy_margin == pytest.approx(0.04)

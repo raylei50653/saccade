@@ -51,9 +51,12 @@ public:
         double native_compact_copy_ms = 0.0;
         double native_large_gather4_ms = 0.0;
         double native_large_copyback_ms = 0.0;
+        double native_private_candidate_nms_ms = 0.0;
+        double native_private_append_ms = 0.0;
         int input_boxes = 0;
         int filtered_boxes = 0;
         int output_boxes = 0;
+        int private_boxes = 0;
     };
 
     struct Config {
@@ -70,6 +73,17 @@ public:
         float person_min_area_ratio   = 0.00006f;
         float person_max_area_ratio   = 0.0f;
         int   max_detections          = 2048;
+        bool  private_continuation_enabled = false;
+        float private_candidate_nms_iou = 0.70f;
+        float private_min_score = 0.25f;
+        int   private_max_candidates = 0;
+        float private_prior_iou_threshold = 0.0f;
+        float private_prior_center_threshold = 0.0f;
+        bool  private_low_stage_only = false;
+        float private_track_thresh = 0.05f;
+        float private_mid_thresh = 0.10f;
+        float private_new_track_thresh = 0.35f;
+        float private_score_eps = 1e-4f;
     };
 
     PerceptionPipeline(FeatureExtractor* reid, Cropper* cropper, Config cfg);
@@ -127,7 +141,9 @@ public:
         const int* prior_classes_ptr,
         int num_priors,
         float prior_iou_threshold,
-        cudaStream_t stream);
+        cudaStream_t stream,
+        const float* private_priors_ptr = nullptr,
+        int num_private_priors = 0);
 
     /**
      * @brief Like process_detections_into() but fully synchronous and returns
@@ -151,7 +167,9 @@ public:
         const int* prior_classes_ptr,
         int num_priors,
         float prior_iou_threshold,
-        cudaStream_t stream);
+        cudaStream_t stream,
+        const float* private_priors_ptr = nullptr,
+        int num_private_priors = 0);
 
     /**
      * @brief Near-sync-free variant of process_detections_n.
@@ -271,6 +289,10 @@ private:
     uint64_t* d_nms_remv_             = nullptr;
     int*      d_nms_count_            = nullptr;
     bool*     d_nms_immunity_mask_    = nullptr;
+    int*      d_private_nms_keep_     = nullptr;
+    int*      d_private_nms_count_    = nullptr;
+    int*      d_private_added_count_  = nullptr;
+    bool*     d_private_baseline_mask_ = nullptr;
     float*    d_crop_buf_             = nullptr;
     int       scratch_capacity_       = 0;
     int       crop_buf_capacity_      = 0;

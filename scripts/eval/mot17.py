@@ -98,6 +98,11 @@ if __name__ == "__main__":
     if config_defaults:
         parser.set_defaults(**config_defaults)
     args = parser.parse_args()
+    if getattr(args, "private_continuation_enabled", False):
+        if getattr(args, "cpp_threads", 0) > 0:
+            parser.error("--private-continuation is not implemented for --cpp-threads")
+        if getattr(args, "workbench", False):
+            parser.error("--private-continuation is not implemented for --workbench")
     if args.double_buffer:
         if args.detect_barrier not in {None, "event"}:
             parser.error("--double-buffer requires --detect-barrier event")

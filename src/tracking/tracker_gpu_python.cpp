@@ -2812,6 +2812,11 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         .def("set_stability_cost_w", &GPUByteTracker::set_stability_cost_w,
              py::arg("w"),
              "Stability reward weight for multiplicative cost form.")
+        .def("set_association_energy_params",
+             &GPUByteTracker::set_association_energy_params,
+             py::arg("enabled"), py::arg("score_cost_w") = 0.0f,
+             py::arg("height_cost_w") = 0.0f,
+             "Optional score and height-mismatch energy terms for association scoring.")
         .def("set_sinkhorn_lambda", &GPUByteTracker::set_sinkhorn_lambda,
              py::arg("lambda"),
              "Sinkhorn exponential lambda (cost→prob, default 30).")
@@ -3444,7 +3449,18 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         .def_readwrite("person_max_aspect",         &PerceptionPipeline::Config::person_max_aspect)
         .def_readwrite("person_min_area_ratio",     &PerceptionPipeline::Config::person_min_area_ratio)
         .def_readwrite("person_max_area_ratio",     &PerceptionPipeline::Config::person_max_area_ratio)
-        .def_readwrite("max_detections",            &PerceptionPipeline::Config::max_detections);
+        .def_readwrite("max_detections",            &PerceptionPipeline::Config::max_detections)
+        .def_readwrite("private_continuation_enabled", &PerceptionPipeline::Config::private_continuation_enabled)
+        .def_readwrite("private_candidate_nms_iou", &PerceptionPipeline::Config::private_candidate_nms_iou)
+        .def_readwrite("private_min_score",         &PerceptionPipeline::Config::private_min_score)
+        .def_readwrite("private_max_candidates",    &PerceptionPipeline::Config::private_max_candidates)
+        .def_readwrite("private_prior_iou_threshold", &PerceptionPipeline::Config::private_prior_iou_threshold)
+        .def_readwrite("private_prior_center_threshold", &PerceptionPipeline::Config::private_prior_center_threshold)
+        .def_readwrite("private_low_stage_only",    &PerceptionPipeline::Config::private_low_stage_only)
+        .def_readwrite("private_track_thresh",      &PerceptionPipeline::Config::private_track_thresh)
+        .def_readwrite("private_mid_thresh",        &PerceptionPipeline::Config::private_mid_thresh)
+        .def_readwrite("private_new_track_thresh",  &PerceptionPipeline::Config::private_new_track_thresh)
+        .def_readwrite("private_score_eps",         &PerceptionPipeline::Config::private_score_eps);
 
     py::class_<PerceptionPipeline>(m, "PerceptionPipeline")
         .def(py::init([](uintptr_t reid_ptr, uintptr_t cropper_ptr,
@@ -3542,6 +3558,43 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             py::arg("out_suspect"),
             py::arg("priors_ptr") = 0, py::arg("prior_classes_ptr") = 0,
             py::arg("num_priors") = 0, py::arg("prior_iou_threshold") = 0.50f,
+            py::arg("stream_ptr"))
+        .def("process_detections_n_private",
+            [](PerceptionPipeline& self,
+               uintptr_t boxes_ptr, uintptr_t scores_ptr, uintptr_t classes_ptr,
+               int n_in, int frame_w, int frame_h, bool is_tiled,
+               uintptr_t out_boxes, uintptr_t out_scores, uintptr_t out_classes,
+               uintptr_t out_suspect,
+               uintptr_t priors_ptr, uintptr_t prior_classes_ptr,
+               int num_priors, float prior_iou_threshold,
+               uintptr_t private_priors_ptr, int num_private_priors,
+               uintptr_t stream_ptr) -> int {
+                py::gil_scoped_release release;
+                return self.process_detections_n(
+                    reinterpret_cast<const float*>(boxes_ptr),
+                    reinterpret_cast<const float*>(scores_ptr),
+                    reinterpret_cast<const int*>(classes_ptr),
+                    n_in, frame_w, frame_h, is_tiled,
+                    reinterpret_cast<float*>(out_boxes),
+                    reinterpret_cast<float*>(out_scores),
+                    reinterpret_cast<int*>(out_classes),
+                    reinterpret_cast<bool*>(out_suspect),
+                    reinterpret_cast<const float*>(priors_ptr),
+                    reinterpret_cast<const int*>(prior_classes_ptr),
+                    num_priors,
+                    prior_iou_threshold,
+                    reinterpret_cast<cudaStream_t>(stream_ptr),
+                    reinterpret_cast<const float*>(private_priors_ptr),
+                    num_private_priors);
+            },
+            py::arg("boxes_ptr"), py::arg("scores_ptr"), py::arg("classes_ptr"),
+            py::arg("n_in"), py::arg("frame_w"), py::arg("frame_h"),
+            py::arg("is_tiled"),
+            py::arg("out_boxes"), py::arg("out_scores"), py::arg("out_classes"),
+            py::arg("out_suspect"),
+            py::arg("priors_ptr") = 0, py::arg("prior_classes_ptr") = 0,
+            py::arg("num_priors") = 0, py::arg("prior_iou_threshold") = 0.50f,
+            py::arg("private_priors_ptr") = 0, py::arg("num_private_priors") = 0,
             py::arg("stream_ptr"))
         .def("process_detections_n_fixed",
             [](PerceptionPipeline& self,
@@ -3697,9 +3750,12 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
                 out["native_compact_copy_ms"] = stats.native_compact_copy_ms;
                 out["native_large_gather4_ms"] = stats.native_large_gather4_ms;
                 out["native_large_copyback_ms"] = stats.native_large_copyback_ms;
+                out["native_private_candidate_nms_ms"] = stats.native_private_candidate_nms_ms;
+                out["native_private_append_ms"] = stats.native_private_append_ms;
                 out["input_boxes"] = stats.input_boxes;
                 out["filtered_boxes"] = stats.filtered_boxes;
                 out["output_boxes"] = stats.output_boxes;
+                out["private_boxes"] = stats.private_boxes;
                 return out;
             })
         .def_property_readonly("embed_dim", &PerceptionPipeline::get_embed_dim)

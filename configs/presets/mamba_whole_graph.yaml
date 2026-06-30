@@ -66,6 +66,25 @@ interpolate_max_gap: 35
 interpolate_min_track_len: 5
 interpolate_min_h: 0
 
+# --- Private continuation (track-gated wider-NMS recovery) ---
+# A second, wider NMS pass produces extra candidate boxes that may CONTINUE an
+# existing track (gated by prior IoU to an active track) but are score-clamped
+# below the birth threshold, so they recover clean overlapping detections that
+# the main NMS suppressed in crowds WITHOUT spawning ghost tracks.
+# Targets the largest detector-FN population (~51% = NMS-suppressed clean boxes;
+# see project_recall_lever_separability). 7-seq vs baseline (2026-06-30):
+# IDF1 78.2→78.6 (+0.4), Rcll 81.0→81.6 (+0.6), MOTA −0.2 (noise), IDs 413→414
+# (+1), FP 2589→3386. Per-seq recall 5/7 positive (02/04/05/09/10; 11 −0.12 noise,
+# 13 −0.57 moving-cam) — passes cross-seq consistency. Beats both blind global NMS
+# raise (nms 0.65: IDs +81) and predict-through-occlusion coast (IDF1 −0.7~−1.5,
+# registry #51) because it recovers CLEAN boxes track-gated, not drifted predictions.
+private_continuation_enabled: true
+private_candidate_nms_iou: 0.70
+private_prior_iou_threshold: 0.30
+private_min_score: 0.10
+private_max_candidates: 50
+private_selection_mode: global
+
 # --- OA-SORT OAO occlusion penalty (duration-ramped) ---
 # cost[t][d] += tau * occ_coeff[t] * min(1, overlap_frames / ramp_frames), where
 # occ_coeff[t] = max inter-track IoU. The duration ramp is the key: persistent

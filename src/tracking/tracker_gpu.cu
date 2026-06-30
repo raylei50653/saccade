@@ -492,6 +492,7 @@ __global__ void stage1_cost_fused_kernel(
     const int* occ_partner_all, float oao_contest_thresh, float oao_score_w,
     const int* occ_front_ttl, float occ_cost_weight,
     bool use_multiplicative_cost, float stability_cost_w, float sinkhorn_lambda,
+    bool association_energy_enabled, float assoc_score_cost_w, float assoc_height_cost_w,
     int* cand_n, float* cand_costs, int* cand_indices, int cand_stride,
     float cand_cost_cap,
     const float* trk_score_sum, const int* trk_hit_streak, int confirm_streak)
@@ -559,6 +560,18 @@ __global__ void stage1_cost_fused_kernel(
             float footy_t = st[1] + st[3] * 0.5f;
             float under = (footy_t - b2[3]) / fmaxf(st[3], 1e-3f);
             if (under > 0.0f) penalty += occ_cost_weight * under;
+        }
+
+        if (association_energy_enabled) {
+            if (assoc_score_cost_w > 0.0f) {
+                penalty += assoc_score_cost_w * score_penalty;
+            }
+            if (assoc_height_cost_w > 0.0f) {
+                float h_det = fmaxf(b2[3] - b2[1], 1e-3f);
+                float h_trk = fmaxf(st[3], 1e-3f);
+                float ratio = h_det / h_trk;
+                penalty += assoc_height_cost_w * fabsf(logf(fmaxf(ratio, 1e-3f)));
+            }
         }
 
         // Stability reward normalized by λ → bid boost exp(stab) independent of λ.
@@ -630,6 +643,7 @@ __global__ void compute_conditional_cost_kernel(
     const int* occ_partner_all, float oao_contest_thresh, float oao_score_w,
     const int* occ_front_ttl, float occ_cost_weight,
     bool use_multiplicative_cost, float stability_cost_w, float sinkhorn_lambda,
+    bool association_energy_enabled, float assoc_score_cost_w, float assoc_height_cost_w,
     int* cand_n, float* cand_costs, int* cand_indices, int cand_stride,
     float cand_cost_cap,
     const float* trk_score_sum, const int* trk_hit_streak, int confirm_streak)
@@ -718,6 +732,17 @@ __global__ void compute_conditional_cost_kernel(
             float footy_t = st[1] + st[3] * 0.5f;
             float under = (footy_t - b2[3]) / fmaxf(st[3], 1e-3f);
             if (under > 0.0f) penalty += occ_cost_weight * under;
+        }
+        if (association_energy_enabled) {
+            if (assoc_score_cost_w > 0.0f) {
+                penalty += assoc_score_cost_w * score_penalty;
+            }
+            if (assoc_height_cost_w > 0.0f) {
+                float h_det = fmaxf(b2[3] - b2[1], 1e-3f);
+                float h_trk = fmaxf(st[3], 1e-3f);
+                float ratio = h_det / h_trk;
+                penalty += assoc_height_cost_w * fabsf(logf(fmaxf(ratio, 1e-3f)));
+            }
         }
         // Stability reward term (λ-normalized, see stage1_cost_fused_kernel)
         if (stability_cost_w > 0.0f) {
@@ -2652,6 +2677,7 @@ public:
                 oao_contest_on ? d_occ_partner_all_ : nullptr, oao_contest_thresh_, oao_score_w_,
                 occ_state_enabled_ ? d_occ_front_ttl_ : nullptr, occ_cost_weight_,
                 multiplicative_cost_, stability_cost_w_, sinkhorn_lambda_,
+                association_energy_enabled_, assoc_score_cost_w_, assoc_height_cost_w_,
                 d_cand_n_, d_cand_costs_, d_cand_indices_, cand_stride_, cand_cost_cap,
                 d_score_sum_, d_hit_streak_, confirm_streak_);
         } else {
@@ -2667,6 +2693,7 @@ public:
                 oao_contest_on ? d_occ_partner_all_ : nullptr, oao_contest_thresh_, oao_score_w_,
                 occ_state_enabled_ ? d_occ_front_ttl_ : nullptr, occ_cost_weight_,
                 multiplicative_cost_, stability_cost_w_, sinkhorn_lambda_,
+                association_energy_enabled_, assoc_score_cost_w_, assoc_height_cost_w_,
                 d_cand_n_, d_cand_costs_, d_cand_indices_, cand_stride_, cand_cost_cap,
                 d_score_sum_, d_hit_streak_, confirm_streak_);
         }
@@ -3070,6 +3097,12 @@ public:
     }
     void set_stability_cost_w_pub(float w) {
         stability_cost_w_ = w;
+    }
+    void set_association_energy_params(
+        bool enabled, float score_cost_w, float height_cost_w) {
+        association_energy_enabled_ = enabled;
+        assoc_score_cost_w_ = std::max(0.0f, score_cost_w);
+        assoc_height_cost_w_ = std::max(0.0f, height_cost_w);
     }
     void set_sinkhorn_lambda(float lambda) {
         sinkhorn_lambda_ = std::max(1.0f, lambda);
@@ -3505,6 +3538,9 @@ private:
     bool  multiplicative_cost_ = false;
     float stability_cost_w_    = 0.0f;
     float sinkhorn_lambda_     = 30.0f;  // Sinkhorn temperature (cost→prob scaling)
+    bool  association_energy_enabled_ = false;
+    float assoc_score_cost_w_ = 0.0f;
+    float assoc_height_cost_w_ = 0.0f;
     bool enable_dda_ = false;
     float dda_max_cost_ = 0.12f;
     float *d_states_, *d_covs_, *d_scores_, *d_features_;
@@ -3620,6 +3656,11 @@ void GPUByteTracker::set_multiplicative_cost(bool enabled) {
 
 void GPUByteTracker::set_stability_cost_w(float w) {
     pimpl_->set_stability_cost_w_pub(w);
+}
+
+void GPUByteTracker::set_association_energy_params(
+    bool enabled, float score_cost_w, float height_cost_w) {
+    pimpl_->set_association_energy_params(enabled, score_cost_w, height_cost_w);
 }
 
 void GPUByteTracker::set_sinkhorn_lambda(float lambda) {
@@ -4439,6 +4480,184 @@ void nms_counted_cuda(
         keep_indices_ptr,
         remv_ptr,
         out_count_ptr
+    );
+    checkCuda(cudaGetLastError());
+}
+
+__global__ void mark_indices_bool_kernel(
+    bool* mask,
+    const int* indices,
+    const int* count_ptr,
+    int max_n
+) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= max_n) return;
+    const int n = min(*count_ptr, max_n);
+    if (i < n) {
+        const int idx = indices[i];
+        if (idx >= 0 && idx < max_n) {
+            mask[idx] = true;
+        }
+    }
+}
+
+__global__ void append_private_continuation_kernel(
+    const float* src_boxes,
+    const float* src_scores,
+    const int* src_classes,
+    const bool* src_suspect,
+    float* dst_boxes,
+    float* dst_scores,
+    int* dst_classes,
+    bool* dst_suspect,
+    int* out_count_ptr,
+    int output_capacity,
+    const bool* baseline_mask,
+    const int* candidate_keep_indices,
+    const int* candidate_count_ptr,
+    const float* private_priors_ptr,
+    int num_private_priors,
+    float private_prior_iou_threshold,
+    float private_prior_center_threshold,
+    float score_floor,
+    float score_ceiling,
+    int max_private_candidates,
+    int* private_added_count_ptr
+) {
+    if (blockIdx.x != 0 || threadIdx.x != 0) return;
+
+    int base_count = *out_count_ptr;
+    if (base_count < 0) base_count = 0;
+    if (base_count > output_capacity) base_count = output_capacity;
+
+    const int candidate_count = min(*candidate_count_ptr, output_capacity);
+    const int private_limit = max_private_candidates > 0
+        ? min(max_private_candidates, output_capacity)
+        : output_capacity;
+    const bool use_prior_gate = (
+        private_priors_ptr != nullptr
+        && num_private_priors > 0
+        && (private_prior_iou_threshold > 0.0f || private_prior_center_threshold > 0.0f)
+    );
+    int added = 0;
+
+    for (int i = 0; i < candidate_count; ++i) {
+        if (added >= private_limit || base_count + added >= output_capacity) break;
+        const int src_idx = candidate_keep_indices[i];
+        if (src_idx < 0 || src_idx >= output_capacity) continue;
+        if (baseline_mask[src_idx]) continue;
+
+        const float score = src_scores[src_idx];
+        if (score < score_floor) continue;
+
+        const float* src_box = src_boxes + src_idx * 4;
+        if (use_prior_gate) {
+            bool prior_keep = false;
+            const float cx = 0.5f * (src_box[0] + src_box[2]);
+            const float cy = 0.5f * (src_box[1] + src_box[3]);
+            for (int p = 0; p < num_private_priors; ++p) {
+                const float* prior = private_priors_ptr + p * 4;
+                if (
+                    private_prior_iou_threshold > 0.0f
+                    && get_iou_device(src_box, prior) >= private_prior_iou_threshold
+                ) {
+                    prior_keep = true;
+                    break;
+                }
+                if (private_prior_center_threshold > 0.0f) {
+                    const float pcx = 0.5f * (prior[0] + prior[2]);
+                    const float pcy = 0.5f * (prior[1] + prior[3]);
+                    const float prior_h = fmaxf(prior[3] - prior[1], 1.0f);
+                    const float dx = cx - pcx;
+                    const float dy = cy - pcy;
+                    const float norm_dist = sqrtf(dx * dx + dy * dy) / prior_h;
+                    if (norm_dist <= private_prior_center_threshold) {
+                        prior_keep = true;
+                        break;
+                    }
+                }
+            }
+            if (!prior_keep) continue;
+        }
+
+        const int dst_idx = base_count + added;
+        dst_boxes[dst_idx * 4 + 0] = src_box[0];
+        dst_boxes[dst_idx * 4 + 1] = src_box[1];
+        dst_boxes[dst_idx * 4 + 2] = src_box[2];
+        dst_boxes[dst_idx * 4 + 3] = src_box[3];
+        dst_scores[dst_idx] = fminf(score, score_ceiling);
+        dst_classes[dst_idx] = src_classes[src_idx];
+        dst_suspect[dst_idx] = src_suspect[src_idx];
+        ++added;
+    }
+
+    *out_count_ptr = base_count + added;
+    if (private_added_count_ptr != nullptr) {
+        *private_added_count_ptr = added;
+    }
+}
+
+void append_private_continuation_cuda(
+    const float* src_boxes,
+    const float* src_scores,
+    const int* src_classes,
+    const bool* src_suspect,
+    float* dst_boxes,
+    float* dst_scores,
+    int* dst_classes,
+    bool* dst_suspect,
+    int* out_count_ptr,
+    int output_capacity,
+    const int* baseline_keep_indices,
+    const int* baseline_count_ptr,
+    bool* baseline_mask,
+    const int* candidate_keep_indices,
+    const int* candidate_count_ptr,
+    const float* private_priors_ptr,
+    int num_private_priors,
+    float private_prior_iou_threshold,
+    float private_prior_center_threshold,
+    float score_floor,
+    float score_ceiling,
+    int max_private_candidates,
+    int* private_added_count_ptr,
+    cudaStream_t stream
+) {
+    if (output_capacity <= 0) return;
+    checkCuda(cudaMemsetAsync(baseline_mask, 0, output_capacity * sizeof(bool), stream));
+    if (private_added_count_ptr != nullptr) {
+        checkCuda(cudaMemsetAsync(private_added_count_ptr, 0, sizeof(int), stream));
+    }
+    const int threads = 256;
+    const int blocks = (output_capacity + threads - 1) / threads;
+    mark_indices_bool_kernel<<<blocks, threads, 0, stream>>>(
+        baseline_mask,
+        baseline_keep_indices,
+        baseline_count_ptr,
+        output_capacity
+    );
+    append_private_continuation_kernel<<<1, 1, 0, stream>>>(
+        src_boxes,
+        src_scores,
+        src_classes,
+        src_suspect,
+        dst_boxes,
+        dst_scores,
+        dst_classes,
+        dst_suspect,
+        out_count_ptr,
+        output_capacity,
+        baseline_mask,
+        candidate_keep_indices,
+        candidate_count_ptr,
+        private_priors_ptr,
+        num_private_priors,
+        private_prior_iou_threshold,
+        private_prior_center_threshold,
+        score_floor,
+        score_ceiling,
+        max_private_candidates,
+        private_added_count_ptr
     );
     checkCuda(cudaGetLastError());
 }
