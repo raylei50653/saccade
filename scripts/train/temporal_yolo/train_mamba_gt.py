@@ -315,6 +315,15 @@ def main() -> None:
         help="Clip start stride. 0 uses clip-len, covering nearly every frame once.",
     )
     parser.add_argument("--gt-ratio", type=float, default=0.5)
+    parser.add_argument(
+        "--interpolate-gt",
+        action="store_true",
+        help="Keyframe-cadence training: when img1 holds every frame but gt is on "
+        "keyframes only (e.g. PersonPath22 full-cadence layout), linearly "
+        "interpolate gt between keyframes for temporal continuity / gt-injection "
+        "and mask the supervised loss to real keyframes. No-op on densely "
+        "annotated data (every frame is a keyframe).",
+    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--spatial-reduction", type=int, default=4)
     parser.add_argument(
@@ -876,9 +885,15 @@ def main() -> None:
         detail_size=detail_size,
         seed=args.seed,
         augment=augment,
+        interpolate_gt=args.interpolate_gt,
     )
     if augment:
         print("[MambaGT] augmentation ACTIVE (live stage, load_images=True)")
+    if args.interpolate_gt:
+        print(
+            "[MambaGT] keyframe interpolation ACTIVE: full-cadence frames, "
+            "linear-interp GT between keyframes, loss masked to real keyframes"
+        )
     print(
         f"[MambaGT] {len(loader)} batches/epoch  gt_ratio={args.gt_ratio}  "
         f"lr={args.lr}  detail={args.detail_source}  seed={args.seed}  "
@@ -956,6 +971,13 @@ def main() -> None:
             gt_boxes_batch = batch["gt_boxes"]
             gt_ids_batch = batch["gt_ids"]
             B, T = frames.shape[:2]
+            # Keyframe loss mask (interpolate_gt): the model forwards every frame at
+            # the real cadence so the temporal SSM sees true displacement, but the
+            # supervised loss is applied only on frames carrying real GT — boxes on
+            # in-between frames are linearly interpolated (approximate) and would
+            # otherwise teach the head against noisy targets. Default: every frame
+            # is a keyframe → no masking (bit-exact).
+            is_keyframe_batch = batch.get("is_keyframe", [[1] * T for _ in range(B)])
             detail_frames = None
             detail_valid_hw = None
             if args.detail_source == "global":
@@ -1092,15 +1114,24 @@ def main() -> None:
             # Batch-major layout: [b0t0, b0t1, ..., b0tT, b1t0, ...]
             # Frame t for all B items: indices t, T+t, 2T+t, ... → c[t::T]
             batch_loss = frames.new_zeros(())
+            n_kf_frames = 0
             for t in range(T):
-                s_cls_t = [c[t::T] for c in s_cls_T]
-                s_reg_t = [r[t::T] for r in s_reg_T]
-                feats_t = [all_feats[si][t] for si in range(3)]
+                # Per-sample keyframe mask: supervise only batch items whose frame t
+                # carries real GT (slice preds/feats/GT to that subset so interpolated
+                # frames contribute neither loss nor background-FP pressure).
+                keep = [b for b in range(B) if is_keyframe_batch[b][t]]
+                if not keep:
+                    continue
+                s_cls_t = [c[t::T][keep] for c in s_cls_T]
+                s_reg_t = [r[t::T][keep] for r in s_reg_T]
+                feats_t = [all_feats[si][t][keep] for si in range(3)]
+                gt_t = [all_gt[t][b] for b in keep]
                 preds = _build_preds_dict(s_cls_t, s_reg_t, feats_t)
-                yolo_batch = _make_yolo_batch(all_gt[t], args.img_size, device)
+                yolo_batch = _make_yolo_batch(gt_t, args.img_size, device)
                 step_loss_vec, _ = criterion(preds, yolo_batch)
                 batch_loss = batch_loss + step_loss_vec.sum()
-            batch_loss = batch_loss / (T * accum)
+                n_kf_frames += 1
+            batch_loss = batch_loss / (max(n_kf_frames, 1) * accum)
 
             if args.t1_weight > 0.0 and T > 1:
                 # Joint loss (route 2): also supervise the pure-spatial T=1 forward
@@ -1119,14 +1150,31 @@ def main() -> None:
                     detail_positions=detail_positions_T,
                     detail_position_mask=detail_position_mask_T,
                 )
-                flat_gt = [all_gt[t][b] for b in range(B) for t in range(T)]
-                preds_1 = _build_preds_dict(s_cls_1, s_reg_1, feats_T)
-                yolo_batch_1 = _make_yolo_batch(flat_gt, args.img_size, device)
-                t1_loss_vec, _ = criterion(preds_1, yolo_batch_1)
-                t1_loss = t1_loss_vec.sum() / (B * T)
-                batch_loss = batch_loss + (args.t1_weight * t1_loss) / accum
-                epoch_t1_sum += t1_loss.detach().item()
-                epoch_t1_n += 1
+                # Mask to keyframe samples in the flattened B*T layout
+                # (k = b*T + t matches feats_T's batch-major reshape).
+                keep_flat = [
+                    b * T + t
+                    for b in range(B)
+                    for t in range(T)
+                    if is_keyframe_batch[b][t]
+                ]
+                if keep_flat:
+                    flat_gt = [
+                        all_gt[t][b]
+                        for b in range(B)
+                        for t in range(T)
+                        if is_keyframe_batch[b][t]
+                    ]
+                    s_cls_1k = [c[keep_flat] for c in s_cls_1]
+                    s_reg_1k = [r[keep_flat] for r in s_reg_1]
+                    feats_1k = [f[keep_flat] for f in feats_T]
+                    preds_1 = _build_preds_dict(s_cls_1k, s_reg_1k, feats_1k)
+                    yolo_batch_1 = _make_yolo_batch(flat_gt, args.img_size, device)
+                    t1_loss_vec, _ = criterion(preds_1, yolo_batch_1)
+                    t1_loss = t1_loss_vec.sum() / len(keep_flat)
+                    batch_loss = batch_loss + (args.t1_weight * t1_loss) / accum
+                    epoch_t1_sum += t1_loss.detach().item()
+                    epoch_t1_n += 1
 
             if args.consistency_weight > 0.0 and T > 1:
                 cons_loss = _temporal_consistency_loss(

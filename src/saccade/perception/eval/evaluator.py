@@ -1685,6 +1685,7 @@ def run_eval_cpp(
         output=str(cfg.output_root),
         sequences=",".join(cfg.seqs),
         detector=cfg.kwargs.get("detector"),
+        score_on_gt_frames=bool(cfg.kwargs.get("score_on_gt_frames", False)),
     )
 
 
@@ -7228,4 +7229,5 @@ def run_eval(
         output=str(cfg.output_root),
         sequences=",".join(cfg.seqs),
         detector=cfg.kwargs.get("detector"),
+        score_on_gt_frames=bool(cfg.kwargs.get("score_on_gt_frames", False)),
     )

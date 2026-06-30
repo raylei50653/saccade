@@ -14,12 +14,51 @@ gt.txt 格式（每行）：
 """
 
 from __future__ import annotations
+import bisect
 import configparser
 import csv
 from pathlib import Path
 from typing import Iterator  # noqa: F401  (used in type hints of _iter_frames in evaluator)
 import torch
 from torch.utils.data import Dataset, DataLoader
+
+
+def _interpolate_gt_for_frame(
+    frame_id: int,
+    keyframes: list[int],
+    gt: dict[int, tuple[torch.Tensor, torch.Tensor]],
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Linear per-ID GT box interpolation for a frame that has no annotation.
+
+    For keyframe-annotated benchmarks (e.g. PersonPath22, labelled every ~5th
+    frame) run at the real frame cadence: intermediate frames carry no gt, so a
+    box is synthesised by linearly interpolating each track between the two
+    *adjacent* keyframes that bracket ``frame_id``. Only tracks present in BOTH
+    bracket endpoints are emitted — births/deaths inside the gap are never
+    extrapolated, and frames outside the annotated range stay empty. Boxes are in
+    the same (original-pixel, xyxy) space as ``gt`` so the caller's resize/letterbox
+    transform applies unchanged. These interpolated boxes are meant for temporal
+    continuity / gt-injection only; the supervised loss should mask them out (see
+    ``is_keyframe`` in the sample) because linear motion is just an approximation.
+    """
+    empty = (torch.zeros(0, 4), torch.zeros(0, dtype=torch.int64))
+    i = bisect.bisect_left(keyframes, frame_id)
+    if i == 0 or i >= len(keyframes):
+        return empty  # outside annotated keyframe span → no extrapolation
+    ka, kb = keyframes[i - 1], keyframes[i]
+    if ka == frame_id or kb == frame_id or kb == ka:
+        return empty
+    boxes_a, ids_a = gt[ka]
+    boxes_b, ids_b = gt[kb]
+    a_map = {int(t): boxes_a[j] for j, t in enumerate(ids_a)}
+    b_map = {int(t): boxes_b[j] for j, t in enumerate(ids_b)}
+    common = [t for t in a_map if t in b_map]
+    if not common:
+        return empty
+    w = (frame_id - ka) / (kb - ka)
+    boxes = torch.stack([a_map[t] + (b_map[t] - a_map[t]) * w for t in common])
+    ids = torch.tensor(common, dtype=torch.int64)
+    return boxes, ids
 
 
 class MOT17TemporalClip(
@@ -53,6 +92,7 @@ class MOT17TemporalClip(
         use_letterbox: bool = False,
         detail_size: tuple[int, int] | None = None,
         augment: bool = False,
+        interpolate_gt: bool = False,
     ):
         self.data_root = Path(data_root)
         self.split = split
@@ -62,6 +102,12 @@ class MOT17TemporalClip(
         self.use_letterbox = use_letterbox
         self.detail_size = detail_size
         self.load_images = load_images
+        # Keyframe-cadence training: when img1 holds every frame but gt is only on
+        # keyframes, linearly interpolate gt on the in-between frames (for temporal
+        # continuity / gt-injection) and tag each frame with is_keyframe so the loss
+        # can be masked to real annotations only. Default off → bit-exact (every
+        # frame that has gt is a keyframe; frames without gt stay empty).
+        self.interpolate_gt = interpolate_gt
         # Strategy B: clip-consistent geometric+photometric augmentation. One
         # random transform is drawn per clip and applied identically to every
         # frame, so temporal continuity (and ID correspondence) is preserved.
@@ -86,6 +132,7 @@ class MOT17TemporalClip(
 
         self._clips: list[tuple[str, int]] = []
         self._gt: dict[str, dict[int, tuple[torch.Tensor, torch.Tensor]]] = {}
+        self._keyframes: dict[str, list[int]] = {}
         self._img_dirs: dict[str, Path] = {}
         self._frame_lists: dict[str, list[Path]] = {}
         self._scale_hw: dict[
@@ -161,6 +208,7 @@ class MOT17TemporalClip(
                     torch.tensor(ids, dtype=torch.int64),
                 )
             self._gt[seq] = gt_tensors
+            self._keyframes[seq] = sorted(gt_tensors.keys())
 
             n_frames = len(frames)
             for start in range(0, n_frames - clip_len + 1, stride):
@@ -249,6 +297,7 @@ class MOT17TemporalClip(
         frames_list: list[torch.Tensor] = []
         gt_boxes_list: list[torch.Tensor] = []
         gt_ids_list: list[torch.Tensor] = []
+        is_keyframe_list: list[int] = []
         fids: list[int] = []
         detail_frames_list: list[torch.Tensor] = []
         detail_valid_hw_list: list[torch.Tensor] = []
@@ -291,9 +340,16 @@ class MOT17TemporalClip(
                 detail_frames_list.append(detail_img)
                 detail_valid_hw_list.append(valid_hw)
 
-            gt = self._gt[seq].get(
-                frame_id, (torch.zeros(0, 4), torch.zeros(0, dtype=torch.int64))
-            )
+            seq_gt = self._gt[seq]
+            if frame_id in seq_gt:
+                gt = seq_gt[frame_id]
+                is_key = 1
+            elif self.interpolate_gt:
+                gt = _interpolate_gt_for_frame(frame_id, self._keyframes[seq], seq_gt)
+                is_key = 0
+            else:
+                gt = (torch.zeros(0, 4), torch.zeros(0, dtype=torch.int64))
+                is_key = 1
             gt_boxes = gt[0].clone()
             if gt_boxes.numel() > 0:
                 if self.use_letterbox:
@@ -304,6 +360,7 @@ class MOT17TemporalClip(
                     gt_boxes[:, [1, 3]] *= scale_h
             gt_boxes_list.append(gt_boxes)
             gt_ids_list.append(gt[1])
+            is_keyframe_list.append(is_key)
             fids.append(frame_id)
 
         if self.augment and frames_list:
@@ -319,6 +376,7 @@ class MOT17TemporalClip(
             ),
             "gt_boxes": gt_boxes_list,
             "gt_ids": gt_ids_list,
+            "is_keyframe": is_keyframe_list,
             "frame_ids": fids,
             "seq": seq,
         }
@@ -486,6 +544,7 @@ def collate_fn(batch: list[dict[str, object]]) -> dict[str, object]:
         "frames": torch.stack([b["frames"] for b in batch]),  # type: ignore[misc]
         "gt_boxes": [b["gt_boxes"] for b in batch],
         "gt_ids": [b["gt_ids"] for b in batch],
+        "is_keyframe": [b["is_keyframe"] for b in batch],
         "frame_ids": [b["frame_ids"] for b in batch],
         "seq": [b["seq"] for b in batch],
     }
@@ -516,6 +575,7 @@ def build_mot17_dataloader(
     seed: int | None = None,
     augment: bool = False,
     balance_by_seq: bool = False,
+    interpolate_gt: bool = False,
 ) -> DataLoader[dict[str, object]]:
     dataset = MOT17TemporalClip(
         data_root=data_root,
@@ -530,6 +590,7 @@ def build_mot17_dataloader(
         use_letterbox=use_letterbox,
         detail_size=detail_size,
         augment=augment,
+        interpolate_gt=interpolate_gt,
     )
     print(f"[Dataset] {len(dataset)} clips from {len(dataset.sequences)} sequences")
 

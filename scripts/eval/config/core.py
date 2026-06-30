@@ -87,6 +87,18 @@ def add_core_args(parser: argparse.ArgumentParser) -> None:
         help="Directory for outputs, metrics, and dumps.",
     )
     io.add_argument(
+        "--score-on-gt-frames",
+        action="store_true",
+        help=(
+            "Score metrics only on frames that carry ground truth, dropping "
+            "predictions on gt-less frames before scoring. For keyframe-annotated "
+            "benchmarks (e.g. PersonPath22, gt every ~5th frame while img1 holds "
+            "every frame): run the tracker at the real frame cadence so the motion "
+            "model sees true displacement, but avoid counting predictions on "
+            "unannotated frames as false positives. No-op when gt is dense."
+        ),
+    )
+    io.add_argument(
         "--workbench",
         action="store_true",
         help="Use the C++ Workbench hot-path (avoids GIL contention for scaling)",
