@@ -49,7 +49,7 @@ echo "=== RECALL EVAL ==="
     --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_15x30/best.ckpt \
     --sequences MOT17-02-SDP \
     --score-thresholds 0.001,0.10,0.25 \
-    --output report_data/mamba_size_recall_v14replica_t3t1_15x30_02.json
+    --output results/mamba_size_recall_v14replica_t3t1_15x30_02.json
 
 echo ""
 echo "=== TRACKING EVAL ==="

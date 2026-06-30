@@ -150,7 +150,7 @@ echo "=== Detector recall eval ==="
     --trt-backbone-engine "$BACKBONE_ENGINE" \
     --sequences MOT17-02-SDP \
     --score-thresholds 0.001,0.10,0.25 \
-    --output "report_data/mamba_size_recall_${RUN_PREFIX}_t3t1_02.json"
+    --output "results/mamba_size_recall_${RUN_PREFIX}_t3t1_02.json"
 
 echo "=== MOT17 tracking eval ==="
 "$PYTHON" scripts/eval/mot17.py --preset mamba_whole_graph --detector SDP \

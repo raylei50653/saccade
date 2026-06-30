@@ -56,7 +56,7 @@ echo "=== RECALL EVAL ==="
     --mamba-ckpt "$RUN/best.ckpt" \
     --sequences MOT17-02-SDP \
     --score-thresholds 0.001,0.10,0.25 \
-    --output report_data/mamba_v14_parent_n16_frozen_refit_recall_02.json
+    --output results/mamba_v14_parent_n16_frozen_refit_recall_02.json
 
 echo "=== TRACKING EVAL ==="
 .venv/bin/python scripts/eval/mot17.py \

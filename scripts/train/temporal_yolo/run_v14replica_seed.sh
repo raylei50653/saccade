@@ -53,7 +53,7 @@ SEQS=MOT17-02-SDP,MOT17-04-SDP,MOT17-05-SDP,MOT17-09-SDP,MOT17-10-SDP,MOT17-11-S
     --mamba-ckpt "runs/mamba_gt_v14replica_${TAG}_final/best.ckpt" \
     --sequences MOT17-02-SDP \
     --score-thresholds 0.001,0.10,0.25 \
-    --output "report_data/mamba_size_recall_v14replica_${TAG}_02.json"
+    --output "results/mamba_size_recall_v14replica_${TAG}_02.json"
 
 .venv/bin/python scripts/eval/mot17.py --preset mamba_whole_graph --detector SDP \
     --mamba-ckpt "runs/mamba_gt_v14replica_${TAG}_final/best.ckpt" \
