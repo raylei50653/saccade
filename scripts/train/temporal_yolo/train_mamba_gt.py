@@ -60,6 +60,7 @@ from saccade.perception.temporal_yolo.mamba_head import (  # noqa: E402
     build_strip_oracle_positions,
     resolve_mamba_in_channels,
 )
+from saccade.perception.temporal_yolo.ngla_assigner import install_assigner  # noqa: E402
 from ultralytics.utils.loss import v8DetectionLoss  # noqa: E402
 
 
@@ -298,6 +299,13 @@ def main() -> None:
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--lr-gate", type=float, default=0.0)
     parser.add_argument("--cls-weight", type=float, default=0.5)
+    parser.add_argument(
+        "--assigner",
+        choices=("tal", "ngla"),
+        default="tal",
+        help="GT fine-tuning label assigner. tal is Ultralytics TaskAlignedAssigner; "
+        "ngla swaps CIoU localization scoring for Gaussian NBCD.",
+    )
     parser.add_argument("--img-size", type=int, default=640)
     parser.add_argument("--clip-len", type=int, default=4)
     parser.add_argument(
@@ -309,6 +317,13 @@ def main() -> None:
     parser.add_argument("--gt-ratio", type=float, default=0.5)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--spatial-reduction", type=int, default=4)
+    parser.add_argument(
+        "--reduction-variant",
+        choices=("auto", "conv", "blur-conv", "space-to-depth", "wavelet"),
+        default="auto",
+        help="Reduction before Mamba. auto keeps checkpoint metadata or conv "
+        "for new runs; blur-conv, space-to-depth, and wavelet are recall probes.",
+    )
     parser.add_argument("--d-model", type=int, default=128)
     parser.add_argument("--d-state", type=int, default=16)
     parser.add_argument("--num-blocks", type=int, default=1)
@@ -342,6 +357,14 @@ def main() -> None:
         default="",
         help="Comma-separated sequences excluded from training for external "
         "detector-recall/HOTA checkpoint selection.",
+    )
+    parser.add_argument(
+        "--augment",
+        action="store_true",
+        help="Enable temporal-consistent clip augmentation (hflip + scale + "
+        "translation + brightness/contrast). Only effective in live stages that "
+        "load images (e.g. GT1, no --cache-dir); silently inert under --cache-dir "
+        "because cached frozen-backbone features are keyed to fixed frames.",
     )
     parser.add_argument("--save-every", type=int, default=5)
     parser.add_argument(
@@ -545,12 +568,17 @@ def main() -> None:
         "d_state": args.d_state,
         "num_blocks": args.num_blocks,
         "spatial_reduction": args.spatial_reduction,
+        "reduction_variant": (
+            args.reduction_variant if args.reduction_variant != "auto" else "conv"
+        ),
         "num_classes": nc,
         "use_pixel_shuffle": False,
         "per_channel_a": False,
     }
     for k, v in mamba_args_default.items():
         mamba_args.setdefault(k, v)
+    if args.reduction_variant != "auto":
+        mamba_args["reduction_variant"] = args.reduction_variant
     if args.add_temporal:
         if getattr(args, "use_temporal_attention", False):
             mamba_args["use_temporal_attention"] = True
@@ -617,6 +645,7 @@ def main() -> None:
         per_channel_a=mamba_args.get("per_channel_a", False),
         scan_stop_grad=mamba_args.get("scan_stop_grad", False),
         legacy_n1_scan=mamba_args.get("legacy_n1_scan", False),
+        reduction_variant=mamba_args.get("reduction_variant", "conv"),
         use_detail_fusion=mamba_args.get("use_detail_fusion", False),
         detail_channels=mamba_args.get("detail_channels", 32),
         detail_patch_size=mamba_args.get("detail_patch_size", 3),
@@ -634,6 +663,8 @@ def main() -> None:
     strict = (
         not args.add_temporal
         and not (args.per_channel_a and not base_per_channel)
+        and mamba_args.get("reduction_variant", "conv")
+        == mamba_state.get("mamba_args", {}).get("reduction_variant", "conv")
         and not use_detail_fusion
         and not use_strip_detail
     )
@@ -658,7 +689,13 @@ def main() -> None:
         temporal_keys = [k for k in missing if "temporal" in k or "flow_gate" in k]
         detail_keys = [k for k in missing if k.startswith("detail_fusion.")]
         strip_keys = [k for k in missing if k.startswith("strip_detail_fusion.")]
-        expected_keys = set(temporal_keys + detail_keys + strip_keys)
+        reduction_keys = [
+            k
+            for k in missing
+            if k.startswith("downsample.")
+            and mamba_args.get("reduction_variant", "conv") != "conv"
+        ]
+        expected_keys = set(temporal_keys + detail_keys + strip_keys + reduction_keys)
         unexpected_missing = [k for k in missing if k not in expected_keys]
         if temporal_keys:
             print(f"  New temporal keys (random init): {len(temporal_keys)}")
@@ -666,10 +703,22 @@ def main() -> None:
             print(f"  New detail keys (expected warm-start): {len(detail_keys)}")
         if strip_keys:
             print(f"  New strip detail keys (random/zero init): {len(strip_keys)}")
+        if reduction_keys:
+            print(f"  New reduction keys (random init): {len(reduction_keys)}")
         if unexpected_missing:
             print(f"  WARNING: unexpected missing keys: {unexpected_missing}")
     if unexpected:
-        print(f"  WARNING: unexpected checkpoint keys: {unexpected}")
+        stale_reduction = [
+            k
+            for k in unexpected
+            if k.startswith("downsample.")
+            and mamba_args.get("reduction_variant", "conv") != "conv"
+        ]
+        unexpected_other = [k for k in unexpected if k not in set(stale_reduction)]
+        if stale_reduction:
+            print(f"  Replaced reduction checkpoint keys: {len(stale_reduction)}")
+        if unexpected_other:
+            print(f"  WARNING: unexpected checkpoint keys: {unexpected_other}")
     mamba.train()
 
     if args.freeze_temporal:
@@ -730,6 +779,7 @@ def main() -> None:
     base_args.setdefault("dfl", 1.5)
     teacher.yolo_model.args = SimpleNamespace(**base_args)
     criterion = v8DetectionLoss(teacher.yolo_model)
+    install_assigner(criterion, args.assigner)
 
     # ------------------------------------------------------------------
     # Optimizer
@@ -802,6 +852,17 @@ def main() -> None:
         if args.detail_source in {"high", "native-p3", "strip-oracle"}
         else None
     )
+    # Augmentation transforms the input frame, so it is only sound where the
+    # backbone runs live on that frame (preload/no-cache, e.g. GT1). Under
+    # --cache-dir the frozen-backbone features are keyed to fixed frames, so
+    # augmenting would misalign inputs and supervision — gate it off and warn.
+    augment = args.augment and preload
+    if args.augment and not augment:
+        print(
+            "[MambaGT] WARNING: --augment ignored under --cache-dir — cached "
+            "frozen-backbone features are keyed to fixed frames; augmentation "
+            "only applies in live stages (no --cache-dir, e.g. GT1)."
+        )
     loader = build_mot17_dataloader(
         data_root=data_root,
         clip_len=args.clip_len,
@@ -814,7 +875,10 @@ def main() -> None:
         load_images=preload or detail_size is not None,
         detail_size=detail_size,
         seed=args.seed,
+        augment=augment,
     )
+    if augment:
+        print("[MambaGT] augmentation ACTIVE (live stage, load_images=True)")
     print(
         f"[MambaGT] {len(loader)} batches/epoch  gt_ratio={args.gt_ratio}  "
         f"lr={args.lr}  detail={args.detail_source}  seed={args.seed}  "
@@ -1169,6 +1233,9 @@ def main() -> None:
                         "d_state": mamba_args["d_state"],
                         "num_blocks": mamba_args["num_blocks"],
                         "spatial_reduction": mamba_args["spatial_reduction"],
+                        "reduction_variant": mamba_args.get(
+                            "reduction_variant", "conv"
+                        ),
                         "num_classes": nc,
                         "use_pixel_shuffle": mamba_args.get("use_pixel_shuffle", False),
                         "use_cross_scan": mamba_args.get("use_cross_scan", False),

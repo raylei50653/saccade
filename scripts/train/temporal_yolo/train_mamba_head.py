@@ -104,6 +104,7 @@ def _validate_cache_manifest(
     expected: dict[str, Any],
     *,
     require_complete: bool,
+    sequences_subset_ok: bool = False,
 ) -> dict[str, Any]:
     manifest_path = cache_dir / CACHE_MANIFEST
     if not manifest_path.is_file():
@@ -112,11 +113,17 @@ def _validate_cache_manifest(
             "are not accepted; rebuild with build_mamba_teacher_cache.sh."
         )
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    mismatches = {
-        key: (manifest.get(key), value)
-        for key, value in expected.items()
-        if manifest.get(key) != value
-    }
+    # sequences_subset_ok: a full-set cache may serve a leave-one-out training
+    # subset — the trainer only reads the frames of its own (fewer) sequences,
+    # so require the requested sequences to be a subset rather than equal.
+    mismatches: dict[str, Any] = {}
+    for key, value in expected.items():
+        cached = manifest.get(key)
+        if key == "sequences" and sequences_subset_ok:
+            if not set(value).issubset(set(cached or [])):
+                mismatches[key] = (cached, value)
+        elif cached != value:
+            mismatches[key] = (cached, value)
     if mismatches:
         raise ValueError(f"Cache manifest mismatch: {mismatches}")
     if require_complete and manifest.get("status") != "complete":
@@ -560,6 +567,11 @@ def main() -> None:
     )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--spatial-reduction", type=int, default=4)
+    parser.add_argument(
+        "--reduction-variant",
+        choices=("conv", "blur-conv", "space-to-depth", "wavelet"),
+        default="conv",
+    )
     parser.add_argument("--d-model", type=int, default=128)
     parser.add_argument("--d-state", type=int, default=16)
     parser.add_argument("--num-blocks", type=int, default=1)
@@ -696,6 +708,7 @@ def main() -> None:
         scan_stop_grad=args.scan_stop_grad,
         legacy_n1_scan=args.legacy_n1_scan,
         use_temporal_attention=getattr(args, "use_temporal_attention", False),
+        reduction_variant=args.reduction_variant,
     ).to(device)
     student.train()
 
@@ -805,6 +818,7 @@ def main() -> None:
             cache_dir,
             expected_manifest,
             require_complete=True,
+            sequences_subset_ok=True,
         )
         cached_channels = tuple(manifest.get("fpn_channels", in_channels))
         if cached_channels != in_channels:
@@ -997,6 +1011,7 @@ def main() -> None:
                     "d_state": args.d_state,
                     "num_blocks": args.num_blocks,
                     "spatial_reduction": args.spatial_reduction,
+                    "reduction_variant": args.reduction_variant,
                     "num_classes": nc,
                     "use_pixel_shuffle": args.use_pixel_shuffle,
                     "use_cross_scan": args.use_cross_scan,

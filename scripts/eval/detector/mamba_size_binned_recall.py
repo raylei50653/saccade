@@ -78,6 +78,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Include per-frame GT/match counts for paired bootstrap analysis.",
     )
+    parser.add_argument(
+        "--save-object-records",
+        action="store_true",
+        help="Include per-GT match records for missed-object taxonomy.",
+    )
     parser.add_argument("--output", required=True)
     return parser
 
@@ -159,6 +164,25 @@ def _match_ground_truth(
     return matched, matched_iou
 
 
+def _best_prediction_overlap(
+    gt_boxes: torch.Tensor,
+    pred_boxes: torch.Tensor,
+    pred_scores: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    gt_count = gt_boxes.shape[0]
+    best_iou = torch.zeros(gt_count, dtype=torch.float32)
+    best_score = torch.zeros(gt_count, dtype=torch.float32)
+    if gt_count == 0 or pred_boxes.numel() == 0:
+        return best_iou, best_score
+
+    ious = torchvision.ops.box_iou(pred_boxes.cpu(), gt_boxes.cpu())
+    best_iou, pred_idx = ious.max(dim=0)
+    pred_scores_cpu = pred_scores.cpu().to(torch.float32)
+    best_score = pred_scores_cpu[pred_idx]
+    best_score = torch.where(best_iou > 0, best_score, torch.zeros_like(best_score))
+    return best_iou, best_score
+
+
 def _new_counter() -> dict[str, float]:
     return {"gt": 0.0, "matched": 0.0, "iou_sum": 0.0}
 
@@ -187,6 +211,48 @@ def _record_matches(
             if bool(matched[index]):
                 counter["matched"] += 1
                 counter["iou_sum"] += float(matched_iou[index])
+
+
+def _object_records(
+    frame_id: int,
+    ground_truth: list[dict[str, float | list[float]]],
+    matched: torch.Tensor,
+    matched_iou: torch.Tensor,
+    threshold_best_iou: torch.Tensor,
+    threshold_best_score: torch.Tensor,
+    floor_best_iou: torch.Tensor,
+    floor_best_score: torch.Tensor,
+    *,
+    orig_h: int,
+    orig_w: int,
+) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for index, item in enumerate(ground_truth):
+        width = float(item["width"])
+        height = float(item["height"])
+        resized_min_side = min(width * 640.0 / orig_w, height * 640.0 / orig_h)
+        records.append(
+            {
+                "frame_id": frame_id,
+                "gt_index": index,
+                "bbox": [float(value) for value in item["bbox"]],
+                "width": width,
+                "height": height,
+                "visibility": float(item["visibility"]),
+                "resized_min_side": resized_min_side,
+                "height_bin": _bin_name(height, ORIGINAL_HEIGHT_BINS),
+                "resized_min_side_bin": _bin_name(
+                    resized_min_side, RESIZED_MIN_SIDE_BINS
+                ),
+                "matched": bool(matched[index]),
+                "matched_iou": float(matched_iou[index]),
+                "best_threshold_iou": float(threshold_best_iou[index]),
+                "best_threshold_score": float(threshold_best_score[index]),
+                "best_conf_floor_iou": float(floor_best_iou[index]),
+                "best_conf_floor_score": float(floor_best_score[index]),
+            }
+        )
+    return records
 
 
 def _finalize(counters: dict[str, dict[str, float]]) -> dict[str, dict[str, float]]:
@@ -282,6 +348,9 @@ def main() -> None:
         frame_records: dict[float, list[dict[str, Any]]] = {
             threshold: [] for threshold in thresholds
         }
+        object_records: dict[float, list[dict[str, Any]]] = {
+            threshold: [] for threshold in thresholds
+        }
 
         detector.reset_tracker()
         with torch.inference_mode():
@@ -333,6 +402,11 @@ def main() -> None:
                     [item["bbox"] for item in frame_gt],
                     dtype=torch.float32,
                 ).reshape(-1, 4)
+                floor_best_iou, floor_best_score = _best_prediction_overlap(
+                    gt_boxes,
+                    boxes,
+                    scores,
+                )
                 for threshold in thresholds:
                     selected = scores >= threshold
                     threshold_boxes = boxes[selected]
@@ -343,6 +417,11 @@ def main() -> None:
                         threshold_boxes,
                         threshold_scores,
                         iou_threshold=args.match_iou,
+                    )
+                    threshold_best_iou, threshold_best_score = _best_prediction_overlap(
+                        gt_boxes,
+                        threshold_boxes,
+                        threshold_scores,
                     )
                     _record_matches(
                         counters[threshold],
@@ -369,6 +448,21 @@ def main() -> None:
                                 "bins": _finalize(frame_counter),
                             }
                         )
+                    if args.save_object_records:
+                        object_records[threshold].extend(
+                            _object_records(
+                                frame_id,
+                                frame_gt,
+                                matched,
+                                matched_iou,
+                                threshold_best_iou,
+                                threshold_best_score,
+                                floor_best_iou,
+                                floor_best_score,
+                                orig_h=orig_h,
+                                orig_w=orig_w,
+                            )
+                        )
                 if frame_index % 100 == 0:
                     print(f"[{label}] {sequence} [{frame_index}/{len(frame_paths)}]")
 
@@ -387,6 +481,10 @@ def main() -> None:
                 sequence_report["thresholds"][str(threshold)]["frames"] = frame_records[
                     threshold
                 ]
+            if args.save_object_records:
+                sequence_report["thresholds"][str(threshold)]["objects"] = (
+                    object_records[threshold]
+                )
             _print_threshold_summary(label, sequence, threshold, metrics)
         report["sequences"][sequence] = sequence_report
 
