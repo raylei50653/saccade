@@ -324,6 +324,21 @@ def main() -> None:
         "and mask the supervised loss to real keyframes. No-op on densely "
         "annotated data (every frame is a keyframe).",
     )
+    parser.add_argument(
+        "--no-preload-images",
+        action="store_true",
+        help="Live mode only: skip RAM-preloading frames; decode per-step from "
+        "disk instead. Needed when the frame set is too large for RAM (e.g. "
+        "full-cadence PersonPath22 ~70 GB). Pair with --num-workers for parallel "
+        "decode.",
+    )
+    parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=0,
+        help="DataLoader worker processes (parallel JPEG decode when not "
+        "RAM-preloaded). 0 = main-thread.",
+    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--spatial-reduction", type=int, default=4)
     parser.add_argument(
@@ -853,19 +868,25 @@ def main() -> None:
         data_root, args.seqs, args.holdout_seqs
     )
     clip_stride = args.clip_stride or args.clip_len
-    # In cache mode the backbone never runs, so raw frame pixels are unused —
-    # skip RAM preload to allow large mixes (e.g. MOT17+MOT20) without OOM.
-    preload = args.cache_dir == ""
+    # Live (no --cache-dir): the backbone runs on raw frames, so images are
+    # needed. RAM-preloading the whole clip set is the fast path, but a
+    # full-cadence PersonPath22 set (~60k frames @640) is ~70 GB and OOMs a
+    # 54 GB box — --no-preload-images falls back to per-step JPEG decode
+    # (pair with --num-workers for parallel decode). In cache mode the backbone
+    # never runs, so raw frame pixels are unused and preload is skipped anyway.
+    live_mode = args.cache_dir == ""
+    preload = live_mode and not args.no_preload_images
     detail_size = (
         (args.detail_height, args.detail_width)
         if args.detail_source in {"high", "native-p3", "strip-oracle"}
         else None
     )
+    need_images = live_mode or detail_size is not None
     # Augmentation transforms the input frame, so it is only sound where the
-    # backbone runs live on that frame (preload/no-cache, e.g. GT1). Under
-    # --cache-dir the frozen-backbone features are keyed to fixed frames, so
-    # augmenting would misalign inputs and supervision — gate it off and warn.
-    augment = args.augment and preload
+    # backbone runs live on that frame (e.g. GT1). Under --cache-dir the
+    # frozen-backbone features are keyed to fixed frames, so augmenting would
+    # misalign inputs and supervision — gate it off and warn.
+    augment = args.augment and live_mode
     if args.augment and not augment:
         print(
             "[MambaGT] WARNING: --augment ignored under --cache-dir — cached "
@@ -880,8 +901,9 @@ def main() -> None:
         stride=clip_stride,
         shuffle=True,
         seqs=seqs,
+        num_workers=args.num_workers,
         preload_to_ram=preload,
-        load_images=preload or detail_size is not None,
+        load_images=need_images,
         detail_size=detail_size,
         seed=args.seed,
         augment=augment,
