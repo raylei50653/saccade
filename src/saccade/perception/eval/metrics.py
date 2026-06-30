@@ -1,5 +1,7 @@
 import os
 import glob
+import contextlib
+import io
 from pathlib import Path
 from collections import OrderedDict
 from typing import Any, Iterable, Sequence, TypedDict
@@ -218,6 +220,10 @@ def _calculate_hota(
 
     trackeval_root = _find_trackeval_root()
     if trackeval_root is None:
+        print(
+            "[metrics] TrackEval not found; skipping HOTA/DetA/AssA.",
+            file=sys.stderr,
+        )
         return None
 
     _ensure_numpy_legacy_aliases()
@@ -226,7 +232,11 @@ def _calculate_hota(
 
     try:
         import trackeval
-    except Exception:
+    except Exception as exc:
+        print(
+            f"[metrics] TrackEval import failed; skipping HOTA/DetA/AssA: {exc}",
+            file=sys.stderr,
+        )
         return None
 
     results_path = Path(output_dir).resolve()
@@ -252,6 +262,7 @@ def _calculate_hota(
         "TRACKERS_TO_EVAL": [tracker_name],
         "SPLIT_TO_EVAL": split,
         "SEQ_INFO": {seq_name: None for seq_name, _, _ in jobs},
+        "PRINT_CONFIG": False,
     }
     metrics_config = {"METRICS": ["HOTA"]}
 
@@ -259,8 +270,14 @@ def _calculate_hota(
         evaluator = trackeval.Evaluator(eval_config)
         dataset_list = [trackeval.datasets.MotChallenge2DBox(dataset_config)]
         metrics_list = [trackeval.metrics.HOTA(metrics_config)]
-        output_res, _ = evaluator.evaluate(dataset_list, metrics_list)
-    except Exception:
+        with contextlib.redirect_stdout(io.StringIO()):
+            output_res, _ = evaluator.evaluate(dataset_list, metrics_list)
+    except Exception as exc:
+        print(
+            "[metrics] TrackEval HOTA evaluation failed; skipping HOTA/DetA/AssA: "
+            f"{exc}",
+            file=sys.stderr,
+        )
         return None
 
     try:
@@ -273,7 +290,12 @@ def _calculate_hota(
             "DetA": float(np.mean(hota_res["DetA"])),
             "AssA": float(np.mean(hota_res["AssA"])),
         }
-    except (KeyError, StopIteration, TypeError):
+    except (KeyError, StopIteration, TypeError) as exc:
+        print(
+            "[metrics] TrackEval HOTA result parsing failed; "
+            f"skipping HOTA/DetA/AssA: {exc}",
+            file=sys.stderr,
+        )
         return None
 
 

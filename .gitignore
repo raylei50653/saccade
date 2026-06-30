@@ -30,6 +30,8 @@ models/yolo/*
 
 # Data & Media
 datasets/
+!third_party/TrackEval/trackeval/datasets/
+!third_party/TrackEval/trackeval/datasets/**
 results/
 runs/
 scripts/eval/output/*
