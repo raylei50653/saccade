@@ -34,6 +34,18 @@ class DetectionConfig:
     track_person_only: bool = True
     detector_box_format: str = "xyxy"
     nms_iou_threshold: float | None = None
+    # Private continuation pool: wider-NMS detections may continue existing tracks
+    # but are score-clamped below birth threshold.
+    private_continuation_enabled: bool = False
+    private_candidate_nms_iou: float = 0.70
+    private_min_score: float = 0.25
+    private_max_candidates: int = 0
+    private_prior_iou_threshold: float = 0.0
+    private_prior_center_threshold: float = 0.0
+    private_prior_max_age: int = 2
+    private_low_stage_only: bool = False
+    private_selection_mode: str = "global"
+    private_energy_margin: float = 0.0
     # Crowd low-score mode
     crowd_low_score_mode: bool = False
     crowd_low_score_trigger: int = 25
@@ -231,6 +243,112 @@ def add_detection_args(parser: argparse.ArgumentParser) -> None:
             "Override detector NMS IoU.",
             range_hint="0-1 or unset",
             edge="lower removes duplicates earlier; higher preserves crowded detections",
+        ),
+    )
+    grp.add_argument(
+        "--private-continuation",
+        "--private-continuation-enabled",
+        dest="private_continuation_enabled",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Enable eval-only private continuation boxes from a wider candidate NMS. "
+            "Private boxes can match existing tracks but are clamped below birth threshold."
+        ),
+    )
+    grp.add_argument(
+        "--private-candidate-nms-iou",
+        type=float,
+        default=0.70,
+        help=_help(
+            "Wider NMS IoU used to build private continuation candidates.",
+            range_hint=">= nms-iou-threshold, usually 0.60-0.70",
+            edge="higher recovers more crowded boxes but increases duplicate/noise load",
+        ),
+    )
+    grp.add_argument(
+        "--private-min-score",
+        type=float,
+        default=0.25,
+        help=_help(
+            "Minimum original detector score for private continuation candidates.",
+            range_hint="0-1",
+            edge="lower may recover more FNs but can increase wrong associations",
+        ),
+    )
+    grp.add_argument(
+        "--private-max-candidates",
+        type=int,
+        default=0,
+        help=_help(
+            "Optional per-frame cap for private continuation candidates (0=unlimited).",
+            range_hint=">=0",
+        ),
+    )
+    grp.add_argument(
+        "--private-prior-iou-threshold",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Require private candidates to overlap a recent tracker prior by this IoU (0=off).",
+            range_hint="0-1",
+        ),
+    )
+    grp.add_argument(
+        "--private-prior-center-threshold",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Require private candidate center distance / prior height below this value (0=off).",
+            range_hint=">=0",
+        ),
+    )
+    grp.add_argument(
+        "--private-prior-max-age",
+        type=int,
+        default=2,
+        help=_help(
+            "Maximum tracker prior age in frames for private continuation gating.",
+            range_hint=">=0",
+        ),
+    )
+    grp.add_argument(
+        "--private-low-stage-only",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Clamp private continuation scores below mid-thresh so they only enter "
+            "the low-score association stage."
+        ),
+    )
+    grp.add_argument(
+        "--private-selection-mode",
+        choices=[
+            "global",
+            "per_track",
+            "suppressor_aware",
+            "sparse_symmetric",
+            "energy",
+        ],
+        default="global",
+        help=(
+            "How private candidates are selected after candidate NMS. "
+            "'global' keeps the previous score/top-k behavior; 'per_track' greedily "
+            "assigns candidates to tracker priors so each track gets at most one; "
+            "'suppressor_aware' also blocks candidates whose suppressing public box "
+            "already matches the same prior; 'sparse_symmetric' reranks candidates "
+            "by local symmetric support in the pre-NMS detection field; 'energy' "
+            "uses a low-energy prior/candidate score with ambiguity rejection."
+        ),
+    )
+    grp.add_argument(
+        "--private-energy-margin",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Minimum best-vs-second pair-score margin for private_selection_mode=energy.",
+            range_hint="0-0.1",
+            edge="higher rejects ambiguous candidates but may reduce recall",
         ),
     )
     grp.add_argument(

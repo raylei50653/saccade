@@ -138,6 +138,16 @@ class EvalConfig:
     tiling: str
     nms_iou_threshold: float
     cross_tile_merge: bool
+    private_continuation_enabled: bool
+    private_candidate_nms_iou: float
+    private_min_score: float
+    private_max_candidates: int
+    private_prior_iou_threshold: float
+    private_prior_center_threshold: float
+    private_prior_max_age: int
+    private_low_stage_only: bool
+    private_selection_mode: str
+    private_energy_margin: float
 
     geometry_mid_scale: bool
     geometry_ref_height_ratio: float
@@ -285,6 +295,10 @@ class EvalConfig:
     multiplicative_cost: bool
     sinkhorn_lambda: float
     stability_cost_w: float
+    association_scoring_mode: str
+    assoc_score_cost_w: float
+    assoc_height_cost_w: float
+    assoc_energy_diagnostics: bool
 
     # Temporal consistency filter
     temporal_consistency_min_frames: int
@@ -414,6 +428,26 @@ def parse_eval_config(
     if post_lifecycle_merge and not post_lifecycle_appearance_gate:
         if post_lifecycle_appearance_weight <= 0.0:
             post_lifecycle_appearance_gate = True
+
+    private_selection_mode = (
+        str(kwargs.get("private_selection_mode", "global")).strip().lower()
+    )
+    if private_selection_mode not in {
+        "global",
+        "per_track",
+        "suppressor_aware",
+        "sparse_symmetric",
+        "energy",
+    }:
+        raise ValueError(f"unknown private_selection_mode: {private_selection_mode}")
+
+    association_scoring_mode = (
+        str(kwargs.get("association_scoring_mode", "baseline")).strip().lower()
+    )
+    if association_scoring_mode not in {"baseline", "energy"}:
+        raise ValueError(
+            f"unknown association_scoring_mode: {association_scoring_mode}"
+        )
 
     return EvalConfig(
         data_root=data_root,
@@ -574,6 +608,22 @@ def parse_eval_config(
         tiling=tiling,
         nms_iou_threshold=float(kwargs.get("nms_iou_threshold") or _nms_default),
         cross_tile_merge=bool(kwargs.get("cross_tile_merge", False)),
+        private_continuation_enabled=bool(
+            kwargs.get("private_continuation_enabled", False)
+        ),
+        private_candidate_nms_iou=float(kwargs.get("private_candidate_nms_iou", 0.70)),
+        private_min_score=float(kwargs.get("private_min_score", 0.25)),
+        private_max_candidates=max(0, int(kwargs.get("private_max_candidates", 0))),
+        private_prior_iou_threshold=float(
+            kwargs.get("private_prior_iou_threshold", 0.0)
+        ),
+        private_prior_center_threshold=float(
+            kwargs.get("private_prior_center_threshold", 0.0)
+        ),
+        private_prior_max_age=max(0, int(kwargs.get("private_prior_max_age", 2))),
+        private_low_stage_only=bool(kwargs.get("private_low_stage_only", False)),
+        private_selection_mode=private_selection_mode,
+        private_energy_margin=max(0.0, float(kwargs.get("private_energy_margin", 0.0))),
         geometry_mid_scale=bool(kwargs.get("geometry_mid_scale", False)),
         geometry_ref_height_ratio=float(
             kwargs.get("geometry_ref_height_ratio", REF_HEIGHT_RATIO)
@@ -757,6 +807,10 @@ def parse_eval_config(
         multiplicative_cost=bool(kwargs.get("multiplicative_cost", False)),
         sinkhorn_lambda=float(kwargs.get("sinkhorn_lambda", 30.0)),
         stability_cost_w=float(kwargs.get("stability_cost_w", 0.0)),
+        association_scoring_mode=association_scoring_mode,
+        assoc_score_cost_w=max(0.0, float(kwargs.get("assoc_score_cost_w", 0.0))),
+        assoc_height_cost_w=max(0.0, float(kwargs.get("assoc_height_cost_w", 0.0))),
+        assoc_energy_diagnostics=bool(kwargs.get("assoc_energy_diagnostics", False)),
         temporal_consistency_min_frames=int(
             kwargs.get("temporal_consistency_min_frames", 3)
         ),

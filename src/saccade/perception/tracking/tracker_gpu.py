@@ -754,6 +754,17 @@ class GPUByteTracker:
         if setter is not None:
             setter(float(w))
 
+    def set_association_energy_params(
+        self,
+        enabled: bool = False,
+        score_cost_w: float = 0.0,
+        height_cost_w: float = 0.0,
+    ) -> None:
+        """Optional score/height energy terms for association scoring."""
+        setter = getattr(self.tracker, "set_association_energy_params", None)
+        if setter is not None:
+            setter(bool(enabled), float(score_cost_w), float(height_cost_w))
+
     def set_sinkhorn_lambda(self, lam: float) -> None:
         """Sinkhorn exponential lambda (cost→prob scaling, default 30).
 

@@ -156,6 +156,16 @@ public:
     void set_stability_cost_w(float w);
 
     /**
+     * @brief Optional energy terms for association scoring.
+     *
+     * Baseline keeps this disabled. When enabled with multiplicative cost,
+     * score and height-consistency terms are added to the log-linear energy
+     * before cost = 1 - quality * exp(-energy).
+     */
+    void set_association_energy_params(
+        bool enabled, float score_cost_w, float height_cost_w);
+
+    /**
      * @brief Set Sinkhorn lambda (cost→prob scaling, default 30.0).
      *
      * Lower values (10-15) give softer discrimination and room for reward
@@ -351,6 +361,32 @@ void SACCADE_TRACKING_API copy_bool_counted_cuda(
 
 void SACCADE_TRACKING_API penalize_suspect_scores_cuda(
     float* scores, const bool* suspect, const int* count_ptr, float penalty_score, int max_n, cudaStream_t stream);
+
+void SACCADE_TRACKING_API append_private_continuation_cuda(
+    const float* src_boxes,
+    const float* src_scores,
+    const int* src_classes,
+    const bool* src_suspect,
+    float* dst_boxes,
+    float* dst_scores,
+    int* dst_classes,
+    bool* dst_suspect,
+    int* out_count_ptr,
+    int output_capacity,
+    const int* baseline_keep_indices,
+    const int* baseline_count_ptr,
+    bool* baseline_mask,
+    const int* candidate_keep_indices,
+    const int* candidate_count_ptr,
+    const float* private_priors_ptr,
+    int num_private_priors,
+    float private_prior_iou_threshold,
+    float private_prior_center_threshold,
+    float score_floor,
+    float score_ceiling,
+    int max_private_candidates,
+    int* private_added_count_ptr,
+    cudaStream_t stream);
 
 // Merged compact+sort+NMS with grid spatial indexing (#1,#2,#3,#5 optimizations)
 void SACCADE_TRACKING_API compact_grid_nms_cuda(

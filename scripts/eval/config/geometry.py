@@ -59,6 +59,10 @@ class GeometryConfig:
     stage2_match_thresh: float = 0.5
     birth_low_score_thresh: float = 0.0
     birth_prox_norm_thresh: float = 0.0  # NO-GO (2026-05-18): FP reduced but FN surged — proximity cannot distinguish ghost from real crowd
+    association_scoring_mode: str = "baseline"
+    assoc_score_cost_w: float = 0.0
+    assoc_height_cost_w: float = 0.0
+    assoc_energy_diagnostics: bool = False
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> "GeometryConfig":
@@ -537,6 +541,44 @@ def add_geometry_args(parser: argparse.ArgumentParser) -> None:
             "0.20 is the current best value.",
             range_hint="0.0-0.5",
         ),
+    )
+    grp.add_argument(
+        "--association-scoring-mode",
+        choices=["baseline", "energy"],
+        default="baseline",
+        dest="association_scoring_mode",
+        help=_help(
+            "Association scoring variant. baseline preserves existing cost behavior; "
+            "energy enables additional score/height energy terms.",
+        ),
+    )
+    grp.add_argument(
+        "--assoc-score-cost-w",
+        type=float,
+        default=0.0,
+        dest="assoc_score_cost_w",
+        help=_help(
+            "Detector-score penalty weight used only with association_scoring_mode=energy.",
+            range_hint="0.0-0.3",
+        ),
+    )
+    grp.add_argument(
+        "--assoc-height-cost-w",
+        type=float,
+        default=0.0,
+        dest="assoc_height_cost_w",
+        help=_help(
+            "Track/detection height-ratio penalty weight used only with "
+            "association_scoring_mode=energy.",
+            range_hint="0.0-0.2",
+        ),
+    )
+    grp.add_argument(
+        "--assoc-energy-diagnostics",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        dest="assoc_energy_diagnostics",
+        help="Write a small scoring configuration diagnostic next to eval outputs.",
     )
     grp.add_argument(
         "--stage2-match-thresh",
