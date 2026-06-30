@@ -2033,7 +2033,9 @@ __global__ void compact_results_kernel(
     float* out_boxes, float* out_scores,
     int* out_ids, int* out_classes, int* out_det_idx,
     int* out_count,
-    const float* d_det_boxes, bool use_measurement)
+    const float* d_det_boxes, bool use_measurement,
+    int coast_max_age, float coast_score_decay,
+    const float* d_occ_coeff, float coast_occ_thresh)
 {
     int tid = threadIdx.x;
     __shared__ int s_counts[256];
@@ -2046,7 +2048,17 @@ __global__ void compact_results_kernel(
     for (int step = 0; step < 8; ++step) {
         int i = start_idx + step;
         if (i < max_objs) {
-            if (d_active[i] && d_state[i] == 2 && d_age[i] == 0) {
+            // Predict-through-occlusion: a confirmed track normally emits only when
+            // matched this frame (age==0). With coast_max_age>0 a confirmed track
+            // that missed for up to coast_max_age frames also emits its Kalman-
+            // predicted (coasted) box, so a transiently-occluded person keeps a
+            // recallable box during the occlusion. coast_max_age==0 ⇒ age<=0 ⇒
+            // age==0 ⇒ bit-identical to the matched-only behaviour. coast_occ_thresh
+            // optionally restricts coasting to tracks whose predicted box is actually
+            // occluded by another track (occ_coeff high) — suppresses ghost boxes from
+            // tracks that simply left the frame. thresh==0 ⇒ all coasting tracks emit.
+            if (d_active[i] && d_state[i] == 2 && d_age[i] <= coast_max_age &&
+                (d_age[i] == 0 || d_occ_coeff[i] >= coast_occ_thresh)) {
                 local_slots[local_count++] = i;
             }
         }
@@ -2090,7 +2102,10 @@ __global__ void compact_results_kernel(
             out_boxes[dest*4+3] = cy + h * 0.5f;
         }
         
-        out_scores[dest]   = d_scores[i];
+        // Coasting tracks (age>0) decay their last score by coast_score_decay per
+        // missed frame so the downstream FP filter can suppress long, drifted
+        // coasts. age==0 ⇒ powf(.,0)==1 ⇒ unchanged score (bit-identical).
+        out_scores[dest]   = d_scores[i] * powf(coast_score_decay, (float)d_age[i]);
         out_ids[dest]      = d_track_ids[i];
         out_classes[dest]  = d_classes[i];
         out_det_idx[dest]  = d_trk_to_det[i];
@@ -2479,6 +2494,13 @@ public:
         occ_vel_occ_thresh_ = env_float_value("SACCADE_OCC_VEL_OCC_THRESH", 0.05f);
         // NSA gating/output decouple: emit measurement for matched tracks (default off).
         output_use_measurement_ = env_flag_enabled("SACCADE_OUTPUT_MEASUREMENT", false);
+        // Predict-through-occlusion: confirmed tracks coast-emit their predicted box
+        // for up to N missed frames (default 0 = matched-only, bit-identical).
+        coast_max_age_ = static_cast<int>(env_float_value("SACCADE_COAST_MAX_AGE", 0.0f));
+        coast_score_decay_ = env_float_value("SACCADE_COAST_SCORE_DECAY", 1.0f);
+        // Occlusion gate for coasting: only coast-emit when the predicted box is
+        // occluded by another track (occ_coeff >= thresh). 0 = no gate (all coast).
+        coast_occ_thresh_ = env_float_value("SACCADE_COAST_OCC_THRESH", 0.0f);
     }
 
     ~Impl() {
@@ -2944,7 +2966,9 @@ public:
             d_trk_to_det_, max_objs_,
             d_res_boxes_, d_res_scores_, d_res_ids_, d_res_classes_, d_res_det_idx_,
             d_res_count_,
-            d_boxes, output_use_measurement_);
+            d_boxes, output_use_measurement_,
+            coast_max_age_, coast_score_decay_,
+            d_occ_coeff_, coast_occ_thresh_);
         h_dirty_ = true;
         h_slot_map_dirty_ = true;
     }
@@ -3488,6 +3512,11 @@ private:
     // (DetA −1.44). The filter state itself is untouched (still used for prediction
     // and the next frame's gate). false = bit-identical (emit filtered state).
     bool output_use_measurement_ = false;
+    // Predict-through-occlusion coast window (frames) and per-frame score decay.
+    // coast_max_age_==0 ⇒ matched-only output (bit-identical to legacy).
+    int coast_max_age_ = 0;
+    float coast_score_decay_ = 1.0f;
+    float coast_occ_thresh_ = 0.0f;
     float r_scale_ = 1.0f;
     float gate_adapt_r_mult_ = 1.0f;
     // Occlusion-gated velocity damping during miss-gap coasting (ablation, default off).
