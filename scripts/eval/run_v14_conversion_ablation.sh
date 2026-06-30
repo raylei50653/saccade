@@ -24,7 +24,7 @@ FIXED_N16="$VARIANT_DIR/pixelshuffle_crossscan_fixed_n16.ckpt"
 run_eval() {
     local tag="$1"
     local checkpoint="$2"
-    local recall_output="report_data/mamba_v14_conversion_${tag}_recall_02.json"
+    local recall_output="results/mamba_v14_conversion_${tag}_recall_02.json"
     local tracking_output="results/mamba_v14_conversion_${tag}"
 
     if [[ -s "$recall_output" ]]; then

@@ -96,7 +96,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--output",
-        default="report_data/mamba_assigner_diagnostics.json",
+        default="results/mamba_assigner_diagnostics.json",
     )
     args = parser.parse_args()
 

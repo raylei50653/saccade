@@ -104,8 +104,12 @@ scripts/tools/out/
 scratch/pipeline_math_validation/data/
 scratch/pipeline_math_validation/output/
 
-# Generated report data (recall curves, benchmark JSONs)
-report_data/*.json
+# Curated report docs (README, algorithms.md, figures/, etc.) live under
+# report_data/ and stay tracked. Machine-generated ablation outputs go to
+# results/ (already ignored above); any stray subdir under report_data/ is
+# ignored too so experiment dumps do not leak in.
+report_data/*/
+!report_data/figures/
 
 # graphify generated (reproducible via graphify export)
 graphify-out/cache/

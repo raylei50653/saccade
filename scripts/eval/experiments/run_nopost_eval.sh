@@ -37,7 +37,7 @@ for i in "${!LABELS[@]}"; do
       --mamba-ckpt "$ckpt" --teacher-ckpt "$TEACHER" \
       --sequences MOT17-02-SDP \
       --score-thresholds 0.001,0.10,0.25 \
-      --output "report_data/recall_nopost_${lbl}.json" 2>&1 | tee "logs/nopost_recall_${lbl}.log"
+      --output "results/recall_nopost_${lbl}.json" 2>&1 | tee "logs/nopost_recall_${lbl}.log"
 done
 
 echo ""
@@ -60,7 +60,7 @@ bins = ["all","h_ge128","h_64to128","h_32to64","h_lt32","min_ge16","min_8to16","
 hdr = f"{'label':10s}" + "".join(f"{b:>10s}" for b in bins)
 print(hdr)
 for lbl in labels:
-    p = pathlib.Path(f"report_data/recall_nopost_{lbl}.json")
+    p = pathlib.Path(f"results/recall_nopost_{lbl}.json")
     if not p.exists():
         print(f"{lbl:10s} (missing)"); continue
     d = json.loads(p.read_text())

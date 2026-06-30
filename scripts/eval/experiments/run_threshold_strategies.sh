@@ -10,7 +10,7 @@ cd "$(dirname "$0")/../.."
 export LD_LIBRARY_PATH="$(.venv/bin/python -c 'import torch,os;print(os.path.join(os.path.dirname(torch.__file__),"lib"))'):${LD_LIBRARY_PATH:-}"
 
 SEQS="MOT17-02-SDP,MOT17-04-SDP,MOT17-05-SDP,MOT17-09-SDP,MOT17-10-SDP,MOT17-11-SDP,MOT17-13-SDP"
-LOGDIR="report_data/threshold_strategies"
+LOGDIR="results/threshold_strategies"
 mkdir -p "$LOGDIR"
 SUMMARY="$LOGDIR/summary.tsv"
 printf "strategy\toverride\tIDF1\tMOTA\tHOTA\tDetA\tAssA\tIDs\tRcll\tPrcn\n" > "$SUMMARY"

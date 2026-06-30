@@ -39,7 +39,7 @@ CACHE="runs/mamba_teacher_cache_${RUN_PREFIX}"
 DISTILL="runs/mamba_distill_${RUN_PREFIX}_n1"
 GT_N1="runs/mamba_gt_${RUN_PREFIX}_n1"
 GT_N16="runs/mamba_gt_${RUN_PREFIX}_n16"
-REPORT="report_data/mamba_${RUN_PREFIX}_n16_recall_02.json"
+REPORT="results/mamba_${RUN_PREFIX}_n16_recall_02.json"
 RESULTS="results/mamba_${RUN_PREFIX}_n16"
 
 run() {
