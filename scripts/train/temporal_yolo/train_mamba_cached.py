@@ -257,6 +257,7 @@ def main():
             "d_state": args.d_state,
             "num_blocks": args.num_blocks,
             "spatial_reduction": args.spatial_reduction,
+            "reduction_variant": "conv",
             "num_classes": nc,
         }
         mamba = MambaDetectionHead(
@@ -267,6 +268,7 @@ def main():
             nc,
             1,
             ma["spatial_reduction"],
+            reduction_variant=ma.get("reduction_variant", "conv"),
         ).to(dev)
         print(f"[From scratch]  LR={args.lr}")
     else:
@@ -279,6 +281,7 @@ def main():
             "d_state": args.d_state,
             "num_blocks": args.num_blocks,
             "spatial_reduction": args.spatial_reduction,
+            "reduction_variant": "conv",
             "num_classes": nc,
         }.items():
             ma.setdefault(k, v)
@@ -290,6 +293,7 @@ def main():
             nc,
             1,
             ma["spatial_reduction"],
+            reduction_variant=ma.get("reduction_variant", "conv"),
         ).to(dev)
         mamba.load_state_dict(_strip(ckpt["student"]), strict=False)
         print(f"[Fine-tune {args.mamba_ckpt}]  LR={args.lr}")

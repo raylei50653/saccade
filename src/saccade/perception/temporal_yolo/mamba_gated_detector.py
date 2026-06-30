@@ -557,6 +557,7 @@ class MambaGatedDetector(nn.Module):
             per_channel_a=mamba_args.get("per_channel_a", False),
             legacy_n1_scan=mamba_args.get("legacy_n1_scan", False),
             use_cuda_graph=use_cuda_graph,
+            reduction_variant=mamba_args.get("reduction_variant", "conv"),
             use_detail_fusion=dense_detail_fusion,
             detail_channels=mamba_args.get("detail_channels", 32),
             detail_patch_size=mamba_args.get("detail_patch_size", 3),

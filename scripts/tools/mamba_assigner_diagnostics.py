@@ -19,6 +19,7 @@ sys.path.insert(0, str(project_root / "build"))
 
 from saccade.perception.temporal_yolo.dataset import build_mot17_dataloader  # noqa: E402
 from saccade.perception.temporal_yolo.mamba_head import MambaDetectionHead  # noqa: E402
+from saccade.perception.temporal_yolo.ngla_assigner import install_assigner  # noqa: E402
 from saccade.perception.temporal_yolo.yolo_gated_detector import (  # noqa: E402
     GatedDetConfig,
     _GATE_LAYER_IDX,
@@ -88,6 +89,12 @@ def main() -> None:
     parser.add_argument("--max-batches", type=int, default=0)
     parser.add_argument("--seqs", default="")
     parser.add_argument(
+        "--assigner",
+        choices=("tal", "ngla"),
+        default="tal",
+        help="Label assignment variant used for the diagnostic probe.",
+    )
+    parser.add_argument(
         "--output",
         default="report_data/mamba_assigner_diagnostics.json",
     )
@@ -131,6 +138,7 @@ def main() -> None:
         use_cross_scan=model_args.get("use_cross_scan", False),
         use_hybrid_head=model_args.get("use_hybrid_head", False),
         per_channel_a=model_args.get("per_channel_a", False),
+        reduction_variant=model_args.get("reduction_variant", "conv"),
     ).to(device)
     head.load_state_dict(_strip_compiled_keys(checkpoint["student"]), strict=False)
     head.eval()
@@ -145,6 +153,7 @@ def main() -> None:
     base_args.setdefault("dfl", 1.5)
     teacher.yolo_model.args = SimpleNamespace(**base_args)
     criterion = v8DetectionLoss(teacher.yolo_model)
+    install_assigner(criterion, args.assigner)
 
     captured: dict[str, torch.Tensor] = {}
     hooks = []
@@ -264,6 +273,10 @@ def main() -> None:
                     _increment(stats, f"original_{original_bin}_gt")
                     _increment(stats, "positive_pre_total", pre)
                     _increment(stats, "positive_post_total", post)
+                    _increment(stats, f"resized_{resized_bin}_positive_pre_total", pre)
+                    _increment(
+                        stats, f"resized_{resized_bin}_positive_post_total", post
+                    )
                     if pre == 0:
                         _increment(stats, "gt_zero_pre")
                         _increment(stats, f"resized_{resized_bin}_zero_pre")
@@ -272,11 +285,17 @@ def main() -> None:
                         _increment(stats, f"resized_{resized_bin}_zero_post")
                     if pre > 0 and post == 0:
                         _increment(stats, "gt_lost_all_to_conflict")
+                        _increment(stats, f"resized_{resized_bin}_lost_all_to_conflict")
                     for level, start, end in zip(
                         level_names, level_offsets[:-1], level_offsets[1:]
                     ):
                         count = int(mask_post[batch_pos, gt_index, start:end].sum())
                         _increment(stats, f"{level}_positive_total", count)
+                        _increment(
+                            stats,
+                            f"resized_{resized_bin}_{level}_positive_total",
+                            count,
+                        )
 
             _increment(stats, "frames", frames.shape[0])
             _increment(stats, "anchors", conflict_anchors.numel())
@@ -290,6 +309,7 @@ def main() -> None:
     report = dict(sorted(stats.items()))
     report.update(
         {
+            "assigner": args.assigner,
             "zero_pre_rate": stats["gt_zero_pre"] / gt_total,
             "zero_post_rate": stats["gt_zero_post"] / gt_total,
             "lost_all_to_conflict_rate": stats["gt_lost_all_to_conflict"] / gt_total,
@@ -298,6 +318,46 @@ def main() -> None:
             "mean_positive_post": stats["positive_post_total"] / gt_total,
         }
     )
+    for size_bin in ("lt4", "4to8", "8to16", "ge16"):
+        bin_gt = stats[f"resized_{size_bin}_gt"]
+        if bin_gt <= 0:
+            continue
+        report.update(
+            {
+                f"resized_{size_bin}_zero_pre_rate": stats[
+                    f"resized_{size_bin}_zero_pre"
+                ]
+                / bin_gt,
+                f"resized_{size_bin}_zero_post_rate": stats[
+                    f"resized_{size_bin}_zero_post"
+                ]
+                / bin_gt,
+                f"resized_{size_bin}_lost_all_to_conflict_rate": stats[
+                    f"resized_{size_bin}_lost_all_to_conflict"
+                ]
+                / bin_gt,
+                f"resized_{size_bin}_mean_positive_pre": stats[
+                    f"resized_{size_bin}_positive_pre_total"
+                ]
+                / bin_gt,
+                f"resized_{size_bin}_mean_positive_post": stats[
+                    f"resized_{size_bin}_positive_post_total"
+                ]
+                / bin_gt,
+                f"resized_{size_bin}_p3_positive_share": stats[
+                    f"resized_{size_bin}_p3_positive_total"
+                ]
+                / max(stats[f"resized_{size_bin}_positive_post_total"], 1.0),
+                f"resized_{size_bin}_p4_positive_share": stats[
+                    f"resized_{size_bin}_p4_positive_total"
+                ]
+                / max(stats[f"resized_{size_bin}_positive_post_total"], 1.0),
+                f"resized_{size_bin}_p5_positive_share": stats[
+                    f"resized_{size_bin}_p5_positive_total"
+                ]
+                / max(stats[f"resized_{size_bin}_positive_post_total"], 1.0),
+            }
+        )
     output_path = project_root / args.output
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")

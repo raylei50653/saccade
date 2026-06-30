@@ -484,6 +484,11 @@ def main() -> None:
     parser.add_argument("--clip-len", type=int, default=None)
     parser.add_argument("--img-size", type=int, default=640)
     parser.add_argument("--spatial-reduction", type=int, default=4)
+    parser.add_argument(
+        "--reduction-variant",
+        choices=("conv", "blur-conv", "space-to-depth", "wavelet"),
+        default="conv",
+    )
     parser.add_argument("--d-model", type=int, default=128)
     parser.add_argument("--d-state", type=int, default=16)
     parser.add_argument("--num-blocks", type=int, default=1)
@@ -534,6 +539,7 @@ def main() -> None:
         num_classes=nc,
         reg_max=1,
         spatial_reduction=args.spatial_reduction,
+        reduction_variant=args.reduction_variant,
     ).to(device)
     mamba.train()
 

@@ -31,8 +31,15 @@ detection_quality_scaling: false
 mamba_ckpt: runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt
 mamba_teacher_ckpt: runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt
 mamba_yolo_weights: models/yolo/yolo26m.pt
-# PyTorch backbone (no m TRT engine; C++/TRT path is yolo26s-only and rejects m).
-fpn_backbone_engine: ""
+# m FPN-backbone TRT engine (FP16, LINEAR outputs). Built 2026-06-30 from the
+# m teacher ckpt via export_yolo_backbone_ckpt.py + build_yolo.py --linear-outputs
+# (HWC8 rejected for FP32 outputs on this TRT). The Python whole-graph
+# TRTYoloBackbone reads channels from the engine (256/512/512) and validates
+# against the head — only the C++ batched path is hardcoded to s, which this
+# path does not use. Recovers FPS 34→~106 vs the PyTorch backbone AND lifts
+# accuracy ~1.5 IDF1 (PyTorch whole-graph used the gated/patched backbone; the
+# exported engine is the clean unpatched fine-tuned backbone).
+fpn_backbone_engine: models/yolo/yolo26m_backbone_640_best.engine
 
 use_whole_graph: true
 use_cuda_graph: true
@@ -58,7 +65,9 @@ relink_bridge_spatial_gate: 0.0
 # fragments m's recovered small objects — Exp2 gave IDs +148) ---
 match_thresh: 0.50
 new_track_thresh: 0.28
-kalman_r_scale: 2.8
+# m-tuned (2026-06-30): 2.8 (s-inherited) → 3.5. m's box-noise distribution
+# differs from s; retuning closes the IDF1 gap (+0.5) — m was never tracker-tuned.
+kalman_r_scale: 3.5
 confirm_streak: 3
 confirm_score_thresh: 0.50
 fuse_score_weight: 0.0
@@ -69,3 +78,19 @@ interpolate_tracklets: true
 interpolate_max_gap: 35
 interpolate_min_track_len: 5
 interpolate_min_h: 0
+
+# --- Recipe parity with mamba_whole_graph (s) (added 2026-06-30) ---
+# The m preset previously predated these; without them m sat at IDF1 76.5.
+# Same values as the s headline (see that preset for rationale): OAO duration-ramp,
+# multiplicative cost form, and track-gated private continuation.
+oao_tau: 0.50
+oao_ramp_frames: 25
+multiplicative_cost: true
+sinkhorn_lambda: 10
+stability_cost_w: 0.20
+private_continuation_enabled: true
+private_candidate_nms_iou: 0.70
+private_prior_iou_threshold: 0.30
+private_min_score: 0.10
+private_max_candidates: 50
+private_selection_mode: global

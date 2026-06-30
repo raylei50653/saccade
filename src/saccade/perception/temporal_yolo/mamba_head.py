@@ -1202,6 +1202,111 @@ def resolve_mamba_in_channels(checkpoint: dict) -> tuple[int, ...]:
     return DEFAULT_MAMBA_IN_CHANNELS
 
 
+class BlurConvReduction(nn.Module):
+    """Anti-aliased spatial reduction: fixed blur followed by learned stride conv."""
+
+    def __init__(self, channels: int, reduction: int):
+        super().__init__()
+        kernel_1d = torch.tensor([1.0, 2.0, 1.0], dtype=torch.float32)
+        kernel_2d = (kernel_1d[:, None] * kernel_1d[None, :]) / 16.0
+        self.register_buffer(
+            "kernel",
+            kernel_2d.reshape(1, 1, 3, 3).repeat(channels, 1, 1, 1),
+            persistent=False,
+        )
+        self.conv = nn.Conv2d(channels, channels, reduction, stride=reduction)
+
+    def forward(self, x: Tensor) -> Tensor:
+        x = F.pad(x, (1, 1, 1, 1), mode="replicate")
+        x = F.conv2d(x, self.kernel.to(dtype=x.dtype), groups=x.shape[1])
+        return self.conv(x)
+
+
+class SpaceToDepthReduction(nn.Module):
+    """Lossless phase packing followed by a 1x1 projection to d_model."""
+
+    def __init__(self, channels: int, reduction: int):
+        super().__init__()
+        self.reduction = reduction
+        self.proj = nn.Conv2d(channels * reduction * reduction, channels, 1)
+
+    def forward(self, x: Tensor) -> Tensor:
+        return self.proj(F.pixel_unshuffle(x, self.reduction))
+
+
+def _haar_wavelet_pack(x: Tensor, reduction: int) -> Tensor:
+    """Pack non-overlapping patches into orthonormal Haar sub-bands."""
+    if reduction < 1 or reduction & (reduction - 1):
+        raise ValueError(f"wavelet reduction must be a power of two, got {reduction}")
+    levels = reduction.bit_length() - 1
+    for _ in range(levels):
+        x00 = x[..., 0::2, 0::2]
+        x01 = x[..., 0::2, 1::2]
+        x10 = x[..., 1::2, 0::2]
+        x11 = x[..., 1::2, 1::2]
+        ll = (x00 + x01 + x10 + x11) * 0.5
+        lh = (x00 - x01 + x10 - x11) * 0.5
+        hl = (x00 + x01 - x10 - x11) * 0.5
+        hh = (x00 - x01 - x10 + x11) * 0.5
+        x = torch.stack((ll, lh, hl, hh), dim=2).flatten(1, 2)
+    return x
+
+
+class WaveletReduction(nn.Module):
+    """Haar frequency packing followed by a 1x1 projection to d_model."""
+
+    def __init__(self, channels: int, reduction: int):
+        super().__init__()
+        self.reduction = reduction
+        self.proj = nn.Conv2d(channels * reduction * reduction, channels, 1)
+
+    def forward(self, x: Tensor) -> Tensor:
+        return self.proj(_haar_wavelet_pack(x, self.reduction))
+
+
+def _stride_conv_to_wavelet_projection(weight: Tensor, reduction: int) -> Tensor:
+    """Convert a stride-r conv kernel to an equivalent Haar-packed 1x1 kernel."""
+    out_ch, in_ch, kh, kw = weight.shape
+    if kh != reduction or kw != reduction:
+        raise ValueError(
+            f"legacy kernel {kh}x{kw} does not match wavelet reduction {reduction}"
+        )
+    basis = weight.new_zeros(reduction * reduction, 1, reduction, reduction)
+    for index in range(reduction * reduction):
+        y = index // reduction
+        x = index % reduction
+        basis[index, 0, y, x] = 1.0
+    transform = _haar_wavelet_pack(basis, reduction).flatten(1).transpose(0, 1)
+    migrated = weight.new_empty(out_ch, in_ch * reduction * reduction, 1, 1)
+    for in_index in range(in_ch):
+        raw = weight[:, in_index].flatten(1)
+        packed = raw @ transform.transpose(0, 1)
+        start = in_index * reduction * reduction
+        end = start + reduction * reduction
+        migrated[:, start:end, 0, 0] = packed
+    return migrated.contiguous()
+
+
+def _make_reduction(
+    variant: str,
+    channels: int,
+    reduction: int,
+) -> nn.Module:
+    if variant == "conv":
+        return nn.Conv2d(channels, channels, reduction, stride=reduction)
+    if variant == "blur-conv":
+        return BlurConvReduction(channels, reduction)
+    if variant == "space-to-depth":
+        return SpaceToDepthReduction(channels, reduction)
+    if variant == "wavelet":
+        return WaveletReduction(channels, reduction)
+    raise ValueError(
+        "reduction_variant must be one of "
+        "{'conv', 'blur-conv', 'space-to-depth', 'wavelet'}, got "
+        f"{variant!r}"
+    )
+
+
 class MambaDetectionHead(nn.Module):
     """Multi-scale Mamba head for YOLO-style detection.
 
@@ -1234,6 +1339,7 @@ class MambaDetectionHead(nn.Module):
         scan_stop_grad: bool = False,  # detach scan output (v14 frozen-SSM training regime)
         legacy_n1_scan: bool = False,  # exact pre-v14 N=1 launch/indexing bug
         use_cuda_graph: bool = False,  # enable CUDA Graph capture and replay
+        reduction_variant: str = "conv",
         use_detail_fusion: bool = False,
         detail_channels: int = 32,
         detail_patch_size: int = 3,
@@ -1265,6 +1371,7 @@ class MambaDetectionHead(nn.Module):
         self.per_channel_a = per_channel_a
         self.scan_stop_grad = scan_stop_grad
         self.legacy_n1_scan = legacy_n1_scan
+        self.reduction_variant = reduction_variant
         self.use_detail_fusion = use_detail_fusion
         self.use_strip_detail = use_strip_detail
         self.strip_detail_type = strip_detail_type
@@ -1275,7 +1382,7 @@ class MambaDetectionHead(nn.Module):
         self.input_proj = nn.ModuleList([nn.Conv2d(c, d_model, 1) for c in in_channels])
         self.downsample = nn.ModuleList(
             [
-                nn.Conv2d(d_model, d_model, spatial_reduction, stride=spatial_reduction)
+                _make_reduction(reduction_variant, d_model, spatial_reduction)
                 for _ in range(self.nl)
             ]
         )
@@ -1462,7 +1569,91 @@ class MambaDetectionHead(nn.Module):
             return False
         return self.detail_fusion.initialize_from_yolo_stem(stem)
 
+    def _migrate_reduction_state_dict(self, state_dict: dict) -> dict:
+        """Warm-start non-conv reductions from legacy stride-conv checkpoints."""
+        if self.reduction_variant == "conv":
+            return state_dict
+        state_dict = dict(state_dict)
+        own_state = self.state_dict()
+        for index in range(self.nl):
+            legacy_weight_key = f"downsample.{index}.weight"
+            legacy_bias_key = f"downsample.{index}.bias"
+            weight = state_dict.get(legacy_weight_key)
+            bias = state_dict.get(legacy_bias_key)
+            if weight is None:
+                continue
+
+            if self.reduction_variant == "blur-conv":
+                target_weight_key = f"downsample.{index}.conv.weight"
+                target_bias_key = f"downsample.{index}.conv.bias"
+                if (
+                    target_weight_key in own_state
+                    and target_weight_key not in state_dict
+                    and own_state[target_weight_key].shape == weight.shape
+                ):
+                    state_dict[target_weight_key] = weight
+                if (
+                    bias is not None
+                    and target_bias_key in own_state
+                    and target_bias_key not in state_dict
+                    and own_state[target_bias_key].shape == bias.shape
+                ):
+                    state_dict[target_bias_key] = bias
+            elif self.reduction_variant == "space-to-depth":
+                target_weight_key = f"downsample.{index}.proj.weight"
+                target_bias_key = f"downsample.{index}.proj.bias"
+                if (
+                    target_weight_key in own_state
+                    and target_weight_key not in state_dict
+                ):
+                    out_ch, in_ch, kh, kw = weight.shape
+                    if kh == kw == self.spatial_reduction:
+                        migrated = (
+                            weight.permute(0, 1, 2, 3)
+                            .reshape(out_ch, in_ch * kh * kw, 1, 1)
+                            .contiguous()
+                        )
+                        if own_state[target_weight_key].shape == migrated.shape:
+                            state_dict[target_weight_key] = migrated
+                if (
+                    bias is not None
+                    and target_bias_key in own_state
+                    and target_bias_key not in state_dict
+                    and own_state[target_bias_key].shape == bias.shape
+                ):
+                    state_dict[target_bias_key] = bias
+            elif self.reduction_variant == "wavelet":
+                target_weight_key = f"downsample.{index}.proj.weight"
+                target_bias_key = f"downsample.{index}.proj.bias"
+                if (
+                    target_weight_key in own_state
+                    and target_weight_key not in state_dict
+                ):
+                    out_ch, _in_ch, kh, kw = weight.shape
+                    if kh == kw == self.spatial_reduction:
+                        migrated = _stride_conv_to_wavelet_projection(
+                            weight, self.spatial_reduction
+                        )
+                        if (
+                            migrated.shape[0] == out_ch
+                            and own_state[target_weight_key].shape == migrated.shape
+                        ):
+                            state_dict[target_weight_key] = migrated
+                if (
+                    bias is not None
+                    and target_bias_key in own_state
+                    and target_bias_key not in state_dict
+                    and own_state[target_bias_key].shape == bias.shape
+                ):
+                    state_dict[target_bias_key] = bias
+
+            state_dict.pop(legacy_weight_key, None)
+            state_dict.pop(legacy_bias_key, None)
+        return state_dict
+
     def load_state_dict(self, state_dict, strict=True):
+        state_dict = self._migrate_reduction_state_dict(state_dict)
+
         # Check if the keys of state_dict contain 'upsample' parameters.
         # This prevents breaking existing checkpoints that were trained without PixelShuffle.
         has_upsample = any("upsample" in k for k in state_dict.keys())
@@ -1700,7 +1891,13 @@ class MambaDetectionHead(nn.Module):
             B = B_merged // T_frames
 
             x_proj = self.input_proj[i](x)
-            x_small = self.downsample[i](x_proj)
+            if getattr(self, "_bypass_reduction", False):
+                # Run Mamba at full FPN resolution: skip the ÷spatial_reduction
+                # downsample (and the matching upsample below). Benchmark/ablation
+                # hook for "no down/up" — default off, bit-exact when unset.
+                x_small = x_proj
+            else:
+                x_small = self.downsample[i](x_proj)
             _, _, Hs, Ws = x_small.shape
 
             if self.use_hybrid_head and i == 0:
@@ -1716,7 +1913,9 @@ class MambaDetectionHead(nn.Module):
                     x_seq = block(x_seq) + x_seq
                 x_up = x_seq.transpose(1, 2).reshape(B_merged, -1, Hs, Ws)
 
-            if self.use_pixel_shuffle and getattr(self, "upsample_loaded", False):
+            if getattr(self, "_bypass_reduction", False):
+                pass  # x_up already at full (H, W); no upsample needed
+            elif self.use_pixel_shuffle and getattr(self, "upsample_loaded", False):
                 x_up = self.upsample[i](x_up)
             else:
                 x_up = F.interpolate(

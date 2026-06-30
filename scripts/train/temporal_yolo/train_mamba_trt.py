@@ -164,6 +164,7 @@ def main():
             "d_state": args.d_state,
             "num_blocks": args.num_blocks,
             "spatial_reduction": args.spatial_reduction,
+            "reduction_variant": "conv",
             "num_classes": nc,
         }
         mamba = MambaDetectionHead(
@@ -174,6 +175,7 @@ def main():
             nc,
             1,
             ma["spatial_reduction"],
+            reduction_variant=ma.get("reduction_variant", "conv"),
         ).to(dev)
         phase1 = False
         print(f"[Phase 2 scratch] GT supervision  LR={args.lr}  B={args.batch_size}")
@@ -185,6 +187,7 @@ def main():
             "d_state": args.d_state,
             "num_blocks": args.num_blocks,
             "spatial_reduction": args.spatial_reduction,
+            "reduction_variant": "conv",
             "num_classes": nc,
         }.items():
             ma.setdefault(k, v)
@@ -196,6 +199,7 @@ def main():
             nc,
             1,
             ma["spatial_reduction"],
+            reduction_variant=ma.get("reduction_variant", "conv"),
         ).to(dev)
         mamba.load_state_dict(_strip(ckpt["student"]), strict=False)
         phase1 = False
