@@ -86,6 +86,23 @@ def _fuse_small_p3_scores(
     return torch.cat(routed_scores, dim=1)
 
 
+def _dfl_decode(reg_all: Tensor) -> Tensor:
+    """DFL decode: (B, reg_max*4, N) distribution logits -> (B, 4, N) distances.
+
+    reg_max is inferred from the channel count (reg_max*4). Channel layout is
+    4 sides x reg_max bins (side-outer, bin-inner), matching ultralytics
+    v8DetectionLoss.bbox_decode. No-op when reg_max == 1 (direct regression).
+    """
+    b, c, n = reg_all.shape
+    reg_max = c // 4
+    if reg_max <= 1:
+        return reg_all
+    proj = torch.arange(reg_max, dtype=reg_all.dtype, device=reg_all.device).view(
+        1, 1, reg_max, 1
+    )
+    return (reg_all.view(b, 4, reg_max, n).softmax(2) * proj).sum(2)
+
+
 def _postprocess_mamba(
     cls_preds: list[Tensor],
     reg_preds: list[Tensor],
@@ -104,7 +121,7 @@ def _postprocess_mamba(
     anchors = anchors.to(device=cls_all.device, dtype=cls_all.dtype)
     anchor_strides = anchor_strides.to(device=cls_all.device, dtype=cls_all.dtype)
 
-    bboxes = dist2bbox(reg_all, anchors.T.unsqueeze(0), xywh=True, dim=1)  # type: ignore[no-untyped-call]
+    bboxes = dist2bbox(_dfl_decode(reg_all), anchors.T.unsqueeze(0), xywh=True, dim=1)  # type: ignore[no-untyped-call]
     strides_t = anchor_strides.squeeze(-1).unsqueeze(0)
     bboxes = bboxes * strides_t
 
@@ -243,7 +260,7 @@ def _postprocess_mamba_fixed_eager(
             strides, [tuple(c.shape) for c in cls_preds]
         )
 
-    bboxes = dist2bbox(reg_all, anchors.T.unsqueeze(0), xywh=True, dim=1)
+    bboxes = dist2bbox(_dfl_decode(reg_all), anchors.T.unsqueeze(0), xywh=True, dim=1)
     strides_t = anchor_strides.squeeze(-1).unsqueeze(0)
     bboxes = bboxes * strides_t
 
@@ -548,6 +565,7 @@ class MambaGatedDetector(nn.Module):
             num_blocks=mamba_args["num_blocks"],
             num_classes=mamba_args["num_classes"],
             reg_max=mamba_args.get("reg_max", 1),
+            head_depth=mamba_args.get("head_depth", 1),
             spatial_reduction=mamba_args["spatial_reduction"],
             emb_dim=emb_dim,
             use_pixel_shuffle=mamba_args.get("use_pixel_shuffle", False),

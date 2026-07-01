@@ -14,12 +14,51 @@ gt.txt 格式（每行）：
 """
 
 from __future__ import annotations
+import bisect
 import configparser
 import csv
 from pathlib import Path
 from typing import Iterator  # noqa: F401  (used in type hints of _iter_frames in evaluator)
 import torch
 from torch.utils.data import Dataset, DataLoader
+
+
+def _interpolate_gt_for_frame(
+    frame_id: int,
+    keyframes: list[int],
+    gt: dict[int, tuple[torch.Tensor, torch.Tensor]],
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Linear per-ID GT box interpolation for a frame that has no annotation.
+
+    For keyframe-annotated benchmarks (e.g. PersonPath22, labelled every ~5th
+    frame) run at the real frame cadence: intermediate frames carry no gt, so a
+    box is synthesised by linearly interpolating each track between the two
+    *adjacent* keyframes that bracket ``frame_id``. Only tracks present in BOTH
+    bracket endpoints are emitted — births/deaths inside the gap are never
+    extrapolated, and frames outside the annotated range stay empty. Boxes are in
+    the same (original-pixel, xyxy) space as ``gt`` so the caller's resize/letterbox
+    transform applies unchanged. These interpolated boxes are meant for temporal
+    continuity / gt-injection only; the supervised loss should mask them out (see
+    ``is_keyframe`` in the sample) because linear motion is just an approximation.
+    """
+    empty = (torch.zeros(0, 4), torch.zeros(0, dtype=torch.int64))
+    i = bisect.bisect_left(keyframes, frame_id)
+    if i == 0 or i >= len(keyframes):
+        return empty  # outside annotated keyframe span → no extrapolation
+    ka, kb = keyframes[i - 1], keyframes[i]
+    if ka == frame_id or kb == frame_id or kb == ka:
+        return empty
+    boxes_a, ids_a = gt[ka]
+    boxes_b, ids_b = gt[kb]
+    a_map = {int(t): boxes_a[j] for j, t in enumerate(ids_a)}
+    b_map = {int(t): boxes_b[j] for j, t in enumerate(ids_b)}
+    common = [t for t in a_map if t in b_map]
+    if not common:
+        return empty
+    w = (frame_id - ka) / (kb - ka)
+    boxes = torch.stack([a_map[t] + (b_map[t] - a_map[t]) * w for t in common])
+    ids = torch.tensor(common, dtype=torch.int64)
+    return boxes, ids
 
 
 class MOT17TemporalClip(
@@ -53,6 +92,8 @@ class MOT17TemporalClip(
         use_letterbox: bool = False,
         detail_size: tuple[int, int] | None = None,
         augment: bool = False,
+        interpolate_gt: bool = False,
+        return_jpeg_bytes: bool = False,
     ):
         self.data_root = Path(data_root)
         self.split = split
@@ -62,6 +103,21 @@ class MOT17TemporalClip(
         self.use_letterbox = use_letterbox
         self.detail_size = detail_size
         self.load_images = load_images
+        # GPU-decode training path: workers return raw JPEG bytes (no decode, no
+        # CUDA touch → num_workers>0 safe), the train loop batch-decodes on the GPU
+        # with nvJPEG. GT is still scaled to img_size here using seqinfo dims (decode
+        # location independent). Mutually exclusive with in-worker decode → forces
+        # load_images off. Default off → bit-exact with the pixel-returning loader.
+        self.return_jpeg_bytes = return_jpeg_bytes
+        if return_jpeg_bytes:
+            load_images = False
+            self.load_images = False
+        # Keyframe-cadence training: when img1 holds every frame but gt is only on
+        # keyframes, linearly interpolate gt on the in-between frames (for temporal
+        # continuity / gt-injection) and tag each frame with is_keyframe so the loss
+        # can be masked to real annotations only. Default off → bit-exact (every
+        # frame that has gt is a keyframe; frames without gt stay empty).
+        self.interpolate_gt = interpolate_gt
         # Strategy B: clip-consistent geometric+photometric augmentation. One
         # random transform is drawn per clip and applied identically to every
         # frame, so temporal continuity (and ID correspondence) is preserved.
@@ -86,6 +142,7 @@ class MOT17TemporalClip(
 
         self._clips: list[tuple[str, int]] = []
         self._gt: dict[str, dict[int, tuple[torch.Tensor, torch.Tensor]]] = {}
+        self._keyframes: dict[str, list[int]] = {}
         self._img_dirs: dict[str, Path] = {}
         self._frame_lists: dict[str, list[Path]] = {}
         self._scale_hw: dict[
@@ -161,6 +218,7 @@ class MOT17TemporalClip(
                     torch.tensor(ids, dtype=torch.int64),
                 )
             self._gt[seq] = gt_tensors
+            self._keyframes[seq] = sorted(gt_tensors.keys())
 
             n_frames = len(frames)
             for start in range(0, n_frames - clip_len + 1, stride):
@@ -249,7 +307,9 @@ class MOT17TemporalClip(
         frames_list: list[torch.Tensor] = []
         gt_boxes_list: list[torch.Tensor] = []
         gt_ids_list: list[torch.Tensor] = []
+        is_keyframe_list: list[int] = []
         fids: list[int] = []
+        jpeg_bytes_list: list[bytes] = []
         detail_frames_list: list[torch.Tensor] = []
         detail_valid_hw_list: list[torch.Tensor] = []
 
@@ -284,6 +344,13 @@ class MOT17TemporalClip(
                             scale_w,
                         )
                 frames_list.append(img)
+            if self.return_jpeg_bytes:
+                # Plain Python bytes (not a torch tensor): sent worker→main via
+                # normal pickling, avoiding torch's fd-based shared-memory tensor
+                # passing (which breaks with many small tensors: "os.dup Bad file
+                # descriptor"). Wrapped to a uint8 tensor at decode time.
+                with open(frame_paths[start + t], "rb") as _fh:
+                    jpeg_bytes_list.append(_fh.read())
             if self.detail_size is not None:
                 detail_img, valid_hw = _load_detail_view(
                     frame_paths[start + t], self.detail_size
@@ -291,9 +358,16 @@ class MOT17TemporalClip(
                 detail_frames_list.append(detail_img)
                 detail_valid_hw_list.append(valid_hw)
 
-            gt = self._gt[seq].get(
-                frame_id, (torch.zeros(0, 4), torch.zeros(0, dtype=torch.int64))
-            )
+            seq_gt = self._gt[seq]
+            if frame_id in seq_gt:
+                gt = seq_gt[frame_id]
+                is_key = 1
+            elif self.interpolate_gt:
+                gt = _interpolate_gt_for_frame(frame_id, self._keyframes[seq], seq_gt)
+                is_key = 0
+            else:
+                gt = (torch.zeros(0, 4), torch.zeros(0, dtype=torch.int64))
+                is_key = 1
             gt_boxes = gt[0].clone()
             if gt_boxes.numel() > 0:
                 if self.use_letterbox:
@@ -304,6 +378,7 @@ class MOT17TemporalClip(
                     gt_boxes[:, [1, 3]] *= scale_h
             gt_boxes_list.append(gt_boxes)
             gt_ids_list.append(gt[1])
+            is_keyframe_list.append(is_key)
             fids.append(frame_id)
 
         if self.augment and frames_list:
@@ -319,9 +394,12 @@ class MOT17TemporalClip(
             ),
             "gt_boxes": gt_boxes_list,
             "gt_ids": gt_ids_list,
+            "is_keyframe": is_keyframe_list,
             "frame_ids": fids,
             "seq": seq,
         }
+        if jpeg_bytes_list:
+            sample["jpeg_bytes"] = jpeg_bytes_list
         if detail_frames_list:
             sample["detail_frames"] = torch.stack(detail_frames_list)
             sample["detail_valid_hw"] = torch.stack(detail_valid_hw_list)
@@ -481,14 +559,58 @@ def _load_detail_view(
     return padded, torch.tensor([valid_h, valid_w], dtype=torch.int64)
 
 
+def gpu_decode_clip_batch(
+    jpeg_bytes_batch: list[list[bytes]],
+    img_size: int,
+    device: torch.device | str,
+) -> torch.Tensor:
+    """Batch-decode raw JPEG bytes on the GPU (nvJPEG) → (B, T, 3, S, S) float [0,255].
+
+    Input is list[B] of list[T] of raw JPEG byte strings. Decodes the whole B*T
+    flat batch in one nvJPEG call, then stretch-resizes each frame to img_size
+    square (matches the non-letterbox loader's stretch scale, so GT scaling stays
+    consistent). Falls back to per-image decode if the batched list API is
+    unsupported by the installed torchvision.
+    """
+    import torch.nn.functional as F
+    from torchvision.io import decode_jpeg
+
+    flat = [
+        torch.frombuffer(bytearray(bt), dtype=torch.uint8)
+        for clip in jpeg_bytes_batch
+        for bt in clip
+    ]
+    try:
+        dec = decode_jpeg(flat, device=device)
+    except (RuntimeError, TypeError):
+        dec = [decode_jpeg(bt, device=device) for bt in flat]
+    out = [
+        F.interpolate(
+            d.float().unsqueeze(0),
+            (img_size, img_size),
+            mode="bilinear",
+            align_corners=False,
+        ).squeeze(0)
+        for d in dec
+    ]
+    B, T = len(jpeg_bytes_batch), len(jpeg_bytes_batch[0])
+    return torch.stack(out).view(B, T, 3, img_size, img_size)
+
+
 def collate_fn(batch: list[dict[str, object]]) -> dict[str, object]:
     collated = {
         "frames": torch.stack([b["frames"] for b in batch]),  # type: ignore[misc]
         "gt_boxes": [b["gt_boxes"] for b in batch],
         "gt_ids": [b["gt_ids"] for b in batch],
+        "is_keyframe": [b["is_keyframe"] for b in batch],
         "frame_ids": [b["frame_ids"] for b in batch],
         "seq": [b["seq"] for b in batch],
     }
+    if "jpeg_bytes" in batch[0]:
+        # list[B] of list[T] of 1D uint8 (raw JPEG); decoded on the GPU in the
+        # train loop via gpu_decode_clip_batch. Kept as nested lists because byte
+        # lengths differ per file (not stackable).
+        collated["jpeg_bytes"] = [b["jpeg_bytes"] for b in batch]
     if "detail_frames" in batch[0]:
         collated["detail_frames"] = torch.stack(
             [b["detail_frames"] for b in batch]  # type: ignore[misc]
@@ -516,6 +638,8 @@ def build_mot17_dataloader(
     seed: int | None = None,
     augment: bool = False,
     balance_by_seq: bool = False,
+    interpolate_gt: bool = False,
+    return_jpeg_bytes: bool = False,
 ) -> DataLoader[dict[str, object]]:
     dataset = MOT17TemporalClip(
         data_root=data_root,
@@ -530,6 +654,8 @@ def build_mot17_dataloader(
         use_letterbox=use_letterbox,
         detail_size=detail_size,
         augment=augment,
+        interpolate_gt=interpolate_gt,
+        return_jpeg_bytes=return_jpeg_bytes,
     )
     print(f"[Dataset] {len(dataset)} clips from {len(dataset.sequences)} sequences")
 

@@ -66,6 +66,8 @@ def eval_recall(ckpt: Path, args, scratch: Path) -> tuple[float, dict[str, float
     ]
     if args.sequences:
         cmd += ["--sequences", args.sequences]
+    if args.extra_eval_args:
+        cmd += args.extra_eval_args.split()
     proc = subprocess.run(cmd, capture_output=True, text=True, cwd=str(ROOT))
     if proc.returncode != 0:
         sys.stderr.write(proc.stdout[-2000:] + proc.stderr[-2000:])
@@ -92,6 +94,12 @@ def main() -> None:
     ap.add_argument("--detector", default="SDP")
     ap.add_argument("--split", default="train")
     ap.add_argument("--sequences", default="")
+    ap.add_argument(
+        "--extra-eval-args",
+        default="",
+        help="Extra flags appended verbatim to each mot17.py eval (e.g. "
+        "'--no-temporal --no-compile' for a PyTorch-backbone PP22 deploy ckpt).",
+    )
     ap.add_argument(
         "--brute",
         action="store_true",

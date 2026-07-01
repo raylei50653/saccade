@@ -42,7 +42,10 @@ sys.path.insert(0, str(project_root / "build"))
 
 import saccade_tracking_ext  # noqa: F401, E402
 
-from saccade.perception.temporal_yolo.dataset import build_mot17_dataloader  # noqa: E402
+from saccade.perception.temporal_yolo.dataset import (  # noqa: E402
+    build_mot17_dataloader,
+    gpu_decode_clip_batch,
+)
 from saccade.perception.temporal_yolo.training_utils import (  # noqa: E402
     build_warmup_cosine_scheduler,
     resolve_training_sequences,
@@ -315,6 +318,38 @@ def main() -> None:
         help="Clip start stride. 0 uses clip-len, covering nearly every frame once.",
     )
     parser.add_argument("--gt-ratio", type=float, default=0.5)
+    parser.add_argument(
+        "--interpolate-gt",
+        action="store_true",
+        help="Keyframe-cadence training: when img1 holds every frame but gt is on "
+        "keyframes only (e.g. PersonPath22 full-cadence layout), linearly "
+        "interpolate gt between keyframes for temporal continuity / gt-injection "
+        "and mask the supervised loss to real keyframes. No-op on densely "
+        "annotated data (every frame is a keyframe).",
+    )
+    parser.add_argument(
+        "--no-preload-images",
+        action="store_true",
+        help="Live mode only: skip RAM-preloading frames; decode per-step from "
+        "disk instead. Needed when the frame set is too large for RAM (e.g. "
+        "full-cadence PersonPath22 ~70 GB). Pair with --num-workers for parallel "
+        "decode.",
+    )
+    parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=0,
+        help="DataLoader worker processes (parallel JPEG decode when not "
+        "RAM-preloaded). 0 = main-thread.",
+    )
+    parser.add_argument(
+        "--gpu-decode",
+        action="store_true",
+        help="Live mode only: DataLoader workers return raw JPEG bytes (no decode) "
+        "and the train loop batch-decodes them on the GPU (nvJPEG). Avoids CPU "
+        "JPEG-decode bottleneck on 1080p full-cadence PersonPath22. Implies "
+        "--no-preload-images. Incompatible with --cache-dir and detail sources.",
+    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--spatial-reduction", type=int, default=4)
     parser.add_argument(
@@ -326,6 +361,24 @@ def main() -> None:
     )
     parser.add_argument("--d-model", type=int, default=128)
     parser.add_argument("--d-state", type=int, default=16)
+    parser.add_argument(
+        "--reg-max",
+        type=int,
+        default=1,
+        help="Box regression bins. 1 = direct regression (legacy). 16 = DFL "
+        "distributional regression (sub-pixel localization; recovers small/mid "
+        "recall lost to reg-miss). Changing from the warm-start ckpt reinitializes "
+        "reg_head and requires the criterion to switch to DFL.",
+    )
+    parser.add_argument(
+        "--head-depth",
+        type=int,
+        default=1,
+        help="3x3 conv blocks in the cls/reg detection heads. 1 = legacy shallow "
+        "head (no BN). 2 = YOLO Detect-aligned (2 blocks + BatchNorm) to test "
+        "whether head capacity/depth is the residual small-object recall gap. "
+        "Changing from the warm-start ckpt reinitializes cls_head/reg_head.",
+    )
     parser.add_argument("--num-blocks", type=int, default=1)
     parser.add_argument(
         "--detail-source",
@@ -495,6 +548,13 @@ def main() -> None:
         parser.error("--consistency-weight requires --add-temporal (needs T>1 clips)")
     if args.t1_weight > 0.0 and not args.add_temporal:
         parser.error("--t1-weight requires --add-temporal (needs T>1 clips)")
+    if args.gpu_decode:
+        if args.cache_dir:
+            parser.error(
+                "--gpu-decode is live-mode only (incompatible with --cache-dir)"
+            )
+        if args.detail_source != "none":
+            parser.error("--gpu-decode does not support detail sources")
 
     seed_everything(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -577,6 +637,22 @@ def main() -> None:
     }
     for k, v in mamba_args_default.items():
         mamba_args.setdefault(k, v)
+    # reg_max: force to the CLI value (the warm-start base may be reg_max=1). When
+    # it differs from the base ckpt, reg_head is reinitialized (filtered from the
+    # warm-start state dict below) and the criterion switches to DFL.
+    base_reg_max = mamba_state.get("mamba_args", {}).get("reg_max", 1)
+    mamba_args["reg_max"] = args.reg_max
+    # spatial_reduction: force to the CLI value (setdefault above keeps the base
+    # ckpt's value otherwise). When it differs from the base, the downsample conv
+    # is reg-shaped to the factor and is reinitialized (filtered below). Default 4
+    # matches the base, so normal runs are unaffected.
+    base_spatial_reduction = mamba_state.get("mamba_args", {}).get(
+        "spatial_reduction", 4
+    )
+    mamba_args["spatial_reduction"] = args.spatial_reduction
+    # head_depth: force to CLI value; on change, cls_head/reg_head reinitialize.
+    base_head_depth = mamba_state.get("mamba_args", {}).get("head_depth", 1)
+    mamba_args["head_depth"] = args.head_depth
     if args.reduction_variant != "auto":
         mamba_args["reduction_variant"] = args.reduction_variant
     if args.add_temporal:
@@ -635,7 +711,8 @@ def main() -> None:
         d_state=mamba_args["d_state"],
         num_blocks=mamba_args["num_blocks"],
         num_classes=mamba_args["num_classes"],
-        reg_max=1,
+        reg_max=mamba_args["reg_max"],
+        head_depth=mamba_args["head_depth"],
         spatial_reduction=mamba_args["spatial_reduction"],
         use_pixel_shuffle=mamba_args["use_pixel_shuffle"],
         use_cross_scan=mamba_args.get("use_cross_scan", False),
@@ -657,12 +734,52 @@ def main() -> None:
         strip_route_chunk_size=mamba_args.get("strip_route_chunk_size", 16),
     ).to(device)
     sd = _strip_compiled_keys(mamba_state["student"])
+    # reg_max change (e.g. 1 -> 16 DFL): reg_head output channels differ
+    # (reg_max*4), so its warm-start weights are shape-incompatible. Drop them so
+    # reg_head reinitializes; everything else still warm-starts.
+    reg_max_changed = args.reg_max != base_reg_max
+    if reg_max_changed:
+        sd = {k: v for k, v in sd.items() if not k.startswith("reg_head.")}
+        print(
+            f"  reg_max {base_reg_max} -> {args.reg_max}: reg_head reinitialized "
+            f"(DFL={'on' if args.reg_max > 1 else 'off'})"
+        )
+    # spatial_reduction change: the downsample (and pixel-shuffle upsample, if any)
+    # convs are shaped to the reduction factor, so their warm-start weights are
+    # shape-incompatible. Drop them so they reinitialize; the rest warm-starts.
+    sr_changed = args.spatial_reduction != base_spatial_reduction
+    if sr_changed:
+        sd = {
+            k: v
+            for k, v in sd.items()
+            if not (k.startswith("downsample.") or k.startswith("upsample."))
+        }
+        print(
+            f"  spatial_reduction {base_spatial_reduction} -> "
+            f"{args.spatial_reduction}: downsample/upsample reinitialized"
+        )
+    # head_depth change: cls_head/reg_head layer structure differs → reinitialize
+    # both. (reg_head is also filtered on a reg_max change above; harmless overlap.)
+    head_depth_changed = args.head_depth != base_head_depth
+    if head_depth_changed:
+        sd = {
+            k: v
+            for k, v in sd.items()
+            if not (k.startswith("cls_head.") or k.startswith("reg_head."))
+        }
+        print(
+            f"  head_depth {base_head_depth} -> {args.head_depth}: "
+            "cls_head/reg_head reinitialized"
+        )
     # per_channel_a from a shared-A base warm-starts via A_log broadcast; relax
     # strict so any incidental layout drift is tolerated alongside it.
     base_per_channel = mamba_state.get("mamba_args", {}).get("per_channel_a", False)
     strict = (
         not args.add_temporal
         and not (args.per_channel_a and not base_per_channel)
+        and not reg_max_changed
+        and not sr_changed
+        and not head_depth_changed
         and mamba_args.get("reduction_variant", "conv")
         == mamba_state.get("mamba_args", {}).get("reduction_variant", "conv")
         and not use_detail_fusion
@@ -779,6 +896,22 @@ def main() -> None:
     base_args.setdefault("dfl", 1.5)
     teacher.yolo_model.args = SimpleNamespace(**base_args)
     criterion = v8DetectionLoss(teacher.yolo_model)
+    # The criterion inherits reg_max from the teacher's Detect head (reg_max=1).
+    # When the student head uses DFL (reg_max>1), switch the loss to distributional
+    # box regression so it decodes the reg_max*4 channels via softmax-expectation
+    # (bbox_decode's use_dfl path) instead of treating them as direct distances.
+    if args.reg_max != criterion.reg_max:
+        from ultralytics.utils.loss import BboxLoss
+
+        criterion.reg_max = args.reg_max
+        criterion.use_dfl = args.reg_max > 1
+        criterion.no = nc + args.reg_max * 4
+        criterion.proj = torch.arange(args.reg_max, dtype=torch.float, device=device)
+        criterion.bbox_loss = BboxLoss(args.reg_max).to(device)
+        print(
+            f"  Loss: reg_max={args.reg_max} use_dfl={criterion.use_dfl} "
+            "(overrode teacher's reg_max)"
+        )
     install_assigner(criterion, args.assigner)
 
     # ------------------------------------------------------------------
@@ -844,19 +977,27 @@ def main() -> None:
         data_root, args.seqs, args.holdout_seqs
     )
     clip_stride = args.clip_stride or args.clip_len
-    # In cache mode the backbone never runs, so raw frame pixels are unused —
-    # skip RAM preload to allow large mixes (e.g. MOT17+MOT20) without OOM.
-    preload = args.cache_dir == ""
+    # Live (no --cache-dir): the backbone runs on raw frames, so images are
+    # needed. RAM-preloading the whole clip set is the fast path, but a
+    # full-cadence PersonPath22 set (~60k frames @640) is ~70 GB and OOMs a
+    # 54 GB box — --no-preload-images falls back to per-step JPEG decode
+    # (pair with --num-workers for parallel decode). In cache mode the backbone
+    # never runs, so raw frame pixels are unused and preload is skipped anyway.
+    live_mode = args.cache_dir == ""
+    # GPU-decode: workers return raw bytes, so in-worker RAM-preload is skipped and
+    # frames are decoded on the GPU in the loop (see gpu_decode_clip_batch).
+    preload = live_mode and not args.no_preload_images and not args.gpu_decode
     detail_size = (
         (args.detail_height, args.detail_width)
         if args.detail_source in {"high", "native-p3", "strip-oracle"}
         else None
     )
+    need_images = live_mode or detail_size is not None
     # Augmentation transforms the input frame, so it is only sound where the
-    # backbone runs live on that frame (preload/no-cache, e.g. GT1). Under
-    # --cache-dir the frozen-backbone features are keyed to fixed frames, so
-    # augmenting would misalign inputs and supervision — gate it off and warn.
-    augment = args.augment and preload
+    # backbone runs live on that frame (e.g. GT1). Under --cache-dir the
+    # frozen-backbone features are keyed to fixed frames, so augmenting would
+    # misalign inputs and supervision — gate it off and warn.
+    augment = args.augment and live_mode
     if args.augment and not augment:
         print(
             "[MambaGT] WARNING: --augment ignored under --cache-dir — cached "
@@ -871,14 +1012,26 @@ def main() -> None:
         stride=clip_stride,
         shuffle=True,
         seqs=seqs,
+        num_workers=args.num_workers,
         preload_to_ram=preload,
-        load_images=preload or detail_size is not None,
+        load_images=need_images,
         detail_size=detail_size,
         seed=args.seed,
         augment=augment,
+        interpolate_gt=args.interpolate_gt,
+        return_jpeg_bytes=args.gpu_decode,
     )
+    if args.gpu_decode:
+        print(
+            "[MambaGT] GPU-decode ACTIVE: workers return JPEG bytes, nvJPEG decode in-loop"
+        )
     if augment:
         print("[MambaGT] augmentation ACTIVE (live stage, load_images=True)")
+    if args.interpolate_gt:
+        print(
+            "[MambaGT] keyframe interpolation ACTIVE: full-cadence frames, "
+            "linear-interp GT between keyframes, loss masked to real keyframes"
+        )
     print(
         f"[MambaGT] {len(loader)} batches/epoch  gt_ratio={args.gt_ratio}  "
         f"lr={args.lr}  detail={args.detail_source}  seed={args.seed}  "
@@ -952,10 +1105,23 @@ def main() -> None:
                 and batch_idx >= args.max_batches_per_epoch
             ):
                 break
-            frames = batch["frames"].to(device, dtype=torch.float32) / 255.0
+            if args.gpu_decode:
+                frames = (
+                    gpu_decode_clip_batch(batch["jpeg_bytes"], args.img_size, device)
+                    / 255.0
+                )
+            else:
+                frames = batch["frames"].to(device, dtype=torch.float32) / 255.0
             gt_boxes_batch = batch["gt_boxes"]
             gt_ids_batch = batch["gt_ids"]
             B, T = frames.shape[:2]
+            # Keyframe loss mask (interpolate_gt): the model forwards every frame at
+            # the real cadence so the temporal SSM sees true displacement, but the
+            # supervised loss is applied only on frames carrying real GT — boxes on
+            # in-between frames are linearly interpolated (approximate) and would
+            # otherwise teach the head against noisy targets. Default: every frame
+            # is a keyframe → no masking (bit-exact).
+            is_keyframe_batch = batch.get("is_keyframe", [[1] * T for _ in range(B)])
             detail_frames = None
             detail_valid_hw = None
             if args.detail_source == "global":
@@ -1092,15 +1258,24 @@ def main() -> None:
             # Batch-major layout: [b0t0, b0t1, ..., b0tT, b1t0, ...]
             # Frame t for all B items: indices t, T+t, 2T+t, ... → c[t::T]
             batch_loss = frames.new_zeros(())
+            n_kf_frames = 0
             for t in range(T):
-                s_cls_t = [c[t::T] for c in s_cls_T]
-                s_reg_t = [r[t::T] for r in s_reg_T]
-                feats_t = [all_feats[si][t] for si in range(3)]
+                # Per-sample keyframe mask: supervise only batch items whose frame t
+                # carries real GT (slice preds/feats/GT to that subset so interpolated
+                # frames contribute neither loss nor background-FP pressure).
+                keep = [b for b in range(B) if is_keyframe_batch[b][t]]
+                if not keep:
+                    continue
+                s_cls_t = [c[t::T][keep] for c in s_cls_T]
+                s_reg_t = [r[t::T][keep] for r in s_reg_T]
+                feats_t = [all_feats[si][t][keep] for si in range(3)]
+                gt_t = [all_gt[t][b] for b in keep]
                 preds = _build_preds_dict(s_cls_t, s_reg_t, feats_t)
-                yolo_batch = _make_yolo_batch(all_gt[t], args.img_size, device)
+                yolo_batch = _make_yolo_batch(gt_t, args.img_size, device)
                 step_loss_vec, _ = criterion(preds, yolo_batch)
                 batch_loss = batch_loss + step_loss_vec.sum()
-            batch_loss = batch_loss / (T * accum)
+                n_kf_frames += 1
+            batch_loss = batch_loss / (max(n_kf_frames, 1) * accum)
 
             if args.t1_weight > 0.0 and T > 1:
                 # Joint loss (route 2): also supervise the pure-spatial T=1 forward
@@ -1119,14 +1294,31 @@ def main() -> None:
                     detail_positions=detail_positions_T,
                     detail_position_mask=detail_position_mask_T,
                 )
-                flat_gt = [all_gt[t][b] for b in range(B) for t in range(T)]
-                preds_1 = _build_preds_dict(s_cls_1, s_reg_1, feats_T)
-                yolo_batch_1 = _make_yolo_batch(flat_gt, args.img_size, device)
-                t1_loss_vec, _ = criterion(preds_1, yolo_batch_1)
-                t1_loss = t1_loss_vec.sum() / (B * T)
-                batch_loss = batch_loss + (args.t1_weight * t1_loss) / accum
-                epoch_t1_sum += t1_loss.detach().item()
-                epoch_t1_n += 1
+                # Mask to keyframe samples in the flattened B*T layout
+                # (k = b*T + t matches feats_T's batch-major reshape).
+                keep_flat = [
+                    b * T + t
+                    for b in range(B)
+                    for t in range(T)
+                    if is_keyframe_batch[b][t]
+                ]
+                if keep_flat:
+                    flat_gt = [
+                        all_gt[t][b]
+                        for b in range(B)
+                        for t in range(T)
+                        if is_keyframe_batch[b][t]
+                    ]
+                    s_cls_1k = [c[keep_flat] for c in s_cls_1]
+                    s_reg_1k = [r[keep_flat] for r in s_reg_1]
+                    feats_1k = [f[keep_flat] for f in feats_T]
+                    preds_1 = _build_preds_dict(s_cls_1k, s_reg_1k, feats_1k)
+                    yolo_batch_1 = _make_yolo_batch(flat_gt, args.img_size, device)
+                    t1_loss_vec, _ = criterion(preds_1, yolo_batch_1)
+                    t1_loss = t1_loss_vec.sum() / len(keep_flat)
+                    batch_loss = batch_loss + (args.t1_weight * t1_loss) / accum
+                    epoch_t1_sum += t1_loss.detach().item()
+                    epoch_t1_n += 1
 
             if args.consistency_weight > 0.0 and T > 1:
                 cons_loss = _temporal_consistency_loss(
@@ -1135,6 +1327,15 @@ def main() -> None:
                 batch_loss = batch_loss + (args.consistency_weight * cons_loss) / accum
                 epoch_cons_sum += cons_loss.detach().item()
                 epoch_cons_n += 1
+
+            if not batch_loss.requires_grad:
+                # No supervised signal this batch: every frame in the B*T clip is
+                # interpolated (no keyframe anywhere) and no aux loss (t1/cons)
+                # contributed a grad term, so batch_loss is a grad-less constant.
+                # Happens under --interpolate-gt when clip_len spans a keyframe gap
+                # (PP22 ~5-frame cadence → a 4-frame clip can miss all keyframes).
+                # Nothing to backprop — skip this batch.
+                continue
 
             if not torch.isfinite(batch_loss):
                 raise FloatingPointError(
@@ -1232,6 +1433,8 @@ def main() -> None:
                         "d_model": mamba_args["d_model"],
                         "d_state": mamba_args["d_state"],
                         "num_blocks": mamba_args["num_blocks"],
+                        "reg_max": mamba_args["reg_max"],
+                        "head_depth": mamba_args["head_depth"],
                         "spatial_reduction": mamba_args["spatial_reduction"],
                         "reduction_variant": mamba_args.get(
                             "reduction_variant", "conv"

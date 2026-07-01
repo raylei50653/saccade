@@ -95,12 +95,56 @@ def _format_overall_metrics_from_counts(counts: dict[str, int]) -> dict[str, Any
     }
 
 
+def _gt_frame_set(gt_path: str) -> set[int]:
+    """Frame indices that carry at least one ground-truth row."""
+    frames: set[int] = set()
+    with open(gt_path) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            frames.add(int(float(line.split(",")[0])))
+    return frames
+
+
+def _filter_jobs_to_gt_frames(
+    jobs: list[tuple[str, str, str]], output: str
+) -> tuple[list[tuple[str, str, str]], str]:
+    """Write GT-frame-only copies of each prediction file to ``<output>/_gt_frames``.
+
+    For sparsely-annotated benchmarks (e.g. PersonPath22's keyframe gt, labelled
+    every ~5th frame while img1 holds every frame) the tracker is run at the real
+    frame cadence so the motion model sees true inter-frame displacement, but
+    predictions on frames without gt would otherwise count as false positives.
+    Dropping prediction rows on non-gt frames scores only on annotated frames.
+    Returns the rewritten ``jobs`` (pointing at the filtered files) plus the
+    filtered directory, used as the TrackEval/HOTA tracker folder. On a
+    fully-annotated benchmark (gt on every frame) this is a no-op.
+    """
+    filtered_dir = os.path.join(output, "_gt_frames")
+    os.makedirs(filtered_dir, exist_ok=True)
+    new_jobs: list[tuple[str, str, str]] = []
+    for gt_name, gt_path, ts_path in jobs:
+        frames = _gt_frame_set(gt_path)
+        out_ts = os.path.join(filtered_dir, Path(ts_path).name)
+        with open(ts_path) as src, open(out_ts, "w") as dst:
+            for line in src:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                if int(float(stripped.split(",")[0])) in frames:
+                    dst.write(line if line.endswith("\n") else line + "\n")
+        new_jobs.append((gt_name, gt_path, out_ts))
+    return new_jobs, filtered_dir
+
+
 def run_motmetrics_evaluation(
     data_root: str,
     split: str,
     output: str,
     sequences: str,
     detector: str | None = None,
+    score_on_gt_frames: bool = False,
 ) -> dict[str, Any] | None:
     import importlib.util
 
@@ -144,6 +188,13 @@ def run_motmetrics_evaluation(
 
     if not jobs:
         return None
+
+    if score_on_gt_frames:
+        jobs, output = _filter_jobs_to_gt_frames(jobs, output)
+        print(
+            "📐 [metrics] --score-on-gt-frames: scoring only on annotated frames "
+            f"(predictions on gt-less frames dropped); filtered preds → {output}"
+        )
 
     counts = {
         "idtp": 0,
