@@ -633,6 +633,14 @@ def main() -> None:
     # warm-start state dict below) and the criterion switches to DFL.
     base_reg_max = mamba_state.get("mamba_args", {}).get("reg_max", 1)
     mamba_args["reg_max"] = args.reg_max
+    # spatial_reduction: force to the CLI value (setdefault above keeps the base
+    # ckpt's value otherwise). When it differs from the base, the downsample conv
+    # is reg-shaped to the factor and is reinitialized (filtered below). Default 4
+    # matches the base, so normal runs are unaffected.
+    base_spatial_reduction = mamba_state.get("mamba_args", {}).get(
+        "spatial_reduction", 4
+    )
+    mamba_args["spatial_reduction"] = args.spatial_reduction
     if args.reduction_variant != "auto":
         mamba_args["reduction_variant"] = args.reduction_variant
     if args.add_temporal:
@@ -723,6 +731,20 @@ def main() -> None:
             f"  reg_max {base_reg_max} -> {args.reg_max}: reg_head reinitialized "
             f"(DFL={'on' if args.reg_max > 1 else 'off'})"
         )
+    # spatial_reduction change: the downsample (and pixel-shuffle upsample, if any)
+    # convs are shaped to the reduction factor, so their warm-start weights are
+    # shape-incompatible. Drop them so they reinitialize; the rest warm-starts.
+    sr_changed = args.spatial_reduction != base_spatial_reduction
+    if sr_changed:
+        sd = {
+            k: v
+            for k, v in sd.items()
+            if not (k.startswith("downsample.") or k.startswith("upsample."))
+        }
+        print(
+            f"  spatial_reduction {base_spatial_reduction} -> "
+            f"{args.spatial_reduction}: downsample/upsample reinitialized"
+        )
     # per_channel_a from a shared-A base warm-starts via A_log broadcast; relax
     # strict so any incidental layout drift is tolerated alongside it.
     base_per_channel = mamba_state.get("mamba_args", {}).get("per_channel_a", False)
@@ -730,6 +752,7 @@ def main() -> None:
         not args.add_temporal
         and not (args.per_channel_a and not base_per_channel)
         and not reg_max_changed
+        and not sr_changed
         and mamba_args.get("reduction_variant", "conv")
         == mamba_state.get("mamba_args", {}).get("reduction_variant", "conv")
         and not use_detail_fusion
