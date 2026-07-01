@@ -28,6 +28,7 @@ COMMON=(
   --data-root "$DATA" --yolo-weights "$YOLO" --teacher-ckpt "$TEACHER"
   --img-size 640 --seqs "$SEQS"
   --interpolate-gt --gpu-decode --num-workers 12
+  --batch-size 16
   --lr 1e-4 --lr-gate 0 --scan-stop-grad --d-state 16 --d-model 128
   --best-by none --save-every 1
 )
