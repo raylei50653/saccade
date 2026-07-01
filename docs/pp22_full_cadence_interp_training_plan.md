@@ -72,6 +72,9 @@ PP22 標註是 ~5fps 關鍵幀。現有訓練資料把關鍵幀重編號 1..N �
 - **唯一剩的槓桿 = 把 teacher forward 從 T-serial 批成 B*T-一次**(省 launch),但 gate_input 是 per-t 建、gt_ratio 的 random() gating 是每 t 對整個 B 共用一次 → 批起來會改 gate-dropout 的 RNG stream = **擾動被訓模型**(這是要拿去評估的 run,不可擾動)→ 不做。
 - **結論**:~0.18s/batch = ~8min/epoch,GT1 30ep ≈ 4hr = teacher-forward 地板。流程已優化到位,直接開 §4。
 
+### 3b. Bug fix(no-keyframe batch backward crash,commit 5ab711cc)
+首跑 GT1 在 epoch1 batch330 崩:`element 0 does not require grad`。根因=**interp + clip_len=4 < PP22 關鍵幀間隔~5** → 某些 clip 4 幀全 interpolated(無關鍵幀),當整個 batch 的 B×T 位置全非關鍵幀時 keyframe-mask 把每個 t 都跳過 → `batch_loss` 停在 grad-less 常數 → backward 崩(機率~(1/5)^4≈0.16%,幾百 batch 撞一次)。**修法**=backward 前 `if not batch_loss.requires_grad: continue`(無監督訊號就跳)。已驗證同 seed 過 batch330。**driver = `run_pp22_full_cadence_chain.sh`**(commit ad9bac07,GT1→T3→T1 latest.ckpt 交接,背景 `nohup`,log `runs/pp22_full_cadence_chain.log`)。
+
 <details><summary>原設計筆記(存查)</summary>
 
 ## (原)3. 待建:GPU-decode 訓練 pipeline(主任務)
