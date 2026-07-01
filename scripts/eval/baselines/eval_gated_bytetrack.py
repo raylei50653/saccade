@@ -335,6 +335,13 @@ def main() -> None:
     parser.add_argument("--split", default="train")
     parser.add_argument("--sequences", default="")
     parser.add_argument("--output", default="/tmp/gated_det_bytetrack")
+    parser.add_argument(
+        "--score-on-gt-frames",
+        action="store_true",
+        help="Keyframe-aware scoring: run full cadence but score only on frames "
+        "carrying GT (PP22 mot_test_kf). Avoids counting non-keyframe predictions "
+        "as FP.",
+    )
     parser.add_argument("--img-size", type=int, default=640)
     parser.add_argument("--conf-threshold", type=float, default=0.05)
     parser.add_argument("--no-gate", action="store_true")
@@ -588,7 +595,8 @@ def main() -> None:
             split=args.split,
             output=str(output_dir),
             sequences=",".join(seqs),
-            detector="SDP",
+            detector=None if args.sequences else "SDP",
+            score_on_gt_frames=args.score_on_gt_frames,
         )
         if metrics:
             print("\n=== OVERALL METRICS ===")
