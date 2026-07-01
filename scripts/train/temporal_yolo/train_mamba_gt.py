@@ -1237,6 +1237,15 @@ def main() -> None:
                 epoch_cons_sum += cons_loss.detach().item()
                 epoch_cons_n += 1
 
+            if not batch_loss.requires_grad:
+                # No supervised signal this batch: every frame in the B*T clip is
+                # interpolated (no keyframe anywhere) and no aux loss (t1/cons)
+                # contributed a grad term, so batch_loss is a grad-less constant.
+                # Happens under --interpolate-gt when clip_len spans a keyframe gap
+                # (PP22 ~5-frame cadence → a 4-frame clip can miss all keyframes).
+                # Nothing to backprop — skip this batch.
+                continue
+
             if not torch.isfinite(batch_loss):
                 raise FloatingPointError(
                     f"Non-finite loss at epoch={epoch} batch={batch_idx + 1}"
