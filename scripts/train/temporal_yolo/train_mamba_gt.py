@@ -361,6 +361,15 @@ def main() -> None:
     )
     parser.add_argument("--d-model", type=int, default=128)
     parser.add_argument("--d-state", type=int, default=16)
+    parser.add_argument(
+        "--reg-max",
+        type=int,
+        default=1,
+        help="Box regression bins. 1 = direct regression (legacy). 16 = DFL "
+        "distributional regression (sub-pixel localization; recovers small/mid "
+        "recall lost to reg-miss). Changing from the warm-start ckpt reinitializes "
+        "reg_head and requires the criterion to switch to DFL.",
+    )
     parser.add_argument("--num-blocks", type=int, default=1)
     parser.add_argument(
         "--detail-source",
@@ -619,6 +628,11 @@ def main() -> None:
     }
     for k, v in mamba_args_default.items():
         mamba_args.setdefault(k, v)
+    # reg_max: force to the CLI value (the warm-start base may be reg_max=1). When
+    # it differs from the base ckpt, reg_head is reinitialized (filtered from the
+    # warm-start state dict below) and the criterion switches to DFL.
+    base_reg_max = mamba_state.get("mamba_args", {}).get("reg_max", 1)
+    mamba_args["reg_max"] = args.reg_max
     if args.reduction_variant != "auto":
         mamba_args["reduction_variant"] = args.reduction_variant
     if args.add_temporal:
@@ -677,7 +691,7 @@ def main() -> None:
         d_state=mamba_args["d_state"],
         num_blocks=mamba_args["num_blocks"],
         num_classes=mamba_args["num_classes"],
-        reg_max=1,
+        reg_max=mamba_args["reg_max"],
         spatial_reduction=mamba_args["spatial_reduction"],
         use_pixel_shuffle=mamba_args["use_pixel_shuffle"],
         use_cross_scan=mamba_args.get("use_cross_scan", False),
@@ -699,12 +713,23 @@ def main() -> None:
         strip_route_chunk_size=mamba_args.get("strip_route_chunk_size", 16),
     ).to(device)
     sd = _strip_compiled_keys(mamba_state["student"])
+    # reg_max change (e.g. 1 -> 16 DFL): reg_head output channels differ
+    # (reg_max*4), so its warm-start weights are shape-incompatible. Drop them so
+    # reg_head reinitializes; everything else still warm-starts.
+    reg_max_changed = args.reg_max != base_reg_max
+    if reg_max_changed:
+        sd = {k: v for k, v in sd.items() if not k.startswith("reg_head.")}
+        print(
+            f"  reg_max {base_reg_max} -> {args.reg_max}: reg_head reinitialized "
+            f"(DFL={'on' if args.reg_max > 1 else 'off'})"
+        )
     # per_channel_a from a shared-A base warm-starts via A_log broadcast; relax
     # strict so any incidental layout drift is tolerated alongside it.
     base_per_channel = mamba_state.get("mamba_args", {}).get("per_channel_a", False)
     strict = (
         not args.add_temporal
         and not (args.per_channel_a and not base_per_channel)
+        and not reg_max_changed
         and mamba_args.get("reduction_variant", "conv")
         == mamba_state.get("mamba_args", {}).get("reduction_variant", "conv")
         and not use_detail_fusion
@@ -821,6 +846,22 @@ def main() -> None:
     base_args.setdefault("dfl", 1.5)
     teacher.yolo_model.args = SimpleNamespace(**base_args)
     criterion = v8DetectionLoss(teacher.yolo_model)
+    # The criterion inherits reg_max from the teacher's Detect head (reg_max=1).
+    # When the student head uses DFL (reg_max>1), switch the loss to distributional
+    # box regression so it decodes the reg_max*4 channels via softmax-expectation
+    # (bbox_decode's use_dfl path) instead of treating them as direct distances.
+    if args.reg_max != criterion.reg_max:
+        from ultralytics.utils.loss import BboxLoss
+
+        criterion.reg_max = args.reg_max
+        criterion.use_dfl = args.reg_max > 1
+        criterion.no = nc + args.reg_max * 4
+        criterion.proj = torch.arange(args.reg_max, dtype=torch.float, device=device)
+        criterion.bbox_loss = BboxLoss(args.reg_max).to(device)
+        print(
+            f"  Loss: reg_max={args.reg_max} use_dfl={criterion.use_dfl} "
+            "(overrode teacher's reg_max)"
+        )
     install_assigner(criterion, args.assigner)
 
     # ------------------------------------------------------------------
@@ -1342,6 +1383,7 @@ def main() -> None:
                         "d_model": mamba_args["d_model"],
                         "d_state": mamba_args["d_state"],
                         "num_blocks": mamba_args["num_blocks"],
+                        "reg_max": mamba_args["reg_max"],
                         "spatial_reduction": mamba_args["spatial_reduction"],
                         "reduction_variant": mamba_args.get(
                             "reduction_variant", "conv"
