@@ -370,6 +370,15 @@ def main() -> None:
         "recall lost to reg-miss). Changing from the warm-start ckpt reinitializes "
         "reg_head and requires the criterion to switch to DFL.",
     )
+    parser.add_argument(
+        "--head-depth",
+        type=int,
+        default=1,
+        help="3x3 conv blocks in the cls/reg detection heads. 1 = legacy shallow "
+        "head (no BN). 2 = YOLO Detect-aligned (2 blocks + BatchNorm) to test "
+        "whether head capacity/depth is the residual small-object recall gap. "
+        "Changing from the warm-start ckpt reinitializes cls_head/reg_head.",
+    )
     parser.add_argument("--num-blocks", type=int, default=1)
     parser.add_argument(
         "--detail-source",
@@ -641,6 +650,9 @@ def main() -> None:
         "spatial_reduction", 4
     )
     mamba_args["spatial_reduction"] = args.spatial_reduction
+    # head_depth: force to CLI value; on change, cls_head/reg_head reinitialize.
+    base_head_depth = mamba_state.get("mamba_args", {}).get("head_depth", 1)
+    mamba_args["head_depth"] = args.head_depth
     if args.reduction_variant != "auto":
         mamba_args["reduction_variant"] = args.reduction_variant
     if args.add_temporal:
@@ -700,6 +712,7 @@ def main() -> None:
         num_blocks=mamba_args["num_blocks"],
         num_classes=mamba_args["num_classes"],
         reg_max=mamba_args["reg_max"],
+        head_depth=mamba_args["head_depth"],
         spatial_reduction=mamba_args["spatial_reduction"],
         use_pixel_shuffle=mamba_args["use_pixel_shuffle"],
         use_cross_scan=mamba_args.get("use_cross_scan", False),
@@ -745,6 +758,19 @@ def main() -> None:
             f"  spatial_reduction {base_spatial_reduction} -> "
             f"{args.spatial_reduction}: downsample/upsample reinitialized"
         )
+    # head_depth change: cls_head/reg_head layer structure differs → reinitialize
+    # both. (reg_head is also filtered on a reg_max change above; harmless overlap.)
+    head_depth_changed = args.head_depth != base_head_depth
+    if head_depth_changed:
+        sd = {
+            k: v
+            for k, v in sd.items()
+            if not (k.startswith("cls_head.") or k.startswith("reg_head."))
+        }
+        print(
+            f"  head_depth {base_head_depth} -> {args.head_depth}: "
+            "cls_head/reg_head reinitialized"
+        )
     # per_channel_a from a shared-A base warm-starts via A_log broadcast; relax
     # strict so any incidental layout drift is tolerated alongside it.
     base_per_channel = mamba_state.get("mamba_args", {}).get("per_channel_a", False)
@@ -753,6 +779,7 @@ def main() -> None:
         and not (args.per_channel_a and not base_per_channel)
         and not reg_max_changed
         and not sr_changed
+        and not head_depth_changed
         and mamba_args.get("reduction_variant", "conv")
         == mamba_state.get("mamba_args", {}).get("reduction_variant", "conv")
         and not use_detail_fusion
@@ -1407,6 +1434,7 @@ def main() -> None:
                         "d_state": mamba_args["d_state"],
                         "num_blocks": mamba_args["num_blocks"],
                         "reg_max": mamba_args["reg_max"],
+                        "head_depth": mamba_args["head_depth"],
                         "spatial_reduction": mamba_args["spatial_reduction"],
                         "reduction_variant": mamba_args.get(
                             "reduction_variant", "conv"

@@ -565,6 +565,7 @@ class MambaGatedDetector(nn.Module):
             num_blocks=mamba_args["num_blocks"],
             num_classes=mamba_args["num_classes"],
             reg_max=mamba_args.get("reg_max", 1),
+            head_depth=mamba_args.get("head_depth", 1),
             spatial_reduction=mamba_args["spatial_reduction"],
             emb_dim=emb_dim,
             use_pixel_shuffle=mamba_args.get("use_pixel_shuffle", False),

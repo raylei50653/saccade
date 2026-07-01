@@ -11,6 +11,7 @@ Reference:
 
 from __future__ import annotations
 
+import math
 import os
 
 import torch
@@ -1327,6 +1328,7 @@ class MambaDetectionHead(nn.Module):
         num_blocks: int = 2,
         num_classes: int = 80,
         reg_max: int = 1,
+        head_depth: int = 1,  # 3x3 conv blocks in cls/reg heads (1=legacy; 2=YOLO-aligned +BN)
         strides: tuple[int, ...] = (8, 16, 32),
         spatial_reduction: int = 4,  # downsample factor before Mamba
         emb_dim: int = 0,  # embedding dimension (0 = disabled)
@@ -1360,6 +1362,7 @@ class MambaDetectionHead(nn.Module):
         self.d_model = d_model
         self.num_classes = num_classes
         self.reg_max = reg_max
+        self.head_depth = head_depth
         self.stride = torch.tensor(strides, dtype=torch.float32)
         self.no = num_classes + reg_max * 4
         self.spatial_reduction = spatial_reduction
@@ -1469,26 +1472,38 @@ class MambaDetectionHead(nn.Module):
                 [TemporalAttentionBlock(d_model) for _ in range(self.nl)]
             )
 
+        def _det_branch(out_ch: int) -> nn.Sequential:
+            # depth 3x3 conv blocks (in 2*d_model -> d_model, then d_model->d_model)
+            # + final 1x1 to out_ch. depth==1 & no BN reproduces the legacy head
+            # bit-exact; depth>1 adds BatchNorm per block (YOLO Detect-aligned).
+            use_bn = head_depth > 1
+            layers: list[nn.Module] = []
+            c_in = d_model * 2
+            for _ in range(head_depth):
+                layers.append(nn.Conv2d(c_in, d_model, 3, padding=1, bias=not use_bn))
+                if use_bn:
+                    layers.append(nn.BatchNorm2d(d_model))
+                layers.append(nn.SiLU())
+                c_in = d_model
+            layers.append(nn.Conv2d(d_model, out_ch, 1))
+            return nn.Sequential(*layers)
+
         self.cls_head = nn.ModuleList(
-            [
-                nn.Sequential(
-                    nn.Conv2d(d_model * 2, d_model, 3, padding=1),
-                    nn.SiLU(),
-                    nn.Conv2d(d_model, num_classes, 1),
-                )
-                for _ in range(self.nl)
-            ]
+            [_det_branch(num_classes) for _ in range(self.nl)]
         )
         self.reg_head = nn.ModuleList(
-            [
-                nn.Sequential(
-                    nn.Conv2d(d_model * 2, d_model, 3, padding=1),
-                    nn.SiLU(),
-                    nn.Conv2d(d_model, reg_max * 4, 1),
-                )
-                for _ in range(self.nl)
-            ]
+            [_det_branch(reg_max * 4) for _ in range(self.nl)]
         )
+        # YOLO Detect.bias_init: reg bias=1 (sane initial box distances), cls bias
+        # for a ~1% object prior. Warm-start load_state_dict overwrites these for
+        # loaded heads (so legacy warm-started runs are unchanged); a freshly
+        # initialized head (e.g. deeper head_depth) keeps them and avoids the
+        # catastrophic cold-start loss a default-init detection head produces.
+        for i, s in enumerate(strides):
+            self.reg_head[i][-1].bias.data.fill_(1.0)
+            self.cls_head[i][-1].bias.data[:num_classes] = math.log(
+                5 / num_classes / (640 / s) ** 2
+            )
 
         self.emb_head: nn.ModuleList | None = None
         if emb_dim > 0:
