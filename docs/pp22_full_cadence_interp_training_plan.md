@@ -6,7 +6,7 @@
 ## 0. 目標 / 假設
 
 在 **PersonPath22(只用 PP22,不碰 MOT17 GT)** 上,用「**全 cadence 訓練 + GT 線性插值 + loss 只在關鍵幀**」重訓 mamba head curriculum,測試「修正訓練 cadence 是否提升 recall」。
-**MOT17 只當 checkpoint 選擇的裁判**(target-domain selection),GT 不進訓練。
+**MOT17 只作 post-hoc transfer 診斷,不進訓練**(GT 不進 loss)。⚠️ 用 MOT17 選 checkpoint 本質仍 touching target domain,故**不算 zero-shot**:zero-shot PP22→MOT17 與「為部署做 target-domain calibration/選模」必須分開報告,別混為一談。
 
 ### 為什麼
 PP22 標註是 ~5fps 關鍵幀。現有訓練資料把關鍵幀重編號 1..N → 訓練時「相鄰幀」其實隔 ~5 真實幀 → temporal SSM 看到大跳躍(非真實運動)。修法 = 跑全 cadence(每幀),讓 SSM 看真實逐幀運動;但中間幀的 GT 是線性插值(近似)→ **loss 只算在真關鍵幀**,中間幀只餵 temporal context。
