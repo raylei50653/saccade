@@ -57,7 +57,17 @@ PP22 標註是 ~5fps 關鍵幀。現有訓練資料把關鍵幀重編號 1..N �
 
 ---
 
-## 3. 待建:GPU-decode 訓練 pipeline(主任務)
+## 3. GPU-decode 訓練 pipeline ✅(已建 + smoke 通過,2026-07-01)
+
+**狀態**:已實作並驗證。`dataset.py` `return_jpeg_bytes`(worker 回傳 raw JPEG **bytes**,非 tensor)+ `gpu_decode_clip_batch`(batched nvJPEG → `(B,T,3,S,S)` float[0,255]);`train_mamba_gt.py` `--gpu-decode`。
+- **坑(已修)**:worker 若回傳 torch byte-tensor,經 DataLoader queue 走 fd-based shared-memory,大量小 tensor → `os.dup Bad file descriptor` 崩。**改回傳 python `bytes`**(正常 pickle,無 fd 共享),decode 時 `torch.frombuffer(bytearray(b))` 包成 uint8。
+- **smoke(50 batch,B4 T4,GT1 recipe)**:GPU-decode ACTIVE + interp ACTIVE + loss 有限(avg~3.0),**VRAM 1.5GB(無 OOM)**。**吞吐:首 batch ~26s(nvJPEG/worker 暖機)但 batch 2+ ~0.2s/batch** → ~8min/epoch,GT1 30ep ≈ 4hr,整鏈 ~overnight。ETA 顯示被首 batch 暖機灌大,實際不慢。
+- **測試**:`tests/unit/detection/test_gpu_decode_clip.py`(shape/dtype/range + batch-major ordering,CUDA-gated);live 驗過 bytes-mode vs decode-mode GT/is_keyframe 一致、pixel diff ~2/255(bilinear stretch vs antialias)。
+- **stage 交接 ckpt**:`--best-by none` 不寫 best.ckpt,每 epoch 寫 `epoch_XXXX.ckpt`+`latest.ckpt`。GT1→T3→T1 交接用各 stage `latest.ckpt`(cosine LR 已 anneal 到底=常規 warm-start),最終選模仍靠 §5 detector-only 在 T1 各 epoch 上做。
+
+<details><summary>原設計筆記(存查)</summary>
+
+## (原)3. 待建:GPU-decode 訓練 pipeline(主任務)
 
 **動機**:PP22 是 1920×1080,CPU JPEG decode 重;`--no-preload-images` 的 CPU per-step decode 會變瓶頸。用 **nvJPEG(torchvision GPU decode)**。
 
@@ -90,6 +100,8 @@ PP22 標註是 ~5fps 關鍵幀。現有訓練資料把關鍵幀重編號 1..N �
 - GT scale = 640/orig(seqinfo),與 GPU stretch-resize 640×640 一致。
 - gt-injection(`gate_input`)用 prev-frame GT boxes,不受 decode 影響。
 - 寫個 test:bytes 模式 vs 既有 decode 模式,GT/is_keyframe 一致 + GPU decode 出的 frame shape/range 正確。
+
+</details>
 
 ---
 
@@ -177,8 +189,8 @@ PP22 標註是 ~5fps 關鍵幀。現有訓練資料把關鍵幀重編號 1..N �
    - 若 **transfer**:interp 擱置,改做 score 重校 / 混 MOT17 / label-policy FP(§6 結論)。
    - 若 **自身域**:往下 ↓
 1. ~~§6 門檻下掃~~ ✅ 已跑(2026-07-01,結論見 §6:transfer 無效)。
-2. 建 §3 GPU-decode pipeline + smoke(3 batch,確認不 OOM / interp ACTIVE / loss 有限)。
-3. §4 全鏈訓練(背景,overnight)。
+2. ~~建 §3 GPU-decode pipeline + smoke~~ ✅ 已建+驗(2026-07-01,見 §3:0.2s/batch、VRAM 1.5GB、interp ACTIVE)。**目標已定=PP22 自身域**。
+3. **§4 全鏈訓練(背景,overnight)← 下一步**。GT1→T3→T1,各 stage `latest.ckpt` 交接。
 4. §5 detector-only MOT17 選模 → 跟基線比。
 5. 若贏:部署 + 更新記憶;若平/輸:記 NO-GO(interp 對 T=1 deploy 無利),回 score 校準主線。
 

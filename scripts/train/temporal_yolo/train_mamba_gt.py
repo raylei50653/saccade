@@ -42,7 +42,10 @@ sys.path.insert(0, str(project_root / "build"))
 
 import saccade_tracking_ext  # noqa: F401, E402
 
-from saccade.perception.temporal_yolo.dataset import build_mot17_dataloader  # noqa: E402
+from saccade.perception.temporal_yolo.dataset import (  # noqa: E402
+    build_mot17_dataloader,
+    gpu_decode_clip_batch,
+)
 from saccade.perception.temporal_yolo.training_utils import (  # noqa: E402
     build_warmup_cosine_scheduler,
     resolve_training_sequences,
@@ -339,6 +342,14 @@ def main() -> None:
         help="DataLoader worker processes (parallel JPEG decode when not "
         "RAM-preloaded). 0 = main-thread.",
     )
+    parser.add_argument(
+        "--gpu-decode",
+        action="store_true",
+        help="Live mode only: DataLoader workers return raw JPEG bytes (no decode) "
+        "and the train loop batch-decodes them on the GPU (nvJPEG). Avoids CPU "
+        "JPEG-decode bottleneck on 1080p full-cadence PersonPath22. Implies "
+        "--no-preload-images. Incompatible with --cache-dir and detail sources.",
+    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--spatial-reduction", type=int, default=4)
     parser.add_argument(
@@ -519,6 +530,13 @@ def main() -> None:
         parser.error("--consistency-weight requires --add-temporal (needs T>1 clips)")
     if args.t1_weight > 0.0 and not args.add_temporal:
         parser.error("--t1-weight requires --add-temporal (needs T>1 clips)")
+    if args.gpu_decode:
+        if args.cache_dir:
+            parser.error(
+                "--gpu-decode is live-mode only (incompatible with --cache-dir)"
+            )
+        if args.detail_source != "none":
+            parser.error("--gpu-decode does not support detail sources")
 
     seed_everything(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -875,7 +893,9 @@ def main() -> None:
     # (pair with --num-workers for parallel decode). In cache mode the backbone
     # never runs, so raw frame pixels are unused and preload is skipped anyway.
     live_mode = args.cache_dir == ""
-    preload = live_mode and not args.no_preload_images
+    # GPU-decode: workers return raw bytes, so in-worker RAM-preload is skipped and
+    # frames are decoded on the GPU in the loop (see gpu_decode_clip_batch).
+    preload = live_mode and not args.no_preload_images and not args.gpu_decode
     detail_size = (
         (args.detail_height, args.detail_width)
         if args.detail_source in {"high", "native-p3", "strip-oracle"}
@@ -908,7 +928,12 @@ def main() -> None:
         seed=args.seed,
         augment=augment,
         interpolate_gt=args.interpolate_gt,
+        return_jpeg_bytes=args.gpu_decode,
     )
+    if args.gpu_decode:
+        print(
+            "[MambaGT] GPU-decode ACTIVE: workers return JPEG bytes, nvJPEG decode in-loop"
+        )
     if augment:
         print("[MambaGT] augmentation ACTIVE (live stage, load_images=True)")
     if args.interpolate_gt:
@@ -989,7 +1014,13 @@ def main() -> None:
                 and batch_idx >= args.max_batches_per_epoch
             ):
                 break
-            frames = batch["frames"].to(device, dtype=torch.float32) / 255.0
+            if args.gpu_decode:
+                frames = (
+                    gpu_decode_clip_batch(batch["jpeg_bytes"], args.img_size, device)
+                    / 255.0
+                )
+            else:
+                frames = batch["frames"].to(device, dtype=torch.float32) / 255.0
             gt_boxes_batch = batch["gt_boxes"]
             gt_ids_batch = batch["gt_ids"]
             B, T = frames.shape[:2]
