@@ -153,7 +153,9 @@ PP22 標註是 ~5fps 關鍵幀。現有訓練資料把關鍵幀重編號 1..N �
 | full t1_ep04–07 | ~92.5 | 74.6–76.6 | ±1 |
 | full t1_ep08–15 | 92.2–92.5 | 74.2–75.7 | −0.1 … −0.95 |
 
-**判讀 NO-GO**:① **@0.001(真檢測 recall)全平 92.2–93.3、≈baseline** → full-cadence 沒改變 detector 實際找人能力。② @0.25 是**校準噪聲**:epoch 間 ±2.4 亂跳,峰值在 **ep1(最沒訓的 ckpt)**、隨訓練**往下掉**(ep15 −0.95),與「正確 cadence 越訓越好」相反。③ ep1 +2.43 落在 epoch-to-epoch 噪聲帶內 = calibration 運氣,非 cadence 能力增益。**符合早標 caveat**:deploy T=1 non-temporal,cadence 只塑形 T3 而 T3 不轉移到單幀 deploy;recall 真槓桿是 calibration(§2/§6)非 cadence。→ **interp 對 T=1 deploy recall 無利,結案**。ckpt 留 `runs/mamba_gt_pp22_aug_full_*`。
+**PP22 自身域(held-out `mot_test_kf` 8 seqs)複驗 — NO-GO 更硬**:baseline @0.001=45.43/@0.25=34.92;full-cadence ep01 45.02/35.34(+0.42)、ep04 45.06/35.10、ep15 44.16/33.96(−0.96)。**@0.001 全 ≤ baseline**(沒改善偵測、還略降)、**@0.25 在 baseline ±1 噪聲**、ep1 微峰隨訓練跌 —— 與 MOT17 同型且更弱。**在目標域本身也打不過 baseline → 假設「cadence 對自身域有意義」被證偽,NO-GO 決定性。**
+
+**判讀 NO-GO(MOT17)**:① **@0.001(真檢測 recall)全平 92.2–93.3、≈baseline** → full-cadence 沒改變 detector 實際找人能力。② @0.25 是**校準噪聲**:epoch 間 ±2.4 亂跳,峰值在 **ep1(最沒訓的 ckpt)**、隨訓練**往下掉**(ep15 −0.95),與「正確 cadence 越訓越好」相反。③ ep1 +2.43 落在 epoch-to-epoch 噪聲帶內 = calibration 運氣,非 cadence 能力增益。**符合早標 caveat**:deploy T=1 non-temporal,cadence 只塑形 T3 而 T3 不轉移到單幀 deploy;recall 真槓桿是 calibration(§2/§6)非 cadence。→ **interp 對 T=1 deploy recall 無利,結案**。ckpt 留 `runs/mamba_gt_pp22_aug_full_*`。
 
 <details><summary>(原)5. Checkpoint 選擇方法論</summary>
 
