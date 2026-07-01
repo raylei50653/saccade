@@ -65,6 +65,13 @@ PP22 標註是 ~5fps 關鍵幀。現有訓練資料把關鍵幀重編號 1..N �
 - **測試**:`tests/unit/detection/test_gpu_decode_clip.py`(shape/dtype/range + batch-major ordering,CUDA-gated);live 驗過 bytes-mode vs decode-mode GT/is_keyframe 一致、pixel diff ~2/255(bilinear stretch vs antialias)。
 - **stage 交接 ckpt**:`--best-by none` 不寫 best.ckpt,每 epoch 寫 `epoch_XXXX.ckpt`+`latest.ckpt`。GT1→T3→T1 交接用各 stage `latest.ckpt`(cosine LR 已 anneal 到底=常規 warm-start),最終選模仍靠 §5 detector-only 在 T1 各 epoch 上做。
 
+### 3a. Profiling(cuda-synced step 拆解,2026-07-01)— 結論:流程已到底,不用再優化
+穩態拆解(b60→b80 delta,GT1 recipe B4 T4):**teacher backbone forward 0.080s/batch(~44%)** > backward 0.036(20%)> decode 0.026(14%)> loss 0.020(11%)> mamba 0.018(10%);**data(loader wait)穩態 ≈0.003s(~0%)**。
+- **data I/O 完全 overlap**(GPU-decode + bytes + 8 workers + persistent_workers 成功):`data=24.5s` 是一次性 worker-spawn/prefetch fill(persistent 只付一次,非每 epoch),穩態 loader 不等 → **不是 I/O-bound**。
+- **compute-bound 在 frozen teacher backbone(44%)**。**`--compile` NO-GO**:teacher 反而變慢(gate_input None-vs-list 兩路徑 + box 數變動 → dynamic shapes 狂 recompile;58s 前置吃不回,穩態僅 0.080→0.065)。
+- **唯一剩的槓桿 = 把 teacher forward 從 T-serial 批成 B*T-一次**(省 launch),但 gate_input 是 per-t 建、gt_ratio 的 random() gating 是每 t 對整個 B 共用一次 → 批起來會改 gate-dropout 的 RNG stream = **擾動被訓模型**(這是要拿去評估的 run,不可擾動)→ 不做。
+- **結論**:~0.18s/batch = ~8min/epoch,GT1 30ep ≈ 4hr = teacher-forward 地板。流程已優化到位,直接開 §4。
+
 <details><summary>原設計筆記(存查)</summary>
 
 ## (原)3. 待建:GPU-decode 訓練 pipeline(主任務)
