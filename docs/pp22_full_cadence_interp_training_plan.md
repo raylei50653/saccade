@@ -140,6 +140,23 @@ PP22 標註是 ~5fps 關鍵幀。現有訓練資料把關鍵幀重編號 1..N �
 
 ---
 
+## 5. Checkpoint 選擇 — ✅ 已跑,結論 **NO-GO**(2026-07-01)
+
+跑完全鏈(GT1 30ep→T3 15ep→T1 15ep,B=16,~6hr)+ detector-only sweep(MOT17-02+13-SDP,@0.001/@0.25,15 個 T1 epoch vs baseline):
+
+| ckpt | @0.001 | @0.25 | Δ@0.25 |
+|---|---|---|---|
+| baseline (keyframe t3t1 best) | 92.75 | **75.76** | — |
+| full t1_ep01 | 93.26 | 78.19 | +2.43 |
+| full t1_ep02 | 92.75 | 76.64 | +0.88 |
+| full t1_ep03 | 92.83 | 73.36 | −2.40 |
+| full t1_ep04–07 | ~92.5 | 74.6–76.6 | ±1 |
+| full t1_ep08–15 | 92.2–92.5 | 74.2–75.7 | −0.1 … −0.95 |
+
+**判讀 NO-GO**:① **@0.001(真檢測 recall)全平 92.2–93.3、≈baseline** → full-cadence 沒改變 detector 實際找人能力。② @0.25 是**校準噪聲**:epoch 間 ±2.4 亂跳,峰值在 **ep1(最沒訓的 ckpt)**、隨訓練**往下掉**(ep15 −0.95),與「正確 cadence 越訓越好」相反。③ ep1 +2.43 落在 epoch-to-epoch 噪聲帶內 = calibration 運氣,非 cadence 能力增益。**符合早標 caveat**:deploy T=1 non-temporal,cadence 只塑形 T3 而 T3 不轉移到單幀 deploy;recall 真槓桿是 calibration(§2/§6)非 cadence。→ **interp 對 T=1 deploy recall 無利,結案**。ckpt 留 `runs/mamba_gt_pp22_aug_full_*`。
+
+<details><summary>(原)5. Checkpoint 選擇方法論</summary>
+
 ## 5. Checkpoint 選擇(只用 MOT17,且必須 detector-only)
 
 **方法論(已結案)**:`select_ckpt_by_recall.py` 包的是**完整 tracking pipeline(含 interpolation/relink/private-continuation 後處理)** → 後處理會補回退化的 detector、**遮住退化**,不該拿來守門。
@@ -158,6 +175,8 @@ PP22 標註是 ~5fps 關鍵幀。現有訓練資料把關鍵幀重編號 1..N �
 (driver 範本在舊 scratchpad `det_select.py`,可重寫。)選 **@0.25 不退化**的 epoch(目的=避免退化,非搶分)。
 
 **基線參考(現有 train-loss best.ckpt = augment T1 ep15)**:detector-only MOT17(02+13)@0.001 ~92.8% / @0.25 ~75.8%,14 epoch 幾乎平(無退化)。新 full-cadence 訓練後拿同一把尺比,看有沒有贏。
+
+</details>
 
 ---
 
