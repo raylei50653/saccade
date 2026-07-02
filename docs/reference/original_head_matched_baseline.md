@@ -369,6 +369,38 @@ Detect head has no ÷4 scan round-trip), so with equal whole-graph treatment the
 native head's ceiling should exceed the Mamba head's. Engine is gitignored
 (generated artifact). Numbers: `results/native_s_trt_7seq.log`.
 
+### Full whole-graph for the native head — prediction confirmed (2026-07-02)
+
+Wired the native head into the full whole-graph runtime (`--teacher-head-whole-graph`,
+requires the TRT backbone): CUDA-graph-captures `interpolate → TRT backbone
+infer_graph → native Detect head → box-scale` into one callable, mirroring
+`MambaGatedDetector.use_whole_graph` (`set_whole_graph_img_dims` for the sx/sy scale;
+`detect_raw` takes the full-res frame). One fix was needed: the ultralytics end2end
+`get_topk_index` does `torch.arange(batch_size)` on CPU to index a GPU tensor, which
+CUDA-graph capture rejects — the `agnostic_nms=True` path (topk+gather, no host
+arange) is graph-safe and semantically equivalent for a person-only tracker.
+
+native-s, 7-seq, same machine, fair point:
+
+| runtime | FPS | IDF1 | MOTA | Rcll | Prcn |
+|---|---:|---:|---:|---:|---:|
+| PyTorch backbone | 60.8 | 73.3 | 70.6 | 73.0 | 97.3 |
+| TRT backbone | 88.6 | 73.7 | 70.7 | 73.0 | 97.4 |
+| **whole-graph** | **142.7** | 73.7 | 70.7 | 73.0 | 97.4 |
+| **whole-graph + double-buffer** | **172.7** | 73.7 | — | — | — |
+| *(ref) mamba-s deployed (whole-graph, no DB)* | *91.8* | *78.4* | — | — | — |
+
+**Whole-graph is numerically identical to the TRT-backbone path** (73.7 / 70.7 / 73.0
+/ 97.4 / IDs 450 / FP 2203 all match — the graph just captures the same compute) and
+2.35× the PyTorch backbone. **At matched runtime (whole-graph, no double-buffer, same
+machine) native-s is 1.55× faster than deployed mamba-s (142.7 vs 91.8); with
+double-buffer 1.88× (172.7).** The 4.7 IDF1 gap (73.7 vs 78.4) is backbone-lineage
+(legacy TRT vs our fresh backbone) + private_continuation, **not the head** — the
+heads tie on s. So on s the native head delivers **the same head-level accuracy at
+1.55–1.88× the throughput**, quantifying the "native for throughput-first" position
+in §10. Wiring: `TeacherHeadDetector(whole_graph=True)` / `--teacher-head-whole-graph`.
+Numbers: `results/native_s_wholegraph_7seq.log`, `results/native_wg_compare.txt`.
+
 ## 7. Artifacts
 - `src/saccade/perception/temporal_yolo/teacher_head_detector.py` — the control detector.
 - `scripts/eval/mot17.py` `--teacher-head-ckpt` — CLI entry.

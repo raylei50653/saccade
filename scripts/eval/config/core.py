@@ -419,6 +419,15 @@ def add_core_args(parser: argparse.ArgumentParser) -> None:
         ),
     )
     core.add_argument(
+        "--teacher-head-whole-graph",
+        action="store_true",
+        help=(
+            "Full whole-graph for the native head: CUDA-graph-capture the TRT "
+            "backbone + native Detect head + box-scale into one callable (mirrors "
+            "the Mamba use_whole_graph path). Requires --teacher-head-backbone-engine."
+        ),
+    )
+    core.add_argument(
         "--mamba-small-p3-max-threshold",
         type=float,
         default=0.0,

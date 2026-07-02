@@ -286,6 +286,7 @@ if __name__ == "__main__":
             device="cuda",
             max_det=getattr(args, "max_det", 300),
             trt_backbone_engine=getattr(args, "teacher_head_backbone_engine", "") or "",
+            whole_graph=bool(getattr(args, "teacher_head_whole_graph", False)),
         )
         eval_kwargs["detector"] = teacher_detector
         eval_kwargs["tiling"] = _tiling
