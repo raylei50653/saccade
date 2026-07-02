@@ -111,7 +111,8 @@ public:
                             float bridge_h_lo = 0.0f, float bridge_h_hi = 0.0f,
                             float bridge_dir_bonus = 0.0f,
                            float occ_gate_cover = 0.0f, int occ_gap_min = 30,
-                           float occ_expand_px = 0.0f, float occ_expand_cover = 0.9f);
+                           float occ_expand_px = 0.0f, float occ_expand_cover = 0.9f,
+                           float bridge_app_veto = -1.0f);
     std::vector<int> get_relink_debug();
 
     /**

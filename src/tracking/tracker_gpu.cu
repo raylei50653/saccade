@@ -1356,6 +1356,45 @@ __global__ void age_relink_bank_kernel(int* lostage, int* valid, int cap, int ma
     if (lostage[i] > max_age) valid[i] = 0;
 }
 
+// Dup-id guard, pass 1: a bank entry whose identity is CONFIRMED again (the
+// LOST slot was re-taken by association) is stale — reviving it would emit the
+// same id twice in one frame (archive_lost banks ids at age==1 while the slot
+// is still live). LOST slots stay revivable; the revive/re-match race on those
+// is resolved by retire_revived_slots_kernel below.
+__global__ void invalidate_tracked_bank_entries_kernel(
+    const bool* active, const int* state, const int* track_ids, int max_objs,
+    const int* relink_ids, int* relink_valid, int cap)
+{
+    int e = blockIdx.x * blockDim.x + threadIdx.x;
+    if (e >= cap || !relink_valid[e]) return;
+    int rid = relink_ids[e];
+    for (int s = 0; s < max_objs; ++s) {
+        if (active[s] && state[s] == TRACK_CONFIRMED && track_ids[s] == rid) {
+            relink_valid[e] = 0;
+            return;
+        }
+    }
+}
+
+// Dup-id guard, pass 2: once a birth detection claims an id from the bank, any
+// slot still holding that id (a live LOST slot awaiting expiry) must retire —
+// the identity continues in the newly spawned track. Without this the old slot
+// can be re-matched in a later frame and the id is emitted twice.
+__global__ void retire_revived_slots_kernel(
+    const int* det_revive_id, int num_dets,
+    bool* active, const int* track_ids, int max_objs)
+{
+    int s = blockIdx.x * blockDim.x + threadIdx.x;
+    if (s >= max_objs || !active[s]) return;
+    int tid = track_ids[s];
+    for (int d = 0; d < num_dets; ++d) {
+        if (det_revive_id[d] == tid) {
+            active[s] = false;
+            return;
+        }
+    }
+}
+
 // Cheb-GR two-pass relink (one thread per detection, no sort):
 //   Pass 1 — accumulate S1=ΣD, S2=ΣD² over all valid lost entries (cosine
 //            distance D = 1 - cos), then μ, σ → Chebyshev threshold T = μ - λσ.
@@ -1380,7 +1419,10 @@ __global__ void relink_births_kernel(
     const float* e2 = det_embeds + d * embed_dim;
     float n2 = 0.f;
     for (int k = 0; k < embed_dim; ++k) n2 += e2[k] * e2[k];
-    if (n2 < 1e-6f) return;
+    if (n2 < 1e-6f) {
+        if (dbg) atomicAdd(&dbg[4], 1);  // birth has no embedding (occ-gated / unbudgeted)
+        return;
+    }
     float inv_n2 = rsqrtf(n2);
 
     const float* b = det_boxes + d * 4;
@@ -1401,7 +1443,10 @@ __global__ void relink_births_kernel(
         s2 += dval * dval;
         n_valid++;
     }
-    if (n_valid < 3) return;  // σ unreliable on a tiny bank → do not revive
+    if (n_valid < 3) {
+        if (dbg) atomicAdd(&dbg[5], 1);  // bank too small for σ
+        return;
+    }
     float mu = s1 / n_valid;
     float var = fmaxf(0.0f, s2 / n_valid - mu * mu);
     float t_cheb = mu - cheb_lambda * sqrtf(var);
@@ -1410,6 +1455,7 @@ __global__ void relink_births_kernel(
     // Pass 2: spatial + Chebyshev edge culling, keep the closest survivor.
     float best_d = 1e30f;
     int best_e = -1;
+    int n_spatial = 0, n_cheb = 0, n_floor = 0;
     for (int e = 0; e < cap; ++e) {
         if (!relink_valid[e]) continue;
         float lcx = relink_pos[e * 5 + 0], lcy = relink_pos[e * 5 + 1];
@@ -1419,15 +1465,24 @@ __global__ void relink_births_kernel(
         float r_max = gamma_gate * lh + kEta * sqrtf(vx * vx + vy * vy) * dt;
         float dist = sqrtf((dcx - lcx) * (dcx - lcx) + (dcy - lcy) * (dcy - lcy));
         if (dist > r_max) continue;
+        n_spatial++;
         const float* e1 = relink_feats + e * embed_dim;
         float dot = 0.f, n1 = 0.f;
         for (int k = 0; k < embed_dim; ++k) { dot += e1[k] * e2[k]; n1 += e1[k] * e1[k]; }
         if (n1 < 1e-6f) continue;
         float dval = 1.0f - dot * rsqrtf(n1) * inv_n2;
+        if (dval <= t_cheb) n_cheb++;
+        if (dval <= d_floor) n_floor++;
         if (dval <= t_cheb && dval <= d_floor && dval < best_d) {
             best_d = dval;
             best_e = e;
         }
+    }
+    if (dbg) {
+        if (n_spatial > 0) atomicAdd(&dbg[6], 1);  // ≥1 entry inside spatial radius
+        if (n_cheb > 0)    atomicAdd(&dbg[7], 1);  // ≥1 spatial entry passed Chebyshev
+        if (n_floor > 0)   atomicAdd(&dbg[8], 1);  // ≥1 spatial entry passed sim floor
+        if (best_e >= 0)   atomicAdd(&dbg[9], 1);  // passed both (pre-claim)
     }
     if (best_e >= 0 && atomicCAS(&relink_valid[best_e], 1, 0) == 1) {
         det_revive_id[d] = relink_ids[best_e];
@@ -1572,12 +1627,42 @@ __global__ void spawn_new_tracks_kernel(
 // Initialise covariance for every slot that is active+tentative+hit_streak==1 (freshly spawned).
 __global__ void init_covariance_if_new_kernel(
     const bool* active, const int* state, const int* hit_streak,
-    float* covs, int max_objs)
+    float* covs, int max_objs, float* features, int embed_dim)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= max_objs) return;
     if (!active[i] || state[i] != 1 || hit_streak[i] != 1) return;
     kf_gpu::init_covariance(covs + i * 64);
+    // Slot reuse hygiene: wipe the previous occupant's reference embedding so
+    // archive/veto/seed never read another identity's appearance.
+    if (features) {
+        float* f = features + (size_t)i * embed_dim;
+        for (int k = 0; k < embed_dim; ++k) f[k] = 0.0f;
+    }
+}
+
+// Fill-in reference seeding: a matched detection's embedding becomes the track
+// reference ONLY while the reference is still empty. Young tracks thus carry an
+// appearance from their first clean frame (bridge veto / archive coverage); the
+// Python bank's curated representative overwrites it via the scatter path once
+// available. Dirty (occlusion-gated, zero) det embeddings never seed.
+__global__ void seed_reference_features_kernel(
+    const int* det_to_trk, const float* det_embeds,
+    int num_dets, int embed_dim, int max_objs, float* features)
+{
+    int d = blockIdx.x * blockDim.x + threadIdx.x;
+    if (d >= num_dets) return;
+    int t = det_to_trk[d];
+    if (t < 0 || t >= max_objs) return;
+    const float* src = det_embeds + (size_t)d * embed_dim;
+    float n2 = 0.0f;
+    for (int k = 0; k < embed_dim; ++k) n2 += src[k] * src[k];
+    if (n2 < 1e-6f) return;
+    float* dst = features + (size_t)t * embed_dim;
+    float n2d = 0.0f;
+    for (int k = 0; k < embed_dim; ++k) n2d += dst[k] * dst[k];
+    if (n2d > 1e-6f) return;
+    for (int k = 0; k < embed_dim; ++k) dst[k] = src[k];
 }
 
 // ── Phase-4 bidirectional foot-bridge (Kalman-free) ──────────────────────────
@@ -1854,6 +1939,7 @@ __global__ void relink_bidir_propose_kernel(
     const unsigned int* occ_grid, const int* occ_frame,
     float occ_gate_cover, int occ_gap_min, float occ_expand_px, float occ_expand_cover,
     int frame_w, int frame_h,
+    const float* features, int embed_dim, float app_veto_cos,
     int* track_revived, int* bridge_claim, int* bridge_cand_lost, int* dbg)
 {
     int cand = blockIdx.x * blockDim.x + threadIdx.x;
@@ -1877,6 +1963,20 @@ __global__ void relink_bidir_propose_kernel(
     float occ_inv_cw = (float)OCC_GW / fmaxf((float)frame_w, 1.0f);
     float occ_inv_ch = (float)OCC_GH / fmaxf((float)frame_h, 1.0f);
     float cand_fx = cring[0], cand_fy = cring[1] + 0.5f * cring[2];  // entry foot
+
+    // Appearance veto context: only active when enabled AND this candidate has a
+    // clean reference embedding. A pair is vetoed only when BOTH sides have
+    // references and their cosine is below app_veto_cos (clearly different
+    // people); missing embeddings pass through (geometry-only, bit-exact with
+    // veto disabled).
+    const float* cand_emb = nullptr;
+    float cand_inv_norm = 0.0f;
+    if (app_veto_cos > -1.0f && features) {
+        const float* ce = features + (size_t)cand * embed_dim;
+        float n2c = 0.0f;
+        for (int k = 0; k < embed_dim; ++k) n2c += ce[k] * ce[k];
+        if (n2c > 1e-6f) { cand_emb = ce; cand_inv_norm = rsqrtf(n2c); }
+    }
 
     float best_dist = 1e30f, second_dist = 1e30f;
     int best_lost = -1;
@@ -1988,6 +2088,19 @@ __global__ void relink_bidir_propose_kernel(
             }
         }
         if (!ok) continue;
+        // Appearance veto (ranking use of the embedding: prune clearly-different
+        // identities from the geometry shortlist; the correct runner-up then wins
+        // the bdist ranking). Calibrated on the 2026-07-02 m candidate probe:
+        // in-bridge-zone cos<0.20 kills ~35% of false pairs at ~1% true-pair cost.
+        if (cand_emb) {
+            const float* le = features + (size_t)lost * embed_dim;
+            float dot = 0.0f, n2l = 0.0f;
+            for (int k = 0; k < embed_dim; ++k) { dot += le[k] * cand_emb[k]; n2l += le[k] * le[k]; }
+            if (n2l > 1e-6f && dot * rsqrtf(n2l) * cand_inv_norm < app_veto_cos) {
+                if (dbg) atomicAdd(&dbg[10], 1);  // bridge pair vetoed by appearance
+                continue;
+            }
+        }
         if (bdist < best_dist) { second_dist = best_dist; best_dist = bdist; best_lost = lost; }
         else if (bdist < second_dist) { second_dist = bdist; }
     }
@@ -2874,6 +2987,12 @@ public:
         cudaMemsetAsync(d_slot_cursor_, 0, sizeof(int), stream);
         collect_free_slots_kernel<<<1, 256, 0, stream>>>(
             d_active_, max_objs_, d_free_slots_, d_n_free_);
+        // Seed young-track references from matched det embeddings (fill-in only;
+        // the bank's curated representative later overwrites via scatter).
+        if (d_embeddings && (relink_enabled_ || bridge_app_veto_ > -1.0f)) {
+            seed_reference_features_kernel<<<(max_assoc_ + threads - 1) / threads, threads, 0, stream>>>(
+                d_det_to_trk_, d_embeddings, num_dets, embed_dim_, max_objs_, d_features_);
+        }
         // Relink: archive tracks that just became LOST so the birth relink can
         // revive them when a detection re-appears (unlike expire-only archiving
         // which only saves about-to-expire confirmed tracks).
@@ -2889,6 +3008,11 @@ public:
         // before spawn assigns fresh ids.
         const int* d_revive = nullptr;
         if (relink_enabled_ && d_embeddings) {
+            // Dup-id guard: entries whose id is confirmed-tracked again must not
+            // be revivable this frame.
+            invalidate_tracked_bank_entries_kernel<<<(relink_bank_cap_ + threads - 1) / threads, threads, 0, stream>>>(
+                d_active_, d_state_, d_track_ids_, max_objs_,
+                d_relink_ids_, d_relink_valid_, relink_bank_cap_);
             // Fixed grid (max_assoc_) so the launch config is stable under CUDA
             // graph capture; the kernel guards with d >= n_det.
             relink_births_kernel<<<(max_assoc_ + threads - 1) / threads, threads, 0, stream>>>(
@@ -2899,6 +3023,10 @@ public:
                 relink_sim_thresh_, relink_lambda_, relink_spatial_gate_,
                 d_det_revive_id_, d_relink_dbg_);
             d_revive = d_det_revive_id_;
+            // Dup-id guard: a revived identity's old LOST slot retires now so a
+            // later re-match cannot emit the same id twice.
+            retire_revived_slots_kernel<<<blocks, threads, 0, stream>>>(
+                d_det_revive_id_, num_dets, d_active_, d_track_ids_, max_objs_);
         }
         spawn_new_tracks_kernel<<<1, 256, 0, stream>>>(
             d_det_to_trk_, d_boxes, d_scores, d_classes, num_dets,
@@ -2915,7 +3043,8 @@ public:
             bidirectional_ ? d_ema_h_ : nullptr,
             bidirectional_ ? d_track_revived_ : nullptr);
         init_covariance_if_new_kernel<<<(max_objs_ + 255) / 256, 256, 0, stream>>>(
-            d_active_, d_state_, d_hit_streak_, d_covs_, max_objs_);
+            d_active_, d_state_, d_hit_streak_, d_covs_, max_objs_,
+            d_features_, embed_dim_);
 
         // Phase-4 bidirectional foot-bridge relink (Kalman-free; default off →
         // no kernel runs → bit-identical). Foot history must update after spawn
@@ -2952,6 +3081,7 @@ public:
                 occ_on ? d_occ_grid_ : nullptr, occ_on ? d_occ_frame_ : nullptr,
                 occ_gate_cover_, occ_gap_min_, occ_expand_px_, occ_expand_cover_,
                 frame_w_, frame_h_,
+                d_features_, embed_dim_, bridge_app_veto_,
                 d_track_revived_, d_bridge_claim_, d_bridge_cand_lost_, d_relink_dbg_);
             relink_bidir_commit_kernel<<<grid, 256, 0, stream>>>(
                 d_active_, d_track_ids_, max_objs_,
@@ -3017,7 +3147,8 @@ public:
                            float bridge_h_lo = 0.0f, float bridge_h_hi = 0.0f,
                            float bridge_dir_bonus = 0.0f,
                            float occ_gate_cover = 0.0f, int occ_gap_min = 30,
-                           float occ_expand_px = 0.0f, float occ_expand_cover = 0.9f) {
+                           float occ_expand_px = 0.0f, float occ_expand_cover = 0.9f,
+                           float bridge_app_veto = -1.0f) {
         relink_enabled_ = enabled;
         relink_bank_cap_ = std::max(1, bank_cap);
         relink_sim_thresh_ = sim_thresh;
@@ -3044,6 +3175,7 @@ public:
         occ_gap_min_ = std::max(1, occ_gap_min);
         occ_expand_px_ = std::max(0.0f, occ_expand_px);
         occ_expand_cover_ = std::clamp(occ_expand_cover, 0.0f, 1.0f);
+        bridge_app_veto_ = std::min(bridge_app_veto, 1.0f);  // <= -1 disables
         // Occupancy ring (~72 KB): lazily allocated only when an occ gate is on.
         if (bidirectional_ && (occ_gate_cover_ > 0.0f || occ_expand_px_ > 0.0f) &&
             d_occ_grid_ == nullptr) {
@@ -3055,8 +3187,8 @@ public:
         // Appearance relink writes births/revives into d_relink_dbg_[0..1], and
         // bridge relink writes attempts/accepts into d_relink_dbg_[2..3].
         if ((enabled || bidirectional_) && d_relink_dbg_ == nullptr) {
-            checkCuda(cudaMalloc(&d_relink_dbg_, 4 * sizeof(int)));
-            checkCuda(cudaMemset(d_relink_dbg_, 0, 4 * sizeof(int)));
+            checkCuda(cudaMalloc(&d_relink_dbg_, 12 * sizeof(int)));
+            checkCuda(cudaMemset(d_relink_dbg_, 0, 12 * sizeof(int)));
         }
         if (enabled && d_relink_feats_ != nullptr && relink_alloc_cap_ < relink_bank_cap_) {
             cudaFree(d_relink_feats_); d_relink_feats_ = nullptr;
@@ -3086,9 +3218,9 @@ public:
     // Debug accumulated over the sequence:
     //   [0]=archived(cursor) [1]=births [2]=revived [3]=bridge_attempts [4]=bridge_accepts
     std::vector<int> get_relink_debug() {
-        std::vector<int> out(5, 0);
+        std::vector<int> out(13, 0);
         if (d_relink_cursor_) checkCuda(cudaMemcpy(out.data(), d_relink_cursor_, sizeof(int), cudaMemcpyDeviceToHost));
-        if (d_relink_dbg_) checkCuda(cudaMemcpy(out.data() + 1, d_relink_dbg_, 4 * sizeof(int), cudaMemcpyDeviceToHost));
+        if (d_relink_dbg_) checkCuda(cudaMemcpy(out.data() + 1, d_relink_dbg_, 12 * sizeof(int), cudaMemcpyDeviceToHost));
         return out;
     }
     void set_oao_params(float tau, float contest_thresh, float score_w, int occ_mode,
@@ -3473,6 +3605,7 @@ private:
     float bridge_h_lo_          = 0.0f; // scale gate: min ema_lost/ema_cand ratio
     float bridge_h_hi_          = 0.0f; // scale gate: max ratio (<=0 disables the gate)
     float bridge_dir_bonus_     = 0.0f; // directional consistency relaxation multiplier
+    float bridge_app_veto_      = -1.0f; // appearance cosine veto floor (<=-1 off)
     float occ_gate_cover_       = 0.0f; // gap-occupancy veto: min occ_cover (0=off)
     int   occ_gap_min_          = 30;   // occ gates apply only to gaps >= this (short-gap occ is noise)
     float occ_expand_px_        = 0.0f; // tiered expansion: looser bridge_px when occ high (0=off)
@@ -3658,13 +3791,15 @@ void GPUByteTracker::set_relink_params(bool enabled, int bank_cap, float sim_thr
                                        float bridge_h_lo, float bridge_h_hi,
                                        float bridge_dir_bonus,
                                        float occ_gate_cover, int occ_gap_min,
-                                       float occ_expand_px, float occ_expand_cover) {
+                                       float occ_expand_px, float occ_expand_cover,
+                                       float bridge_app_veto) {
     pimpl_->set_relink_params(enabled, bank_cap, sim_thresh, cheb_lambda, spatial_gate, max_age,
                               bidirectional, bridge_px, bridge_at, bridge_min_lost, bridge_ttl,
                               bridge_max_speed, bridge_person_height, bridge_fps, bridge_margin,
                               bridge_spatial_gate, bridge_anchor, bridge_anchor_rate,
                               bridge_h_lo, bridge_h_hi, bridge_dir_bonus,
-                              occ_gate_cover, occ_gap_min, occ_expand_px, occ_expand_cover);
+                              occ_gate_cover, occ_gap_min, occ_expand_px, occ_expand_cover,
+                              bridge_app_veto);
 }
 std::vector<int> GPUByteTracker::get_relink_debug() { return pimpl_->get_relink_debug(); }
 void GPUByteTracker::set_oao_params(float tau, float contest_thresh, float score_w, int occ_mode,

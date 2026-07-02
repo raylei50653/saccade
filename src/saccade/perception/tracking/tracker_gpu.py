@@ -652,6 +652,7 @@ class GPUByteTracker:
         occ_gap_min: int = 30,
         occ_expand_px: float = 0.0,
         occ_expand_cover: float = 0.9,
+        bridge_app_veto: float = -1.0,
     ) -> None:
         setter = getattr(self.tracker, "set_relink_params", None)
         if setter is not None:
@@ -685,6 +686,7 @@ class GPUByteTracker:
                     occ_gap_min,
                     occ_expand_px,
                     occ_expand_cover,
+                    bridge_app_veto,
                 )
             except TypeError:
                 setter(*base_args)

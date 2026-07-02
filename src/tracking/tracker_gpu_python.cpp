@@ -2768,6 +2768,7 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
               py::arg("bridge_dir_bonus") = 0.0f,
              py::arg("occ_gate_cover") = 0.0f, py::arg("occ_gap_min") = 30,
              py::arg("occ_expand_px") = 0.0f, py::arg("occ_expand_cover") = 0.9f,
+             py::arg("bridge_app_veto") = -1.0f,
              "Birth-time lost-bank ReID relink: revive a lost identity at spawn instead "
              "of minting a new id. Precision-first (high sim threshold + spatial gate). "
              "The bridge_* args enable the Phase-4 Kalman-free bidirectional foot-bridge "
