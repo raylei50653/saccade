@@ -11,6 +11,7 @@
   * `find_matches_batch` 與 `find_cross_camera_matches`：使用向量化矩陣乘法 `torch.mm(queries, targets.t())` 並行計算所有待關聯目標與 Feature Bank 的餘弦相似度。跨相機匹配使用更高的嚴格相似度門檻（`self.threshold + 0.03`）。
 * ⚠️ **ReID + Appearance Bank 暫緩執行**：待 Temporal YOLO 驗證後，再行評估是否疊加。
 * ℹ️ **Cheb-GR re-ranking 不屬本模組**：core 程式碼物理上放在 `perception/reid/cheb_gr.py`（commit 也 tag `reid`），但功能為 re-ranking / tracklet 關聯，歸 [semantic](../semantic/README.md)；本模組維持暫緩，不因 Cheb-GR 重啟。
+* 📝 **MobileNetV4 候選 backbone**：目前僅完成資源整理與本地權重下載，未接線；整合方案與 gate 見 [mobilenetv4_integration_options.md](mobilenetv4_integration_options.md)。
 
 ## 🔗 I/O & Dataflow
 

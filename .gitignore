@@ -121,3 +121,4 @@ graphify-out/**/graph.html
 # Build artifacts accidentally committed
 src/tracking/topk_test
 src/tracking/topk_test_fixed
+models/**/*.pth
