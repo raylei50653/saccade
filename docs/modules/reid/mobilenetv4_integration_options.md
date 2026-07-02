@@ -245,6 +245,30 @@ batch-hard triplet m0.3，PK 24×4，AdamW bb 1e-4 / head 3.5e-4，cosine+warmup
   - 現成接口：Phase-3 bank inject gate / 高品質 tier、need_reid 觸發器
     （birth_death_lost_min）可直接掛。
 
+## 方案 A 接線備忘（給下一個 session）
+
+- **Checkpoint 格式**（`runs/reid_mnv4_ft_visclean/best.ckpt`，ep45，gap31+ 74.1%）：
+  `{arch, input_hw, mean, std, n_classes, backbone, bnneck, metrics, args}`。
+  embedding = `L2norm(bnneck(backbone((x-mean)/std)))`，輸入 224×224 stretch
+  （bicubic），dim=1280。注意 best 是用 MOT17 gap31+ 選的（輕微 selection-on-eval）。
+- **重跑驗證**：
+  `uv run scripts/eval/appearance/reid_id_benchmark.py --ft-checkpoint runs/reid_mnv4_ft_visclean/best.ckpt --resize bicubic`
+- **ONNX export**：把 backbone+BNNeck 包成單一 nn.Module 再 export（輸出 pre-L2
+  embedding，L2 留在 extractor 做，與現有模型一致）；input 命名 `pixel_values` +
+  dynamic batch axis，可直接吃 `TRTFeatureExtractor` 的 Python TRT 路徑（它寫死讀
+  `pixel_values`）。
+- **TRTFeatureExtractor 接線**（`src/saccade/perception/feature_extractor.py`）：
+  `_DEFAULT_ENGINE` 加 `"mobilenetv4_reid"`；`_normalize` 走 ImageNet mean/std 分支
+  （同 dinov2）；C++ ext 的 `cpp_type_map` 需對應 ModelType（或第一輪先走 Python
+  TRT 路徑驗證）。
+- **Tracker A/B 評估重點**：看 relink 作用區（gap 31+ 重連 / IDs / AssA），不是整體
+  IDF1；birth gate / occlusion freeze 規則見上節。過往 relink 失敗模式=長 gap
+  look-alike 誤接（gap 121+ 仍僅 ~46%），寧缺勿錯的門檻策略照舊。
+- 訓練/評估均為 `conv_small`；要 `_050`（latency）或 `medium` 需用
+  `scripts/train/finetune_mobilenetv4_reid.py --arch/--init` 重訓。
+- 環境坑：跑舊 TRT 模型（osnet 等）作 control 需
+  `PYTHONPATH=src/saccade/perception` + `LD_LIBRARY_PATH=<torch>/lib`。
+
 ## 當前決策
 
 **方案 C 已完成且 gate 通過（2026-07-02）**：ImageNet 權重的 conv_small 即超過既有
