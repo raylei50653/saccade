@@ -16,6 +16,10 @@ Metrics (leave-one-out, same-frame matches excluded):
 Usage:
   uv run scripts/eval/appearance/reid_id_benchmark.py
   uv run scripts/eval/appearance/reid_id_benchmark.py --model-type siglip2_reid --per-id 20
+  uv run scripts/eval/appearance/reid_id_benchmark.py --model-type mobilenetv4_conv_small
+
+mobilenetv4_* model types run eagerly via timm from local checkpoints listed in
+models/mobilenetv4/manifest.json (no TensorRT engine needed).
 """
 
 from __future__ import annotations
@@ -37,6 +41,65 @@ sys.path.insert(0, str(_ROOT))
 sys.path.insert(0, str(_ROOT / "src"))
 
 from saccade.perception.feature_extractor import TRTFeatureExtractor  # noqa: E402
+
+_MNV4_MANIFEST = _ROOT / "models" / "mobilenetv4" / "manifest.json"
+
+
+class TimmEagerExtractor:
+    """Eager timm extractor from a local checkpoint (offline benchmark only).
+
+    Mirrors the TRTFeatureExtractor contract used by this script: `.device`,
+    `.feature_dim`, and `.extract(t)` with t float32 NCHW in [0, 1];
+    model-specific normalization happens inside.
+    """
+
+    def __init__(
+        self, name: str, device: str = "cuda", ft_checkpoint: str = ""
+    ) -> None:
+        import json
+
+        import timm
+
+        self.device = device
+        self._bnneck = None
+        if ft_checkpoint:
+            # Fine-tuned checkpoint from scripts/train/finetune_mobilenetv4_reid.py:
+            # backbone state dict + BNNeck; embedding = bnneck(backbone(x)).
+            ck = torch.load(ft_checkpoint, map_location="cpu")
+            self.model = timm.create_model(ck["arch"], pretrained=False, num_classes=0)
+            self.model.load_state_dict(ck["backbone"], strict=True)
+            self.input_hw = tuple(ck["input_hw"])
+            self._mean = torch.tensor(ck["mean"], device=device).view(1, 3, 1, 1)
+            self._std = torch.tensor(ck["std"], device=device).view(1, 3, 1, 1)
+            d = ck["bnneck"]["weight"].shape[0]
+            self._bnneck = torch.nn.BatchNorm1d(d)
+            self._bnneck.load_state_dict(ck["bnneck"])
+            self._bnneck.eval().to(device)
+        else:
+            entries = {
+                m["name"]: m for m in json.loads(_MNV4_MANIFEST.read_text())["models"]
+            }
+            if name not in entries:
+                raise ValueError(f"'{name}' not in {_MNV4_MANIFEST}: {list(entries)}")
+            cfg = entries[name]["pretrained_cfg"]
+            self.model = timm.create_model(
+                cfg["architecture"], pretrained=False, num_classes=0
+            )
+            sd = torch.load(_ROOT / entries[name]["path"], map_location="cpu")
+            self.model.load_state_dict(sd, strict=True)
+            self.input_hw = (int(cfg["input_size"][1]), int(cfg["input_size"][2]))
+            self._mean = torch.tensor(cfg["mean"], device=device).view(1, 3, 1, 1)
+            self._std = torch.tensor(cfg["std"], device=device).view(1, 3, 1, 1)
+        self.model.eval().to(device)
+        with torch.no_grad():
+            probe = torch.zeros(1, 3, *self.input_hw, device=device)
+            self.feature_dim = int(self.model(probe).shape[-1])
+
+    @torch.no_grad()
+    def extract(self, t: torch.Tensor) -> torch.Tensor:
+        feat = self.model((t - self._mean) / self._std)
+        return self._bnneck(feat) if self._bnneck is not None else feat
+
 
 GAP_BUCKETS = [(1, 10), (11, 30), (31, 60), (61, 120), (121, 10**9)]
 SIZE_BUCKETS = [(0, 50), (50, 100), (100, 200), (200, 10**9)]  # query box height (px)
@@ -235,6 +298,11 @@ def main() -> None:
     ap.add_argument("--sequences", default="")
     ap.add_argument("--model-type", default="siglip2_reid")
     ap.add_argument(
+        "--ft-checkpoint",
+        default="",
+        help="Fine-tuned mobilenetv4 ReID checkpoint (implies timm eager path).",
+    )
+    ap.add_argument(
         "--per-id", type=int, default=20, help="Temporal samples per identity."
     )
     ap.add_argument("--im-ext", default=".jpg")
@@ -251,14 +319,20 @@ def main() -> None:
             d.name for d in gt_root.iterdir() if d.is_dir() and d.name.endswith("-SDP")
         )
     )
-    crop_hw = (
-        (256, 128)
-        if args.model_type in {"transreid", "osnet", "fastreid"}
-        else (224, 224)
-    )
-    extractor = TRTFeatureExtractor(
-        engine_path="", model_type=args.model_type, max_batch=64
-    )
+    if args.model_type.startswith("mobilenetv4") or args.ft_checkpoint:
+        extractor = TimmEagerExtractor(
+            args.model_type, ft_checkpoint=args.ft_checkpoint
+        )
+        crop_hw = extractor.input_hw
+    else:
+        crop_hw = (
+            (256, 128)
+            if args.model_type in {"transreid", "osnet", "fastreid"}
+            else (224, 224)
+        )
+        extractor = TRTFeatureExtractor(
+            engine_path="", model_type=args.model_type, max_batch=64
+        )
 
     runs = []  # (seq, metrics)
     gh, gt_ = defaultdict(int), defaultdict(int)
