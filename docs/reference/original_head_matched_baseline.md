@@ -302,7 +302,10 @@ So the framing is **not** "Mamba head unconditionally beats native," but
 **capacity-gated temporal head**: when backbone features are thin the temporal
 shaping can't express itself (s tie); once the backbone supplies rich enough
 spatial/semantic features (m), the Mamba head converts them into more stable
-detection *and* association. Trade-off: 1.6× slower (39 vs 64 FPS eager).
+detection *and* association. Trade-off: 1.6× slower **in eager only** (39 vs 64 FPS);
+in the deployed whole-graph+double-buffer runtime the Mamba head is actually *faster*
+than the native head (§11 correction) — so on speed too the eager disadvantage does
+not hold at deployment.
 
 ## 10. Project positioning (report-ready)
 
@@ -319,10 +322,14 @@ backbone 上，mamba head 相對同 backbone native head 提升 **+2.2 IDF1**，
 另一部分來自 T3→T1 的時序一致性塑形；後者更接近架構性收益，且在目前 native per-frame
 head、完整訓練與 eval 參數掃描下仍無法完全補回。
 
-**部署定位**：
+**部署定位**（§11 修正後更新）：
 - **`m + mamba` = 目前最佳生產點**（單流高精度、MOT17 主結果、IDF1 80% 衝刺主線）。
-- **`s` 上不值得付出 mamba 成本**（打平且更慢）；`native-s / native-m` 適合極限
-  多流、低功耗、或吞吐優先場景（1.6× 快、precision 高、FP 少）。
+- **`s` 上：精度打平，但速度優勢視 runtime 而定**。⚠️ 原本寫「native 1.6× 快、
+  給吞吐優先」**只在 eager／非-graph runtime 成立**；在實際部署的 whole-graph +
+  double-buffer 下，**mamba-s 反而快 1.35×（233 vs 173 FPS）**——CUDA-graph 消掉了
+  mamba ÷4 scan 的 launch 開銷，而 native 的 ultralytics 80 類 end2end postprocess
+  沒變輕、成了瓶頸。故 native 頭的吞吐優勢**不轉移到部署 runtime**；`native-s/-m`
+  的合理定位收窄為 eager／未優化 runtime，或把頭改成 person-only（未做）之後。
 
 **native-m eval-param search — 76.4 is the ceiling, same as s**: bridge-relax
 −0.7, private_continuation −1.3, both −1.4 (all inflate FP, AssA locked ~63.7).
@@ -363,13 +370,13 @@ native-s, 7-seq, fair point:
 backbone was the dominant cost. This is **TRT backbone + PyTorch head + PyTorch
 tracker**, *not* the full whole-graph runtime: the deployed Mamba path (`~117 FPS`
 s / `~239` m) additionally CUDA-graph-captures head+tracker and double-buffers,
-which the native head is not yet wired into. At the **matched runtime tier** the
-native head is faster (eager PyTorch: native 60.8 vs mamba 38.0 = 1.6×; the native
-Detect head has no ÷4 scan round-trip), so with equal whole-graph treatment the
-native head's ceiling should exceed the Mamba head's. Engine is gitignored
-(generated artifact). Numbers: `results/native_s_trt_7seq.log`.
+which the native head is not yet wired into. In eager PyTorch the native head is
+faster (native 60.8 vs mamba 38.0 = 1.6×, the ÷4 scan is launch-bound), **but that
+does NOT carry to the whole-graph runtime — see the correction in the next
+subsection: once the scan is CUDA-graphed the Mamba head is actually faster.** Engine
+is gitignored (generated artifact). Numbers: `results/native_s_trt_7seq.log`.
 
-### Full whole-graph for the native head — prediction confirmed (2026-07-02)
+### Full whole-graph for the native head — and the speed advantage REVERSES (2026-07-02)
 
 Wired the native head into the full whole-graph runtime (`--teacher-head-whole-graph`,
 requires the TRT backbone): CUDA-graph-captures `interpolate → TRT backbone
@@ -380,25 +387,39 @@ infer_graph → native Detect head → box-scale` into one callable, mirroring
 CUDA-graph capture rejects — the `agnostic_nms=True` path (topk+gather, no host
 arange) is graph-safe and semantically equivalent for a person-only tracker.
 
-native-s, 7-seq, same machine, fair point:
-
-| runtime | FPS | IDF1 | MOTA | Rcll | Prcn |
-|---|---:|---:|---:|---:|---:|
-| PyTorch backbone | 60.8 | 73.3 | 70.6 | 73.0 | 97.3 |
-| TRT backbone | 88.6 | 73.7 | 70.7 | 73.0 | 97.4 |
-| **whole-graph** | **142.7** | 73.7 | 70.7 | 73.0 | 97.4 |
-| **whole-graph + double-buffer** | **172.7** | 73.7 | — | — | — |
-| *(ref) mamba-s deployed (whole-graph, no DB)* | *91.8* | *78.4* | — | — | — |
-
 **Whole-graph is numerically identical to the TRT-backbone path** (73.7 / 70.7 / 73.0
-/ 97.4 / IDs 450 / FP 2203 all match — the graph just captures the same compute) and
-2.35× the PyTorch backbone. **At matched runtime (whole-graph, no double-buffer, same
-machine) native-s is 1.55× faster than deployed mamba-s (142.7 vs 91.8); with
-double-buffer 1.88× (172.7).** The 4.7 IDF1 gap (73.7 vs 78.4) is backbone-lineage
-(legacy TRT vs our fresh backbone) + private_continuation, **not the head** — the
-heads tie on s. So on s the native head delivers **the same head-level accuracy at
-1.55–1.88× the throughput**, quantifying the "native for throughput-first" position
-in §10. Wiring: `TeacherHeadDetector(whole_graph=True)` / `--teacher-head-whole-graph`.
+/ 97.4 / IDs 450 / FP 2203 all match — the graph just captures the same compute).
+
+**⚠️ Correction — the "native head is faster" claim does NOT survive the deployed
+runtime.** The head-to-head speed at matched config on the same `s` backbone
+(same machine, 7-seq):
+
+| config (same s backbone) | native-s FPS | mamba-s FPS | faster |
+|---|---:|---:|---|
+| eager PyTorch backbone | 60.8 | 38.0 | native 1.60× |
+| whole-graph, no double-buffer | 142.7 | 91.8 | native 1.55× |
+| **whole-graph + double-buffer (deployed)** | 172.7 | **233.1** | **mamba 1.35×** |
+
+**The speed advantage REVERSES.** "Native is faster" is an **eager-mode artifact**:
+in eager, the Mamba head's ÷4 selective-scan is launch-bound (many small kernels), so
+the native head wins. The whole-graph runtime CUDA-graph-captures exactly that scan,
+erasing its launch overhead — and now the **native head's cost dominates: the
+ultralytics 80-class end2end postprocess (full DFL decode + top-k over 8400 anchors ×
+80 classes) is heavier than the Mamba head's lean 1-class person head** (native
+per-frame 11.6 ms vs mamba-m 8.6 ms). Double-buffer compounds it: it lifts mamba
+2.54× (91.8→233, balanced graphed-detect vs tracker legs) but native only 1.21×
+(142.7→172.7, imbalanced legs), because the native detect leg cannot be hidden.
+tracker-graph and torch.compile did **not** help native (both flat/worse: 156.8 /
+154.4). So on the actual deployed config (whole-graph + double-buffer) the **Mamba
+head is 1.35× FASTER than the native head**, not slower.
+
+⇒ The native head's throughput edge only exists in eager / non-graph runtimes; under
+the deployment optimization the product actually uses, the Mamba head wins on speed
+too. (A person-only native head — dropping the 79 unused COCO classes from the
+postprocess — could close this, but that is head surgery, not tested here.) Wiring:
+`TeacherHeadDetector(whole_graph=True)` / `--teacher-head-whole-graph`; preset
+`native_whole_graph` (adds `use_tracker_graph`). Numbers: `results/native_s_wg_tg.log`,
+`results/cmp_mamba_s_db.log`, `results/native_wg_ceiling.txt`.
 Numbers: `results/native_s_wholegraph_7seq.log`, `results/native_wg_compare.txt`.
 
 ## 7. Artifacts

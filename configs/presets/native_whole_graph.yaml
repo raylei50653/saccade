@@ -1,0 +1,73 @@
+# Native-head whole-graph preset (derived from mamba_pyt_backbone).
+#
+# For the ORIGINAL YOLO detect head (--teacher-head-ckpt) run through the full
+# whole-graph runtime: detect graph (--teacher-head-whole-graph +
+# --teacher-head-backbone-engine) + tracker graph + double-buffer. Identical
+# tracker to mamba_pyt_backbone; the ONLY change is use_tracker_graph: true so
+# the eager Python tracker (the throughput bottleneck once the detect side is
+# graphed) is CUDA-graph-captured, matching the deployed mamba path.
+#
+# Usage:
+#   uv run scripts/eval/mot17.py --preset native_whole_graph --detector SDP \
+#     --no-compile --mamba-ckpt "" \
+#     --teacher-head-ckpt runs/gated_det_native_full/epoch_0026.ckpt \
+#     --teacher-head-backbone-engine models/yolo/native_s_backbone_640.engine \
+#     --teacher-head-whole-graph --double-buffer --detect-barrier event \
+#     --confirm-streak 2 --confirm-score-thresh 0.15 --new-track-thresh 0.20
+
+# --- Detection & Tiling ---
+tiling: native_640
+preprocess: none
+track_person_only: false
+person_geometry_prior: false
+detection_quality_scaling: false
+
+# --- Backbone (PyTorch fallback; --teacher-head-backbone-engine overrides) ---
+mamba_ckpt: runs/mamba_gt_v14replica_t3_t1/best.ckpt
+fpn_backbone_engine: ""
+
+# Mamba-head graphs off (native head owns its own graph via --teacher-head-whole-graph);
+# tracker graph ON — this is the only change vs mamba_pyt_backbone.
+use_whole_graph: false
+use_cuda_graph: false
+use_tracker_graph: true
+
+# --- GMC ---
+gmc: true
+gmc_downscale: 4
+gmc_fg_mask: false
+
+# --- ReID ---
+reid_mode: "off"
+
+relink_bridge_enabled: true
+relink_bridge_px: 0.25
+relink_bridge_margin: 0.05
+relink_bridge_h_lo: 0.75
+relink_bridge_h_hi: 1.33
+relink_bridge_spatial_gate: 0.0
+relink_bridge_dir_bonus: 0.8
+
+# --- Tracker Parameters ---
+match_thresh: 0.50
+new_track_thresh: 0.28
+kalman_r_scale: 2.8
+confirm_streak: 3
+confirm_score_thresh: 0.50
+fuse_score_weight: 0.0
+id_stability_filter: false
+per_seq_adapt: false
+geometry_suspect_support: false
+interpolate_tracklets: true
+interpolate_max_gap: 35
+interpolate_min_track_len: 5
+interpolate_min_h: 0
+
+# --- OA-SORT OAO occlusion penalty (duration-ramped) ---
+oao_tau: 0.50
+oao_ramp_frames: 25
+
+# --- Multiplicative (log-linear) cost form ---
+multiplicative_cost: true
+sinkhorn_lambda: 10
+stability_cost_w: 0.20

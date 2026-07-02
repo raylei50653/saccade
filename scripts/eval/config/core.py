@@ -185,6 +185,7 @@ def add_core_args(parser: argparse.ArgumentParser) -> None:
             "mamba_detail_b2_native_p3",
             "mamba_eager_temporal_probe",
             "fpn_reid_baseline",
+            "native_whole_graph",
         ),
         default=None,
         help="Built-in preset from configs/presets/<name>.yaml.",
