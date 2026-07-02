@@ -399,6 +399,16 @@ def add_core_args(parser: argparse.ArgumentParser) -> None:
         help="Base YOLO weights matching the Mamba/teacher lineage.",
     )
     core.add_argument(
+        "--teacher-head-ckpt",
+        default="",
+        help=(
+            "Matched-baseline control: run the NATIVE YOLO detect head of a gated "
+            "teacher checkpoint through the standard tracker (swaps out the Mamba "
+            "head, keeps backbone+tracker identical). Mutually exclusive with "
+            "--mamba-ckpt."
+        ),
+    )
+    core.add_argument(
         "--mamba-small-p3-max-threshold",
         type=float,
         default=0.0,

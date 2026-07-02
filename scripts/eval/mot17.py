@@ -235,7 +235,12 @@ if __name__ == "__main__":
         "module_trigger",
         "module_lifecycle",
     }
-    _MAMBA_KEYS = {"mamba_ckpt", "mamba_teacher_ckpt", "mamba_yolo_weights"}
+    _MAMBA_KEYS = {
+        "mamba_ckpt",
+        "mamba_teacher_ckpt",
+        "mamba_yolo_weights",
+        "teacher_head_ckpt",
+    }
     _VIS_KEYS = {
         "visualize",
         "visualize_scale",
@@ -248,6 +253,42 @@ if __name__ == "__main__":
         for k, v in vars(args).items()
         if k not in _MODULE_KEYS and k not in _MAMBA_KEYS and k not in _VIS_KEYS
     }
+
+    if getattr(args, "teacher_head_ckpt", None) and getattr(args, "mamba_ckpt", None):
+        raise SystemExit(
+            "--teacher-head-ckpt and --mamba-ckpt are mutually exclusive "
+            "(they choose which detection head runs)."
+        )
+
+    if getattr(args, "teacher_head_ckpt", None):
+        print(
+            f"\n🧩 [TeacherHead] native YOLO detect head from "
+            f"{args.teacher_head_ckpt} (matched-baseline control)"
+        )
+        _tiling = getattr(args, "tiling", "native_640")
+        if "1280" in _tiling:
+            _img_sz = 1280
+        elif "1024" in _tiling:
+            _img_sz = 1024
+        elif "960" in _tiling:
+            _img_sz = 960
+        else:
+            _img_sz = 640
+
+        from saccade.perception.temporal_yolo.teacher_head_detector import (
+            build_teacher_head_detector,
+        )
+
+        teacher_detector = build_teacher_head_detector(
+            teacher_ckpt=args.teacher_head_ckpt,
+            yolo_pt_path=args.mamba_yolo_weights,
+            img_size=_img_sz,
+            device="cuda",
+            max_det=getattr(args, "max_det", 300),
+        )
+        eval_kwargs["detector"] = teacher_detector
+        eval_kwargs["tiling"] = _tiling
+        eval_kwargs["engine"] = "teacher_head"
 
     if getattr(args, "mamba_ckpt", None):
         print(f"\n🧠 [Mamba] Loading Mamba head from {args.mamba_ckpt}")
