@@ -409,6 +409,16 @@ def add_core_args(parser: argparse.ArgumentParser) -> None:
         ),
     )
     core.add_argument(
+        "--teacher-head-backbone-engine",
+        default="",
+        help=(
+            "Optional TRT backbone engine for --teacher-head-ckpt: run layers 0-22 "
+            "on TensorRT and the native Detect head in PyTorch (deployed-backbone "
+            "speed for the native head, mirroring the Mamba fpn_backbone_engine "
+            "path). Empty = pure PyTorch backbone."
+        ),
+    )
+    core.add_argument(
         "--mamba-small-p3-max-threshold",
         type=float,
         default=0.0,

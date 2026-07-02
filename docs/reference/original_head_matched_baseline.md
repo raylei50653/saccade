@@ -333,6 +333,42 @@ backbone) / 79.5 (deployed TRT whole-graph + private_continuation).
 Drivers: `run_native_m_sweep.sh`, `run_m_matched.sh`, `run_native_m_param.sh`;
 numbers `results/native_m_sweep.txt`, `results/m_matched.txt`, `results/native_m_param.txt`.
 
+## 11. TRT backbone for the native head — deployed-backbone speed (2026-07-02)
+
+The eager numbers above run the backbone in PyTorch. To measure the native head's
+*deployed-backbone* speed, its backbone was exported to a TRT engine (layers 0-22 →
+P3/P4/P5) and run on TensorRT with the native Detect head (layer 23) in PyTorch —
+mirroring the Mamba head's `fpn_backbone_engine` path. At deploy the gate is
+identity (`gate_input=None`), so the TRT features equal the gated features the head
+would see; the swap is numerically faithful (FP16 tolerance).
+
+Wiring: `TeacherHeadDetector(trt_backbone_engine=...)` /
+`--teacher-head-backbone-engine`. Regenerate the engine:
+```
+uv run scripts/model/export_yolo_backbone_ckpt.py \
+    --teacher-ckpt runs/gated_det_native_full/epoch_0026.ckpt \
+    --output models/yolo/native_s_backbone_640.onnx
+uv run scripts/model/build_yolo.py --onnx models/yolo/native_s_backbone_640.onnx \
+    --engine models/yolo/native_s_backbone_640.engine --precision fp16 --linear-outputs
+```
+
+native-s, 7-seq, fair point:
+
+| runtime | FPS | IDF1 | MOTA | Rcll | Prcn |
+|---|---:|---:|---:|---:|---:|
+| PyTorch backbone (eager) | 60.8 | 73.3 | 70.6 | 73.0 | 97.3 |
+| **TRT backbone** | **88.6** | 73.7 | 70.7 | 73.0 | 97.4 |
+
+**+46% throughput (single-seq +68%), IDF1 unchanged (73.3→73.7, FP16 noise)** — the
+backbone was the dominant cost. This is **TRT backbone + PyTorch head + PyTorch
+tracker**, *not* the full whole-graph runtime: the deployed Mamba path (`~117 FPS`
+s / `~239` m) additionally CUDA-graph-captures head+tracker and double-buffers,
+which the native head is not yet wired into. At the **matched runtime tier** the
+native head is faster (eager PyTorch: native 60.8 vs mamba 38.0 = 1.6×; the native
+Detect head has no ÷4 scan round-trip), so with equal whole-graph treatment the
+native head's ceiling should exceed the Mamba head's. Engine is gitignored
+(generated artifact). Numbers: `results/native_s_trt_7seq.log`.
+
 ## 7. Artifacts
 - `src/saccade/perception/temporal_yolo/teacher_head_detector.py` — the control detector.
 - `scripts/eval/mot17.py` `--teacher-head-ckpt` — CLI entry.

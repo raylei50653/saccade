@@ -65,6 +65,7 @@ class TeacherHeadDetector:
         img_size: int = 640,
         device: str | torch.device = "cuda",
         max_det: int = 300,
+        trt_backbone_engine: str = "",
     ) -> None:
         self.img_size = int(img_size)
         self.max_det = int(max_det)
@@ -97,6 +98,27 @@ class TeacherHeadDetector:
         for p in self.teacher.parameters():
             p.requires_grad_(False)
 
+        # Optional TRT backbone: run layers 0-22 (P3/P4/P5) on TensorRT, then the
+        # native Detect head (layer 23) in PyTorch. At deploy the gate is identity
+        # (gate_input=None), so the TRT features == the gated features the head
+        # would see — the swap is numerically faithful (FP16 tolerance) and isolates
+        # the "deployed backbone" speed for the native head, mirroring the Mamba
+        # head's fpn_backbone_engine path.
+        self._trt_backbone = None
+        self._detect_head = self.teacher.yolo_model.model[-1]
+        if trt_backbone_engine:
+            from saccade.perception.temporal_yolo.mamba_gated_detector import (
+                TRTYoloBackbone,
+            )
+
+            self._trt_backbone = TRTYoloBackbone(
+                str(Path(trt_backbone_engine).resolve())
+            )
+            print(
+                f"🚀 [TeacherHead] TRT backbone {trt_backbone_engine} "
+                f"channels={self._trt_backbone.output_channels}"
+            )
+
         # The eval pipeline drives the DETECTOR's own association tracker and
         # configures it from the preset (set_params/set_relink_params/…), exactly
         # as it does for the Mamba detector. Own one so the tracker is identical.
@@ -111,8 +133,14 @@ class TeacherHeadDetector:
 
     @torch.inference_mode()
     def detect_raw(self, input_tensor: Tensor) -> Tensor:
-        # Gate-free deploy (identity boost), matching the Mamba deploy path.
-        out = self.teacher(input_tensor, gate_input=None)
+        if self._trt_backbone is not None:
+            # TRT backbone (layers 0-22) -> native Detect head (layer 23). Gate is
+            # identity at deploy, so no gate application is needed on the features.
+            p3, p4, p5 = self._trt_backbone.infer(input_tensor)
+            out = self._detect_head([p3, p4, p5])
+        else:
+            # Gate-free deploy (identity boost), matching the Mamba deploy path.
+            out = self.teacher(input_tensor, gate_input=None)
         # out[0]: (B, max_det, 6) = (x1, y1, x2, y2, conf, cls), img_size px space.
         dets = out[0] if isinstance(out, (tuple, list)) else out
         # The teacher is an 80-class COCO head; the Mamba head it is being
@@ -154,6 +182,7 @@ def build_teacher_head_detector(
     img_size: int = 640,
     device: str | torch.device = "cuda",
     max_det: int = 300,
+    trt_backbone_engine: str = "",
 ) -> TeacherHeadDetector:
     return TeacherHeadDetector(
         teacher_ckpt=teacher_ckpt,
@@ -161,4 +190,5 @@ def build_teacher_head_detector(
         img_size=img_size,
         device=device,
         max_det=max_det,
+        trt_backbone_engine=trt_backbone_engine,
     )

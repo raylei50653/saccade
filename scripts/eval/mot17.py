@@ -285,6 +285,7 @@ if __name__ == "__main__":
             img_size=_img_sz,
             device="cuda",
             max_det=getattr(args, "max_det", 300),
+            trt_backbone_engine=getattr(args, "teacher_head_backbone_engine", "") or "",
         )
         eval_kwargs["detector"] = teacher_detector
         eval_kwargs["tiling"] = _tiling
