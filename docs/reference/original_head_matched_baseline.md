@@ -107,6 +107,11 @@ Mamba head up.
 
 ## 6. Interpretation — for the contribution framing
 
+> ⚠️ **This section is s-backbone-only and was superseded by §9–§10.** The "no
+> head advantage" reading below holds on the small (`s`) backbone; on the medium
+> (`m`) backbone the Mamba head has a genuine +2.2 IDF1 advantage. Read §9 (m head
+> A/B) and §10 (capacity-gated positioning) for the final framing.
+
 - **The Mamba head is NOT globally superior to the original architecture.** It is
   a **crowd / small-object recall specialist** that trades throughput (1.6×
   slower) and sparse-scene accuracy for dense-scene recall. On the balanced
@@ -254,14 +259,17 @@ each head at its fair point):
 **On the m backbone the Mamba head WINS +2.2 IDF1 (77.4 vs 75.2) — the s tie does
 NOT hold.** Breakdown: recall +3.6 (saturation, same as s) **+ AssA +4.9 (new)**.
 
-**The AssA gap is architectural, not a training-budget artifact:**
+**The AssA gap is not a training-budget artifact:**
 - native-m *full* training (own 30ep backbone, e26): AssA 63.7 — identical to the
   matched 63.4. More training did **not** move native AssA.
 - The +4.9 is the Mamba head's **T3→T1 temporal-consistency shaping** (cross-frame
   blocks force temporally consistent features, +3–5 AssA; `project_t3t1_temporal_consistency`).
-  The native per-frame YOLO head **structurally has no temporal path**, so it cannot
-  replicate this — and on the richer m features the shaping pays off much more than
-  on s (s matched AssA gap was only +1.2).
+  **Under the current native per-frame head — after full retraining *and* the
+  eval-parameter sweep below — this T3→T1 AssA gain is not recovered.** (Framed as
+  "not recovered under what we tried," *not* as an impossibility: a stronger native
+  head is future work, and this keeps the claim robust to "what if you use a better
+  native head?".) On the richer m features the shaping pays off much more than on s
+  (s matched AssA gap was only +1.2), i.e. the gain is **capacity-gated**.
 
 **Cross-backbone summary (eager, fair points):**
 
@@ -271,14 +279,50 @@ NOT hold.** Breakdown: recall +3.6 (saturation, same as s) **+ AssA +4.9 (new)**
 | m, same `epoch_0012_m` | 75.2 | 77.4 | **+2.2 — mamba wins** |
 | m, native own full backbone | 76.4 | (77.4) | +1.0 — mamba still ahead |
 
-**Revised verdict**: the §6 "Mamba head has no advantage" claim was **s-specific**.
-On a bigger backbone the Mamba head's two properties — saturation recall (crowd
-specialist) **and** T3→T1 temporal-consistency AssA — compound into a genuine +2.2
-IDF1 win, and the durable half (AssA) is a real **architectural capability** the
-native head lacks. The trade-off (1.6× slower: 39 vs 64 FPS eager) stands. So:
-**backbone capacity and the Mamba head's advantage scale together** — which also
-explains the s tie (small-backbone features don't give the temporal shaping enough
-to work with). A head-superiority claim is now *supported on m*, not on s.
+**Revised verdict — a capacity-gated temporal head, in three layers:**
+
+1. **s backbone — cannot claim a Mamba advantage.** Same-backbone +0.4 is a tie,
+   and native full-retraining (73.3) even edges eager mamba (71.4). On a small
+   backbone the Mamba head's extra temporal structure does not convert to a
+   reliable gain — it is capped by feature capacity, and is caught up by the native
+   head's calibration + full training. *Honest statement: no stable head-level
+   advantage on the small backbone; the benefit is capacity-limited.*
+2. **m backbone — a real, defensible advantage.** Same-backbone 75.2 → 77.4 (+2.2)
+   is beyond noise, and it survives against the *fully-trained* native-m ceiling
+   (76.4), i.e. +1.0 — so it is **not** just "native wasn't trained enough," and it
+   is not closed by the eval-parameter sweep. *Honest statement: on the medium
+   backbone the Mamba head keeps a sizeable advantage that neither native full
+   training nor eval-param tuning recovers.*
+3. **The strongest claim is AssA, not recall.** recall +3.6 is easy to attribute
+   away (thresholds / NMS / calibration / training策略); **AssA +4.9 is the more
+   structural, tracking-head-level gain** (T3→T1 temporal consistency) and is the
+   part that does not come back under everything we tried.
+
+So the framing is **not** "Mamba head unconditionally beats native," but
+**capacity-gated temporal head**: when backbone features are thin the temporal
+shaping can't express itself (s tie); once the backbone supplies rich enough
+spatial/semantic features (m), the Mamba head converts them into more stable
+detection *and* association. Trade-off: 1.6× slower (39 vs 64 FPS eager).
+
+## 10. Project positioning (report-ready)
+
+先前「mamba head 無架構優勢」的結論其實是 **s-backbone-only 的過度概括**。修正後的
+結果顯示，mamba head 的收益與 backbone 容量存在明顯交互作用：在 small backbone 上，
+mamba head 與 native head 基本打平，完整訓練後 native head 甚至略勝；但在 medium
+backbone 上，mamba head 相對同 backbone native head 提升 **+2.2 IDF1**，即使與完整訓練
+後的 native-m 天花板（76.4）相比，仍保留約 **+1.0 IDF1** 優勢。
+
+因此 mamba head 不應被描述為無條件成立的 head-level 改進，而應被定位為
+**capacity-gated temporal head**：當 backbone 特徵容量不足時，時序塑形能力無法充分
+發揮；當 backbone 提供足夠豐富的空間與語義特徵後，mamba head 能進一步將其轉化為更
+穩定的偵測與關聯訊號。其收益可拆為兩部分：一部分來自 crowd 場景的 recall 飽和撈回，
+另一部分來自 T3→T1 的時序一致性塑形；後者更接近架構性收益，且在目前 native per-frame
+head、完整訓練與 eval 參數掃描下仍無法完全補回。
+
+**部署定位**：
+- **`m + mamba` = 目前最佳生產點**（單流高精度、MOT17 主結果、IDF1 80% 衝刺主線）。
+- **`s` 上不值得付出 mamba 成本**（打平且更慢）；`native-s / native-m` 適合極限
+  多流、低功耗、或吞吐優先場景（1.6× 快、precision 高、FP 少）。
 
 **native-m eval-param search — 76.4 is the ceiling, same as s**: bridge-relax
 −0.7, private_continuation −1.3, both −1.4 (all inflate FP, AssA locked ~63.7).
