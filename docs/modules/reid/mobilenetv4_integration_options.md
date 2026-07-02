@@ -38,10 +38,38 @@ MobileNetV4 是 Google 2024 年提出的新一代 MobileNet。相較 MobileNetV3
 
 - 已用 `timm.create_model(..., pretrained=False, num_classes=0)` strict load 三份 `.pth`。
 - 三者皆 `missing=0`、`unexpected=0`。
+- **已完成方案 C offline identity benchmark（2026-07-02，見下）— ImageNet 權重即超過既有 ceiling，gate 通過。**
 - 尚未匯出 ONNX。
 - 尚未建 TensorRT engine。
-- 尚未接入 `TRTFeatureExtractor` / evaluator。
-- 尚未做 ReID 任務微調或 MOT-domain benchmark。
+- 尚未接入 `TRTFeatureExtractor` / evaluator（benchmark 走 `reid_id_benchmark.py` 的 timm eager 路徑）。
+- 尚未做 ReID 任務微調。
+
+## 方案 C 結果：offline identity benchmark（2026-07-02）
+
+`reid_id_benchmark.py` 新增 timm eager 路徑（`--model-type mobilenetv4_*`，讀 manifest 的
+mean/std 與 input size，`--resize bicubic` 對齊 pretrained cfg）。MOT17 train 7×SDP GT
+crops，per-id 20。同日同協定重跑 osnet 作 control：gap 31-60 54.6% / 61-120 30.3% /
+121+ 10.2%，與 appearance_ceiling_mot17.md 記載（54/36/10）一致 → 協定可比。
+
+| 模型 | gap 31-60 | gap 61-120 | gap 121+ | h 0-50px | d' 範圍 | AUC 範圍 |
+|---|---:|---:|---:|---:|---|---|
+| osnet（control，同日） | 54.6% | 30.3% | 10.2% | 48.0% | 0.64–0.97 | 72.7–82.5% |
+| transreid（既有 ceiling，文檔值） | 63% | 38% | 13% | — | ~1.0 | — |
+| **mobilenetv4_conv_small** | **71.8%** | **52.0%** | **22.9%** | **77.4%** | 1.00–1.95 | 76.2–90.8% |
+| mobilenetv4_conv_small_050 | 70.0% | 51.7% | 23.2% | 76.7% | 1.02–1.91 | 76.1–90.2% |
+| mobilenetv4_conv_medium | 69.7% | 44.5% | 20.8% | 74.6% | 0.90–1.97 | 74.6–91.1% |
+
+判讀：
+
+- **gate 通過**：純 ImageNet 權重（原本預期不過關的 sanity check）即全面超過既有
+  appearance ceiling——gap 31+ 全分層明顯高於 transreid/osnet。
+- **小框分層是最大驚喜**：h 0-50px rank-1 77.4% vs osnet 48.0%，正是「小框、遮擋」
+  這個解鎖條件的族群。
+- 容量非單調：conv_small > conv_medium（8.4M 參數反而略差），conv_small_050（0.96M）
+  幾乎不掉——首選部署候選仍是 `conv_small`，`_050` 是 latency 備胎。
+- 尚未達「好 ReID」絕對標準（d'>2、AUC>95%）；gap 121+ 仍僅 ~23%，長 gap relink
+  的 base-rate 牆是否可破仍待 domain fine-tune 與 tracking A/B 驗證。
+- intra−inter cosine gap 0.15–0.22（既有模型 ~0.03–0.19），分佈重疊明顯縮小。
 
 ## 與現有 ReID 狀態的關係
 
@@ -173,8 +201,58 @@ MobileNetV4 不直接進 runtime，而是作為 teacher，蒸餾現有 FPN/JDE e
 - Latency：crop + preprocess + TRT enqueue + normalize 必須與現有 `osnet` / `fpn_trained` 比較。
 - Tracking：MOT17 SDP/DPM/FRCNN 分 detector source 比較 IDF1、HOTA、IDs、FPS。
 
+## Domain fine-tune 結果（2026-07-02）
+
+`scripts/train/finetune_mobilenetv4_reid.py`：full-backbone BoT 配方（BNNeck + CE ls0.1 +
+batch-hard triplet m0.3，PK 24×4，AdamW bb 1e-4 / head 3.5e-4，cosine+warmup，bf16，
+224×224 stretch 對齊 eval 幾何）。訓練身份與 MOT17 不相交（leak-free，同
+`reid_domain_probe.py` 協定）；eval = 同一 `reid_id_benchmark` 協定，直接可比。
+
+兩臂對照（MOT17 rank-1）：
+
+| arm | 資料 | gap 31-60 | gap 61-120 | gap 121+ | gap31+ |
+|---|---|---:|---:|---:|---:|
+| ImageNet init（參考） | — | 71.8% | 52.0% | 22.9% | — |
+| mixed（60ep, final=best） | Market1501 + MOT20/DanceTrack/SportsMOT crops（64.6k crops / 4,002 ids） | 87.2% | 72.9% | 46.0% | 73.3% |
+| **visclean（60ep, best=ep45）** | mixed + 去汙染（vis≥0.3 + occ-cov 0.4；62.7k / 3,903 ids） | **89.0%** | **75.1%** | 43.8%（峰值 ep30 46.8%） | **74.1%** |
+| Market-only（240ep） | Market1501（12.9k / 751 ids） | 61.4% | 34.6% | 8.9% | 27.5%（峰值 ep120 42.5% 後單調退化） |
+
+判讀：
+
+- **增益全部來自 MOT-domain crops**。Market-only 不只無效、還把 ImageNet 特徵的泛化性
+  洗掉（長 gap 121+ 22.9→8.9%），重演 siglip2_reid「Market 81% mAP → MOT17 不轉移」。
+- mixed 臂長 gap 121+ 46.0% = ImageNet init 的 2 倍、舊 ceiling（13%）的 3.5 倍——
+  正是過去 birth-relink 全滅（look-alike 誤接）的區段。
+- **去汙染消融小勝且方向確認**（`--vis-min 0.3 --occ-cov 0.4`：MOT20 標註 vis 過濾
+  + 幾何 front-box coverage 過濾，丟 278.9k vis<0.3 + 339.4k 幾何被遮框，後者覆蓋
+  無 vis 標註的 DanceTrack/SportsMOT；per-id 取樣改取乾淨幀故池幾乎沒縮）：
+  gap31+ 74.1% vs 混合 73.3%，增益集中中 gap（31-60 +1.8 / 61-120 +2.2），長 gap
+  持平。標籤更乾淨、收斂略慢（ep15 落後、ep30 反超）。**部署首選 checkpoint**。
+- checkpoints：`runs/reid_mnv4_ft_visclean/best.ckpt`（ep45，首選）、
+  `runs/reid_mnv4_ft/best.ckpt`（mixed）；用
+  `reid_id_benchmark.py --ft-checkpoint <ckpt>` 可獨立重跑。
+- Runtime 側設計（整合時）——核心是 **birth-time 汙染**（User 定調）：新軌常誕生在
+  「從遮擋者身後走出」的瞬間，此時 crop 像素大多是前面那個人，birth embedding 一進
+  bank 就把身份汙染定死，後續 relink 全跟著錯。規則：
+  1. **birth gate**：新軌誕生時若幾何判定被遮（存在 foot 更低的框 coverage > τ，
+     與訓練側 `--occ-cov` 同一判定式），**不 seed 外觀特徵**——直到第一個乾淨幀才
+     建立 reference；在那之前該軌只走幾何關聯，不作 relink query 也不作 match target。
+  2. **occlusion freeze**：既有軌被遮期間凍結 bank 更新（不 EMA、不 inject）。
+  3. 判定源用 tracker 既有幾何 occ_state（IoU + foot-gap,occ_event 92-100% 準）；
+     mamba head x_cls probe（AUC 0.836,弱於幾何）僅作輔助。
+  4. 訓練側與 runtime 用**同一個 coverage 判定**：模型沒學過髒 crop,部署也永遠
+     不餵髒 crop——train/deploy 分佈一致。
+  - 現成接口：Phase-3 bank inject gate / 高品質 tier、need_reid 觸發器
+    （birth_death_lost_min）可直接掛。
+
 ## 當前決策
 
-**不建議直接把 MobileNetV4 接入 online evaluator。**
+**方案 C 已完成且 gate 通過（2026-07-02）**：ImageNet 權重的 conv_small 即超過既有
+appearance ceiling（gap 31+ 全分層、小框分層尤其顯著）。
 
-合理的下一步是把它視為「MOT-domain ReID backbone 候選」，先做 offline identity benchmark；只有在可分性超過現有 appearance ceiling 後，才值得投入 ONNX/TensorRT 與 evaluator 接線。
+下一步依原順序進入方案 A 評估，但有兩個前置判斷：
+
+1. 先決定是否直接用 ImageNet 權重做一次 tracking A/B（成本低、回答「offline 可分性
+   增益能否轉移到 relink/association」），或先做 Market1501+MOT crops fine-tune 再接線。
+2. 長 gap 121+ 仍僅 ~23%，過往 birth-relink 失敗主因（長 gap look-alike 誤接）未必
+   解除；tracking A/B 應優先看 relink 作用區（gap 31+）而非整體 IDF1。
