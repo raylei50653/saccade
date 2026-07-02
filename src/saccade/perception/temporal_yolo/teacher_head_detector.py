@@ -24,6 +24,7 @@ Mamba deploy path (null teacher gate, gt-ratio-0 lineage).
 from __future__ import annotations
 
 from pathlib import Path
+from types import MethodType
 from typing import Any
 
 import torch
@@ -34,6 +35,57 @@ from saccade.perception.temporal_yolo.yolo_gated_detector import (
     GatedDetConfig,
     build_gated_yolo_detector,
 )
+
+
+def _get_topk_index_graph_safe(
+    head: Any, scores: Tensor, max_det: int
+) -> tuple[Tensor, Tensor, Tensor]:
+    """Ultralytics Detect.get_topk_index without the CPU batch arange.
+
+    The default class-aware path indexes a CUDA tensor with ``torch.arange`` on
+    CPU, which breaks CUDA graph capture. Keep the exact class-aware ranking
+    semantics and cache the batch index on the scores device instead.
+    """
+    batch_size, anchors, nc = scores.shape
+    k = max_det if head.export else min(max_det, anchors)
+    if head.agnostic_nms:
+        scores, labels = scores.max(dim=-1, keepdim=True)
+        scores, indices = scores.topk(k, dim=1)
+        labels = labels.gather(1, indices)
+        return scores, labels, indices
+
+    ori_index = scores.max(dim=-1)[0].topk(k)[1].unsqueeze(-1)
+    scores = scores.gather(dim=1, index=ori_index.repeat(1, 1, nc))
+    scores, index = scores.flatten(1).topk(k)
+
+    batch_index = getattr(head, "_saccade_graph_batch_index", None)
+    if (
+        not isinstance(batch_index, Tensor)
+        or batch_index.device != scores.device
+        or batch_index.numel() < batch_size
+    ):
+        batch_index = torch.arange(batch_size, device=scores.device)
+        head._saccade_graph_batch_index = batch_index
+    idx = ori_index[batch_index[:batch_size, None], index // nc]
+    return scores[..., None], (index % nc)[..., None].float(), idx
+
+
+def _install_graph_safe_class_aware_topk(
+    head: Any, device: torch.device | str | None = None, max_batch: int = 1024
+) -> None:
+    if device is not None:
+        batch_index = torch.arange(max_batch, device=device)
+        buffers = getattr(head, "_buffers", {})
+        if (
+            hasattr(head, "register_buffer")
+            and "_saccade_graph_batch_index" not in buffers
+        ):
+            head.register_buffer(
+                "_saccade_graph_batch_index", batch_index, persistent=False
+            )
+        else:
+            head._saccade_graph_batch_index = batch_index
+    head.get_topk_index = MethodType(_get_topk_index_graph_safe, head)
 
 
 class TeacherHeadDetector:
@@ -138,12 +190,11 @@ class TeacherHeadDetector:
                 "(the whole graph captures the TRT backbone's infer_graph)."
             )
         if self.use_whole_graph:
-            # The end2end Detect postprocess's default get_topk_index does
-            # `torch.arange(batch_size)` (CPU) to index a GPU tensor — a CPU→CUDA
-            # copy that CUDA-graph capture rejects. The agnostic_nms path uses
-            # topk+gather with no host-side arange (graph-safe) and is semantically
-            # equivalent for a person-only tracker (dedups a box across classes).
-            self._detect_head.agnostic_nms = True
+            # The end2end Detect postprocess's default class-aware path does
+            # `torch.arange(batch_size)` on CPU to index a GPU tensor, which CUDA
+            # graph capture rejects. Patch only this instance so whole-graph keeps
+            # the same class-aware top-k semantics as the eager teacher-head path.
+            _install_graph_safe_class_aware_topk(self._detect_head, self.device)
             print("🕸️ [TeacherHead] whole-graph runtime ENABLED (backbone+head graph)")
 
         # The eval pipeline drives the DETECTOR's own association tracker and

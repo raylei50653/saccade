@@ -9,7 +9,7 @@
 #
 # Usage:
 #   uv run scripts/eval/mot17.py --preset native_whole_graph --detector SDP \
-#     --no-compile --mamba-ckpt "" \
+#     --no-compile \
 #     --teacher-head-ckpt runs/gated_det_native_full/epoch_0026.ckpt \
 #     --teacher-head-backbone-engine models/yolo/native_s_backbone_640.engine \
 #     --teacher-head-whole-graph --double-buffer --detect-barrier event \
@@ -23,7 +23,7 @@ person_geometry_prior: false
 detection_quality_scaling: false
 
 # --- Backbone (PyTorch fallback; --teacher-head-backbone-engine overrides) ---
-mamba_ckpt: runs/mamba_gt_v14replica_t3_t1/best.ckpt
+mamba_ckpt: ""
 fpn_backbone_engine: ""
 
 # Mamba-head graphs off (native head owns its own graph via --teacher-head-whole-graph);
