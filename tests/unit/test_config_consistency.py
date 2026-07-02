@@ -20,6 +20,8 @@ import dataclasses
 import sys
 from pathlib import Path
 
+import yaml
+
 _eval_dir = Path(__file__).resolve().parents[2] / "scripts" / "eval"
 if str(_eval_dir) not in sys.path:
     sys.path.insert(0, str(_eval_dir))
@@ -81,3 +83,16 @@ def test_every_field_has_an_argparse_dest() -> None:
         "dataclass fields with no argparse argument (rename would silently "
         "fall back to the EvalConfig default):\n" + "\n".join(orphans)
     )
+
+
+def test_native_whole_graph_preset_does_not_select_mamba_head() -> None:
+    preset = (
+        Path(__file__).resolve().parents[2]
+        / "configs"
+        / "presets"
+        / "native_whole_graph.yaml"
+    )
+    with preset.open() as f:
+        loaded = yaml.safe_load(f) or {}
+
+    assert loaded.get("mamba_ckpt") == ""

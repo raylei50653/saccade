@@ -185,6 +185,7 @@ def add_core_args(parser: argparse.ArgumentParser) -> None:
             "mamba_detail_b2_native_p3",
             "mamba_eager_temporal_probe",
             "fpn_reid_baseline",
+            "native_whole_graph",
         ),
         default=None,
         help="Built-in preset from configs/presets/<name>.yaml.",
@@ -397,6 +398,35 @@ def add_core_args(parser: argparse.ArgumentParser) -> None:
         "--mamba-yolo-weights",
         default="models/yolo/yolo26s.pt",
         help="Base YOLO weights matching the Mamba/teacher lineage.",
+    )
+    core.add_argument(
+        "--teacher-head-ckpt",
+        default="",
+        help=(
+            "Matched-baseline control: run the NATIVE YOLO detect head of a gated "
+            "teacher checkpoint through the standard tracker (swaps out the Mamba "
+            "head, keeps backbone+tracker identical). Mutually exclusive with "
+            "--mamba-ckpt."
+        ),
+    )
+    core.add_argument(
+        "--teacher-head-backbone-engine",
+        default="",
+        help=(
+            "Optional TRT backbone engine for --teacher-head-ckpt: run layers 0-22 "
+            "on TensorRT and the native Detect head in PyTorch (deployed-backbone "
+            "speed for the native head, mirroring the Mamba fpn_backbone_engine "
+            "path). Empty = pure PyTorch backbone."
+        ),
+    )
+    core.add_argument(
+        "--teacher-head-whole-graph",
+        action="store_true",
+        help=(
+            "Full whole-graph for the native head: CUDA-graph-capture the TRT "
+            "backbone + native Detect head + box-scale into one callable (mirrors "
+            "the Mamba use_whole_graph path). Requires --teacher-head-backbone-engine."
+        ),
     )
     core.add_argument(
         "--mamba-small-p3-max-threshold",

@@ -6385,7 +6385,12 @@ def run_eval(
             MambaStreamProxy,
         )
 
-        if isinstance(detector, (MambaGatedDetector, MambaStreamProxy)):
+        if isinstance(detector, (MambaGatedDetector, MambaStreamProxy)) or (
+            detector is not None and hasattr(detector, "detect_raw")
+        ):
+            # Pre-built detector (Mamba head, or a TeacherHeadDetector-style
+            # drop-in exposing detect_raw) — use as-is, do not construct a TRT
+            # engine from the placeholder engine string.
             pass
         else:
             import os as _os
