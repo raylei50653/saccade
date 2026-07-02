@@ -220,7 +220,15 @@ def main() -> None:
     parser.add_argument(
         "--model-type",
         default="osnet",
-        choices=["osnet", "siglip2_reid", "transreid", "fastreid", "dinov2", "siglip2"],
+        choices=[
+            "osnet",
+            "siglip2_reid",
+            "transreid",
+            "fastreid",
+            "dinov2",
+            "siglip2",
+            "mobilenetv4_reid",
+        ],
         help="ReID extractor engine to use (default: osnet).",
     )
     parser.add_argument(

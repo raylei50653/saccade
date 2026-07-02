@@ -139,6 +139,25 @@ __global__ void l2_normalize_kernel(float* data, int n, int dim) {
     }
 }
 
+__global__ void reid_preprocess_kernel(
+    const float* src, float* dst, int num, int channels, int h, int w,
+    const float* mean, const float* std, bool is_siglip)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int spatial_size = h * w;
+    int total = num * channels * spatial_size;
+
+    if (idx < total) {
+        float v = src[idx];
+        if (is_siglip) {
+            dst[idx] = v * 2.0f - 1.0f;
+        } else {
+            int c = (idx / spatial_size) % channels;
+            dst[idx] = (v - mean[c]) / std[c];
+        }
+    }
+}
+
 void launch_reid_pre_normalize(
     float* data, int num, int channels, int h, int w,
     const float* mean, const float* std, bool is_siglip,
@@ -148,6 +167,18 @@ void launch_reid_pre_normalize(
     int threads = 256;
     int blocks = (total + threads - 1) / threads;
     reid_pre_normalize_kernel<<<blocks, threads, 0, stream>>>(data, num, channels, h, w, mean, std, is_siglip);
+}
+
+void launch_reid_preprocess(
+    const float* src, float* dst, int num, int channels, int h, int w,
+    const float* mean, const float* std, bool is_siglip,
+    cudaStream_t stream)
+{
+    int total = num * channels * h * w;
+    int threads = 256;
+    int blocks = (total + threads - 1) / threads;
+    reid_preprocess_kernel<<<blocks, threads, 0, stream>>>(
+        src, dst, num, channels, h, w, mean, std, is_siglip);
 }
 
 void launch_l2_normalize(float* data, int n, int dim, cudaStream_t stream) {

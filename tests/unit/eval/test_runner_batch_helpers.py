@@ -21,6 +21,7 @@ from saccade.perception.eval.types import (  # noqa: E402
 from saccade.perception.eval.helpers import (  # noqa: E402
     emit_resolved_tracks as _emit_resolved_tracks,
     finalize_frame_side_effects as _finalize_frame_side_effects,
+    front_occlusion_mask_xyxy,
     inject_lost_track_references as _inject_lost_track_references,
     prepare_track_candidates as _prepare_track_candidates,
     resolve_frame_tracks as _resolve_frame_tracks,
@@ -308,6 +309,21 @@ class _ConsistencyBank:
 
     def is_consistent(self, track_id: int) -> bool:
         return track_id in self.consistent_ids
+
+
+def test_front_occlusion_mask_xyxy_matches_visclean_lower_foot_rule() -> None:
+    boxes = torch.tensor(
+        [
+            [0.0, 0.0, 10.0, 10.0],
+            [0.0, 5.0, 10.0, 15.0],
+            [30.0, 0.0, 40.0, 10.0],
+        ],
+        dtype=torch.float32,
+    )
+
+    mask = front_occlusion_mask_xyxy(boxes, 0.4)
+
+    assert mask.tolist() == [True, False, False]
 
 
 @pytest.mark.skipif(

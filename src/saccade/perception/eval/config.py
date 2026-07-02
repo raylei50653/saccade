@@ -233,6 +233,7 @@ class EvalConfig:
     cheb_gr_max_fwd: int
     cheb_gr_fuse_lambda: float
     cheb_gr_engine: str
+    cheb_gr_model: str
 
     # Birth-time lost-bank ReID relink (online, GPU; default off)
     relink_enabled: bool
@@ -262,6 +263,7 @@ class EvalConfig:
     relink_bridge_occ_gap_min: int
     relink_bridge_occ_expand_px: float
     relink_bridge_occ_expand_cover: float
+    relink_bridge_app_veto: float
 
     min_tracklet_len: int
     min_tracklet_score: float
@@ -330,6 +332,8 @@ class EvalConfig:
     appearance_bank_high_quality_min_score: float
     appearance_bank_min_aspect: float
     appearance_bank_max_aspect: float
+    appearance_occlusion_gate: bool
+    appearance_occlusion_cov: float
 
     bank_quality_v2: bool
     bank_quality_w_det: float
@@ -737,6 +741,7 @@ def parse_eval_config(
         cheb_gr_max_fwd=int(kwargs.get("cheb_gr_max_fwd", 50)),
         cheb_gr_fuse_lambda=float(kwargs.get("cheb_gr_fuse_lambda", 0.3)),
         cheb_gr_engine=str(kwargs.get("cheb_gr_engine", "") or ""),
+        cheb_gr_model=str(kwargs.get("cheb_gr_model", "siglip2_reid")),
         relink_enabled=bool(kwargs.get("relink_enabled", False)),
         relink_bank_cap=int(kwargs.get("relink_bank_cap", 256)),
         relink_sim_thresh=float(kwargs.get("relink_sim_thresh", 0.6)),
@@ -770,6 +775,7 @@ def parse_eval_config(
         relink_bridge_occ_expand_cover=float(
             kwargs.get("relink_bridge_occ_expand_cover", 0.9)
         ),
+        relink_bridge_app_veto=float(kwargs.get("relink_bridge_app_veto", -1.0)),
         min_tracklet_len=max(1, int(kwargs.get("min_tracklet_len", 1))),
         min_tracklet_score=float(kwargs.get("min_tracklet_score", 0.0)),
         interpolate_tracklets=bool(kwargs.get("interpolate_tracklets", True)),
@@ -853,6 +859,8 @@ def parse_eval_config(
         ),
         appearance_bank_min_aspect=float(kwargs.get("appearance_bank_min_aspect", 1.2)),
         appearance_bank_max_aspect=float(kwargs.get("appearance_bank_max_aspect", 4.5)),
+        appearance_occlusion_gate=bool(kwargs.get("appearance_occlusion_gate", False)),
+        appearance_occlusion_cov=float(kwargs.get("appearance_occlusion_cov", 0.4)),
         bank_quality_v2=bool(kwargs.get("bank_quality_v2", False)),
         bank_quality_w_det=float(kwargs.get("bank_quality_w_det", 0.45)),
         bank_quality_w_iou=float(kwargs.get("bank_quality_w_iou", 0.20)),

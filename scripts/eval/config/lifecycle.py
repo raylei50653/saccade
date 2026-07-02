@@ -68,6 +68,7 @@ class LifecycleConfig:
     cheb_gr_max_fwd: int = 50
     cheb_gr_fuse_lambda: float = 0.3
     cheb_gr_engine: str = ""
+    cheb_gr_model: str = "siglip2_reid"
     # Lost-track memory (ByteTrack track_buffer): frames a lost track survives in
     # the tracker (and stays available for association + bridge relink) before
     # removal. Per-seq fps-scaled when per_seq_adapt is on.
@@ -111,6 +112,9 @@ class LifecycleConfig:
     relink_bridge_occ_gap_min: int = 30
     relink_bridge_occ_expand_px: float = 0.0
     relink_bridge_occ_expand_cover: float = 0.9
+    # Appearance cosine veto on bridge candidates (ranking use of the ReID
+    # embedding; needs reid_mode=tracker). <= -1 disables (bit-exact).
+    relink_bridge_app_veto: float = -1.0
     # Duplicate suppression: remove near-duplicate detections within the same frame
     # (detector artifact where multiple overlapping boxes are produced for the same person)
     duplicate_suppression_enabled: bool = False
@@ -735,6 +739,12 @@ def add_lifecycle_args(parser: argparse.ArgumentParser) -> None:
         help="Optional ReID engine path for tracklet crops (default: siglip2_reid).",
     )
     grp.add_argument(
+        "--cheb-gr-model",
+        default="siglip2_reid",
+        help="TRTFeatureExtractor model_type for Cheb-GR tracklet embeddings "
+        "(e.g. mobilenetv4_reid).",
+    )
+    grp.add_argument(
         "--relink-enabled",
         action=argparse.BooleanOptionalAction,
         default=False,
@@ -975,5 +985,18 @@ def add_lifecycle_args(parser: argparse.ArgumentParser) -> None:
         help=_help(
             "Minimum occ_cover to unlock the expanded bridge threshold.",
             range_hint="0-1, suggested 0.9",
+        ),
+    )
+    grp.add_argument(
+        "--relink-bridge-app-veto",
+        type=float,
+        default=-1.0,
+        help=_help(
+            "Appearance cosine veto for bridge candidates: a geometry-plausible "
+            "(lost, cand) pair is dropped when both tracks have reference "
+            "embeddings and cosine < this floor (ranking use: the correct "
+            "runner-up then wins the bdist ranking). Needs per-detection "
+            "embeddings (reid_mode=tracker). <= -1 disables (bit-exact).",
+            range_hint="mnv4 scale: 0.20-0.25 (in-zone false-kill 35-43% at 1-2% true cost)",
         ),
     )

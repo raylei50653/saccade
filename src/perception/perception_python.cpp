@@ -102,6 +102,7 @@ void init_perception_ext(py::module &m) {
         .value("TRANSREID", ModelType::TRANSREID)
         .value("OSNET", ModelType::OSNET)
         .value("FASTREID", ModelType::FASTREID)
+        .value("MOBILENETV4_REID", ModelType::MOBILENETV4_REID)
         .export_values();
 
     py::class_<FeatureExtractor>(m, "FeatureExtractor")

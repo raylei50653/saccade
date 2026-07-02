@@ -285,6 +285,27 @@ def test_parse_eval_config_defaults_to_fixed_interval_reid(tmp_path):
     assert cfg.birth_quality_score_bias == 0.15
 
 
+def test_parse_eval_config_accepts_mobilenetv4_reid_and_occlusion_gate(tmp_path):
+    cfg = parse_eval_config(
+        output=str(tmp_path),
+        data_root="datasets/MOT17",
+        split="train",
+        sequences="MOT17-04-SDP",
+        conf_threshold=0.05,
+        reid_mode="semantic",
+        reid_model="mobilenetv4_reid",
+        profile_stages=False,
+        kwargs={
+            "appearance_occlusion_gate": True,
+            "appearance_occlusion_cov": 0.4,
+        },
+    )
+
+    assert cfg.crop_hw == (224, 224)
+    assert cfg.appearance_occlusion_gate is True
+    assert cfg.appearance_occlusion_cov == pytest.approx(0.4)
+
+
 def test_parse_eval_config_preserves_sahi_tiling(tmp_path):
     cfg = parse_eval_config(
         output=str(tmp_path),

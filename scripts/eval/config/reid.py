@@ -90,6 +90,7 @@ def add_reid_args(parser: argparse.ArgumentParser) -> None:
             "transreid",
             "osnet",
             "fastreid",
+            "mobilenetv4_reid",
             "fpn_raw",
             "fpn_trained",
         ),

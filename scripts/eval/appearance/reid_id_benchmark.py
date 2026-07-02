@@ -319,7 +319,10 @@ def main() -> None:
             d.name for d in gt_root.iterdir() if d.is_dir() and d.name.endswith("-SDP")
         )
     )
-    if args.model_type.startswith("mobilenetv4") or args.ft_checkpoint:
+    if (
+        args.model_type.startswith("mobilenetv4")
+        and args.model_type != "mobilenetv4_reid"
+    ) or args.ft_checkpoint:
         extractor = TimmEagerExtractor(
             args.model_type, ft_checkpoint=args.ft_checkpoint
         )

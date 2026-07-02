@@ -64,6 +64,7 @@ from .helpers import (
     emit_resolved_tracks as _emit_resolved_tracks,
     finalize_frame_side_effects as _finalize_frame_side_effects,
     budget_reid_candidates as _budget_reid_candidates,
+    front_occlusion_mask_xyxy as _front_occlusion_mask_xyxy,
 )
 
 # Perception/eval modules load local extensions before any torchvision fallback.
@@ -1452,6 +1453,7 @@ def _build_cpp_seq_config(
         "transreid": 2,
         "osnet": 3,
         "fastreid": 4,
+        "mobilenetv4_reid": 5,
     }
     c.reid_model_type = _model_type_map.get(_reid_model, 0)
     _budget_raw = float(getattr(cfg, "reid_budget_raw", 0.0))
@@ -1585,7 +1587,7 @@ def run_eval_cpp(
 
         cheb_gr_extractor = TRTFeatureExtractor(
             engine_path=cfg.cheb_gr_engine,
-            model_type="siglip2_reid",
+            model_type=getattr(cfg, "cheb_gr_model", "siglip2_reid"),
             max_batch=64,
         )
 
@@ -1944,11 +1946,16 @@ class EvalPipeline:
                 gmc_uncertain=False,
             )
         else:
-            if contract.fpn_reid_mode:
+            tracker_feature_dim = (
+                contract.feature_dim
+                if contract.fpn_reid_mode
+                else (extractor.feature_dim if extractor is not None else 0)
+            )
+            if tracker_feature_dim > 0:
                 from saccade.perception.tracking import GPUByteTracker
 
                 detector.tracker = GPUByteTracker(
-                    max_objects=2048, embedding_dim=contract.feature_dim
+                    max_objects=2048, embedding_dim=tracker_feature_dim
                 )
             else:
                 detector.reset_tracker()
@@ -2059,6 +2066,7 @@ class EvalPipeline:
                 occ_gap_min=cfg.relink_bridge_occ_gap_min,
                 occ_expand_px=cfg.relink_bridge_occ_expand_px,
                 occ_expand_cover=cfg.relink_bridge_occ_expand_cover,
+                bridge_app_veto=getattr(cfg, "relink_bridge_app_veto", -1.0),
             )
 
         if hasattr(detector.tracker, "set_unified_score_params"):
@@ -4581,6 +4589,7 @@ def _run_reid_and_gmc(
     _reid_async_indices: torch.Tensor | None = None
     _reid_frame_hwc_ref: torch.Tensor | None = None
     embeddings = None
+    state.appearance_occlusion_mask = None
     _fpn_ready = _fpn_reid_mode and fused_boxes.numel() > 0
     _do_reid = _fpn_ready or (
         cfg.reid_work_enabled
@@ -4684,6 +4693,12 @@ def _run_reid_and_gmc(
                 t_reid_budget_start = time.perf_counter()
 
             num_dets = fused_boxes.shape[0]
+            appearance_occlusion_mask = None
+            if cfg.appearance_occlusion_gate:
+                appearance_occlusion_mask = _front_occlusion_mask_xyxy(
+                    fused_boxes, cfg.appearance_occlusion_cov
+                )
+                state.appearance_occlusion_mask = appearance_occlusion_mask
             if cfg.reid_budget_raw >= 1.0:
                 actual_budget = int(cfg.reid_budget_raw)
             elif cfg.reid_budget_raw > 0.0:
@@ -4699,6 +4714,10 @@ def _run_reid_and_gmc(
                 gmc_warp=state.gmc_warp if cfg.gmc_enabled else None,
                 gmc_uncertain=state.gmc_uncertain,
             )
+            if appearance_occlusion_mask is not None and budget_indices.numel() > 0:
+                budget_indices = budget_indices[
+                    ~appearance_occlusion_mask[budget_indices]
+                ]
 
             if profile_stages:
                 torch.cuda.synchronize()
@@ -6098,6 +6117,16 @@ def _run_frame(
                 current_stage_sample_active=current_stage_sample_active,
                 _fpn_cache=_fpn_cache,
             )
+            appearance_occlusion_mask = getattr(
+                state, "appearance_occlusion_mask", None
+            )
+            if (
+                appearance_occlusion_mask is not None
+                and appearance_occlusion_mask.shape == geometry_suspect_mask.shape
+            ):
+                geometry_suspect_mask = (
+                    geometry_suspect_mask | appearance_occlusion_mask
+                )
 
             state.tracker_result_buffers = _run_track(
                 state,
@@ -6751,7 +6780,7 @@ def run_eval(
 
         cheb_gr_extractor = TRTFeatureExtractor(
             engine_path=cfg.cheb_gr_engine,
-            model_type="siglip2_reid",
+            model_type=getattr(cfg, "cheb_gr_model", "siglip2_reid"),
             max_batch=64,
         )
 
@@ -6953,10 +6982,20 @@ def run_eval(
             detector.tracker, "get_relink_debug"
         ):
             _rd = detector.tracker.get_relink_debug()
+            _gates = (
+                (
+                    f" | no_emb={_rd[5]} bank_lt3={_rd[6]} spatial_ok={_rd[7]} "
+                    f"cheb_ok={_rd[8]} floor_ok={_rd[9]} both_ok={_rd[10]}"
+                )
+                if len(_rd) > 10
+                else ""
+            )
+            if len(_rd) > 11:
+                _gates += f" bridge_veto={_rd[11]}"
             print(
                 f"🔗 Relink debug {seq}: archived={_rd[0]} "
                 f"birth_candidates={_rd[1]} revived={_rd[2]} "
-                f"bridge_attempts={_rd[3]} bridge_accepts={_rd[4]}"
+                f"bridge_attempts={_rd[3]} bridge_accepts={_rd[4]}{_gates}"
             )
 
         _seq_state.results_lines, post_merge_stats = post_merge_output_tracklets(

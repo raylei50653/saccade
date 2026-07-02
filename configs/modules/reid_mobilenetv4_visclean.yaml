@@ -1,0 +1,52 @@
+# MobileNetV4 conv_small ReID, fine-tuned with visclean MOT-domain crops.
+# Load with:
+#   --module-reid configs/modules/reid_mobilenetv4_visclean.yaml
+
+reid_mode: semantic
+reid_model: mobilenetv4_reid
+reid_engine_path: models/embedding/mobilenetv4_reid_visclean_224.engine
+
+# Keep first-pass runtime comparable to the existing ReID module.
+reid_budget: 0.2
+reid_interval: 20
+need_reid: true
+async_reid: true
+pipeline_relink: true
+
+reid_cos_threshold: 0.90
+reid_iou_low: 0.30
+reid_iou_high: 0.60
+reid_weight: 0.80
+reid_cost_cos_w: 0.55
+reid_cost_iou_w: 0.30
+reid_cost_score_w: 0.15
+
+reid_crop_mode: tight
+reid_crop_padding: 0.0
+reid_crop_layout: full
+
+# Runtime/train consistency: do not extract or bank crops that the visclean
+# training filter would have dropped.
+appearance_occlusion_gate: true
+appearance_occlusion_cov: 0.4
+
+# Feed high-quality clean references back into tracker association/relink.
+appearance_bank: true
+appearance_bank_size: 5
+appearance_bank_min_score: 0.45
+appearance_bank_min_iou: 0.35
+appearance_bank_consistency_threshold: 0.75
+appearance_bank_high_quality_min_score: 0.75
+appearance_bank_min_aspect: 1.2
+appearance_bank_max_aspect: 4.5
+bank_quality_v2: true
+semantic_bank_inject: true
+
+# Online lost-bank relink is precision-sensitive; keep the existing conservative
+# Cheb-GR uniqueness gate and only replace the embedding source.
+relink_enabled: true
+relink_bank_cap: 256
+relink_sim_thresh: 0.90
+relink_lambda: 2.5
+relink_spatial_gate: 4.0
+relink_max_age: 300

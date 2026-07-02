@@ -111,6 +111,11 @@ _CATEGORY_EXPERIMENTS: dict[str, list[_ExperimentSpec]] = {
         ("hybrid mode", "hybrid_mode", ["--reid-mode", "hybrid"]),
         ("transreid", "transreid", ["--reid-model", "transreid"]),
         ("osnet", "osnet", ["--reid-model", "osnet"]),
+        (
+            "mobilenetv4 visclean",
+            "mobilenetv4_visclean",
+            ["--module-reid", "configs/modules/reid_mobilenetv4_visclean.yaml"],
+        ),
         ("cos=0.88", "cos088", ["--reid-cos-threshold", "0.88"]),
         ("cos=0.92", "cos092", ["--reid-cos-threshold", "0.92"]),
     ],

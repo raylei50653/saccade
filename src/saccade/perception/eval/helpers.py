@@ -22,6 +22,37 @@ from saccade.perception.eval.detection import (
 _CUDA_COPY_STREAM: "torch.cuda.Stream | None" = None
 
 
+def front_occlusion_mask_xyxy(
+    boxes: torch.Tensor,
+    cov_thresh: float,
+) -> torch.Tensor:
+    """Return boxes covered by a lower-foot foreground box.
+
+    This mirrors the MobileNetV4 visclean training filter: a box is dirty when
+    another box has a lower foot (`y2` is larger) and the intersection covers
+    more than `cov_thresh` of the box's own area.
+    """
+    n = int(boxes.shape[0])
+    if n == 0 or cov_thresh >= 1.0:
+        return torch.zeros((n,), dtype=torch.bool, device=boxes.device)
+
+    boxes_f = boxes.to(dtype=torch.float32)
+    x1, _y1, x2, y2 = boxes_f.unbind(dim=1)
+    y1 = boxes_f[:, 1]
+    area = ((x2 - x1).clamp(min=0.0) * (y2 - y1).clamp(min=0.0)).clamp(min=1e-6)
+
+    iw = torch.minimum(x2[:, None], x2[None, :]) - torch.maximum(
+        x1[:, None], x1[None, :]
+    )
+    ih = torch.minimum(y2[:, None], y2[None, :]) - torch.maximum(
+        y1[:, None], y1[None, :]
+    )
+    inter = iw.clamp(min=0.0) * ih.clamp(min=0.0)
+    front = y2[None, :] > y2[:, None]
+    covered = (inter / area[:, None]) > float(cov_thresh)
+    return (front & covered).any(dim=1)
+
+
 def _get_copy_stream() -> torch.cuda.Stream:
     global _CUDA_COPY_STREAM
     if _CUDA_COPY_STREAM is None:

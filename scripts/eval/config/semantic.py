@@ -70,6 +70,8 @@ class SemanticConfig:
     appearance_bank_high_quality_min_score: float = 0.75
     appearance_bank_min_aspect: float = 1.2
     appearance_bank_max_aspect: float = 4.5
+    appearance_occlusion_gate: bool = False
+    appearance_occlusion_cov: float = 0.4
     # Bank quality scoring (A6)
     bank_quality_v2: bool = True
     bank_weighted_mean: bool = False
@@ -505,6 +507,25 @@ def add_semantic_args(parser: argparse.ArgumentParser) -> None:
         default=4.5,
         help=_help(
             "Maximum h/w aspect for a high-quality bank sample.", range_hint=">=0"
+        ),
+    )
+    grp.add_argument(
+        "--appearance-occlusion-gate",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Skip appearance extraction and bank updates for boxes covered by a "
+            "lower-foot foreground box."
+        ),
+    )
+    grp.add_argument(
+        "--appearance-occlusion-cov",
+        type=float,
+        default=0.4,
+        help=_help(
+            "Coverage threshold for --appearance-occlusion-gate; matches "
+            "MobileNetV4 visclean training --occ-cov.",
+            range_hint="0-1",
         ),
     )
     grp.add_argument(

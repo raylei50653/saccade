@@ -39,10 +39,18 @@ MobileNetV4 是 Google 2024 年提出的新一代 MobileNet。相較 MobileNetV3
 - 已用 `timm.create_model(..., pretrained=False, num_classes=0)` strict load 三份 `.pth`。
 - 三者皆 `missing=0`、`unexpected=0`。
 - **已完成方案 C offline identity benchmark（2026-07-02，見下）— ImageNet 權重即超過既有 ceiling，gate 通過。**
-- 尚未匯出 ONNX。
-- 尚未建 TensorRT engine。
-- 尚未接入 `TRTFeatureExtractor` / evaluator（benchmark 走 `reid_id_benchmark.py` 的 timm eager 路徑）。
-- 尚未做 ReID 任務微調。
+- **已完成方案 A first-pass 接線（2026-07-02）**：
+  `models/embedding/mobilenetv4_reid_visclean_224.onnx` 與
+  `models/embedding/mobilenetv4_reid_visclean_224.engine` 已由
+  `runs/reid_mnv4_ft_visclean/best.ckpt` 匯出/建置。
+- `TRTFeatureExtractor(model_type="mobilenetv4_reid")`、`mot17.py --reid-model
+  mobilenetv4_reid`、`configs/modules/reid_mobilenetv4_visclean.yaml` 已接線。
+- C++/CUDA `FeatureExtractor` 已補 `MOBILENETV4_REID` 並預設啟用；batch/chunk
+  parity 已對齊 Python TensorRT path。此 path 目前在 TensorRT enqueue 後使用
+  device-level sync 保 correctness，並在 C++ 端用 input scratch 做 preprocess，避免
+  in-place normalize 汙染 caller tensor；Python wrapper 進 native path 前會保證
+  float32 contiguous NCHW。
+- 已完成 MOT-domain `visclean` ReID fine-tune。
 
 ## 方案 C 結果：offline identity benchmark（2026-07-02）
 
@@ -259,8 +267,8 @@ batch-hard triplet m0.3，PK 24×4，AdamW bb 1e-4 / head 3.5e-4，cosine+warmup
   `pixel_values`）。
 - **TRTFeatureExtractor 接線**（`src/saccade/perception/feature_extractor.py`）：
   `_DEFAULT_ENGINE` 加 `"mobilenetv4_reid"`；`_normalize` 走 ImageNet mean/std 分支
-  （同 dinov2）；C++ ext 的 `cpp_type_map` 需對應 ModelType（或第一輪先走 Python
-  TRT 路徑驗證）。
+  （同 dinov2）；C++ ext 的 `cpp_type_map` 對應 `ModelType::MOBILENETV4_REID`，
+  預設走 native C++/CUDA extractor。
 - **Tracker A/B 評估重點**：看 relink 作用區（gap 31+ 重連 / IDs / AssA），不是整體
   IDF1；birth gate / occlusion freeze 規則見上節。過往 relink 失敗模式=長 gap
   look-alike 誤接（gap 121+ 仍僅 ~46%），寧缺勿錯的門檻策略照舊。
@@ -269,14 +277,50 @@ batch-hard triplet m0.3，PK 24×4，AdamW bb 1e-4 / head 3.5e-4，cosine+warmup
 - 環境坑：跑舊 TRT 模型（osnet 等）作 control 需
   `PYTHONPATH=src/saccade/perception` + `LD_LIBRARY_PATH=<torch>/lib`。
 
-## 當前決策
+## 方案 A first-pass 接線與 tracking A/B（2026-07-02）
 
-**方案 C 已完成且 gate 通過（2026-07-02）**：ImageNet 權重的 conv_small 即超過既有
-appearance ceiling（gap 31+ 全分層、小框分層尤其顯著）。
+接線內容：
 
-下一步依原順序進入方案 A 評估，但有兩個前置判斷：
+- `scripts/model/export_mobilenetv4_reid.py`：匯出 `visclean` checkpoint 的
+  backbone+BNNeck，ONNX input=`pixel_values`，output=`image_embeds`（pre-L2）。
+- `scripts/model/build_reid.py`：已建
+  `models/embedding/mobilenetv4_reid_visclean_224.engine`，dynamic batch 1/8/32。
+- evaluator / config 接受 `reid_model=mobilenetv4_reid`；tracker 會依 extractor
+  `feature_dim=1280` 重建 embedding buffer。
+- runtime 新增 `appearance_occlusion_gate` / `appearance_occlusion_cov=0.4`：
+  與訓練 `_occluded_behind` 同式，covered-by-lower-foot box 的 dirty detection 不裁圖、
+  不抽 embedding，並併入 bank suspect mask，避免 birth-time 汙染與 occlusion update。
 
-1. 先決定是否直接用 ImageNet 權重做一次 tracking A/B（成本低、回答「offline 可分性
-   增益能否轉移到 relink/association」），或先做 Market1501+MOT crops fine-tune 再接線。
-2. 長 gap 121+ 仍僅 ~23%，過往 birth-relink 失敗主因（長 gap look-alike 誤接）未必
-   解除；tracking A/B 應優先看 relink 作用區（gap 31+）而非整體 IDF1。
+驗證：
+
+- TRT vs eager cosine sanity：random batch 1/4/32/33/64/128/256 mean cosine 約 0.99995。
+- `reid_id_benchmark.py --model-type mobilenetv4_reid --resize bicubic --per-id 20`
+  與 eager `--ft-checkpoint` 對齊：gap 31-60 88.6%、61-120 75.4%、121+ 43.3%。
+- C++/CUDA `FeatureExtractor` 已補 `MOBILENETV4_REID` 並預設啟用；random batch
+  1/2/3/4/5/8/16/31/32/33/64/65/96/128/256 對 Python TensorRT path 的 cosine
+  mean/min 約 1.0，max abs diff 約 1e-7。
+- benchmark 實際 crop tensor（`np.transpose` 後 stride 非 contiguous）已驗證：
+  native path 會先 contiguous，再由 C++ scratch preprocess；輸入 tensor 不被修改。
+
+Tracking A/B：MOT17 train SDP，baseline=`configs/mot17_baseline.yaml`，
+B=`--module-reid configs/modules/reid_mobilenetv4_visclean.yaml`。
+
+| run | IDF1 | MOTA | HOTA | AssA | IDs | FP | FN | eval FPS |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| baseline | 46.8% | 27.2% | 41.1% | 46.0% | 443 | 27,311 | 53,948 | 105.0 |
+| mobilenetv4 visclean | 47.3% | 27.2% | 41.5% | 46.8% | 427 | 27,497 | 53,830 | 89.5 |
+| Δ | +0.5pp | +0.0pp | +0.4pp | +0.8pp | -16 | +186 | -118 | -15.5 |
+
+Per-sequence read：
+
+- 最大收益在 MOT17-11：IDF1 51.3→56.2、IDs 28→21。
+- MOT17-02 / 09 / 10 小幅改善；MOT17-04 持平。
+- MOT17-05 與 MOT17-13 退化，FP 上升；需要做 threshold / budget / relink-sim 消融。
+
+當前決策：
+
+- 方案 A 已可跑 tracking A/B，但收益是小幅正向，不是直接解鎖。
+- 下一步不是換 backbone，而是調度/門檻消融：`reid_budget`、`need_reid`、`relink_sim_thresh`、
+  `appearance_occlusion_cov`、是否只啟用 bank association 而關閉 semantic relink。
+- 若要追 latency，下一步是移除 native C++ MobileNetV4 path 的 enqueue 後 device sync
+  或用 CUDA graph/single-stream engine 重建，再評估 `_050` 重訓。
