@@ -51,6 +51,11 @@ class _HandoverStats:
     events: int = 0
     events_with_candidates: int = 0
     handovers: int = 0
+    reject_no_head: int = 0
+    reject_min_head: int = 0
+    reject_cost: int = 0
+    reject_margin: int = 0
+    decisions_logged: int = 0
     ids_before: int = 0
     ids_after: int = 0
 
@@ -64,11 +69,14 @@ def causal_handover_lines(
     max_cost: float = 0.45,
     max_gap: int = 60,
     decide_n: int = 5,
+    min_head_samples: int = 1,
+    margin: float = 0.0,
     pool_frac: float = 0.3,
     cheb_lambda: float = 2.0,
     k2: int = 6,
     max_fwd: int = 50,
     fuse_lambda: float = 0.3,
+    decision_log: list[dict[str, int | float | str | bool]] | None = None,
 ) -> tuple[list[str], dict[str, int]]:
     """Causally relabel newborn tracklets that hand over a dead identity.
 
@@ -83,6 +91,12 @@ def causal_handover_lines(
             default operating point as the offline merge).
         max_gap: max frames between a candidate's death and the newborn's birth.
         decide_n: frames after birth at which the one-shot decision happens.
+        min_head_samples: min clean newborn head samples required before a
+            handover can be accepted.
+        margin: minimum separation between the best and second-best candidate
+            costs. A single valid candidate has infinite margin.
+        decision_log: optional mutable list that receives one row per scored
+            handover decision.
 
     Returns:
         (rewritten lines, stats dict).
@@ -127,6 +141,10 @@ def causal_handover_lines(
         stats.events += 1
         head = head_embs.get(tb.track_id)
         if head is None or head.shape[0] == 0:
+            stats.reject_no_head += 1
+            continue
+        if head.shape[0] < min_head_samples:
+            stats.reject_min_head += 1
             continue
 
         in_graph = [
@@ -163,16 +181,59 @@ def causal_handover_lines(
             fuse_lambda=fuse_lambda,
         )
 
-        best_cost, best = float("inf"), None
+        scored: list[tuple[float, Any]] = []
         head_rows = sdist[: head.shape[0]]
         for ta in cands:
             lo, hi = span_by_tid[ta.track_id]
             block = head_rows[:, lo:hi].reshape(-1)
             k = max(1, int(round(pool_frac * block.numel())))
             cost = float(torch.topk(block, k, largest=False).values.mean())
-            if cost < best_cost:
-                best_cost, best = cost, ta
-        if best is None or best_cost > max_cost:
+            scored.append((cost, ta))
+        if not scored:
+            continue
+        scored.sort(key=lambda item: (item[0], item[1].track_id))
+        best_cost, best = scored[0]
+        second_cost = scored[1][0] if len(scored) > 1 else float("inf")
+        observed_margin = second_cost - best_cost
+        reason = "accepted"
+        accepted = True
+        if best_cost > max_cost:
+            reason = "cost"
+            accepted = False
+            stats.reject_cost += 1
+        elif margin > 0.0 and observed_margin < margin:
+            reason = "margin"
+            accepted = False
+            stats.reject_margin += 1
+
+        if decision_log is not None:
+            row_second_cost = second_cost if np.isfinite(second_cost) else -1.0
+            row_margin = observed_margin if np.isfinite(observed_margin) else 999.0
+            decision_log.append(
+                {
+                    "newborn_id": int(tb.track_id),
+                    "newborn_start": int(tb.start),
+                    "newborn_end": int(tb.end),
+                    "candidate_id": int(best.track_id),
+                    "candidate_label": int(label[best.track_id]),
+                    "candidate_start": int(best.start),
+                    "candidate_end": int(best.end),
+                    "gap": int(tb.start - best.end),
+                    "head_n": int(head.shape[0]),
+                    "bank_n": int(bank_embs[best.track_id].shape[0]),
+                    "candidate_count": int(len(scored)),
+                    "best_cost": float(best_cost),
+                    "second_cost": float(row_second_cost),
+                    "margin": float(row_margin),
+                    "required_margin": float(margin),
+                    "max_cost": float(max_cost),
+                    "accepted": bool(accepted),
+                    "reason": reason,
+                }
+            )
+            stats.decisions_logged += 1
+
+        if not accepted:
             continue
 
         label[tb.track_id] = label[best.track_id]

@@ -7,6 +7,11 @@ import torch
 import torch.nn.functional as F
 
 from saccade.perception.eval.cheb_gr_online import causal_handover_lines
+from saccade.perception.reid.cheb_gr import (
+    cheb_gr_kreciprocal,
+    cheb_gr_kreciprocal_self_dense,
+    cheb_gr_kreciprocal_self_dense_padded,
+)
 
 
 def _normed(
@@ -23,6 +28,72 @@ def _track(lines: list[str], tid: int, frames: range, x: float = 10.0) -> None:
 
 def _ids(lines: list[str]) -> set[int]:
     return {int(ln.split(",")[1]) for ln in lines}
+
+
+def test_dense_self_kreciprocal_matches_sparse_reference():
+    rng = np.random.default_rng(42)
+    feats = _normed(rng, 7, 16, rng.standard_normal(16).astype(np.float32))
+
+    ref = cheb_gr_kreciprocal(
+        feats,
+        feats,
+        cheb_lambda=2.0,
+        k2=4,
+        max_fwd=5,
+        fuse_lambda=0.3,
+    )
+    dense = cheb_gr_kreciprocal_self_dense(
+        feats,
+        cheb_lambda=2.0,
+        k2=4,
+        max_fwd=5,
+        fuse_lambda=0.3,
+    )
+
+    torch.testing.assert_close(dense, ref, rtol=1e-5, atol=1e-6)
+
+
+def test_padded_self_kreciprocal_matches_dense_valid_block():
+    rng = np.random.default_rng(43)
+    feats = _normed(rng, 5, 16, rng.standard_normal(16).astype(np.float32))
+    cap = 16
+    padded = torch.zeros((cap, feats.shape[1]), dtype=feats.dtype)
+    padded[: feats.shape[0]] = feats
+    valid_mask = torch.zeros((cap * 2,), dtype=torch.bool)
+    n = feats.shape[0]
+    valid_mask[: n * 2] = True
+    order = torch.arange(cap * 2, dtype=torch.long)
+    order[:n] = torch.arange(n)
+    order[n : n * 2] = torch.arange(cap, cap + n)
+    order[n * 2 : n * 2 + cap - n] = torch.arange(n, cap)
+    order[n * 2 + cap - n :] = torch.arange(cap + n, cap * 2)
+    gallery_indices = torch.arange(cap, dtype=torch.long)
+    gallery_indices[:n] = torch.arange(n, n * 2)
+
+    ref = cheb_gr_kreciprocal_self_dense(
+        feats,
+        cheb_lambda=2.0,
+        k2=min(6, feats.shape[0]),
+        max_fwd=50,
+        fuse_lambda=0.3,
+    )
+    padded_dist = cheb_gr_kreciprocal_self_dense_padded(
+        padded,
+        valid_mask,
+        order,
+        gallery_indices,
+        cheb_lambda=2.0,
+        k2=6,
+        max_fwd=50,
+        fuse_lambda=0.3,
+    )
+
+    torch.testing.assert_close(
+        padded_dist[: feats.shape[0], : feats.shape[0]],
+        ref,
+        rtol=1e-5,
+        atol=1e-6,
+    )
 
 
 def test_disabled_is_passthrough():
@@ -172,3 +243,85 @@ def test_newborn_without_head_samples_keeps_id():
     )
     assert stats["handovers"] == 0
     assert _ids(out) == {1, 2}
+
+
+def test_min_head_gate_blocks_single_clean_head_sample():
+    rng = np.random.default_rng(7)
+    d = 32
+    c0 = rng.standard_normal(d).astype(np.float32)
+    lines: list[str] = []
+    _track(lines, 1, range(1, 11))
+    _track(lines, 2, range(16, 26))
+    head = {2: _normed(rng, 1, d, c0)}
+    bank = {1: _normed(rng, 8, d, c0)}
+
+    out, stats = causal_handover_lines(
+        lines,
+        head,
+        bank,
+        enabled=True,
+        max_cost=0.9,
+        min_head_samples=2,
+        max_fwd=0,
+    )
+    assert stats["handovers"] == 0
+    assert stats["reject_min_head"] == 1
+    assert _ids(out) == {1, 2}
+
+
+def test_margin_gate_rejects_ambiguous_candidate():
+    rng = np.random.default_rng(8)
+    d = 32
+    c0 = rng.standard_normal(d).astype(np.float32)
+    lines: list[str] = []
+    _track(lines, 1, range(1, 11))
+    _track(lines, 3, range(3, 13))
+    _track(lines, 2, range(16, 26))
+    head = {2: _normed(rng, 3, d, c0)}
+    shared_bank = _normed(rng, 8, d, c0)
+    bank = {
+        1: shared_bank,
+        3: shared_bank.clone(),
+    }
+
+    out, stats = causal_handover_lines(
+        lines,
+        head,
+        bank,
+        enabled=True,
+        max_cost=0.9,
+        margin=0.05,
+        max_fwd=0,
+    )
+    assert stats["handovers"] == 0
+    assert stats["reject_margin"] == 1
+    assert _ids(out) == {1, 2, 3}
+
+
+def test_decision_log_records_accepted_handover():
+    rng = np.random.default_rng(9)
+    d = 32
+    c0 = rng.standard_normal(d).astype(np.float32)
+    lines: list[str] = []
+    _track(lines, 1, range(1, 11))
+    _track(lines, 2, range(16, 26))
+    head = {2: _normed(rng, 3, d, c0)}
+    bank = {1: _normed(rng, 8, d, c0)}
+    decision_log: list[dict[str, int | float | str | bool]] = []
+
+    out, stats = causal_handover_lines(
+        lines,
+        head,
+        bank,
+        enabled=True,
+        max_cost=0.9,
+        max_fwd=0,
+        decision_log=decision_log,
+    )
+    assert stats["handovers"] == 1
+    assert stats["decisions_logged"] == 1
+    assert _ids(out) == {1}
+    assert decision_log[0]["newborn_id"] == 2
+    assert decision_log[0]["candidate_id"] == 1
+    assert decision_log[0]["accepted"] is True
+    assert decision_log[0]["reason"] == "accepted"
