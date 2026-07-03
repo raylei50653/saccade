@@ -1575,14 +1575,19 @@ def run_eval_cpp(
         f"({n_threads} threads)"
     )
 
-    # Cheb-GR offline tracklet merge (path 2): build the siglip2_reid extractor
-    # once. C++ eval emits no per-det embedding, so tracklet crops are re-cut
-    # from img1 inside the post-process loop.
+    # Cheb-GR offline tracklet merge (path 2) / causal online handover: build
+    # the ReID extractor once. C++ eval emits no per-det embedding, so tracklet
+    # crops are re-cut from img1 inside the post-process loop.
     cheb_gr_extractor = None
-    if cfg.cheb_gr_merge_enabled:
+    cheb_gr_online = getattr(cfg, "cheb_gr_online", False)
+    if cfg.cheb_gr_merge_enabled or cheb_gr_online:
         from .cheb_gr_merge import (
             cheb_gr_merge_output_tracklets,
             extract_tracklet_embeddings,
+        )
+        from .cheb_gr_online import (
+            causal_handover_lines,
+            extract_handover_embeddings,
         )
 
         cheb_gr_extractor = TRTFeatureExtractor(
@@ -1628,13 +1633,50 @@ def run_eval_cpp(
             appearance_bank=None,
         )
 
-        if cheb_gr_extractor is not None:
+        if cheb_gr_extractor is not None and cheb_gr_online:
+            seq_img_dir = str(_Path(cfg.data_root) / cfg.split / seq / "img1")
+            head_embs, bank_embs = extract_handover_embeddings(
+                results_lines,
+                seq_img_dir,
+                cheb_gr_extractor,
+                decide_n=cfg.cheb_gr_online_decide_n,
+                n_samples=cfg.cheb_gr_merge_n_samples,
+                crop_hw=getattr(cheb_gr_extractor, "input_hw", (224, 224)),
+                appearance_occlusion_cov=cfg.appearance_occlusion_cov,
+            )
+            results_lines, ho_stats = causal_handover_lines(
+                results_lines,
+                head_embs,
+                bank_embs,
+                enabled=True,
+                max_cost=cfg.cheb_gr_online_max_cost,
+                max_gap=cfg.cheb_gr_merge_max_gap,
+                decide_n=cfg.cheb_gr_online_decide_n,
+                pool_frac=cfg.cheb_gr_pool_frac,
+                cheb_lambda=cfg.cheb_gr_lambda,
+                k2=cfg.cheb_gr_k2,
+                max_fwd=cfg.cheb_gr_max_fwd,
+                fuse_lambda=cfg.cheb_gr_fuse_lambda,
+            )
+            print(
+                f"  {seq}: cheb-gr online handover {ho_stats['ids_before']}→"
+                f"{ho_stats['ids_after']} ({ho_stats['handovers']} handovers, "
+                f"{ho_stats['events_with_candidates']}/{ho_stats['events']} "
+                "events had candidates)"
+            )
+        elif cheb_gr_extractor is not None:
             seq_img_dir = str(_Path(cfg.data_root) / cfg.split / seq / "img1")
             cheb_embeddings = extract_tracklet_embeddings(
                 results_lines,
                 seq_img_dir,
                 cheb_gr_extractor,
                 n_samples=cfg.cheb_gr_merge_n_samples,
+                crop_hw=getattr(cheb_gr_extractor, "input_hw", (224, 224)),
+                appearance_occlusion_gate=(
+                    cfg.appearance_occlusion_gate
+                    or getattr(cfg, "cheb_gr_model", "") == "mobilenetv4_reid"
+                ),
+                appearance_occlusion_cov=cfg.appearance_occlusion_cov,
             )
             results_lines, cheb_stats = cheb_gr_merge_output_tracklets(
                 results_lines,
@@ -6770,12 +6812,18 @@ def run_eval(
 
     all_seq_profile: list[dict] = []
 
-    # Cheb-GR offline tracklet merge (path 2): siglip2_reid extractor built once.
+    # Cheb-GR offline tracklet merge (path 2) / causal online handover:
+    # ReID extractor built once.
     cheb_gr_extractor = None
-    if cfg.cheb_gr_merge_enabled:
+    cheb_gr_online = getattr(cfg, "cheb_gr_online", False)
+    if cfg.cheb_gr_merge_enabled or cheb_gr_online:
         from .cheb_gr_merge import (
             cheb_gr_merge_output_tracklets,
             extract_tracklet_embeddings,
+        )
+        from .cheb_gr_online import (
+            causal_handover_lines,
+            extract_handover_embeddings,
         )
 
         cheb_gr_extractor = TRTFeatureExtractor(
@@ -7019,13 +7067,50 @@ def run_eval(
             missing_appearance_cost=cfg.post_lifecycle_missing_appearance_cost,
         )
 
-        if cheb_gr_extractor is not None:
+        if cheb_gr_extractor is not None and cheb_gr_online:
+            seq_img_dir = str(Path(cfg.data_root) / cfg.split / seq / "img1")
+            head_embs, bank_embs = extract_handover_embeddings(
+                _seq_state.results_lines,
+                seq_img_dir,
+                cheb_gr_extractor,
+                decide_n=cfg.cheb_gr_online_decide_n,
+                n_samples=cfg.cheb_gr_merge_n_samples,
+                crop_hw=getattr(cheb_gr_extractor, "input_hw", (224, 224)),
+                appearance_occlusion_cov=cfg.appearance_occlusion_cov,
+            )
+            _seq_state.results_lines, ho_stats = causal_handover_lines(
+                _seq_state.results_lines,
+                head_embs,
+                bank_embs,
+                enabled=True,
+                max_cost=cfg.cheb_gr_online_max_cost,
+                max_gap=cfg.cheb_gr_merge_max_gap,
+                decide_n=cfg.cheb_gr_online_decide_n,
+                pool_frac=cfg.cheb_gr_pool_frac,
+                cheb_lambda=cfg.cheb_gr_lambda,
+                k2=cfg.cheb_gr_k2,
+                max_fwd=cfg.cheb_gr_max_fwd,
+                fuse_lambda=cfg.cheb_gr_fuse_lambda,
+            )
+            print(
+                f"🧬 Cheb-GR Online Handover: ids={ho_stats['ids_before']}->"
+                f"{ho_stats['ids_after']} ({ho_stats['handovers']} handovers, "
+                f"{ho_stats['events_with_candidates']}/{ho_stats['events']} "
+                "events had candidates)"
+            )
+        elif cheb_gr_extractor is not None:
             seq_img_dir = str(Path(cfg.data_root) / cfg.split / seq / "img1")
             cheb_embeddings = extract_tracklet_embeddings(
                 _seq_state.results_lines,
                 seq_img_dir,
                 cheb_gr_extractor,
                 n_samples=cfg.cheb_gr_merge_n_samples,
+                crop_hw=getattr(cheb_gr_extractor, "input_hw", (224, 224)),
+                appearance_occlusion_gate=(
+                    cfg.appearance_occlusion_gate
+                    or getattr(cfg, "cheb_gr_model", "") == "mobilenetv4_reid"
+                ),
+                appearance_occlusion_cov=cfg.appearance_occlusion_cov,
             )
             _seq_state.results_lines, cheb_stats = cheb_gr_merge_output_tracklets(
                 _seq_state.results_lines,

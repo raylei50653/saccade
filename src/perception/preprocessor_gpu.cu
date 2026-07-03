@@ -32,12 +32,25 @@ void launch_normalize_chw(const uint8_t* src, float* dst, int w, int h, cudaStre
 }
 
 // --- Cropper Kernel ---
-
+//
+// Antialiased bilinear (triangle) resampling. Matches PIL's
+// `img.crop(box).resize(out, Image.BILINEAR)` filter convention so the native
+// path and the PIL fallback stay pixel-aligned:
+//   * pixel-center convention — source pixel j is sampled at j + 0.5 and the
+//     output-pixel center maps to `x1 + (xx + 0.5) * scale` (the old kernel used
+//     a corner convention with no half-pixel shift);
+//   * triangle filter `1 - |t|` with support = max(1, scale), so downscaling
+//     averages multiple source pixels instead of aliasing onto a single tap;
+//   * separable weights, each axis normalized to sum 1 (2-D pass with
+//     pre-normalized wx*wy is algebraically equal to PIL's H-then-V passes).
+// Boxes stay sub-pixel accurate (no integer rounding) so the online pipeline
+// keeps full detector precision; the only residual vs PIL is box rounding,
+// which is sub-pixel and negligible for embedding cosine.
 __global__ void batch_crop_resize_kernel(
-    const float* src, float* dst, 
+    const float* src, float* dst,
     int src_w, int src_h,
     const float* boxes, int num_boxes,
-    int crop_w, int crop_h) 
+    int crop_w, int crop_h)
 {
     int box_idx = blockIdx.z;
     if (box_idx >= num_boxes) return;
@@ -45,48 +58,96 @@ __global__ void batch_crop_resize_kernel(
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
 
-    if (x < crop_w && y < crop_h) {
-        const float* box = boxes + box_idx * 4;
-        float x1 = box[0], y1 = box[1], x2 = box[2], y2 = box[3];
-        float bw = fmaxf(x2 - x1, 1e-6f);
-        float bh = fmaxf(y2 - y1, 1e-6f);
+    if (x >= crop_w || y >= crop_h) return;
 
-        float sx = x1 + (x + 0.5f) * (bw / crop_w);
-        float sy = y1 + (y + 0.5f) * (bh / crop_h);
+    const float* box = boxes + box_idx * 4;
+    float x1 = box[0], y1 = box[1], x2 = box[2], y2 = box[3];
+    // Clamp the box to the image first, then derive the scale from the visible
+    // region — matches PIL's `img.crop(clamped_box).resize(...)`: when a box
+    // runs off the edge, PIL shrinks the crop to the visible pixels and resizes
+    // that, instead of distorting the crop with edge-replicated pixels.
+    if (x1 < 0.0f) x1 = 0.0f;
+    if (y1 < 0.0f) y1 = 0.0f;
+    if (x2 > (float)src_w) x2 = (float)src_w;
+    if (y2 > (float)src_h) y2 = (float)src_h;
+    float bw = fmaxf(x2 - x1, 1e-6f);
+    float bh = fmaxf(y2 - y1, 1e-6f);
 
-        // Bi-linear interpolation
-        int x_low = (int)floorf(sx);
-        int y_low = (int)floorf(sy);
-        int x_high = x_low + 1;
-        int y_high = y_low + 1;
+    float scale_x = bw / (float)crop_w;
+    float scale_y = bh / (float)crop_h;
+    float fscale_x = fmaxf(1.0f, scale_x);  // filter stretch when downscaling
+    float fscale_y = fmaxf(1.0f, scale_y);
+    float center_x = x1 + (x + 0.5f) * scale_x;
+    float center_y = y1 + (y + 0.5f) * scale_y;
 
-        float dx = sx - x_low;
-        float dy = sy - y_low;
+    // Support covers every source pixel whose triangle weight can be nonzero,
+    // then truncated to the crop region [x1, x2] x [y1, y2] (and the image).
+    // Truncating at the box edge mirrors PIL's crop-then-resize: the resize
+    // never reads pixels outside the crop, so no background leaks in and the
+    // renormalized weights match PIL exactly for integer boxes.
+    int xmin = (int)floorf(center_x - fscale_x);
+    int xmax = (int)ceilf(center_x + fscale_x);   // exclusive
+    int ymin = (int)floorf(center_y - fscale_y);
+    int ymax = (int)ceilf(center_y + fscale_y);   // exclusive
+    int bx_lo = (int)floorf(x1);
+    int by_lo = (int)floorf(y1);
+    int bx_hi = (int)ceilf(x2);
+    int by_hi = (int)ceilf(y2);
+    if (bx_lo < 0) bx_lo = 0;
+    if (by_lo < 0) by_lo = 0;
+    if (bx_hi > src_w) bx_hi = src_w;
+    if (by_hi > src_h) by_hi = src_h;
+    if (xmin < bx_lo) xmin = bx_lo;
+    if (ymin < by_lo) ymin = by_lo;
+    if (xmax > bx_hi) xmax = bx_hi;
+    if (ymax > by_hi) ymax = by_hi;
 
-        // src is CHW float (output of normalize_chw_kernel)
-        auto get_pixel = [&](int px, int py, int c) {
-            px = max(0, min(px, src_w - 1));
-            py = max(0, min(py, src_h - 1));
-            return src[c * src_h * src_w + py * src_w + px];
-        };
+    // Normalization sums (separable). Two short passes avoid local-memory
+    // arrays that would spill for large downscale ratios.
+    float sum_wx = 0.0f, sum_wy = 0.0f;
+    for (int j = xmin; j < xmax; ++j) {
+        float t = ((float)j + 0.5f - center_x) / fscale_x;
+        float w = 1.0f - fabsf(t);
+        if (w > 0.0f) sum_wx += w;
+    }
+    for (int j = ymin; j < ymax; ++j) {
+        float t = ((float)j + 0.5f - center_y) / fscale_y;
+        float w = 1.0f - fabsf(t);
+        if (w > 0.0f) sum_wy += w;
+    }
 
-        float* dst_ptr = dst + box_idx * (3 * crop_w * crop_h);
-        int plane_size = crop_w * crop_h;
-        int spatial_idx = y * crop_w + x;
+    float* dst_ptr = dst + box_idx * (3 * crop_w * crop_h);
+    int plane_size = crop_w * crop_h;
+    int spatial_idx = y * crop_w + x;
+    int src_plane = src_w * src_h;
 
-        for (int c = 0; c < 3; ++c) {
-            float p00 = get_pixel(x_low, y_low, c);
-            float p01 = get_pixel(x_high, y_low, c);
-            float p10 = get_pixel(x_low, y_high, c);
-            float p11 = get_pixel(x_high, y_high, c);
+    if (sum_wx <= 0.0f || sum_wy <= 0.0f) {
+        // Degenerate box (zero-area after clamp): emit zeros.
+        for (int c = 0; c < 3; ++c)
+            dst_ptr[c * plane_size + spatial_idx] = 0.0f;
+        return;
+    }
+    float inv_wx = 1.0f / sum_wx;
+    float inv_wy = 1.0f / sum_wy;
 
-            float val = (1.0f - dx) * (1.0f - dy) * p00 +
-                        dx * (1.0f - dy) * p01 +
-                        (1.0f - dx) * dy * p10 +
-                        dx * dy * p11;
-            
-            dst_ptr[c * plane_size + spatial_idx] = val;
+    // src is CHW float (output of normalize_chw_kernel).
+    for (int c = 0; c < 3; ++c) {
+        const float* src_c = src + c * src_plane;
+        float val = 0.0f;
+        for (int jy = ymin; jy < ymax; ++jy) {
+            float ty = ((float)jy + 0.5f - center_y) / fscale_y;
+            float wy = 1.0f - fabsf(ty);
+            if (wy <= 0.0f) continue;
+            wy *= inv_wy;
+            int row = jy * src_w;
+            for (int jx = xmin; jx < xmax; ++jx) {
+                float tx = ((float)jx + 0.5f - center_x) / fscale_x;
+                float wx = 1.0f - fabsf(tx);
+                if (wx <= 0.0f) continue;
+                val += wy * wx * inv_wx * src_c[row + jx];
+            }
         }
+        dst_ptr[c * plane_size + spatial_idx] = val;
     }
 }
 

@@ -267,11 +267,12 @@ def cheb_gr_kreciprocal(
     # k2 local query expansion: V_i <- mean of V over i's k2 nearest neighbours.
     if k2 > 1:
         rows = torch.arange(n, device=device).repeat_interleave(k2)
-        a = torch.sparse_coo_tensor(
-            torch.stack([rows, knn.reshape(-1)]),
-            torch.full((n * k2,), 1.0 / k2, device=device),
-            (n, n),
-        ).coalesce()
+        with torch.sparse.check_sparse_tensor_invariants(False):
+            a = torch.sparse_coo_tensor(
+                torch.stack([rows, knn.reshape(-1)]),
+                torch.full((n * k2,), 1.0 / k2, device=device),
+                (n, n),
+            ).coalesce()
         v = torch.sparse.mm(a, v)
 
     # Jaccard distance via histogram intersection. V is sparse (only reciprocal

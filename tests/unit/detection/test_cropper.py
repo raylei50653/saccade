@@ -14,6 +14,7 @@ from __future__ import annotations
 import pytest
 import torch
 
+import saccade.perception.cropper as cropper_module
 from saccade.perception.cropper import ZeroCopyCropper
 
 
@@ -109,6 +110,54 @@ class TestCropperProcess:
         assert result.shape == (1, 3, 224, 224)
         # Values should be valid (not NaN)
         assert not torch.isnan(result).any()
+
+    def test_cpp_fast_path_passes_chw_storage(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """C++ cropper expects CHW float input, not an HWC permuted copy."""
+        created: list[FakeCppCropper] = []
+
+        class FakeStream:
+            cuda_stream = 0
+
+        class FakeCppCropper:
+            def __init__(self, crop_width: int, crop_height: int) -> None:
+                self.crop_width = crop_width
+                self.crop_height = crop_height
+                self.input_ptr: int | None = None
+                self.src_w: int | None = None
+                self.src_h: int | None = None
+                created.append(self)
+
+            def process_gpu(
+                self,
+                input_ptr: int,
+                src_w: int,
+                src_h: int,
+                boxes_ptr: int,
+                num_boxes: int,
+                output_ptr: int,
+                stream_ptr: int,
+            ) -> None:
+                self.input_ptr = input_ptr
+                self.src_w = src_w
+                self.src_h = src_h
+
+        monkeypatch.setattr(cropper_module, "_CROPPER_CPP_AVAILABLE", True)
+        monkeypatch.setattr(cropper_module, "CropperCpp", FakeCppCropper, raising=False)
+        monkeypatch.setattr(torch.cuda, "current_stream", lambda: FakeStream())
+
+        cropper = ZeroCopyCropper(output_size=(4, 5))
+        frame = torch.arange(1 * 3 * 7 * 11, dtype=torch.float32).reshape(1, 3, 7, 11)
+        boxes = torch.tensor([[1.0, 2.0, 8.0, 6.0]], dtype=torch.float32)
+
+        result = cropper.process(frame, boxes)
+
+        assert result.shape == (1, 3, 4, 5)
+        assert len(created) == 1
+        assert created[0].input_ptr == frame.squeeze(0).data_ptr()
+        assert created[0].src_w == 11
+        assert created[0].src_h == 7
 
 
 # ─── _prepare_boxes ─────────────────────────────────────────────────────────
@@ -308,3 +357,102 @@ class TestCppPtr:
         with pytest.raises(RuntimeError) as exc_info:
             _ = cropper.cpp_ptr
         assert "C++" in str(exc_info.value)
+
+
+# ─── native kernel vs PIL bilinear alignment ─────────────────────────────────
+
+cuda_only = pytest.mark.skipif(
+    not torch.cuda.is_available(), reason="native cropper alignment requires CUDA"
+)
+
+
+def _structured_frame(h: int, w: int):
+    """RGB uint8 HWC frame with gradients + 2px diagonal stripes (aliasing bait)."""
+    import numpy as np
+
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    r = ((xx * 0.7 + yy * 0.3) % 255).astype(np.uint8)
+    g = ((np.sin(xx * 0.05) * 127 + 128 + yy * 0.4) % 255).astype(np.uint8)
+    b = ((np.cos(yy * 0.07) * 127 + 128 + xx * 0.2) % 255).astype(np.uint8)
+    frame = np.stack([r, g, b], axis=-1).astype(np.uint8)
+    frame[((xx + yy) % 8) < 2] = [255, 0, 0]
+    return frame
+
+
+def _pil_crop(frame, box_xyxy, out_hw):
+    import numpy as np
+    from PIL import Image
+
+    h, w = frame.shape[:2]
+    x1, y1, x2, y2 = box_xyxy
+    box = (
+        max(0, int(round(x1))),
+        max(0, int(round(y1))),
+        min(w, int(round(x2))),
+        min(h, int(round(y2))),
+    )
+    if box[2] <= box[0] or box[3] <= box[1]:
+        box = (0, 0, w, h)
+    img = Image.fromarray(frame, mode="RGB")
+    return np.asarray(
+        img.crop(box).resize((out_hw[1], out_hw[0]), Image.BILINEAR), dtype=np.uint8
+    )
+
+
+@cuda_only
+class TestNativeCropMatchesPilBilinear:
+    """The CUDA crop kernel must stay pixel-aligned with the PIL fallback.
+
+    Guards against the two drift sources that broke offline/online parity:
+      1. half-pixel shift (corner vs pixel-center convention);
+      2. missing antialiasing (single-tap vs PIL's triangle filter).
+    Integer boxes match PIL to within uint8 rounding (max abs diff <= 1).
+    """
+
+    def test_integer_boxes_match_pil(self) -> None:
+        import numpy as np
+
+        h, w, out_hw = 720, 1280, (224, 224)
+        frame = _structured_frame(h, w)
+        frame_chw = (
+            torch.from_numpy(frame.copy())
+            .to(device="cuda", dtype=torch.float32)
+            .div_(255.0)
+            .permute(2, 0, 1)
+            .contiguous()
+            .unsqueeze(0)
+        )
+        cropper = ZeroCopyCropper(output_size=out_hw, mode="tight", padding=0.0)
+        if cropper._cpp is None:
+            pytest.skip("C++ cropper extension not available")
+        boxes = [
+            (50.0, 80.0, 450.0, 520.0),  # ~2x downscale
+            (200.0, 150.0, 300.0, 250.0),  # upscale (small box)
+            (1000.0, 400.0, 1280.0, 700.0),  # near right edge
+            (0.0, 0.0, 224.0, 224.0),  # 1:1
+            (530.0, 310.0, 954.0, 734.0),  # box runs off the bottom edge
+        ]
+        boxes_t = torch.tensor(boxes, dtype=torch.float32, device="cuda")
+        with torch.no_grad():
+            crops = cropper.process(frame_chw, boxes_t).clamp(0.0, 1.0)
+        crops_hwc = (
+            (crops.permute(0, 2, 3, 1).cpu().numpy() * 255.0)
+            .round()
+            .clip(0, 255)
+            .astype(np.uint8)
+        )
+        for i, bx in enumerate(boxes):
+            pil = _pil_crop(frame, bx, out_hw).astype(np.float32).ravel()
+            cpp = crops_hwc[i].astype(np.float32).ravel()
+            cos = float(
+                np.dot(pil, cpp) / (np.linalg.norm(pil) * np.linalg.norm(cpp) + 1e-12)
+            )
+            mae = float(np.abs(pil - cpp).mean())
+            mx = float(np.abs(pil - cpp).max())
+            assert cos >= 0.999, (
+                f"box {bx}: cosine {cos:.4f} < 0.999 (mae={mae:.3f}, max={mx:.0f})"
+            )
+            # uint8 rounding only — no structural drift.
+            assert mx <= 1.0, (
+                f"box {bx}: max abs diff {mx:.0f} > 1 (rounding-only expected)"
+            )

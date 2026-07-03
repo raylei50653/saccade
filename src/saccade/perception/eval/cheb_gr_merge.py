@@ -37,6 +37,7 @@ import torch
 from torch import Tensor
 
 from ..reid.cheb_gr import cheb_gr_kreciprocal
+from .helpers import front_occlusion_mask_xyxy
 from .lifecycle import UnionFind
 from .post_merge import _build_output_tracklets, _format_mot_records, _parse_mot_lines
 from .types import OutputTracklet
@@ -286,22 +287,159 @@ def cheb_gr_merge_output_tracklets(
     return _format_mot_records(records), vars(stats)
 
 
+def _native_fallback(reason: str) -> None:
+    """Announce PIL fallback loudly: a silent fallback makes native-vs-PIL
+    A/B reports lie about which path actually produced the embeddings."""
+    print(f"⚠️  cheb-gr merge: native crop path unavailable ({reason}), using PIL")
+
+
+def _native_cropper(output_hw: tuple[int, int]) -> Any | None:
+    try:
+        from saccade_perception_ext import Cropper as CropperCpp
+    except ImportError:
+        _native_fallback("saccade_perception_ext import failed")
+        return None
+
+    out_h, out_w = output_hw
+    try:
+        return CropperCpp(out_w, out_h)
+    except Exception as exc:
+        _native_fallback(f"CropperCpp init failed: {exc}")
+        return None
+
+
+def _load_frame_chw_gpu(
+    path: str, device: str | torch.device
+) -> tuple[Tensor, int, int]:
+    from PIL import Image
+
+    img = Image.open(path).convert("RGB")
+    arr = np.asarray(img, dtype=np.uint8).copy()
+    h, w = arr.shape[:2]
+    frame = (
+        torch.from_numpy(arr)
+        .to(device=device, dtype=torch.float32, non_blocking=True)
+        .div_(255.0)
+        .permute(2, 0, 1)
+        .contiguous()
+    )
+    return frame, h, w
+
+
+def _extract_native_crops_trt(
+    samples: list[tuple[int, int, tuple[float, float, float, float]]],
+    by_frame: dict[int, list[int]],
+    seq_dir: str,
+    extractor: Any,
+    *,
+    crop_hw: tuple[int, int],
+    im_ext: str,
+    batch: int,
+) -> Tensor | None:
+    """CUDA crop + TensorRT extraction for offline tracklet samples.
+
+    Frames are still JPEG-decoded on CPU, but every expensive per-crop operation
+    moves to the same native path used online: C++ CUDA cropper + C++ TRT
+    FeatureExtractor. Returns ``None`` when native cropper/extractor support is
+    unavailable so the caller can use the PIL fallback.
+    """
+    if not torch.cuda.is_available():
+        _native_fallback("CUDA not available")
+        return None
+    try:
+        if int(extractor.cpp_ptr) == 0:
+            _native_fallback("extractor has no C++ TRT backend (cpp_ptr == 0)")
+            return None
+    except Exception as exc:
+        _native_fallback(f"extractor cpp_ptr check failed: {exc}")
+        return None
+
+    cropper = _native_cropper(crop_hw)
+    if cropper is None:
+        return None
+
+    device = torch.device(getattr(extractor, "device", "cuda"))
+    if device.type != "cuda":
+        _native_fallback(f"extractor device is {device}, need cuda")
+        return None
+    feat_dim = int(extractor.feature_dim)
+    feats = torch.empty((len(samples), feat_dim), device=device, dtype=torch.float32)
+    pending_crops: list[Tensor] = []
+    pending_rows: list[int] = []
+    pending_n = 0
+    stream = torch.cuda.current_stream(device)
+
+    def flush() -> None:
+        nonlocal pending_crops, pending_rows, pending_n
+        if pending_n == 0:
+            return
+        crops = (
+            pending_crops[0]
+            if len(pending_crops) == 1
+            else torch.cat(pending_crops, dim=0)
+        )
+        embeds = extractor.extract(crops, stream=stream)
+        rows = torch.tensor(pending_rows, device=device, dtype=torch.long)
+        feats[rows] = embeds
+        pending_crops = []
+        pending_rows = []
+        pending_n = 0
+
+    for frame, sample_indices in by_frame.items():
+        frame_tensor, frame_h, frame_w = _load_frame_chw_gpu(
+            f"{seq_dir}/{frame:06d}{im_ext}", device
+        )
+        boxes = torch.tensor(
+            [samples[si][2] for si in sample_indices],
+            device=device,
+            dtype=torch.float32,
+        ).contiguous()
+        crops = torch.empty(
+            (len(sample_indices), 3, crop_hw[0], crop_hw[1]),
+            device=device,
+            dtype=torch.float32,
+        )
+        cropper.process_gpu(
+            frame_tensor.data_ptr(),
+            frame_w,
+            frame_h,
+            boxes.data_ptr(),
+            len(sample_indices),
+            crops.data_ptr(),
+            stream.cuda_stream,
+        )
+        pending_crops.append(crops)
+        pending_rows.extend(sample_indices)
+        pending_n += len(sample_indices)
+        if pending_n >= batch:
+            flush()
+
+    flush()
+    return feats
+
+
 def extract_tracklet_embeddings(
     results_lines: list[str],
     seq_dir: str,
     extractor: Any,
     *,
     n_samples: int = 50,
-    crop_hw: tuple[int, int] = (224, 224),
+    crop_hw: tuple[int, int] | None = None,
     im_ext: str = ".jpg",
     batch: int = 256,
+    appearance_occlusion_gate: bool | None = None,
+    appearance_occlusion_cov: float = 0.4,
+    resample: str | None = None,
+    prefer_native: bool = True,
 ) -> dict[int, Tensor]:
     """Per-tracklet L2-normalized appearance samples for offline merge.
 
-    Mirrors the *proven* siglip2_reid preprocessing of the standalone Market gate
-    (``scripts/eval/cheb_gr_osnet_gate.py``, mAP 81.31%): PIL ``convert("RGB")``
-    + bilinear resize + ``/255`` -> ``extractor.extract``. The C++ eval path
-    emits no per-det embedding, so detections are re-cropped from ``img1`` here.
+    The C++ eval path emits no per-det embedding, so detections are re-cropped
+    from ``img1`` here. For ``mobilenetv4_reid`` this mirrors the visclean
+    train/online contract: filter lower-foot front-occluded crops before temporal
+    sampling, stretch to the extractor input size, then ``/255`` ->
+    ``extractor.extract``. When native support is available, the resize/crop and
+    TensorRT inference use the C++/CUDA path; PIL remains the fallback.
 
     Frames are read once each (tracklets share frames). Returns
     ``{track_id: [S_i, D]}`` on the extractor's device.
@@ -310,18 +448,52 @@ def extract_tracklet_embeddings(
 
     from PIL import Image
 
+    model_type = str(getattr(extractor, "model_type", ""))
+    if crop_hw is None:
+        crop_hw = tuple(getattr(extractor, "input_hw", (224, 224)))  # type: ignore[arg-type]
+    batch = max(1, int(batch))
+    if appearance_occlusion_gate is None:
+        appearance_occlusion_gate = model_type == "mobilenetv4_reid"
+    requested_resample = resample
+    if resample is None:
+        resample = "bicubic" if model_type == "mobilenetv4_reid" else "bilinear"
+    resample_mode = Image.BICUBIC if resample.lower() == "bicubic" else Image.BILINEAR
+
     records = _parse_mot_lines(results_lines)
-    by_id: dict[int, list[Any]] = defaultdict(list)
-    for r in records:
-        by_id[r.track_id].append(r)
+    dirty_record_idx: set[int] = set()
+    if appearance_occlusion_gate:
+        by_frame_idx: dict[int, list[int]] = defaultdict(list)
+        for ri, r in enumerate(records):
+            by_frame_idx[r.frame].append(ri)
+        for idxs in by_frame_idx.values():
+            boxes = torch.tensor(
+                [
+                    (
+                        records[i].x,
+                        records[i].y,
+                        records[i].x + records[i].w,
+                        records[i].y + records[i].h,
+                    )
+                    for i in idxs
+                ],
+                dtype=torch.float32,
+            )
+            mask = front_occlusion_mask_xyxy(boxes, appearance_occlusion_cov)
+            dirty_record_idx.update(i for i, dirty in zip(idxs, mask.tolist()) if dirty)
+
+    by_id: dict[int, list[tuple[int, Any]]] = defaultdict(list)
+    for ri, r in enumerate(records):
+        if ri in dirty_record_idx:
+            continue
+        by_id[r.track_id].append((ri, r))
 
     # Temporally-distributed sampling -> flat list of (track_id, frame, xyxy box).
     samples: list[tuple[int, int, tuple[float, float, float, float]]] = []
     for tid, items in by_id.items():
-        items.sort(key=lambda r: r.frame)
-        scores = np.asarray([r.score for r in items], dtype=np.float32)
+        items.sort(key=lambda item: item[1].frame)
+        scores = np.asarray([r.score for _, r in items], dtype=np.float32)
         for j in temporal_sample_indices(len(items), n_samples, scores=scores):
-            r = items[j]
+            _, r = items[j]
             samples.append((tid, r.frame, (r.x, r.y, r.x + r.w, r.y + r.h)))
     if not samples:
         return {}
@@ -330,6 +502,30 @@ def extract_tracklet_embeddings(
     by_frame: dict[int, list[int]] = defaultdict(list)
     for si, (_, frame, _) in enumerate(samples):
         by_frame[frame].append(si)
+
+    native_allowed = prefer_native and (
+        requested_resample is None
+        or requested_resample.lower() in {"native", "bilinear"}
+    )
+    if native_allowed:
+        native_feats = _extract_native_crops_trt(
+            samples,
+            by_frame,
+            seq_dir,
+            extractor,
+            crop_hw=crop_hw,
+            im_ext=im_ext,
+            batch=batch,
+        )
+        if native_feats is not None:
+            result: dict[int, Tensor] = {}
+            owner = torch.tensor([s[0] for s in samples])
+            device = native_feats.device
+            for tid in by_id:
+                rows = torch.nonzero(owner == tid, as_tuple=True)[0]
+                if rows.numel() > 0:
+                    result[tid] = native_feats[rows.to(device)]
+            return result
 
     out_h, out_w = crop_hw
     crop_arrs: list[np.ndarray | None] = [None] * len(samples)
@@ -347,7 +543,7 @@ def extract_tracklet_embeddings(
             )
             if box[2] <= box[0] or box[3] <= box[1]:
                 box = (0, 0, fw, fh)
-            crop = img.crop(box).resize((out_w, out_h), Image.BILINEAR)  # type: ignore[attr-defined]
+            crop = img.crop(box).resize((out_w, out_h), resample_mode)  # type: ignore[attr-defined]
             crop_arrs[si] = np.asarray(crop, dtype=np.uint8).transpose(2, 0, 1)
 
     device = getattr(extractor, "device", "cuda")

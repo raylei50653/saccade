@@ -69,6 +69,9 @@ class LifecycleConfig:
     cheb_gr_fuse_lambda: float = 0.3
     cheb_gr_engine: str = ""
     cheb_gr_model: str = "siglip2_reid"
+    cheb_gr_online: bool = False
+    cheb_gr_online_decide_n: int = 5
+    cheb_gr_online_max_cost: float = 0.45
     # Lost-track memory (ByteTrack track_buffer): frames a lost track survives in
     # the tracker (and stays available for association + bridge relink) before
     # removal. Per-seq fps-scaled when per_seq_adapt is on.
@@ -654,7 +657,9 @@ def add_lifecycle_args(parser: argparse.ArgumentParser) -> None:
         action=argparse.BooleanOptionalAction,
         default=False,
         help="Cheb-GR offline tracklet merge (path 2): stitch temporally-disjoint "
-        "tracklets by appearance to recover AssA. Re-crops img1 + siglip2_reid.",
+        "tracklets by appearance to recover AssA. Re-crops img1 with "
+        "--cheb-gr-model; uses native C++/CUDA crop + TRT extractor when "
+        "available; mobilenetv4_reid uses the visclean occlusion crop gate.",
     )
     grp.add_argument(
         "--cheb-gr-merge-max-cost",
@@ -743,6 +748,38 @@ def add_lifecycle_args(parser: argparse.ArgumentParser) -> None:
         default="siglip2_reid",
         help="TRTFeatureExtractor model_type for Cheb-GR tracklet embeddings "
         "(e.g. mobilenetv4_reid).",
+    )
+    grp.add_argument(
+        "--cheb-gr-online",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Causal online Cheb-GR ID handover: one-shot identity decision "
+        "decide-n frames after birth against an archive of recently-dead "
+        "tracks (event-local causal gallery, no retroactive rewrite). "
+        "Real-time analogue of --cheb-gr-merge-enabled; replaces it when both "
+        "are set. Shares the --cheb-gr-* knobs and extractor.",
+    )
+    grp.add_argument(
+        "--cheb-gr-online-decide-n",
+        type=int,
+        default=5,
+        help=_help(
+            "Frames after birth at which the one-shot handover decision fires "
+            "(the tracker's unemitted confirmation window).",
+            range_hint=">=1",
+            edge="probe 2026-07-03: 5 already matches full offline evidence",
+        ),
+    )
+    grp.add_argument(
+        "--cheb-gr-online-max-cost",
+        type=float,
+        default=0.45,
+        help=_help(
+            "Max Cheb-GR distance accepted for an online handover (own knob: "
+            "the offline merge config default 0.55 is too loose here).",
+            range_hint="0-1",
+            edge="0.45 = offline parity 80.3; 0.40 = all per-seq drawdowns <=0.2",
+        ),
     )
     grp.add_argument(
         "--relink-enabled",
