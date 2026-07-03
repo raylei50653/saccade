@@ -234,6 +234,9 @@ class EvalConfig:
     cheb_gr_fuse_lambda: float
     cheb_gr_engine: str
     cheb_gr_model: str
+    cheb_gr_online: bool
+    cheb_gr_online_decide_n: int
+    cheb_gr_online_max_cost: float
 
     # Birth-time lost-bank ReID relink (online, GPU; default off)
     relink_enabled: bool
@@ -742,6 +745,9 @@ def parse_eval_config(
         cheb_gr_fuse_lambda=float(kwargs.get("cheb_gr_fuse_lambda", 0.3)),
         cheb_gr_engine=str(kwargs.get("cheb_gr_engine", "") or ""),
         cheb_gr_model=str(kwargs.get("cheb_gr_model", "siglip2_reid")),
+        cheb_gr_online=bool(kwargs.get("cheb_gr_online", False)),
+        cheb_gr_online_decide_n=int(kwargs.get("cheb_gr_online_decide_n", 5)),
+        cheb_gr_online_max_cost=float(kwargs.get("cheb_gr_online_max_cost", 0.45)),
         relink_enabled=bool(kwargs.get("relink_enabled", False)),
         relink_bank_cap=int(kwargs.get("relink_bank_cap", 256)),
         relink_sim_thresh=float(kwargs.get("relink_sim_thresh", 0.6)),
