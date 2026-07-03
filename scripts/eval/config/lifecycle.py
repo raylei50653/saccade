@@ -72,6 +72,17 @@ class LifecycleConfig:
     cheb_gr_online: bool = False
     cheb_gr_online_decide_n: int = 5
     cheb_gr_online_max_cost: float = 0.45
+    cheb_gr_online_min_head: int = 1
+    cheb_gr_online_margin: float = 0.0
+    cheb_gr_online_log: bool = False
+    occ_audit: bool = False
+    occ_audit_tau: float = 0.45
+    occ_audit_ref_n: int = 5
+    occ_audit_min_ref: int = 2
+    occ_audit_crops: int = 3
+    occ_audit_window: int = 30
+    occ_audit_min_occ: int = 2
+    occ_audit_log: bool = False
     # Lost-track memory (ByteTrack track_buffer): frames a lost track survives in
     # the tracker (and stays available for association + bridge relink) before
     # removal. Per-seq fps-scaled when per_seq_adapt is on.
@@ -782,6 +793,106 @@ def add_lifecycle_args(parser: argparse.ArgumentParser) -> None:
         ),
     )
     grp.add_argument(
+        "--cheb-gr-online-min-head",
+        type=int,
+        default=1,
+        help=_help(
+            "Minimum clean newborn head samples required before accepting an "
+            "online handover.",
+            range_hint=">=1",
+            edge="raise to 2+ to avoid decisions from a single clean crop",
+        ),
+    )
+    grp.add_argument(
+        "--cheb-gr-online-margin",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Minimum separation between best and second-best Cheb-GR candidate "
+            "costs. 0 preserves the original top-1 behavior.",
+            range_hint=">=0",
+            edge="use 0.03-0.05 to reject ambiguous handovers",
+        ),
+    )
+    grp.add_argument(
+        "--cheb-gr-online-log",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Write _cheb_gr_online_handover.csv with accept/reject decision rows.",
+    )
+    grp.add_argument(
+        "--occ-audit",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Causal occ-exit identity audit (ABSORB-side twin of "
+        "--cheb-gr-online): after a geometric occlusion episode ends, compare "
+        "the track's first clean crops against its pre-occlusion reference and "
+        "split off a fresh id from the first crop that contradicts it. Shares "
+        "the --cheb-gr-engine/--cheb-gr-model extractor.",
+    )
+    grp.add_argument(
+        "--occ-audit-tau",
+        type=float,
+        default=0.45,
+        help=_help(
+            "Cosine below this flags an identity transfer (clean-stream quantile).",
+            range_hint="0-1",
+            edge="probe 2026-07-03: 0.386 = 0.1%% false rate, 0.498 = 0.5%%",
+        ),
+    )
+    grp.add_argument(
+        "--occ-audit-ref-n",
+        type=int,
+        default=5,
+        help=_help(
+            "Clean pre-occlusion frames kept as the appearance reference.",
+            range_hint=">=1",
+        ),
+    )
+    grp.add_argument(
+        "--occ-audit-min-ref",
+        type=int,
+        default=2,
+        help=_help(
+            "Minimum clean reference samples; episodes with fewer abstain.",
+            range_hint=">=1",
+        ),
+    )
+    grp.add_argument(
+        "--occ-audit-crops",
+        type=int,
+        default=3,
+        help=_help(
+            "Post-exit clean crops checked per episode (min-of-N decision).",
+            range_hint=">=1",
+        ),
+    )
+    grp.add_argument(
+        "--occ-audit-window",
+        type=int,
+        default=30,
+        help=_help(
+            "Frames after occlusion exit in which audit crops may be collected.",
+            range_hint=">=1",
+        ),
+    )
+    grp.add_argument(
+        "--occ-audit-min-occ",
+        type=int,
+        default=2,
+        help=_help(
+            "Minimum consecutive dirty frames for an episode to be audited "
+            "(single-frame blips are skipped).",
+            range_hint=">=1",
+        ),
+    )
+    grp.add_argument(
+        "--occ-audit-log",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Write _occ_audit.csv with one row per audited episode.",
+    )
+    grp.add_argument(
         "--relink-enabled",
         action=argparse.BooleanOptionalAction,
         default=False,
@@ -1034,6 +1145,6 @@ def add_lifecycle_args(parser: argparse.ArgumentParser) -> None:
             "embeddings and cosine < this floor (ranking use: the correct "
             "runner-up then wins the bdist ranking). Needs per-detection "
             "embeddings (reid_mode=tracker). <= -1 disables (bit-exact).",
-            range_hint="mnv4 scale: 0.20-0.25 (in-zone false-kill 35-43% at 1-2% true cost)",
+            range_hint="mnv4 scale: 0.20-0.25 (in-zone false-kill 35-43%% at 1-2%% true cost)",
         ),
     )
