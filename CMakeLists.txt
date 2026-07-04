@@ -155,6 +155,9 @@ add_library(saccade_tracking STATIC
     src/tracking/gmc.cpp
     src/tracking/gmc_kernel.cu
     src/tracking/pipeline.cpp
+    src/tracking/crop_pool.cpp
+    src/tracking/frame_buffer.cpp
+    src/tracking/reid_queue.cpp
     src/tracking/workbench.cpp
     src/tracking/quality_filter.cu
     src/tracking/copy_pad.cu
@@ -364,6 +367,8 @@ if(ENABLE_NATIVE_TESTS)
         tests/native/test_mamba_scan.cpp)
     add_tracking_native_test(saccade_gmc_hanning_guard_test
         tests/native/test_gmc_hanning_guard.cpp)
+    add_tracking_native_test(saccade_crop_pool_test
+        tests/native/test_crop_pool.cpp)
 
     # fpn_reid launchers live in fpn_reid_cuda.cu, which is NOT part of
     # saccade_tracking (it ships as a standalone torch extension). Compile

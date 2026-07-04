@@ -20,6 +20,8 @@ struct TrackResult {
 
 struct TrackStateSnapshot {
     int obj_id;
+    uint64_t track_uid = 0;
+    int generation = 0;
     int class_id;
     int age;
     float score;
@@ -29,6 +31,8 @@ struct TrackStateSnapshot {
 
 struct TrackCandidateSnapshot {
     int obj_id;
+    uint64_t track_uid = 0;
+    int generation = 0;
     int class_id;
     int age;
     int hit_streak;
@@ -49,6 +53,7 @@ struct TrackerGPUBuffers {
     uintptr_t states;     // float*,  device pointer [max_objs * 8]
     uintptr_t covs;       // float*,  device pointer [max_objs * 64]
     uintptr_t track_ids;  // int*,    device pointer [max_objs]
+    uintptr_t track_uids; // uint64_t*, device pointer [max_objs]
     int max_objs;
 };
 

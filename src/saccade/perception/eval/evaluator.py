@@ -1770,6 +1770,9 @@ def run_eval_cpp(
                 decide_n=cfg.cheb_gr_online_decide_n,
                 min_head_samples=cfg.cheb_gr_online_min_head,
                 margin=cfg.cheb_gr_online_margin,
+                key_sim_min=cfg.cheb_gr_online_key_sim_min,
+                key_sim_cost_floor=cfg.cheb_gr_online_key_sim_cost_floor,
+                key_margin_min=cfg.cheb_gr_online_key_margin_min,
                 center_dist_veto=cfg.cheb_gr_online_center_dist_veto,
                 pollution_veto=cfg.cheb_gr_online_pollution_veto,
                 pool_frac=cfg.cheb_gr_pool_frac,
@@ -1793,6 +1796,8 @@ def run_eval_cpp(
                 "events had candidates, "
                 f"reject_cost={ho_stats['reject_cost']} "
                 f"reject_margin={ho_stats['reject_margin']} "
+                f"reject_key_sim={ho_stats['reject_key_sim']} "
+                f"reject_key_margin={ho_stats['reject_key_margin']} "
                 f"reject_center_dist={ho_stats['reject_center_dist']} "
                 f"reject_pollution={ho_stats['reject_pollution']} "
                 f"reject_min_head={ho_stats['reject_min_head']})"
@@ -3001,7 +3006,7 @@ class EvalPipeline:
             ):
                 tracker_kwargs = {}
                 if hasattr(detector.tracker, "get_gpu_buffers"):
-                    states, covs, tids, maxn = detector.tracker.get_gpu_buffers()
+                    states, covs, tids, uids, maxn = detector.tracker.get_gpu_buffers()
                     tracker_kwargs = dict(
                         tracker_states=int(states),
                         tracker_covs=int(covs),
@@ -7495,6 +7500,9 @@ def run_eval(
                 decide_n=cfg.cheb_gr_online_decide_n,
                 min_head_samples=cfg.cheb_gr_online_min_head,
                 margin=cfg.cheb_gr_online_margin,
+                key_sim_min=cfg.cheb_gr_online_key_sim_min,
+                key_sim_cost_floor=cfg.cheb_gr_online_key_sim_cost_floor,
+                key_margin_min=cfg.cheb_gr_online_key_margin_min,
                 center_dist_veto=cfg.cheb_gr_online_center_dist_veto,
                 pollution_veto=cfg.cheb_gr_online_pollution_veto,
                 pool_frac=cfg.cheb_gr_pool_frac,
@@ -7518,6 +7526,8 @@ def run_eval(
                 "events had candidates, "
                 f"reject_cost={ho_stats['reject_cost']} "
                 f"reject_margin={ho_stats['reject_margin']} "
+                f"reject_key_sim={ho_stats['reject_key_sim']} "
+                f"reject_key_margin={ho_stats['reject_key_margin']} "
                 f"reject_center_dist={ho_stats['reject_center_dist']} "
                 f"reject_pollution={ho_stats['reject_pollution']} "
                 f"reject_min_head={ho_stats['reject_min_head']})"

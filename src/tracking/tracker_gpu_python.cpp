@@ -3422,6 +3422,8 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
 
     py::class_<TrackStateSnapshot>(m, "TrackStateSnapshot")
         .def_readonly("obj_id", &TrackStateSnapshot::obj_id)
+        .def_readonly("track_uid", &TrackStateSnapshot::track_uid)
+        .def_readonly("generation", &TrackStateSnapshot::generation)
         .def_readonly("class_id", &TrackStateSnapshot::class_id)
         .def_readonly("age", &TrackStateSnapshot::age)
         .def_readonly("score", &TrackStateSnapshot::score)
@@ -3430,6 +3432,8 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
 
     py::class_<TrackCandidateSnapshot>(m, "TrackCandidateSnapshot")
         .def_readonly("obj_id", &TrackCandidateSnapshot::obj_id)
+        .def_readonly("track_uid", &TrackCandidateSnapshot::track_uid)
+        .def_readonly("generation", &TrackCandidateSnapshot::generation)
         .def_readonly("class_id", &TrackCandidateSnapshot::class_id)
         .def_readonly("age", &TrackCandidateSnapshot::age)
         .def_readonly("hit_streak", &TrackCandidateSnapshot::hit_streak)
@@ -3579,8 +3583,8 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
            "Shares the lazy-sync cache with update_reference_features / set_clean_embedding_flags.")
         .def("get_gpu_buffers", [](GPUByteTracker& self) {
             auto buf = self.get_gpu_buffers();
-            return py::make_tuple(buf.states, buf.covs, buf.track_ids, buf.max_objs);
-        }, "Return (states_ptr, covs_ptr, track_ids_ptr, max_objs) device pointers.")
+            return py::make_tuple(buf.states, buf.covs, buf.track_ids, buf.track_uids, buf.max_objs);
+        }, "Return (states_ptr, covs_ptr, track_ids_ptr, track_uids_ptr, max_objs) device pointers.")
         .def_property_readonly("max_objects", &GPUByteTracker::max_objects)
         .def_property_readonly("max_assoc", &GPUByteTracker::max_assoc)
         .def("update", [](GPUByteTracker& self, uintptr_t boxes_ptr, uintptr_t scores_ptr, uintptr_t classes_ptr, int num_dets, uintptr_t stream_ptr,
@@ -4302,6 +4306,11 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
     );
 
     // PerceptionPipeline — C++ facade for filter+NMS+reid hot path
+    py::class_<ReIDQueue>(m, "ReIDQueue")
+        .def(py::init<>())
+        .def("size", &ReIDQueue::size)
+        .def("shutdown", &ReIDQueue::shutdown);
+
     py::class_<PerceptionPipeline::Config>(m, "PerceptionPipelineConfig")
         .def(py::init<>())
         .def_readwrite("score_threshold",           &PerceptionPipeline::Config::score_threshold)
@@ -4578,6 +4587,118 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             py::arg("frame_ptr"), py::arg("frame_h"), py::arg("frame_w"),
             py::arg("boxes_ptr"), py::arg("n_boxes"),
             py::arg("out_embeds"), py::arg("stream_ptr"))
+        .def("crop_into_pool",
+            [](PerceptionPipeline& self,
+               uintptr_t frame_ptr, int frame_h, int frame_w,
+               uintptr_t boxes_ptr, int n_boxes,
+               uintptr_t stream_ptr) -> int {
+                py::gil_scoped_release release;
+                int slot = -1;
+                self.crop_into_pool(
+                    reinterpret_cast<const float*>(frame_ptr),
+                    frame_h, frame_w,
+                    reinterpret_cast<const float*>(boxes_ptr),
+                    n_boxes,
+                    &slot,
+                    reinterpret_cast<cudaStream_t>(stream_ptr));
+                return slot;
+            },
+            py::arg("frame_ptr"), py::arg("frame_h"), py::arg("frame_w"),
+            py::arg("boxes_ptr"), py::arg("n_boxes"),
+            py::arg("stream_ptr"),
+            "Crop boxes into the CropPool. Returns the starting slot index (-1 on failure).")
+        .def("extract_from_pool",
+            [](PerceptionPipeline& self,
+               int slot, int n_boxes,
+               uintptr_t out_embeds, uintptr_t stream_ptr) {
+                py::gil_scoped_release release;
+                self.extract_from_pool(
+                    slot, n_boxes,
+                    reinterpret_cast<float*>(out_embeds),
+                    reinterpret_cast<cudaStream_t>(stream_ptr));
+            },
+            py::arg("slot"), py::arg("n_boxes"),
+            py::arg("out_embeds"), py::arg("stream_ptr"),
+            "Extract ReID embeddings from crops in the pool, then release the slots.")
+        .def("crop_into_pool_async",
+            [](PerceptionPipeline& self,
+               uintptr_t frame_ptr, int frame_h, int frame_w,
+               uintptr_t boxes_ptr, int n_boxes) -> py::tuple {
+                int slot = -1;
+                cudaEvent_t evt = nullptr;
+                {
+                    py::gil_scoped_release release;
+                    self.crop_into_pool_async(
+                        reinterpret_cast<const float*>(frame_ptr),
+                        frame_h, frame_w,
+                        reinterpret_cast<const float*>(boxes_ptr),
+                        n_boxes,
+                        &slot, &evt);
+                }
+                return py::make_tuple(slot, reinterpret_cast<uintptr_t>(evt));
+            },
+            py::arg("frame_ptr"), py::arg("frame_h"), py::arg("frame_w"),
+            py::arg("boxes_ptr"), py::arg("n_boxes"),
+            "Async crop into pool on crop_stream. Returns (slot, event_ptr).")
+        .def("extract_batch_from_pool",
+            [](PerceptionPipeline& self,
+               const py::list& jobs,
+               uintptr_t out_embeds) -> py::tuple {
+                // Convert Python list of dicts to ReIDCropJob array.
+                std::vector<ReIDCropJob> cpp_jobs;
+                cpp_jobs.reserve(jobs.size());
+                for (auto& item : jobs) {
+                    auto d = item.cast<py::dict>();
+                    ReIDCropJob job;
+                    job.crop_slot = d["crop_slot"].cast<int>();
+                    job.n_crops = d["n_crops"].cast<int>();
+                    job.frame_idx = d["frame_idx"].cast<int>();
+                    job.track_uid = d["track_uid"].cast<uint64_t>();
+                    job.generation = d["generation"].cast<int>();
+                    job.det_score = d["det_score"].cast<float>();
+                    job.quality = d["quality"].cast<float>();
+                    job.reason = d["reason"].cast<int>();
+                    uintptr_t evt_ptr = d["crop_ready"].cast<uintptr_t>();
+                    job.crop_ready = reinterpret_cast<cudaEvent_t>(evt_ptr);
+                    cpp_jobs.push_back(job);
+                }
+                int n_jobs = static_cast<int>(cpp_jobs.size());
+                std::vector<ReIDResult> results(n_jobs);
+                int n_extracted;
+                {
+                    py::gil_scoped_release release;
+                    n_extracted = self.extract_batch_from_pool(
+                        cpp_jobs.data(), n_jobs,
+                        reinterpret_cast<float*>(out_embeds),
+                        results.data());
+                }
+                // Build Python result list with GIL held.
+                py::list result_list;
+                for (int i = 0; i < n_jobs; ++i) {
+                    py::dict r;
+                    r["frame_idx"] = results[i].frame_idx;
+                    r["track_uid"] = results[i].track_uid;
+                    r["generation"] = results[i].generation;
+                    r["reason"] = results[i].reason;
+                    r["embed_offset"] = results[i].embed_offset;
+                    r["n_crops"] = results[i].n_crops;
+                    result_list.append(r);
+                }
+                return py::make_tuple(n_extracted, result_list);
+            },
+            py::arg("jobs"), py::arg("out_embeds"),
+            "Batch extract: wait on crop events, gather, infer, release slots. "
+            "Returns (n_extracted, results_list).")
+        .def("crop_stream",
+            [](PerceptionPipeline& self) -> uintptr_t {
+                return reinterpret_cast<uintptr_t>(self.crop_stream());
+            },
+            "Return the internal crop CUDA stream pointer.")
+        .def("reid_stream",
+            [](PerceptionPipeline& self) -> uintptr_t {
+                return reinterpret_cast<uintptr_t>(self.reid_stream());
+            },
+            "Return the internal reid CUDA stream pointer.")
         .def("set_reid_profiling_enabled", &PerceptionPipeline::set_reid_profiling_enabled, py::arg("enabled"))
         .def("reset_reid_profile_stats", &PerceptionPipeline::reset_reid_profile_stats)
         .def("get_reid_profile_stats",
