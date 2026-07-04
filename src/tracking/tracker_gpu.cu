@@ -2735,6 +2735,20 @@ public:
         }
         nvtxRangePop();
     }
+    int compact_output_to_host(float* host_boxes, float* host_scores,
+                                int* host_ids, int* host_classes,
+                                int capacity, cudaStream_t stream) {
+        int count = 0;
+        checkCuda(cudaMemcpy(&count, d_res_count_, sizeof(int), cudaMemcpyDeviceToHost));
+        int n = std::max(0, std::min(count, capacity));
+        if (n > 0) {
+            checkCuda(cudaMemcpy(host_boxes,  d_res_boxes_,  n * 4 * sizeof(float), cudaMemcpyDeviceToHost));
+            checkCuda(cudaMemcpy(host_scores, d_res_scores_, n *     sizeof(float), cudaMemcpyDeviceToHost));
+            checkCuda(cudaMemcpy(host_ids,    d_res_ids_,    n *     sizeof(int),   cudaMemcpyDeviceToHost));
+            checkCuda(cudaMemcpy(host_classes,d_res_classes_,n *     sizeof(int),   cudaMemcpyDeviceToHost));
+        }
+        return n;
+    }
     void run_update_device(
         float* d_boxes, float* d_scores, int* d_classes, int num_dets,
         cudaStream_t stream, float* d_embeddings, float* d_gmc,
@@ -3858,6 +3872,12 @@ void GPUByteTracker::update_into(
         b, s, c, n, stream,
         out_boxes, out_scores, out_ids, out_classes, out_det_idx, out_count,
         e, g, l, m, out_capacity);
+}
+int GPUByteTracker::compact_output_to_host(
+    float* host_boxes, float* host_scores,
+    int* host_ids, int* host_classes,
+    int capacity, cudaStream_t stream) {
+    return pimpl_->compact_output_to_host(host_boxes, host_scores, host_ids, host_classes, capacity, stream);
 }
 std::vector<TrackResult> GPUByteTracker::update(float* b, float* s, int* c, int n, cudaStream_t stream, float* e, float* g, float l, float m) {
     return pimpl_->update(b, s, c, n, stream, e, g, l, m);

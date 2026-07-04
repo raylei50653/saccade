@@ -6,7 +6,11 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from saccade.perception.eval.cheb_gr_online import causal_handover_lines
+from saccade.perception.eval import cheb_gr_online
+from saccade.perception.eval.cheb_gr_online import (
+    causal_handover_lines,
+    extract_handover_embeddings,
+)
 from saccade.perception.reid.cheb_gr import (
     cheb_gr_kreciprocal,
     cheb_gr_kreciprocal_self_dense,
@@ -296,6 +300,178 @@ def test_margin_gate_rejects_ambiguous_candidate():
     assert stats["handovers"] == 0
     assert stats["reject_margin"] == 1
     assert _ids(out) == {1, 2, 3}
+
+
+def test_center_dist_veto_rejects_far_candidate():
+    rng = np.random.default_rng(10)
+    d = 32
+    c0 = rng.standard_normal(d).astype(np.float32)
+    lines: list[str] = []
+    _track(lines, 1, range(1, 11))  # stationary at x=10, box h=40
+    _track(lines, 2, range(16, 26), x=500.0)  # ~12 avg heights away
+    head = {2: _normed(rng, 3, d, c0)}
+    bank = {1: _normed(rng, 8, d, c0)}
+
+    out, stats = causal_handover_lines(
+        lines, head, bank, enabled=True, max_cost=0.9, max_fwd=0
+    )
+    assert stats["handovers"] == 1  # appearance alone accepts
+
+    log: list[dict[str, int | float | str | bool]] = []
+    out, stats = causal_handover_lines(
+        lines,
+        head,
+        bank,
+        enabled=True,
+        max_cost=0.9,
+        center_dist_veto=2.0,
+        max_fwd=0,
+        decision_log=log,
+    )
+    assert stats["handovers"] == 0
+    assert stats["reject_center_dist"] == 1
+    assert log[0]["reason"] == "center_dist"
+    assert _ids(out) == {1, 2}
+
+
+def test_pollution_veto_rejects_overlapping_head():
+    rng = np.random.default_rng(11)
+    d = 32
+    c0 = rng.standard_normal(d).astype(np.float32)
+    lines: list[str] = []
+    _track(lines, 1, range(1, 11))
+    _track(lines, 2, range(16, 26))
+    _track(lines, 9, range(16, 26), x=12.0)  # overlaps 2's head (IoU ~0.82)
+    head = {2: _normed(rng, 3, d, c0)}
+    bank = {1: _normed(rng, 8, d, c0)}
+
+    out, stats = causal_handover_lines(
+        lines, head, bank, enabled=True, max_cost=0.9, max_fwd=0
+    )
+    assert stats["handovers"] == 1
+
+    log: list[dict[str, int | float | str | bool]] = []
+    out, stats = causal_handover_lines(
+        lines,
+        head,
+        bank,
+        enabled=True,
+        max_cost=0.9,
+        pollution_veto=0.5,
+        max_fwd=0,
+        decision_log=log,
+    )
+    assert stats["handovers"] == 0
+    assert stats["reject_pollution"] == 1
+    row = next(r for r in log if r["reason"] == "pollution")
+    assert float(row["head_tail_neighbor_iou"]) >= 0.5  # type: ignore[arg-type]
+    assert _ids(out) == {1, 2, 9}
+
+
+class _DummyExtractor:
+    model_type = "mobilenetv4_reid"
+    device = "cpu"
+    feature_dim = 4
+    input_hw = (12, 8)
+
+
+def _patch_native(monkeypatch) -> list[int]:
+    pool_sizes: list[int] = []
+
+    def fake_native(samples, by_frame, seq_dir, extractor, *, crop_hw, im_ext, batch):
+        del by_frame, seq_dir, extractor, crop_hw, im_ext, batch
+        pool_sizes.append(len(samples))
+        return F.normalize(
+            torch.arange(1, len(samples) * 4 + 1, dtype=torch.float32).reshape(-1, 4),
+            dim=1,
+        )
+
+    monkeypatch.setattr(cheb_gr_online, "_extract_native_crops_trt", fake_native)
+    return pool_sizes
+
+
+def test_extract_neighbor_iou_filter_drops_polluted_head_rows(monkeypatch):
+    _patch_native(monkeypatch)
+    # Frame 1: tracks 1/2 overlap at IoU ~0.67; frame 2: far apart.
+    lines = [
+        "1,1,0,0,10,10,0.9,-1,-1,-1",
+        "1,2,2,0,10,10,0.9,-1,-1,-1",
+        "2,1,0,0,10,10,0.9,-1,-1,-1",
+        "2,2,20,0,10,10,0.9,-1,-1,-1",
+    ]
+
+    head, bank = extract_handover_embeddings(
+        lines,
+        "/unused/img1",
+        _DummyExtractor(),
+        appearance_occlusion_cov=0.99,
+    )
+    assert {tid: e.shape[0] for tid, e in head.items()} == {1: 2, 2: 2}
+
+    head, bank = extract_handover_embeddings(
+        lines,
+        "/unused/img1",
+        _DummyExtractor(),
+        appearance_occlusion_cov=0.99,
+        neighbor_iou_max=0.5,
+    )
+    # Frame-1 rows are polluted -> only the frame-2 crop remains per track.
+    assert {tid: e.shape[0] for tid, e in head.items()} == {1: 1, 2: 1}
+    assert {tid: e.shape[0] for tid, e in bank.items()} == {1: 1, 2: 1}
+
+
+def test_extract_recent_bank_mode_keeps_last_clean_samples(monkeypatch):
+    _patch_native(monkeypatch)
+    # Track 1 has 4 clean frames far from track 2; recent bank_n=2 must keep
+    # exactly the last two samples (frames 3-4), not a temporal spread.
+    lines = [
+        "1,1,0,0,10,10,0.9,-1,-1,-1",
+        "2,1,0,0,10,10,0.9,-1,-1,-1",
+        "3,1,0,0,10,10,0.9,-1,-1,-1",
+        "4,1,0,0,10,10,0.9,-1,-1,-1",
+        "4,2,50,0,10,10,0.9,-1,-1,-1",
+    ]
+
+    head, bank = extract_handover_embeddings(
+        lines,
+        "/unused/img1",
+        _DummyExtractor(),
+        appearance_occlusion_cov=0.99,
+        bank_mode="recent",
+        bank_n=2,
+    )
+    assert bank[1].shape[0] == 2
+    # Pool rows are added head-first (frames 1-4 for track 1's head window),
+    # so track 1's recent-2 bank rows must equal the frame-3/frame-4 features.
+    full_head, _ = extract_handover_embeddings(
+        lines,
+        "/unused/img1",
+        _DummyExtractor(),
+        appearance_occlusion_cov=0.99,
+    )
+    torch.testing.assert_close(bank[1], full_head[1][-2:])
+
+
+def test_extract_neighbor_iou_filter_bank_falls_back_when_empty(monkeypatch):
+    _patch_native(monkeypatch)
+    # Tracks 1/2 overlap in every frame: strict head filter empties the head,
+    # but the bank must fall back to the unfiltered clean pool.
+    lines = [
+        "1,1,0,0,10,10,0.9,-1,-1,-1",
+        "1,2,2,0,10,10,0.9,-1,-1,-1",
+        "2,1,0,0,10,10,0.9,-1,-1,-1",
+        "2,2,2,0,10,10,0.9,-1,-1,-1",
+    ]
+
+    head, bank = extract_handover_embeddings(
+        lines,
+        "/unused/img1",
+        _DummyExtractor(),
+        appearance_occlusion_cov=0.99,
+        neighbor_iou_max=0.5,
+    )
+    assert head == {}
+    assert {tid: e.shape[0] for tid, e in bank.items()} == {1: 2, 2: 2}
 
 
 def test_decision_log_records_accepted_handover():

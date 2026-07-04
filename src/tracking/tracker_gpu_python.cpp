@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <fstream>
 #include <iostream>
 #include <limits>
 #include <unordered_map>
@@ -18,6 +19,9 @@
 #include "tracking/box_ops.hpp"
 #include "tracking/tracker_gpu.hpp"
 #include "tracking/gmc.hpp"
+#include "tracking/cheb_gr_kreciprocal.hpp"
+#include "tracking/dynamic_reid_controller.hpp"
+#include <Eigen/Dense>
 #include "tracking/pipeline.hpp"
 #include "tracking/workbench.hpp"
 #include "tracking/mamba_scan.cuh"
@@ -352,6 +356,8 @@ struct RelinkStats {
     int delayed_claim_pending = 0;
     int delayed_claim_ready = 0;
     int delayed_claim_accepted = 0;
+    int cheb_gr_claim_attempts = 0;
+    int cheb_gr_claim_accepted = 0;
     int new_ids = 0;
     int reject_backward = 0;
     int accept_bidir = 0;
@@ -420,7 +426,17 @@ public:
         float bridge_h_hi = 0.0f,
         bool exp_density_gating = false,
         float exp_density_k = 2.0f,
-        float exp_density_eta = 0.15f
+        float exp_density_eta = 0.15f,
+        bool cheb_gr_claim = false,
+        float cheb_gr_max_cost = 0.45f,
+        float cheb_gr_margin = 0.05f,
+        int cheb_gr_min_head = 2,
+        float cheb_gr_pool_frac = 0.3f,
+        float cheb_gr_min_sim = 0.0f,
+        float cheb_gr_lambda = 2.0f,
+        int cheb_gr_k2 = 6,
+        int cheb_gr_max_fwd = 50,
+        float cheb_gr_fuse_lambda = 0.3f
     )
         : sim_threshold_(sim_threshold),
           ttl_(ttl),
@@ -467,6 +483,16 @@ public:
           bridge_px_(bridge_px),
           bridge_h_lo_(std::max(0.0f, bridge_h_lo)),
           bridge_h_hi_(std::max(0.0f, bridge_h_hi)),
+          cheb_gr_claim_(cheb_gr_claim),
+          cheb_gr_max_cost_(cheb_gr_max_cost),
+          cheb_gr_margin_(std::max(0.0f, cheb_gr_margin)),
+          cheb_gr_min_head_(std::max(1, std::min(cheb_gr_min_head, cheb_gr_min_head))),
+          cheb_gr_pool_frac_(std::max(0.0f, cheb_gr_pool_frac)),
+          cheb_gr_min_sim_(cheb_gr_min_sim),
+          cheb_gr_lambda_(cheb_gr_lambda),
+          cheb_gr_k2_(std::max(1, cheb_gr_k2)),
+          cheb_gr_max_fwd_(cheb_gr_max_fwd),
+          cheb_gr_fuse_lambda_(cheb_gr_fuse_lambda),
           split_counter_(0) {}
 
     void update_motion_snapshots(const std::vector<TrackStateSnapshot>& snapshots, int frame_id = -1) {
@@ -993,6 +1019,86 @@ public:
         return it != pending_claims_.end() && it->second.hits >= claim_warmup_frames_;
     }
 
+    void remember_pending_head(int raw_id, const std::vector<float>& emb, bool is_clean) {
+        if (!delayed_claim_ || !is_clean || emb.empty()) return;
+        if (!pending_heads_.count(raw_id)) {
+            pending_heads_[raw_id] = {};
+        }
+        pending_heads_[raw_id].push_back(emb);
+    }
+
+    int cheb_gr_claim_best(
+        int raw_id,
+        const std::vector<std::vector<float>>& candidates,
+        const std::vector<int>& candidate_ids,
+        int emb_dim
+    ) {
+        auto head_it = pending_heads_.find(raw_id);
+        if (head_it == pending_heads_.end()) return -1;
+        const auto& head = head_it->second;
+        int H = static_cast<int>(head.size());
+        if (H < cheb_gr_min_head_) return -1;
+
+        int N = H + static_cast<int>(candidates.size());
+        std::vector<float> feats_data(N * emb_dim);
+        int pos = 0;
+        for (const auto& h : head) {
+            std::copy(h.begin(), h.end(), feats_data.begin() + pos * emb_dim);
+            pos++;
+        }
+        std::unordered_map<int, std::pair<int,int>> spans;
+        for (size_t ci = 0; ci < candidates.size(); ++ci) {
+            std::copy(candidates[ci].begin(), candidates[ci].end(),
+                      feats_data.begin() + pos * emb_dim);
+            pos++;
+            spans[candidate_ids[ci]] = {pos - 1, pos};
+        }
+        // feats_data is row-major (one sample per contiguous emb_dim block);
+        // Eigen::MatrixXf defaults to column-major, so map row-major first.
+        Eigen::MatrixXf feats =
+            Eigen::Map<const Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic,
+                                           Eigen::RowMajor>>(
+                feats_data.data(), N, emb_dim);
+        auto sdist = saccade::cheb_gr_kreciprocal_self(
+            feats, cheb_gr_lambda_, cheb_gr_k2_, cheb_gr_max_fwd_,
+            cheb_gr_fuse_lambda_);
+
+        float best_cost = cheb_gr_max_cost_ + 1.0f;
+        float second_cost = std::numeric_limits<float>::infinity();
+        int best_id = -1;
+
+        auto head_rows = sdist.topRows(H);
+        for (size_t ci = 0; ci < candidate_ids.size(); ++ci) {
+            int cid = candidate_ids[ci];
+            auto it = spans.find(cid);
+            if (it == spans.end()) continue;
+            int lo = it->second.first, hi = it->second.second;
+            std::vector<float> block;
+            for (int r = 0; r < H; ++r)
+                for (int c = lo; c < hi; ++c)
+                    block.push_back(head_rows(r, c));
+            int k = std::max(1, static_cast<int>(
+                std::round(cheb_gr_pool_frac_ * static_cast<float>(block.size()))));
+            std::nth_element(block.begin(), block.begin() + k, block.end());
+            float cost = 0.0f;
+            for (int i = 0; i < k; ++i) cost += block[i];
+            cost /= static_cast<float>(k);
+
+            if (cost < best_cost) {
+                second_cost = best_cost;
+                best_cost = cost;
+                best_id = cid;
+            } else if (cost < second_cost) {
+                second_cost = cost;
+            }
+        }
+
+        if (best_cost > cheb_gr_max_cost_) return -1;
+        float margin = second_cost - best_cost;
+        if (cheb_gr_margin_ > 0.0f && margin < cheb_gr_margin_) return -1;
+        return best_id;
+    }
+
     int resolve(
         int raw_id,
         py::object embedding,
@@ -1012,6 +1118,10 @@ public:
         const RelinkBox box = parse_box(box_obj);
         const bool is_clean = is_clean_observation(box, score, frame_w, frame_h);
         const float current_sim_thresh = is_clean ? sim_threshold_ : strict_sim_threshold_;
+
+        if (delayed_claim_) {
+            remember_pending_head(raw_id, emb, is_clean);
+        }
 
         if (delayed_claim_ && pending_claims_.count(raw_id) && canonical_id(raw_id) == raw_id) {
             mark_pending_claim(raw_id, frame_id);
@@ -1087,6 +1197,12 @@ public:
 
         int canonical = alias_.at(raw_id);
         commit_reference_state(canonical, box, emb, has_emb, is_clean, frame_id);
+
+        if (ho_enabled_ && has_emb && is_clean) {
+            feed_newborn_head(raw_id, emb, frame_id);
+        }
+        expire_dead_archive(frame_id);
+
         // Per-frame uniqueness guard
         py::int_ py_canonical(canonical);
         if (PySet_Contains(assigned.ptr(), py_canonical.ptr()) == 1) {
@@ -1459,6 +1575,67 @@ public:
             }
 
             int n_gate_passed = static_cast<int>(candidates_to_score.size());
+
+            bool cheb_gr_scored = false;
+            int cheb_gr_dim = 0;
+            for (const auto& [cid, f] : features_) { cheb_gr_dim = static_cast<int>(f.size()); break; }
+
+            if (cheb_gr_claim_ && delayed_claim_ && claim_ready && has_emb
+                && cheb_gr_dim > 0 && !candidates_to_score.empty()) {
+                int H = 0;
+                auto head_it = pending_heads_.find(raw_id);
+                if (head_it != pending_heads_.end()) H = static_cast<int>(head_it->second.size());
+                if (H >= cheb_gr_min_head_) {
+                    std::vector<std::vector<float>> cand_embs;
+                    std::vector<int> cand_ids;
+                    for (const auto& gates : candidates_to_score) {
+                        int cid = gates.cid;
+                        auto fit = features_.find(cid);
+                        if (fit == features_.end()) continue;
+                        if (cheb_gr_min_sim_ > 0.0f) {
+                            float sim_val = sim_lookup(raw_id, cid);
+                            if (sim_val <= -2.0f) {
+                                std::vector<float> ref = buffer_size_ > 1 ? buffer_mean(cid) : fit->second;
+                                if (ref.empty()) ref = fit->second;
+                                sim_val = dot(emb, ref);
+                            }
+                            if (sim_val < cheb_gr_min_sim_) continue;
+                        }
+                        std::vector<std::vector<float>> bank;
+                        if (buffer_size_ > 1) {
+                            auto bit = buffers_.find(cid);
+                            if (bit != buffers_.end() && !bit->second.empty()) {
+                                bank = bit->second;
+                            }
+                        }
+                        if (bank.empty()) bank.push_back(fit->second);
+                        cand_embs.push_back(bank.front());
+                        cand_ids.push_back(cid);
+                    }
+                    if (!cand_ids.empty()) {
+                        int gbest = cheb_gr_claim_best(raw_id, cand_embs, cand_ids, cheb_gr_dim);
+                        if (gbest >= 0) {
+                            best_id = gbest;
+                            best_joint = 1.0f;
+                            best_sim_raw = sim_lookup(raw_id, gbest);
+                            if (best_sim_raw <= -2.0f) {
+                                auto fit = features_.find(gbest);
+                                if (fit != features_.end())
+                                    best_sim_raw = dot(emb, fit->second);
+                            }
+                            stats_.cheb_gr_claim_attempts += 1;
+                            stats_.cheb_gr_claim_accepted += 1;
+                            cheb_gr_scored = true;
+                        } else {
+                            stats_.cheb_gr_claim_attempts += 1;
+                        }
+                    }
+                }
+            }
+
+            if (cheb_gr_scored) {
+                record_relink_accept(raw_id, best_id, best_sim_raw, best_iou, best_center, best_maha);
+            } else {
             bool _use_legacy_joint = iou_weight_ > 0.0f || mahalanobis_weight_ > 0.0f;
             bool _use_unified_score = w_sim_base_ > 0.0f || w_iou_base_ > 0.0f || w_maha_base_ > 0.0f;
 
@@ -1572,6 +1749,7 @@ public:
             } else {
                 record_new_identity(raw_id, claim_ready);
             }
+            } // closes cheb_gr_scored else { standard scoring }
             } // closes GPU-scored else { fall-through to inline loop }
         }
 
@@ -1581,8 +1759,494 @@ public:
             canonical = split_on_collision(raw_id);
         }
         assigned.insert(canonical);
+
+        if (ho_enabled_ && has_emb && is_clean) {
+            feed_newborn_head(raw_id, emb, frame_id);
+        }
+        expire_dead_archive(frame_id);
+
         return canonical;
     }
+
+    void resolve_batch_from_host(
+        int n_tracks,
+        const float* boxes,
+        const float* scores,
+        int* ids,
+        const float* embeddings,
+        int embedding_dim,
+        int frame_id,
+        int frame_w,
+        int frame_h
+    ) {
+        std::unordered_set<int> assigned;
+        for (int i = 0; i < n_tracks; ++i) {
+            RelinkBox box{
+                boxes[i*4], boxes[i*4+1], boxes[i*4+2], boxes[i*4+3]};
+            float score = scores[i];
+            int raw_id = ids[i];
+            std::vector<float> emb;
+            bool has_emb = (embeddings != nullptr);
+            if (has_emb) {
+                const float* e = embeddings + i * embedding_dim;
+                emb.assign(e, e + embedding_dim);
+            }
+            int canonical = resolve_cpp(raw_id, emb, has_emb, box, score,
+                                        frame_id, frame_w, frame_h, assigned);
+            ids[i] = canonical;
+        }
+    }
+
+    struct HandoverSnapshot {
+        int raw_id;
+        int frame_id;
+        int birth_frame;
+        std::vector<std::vector<float>> head_samples;
+        // Every in-window archive bank joins the Cheb-GR graph; only entries
+        // with gap in [1, max_gap] are scoreable candidates, the rest are
+        // context (keeps the re-ranked distance scale close to the offline
+        // graph the max_cost operating point came from — Python parity).
+        struct ArchiveEntry {
+            int tid;
+            int canonical;
+            bool is_candidate;
+            std::vector<std::vector<float>> bank;  // deep copy
+        };
+        std::vector<ArchiveEntry> archive;
+    };
+
+    struct HandoverScoreResult {
+        int best_id = -1;
+        float best_cost = std::numeric_limits<float>::infinity();
+        float second_cost = std::numeric_limits<float>::infinity();
+    };
+
+    void set_handover_params(bool enabled, float max_cost, float margin,
+                              int max_gap, int decide_n, int min_head,
+                              float pool_frac, float cheb_lambda,
+                              int k2, int max_fwd, float fuse_lambda) {
+        ho_enabled_ = enabled;
+        ho_max_cost_ = max_cost;
+        ho_margin_ = margin;
+        ho_max_gap_ = max_gap;
+        ho_decide_n_ = decide_n;
+        ho_min_head_ = min_head;
+        ho_pool_frac_ = pool_frac;
+        ho_cheb_lambda_ = cheb_lambda;
+        ho_k2_ = k2;
+        ho_max_fwd_ = max_fwd;
+        ho_fuse_lambda_ = fuse_lambda;
+    }
+
+    static bool ho_usable_emb(const std::vector<float>& emb) {
+        // Budgeted extraction leaves all-zero rows for tracks without a fresh
+        // embedding; zero vectors are mutual nearest neighbours in the
+        // k-reciprocal graph and poison head/bank evidence.
+        float norm_sq = 0.0f;
+        for (float v : emb) norm_sq += v * v;
+        return norm_sq >= 1e-8f;
+    }
+
+    void feed_newborn_head(int raw_id, const std::vector<float>& emb,
+                           int frame_id) {
+        if (!ho_enabled_ || !ho_usable_emb(emb)) return;
+        auto [bit, born] = ho_track_birth_.try_emplace(raw_id, frame_id);
+        // Head window only (Python parity: r.frame < birth + decide_n), one
+        // sample per frame — resolve() and feed_frame_embeddings() may both
+        // fire for the same track in the same frame.
+        if (frame_id - bit->second >= ho_decide_n_) return;
+        auto [fit, fresh] = ho_head_last_frame_.try_emplace(raw_id, frame_id);
+        if (!fresh && fit->second == frame_id) return;
+        fit->second = frame_id;
+        ho_newborn_heads_[raw_id].push_back(emb);
+    }
+
+    void feed_life_bank(int canonical, const std::vector<float>& emb,
+                        int frame_id) {
+        if (!ho_enabled_ || !ho_usable_emb(emb)) return;
+        auto& b = ho_life_bank_[canonical];
+        if (b.last_frame == frame_id) return;
+        b.last_frame = frame_id;
+        if (b.skip > 0) { b.skip--; return; }
+        b.skip = b.stride - 1;
+        b.samples.push_back(emb);
+        if (static_cast<int>(b.samples.size()) >= 2 * kHoBankCap) {
+            std::vector<std::vector<float>> kept;
+            kept.reserve(kHoBankCap);
+            for (size_t i = 0; i < b.samples.size(); i += 2)
+                kept.push_back(std::move(b.samples[i]));
+            b.samples.swap(kept);
+            b.stride *= 2;
+        }
+    }
+
+    void archive_dead_track(int track_id, int frame_id) {
+        if (!ho_enabled_) return;
+        int canonical = canonical_id(track_id);
+        std::vector<std::vector<float>> bank;
+        auto bit = ho_life_bank_.find(canonical);
+        if (bit != ho_life_bank_.end()) {
+            bank = std::move(bit->second.samples);
+            ho_life_bank_.erase(bit);
+        }
+        std::vector<float> embedding;
+        auto fit = features_.find(canonical);
+        if (fit != features_.end()) embedding = fit->second;
+        // features_ holds a {0.0f} placeholder for tracks that never had an
+        // embedding — size 1 never matches emb_dim, so it is unusable.
+        if (bank.empty() && embedding.size() <= 1) return;
+        auto& entry = ho_dead_archive_[track_id];
+        entry.embedding = std::move(embedding);
+        entry.bank = std::move(bank);
+        // Death = last frame the track was actually emitted (Python parity:
+        // tracklet end), not the frame we noticed it missing.
+        auto la = ho_last_active_.find(track_id);
+        entry.death_frame = (la != ho_last_active_.end()) ? la->second
+                                                          : frame_id - 1;
+        entry.canonical_label = canonical;
+        ho_last_active_.erase(track_id);
+    }
+
+    int try_handover(int raw_id, int frame_id, int emb_dim) {
+        if (!ho_enabled_) return -1;
+
+        const int debug_level = []() {
+            const char* val = std::getenv("SACCADE_HO_DEBUG_LEVEL");
+            return val ? std::atoi(val) : 999;
+        }();
+
+        HandoverSnapshot snap;
+        if (!build_handover_snapshot(raw_id, frame_id, emb_dim, snap))
+            return -1;
+
+        // --- debug gating ---
+        if (debug_level <= 0) return -1;
+        if (debug_level <= 1) {
+            dump_handover_replay(snap);
+            return -1;
+        }
+        if (debug_level <= 2) {
+            dump_handover_replay(snap);
+            return -1;
+        }
+
+        HandoverScoreResult best;
+        if (!score_handover_candidates(snap, emb_dim, best))
+            return -1;
+        if (debug_level <= 3) {
+            dump_handover_replay(snap);
+            return -1;
+        }
+        if (debug_level <= 4) {
+            dump_handover_replay(snap);
+            return -1;
+        }
+        if (debug_level == 5) {
+            int death = -1;
+            auto it = ho_dead_archive_.find(best.best_id);
+            if (it != ho_dead_archive_.end()) death = it->second.death_frame;
+            std::fprintf(stderr,
+                         "[ho] frame=%d raw=%d claims tid=%d cost=%.4f "
+                         "second=%.4f H=%zu gap=%d\n",
+                         frame_id, raw_id, best.best_id, best.best_cost,
+                         best.second_cost, snap.head_samples.size(),
+                         snap.birth_frame - death);
+        }
+
+        return apply_handover(snap, best);
+    }
+
+    bool build_handover_snapshot(int raw_id, int frame_id, int emb_dim,
+                                 HandoverSnapshot& snap) {
+        auto birth_it = ho_track_birth_.find(raw_id);
+        if (birth_it == ho_track_birth_.end()) return false;
+        int birth = birth_it->second;
+        if (frame_id - birth < ho_decide_n_) return false;
+
+        auto head_it = ho_newborn_heads_.find(raw_id);
+        if (head_it == ho_newborn_heads_.end()) return false;
+        const auto& head = head_it->second;
+        if (static_cast<int>(head.size()) < ho_min_head_) return false;
+
+        snap.raw_id = raw_id;
+        snap.frame_id = frame_id;
+        snap.birth_frame = birth;
+
+        snap.head_samples.reserve(head.size());
+        for (const auto& h : head) {
+            if (static_cast<int>(h.size()) != emb_dim) continue;
+            snap.head_samples.push_back(h);
+        }
+        if (snap.head_samples.empty()) return false;
+
+        bool any_candidate = false;
+        for (auto& [tid, entry] : ho_dead_archive_) {
+            int gap = birth - entry.death_frame;
+            if (gap > ho_max_gap_) continue;  // expired relative to this newborn
+            HandoverSnapshot::ArchiveEntry ae;
+            ae.tid = tid;
+            ae.canonical = entry.canonical_label;
+            ae.is_candidate = (gap >= 1);
+            for (const auto& s : entry.bank) {
+                if (static_cast<int>(s.size()) == emb_dim)
+                    ae.bank.push_back(s);  // deep copy
+            }
+            if (ae.bank.empty() &&
+                static_cast<int>(entry.embedding.size()) == emb_dim &&
+                ho_usable_emb(entry.embedding)) {
+                ae.bank.push_back(entry.embedding);
+            }
+            if (ae.bank.empty()) continue;
+            any_candidate = any_candidate || ae.is_candidate;
+            snap.archive.push_back(std::move(ae));
+        }
+
+        return any_candidate;
+    }
+
+    bool score_handover_candidates(const HandoverSnapshot& snap,
+                                   int emb_dim,
+                                   HandoverScoreResult& result) {
+        int H = static_cast<int>(snap.head_samples.size());
+        if (H <= 0 || emb_dim <= 0) return false;
+        int total_rows = H;
+        for (const auto& ae : snap.archive)
+            total_rows += static_cast<int>(ae.bank.size());
+        if (total_rows <= H) return false;
+
+        std::vector<float> feats_data(
+            static_cast<size_t>(total_rows) * static_cast<size_t>(emb_dim));
+        int pos = 0;
+        for (const auto& h : snap.head_samples) {
+            std::copy(h.begin(), h.end(), feats_data.begin() + static_cast<size_t>(pos) * emb_dim);
+            pos++;
+        }
+        std::vector<std::pair<int, int>> spans(snap.archive.size());
+        for (size_t ci = 0; ci < snap.archive.size(); ++ci) {
+            int lo = pos;
+            for (const auto& s : snap.archive[ci].bank) {
+                std::copy(s.begin(), s.end(), feats_data.begin() + static_cast<size_t>(pos) * emb_dim);
+                pos++;
+            }
+            spans[ci] = {lo, pos};
+        }
+        if (pos != total_rows) return false;
+
+        // feats_data is row-major (one sample per contiguous emb_dim block);
+        // Eigen::MatrixXf defaults to column-major, so map row-major first.
+        Eigen::MatrixXf feats =
+            Eigen::Map<const Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic,
+                                           Eigen::RowMajor>>(
+                feats_data.data(), total_rows, emb_dim);
+        auto sdist = saccade::cheb_gr_kreciprocal_self(
+            feats, ho_cheb_lambda_, ho_k2_, ho_max_fwd_, ho_fuse_lambda_);
+
+        float best_cost = std::numeric_limits<float>::infinity();
+        float second_cost = std::numeric_limits<float>::infinity();
+        int best_id = -1;
+
+        auto head_rows = sdist.topRows(H);
+        for (size_t ci = 0; ci < snap.archive.size(); ++ci) {
+            if (!snap.archive[ci].is_candidate) continue;
+            int cand_id = snap.archive[ci].tid;
+            auto [lo, hi] = spans[ci];
+            std::vector<float> block;
+            block.reserve(static_cast<size_t>(H) * (hi - lo));
+            for (int r = 0; r < H; ++r)
+                for (int c = lo; c < hi; ++c)
+                    block.push_back(head_rows(r, c));
+            int k = std::max(1, static_cast<int>(
+                std::round(ho_pool_frac_ * static_cast<float>(block.size()))));
+            k = std::min(k, static_cast<int>(block.size()));
+            std::nth_element(block.begin(), block.begin() + (k - 1), block.end());
+            float cost = 0.0f;
+            for (int i = 0; i < k; ++i) cost += block[i];
+            cost /= static_cast<float>(k);
+            bool wins = cost < best_cost ||
+                        (cost == best_cost && best_id >= 0 && cand_id < best_id);
+            if (wins) {
+                second_cost = std::min(second_cost, best_cost);
+                best_cost = cost;
+                best_id = cand_id;
+            } else if (cost < second_cost) {
+                second_cost = cost;
+            }
+        }
+
+        if (best_id < 0 || best_cost > ho_max_cost_) return false;
+        float obs_margin = second_cost - best_cost;
+        if (ho_margin_ > 0.0f && obs_margin < ho_margin_) return false;
+
+        result.best_id = best_id;
+        result.best_cost = best_cost;
+        result.second_cost = second_cost;
+        return true;
+    }
+
+    int apply_handover(const HandoverSnapshot& snap, const HandoverScoreResult& result) {
+        int best_id = result.best_id;
+        auto arch_it = ho_dead_archive_.find(best_id);
+        if (arch_it == ho_dead_archive_.end()) return -1;
+        int canon = arch_it->second.canonical_label;
+
+        alias_[snap.raw_id] = canon;
+        ho_dead_archive_.erase(best_id);  // an identity is revived at most once
+        // Keep ho_track_birth_: erasing it would let feed_newborn_head re-open
+        // the head window for this (already decided) track.
+        ho_newborn_heads_.erase(snap.raw_id);
+        ho_head_last_frame_.erase(snap.raw_id);
+        // The newborn's provisional identity is absorbed by canon: migrate its
+        // clean bank samples and drop the stale identity-keyed state so it can
+        // never be archived as a separate (living) identity later.
+        if (snap.raw_id != canon) {
+            auto bit = ho_life_bank_.find(snap.raw_id);
+            if (bit != ho_life_bank_.end()) {
+                auto& dst = ho_life_bank_[canon];
+                for (auto& s : bit->second.samples)
+                    dst.samples.push_back(std::move(s));
+                if (static_cast<int>(dst.samples.size()) >= 2 * kHoBankCap) {
+                    std::vector<std::vector<float>> kept;
+                    kept.reserve(kHoBankCap);
+                    for (size_t i = 0; i < dst.samples.size(); i += 2)
+                        kept.push_back(std::move(dst.samples[i]));
+                    dst.samples.swap(kept);
+                    dst.stride *= 2;
+                }
+                ho_life_bank_.erase(snap.raw_id);
+            }
+            features_.erase(snap.raw_id);
+            buffers_.erase(snap.raw_id);
+            ho_last_active_.erase(snap.raw_id);
+        }
+        ho_handover_count_++;
+        return canon;
+    }
+
+    void dump_handover_replay(const HandoverSnapshot& snap) {
+        static int dump_seq = 0;
+        std::string path = "/tmp/saccade_ho_frame" +
+            std::to_string(snap.frame_id) + "_" + std::to_string(dump_seq++) + ".txt";
+        std::ofstream f(path);
+        if (!f) return;
+        f << "frame " << snap.frame_id << "\n";
+        f << "raw_id " << snap.raw_id << "\n";
+        f << "birth " << snap.birth_frame << "\n";
+        f << "H " << snap.head_samples.size() << " archive " << snap.archive.size() << "\n";
+        for (const auto& h : snap.head_samples) {
+            f << "head";
+            for (float v : h) f << " " << v;
+            f << "\n";
+        }
+        for (const auto& ae : snap.archive) {
+            for (const auto& s : ae.bank) {
+                f << "bank " << ae.tid << " " << (ae.is_candidate ? 1 : 0);
+                for (float v : s) f << " " << v;
+                f << "\n";
+            }
+        }
+    }
+
+    void expire_dead_archive(int frame_id) {
+        if (!ho_enabled_) return;
+        // decide_n slack: a newborn born at B decides at B+decide_n and may
+        // still claim a candidate with gap == max_gap (death == B - max_gap).
+        std::vector<int> expired;
+        for (auto& [tid, entry] : ho_dead_archive_)
+            if (frame_id - entry.death_frame > ho_max_gap_ + ho_decide_n_)
+                expired.push_back(tid);
+        for (int tid : expired) ho_dead_archive_.erase(tid);
+    }
+
+    int handover_count() const { return ho_handover_count_; }
+
+    void feed_frame_embeddings(const std::vector<float>& emb_flat,
+                                int emb_dim, int frame_id,
+                                const std::vector<int>& track_ids,
+                                const std::vector<float>& scores,
+                                const std::vector<int>& clean_flags = {}) {
+        if (!ho_enabled_) return;
+        int n = static_cast<int>(track_ids.size());
+        // Birth = first frame the track is *emitted*, independent of when its
+        // first clean embedding arrives (budgeted extraction can lag several
+        // frames). A late birth would shift the [birth-max_gap, birth-1]
+        // candidate window onto tracks that co-existed with this newborn,
+        // breaking the causal disjointness guarantee (gap >= 1).
+        for (int i = 0; i < n; ++i)
+            ho_track_birth_.try_emplace(track_ids[i], frame_id);
+        for (int i = 0; i < n; ++i) {
+            if (static_cast<int>(emb_flat.size()) < (i + 1) * emb_dim) break;
+            int raw_id = track_ids[i];
+            const float* e = emb_flat.data() + i * emb_dim;
+            // Budgeted extraction leaves zero rows for tracks without a fresh
+            // embedding this frame — zero vectors are mutual nearest neighbours
+            // in the k-reciprocal graph and must never enter head or bank.
+            float norm_sq = 0.0f;
+            for (int d = 0; d < emb_dim; ++d) norm_sq += e[d] * e[d];
+            if (norm_sq < 1e-8f) continue;
+            if (i < static_cast<int>(clean_flags.size()) && !clean_flags[i])
+                continue;
+            std::vector<float> emb(e, e + emb_dim);
+            feed_newborn_head(raw_id, emb, frame_id);
+            feed_life_bank(canonical_id(raw_id), emb, frame_id);
+        }
+        // One-shot decision (Python parity): each newborn decides exactly once,
+        // decide_n frames after birth. The event is consumed whether or not a
+        // handover happened.
+        for (int i = 0; i < n; ++i) {
+            int raw_id = track_ids[i];
+            auto bit = ho_track_birth_.find(raw_id);
+            if (bit == ho_track_birth_.end()) continue;
+            if (frame_id - bit->second < ho_decide_n_) continue;
+            if (!ho_decided_.insert(raw_id).second) continue;
+            try_handover(raw_id, frame_id, emb_dim);
+        }
+        expire_dead_archive(frame_id);
+    }
+
+    void prune_and_archive(const std::vector<int>& active_ids, int frame_id) {
+        if (!ho_enabled_) return;
+        std::unordered_set<int> active_set(active_ids.begin(), active_ids.end());
+        // A track that reappears was never dead — its identity must not be
+        // claimable by newborns (temporary occlusion is not a death).
+        for (int tid : active_ids) {
+            ho_dead_archive_.erase(tid);
+            ho_last_active_[tid] = frame_id;
+        }
+        // active_ids are *emitted* (canonical) ids. A raw/stale key whose
+        // canonical identity is still emitted is alive — archiving it would
+        // put a living identity back into the claimable pool.
+        auto is_active = [&](int tid) {
+            return active_set.count(tid) || active_set.count(canonical_id(tid));
+        };
+        std::vector<int> inactive;
+        for (auto& [tid, _] : features_) {
+            if (!is_active(tid)) inactive.push_back(tid);
+        }
+        // Tracks known only through the feed path (tracker-mode ReID without
+        // semantic relink) live in ho_life_bank_ but never enter features_.
+        for (auto& [tid, _] : ho_life_bank_) {
+            if (!is_active(tid) && !features_.count(tid))
+                inactive.push_back(tid);
+        }
+        for (int tid : inactive) {
+            archive_dead_track(tid, frame_id);
+            features_.erase(tid);
+            last_seen_.erase(tid);
+            last_boxes_.erase(tid);
+            buffers_.erase(tid);
+            ema_h_.erase(tid);
+            foot_history_.erase(tid);
+            alias_.erase(tid);
+            pending_claims_.erase(tid);
+            pending_heads_.erase(tid);
+            ho_newborn_heads_.erase(tid);
+            ho_track_birth_.erase(tid);
+            ho_head_last_frame_.erase(tid);
+            ho_decided_.erase(tid);
+        }
+    }
+
+    // --- end handover methods ---
 
 private:
     static std::string format3(float value) {
@@ -1863,6 +2527,9 @@ private:
             }
         } else if (features_.find(canonical) == features_.end()) {
             features_[canonical] = std::vector<float>{0.0f};
+        }
+        if (ho_enabled_ && has_emb && is_clean) {
+            feed_life_bank(canonical, emb, frame_id);
         }
 
         if (std::find(feature_order_.begin(), feature_order_.end(), canonical) == feature_order_.end()) {
@@ -2276,10 +2943,21 @@ private:
     float bridge_px_;
     float bridge_h_lo_;
     float bridge_h_hi_;
+    bool cheb_gr_claim_ = false;
+    float cheb_gr_max_cost_ = 0.45f;
+    float cheb_gr_margin_ = 0.05f;
+    int cheb_gr_min_head_ = 2;
+    float cheb_gr_pool_frac_ = 0.3f;
+    float cheb_gr_min_sim_ = 0.0f;
+    float cheb_gr_lambda_ = 2.0f;
+    int cheb_gr_k2_ = 6;
+    int cheb_gr_max_fwd_ = 50;
+    float cheb_gr_fuse_lambda_ = 0.3f;
     int split_counter_;
 
     std::unordered_map<int, int> alias_;
     std::unordered_map<int, PendingClaim> pending_claims_;
+    std::unordered_map<int, std::vector<std::vector<float>>> pending_heads_;
     std::unordered_map<int, int> deferred_alias_;
     std::unordered_map<int, std::vector<float>> features_;
     std::unordered_map<int, std::vector<std::vector<float>>> buffers_;
@@ -2307,6 +2985,46 @@ private:
     std::vector<int> scoring_ids_;
     std::vector<float> scoring_scores_;
     std::vector<float> scoring_second_;
+
+    // --- Online Cheb-GR handover ---
+    bool ho_enabled_ = false;
+    float ho_max_cost_ = 0.45f;
+    float ho_margin_ = 0.0f;
+    int ho_max_gap_ = 60;
+    int ho_decide_n_ = 5;
+    int ho_min_head_ = 1;
+    float ho_pool_frac_ = 0.3f;
+    float ho_cheb_lambda_ = 2.0f;
+    int ho_k2_ = 6;
+    int ho_max_fwd_ = 50;
+    float ho_fuse_lambda_ = 0.3f;
+
+    struct DeadEntry {
+        std::vector<float> embedding;           // last reference feature (fallback)
+        std::vector<std::vector<float>> bank;   // full-life clean sample bank
+        int death_frame;
+        int canonical_label;
+    };
+    // Full-life clean sample bank (Python parity: bank_embs, n_samples=50).
+    // Thinning keeps samples temporally distributed with bounded memory: once
+    // 2*cap samples accumulate, every other one is dropped and the sampling
+    // stride doubles.
+    struct HoLifeBank {
+        std::vector<std::vector<float>> samples;
+        int stride = 1;
+        int skip = 0;
+        int last_frame = -1;
+    };
+    static constexpr int kHoBankCap = 50;
+    std::unordered_map<int, DeadEntry> ho_dead_archive_;
+    std::unordered_map<int, int> ho_track_birth_;  // raw_id → birth frame
+    std::unordered_map<int, std::vector<std::vector<float>>> ho_newborn_heads_;
+    std::unordered_map<int, int> ho_head_last_frame_;   // raw_id → last fed frame
+    std::unordered_map<int, HoLifeBank> ho_life_bank_;  // canonical → bank
+    std::unordered_map<int, int> ho_last_active_;       // tid → last emitted frame
+    std::unordered_set<int> ho_decided_;                // raw ids with a consumed decision
+    int ho_handover_count_ = 0;
+    int ho_last_handover_frame_ = -1;
 };
 
 // ============================================================
@@ -2624,7 +3342,8 @@ public:
             if (relinker_->is_bidirectional() && n > 0) {
                 std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
                     return scores_v[a] > scores_v[b];
-                });
+        });
+
             }
             std::unordered_set<int> assigned;
             for (size_t idx : order) {
@@ -2964,10 +3683,29 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         "Same as set_clean_embedding_flags but takes host (CPU) pointers — skips the D2H round-trip for IDs")
         .def_property_readonly("cpp_ptr", [](GPUByteTracker& self) {
             return reinterpret_cast<uintptr_t>(&self);
-        }, "Raw C++ pointer to this GPUByteTracker (for Workbench construction)");
+        }, "Raw C++ pointer to this GPUByteTracker (for Workbench construction)")
+        .def("compact_output_to_host",
+             [](GPUByteTracker& self, uintptr_t stream_ptr,
+                int capacity) -> py::tuple {
+                 std::vector<float> boxes(capacity * 4);
+                 std::vector<float> scores(capacity);
+                 std::vector<int> ids(capacity);
+                 std::vector<int> classes(capacity);
+                 int n = self.compact_output_to_host(
+                     boxes.data(), scores.data(), ids.data(), classes.data(),
+                     capacity, reinterpret_cast<cudaStream_t>(stream_ptr));
+                 boxes.resize(n * 4);
+                 scores.resize(n);
+                 ids.resize(n);
+                 classes.resize(n);
+                 return py::make_tuple(n, boxes, scores, ids, classes);
+             },
+             py::arg("stream_ptr"), py::arg("capacity") = -1,
+             "Read compact tracker output directly into host memory in one batch. "
+             "Returns (count, boxes[n*4], scores[n], ids[n], classes[n]).");
 
     py::class_<SemanticRelinkerCpp>(m, "SemanticRelinker")
-        .def(py::init<float, int, float, float, int, float, float, int, float, std::string, float, bool, float, float, float, float, float, float, float, float, float, float, float, float, float, float, bool, float, float, float, float, float, float, float, float, float, bool, int, bool, float, float, float, bool, float, float>(),
+        .def(py::init<float, int, float, float, int, float, float, int, float, std::string, float, bool, float, float, float, float, float, float, float, float, float, float, float, float, float, float, bool, float, float, float, float, float, float, float, float, float, bool, int, bool, float, float, float, bool, float, float, bool, float, float, int, float, float, float, int, int, float>(),
              py::arg("sim_threshold") = 0.985f,
              py::arg("ttl") = 45,
              py::arg("ema_beta") = 0.83f,
@@ -3012,7 +3750,17 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
              py::arg("bridge_h_hi") = 0.0f,
              py::arg("exp_density_gating") = false,
              py::arg("exp_density_k") = 2.0f,
-             py::arg("exp_density_eta") = 0.15f)
+              py::arg("exp_density_eta") = 0.15f,
+              py::arg("cheb_gr_claim") = false,
+              py::arg("cheb_gr_max_cost") = 0.45f,
+              py::arg("cheb_gr_margin") = 0.05f,
+              py::arg("cheb_gr_min_head") = 2,
+              py::arg("cheb_gr_pool_frac") = 0.3f,
+              py::arg("cheb_gr_min_sim") = 0.0f,
+              py::arg("cheb_gr_lambda") = 2.0f,
+              py::arg("cheb_gr_k2") = 6,
+              py::arg("cheb_gr_max_fwd") = 50,
+              py::arg("cheb_gr_fuse_lambda") = 0.3f)
         .def("update_motion_snapshots", &SemanticRelinkerCpp::update_motion_snapshots,
              py::arg("snapshots"), py::arg("frame_id") = -1)
         .def("motion_candidate_ids", &SemanticRelinkerCpp::motion_candidate_ids, py::arg("frame_id") = -1)
@@ -3063,7 +3811,34 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
              "When query_embs is a [N, D] tensor, batch cosine similarity is "
              "computed on GPU and used to skip CPU dot products.")
         .def("clear_gate_table", &SemanticRelinkerCpp::clear_gate_table,
-             "Release the GPU gate table, reverting to inline gate computation.");
+             "Release the GPU gate table, reverting to inline gate computation.")
+        .def("resolve_batch_from_host",
+             &SemanticRelinkerCpp::resolve_batch_from_host,
+             py::arg("n_tracks"), py::arg("boxes"), py::arg("scores"),
+             py::arg("ids"), py::arg("embeddings"), py::arg("embedding_dim"),
+             py::arg("frame_id"), py::arg("frame_w"), py::arg("frame_h"),
+             "Resolve all tracker output IDs in-place from host-side data.")
+        .def("set_handover_params", &SemanticRelinkerCpp::set_handover_params,
+             py::arg("enabled"), py::arg("max_cost") = 0.45f,
+             py::arg("margin") = 0.0f, py::arg("max_gap") = 60,
+             py::arg("decide_n") = 5, py::arg("min_head") = 1,
+             py::arg("pool_frac") = 0.3f, py::arg("cheb_lambda") = 2.0f,
+             py::arg("k2") = 6, py::arg("max_fwd") = 50,
+             py::arg("fuse_lambda") = 0.3f,
+             "Configure online Cheb-GR handover parameters.")
+        .def("prune_and_archive", &SemanticRelinkerCpp::prune_and_archive,
+             py::arg("active_ids"), py::arg("frame_id"),
+             "Archive dead tracks and prune inactive features.")
+        .def_property_readonly("handover_count",
+             &SemanticRelinkerCpp::handover_count)
+        .def("feed_frame_embeddings",
+             &SemanticRelinkerCpp::feed_frame_embeddings,
+             py::arg("emb_flat"), py::arg("emb_dim"), py::arg("frame_id"),
+             py::arg("track_ids"), py::arg("scores"),
+             py::arg("clean_flags") = std::vector<int>{},
+             "Feed per-frame track embeddings for online handover. "
+             "clean_flags[i]=0 marks an occluded crop (skipped); zero "
+             "embedding rows are skipped automatically.");
 
     py::class_<TrackletLifecycleMergerCpp>(m, "TrackletLifecycleMerger")
         .def(py::init<bool, int, int, float, float, float, bool, float>(),
@@ -3091,6 +3866,52 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         .def("resolve_pass", &IdentityResolverCpp::resolve_pass,
              py::arg("local_ids"), py::arg("embeddings"), py::arg("boxes"), py::arg("scores"),
              py::arg("frame_id"), py::arg("frame_w"), py::arg("frame_h"));
+
+    py::class_<saccade::ReIDTrackObservation>(m, "ReIDTrackObservation")
+        .def(py::init<>())
+        .def(py::init<float, float, float, float, float>(),
+             py::arg("x1"), py::arg("y1"), py::arg("x2"), py::arg("y2"),
+             py::arg("det_score"))
+        .def_readwrite("x1", &saccade::ReIDTrackObservation::x1)
+        .def_readwrite("y1", &saccade::ReIDTrackObservation::y1)
+        .def_readwrite("x2", &saccade::ReIDTrackObservation::x2)
+        .def_readwrite("y2", &saccade::ReIDTrackObservation::y2)
+        .def_readwrite("det_score", &saccade::ReIDTrackObservation::det_score);
+
+    py::class_<saccade::DynamicReIDController>(m, "DynamicReIDController")
+        .def(py::init<int, std::string, float, float, int, float, float, float, float, float, float, float, float, float, float, float, int, float, float, float, int, int>(),
+             py::arg("history_size") = 5,
+             py::arg("mode") = "event_any",
+             py::arg("unstable_iou") = 0.50f,
+             py::arg("unstable_center_shift") = 0.30f,
+             py::arg("crowd_threshold") = 8,
+             py::arg("long_memory_decay") = 0.80f,
+             py::arg("long_memory_trigger") = 1.25f,
+             py::arg("score_decay") = 0.80f,
+             py::arg("score_threshold") = 2.0f,
+             py::arg("score_threshold_low") = 0.0f,
+             py::arg("weight_new") = 1.0f,
+             py::arg("weight_lost") = 1.4f,
+             py::arg("weight_geom") = 0.5f,
+             py::arg("weight_conf") = 0.5f,
+             py::arg("birth_death_boost") = 1.0f,
+             py::arg("birth_death_lost_min") = 0.0f,
+             py::arg("lost_age_cap") = 30,
+             py::arg("unstable_shift_weight") = 1.0f,
+             py::arg("unstable_iou_weight") = 1.0f,
+             py::arg("conf_jitter_gate") = 0.10f,
+             py::arg("trigger_persist_frames") = 1,
+             py::arg("cooldown_frames") = 0)
+        .def("observe",
+             [](saccade::DynamicReIDController& self,
+                const std::unordered_map<int, saccade::ReIDTrackObservation>& tracks,
+                const std::vector<float>& gmc) {
+                 self.observe(tracks, gmc);
+             },
+             py::arg("tracks"), py::arg("gmc") = std::vector<float>{})
+        .def("should_reid", &saccade::DynamicReIDController::should_reid,
+             py::arg("det_count"))
+        .def("get_priorities", &saccade::DynamicReIDController::get_priorities);
 
     py::class_<GMC>(m, "GMC")
         .def(py::init<int, int, float, float, int, float>(),
@@ -3224,6 +4045,52 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         py::arg("person_max_area_ratio"),
         "Return kept detection indices and geometry-suspect flags."
     );
+
+    m.def("emit_tracks_unified",
+          [](GPUByteTracker& tracker,
+             py::object relinker_obj,
+             uintptr_t stream_ptr, int frame_id, int frame_w, int frame_h,
+             int capacity,
+             py::object embeddings_obj) -> py::tuple {
+              int count, emb_dim = 0;
+              std::vector<float> emb_data;
+              std::vector<float> boxes(capacity * 4);
+              std::vector<float> scores(capacity);
+              std::vector<int> ids(capacity);
+              std::vector<int> classes(capacity);
+
+              if (!embeddings_obj.is_none()) {
+                  py::array arr = embeddings_obj.attr("detach")().attr("cpu")().attr("numpy")();
+                  py::array_t<float, py::array::c_style> arr_flat(arr.attr("ravel")());
+                  emb_data.assign(arr_flat.data(), arr_flat.data() + arr_flat.size());
+              }
+
+              count = tracker.compact_output_to_host(
+                  boxes.data(), scores.data(), ids.data(), classes.data(),
+                  capacity, reinterpret_cast<cudaStream_t>(stream_ptr));
+
+              if (count > 0 && !emb_data.empty()) {
+                  emb_dim = static_cast<int>(emb_data.size()) / count;
+              }
+              if (count > 0 && !relinker_obj.is_none()) {
+                  auto* relinker = relinker_obj.cast<SemanticRelinkerCpp*>();
+                  relinker->resolve_batch_from_host(
+                      count, boxes.data(), scores.data(), ids.data(),
+                      emb_data.empty() ? nullptr : emb_data.data(),
+                      emb_dim, frame_id, frame_w, frame_h);
+              }
+              boxes.resize(std::max(0, count) * 4);
+              scores.resize(count);
+              ids.resize(count);
+              classes.resize(count);
+              return py::make_tuple(count, boxes, scores, ids, classes);
+          },
+          py::arg("tracker"), py::arg("relinker") = py::none(),
+          py::arg("stream_ptr"), py::arg("frame_id"),
+          py::arg("frame_w"), py::arg("frame_h"),
+          py::arg("capacity") = -1,
+          py::arg("embeddings") = py::none(),
+          "Unified emit: D2H + resolve canonical IDs in one call.");
 
     m.def(
         "filter_detections_cuda",

@@ -163,6 +163,9 @@ add_library(saccade_tracking STATIC
     src/tracking/multi_signal_birth_pool.cu
     src/tracking/seq_runner.cpp
     src/tracking/eval_pool.cpp
+    src/tracking/cheb_gr_online.cpp
+    src/tracking/cheb_gr_kreciprocal.cpp
+    src/tracking/dynamic_reid_controller.cpp
 )
 set_target_properties(saccade_tracking PROPERTIES CUDA_SEPARABLE_COMPILATION OFF)
 target_link_libraries(saccade_tracking
@@ -276,6 +279,13 @@ target_link_libraries(saccade_eval_ext PRIVATE
 )
 target_compile_options(saccade_eval_ext PRIVATE -fno-lto)
 
+pybind11_add_module(saccade_cheb_gr_online_ext NO_EXTRAS src/tracking/cheb_gr_online_python.cpp)
+target_link_libraries(saccade_cheb_gr_online_ext PRIVATE
+    saccade_tracking
+    CUDA::cudart
+)
+target_compile_options(saccade_cheb_gr_online_ext PRIVATE -fno-lto)
+
 pybind11_add_module(saccade_perception_ext NO_EXTRAS src/perception/perception_python.cpp)
 target_link_libraries(saccade_perception_ext PRIVATE
     saccade_perception
@@ -288,6 +298,7 @@ set_target_properties(
     saccade_tracking_ext
     saccade_eval_ext
     saccade_perception_ext
+    saccade_cheb_gr_online_ext
     PROPERTIES
         BUILD_RPATH "${SACCADE_BUILD_RPATH}"
         INSTALL_RPATH "${SACCADE_INSTALL_RPATH}"
@@ -369,6 +380,9 @@ if(ENABLE_NATIVE_TESTS)
         CUDA_SEPARABLE_COMPILATION ON)
     enable_native_coverage(saccade_fpn_reid_launchers_test)
     add_test(NAME saccade_fpn_reid_launchers_test COMMAND saccade_fpn_reid_launchers_test)
+
+    add_tracking_native_test(saccade_cheb_gr_online_test
+        tests/native/test_cheb_gr_online.cpp)
 
     # ── media buffer-pool race tests (S1-S9 regression) ─────────────────────
     # BufferPool is GStreamer-independent; the test links saccade_media

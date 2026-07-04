@@ -1,0 +1,70 @@
+# MobileNetV4 dynamic ReID — 5-frame sliding window, budgeted extraction.
+# Only the highest-priority tracks (instability/jitter/new/lost) get mnv4.
+# Feeds tracker d_features_ via reid_mode: tracker, cos_thresh: 1.1 (bank-only).
+#
+# Load with:
+#   uv run scripts/eval/mot17.py --preset mamba_whole_graph_m --detector SDP \
+#       --module-reid configs/modules/reid_mnv4_dynamic.yaml --reid-mode tracker
+
+reid_mode: tracker
+reid_model: mobilenetv4_reid
+reid_engine_path: models/embedding/mobilenetv4_reid_visclean_224.engine
+
+# Every 5 frames, budget top-10 detections by DynamicReIDController priority.
+reid_interval: 5
+need_reid: false
+reid_budget: 10
+async_reid: false
+pipeline_relink: false
+
+# Dynamic trigger config: score-EMA mode with 5-frame window.
+dynamic_reid_mode: score_ema_geom
+dynamic_reid_history_size: 5
+dynamic_reid_long_memory_decay: 0.80
+dynamic_reid_long_memory_trigger: 1.0
+dynamic_reid_score_decay: 0.80
+dynamic_reid_score_threshold: 1.5
+dynamic_reid_trigger_persist_frames: 1
+dynamic_reid_cooldown_frames: 4
+
+# Weights tuned for instability-priority ordering.
+dynamic_reid_weight_new: 1.0
+dynamic_reid_weight_lost: 1.4
+dynamic_reid_weight_geom: 0.8
+dynamic_reid_weight_conf: 0.3
+dynamic_reid_birth_death_boost: 1.0
+
+# Appearance-assist in primary association: DISABLED (cosine can never reach 1.1).
+# Embeddings only feed appearance bank + SemanticRelinker resolve.
+reid_cos_threshold: 1.1
+reid_iou_low: 0.30
+reid_iou_high: 0.60
+reid_weight: 0.80
+reid_cost_cos_w: 0.55
+reid_cost_iou_w: 0.30
+reid_cost_score_w: 0.15
+
+reid_crop_mode: tight
+reid_crop_padding: 0.0
+reid_crop_layout: full
+
+appearance_occlusion_gate: true
+appearance_occlusion_cov: 0.4
+
+appearance_bank: true
+appearance_bank_size: 5
+appearance_bank_min_score: 0.45
+appearance_bank_min_iou: 0.35
+appearance_bank_consistency_threshold: 0.75
+appearance_bank_high_quality_min_score: 0.75
+appearance_bank_min_aspect: 1.2
+appearance_bank_max_aspect: 4.5
+bank_quality_v2: true
+semantic_bank_inject: false
+
+relink_enabled: true
+relink_bank_cap: 256
+relink_sim_thresh: 0.65
+relink_lambda: 2.5
+relink_spatial_gate: 4.0
+relink_max_age: 300

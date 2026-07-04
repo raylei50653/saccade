@@ -241,6 +241,10 @@ public:
         float mid_thresh_scale = 1.0f
     ) override;
 
+    int compact_output_to_host(float* host_boxes, float* host_scores,
+                                int* host_ids, int* host_classes,
+                                int capacity, cudaStream_t stream);
+
 private:
     class Impl;
     std::unique_ptr<Impl> pimpl_;
