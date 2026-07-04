@@ -143,7 +143,13 @@ def test_bidirectional_bridge_revives_live_lost_identity() -> None:
     assert without_bridge[12] == [2]
     assert with_bridge[11] == [2]
     assert with_bridge[12] == [1]
-    assert without_debug[3:] == [0, 0]
+    # get_relink_debug layout: [0]=cursor, [1]=births, [2]=revived,
+    # [3]=bridge_attempts, [4]=bridge_accepts, [5..12]=appearance-relink
+    # diagnostics. Without the bidirectional bridge, no bridge attempt or
+    # accept fires (indices 3/4); the appended appearance-relink counters
+    # may be nonzero and are not asserted here.
+    assert without_debug[3] == 0
+    assert without_debug[4] == 0
     assert with_debug[3] >= with_debug[4]
     assert with_debug[4] == 1
 

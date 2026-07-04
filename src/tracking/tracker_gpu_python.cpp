@@ -220,8 +220,8 @@ py::tuple merge_cross_tile_duplicates_cpu(
 
     const ssize_t out_num = static_cast<ssize_t>(out_scores.size());
     py::array_t<float> out_boxes_arr({out_num, static_cast<ssize_t>(4)});
-    py::array_t<float> out_scores_arr({out_num});
-    py::array_t<int> out_classes_arr({out_num});
+    py::array_t<float> out_scores_arr(std::vector<ssize_t>{out_num});
+    py::array_t<int> out_classes_arr(std::vector<ssize_t>{out_num});
 
     auto out_boxes_mut = out_boxes_arr.mutable_unchecked<2>();
     auto out_scores_mut = out_scores_arr.mutable_unchecked<1>();
@@ -307,8 +307,8 @@ py::tuple filter_detections_cpu(
     }
 
     const ssize_t out_num = static_cast<ssize_t>(keep_indices.size());
-    py::array_t<int> keep_arr({out_num});
-    py::array_t<bool> suspect_arr({out_num});
+    py::array_t<int> keep_arr(std::vector<ssize_t>{out_num});
+    py::array_t<bool> suspect_arr(std::vector<ssize_t>{out_num});
     auto keep_mut = keep_arr.mutable_unchecked<1>();
     auto suspect_mut = suspect_arr.mutable_unchecked<1>();
     for (ssize_t i = 0; i < out_num; ++i) {
@@ -2912,7 +2912,7 @@ private:
     float min_consistency_;
     std::string rerank_mode_;
     float reciprocal_margin_;
-    bool debug_;
+    [[maybe_unused]] bool debug_;
     float clean_score_threshold_;
     float clean_margin_ratio_;
     float clean_min_aspect_;
@@ -3024,7 +3024,6 @@ private:
     std::unordered_map<int, int> ho_last_active_;       // tid → last emitted frame
     std::unordered_set<int> ho_decided_;                // raw ids with a consumed decision
     int ho_handover_count_ = 0;
-    int ho_last_handover_frame_ = -1;
 };
 
 // ============================================================

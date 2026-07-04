@@ -278,7 +278,7 @@ def test_mahalanobis_singular_matrix_uses_pseudoinverse() -> None:
 
 def test_buffer_mean_single_item() -> None:
     """Single buffer item returned directly."""
-    relinker = PythonSemanticRelinker(buffer_size=3)
+    relinker = PythonSemanticRelinker(buffer_size=3, device="cpu")
     emb = torch.tensor([1.0, 0.0, 0.0, 0.0])
     relinker.buffers[1] = [emb]
     result = relinker._buffer_mean(1)
@@ -287,7 +287,7 @@ def test_buffer_mean_single_item() -> None:
 
 def test_buffer_mean_multiple_items() -> None:
     """Multiple buffer items return their normalized mean."""
-    relinker = PythonSemanticRelinker(buffer_size=3)
+    relinker = PythonSemanticRelinker(buffer_size=3, device="cpu")
     a = torch.tensor([1.0, 0.0, 0.0, 0.0])
     b = torch.tensor([0.0, 1.0, 0.0, 0.0])
     relinker.buffers[1] = [a, b]
@@ -338,7 +338,7 @@ def test_buffer_consistency_orthogonal() -> None:
 
 def test_buffer_sim_mean_rerank_mode() -> None:
     """mean rerank_mode: dot(query, mean_of_buffer)."""
-    relinker = PythonSemanticRelinker(buffer_size=2, rerank_mode="mean")
+    relinker = PythonSemanticRelinker(buffer_size=2, rerank_mode="mean", device="cpu")
     a = torch.tensor([1.0, 0.0, 0.0, 0.0])
     b = torch.tensor([0.0, 1.0, 0.0, 0.0])
     relinker.buffers[1] = [a, b]
@@ -351,7 +351,7 @@ def test_buffer_sim_mean_rerank_mode() -> None:
 
 def test_buffer_sim_max_rerank_mode() -> None:
     """max rerank_mode: max cosine over buffer items."""
-    relinker = PythonSemanticRelinker(buffer_size=2, rerank_mode="max")
+    relinker = PythonSemanticRelinker(buffer_size=2, rerank_mode="max", device="cpu")
     a = torch.tensor([1.0, 0.0, 0.0, 0.0])
     b = torch.tensor([0.0, 1.0, 0.0, 0.0])
     relinker.buffers[1] = [a, b]
@@ -363,7 +363,9 @@ def test_buffer_sim_max_rerank_mode() -> None:
 
 def test_buffer_sim_top2_mean_rerank_mode() -> None:
     """top2_mean rerank_mode: mean of top-2 cosines."""
-    relinker = PythonSemanticRelinker(buffer_size=3, rerank_mode="top2_mean")
+    relinker = PythonSemanticRelinker(
+        buffer_size=3, rerank_mode="top2_mean", device="cpu"
+    )
     a = torch.tensor([1.0, 0.0, 0.0, 0.0])
     b = torch.tensor([0.0, 1.0, 0.0, 0.0])
     c = torch.tensor([0.7, 0.0, 0.0, 0.0])
@@ -376,7 +378,9 @@ def test_buffer_sim_top2_mean_rerank_mode() -> None:
 
 def test_buffer_sim_weighted_rerank_mode() -> None:
     """weighted rerank_mode: 0.7*max + 0.3*mean."""
-    relinker = PythonSemanticRelinker(buffer_size=2, rerank_mode="weighted")
+    relinker = PythonSemanticRelinker(
+        buffer_size=2, rerank_mode="weighted", device="cpu"
+    )
     a = torch.tensor([1.0, 0.0, 0.0, 0.0])
     b = torch.tensor([0.0, 1.0, 0.0, 0.0])
     relinker.buffers[1] = [a, b]
@@ -389,7 +393,7 @@ def test_buffer_sim_weighted_rerank_mode() -> None:
 
 def test_buffer_sim_empty_buffer_falls_back_to_features() -> None:
     """Empty buffer falls back to stored feature."""
-    relinker = PythonSemanticRelinker(buffer_size=2, rerank_mode="max")
+    relinker = PythonSemanticRelinker(buffer_size=2, rerank_mode="max", device="cpu")
     relinker.features[1] = torch.tensor([1.0, 0.0, 0.0, 0.0])
     query = torch.tensor([1.0, 0.0, 0.0, 0.0])
     sim = relinker._buffer_sim(1, query)
