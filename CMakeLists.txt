@@ -32,6 +32,7 @@ endfunction()
 find_package(CUDAToolkit REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(PkgConfig REQUIRED)
+find_package(Threads REQUIRED)
 pkg_check_modules(GSTREAMER REQUIRED gstreamer-1.0 gstreamer-app-1.0 gstreamer-video-1.0)
 
 # 3. Python 基礎環境搜尋 (用於獲取 Pybind11 與 TensorRT 庫路徑)
@@ -175,6 +176,7 @@ target_compile_definitions(saccade_tracking PRIVATE SACCADE_EXPORT_TRACKING)
 # 8. 定義 Media 模組 (Dynamic Library)
 add_library(saccade_media STATIC
     src/media/gst_client.cpp
+    src/media/buffer_pool.cpp
 )
 target_link_libraries(saccade_media
     ${GSTREAMER_LIBRARIES}
@@ -367,4 +369,22 @@ if(ENABLE_NATIVE_TESTS)
         CUDA_SEPARABLE_COMPILATION ON)
     enable_native_coverage(saccade_fpn_reid_launchers_test)
     add_test(NAME saccade_fpn_reid_launchers_test COMMAND saccade_fpn_reid_launchers_test)
+
+    # ── media buffer-pool race tests (S1-S9 regression) ─────────────────────
+    # BufferPool is GStreamer-independent; the test links saccade_media
+    # (which contains buffer_pool.cpp) + Threads for the concurrent-acquire
+    # scenarios. No GStreamer runtime needed.
+    add_executable(saccade_gst_buffer_pool_test
+        tests/native/test_gst_buffer_pool.cpp
+    )
+    target_include_directories(saccade_gst_buffer_pool_test PRIVATE
+        ${PROJECT_SOURCE_DIR}/include
+    )
+    target_link_libraries(saccade_gst_buffer_pool_test PRIVATE
+        saccade_media
+        CUDA::cudart
+        Threads::Threads
+    )
+    enable_native_coverage(saccade_gst_buffer_pool_test)
+    add_test(NAME saccade_gst_buffer_pool_test COMMAND saccade_gst_buffer_pool_test)
 endif()

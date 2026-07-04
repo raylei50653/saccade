@@ -2,19 +2,8 @@
 #include <string>
 #include <functional>
 #include <memory>
-#include <atomic>
 
 namespace saccade {
-
-/**
- * @brief 緩衝區狀態列舉 (State Machine)
- */
-enum class BufferStatus {
-    EMPTY = 0,      // C++ 可寫入
-    WRITING = 1,    // C++ 正在進行 H2D 搬運
-    READY = 2,      // 搬運指令已發出，等待 Python 處理
-    PROCESSING = 3  // Python 正持有此 Buffer 進行計算
-};
 
 /**
  * @brief 影格封裝物件 (Industrial Grade)

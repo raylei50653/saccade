@@ -21,16 +21,26 @@ PYBIND11_MODULE(saccade_media_ext, m) {
         .def_readonly("buffer_index", &FrameData::buffer_index)
         .def_readonly("width", &FrameData::width)
         .def_readonly("height", &FrameData::height)
+        .def_readonly("channels", &FrameData::channels)
         .def_readonly("timestamp", &FrameData::timestamp)
+        // mark_processing: READY → PROCESSING (CAS)。consumer 取得 buffer 所有權。
         .def("mark_processing", [](FrameData& self) {
             auto* client_impl = static_cast<IMediaClient*>(self.owner_ptr);
             if (client_impl) client_impl->markProcessing(self.buffer_index);
         })
+        // release: PROCESSING/READY → EMPTY (CAS)。consumer 歸還 buffer。
         .def("release", [](FrameData& self) {
             auto* client_impl = static_cast<IMediaClient*>(self.owner_ptr);
             if (client_impl) client_impl->releaseBuffer(self.buffer_index);
         })
-        // 支援 Python with 語句 (RAII)
+        // sync_buffer: 等 H2D 完成。consumer 讀取 cuda_ptr 前必須呼叫 (修 S1)。
+        .def("sync_buffer", [](FrameData& self) {
+            auto* client_impl = static_cast<IMediaClient*>(self.owner_ptr);
+            if (client_impl) client_impl->syncBuffer(self.buffer_index);
+        })
+        // 支援 Python with 語句 (RAII): __enter__ mark_processing, __exit__ release。
+        // 正常流程: with frame_data: → __enter__ (READY→PROCESSING) ... __exit__ (PROCESSING→EMPTY)。
+        // 例外流程: __exit__ 仍會 release,避免 buffer leak (修 S4/S11)。
         .def("__enter__", [](FrameData& self) {
             auto* client_impl = static_cast<IMediaClient*>(self.owner_ptr);
             if (client_impl) client_impl->markProcessing(self.buffer_index);
