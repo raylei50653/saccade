@@ -1,0 +1,14 @@
+# Offline/output-layer Cheb-GR handover using MobileNetV4 ReID.
+#
+# This route runs after tracker output is complete. It extracts newborn head
+# crops and dead-track banks, then relabels eligible MOT tracklets without
+# feeding appearance decisions back into the tracker critical path.
+#
+# Load with:
+#   uv run scripts/eval/mot17.py --preset mamba_whole_graph_m --detector SDP \
+#       --double-buffer --module-lifecycle configs/modules/cheb_gr_offline_mnv4.yaml
+
+cheb_gr_offline_handover: true
+cheb_gr_model: mobilenetv4_reid
+cheb_gr_offline_min_head: 2
+cheb_gr_offline_margin: 0.05

@@ -1,0 +1,15 @@
+# Offline/output-layer Cheb-GR handover using MobileNetV4 ReID with the
+# sparse clean-FIFO-20 dead-track bank (probe 2026-07-04, registry #58:
+# recent-20 = +0.07/+0.05 IDF1 vs dense-50 on m/s frozen substrates, highest
+# accept-set fidelity, ~2.5x fewer bank crops in the post-hoc extraction).
+#
+# Load with:
+#   uv run scripts/eval/mot17.py --preset mamba_whole_graph_m --detector SDP \
+#       --double-buffer --module-lifecycle configs/modules/cheb_gr_offline_mnv4_fifo20.yaml
+
+cheb_gr_offline_handover: true
+cheb_gr_model: mobilenetv4_reid
+cheb_gr_offline_min_head: 2
+cheb_gr_offline_margin: 0.05
+cheb_gr_offline_bank_mode: recent
+cheb_gr_offline_bank_n: 20

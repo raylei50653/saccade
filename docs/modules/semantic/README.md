@@ -33,6 +33,9 @@
 | 2026-06-11 | GPU 雙向中點橋接 relink（px=0.25 + scale gate） | ✅ GO，**preset 預設開**；MOT17-SDP on/off IDF1 +2.1 / AssA +2.8 / IDs −13.6% / FP −14% 全指標嚴格優勢 |
 | 2026-06-11 | Relink bridge scale gate（speed 方向擴展） | ❌ NO-GO（SDP 小幅正向但速度方向全線死；P0 L_med 復核不重現），registry [#31](../../reference/no_go_registry.md) |
 | 2026-06-11 | occ_cover live relink（gap-path 占用門） | ❌ NO-GO（live accepts 全 gap≤1；長 gap 被 track_buffer=30 結構性消滅；tb90 解鎖反 −0.8），registry [#33](../../reference/no_go_registry.md) |
+| 2026-07-03 | Cheb-GR causal online handover — **live streaming claims**（每幀 Cheb-GR k-reciprocal newborn→dead 手遞，不重標已輸出幀） | ❌ NO-GO（**全網格單調有害，7/7 序列負**；min_head=2 揭露 budget 下 head 恆=1；mainline 每幀抽取 h≥2/h≥3 也 −2.4；live 回饋迴路複利懲罰 ~4.3）。C++ streaming port 本身已驗證正確（含重大 fix：Eigen::Map column-major→row-major，kernel vs torch 6e-8），code 保留 default-off + `SACCADE_HO_DEBUG_LEVEL` gating。**可用路徑 = offline Cheb-GR merge (已 GO) + delayed-claim 臂重掃（kernel 修復紅利）**。registry [#56](../../reference/no_go_registry.md#56) |
+| 2026-07-04 | Sync online ReID in tracker critical path（mnv4 dynamic / bridge appearance veto） | ❌ NO-GO（cost-benefit 不成立）。無 ReID `mamba_whole_graph_m` 79.5 / IDs 335 / ~241 FPS；修掉 live handover 污染後同步 `reid_mnv4_dynamic` 79.7 / IDs 333 / ~193 FPS，吞吐約 −20% 只換 +0.2 IDF1。`relink_bridge_app_veto=0.20` 無實際 veto；`veto=1.0` 僅 33 veto 且 IDs 341。**主線：geometry + conservative relink；ReID 只能 async sidecar / offline，不得阻塞 double-buffer critical path。** registry [#57](../../reference/no_go_registry.md#57) |
+| 2026-07-04 | Cheb-GR offline handover（output-layer，mnv4 h2 margin0.05） | ✅ GO as post-hoc cleanup；`--cheb-gr-offline-handover --cheb-gr-model mobilenetv4_reid --cheb-gr-offline-min-head 2 --cheb-gr-offline-margin 0.05`：IDF1 80.3 / IDs 311 / ~219 FPS；先輸出 MOT 再 crop/extract/relabel，不進 tracker critical path |
 
 ## 📚 研究 / 設計
 
@@ -42,6 +45,7 @@
 | [research/depth_ordering_crossing_swap.md](research/depth_ordering_crossing_swap.md) | occlusion crossing-swap 深度排序：foot_y 判別 front/back **AUC 0.898**（vs 外觀 ≈0.50）；same-height gate **GO default-on**（+0.5 IDF1，commit c418872b）（2026-06-14） |
 | [research/bidirectional_relink_roadmap.md](research/bidirectional_relink_roadmap.md) | 雙向時空收斂幾何重連長期路線圖（Phase 0 已落地，1–4 規劃） |
 | [research/bidir_relink_data_analysis.md](research/bidir_relink_data_analysis.md) | 線上 bridge 候選 per-attempt 分析（hard-case AUC≈0.55，與上文難區 0.65 一致） |
+| [research/sparse_key_embedding_bank_20260704.md](research/sparse_key_embedding_bank_20260704.md) | **Cheb-GR 稀疏 bank 結案（registry #58）**：clean-FIFO-20 = dense 等價偏優（m/s +0.07/+0.05）；embedding 不能平均、copy 重複不進 graph、visclean 後品質訊號零殘餘；stride-3 抽取 ÷3 等價；Python 層已落地（`--cheb-gr-offline-bank-mode recent`） |
 
 ## 📋 模組 TODO
 

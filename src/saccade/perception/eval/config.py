@@ -250,6 +250,11 @@ class EvalConfig:
     cheb_gr_online_max_cost: float
     cheb_gr_online_min_head: int
     cheb_gr_online_margin: float
+    cheb_gr_online_center_dist_veto: float
+    cheb_gr_online_pollution_veto: float
+    cheb_gr_online_neighbor_iou_max: float
+    cheb_gr_online_bank_mode: str
+    cheb_gr_online_bank_n: int
     cheb_gr_online_log: bool
 
     # Causal occ-exit identity audit (ABSORB-side twin of the online handover;
@@ -262,6 +267,8 @@ class EvalConfig:
     occ_audit_window: int
     occ_audit_min_occ: int
     occ_audit_log: bool
+    occ_audit_bank_reference: bool
+    occ_audit_bank_n: int
 
     # Birth-time lost-bank ReID relink (online, GPU; default off)
     relink_enabled: bool
@@ -794,12 +801,66 @@ def parse_eval_config(
         cheb_gr_fuse_lambda=float(kwargs.get("cheb_gr_fuse_lambda", 0.3)),
         cheb_gr_engine=str(kwargs.get("cheb_gr_engine", "") or ""),
         cheb_gr_model=str(kwargs.get("cheb_gr_model", "siglip2_reid")),
-        cheb_gr_online=bool(kwargs.get("cheb_gr_online", False)),
-        cheb_gr_online_decide_n=int(kwargs.get("cheb_gr_online_decide_n", 5)),
-        cheb_gr_online_max_cost=float(kwargs.get("cheb_gr_online_max_cost", 0.45)),
-        cheb_gr_online_min_head=int(kwargs.get("cheb_gr_online_min_head", 1)),
-        cheb_gr_online_margin=float(kwargs.get("cheb_gr_online_margin", 0.0)),
-        cheb_gr_online_log=bool(kwargs.get("cheb_gr_online_log", False)),
+        cheb_gr_online=bool(
+            kwargs.get("cheb_gr_offline_handover", kwargs.get("cheb_gr_online", False))
+        ),
+        cheb_gr_online_decide_n=int(
+            kwargs.get(
+                "cheb_gr_offline_decide_n",
+                kwargs.get("cheb_gr_online_decide_n", 5),
+            )
+        ),
+        cheb_gr_online_max_cost=float(
+            kwargs.get(
+                "cheb_gr_offline_max_cost",
+                kwargs.get("cheb_gr_online_max_cost", 0.45),
+            )
+        ),
+        cheb_gr_online_min_head=int(
+            kwargs.get(
+                "cheb_gr_offline_min_head",
+                kwargs.get("cheb_gr_online_min_head", 1),
+            )
+        ),
+        cheb_gr_online_margin=float(
+            kwargs.get(
+                "cheb_gr_offline_margin",
+                kwargs.get("cheb_gr_online_margin", 0.0),
+            )
+        ),
+        cheb_gr_online_center_dist_veto=float(
+            kwargs.get(
+                "cheb_gr_offline_center_dist_veto",
+                kwargs.get("cheb_gr_online_center_dist_veto", 0.0),
+            )
+        ),
+        cheb_gr_online_pollution_veto=float(
+            kwargs.get(
+                "cheb_gr_offline_pollution_veto",
+                kwargs.get("cheb_gr_online_pollution_veto", 0.0),
+            )
+        ),
+        cheb_gr_online_neighbor_iou_max=float(
+            kwargs.get(
+                "cheb_gr_offline_neighbor_iou_max",
+                kwargs.get("cheb_gr_online_neighbor_iou_max", 0.0),
+            )
+        ),
+        cheb_gr_online_bank_mode=str(
+            kwargs.get(
+                "cheb_gr_offline_bank_mode",
+                kwargs.get("cheb_gr_online_bank_mode", "spread"),
+            )
+        ),
+        cheb_gr_online_bank_n=int(
+            kwargs.get(
+                "cheb_gr_offline_bank_n",
+                kwargs.get("cheb_gr_online_bank_n", 0),
+            )
+        ),
+        cheb_gr_online_log=bool(
+            kwargs.get("cheb_gr_offline_log", kwargs.get("cheb_gr_online_log", False))
+        ),
         occ_audit=bool(kwargs.get("occ_audit", False)),
         occ_audit_tau=float(kwargs.get("occ_audit_tau", 0.45)),
         occ_audit_ref_n=int(kwargs.get("occ_audit_ref_n", 5)),
@@ -808,6 +869,8 @@ def parse_eval_config(
         occ_audit_window=int(kwargs.get("occ_audit_window", 30)),
         occ_audit_min_occ=int(kwargs.get("occ_audit_min_occ", 2)),
         occ_audit_log=bool(kwargs.get("occ_audit_log", False)),
+        occ_audit_bank_reference=bool(kwargs.get("occ_audit_bank_reference", False)),
+        occ_audit_bank_n=int(kwargs.get("occ_audit_bank_n", 20)),
         relink_enabled=bool(kwargs.get("relink_enabled", False)),
         relink_bank_cap=int(kwargs.get("relink_bank_cap", 256)),
         relink_sim_thresh=float(kwargs.get("relink_sim_thresh", 0.6)),

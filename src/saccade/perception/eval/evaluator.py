@@ -1580,7 +1580,7 @@ def run_eval_cpp(
 
     output_root = cfg.output_root
     output_root.mkdir(parents=True, exist_ok=True)
-    cheb_gr_online_log_path = output_root / "_cheb_gr_online_handover.csv"
+    cheb_gr_online_log_path = output_root / "_cheb_gr_offline_handover.csv"
     if getattr(cfg, "cheb_gr_online_log", False):
         cheb_gr_online_log_path.unlink(missing_ok=True)
     occ_audit_log_path = output_root / "_occ_audit.csv"
@@ -1595,7 +1595,7 @@ def run_eval_cpp(
         f"({n_threads} threads)"
     )
 
-    # Cheb-GR offline tracklet merge (path 2) / causal online handover: build
+    # Cheb-GR offline tracklet merge (path 2) / output-layer handover: build
     # the ReID extractor once. C++ eval emits no per-det embedding, so tracklet
     # crops are re-cut from img1 inside the post-process loop.
     cheb_gr_extractor = None
@@ -1660,33 +1660,77 @@ def run_eval_cpp(
 
         if cheb_gr_extractor is not None and occ_audit_enabled:
             seq_img_dir = str(_Path(cfg.data_root) / cfg.split / seq / "img1")
-            audit_embs = extract_audit_embeddings(
-                results_lines,
-                seq_img_dir,
-                cheb_gr_extractor,
-                ref_n=cfg.occ_audit_ref_n,
-                audit_crops=cfg.occ_audit_crops,
-                audit_window=cfg.occ_audit_window,
-                min_occ_frames=cfg.occ_audit_min_occ,
-                crop_hw=getattr(cheb_gr_extractor, "input_hw", (224, 224)),
-                appearance_occlusion_cov=cfg.appearance_occlusion_cov,
-            )
-            oa_log_rows: list[dict[str, Any]] = []
-            results_lines, oa_stats = occ_exit_audit_lines(
-                results_lines,
-                audit_embs,
-                enabled=True,
-                tau=cfg.occ_audit_tau,
-                min_ref=cfg.occ_audit_min_ref,
-                ref_n=cfg.occ_audit_ref_n,
-                audit_crops=cfg.occ_audit_crops,
-                audit_window=cfg.occ_audit_window,
-                min_occ_frames=cfg.occ_audit_min_occ,
-                appearance_occlusion_cov=cfg.appearance_occlusion_cov,
-                decision_log=oa_log_rows
-                if getattr(cfg, "occ_audit_log", False)
-                else None,
-            )
+            if getattr(cfg, "occ_audit_bank_reference", False):
+                from .clean_fifo_bank import build_filled_bank
+                from .occ_audit import (
+                    extract_audit_embeddings_post_exit,
+                    occ_exit_audit_lines_from_bank,
+                )
+
+                occ_bank = build_filled_bank(
+                    results_lines,
+                    seq_img_dir,
+                    cheb_gr_extractor,
+                    appearance_occlusion_cov=cfg.appearance_occlusion_cov,
+                    fifo_n=getattr(cfg, "occ_audit_bank_n", 20),
+                    crop_hw=getattr(cheb_gr_extractor, "input_hw", (224, 224)),
+                )
+                audit_embs = extract_audit_embeddings_post_exit(
+                    results_lines,
+                    seq_img_dir,
+                    cheb_gr_extractor,
+                    ref_n=cfg.occ_audit_ref_n,
+                    audit_crops=cfg.occ_audit_crops,
+                    audit_window=cfg.occ_audit_window,
+                    min_occ_frames=cfg.occ_audit_min_occ,
+                    crop_hw=getattr(cheb_gr_extractor, "input_hw", (224, 224)),
+                    appearance_occlusion_cov=cfg.appearance_occlusion_cov,
+                )
+                oa_log_rows: list[dict[str, Any]] = []
+                results_lines, oa_stats = occ_exit_audit_lines_from_bank(
+                    results_lines,
+                    occ_bank,
+                    audit_embs,
+                    enabled=True,
+                    tau=cfg.occ_audit_tau,
+                    min_ref=cfg.occ_audit_min_ref,
+                    ref_n=cfg.occ_audit_ref_n,
+                    audit_crops=cfg.occ_audit_crops,
+                    audit_window=cfg.occ_audit_window,
+                    min_occ_frames=cfg.occ_audit_min_occ,
+                    appearance_occlusion_cov=cfg.appearance_occlusion_cov,
+                    decision_log=oa_log_rows
+                    if getattr(cfg, "occ_audit_log", False)
+                    else None,
+                )
+            else:
+                audit_embs = extract_audit_embeddings(
+                    results_lines,
+                    seq_img_dir,
+                    cheb_gr_extractor,
+                    ref_n=cfg.occ_audit_ref_n,
+                    audit_crops=cfg.occ_audit_crops,
+                    audit_window=cfg.occ_audit_window,
+                    min_occ_frames=cfg.occ_audit_min_occ,
+                    crop_hw=getattr(cheb_gr_extractor, "input_hw", (224, 224)),
+                    appearance_occlusion_cov=cfg.appearance_occlusion_cov,
+                )
+                oa_log_rows: list[dict[str, Any]] = []
+                results_lines, oa_stats = occ_exit_audit_lines(
+                    results_lines,
+                    audit_embs,
+                    enabled=True,
+                    tau=cfg.occ_audit_tau,
+                    min_ref=cfg.occ_audit_min_ref,
+                    ref_n=cfg.occ_audit_ref_n,
+                    audit_crops=cfg.occ_audit_crops,
+                    audit_window=cfg.occ_audit_window,
+                    min_occ_frames=cfg.occ_audit_min_occ,
+                    appearance_occlusion_cov=cfg.appearance_occlusion_cov,
+                    decision_log=oa_log_rows
+                    if getattr(cfg, "occ_audit_log", False)
+                    else None,
+                )
             if getattr(cfg, "occ_audit_log", False) and oa_log_rows:
                 _append_dict_csv(
                     occ_audit_log_path,
@@ -1711,6 +1755,9 @@ def run_eval_cpp(
                 n_samples=cfg.cheb_gr_merge_n_samples,
                 crop_hw=getattr(cheb_gr_extractor, "input_hw", (224, 224)),
                 appearance_occlusion_cov=cfg.appearance_occlusion_cov,
+                neighbor_iou_max=cfg.cheb_gr_online_neighbor_iou_max,
+                bank_mode=cfg.cheb_gr_online_bank_mode,
+                bank_n=cfg.cheb_gr_online_bank_n,
             )
             ho_log_rows: list[dict[str, Any]] = []
             results_lines, ho_stats = causal_handover_lines(
@@ -1723,6 +1770,8 @@ def run_eval_cpp(
                 decide_n=cfg.cheb_gr_online_decide_n,
                 min_head_samples=cfg.cheb_gr_online_min_head,
                 margin=cfg.cheb_gr_online_margin,
+                center_dist_veto=cfg.cheb_gr_online_center_dist_veto,
+                pollution_veto=cfg.cheb_gr_online_pollution_veto,
                 pool_frac=cfg.cheb_gr_pool_frac,
                 cheb_lambda=cfg.cheb_gr_lambda,
                 k2=cfg.cheb_gr_k2,
@@ -1738,12 +1787,14 @@ def run_eval_cpp(
                     [{"seq": seq, **row} for row in ho_log_rows],
                 )
             print(
-                f"  {seq}: cheb-gr online handover {ho_stats['ids_before']}→"
+                f"  {seq}: cheb-gr offline handover {ho_stats['ids_before']}→"
                 f"{ho_stats['ids_after']} ({ho_stats['handovers']} handovers, "
                 f"{ho_stats['events_with_candidates']}/{ho_stats['events']} "
                 "events had candidates, "
                 f"reject_cost={ho_stats['reject_cost']} "
                 f"reject_margin={ho_stats['reject_margin']} "
+                f"reject_center_dist={ho_stats['reject_center_dist']} "
+                f"reject_pollution={ho_stats['reject_pollution']} "
                 f"reject_min_head={ho_stats['reject_min_head']})"
             )
         elif cheb_gr_extractor is not None:
@@ -2213,8 +2264,6 @@ class EvalPipeline:
         _use_python_relinker = (
             cfg.force_python_relinker
             or cfg.semantic_rerank_mode != "mean"
-            or _semantic_delayed_claim
-            or _semantic_cheb_gr_claim
             or _semantic_gpu_relink_gate
         )
         _relinker_cls = (
@@ -2271,6 +2320,19 @@ class EvalPipeline:
                 delayed_claim=True,
                 claim_warmup_frames=cfg.kwargs.get("semantic_claim_warmup_frames", 3),
             )
+        if _semantic_cheb_gr_claim:
+            _relinker_common_kwargs.update(
+                cheb_gr_claim=_semantic_cheb_gr_claim,
+                cheb_gr_max_cost=cfg.semantic_cheb_gr_max_cost,
+                cheb_gr_margin=cfg.semantic_cheb_gr_margin,
+                cheb_gr_min_head=cfg.semantic_cheb_gr_min_head,
+                cheb_gr_pool_frac=cfg.semantic_cheb_gr_pool_frac,
+                cheb_gr_min_sim=cfg.semantic_cheb_gr_min_sim,
+                cheb_gr_lambda=cfg.cheb_gr_lambda,
+                cheb_gr_k2=cfg.cheb_gr_k2,
+                cheb_gr_max_fwd=cfg.cheb_gr_max_fwd,
+                cheb_gr_fuse_lambda=cfg.cheb_gr_fuse_lambda,
+            )
         if _semantic_bidirectional:
             _relinker_common_kwargs.update(
                 bidirectional=True,
@@ -2310,16 +2372,6 @@ class EvalPipeline:
                 motion_motion_only_min_lost_frames=cfg.kwargs.get(
                     "motion_motion_only_min_lost_frames", 1
                 ),
-                cheb_gr_claim=_semantic_cheb_gr_claim,
-                cheb_gr_max_cost=cfg.semantic_cheb_gr_max_cost,
-                cheb_gr_margin=cfg.semantic_cheb_gr_margin,
-                cheb_gr_min_head=cfg.semantic_cheb_gr_min_head,
-                cheb_gr_pool_frac=cfg.semantic_cheb_gr_pool_frac,
-                cheb_gr_min_sim=cfg.semantic_cheb_gr_min_sim,
-                cheb_gr_lambda=cfg.cheb_gr_lambda,
-                cheb_gr_k2=cfg.cheb_gr_k2,
-                cheb_gr_max_fwd=cfg.cheb_gr_max_fwd,
-                cheb_gr_fuse_lambda=cfg.cheb_gr_fuse_lambda,
                 gpu_relink_gate=_semantic_gpu_relink_gate,
                 gpu_relink_gate_graph=cfg.semantic_gpu_relink_gate_graph,
                 gpu_relink_gate_init_query_cap=(
@@ -2382,6 +2434,24 @@ class EvalPipeline:
                 )
                 relinker = PythonSemanticRelinker(**_fallback_kwargs)
 
+        # Tracker-mode live handover is experimental and default-off. The
+        # output-layer --cheb-gr-offline-handover path below is the supported
+        # handover route; do not enable the live feedback loop just because
+        # tracker ReID embeddings are present.
+        _tracker_online_handover = bool(
+            getattr(cfg, "kwargs", {}).get("tracker_online_handover", False)
+        )
+        if (
+            relinker is None
+            and _tracker_online_handover
+            and cfg.reid_mode == "tracker"
+            and _relinker_cls is not PythonSemanticRelinker
+        ):
+            try:
+                relinker = _relinker_cls(**_relinker_common_kwargs)
+            except TypeError:
+                pass
+
         if relinker is not None:
             if (
                 _CppIdentityResolver is not None
@@ -2394,6 +2464,38 @@ class EvalPipeline:
                 identity_resolver = IdentityResolver(relinker, lifecycle_merger)
         else:
             identity_resolver = None
+
+        # Live Cheb-GR handover: configure the C++ relinker for per-frame
+        # handover decisions only when the experimental live feedback loop is
+        # explicitly requested. Plain tracker-mode ReID must not enable this.
+        _has_reid = cfg.reid_mode != "off"
+        if (
+            _tracker_online_handover
+            and _has_reid
+            and relinker is not None
+            and not isinstance(relinker, PythonSemanticRelinker)
+        ):
+            ho_max_cost = getattr(cfg, "cheb_gr_online_max_cost", 0.45)
+            ho_margin = getattr(cfg, "cheb_gr_online_margin", 0.0)
+            ho_max_gap = getattr(cfg, "cheb_gr_merge_max_gap", 60)
+            ho_decide_n = getattr(cfg, "cheb_gr_online_decide_n", 5)
+            ho_min_head = getattr(cfg, "cheb_gr_online_min_head", 1)
+            relinker.set_handover_params(
+                enabled=True,
+                max_cost=ho_max_cost,
+                margin=ho_margin,
+                max_gap=ho_max_gap,
+                decide_n=ho_decide_n,
+                min_head=ho_min_head,
+                pool_frac=getattr(cfg, "cheb_gr_pool_frac", 0.3),
+                cheb_lambda=getattr(cfg, "cheb_gr_lambda", 2.0),
+                k2=getattr(cfg, "cheb_gr_k2", 6),
+                max_fwd=getattr(cfg, "cheb_gr_max_fwd", 50),
+                fuse_lambda=getattr(cfg, "cheb_gr_fuse_lambda", 0.3),
+            )
+            print(
+                f"🔗 Online handover enabled: decide_n={ho_decide_n} max_cost={ho_max_cost} margin={ho_margin}"
+            )
 
         seq_path = Path(cfg.data_root) / cfg.split / seq
         config = configparser.ConfigParser()
@@ -4122,6 +4224,52 @@ def _run_emit(
     seq_stage_totals = state.seq_stage_totals
     relinker = state.relinker
     id_stability_filter = state.id_stability_filter
+
+    if (
+        relinker is not None
+        and hasattr(relinker, "feed_frame_embeddings")
+        and embeddings is not None
+        and embeddings.numel() > 0
+    ):
+        try:
+            ids_t = track_results["ids"]
+            count_raw = track_results["count"]
+            count_i = int(count_raw.item() if hasattr(count_raw, "item") else count_raw)
+            if count_i > 0:
+                ids_cpu = ids_t[:count_i].cpu().tolist()
+                scores_cpu = track_results["scores"][:count_i].cpu().tolist()
+                emb_dim = embeddings.shape[1]
+                # embeddings is detection-indexed (fused_boxes rows, zero rows
+                # for un-budgeted dets); gather to track order via det_idx.
+                # Tracks with no matched detection this frame get a zero row
+                # (skipped by the C++ side).
+                det_idx = track_results.get("det_idx")
+                emb_rows = torch.zeros((count_i, emb_dim), dtype=embeddings.dtype)
+                if det_idx is not None:
+                    di = det_idx[:count_i].long().cpu()
+                    ok = (di >= 0) & (di < embeddings.shape[0])
+                    if ok.any():
+                        emb_rows[ok] = embeddings.detach().cpu()[di[ok]]
+                else:
+                    n_copy = min(count_i, embeddings.shape[0])
+                    emb_rows[:n_copy] = embeddings[:n_copy].detach().cpu()
+                # Head/bank samples must be visually clean (Python-reference
+                # parity): front-occlusion gate over this frame's track boxes.
+                boxes_xyxy = track_results["boxes"][:count_i].detach().cpu()
+                occluded = _front_occlusion_mask_xyxy(
+                    boxes_xyxy, getattr(cfg, "appearance_occlusion_cov", 0.4)
+                )
+                clean_flags = (~occluded).to(torch.int32).tolist()
+                emb_cpu = emb_rows.numpy().ravel().tolist()
+                relinker.feed_frame_embeddings(
+                    emb_cpu, emb_dim, frame_id, ids_cpu, scores_cpu, clean_flags
+                )
+        except Exception as exc:
+            print(f"[online_ho] ERROR frame={frame_id}: {exc}")
+            import traceback
+
+            traceback.print_exc()
+
     primary_appearance_bank = state.primary_appearance_bank
     output_appearance_bank = state.output_appearance_bank
     dynamic_reid = state.dynamic_reid
@@ -4206,19 +4354,46 @@ def _run_emit(
 
         _use_fast_emit = (
             not _needs_emit_pipeline
-            and cfg.reid_mode == "off"
+            and cfg.reid_mode in ("off", "tracker")
             and not bool(cfg.kwargs.get("id_stability_filter", False))
         )
         if _use_fast_emit:
-            frame_result_lines = _fast_emit_mot_lines(
-                track_results=track_results,
-                global_id_mapper=global_id_mapper,
-                seq=seq,
-                frame_id=frame_id,
-                frame_w=w_orig,
-                frame_h=h_orig,
-            )
-            curr_track_ids = set(int(x) for x in track_results["ids"].tolist())
+            if hasattr(detector.tracker.tracker, "compact_output_to_host"):
+                import saccade_tracking_ext
+
+                count, boxes_list, scores_list, ids_list, _ = (
+                    saccade_tracking_ext.emit_tracks_unified(
+                        detector.tracker.tracker,
+                        relinker if relinker else None,
+                        torch.cuda.current_stream().cuda_stream,
+                        frame_id,
+                        w_orig,
+                        h_orig,
+                        detector.tracker.max_objects,
+                        embeddings if cfg.use_tracker_reid else None,
+                    )
+                )
+                frame_result_lines = []
+                for i in range(count):
+                    gid = global_id_mapper.map(seq, int(ids_list[i]))
+                    x1, y1 = float(boxes_list[i * 4]), float(boxes_list[i * 4 + 1])
+                    x2, y2 = float(boxes_list[i * 4 + 2]), float(boxes_list[i * 4 + 3])
+                    s = float(scores_list[i])
+                    frame_result_lines.append(
+                        f"{frame_id},{gid},{x1:.2f},{y1:.2f},"
+                        f"{x2 - x1:.2f},{y2 - y1:.2f},{s:.4f},-1,-1,-1"
+                    )
+                curr_track_ids = set(ids_list[:count])
+            else:
+                frame_result_lines = _fast_emit_mot_lines(
+                    track_results=track_results,
+                    global_id_mapper=global_id_mapper,
+                    seq=seq,
+                    frame_id=frame_id,
+                    frame_w=w_orig,
+                    frame_h=h_orig,
+                )
+                curr_track_ids = set(int(x) for x in track_results["ids"].tolist())
         else:
             host_track_batch = _prepare_host_track_batch(
                 track_results,
@@ -4297,6 +4472,16 @@ def _run_emit(
             gmc_warp=gmc_warp,
             gmc_enabled=cfg.gmc_enabled,
         )
+        if hasattr(detector.tracker, "observe_track_observations"):
+            detector.tracker.observe_track_observations(
+                host_track_batch.person_observations if not _use_fast_emit else {},
+                gmc=gmc_warp if cfg.gmc_enabled else None,
+            )
+        if relinker is not None and hasattr(relinker, "prune_and_archive"):
+            try:
+                relinker.prune_and_archive(list(curr_track_ids), frame_id)
+            except Exception as exc:
+                print(f"[online_ho] prune ERROR frame={frame_id}: {exc}")
         if profile_stages:
             torch.cuda.synchronize()
             elapsed_ms = (time.perf_counter() - t_relink_write_start) * 1000
@@ -4756,7 +4941,9 @@ def _run_reid_and_gmc(
             if time_since_last_reid < MIN_REID_GAP:
                 _do_reid = False
             elif cfg.need_reid_enabled:
-                if dynamic_reid is not None:
+                if hasattr(detector.tracker, "need_reid"):
+                    _do_reid = detector.tracker.need_reid(after_merge_count)
+                elif dynamic_reid is not None:
                     _do_reid = dynamic_reid.should_reid(after_merge_count)
                 else:
                     _do_reid = need_reid_frame(state.prev_track_ids, after_merge_count)
@@ -6508,7 +6695,7 @@ def run_eval(
 
     output_root = cfg.output_root
     output_root.mkdir(parents=True, exist_ok=True)
-    cheb_gr_online_log_path = output_root / "_cheb_gr_online_handover.csv"
+    cheb_gr_online_log_path = output_root / "_cheb_gr_offline_handover.csv"
     if getattr(cfg, "cheb_gr_online_log", False):
         cheb_gr_online_log_path.unlink(missing_ok=True)
     occ_audit_log_path = output_root / "_occ_audit.csv"
@@ -6929,7 +7116,7 @@ def run_eval(
 
     all_seq_profile: list[dict] = []
 
-    # Cheb-GR offline tracklet merge (path 2) / causal online handover:
+    # Cheb-GR offline tracklet merge (path 2) / output-layer handover:
     # ReID extractor built once.
     cheb_gr_extractor = None
     cheb_gr_online = getattr(cfg, "cheb_gr_online", False)
@@ -7168,6 +7355,13 @@ def run_eval(
                 f"bridge_attempts={_rd[3]} bridge_accepts={_rd[4]}{_gates}"
             )
 
+        if _seq_state.relinker is not None and hasattr(
+            _seq_state.relinker, "handover_count"
+        ):
+            ho_n = _seq_state.relinker.handover_count
+            if ho_n > 0:
+                print(f"🔗 Online handover {seq}: {ho_n} handovers accepted")
+
         _seq_state.results_lines, post_merge_stats = post_merge_output_tracklets(
             _seq_state.results_lines,
             enabled=cfg.post_lifecycle_merge,
@@ -7191,33 +7385,77 @@ def run_eval(
 
         if cheb_gr_extractor is not None and occ_audit_enabled:
             seq_img_dir = str(Path(cfg.data_root) / cfg.split / seq / "img1")
-            audit_embs = extract_audit_embeddings(
-                _seq_state.results_lines,
-                seq_img_dir,
-                cheb_gr_extractor,
-                ref_n=cfg.occ_audit_ref_n,
-                audit_crops=cfg.occ_audit_crops,
-                audit_window=cfg.occ_audit_window,
-                min_occ_frames=cfg.occ_audit_min_occ,
-                crop_hw=getattr(cheb_gr_extractor, "input_hw", (224, 224)),
-                appearance_occlusion_cov=cfg.appearance_occlusion_cov,
-            )
-            oa_log_rows: list[dict[str, Any]] = []
-            _seq_state.results_lines, oa_stats = occ_exit_audit_lines(
-                _seq_state.results_lines,
-                audit_embs,
-                enabled=True,
-                tau=cfg.occ_audit_tau,
-                min_ref=cfg.occ_audit_min_ref,
-                ref_n=cfg.occ_audit_ref_n,
-                audit_crops=cfg.occ_audit_crops,
-                audit_window=cfg.occ_audit_window,
-                min_occ_frames=cfg.occ_audit_min_occ,
-                appearance_occlusion_cov=cfg.appearance_occlusion_cov,
-                decision_log=oa_log_rows
-                if getattr(cfg, "occ_audit_log", False)
-                else None,
-            )
+            if getattr(cfg, "occ_audit_bank_reference", False):
+                from .clean_fifo_bank import build_filled_bank
+                from .occ_audit import (
+                    extract_audit_embeddings_post_exit,
+                    occ_exit_audit_lines_from_bank,
+                )
+
+                occ_bank = build_filled_bank(
+                    _seq_state.results_lines,
+                    seq_img_dir,
+                    cheb_gr_extractor,
+                    appearance_occlusion_cov=cfg.appearance_occlusion_cov,
+                    fifo_n=getattr(cfg, "occ_audit_bank_n", 20),
+                    crop_hw=getattr(cheb_gr_extractor, "input_hw", (224, 224)),
+                )
+                audit_embs = extract_audit_embeddings_post_exit(
+                    _seq_state.results_lines,
+                    seq_img_dir,
+                    cheb_gr_extractor,
+                    ref_n=cfg.occ_audit_ref_n,
+                    audit_crops=cfg.occ_audit_crops,
+                    audit_window=cfg.occ_audit_window,
+                    min_occ_frames=cfg.occ_audit_min_occ,
+                    crop_hw=getattr(cheb_gr_extractor, "input_hw", (224, 224)),
+                    appearance_occlusion_cov=cfg.appearance_occlusion_cov,
+                )
+                oa_log_rows: list[dict[str, Any]] = []
+                _seq_state.results_lines, oa_stats = occ_exit_audit_lines_from_bank(
+                    _seq_state.results_lines,
+                    occ_bank,
+                    audit_embs,
+                    enabled=True,
+                    tau=cfg.occ_audit_tau,
+                    min_ref=cfg.occ_audit_min_ref,
+                    ref_n=cfg.occ_audit_ref_n,
+                    audit_crops=cfg.occ_audit_crops,
+                    audit_window=cfg.occ_audit_window,
+                    min_occ_frames=cfg.occ_audit_min_occ,
+                    appearance_occlusion_cov=cfg.appearance_occlusion_cov,
+                    decision_log=oa_log_rows
+                    if getattr(cfg, "occ_audit_log", False)
+                    else None,
+                )
+            else:
+                audit_embs = extract_audit_embeddings(
+                    _seq_state.results_lines,
+                    seq_img_dir,
+                    cheb_gr_extractor,
+                    ref_n=cfg.occ_audit_ref_n,
+                    audit_crops=cfg.occ_audit_crops,
+                    audit_window=cfg.occ_audit_window,
+                    min_occ_frames=cfg.occ_audit_min_occ,
+                    crop_hw=getattr(cheb_gr_extractor, "input_hw", (224, 224)),
+                    appearance_occlusion_cov=cfg.appearance_occlusion_cov,
+                )
+                oa_log_rows: list[dict[str, Any]] = []
+                _seq_state.results_lines, oa_stats = occ_exit_audit_lines(
+                    _seq_state.results_lines,
+                    audit_embs,
+                    enabled=True,
+                    tau=cfg.occ_audit_tau,
+                    min_ref=cfg.occ_audit_min_ref,
+                    ref_n=cfg.occ_audit_ref_n,
+                    audit_crops=cfg.occ_audit_crops,
+                    audit_window=cfg.occ_audit_window,
+                    min_occ_frames=cfg.occ_audit_min_occ,
+                    appearance_occlusion_cov=cfg.appearance_occlusion_cov,
+                    decision_log=oa_log_rows
+                    if getattr(cfg, "occ_audit_log", False)
+                    else None,
+                )
             if getattr(cfg, "occ_audit_log", False) and oa_log_rows:
                 _append_dict_csv(
                     occ_audit_log_path,
@@ -7242,6 +7480,9 @@ def run_eval(
                 n_samples=cfg.cheb_gr_merge_n_samples,
                 crop_hw=getattr(cheb_gr_extractor, "input_hw", (224, 224)),
                 appearance_occlusion_cov=cfg.appearance_occlusion_cov,
+                neighbor_iou_max=cfg.cheb_gr_online_neighbor_iou_max,
+                bank_mode=cfg.cheb_gr_online_bank_mode,
+                bank_n=cfg.cheb_gr_online_bank_n,
             )
             ho_log_rows: list[dict[str, Any]] = []
             _seq_state.results_lines, ho_stats = causal_handover_lines(
@@ -7254,6 +7495,8 @@ def run_eval(
                 decide_n=cfg.cheb_gr_online_decide_n,
                 min_head_samples=cfg.cheb_gr_online_min_head,
                 margin=cfg.cheb_gr_online_margin,
+                center_dist_veto=cfg.cheb_gr_online_center_dist_veto,
+                pollution_veto=cfg.cheb_gr_online_pollution_veto,
                 pool_frac=cfg.cheb_gr_pool_frac,
                 cheb_lambda=cfg.cheb_gr_lambda,
                 k2=cfg.cheb_gr_k2,
@@ -7269,12 +7512,14 @@ def run_eval(
                     [{"seq": seq, **row} for row in ho_log_rows],
                 )
             print(
-                f"🧬 Cheb-GR Online Handover: ids={ho_stats['ids_before']}->"
+                f"🧬 Cheb-GR Offline Handover: ids={ho_stats['ids_before']}->"
                 f"{ho_stats['ids_after']} ({ho_stats['handovers']} handovers, "
                 f"{ho_stats['events_with_candidates']}/{ho_stats['events']} "
                 "events had candidates, "
                 f"reject_cost={ho_stats['reject_cost']} "
                 f"reject_margin={ho_stats['reject_margin']} "
+                f"reject_center_dist={ho_stats['reject_center_dist']} "
+                f"reject_pollution={ho_stats['reject_pollution']} "
                 f"reject_min_head={ho_stats['reject_min_head']})"
             )
         elif cheb_gr_extractor is not None:

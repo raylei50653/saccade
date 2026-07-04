@@ -37,8 +37,10 @@ from torch import Tensor
 
 from ..reid.cheb_gr import cheb_gr_kreciprocal
 from .cheb_gr_merge import _extract_native_crops_trt, temporal_sample_indices
+from .clean_fifo_bank import CleanFifoPlan, plan_clean_fifo_crops
 from .helpers import front_occlusion_mask_xyxy
 from .post_merge import _build_output_tracklets, _format_mot_records, _parse_mot_lines
+from .utils import box_center, box_iou_tuple, shift_box
 
 __all__ = [
     "causal_handover_lines",
@@ -55,6 +57,8 @@ class _HandoverStats:
     reject_min_head: int = 0
     reject_cost: int = 0
     reject_margin: int = 0
+    reject_center_dist: int = 0
+    reject_pollution: int = 0
     decisions_logged: int = 0
     ids_before: int = 0
     ids_after: int = 0
@@ -71,6 +75,8 @@ def causal_handover_lines(
     decide_n: int = 5,
     min_head_samples: int = 1,
     margin: float = 0.0,
+    center_dist_veto: float = 0.0,
+    pollution_veto: float = 0.0,
     pool_frac: float = 0.3,
     cheb_lambda: float = 2.0,
     k2: int = 6,
@@ -95,6 +101,14 @@ def causal_handover_lines(
             handover can be accepted.
         margin: minimum separation between the best and second-best candidate
             costs. A single valid candidate has infinite margin.
+        center_dist_veto: reject a handover whose forward-projected candidate
+            center is at least this many average box heights from the newborn
+            start center (0 = off). Cross-run applicability evidence:
+            ``center_dist_norm >= 2`` is a stable veto.
+        pollution_veto: reject a handover whose newborn head / candidate tail
+            crops overlap another track above this IoU (0 = off). Cross-run
+            applicability evidence: ``head_tail_neighbor_iou >= 0.5`` is a
+            stable high-pollution zone.
         decision_log: optional mutable list that receives one row per scored
             handover decision.
 
@@ -111,6 +125,30 @@ def causal_handover_lines(
     if len(tracklets) <= 1:
         stats.ids_after = len(tracklets)
         return results_lines, vars(stats)
+    boxes_by_frame: dict[int, list[tuple[int, tuple[float, float, float, float]]]] = (
+        defaultdict(list)
+    )
+    for r in records:
+        boxes_by_frame[r.frame].append((r.track_id, (r.x, r.y, r.x + r.w, r.y + r.h)))
+
+    def max_neighbor_iou(
+        track_id: int,
+        frame: int,
+        box: tuple[float, float, float, float],
+    ) -> float:
+        best = 0.0
+        for other_id, other_box in boxes_by_frame.get(frame, []):
+            if other_id == track_id:
+                continue
+            best = max(best, float(box_iou_tuple(box, other_box)))
+        return best
+
+    def max_record_neighbor_iou(rs: list[Any]) -> float:
+        best = 0.0
+        for r in rs:
+            box = (r.x, r.y, r.x + r.w, r.y + r.h)
+            best = max(best, max_neighbor_iou(r.track_id, r.frame, box))
+        return best
 
     # label: output identity per original track id (follows handover chains).
     label = {t.track_id: t.track_id for t in tracklets}
@@ -195,6 +233,35 @@ def causal_handover_lines(
         best_cost, best = scored[0]
         second_cost = scored[1][0] if len(scored) > 1 else float("inf")
         observed_margin = second_cost - best_cost
+
+        gap = int(tb.start - best.end)
+        direct_iou = box_iou_tuple(best.end_box, tb.start_box)
+        candidate_forward_box = shift_box(best.end_box, best.end_velocity, gap)
+        newborn_backward_box = shift_box(tb.start_box, tb.start_velocity, -gap)
+        candidate_forward_iou = box_iou_tuple(candidate_forward_box, tb.start_box)
+        newborn_backward_iou = box_iou_tuple(newborn_backward_box, best.end_box)
+        c0 = box_center(candidate_forward_box)
+        c1 = box_center(tb.start_box)
+        avg_h = max(
+            ((best.end_box[3] - best.end_box[1]) + (tb.start_box[3] - tb.start_box[1]))
+            * 0.5,
+            1.0,
+        )
+        center_dist_norm = float(
+            ((c0[0] - c1[0]) ** 2 + (c0[1] - c1[1]) ** 2) ** 0.5 / avg_h
+        )
+        newborn_head_records = [
+            r for r in tb.records if r.frame < tb.start + max(1, decide_n)
+        ]
+        candidate_tail_records = [
+            r for r in best.records if r.frame > best.end - max(1, decide_n)
+        ]
+        newborn_head_neighbor_iou = max_record_neighbor_iou(newborn_head_records)
+        candidate_tail_neighbor_iou = max_record_neighbor_iou(candidate_tail_records)
+        head_tail_neighbor_iou = max(
+            newborn_head_neighbor_iou, candidate_tail_neighbor_iou
+        )
+
         reason = "accepted"
         accepted = True
         if best_cost > max_cost:
@@ -205,20 +272,55 @@ def causal_handover_lines(
             reason = "margin"
             accepted = False
             stats.reject_margin += 1
+        elif center_dist_veto > 0.0 and center_dist_norm >= center_dist_veto:
+            reason = "center_dist"
+            accepted = False
+            stats.reject_center_dist += 1
+        elif pollution_veto > 0.0 and head_tail_neighbor_iou >= pollution_veto:
+            reason = "pollution"
+            accepted = False
+            stats.reject_pollution += 1
 
         if decision_log is not None:
             row_second_cost = second_cost if np.isfinite(second_cost) else -1.0
             row_margin = observed_margin if np.isfinite(observed_margin) else 999.0
+            newborn_neighbor_iou = max_neighbor_iou(
+                tb.track_id,
+                tb.records[0].frame,
+                tb.start_box,
+            )
+            candidate_neighbor_iou = max_neighbor_iou(
+                best.track_id,
+                best.records[-1].frame,
+                best.end_box,
+            )
             decision_log.append(
                 {
                     "newborn_id": int(tb.track_id),
                     "newborn_start": int(tb.start),
                     "newborn_end": int(tb.end),
+                    "newborn_mean_score": float(tb.mean_score),
+                    "newborn_start_score": float(tb.records[0].score),
                     "candidate_id": int(best.track_id),
                     "candidate_label": int(label[best.track_id]),
                     "candidate_start": int(best.start),
                     "candidate_end": int(best.end),
-                    "gap": int(tb.start - best.end),
+                    "candidate_mean_score": float(best.mean_score),
+                    "candidate_end_score": float(best.records[-1].score),
+                    "gap": gap,
+                    "direct_iou": float(direct_iou),
+                    "candidate_forward_iou": float(candidate_forward_iou),
+                    "newborn_backward_iou": float(newborn_backward_iou),
+                    "match_iou": float(candidate_forward_iou),
+                    "newborn_neighbor_iou": float(newborn_neighbor_iou),
+                    "candidate_neighbor_iou": float(candidate_neighbor_iou),
+                    "neighbor_iou": float(
+                        max(newborn_neighbor_iou, candidate_neighbor_iou)
+                    ),
+                    "newborn_head_neighbor_iou": float(newborn_head_neighbor_iou),
+                    "candidate_tail_neighbor_iou": float(candidate_tail_neighbor_iou),
+                    "head_tail_neighbor_iou": float(head_tail_neighbor_iou),
+                    "center_dist_norm": center_dist_norm,
                     "head_n": int(head.shape[0]),
                     "bank_n": int(bank_embs[best.track_id].shape[0]),
                     "candidate_count": int(len(scored)),
@@ -250,32 +352,51 @@ def causal_handover_lines(
     return _format_mot_records(records), vars(stats)
 
 
-def extract_handover_embeddings(
-    results_lines: list[str],
-    seq_dir: str,
-    extractor: Any,
+_POOL = tuple[int, int, tuple[float, float, float, float]]
+
+
+def _build_pool_from_plan(
+    plan: CleanFifoPlan,
+) -> tuple[list[_POOL], dict[int, list[int]], dict[int, list[int]]]:
+    """Build shared dedup crop pool from a ``CleanFifoPlan``."""
+    pool_idx: dict[tuple[int, int, float, float, float, float], int] = {}
+    pool: list[_POOL] = []
+    head_rows: dict[int, list[int]] = {}
+    bank_rows: dict[int, list[int]] = {}
+
+    for tid in plan.head_crops:
+        hr: list[int] = []
+        for frame, (x1, y1, x2, y2) in plan.head_crops[tid]:
+            w, h = x2 - x1, y2 - y1
+            key = (tid, frame, x1, y1, w, h)
+            if key not in pool_idx:
+                pool_idx[key] = len(pool)
+                pool.append((tid, frame, (x1, y1, x2, y2)))
+            hr.append(pool_idx[key])
+        head_rows[tid] = hr
+
+        br: list[int] = []
+        for frame, (x1, y1, x2, y2) in plan.bank_crops[tid]:
+            w, h = x2 - x1, y2 - y1
+            key = (tid, frame, x1, y1, w, h)
+            if key not in pool_idx:
+                pool_idx[key] = len(pool)
+                pool.append((tid, frame, (x1, y1, x2, y2)))
+            br.append(pool_idx[key])
+        bank_rows[tid] = br
+
+    return pool, head_rows, bank_rows
+
+
+def _build_pool_spread(
+    records: list[Any],
     *,
-    decide_n: int = 5,
-    n_samples: int = 50,
-    crop_hw: tuple[int, int] | None = None,
-    im_ext: str = ".jpg",
-    batch: int = 256,
-    appearance_occlusion_cov: float = 0.4,
-) -> tuple[dict[int, Tensor], dict[int, Tensor]]:
-    """Head + bank embeddings for the causal handover, one extraction pass.
-
-    Mirrors the offline path's visclean contract (full-frame-context front
-    occlusion gate on every sample). ``head`` = all clean detections in the
-    track's first ``decide_n`` frames; ``bank`` = temporally-distributed
-    ``n_samples`` over the whole life. Both come from the same deduplicated
-    crop pool, extracted through the native C++/CUDA + TRT path (PIL fallback).
-    """
-    from PIL import Image
-
-    if crop_hw is None:
-        crop_hw = tuple(getattr(extractor, "input_hw", (224, 224)))  # type: ignore[arg-type]
-
-    records = _parse_mot_lines(results_lines)
+    decide_n: int,
+    bank_budget: int,
+    appearance_occlusion_cov: float,
+    neighbor_iou_max: float,
+) -> tuple[list[_POOL], dict[int, list[int]], dict[int, list[int]]]:
+    """Legacy spread-mode pool (temporal distribution over whole track life)."""
     tracklets = _build_output_tracklets(records, velocity_samples=5)
     start_by_id = {t.track_id: t.start for t in tracklets}
 
@@ -304,8 +425,31 @@ def extract_handover_embeddings(
         if ri not in dirty:
             clean_by_id[r.track_id].append(r)
 
-    pool_idx: dict[tuple, int] = {}
-    pool: list[tuple[int, int, tuple[float, float, float, float]]] = []
+    def _rkey(r: Any) -> tuple[int, int, float, float, float, float]:
+        return (r.track_id, r.frame, r.x, r.y, r.w, r.h)
+
+    polluted: set[tuple[int, int, float, float, float, float]] = set()
+    if neighbor_iou_max > 0.0:
+        for idxs in by_frame_idx.values():
+            box_tuples = [
+                (
+                    records[i].x,
+                    records[i].y,
+                    records[i].x + records[i].w,
+                    records[i].y + records[i].h,
+                )
+                for i in idxs
+            ]
+            for a in range(len(idxs)):
+                for b in range(a + 1, len(idxs)):
+                    if records[idxs[a]].track_id == records[idxs[b]].track_id:
+                        continue
+                    if box_iou_tuple(box_tuples[a], box_tuples[b]) >= neighbor_iou_max:
+                        polluted.add(_rkey(records[idxs[a]]))
+                        polluted.add(_rkey(records[idxs[b]]))
+
+    pool_idx: dict[tuple[int, int, float, float, float, float], int] = {}
+    pool: list[_POOL] = []
 
     def add(rs: list[Any]) -> list[int]:
         out = []
@@ -322,10 +466,80 @@ def extract_handover_embeddings(
     for tid, items in clean_by_id.items():
         items.sort(key=lambda r: r.frame)
         birth = start_by_id[tid]
-        head_rows[tid] = add([r for r in items if r.frame < birth + decide_n])
-        scores = np.asarray([r.score for r in items], dtype=np.float32)
-        sel = temporal_sample_indices(len(items), n_samples, scores=scores)
-        bank_rows[tid] = add([items[j] for j in sel])
+        unpolluted = [r for r in items if _rkey(r) not in polluted]
+        head_rows[tid] = add([r for r in unpolluted if r.frame < birth + decide_n])
+        bank_pool = unpolluted if unpolluted else items
+        scores = np.asarray([r.score for r in bank_pool], dtype=np.float32)
+        sel = temporal_sample_indices(len(bank_pool), bank_budget, scores=scores)
+        bank_rows[tid] = add([bank_pool[j] for j in sel])
+
+    return pool, head_rows, bank_rows
+
+
+def extract_handover_embeddings(
+    results_lines: list[str],
+    seq_dir: str,
+    extractor: Any,
+    *,
+    decide_n: int = 5,
+    n_samples: int = 50,
+    crop_hw: tuple[int, int] | None = None,
+    im_ext: str = ".jpg",
+    batch: int = 256,
+    appearance_occlusion_cov: float = 0.4,
+    neighbor_iou_max: float = 0.0,
+    bank_mode: str = "spread",
+    bank_n: int = 0,
+) -> tuple[dict[int, Tensor], dict[int, Tensor]]:
+    """Head + bank embeddings for the causal handover, one extraction pass.
+
+    Mirrors the offline path's visclean contract (full-frame-context front
+    occlusion gate on every sample). ``head`` = all clean detections in the
+    track's first ``decide_n`` frames; ``bank`` = per ``bank_mode`` either
+    temporally-distributed samples over the whole life (``"spread"``) or the
+    most recent clean samples before death (``"recent"``, a visclean-gated
+    FIFO — probe 2026-07-04: recent-20 beats spread on both m/s substrates
+    with the highest accept-set fidelity). ``bank_n`` caps the bank budget
+    (0 = ``n_samples``). Both come from the same deduplicated crop pool,
+    extracted through the native C++/CUDA + TRT path (PIL fallback).
+
+    ``neighbor_iou_max`` > 0 additionally drops samples whose box overlaps any
+    other track's box in the same frame at or above that IoU (crowd-pollution
+    proxy; front-occlusion coverage alone misses behind-neighbor pixel bleed).
+    The head is filtered strictly — a newborn without enough unpolluted head
+    crops falls to the ``min_head_samples`` gate instead of handing over on
+    ambiguous evidence. A bank falls back to the unfiltered clean pool when
+    the filter would empty it, so archive candidates stay scoreable.
+    """
+    from PIL import Image
+
+    if crop_hw is None:
+        crop_hw = tuple(getattr(extractor, "input_hw", (224, 224)))
+
+    records = _parse_mot_lines(results_lines)
+
+    if bank_mode not in ("spread", "recent"):
+        raise ValueError(f"unknown bank_mode {bank_mode!r}")
+    bank_budget = bank_n if bank_n > 0 else n_samples
+
+    if bank_mode == "recent":
+        plan = plan_clean_fifo_crops(
+            records,
+            appearance_occlusion_cov=appearance_occlusion_cov,
+            fifo_n=bank_budget,
+            stride=1,
+            decide_n=decide_n,
+            neighbor_iou_max=neighbor_iou_max,
+        )
+        pool, head_rows, bank_rows = _build_pool_from_plan(plan)
+    else:
+        pool, head_rows, bank_rows = _build_pool_spread(
+            records,
+            decide_n=decide_n,
+            bank_budget=bank_budget,
+            appearance_occlusion_cov=appearance_occlusion_cov,
+            neighbor_iou_max=neighbor_iou_max,
+        )
 
     if not pool:
         return {}, {}

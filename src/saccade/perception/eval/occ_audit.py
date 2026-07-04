@@ -40,12 +40,15 @@ import torch
 from torch import Tensor
 
 from .cheb_gr_merge import _extract_native_crops_trt
+from .clean_fifo_bank import CleanFifoBank
 from .helpers import front_occlusion_mask_xyxy
 from .post_merge import _format_mot_records, _parse_mot_lines
 
 __all__ = [
     "extract_audit_embeddings",
+    "extract_audit_embeddings_post_exit",
     "occ_exit_audit_lines",
+    "occ_exit_audit_lines_from_bank",
     "plan_occ_audit_episodes",
 ]
 
@@ -200,7 +203,7 @@ def occ_exit_audit_lines(
     flag_consensus: int = 1,
     self_consistency_min: float = 0.0,
     occluder_margin: float = -1.0,
-    decision_log: list[dict[str, int | float | bool]] | None = None,
+    decision_log: list[dict[str, int | float | bool | str]] | None = None,
 ) -> tuple[list[str], dict[str, int]]:
     """Causally split tracks whose post-occlusion appearance contradicts their
     pre-occlusion reference.
@@ -363,6 +366,269 @@ def occ_exit_audit_lines(
     return _format_mot_records(records), vars(stats)
 
 
+def _bank_ref_vecs(
+    bank: CleanFifoBank,
+    track_id: int,
+    occ_start: int,
+    ref_n: int,
+    boundary: int,
+) -> Tensor | None:
+    """Last ``ref_n`` bank samples before ``occ_start`` and after ``boundary``."""
+    s = bank.samples(track_id)
+    if s is None:
+        return None
+    frames = bank.frames(track_id)
+    selected = [
+        (f, emb) for f, emb in zip(frames, s) if f < occ_start and f >= boundary
+    ]
+    if not selected:
+        return None
+    selected = selected[-ref_n:]
+    return torch.stack([emb for _, emb in selected])
+
+
+def occ_exit_audit_lines_from_bank(
+    results_lines: list[str],
+    bank: CleanFifoBank,
+    audit_embs: dict[tuple[int, int], Tensor],
+    *,
+    enabled: bool = False,
+    tau: float = 0.45,
+    min_ref: int = 2,
+    ref_n: int = 5,
+    audit_crops: int = 3,
+    audit_window: int = 30,
+    min_occ_frames: int = 2,
+    appearance_occlusion_cov: float = 0.4,
+    flag_consensus: int = 1,
+    self_consistency_min: float = 0.0,
+    occluder_margin: float = -1.0,
+    decision_log: list[dict[str, int | float | bool | str]] | None = None,
+) -> tuple[list[str], dict[str, int]]:
+    """Bank-reference variant of :func:`occ_exit_audit_lines`.
+
+    The pre-episode reference comes from ``bank.samples_before(tid, occ_start)``
+    (a ``CleanFifoBank`` built from the same substrate) instead of separately
+    extracted ref-frame embeddings. Post-exit audit embeddings still come from
+    ``audit_embs``. Occluder references also come from the bank.
+
+    This is the Phase 2a wiring for #55: the occ-exit audit's reference is
+    exactly what the FIFO bank holds (last N clean samples before the episode),
+    so the bank substrate eliminates redundant ref-frame extraction when the
+    bank is already built (e.g., for handover).
+    """
+    stats = _AuditStats()
+    if not enabled or not results_lines:
+        return results_lines, vars(stats)
+
+    records = _parse_mot_lines(results_lines)
+    track_ids = {r.track_id for r in records}
+    stats.ids_before = len(track_ids)
+    episodes = plan_occ_audit_episodes(
+        records,
+        appearance_occlusion_cov=appearance_occlusion_cov,
+        ref_n=ref_n,
+        audit_crops=audit_crops,
+        audit_window=audit_window,
+        min_occ_frames=min_occ_frames,
+    )
+    stats.episodes = len(episodes)
+
+    cuts: dict[int, list[int]] = defaultdict(list)
+    last_cut: dict[int, int] = {}
+
+    for ep in episodes:
+        boundary = last_cut.get(ep.track_id, -1)
+        ref_stack = _bank_ref_vecs(bank, ep.track_id, ep.occ_start, ref_n, boundary)
+        if ref_stack is None or ref_stack.shape[0] < min_ref:
+            stats.abstain_no_ref += 1
+            continue
+        audit = [
+            (f, audit_embs[(ep.track_id, f)])
+            for f in ep.audit_frames
+            if (ep.track_id, f) in audit_embs
+        ]
+        if not audit:
+            stats.abstain_no_crops += 1
+            continue
+        stats.audited += 1
+
+        ref = torch.nn.functional.normalize(ref_stack.mean(dim=0, keepdim=True), dim=1)[
+            0
+        ]
+        cosines = [(f, float(ref @ v)) for f, v in audit]
+
+        if len(audit) > 1:
+            stack = torch.stack([v for _, v in audit])
+            sim = stack @ stack.T
+            n_a = sim.shape[0]
+            self_consistency = float((sim.sum() - n_a) / max(1, n_a * (n_a - 1)))
+        else:
+            self_consistency = 1.0
+
+        occ_ref = None
+        max_contrast = float("nan")
+        if occluder_margin >= 0.0:
+            occ_stack = _bank_ref_vecs(bank, ep.occluder_id, ep.occ_start, ref_n, -1)
+            if occ_stack is None or occ_stack.shape[0] < min_ref:
+                stats.abstain_no_occref += 1
+                continue
+            occ_ref = torch.nn.functional.normalize(
+                occ_stack.mean(dim=0, keepdim=True), dim=1
+            )[0]
+            max_contrast = max(
+                float(occ_ref @ v) - c for (_, c), (_, v) in zip(cosines, audit)
+            )
+
+        flag_frame = None
+        below = 0
+        for (f, c), (_, v) in zip(cosines, audit):
+            if c >= tau:
+                continue
+            if occ_ref is not None and float(occ_ref @ v) - c < occluder_margin:
+                continue
+            below += 1
+            if below >= flag_consensus:
+                flag_frame = f
+                break
+        if flag_frame is not None and self_consistency < self_consistency_min:
+            flag_frame = None
+
+        if decision_log is not None:
+            decision_log.append(
+                {
+                    "track_id": int(ep.track_id),
+                    "occ_start": int(ep.occ_start),
+                    "occ_end": int(ep.occ_end),
+                    "ref_n_used": int(ref_stack.shape[0]),
+                    "ref_source": "bank",
+                    "audit_n": int(len(cosines)),
+                    "min_cos": float(min(c for _, c in cosines)),
+                    "median_cos": float(np.median([c for _, c in cosines])),
+                    "self_consistency": float(self_consistency),
+                    "cos_list": " ".join(f"{c:.3f}" for _, c in cosines),
+                    "occluder_id": int(ep.occluder_id),
+                    "max_contrast": float(max_contrast),
+                    "tau": float(tau),
+                    "flagged": bool(flag_frame is not None),
+                    "flag_frame": int(flag_frame if flag_frame is not None else -1),
+                }
+            )
+            stats.decisions_logged += 1
+
+        if flag_frame is None:
+            continue
+        stats.flags += 1
+        cuts[ep.track_id].append(flag_frame)
+        last_cut[ep.track_id] = flag_frame
+
+    if not cuts:
+        stats.ids_after = stats.ids_before
+        return results_lines, vars(stats)
+
+    next_id = max(track_ids) + 1
+    seg_id: dict[tuple[int, int], int] = {}
+    for tid, frames in cuts.items():
+        for f in sorted(frames):
+            seg_id[(tid, f)] = next_id
+            next_id += 1
+    for r in records:
+        past = [f for f in cuts.get(r.track_id, []) if f <= r.frame]
+        if past:
+            r.track_id = seg_id[(r.track_id, max(past))]
+    stats.ids_after = len({r.track_id for r in records})
+    return _format_mot_records(records), vars(stats)
+
+
+def extract_audit_embeddings_post_exit(
+    results_lines: list[str],
+    seq_dir: str,
+    extractor: Any,
+    *,
+    ref_n: int = 5,
+    audit_crops: int = 3,
+    audit_window: int = 30,
+    min_occ_frames: int = 2,
+    crop_hw: tuple[int, int] | None = None,
+    im_ext: str = ".jpg",
+    batch: int = 256,
+    appearance_occlusion_cov: float = 0.4,
+) -> dict[tuple[int, int], Tensor]:
+    """Extract only post-exit audit crops (ref frames come from the bank).
+
+    Same crop contract as :func:`extract_audit_embeddings` but skips ref frames
+    and occluder ref frames — those are sourced from a pre-built
+    ``CleanFifoBank``. Reduces extraction when the bank is already built.
+    """
+    from PIL import Image
+
+    if crop_hw is None:
+        crop_hw = tuple(getattr(extractor, "input_hw", (224, 224)))
+
+    records = _parse_mot_lines(results_lines)
+    episodes = plan_occ_audit_episodes(
+        records,
+        appearance_occlusion_cov=appearance_occlusion_cov,
+        ref_n=ref_n,
+        audit_crops=audit_crops,
+        audit_window=audit_window,
+        min_occ_frames=min_occ_frames,
+    )
+    needed: set[tuple[int, int]] = set()
+    for ep in episodes:
+        needed.update((ep.track_id, f) for f in ep.audit_frames)
+    if not needed:
+        return {}
+
+    box_by_key = {
+        (r.track_id, r.frame): (r.x, r.y, r.x + r.w, r.y + r.h)
+        for r in records
+        if (r.track_id, r.frame) in needed
+    }
+    keys = sorted(box_by_key)
+    pool = [(tid, fr, box_by_key[(tid, fr)]) for tid, fr in keys]
+    by_frame_s: dict[int, list[int]] = defaultdict(list)
+    for si, (_, fr, _) in enumerate(pool):
+        by_frame_s[fr].append(si)
+
+    feats = _extract_native_crops_trt(
+        pool,
+        by_frame_s,
+        seq_dir,
+        extractor,
+        crop_hw=crop_hw,
+        im_ext=im_ext,
+        batch=batch,
+    )
+    if feats is None:
+        out_h, out_w = crop_hw
+        arrs: list[np.ndarray | None] = [None] * len(pool)
+        for fr, si_list in by_frame_s.items():
+            img = Image.open(f"{seq_dir}/{fr:06d}{im_ext}").convert("RGB")
+            fw, fh = img.size
+            for si in si_list:
+                x1, y1, x2, y2 = pool[si][2]
+                box = (
+                    max(0, int(round(x1))),
+                    max(0, int(round(y1))),
+                    min(fw, int(round(x2))),
+                    min(fh, int(round(y2))),
+                )
+                if box[2] <= box[0] or box[3] <= box[1]:
+                    box = (0, 0, fw, fh)
+                crop = img.crop(box).resize((out_w, out_h), Image.BILINEAR)  # type: ignore[attr-defined]
+                arrs[si] = np.asarray(crop, dtype=np.uint8).transpose(2, 0, 1)
+        device = getattr(extractor, "device", "cuda")
+        feats = torch.empty((len(pool), extractor.feature_dim), device=device)
+        for s in range(0, len(pool), max(1, batch)):
+            chunk = [a for a in arrs[s : s + batch] if a is not None]
+            t = torch.from_numpy(np.stack(chunk)).to(device).float().div_(255.0)
+            feats[s : s + t.shape[0]] = extractor.extract(t)
+
+    feats = torch.nn.functional.normalize(feats.float(), dim=1)
+    return {key: feats[i] for i, key in enumerate(keys)}
+
+
 def extract_audit_embeddings(
     results_lines: list[str],
     seq_dir: str,
@@ -381,7 +647,7 @@ def extract_audit_embeddings(
     from PIL import Image
 
     if crop_hw is None:
-        crop_hw = tuple(getattr(extractor, "input_hw", (224, 224)))  # type: ignore[arg-type]
+        crop_hw = tuple(getattr(extractor, "input_hw", (224, 224)))
 
     records = _parse_mot_lines(results_lines)
     episodes = plan_occ_audit_episodes(

@@ -761,50 +761,59 @@ def add_lifecycle_args(parser: argparse.ArgumentParser) -> None:
         "(e.g. mobilenetv4_reid).",
     )
     grp.add_argument(
+        "--cheb-gr-offline-handover",
         "--cheb-gr-online",
         action=argparse.BooleanOptionalAction,
+        dest="cheb_gr_online",
         default=False,
-        help="Causal online Cheb-GR ID handover: one-shot identity decision "
-        "decide-n frames after birth against an archive of recently-dead "
-        "tracks (event-local causal gallery, no retroactive rewrite). "
-        "Real-time analogue of --cheb-gr-merge-enabled; replaces it when both "
-        "are set. Shares the --cheb-gr-* knobs and extractor.",
+        help="Offline/output-layer Cheb-GR ID handover: after tracker output "
+        "is complete, extract newborn heads and dead-track banks, then relabel "
+        "eligible tracklets without feeding decisions back into the tracker. "
+        "--cheb-gr-online is a deprecated alias.",
     )
     grp.add_argument(
+        "--cheb-gr-offline-decide-n",
         "--cheb-gr-online-decide-n",
+        dest="cheb_gr_online_decide_n",
         type=int,
         default=5,
         help=_help(
-            "Frames after birth at which the one-shot handover decision fires "
-            "(the tracker's unemitted confirmation window).",
+            "Frames after birth used as the newborn head window before an "
+            "offline handover decision.",
             range_hint=">=1",
             edge="probe 2026-07-03: 5 already matches full offline evidence",
         ),
     )
     grp.add_argument(
+        "--cheb-gr-offline-max-cost",
         "--cheb-gr-online-max-cost",
+        dest="cheb_gr_online_max_cost",
         type=float,
         default=0.45,
         help=_help(
-            "Max Cheb-GR distance accepted for an online handover (own knob: "
+            "Max Cheb-GR distance accepted for an offline handover (own knob: "
             "the offline merge config default 0.55 is too loose here).",
             range_hint="0-1",
             edge="0.45 = offline parity 80.3; 0.40 = all per-seq drawdowns <=0.2",
         ),
     )
     grp.add_argument(
+        "--cheb-gr-offline-min-head",
         "--cheb-gr-online-min-head",
+        dest="cheb_gr_online_min_head",
         type=int,
         default=1,
         help=_help(
             "Minimum clean newborn head samples required before accepting an "
-            "online handover.",
+            "offline handover.",
             range_hint=">=1",
             edge="raise to 2+ to avoid decisions from a single clean crop",
         ),
     )
     grp.add_argument(
+        "--cheb-gr-offline-margin",
         "--cheb-gr-online-margin",
+        dest="cheb_gr_online_margin",
         type=float,
         default=0.0,
         help=_help(
@@ -815,17 +824,82 @@ def add_lifecycle_args(parser: argparse.ArgumentParser) -> None:
         ),
     )
     grp.add_argument(
+        "--cheb-gr-offline-center-dist-veto",
+        dest="cheb_gr_online_center_dist_veto",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Reject an offline handover whose forward-projected candidate "
+            "center is >= this many avg box heights from the newborn center "
+            "(0 = off).",
+            range_hint=">=0",
+            edge="applicability map 2026-07-04: >=2 is a stable veto (m/s)",
+        ),
+    )
+    grp.add_argument(
+        "--cheb-gr-offline-pollution-veto",
+        dest="cheb_gr_online_pollution_veto",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Reject an offline handover whose newborn-head / candidate-tail "
+            "crops overlap another track at or above this IoU (0 = off).",
+            range_hint="0-1",
+            edge="applicability map 2026-07-04: >=0.5 = stable-high-pollution",
+        ),
+    )
+    grp.add_argument(
+        "--cheb-gr-offline-neighbor-iou-max",
+        dest="cheb_gr_online_neighbor_iou_max",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Drop head/bank crop samples whose box overlaps another track at "
+            "or above this IoU before embedding extraction (0 = off). Head is "
+            "filtered strictly; a bank falls back to unfiltered clean crops.",
+            range_hint="0-1",
+            edge="crowd-pollution proxy; complements the front-occlusion gate",
+        ),
+    )
+    grp.add_argument(
+        "--cheb-gr-offline-bank-mode",
+        dest="cheb_gr_online_bank_mode",
+        choices=("spread", "recent"),
+        default="spread",
+        help=_help(
+            "Dead-track bank construction for the offline handover: 'spread' "
+            "= temporally-distributed samples over the whole life; 'recent' = "
+            "most recent clean samples before death (visclean-gated FIFO).",
+            edge="probe 2026-07-04: recent-20 +0.07/+0.05 vs dense on m/s, "
+            "highest accept-set fidelity; pair with --cheb-gr-offline-bank-n 20",
+        ),
+    )
+    grp.add_argument(
+        "--cheb-gr-offline-bank-n",
+        dest="cheb_gr_online_bank_n",
+        type=int,
+        default=0,
+        help=_help(
+            "Bank sample budget for the offline handover (0 = use "
+            "--cheb-gr-merge-n-samples).",
+            range_hint=">=0",
+            edge="recent mode: 20 is the validated safe point; 10 and below degrade",
+        ),
+    )
+    grp.add_argument(
+        "--cheb-gr-offline-log",
         "--cheb-gr-online-log",
         action=argparse.BooleanOptionalAction,
+        dest="cheb_gr_online_log",
         default=False,
-        help="Write _cheb_gr_online_handover.csv with accept/reject decision rows.",
+        help="Write _cheb_gr_offline_handover.csv with accept/reject decision rows.",
     )
     grp.add_argument(
         "--occ-audit",
         action=argparse.BooleanOptionalAction,
         default=False,
         help="Causal occ-exit identity audit (ABSORB-side twin of "
-        "--cheb-gr-online): after a geometric occlusion episode ends, compare "
+        "--cheb-gr-offline-handover): after a geometric occlusion episode ends, compare "
         "the track's first clean crops against its pre-occlusion reference and "
         "split off a fresh id from the first crop that contradicts it. Shares "
         "the --cheb-gr-engine/--cheb-gr-model extractor.",
