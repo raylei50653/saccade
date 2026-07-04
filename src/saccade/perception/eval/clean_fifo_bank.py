@@ -35,7 +35,7 @@ Consumers:
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import torch
@@ -47,6 +47,7 @@ from .post_merge import _build_output_tracklets, _parse_mot_lines
 from .utils import box_iou_tuple
 
 __all__ = [
+    "AppearanceQueryResult",
     "CleanFifoBank",
     "CleanFifoPlan",
     "build_filled_bank",
@@ -61,6 +62,30 @@ _CROP = tuple[int, _BOX]  # (frame_id, (x1, y1, x2, y2))
 class _FifoEntry:
     frame_id: int
     embedding: Tensor
+    quality: float = 1.0
+    source_type: str = "clean"
+
+
+@dataclass(frozen=True)
+class AppearanceQueryResult:
+    """Direct key-bank query result for confirm/veto decisions.
+
+    This is intentionally graph-external: it compares a candidate crop against
+    stored raw key embeddings and reports best/top-k cosine plus the local
+    hard-negative margin. Cheb-GR consumers should keep using ``samples()``.
+    """
+
+    track_id: int
+    best_sim: float
+    mean_topk_sim: float
+    support_count: int
+    best_frame_id: int
+    best_quality: float
+    best_source_type: str
+    best_other_track_id: int | None
+    best_other_sim: float
+    other_support_count: int
+    margin: float
 
 
 @dataclass
@@ -74,11 +99,15 @@ class CleanFifoPlan:
     ``bank``: a ``CleanFifoBank`` with clean-frame counters already filled
     by the planner's dry run; call ``bank.store()`` for each extracted
     embedding to complete the FIFO.
+    ``job_crops``: every crop the scheduler would extract over the track's
+    life (before FIFO eviction) — the per-track ReID job count. ``bank_crops``
+    is its ``fifo_n`` tail.
     """
 
     head_crops: dict[int, list[_CROP]]
     bank_crops: dict[int, list[_CROP]]
     bank: CleanFifoBank
+    job_crops: dict[int, list[_CROP]] = field(default_factory=dict)
 
 
 class CleanFifoBank:
@@ -110,16 +139,23 @@ class CleanFifoBank:
         *,
         is_clean: bool,
         frame_offset_from_birth: int = 0,
+        force: bool = False,
     ) -> bool:
         """Decide whether to extract this frame's embedding.
 
         Increments the per-track clean-frame counter as a side effect
         (needed for stride scheduling). Call once per frame in frame order.
+
+        ``force`` is the event-override hook (pre-occlusion snapshot,
+        ambiguity trigger): it bypasses the stride phase but never the
+        clean gate — a dirty crop stays unextractable.
         """
         if not is_clean:
             return False
         seen = self._clean_seen.get(track_id, 0)
         self._clean_seen[track_id] = seen + 1
+        if force:
+            return True
         in_birth = frame_offset_from_birth < self.decide_n
         if in_birth:
             return True
@@ -132,11 +168,14 @@ class CleanFifoBank:
         track_id: int,
         embedding: Tensor,
         frame_id: int,
+        *,
+        quality: float = 1.0,
+        source_type: str = "clean",
     ) -> None:
         """Store a raw embedding (already extracted). FIFO eviction by age."""
         emb = F.normalize(embedding.detach().float(), dim=0)
         samples = self._samples.setdefault(track_id, [])
-        samples.append(_FifoEntry(frame_id, emb))
+        samples.append(_FifoEntry(frame_id, emb, float(quality), source_type))
         excess = len(samples) - self.fifo_n
         if excess > 0:
             del samples[:excess]
@@ -149,14 +188,24 @@ class CleanFifoBank:
         *,
         is_clean: bool,
         frame_offset_from_birth: int = 0,
+        force: bool = False,
+        quality: float = 1.0,
+        source_type: str = "clean",
     ) -> bool:
         """Online entry point: schedule + store. Returns True if stored."""
         if self.should_extract(
             track_id,
             is_clean=is_clean,
             frame_offset_from_birth=frame_offset_from_birth,
+            force=force,
         ):
-            self.store(track_id, embedding, frame_id)
+            self.store(
+                track_id,
+                embedding,
+                frame_id,
+                quality=quality,
+                source_type=source_type,
+            )
             return True
         return False
 
@@ -178,6 +227,138 @@ class CleanFifoBank:
     def frames(self, track_id: int) -> list[int]:
         """Frame IDs of stored samples (for audit/debug)."""
         return [e.frame_id for e in self._samples.get(track_id, [])]
+
+    def metadata(self, track_id: int) -> list[dict[str, int | float | str]]:
+        """Per-sample metadata aligned with ``samples(track_id)`` rows."""
+        return [
+            {
+                "frame_id": e.frame_id,
+                "quality": e.quality,
+                "source_type": e.source_type,
+            }
+            for e in self._samples.get(track_id, [])
+        ]
+
+    def _filtered_entries(
+        self,
+        track_id: int,
+        *,
+        min_quality: float = 0.0,
+        source_types: set[str] | None = None,
+    ) -> list[_FifoEntry]:
+        entries = self._samples.get(track_id, [])
+        return [
+            e
+            for e in entries
+            if e.quality >= min_quality
+            and (source_types is None or e.source_type in source_types)
+        ]
+
+    def query(
+        self,
+        track_id: int,
+        embedding: Tensor,
+        *,
+        other_track_ids: set[int] | list[int] | None = None,
+        topk: int = 3,
+        min_quality: float = 0.0,
+        source_types: set[str] | list[str] | None = None,
+    ) -> AppearanceQueryResult | None:
+        """Query one ID's key bank and optional nearby hard negatives.
+
+        ``best_sim`` and ``mean_topk_sim`` are cosine similarities against this
+        track's stored key embeddings. ``margin`` is ``best_sim`` minus the best
+        similarity to any requested ``other_track_ids``. If no hard negatives
+        are supplied, ``margin`` is ``+inf``.
+        """
+        topk = max(1, int(topk))
+        allowed_sources = set(source_types) if source_types is not None else None
+        entries = self._filtered_entries(
+            track_id,
+            min_quality=min_quality,
+            source_types=allowed_sources,
+        )
+        if not entries:
+            return None
+
+        q = F.normalize(embedding.detach().float(), dim=0)
+        stack = torch.stack([e.embedding for e in entries])
+        sims = stack @ q
+        best_idx = int(torch.argmax(sims).item())
+        k = min(topk, sims.numel())
+        mean_topk = float(torch.topk(sims, k=k, largest=True).values.mean().item())
+        best_sim = float(sims[best_idx].item())
+        best = entries[best_idx]
+
+        best_other_tid: int | None = None
+        best_other_sim = float("-inf")
+        other_support = 0
+        for other_id in other_track_ids or []:
+            if other_id == track_id:
+                continue
+            other_entries = self._filtered_entries(
+                int(other_id),
+                min_quality=min_quality,
+                source_types=allowed_sources,
+            )
+            if not other_entries:
+                continue
+            other_support += len(other_entries)
+            other_sims = torch.stack([e.embedding for e in other_entries]) @ q
+            other_best = float(other_sims.max().item())
+            if other_best > best_other_sim:
+                best_other_sim = other_best
+                best_other_tid = int(other_id)
+
+        margin = (
+            best_sim - best_other_sim if best_other_tid is not None else float("inf")
+        )
+        return AppearanceQueryResult(
+            track_id=track_id,
+            best_sim=best_sim,
+            mean_topk_sim=mean_topk,
+            support_count=len(entries),
+            best_frame_id=best.frame_id,
+            best_quality=best.quality,
+            best_source_type=best.source_type,
+            best_other_track_id=best_other_tid,
+            best_other_sim=best_other_sim,
+            other_support_count=other_support,
+            margin=margin,
+        )
+
+    def query_all(
+        self,
+        embedding: Tensor,
+        *,
+        candidate_track_ids: set[int] | list[int] | None = None,
+        topk: int = 3,
+        min_quality: float = 0.0,
+        source_types: set[str] | list[str] | None = None,
+    ) -> list[AppearanceQueryResult]:
+        """Query every candidate ID, sorted by descending ``best_sim``."""
+        ids = (
+            list(candidate_track_ids)
+            if candidate_track_ids is not None
+            else list(self.clean_ids())
+        )
+        results: list[AppearanceQueryResult] = []
+        for tid in ids:
+            others = [other for other in ids if other != tid]
+            r = self.query(
+                int(tid),
+                embedding,
+                other_track_ids=others,
+                topk=topk,
+                min_quality=min_quality,
+                source_types=source_types,
+            )
+            if r is not None:
+                results.append(r)
+        results.sort(
+            key=lambda r: (r.best_sim, r.margin, r.support_count), reverse=True
+        )
+        return results
 
     def representative(self, track_id: int) -> Tensor | None:
         """Mean of FIFO samples — **GRAPH-EXTERNAL cosine only**.
@@ -299,6 +480,62 @@ def _compute_polluted_set(
     return polluted
 
 
+def _compute_forced_keys(
+    records: list[Any],
+    dirty: set[int],
+    *,
+    preocc_snapshot: bool,
+    ambiguity_iou: float,
+    preocc_window: int = 1,
+    postocc_snapshot: bool = False,
+) -> set[tuple[int, int, float, float, float, float]]:
+    """Event-override record keys that must be extracted regardless of stride.
+
+    - **pre-occlusion / death snapshot**: the last ``preocc_window`` clean
+      records before a dirty run, a track-frame gap, or track death — the
+      appearance closest to the moment the identity becomes claimable. Causal
+      online: keep a ring buffer of the last W clean crops per track; submit
+      them when the next frame turns dirty/lost or the track dies.
+    - **post-occlusion snapshot**: the first clean record after a dirty run or
+      frame gap — re-anchors the bank on the fresh appearance (extraction is
+      immediate and causal online).
+    - **ambiguity trigger**: clean records whose box overlaps another track at
+      >= ``ambiguity_iou`` — the geometric proxy for a tight top1/top2 assoc.
+    """
+    forced: set[tuple[int, int, float, float, float, float]] = set()
+    if preocc_snapshot or postocc_snapshot:
+        by_track: dict[int, list[int]] = defaultdict(list)
+        for ri, r in enumerate(records):
+            by_track[r.track_id].append(ri)
+        window = max(1, preocc_window)
+        for idxs in by_track.values():
+            idxs.sort(key=lambda i: records[i].frame)
+            clean_upto: list[int] = []  # clean record indices seen so far
+            for j, ri in enumerate(idxs):
+                if ri in dirty:
+                    continue
+                r = records[ri]
+                if postocc_snapshot and j > 0:
+                    prev = idxs[j - 1]
+                    if prev in dirty or r.frame > records[prev].frame + 1:
+                        forced.add((r.track_id, r.frame, r.x, r.y, r.w, r.h))
+                clean_upto.append(ri)
+                if not preocc_snapshot:
+                    continue
+                is_last = j + 1 == len(idxs)
+                if (
+                    is_last
+                    or idxs[j + 1] in dirty
+                    or records[idxs[j + 1]].frame > r.frame + 1
+                ):
+                    for ci in clean_upto[-window:]:
+                        c = records[ci]
+                        forced.add((c.track_id, c.frame, c.x, c.y, c.w, c.h))
+    if ambiguity_iou > 0.0:
+        forced |= _compute_polluted_set(records, ambiguity_iou)
+    return forced
+
+
 def plan_clean_fifo_crops(
     records: list[Any],
     *,
@@ -307,6 +544,10 @@ def plan_clean_fifo_crops(
     stride: int = 1,
     decide_n: int = 5,
     neighbor_iou_max: float = 0.0,
+    preocc_snapshot: bool = False,
+    ambiguity_iou: float = 0.0,
+    preocc_window: int = 1,
+    postocc_snapshot: bool = False,
 ) -> CleanFifoPlan:
     """Plan head + bank crops from substrate records (post-hoc, pre-extraction).
 
@@ -319,6 +560,11 @@ def plan_clean_fifo_crops(
       Falls back to the unfiltered clean pool when the pollution filter
       would empty it, so archive candidates stay scoreable.
 
+    ``preocc_snapshot`` / ``ambiguity_iou`` are event overrides: they force
+    extraction of stride-skipped clean records (see ``_compute_forced_keys``)
+    so a strict stride budget keeps the death-adjacent and crossing-adjacent
+    evidence a handover decision actually queries.
+
     The returned ``CleanFifoBank`` has its clean-frame counters filled by
     the planner's dry run — call ``bank.store()`` for each extracted
     embedding (in the same frame order the planner saw) to complete the FIFO.
@@ -330,6 +576,14 @@ def plan_clean_fifo_crops(
             clean_by_id[r.track_id].append(r)
 
     polluted = _compute_polluted_set(records, neighbor_iou_max)
+    forced = _compute_forced_keys(
+        records,
+        dirty,
+        preocc_snapshot=preocc_snapshot,
+        ambiguity_iou=ambiguity_iou,
+        preocc_window=preocc_window,
+        postocc_snapshot=postocc_snapshot,
+    )
 
     def _rkey(r: Any) -> tuple[int, int, float, float, float, float]:
         return (r.track_id, r.frame, r.x, r.y, r.w, r.h)
@@ -340,6 +594,7 @@ def plan_clean_fifo_crops(
     bank = CleanFifoBank(fifo_n=fifo_n, stride=stride, decide_n=decide_n)
     head_crops: dict[int, list[_CROP]] = {}
     bank_crops: dict[int, list[_CROP]] = {}
+    job_crops: dict[int, list[_CROP]] = {}
 
     for tid, items in clean_by_id.items():
         items.sort(key=lambda r: r.frame)
@@ -356,11 +611,22 @@ def plan_clean_fifo_crops(
         accepted: list[_CROP] = []
         for r in bank_pool:
             offset = r.frame - birth
-            if bank.should_extract(tid, is_clean=True, frame_offset_from_birth=offset):
+            if bank.should_extract(
+                tid,
+                is_clean=True,
+                frame_offset_from_birth=offset,
+                force=_rkey(r) in forced,
+            ):
                 accepted.append((r.frame, (r.x, r.y, r.x + r.w, r.y + r.h)))
+        job_crops[tid] = accepted
         bank_crops[tid] = accepted[-bank.fifo_n :]
 
-    return CleanFifoPlan(head_crops=head_crops, bank_crops=bank_crops, bank=bank)
+    return CleanFifoPlan(
+        head_crops=head_crops,
+        bank_crops=bank_crops,
+        bank=bank,
+        job_crops=job_crops,
+    )
 
 
 def build_filled_bank(

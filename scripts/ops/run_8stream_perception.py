@@ -17,6 +17,7 @@ from saccade.media.rtsp import (
 )
 from saccade.perception.detector_trt import TRTYoloDetector
 from saccade.perception.dispatcher import AsyncDispatcher
+from saccade.perception.online_telemetry import OnlineTelemetry
 from saccade.resource.resource_manager import ResourceManager
 
 
@@ -107,6 +108,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--stats-interval-sec", type=float, default=5.0)
     parser.add_argument(
+        "--online-telemetry",
+        action="store_true",
+        help="Print rolling CPU/GPU utilization and stage latency telemetry.",
+    )
+    parser.add_argument(
         "--workbench",
         action="store_true",
         default=False,
@@ -177,6 +183,11 @@ async def _on_result_legacy(
 async def run_multistream_perception(args: argparse.Namespace) -> None:
     n = args.streams
     print("🚀 Initializing multi-stream Perception Pipeline...")
+    telemetry = (
+        OnlineTelemetry(sample_interval_sec=1.0) if args.online_telemetry else None
+    )
+    if telemetry is not None:
+        telemetry.start()
 
     if args.workbench:
         # WorkbenchPool: per-thread Workbenches sharing one BatchingTRTDetector
@@ -187,6 +198,7 @@ async def run_multistream_perception(args: argparse.Namespace) -> None:
             on_result=_on_result_workbench,
             input_hw=(args.input_size, args.input_size),
             frame_size=(args.frame_width, args.frame_height),
+            telemetry=telemetry,
         )
         await pool.start()
 
@@ -212,6 +224,17 @@ async def run_multistream_perception(args: argparse.Namespace) -> None:
                     f"e2e_p99={stats['e2e_ms_p99']:.1f}ms "
                     f"queue_wait_p95={stats['queue_wait_ms_p95']:.1f}ms"
                 )
+                if telemetry is not None:
+                    print(
+                        "🔬 Online Telemetry: "
+                        f"cpu_mean={stats.get('cpu_util_mean', 0.0):.1f}% "
+                        f"gpu_mean={stats.get('gpu_util_mean', 0.0):.1f}% "
+                        f"gpu_p95={stats.get('gpu_util_p95', 0.0):.1f}% "
+                        f"gpu_mem={stats.get('gpu_mem_used_mb_mean', 0.0):.0f}MB "
+                        f"pre_p95={stats.get('workbench_preprocess_ms_p95', 0.0):.1f}ms "
+                        f"wb_p95={stats.get('workbench_process_ms_p95', 0.0):.1f}ms "
+                        f"worker_p95={stats.get('workbench_worker_ms_p95', 0.0):.1f}ms"
+                    )
         except asyncio.CancelledError:
             print("🛑 Shutting down WorkbenchPool...")
         finally:
@@ -219,6 +242,8 @@ async def run_multistream_perception(args: argparse.Namespace) -> None:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
             pool.stop()
+            if telemetry is not None:
+                telemetry.stop()
     else:
         # AsyncDispatcher: legacy single-async-loop batching
         print(f"  Using AsyncDispatcher ({n} streams, async batching)")
@@ -232,6 +257,7 @@ async def run_multistream_perception(args: argparse.Namespace) -> None:
             batch_timeout_ms=args.batch_timeout_ms,
             max_streams=max(n, args.max_batch),
             on_track_result=_on_result_legacy,
+            telemetry=telemetry,
         )
         await dispatcher.start()
 
@@ -252,11 +278,23 @@ async def run_multistream_perception(args: argparse.Namespace) -> None:
                     f"queue={stats['queue_depth']} "
                     f"batch_mean={stats['mean_batch_size']:.2f} "
                     f"batch_p95={stats['batch_size_p95']:.2f} "
+                    f"batch_build_p95={stats['batch_build_ms_p95']:.2f}ms "
                     f"queue_wait_p95={stats['queue_wait_ms_p95']:.2f}ms "
                     f"infer_p95={stats['infer_ms_p95']:.2f}ms "
                     f"e2e_p95={stats['end_to_end_ms_p95']:.2f}ms "
                     f"e2e_p99={stats['end_to_end_ms_p99']:.2f}ms"
                 )
+                if telemetry is not None:
+                    print(
+                        "🔬 Online Telemetry: "
+                        f"cpu_mean={stats.get('cpu_util_mean', 0.0):.1f}% "
+                        f"gpu_mean={stats.get('gpu_util_mean', 0.0):.1f}% "
+                        f"gpu_p95={stats.get('gpu_util_p95', 0.0):.1f}% "
+                        f"gpu_mem={stats.get('gpu_mem_used_mb_mean', 0.0):.0f}MB "
+                        f"build_p95={stats.get('dispatcher_batch_build_ms_p95', 0.0):.1f}ms "
+                        f"infer_p95={stats.get('dispatcher_infer_ms_p95', 0.0):.1f}ms "
+                        f"track_p95={stats.get('dispatcher_track_ms_p95', 0.0):.1f}ms"
+                    )
         except asyncio.CancelledError:
             print("🛑 Shutting down AsyncDispatcher...")
         finally:
@@ -265,6 +303,8 @@ async def run_multistream_perception(args: argparse.Namespace) -> None:
             await asyncio.gather(*tasks, return_exceptions=True)
             await dispatcher.stop()
             resource_manager.close()
+            if telemetry is not None:
+                telemetry.stop()
 
 
 if __name__ == "__main__":

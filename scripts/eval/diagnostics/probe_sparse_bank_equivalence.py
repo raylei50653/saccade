@@ -22,6 +22,18 @@ Bank strategies (head evidence is never compressed):
              deduplicated bank content is exactly these rows)
   stridefifo-K-N  every K-th clean sample, keep the last N (sparse extraction
              + bounded FIFO retention: the cheapest online form)
+  schedfifo-K-N  production CleanFifoBank scheduler (dense birth window into
+             the FIFO + stride-K after), no event overrides — isolates
+             scheduler semantics from stridefifo's post-hoc slicing
+  evfifo-K-N[-ambP][-wW][-po]  schedfifo + event overrides: pre-occlusion /
+             death snapshot always on (``-wW``: last W clean crops instead
+             of 1); ``-ambP`` adds the ambiguity trigger at neighbor IoU >=
+             P/100; ``-po`` adds the post-occlusion snapshot.
+
+``--requery-band B`` additionally re-scores borderline decisions (|cost-gate|
+or margin within B) with a dense fallback bank (``--requery-source``:
+whole-life ref or online-feasible recent tail; ``--requery-top K`` densifies
+only the top-K candidates) — the decision-side stabilizer for sparse banks.
   dupfill-N  spread-N unique rows, each duplicated to fill n_samples rows
              (models naively feeding the copied per-frame embeddings into the
              graph without dedup)
@@ -68,6 +80,7 @@ from saccade.perception.eval.cheb_gr_merge import (  # noqa: E402
     temporal_sample_indices,
 )
 from saccade.perception.eval.cheb_gr_online import causal_handover_lines  # noqa: E402
+from saccade.perception.eval.clean_fifo_bank import plan_clean_fifo_crops  # noqa: E402
 from saccade.perception.eval.helpers import front_occlusion_mask_xyxy  # noqa: E402
 from saccade.perception.eval.post_merge import (  # noqa: E402
     _build_output_tracklets,
@@ -78,6 +91,39 @@ from saccade.perception.feature_extractor import TRTFeatureExtractor  # noqa: E4
 
 SEQS = [f"MOT17-{n}-SDP" for n in ("02", "04", "05", "09", "10", "11", "13")]
 SIGNALS = ("score", "box_h", "neighbor_iou", "time_frac")
+
+_CROP = tuple[int, tuple[float, float, float, float]]
+
+
+def parse_plan_strategy(strat: str) -> dict[str, Any] | None:
+    """schedfifo-K-N / evfifo-K-N[-ambP][-wW][-po] -> planner kwargs.
+
+    ``ambP``: ambiguity trigger at neighbor IoU >= P/100. ``wW``: pre-occlusion
+    window of W clean crops (default 1). ``po``: post-occlusion snapshot.
+    """
+    parts = strat.split("-")
+    if parts[0] not in ("schedfifo", "evfifo"):
+        return None
+    spec = {
+        "stride": int(parts[1]),
+        "fifo_n": int(parts[2]),
+        "preocc_snapshot": parts[0] == "evfifo",
+        "ambiguity_iou": 0.0,
+        "preocc_window": 1,
+        "postocc_snapshot": False,
+    }
+    for token in parts[3:]:
+        if parts[0] != "evfifo":
+            raise SystemExit(f"unknown strategy {strat!r}")
+        if token.startswith("amb"):
+            spec["ambiguity_iou"] = int(token[3:]) / 100.0
+        elif token == "po":
+            spec["postocc_snapshot"] = True
+        elif token.startswith("w"):
+            spec["preocc_window"] = int(token[1:])
+        else:
+            raise SystemExit(f"unknown strategy {strat!r}")
+    return spec
 
 
 def extract_bank_with_meta(
@@ -91,18 +137,26 @@ def extract_bank_with_meta(
     batch: int = 256,
     tail_n: int = 20,
     strides: tuple[int, ...] = (),
+    plan_bank_crops: dict[str, dict[int, list[_CROP]]] | None = None,
+    job_strategies: tuple[str, ...] = (),
 ) -> tuple[
     dict[int, torch.Tensor],
     dict[int, torch.Tensor],
     dict[int, list[dict]],
     dict[int, torch.Tensor],
     dict[int, dict[int, torch.Tensor]],
+    dict[str, dict[int, torch.Tensor]],
+    dict[str, int],
 ]:
     """extract_handover_embeddings + per-bank-row metadata (same contract).
 
     Additionally returns ``tails`` (last ``tail_n`` clean rows per track, for
-    recent-N FIFO banks) and ``stride_banks[K]`` (every K-th clean row, for
-    sparse-extraction-schedule banks). All share one deduplicated crop pool.
+    recent-N FIFO banks), ``stride_banks[K]`` (every K-th clean row, for
+    sparse-extraction-schedule banks), ``plan_banks[strategy]`` (embeddings
+    for externally planned bank crops, e.g. CleanFifoPlan schedules) and
+    ``jobs[strategy]`` (unique head+bank extraction count = online ReID job
+    count; ``__all__`` = every detection, ``__clean__`` = every clean crop).
+    All share one deduplicated crop pool.
     """
     crop_hw = tuple(getattr(extractor, "input_hw", (224, 224)))
     records = _parse_mot_lines(lines)
@@ -151,7 +205,9 @@ def extract_bank_with_meta(
     def add(rs: list[Any]) -> list[int]:
         out = []
         for r in rs:
-            key = (r.track_id, r.frame, r.x, r.y, r.w, r.h)
+            # Corner-format key so externally planned crops (already corner
+            # boxes computed from the same records) dedup against these rows.
+            key = (r.track_id, r.frame, r.x, r.y, r.x + r.w, r.y + r.h)
             if key not in pool_idx:
                 pool_idx[key] = len(pool)
                 pool.append((r.track_id, r.frame, (r.x, r.y, r.x + r.w, r.y + r.h)))
@@ -187,8 +243,40 @@ def extract_bank_with_meta(
             for j in sel
         ]
 
+    plan_rows: dict[str, dict[int, list[int]]] = {}
+    for strat, crops_by_tid in (plan_bank_crops or {}).items():
+        rows_by_tid: dict[int, list[int]] = {}
+        for tid, crops in crops_by_tid.items():
+            row_idxs: list[int] = []
+            for frame, (x1, y1, x2, y2) in crops:
+                key = (tid, frame, x1, y1, x2, y2)
+                if key not in pool_idx:
+                    pool_idx[key] = len(pool)
+                    pool.append((tid, frame, (x1, y1, x2, y2)))
+                row_idxs.append(pool_idx[key])
+            if row_idxs:
+                rows_by_tid[tid] = row_idxs
+        plan_rows[strat] = rows_by_tid
+
+    n_clean = sum(len(v) for v in clean_by_id.values())
+    jobs: dict[str, int] = {"__all__": len(records), "__clean__": n_clean}
+    head_all: set[int] = set()
+    for rows in head_rows.values():
+        head_all.update(rows)
+    for strat in job_strategies:
+        if strat.startswith(("stride-", "stridefifo-")):
+            k = int(strat.split("-")[1])
+            sel = set(head_all)
+            for rows in stride_rows[k].values():
+                sel.update(rows)
+            jobs[strat] = len(sel)
+        elif strat not in plan_rows:
+            # Dense post-hoc strategies (ref/spread/recent/mean/...) select
+            # from the full clean pool -> online cost = every clean crop.
+            jobs[strat] = n_clean
+
     if not pool:
-        return {}, {}, {}, {}, {}
+        return {}, {}, {}, {}, {}, {}, jobs
 
     by_frame_s: dict[int, list[int]] = defaultdict(list)
     for si, (_, fr, _) in enumerate(pool):
@@ -218,6 +306,8 @@ def extract_bank_with_meta(
         bank_meta,
         gather(tail_rows),
         {k: gather(rows) for k, rows in stride_rows.items()},
+        {strat: gather(rows) for strat, rows in plan_rows.items()},
+        jobs,
     )
 
 
@@ -305,6 +395,28 @@ def main() -> None:
     ap.add_argument("--cov", type=float, default=0.4)
     ap.add_argument("--tail-n", type=int, default=20)
     ap.add_argument(
+        "--requery-band",
+        type=float,
+        default=0.0,
+        help="Borderline half-width around max_cost/margin that triggers a "
+        "dense-bank re-query for non-ref strategies (0 = off).",
+    )
+    ap.add_argument(
+        "--requery-top",
+        type=int,
+        default=0,
+        help="Densify only the top-K sparse-ranked candidates on re-query "
+        "(0 = all in-graph banks).",
+    )
+    ap.add_argument(
+        "--requery-source",
+        choices=("ref", "recent"),
+        default="ref",
+        help="Fallback bank for re-queries: 'ref' = whole-life spread-50 "
+        "(offline upper bound), 'recent' = dense tail-20 (what an online "
+        "raw-crop ring buffer can actually reconstruct).",
+    )
+    ap.add_argument(
         "--strategies",
         nargs="*",
         default=[
@@ -320,6 +432,12 @@ def main() -> None:
         ],
     )
     ap.add_argument("--out-json", type=Path, default=None)
+    ap.add_argument(
+        "--dump-decisions",
+        type=Path,
+        default=None,
+        help="Dump per-strategy handover decision-log rows to this JSON path.",
+    )
     args = ap.parse_args()
 
     extractor = TRTFeatureExtractor(
@@ -337,27 +455,64 @@ def main() -> None:
             }
         )
     )
+    plan_specs = {
+        s: spec for s in args.strategies if (spec := parse_plan_strategy(s)) is not None
+    }
     lines_by_seq: dict[str, list[str]] = {}
     heads: dict[str, dict[int, torch.Tensor]] = {}
     banks: dict[str, dict[int, torch.Tensor]] = {}
     metas: dict[str, dict[int, list[dict]]] = {}
     tails: dict[str, dict[int, torch.Tensor]] = {}
     stride_banks: dict[str, dict[int, dict[int, torch.Tensor]]] = {}
+    plan_banks: dict[str, dict[str, dict[int, torch.Tensor]]] = {}
+    jobs_by_seq: dict[str, dict[str, int]] = {}
     for seq in args.seqs:
         lines = (args.substrate / f"{seq}.txt").read_text().splitlines()
         lines_by_seq[seq] = lines
-        heads[seq], banks[seq], metas[seq], tails[seq], stride_banks[seq] = (
-            extract_bank_with_meta(
-                lines,
-                str(PROJECT_ROOT / args.data_root / args.split / seq / "img1"),
-                extractor,
+        records = _parse_mot_lines(lines)
+        plan_crops: dict[str, dict[int, list[_CROP]]] = {}
+        plan_jobs: dict[str, int] = {}
+        for strat, spec in plan_specs.items():
+            plan = plan_clean_fifo_crops(
+                records,
+                appearance_occlusion_cov=args.cov,
+                fifo_n=spec["fifo_n"],
+                stride=spec["stride"],
                 decide_n=args.decide_n,
-                n_samples=args.n_samples,
-                cov=args.cov,
-                tail_n=args.tail_n,
-                strides=strides_needed,
+                preocc_snapshot=spec["preocc_snapshot"],
+                ambiguity_iou=spec["ambiguity_iou"],
+                preocc_window=spec["preocc_window"],
+                postocc_snapshot=spec["postocc_snapshot"],
             )
+            plan_crops[strat] = plan.bank_crops
+            job_keys = {
+                (tid, frame, *box)
+                for crops_map in (plan.head_crops, plan.job_crops)
+                for tid, crops in crops_map.items()
+                for frame, box in crops
+            }
+            plan_jobs[strat] = len(job_keys)
+        (
+            heads[seq],
+            banks[seq],
+            metas[seq],
+            tails[seq],
+            stride_banks[seq],
+            plan_banks[seq],
+            jobs_by_seq[seq],
+        ) = extract_bank_with_meta(
+            lines,
+            str(PROJECT_ROOT / args.data_root / args.split / seq / "img1"),
+            extractor,
+            decide_n=args.decide_n,
+            n_samples=args.n_samples,
+            cov=args.cov,
+            tail_n=args.tail_n,
+            strides=strides_needed,
+            plan_bank_crops=plan_crops,
+            job_strategies=tuple(args.strategies),
         )
+        jobs_by_seq[seq].update(plan_jobs)
         print(f"extracted {seq}: {len(banks[seq])} banks")
 
     # ── 1. Signal importance: per-sample cosine-to-prototype vs signals ──────
@@ -392,8 +547,11 @@ def main() -> None:
         out_dir.mkdir(parents=True, exist_ok=True)
         log_rows: list[dict] = []
         handovers = 0
+        requeries = 0
         for si, seq in enumerate(args.seqs):
-            if strat.startswith("recent-"):
+            if strat in plan_specs:
+                sparse_bank = plan_banks[seq][strat]
+            elif strat.startswith("recent-"):
                 n = int(strat.split("-", 1)[1])
                 sparse_bank = {tid: t[-n:] for tid, t in tails[seq].items()}
             elif strat.startswith("stridefifo-"):
@@ -428,24 +586,54 @@ def main() -> None:
                 decide_n=args.decide_n,
                 min_head_samples=args.min_head,
                 margin=args.margin,
+                requery_bank_embs=(
+                    (
+                        banks[seq]
+                        if args.requery_source == "ref"
+                        else {tid: t[-20:] for tid, t in tails[seq].items()}
+                    )
+                    if args.requery_band > 0.0 and strat != "ref"
+                    else None
+                ),
+                requery_band=args.requery_band,
+                requery_top=args.requery_top,
                 decision_log=rows,
             )
             (out_dir / f"{seq}.txt").write_text("\n".join(out_lines) + "\n")
             log_rows.extend({"seq_idx": si, **r} for r in rows)
             handovers += stats["handovers"]
+            requeries += stats["requeries"]
         logs[strat] = log_rows
-        results[strat] = {"handovers": handovers, "out_dir": str(out_dir)}
-        print(f"applied {strat}: {handovers} handovers")
+        results[strat] = {
+            "handovers": handovers,
+            "requeries": requeries,
+            "out_dir": str(out_dir),
+        }
+        print(f"applied {strat}: {handovers} handovers ({requeries} requeries)")
+
+    if args.dump_decisions:
+        args.dump_decisions.write_text(
+            json.dumps({"seqs": args.seqs, "logs": logs}, indent=1) + "\n"
+        )
+        print(f"wrote decision logs to {args.dump_decisions}")
 
     ref_accepts = accept_set(logs["ref"])
     ref_costs = {
         (int(r["seq_idx"]), int(r["newborn_id"])): float(r["best_cost"])
         for r in logs["ref"]
     }
-    print("\n=== equivalence vs dense reference ===")
+    total_all = sum(jobs_by_seq[seq]["__all__"] for seq in args.seqs)
+    total_jobs = {
+        strat: sum(jobs_by_seq[seq][strat] for seq in args.seqs)
+        for strat in args.strategies
+    }
     print(
-        f"{'strategy':>12} {'handover':>8} {'kept':>5} {'lost':>5} {'new':>5} "
-        f"{'jaccard':>8} {'|dcost|med':>10} {'IDF1':>7} {'dIDF1':>7} {'IDs':>5}"
+        f"\n=== equivalence vs dense reference (all-detection jobs = {total_all}) ==="
+    )
+    print(
+        f"{'strategy':>18} {'handover':>8} {'kept':>5} {'lost':>5} {'new':>5} "
+        f"{'jaccard':>8} {'|dcost|med':>10} {'IDF1':>7} {'dIDF1':>7} {'IDs':>5} "
+        f"{'jobs':>7} {'jobs%':>6}"
     )
     ref_metrics = score_dir(Path(results["ref"]["out_dir"]), args)
     ref_idf1 = float(ref_metrics.loc["OVERALL", "idf1"]) * 100
@@ -468,6 +656,7 @@ def main() -> None:
         metrics = score_dir(Path(results[strat]["out_dir"]), args)
         idf1 = float(metrics.loc["OVERALL", "idf1"]) * 100
         ids = int(metrics.loc["OVERALL", "num_switches"])
+        jobs_frac = total_jobs[strat] / total_all if total_all else float("nan")
         results[strat].update(
             {
                 "kept": kept,
@@ -478,12 +667,15 @@ def main() -> None:
                 "idf1": idf1,
                 "d_idf1": idf1 - ref_idf1,
                 "num_switches": ids,
+                "jobs": total_jobs[strat],
+                "jobs_frac_of_all_detections": jobs_frac,
             }
         )
         print(
-            f"{strat:>12} {results[strat]['handovers']:>8} {kept:>5} {lost:>5} "
+            f"{strat:>18} {results[strat]['handovers']:>8} {kept:>5} {lost:>5} "
             f"{new:>5} {jac:>8.3f} {dmed:>10.4f} {idf1:>7.2f} "
-            f"{idf1 - ref_idf1:>+7.2f} {ids:>5}"
+            f"{idf1 - ref_idf1:>+7.2f} {ids:>5} {total_jobs[strat]:>7} "
+            f"{jobs_frac * 100:>5.1f}%"
         )
 
     if args.out_json:
@@ -499,6 +691,8 @@ def main() -> None:
                 "n_samples": args.n_samples,
             },
             "signal_spearman_vs_prototype_cosine": signal_corr,
+            "total_detection_jobs": total_all,
+            "total_clean_jobs": sum(jobs_by_seq[seq]["__clean__"] for seq in args.seqs),
             "strategies": results,
         }
         args.out_json.write_text(json.dumps(payload, indent=2) + "\n")

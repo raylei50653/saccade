@@ -235,6 +235,42 @@ def test_cost_gate_rejects_different_identity():
     assert _ids(out) == {1, 2}
 
 
+def test_borderline_requery_recovers_dense_decision():
+    rng = np.random.default_rng(5)
+    d = 32
+    c0 = rng.standard_normal(d).astype(np.float32)
+    c_noise = rng.standard_normal(d).astype(np.float32)
+    lines: list[str] = []
+    _track(lines, 1, range(1, 11))
+    _track(lines, 2, range(16, 26))
+    head = {2: _normed(rng, 3, d, c0)}
+    sparse_bank = {1: _normed(rng, 2, d, c_noise)}  # degraded sparse memory
+    dense_bank = {1: _normed(rng, 8, d, c0)}  # true identity evidence
+
+    out_sparse, stats_sparse = causal_handover_lines(
+        lines, head, sparse_bank, enabled=True, max_cost=0.3, max_fwd=0
+    )
+    assert stats_sparse["handovers"] == 0
+    assert stats_sparse["requeries"] == 0
+
+    rows: list[dict] = []
+    out_rq, stats_rq = causal_handover_lines(
+        lines,
+        head,
+        sparse_bank,
+        enabled=True,
+        max_cost=0.3,
+        max_fwd=0,
+        requery_bank_embs=dense_bank,
+        requery_band=10.0,  # wide band: always borderline in this test
+        decision_log=rows,
+    )
+    assert stats_rq["requeries"] == 1
+    assert stats_rq["handovers"] == 1
+    assert _ids(out_rq) == {1}
+    assert rows[0]["requeried"] is True
+
+
 def test_newborn_without_head_samples_keeps_id():
     rng = np.random.default_rng(6)
     d = 32
@@ -287,6 +323,7 @@ def test_margin_gate_rejects_ambiguous_candidate():
         1: shared_bank,
         3: shared_bank.clone(),
     }
+    decision_log: list[dict[str, int | float | str | bool]] = []
 
     out, stats = causal_handover_lines(
         lines,
@@ -296,9 +333,109 @@ def test_margin_gate_rejects_ambiguous_candidate():
         max_cost=0.9,
         margin=0.05,
         max_fwd=0,
+        decision_log=decision_log,
     )
     assert stats["handovers"] == 0
     assert stats["reject_margin"] == 1
+    assert _ids(out) == {1, 2, 3}
+    assert stats["decisions_logged"] == 1
+    assert decision_log[0]["key_best_other_id"] in {1, 3}
+    assert abs(float(decision_log[0]["key_margin"])) < 1e-5
+
+
+def test_key_similarity_gate_rejects_low_direct_support():
+    rng = np.random.default_rng(81)
+    d = 32
+    c0 = rng.standard_normal(d).astype(np.float32)
+    c1 = rng.standard_normal(d).astype(np.float32)
+    lines: list[str] = []
+    _track(lines, 1, range(1, 11))
+    _track(lines, 2, range(16, 26))
+    head = {2: _normed(rng, 3, d, c1)}
+    bank = {1: _normed(rng, 8, d, c0)}
+    log: list[dict[str, int | float | str | bool]] = []
+
+    out, stats = causal_handover_lines(
+        lines,
+        head,
+        bank,
+        enabled=True,
+        max_cost=0.99,
+        key_sim_min=0.95,
+        max_fwd=0,
+        decision_log=log,
+    )
+
+    assert stats["handovers"] == 0
+    assert stats["reject_key_sim"] == 1
+    assert log[0]["reason"] == "key_sim"
+    assert float(log[0]["key_best_sim"]) < 0.95
+    assert _ids(out) == {1, 2}
+
+
+def test_key_similarity_gate_respects_cost_floor():
+    rng = np.random.default_rng(83)
+    d = 32
+    c0 = rng.standard_normal(d).astype(np.float32)
+    c1 = rng.standard_normal(d).astype(np.float32)
+    lines: list[str] = []
+    _track(lines, 1, range(1, 11))
+    _track(lines, 2, range(16, 26))
+    head = {2: _normed(rng, 3, d, c1)}
+    bank = {1: _normed(rng, 8, d, c0)}
+    log: list[dict[str, int | float | str | bool]] = []
+
+    out, stats = causal_handover_lines(
+        lines,
+        head,
+        bank,
+        enabled=True,
+        max_cost=0.99,
+        key_sim_min=0.95,
+        key_sim_cost_floor=1.01,
+        max_fwd=0,
+        decision_log=log,
+    )
+
+    assert stats["handovers"] == 1
+    assert stats["reject_key_sim"] == 0
+    assert log[0]["reason"] == "accepted"
+    assert float(log[0]["key_best_sim"]) < 0.95
+    assert log[0]["key_sim_cost_floor"] == 1.01
+    assert _ids(out) == {1}
+
+
+def test_key_margin_gate_rejects_hard_negative_ambiguity():
+    rng = np.random.default_rng(82)
+    d = 32
+    c0 = rng.standard_normal(d).astype(np.float32)
+    lines: list[str] = []
+    _track(lines, 1, range(1, 11))
+    _track(lines, 3, range(3, 13))
+    _track(lines, 2, range(16, 26))
+    head = {2: _normed(rng, 3, d, c0)}
+    shared_bank = _normed(rng, 8, d, c0)
+    bank = {
+        1: shared_bank,
+        3: shared_bank.clone(),
+    }
+    log: list[dict[str, int | float | str | bool]] = []
+
+    out, stats = causal_handover_lines(
+        lines,
+        head,
+        bank,
+        enabled=True,
+        max_cost=0.9,
+        key_margin_min=0.05,
+        max_fwd=0,
+        decision_log=log,
+    )
+
+    assert stats["handovers"] == 0
+    assert stats["reject_key_margin"] == 1
+    assert log[0]["reason"] == "key_margin"
+    assert abs(float(log[0]["key_margin"])) < 1e-5
     assert _ids(out) == {1, 2, 3}
 
 
@@ -501,3 +638,10 @@ def test_decision_log_records_accepted_handover():
     assert decision_log[0]["candidate_id"] == 1
     assert decision_log[0]["accepted"] is True
     assert decision_log[0]["reason"] == "accepted"
+    assert decision_log[0]["key_best_sim"] > 0.95
+    assert decision_log[0]["key_mean_topk_sim"] > 0.95
+    assert decision_log[0]["key_best_other_id"] == -1
+    assert decision_log[0]["key_best_other_sim"] == -1.0
+    assert decision_log[0]["key_margin"] == 999.0
+    assert decision_log[0]["key_support"] == 24
+    assert decision_log[0]["key_other_support"] == 0

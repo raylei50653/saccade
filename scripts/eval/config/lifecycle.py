@@ -74,6 +74,14 @@ class LifecycleConfig:
     cheb_gr_online_max_cost: float = 0.45
     cheb_gr_online_min_head: int = 1
     cheb_gr_online_margin: float = 0.0
+    cheb_gr_online_key_sim_min: float = 0.0
+    cheb_gr_online_key_sim_cost_floor: float = 0.0
+    cheb_gr_online_key_margin_min: float = 0.0
+    cheb_gr_online_center_dist_veto: float = 0.0
+    cheb_gr_online_pollution_veto: float = 0.0
+    cheb_gr_online_neighbor_iou_max: float = 0.0
+    cheb_gr_online_bank_mode: str = "spread"
+    cheb_gr_online_bank_n: int = 0
     cheb_gr_online_log: bool = False
     occ_audit: bool = False
     occ_audit_tau: float = 0.45
@@ -821,6 +829,48 @@ def add_lifecycle_args(parser: argparse.ArgumentParser) -> None:
             "costs. 0 preserves the original top-1 behavior.",
             range_hint=">=0",
             edge="use 0.03-0.05 to reject ambiguous handovers",
+        ),
+    )
+    grp.add_argument(
+        "--cheb-gr-offline-key-sim-min",
+        "--cheb-gr-online-key-sim-min",
+        dest="cheb_gr_online_key_sim_min",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Reject an offline handover whose direct key-bank similarity "
+            "support is below this cosine threshold (0 = off).",
+            range_hint="0-1",
+            edge="diagnostic 2026-07-04: key_best_sim is strong confirm evidence; "
+            "combine with geometry before enabling as policy",
+        ),
+    )
+    grp.add_argument(
+        "--cheb-gr-offline-key-margin-min",
+        "--cheb-gr-online-key-margin-min",
+        dest="cheb_gr_online_key_margin_min",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Reject an offline handover whose direct key-bank hard-negative "
+            "margin is below this threshold (0 = off). No-hard-negative events "
+            "use sentinel margin 999 and pass.",
+            range_hint=">=0",
+            edge="diagnostic 2026-07-04: key_margin <=0.03 was a strong "
+            "ambiguity veto on m-substrate; validate cross-condition before defaulting",
+        ),
+    )
+    grp.add_argument(
+        "--cheb-gr-offline-key-sim-cost-floor",
+        "--cheb-gr-online-key-sim-cost-floor",
+        dest="cheb_gr_online_key_sim_cost_floor",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Only apply key-sim veto when Cheb-GR best_cost is at least this "
+            "value (0 = apply key-sim veto to all accepted-cost candidates).",
+            range_hint=">=0",
+            edge="use 0.25-0.30 to avoid vetoing very strong Cheb-GR matches",
         ),
     )
     grp.add_argument(

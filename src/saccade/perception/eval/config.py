@@ -250,6 +250,9 @@ class EvalConfig:
     cheb_gr_online_max_cost: float
     cheb_gr_online_min_head: int
     cheb_gr_online_margin: float
+    cheb_gr_online_key_sim_min: float
+    cheb_gr_online_key_sim_cost_floor: float
+    cheb_gr_online_key_margin_min: float
     cheb_gr_online_center_dist_veto: float
     cheb_gr_online_pollution_veto: float
     cheb_gr_online_neighbor_iou_max: float
@@ -826,6 +829,24 @@ def parse_eval_config(
             kwargs.get(
                 "cheb_gr_offline_margin",
                 kwargs.get("cheb_gr_online_margin", 0.0),
+            )
+        ),
+        cheb_gr_online_key_sim_min=float(
+            kwargs.get(
+                "cheb_gr_offline_key_sim_min",
+                kwargs.get("cheb_gr_online_key_sim_min", 0.0),
+            )
+        ),
+        cheb_gr_online_key_sim_cost_floor=float(
+            kwargs.get(
+                "cheb_gr_offline_key_sim_cost_floor",
+                kwargs.get("cheb_gr_online_key_sim_cost_floor", 0.0),
+            )
+        ),
+        cheb_gr_online_key_margin_min=float(
+            kwargs.get(
+                "cheb_gr_offline_key_margin_min",
+                kwargs.get("cheb_gr_online_key_margin_min", 0.0),
             )
         ),
         cheb_gr_online_center_dist_veto=float(

@@ -75,6 +75,78 @@ handover 的 query 是死亡後緊接的 newborn head——**死前樣本與比�
 
 **已落地（Python 層）**：`--cheb-gr-offline-bank-mode {spread,recent}` + `--cheb-gr-offline-bank-n`（default spread=現行 GO 不動）；一鍵 config `configs/modules/cheb_gr_offline_mnv4_fifo20.yaml`。wired 路徑已在 m/s substrate 端到端複驗與 probe 一致（m：11 +0.52/13 +0.26/05 +0.10/10 −0.10；s：05 +0.46/10 +0.23；IDs 持平）。附帶收益：post-hoc bank crop 抽取量 ~2.5×↓。
 
+### 5.1 Direct key-bank query 診斷（2026-07-04 追加）
+
+為了驗證「小型 key bank 不只可餵 Cheb-GR，也可作 candidate-level confirm/veto evidence」，`CleanFifoBank` 追加 graph-external query API：
+
+- `metadata()`：保存每個 key embedding 的 `frame_id / quality / source_type`。
+- `query()` / `query_all()`：回傳 `best_sim`、`mean_topk_sim`、support count、best source，以及 `best_sim - best_other_track_sim` hard-negative margin。
+
+同時 `causal_handover_lines(..., decision_log=...)` 追加欄位：`key_best_sim`、`key_mean_topk_sim`、`key_best_other_id`、`key_best_other_sim`、`key_margin`、`key_support`、`key_other_support`；`cheb_gr_offline_handover_report.py` 會把 `key_best_sim / key_margin` 納入 feature registry、bucket map、gate search。
+
+7-seq frozen substrate 重跑命令：
+
+```bash
+uv run python scripts/eval/run_offline_handover_ablation.py \
+  --substrate results/diag_m_no_reid_current_20260704
+
+uv run python scripts/eval/diagnostics/cheb_gr_offline_handover_report.py \
+  --handover-log results/diag_m_no_reid_current_20260704_ho_control/_cheb_gr_offline_handover.csv \
+  --baseline-dir results/diag_m_no_reid_current_20260704 \
+  --gt-root datasets/MOT17/train \
+  --out-csv results/diag_m_no_reid_current_20260704_ho_control/_cheb_gr_offline_handover_labeled_key.csv \
+  --registry-md results/diag_m_no_reid_current_20260704_ho_control/parameter_registry_key.md \
+  --summary-json results/diag_m_no_reid_current_20260704_ho_control/parameter_summary_key.json
+```
+
+結果（m substrate，control 80.22 IDF1 / 309 IDs；candidate rows 311、accepted known precision 27/47=0.574）：
+
+| 訊號 | AUC | 方向 | 觀察 |
+|---|---:|---|---|
+| `key_best_sim` | **0.928** | high | raw key-bank similarity 幾乎追上 `best_cost`，低區是穩定 danger：`<0.3` = 0/104、`0.3~0.5` = 5/126；`0.75~0.85` = 10/11，但樣本仍薄 |
+| `key_margin` | 0.788 | high | 很適合 ambiguity veto/abstain：`<=0.03` = 1/87 same-GT；高 margin 支援但不保證 accept（`>=0.25` = 19/56） |
+| `best_cost` | 0.915 | low | 仍是主決策量；`<0.25` = 12/13 |
+
+在 accepted-known rows 的 two-feature gate search 裡，最好的 key 組合是：
+
+```text
+key_best_sim >= 0.54 && center_dist_norm <= 0.756
+  selected=23, correct=22, wrong=1
+  precision=0.957, correct_recall=0.815, wrong_keep=0.05
+```
+
+正式管線狀態（2026-07-04）：
+
+- 已接入 `causal_handover_lines` 決策 gate：`key_sim_min` 與 `key_margin_min`。
+- 已接入 CLI / config / evaluator / ablation runner；預設皆為 `0.0`，等於關閉，不改現行 GO。
+- CLI flags：`--cheb-gr-offline-key-sim-min`、`--cheb-gr-offline-key-sim-cost-floor`、`--cheb-gr-offline-key-margin-min`（同時保留 `--cheb-gr-online-*` alias）。
+- ablation runner variant keys：`key_sim_min=...`、`key_sim_cost_floor=...`、`key_margin_min=...`，可與既有 `center_dist_veto=...`、`margin=...` 合併重放。
+- decision log 會同步記錄 `key_sim_min` / `key_margin_min` 與實際 `key_*` evidence，方便回放分析。
+
+正式 gate 實測（m/s 7-seq frozen substrate）：
+
+| policy | m IDF1 | s IDF1 | 判定 |
+|---|---:|---:|---|
+| control | 80.22 | 78.83 | 現行 GO |
+| `key_sim_min=0.54` | 80.24 | 78.84 | 小幅正向；m 擋 13 個 control accepts（11 wrong / 1 correct / 1 unknown），s 擋 17 個（10 wrong / 3 correct / 4 unknown） |
+| `key_margin_min=0.03` | 80.21 | 78.82 | 幾乎無效；低 margin 是 ambiguity 訊號，但 policy 收益不足 |
+| `key_sim_min=0.54 + center_dist_veto=0.756` | 80.01 | 78.77 | 不可用；MOT17-10 被打壞（m −3.01、s −0.81） |
+| `key_sim_min=0.54 + key_sim_cost_floor=0.25/0.30` | 80.24 | 78.84 | 最合理候選；只在 Cheb-GR cost 不夠強時套低-sim veto，避免誤殺強 graph match |
+
+研究結論：
+
+1. **低 `key_best_sim` 是有效 veto evidence，但收益很小**。最佳區間仍是 `key_sim_min≈0.54`；再高會大量誤殺 correct，再低吞吐不足。
+2. **key-sim veto 應該服從 Cheb-GR 主訊號**。control accepted rows 上，`key_best_sim < 0.54 && best_cost >= 0.25/0.30` 的 wrong/known 比率約 0.95/0.96（m+s combined），比裸 `key_best_sim < 0.54` 更乾淨。
+3. **center distance 不適合用 tight threshold 硬砍**。`center_dist_norm <= 0.756` 來自 accepted-known 搜尋，但實測會殺掉 MOT17-10 的正確 handover；只能作報告 feature 或寬鬆 veto，不可作 default policy。
+4. **confirm 方向暫時不成立**。被 `best_cost > 0.45` 擋掉的正確候選，其 `key_best_sim` 最高約 0.62，沒有高-sim rescue 區；key bank 目前只適合 veto/abstain，不適合放寬 accept。
+5. **實驗瓶頸是 CPU，不是 ReID/GPU**。回放期間 Python runner 單核 100%、GPU utilization 0%；後續 threshold search 應先用 decision log 做 CSV counterfactual sweep，只把少量候選 policy 丟進完整 MOT scoring。
+
+判定：
+
+1. **direct key-bank query 是有效診斷訊號**，可用於 confirm/veto analysis；`key_best_sim` 對 same-GT 分離清楚。
+2. **`key_margin` 更像 abstain/veto 訊號，不是 accept 訊號**；低 margin 幾乎全錯，但高 margin 仍有 shared-appearance / no-hard-negative 風險。
+3. **正式管線已接，但 default off**。目前只在 m substrate 重跑；需與 s backbone / confirm-score 0.30 regime 做 applicability map 後，才可把 `key_best_sim + geometry` 提升成預設 policy。
+
 **C++ 線上層（刻意未做）**：per-track clean-FIFO-20 ring buffer + stride-3 排程 + **event-aware birth 窗**（decide 窗 5 幀須密集抽，min_head=2 才有料——#56 的教訓是 budget 排程餓死 head）。啟動條件=async sidecar 立項（#57 禁 sync 抽取，目前 C++ bank 沒有消費者）。
 
 **保留條款**：等價只驗證於 offline handover 操作點（max_gap 60）。長 gap relink 可能需要更久遠的錨點樣本，屆時 FIFO-20 + 老樣本錨點另測。
@@ -83,4 +155,5 @@ handover 的 query 是死亡後緊接的 newborn head——**死前樣本與比�
 
 - probe JSON：`results/probe_sparse_bank_m_20260704.json`、`probe_sparse_bank_recency_{m,s}_20260704.json`、`probe_sparse_bank_stridefifo_{m,s}_20260704.json`
 - 變體輸出：`results/diag_{m,s}_no_reid_current_20260704_ho_*/`（含 decision log CSV）、`..._sparse_*/`
-- 單元測試：`tests/unit/reid/test_cheb_gr_online.py`（veto ×2、crop 過濾 ×2、recent bank mode ×1）
+- direct key-bank query summary：`results/diag_m_no_reid_current_20260704_ho_control/parameter_summary_key.json`、`parameter_registry_key.md`
+- 單元測試：`tests/unit/eval/test_clean_fifo_bank.py`、`tests/unit/reid/test_cheb_gr_online.py`、`tests/unit/eval/test_cheb_gr_offline_handover_report.py`

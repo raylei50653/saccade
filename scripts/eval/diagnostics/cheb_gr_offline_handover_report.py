@@ -2,9 +2,10 @@
 """Label and analyze Cheb-GR offline handover decisions.
 
 The handover CSV contains the decision-side features (Cheb-GR cost/margin,
-geometry, scores). This report joins those rows with MOT17 GT via a baseline
-pre-handover output, labels each proposed bridge as correct/wrong/unknown, and
-prints feature distributions plus simple one/two-feature gate candidates.
+direct key-bank similarity/margin, geometry, scores). This report joins those
+rows with MOT17 GT via a baseline pre-handover output, labels each proposed
+bridge as correct/wrong/unknown, and prints feature distributions plus simple
+one/two-feature gate candidates.
 
 Usage:
   uv run scripts/eval/diagnostics/cheb_gr_offline_handover_report.py \
@@ -37,6 +38,13 @@ from scripts.eval.diagnostics.reconnect_rate import _load_mot, _match_frame
 FEATURES: tuple[str, ...] = (
     "best_cost",
     "margin",
+    "key_best_sim",
+    "key_mean_topk_sim",
+    "key_best_other_id",
+    "key_best_other_sim",
+    "key_margin",
+    "key_support",
+    "key_other_support",
     "match_iou",
     "direct_iou",
     "candidate_forward_iou",
@@ -59,6 +67,9 @@ FEATURES: tuple[str, ...] = (
 GATE_FEATURES: tuple[str, ...] = (
     "best_cost",
     "margin",
+    "key_best_sim",
+    "key_mean_topk_sim",
+    "key_margin",
     "match_iou",
     "direct_iou",
     "candidate_forward_iou",
@@ -83,6 +94,18 @@ REGISTRY_SPECS: dict[str, dict[str, Any]] = {
         "edges": (0.01, 0.03, 0.05, 0.08, 0.12, 0.20, 0.30),
         "use_with": "best_cost, candidate_count",
         "failure": "Single clear wrong candidate can have a large margin.",
+    },
+    "key_best_sim": {
+        "meaning": "Best direct cosine between newborn head samples and the selected candidate's sparse key bank; higher means stronger raw appearance support.",
+        "edges": (0.30, 0.50, 0.65, 0.75, 0.85, 0.92),
+        "use_with": "key_margin, best_cost, neighbor_iou",
+        "failure": "High raw similarity can be a shared/crowded appearance; use margin against nearby candidate banks.",
+    },
+    "key_margin": {
+        "meaning": "Direct key-bank margin: selected candidate best cosine minus best other candidate-bank cosine.",
+        "edges": (-0.10, -0.03, 0.00, 0.03, 0.08, 0.15, 0.25),
+        "use_with": "key_best_sim, candidate_count, head_tail_neighbor_iou",
+        "failure": "No hard negative gives a sentinel high margin; inspect key_best_other_id/support before treating it as confidence.",
     },
     "center_dist_norm": {
         "meaning": "Motion-projected center distance normalized by box height; lower is cleaner geometry.",
@@ -153,6 +176,27 @@ STABILITY_RULES: tuple[dict[str, Any], ...] = (
         "gates": (("margin", 0.05, "low"),),
     },
     {
+        "name": "key_sim_support",
+        "intent": "sparse appearance support zone",
+        "decision": "support-only",
+        "use": "Direct key-bank support; combine with key_margin and pollution context before accepting.",
+        "gates": (("key_best_sim", 0.85, "high"),),
+    },
+    {
+        "name": "key_margin_danger",
+        "intent": "sparse appearance ambiguity zone",
+        "decision": "reject/veto",
+        "use": "Hard-negative key-bank ambiguity; candidate-level confirm should abstain or defer.",
+        "gates": (("key_margin", 0.03, "low"),),
+    },
+    {
+        "name": "key_sim_x_margin_accept",
+        "intent": "sparse appearance candidate zone",
+        "decision": "support-only",
+        "use": "Raw key-bank confirm candidate; keep support-only until cross-run validation proves precision.",
+        "gates": (("key_best_sim", 0.85, "high"), ("key_margin", 0.08, "high")),
+    },
+    {
         "name": "center_dist_support",
         "intent": "geometry support zone",
         "decision": "support-only",
@@ -220,7 +264,14 @@ def _read_handover_log(path: Path) -> list[dict[str, Any]]:
                 "candidate_end",
             ):
                 out[key] = int(float(out[key]))
-            for key in FEATURES + ("second_cost", "required_margin", "max_cost"):
+            for key in FEATURES + (
+                "second_cost",
+                "required_margin",
+                "max_cost",
+                "key_sim_min",
+                "key_sim_cost_floor",
+                "key_margin_min",
+            ):
                 if key in out:
                     out[key] = _parse_float(out[key])
             out["accepted"] = _parse_bool(out.get("accepted", False))

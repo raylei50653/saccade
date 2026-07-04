@@ -42,6 +42,8 @@ def _handover_row(
     head_tail_neighbor_iou: float,
     center_dist_norm: float,
     candidate_count: int,
+    key_best_sim: float = 0.8,
+    key_margin: float = 0.1,
 ) -> dict[str, object]:
     return {
         "seq": seq,
@@ -57,6 +59,15 @@ def _handover_row(
         "margin": margin,
         "required_margin": 0.05,
         "max_cost": 0.5,
+        "key_best_sim": key_best_sim,
+        "key_mean_topk_sim": key_best_sim - 0.02,
+        "key_best_other_id": -1 if key_margin >= 999.0 else candidate_id + 1,
+        "key_best_other_sim": -1.0
+        if key_margin >= 999.0
+        else key_best_sim - key_margin,
+        "key_margin": key_margin,
+        "key_support": 4,
+        "key_other_support": 0 if key_margin >= 999.0 else 4,
         "match_iou": match_iou,
         "direct_iou": match_iou,
         "candidate_forward_iou": match_iou,
@@ -126,6 +137,8 @@ def test_offline_handover_report_labels_edges_and_writes_registry(tmp_path: Path
             head_tail_neighbor_iou=0.05,
             center_dist_norm=0.3,
             candidate_count=6,
+            key_best_sim=0.93,
+            key_margin=0.18,
         ),
         _handover_row(
             seq=seq,
@@ -143,6 +156,8 @@ def test_offline_handover_report_labels_edges_and_writes_registry(tmp_path: Path
             head_tail_neighbor_iou=0.1,
             center_dist_norm=3.0,
             candidate_count=4,
+            key_best_sim=0.40,
+            key_margin=0.01,
         ),
         _handover_row(
             seq=seq,
@@ -160,6 +175,8 @@ def test_offline_handover_report_labels_edges_and_writes_registry(tmp_path: Path
             head_tail_neighbor_iou=0.8,
             center_dist_norm=0.2,
             candidate_count=8,
+            key_best_sim=0.88,
+            key_margin=0.02,
         ),
         _handover_row(
             seq=seq,
@@ -177,6 +194,8 @@ def test_offline_handover_report_labels_edges_and_writes_registry(tmp_path: Path
             head_tail_neighbor_iou=0.2,
             center_dist_norm=4.0,
             candidate_count=3,
+            key_best_sim=0.45,
+            key_margin=-0.04,
         ),
     ]
     handover_log = tmp_path / "_cheb_gr_offline_handover.csv"
@@ -253,8 +272,13 @@ def test_offline_handover_report_labels_edges_and_writes_registry(tmp_path: Path
         "wrong": 2,
     }
     assert "best_cost" in summary["features"]
+    assert "key_best_sim" in summary["features"]
+    assert "key_margin" in summary["features"]
     assert summary["features"]["neighbor_iou"]["failure_mode"].startswith(
         "Not a standalone identity signal"
+    )
+    assert summary["features"]["key_margin"]["failure_mode"].startswith(
+        "No hard negative"
     )
     discovered = summary["discovered_gates"]
     assert discovered["all_known_single_feature"]

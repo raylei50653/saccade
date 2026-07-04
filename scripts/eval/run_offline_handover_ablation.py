@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import io
 import sys
 from pathlib import Path
 
@@ -38,6 +39,7 @@ if not hasattr(np, "asfarray"):
     np.asfarray = lambda a, dtype=float: np.asarray(a, dtype=dtype)  # type: ignore[attr-defined]
 
 import motmetrics as mm  # noqa: E402
+import pandas as pd  # noqa: E402
 
 from saccade.perception.eval.cheb_gr_online import (  # noqa: E402
     causal_handover_lines,
@@ -58,6 +60,9 @@ KEY_METRICS = [
 VARIANT_KEYS = {
     "max_cost": float,
     "margin": float,
+    "key_sim_min": float,
+    "key_sim_cost_floor": float,
+    "key_margin_min": float,
     "min_head": int,
     "center_dist_veto": float,
     "pollution_veto": float,
@@ -67,15 +72,56 @@ VARIANT_KEYS = {
 }
 
 
-def score(output_dir: Path, args):
+def _mot_lines_to_df(lines: list[str], *, min_confidence: float = -1.0) -> pd.DataFrame:
+    text = "\n".join(line for line in lines if line.strip())
+    columns = [
+        "FrameId",
+        "Id",
+        "X",
+        "Y",
+        "Width",
+        "Height",
+        "Confidence",
+        "ClassId",
+        "Visibility",
+        "unused",
+    ]
+    if not text:
+        empty = pd.DataFrame(columns=columns[:-1])
+        empty.index = pd.MultiIndex.from_arrays([[], []], names=["FrameId", "Id"])
+        return empty
+    df = pd.read_csv(
+        io.StringIO(text),
+        sep=r"\s+|\t+|,",
+        index_col=[0, 1],
+        skipinitialspace=True,
+        header=None,
+        names=columns,
+        engine="python",
+    )
+    df[["X", "Y"]] -= (1, 1)
+    del df["unused"]
+    return df[df["Confidence"] >= min_confidence]
+
+
+def _load_gt(args) -> dict[str, pd.DataFrame]:
+    return {
+        seq: mm.io.loadtxt(
+            str(PROJECT_ROOT / args.data_root / args.split / seq / "gt" / "gt.txt"),
+            fmt="mot15-2D",
+            min_confidence=1,
+        )
+        for seq in args.seqs
+    }
+
+
+def score_lines(lines_by_seq: dict[str, list[str]], args, gt_by_seq):
     accs, names = [], []
     for seq in args.seqs:
-        gt_path = PROJECT_ROOT / args.data_root / args.split / seq / "gt" / "gt.txt"
-        gt_df = mm.io.loadtxt(str(gt_path), fmt="mot15-2D", min_confidence=1)
-        hyp_df = mm.io.loadtxt(
-            str(output_dir / f"{seq}.txt"), fmt="mot15-2D", min_confidence=-1.0
+        hyp_df = _mot_lines_to_df(lines_by_seq[seq], min_confidence=-1.0)
+        accs.append(
+            mm.utils.compare_to_groundtruth(gt_by_seq[seq], hyp_df, "iou", distth=0.5)
         )
-        accs.append(mm.utils.compare_to_groundtruth(gt_df, hyp_df, "iou", distth=0.5))
         names.append(seq)
     mh = mm.metrics.create()
     return mh.compute_many(
@@ -131,6 +177,16 @@ def main() -> None:
     ap.add_argument("--max-gap", type=int, default=60)
     ap.add_argument("--n-samples", type=int, default=50)
     ap.add_argument("--cov", type=float, default=0.4)
+    ap.add_argument(
+        "--no-write-results",
+        action="store_true",
+        help="Do not write per-variant MOT txt files; score directly from memory.",
+    )
+    ap.add_argument(
+        "--no-score",
+        action="store_true",
+        help="Run handover variants and logs only; skip motmetrics scoring.",
+    )
     args = ap.parse_args()
 
     variants = parse_variants(args.variant)
@@ -181,11 +237,13 @@ def main() -> None:
             )
 
     runs: list[tuple[str, Path]] = []
+    variant_lines: dict[str, dict[str, list[str]]] = {}
     for name, params in variants:
         out_dir = Path(f"{args.substrate}_ho_{name}")
         out_dir.mkdir(parents=True, exist_ok=True)
         ext_key = _ext_key(params)
         log_rows: list[dict] = []
+        seq_lines: dict[str, list[str]] = {}
         for seq in args.seqs:
             head_embs, bank_embs = embs[(ext_key, seq)]
             rows: list[dict] = []
@@ -199,17 +257,24 @@ def main() -> None:
                 decide_n=args.decide_n,
                 min_head_samples=params.get("min_head", args.min_head),
                 margin=params.get("margin", args.margin),
+                key_sim_min=params.get("key_sim_min", 0.0),
+                key_sim_cost_floor=params.get("key_sim_cost_floor", 0.0),
+                key_margin_min=params.get("key_margin_min", 0.0),
                 center_dist_veto=params.get("center_dist_veto", 0.0),
                 pollution_veto=params.get("pollution_veto", 0.0),
                 decision_log=rows,
             )
-            (out_dir / f"{seq}.txt").write_text("\n".join(out_lines) + "\n")
+            seq_lines[seq] = out_lines
+            if not args.no_write_results:
+                (out_dir / f"{seq}.txt").write_text("\n".join(out_lines) + "\n")
             log_rows.extend({"seq": seq, **r} for r in rows)
             print(
                 f"  {name} {seq}: {stats['handovers']} handovers "
                 f"(ids {stats['ids_before']}->{stats['ids_after']}, "
                 f"reject_cost={stats['reject_cost']} "
                 f"reject_margin={stats['reject_margin']} "
+                f"reject_key_sim={stats['reject_key_sim']} "
+                f"reject_key_margin={stats['reject_key_margin']} "
                 f"reject_center_dist={stats['reject_center_dist']} "
                 f"reject_pollution={stats['reject_pollution']} "
                 f"reject_min_head={stats['reject_min_head']})"
@@ -221,11 +286,18 @@ def main() -> None:
                 w = csv.DictWriter(fh, fieldnames=list(log_rows[0]))
                 w.writeheader()
                 w.writerows(log_rows)
+        variant_lines[name] = seq_lines
         runs.append((name, out_dir))
 
+    if args.no_score:
+        return
+
     print("\n=== scoring ===")
-    substrate = score(args.substrate, args)
-    variants_scored = {name: score(out_dir, args) for name, out_dir in runs}
+    gt_by_seq = _load_gt(args)
+    substrate = score_lines(lines_by_seq, args, gt_by_seq)
+    variants_scored = {
+        name: score_lines(variant_lines[name], args, gt_by_seq) for name, _ in runs
+    }
 
     def fmt(v: float, key: str) -> str:
         return (

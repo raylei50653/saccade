@@ -57,11 +57,80 @@ class _HandoverStats:
     reject_min_head: int = 0
     reject_cost: int = 0
     reject_margin: int = 0
+    reject_key_sim: int = 0
+    reject_key_margin: int = 0
     reject_center_dist: int = 0
     reject_pollution: int = 0
+    requeries: int = 0
     decisions_logged: int = 0
     ids_before: int = 0
     ids_after: int = 0
+
+
+def _key_bank_block_metrics(
+    head: Tensor,
+    bank_embs: dict[int, Tensor],
+    *,
+    candidate_ids: list[int],
+    best_track_id: int,
+    topk: int = 3,
+) -> dict[str, int | float]:
+    """Graph-external key-bank cosine diagnostics for one handover event.
+
+    The Cheb-GR decision still uses k-reciprocal graph distance. These metrics
+    expose the simpler sparse-memory question in the same log row: how strongly
+    the newborn head matches the selected candidate bank, and by what margin
+    against nearby candidate banks.
+    """
+    target = bank_embs.get(best_track_id)
+    if target is None or head.numel() == 0 or target.numel() == 0:
+        return {
+            "key_best_sim": -1.0,
+            "key_mean_topk_sim": -1.0,
+            "key_best_other_id": -1,
+            "key_best_other_sim": -1.0,
+            "key_margin": -999.0,
+            "key_support": 0,
+            "key_other_support": 0,
+        }
+
+    block = head @ target.t()
+    flat = block.reshape(-1)
+    k = min(max(1, int(topk)), int(flat.numel()))
+    key_best_sim = float(flat.max().item())
+    key_mean_topk_sim = float(torch.topk(flat, k=k, largest=True).values.mean().item())
+
+    best_other_id = -1
+    best_other_sim = float("-inf")
+    other_support = 0
+    for tid in candidate_ids:
+        if tid == best_track_id:
+            continue
+        other = bank_embs.get(tid)
+        if other is None or other.numel() == 0:
+            continue
+        other_support += int(head.shape[0] * other.shape[0])
+        other_sim = float((head @ other.t()).max().item())
+        if other_sim > best_other_sim:
+            best_other_sim = other_sim
+            best_other_id = int(tid)
+
+    if best_other_id >= 0:
+        key_best_other_sim = best_other_sim
+        key_margin = key_best_sim - best_other_sim
+    else:
+        key_best_other_sim = -1.0
+        key_margin = 999.0
+
+    return {
+        "key_best_sim": key_best_sim,
+        "key_mean_topk_sim": key_mean_topk_sim,
+        "key_best_other_id": best_other_id,
+        "key_best_other_sim": key_best_other_sim,
+        "key_margin": key_margin,
+        "key_support": int(head.shape[0] * target.shape[0]),
+        "key_other_support": other_support,
+    }
 
 
 def causal_handover_lines(
@@ -75,8 +144,14 @@ def causal_handover_lines(
     decide_n: int = 5,
     min_head_samples: int = 1,
     margin: float = 0.0,
+    key_sim_min: float = 0.0,
+    key_sim_cost_floor: float = 0.0,
+    key_margin_min: float = 0.0,
     center_dist_veto: float = 0.0,
     pollution_veto: float = 0.0,
+    requery_bank_embs: dict[int, Tensor] | None = None,
+    requery_band: float = 0.0,
+    requery_top: int = 0,
     pool_frac: float = 0.3,
     cheb_lambda: float = 2.0,
     k2: int = 6,
@@ -101,6 +176,14 @@ def causal_handover_lines(
             handover can be accepted.
         margin: minimum separation between the best and second-best candidate
             costs. A single valid candidate has infinite margin.
+        key_sim_min: if > 0, reject when direct newborn-head vs selected-bank
+            cosine support is below this threshold.
+        key_sim_cost_floor: only apply ``key_sim_min`` when the Cheb-GR cost is
+            at least this value. This lets very strong graph matches survive raw
+            key-sim ambiguity.
+        key_margin_min: if > 0, reject when direct key-bank hard-negative
+            margin is below this threshold. A no-hard-negative event has
+            sentinel margin 999 and passes this gate.
         center_dist_veto: reject a handover whose forward-projected candidate
             center is at least this many average box heights from the newborn
             start center (0 = off). Cross-run applicability evidence:
@@ -109,6 +192,21 @@ def causal_handover_lines(
             crops overlap another track above this IoU (0 = off). Cross-run
             applicability evidence: ``head_tail_neighbor_iou >= 0.5`` is a
             stable high-pollution zone.
+        requery_bank_embs: optional denser fallback banks. When a decision
+            lands in the borderline band (``|best_cost - max_cost| <=
+            requery_band`` or the observed margin is within ``requery_band``
+            of the required margin), the event graph is rebuilt with these
+            banks and rescored before gating — removing sparse-bank phase
+            jitter exactly where flips live. Online analogue: keep a raw-crop
+            ring buffer per track tail and re-extract on demand for the
+            handful of borderline events.
+        requery_band: borderline half-width that triggers the re-query
+            (0 = off).
+        requery_top: if > 0, only the top-``requery_top`` sparse-ranked
+            candidates get their dense fallback bank in the re-query (the
+            rest keep sparse banks as graph context) — the cheap online form:
+            ~2 candidate tails re-extracted per borderline event instead of
+            the whole archive. 0 = densify every in-graph bank.
         decision_log: optional mutable list that receives one row per scored
             handover decision.
 
@@ -200,39 +298,74 @@ def causal_handover_lines(
         # Non-candidate banks (e.g. died inside the head window) join as context
         # only — a larger graph keeps the re-ranked distance scale closer to the
         # offline whole-sequence graph the max_cost operating point came from.
-        feats_list = [head]
-        span_by_tid: dict[int, tuple[int, int]] = {}
-        pos = head.shape[0]
-        for ta in in_graph:
-            bank = bank_embs[ta.track_id]
-            feats_list.append(bank)
-            span_by_tid[ta.track_id] = (pos, pos + bank.shape[0])
-            pos += bank.shape[0]
-        feats = torch.cat(feats_list, dim=0)
-        n = feats.shape[0]
-        sdist = cheb_gr_kreciprocal(
-            feats,
-            feats,
-            cheb_lambda=cheb_lambda,
-            k2=min(k2, n),
-            max_fwd=max_fwd,
-            fuse_lambda=fuse_lambda,
-        )
+        def _score_event(bmap: dict[int, Tensor]) -> list[tuple[float, Any]]:
+            feats_list = [head]
+            span_by_tid: dict[int, tuple[int, int]] = {}
+            pos = head.shape[0]
+            for ta in in_graph:
+                bank = bmap.get(ta.track_id)
+                if bank is None or bank.shape[0] == 0:
+                    bank = bank_embs[ta.track_id]
+                feats_list.append(bank)
+                span_by_tid[ta.track_id] = (pos, pos + bank.shape[0])
+                pos += bank.shape[0]
+            feats = torch.cat(feats_list, dim=0)
+            n = feats.shape[0]
+            sdist = cheb_gr_kreciprocal(
+                feats,
+                feats,
+                cheb_lambda=cheb_lambda,
+                k2=min(k2, n),
+                max_fwd=max_fwd,
+                fuse_lambda=fuse_lambda,
+            )
+            out: list[tuple[float, Any]] = []
+            head_rows = sdist[: head.shape[0]]
+            for ta in cands:
+                lo, hi = span_by_tid[ta.track_id]
+                block = head_rows[:, lo:hi].reshape(-1)
+                k = max(1, int(round(pool_frac * block.numel())))
+                cost = float(torch.topk(block, k, largest=False).values.mean())
+                out.append((cost, ta))
+            out.sort(key=lambda item: (item[0], item[1].track_id))
+            return out
 
-        scored: list[tuple[float, Any]] = []
-        head_rows = sdist[: head.shape[0]]
-        for ta in cands:
-            lo, hi = span_by_tid[ta.track_id]
-            block = head_rows[:, lo:hi].reshape(-1)
-            k = max(1, int(round(pool_frac * block.numel())))
-            cost = float(torch.topk(block, k, largest=False).values.mean())
-            scored.append((cost, ta))
+        scored = _score_event(bank_embs)
         if not scored:
             continue
-        scored.sort(key=lambda item: (item[0], item[1].track_id))
         best_cost, best = scored[0]
         second_cost = scored[1][0] if len(scored) > 1 else float("inf")
         observed_margin = second_cost - best_cost
+
+        # A decision is flippable only if a band-sized perturbation could change
+        # a gate outcome: the cost gate near max_cost, or the margin gate — the
+        # latter only matters when the cost gate itself is (nearly) passing.
+        cost_borderline = abs(best_cost - max_cost) <= requery_band
+        margin_borderline = (
+            margin > 0.0
+            and best_cost <= max_cost + requery_band
+            and abs(observed_margin - margin) <= requery_band
+        )
+        requeried = False
+        if (
+            requery_bank_embs is not None
+            and requery_band > 0.0
+            and (cost_borderline or margin_borderline)
+        ):
+            requery_map = requery_bank_embs
+            if requery_top > 0:
+                top_ids = {ta.track_id for _, ta in scored[:requery_top]}
+                requery_map = {
+                    tid: bank
+                    for tid, bank in requery_bank_embs.items()
+                    if tid in top_ids
+                }
+            scored = _score_event(requery_map)
+            best_cost, best = scored[0]
+            second_cost = scored[1][0] if len(scored) > 1 else float("inf")
+            observed_margin = second_cost - best_cost
+            requeried = True
+            stats.requeries += 1
 
         gap = int(tb.start - best.end)
         direct_iou = box_iou_tuple(best.end_box, tb.start_box)
@@ -261,6 +394,12 @@ def causal_handover_lines(
         head_tail_neighbor_iou = max(
             newborn_head_neighbor_iou, candidate_tail_neighbor_iou
         )
+        key_metrics = _key_bank_block_metrics(
+            head,
+            bank_embs,
+            candidate_ids=[ta.track_id for _, ta in scored],
+            best_track_id=best.track_id,
+        )
 
         reason = "accepted"
         accepted = True
@@ -272,6 +411,18 @@ def causal_handover_lines(
             reason = "margin"
             accepted = False
             stats.reject_margin += 1
+        elif (
+            key_sim_min > 0.0
+            and best_cost >= key_sim_cost_floor
+            and float(key_metrics["key_best_sim"]) < key_sim_min
+        ):
+            reason = "key_sim"
+            accepted = False
+            stats.reject_key_sim += 1
+        elif key_margin_min > 0.0 and float(key_metrics["key_margin"]) < key_margin_min:
+            reason = "key_margin"
+            accepted = False
+            stats.reject_key_margin += 1
         elif center_dist_veto > 0.0 and center_dist_norm >= center_dist_veto:
             reason = "center_dist"
             accepted = False
@@ -323,12 +474,17 @@ def causal_handover_lines(
                     "center_dist_norm": center_dist_norm,
                     "head_n": int(head.shape[0]),
                     "bank_n": int(bank_embs[best.track_id].shape[0]),
+                    "requeried": bool(requeried),
                     "candidate_count": int(len(scored)),
                     "best_cost": float(best_cost),
                     "second_cost": float(row_second_cost),
                     "margin": float(row_margin),
                     "required_margin": float(margin),
                     "max_cost": float(max_cost),
+                    "key_sim_min": float(key_sim_min),
+                    "key_sim_cost_floor": float(key_sim_cost_floor),
+                    "key_margin_min": float(key_margin_min),
+                    **key_metrics,
                     "accepted": bool(accepted),
                     "reason": reason,
                 }
