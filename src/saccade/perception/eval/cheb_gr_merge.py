@@ -450,14 +450,18 @@ def extract_tracklet_embeddings(
 
     model_type = str(getattr(extractor, "model_type", ""))
     if crop_hw is None:
-        crop_hw = tuple(getattr(extractor, "input_hw", (224, 224)))  # type: ignore[arg-type]
+        crop_hw = tuple(getattr(extractor, "input_hw", (224, 224)))
     batch = max(1, int(batch))
     if appearance_occlusion_gate is None:
         appearance_occlusion_gate = model_type == "mobilenetv4_reid"
     requested_resample = resample
     if resample is None:
         resample = "bicubic" if model_type == "mobilenetv4_reid" else "bilinear"
-    resample_mode = Image.BICUBIC if resample.lower() == "bicubic" else Image.BILINEAR
+    resample_mode = (
+        Image.Resampling.BICUBIC
+        if resample.lower() == "bicubic"
+        else Image.Resampling.BILINEAR
+    )
 
     records = _parse_mot_lines(results_lines)
     dirty_record_idx: set[int] = set()
@@ -543,10 +547,10 @@ def extract_tracklet_embeddings(
             )
             if box[2] <= box[0] or box[3] <= box[1]:
                 box = (0, 0, fw, fh)
-            crop = img.crop(box).resize((out_w, out_h), resample_mode)  # type: ignore[attr-defined]
+            crop = img.crop(box).resize((out_w, out_h), resample_mode)
             crop_arrs[si] = np.asarray(crop, dtype=np.uint8).transpose(2, 0, 1)
 
-    device = getattr(extractor, "device", "cuda")
+    device = getattr(extractor, "device", torch.device("cuda"))
     feats = torch.empty((len(samples), extractor.feature_dim), device=device)
     for start in range(0, len(samples), batch):
         chunk = crop_arrs[start : start + batch]
@@ -555,7 +559,7 @@ def extract_tracklet_embeddings(
         feats[start : start + tensor.shape[0]] = extractor.extract(tensor)
     feats = torch.nn.functional.normalize(feats, dim=1)
 
-    result: dict[int, Tensor] = {}
+    result = {}
     owner = torch.tensor([s[0] for s in samples])
     for tid in by_id:
         rows = torch.nonzero(owner == tid, as_tuple=True)[0]

@@ -1236,7 +1236,7 @@ class PythonSemanticRelinker:
     def _cheb_gr_claim_best(
         self,
         raw_id: int,
-        candidates_to_score: List[tuple],
+        candidates_to_score: List[tuple[Any, ...]],
     ) -> tuple[Optional[int], float, float]:
         self.stats["cheb_gr_claim_attempts"] += 1
         head_items = self._pending_heads.get(raw_id, [])

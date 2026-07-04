@@ -5,6 +5,7 @@ __pycache__/
 build/
 build_ci/
 build_trt_venv/
+build-native-test/
 dist/
 wheels/
 *.egg-info

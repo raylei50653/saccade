@@ -63,7 +63,7 @@ override-dependencies = [
 [tool.mypy]
 strict = true
 ignore_missing_imports = true
-exclude = ["tests/", "build/", "build-native-coverage/", "storage/", "runs/", "results/", "train/", "scratch/", "third_party/"]
+exclude = ["tests/", "build/", "build-native-coverage/", "build-native-test/", "storage/", "runs/", "results/", "train/", "scratch/", "third_party/"]
 mypy_path = "src"
 
 [[tool.mypy.overrides]]

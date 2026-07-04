@@ -269,7 +269,7 @@ def cheb_gr_kreciprocal(
     # k2 local query expansion: V_i <- mean of V over i's k2 nearest neighbours.
     if k2 > 1:
         rows = torch.arange(n, device=device).repeat_interleave(k2)
-        with torch.sparse.check_sparse_tensor_invariants(False):
+        with torch.sparse.check_sparse_tensor_invariants(False):  # type: ignore[no-untyped-call]
             a = torch.sparse_coo_tensor(
                 torch.stack([rows, knn.reshape(-1)]),
                 torch.full((n * k2,), 1.0 / k2, device=device),
