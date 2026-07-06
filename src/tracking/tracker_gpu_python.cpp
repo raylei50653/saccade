@@ -3489,6 +3489,90 @@ public:
         return out;
     }
 
+    // Batched variant: embeddings arrive as one contiguous [n_rows, dim]
+    // float32 array (a single host copy at the call site) plus a per-candidate
+    // row index (-1 = no embedding). Avoids resolve_pass's per-candidate
+    // tensor->numpy round-trip, which costs one D2H sync per track per frame.
+    py::list resolve_pass_arr(
+        py::array_t<int32_t, py::array::c_style | py::array::forcecast> local_ids,
+        py::array_t<float, py::array::c_style | py::array::forcecast> emb_rows,
+        py::array_t<int32_t, py::array::c_style | py::array::forcecast> emb_idx,
+        py::array_t<float, py::array::c_style | py::array::forcecast> boxes,
+        py::array_t<float, py::array::c_style | py::array::forcecast> scores,
+        int frame_id,
+        int frame_w,
+        int frame_h
+    ) {
+        const py::ssize_t n = local_ids.size();
+        if (n == 0) return py::list{};
+        if (boxes.ndim() != 2 || boxes.shape(0) != n || boxes.shape(1) != 4)
+            throw std::invalid_argument("resolve_pass_arr: boxes must be [n, 4]");
+        if (scores.size() != n || emb_idx.size() != n)
+            throw std::invalid_argument("resolve_pass_arr: length mismatch");
+        const py::ssize_t n_rows = emb_rows.ndim() == 2 ? emb_rows.shape(0) : 0;
+        const py::ssize_t dim = emb_rows.ndim() == 2 ? emb_rows.shape(1) : 0;
+
+        std::vector<int> ids_v(static_cast<size_t>(n));
+        std::vector<std::vector<float>> embs_v(static_cast<size_t>(n));
+        std::vector<bool> has_emb_v(static_cast<size_t>(n), false);
+        std::vector<RelinkBox> boxes_v(static_cast<size_t>(n));
+        std::vector<float> scores_v(static_cast<size_t>(n));
+
+        const int32_t* ids_p = local_ids.data();
+        const int32_t* ei_p = emb_idx.data();
+        const float* bx_p = boxes.data();
+        const float* sc_p = scores.data();
+        const float* em_p = n_rows > 0 ? emb_rows.data() : nullptr;
+        for (py::ssize_t i = 0; i < n; ++i) {
+            const size_t idx = static_cast<size_t>(i);
+            ids_v[idx] = ids_p[i];
+            boxes_v[idx] = {bx_p[i * 4 + 0], bx_p[i * 4 + 1],
+                            bx_p[i * 4 + 2], bx_p[i * 4 + 3]};
+            scores_v[idx] = sc_p[i];
+            const int32_t r = ei_p[i];
+            if (em_p && r >= 0 && r < n_rows) {
+                std::vector<float> row(em_p + static_cast<size_t>(r) * dim,
+                                       em_p + static_cast<size_t>(r + 1) * dim);
+                embs_v[idx] = normalize_ip(row);
+                has_emb_v[idx] = true;
+            }
+        }
+
+        std::vector<int> relinked(static_cast<size_t>(n));
+        {
+            std::vector<size_t> order(static_cast<size_t>(n));
+            for (size_t i = 0; i < static_cast<size_t>(n); ++i) order[i] = i;
+            if (relinker_->is_bidirectional() && n > 0) {
+                std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+                    return scores_v[a] > scores_v[b];
+                });
+            }
+            std::unordered_set<int> assigned;
+            for (size_t idx : order) {
+                relinked[idx] = relinker_->resolve_cpp(
+                    ids_v[idx], embs_v[idx], has_emb_v[idx],
+                    boxes_v[idx], scores_v[idx],
+                    frame_id, frame_w, frame_h, assigned
+                );
+            }
+        }
+
+        py::list out;
+        {
+            std::unordered_set<int> assigned;
+            for (py::ssize_t i = 0; i < n; ++i) {
+                const size_t idx = static_cast<size_t>(i);
+                out.append(lifecycle_->resolve_cpp(
+                    relinked[idx],
+                    boxes_v[idx], scores_v[idx],
+                    frame_id, frame_w, frame_h,
+                    embs_v[idx], has_emb_v[idx], assigned
+                ));
+            }
+        }
+        return out;
+    }
+
 private:
     static std::vector<float> extract_emb_ip(py::object emb_obj) {
         py::object np = emb_obj.attr("detach")().attr("float")().attr("cpu")().attr("numpy")();
@@ -3972,7 +4056,32 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
              py::arg("clean_flags") = std::vector<int>{},
              "Feed per-frame track embeddings for online handover. "
              "clean_flags[i]=0 marks an occluded crop (skipped); zero "
-             "embedding rows are skipped automatically.");
+             "embedding rows are skipped automatically.")
+        .def("feed_frame_embeddings_arr",
+             [](SemanticRelinkerCpp& self,
+                py::array_t<float, py::array::c_style | py::array::forcecast> emb,
+                int emb_dim, int frame_id,
+                py::array_t<int32_t, py::array::c_style | py::array::forcecast> track_ids,
+                py::array_t<float, py::array::c_style | py::array::forcecast> scores,
+                py::array_t<int32_t, py::array::c_style | py::array::forcecast> clean_flags) {
+                 // Buffer-protocol variant of feed_frame_embeddings: bulk
+                 // memcpy instead of the stl caster's per-element Python
+                 // float round-trip (the flat embedding buffer is
+                 // n_tracks*emb_dim floats every frame).
+                 std::vector<float> emb_v(emb.data(), emb.data() + emb.size());
+                 std::vector<int> ids_v(track_ids.data(),
+                                        track_ids.data() + track_ids.size());
+                 std::vector<float> sc_v(scores.data(),
+                                         scores.data() + scores.size());
+                 std::vector<int> cf_v(clean_flags.data(),
+                                       clean_flags.data() + clean_flags.size());
+                 self.feed_frame_embeddings(emb_v, emb_dim, frame_id, ids_v,
+                                            sc_v, cf_v);
+             },
+             py::arg("emb"), py::arg("emb_dim"), py::arg("frame_id"),
+             py::arg("track_ids"), py::arg("scores"), py::arg("clean_flags"),
+             "feed_frame_embeddings taking contiguous numpy arrays "
+             "(no per-element conversion).");
 
     py::class_<TrackletLifecycleMergerCpp>(m, "TrackletLifecycleMerger")
         .def(py::init<bool, int, int, float, float, float, bool, float>(),
@@ -3999,7 +4108,14 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
              py::arg("relinker"), py::arg("lifecycle_merger"))
         .def("resolve_pass", &IdentityResolverCpp::resolve_pass,
              py::arg("local_ids"), py::arg("embeddings"), py::arg("boxes"), py::arg("scores"),
-             py::arg("frame_id"), py::arg("frame_w"), py::arg("frame_h"));
+             py::arg("frame_id"), py::arg("frame_w"), py::arg("frame_h"))
+        .def("resolve_pass_arr", &IdentityResolverCpp::resolve_pass_arr,
+             py::arg("local_ids"), py::arg("emb_rows"), py::arg("emb_idx"),
+             py::arg("boxes"), py::arg("scores"),
+             py::arg("frame_id"), py::arg("frame_w"), py::arg("frame_h"),
+             "resolve_pass with embeddings as one [n_rows, dim] float32 array "
+             "and per-candidate row indices (-1 = none); avoids per-candidate "
+             "D2H syncs.");
 
     py::class_<saccade::ReIDTrackObservation>(m, "ReIDTrackObservation")
         .def(py::init<>())

@@ -26,6 +26,14 @@ int CropPool::acquire(int n) {
     std::lock_guard<std::mutex> lock(mutex_);
     // Find n contiguous free slots.
     if (static_cast<int>(free_slots_.size()) < n) return -1;
+    // Single slot needs no contiguity: pop in O(1). The sort-a-copy search
+    // below is O(capacity log capacity) per call, which at the crop ring's
+    // capacity (4096) costs ~3 ms/frame across a frame's stashes.
+    if (n == 1) {
+        int s = free_slots_.back();
+        free_slots_.pop_back();
+        return s;
+    }
     // Search for a contiguous run in the free list.
     // The free list is not sorted, so we search by sorting a copy.
     // For small pools (256-512), this is fast enough.

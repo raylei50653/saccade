@@ -873,13 +873,10 @@ void PerceptionPipeline::stash_crops(
         frame_w, frame_h,
         const_cast<float*>(boxes_ptr), n_boxes,
         d_stash_scratch_, stream);
-    const int elem = crop_ring_->crop_elem_count();
-    for (int i = 0; i < n_boxes; ++i) {
-        bool c = clean ? clean[i] : true;
-        crop_ring_->stash(uids[i], frames ? frames[i] : -1,
-                          d_stash_scratch_ + static_cast<size_t>(i) * elem,
-                          c, stream);
-    }
+    // One batched scatter instead of per-crop stash: the per-frame stash of
+    // every confirmed track is launch-bound (3 CUDA API calls per crop).
+    crop_ring_->stash_batch(uids, frames, d_stash_scratch_, clean, n_boxes,
+                            stream);
 }
 
 int PerceptionPipeline::embed_dim() const {

@@ -53,6 +53,21 @@ public:
     int stash(uint64_t uid, int frame, const float* crop_dev, bool clean,
               cudaStream_t stream);
 
+    /**
+     * @brief Stash @p n contiguous ``[3, crop_h, crop_w]`` device crops.
+     *
+     * Same per-crop semantics as calling :meth:`stash` in a loop, but the
+     * pixel movement is one pointer-scatter kernel plus one event record
+     * instead of ``3 * n`` CUDA API calls — the per-frame stash of every
+     * confirmed track is launch-bound, not bandwidth-bound.
+     * ``crops_dev`` rows must be laid out ``[n, crop_elem_count()]``.
+     * Returns the number of crops actually stashed (rows that failed slot
+     * acquisition are skipped).
+     */
+    int stash_batch(const uint64_t* uids, const int* frames,
+                    const float* crops_dev, const bool* clean, int n,
+                    cudaStream_t stream);
+
     /// Number of crops currently held for @p uid.
     int count(uint64_t uid) const;
 
@@ -115,17 +130,34 @@ private:
     void touch_lru_(int slot);    // mark slot most-recently used
     void drop_lru_(int slot);     // remove slot from the LRU list
     void free_slot_(int slot);    // clear meta + return slot to the pool
+    int acquire_for_uid_(uint64_t uid);  // depth-trim + acquire (stash core)
+    void ensure_batch_scratch_(int n);   // pinned/device dst-pointer arrays
 
     CropPool pool_;
     int depth_;
-    // Per-slot completion event of the last stash write. Stash and gather run
-    // on different streams (tracker vs bg-handover requery); the mutex orders
-    // host bookkeeping only, so pixel access is ordered via these events:
-    // stash waits on the slot's previous write before overwriting a recycled
-    // slot and records after its copy; gathers wait on it before reading and
-    // synchronize their stream under the lock so a later stash cannot recycle
-    // a slot whose read is still in flight.
+    // Per-slot completion event HANDLE of the last stash write (non-owning:
+    // points at own_ev_[slot] for single stashes or at a rotating batch event
+    // for stash_batch). Stash and gather run on different streams (tracker vs
+    // bg-handover requery); the mutex orders host bookkeeping only, so pixel
+    // access is ordered via these events: stash waits on the slot's previous
+    // write before overwriting a recycled slot and records after its copy;
+    // gathers wait on it before reading and synchronize their stream under
+    // the lock so a later stash cannot recycle a slot whose read is still in
+    // flight.
+    //
+    // Batch-event reuse is safe: a batch event object is only re-recorded by
+    // a LATER stash_batch. Same stream => stream order makes any wait on the
+    // re-recorded event an over-wait, never an under-wait. Stream switch =>
+    // stash_batch synchronizes the previous write stream first, so every
+    // write the stale handle could have guarded is already complete.
     std::vector<cudaEvent_t> write_ev_;
+    std::vector<cudaEvent_t> own_ev_;        // owned, one per slot
+    std::vector<cudaEvent_t> batch_ev_;      // owned, rotating stash_batch pool
+    int batch_ev_idx_ = 0;
+    cudaStream_t last_write_stream_ = nullptr;
+    float** h_batch_dst_ = nullptr;  // pinned [batch_scratch_n_]
+    float** d_batch_dst_ = nullptr;  // device [batch_scratch_n_]
+    int batch_scratch_n_ = 0;
     std::unordered_map<uint64_t, std::deque<int>> uid_slots_;
     std::vector<SlotMeta> slot_meta_;
     std::list<int> lru_;  // front = least recently stashed

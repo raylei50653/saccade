@@ -230,6 +230,91 @@ void test_gather_many_contiguous() {
     std::cout << "gather_many_contiguous passed" << std::endl;
 }
 
+void test_stash_batch_matches_loop_semantics() {
+    const int ch = 2, cw = 2, elem = 3 * ch * cw;
+    CropRingStore ring(/*capacity=*/16, /*depth=*/3, ch, cw);
+
+    // Contiguous [n, elem] crop rows with values 10, 20, 30.
+    const int n = 3;
+    float* crops = nullptr;
+    check_cuda(cudaMalloc(&crops, n * elem * sizeof(float)), "malloc crops");
+    std::vector<float> h(static_cast<size_t>(n) * elem);
+    for (int i = 0; i < n; ++i)
+        for (int j = 0; j < elem; ++j)
+            h[static_cast<size_t>(i) * elem + j] = 10.0f * (i + 1);
+    check_cuda(cudaMemcpy(crops, h.data(), h.size() * sizeof(float),
+                          cudaMemcpyHostToDevice),
+               "upload crops");
+
+    uint64_t uids[n] = {1, 2, 1};
+    int frames[n] = {0, 0, 1};
+    bool clean[n] = {true, false, true};
+    int stashed = ring.stash_batch(uids, frames, crops, clean, n, nullptr);
+    check_cuda(cudaStreamSynchronize(nullptr), "sync batch");
+    expect_true(stashed == 3, "3 crops stashed");
+    expect_true(ring.count(1) == 2 && ring.count(2) == 1, "per-uid counts");
+    expect_true(ring.has_crop(1, 1, /*clean_only=*/true), "clean crop kept");
+    expect_true(!ring.has_crop(2, 0, /*clean_only=*/true), "dirty flag kept");
+
+    float* batch = nullptr;
+    check_cuda(cudaMalloc(&batch, ring.depth() * elem * sizeof(float)),
+               "malloc batch");
+    int rows = ring.gather(1, batch, nullptr);
+    check_cuda(cudaStreamSynchronize(nullptr), "sync gather");
+    expect_true(rows == 2, "uid 1 has 2 rows");
+    expect_true(std::fabs(row_value(batch, 0, elem) - 10.0f) < 1e-6f,
+                "uid1 oldest = batch row 0");
+    expect_true(std::fabs(row_value(batch, 1, elem) - 30.0f) < 1e-6f,
+                "uid1 newest = batch row 2");
+    rows = ring.gather(2, batch, nullptr);
+    check_cuda(cudaStreamSynchronize(nullptr), "sync gather 2");
+    expect_true(rows == 1 &&
+                    std::fabs(row_value(batch, 0, elem) - 20.0f) < 1e-6f,
+                "uid2 row = batch row 1");
+    check_cuda(cudaFree(batch), "free batch");
+    check_cuda(cudaFree(crops), "free crops");
+
+    std::cout << "stash_batch_matches_loop_semantics passed" << std::endl;
+}
+
+void test_stash_batch_depth_and_lru() {
+    const int ch = 2, cw = 2, elem = 3 * ch * cw;
+    // Pool smaller than the batch: later rows LRU-evict earlier rows inside
+    // one batch — the earlier scatter row must be nulled, never aliased.
+    CropRingStore ring(/*capacity=*/2, /*depth=*/2, ch, cw);
+    const int n = 4;
+    float* crops = nullptr;
+    check_cuda(cudaMalloc(&crops, n * elem * sizeof(float)), "malloc crops");
+    std::vector<float> h(static_cast<size_t>(n) * elem);
+    for (int i = 0; i < n; ++i)
+        for (int j = 0; j < elem; ++j)
+            h[static_cast<size_t>(i) * elem + j] = 1.0f * (i + 1);
+    check_cuda(cudaMemcpy(crops, h.data(), h.size() * sizeof(float),
+                          cudaMemcpyHostToDevice),
+               "upload crops");
+
+    uint64_t uids[n] = {1, 2, 3, 4};
+    int frames[n] = {0, 0, 0, 0};
+    int stashed = ring.stash_batch(uids, frames, crops, nullptr, n, nullptr);
+    check_cuda(cudaStreamSynchronize(nullptr), "sync batch");
+    expect_true(stashed == 2, "only capacity crops survive");
+    expect_true(ring.in_use() == 2, "memory bounded");
+    expect_true(ring.count(3) == 1 && ring.count(4) == 1,
+                "newest uids survive the intra-batch LRU");
+
+    float* batch = nullptr;
+    check_cuda(cudaMalloc(&batch, ring.depth() * elem * sizeof(float)),
+               "malloc batch");
+    int rows = ring.gather(4, batch, nullptr);
+    check_cuda(cudaStreamSynchronize(nullptr), "sync gather");
+    expect_true(rows == 1 && std::fabs(row_value(batch, 0, elem) - 4.0f) < 1e-6f,
+                "surviving pixels belong to the surviving uid");
+    check_cuda(cudaFree(batch), "free batch");
+    check_cuda(cudaFree(crops), "free crops");
+
+    std::cout << "stash_batch_depth_and_lru passed" << std::endl;
+}
+
 }  // namespace
 
 int main() {
@@ -246,6 +331,8 @@ int main() {
     test_evict_frees_slots();
     test_clean_only_filter();
     test_gather_many_contiguous();
+    test_stash_batch_matches_loop_semantics();
+    test_stash_batch_depth_and_lru();
 
     std::cout << "crop ring store tests passed" << std::endl;
     return 0;

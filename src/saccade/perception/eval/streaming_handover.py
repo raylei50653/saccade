@@ -337,12 +337,17 @@ class LiveEvfifoHandover:
         Also records the (frame, box) → uid mapping for ring-based extraction at
         finalize (uid = during-tracking id, invariant under post_merge remap).
         """
+        if len(ids) == 0:
+            return
+        embs_f = embs.detach().float()
+        # One reduction for all rows; a per-row emb.dot(emb) is ~40 torch
+        # dispatches per frame.
+        norms = torch.einsum("ij,ij->i", embs_f, embs_f).tolist()
         for i, tid in enumerate(ids):
-            emb = embs[i]
-            if float(emb.dot(emb)) < 1e-8:
+            if norms[i] < 1e-8:
                 continue
             k = self._key(frame_id, boxes[i])
-            self._cache[k] = emb.detach().float()
+            self._cache[k] = embs_f[i]
             self._box_to_uid[k] = tid
 
     def uid_for_box(self, frame: int, box: Any) -> int | None:

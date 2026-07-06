@@ -4324,10 +4324,13 @@ def _run_emit(
         and embeddings.numel() > 0
     ):
         try:
+            from .helpers import FLOW_TIMING, flow_add, flow_now, flow_report
+
             ids_t = track_results["ids"]
             count_raw = track_results["count"]
             count_i = int(count_raw.item() if hasattr(count_raw, "item") else count_raw)
             if count_i > 0:
+                _t0 = flow_now() if FLOW_TIMING else 0.0
                 ids_cpu = ids_t[:count_i].cpu().tolist()
                 scores_cpu = track_results["scores"][:count_i].cpu().tolist()
                 emb_dim = embeddings.shape[1]
@@ -4336,15 +4339,19 @@ def _run_emit(
                 # Tracks with no matched detection this frame get a zero row
                 # (skipped by the C++ side).
                 det_idx = track_results.get("det_idx")
-                emb_rows = torch.zeros((count_i, emb_dim), dtype=embeddings.dtype)
+                emb_src = embeddings.detach()
+                emb_rows = torch.zeros((count_i, emb_dim), dtype=emb_src.dtype)
                 if det_idx is not None:
                     di = det_idx[:count_i].long().cpu()
-                    ok = (di >= 0) & (di < embeddings.shape[0])
+                    ok = (di >= 0) & (di < emb_src.shape[0])
                     if ok.any():
-                        emb_rows[ok] = embeddings.detach().cpu()[di[ok]]
+                        # Gather on-device, then D2H only the matched rows —
+                        # not the full detection-indexed tensor.
+                        sel = di[ok].to(emb_src.device, non_blocking=True)
+                        emb_rows[ok] = emb_src.index_select(0, sel).cpu()
                 else:
-                    n_copy = min(count_i, embeddings.shape[0])
-                    emb_rows[:n_copy] = embeddings[:n_copy].detach().cpu()
+                    n_copy = min(count_i, emb_src.shape[0])
+                    emb_rows[:n_copy] = emb_src[:n_copy].cpu()
                 # Head/bank samples must be visually clean (Python-reference
                 # parity): front-occlusion gate over this frame's track boxes.
                 boxes_xyxy = track_results["boxes"][:count_i].detach().cpu()
@@ -4352,14 +4359,39 @@ def _run_emit(
                     boxes_xyxy, getattr(cfg, "appearance_occlusion_cov", 0.4)
                 )
                 clean_flags = (~occluded).to(torch.int32).tolist()
-                emb_cpu = emb_rows.numpy().ravel().tolist()
-                relinker.feed_frame_embeddings(
-                    emb_cpu, emb_dim, frame_id, ids_cpu, scores_cpu, clean_flags
-                )
+                if FLOW_TIMING:
+                    flow_add("ho_gather", flow_now() - _t0)
+                    _t0 = flow_now()
+                if hasattr(relinker, "feed_frame_embeddings_arr"):
+                    # Buffer-protocol fast path: no per-element Python float
+                    # round-trip through the pybind std::vector caster.
+                    relinker.feed_frame_embeddings_arr(
+                        np.ascontiguousarray(emb_rows.numpy()),
+                        emb_dim,
+                        frame_id,
+                        np.asarray(ids_cpu, dtype=np.int32),
+                        np.asarray(scores_cpu, dtype=np.float32),
+                        (~occluded).numpy().astype(np.int32),
+                    )
+                else:
+                    relinker.feed_frame_embeddings(
+                        emb_rows.numpy().ravel().tolist(),
+                        emb_dim,
+                        frame_id,
+                        ids_cpu,
+                        scores_cpu,
+                        clean_flags,
+                    )
+                if FLOW_TIMING:
+                    flow_add("ho_feed", flow_now() - _t0)
+                    _t0 = flow_now()
                 if state.live_evfifo is not None:
                     state.live_evfifo.observe_frame(
                         frame_id, ids_cpu, boxes_xyxy, emb_rows
                     )
+                if FLOW_TIMING:
+                    flow_add("ho_observe", flow_now() - _t0)
+                    _t0 = flow_now()
                 # Stash each confirmed track's crop into the re-query ring,
                 # keyed by the same track id fed above (= handover archive tid).
                 pp = state.perception_pipeline
@@ -4386,6 +4418,9 @@ def _run_emit(
                     uids_np = np.asarray(ids_cpu, dtype=np.uint64)
                     frames_np = np.full(count_i, frame_id, dtype=np.int32)
                     clean_np = np.asarray(clean_flags, dtype=bool)
+                    if FLOW_TIMING:
+                        flow_add("ho_hwc_boxes", flow_now() - _t0)
+                        _t0 = flow_now()
                     pp.stash_crops(
                         uids_np.ctypes.data,
                         frames_np.ctypes.data,
@@ -4397,6 +4432,10 @@ def _run_emit(
                         clean_np.ctypes.data,
                         torch.cuda.current_stream().cuda_stream,
                     )
+                    if FLOW_TIMING:
+                        flow_add("ho_stash", flow_now() - _t0)
+            if FLOW_TIMING and frame_id % 100 == 0:
+                print(f"[flow t] f{frame_id}: {flow_report()}")
         except Exception as exc:
             print(f"[online_ho] ERROR frame={frame_id}: {exc}")
             import traceback
@@ -4528,12 +4567,18 @@ def _run_emit(
                 )
                 curr_track_ids = set(int(x) for x in track_results["ids"].tolist())
         else:
+            from .helpers import FLOW_TIMING, flow_add, flow_now
+
+            _t0 = flow_now() if FLOW_TIMING else 0.0
             host_track_batch = _prepare_host_track_batch(
                 track_results,
                 tracker_result_buffers,
                 dynamic_reid_enabled=dynamic_reid is not None,
                 person_class=cfg.person_class,
             )
+            if FLOW_TIMING:
+                flow_add("emit_host_batch", flow_now() - _t0)
+                _t0 = flow_now()
 
             prepared_candidates = _prepare_track_candidates(
                 frame_id=frame_id,
@@ -4558,6 +4603,9 @@ def _run_emit(
                 bank_quality_w_center=cfg.bank_quality_w_center,
                 bank_quality_w_area=cfg.bank_quality_w_area,
             )
+            if FLOW_TIMING:
+                flow_add("emit_prepare_cand", flow_now() - _t0)
+                _t0 = flow_now()
             resolved_tracks = _resolve_frame_tracks(
                 frame_id=frame_id,
                 frame_w=w_orig,
@@ -4566,6 +4614,9 @@ def _run_emit(
                 lifecycle_merger=lifecycle_merger,
                 identity_resolver=identity_resolver,
             )
+            if FLOW_TIMING:
+                flow_add("emit_resolve", flow_now() - _t0)
+                _t0 = flow_now()
             frame_result_lines = _emit_resolved_tracks(
                 seq=seq,
                 frame_id=frame_id,
@@ -4575,6 +4626,8 @@ def _run_emit(
                 global_id_mapper=global_id_mapper,
                 output_appearance_bank=output_appearance_bank,
             )
+            if FLOW_TIMING:
+                flow_add("emit_lines", flow_now() - _t0)
             det_idx_to_local_id = {
                 int(det_idx): int(local_id)
                 for local_id, det_idx in zip(
@@ -5209,9 +5262,14 @@ def _run_reid_and_gmc(
                 budgeted_boxes = fused_boxes[budget_indices].contiguous()
 
                 if native_reid_available and perception_pipeline is not None:
+                    from .helpers import FLOW_TIMING, flow_add, flow_now
+
+                    _t0 = flow_now() if FLOW_TIMING else 0.0
                     frame_hwc = pool.as_rgb_chw().permute(1, 2, 0).contiguous()
                     # Shared with the emit-stage crop-ring stash (read-only).
                     state.frame_hwc_cache = (frame_id, frame_hwc)
+                    if FLOW_TIMING:
+                        flow_add("reid_hwc", flow_now() - _t0)
                     budget_embeddings = torch.empty(
                         (budget_indices.numel(), extractor.feature_dim),
                         device=fused_boxes.device,
@@ -5242,6 +5300,7 @@ def _run_reid_and_gmc(
                             torch.cuda.synchronize()
                             t_reid_extract_start = time.perf_counter()
 
+                        _t0 = flow_now() if FLOW_TIMING else 0.0
                         perception_pipeline.extract_reid(
                             frame_hwc.data_ptr(),
                             h_orig,
@@ -5251,6 +5310,8 @@ def _run_reid_and_gmc(
                             budget_embeddings.data_ptr(),
                             torch.cuda.current_stream().cuda_stream,
                         )
+                        if FLOW_TIMING:
+                            flow_add("reid_extract_call", flow_now() - _t0)
 
                         if profile_stages:
                             torch.cuda.synchronize()

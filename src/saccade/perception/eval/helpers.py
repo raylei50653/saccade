@@ -1,3 +1,6 @@
+import os as _os
+import time as _time
+
 import torch
 from typing import Any
 from .types import (
@@ -20,6 +23,29 @@ from saccade.perception.eval.detection import (
 
 
 _CUDA_COPY_STREAM: "torch.cuda.Stream | None" = None
+
+# ── Host-side data-flow wall timers (SACCADE_FLOW_TIMING=1) ────────────────
+# Whole-graph mode zeroes the sync-based stage timers, so these measure the
+# host-blocking time of individual emit-tail calls without any device sync.
+FLOW_TIMING = _os.environ.get("SACCADE_FLOW_TIMING") == "1"
+_FLOW_T: dict[str, float] = {}
+_FLOW_N: dict[str, int] = {}
+
+
+def flow_add(key: str, dt_s: float) -> None:
+    _FLOW_T[key] = _FLOW_T.get(key, 0.0) + dt_s
+    _FLOW_N[key] = _FLOW_N.get(key, 0) + 1
+
+
+def flow_report() -> str:
+    rows = sorted(_FLOW_T.items(), key=lambda kv: -kv[1])
+    return " | ".join(
+        f"{k}={v / max(_FLOW_N[k], 1) * 1000:.2f}ms(n={_FLOW_N[k]})" for k, v in rows
+    )
+
+
+def flow_now() -> float:
+    return _time.perf_counter()
 
 
 def front_occlusion_mask_xyxy(
@@ -366,15 +392,49 @@ def resolve_frame_tracks(
     identity_resolver: Any = None,
 ) -> list[ResolvedTrack]:
     if identity_resolver is not None and prepared_candidates:
-        resolved_ids = identity_resolver.resolve_pass(
-            [c.local_track_id for c in prepared_candidates],
-            [c.embedding for c in prepared_candidates],
-            [c.box for c in prepared_candidates],
-            [c.score for c in prepared_candidates],
-            frame_id=frame_id,
-            frame_w=frame_w,
-            frame_h=frame_h,
-        )
+        _t0 = flow_now() if FLOW_TIMING else 0.0
+        if hasattr(identity_resolver, "resolve_pass_arr"):
+            # Batch the candidate embeddings into one host copy: the legacy
+            # entry point converts each (GPU) row separately — one D2H sync
+            # per track per frame.
+            import numpy as _np
+
+            emb_idx = _np.full(len(prepared_candidates), -1, dtype=_np.int32)
+            emb_list: list[torch.Tensor] = []
+            for i, c in enumerate(prepared_candidates):
+                if c.embedding is not None:
+                    emb_idx[i] = len(emb_list)
+                    emb_list.append(c.embedding)
+            if emb_list:
+                emb_mat = torch.stack(emb_list).detach().to(torch.float32).cpu().numpy()
+            else:
+                emb_mat = _np.zeros((0, 0), dtype=_np.float32)
+            resolved_ids = identity_resolver.resolve_pass_arr(
+                _np.asarray(
+                    [c.local_track_id for c in prepared_candidates], dtype=_np.int32
+                ),
+                emb_mat,
+                emb_idx,
+                _np.asarray(
+                    [c.box for c in prepared_candidates], dtype=_np.float32
+                ).reshape(len(prepared_candidates), 4),
+                _np.asarray([c.score for c in prepared_candidates], dtype=_np.float32),
+                frame_id=frame_id,
+                frame_w=frame_w,
+                frame_h=frame_h,
+            )
+        else:
+            resolved_ids = identity_resolver.resolve_pass(
+                [c.local_track_id for c in prepared_candidates],
+                [c.embedding for c in prepared_candidates],
+                [c.box for c in prepared_candidates],
+                [c.score for c in prepared_candidates],
+                frame_id=frame_id,
+                frame_w=frame_w,
+                frame_h=frame_h,
+            )
+        if FLOW_TIMING:
+            flow_add("resolve_pass", flow_now() - _t0)
         return [
             ResolvedTrack(
                 local_track_id=candidate.local_track_id,
@@ -521,6 +581,26 @@ def build_prepared_candidates(
         bh_gpu = (det_boxes_gpu[:, 3] - det_boxes_gpu[:, 1]).clamp(min=1e-6)
         aspects_gpu = bh_gpu / bw_gpu
         det_scores_gpu = fused_scores[di_list]
+        # Suspect flags ride the same batched D2H below — a per-pair
+        # bool(geometry_suspect_mask[di]) would sync the device once per track.
+        has_suspect = geometry_suspect_mask.numel() > 0
+        if has_suspect:
+            di_gpu = torch.as_tensor(
+                di_list, dtype=torch.long, device=geometry_suspect_mask.device
+            )
+            in_range = di_gpu < geometry_suspect_mask.numel()
+            suspect_gpu = torch.zeros(
+                len(di_list),
+                dtype=torch.float32,
+                device=geometry_suspect_mask.device,
+            )
+            suspect_gpu[in_range] = geometry_suspect_mask[di_gpu[in_range]].to(
+                torch.float32
+            )
+        else:
+            suspect_gpu = torch.zeros(
+                len(di_list), dtype=torch.float32, device=det_scores_gpu.device
+            )
         batch_cpu = (
             torch.stack(
                 [
@@ -531,21 +611,16 @@ def build_prepared_candidates(
                     det_boxes_gpu[:, 1],
                     det_boxes_gpu[:, 2],
                     det_boxes_gpu[:, 3],
+                    suspect_gpu,
                 ],
                 dim=1,
             )
             .cpu()
             .tolist()
         )
-        has_suspect = geometry_suspect_mask.numel() > 0
         for li, di, row in zip(li_list, di_list, batch_cpu):
-            iou, asp, ds, x1, y1, x2, y2 = row
-            suspect = (
-                bool(geometry_suspect_mask[di])
-                if has_suspect and di < geometry_suspect_mask.numel()
-                else False
-            )
-            precomp[li] = (iou, asp, ds, suspect, (x1, y1, x2, y2))
+            iou, asp, ds, x1, y1, x2, y2, sus = row
+            precomp[li] = (iou, asp, ds, bool(sus > 0.5), (x1, y1, x2, y2))
 
     prepared: list[PreparedTrackCandidate] = []
     appearance_updates: list[CandidateAppearanceUpdate] = []
