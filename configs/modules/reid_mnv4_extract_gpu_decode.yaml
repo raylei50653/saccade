@@ -1,0 +1,23 @@
+# MobileNetV4 visclean ReID trained/selected in the GPU-decode crop domain.
+# Same extract-only wiring as reid_mnv4_extract.yaml; only the engine changes.
+
+reid_model: mobilenetv4_reid
+reid_engine_path: models/embedding/mobilenetv4_reid_visclean_gpu_decode_224.engine
+
+reid_budget: 0
+reid_interval: 1
+need_reid: false
+async_reid: false
+
+appearance_bank: false
+relink_enabled: false
+pipeline_relink: false
+
+reid_cos_threshold: 1.1
+
+reid_crop_mode: tight
+reid_crop_padding: 0.0
+reid_crop_layout: full
+
+appearance_occlusion_gate: true
+appearance_occlusion_cov: 0.4

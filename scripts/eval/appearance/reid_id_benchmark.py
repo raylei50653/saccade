@@ -142,6 +142,7 @@ def _extract_seq(
     crop_hw,
     im_ext: str,
     resample: str = "bilinear",
+    gpu_decode: bool = False,
 ):
     """Returns feats [M,D] (L2-normed), labels [M], frames [M], heights [M]."""
     from PIL import Image
@@ -150,6 +151,11 @@ def _extract_seq(
         "bilinear": Image.BILINEAR,
         "bicubic": Image.BICUBIC,
         "lanczos": Image.LANCZOS,
+    }[resample]
+    _INTERP = {
+        "bilinear": "bilinear",
+        "bicubic": "bicubic",
+        "lanczos": "bicubic",
     }[resample]
 
     # Resolve frame -> image path from the directory listing (robust to zero-pad
@@ -171,28 +177,63 @@ def _extract_seq(
         by_frame[frame].append(si)
 
     out_h, out_w = crop_hw
-    crops: list[np.ndarray | None] = [None] * len(samples)
-    for frame, si_list in by_frame.items():
-        img = Image.open(frame_paths[frame]).convert("RGB")
-        fw, fh = img.size
-        for si in si_list:
-            x, y, w, h = samples[si][2]
-            box = (
-                max(0, int(x)),
-                max(0, int(y)),
-                min(fw, int(x + w)),
-                min(fh, int(y + h)),
-            )
-            if box[2] <= box[0] or box[3] <= box[1]:
-                box = (0, 0, fw, fh)
-            c = img.crop(box).resize((out_w, out_h), _RESAMPLE)
-            crops[si] = np.asarray(c, dtype=np.uint8).transpose(2, 0, 1)
-
     device = getattr(extractor, "device", "cuda")
+    crops: list[np.ndarray | torch.Tensor | None] = [None] * len(samples)
+    if gpu_decode:
+        from torchvision.io import ImageReadMode, decode_jpeg, read_file
+
+        if not torch.cuda.is_available():
+            raise RuntimeError("--gpu-decode requires CUDA")
+        for frame, si_list in by_frame.items():
+            raw = read_file(str(frame_paths[frame]))
+            img = decode_jpeg(raw, mode=ImageReadMode.RGB, device=device)
+            _, fh, fw = img.shape
+            for si in si_list:
+                x, y, w, h = samples[si][2]
+                box = (
+                    max(0, int(x)),
+                    max(0, int(y)),
+                    min(fw, int(x + w)),
+                    min(fh, int(y + h)),
+                )
+                if box[2] <= box[0] or box[3] <= box[1]:
+                    box = (0, 0, fw, fh)
+                crop = img[:, box[1] : box[3], box[0] : box[2]].float().unsqueeze(0)
+                crop = torch.nn.functional.interpolate(
+                    crop / 255.0,
+                    size=(out_h, out_w),
+                    mode=_INTERP,
+                    align_corners=False,
+                ).squeeze(0)
+                crops[si] = crop
+    else:
+        for frame, si_list in by_frame.items():
+            img = Image.open(frame_paths[frame]).convert("RGB")
+            fw, fh = img.size
+            for si in si_list:
+                x, y, w, h = samples[si][2]
+                box = (
+                    max(0, int(x)),
+                    max(0, int(y)),
+                    min(fw, int(x + w)),
+                    min(fh, int(y + h)),
+                )
+                if box[2] <= box[0] or box[3] <= box[1]:
+                    box = (0, 0, fw, fh)
+                c = img.crop(box).resize((out_w, out_h), _RESAMPLE)
+                crops[si] = np.asarray(c, dtype=np.uint8).transpose(2, 0, 1)
+
     feats = torch.empty((len(samples), extractor.feature_dim), device=device)
     for s in range(0, len(samples), 256):
-        arr = np.stack(crops[s : s + 256])
-        t = torch.from_numpy(arr).to(device).float().div_(255.0)
+        chunk = crops[s : s + 256]
+        if gpu_decode:
+            tensors = [c for c in chunk if isinstance(c, torch.Tensor)]
+            if len(tensors) != len(chunk):
+                raise RuntimeError("missing GPU-decoded crop in ReID benchmark batch")
+            t = torch.stack(tensors).to(device)
+        else:
+            arr = np.stack(chunk)
+            t = torch.from_numpy(arr).to(device).float().div_(255.0)
         feats[s : s + t.shape[0]] = extractor.extract(t)
     feats = torch.nn.functional.normalize(feats, dim=1)
     labels = torch.tensor([s[0] for s in samples])
@@ -309,6 +350,11 @@ def main() -> None:
     ap.add_argument(
         "--resize", default="bilinear", choices=["bilinear", "bicubic", "lanczos"]
     )
+    ap.add_argument(
+        "--gpu-decode",
+        action="store_true",
+        help="Decode full frames with torchvision/nvJPEG and crop/resize on GPU.",
+    )
     args = ap.parse_args()
 
     gt_root = Path(args.gt_root)
@@ -350,6 +396,7 @@ def main() -> None:
             crop_hw,
             args.im_ext,
             resample=args.resize,
+            gpu_decode=args.gpu_decode,
         )
         if res is None:
             continue

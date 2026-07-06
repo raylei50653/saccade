@@ -27,10 +27,18 @@ from PIL import Image
 
 
 class YoloCalibrationReader(CalibrationDataReader):
-    def __init__(self, img_paths: list[Path], img_size: int, input_name: str):
+    def __init__(
+        self,
+        img_paths: list[Path],
+        img_size: int,
+        input_name: str,
+        *,
+        gpu_decode: bool = True,
+    ):
         self.img_paths = img_paths
         self.img_size = img_size
         self.input_name = input_name
+        self.gpu_decode = gpu_decode
         self._iter = iter(self.img_paths)
 
     def get_next(self):
@@ -38,10 +46,34 @@ class YoloCalibrationReader(CalibrationDataReader):
             p = next(self._iter)
         except StopIteration:
             return None
-        img = Image.open(p).convert("RGB").resize((self.img_size, self.img_size))
-        arr = np.array(img, dtype=np.float32) / 255.0  # HWC
+        if self.gpu_decode and p.suffix.lower() in {".jpg", ".jpeg"}:
+            arr = self._load_gpu_decode_jpeg(p)
+        else:
+            arr = self._load_cpu_decode(p)
+        # HWC -> 1CHW
         arr = arr.transpose(2, 0, 1)[None]  # 1CHW
         return {self.input_name: arr}
+
+    def _load_cpu_decode(self, p: Path) -> np.ndarray:
+        img = Image.open(p).convert("RGB").resize((self.img_size, self.img_size))
+        return np.array(img, dtype=np.float32) / 255.0
+
+    def _load_gpu_decode_jpeg(self, p: Path) -> np.ndarray:
+        import torch
+        import torch.nn.functional as F
+        from torchvision.io import ImageReadMode, decode_jpeg, read_file
+
+        if not torch.cuda.is_available():
+            raise RuntimeError("--gpu-decode calibration requires CUDA")
+        raw = read_file(str(p))
+        chw = decode_jpeg(raw, mode=ImageReadMode.RGB, device="cuda").float() / 255.0
+        chw = F.interpolate(
+            chw.unsqueeze(0),
+            size=(self.img_size, self.img_size),
+            mode="bilinear",
+            align_corners=False,
+        )[0]
+        return chw.permute(1, 2, 0).contiguous().cpu().numpy()
 
 
 def collect_images(data_root: Path, num_images: int, seed: int = 42) -> list[Path]:
@@ -65,6 +97,18 @@ def main():
     parser.add_argument("--img-size", type=int, default=960)
     parser.add_argument("--num-images", type=int, default=512)
     parser.add_argument("--seed", type=int, default=42)
+    decode = parser.add_mutually_exclusive_group()
+    decode.add_argument(
+        "--gpu-decode",
+        action="store_true",
+        default=True,
+        help="Decode JPEG calibration images with torchvision/nvJPEG on GPU.",
+    )
+    decode.add_argument(
+        "--no-gpu-decode",
+        action="store_true",
+        help="Use PIL CPU decode for legacy calibration comparisons.",
+    )
     args = parser.parse_args()
 
     print(f"Collecting {args.num_images} calibration images from {args.data_root}...")
@@ -74,7 +118,14 @@ def main():
     input_name = get_input_name(args.onnx)
     print(f"  Model input: {input_name!r}  size: {args.img_size}x{args.img_size}")
 
-    reader = YoloCalibrationReader(imgs, args.img_size, input_name)
+    gpu_decode = bool(args.gpu_decode and not args.no_gpu_decode)
+    print(f"  Decode domain: {'GPU/nvJPEG' if gpu_decode else 'CPU/PIL'}")
+    reader = YoloCalibrationReader(
+        imgs,
+        args.img_size,
+        input_name,
+        gpu_decode=gpu_decode,
+    )
 
     print("Running INT8 static calibration (QDQ format)...")
     quantize_static(

@@ -21,7 +21,7 @@ from saccade.perception.eval.evaluator import run_eval_cpp  # noqa: E402
 from mlflow_logger import log_eval_run  # noqa: E402
 
 import yaml  # noqa: E402
-from mot17_args import build_parser  # noqa: E402
+from mot17_args import build_parser, configure_runtime_env  # noqa: E402
 
 
 def _load_config_defaults(project_root: Path) -> dict:
@@ -103,15 +103,10 @@ if __name__ == "__main__":
             parser.error("--private-continuation is not implemented for --cpp-threads")
         if getattr(args, "workbench", False):
             parser.error("--private-continuation is not implemented for --workbench")
-    if args.double_buffer:
-        if args.detect_barrier not in {None, "event"}:
-            parser.error("--double-buffer requires --detect-barrier event")
-        os.environ["SACCADE_DOUBLE_BUFFER"] = "1"
-        os.environ["SACCADE_DETECT_BARRIER"] = "event"
-    elif args.detect_barrier is not None:
-        os.environ["SACCADE_DETECT_BARRIER"] = args.detect_barrier
-    if not getattr(args, "no_gpu_decode", False):
-        os.environ["SACCADE_GPU_DECODE"] = "1"
+    try:
+        configure_runtime_env(args)
+    except ValueError as exc:
+        parser.error(str(exc))
     if os.environ.get("SACCADE_NV12_BUFFER") == "1":
         _nv_lib = project_root / ".venv/lib/python3.12/site-packages/nvidia/cu13/lib"
         _ld_preload = os.environ.get("LD_PRELOAD", "")

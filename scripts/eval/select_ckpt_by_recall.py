@@ -66,6 +66,10 @@ def eval_recall(ckpt: Path, args, scratch: Path) -> tuple[float, dict[str, float
     ]
     if args.sequences:
         cmd += ["--sequences", args.sequences]
+    if args.no_gpu_decode:
+        cmd += ["--no-gpu-decode"]
+    elif args.gpu_decode:
+        cmd += ["--gpu-decode"]
     if args.extra_eval_args:
         cmd += args.extra_eval_args.split()
     proc = subprocess.run(cmd, capture_output=True, text=True, cwd=str(ROOT))
@@ -94,6 +98,18 @@ def main() -> None:
     ap.add_argument("--detector", default="SDP")
     ap.add_argument("--split", default="train")
     ap.add_argument("--sequences", default="")
+    decode = ap.add_mutually_exclusive_group()
+    decode.add_argument(
+        "--gpu-decode",
+        action="store_true",
+        default=True,
+        help="Select checkpoints using the GPU/nvJPEG eval decode domain.",
+    )
+    decode.add_argument(
+        "--no-gpu-decode",
+        action="store_true",
+        help="Select checkpoints using the legacy CPU/DALI eval decode domain.",
+    )
     ap.add_argument(
         "--extra-eval-args",
         default="",

@@ -1,6 +1,8 @@
 import argparse
+import os
 import sys
 from pathlib import Path
+from typing import MutableMapping
 
 # Allow running from scripts/eval/ directly
 _config_dir = Path(__file__).resolve().parent / "config"
@@ -50,11 +52,21 @@ def build_parser() -> argparse.ArgumentParser:
 
     # Decode backend
     dec = parser.add_argument_group("Decode backend")
-    dec.add_argument(
+    decode_choice = dec.add_mutually_exclusive_group()
+    decode_choice.add_argument(
+        "--gpu-decode",
+        action="store_true",
+        help=(
+            "Use torchvision/nvJPEG GPU JPEG decode. This is the default decode "
+            "domain for GPU-trained/calibrated runs."
+        ),
+    )
+    decode_choice.add_argument(
         "--no-gpu-decode",
         action="store_true",
-        help="Use CPU JPEG decode (DALI) instead of GPU NVJPG engine (default: GPU decode).",
+        help="Use CPU JPEG decode (DALI) for legacy CPU-decode baseline comparisons.",
     )
+    parser.set_defaults(gpu_decode=True)
 
     runtime = parser.add_argument_group("Pipeline scheduling")
     runtime.add_argument(
@@ -109,3 +121,31 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     return parser
+
+
+def configure_runtime_env(
+    args: argparse.Namespace,
+    environ: MutableMapping[str, str] | None = None,
+) -> None:
+    """Apply CLI runtime choices to process env used by the eval pipeline.
+
+    The lower-level evaluator reads a few scheduling/decode knobs from env for
+    historical reasons.  Make the CLI entrypoint authoritative so a previous
+    shell export (especially SACCADE_DETECT_BARRIER=event) cannot silently move
+    a normal GPU-decode run onto the known drift-prone path.
+    """
+
+    env = os.environ if environ is None else environ
+
+    if getattr(args, "double_buffer", False):
+        if getattr(args, "detect_barrier", None) not in {None, "event"}:
+            raise ValueError("--double-buffer requires --detect-barrier event")
+        env["SACCADE_DOUBLE_BUFFER"] = "1"
+        env["SACCADE_DETECT_BARRIER"] = "event"
+    else:
+        env["SACCADE_DOUBLE_BUFFER"] = "0"
+        env["SACCADE_DETECT_BARRIER"] = (
+            args.detect_barrier if getattr(args, "detect_barrier", None) else "full"
+        )
+
+    env["SACCADE_GPU_DECODE"] = "0" if getattr(args, "no_gpu_decode", False) else "1"

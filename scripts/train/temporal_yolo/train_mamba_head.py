@@ -43,7 +43,10 @@ sys.path.insert(0, str(project_root / "build"))
 # Import tracker first to avoid libtiff symbol conflict with torchvision
 import saccade_tracking_ext  # noqa: F401, E402
 
-from saccade.perception.temporal_yolo.dataset import build_mot17_dataloader  # noqa: E402
+from saccade.perception.temporal_yolo.dataset import (  # noqa: E402
+    build_mot17_dataloader,
+    gpu_decode_clip_batch,
+)
 from saccade.perception.temporal_yolo.yolo_gated_detector import (  # noqa: E402
     GatedDetConfig,
     build_gated_yolo_detector,
@@ -172,10 +175,12 @@ def _precompute_teacher_features(
     device: torch.device,
     teacher: nn.Module,
     manifest_base: dict[str, Any],
+    *,
+    gpu_decode: bool = False,
 ) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     dataset: Any = loader.dataset
-    img_cache: dict = dataset._img_cache
+    img_cache: dict | None = dataset._img_cache
     frame_lists: dict = dataset._frame_lists
     sequences: list[str] = dataset.sequences
     detect_head = teacher.yolo_model.model[-1]
@@ -210,47 +215,94 @@ def _precompute_teacher_features(
     skipped = 0
     t0 = time.time()
 
+    def write_frame(seq: str, fid: int, img: torch.Tensor) -> bool:
+        cache_path = out_dir / seq / f"{fid:06d}.pt"
+        if cache_path.exists():
+            existing = torch.load(cache_path, map_location="cpu", weights_only=True)
+            if _cache_required_keys().issubset(existing):
+                return False
+
+        img = img.to(device, dtype=torch.float32) / 255.0
+        img = img.unsqueeze(0)
+
+        with torch.no_grad():
+            features = _forward_teacher_backbone(teacher, img)
+            teacher_cls = [detect_head.cv3[si](features[si]) for si in range(3)]
+            teacher_reg = [detect_head.cv2[si](features[si]) for si in range(3)]
+
+        cached = {
+            scale: features[si].squeeze(0).cpu().half()
+            for si, scale in enumerate(CACHE_SCALES)
+        }
+        for si, scale in enumerate(CACHE_SCALES):
+            cached[f"cls_{scale}"] = teacher_cls[si].squeeze(0).cpu().half()
+            cached[f"reg_{scale}"] = teacher_reg[si].squeeze(0).cpu().half()
+        torch.save(cached, cache_path)
+        return True
+
     for seq in sequences:
         (out_dir / seq).mkdir(parents=True, exist_ok=True)
-        seq_imgs = img_cache[seq]
-        seq_paths = frame_lists[seq]
+    if gpu_decode:
+        print("  [Precompute] GPU-decode cache ACTIVE: nvJPEG decode in-loop")
+        for batch in loader:
+            frames = gpu_decode_clip_batch(
+                batch["jpeg_bytes"], loader.dataset.img_size, device
+            )  # type: ignore[index,attr-defined]
+            seqs_batch = batch["seq"]  # type: ignore[index]
+            fids_batch = batch["frame_ids"]  # type: ignore[index]
+            B, T = frames.shape[:2]
+            for b in range(B):
+                seq = seqs_batch[b]
+                for t in range(T):
+                    fid = int(fids_batch[b][t])
+                    cache_path = out_dir / seq / f"{fid:06d}.pt"
+                    if cache_path.exists():
+                        existing = torch.load(
+                            cache_path, map_location="cpu", weights_only=True
+                        )
+                        if _cache_required_keys().issubset(existing):
+                            skipped += 1
+                            continue
+                    if write_frame(seq, fid, frames[b, t]):
+                        done += 1
+                    if done % 100 == 0 or done == 1:
+                        elapsed = time.time() - t0
+                        fps = done / elapsed if elapsed > 0 else 0
+                        print(
+                            f"  [Precompute] {done}/{total}  ({fps:.1f} fps)  "
+                            f"ETA: {(total - done) / fps:.0f}s"
+                            if fps > 0
+                            else ""
+                        )
+    else:
+        if img_cache is None:
+            raise RuntimeError("CPU precompute requires preloaded image cache")
+        for seq in sequences:
+            seq_imgs = img_cache[seq]
+            seq_paths = frame_lists[seq]
 
-        for i, fpath in enumerate(seq_paths):
-            fid = int(fpath.stem)
-            cache_path = out_dir / seq / f"{fid:06d}.pt"
-            if cache_path.exists():
-                existing = torch.load(cache_path, map_location="cpu", weights_only=True)
-                if _cache_required_keys().issubset(existing):
-                    skipped += 1
-                    continue
+            for i, fpath in enumerate(seq_paths):
+                fid = int(fpath.stem)
+                cache_path = out_dir / seq / f"{fid:06d}.pt"
+                if cache_path.exists():
+                    existing = torch.load(
+                        cache_path, map_location="cpu", weights_only=True
+                    )
+                    if _cache_required_keys().issubset(existing):
+                        skipped += 1
+                        continue
 
-            img = seq_imgs[i].float().to(device) / 255.0
-            img = img.unsqueeze(0)
-
-            with torch.no_grad():
-                features = _forward_teacher_backbone(teacher, img)
-                teacher_cls = [detect_head.cv3[si](features[si]) for si in range(3)]
-                teacher_reg = [detect_head.cv2[si](features[si]) for si in range(3)]
-
-            cached = {
-                scale: features[si].squeeze(0).cpu().half()
-                for si, scale in enumerate(CACHE_SCALES)
-            }
-            for si, scale in enumerate(CACHE_SCALES):
-                cached[f"cls_{scale}"] = teacher_cls[si].squeeze(0).cpu().half()
-                cached[f"reg_{scale}"] = teacher_reg[si].squeeze(0).cpu().half()
-            torch.save(cached, cache_path)
-
-            done += 1
-            if done % 100 == 0 or done == 1:
-                elapsed = time.time() - t0
-                fps = done / elapsed if elapsed > 0 else 0
-                print(
-                    f"  [Precompute] {done}/{total}  ({fps:.1f} fps)  "
-                    f"ETA: {(total - done) / fps:.0f}s"
-                    if fps > 0
-                    else ""
-                )
+                if write_frame(seq, fid, seq_imgs[i]):
+                    done += 1
+                if done % 100 == 0 or done == 1:
+                    elapsed = time.time() - t0
+                    fps = done / elapsed if elapsed > 0 else 0
+                    print(
+                        f"  [Precompute] {done}/{total}  ({fps:.1f} fps)  "
+                        f"ETA: {(total - done) / fps:.0f}s"
+                        if fps > 0
+                        else ""
+                    )
 
     elapsed = time.time() - t0
     frame_counts = {seq: len(list((out_dir / seq).glob("*.pt"))) for seq in sequences}
@@ -631,6 +683,21 @@ def main() -> None:
         help="Precompute teacher FPN features for all frames and exit",
     )
     parser.add_argument(
+        "--gpu-decode",
+        action="store_true",
+        help=(
+            "Precompute mode only: DataLoader workers return raw JPEG bytes and "
+            "the main loop decodes with torchvision/nvJPEG on GPU before teacher "
+            "forward. Builds a cache in the same decode domain as GPU eval."
+        ),
+    )
+    parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=0,
+        help="DataLoader workers for precompute GPU-decode raw-byte loading.",
+    )
+    parser.add_argument(
         "--cache-dir",
         default="",
         help="Use precomputed teacher FPN features (skip backbone forward pass)",
@@ -655,6 +722,8 @@ def main() -> None:
         parser.error("--clip-stride must be >= 0")
     if args.max_batches_per_epoch < 0:
         parser.error("--max-batches-per-epoch must be >= 0")
+    if args.gpu_decode and not args.precompute_dir:
+        parser.error("--gpu-decode is currently supported only with --precompute-dir")
     seed_everything(args.seed)
 
     if args.use_temporal_mamba and args.clip_len < 2:
@@ -757,12 +826,14 @@ def main() -> None:
         clip_len=args.clip_len,
         img_size=args.img_size,
         batch_size=args.batch_size,
+        num_workers=args.num_workers if args.gpu_decode else 0,
         stride=args.clip_stride or (1 if args.use_temporal_mamba else args.clip_len),
         shuffle=not args.use_temporal_mamba,
         seqs=args.seqs.split(",") if args.seqs else None,
-        preload_to_ram=not bool(args.cache_dir),
-        load_images=not bool(args.cache_dir),
+        preload_to_ram=not bool(args.cache_dir) and not args.gpu_decode,
+        load_images=not bool(args.cache_dir) and not args.gpu_decode,
         seed=args.seed,
+        return_jpeg_bytes=args.gpu_decode,
     )
 
     # ------------------------------------------------------------------
@@ -782,6 +853,7 @@ def main() -> None:
                 sha256_file(teacher_ckpt) if teacher_ckpt is not None else ""
             ),
             "fpn_channels": list(in_channels),
+            "decode_backend": "torchvision_nvjpeg" if args.gpu_decode else "cpu",
             "command": shlex.join(sys.argv),
         }
         _precompute_teacher_features(
@@ -790,6 +862,7 @@ def main() -> None:
             device,
             teacher,
             manifest_base,
+            gpu_decode=args.gpu_decode,
         )
         return
 

@@ -109,6 +109,8 @@ def build_mot_crop_cache(
     min_h: int,
     vis_min: float,
     occ_cov: float,
+    *,
+    gpu_decode: bool = False,
 ) -> list[dict]:
     """Crop per-id temporally-spread GT boxes to cache_dir; returns index entries.
 
@@ -118,6 +120,31 @@ def build_mot_crop_cache(
     whose pixels are mostly another person must not carry this identity label.
     """
     out_h, out_w = out_hw
+    if gpu_decode:
+        if not torch.cuda.is_available():
+            raise RuntimeError("--gpu-decode-cache requires CUDA")
+        from torchvision.io import ImageReadMode, decode_jpeg, read_file
+
+        def load_frame(path: Path) -> torch.Tensor:
+            raw = read_file(str(path))
+            return decode_jpeg(raw, mode=ImageReadMode.RGB, device="cuda")
+
+        def save_crop(img_chw: torch.Tensor, box, rel: str) -> None:
+            x1, y1, x2, y2 = box
+            crop = img_chw[:, y1:y2, x1:x2].float().unsqueeze(0) / 255.0
+            crop = F.interpolate(
+                crop,
+                size=(out_h, out_w),
+                mode="bicubic",
+                align_corners=False,
+            )
+            crop_u8 = (crop.squeeze(0).clamp(0, 1) * 255.0).round().to(torch.uint8)
+            torch.save(crop_u8.cpu(), cache_dir / rel)
+
+    else:
+        load_frame = None
+        save_crop = None
+
     entries: list[dict] = []
     next_label = 0
     n_vis_drop = n_occ_drop = 0
@@ -157,8 +184,12 @@ def build_mot_crop_cache(
             for tid, fr, box in samples:
                 by_frame[fr].append((tid, box))
             for fr, lst in by_frame.items():
-                img = Image.open(have[fr]).convert("RGB")
-                fw, fh = img.size
+                if gpu_decode:
+                    img_chw = load_frame(have[fr])  # type: ignore[misc]
+                    _, fh, fw = img_chw.shape
+                else:
+                    img = Image.open(have[fr]).convert("RGB")
+                    fw, fh = img.size
                 for tid, (x, y, w, h) in lst:
                     box = (
                         max(0, int(x)),
@@ -168,9 +199,13 @@ def build_mot_crop_cache(
                     )
                     if box[2] <= box[0] or box[3] <= box[1]:
                         continue
-                    crop = img.crop(box).resize((out_w, out_h), Image.BICUBIC)
-                    rel = f"{ds}_{seq}_{tid}_{fr}.jpg"
-                    crop.save(cache_dir / rel, quality=95)
+                    if gpu_decode:
+                        rel = f"{ds}_{seq}_{tid}_{fr}.pt"
+                        save_crop(img_chw, box, rel)  # type: ignore[misc]
+                    else:
+                        crop = img.crop(box).resize((out_w, out_h), Image.BICUBIC)
+                        rel = f"{ds}_{seq}_{tid}_{fr}.jpg"
+                        crop.save(cache_dir / rel, quality=95)
                     entries.append(
                         {"path": rel, "label": tid_map[tid], "src_h": int(h)}
                     )
@@ -198,6 +233,43 @@ def load_market_entries(label_offset: int) -> tuple[list[dict], int]:
     return entries, len(ids)
 
 
+def build_market_tensor_cache(
+    cache_dir: Path, label_offset: int, out_hw
+) -> tuple[list[dict], int]:
+    """Decode Market1501 crop JPEGs with nvJPEG and store 224x224 uint8 tensors."""
+    if not torch.cuda.is_available():
+        raise RuntimeError("--gpu-decode-cache requires CUDA")
+    from torchvision.io import ImageReadMode, decode_jpeg, read_file
+
+    out_h, out_w = out_hw
+    root = _ROOT / MARKET_TRAIN
+    ids: dict[int, int] = {}
+    entries = []
+    out_dir = cache_dir / "market1501"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for p in sorted(root.glob("*.jpg")):
+        pid = int(p.name.split("_")[0])
+        if pid == -1:
+            continue
+        if pid not in ids:
+            ids[pid] = label_offset + len(ids)
+        rel = f"market1501/{p.stem}.pt"
+        out_path = cache_dir / rel
+        if not out_path.exists():
+            raw = read_file(str(p))
+            img = decode_jpeg(raw, mode=ImageReadMode.RGB, device="cuda")
+            crop = F.interpolate(
+                img.float().unsqueeze(0) / 255.0,
+                size=(out_h, out_w),
+                mode="bicubic",
+                align_corners=False,
+            )
+            crop_u8 = (crop.squeeze(0).clamp(0, 1) * 255.0).round().to(torch.uint8)
+            torch.save(crop_u8.cpu(), out_path)
+        entries.append({"path": rel, "label": ids[pid], "src_h": 128})
+    return entries, len(ids)
+
+
 # ---------------------------------------------------------------------------
 # Dataset + PK sampler
 # ---------------------------------------------------------------------------
@@ -222,8 +294,23 @@ class CropDataset(Dataset):
         p = Path(e["path"])
         if not p.is_absolute():
             p = self.mot_cache / p
-        img = Image.open(p).convert("RGB")
         out_h, out_w = self.out_hw
+
+        if p.suffix == ".pt":
+            t = torch.load(p, map_location="cpu", weights_only=True).float() / 255.0
+            if self.train:
+                if random.random() < 0.5:
+                    t = torch.flip(t, dims=[2])
+                # Keep the GPU-decode pixel domain for MOT crops: no PIL color
+                # jitter/re-encode path, only tensor-space geometry/erasing.
+                pad = 10
+                t = F.pad(t, (pad, pad, pad, pad), value=0.5)
+                ox, oy = random.randint(0, 2 * pad), random.randint(0, 2 * pad)
+                t = t[:, oy : oy + out_h, ox : ox + out_w]
+                t = self._erase(t)
+            return t, e["label"]
+
+        img = Image.open(p).convert("RGB")
         if self.train:
             if random.random() < 0.5:
                 img = img.transpose(Image.FLIP_LEFT_RIGHT)
@@ -334,7 +421,9 @@ class _FTExtractor:
         return feat_bn.float()
 
 
-def eval_mot17(model, mean, std, device, crop_hw, gt_root: Path) -> dict:
+def eval_mot17(
+    model, mean, std, device, crop_hw, gt_root: Path, *, gpu_decode: bool
+) -> dict:
     model.eval()
     ext = _FTExtractor(model, mean, std, device)
     gh: dict = defaultdict(int)
@@ -347,7 +436,14 @@ def eval_mot17(model, mean, std, device, crop_hw, gt_root: Path) -> dict:
     ):
         gt = _load_gt(gt_root / seq / "gt" / "gt.txt")
         res = _extract_seq(
-            gt_root / seq / "img1", gt, ext, 20, crop_hw, ".jpg", resample="bicubic"
+            gt_root / seq / "img1",
+            gt,
+            ext,
+            20,
+            crop_hw,
+            ".jpg",
+            resample="bicubic",
+            gpu_decode=gpu_decode,
         )
         if res is None:
             continue
@@ -424,6 +520,15 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--gt-root", default="datasets/MOT17/train")
     ap.add_argument("--workers", type=int, default=8)
+    ap.add_argument(
+        "--gpu-decode-cache",
+        action="store_true",
+        help=(
+            "Build MOT-domain crop cache from full frames with torchvision/nvJPEG "
+            "GPU decode and tensor-space crop/resize, then train from cached .pt "
+            "crops without PIL/JPEG re-decode."
+        ),
+    )
     args = ap.parse_args()
 
     torch.manual_seed(args.seed)
@@ -438,6 +543,8 @@ def main() -> None:
     tag = f"crops_{args.input}_pid{args.per_id}_minh{args.min_h}"
     if args.vis_min > 0 or args.occ_cov < 1.0:
         tag += f"_vis{args.vis_min}_cov{args.occ_cov}"
+    if args.gpu_decode_cache:
+        tag += "_gpu_decode"
     cache = run / tag
     if args.per_id == 0:  # Market1501-only arm
         mot_entries = []
@@ -450,11 +557,32 @@ def main() -> None:
             cache.mkdir(parents=True, exist_ok=True)
             print("building MOT crop cache...", flush=True)
             mot_entries = build_mot_crop_cache(
-                cache, args.per_id, out_hw, args.min_h, args.vis_min, args.occ_cov
+                cache,
+                args.per_id,
+                out_hw,
+                args.min_h,
+                args.vis_min,
+                args.occ_cov,
+                gpu_decode=args.gpu_decode_cache,
             )
             index_p.write_text(json.dumps(mot_entries))
     n_mot_ids = 1 + max((e["label"] for e in mot_entries), default=-1)
-    market_entries, n_market_ids = load_market_entries(n_mot_ids)
+    if args.gpu_decode_cache:
+        market_index_p = cache / "market_index.json"
+        if market_index_p.exists():
+            market_entries = json.loads(market_index_p.read_text())
+            n_market_ids = 1 + max(
+                (e["label"] - n_mot_ids for e in market_entries), default=-1
+            )
+            print(f"loaded Market tensor cache: {len(market_entries)} crops")
+        else:
+            print("building Market tensor cache...", flush=True)
+            market_entries, n_market_ids = build_market_tensor_cache(
+                cache, n_mot_ids, out_hw
+            )
+            market_index_p.write_text(json.dumps(market_entries))
+    else:
+        market_entries, n_market_ids = load_market_entries(n_mot_ids)
     entries = mot_entries + market_entries
     n_classes = n_mot_ids + n_market_ids
     print(
@@ -534,7 +662,15 @@ def main() -> None:
         )
         if ep % args.eval_every == 0 or ep == args.epochs:
             print(f"--- MOT17 eval @ epoch {ep} ---", flush=True)
-            m = eval_mot17(model, mean, std, device, out_hw, _ROOT / args.gt_root)
+            m = eval_mot17(
+                model,
+                mean,
+                std,
+                device,
+                out_hw,
+                _ROOT / args.gt_root,
+                gpu_decode=args.gpu_decode_cache,
+            )
             m["epoch"] = ep
             hist.append(m)
             ckpt = {
