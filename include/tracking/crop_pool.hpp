@@ -2,7 +2,6 @@
 
 #include "saccade/common.hpp"
 #include <cuda_runtime.h>
-#include <cstdint>
 #include <mutex>
 #include <vector>
 
@@ -46,6 +45,7 @@ public:
 
     /// Device pointer to slot @p slot (or the start of a contiguous run).
     float* slot_ptr(int slot);
+    const float* slot_ptr(int slot) const;
 
     /// Number of slots currently in use.
     int in_use() const { return capacity_ - static_cast<int>(free_slots_.size()); }

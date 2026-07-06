@@ -51,6 +51,11 @@ PerceptionPipeline::~PerceptionPipeline() {
     if (d_private_added_count_) cudaFree(d_private_added_count_);
     if (d_private_baseline_mask_) cudaFree(d_private_baseline_mask_);
     delete crop_pool_; crop_pool_ = nullptr;
+    delete crop_ring_; crop_ring_ = nullptr;
+    if (d_stash_scratch_) cudaFree(d_stash_scratch_);
+    if (d_requery_crops_) cudaFree(d_requery_crops_);
+    if (d_requery_embeds_) cudaFree(d_requery_embeds_);
+    if (requery_stream_) cudaStreamDestroy(requery_stream_);
     if (d_batch_buf_) cudaFree(d_batch_buf_);
     if (crop_stream_) cudaStreamDestroy(crop_stream_);
     if (reid_stream_) cudaStreamDestroy(reid_stream_);
@@ -815,6 +820,114 @@ void PerceptionPipeline::extract_reid(
     crop_into_pool(frame_ptr, frame_h, frame_w, boxes_ptr, n_boxes, &slot, stream);
     if (slot < 0) return;
     extract_from_pool(slot, n_boxes, out_embeds, stream);
+}
+
+// ── Borderline re-query crop ring (ReidCropStore) ──────────────────────────
+void PerceptionPipeline::enable_crop_ring(int capacity, int depth) {
+    if (!reid_) return;
+    auto [crop_h, crop_w] = reid_->get_input_hw();
+    delete crop_ring_;
+    crop_ring_ = new CropRingStore(capacity, depth, crop_h, crop_w);
+    if (!requery_stream_) cudaStreamCreate(&requery_stream_);
+}
+
+void PerceptionPipeline::ensure_stash_scratch(int n_boxes) {
+    if (!crop_ring_ || n_boxes <= 0) return;
+    if (d_stash_scratch_ && stash_scratch_n_ >= n_boxes) return;
+    if (d_stash_scratch_) cudaFree(d_stash_scratch_);
+    stash_scratch_n_ = n_boxes;
+    size_t bytes =
+        static_cast<size_t>(n_boxes) * crop_ring_->crop_elem_count() * sizeof(float);
+    cudaMalloc(&d_stash_scratch_, bytes);
+}
+
+void PerceptionPipeline::ensure_requery_scratch(int n_rows) {
+    if (!crop_ring_ || !reid_ || n_rows <= 0) return;
+    if (d_requery_crops_ && requery_scratch_n_ >= n_rows) return;
+    if (d_requery_crops_) cudaFree(d_requery_crops_);
+    if (d_requery_embeds_) cudaFree(d_requery_embeds_);
+    requery_scratch_n_ = n_rows;
+    cudaMalloc(&d_requery_crops_,
+               static_cast<size_t>(n_rows) * crop_ring_->crop_elem_count()
+                   * sizeof(float));
+    cudaMalloc(&d_requery_embeds_,
+               static_cast<size_t>(n_rows) * reid_->get_feature_dim()
+                   * sizeof(float));
+}
+
+void PerceptionPipeline::stash_crops(
+    const uint64_t* uids, const int* frames,
+    const float* frame_ptr, int frame_h, int frame_w,
+    const float* boxes_ptr, int n_boxes,
+    const bool* clean,
+    cudaStream_t stream)
+{
+    if (!crop_ring_ || !cropper_ || n_boxes <= 0 || !uids || !boxes_ptr) return;
+    ensure_stash_scratch(n_boxes);
+    if (!d_stash_scratch_) return;
+    // Crop all boxes contiguously into the dedicated stash scratch (not the
+    // hot-path crop_pool_, so there is no cross-stream slot-reuse hazard), then
+    // copy each crop into its uid's ring slot — all on @p stream, in order.
+    cropper_->process_gpu(
+        const_cast<void*>(reinterpret_cast<const void*>(frame_ptr)),
+        frame_w, frame_h,
+        const_cast<float*>(boxes_ptr), n_boxes,
+        d_stash_scratch_, stream);
+    const int elem = crop_ring_->crop_elem_count();
+    for (int i = 0; i < n_boxes; ++i) {
+        bool c = clean ? clean[i] : true;
+        crop_ring_->stash(uids[i], frames ? frames[i] : -1,
+                          d_stash_scratch_ + static_cast<size_t>(i) * elem,
+                          c, stream);
+    }
+}
+
+int PerceptionPipeline::embed_dim() const {
+    return reid_ ? reid_->get_feature_dim() : 0;
+}
+
+int PerceptionPipeline::ring_depth() const {
+    return crop_ring_ ? crop_ring_->depth() : 0;
+}
+
+int PerceptionPipeline::requery_extract(const uint64_t* uids, int n_uids,
+                                        float* out_embeds, int* out_counts) {
+    if (!crop_ring_ || !reid_ || n_uids <= 0 || !uids || !out_embeds) return 0;
+    if (!requery_stream_) cudaStreamCreate(&requery_stream_);
+    const int max_rows = crop_ring_->depth() * n_uids;
+    ensure_requery_scratch(max_rows);
+    if (!d_requery_crops_ || !d_requery_embeds_) return 0;
+    // Clean crops only: the validated dense recent-tail substrate excludes
+    // occluded crops (mnv4 is pollution-sensitive). A uid with no clean crops
+    // gets count 0 and keeps its sparse bank in the rescore.
+    int total = crop_ring_->gather_many(uids, n_uids, d_requery_crops_,
+                                        out_counts, requery_stream_,
+                                        /*clean_only=*/true);
+    if (total <= 0) return 0;
+    reid_->extract(d_requery_crops_, total, d_requery_embeds_, requery_stream_);
+    cudaStreamSynchronize(requery_stream_);
+    const int dim = reid_->get_feature_dim();
+    cudaMemcpy(out_embeds, d_requery_embeds_,
+               static_cast<size_t>(total) * dim * sizeof(float),
+               cudaMemcpyDeviceToHost);
+    return total;
+}
+
+void PerceptionPipeline::evict(uint64_t uid) {
+    if (crop_ring_) crop_ring_->evict(uid);
+}
+
+int PerceptionPipeline::gather_crops_framed(const uint64_t* uids,
+                                            const int* frames, int n,
+                                            float* batch, cudaStream_t stream,
+                                            bool clean_only) {
+    if (!crop_ring_) return 0;
+    return crop_ring_->gather_framed(uids, frames, n, batch, stream, clean_only);
+}
+
+bool PerceptionPipeline::has_crop(uint64_t uid, int frame, bool clean_only) const {
+    if (!crop_ring_) return false;
+    return crop_ring_->has_crop(uid, frame, clean_only);
 }
 
 void PerceptionPipeline::crop_into_pool_async(

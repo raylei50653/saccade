@@ -72,13 +72,19 @@ def add_reid_args(parser: argparse.ArgumentParser) -> None:
     )
     grp.add_argument(
         "--reid-mode",
-        choices=("off", "tracker", "semantic", "hybrid"),
+        choices=("off", "tracker", "semantic", "hybrid", "extract"),
         default="off",
         help=_help(
             "ReID stack to enable. NOTE: semantic/hybrid modes are NO-GO when GMC is ON "
-            "(GMC eliminates the main relink use case).",
-            range_hint="off/tracker/semantic/hybrid",
-            edge="off = baseline (no appearance); semantic = add semantic relink",
+            "(GMC eliminates the main relink use case). extract = run the appearance "
+            "extractor for downstream consumers (online handover / crop ring) WITHOUT "
+            "feeding embeddings into association — the tracker output is identical to "
+            "off, so the handover sees the same track-fragmentation base as the offline "
+            "reid-off run. Pair with a reid config that disables appearance_bank + "
+            "relink_enabled (e.g. reid_mnv4_extract.yaml).",
+            range_hint="off/tracker/semantic/hybrid/extract",
+            edge="off = baseline (no appearance); extract = extract-only, tracker "
+            "unaffected; semantic = add semantic relink",
         ),
     )
     grp.add_argument(

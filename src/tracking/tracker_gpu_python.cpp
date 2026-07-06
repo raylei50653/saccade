@@ -1838,6 +1838,21 @@ public:
         ho_fuse_lambda_ = fuse_lambda;
     }
 
+    /// Attach the crop store used for borderline re-query (nullptr disables).
+    void set_crop_store(ReidCropStore* store) { ho_crop_store_ = store; }
+
+    /**
+     * @brief Configure borderline re-query.
+     * @param band Half-width around the cost/margin gate that triggers re-query
+     *             (0 disables).
+     * @param top  Densify only the top-``top`` sparse-ranked candidates
+     *             (0 = every in-graph candidate).
+     */
+    void set_handover_requery(float band, int top) {
+        ho_requery_band_ = std::max(0.0f, band);
+        ho_requery_top_ = std::max(0, top);
+    }
+
     static bool ho_usable_emb(const std::vector<float>& emb) {
         // Budgeted extraction leaves all-zero rows for tracks without a fresh
         // embedding; zero vectors are mutual nearest neighbours in the
@@ -2006,7 +2021,8 @@ public:
 
     bool score_handover_candidates(const HandoverSnapshot& snap,
                                    int emb_dim,
-                                   HandoverScoreResult& result) {
+                                   HandoverScoreResult& result,
+                                   bool allow_requery = true) {
         int H = static_cast<int>(snap.head_samples.size());
         if (H <= 0 || emb_dim <= 0) return false;
         int total_rows = H;
@@ -2044,6 +2060,7 @@ public:
         float best_cost = std::numeric_limits<float>::infinity();
         float second_cost = std::numeric_limits<float>::infinity();
         int best_id = -1;
+        std::vector<std::pair<float, int>> cand_costs;  // (cost, tid) for re-query
 
         auto head_rows = sdist.topRows(H);
         for (size_t ci = 0; ci < snap.archive.size(); ++ci) {
@@ -2062,6 +2079,7 @@ public:
             float cost = 0.0f;
             for (int i = 0; i < k; ++i) cost += block[i];
             cost /= static_cast<float>(k);
+            cand_costs.emplace_back(cost, cand_id);
             bool wins = cost < best_cost ||
                         (cost == best_cost && best_id >= 0 && cand_id < best_id);
             if (wins) {
@@ -2070,6 +2088,29 @@ public:
                 best_id = cand_id;
             } else if (cost < second_cost) {
                 second_cost = cost;
+            }
+        }
+
+        // Borderline re-query: if a band-sized perturbation could flip a gate,
+        // re-extract dense recent-tail banks for the top candidates and rescore
+        // by recursing through this same path (reusing the validated Eigen
+        // row-major mapping — see project_eigen_rowmajor_chebgr_bug). Default-off
+        // and one-shot (allow_requery guards against re-entry).
+        if (allow_requery && ho_crop_store_ != nullptr && ho_requery_band_ > 0.0f
+            && best_id >= 0) {
+            float obs_margin0 = second_cost - best_cost;
+            bool cost_borderline =
+                std::fabs(best_cost - ho_max_cost_) <= ho_requery_band_;
+            bool margin_borderline =
+                ho_margin_ > 0.0f
+                && best_cost <= ho_max_cost_ + ho_requery_band_
+                && std::fabs(obs_margin0 - ho_margin_) <= ho_requery_band_;
+            if (cost_borderline || margin_borderline) {
+                HandoverSnapshot dense;
+                if (requery_densify(snap, cand_costs, emb_dim, dense)) {
+                    return score_handover_candidates(dense, emb_dim, result,
+                                                     /*allow_requery=*/false);
+                }
             }
         }
 
@@ -2083,6 +2124,68 @@ public:
         return true;
     }
 
+    /**
+     * @brief Build a snapshot with dense re-query banks for the top candidates.
+     *
+     * Selects the top-``ho_requery_top_`` candidates by sparse cost (0 = all),
+     * asks the crop store to re-extract their dense recent-tail embeddings, and
+     * returns a copy of @p snap with those candidates' banks replaced. Other
+     * entries keep their sparse banks as graph context. Returns false (no
+     * rescore) if nothing could be densified.
+     */
+    bool requery_densify(const HandoverSnapshot& snap,
+                         std::vector<std::pair<float, int>> cand_costs,
+                         int emb_dim, HandoverSnapshot& out) {
+        if (ho_crop_store_ == nullptr || cand_costs.empty()) return false;
+        std::sort(cand_costs.begin(), cand_costs.end());
+        int n_top = ho_requery_top_ > 0
+                        ? std::min(ho_requery_top_,
+                                   static_cast<int>(cand_costs.size()))
+                        : static_cast<int>(cand_costs.size());
+        std::vector<uint64_t> uids;
+        uids.reserve(n_top);
+        for (int i = 0; i < n_top; ++i)
+            uids.push_back(static_cast<uint64_t>(cand_costs[i].second));
+
+        const int depth = ho_crop_store_->ring_depth();
+        const int dim = ho_crop_store_->embed_dim();
+        if (depth <= 0 || dim != emb_dim) return false;
+        std::vector<float> embeds(
+            static_cast<size_t>(depth) * uids.size() * emb_dim);
+        std::vector<int> counts(uids.size(), 0);
+        int total = ho_crop_store_->requery_extract(
+            uids.data(), static_cast<int>(uids.size()), embeds.data(),
+            counts.data());
+        if (total <= 0) return false;
+
+        // Map tid -> dense bank rows.
+        std::unordered_map<int, std::vector<std::vector<float>>> dense_banks;
+        size_t row = 0;
+        for (size_t i = 0; i < uids.size(); ++i) {
+            std::vector<std::vector<float>> bank;
+            for (int r = 0; r < counts[i]; ++r) {
+                const float* src = embeds.data() + (row + r) * emb_dim;
+                bank.emplace_back(src, src + emb_dim);
+            }
+            row += counts[i];
+            if (!bank.empty())
+                dense_banks[static_cast<int>(cand_costs[i].second)] =
+                    std::move(bank);
+        }
+        if (dense_banks.empty()) return false;
+
+        out = snap;  // deep copy
+        bool changed = false;
+        for (auto& ae : out.archive) {
+            auto it = dense_banks.find(ae.tid);
+            if (it != dense_banks.end()) {
+                ae.bank = std::move(it->second);
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
     int apply_handover(const HandoverSnapshot& snap, const HandoverScoreResult& result) {
         int best_id = result.best_id;
         auto arch_it = ho_dead_archive_.find(best_id);
@@ -2091,6 +2194,8 @@ public:
 
         alias_[snap.raw_id] = canon;
         ho_dead_archive_.erase(best_id);  // an identity is revived at most once
+        // The consumed identity can never be scored again — free its ring crops.
+        if (ho_crop_store_) ho_crop_store_->evict(static_cast<uint64_t>(best_id));
         // Keep ho_track_birth_: erasing it would let feed_newborn_head re-open
         // the head window for this (already decided) track.
         ho_newborn_heads_.erase(snap.raw_id);
@@ -2154,7 +2259,12 @@ public:
         for (auto& [tid, entry] : ho_dead_archive_)
             if (frame_id - entry.death_frame > ho_max_gap_ + ho_decide_n_)
                 expired.push_back(tid);
-        for (int tid : expired) ho_dead_archive_.erase(tid);
+        for (int tid : expired) {
+            ho_dead_archive_.erase(tid);
+            // Beyond the claim window the crops are dead weight; freeing them
+            // keeps LRU pressure off live tracks' recent tails.
+            if (ho_crop_store_) ho_crop_store_->evict(static_cast<uint64_t>(tid));
+        }
     }
 
     int handover_count() const { return ho_handover_count_; }
@@ -2998,6 +3108,14 @@ private:
     int ho_k2_ = 6;
     int ho_max_fwd_ = 50;
     float ho_fuse_lambda_ = 0.3f;
+    // Borderline re-query (default-off: ho_requery_band_ == 0). At a flippable
+    // decision, dense recent-tail banks for the top candidates are re-extracted
+    // from the crop store and the event is rescored, removing sparse-bank phase
+    // jitter exactly where flips live. The store is keyed by the same id the
+    // handover archive carries (ArchiveEntry::tid) — the stash side must match.
+    ReidCropStore* ho_crop_store_ = nullptr;
+    float ho_requery_band_ = 0.0f;
+    int ho_requery_top_ = 0;
 
     struct DeadEntry {
         std::vector<float> embedding;           // last reference feature (fallback)
@@ -3829,6 +3947,19 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
              py::arg("k2") = 6, py::arg("max_fwd") = 50,
              py::arg("fuse_lambda") = 0.3f,
              "Configure online Cheb-GR handover parameters.")
+        .def("set_crop_store",
+             [](SemanticRelinkerCpp& self, PerceptionPipeline& pipe) {
+                 self.set_crop_store(&pipe);
+             },
+             py::arg("pipeline"),
+             "Attach a PerceptionPipeline crop ring as the borderline re-query "
+             "store (its ReidCropStore interface).")
+        .def("clear_crop_store",
+             [](SemanticRelinkerCpp& self) { self.set_crop_store(nullptr); },
+             "Detach the borderline re-query store.")
+        .def("set_handover_requery", &SemanticRelinkerCpp::set_handover_requery,
+             py::arg("band") = 0.0f, py::arg("top") = 0,
+             "Configure borderline re-query (band=0 disables).")
         .def("prune_and_archive", &SemanticRelinkerCpp::prune_and_archive,
              py::arg("active_ids"), py::arg("frame_id"),
              "Archive dead tracks and prune inactive features.")
@@ -4346,6 +4477,53 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
                 reinterpret_cast<Cropper*>(cropper_ptr),
                 cfg);
         }), py::arg("reid_ptr"), py::arg("cropper_ptr"), py::arg("config"))
+        .def("enable_crop_ring", &PerceptionPipeline::enable_crop_ring,
+             py::arg("capacity"), py::arg("depth"),
+             "Enable the per-track_uid recent-crop ring for borderline re-query.")
+        .def("crop_ring_enabled", &PerceptionPipeline::crop_ring_enabled)
+        .def("ring_depth", &PerceptionPipeline::ring_depth)
+        .def("stash_crops",
+            [](PerceptionPipeline& self,
+               uintptr_t uids_ptr, uintptr_t frames_ptr,
+               uintptr_t frame_ptr, int frame_h, int frame_w,
+               uintptr_t boxes_ptr, int n_boxes,
+               uintptr_t clean_ptr, uintptr_t stream_ptr) {
+                self.stash_crops(
+                    reinterpret_cast<const uint64_t*>(uids_ptr),
+                    reinterpret_cast<const int*>(frames_ptr),
+                    reinterpret_cast<const float*>(frame_ptr),
+                    frame_h, frame_w,
+                    reinterpret_cast<const float*>(boxes_ptr), n_boxes,
+                    reinterpret_cast<const bool*>(clean_ptr),
+                    reinterpret_cast<cudaStream_t>(stream_ptr));
+            },
+            py::arg("uids_ptr"), py::arg("frames_ptr"),
+            py::arg("frame_ptr"), py::arg("frame_h"), py::arg("frame_w"),
+            py::arg("boxes_ptr"), py::arg("n_boxes"),
+            py::arg("clean_ptr"), py::arg("stream_ptr"),
+            "Stash n_boxes crops keyed by track_uid (clean_ptr may be 0).")
+        .def("evict_crop_uid",
+            [](PerceptionPipeline& self, uint64_t uid) { self.evict(uid); },
+            py::arg("uid"), "Drop a track_uid's stashed crops.")
+        .def("gather_crops_framed",
+            [](PerceptionPipeline& self,
+               uintptr_t uids_ptr, uintptr_t frames_ptr, int n,
+               uintptr_t batch_ptr, uintptr_t stream_ptr,
+               bool clean_only) -> int {
+                return self.gather_crops_framed(
+                    reinterpret_cast<const uint64_t*>(uids_ptr),
+                    reinterpret_cast<const int*>(frames_ptr),
+                    n,
+                    reinterpret_cast<float*>(batch_ptr),
+                    reinterpret_cast<cudaStream_t>(stream_ptr),
+                    clean_only);
+            },
+            py::arg("uids_ptr"), py::arg("frames_ptr"), py::arg("n"),
+            py::arg("batch_ptr"), py::arg("stream_ptr"),
+            py::arg("clean_only") = false,
+            "Gather one raw crop per (uid, frame) pair into batch.")
+        .def("has_crop", &PerceptionPipeline::has_crop,
+             py::arg("uid"), py::arg("frame"), py::arg("clean_only") = false)
         .def("process_detections",
             [](PerceptionPipeline& self,
                uintptr_t boxes_ptr, uintptr_t scores_ptr, uintptr_t classes_ptr,

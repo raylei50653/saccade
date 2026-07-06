@@ -1601,7 +1601,15 @@ def run_eval_cpp(
     cheb_gr_extractor = None
     cheb_gr_online = getattr(cfg, "cheb_gr_online", False)
     occ_audit_enabled = getattr(cfg, "occ_audit", False)
-    if cfg.cheb_gr_merge_enabled or cheb_gr_online or occ_audit_enabled:
+    _live_bank_enabled = bool(
+        getattr(cfg, "kwargs", {}).get("cheb_gr_online_live_bank", False)
+    )
+    if (
+        cfg.cheb_gr_merge_enabled
+        or cheb_gr_online
+        or occ_audit_enabled
+        or _live_bank_enabled
+    ):
         from .cheb_gr_merge import (
             cheb_gr_merge_output_tracklets,
             extract_tracklet_embeddings,
@@ -2439,17 +2447,20 @@ class EvalPipeline:
                 )
                 relinker = PythonSemanticRelinker(**_fallback_kwargs)
 
-        # Tracker-mode live handover is experimental and default-off. The
-        # output-layer --cheb-gr-offline-handover path below is the supported
-        # handover route; do not enable the live feedback loop just because
-        # tracker ReID embeddings are present.
+        # Online handover is experimental and default-off. The output-layer
+        # --cheb-gr-offline-handover path below is the supported handover route;
+        # do not enable the live feedback loop just because ReID embeddings are
+        # present. Accepted in both "tracker" (embeddings also drive association)
+        # and "extract" (embeddings feed only the handover; the tracker output is
+        # identical to reid-off, giving the handover the same fragmentation base
+        # as the offline reid-off run).
         _tracker_online_handover = bool(
             getattr(cfg, "kwargs", {}).get("tracker_online_handover", False)
         )
         if (
             relinker is None
             and _tracker_online_handover
-            and cfg.reid_mode == "tracker"
+            and cfg.reid_mode in ("tracker", "extract")
             and _relinker_cls is not PythonSemanticRelinker
         ):
             try:
@@ -2474,6 +2485,7 @@ class EvalPipeline:
         # handover decisions only when the experimental live feedback loop is
         # explicitly requested. Plain tracker-mode ReID must not enable this.
         _has_reid = cfg.reid_mode != "off"
+        self.live_evfifo = None
         if (
             _tracker_online_handover
             and _has_reid
@@ -2485,8 +2497,16 @@ class EvalPipeline:
             ho_max_gap = getattr(cfg, "cheb_gr_merge_max_gap", 60)
             ho_decide_n = getattr(cfg, "cheb_gr_online_decide_n", 5)
             ho_min_head = getattr(cfg, "cheb_gr_online_min_head", 1)
+            # Live evfifo bank mode: build the offline evfifo-5-20-w3 bank
+            # incrementally during tracking and run the decision at sequence end
+            # (bounded VRAM, no disk re-read). The C++ relinker's own per-frame
+            # handover is disabled to avoid double application — it still
+            # accumulates fed embeddings harmlessly (enabled=False).
+            _live_bank = bool(
+                getattr(cfg, "kwargs", {}).get("cheb_gr_online_live_bank", False)
+            )
             relinker.set_handover_params(
-                enabled=True,
+                enabled=not _live_bank,
                 max_cost=ho_max_cost,
                 margin=ho_margin,
                 max_gap=ho_max_gap,
@@ -2501,6 +2521,73 @@ class EvalPipeline:
             print(
                 f"🔗 Online handover enabled: decide_n={ho_decide_n} max_cost={ho_max_cost} margin={ho_margin}"
             )
+
+            if _live_bank:
+                from .streaming_handover import LiveEvfifoHandover
+
+                _lb_kwargs = getattr(cfg, "kwargs", {})
+                self.live_evfifo = LiveEvfifoHandover(
+                    fifo_n=int(_lb_kwargs.get("cheb_gr_online_bank_fifo_n", 20)),
+                    stride=int(_lb_kwargs.get("cheb_gr_online_bank_stride", 5)),
+                    decide_n=int(ho_decide_n),
+                    preocc_window=int(
+                        _lb_kwargs.get("cheb_gr_online_preocc_window", 3)
+                    ),
+                    appearance_occlusion_cov=getattr(
+                        cfg, "appearance_occlusion_cov", 0.4
+                    ),
+                    neighbor_iou_max=getattr(
+                        cfg, "cheb_gr_online_neighbor_iou_max", 0.0
+                    ),
+                )
+                # Enable the crop ring for raw-crop extraction at finalize.
+                _ring_depth = int(_lb_kwargs.get("cheb_gr_online_requery_ring_n", 20))
+                _ring_cap = int(
+                    _lb_kwargs.get("cheb_gr_online_requery_ring_capacity", 4096)
+                )
+                if (
+                    hasattr(perception_pipeline, "enable_crop_ring")
+                    and perception_pipeline is not None
+                ):
+                    perception_pipeline.enable_crop_ring(_ring_cap, _ring_depth)
+                print(
+                    "🧬 Live handover bank enabled: "
+                    f"fifo={self.live_evfifo.fifo_n} "
+                    f"stride={self.live_evfifo.stride} "
+                    f"w{self.live_evfifo.preocc_window} "
+                    f"ring={_ring_cap}x{_ring_depth} "
+                    "(C++ per-frame handover disabled)"
+                )
+
+            # Borderline re-query: attach the PerceptionPipeline crop ring as the
+            # relinker's ReidCropStore so a flippable decision can re-extract
+            # dense recent-tail banks. The ring is keyed by the same track ids
+            # fed to feed_frame_embeddings (= the handover archive tids), so
+            # ByteTrack's never-reused ids double as track_uids. Default-off
+            # (requery_band == 0).
+            _ho_kwargs = getattr(cfg, "kwargs", {})
+            _ho_requery_band = float(_ho_kwargs.get("cheb_gr_online_requery_band", 0.0))
+            if (
+                _ho_requery_band > 0.0
+                and hasattr(relinker, "set_crop_store")
+                and perception_pipeline is not None
+                and hasattr(perception_pipeline, "enable_crop_ring")
+            ):
+                _ring_depth = int(_ho_kwargs.get("cheb_gr_online_requery_ring_n", 20))
+                _ring_cap = int(
+                    _ho_kwargs.get("cheb_gr_online_requery_ring_capacity", 4096)
+                )
+                _ho_requery_top = int(_ho_kwargs.get("cheb_gr_online_requery_top", 0))
+                # The live-bank block above may already have enabled the ring
+                # (same kwargs); re-enabling would drop and reallocate it.
+                if not perception_pipeline.crop_ring_enabled():
+                    perception_pipeline.enable_crop_ring(_ring_cap, _ring_depth)
+                relinker.set_crop_store(perception_pipeline)
+                relinker.set_handover_requery(_ho_requery_band, _ho_requery_top)
+                print(
+                    f"🔎 Borderline re-query enabled: band={_ho_requery_band} "
+                    f"top={_ho_requery_top} ring={_ring_cap}x{_ring_depth}"
+                )
 
         seq_path = Path(cfg.data_root) / cfg.split / seq
         config = configparser.ConfigParser()
@@ -4269,6 +4356,47 @@ def _run_emit(
                 relinker.feed_frame_embeddings(
                     emb_cpu, emb_dim, frame_id, ids_cpu, scores_cpu, clean_flags
                 )
+                if state.live_evfifo is not None:
+                    state.live_evfifo.observe_frame(
+                        frame_id, ids_cpu, boxes_xyxy, emb_rows
+                    )
+                # Stash each confirmed track's crop into the re-query ring,
+                # keyed by the same track id fed above (= handover archive tid).
+                pp = state.perception_pipeline
+                if (
+                    pp is not None
+                    and hasattr(pp, "crop_ring_enabled")
+                    and pp.crop_ring_enabled()
+                ):
+                    # Reuse the HWC frame copy the ReID stage built this frame
+                    # (a full-frame permute+contiguous is ~24MB at 1080p).
+                    _hwc_cache = getattr(state, "frame_hwc_cache", None)
+                    if _hwc_cache is not None and _hwc_cache[0] == frame_id:
+                        frame_hwc = _hwc_cache[1]
+                    else:
+                        frame_hwc = (
+                            state.pool.as_rgb_chw().permute(1, 2, 0).contiguous()
+                        )
+                        state.frame_hwc_cache = (frame_id, frame_hwc)
+                    boxes_dev = (
+                        track_results["boxes"][:count_i]
+                        .to("cuda", torch.float32)
+                        .contiguous()
+                    )
+                    uids_np = np.asarray(ids_cpu, dtype=np.uint64)
+                    frames_np = np.full(count_i, frame_id, dtype=np.int32)
+                    clean_np = np.asarray(clean_flags, dtype=bool)
+                    pp.stash_crops(
+                        uids_np.ctypes.data,
+                        frames_np.ctypes.data,
+                        frame_hwc.data_ptr(),
+                        state.h_orig,
+                        state.w_orig,
+                        boxes_dev.data_ptr(),
+                        count_i,
+                        clean_np.ctypes.data,
+                        torch.cuda.current_stream().cuda_stream,
+                    )
         except Exception as exc:
             print(f"[online_ho] ERROR frame={frame_id}: {exc}")
             import traceback
@@ -4359,7 +4487,7 @@ def _run_emit(
 
         _use_fast_emit = (
             not _needs_emit_pipeline
-            and cfg.reid_mode in ("off", "tracker")
+            and cfg.reid_mode in ("off", "tracker", "extract")
             and not bool(cfg.kwargs.get("id_stability_filter", False))
         )
         if _use_fast_emit:
@@ -4940,7 +5068,7 @@ def _run_reid_and_gmc(
     )
     if _do_reid:
         if not _fpn_ready:
-            MIN_REID_GAP = 2
+            MIN_REID_GAP = 1 if state.live_evfifo is not None else 2
             time_since_last_reid = frame_id - state.last_reid_frame
 
             if time_since_last_reid < MIN_REID_GAP:
@@ -5082,6 +5210,8 @@ def _run_reid_and_gmc(
 
                 if native_reid_available and perception_pipeline is not None:
                     frame_hwc = pool.as_rgb_chw().permute(1, 2, 0).contiguous()
+                    # Shared with the emit-stage crop-ring stash (read-only).
+                    state.frame_hwc_cache = (frame_id, frame_hwc)
                     budget_embeddings = torch.empty(
                         (budget_indices.numel(), extractor.feature_dim),
                         device=fused_boxes.device,
@@ -6786,7 +6916,7 @@ def run_eval(
             else:
                 detector = TRTYoloDetector(engine_path=engine)
 
-    if reid_mode not in {"off", "tracker", "semantic", "hybrid"}:
+    if reid_mode not in {"off", "tracker", "semantic", "hybrid", "extract"}:
         raise ValueError(f"Unsupported reid_mode: {reid_mode}")
     if bool(kwargs.get("semantic_cheb_gr_claim", False)) and reid_mode == "off":
         raise ValueError("--semantic-cheb-gr-claim requires a non-off --reid-mode")
@@ -7126,7 +7256,15 @@ def run_eval(
     cheb_gr_extractor = None
     cheb_gr_online = getattr(cfg, "cheb_gr_online", False)
     occ_audit_enabled = getattr(cfg, "occ_audit", False)
-    if cfg.cheb_gr_merge_enabled or cheb_gr_online or occ_audit_enabled:
+    _live_bank_enabled = bool(
+        getattr(cfg, "kwargs", {}).get("cheb_gr_online_live_bank", False)
+    )
+    if (
+        cfg.cheb_gr_merge_enabled
+        or cheb_gr_online
+        or occ_audit_enabled
+        or _live_bank_enabled
+    ):
         from .cheb_gr_merge import (
             cheb_gr_merge_output_tracklets,
             extract_tracklet_embeddings,
@@ -7475,20 +7613,51 @@ def run_eval(
                 f"ids {oa_stats['ids_before']}->{oa_stats['ids_after']})"
             )
 
-        if cheb_gr_extractor is not None and cheb_gr_online:
-            seq_img_dir = str(Path(cfg.data_root) / cfg.split / seq / "img1")
-            head_embs, bank_embs = extract_handover_embeddings(
-                _seq_state.results_lines,
-                seq_img_dir,
-                cheb_gr_extractor,
-                decide_n=cfg.cheb_gr_online_decide_n,
-                n_samples=cfg.cheb_gr_merge_n_samples,
-                crop_hw=getattr(cheb_gr_extractor, "input_hw", (224, 224)),
-                appearance_occlusion_cov=cfg.appearance_occlusion_cov,
-                neighbor_iou_max=cfg.cheb_gr_online_neighbor_iou_max,
-                bank_mode=cfg.cheb_gr_online_bank_mode,
-                bank_n=cfg.cheb_gr_online_bank_n,
-            )
+        _live_evfifo = getattr(_seq_state, "live_evfifo", None)
+        if _live_evfifo is not None or (
+            cheb_gr_extractor is not None and cheb_gr_online
+        ):
+            if _live_evfifo is not None:
+                # Live evfifo-5-20-w3 bank accumulated during tracking (bounded
+                # VRAM, no end-of-sequence disk re-read) — reproduces the offline
+                # decision online.
+                head_embs, bank_embs = _live_evfifo.build_embeddings(
+                    _seq_state.results_lines,
+                    extractor=cheb_gr_extractor,
+                    bank_mode=getattr(cfg, "cheb_gr_online_bank_mode", "spread"),
+                    bank_n=getattr(cfg, "cheb_gr_online_bank_n", 0),
+                    decide_n=getattr(cfg, "cheb_gr_online_decide_n", 5),
+                    n_samples=getattr(cfg, "cheb_gr_merge_n_samples", 50),
+                    appearance_occlusion_cov=getattr(
+                        cfg, "appearance_occlusion_cov", 0.4
+                    ),
+                    neighbor_iou_max=getattr(
+                        cfg, "cheb_gr_online_neighbor_iou_max", 0.0
+                    ),
+                    crop_ring=(
+                        _seq_state.perception_pipeline
+                        if _seq_state.perception_pipeline is not None
+                        and hasattr(_seq_state.perception_pipeline, "crop_ring_enabled")
+                        and _seq_state.perception_pipeline.crop_ring_enabled()
+                        else None
+                    ),
+                    alias=getattr(_seq_state.relinker, "deferred_alias", None),
+                    stream_ptr=torch.cuda.current_stream().cuda_stream,
+                )
+            else:
+                seq_img_dir = str(Path(cfg.data_root) / cfg.split / seq / "img1")
+                head_embs, bank_embs = extract_handover_embeddings(
+                    _seq_state.results_lines,
+                    seq_img_dir,
+                    cheb_gr_extractor,
+                    decide_n=cfg.cheb_gr_online_decide_n,
+                    n_samples=cfg.cheb_gr_merge_n_samples,
+                    crop_hw=getattr(cheb_gr_extractor, "input_hw", (224, 224)),
+                    appearance_occlusion_cov=cfg.appearance_occlusion_cov,
+                    neighbor_iou_max=cfg.cheb_gr_online_neighbor_iou_max,
+                    bank_mode=cfg.cheb_gr_online_bank_mode,
+                    bank_n=cfg.cheb_gr_online_bank_n,
+                )
             ho_log_rows: list[dict[str, Any]] = []
             _seq_state.results_lines, ho_stats = causal_handover_lines(
                 _seq_state.results_lines,

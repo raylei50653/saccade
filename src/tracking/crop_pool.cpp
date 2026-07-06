@@ -70,4 +70,9 @@ float* CropPool::slot_ptr(int slot) {
     return d_buffer_ + static_cast<size_t>(slot) * crop_elem_count();
 }
 
+const float* CropPool::slot_ptr(int slot) const {
+    if (!d_buffer_ || slot < 0 || slot >= capacity_) return nullptr;
+    return d_buffer_ + static_cast<size_t>(slot) * crop_elem_count();
+}
+
 } // namespace saccade

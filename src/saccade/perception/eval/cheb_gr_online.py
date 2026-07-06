@@ -632,6 +632,23 @@ def _build_pool_spread(
     return pool, head_rows, bank_rows
 
 
+def _cache_key(
+    frame: int, box: tuple[float, float, float, float]
+) -> tuple[int, int, int, int, int]:
+    """(frame, x, y, w, h) with coordinates quantized through the exact ``.2f``
+    formatting MOT lines are serialized with, so a raw live-side float and its
+    parsed round-trip value land on the same key by construction. (Any other
+    quantization disagrees at rounding boundaries: a 0.1px grid flips ~2.5% of
+    coordinates, and ``round(x*100)`` still flips at .005 ties where printf's
+    decimal rounding and the fp multiply resolve differently.)"""
+
+    def _q(v: float) -> int:
+        return int(round(float(f"{v:.2f}") * 100))
+
+    x1, y1, x2, y2 = float(box[0]), float(box[1]), float(box[2]), float(box[3])
+    return (int(frame), _q(x1), _q(y1), _q(x2 - x1), _q(y2 - y1))
+
+
 def extract_handover_embeddings(
     results_lines: list[str],
     seq_dir: str,
@@ -646,6 +663,7 @@ def extract_handover_embeddings(
     neighbor_iou_max: float = 0.0,
     bank_mode: str = "spread",
     bank_n: int = 0,
+    embedding_cache: dict[tuple[int, int, int, int, int], Tensor] | None = None,
 ) -> tuple[dict[int, Tensor], dict[int, Tensor]]:
     """Head + bank embeddings for the causal handover, one extraction pass.
 
@@ -659,13 +677,14 @@ def extract_handover_embeddings(
     (0 = ``n_samples``). Both come from the same deduplicated crop pool,
     extracted through the native C++/CUDA + TRT path (PIL fallback).
 
-    ``neighbor_iou_max`` > 0 additionally drops samples whose box overlaps any
-    other track's box in the same frame at or above that IoU (crowd-pollution
-    proxy; front-occlusion coverage alone misses behind-neighbor pixel bleed).
-    The head is filtered strictly — a newborn without enough unpolluted head
-    crops falls to the ``min_head_samples`` gate instead of handing over on
-    ambiguous evidence. A bank falls back to the unfiltered clean pool when
-    the filter would empty it, so archive candidates stay scoreable.
+    ``embedding_cache``, when provided, is a live (frame,box) → embedding dict
+    populated during tracking; no disk I/O happens. Planned crops that miss the
+    cache (coasting/interpolated boxes where no detection fired → no reid ran)
+    are dropped from the head/bank rows — never emitted as zero vectors, which
+    are mutual nearest neighbours in the k-reciprocal graph. The planner
+    (spread/recent) is identical to the offline variant, so the output is
+    bit-identical when the cache has full coverage, and simply sparser
+    otherwise (the min_head / margin gates absorb the sparseness).
     """
     from PIL import Image
 
@@ -699,52 +718,78 @@ def extract_handover_embeddings(
 
     if not pool:
         return {}, {}
+    n_pool = len(pool)
+    feats: Tensor | None
 
-    by_frame_s: dict[int, list[int]] = defaultdict(list)
-    for si, (_, fr, _) in enumerate(pool):
-        by_frame_s[fr].append(si)
+    # When a live embedding cache is provided, use it directly (no disk I/O).
+    # Cached crops skip extraction; uncached pool entries stay zero and are
+    # dropped per-track in gather() below.
+    if embedding_cache is not None:
+        feats = torch.zeros((n_pool, extractor.feature_dim), device="cpu")
+        for si, (_, fr, box_xyxy) in enumerate(pool):
+            emb = embedding_cache.get(_cache_key(fr, box_xyxy))
+            if emb is not None:
+                feats[si] = emb.detach().float()
+        feats = feats.to(getattr(extractor, "device", "cuda"), copy=True)
+        nonzero = feats.norm(dim=1) > 1e-8
+        if nonzero.any():
+            feats[nonzero] = torch.nn.functional.normalize(feats[nonzero], dim=1)
+    else:
+        # No live cache — full disk extraction (original offline path).
+        by_frame_s: dict[int, list[int]] = defaultdict(list)
+        for si, (_, fr, _) in enumerate(pool):
+            by_frame_s[fr].append(si)
 
-    feats = _extract_native_crops_trt(
-        pool,
-        by_frame_s,
-        seq_dir,
-        extractor,
-        crop_hw=crop_hw,
-        im_ext=im_ext,
-        batch=batch,
-    )
-    if feats is None:
-        # PIL fallback (same crop contract as the offline merge's fallback).
-        out_h, out_w = crop_hw
-        arrs: list[np.ndarray | None] = [None] * len(pool)
-        for fr, si_list in by_frame_s.items():
-            img = Image.open(f"{seq_dir}/{fr:06d}{im_ext}").convert("RGB")
-            fw, fh = img.size
-            for si in si_list:
-                x1, y1, x2, y2 = pool[si][2]
-                box = (
-                    max(0, int(round(x1))),
-                    max(0, int(round(y1))),
-                    min(fw, int(round(x2))),
-                    min(fh, int(round(y2))),
-                )
-                if box[2] <= box[0] or box[3] <= box[1]:
-                    box = (0, 0, fw, fh)
-                crop = img.crop(box).resize((out_w, out_h), Image.BILINEAR)  # type: ignore[attr-defined]
-                arrs[si] = np.asarray(crop, dtype=np.uint8).transpose(2, 0, 1)
-        device = getattr(extractor, "device", "cuda")
-        feats = torch.empty((len(pool), extractor.feature_dim), device=device)
-        for s in range(0, len(pool), max(1, batch)):
-            chunk = [a for a in arrs[s : s + batch] if a is not None]
-            t = torch.from_numpy(np.stack(chunk)).to(device).float().div_(255.0)
-            feats[s : s + t.shape[0]] = extractor.extract(t)
-        feats = torch.nn.functional.normalize(feats, dim=1)
+        feats = _extract_native_crops_trt(
+            pool,
+            by_frame_s,
+            seq_dir,
+            extractor,
+            crop_hw=crop_hw,
+            im_ext=im_ext,
+            batch=batch,
+        )
+        if feats is None:
+            out_h, out_w = crop_hw
+            arrs: list[np.ndarray | None] = [None] * n_pool
+            for fr, si_list in by_frame_s.items():
+                img = Image.open(f"{seq_dir}/{fr:06d}{im_ext}").convert("RGB")
+                fw, fh = img.size
+                for si in si_list:
+                    x1, y1, x2, y2 = pool[si][2]
+                    box = (
+                        max(0, int(round(x1))),
+                        max(0, int(round(y1))),
+                        min(fw, int(round(x2))),
+                        min(fh, int(round(y2))),
+                    )
+                    if box[2] <= box[0] or box[3] <= box[1]:
+                        box = (0, 0, fw, fh)
+                    crop = img.crop(box).resize(
+                        (out_w, out_h),
+                        Image.BILINEAR,  # type: ignore[attr-defined]
+                    )
+                    arrs[si] = np.asarray(crop, dtype=np.uint8).transpose(2, 0, 1)
+            device = getattr(extractor, "device", "cuda")
+            feats = torch.empty((n_pool, extractor.feature_dim), device=device)
+            for s in range(0, n_pool, max(1, batch)):
+                chunk = [a for a in arrs[s : s + batch] if a is not None]
+                t = torch.from_numpy(np.stack(chunk)).to(device).float().div_(255.0)
+                feats[s : s + t.shape[0]] = extractor.extract(t)
+            feats = torch.nn.functional.normalize(feats, dim=1)
+
+    assert feats is not None
 
     def gather(rows: dict[int, list[int]]) -> dict[int, Tensor]:
+        # Zero rows (cache misses) must not reach the decision core: zero
+        # vectors are mutual nearest neighbours in the k-reciprocal graph.
         out: dict[int, Tensor] = {}
         for tid, idxs in rows.items():
             if idxs:
-                out[tid] = feats[torch.tensor(idxs, device=feats.device)]
+                t = feats[torch.tensor(idxs, device=feats.device)]
+                keep = t.norm(dim=1) > 1e-8
+                if keep.any():
+                    out[tid] = t[keep]
         return out
 
     return gather(head_rows), gather(bank_rows)

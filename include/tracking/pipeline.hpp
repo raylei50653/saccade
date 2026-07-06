@@ -4,6 +4,8 @@
 #include "perception/feature_extractor.hpp"
 #include "perception/preprocessor.hpp"
 #include "tracking/crop_pool.hpp"
+#include "tracking/crop_ring_store.hpp"
+#include "tracking/reid_crop_store.hpp"
 #include "tracking/reid_queue.hpp"
 #include <cuda_runtime.h>
 #include <cstdint>
@@ -22,7 +24,7 @@ namespace saccade {
  *      pre-allocated scratch workspace.
  *   3. Optionally call extract_reid() on the filtered boxes.
  */
-class SACCADE_TRACKING_API PerceptionPipeline {
+class SACCADE_TRACKING_API PerceptionPipeline : public ReidCropStore {
 public:
     struct ReIDProfileStats {
         double crop_ms = 0.0;
@@ -362,6 +364,59 @@ public:
         ReIDResult* out_results
     );
 
+    // ── Borderline re-query crop ring (ReidCropStore) ──────────────────────
+    /**
+     * @brief Enable the per-track_uid recent-crop ring backing re-query.
+     *
+     * @param capacity Total GPU crop slots (bounds memory; ~max_tracks*depth).
+     * @param depth    Recent-tail crops retained per track_uid.
+     */
+    void enable_crop_ring(int capacity, int depth);
+
+    /// Whether the crop ring is enabled.
+    bool crop_ring_enabled() const { return crop_ring_ != nullptr; }
+
+    /**
+     * @brief Crop @p n_boxes from the frame and stash them by track_uid.
+     *
+     * Runs the crop kernel on @p stream into a transient scratch, then copies
+     * each crop into its uid's ring slot. Called after association, when each
+     * confirmed box has a never-reused ``track_uid`` — the live analogue of the
+     * offline recent-tail bank harvest. No-op if the ring is disabled.
+     *
+     * @param uids    [n_boxes] never-reused track uids (one per box)
+     * @param frames  [n_boxes] frame ids (metadata)
+     * @param clean   [n_boxes] per-box clean flag, or nullptr (all clean)
+     */
+    void stash_crops(
+        const uint64_t* uids, const int* frames,
+        const float* frame_ptr, int frame_h, int frame_w,
+        const float* boxes_ptr, int n_boxes,
+        const bool* clean,
+        cudaStream_t stream);
+
+    // ReidCropStore interface (called by SemanticRelinkerCpp at a flippable
+    // handover decision to densify the top candidates).
+    int embed_dim() const override;
+    int ring_depth() const override;
+    int requery_extract(const uint64_t* uids, int n_uids,
+                        float* out_embeds, int* out_counts) override;
+    void evict(uint64_t uid) override;
+
+    /**
+     * @brief Gather one raw crop per (uid, frame) pair into @p batch.
+     *
+     * Used at handover finalize: the planner selects (track_id, frame) crops,
+     * the uid→frame pairs are gathered here, then TRT runs on the batch.
+     * @return Total crop rows written (≤ @p n).
+     */
+    int gather_crops_framed(const uint64_t* uids, const int* frames, int n,
+                            float* batch, cudaStream_t stream,
+                            bool clean_only = false);
+
+    /// True if the ring holds a crop for (uid, frame), optionally clean-only.
+    bool has_crop(uint64_t uid, int frame, bool clean_only = false) const;
+
     /// Get the internal crop stream (for event-based frame release ordering).
     cudaStream_t crop_stream() const { return crop_stream_; }
 
@@ -398,6 +453,19 @@ private:
     CropPool* crop_pool_              = nullptr;  // owned by PerceptionPipeline
     int       crop_pool_capacity_     = 0;
     int       scratch_capacity_       = 0;
+
+    // Borderline re-query crop ring (owned; nullptr when disabled).
+    CropRingStore* crop_ring_         = nullptr;
+    float*    d_stash_scratch_        = nullptr;  // [n,3,h,w] transient crop out
+    int       stash_scratch_n_        = 0;        // rows d_stash_scratch_ holds
+    float*    d_requery_crops_        = nullptr;  // gathered crops for extract
+    float*    d_requery_embeds_       = nullptr;  // device embeddings for D2H
+    int       requery_scratch_n_      = 0;        // rows the requery scratch holds
+    // Dedicated stream: re-query runs on the bg handover thread and must not
+    // race the ReID worker's reid_stream_.
+    cudaStream_t requery_stream_      = nullptr;
+    void ensure_stash_scratch(int n_boxes);
+    void ensure_requery_scratch(int n_rows);
 
     // Phase 2: async streams + batch buffer
     cudaStream_t crop_stream_         = nullptr;
