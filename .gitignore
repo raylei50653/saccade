@@ -68,6 +68,7 @@ scratch/*_sweep.txt
 *.service.backup
 
 # Testing & Linting
+Testing/
 .pytest_cache/
 .mypy_cache/
 htmlcov/
