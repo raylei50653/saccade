@@ -52,6 +52,7 @@ __global__ void selective_scan_fwd_kernel(
     if (d >= D_dim || b >= B) return;
 
     float A_n = static_cast<float>(A[a_per_channel ? (d * N + n) : n]);
+    float D_d = (has_D && n == 0) ? static_cast<float>(D[d]) : 0.0f;
     float h = 0.0f;
 
     // Each channel's N=16 threads are consecutive within a single warp.
@@ -81,17 +82,8 @@ __global__ void selective_scan_fwd_kernel(
 
         // Thread 0 of each channel group writes the reduced result.
         if (n == 0) {
+            if (has_D) acc += D_d * u_btd;
             y[((b * L + t) * D_dim) + d] = static_cast<T>(acc);
-        }
-    }
-
-    // D skip connection — thread 0 of each channel group
-    if (has_D && n == 0) {
-        float D_d = static_cast<float>(D[d]);
-        for (int t = 0; t < L; t++) {
-            float val = static_cast<float>(y[((b * L + t) * D_dim) + d]);
-            val += D_d * static_cast<float>(u[((b * L + t) * D_dim) + d]);
-            y[((b * L + t) * D_dim) + d] = static_cast<T>(val);
         }
     }
 }
