@@ -1,4 +1,5 @@
 #include "tracking/workbench.hpp"
+#include "utils/nvtx_range.hpp"
 #include <cstdio>
 #include <stdexcept>
 #include <string>
@@ -69,6 +70,7 @@ int Workbench::process_frame_postyolo(
     int*   out_det_idx,
     int*   out_count)
 {
+    NvtxRange nvtx_range_wb("frame.workbench");
     // 1. Filter + NMS + optional geometry/ONMS, writing into per-workbench
     //    post-NMS scratch on stream_.
     pipeline_->process_detections_into(

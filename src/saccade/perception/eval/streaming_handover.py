@@ -353,6 +353,14 @@ class LiveEvfifoHandover:
     def uid_for_box(self, frame: int, box: Any) -> int | None:
         return self._box_to_uid.get(self._key(frame, box))
 
+    def record_box_uids(self, frame_id: int, ids: list[int], boxes: Any) -> None:
+        """Record (frame, box) → uid mapping for crop-ring handover (no embeddings)."""
+        if len(ids) == 0:
+            return
+        for i, tid in enumerate(ids):
+            k = self._key(frame_id, boxes[i])
+            self._box_to_uid[k] = tid
+
     def build_embeddings(
         self,
         results_lines: list[str],

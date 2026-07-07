@@ -40,6 +40,7 @@ mamba_yolo_weights: models/yolo/yolo26m.pt
 # accuracy ~1.5 IDF1 (PyTorch whole-graph used the gated/patched backbone; the
 # exported engine is the clean unpatched fine-tuned backbone).
 fpn_backbone_engine: models/yolo/yolo26m_backbone_640_best.engine
+mamba_head_engine: models/yolo/mamba_head_26m.engine
 
 use_whole_graph: true
 use_cuda_graph: true

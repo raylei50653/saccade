@@ -210,6 +210,47 @@ def _detect_barrier_mode() -> str:
     return (os.getenv("SACCADE_DETECT_BARRIER", "full") or "full").strip().lower()
 
 
+def _explicit_stream_probe_enabled() -> bool:
+    """Return True when explicit-stream pipeline modes are active.
+
+    Env ``SACCADE_STREAM_MODE`` values:
+      * ``detect_post_event`` (production): S_detect/S_post event fence,
+        per-parity stream pairs, track on legacy 0x0. Replaces DS2 full-device
+        barrier with GPU-side event dependency.
+      * ``explicit_probe`` (alias): same as detect_post_event.
+      * ``legacy_pingpong`` (alias): same as detect_post_event.
+      * ``ptds_probe`` (experimental): same + per-parity S_track with GTU.
+        FAILED determinism.
+    """
+    mode = os.getenv("SACCADE_STREAM_MODE", "")
+    return mode in (
+        "detect_post_event",
+        "explicit_probe",
+        "legacy_pingpong",
+        "ptds_probe",
+    )
+
+
+def _stream_mode_ptds_probe() -> bool:
+    """Return True when the PTDS (per-thread default stream) probe is active.
+
+    In this mode all three stages (detect, post, track) use per-parity explicit
+    streams and the tracker is forced to CUDA-graph mode for single-launch
+    determinism.
+    """
+    return os.getenv("SACCADE_STREAM_MODE", "") == "ptds_probe"
+
+
+def _fixed_postbuf_enabled() -> bool:
+    """Return True when full-capacity fixed postprocess buffers are active.
+
+    Env ``SACCADE_FIXED_POSTBUF=1`` skips per-frame count D2H reads from
+    NMS output — postprocess writes full-capacity buffers and the tracker
+    handles padded rows via its max_assoc parameter.
+    """
+    return os.getenv("SACCADE_FIXED_POSTBUF", "") in ("1", "true", "yes")
+
+
 def _double_buffer_eligible(cfg: Any, detector: Any, profile_stages: bool) -> bool:
     """Return whether the safe, frame-independent overlap path can run.
 
@@ -319,6 +360,7 @@ class EvalPipeline:
         native_reid_available: Any = None,
         external_fp_rule_config: Any = None,
         external_fp_logistic_model: Any = None,
+        frame_ledger: Any = None,
     ) -> None:
         # ── params that aren't computed by setup ──────────────────────
         self.cfg = cfg
@@ -351,6 +393,20 @@ class EvalPipeline:
         self.native_reid_available = native_reid_available
         self.external_fp_rule_config = external_fp_rule_config
         self.external_fp_logistic_model = external_fp_logistic_model
+        self.frame_ledger = frame_ledger
+        self._frame_det_counts: dict[str, int] | None = None
+        self._frame_stage_times: dict[str, float] | None = None
+        self._frame_reid_stats: dict[str, Any] | None = None
+        self._prev_post_sync_stats: dict[str, float] | None = None
+        self.stream_detect: "torch.cuda.Stream | None" = None
+        self.stream_post: "torch.cuda.Stream | None" = None
+        self.stream_detect_event: "torch.cuda.Event | None" = None
+        self._pp_streams: list[dict[str, Any]] = [{}, {}]
+        self._pp_detect_done: list[Any] = [None, None]
+        self._pp_post_done: list[Any] = [None, None]
+        self._pp_track_done: list[Any] = [None, None]
+        self._pp_track_streams: list[Any] = [None, None]
+        self._pp_fused: list[Any] = [None, None]
         # ── cross-frame state (fresh per seq) ─────────────────────────
         self.defer_emit_event: torch.cuda.Event | None = None
         self.defer_emit_fid: int = 0

@@ -10,6 +10,11 @@ set(CMAKE_CUDA_ARCHITECTURES "native")
 
 option(ENABLE_NATIVE_TESTS "Build native C++ tests" ON)
 option(ENABLE_NATIVE_COVERAGE "Enable coverage instrumentation for native C++ test targets" OFF)
+option(SACCADE_ENABLE_NVTX "Enable NVTX instrumentation for Nsight Systems profiling" ON)
+
+if(SACCADE_ENABLE_NVTX)
+    add_compile_definitions(SACCADE_ENABLE_NVTX)
+endif()
 
 # 1. 全局編譯配置
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -fvisibility=hidden -O3 -Wall -fno-lto")

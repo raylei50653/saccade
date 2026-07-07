@@ -5024,6 +5024,7 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
                 out["native_gather_compact3_ms"] = stats.native_gather_compact3_ms;
                 out["native_copy_suspect_ms"] = stats.native_copy_suspect_ms;
                 out["native_filter_count_sync_ms"] = stats.native_filter_count_sync_ms;
+                out["native_nms_count_sync_ms"] = stats.native_nms_count_sync_ms;
                 out["native_small_nms_ms"] = stats.native_small_nms_ms;
                 out["native_suspect_penalty_ms"] = stats.native_suspect_penalty_ms;
                 out["native_large_sort_nms_ms"] = stats.native_large_sort_nms_ms;

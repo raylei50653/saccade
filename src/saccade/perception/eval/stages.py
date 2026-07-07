@@ -1300,6 +1300,56 @@ def _run_detect(
     return fused_boxes, fused_scores, fused_classes, is_tiled, source_keypoints
 
 
+def _stash_crop_ring(state: "EvalPipeline", track_results: Any, frame_id: int) -> None:
+    pp = state.perception_pipeline
+    if pp is None or not hasattr(pp, "crop_ring_enabled") or not pp.crop_ring_enabled():
+        return
+    live_evfifo = getattr(state, "live_evfifo", None)
+    if (
+        live_evfifo is not None
+        and frame_id % max(1, getattr(live_evfifo, "stride", 5)) != 0
+    ):
+        return
+    count_raw = track_results.get("count")
+    if count_raw is None:
+        return
+    count_i = int(count_raw.item() if hasattr(count_raw, "item") else count_raw)
+    if count_i == 0:
+        return
+    ids_t = track_results["ids"]
+    ids_cpu = ids_t[:count_i].cpu().tolist()
+    boxes_xyxy = track_results["boxes"][:count_i].detach().cpu()
+    from .helpers import front_occlusion_mask_xyxy as _front_occlusion_mask_xyxy
+
+    occluded = _front_occlusion_mask_xyxy(
+        boxes_xyxy, getattr(state.cfg, "appearance_occlusion_cov", 0.4)
+    )
+    clean_flags = (~occluded).to(torch.int32).tolist()
+    _hwc_cache = getattr(state, "frame_hwc_cache", None)
+    if _hwc_cache is not None and _hwc_cache[0] == frame_id:
+        frame_hwc = _hwc_cache[1]
+    else:
+        frame_hwc = state.pool.as_rgb_chw().permute(1, 2, 0).contiguous()
+        state.frame_hwc_cache = (frame_id, frame_hwc)
+    boxes_dev = boxes_xyxy.to("cuda", torch.float32).contiguous()
+    uids_np = np.asarray(ids_cpu, dtype=np.uint64)
+    frames_np = np.full(count_i, frame_id, dtype=np.int32)
+    clean_np = np.asarray(clean_flags, dtype=bool)
+    pp.stash_crops(
+        uids_np.ctypes.data,
+        frames_np.ctypes.data,
+        frame_hwc.data_ptr(),
+        state.h_orig,
+        state.w_orig,
+        boxes_dev.data_ptr(),
+        count_i,
+        clean_np.ctypes.data,
+        torch.cuda.current_stream().cuda_stream,
+    )
+    if live_evfifo is not None:
+        live_evfifo.record_box_uids(frame_id, ids_cpu, boxes_xyxy)
+
+
 def _run_emit(
     state: EvalPipeline,
     *,
@@ -1413,11 +1463,19 @@ def _run_emit(
                     _t0 = flow_now()
                 # Stash each confirmed track's crop into the re-query ring,
                 # keyed by the same track id fed above (= handover archive tid).
+                # Align with evfifo stride: the planner selects 1 every N frames,
+                # so stashing every frame wastes GPU copy bandwidth (24 MB/frame
+                # HWC permute + contiguous at 1080p).
                 pp = state.perception_pipeline
                 if (
                     pp is not None
                     and hasattr(pp, "crop_ring_enabled")
                     and pp.crop_ring_enabled()
+                    and (
+                        state.live_evfifo is None
+                        or frame_id % max(1, getattr(state.live_evfifo, "stride", 5))
+                        == 0
+                    )
                 ):
                     # Reuse the HWC frame copy the ReID stage built this frame
                     # (a full-frame permute+contiguous is ~24MB at 1080p).
@@ -1476,7 +1534,7 @@ def _run_emit(
     _bg_future = state.bg_future
     _bg_birth_events = state.bg_birth_events
     _needs_emit_pipeline = (
-        relinker is not None
+        (relinker is not None and state.live_evfifo is None)
         or id_stability_filter is not None
         or primary_appearance_bank is not None
         or dynamic_reid is not None
@@ -1663,6 +1721,8 @@ def _run_emit(
             )
             curr_track_ids = set(host_track_batch.ids)
         _lines_out = frame_result_lines
+        if state.double_buffer_stream is None:
+            _stash_crop_ring(state, track_results, frame_id)
         lifecycle_merger.prune(frame_id)
         prev_track_ids = _finalize_frame_side_effects(
             curr_track_ids=curr_track_ids,
@@ -2142,7 +2202,11 @@ def _run_reid_and_gmc(
     )
     if _do_reid:
         if not _fpn_ready:
-            MIN_REID_GAP = 1 if state.live_evfifo is not None else 2
+            MIN_REID_GAP = (
+                max(1, getattr(state.live_evfifo, "stride", 5))
+                if state.live_evfifo is not None
+                else 2
+            )
             time_since_last_reid = frame_id - state.last_reid_frame
 
             if time_since_last_reid < MIN_REID_GAP:
@@ -2155,7 +2219,7 @@ def _run_reid_and_gmc(
                 else:
                     _do_reid = need_reid_frame(state.prev_track_ids, after_merge_count)
             else:
-                _do_reid = frame_id % seq_reid_interval == 0
+                _do_reid = seq_reid_interval > 0 and frame_id % seq_reid_interval == 0
 
         if _do_reid:
             state.last_reid_frame = frame_id

@@ -1,4 +1,5 @@
 #include "tracking/gmc.hpp"
+#include "utils/nvtx_range.hpp"
 #include <cuda_runtime.h>
 #include <opencv2/calib3d.hpp>
 #include <iostream>
@@ -261,6 +262,7 @@ void GMC::estimate_into(
     float* d_out_warp,
     bool use_gpu_phase_corr,
     bool sync_caller_stream) {
+    NvtxRange nvtx_range_gmc("frame.gmc");
     refresh_pcr_score();
     if (profiling_enabled_) {
         reset_profile_stats();

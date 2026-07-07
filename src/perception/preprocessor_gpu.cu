@@ -1,6 +1,7 @@
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
 #include <cufft.h>
+#include "utils/nvtx_range.hpp"
 #include <stdint.h>
 #include <cmath>
 #include <vector>
@@ -158,6 +159,7 @@ void launch_batch_crop_resize(
     int crop_w, int crop_h,
     cudaStream_t stream) 
 {
+    NvtxRange nvtx_range_crop("frame.reid.crop");
     if (num_boxes <= 0) return;
 
     dim3 block(16, 16);

@@ -1,6 +1,7 @@
 #include "tracking/pipeline.hpp"
 #include "tracking/tracker_gpu.hpp"
 #include "tracking/copy_pad.cuh"
+#include "utils/nvtx_range.hpp"
 #include <cuda_runtime.h>
 #include <algorithm>
 #include <chrono>
@@ -171,8 +172,12 @@ int PerceptionPipeline::process_detections(
         out_boxes, out_scores, out_classes, out_suspect,
         d_nms_count_, nullptr, nullptr, 0, 0.5f, stream);
     int n_out = 0;
+    const auto nms_count_sync_start = std::chrono::high_resolution_clock::now();
     cudaMemcpyAsync(&n_out, d_nms_count_, sizeof(int), cudaMemcpyDeviceToHost, stream);
     cudaStreamSynchronize(stream);
+    last_postprocess_profile_stats_.native_nms_count_sync_ms =
+        std::chrono::duration<double, std::milli>(
+            std::chrono::high_resolution_clock::now() - nms_count_sync_start).count();
     return n_out;
 }
 
@@ -196,6 +201,7 @@ void PerceptionPipeline::process_detections_into(
     const float* private_priors_ptr,
     int num_private_priors)
 {
+    NvtxRange nvtx_range_pp("frame.postprocess");
     if (n_in <= 0) {
         cudaMemsetAsync(out_count, 0, sizeof(int), stream);
         if (postprocess_profiling_enabled_) {
@@ -250,15 +256,15 @@ void PerceptionPipeline::process_detections_into(
     }
 
     int filter_count = 0;
-    const Clock::time_point filter_count_sync_start = profile_post ? Clock::now() : Clock::time_point{};
+    const Clock::time_point filter_count_sync_start = Clock::now();
     cudaMemcpyAsync(&filter_count, d_filter_count_, sizeof(int),
                     cudaMemcpyDeviceToHost, stream);
     cudaStreamSynchronize(stream);
+    last_postprocess_profile_stats_.native_filter_count_sync_ms =
+        std::chrono::duration<double, std::milli>(Clock::now() - filter_count_sync_start).count();
     if (profile_post) {
         last_postprocess_profile_stats_.filter_ms =
             std::chrono::duration<double, std::milli>(Clock::now() - filter_start).count();
-        last_postprocess_profile_stats_.native_filter_count_sync_ms =
-            std::chrono::duration<double, std::milli>(Clock::now() - filter_count_sync_start).count();
         last_postprocess_profile_stats_.filtered_boxes = filter_count;
     }
 
@@ -581,18 +587,18 @@ int PerceptionPipeline::process_detections_n(
 
     // Sync stream (GIL already released in Python binding) then read count.
     int n_post = 0;
-    const Clock::time_point count_start = profile_post ? Clock::now() : Clock::time_point{};
+    const Clock::time_point count_start = Clock::now();
     cudaMemcpyAsync(&n_post, d_count_staging, sizeof(int),
                     cudaMemcpyDeviceToHost, stream);
     cudaStreamSynchronize(stream);
+    last_postprocess_profile_stats_.count_d2h_ms =
+        std::chrono::duration<double, std::milli>(Clock::now() - count_start).count();
     if (profile_post) {
         if (cfg_.private_continuation_enabled && d_private_added_count_ != nullptr) {
             int private_boxes = 0;
             cudaMemcpy(&private_boxes, d_private_added_count_, sizeof(int), cudaMemcpyDeviceToHost);
             last_postprocess_profile_stats_.private_boxes = private_boxes;
         }
-        last_postprocess_profile_stats_.count_d2h_ms =
-            std::chrono::duration<double, std::milli>(Clock::now() - count_start).count();
         last_postprocess_profile_stats_.total_ms =
             std::chrono::duration<double, std::milli>(Clock::now() - total_start).count();
         last_postprocess_profile_stats_.output_boxes = n_post;
@@ -811,6 +817,7 @@ void PerceptionPipeline::extract_reid(
     float* out_embeds,
     cudaStream_t stream)
 {
+    NvtxRange nvtx_range_reid("frame.reid.extract");
     if (!reid_ || !cropper_ || n_boxes <= 0) return;
     if (reid_profiling_enabled_) {
         reset_reid_profile_stats();

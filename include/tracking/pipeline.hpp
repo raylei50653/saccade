@@ -47,6 +47,7 @@ public:
         double native_gather_compact3_ms = 0.0;
         double native_copy_suspect_ms = 0.0;
         double native_filter_count_sync_ms = 0.0;
+        double native_nms_count_sync_ms = 0.0;
         double native_small_nms_ms = 0.0;
         double native_suspect_penalty_ms = 0.0;
         double native_large_sort_nms_ms = 0.0;

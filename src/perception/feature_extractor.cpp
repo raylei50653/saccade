@@ -1,4 +1,5 @@
 #include "perception/feature_extractor.hpp"
+#include "utils/nvtx_range.hpp"
 #include <cuda_runtime.h>
 #include <iostream>
 #include <algorithm>
@@ -186,6 +187,7 @@ FeatureExtractor::~FeatureExtractor() {
 }
 
 void FeatureExtractor::extract(void* input_cuda_ptr, int num_images, void* output_cuda_ptr, cudaStream_t stream) {
+    NvtxRange nvtx_range_ft("frame.reid.extract");
     if (num_images <= 0) return;
     if (profiling_enabled_) {
         reset_profile_stats();

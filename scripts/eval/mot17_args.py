@@ -87,6 +87,18 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    profile = parser.add_argument_group("Profiling")
+    profile.add_argument(
+        "--profile-frame-csv",
+        action="store_true",
+        help=(
+            "Write a per-frame CSV ledger with stage wall times and state "
+            "quantities (n_dets, n_tracks, etc.). Lightweight — does not change "
+            "pipeline scheduling, double-buffering, or CUDA graph behaviour. "
+            "Distinct from --profile-stages."
+        ),
+    )
+
     # Tracking result visualization
     vis = parser.add_argument_group("Tracking result visualization")
     vis.add_argument(

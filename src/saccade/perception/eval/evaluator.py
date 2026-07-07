@@ -240,6 +240,7 @@ from .stages import (  # noqa: E402,F401
     _run_post_nms_finalize,
     _run_reid_and_gmc,
     _run_track,
+    _stash_crop_ring,
 )
 
 
@@ -1612,6 +1613,15 @@ def _run_frame(
                 db_bufs = state.tracker_result_buffers
                 for key in ("boxes", "scores", "ids", "classes", "det_idx", "count"):
                     pinned[key].copy_(db_bufs[key], non_blocking=True)
+                _stash_crop_ring(
+                    state,
+                    {
+                        "count": db_bufs["count"],
+                        "ids": db_bufs["ids"],
+                        "boxes": db_bufs["boxes"],
+                    },
+                    frame_id,
+                )
                 ev = state.double_buffer_tracker_out_events[parity]
                 ev.record()
                 state.double_buffer_tracker_out_fids[parity] = frame_id
