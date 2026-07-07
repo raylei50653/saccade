@@ -20,6 +20,7 @@ class EvalConfig:
     debug_dump_csv: str
     debug_birth_csv: str
     profile_stages: bool
+    profile_frame_csv: bool
     latency_only: bool
     workbench: bool
     threads: int
@@ -412,6 +413,7 @@ def parse_eval_config(
     reid_model: str,
     profile_stages: bool,
     kwargs: dict[str, Any],
+    profile_frame_csv: bool = False,
 ) -> EvalConfig:
     output_root = Path(output)
 
@@ -501,6 +503,7 @@ def parse_eval_config(
         debug_dump_csv=str(kwargs.get("debug_dump_csv", "")).strip(),
         debug_birth_csv=str(kwargs.get("debug_birth_csv", "")).strip(),
         profile_stages=profile_stages,
+        profile_frame_csv=profile_frame_csv,
         latency_only=bool(kwargs.get("latency_only", False)),
         workbench=bool(kwargs.get("workbench", False)),
         threads=int(kwargs.get("threads", 1)),
