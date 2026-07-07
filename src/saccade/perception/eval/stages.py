@@ -6,6 +6,7 @@ per-frame FrameCtx. _run_frame (evaluator.py) sequences them.
 """
 
 # mypy: ignore-errors
+import os
 import threading
 import time
 import dataclasses
@@ -146,6 +147,7 @@ from .detection_filters import (  # noqa: E402,F401
 from .pipeline import (  # noqa: E402
     EvalPipeline,
     _detect_barrier_mode,
+    _explicit_stream_probe_enabled,
 )
 
 
@@ -564,7 +566,11 @@ def _run_nms(
     w_orig = state.w_orig
     h_orig = state.h_orig
     _nms_graph = nms_graph
-    current_stream = torch.cuda.current_stream().cuda_stream
+    _explicit_probe = _explicit_stream_probe_enabled()
+    if _explicit_probe and state.stream_post is not None:
+        current_stream = state.stream_post.cuda_stream
+    else:
+        current_stream = torch.cuda.current_stream().cuda_stream
     priors_ptr = (
         priors_tensor.data_ptr() if num_priors > 0 and priors_tensor is not None else 0
     )
@@ -629,6 +635,7 @@ def _run_nms(
     # sequence so sibling threads can run Python while GPU is busy.
     _use_graph_nms = perception_pipeline is not None
     if _use_graph_nms:
+        _pad_stream = current_stream
         copy_pad_detections(
             raw_boxes_contig.data_ptr(),
             raw_scores_contig.data_ptr(),
@@ -638,7 +645,7 @@ def _run_nms(
             _nms_in["scores"].data_ptr(),
             _nms_in["classes"].data_ptr(),
             _NMS_FIXED_N,
-            torch.cuda.current_stream().cuda_stream,
+            _pad_stream,
         )
 
     if _nms_graph is None:
@@ -663,11 +670,23 @@ def _run_nms(
             0,
             0,
             0.0,
-            torch.cuda.current_stream().cuda_stream,
+            current_stream,
         )
         torch.cuda.synchronize()
+        if _explicit_probe and state.stream_post is not None:
+            _capture_ctx = torch.cuda.stream(state.stream_post)
+        else:
+            _capture_ctx = nullcontext()
         _nms_graph = torch.cuda.CUDAGraph()
-        with torch.cuda.graph(_nms_graph):
+        if os.environ.get("SACCADE_STREAM_DEBUG", "") in ("1", "true", "yes"):
+            _cs = torch.cuda.current_stream()
+            _cs_stream_post = (
+                state.stream_post.cuda_stream if state.stream_post is not None else 0
+            )
+            print(
+                f"[STREAM] _run_nms graph capture: current={_cs.cuda_stream:#x} stream_post={_cs_stream_post:#x}"
+            )
+        with _capture_ctx, torch.cuda.graph(_nms_graph):
             perception_pipeline.process_detections_graph(
                 _nms_in["boxes"].data_ptr(),
                 _nms_in["scores"].data_ptr(),
@@ -685,12 +704,39 @@ def _run_nms(
                 0,
                 0,
                 0.0,
-                torch.cuda.current_stream().cuda_stream,
+                current_stream,
             )
         print("🕯️ [NMSGraph] Captured NMS graph")
     else:
-        _nms_graph.replay()
-    n_post = _NMS_FIXED_N
+        if state._frame_stage_times is not None:
+            _t_graph_replay = time.perf_counter()
+        if os.environ.get("SACCADE_STREAM_DEBUG", "") in ("1", "true", "yes"):
+            _cs = torch.cuda.current_stream()
+            _cs_stream_post = (
+                state.stream_post.cuda_stream if state.stream_post is not None else 0
+            )
+            print(
+                f"[STREAM] _run_nms graph replay: current={_cs.cuda_stream:#x} stream_post={_cs_stream_post:#x}"
+            )
+        if _explicit_probe and state.stream_post is not None:
+            torch.cuda.set_stream(state.stream_post)
+            _nms_graph.replay()
+        else:
+            _nms_graph.replay()
+        if state._frame_stage_times is not None:
+            state._frame_stage_times["post_graph_replay"] = round(
+                (time.perf_counter() - _t_graph_replay) * 1000, 6
+            )
+    _logical_cap = int(os.environ.get("SACCADE_NMS_LOGICAL_N", str(_NMS_FIXED_N)))
+    n_post = min(_logical_cap, _NMS_FIXED_N)
+    if state._frame_stage_times is not None and _explicit_probe:
+        _sp = state.stream_post
+        state._frame_stage_times["post_capture_stream_handle"] = (
+            _sp.cuda_stream if _sp is not None else 0
+        )
+        state._frame_stage_times["post_replay_stream_handle"] = (
+            _sp.cuda_stream if _sp is not None else 0
+        )
     return n_post, _nms_graph
 
 
@@ -962,6 +1008,30 @@ def _launch_double_buffer_detect(
     reported per-frame latency is genuinely end-to-end (decode→detect→track→out).
     """
 
+    # Per-parity stream/event swap for explicit probe mode.
+    # _run_frame also does this swap, but _launch_double_buffer_detect runs
+    # before _run_frame for the same frame_id — we must assign the correct
+    # parity's streams before _run_detect enqueues work.
+    #
+    # IMPORTANT: _run_detect is called on double_buffer_stream (explicit probe's
+    # per-parity stream_detect is temporarily nulled).  The whole-detect CUDA
+    # graph is captured once on the first call's stream — switching to a
+    # different per-parity stream on later frames would replay the graph on a
+    # stream whose kernels differ from the capture stream, making detect_done
+    # fire at the wrong point.  We record detect_done on double_buffer_stream
+    # instead and fence stream_post here so _run_frame's postprocessing is
+    # correctly ordered.
+    _p_db = -1
+    if _explicit_stream_probe_enabled() and state._pp_streams[0]:
+        _p_db = frame_id % 2
+        state.stream_post = state._pp_streams[_p_db]["post"]
+        # Save and null per-parity detect stream so _run_detect falls back to
+        # the legacy path (TRT on current = double_buffer_stream).
+        _saved_detect = state.stream_detect
+        _saved_detect_event = state.stream_detect_event
+        state.stream_detect = None
+        state.stream_detect_event = None
+
     stream = state.double_buffer_stream
     if stream is None:
         raise RuntimeError("double-buffer launch requested without a CUDA stream")
@@ -988,6 +1058,17 @@ def _launch_double_buffer_detect(
             detector_box_format=state.detector_box_format,
             synchronize=False,
         )
+        # Record detect_done on double_buffer_stream so _run_frame's
+        # stream_post can be fenced after the detection output is ready.
+        if _p_db >= 0:
+            _detect_done_ev = state._pp_detect_done[_p_db]
+            _detect_done_ev.record(stream)
+            _sp = state.stream_post
+            if _sp is not None:
+                _sp.wait_event(_detect_done_ev)
+            # Restore per-parity detect state for _run_frame's parity swap.
+            state.stream_detect = _saved_detect
+            state.stream_detect_event = _saved_detect_event
         # Whole-graph replays return views into reusable static buffers.  Clone
         # every tensor crossing the frame boundary before another replay can
         # overwrite those buffers.
@@ -997,7 +1078,7 @@ def _launch_double_buffer_detect(
         source_keypoints = (
             source_keypoints.clone() if source_keypoints is not None else None
         )
-        ready_event.record(stream)
+        ready_event.record()
 
     for tensor in (fused_boxes, fused_scores, fused_classes, source_keypoints):
         if tensor is not None:
@@ -1077,39 +1158,118 @@ def _run_detect(
     # Profiling mode masks this by synchronizing at every stage boundary; this
     # is the minimal single-barrier fix.
     _barrier_mode = _detect_barrier_mode()
+    _explicit_probe = _explicit_stream_probe_enabled()
+    if os.environ.get("SACCADE_STREAM_DEBUG", "") in ("1", "true", "yes"):
+        _cs = torch.cuda.current_stream()
+        _ds = torch.cuda.default_stream()
+        _s_detect_str = (
+            f" S_detect={state.stream_detect.cuda_stream:#x}"
+            if state.stream_detect is not None
+            else ""
+        )
+        _s_post_str = (
+            f" S_post={state.stream_post.cuda_stream:#x}"
+            if state.stream_post is not None
+            else ""
+        )
+        print(
+            f"[STREAM] _run_detect: current={_cs.cuda_stream:#x} default={_ds.cuda_stream:#x}{_s_detect_str}{_s_post_str} trt_enqueue_on_current=True barrier={_barrier_mode} explicit_probe={_explicit_probe}"
+        )
+    _t_ds1_start = time.perf_counter() if state._frame_stage_times is not None else 0.0
     if not synchronize or _barrier_mode == "event":
-        # EXPERIMENTAL: drop the ingest->detect full barrier to probe whether the
-        # decode is already ordered w.r.t. the current (TRT) stream and to measure
-        # the recoverable host stall. The decode (nvJPEG/DALI) exposes no stream/
-        # event handle, so there is no narrow fence here yet -- this mode is only
-        # valid if N>=6 GPU-decode runs show zero drift; otherwise the decode must
-        # be fenced onto the current stream first.
         pass
     else:
         torch.cuda.synchronize()
+    if state._frame_stage_times is not None:
+        state._frame_stage_times["detect_ingest_barrier"] = round(
+            (time.perf_counter() - _t_ds1_start) * 1000, 6
+        )
 
-    (
+    _t_trt_start = time.perf_counter() if state._frame_stage_times is not None else 0.0
+    if _explicit_probe and state.stream_detect is not None:
+        _trt_sync = False
+        _t_explicit_dispatch_start = (
+            time.perf_counter() if state._frame_stage_times is not None else 0.0
+        )
+        _s_detect = state.stream_detect
+        _s_post = state.stream_post
+        _prev_stream = torch.cuda.current_stream()
+        if _prev_stream.cuda_stream != _s_detect.cuda_stream:
+            torch.cuda.set_stream(_s_detect)
+        _t_stream_switch = (
+            time.perf_counter() if state._frame_stage_times is not None else 0.0
+        )
         (
-            fused_boxes,
-            fused_scores,
-            fused_classes,
-            is_tiled,
-            source_keypoints,
-        ),
-        _,
-    ) = time_stage(
-        seq_stage_totals,
-        "detect",
-        lambda: detect_fn(
-            detector,
-            pool,
-            h_orig,
-            w_orig,
-            cfg.preprocess_modes,
-            detector_box_format,
-        ),
-        sync_cuda=synchronize,
-    )
+            (
+                fused_boxes,
+                fused_scores,
+                fused_classes,
+                is_tiled,
+                source_keypoints,
+            ),
+            _,
+        ) = time_stage(
+            seq_stage_totals,
+            "detect",
+            lambda: detect_fn(
+                detector,
+                pool,
+                h_orig,
+                w_orig,
+                cfg.preprocess_modes,
+                detector_box_format,
+            ),
+            sync_cuda=_trt_sync,
+        )
+        _t_trt_done = (
+            time.perf_counter() if state._frame_stage_times is not None else 0.0
+        )
+        state.stream_detect_event.record(_s_detect)
+        _s_post.wait_event(state.stream_detect_event)
+        _t_event_fence = (
+            time.perf_counter() if state._frame_stage_times is not None else 0.0
+        )
+        _default = torch.cuda.default_stream()
+        torch.cuda.set_stream(_default)
+        _default.wait_event(state.stream_detect_event)
+        if state._frame_stage_times is not None:
+            _dispatch_total = (_t_event_fence - _t_explicit_dispatch_start) * 1000
+            state._frame_stage_times["explicit_stream_dispatch_ms"] = round(
+                _dispatch_total, 6
+            )
+            state._frame_stage_times["trt_enqueue_host_ms"] = round(
+                (_t_trt_done - _t_stream_switch) * 1000, 6
+            )
+            state._frame_stage_times["event_record_ms"] = round(
+                (_t_event_fence - _t_trt_done) * 1000, 6
+            )
+    else:
+        (
+            (
+                fused_boxes,
+                fused_scores,
+                fused_classes,
+                is_tiled,
+                source_keypoints,
+            ),
+            _,
+        ) = time_stage(
+            seq_stage_totals,
+            "detect",
+            lambda: detect_fn(
+                detector,
+                pool,
+                h_orig,
+                w_orig,
+                cfg.preprocess_modes,
+                detector_box_format,
+            ),
+            sync_cuda=synchronize,
+        )
+    if state._frame_stage_times is not None:
+        state._frame_stage_times["detect_trt_enqueue"] = round(
+            (time.perf_counter() - _t_trt_start) * 1000, 6
+        )
 
     # Ensure the TRT output is fully written before the postprocess stage
     # reads the raw detection tensors (views into the shared output buffer).
@@ -1117,10 +1277,25 @@ def _run_detect(
     # from the current stream, so this ordering is likely already implicit; the
     # no_postproc/event modes drop the redundant full barrier (gated on the same
     # N>=6 determinism check).
-    if not synchronize or _barrier_mode in ("no_postproc", "event"):
-        pass
-    else:
-        torch.cuda.synchronize()
+    _t_ds2_start = time.perf_counter() if state._frame_stage_times is not None else 0.0
+    if not _explicit_probe:
+        if not synchronize or _barrier_mode in ("no_postproc", "event"):
+            pass
+        else:
+            torch.cuda.synchronize()
+    if state._frame_stage_times is not None:
+        state._frame_stage_times["detect_postproc_barrier"] = round(
+            (time.perf_counter() - _t_ds2_start) * 1000, 6
+        )
+    if state._frame_stage_times is not None:
+        _sd = state.stream_detect
+        _sp = state.stream_post
+        state._frame_stage_times["detect_stream_handle"] = (
+            _sd.cuda_stream if _sd is not None else 0
+        )
+        state._frame_stage_times["trt_enqueue_stream_handle"] = (
+            _sd.cuda_stream if _sd is not None else 0
+        )
 
     return fused_boxes, fused_scores, fused_classes, is_tiled, source_keypoints
 
@@ -1955,6 +2130,8 @@ def _run_reid_and_gmc(
     _reid_async_indices: torch.Tensor | None = None
     _reid_frame_hwc_ref: torch.Tensor | None = None
     embeddings = None
+    if state._frame_stage_times is not None:
+        state._frame_stage_times["_reid_enter"] = time.perf_counter()
     state.appearance_occlusion_mask = None
     _fpn_ready = _fpn_reid_mode and fused_boxes.numel() > 0
     _do_reid = _fpn_ready or (
@@ -1982,6 +2159,17 @@ def _run_reid_and_gmc(
 
         if _do_reid:
             state.last_reid_frame = frame_id
+            if state.frame_ledger is not None:
+                state._frame_reid_stats = {
+                    "submitted": True,
+                    "n_crops": 0,
+                    "n_requery": 0,
+                    "crop_ms": 0.0,
+                    "extract_ms": 0.0,
+                    "blocking_wait_ms": 0.0,
+                    "waited": False,
+                }
+                _t_reid_start = time.perf_counter()
             if primary_appearance_bank is not None:
                 if profile_stages:
                     torch.cuda.synchronize()
@@ -2104,6 +2292,9 @@ def _run_reid_and_gmc(
 
             if budget_indices.numel() > 0:
                 budgeted_boxes = fused_boxes[budget_indices].contiguous()
+                if state._frame_reid_stats is not None:
+                    state._frame_reid_stats["n_crops"] = int(budgeted_boxes.shape[0])
+                    _t_reid_crop = time.perf_counter()
 
                 if native_reid_available and perception_pipeline is not None:
                     from .helpers import FLOW_TIMING, flow_add, flow_now
@@ -2138,6 +2329,10 @@ def _run_reid_and_gmc(
                         _reid_async_embeddings = budget_embeddings
                         _reid_async_indices = budget_indices
                         _reid_frame_hwc_ref = frame_hwc
+                        if state._frame_reid_stats is not None:
+                            state._frame_reid_stats["crop_ms"] = round(
+                                (time.perf_counter() - _t_reid_crop) * 1000, 6
+                            )
                     else:
                         if profile_stages:
                             perception_pipeline.reset_reid_profile_stats()
@@ -2157,6 +2352,10 @@ def _run_reid_and_gmc(
                         if FLOW_TIMING:
                             flow_add("reid_extract_call", flow_now() - _t0)
 
+                        if state._frame_reid_stats is not None:
+                            state._frame_reid_stats["extract_ms"] = round(
+                                (time.perf_counter() - _t_reid_crop) * 1000, 6
+                            )
                         if profile_stages:
                             torch.cuda.synchronize()
                             elapsed_ms = (
@@ -2273,6 +2472,15 @@ def _run_reid_and_gmc(
         min_samples=cfg.geometry_min_samples,
         state=geometry_scale_state,
     )
+    if (
+        state._frame_stage_times is not None
+        and "_reid_enter" in state._frame_stage_times
+    ):
+        _now = time.perf_counter()
+        state._frame_stage_times["reid"] = round(
+            (_now - state._frame_stage_times["_reid_enter"]) * 1000, 6
+        )
+        state._frame_stage_times["_gmc_enter"] = _now
     state.gmc_warp = None
     state.gmc_uncertain = False
     # GMC estimator takes luma from frame_buffer (RGB path)
@@ -2308,7 +2516,14 @@ def _run_reid_and_gmc(
         if profile_stages:
             torch.cuda.synchronize()
             t_reid_extract_start = time.perf_counter()
+        if state._frame_reid_stats is not None:
+            _t_blocking = time.perf_counter()
         reid_side_event.synchronize()
+        if state._frame_reid_stats is not None:
+            state._frame_reid_stats["blocking_wait_ms"] = round(
+                (time.perf_counter() - _t_blocking) * 1000, 6
+            )
+            state._frame_reid_stats["waited"] = True
         if profile_stages:
             elapsed_ms = (time.perf_counter() - t_reid_extract_start) * 1000
             seq_stage_totals["reid_extract"] += elapsed_ms
@@ -2316,4 +2531,13 @@ def _run_reid_and_gmc(
         embeddings[_reid_async_indices] = _reid_async_embeddings
         _reid_side_pending = False
         _reid_frame_hwc_ref = None
+    if (
+        state._frame_stage_times is not None
+        and "_gmc_enter" in state._frame_stage_times
+    ):
+        _now = time.perf_counter()
+        state._frame_stage_times["gmc"] = round(
+            (_now - state._frame_stage_times["_gmc_enter"]) * 1000, 6
+        )
+        state._frame_stage_times["_stage_end"] = _now
     return embeddings, mid_thresh_scale

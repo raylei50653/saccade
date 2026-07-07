@@ -219,6 +219,8 @@ from .pipeline import (  # noqa: E402,F401
     _build_gmc_estimator,
     _detect_barrier_mode,
     _double_buffer_eligible,
+    _explicit_stream_probe_enabled,
+    _stream_mode_ptds_probe,
     _resolve_kalman_fps,
 )
 from .stages import (  # noqa: E402,F401
@@ -340,7 +342,34 @@ def _run_frame(
         if current_stage_sample_active
         else None
     )
+    if state.frame_ledger is not None:
+        state._frame_det_counts = None
+        state._frame_stage_times = None
+        state._frame_reid_stats = None
+        if state.perception_pipeline is not None:
+            try:
+                state._prev_post_sync_stats = (
+                    state.perception_pipeline.get_postprocess_profile_stats()
+                )
+            except Exception:
+                state._prev_post_sync_stats = None
     t_e2e_start = time.perf_counter()
+    if state.frame_ledger is not None and frame_id > warmup_frames:
+        state._frame_stage_times = {}
+    _t_ledger_last: float | None = (
+        t_e2e_start
+        if (state.frame_ledger is not None and frame_id > warmup_frames)
+        else None
+    )
+
+    def _ledger_stage_done(name: str) -> None:
+        nonlocal _t_ledger_last
+        st = state._frame_stage_times
+        if _t_ledger_last is not None and st is not None:
+            now = time.perf_counter()
+            st[name] = round((now - _t_ledger_last) * 1000, 6)
+            _t_ledger_last = now
+
     _reid_side_pending = False
     _reid_async_embeddings: torch.Tensor | None = None
     _reid_async_indices: torch.Tensor | None = None
@@ -376,7 +405,7 @@ def _run_frame(
         t_frame_start = t_e2e_start
 
     if getattr(cfg, "workbench", False) and wb is not None:
-        _, _ = time_stage(
+        _, _ingest_elapsed = time_stage(
             seq_stage_totals,
             "ingest_preprocess",
             lambda: (
@@ -418,7 +447,7 @@ def _run_frame(
             )
 
         # Process frame
-        wb_result, _ = time_stage(
+        wb_result, _detect_elapsed = time_stage(
             seq_stage_totals,
             "detect",
             lambda: wb.process_frame(
@@ -637,7 +666,18 @@ def _run_frame(
 
             # Save gray frame for GMC in next frame
             state.prev_gray = pool.get_frame_luma().clone()
+
+            if _t_ledger_last is not None and state._frame_stage_times is not None:
+                state._frame_stage_times["fetch"] = round(_ingest_elapsed, 6)
+                state._frame_stage_times["detect"] = round(_detect_elapsed, 6)
+                _t_ledger_last = time.perf_counter()
         else:
+            _ledger_stage_done("fetch")
+            if _explicit_stream_probe_enabled() and state._pp_streams[0]:
+                _p = frame_id % 2
+                state.stream_detect = state._pp_streams[_p]["detect"]
+                state.stream_post = state._pp_streams[_p]["post"]
+                state.stream_detect_event = state._pp_detect_done[_p]
             if prepared_detection is None:
                 (
                     fused_boxes,
@@ -660,6 +700,17 @@ def _run_frame(
                 is_tiled = prepared_detection.is_tiled
                 source_keypoints = prepared_detection.source_keypoints
 
+            if _explicit_stream_probe_enabled() and state._pp_streams[0]:
+                _pp = frame_id % 2
+                state._pp_fused[_pp] = (
+                    fused_boxes.clone(),
+                    fused_scores.clone(),
+                    fused_classes.clone(),
+                )
+                state._pp_streams[_pp]["is_tiled"] = is_tiled
+                state._pp_streams[_pp]["source_keypoints"] = source_keypoints
+
+            _ledger_stage_done("detect")
             _fpn_cache: dict[str, torch.Tensor] = {}
             if _fpn_backbone is not None and fused_boxes.numel() > 0:
                 _fpn_in = pool.canvas_960p.unsqueeze(0)
@@ -761,6 +812,12 @@ def _run_frame(
             raw_box_count = int(fused_scores.numel())
             private_added_count = 0
 
+            if state._frame_stage_times is not None:
+                _t_post_sub = time.perf_counter()
+
+            if _explicit_stream_probe_enabled() and state.stream_post is not None:
+                torch.cuda.set_stream(state.stream_post)
+
             if perception_pipeline is not None:
                 t_native_prep_start = None
                 if profile_stages:
@@ -781,6 +838,11 @@ def _run_frame(
                 raw_scores_contig = _fctx.raw_scores_contig
                 raw_classes_contig = _fctx.raw_classes_contig
                 num_priors = _fctx.num_priors
+                if state._frame_stage_times is not None:
+                    _t_post_after_prep = time.perf_counter()
+                    state._frame_stage_times["post_tensor_prep"] = round(
+                        (_t_post_after_prep - _t_post_sub) * 1000, 6
+                    )
                 if (
                     profile_stages
                     and current_stage_sample_active
@@ -810,6 +872,13 @@ def _run_frame(
                     is_tiled=is_tiled,
                     nms_graph=state.nms_graph,
                 )
+                if state._frame_stage_times is not None:
+                    _t_now = time.perf_counter()
+                    state._frame_stage_times["post_pre_nms"] = round(
+                        (_t_now - _t_post_sub) * 1000, 6
+                    )
+                    _t_post_sub = _t_now
+                    state._frame_stage_times["_t_post_after_nms"] = _t_now
                 if profile_stages and current_stage_sample_active:
                     _post_stats = perception_pipeline.get_postprocess_profile_stats()
                     _post_filter_ms = float(_post_stats.get("filter_ms", 0.0))
@@ -920,6 +989,8 @@ def _run_frame(
                     max_aspect=cfg.narrow_person_max_aspect,
                 )
                 t_sub_start = time.perf_counter()
+                if state._frame_stage_times is not None:
+                    _t_pre_filter = time.perf_counter()
                 keep_indices, geometry_suspect_mask, _ = filter_detections_fast(
                     fused_boxes,
                     fused_scores,
@@ -950,12 +1021,21 @@ def _run_frame(
                 fused_boxes = fused_boxes[keep_indices]
                 fused_scores = fused_scores[keep_indices]
                 fused_classes = fused_classes[keep_indices]
+                if state._frame_stage_times is not None:
+                    _t_after_filter = time.perf_counter()
+                    state._frame_stage_times["_t_post_after_filter"] = _t_after_filter
                 if aligned_keypoints is not None:
                     aligned_keypoints = aligned_keypoints[keep_indices]
 
                 if _fpn_reid_mode and fused_boxes.numel() > 0:
                     valid_w = (fused_boxes[:, 2] - fused_boxes[:, 0]) > 0
+                    if state._frame_stage_times is not None:
+                        _t_any = time.perf_counter()
                     if not valid_w.all():
+                        if state._frame_stage_times is not None:
+                            _t_elapsed = (time.perf_counter() - _t_any) * 1000
+                            state._frame_stage_times.setdefault("_post_any_sync", 0.0)
+                            state._frame_stage_times["_post_any_sync"] += _t_elapsed
                         fused_boxes = fused_boxes[valid_w]
                         fused_scores = fused_scores[valid_w]
                         fused_classes = fused_classes[valid_w]
@@ -972,15 +1052,23 @@ def _run_frame(
                         w_area=cfg.detection_quality_w_area,
                     )
                     fused_scores = fused_scores * quality_factors
-                elif cfg.geometry_suspect_support and geometry_suspect_mask.any():
-                    fused_scores = fused_scores.clone()
-                    fused_scores[geometry_suspect_mask] = torch.minimum(
-                        fused_scores[geometry_suspect_mask],
-                        torch.full_like(
+                elif cfg.geometry_suspect_support and geometry_suspect_mask.numel() > 0:
+                    if state._frame_stage_times is not None:
+                        _t_any = time.perf_counter()
+                    _suspect_any = geometry_suspect_mask.any()
+                    if state._frame_stage_times is not None:
+                        _t_elapsed = (time.perf_counter() - _t_any) * 1000
+                        state._frame_stage_times.setdefault("_post_any_sync", 0.0)
+                        state._frame_stage_times["_post_any_sync"] += _t_elapsed
+                    if _suspect_any:
+                        fused_scores = fused_scores.clone()
+                        fused_scores[geometry_suspect_mask] = torch.minimum(
                             fused_scores[geometry_suspect_mask],
-                            cfg.geometry_suspect_support_score,
-                        ),
-                    )
+                            torch.full_like(
+                                fused_scores[geometry_suspect_mask],
+                                cfg.geometry_suspect_support_score,
+                            ),
+                        )
                 if profile_stages:
                     torch.cuda.synchronize()
                     elapsed_ms = (time.perf_counter() - t_sub_start) * 1000
@@ -1186,6 +1274,10 @@ def _run_frame(
                 debug_dump_active=debug_dump_active,
                 debug_stage_dump_rows=debug_stage_dump_rows,
             )
+            if state._frame_stage_times is not None:
+                state._frame_stage_times["_t_post_after_det_filters"] = (
+                    time.perf_counter()
+                )
 
             # === Stage 2 Quality Gate ===
             # Remove mid-score-band detections with poor geometry before the tracker's
@@ -1348,6 +1440,15 @@ def _run_frame(
                     fused_scores[seam_mask] = (
                         fused_scores[seam_mask] * cfg.tile_seam_score_penalty
                     )
+            if state.frame_ledger is not None and frame_id > warmup_frames:
+                state._frame_det_counts = {
+                    "raw_boxes": raw_box_count,
+                    "after_filter": after_filter_count,
+                    "after_nms": after_nms_count,
+                    "after_merge": after_merge_count_before_private,
+                    "private_candidates": private_added_count,
+                    "after_private": after_private_count,
+                }
             if profile_stages:
                 if post_gpu_end_event is not None:
                     post_gpu_end_event.record(torch.cuda.current_stream())
@@ -1382,10 +1483,59 @@ def _run_frame(
                     seq_post_counts["after_merge"] += after_merge_count_before_private
                     seq_post_counts["private_candidates"] += private_added_count
                     seq_post_counts["after_private"] += after_private_count
+            _ledger_stage_done("post")
+            if (
+                state._frame_stage_times is not None
+                and "_t_post_after_nms" in state._frame_stage_times
+            ):
+                _t_post_end = time.perf_counter()
+                _t_after_nms = state._frame_stage_times.pop("_t_post_after_nms")
+                _t_after_filter = state._frame_stage_times.pop(
+                    "_t_post_after_filter", None
+                )
+                _t_after_det = state._frame_stage_times.pop(
+                    "_t_post_after_det_filters", None
+                )
+                state._frame_stage_times["post_finalize"] = round(
+                    (_t_post_end - _t_after_nms) * 1000, 6
+                )
+                if _t_after_filter is not None:
+                    state._frame_stage_times["post_filter_d2h"] = round(
+                        (_t_after_filter - _t_after_nms) * 1000, 6
+                    )
+                if _t_after_det is not None:
+                    state._frame_stage_times["post_quality_filters"] = (
+                        round((_t_after_det - _t_after_filter) * 1000, 6)
+                        if _t_after_filter is not None
+                        else 0
+                    )
+                    state._frame_stage_times["post_tail"] = round(
+                        (_t_post_end - _t_after_det) * 1000, 6
+                    )
+            if _explicit_stream_probe_enabled() and state.stream_post is not None:
+                _pp = frame_id % 2
+                state._pp_post_done[_pp].record(state.stream_post)
+                if (
+                    _stream_mode_ptds_probe()
+                    and state._pp_track_streams[_pp] is not None
+                ):
+                    _s_track = state._pp_track_streams[_pp]
+                    torch.cuda.set_stream(_s_track)
+                    _s_track.wait_event(state._pp_post_done[_pp])
+                    if frame_id > 0:
+                        _prev_p = 1 - _pp
+                        _s_track.wait_event(state._pp_track_done[_prev_p])
+                else:
+                    # detect_post_event (production): restore the default stream
+                    # so tracker/ReID/GMC/output — all of which assume the legacy
+                    # (default) stream for ordering — are fenced after postprocess.
+                    _default = torch.cuda.default_stream()
+                    torch.cuda.set_stream(_default)
+                    _default.wait_event(state._pp_post_done[_pp])
             # Sync previous frame's background relink_write before accessing shared
             # mutable state (dynamic_reid, primary_appearance_bank, relinker).
             if state.bg_future is not None:
-                if profile_stages:
+                if profile_stages or (_t_ledger_last is not None):
                     t_bg_wait_start = time.perf_counter()
                 (
                     _bg_rw_lines,
@@ -1397,6 +1547,8 @@ def _run_frame(
                     elapsed_ms = (time.perf_counter() - t_bg_wait_start) * 1000
                     seq_stage_totals["bg_relink_wait"] += elapsed_ms
                     record_stage_sample("bg_relink_wait", elapsed_ms)
+                elif _t_ledger_last is not None:
+                    _ledger_stage_done("handover")
                 results_lines.extend(_bg_rw_lines)
                 if state.bg_birth_events is not None:
                     _annotate_birth_events(
@@ -1417,6 +1569,14 @@ def _run_frame(
                 current_stage_sample_active=current_stage_sample_active,
                 _fpn_cache=_fpn_cache,
             )
+            if _t_ledger_last is not None and state._frame_stage_times is not None:
+                _end = state._frame_stage_times.pop("_stage_end", None)
+                if isinstance(_end, (int, float)):
+                    _t_ledger_last = float(_end)
+                else:
+                    _t_ledger_last = time.perf_counter()
+                state._frame_stage_times.pop("_reid_enter", None)
+                state._frame_stage_times.pop("_gmc_enter", None)
             appearance_occlusion_mask = getattr(
                 state, "appearance_occlusion_mask", None
             )
@@ -1439,6 +1599,10 @@ def _run_frame(
                 tracker_result_buffers=state.tracker_result_buffers,
                 synchronize=state.double_buffer_stream is None,
             )
+            if _stream_mode_ptds_probe() and state._pp_track_streams[0]:
+                _pp = frame_id % 2
+                state._pp_track_done[_pp].record(state._pp_track_streams[_pp])
+                torch.cuda.set_stream(torch.cuda.default_stream())
             if (
                 state.double_buffer_stream is not None
                 and state.double_buffer_tracker_out_pinned
@@ -1479,6 +1643,8 @@ def _run_frame(
                     aligned_keypoints=aligned_keypoints,
                     frame_id=frame_id,
                 )
+
+            _ledger_stage_done("track")
 
     if (
         aligned_keypoints is not None
@@ -1601,7 +1767,92 @@ def _run_frame(
         )
         results_lines.extend(_emit_lines)
 
+    _ledger_stage_done("output")
     _record_frame_timing(state, latency_started_at=t_frame_start)
+    if state.frame_ledger is not None and frame_id > warmup_frames:
+        total_ms = (time.perf_counter() - t_frame_start) * 1000
+        det = state._frame_det_counts or {}
+        st = state._frame_stage_times or {}
+        reid = state._frame_reid_stats or {}
+        state.frame_ledger.add(
+            seq=seq,
+            frame=frame_id,
+            total_ms=round(total_ms, 6),
+            n_dets_raw=det.get("raw_boxes", 0),
+            n_dets_after_filter=det.get("after_filter", 0),
+            n_dets_after_nms=det.get("after_nms", 0),
+            n_dets_final=det.get("after_private", track_results.get("count", 0)),
+            fetch_ms=st.get("fetch", 0),
+            detect_ms=st.get("detect", 0),
+            detect_ingest_barrier_ms=st.get("detect_ingest_barrier", 0),
+            detect_trt_enqueue_ms=st.get("detect_trt_enqueue", 0),
+            detect_postproc_barrier_ms=st.get("detect_postproc_barrier", 0),
+            post_ms=st.get("post", 0),
+            post_graph_replay_ms=st.get("post_graph_replay", 0),
+            post_graph_count_wait_ms=round(
+                max(0.0, st.get("post", 0) - st.get("post_graph_replay", 0)), 6
+            ),
+            post_pre_nms_ms=st.get("post_pre_nms", 0),
+            reid_ms=st.get("reid", 0),
+            gmc_ms=st.get("gmc", 0),
+            track_ms=st.get("track", 0),
+            handover_ms=st.get("handover", 0),
+            output_ms=st.get("output", 0),
+            reid_submitted=1 if reid.get("submitted") else 0,
+            reid_waited_this_frame=1 if reid.get("waited") else 0,
+            reid_blocking_wait_ms=reid.get("blocking_wait_ms", 0),
+            reid_crop_stash_ms=reid.get("crop_ms", 0),
+            reid_extract_submit_ms=reid.get("extract_ms", 0),
+            n_crops=reid.get("n_crops", 0),
+            detect_stream_handle=int(st.get("detect_stream_handle", 0)),
+            post_capture_stream_handle=int(st.get("post_capture_stream_handle", 0)),
+            post_replay_stream_handle=int(st.get("post_replay_stream_handle", 0)),
+            trt_enqueue_stream_handle=int(st.get("trt_enqueue_stream_handle", 0)),
+            dets_hash="",
+            explicit_stream_dispatch_ms=st.get("explicit_stream_dispatch_ms", 0),
+            trt_enqueue_host_ms=st.get("trt_enqueue_host_ms", 0),
+            event_record_ms=st.get("event_record_ms", 0),
+            post_graph_launch_host_ms=st.get("post_graph_launch_host_ms", 0),
+            post_tensor_prep_ms=st.get("post_tensor_prep", 0),
+            post_nms_replay_ms=st.get("post_graph_replay", 0),
+            post_finalize_ms=st.get("post_finalize", 0),
+            post_any_sync_ms=round(st.pop("_post_any_sync", 0.0), 6),
+            post_item_sync_ms=0,
+            post_filter_d2h_ms=st.get("post_filter_d2h", 0),
+            post_quality_filters_ms=st.get("post_quality_filters", 0),
+            post_tail_ms=st.get("post_tail", 0),
+        )
+        if state.perception_pipeline is not None:
+            try:
+                cur = state.perception_pipeline.get_postprocess_profile_stats()
+                prev = state._prev_post_sync_stats or {}
+                state.frame_ledger._rows[-1]["post_filter_count_sync_ms"] = round(
+                    float(cur.get("native_filter_count_sync_ms", 0))
+                    - float(prev.get("native_filter_count_sync_ms", 0)),
+                    6,
+                )
+                state.frame_ledger._rows[-1]["post_nms_count_sync_ms"] = round(
+                    float(cur.get("native_nms_count_sync_ms", 0))
+                    - float(prev.get("native_nms_count_sync_ms", 0)),
+                    6,
+                )
+                state.frame_ledger._rows[-1]["post_final_count_sync_ms"] = round(
+                    float(cur.get("count_d2h_ms", 0))
+                    - float(prev.get("count_d2h_ms", 0)),
+                    6,
+                )
+            except Exception:
+                pass
+        if state.frame_ledger is not None and state.frame_ledger._rows:
+            import hashlib
+
+            _row = state.frame_ledger._rows[-1]
+            _counts = (
+                str(int(float(_row.get("n_dets_raw", 0))))
+                + str(int(float(_row.get("n_dets_final", 0))))
+                + str(int(float(_row.get("n_tracks", 0))))
+            )
+            _row["dets_hash"] = hashlib.md5(_counts.encode()).hexdigest()[:8]
     if profile_stages and frame_id > warmup_frames:
         elapsed_ms = (time.perf_counter() - t_frame_start) * 1000
         seq_stage_totals["frame_total"] += elapsed_ms
@@ -1644,6 +1895,7 @@ def run_eval(
         reid_mode=reid_mode,
         reid_model=reid_model,
         profile_stages=bool(kwargs.get("profile_stages", False)),
+        profile_frame_csv=bool(kwargs.get("profile_frame_csv", False)),
         kwargs=kwargs,
     )
     if cfg.private_continuation_enabled:
@@ -1691,6 +1943,33 @@ def run_eval(
     debug_birth_csv = cfg.debug_birth_csv
     debug_birth_rows: list[dict[str, float | int | str | bool]] = []
     profile_stages = cfg.profile_stages
+    profile_frame_csv = cfg.profile_frame_csv
+    if profile_frame_csv:
+        from .frame_ledger import FrameLedger
+
+        frame_ledger = FrameLedger()
+    else:
+        frame_ledger = None
+
+    if os.environ.get("SACCADE_STREAM_MODE", "") == "ptds_probe":
+        cfg.kwargs["use_tracker_graph"] = True
+        print("[STREAM] ptds_probe: forcing use_tracker_graph=True")
+
+    if os.environ.get("SACCADE_STREAM_DEBUG", "") in ("1", "true", "yes"):
+        import os as _os
+
+        _cs = torch.cuda.current_stream()
+        _ds = torch.cuda.default_stream()
+        _legacy = torch.cuda.Stream(0) if hasattr(torch.cuda, "Stream") else None
+        print(
+            f"[STREAM] run_eval: current={_cs.cuda_stream:#x} default={_ds.cuda_stream:#x}"
+        )
+        print(
+            f"[STREAM] barrier={_detect_barrier_mode()} workbench={cfg.workbench} whole_graph={getattr(detector, 'use_whole_graph', False)} double_buffer={_double_buffer_eligible(cfg, detector, profile_stages)}"
+        )
+        print(
+            f"[STREAM] async_reid={cfg.async_reid} gmc_mode={cfg.gmc_mode} decode={'NVJPEG' if _os.environ.get('SACCADE_GPU_DECODE') == '1' else 'DALI'}"
+        )
     detector_box_format = str(kwargs.get("detector_box_format", "xyxy"))
     stage_summary_lines = []
     global_id_mapper = GlobalTrackIdMapper()
@@ -2152,7 +2431,49 @@ def run_eval(
             native_reid_available=native_reid_available,
             external_fp_rule_config=external_fp_rule_config,
             external_fp_logistic_model=external_fp_logistic_model,
+            frame_ledger=frame_ledger,
         )
+
+        from .pipeline import _explicit_stream_probe_enabled, _stream_mode_ptds_probe
+
+        if _explicit_stream_probe_enabled():
+            _s_detect_handles = []
+            _s_post_handles = []
+            _s_track_handles = []
+            _ptds = _stream_mode_ptds_probe()
+            for _p in (0, 1):
+                _pp = _seq_state._pp_streams[_p]
+                _pp["detect"] = torch.cuda.Stream()
+                _pp["post"] = torch.cuda.Stream()
+                _s_detect_handles.append(_pp["detect"].cuda_stream)
+                _s_post_handles.append(_pp["post"].cuda_stream)
+                _seq_state._pp_detect_done[_p] = torch.cuda.Event()
+                _seq_state._pp_post_done[_p] = torch.cuda.Event()
+                if _ptds:
+                    _seq_state._pp_track_streams[_p] = torch.cuda.Stream()
+                    _seq_state._pp_track_done[_p] = torch.cuda.Event()
+                    _s_track_handles.append(
+                        _seq_state._pp_track_streams[_p].cuda_stream
+                    )
+            _seq_state.stream_detect = _seq_state._pp_streams[0]["detect"]
+            _seq_state.stream_post = _seq_state._pp_streams[0]["post"]
+            _seq_state.stream_detect_event = _seq_state._pp_detect_done[0]
+            _track_info = (
+                f"S_track=({_s_track_handles[0]:#x},{_s_track_handles[1]:#x})"
+                if _ptds
+                else "track=0x0 (legacy)"
+            )
+            print(
+                f"[STREAM] {('ptds_probe (experimental)' if _ptds else 'detect_post_event (production)'):>35s}: "
+                f"S_detect=({_s_detect_handles[0]:#x},{_s_detect_handles[1]:#x}) "
+                f"S_post=({_s_post_handles[0]:#x},{_s_post_handles[1]:#x}) "
+                f"{_track_info}"
+            )
+            if _ptds:
+                forced_graph = cfg.kwargs.setdefault("use_tracker_graph", True)
+                if not forced_graph:
+                    cfg.kwargs["use_tracker_graph"] = True
+                    print("[STREAM] ptds_probe: forced use_tracker_graph=True")
 
         def _run_frame_diagnostics(frame_id: int) -> None:
             import os as _os  # noqa: E402
@@ -2260,6 +2581,13 @@ def run_eval(
                 )
             _seq_state.bg_future = None
             _seq_state.bg_birth_events = None
+
+        if _seq_state.frame_ledger is not None:
+            csv_path = output_root / f"_frame_ledger_{seq}.csv"
+            _seq_state.frame_ledger.write_csv(csv_path)
+            print(
+                f"📋 Frame ledger written: {csv_path} ({len(_seq_state.frame_ledger)} frames)"
+            )
 
         if _seq_state.frame_latencies:
             lats = np.array(_seq_state.frame_latencies)
