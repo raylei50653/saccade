@@ -81,6 +81,7 @@ def test_nms_graph_retains_captured_count_buffer(monkeypatch):
     )
 
     state = SimpleNamespace(
+        _frame_stage_times=None,
         perception_pipeline=pipe,
         nms_in={
             "boxes": torch.empty((4, 4)),

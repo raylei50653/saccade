@@ -85,6 +85,7 @@ def test_double_buffer_clones_reused_detector_output_before_next_replay() -> Non
         return fn(), 0.0
 
     state = SimpleNamespace(
+        _frame_stage_times=None,
         double_buffer_stream=torch.cuda.Stream(),
         cfg=SimpleNamespace(
             preprocess_modes=[], gamma=1.0, gamma_luma_threshold=0.0, contrast=1.0
