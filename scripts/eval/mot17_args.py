@@ -29,7 +29,9 @@ def build_parser() -> argparse.ArgumentParser:
             "Load per-module YAML files with --module-<name> PATH to opt into "
             "advanced parameter sets without exposing them in every run. "
             "Tier legend: Tier 1 = daily knobs; Tier 2 = advanced tuning; "
-            "Experimental = ablation-heavy or niche controls."
+            "Experimental = ablation-heavy or niche controls.\n"
+            "Cost: full 7-sequence SDP eval finishes in <20 s on a single GPU "
+            "(~5000 frames at 340+ fps); single-sequence runs are 2-4 s."
         ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
