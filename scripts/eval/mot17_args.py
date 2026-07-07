@@ -25,8 +25,9 @@ class _CostHelpFormatter(argparse.ArgumentDefaultsHelpFormatter):
     """Prepend eval-cost note to --help so it shows in head -N."""
 
     _COST_NOTE = (
-        "Cost: 7-seq SDP eval <20 s | single-seq 2-4 s "
-        "(measured: 29 s wall for 4966 frames @ 340 fps)\n"
+        "Cost: 7-seq SDP eval is cheap (~15s core, ~30s wall; "
+        "4966 frames @ ~340 fps).\n"
+        "Do not reduce validation scope solely due to guessed runtime.\n"
     )
 
     def format_help(self) -> str:
