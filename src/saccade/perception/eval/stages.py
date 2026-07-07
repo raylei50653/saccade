@@ -469,6 +469,49 @@ def _flush_db_tracker_out(state: EvalPipeline) -> None:
     state.db_emit_ctx.clear()
 
 
+def _apply_score_jitter(
+    state: EvalPipeline, fused_scores: torch.Tensor, fused_boxes: torch.Tensor
+) -> None:
+    """Perturbation-robustness probe: deterministic tiny noise on scores/boxes.
+
+    Enabled by SACCADE_SCORE_JITTER="<seed>[:<score_eps>[:<box_eps_px>]]"
+    (defaults 1e-3 / 0.05 px). Seeded per (seed, sequence) so each run is
+    reproducible. Emulates implementation-level bit perturbations (fp16
+    rounding, kernel reorders): box jitter is the dominant channel — the
+    tracker amplifies geometry flips through birth/confirm/bridge decisions —
+    while score-only jitter barely moves metrics. Used to check that a tuning
+    delta survives perturbation redraws instead of being one lottery draw
+    (see perf_attribution_whole_graph_m.md).
+    """
+    jit = getattr(state, "_score_jitter", None)
+    if jit is None:
+        spec = os.environ.get("SACCADE_SCORE_JITTER", "")
+        if not spec:
+            state._score_jitter = ()
+            return
+        import zlib
+
+        parts = spec.split(":")
+        gen = torch.Generator(device=fused_scores.device)
+        gen.manual_seed((int(parts[0]) << 32) ^ zlib.crc32(state.seq.encode()))
+        eps = float(parts[1]) if len(parts) > 1 and parts[1] else 1e-3
+        box_eps = float(parts[2]) if len(parts) > 2 and parts[2] else 0.05
+        jit = state._score_jitter = (gen, eps, box_eps)
+    if jit:
+        gen, eps, box_eps = jit
+        fused_scores.add_(
+            torch.randn(fused_scores.shape, generator=gen, device=fused_scores.device),
+            alpha=eps,
+        )
+        if box_eps > 0:
+            fused_boxes.add_(
+                torch.randn(
+                    fused_boxes.shape, generator=gen, device=fused_boxes.device
+                ),
+                alpha=box_eps,
+            )
+
+
 def _run_track(
     state: EvalPipeline,
     *,
@@ -487,6 +530,7 @@ def _run_track(
     direct ``update_into``. Returns the result buffers (the graph path returns
     fresh ``gtu.out_*`` tensors; the direct path writes in place).
     """
+    _apply_score_jitter(state, fused_scores, fused_boxes)
     gtu = state.gtu
     detector = state.detector
     cfg = state.cfg

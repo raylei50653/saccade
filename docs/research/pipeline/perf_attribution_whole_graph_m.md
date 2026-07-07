@@ -91,7 +91,23 @@ Performance：
 | nsys selective_scan | **0.327 ms/frame, 3 launches** |
 | production bubble 校準（MOT17-04）| 1000/298.30 − 2.663 ≈ **0.69 ms/frame** |
 
-對比本頁原始 trace：selective_scan 0.437 → **0.327 ms/frame**（約 **−0.11 ms/frame, −25%**）；detect graph span 2.59 → **2.50 ms**。整體 7-seq throughput 與原 baseline 292.8 FPS 同級，scan kernel 改動沒有造成 metric drift（IDF1 80.3 vs 原 80.5，屬同一 preset/輸出波動範圍）。
+對比本頁原始 trace：selective_scan 0.437 → **0.327 ms/frame**（約 **−0.11 ms/frame, −25%**）；detect graph span 2.59 → **2.50 ms**。整體 7-seq throughput 與原 baseline 292.8 FPS 同級。
+
+**Metric drift 歸因（2026-07-07 更正）**：IDF1 80.5 → 80.3（MOTA 82.1→81.9、IDs 358→359）**是本 commit 造成的真實 drift，不是輸出波動**——此 preset 已實證 run-to-run 零波動（前後各多次 run metric 全同）。機制：production 走 TRT fp16 engine 的 SelectiveScan plugin（`mamba_scan_plugin.cpp` `is_half` → `selective_scan_fwd_half`，`T=__half`）；舊 code `y=half(acc)` 寫出→讀回 fp32 加 `D*u`→再 cast half（**兩次捨入**），fusion 後 `half(acc+D*u)` **一次捨入**→ 每個 y 元素 ±1 ulp fp16 → head 輸出微移 → 邊界 association 決策翻轉。fp32 路徑（`selective_scan_fwd_float`）bit-exact 不受影響。新 kernel 數值上**更準**（單次捨入 + fp32 累加），−0.2 是下游校準對 bit-level 擾動的敏感度，屬可收的 trade（換 −25% scan 時間）；若需回 80.5 需 revert fusion。
+
+**逐序列分解（revert-rebuild A/B，閉環驗證）**：drift 是零均值散射、非系統性——05/09 反向**進步**（IDF1 +0.8/+0.5、AssA +1.5/+1.3），02/04/11/13 微降，聚合 FP +127 幾乎全來自 10（+118）與 04（+64）。舊 kernel 重跑與 baseline **每指標逐位相同**（80.5/358/1940/17793），歸因 100% 閉環。**結論：下游門檻不調**——無一致方向的位移可補償，micro-tune 即 fit 單次抽籤；僅 seq10 IDF1 −1.4 在後續 tracker 側改動時順帶觀察是否放大。
+
+---
+
+## 4. 調參噪音帶與擾動探針（2026-07-07）
+
+**噪音帶（GO/NO-GO 判定的最低可信 delta）**：`SACCADE_SCORE_JITTER=<seed>[:score_eps[:box_eps_px]]`（預設 1e-3 / 0.05 px，掛在 `stages.py::_run_track` 進 tracker 前；default off 時 bit-exact 零影響）注入 seed 化擾動，模擬實作級 bit 擾動（fp16 捨入、kernel 重排）。3-seed 實測（7-seq 聚合）：**IDF1 80.3–80.6、IDs 355–362、FP ±60** —— 有 seed 抽出高於 80.5 baseline 的 80.6，scan fusion 的 −0.2 完全在抽籤帶內。
+
+規則：**聚合 |ΔIDF1| ≲ 0.3 / 單序列 ≲ 1.5 一律視為噪音**，不做 GO/NO-GO；貼帶邊緣的決策跑 3–5 seed 探針，delta 全 seed 同向才算訊號（350 FPS 下 5 seed < 4 分鐘）。
+
+附帶發現：**score-only 擾動（1e-3）幾乎不動指標**（4 seed IDF1 全同）——系統的擾動放大通道是 **box 幾何**（IoU/Kalman → birth/confirm/橋接決策，單次翻轉被軌長放大成數十至上千幀輸出差異），與 §3 逐序列證據一致。
+
+**Threaded-decode capture 相容性**：decode daemon thread（`streaming.py`）併發於 per-seq graph capture 會間歇觸發 `cudaErrorStreamCaptureInvalidated`（global capture mode 下任何他線程 unsafe CUDA 呼叫都會 invalidate，實測 ~2/13 run）；修法 = worker 進場先 `cudaThreadExchangeStreamCaptureMode(relaxed)`（單點覆蓋 GMC/tracker/NMS/relink/detect 全部 capture 站點）。
 
 ---
 
