@@ -21,6 +21,18 @@ from config import (  # noqa: E402
 )
 
 
+class _CostHelpFormatter(argparse.ArgumentDefaultsHelpFormatter):
+    """Prepend eval-cost note to --help so it shows in head -N."""
+
+    _COST_NOTE = (
+        "Cost: 7-seq SDP eval <20 s | single-seq 2-4 s "
+        "(measured: 29 s wall for 4966 frames @ 340 fps)\n"
+    )
+
+    def format_help(self) -> str:
+        return self._COST_NOTE + "\n" + super().format_help()
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
@@ -29,11 +41,9 @@ def build_parser() -> argparse.ArgumentParser:
             "Load per-module YAML files with --module-<name> PATH to opt into "
             "advanced parameter sets without exposing them in every run. "
             "Tier legend: Tier 1 = daily knobs; Tier 2 = advanced tuning; "
-            "Experimental = ablation-heavy or niche controls.\n"
-            "Cost: full 7-sequence SDP eval finishes in <20 s on a single GPU "
-            "(~5000 frames at 340+ fps); single-sequence runs are 2-4 s."
+            "Experimental = ablation-heavy or niche controls."
         ),
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        formatter_class=_CostHelpFormatter,
     )
     add_core_args(parser)
     add_detection_args(parser)
