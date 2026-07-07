@@ -27,6 +27,7 @@ train/eval. **Mechanical fit is fine.** The findings below are the payload.
 ## Supporting evidence (all measured this session)
 
 - **Head is not the deploy bottleneck**: same gated FPN features — teacher YOLO head @0.001=75.2 vs mamba head 45.4 (−30pp), but **@0.25 teacher 39.4 vs mamba 34.9 (only −4.5pp)**. `raw_yolo_recall.py` / `teacher_recall.py` (reuse `mamba_size_binned_recall` helpers).
+  - **MOT17 full-pipeline matched baseline (2026-07-01, the missing control)**: original YOLO detect head vs Mamba head through the *identical tracker* on the *same backbone* → **dead heat** (mamba 71.4 vs original 71.0 IDF1, ±0.5 across tracker configs), original 1.6× faster; Mamba wins only crowded 02/04. ⇒ Mamba head = crowd-recall specialist, not globally superior. See `docs/reference/original_head_matched_baseline.md`.
 - **Head knobs NO-GO** (single-variable GT1 vs baseline GT1, PP22 held-out `mot_test_kf` 8 seqs, @0.001): DFL reg_max=16 → flat (45.8); sr=2 → 47.7 (+2.5, weak, 3× head latency); head-depth 2 (YOLO-aligned 2 conv blocks + BN) → 45.1 (flat).
 - **Stage probe**: gap is present from GT1 (45.2), not introduced by temporal (T3 47.3, T1 45.4) — temporal curriculum is innocent.
 - **Full-cadence + interp NO-GO** on both MOT17 transfer and PP22 held-out self-domain (see `pp22_full_cadence_interp_training_plan.md` §5–6).
