@@ -10,12 +10,18 @@
 - [ADR 007: C++ Migration Spec](007-cpp-migration-spec.md)
 - [ADR 008: Cognition Layer Definition](008-cognition-layer-definition.md)
 - [ADR 009: Industrial Zero-Copy V2](009-industrial-zero-copy-v2.md)
+- [ADR 010: DALI GPU Preprocessing](010-dali-gpu-preprocessing.md)
 - [ADR 011: FastTracker Reference Adaptation](011-fasttracker-reference-adaptation.md)
 - [ADR 012: FastTracker Selective Adaptation](012-fasttracker-selective-adaptation.md)
 - [ADR 013: GPUByteTracker 與 Saccade Heartbeat](013-gpubytetracker-saccade-heartbeat.md)
 - [ADR 014: Agentic RAG — LlamaIndex 整合](014-agentic-rag-llama-index.md)
+- [ADR 015: Sinkhorn-Auction Hybrid Association](015-sinkhorn-auction-hybrid-association.md)
+- [ADR 016: Rerank Phase 3 - Reference Quality and False-Accept Filtering](016-rerank-phase3-reference-quality.md)
+- [ADR 017: 2025-2026 高 MOTA 技術整合策略分析](017-high-mota-2026-integration-strategy.md)
+- [ADR 018: 專案主線收斂與雙線開發方向](018-project-main-line-direction.md)
+- [ADR 019: Demote ReID and Adopt Geometry-First Production Tracker](019-demote-reid-geometry-first-production-tracker.md)
 
-> ADR 001、002、003、010 未建立（對應決策已直接合併至後續 ADR 中）。
+> ADR 001、002、003 未建立（對應決策已直接合併至後續 ADR 中）。
 
 ## 使用方式
 
