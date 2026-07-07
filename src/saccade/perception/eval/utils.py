@@ -1,3 +1,5 @@
+import csv
+from pathlib import Path
 from typing import Any
 
 import torch
@@ -226,3 +228,16 @@ def count_tile_seam_boxes(
         .sum()
         .item()
     )
+
+
+def append_dict_csv(path: "Path", rows: list[dict[str, Any]]) -> None:
+    if not rows:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_header = not path.exists() or path.stat().st_size == 0
+    fieldnames = list(rows[0].keys())
+    with path.open("a", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        if write_header:
+            writer.writeheader()
+        writer.writerows(rows)

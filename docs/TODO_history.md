@@ -741,3 +741,95 @@ VRAM 優化見 commit（in-place dist + support-gather Jaccard，active 7.45→~
 **下一步＝路徑 2（offline tracklet merge / MOT17）**：standalone 既不優於 fixed-k，Cheb-GR
 唯一可能加值處在 tracklet 縫合（AssA 64.7% 為瓶頸），用 `cheb_gr_kreciprocal()` 當 tracklet
 相似度，驗收 IDF1/AssA > ±0.3pp 才 GO。flag 全 default off。
+
+### Causal Online Cheb-GR Handover — C++ Streaming Ablation（2026-07-03，❌ NO-GO）
+
+#### 前置：Eigen::Map Row-Major Bug（重大修復）
+
+`Eigen::Map<Eigen::MatrixXf>(ptr, N, D)` 預設 column-major，但三處呼叫端的 buffer 都是
+row-major 填充（每 sample 連續 D floats）→ 特徵矩陣被打亂，Cheb-GR 距離全糊在 ~0.43–0.48
+（同人/異人幾乎無分離：0.457 vs 0.484；正確值 0.238 vs 0.553）。三處中招：
+`cheb_gr_online.cpp`（batch）、`cheb_gr_claim_best`（delayed-claim，default-off 實驗臂）、
+`score_handover_candidates`（streaming handover）。修法：`Eigen::Map<..., RowMajor>`。
+修後 kernel vs torch max diff **6e-8**，batch 版 vs Python 參考 cost 四位小數一致。
+
+**後果**：所有經過 native Cheb-GR kernel 的舊 ablation 數字作廢——包括 streaming handover
+基準表（67.9@0.45、79.8@0.25「未觸發」= 壞距離全高於 0.25）、以及任何
+`semantic_cheb_gr_claim` 臂量測。14 個 native test 之前全過 = 測試 embedding 太可分離。
+
+#### 修復清單（七項語意對齊 Python 參考）
+
+1. **det_idx 對齊**：evaluator feed 站 `embeddings[:count]` 是 detection-indexed（零列=未 budget），須經 `det_idx` gather 到 track 順序。
+2. **零向量毒化**：零 emb 互為最近鄰（cost 恰 0.3500 = 0.3×d_j0+0.7×0.5 是診斷特徵）；guard 下沉到 `feed_newborn_head`/`feed_life_bank`。
+3. **one-shot 決策**：`ho_decided_`；Python 每 newborn 在 birth+decide_n 決策一次。
+4. **birth=首次 emit**，不是首個 clean embedding（budget 會晚幾幀→毀掉 gap≥1 因果不相交）。
+5. **death=最後 emit 幀**；暫時遮擋≠死亡：track 重現時從 archive 移除。
+6. **alias-aware prune**：active_ids 是 canonical；handover 後 newborn 殘留狀態併入 canon。
+7. **bank=全生涯 clean 樣本**（stride-thinning cap 50）+ context banks 進 graph（Python parity）。
+
+#### Ablation 設計與結果
+
+**環境**：`--preset mamba_whole_graph_m --detector SDP --no-gpu-decode`（確定性），
+7 序列 SDP train。Baseline **IDF1 80.0 / IDs 333**。
+
+**Dynamic config（reid_mnv4_dynamic.yaml，budget=10, interval=5，H 恆=1）：**
+
+| arm | IDF1 | IDs | handovers | 判讀 |
+|:---|:---:|:---:|:---:|:---|
+| baseline（off） | **80.0** | 333 | — | |
+| 0.45 / 0.0 | 73.8 | 571 | ~200 | −6.2，最激進 |
+| 0.30 / 0.10 | 77.9 | 416 | 72 | −2.1 |
+| 0.25 / 0.15 | 78.2 | 400 | 54 | −1.8 |
+| 0.20 / 0.10 | 78.6 | 380 | 44 | −1.4 |
+| 0.25 / 0.10 / **min_head=2** | 80.0 | 333 | **0** | budget 下 head 恆=1 |
+
+**Mainline config（reid_mnv4_mainline.yaml，每幀抽取，H=2–5）：**
+
+| arm | IDF1 | IDs | handovers | 判讀 |
+|:---|:---:|:---:|:---:|:---|
+| baseline（off） | 80.0 | 334 | — | |
+| 0.25 / 0.10 / min_head=2 | 77.6 | 407 | 67 | −2.4 |
+| 0.30 / 0.10 / min_head=3 | 77.6 | 402 | 60 | −2.4 |
+
+**Per-seq IDF1 / IDs（dynamic 臂，7 序列）：**
+
+| seq | base_off | c30_m10 | c20_m10 | c25_m15 | c25_m10_h2 |
+|:---|---:|---:|---:|---:|---:|
+| 02 | 58.6 / 81 | 56.0 / 90 | 57.5 / 87 | 57.5 / 87 | 58.6 / 81 |
+| 04 | 93.2 / 16 | 92.3 / 18 | 92.3 / 18 | 92.3 / 18 | 93.2 / 16 |
+| 05 | 72.6 / 53 | 67.7 / 82 | 68.7 / 70 | 68.0 / 80 | 72.6 / 53 |
+| 09 | 70.4 / 15 | 65.6 / 22 | 69.8 / 20 | 65.6 / 22 | 70.4 / 15 |
+| 10 | 68.1 / 90 | 66.6 / 100 | 66.1 / 96 | 66.2 / 95 | 68.1 / 90 |
+| 11 | 78.6 / 29 | 75.9 / 35 | 78.6 / 29 | 77.6 / 32 | 78.6 / 29 |
+| 13 | 76.6 / 49 | 73.0 / 69 | 74.1 / 60 | 73.3 / 66 | 76.6 / 49 |
+
+**Per-seq IDF1（mainline 臂）：**
+
+| seq | ml_base_off | ml_c25_m10_h2 | ml_c30_m10_h3 |
+|:---|---:|---:|---:|
+| 02 | 58.6 / 81 | 56.8 / 92 | 57.5 / 86 |
+| 04 | 93.2 / 16 | 91.2 / 24 | 90.1 / 23 |
+| 05 | 72.6 / 54 | 70.9 / 69 | 71.3 / 69 |
+| 09 | 70.4 / 15 | 69.6 / 18 | 65.3 / 27 |
+| 10 | 68.1 / 90 | 63.8 / 103 | 65.6 / 100 |
+| 11 | 78.6 / 29 | 78.8 / 28 | 78.2 / 31 |
+| 13 | 76.6 / 49 | 71.8 / 73 | 74.7 / 66 |
+
+**Python post-hoc 金標**（同 config，離線抽出 embedding）：
+dynamic@0.45 = 78.1(−1.4)、05 mainline@0.45 = 65.7(−6.1)。
+
+#### 歸因
+
+- **不是門檻**：收緊單調減害（−6.2→−1.4）但永不翻正，7/7 dynamic + 6/7 mainline 序列負（11 的 +0.2 在 noise 內）→ 分佈級傷害，沒有 conditional gate 可切。
+- **不是證據厚度**：min_head=2 在 budget config 直接歸零觸發（head 恆為出生髒 crop）；mainline H=2–5 也 −2.4。
+- **不是 port**：kernel 6e-8、cost 四位小數一致；Python 金標在同 config 也負。
+- **live 回饋迴路複利懲罰**：同工作點 streaming (73.8) vs post-hoc (78.1) = 4.3——claim 錯了改變後續關聯，錯誤複利；post-hoc 重標沒有此懲罰。
+- **懸案**：phase-1（2026-07-02）記錄 `--cheb-gr-online` IDF1 80.3=parity，在本 config 家族不可重現。需復查原 CLI/gallery 構成。
+
+#### 保留基礎設施（default-off）
+
+- `try_handover` / `feed_frame_embeddings` / `prune_and_archive` 介面（tracker_gpu_python.cpp ±880 行改動）
+- `SACCADE_HO_DEBUG_LEVEL` 四級 gating（0=禁用, 3=只 log 不 apply, 5=apply+per-claim stderr, 999=全開 apply）
+- `cheb_gr_kreciprocal_self` row-major 修復版（Eigen）
+- `output/ho_sweep/` 保留 per-arm MOT 輸出供覆查
+- registry [#56](reference/no_go_registry.md#56)

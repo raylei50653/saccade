@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 from types import SimpleNamespace
 
 import saccade.perception.eval.evaluator as evaluator_mod
+import saccade.perception.eval.stages as stages_mod
 
 from saccade.perception.eval.evaluator import (
     _record_profile_scope,
@@ -62,7 +63,7 @@ def test_nms_graph_retains_captured_count_buffer(monkeypatch):
         kwargs.pop("device", None)
         return original_zeros(*args, **kwargs)
 
-    monkeypatch.setattr(evaluator_mod, "copy_pad_detections", lambda *args: None)
+    monkeypatch.setattr(stages_mod, "copy_pad_detections", lambda *args: None)
     monkeypatch.setattr(evaluator_mod.torch, "zeros", _cpu_zeros)
     monkeypatch.setattr(evaluator_mod.torch.cuda, "synchronize", lambda: None)
     monkeypatch.setattr(

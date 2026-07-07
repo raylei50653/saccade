@@ -22,6 +22,15 @@ except ImportError:
         CppGPUByteTracker = None
         TrackResult = None
 
+try:
+    from saccade_tracking_ext import (
+        DynamicReIDController as CppDynamicReIDController,
+        ReIDTrackObservation as CppReIDTrackObservation,
+    )
+except ImportError:
+    CppDynamicReIDController = None
+    CppReIDTrackObservation = None
+
 if CppGPUByteTracker is None:
     # Fallback for environments where the extension is not available or has library conflicts
     class TrackResult:  # type: ignore
@@ -550,6 +559,10 @@ class GPUByteTracker:
                 (max_objects, embedding_dim), dtype=torch.float32
             )
 
+        self._reid_controller = (
+            CppDynamicReIDController() if CppDynamicReIDController is not None else None
+        )
+
     def _validate_num_dets(self, num_dets: int) -> None:
         if num_dets > self.max_assoc:
             raise ValueError(
@@ -652,6 +665,7 @@ class GPUByteTracker:
         occ_gap_min: int = 30,
         occ_expand_px: float = 0.0,
         occ_expand_cover: float = 0.9,
+        bridge_app_veto: float = -1.0,
     ) -> None:
         setter = getattr(self.tracker, "set_relink_params", None)
         if setter is not None:
@@ -685,6 +699,7 @@ class GPUByteTracker:
                     occ_gap_min,
                     occ_expand_px,
                     occ_expand_cover,
+                    bridge_app_veto,
                 )
             except TypeError:
                 setter(*base_args)
@@ -1236,6 +1251,66 @@ class GPUByteTracker:
             int(track_ids.numel()),
             stream,
         )
+
+    def observe_from_results(
+        self,
+        results: List[TrackResult],
+        gmc: Optional[torch.Tensor] = None,
+    ) -> None:
+        if self._reid_controller is None:
+            return
+        tracks: dict[int, Any] = {}
+        for r in results:
+            tlbr = r.tlbr
+            if CppReIDTrackObservation is not None:
+                obs = CppReIDTrackObservation(
+                    float(tlbr[0]),
+                    float(tlbr[1]),
+                    float(tlbr[2]),
+                    float(tlbr[3]),
+                    float(r.score),
+                )
+                tracks[int(r.track_id)] = obs
+        gmc_vec: List[float] = []
+        if gmc is not None and hasattr(gmc, "detach"):
+            # saccade-allow-cpu: 9-elem affine → C++ DynamicReIDController (default-off)
+            gmc_vec = gmc.detach().cpu().view(-1).tolist()  # saccade-allow-cpu
+        self._reid_controller.observe(tracks, gmc_vec)
+
+    def need_reid(self, det_count: int) -> bool:
+        if self._reid_controller is None:
+            return False
+        return bool(self._reid_controller.should_reid(det_count))
+
+    def observe_track_observations(
+        self,
+        observations: dict[int, Any],
+        gmc: Optional[torch.Tensor] = None,
+    ) -> None:
+        """Feed per-track observations (from evaluator's person_observations)
+        into the C++ DynamicReIDController. Accepts any dict with items having
+        .box (xyxy tuple) and .det_score attributes."""
+        if self._reid_controller is None or not observations:
+            return
+        tracks: dict[int, Any] = {}
+        for tid, obs in observations.items():
+            if CppReIDTrackObservation is not None:
+                box = getattr(obs, "box", None)
+                if box is not None:
+                    tracks[int(tid)] = CppReIDTrackObservation(
+                        float(box[0]),
+                        float(box[1]),
+                        float(box[2]),
+                        float(box[3]),
+                        float(getattr(obs, "det_score", 0.0)),
+                    )
+        if not tracks:
+            return
+        gmc_vec: list[float] = []
+        if gmc is not None and hasattr(gmc, "detach"):
+            # saccade-allow-cpu: 9-elem affine → C++ DynamicReIDController (default-off)
+            gmc_vec = gmc.detach().cpu().view(-1).tolist()  # saccade-allow-cpu
+        self._reid_controller.observe(tracks, gmc_vec)
 
     def set_reference_features_from_bank(
         self,

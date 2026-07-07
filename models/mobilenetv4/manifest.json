@@ -1,0 +1,141 @@
+{
+  "downloaded_at_utc": "2026-07-01T05:37:46.497618+00:00",
+  "timm_version": "1.0.26",
+  "models": [
+    {
+      "name": "mobilenetv4_conv_small",
+      "path": "models/mobilenetv4/mobilenetv4_conv_small.pth",
+      "params": 2493024,
+      "pretrained_cfg": {
+        "url": "",
+        "hf_hub_id": "timm/mobilenetv4_conv_small.e2400_r224_in1k",
+        "architecture": "mobilenetv4_conv_small",
+        "tag": "e2400_r224_in1k",
+        "custom_load": false,
+        "input_size": [
+          3,
+          224,
+          224
+        ],
+        "test_input_size": [
+          3,
+          256,
+          256
+        ],
+        "fixed_input_size": false,
+        "interpolation": "bicubic",
+        "crop_pct": 0.875,
+        "test_crop_pct": 0.95,
+        "crop_mode": "center",
+        "mean": [
+          0.485,
+          0.456,
+          0.406
+        ],
+        "std": [
+          0.229,
+          0.224,
+          0.225
+        ],
+        "num_classes": 1000,
+        "pool_size": [
+          7,
+          7
+        ],
+        "first_conv": "conv_stem",
+        "classifier": "classifier",
+        "license": "apache-2.0"
+      }
+    },
+    {
+      "name": "mobilenetv4_conv_small_050",
+      "path": "models/mobilenetv4/mobilenetv4_conv_small_050.pth",
+      "params": 957952,
+      "pretrained_cfg": {
+        "url": "",
+        "hf_hub_id": "timm/mobilenetv4_conv_small_050.e3000_r224_in1k",
+        "architecture": "mobilenetv4_conv_small_050",
+        "tag": "e3000_r224_in1k",
+        "custom_load": false,
+        "input_size": [
+          3,
+          224,
+          224
+        ],
+        "test_input_size": [
+          3,
+          256,
+          256
+        ],
+        "fixed_input_size": false,
+        "interpolation": "bicubic",
+        "crop_pct": 0.875,
+        "test_crop_pct": 0.95,
+        "crop_mode": "center",
+        "mean": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "std": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "num_classes": 1000,
+        "pool_size": [
+          7,
+          7
+        ],
+        "first_conv": "conv_stem",
+        "classifier": "classifier",
+        "license": "apache-2.0"
+      }
+    },
+    {
+      "name": "mobilenetv4_conv_medium",
+      "path": "models/mobilenetv4/mobilenetv4_conv_medium.pth",
+      "params": 8434512,
+      "pretrained_cfg": {
+        "url": "",
+        "hf_hub_id": "timm/mobilenetv4_conv_medium.e500_r256_in1k",
+        "architecture": "mobilenetv4_conv_medium",
+        "tag": "e500_r256_in1k",
+        "custom_load": false,
+        "input_size": [
+          3,
+          256,
+          256
+        ],
+        "test_input_size": [
+          3,
+          320,
+          320
+        ],
+        "fixed_input_size": false,
+        "interpolation": "bicubic",
+        "crop_pct": 0.95,
+        "test_crop_pct": 1.0,
+        "crop_mode": "center",
+        "mean": [
+          0.485,
+          0.456,
+          0.406
+        ],
+        "std": [
+          0.229,
+          0.224,
+          0.225
+        ],
+        "num_classes": 1000,
+        "pool_size": [
+          8,
+          8
+        ],
+        "first_conv": "conv_stem",
+        "classifier": "classifier",
+        "license": "apache-2.0"
+      }
+    }
+  ]
+}

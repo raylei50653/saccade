@@ -114,7 +114,7 @@ uv run scripts/eval/mot17.py --preset speed --detector SDP               # 舊 y
 | 🧬 reid | ⏸️ 暫緩 | Appearance Bank 尋回（待時序 YOLO 驗證） | [↗](docs/modules/reid/TODO.md) |
 | 🔄 lifecycle | 📋 待辦 | evaluator.py lifecycle 切片測試覆蓋率 | [↗](docs/modules/lifecycle/TODO.md) |
 | 🌀 motion | 🟢 收斂 | — | [↗](docs/modules/motion/TODO.md) |
-| 🤝 semantic | 🟢 收斂 | — | [↗](docs/modules/semantic/TODO.md) |
+| 🤝 semantic | 🔄 active | phase-1 diff 復查、delayed-claim Cheb-GR 重掃、occ-exit 條件化復活 | [↗](docs/modules/semantic/TODO.md) |
 | ⚡ trigger | 🟢 收斂 | — | [↗](docs/modules/trigger/TODO.md) |
 | 🖥️ streaming | 🟢 收斂 | — | [↗](docs/modules/streaming/TODO.md) |
 | 💾 storage | 🟢 收斂 | — | [↗](docs/modules/storage/TODO.md) |

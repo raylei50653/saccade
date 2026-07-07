@@ -21,7 +21,7 @@ from saccade.perception.eval.evaluator import run_eval_cpp  # noqa: E402
 from mlflow_logger import log_eval_run  # noqa: E402
 
 import yaml  # noqa: E402
-from mot17_args import build_parser  # noqa: E402
+from mot17_args import build_parser, configure_runtime_env  # noqa: E402
 
 
 def _load_config_defaults(project_root: Path) -> dict:
@@ -94,6 +94,23 @@ if __name__ == "__main__":
         action="store_true",
         help="Disable torch.compile on detection head and postprocess",
     )
+    parser.add_argument(
+        "--mamba-trt",
+        action="store_true",
+        default=None,
+        help="Use TRT engine for Mamba head (auto-selects from preset or default path)",
+    )
+    parser.add_argument(
+        "--no-mamba-trt",
+        action="store_false",
+        dest="mamba_trt",
+        help="Disable TRT Mamba head, force PyTorch head",
+    )
+    parser.add_argument(
+        "--mamba-head-engine",
+        default=None,
+        help="Path to Mamba head TRT engine (overrides default)",
+    )
     config_defaults = _load_config_defaults(project_root)
     if config_defaults:
         parser.set_defaults(**config_defaults)
@@ -103,15 +120,10 @@ if __name__ == "__main__":
             parser.error("--private-continuation is not implemented for --cpp-threads")
         if getattr(args, "workbench", False):
             parser.error("--private-continuation is not implemented for --workbench")
-    if args.double_buffer:
-        if args.detect_barrier not in {None, "event"}:
-            parser.error("--double-buffer requires --detect-barrier event")
-        os.environ["SACCADE_DOUBLE_BUFFER"] = "1"
-        os.environ["SACCADE_DETECT_BARRIER"] = "event"
-    elif args.detect_barrier is not None:
-        os.environ["SACCADE_DETECT_BARRIER"] = args.detect_barrier
-    if not getattr(args, "no_gpu_decode", False):
-        os.environ["SACCADE_GPU_DECODE"] = "1"
+    try:
+        configure_runtime_env(args)
+    except ValueError as exc:
+        parser.error(str(exc))
     if os.environ.get("SACCADE_NV12_BUFFER") == "1":
         _nv_lib = project_root / ".venv/lib/python3.12/site-packages/nvidia/cu13/lib"
         _ld_preload = os.environ.get("LD_PRELOAD", "")
@@ -311,6 +323,28 @@ if __name__ == "__main__":
             build_mamba_gated_detector,
         )
 
+        # Resolve TRT head engine:
+        #   --mamba-trt           → auto-select default engine
+        #   --no-mamba-trt        → force PyTorch head (override preset)
+        #   --mamba-head-engine X → use specific engine
+        #   (none)                → use preset's mamba_head_engine if set
+        _trt_head_engine = ""
+        _use_trt_head = getattr(args, "mamba_trt", None)
+        if _use_trt_head is False:
+            pass  # --no-mamba-trt: force PyTorch
+        elif getattr(args, "mamba_head_engine", None):
+            _trt_head_engine = getattr(args, "mamba_head_engine", "")
+        elif _use_trt_head is True:
+            _default_head_engine = project_root / "models/yolo/mamba_head_26m.engine"
+            if _default_head_engine.exists():
+                _trt_head_engine = str(_default_head_engine)
+                print(f"[Mamba] --mamba-trt: using {_trt_head_engine}")
+            else:
+                print(
+                    f"[Mamba] --mamba-trt: default engine not found at "
+                    f"{_default_head_engine}; falling back to PyTorch head"
+                )
+
         mamba_detector = build_mamba_gated_detector(
             yolo_pt_path=args.mamba_yolo_weights,
             teacher_ckpt=args.mamba_teacher_ckpt,
@@ -320,6 +354,7 @@ if __name__ == "__main__":
             conf_thr=0.001,
             max_det=getattr(args, "max_det", 300),
             trt_backbone_engine=getattr(args, "fpn_backbone_engine", ""),
+            trt_head_engine=_trt_head_engine,
             temporal_T_override=0 if getattr(args, "no_temporal", False) else None,
             use_cuda_graph=getattr(args, "use_cuda_graph", False)
             and not (getattr(args, "cpp_threads", 0) > 0),

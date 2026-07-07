@@ -16,6 +16,10 @@ Metrics (leave-one-out, same-frame matches excluded):
 Usage:
   uv run scripts/eval/appearance/reid_id_benchmark.py
   uv run scripts/eval/appearance/reid_id_benchmark.py --model-type siglip2_reid --per-id 20
+  uv run scripts/eval/appearance/reid_id_benchmark.py --model-type mobilenetv4_conv_small
+
+mobilenetv4_* model types run eagerly via timm from local checkpoints listed in
+models/mobilenetv4/manifest.json (no TensorRT engine needed).
 """
 
 from __future__ import annotations
@@ -37,6 +41,65 @@ sys.path.insert(0, str(_ROOT))
 sys.path.insert(0, str(_ROOT / "src"))
 
 from saccade.perception.feature_extractor import TRTFeatureExtractor  # noqa: E402
+
+_MNV4_MANIFEST = _ROOT / "models" / "mobilenetv4" / "manifest.json"
+
+
+class TimmEagerExtractor:
+    """Eager timm extractor from a local checkpoint (offline benchmark only).
+
+    Mirrors the TRTFeatureExtractor contract used by this script: `.device`,
+    `.feature_dim`, and `.extract(t)` with t float32 NCHW in [0, 1];
+    model-specific normalization happens inside.
+    """
+
+    def __init__(
+        self, name: str, device: str = "cuda", ft_checkpoint: str = ""
+    ) -> None:
+        import json
+
+        import timm
+
+        self.device = device
+        self._bnneck = None
+        if ft_checkpoint:
+            # Fine-tuned checkpoint from scripts/train/finetune_mobilenetv4_reid.py:
+            # backbone state dict + BNNeck; embedding = bnneck(backbone(x)).
+            ck = torch.load(ft_checkpoint, map_location="cpu")
+            self.model = timm.create_model(ck["arch"], pretrained=False, num_classes=0)
+            self.model.load_state_dict(ck["backbone"], strict=True)
+            self.input_hw = tuple(ck["input_hw"])
+            self._mean = torch.tensor(ck["mean"], device=device).view(1, 3, 1, 1)
+            self._std = torch.tensor(ck["std"], device=device).view(1, 3, 1, 1)
+            d = ck["bnneck"]["weight"].shape[0]
+            self._bnneck = torch.nn.BatchNorm1d(d)
+            self._bnneck.load_state_dict(ck["bnneck"])
+            self._bnneck.eval().to(device)
+        else:
+            entries = {
+                m["name"]: m for m in json.loads(_MNV4_MANIFEST.read_text())["models"]
+            }
+            if name not in entries:
+                raise ValueError(f"'{name}' not in {_MNV4_MANIFEST}: {list(entries)}")
+            cfg = entries[name]["pretrained_cfg"]
+            self.model = timm.create_model(
+                cfg["architecture"], pretrained=False, num_classes=0
+            )
+            sd = torch.load(_ROOT / entries[name]["path"], map_location="cpu")
+            self.model.load_state_dict(sd, strict=True)
+            self.input_hw = (int(cfg["input_size"][1]), int(cfg["input_size"][2]))
+            self._mean = torch.tensor(cfg["mean"], device=device).view(1, 3, 1, 1)
+            self._std = torch.tensor(cfg["std"], device=device).view(1, 3, 1, 1)
+        self.model.eval().to(device)
+        with torch.no_grad():
+            probe = torch.zeros(1, 3, *self.input_hw, device=device)
+            self.feature_dim = int(self.model(probe).shape[-1])
+
+    @torch.no_grad()
+    def extract(self, t: torch.Tensor) -> torch.Tensor:
+        feat = self.model((t - self._mean) / self._std)
+        return self._bnneck(feat) if self._bnneck is not None else feat
+
 
 GAP_BUCKETS = [(1, 10), (11, 30), (31, 60), (61, 120), (121, 10**9)]
 SIZE_BUCKETS = [(0, 50), (50, 100), (100, 200), (200, 10**9)]  # query box height (px)
@@ -79,6 +142,7 @@ def _extract_seq(
     crop_hw,
     im_ext: str,
     resample: str = "bilinear",
+    gpu_decode: bool = False,
 ):
     """Returns feats [M,D] (L2-normed), labels [M], frames [M], heights [M]."""
     from PIL import Image
@@ -87,6 +151,11 @@ def _extract_seq(
         "bilinear": Image.BILINEAR,
         "bicubic": Image.BICUBIC,
         "lanczos": Image.LANCZOS,
+    }[resample]
+    _INTERP = {
+        "bilinear": "bilinear",
+        "bicubic": "bicubic",
+        "lanczos": "bicubic",
     }[resample]
 
     # Resolve frame -> image path from the directory listing (robust to zero-pad
@@ -108,28 +177,63 @@ def _extract_seq(
         by_frame[frame].append(si)
 
     out_h, out_w = crop_hw
-    crops: list[np.ndarray | None] = [None] * len(samples)
-    for frame, si_list in by_frame.items():
-        img = Image.open(frame_paths[frame]).convert("RGB")
-        fw, fh = img.size
-        for si in si_list:
-            x, y, w, h = samples[si][2]
-            box = (
-                max(0, int(x)),
-                max(0, int(y)),
-                min(fw, int(x + w)),
-                min(fh, int(y + h)),
-            )
-            if box[2] <= box[0] or box[3] <= box[1]:
-                box = (0, 0, fw, fh)
-            c = img.crop(box).resize((out_w, out_h), _RESAMPLE)
-            crops[si] = np.asarray(c, dtype=np.uint8).transpose(2, 0, 1)
-
     device = getattr(extractor, "device", "cuda")
+    crops: list[np.ndarray | torch.Tensor | None] = [None] * len(samples)
+    if gpu_decode:
+        from torchvision.io import ImageReadMode, decode_jpeg, read_file
+
+        if not torch.cuda.is_available():
+            raise RuntimeError("--gpu-decode requires CUDA")
+        for frame, si_list in by_frame.items():
+            raw = read_file(str(frame_paths[frame]))
+            img = decode_jpeg(raw, mode=ImageReadMode.RGB, device=device)
+            _, fh, fw = img.shape
+            for si in si_list:
+                x, y, w, h = samples[si][2]
+                box = (
+                    max(0, int(x)),
+                    max(0, int(y)),
+                    min(fw, int(x + w)),
+                    min(fh, int(y + h)),
+                )
+                if box[2] <= box[0] or box[3] <= box[1]:
+                    box = (0, 0, fw, fh)
+                crop = img[:, box[1] : box[3], box[0] : box[2]].float().unsqueeze(0)
+                crop = torch.nn.functional.interpolate(
+                    crop / 255.0,
+                    size=(out_h, out_w),
+                    mode=_INTERP,
+                    align_corners=False,
+                ).squeeze(0)
+                crops[si] = crop
+    else:
+        for frame, si_list in by_frame.items():
+            img = Image.open(frame_paths[frame]).convert("RGB")
+            fw, fh = img.size
+            for si in si_list:
+                x, y, w, h = samples[si][2]
+                box = (
+                    max(0, int(x)),
+                    max(0, int(y)),
+                    min(fw, int(x + w)),
+                    min(fh, int(y + h)),
+                )
+                if box[2] <= box[0] or box[3] <= box[1]:
+                    box = (0, 0, fw, fh)
+                c = img.crop(box).resize((out_w, out_h), _RESAMPLE)
+                crops[si] = np.asarray(c, dtype=np.uint8).transpose(2, 0, 1)
+
     feats = torch.empty((len(samples), extractor.feature_dim), device=device)
     for s in range(0, len(samples), 256):
-        arr = np.stack(crops[s : s + 256])
-        t = torch.from_numpy(arr).to(device).float().div_(255.0)
+        chunk = crops[s : s + 256]
+        if gpu_decode:
+            tensors = [c for c in chunk if isinstance(c, torch.Tensor)]
+            if len(tensors) != len(chunk):
+                raise RuntimeError("missing GPU-decoded crop in ReID benchmark batch")
+            t = torch.stack(tensors).to(device)
+        else:
+            arr = np.stack(chunk)
+            t = torch.from_numpy(arr).to(device).float().div_(255.0)
         feats[s : s + t.shape[0]] = extractor.extract(t)
     feats = torch.nn.functional.normalize(feats, dim=1)
     labels = torch.tensor([s[0] for s in samples])
@@ -235,11 +339,21 @@ def main() -> None:
     ap.add_argument("--sequences", default="")
     ap.add_argument("--model-type", default="siglip2_reid")
     ap.add_argument(
+        "--ft-checkpoint",
+        default="",
+        help="Fine-tuned mobilenetv4 ReID checkpoint (implies timm eager path).",
+    )
+    ap.add_argument(
         "--per-id", type=int, default=20, help="Temporal samples per identity."
     )
     ap.add_argument("--im-ext", default=".jpg")
     ap.add_argument(
         "--resize", default="bilinear", choices=["bilinear", "bicubic", "lanczos"]
+    )
+    ap.add_argument(
+        "--gpu-decode",
+        action="store_true",
+        help="Decode full frames with torchvision/nvJPEG and crop/resize on GPU.",
     )
     args = ap.parse_args()
 
@@ -251,14 +365,23 @@ def main() -> None:
             d.name for d in gt_root.iterdir() if d.is_dir() and d.name.endswith("-SDP")
         )
     )
-    crop_hw = (
-        (256, 128)
-        if args.model_type in {"transreid", "osnet", "fastreid"}
-        else (224, 224)
-    )
-    extractor = TRTFeatureExtractor(
-        engine_path="", model_type=args.model_type, max_batch=64
-    )
+    if (
+        args.model_type.startswith("mobilenetv4")
+        and args.model_type != "mobilenetv4_reid"
+    ) or args.ft_checkpoint:
+        extractor = TimmEagerExtractor(
+            args.model_type, ft_checkpoint=args.ft_checkpoint
+        )
+        crop_hw = extractor.input_hw
+    else:
+        crop_hw = (
+            (256, 128)
+            if args.model_type in {"transreid", "osnet", "fastreid"}
+            else (224, 224)
+        )
+        extractor = TRTFeatureExtractor(
+            engine_path="", model_type=args.model_type, max_batch=64
+        )
 
     runs = []  # (seq, metrics)
     gh, gt_ = defaultdict(int), defaultdict(int)
@@ -273,6 +396,7 @@ def main() -> None:
             crop_hw,
             args.im_ext,
             resample=args.resize,
+            gpu_decode=args.gpu_decode,
         )
         if res is None:
             continue

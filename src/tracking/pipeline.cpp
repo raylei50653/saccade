@@ -1,6 +1,7 @@
 #include "tracking/pipeline.hpp"
 #include "tracking/tracker_gpu.hpp"
 #include "tracking/copy_pad.cuh"
+#include "utils/nvtx_range.hpp"
 #include <cuda_runtime.h>
 #include <algorithm>
 #include <chrono>
@@ -50,7 +51,15 @@ PerceptionPipeline::~PerceptionPipeline() {
     if (d_private_nms_count_) cudaFree(d_private_nms_count_);
     if (d_private_added_count_) cudaFree(d_private_added_count_);
     if (d_private_baseline_mask_) cudaFree(d_private_baseline_mask_);
-    if (d_crop_buf_) cudaFree(d_crop_buf_);
+    delete crop_pool_; crop_pool_ = nullptr;
+    delete crop_ring_; crop_ring_ = nullptr;
+    if (d_stash_scratch_) cudaFree(d_stash_scratch_);
+    if (d_requery_crops_) cudaFree(d_requery_crops_);
+    if (d_requery_embeds_) cudaFree(d_requery_embeds_);
+    if (requery_stream_) cudaStreamDestroy(requery_stream_);
+    if (d_batch_buf_) cudaFree(d_batch_buf_);
+    if (crop_stream_) cudaStreamDestroy(crop_stream_);
+    if (reid_stream_) cudaStreamDestroy(reid_stream_);
     if (d_compact_boxes_)   cudaFree(d_compact_boxes_);
     if (d_compact_scores_)  cudaFree(d_compact_scores_);
     if (d_compact_classes_) cudaFree(d_compact_classes_);
@@ -115,14 +124,30 @@ void PerceptionPipeline::ensure_scratch(int n_dets, cudaStream_t /*stream*/) {
     scratch_capacity_ = cap;
 }
 
-void PerceptionPipeline::ensure_crop_buf(int n_boxes) {
+void PerceptionPipeline::ensure_crop_pool() {
     if (!reid_ || !cropper_) return;
     auto [crop_h, crop_w] = reid_->get_input_hw();
-    int needed = n_boxes * 3 * crop_h * crop_w;
-    if (needed <= crop_buf_capacity_) return;
-    if (d_crop_buf_) cudaFree(d_crop_buf_);
-    cudaMalloc(&d_crop_buf_, needed * sizeof(float));
-    crop_buf_capacity_ = needed;
+    int desired_cap = crop_pool_capacity_ > 0 ? crop_pool_capacity_ : 256;
+    if (crop_pool_ && crop_pool_->capacity() >= desired_cap
+        && crop_pool_->crop_h() == crop_h && crop_pool_->crop_w() == crop_w) {
+        // Pool already sized — just ensure streams + batch buffer exist.
+    } else {
+        delete crop_pool_;
+        crop_pool_ = new CropPool(desired_cap, crop_h, crop_w);
+    }
+    // Create async streams (idempotent — only once).
+    if (!crop_stream_) cudaStreamCreateWithFlags(&crop_stream_, cudaStreamNonBlocking);
+    if (!reid_stream_) cudaStreamCreateWithFlags(&reid_stream_, cudaStreamNonBlocking);
+    // Allocate / resize batch buffer.
+    int max_batch = reid_->get_max_batch();
+    int needed = max_batch * 3 * crop_h * crop_w;
+    if (needed > batch_buf_capacity_ || crop_h != batch_buf_crop_h_ || crop_w != batch_buf_crop_w_) {
+        if (d_batch_buf_) cudaFree(d_batch_buf_);
+        cudaMalloc(&d_batch_buf_, needed * sizeof(float));
+        batch_buf_capacity_ = needed;
+        batch_buf_crop_h_ = crop_h;
+        batch_buf_crop_w_ = crop_w;
+    }
 }
 
 int PerceptionPipeline::process_detections(
@@ -147,8 +172,12 @@ int PerceptionPipeline::process_detections(
         out_boxes, out_scores, out_classes, out_suspect,
         d_nms_count_, nullptr, nullptr, 0, 0.5f, stream);
     int n_out = 0;
+    const auto nms_count_sync_start = std::chrono::high_resolution_clock::now();
     cudaMemcpyAsync(&n_out, d_nms_count_, sizeof(int), cudaMemcpyDeviceToHost, stream);
     cudaStreamSynchronize(stream);
+    last_postprocess_profile_stats_.native_nms_count_sync_ms =
+        std::chrono::duration<double, std::milli>(
+            std::chrono::high_resolution_clock::now() - nms_count_sync_start).count();
     return n_out;
 }
 
@@ -172,6 +201,7 @@ void PerceptionPipeline::process_detections_into(
     const float* private_priors_ptr,
     int num_private_priors)
 {
+    NvtxRange nvtx_range_pp("frame.postprocess");
     if (n_in <= 0) {
         cudaMemsetAsync(out_count, 0, sizeof(int), stream);
         if (postprocess_profiling_enabled_) {
@@ -226,15 +256,15 @@ void PerceptionPipeline::process_detections_into(
     }
 
     int filter_count = 0;
-    const Clock::time_point filter_count_sync_start = profile_post ? Clock::now() : Clock::time_point{};
+    const Clock::time_point filter_count_sync_start = Clock::now();
     cudaMemcpyAsync(&filter_count, d_filter_count_, sizeof(int),
                     cudaMemcpyDeviceToHost, stream);
     cudaStreamSynchronize(stream);
+    last_postprocess_profile_stats_.native_filter_count_sync_ms =
+        std::chrono::duration<double, std::milli>(Clock::now() - filter_count_sync_start).count();
     if (profile_post) {
         last_postprocess_profile_stats_.filter_ms =
             std::chrono::duration<double, std::milli>(Clock::now() - filter_start).count();
-        last_postprocess_profile_stats_.native_filter_count_sync_ms =
-            std::chrono::duration<double, std::milli>(Clock::now() - filter_count_sync_start).count();
         last_postprocess_profile_stats_.filtered_boxes = filter_count;
     }
 
@@ -557,18 +587,18 @@ int PerceptionPipeline::process_detections_n(
 
     // Sync stream (GIL already released in Python binding) then read count.
     int n_post = 0;
-    const Clock::time_point count_start = profile_post ? Clock::now() : Clock::time_point{};
+    const Clock::time_point count_start = Clock::now();
     cudaMemcpyAsync(&n_post, d_count_staging, sizeof(int),
                     cudaMemcpyDeviceToHost, stream);
     cudaStreamSynchronize(stream);
+    last_postprocess_profile_stats_.count_d2h_ms =
+        std::chrono::duration<double, std::milli>(Clock::now() - count_start).count();
     if (profile_post) {
         if (cfg_.private_continuation_enabled && d_private_added_count_ != nullptr) {
             int private_boxes = 0;
             cudaMemcpy(&private_boxes, d_private_added_count_, sizeof(int), cudaMemcpyDeviceToHost);
             last_postprocess_profile_stats_.private_boxes = private_boxes;
         }
-        last_postprocess_profile_stats_.count_d2h_ms =
-            std::chrono::duration<double, std::milli>(Clock::now() - count_start).count();
         last_postprocess_profile_stats_.total_ms =
             std::chrono::duration<double, std::milli>(Clock::now() - total_start).count();
         last_postprocess_profile_stats_.output_boxes = n_post;
@@ -718,38 +748,56 @@ void PerceptionPipeline::process_detections_interleaved_graph(
         nullptr, nullptr, 0, 0.0f, stream);
 }
 
-void PerceptionPipeline::extract_reid(
+void PerceptionPipeline::crop_into_pool(
     const float* frame_ptr, int frame_h, int frame_w,
     const float* boxes_ptr, int n_boxes,
-    float* out_embeds,
+    int* out_slot,
     cudaStream_t stream)
 {
+    *out_slot = -1;
     if (!reid_ || !cropper_ || n_boxes <= 0) return;
+    ensure_crop_pool();
+    int slot = crop_pool_->acquire(n_boxes);
+    if (slot < 0) return;
+    *out_slot = slot;
+    float* crop_ptr = crop_pool_->slot_ptr(slot);
     if (reid_profiling_enabled_) {
-        reset_reid_profile_stats();
         last_reid_profile_stats_.images = n_boxes;
     }
-    ensure_crop_buf(n_boxes);
-    cudaEvent_t start = nullptr;
-    cudaEvent_t stop = nullptr;
     if (reid_profiling_enabled_) {
+        cudaEvent_t start = nullptr, stop = nullptr;
         cudaEventCreate(&start);
         cudaEventCreate(&stop);
-    }
-    if (reid_profiling_enabled_) cudaEventRecord(start, stream);
-    cropper_->process_gpu(
-        const_cast<void*>(reinterpret_cast<const void*>(frame_ptr)),
-        frame_w, frame_h,
-        const_cast<float*>(boxes_ptr), n_boxes,
-        d_crop_buf_, stream);
-    if (reid_profiling_enabled_) {
+        cudaEventRecord(start, stream);
+        cropper_->process_gpu(
+            const_cast<void*>(reinterpret_cast<const void*>(frame_ptr)),
+            frame_w, frame_h,
+            const_cast<float*>(boxes_ptr), n_boxes,
+            crop_ptr, stream);
         cudaEventRecord(stop, stream);
         cudaEventSynchronize(stop);
         float ms = 0.0f;
         cudaEventElapsedTime(&ms, start, stop);
         last_reid_profile_stats_.crop_ms += ms;
+        cudaEventDestroy(start);
+        cudaEventDestroy(stop);
+    } else {
+        cropper_->process_gpu(
+            const_cast<void*>(reinterpret_cast<const void*>(frame_ptr)),
+            frame_w, frame_h,
+            const_cast<float*>(boxes_ptr), n_boxes,
+            crop_ptr, stream);
     }
-    reid_->extract(d_crop_buf_, n_boxes, out_embeds, stream);
+}
+
+void PerceptionPipeline::extract_from_pool(
+    int slot, int n_boxes,
+    float* out_embeds,
+    cudaStream_t stream)
+{
+    if (!reid_ || !crop_pool_ || slot < 0 || n_boxes <= 0) return;
+    float* crop_ptr = crop_pool_->slot_ptr(slot);
+    reid_->extract(crop_ptr, n_boxes, out_embeds, stream);
     if (reid_profiling_enabled_) {
         const auto feature_stats = reid_->get_profile_stats();
         last_reid_profile_stats_.extract_pre_normalize_ms = feature_stats.pre_normalize_ms;
@@ -759,9 +807,243 @@ void PerceptionPipeline::extract_reid(
         last_reid_profile_stats_.chunks = feature_stats.chunks;
         last_reid_profile_stats_.total_ms =
             last_reid_profile_stats_.crop_ms + last_reid_profile_stats_.extract_total_ms;
-        cudaEventDestroy(start);
-        cudaEventDestroy(stop);
     }
+    crop_pool_->release(slot, n_boxes);
+}
+
+void PerceptionPipeline::extract_reid(
+    const float* frame_ptr, int frame_h, int frame_w,
+    const float* boxes_ptr, int n_boxes,
+    float* out_embeds,
+    cudaStream_t stream)
+{
+    NvtxRange nvtx_range_reid("frame.reid.extract");
+    if (!reid_ || !cropper_ || n_boxes <= 0) return;
+    if (reid_profiling_enabled_) {
+        reset_reid_profile_stats();
+        last_reid_profile_stats_.images = n_boxes;
+    }
+    int slot = -1;
+    crop_into_pool(frame_ptr, frame_h, frame_w, boxes_ptr, n_boxes, &slot, stream);
+    if (slot < 0) return;
+    extract_from_pool(slot, n_boxes, out_embeds, stream);
+}
+
+// ── Borderline re-query crop ring (ReidCropStore) ──────────────────────────
+void PerceptionPipeline::enable_crop_ring(int capacity, int depth) {
+    if (!reid_) return;
+    auto [crop_h, crop_w] = reid_->get_input_hw();
+    delete crop_ring_;
+    crop_ring_ = new CropRingStore(capacity, depth, crop_h, crop_w);
+    if (!requery_stream_) cudaStreamCreate(&requery_stream_);
+}
+
+void PerceptionPipeline::ensure_stash_scratch(int n_boxes) {
+    if (!crop_ring_ || n_boxes <= 0) return;
+    if (d_stash_scratch_ && stash_scratch_n_ >= n_boxes) return;
+    if (d_stash_scratch_) cudaFree(d_stash_scratch_);
+    stash_scratch_n_ = n_boxes;
+    size_t bytes =
+        static_cast<size_t>(n_boxes) * crop_ring_->crop_elem_count() * sizeof(float);
+    cudaMalloc(&d_stash_scratch_, bytes);
+}
+
+void PerceptionPipeline::ensure_requery_scratch(int n_rows) {
+    if (!crop_ring_ || !reid_ || n_rows <= 0) return;
+    if (d_requery_crops_ && requery_scratch_n_ >= n_rows) return;
+    if (d_requery_crops_) cudaFree(d_requery_crops_);
+    if (d_requery_embeds_) cudaFree(d_requery_embeds_);
+    requery_scratch_n_ = n_rows;
+    cudaMalloc(&d_requery_crops_,
+               static_cast<size_t>(n_rows) * crop_ring_->crop_elem_count()
+                   * sizeof(float));
+    cudaMalloc(&d_requery_embeds_,
+               static_cast<size_t>(n_rows) * reid_->get_feature_dim()
+                   * sizeof(float));
+}
+
+void PerceptionPipeline::stash_crops(
+    const uint64_t* uids, const int* frames,
+    const float* frame_ptr, int frame_h, int frame_w,
+    const float* boxes_ptr, int n_boxes,
+    const bool* clean,
+    cudaStream_t stream)
+{
+    if (!crop_ring_ || !cropper_ || n_boxes <= 0 || !uids || !boxes_ptr) return;
+    ensure_stash_scratch(n_boxes);
+    if (!d_stash_scratch_) return;
+    // Crop all boxes contiguously into the dedicated stash scratch (not the
+    // hot-path crop_pool_, so there is no cross-stream slot-reuse hazard), then
+    // copy each crop into its uid's ring slot — all on @p stream, in order.
+    cropper_->process_gpu(
+        const_cast<void*>(reinterpret_cast<const void*>(frame_ptr)),
+        frame_w, frame_h,
+        const_cast<float*>(boxes_ptr), n_boxes,
+        d_stash_scratch_, stream);
+    // One batched scatter instead of per-crop stash: the per-frame stash of
+    // every confirmed track is launch-bound (3 CUDA API calls per crop).
+    crop_ring_->stash_batch(uids, frames, d_stash_scratch_, clean, n_boxes,
+                            stream);
+}
+
+int PerceptionPipeline::embed_dim() const {
+    return reid_ ? reid_->get_feature_dim() : 0;
+}
+
+int PerceptionPipeline::ring_depth() const {
+    return crop_ring_ ? crop_ring_->depth() : 0;
+}
+
+int PerceptionPipeline::requery_extract(const uint64_t* uids, int n_uids,
+                                        float* out_embeds, int* out_counts) {
+    if (!crop_ring_ || !reid_ || n_uids <= 0 || !uids || !out_embeds) return 0;
+    if (!requery_stream_) cudaStreamCreate(&requery_stream_);
+    const int max_rows = crop_ring_->depth() * n_uids;
+    ensure_requery_scratch(max_rows);
+    if (!d_requery_crops_ || !d_requery_embeds_) return 0;
+    // Clean crops only: the validated dense recent-tail substrate excludes
+    // occluded crops (mnv4 is pollution-sensitive). A uid with no clean crops
+    // gets count 0 and keeps its sparse bank in the rescore.
+    int total = crop_ring_->gather_many(uids, n_uids, d_requery_crops_,
+                                        out_counts, requery_stream_,
+                                        /*clean_only=*/true);
+    if (total <= 0) return 0;
+    reid_->extract(d_requery_crops_, total, d_requery_embeds_, requery_stream_);
+    cudaStreamSynchronize(requery_stream_);
+    const int dim = reid_->get_feature_dim();
+    cudaMemcpy(out_embeds, d_requery_embeds_,
+               static_cast<size_t>(total) * dim * sizeof(float),
+               cudaMemcpyDeviceToHost);
+    return total;
+}
+
+void PerceptionPipeline::evict(uint64_t uid) {
+    if (crop_ring_) crop_ring_->evict(uid);
+}
+
+int PerceptionPipeline::gather_crops_framed(const uint64_t* uids,
+                                            const int* frames, int n,
+                                            float* batch, cudaStream_t stream,
+                                            bool clean_only) {
+    if (!crop_ring_) return 0;
+    return crop_ring_->gather_framed(uids, frames, n, batch, stream, clean_only);
+}
+
+bool PerceptionPipeline::has_crop(uint64_t uid, int frame, bool clean_only) const {
+    if (!crop_ring_) return false;
+    return crop_ring_->has_crop(uid, frame, clean_only);
+}
+
+void PerceptionPipeline::crop_into_pool_async(
+    const float* frame_ptr, int frame_h, int frame_w,
+    const float* boxes_ptr, int n_boxes,
+    int* out_slot,
+    cudaEvent_t* out_event)
+{
+    *out_slot = -1;
+    *out_event = nullptr;
+    if (!reid_ || !cropper_ || n_boxes <= 0) return;
+    ensure_crop_pool();
+    int slot = crop_pool_->acquire(n_boxes);
+    if (slot < 0) return;
+    *out_slot = slot;
+    // Create event for crop completion signaling.
+    cudaEvent_t evt;
+    cudaEventCreateWithFlags(&evt, cudaEventDisableTiming);
+    *out_event = evt;
+    float* crop_ptr = crop_pool_->slot_ptr(slot);
+    // The frame tensor was allocated on the caller's (default) stream.
+    // Before reading it on crop_stream_, wait for the default stream to
+    // finish any pending writes to the frame.
+    cudaEvent_t frame_ready;
+    cudaEventCreateWithFlags(&frame_ready, cudaEventDisableTiming);
+    cudaEventRecord(frame_ready, 0);  // record on default stream
+    cudaStreamWaitEvent(crop_stream_, frame_ready);
+    cudaEventDestroy(frame_ready);
+    cropper_->process_gpu(
+        const_cast<void*>(reinterpret_cast<const void*>(frame_ptr)),
+        frame_w, frame_h,
+        const_cast<float*>(boxes_ptr), n_boxes,
+        crop_ptr, crop_stream_);
+    cudaEventRecord(evt, crop_stream_);
+}
+
+int PerceptionPipeline::extract_batch_from_pool(
+    const ReIDCropJob* jobs, int n_jobs,
+    float* out_embeds,
+    ReIDResult* out_results)
+{
+    if (!reid_ || !crop_pool_ || n_jobs <= 0) return 0;
+    ensure_crop_pool();
+    int max_batch = reid_->get_max_batch();
+    auto [crop_h, crop_w] = reid_->get_input_hw();
+    int crop_elem = 3 * crop_h * crop_w;
+    int total_crops = 0;
+    for (int j = 0; j < n_jobs; ++j) {
+        total_crops += jobs[j].n_crops;
+    }
+    if (total_crops <= 0) return 0;
+    if (total_crops > max_batch) {
+        // Caller should chunk — for now, process up to max_batch.
+        total_crops = max_batch;
+    }
+
+    // Phase 2: gather crops from pool slots to contiguous batch buffer.
+    // For each job, wait on its crop_ready event, then copy crops to batch_buf.
+    int batch_offset = 0;
+    int results_idx = 0;
+    for (int j = 0; j < n_jobs && batch_offset < max_batch; ++j) {
+        const auto& job = jobs[j];
+        if (job.crop_slot < 0 || job.n_crops <= 0) continue;
+        // Wait for crop to complete on crop_stream before reading on reid_stream.
+        if (job.crop_ready) {
+            cudaStreamWaitEvent(reid_stream_, job.crop_ready);
+        }
+        float* src = crop_pool_->slot_ptr(job.crop_slot);
+        float* dst = d_batch_buf_ + static_cast<size_t>(batch_offset) * crop_elem;
+        int n_copy = job.n_crops;
+        if (batch_offset + n_copy > max_batch) {
+            n_copy = max_batch - batch_offset;
+        }
+        cudaMemcpyAsync(dst, src,
+                        static_cast<size_t>(n_copy) * crop_elem * sizeof(float),
+                        cudaMemcpyDeviceToDevice, reid_stream_);
+        // Record result metadata.
+        if (out_results) {
+            out_results[results_idx].frame_idx = job.frame_idx;
+            out_results[results_idx].track_uid = job.track_uid;
+            out_results[results_idx].generation = job.generation;
+            out_results[results_idx].reason = job.reason;
+            out_results[results_idx].embed_offset = batch_offset;
+            out_results[results_idx].n_crops = n_copy;
+        }
+        batch_offset += n_copy;
+        ++results_idx;
+    }
+    int n_to_extract = batch_offset;
+    if (n_to_extract <= 0) return 0;
+
+    // Run TensorRT inference on the contiguous batch buffer.
+    reid_->extract(d_batch_buf_, n_to_extract, out_embeds, reid_stream_);
+
+    // Release pool slots (after the copy is done — but we need to sync to
+    // ensure the D2D copy has completed before releasing.  Since extract
+    // also runs on reid_stream_ and is ordered after the copies, we can
+    // release after the extract completes.  Use a sync for Phase 2; Phase 3
+    // can use an event for deferred release.)
+    cudaStreamSynchronize(reid_stream_);
+
+    for (int j = 0; j < n_jobs; ++j) {
+        const auto& job = jobs[j];
+        if (job.crop_slot >= 0 && job.n_crops > 0) {
+            crop_pool_->release(job.crop_slot, job.n_crops);
+        }
+        if (job.crop_ready) {
+            cudaEventDestroy(job.crop_ready);
+        }
+    }
+
+    return n_to_extract;
 }
 
 int PerceptionPipeline::get_embed_dim() const {

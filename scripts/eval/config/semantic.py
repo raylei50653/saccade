@@ -32,6 +32,17 @@ class SemanticConfig:
     semantic_kalman_max_speed_mps: float = 0.0
     semantic_delayed_claim: bool = False
     semantic_claim_warmup_frames: int = 3
+    semantic_cheb_gr_claim: bool = False
+    semantic_cheb_gr_max_cost: float = 0.45
+    semantic_cheb_gr_margin: float = 0.05
+    semantic_cheb_gr_min_head: int = 2
+    semantic_cheb_gr_pool_frac: float = 0.3
+    semantic_cheb_gr_min_sim: float = 0.0
+    semantic_gpu_relink_gate: bool | None = None
+    semantic_gpu_relink_gate_graph: bool = True
+    semantic_gpu_relink_gate_init_query_cap: int = 64
+    semantic_gpu_relink_gate_init_candidate_cap: int = 128
+    semantic_cheb_gr_graph_init_cap: int = 32
     semantic_bidirectional: bool = False
     semantic_bridge_px: float = 350.0
     semantic_debug: bool = False
@@ -70,6 +81,8 @@ class SemanticConfig:
     appearance_bank_high_quality_min_score: float = 0.75
     appearance_bank_min_aspect: float = 1.2
     appearance_bank_max_aspect: float = 4.5
+    appearance_occlusion_gate: bool = False
+    appearance_occlusion_cov: float = 0.4
     # Bank quality scoring (A6)
     bank_quality_v2: bool = True
     bank_weighted_mean: bool = False
@@ -280,6 +293,106 @@ def add_semantic_args(parser: argparse.ArgumentParser) -> None:
             "Frames a new raw ID must survive before semantic delayed-claim "
             "arbitration runs.",
             range_hint=">=1",
+        ),
+    )
+    grp.add_argument(
+        "--semantic-cheb-gr-claim",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Use Cheb-GR multi-sample scoring for delayed-claim relink. "
+            "Requires ReID embeddings and forces the Python delayed-claim relinker."
+        ),
+    )
+    grp.add_argument(
+        "--semantic-cheb-gr-max-cost",
+        type=float,
+        default=0.45,
+        help=_help(
+            "Max Cheb-GR distance accepted by semantic delayed-claim relink.",
+            range_hint="0-1",
+        ),
+    )
+    grp.add_argument(
+        "--semantic-cheb-gr-margin",
+        type=float,
+        default=0.05,
+        help=_help(
+            "Minimum separation between best and second-best Cheb-GR claim costs.",
+            range_hint=">=0",
+        ),
+    )
+    grp.add_argument(
+        "--semantic-cheb-gr-min-head",
+        type=int,
+        default=2,
+        help=_help(
+            "Minimum clean warmup embeddings required before a Cheb-GR claim.",
+            range_hint=">=1",
+        ),
+    )
+    grp.add_argument(
+        "--semantic-cheb-gr-pool-frac",
+        type=float,
+        default=0.3,
+        help=_help(
+            "Fraction of lowest head-bank distances averaged for Cheb-GR claim cost.",
+            range_hint="0-1",
+        ),
+    )
+    grp.add_argument(
+        "--semantic-cheb-gr-min-sim",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Minimum raw cosine similarity required before Cheb-GR may accept a "
+            "delayed-claim relink candidate.",
+            range_hint="0-1",
+        ),
+    )
+    grp.add_argument(
+        "--semantic-gpu-relink-gate",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "Use the CUDA relink gate kernel for semantic relink candidate gates. "
+            "Default auto-enables for --semantic-cheb-gr-claim."
+        ),
+    )
+    grp.add_argument(
+        "--semantic-gpu-relink-gate-graph",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Capture the CUDA relink gate kernel in a fixed-capacity CUDA graph "
+            "when semantic GPU relink gate is enabled."
+        ),
+    )
+    grp.add_argument(
+        "--semantic-gpu-relink-gate-init-query-cap",
+        type=int,
+        default=64,
+        help=_help(
+            "Initial fixed CUDA graph query capacity for semantic relink gates.",
+            range_hint=">=0",
+        ),
+    )
+    grp.add_argument(
+        "--semantic-gpu-relink-gate-init-candidate-cap",
+        type=int,
+        default=128,
+        help=_help(
+            "Initial fixed CUDA graph candidate capacity for semantic relink gates.",
+            range_hint=">=0",
+        ),
+    )
+    grp.add_argument(
+        "--semantic-cheb-gr-graph-init-cap",
+        type=int,
+        default=32,
+        help=_help(
+            "Initial fixed CUDA graph sample capacity for Cheb-GR delayed claims.",
+            range_hint=">=0",
         ),
     )
     grp.add_argument(
@@ -505,6 +618,25 @@ def add_semantic_args(parser: argparse.ArgumentParser) -> None:
         default=4.5,
         help=_help(
             "Maximum h/w aspect for a high-quality bank sample.", range_hint=">=0"
+        ),
+    )
+    grp.add_argument(
+        "--appearance-occlusion-gate",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Skip appearance extraction and bank updates for boxes covered by a "
+            "lower-foot foreground box."
+        ),
+    )
+    grp.add_argument(
+        "--appearance-occlusion-cov",
+        type=float,
+        default=0.4,
+        help=_help(
+            "Coverage threshold for --appearance-occlusion-gate; matches "
+            "MobileNetV4 visclean training --occ-cov.",
+            range_hint="0-1",
         ),
     )
     grp.add_argument(

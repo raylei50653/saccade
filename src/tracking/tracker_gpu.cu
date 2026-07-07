@@ -1286,9 +1286,11 @@ __global__ void collect_free_slots_kernel(
 __global__ void archive_expiring_tracks_kernel(
     const bool* active, const int* state, const int* age, const bool* has_clean,
     const float* states, const float* features, const int* track_ids,
+    const uint64_t* track_uids, const int* generations,
     int max_objs, int max_age, int embed_dim, int cap,
     float* relink_feats, int* relink_ids, float* relink_pos,
-    int* relink_lostage, int* relink_valid, int* relink_cursor)
+    int* relink_lostage, int* relink_valid, int* relink_cursor,
+    uint64_t* relink_uids, int* relink_generations)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= max_objs) return;
@@ -1313,6 +1315,8 @@ __global__ void archive_expiring_tracks_kernel(
     relink_pos[slot * 5 + 4] = states[idx * 8 + 5];  // vy
     relink_lostage[slot] = 0;
     relink_valid[slot] = 1;
+    relink_uids[slot] = track_uids[idx];
+    relink_generations[slot] = generations[idx];
 }
 
 // Archive tracks that just became LOST (age == 1) so the birth relink can
@@ -1322,9 +1326,11 @@ __global__ void archive_expiring_tracks_kernel(
 __global__ void archive_lost_tracks_kernel(
     const bool* active, const int* state, const int* age,
     const float* states, const float* features, const int* track_ids,
+    const uint64_t* track_uids, const int* generations,
     int max_objs, int embed_dim, int cap,
     float* relink_feats, int* relink_ids, float* relink_pos,
-    int* relink_lostage, int* relink_valid, int* relink_cursor)
+    int* relink_lostage, int* relink_valid, int* relink_cursor,
+    uint64_t* relink_uids, int* relink_generations)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= max_objs) return;
@@ -1347,6 +1353,8 @@ __global__ void archive_lost_tracks_kernel(
     relink_pos[slot * 5 + 4] = states[idx * 8 + 5];
     relink_lostage[slot] = 0;
     relink_valid[slot] = 1;
+    relink_uids[slot] = track_uids[idx];
+    relink_generations[slot] = generations[idx];
 }
 
 __global__ void age_relink_bank_kernel(int* lostage, int* valid, int cap, int max_age) {
@@ -1354,6 +1362,45 @@ __global__ void age_relink_bank_kernel(int* lostage, int* valid, int cap, int ma
     if (i >= cap || !valid[i]) return;
     lostage[i] += 1;
     if (lostage[i] > max_age) valid[i] = 0;
+}
+
+// Dup-id guard, pass 1: a bank entry whose identity is CONFIRMED again (the
+// LOST slot was re-taken by association) is stale — reviving it would emit the
+// same id twice in one frame (archive_lost banks ids at age==1 while the slot
+// is still live). LOST slots stay revivable; the revive/re-match race on those
+// is resolved by retire_revived_slots_kernel below.
+__global__ void invalidate_tracked_bank_entries_kernel(
+    const bool* active, const int* state, const int* track_ids, int max_objs,
+    const int* relink_ids, int* relink_valid, int cap)
+{
+    int e = blockIdx.x * blockDim.x + threadIdx.x;
+    if (e >= cap || !relink_valid[e]) return;
+    int rid = relink_ids[e];
+    for (int s = 0; s < max_objs; ++s) {
+        if (active[s] && state[s] == TRACK_CONFIRMED && track_ids[s] == rid) {
+            relink_valid[e] = 0;
+            return;
+        }
+    }
+}
+
+// Dup-id guard, pass 2: once a birth detection claims an id from the bank, any
+// slot still holding that id (a live LOST slot awaiting expiry) must retire —
+// the identity continues in the newly spawned track. Without this the old slot
+// can be re-matched in a later frame and the id is emitted twice.
+__global__ void retire_revived_slots_kernel(
+    const int* det_revive_id, int num_dets,
+    bool* active, const int* track_ids, int max_objs)
+{
+    int s = blockIdx.x * blockDim.x + threadIdx.x;
+    if (s >= max_objs || !active[s]) return;
+    int tid = track_ids[s];
+    for (int d = 0; d < num_dets; ++d) {
+        if (det_revive_id[d] == tid) {
+            active[s] = false;
+            return;
+        }
+    }
 }
 
 // Cheb-GR two-pass relink (one thread per detection, no sort):
@@ -1368,19 +1415,25 @@ __global__ void relink_births_kernel(
     const float* det_embeds, int n_det, float new_track_thresh, int embed_dim,
     int cap, const float* relink_feats, const int* relink_ids, const float* relink_pos,
     const int* relink_lostage, int* relink_valid,
+    const uint64_t* relink_uids, const int* relink_generations,
     float sim_thresh, float cheb_lambda, float gamma_gate,
-    int* det_revive_id, int* dbg)
+    int* det_revive_id, uint64_t* det_revive_uid, int* det_revive_generation, int* dbg)
 {
     int d = blockIdx.x * blockDim.x + threadIdx.x;
     if (d >= n_det) return;
     det_revive_id[d] = -1;
+    det_revive_uid[d] = 0;
+    det_revive_generation[d] = 0;
     if (det_to_trk[d] >= 0 || det_scores[d] < new_track_thresh) return;
     if (dbg) atomicAdd(&dbg[0], 1);  // birth candidate entering relink
 
     const float* e2 = det_embeds + d * embed_dim;
     float n2 = 0.f;
     for (int k = 0; k < embed_dim; ++k) n2 += e2[k] * e2[k];
-    if (n2 < 1e-6f) return;
+    if (n2 < 1e-6f) {
+        if (dbg) atomicAdd(&dbg[4], 1);  // birth has no embedding (occ-gated / unbudgeted)
+        return;
+    }
     float inv_n2 = rsqrtf(n2);
 
     const float* b = det_boxes + d * 4;
@@ -1401,7 +1454,10 @@ __global__ void relink_births_kernel(
         s2 += dval * dval;
         n_valid++;
     }
-    if (n_valid < 3) return;  // σ unreliable on a tiny bank → do not revive
+    if (n_valid < 3) {
+        if (dbg) atomicAdd(&dbg[5], 1);  // bank too small for σ
+        return;
+    }
     float mu = s1 / n_valid;
     float var = fmaxf(0.0f, s2 / n_valid - mu * mu);
     float t_cheb = mu - cheb_lambda * sqrtf(var);
@@ -1410,6 +1466,7 @@ __global__ void relink_births_kernel(
     // Pass 2: spatial + Chebyshev edge culling, keep the closest survivor.
     float best_d = 1e30f;
     int best_e = -1;
+    int n_spatial = 0, n_cheb = 0, n_floor = 0;
     for (int e = 0; e < cap; ++e) {
         if (!relink_valid[e]) continue;
         float lcx = relink_pos[e * 5 + 0], lcy = relink_pos[e * 5 + 1];
@@ -1419,18 +1476,29 @@ __global__ void relink_births_kernel(
         float r_max = gamma_gate * lh + kEta * sqrtf(vx * vx + vy * vy) * dt;
         float dist = sqrtf((dcx - lcx) * (dcx - lcx) + (dcy - lcy) * (dcy - lcy));
         if (dist > r_max) continue;
+        n_spatial++;
         const float* e1 = relink_feats + e * embed_dim;
         float dot = 0.f, n1 = 0.f;
         for (int k = 0; k < embed_dim; ++k) { dot += e1[k] * e2[k]; n1 += e1[k] * e1[k]; }
         if (n1 < 1e-6f) continue;
         float dval = 1.0f - dot * rsqrtf(n1) * inv_n2;
+        if (dval <= t_cheb) n_cheb++;
+        if (dval <= d_floor) n_floor++;
         if (dval <= t_cheb && dval <= d_floor && dval < best_d) {
             best_d = dval;
             best_e = e;
         }
     }
+    if (dbg) {
+        if (n_spatial > 0) atomicAdd(&dbg[6], 1);  // ≥1 entry inside spatial radius
+        if (n_cheb > 0)    atomicAdd(&dbg[7], 1);  // ≥1 spatial entry passed Chebyshev
+        if (n_floor > 0)   atomicAdd(&dbg[8], 1);  // ≥1 spatial entry passed sim floor
+        if (best_e >= 0)   atomicAdd(&dbg[9], 1);  // passed both (pre-claim)
+    }
     if (best_e >= 0 && atomicCAS(&relink_valid[best_e], 1, 0) == 1) {
         det_revive_id[d] = relink_ids[best_e];
+        det_revive_uid[d] = relink_uids[best_e];
+        det_revive_generation[d] = relink_generations[best_e];
         if (dbg) atomicAdd(&dbg[1], 1);  // revived
     }
 }
@@ -1450,8 +1518,9 @@ __global__ void spawn_new_tracks_kernel(
     int confirm_streak, float birth_low_score_thresh,
     int max_objs, float birth_prox_norm_thresh,
     const int* d_det_revive_id, float* d_covs,
-    int* d_foot_len, float* d_ema_h, int* d_track_revived)  // bridge foot-state reset (null when off)
-{
+    int* d_foot_len, float* d_ema_h, int* d_track_revived,  // bridge foot-state reset (null when off)
+    uint64_t* d_track_uid, uint64_t* d_track_uid_ctr, int* d_generation,
+    const uint64_t* d_det_revive_uid, const int* d_det_revive_generation){
     int tid = threadIdx.x;
     __shared__ int s_counts[256];
     __shared__ int s_offsets[256];
@@ -1514,6 +1583,7 @@ __global__ void spawn_new_tracks_kernel(
     int start_cursor = *d_slot_cursor;
     int n_free = *d_n_free;
     int id_ctr = *d_track_id_ctr;
+    uint64_t uid_ctr = *d_track_uid_ctr;
 
     int global_offset = s_offsets[tid];
     for (int step = 0; step < local_count; ++step) {
@@ -1539,12 +1609,19 @@ __global__ void spawn_new_tracks_kernel(
                 d_hit_streak[slot]  = confirm_streak;
                 d_confirm_req[slot] = 0;
                 kf_gpu::init_covariance(d_covs + slot * 64);  // fresh slot
+                // Restore the immutable uid from the relink bank; bump generation
+                // so late async results from the pre-loss epoch are rejected.
+                d_track_uid[slot]     = d_det_revive_uid ? d_det_revive_uid[det_idx] : 0;
+                d_generation[slot]    = (d_det_revive_generation ? d_det_revive_generation[det_idx] : 0) + 1;
             } else {
                 d_track_ids[slot]   = id_ctr + global_offset + step;
                 d_state[slot]       = 1; // TRACK_TENTATIVE
                 d_hit_streak[slot]  = 1;
                 d_confirm_req[slot] = (birth_low_score_thresh > 0.0f && d_det_scores[det_idx] < birth_low_score_thresh)
                     ? (confirm_streak + 1) : 0;
+                // Fresh identity: assign a new immutable uid, generation starts at 0.
+                d_track_uid[slot]     = uid_ctr + static_cast<uint64_t>(global_offset + step);
+                d_generation[slot]    = 0;
             }
             d_age[slot]         = 0;
             d_score_sum[slot]   = d_det_scores[det_idx];
@@ -1566,18 +1643,49 @@ __global__ void spawn_new_tracks_kernel(
         int final_spawned = min(total_to_spawn, n_free - start_cursor);
         *d_slot_cursor = start_cursor + final_spawned;
         *d_track_id_ctr = id_ctr + final_spawned;
+        *d_track_uid_ctr = uid_ctr + static_cast<uint64_t>(final_spawned);
     }
 }
 
 // Initialise covariance for every slot that is active+tentative+hit_streak==1 (freshly spawned).
 __global__ void init_covariance_if_new_kernel(
     const bool* active, const int* state, const int* hit_streak,
-    float* covs, int max_objs)
+    float* covs, int max_objs, float* features, int embed_dim)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= max_objs) return;
     if (!active[i] || state[i] != 1 || hit_streak[i] != 1) return;
     kf_gpu::init_covariance(covs + i * 64);
+    // Slot reuse hygiene: wipe the previous occupant's reference embedding so
+    // archive/veto/seed never read another identity's appearance.
+    if (features) {
+        float* f = features + (size_t)i * embed_dim;
+        for (int k = 0; k < embed_dim; ++k) f[k] = 0.0f;
+    }
+}
+
+// Fill-in reference seeding: a matched detection's embedding becomes the track
+// reference ONLY while the reference is still empty. Young tracks thus carry an
+// appearance from their first clean frame (bridge veto / archive coverage); the
+// Python bank's curated representative overwrites it via the scatter path once
+// available. Dirty (occlusion-gated, zero) det embeddings never seed.
+__global__ void seed_reference_features_kernel(
+    const int* det_to_trk, const float* det_embeds,
+    int num_dets, int embed_dim, int max_objs, float* features)
+{
+    int d = blockIdx.x * blockDim.x + threadIdx.x;
+    if (d >= num_dets) return;
+    int t = det_to_trk[d];
+    if (t < 0 || t >= max_objs) return;
+    const float* src = det_embeds + (size_t)d * embed_dim;
+    float n2 = 0.0f;
+    for (int k = 0; k < embed_dim; ++k) n2 += src[k] * src[k];
+    if (n2 < 1e-6f) return;
+    float* dst = features + (size_t)t * embed_dim;
+    float n2d = 0.0f;
+    for (int k = 0; k < embed_dim; ++k) n2d += dst[k] * dst[k];
+    if (n2d > 1e-6f) return;
+    for (int k = 0; k < embed_dim; ++k) dst[k] = src[k];
 }
 
 // ── Phase-4 bidirectional foot-bridge (Kalman-free) ──────────────────────────
@@ -1854,6 +1962,7 @@ __global__ void relink_bidir_propose_kernel(
     const unsigned int* occ_grid, const int* occ_frame,
     float occ_gate_cover, int occ_gap_min, float occ_expand_px, float occ_expand_cover,
     int frame_w, int frame_h,
+    const float* features, int embed_dim, float app_veto_cos,
     int* track_revived, int* bridge_claim, int* bridge_cand_lost, int* dbg)
 {
     int cand = blockIdx.x * blockDim.x + threadIdx.x;
@@ -1877,6 +1986,20 @@ __global__ void relink_bidir_propose_kernel(
     float occ_inv_cw = (float)OCC_GW / fmaxf((float)frame_w, 1.0f);
     float occ_inv_ch = (float)OCC_GH / fmaxf((float)frame_h, 1.0f);
     float cand_fx = cring[0], cand_fy = cring[1] + 0.5f * cring[2];  // entry foot
+
+    // Appearance veto context: only active when enabled AND this candidate has a
+    // clean reference embedding. A pair is vetoed only when BOTH sides have
+    // references and their cosine is below app_veto_cos (clearly different
+    // people); missing embeddings pass through (geometry-only, bit-exact with
+    // veto disabled).
+    const float* cand_emb = nullptr;
+    float cand_inv_norm = 0.0f;
+    if (app_veto_cos > -1.0f && features) {
+        const float* ce = features + (size_t)cand * embed_dim;
+        float n2c = 0.0f;
+        for (int k = 0; k < embed_dim; ++k) n2c += ce[k] * ce[k];
+        if (n2c > 1e-6f) { cand_emb = ce; cand_inv_norm = rsqrtf(n2c); }
+    }
 
     float best_dist = 1e30f, second_dist = 1e30f;
     int best_lost = -1;
@@ -1988,6 +2111,19 @@ __global__ void relink_bidir_propose_kernel(
             }
         }
         if (!ok) continue;
+        // Appearance veto (ranking use of the embedding: prune clearly-different
+        // identities from the geometry shortlist; the correct runner-up then wins
+        // the bdist ranking). Calibrated on the 2026-07-02 m candidate probe:
+        // in-bridge-zone cos<0.20 kills ~35% of false pairs at ~1% true-pair cost.
+        if (cand_emb) {
+            const float* le = features + (size_t)lost * embed_dim;
+            float dot = 0.0f, n2l = 0.0f;
+            for (int k = 0; k < embed_dim; ++k) { dot += le[k] * cand_emb[k]; n2l += le[k] * le[k]; }
+            if (n2l > 1e-6f && dot * rsqrtf(n2l) * cand_inv_norm < app_veto_cos) {
+                if (dbg) atomicAdd(&dbg[10], 1);  // bridge pair vetoed by appearance
+                continue;
+            }
+        }
         if (bdist < best_dist) { second_dist = best_dist; best_dist = bdist; best_lost = lost; }
         else if (bdist < second_dist) { second_dist = bdist; }
     }
@@ -2367,6 +2503,9 @@ public:
         checkCuda(cudaMalloc(&d_scores_, max_objs_ * sizeof(float)));
         checkCuda(cudaMalloc(&d_classes_, max_objs_ * sizeof(int)));
         checkCuda(cudaMalloc(&d_track_ids_, max_objs_ * sizeof(int)));
+        checkCuda(cudaMalloc(&d_track_uid_, max_objs_ * sizeof(uint64_t)));
+        checkCuda(cudaMalloc(&d_track_uid_ctr_, sizeof(uint64_t)));
+        checkCuda(cudaMalloc(&d_generation_, max_objs_ * sizeof(int)));
         checkCuda(cudaMalloc(&d_features_, max_objs_ * embed_dim_ * sizeof(float)));
         d_features_owned_ = true;
         
@@ -2437,11 +2576,14 @@ public:
         checkCuda(cudaMalloc(&d_res_det_idx_,   max_objs_ * sizeof(int)));
         checkCuda(cudaMalloc(&d_res_count_,     sizeof(int)));
         { int init_id = 1; checkCuda(cudaMemcpy(d_track_id_ctr_, &init_id, sizeof(int), cudaMemcpyHostToDevice)); }
+        { uint64_t init_uid = 1; checkCuda(cudaMemcpy(d_track_uid_ctr_, &init_uid, sizeof(uint64_t), cudaMemcpyHostToDevice)); }
 
         checkCuda(cudaMemset(d_active_, 0, max_objs_ * sizeof(bool)));
         checkCuda(cudaMemset(d_states_, 0, max_objs_ * 8 * sizeof(float)));
         checkCuda(cudaMemset(d_covs_, 0, max_objs_ * 64 * sizeof(float)));
         checkCuda(cudaMemset(d_age_, 0, max_objs_ * sizeof(int)));
+        checkCuda(cudaMemset(d_track_uid_, 0, max_objs_ * sizeof(uint64_t)));
+        checkCuda(cudaMemset(d_generation_, 0, max_objs_ * sizeof(int)));
         checkCuda(cudaMemset(d_features_, 0, max_objs_ * embed_dim_ * sizeof(float)));
         checkCuda(cudaMemset(d_state_, 0, max_objs_ * sizeof(int)));
         checkCuda(cudaMemset(d_occ_front_ttl_, 0, max_objs_ * sizeof(int)));
@@ -2461,6 +2603,8 @@ public:
         h_states_.resize(max_objs_ * 8, 0.0f);
         h_covs_.resize(max_objs_ * 64, 0.0f);
         h_track_ids_.resize(max_objs_, 0);
+        h_track_uid_.resize(max_objs_, 0);
+        h_generation_.resize(max_objs_, 0);
         h_scores_.resize(max_objs_, 0.0f);
         h_classes_.resize(max_objs_, 0);
         h_age_.resize(max_objs_, 0);
@@ -2477,6 +2621,8 @@ public:
         checkCuda(cudaHostRegister(h_states_.data(),                max_objs_ * 8 * sizeof(float), cudaHostRegisterDefault));
         checkCuda(cudaHostRegister(h_covs_.data(),                  max_objs_ * 64 * sizeof(float), cudaHostRegisterDefault));
         checkCuda(cudaHostRegister(h_track_ids_.data(),             max_objs_ * sizeof(int), cudaHostRegisterDefault));
+        checkCuda(cudaHostRegister(h_track_uid_.data(),             max_objs_ * sizeof(uint64_t), cudaHostRegisterDefault));
+        checkCuda(cudaHostRegister(h_generation_.data(),            max_objs_ * sizeof(int), cudaHostRegisterDefault));
         checkCuda(cudaHostRegister(h_scores_.data(),                max_objs_ * sizeof(float), cudaHostRegisterDefault));
         checkCuda(cudaHostRegister(h_classes_.data(),               max_objs_ * sizeof(int), cudaHostRegisterDefault));
         checkCuda(cudaHostRegister(h_age_.data(),                   max_objs_ * sizeof(int), cudaHostRegisterDefault));
@@ -2508,6 +2654,8 @@ public:
         cudaHostUnregister(h_states_.data());
         cudaHostUnregister(h_covs_.data());
         cudaHostUnregister(h_track_ids_.data());
+        cudaHostUnregister(h_track_uid_.data());
+        cudaHostUnregister(h_generation_.data());
         cudaHostUnregister(h_scores_.data());
         cudaHostUnregister(h_classes_.data());
         cudaHostUnregister(h_age_.data());
@@ -2520,6 +2668,7 @@ public:
         cudaFree(d_states_); cudaFree(d_covs_); cudaFree(d_active_);
         cudaFree(d_age_); cudaFree(d_scores_); cudaFree(d_classes_);
         cudaFree(d_track_ids_);
+        cudaFree(d_track_uid_); cudaFree(d_track_uid_ctr_); cudaFree(d_generation_);
         if (d_features_owned_) cudaFree(d_features_);
         cudaFree(d_cost_matrix_); cudaFree(d_sinkhorn_v_);
         cudaFree(d_topk_indices_); cudaFree(d_topk_probs_);
@@ -2555,6 +2704,10 @@ public:
         if (d_relink_valid_) cudaFree(d_relink_valid_);
         if (d_relink_cursor_) cudaFree(d_relink_cursor_);
         if (d_det_revive_id_) cudaFree(d_det_revive_id_);
+        if (d_relink_uid_) cudaFree(d_relink_uid_);
+        if (d_relink_generation_) cudaFree(d_relink_generation_);
+        if (d_det_revive_uid_) cudaFree(d_det_revive_uid_);
+        if (d_det_revive_generation_) cudaFree(d_det_revive_generation_);
         if (d_relink_dbg_) cudaFree(d_relink_dbg_);
     }
 
@@ -2622,6 +2775,20 @@ public:
         }
         nvtxRangePop();
     }
+    int compact_output_to_host(float* host_boxes, float* host_scores,
+                                int* host_ids, int* host_classes,
+                                int capacity, cudaStream_t stream) {
+        int count = 0;
+        checkCuda(cudaMemcpy(&count, d_res_count_, sizeof(int), cudaMemcpyDeviceToHost));
+        int n = std::max(0, std::min(count, capacity));
+        if (n > 0) {
+            checkCuda(cudaMemcpy(host_boxes,  d_res_boxes_,  n * 4 * sizeof(float), cudaMemcpyDeviceToHost));
+            checkCuda(cudaMemcpy(host_scores, d_res_scores_, n *     sizeof(float), cudaMemcpyDeviceToHost));
+            checkCuda(cudaMemcpy(host_ids,    d_res_ids_,    n *     sizeof(int),   cudaMemcpyDeviceToHost));
+            checkCuda(cudaMemcpy(host_classes,d_res_classes_,n *     sizeof(int),   cudaMemcpyDeviceToHost));
+        }
+        return n;
+    }
     void run_update_device(
         float* d_boxes, float* d_scores, int* d_classes, int num_dets,
         cudaStream_t stream, float* d_embeddings, float* d_gmc,
@@ -2647,10 +2814,11 @@ public:
         if (relink_enabled_ && d_embeddings) {
             archive_expiring_tracks_kernel<<<blocks, threads, 0, stream>>>(
                 d_active_, d_state_, d_age_, d_has_clean_embedding_,
-                d_states_, d_features_, d_track_ids_,
+                d_states_, d_features_, d_track_ids_, d_track_uid_, d_generation_,
                 max_objs_, max_age_, embed_dim_, relink_bank_cap_,
                 d_relink_feats_, d_relink_ids_, d_relink_pos_,
-                d_relink_lostage_, d_relink_valid_, d_relink_cursor_);
+                d_relink_lostage_, d_relink_valid_, d_relink_cursor_,
+                d_relink_uid_, d_relink_generation_);
             age_relink_bank_kernel<<<(relink_bank_cap_ + threads - 1) / threads, threads, 0, stream>>>(
                 d_relink_lostage_, d_relink_valid_, relink_bank_cap_, relink_max_age_);
         }
@@ -2874,21 +3042,33 @@ public:
         cudaMemsetAsync(d_slot_cursor_, 0, sizeof(int), stream);
         collect_free_slots_kernel<<<1, 256, 0, stream>>>(
             d_active_, max_objs_, d_free_slots_, d_n_free_);
+        // Seed young-track references from matched det embeddings (fill-in only;
+        // the bank's curated representative later overwrites via scatter).
+        if (d_embeddings && (relink_enabled_ || bridge_app_veto_ > -1.0f)) {
+            seed_reference_features_kernel<<<(max_assoc_ + threads - 1) / threads, threads, 0, stream>>>(
+                d_det_to_trk_, d_embeddings, num_dets, embed_dim_, max_objs_, d_features_);
+        }
         // Relink: archive tracks that just became LOST so the birth relink can
         // revive them when a detection re-appears (unlike expire-only archiving
         // which only saves about-to-expire confirmed tracks).
         if (relink_enabled_ && d_embeddings) {
             archive_lost_tracks_kernel<<<blocks, threads, 0, stream>>>(
                 d_active_, d_state_, d_age_,
-                d_states_, d_features_, d_track_ids_,
+                d_states_, d_features_, d_track_ids_, d_track_uid_, d_generation_,
                 max_objs_, embed_dim_, relink_bank_cap_,
                 d_relink_feats_, d_relink_ids_, d_relink_pos_,
-                d_relink_lostage_, d_relink_valid_, d_relink_cursor_);
+                d_relink_lostage_, d_relink_valid_, d_relink_cursor_,
+                d_relink_uid_, d_relink_generation_);
         }
         // Relink: try to revive a lost identity for each unmatched birth candidate
         // before spawn assigns fresh ids.
         const int* d_revive = nullptr;
         if (relink_enabled_ && d_embeddings) {
+            // Dup-id guard: entries whose id is confirmed-tracked again must not
+            // be revivable this frame.
+            invalidate_tracked_bank_entries_kernel<<<(relink_bank_cap_ + threads - 1) / threads, threads, 0, stream>>>(
+                d_active_, d_state_, d_track_ids_, max_objs_,
+                d_relink_ids_, d_relink_valid_, relink_bank_cap_);
             // Fixed grid (max_assoc_) so the launch config is stable under CUDA
             // graph capture; the kernel guards with d >= n_det.
             relink_births_kernel<<<(max_assoc_ + threads - 1) / threads, threads, 0, stream>>>(
@@ -2896,9 +3076,14 @@ public:
                 effective_new_track_thresh_spawn, embed_dim_,
                 relink_bank_cap_, d_relink_feats_, d_relink_ids_, d_relink_pos_,
                 d_relink_lostage_, d_relink_valid_,
+                d_relink_uid_, d_relink_generation_,
                 relink_sim_thresh_, relink_lambda_, relink_spatial_gate_,
-                d_det_revive_id_, d_relink_dbg_);
+                d_det_revive_id_, d_det_revive_uid_, d_det_revive_generation_, d_relink_dbg_);
             d_revive = d_det_revive_id_;
+            // Dup-id guard: a revived identity's old LOST slot retires now so a
+            // later re-match cannot emit the same id twice.
+            retire_revived_slots_kernel<<<blocks, threads, 0, stream>>>(
+                d_det_revive_id_, num_dets, d_active_, d_track_ids_, max_objs_);
         }
         spawn_new_tracks_kernel<<<1, 256, 0, stream>>>(
             d_det_to_trk_, d_boxes, d_scores, d_classes, num_dets,
@@ -2913,9 +3098,12 @@ public:
             d_revive, d_covs_,
             bidirectional_ ? d_foot_len_ : nullptr,
             bidirectional_ ? d_ema_h_ : nullptr,
-            bidirectional_ ? d_track_revived_ : nullptr);
+            bidirectional_ ? d_track_revived_ : nullptr,
+            d_track_uid_, d_track_uid_ctr_, d_generation_,
+            d_det_revive_uid_, d_det_revive_generation_);
         init_covariance_if_new_kernel<<<(max_objs_ + 255) / 256, 256, 0, stream>>>(
-            d_active_, d_state_, d_hit_streak_, d_covs_, max_objs_);
+            d_active_, d_state_, d_hit_streak_, d_covs_, max_objs_,
+            d_features_, embed_dim_);
 
         // Phase-4 bidirectional foot-bridge relink (Kalman-free; default off →
         // no kernel runs → bit-identical). Foot history must update after spawn
@@ -2952,6 +3140,7 @@ public:
                 occ_on ? d_occ_grid_ : nullptr, occ_on ? d_occ_frame_ : nullptr,
                 occ_gate_cover_, occ_gap_min_, occ_expand_px_, occ_expand_cover_,
                 frame_w_, frame_h_,
+                d_features_, embed_dim_, bridge_app_veto_,
                 d_track_revived_, d_bridge_claim_, d_bridge_cand_lost_, d_relink_dbg_);
             relink_bidir_commit_kernel<<<grid, 256, 0, stream>>>(
                 d_active_, d_track_ids_, max_objs_,
@@ -3017,7 +3206,8 @@ public:
                            float bridge_h_lo = 0.0f, float bridge_h_hi = 0.0f,
                            float bridge_dir_bonus = 0.0f,
                            float occ_gate_cover = 0.0f, int occ_gap_min = 30,
-                           float occ_expand_px = 0.0f, float occ_expand_cover = 0.9f) {
+                           float occ_expand_px = 0.0f, float occ_expand_cover = 0.9f,
+                           float bridge_app_veto = -1.0f) {
         relink_enabled_ = enabled;
         relink_bank_cap_ = std::max(1, bank_cap);
         relink_sim_thresh_ = sim_thresh;
@@ -3044,6 +3234,7 @@ public:
         occ_gap_min_ = std::max(1, occ_gap_min);
         occ_expand_px_ = std::max(0.0f, occ_expand_px);
         occ_expand_cover_ = std::clamp(occ_expand_cover, 0.0f, 1.0f);
+        bridge_app_veto_ = std::min(bridge_app_veto, 1.0f);  // <= -1 disables
         // Occupancy ring (~72 KB): lazily allocated only when an occ gate is on.
         if (bidirectional_ && (occ_gate_cover_ > 0.0f || occ_expand_px_ > 0.0f) &&
             d_occ_grid_ == nullptr) {
@@ -3055,8 +3246,8 @@ public:
         // Appearance relink writes births/revives into d_relink_dbg_[0..1], and
         // bridge relink writes attempts/accepts into d_relink_dbg_[2..3].
         if ((enabled || bidirectional_) && d_relink_dbg_ == nullptr) {
-            checkCuda(cudaMalloc(&d_relink_dbg_, 4 * sizeof(int)));
-            checkCuda(cudaMemset(d_relink_dbg_, 0, 4 * sizeof(int)));
+            checkCuda(cudaMalloc(&d_relink_dbg_, 12 * sizeof(int)));
+            checkCuda(cudaMemset(d_relink_dbg_, 0, 12 * sizeof(int)));
         }
         if (enabled && d_relink_feats_ != nullptr && relink_alloc_cap_ < relink_bank_cap_) {
             cudaFree(d_relink_feats_); d_relink_feats_ = nullptr;
@@ -3066,6 +3257,10 @@ public:
             cudaFree(d_relink_valid_); d_relink_valid_ = nullptr;
             cudaFree(d_relink_cursor_); d_relink_cursor_ = nullptr;
             cudaFree(d_det_revive_id_); d_det_revive_id_ = nullptr;
+            cudaFree(d_relink_uid_); d_relink_uid_ = nullptr;
+            cudaFree(d_relink_generation_); d_relink_generation_ = nullptr;
+            cudaFree(d_det_revive_uid_); d_det_revive_uid_ = nullptr;
+            cudaFree(d_det_revive_generation_); d_det_revive_generation_ = nullptr;
             relink_alloc_cap_ = 0;
         }
         if (enabled && d_relink_feats_ == nullptr) {
@@ -3077,18 +3272,26 @@ public:
             checkCuda(cudaMalloc(&d_relink_valid_, cap * sizeof(int)));
             checkCuda(cudaMalloc(&d_relink_cursor_, sizeof(int)));
             checkCuda(cudaMalloc(&d_det_revive_id_, max_assoc_ * sizeof(int)));
+            checkCuda(cudaMalloc(&d_relink_uid_, cap * sizeof(uint64_t)));
+            checkCuda(cudaMalloc(&d_relink_generation_, cap * sizeof(int)));
+            checkCuda(cudaMalloc(&d_det_revive_uid_, max_assoc_ * sizeof(uint64_t)));
+            checkCuda(cudaMalloc(&d_det_revive_generation_, max_assoc_ * sizeof(int)));
             checkCuda(cudaMemset(d_relink_valid_, 0, cap * sizeof(int)));
             checkCuda(cudaMemset(d_relink_lostage_, 0, cap * sizeof(int)));
             checkCuda(cudaMemset(d_relink_cursor_, 0, sizeof(int)));
+            checkCuda(cudaMemset(d_relink_uid_, 0, cap * sizeof(uint64_t)));
+            checkCuda(cudaMemset(d_relink_generation_, 0, cap * sizeof(int)));
+            checkCuda(cudaMemset(d_det_revive_uid_, 0, max_assoc_ * sizeof(uint64_t)));
+            checkCuda(cudaMemset(d_det_revive_generation_, 0, max_assoc_ * sizeof(int)));
             relink_alloc_cap_ = cap;
         }
     }
     // Debug accumulated over the sequence:
     //   [0]=archived(cursor) [1]=births [2]=revived [3]=bridge_attempts [4]=bridge_accepts
     std::vector<int> get_relink_debug() {
-        std::vector<int> out(5, 0);
+        std::vector<int> out(13, 0);
         if (d_relink_cursor_) checkCuda(cudaMemcpy(out.data(), d_relink_cursor_, sizeof(int), cudaMemcpyDeviceToHost));
-        if (d_relink_dbg_) checkCuda(cudaMemcpy(out.data() + 1, d_relink_dbg_, 4 * sizeof(int), cudaMemcpyDeviceToHost));
+        if (d_relink_dbg_) checkCuda(cudaMemcpy(out.data() + 1, d_relink_dbg_, 12 * sizeof(int), cudaMemcpyDeviceToHost));
         return out;
     }
     void set_oao_params(float tau, float contest_thresh, float score_w, int occ_mode,
@@ -3270,6 +3473,8 @@ public:
         checkCuda(cudaMemcpyAsync(h_scores_.data(), d_scores_, max_objs_ * sizeof(float), cudaMemcpyDeviceToHost, stream));
         checkCuda(cudaMemcpyAsync(h_classes_.data(), d_classes_, max_objs_ * sizeof(int), cudaMemcpyDeviceToHost, stream));
         checkCuda(cudaMemcpyAsync(h_track_ids_.data(), d_track_ids_, max_objs_ * sizeof(int), cudaMemcpyDeviceToHost, stream));
+        checkCuda(cudaMemcpyAsync(h_track_uid_.data(), d_track_uid_, max_objs_ * sizeof(uint64_t), cudaMemcpyDeviceToHost, stream));
+        checkCuda(cudaMemcpyAsync(h_generation_.data(), d_generation_, max_objs_ * sizeof(int), cudaMemcpyDeviceToHost, stream));
         cudaStreamSynchronize(stream);
         h_dirty_ = false;
 
@@ -3279,6 +3484,8 @@ public:
             if (!h_active_raw_[i]) continue;
             TrackStateSnapshot snap;
             snap.obj_id = h_track_ids_[i];
+            snap.track_uid = h_track_uid_[i];
+            snap.generation = h_generation_[i];
             snap.class_id = h_classes_[i];
             snap.age = h_age_[i];
             snap.score = h_scores_[i];
@@ -3304,6 +3511,8 @@ public:
         }
         checkCuda(cudaMemcpyAsync(h_active_raw_.data(), d_active_, max_objs_ * sizeof(bool), cudaMemcpyDeviceToHost, stream));
         checkCuda(cudaMemcpyAsync(h_track_ids_.data(), d_track_ids_, max_objs_ * sizeof(int), cudaMemcpyDeviceToHost, stream));
+        checkCuda(cudaMemcpyAsync(h_track_uid_.data(), d_track_uid_, max_objs_ * sizeof(uint64_t), cudaMemcpyDeviceToHost, stream));
+        checkCuda(cudaMemcpyAsync(h_generation_.data(), d_generation_, max_objs_ * sizeof(int), cudaMemcpyDeviceToHost, stream));
         cudaStreamSynchronize(stream);
         h_dirty_ = false;
 
@@ -3330,6 +3539,8 @@ public:
         for (size_t i = 0; i < matched_slots.size(); ++i) {
             const int slot = matched_slots[i];
             snapshots[i].obj_id = h_track_ids_[slot];
+            snapshots[i].track_uid = h_track_uid_[slot];
+            snapshots[i].generation = h_generation_[slot];
             checkCuda(cudaMemcpyAsync(
                 matched_states.data() + i * 8,
                 d_states_ + static_cast<size_t>(slot) * 8,
@@ -3391,6 +3602,8 @@ public:
         checkCuda(cudaMemcpyAsync(h_scores_.data(),                d_scores_,                    max_objs_ *     sizeof(float), cudaMemcpyDeviceToHost, stream));
         checkCuda(cudaMemcpyAsync(h_classes_.data(),               d_classes_,                   max_objs_ *     sizeof(int),   cudaMemcpyDeviceToHost, stream));
         checkCuda(cudaMemcpyAsync(h_track_ids_.data(),             d_track_ids_,                 max_objs_ *     sizeof(int),   cudaMemcpyDeviceToHost, stream));
+        checkCuda(cudaMemcpyAsync(h_track_uid_.data(),             d_track_uid_,                 max_objs_ *     sizeof(uint64_t), cudaMemcpyDeviceToHost, stream));
+        checkCuda(cudaMemcpyAsync(h_generation_.data(),            d_generation_,                max_objs_ *     sizeof(int),   cudaMemcpyDeviceToHost, stream));
         checkCuda(cudaMemcpyAsync(h_state_.data(),                 d_state_,                     max_objs_ *     sizeof(int),   cudaMemcpyDeviceToHost, stream));
         checkCuda(cudaMemcpyAsync(h_hit_streak_.data(),            d_hit_streak_,                max_objs_ *     sizeof(int),   cudaMemcpyDeviceToHost, stream));
         checkCuda(cudaMemcpyAsync(h_confirm_streak_required_.data(), d_confirm_streak_required_, max_objs_ *     sizeof(int),   cudaMemcpyDeviceToHost, stream));
@@ -3404,6 +3617,8 @@ public:
             float a = h_states_[i * 8 + 2], h = h_states_[i * 8 + 3], w = a * h;
             candidates.push_back({
                 h_track_ids_[i],
+                h_track_uid_[i],
+                h_generation_[i],
                 h_classes_[i],
                 h_age_[i],
                 h_hit_streak_[i],
@@ -3422,6 +3637,7 @@ public:
         return {reinterpret_cast<uintptr_t>(d_states_),
                 reinterpret_cast<uintptr_t>(d_covs_),
                 reinterpret_cast<uintptr_t>(d_track_ids_),
+                reinterpret_cast<uintptr_t>(d_track_uid_),
                 max_objs_};
     }
 
@@ -3454,6 +3670,10 @@ private:
     int*   d_relink_valid_ = nullptr;
     int*   d_relink_cursor_ = nullptr;
     int*   d_det_revive_id_ = nullptr;
+    uint64_t* d_relink_uid_ = nullptr;        // [cap] bank: uid of archived track
+    int*   d_relink_generation_ = nullptr;    // [cap] bank: generation of archived track
+    uint64_t* d_det_revive_uid_ = nullptr;    // [max_assoc] per-det revive uid
+    int*   d_det_revive_generation_ = nullptr;// [max_assoc] per-det revive generation
     int*   d_relink_dbg_ = nullptr;  // [0]=births [1]=revived [2]=bridge_attempts [3]=bridge_accepts
 
     // Phase-4 bidirectional foot-bridge relink (Kalman-free; default off → no work).
@@ -3473,6 +3693,7 @@ private:
     float bridge_h_lo_          = 0.0f; // scale gate: min ema_lost/ema_cand ratio
     float bridge_h_hi_          = 0.0f; // scale gate: max ratio (<=0 disables the gate)
     float bridge_dir_bonus_     = 0.0f; // directional consistency relaxation multiplier
+    float bridge_app_veto_      = -1.0f; // appearance cosine veto floor (<=-1 off)
     float occ_gate_cover_       = 0.0f; // gap-occupancy veto: min occ_cover (0=off)
     int   occ_gap_min_          = 30;   // occ gates apply only to gaps >= this (short-gap occ is noise)
     float occ_expand_px_        = 0.0f; // tiered expansion: looser bridge_px when occ high (0=off)
@@ -3596,6 +3817,9 @@ private:
     float* d_s_inv_;
     float* d_homography_;
     int *d_age_, *d_classes_, *d_track_ids_;
+    uint64_t* d_track_uid_     = nullptr;  // [max_objs] per-slot immutable uid (never reused)
+    uint64_t* d_track_uid_ctr_ = nullptr;  // [1] monotonic uid counter
+    int* d_generation_         = nullptr;  // [max_objs] per-slot generation (bumps on revive/handover)
     // Auction pending buffers
     int*      d_pending_det_ = nullptr;
     uint64_t* d_pending_bid_ = nullptr;
@@ -3626,6 +3850,8 @@ private:
     std::vector<uint8_t>  h_active_raw_;
     std::vector<uint8_t>  h_has_clean_embedding_;
     std::vector<int>      h_age_, h_classes_, h_track_ids_;
+    std::vector<uint64_t> h_track_uid_;
+    std::vector<int>      h_generation_;
     std::vector<int>      h_state_, h_hit_streak_, h_confirm_streak_required_;
     std::vector<float>    h_score_sum_;
 };
@@ -3658,13 +3884,15 @@ void GPUByteTracker::set_relink_params(bool enabled, int bank_cap, float sim_thr
                                        float bridge_h_lo, float bridge_h_hi,
                                        float bridge_dir_bonus,
                                        float occ_gate_cover, int occ_gap_min,
-                                       float occ_expand_px, float occ_expand_cover) {
+                                       float occ_expand_px, float occ_expand_cover,
+                                       float bridge_app_veto) {
     pimpl_->set_relink_params(enabled, bank_cap, sim_thresh, cheb_lambda, spatial_gate, max_age,
                               bidirectional, bridge_px, bridge_at, bridge_min_lost, bridge_ttl,
                               bridge_max_speed, bridge_person_height, bridge_fps, bridge_margin,
                               bridge_spatial_gate, bridge_anchor, bridge_anchor_rate,
                               bridge_h_lo, bridge_h_hi, bridge_dir_bonus,
-                              occ_gate_cover, occ_gap_min, occ_expand_px, occ_expand_cover);
+                              occ_gate_cover, occ_gap_min, occ_expand_px, occ_expand_cover,
+                              bridge_app_veto);
 }
 std::vector<int> GPUByteTracker::get_relink_debug() { return pimpl_->get_relink_debug(); }
 void GPUByteTracker::set_oao_params(float tau, float contest_thresh, float score_w, int occ_mode,
@@ -3723,6 +3951,12 @@ void GPUByteTracker::update_into(
         b, s, c, n, stream,
         out_boxes, out_scores, out_ids, out_classes, out_det_idx, out_count,
         e, g, l, m, out_capacity);
+}
+int GPUByteTracker::compact_output_to_host(
+    float* host_boxes, float* host_scores,
+    int* host_ids, int* host_classes,
+    int capacity, cudaStream_t stream) {
+    return pimpl_->compact_output_to_host(host_boxes, host_scores, host_ids, host_classes, capacity, stream);
 }
 std::vector<TrackResult> GPUByteTracker::update(float* b, float* s, int* c, int n, cudaStream_t stream, float* e, float* g, float l, float m) {
     return pimpl_->update(b, s, c, n, stream, e, g, l, m);

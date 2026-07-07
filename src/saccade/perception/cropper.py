@@ -152,12 +152,9 @@ class ZeroCopyCropper:
                 dtype=torch.float32,
             )
 
-            # C++ process_gpu expects HWC RGB interleaved float32 [0, 1] on GPU for input.
-            # If frame_tensor is [1, 3, H, W], we permute it.
-            hwc_frame = frame_tensor.squeeze(0).permute(1, 2, 0).contiguous()
-
+            # The native crop kernel reads CHW float32 [0, 1] input.
             self._cpp.process_gpu(
-                hwc_frame.data_ptr(),
+                frame_tensor.squeeze(0).contiguous().data_ptr(),
                 w,
                 h,
                 boxes.contiguous().data_ptr(),

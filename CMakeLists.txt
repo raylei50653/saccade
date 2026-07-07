@@ -10,6 +10,11 @@ set(CMAKE_CUDA_ARCHITECTURES "native")
 
 option(ENABLE_NATIVE_TESTS "Build native C++ tests" ON)
 option(ENABLE_NATIVE_COVERAGE "Enable coverage instrumentation for native C++ test targets" OFF)
+option(SACCADE_ENABLE_NVTX "Enable NVTX instrumentation for Nsight Systems profiling" ON)
+
+if(SACCADE_ENABLE_NVTX)
+    add_compile_definitions(SACCADE_ENABLE_NVTX)
+endif()
 
 # 1. 全局編譯配置
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -fvisibility=hidden -O3 -Wall -fno-lto")
@@ -32,6 +37,7 @@ endfunction()
 find_package(CUDAToolkit REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(PkgConfig REQUIRED)
+find_package(Threads REQUIRED)
 pkg_check_modules(GSTREAMER REQUIRED gstreamer-1.0 gstreamer-app-1.0 gstreamer-video-1.0)
 
 # 3. Python 基礎環境搜尋 (用於獲取 Pybind11 與 TensorRT 庫路徑)
@@ -154,6 +160,10 @@ add_library(saccade_tracking STATIC
     src/tracking/gmc.cpp
     src/tracking/gmc_kernel.cu
     src/tracking/pipeline.cpp
+    src/tracking/crop_pool.cpp
+    src/tracking/crop_ring_store.cpp
+    src/tracking/frame_buffer.cpp
+    src/tracking/reid_queue.cpp
     src/tracking/workbench.cpp
     src/tracking/quality_filter.cu
     src/tracking/copy_pad.cu
@@ -162,6 +172,9 @@ add_library(saccade_tracking STATIC
     src/tracking/multi_signal_birth_pool.cu
     src/tracking/seq_runner.cpp
     src/tracking/eval_pool.cpp
+    src/tracking/cheb_gr_online.cpp
+    src/tracking/cheb_gr_kreciprocal.cpp
+    src/tracking/dynamic_reid_controller.cpp
 )
 set_target_properties(saccade_tracking PROPERTIES CUDA_SEPARABLE_COMPILATION OFF)
 target_link_libraries(saccade_tracking
@@ -175,6 +188,7 @@ target_compile_definitions(saccade_tracking PRIVATE SACCADE_EXPORT_TRACKING)
 # 8. 定義 Media 模組 (Dynamic Library)
 add_library(saccade_media STATIC
     src/media/gst_client.cpp
+    src/media/buffer_pool.cpp
 )
 target_link_libraries(saccade_media
     ${GSTREAMER_LIBRARIES}
@@ -274,6 +288,13 @@ target_link_libraries(saccade_eval_ext PRIVATE
 )
 target_compile_options(saccade_eval_ext PRIVATE -fno-lto)
 
+pybind11_add_module(saccade_cheb_gr_online_ext NO_EXTRAS src/tracking/cheb_gr_online_python.cpp)
+target_link_libraries(saccade_cheb_gr_online_ext PRIVATE
+    saccade_tracking
+    CUDA::cudart
+)
+target_compile_options(saccade_cheb_gr_online_ext PRIVATE -fno-lto)
+
 pybind11_add_module(saccade_perception_ext NO_EXTRAS src/perception/perception_python.cpp)
 target_link_libraries(saccade_perception_ext PRIVATE
     saccade_perception
@@ -286,6 +307,7 @@ set_target_properties(
     saccade_tracking_ext
     saccade_eval_ext
     saccade_perception_ext
+    saccade_cheb_gr_online_ext
     PROPERTIES
         BUILD_RPATH "${SACCADE_BUILD_RPATH}"
         INSTALL_RPATH "${SACCADE_INSTALL_RPATH}"
@@ -351,6 +373,10 @@ if(ENABLE_NATIVE_TESTS)
         tests/native/test_mamba_scan.cpp)
     add_tracking_native_test(saccade_gmc_hanning_guard_test
         tests/native/test_gmc_hanning_guard.cpp)
+    add_tracking_native_test(saccade_crop_pool_test
+        tests/native/test_crop_pool.cpp)
+    add_tracking_native_test(saccade_crop_ring_store_test
+        tests/native/test_crop_ring_store.cpp)
 
     # fpn_reid launchers live in fpn_reid_cuda.cu, which is NOT part of
     # saccade_tracking (it ships as a standalone torch extension). Compile
@@ -367,4 +393,25 @@ if(ENABLE_NATIVE_TESTS)
         CUDA_SEPARABLE_COMPILATION ON)
     enable_native_coverage(saccade_fpn_reid_launchers_test)
     add_test(NAME saccade_fpn_reid_launchers_test COMMAND saccade_fpn_reid_launchers_test)
+
+    add_tracking_native_test(saccade_cheb_gr_online_test
+        tests/native/test_cheb_gr_online.cpp)
+
+    # ── media buffer-pool race tests (S1-S9 regression) ─────────────────────
+    # BufferPool is GStreamer-independent; the test links saccade_media
+    # (which contains buffer_pool.cpp) + Threads for the concurrent-acquire
+    # scenarios. No GStreamer runtime needed.
+    add_executable(saccade_gst_buffer_pool_test
+        tests/native/test_gst_buffer_pool.cpp
+    )
+    target_include_directories(saccade_gst_buffer_pool_test PRIVATE
+        ${PROJECT_SOURCE_DIR}/include
+    )
+    target_link_libraries(saccade_gst_buffer_pool_test PRIVATE
+        saccade_media
+        CUDA::cudart
+        Threads::Threads
+    )
+    enable_native_coverage(saccade_gst_buffer_pool_test)
+    add_test(NAME saccade_gst_buffer_pool_test COMMAND saccade_gst_buffer_pool_test)
 endif()

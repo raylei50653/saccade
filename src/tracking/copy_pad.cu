@@ -34,6 +34,22 @@ __global__ void copy_pad_detections_kernel(
     }
 }
 
+__global__ void scatter_copy_rows_kernel(
+    const float* __restrict__ src,
+    float* const* __restrict__ dst_ptrs,
+    int n_rows,
+    int elem)
+{
+    long long i = static_cast<long long>(blockIdx.x) * blockDim.x + threadIdx.x;
+    const long long total = static_cast<long long>(n_rows) * elem;
+    const long long step = static_cast<long long>(gridDim.x) * blockDim.x;
+    for (; i < total; i += step) {
+        const int r = static_cast<int>(i / elem);
+        float* dst = dst_ptrs[r];
+        if (dst != nullptr) dst[i % elem] = src[i];
+    }
+}
+
 __global__ void interleaved_to_split_kernel(
     const float* det_6d,
     int n,
@@ -73,6 +89,22 @@ void copy_pad_detections(
         n_copy,
         dst_boxes, dst_scores, dst_classes,
         padded_n);
+}
+
+void scatter_copy_rows(
+    const float* src,
+    float* const* dst_ptrs,
+    int n_rows,
+    int elem,
+    cudaStream_t stream)
+{
+    if (n_rows <= 0 || elem <= 0) return;
+    const long long total = static_cast<long long>(n_rows) * elem;
+    const int THREADS = 256;
+    const long long want = (total + THREADS - 1) / THREADS;
+    const int BLOCKS = static_cast<int>(want < 4096 ? want : 4096);
+    scatter_copy_rows_kernel<<<BLOCKS, THREADS, 0, stream>>>(
+        src, dst_ptrs, n_rows, elem);
 }
 
 void interleaved_to_split(

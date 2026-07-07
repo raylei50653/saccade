@@ -142,10 +142,8 @@ class SelectiveScanFn(torch.autograd.Function):
 # ---------------------------------------------------------------------------
 
 _STRIDES = (8, 16, 32)
-_IN_CHANNELS = (128, 256, 512)
 _NUM_CLASSES = 80
 _REG_MAX = 1
-_IMG_SIZE = 640
 
 
 class ONNXMambaHead(nn.Module):
@@ -187,15 +185,22 @@ def _patch_selective_scan(module: nn.Module) -> None:
     )
 
 
-def export() -> None:
+def export(
+    yolo_pt_path: str = "models/yolo/yolo26m.pt",
+    teacher_ckpt: str = "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
+    mamba_ckpt: str = "runs/mamba_gt_yolo26m_v14replica_t3_t1_gpu_decode/best_recall.ckpt",
+    img_size: int = 640,
+    in_channels: tuple[int, int, int] = (256, 512, 512),
+    output: str = "models/yolo/mamba_head_26m.onnx",
+) -> None:
     device = torch.device("cuda")
 
-    print("Building detector (v14 mamba head)...")
+    print("Building detector...")
     detector = build_mamba_gated_detector(
-        yolo_pt_path=str(project_root / "models/yolo/yolo26s.pt"),
-        teacher_ckpt=str(project_root / "runs/gated_det_v1/best.ckpt"),
-        mamba_ckpt=str(project_root / "runs/mamba_gt_vgt_mamba_v14/best.ckpt"),
-        img_size=_IMG_SIZE,
+        yolo_pt_path=str(project_root / yolo_pt_path),
+        teacher_ckpt=str(project_root / teacher_ckpt),
+        mamba_ckpt=str(project_root / mamba_ckpt),
+        img_size=img_size,
         device=device,
         emb_dim=0,
     )
@@ -206,17 +211,18 @@ def export() -> None:
     wrapper = ONNXMambaHead(head).eval()
 
     # Dummy FPN features matching backbone output shapes
-    H, W = _IMG_SIZE, _IMG_SIZE
-    p3_dummy = torch.zeros(1, 128, H // 8, W // 8, device=device)
-    p4_dummy = torch.zeros(1, 256, H // 16, W // 16, device=device)
-    p5_dummy = torch.zeros(1, 512, H // 32, W // 32, device=device)
+    H, W = img_size, img_size
+    c3, c4, c5 = in_channels
+    p3_dummy = torch.zeros(1, c3, H // 8, W // 8, device=device)
+    p4_dummy = torch.zeros(1, c4, H // 16, W // 16, device=device)
+    p5_dummy = torch.zeros(1, c5, H // 32, W // 32, device=device)
 
     print("Warm-up forward...")
     with torch.no_grad():
         wrapper(p3_dummy, p4_dummy, p5_dummy)
     torch.cuda.synchronize()
 
-    output_path = project_root / "models/yolo/mamba_head.onnx"
+    output_path = project_root / output
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     print("Exporting to ONNX...")
@@ -254,14 +260,69 @@ def export() -> None:
 
     print(f"ONNX saved: {output_path}")
 
+    eng_p = str(output_path).replace(".onnx", ".engine")
     print("\nNext — build TRT engine:")
     print(
-        f"trtexec --onnx={output_path} \\\n"
-        f"  --plugins=build/libsaccade_scan_plugin.so \\\n"
-        f"  --saveEngine=models/yolo/mamba_head.engine \\\n"
-        f"  --fp16"
+        f"uv run scripts/model/build_mamba_head_trt.py \\\n"
+        f"  --onnx={output_path} \\\n"
+        f"  --engine={eng_p} \\\n"
+        f"  --p3-channels={c3} --p4-channels={c4} --p5-channels={c5}"
     )
 
 
 if __name__ == "__main__":
-    export()
+    import argparse
+
+    _DEFAULT_IN = (256, 512, 512)
+
+    parser = argparse.ArgumentParser(
+        description="Export MambaHead to ONNX with SelectiveScan plugin"
+    )
+    parser.add_argument(
+        "--yolo-pt", default="models/yolo/yolo26m.pt", help="YOLO .pt weights path"
+    )
+    parser.add_argument(
+        "--teacher-ckpt",
+        default="runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
+        help="Teacher checkpoint path",
+    )
+    parser.add_argument(
+        "--mamba-ckpt",
+        default="runs/mamba_gt_yolo26m_v14replica_t3_t1_gpu_decode/best_recall.ckpt",
+        help="Mamba checkpoint path",
+    )
+    parser.add_argument("--img-size", type=int, default=640)
+    parser.add_argument(
+        "--in-channels",
+        type=int,
+        nargs=3,
+        default=list(_DEFAULT_IN),
+        help="FPN in_channels (P3 P4 P5)",
+    )
+    parser.add_argument(
+        "--output", default="models/yolo/mamba_head_26m.onnx", help="Output ONNX path"
+    )
+    parser.add_argument(
+        "--auto-channels",
+        action="store_true",
+        help="Auto-detect in_channels from mamba checkpoint mamba_args",
+    )
+    args = parser.parse_args()
+
+    in_channels = tuple(args.in_channels)  # type: ignore[arg-type]
+    if args.auto_channels:
+        ckpt = torch.load(
+            str(project_root / args.mamba_ckpt), map_location="cpu", weights_only=False
+        )
+        ma = ckpt.get("mamba_args", {})
+        in_channels = tuple(ma.get("in_channels", _DEFAULT_IN))
+        print(f"Auto-detected in_channels from checkpoint: {in_channels}")
+
+    export(
+        yolo_pt_path=args.yolo_pt,
+        teacher_ckpt=args.teacher_ckpt,
+        mamba_ckpt=args.mamba_ckpt,
+        img_size=args.img_size,
+        in_channels=in_channels,
+        output=args.output,
+    )

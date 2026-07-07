@@ -1,0 +1,50 @@
+# MobileNetV4 visclean ReID, EXTRACT-ONLY: run the appearance extractor for the
+# online handover / crop-ring consumers WITHOUT feeding embeddings into the
+# tracker. Pair with --reid-mode extract.
+#
+# Why this exists: reid_mnv4_mainline.yaml integrates ReID into the tracker
+# (appearance_bank pushes reference features via set_reference_features_from_bank,
+# relink_enabled runs the C++ archive/revive kernels). Both change the tracker
+# output away from the reid-off base, which shrinks the handover's event space
+# (relink already reconnects the identities the handover would claim). This
+# config disables all of that: the tracker runs identically to --reid-mode off,
+# so the online handover sees the SAME track fragmentation as the offline
+# reid-off run — the base the offline +0.7 IDF1 handover lever lives on.
+#
+# Load with:
+#   scripts/eval/mot17.py --preset mamba_whole_graph_m --detector SDP \
+#       --module-reid configs/modules/reid_mnv4_extract.yaml --reid-mode extract \
+#       --module-lifecycle configs/modules/online_ho_mnv4_evfifo_live.yaml
+#
+# NOTE: --reid-mode extract MUST be passed on the CLI (the preset sets off).
+
+reid_model: mobilenetv4_reid
+reid_engine_path: models/embedding/mobilenetv4_reid_visclean_224.engine
+
+# Every-frame extraction, unlimited budget: the handover head/bank need a
+# same-frame embedding for every confirmed track.
+reid_budget: 0
+reid_interval: 1
+need_reid: false
+async_reid: false
+
+# Extract-only: none of the tracker-integrating machinery. With --reid-mode
+# extract, use_tracker_reid is already False (embeddings never reach
+# association); the two knobs below are the remaining tracker feeds and must be
+# off for base parity with reid-off.
+appearance_bank: false   # no set_reference_features_from_bank into the tracker
+relink_enabled: false    # no C++ archive/revive relink (preset bridge relink stays)
+pipeline_relink: false   # semantic relinker write-thread not used
+
+# Assist branch can never fire (also blocked by use_tracker_reid=False); kept
+# explicit for clarity.
+reid_cos_threshold: 1.1
+
+reid_crop_mode: tight
+reid_crop_padding: 0.0
+reid_crop_layout: full
+
+# Visclean parity: the front-occlusion gate the handover uses to mark crops
+# clean (head/bank + crop-ring clean flag). Independent of the appearance bank.
+appearance_occlusion_gate: true
+appearance_occlusion_cov: 0.4

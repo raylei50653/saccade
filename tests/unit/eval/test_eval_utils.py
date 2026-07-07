@@ -1,6 +1,6 @@
 import pytest
 import torch
-from scripts.eval.mot17_args import build_parser
+from scripts.eval.mot17_args import build_parser, configure_runtime_env
 from saccade.perception.eval.config import parse_eval_config
 
 from saccade.perception.eval.utils import (
@@ -240,6 +240,59 @@ def test_mot17_parser_accepts_double_buffer_flags():
     assert args.detect_barrier == "event"
 
 
+def test_mot17_runtime_env_defaults_to_gpu_decode_domain():
+    args = build_parser().parse_args([])
+    env = {
+        "SACCADE_GPU_DECODE": "0",
+        "SACCADE_DETECT_BARRIER": "event",
+        "SACCADE_DOUBLE_BUFFER": "1",
+    }
+
+    configure_runtime_env(args, env)
+
+    assert env["SACCADE_GPU_DECODE"] == "1"
+    assert env["SACCADE_DETECT_BARRIER"] == "full"
+    assert env["SACCADE_DOUBLE_BUFFER"] == "0"
+
+
+def test_mot17_runtime_env_no_gpu_decode_selects_cpu_decode():
+    args = build_parser().parse_args(["--no-gpu-decode"])
+    env = {"SACCADE_GPU_DECODE": "1"}
+
+    configure_runtime_env(args, env)
+
+    assert env["SACCADE_GPU_DECODE"] == "0"
+    assert env["SACCADE_DETECT_BARRIER"] == "full"
+
+
+def test_mot17_runtime_env_gpu_decode_requires_explicit_opt_in():
+    args = build_parser().parse_args(["--gpu-decode"])
+    env = {}
+
+    configure_runtime_env(args, env)
+
+    assert env["SACCADE_GPU_DECODE"] == "1"
+    assert env["SACCADE_DETECT_BARRIER"] == "full"
+
+
+def test_mot17_runtime_env_keeps_explicit_event_opt_in():
+    args = build_parser().parse_args(["--detect-barrier", "event"])
+    env = {}
+
+    configure_runtime_env(args, env)
+
+    assert env["SACCADE_GPU_DECODE"] == "1"
+    assert env["SACCADE_DETECT_BARRIER"] == "event"
+    assert env["SACCADE_DOUBLE_BUFFER"] == "0"
+
+
+def test_mot17_runtime_env_double_buffer_requires_event():
+    args = build_parser().parse_args(["--double-buffer", "--detect-barrier", "full"])
+
+    with pytest.raises(ValueError, match="double-buffer"):
+        configure_runtime_env(args, {})
+
+
 def test_mot17_parser_accepts_association_energy_flags():
     args = build_parser().parse_args(
         [
@@ -283,6 +336,27 @@ def test_parse_eval_config_defaults_to_fixed_interval_reid(tmp_path):
     assert cfg.birth_quality_gate is False
     assert cfg.birth_min_quality == 0.0
     assert cfg.birth_quality_score_bias == 0.15
+
+
+def test_parse_eval_config_accepts_mobilenetv4_reid_and_occlusion_gate(tmp_path):
+    cfg = parse_eval_config(
+        output=str(tmp_path),
+        data_root="datasets/MOT17",
+        split="train",
+        sequences="MOT17-04-SDP",
+        conf_threshold=0.05,
+        reid_mode="semantic",
+        reid_model="mobilenetv4_reid",
+        profile_stages=False,
+        kwargs={
+            "appearance_occlusion_gate": True,
+            "appearance_occlusion_cov": 0.4,
+        },
+    )
+
+    assert cfg.crop_hw == (224, 224)
+    assert cfg.appearance_occlusion_gate is True
+    assert cfg.appearance_occlusion_cov == pytest.approx(0.4)
 
 
 def test_parse_eval_config_preserves_sahi_tiling(tmp_path):

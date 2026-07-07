@@ -3,6 +3,10 @@
 #include "saccade/common.hpp"
 #include "perception/feature_extractor.hpp"
 #include "perception/preprocessor.hpp"
+#include "tracking/crop_pool.hpp"
+#include "tracking/crop_ring_store.hpp"
+#include "tracking/reid_crop_store.hpp"
+#include "tracking/reid_queue.hpp"
 #include <cuda_runtime.h>
 #include <cstdint>
 
@@ -20,7 +24,7 @@ namespace saccade {
  *      pre-allocated scratch workspace.
  *   3. Optionally call extract_reid() on the filtered boxes.
  */
-class SACCADE_TRACKING_API PerceptionPipeline {
+class SACCADE_TRACKING_API PerceptionPipeline : public ReidCropStore {
 public:
     struct ReIDProfileStats {
         double crop_ms = 0.0;
@@ -43,6 +47,7 @@ public:
         double native_gather_compact3_ms = 0.0;
         double native_copy_suspect_ms = 0.0;
         double native_filter_count_sync_ms = 0.0;
+        double native_nms_count_sync_ms = 0.0;
         double native_small_nms_ms = 0.0;
         double native_suspect_penalty_ms = 0.0;
         double native_large_sort_nms_ms = 0.0;
@@ -251,6 +256,10 @@ public:
     /**
      * @brief Crop boxes from frame_ptr and extract ReID embeddings.
      *
+     * Sync fallback: crop_into_pool → extract_from_pool on the same stream.
+     * Kept for backwards compatibility with callers that don't need the
+     * async decoupled path.
+     *
      * @param frame_ptr   [3, H, W] float32 GPU (CHW, [0,1])
      * @param frame_h     Frame height
      * @param frame_w     Frame width
@@ -265,6 +274,155 @@ public:
         float* out_embeds,
         cudaStream_t stream
     );
+
+    /**
+     * @brief Crop boxes from frame_ptr into the CropPool.
+     *
+     * Runs the fused batched crop+resize kernel on @p stream and writes
+     * [n_boxes, 3, crop_h, crop_w] float32 into a contiguous run of pool
+     * slots.  Returns the starting slot index via @p out_slot, or -1 if
+     * the pool cannot satisfy the request.
+     *
+     * After this call, the frame buffer is no longer needed by the ReID
+     * path — the crops live in the pool until extract_from_pool consumes
+     * them.  In the async path (Phase 2), the caller may release the frame
+     * buffer immediately after this returns (using a crop_done event).
+     *
+     * @param frame_ptr   [3, H, W] float32 GPU (CHW, [0,1])
+     * @param frame_h     Frame height
+     * @param frame_w     Frame width
+     * @param boxes_ptr   [N, 4] float32 GPU — boxes to crop
+     * @param n_boxes     Number of boxes
+     * @param out_slot    Output: starting slot index in the pool (-1 on failure)
+     * @param stream      CUDA stream
+     */
+    void crop_into_pool(
+        const float* frame_ptr, int frame_h, int frame_w,
+        const float* boxes_ptr, int n_boxes,
+        int* out_slot,
+        cudaStream_t stream
+    );
+
+    /**
+     * @brief Extract ReID embeddings from crops already in the pool.
+     *
+     * Reads [n_boxes, 3, crop_h, crop_w] from pool slots starting at
+     * @p slot and runs TensorRT inference on @p stream, writing
+     * [n_boxes, feat_dim] to @p out_embeds.  Releases the slots back to
+     * the pool after extraction.
+     *
+     * @param slot        Starting slot index (from crop_into_pool)
+     * @param n_boxes     Number of boxes (must match crop_into_pool)
+     * @param out_embeds  [N, feat_dim] float32 GPU — caller allocates
+     * @param stream      CUDA stream
+     */
+    void extract_from_pool(
+        int slot, int n_boxes,
+        float* out_embeds,
+        cudaStream_t stream
+    );
+
+    /**
+     * @brief Async crop: crop boxes into pool on crop_stream, record event.
+     *
+     * Same as crop_into_pool but runs on the internal crop_stream_ and
+     * records a CUDA event that is signaled when the crop kernel completes.
+     * The caller can release the frame buffer after this event.
+     *
+     * @param frame_ptr   [3, H, W] float32 GPU (CHW, [0,1])
+     * @param frame_h     Frame height
+     * @param frame_w     Frame width
+     * @param boxes_ptr   [N, 4] float32 GPU — boxes to crop
+     * @param n_boxes     Number of boxes
+     * @param out_slot    Output: starting slot index (-1 on failure)
+     * @param out_event   Output: CUDA event signaled when crop completes
+     *                    (caller must not destroy until after extract_batch_from_pool)
+     */
+    void crop_into_pool_async(
+        const float* frame_ptr, int frame_h, int frame_w,
+        const float* boxes_ptr, int n_boxes,
+        int* out_slot,
+        cudaEvent_t* out_event
+    );
+
+    /**
+     * @brief Batch extract: wait on crop events, gather to batch buffer, infer.
+     *
+     * For each job: waits on job.crop_ready (on reid_stream_), copies crops
+     * from pool slots to a contiguous batch buffer, runs TensorRT inference,
+     * and releases the pool slots.  Embeddings are written contiguously to
+     * @p out_embeds (job i's embeddings at row offset sum of prior n_crops).
+     *
+     * @param jobs        Array of ReIDCropJob (n_jobs entries)
+     * @param n_jobs      Number of jobs in the batch
+     * @param out_embeds  [total_crops, feat_dim] float32 GPU — caller allocates
+     * @param out_results Output array of ReIDResult (n_jobs entries, caller allocates)
+     * @return Total number of crops extracted, or -1 on failure.
+     */
+    int extract_batch_from_pool(
+        const ReIDCropJob* jobs, int n_jobs,
+        float* out_embeds,
+        ReIDResult* out_results
+    );
+
+    // ── Borderline re-query crop ring (ReidCropStore) ──────────────────────
+    /**
+     * @brief Enable the per-track_uid recent-crop ring backing re-query.
+     *
+     * @param capacity Total GPU crop slots (bounds memory; ~max_tracks*depth).
+     * @param depth    Recent-tail crops retained per track_uid.
+     */
+    void enable_crop_ring(int capacity, int depth);
+
+    /// Whether the crop ring is enabled.
+    bool crop_ring_enabled() const { return crop_ring_ != nullptr; }
+
+    /**
+     * @brief Crop @p n_boxes from the frame and stash them by track_uid.
+     *
+     * Runs the crop kernel on @p stream into a transient scratch, then copies
+     * each crop into its uid's ring slot. Called after association, when each
+     * confirmed box has a never-reused ``track_uid`` — the live analogue of the
+     * offline recent-tail bank harvest. No-op if the ring is disabled.
+     *
+     * @param uids    [n_boxes] never-reused track uids (one per box)
+     * @param frames  [n_boxes] frame ids (metadata)
+     * @param clean   [n_boxes] per-box clean flag, or nullptr (all clean)
+     */
+    void stash_crops(
+        const uint64_t* uids, const int* frames,
+        const float* frame_ptr, int frame_h, int frame_w,
+        const float* boxes_ptr, int n_boxes,
+        const bool* clean,
+        cudaStream_t stream);
+
+    // ReidCropStore interface (called by SemanticRelinkerCpp at a flippable
+    // handover decision to densify the top candidates).
+    int embed_dim() const override;
+    int ring_depth() const override;
+    int requery_extract(const uint64_t* uids, int n_uids,
+                        float* out_embeds, int* out_counts) override;
+    void evict(uint64_t uid) override;
+
+    /**
+     * @brief Gather one raw crop per (uid, frame) pair into @p batch.
+     *
+     * Used at handover finalize: the planner selects (track_id, frame) crops,
+     * the uid→frame pairs are gathered here, then TRT runs on the batch.
+     * @return Total crop rows written (≤ @p n).
+     */
+    int gather_crops_framed(const uint64_t* uids, const int* frames, int n,
+                            float* batch, cudaStream_t stream,
+                            bool clean_only = false);
+
+    /// True if the ring holds a crop for (uid, frame), optionally clean-only.
+    bool has_crop(uint64_t uid, int frame, bool clean_only = false) const;
+
+    /// Get the internal crop stream (for event-based frame release ordering).
+    cudaStream_t crop_stream() const { return crop_stream_; }
+
+    /// Get the internal reid stream (for event-based result synchronization).
+    cudaStream_t reid_stream() const { return reid_stream_; }
 
     int get_embed_dim() const;
     void set_reid_profiling_enabled(bool enabled);
@@ -293,9 +451,30 @@ private:
     int*      d_private_nms_count_    = nullptr;
     int*      d_private_added_count_  = nullptr;
     bool*     d_private_baseline_mask_ = nullptr;
-    float*    d_crop_buf_             = nullptr;
+    CropPool* crop_pool_              = nullptr;  // owned by PerceptionPipeline
+    int       crop_pool_capacity_     = 0;
     int       scratch_capacity_       = 0;
-    int       crop_buf_capacity_      = 0;
+
+    // Borderline re-query crop ring (owned; nullptr when disabled).
+    CropRingStore* crop_ring_         = nullptr;
+    float*    d_stash_scratch_        = nullptr;  // [n,3,h,w] transient crop out
+    int       stash_scratch_n_        = 0;        // rows d_stash_scratch_ holds
+    float*    d_requery_crops_        = nullptr;  // gathered crops for extract
+    float*    d_requery_embeds_       = nullptr;  // device embeddings for D2H
+    int       requery_scratch_n_      = 0;        // rows the requery scratch holds
+    // Dedicated stream: re-query runs on the bg handover thread and must not
+    // race the ReID worker's reid_stream_.
+    cudaStream_t requery_stream_      = nullptr;
+    void ensure_stash_scratch(int n_boxes);
+    void ensure_requery_scratch(int n_rows);
+
+    // Phase 2: async streams + batch buffer
+    cudaStream_t crop_stream_         = nullptr;
+    cudaStream_t reid_stream_         = nullptr;
+    float*       d_batch_buf_         = nullptr;  // [max_batch, 3, crop_h, crop_w] GPU
+    int          batch_buf_capacity_  = 0;        // max crops in batch buffer
+    int          batch_buf_crop_h_    = 0;
+    int          batch_buf_crop_w_    = 0;
     // M1: GPU compaction scratch (NMS in-place scatter needs temp)
     float*    d_compact_boxes_        = nullptr;
     float*    d_compact_scores_       = nullptr;
@@ -308,7 +487,7 @@ private:
     size_t    cub_sort_tmp_bytes_     = 0;
 
     void ensure_scratch(int n_dets, cudaStream_t stream);
-    void ensure_crop_buf(int n_boxes);
+    void ensure_crop_pool();
     bool reid_profiling_enabled_ = false;
     ReIDProfileStats last_reid_profile_stats_{};
     bool postprocess_profiling_enabled_ = false;

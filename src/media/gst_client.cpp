@@ -1,34 +1,27 @@
 #include "media/gst_client.hpp"
+#include "media/buffer_pool.hpp"
 #include <gst/gst.h>
 #include <gst/app/gstappsink.h>
 #include <cuda_runtime.h>
 #include <iostream>
 #include <mutex>
-#include <vector>
-#include <atomic>
 
 namespace saccade {
 
-class GstClient::Impl {
+class GstClient::Impl : public IMediaClient {
 public:
-    static constexpr size_t POOL_SIZE = 5;
+    explicit Impl(const std::string& pipeline_str)
+        : pipeline_str_(pipeline_str), pool_(std::make_unique<BufferPool>(0)) {}
 
-    Impl(const std::string& pipeline_str) : pipeline_str_(pipeline_str) {
-        for (size_t i = 0; i < POOL_SIZE; ++i) {
-            cudaStreamCreate(&streams_[i]);
-            buffer_states_[i].store((int)BufferStatus::EMPTY);
-        }
-    }
-
-    ~Impl() {
+    ~Impl() override {
+        // 先停止 GStreamer pipeline 並等 callback 結束 (修 S5/S9):
+        // release() 觸發 GST_STATE_NULL,但 appsink streaming thread 可能仍在
+        // on_new_sample 中。持 cb_mutex_ 確保 in-flight callback 結束後才銷毀 pool。
         release();
-        std::lock_guard<std::mutex> lock(pool_mutex_);
-        for (void* ptr : d_buffers_) {
-            if (ptr) cudaFree(ptr);
-        }
-        for (size_t i = 0; i < POOL_SIZE; ++i) {
-            if (streams_[i]) cudaStreamDestroy(streams_[i]);
-        }
+        std::lock_guard<std::mutex> cb_lock(cb_mutex_);
+        // reset() 在此觸發 ~BufferPool (sync 全部 stream 再 free,修 S3),
+        // 並避免自動解構式再次銷毀 pool。
+        pool_.reset();
     }
 
     bool connect() {
@@ -47,7 +40,7 @@ public:
         gst_object_unref(sink);
 
         gst_element_set_state(pipeline_, GST_STATE_PLAYING);
-        std::cout << "🚀 [GstClient] 5-Stream State-Machine Enabled." << std::endl;
+        std::cout << "🚀 [GstClient] 5-Stream State-Machine Enabled (race-fixed)." << std::endl;
         return true;
     }
 
@@ -64,24 +57,18 @@ public:
         frame_cb_ = cb;
     }
 
-    // 當 Python 拿到影格並開始分析時調用
-    void markProcessing(int index) {
-        if (index >= 0 && index < (int)POOL_SIZE) {
-            buffer_states_[index].store((int)BufferStatus::PROCESSING);
-        }
+    // IMediaClient — 由 Python FrameData.mark_processing / release 呼叫
+    void markProcessing(int index) override {
+        // READY → PROCESSING (CAS);失敗代表狀態不符契約,忽略。
+        pool_->mark_processing(index);
     }
 
-    // 當 Python 完成處理（GC 或手動）時調用
-    void releaseBuffer(int index) {
-        if (index >= 0 && index < (int)POOL_SIZE) {
-            buffer_states_[index].store((int)BufferStatus::EMPTY);
-        }
+    void releaseBuffer(int index) override {
+        pool_->release(index);
     }
 
-    void syncBuffer(int index) {
-        if (index >= 0 && index < (int)POOL_SIZE) {
-            cudaStreamSynchronize(streams_[index]);
-        }
+    void syncBuffer(int index) override {
+        pool_->sync_slot(index);
     }
 
 private:
@@ -103,49 +90,31 @@ private:
 
         GstMapInfo map;
         if (gst_buffer_map(buffer, &map, GST_MAP_READ)) {
-            self->ensureBufferPool(map.size);
-            
-            // 找出下一個可用的 EMPTY Buffer
-            int target_idx = -1;
-            for (size_t i = 0; i < POOL_SIZE; ++i) {
-                size_t check_idx = (self->write_idx_ + i) % POOL_SIZE;
-                if (self->buffer_states_[check_idx].load() == (int)BufferStatus::EMPTY) {
-                    target_idx = (int)check_idx;
-                    break;
-                }
-            }
-
-            if (target_idx == -1) {
-                // 所有緩衝區都在 PROCESSING 或 WRITING，執行 Drop Frame
-                // 這對即時系統非常重要，避免卡住解碼端
+            // 原子取得 EMPTY 槽 (CAS EMPTY→WRITING),不足空間時只成長該槽 (修 S2/S6/S7)。
+            int target_idx = self->pool_->acquire_empty_slot(map.size);
+            if (target_idx < 0) {
+                // 所有緩衝區都在 PROCESSING/READY/WRITING → drop frame。
+                // 即時系統避免阻塞解碼端。
                 gst_buffer_unmap(buffer, &map);
                 gst_sample_unref(sample);
                 return GST_FLOW_OK;
             }
 
-            // 更新寫入索引
-            self->write_idx_ = (target_idx + 1) % POOL_SIZE;
-
-            // 狀態變更：EMPTY -> WRITING
-            self->buffer_states_[target_idx].store((int)BufferStatus::WRITING);
-
-            void* target_ptr = self->d_buffers_[target_idx];
-            cudaMemcpyAsync(target_ptr, map.data, map.size, cudaMemcpyHostToDevice, self->streams_[target_idx]);
-            
-            // 狀態變更：WRITING -> READY (搬運指令已排隊)
-            self->buffer_states_[target_idx].store((int)BufferStatus::READY);
+            // 排隊 H2D 並標記 READY (修 S1):consumer 讀取前必須 sync_slot。
+            self->pool_->submit_h2d(target_idx, map.data, map.size);
 
             FrameData data;
-            data.cuda_ptr = target_ptr;
-            data.stream_ptr = (void*)self->streams_[target_idx];
+            data.cuda_ptr = self->pool_->device_ptr(target_idx);
+            data.stream_ptr = (void*)self->pool_->stream(target_idx);
             data.buffer_index = target_idx;
             data.width = w;
             data.height = h;
             data.channels = 3;
             data.timestamp = GST_BUFFER_TIMESTAMP(buffer);
-            data.owner_ptr = (void*)self;
+            data.owner_ptr = (void*)static_cast<IMediaClient*>(self);
 
             {
+                // cb_mutex_ 保證 ~Impl 不會在 callback 進行中銷毀 pool (修 S9)。
                 std::lock_guard<std::mutex> lock(self->cb_mutex_);
                 if (self->frame_cb_) {
                     self->frame_cb_(data);
@@ -159,31 +128,11 @@ private:
         return GST_FLOW_OK;
     }
 
-    void ensureBufferPool(size_t size) {
-        if (gpu_buffer_size_ < size) {
-            std::lock_guard<std::mutex> lock(pool_mutex_);
-            for (void* ptr : d_buffers_) if (ptr) cudaFree(ptr);
-            d_buffers_.clear();
-            for (size_t i = 0; i < POOL_SIZE; ++i) {
-                void* ptr = nullptr;
-                cudaMalloc(&ptr, size);
-                d_buffers_.push_back(ptr);
-            }
-            gpu_buffer_size_ = size;
-        }
-    }
-
     std::string pipeline_str_;
     GstElement* pipeline_ = nullptr;
     FrameCallback frame_cb_;
     std::mutex cb_mutex_;
-    std::mutex pool_mutex_;
-    
-    std::vector<void*> d_buffers_;
-    std::atomic<int> buffer_states_[POOL_SIZE];
-    cudaStream_t streams_[POOL_SIZE];
-    std::atomic<size_t> write_idx_{0};
-    size_t gpu_buffer_size_ = 0;
+    std::unique_ptr<BufferPool> pool_;
 };
 
 GstClient::GstClient(const std::string& pipeline_str)
@@ -194,6 +143,7 @@ GstClient::~GstClient() = default;
 bool GstClient::connect() { return pimpl_->connect(); }
 void GstClient::release() { pimpl_->release(); }
 void GstClient::setFrameCallback(FrameCallback cb) { pimpl_->setFrameCallback(cb); }
+
 void GstClient::markProcessing(int index) { pimpl_->markProcessing(index); }
 void GstClient::releaseBuffer(int index) { pimpl_->releaseBuffer(index); }
 void GstClient::syncBuffer(int index) { pimpl_->syncBuffer(index); }

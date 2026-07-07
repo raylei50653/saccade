@@ -68,6 +68,29 @@ class LifecycleConfig:
     cheb_gr_max_fwd: int = 50
     cheb_gr_fuse_lambda: float = 0.3
     cheb_gr_engine: str = ""
+    cheb_gr_model: str = "siglip2_reid"
+    cheb_gr_online: bool = False
+    cheb_gr_online_decide_n: int = 5
+    cheb_gr_online_max_cost: float = 0.45
+    cheb_gr_online_min_head: int = 1
+    cheb_gr_online_margin: float = 0.0
+    cheb_gr_online_key_sim_min: float = 0.0
+    cheb_gr_online_key_sim_cost_floor: float = 0.0
+    cheb_gr_online_key_margin_min: float = 0.0
+    cheb_gr_online_center_dist_veto: float = 0.0
+    cheb_gr_online_pollution_veto: float = 0.0
+    cheb_gr_online_neighbor_iou_max: float = 0.0
+    cheb_gr_online_bank_mode: str = "spread"
+    cheb_gr_online_bank_n: int = 0
+    cheb_gr_online_log: bool = False
+    occ_audit: bool = False
+    occ_audit_tau: float = 0.45
+    occ_audit_ref_n: int = 5
+    occ_audit_min_ref: int = 2
+    occ_audit_crops: int = 3
+    occ_audit_window: int = 30
+    occ_audit_min_occ: int = 2
+    occ_audit_log: bool = False
     # Lost-track memory (ByteTrack track_buffer): frames a lost track survives in
     # the tracker (and stays available for association + bridge relink) before
     # removal. Per-seq fps-scaled when per_seq_adapt is on.
@@ -111,6 +134,9 @@ class LifecycleConfig:
     relink_bridge_occ_gap_min: int = 30
     relink_bridge_occ_expand_px: float = 0.0
     relink_bridge_occ_expand_cover: float = 0.9
+    # Appearance cosine veto on bridge candidates (ranking use of the ReID
+    # embedding; needs reid_mode=tracker). <= -1 disables (bit-exact).
+    relink_bridge_app_veto: float = -1.0
     # Duplicate suppression: remove near-duplicate detections within the same frame
     # (detector artifact where multiple overlapping boxes are produced for the same person)
     duplicate_suppression_enabled: bool = False
@@ -650,7 +676,9 @@ def add_lifecycle_args(parser: argparse.ArgumentParser) -> None:
         action=argparse.BooleanOptionalAction,
         default=False,
         help="Cheb-GR offline tracklet merge (path 2): stitch temporally-disjoint "
-        "tracklets by appearance to recover AssA. Re-crops img1 + siglip2_reid.",
+        "tracklets by appearance to recover AssA. Re-crops img1 with "
+        "--cheb-gr-model; uses native C++/CUDA crop + TRT extractor when "
+        "available; mobilenetv4_reid uses the visclean occlusion crop gate.",
     )
     grp.add_argument(
         "--cheb-gr-merge-max-cost",
@@ -733,6 +761,260 @@ def add_lifecycle_args(parser: argparse.ArgumentParser) -> None:
         "--cheb-gr-engine",
         default="",
         help="Optional ReID engine path for tracklet crops (default: siglip2_reid).",
+    )
+    grp.add_argument(
+        "--cheb-gr-model",
+        default="siglip2_reid",
+        help="TRTFeatureExtractor model_type for Cheb-GR tracklet embeddings "
+        "(e.g. mobilenetv4_reid).",
+    )
+    grp.add_argument(
+        "--cheb-gr-offline-handover",
+        "--cheb-gr-online",
+        action=argparse.BooleanOptionalAction,
+        dest="cheb_gr_online",
+        default=False,
+        help="Offline/output-layer Cheb-GR ID handover: after tracker output "
+        "is complete, extract newborn heads and dead-track banks, then relabel "
+        "eligible tracklets without feeding decisions back into the tracker. "
+        "--cheb-gr-online is a deprecated alias.",
+    )
+    grp.add_argument(
+        "--cheb-gr-offline-decide-n",
+        "--cheb-gr-online-decide-n",
+        dest="cheb_gr_online_decide_n",
+        type=int,
+        default=5,
+        help=_help(
+            "Frames after birth used as the newborn head window before an "
+            "offline handover decision.",
+            range_hint=">=1",
+            edge="probe 2026-07-03: 5 already matches full offline evidence",
+        ),
+    )
+    grp.add_argument(
+        "--cheb-gr-offline-max-cost",
+        "--cheb-gr-online-max-cost",
+        dest="cheb_gr_online_max_cost",
+        type=float,
+        default=0.45,
+        help=_help(
+            "Max Cheb-GR distance accepted for an offline handover (own knob: "
+            "the offline merge config default 0.55 is too loose here).",
+            range_hint="0-1",
+            edge="0.45 = offline parity 80.3; 0.40 = all per-seq drawdowns <=0.2",
+        ),
+    )
+    grp.add_argument(
+        "--cheb-gr-offline-min-head",
+        "--cheb-gr-online-min-head",
+        dest="cheb_gr_online_min_head",
+        type=int,
+        default=1,
+        help=_help(
+            "Minimum clean newborn head samples required before accepting an "
+            "offline handover.",
+            range_hint=">=1",
+            edge="raise to 2+ to avoid decisions from a single clean crop",
+        ),
+    )
+    grp.add_argument(
+        "--cheb-gr-offline-margin",
+        "--cheb-gr-online-margin",
+        dest="cheb_gr_online_margin",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Minimum separation between best and second-best Cheb-GR candidate "
+            "costs. 0 preserves the original top-1 behavior.",
+            range_hint=">=0",
+            edge="use 0.03-0.05 to reject ambiguous handovers",
+        ),
+    )
+    grp.add_argument(
+        "--cheb-gr-offline-key-sim-min",
+        "--cheb-gr-online-key-sim-min",
+        dest="cheb_gr_online_key_sim_min",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Reject an offline handover whose direct key-bank similarity "
+            "support is below this cosine threshold (0 = off).",
+            range_hint="0-1",
+            edge="diagnostic 2026-07-04: key_best_sim is strong confirm evidence; "
+            "combine with geometry before enabling as policy",
+        ),
+    )
+    grp.add_argument(
+        "--cheb-gr-offline-key-margin-min",
+        "--cheb-gr-online-key-margin-min",
+        dest="cheb_gr_online_key_margin_min",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Reject an offline handover whose direct key-bank hard-negative "
+            "margin is below this threshold (0 = off). No-hard-negative events "
+            "use sentinel margin 999 and pass.",
+            range_hint=">=0",
+            edge="diagnostic 2026-07-04: key_margin <=0.03 was a strong "
+            "ambiguity veto on m-substrate; validate cross-condition before defaulting",
+        ),
+    )
+    grp.add_argument(
+        "--cheb-gr-offline-key-sim-cost-floor",
+        "--cheb-gr-online-key-sim-cost-floor",
+        dest="cheb_gr_online_key_sim_cost_floor",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Only apply key-sim veto when Cheb-GR best_cost is at least this "
+            "value (0 = apply key-sim veto to all accepted-cost candidates).",
+            range_hint=">=0",
+            edge="use 0.25-0.30 to avoid vetoing very strong Cheb-GR matches",
+        ),
+    )
+    grp.add_argument(
+        "--cheb-gr-offline-center-dist-veto",
+        dest="cheb_gr_online_center_dist_veto",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Reject an offline handover whose forward-projected candidate "
+            "center is >= this many avg box heights from the newborn center "
+            "(0 = off).",
+            range_hint=">=0",
+            edge="applicability map 2026-07-04: >=2 is a stable veto (m/s)",
+        ),
+    )
+    grp.add_argument(
+        "--cheb-gr-offline-pollution-veto",
+        dest="cheb_gr_online_pollution_veto",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Reject an offline handover whose newborn-head / candidate-tail "
+            "crops overlap another track at or above this IoU (0 = off).",
+            range_hint="0-1",
+            edge="applicability map 2026-07-04: >=0.5 = stable-high-pollution",
+        ),
+    )
+    grp.add_argument(
+        "--cheb-gr-offline-neighbor-iou-max",
+        dest="cheb_gr_online_neighbor_iou_max",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Drop head/bank crop samples whose box overlaps another track at "
+            "or above this IoU before embedding extraction (0 = off). Head is "
+            "filtered strictly; a bank falls back to unfiltered clean crops.",
+            range_hint="0-1",
+            edge="crowd-pollution proxy; complements the front-occlusion gate",
+        ),
+    )
+    grp.add_argument(
+        "--cheb-gr-offline-bank-mode",
+        dest="cheb_gr_online_bank_mode",
+        choices=("spread", "recent"),
+        default="spread",
+        help=_help(
+            "Dead-track bank construction for the offline handover: 'spread' "
+            "= temporally-distributed samples over the whole life; 'recent' = "
+            "most recent clean samples before death (visclean-gated FIFO).",
+            edge="probe 2026-07-04: recent-20 +0.07/+0.05 vs dense on m/s, "
+            "highest accept-set fidelity; pair with --cheb-gr-offline-bank-n 20",
+        ),
+    )
+    grp.add_argument(
+        "--cheb-gr-offline-bank-n",
+        dest="cheb_gr_online_bank_n",
+        type=int,
+        default=0,
+        help=_help(
+            "Bank sample budget for the offline handover (0 = use "
+            "--cheb-gr-merge-n-samples).",
+            range_hint=">=0",
+            edge="recent mode: 20 is the validated safe point; 10 and below degrade",
+        ),
+    )
+    grp.add_argument(
+        "--cheb-gr-offline-log",
+        "--cheb-gr-online-log",
+        action=argparse.BooleanOptionalAction,
+        dest="cheb_gr_online_log",
+        default=False,
+        help="Write _cheb_gr_offline_handover.csv with accept/reject decision rows.",
+    )
+    grp.add_argument(
+        "--occ-audit",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Causal occ-exit identity audit (ABSORB-side twin of "
+        "--cheb-gr-offline-handover): after a geometric occlusion episode ends, compare "
+        "the track's first clean crops against its pre-occlusion reference and "
+        "split off a fresh id from the first crop that contradicts it. Shares "
+        "the --cheb-gr-engine/--cheb-gr-model extractor.",
+    )
+    grp.add_argument(
+        "--occ-audit-tau",
+        type=float,
+        default=0.45,
+        help=_help(
+            "Cosine below this flags an identity transfer (clean-stream quantile).",
+            range_hint="0-1",
+            edge="probe 2026-07-03: 0.386 = 0.1%% false rate, 0.498 = 0.5%%",
+        ),
+    )
+    grp.add_argument(
+        "--occ-audit-ref-n",
+        type=int,
+        default=5,
+        help=_help(
+            "Clean pre-occlusion frames kept as the appearance reference.",
+            range_hint=">=1",
+        ),
+    )
+    grp.add_argument(
+        "--occ-audit-min-ref",
+        type=int,
+        default=2,
+        help=_help(
+            "Minimum clean reference samples; episodes with fewer abstain.",
+            range_hint=">=1",
+        ),
+    )
+    grp.add_argument(
+        "--occ-audit-crops",
+        type=int,
+        default=3,
+        help=_help(
+            "Post-exit clean crops checked per episode (min-of-N decision).",
+            range_hint=">=1",
+        ),
+    )
+    grp.add_argument(
+        "--occ-audit-window",
+        type=int,
+        default=30,
+        help=_help(
+            "Frames after occlusion exit in which audit crops may be collected.",
+            range_hint=">=1",
+        ),
+    )
+    grp.add_argument(
+        "--occ-audit-min-occ",
+        type=int,
+        default=2,
+        help=_help(
+            "Minimum consecutive dirty frames for an episode to be audited "
+            "(single-frame blips are skipped).",
+            range_hint=">=1",
+        ),
+    )
+    grp.add_argument(
+        "--occ-audit-log",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Write _occ_audit.csv with one row per audited episode.",
     )
     grp.add_argument(
         "--relink-enabled",
@@ -975,5 +1257,18 @@ def add_lifecycle_args(parser: argparse.ArgumentParser) -> None:
         help=_help(
             "Minimum occ_cover to unlock the expanded bridge threshold.",
             range_hint="0-1, suggested 0.9",
+        ),
+    )
+    grp.add_argument(
+        "--relink-bridge-app-veto",
+        type=float,
+        default=-1.0,
+        help=_help(
+            "Appearance cosine veto for bridge candidates: a geometry-plausible "
+            "(lost, cand) pair is dropped when both tracks have reference "
+            "embeddings and cosine < this floor (ranking use: the correct "
+            "runner-up then wins the bdist ranking). Needs per-detection "
+            "embeddings (reid_mode=tracker). <= -1 disables (bit-exact).",
+            range_hint="mnv4 scale: 0.20-0.25 (in-zone false-kill 35-43%% at 1-2%% true cost)",
         ),
     )

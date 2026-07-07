@@ -15,6 +15,7 @@ enum class ModelType {
     TRANSREID,
     OSNET,
     FASTREID,
+    MOBILENETV4_REID,
 };
 
 /**
@@ -93,6 +94,7 @@ private:
     int lhs_N_ = 0;          // sequence length (196 for 224×224 SigLIP2)
     int lhs_C_ = 0;          // channel dim (768)
     std::vector<std::pair<std::string, void*>> scratch_buffers_;
+    void* d_input_scratch_ = nullptr;
     bool profiling_enabled_ = false;
     ProfileStats last_profile_stats_{};
 

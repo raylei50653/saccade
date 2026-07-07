@@ -408,6 +408,127 @@ class TRTYoloBackbone(nn.Module):
         return self._output_bufs[0], self._output_bufs[1], self._output_bufs[2]
 
 
+class TRTMambaHead(nn.Module):
+    """Runs Mamba detection head via TRT: P3/P4/P5 features → cls/reg preds.
+
+    Replacement for ``mamba_head._forward_eager([p3,p4,p5])`` in whole-graph
+    mode.  Takes FP32 NCHW feature tensors; returns ``(cls_preds, reg_preds)``
+    as lists of 3 tensors each, matching the PyTorch head output convention.
+    """
+
+    def __init__(self, engine_path: str):
+        super().__init__()
+        import tensorrt as trt
+
+        _plugins_loaded = False
+
+        def _load_scan_plugin() -> None:
+            nonlocal _plugins_loaded
+            if _plugins_loaded:
+                return
+            from pathlib import Path as _Path
+
+            _root = _Path(__file__).resolve().parent.parent.parent.parent.parent
+            _so = _root / "build" / "libsaccade_scan_plugin.so"
+            if _so.exists():
+                trt.get_plugin_registry().load_library(str(_so))
+                print(f"[TRTHead] Loaded SelectiveScan plugin: {_so}")
+            else:
+                print(
+                    f"[TRTHead] WARNING: SelectiveScan plugin not found at {_so}; "
+                    "engine may fail to deserialize"
+                )
+            _plugins_loaded = True
+
+        _load_scan_plugin()
+
+        self.logger = trt.Logger(trt.Logger.ERROR)
+        with open(engine_path, "rb") as f:
+            runtime = trt.Runtime(self.logger)
+            self.engine = runtime.deserialize_cuda_engine(f.read())
+        self.context = self.engine.create_execution_context()
+
+        num_io = self.engine.num_io_tensors
+        INPUT = trt.TensorIOMode.INPUT
+        self.input_names = [
+            self.engine.get_tensor_name(i)
+            for i in range(num_io)
+            if self.engine.get_tensor_mode(self.engine.get_tensor_name(i)) == INPUT
+        ]
+        self.output_names = [
+            self.engine.get_tensor_name(i)
+            for i in range(num_io)
+            if self.engine.get_tensor_mode(self.engine.get_tensor_name(i)) != INPUT
+        ]
+        assert len(self.input_names) == 3
+        assert len(self.output_names) == 6
+
+        cls_names = [n for n in self.output_names if n.startswith("cls_")]
+        reg_names = [n for n in self.output_names if n.startswith("reg_")]
+        cls_names.sort(key=lambda n: int(n.split("_p")[-1]))
+        reg_names.sort(key=lambda n: int(n.split("_p")[-1]))
+        self._cls_names = cls_names
+        self._reg_names = reg_names
+
+        self._output_bufs: dict[str, Tensor] = {}
+        self._output_bufs_list: list[Tensor] = []
+        self._last_batch = -1
+
+    def infer(
+        self, p3: Tensor, p4: Tensor, p5: Tensor
+    ) -> tuple[list[Tensor], list[Tensor]]:
+        return self._run(p3, p4, p5, use_separate_stream=True)
+
+    def infer_graph(
+        self, p3: Tensor, p4: Tensor, p5: Tensor
+    ) -> tuple[list[Tensor], list[Tensor]]:
+        return self._run(p3, p4, p5, use_separate_stream=False)
+
+    def _run(
+        self, p3: Tensor, p4: Tensor, p5: Tensor, use_separate_stream: bool
+    ) -> tuple[list[Tensor], list[Tensor]]:
+        B = p3.shape[0]
+
+        self.context.set_input_shape("p3", tuple(p3.shape))
+        self.context.set_input_shape("p4", tuple(p4.shape))
+        self.context.set_input_shape("p5", tuple(p5.shape))
+        self.context.set_tensor_address("p3", p3.contiguous().data_ptr())
+        self.context.set_tensor_address("p4", p4.contiguous().data_ptr())
+        self.context.set_tensor_address("p5", p5.contiguous().data_ptr())
+
+        if B != self._last_batch:
+            self._output_bufs.clear()
+            self._output_bufs_list.clear()
+            ordered_names = self._cls_names + self._reg_names
+            for name in ordered_names:
+                shape = tuple(self.context.get_tensor_shape(name))
+                shape = tuple(B if d == -1 else d for d in shape)
+                buf = torch.empty(shape, dtype=torch.float32, device=p3.device)
+                self.context.set_tensor_address(name, buf.data_ptr())
+                self._output_bufs[name] = buf
+                self._output_bufs_list.append(buf)
+            self._last_batch = B
+        else:
+            for name, buf in self._output_bufs.items():
+                self.context.set_tensor_address(name, buf.data_ptr())
+
+        if use_separate_stream:
+            stream = torch.cuda.Stream()
+            event_in = torch.cuda.Event()
+            event_in.record(torch.cuda.current_stream())
+            stream.wait_event(event_in)
+            self.context.execute_async_v3(stream.cuda_stream)
+            event_out = torch.cuda.Event()
+            event_out.record(stream)
+            torch.cuda.current_stream().wait_event(event_out)
+        else:
+            self.context.execute_async_v3(torch.cuda.current_stream().cuda_stream)
+
+        cls_preds = [self._output_bufs[n] for n in self._cls_names]
+        reg_preds = [self._output_bufs[n] for n in self._reg_names]
+        return cls_preds, reg_preds
+
+
 # ---------------------------------------------------------------------------
 # Per-stream temporal state
 # ---------------------------------------------------------------------------
@@ -467,6 +588,7 @@ class MambaGatedDetector(nn.Module):
         conf_thr: float = 0.25,
         max_det: int = 300,
         trt_backbone_engine: str = "",
+        trt_head_engine: str = "",
         emb_dim: int = 0,
         jde_proj_ckpt: str = "",
         temporal_T: int = 0,
@@ -483,6 +605,7 @@ class MambaGatedDetector(nn.Module):
         self._device = device
         self.img_size = cfg.img_size
         self._trt_backbone: TRTYoloBackbone | None = None
+        self._trt_head: TRTMambaHead | None = None
         self.emb_dim = emb_dim
         self._emb_projector: EmbeddingProjector | None = None
         self._trt_feat_cache: dict[str, Tensor] = {}
@@ -613,6 +736,10 @@ class MambaGatedDetector(nn.Module):
                     f"engine={self._trt_backbone.output_channels}, "
                     f"checkpoint={self.in_channels}"
                 )
+
+        if trt_head_engine:
+            self._trt_head = TRTMambaHead(trt_head_engine)
+            print(f"[MambaDetector] TRT MambaHead enabled: {trt_head_engine}")
 
         if self.use_whole_graph and self._trt_backbone is not None:
             if (
@@ -909,12 +1036,15 @@ class MambaGatedDetector(nn.Module):
                 )
             else:
                 detail_images, detail_valid_hw = self._prepare_detail_view(frame)
-        cls_preds, reg_preds = self.mamba_head._forward_eager(
-            [p3, p4, p5],
-            return_embeddings=False,
-            detail_images=detail_images,
-            detail_valid_hw=detail_valid_hw,
-        )
+        if self._trt_head is not None and not self.use_detail_fusion:
+            cls_preds, reg_preds = self._trt_head.infer_graph(p3, p4, p5)
+        else:
+            cls_preds, reg_preds = self.mamba_head._forward_eager(
+                [p3, p4, p5],
+                return_embeddings=False,
+                detail_images=detail_images,
+                detail_valid_hw=detail_valid_hw,
+            )
         detections = _postprocess_mamba_fixed(
             cls_preds,
             reg_preds,
@@ -938,10 +1068,13 @@ class MambaGatedDetector(nn.Module):
             )
         backbone = self._trt_backbone
         p3, p4, p5 = backbone.infer_graph(frame)
-        cls_preds, reg_preds = self.mamba_head._forward_eager(
-            [p3, p4, p5],
-            return_embeddings=False,
-        )
+        if self._trt_head is not None:
+            cls_preds, reg_preds = self._trt_head.infer_graph(p3, p4, p5)
+        else:
+            cls_preds, reg_preds = self.mamba_head._forward_eager(
+                [p3, p4, p5],
+                return_embeddings=False,
+            )
         return _postprocess_mamba_fixed(
             cls_preds,
             reg_preds,
@@ -1425,6 +1558,7 @@ def build_mamba_gated_detector(
     conf_thr: float = 0.25,
     max_det: int = 300,
     trt_backbone_engine: str = "",
+    trt_head_engine: str = "",
     emb_dim: int = 0,
     jde_proj_ckpt: str = "",
     temporal_T_override: int | None = None,
@@ -1491,6 +1625,7 @@ def build_mamba_gated_detector(
         trt_backbone_engine=str(Path(trt_backbone_engine).resolve())
         if trt_backbone_engine
         else "",
+        trt_head_engine=str(Path(trt_head_engine).resolve()) if trt_head_engine else "",
         emb_dim=emb_dim,
         jde_proj_ckpt=str(Path(jde_proj_ckpt).resolve()) if jde_proj_ckpt else "",
         temporal_T=temporal_T,

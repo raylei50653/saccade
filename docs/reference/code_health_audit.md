@@ -87,6 +87,15 @@ Current result:
   when a pulled sample has no caps instead of raising an AttributeError.
 - Added zero-copy decoder tests for RTSP/file pipeline quoting and missing caps
   handling.
+- Fixed 12 race conditions (S1–S12) in the C++ `GstClient` GPU-decode buffer
+  pool (`src/media/gst_client.cpp`). Extracted a GStreamer-independent
+  `BufferPool` class (`include/media/buffer_pool.hpp`) with CAS-based slot
+  acquisition, grow-only buffer reallocation, stream-synced teardown, and a
+  proper `EMPTY→WRITING→READY→PROCESSING→EMPTY` state machine. Implemented the
+  ADR-009 Python contract in `_on_cpp_frame`: `with frame_data` RAII +
+  `sync_buffer` before read + `ExternalStream` stream-ordered handoff +
+  `clone()` to decouple tensor lifetime from pool slots. Added 8 native race
+  tests (`tests/native/test_gst_buffer_pool.cpp`, `ctest -R gst_buffer_pool`).
 - Fixed `perception/eval/evaluator.py` softmax3 torch parameter caching so two
   same-shape models with different learned values do not share stale tensors.
 - Made softmax3 feature-name mismatches fail with a clear `ValueError` instead
@@ -149,7 +158,9 @@ Current result:
   The full suite reports 48% total coverage. Notable low-coverage modules:
   `detector_trt.py` at 25%, `perception/eval/evaluator.py` at 19%,
   `feature_extractor.py` at 40%, `mediamtx_client.py` at 46%, and
-  `zero_copy.py` at 55%.
+  `zero_copy.py` at 55%. The C++ `BufferPool` race fixes are covered by native
+  tests (`tests/native/test_gst_buffer_pool.cpp`, 8 scenarios) rather than the
+  Python coverage report.
 - `src/saccade/api/server.py` is now covered at 97%, but it still depends on
   global singleton stores. That is testable, but future dependency-injection
   cleanup would make startup/shutdown and endpoint testing simpler.

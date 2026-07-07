@@ -1,0 +1,34 @@
+# Live evfifo-5-20-w3 handover: build the offline evfifo bank incrementally
+# during tracking (CleanFifoBank fifo_n=20 stride=5 + w3 pre-event snapshot) and
+# run the validated causal_handover_lines decision at sequence end — bounded
+# VRAM (20 embeddings/track), no end-of-sequence disk re-read. The C++ relinker's
+# own per-frame handover is disabled (cheb_gr_online_live_bank routes the bank
+# through the Python decision instead).
+#
+# Pair with:
+#   --preset mamba_whole_graph_m --detector SDP
+#   --module-reid configs/modules/reid_mnv4_mainline.yaml --reid-mode tracker
+# reid_mode MUST be passed on the CLI (the preset sets reid_mode: off) — the
+# live bank needs per-frame track embeddings.
+tracker_online_handover: true
+cheb_gr_online_live_bank: true
+cheb_gr_model: mobilenetv4_reid
+# Operating point (offline parity: h2 margin0.05 maxcost0.45).
+cheb_gr_online_max_cost: 0.45
+cheb_gr_online_margin: 0.05
+cheb_gr_online_decide_n: 5
+cheb_gr_online_min_head: 2
+cheb_gr_pool_frac: 0.3
+cheb_gr_lambda: 2.0
+cheb_gr_k2: 6
+cheb_gr_max_fwd: 50
+cheb_gr_fuse_lambda: 0.3
+# Bank: recent tail (ring stores a sliding window, recent-N matches this).
+cheb_gr_online_bank_mode: recent
+cheb_gr_online_bank_n: 20
+cheb_gr_online_requery_ring_n: 20
+cheb_gr_online_requery_ring_capacity: 4096
+# evfifo-5-20-w3 bank substrate (used only by the planner, not the ring).
+cheb_gr_online_bank_fifo_n: 20
+cheb_gr_online_bank_stride: 5
+cheb_gr_online_preocc_window: 3

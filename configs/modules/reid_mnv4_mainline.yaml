@@ -1,0 +1,66 @@
+# MobileNetV4 visclean ReID → main line (mamba_whole_graph_m), tracker mode.
+# First pass: birth-relink gate ONLY — the primary association cost is untouched
+# (reid_cos_threshold 1.1 means the appearance-assist branch can never fire).
+#
+# Load with:
+#   uv run scripts/eval/mot17.py --preset mamba_whole_graph_m \
+#       --module-reid configs/modules/reid_mnv4_mainline.yaml --reid-mode tracker
+#
+# NOTE: reid_mode MUST be passed on the CLI — the preset sets reid_mode: "off"
+# and presets override module YAMLs.
+
+reid_model: mobilenetv4_reid
+reid_engine_path: models/embedding/mobilenetv4_reid_visclean_224.engine
+
+# Every-frame extraction, unlimited budget: references and birth detections
+# always have same-frame embeddings (correctness first; schedule later).
+reid_budget: 0
+reid_interval: 1
+need_reid: false
+async_reid: false        # tracker path consumes embeddings same-frame
+pipeline_relink: false   # semantic relinker thread not used in tracker mode
+
+# Appearance-assist in primary association: DISABLED (cosine can never reach
+# 1.1). Flip to a real threshold (mnv4 scale: pos median 0.55 / neg p99 0.66)
+# to test the assist as a separate arm.
+reid_cos_threshold: 1.1
+reid_iou_low: 0.30
+reid_iou_high: 0.60
+reid_weight: 0.80
+reid_cost_cos_w: 0.55
+reid_cost_iou_w: 0.30
+reid_cost_score_w: 0.15
+
+reid_crop_mode: tight
+reid_crop_padding: 0.0
+reid_crop_layout: full
+
+# Runtime/train consistency: crops the visclean training filter would drop are
+# not extracted and never enter the bank (birth-time contamination guard).
+appearance_occlusion_gate: true
+appearance_occlusion_cov: 0.4
+
+# The Python bank is REQUIRED in this mode: it is the only writer of the C++
+# per-track reference embeddings (d_features_) and clean flags, which the
+# archive→relink kernels snapshot on track loss.
+appearance_bank: true
+appearance_bank_size: 5
+appearance_bank_min_score: 0.45
+appearance_bank_min_iou: 0.35
+appearance_bank_consistency_threshold: 0.75
+appearance_bank_high_quality_min_score: 0.75
+appearance_bank_min_aspect: 1.2
+appearance_bank_max_aspect: 4.5
+bank_quality_v2: true
+semantic_bank_inject: false
+
+# Birth-time lost-bank relink (C++ archive/revive kernels), precision-first.
+# sim_thresh calibrated on the mnv4 cosine distribution from the 2026-07-02
+# main-line candidate probe (neg p99 ≈ 0.66; osnet-scale 0.90 would kill every
+# revive). Coexists with the preset's geometry bridge relink.
+relink_enabled: true
+relink_bank_cap: 256
+relink_sim_thresh: 0.65
+relink_lambda: 2.5
+relink_spatial_gate: 4.0
+relink_max_age: 300

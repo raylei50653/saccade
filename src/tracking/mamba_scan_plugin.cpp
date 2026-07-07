@@ -118,11 +118,14 @@ public:
         bool const need_broadcast = (C_last_dim < params_.N && C_last_dim == 1);
         if (!need_broadcast) return 0;
         // Reserve space for C broadcast: largest possible (max profile batch × L × N × elem)
-        size_t const max_B = static_cast<size_t>(inputs[0].desc.dims.d[0]);  // max batch
+        // Use max shape from profile, not desc.dims (desc.dims.d[0] may be -1 for dynamic dims).
+        int32_t max_B = inputs[0].max.d[0];
+        if (max_B <= 0) max_B = inputs[0].desc.dims.d[0];
+        if (max_B <= 0) max_B = 4;
         size_t const L     = static_cast<size_t>(inputs[0].desc.dims.d[1]);
         size_t const N     = static_cast<size_t>(params_.N);
         size_t const elem  = (inputs[0].desc.type == DataType::kHALF) ? 2 : 4;
-        return max_B * L * N * elem;
+        return static_cast<size_t>(max_B) * L * N * elem;
     }
 
     SelectiveScanPluginParams params_;

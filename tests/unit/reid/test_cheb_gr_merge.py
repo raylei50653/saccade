@@ -6,8 +6,10 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
+import saccade.perception.eval.cheb_gr_merge as cheb_gr_merge
 from saccade.perception.eval.cheb_gr_merge import (
     cheb_gr_merge_output_tracklets,
+    extract_tracklet_embeddings,
     temporal_sample_indices,
     tracklet_distance_matrix,
 )
@@ -123,3 +125,95 @@ def test_merge_respects_temporal_overlap_gate():
         lines, embeddings, enabled=True, max_cost=0.99, max_gap=30, max_fwd=0
     )
     assert stats["merges"] == 0
+
+
+def test_extract_tracklet_embeddings_filters_mnv4_dirty_crops(tmp_path):
+    from PIL import Image
+
+    class DummyExtractor:
+        model_type = "mobilenetv4_reid"
+        device = "cpu"
+        feature_dim = 4
+        input_hw = (12, 8)
+
+        def __init__(self) -> None:
+            self.batches: list[torch.Tensor] = []
+
+        def extract(self, t: torch.Tensor) -> torch.Tensor:
+            self.batches.append(t.clone())
+            return torch.ones((t.shape[0], self.feature_dim), dtype=torch.float32)
+
+    seq_dir = tmp_path / "img1"
+    seq_dir.mkdir()
+    for frame in (1, 2):
+        Image.new("RGB", (32, 32), color=(frame, 10, 20)).save(
+            seq_dir / f"{frame:06d}.jpg"
+        )
+
+    # tid 1 in frame 1 is covered 50% by tid 2, whose lower foot makes it the
+    # foreground occluder. The mnv4 visclean path should sample only tid 1's
+    # clean frame 2 crop.
+    lines = [
+        "1,1,0,0,10,10,0.9,-1,-1,-1",
+        "1,2,0,5,10,10,0.8,-1,-1,-1",
+        "2,1,20,0,10,10,0.7,-1,-1,-1",
+    ]
+    ext = DummyExtractor()
+
+    out = extract_tracklet_embeddings(
+        lines,
+        str(seq_dir),
+        ext,
+        n_samples=10,
+        batch=8,
+    )
+
+    assert {tid: emb.shape[0] for tid, emb in out.items()} == {1: 1, 2: 1}
+    assert len(ext.batches) == 1
+    assert tuple(ext.batches[0].shape) == (2, 3, 12, 8)
+
+
+def test_extract_tracklet_embeddings_prefers_native_for_mnv4(monkeypatch):
+    class DummyExtractor:
+        model_type = "mobilenetv4_reid"
+        device = "cpu"
+        feature_dim = 4
+        input_hw = (12, 8)
+
+    calls: list[tuple[int, tuple[int, int], str, int]] = []
+
+    def fake_native(
+        samples,
+        by_frame,
+        seq_dir,
+        extractor,
+        *,
+        crop_hw,
+        im_ext,
+        batch,
+    ):
+        del by_frame, seq_dir, extractor
+        calls.append((len(samples), crop_hw, im_ext, batch))
+        return torch.arange(len(samples) * 4, dtype=torch.float32).reshape(-1, 4)
+
+    monkeypatch.setattr(cheb_gr_merge, "_extract_native_crops_trt", fake_native)
+
+    lines = [
+        "1,1,0,0,10,10,0.9,-1,-1,-1",
+        "2,1,2,0,10,10,0.8,-1,-1,-1",
+        "1,2,20,0,10,10,0.7,-1,-1,-1",
+    ]
+
+    out = extract_tracklet_embeddings(
+        lines,
+        "/unused/img1",
+        DummyExtractor(),
+        n_samples=10,
+        batch=8,
+    )
+
+    assert calls == [(3, (12, 8), ".jpg", 8)]
+    assert {tid: emb.shape for tid, emb in out.items()} == {
+        1: torch.Size([2, 4]),
+        2: torch.Size([1, 4]),
+    }

@@ -6,6 +6,10 @@ from dataclasses import dataclass
 from typing import Dict, List, Tuple, Optional, Any, Set, cast
 
 from saccade.perception.box_ops import spatial_metrics as box_spatial_metrics
+from saccade.perception.reid.cheb_gr import (
+    cheb_gr_kreciprocal,
+    cheb_gr_kreciprocal_self_dense_padded,
+)
 from .motion_model import MotionModel, MotionModelRegistry
 
 
@@ -46,6 +50,348 @@ class MotionRelinkingConfig:
     vel_alpha: float = 0.3
     acc_alpha: float = 0.15
     min_motion_observations: int = 2
+
+
+class _GraphedRelinkGateRunner:
+    """Fixed-capacity CUDA graph wrapper for ``relink_gate_batch``.
+
+    The relinker still owns identity state and final decisions in Python, but the
+    per-query/per-candidate spatial, speed, and Kalman gate table is a stable GPU
+    work unit.  Inputs are copied into persistent padded tensors; the extension is
+    captured at the current capacity and replayed until capacity or params change.
+    """
+
+    def __init__(
+        self,
+        ext: Any,
+        device: torch.device,
+        *,
+        initial_cap_q: int = 64,
+        initial_cap_c: int = 128,
+    ) -> None:
+        self.ext = ext
+        self.device = device
+        self.initial_cap_q = max(0, int(initial_cap_q))
+        self.initial_cap_c = max(0, int(initial_cap_c))
+        self.cap_q = 0
+        self.cap_c = 0
+        self.params: tuple[Any, ...] | None = None
+        self.graph: Optional[torch.cuda.CUDAGraph] = None
+        self.q_box: Optional[torch.Tensor] = None
+        self.q_foot: Optional[torch.Tensor] = None
+        self.q_footn: Optional[torch.Tensor] = None
+        self.q_emah: Optional[torch.Tensor] = None
+        self.c_last: Optional[torch.Tensor] = None
+        self.c_mean: Optional[torch.Tensor] = None
+        self.c_cov: Optional[torch.Tensor] = None
+        self.c_foot: Optional[torch.Tensor] = None
+        self.c_footn: Optional[torch.Tensor] = None
+        self.c_emah: Optional[torch.Tensor] = None
+        self.c_gap: Optional[torch.Tensor] = None
+        self.c_delta: Optional[torch.Tensor] = None
+        self.c_has: Optional[torch.Tensor] = None
+        self.table: Optional[torch.Tensor] = None
+
+    @staticmethod
+    def _capacity(n: int, minimum: int = 0) -> int:
+        n = max(1, int(n), int(minimum))
+        return 1 << (n - 1).bit_length()
+
+    def _allocate(self, cap_q: int, cap_c: int) -> None:
+        self.cap_q = cap_q
+        self.cap_c = cap_c
+        dev = self.device
+        self.q_box = torch.zeros((cap_q, 4), dtype=torch.float32, device=dev)
+        self.q_foot = torch.zeros((cap_q, 8), dtype=torch.float32, device=dev)
+        self.q_footn = torch.zeros((cap_q,), dtype=torch.int32, device=dev)
+        self.q_emah = torch.ones((cap_q,), dtype=torch.float32, device=dev)
+        self.c_last = torch.zeros((cap_c, 4), dtype=torch.float32, device=dev)
+        self.c_mean = torch.zeros((cap_c, 6), dtype=torch.float32, device=dev)
+        self.c_cov = torch.zeros((cap_c, 10), dtype=torch.float32, device=dev)
+        self.c_foot = torch.zeros((cap_c, 8), dtype=torch.float32, device=dev)
+        self.c_footn = torch.zeros((cap_c,), dtype=torch.int32, device=dev)
+        self.c_emah = torch.ones((cap_c,), dtype=torch.float32, device=dev)
+        self.c_gap = torch.zeros((cap_c,), dtype=torch.int32, device=dev)
+        self.c_delta = torch.zeros((cap_c,), dtype=torch.int32, device=dev)
+        self.c_has = torch.zeros((cap_c,), dtype=torch.int32, device=dev)
+        self.table = torch.empty((cap_q, cap_c, 6), dtype=torch.float32, device=dev)
+
+    def _require(self) -> tuple[torch.Tensor, ...]:
+        tensors = (
+            self.q_box,
+            self.q_foot,
+            self.q_footn,
+            self.q_emah,
+            self.c_last,
+            self.c_mean,
+            self.c_cov,
+            self.c_foot,
+            self.c_footn,
+            self.c_emah,
+            self.c_gap,
+            self.c_delta,
+            self.c_has,
+            self.table,
+        )
+        if any(t is None for t in tensors):
+            raise RuntimeError("Relink gate graph buffers are not allocated")
+        return cast(tuple[torch.Tensor, ...], tensors)
+
+    def _launch(self) -> None:
+        (
+            q_box,
+            q_foot,
+            q_footn,
+            q_emah,
+            c_last,
+            c_mean,
+            c_cov,
+            c_foot,
+            c_footn,
+            c_emah,
+            c_gap,
+            c_delta,
+            c_has,
+            table,
+        ) = self._require()
+        if self.params is None:
+            raise RuntimeError("Relink gate graph params are not set")
+        (
+            w,
+            h,
+            dims,
+            fps,
+            person_height_m,
+            max_speed_mps,
+            accel_long,
+            accel_lat,
+            dir_min_cos,
+            dir_min_speed,
+        ) = self.params
+        stream = torch.cuda.current_stream(self.device).cuda_stream
+        self.ext.relink_gate_batch(
+            self.cap_q,
+            self.cap_c,
+            int(w),
+            int(h),
+            int(dims),
+            float(fps),
+            float(person_height_m),
+            float(max_speed_mps),
+            float(accel_long),
+            float(accel_lat),
+            float(dir_min_cos),
+            float(dir_min_speed),
+            q_box.data_ptr(),
+            q_foot.data_ptr(),
+            q_footn.data_ptr(),
+            q_emah.data_ptr(),
+            c_last.data_ptr(),
+            c_mean.data_ptr(),
+            c_cov.data_ptr(),
+            c_foot.data_ptr(),
+            c_footn.data_ptr(),
+            c_emah.data_ptr(),
+            c_gap.data_ptr(),
+            c_delta.data_ptr(),
+            c_has.data_ptr(),
+            table.data_ptr(),
+            stream,
+        )
+
+    def _capture(self) -> None:
+        self._launch()
+        torch.cuda.synchronize(self.device)  # saccade-allow-cpu
+        graph = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(graph):
+            self._launch()
+        self.graph = graph
+        print(
+            "🕯️ [RelinkGateGraph] Captured relink_gate_batch "
+            f"capacity={self.cap_q}x{self.cap_c}"
+        )
+
+    def ensure(self, n_query: int, n_cand: int, params: tuple[Any, ...]) -> None:
+        cap_q = (
+            self.cap_q
+            if self.cap_q >= n_query
+            else self._capacity(n_query, self.initial_cap_q)
+        )
+        cap_c = (
+            self.cap_c
+            if self.cap_c >= n_cand
+            else self._capacity(n_cand, self.initial_cap_c)
+        )
+        if cap_q != self.cap_q or cap_c != self.cap_c:
+            self._allocate(cap_q, cap_c)
+            self.graph = None
+        if params != self.params:
+            self.params = params
+            self.graph = None
+        if self.graph is None:
+            self._capture()
+
+    def copy_inputs(
+        self,
+        q_box: np.ndarray,
+        q_foot: np.ndarray,
+        q_footn: np.ndarray,
+        q_emah: np.ndarray,
+        c_last: np.ndarray,
+        c_mean: np.ndarray,
+        c_cov: np.ndarray,
+        c_foot: np.ndarray,
+        c_footn: np.ndarray,
+        c_emah: np.ndarray,
+        c_gap: np.ndarray,
+        c_delta: np.ndarray,
+        c_has: np.ndarray,
+    ) -> None:
+        tensors = self._require()
+
+        def _copy(dst: torch.Tensor, src: np.ndarray) -> None:
+            dst[: src.shape[0]].copy_(torch.from_numpy(src).to(self.device))
+
+        _copy(tensors[0], q_box)
+        _copy(tensors[1], q_foot)
+        _copy(tensors[2], q_footn)
+        _copy(tensors[3], q_emah)
+        _copy(tensors[4], c_last)
+        _copy(tensors[5], c_mean)
+        _copy(tensors[6], c_cov)
+        _copy(tensors[7], c_foot)
+        _copy(tensors[8], c_footn)
+        _copy(tensors[9], c_emah)
+        _copy(tensors[10], c_gap)
+        _copy(tensors[11], c_delta)
+        _copy(tensors[12], c_has)
+
+    def replay(self, n_query: int, n_cand: int) -> torch.Tensor:
+        if self.graph is None or self.table is None:
+            raise RuntimeError("Relink gate graph is not captured")
+        self.graph.replay()
+        return self.table[:n_query, :n_cand]
+
+
+class _GraphedChebGRSelfRunner:
+    """CUDA graph wrapper for padded Cheb-GR self-distance claim batches."""
+
+    def __init__(self, device: torch.device, *, initial_cap_n: int = 32) -> None:
+        self.device = device
+        self.initial_cap_n = max(0, int(initial_cap_n))
+        self.cap_n = 0
+        self.dim = 0
+        self.params: tuple[Any, ...] | None = None
+        self.feats: Optional[torch.Tensor] = None
+        self.valid_mask: Optional[torch.Tensor] = None
+        self.combined_order: Optional[torch.Tensor] = None
+        self.gallery_indices: Optional[torch.Tensor] = None
+        self.out: Optional[torch.Tensor] = None
+        self.graph: Optional[torch.cuda.CUDAGraph] = None
+
+    @staticmethod
+    def _capacity(n: int, minimum: int = 0) -> int:
+        n = max(1, int(n), int(minimum))
+        return 1 << (n - 1).bit_length()
+
+    def _run_dense(self) -> None:
+        if (
+            self.feats is None
+            or self.valid_mask is None
+            or self.combined_order is None
+            or self.gallery_indices is None
+            or self.out is None
+            or self.params is None
+        ):
+            raise RuntimeError("Cheb-GR graph buffers are not ready")
+        cheb_lambda, k2, max_fwd, fuse_lambda = self.params
+        self.out.copy_(
+            cheb_gr_kreciprocal_self_dense_padded(
+                self.feats,
+                self.valid_mask,
+                self.combined_order,
+                self.gallery_indices,
+                cheb_lambda=float(cheb_lambda),
+                k2=int(k2),
+                max_fwd=int(max_fwd),
+                fuse_lambda=float(fuse_lambda),
+            )
+        )
+
+    def ensure(self, valid_n: int, dim: int, params: tuple[Any, ...]) -> None:
+        cap_n = (
+            self.cap_n
+            if self.cap_n >= valid_n and self.dim == dim
+            else self._capacity(valid_n, self.initial_cap_n)
+        )
+        if cap_n != self.cap_n or dim != self.dim:
+            self.cap_n = cap_n
+            self.dim = dim
+            self.feats = torch.zeros(
+                (cap_n, dim), dtype=torch.float32, device=self.device
+            )
+            self.valid_mask = torch.zeros(
+                (cap_n * 2,), dtype=torch.bool, device=self.device
+            )
+            self.combined_order = torch.arange(
+                cap_n * 2, dtype=torch.long, device=self.device
+            )
+            self.gallery_indices = torch.arange(
+                cap_n, cap_n * 2, dtype=torch.long, device=self.device
+            )
+            self.out = torch.empty(
+                (cap_n, cap_n), dtype=torch.float32, device=self.device
+            )
+            self.graph = None
+        if params != self.params:
+            self.params = params
+            self.graph = None
+        if self.graph is not None:
+            return
+        self._run_dense()
+        torch.cuda.synchronize(self.device)  # saccade-allow-cpu
+        graph = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(graph):
+            self._run_dense()
+        self.graph = graph
+        print(
+            "🕯️ [ChebGRGraph] Captured Cheb-GR self distance "
+            f"capacity=({self.cap_n}, {self.dim})"
+        )
+
+    def replay(self, feats: torch.Tensor, params: tuple[Any, ...]) -> torch.Tensor:
+        n = int(feats.shape[0])
+        dim = int(feats.shape[1])
+        self.ensure(n, dim, params)
+        if (
+            self.feats is None
+            or self.valid_mask is None
+            or self.combined_order is None
+            or self.gallery_indices is None
+            or self.out is None
+            or self.graph is None
+        ):
+            raise RuntimeError("Cheb-GR graph is not captured")
+        self.feats.zero_()
+        self.feats[:n].copy_(feats.float())
+        self.valid_mask.zero_()
+        self.valid_mask[: n * 2] = True
+        self.combined_order[:n].copy_(torch.arange(n, device=self.device))
+        self.combined_order[n : n * 2].copy_(
+            torch.arange(self.cap_n, self.cap_n + n, device=self.device)
+        )
+        if n < self.cap_n:
+            rest_q = self.cap_n - n
+            self.combined_order[n * 2 : n * 2 + rest_q].copy_(
+                torch.arange(n, self.cap_n, device=self.device)
+            )
+            self.combined_order[n * 2 + rest_q :].copy_(
+                torch.arange(self.cap_n + n, self.cap_n * 2, device=self.device)
+            )
+        self.gallery_indices.zero_()
+        self.gallery_indices[:n].copy_(torch.arange(n, n * 2, device=self.device))
+        self.graph.replay()
+        return self.out[:n, :n]
 
 
 class PythonSemanticRelinker:
@@ -100,6 +446,21 @@ class PythonSemanticRelinker:
         kalman_max_speed_mps: float = 0.0,
         delayed_claim: bool = False,
         claim_warmup_frames: int = 3,
+        cheb_gr_claim: bool = False,
+        cheb_gr_max_cost: float = 0.45,
+        cheb_gr_margin: float = 0.05,
+        cheb_gr_min_head: int = 2,
+        cheb_gr_pool_frac: float = 0.3,
+        cheb_gr_min_sim: float = 0.0,
+        cheb_gr_lambda: float = 2.0,
+        cheb_gr_k2: int = 6,
+        cheb_gr_max_fwd: int = 50,
+        cheb_gr_fuse_lambda: float = 0.3,
+        gpu_relink_gate: Optional[bool] = None,
+        gpu_relink_gate_graph: Optional[bool] = None,
+        gpu_relink_gate_init_query_cap: int = 64,
+        gpu_relink_gate_init_candidate_cap: int = 128,
+        cheb_gr_graph_init_cap: int = 32,
         bidirectional: bool = False,
         bridge_chi2: float = 1.5,
         bridge_px: float | None = None,
@@ -199,7 +560,17 @@ class PythonSemanticRelinker:
         # (dist / time, scaled to m/s via person height) exceeds human limits.
         # Snapshot-independent → always applies, closing the no-snapshot fallback.
         self.kalman_max_speed_mps = max(0.0, float(kalman_max_speed_mps))
-        self.delayed_claim = bool(delayed_claim)
+        self.cheb_gr_claim = bool(cheb_gr_claim)
+        self.cheb_gr_max_cost = float(cheb_gr_max_cost)
+        self.cheb_gr_margin = max(0.0, float(cheb_gr_margin))
+        self.cheb_gr_min_head = max(1, int(cheb_gr_min_head))
+        self.cheb_gr_pool_frac = max(0.0, float(cheb_gr_pool_frac))
+        self.cheb_gr_min_sim = float(cheb_gr_min_sim)
+        self.cheb_gr_lambda = float(cheb_gr_lambda)
+        self.cheb_gr_k2 = max(1, int(cheb_gr_k2))
+        self.cheb_gr_max_fwd = int(cheb_gr_max_fwd)
+        self.cheb_gr_fuse_lambda = float(cheb_gr_fuse_lambda)
+        self.delayed_claim = bool(delayed_claim or self.cheb_gr_claim)
         self.claim_warmup_frames = max(1, int(claim_warmup_frames))
         self.bidirectional = bool(bidirectional)
         self.bridge_px = float(bridge_px if bridge_px is not None else bridge_chi2)
@@ -210,13 +581,41 @@ class PythonSemanticRelinker:
         # GPU relink-gate (A/B): offload the O(n_query*n_cand) per-pair gate
         # computation to a CUDA kernel; Python keeps all decision logic and reads
         # gate quantities from the per-frame table. Toggle for bit-exact A/B.
-        self.gpu_relink_gate = bool(
-            int(os.environ.get("SACCADE_GPU_RELINK_GATE", "0") or "0")
+        if gpu_relink_gate is None:
+            self.gpu_relink_gate = bool(
+                int(os.environ.get("SACCADE_GPU_RELINK_GATE", "0") or "0")
+            )
+        else:
+            self.gpu_relink_gate = bool(gpu_relink_gate)
+        if self.device.type != "cuda":
+            self.gpu_relink_gate = False
+        if gpu_relink_gate_graph is None:
+            _gate_graph = bool(
+                int(os.environ.get("SACCADE_GPU_RELINK_GATE_GRAPH", "1") or "1")
+            )
+        else:
+            _gate_graph = bool(gpu_relink_gate_graph)
+        self.gpu_relink_gate_graph = bool(
+            self.gpu_relink_gate and self.device.type == "cuda" and _gate_graph
         )
+        self.cheb_gr_cuda_graph = bool(
+            self.cheb_gr_claim and self.device.type == "cuda" and _gate_graph
+        )
+        self.gpu_relink_gate_init_query_cap = max(
+            0, int(gpu_relink_gate_init_query_cap)
+        )
+        self.gpu_relink_gate_init_candidate_cap = max(
+            0, int(gpu_relink_gate_init_candidate_cap)
+        )
+        self.cheb_gr_graph_init_cap = max(0, int(cheb_gr_graph_init_cap))
         self._gate_ext = None
         self._gate_tbl: Optional[np.ndarray] = None  # [n_query, n_cand, 6] host
         self._gate_row: Dict[int, int] = {}
         self._gate_col: Dict[int, int] = {}
+        self._gate_graph: Optional[_GraphedRelinkGateRunner] = None
+        self._gate_graph_failed = False
+        self._cheb_gr_graph: Optional[_GraphedChebGRSelfRunner] = None
+        self._cheb_gr_graph_failed = False
         if self.gpu_relink_gate:
             try:
                 import saccade_tracking_ext as _ext
@@ -224,6 +623,7 @@ class PythonSemanticRelinker:
                 self._gate_ext = _ext
             except Exception:
                 self.gpu_relink_gate = False
+                self.gpu_relink_gate_graph = False
         self.clean_score_threshold = clean_score_threshold
         self.clean_margin_ratio = clean_margin_ratio
         self.clean_min_aspect = clean_min_aspect
@@ -271,6 +671,7 @@ class PythonSemanticRelinker:
         self._ema_h: Dict[int, float] = {}
         self._foot_history: Dict[int, List[Tuple[float, float]]] = {}
         self._pending_claims: Dict[int, Dict[str, int]] = {}
+        self._pending_heads: Dict[int, List[torch.Tensor]] = {}
         self._deferred_alias: Dict[int, int] = {}
         self.stats: Dict[str, int] = {
             "attempts": 0,
@@ -306,6 +707,17 @@ class PythonSemanticRelinker:
             "motion_only_match": 0,
             "motion_consistency_fail": 0,
             "motion_iou_gate_pass": 0,
+            "cheb_gr_claim_attempts": 0,
+            "cheb_gr_claim_accepted": 0,
+            "cheb_gr_claim_reject_cost": 0,
+            "cheb_gr_claim_reject_margin": 0,
+            "cheb_gr_claim_reject_sim": 0,
+            "cheb_gr_claim_reject_spatial": 0,
+            "cheb_gr_claim_reject_min_head": 0,
+            "cheb_gr_claim_reject_no_bank": 0,
+            "cheb_gr_claim_candidates": 0,
+            "cheb_gr_claim_graph_replay": 0,
+            "cheb_gr_claim_graph_fallback": 0,
         }
         self._bio_tracker: Any = None
         self.accept_sims: List[float] = []
@@ -654,34 +1066,60 @@ class PythonSemanticRelinker:
             device=self.device,
         )
 
-    def _buffer_mean(self, cid: int) -> Optional[torch.Tensor]:
+    def _valid_buffer_samples(
+        self, cid: int, dim: Optional[int] = None
+    ) -> List[torch.Tensor]:
         buf = self.buffers.get(cid)
         if not buf:
+            return []
+        if dim is None:
+            dims = [int(b.numel()) for b in buf if b is not None]
+            if not dims:
+                return []
+            dim = max(set(dims), key=dims.count)
+        return [
+            b.to(self.device).reshape(-1)
+            for b in buf
+            if b is not None and int(b.numel()) == dim
+        ]
+
+    def _buffer_mean(
+        self, cid: int, dim: Optional[int] = None
+    ) -> Optional[torch.Tensor]:
+        valid = self._valid_buffer_samples(cid, dim)
+        if not valid:
             return None
-        if len(buf) == 1:
-            return buf[0]
-        return F.normalize(torch.stack(buf).mean(dim=0), dim=0)
+        if len(valid) == 1:
+            return valid[0]
+        return F.normalize(torch.stack(valid).mean(dim=0), dim=0)
 
     def _buffer_consistency(self, cid: int) -> float:
-        buf = self.buffers.get(cid)
-        if buf is None or len(buf) < 2:
+        valid = self._valid_buffer_samples(cid)
+        if len(valid) < 2:
             return 1.0
-        stacked = torch.stack(buf)  # [K, D]
+        stacked = torch.stack(valid)  # [K, D]
         cosines = stacked @ stacked.T  # [K, K]
-        n = len(buf)
+        n = len(valid)
         return float((cosines.sum() - n) / (n * (n - 1)))
 
     def _buffer_sim(self, cid: int, query: torch.Tensor) -> float:
         """Compute similarity between query and stored samples using rerank_mode."""
+        dim = int(query.numel())
         buf = self.buffers.get(cid)
         if not buf or self.rerank_mode == "mean":
-            ref = self._buffer_mean(cid)
+            ref = self._buffer_mean(cid, dim)
             if ref is None:
                 ref = self.features.get(cid)
-            if ref is None:
+            if ref is None or int(ref.numel()) != dim:
                 return -1.0
-            return float(torch.dot(query, ref).item())
-        stacked = torch.stack(buf)  # [K, D]
+            return float(torch.dot(query, ref.to(self.device).reshape(-1)).item())
+        valid = self._valid_buffer_samples(cid, dim)
+        if not valid:
+            ref = self.features.get(cid)
+            if ref is None or int(ref.numel()) != dim:
+                return -1.0
+            valid = [ref.to(self.device).reshape(-1)]
+        stacked = torch.stack(valid)  # [K, D]
         sims = stacked @ query  # [K]
         if self.rerank_mode == "max":
             return float(sims.max().item())
@@ -727,13 +1165,132 @@ class PythonSemanticRelinker:
         elif pending["last"] != frame_id:
             pending["last"] = frame_id
             pending["hits"] += 1
-        ready = pending["hits"] >= self.claim_warmup_frames
+        ready = self._is_pending_ready(raw_id)
         self.stats["delayed_claim_ready" if ready else "delayed_claim_pending"] += 1
         return not ready
 
+    def _remember_pending_head(
+        self, raw_id: int, emb: Optional[torch.Tensor], is_clean: bool
+    ) -> None:
+        if not self.cheb_gr_claim or emb is None or not is_clean:
+            return
+        if self.alias.get(raw_id, raw_id) != raw_id:
+            return
+        head = self._pending_heads.setdefault(raw_id, [])
+        if len(head) >= max(self.claim_warmup_frames, self.cheb_gr_min_head):
+            return
+        head.append(emb.detach())
+
+    def _candidate_bank(self, cid: int, dim: int) -> Optional[torch.Tensor]:
+        buf = self.buffers.get(cid)
+        if buf:
+            valid = [
+                b.to(self.device).reshape(-1)
+                for b in buf
+                if b is not None and int(b.numel()) == dim
+            ]
+            if not valid:
+                return None
+            bank = torch.stack(valid)
+        else:
+            ref = self.features.get(cid)
+            if ref is None or int(ref.numel()) != dim:
+                return None
+            bank = ref.to(self.device).reshape(1, -1)
+        if bank.shape[0] == 0:
+            return None
+        return F.normalize(bank.float(), dim=1)
+
+    def _cheb_gr_self_distance(self, feats: torch.Tensor) -> torch.Tensor:
+        params = (
+            float(self.cheb_gr_lambda),
+            int(self.cheb_gr_k2),
+            int(self.cheb_gr_max_fwd),
+            float(self.cheb_gr_fuse_lambda),
+        )
+        if self.cheb_gr_cuda_graph and not self._cheb_gr_graph_failed:
+            try:
+                if self._cheb_gr_graph is None:
+                    self._cheb_gr_graph = _GraphedChebGRSelfRunner(
+                        self.device,
+                        initial_cap_n=self.cheb_gr_graph_init_cap,
+                    )
+                dist = self._cheb_gr_graph.replay(feats, params)
+                self.stats["cheb_gr_claim_graph_replay"] += 1
+                return dist
+            except Exception as exc:
+                print(f"⚠️  [ChebGRGraph] capture/replay failed; fallback: {exc}")
+                self._cheb_gr_graph_failed = True
+                self._cheb_gr_graph = None
+                self.stats["cheb_gr_claim_graph_fallback"] += 1
+                torch.cuda.synchronize(self.device)  # saccade-allow-cpu
+        return cheb_gr_kreciprocal(
+            feats,
+            feats,
+            cheb_lambda=float(params[0]),
+            k2=min(int(params[1]), int(feats.shape[0])),
+            max_fwd=int(params[2]),
+            fuse_lambda=float(params[3]),
+        )
+
+    def _cheb_gr_claim_best(
+        self,
+        raw_id: int,
+        candidates_to_score: List[tuple[Any, ...]],
+    ) -> tuple[Optional[int], float, float]:
+        self.stats["cheb_gr_claim_attempts"] += 1
+        head_items = self._pending_heads.get(raw_id, [])
+        if len(head_items) < self.cheb_gr_min_head:
+            self.stats["cheb_gr_claim_reject_min_head"] += 1
+            return None, float("inf"), float("inf")
+
+        head = F.normalize(torch.stack([h.to(self.device) for h in head_items]), dim=1)
+        feats_list: List[torch.Tensor] = [head]
+        spans: Dict[int, tuple[int, int]] = {}
+        pos = head.shape[0]
+        for item in candidates_to_score:
+            cid = int(item[0])
+            bank = self._candidate_bank(cid, int(head.shape[1]))
+            if bank is None:
+                continue
+            feats_list.append(bank)
+            spans[cid] = (pos, pos + bank.shape[0])
+            pos += bank.shape[0]
+
+        if not spans:
+            self.stats["cheb_gr_claim_reject_no_bank"] += 1
+            return None, float("inf"), float("inf")
+        self.stats["cheb_gr_claim_candidates"] += len(spans)
+
+        feats = torch.cat(feats_list, dim=0)
+        dist = self._cheb_gr_self_distance(feats)
+        head_rows = dist[: head.shape[0]]
+        scored: List[tuple[float, int]] = []
+        for cid, (lo, hi) in spans.items():
+            block = head_rows[:, lo:hi].reshape(-1)
+            k = max(1, int(round(self.cheb_gr_pool_frac * block.numel())))
+            cost = float(torch.topk(block, k, largest=False).values.mean().item())
+            scored.append((cost, cid))
+        scored.sort(key=lambda item: (item[0], item[1]))
+
+        best_cost, best_id = scored[0]
+        second_cost = scored[1][0] if len(scored) > 1 else float("inf")
+        if best_cost > self.cheb_gr_max_cost:
+            self.stats["cheb_gr_claim_reject_cost"] += 1
+            return None, best_cost, second_cost
+        if self.cheb_gr_margin > 0.0 and second_cost - best_cost < self.cheb_gr_margin:
+            self.stats["cheb_gr_claim_reject_margin"] += 1
+            return None, best_cost, second_cost
+        self.stats["cheb_gr_claim_accepted"] += 1
+        return best_id, best_cost, second_cost
+
     def _is_pending_ready(self, raw_id: int) -> bool:
         pending = self._pending_claims.get(raw_id)
-        return bool(pending and pending["hits"] >= self.claim_warmup_frames)
+        if not pending or pending["hits"] < self.claim_warmup_frames:
+            return False
+        if not self.cheb_gr_claim:
+            return True
+        return len(self._pending_heads.get(raw_id, [])) >= self.cheb_gr_min_head
 
     def _update_motion_model(
         self, canonical_id: int, box: torch.Tensor, frame_id: int
@@ -843,6 +1400,36 @@ class PythonSemanticRelinker:
             hist.pop(0)
         return self.alias[raw_id]
 
+    def _resolve_without_embedding_self(
+        self,
+        raw_id: int,
+        box: torch.Tensor,
+        frame_id: int,
+        assigned: Set[int],
+    ) -> int:
+        if raw_id not in self.alias:
+            self.stats["new_ids"] += 1
+            self.alias[raw_id] = raw_id
+
+        canonical = self.alias[raw_id]
+        if canonical in assigned:
+            canonical = self._split_on_collision(raw_id)
+        if canonical not in self.features:
+            self.features[canonical] = torch.zeros(1, device=self.device)
+        self.last_seen[canonical] = frame_id
+        self.last_boxes[canonical] = box
+        bh = float(box[3] - box[1])
+        old_h = self._ema_h.get(canonical)
+        self._ema_h[canonical] = bh if old_h is None else 0.95 * old_h + 0.05 * bh
+        cx = (float(box[0]) + float(box[2])) * 0.5
+        cy = (float(box[1]) + float(box[3])) * 0.5
+        hist = self._foot_history.setdefault(canonical, [])
+        hist.append((cx, cy))
+        if len(hist) > 8:
+            hist.pop(0)
+        assigned.add(canonical)
+        return canonical
+
     def resolve(
         self,
         raw_id: int,
@@ -857,7 +1444,7 @@ class PythonSemanticRelinker:
         if embedding is None:
             if self.motion_cfg.enable_motion_only and not self.bidirectional:
                 return self._resolve_motion_only(raw_id, box, frame_id, w, h, assigned)
-            emb = None
+            return self._resolve_without_embedding_self(raw_id, box, frame_id, assigned)
 
         if embedding is not None:
             emb = self._normalize(embedding)
@@ -895,6 +1482,8 @@ class PythonSemanticRelinker:
         current_sim_thresh = (
             self.sim_threshold if is_clean else self.strict_sim_threshold
         )
+        if self.delayed_claim:
+            self._remember_pending_head(raw_id, emb, is_clean)
 
         if (
             self.delayed_claim
@@ -1105,136 +1694,199 @@ class PythonSemanticRelinker:
             _use_unified_score = (
                 self.w_sim_base > 0.0 or self.w_iou_base > 0.0 or self.w_maha_base > 0.0
             )
+            cheb_gr_scored = (
+                self.cheb_gr_claim
+                and self.delayed_claim
+                and claim_ready
+                and emb is not None
+            )
 
-            if not _use_unified_score and not _use_legacy_joint:
+            if cheb_gr_scored:
+                cheb_candidates_to_score = []
+                for item in candidates_to_score:
+                    cid = int(item[0])
+                    age = int(item[1])
+                    iou = float(item[2])
+                    center_norm = float(item[3])
+                    spatial_failed = bool(item[5])
+                    if spatial_failed:
+                        self.stats["reject_spatial"] += 1
+                        self.stats["cheb_gr_claim_reject_spatial"] += 1
+                        self.age_gate_pass_outcomes.append((age, "spatial"))
+                        if center_norm > self.spatial_gate:
+                            self.age_gate_pass_spatial_subreasons.append(
+                                (age, "center_norm")
+                            )
+                        if iou < self.min_iou:
+                            self.age_gate_pass_spatial_subreasons.append((age, "iou"))
+                        continue
+                    sim = self._buffer_sim(cid, emb)
+                    if sim < self.cheb_gr_min_sim:
+                        self.stats["reject_similarity"] += 1
+                        self.stats["cheb_gr_claim_reject_sim"] += 1
+                        self.age_gate_pass_outcomes.append((age, "similarity"))
+                        continue
+                    cheb_candidates_to_score.append(item)
+                best_id, best_cost, second_cost = self._cheb_gr_claim_best(
+                    raw_id, cheb_candidates_to_score
+                )
+                if best_id is not None:
+                    info_by_id = {int(item[0]): item for item in candidates_to_score}
+                    info = info_by_id[best_id]
+                    best_joint = -best_cost
+                    second_best_joint = (
+                        -second_cost if np.isfinite(second_cost) else best_joint - 1.0
+                    )
+                    best_sim_raw = max(0.0, self._buffer_sim(best_id, emb))
+                    best_iou = float(info[2])
+                    best_center = float(info[3])
+                    best_maha = float(info[4])
+                    best_bypassed = False
+            elif not _use_unified_score and not _use_legacy_joint:
                 best_joint = current_sim_thresh
                 second_best_joint = current_sim_thresh - 1.0
 
             # Batch similarity: one matmul + one D2H instead of N dot-products
             _sim_iter = None
-            if emb is not None and candidates_to_score and self.buffer_size == 1:
+            if (
+                not cheb_gr_scored
+                and emb is not None
+                and candidates_to_score
+                and self.buffer_size == 1
+            ):
                 _cand_ids = [c[0] for c in candidates_to_score]
-                _bank = torch.stack([self.features[cid] for cid in _cand_ids]).to(
-                    self.device
-                )
-                _batch_sims = (_bank @ emb).tolist()  # single kernel + single D2H
-                _sim_iter = iter(_batch_sims)
+                _dim = int(emb.numel())
+                _cand_refs: List[torch.Tensor] = []
+                _batch_ok = True
+                for cid in _cand_ids:
+                    ref = self.features.get(cid)
+                    if ref is None or int(ref.numel()) != _dim:
+                        _batch_ok = False
+                        break
+                    _cand_refs.append(ref.to(self.device).reshape(-1))
+                if _batch_ok:
+                    _bank = torch.stack(_cand_refs)
+                    _batch_sims = (_bank @ emb).tolist()  # single kernel + single D2H
+                    _sim_iter = iter(_batch_sims)
 
-            for (
-                cid,
-                age,
-                iou,
-                center_norm,
-                maha,
-                spatial_failed,
-                motion_iou_ema,
-                motion_ok,
-                kalman_d2,
-                bridge_dist,
-                current_threshold,
-            ) in candidates_to_score:
-                if emb is None:
-                    sim = 0.0
-                elif self.buffer_size > 1:
-                    sim = self._buffer_sim(cid, emb)
-                else:
-                    assert _sim_iter is not None
-                    sim = next(_sim_iter)
+            if not cheb_gr_scored:
+                for (
+                    cid,
+                    age,
+                    iou,
+                    center_norm,
+                    maha,
+                    spatial_failed,
+                    motion_iou_ema,
+                    motion_ok,
+                    kalman_d2,
+                    bridge_dist,
+                    current_threshold,
+                ) in candidates_to_score:
+                    if emb is None:
+                        sim = 0.0
+                    elif self.buffer_size > 1 or _sim_iter is None:
+                        sim = self._buffer_sim(cid, emb)
+                    else:
+                        sim = next(_sim_iter)
 
-                # Hard appearance gate: raw cosine must still pass sim_threshold.
-                if emb is not None and sim < current_sim_thresh:
-                    self.stats["reject_similarity"] += 1
-                    self.age_gate_pass_outcomes.append((age, "similarity"))
-                    continue
+                    # Hard appearance gate: raw cosine must still pass sim_threshold.
+                    if emb is not None and sim < current_sim_thresh:
+                        self.stats["reject_similarity"] += 1
+                        self.age_gate_pass_outcomes.append((age, "similarity"))
+                        continue
 
-                appearance_first_bypass = (
-                    self.experimental_mode == "appearance_first"
-                    and spatial_failed
-                    and is_clean
-                    and sim >= self.appearance_first_sim_threshold
-                )
-                if spatial_failed and not appearance_first_bypass:
-                    self.stats["reject_spatial"] += 1
-                    self.age_gate_pass_outcomes.append((age, "spatial"))
-                    if center_norm > self.spatial_gate:
-                        self.age_gate_pass_spatial_subreasons.append(
-                            (age, "center_norm")
+                    appearance_first_bypass = (
+                        self.experimental_mode == "appearance_first"
+                        and spatial_failed
+                        and is_clean
+                        and sim >= self.appearance_first_sim_threshold
+                    )
+                    if spatial_failed and not appearance_first_bypass:
+                        self.stats["reject_spatial"] += 1
+                        self.age_gate_pass_outcomes.append((age, "spatial"))
+                        if center_norm > self.spatial_gate:
+                            self.age_gate_pass_spatial_subreasons.append(
+                                (age, "center_norm")
+                            )
+                        if iou < self.min_iou:
+                            self.age_gate_pass_spatial_subreasons.append((age, "iou"))
+                        continue
+
+                    maha_score = 0.0
+                    if current_threshold > 0.0 and maha > 0.0:
+                        maha_score = max(0.0, 1.0 - maha / current_threshold)
+
+                    # Motion evidence bonus: add motion IoU as soft evidence
+                    motion_bonus = 0.0
+                    if motion_ok:
+                        motion_bonus = self.motion_cfg.w_motion_iou * motion_iou_ema
+
+                    if appearance_first_bypass:
+                        joint = sim
+                    elif _use_unified_score:
+                        w_sim = self.w_sim_base
+                        w_iou = self.w_iou_base
+                        w_maha = self.w_maha_base
+
+                        if n_gate_passed > 1:
+                            ambiguity_factor = min(1.0, (n_gate_passed - 1) / 8.0)
+                            w_sim += self.shift_ambiguity * ambiguity_factor
+                            w_iou -= self.shift_ambiguity * ambiguity_factor
+
+                        lost_factor = min(1.0, age / max(1, self.ttl))
+                        w_sim += self.shift_lost_age * lost_factor
+                        w_iou -= self.shift_lost_age * lost_factor
+
+                        w_sim = max(0.0, w_sim)
+                        w_iou = max(0.0, w_iou)
+                        w_maha = max(0.0, w_maha)
+                        sum_w = w_sim + w_iou + w_maha
+                        if sum_w > 0:
+                            w_sim /= sum_w
+                            w_iou /= sum_w
+                            w_maha /= sum_w
+
+                        joint = (
+                            w_sim * sim
+                            + w_iou * iou
+                            + w_maha * maha_score
+                            + motion_bonus
                         )
-                    if iou < self.min_iou:
-                        self.age_gate_pass_spatial_subreasons.append((age, "iou"))
-                    continue
+                    elif _use_legacy_joint:
+                        joint = (
+                            sim
+                            + self.iou_weight * iou
+                            + self.mahalanobis_weight * maha_score
+                            + motion_bonus
+                        )
+                    else:
+                        joint = sim + motion_bonus
 
-                maha_score = 0.0
-                if current_threshold > 0.0 and maha > 0.0:
-                    maha_score = max(0.0, 1.0 - maha / current_threshold)
+                    # Spatial probability penalty: cost = 1 - exp(-D^2/2); closer to the
+                    # predicted cloud center costs less.
+                    if self.kalman_penalty_weight > 0.0 and kalman_d2 >= 0.0:
+                        joint -= self.kalman_penalty_weight * (
+                            1.0 - float(np.exp(-0.5 * kalman_d2))
+                        )
 
-                # Motion evidence bonus: add motion IoU as soft evidence
-                motion_bonus = 0.0
-                if motion_ok:
-                    motion_bonus = self.motion_cfg.w_motion_iou * motion_iou_ema
-
-                if appearance_first_bypass:
-                    joint = sim
-                elif _use_unified_score:
-                    w_sim = self.w_sim_base
-                    w_iou = self.w_iou_base
-                    w_maha = self.w_maha_base
-
-                    if n_gate_passed > 1:
-                        ambiguity_factor = min(1.0, (n_gate_passed - 1) / 8.0)
-                        w_sim += self.shift_ambiguity * ambiguity_factor
-                        w_iou -= self.shift_ambiguity * ambiguity_factor
-
-                    lost_factor = min(1.0, age / max(1, self.ttl))
-                    w_sim += self.shift_lost_age * lost_factor
-                    w_iou -= self.shift_lost_age * lost_factor
-
-                    w_sim = max(0.0, w_sim)
-                    w_iou = max(0.0, w_iou)
-                    w_maha = max(0.0, w_maha)
-                    sum_w = w_sim + w_iou + w_maha
-                    if sum_w > 0:
-                        w_sim /= sum_w
-                        w_iou /= sum_w
-                        w_maha /= sum_w
-
-                    joint = (
-                        w_sim * sim + w_iou * iou + w_maha * maha_score + motion_bonus
-                    )
-                elif _use_legacy_joint:
-                    joint = (
-                        sim
-                        + self.iou_weight * iou
-                        + self.mahalanobis_weight * maha_score
-                        + motion_bonus
-                    )
-                else:
-                    joint = sim + motion_bonus
-
-                # Spatial probability penalty: cost = 1 - exp(-D^2/2); closer to the
-                # predicted cloud center costs less.
-                if self.kalman_penalty_weight > 0.0 and kalman_d2 >= 0.0:
-                    joint -= self.kalman_penalty_weight * (
-                        1.0 - float(np.exp(-0.5 * kalman_d2))
-                    )
-
-                if joint > best_joint:
-                    if best_id is not None:
-                        second_best_joint = best_joint  # demote previous winner
-                    best_id = cid
-                    best_joint = joint
-                    best_sim_raw = sim
-                    best_iou, best_center, best_maha = iou, center_norm, maha
-                    best_bypassed = appearance_first_bypass
-                else:
-                    if joint > second_best_joint:
-                        second_best_joint = joint  # update runner-up
-                    self.stats["reject_similarity"] += 1
-                    self.age_gate_pass_outcomes.append((age, "similarity"))
+                    if joint > best_joint:
+                        if best_id is not None:
+                            second_best_joint = best_joint  # demote previous winner
+                        best_id = cid
+                        best_joint = joint
+                        best_sim_raw = sim
+                        best_iou, best_center, best_maha = iou, center_norm, maha
+                        best_bypassed = appearance_first_bypass
+                    else:
+                        if joint > second_best_joint:
+                            second_best_joint = joint  # update runner-up
+                        self.stats["reject_similarity"] += 1
+                        self.age_gate_pass_outcomes.append((age, "similarity"))
 
             # Dynamic margin: base + crowd penalty + age penalty
             effective_margin = self.reciprocal_margin
-            if best_id is not None:
+            if best_id is not None and not cheb_gr_scored:
                 if self.dynamic_margin_crowd > 0.0 and n_gate_passed > 1:
                     crowd_factor = min(1.0, (n_gate_passed - 1) / 8.0)
                     effective_margin += self.dynamic_margin_crowd * crowd_factor
@@ -1246,7 +1898,7 @@ class PythonSemanticRelinker:
                     effective_margin = max(
                         effective_margin, self.appearance_first_margin
                     )
-            if best_id is not None and effective_margin > 0.0:
+            if best_id is not None and not cheb_gr_scored and effective_margin > 0.0:
                 if best_joint - second_best_joint < effective_margin:
                     self.stats["reject_margin"] += 1
                     best_age = frame_id - self.last_seen.get(best_id, frame_id)
@@ -1273,11 +1925,13 @@ class PythonSemanticRelinker:
                     self.stats["delayed_claim_accepted"] += 1
                     self._deferred_alias[raw_id] = best_id
                     self._pending_claims.pop(raw_id, None)
+                    self._pending_heads.pop(raw_id, None)
             else:
                 self.stats["new_ids"] += 1
                 self.alias[raw_id] = raw_id
                 if self.delayed_claim and claim_ready:
                     self._pending_claims.pop(raw_id, None)
+                    self._pending_heads.pop(raw_id, None)
 
         canonical = self.alias[raw_id]
         # Per-frame uniqueness guard: never emit the same canonical id twice in one
@@ -1303,7 +1957,8 @@ class PythonSemanticRelinker:
                     if len(buf) > self.buffer_size:
                         buf.pop(0)
                     self.features[canonical] = F.normalize(
-                        torch.stack(buf).mean(dim=0), dim=0
+                        torch.stack([b.to(self.device) for b in buf]).mean(dim=0),
+                        dim=0,
                     ).detach()
                 else:
                     old = self.features.get(canonical)
@@ -1415,6 +2070,53 @@ class PythonSemanticRelinker:
                 q_foot[i, k * 2 + 1] = fy
             q_footn[i] = min(len(hist), 4)
 
+        dims = 2 if self.bidirectional else 4
+        params = (
+            int(w),
+            int(h),
+            dims,
+            float(self.kalman_fps),
+            float(self.kalman_person_height_m),
+            float(self.kalman_max_speed_mps),
+            float(self.kalman_accel_long),
+            float(self.kalman_accel_lat),
+            float(self.kalman_dir_min_cos),
+            float(self.kalman_dir_min_speed),
+        )
+        if self.gpu_relink_gate_graph and not self._gate_graph_failed:
+            try:
+                if self._gate_graph is None:
+                    self._gate_graph = _GraphedRelinkGateRunner(
+                        ext,
+                        self.device,
+                        initial_cap_q=self.gpu_relink_gate_init_query_cap,
+                        initial_cap_c=self.gpu_relink_gate_init_candidate_cap,
+                    )
+                self._gate_graph.ensure(nq, nc, params)
+                self._gate_graph.copy_inputs(
+                    q_box,
+                    q_foot,
+                    q_footn,
+                    q_emah,
+                    c_last,
+                    c_mean,
+                    c_cov,
+                    c_foot,
+                    c_footn,
+                    c_emah,
+                    c_gap,
+                    c_delta,
+                    c_has,
+                )
+                tbl_graph = self._gate_graph.replay(nq, nc)
+                self._gate_tbl = tbl_graph.detach().cpu().numpy()
+                return
+            except Exception as exc:
+                print(f"⚠️  [RelinkGateGraph] capture/replay failed; fallback: {exc}")
+                self._gate_graph_failed = True
+                self._gate_graph = None
+                torch.cuda.synchronize(self.device)  # saccade-allow-cpu
+
         dev = self.device
 
         def _t(a: np.ndarray) -> torch.Tensor:
@@ -1433,20 +2135,19 @@ class PythonSemanticRelinker:
             _t(c_has),
         ]
         tbl = torch.zeros((nq, nc, 6), dtype=torch.float32, device=dev)
-        dims = 2 if self.bidirectional else 4
         ext.relink_gate_batch(
             nq,
             nc,
             int(w),
             int(h),
-            dims,
-            float(self.kalman_fps),
-            float(self.kalman_person_height_m),
-            float(self.kalman_max_speed_mps),
-            float(self.kalman_accel_long),
-            float(self.kalman_accel_lat),
-            float(self.kalman_dir_min_cos),
-            float(self.kalman_dir_min_speed),
+            int(params[2]),
+            float(params[3]),
+            float(params[4]),
+            float(params[5]),
+            float(params[6]),
+            float(params[7]),
+            float(params[8]),
+            float(params[9]),
             tq[0].data_ptr(),
             tq[1].data_ptr(),
             tq[2].data_ptr(),
@@ -1492,7 +2193,7 @@ class PythonSemanticRelinker:
     ) -> List[int]:
         assigned: Set[int] = set()
         order = self._frame_order([c[3] for c in candidates])
-        if self.gpu_relink_gate and self.bidirectional:
+        if self.gpu_relink_gate:
             self._build_gpu_gate_table(
                 [c[0] for c in candidates], [c[2] for c in candidates], frame_id, w, h
             )
@@ -1528,7 +2229,7 @@ class PythonSemanticRelinker:
     ) -> List[int]:
         assigned: Set[int] = set()
         order = self._frame_order(scores)
-        if self.gpu_relink_gate and self.bidirectional:
+        if self.gpu_relink_gate:
             self._build_gpu_gate_table(list(raw_ids), list(boxes), frame_id, w, h)
         out: List[int] = [0] * len(raw_ids)
         for i in order:
@@ -1654,6 +2355,20 @@ class PythonSemanticRelinker:
                 motion_registry_size=len(self.motion_registry),
             )
         )
+        if self.cheb_gr_claim:
+            print(
+                "  cheb_gr_claim attempts={cheb_gr_claim_attempts} "
+                "accepted={cheb_gr_claim_accepted} "
+                "candidates={cheb_gr_claim_candidates} "
+                "reject_cost={cheb_gr_claim_reject_cost} "
+                "reject_margin={cheb_gr_claim_reject_margin} "
+                "reject_sim={cheb_gr_claim_reject_sim} "
+                "reject_spatial={cheb_gr_claim_reject_spatial} "
+                "reject_min_head={cheb_gr_claim_reject_min_head} "
+                "reject_no_bank={cheb_gr_claim_reject_no_bank} "
+                "graph_replay={cheb_gr_claim_graph_replay} "
+                "graph_fallback={cheb_gr_claim_graph_fallback}".format(**self.stats)
+            )
         print(
             "  age_hist gate_pass=("
             + _histogram(

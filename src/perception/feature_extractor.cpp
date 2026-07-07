@@ -1,14 +1,33 @@
 #include "perception/feature_extractor.hpp"
+#include "utils/nvtx_range.hpp"
 #include <cuda_runtime.h>
 #include <iostream>
 #include <algorithm>
 #include <stdexcept>
+#include <string>
 
 namespace saccade {
+
+namespace {
+
+void check_cuda(cudaError_t err, const char* where) {
+    if (err != cudaSuccess) {
+        throw std::runtime_error(
+            std::string("FeatureExtractor CUDA error at ") + where + ": "
+            + cudaGetErrorString(err));
+    }
+}
+
+} // namespace
 
 // Extern kernels from preprocessor_gpu.cu
 void launch_reid_pre_normalize(
     float* data, int num, int channels, int h, int w,
+    const float* mean, const float* std, bool is_siglip,
+    cudaStream_t stream);
+
+void launch_reid_preprocess(
+    const float* src, float* dst, int num, int channels, int h, int w,
     const float* mean, const float* std, bool is_siglip,
     cudaStream_t stream);
 
@@ -37,8 +56,9 @@ FeatureExtractor::FeatureExtractor(const std::string& model_path, ModelType type
     
     // Auto-detect names and shapes
     bool is_siglip_family = (type == ModelType::SIGLIP2);
-    input_name_ = is_siglip_family ? "pixel_values" : "input";
-    output_name_ = is_siglip_family ? "image_embeds" : "output";
+    bool uses_pixel_values = is_siglip_family || type == ModelType::MOBILENETV4_REID;
+    input_name_ = uses_pixel_values ? "pixel_values" : "input";
+    output_name_ = uses_pixel_values ? "image_embeds" : "output";
     
     // Validate primary input
     auto in_dims = engine_->getTensorDims(input_name_.c_str());
@@ -149,17 +169,25 @@ FeatureExtractor::FeatureExtractor(const std::string& model_path, ModelType type
         cudaMemcpy(d_mean_, h_mean, sizeof(h_mean), cudaMemcpyHostToDevice);
         cudaMemcpy(d_std_, h_std, sizeof(h_std), cudaMemcpyHostToDevice);
     }
+
+    size_t input_scratch_bytes =
+        static_cast<size_t>(max_batch_) * 3 * input_h_ * input_w_ * sizeof(float);
+    check_cuda(
+        cudaMalloc(&d_input_scratch_, input_scratch_bytes),
+        "input scratch allocation");
 }
 
 FeatureExtractor::~FeatureExtractor() {
     if (d_mean_) cudaFree(d_mean_);
     if (d_std_) cudaFree(d_std_);
+    if (d_input_scratch_) cudaFree(d_input_scratch_);
     for (auto& pair : scratch_buffers_) {
         cudaFree(pair.second);
     }
 }
 
 void FeatureExtractor::extract(void* input_cuda_ptr, int num_images, void* output_cuda_ptr, cudaStream_t stream) {
+    NvtxRange nvtx_range_ft("frame.reid.extract");
     if (num_images <= 0) return;
     if (profiling_enabled_) {
         reset_profile_stats();
@@ -169,7 +197,8 @@ void FeatureExtractor::extract(void* input_cuda_ptr, int num_images, void* outpu
     int processed = 0;
     while (processed < num_images) {
         int batch = std::min(num_images - processed, max_batch_);
-        float* cur_input = (float*)input_cuda_ptr + processed * 3 * input_h_ * input_w_;
+        float* raw_input = (float*)input_cuda_ptr + processed * 3 * input_h_ * input_w_;
+        float* cur_input = (float*)d_input_scratch_;
         float* cur_output = (float*)output_cuda_ptr + processed * feature_dim_;
         cudaEvent_t start = nullptr;
         cudaEvent_t stop = nullptr;
@@ -181,12 +210,15 @@ void FeatureExtractor::extract(void* input_cuda_ptr, int num_images, void* outpu
 
         // 1. Pre-normalize
         if (profiling_enabled_) cudaEventRecord(start, stream);
-        launch_reid_pre_normalize(
-            cur_input, batch, 3, input_h_, input_w_,
+        launch_reid_preprocess(
+            raw_input, cur_input, batch, 3, input_h_, input_w_,
             (float*)d_mean_, (float*)d_std_, 
             type_ == ModelType::SIGLIP2, 
             stream
         );
+        check_cuda(cudaGetLastError(), "reid_preprocess launch");
+        // saccade-allow-cpu: TensorRT may read on a runtime stream not ordered after this custom kernel.
+        check_cuda(cudaStreamSynchronize(stream), "reid_preprocess sync");
         if (profiling_enabled_) {
             cudaEventRecord(stop, stream);
             cudaEventSynchronize(stop);
@@ -209,7 +241,11 @@ void FeatureExtractor::extract(void* input_cuda_ptr, int num_images, void* outpu
 
         // 4. Infer
         if (profiling_enabled_) cudaEventRecord(start, stream);
-        engine_->enqueue_v3(stream);
+        if (!engine_->enqueue_v3(stream)) {
+            throw std::runtime_error("FeatureExtractor: TensorRT enqueue_v3 failed");
+        }
+        // saccade-allow-cpu: MobileNetV4 TRT writes can race the post-TRT L2 kernel without a device fence.
+        check_cuda(cudaDeviceSynchronize(), "TensorRT enqueue sync");
         if (profiling_enabled_) {
             cudaEventRecord(stop, stream);
             cudaEventSynchronize(stop);
@@ -221,6 +257,7 @@ void FeatureExtractor::extract(void* input_cuda_ptr, int num_images, void* outpu
         // 5. L2 Normalize output
         if (profiling_enabled_) cudaEventRecord(start, stream);
         launch_l2_normalize(cur_output, batch, feature_dim_, stream);
+        check_cuda(cudaGetLastError(), "l2_normalize launch");
         if (profiling_enabled_) {
             cudaEventRecord(stop, stream);
             cudaEventSynchronize(stop);
@@ -292,14 +329,18 @@ void FeatureExtractor::extract_with_stability(
     int processed = 0;
     while (processed < num_images) {
         int batch = std::min(num_images - processed, max_batch_);
-        float* cur_input     = (float*)input_cuda_ptr + processed * 3 * input_h_ * input_w_;
+        float* raw_input     = (float*)input_cuda_ptr + processed * 3 * input_h_ * input_w_;
+        float* cur_input     = (float*)d_input_scratch_;
         float* cur_embed_out = (float*)embedding_out  + processed * feature_dim_;
         float* cur_stab_out  = (float*)stability_out  + processed;
 
         // Pre-normalize (SigLIP: x*2-1)
-        launch_reid_pre_normalize(
-            cur_input, batch, 3, input_h_, input_w_,
+        launch_reid_preprocess(
+            raw_input, cur_input, batch, 3, input_h_, input_w_,
             nullptr, nullptr, true, stream);
+        check_cuda(cudaGetLastError(), "stability preprocess launch");
+        // saccade-allow-cpu: TensorRT may read on a runtime stream not ordered after this custom kernel.
+        check_cuda(cudaStreamSynchronize(stream), "stability preprocess sync");
 
         // Set input shape if dynamic
         if (is_dynamic_) {
@@ -314,7 +355,11 @@ void FeatureExtractor::extract_with_stability(
         }
 
         // TRT inference — populates lhs_buf [batch, N, C] and cur_embed_out [batch, feat_dim]
-        engine_->enqueue_v3(stream);
+        if (!engine_->enqueue_v3(stream)) {
+            throw std::runtime_error("FeatureExtractor: TensorRT enqueue_v3 failed");
+        }
+        // saccade-allow-cpu: TensorRT output must be complete before LaSt-ViT refinement.
+        check_cuda(cudaDeviceSynchronize(), "stability TensorRT enqueue sync");
 
         // LaSt-ViT refinement: overwrites cur_embed_out with Top-K pooled result
         launch_last_vit_refinement(
@@ -325,6 +370,7 @@ void FeatureExtractor::extract_with_stability(
 
         // L2 normalize the refined embedding
         launch_l2_normalize(cur_embed_out, batch, lhs_C_, stream);
+        check_cuda(cudaGetLastError(), "stability l2_normalize launch");
 
         processed += batch;
     }

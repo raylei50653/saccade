@@ -6,6 +6,7 @@ import torch.nn.functional as F
 
 from saccade.perception.feature_extractor import (
     TRTFeatureExtractor,
+    _CPP_MODEL_TYPES,
     _last_vit_dual,
 )
 
@@ -62,6 +63,10 @@ def test_cpp_ptr_raises_when_cpp_extension_not_attached() -> None:
 
     with pytest.raises(RuntimeError, match="C\\+\\+ extension not available"):
         _ = extractor.cpp_ptr
+
+
+def test_mobilenetv4_reid_uses_cpp_extractor_when_available() -> None:
+    assert "mobilenetv4_reid" in _CPP_MODEL_TYPES
 
 
 def test_extract_parts_fused_python_fallback_weights_and_normalizes() -> None:

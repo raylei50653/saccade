@@ -20,6 +20,7 @@ class EvalConfig:
     debug_dump_csv: str
     debug_birth_csv: str
     profile_stages: bool
+    profile_frame_csv: bool
     latency_only: bool
     workbench: bool
     threads: int
@@ -67,6 +68,17 @@ class EvalConfig:
     semantic_exp_density_gating: bool
     semantic_exp_density_k: float
     semantic_exp_density_eta: float
+    semantic_cheb_gr_claim: bool
+    semantic_cheb_gr_max_cost: float
+    semantic_cheb_gr_margin: float
+    semantic_cheb_gr_min_head: int
+    semantic_cheb_gr_pool_frac: float
+    semantic_cheb_gr_min_sim: float
+    semantic_gpu_relink_gate: bool | None
+    semantic_gpu_relink_gate_graph: bool
+    semantic_gpu_relink_gate_init_query_cap: int
+    semantic_gpu_relink_gate_init_candidate_cap: int
+    semantic_cheb_gr_graph_init_cap: int
 
     cross_tile_score_penalty: float
     tile_diagnostics: bool
@@ -233,6 +245,34 @@ class EvalConfig:
     cheb_gr_max_fwd: int
     cheb_gr_fuse_lambda: float
     cheb_gr_engine: str
+    cheb_gr_model: str
+    cheb_gr_online: bool
+    cheb_gr_online_decide_n: int
+    cheb_gr_online_max_cost: float
+    cheb_gr_online_min_head: int
+    cheb_gr_online_margin: float
+    cheb_gr_online_key_sim_min: float
+    cheb_gr_online_key_sim_cost_floor: float
+    cheb_gr_online_key_margin_min: float
+    cheb_gr_online_center_dist_veto: float
+    cheb_gr_online_pollution_veto: float
+    cheb_gr_online_neighbor_iou_max: float
+    cheb_gr_online_bank_mode: str
+    cheb_gr_online_bank_n: int
+    cheb_gr_online_log: bool
+
+    # Causal occ-exit identity audit (ABSORB-side twin of the online handover;
+    # default off). Shares the cheb_gr extractor + visclean coverage rule.
+    occ_audit: bool
+    occ_audit_tau: float
+    occ_audit_ref_n: int
+    occ_audit_min_ref: int
+    occ_audit_crops: int
+    occ_audit_window: int
+    occ_audit_min_occ: int
+    occ_audit_log: bool
+    occ_audit_bank_reference: bool
+    occ_audit_bank_n: int
 
     # Birth-time lost-bank ReID relink (online, GPU; default off)
     relink_enabled: bool
@@ -262,6 +302,7 @@ class EvalConfig:
     relink_bridge_occ_gap_min: int
     relink_bridge_occ_expand_px: float
     relink_bridge_occ_expand_cover: float
+    relink_bridge_app_veto: float
 
     min_tracklet_len: int
     min_tracklet_score: float
@@ -330,6 +371,8 @@ class EvalConfig:
     appearance_bank_high_quality_min_score: float
     appearance_bank_min_aspect: float
     appearance_bank_max_aspect: float
+    appearance_occlusion_gate: bool
+    appearance_occlusion_cov: float
 
     bank_quality_v2: bool
     bank_quality_w_det: float
@@ -370,6 +413,7 @@ def parse_eval_config(
     reid_model: str,
     profile_stages: bool,
     kwargs: dict[str, Any],
+    profile_frame_csv: bool = False,
 ) -> EvalConfig:
     output_root = Path(output)
 
@@ -459,6 +503,7 @@ def parse_eval_config(
         debug_dump_csv=str(kwargs.get("debug_dump_csv", "")).strip(),
         debug_birth_csv=str(kwargs.get("debug_birth_csv", "")).strip(),
         profile_stages=profile_stages,
+        profile_frame_csv=profile_frame_csv,
         latency_only=bool(kwargs.get("latency_only", False)),
         workbench=bool(kwargs.get("workbench", False)),
         threads=int(kwargs.get("threads", 1)),
@@ -519,6 +564,29 @@ def parse_eval_config(
         ),
         semantic_exp_density_k=float(kwargs.get("semantic_exp_density_k", 2.0)),
         semantic_exp_density_eta=float(kwargs.get("semantic_exp_density_eta", 0.15)),
+        semantic_cheb_gr_claim=bool(kwargs.get("semantic_cheb_gr_claim", False)),
+        semantic_cheb_gr_max_cost=float(kwargs.get("semantic_cheb_gr_max_cost", 0.45)),
+        semantic_cheb_gr_margin=float(kwargs.get("semantic_cheb_gr_margin", 0.05)),
+        semantic_cheb_gr_min_head=int(kwargs.get("semantic_cheb_gr_min_head", 2)),
+        semantic_cheb_gr_pool_frac=float(kwargs.get("semantic_cheb_gr_pool_frac", 0.3)),
+        semantic_cheb_gr_min_sim=float(kwargs.get("semantic_cheb_gr_min_sim", 0.0)),
+        semantic_gpu_relink_gate=(
+            None
+            if kwargs.get("semantic_gpu_relink_gate", None) is None
+            else bool(kwargs.get("semantic_gpu_relink_gate"))
+        ),
+        semantic_gpu_relink_gate_graph=bool(
+            kwargs.get("semantic_gpu_relink_gate_graph", True)
+        ),
+        semantic_gpu_relink_gate_init_query_cap=int(
+            kwargs.get("semantic_gpu_relink_gate_init_query_cap", 64)
+        ),
+        semantic_gpu_relink_gate_init_candidate_cap=int(
+            kwargs.get("semantic_gpu_relink_gate_init_candidate_cap", 128)
+        ),
+        semantic_cheb_gr_graph_init_cap=int(
+            kwargs.get("semantic_cheb_gr_graph_init_cap", 32)
+        ),
         cross_tile_score_penalty=float(kwargs.get("cross_tile_score_penalty", 1.0)),
         tile_diagnostics=bool(kwargs.get("tile_diagnostics", False)),
         tile_seam_score_penalty=float(kwargs.get("tile_seam_score_penalty", 1.0)),
@@ -536,7 +604,8 @@ def parse_eval_config(
         ),
         force_python_relinker=bool(kwargs.get("force_python_relinker", False)),
         use_semantic_mode=reid_mode in {"semantic", "hybrid"}
-        or bool(kwargs.get("semantic_kalman_gate", False)),
+        or bool(kwargs.get("semantic_kalman_gate", False))
+        or bool(kwargs.get("semantic_cheb_gr_claim", False)),
         use_tracker_reid=reid_mode in {"tracker", "hybrid"},
         person_class=int(kwargs.get("person_class", 0)),
         track_person_only=bool(kwargs.get("track_person_only", True)),
@@ -737,6 +806,95 @@ def parse_eval_config(
         cheb_gr_max_fwd=int(kwargs.get("cheb_gr_max_fwd", 50)),
         cheb_gr_fuse_lambda=float(kwargs.get("cheb_gr_fuse_lambda", 0.3)),
         cheb_gr_engine=str(kwargs.get("cheb_gr_engine", "") or ""),
+        cheb_gr_model=str(kwargs.get("cheb_gr_model", "siglip2_reid")),
+        cheb_gr_online=bool(
+            kwargs.get("cheb_gr_offline_handover", kwargs.get("cheb_gr_online", False))
+        ),
+        cheb_gr_online_decide_n=int(
+            kwargs.get(
+                "cheb_gr_offline_decide_n",
+                kwargs.get("cheb_gr_online_decide_n", 5),
+            )
+        ),
+        cheb_gr_online_max_cost=float(
+            kwargs.get(
+                "cheb_gr_offline_max_cost",
+                kwargs.get("cheb_gr_online_max_cost", 0.45),
+            )
+        ),
+        cheb_gr_online_min_head=int(
+            kwargs.get(
+                "cheb_gr_offline_min_head",
+                kwargs.get("cheb_gr_online_min_head", 1),
+            )
+        ),
+        cheb_gr_online_margin=float(
+            kwargs.get(
+                "cheb_gr_offline_margin",
+                kwargs.get("cheb_gr_online_margin", 0.0),
+            )
+        ),
+        cheb_gr_online_key_sim_min=float(
+            kwargs.get(
+                "cheb_gr_offline_key_sim_min",
+                kwargs.get("cheb_gr_online_key_sim_min", 0.0),
+            )
+        ),
+        cheb_gr_online_key_sim_cost_floor=float(
+            kwargs.get(
+                "cheb_gr_offline_key_sim_cost_floor",
+                kwargs.get("cheb_gr_online_key_sim_cost_floor", 0.0),
+            )
+        ),
+        cheb_gr_online_key_margin_min=float(
+            kwargs.get(
+                "cheb_gr_offline_key_margin_min",
+                kwargs.get("cheb_gr_online_key_margin_min", 0.0),
+            )
+        ),
+        cheb_gr_online_center_dist_veto=float(
+            kwargs.get(
+                "cheb_gr_offline_center_dist_veto",
+                kwargs.get("cheb_gr_online_center_dist_veto", 0.0),
+            )
+        ),
+        cheb_gr_online_pollution_veto=float(
+            kwargs.get(
+                "cheb_gr_offline_pollution_veto",
+                kwargs.get("cheb_gr_online_pollution_veto", 0.0),
+            )
+        ),
+        cheb_gr_online_neighbor_iou_max=float(
+            kwargs.get(
+                "cheb_gr_offline_neighbor_iou_max",
+                kwargs.get("cheb_gr_online_neighbor_iou_max", 0.0),
+            )
+        ),
+        cheb_gr_online_bank_mode=str(
+            kwargs.get(
+                "cheb_gr_offline_bank_mode",
+                kwargs.get("cheb_gr_online_bank_mode", "spread"),
+            )
+        ),
+        cheb_gr_online_bank_n=int(
+            kwargs.get(
+                "cheb_gr_offline_bank_n",
+                kwargs.get("cheb_gr_online_bank_n", 0),
+            )
+        ),
+        cheb_gr_online_log=bool(
+            kwargs.get("cheb_gr_offline_log", kwargs.get("cheb_gr_online_log", False))
+        ),
+        occ_audit=bool(kwargs.get("occ_audit", False)),
+        occ_audit_tau=float(kwargs.get("occ_audit_tau", 0.45)),
+        occ_audit_ref_n=int(kwargs.get("occ_audit_ref_n", 5)),
+        occ_audit_min_ref=int(kwargs.get("occ_audit_min_ref", 2)),
+        occ_audit_crops=int(kwargs.get("occ_audit_crops", 3)),
+        occ_audit_window=int(kwargs.get("occ_audit_window", 30)),
+        occ_audit_min_occ=int(kwargs.get("occ_audit_min_occ", 2)),
+        occ_audit_log=bool(kwargs.get("occ_audit_log", False)),
+        occ_audit_bank_reference=bool(kwargs.get("occ_audit_bank_reference", False)),
+        occ_audit_bank_n=int(kwargs.get("occ_audit_bank_n", 20)),
         relink_enabled=bool(kwargs.get("relink_enabled", False)),
         relink_bank_cap=int(kwargs.get("relink_bank_cap", 256)),
         relink_sim_thresh=float(kwargs.get("relink_sim_thresh", 0.6)),
@@ -770,6 +928,7 @@ def parse_eval_config(
         relink_bridge_occ_expand_cover=float(
             kwargs.get("relink_bridge_occ_expand_cover", 0.9)
         ),
+        relink_bridge_app_veto=float(kwargs.get("relink_bridge_app_veto", -1.0)),
         min_tracklet_len=max(1, int(kwargs.get("min_tracklet_len", 1))),
         min_tracklet_score=float(kwargs.get("min_tracklet_score", 0.0)),
         interpolate_tracklets=bool(kwargs.get("interpolate_tracklets", True)),
@@ -853,6 +1012,8 @@ def parse_eval_config(
         ),
         appearance_bank_min_aspect=float(kwargs.get("appearance_bank_min_aspect", 1.2)),
         appearance_bank_max_aspect=float(kwargs.get("appearance_bank_max_aspect", 4.5)),
+        appearance_occlusion_gate=bool(kwargs.get("appearance_occlusion_gate", False)),
+        appearance_occlusion_cov=float(kwargs.get("appearance_occlusion_cov", 0.4)),
         bank_quality_v2=bool(kwargs.get("bank_quality_v2", False)),
         bank_quality_w_det=float(kwargs.get("bank_quality_w_det", 0.45)),
         bank_quality_w_iou=float(kwargs.get("bank_quality_w_iou", 0.20)),

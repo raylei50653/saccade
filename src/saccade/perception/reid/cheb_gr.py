@@ -28,6 +28,8 @@ __all__ = [
     "cheb_gr_rerank_distance",
     "cheb_gr_jaccard_distance",
     "cheb_gr_kreciprocal",
+    "cheb_gr_kreciprocal_self_dense",
+    "cheb_gr_kreciprocal_self_dense_padded",
 ]
 
 
@@ -267,11 +269,12 @@ def cheb_gr_kreciprocal(
     # k2 local query expansion: V_i <- mean of V over i's k2 nearest neighbours.
     if k2 > 1:
         rows = torch.arange(n, device=device).repeat_interleave(k2)
-        a = torch.sparse_coo_tensor(
-            torch.stack([rows, knn.reshape(-1)]),
-            torch.full((n * k2,), 1.0 / k2, device=device),
-            (n, n),
-        ).coalesce()
+        with torch.sparse.check_sparse_tensor_invariants(False):  # type: ignore[no-untyped-call]
+            a = torch.sparse_coo_tensor(
+                torch.stack([rows, knn.reshape(-1)]),
+                torch.full((n * k2,), 1.0 / k2, device=device),
+                (n, n),
+            ).coalesce()
         v = torch.sparse.mm(a, v)
 
     # Jaccard distance via histogram intersection. V is sparse (only reciprocal
@@ -291,4 +294,160 @@ def cheb_gr_kreciprocal(
     if fuse_lambda >= 1.0:
         return d_jaccard
     d_orig = 0.5 * (1.0 - query_feats @ gallery_feats.t())
+    return fuse_lambda * d_jaccard + (1.0 - fuse_lambda) * d_orig
+
+
+def cheb_gr_kreciprocal_self_dense(
+    feats: Tensor,
+    *,
+    cheb_lambda: float = 2.0,
+    k2: int = 6,
+    max_fwd: int = 50,
+    fuse_lambda: float = 0.3,
+) -> Tensor:
+    """Dense, CUDA-graph-friendly variant for ``cheb_gr_kreciprocal(feats, feats)``.
+
+    The public k-reciprocal implementation uses sparse query expansion and a
+    per-query ``nonzero`` loop to avoid dense memory traffic on large offline
+    matrices.  Online delayed-claim batches are small, and CUDA graph capture
+    needs fixed-shape outputs, so this variant uses dense query expansion and
+    dense histogram intersection.  It preserves the same returned [N, N] block
+    as ``cheb_gr_kreciprocal(feats, feats, ...)``.
+    """
+    n = feats.shape[0]
+    if n == 0:
+        return feats.new_empty((0, 0))
+
+    combined = torch.cat([feats, feats], dim=0)
+    total = combined.shape[0]
+    device = combined.device
+
+    dist = combined @ combined.t()
+    dist.mul_(-2.0).add_(2.0).clamp_min_(0.0)
+    mu = dist.mean(dim=1, keepdim=True)
+    sigma = dist.std(dim=1, unbiased=False, keepdim=True)
+
+    fwd = dist <= (mu - cheb_lambda * sigma)
+    fwd.fill_diagonal_(True)
+    if 0 < max_fwd < total:
+        cap = torch.zeros_like(fwd)
+        cap.scatter_(1, torch.topk(dist, max_fwd, dim=1, largest=False).indices, True)
+        fwd &= cap
+        del cap
+    recip = fwd & fwd.t()
+    del fwd
+
+    k2_eff = min(max(k2, 1), total)
+    knn = torch.topk(dist, k2_eff, dim=1, largest=False).indices
+    v = dist.neg_().exp_().mul_(recip)
+    del recip
+    v = v / v.sum(dim=1, keepdim=True).clamp_min(1e-12)
+
+    if k2_eff > 1:
+        a = torch.zeros((total, total), dtype=v.dtype, device=device)
+        a.scatter_add_(
+            1,
+            knn,
+            torch.full((total, k2_eff), 1.0 / k2_eff, dtype=v.dtype, device=device),
+        )
+        v = a @ v
+
+    q = v[:n]
+    g = v[n:]
+    s = torch.minimum(q.unsqueeze(1), g.unsqueeze(0)).sum(dim=2)
+    d_jaccard = 1.0 - s / (2.0 - s).clamp_min(1e-12)
+
+    if fuse_lambda >= 1.0:
+        return d_jaccard
+    d_orig = 0.5 * (1.0 - feats @ feats.t())
+    return fuse_lambda * d_jaccard + (1.0 - fuse_lambda) * d_orig
+
+
+def cheb_gr_kreciprocal_self_dense_padded(
+    feats: Tensor,
+    valid_mask: Tensor,
+    combined_order: Tensor | None = None,
+    gallery_indices: Tensor | None = None,
+    *,
+    cheb_lambda: float = 2.0,
+    k2: int = 6,
+    max_fwd: int = 50,
+    fuse_lambda: float = 0.3,
+) -> Tensor:
+    """Fixed-shape self Cheb-GR with padded rows excluded by ``valid_mask``.
+
+    ``feats`` is [C, D], where only the first valid samples are active.
+    ``combined_order`` can reorder ``cat([feats, feats])`` so active query and
+    gallery rows are contiguous before padding. That preserves exact top-k tie
+    ordering against the non-padded online claim path.
+    """
+    cap_n = feats.shape[0]
+    if cap_n == 0:
+        return feats.new_empty((0, 0))
+
+    combined = torch.cat([feats, feats], dim=0)
+    if combined_order is not None:
+        combined = combined.index_select(
+            0, combined_order.to(device=combined.device, dtype=torch.long)
+        )
+    total = combined.shape[0]
+    device = combined.device
+    valid = valid_mask.to(device=device, dtype=torch.bool).reshape(total)
+    valid_f = valid.to(dtype=combined.dtype)
+    valid_cols = valid.view(1, total)
+    valid_rows = valid.view(total, 1)
+    valid_total = valid_f.sum().clamp_min(1.0)
+    valid_samples = valid_total.mul(0.5).clamp_min(1.0)
+
+    dist = combined @ combined.t()
+    dist.mul_(-2.0).add_(2.0).clamp_min_(0.0)
+    col_weight = valid_f.view(1, total)
+    mu = (dist * col_weight).sum(dim=1, keepdim=True) / valid_total
+    diff = (dist - mu) * col_weight
+    sigma = (diff * diff).sum(dim=1, keepdim=True).div(valid_total).sqrt()
+
+    fwd = (dist <= (mu - cheb_lambda * sigma)) & valid_rows & valid_cols
+    eye = torch.eye(total, dtype=torch.bool, device=device)
+    fwd |= eye & valid_rows
+
+    dist_rank = dist.masked_fill(~valid_cols, float("inf"))
+    if 0 < max_fwd < total:
+        cap = torch.zeros_like(fwd)
+        cap.scatter_(
+            1,
+            torch.topk(dist_rank, max_fwd, dim=1, largest=False).indices,
+            True,
+        )
+        fwd &= cap
+        del cap
+    recip = fwd & fwd.t()
+    del fwd
+
+    k2_cap = min(max(int(k2), 1), cap_n)
+    knn = torch.topk(dist_rank, k2_cap, dim=1, largest=False, sorted=True).indices
+    v = dist.neg_().exp_().mul_(recip)
+    del recip
+    v = v / v.sum(dim=1, keepdim=True).clamp_min(1e-12)
+
+    if k2_cap > 1:
+        a = torch.zeros((total, total), dtype=v.dtype, device=device)
+        k2_eff = valid_samples.clamp_max(float(k2_cap)).clamp_min(1.0)
+        rank = torch.arange(k2_cap, dtype=v.dtype, device=device)
+        weights = (rank < k2_eff).to(v.dtype).div(k2_eff)
+        a.scatter_add_(1, knn, weights.view(1, k2_cap).expand(total, k2_cap))
+        v = a @ v
+
+    q = v[:cap_n]
+    if gallery_indices is None:
+        g = v[cap_n:]
+    else:
+        g = v.index_select(
+            0, gallery_indices.to(device=device, dtype=torch.long).reshape(cap_n)
+        )
+    s = torch.minimum(q.unsqueeze(1), g.unsqueeze(0)).sum(dim=2)
+    d_jaccard = 1.0 - s / (2.0 - s).clamp_min(1e-12)
+
+    if fuse_lambda >= 1.0:
+        return d_jaccard
+    d_orig = 0.5 * (1.0 - feats @ feats.t())
     return fuse_lambda * d_jaccard + (1.0 - fuse_lambda) * d_orig

@@ -14,6 +14,17 @@ _DEFAULT_ENGINE: Dict[str, str] = {
     "transreid": "models/embedding/transreid_256x128.engine",
     "osnet": "models/embedding/osnet_x1_0_256x128.engine",
     "fastreid": "models/embedding/fastreid_256x128.engine",
+    "mobilenetv4_reid": "models/embedding/mobilenetv4_reid_visclean_224.engine",
+}
+
+_CPP_MODEL_TYPES = {
+    "siglip2",
+    "siglip2_reid",
+    "dinov2",
+    "transreid",
+    "osnet",
+    "fastreid",
+    "mobilenetv4_reid",
 }
 
 
@@ -101,7 +112,8 @@ class TRTFeatureExtractor:
 
         path = engine_path or _DEFAULT_ENGINE[model_type]
 
-        if HAS_CPP_EXT:
+        use_cpp_ext = HAS_CPP_EXT and model_type in _CPP_MODEL_TYPES
+        if use_cpp_ext:
             cpp_type_map = {
                 "siglip2": ModelType.SIGLIP2,
                 "siglip2_reid": ModelType.SIGLIP2,
@@ -109,6 +121,7 @@ class TRTFeatureExtractor:
                 "transreid": ModelType.TRANSREID,
                 "osnet": ModelType.OSNET,
                 "fastreid": ModelType.FASTREID,
+                "mobilenetv4_reid": ModelType.MOBILENETV4_REID,
             }
             print(f"Loading C++ TensorRT Engine [{model_type}] from {path}...")
             self._cpp = FeatureExtractorCpp(path, cpp_type_map[model_type], max_batch)
@@ -157,7 +170,13 @@ class TRTFeatureExtractor:
         self.feature_dim = int(self.output_buffers[self._embed_key].shape[-1])
 
         # Pre-cache ImageNet normalization tensors on the target device.
-        if model_type in {"dinov2", "transreid", "osnet", "fastreid"}:
+        if model_type in {
+            "dinov2",
+            "transreid",
+            "osnet",
+            "fastreid",
+            "mobilenetv4_reid",
+        }:
             self._imagenet_mean = torch.tensor(
                 _IMAGENET_MEAN, device=device, dtype=torch.float32
             ).view(1, 3, 1, 1)
@@ -183,6 +202,9 @@ class TRTFeatureExtractor:
             return torch.empty((0, self.feature_dim), device=self.device)
 
         if self._cpp is not None:
+            input_tensor = input_tensor.to(
+                device=self.device, dtype=torch.float32, non_blocking=True
+            ).contiguous()
             out = torch.empty(
                 (batch_size, self.feature_dim), device=self.device, dtype=torch.float32
             )
@@ -210,7 +232,7 @@ class TRTFeatureExtractor:
             # SigLIP vision_model expects pixel_values in [-1, 1].
             return x.mul(2.0).sub(1.0).contiguous()
 
-        # DINOv2 and TransReID use standard ImageNet mean/std.
+        # DINOv2, TransReID, OSNet, FastReID, and MobileNetV4 ReID use ImageNet mean/std.
         if self._imagenet_mean is not None and self._imagenet_std is not None:
             return ((x - self._imagenet_mean) / self._imagenet_std).contiguous()
         return x.contiguous()

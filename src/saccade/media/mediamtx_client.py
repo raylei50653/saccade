@@ -203,12 +203,26 @@ class MediaMTXClient:
         return rgb.squeeze(0).permute(1, 2, 0)  # [H, W, 3]
 
     def _on_cpp_frame(self, frame_data: Any) -> None:
-        """C++ 擴展的回調函式：處理 GPU 指標"""
+        """C++ 擴展的回調函式:處理 GPU 指標 (ADR-009 race-fixed 契約)。
+
+        契約流程 (修 S1/S4/S10):
+          1. ``with frame_data`` 觸發 ``__enter__`` (READY→PROCESSING CAS),
+             取得 buffer 所有權。
+          2. ``sync_buffer`` 等 H2D 完成 (修 S1: 讀 cuda_ptr 前必須 sync)。
+          3. ``ExternalStream`` 把後續算子排入 buffer 專屬 stream (修 S10:
+             stream-ordered 接軌,推理算子與 H2D 同 stream 不需額外 sync)。
+          4. ``tensor.clone()`` D2D 複製成自有顯存,脫離 pool buffer 生命週期,
+             pool slot 立即回收 (修 grab_tensor 返回 live view 的覆寫 race)。
+          5. ``with`` 結束自動 ``__exit__`` (PROCESSING→EMPTY CAS),歸還 buffer。
+             例外路徑也會 release,避免 buffer leak (修 S4/S11)。
+        """
         try:
+            if self.cpp_client is None:
+                return
+            idx = frame_data.buffer_index
             h, w = frame_data.height, frame_data.width
-            # 根據 channels 判斷格式 (C++ 層目前寫死 3，未來若支援 NV12 可透過 channels=0 或其他約定辨識)
             channels = getattr(frame_data, "channels", 3)
-            is_nv12 = channels == 0  # 假設 0 代表 YUV/NV12，3 代表 RGB
+            is_nv12 = channels == 0
 
             class CudaPointerHolder:
                 def __init__(
@@ -221,26 +235,38 @@ class MediaMTXClient:
                         "version": 3,
                     }
 
-            if is_nv12:
-                # NV12 佔用空間為 1.5 * H * W
-                holder = CudaPointerHolder(
-                    ptr=frame_data.cuda_ptr,
-                    shape=(int(h * 1.5), w),
-                    dtype="|u1",
-                )
-                raw_tensor = torch.as_tensor(holder, device="cuda")
-                tensor = self._nv12_to_rgb_gpu(raw_tensor.flatten(), h, w)
-            else:
-                # 預設為 RGB [H, W, 3]
-                holder = CudaPointerHolder(
-                    ptr=frame_data.cuda_ptr,
-                    shape=(h, w, 3),
-                    dtype="|u1",
-                )
-                tensor = torch.as_tensor(holder, device="cuda")
+            with frame_data:
+                # 等 H2D 完成 (修 S1):讀 cuda_ptr 前必須 sync 該 buffer 專屬 stream。
+                self.cpp_client.sync_buffer(idx)
+                # 在 buffer 專屬 stream 上建 tensor (修 S10):
+                # 後續算子 (NV12→RGB / clone) 排入同 stream,stream-ordered 接軌。
+                with torch.cuda.stream(
+                    torch.cuda.ExternalStream(frame_data.stream_ptr)  # type: ignore[no-untyped-call]
+                ):
+                    if is_nv12:
+                        holder = CudaPointerHolder(
+                            ptr=frame_data.cuda_ptr,
+                            shape=(int(h * 1.5), w),
+                            dtype="|u1",
+                        )
+                        raw_tensor = torch.as_tensor(holder, device="cuda")
+                        rgb_tensor = self._nv12_to_rgb_gpu(raw_tensor.flatten(), h, w)
+                    else:
+                        holder = CudaPointerHolder(
+                            ptr=frame_data.cuda_ptr,
+                            shape=(h, w, 3),
+                            dtype="|u1",
+                        )
+                        raw_tensor = torch.as_tensor(holder, device="cuda")
+                        rgb_tensor = raw_tensor
+                    # D2D clone 成自有顯存,脫離 pool buffer 生命週期。
+                    # pool slot 隨即由 __exit__ 回收為 EMPTY;grab_tensor
+                    # 返回的 tensor 不會被下一幀覆寫。
+                    tensor = rgb_tensor.clone()
+            # __exit__ 已自動 release_buffer (PROCESSING→EMPTY)。
 
             with self._lock:
-                # 智慧抽樣 (Smart Sampling)：若像素差異過小則丟棄 (降低低資訊幀)
+                # 智慧抽樣 (Smart Sampling):若像素差異過小則丟棄 (降低低資訊幀)
                 if self._last_tensor is not None:
                     diff = torch.mean(
                         torch.abs(tensor.float() - self._last_tensor.float())

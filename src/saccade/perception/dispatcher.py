@@ -10,6 +10,7 @@ import numpy as np
 import torch
 
 from saccade.perception.detector_trt import TRTYoloDetector, BatchingTRTDetector
+from saccade.perception.online_telemetry import OnlineTelemetry
 
 try:
     from saccade_tracking_ext import GPUByteTracker
@@ -103,6 +104,7 @@ class _WorkbenchWorker(threading.Thread):
         input_size: tuple[int, int],
         stats_window: deque[float],
         queue_wait_window: deque[float],
+        telemetry: OnlineTelemetry | None = None,
         use_nv12: bool = False,
     ):
         super().__init__(daemon=True, name=f"wb-{stream_id}")
@@ -115,6 +117,7 @@ class _WorkbenchWorker(threading.Thread):
         self.input_size = input_size
         self.stats_window = stats_window
         self.queue_wait_window = queue_wait_window
+        self.telemetry = telemetry
         self.use_nv12 = use_nv12
 
     def run(self) -> None:
@@ -128,6 +131,7 @@ class _WorkbenchWorker(threading.Thread):
             self.queue_wait_window.append(queue_wait_ms)
 
             t_start = time.perf_counter()
+            preproc_start = t_start
 
             if self.use_nv12:
                 if _nv12_letterbox_kernel is None:
@@ -198,15 +202,27 @@ class _WorkbenchWorker(threading.Thread):
                 )
                 padded[:, :new_h, :new_w] = letterbox
 
+            preproc_ms = (time.perf_counter() - preproc_start) * 1000.0
+            if self.telemetry is not None:
+                self.telemetry.observe("workbench_preprocess", preproc_ms)
+
             # Process frame through Workbench
+            process_start = time.perf_counter()
             result = self.workbench.process_frame(
                 padded,
                 frame_w=self.frame_w,
                 frame_h=self.frame_h,
             )
+            if self.telemetry is not None:
+                self.telemetry.observe(
+                    "workbench_process",
+                    (time.perf_counter() - process_start) * 1000.0,
+                )
 
             elapsed_ms = (time.perf_counter() - t_start) * 1000.0
             self.stats_window.append(elapsed_ms)
+            if self.telemetry is not None:
+                self.telemetry.observe("workbench_worker", elapsed_ms)
 
             # Emit result via callback (runs in caller's thread)
             self.on_result(
@@ -245,6 +261,7 @@ class WorkbenchPool:
         max_tracks: int = 256,
         stats_window: int = 512,
         use_nv12: bool = False,
+        telemetry: OnlineTelemetry | None = None,
     ):
         self.engine_path = engine_path
         self.n_streams = n_streams
@@ -254,6 +271,7 @@ class WorkbenchPool:
         self.max_dets = max_dets
         self.max_tracks = max_tracks
         self.use_nv12 = use_nv12
+        self.telemetry = telemetry
 
         self._running = False
         self._loop: Optional[asyncio.AbstractEventLoop] = None
@@ -311,9 +329,6 @@ class WorkbenchPool:
 
             wb = make_wb()
             q_frame_w, q_frame_h = self.frame_size
-            stats_w: deque[float] = deque(maxlen=self._stats_window.maxlen)
-            wait_w: deque[float] = deque(maxlen=self._queue_wait_window.maxlen)
-
             loop = self._loop
             assert loop is not None
 
@@ -342,8 +357,9 @@ class WorkbenchPool:
                 frame_w=q_frame_w,
                 frame_h=q_frame_h,
                 input_size=self.input_hw,
-                stats_window=stats_w,
-                queue_wait_window=wait_w,
+                stats_window=self._stats_window,
+                queue_wait_window=self._queue_wait_window,
+                telemetry=self.telemetry,
                 use_nv12=self.use_nv12,
             )
             worker.start()
@@ -373,6 +389,8 @@ class WorkbenchPool:
             # Latest-wins: drain oldest and enqueue new one
             with self._lock:
                 self._drop_count += 1
+            if self.telemetry is not None:
+                self.telemetry.increment("workbench_drops")
             try:
                 while not q.empty():
                     q.get_nowait()
@@ -399,6 +417,7 @@ class WorkbenchPool:
 
         stats = list(self._stats_window)
         wait = list(self._queue_wait_window)
+        telemetry = self.telemetry.summary() if self.telemetry is not None else {}
 
         return {
             "current_level": "NORMAL",
@@ -411,6 +430,7 @@ class WorkbenchPool:
             "queue_wait_ms_mean": round(float(np.mean(wait)), 2) if wait else 0.0,
             "queue_wait_ms_p95": round(_percentile(wait, 95), 2) if wait else 0.0,
             "queue_wait_ms_p99": round(_percentile(wait, 99), 2) if wait else 0.0,
+            **telemetry,
         }
 
     def reset_stats(self) -> None:
@@ -433,6 +453,7 @@ class AsyncDispatcher:
         input_hw: tuple[int, int] = (960, 960),
         batch_timeout_ms: float = 3.0,
         stats_window: int = 512,
+        telemetry: OnlineTelemetry | None = None,
     ):
         self.detector = detector
         self.resource_manager = resource_manager
@@ -445,6 +466,7 @@ class AsyncDispatcher:
         self.input_hw = input_hw
         self.batch_timeout_ms = batch_timeout_ms
         self.stats_window = stats_window
+        self.telemetry = telemetry
 
         self.queue: asyncio.Queue[_QueuedFrame] = asyncio.Queue(maxsize=100)
         self.trackers: OrderedDict[str, Any] = OrderedDict()
@@ -458,6 +480,7 @@ class AsyncDispatcher:
         self._infer_ms: deque[float] = deque(maxlen=stats_window)
         self._track_ms: deque[float] = deque(maxlen=stats_window)
         self._end_to_end_ms: deque[float] = deque(maxlen=stats_window)
+        self._batch_build_ms: deque[float] = deque(maxlen=stats_window)
 
     def _make_tracker(self) -> Any:
         return GPUByteTracker(
@@ -530,6 +553,8 @@ class AsyncDispatcher:
         infer = list(self._infer_ms)
         track = list(self._track_ms)
         end_to_end = list(self._end_to_end_ms)
+        batch_build = list(self._batch_build_ms)
+        telemetry = self.telemetry.summary() if self.telemetry is not None else {}
 
         return {
             "queue_depth": self.queue.qsize(),
@@ -551,6 +576,10 @@ class AsyncDispatcher:
             "infer_ms_mean": round(float(np.mean(infer)), 3) if infer else 0.0,
             "infer_ms_p95": round(_percentile(infer, 95), 3),
             "infer_ms_p99": round(_percentile(infer, 99), 3),
+            "batch_build_ms_mean": round(float(np.mean(batch_build)), 3)
+            if batch_build
+            else 0.0,
+            "batch_build_ms_p95": round(_percentile(batch_build, 95), 3),
             "track_ms_mean": round(float(np.mean(track)), 3) if track else 0.0,
             "track_ms_p95": round(_percentile(track, 95), 3),
             "track_ms_p99": round(_percentile(track, 99), 3),
@@ -559,6 +588,7 @@ class AsyncDispatcher:
             else 0.0,
             "end_to_end_ms_p95": round(_percentile(end_to_end, 95), 3),
             "end_to_end_ms_p99": round(_percentile(end_to_end, 99), 3),
+            **telemetry,
         }
 
     def _normalize_batch_item(
@@ -628,9 +658,14 @@ class AsyncDispatcher:
         for item in normalized:
             self._queue_wait_ms.append((batch_start - item.enqueued_at) * 1000.0)
 
+        build_start = time.perf_counter()
         input_tensor = torch.stack(
             [item.frame.contiguous() for item in normalized], dim=0
         ).contiguous()
+        batch_build_ms = (time.perf_counter() - build_start) * 1000.0
+        self._batch_build_ms.append(batch_build_ms)
+        if self.telemetry is not None:
+            self.telemetry.observe("dispatcher_batch_build", batch_build_ms)
 
         infer_start = time.perf_counter()
         with torch.no_grad():
@@ -639,6 +674,8 @@ class AsyncDispatcher:
             )
         infer_elapsed_ms = (time.perf_counter() - infer_start) * 1000.0
         self._infer_ms.append(infer_elapsed_ms)
+        if self.telemetry is not None:
+            self.telemetry.observe("dispatcher_infer", infer_elapsed_ms)
         self._batch_sizes.append(batch_size)
 
         track_start = time.perf_counter()
@@ -697,6 +734,8 @@ class AsyncDispatcher:
 
         track_elapsed_ms = (time.perf_counter() - track_start) * 1000.0
         self._track_ms.append(track_elapsed_ms / max(batch_size, 1))
+        if self.telemetry is not None:
+            self.telemetry.observe("dispatcher_track", track_elapsed_ms)
         total_elapsed_ms = (time.perf_counter() - batch_start) * 1000.0
         print(
             f"⚡ [Batch] size={batch_size} infer={infer_elapsed_ms:.2f}ms "

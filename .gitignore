@@ -5,6 +5,7 @@ __pycache__/
 build/
 build_ci/
 build_trt_venv/
+build-native-test/
 dist/
 wheels/
 *.egg-info
@@ -67,6 +68,7 @@ scratch/*_sweep.txt
 *.service.backup
 
 # Testing & Linting
+Testing/
 .pytest_cache/
 .mypy_cache/
 htmlcov/
@@ -121,3 +123,4 @@ graphify-out/**/graph.html
 # Build artifacts accidentally committed
 src/tracking/topk_test
 src/tracking/topk_test_fixed
+models/**/*.pth

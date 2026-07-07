@@ -166,7 +166,13 @@ class Workbench:
         self.has_reid_support = extractor is not None and cropper is not None
 
         # ── Per-workbench tracker ────────────────────────────────────
-        self.tracker = GPUByteTracker(max_objects=max_tracks * 8)
+        embedding_dim = (
+            int(getattr(extractor, "feature_dim", 768)) if extractor else 768
+        )
+        self.tracker = GPUByteTracker(
+            max_objects=max_tracks * 8,
+            embedding_dim=embedding_dim,
+        )
         self.stream = torch.cuda.Stream(device=device)
 
         self.proxy = proxy

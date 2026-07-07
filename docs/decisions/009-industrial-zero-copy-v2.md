@@ -2,6 +2,7 @@
 
 ## 狀態
 **已通過 (Accepted)** - 2026-04-14
+**已實作 (Implemented)** - 2026-07-04 — 見下方 Implementation Status。
 
 ## 背景 (Background)
 在 Saccade 的高併發場景下，原有的單緩衝區/單 Stream 零拷貝機制存在兩個核心風險：
@@ -47,3 +48,39 @@
 > Current tree note (2026-06-19): bench_core_transport.py is no longer present.
 > Treat this as the original ADR validation target, not a
 > currently runnable verification command.
+
+## Implementation Status (2026-07-04)
+
+原始 ADR 僅描述設計契約,實作層有 12 處 race (S1–S12) 未真正落地:
+Python 端從未呼叫 `sync_buffer` / `mark_processing` / `release`,
+`ExternalStream` 整合不存在,C++ 端 `d_buffers_` 在 `~Impl` / `ensureBufferPool`
+下 use-after-free,`EMPTY→WRITING` 是 store 而非 CAS。
+
+本次修復讓 ADR-009 契約真正生效:
+
+### C++ 端 (`include/media/buffer_pool.hpp` + `src/media/buffer_pool.cpp`)
+- 抽出 `BufferPool` 類 (GStreamer-independent,可獨立單元測試)。
+- 固定 C-array `d_buffers_[POOL_SIZE]` 取代 `std::vector`,消除 `clear()` dangling (S2)。
+- `acquire_empty_slot` 以 CAS `EMPTY→WRITING` 原子取得 slot (S7)。
+- `ensure_grow` 只成長 EMPTY 槽,不釋放 READY/PROCESSING 槽 (S2/S6)。
+- `~BufferPool` 先 `cudaStreamSynchronize` 全部 stream 再 free + destroy (S3/S5)。
+- `submit_h2d` 排隊後標記 `READY`;consumer 必須 `sync_slot` 才能讀 `device_ptr` (S1)。
+- `mark_processing` / `release` 皆 CAS,拒絕非法狀態轉移 (S4/S11)。
+
+### Python 端 (`src/saccade/media/mediamtx_client.py:_on_cpp_frame`)
+- `with frame_data:` 觸發 `__enter__` (READY→PROCESSING) / `__exit__` (PROCESSING→EMPTY)。
+- `sync_buffer(idx)` 在讀 `cuda_ptr` 前等 H2D 完成 (S1)。
+- `torch.cuda.ExternalStream(stream_ptr)` 將推理算子排入 buffer 專屬 stream (S10)。
+- `tensor.clone()` D2D 複製成自有顯存,slot 立即回收;`grab_tensor` 返回的 tensor 不被覆寫 (S12)。
+- 例外路徑 `__exit__` 自動 release,避免 buffer leak (S4)。
+
+### 驗證
+- `tests/native/test_gst_buffer_pool.cpp`:8 個 race 場景 (CAS / 多緒競爭 / H2D sync /
+  release 重用 / mark_processing CAS 守護 / grow 保留 in-use / 解構子安全 / write_hint 無關)。
+- `ctest -R gst_buffer_pool` 全數通過。
+- `saccade_media_ext` pybind 模組重建通過。
+- `ruff` + `mypy --strict` 通過。
+- 既有 `tests/unit/media/` (13 test) + `tests/unit/eval/test_core.py` media 子集 (14 test) 無退。
+
+### 啟用方式
+維持 opt-in: `SACCADE_MEDIA_USE_CPP=1` 環境變數啟用 C++ GstClient 路徑。
