@@ -3847,6 +3847,26 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         },
         py::arg("stream_ptr"),
         "Return active Kalman state and covariance snapshots")
+        .def("build_track_priors_gpu",
+             [](GPUByteTracker& self,
+                uintptr_t boxes_ptr, uintptr_t classes_ptr,
+                int min_track_age, int max_track_age, float min_track_score,
+                uintptr_t stream_ptr) {
+                 return self.build_track_priors_gpu(
+                     reinterpret_cast<float*>(boxes_ptr),
+                     reinterpret_cast<int*>(classes_ptr),
+                     min_track_age, max_track_age, min_track_score,
+                     reinterpret_cast<cudaStream_t>(stream_ptr)
+                 );
+             },
+             py::arg("boxes_ptr"),
+             py::arg("classes_ptr"),
+             py::arg("min_track_age") = 0,
+             py::arg("max_track_age") = -1,
+             py::arg("min_track_score") = 0.0f,
+             py::arg("stream_ptr"),
+             "GPU compaction kernel: build compacted xyxy prior boxes + classes "
+             "from active Kalman states.  Returns the compacted count.")
         .def("get_motion_snapshots_for_track_ids",
              [](GPUByteTracker& self, const std::vector<int>& track_ids, uintptr_t stream_ptr) {
                  return self.get_motion_snapshots_for_track_ids(

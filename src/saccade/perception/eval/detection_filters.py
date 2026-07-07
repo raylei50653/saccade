@@ -1142,6 +1142,19 @@ def _build_active_track_priors(
     max_track_age: int | None = None,
     min_track_score: float = 0.0,
 ) -> tuple[torch.Tensor | None, torch.Tensor | None]:
+    # GPU fast path: compaction kernel reads d_active_/d_states_/d_classes_
+    # on device, writes compacted xyxy boxes + classes to pre-allocated
+    # buffers.  Eliminates 634 KB D2H (get_state_snapshots) + Python loop
+    # + cudaStreamSynchronize.  Returns fixed-capacity buffers with
+    # inactive slots zero-filled ([0,0,0,0] -- safe for NMS).
+    if hasattr(tracker, "build_track_priors_gpu"):
+        return tracker.build_track_priors_gpu(
+            min_track_age=min_track_age,
+            max_track_age=max_track_age,
+            min_track_score=min_track_score,
+        )
+
+    # Fallback: host-side loop via get_state_snapshots (634 KB D2H + sync).
     snapshots = tracker.get_state_snapshots()
     if not snapshots:
         return None, None

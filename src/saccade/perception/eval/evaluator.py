@@ -1351,13 +1351,7 @@ def _run_frame(
                         }
                     )
                 ):
-                    private_motion_prior_boxes, _ = _build_active_track_priors(
-                        detector.tracker,
-                        fused_boxes.device,
-                        min_track_age=0,
-                        max_track_age=cfg.private_prior_max_age,
-                        min_track_score=0.0,
-                    )
+                    private_motion_prior_boxes = _fctx.private_prior_boxes
                 t_private_start = None
                 if profile_stages:
                     torch.cuda.synchronize()
@@ -1774,6 +1768,7 @@ def _run_frame(
             frame_birth_events=frame_birth_events,
             frame_id=frame_id,
             prev_track_ids=state.prev_track_ids,
+            track_results_on_host=True,
         )
         results_lines.extend(_emit_lines)
 

@@ -461,6 +461,7 @@ def _flush_db_tracker_out(state: EvalPipeline) -> None:
         frame_birth_events=[],
         frame_id=fid,
         prev_track_ids=state.prev_track_ids,
+        track_results_on_host=True,
     )
     state.results_lines.extend(_emit_lines)
     state.db_emit_frame_id = 0
@@ -1363,6 +1364,7 @@ def _run_emit(
     frame_birth_events: list,
     frame_id: int,
     prev_track_ids: set,
+    track_results_on_host: bool = False,
 ) -> tuple[set, list]:
     """Emit MOT lines for one frame's tracker result (extracted from run_eval).
 
@@ -1607,7 +1609,26 @@ def _run_emit(
             and not bool(cfg.kwargs.get("id_stability_filter", False))
         )
         if _use_fast_emit:
-            if hasattr(detector.tracker.tracker, "compact_output_to_host"):
+            # When the caller already materialized track_results to host
+            # (DB flush via _flush_db_tracker_out, or _run_materialize),
+            # use _fast_emit_mot_lines directly on the host data. This avoids
+            # emit_tracks_unified's redundant synchronous D2H via
+            # compact_output_to_host, which re-reads d_res_* from GPU after
+            # the data is already on host via the pinned copy.
+            _can_use_host_fast_emit = track_results_on_host or not hasattr(
+                detector.tracker.tracker, "compact_output_to_host"
+            )
+            if _can_use_host_fast_emit:
+                frame_result_lines = _fast_emit_mot_lines(
+                    track_results=track_results,
+                    global_id_mapper=global_id_mapper,
+                    seq=seq,
+                    frame_id=frame_id,
+                    frame_w=w_orig,
+                    frame_h=h_orig,
+                )
+                curr_track_ids = set(int(x) for x in track_results["ids"].tolist())
+            else:
                 import saccade_tracking_ext
 
                 count, boxes_list, scores_list, ids_list, _ = (
@@ -1633,16 +1654,6 @@ def _run_emit(
                         f"{x2 - x1:.2f},{y2 - y1:.2f},{s:.4f},-1,-1,-1"
                     )
                 curr_track_ids = set(ids_list[:count])
-            else:
-                frame_result_lines = _fast_emit_mot_lines(
-                    track_results=track_results,
-                    global_id_mapper=global_id_mapper,
-                    seq=seq,
-                    frame_id=frame_id,
-                    frame_w=w_orig,
-                    frame_h=h_orig,
-                )
-                curr_track_ids = set(int(x) for x in track_results["ids"].tolist())
         else:
             from .helpers import FLOW_TIMING, flow_add, flow_now
 
