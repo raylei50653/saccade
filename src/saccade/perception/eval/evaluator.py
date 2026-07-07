@@ -2662,7 +2662,7 @@ def run_eval(
                 "p99_ms": round(p99_ms, 6),
                 "samples_ms": [round(float(x), 6) for x in _seq_state.frame_latencies],
             }
-            (output_root / "_latency_profile.json").write_text(
+            (output_root / f"_latency_profile_{seq}.json").write_text(
                 json.dumps(latency_profile, indent=2) + "\n"
             )
         else:
@@ -3099,6 +3099,20 @@ def run_eval(
             all_seq_profile.append(seq_entry)
 
     from .reporting import print_overall_summary
+
+    if overall_latency_ms:
+        _overall_lats = np.array(overall_latency_ms)
+        _overall_profile = {
+            "sequence": "OVERALL",
+            "frames": len(overall_latency_ms),
+            "mean_ms": round(float(np.mean(_overall_lats)), 6),
+            "std_ms": round(float(np.std(_overall_lats)), 6),
+            "p95_ms": round(float(np.percentile(_overall_lats, 95)), 6),
+            "p99_ms": round(float(np.percentile(_overall_lats, 99)), 6),
+        }
+        (output_root / "_latency_profile.json").write_text(
+            json.dumps(_overall_profile, indent=2) + "\n"
+        )
 
     print_overall_summary(
         cfg=cfg,
