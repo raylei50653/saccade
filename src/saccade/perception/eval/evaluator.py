@@ -868,7 +868,10 @@ def _run_frame(
                 _graph_shadow_enabled = os.environ.get(
                     "SACCADE_MAIN_NMS_GRAPH_SHADOW", ""
                 ) in ("1", "true", "yes")
-                if _shadow_enabled or _graph_shadow_enabled:
+                _graphed_shadow_enabled = os.environ.get(
+                    "SACCADE_MAIN_NMS_GRAPHED_SHADOW", ""
+                ) in ("1", "true", "yes")
+                if _shadow_enabled or _graph_shadow_enabled or _graphed_shadow_enabled:
                     n_post, state.nms_graph = _run_nms_shadow_compare(
                         state,
                         raw_boxes_contig=raw_boxes_contig,

@@ -421,6 +421,8 @@ class EvalPipeline:
         self.main_nms_graph: Any = None
         self._main_nms_exec_graph: Any = None  # raw CUDA graph exec handle
         self.main_nms_graph_out_count: torch.Tensor | None = None
+        # ── Main NMS graph nocopyback (graphed split pipeline) ─────────
+        self.main_nms_graph_nocopyback: Any = None
         self.gmc_uncertain: bool = False
         self.last_reid_frame: int = -100
         self.prev_gray: torch.Tensor | None = None

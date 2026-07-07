@@ -315,6 +315,59 @@ public:
         int num_private_priors,
         cudaStream_t stream);
 
+    /**
+     * @brief Graph-capture-safe main NMS **without** copyback.
+     *
+     * Same as process_detections_main_nms_graph but does NOT copy
+     * d_compact_* back into out_*.  After this call:
+     *   - out_* holds pre-NMS compacted data (private NMS reads this)
+     *   - d_compact_* holds post-NMS survivors (private append uses as dst)
+     *   - d_nms_keep_ / d_nms_count_ hold the main NMS keep mask / count
+     *
+     * Chain with process_detections_split_pipeline_graphed() to complete
+     * the private-continuation append + D2H sync.
+     */
+    void process_detections_main_nms_graph_nocopyback(
+        const float* boxes_ptr,
+        const float* scores_ptr,
+        const int*   classes_ptr,
+        int n_in,
+        int frame_w, int frame_h,
+        bool is_tiled,
+        float* out_boxes,
+        float* out_scores,
+        int*   out_classes,
+        bool*  out_suspect,
+        int*   out_count,
+        const float* priors_ptr,
+        const int* prior_classes_ptr,
+        int num_priors,
+        float prior_iou_threshold,
+        cudaStream_t stream);
+
+    /**
+     * @brief Private-continuation append + D2H sync (graphed split tail).
+     *
+     * Assumes the caller has already replayed a captured graph that ran
+     * process_detections_main_nms_graph_nocopyback on the same out_*
+     * buffers.  This function runs process_private_continuation_append
+     * (which reads pre-NMS out_* + post-NMS d_compact_*, appends private
+     * candidates, and copybacks d_compact_* -> out_*) then does the
+     * D2H count sync.
+     *
+     * @return final post-NMS+private count
+     */
+    int process_detections_split_pipeline_graphed(
+        float* out_boxes,
+        float* out_scores,
+        int*   out_classes,
+        bool*  out_suspect,
+        int*   out_count,
+        int n_in,
+        const float* private_priors_ptr,
+        int num_private_priors,
+        cudaStream_t stream);
+
     void process_detections_main_nms_graph(
         const float* boxes_ptr,
         const float* scores_ptr,

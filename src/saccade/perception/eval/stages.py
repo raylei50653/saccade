@@ -633,6 +633,106 @@ def _run_nms(
     )
 
     if native_private_enabled:
+        _use_graphed = os.environ.get("SACCADE_MAIN_NMS_GRAPHED", "") in (
+            "1",
+            "true",
+            "yes",
+        )
+        if _use_graphed and num_priors == 0:
+            # Graphed path captures priors_ptr=0, so only correct when
+            # ONMS priors are inactive.  Fall back to split when priors exist.
+            out_count_buf = state.nms_graph_out_count
+            if out_count_buf is None:
+                out_count_buf = torch.zeros(1, dtype=torch.int32, device="cuda")
+                state.nms_graph_out_count = out_count_buf
+
+            _NMS_FIXED_N = state.nms_fixed_n
+            _main_nms_in = state.main_nms_in
+
+            # Input staging: copy_pad raw detections to fixed graph input
+            # (must happen BEFORE capture so warmup sees real data)
+            copy_pad_detections(
+                raw_boxes_contig.data_ptr(),
+                raw_scores_contig.data_ptr(),
+                raw_classes_contig.data_ptr(),
+                min(raw_box_count, _NMS_FIXED_N),
+                _main_nms_in["boxes"].data_ptr(),
+                _main_nms_in["scores"].data_ptr(),
+                _main_nms_in["classes"].data_ptr(),
+                _NMS_FIXED_N,
+                current_stream,
+            )
+
+            # Capture on first frame
+            if state.main_nms_graph_nocopyback is None:
+                _capture_main_nms_graph_nocopyback(state, is_tiled=is_tiled)
+
+            if state.main_nms_graph_nocopyback is None:
+                # Capture failed (no perception_pipeline); fall back to split
+                n_post = perception_pipeline.process_detections_split_pipeline(
+                    raw_boxes_contig.data_ptr(),
+                    raw_scores_contig.data_ptr(),
+                    raw_classes_contig.data_ptr(),
+                    raw_box_count,
+                    w_orig,
+                    h_orig,
+                    is_tiled,
+                    _post_bufs["boxes"].data_ptr(),
+                    _post_bufs["scores"].data_ptr(),
+                    _post_bufs["classes"].data_ptr(),
+                    _post_bufs["suspect"].data_ptr(),
+                    out_count_buf.data_ptr(),
+                    priors_ptr,
+                    prior_classes_ptr,
+                    num_priors,
+                    state.onms_prior_iou_threshold,
+                    private_priors_ptr,
+                    num_private_priors,
+                    current_stream,
+                )
+                return n_post, _nms_graph
+
+            # Run main NMS: graph replay or eager
+            if state.main_nms_graph_nocopyback == "eager":
+                perception_pipeline.process_detections_main_nms_graph_nocopyback(
+                    _main_nms_in["boxes"].data_ptr(),
+                    _main_nms_in["scores"].data_ptr(),
+                    _main_nms_in["classes"].data_ptr(),
+                    _NMS_FIXED_N,
+                    w_orig,
+                    h_orig,
+                    is_tiled,
+                    _post_bufs["boxes"].data_ptr(),
+                    _post_bufs["scores"].data_ptr(),
+                    _post_bufs["classes"].data_ptr(),
+                    _post_bufs["suspect"].data_ptr(),
+                    out_count_buf.data_ptr(),
+                    0,
+                    0,
+                    0,
+                    0.0,
+                    current_stream,
+                )
+            else:
+                # Graph replay: main NMS (nocopyback) — writes pre-NMS to
+                # _post_bufs, post-NMS survivors to d_compact_*
+                state.main_nms_graph_nocopyback.replay()
+
+            # Private append + D2H sync (reads pre-NMS _post_bufs +
+            # post-NMS d_compact_*, appends private, copybacks, syncs)
+            n_post = perception_pipeline.process_detections_split_pipeline_graphed(
+                _post_bufs["boxes"].data_ptr(),
+                _post_bufs["scores"].data_ptr(),
+                _post_bufs["classes"].data_ptr(),
+                _post_bufs["suspect"].data_ptr(),
+                out_count_buf.data_ptr(),
+                _NMS_FIXED_N,
+                private_priors_ptr,
+                num_private_priors,
+                current_stream,
+            )
+            return n_post, _nms_graph
+
         _use_split = os.environ.get("SACCADE_MAIN_NMS_SPLIT", "") in (
             "1",
             "true",
@@ -718,9 +818,9 @@ def _run_nms(
             raw_scores_contig.data_ptr(),
             raw_classes_contig.data_ptr(),
             min(raw_box_count, _NMS_FIXED_N),
-            _nms_in["boxes"].data_ptr(),
-            _nms_in["scores"].data_ptr(),
-            _nms_in["classes"].data_ptr(),
+            _main_nms_in["boxes"].data_ptr(),
+            _main_nms_in["scores"].data_ptr(),
+            _main_nms_in["classes"].data_ptr(),
             _NMS_FIXED_N,
             _pad_stream,
         )
@@ -764,6 +864,7 @@ def _run_nms(
                 f"[STREAM] _run_nms graph capture: current={_cs.cuda_stream:#x} stream_post={_cs_stream_post:#x}"
             )
         with _capture_ctx, torch.cuda.graph(_nms_graph):
+            _capture_stream = torch.cuda.current_stream().cuda_stream
             perception_pipeline.process_detections_graph(
                 _nms_in["boxes"].data_ptr(),
                 _nms_in["scores"].data_ptr(),
@@ -781,7 +882,7 @@ def _run_nms(
                 0,
                 0,
                 0.0,
-                current_stream,
+                _capture_stream,
             )
         print("🕯️ [NMSGraph] Captured NMS graph")
     else:
@@ -866,6 +967,7 @@ def _capture_main_nms_graph(
 
     _graph = torch.cuda.CUDAGraph()
     with torch.cuda.graph(_graph):
+        _capture_stream = torch.cuda.current_stream().cuda_stream
         _perception_pipeline.process_detections_main_nms_graph(
             _main_nms_in["boxes"].data_ptr(),
             _main_nms_in["scores"].data_ptr(),
@@ -883,10 +985,97 @@ def _capture_main_nms_graph(
             0,
             0,
             0.0,
-            stream_ptr,
+            _capture_stream,
         )
     state.main_nms_graph = _graph
     print("🕯️ [MainNMSGraph] Captured main NMS graph")
+
+
+def _capture_main_nms_graph_nocopyback(
+    state: EvalPipeline,
+    *,
+    is_tiled: bool,
+) -> None:
+    """Capture process_detections_main_nms_graph_nocopyback into a CUDAGraph.
+
+    Unlike _capture_main_nms_graph, this variant:
+      - Uses _post_bufs (not main_nms_graph_out) as output buffers
+      - Captures the nocopyback variant (out_* retains pre-NMS data)
+      - priors_ptr is 0 (ONMS priors are per-frame, can't be graphed)
+    """
+    _perception_pipeline = state.perception_pipeline
+    if _perception_pipeline is None:
+        return
+    _main_nms_in = state.main_nms_in
+    _post_bufs = state.post_bufs
+    _NMS_FIXED_N = state.nms_fixed_n
+    n_in = _NMS_FIXED_N
+
+    out_count_buf = state.nms_graph_out_count
+    if out_count_buf is None:
+        out_count_buf = torch.zeros(1, dtype=torch.int32, device="cuda")
+        state.nms_graph_out_count = out_count_buf
+
+    stream_ptr = torch.cuda.current_stream().cuda_stream
+
+    # Warm up (eager, outside graph capture)
+    _perception_pipeline.process_detections_main_nms_graph_nocopyback(
+        _main_nms_in["boxes"].data_ptr(),
+        _main_nms_in["scores"].data_ptr(),
+        _main_nms_in["classes"].data_ptr(),
+        n_in,
+        state.w_orig,
+        state.h_orig,
+        is_tiled,
+        _post_bufs["boxes"].data_ptr(),
+        _post_bufs["scores"].data_ptr(),
+        _post_bufs["classes"].data_ptr(),
+        _post_bufs["suspect"].data_ptr(),
+        out_count_buf.data_ptr(),
+        0,
+        0,
+        0,
+        0.0,
+        stream_ptr,
+    )
+    torch.cuda.synchronize()
+
+    # If this env var is set, skip graph capture and run eagerly to verify
+    # the nocopyback function itself produces correct results.
+    if os.environ.get("SACCADE_NMS_GRAPHED_EAGER_TEST", "") in ("1", "true", "yes"):
+        state.main_nms_graph_nocopyback = "eager"
+        print("🕯️ [MainNMSGraphNoCopyback] Eager test mode (no graph capture)")
+        return
+
+    _graph = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(_graph):
+        # Use the CAPTURE stream (current inside context), not stream_ptr
+        # from outside.  Global capture mode rejects ops on non-capture
+        # streams.
+        _capture_stream = torch.cuda.current_stream().cuda_stream
+        _perception_pipeline.process_detections_main_nms_graph_nocopyback(
+            _main_nms_in["boxes"].data_ptr(),
+            _main_nms_in["scores"].data_ptr(),
+            _main_nms_in["classes"].data_ptr(),
+            n_in,
+            state.w_orig,
+            state.h_orig,
+            is_tiled,
+            _post_bufs["boxes"].data_ptr(),
+            _post_bufs["scores"].data_ptr(),
+            _post_bufs["classes"].data_ptr(),
+            _post_bufs["suspect"].data_ptr(),
+            out_count_buf.data_ptr(),
+            0,
+            0,
+            0,
+            0.0,
+            _capture_stream,
+        )
+    state.main_nms_graph_nocopyback = _graph
+    print(
+        f"🕯️ [MainNMSGraphNoCopyback] Captured main NMS nocopyback graph (graph={_graph})"
+    )
 
 
 def _run_nms_shadow_compare(
@@ -1069,8 +1258,6 @@ def _run_nms_shadow_compare(
         _graph_out = state.main_nms_graph_out
 
         # Copy per-frame raw detections to fixed graph input buffers
-        from saccade_tracking_ext import copy_pad_detections
-
         copy_pad_detections(
             raw_boxes_contig.data_ptr(),
             raw_scores_contig.data_ptr(),
@@ -1152,6 +1339,86 @@ def _run_nms_shadow_compare(
                     f"[NMS_GRAPH_SHADOW] frame={state.current_frame_id} "
                     + " ".join(issues)
                 )
+
+    # ── Graphed shadow: nocopyback graph + split_pipeline_graphed ──────
+    _graphed_shadow_enabled = os.environ.get("SACCADE_MAIN_NMS_GRAPHED_SHADOW", "") in (
+        "1",
+        "true",
+        "yes",
+    )
+    if _graphed_shadow_enabled and num_priors == 0:
+        _main_nms_in = state.main_nms_in
+        _post_bufs = state.post_bufs
+        _NMS_FIXED_N = state.nms_fixed_n
+
+        out_count_buf = state.nms_graph_out_count
+        if out_count_buf is None:
+            out_count_buf = torch.zeros(1, dtype=torch.int32, device="cuda")
+            state.nms_graph_out_count = out_count_buf
+
+        # copy_pad before capture so warmup sees real data
+        copy_pad_detections(
+            raw_boxes_contig.data_ptr(),
+            raw_scores_contig.data_ptr(),
+            raw_classes_contig.data_ptr(),
+            min(raw_box_count, _NMS_FIXED_N),
+            _main_nms_in["boxes"].data_ptr(),
+            _main_nms_in["scores"].data_ptr(),
+            _main_nms_in["classes"].data_ptr(),
+            _NMS_FIXED_N,
+            current_stream,
+        )
+
+        if state.main_nms_graph_nocopyback is None:
+            _capture_main_nms_graph_nocopyback(state, is_tiled=is_tiled)
+
+        if state.main_nms_graph_nocopyback is not None:
+            state.main_nms_graph_nocopyback.replay()
+
+            _graphed_n = _perception_pipeline.process_detections_split_pipeline_graphed(
+                _post_bufs["boxes"].data_ptr(),
+                _post_bufs["scores"].data_ptr(),
+                _post_bufs["classes"].data_ptr(),
+                _post_bufs["suspect"].data_ptr(),
+                out_count_buf.data_ptr(),
+                _NMS_FIXED_N,
+                _private_priors_ptr,
+                num_private_priors,
+                current_stream,
+            )
+
+            if n_post_mono != _graphed_n:
+                print(
+                    f"[NMS_GRAPHED_SHADOW] frame={state.current_frame_id} "
+                    f"COUNT: mono={n_post_mono} graphed={_graphed_n}"
+                )
+            else:
+                _ge_boxes = _post_bufs["boxes"][:_graphed_n]
+                _ge_scores = _post_bufs["scores"][:_graphed_n]
+                _ge_classes = _post_bufs["classes"][:_graphed_n]
+                _ge_suspect = _post_bufs["suspect"][:_graphed_n]
+
+                boxes_ok = torch.allclose(mono_boxes, _ge_boxes, atol=1e-4)
+                scores_ok = torch.allclose(mono_scores, _ge_scores, atol=1e-4)
+                classes_ok = bool((mono_classes == _ge_classes).all())
+                suspect_ok = bool((mono_suspect == _ge_suspect).all())
+
+                if not (boxes_ok and scores_ok and classes_ok and suspect_ok):
+                    issues = []
+                    if not boxes_ok:
+                        diff = (mono_boxes - _ge_boxes).abs()
+                        issues.append(f"boxes max diff={diff.max().item():.6f}")
+                    if not scores_ok:
+                        diff = (mono_scores - _ge_scores).abs()
+                        issues.append(f"scores max diff={diff.max().item():.6f}")
+                    if not classes_ok:
+                        issues.append("classes")
+                    if not suspect_ok:
+                        issues.append("suspect")
+                    print(
+                        f"[NMS_GRAPHED_SHADOW] frame={state.current_frame_id} "
+                        + " ".join(issues)
+                    )
 
     return n_post_mono, _nms_graph_out
 
