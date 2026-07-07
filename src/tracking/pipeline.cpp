@@ -541,6 +541,301 @@ void PerceptionPipeline::process_detections_into(
     }
 }
 
+void PerceptionPipeline::process_detections_main_nms(
+    const float* boxes_ptr,
+    const float* scores_ptr,
+    const int*   classes_ptr,
+    int n_in,
+    int frame_w, int frame_h,
+    bool is_tiled,
+    float* out_boxes,
+    float* out_scores,
+    int*   out_classes,
+    bool*  out_suspect,
+    int*   out_count,
+    const float* priors_ptr,
+    const int* prior_classes_ptr,
+    int num_priors,
+    float prior_iou_threshold,
+    cudaStream_t stream)
+{
+    if (n_in <= 0) {
+        cudaMemsetAsync(out_count, 0, sizeof(int), stream);
+        return;
+    }
+    ensure_scratch(n_in, stream);
+
+    using Clock = std::chrono::steady_clock;
+    const bool profile_post = postprocess_profiling_enabled_;
+    const Clock::time_point filter_start = profile_post ? Clock::now() : Clock::time_point{};
+
+    // ── Filter ──────────────────────────────────────────────────
+    cudaMemsetAsync(d_filter_count_, 0, sizeof(int), stream);
+    auto launch_filter = [&] {
+        filter_detections_cuda(
+            boxes_ptr, scores_ptr, classes_ptr, n_in,
+            d_filter_keep_indices_, d_filter_suspect_flags_, nullptr, d_filter_count_,
+            cfg_.score_threshold,
+            cfg_.person_only, cfg_.person_class,
+            is_tiled, frame_w, frame_h,
+            cfg_.person_geometry_prior, cfg_.geometry_suspect_support,
+            cfg_.person_min_height_ratio,
+            cfg_.person_min_aspect, cfg_.person_max_aspect,
+            cfg_.person_min_area_ratio, cfg_.person_max_area_ratio,
+            stream);
+    };
+    if (profile_post) {
+        measure_gpu_stage(stream, last_postprocess_profile_stats_.native_filter_kernel_ms, launch_filter);
+    } else {
+        launch_filter();
+    }
+
+    int filter_count = 0;
+    cudaMemcpyAsync(&filter_count, d_filter_count_, sizeof(int), cudaMemcpyDeviceToHost, stream);
+    cudaStreamSynchronize(stream);
+
+    if (profile_post) {
+        last_postprocess_profile_stats_.filter_ms =
+            std::chrono::duration<double, std::milli>(Clock::now() - filter_start).count();
+        last_postprocess_profile_stats_.filtered_boxes = filter_count;
+    }
+
+    // ── ≤1 detection: just write count, no NMS needed ──────────
+    if (filter_count <= 1) {
+        cudaMemcpyAsync(out_count, &filter_count, sizeof(int), cudaMemcpyHostToDevice, stream);
+        if (cfg_.geometry_suspect_support && cfg_.geometry_suspect_support_score > 0.0f && filter_count > 0) {
+            penalize_suspect_scores_cuda(out_scores, out_suspect, out_count,
+                                         cfg_.geometry_suspect_support_score, n_in, stream);
+        }
+        if (profile_post) {
+            cudaStreamSynchronize(stream);
+            last_postprocess_profile_stats_.nms_ms = 0.0;
+            last_postprocess_profile_stats_.output_boxes = filter_count;
+        }
+        return;
+    }
+
+    const Clock::time_point nms_start = profile_post ? Clock::now() : Clock::time_point{};
+    const bool nms_class_aware = !cfg_.person_only;
+
+    if (filter_count <= 64 && !cfg_.private_continuation_enabled) {
+        // Small path: compact_grid_nms writes directly to d_compact_*
+        if (profile_post) {
+            measure_gpu_stage(stream, last_postprocess_profile_stats_.native_small_nms_ms, [&] {
+                compact_grid_nms_cuda(
+                    boxes_ptr, scores_ptr, classes_ptr, n_in,
+                    d_filter_keep_indices_, filter_count,
+                    d_compact_boxes_, d_compact_scores_, d_compact_classes_,
+                    d_compact_suspect_, d_nms_count_,
+                    cfg_.nms_threshold, stream);
+            });
+        } else {
+            compact_grid_nms_cuda(
+                boxes_ptr, scores_ptr, classes_ptr, n_in,
+                d_filter_keep_indices_, filter_count,
+                d_compact_boxes_, d_compact_scores_, d_compact_classes_,
+                d_compact_suspect_, d_nms_count_,
+                cfg_.nms_threshold, stream);
+        }
+    } else {
+        // Large path: gather → NMS → compact4
+        // Matching the original process_detections_into: gather_compact3 writes to
+        // out_* (the caller's output buffer), NMS runs on out_*, then gather_compact4
+        // copies survivors from out_* to d_compact_*.  This is REQUIRED because
+        // process_private_continuation_append reads out_* for its private NMS pass.
+        gather_compact3_counted_cuda(
+            boxes_ptr, scores_ptr, classes_ptr,
+            out_boxes, out_scores, out_classes,
+            d_filter_keep_indices_, d_filter_count_, n_in, stream);
+        copy_bool_counted_cuda(
+            d_filter_suspect_flags_, out_suspect, d_filter_count_, n_in, stream);
+
+        const int col_blocks = (n_in + 63) / 64;
+        cudaMemsetAsync(d_nms_suppression_, 0, (size_t)n_in * col_blocks * sizeof(uint64_t), stream);
+        cudaMemsetAsync(d_nms_remv_, 0, col_blocks * sizeof(uint64_t), stream);
+        cudaMemsetAsync(d_nms_count_, 0, sizeof(int), stream);
+
+        auto launch_argsort = [&] {
+            argsort_scores_descending_cuda(
+                out_scores, n_in,
+                d_nms_order_, d_sort_keys_in_, d_sort_keys_out_,
+                d_cub_sort_tmp_, cub_sort_tmp_bytes_, stream);
+        };
+        auto launch_nms = [&] {
+            nms_counted_cuda(
+                out_boxes, out_scores, out_classes, d_nms_order_,
+                n_in, d_filter_count_, d_nms_keep_, d_nms_suppression_, d_nms_remv_,
+                d_nms_count_, cfg_.nms_threshold, nms_class_aware,
+                priors_ptr, prior_classes_ptr, num_priors, prior_iou_threshold,
+                d_nms_immunity_mask_, stream);
+        };
+        auto launch_compact4 = [&] {
+            gather_compact4_counted_cuda(
+                out_boxes, out_scores, out_classes, out_suspect,
+                d_compact_boxes_, d_compact_scores_, d_compact_classes_, d_compact_suspect_,
+                d_nms_keep_, d_nms_count_, n_in, stream);
+        };
+
+        if (profile_post) {
+            measure_gpu_stage(stream, last_postprocess_profile_stats_.native_large_argsort_ms, launch_argsort);
+            measure_gpu_stage(stream, last_postprocess_profile_stats_.native_large_nms_ms, launch_nms);
+        } else {
+            launch_argsort();
+            launch_nms();
+        }
+        launch_compact4();
+    }
+
+    // ── Copyback: d_compact_* → out_* ──────────────────────────
+    // NOTE: copyback is deferred to the caller. After main NMS,
+    // d_compact_* holds the post-NMS survivors. The caller should
+    // either chain process_private_continuation_append() (which
+    // handles copyback internally) or call process_detections_copyback().
+    // This split avoids the double-copy issue where the private NMS
+    // needs to read from out_* (pre-NMS data) while the main NMS
+    // copyback would have overwritten it with post-NMS survivors.
+
+    if (profile_post) {
+        cudaStreamSynchronize(stream);
+        last_postprocess_profile_stats_.nms_ms =
+            std::chrono::duration<double, std::milli>(Clock::now() - nms_start).count();
+    }
+}
+
+void PerceptionPipeline::process_private_continuation_append(
+    float* out_boxes,
+    float* out_scores,
+    int*   out_classes,
+    bool*  out_suspect,
+    int*   out_count,
+    int n_in,
+    const float* private_priors_ptr,
+    int num_private_priors,
+    cudaStream_t stream)
+{
+    const bool profile_post = postprocess_profiling_enabled_;
+    const bool nms_class_aware = !cfg_.person_only;
+    const int col_blocks = (n_in + 63) / 64;
+
+    const float private_score_ceiling = cfg_.private_low_stage_only
+        ? std::min(
+            cfg_.private_new_track_thresh - cfg_.private_score_eps,
+            cfg_.private_mid_thresh - cfg_.private_score_eps)
+        : cfg_.private_new_track_thresh - cfg_.private_score_eps;
+    const float private_score_floor = std::max(cfg_.private_min_score, cfg_.private_track_thresh);
+
+    const bool run_private = (
+        cfg_.private_continuation_enabled
+        && cfg_.private_candidate_nms_iou > cfg_.nms_threshold
+        && cfg_.private_new_track_thresh - cfg_.private_score_eps > cfg_.private_track_thresh
+        && private_score_ceiling > cfg_.private_track_thresh);
+
+    if (!run_private) {
+        process_detections_copyback(out_boxes, out_scores, out_classes, out_suspect,
+                                    out_count, n_in, stream);
+        if (cfg_.geometry_suspect_support && cfg_.geometry_suspect_support_score > 0.0f) {
+            penalize_suspect_scores_cuda(out_scores, out_suspect, out_count,
+                                         cfg_.geometry_suspect_support_score, n_in, stream);
+        }
+        if (profile_post) {
+            cudaStreamSynchronize(stream);
+            last_postprocess_profile_stats_.output_boxes = 0;
+        }
+        return;
+    }
+
+    // ── Gather post-main-NMS survivors from out_* to d_compact_* ─
+    // (This is the same gather_compact4 as in the original monolithic path.)
+    // After this, d_compact_* has the main NMS survivors, and out_* still
+    // has the pre-NMS compacted data that the private NMS reads from.
+    auto launch_gather4 = [&] {
+        gather_compact4_counted_cuda(
+            out_boxes, out_scores, out_classes, out_suspect,
+            d_compact_boxes_, d_compact_scores_, d_compact_classes_, d_compact_suspect_,
+            d_nms_keep_, d_nms_count_, n_in, stream);
+    };
+
+    // ── Private candidate NMS ───────────────────────────────────
+    // MUST run on out_* (pre-NMS compacted data, same as the original),
+    // NOT on d_compact_* (which only has main NMS survivors).
+    auto launch_private_nms = [&] {
+        cudaMemsetAsync(d_nms_suppression_, 0, (size_t)n_in * col_blocks * sizeof(uint64_t), stream);
+        cudaMemsetAsync(d_nms_remv_, 0, col_blocks * sizeof(uint64_t), stream);
+        cudaMemsetAsync(d_private_nms_count_, 0, sizeof(int), stream);
+        nms_counted_cuda(
+            out_boxes, out_scores, out_classes, d_nms_order_,
+            n_in, d_filter_count_, d_private_nms_keep_,
+            d_nms_suppression_, d_nms_remv_, d_private_nms_count_,
+            cfg_.private_candidate_nms_iou, nms_class_aware,
+            nullptr, nullptr, 0, 0.0f,  // no priors in private pass
+            d_nms_immunity_mask_, stream);
+    };
+
+    // ── Append private continuation ──────────────────────────────
+    // Use d_nms_count_ as the working count buffer (matching the original).
+    // The append kernel reads *d_nms_count_ as the baseline (main NMS count)
+    // and writes back the extended count.  We then copy to the caller's
+    // out_count buffer at the end.
+    auto launch_append = [&] {
+        append_private_continuation_cuda(
+            out_boxes, out_scores, out_classes, out_suspect,
+            d_compact_boxes_, d_compact_scores_, d_compact_classes_, d_compact_suspect_,
+            d_nms_count_, n_in,
+            d_nms_keep_, d_nms_count_,
+            d_private_baseline_mask_,
+            d_private_nms_keep_, d_private_nms_count_,
+            private_priors_ptr, num_private_priors,
+            cfg_.private_prior_iou_threshold, cfg_.private_prior_center_threshold,
+            private_score_floor, private_score_ceiling,
+            cfg_.private_max_candidates,
+            d_private_added_count_, stream);
+    };
+
+    if (profile_post) {
+        measure_gpu_stage(stream, last_postprocess_profile_stats_.native_large_gather4_ms, launch_gather4);
+        measure_gpu_stage(stream, last_postprocess_profile_stats_.native_private_candidate_nms_ms, launch_private_nms);
+        measure_gpu_stage(stream, last_postprocess_profile_stats_.native_private_append_ms, launch_append);
+    } else {
+        launch_gather4();
+        launch_private_nms();
+        launch_append();
+    }
+
+    // ── Suspect penalty ─────────────────────────────────────────
+    if (cfg_.geometry_suspect_support && cfg_.geometry_suspect_support_score > 0.0f) {
+        auto launch_penalty = [&] {
+            penalize_suspect_scores_cuda(out_scores, out_suspect, d_nms_count_,
+                                         cfg_.geometry_suspect_support_score, n_in, stream);
+        };
+        if (profile_post) measure_gpu_stage(stream, last_postprocess_profile_stats_.native_suspect_penalty_ms, launch_penalty);
+        else launch_penalty();
+    }
+
+    // ── Copy final results to caller's out_* ────────────────────
+    process_detections_copyback(out_boxes, out_scores, out_classes, out_suspect,
+                                out_count, n_in, stream);
+
+    if (profile_post) {
+        cudaStreamSynchronize(stream);
+    }
+}
+
+void PerceptionPipeline::process_detections_copyback(
+    float* out_boxes,
+    float* out_scores,
+    int*   out_classes,
+    bool*  out_suspect,
+    int*   out_count,
+    int n_in,
+    cudaStream_t stream)
+{
+    cudaMemcpyAsync(out_boxes,   d_compact_boxes_,   n_in * 4 * sizeof(float), cudaMemcpyDeviceToDevice, stream);
+    cudaMemcpyAsync(out_scores,  d_compact_scores_,  n_in *     sizeof(float), cudaMemcpyDeviceToDevice, stream);
+    cudaMemcpyAsync(out_classes, d_compact_classes_, n_in *     sizeof(int),   cudaMemcpyDeviceToDevice, stream);
+    cudaMemcpyAsync(out_suspect, d_compact_suspect_, n_in *     sizeof(bool),  cudaMemcpyDeviceToDevice, stream);
+    cudaMemcpyAsync(out_count,   d_nms_count_,       sizeof(int),              cudaMemcpyDeviceToDevice, stream);
+}
+
 int PerceptionPipeline::process_detections_n(
     const float* boxes_ptr,
     const float* scores_ptr,
@@ -723,6 +1018,83 @@ void PerceptionPipeline::process_detections_graph(
             out_scores, out_suspect, out_count,
             cfg_.geometry_suspect_support_score, n_in, stream);
     }
+}
+
+void PerceptionPipeline::process_detections_main_nms_graph(
+    const float* boxes_ptr,
+    const float* scores_ptr,
+    const int*   classes_ptr,
+    int n_in,
+    int frame_w, int frame_h,
+    bool is_tiled,
+    float* out_boxes,
+    float* out_scores,
+    int*   out_classes,
+    bool*  out_suspect,
+    int*   out_count,
+    const float* priors_ptr,
+    const int* prior_classes_ptr,
+    int num_priors,
+    float prior_iou_threshold,
+    cudaStream_t stream)
+{
+    if (n_in <= 0) { cudaMemsetAsync(out_count, 0, sizeof(int), stream); return; }
+    ensure_scratch(n_in, stream);
+
+    // Same as process_detections_graph BUT with class_aware = !person_only
+    // (matching the private-continuation path's NMS semantics), and without
+    // the suspect-penalty tail (deferred to process_private_continuation_append).
+    // All pointers are graph-capture-safe: no D2H, no allocation, no branching.
+
+    cudaMemsetAsync(d_filter_count_, 0, sizeof(int), stream);
+    filter_detections_cuda(
+        boxes_ptr, scores_ptr, classes_ptr, n_in,
+        d_filter_keep_indices_, d_filter_suspect_flags_, nullptr, d_filter_count_,
+        cfg_.score_threshold,
+        cfg_.person_only, cfg_.person_class,
+        is_tiled, frame_w, frame_h,
+        cfg_.person_geometry_prior, cfg_.geometry_suspect_support,
+        cfg_.person_min_height_ratio,
+        cfg_.person_min_aspect, cfg_.person_max_aspect,
+        cfg_.person_min_area_ratio, cfg_.person_max_area_ratio,
+        stream);
+
+    gather_compact3_counted_cuda(
+        boxes_ptr, scores_ptr, classes_ptr,
+        out_boxes, out_scores, out_classes,
+        d_filter_keep_indices_, d_filter_count_, n_in, stream);
+
+    copy_bool_counted_cuda(
+        d_filter_suspect_flags_, out_suspect, d_filter_count_, n_in, stream);
+
+    const int col_blocks = (n_in + 63) / 64;
+    cudaMemsetAsync(d_nms_suppression_, 0, (size_t)n_in * col_blocks * sizeof(uint64_t), stream);
+    cudaMemsetAsync(d_nms_remv_, 0, col_blocks * sizeof(uint64_t), stream);
+    cudaMemsetAsync(d_nms_count_, 0, sizeof(int), stream);
+
+    argsort_scores_descending_cuda(
+        out_scores, n_in,
+        d_nms_order_, d_sort_keys_in_, d_sort_keys_out_,
+        d_cub_sort_tmp_, cub_sort_tmp_bytes_, stream);
+
+    nms_counted_cuda(
+        out_boxes, out_scores, out_classes, d_nms_order_,
+        n_in, d_filter_count_, d_nms_keep_, d_nms_suppression_, d_nms_remv_,
+        d_nms_count_, cfg_.nms_threshold, !cfg_.person_only,
+        priors_ptr, prior_classes_ptr, num_priors, prior_iou_threshold,
+        d_nms_immunity_mask_,
+        stream);
+
+    gather_compact4_counted_cuda(
+        out_boxes, out_scores, out_classes, out_suspect,
+        d_compact_boxes_, d_compact_scores_, d_compact_classes_, d_compact_suspect_,
+        d_nms_keep_, d_nms_count_, n_in, stream);
+
+    cudaMemcpyAsync(out_boxes,   d_compact_boxes_,   n_in * 4 * sizeof(float), cudaMemcpyDeviceToDevice, stream);
+    cudaMemcpyAsync(out_scores,  d_compact_scores_,  n_in *     sizeof(float), cudaMemcpyDeviceToDevice, stream);
+    cudaMemcpyAsync(out_classes, d_compact_classes_, n_in *     sizeof(int),   cudaMemcpyDeviceToDevice, stream);
+    cudaMemcpyAsync(out_suspect, d_compact_suspect_, n_in *     sizeof(bool),  cudaMemcpyDeviceToDevice, stream);
+    cudaMemcpyAsync(out_count, d_nms_count_, sizeof(int), cudaMemcpyDeviceToDevice, stream);
 }
 
 void PerceptionPipeline::process_detections_interleaved_graph(
