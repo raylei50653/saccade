@@ -1000,18 +1000,63 @@ def _run_nms_shadow_compare(
         suspect_ok = bool((mono_suspect == _split_suspect).all())
 
         if not (boxes_ok and scores_ok and classes_ok and suspect_ok):
-            issues = []
-            if not boxes_ok:
-                diff = (mono_boxes - _split_boxes).abs()
-                issues.append(f"boxes max diff={diff.max().item():.6f}")
-            if not scores_ok:
-                diff = (mono_scores - _split_scores).abs()
-                issues.append(f"scores max diff={diff.max().item():.6f}")
-            if not classes_ok:
-                issues.append("classes")
-            if not suspect_ok:
-                issues.append("suspect")
-            print(f"[NMS_SHADOW] frame={state.current_frame_id} " + " ".join(issues))
+            # ── Canonical sort compare: check if it's ordering-only ──
+            def _canonical_idx(boxes, scores, classes, suspect):
+                """Lexsort by (class, -score, x1, y1, x2, y2)."""
+                cb, cs, cc = boxes.cpu(), scores.cpu(), classes.cpu()
+                keys = [
+                    cb[:, 3].double(),
+                    cb[:, 2].double(),
+                    cb[:, 1].double(),
+                    cb[:, 0].double(),
+                    (-cs).double(),
+                    cc.double(),
+                ]
+                idx = torch.arange(boxes.shape[0])
+                for key in reversed(keys):
+                    idx = idx[torch.argsort(key[idx], stable=True)]
+                return idx.to(boxes.device)
+
+            _mi = _canonical_idx(mono_boxes, mono_scores, mono_classes, mono_suspect)
+            _si = _canonical_idx(
+                _split_boxes, _split_scores, _split_classes, _split_suspect
+            )
+
+            sorted_boxes_ok = torch.allclose(
+                mono_boxes[_mi], _split_boxes[_si], atol=1e-4
+            )
+            sorted_scores_ok = torch.allclose(
+                mono_scores[_mi], _split_scores[_si], atol=1e-4
+            )
+            sorted_classes_ok = bool((mono_classes[_mi] == _split_classes[_si]).all())
+            sorted_suspect_ok = bool((mono_suspect[_mi] == _split_suspect[_si]).all())
+
+            if (
+                sorted_boxes_ok
+                and sorted_scores_ok
+                and sorted_classes_ok
+                and sorted_suspect_ok
+            ):
+                print(
+                    f"[NMS_SHADOW] frame={state.current_frame_id} "
+                    f"ordering-only (same set, different index order)"
+                )
+            else:
+                issues = []
+                if not sorted_boxes_ok:
+                    diff = (mono_boxes[_mi] - _split_boxes[_si]).abs()
+                    issues.append(f"boxes max diff={diff.max().item():.6f}")
+                if not sorted_scores_ok:
+                    diff = (mono_scores[_mi] - _split_scores[_si]).abs()
+                    issues.append(f"scores max diff={diff.max().item():.6f}")
+                if not sorted_classes_ok:
+                    issues.append("classes")
+                if not sorted_suspect_ok:
+                    issues.append("suspect")
+                print(
+                    f"[NMS_SHADOW] frame={state.current_frame_id} "
+                    f"REAL MISMATCH: " + " ".join(issues)
+                )
 
     # ── Graph shadow: main NMS graph vs eager ──────────────────────
     _graph_shadow_enabled = os.environ.get("SACCADE_MAIN_NMS_GRAPH_SHADOW", "") in (
