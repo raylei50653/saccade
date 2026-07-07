@@ -4,6 +4,7 @@
 
 ## 文件索引
 
+- [nsys_profiling.md](nsys_profiling.md): nsys profiling 工作流（compile+CUDA graph 全開）、injection 死鎖禁忌 flag、hang 簽名、開銷校準。
 - [stream_recovery.md](../../modules/streaming/runbooks/stream_recovery.md): 串流斷線恢復流程。
 - [vram_oom.md](../../modules/resource/runbooks/vram_oom.md): VRAM OOM 緊急處置與降級策略。
 

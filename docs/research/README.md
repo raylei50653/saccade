@@ -7,6 +7,7 @@
 | 文件 | 內容 |
 |------|------|
 | [gpu_pipeline_m4b_identity_resolver.md](pipeline/gpu_pipeline_m4b_identity_resolver.md) | M4b native identity resolver 設計 |
+| [perf_attribution_whole_graph_m.md](pipeline/perf_attribution_whole_graph_m.md) | whole_graph_m 每幀開銷歸因 + 優化 backlog（nsys, 2026-07） |
 
 ## tracking/
 
