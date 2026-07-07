@@ -283,6 +283,38 @@ public:
         int n_in,
         cudaStream_t stream);
 
+    /**
+     * @brief Consolidated eager split pipeline: main NMS + private append.
+     *
+     * Chains process_detections_main_nms() → process_private_continuation_append()
+     * → D2H count sync in a single C++ call, eliminating per-frame Python/pybind
+     * orchestration overhead.  private_continuation_append internally handles the
+     * disabled case (falls back to copyback + suspect penalty).  Returns the final
+     * post-NMS count.
+     *
+     * @param out_count  [1] int32 GPU — receives final count (D2D written by copyback)
+     * @return           final post-NMS count (after D2H sync)
+     */
+    int process_detections_split_pipeline(
+        const float* boxes_ptr,
+        const float* scores_ptr,
+        const int*   classes_ptr,
+        int n_in,
+        int frame_w, int frame_h,
+        bool is_tiled,
+        float* out_boxes,
+        float* out_scores,
+        int*   out_classes,
+        bool*  out_suspect,
+        int*   out_count,
+        const float* priors_ptr,
+        const int* prior_classes_ptr,
+        int num_priors,
+        float prior_iou_threshold,
+        const float* private_priors_ptr,
+        int num_private_priors,
+        cudaStream_t stream);
+
     void process_detections_main_nms_graph(
         const float* boxes_ptr,
         const float* scores_ptr,

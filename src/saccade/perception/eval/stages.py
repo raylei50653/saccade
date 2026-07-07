@@ -633,6 +633,38 @@ def _run_nms(
     )
 
     if native_private_enabled:
+        _use_split = os.environ.get("SACCADE_MAIN_NMS_SPLIT", "") in (
+            "1",
+            "true",
+            "yes",
+        )
+        if _use_split:
+            out_count_buf = state.nms_graph_out_count
+            if out_count_buf is None:
+                out_count_buf = torch.zeros(1, dtype=torch.int32, device="cuda")
+                state.nms_graph_out_count = out_count_buf
+            n_post = perception_pipeline.process_detections_split_pipeline(
+                raw_boxes_contig.data_ptr(),
+                raw_scores_contig.data_ptr(),
+                raw_classes_contig.data_ptr(),
+                raw_box_count,
+                w_orig,
+                h_orig,
+                is_tiled,
+                _post_bufs["boxes"].data_ptr(),
+                _post_bufs["scores"].data_ptr(),
+                _post_bufs["classes"].data_ptr(),
+                _post_bufs["suspect"].data_ptr(),
+                out_count_buf.data_ptr(),
+                priors_ptr,
+                prior_classes_ptr,
+                num_priors,
+                state.onms_prior_iou_threshold,
+                private_priors_ptr,
+                num_private_priors,
+                current_stream,
+            )
+            return n_post, _nms_graph
         n_post = perception_pipeline.process_detections_n_private(
             raw_boxes_contig.data_ptr(),
             raw_scores_contig.data_ptr(),
@@ -783,6 +815,300 @@ def _run_nms(
             _sp.cuda_stream if _sp is not None else 0
         )
     return n_post, _nms_graph
+
+
+def _capture_main_nms_graph(
+    state: EvalPipeline,
+    *,
+    raw_box_count: int,
+    is_tiled: bool,
+) -> None:
+    """Capture process_detections_main_nms_graph into a torch.cuda.CUDAGraph.
+
+    Works around torch.cuda.CUDAGraph() memory snapshotting by allocating
+    fresh output tensors for the graph to write into. Input data is copied
+    to _main_nms_in before each replay (outside the graph).
+    """
+    _perception_pipeline = state.perception_pipeline
+    if _perception_pipeline is None:
+        return
+    _main_nms_in = state.main_nms_in
+    _graph_out = state.main_nms_graph_out
+    _NMS_FIXED_N = state.nms_fixed_n
+    n_in = min(raw_box_count, _NMS_FIXED_N)
+
+    out_count_buf = torch.zeros(1, dtype=torch.int32, device="cuda")
+    state.main_nms_graph_out_count = out_count_buf
+
+    stream_ptr = torch.cuda.current_stream().cuda_stream
+
+    # Warm up (eager, outside graph capture)
+    _perception_pipeline.process_detections_main_nms_graph(
+        _main_nms_in["boxes"].data_ptr(),
+        _main_nms_in["scores"].data_ptr(),
+        _main_nms_in["classes"].data_ptr(),
+        n_in,
+        state.w_orig,
+        state.h_orig,
+        is_tiled,
+        _graph_out["boxes"].data_ptr(),
+        _graph_out["scores"].data_ptr(),
+        _graph_out["classes"].data_ptr(),
+        _graph_out["suspect"].data_ptr(),
+        out_count_buf.data_ptr(),
+        0,
+        0,
+        0,
+        0.0,
+        stream_ptr,
+    )
+    torch.cuda.synchronize()
+
+    _graph = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(_graph):
+        _perception_pipeline.process_detections_main_nms_graph(
+            _main_nms_in["boxes"].data_ptr(),
+            _main_nms_in["scores"].data_ptr(),
+            _main_nms_in["classes"].data_ptr(),
+            n_in,
+            state.w_orig,
+            state.h_orig,
+            is_tiled,
+            _graph_out["boxes"].data_ptr(),
+            _graph_out["scores"].data_ptr(),
+            _graph_out["classes"].data_ptr(),
+            _graph_out["suspect"].data_ptr(),
+            out_count_buf.data_ptr(),
+            0,
+            0,
+            0,
+            0.0,
+            stream_ptr,
+        )
+    state.main_nms_graph = _graph
+    print("🕯️ [MainNMSGraph] Captured main NMS graph")
+
+
+def _run_nms_shadow_compare(
+    state: EvalPipeline,
+    *,
+    raw_boxes_contig: torch.Tensor,
+    raw_scores_contig: torch.Tensor,
+    raw_classes_contig: torch.Tensor,
+    raw_box_count: int,
+    priors_tensor: "torch.Tensor | None",
+    prior_classes_tensor: "torch.Tensor | None",
+    num_priors: int,
+    private_prior_boxes: "torch.Tensor | None",
+    num_private_priors: int,
+    native_private_enabled: bool,
+    is_tiled: bool,
+    nms_graph: Any,
+) -> tuple[int, Any]:
+    """Shadow compare: runs monolithic on both post_bufs and shadow bufs,
+    then compares split (main_nms + private_append) against monolithic.
+    """
+
+    _post_bufs = state.post_bufs
+    _NMS_FIXED_N = state.nms_fixed_n
+    _perception_pipeline = state.perception_pipeline
+    _cfg = state.cfg
+
+    # ── Monolithic on post_bufs (production path) ──────────────────
+    n_post_mono, _nms_graph_out = _run_nms(
+        state,
+        raw_boxes_contig=raw_boxes_contig,
+        raw_scores_contig=raw_scores_contig,
+        raw_classes_contig=raw_classes_contig,
+        raw_box_count=raw_box_count,
+        priors_tensor=priors_tensor,
+        prior_classes_tensor=prior_classes_tensor,
+        num_priors=num_priors,
+        private_prior_boxes=private_prior_boxes,
+        num_private_priors=num_private_priors,
+        native_private_enabled=native_private_enabled,
+        is_tiled=is_tiled,
+        nms_graph=nms_graph,
+    )
+    torch.cuda.synchronize()
+
+    mono_boxes = _post_bufs["boxes"][:n_post_mono].clone()
+    mono_scores = _post_bufs["scores"][:n_post_mono].clone()
+    mono_classes = _post_bufs["classes"][:n_post_mono].clone()
+    mono_suspect = _post_bufs["suspect"][:n_post_mono].clone()
+
+    # ── Split path on shadow buffers ─────────────────────────────
+    _shadow_boxes = torch.empty((_NMS_FIXED_N, 4), dtype=torch.float32, device="cuda")
+    _shadow_scores = torch.empty((_NMS_FIXED_N,), dtype=torch.float32, device="cuda")
+    _shadow_classes = torch.empty((_NMS_FIXED_N,), dtype=torch.int32, device="cuda")
+    _shadow_suspect = torch.empty((_NMS_FIXED_N,), dtype=torch.bool, device="cuda")
+    _shadow_count = torch.zeros(1, dtype=torch.int32, device="cuda")
+
+    _priors_ptr = (
+        priors_tensor.data_ptr() if num_priors > 0 and priors_tensor is not None else 0
+    )
+    _prior_classes_ptr = (
+        prior_classes_tensor.data_ptr()
+        if num_priors > 0 and prior_classes_tensor is not None
+        else 0
+    )
+    _private_priors_ptr = (
+        private_prior_boxes.data_ptr()
+        if num_private_priors > 0 and private_prior_boxes is not None
+        else 0
+    )
+    current_stream = torch.cuda.current_stream().cuda_stream
+
+    assert _perception_pipeline is not None
+    n_post_split = _perception_pipeline.process_detections_split_pipeline(
+        raw_boxes_contig.data_ptr(),
+        raw_scores_contig.data_ptr(),
+        raw_classes_contig.data_ptr(),
+        raw_box_count,
+        state.w_orig,
+        state.h_orig,
+        is_tiled,
+        _shadow_boxes.data_ptr(),
+        _shadow_scores.data_ptr(),
+        _shadow_classes.data_ptr(),
+        _shadow_suspect.data_ptr(),
+        _shadow_count.data_ptr(),
+        _priors_ptr,
+        _prior_classes_ptr,
+        num_priors,
+        state.onms_prior_iou_threshold,
+        _private_priors_ptr,
+        num_private_priors,
+        current_stream,
+    )
+
+    # ── Compare ───────────────────────────────────────────────────
+    if n_post_mono != n_post_split:
+        print(
+            f"[NMS_SHADOW] frame={state.current_frame_id} COUNT MISMATCH: "
+            f"mono={n_post_mono} split={n_post_split}"
+        )
+    else:
+        _split_boxes = _shadow_boxes[:n_post_split]
+        _split_scores = _shadow_scores[:n_post_split]
+        _split_classes = _shadow_classes[:n_post_split]
+        _split_suspect = _shadow_suspect[:n_post_split]
+
+        boxes_ok = torch.allclose(mono_boxes, _split_boxes, atol=1e-4)
+        scores_ok = torch.allclose(mono_scores, _split_scores, atol=1e-4)
+        classes_ok = bool((mono_classes == _split_classes).all())
+        suspect_ok = bool((mono_suspect == _split_suspect).all())
+
+        if not (boxes_ok and scores_ok and classes_ok and suspect_ok):
+            issues = []
+            if not boxes_ok:
+                diff = (mono_boxes - _split_boxes).abs()
+                issues.append(f"boxes max diff={diff.max().item():.6f}")
+            if not scores_ok:
+                diff = (mono_scores - _split_scores).abs()
+                issues.append(f"scores max diff={diff.max().item():.6f}")
+            if not classes_ok:
+                issues.append("classes")
+            if not suspect_ok:
+                issues.append("suspect")
+            print(f"[NMS_SHADOW] frame={state.current_frame_id} " + " ".join(issues))
+
+    # ── Graph shadow: main NMS graph vs eager ──────────────────────
+    _graph_shadow_enabled = os.environ.get("SACCADE_MAIN_NMS_GRAPH_SHADOW", "") in (
+        "1",
+        "true",
+        "yes",
+    )
+    if _graph_shadow_enabled:
+        _graph_in = state.main_nms_in
+        _graph_out = state.main_nms_graph_out
+
+        # Copy per-frame raw detections to fixed graph input buffers
+        from saccade_tracking_ext import copy_pad_detections
+
+        copy_pad_detections(
+            raw_boxes_contig.data_ptr(),
+            raw_scores_contig.data_ptr(),
+            raw_classes_contig.data_ptr(),
+            min(raw_box_count, _NMS_FIXED_N),
+            _graph_in["boxes"].data_ptr(),
+            _graph_in["scores"].data_ptr(),
+            _graph_in["classes"].data_ptr(),
+            _NMS_FIXED_N,
+            current_stream,
+        )
+
+        if state.main_nms_graph is None:
+            _capture_main_nms_graph(
+                state,
+                raw_box_count=raw_box_count,
+                is_tiled=is_tiled,
+            )
+
+        if state.main_nms_graph is None:
+            return n_post_mono, _nms_graph_out
+
+        state.main_nms_graph.replay()
+        torch.cuda.synchronize()
+
+        # Save graph main NMS output before private append
+        _graph_count = int(state.main_nms_graph_out_count.item())
+        _graph_boxes = _graph_out["boxes"][:_graph_count].clone()
+        _graph_scores = _graph_out["scores"][:_graph_count].clone()
+        _graph_classes = _graph_out["classes"][:_graph_count].clone()
+        _graph_suspect = _graph_out["suspect"][:_graph_count].clone()
+
+        # Run private append on graph output
+        _perception_pipeline.process_private_continuation_append(
+            _graph_out["boxes"].data_ptr(),
+            _graph_out["scores"].data_ptr(),
+            _graph_out["classes"].data_ptr(),
+            _graph_out["suspect"].data_ptr(),
+            state.main_nms_graph_out_count.data_ptr(),
+            _NMS_FIXED_N,
+            _private_priors_ptr,
+            num_private_priors,
+            current_stream,
+        )
+        torch.cuda.synchronize()
+
+        _graph_final_count = int(state.main_nms_graph_out_count.item())
+
+        # Compare graph+private final vs monolithic final
+        if n_post_mono != _graph_final_count:
+            print(
+                f"[NMS_GRAPH_SHADOW] frame={state.current_frame_id} "
+                f"COUNT: mono={n_post_mono} graph={_graph_final_count}"
+            )
+        else:
+            _gf_boxes = _graph_out["boxes"][:_graph_final_count]
+            _gf_scores = _graph_out["scores"][:_graph_final_count]
+            _gf_classes = _graph_out["classes"][:_graph_final_count]
+            _gf_suspect = _graph_out["suspect"][:_graph_final_count]
+
+            boxes_ok = torch.allclose(mono_boxes, _gf_boxes, atol=1e-4)
+            scores_ok = torch.allclose(mono_scores, _gf_scores, atol=1e-4)
+            classes_ok = bool((mono_classes == _gf_classes).all())
+            suspect_ok = bool((mono_suspect == _gf_suspect).all())
+
+            if not (boxes_ok and scores_ok and classes_ok and suspect_ok):
+                issues = []
+                if not boxes_ok:
+                    diff = (mono_boxes - _gf_boxes).abs()
+                    issues.append(f"boxes max diff={diff.max().item():.6f}")
+                if not scores_ok:
+                    diff = (mono_scores - _gf_scores).abs()
+                    issues.append(f"scores max diff={diff.max().item():.6f}")
+                if not classes_ok:
+                    issues.append("classes")
+                if not suspect_ok:
+                    issues.append("suspect")
+                print(
+                    f"[NMS_GRAPH_SHADOW] frame={state.current_frame_id} "
+                    + " ".join(issues)
+                )
+
+    return n_post_mono, _nms_graph_out
 
 
 def _run_native_tensor_prep(
@@ -1618,6 +1944,11 @@ def _run_emit(
             if (gmc_warp is not None and gmc_warp.device.type == "cuda")
             else gmc_warp
         )
+        if _rw_executor is None:
+            from concurrent.futures import ThreadPoolExecutor
+
+            _rw_executor = ThreadPoolExecutor(max_workers=1)
+            state.rw_executor = _rw_executor
         _bg_future = _rw_executor.submit(  # type: ignore[union-attr]
             _bg_relink_write,
             frame_id,

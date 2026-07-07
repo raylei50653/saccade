@@ -836,6 +836,51 @@ void PerceptionPipeline::process_detections_copyback(
     cudaMemcpyAsync(out_count,   d_nms_count_,       sizeof(int),              cudaMemcpyDeviceToDevice, stream);
 }
 
+int PerceptionPipeline::process_detections_split_pipeline(
+    const float* boxes_ptr,
+    const float* scores_ptr,
+    const int*   classes_ptr,
+    int n_in,
+    int frame_w, int frame_h,
+    bool is_tiled,
+    float* out_boxes,
+    float* out_scores,
+    int*   out_classes,
+    bool*  out_suspect,
+    int*   out_count,
+    const float* priors_ptr,
+    const int* prior_classes_ptr,
+    int num_priors,
+    float prior_iou_threshold,
+    const float* private_priors_ptr,
+    int num_private_priors,
+    cudaStream_t stream)
+{
+    if (n_in <= 0) {
+        cudaMemsetAsync(out_count, 0, sizeof(int), stream);
+        cudaStreamSynchronize(stream);
+        return 0;
+    }
+
+    process_detections_main_nms(
+        boxes_ptr, scores_ptr, classes_ptr, n_in,
+        frame_w, frame_h, is_tiled,
+        out_boxes, out_scores, out_classes, out_suspect, out_count,
+        priors_ptr, prior_classes_ptr, num_priors, prior_iou_threshold,
+        stream);
+
+    process_private_continuation_append(
+        out_boxes, out_scores, out_classes, out_suspect, out_count,
+        n_in,
+        private_priors_ptr, num_private_priors,
+        stream);
+
+    int n_post = 0;
+    cudaMemcpyAsync(&n_post, out_count, sizeof(int), cudaMemcpyDeviceToHost, stream);
+    cudaStreamSynchronize(stream);
+    return n_post;
+}
+
 int PerceptionPipeline::process_detections_n(
     const float* boxes_ptr,
     const float* scores_ptr,

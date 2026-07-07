@@ -417,6 +417,10 @@ class EvalPipeline:
         # replay. It must outlive the CUDA graph; a function-local tensor may
         # otherwise be returned to PyTorch's allocator after capture.
         self.nms_graph_out_count: torch.Tensor | None = None
+        # ── Main NMS graph (split: process_detections_main_nms) ─────────
+        self.main_nms_graph: Any = None
+        self._main_nms_exec_graph: Any = None  # raw CUDA graph exec handle
+        self.main_nms_graph_out_count: torch.Tensor | None = None
         self.gmc_uncertain: bool = False
         self.last_reid_frame: int = -100
         self.prev_gray: torch.Tensor | None = None
@@ -1281,6 +1285,20 @@ class EvalPipeline:
             "scores": torch.empty((_NMS_FIXED_N,), dtype=torch.float32, device="cuda"),
             "classes": torch.empty((_NMS_FIXED_N,), dtype=torch.int32, device="cuda"),
         }
+        # ── Main NMS graph: fixed input buffers ────────────────────────
+        _main_nms_in: dict[str, torch.Tensor] = {
+            "boxes": torch.empty((_NMS_FIXED_N, 4), dtype=torch.float32, device="cuda"),
+            "scores": torch.empty((_NMS_FIXED_N,), dtype=torch.float32, device="cuda"),
+            "classes": torch.empty((_NMS_FIXED_N,), dtype=torch.int32, device="cuda"),
+        }
+        # Dedicated output buffers for the main NMS graph (separate from
+        # _post_bufs so the production path is untouched).
+        _main_nms_graph_out: dict[str, torch.Tensor] = {
+            "boxes": torch.empty((_NMS_FIXED_N, 4), dtype=torch.float32, device="cuda"),
+            "scores": torch.empty((_NMS_FIXED_N,), dtype=torch.float32, device="cuda"),
+            "classes": torch.empty((_NMS_FIXED_N,), dtype=torch.int32, device="cuda"),
+            "suspect": torch.empty((_NMS_FIXED_N,), dtype=torch.bool, device="cuda"),
+        }
 
         gtu: Any = None
         # GraphedTrackerUpdate.copy_inputs does not feed per-detection embeddings,
@@ -1531,6 +1549,8 @@ class EvalPipeline:
         self.defer_emit = _defer_emit
         self.gtu = gtu
         self.nms_in = _nms_in
+        self.main_nms_in = _main_nms_in
+        self.main_nms_graph_out = _main_nms_graph_out
         self.post_bufs = _post_bufs
         self.nms_fixed_n = _NMS_FIXED_N
         self.relinker = relinker
