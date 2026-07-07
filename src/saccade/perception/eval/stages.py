@@ -665,10 +665,18 @@ def _run_nms(
 
             # Capture on first frame
             if state.main_nms_graph_nocopyback is None:
-                _capture_main_nms_graph_nocopyback(state, is_tiled=is_tiled)
+                try:
+                    _capture_main_nms_graph_nocopyback(state, is_tiled=is_tiled)
+                except Exception as e:
+                    print(
+                        f"[MainNMSGraphNoCopyback] Capture failed: {e}. "
+                        f"Falling back to eager split pipeline."
+                    )
+                    state.main_nms_graph_nocopyback = None
 
             if state.main_nms_graph_nocopyback is None:
-                # Capture failed (no perception_pipeline); fall back to split
+                # Capture failed (no perception_pipeline or exception);
+                # fall back to eager split pipeline.
                 n_post = perception_pipeline.process_detections_split_pipeline(
                     raw_boxes_contig.data_ptr(),
                     raw_scores_contig.data_ptr(),
@@ -716,7 +724,37 @@ def _run_nms(
             else:
                 # Graph replay: main NMS (nocopyback) — writes pre-NMS to
                 # _post_bufs, post-NMS survivors to d_compact_*
-                state.main_nms_graph_nocopyback.replay()
+                try:
+                    state.main_nms_graph_nocopyback.replay()
+                except Exception as e:
+                    print(
+                        f"[MainNMSGraphNoCopyback] Replay failed on "
+                        f"frame {state.current_frame_id}: {e}. "
+                        f"Falling back to eager split pipeline."
+                    )
+                    state.main_nms_graph_nocopyback = None
+                    n_post = perception_pipeline.process_detections_split_pipeline(
+                        raw_boxes_contig.data_ptr(),
+                        raw_scores_contig.data_ptr(),
+                        raw_classes_contig.data_ptr(),
+                        raw_box_count,
+                        w_orig,
+                        h_orig,
+                        is_tiled,
+                        _post_bufs["boxes"].data_ptr(),
+                        _post_bufs["scores"].data_ptr(),
+                        _post_bufs["classes"].data_ptr(),
+                        _post_bufs["suspect"].data_ptr(),
+                        out_count_buf.data_ptr(),
+                        priors_ptr,
+                        prior_classes_ptr,
+                        num_priors,
+                        state.onms_prior_iou_threshold,
+                        private_priors_ptr,
+                        num_private_priors,
+                        current_stream,
+                    )
+                    return n_post, _nms_graph
 
             # Private append + D2H sync (reads pre-NMS _post_bufs +
             # post-NMS d_compact_*, appends private, copybacks, syncs)
