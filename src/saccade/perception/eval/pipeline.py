@@ -1429,7 +1429,7 @@ class EvalPipeline:
                 host_batch=_host_batch,
                 person_class=cfg.detection.person_class,
                 track_person_only=cfg.detection.track_person_only,
-                geometry_suspect_support=cfg.geometry_suspect_support,
+                geometry_suspect_support=cfg.geometry.geometry_suspect_support,
                 geometry_suspect_support_score=cfg.geometry_suspect_support_score,
                 id_stability_filter=id_stability_filter,
                 embeddings=_embeddings,

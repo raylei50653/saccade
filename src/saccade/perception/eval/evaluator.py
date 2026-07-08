@@ -1044,7 +1044,7 @@ def _run_frame(
                     frame_w=w_orig,
                     frame_h=h_orig,
                     person_geometry_prior=cfg.geometry.person_geometry_prior,
-                    geometry_suspect_support=cfg.geometry_suspect_support,
+                    geometry_suspect_support=cfg.geometry.geometry_suspect_support,
                     person_min_height_ratio=cfg.geometry.person_min_height_ratio,
                     person_min_aspect=cfg.geometry.person_min_aspect,
                     person_max_aspect=cfg.geometry.person_max_aspect,
@@ -1085,7 +1085,10 @@ def _run_frame(
                         w_area=cfg.geometry.detection_quality_w_area,
                     )
                     fused_scores = fused_scores * quality_factors
-                elif cfg.geometry_suspect_support and geometry_suspect_mask.numel() > 0:
+                elif (
+                    cfg.geometry.geometry_suspect_support
+                    and geometry_suspect_mask.numel() > 0
+                ):
                     if state._frame_stage_times is not None:
                         _t_any = time.perf_counter()
                     _suspect_any = geometry_suspect_mask.any()
@@ -2249,7 +2252,7 @@ def run_eval(
         native_cfg.person_only = cfg.detection.track_person_only
         native_cfg.nms_threshold = cfg.detection.nms_iou_threshold
         native_cfg.person_geometry_prior = cfg.geometry.person_geometry_prior
-        native_cfg.geometry_suspect_support = cfg.geometry_suspect_support
+        native_cfg.geometry_suspect_support = cfg.geometry.geometry_suspect_support
         native_cfg.geometry_suspect_support_score = cfg.geometry_suspect_support_score
         native_cfg.person_min_height_ratio = cfg.geometry.person_min_height_ratio
         native_cfg.person_min_aspect = cfg.geometry.person_min_aspect
