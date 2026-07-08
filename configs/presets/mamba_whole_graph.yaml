@@ -109,3 +109,8 @@ oao_ramp_frames: 25
 multiplicative_cost: true
 sinkhorn_lambda: 10
 stability_cost_w: 0.20
+
+# Graphed main NMS (issue #56): capture main NMS into a CUDA graph (nocopyback)
+# with automatic eager-split fallback. +4.7% FPS / lower tail latency, metrics
+# identical to eager baseline. Frames with active ONMS priors fall back to eager.
+main_nms_graphed: true

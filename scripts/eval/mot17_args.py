@@ -99,6 +99,19 @@ def build_parser() -> argparse.ArgumentParser:
             "--double-buffer requires event."
         ),
     )
+    runtime.add_argument(
+        "--main-nms-graphed",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Capture main NMS into a CUDA graph (nocopyback variant) with "
+            "automatic eager-split fallback. Sets SACCADE_MAIN_NMS_GRAPHED=1. "
+            "Enabled by default in whole_graph presets; the graph captures "
+            "priors_ptr=0, so frames with active ONMS priors (num_priors>0) "
+            "fall back to the eager split pipeline. Pass --no-main-nms-graphed "
+            "to force the eager path (e.g. for an A/B baseline)."
+        ),
+    )
 
     profile = parser.add_argument_group("Profiling")
     profile.add_argument(
@@ -174,3 +187,10 @@ def configure_runtime_env(
         )
 
     env["SACCADE_GPU_DECODE"] = "0" if getattr(args, "no_gpu_decode", False) else "1"
+
+    # Graphed main NMS (issue #56): opt-in via --main-nms-graphed or the
+    # whole_graph preset default. Set-if-true only — unlike the barrier knob we
+    # do not force "0" when off, so a manual SACCADE_MAIN_NMS_GRAPHED export (the
+    # documented rollout gate) and --no-main-nms-graphed A/B runs are respected.
+    if getattr(args, "main_nms_graphed", False):
+        env["SACCADE_MAIN_NMS_GRAPHED"] = "1"

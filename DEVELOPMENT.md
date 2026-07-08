@@ -49,6 +49,7 @@ MOT / tracking / relink 主線開發從這些檔案出發：
 ### 4.1 Pipeline 合約
 - 主熱路徑優先走 GPU / native。新路徑引入 CPU roundtrip 必須說明必要性。
 - Python 負責 orchestration / 評估 / 整理；不應接回每幀大量資料面工作。
+- CUDA graph capture：graph context 內一律解析 `torch.cuda.current_stream().cuda_stream`，不得重用進 `torch.cuda.graph()` 前取得的 stream pointer（否則 graph 建立成功但 replay 產 garbage）。未來所有 capture site（GMC / post / detect / tracker / NMS）遵守同一規則 → [docs/CUDA_GRAPH_CAPTURE_STREAM_RULE.md](docs/CUDA_GRAPH_CAPTURE_STREAM_RULE.md)。
 
 ### 4.2 Tracking / Association 合約
 - ambiguous case 不靠單一固定 threshold；fallback 必須穩定且可解釋（最低保證：IoU-only）。
