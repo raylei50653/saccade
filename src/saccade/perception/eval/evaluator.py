@@ -564,7 +564,7 @@ def _run_frame(
                         f"  [scene_adapt] {seq} @ frame {frame_id}: {st}"
                         + (
                             f" → narrow_bonus={state.seq_narrow_bonus:.2f}"
-                            if cfg.scene_adapt_enabled
+                            if cfg.detection.scene_adapt_enabled
                             and cfg.detection.narrow_person_score_bonus > 0
                             else ""
                         )
@@ -751,7 +751,7 @@ def _run_frame(
                         f"  [scene_adapt] {seq} @ frame {frame_id}: {st}"
                         + (
                             f" → narrow_bonus={state.seq_narrow_bonus:.2f}"
-                            if cfg.scene_adapt_enabled
+                            if cfg.detection.scene_adapt_enabled
                             and cfg.detection.narrow_person_score_bonus > 0
                             else ""
                         )

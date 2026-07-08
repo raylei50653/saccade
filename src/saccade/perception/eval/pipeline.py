@@ -511,12 +511,12 @@ class EvalPipeline:
         if wb is not None:
             wb_scene_policy = (
                 SceneAdaptivePolicy(
-                    window=cfg.scene_adapt_window,
-                    crowd_box_thresh=cfg.scene_adapt_crowd_thresh,
-                    narrow_aspect_thresh=cfg.scene_adapt_narrow_aspect_thresh,
-                    narrow_width_thresh=cfg.scene_adapt_narrow_width_thresh,
+                    window=cfg.detection.scene_adapt_window,
+                    crowd_box_thresh=cfg.detection.scene_adapt_crowd_thresh,
+                    narrow_aspect_thresh=cfg.detection.scene_adapt_narrow_aspect_thresh,
+                    narrow_width_thresh=cfg.detection.scene_adapt_narrow_width_thresh,
                 )
-                if cfg.scene_adapt_enabled
+                if cfg.detection.scene_adapt_enabled
                 else None
             )
             wb.scene_adapt_policy = wb_scene_policy
@@ -1137,17 +1137,19 @@ class EvalPipeline:
         # applies seq-local narrow_person_score_bonus for crowded_narrow scenes.
         _scene_policy = (
             SceneAdaptivePolicy(
-                window=cfg.scene_adapt_window,
-                crowd_box_thresh=cfg.scene_adapt_crowd_thresh,
-                narrow_aspect_thresh=cfg.scene_adapt_narrow_aspect_thresh,
-                narrow_width_thresh=cfg.scene_adapt_narrow_width_thresh,
+                window=cfg.detection.scene_adapt_window,
+                crowd_box_thresh=cfg.detection.scene_adapt_crowd_thresh,
+                narrow_aspect_thresh=cfg.detection.scene_adapt_narrow_aspect_thresh,
+                narrow_width_thresh=cfg.detection.scene_adapt_narrow_width_thresh,
             )
-            if cfg.scene_adapt_enabled
+            if cfg.detection.scene_adapt_enabled
             else None
         )
         # Start with 0 bonus; if scene_adapt disabled, use the configured value directly.
         seq_narrow_bonus: float = (
-            0.0 if cfg.scene_adapt_enabled else cfg.detection.narrow_person_score_bonus
+            0.0
+            if cfg.detection.scene_adapt_enabled
+            else cfg.detection.narrow_person_score_bonus
         )
         start_time = time.time()
         warmup_frames = int(cfg.kwargs.get("warmup_frames", 50))
