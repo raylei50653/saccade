@@ -1,5 +1,10 @@
 # PP22 全-cadence interp 訓練 — 計畫 / Handoff
 
+> **狀態：PP22 training-pipeline stress test / NO-GO evidence snapshot。** 本檔為
+> research evidence，**不是** active training plan、**不是** current baseline owner。
+> NO-GO 判讀與登記見 [no_go_registry.md](../../reference/no_go_registry.md) #52；正文的數字、
+> 表格、結論與 handoff 歷史保留原貌。
+
 > 開新對話做。這份文檔自足:讀完即可接手。
 > 分支:`feat/pp22-keyframe-aware-eval-and-training`(基於 `996386d4`)
 
