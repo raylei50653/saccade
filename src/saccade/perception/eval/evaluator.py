@@ -1963,16 +1963,17 @@ def run_eval(
     occ_audit_log_path = output_root / "_occ_audit.csv"
     if getattr(cfg, "occ_audit_log", False):
         occ_audit_log_path.unlink(missing_ok=True)
-    if cfg.assoc_energy_diagnostics:
+    if cfg.geometry.assoc_energy_diagnostics:
         scoring_profile = {
-            "association_scoring_mode": cfg.association_scoring_mode,
+            "association_scoring_mode": cfg.geometry.association_scoring_mode,
             "multiplicative_cost": bool(
-                cfg.multiplicative_cost or cfg.association_scoring_mode == "energy"
+                cfg.multiplicative_cost
+                or cfg.geometry.association_scoring_mode == "energy"
             ),
             "sinkhorn_lambda": float(cfg.sinkhorn_lambda),
             "stability_cost_w": float(cfg.stability_cost_w),
-            "assoc_score_cost_w": float(cfg.assoc_score_cost_w),
-            "assoc_height_cost_w": float(cfg.assoc_height_cost_w),
+            "assoc_score_cost_w": float(cfg.geometry.assoc_score_cost_w),
+            "assoc_height_cost_w": float(cfg.geometry.assoc_height_cost_w),
             "private_continuation_enabled": bool(
                 cfg.detection.private_continuation_enabled
             ),
