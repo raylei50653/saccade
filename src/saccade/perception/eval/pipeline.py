@@ -474,7 +474,7 @@ class EvalPipeline:
                 )
                 if cfg.detection_quality_scaling
                 else (0.5, 0.3, 0.2),
-                max_detections=cfg.per_frame_detection_cap or 30,
+                max_detections=cfg.detection.per_frame_detection_cap or 30,
                 fp_hard_filter=cfg.fp_hard_filter_enabled,
                 fp_min_score=cfg.fp_hard_filter_min_score,
                 fp_max_suspicious_area=cfg.fp_hard_filter_max_suspicious_area,

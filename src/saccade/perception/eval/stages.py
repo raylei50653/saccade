@@ -2651,7 +2651,7 @@ def _run_detection_filters(
     # Cap detections per frame to prevent overwhelming association.
     # Uses FP-filter-aware ranking to preferentially keep high-score,
     # appropriately-sized detections while filtering suspicious large boxes.
-    if cfg.per_frame_detection_cap > 0 and fused_scores.numel() > 0:
+    if cfg.detection.per_frame_detection_cap > 0 and fused_scores.numel() > 0:
         quality_factors_for_cap = None
         if cfg.detection_quality_scaling and fused_scores.numel() > 0:
             quality_factors_for_cap = _compute_detection_quality_batch(
@@ -2664,17 +2664,17 @@ def _run_detection_filters(
             )
 
         # Compute adaptive cap if enabled
-        max_det = cfg.per_frame_detection_cap
-        if cfg.adaptive_detection_cap:
+        max_det = cfg.detection.per_frame_detection_cap
+        if cfg.detection.adaptive_detection_cap:
             max_det = _compute_adaptive_cap(
                 fused_boxes,
                 fused_scores,
-                base_cap=cfg.adaptive_cap_base,
-                max_cap=cfg.adaptive_cap_max,
-                min_cap=cfg.adaptive_cap_min,
+                base_cap=cfg.detection.adaptive_cap_base,
+                max_cap=cfg.detection.adaptive_cap_max,
+                min_cap=cfg.detection.adaptive_cap_min,
             )
 
-        rank_method = cfg.detection_cap_rank_method
+        rank_method = cfg.detection.detection_cap_rank_method
         # Only apply cap if we have more detections than the cap
         if fused_scores.numel() > max_det:
             fused_boxes, fused_scores, fused_classes = _apply_detection_cap(
