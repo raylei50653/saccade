@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # PP22 full-cadence + interp + live-teacher + GPU-decode training chain.
-# Reproduces docs/pp22_full_cadence_interp_training_plan.md §4.
+# Reproduces docs/research/training/pp22_full_cadence_interp_training_plan.md §4.
 #
 #   GT1 (clip4, 30ep) --latest.ckpt--> T3 (add-temporal, clip3, 15ep)
 #       --latest.ckpt--> T1 (clip1, 15ep)
