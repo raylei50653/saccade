@@ -1150,7 +1150,7 @@ def _run_frame(
             private_motion_prior_boxes = None
             if (
                 perception_pipeline is None
-                and (is_tiled or cfg.nms_iou_threshold is not None)
+                and (is_tiled or cfg.detection.nms_iou_threshold is not None)
                 and fused_boxes.numel() > 0
             ):
                 if profile_stages:
@@ -1177,7 +1177,7 @@ def _run_frame(
                     fused_boxes,
                     fused_scores,
                     fused_classes,
-                    cfg.nms_iou_threshold,
+                    cfg.detection.nms_iou_threshold,
                     class_aware=not cfg.detection.track_person_only,
                     priors=priors,
                     prior_classes=prior_classes,
@@ -1408,7 +1408,7 @@ def _run_frame(
                     pre_nms_geometry_suspect_mask=pre_private_geometry_suspect_mask,
                     pre_nms_aligned_keypoints=pre_private_aligned_keypoints,
                     baseline_keep=private_baseline_keep,
-                    baseline_nms_iou=cfg.nms_iou_threshold,
+                    baseline_nms_iou=cfg.detection.nms_iou_threshold,
                     candidate_nms_iou=cfg.private_candidate_nms_iou,
                     class_aware=not cfg.detection.track_person_only,
                     priors=private_priors,
@@ -1943,7 +1943,7 @@ def run_eval(
                 "private continuation is not implemented for the Workbench "
                 "hot path; disable --workbench"
             )
-        if cfg.private_candidate_nms_iou < cfg.nms_iou_threshold:
+        if cfg.private_candidate_nms_iou < cfg.detection.nms_iou_threshold:
             raise ValueError("private-candidate-nms-iou must be >= nms-iou-threshold")
 
     output_root = cfg.output_root
@@ -2231,7 +2231,7 @@ def run_eval(
         )
         native_cfg.person_class = cfg.detection.person_class
         native_cfg.person_only = cfg.detection.track_person_only
-        native_cfg.nms_threshold = cfg.nms_iou_threshold
+        native_cfg.nms_threshold = cfg.detection.nms_iou_threshold
         native_cfg.person_geometry_prior = cfg.person_geometry_prior
         native_cfg.geometry_suspect_support = cfg.geometry_suspect_support
         native_cfg.geometry_suspect_support_score = cfg.geometry_suspect_support_score
@@ -2263,7 +2263,7 @@ def run_eval(
     enable_onms = _env_flag_enabled("SACCADE_ENABLE_ONMS", False)
     onms_prior_iou_threshold = 0.70
     onms_min_track_age = 2
-    onms_min_track_score = cfg.high_thresh
+    onms_min_track_score = cfg.core.high_thresh
 
     top_level_stage_names = (
         "fetch",

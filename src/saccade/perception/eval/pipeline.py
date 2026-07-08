@@ -950,7 +950,7 @@ class EvalPipeline:
         )
         detector.tracker.set_params(
             track_thresh=cfg.track_thresh,
-            high_thresh=cfg.high_thresh,
+            high_thresh=cfg.core.high_thresh,
             match_thresh=cfg.match_thresh,
             track_buffer=seq_track_buffer,
             mid_thresh=cfg.mid_thresh,

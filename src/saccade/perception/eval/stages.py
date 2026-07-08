@@ -2746,7 +2746,7 @@ def _run_birth_config(
                         score_before = fused_scores[boost_idx].clone()
                         fused_scores[boost_idx] = torch.clamp(
                             fused_scores[boost_idx] + cfg.birth_consecutive_boost,
-                            max=cfg.high_thresh,
+                            max=cfg.core.high_thresh,
                         )
                         _append_birth_event_rows(
                             frame_birth_events,
@@ -2796,7 +2796,7 @@ def _run_birth_config(
             ) * cfg.birth_quality_score_bias
             fused_scores[boost_mask] = torch.clamp(
                 fused_scores[boost_mask] + boost,
-                max=cfg.high_thresh,
+                max=cfg.core.high_thresh,
             )
             _append_birth_event_rows(
                 frame_birth_events,
@@ -2846,7 +2846,7 @@ def _run_birth_config(
     if frame_tracker_thresholds != state.active_tracker_thresholds:
         detector.tracker.set_params(
             track_thresh=frame_track_thresh,
-            high_thresh=cfg.high_thresh,
+            high_thresh=cfg.core.high_thresh,
             match_thresh=cfg.match_thresh,
             track_buffer=seq_track_buffer,
             mid_thresh=frame_mid_thresh,

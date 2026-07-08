@@ -146,7 +146,7 @@ def run_eval_cpp(
     native_cfg = PerceptionPipelineConfig()
     native_cfg.score_threshold = cfg.conf_threshold
     native_cfg.person_class = cfg.detection.person_class
-    native_cfg.nms_threshold = cfg.nms_iou_threshold
+    native_cfg.nms_threshold = cfg.detection.nms_iou_threshold
     native_cfg.person_geometry_prior = cfg.person_geometry_prior
     native_cfg.person_min_height_ratio = cfg.person_min_height_ratio
     native_cfg.person_min_aspect = cfg.person_min_aspect
