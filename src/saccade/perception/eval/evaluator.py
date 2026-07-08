@@ -1970,11 +1970,11 @@ def run_eval(
         scoring_profile = {
             "association_scoring_mode": cfg.geometry.association_scoring_mode,
             "multiplicative_cost": bool(
-                cfg.multiplicative_cost
+                cfg.geometry.multiplicative_cost
                 or cfg.geometry.association_scoring_mode == "energy"
             ),
-            "sinkhorn_lambda": float(cfg.sinkhorn_lambda),
-            "stability_cost_w": float(cfg.stability_cost_w),
+            "sinkhorn_lambda": float(cfg.geometry.sinkhorn_lambda),
+            "stability_cost_w": float(cfg.geometry.stability_cost_w),
             "assoc_score_cost_w": float(cfg.geometry.assoc_score_cost_w),
             "assoc_height_cost_w": float(cfg.geometry.assoc_height_cost_w),
             "private_continuation_enabled": bool(
