@@ -2587,7 +2587,7 @@ def _run_detection_filters(
     # === FP hard filter ===
     # Removes extremely suspicious low-score large-area detections
     # that are likely false positives based on FP analysis.
-    if cfg.fp_hard_filter_enabled and fused_scores.numel() > 0:
+    if cfg.detection.fp_hard_filter_enabled and fused_scores.numel() > 0:
         # Mask-in-place (fixed shape, sync-free): set rejected scores
         # below all tracker thresholds rather than compacting. The GPU
         # tracker's score gate drops them without a host .nonzero()
@@ -2595,9 +2595,9 @@ def _run_detection_filters(
         _fp_reject = _fp_hard_reject_mask(
             fused_boxes,
             fused_scores,
-            min_score=cfg.fp_hard_filter_min_score,
-            max_suspicious_area=cfg.fp_hard_filter_max_suspicious_area,
-            max_suspicious_score=cfg.fp_hard_filter_max_suspicious_score,
+            min_score=cfg.detection.fp_hard_filter_min_score,
+            max_suspicious_area=cfg.detection.fp_hard_filter_max_suspicious_area,
+            max_suspicious_score=cfg.detection.fp_hard_filter_max_suspicious_score,
         )
         fused_scores = fused_scores.masked_fill(_fp_reject, _FP_HARD_REJECT_SCORE)
         after_merge_count = int(fused_scores.numel())

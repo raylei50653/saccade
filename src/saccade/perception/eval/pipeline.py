@@ -475,10 +475,10 @@ class EvalPipeline:
                 if cfg.detection_quality_scaling
                 else (0.5, 0.3, 0.2),
                 max_detections=cfg.detection.per_frame_detection_cap or 30,
-                fp_hard_filter=cfg.fp_hard_filter_enabled,
-                fp_min_score=cfg.fp_hard_filter_min_score,
-                fp_max_suspicious_area=cfg.fp_hard_filter_max_suspicious_area,
-                fp_max_suspicious_score=cfg.fp_hard_filter_max_suspicious_score,
+                fp_hard_filter=cfg.detection.fp_hard_filter_enabled,
+                fp_min_score=cfg.detection.fp_hard_filter_min_score,
+                fp_max_suspicious_area=cfg.detection.fp_hard_filter_max_suspicious_area,
+                fp_max_suspicious_score=cfg.detection.fp_hard_filter_max_suspicious_score,
                 # ReID params
                 reid_budget_raw=cfg.reid_budget_raw,
                 reid_interval=cfg.reid_interval,
