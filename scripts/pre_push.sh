@@ -91,6 +91,11 @@ else
     ERRORS=$((ERRORS + 1))
 fi
 
+# ── 4.9 doc freshness check (warn-only) ──────────────────────────────────────
+echo "── doc freshness check (warn-only)"
+uv run python3 scripts/tools/check_doc_freshness.py 2>&1 || true
+ok "doc freshness (warnings only)"
+
 # ── 5. pytest ────────────────────────────────────────────────────────────────
 echo "── pytest"
 if uv run pytest tests/ -q --ignore=tests/benchmarks 2>&1; then
