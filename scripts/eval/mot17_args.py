@@ -201,7 +201,7 @@ def configure_runtime_env(
     # It is managed via direct shell export for probe/ablation runs and is NOT
     # wired to a CLI flag.  If a prior shell session exported, e.g.,
     # SACCADE_STREAM_MODE=ptds_probe (a mode whose determinism FAILS — see
-    # docs/sync_audit.md), that value persists in the subprocess env and causes
+    # docs/research/pipeline/sync_audit_20260706.md), that value persists in the subprocess env and causes
     # run-to-run detection/tracking drift.  The deterministic default is "" (no
     # stream mode → full device barriers).  We explicitly clear it here so the
     # CLI is always authoritative: you only get a non-default stream mode when

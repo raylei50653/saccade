@@ -18,6 +18,9 @@ GT-weighted internal evaluation。這是 in-domain train evaluation，**不是**
 MOTChallenge test-server leaderboard，也不應與不同 engine / profiling / subset
 的吞吐數字並列比較。
 
+<!-- fact-owner: current-baseline = docs/TODO.md -->
+> 下表為 headline 快照；baseline 數字的唯一事實來源是 [docs/TODO.md](docs/TODO.md)「當前 Baseline」節。
+
 | HOTA | IDF1 | MOTA | DetA | AssA | IDs | Eval FPS |
 |---:|---:|---:|---:|---:|---:|---:|
 | **70.2** | **78.2** | **78.4** | **70.9** | **69.7** | **413** | **269.47** |
