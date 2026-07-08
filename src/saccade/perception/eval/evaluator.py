@@ -2016,7 +2016,7 @@ def run_eval(
         print(
             f"[STREAM] async_reid={cfg.async_reid} gmc_mode={cfg.gmc_mode} decode={'NVJPEG' if _os.environ.get('SACCADE_GPU_DECODE') == '1' else 'DALI'}"
         )
-    detector_box_format = cfg.detector_box_format
+    detector_box_format = cfg.detection.detector_box_format
     stage_summary_lines = []
     global_id_mapper = GlobalTrackIdMapper()
     external_fp_rule_config = RuleBaselineConfig()
