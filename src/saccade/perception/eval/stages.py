@@ -2556,21 +2556,21 @@ def _run_detection_filters(
             classes=fused_classes,
         )
 
-    if cfg.external_fp_filter_mode != "off" and fused_scores.numel() > 0:
+    if cfg.detection.external_fp_filter_mode != "off" and fused_scores.numel() > 0:
         fused_boxes, fused_scores, fused_classes = _apply_external_fp_filter(
             fused_boxes,
             fused_scores,
             fused_classes,
             image_width=w_orig,
             image_height=h_orig,
-            mode=cfg.external_fp_filter_mode,
+            mode=cfg.detection.external_fp_filter_mode,
             rule_config=external_fp_rule_config,
             logistic_model=external_fp_logistic_model,
-            logistic_threshold=cfg.external_fp_logistic_threshold,
-            max_score=cfg.external_fp_max_score,
-            penalty=cfg.external_fp_penalty,
+            logistic_threshold=cfg.detection.external_fp_logistic_threshold,
+            max_score=cfg.detection.external_fp_max_score,
+            penalty=cfg.detection.external_fp_penalty,
             min_score=frame_score_floor,
-            softmax_min_scale=cfg.external_fp_softmax_min_scale,
+            softmax_min_scale=cfg.detection.external_fp_softmax_min_scale,
         )
         after_merge_count = int(fused_scores.numel())
         if debug_dump_active:
@@ -2578,7 +2578,7 @@ def _run_detection_filters(
                 debug_stage_dump_rows,
                 seq=seq,
                 frame_id=frame_id,
-                stage=f"external_fp_{cfg.external_fp_filter_mode}",
+                stage=f"external_fp_{cfg.detection.external_fp_filter_mode}",
                 boxes=fused_boxes,
                 scores=fused_scores,
                 classes=fused_classes,

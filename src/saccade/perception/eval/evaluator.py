@@ -2014,8 +2014,8 @@ def run_eval(
     global_id_mapper = GlobalTrackIdMapper()
     external_fp_rule_config = RuleBaselineConfig()
     external_fp_logistic_model = None
-    if cfg.external_fp_filter_mode in {"logistic", "softmax3"}:
-        model_path = Path(cfg.external_fp_logistic_model)
+    if cfg.detection.external_fp_filter_mode in {"logistic", "softmax3"}:
+        model_path = Path(cfg.detection.external_fp_logistic_model)
         if not model_path.is_file():
             raise FileNotFoundError(
                 f"external FP logistic model not found: {model_path}"
