@@ -1984,11 +1984,11 @@ def run_eval(
     overall_latency_ms = []
     overall_throughput_frames = 0
     overall_throughput_seconds = 0.0
-    debug_dump_seq = cfg.debug_dump_seq
-    debug_dump_frames = _parse_debug_frame_ranges(cfg.debug_dump_frames)
-    debug_dump_csv = cfg.debug_dump_csv
+    debug_dump_seq = cfg.core.debug_dump_seq
+    debug_dump_frames = _parse_debug_frame_ranges(cfg.core.debug_dump_frames)
+    debug_dump_csv = cfg.core.debug_dump_csv
     debug_stage_dump_rows: list[dict[str, float | int | str]] = []
-    debug_birth_csv = cfg.debug_birth_csv
+    debug_birth_csv = cfg.core.debug_birth_csv
     debug_birth_rows: list[dict[str, float | int | str | bool]] = []
     profile_stages = cfg.core.profile_stages
     profile_frame_csv = cfg.core.profile_frame_csv
@@ -2455,7 +2455,7 @@ def run_eval(
         )
 
     for seq in cfg.seqs:
-        _seq_path = Path(cfg.data_root) / cfg.split / seq
+        _seq_path = Path(cfg.core.data_root) / cfg.core.split / seq
         if not (_seq_path / "seqinfo.ini").exists():
             continue
         _seq_state = EvalPipeline(
@@ -2748,7 +2748,7 @@ def run_eval(
         )
 
         if cheb_gr_extractor is not None and occ_audit_enabled:
-            seq_img_dir = str(Path(cfg.data_root) / cfg.split / seq / "img1")
+            seq_img_dir = str(Path(cfg.core.data_root) / cfg.core.split / seq / "img1")
             if getattr(cfg, "occ_audit_bank_reference", False):
                 from .clean_fifo_bank import build_filled_bank
                 from .occ_audit import (
@@ -2866,7 +2866,9 @@ def run_eval(
                     stream_ptr=torch.cuda.current_stream().cuda_stream,
                 )
             else:
-                seq_img_dir = str(Path(cfg.data_root) / cfg.split / seq / "img1")
+                seq_img_dir = str(
+                    Path(cfg.core.data_root) / cfg.core.split / seq / "img1"
+                )
                 head_embs, bank_embs = extract_handover_embeddings(
                     _seq_state.results_lines,
                     seq_img_dir,
@@ -2923,7 +2925,7 @@ def run_eval(
                 f"reject_min_head={ho_stats['reject_min_head']})"
             )
         elif cheb_gr_extractor is not None:
-            seq_img_dir = str(Path(cfg.data_root) / cfg.split / seq / "img1")
+            seq_img_dir = str(Path(cfg.core.data_root) / cfg.core.split / seq / "img1")
             cheb_embeddings = extract_tracklet_embeddings(
                 _seq_state.results_lines,
                 seq_img_dir,
@@ -3186,8 +3188,8 @@ def run_eval(
     from .metrics import run_motmetrics_evaluation
 
     return run_motmetrics_evaluation(
-        data_root=cfg.data_root,
-        split=cfg.split,
+        data_root=cfg.core.data_root,
+        split=cfg.core.split,
         output=str(cfg.output_root),
         sequences=",".join(cfg.seqs),
         detector=cfg.kwargs.get("detector"),

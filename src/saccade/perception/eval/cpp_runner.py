@@ -180,7 +180,7 @@ def run_eval_cpp(
 
     seq_configs = [
         _build_cpp_seq_config(
-            cfg, seq, data_root, cfg.split, trt_input_size, max_raw_dets
+            cfg, seq, data_root, cfg.core.split, trt_input_size, max_raw_dets
         )
         for seq in cfg.seqs
     ]
@@ -292,7 +292,7 @@ def run_eval_cpp(
         )
 
         if cheb_gr_extractor is not None and occ_audit_enabled:
-            seq_img_dir = str(_Path(cfg.data_root) / cfg.split / seq / "img1")
+            seq_img_dir = str(_Path(cfg.core.data_root) / cfg.core.split / seq / "img1")
             if getattr(cfg, "occ_audit_bank_reference", False):
                 from .clean_fifo_bank import build_filled_bank
                 from .occ_audit import (
@@ -379,7 +379,7 @@ def run_eval_cpp(
             )
 
         if cheb_gr_extractor is not None and cheb_gr_online:
-            seq_img_dir = str(_Path(cfg.data_root) / cfg.split / seq / "img1")
+            seq_img_dir = str(_Path(cfg.core.data_root) / cfg.core.split / seq / "img1")
             head_embs, bank_embs = extract_handover_embeddings(
                 results_lines,
                 seq_img_dir,
@@ -436,7 +436,7 @@ def run_eval_cpp(
                 f"reject_min_head={ho_stats['reject_min_head']})"
             )
         elif cheb_gr_extractor is not None:
-            seq_img_dir = str(_Path(cfg.data_root) / cfg.split / seq / "img1")
+            seq_img_dir = str(_Path(cfg.core.data_root) / cfg.core.split / seq / "img1")
             cheb_embeddings = extract_tracklet_embeddings(
                 results_lines,
                 seq_img_dir,
@@ -495,8 +495,8 @@ def run_eval_cpp(
     from .metrics import run_motmetrics_evaluation
 
     return run_motmetrics_evaluation(
-        data_root=cfg.data_root,
-        split=cfg.split,
+        data_root=cfg.core.data_root,
+        split=cfg.core.split,
         output=str(cfg.output_root),
         sequences=",".join(cfg.seqs),
         detector=cfg.kwargs.get("detector"),

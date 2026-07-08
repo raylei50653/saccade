@@ -655,7 +655,7 @@ class EvalPipeline:
             kalman_accel_lat=cfg.kwargs.get("semantic_kalman_accel_lat", 1.0),
             kalman_fps=_resolve_kalman_fps(
                 cfg.kwargs.get("semantic_kalman_fps", 0.0),
-                Path(cfg.data_root) / cfg.split / seq,
+                Path(cfg.core.data_root) / cfg.core.split / seq,
             ),
             kalman_max_speed_mps=cfg.kwargs.get("semantic_kalman_max_speed_mps", 0.0),
             buffer_size=cfg.semantic_buffer_size,
@@ -918,7 +918,7 @@ class EvalPipeline:
                     f"top={_ho_requery_top} ring={_ring_cap}x{_ring_depth}"
                 )
 
-        seq_path = Path(cfg.data_root) / cfg.split / seq
+        seq_path = Path(cfg.core.data_root) / cfg.core.split / seq
         config = configparser.ConfigParser()
         config.read(seq_path / "seqinfo.ini")
         w_orig = config.getint("Sequence", "imWidth")
