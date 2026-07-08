@@ -279,7 +279,7 @@ def _run_gmc_estimate(
             print(
                 f"🕯️ [GMCGraph] Captured C++ cuFFT GMC graph "
                 f"for seq {seq} (img={_h}×{_w} "
-                f"ds={cfg.gmc_downscale})"
+                f"ds={cfg.core.gmc_downscale})"
             )
         else:
             # Steady state: copy new frame into the captured

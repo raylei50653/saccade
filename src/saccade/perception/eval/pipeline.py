@@ -930,7 +930,7 @@ class EvalPipeline:
         seq_reid_interval = cfg.reid_interval
         _track_buffer_base = cfg.track_buffer
         seq_track_buffer = _track_buffer_base
-        if cfg.per_seq_adapt and seq_fps != 30:
+        if cfg.core.per_seq_adapt and seq_fps != 30:
             fps_scale = seq_fps / 30.0
             seq_reid_interval = max(1, round(cfg.reid_interval * fps_scale))
             seq_track_buffer = max(10, round(_track_buffer_base * fps_scale))
@@ -1619,28 +1619,30 @@ def _build_gmc_estimator(
     # A8: Uniform CMC & 2D MMD
     gmc_estimator = None
     if cfg.gmc_enabled:
-        if cfg.gmc_mode == "gpu":
+        if cfg.core.gmc_mode == "gpu":
             # Default: C++ cuFFT GMC, graph-captured in the frame loop below.
             # Falls back to the pure-Python PyGraphedGMC (also graph-capturable)
             # only if the native extension is unavailable.
             try:
                 from saccade_tracking_ext import GMC as CppGMC
 
-                gmc_estimator = CppGMC(downscale=cfg.gmc_downscale)
+                gmc_estimator = CppGMC(downscale=cfg.core.gmc_downscale)
                 if hasattr(gmc_estimator, "set_profiling_enabled"):
                     gmc_estimator.set_profiling_enabled(profile_stages)
             except (ImportError, AttributeError):
                 try:
-                    gmc_estimator = PyGraphedGMC(downscale=cfg.gmc_downscale)
+                    gmc_estimator = PyGraphedGMC(downscale=cfg.core.gmc_downscale)
                 except Exception:
-                    gmc_estimator = SparseOpticalFlowGMC(downscale=cfg.gmc_downscale)
-        elif cfg.gmc_mode == "tile":
+                    gmc_estimator = SparseOpticalFlowGMC(
+                        downscale=cfg.core.gmc_downscale
+                    )
+        elif cfg.core.gmc_mode == "tile":
             # Tile-based phase-correlation similarity GMC (4-DOF: s, θ, tx, ty).
             # Eager Python prototype; falls back to global PCR translation when
             # the affine fit is not confident/plausible (never to identity).
-            gmc_estimator = TilePhaseCorrAffineGMC(downscale=cfg.gmc_downscale)
+            gmc_estimator = TilePhaseCorrAffineGMC(downscale=cfg.core.gmc_downscale)
         else:
-            gmc_estimator = SparseOpticalFlowGMC(downscale=cfg.gmc_downscale)
+            gmc_estimator = SparseOpticalFlowGMC(downscale=cfg.core.gmc_downscale)
     _use_direct_gmc = hasattr(gmc_estimator, "estimate_into_direct")
     # C++ estimate_into_direct is CUDA-graph-capturable (PyGraphedGMC self-graphs
     # via make_graphed_callables, so it is excluded here). Capture lazily on the

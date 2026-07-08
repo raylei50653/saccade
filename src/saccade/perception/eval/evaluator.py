@@ -2016,7 +2016,7 @@ def run_eval(
             f"[STREAM] barrier={_detect_barrier_mode()} workbench={cfg.workbench} whole_graph={getattr(detector, 'use_whole_graph', False)} double_buffer={_double_buffer_eligible(cfg, detector, profile_stages)}"
         )
         print(
-            f"[STREAM] async_reid={cfg.async_reid} gmc_mode={cfg.gmc_mode} decode={'NVJPEG' if _os.environ.get('SACCADE_GPU_DECODE') == '1' else 'DALI'}"
+            f"[STREAM] async_reid={cfg.async_reid} gmc_mode={cfg.core.gmc_mode} decode={'NVJPEG' if _os.environ.get('SACCADE_GPU_DECODE') == '1' else 'DALI'}"
         )
     detector_box_format = cfg.detection.detector_box_format
     stage_summary_lines = []
@@ -3017,7 +3017,7 @@ def run_eval(
                 f"frames_added={interp_stats['frames_added']}"
             )
 
-        if not cfg.latency_only:
+        if not cfg.core.latency_only:
             Path(output_root / f"{seq}.txt").write_text(
                 "\n".join(_seq_state.results_lines)
             )
@@ -3180,7 +3180,7 @@ def run_eval(
     )
 
     # ── MOTMetrics Evaluation ──────────────────────────────────────────────────
-    if cfg.latency_only:
+    if cfg.core.latency_only:
         return {}
 
     from .metrics import run_motmetrics_evaluation
