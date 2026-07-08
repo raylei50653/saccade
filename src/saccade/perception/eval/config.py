@@ -215,7 +215,7 @@ class SemanticView:
     semantic_cheb_gr_min_head: int
     semantic_cheb_gr_pool_frac: float
     semantic_cheb_gr_min_sim: float
-    semantic_gpu_relink_gate: bool
+    semantic_gpu_relink_gate: bool | None
     semantic_gpu_relink_gate_graph: bool
     semantic_gpu_relink_gate_init_query_cap: int
     semantic_gpu_relink_gate_init_candidate_cap: int
@@ -1768,10 +1768,9 @@ def parse_eval_config(
     fields["tiling"] = tiling
 
     # New track thresh (conditional)
+    _new_track_thresh = kwargs.get("new_track_thresh")
     fields["new_track_thresh"] = (
-        0.35
-        if kwargs.get("new_track_thresh", None) is None
-        else float(kwargs.get("new_track_thresh"))
+        0.35 if _new_track_thresh is None else float(_new_track_thresh)
     )
 
     # Kalman adapt mode (NSA backward compat)
