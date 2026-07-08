@@ -302,7 +302,7 @@ def fast_emit_mot_lines(
     lines = [""] * count
     for i in range(count):
         gid = global_id_mapper.map(seq, int(ids_np[i]))
-        x1, y1, x2, y2 = boxes_np[i]
+        x1, y1, x2, y2 = (float(v) for v in boxes_np[i])
         s = float(scores_np[i])
         w = x2 - x1
         h = y2 - y1

@@ -237,6 +237,8 @@ from .stages import (  # noqa: E402,F401
     _run_materialize,
     _run_native_tensor_prep,
     _run_nms,
+    _run_nms_shadow_compare,
+    _capture_main_nms_graph,
     _run_post_nms_finalize,
     _run_reid_and_gmc,
     _run_track,
@@ -858,21 +860,49 @@ def _run_frame(
                     _seg_ev.record(torch.cuda.current_stream())
                     post_seg_events.append(("post_seg_prep", _seg_ev))
 
-                n_post, state.nms_graph = _run_nms(
-                    state,
-                    raw_boxes_contig=raw_boxes_contig,
-                    raw_scores_contig=raw_scores_contig,
-                    raw_classes_contig=raw_classes_contig,
-                    raw_box_count=raw_box_count,
-                    priors_tensor=_fctx.priors_tensor,
-                    prior_classes_tensor=_fctx.prior_classes_tensor,
-                    num_priors=num_priors,
-                    private_prior_boxes=_fctx.private_prior_boxes,
-                    num_private_priors=_fctx.num_private_priors,
-                    native_private_enabled=_fctx.native_private_enabled,
-                    is_tiled=is_tiled,
-                    nms_graph=state.nms_graph,
+                _shadow_enabled = os.environ.get("SACCADE_MAIN_NMS_SHADOW", "") in (
+                    "1",
+                    "true",
+                    "yes",
                 )
+                _graph_shadow_enabled = os.environ.get(
+                    "SACCADE_MAIN_NMS_GRAPH_SHADOW", ""
+                ) in ("1", "true", "yes")
+                _graphed_shadow_enabled = os.environ.get(
+                    "SACCADE_MAIN_NMS_GRAPHED_SHADOW", ""
+                ) in ("1", "true", "yes")
+                if _shadow_enabled or _graph_shadow_enabled or _graphed_shadow_enabled:
+                    n_post, state.nms_graph = _run_nms_shadow_compare(
+                        state,
+                        raw_boxes_contig=raw_boxes_contig,
+                        raw_scores_contig=raw_scores_contig,
+                        raw_classes_contig=raw_classes_contig,
+                        raw_box_count=raw_box_count,
+                        priors_tensor=_fctx.priors_tensor,
+                        prior_classes_tensor=_fctx.prior_classes_tensor,
+                        num_priors=num_priors,
+                        private_prior_boxes=_fctx.private_prior_boxes,
+                        num_private_priors=_fctx.num_private_priors,
+                        native_private_enabled=_fctx.native_private_enabled,
+                        is_tiled=is_tiled,
+                        nms_graph=state.nms_graph,
+                    )
+                else:
+                    n_post, state.nms_graph = _run_nms(
+                        state,
+                        raw_boxes_contig=raw_boxes_contig,
+                        raw_scores_contig=raw_scores_contig,
+                        raw_classes_contig=raw_classes_contig,
+                        raw_box_count=raw_box_count,
+                        priors_tensor=_fctx.priors_tensor,
+                        prior_classes_tensor=_fctx.prior_classes_tensor,
+                        num_priors=num_priors,
+                        private_prior_boxes=_fctx.private_prior_boxes,
+                        num_private_priors=_fctx.num_private_priors,
+                        native_private_enabled=_fctx.native_private_enabled,
+                        is_tiled=is_tiled,
+                        nms_graph=state.nms_graph,
+                    )
                 if state._frame_stage_times is not None:
                     _t_now = time.perf_counter()
                     state._frame_stage_times["post_pre_nms"] = round(
@@ -1351,13 +1381,7 @@ def _run_frame(
                         }
                     )
                 ):
-                    private_motion_prior_boxes, _ = _build_active_track_priors(
-                        detector.tracker,
-                        fused_boxes.device,
-                        min_track_age=0,
-                        max_track_age=cfg.private_prior_max_age,
-                        min_track_score=0.0,
-                    )
+                    private_motion_prior_boxes = _fctx.private_prior_boxes
                 t_private_start = None
                 if profile_stages:
                     torch.cuda.synchronize()
@@ -1774,6 +1798,7 @@ def _run_frame(
             frame_birth_events=frame_birth_events,
             frame_id=frame_id,
             prev_track_ids=state.prev_track_ids,
+            track_results_on_host=True,
         )
         results_lines.extend(_emit_lines)
 
@@ -2366,9 +2391,7 @@ def run_eval(
         torch.cuda.Event(enable_timing=False) if reid_side_stream is not None else None
     )
 
-    _rw_executor: ThreadPoolExecutor | None = (
-        ThreadPoolExecutor(max_workers=1) if cfg.pipeline_relink else None
-    )
+    _rw_executor: ThreadPoolExecutor | None = None
 
     all_seq_profile: list[dict] = []
 
@@ -2642,7 +2665,7 @@ def run_eval(
                 "p99_ms": round(p99_ms, 6),
                 "samples_ms": [round(float(x), 6) for x in _seq_state.frame_latencies],
             }
-            (output_root / "_latency_profile.json").write_text(
+            (output_root / f"_latency_profile_{seq}.json").write_text(
                 json.dumps(latency_profile, indent=2) + "\n"
             )
         else:
@@ -3079,6 +3102,20 @@ def run_eval(
             all_seq_profile.append(seq_entry)
 
     from .reporting import print_overall_summary
+
+    if overall_latency_ms:
+        _overall_lats = np.array(overall_latency_ms)
+        _overall_profile = {
+            "sequence": "OVERALL",
+            "frames": len(overall_latency_ms),
+            "mean_ms": round(float(np.mean(_overall_lats)), 6),
+            "std_ms": round(float(np.std(_overall_lats)), 6),
+            "p95_ms": round(float(np.percentile(_overall_lats, 95)), 6),
+            "p99_ms": round(float(np.percentile(_overall_lats, 99)), 6),
+        }
+        (output_root / "_latency_profile.json").write_text(
+            json.dumps(_overall_profile, indent=2) + "\n"
+        )
 
     print_overall_summary(
         cfg=cfg,

@@ -95,3 +95,8 @@ private_prior_iou_threshold: 0.30
 private_min_score: 0.10
 private_max_candidates: 50
 private_selection_mode: global
+
+# Graphed main NMS (issue #56): capture main NMS into a CUDA graph (nocopyback)
+# with automatic eager-split fallback. +4.7% FPS / lower tail latency, metrics
+# identical to eager baseline. Frames with active ONMS priors fall back to eager.
+main_nms_graphed: true

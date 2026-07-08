@@ -554,6 +554,14 @@ class GPUByteTracker:
                 (max_objects, embedding_dim), device="cuda", dtype=torch.float32
             ).contiguous()
             self.tracker.bind_features_buffer(self._bank_slot_features.data_ptr())
+            # Pre-allocated GPU buffers for build_track_priors_gpu (compaction
+            # kernel output).  Avoids per-frame allocation.
+            self._prior_boxes = torch.empty(
+                (max_objects, 4), device="cuda", dtype=torch.float32
+            )
+            self._prior_classes = torch.empty(
+                (max_objects,), device="cuda", dtype=torch.int32
+            )
         else:
             self._bank_slot_features = torch.zeros(
                 (max_objects, embedding_dim), dtype=torch.float32
@@ -1157,6 +1165,37 @@ class GPUByteTracker:
         """Return active Kalman state/covariance snapshots from the C++ tracker."""
         stream = torch.cuda.current_stream().cuda_stream
         return cast(List[Any], self.tracker.get_state_snapshots(stream))
+
+    def build_track_priors_gpu(
+        self,
+        *,
+        min_track_age: int = 0,
+        max_track_age: int | None = None,
+        min_track_score: float = 0.0,
+    ) -> tuple[torch.Tensor | None, torch.Tensor | None]:
+        """Build compacted xyxy prior boxes + classes on GPU via compaction kernel.
+
+        Replaces get_state_snapshots() + Python loop for the prior-building hot
+        path.  Reads d_active_/d_states_/d_classes_/d_age_/d_scores_ on device,
+        writes compacted output to pre-allocated GPU buffers, returns tensor
+        views.  No 634 KB D2H, no Python per-track loop, no host sync.
+
+        Returns fixed-capacity buffers (max_objects slots) with inactive slots
+        zero-filled ([0,0,0,0] boxes -- IoU=0, below NMS threshold).  The NMS
+        kernel iterates over all slots; inactive ones are effectively ignored.
+        """
+        stream = torch.cuda.current_stream().cuda_stream
+        count = self.tracker.build_track_priors_gpu(
+            self._prior_boxes.data_ptr(),
+            self._prior_classes.data_ptr(),
+            min_track_age,
+            max_track_age if max_track_age is not None else -1,
+            min_track_score,
+            stream,
+        )
+        if count <= 0:
+            return None, None
+        return self._prior_boxes[:count], self._prior_classes[:count]
 
     def get_motion_snapshots_for_track_ids(self, track_ids: list[int]) -> List[Any]:
         """Return Kalman motion snapshots only for the requested track IDs."""

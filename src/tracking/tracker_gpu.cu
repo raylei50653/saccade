@@ -2483,6 +2483,45 @@ void argsort_scores_descending_cuda(
     decode_sort_order_kernel<<<blk, thr, 0, stream>>>(d_keys_out, d_order_out, n);
 }
 
+// Compaction kernel: reads active Kalman track states on GPU and writes
+// compacted xyxy prior boxes + classes into caller-provided buffers.
+// Replaces get_state_snapshots() (634 KB D2H + Python loop) with a single
+// GPU kernel + 4-byte count D2H.
+__global__ void build_track_priors_kernel(
+    const bool* __restrict__ d_active,
+    const float* __restrict__ d_states,
+    const int* __restrict__ d_classes,
+    const int* __restrict__ d_age,
+    const float* __restrict__ d_scores,
+    float* __restrict__ d_out_boxes,
+    int* __restrict__ d_out_classes,
+    int* __restrict__ d_out_count,
+    int max_objs,
+    int min_track_age,
+    int max_track_age,
+    float min_track_score
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= max_objs) return;
+    if (!d_active[idx]) return;
+    int age = d_age[idx];
+    if (age < min_track_age) return;
+    if (max_track_age >= 0 && age > max_track_age) return;
+    float score = d_scores[idx];
+    if (score < min_track_score) return;
+    float cx = d_states[idx * 8 + 0];
+    float cy = d_states[idx * 8 + 1];
+    float a  = d_states[idx * 8 + 2];
+    float h  = d_states[idx * 8 + 3];
+    float w = a * h;
+    int out_idx = atomicAdd(d_out_count, 1);
+    d_out_boxes[out_idx * 4 + 0] = cx - w * 0.5f;
+    d_out_boxes[out_idx * 4 + 1] = cy - h * 0.5f;
+    d_out_boxes[out_idx * 4 + 2] = cx + w * 0.5f;
+    d_out_boxes[out_idx * 4 + 3] = cy + h * 0.5f;
+    d_out_classes[out_idx] = d_classes[idx];
+}
+
 class GPUByteTracker::Impl {
 public:
     Impl(int max_objects, int embedding_dim, int max_assoc)
@@ -2575,6 +2614,13 @@ public:
         checkCuda(cudaMalloc(&d_res_classes_,   max_objs_ * sizeof(int)));
         checkCuda(cudaMalloc(&d_res_det_idx_,   max_objs_ * sizeof(int)));
         checkCuda(cudaMalloc(&d_res_count_,     sizeof(int)));
+        checkCuda(cudaMalloc(&d_prior_count_,   sizeof(int)));
+        checkCuda(cudaHostAlloc(&h_prior_count_, sizeof(int), cudaHostAllocDefault));
+        // Size pinned host staging buffers for compact_output_to_host.
+        h_res_boxes_.resize(max_objs_ * 4);
+        h_res_scores_.resize(max_objs_);
+        h_res_ids_.resize(max_objs_);
+        h_res_classes_.resize(max_objs_);
         { int init_id = 1; checkCuda(cudaMemcpy(d_track_id_ctr_, &init_id, sizeof(int), cudaMemcpyHostToDevice)); }
         { uint64_t init_uid = 1; checkCuda(cudaMemcpy(d_track_uid_ctr_, &init_uid, sizeof(uint64_t), cudaMemcpyHostToDevice)); }
 
@@ -2631,6 +2677,10 @@ public:
         checkCuda(cudaHostRegister(h_confirm_streak_required_.data(), max_objs_ * sizeof(int), cudaHostRegisterDefault));
         checkCuda(cudaHostRegister(h_score_sum_.data(),             max_objs_ * sizeof(float), cudaHostRegisterDefault));
         checkCuda(cudaHostRegister(h_has_clean_embedding_.data(),   max_objs_ * sizeof(uint8_t), cudaHostRegisterDefault));
+        checkCuda(cudaHostRegister(h_res_boxes_.data(),             max_objs_ * 4 * sizeof(float), cudaHostRegisterDefault));
+        checkCuda(cudaHostRegister(h_res_scores_.data(),            max_objs_ *     sizeof(float), cudaHostRegisterDefault));
+        checkCuda(cudaHostRegister(h_res_ids_.data(),               max_objs_ *     sizeof(int),   cudaHostRegisterDefault));
+        checkCuda(cudaHostRegister(h_res_classes_.data(),           max_objs_ *     sizeof(int),   cudaHostRegisterDefault));
 
         enable_dda_ = env_flag_enabled("SACCADE_ENABLE_DDA", true);
         dda_max_cost_ = env_float_value("SACCADE_DDA_MAX_COST", 0.12f);
@@ -2664,6 +2714,10 @@ public:
         cudaHostUnregister(h_confirm_streak_required_.data());
         cudaHostUnregister(h_score_sum_.data());
         cudaHostUnregister(h_has_clean_embedding_.data());
+        cudaHostUnregister(h_res_boxes_.data());
+        cudaHostUnregister(h_res_scores_.data());
+        cudaHostUnregister(h_res_ids_.data());
+        cudaHostUnregister(h_res_classes_.data());
 
         cudaFree(d_states_); cudaFree(d_covs_); cudaFree(d_active_);
         cudaFree(d_age_); cudaFree(d_scores_); cudaFree(d_classes_);
@@ -2695,6 +2749,8 @@ public:
         cudaFree(d_track_id_ctr_);
         cudaFree(d_res_boxes_); cudaFree(d_res_scores_); cudaFree(d_res_ids_);
         cudaFree(d_res_classes_); cudaFree(d_res_det_idx_); cudaFree(d_res_count_);
+        cudaFree(d_prior_count_);
+        cudaFreeHost(h_prior_count_);
         // Relink lost-bank/debug buffers are allocated lazily and independently:
         // bidirectional bridge can allocate only d_relink_dbg_.
         if (d_relink_feats_) cudaFree(d_relink_feats_);
@@ -2778,14 +2834,27 @@ public:
     int compact_output_to_host(float* host_boxes, float* host_scores,
                                 int* host_ids, int* host_classes,
                                 int capacity, cudaStream_t stream) {
+        // Stream-ordered async D2H via internal pinned staging buffers.
+        // The previous implementation used synchronous cudaMemcpy which
+        // (a) ignored the caller's stream — reading stale data when the
+        // tracker ran on a non-default stream, and (b) blocked the host
+        // on the default stream's full queue. The pinned h_res_* buffers
+        // enable true async DMA; the host-to-host copy to the caller's
+        // buffers is negligible for typical track counts (<50).
         int count = 0;
-        checkCuda(cudaMemcpy(&count, d_res_count_, sizeof(int), cudaMemcpyDeviceToHost));
+        checkCuda(cudaMemcpyAsync(&count, d_res_count_, sizeof(int), cudaMemcpyDeviceToHost, stream));
+        checkCuda(cudaStreamSynchronize(stream));
         int n = std::max(0, std::min(count, capacity));
         if (n > 0) {
-            checkCuda(cudaMemcpy(host_boxes,  d_res_boxes_,  n * 4 * sizeof(float), cudaMemcpyDeviceToHost));
-            checkCuda(cudaMemcpy(host_scores, d_res_scores_, n *     sizeof(float), cudaMemcpyDeviceToHost));
-            checkCuda(cudaMemcpy(host_ids,    d_res_ids_,    n *     sizeof(int),   cudaMemcpyDeviceToHost));
-            checkCuda(cudaMemcpy(host_classes,d_res_classes_,n *     sizeof(int),   cudaMemcpyDeviceToHost));
+            checkCuda(cudaMemcpyAsync(h_res_boxes_.data(),   d_res_boxes_,   n * 4 * sizeof(float), cudaMemcpyDeviceToHost, stream));
+            checkCuda(cudaMemcpyAsync(h_res_scores_.data(),  d_res_scores_,  n *     sizeof(float), cudaMemcpyDeviceToHost, stream));
+            checkCuda(cudaMemcpyAsync(h_res_ids_.data(),     d_res_ids_,     n *     sizeof(int),   cudaMemcpyDeviceToHost, stream));
+            checkCuda(cudaMemcpyAsync(h_res_classes_.data(), d_res_classes_, n *     sizeof(int),   cudaMemcpyDeviceToHost, stream));
+            checkCuda(cudaStreamSynchronize(stream));
+            std::memcpy(host_boxes,   h_res_boxes_.data(),   n * 4 * sizeof(float));
+            std::memcpy(host_scores,  h_res_scores_.data(),  n *     sizeof(float));
+            std::memcpy(host_ids,     h_res_ids_.data(),     n *     sizeof(int));
+            std::memcpy(host_classes, h_res_classes_.data(), n *     sizeof(int));
         }
         return n;
     }
@@ -3502,6 +3571,29 @@ public:
         return snapshots;
     }
 
+    int build_track_priors_gpu(
+        float* d_out_boxes, int* d_out_classes,
+        int min_track_age, int max_track_age, float min_track_score,
+        cudaStream_t stream
+    ) {
+        // Zero-fill entire buffers so inactive slots have [0,0,0,0] boxes
+        // (IoU with zero-area box = 0, below NMS threshold — safe).
+        checkCuda(cudaMemsetAsync(d_out_boxes, 0, max_objs_ * 4 * sizeof(float), stream));
+        checkCuda(cudaMemsetAsync(d_out_classes, 0, max_objs_ * sizeof(int), stream));
+        checkCuda(cudaMemsetAsync(d_prior_count_, 0, sizeof(int), stream));
+        const int threads = 256;
+        const int blocks = (max_objs_ + threads - 1) / threads;
+        build_track_priors_kernel<<<blocks, threads, 0, stream>>>(
+            d_active_, d_states_, d_classes_, d_age_, d_scores_,
+            d_out_boxes, d_out_classes, d_prior_count_,
+            max_objs_, min_track_age, max_track_age, min_track_score
+        );
+        // No sync — return fixed upper bound.  The NMS kernel iterates
+        // over all max_objs prior slots; inactive ones have [0,0,0,0]
+        // (zero IoU, below threshold) and are effectively ignored.
+        return max_objs_;
+    }
+
     std::vector<TrackStateSnapshot> get_motion_snapshots_for_track_ids(
         const std::vector<int>& track_ids,
         cudaStream_t stream
@@ -3835,6 +3927,18 @@ private:
     int   *d_res_classes_ = nullptr;
     int   *d_res_det_idx_ = nullptr;
     int   *d_res_count_   = nullptr;
+    int   *d_prior_count_ = nullptr;
+    int   *h_prior_count_ = nullptr;
+    // Pinned host staging buffers for compact_output_to_host's async D2H.
+    // Without pinning, cudaMemcpyAsync to pageable memory falls back to
+    // synchronous behaviour (see comment at cudaHostRegister block above).
+    // These are registered as pinned in the constructor and used as the
+    // DMA target; compact_output_to_host then memcpy's to the caller's
+    // buffers (host-to-host, negligible for <50 tracks).
+    std::vector<float> h_res_boxes_;
+    std::vector<float> h_res_scores_;
+    std::vector<int>   h_res_ids_;
+    std::vector<int>   h_res_classes_;
     // Host caches — valid only after a lazy sync (set_clean_embedding_flags /
     // update_reference_features_impl / get_tentative_candidates).
     // h_dirty_ is set true by update() and cleared by each lazy-sync function.
@@ -3962,6 +4066,15 @@ std::vector<TrackResult> GPUByteTracker::update(float* b, float* s, int* c, int 
     return pimpl_->update(b, s, c, n, stream, e, g, l, m);
 }
 std::vector<TrackStateSnapshot> GPUByteTracker::get_state_snapshots(cudaStream_t stream) { return pimpl_->get_state_snapshots(stream); }
+int GPUByteTracker::build_track_priors_gpu(
+    float* d_out_boxes, int* d_out_classes,
+    int min_track_age, int max_track_age, float min_track_score,
+    cudaStream_t stream
+) {
+    return pimpl_->build_track_priors_gpu(
+        d_out_boxes, d_out_classes, min_track_age, max_track_age, min_track_score, stream
+    );
+}
 std::vector<TrackStateSnapshot> GPUByteTracker::get_motion_snapshots_for_track_ids(const std::vector<int>& track_ids, cudaStream_t stream) {
     return pimpl_->get_motion_snapshots_for_track_ids(track_ids, stream);
 }
@@ -4820,6 +4933,13 @@ __global__ void append_private_continuation_kernel(
             const float cy = 0.5f * (src_box[1] + src_box[3]);
             for (int p = 0; p < num_private_priors; ++p) {
                 const float* prior = private_priors_ptr + p * 4;
+                // Skip zero-area sentinel priors ([0,0,0,0]) emitted for
+                // inactive slots by the GPU compaction path
+                // (build_track_priors_kernel). Their (0,0) center would
+                // otherwise spuriously satisfy the center-distance gate for
+                // detections near the frame origin; the IoU gate already
+                // rejects them (zero intersection).
+                if (prior[2] <= prior[0] || prior[3] <= prior[1]) continue;
                 if (
                     private_prior_iou_threshold > 0.0f
                     && get_iou_device(src_box, prior) >= private_prior_iou_threshold

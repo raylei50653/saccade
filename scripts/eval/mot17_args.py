@@ -21,6 +21,19 @@ from config import (  # noqa: E402
 )
 
 
+class _CostHelpFormatter(argparse.ArgumentDefaultsHelpFormatter):
+    """Prepend eval-cost note to --help so it shows in head -N."""
+
+    _COST_NOTE = (
+        "Cost: 7-seq SDP eval is cheap (~15s core, ~30s wall; "
+        "4966 frames @ ~340 fps).\n"
+        "Do not reduce validation scope solely due to guessed runtime.\n"
+    )
+
+    def format_help(self) -> str:
+        return self._COST_NOTE + "\n" + super().format_help()
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
@@ -31,7 +44,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Tier legend: Tier 1 = daily knobs; Tier 2 = advanced tuning; "
             "Experimental = ablation-heavy or niche controls."
         ),
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        formatter_class=_CostHelpFormatter,
     )
     add_core_args(parser)
     add_detection_args(parser)
@@ -84,6 +97,19 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Override SACCADE_DETECT_BARRIER for this run. "
             "--double-buffer requires event."
+        ),
+    )
+    runtime.add_argument(
+        "--main-nms-graphed",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Capture main NMS into a CUDA graph (nocopyback variant) with "
+            "automatic eager-split fallback. Sets SACCADE_MAIN_NMS_GRAPHED=1. "
+            "Enabled by default in whole_graph presets; the graph captures "
+            "priors_ptr=0, so frames with active ONMS priors (num_priors>0) "
+            "fall back to the eager split pipeline. Pass --no-main-nms-graphed "
+            "to force the eager path (e.g. for an A/B baseline)."
         ),
     )
 
@@ -161,3 +187,23 @@ def configure_runtime_env(
         )
 
     env["SACCADE_GPU_DECODE"] = "0" if getattr(args, "no_gpu_decode", False) else "1"
+
+    # Graphed main NMS (issue #56): opt-in via --main-nms-graphed or the
+    # whole_graph preset default. Set-if-true only — unlike the barrier knob we
+    # do not force "0" when off, so a manual SACCADE_MAIN_NMS_GRAPHED export (the
+    # documented rollout gate) and --no-main-nms-graphed A/B runs are respected.
+    if getattr(args, "main_nms_graphed", False):
+        env["SACCADE_MAIN_NMS_GRAPHED"] = "1"
+
+    # Clear SACCADE_STREAM_MODE to prevent shell leakage.
+    #
+    # This env var controls experimental CUDA stream dispatch modes (pipelines.py).
+    # It is managed via direct shell export for probe/ablation runs and is NOT
+    # wired to a CLI flag.  If a prior shell session exported, e.g.,
+    # SACCADE_STREAM_MODE=ptds_probe (a mode whose determinism FAILS — see
+    # docs/sync_audit.md), that value persists in the subprocess env and causes
+    # run-to-run detection/tracking drift.  The deterministic default is "" (no
+    # stream mode → full device barriers).  We explicitly clear it here so the
+    # CLI is always authoritative: you only get a non-default stream mode when
+    # you deliberately export it in the same invocation.
+    env.pop("SACCADE_STREAM_MODE", None)

@@ -3847,6 +3847,26 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         },
         py::arg("stream_ptr"),
         "Return active Kalman state and covariance snapshots")
+        .def("build_track_priors_gpu",
+             [](GPUByteTracker& self,
+                uintptr_t boxes_ptr, uintptr_t classes_ptr,
+                int min_track_age, int max_track_age, float min_track_score,
+                uintptr_t stream_ptr) {
+                 return self.build_track_priors_gpu(
+                     reinterpret_cast<float*>(boxes_ptr),
+                     reinterpret_cast<int*>(classes_ptr),
+                     min_track_age, max_track_age, min_track_score,
+                     reinterpret_cast<cudaStream_t>(stream_ptr)
+                 );
+             },
+             py::arg("boxes_ptr"),
+             py::arg("classes_ptr"),
+             py::arg("min_track_age") = 0,
+             py::arg("max_track_age") = -1,
+             py::arg("min_track_score") = 0.0f,
+             py::arg("stream_ptr"),
+             "GPU compaction kernel: build compacted xyxy prior boxes + classes "
+             "from active Kalman states.  Returns the compacted count.")
         .def("get_motion_snapshots_for_track_ids",
              [](GPUByteTracker& self, const std::vector<int>& track_ids, uintptr_t stream_ptr) {
                  return self.get_motion_snapshots_for_track_ids(
@@ -4799,6 +4819,39 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             py::arg("priors_ptr") = 0, py::arg("prior_classes_ptr") = 0,
             py::arg("num_priors") = 0, py::arg("prior_iou_threshold") = 0.50f,
             py::arg("stream_ptr"))
+        .def("process_detections_main_nms_graph",
+            [](PerceptionPipeline& self,
+               uintptr_t boxes_ptr, uintptr_t scores_ptr, uintptr_t classes_ptr,
+               int n_in, int frame_w, int frame_h, bool is_tiled,
+               uintptr_t out_boxes, uintptr_t out_scores, uintptr_t out_classes,
+               uintptr_t out_suspect, uintptr_t out_count,
+               uintptr_t priors_ptr, uintptr_t prior_classes_ptr,
+               int num_priors, float prior_iou_threshold,
+               uintptr_t stream_ptr) {
+                py::gil_scoped_release release;
+                self.process_detections_main_nms_graph(
+                    reinterpret_cast<const float*>(boxes_ptr),
+                    reinterpret_cast<const float*>(scores_ptr),
+                    reinterpret_cast<const int*>(classes_ptr),
+                    n_in, frame_w, frame_h, is_tiled,
+                    reinterpret_cast<float*>(out_boxes),
+                    reinterpret_cast<float*>(out_scores),
+                    reinterpret_cast<int*>(out_classes),
+                    reinterpret_cast<bool*>(out_suspect),
+                    reinterpret_cast<int*>(out_count),
+                    reinterpret_cast<const float*>(priors_ptr),
+                    reinterpret_cast<const int*>(prior_classes_ptr),
+                    num_priors, prior_iou_threshold,
+                    reinterpret_cast<cudaStream_t>(stream_ptr));
+            },
+            py::arg("boxes_ptr"), py::arg("scores_ptr"), py::arg("classes_ptr"),
+            py::arg("n_in"), py::arg("frame_w"), py::arg("frame_h"),
+            py::arg("is_tiled"),
+            py::arg("out_boxes"), py::arg("out_scores"), py::arg("out_classes"),
+            py::arg("out_suspect"), py::arg("out_count"),
+            py::arg("priors_ptr") = 0, py::arg("prior_classes_ptr") = 0,
+            py::arg("num_priors") = 0, py::arg("prior_iou_threshold") = 0.50f,
+            py::arg("stream_ptr"))
         .def("process_detections_graph",
             [](PerceptionPipeline& self,
                uintptr_t boxes_ptr, uintptr_t scores_ptr, uintptr_t classes_ptr,
@@ -4831,6 +4884,177 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             py::arg("out_suspect"), py::arg("out_count"),
             py::arg("priors_ptr") = 0, py::arg("prior_classes_ptr") = 0,
             py::arg("num_priors") = 0, py::arg("prior_iou_threshold") = 0.50f,
+            py::arg("stream_ptr"))
+        .def("process_detections_main_nms",
+            [](PerceptionPipeline& self,
+               uintptr_t boxes_ptr, uintptr_t scores_ptr, uintptr_t classes_ptr,
+               int n_in, int frame_w, int frame_h, bool is_tiled,
+               uintptr_t out_boxes, uintptr_t out_scores, uintptr_t out_classes,
+               uintptr_t out_suspect, uintptr_t out_count,
+               uintptr_t priors_ptr, uintptr_t prior_classes_ptr,
+               int num_priors, float prior_iou_threshold,
+               uintptr_t stream_ptr) {
+                py::gil_scoped_release release;
+                self.process_detections_main_nms(
+                    reinterpret_cast<const float*>(boxes_ptr),
+                    reinterpret_cast<const float*>(scores_ptr),
+                    reinterpret_cast<const int*>(classes_ptr),
+                    n_in, frame_w, frame_h, is_tiled,
+                    reinterpret_cast<float*>(out_boxes),
+                    reinterpret_cast<float*>(out_scores),
+                    reinterpret_cast<int*>(out_classes),
+                    reinterpret_cast<bool*>(out_suspect),
+                    reinterpret_cast<int*>(out_count),
+                    reinterpret_cast<const float*>(priors_ptr),
+                    reinterpret_cast<const int*>(prior_classes_ptr),
+                    num_priors, prior_iou_threshold,
+                    reinterpret_cast<cudaStream_t>(stream_ptr));
+            },
+            py::arg("boxes_ptr"), py::arg("scores_ptr"), py::arg("classes_ptr"),
+            py::arg("n_in"), py::arg("frame_w"), py::arg("frame_h"),
+            py::arg("is_tiled"),
+            py::arg("out_boxes"), py::arg("out_scores"), py::arg("out_classes"),
+            py::arg("out_suspect"), py::arg("out_count"),
+            py::arg("priors_ptr") = 0, py::arg("prior_classes_ptr") = 0,
+            py::arg("num_priors") = 0, py::arg("prior_iou_threshold") = 0.50f,
+            py::arg("stream_ptr"))
+        .def("process_private_continuation_append",
+            [](PerceptionPipeline& self,
+               uintptr_t out_boxes, uintptr_t out_scores, uintptr_t out_classes,
+               uintptr_t out_suspect, uintptr_t out_count,
+               int n_in,
+               uintptr_t private_priors_ptr, int num_private_priors,
+               uintptr_t stream_ptr) {
+                py::gil_scoped_release release;
+                self.process_private_continuation_append(
+                    reinterpret_cast<float*>(out_boxes),
+                    reinterpret_cast<float*>(out_scores),
+                    reinterpret_cast<int*>(out_classes),
+                    reinterpret_cast<bool*>(out_suspect),
+                    reinterpret_cast<int*>(out_count),
+                    n_in,
+                    reinterpret_cast<const float*>(private_priors_ptr),
+                    num_private_priors,
+                    reinterpret_cast<cudaStream_t>(stream_ptr));
+            },
+            py::arg("out_boxes"), py::arg("out_scores"), py::arg("out_classes"),
+            py::arg("out_suspect"), py::arg("out_count"),
+            py::arg("n_in"),
+            py::arg("private_priors_ptr") = 0, py::arg("num_private_priors") = 0,
+            py::arg("stream_ptr"))
+        .def("process_detections_copyback",
+            [](PerceptionPipeline& self,
+               uintptr_t out_boxes, uintptr_t out_scores, uintptr_t out_classes,
+               uintptr_t out_suspect, uintptr_t out_count,
+               int n_in,
+               uintptr_t stream_ptr) {
+                py::gil_scoped_release release;
+                self.process_detections_copyback(
+                    reinterpret_cast<float*>(out_boxes),
+                    reinterpret_cast<float*>(out_scores),
+                    reinterpret_cast<int*>(out_classes),
+                    reinterpret_cast<bool*>(out_suspect),
+                    reinterpret_cast<int*>(out_count),
+                    n_in,
+                    reinterpret_cast<cudaStream_t>(stream_ptr));
+            },
+            py::arg("out_boxes"), py::arg("out_scores"), py::arg("out_classes"),
+            py::arg("out_suspect"), py::arg("out_count"),
+            py::arg("n_in"),
+            py::arg("stream_ptr"))
+        .def("process_detections_split_pipeline",
+            [](PerceptionPipeline& self,
+               uintptr_t boxes_ptr, uintptr_t scores_ptr, uintptr_t classes_ptr,
+               int n_in, int frame_w, int frame_h, bool is_tiled,
+               uintptr_t out_boxes, uintptr_t out_scores, uintptr_t out_classes,
+               uintptr_t out_suspect, uintptr_t out_count,
+               uintptr_t priors_ptr, uintptr_t prior_classes_ptr,
+               int num_priors, float prior_iou_threshold,
+               uintptr_t private_priors_ptr, int num_private_priors,
+               uintptr_t stream_ptr) -> int {
+                py::gil_scoped_release release;
+                return self.process_detections_split_pipeline(
+                    reinterpret_cast<const float*>(boxes_ptr),
+                    reinterpret_cast<const float*>(scores_ptr),
+                    reinterpret_cast<const int*>(classes_ptr),
+                    n_in, frame_w, frame_h, is_tiled,
+                    reinterpret_cast<float*>(out_boxes),
+                    reinterpret_cast<float*>(out_scores),
+                    reinterpret_cast<int*>(out_classes),
+                    reinterpret_cast<bool*>(out_suspect),
+                    reinterpret_cast<int*>(out_count),
+                    reinterpret_cast<const float*>(priors_ptr),
+                    reinterpret_cast<const int*>(prior_classes_ptr),
+                    num_priors, prior_iou_threshold,
+                    reinterpret_cast<const float*>(private_priors_ptr),
+                    num_private_priors,
+                    reinterpret_cast<cudaStream_t>(stream_ptr));
+            },
+            py::arg("boxes_ptr"), py::arg("scores_ptr"), py::arg("classes_ptr"),
+            py::arg("n_in"), py::arg("frame_w"), py::arg("frame_h"),
+            py::arg("is_tiled"),
+            py::arg("out_boxes"), py::arg("out_scores"), py::arg("out_classes"),
+            py::arg("out_suspect"), py::arg("out_count"),
+            py::arg("priors_ptr") = 0, py::arg("prior_classes_ptr") = 0,
+            py::arg("num_priors") = 0, py::arg("prior_iou_threshold") = 0.50f,
+            py::arg("private_priors_ptr") = 0, py::arg("num_private_priors") = 0,
+            py::arg("stream_ptr"))
+        .def("process_detections_main_nms_graph_nocopyback",
+            [](PerceptionPipeline& self,
+               uintptr_t boxes_ptr, uintptr_t scores_ptr, uintptr_t classes_ptr,
+               int n_in, int frame_w, int frame_h, bool is_tiled,
+               uintptr_t out_boxes, uintptr_t out_scores, uintptr_t out_classes,
+               uintptr_t out_suspect, uintptr_t out_count,
+               uintptr_t priors_ptr, uintptr_t prior_classes_ptr,
+               int num_priors, float prior_iou_threshold,
+               uintptr_t stream_ptr) {
+                py::gil_scoped_release release;
+                self.process_detections_main_nms_graph_nocopyback(
+                    reinterpret_cast<const float*>(boxes_ptr),
+                    reinterpret_cast<const float*>(scores_ptr),
+                    reinterpret_cast<const int*>(classes_ptr),
+                    n_in, frame_w, frame_h, is_tiled,
+                    reinterpret_cast<float*>(out_boxes),
+                    reinterpret_cast<float*>(out_scores),
+                    reinterpret_cast<int*>(out_classes),
+                    reinterpret_cast<bool*>(out_suspect),
+                    reinterpret_cast<int*>(out_count),
+                    reinterpret_cast<const float*>(priors_ptr),
+                    reinterpret_cast<const int*>(prior_classes_ptr),
+                    num_priors, prior_iou_threshold,
+                    reinterpret_cast<cudaStream_t>(stream_ptr));
+            },
+            py::arg("boxes_ptr"), py::arg("scores_ptr"), py::arg("classes_ptr"),
+            py::arg("n_in"), py::arg("frame_w"), py::arg("frame_h"),
+            py::arg("is_tiled"),
+            py::arg("out_boxes"), py::arg("out_scores"), py::arg("out_classes"),
+            py::arg("out_suspect"), py::arg("out_count"),
+            py::arg("priors_ptr") = 0, py::arg("prior_classes_ptr") = 0,
+            py::arg("num_priors") = 0, py::arg("prior_iou_threshold") = 0.50f,
+            py::arg("stream_ptr"))
+        .def("process_detections_split_pipeline_graphed",
+            [](PerceptionPipeline& self,
+               uintptr_t out_boxes, uintptr_t out_scores, uintptr_t out_classes,
+               uintptr_t out_suspect, uintptr_t out_count,
+               int n_in,
+               uintptr_t private_priors_ptr, int num_private_priors,
+               uintptr_t stream_ptr) -> int {
+                py::gil_scoped_release release;
+                return self.process_detections_split_pipeline_graphed(
+                    reinterpret_cast<float*>(out_boxes),
+                    reinterpret_cast<float*>(out_scores),
+                    reinterpret_cast<int*>(out_classes),
+                    reinterpret_cast<bool*>(out_suspect),
+                    reinterpret_cast<int*>(out_count),
+                    n_in,
+                    reinterpret_cast<const float*>(private_priors_ptr),
+                    num_private_priors,
+                    reinterpret_cast<cudaStream_t>(stream_ptr));
+            },
+            py::arg("out_boxes"), py::arg("out_scores"), py::arg("out_classes"),
+            py::arg("out_suspect"), py::arg("out_count"),
+            py::arg("n_in"),
+            py::arg("private_priors_ptr") = 0, py::arg("num_private_priors") = 0,
             py::arg("stream_ptr"))
         .def("process_detections_interleaved_graph",
             [](PerceptionPipeline& self,

@@ -8,11 +8,13 @@
 
 ---
 
-## 1. Recommended Baseline
+## 1. Recommended Baselines
 
-Use `mamba_whole_graph` for current MOT17-SDP module work and headline numbers.
-它的 display stack 是 **YOLO26s TensorRT backbone + Mamba v14-replica T3→T1 head
-+ C++/CUDA `GPUByteTracker`**：
+Two baseline presets are available, each with a different trade-off:
+
+### s-variant (`mamba_whole_graph`, headline throughput)
+
+YOLO26s TensorRT backbone + Mamba v14-replica T3→T1 head + C++/CUDA `GPUByteTracker`:
 
 ```bash
 uv run scripts/eval/mot17.py \
@@ -21,13 +23,6 @@ uv run scripts/eval/mot17.py \
   --double-buffer \
   --output out/frozen_v2
 ```
-
-Authoritative sources:
-
-- Preset: `configs/presets/mamba_whole_graph.yaml`
-- Entry point: `scripts/eval/mot17.py`
-- Config parser: `src/saccade/perception/eval/config.py`
-- Stage order: `src/saccade/perception/eval/evaluator.py`
 
 `frozen_v2` run (2026-06-21; MOT17 train / SDP, seven sequences):
 
@@ -44,6 +39,46 @@ Authoritative sources:
 | Eval FPS | **269.47** |
 | Mean latency | **7.42 ms** |
 
+### m-variant (`mamba_whole_graph_m`, higher recall/MOTA)
+
+YOLO26m TensorRT backbone + Mamba head + C++/CUDA `GPUByteTracker`. Higher
+capacity FPN (256/512/512 vs s's 128/256/512) — stronger small-object recall
+and MOTA at IDF1 parity with reduced IDs:
+
+```bash
+uv run scripts/eval/mot17.py \
+  --preset mamba_whole_graph_m \
+  --detector SDP \
+  --double-buffer \
+  --output out/m_run
+```
+
+Key differences from the s-variant:
+
+| Area | s-variant | m-variant |
+|:--|:--|:--|
+| Backbone | yolo26s (128/256/512) | yolo26m (256/512/512) |
+| `fpn_backbone_engine` | `yolo26s_backbone_640_best.engine` | `yolo26m_backbone_640_best.engine` |
+| `mamba_ckpt` | `mamba_gt_v14replica_t3_t1` | `mamba_gt_yolo26m_v14replica_t3_t1` |
+| `mamba_teacher_ckpt` | *(not needed)* | `gated_det_yolo26m_v14replica/epoch_0012.ckpt` |
+| `mamba_head_engine` | *(PyTorch head)* | `mamba_head_26m.engine` (TRT head) |
+| `kalman_r_scale` | 2.8 | 3.5 (m-tuned) |
+| Bridge gate | `[0.75, 1.33] / px 0.25` | `[0.6, 1.7] / px 0.4` (relaxed) |
+| Eval FPS | ~269 | ~241 |
+| IDF1 / IDs | 78.2 / 413 | 79.5 / 335 |
+
+The m-variant requires `mamba_teacher_ckpt` because the fine-tuned backbone is
+loaded from the teacher checkpoint: the C++ batched TRT path is hardcoded to
+yolo26s channels, so the Python whole-graph path reads channels from the m
+engine and validates against the head.
+
+Authoritative sources:
+
+- Presets: `configs/presets/mamba_whole_graph.yaml`, `configs/presets/mamba_whole_graph_m.yaml`
+- Entry point: `scripts/eval/mot17.py`
+- Config parser: `src/saccade/perception/eval/config.py`
+- Stage order: `src/saccade/perception/eval/evaluator.py`
+
 The frozen-v2 measurement ran on an NVIDIA GeForce RTX 5070 Ti Laptop GPU
 (12 GB), Driver 610.62, CUDA UMD 13.3, with `--double-buffer`. The HOTA family
 uses TrackEval; IDF1/MOTA/IDs were recomputed with `calculate_mota.py`. Older
@@ -54,6 +89,8 @@ module-only benchmarks; do not mix those numbers without naming the protocol.
 ---
 
 ## 2. Current Preset Shape
+
+### `mamba_whole_graph` (s-variant)
 
 `configs/presets/mamba_whole_graph.yaml` currently overrides the raw CLI
 fallback in these important ways:
@@ -70,15 +107,22 @@ fallback in these important ways:
 | Output cleanup | `interpolate_tracklets: true`, `interpolate_max_gap: 35`, `interpolate_min_track_len: 5` |
 | Disabled vs legacy baseline | `track_person_only: false`, `person_geometry_prior: false`, `detection_quality_scaling: false`, `id_stability_filter: false`, `per_seq_adapt: false`, `geometry_suspect_support: false` |
 
-Notes:
+### `mamba_whole_graph_m` (m-variant)
 
-- `use_tracker_graph: true` is present in the preset. The evaluator disables the
+Differs from the s-variant only where noted above in §1: `fpn_backbone_engine`,
+`mamba_ckpt`, `mamba_teacher_ckpt`, `mamba_head_engine`, `kalman_r_scale`,
+and the bridge gate values (`bridge_px`, `bridge_h_lo`, `bridge_h_hi`). All other
+parameters (GMC, OAO, occlusion, interpolation, disabled features) are identical.
+
+Notes (apply to both presets unless stated otherwise):
+
+- `use_tracker_graph: true` is present in the presets. The evaluator disables the
   captured tracker graph only when semantic relink needs per-detection embeddings
   through `relink_enabled`; bridge relink does not require that fallback.
 - `async_reid` and `pipeline_relink` are CLI flags and config fields, but with
   `reid_mode: off` they are not the source of the current headline accuracy.
 - Semantic relink, appearance bank, lifecycle merge, Cheb-GR merge, multi-birth,
-  and scene adapt are not part of the current recommended baseline.
+  and scene adapt are not part of the current recommended baselines.
 
 ---
 
@@ -151,7 +195,8 @@ diagnostics under those top-level stages.
 
 When changing defaults or headline numbers:
 
-1. Update `configs/presets/mamba_whole_graph.yaml` first if the baseline really changes.
+1. Update the appropriate preset file(s) (`configs/presets/mamba_whole_graph.yaml`
+   and/or `configs/presets/mamba_whole_graph_m.yaml`) first if the baseline really changes.
 2. Re-run or cite a same-run MOT17 result before editing headline metrics.
-3. Update [PIPELINE.md](../PIPELINE.md), [TODO.md](../TODO.md), and this file together.
+3. Update [PIPELINE.md](../PIPELINE.md), [DATAFLOW.md](../DATAFLOW.md), [TODO.md](../TODO.md), and this file together.
 4. Keep legacy `speed` / `baseline` numbers labelled as legacy comparisons.

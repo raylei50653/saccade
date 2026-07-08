@@ -210,6 +210,183 @@ public:
         cudaStream_t stream);
 
     /**
+     * @brief Main NMS only: filter + class-aware NMS (no private continuation).
+     *
+     * Runs filter_detections_cuda + gather/copy + NMS with class_aware policy.
+     * Supports both small (compact_grid_nms) and large (argsort + bitmask NMS)
+     * paths based on filtered count. Output is compacted into out_* buffers.
+     * Does NOT run private continuation or copyback — scratch (d_compact_*)
+     * holds the intermediate post-NMS layout until the caller invokes
+     * process_private_continuation_append() or a simple copyback.
+     *
+     * @param out_count  [1] int32 GPU — receives post-NMS count (D2D)
+     */
+    void process_detections_main_nms(
+        const float* boxes_ptr,
+        const float* scores_ptr,
+        const int*   classes_ptr,
+        int n_in,
+        int frame_w, int frame_h,
+        bool is_tiled,
+        float* out_boxes,
+        float* out_scores,
+        int*   out_classes,
+        bool*  out_suspect,
+        int*   out_count,
+        const float* priors_ptr,
+        const int* prior_classes_ptr,
+        int num_priors,
+        float prior_iou_threshold,
+        cudaStream_t stream);
+
+    /**
+     * @brief Private continuation append (standalone).
+     *
+     * Runs the second, wider NMS (private_candidate_nms_iou) followed by
+     * append_private_continuation_cuda that extends the output buffers with
+     * track-gated candidates.  Call process_detections_main_nms() first;
+     * the internal scratch (d_compact_*, d_nms_keep_, d_nms_count_) must
+     * still hold the post-main-NMS state.
+     *
+     * @param out_boxes   [n_in, 4] float32 GPU — in/out
+     * @param out_scores  [n_in] float32 GPU — in/out
+     * @param out_classes [n_in] int32 GPU — in/out
+     * @param out_suspect [n_in] bool GPU — in/out
+     * @param out_count   [1] int32 GPU — in/out (main NMS count → final count)
+     * @param n_in        Capacity of output buffers
+     */
+    void process_private_continuation_append(
+        float* out_boxes,
+        float* out_scores,
+        int*   out_classes,
+        bool*  out_suspect,
+        int*   out_count,
+        int n_in,
+        const float* private_priors_ptr,
+        int num_private_priors,
+        cudaStream_t stream);
+
+    /**
+     * @brief Copyback after main NMS or private append.
+     *
+     * Copies compacted detections from internal scratch (d_compact_*) to
+     * the caller's output buffers.  Call after process_detections_main_nms()
+     * when private continuation is disabled, or after
+     * process_private_continuation_append() when it is enabled.
+     */
+    void process_detections_copyback(
+        float* out_boxes,
+        float* out_scores,
+        int*   out_classes,
+        bool*  out_suspect,
+        int*   out_count,
+        int n_in,
+        cudaStream_t stream);
+
+    /**
+     * @brief Consolidated eager split pipeline: main NMS + private append.
+     *
+     * Chains process_detections_main_nms() → process_private_continuation_append()
+     * → D2H count sync in a single C++ call, eliminating per-frame Python/pybind
+     * orchestration overhead.  private_continuation_append internally handles the
+     * disabled case (falls back to copyback + suspect penalty).  Returns the final
+     * post-NMS count.
+     *
+     * @param out_count  [1] int32 GPU — receives final count (D2D written by copyback)
+     * @return           final post-NMS count (after D2H sync)
+     */
+    int process_detections_split_pipeline(
+        const float* boxes_ptr,
+        const float* scores_ptr,
+        const int*   classes_ptr,
+        int n_in,
+        int frame_w, int frame_h,
+        bool is_tiled,
+        float* out_boxes,
+        float* out_scores,
+        int*   out_classes,
+        bool*  out_suspect,
+        int*   out_count,
+        const float* priors_ptr,
+        const int* prior_classes_ptr,
+        int num_priors,
+        float prior_iou_threshold,
+        const float* private_priors_ptr,
+        int num_private_priors,
+        cudaStream_t stream);
+
+    /**
+     * @brief Graph-capture-safe main NMS **without** copyback.
+     *
+     * Same as process_detections_main_nms_graph but does NOT copy
+     * d_compact_* back into out_*.  After this call:
+     *   - out_* holds pre-NMS compacted data (private NMS reads this)
+     *   - d_compact_* holds post-NMS survivors (private append uses as dst)
+     *   - d_nms_keep_ / d_nms_count_ hold the main NMS keep mask / count
+     *
+     * Chain with process_detections_split_pipeline_graphed() to complete
+     * the private-continuation append + D2H sync.
+     */
+    void process_detections_main_nms_graph_nocopyback(
+        const float* boxes_ptr,
+        const float* scores_ptr,
+        const int*   classes_ptr,
+        int n_in,
+        int frame_w, int frame_h,
+        bool is_tiled,
+        float* out_boxes,
+        float* out_scores,
+        int*   out_classes,
+        bool*  out_suspect,
+        int*   out_count,
+        const float* priors_ptr,
+        const int* prior_classes_ptr,
+        int num_priors,
+        float prior_iou_threshold,
+        cudaStream_t stream);
+
+    /**
+     * @brief Private-continuation append + D2H sync (graphed split tail).
+     *
+     * Assumes the caller has already replayed a captured graph that ran
+     * process_detections_main_nms_graph_nocopyback on the same out_*
+     * buffers.  This function runs process_private_continuation_append
+     * (which reads pre-NMS out_* + post-NMS d_compact_*, appends private
+     * candidates, and copybacks d_compact_* -> out_*) then does the
+     * D2H count sync.
+     *
+     * @return final post-NMS+private count
+     */
+    int process_detections_split_pipeline_graphed(
+        float* out_boxes,
+        float* out_scores,
+        int*   out_classes,
+        bool*  out_suspect,
+        int*   out_count,
+        int n_in,
+        const float* private_priors_ptr,
+        int num_private_priors,
+        cudaStream_t stream);
+
+    void process_detections_main_nms_graph(
+        const float* boxes_ptr,
+        const float* scores_ptr,
+        const int*   classes_ptr,
+        int n_in,
+        int frame_w, int frame_h,
+        bool is_tiled,
+        float* out_boxes,
+        float* out_scores,
+        int*   out_classes,
+        bool*  out_suspect,
+        int*   out_count,
+        const float* priors_ptr,
+        const int* prior_classes_ptr,
+        int num_priors,
+        float prior_iou_threshold,
+        cudaStream_t stream);
+
+    /**
      * @brief Graph-capture-safe NMS: always uses the large path, skips all
      * D2H sync points. Input must be zero-padded to n_in.
      */

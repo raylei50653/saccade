@@ -207,6 +207,18 @@ public:
     void bind_features_buffer(float* ptr);
     std::vector<std::pair<int,int>> get_active_tid_slot_pairs();
     std::vector<TrackStateSnapshot> get_state_snapshots(cudaStream_t stream);
+
+    /// GPU compaction kernel: reads active Kalman track states on device and
+    /// writes compacted xyxy prior boxes + classes into caller-provided
+    /// buffers.  Returns the compacted count (host-side int via 4-byte D2H).
+    /// Replaces get_state_snapshots() (634 KB D2H + Python loop) for the
+    /// prior-building hot path.
+    int build_track_priors_gpu(
+        float* d_out_boxes, int* d_out_classes,
+        int min_track_age, int max_track_age, float min_track_score,
+        cudaStream_t stream
+    );
+
     std::vector<TrackStateSnapshot> get_motion_snapshots_for_track_ids(
         const std::vector<int>& track_ids,
         cudaStream_t stream

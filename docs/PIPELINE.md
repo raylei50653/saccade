@@ -73,7 +73,7 @@
 **關鍵 NO-GO / blocked**：
 - **高解析度 head**：960 head 幾何 crash（input 須 ÷128）；1024 能跑但 640-head 不轉移（IDF1 74→39）。要 hi-res 須 head 重訓。
 - **NV12 融合 decode+letterbox 路徑** —— kernel/Python 寫好但沒接 build/pybind、沒打過 baseline，**目前不算數**。
-- **奇偶雙緩衝 detect(N)‖tracker(N-1)** —— clean-room +23% 但 correctness 0/250 不符；未驗 GMC+postprocess sync。
+- **double-buffer detect(N+1) ‖ track(N)**: cross-frame overlap via side CUDA stream; bit-exact with serial path (MOT result MD5 identical), throughput ~269 FPS vs ~144 single-frame. Only throughput benefit — single-frame latency is *higher* (7.42 vs 6.34 ms) due to side-stream overhead. Enabled by `--double-buffer`; requires `use_whole_graph=true` + `SACCADE_DETECT_BARRIER=event`.
 - channels_last(NHWC) head（mamba SSM reshape 強制 NCHW 邊界，轉置只被搬走非消除）、fp16 mamba head（association 退步 −0.7pp）。
 
 **補充文檔**：JPEG decode 引擎 (`memory project_jpeg_decode_engine_underfed`)・e2e latency opt (`memory project_e2e_latency_opt`)・[streaming 架構](modules/streaming/architecture.md)（L3 媒體接入，附錄 A）・高解析 blocked (`memory project_hires_960_mamba_head_blocked`)
