@@ -1945,7 +1945,7 @@ def run_eval(
         kwargs=kwargs,
     )
     if cfg.detection.private_continuation_enabled:
-        if cfg.workbench:
+        if cfg.core.workbench:
             raise ValueError(
                 "private continuation is not implemented for the Workbench "
                 "hot path; disable --workbench"
@@ -1990,8 +1990,8 @@ def run_eval(
     debug_stage_dump_rows: list[dict[str, float | int | str]] = []
     debug_birth_csv = cfg.debug_birth_csv
     debug_birth_rows: list[dict[str, float | int | str | bool]] = []
-    profile_stages = cfg.profile_stages
-    profile_frame_csv = cfg.profile_frame_csv
+    profile_stages = cfg.core.profile_stages
+    profile_frame_csv = cfg.core.profile_frame_csv
     if profile_frame_csv:
         from .frame_ledger import FrameLedger
 
@@ -2013,7 +2013,7 @@ def run_eval(
             f"[STREAM] run_eval: current={_cs.cuda_stream:#x} default={_ds.cuda_stream:#x}"
         )
         print(
-            f"[STREAM] barrier={_detect_barrier_mode()} workbench={cfg.workbench} whole_graph={getattr(detector, 'use_whole_graph', False)} double_buffer={_double_buffer_eligible(cfg, detector, profile_stages)}"
+            f"[STREAM] barrier={_detect_barrier_mode()} workbench={cfg.core.workbench} whole_graph={getattr(detector, 'use_whole_graph', False)} double_buffer={_double_buffer_eligible(cfg, detector, profile_stages)}"
         )
         print(
             f"[STREAM] async_reid={cfg.async_reid} gmc_mode={cfg.core.gmc_mode} decode={'NVJPEG' if _os.environ.get('SACCADE_GPU_DECODE') == '1' else 'DALI'}"
