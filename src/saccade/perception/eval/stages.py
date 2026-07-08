@@ -1634,7 +1634,7 @@ def _run_post_nms_finalize(
         t_quality_scale_start = time.perf_counter()
     with _record_profile_scope("post.quality_scale"):
         if (
-            cfg.detection_quality_scaling
+            cfg.geometry.detection_quality_scaling
             and n_post > 0
             and not getattr(detector.tracker, "is_cuda", False)
         ):
@@ -1642,9 +1642,9 @@ def _run_post_nms_finalize(
                 fused_boxes,
                 w_orig,
                 h_orig,
-                w_aspect=cfg.detection_quality_w_aspect,
-                w_center=cfg.detection_quality_w_center,
-                w_area=cfg.detection_quality_w_area,
+                w_aspect=cfg.geometry.detection_quality_w_aspect,
+                w_center=cfg.geometry.detection_quality_w_center,
+                w_area=cfg.geometry.detection_quality_w_area,
             )
             fused_scores = fused_scores * quality_factors
     if (
@@ -2653,14 +2653,14 @@ def _run_detection_filters(
     # appropriately-sized detections while filtering suspicious large boxes.
     if cfg.detection.per_frame_detection_cap > 0 and fused_scores.numel() > 0:
         quality_factors_for_cap = None
-        if cfg.detection_quality_scaling and fused_scores.numel() > 0:
+        if cfg.geometry.detection_quality_scaling and fused_scores.numel() > 0:
             quality_factors_for_cap = _compute_detection_quality_batch(
                 fused_boxes,
                 w_orig,
                 h_orig,
-                w_aspect=cfg.detection_quality_w_aspect,
-                w_center=cfg.detection_quality_w_center,
-                w_area=cfg.detection_quality_w_area,
+                w_aspect=cfg.geometry.detection_quality_w_aspect,
+                w_center=cfg.geometry.detection_quality_w_center,
+                w_area=cfg.geometry.detection_quality_w_area,
             )
 
         # Compute adaptive cap if enabled
@@ -2778,9 +2778,9 @@ def _run_birth_config(
                 fused_boxes,
                 w_orig,
                 h_orig,
-                w_aspect=cfg.detection_quality_w_aspect,
-                w_center=cfg.detection_quality_w_center,
-                w_area=cfg.detection_quality_w_area,
+                w_aspect=cfg.geometry.detection_quality_w_aspect,
+                w_center=cfg.geometry.detection_quality_w_center,
+                w_area=cfg.geometry.detection_quality_w_area,
             )
         below_birth = fused_scores < frame_new_track_thresh
         high_quality = birth_quality > cfg.birth_min_quality

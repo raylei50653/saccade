@@ -1075,14 +1075,14 @@ def _run_frame(
                         if geometry_suspect_mask.numel() > 0:
                             geometry_suspect_mask = geometry_suspect_mask[valid_w]
 
-                if cfg.detection_quality_scaling and fused_boxes.numel() > 0:
+                if cfg.geometry.detection_quality_scaling and fused_boxes.numel() > 0:
                     quality_factors = _compute_detection_quality_batch(
                         fused_boxes,
                         w_orig,
                         h_orig,
-                        w_aspect=cfg.detection_quality_w_aspect,
-                        w_center=cfg.detection_quality_w_center,
-                        w_area=cfg.detection_quality_w_area,
+                        w_aspect=cfg.geometry.detection_quality_w_aspect,
+                        w_center=cfg.geometry.detection_quality_w_center,
+                        w_area=cfg.geometry.detection_quality_w_area,
                     )
                     fused_scores = fused_scores * quality_factors
                 elif cfg.geometry_suspect_support and geometry_suspect_mask.numel() > 0:
@@ -1327,9 +1327,9 @@ def _run_frame(
                     fused_boxes,
                     w_orig,
                     h_orig,
-                    w_aspect=cfg.detection_quality_w_aspect,
-                    w_center=cfg.detection_quality_w_center,
-                    w_area=cfg.detection_quality_w_area,
+                    w_aspect=cfg.geometry.detection_quality_w_aspect,
+                    w_center=cfg.geometry.detection_quality_w_center,
+                    w_area=cfg.geometry.detection_quality_w_area,
                 )
                 (
                     fused_boxes,

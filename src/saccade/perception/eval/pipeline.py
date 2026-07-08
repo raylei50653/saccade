@@ -468,11 +468,11 @@ class EvalPipeline:
                 narrow_bonus=0.0,
                 # Quality filter params
                 quality_weights=(
-                    cfg.detection_quality_w_aspect,
-                    cfg.detection_quality_w_center,
-                    cfg.detection_quality_w_area,
+                    cfg.geometry.detection_quality_w_aspect,
+                    cfg.geometry.detection_quality_w_center,
+                    cfg.geometry.detection_quality_w_area,
                 )
-                if cfg.detection_quality_scaling
+                if cfg.geometry.detection_quality_scaling
                 else (0.5, 0.3, 0.2),
                 max_detections=cfg.detection.per_frame_detection_cap or 30,
                 fp_hard_filter=cfg.detection.fp_hard_filter_enabled,
@@ -943,10 +943,10 @@ class EvalPipeline:
                 3, h_orig, w_orig, dtype=torch.float32, device="cuda"
             )
         detector.tracker.set_quality_params(
-            enabled=cfg.detection_quality_scaling,
-            w_aspect=cfg.detection_quality_w_aspect,
-            w_center=cfg.detection_quality_w_center,
-            w_area=cfg.detection_quality_w_area,
+            enabled=cfg.geometry.detection_quality_scaling,
+            w_aspect=cfg.geometry.detection_quality_w_aspect,
+            w_center=cfg.geometry.detection_quality_w_center,
+            w_area=cfg.geometry.detection_quality_w_area,
         )
         detector.tracker.set_params(
             track_thresh=cfg.core.track_thresh,
