@@ -666,7 +666,9 @@ def _run_nms(
             # Capture on first frame
             if state.main_nms_graph_nocopyback is None:
                 try:
-                    _capture_main_nms_graph_nocopyback(state, is_tiled=is_tiled)
+                    state.main_nms_graph_nocopyback = (
+                        _capture_main_nms_graph_nocopyback(state, is_tiled=is_tiled)
+                    )
                 except Exception as e:
                     print(
                         f"[MainNMSGraphNoCopyback] Capture failed: {e}. "
@@ -1033,26 +1035,37 @@ def _capture_main_nms_graph_nocopyback(
     state: EvalPipeline,
     *,
     is_tiled: bool,
-) -> None:
+    in_bufs: "dict[str, torch.Tensor] | None" = None,
+    out_bufs: "dict[str, torch.Tensor] | None" = None,
+    out_count_buf: "torch.Tensor | None" = None,
+) -> Any:
     """Capture process_detections_main_nms_graph_nocopyback into a CUDAGraph.
 
     Unlike _capture_main_nms_graph, this variant:
       - Uses _post_bufs (not main_nms_graph_out) as output buffers
       - Captures the nocopyback variant (out_* retains pre-NMS data)
       - priors_ptr is 0 (ONMS priors are per-frame, can't be graphed)
+
+    ``in_bufs`` / ``out_bufs`` / ``out_count_buf`` default to the production
+    buffers (``state.main_nms_in`` / ``state.post_bufs`` /
+    ``state.nms_graph_out_count``). The nocopyback shadow-compare variant passes
+    dedicated buffers so it never touches ``_post_bufs`` (see #57). Returns the
+    captured graph (or ``"eager"`` in eager-test mode, or ``None`` if there is no
+    perception pipeline); the caller assigns it to the right state handle.
     """
     _perception_pipeline = state.perception_pipeline
     if _perception_pipeline is None:
-        return
-    _main_nms_in = state.main_nms_in
-    _post_bufs = state.post_bufs
+        return None
+    _main_nms_in = in_bufs if in_bufs is not None else state.main_nms_in
+    _post_bufs = out_bufs if out_bufs is not None else state.post_bufs
     _NMS_FIXED_N = state.nms_fixed_n
     n_in = _NMS_FIXED_N
 
-    out_count_buf = state.nms_graph_out_count
     if out_count_buf is None:
-        out_count_buf = torch.zeros(1, dtype=torch.int32, device="cuda")
-        state.nms_graph_out_count = out_count_buf
+        out_count_buf = state.nms_graph_out_count
+        if out_count_buf is None:
+            out_count_buf = torch.zeros(1, dtype=torch.int32, device="cuda")
+            state.nms_graph_out_count = out_count_buf
 
     stream_ptr = torch.cuda.current_stream().cuda_stream
 
@@ -1081,9 +1094,8 @@ def _capture_main_nms_graph_nocopyback(
     # If this env var is set, skip graph capture and run eagerly to verify
     # the nocopyback function itself produces correct results.
     if os.environ.get("SACCADE_NMS_GRAPHED_EAGER_TEST", "") in ("1", "true", "yes"):
-        state.main_nms_graph_nocopyback = "eager"
         print("🕯️ [MainNMSGraphNoCopyback] Eager test mode (no graph capture)")
-        return
+        return "eager"
 
     _graph = torch.cuda.CUDAGraph()
     with torch.cuda.graph(_graph):
@@ -1110,10 +1122,78 @@ def _capture_main_nms_graph_nocopyback(
             0.0,
             _capture_stream,
         )
-    state.main_nms_graph_nocopyback = _graph
     print(
         f"🕯️ [MainNMSGraphNoCopyback] Captured main NMS nocopyback graph (graph={_graph})"
     )
+    return _graph
+
+
+def _classify_nms_shadow_match(
+    tag: str,
+    frame_id: int,
+    mono: "tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]",
+    cand: "tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]",
+) -> None:
+    """Compare a candidate NMS output against the monolithic reference and print
+    a one-line classification.
+
+    A raw positional match prints nothing. Otherwise a canonical lexsort decides
+    whether the two hold the same detection set in a different order
+    (``ordering-only`` — benign, since the private-continuation append can
+    reorder survivors) or a genuine ``REAL MISMATCH``. Counts are assumed equal
+    (the caller checks that first). Shared by the split and graphed comparisons.
+    """
+    mono_boxes, mono_scores, mono_classes, mono_suspect = mono
+    cand_boxes, cand_scores, cand_classes, cand_suspect = cand
+
+    if (
+        torch.allclose(mono_boxes, cand_boxes, atol=1e-4)
+        and torch.allclose(mono_scores, cand_scores, atol=1e-4)
+        and bool((mono_classes == cand_classes).all())
+        and bool((mono_suspect == cand_suspect).all())
+    ):
+        return
+
+    def _canonical_idx(boxes, scores, classes, suspect):
+        """Lexsort by (class, -score, x1, y1, x2, y2)."""
+        cb, cs, cc = boxes.cpu(), scores.cpu(), classes.cpu()
+        keys = [
+            cb[:, 3].double(),
+            cb[:, 2].double(),
+            cb[:, 1].double(),
+            cb[:, 0].double(),
+            (-cs).double(),
+            cc.double(),
+        ]
+        idx = torch.arange(boxes.shape[0])
+        for key in reversed(keys):
+            idx = idx[torch.argsort(key[idx], stable=True)]
+        return idx.to(boxes.device)
+
+    _mi = _canonical_idx(mono_boxes, mono_scores, mono_classes, mono_suspect)
+    _ci = _canonical_idx(cand_boxes, cand_scores, cand_classes, cand_suspect)
+
+    sorted_boxes_ok = torch.allclose(mono_boxes[_mi], cand_boxes[_ci], atol=1e-4)
+    sorted_scores_ok = torch.allclose(mono_scores[_mi], cand_scores[_ci], atol=1e-4)
+    sorted_classes_ok = bool((mono_classes[_mi] == cand_classes[_ci]).all())
+    sorted_suspect_ok = bool((mono_suspect[_mi] == cand_suspect[_ci]).all())
+
+    if sorted_boxes_ok and sorted_scores_ok and sorted_classes_ok and sorted_suspect_ok:
+        print(f"{tag} frame={frame_id} ordering-only (same set, different index order)")
+        return
+
+    issues = []
+    if not sorted_boxes_ok:
+        diff = (mono_boxes[_mi] - cand_boxes[_ci]).abs()
+        issues.append(f"boxes max diff={diff.max().item():.6f}")
+    if not sorted_scores_ok:
+        diff = (mono_scores[_mi] - cand_scores[_ci]).abs()
+        issues.append(f"scores max diff={diff.max().item():.6f}")
+    if not sorted_classes_ok:
+        issues.append("classes")
+    if not sorted_suspect_ok:
+        issues.append("suspect")
+    print(f"{tag} frame={frame_id} REAL MISMATCH: " + " ".join(issues))
 
 
 def _run_nms_shadow_compare(
@@ -1216,74 +1296,17 @@ def _run_nms_shadow_compare(
             f"mono={n_post_mono} split={n_post_split}"
         )
     else:
-        _split_boxes = _shadow_boxes[:n_post_split]
-        _split_scores = _shadow_scores[:n_post_split]
-        _split_classes = _shadow_classes[:n_post_split]
-        _split_suspect = _shadow_suspect[:n_post_split]
-
-        boxes_ok = torch.allclose(mono_boxes, _split_boxes, atol=1e-4)
-        scores_ok = torch.allclose(mono_scores, _split_scores, atol=1e-4)
-        classes_ok = bool((mono_classes == _split_classes).all())
-        suspect_ok = bool((mono_suspect == _split_suspect).all())
-
-        if not (boxes_ok and scores_ok and classes_ok and suspect_ok):
-            # ── Canonical sort compare: check if it's ordering-only ──
-            def _canonical_idx(boxes, scores, classes, suspect):
-                """Lexsort by (class, -score, x1, y1, x2, y2)."""
-                cb, cs, cc = boxes.cpu(), scores.cpu(), classes.cpu()
-                keys = [
-                    cb[:, 3].double(),
-                    cb[:, 2].double(),
-                    cb[:, 1].double(),
-                    cb[:, 0].double(),
-                    (-cs).double(),
-                    cc.double(),
-                ]
-                idx = torch.arange(boxes.shape[0])
-                for key in reversed(keys):
-                    idx = idx[torch.argsort(key[idx], stable=True)]
-                return idx.to(boxes.device)
-
-            _mi = _canonical_idx(mono_boxes, mono_scores, mono_classes, mono_suspect)
-            _si = _canonical_idx(
-                _split_boxes, _split_scores, _split_classes, _split_suspect
-            )
-
-            sorted_boxes_ok = torch.allclose(
-                mono_boxes[_mi], _split_boxes[_si], atol=1e-4
-            )
-            sorted_scores_ok = torch.allclose(
-                mono_scores[_mi], _split_scores[_si], atol=1e-4
-            )
-            sorted_classes_ok = bool((mono_classes[_mi] == _split_classes[_si]).all())
-            sorted_suspect_ok = bool((mono_suspect[_mi] == _split_suspect[_si]).all())
-
-            if (
-                sorted_boxes_ok
-                and sorted_scores_ok
-                and sorted_classes_ok
-                and sorted_suspect_ok
-            ):
-                print(
-                    f"[NMS_SHADOW] frame={state.current_frame_id} "
-                    f"ordering-only (same set, different index order)"
-                )
-            else:
-                issues = []
-                if not sorted_boxes_ok:
-                    diff = (mono_boxes[_mi] - _split_boxes[_si]).abs()
-                    issues.append(f"boxes max diff={diff.max().item():.6f}")
-                if not sorted_scores_ok:
-                    diff = (mono_scores[_mi] - _split_scores[_si]).abs()
-                    issues.append(f"scores max diff={diff.max().item():.6f}")
-                if not sorted_classes_ok:
-                    issues.append("classes")
-                if not sorted_suspect_ok:
-                    issues.append("suspect")
-                print(
-                    f"[NMS_SHADOW] frame={state.current_frame_id} "
-                    f"REAL MISMATCH: " + " ".join(issues)
-                )
+        _classify_nms_shadow_match(
+            "[NMS_SHADOW]",
+            state.current_frame_id,
+            (mono_boxes, mono_scores, mono_classes, mono_suspect),
+            (
+                _shadow_boxes[:n_post_split],
+                _shadow_scores[:n_post_split],
+                _shadow_classes[:n_post_split],
+                _shadow_suspect[:n_post_split],
+            ),
+        )
 
     # ── Graph shadow: main NMS graph vs eager ──────────────────────
     _graph_shadow_enabled = os.environ.get("SACCADE_MAIN_NMS_GRAPH_SHADOW", "") in (
@@ -1385,14 +1408,18 @@ def _run_nms_shadow_compare(
         "yes",
     )
     if _graphed_shadow_enabled and num_priors == 0:
-        _main_nms_in = state.main_nms_in
-        _post_bufs = state.post_bufs
+        # Dedicated in/out buffers so this variant never reads/writes the
+        # _post_bufs that the monolithic reference path (step 1) just filled —
+        # otherwise the fixed-N argsort ingests that buffer's stale real-box
+        # tail as private candidates (see #57).
+        _gs_in = state.graphed_shadow_in
+        _gs_out = state.graphed_shadow_out
         _NMS_FIXED_N = state.nms_fixed_n
 
-        out_count_buf = state.nms_graph_out_count
+        out_count_buf = state.graphed_shadow_out_count
         if out_count_buf is None:
             out_count_buf = torch.zeros(1, dtype=torch.int32, device="cuda")
-            state.nms_graph_out_count = out_count_buf
+            state.graphed_shadow_out_count = out_count_buf
 
         # copy_pad before capture so warmup sees real data
         copy_pad_detections(
@@ -1400,24 +1427,30 @@ def _run_nms_shadow_compare(
             raw_scores_contig.data_ptr(),
             raw_classes_contig.data_ptr(),
             min(raw_box_count, _NMS_FIXED_N),
-            _main_nms_in["boxes"].data_ptr(),
-            _main_nms_in["scores"].data_ptr(),
-            _main_nms_in["classes"].data_ptr(),
+            _gs_in["boxes"].data_ptr(),
+            _gs_in["scores"].data_ptr(),
+            _gs_in["classes"].data_ptr(),
             _NMS_FIXED_N,
             current_stream,
         )
 
-        if state.main_nms_graph_nocopyback is None:
-            _capture_main_nms_graph_nocopyback(state, is_tiled=is_tiled)
+        if state.main_nms_graph_nocopyback_shadow is None:
+            state.main_nms_graph_nocopyback_shadow = _capture_main_nms_graph_nocopyback(
+                state,
+                is_tiled=is_tiled,
+                in_bufs=_gs_in,
+                out_bufs=_gs_out,
+                out_count_buf=out_count_buf,
+            )
 
-        if state.main_nms_graph_nocopyback is not None:
-            state.main_nms_graph_nocopyback.replay()
+        if state.main_nms_graph_nocopyback_shadow is not None:
+            state.main_nms_graph_nocopyback_shadow.replay()
 
             _graphed_n = _perception_pipeline.process_detections_split_pipeline_graphed(
-                _post_bufs["boxes"].data_ptr(),
-                _post_bufs["scores"].data_ptr(),
-                _post_bufs["classes"].data_ptr(),
-                _post_bufs["suspect"].data_ptr(),
+                _gs_out["boxes"].data_ptr(),
+                _gs_out["scores"].data_ptr(),
+                _gs_out["classes"].data_ptr(),
+                _gs_out["suspect"].data_ptr(),
                 out_count_buf.data_ptr(),
                 _NMS_FIXED_N,
                 _private_priors_ptr,
@@ -1431,32 +1464,17 @@ def _run_nms_shadow_compare(
                     f"COUNT: mono={n_post_mono} graphed={_graphed_n}"
                 )
             else:
-                _ge_boxes = _post_bufs["boxes"][:_graphed_n]
-                _ge_scores = _post_bufs["scores"][:_graphed_n]
-                _ge_classes = _post_bufs["classes"][:_graphed_n]
-                _ge_suspect = _post_bufs["suspect"][:_graphed_n]
-
-                boxes_ok = torch.allclose(mono_boxes, _ge_boxes, atol=1e-4)
-                scores_ok = torch.allclose(mono_scores, _ge_scores, atol=1e-4)
-                classes_ok = bool((mono_classes == _ge_classes).all())
-                suspect_ok = bool((mono_suspect == _ge_suspect).all())
-
-                if not (boxes_ok and scores_ok and classes_ok and suspect_ok):
-                    issues = []
-                    if not boxes_ok:
-                        diff = (mono_boxes - _ge_boxes).abs()
-                        issues.append(f"boxes max diff={diff.max().item():.6f}")
-                    if not scores_ok:
-                        diff = (mono_scores - _ge_scores).abs()
-                        issues.append(f"scores max diff={diff.max().item():.6f}")
-                    if not classes_ok:
-                        issues.append("classes")
-                    if not suspect_ok:
-                        issues.append("suspect")
-                    print(
-                        f"[NMS_GRAPHED_SHADOW] frame={state.current_frame_id} "
-                        + " ".join(issues)
-                    )
+                _classify_nms_shadow_match(
+                    "[NMS_GRAPHED_SHADOW]",
+                    state.current_frame_id,
+                    (mono_boxes, mono_scores, mono_classes, mono_suspect),
+                    (
+                        _gs_out["boxes"][:_graphed_n],
+                        _gs_out["scores"][:_graphed_n],
+                        _gs_out["classes"][:_graphed_n],
+                        _gs_out["suspect"][:_graphed_n],
+                    ),
+                )
 
     return n_post_mono, _nms_graph_out
 

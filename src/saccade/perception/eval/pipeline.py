@@ -423,6 +423,11 @@ class EvalPipeline:
         self.main_nms_graph_out_count: torch.Tensor | None = None
         # ── Main NMS graph nocopyback (graphed split pipeline) ─────────
         self.main_nms_graph_nocopyback: Any = None
+        # Dedicated graph + count for the nocopyback shadow-compare variant
+        # (SACCADE_MAIN_NMS_GRAPHED_SHADOW). Kept separate from the production
+        # handle so the shadow tool never writes _post_bufs (see #57).
+        self.main_nms_graph_nocopyback_shadow: Any = None
+        self.graphed_shadow_out_count: torch.Tensor | None = None
         self.gmc_uncertain: bool = False
         self.last_reid_frame: int = -100
         self.prev_gray: torch.Tensor | None = None
@@ -1301,6 +1306,21 @@ class EvalPipeline:
             "classes": torch.empty((_NMS_FIXED_N,), dtype=torch.int32, device="cuda"),
             "suspect": torch.empty((_NMS_FIXED_N,), dtype=torch.bool, device="cuda"),
         }
+        # Dedicated in/out buffers for the nocopyback shadow-compare variant
+        # (SACCADE_MAIN_NMS_GRAPHED_SHADOW). Isolated from _main_nms_in /
+        # _post_bufs so the shadow tool cannot read the monolithic path's
+        # writes to _post_bufs (see #57).
+        _graphed_shadow_in: dict[str, torch.Tensor] = {
+            "boxes": torch.empty((_NMS_FIXED_N, 4), dtype=torch.float32, device="cuda"),
+            "scores": torch.empty((_NMS_FIXED_N,), dtype=torch.float32, device="cuda"),
+            "classes": torch.empty((_NMS_FIXED_N,), dtype=torch.int32, device="cuda"),
+        }
+        _graphed_shadow_out: dict[str, torch.Tensor] = {
+            "boxes": torch.empty((_NMS_FIXED_N, 4), dtype=torch.float32, device="cuda"),
+            "scores": torch.empty((_NMS_FIXED_N,), dtype=torch.float32, device="cuda"),
+            "classes": torch.empty((_NMS_FIXED_N,), dtype=torch.int32, device="cuda"),
+            "suspect": torch.empty((_NMS_FIXED_N,), dtype=torch.bool, device="cuda"),
+        }
 
         gtu: Any = None
         # GraphedTrackerUpdate.copy_inputs does not feed per-detection embeddings,
@@ -1553,6 +1573,8 @@ class EvalPipeline:
         self.nms_in = _nms_in
         self.main_nms_in = _main_nms_in
         self.main_nms_graph_out = _main_nms_graph_out
+        self.graphed_shadow_in = _graphed_shadow_in
+        self.graphed_shadow_out = _graphed_shadow_out
         self.post_bufs = _post_bufs
         self.nms_fixed_n = _NMS_FIXED_N
         self.relinker = relinker
