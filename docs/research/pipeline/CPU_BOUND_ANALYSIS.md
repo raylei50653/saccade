@@ -1,5 +1,10 @@
 # CPU-Bound Operations: `mamba_whole_graph` + `--relink-bridge-enabled`
 
+> **Status: one-off profiling snapshot.** Point-in-time analysis, not a living
+> contract and not the current-baseline owner. Numbers, conclusions and
+> observations are preserved as originally recorded; the current baseline lives
+> in [docs/TODO.md](../../TODO.md).
+
 > Command: `uv run scripts/eval/mot17.py --preset mamba_whole_graph --detector SDP --relink-bridge-enabled`
 
 ---
@@ -36,7 +41,7 @@
 
 ## 1. Per-Frame CPU Operations (Hot Loop)
 
-The per-frame loop is in [evaluator.py](../src/saccade/perception/eval/evaluator.py).
+The per-frame loop is in [evaluator.py](../../../src/saccade/perception/eval/evaluator.py).
 
 ### 1.1 Fetch + Ingest + Preprocess
 

@@ -1,5 +1,8 @@
 # 重複計算分析與修復記錄
 
+> **狀態：一次性分析快照（profiling / audit snapshot）。** 非活合約、非當前 baseline owner；
+> 數據、結論與觀察保留原貌。當前 baseline 見 [docs/TODO.md](../../TODO.md)。
+
 分析日期: 2026-06-20
 
 ---

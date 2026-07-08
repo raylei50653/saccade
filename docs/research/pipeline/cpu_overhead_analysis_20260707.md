@@ -1,5 +1,10 @@
 # CPU Overhead Analysis — mamba_whole_graph_m Preset
 
+> **Status: one-off profiling snapshot.** Point-in-time analysis, not a living
+> contract and not the current-baseline owner. Numbers, conclusions and
+> observations are preserved as originally recorded; the current baseline lives
+> in [docs/TODO.md](../../TODO.md).
+
 > Date: 2026-07-07
 > Scope: per-frame hot path, DB (double-buffer) path, m preset
 > Method: `--profile-frame-csv` stage timing + code audit

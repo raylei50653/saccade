@@ -1,5 +1,10 @@
 # Sync & D2H Audit — fetch + postprocess focus
 
+> **Status: one-off audit snapshot.** Point-in-time analysis, not a living
+> contract and not the current-baseline owner. Numbers, conclusions and
+> observations are preserved as originally recorded; the current baseline lives
+> in [docs/TODO.md](../../TODO.md).
+
 Generated: 2026-07-06 | Phase 10.1 — detect_post_event validated for correctness, opt-in for overlap-ready systems
 
 ---
