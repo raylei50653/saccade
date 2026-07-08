@@ -1518,14 +1518,14 @@ def _run_native_tensor_prep(
         private_prior_boxes = None
         num_private_priors = 0
         if native_private_enabled and (
-            cfg.private_prior_iou_threshold > 0.0
-            or cfg.private_prior_center_threshold > 0.0
+            cfg.detection.private_prior_iou_threshold > 0.0
+            or cfg.detection.private_prior_center_threshold > 0.0
         ):
             private_prior_boxes, _ = _build_active_track_priors(
                 detector.tracker,
                 raw_boxes_contig.device,
                 min_track_age=0,
-                max_track_age=cfg.private_prior_max_age,
+                max_track_age=cfg.detection.private_prior_max_age,
                 min_track_score=0.0,
             )
             if private_prior_boxes is not None:

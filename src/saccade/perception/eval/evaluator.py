@@ -1372,12 +1372,15 @@ def _run_frame(
                 after_merge_count_before_private = max(
                     0, after_merge_count - private_added_count
                 )
-            if cfg.private_continuation_enabled and pre_private_boxes is not None:
+            if (
+                cfg.detection.private_continuation_enabled
+                and pre_private_boxes is not None
+            ):
                 if (
-                    cfg.private_prior_iou_threshold > 0.0
-                    or cfg.private_prior_center_threshold > 0.0
+                    cfg.detection.private_prior_iou_threshold > 0.0
+                    or cfg.detection.private_prior_center_threshold > 0.0
                     or (
-                        cfg.private_selection_mode
+                        cfg.detection.private_selection_mode
                         in {
                             "per_track",
                             "suppressor_aware",
@@ -1411,22 +1414,22 @@ def _run_frame(
                     pre_nms_aligned_keypoints=pre_private_aligned_keypoints,
                     baseline_keep=private_baseline_keep,
                     baseline_nms_iou=cfg.detection.nms_iou_threshold,
-                    candidate_nms_iou=cfg.private_candidate_nms_iou,
+                    candidate_nms_iou=cfg.detection.private_candidate_nms_iou,
                     class_aware=not cfg.detection.track_person_only,
                     priors=private_priors,
                     prior_classes=private_prior_classes,
                     prior_iou_threshold=onms_prior_iou_threshold,
                     private_prior_boxes=private_motion_prior_boxes,
-                    private_prior_iou_threshold=cfg.private_prior_iou_threshold,
-                    private_prior_center_threshold=cfg.private_prior_center_threshold,
+                    private_prior_iou_threshold=cfg.detection.private_prior_iou_threshold,
+                    private_prior_center_threshold=cfg.detection.private_prior_center_threshold,
                     frame_track_thresh=frame_track_thresh,
                     frame_mid_thresh=frame_mid_thresh,
                     frame_new_track_thresh=frame_new_track_thresh,
-                    low_stage_only=cfg.private_low_stage_only,
-                    private_min_score=cfg.private_min_score,
-                    private_max_candidates=cfg.private_max_candidates,
-                    private_selection_mode=cfg.private_selection_mode,
-                    private_energy_margin=cfg.private_energy_margin,
+                    low_stage_only=cfg.detection.private_low_stage_only,
+                    private_min_score=cfg.detection.private_min_score,
+                    private_max_candidates=cfg.detection.private_max_candidates,
+                    private_selection_mode=cfg.detection.private_selection_mode,
+                    private_energy_margin=cfg.detection.private_energy_margin,
                 )
                 after_merge_count = int(fused_scores.numel())
                 after_private_count = after_merge_count
@@ -1939,13 +1942,13 @@ def run_eval(
         profile_frame_csv=bool(kwargs.get("profile_frame_csv", False)),
         kwargs=kwargs,
     )
-    if cfg.private_continuation_enabled:
+    if cfg.detection.private_continuation_enabled:
         if cfg.workbench:
             raise ValueError(
                 "private continuation is not implemented for the Workbench "
                 "hot path; disable --workbench"
             )
-        if cfg.private_candidate_nms_iou < cfg.detection.nms_iou_threshold:
+        if cfg.detection.private_candidate_nms_iou < cfg.detection.nms_iou_threshold:
             raise ValueError("private-candidate-nms-iou must be >= nms-iou-threshold")
 
     output_root = cfg.output_root
@@ -1966,9 +1969,11 @@ def run_eval(
             "stability_cost_w": float(cfg.stability_cost_w),
             "assoc_score_cost_w": float(cfg.assoc_score_cost_w),
             "assoc_height_cost_w": float(cfg.assoc_height_cost_w),
-            "private_continuation_enabled": bool(cfg.private_continuation_enabled),
-            "private_selection_mode": cfg.private_selection_mode,
-            "private_energy_margin": float(cfg.private_energy_margin),
+            "private_continuation_enabled": bool(
+                cfg.detection.private_continuation_enabled
+            ),
+            "private_selection_mode": cfg.detection.private_selection_mode,
+            "private_energy_margin": float(cfg.detection.private_energy_margin),
         }
         (output_root / "_association_scoring_profile.json").write_text(
             json.dumps(scoring_profile, indent=2) + "\n"
@@ -2187,9 +2192,9 @@ def run_eval(
     native_postprocess_available = (
         PerceptionPipeline is not None and PerceptionPipelineConfig is not None
     )
-    native_private_mode = str(cfg.private_selection_mode).strip().lower()
+    native_private_mode = str(cfg.detection.private_selection_mode).strip().lower()
     native_private_blockers: list[str] = []
-    if cfg.private_continuation_enabled:
+    if cfg.detection.private_continuation_enabled:
         if native_private_mode != "global":
             native_private_blockers.append(f"selection_mode={native_private_mode}")
         for _flag_name in (
@@ -2203,10 +2208,10 @@ def run_eval(
             if bool(getattr(cfg, _flag_name, False)):
                 native_private_blockers.append(_flag_name)
     native_private_available = bool(
-        cfg.private_continuation_enabled and not native_private_blockers
+        cfg.detection.private_continuation_enabled and not native_private_blockers
     )
     if (
-        cfg.private_continuation_enabled
+        cfg.detection.private_continuation_enabled
         and native_postprocess_available
         and not native_private_available
     ):
@@ -2248,12 +2253,16 @@ def run_eval(
         native_cfg.person_max_area_ratio = cfg.person_max_area_ratio
         native_cfg.max_detections = 2048
         native_cfg.private_continuation_enabled = native_private_available
-        native_cfg.private_candidate_nms_iou = cfg.private_candidate_nms_iou
-        native_cfg.private_min_score = cfg.private_min_score
-        native_cfg.private_max_candidates = cfg.private_max_candidates
-        native_cfg.private_prior_iou_threshold = cfg.private_prior_iou_threshold
-        native_cfg.private_prior_center_threshold = cfg.private_prior_center_threshold
-        native_cfg.private_low_stage_only = cfg.private_low_stage_only
+        native_cfg.private_candidate_nms_iou = cfg.detection.private_candidate_nms_iou
+        native_cfg.private_min_score = cfg.detection.private_min_score
+        native_cfg.private_max_candidates = cfg.detection.private_max_candidates
+        native_cfg.private_prior_iou_threshold = (
+            cfg.detection.private_prior_iou_threshold
+        )
+        native_cfg.private_prior_center_threshold = (
+            cfg.detection.private_prior_center_threshold
+        )
+        native_cfg.private_low_stage_only = cfg.detection.private_low_stage_only
         native_cfg.private_track_thresh = cfg.track_thresh
         native_cfg.private_mid_thresh = cfg.mid_thresh
         native_cfg.private_new_track_thresh = cfg.new_track_thresh
