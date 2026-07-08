@@ -967,14 +967,14 @@ class EvalPipeline:
             birth_prox_norm_thresh=cfg.geometry.birth_prox_norm_thresh,
         )
         detector.tracker.set_oao_params(
-            cfg.oao_tau,
-            cfg.oao_contest_thresh,
-            cfg.oao_score_w,
-            cfg.oao_occ_mode,
-            cfg.oao_crowd_radius,
-            cfg.oao_height_gate,
-            cfg.oao_foot_gate,
-            cfg.oao_ramp_frames,
+            cfg.geometry.oao_tau,
+            cfg.geometry.oao_contest_thresh,
+            cfg.geometry.oao_score_w,
+            cfg.geometry.oao_occ_mode,
+            cfg.geometry.oao_crowd_radius,
+            cfg.geometry.oao_height_gate,
+            cfg.geometry.oao_foot_gate,
+            cfg.geometry.oao_ramp_frames,
         )
         detector.tracker.set_occ_params(
             enabled=cfg.geometry.occ_state_enabled,
