@@ -1,5 +1,11 @@
 # PP22 as a training-pipeline stress test — findings & handoff (2026-07-01)
 
+> **Status: PP22 training-pipeline stress test / NO-GO evidence snapshot.** This
+> file is research evidence — **not** an active training plan and **not** the
+> current-baseline owner. NO-GO verdicts are registered in
+> [no_go_registry.md](../../reference/no_go_registry.md) #52–54; the numbers,
+> tables, conclusions and handoff history below are preserved as recorded.
+
 > **Purpose of the PP22 detour**: not to optimize PP22, but to (a) test how well the
 > current training pipeline adapts to *complex scenes*, and (b) surface latent
 > problems. PP22 (PersonPath22) is small-object-heavy, occlusion-heavy, and
