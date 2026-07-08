@@ -468,17 +468,17 @@ class EvalPipeline:
                 narrow_bonus=0.0,
                 # Quality filter params
                 quality_weights=(
-                    cfg.detection_quality_w_aspect,
-                    cfg.detection_quality_w_center,
-                    cfg.detection_quality_w_area,
+                    cfg.geometry.detection_quality_w_aspect,
+                    cfg.geometry.detection_quality_w_center,
+                    cfg.geometry.detection_quality_w_area,
                 )
-                if cfg.detection_quality_scaling
+                if cfg.geometry.detection_quality_scaling
                 else (0.5, 0.3, 0.2),
-                max_detections=cfg.per_frame_detection_cap or 30,
-                fp_hard_filter=cfg.fp_hard_filter_enabled,
-                fp_min_score=cfg.fp_hard_filter_min_score,
-                fp_max_suspicious_area=cfg.fp_hard_filter_max_suspicious_area,
-                fp_max_suspicious_score=cfg.fp_hard_filter_max_suspicious_score,
+                max_detections=cfg.detection.per_frame_detection_cap or 30,
+                fp_hard_filter=cfg.detection.fp_hard_filter_enabled,
+                fp_min_score=cfg.detection.fp_hard_filter_min_score,
+                fp_max_suspicious_area=cfg.detection.fp_hard_filter_max_suspicious_area,
+                fp_max_suspicious_score=cfg.detection.fp_hard_filter_max_suspicious_score,
                 # ReID params
                 reid_budget_raw=cfg.reid_budget_raw,
                 reid_interval=cfg.reid_interval,
@@ -511,12 +511,12 @@ class EvalPipeline:
         if wb is not None:
             wb_scene_policy = (
                 SceneAdaptivePolicy(
-                    window=cfg.scene_adapt_window,
-                    crowd_box_thresh=cfg.scene_adapt_crowd_thresh,
-                    narrow_aspect_thresh=cfg.scene_adapt_narrow_aspect_thresh,
-                    narrow_width_thresh=cfg.scene_adapt_narrow_width_thresh,
+                    window=cfg.detection.scene_adapt_window,
+                    crowd_box_thresh=cfg.detection.scene_adapt_crowd_thresh,
+                    narrow_aspect_thresh=cfg.detection.scene_adapt_narrow_aspect_thresh,
+                    narrow_width_thresh=cfg.detection.scene_adapt_narrow_width_thresh,
                 )
-                if cfg.scene_adapt_enabled
+                if cfg.detection.scene_adapt_enabled
                 else None
             )
             wb.scene_adapt_policy = wb_scene_policy
@@ -542,12 +542,12 @@ class EvalPipeline:
 
         id_stability_filter = (
             IdStabilityFilter(
-                min_hits=cfg.id_stability_min_hits,
-                min_iou=cfg.id_stability_min_iou,
-                max_center_shift=cfg.id_stability_max_center_shift,
-                max_gap=cfg.id_stability_max_gap,
-                score_ema=cfg.id_stability_score_ema,
-                min_score_ema=cfg.id_stability_min_score_ema,
+                min_hits=cfg.geometry.id_stability_min_hits,
+                min_iou=cfg.geometry.id_stability_min_iou,
+                max_center_shift=cfg.geometry.id_stability_max_center_shift,
+                max_gap=cfg.geometry.id_stability_max_gap,
+                score_ema=cfg.geometry.id_stability_score_ema,
+                min_score_ema=cfg.geometry.id_stability_min_score_ema,
             )
             if cfg.id_stability_filter_enabled
             else None
@@ -655,7 +655,7 @@ class EvalPipeline:
             kalman_accel_lat=cfg.kwargs.get("semantic_kalman_accel_lat", 1.0),
             kalman_fps=_resolve_kalman_fps(
                 cfg.kwargs.get("semantic_kalman_fps", 0.0),
-                Path(cfg.data_root) / cfg.split / seq,
+                Path(cfg.core.data_root) / cfg.core.split / seq,
             ),
             kalman_max_speed_mps=cfg.kwargs.get("semantic_kalman_max_speed_mps", 0.0),
             buffer_size=cfg.semantic_buffer_size,
@@ -718,26 +718,16 @@ class EvalPipeline:
                     cfg.kwargs.get("semantic_appearance_first_margin", 0.03)
                 ),
                 # Motion-based relinking (PythonSemanticRelinker only)
-                motion_vel_alpha=cfg.kwargs.get("motion_vel_alpha", 0.3),
-                motion_acc_alpha=cfg.kwargs.get("motion_acc_alpha", 0.15),
-                motion_min_observations=cfg.kwargs.get("motion_min_observations", 2),
-                motion_w_iou=cfg.kwargs.get("motion_w_iou", 0.3),
-                motion_consistency_check=cfg.kwargs.get(
-                    "motion_consistency_check", True
-                ),
-                motion_consistency_tol=cfg.kwargs.get("motion_consistency_tol", 2.0),
-                motion_enable_motion_only=cfg.kwargs.get(
-                    "motion_enable_motion_only", not _semantic_cheb_gr_claim
-                ),
-                motion_motion_only_lost_frames=cfg.kwargs.get(
-                    "motion_motion_only_lost_frames", 5
-                ),
-                motion_motion_only_iou_threshold=cfg.kwargs.get(
-                    "motion_motion_only_iou_threshold", 0.15
-                ),
-                motion_motion_only_min_lost_frames=cfg.kwargs.get(
-                    "motion_motion_only_min_lost_frames", 1
-                ),
+                motion_vel_alpha=cfg.motion.vel_alpha,
+                motion_acc_alpha=cfg.motion.acc_alpha,
+                motion_min_observations=cfg.motion.min_motion_observations,
+                motion_w_iou=cfg.motion.w_motion_iou,
+                motion_consistency_check=cfg.motion.motion_consistency_check,
+                motion_consistency_tol=cfg.motion.consistency_tol,
+                motion_enable_motion_only=cfg.motion.enable_motion_only,
+                motion_motion_only_lost_frames=cfg.motion.motion_only_lost_frames,
+                motion_motion_only_iou_threshold=cfg.motion.motion_only_iou_threshold,
+                motion_motion_only_min_lost_frames=cfg.motion.motion_only_min_lost_frames,
                 gpu_relink_gate=_semantic_gpu_relink_gate,
                 gpu_relink_gate_graph=cfg.semantic_gpu_relink_gate_graph,
                 gpu_relink_gate_init_query_cap=(
@@ -769,30 +759,16 @@ class EvalPipeline:
                     appearance_first_margin=float(
                         cfg.kwargs.get("semantic_appearance_first_margin", 0.03)
                     ),
-                    motion_vel_alpha=cfg.kwargs.get("motion_vel_alpha", 0.3),
-                    motion_acc_alpha=cfg.kwargs.get("motion_acc_alpha", 0.15),
-                    motion_min_observations=cfg.kwargs.get(
-                        "motion_min_observations", 2
-                    ),
-                    motion_w_iou=cfg.kwargs.get("motion_w_iou", 0.3),
-                    motion_consistency_check=cfg.kwargs.get(
-                        "motion_consistency_check", True
-                    ),
-                    motion_consistency_tol=cfg.kwargs.get(
-                        "motion_consistency_tol", 2.0
-                    ),
-                    motion_enable_motion_only=cfg.kwargs.get(
-                        "motion_enable_motion_only", True
-                    ),
-                    motion_motion_only_lost_frames=cfg.kwargs.get(
-                        "motion_motion_only_lost_frames", 5
-                    ),
-                    motion_motion_only_iou_threshold=cfg.kwargs.get(
-                        "motion_motion_only_iou_threshold", 0.15
-                    ),
-                    motion_motion_only_min_lost_frames=cfg.kwargs.get(
-                        "motion_motion_only_min_lost_frames", 1
-                    ),
+                    motion_vel_alpha=cfg.motion.vel_alpha,
+                    motion_acc_alpha=cfg.motion.acc_alpha,
+                    motion_min_observations=cfg.motion.min_motion_observations,
+                    motion_w_iou=cfg.motion.w_motion_iou,
+                    motion_consistency_check=cfg.motion.motion_consistency_check,
+                    motion_consistency_tol=cfg.motion.consistency_tol,
+                    motion_enable_motion_only=cfg.motion.enable_motion_only,
+                    motion_motion_only_lost_frames=cfg.motion.motion_only_lost_frames,
+                    motion_motion_only_iou_threshold=cfg.motion.motion_only_iou_threshold,
+                    motion_motion_only_min_lost_frames=cfg.motion.motion_only_min_lost_frames,
                 )
                 print(
                     "ℹ️  [Semantic] C++ relinker lacks delayed-claim kwargs; "
@@ -942,7 +918,7 @@ class EvalPipeline:
                     f"top={_ho_requery_top} ring={_ring_cap}x{_ring_depth}"
                 )
 
-        seq_path = Path(cfg.data_root) / cfg.split / seq
+        seq_path = Path(cfg.core.data_root) / cfg.core.split / seq
         config = configparser.ConfigParser()
         config.read(seq_path / "seqinfo.ini")
         w_orig = config.getint("Sequence", "imWidth")
@@ -952,9 +928,9 @@ class EvalPipeline:
 
         # F-1: Per-sequence adaptive params — scale temporal params by fps/30
         seq_reid_interval = cfg.reid_interval
-        _track_buffer_base = int(cfg.kwargs.get("track_buffer", 30))
+        _track_buffer_base = cfg.track_buffer
         seq_track_buffer = _track_buffer_base
-        if cfg.per_seq_adapt and seq_fps != 30:
+        if cfg.core.per_seq_adapt and seq_fps != 30:
             fps_scale = seq_fps / 30.0
             seq_reid_interval = max(1, round(cfg.reid_interval * fps_scale))
             seq_track_buffer = max(10, round(_track_buffer_base * fps_scale))
@@ -967,45 +943,45 @@ class EvalPipeline:
                 3, h_orig, w_orig, dtype=torch.float32, device="cuda"
             )
         detector.tracker.set_quality_params(
-            enabled=cfg.detection_quality_scaling,
-            w_aspect=cfg.detection_quality_w_aspect,
-            w_center=cfg.detection_quality_w_center,
-            w_area=cfg.detection_quality_w_area,
+            enabled=cfg.geometry.detection_quality_scaling,
+            w_aspect=cfg.geometry.detection_quality_w_aspect,
+            w_center=cfg.geometry.detection_quality_w_center,
+            w_area=cfg.geometry.detection_quality_w_area,
         )
         detector.tracker.set_params(
-            track_thresh=cfg.track_thresh,
-            high_thresh=cfg.high_thresh,
-            match_thresh=cfg.match_thresh,
+            track_thresh=cfg.core.track_thresh,
+            high_thresh=cfg.core.high_thresh,
+            match_thresh=cfg.core.match_thresh,
             track_buffer=seq_track_buffer,
-            mid_thresh=cfg.mid_thresh,
-            confirm_streak=int(cfg.kwargs.get("confirm_streak", 1)),
-            confirm_score_thresh=float(cfg.kwargs.get("confirm_score_thresh", 0.0)),
-            adaptive_confirmation=bool(cfg.kwargs.get("adaptive_confirmation", False)),
-            new_track_thresh=cfg.new_track_thresh,
-            kalman_adapt_mode=cfg.kalman_adapt_mode,
-            r_scale=cfg.kalman_r_scale,
-            vel_dir_weight=cfg.vel_dir_weight,
-            fuse_score_weight=cfg.fuse_score_weight,
-            stage2_match_thresh=cfg.stage2_match_thresh,
-            birth_low_score_thresh=cfg.birth_low_score_thresh,
-            birth_prox_norm_thresh=cfg.birth_prox_norm_thresh,
+            mid_thresh=cfg.core.mid_thresh,
+            confirm_streak=cfg.core.confirm_streak,
+            confirm_score_thresh=cfg.core.confirm_score_thresh,
+            adaptive_confirmation=cfg.core.adaptive_confirmation,
+            new_track_thresh=cfg.core.new_track_thresh,
+            kalman_adapt_mode=cfg.geometry.kalman_adapt_mode,
+            r_scale=cfg.geometry.kalman_r_scale,
+            vel_dir_weight=cfg.geometry.vel_dir_weight,
+            fuse_score_weight=cfg.geometry.fuse_score_weight,
+            stage2_match_thresh=cfg.geometry.stage2_match_thresh,
+            birth_low_score_thresh=cfg.geometry.birth_low_score_thresh,
+            birth_prox_norm_thresh=cfg.geometry.birth_prox_norm_thresh,
         )
         detector.tracker.set_oao_params(
-            cfg.oao_tau,
-            cfg.oao_contest_thresh,
-            cfg.oao_score_w,
-            cfg.oao_occ_mode,
-            cfg.oao_crowd_radius,
-            cfg.oao_height_gate,
-            cfg.oao_foot_gate,
-            cfg.oao_ramp_frames,
+            cfg.geometry.oao_tau,
+            cfg.geometry.oao_contest_thresh,
+            cfg.geometry.oao_score_w,
+            cfg.geometry.oao_occ_mode,
+            cfg.geometry.oao_crowd_radius,
+            cfg.geometry.oao_height_gate,
+            cfg.geometry.oao_foot_gate,
+            cfg.geometry.oao_ramp_frames,
         )
         detector.tracker.set_occ_params(
-            enabled=cfg.occ_state_enabled,
-            iou_thresh=cfg.occ_iou_thresh,
-            foot_gap=cfg.occ_foot_gap,
-            ttl=cfg.occ_ttl,
-            cost_weight=cfg.occ_cost_weight,
+            enabled=cfg.geometry.occ_state_enabled,
+            iou_thresh=cfg.geometry.occ_iou_thresh,
+            foot_gap=cfg.geometry.occ_foot_gap,
+            ttl=cfg.geometry.occ_ttl,
+            cost_weight=cfg.geometry.occ_cost_weight,
         )
         association_scoring_mode = (
             str(getattr(cfg, "association_scoring_mode", "baseline")).strip().lower()
@@ -1032,9 +1008,9 @@ class EvalPipeline:
                 float(getattr(cfg, "assoc_height_cost_w", 0.0)),
             )
         active_tracker_thresholds = (
-            cfg.track_thresh,
-            cfg.mid_thresh,
-            cfg.new_track_thresh,
+            cfg.core.track_thresh,
+            cfg.core.mid_thresh,
+            cfg.core.new_track_thresh,
         )
 
         pool = AdaptiveFramePool(h_orig, w_orig)
@@ -1140,7 +1116,7 @@ class EvalPipeline:
         )
         _multi_birth_manager = (
             MultiSignalBirthManager(
-                new_track_thresh=cfg.new_track_thresh,
+                new_track_thresh=cfg.core.new_track_thresh,
                 min_score=cfg.multi_birth_min_score,
                 min_frames=cfg.multi_birth_min_frames,
                 target_motion_px=cfg.multi_birth_target_motion,
@@ -1161,17 +1137,19 @@ class EvalPipeline:
         # applies seq-local narrow_person_score_bonus for crowded_narrow scenes.
         _scene_policy = (
             SceneAdaptivePolicy(
-                window=cfg.scene_adapt_window,
-                crowd_box_thresh=cfg.scene_adapt_crowd_thresh,
-                narrow_aspect_thresh=cfg.scene_adapt_narrow_aspect_thresh,
-                narrow_width_thresh=cfg.scene_adapt_narrow_width_thresh,
+                window=cfg.detection.scene_adapt_window,
+                crowd_box_thresh=cfg.detection.scene_adapt_crowd_thresh,
+                narrow_aspect_thresh=cfg.detection.scene_adapt_narrow_aspect_thresh,
+                narrow_width_thresh=cfg.detection.scene_adapt_narrow_width_thresh,
             )
-            if cfg.scene_adapt_enabled
+            if cfg.detection.scene_adapt_enabled
             else None
         )
         # Start with 0 bonus; if scene_adapt disabled, use the configured value directly.
         seq_narrow_bonus: float = (
-            0.0 if cfg.scene_adapt_enabled else cfg.narrow_person_score_bonus
+            0.0
+            if cfg.detection.scene_adapt_enabled
+            else cfg.detection.narrow_person_score_bonus
         )
         start_time = time.time()
         warmup_frames = int(cfg.kwargs.get("warmup_frames", 50))
@@ -1449,9 +1427,9 @@ class EvalPipeline:
                 frame_id=_frame_id,
                 track_results=_track_results,
                 host_batch=_host_batch,
-                person_class=cfg.person_class,
-                track_person_only=cfg.track_person_only,
-                geometry_suspect_support=cfg.geometry_suspect_support,
+                person_class=cfg.detection.person_class,
+                track_person_only=cfg.detection.track_person_only,
+                geometry_suspect_support=cfg.geometry.geometry_suspect_support,
                 geometry_suspect_support_score=cfg.geometry_suspect_support_score,
                 id_stability_filter=id_stability_filter,
                 embeddings=_embeddings,
@@ -1641,28 +1619,30 @@ def _build_gmc_estimator(
     # A8: Uniform CMC & 2D MMD
     gmc_estimator = None
     if cfg.gmc_enabled:
-        if cfg.gmc_mode == "gpu":
+        if cfg.core.gmc_mode == "gpu":
             # Default: C++ cuFFT GMC, graph-captured in the frame loop below.
             # Falls back to the pure-Python PyGraphedGMC (also graph-capturable)
             # only if the native extension is unavailable.
             try:
                 from saccade_tracking_ext import GMC as CppGMC
 
-                gmc_estimator = CppGMC(downscale=cfg.gmc_downscale)
+                gmc_estimator = CppGMC(downscale=cfg.core.gmc_downscale)
                 if hasattr(gmc_estimator, "set_profiling_enabled"):
                     gmc_estimator.set_profiling_enabled(profile_stages)
             except (ImportError, AttributeError):
                 try:
-                    gmc_estimator = PyGraphedGMC(downscale=cfg.gmc_downscale)
+                    gmc_estimator = PyGraphedGMC(downscale=cfg.core.gmc_downscale)
                 except Exception:
-                    gmc_estimator = SparseOpticalFlowGMC(downscale=cfg.gmc_downscale)
-        elif cfg.gmc_mode == "tile":
+                    gmc_estimator = SparseOpticalFlowGMC(
+                        downscale=cfg.core.gmc_downscale
+                    )
+        elif cfg.core.gmc_mode == "tile":
             # Tile-based phase-correlation similarity GMC (4-DOF: s, θ, tx, ty).
             # Eager Python prototype; falls back to global PCR translation when
             # the affine fit is not confident/plausible (never to identity).
-            gmc_estimator = TilePhaseCorrAffineGMC(downscale=cfg.gmc_downscale)
+            gmc_estimator = TilePhaseCorrAffineGMC(downscale=cfg.core.gmc_downscale)
         else:
-            gmc_estimator = SparseOpticalFlowGMC(downscale=cfg.gmc_downscale)
+            gmc_estimator = SparseOpticalFlowGMC(downscale=cfg.core.gmc_downscale)
     _use_direct_gmc = hasattr(gmc_estimator, "estimate_into_direct")
     # C++ estimate_into_direct is CUDA-graph-capturable (PyGraphedGMC self-graphs
     # via make_graphed_callables, so it is excluded here). Capture lazily on the

@@ -15,6 +15,7 @@ class ReIDConfig:
     reid_mode: str = "off"
     reid_model: str = "siglip2"
     reid_engine_path: str = ""
+    fpn_reid_ckpt: str = ""
     # Budget + scheduling
     reid_budget: float = 0.2
     reid_interval: int = 20

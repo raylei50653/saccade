@@ -48,6 +48,7 @@ class CoreConfig:
     per_seq_adapt: bool = True
     warmup_frames: int = 50
     profile_stages: bool = False
+    profile_frame_csv: bool = False
     latency_only: bool = False
     # MLflow tracking
     mlflow_uri: str = "http://localhost:5000"

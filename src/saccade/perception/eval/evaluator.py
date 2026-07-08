@@ -330,7 +330,9 @@ def _run_frame(
         _lines, state.prev_track_ids = _flush_deferred_emit(
             state.defer_emit_event,
             _pinned_result_bufs,
-            default_class_id=cfg.person_class if cfg.track_person_only else None,
+            default_class_id=cfg.detection.person_class
+            if cfg.detection.track_person_only
+            else None,
             global_id_mapper=global_id_mapper,
             seq=seq,
             frame_id=state.defer_emit_fid,
@@ -422,9 +424,9 @@ def _run_frame(
                     apply_frame_preprocess(
                         pool.frame_buffer,
                         cfg.preprocess_modes,
-                        cfg.gamma,
-                        cfg.gamma_luma_threshold,
-                        cfg.contrast,
+                        cfg.detection.gamma,
+                        cfg.detection.gamma_luma_threshold,
+                        cfg.detection.contrast,
                     ),
                     pool.mark_rgb_current(),
                     (
@@ -509,9 +511,9 @@ def _run_frame(
                         apply_frame_preprocess(
                             pool.frame_buffer,
                             cfg.preprocess_modes,
-                            cfg.gamma,
-                            cfg.gamma_luma_threshold,
-                            cfg.contrast,
+                            cfg.detection.gamma,
+                            cfg.detection.gamma_luma_threshold,
+                            cfg.detection.contrast,
                         ),
                         pool.mark_rgb_current(),
                         (
@@ -556,14 +558,14 @@ def _run_frame(
                 if wb_scene_policy.is_classified and wb_scene_policy.stats is not None:
                     st = wb_scene_policy.stats
                     if st.scene_type == "crowded_narrow":
-                        state.seq_narrow_bonus = cfg.narrow_person_score_bonus
+                        state.seq_narrow_bonus = cfg.detection.narrow_person_score_bonus
                     wb.narrow_bonus = state.seq_narrow_bonus
                     print(
                         f"  [scene_adapt] {seq} @ frame {frame_id}: {st}"
                         + (
                             f" → narrow_bonus={state.seq_narrow_bonus:.2f}"
-                            if cfg.scene_adapt_enabled
-                            and cfg.narrow_person_score_bonus > 0
+                            if cfg.detection.scene_adapt_enabled
+                            and cfg.detection.narrow_person_score_bonus > 0
                             else ""
                         )
                     )
@@ -744,13 +746,13 @@ def _run_frame(
                 if _scene_policy.is_classified and _scene_policy.stats is not None:
                     st = _scene_policy.stats
                     if st.scene_type == "crowded_narrow":
-                        state.seq_narrow_bonus = cfg.narrow_person_score_bonus
+                        state.seq_narrow_bonus = cfg.detection.narrow_person_score_bonus
                     print(
                         f"  [scene_adapt] {seq} @ frame {frame_id}: {st}"
                         + (
                             f" → narrow_bonus={state.seq_narrow_bonus:.2f}"
-                            if cfg.scene_adapt_enabled
-                            and cfg.narrow_person_score_bonus > 0
+                            if cfg.detection.scene_adapt_enabled
+                            and cfg.detection.narrow_person_score_bonus > 0
                             else ""
                         )
                     )
@@ -795,7 +797,7 @@ def _run_frame(
                     time.perf_counter() - t_keypoint_align_start
                 ) * 1000
 
-            # Keep low-score boxes down to cfg.track_thresh so ByteTrack's
+            # Keep low-score boxes down to cfg.core.track_thresh so ByteTrack's
             # second-stage association can actually use them.
             post_gpu_start_event = None
             post_gpu_end_event = None
@@ -1012,12 +1014,12 @@ def _run_frame(
                     fused_classes,
                     frame_w=w_orig,
                     frame_h=h_orig,
-                    person_class=cfg.person_class,
+                    person_class=cfg.detection.person_class,
                     bonus=state.seq_narrow_bonus,
-                    max_width_ratio=cfg.narrow_person_max_width_ratio,
-                    min_height_ratio=cfg.narrow_person_min_height_ratio,
-                    min_aspect=cfg.narrow_person_min_aspect,
-                    max_aspect=cfg.narrow_person_max_aspect,
+                    max_width_ratio=cfg.detection.narrow_person_max_width_ratio,
+                    min_height_ratio=cfg.detection.narrow_person_min_height_ratio,
+                    min_aspect=cfg.detection.narrow_person_min_aspect,
+                    max_aspect=cfg.detection.narrow_person_max_aspect,
                 )
                 t_sub_start = time.perf_counter()
                 if state._frame_stage_times is not None:
@@ -1027,27 +1029,27 @@ def _run_frame(
                     fused_scores,
                     fused_classes,
                     score_threshold=min(
-                        cfg.conf_threshold,
-                        cfg.track_thresh,
-                        cfg.crowd_conf_threshold
-                        if cfg.crowd_low_score_mode
-                        else cfg.conf_threshold,
-                        cfg.crowd_track_thresh
-                        if cfg.crowd_low_score_mode
-                        else cfg.track_thresh,
+                        cfg.core.conf_threshold,
+                        cfg.core.track_thresh,
+                        cfg.detection.crowd_conf_threshold
+                        if cfg.detection.crowd_low_score_mode
+                        else cfg.core.conf_threshold,
+                        cfg.geometry.crowd_track_thresh
+                        if cfg.detection.crowd_low_score_mode
+                        else cfg.core.track_thresh,
                     ),
-                    track_person_only=cfg.track_person_only,
-                    person_class=cfg.person_class,
+                    track_person_only=cfg.detection.track_person_only,
+                    person_class=cfg.detection.person_class,
                     is_tiled=is_tiled,
                     frame_w=w_orig,
                     frame_h=h_orig,
-                    person_geometry_prior=cfg.person_geometry_prior,
-                    geometry_suspect_support=cfg.geometry_suspect_support,
-                    person_min_height_ratio=cfg.person_min_height_ratio,
-                    person_min_aspect=cfg.person_min_aspect,
-                    person_max_aspect=cfg.person_max_aspect,
-                    person_min_area_ratio=cfg.person_min_area_ratio,
-                    person_max_area_ratio=cfg.person_max_area_ratio,
+                    person_geometry_prior=cfg.geometry.person_geometry_prior,
+                    geometry_suspect_support=cfg.geometry.geometry_suspect_support,
+                    person_min_height_ratio=cfg.geometry.person_min_height_ratio,
+                    person_min_aspect=cfg.geometry.person_min_aspect,
+                    person_max_aspect=cfg.geometry.person_max_aspect,
+                    person_min_area_ratio=cfg.geometry.person_min_area_ratio,
+                    person_max_area_ratio=cfg.geometry.person_max_area_ratio,
                 )
                 fused_boxes = fused_boxes[keep_indices]
                 fused_scores = fused_scores[keep_indices]
@@ -1073,17 +1075,20 @@ def _run_frame(
                         if geometry_suspect_mask.numel() > 0:
                             geometry_suspect_mask = geometry_suspect_mask[valid_w]
 
-                if cfg.detection_quality_scaling and fused_boxes.numel() > 0:
+                if cfg.geometry.detection_quality_scaling and fused_boxes.numel() > 0:
                     quality_factors = _compute_detection_quality_batch(
                         fused_boxes,
                         w_orig,
                         h_orig,
-                        w_aspect=cfg.detection_quality_w_aspect,
-                        w_center=cfg.detection_quality_w_center,
-                        w_area=cfg.detection_quality_w_area,
+                        w_aspect=cfg.geometry.detection_quality_w_aspect,
+                        w_center=cfg.geometry.detection_quality_w_center,
+                        w_area=cfg.geometry.detection_quality_w_area,
                     )
                     fused_scores = fused_scores * quality_factors
-                elif cfg.geometry_suspect_support and geometry_suspect_mask.numel() > 0:
+                elif (
+                    cfg.geometry.geometry_suspect_support
+                    and geometry_suspect_mask.numel() > 0
+                ):
                     if state._frame_stage_times is not None:
                         _t_any = time.perf_counter()
                     _suspect_any = geometry_suspect_mask.any()
@@ -1148,7 +1153,7 @@ def _run_frame(
             private_motion_prior_boxes = None
             if (
                 perception_pipeline is None
-                and (is_tiled or cfg.nms_iou_threshold is not None)
+                and (is_tiled or cfg.detection.nms_iou_threshold is not None)
                 and fused_boxes.numel() > 0
             ):
                 if profile_stages:
@@ -1175,8 +1180,8 @@ def _run_frame(
                     fused_boxes,
                     fused_scores,
                     fused_classes,
-                    cfg.nms_iou_threshold,
-                    class_aware=not cfg.track_person_only,
+                    cfg.detection.nms_iou_threshold,
+                    class_aware=not cfg.detection.track_person_only,
                     priors=priors,
                     prior_classes=prior_classes,
                     prior_iou_threshold=onms_prior_iou_threshold,
@@ -1207,19 +1212,19 @@ def _run_frame(
                     classes=fused_classes,
                 )
 
-            if cfg.tile_diagnostics and is_tiled:
+            if cfg.detection.tile_diagnostics and is_tiled:
                 seq_tile_diag["frames_tiled"] += 1
                 seq_tile_diag["pre_merge_seam_boxes"] += _count_tile_seam_boxes(
                     fused_boxes,
-                    tiling=cfg.tiling,
+                    tiling=cfg.detection.tiling,
                     h_orig=h_orig,
                     w_orig=w_orig,
                 )
 
             use_repo_cross_tile_merge = (
-                cfg.cross_tile_merge
+                cfg.detection.cross_tile_merge
                 and is_tiled
-                and cfg.tiling != "sahi_960p_2x2"
+                and cfg.detection.tiling != "sahi_960p_2x2"
                 and fused_boxes.numel() > 1
             )
             if use_repo_cross_tile_merge:
@@ -1231,26 +1236,27 @@ def _run_frame(
                         fused_boxes,
                         fused_scores,
                         fused_classes,
-                        tiling=cfg.tiling,
+                        tiling=cfg.detection.tiling,
                         frame_w=w_orig,
                         frame_h=h_orig,
-                        seam_margin_canvas_px=cfg.tile_seam_margin_canvas_px,
-                        seam_center_scale=cfg.cross_tile_seam_center_scale,
-                        seam_area_ratio_threshold=cfg.cross_tile_seam_area_ratio_threshold,
-                        seam_min_overlap_ratio=cfg.cross_tile_seam_min_overlap_ratio,
+                        seam_margin_canvas_px=cfg.detection.tile_seam_margin_canvas_px,
+                        seam_center_scale=cfg.detection.cross_tile_seam_center_scale,
+                        seam_area_ratio_threshold=cfg.detection.cross_tile_seam_area_ratio_threshold,
+                        seam_min_overlap_ratio=cfg.detection.cross_tile_seam_min_overlap_ratio,
                     )
                 )
                 # MOT17-b: penalise boxes that were merged from multiple tiles.
                 # Merged boxes have uncertain positions; lowering their score makes
                 # ByteTracker treat them more conservatively during association.
-                if cfg.cross_tile_score_penalty < 1.0:
+                if cfg.detection.cross_tile_score_penalty < 1.0:
                     merged_mask = _merge_counts > 1
                     if merged_mask.any():
                         fused_scores = fused_scores.clone()
                         fused_scores[merged_mask] = (
-                            fused_scores[merged_mask] * cfg.cross_tile_score_penalty
+                            fused_scores[merged_mask]
+                            * cfg.detection.cross_tile_score_penalty
                         )
-                if cfg.tile_diagnostics:
+                if cfg.detection.tile_diagnostics:
                     merged_mask = _merge_counts > 1
                     seq_tile_diag["merged_clusters"] += int(merged_mask.sum().item())
                     seq_tile_diag["merged_members"] += int(
@@ -1265,23 +1271,31 @@ def _run_frame(
                     seq_stage_totals["post_merge"] += elapsed_ms
             after_merge_count = int(fused_scores.numel())
             crowd_low_active = (
-                cfg.crowd_low_score_mode
-                and after_merge_count >= cfg.crowd_low_score_trigger
+                cfg.detection.crowd_low_score_mode
+                and after_merge_count >= cfg.detection.crowd_low_score_trigger
             )
             frame_conf_threshold = (
-                cfg.crowd_conf_threshold if crowd_low_active else cfg.conf_threshold
+                cfg.detection.crowd_conf_threshold
+                if crowd_low_active
+                else cfg.core.conf_threshold
             )
             frame_track_thresh = (
-                cfg.crowd_track_thresh if crowd_low_active else cfg.track_thresh
+                cfg.geometry.crowd_track_thresh
+                if crowd_low_active
+                else cfg.core.track_thresh
             )
             frame_mid_thresh = (
-                cfg.crowd_mid_thresh if crowd_low_active else cfg.mid_thresh
+                cfg.geometry.crowd_mid_thresh
+                if crowd_low_active
+                else cfg.core.mid_thresh
             )
             frame_new_track_thresh = (
-                cfg.crowd_new_track_thresh if crowd_low_active else cfg.new_track_thresh
+                cfg.geometry.crowd_new_track_thresh
+                if crowd_low_active
+                else cfg.core.new_track_thresh
             )
             frame_score_floor = min(frame_conf_threshold, frame_track_thresh)
-            base_score_floor = min(cfg.conf_threshold, cfg.track_thresh)
+            base_score_floor = min(cfg.core.conf_threshold, cfg.core.track_thresh)
             (
                 fused_boxes,
                 fused_scores,
@@ -1320,9 +1334,9 @@ def _run_frame(
                     fused_boxes,
                     w_orig,
                     h_orig,
-                    w_aspect=cfg.detection_quality_w_aspect,
-                    w_center=cfg.detection_quality_w_center,
-                    w_area=cfg.detection_quality_w_area,
+                    w_aspect=cfg.geometry.detection_quality_w_aspect,
+                    w_center=cfg.geometry.detection_quality_w_center,
+                    w_area=cfg.geometry.detection_quality_w_area,
                 )
                 (
                     fused_boxes,
@@ -1367,12 +1381,15 @@ def _run_frame(
                 after_merge_count_before_private = max(
                     0, after_merge_count - private_added_count
                 )
-            if cfg.private_continuation_enabled and pre_private_boxes is not None:
+            if (
+                cfg.detection.private_continuation_enabled
+                and pre_private_boxes is not None
+            ):
                 if (
-                    cfg.private_prior_iou_threshold > 0.0
-                    or cfg.private_prior_center_threshold > 0.0
+                    cfg.detection.private_prior_iou_threshold > 0.0
+                    or cfg.detection.private_prior_center_threshold > 0.0
                     or (
-                        cfg.private_selection_mode
+                        cfg.detection.private_selection_mode
                         in {
                             "per_track",
                             "suppressor_aware",
@@ -1405,23 +1422,23 @@ def _run_frame(
                     pre_nms_geometry_suspect_mask=pre_private_geometry_suspect_mask,
                     pre_nms_aligned_keypoints=pre_private_aligned_keypoints,
                     baseline_keep=private_baseline_keep,
-                    baseline_nms_iou=cfg.nms_iou_threshold,
-                    candidate_nms_iou=cfg.private_candidate_nms_iou,
-                    class_aware=not cfg.track_person_only,
+                    baseline_nms_iou=cfg.detection.nms_iou_threshold,
+                    candidate_nms_iou=cfg.detection.private_candidate_nms_iou,
+                    class_aware=not cfg.detection.track_person_only,
                     priors=private_priors,
                     prior_classes=private_prior_classes,
                     prior_iou_threshold=onms_prior_iou_threshold,
                     private_prior_boxes=private_motion_prior_boxes,
-                    private_prior_iou_threshold=cfg.private_prior_iou_threshold,
-                    private_prior_center_threshold=cfg.private_prior_center_threshold,
+                    private_prior_iou_threshold=cfg.detection.private_prior_iou_threshold,
+                    private_prior_center_threshold=cfg.detection.private_prior_center_threshold,
                     frame_track_thresh=frame_track_thresh,
                     frame_mid_thresh=frame_mid_thresh,
                     frame_new_track_thresh=frame_new_track_thresh,
-                    low_stage_only=cfg.private_low_stage_only,
-                    private_min_score=cfg.private_min_score,
-                    private_max_candidates=cfg.private_max_candidates,
-                    private_selection_mode=cfg.private_selection_mode,
-                    private_energy_margin=cfg.private_energy_margin,
+                    low_stage_only=cfg.detection.private_low_stage_only,
+                    private_min_score=cfg.detection.private_min_score,
+                    private_max_candidates=cfg.detection.private_max_candidates,
+                    private_selection_mode=cfg.detection.private_selection_mode,
+                    private_energy_margin=cfg.detection.private_energy_margin,
                 )
                 after_merge_count = int(fused_scores.numel())
                 after_private_count = after_merge_count
@@ -1440,30 +1457,30 @@ def _run_frame(
                         scores=fused_scores,
                         classes=fused_classes,
                     )
-            if cfg.tile_diagnostics and is_tiled:
+            if cfg.detection.tile_diagnostics and is_tiled:
                 seq_tile_diag["post_merge_seam_boxes"] += _count_tile_seam_boxes(
                     fused_boxes,
-                    tiling=cfg.tiling,
+                    tiling=cfg.detection.tiling,
                     h_orig=h_orig,
                     w_orig=w_orig,
-                    seam_margin_canvas_px=cfg.tile_seam_margin_canvas_px,
+                    seam_margin_canvas_px=cfg.detection.tile_seam_margin_canvas_px,
                 )
             if (
-                cfg.tile_seam_score_penalty < 1.0
+                cfg.detection.tile_seam_score_penalty < 1.0
                 and is_tiled
                 and fused_boxes.numel() > 0
             ):
                 seam_mask = _tile_seam_mask(
                     fused_boxes,
-                    tiling=cfg.tiling,
+                    tiling=cfg.detection.tiling,
                     h_orig=h_orig,
                     w_orig=w_orig,
-                    seam_margin_canvas_px=cfg.tile_seam_margin_canvas_px,
+                    seam_margin_canvas_px=cfg.detection.tile_seam_margin_canvas_px,
                 )
                 if seam_mask.any():
                     fused_scores = fused_scores.clone()
                     fused_scores[seam_mask] = (
-                        fused_scores[seam_mask] * cfg.tile_seam_score_penalty
+                        fused_scores[seam_mask] * cfg.detection.tile_seam_score_penalty
                     )
             if state.frame_ledger is not None and frame_id > warmup_frames:
                 state._frame_det_counts = {
@@ -1714,7 +1731,8 @@ def _run_frame(
                 embed_candidates = [
                     c
                     for c in candidates
-                    if int(c.class_id) == cfg.person_class and c.hit_streak >= 1
+                    if int(c.class_id) == cfg.detection.person_class
+                    and c.hit_streak >= 1
                 ]
                 if not embed_candidates:
                     return 0, 0, 0, 0.0, 0, 0, set()
@@ -1933,13 +1951,13 @@ def run_eval(
         profile_frame_csv=bool(kwargs.get("profile_frame_csv", False)),
         kwargs=kwargs,
     )
-    if cfg.private_continuation_enabled:
-        if cfg.workbench:
+    if cfg.detection.private_continuation_enabled:
+        if cfg.core.workbench:
             raise ValueError(
                 "private continuation is not implemented for the Workbench "
                 "hot path; disable --workbench"
             )
-        if cfg.private_candidate_nms_iou < cfg.nms_iou_threshold:
+        if cfg.detection.private_candidate_nms_iou < cfg.detection.nms_iou_threshold:
             raise ValueError("private-candidate-nms-iou must be >= nms-iou-threshold")
 
     output_root = cfg.output_root
@@ -1950,19 +1968,22 @@ def run_eval(
     occ_audit_log_path = output_root / "_occ_audit.csv"
     if getattr(cfg, "occ_audit_log", False):
         occ_audit_log_path.unlink(missing_ok=True)
-    if cfg.assoc_energy_diagnostics:
+    if cfg.geometry.assoc_energy_diagnostics:
         scoring_profile = {
-            "association_scoring_mode": cfg.association_scoring_mode,
+            "association_scoring_mode": cfg.geometry.association_scoring_mode,
             "multiplicative_cost": bool(
-                cfg.multiplicative_cost or cfg.association_scoring_mode == "energy"
+                cfg.geometry.multiplicative_cost
+                or cfg.geometry.association_scoring_mode == "energy"
             ),
-            "sinkhorn_lambda": float(cfg.sinkhorn_lambda),
-            "stability_cost_w": float(cfg.stability_cost_w),
-            "assoc_score_cost_w": float(cfg.assoc_score_cost_w),
-            "assoc_height_cost_w": float(cfg.assoc_height_cost_w),
-            "private_continuation_enabled": bool(cfg.private_continuation_enabled),
-            "private_selection_mode": cfg.private_selection_mode,
-            "private_energy_margin": float(cfg.private_energy_margin),
+            "sinkhorn_lambda": float(cfg.geometry.sinkhorn_lambda),
+            "stability_cost_w": float(cfg.geometry.stability_cost_w),
+            "assoc_score_cost_w": float(cfg.geometry.assoc_score_cost_w),
+            "assoc_height_cost_w": float(cfg.geometry.assoc_height_cost_w),
+            "private_continuation_enabled": bool(
+                cfg.detection.private_continuation_enabled
+            ),
+            "private_selection_mode": cfg.detection.private_selection_mode,
+            "private_energy_margin": float(cfg.detection.private_energy_margin),
         }
         (output_root / "_association_scoring_profile.json").write_text(
             json.dumps(scoring_profile, indent=2) + "\n"
@@ -1971,14 +1992,14 @@ def run_eval(
     overall_latency_ms = []
     overall_throughput_frames = 0
     overall_throughput_seconds = 0.0
-    debug_dump_seq = cfg.debug_dump_seq
-    debug_dump_frames = _parse_debug_frame_ranges(cfg.debug_dump_frames)
-    debug_dump_csv = cfg.debug_dump_csv
+    debug_dump_seq = cfg.core.debug_dump_seq
+    debug_dump_frames = _parse_debug_frame_ranges(cfg.core.debug_dump_frames)
+    debug_dump_csv = cfg.core.debug_dump_csv
     debug_stage_dump_rows: list[dict[str, float | int | str]] = []
-    debug_birth_csv = cfg.debug_birth_csv
+    debug_birth_csv = cfg.core.debug_birth_csv
     debug_birth_rows: list[dict[str, float | int | str | bool]] = []
-    profile_stages = cfg.profile_stages
-    profile_frame_csv = cfg.profile_frame_csv
+    profile_stages = cfg.core.profile_stages
+    profile_frame_csv = cfg.core.profile_frame_csv
     if profile_frame_csv:
         from .frame_ledger import FrameLedger
 
@@ -2000,18 +2021,18 @@ def run_eval(
             f"[STREAM] run_eval: current={_cs.cuda_stream:#x} default={_ds.cuda_stream:#x}"
         )
         print(
-            f"[STREAM] barrier={_detect_barrier_mode()} workbench={cfg.workbench} whole_graph={getattr(detector, 'use_whole_graph', False)} double_buffer={_double_buffer_eligible(cfg, detector, profile_stages)}"
+            f"[STREAM] barrier={_detect_barrier_mode()} workbench={cfg.core.workbench} whole_graph={getattr(detector, 'use_whole_graph', False)} double_buffer={_double_buffer_eligible(cfg, detector, profile_stages)}"
         )
         print(
-            f"[STREAM] async_reid={cfg.async_reid} gmc_mode={cfg.gmc_mode} decode={'NVJPEG' if _os.environ.get('SACCADE_GPU_DECODE') == '1' else 'DALI'}"
+            f"[STREAM] async_reid={cfg.async_reid} gmc_mode={cfg.core.gmc_mode} decode={'NVJPEG' if _os.environ.get('SACCADE_GPU_DECODE') == '1' else 'DALI'}"
         )
-    detector_box_format = str(kwargs.get("detector_box_format", "xyxy"))
+    detector_box_format = cfg.detection.detector_box_format
     stage_summary_lines = []
     global_id_mapper = GlobalTrackIdMapper()
     external_fp_rule_config = RuleBaselineConfig()
     external_fp_logistic_model = None
-    if cfg.external_fp_filter_mode in {"logistic", "softmax3"}:
-        model_path = Path(cfg.external_fp_logistic_model)
+    if cfg.detection.external_fp_filter_mode in {"logistic", "softmax3"}:
+        model_path = Path(cfg.detection.external_fp_logistic_model)
         if not model_path.is_file():
             raise FileNotFoundError(
                 f"external FP logistic model not found: {model_path}"
@@ -2143,15 +2164,20 @@ def run_eval(
     if cfg.reid_crop_layout not in {"full", "parts"}:
         raise ValueError(f"Unsupported reid_crop_layout: {cfg.reid_crop_layout}")
 
-    if cfg.tiling == "mamba_global_2x2":
+    if cfg.detection.tiling == "mamba_global_2x2":
         detect_fn = detect_mamba_global_2x2
-    elif cfg.tiling == "960p_3x2":
+    elif cfg.detection.tiling == "960p_3x2":
         detect_fn = detect_960p_3x2_tiled
-    elif cfg.tiling == "sahi_960p_2x2":
+    elif cfg.detection.tiling == "sahi_960p_2x2":
         detect_fn = detect_sahi_960p_2x2
-    elif cfg.tiling == "native_640":
+    elif cfg.detection.tiling == "native_640":
         detect_fn = detect_native_640
-    elif cfg.tiling in ("native_960", "mamba_960", "native_1024", "native_1280"):
+    elif cfg.detection.tiling in (
+        "native_960",
+        "mamba_960",
+        "native_1024",
+        "native_1280",
+    ):
         detect_fn = (
             detect_native_960_tta if getattr(cfg, "tta", False) else detect_native_960
         )
@@ -2176,9 +2202,9 @@ def run_eval(
     native_postprocess_available = (
         PerceptionPipeline is not None and PerceptionPipelineConfig is not None
     )
-    native_private_mode = str(cfg.private_selection_mode).strip().lower()
+    native_private_mode = str(cfg.detection.private_selection_mode).strip().lower()
     native_private_blockers: list[str] = []
-    if cfg.private_continuation_enabled:
+    if cfg.detection.private_continuation_enabled:
         if native_private_mode != "global":
             native_private_blockers.append(f"selection_mode={native_private_mode}")
         for _flag_name in (
@@ -2192,10 +2218,10 @@ def run_eval(
             if bool(getattr(cfg, _flag_name, False)):
                 native_private_blockers.append(_flag_name)
     native_private_available = bool(
-        cfg.private_continuation_enabled and not native_private_blockers
+        cfg.detection.private_continuation_enabled and not native_private_blockers
     )
     if (
-        cfg.private_continuation_enabled
+        cfg.detection.private_continuation_enabled
         and native_postprocess_available
         and not native_private_available
     ):
@@ -2216,32 +2242,40 @@ def run_eval(
         native_cfg = PerceptionPipelineConfig()
         native_cfg.score_threshold = min(
             conf_threshold,
-            cfg.track_thresh,
-            cfg.crowd_conf_threshold if cfg.crowd_low_score_mode else conf_threshold,
-            cfg.crowd_track_thresh if cfg.crowd_low_score_mode else cfg.track_thresh,
+            cfg.core.track_thresh,
+            cfg.detection.crowd_conf_threshold
+            if cfg.detection.crowd_low_score_mode
+            else conf_threshold,
+            cfg.geometry.crowd_track_thresh
+            if cfg.detection.crowd_low_score_mode
+            else cfg.core.track_thresh,
         )
-        native_cfg.person_class = cfg.person_class
-        native_cfg.person_only = cfg.track_person_only
-        native_cfg.nms_threshold = cfg.nms_iou_threshold
-        native_cfg.person_geometry_prior = cfg.person_geometry_prior
-        native_cfg.geometry_suspect_support = cfg.geometry_suspect_support
+        native_cfg.person_class = cfg.detection.person_class
+        native_cfg.person_only = cfg.detection.track_person_only
+        native_cfg.nms_threshold = cfg.detection.nms_iou_threshold
+        native_cfg.person_geometry_prior = cfg.geometry.person_geometry_prior
+        native_cfg.geometry_suspect_support = cfg.geometry.geometry_suspect_support
         native_cfg.geometry_suspect_support_score = cfg.geometry_suspect_support_score
-        native_cfg.person_min_height_ratio = cfg.person_min_height_ratio
-        native_cfg.person_min_aspect = cfg.person_min_aspect
-        native_cfg.person_max_aspect = cfg.person_max_aspect
-        native_cfg.person_min_area_ratio = cfg.person_min_area_ratio
-        native_cfg.person_max_area_ratio = cfg.person_max_area_ratio
+        native_cfg.person_min_height_ratio = cfg.geometry.person_min_height_ratio
+        native_cfg.person_min_aspect = cfg.geometry.person_min_aspect
+        native_cfg.person_max_aspect = cfg.geometry.person_max_aspect
+        native_cfg.person_min_area_ratio = cfg.geometry.person_min_area_ratio
+        native_cfg.person_max_area_ratio = cfg.geometry.person_max_area_ratio
         native_cfg.max_detections = 2048
         native_cfg.private_continuation_enabled = native_private_available
-        native_cfg.private_candidate_nms_iou = cfg.private_candidate_nms_iou
-        native_cfg.private_min_score = cfg.private_min_score
-        native_cfg.private_max_candidates = cfg.private_max_candidates
-        native_cfg.private_prior_iou_threshold = cfg.private_prior_iou_threshold
-        native_cfg.private_prior_center_threshold = cfg.private_prior_center_threshold
-        native_cfg.private_low_stage_only = cfg.private_low_stage_only
-        native_cfg.private_track_thresh = cfg.track_thresh
-        native_cfg.private_mid_thresh = cfg.mid_thresh
-        native_cfg.private_new_track_thresh = cfg.new_track_thresh
+        native_cfg.private_candidate_nms_iou = cfg.detection.private_candidate_nms_iou
+        native_cfg.private_min_score = cfg.detection.private_min_score
+        native_cfg.private_max_candidates = cfg.detection.private_max_candidates
+        native_cfg.private_prior_iou_threshold = (
+            cfg.detection.private_prior_iou_threshold
+        )
+        native_cfg.private_prior_center_threshold = (
+            cfg.detection.private_prior_center_threshold
+        )
+        native_cfg.private_low_stage_only = cfg.detection.private_low_stage_only
+        native_cfg.private_track_thresh = cfg.core.track_thresh
+        native_cfg.private_mid_thresh = cfg.core.mid_thresh
+        native_cfg.private_new_track_thresh = cfg.core.new_track_thresh
         native_cfg.private_score_eps = 1e-4
         perception_pipeline = PerceptionPipeline(
             extractor_cpp_ptr if native_reid_available else 0,
@@ -2254,7 +2288,7 @@ def run_eval(
     enable_onms = _env_flag_enabled("SACCADE_ENABLE_ONMS", False)
     onms_prior_iou_threshold = 0.70
     onms_min_track_age = 2
-    onms_min_track_score = cfg.high_thresh
+    onms_min_track_score = cfg.core.high_thresh
 
     top_level_stage_names = (
         "fetch",
@@ -2429,7 +2463,7 @@ def run_eval(
         )
 
     for seq in cfg.seqs:
-        _seq_path = Path(cfg.data_root) / cfg.split / seq
+        _seq_path = Path(cfg.core.data_root) / cfg.core.split / seq
         if not (_seq_path / "seqinfo.ini").exists():
             continue
         _seq_state = EvalPipeline(
@@ -2584,7 +2618,9 @@ def run_eval(
             _lines, _ = _flush_deferred_emit(
                 _seq_state.defer_emit_event,
                 _seq_state.pinned_result_bufs,
-                default_class_id=cfg.person_class if cfg.track_person_only else None,
+                default_class_id=cfg.detection.person_class
+                if cfg.detection.track_person_only
+                else None,
                 global_id_mapper=global_id_mapper,
                 seq=seq,
                 frame_id=_seq_state.defer_emit_fid,
@@ -2720,7 +2756,7 @@ def run_eval(
         )
 
         if cheb_gr_extractor is not None and occ_audit_enabled:
-            seq_img_dir = str(Path(cfg.data_root) / cfg.split / seq / "img1")
+            seq_img_dir = str(Path(cfg.core.data_root) / cfg.core.split / seq / "img1")
             if getattr(cfg, "occ_audit_bank_reference", False):
                 from .clean_fifo_bank import build_filled_bank
                 from .occ_audit import (
@@ -2838,7 +2874,9 @@ def run_eval(
                     stream_ptr=torch.cuda.current_stream().cuda_stream,
                 )
             else:
-                seq_img_dir = str(Path(cfg.data_root) / cfg.split / seq / "img1")
+                seq_img_dir = str(
+                    Path(cfg.core.data_root) / cfg.core.split / seq / "img1"
+                )
                 head_embs, bank_embs = extract_handover_embeddings(
                     _seq_state.results_lines,
                     seq_img_dir,
@@ -2895,7 +2933,7 @@ def run_eval(
                 f"reject_min_head={ho_stats['reject_min_head']})"
             )
         elif cheb_gr_extractor is not None:
-            seq_img_dir = str(Path(cfg.data_root) / cfg.split / seq / "img1")
+            seq_img_dir = str(Path(cfg.core.data_root) / cfg.core.split / seq / "img1")
             cheb_embeddings = extract_tracklet_embeddings(
                 _seq_state.results_lines,
                 seq_img_dir,
@@ -2989,7 +3027,7 @@ def run_eval(
                 f"frames_added={interp_stats['frames_added']}"
             )
 
-        if not cfg.latency_only:
+        if not cfg.core.latency_only:
             Path(output_root / f"{seq}.txt").write_text(
                 "\n".join(_seq_state.results_lines)
             )
@@ -3152,14 +3190,14 @@ def run_eval(
     )
 
     # ── MOTMetrics Evaluation ──────────────────────────────────────────────────
-    if cfg.latency_only:
+    if cfg.core.latency_only:
         return {}
 
     from .metrics import run_motmetrics_evaluation
 
     return run_motmetrics_evaluation(
-        data_root=cfg.data_root,
-        split=cfg.split,
+        data_root=cfg.core.data_root,
+        split=cfg.core.split,
         output=str(cfg.output_root),
         sequences=",".join(cfg.seqs),
         detector=cfg.kwargs.get("detector"),

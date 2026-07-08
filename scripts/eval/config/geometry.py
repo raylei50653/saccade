@@ -63,6 +63,27 @@ class GeometryConfig:
     assoc_score_cost_w: float = 0.0
     assoc_height_cost_w: float = 0.0
     assoc_energy_diagnostics: bool = False
+    # NSA Kalman (legacy)
+    nsa_kalman: bool = False
+    # OA-SORT OAO occlusion penalty
+    oao_tau: float = 0.0
+    oao_contest_thresh: float = -1.0
+    oao_score_w: float = -1.0
+    oao_occ_mode: int = 0
+    oao_crowd_radius: float = 0.0
+    oao_height_gate: float = 0.0
+    oao_foot_gate: float = 0.0
+    oao_ramp_frames: float = 0.0
+    # Depth-gated occlusion-state machine
+    occ_state_enabled: bool = True
+    occ_iou_thresh: float = 0.45
+    occ_foot_gap: float = 0.15
+    occ_ttl: int = 4
+    occ_cost_weight: float = 0.50
+    # Multiplicative (log-linear) cost form
+    multiplicative_cost: bool = False
+    sinkhorn_lambda: float = 30.0
+    stability_cost_w: float = 0.0
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> "GeometryConfig":

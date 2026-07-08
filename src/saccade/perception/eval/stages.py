@@ -279,7 +279,7 @@ def _run_gmc_estimate(
             print(
                 f"🕯️ [GMCGraph] Captured C++ cuFFT GMC graph "
                 f"for seq {seq} (img={_h}×{_w} "
-                f"ds={cfg.gmc_downscale})"
+                f"ds={cfg.core.gmc_downscale})"
             )
         else:
             # Steady state: copy new frame into the captured
@@ -369,7 +369,9 @@ def _run_materialize(
         _defer_emit_event, _ = _materialize_gpu_track_results_async(
             tracker_result_buffers,
             _pinned_result_bufs,
-            default_class_id=cfg.person_class if cfg.track_person_only else None,
+            default_class_id=cfg.detection.person_class
+            if cfg.detection.track_person_only
+            else None,
             include_det_idx=False,
         )
         _defer_emit_fid = frame_id
@@ -389,8 +391,8 @@ def _run_materialize(
                 _materialize_gpu_track_results_pinned(
                     tracker_result_buffers,
                     _pinned_result_bufs,
-                    default_class_id=cfg.person_class
-                    if cfg.track_person_only
+                    default_class_id=cfg.detection.person_class
+                    if cfg.detection.track_person_only
                     else None,
                     include_det_idx=(
                         embeddings is not None or aligned_keypoints is not None
@@ -399,8 +401,8 @@ def _run_materialize(
                 if _use_pinned_materialize
                 else _materialize_gpu_track_results(
                     tracker_result_buffers,
-                    default_class_id=cfg.person_class
-                    if cfg.track_person_only
+                    default_class_id=cfg.detection.person_class
+                    if cfg.detection.track_person_only
                     else None,
                     include_det_idx=(
                         embeddings is not None or aligned_keypoints is not None
@@ -1484,12 +1486,12 @@ def _run_native_tensor_prep(
             raw_classes_contig,
             frame_w=w_orig,
             frame_h=h_orig,
-            person_class=cfg.person_class,
+            person_class=cfg.detection.person_class,
             bonus=seq_narrow_bonus,
-            max_width_ratio=cfg.narrow_person_max_width_ratio,
-            min_height_ratio=cfg.narrow_person_min_height_ratio,
-            min_aspect=cfg.narrow_person_min_aspect,
-            max_aspect=cfg.narrow_person_max_aspect,
+            max_width_ratio=cfg.detection.narrow_person_max_width_ratio,
+            min_height_ratio=cfg.detection.narrow_person_min_height_ratio,
+            min_aspect=cfg.detection.narrow_person_min_aspect,
+            max_aspect=cfg.detection.narrow_person_max_aspect,
         )
         post_boxes = _post_bufs["boxes"][:raw_box_count]
         post_scores = _post_bufs["scores"][:raw_box_count]
@@ -1516,14 +1518,14 @@ def _run_native_tensor_prep(
         private_prior_boxes = None
         num_private_priors = 0
         if native_private_enabled and (
-            cfg.private_prior_iou_threshold > 0.0
-            or cfg.private_prior_center_threshold > 0.0
+            cfg.detection.private_prior_iou_threshold > 0.0
+            or cfg.detection.private_prior_center_threshold > 0.0
         ):
             private_prior_boxes, _ = _build_active_track_priors(
                 detector.tracker,
                 raw_boxes_contig.device,
                 min_track_age=0,
-                max_track_age=cfg.private_prior_max_age,
+                max_track_age=cfg.detection.private_prior_max_age,
                 min_track_score=0.0,
             )
             if private_prior_boxes is not None:
@@ -1632,7 +1634,7 @@ def _run_post_nms_finalize(
         t_quality_scale_start = time.perf_counter()
     with _record_profile_scope("post.quality_scale"):
         if (
-            cfg.detection_quality_scaling
+            cfg.geometry.detection_quality_scaling
             and n_post > 0
             and not getattr(detector.tracker, "is_cuda", False)
         ):
@@ -1640,9 +1642,9 @@ def _run_post_nms_finalize(
                 fused_boxes,
                 w_orig,
                 h_orig,
-                w_aspect=cfg.detection_quality_w_aspect,
-                w_center=cfg.detection_quality_w_center,
-                w_area=cfg.detection_quality_w_area,
+                w_aspect=cfg.geometry.detection_quality_w_aspect,
+                w_center=cfg.geometry.detection_quality_w_center,
+                w_area=cfg.geometry.detection_quality_w_area,
             )
             fused_scores = fused_scores * quality_factors
     if (
@@ -1840,9 +1842,9 @@ def _run_detect(
                 apply_frame_preprocess(
                     pool.frame_buffer,
                     cfg.preprocess_modes,
-                    cfg.gamma,
-                    cfg.gamma_luma_threshold,
-                    cfg.contrast,
+                    cfg.detection.gamma,
+                    cfg.detection.gamma_luma_threshold,
+                    cfg.detection.contrast,
                 ),
                 pool.mark_rgb_current(),
                 (
@@ -2256,7 +2258,7 @@ def _run_emit(
             track_results,
             tracker_result_buffers,
             dynamic_reid_enabled=dynamic_reid is not None,
-            person_class=cfg.person_class,
+            person_class=cfg.detection.person_class,
         )
         _pm_motion_cids: list[int] = []
         _pm_motion_snaps = None
@@ -2371,7 +2373,7 @@ def _run_emit(
                 track_results,
                 tracker_result_buffers,
                 dynamic_reid_enabled=dynamic_reid is not None,
-                person_class=cfg.person_class,
+                person_class=cfg.detection.person_class,
             )
             if FLOW_TIMING:
                 flow_add("emit_host_batch", flow_now() - _t0)
@@ -2381,9 +2383,9 @@ def _run_emit(
                 frame_id=frame_id,
                 track_results=track_results,
                 host_batch=host_track_batch,
-                person_class=cfg.person_class,
-                track_person_only=cfg.track_person_only,
-                geometry_suspect_support=cfg.geometry_suspect_support,
+                person_class=cfg.detection.person_class,
+                track_person_only=cfg.detection.track_person_only,
+                geometry_suspect_support=cfg.geometry.geometry_suspect_support,
                 geometry_suspect_support_score=cfg.geometry_suspect_support_score,
                 id_stability_filter=id_stability_filter,
                 embeddings=embeddings,
@@ -2554,21 +2556,21 @@ def _run_detection_filters(
             classes=fused_classes,
         )
 
-    if cfg.external_fp_filter_mode != "off" and fused_scores.numel() > 0:
+    if cfg.detection.external_fp_filter_mode != "off" and fused_scores.numel() > 0:
         fused_boxes, fused_scores, fused_classes = _apply_external_fp_filter(
             fused_boxes,
             fused_scores,
             fused_classes,
             image_width=w_orig,
             image_height=h_orig,
-            mode=cfg.external_fp_filter_mode,
+            mode=cfg.detection.external_fp_filter_mode,
             rule_config=external_fp_rule_config,
             logistic_model=external_fp_logistic_model,
-            logistic_threshold=cfg.external_fp_logistic_threshold,
-            max_score=cfg.external_fp_max_score,
-            penalty=cfg.external_fp_penalty,
+            logistic_threshold=cfg.detection.external_fp_logistic_threshold,
+            max_score=cfg.detection.external_fp_max_score,
+            penalty=cfg.detection.external_fp_penalty,
             min_score=frame_score_floor,
-            softmax_min_scale=cfg.external_fp_softmax_min_scale,
+            softmax_min_scale=cfg.detection.external_fp_softmax_min_scale,
         )
         after_merge_count = int(fused_scores.numel())
         if debug_dump_active:
@@ -2576,7 +2578,7 @@ def _run_detection_filters(
                 debug_stage_dump_rows,
                 seq=seq,
                 frame_id=frame_id,
-                stage=f"external_fp_{cfg.external_fp_filter_mode}",
+                stage=f"external_fp_{cfg.detection.external_fp_filter_mode}",
                 boxes=fused_boxes,
                 scores=fused_scores,
                 classes=fused_classes,
@@ -2585,7 +2587,7 @@ def _run_detection_filters(
     # === FP hard filter ===
     # Removes extremely suspicious low-score large-area detections
     # that are likely false positives based on FP analysis.
-    if cfg.fp_hard_filter_enabled and fused_scores.numel() > 0:
+    if cfg.detection.fp_hard_filter_enabled and fused_scores.numel() > 0:
         # Mask-in-place (fixed shape, sync-free): set rejected scores
         # below all tracker thresholds rather than compacting. The GPU
         # tracker's score gate drops them without a host .nonzero()
@@ -2593,9 +2595,9 @@ def _run_detection_filters(
         _fp_reject = _fp_hard_reject_mask(
             fused_boxes,
             fused_scores,
-            min_score=cfg.fp_hard_filter_min_score,
-            max_suspicious_area=cfg.fp_hard_filter_max_suspicious_area,
-            max_suspicious_score=cfg.fp_hard_filter_max_suspicious_score,
+            min_score=cfg.detection.fp_hard_filter_min_score,
+            max_suspicious_area=cfg.detection.fp_hard_filter_max_suspicious_area,
+            max_suspicious_score=cfg.detection.fp_hard_filter_max_suspicious_score,
         )
         fused_scores = fused_scores.masked_fill(_fp_reject, _FP_HARD_REJECT_SCORE)
         after_merge_count = int(fused_scores.numel())
@@ -2649,30 +2651,30 @@ def _run_detection_filters(
     # Cap detections per frame to prevent overwhelming association.
     # Uses FP-filter-aware ranking to preferentially keep high-score,
     # appropriately-sized detections while filtering suspicious large boxes.
-    if cfg.per_frame_detection_cap > 0 and fused_scores.numel() > 0:
+    if cfg.detection.per_frame_detection_cap > 0 and fused_scores.numel() > 0:
         quality_factors_for_cap = None
-        if cfg.detection_quality_scaling and fused_scores.numel() > 0:
+        if cfg.geometry.detection_quality_scaling and fused_scores.numel() > 0:
             quality_factors_for_cap = _compute_detection_quality_batch(
                 fused_boxes,
                 w_orig,
                 h_orig,
-                w_aspect=cfg.detection_quality_w_aspect,
-                w_center=cfg.detection_quality_w_center,
-                w_area=cfg.detection_quality_w_area,
+                w_aspect=cfg.geometry.detection_quality_w_aspect,
+                w_center=cfg.geometry.detection_quality_w_center,
+                w_area=cfg.geometry.detection_quality_w_area,
             )
 
         # Compute adaptive cap if enabled
-        max_det = cfg.per_frame_detection_cap
-        if cfg.adaptive_detection_cap:
+        max_det = cfg.detection.per_frame_detection_cap
+        if cfg.detection.adaptive_detection_cap:
             max_det = _compute_adaptive_cap(
                 fused_boxes,
                 fused_scores,
-                base_cap=cfg.adaptive_cap_base,
-                max_cap=cfg.adaptive_cap_max,
-                min_cap=cfg.adaptive_cap_min,
+                base_cap=cfg.detection.adaptive_cap_base,
+                max_cap=cfg.detection.adaptive_cap_max,
+                min_cap=cfg.detection.adaptive_cap_min,
             )
 
-        rank_method = cfg.detection_cap_rank_method
+        rank_method = cfg.detection.detection_cap_rank_method
         # Only apply cap if we have more detections than the cap
         if fused_scores.numel() > max_det:
             fused_boxes, fused_scores, fused_classes = _apply_detection_cap(
@@ -2744,7 +2746,7 @@ def _run_birth_config(
                         score_before = fused_scores[boost_idx].clone()
                         fused_scores[boost_idx] = torch.clamp(
                             fused_scores[boost_idx] + cfg.birth_consecutive_boost,
-                            max=cfg.high_thresh,
+                            max=cfg.core.high_thresh,
                         )
                         _append_birth_event_rows(
                             frame_birth_events,
@@ -2776,9 +2778,9 @@ def _run_birth_config(
                 fused_boxes,
                 w_orig,
                 h_orig,
-                w_aspect=cfg.detection_quality_w_aspect,
-                w_center=cfg.detection_quality_w_center,
-                w_area=cfg.detection_quality_w_area,
+                w_aspect=cfg.geometry.detection_quality_w_aspect,
+                w_center=cfg.geometry.detection_quality_w_center,
+                w_area=cfg.geometry.detection_quality_w_area,
             )
         below_birth = fused_scores < frame_new_track_thresh
         high_quality = birth_quality > cfg.birth_min_quality
@@ -2794,7 +2796,7 @@ def _run_birth_config(
             ) * cfg.birth_quality_score_bias
             fused_scores[boost_mask] = torch.clamp(
                 fused_scores[boost_mask] + boost,
-                max=cfg.high_thresh,
+                max=cfg.core.high_thresh,
             )
             _append_birth_event_rows(
                 frame_birth_events,
@@ -2844,21 +2846,21 @@ def _run_birth_config(
     if frame_tracker_thresholds != state.active_tracker_thresholds:
         detector.tracker.set_params(
             track_thresh=frame_track_thresh,
-            high_thresh=cfg.high_thresh,
-            match_thresh=cfg.match_thresh,
+            high_thresh=cfg.core.high_thresh,
+            match_thresh=cfg.core.match_thresh,
             track_buffer=seq_track_buffer,
             mid_thresh=frame_mid_thresh,
-            confirm_streak=int(cfg.kwargs.get("confirm_streak", 1)),
-            confirm_score_thresh=float(cfg.kwargs.get("confirm_score_thresh", 0.0)),
-            adaptive_confirmation=bool(cfg.kwargs.get("adaptive_confirmation", False)),
+            confirm_streak=cfg.core.confirm_streak,
+            confirm_score_thresh=cfg.core.confirm_score_thresh,
+            adaptive_confirmation=cfg.core.adaptive_confirmation,
             new_track_thresh=frame_new_track_thresh,
-            kalman_adapt_mode=cfg.kalman_adapt_mode,
-            r_scale=cfg.kalman_r_scale,
-            vel_dir_weight=cfg.vel_dir_weight,
-            fuse_score_weight=cfg.fuse_score_weight,
-            stage2_match_thresh=cfg.stage2_match_thresh,
-            birth_low_score_thresh=cfg.birth_low_score_thresh,
-            birth_prox_norm_thresh=cfg.birth_prox_norm_thresh,
+            kalman_adapt_mode=cfg.geometry.kalman_adapt_mode,
+            r_scale=cfg.geometry.kalman_r_scale,
+            vel_dir_weight=cfg.geometry.vel_dir_weight,
+            fuse_score_weight=cfg.geometry.fuse_score_weight,
+            stage2_match_thresh=cfg.geometry.stage2_match_thresh,
+            birth_low_score_thresh=cfg.geometry.birth_low_score_thresh,
+            birth_prox_norm_thresh=cfg.geometry.birth_prox_norm_thresh,
         )
         state.active_tracker_thresholds = frame_tracker_thresholds
     return frame_birth_events, fused_scores
@@ -3244,16 +3246,16 @@ def _run_reid_and_gmc(
         fused_boxes,
         fused_classes,
         h_orig,
-        enabled=cfg.geometry_mid_scale,
-        person_class=cfg.person_class,
-        track_person_only=cfg.track_person_only,
-        ref_height_ratio=cfg.geometry_ref_height_ratio,
-        min_scale=cfg.geometry_min_scale,
-        max_scale=cfg.geometry_max_scale,
-        ema_beta=cfg.geometry_ema_beta,
-        loosen_step=cfg.geometry_loosen_step,
-        tighten_step=cfg.geometry_tighten_step,
-        min_samples=cfg.geometry_min_samples,
+        enabled=cfg.geometry.geometry_mid_scale,
+        person_class=cfg.detection.person_class,
+        track_person_only=cfg.detection.track_person_only,
+        ref_height_ratio=cfg.geometry.geometry_ref_height_ratio,
+        min_scale=cfg.geometry.geometry_min_scale,
+        max_scale=cfg.geometry.geometry_max_scale,
+        ema_beta=cfg.geometry.geometry_ema_beta,
+        loosen_step=cfg.geometry.geometry_loosen_step,
+        tighten_step=cfg.geometry.geometry_tighten_step,
+        min_samples=cfg.geometry.geometry_min_samples,
         state=geometry_scale_state,
     )
     if (

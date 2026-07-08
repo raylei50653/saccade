@@ -65,8 +65,8 @@ def _build_cpp_seq_config(
     c.match_thresh = float(getattr(cfg, "match_thresh", 0.66))
     c.new_track_thresh = float(getattr(cfg, "new_track_thresh", 0.28))
     c.mid_thresh = float(getattr(cfg, "mid_thresh", 0.10))
-    c.confirm_streak = int(cfg.kwargs.get("confirm_streak", 1))
-    c.confirm_score_thresh = float(cfg.kwargs.get("confirm_score_thresh", 0.0))
+    c.confirm_streak = cfg.core.confirm_streak
+    c.confirm_score_thresh = cfg.core.confirm_score_thresh
     c.fuse_score_weight = float(getattr(cfg, "fuse_score_weight", 0.4))
     c.vel_dir_weight = float(getattr(cfg, "vel_dir_weight", 0.0))
     c.stage2_match_thresh = float(getattr(cfg, "stage2_match_thresh", 0.5))
@@ -74,7 +74,7 @@ def _build_cpp_seq_config(
     c.birth_prox_norm_thresh = float(getattr(cfg, "birth_prox_norm_thresh", 0.0))
     # NB: OAO is configured on the tracker via set_oao_params(cfg.oao_tau); the
     # C++ SequenceConfig has no oao_tau field, so do not set it here.
-    c.track_buffer = 30
+    c.track_buffer = cfg.track_buffer
 
     # GMC — always enabled (GPU phase correlation, matches Python workbench default)
     c.gmc_enabled = True
@@ -144,13 +144,13 @@ def run_eval_cpp(
     from saccade_tracking_ext import PerceptionPipelineConfig
 
     native_cfg = PerceptionPipelineConfig()
-    native_cfg.score_threshold = cfg.conf_threshold
-    native_cfg.person_class = cfg.person_class
-    native_cfg.nms_threshold = cfg.nms_iou_threshold
-    native_cfg.person_geometry_prior = cfg.person_geometry_prior
-    native_cfg.person_min_height_ratio = cfg.person_min_height_ratio
-    native_cfg.person_min_aspect = cfg.person_min_aspect
-    native_cfg.person_max_aspect = cfg.person_max_aspect
+    native_cfg.score_threshold = cfg.core.conf_threshold
+    native_cfg.person_class = cfg.detection.person_class
+    native_cfg.nms_threshold = cfg.detection.nms_iou_threshold
+    native_cfg.person_geometry_prior = cfg.geometry.person_geometry_prior
+    native_cfg.person_min_height_ratio = cfg.geometry.person_min_height_ratio
+    native_cfg.person_min_aspect = cfg.geometry.person_min_aspect
+    native_cfg.person_max_aspect = cfg.geometry.person_max_aspect
 
     detector = kwargs.pop("detector", None)
     if detector is None:
@@ -180,7 +180,7 @@ def run_eval_cpp(
 
     seq_configs = [
         _build_cpp_seq_config(
-            cfg, seq, data_root, cfg.split, trt_input_size, max_raw_dets
+            cfg, seq, data_root, cfg.core.split, trt_input_size, max_raw_dets
         )
         for seq in cfg.seqs
     ]
@@ -292,7 +292,7 @@ def run_eval_cpp(
         )
 
         if cheb_gr_extractor is not None and occ_audit_enabled:
-            seq_img_dir = str(_Path(cfg.data_root) / cfg.split / seq / "img1")
+            seq_img_dir = str(_Path(cfg.core.data_root) / cfg.core.split / seq / "img1")
             if getattr(cfg, "occ_audit_bank_reference", False):
                 from .clean_fifo_bank import build_filled_bank
                 from .occ_audit import (
@@ -379,7 +379,7 @@ def run_eval_cpp(
             )
 
         if cheb_gr_extractor is not None and cheb_gr_online:
-            seq_img_dir = str(_Path(cfg.data_root) / cfg.split / seq / "img1")
+            seq_img_dir = str(_Path(cfg.core.data_root) / cfg.core.split / seq / "img1")
             head_embs, bank_embs = extract_handover_embeddings(
                 results_lines,
                 seq_img_dir,
@@ -436,7 +436,7 @@ def run_eval_cpp(
                 f"reject_min_head={ho_stats['reject_min_head']})"
             )
         elif cheb_gr_extractor is not None:
-            seq_img_dir = str(_Path(cfg.data_root) / cfg.split / seq / "img1")
+            seq_img_dir = str(_Path(cfg.core.data_root) / cfg.core.split / seq / "img1")
             cheb_embeddings = extract_tracklet_embeddings(
                 results_lines,
                 seq_img_dir,
@@ -495,8 +495,8 @@ def run_eval_cpp(
     from .metrics import run_motmetrics_evaluation
 
     return run_motmetrics_evaluation(
-        data_root=cfg.data_root,
-        split=cfg.split,
+        data_root=cfg.core.data_root,
+        split=cfg.core.split,
         output=str(cfg.output_root),
         sequences=",".join(cfg.seqs),
         detector=cfg.kwargs.get("detector"),

@@ -156,6 +156,8 @@ class LifecycleConfig:
     multi_birth_w_streak: float = 0.15
     multi_birth_min_aspect: float = 0.0
     multi_birth_max_area_px: int = 0
+    multi_birth_replace_mode: bool = False
+    multi_birth_replace_evidence_threshold: float = 0.85
     # Tracklet cleanup
     min_tracklet_len: int = 1
     min_tracklet_score: float = 0.0
