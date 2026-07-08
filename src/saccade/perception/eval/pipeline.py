@@ -949,15 +949,15 @@ class EvalPipeline:
             w_area=cfg.detection_quality_w_area,
         )
         detector.tracker.set_params(
-            track_thresh=cfg.track_thresh,
+            track_thresh=cfg.core.track_thresh,
             high_thresh=cfg.core.high_thresh,
-            match_thresh=cfg.match_thresh,
+            match_thresh=cfg.core.match_thresh,
             track_buffer=seq_track_buffer,
-            mid_thresh=cfg.mid_thresh,
-            confirm_streak=cfg.confirm_streak,
-            confirm_score_thresh=cfg.confirm_score_thresh,
-            adaptive_confirmation=cfg.adaptive_confirmation,
-            new_track_thresh=cfg.new_track_thresh,
+            mid_thresh=cfg.core.mid_thresh,
+            confirm_streak=cfg.core.confirm_streak,
+            confirm_score_thresh=cfg.core.confirm_score_thresh,
+            adaptive_confirmation=cfg.core.adaptive_confirmation,
+            new_track_thresh=cfg.core.new_track_thresh,
             kalman_adapt_mode=cfg.kalman_adapt_mode,
             r_scale=cfg.kalman_r_scale,
             vel_dir_weight=cfg.vel_dir_weight,
@@ -1008,9 +1008,9 @@ class EvalPipeline:
                 float(getattr(cfg, "assoc_height_cost_w", 0.0)),
             )
         active_tracker_thresholds = (
-            cfg.track_thresh,
-            cfg.mid_thresh,
-            cfg.new_track_thresh,
+            cfg.core.track_thresh,
+            cfg.core.mid_thresh,
+            cfg.core.new_track_thresh,
         )
 
         pool = AdaptiveFramePool(h_orig, w_orig)
@@ -1116,7 +1116,7 @@ class EvalPipeline:
         )
         _multi_birth_manager = (
             MultiSignalBirthManager(
-                new_track_thresh=cfg.new_track_thresh,
+                new_track_thresh=cfg.core.new_track_thresh,
                 min_score=cfg.multi_birth_min_score,
                 min_frames=cfg.multi_birth_min_frames,
                 target_motion_px=cfg.multi_birth_target_motion,

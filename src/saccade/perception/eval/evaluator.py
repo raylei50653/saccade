@@ -797,7 +797,7 @@ def _run_frame(
                     time.perf_counter() - t_keypoint_align_start
                 ) * 1000
 
-            # Keep low-score boxes down to cfg.track_thresh so ByteTrack's
+            # Keep low-score boxes down to cfg.core.track_thresh so ByteTrack's
             # second-stage association can actually use them.
             post_gpu_start_event = None
             post_gpu_end_event = None
@@ -1029,14 +1029,14 @@ def _run_frame(
                     fused_scores,
                     fused_classes,
                     score_threshold=min(
-                        cfg.conf_threshold,
-                        cfg.track_thresh,
+                        cfg.core.conf_threshold,
+                        cfg.core.track_thresh,
                         cfg.detection.crowd_conf_threshold
                         if cfg.detection.crowd_low_score_mode
-                        else cfg.conf_threshold,
+                        else cfg.core.conf_threshold,
                         cfg.crowd_track_thresh
                         if cfg.detection.crowd_low_score_mode
-                        else cfg.track_thresh,
+                        else cfg.core.track_thresh,
                     ),
                     track_person_only=cfg.detection.track_person_only,
                     person_class=cfg.detection.person_class,
@@ -1274,19 +1274,21 @@ def _run_frame(
             frame_conf_threshold = (
                 cfg.detection.crowd_conf_threshold
                 if crowd_low_active
-                else cfg.conf_threshold
+                else cfg.core.conf_threshold
             )
             frame_track_thresh = (
-                cfg.crowd_track_thresh if crowd_low_active else cfg.track_thresh
+                cfg.crowd_track_thresh if crowd_low_active else cfg.core.track_thresh
             )
             frame_mid_thresh = (
-                cfg.crowd_mid_thresh if crowd_low_active else cfg.mid_thresh
+                cfg.crowd_mid_thresh if crowd_low_active else cfg.core.mid_thresh
             )
             frame_new_track_thresh = (
-                cfg.crowd_new_track_thresh if crowd_low_active else cfg.new_track_thresh
+                cfg.crowd_new_track_thresh
+                if crowd_low_active
+                else cfg.core.new_track_thresh
             )
             frame_score_floor = min(frame_conf_threshold, frame_track_thresh)
-            base_score_floor = min(cfg.conf_threshold, cfg.track_thresh)
+            base_score_floor = min(cfg.core.conf_threshold, cfg.core.track_thresh)
             (
                 fused_boxes,
                 fused_scores,
@@ -2232,13 +2234,13 @@ def run_eval(
         native_cfg = PerceptionPipelineConfig()
         native_cfg.score_threshold = min(
             conf_threshold,
-            cfg.track_thresh,
+            cfg.core.track_thresh,
             cfg.detection.crowd_conf_threshold
             if cfg.detection.crowd_low_score_mode
             else conf_threshold,
             cfg.crowd_track_thresh
             if cfg.detection.crowd_low_score_mode
-            else cfg.track_thresh,
+            else cfg.core.track_thresh,
         )
         native_cfg.person_class = cfg.detection.person_class
         native_cfg.person_only = cfg.detection.track_person_only
@@ -2263,9 +2265,9 @@ def run_eval(
             cfg.detection.private_prior_center_threshold
         )
         native_cfg.private_low_stage_only = cfg.detection.private_low_stage_only
-        native_cfg.private_track_thresh = cfg.track_thresh
-        native_cfg.private_mid_thresh = cfg.mid_thresh
-        native_cfg.private_new_track_thresh = cfg.new_track_thresh
+        native_cfg.private_track_thresh = cfg.core.track_thresh
+        native_cfg.private_mid_thresh = cfg.core.mid_thresh
+        native_cfg.private_new_track_thresh = cfg.core.new_track_thresh
         native_cfg.private_score_eps = 1e-4
         perception_pipeline = PerceptionPipeline(
             extractor_cpp_ptr if native_reid_available else 0,

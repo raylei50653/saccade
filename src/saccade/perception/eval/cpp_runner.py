@@ -65,8 +65,8 @@ def _build_cpp_seq_config(
     c.match_thresh = float(getattr(cfg, "match_thresh", 0.66))
     c.new_track_thresh = float(getattr(cfg, "new_track_thresh", 0.28))
     c.mid_thresh = float(getattr(cfg, "mid_thresh", 0.10))
-    c.confirm_streak = cfg.confirm_streak
-    c.confirm_score_thresh = cfg.confirm_score_thresh
+    c.confirm_streak = cfg.core.confirm_streak
+    c.confirm_score_thresh = cfg.core.confirm_score_thresh
     c.fuse_score_weight = float(getattr(cfg, "fuse_score_weight", 0.4))
     c.vel_dir_weight = float(getattr(cfg, "vel_dir_weight", 0.0))
     c.stage2_match_thresh = float(getattr(cfg, "stage2_match_thresh", 0.5))
@@ -144,7 +144,7 @@ def run_eval_cpp(
     from saccade_tracking_ext import PerceptionPipelineConfig
 
     native_cfg = PerceptionPipelineConfig()
-    native_cfg.score_threshold = cfg.conf_threshold
+    native_cfg.score_threshold = cfg.core.conf_threshold
     native_cfg.person_class = cfg.detection.person_class
     native_cfg.nms_threshold = cfg.detection.nms_iou_threshold
     native_cfg.person_geometry_prior = cfg.person_geometry_prior
