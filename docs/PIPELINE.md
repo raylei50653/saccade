@@ -9,7 +9,7 @@
 > - **[NO-GO 全局登記表](reference/no_go_registry.md)** → 每條死路的完整數據與歸因（本檔以 `#N` 引用）
 > - **[模組物理文檔庫](README.md)** → 各模組 architecture / research / ADR
 >
-> 最後更新：2026-06-19
+> 本檔只保留「現行最優 / GO / NO-GO」結論；baseline 數字鏡射自 [TODO.md](TODO.md)「當前 Baseline」節，不在此另立事實。
 
 ---
 
@@ -47,6 +47,7 @@
 | +3 | **depth 同高遮擋 gate** | IDF1 +0.5、AssA +0.4（crossing-swap） |
 | +4 | **OAO duration-ramp occlusion penalty** | IDF1 75.9→77.6、HOTA 68.1→69.9、AssA 66.2→69.1 |
 
+<!-- fact-owner: current-baseline = docs/TODO.md -->
 現行最優 = **IDF1 78.2 / MOTA 78.4 / HOTA 70.2 / AssA 69.7 / IDs 413 / 269.47 FPS**（**YOLO26s + Mamba + C++/CUDA GPU tracker**；`mamba_whole_graph` `frozen_v2` run，7-seq MOT17-SDP、`--double-buffer`；詳見 [mot17_default_config.md](reference/mot17_default_config.md)）。
 
 **結構性鐵律（先讀，省得重蹈）：**

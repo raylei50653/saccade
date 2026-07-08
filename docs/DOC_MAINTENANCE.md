@@ -53,6 +53,40 @@ Proposed → Accepted → (必要時) Superseded by ADR XXX
 
 ---
 
+## 事實所有權與新鮮度 (Fact Ownership & Freshness)
+
+核心原則見 [DEVELOPMENT.md §11](../DEVELOPMENT.md)：**每個事實只有一個家，其餘只鏡射並回連，不複製成獨立事實。** 入口文件最容易 drift 的是 baseline 數字。
+
+### fact-owner marker
+
+在「擁有」或「鏡射」某類事實的段落上方，加一行機器可讀標記：
+
+```html
+<!-- fact-owner: <fact-id> = <repo-root-relative path> -->
+```
+
+- 路徑一律用 **repo-root 相對路徑**（如 `docs/TODO.md`），與檔案位置無關，方便 checker 解析。
+- 標記路徑 **等於所在檔案本身** → 該檔是這項事實的 **owner**。
+- 標記路徑 **指向別的檔案** → 該段只是 **mirror**（鏡射），必須同時附一句人類可讀的「唯一來源在 X」並回連。
+
+目前定義的 fact-id：
+
+| fact-id | owner |
+|---------|-------|
+| `current-baseline` | `docs/TODO.md`「當前 Baseline」節 |
+
+### 入口文件新鮮度合約 (entry freshness contract)
+
+- 入口/敘事文件（`README.md`、`docs/PIPELINE.md`、`docs/DATAFLOW.md`、`docs/PROJECT_SHOWCASE.md` 等）可保留數字作為 headline / 展示 / ablation，但**必須**帶 mirror marker 並回連 owner。
+- 不要在入口文件用手寫「最後更新：YYYY-MM-DD」當新鮮度證明——它是死資料。改用 fact-owner marker 指向真正會更新的來源。
+
+### 相關 checker
+
+- `scripts/tools/check_doc_stale_paths.py`：**hard fail**，禁止引用已搬移文件的舊路徑（固定 denylist）。
+- `scripts/tools/check_doc_freshness.py`：**warn-only**，提醒手寫日期、缺 marker 的鏡射數字、跨入口重複的 baseline 數字；只警告不擋 CI。
+
+---
+
 ## 不需要寫文檔的情況
 
 - Bug fix（外部行為不變）

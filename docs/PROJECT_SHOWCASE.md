@@ -8,6 +8,9 @@
 > preset 與評測協定見 [MOT17 Evaluation Configuration](reference/mot17_default_config.md)。
 > 歷史 benchmark 或舊 preset 僅用來說明演進，不能與 headline 混合比較。
 
+<!-- fact-owner: current-baseline = docs/TODO.md -->
+> baseline 指標的唯一事實來源是 [TODO.md](TODO.md)「當前 Baseline」節；本文件為展示敘事，內含之數字與 ablation 為引用鏡射，不另立事實。
+
 ## 30 秒版本
 
 Saccade 是一個以 GPU 為資料面中心的即時多人追蹤系統。它將 YOLO26 TensorRT

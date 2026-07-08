@@ -284,6 +284,9 @@ that full emit path to a background executor, but it is disabled while
 
 ## 7. Current Headline Baselines
 
+<!-- fact-owner: current-baseline = docs/TODO.md -->
+> These numbers mirror the single fact owner in [TODO.md](TODO.md) 「當前 Baseline」; do not re-baseline here.
+
 Frozen runs recorded in [ADR 018](decisions/018-project-main-line-direction.md):
 
 | Preset | IDF1 | MOTA | HOTA | DetA | AssA | IDs | Rcll | Prcn | Eval FPS |

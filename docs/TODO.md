@@ -38,6 +38,9 @@
 
 ## 當前 Baseline（2026-06-21 `frozen_v2` run）
 
+<!-- fact-owner: current-baseline = docs/TODO.md -->
+> 本節是「當前 baseline 數字」的唯一事實來源（single fact owner）。其他入口文件只鏡射並回連此處，不另立數字。
+
 | preset | IDF1 | MOTA | IDs | Rcll | FP | FPS | 備註 |
 |--------|------|------|-----|------|-----|-----|------|
 | **YOLO26s + Mamba + GPU tracker** (`mamba_whole_graph`) | **78.2%** | **78.4%** | **413** | 81.0% | 2589 | **269.47** | **當前 baseline**，`frozen_v2`、整圖 CUDA graph + double-buffer + bidir bridge relink + GMC cuFFT graph + same-height occlusion gate + **OAO duration-ramp**，ReID off；HOTA 70.2/DetA 70.9/AssA 69.7/Prcn 97.2 |
