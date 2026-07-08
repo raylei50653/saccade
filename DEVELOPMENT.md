@@ -75,17 +75,8 @@ MOT / tracking / relink 主線開發從這些檔案出發：
 
 **當前生產 baseline = `mamba_whole_graph`**（Option F Mamba 偵測頭 + 整圖 CUDA graph，**ReID off**）。整圖 graph 與 `mamba_optimal` 同路線、純加速 detect（7.4→3.1ms），精度持平、FPS 大幅提升。
 
-> 詳細 CLI 默認值見 [docs/reference/mot17_default_config.md](docs/reference/mot17_default_config.md)。完整 baseline 矩陣（含各 Option 歷史）見 [docs/TODO.md](docs/TODO.md)。
+> **baseline 數字的唯一來源（single fact owner）是 [docs/TODO.md](docs/TODO.md)「當前 Baseline」節。** 本文件不內嵌 baseline 表或指標數字，避免入口與 fact owner 漂移。完整 baseline 矩陣（含各 Option 歷史指標）見 [docs/TODO.md](docs/TODO.md)；詳細 CLI 默認值見 [docs/reference/mot17_default_config.md](docs/reference/mot17_default_config.md)。
 > mamba preset 自帶 override，不吃 yolo26 path 的部分 default：`reid_mode=off`、`kalman_r_scale=2.8`、`match_thresh=0.50`、`fuse_score_weight=0.0`、`gmc_downscale=4`、`interpolate_max_gap=35`。
-
-| preset | engine | IDF1 | MOTA | HOTA | IDs | FPS |
-|--------|--------|------|------|------|-----|-----|
-| **mamba_whole_graph**（當前 baseline，ReID off） | mamba v14 + yolo26s_640 | **75.1%** | **77.7%** | **68.2%** | **482** | **223.2** |
-| mamba_optimal（head-only graph，前身） | mamba v14 + yolo26s_640 | 73.4% | 77.1% | 66.7% | 533 | 116.7 |
-| speed（舊 yolo26 路線，參考） | yolo26s_960 | 52.3% | 41.8% | — | 473 | 138.9 |
-| baseline（舊 yolo26 路線，參考） | yolo26m_960 | 51.4% | 43.5% | — | 501 | 113.2 |
-
-`mamba_whole_graph` 完整指標：DetA 70.0% / AssA 66.6% / FP 3514 / FN 21082 / Rcll 81.2% / Prcn 96.3%（2026-06-13 SDP train，含 bidir bridge relink 預設開 + GMC cuFFT graph；AssA 仍為瓶頸）。
 
 使用方式：
 ```bash

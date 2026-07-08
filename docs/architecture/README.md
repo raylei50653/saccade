@@ -277,4 +277,5 @@ not the headline architecture.
 - 全流程敘事版資料流：[pipeline_flow.md](../reference/pipeline_flow.md)
 - Tracker 深入說明：[gpubytetracker_deep_dive.md](../modules/geometry/tracker_deep_dive.md)
 
-最後更新：2026-05-07
+> 本文件只描述**穩定架構形狀與責任邊界**，不內嵌會隨實驗漂移的數字。
+> baseline 數字見 [TODO.md](../TODO.md)「當前 Baseline」節；模組現狀 dashboard 見 [DEVELOPMENT.md §6](../../DEVELOPMENT.md)。
