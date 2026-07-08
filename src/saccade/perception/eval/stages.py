@@ -633,6 +633,36 @@ def _run_nms(
     )
 
     if native_private_enabled:
+        # Eager split pipeline (main NMS + private append + D2H sync) over the
+        # raw detections. Shared by three fallbacks below: graph capture
+        # failure, graph replay failure, and the SACCADE_MAIN_NMS_SPLIT probe.
+        def _eager_split_pipeline() -> int:
+            out_count_buf = state.nms_graph_out_count
+            if out_count_buf is None:
+                out_count_buf = torch.zeros(1, dtype=torch.int32, device="cuda")
+                state.nms_graph_out_count = out_count_buf
+            return perception_pipeline.process_detections_split_pipeline(
+                raw_boxes_contig.data_ptr(),
+                raw_scores_contig.data_ptr(),
+                raw_classes_contig.data_ptr(),
+                raw_box_count,
+                w_orig,
+                h_orig,
+                is_tiled,
+                _post_bufs["boxes"].data_ptr(),
+                _post_bufs["scores"].data_ptr(),
+                _post_bufs["classes"].data_ptr(),
+                _post_bufs["suspect"].data_ptr(),
+                out_count_buf.data_ptr(),
+                priors_ptr,
+                prior_classes_ptr,
+                num_priors,
+                state.onms_prior_iou_threshold,
+                private_priors_ptr,
+                num_private_priors,
+                current_stream,
+            )
+
         _use_graphed = os.environ.get("SACCADE_MAIN_NMS_GRAPHED", "") in (
             "1",
             "true",
@@ -679,27 +709,7 @@ def _run_nms(
             if state.main_nms_graph_nocopyback is None:
                 # Capture failed (no perception_pipeline or exception);
                 # fall back to eager split pipeline.
-                n_post = perception_pipeline.process_detections_split_pipeline(
-                    raw_boxes_contig.data_ptr(),
-                    raw_scores_contig.data_ptr(),
-                    raw_classes_contig.data_ptr(),
-                    raw_box_count,
-                    w_orig,
-                    h_orig,
-                    is_tiled,
-                    _post_bufs["boxes"].data_ptr(),
-                    _post_bufs["scores"].data_ptr(),
-                    _post_bufs["classes"].data_ptr(),
-                    _post_bufs["suspect"].data_ptr(),
-                    out_count_buf.data_ptr(),
-                    priors_ptr,
-                    prior_classes_ptr,
-                    num_priors,
-                    state.onms_prior_iou_threshold,
-                    private_priors_ptr,
-                    num_private_priors,
-                    current_stream,
-                )
+                n_post = _eager_split_pipeline()
                 return n_post, _nms_graph
 
             # Run main NMS: graph replay or eager
@@ -735,27 +745,7 @@ def _run_nms(
                         f"Falling back to eager split pipeline."
                     )
                     state.main_nms_graph_nocopyback = None
-                    n_post = perception_pipeline.process_detections_split_pipeline(
-                        raw_boxes_contig.data_ptr(),
-                        raw_scores_contig.data_ptr(),
-                        raw_classes_contig.data_ptr(),
-                        raw_box_count,
-                        w_orig,
-                        h_orig,
-                        is_tiled,
-                        _post_bufs["boxes"].data_ptr(),
-                        _post_bufs["scores"].data_ptr(),
-                        _post_bufs["classes"].data_ptr(),
-                        _post_bufs["suspect"].data_ptr(),
-                        out_count_buf.data_ptr(),
-                        priors_ptr,
-                        prior_classes_ptr,
-                        num_priors,
-                        state.onms_prior_iou_threshold,
-                        private_priors_ptr,
-                        num_private_priors,
-                        current_stream,
-                    )
+                    n_post = _eager_split_pipeline()
                     return n_post, _nms_graph
 
             # Private append + D2H sync (reads pre-NMS _post_bufs +
@@ -779,31 +769,7 @@ def _run_nms(
             "yes",
         )
         if _use_split:
-            out_count_buf = state.nms_graph_out_count
-            if out_count_buf is None:
-                out_count_buf = torch.zeros(1, dtype=torch.int32, device="cuda")
-                state.nms_graph_out_count = out_count_buf
-            n_post = perception_pipeline.process_detections_split_pipeline(
-                raw_boxes_contig.data_ptr(),
-                raw_scores_contig.data_ptr(),
-                raw_classes_contig.data_ptr(),
-                raw_box_count,
-                w_orig,
-                h_orig,
-                is_tiled,
-                _post_bufs["boxes"].data_ptr(),
-                _post_bufs["scores"].data_ptr(),
-                _post_bufs["classes"].data_ptr(),
-                _post_bufs["suspect"].data_ptr(),
-                out_count_buf.data_ptr(),
-                priors_ptr,
-                prior_classes_ptr,
-                num_priors,
-                state.onms_prior_iou_threshold,
-                private_priors_ptr,
-                num_private_priors,
-                current_stream,
-            )
+            n_post = _eager_split_pipeline()
             return n_post, _nms_graph
         n_post = perception_pipeline.process_detections_n_private(
             raw_boxes_contig.data_ptr(),
@@ -858,9 +824,9 @@ def _run_nms(
             raw_scores_contig.data_ptr(),
             raw_classes_contig.data_ptr(),
             min(raw_box_count, _NMS_FIXED_N),
-            _main_nms_in["boxes"].data_ptr(),
-            _main_nms_in["scores"].data_ptr(),
-            _main_nms_in["classes"].data_ptr(),
+            _nms_in["boxes"].data_ptr(),
+            _nms_in["scores"].data_ptr(),
+            _nms_in["classes"].data_ptr(),
             _NMS_FIXED_N,
             _pad_stream,
         )

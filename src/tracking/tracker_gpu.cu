@@ -4933,6 +4933,13 @@ __global__ void append_private_continuation_kernel(
             const float cy = 0.5f * (src_box[1] + src_box[3]);
             for (int p = 0; p < num_private_priors; ++p) {
                 const float* prior = private_priors_ptr + p * 4;
+                // Skip zero-area sentinel priors ([0,0,0,0]) emitted for
+                // inactive slots by the GPU compaction path
+                // (build_track_priors_kernel). Their (0,0) center would
+                // otherwise spuriously satisfy the center-distance gate for
+                // detections near the frame origin; the IoU gate already
+                // rejects them (zero intersection).
+                if (prior[2] <= prior[0] || prior[3] <= prior[1]) continue;
                 if (
                     private_prior_iou_threshold > 0.0f
                     && get_iou_device(src_box, prior) >= private_prior_iou_threshold
