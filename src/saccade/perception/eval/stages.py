@@ -2854,13 +2854,13 @@ def _run_birth_config(
             confirm_score_thresh=cfg.core.confirm_score_thresh,
             adaptive_confirmation=cfg.core.adaptive_confirmation,
             new_track_thresh=frame_new_track_thresh,
-            kalman_adapt_mode=cfg.kalman_adapt_mode,
-            r_scale=cfg.kalman_r_scale,
-            vel_dir_weight=cfg.vel_dir_weight,
-            fuse_score_weight=cfg.fuse_score_weight,
-            stage2_match_thresh=cfg.stage2_match_thresh,
-            birth_low_score_thresh=cfg.birth_low_score_thresh,
-            birth_prox_norm_thresh=cfg.birth_prox_norm_thresh,
+            kalman_adapt_mode=cfg.geometry.kalman_adapt_mode,
+            r_scale=cfg.geometry.kalman_r_scale,
+            vel_dir_weight=cfg.geometry.vel_dir_weight,
+            fuse_score_weight=cfg.geometry.fuse_score_weight,
+            stage2_match_thresh=cfg.geometry.stage2_match_thresh,
+            birth_low_score_thresh=cfg.geometry.birth_low_score_thresh,
+            birth_prox_norm_thresh=cfg.geometry.birth_prox_norm_thresh,
         )
         state.active_tracker_thresholds = frame_tracker_thresholds
     return frame_birth_events, fused_scores
