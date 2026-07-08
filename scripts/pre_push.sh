@@ -82,6 +82,15 @@ else
     ERRORS=$((ERRORS + 1))
 fi
 
+# ── 4.8 stale doc path check ─────────────────────────────────────────────────
+echo "── stale doc path check"
+if uv run python3 scripts/tools/check_doc_stale_paths.py 2>&1; then
+    ok "stale doc paths"
+else
+    fail "stale doc paths — reference(s) to pre-move Phase 1 doc location(s)"
+    ERRORS=$((ERRORS + 1))
+fi
+
 # ── 5. pytest ────────────────────────────────────────────────────────────────
 echo "── pytest"
 if uv run pytest tests/ -q --ignore=tests/benchmarks 2>&1; then
