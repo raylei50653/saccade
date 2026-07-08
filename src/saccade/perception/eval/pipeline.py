@@ -977,11 +977,11 @@ class EvalPipeline:
             cfg.oao_ramp_frames,
         )
         detector.tracker.set_occ_params(
-            enabled=cfg.occ_state_enabled,
-            iou_thresh=cfg.occ_iou_thresh,
-            foot_gap=cfg.occ_foot_gap,
-            ttl=cfg.occ_ttl,
-            cost_weight=cfg.occ_cost_weight,
+            enabled=cfg.geometry.occ_state_enabled,
+            iou_thresh=cfg.geometry.occ_iou_thresh,
+            foot_gap=cfg.geometry.occ_foot_gap,
+            ttl=cfg.geometry.occ_ttl,
+            cost_weight=cfg.geometry.occ_cost_weight,
         )
         association_scoring_mode = (
             str(getattr(cfg, "association_scoring_mode", "baseline")).strip().lower()
