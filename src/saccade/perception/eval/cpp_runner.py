@@ -147,10 +147,10 @@ def run_eval_cpp(
     native_cfg.score_threshold = cfg.core.conf_threshold
     native_cfg.person_class = cfg.detection.person_class
     native_cfg.nms_threshold = cfg.detection.nms_iou_threshold
-    native_cfg.person_geometry_prior = cfg.person_geometry_prior
-    native_cfg.person_min_height_ratio = cfg.person_min_height_ratio
-    native_cfg.person_min_aspect = cfg.person_min_aspect
-    native_cfg.person_max_aspect = cfg.person_max_aspect
+    native_cfg.person_geometry_prior = cfg.geometry.person_geometry_prior
+    native_cfg.person_min_height_ratio = cfg.geometry.person_min_height_ratio
+    native_cfg.person_min_aspect = cfg.geometry.person_min_aspect
+    native_cfg.person_max_aspect = cfg.geometry.person_max_aspect
 
     detector = kwargs.pop("detector", None)
     if detector is None:
