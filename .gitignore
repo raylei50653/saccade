@@ -5,6 +5,7 @@ __pycache__/
 build/
 build_ci/
 build_trt_venv/
+build-native-test/
 dist/
 wheels/
 *.egg-info
@@ -30,6 +31,8 @@ models/yolo/*
 
 # Data & Media
 datasets/
+!third_party/TrackEval/trackeval/datasets/
+!third_party/TrackEval/trackeval/datasets/**
 results/
 runs/
 scripts/eval/output/*
@@ -49,6 +52,8 @@ assets/videos/*.mp4
 *.diff
 debug_*.py
 .codex
+scratch/*.nohup
+scratch/*_sweep.txt
 
 # LLM Quantization temporary files
 *.gguf.tmp
@@ -63,6 +68,7 @@ debug_*.py
 *.service.backup
 
 # Testing & Linting
+Testing/
 .pytest_cache/
 .mypy_cache/
 htmlcov/
@@ -88,12 +94,33 @@ build-native-coverage/
 *.sqlite
 scratch/nsys_profiles/
 storage/mlflow_artifacts/
+storage/postgres_data/
 output/
+out/
+scratch/root_artifacts_*/
+scratch/ab_runs/
+scratch/ab_smoke/
 
 # Analysis script outputs (generated plots, candidate CSVs, sweep data)
 scripts/tools/out/
 scratch/pipeline_math_validation/data/
 scratch/pipeline_math_validation/output/
 
-# Generated report data (recall curves, benchmark JSONs)
-report_data/*.json
+# Curated report docs (README, algorithms.md, figures/, etc.) live under
+# report_data/ and stay tracked. Machine-generated ablation outputs go to
+# results/ (already ignored above); any stray subdir under report_data/ is
+# ignored too so experiment dumps do not leak in.
+report_data/*/
+!report_data/figures/
+
+# graphify generated (reproducible via graphify export)
+graphify-out/cache/
+graphify-out/**/*.json
+graphify-out/**/*.js
+graphify-out/**/.graphify_*
+graphify-out/**/graph.html
+
+# Build artifacts accidentally committed
+src/tracking/topk_test
+src/tracking/topk_test_fixed
+models/**/*.pth
