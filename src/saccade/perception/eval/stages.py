@@ -3255,7 +3255,7 @@ def _run_reid_and_gmc(
         ema_beta=cfg.geometry.geometry_ema_beta,
         loosen_step=cfg.geometry.geometry_loosen_step,
         tighten_step=cfg.geometry.geometry_tighten_step,
-        min_samples=cfg.geometry_min_samples,
+        min_samples=cfg.geometry.geometry_min_samples,
         state=geometry_scale_state,
     )
     if (

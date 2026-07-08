@@ -1285,10 +1285,12 @@ def _run_frame(
                 else cfg.core.track_thresh
             )
             frame_mid_thresh = (
-                cfg.crowd_mid_thresh if crowd_low_active else cfg.core.mid_thresh
+                cfg.geometry.crowd_mid_thresh
+                if crowd_low_active
+                else cfg.core.mid_thresh
             )
             frame_new_track_thresh = (
-                cfg.crowd_new_track_thresh
+                cfg.geometry.crowd_new_track_thresh
                 if crowd_low_active
                 else cfg.core.new_track_thresh
             )
