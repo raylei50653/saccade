@@ -330,7 +330,9 @@ def _run_frame(
         _lines, state.prev_track_ids = _flush_deferred_emit(
             state.defer_emit_event,
             _pinned_result_bufs,
-            default_class_id=cfg.person_class if cfg.track_person_only else None,
+            default_class_id=cfg.detection.person_class
+            if cfg.detection.track_person_only
+            else None,
             global_id_mapper=global_id_mapper,
             seq=seq,
             frame_id=state.defer_emit_fid,
@@ -422,9 +424,9 @@ def _run_frame(
                     apply_frame_preprocess(
                         pool.frame_buffer,
                         cfg.preprocess_modes,
-                        cfg.gamma,
-                        cfg.gamma_luma_threshold,
-                        cfg.contrast,
+                        cfg.detection.gamma,
+                        cfg.detection.gamma_luma_threshold,
+                        cfg.detection.contrast,
                     ),
                     pool.mark_rgb_current(),
                     (
@@ -509,9 +511,9 @@ def _run_frame(
                         apply_frame_preprocess(
                             pool.frame_buffer,
                             cfg.preprocess_modes,
-                            cfg.gamma,
-                            cfg.gamma_luma_threshold,
-                            cfg.contrast,
+                            cfg.detection.gamma,
+                            cfg.detection.gamma_luma_threshold,
+                            cfg.detection.contrast,
                         ),
                         pool.mark_rgb_current(),
                         (
@@ -1012,7 +1014,7 @@ def _run_frame(
                     fused_classes,
                     frame_w=w_orig,
                     frame_h=h_orig,
-                    person_class=cfg.person_class,
+                    person_class=cfg.detection.person_class,
                     bonus=state.seq_narrow_bonus,
                     max_width_ratio=cfg.narrow_person_max_width_ratio,
                     min_height_ratio=cfg.narrow_person_min_height_ratio,
@@ -1036,8 +1038,8 @@ def _run_frame(
                         if cfg.crowd_low_score_mode
                         else cfg.track_thresh,
                     ),
-                    track_person_only=cfg.track_person_only,
-                    person_class=cfg.person_class,
+                    track_person_only=cfg.detection.track_person_only,
+                    person_class=cfg.detection.person_class,
                     is_tiled=is_tiled,
                     frame_w=w_orig,
                     frame_h=h_orig,
@@ -1176,7 +1178,7 @@ def _run_frame(
                     fused_scores,
                     fused_classes,
                     cfg.nms_iou_threshold,
-                    class_aware=not cfg.track_person_only,
+                    class_aware=not cfg.detection.track_person_only,
                     priors=priors,
                     prior_classes=prior_classes,
                     prior_iou_threshold=onms_prior_iou_threshold,
@@ -1207,19 +1209,19 @@ def _run_frame(
                     classes=fused_classes,
                 )
 
-            if cfg.tile_diagnostics and is_tiled:
+            if cfg.detection.tile_diagnostics and is_tiled:
                 seq_tile_diag["frames_tiled"] += 1
                 seq_tile_diag["pre_merge_seam_boxes"] += _count_tile_seam_boxes(
                     fused_boxes,
-                    tiling=cfg.tiling,
+                    tiling=cfg.detection.tiling,
                     h_orig=h_orig,
                     w_orig=w_orig,
                 )
 
             use_repo_cross_tile_merge = (
-                cfg.cross_tile_merge
+                cfg.detection.cross_tile_merge
                 and is_tiled
-                and cfg.tiling != "sahi_960p_2x2"
+                and cfg.detection.tiling != "sahi_960p_2x2"
                 and fused_boxes.numel() > 1
             )
             if use_repo_cross_tile_merge:
@@ -1231,26 +1233,27 @@ def _run_frame(
                         fused_boxes,
                         fused_scores,
                         fused_classes,
-                        tiling=cfg.tiling,
+                        tiling=cfg.detection.tiling,
                         frame_w=w_orig,
                         frame_h=h_orig,
-                        seam_margin_canvas_px=cfg.tile_seam_margin_canvas_px,
-                        seam_center_scale=cfg.cross_tile_seam_center_scale,
-                        seam_area_ratio_threshold=cfg.cross_tile_seam_area_ratio_threshold,
-                        seam_min_overlap_ratio=cfg.cross_tile_seam_min_overlap_ratio,
+                        seam_margin_canvas_px=cfg.detection.tile_seam_margin_canvas_px,
+                        seam_center_scale=cfg.detection.cross_tile_seam_center_scale,
+                        seam_area_ratio_threshold=cfg.detection.cross_tile_seam_area_ratio_threshold,
+                        seam_min_overlap_ratio=cfg.detection.cross_tile_seam_min_overlap_ratio,
                     )
                 )
                 # MOT17-b: penalise boxes that were merged from multiple tiles.
                 # Merged boxes have uncertain positions; lowering their score makes
                 # ByteTracker treat them more conservatively during association.
-                if cfg.cross_tile_score_penalty < 1.0:
+                if cfg.detection.cross_tile_score_penalty < 1.0:
                     merged_mask = _merge_counts > 1
                     if merged_mask.any():
                         fused_scores = fused_scores.clone()
                         fused_scores[merged_mask] = (
-                            fused_scores[merged_mask] * cfg.cross_tile_score_penalty
+                            fused_scores[merged_mask]
+                            * cfg.detection.cross_tile_score_penalty
                         )
-                if cfg.tile_diagnostics:
+                if cfg.detection.tile_diagnostics:
                     merged_mask = _merge_counts > 1
                     seq_tile_diag["merged_clusters"] += int(merged_mask.sum().item())
                     seq_tile_diag["merged_members"] += int(
@@ -1407,7 +1410,7 @@ def _run_frame(
                     baseline_keep=private_baseline_keep,
                     baseline_nms_iou=cfg.nms_iou_threshold,
                     candidate_nms_iou=cfg.private_candidate_nms_iou,
-                    class_aware=not cfg.track_person_only,
+                    class_aware=not cfg.detection.track_person_only,
                     priors=private_priors,
                     prior_classes=private_prior_classes,
                     prior_iou_threshold=onms_prior_iou_threshold,
@@ -1440,30 +1443,30 @@ def _run_frame(
                         scores=fused_scores,
                         classes=fused_classes,
                     )
-            if cfg.tile_diagnostics and is_tiled:
+            if cfg.detection.tile_diagnostics and is_tiled:
                 seq_tile_diag["post_merge_seam_boxes"] += _count_tile_seam_boxes(
                     fused_boxes,
-                    tiling=cfg.tiling,
+                    tiling=cfg.detection.tiling,
                     h_orig=h_orig,
                     w_orig=w_orig,
-                    seam_margin_canvas_px=cfg.tile_seam_margin_canvas_px,
+                    seam_margin_canvas_px=cfg.detection.tile_seam_margin_canvas_px,
                 )
             if (
-                cfg.tile_seam_score_penalty < 1.0
+                cfg.detection.tile_seam_score_penalty < 1.0
                 and is_tiled
                 and fused_boxes.numel() > 0
             ):
                 seam_mask = _tile_seam_mask(
                     fused_boxes,
-                    tiling=cfg.tiling,
+                    tiling=cfg.detection.tiling,
                     h_orig=h_orig,
                     w_orig=w_orig,
-                    seam_margin_canvas_px=cfg.tile_seam_margin_canvas_px,
+                    seam_margin_canvas_px=cfg.detection.tile_seam_margin_canvas_px,
                 )
                 if seam_mask.any():
                     fused_scores = fused_scores.clone()
                     fused_scores[seam_mask] = (
-                        fused_scores[seam_mask] * cfg.tile_seam_score_penalty
+                        fused_scores[seam_mask] * cfg.detection.tile_seam_score_penalty
                     )
             if state.frame_ledger is not None and frame_id > warmup_frames:
                 state._frame_det_counts = {
@@ -1714,7 +1717,8 @@ def _run_frame(
                 embed_candidates = [
                     c
                     for c in candidates
-                    if int(c.class_id) == cfg.person_class and c.hit_streak >= 1
+                    if int(c.class_id) == cfg.detection.person_class
+                    and c.hit_streak >= 1
                 ]
                 if not embed_candidates:
                     return 0, 0, 0, 0.0, 0, 0, set()
@@ -2005,7 +2009,7 @@ def run_eval(
         print(
             f"[STREAM] async_reid={cfg.async_reid} gmc_mode={cfg.gmc_mode} decode={'NVJPEG' if _os.environ.get('SACCADE_GPU_DECODE') == '1' else 'DALI'}"
         )
-    detector_box_format = str(kwargs.get("detector_box_format", "xyxy"))
+    detector_box_format = cfg.detector_box_format
     stage_summary_lines = []
     global_id_mapper = GlobalTrackIdMapper()
     external_fp_rule_config = RuleBaselineConfig()
@@ -2143,15 +2147,20 @@ def run_eval(
     if cfg.reid_crop_layout not in {"full", "parts"}:
         raise ValueError(f"Unsupported reid_crop_layout: {cfg.reid_crop_layout}")
 
-    if cfg.tiling == "mamba_global_2x2":
+    if cfg.detection.tiling == "mamba_global_2x2":
         detect_fn = detect_mamba_global_2x2
-    elif cfg.tiling == "960p_3x2":
+    elif cfg.detection.tiling == "960p_3x2":
         detect_fn = detect_960p_3x2_tiled
-    elif cfg.tiling == "sahi_960p_2x2":
+    elif cfg.detection.tiling == "sahi_960p_2x2":
         detect_fn = detect_sahi_960p_2x2
-    elif cfg.tiling == "native_640":
+    elif cfg.detection.tiling == "native_640":
         detect_fn = detect_native_640
-    elif cfg.tiling in ("native_960", "mamba_960", "native_1024", "native_1280"):
+    elif cfg.detection.tiling in (
+        "native_960",
+        "mamba_960",
+        "native_1024",
+        "native_1280",
+    ):
         detect_fn = (
             detect_native_960_tta if getattr(cfg, "tta", False) else detect_native_960
         )
@@ -2220,8 +2229,8 @@ def run_eval(
             cfg.crowd_conf_threshold if cfg.crowd_low_score_mode else conf_threshold,
             cfg.crowd_track_thresh if cfg.crowd_low_score_mode else cfg.track_thresh,
         )
-        native_cfg.person_class = cfg.person_class
-        native_cfg.person_only = cfg.track_person_only
+        native_cfg.person_class = cfg.detection.person_class
+        native_cfg.person_only = cfg.detection.track_person_only
         native_cfg.nms_threshold = cfg.nms_iou_threshold
         native_cfg.person_geometry_prior = cfg.person_geometry_prior
         native_cfg.geometry_suspect_support = cfg.geometry_suspect_support
@@ -2584,7 +2593,9 @@ def run_eval(
             _lines, _ = _flush_deferred_emit(
                 _seq_state.defer_emit_event,
                 _seq_state.pinned_result_bufs,
-                default_class_id=cfg.person_class if cfg.track_person_only else None,
+                default_class_id=cfg.detection.person_class
+                if cfg.detection.track_person_only
+                else None,
                 global_id_mapper=global_id_mapper,
                 seq=seq,
                 frame_id=_seq_state.defer_emit_fid,

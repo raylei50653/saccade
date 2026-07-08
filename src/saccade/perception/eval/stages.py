@@ -369,7 +369,9 @@ def _run_materialize(
         _defer_emit_event, _ = _materialize_gpu_track_results_async(
             tracker_result_buffers,
             _pinned_result_bufs,
-            default_class_id=cfg.person_class if cfg.track_person_only else None,
+            default_class_id=cfg.detection.person_class
+            if cfg.detection.track_person_only
+            else None,
             include_det_idx=False,
         )
         _defer_emit_fid = frame_id
@@ -389,8 +391,8 @@ def _run_materialize(
                 _materialize_gpu_track_results_pinned(
                     tracker_result_buffers,
                     _pinned_result_bufs,
-                    default_class_id=cfg.person_class
-                    if cfg.track_person_only
+                    default_class_id=cfg.detection.person_class
+                    if cfg.detection.track_person_only
                     else None,
                     include_det_idx=(
                         embeddings is not None or aligned_keypoints is not None
@@ -399,8 +401,8 @@ def _run_materialize(
                 if _use_pinned_materialize
                 else _materialize_gpu_track_results(
                     tracker_result_buffers,
-                    default_class_id=cfg.person_class
-                    if cfg.track_person_only
+                    default_class_id=cfg.detection.person_class
+                    if cfg.detection.track_person_only
                     else None,
                     include_det_idx=(
                         embeddings is not None or aligned_keypoints is not None
@@ -1484,7 +1486,7 @@ def _run_native_tensor_prep(
             raw_classes_contig,
             frame_w=w_orig,
             frame_h=h_orig,
-            person_class=cfg.person_class,
+            person_class=cfg.detection.person_class,
             bonus=seq_narrow_bonus,
             max_width_ratio=cfg.narrow_person_max_width_ratio,
             min_height_ratio=cfg.narrow_person_min_height_ratio,
@@ -1840,9 +1842,9 @@ def _run_detect(
                 apply_frame_preprocess(
                     pool.frame_buffer,
                     cfg.preprocess_modes,
-                    cfg.gamma,
-                    cfg.gamma_luma_threshold,
-                    cfg.contrast,
+                    cfg.detection.gamma,
+                    cfg.detection.gamma_luma_threshold,
+                    cfg.detection.contrast,
                 ),
                 pool.mark_rgb_current(),
                 (
@@ -2256,7 +2258,7 @@ def _run_emit(
             track_results,
             tracker_result_buffers,
             dynamic_reid_enabled=dynamic_reid is not None,
-            person_class=cfg.person_class,
+            person_class=cfg.detection.person_class,
         )
         _pm_motion_cids: list[int] = []
         _pm_motion_snaps = None
@@ -2371,7 +2373,7 @@ def _run_emit(
                 track_results,
                 tracker_result_buffers,
                 dynamic_reid_enabled=dynamic_reid is not None,
-                person_class=cfg.person_class,
+                person_class=cfg.detection.person_class,
             )
             if FLOW_TIMING:
                 flow_add("emit_host_batch", flow_now() - _t0)
@@ -2381,8 +2383,8 @@ def _run_emit(
                 frame_id=frame_id,
                 track_results=track_results,
                 host_batch=host_track_batch,
-                person_class=cfg.person_class,
-                track_person_only=cfg.track_person_only,
+                person_class=cfg.detection.person_class,
+                track_person_only=cfg.detection.track_person_only,
                 geometry_suspect_support=cfg.geometry_suspect_support,
                 geometry_suspect_support_score=cfg.geometry_suspect_support_score,
                 id_stability_filter=id_stability_filter,
@@ -2848,9 +2850,9 @@ def _run_birth_config(
             match_thresh=cfg.match_thresh,
             track_buffer=seq_track_buffer,
             mid_thresh=frame_mid_thresh,
-            confirm_streak=int(cfg.kwargs.get("confirm_streak", 1)),
-            confirm_score_thresh=float(cfg.kwargs.get("confirm_score_thresh", 0.0)),
-            adaptive_confirmation=bool(cfg.kwargs.get("adaptive_confirmation", False)),
+            confirm_streak=cfg.confirm_streak,
+            confirm_score_thresh=cfg.confirm_score_thresh,
+            adaptive_confirmation=cfg.adaptive_confirmation,
             new_track_thresh=frame_new_track_thresh,
             kalman_adapt_mode=cfg.kalman_adapt_mode,
             r_scale=cfg.kalman_r_scale,
@@ -3245,8 +3247,8 @@ def _run_reid_and_gmc(
         fused_classes,
         h_orig,
         enabled=cfg.geometry_mid_scale,
-        person_class=cfg.person_class,
-        track_person_only=cfg.track_person_only,
+        person_class=cfg.detection.person_class,
+        track_person_only=cfg.detection.track_person_only,
         ref_height_ratio=cfg.geometry_ref_height_ratio,
         min_scale=cfg.geometry_min_scale,
         max_scale=cfg.geometry_max_scale,

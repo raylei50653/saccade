@@ -65,8 +65,8 @@ def _build_cpp_seq_config(
     c.match_thresh = float(getattr(cfg, "match_thresh", 0.66))
     c.new_track_thresh = float(getattr(cfg, "new_track_thresh", 0.28))
     c.mid_thresh = float(getattr(cfg, "mid_thresh", 0.10))
-    c.confirm_streak = int(cfg.kwargs.get("confirm_streak", 1))
-    c.confirm_score_thresh = float(cfg.kwargs.get("confirm_score_thresh", 0.0))
+    c.confirm_streak = cfg.confirm_streak
+    c.confirm_score_thresh = cfg.confirm_score_thresh
     c.fuse_score_weight = float(getattr(cfg, "fuse_score_weight", 0.4))
     c.vel_dir_weight = float(getattr(cfg, "vel_dir_weight", 0.0))
     c.stage2_match_thresh = float(getattr(cfg, "stage2_match_thresh", 0.5))
@@ -74,7 +74,7 @@ def _build_cpp_seq_config(
     c.birth_prox_norm_thresh = float(getattr(cfg, "birth_prox_norm_thresh", 0.0))
     # NB: OAO is configured on the tracker via set_oao_params(cfg.oao_tau); the
     # C++ SequenceConfig has no oao_tau field, so do not set it here.
-    c.track_buffer = 30
+    c.track_buffer = cfg.track_buffer
 
     # GMC — always enabled (GPU phase correlation, matches Python workbench default)
     c.gmc_enabled = True
@@ -145,7 +145,7 @@ def run_eval_cpp(
 
     native_cfg = PerceptionPipelineConfig()
     native_cfg.score_threshold = cfg.conf_threshold
-    native_cfg.person_class = cfg.person_class
+    native_cfg.person_class = cfg.detection.person_class
     native_cfg.nms_threshold = cfg.nms_iou_threshold
     native_cfg.person_geometry_prior = cfg.person_geometry_prior
     native_cfg.person_min_height_ratio = cfg.person_min_height_ratio

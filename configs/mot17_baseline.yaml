@@ -1,62 +1,18 @@
-# MOT17 tracker_core_gmc baseline config
-# State: 2026-05-11 (fuse_score_weight=0.4 added; botsort-style IoU×(1-w×score) for FP reduction)
-# Equivalent to: --preset baseline
-# Results (7-seq SDP): IDF1 51.2% / MOTA 43.4% / IDs 505 / Rcll 58.5% / ~90 FPS
+# MOT17 baseline config — minimal intentional overrides only.
 #
-# For yolo26s: --preset speed → IDF1 52.0% / MOTA 41.6% / IDs 475 / Rcll 55.0% / ~98 FPS
+# State: 2026-07-08 (Phase 3C: stripped 29 no-op keys matching argparse defaults)
 #
-# Engine comparison (same params m=0.66, ntt=0.28, interp+fp_hard_filter+fsw=0.4 on):
-#   yolo26s: IDF1 52.0%, MOTA 41.6%, IDs 475, FP 14563, FN 50545, Rcll 55.0%  (fsw not yet applied)
-#   yolo26m: IDF1 51.2%, MOTA 43.4%, IDs 505, FP 16476, FN 46548, Rcll 58.5%
+# All fields NOT listed here use the argparse / dataclass defaults.
+# The 3 fields below are the only ones that intentionally differ from defaults.
+#
+# Benchmarks (7-seq SDP, yolo26m):
+#   IDF1 51.2% / MOTA 43.4% / IDs 505 / Rcll 58.5% / ~90 FPS
 #
 # Usage:
-#   uv run scripts/eval/mot17.py --preset baseline --detector SDP
-#   uv run scripts/eval/mot17.py --preset speed --detector SDP     # yolo26s
-#   uv run scripts/eval/mot17.py --config configs/mot17_baseline.yaml --match-thresh 0.70  # CLI overrides
+#   uv run scripts/eval/mot17.py --config configs/mot17_baseline.yaml
+#   uv run scripts/eval/mot17.py --preset mamba_whole_graph --detector SDP
 
-# --- Engine ---
-engine: models/yolo/yolo26m_960_batch1.engine
-
-# --- Core tracking (P3 confirmed 2026-05-10; fuse_score_weight added 2026-05-11) ---
-match_thresh: 0.66       # P3 best; lower match → stable associations → fewer IDs
-new_track_thresh: 0.28   # P3 best; lower ntt → better recall
-track_thresh: 0.05
-high_thresh: 0.45
-mid_thresh: 0.10
-confirm_streak: 1
-fuse_score_weight: 0.4   # botsort-style: IoU×(1-0.4×score); FP -12%, MOTA +1.6pp, Rcll -0.5pp
-oao_tau: 0.0             # OA-SORT OAO penalty (0=disabled); sweep 0.1-0.4
-
-# --- GMC ---
-gmc: true
-gmc_mode: gpu
-gmc_downscale: 8
-
-# --- Detection ---
-conf_threshold: 0.05
-tiling: native_960
-cross_tile_merge: true
-detection_quality_scaling: true
-
-# --- Pipeline (baseline: no ReID stack) ---
-reid_mode: "off"
-appearance_bank: false
-semantic_bank_inject: false
-
-# --- Stability ---
-id_stability_filter: true
-per_seq_adapt: true
-geometry_suspect_support: true
-
-# --- Motion-based relinking ---
-motion:
-  vel_alpha: 0.3
-  acc_alpha: 0.15
-  min_motion_observations: 2
-  w_motion_iou: 0.3
-  motion_consistency_check: true
-  consistency_tol: 2.0
-  enable_motion_only: true
-  motion_only_lost_frames: 5
-  motion_only_iou_threshold: 0.15
-  motion_only_min_lost_frames: 1
+# --- Core tracking overrides ---
+match_thresh: 0.66       # lower than default 0.75; more stable associations → fewer IDs
+new_track_thresh: 0.28   # lower than default 0.35; better recall
+fuse_score_weight: 0.4   # botsort-style: IoU×(1-0.4×score); FP -12%, MOTA +1.6pp

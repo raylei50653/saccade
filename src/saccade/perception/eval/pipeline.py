@@ -718,26 +718,16 @@ class EvalPipeline:
                     cfg.kwargs.get("semantic_appearance_first_margin", 0.03)
                 ),
                 # Motion-based relinking (PythonSemanticRelinker only)
-                motion_vel_alpha=cfg.kwargs.get("motion_vel_alpha", 0.3),
-                motion_acc_alpha=cfg.kwargs.get("motion_acc_alpha", 0.15),
-                motion_min_observations=cfg.kwargs.get("motion_min_observations", 2),
-                motion_w_iou=cfg.kwargs.get("motion_w_iou", 0.3),
-                motion_consistency_check=cfg.kwargs.get(
-                    "motion_consistency_check", True
-                ),
-                motion_consistency_tol=cfg.kwargs.get("motion_consistency_tol", 2.0),
-                motion_enable_motion_only=cfg.kwargs.get(
-                    "motion_enable_motion_only", not _semantic_cheb_gr_claim
-                ),
-                motion_motion_only_lost_frames=cfg.kwargs.get(
-                    "motion_motion_only_lost_frames", 5
-                ),
-                motion_motion_only_iou_threshold=cfg.kwargs.get(
-                    "motion_motion_only_iou_threshold", 0.15
-                ),
-                motion_motion_only_min_lost_frames=cfg.kwargs.get(
-                    "motion_motion_only_min_lost_frames", 1
-                ),
+                motion_vel_alpha=cfg.motion.vel_alpha,
+                motion_acc_alpha=cfg.motion.acc_alpha,
+                motion_min_observations=cfg.motion.min_motion_observations,
+                motion_w_iou=cfg.motion.w_motion_iou,
+                motion_consistency_check=cfg.motion.motion_consistency_check,
+                motion_consistency_tol=cfg.motion.consistency_tol,
+                motion_enable_motion_only=cfg.motion.enable_motion_only,
+                motion_motion_only_lost_frames=cfg.motion.motion_only_lost_frames,
+                motion_motion_only_iou_threshold=cfg.motion.motion_only_iou_threshold,
+                motion_motion_only_min_lost_frames=cfg.motion.motion_only_min_lost_frames,
                 gpu_relink_gate=_semantic_gpu_relink_gate,
                 gpu_relink_gate_graph=cfg.semantic_gpu_relink_gate_graph,
                 gpu_relink_gate_init_query_cap=(
@@ -769,30 +759,16 @@ class EvalPipeline:
                     appearance_first_margin=float(
                         cfg.kwargs.get("semantic_appearance_first_margin", 0.03)
                     ),
-                    motion_vel_alpha=cfg.kwargs.get("motion_vel_alpha", 0.3),
-                    motion_acc_alpha=cfg.kwargs.get("motion_acc_alpha", 0.15),
-                    motion_min_observations=cfg.kwargs.get(
-                        "motion_min_observations", 2
-                    ),
-                    motion_w_iou=cfg.kwargs.get("motion_w_iou", 0.3),
-                    motion_consistency_check=cfg.kwargs.get(
-                        "motion_consistency_check", True
-                    ),
-                    motion_consistency_tol=cfg.kwargs.get(
-                        "motion_consistency_tol", 2.0
-                    ),
-                    motion_enable_motion_only=cfg.kwargs.get(
-                        "motion_enable_motion_only", True
-                    ),
-                    motion_motion_only_lost_frames=cfg.kwargs.get(
-                        "motion_motion_only_lost_frames", 5
-                    ),
-                    motion_motion_only_iou_threshold=cfg.kwargs.get(
-                        "motion_motion_only_iou_threshold", 0.15
-                    ),
-                    motion_motion_only_min_lost_frames=cfg.kwargs.get(
-                        "motion_motion_only_min_lost_frames", 1
-                    ),
+                    motion_vel_alpha=cfg.motion.vel_alpha,
+                    motion_acc_alpha=cfg.motion.acc_alpha,
+                    motion_min_observations=cfg.motion.min_motion_observations,
+                    motion_w_iou=cfg.motion.w_motion_iou,
+                    motion_consistency_check=cfg.motion.motion_consistency_check,
+                    motion_consistency_tol=cfg.motion.consistency_tol,
+                    motion_enable_motion_only=cfg.motion.enable_motion_only,
+                    motion_motion_only_lost_frames=cfg.motion.motion_only_lost_frames,
+                    motion_motion_only_iou_threshold=cfg.motion.motion_only_iou_threshold,
+                    motion_motion_only_min_lost_frames=cfg.motion.motion_only_min_lost_frames,
                 )
                 print(
                     "ℹ️  [Semantic] C++ relinker lacks delayed-claim kwargs; "
@@ -952,7 +928,7 @@ class EvalPipeline:
 
         # F-1: Per-sequence adaptive params — scale temporal params by fps/30
         seq_reid_interval = cfg.reid_interval
-        _track_buffer_base = int(cfg.kwargs.get("track_buffer", 30))
+        _track_buffer_base = cfg.track_buffer
         seq_track_buffer = _track_buffer_base
         if cfg.per_seq_adapt and seq_fps != 30:
             fps_scale = seq_fps / 30.0
@@ -978,9 +954,9 @@ class EvalPipeline:
             match_thresh=cfg.match_thresh,
             track_buffer=seq_track_buffer,
             mid_thresh=cfg.mid_thresh,
-            confirm_streak=int(cfg.kwargs.get("confirm_streak", 1)),
-            confirm_score_thresh=float(cfg.kwargs.get("confirm_score_thresh", 0.0)),
-            adaptive_confirmation=bool(cfg.kwargs.get("adaptive_confirmation", False)),
+            confirm_streak=cfg.confirm_streak,
+            confirm_score_thresh=cfg.confirm_score_thresh,
+            adaptive_confirmation=cfg.adaptive_confirmation,
             new_track_thresh=cfg.new_track_thresh,
             kalman_adapt_mode=cfg.kalman_adapt_mode,
             r_scale=cfg.kalman_r_scale,
@@ -1449,8 +1425,8 @@ class EvalPipeline:
                 frame_id=_frame_id,
                 track_results=_track_results,
                 host_batch=_host_batch,
-                person_class=cfg.person_class,
-                track_person_only=cfg.track_person_only,
+                person_class=cfg.detection.person_class,
+                track_person_only=cfg.detection.track_person_only,
                 geometry_suspect_support=cfg.geometry_suspect_support,
                 geometry_suspect_support_score=cfg.geometry_suspect_support_score,
                 id_stability_filter=id_stability_filter,

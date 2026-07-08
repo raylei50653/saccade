@@ -60,6 +60,9 @@ class DetectionConfig:
     external_fp_max_score: float = 0.18
     external_fp_penalty: float = 1.0
     external_fp_softmax_min_scale: float = 0.7
+    external_fp_logistic_model: str = ""
+    # Mamba detector
+    max_det: int = 300
     # Narrow person score bonus
     narrow_person_score_bonus: float = 0.0
     narrow_person_max_width_ratio: float = 0.018
