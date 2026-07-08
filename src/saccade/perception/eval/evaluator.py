@@ -1034,7 +1034,7 @@ def _run_frame(
                         cfg.detection.crowd_conf_threshold
                         if cfg.detection.crowd_low_score_mode
                         else cfg.core.conf_threshold,
-                        cfg.crowd_track_thresh
+                        cfg.geometry.crowd_track_thresh
                         if cfg.detection.crowd_low_score_mode
                         else cfg.core.track_thresh,
                     ),
@@ -1277,7 +1277,9 @@ def _run_frame(
                 else cfg.core.conf_threshold
             )
             frame_track_thresh = (
-                cfg.crowd_track_thresh if crowd_low_active else cfg.core.track_thresh
+                cfg.geometry.crowd_track_thresh
+                if crowd_low_active
+                else cfg.core.track_thresh
             )
             frame_mid_thresh = (
                 cfg.crowd_mid_thresh if crowd_low_active else cfg.core.mid_thresh
@@ -2238,7 +2240,7 @@ def run_eval(
             cfg.detection.crowd_conf_threshold
             if cfg.detection.crowd_low_score_mode
             else conf_threshold,
-            cfg.crowd_track_thresh
+            cfg.geometry.crowd_track_thresh
             if cfg.detection.crowd_low_score_mode
             else cfg.core.track_thresh,
         )

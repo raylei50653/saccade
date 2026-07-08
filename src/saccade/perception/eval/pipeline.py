@@ -542,12 +542,12 @@ class EvalPipeline:
 
         id_stability_filter = (
             IdStabilityFilter(
-                min_hits=cfg.id_stability_min_hits,
-                min_iou=cfg.id_stability_min_iou,
-                max_center_shift=cfg.id_stability_max_center_shift,
-                max_gap=cfg.id_stability_max_gap,
-                score_ema=cfg.id_stability_score_ema,
-                min_score_ema=cfg.id_stability_min_score_ema,
+                min_hits=cfg.geometry.id_stability_min_hits,
+                min_iou=cfg.geometry.id_stability_min_iou,
+                max_center_shift=cfg.geometry.id_stability_max_center_shift,
+                max_gap=cfg.geometry.id_stability_max_gap,
+                score_ema=cfg.geometry.id_stability_score_ema,
+                min_score_ema=cfg.geometry.id_stability_min_score_ema,
             )
             if cfg.id_stability_filter_enabled
             else None
