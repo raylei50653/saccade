@@ -194,3 +194,16 @@ def configure_runtime_env(
     # documented rollout gate) and --no-main-nms-graphed A/B runs are respected.
     if getattr(args, "main_nms_graphed", False):
         env["SACCADE_MAIN_NMS_GRAPHED"] = "1"
+
+    # Clear SACCADE_STREAM_MODE to prevent shell leakage.
+    #
+    # This env var controls experimental CUDA stream dispatch modes (pipelines.py).
+    # It is managed via direct shell export for probe/ablation runs and is NOT
+    # wired to a CLI flag.  If a prior shell session exported, e.g.,
+    # SACCADE_STREAM_MODE=ptds_probe (a mode whose determinism FAILS — see
+    # docs/sync_audit.md), that value persists in the subprocess env and causes
+    # run-to-run detection/tracking drift.  The deterministic default is "" (no
+    # stream mode → full device barriers).  We explicitly clear it here so the
+    # CLI is always authoritative: you only get a non-default stream mode when
+    # you deliberately export it in the same invocation.
+    env.pop("SACCADE_STREAM_MODE", None)
