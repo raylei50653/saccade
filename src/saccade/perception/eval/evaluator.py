@@ -558,14 +558,14 @@ def _run_frame(
                 if wb_scene_policy.is_classified and wb_scene_policy.stats is not None:
                     st = wb_scene_policy.stats
                     if st.scene_type == "crowded_narrow":
-                        state.seq_narrow_bonus = cfg.narrow_person_score_bonus
+                        state.seq_narrow_bonus = cfg.detection.narrow_person_score_bonus
                     wb.narrow_bonus = state.seq_narrow_bonus
                     print(
                         f"  [scene_adapt] {seq} @ frame {frame_id}: {st}"
                         + (
                             f" → narrow_bonus={state.seq_narrow_bonus:.2f}"
                             if cfg.scene_adapt_enabled
-                            and cfg.narrow_person_score_bonus > 0
+                            and cfg.detection.narrow_person_score_bonus > 0
                             else ""
                         )
                     )
@@ -746,13 +746,13 @@ def _run_frame(
                 if _scene_policy.is_classified and _scene_policy.stats is not None:
                     st = _scene_policy.stats
                     if st.scene_type == "crowded_narrow":
-                        state.seq_narrow_bonus = cfg.narrow_person_score_bonus
+                        state.seq_narrow_bonus = cfg.detection.narrow_person_score_bonus
                     print(
                         f"  [scene_adapt] {seq} @ frame {frame_id}: {st}"
                         + (
                             f" → narrow_bonus={state.seq_narrow_bonus:.2f}"
                             if cfg.scene_adapt_enabled
-                            and cfg.narrow_person_score_bonus > 0
+                            and cfg.detection.narrow_person_score_bonus > 0
                             else ""
                         )
                     )
@@ -1016,10 +1016,10 @@ def _run_frame(
                     frame_h=h_orig,
                     person_class=cfg.detection.person_class,
                     bonus=state.seq_narrow_bonus,
-                    max_width_ratio=cfg.narrow_person_max_width_ratio,
-                    min_height_ratio=cfg.narrow_person_min_height_ratio,
-                    min_aspect=cfg.narrow_person_min_aspect,
-                    max_aspect=cfg.narrow_person_max_aspect,
+                    max_width_ratio=cfg.detection.narrow_person_max_width_ratio,
+                    min_height_ratio=cfg.detection.narrow_person_min_height_ratio,
+                    min_aspect=cfg.detection.narrow_person_min_aspect,
+                    max_aspect=cfg.detection.narrow_person_max_aspect,
                 )
                 t_sub_start = time.perf_counter()
                 if state._frame_stage_times is not None:
@@ -1031,11 +1031,11 @@ def _run_frame(
                     score_threshold=min(
                         cfg.conf_threshold,
                         cfg.track_thresh,
-                        cfg.crowd_conf_threshold
-                        if cfg.crowd_low_score_mode
+                        cfg.detection.crowd_conf_threshold
+                        if cfg.detection.crowd_low_score_mode
                         else cfg.conf_threshold,
                         cfg.crowd_track_thresh
-                        if cfg.crowd_low_score_mode
+                        if cfg.detection.crowd_low_score_mode
                         else cfg.track_thresh,
                     ),
                     track_person_only=cfg.detection.track_person_only,
@@ -1268,11 +1268,13 @@ def _run_frame(
                     seq_stage_totals["post_merge"] += elapsed_ms
             after_merge_count = int(fused_scores.numel())
             crowd_low_active = (
-                cfg.crowd_low_score_mode
-                and after_merge_count >= cfg.crowd_low_score_trigger
+                cfg.detection.crowd_low_score_mode
+                and after_merge_count >= cfg.detection.crowd_low_score_trigger
             )
             frame_conf_threshold = (
-                cfg.crowd_conf_threshold if crowd_low_active else cfg.conf_threshold
+                cfg.detection.crowd_conf_threshold
+                if crowd_low_active
+                else cfg.conf_threshold
             )
             frame_track_thresh = (
                 cfg.crowd_track_thresh if crowd_low_active else cfg.track_thresh
@@ -2226,8 +2228,12 @@ def run_eval(
         native_cfg.score_threshold = min(
             conf_threshold,
             cfg.track_thresh,
-            cfg.crowd_conf_threshold if cfg.crowd_low_score_mode else conf_threshold,
-            cfg.crowd_track_thresh if cfg.crowd_low_score_mode else cfg.track_thresh,
+            cfg.detection.crowd_conf_threshold
+            if cfg.detection.crowd_low_score_mode
+            else conf_threshold,
+            cfg.crowd_track_thresh
+            if cfg.detection.crowd_low_score_mode
+            else cfg.track_thresh,
         )
         native_cfg.person_class = cfg.detection.person_class
         native_cfg.person_only = cfg.detection.track_person_only

@@ -1147,7 +1147,7 @@ class EvalPipeline:
         )
         # Start with 0 bonus; if scene_adapt disabled, use the configured value directly.
         seq_narrow_bonus: float = (
-            0.0 if cfg.scene_adapt_enabled else cfg.narrow_person_score_bonus
+            0.0 if cfg.scene_adapt_enabled else cfg.detection.narrow_person_score_bonus
         )
         start_time = time.time()
         warmup_frames = int(cfg.kwargs.get("warmup_frames", 50))

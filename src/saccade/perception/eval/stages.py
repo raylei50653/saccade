@@ -1488,10 +1488,10 @@ def _run_native_tensor_prep(
             frame_h=h_orig,
             person_class=cfg.detection.person_class,
             bonus=seq_narrow_bonus,
-            max_width_ratio=cfg.narrow_person_max_width_ratio,
-            min_height_ratio=cfg.narrow_person_min_height_ratio,
-            min_aspect=cfg.narrow_person_min_aspect,
-            max_aspect=cfg.narrow_person_max_aspect,
+            max_width_ratio=cfg.detection.narrow_person_max_width_ratio,
+            min_height_ratio=cfg.detection.narrow_person_min_height_ratio,
+            min_aspect=cfg.detection.narrow_person_min_aspect,
+            max_aspect=cfg.detection.narrow_person_max_aspect,
         )
         post_boxes = _post_bufs["boxes"][:raw_box_count]
         post_scores = _post_bufs["scores"][:raw_box_count]
