@@ -10,11 +10,20 @@
 | [gpu_pipeline_m4b_identity_resolver.md](pipeline/gpu_pipeline_m4b_identity_resolver.md) | M4b native identity resolver 設計 |
 | [perf_attribution_whole_graph_m.md](pipeline/perf_attribution_whole_graph_m.md) | whole_graph_m 每幀開銷歸因 + 優化 backlog（nsys, 2026-07） |
 
+## Research narrative (P8)
+
+| 文件 | 內容 |
+|------|------|
+| [tracker-decision/status_2026-07-09.md](tracker-decision/status_2026-07-09.md) | 一頁式 production / contract / dual-stab / NO-GO 總結 |
+| [paper_outline.md](paper_outline.md) | arXiv / technical report **skeleton only** |
+| [evidence_ledger.md](evidence_ledger.md) | 可引用 metrics + decision outcomes 總表 |
+
 ## tracker-decision/
 
 | 文件 | 內容 |
 |------|------|
 | [README.md](tracker-decision/README.md) | Tracker 決策層範圍、與 pipeline 分工、文件索引 |
+| [status_2026-07-09.md](tracker-decision/status_2026-07-09.md) | P8 一頁式現況（keep both + m cost nuance） |
 | [scoring_semantics.md](tracker-decision/scoring_semantics.md) | Association cost / gate / weight / identity 語意 |
 | [assoc_knobs.md](tracker-decision/assoc_knobs.md) | 決策旋鈕卡片（ACTIVE + NO-GO） |
 | [relink_bridge.md](tracker-decision/relink_bridge.md) | Geometry-only bridge relink |
@@ -24,6 +33,7 @@
 | [audit/callpoints.md](tracker-decision/audit/callpoints.md) | schema → inject → native 對照 |
 | [audit/native_bridge.md](tracker-decision/audit/native_bridge.md) | Python↔CUDA bridge / rename 風險 |
 | [audit/math_model_drift_2026-07-09.md](tracker-decision/audit/math_model_drift_2026-07-09.md) | math_model.md 靜態 drift audit（P3） |
+| [audit/dual_stability_ablation_results_2026-07-09.md](tracker-decision/audit/dual_stability_ablation_results_2026-07-09.md) | P7 dual stability A–D（s+m） |
 
 ## tracking/
 
