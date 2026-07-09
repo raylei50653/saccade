@@ -11,6 +11,8 @@ See [../../ownership/doc_structure_contract.md](../../ownership/doc_structure_co
 |------|------|
 | [signal_table_schema.md](signal_table_schema.md) | 訊號分析契約；A/B1/B2；B1 輸出；**§0.3 風格參考與注意事項** |
 | [m_b1_substrate_smoke_20260709.md](m_b1_substrate_smoke_20260709.md) | D1：`mamba_whole_graph_m` 上 offline_relink/B1 資料規格煙測（pointer → study_dir） |
+| [m_b1_bridge_discriminability_20260709.md](../../modules/semantic/research/m_b1_bridge_discriminability_20260709.md) | D2：m B1 full/hard + thr 誰傷 GT + thr(gap) 非線性（study_dir master） |
+| [m_b2_reconnect_bridge_ab_20260709.md](../../modules/semantic/research/m_b2_reconnect_bridge_ab_20260709.md) | D3：m B2 bridge on/off reconnect + e2e（study_dir master） |
 | [fp_classifier_external_only_plan.md](fp_classifier_external_only_plan.md) | 0-shot FP classifier 設計 |
 | [gmc_residual_correction_20260612.md](gmc_residual_correction_20260612.md) | GMC residual 共模修正 ablation |
 | [kalman_h_recalibration_20260612.md](kalman_h_recalibration_20260612.md) | Kalman H 重校準 |

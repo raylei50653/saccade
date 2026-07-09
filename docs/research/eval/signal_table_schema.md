@@ -144,7 +144,13 @@ D1 真 m 煙測 pointer： [m_b1_substrate_smoke_20260709.md](m_b1_substrate_smo
 D1  真 pairs 煙測（任意/m substrate → builder → summarize → 查三檔）
     → 2026-07-09 m 煙測已過：m_b1_substrate_smoke_20260709.md
 D2  m B1 正式 stamp + 短 note（pointer only）
+    → 2026-07-09：m_b1_bridge_discriminability_20260709.md
+      study out/signal_study/m_b1_smoke_20260709T092543Z/
+      + thr GT_hurt / thr(gap) 非線性試算（note §3b–3c；metrics_thr_* in study_dir）
 D3  B2 reconnect 對照（bridge on/off）
+    → 2026-07-09：m_b2_reconnect_bridge_ab_20260709.md
+      study out/signal_study/m_b2_bridge_ab_20260709T094646Z/
+      tool: reconnect_rate.py --json-out / --events-out
 D4  可選：meta 自動寫入、e2e 灌 context、ledger 升格
 ```
 

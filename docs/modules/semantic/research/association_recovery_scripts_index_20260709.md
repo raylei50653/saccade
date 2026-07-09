@@ -247,6 +247,27 @@ uv run python scripts/tools/optimize_relink_weight.py
 Verified m smoke (pointer only): [m_b1_substrate_smoke_20260709.md](../../../research/eval/m_b1_substrate_smoke_20260709.md) → `out/signal_study/m_b1_smoke_*`.  
 Artifacts often under `out/signal_study/` · `scripts/tools/out/` · `docs/modules/semantic/research/figures/`.
 
+### R-B2 — Online reconnect (bridge on/off, B2)
+
+```bash
+# production-like m: interpolate ON; ablate only bridge
+uv run python scripts/eval/mot17.py --preset mamba_whole_graph_m --detector SDP \
+  --double-buffer --detect-barrier event --no-relink-bridge-enabled \
+  --output results/<m_b2_off>
+uv run python scripts/eval/mot17.py --preset mamba_whole_graph_m --detector SDP \
+  --double-buffer --detect-barrier event --relink-bridge-enabled \
+  --output results/<m_b2_on>
+
+uv run python scripts/eval/diagnostics/reconnect_rate.py \
+  --pred-dir results/<m_b2_on> --baseline-dir results/<m_b2_off> \
+  --label bridge_on --baseline-label bridge_off \
+  --json-out out/signal_study/<id>/metrics_reconnect.json \
+  --events-out out/signal_study/<id>/events_bridge_on.csv \
+  --baseline-events-out out/signal_study/<id>/events_bridge_off.csv
+```
+
+Live pointer: [m_b2_reconnect_bridge_ab_20260709.md](m_b2_reconnect_bridge_ab_20260709.md).
+
 ### R-B — Depth / swap probe
 
 ```bash

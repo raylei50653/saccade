@@ -18,7 +18,10 @@
 2. `build_relink_candidates.py` → `U_relink_pair` 齊欄  
 3. `summarize_relink_pairs.py` → 契約三檔；`n_pos>0`、hard≤full、`citation_ok=true`
 
-**一句：** B1 管道在真 m 資料上驗收通過；D2 研究 note 另開。
+**一句：** B1 管道在真 m 資料上驗收通過。
+
+**D2 解讀（同 study stamp）：**  
+[m_b1_bridge_discriminability_20260709.md](../../modules/semantic/research/m_b1_bridge_discriminability_20260709.md)
 
 ## Recipe（摘要）
 
@@ -40,9 +43,9 @@
 | substrate MOT | `results/MOT17_eval_m_b1_substrate_20260709T092543Z/` |
 | eval log | `logs/m_b1_substrate_20260709T092543Z.log` |
 
-## Out of scope
+## Out of scope（本煙測檔）
 
-- 不當 D2 解讀 headline  
+- 解讀正文 → 見 D2 note  
 - 不改 production preset  
 - 不重寫 s 文內嵌表  
 - B2 reconnect 另見 D3
