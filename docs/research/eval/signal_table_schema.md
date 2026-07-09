@@ -41,7 +41,8 @@
 
 - B1 **不**取代 B2；B1 AUC **不是** e2e IDF1。  
 - B1 方法敘事以 [offline_relink_candidate_analysis.md](../../modules/semantic/research/offline_relink_candidate_analysis.md) 為準（**s 歷史數字 as-of 該文日期**；m 主線數字只進 study 目錄）。  
-- 預設 hard pool = `bridge_dist<=1.0`。Code：`STUDY_SCRIPT_MAP` / `B1_OUTPUT_FILES`。
+- 預設 hard pool = `bridge_dist<=1.0`。Code：`STUDY_SCRIPT_MAP` / `B1_OUTPUT_FILES`。  
+- **Gate vs Score 分工見 §0.5**（勿把 thr 當訊號強度、勿把分布主討論放在 gate）。
 
 ### 0.2 B1 輸出契約（分布背景 + 腳本產物）
 
@@ -202,20 +203,21 @@ Code：`SAFE_REJECT_EPSILONS` / `classify_safe_level` / `constrained_fp_prune_me
 | `calibration` | 主要保護 coverage（如 thr(gap)），不保證砍 FP |
 | `baseline` | 對照用 1D thr 等 |
 
-**分層：**
+**在 §0.5 中的位置：** 本節 = **Support Gate（L0）** 內的 safe-reject 子契約。  
+`thr(gap)` = L0 **coverage calibration**（`rule_class=calibration`），不是 score term 強度。
 
 ```text
-Layer A  thr(gap) / coverage     → calibration（少傷 GT，硬約束）
-Layer B  context reject C        → safe/risky FP pruning（GT hard / FP soft）
+L0a  thr(gap) / coverage     → 少傷 GT（硬）
+L0b  context reject C        → safe/risky FP pruning（GT hard / FP soft）
 ```
 
-先 A 再 B；不要用緊 thr 假裝 safe prune。
+先 L0a 再 L0b；不要用緊 thr 假裝 safe prune。
 
 **必報表（audit 一列一 rule×bin）：**  
 `rule_name, coverage_bin, rule_class, GT_total, GT_hurt, GT_hurt_rate, FP_total, FP_removed, FP_removed_rate, FP_removed_per_GT_hurt, safe_level, notes`  
 常數：`SAFE_REJECT_AUDIT_COLS` · 檔名 `metrics_safe_reject_audit.csv` / `metrics_safe_reject_summary.json`。
 
-**主問題（每個 gate）：**
+**主問題（每個 gate rule）：**
 
 1. 被 reject 的有哪些是 GT？  
 2. 被保留的有哪些是 FP？  
@@ -232,7 +234,69 @@ uv run python scripts/tools/audit_relink_safe_reject.py \
   --write-study --by-gap
 ```
 
-**非目標：** 改 production preset；把 offline safe rule 直接當 e2e GO。
+**非目標：** 改 production preset；把 offline safe rule 直接當 e2e GO；用 gate thr 代替 score 排序討論。
+
+### 0.5 Gate vs Score（support / calibration / policy）
+
+**一句：**
+
+> **Gate 負責「不要讓真對死掉」（必要時安全砍明顯 FP）；  
+> Score weighting 才負責「真對與假對都活著時，讓真對贏」。**
+
+Gate **不主要拿來討論分布**；分布、校準、加權屬 **score layer**。  
+（命名 **L0/L1/L2** 僅用於本節 identity 分析；**≠** §P 的 `PipelineLayer` L0_ingest / L1_detect。）
+
+| 層 | 名稱 | 主問題 | 可看的量 | 禁止當… |
+|:--|:--|:--|:--|:--|
+| **L0** | **Support Gate** | 這條候選**還能否進後段**？ | coverage、GT_hurt、safe FP prune、ε-frontier | 「訊號多強」；對稱 F1 thr 調參當 headline |
+| **L1** | **Signal Calibration** | 各 term **尺度可不可比**？ | pos/neg 分位、單 term AUC、overlap、分 gap 失效 | 直接決定生死（那是 gate 或 assignment） |
+| **L2** | **Policy Weighting / Assignment** | **誰該贏**、margin 穩不穩？ | GT rank、**GT_vs_best_FP_margin**、top1/topk、flip；online 才 IDs/IDF1 | 單 term 平均分代替 margin |
+
+**同一物理量可兩用，audit 必須分家：**
+
+| 用法 | 層 | 例 |
+|:--|:--|:--|
+| 截斷 / reject | L0 gate | `bridge_dist ≤ thr`、`thr(gap)`、safe-reject rule C |
+| 排序 term | L1→L2 | `bridge_dist_score`、`direction_score`、`residual_score`、`speed_score`、`scale_score`、`gap_prior`、`context_penalty` |
+
+```text
+signal measurement  ≠  normalization  ≠  policy weight
+```
+
+異質 cost 裡混「真訊號 / proxy / policy knob」時，先拆 term 再談權重。
+
+#### 兩份 audit（勿混檔、勿混結論）
+
+| | **Gate Audit**（§0.4） | **Score Audit**（契約；工具可後補） |
+|:--|:--|:--|
+| 目標 | 保 GT support；ε 下 safe prune | 在**保留池**內讓 GT 贏過 hard FP |
+| 主指標 | GT_hurt、FP_removed、safe_level | term 分布、AUC、overlap、**GT_vs_best_FP_margin**、GT_best_rank |
+| 已有 | `audit_relink_safe_reject.py` · thr / thr(gap) study 產物 | 單 term AUC 部分見 summarize；**系統 score audit 尚未建**（§8.2） |
+| 成功長相 | thr(gap) 公平 coverage；ε=0 砍明顯 FP | hard pool 裡 margin>0、top1 升；非全池 prec 幻覺 |
+
+**Score term 建議報（每 term × context_bin）：**  
+`signal_name, context_bin, GT_median/p90/p95, FP_median/p10/p05, AUC, overlap_rate, GT_best_rank, GT_vs_best_FP_margin, term_failure_case`  
+
+**加權 profile 建議報：**  
+`weight_profile, GT_top1_rate, GT_topk_rate, mean_margin, negative_margin_count, assignment_flip_count`；（online）IDs/IDF1 Δ 另 study。
+
+**解讀範式（已見現象）：**
+
+```text
+thr(gap) 把 GT_hurt 分配公平  +  全池 prec 仍 ~2–3%
+  ⇒ L0 calibration 可能成功；L1/L2 separability 未解
+  ⇒ 下一步主戰場是 Score Audit，不是再調 gate thr
+```
+
+**與 A/B1/B2：**
+
+| 線 | 偏哪層 |
+|:--|:--|
+| A Recall | 多為 det **gate**（誰進系統） |
+| B1 | L0 gate audit + L1 單 term 排序能力（pairs）；**未自動含 L2 加權** |
+| B2 | L2 **online 後果**（reconnect / e2e），不代替 L0/L1 表 |
+
+**非目標：** 用 gate thr 表驅動 production px；把 full-pool AUC 當 L2 已解；在 DEVELOPMENT 展開本節細節。
 
 ---
 

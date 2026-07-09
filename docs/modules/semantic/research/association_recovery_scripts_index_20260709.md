@@ -210,8 +210,8 @@ Redirect helper: `scripts/eval/_redirect.py`.
 
 ## 4. Recipes (CLI assembly only — conclusions stay manual)
 
-**能用 / 缺什麼（gate·訊號研究總覽，不在本檔重複維護）：**  
-[signal_table_schema.md §8](../../../research/eval/signal_table_schema.md#8-與現有工具的映射實作入口--能用--缺什麼).
+**能用 / 缺什麼 + Gate vs Score 分工（不在本檔重複維護）：**  
+[signal_table_schema §8](../../../research/eval/signal_table_schema.md) · [§0.5](../../../research/eval/signal_table_schema.md)（L0 gate / L1–L2 score）。
 
 These are **suggested command chains**, not automated GO gates. Fill `<…>` from crosswalk §5 substrates.
 

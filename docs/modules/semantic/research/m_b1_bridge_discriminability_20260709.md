@@ -22,6 +22,10 @@
 
 ## TL;DR（as-of study）
 
+**Layering (schema §0.5):** `thr` / `thr(gap)` / safe-reject = **L0 Gate**（保 GT support）；  
+full/hard AUC on `bridge_dist` = **L1 term** 排序能力。Gate 不主要拿來討論分布；  
+「誰在候選池裡贏」屬 Score（L1/L2）— 本 note 的 thr 節是 gate，AUC 節是 score term，勿混結論。
+
 Same **qualitative** story as offline_relink (s): `bridge_dist` is a **strong full-pool ranker** and a **weaker hard-pool ranker**; precision is still **base-rate limited**.
 
 | Pool | as-of (see `metrics_auc.json`) | How to read |
@@ -151,7 +155,10 @@ n_pos=340（gt_valid）。
 
 **Caveat：** 這是 **B1 offline pair thr**，不是 e2e IDF1；也 **不是** 直接改 `relink_bridge_px`。不傷 offline 真對 ≠ online 無假 merge（見 B2）。
 
-### 3c. 非線性 `thr(gap)` 試算（as-of same study）
+### 3c. 非線性 `thr(gap)` 試算（as-of same study · **L0 gate calibration only**）
+
+> **§0.5：** `thr(gap)` 屬 Support Gate 的 coverage calibration，**不是** signal strength、不是 score weighting。  
+> 保 GT 分配公平 ≠ 解 hard-pool separability（見 §2 hard AUC / 後續 Score Audit）。
 
 Master：`metrics_thr_gap_schedules.csv` · `metrics_thr_gap_nonlinear.json` · `metrics_thr_gap_hybrid.json`。
 
