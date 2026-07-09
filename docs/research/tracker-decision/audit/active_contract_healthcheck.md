@@ -7,10 +7,12 @@
 headline presets → schema defaults → `pipeline.py` inject → native  
 (see [callpoints.md](callpoints.md), [native_bridge.md](native_bridge.md)).
 
-**Automated checker (C1–C5, C7 hard; C6 NOTE):**
+**Automated checker (C1–C5, C7 hard; C6 NOTE; C8 inject-map hard):**
 
 ```bash
 uv run python scripts/tools/check_headline_decision_contract.py
+# YAML only (skip C8):
+uv run python scripts/tools/check_headline_decision_contract.py --skip-inject
 ```
 
 CI: `contracts` job runs this script. Unit tests:
@@ -41,15 +43,11 @@ unless behavior actually changes.
 ## How to run
 
 ```bash
-# Automated (P5) — preferred first step on preset PRs
+# Automated (P5 + P5.1) — preferred first step on preset / inject PRs
 uv run python scripts/tools/check_headline_decision_contract.py
 
-# Manual supplements (not fully automated yet)
+# Manual supplements
 diff -u configs/presets/mamba_whole_graph.yaml configs/presets/mamba_whole_graph_m.yaml
-
-# C8 inject map (script does not parse pipeline.py in v1)
-rg -n "set_params|set_occ_params|set_relink_params|set_stability_cost_w|set_multiplicative" \
-  src/saccade/perception/eval/pipeline.py
 
 uv run python scripts/tools/check_doc_stale_paths.py
 uv run python scripts/tools/check_doc_freshness.py   # warn-only
@@ -177,15 +175,19 @@ Spot-check (full table: [no_go_guardrails.md](no_go_guardrails.md)):
 
 ---
 
-### C8 — inject map still correct (sanity)
+### C8 — inject map still correct (sanity) — **automated**
 
-| Expectation | Path |
-|:--|:--|
-| Primary tracker inject | `src/saccade/perception/eval/pipeline.py` (`set_params` / `set_occ_params` / `set_relink_params`) |
-| Stage orchestration | `evaluator.py` (not primary setter site) |
-| Name remap | `kalman_r_scale` → `r_scale=` |
+| Expectation | Path | Checker |
+|:--|:--|:--|
+| Primary tracker inject | `pipeline.py` calls `detector.tracker.set_params` / `set_occ_params` / `set_relink_params` | hard fail |
+| Name remap | `r_scale=cfg.geometry.kalman_r_scale` | hard fail |
+| occ knobs flow | `cfg.geometry.occ_*` into `set_occ_params` | hard fail |
+| Multiplicative / stability | `set_multiplicative_cost` + `set_stability_cost_w` present | hard fail |
+| Private continuation | `_append_private_continuation_candidates` + `birth_ceiling` in `detection_filters.py` | hard fail |
+| Private not a setter | no `set_private_continuation` / `set_params(..., private_*)` on tracker facade | hard fail |
+| Facade remap target | `tracker_gpu.py` `set_params` accepts `r_scale` | hard fail |
 
-**Fail if:** docs or new code move production inject only to a dead path.
+**Fail if:** production inject moves off `pipeline.py`, remap drops, or private becomes a tracker setter.
 
 ---
 
@@ -202,7 +204,7 @@ Active contract healthcheck (manual):
 - [ ] C5 dir_bonus s/m
 - [ ] C6 dual stability still separate (or linked decision PR)
 - [ ] C7 NO-GO not on headline
-- [ ] C8 inject still pipeline.py
+- [ ] C8 inject still pipeline.py (+ remap + private det-set)
 Behavior change? no / yes → smoke → 04 → 7-seq
 ```
 
@@ -212,10 +214,10 @@ Behavior change? no / yes → smoke → 04 → 7-seq
 
 | Item | Status |
 |:--|:--|
-| `scripts/tools/check_headline_decision_contract.py` | **done** (YAML C1–C5, C7; C6 NOTE) |
+| `scripts/tools/check_headline_decision_contract.py` | **done** (YAML C1–C7 + inject C8) |
 | pytest `tests/unit/test_headline_decision_contract.py` | **done** |
 | CI `contracts` job | **done** |
-| C8 inject map (`pipeline.py`) | **manual** (v1 out of scope) |
+| C8 inject map (`pipeline.py` / private det-set) | **done** (P5.1) |
 | Env `SACCADE_STABILITY_W` default assert | **not in CI** (NOTE only; dual-stability RFC) |
 
 **Do not** auto-merge dual stability knobs from this checker.
