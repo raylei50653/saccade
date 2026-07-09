@@ -53,3 +53,35 @@ def test_frontier_eps0_picks_max_fp_without_gt() -> None:
     # thr must be > max GT score so no GT hurt; max FP below that
     assert eps0["GT_hurt"] == 0
     assert eps0["FP_removed"] == 3  # all FP scores > 0.2
+
+
+def test_prod_proxy_score_and_h_ratio() -> None:
+    """Offline production-shaped score uses speed-weighted blend (kernel shape)."""
+    import importlib.util
+    from pathlib import Path
+
+    path = Path("scripts/tools/audit_relink_safe_reject.py")
+    spec = importlib.util.spec_from_file_location("audit_relink_safe_reject", path)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    pool = {
+        "gt_match": np.array([True, False]),
+        "lost_exit_speed": np.array([0.0, 0.12]),  # w=0 and w=1
+        "fwd_resid": np.array([1.0, 2.0]),
+        "bwd_resid": np.array([1.0, 2.0]),
+        "dist_h": np.array([0.5, 0.5]),
+        "h_lost_raw": np.array([100.0, 50.0]),
+        "h_cand_raw": np.array([100.0, 100.0]),
+    }
+    mod.ensure_prod_proxy_scores(pool)
+    # w=0 → score = dist_h; w=1 → score = 0.5*(fwd+bwd)
+    assert abs(pool["score_m_bridge"][0] - 0.5) < 1e-6
+    assert abs(pool["score_m_bridge"][1] - 2.0) < 1e-6
+    assert abs(pool["h_ratio_lost_over_cand"][0] - 1.0) < 1e-6
+    assert abs(pool["h_ratio_lost_over_cand"][1] - 0.5) < 1e-6
+
+    rules = {name: fn for name, _hint, fn, _n in mod.production_shaped_rules()}
+    # second row: h_ratio 0.5 < 0.6 → m h-gate reject
+    assert rules["prod_m_h_ratio_out_0.6_1.7"](pool).tolist() == [False, True]

@@ -47,7 +47,7 @@
 | 目錄 | 入口 | 內容 |
 |------|------|------|
 | [pipeline/](pipeline/) | 見下表（本目錄無獨立 README） | Runtime 路徑、perf、sync、CPU |
-| [eval/](eval/README.md) | [eval/README.md](eval/README.md) | Eval / ablation 筆記 |
+| [eval/](eval/README.md) | [eval/README.md](eval/README.md) · **[signal_analysis_ledger](eval/signal_analysis_ledger.md)** | Eval / ablation；**深度訊號總帳** |
 | [training/](training/README.md) | [training/README.md](training/README.md) | 訓練實驗 |
 | [reid/](reid/) | 見下表 | 外觀能力上限等跨模組 reid 筆記 |
 | [tracker-decision/](tracker-decision/README.md) | [tracker-decision/README.md](tracker-decision/README.md) | 決策語義（closed 線為主） |

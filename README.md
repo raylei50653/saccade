@@ -46,13 +46,16 @@ uv run scripts/eval/mot17.py \
 ## Quick Start
 
 ```bash
-uv sync                                                                # Python 3.12 + uv
+uv sync                                                                # Python 3.12 + uv (no DALI)
+uv sync --extra dali                                                   # GPU + NVDEC media path only
 uv run python scripts/eval/mot17.py --detector SDP --output results/MOT17_eval
 ```
 
-常見執行期相依：`torch`、`torchvision`、`tensorrt-cu12`、`nvidia-dali-cuda120`、
-`motmetrics`。native C++ / CUDA extension 需另為你的機器 build；部分 benchmark／
-eval flow 需要 CUDA hardware、TensorRT engines 與 local MOT datasets。
+常見執行期相依：`torch`、`torchvision`、`tensorrt-cu12`、`motmetrics`。  
+**DALI**（`nvidia-dali-cuda120`）是 **optional extra** — 無 GPU 雲端 / CI / C++ core
+build 不裝；本機 GPU 解碼路徑再 `uv sync --extra dali`。  
+native C++ / CUDA extension 需另為你的機器 build；部分 benchmark／eval flow 需要
+CUDA hardware、TensorRT engines 與 local MOT datasets。
 
 所有 evaluation / ablation / metrics / mAP / baseline 比較指令見
 **[scripts/eval/README.md](scripts/eval/README.md)**。

@@ -22,8 +22,11 @@ Layering:
 Usage:
   uv run python scripts/tools/audit_relink_safe_reject.py \\
     --pairs out/signal_study/m_b1_smoke_*/pairs.csv \\
-    --study-dir out/signal_study/m_b1_smoke_* \\
-    --write-study
+    --study-dir out/signal_study/<id> \\
+    --write-study --by-gap --by-seq
+
+Includes production-shaped m gates (px=0.4, h∈[0.6,1.7] offline proxy)
+unless --no-prod-shaped. 7-seq MOT is cheap (~30s); re-run substrate freely.
 
 Contract: docs/research/eval/signal_table_schema.md §0.4
 """
@@ -113,6 +116,126 @@ def load_gt_valid_pool(pairs_csv: Path) -> dict[str, np.ndarray]:
     out["speed_mismatch"] = np.abs(out["lost_exit_speed"] - out["cand_entry_speed"])
     out["resid_max"] = np.maximum(out["fwd_resid"], out["bwd_resid"])
     return out
+
+
+# mamba_whole_graph_m production bridge knobs (configs/presets/mamba_whole_graph_m.yaml).
+# Offline proxies on builder pairs — not bit-exact with live ema_h / foot-ring OLS.
+M_PROD_BRIDGE_PX = 0.40
+M_PROD_H_LO = 0.60
+M_PROD_H_HI = 1.70
+# s preset (for contrast; not active on m)
+S_PROD_BRIDGE_PX = 0.25
+S_PROD_H_LO = 0.75
+S_PROD_H_HI = 1.33
+
+
+def ensure_prod_proxy_scores(pool: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+    """Add offline proxies of live bridge score + height ratio.
+
+    Live kernel (tracker_gpu.cu):
+      w = sqrt(clip(s_lost / 0.12, 0, 1))
+      bdist = w * 0.5*(fwd+bwd) + (1-w)*dist_h
+      accept if bdist <= bridge_px and ema_lost/ema_cand in [h_lo, h_hi]
+
+    Builder pairs store mid-point ``bridge_dist`` and residual terms; we rebuild
+    the speed-weighted score as ``score_m_bridge`` for production-shaped gates.
+    Height ratio uses raw endpoint heights (ema proxy).
+    """
+    if "score_m_bridge" not in pool:
+        s = pool["lost_exit_speed"]
+        w = np.sqrt(np.clip(s / 0.12, 0.0, 1.0))
+        pool["score_m_bridge"] = (
+            w * 0.5 * (pool["fwd_resid"] + pool["bwd_resid"])
+            + (1.0 - w) * pool["dist_h"]
+        )
+    if "h_ratio_lost_over_cand" not in pool:
+        hl = np.maximum(pool["h_lost_raw"], 1e-6)
+        hc = np.maximum(pool["h_cand_raw"], 1e-6)
+        pool["h_ratio_lost_over_cand"] = hl / hc
+    return pool
+
+
+def production_shaped_rules() -> list[tuple[str, str, RuleFn, str]]:
+    """m (and contrast s) production-shaped reject masks = fail support gate.
+
+    rule_class=baseline: coverage of what production already would cut,
+    not a research safe_reject candidate library entry.
+    """
+
+    def r_m_px(p: dict[str, np.ndarray]) -> np.ndarray:
+        ensure_prod_proxy_scores(p)
+        return p["score_m_bridge"] > M_PROD_BRIDGE_PX
+
+    def r_m_h(p: dict[str, np.ndarray]) -> np.ndarray:
+        ensure_prod_proxy_scores(p)
+        hr = p["h_ratio_lost_over_cand"]
+        return (hr < M_PROD_H_LO) | (hr > M_PROD_H_HI)
+
+    def r_m_combo(p: dict[str, np.ndarray]) -> np.ndarray:
+        return r_m_px(p) | r_m_h(p)
+
+    def r_m_midpoint_px(p: dict[str, np.ndarray]) -> np.ndarray:
+        # mid-point bridge_dist (builder column) vs same px — shape contrast
+        return p["bridge_dist"] > M_PROD_BRIDGE_PX
+
+    def r_s_px(p: dict[str, np.ndarray]) -> np.ndarray:
+        ensure_prod_proxy_scores(p)
+        return p["score_m_bridge"] > S_PROD_BRIDGE_PX
+
+    def r_s_h(p: dict[str, np.ndarray]) -> np.ndarray:
+        ensure_prod_proxy_scores(p)
+        hr = p["h_ratio_lost_over_cand"]
+        return (hr < S_PROD_H_LO) | (hr > S_PROD_H_HI)
+
+    def r_s_combo(p: dict[str, np.ndarray]) -> np.ndarray:
+        return r_s_px(p) | r_s_h(p)
+
+    return [
+        (
+            "prod_m_score_gt_px0.4",
+            "baseline",
+            r_m_px,
+            f"m production-shaped: score_m_bridge > {M_PROD_BRIDGE_PX} "
+            f"(offline proxy of relink_bridge_px)",
+        ),
+        (
+            "prod_m_h_ratio_out_0.6_1.7",
+            "baseline",
+            r_m_h,
+            f"m production-shaped: h_lost/h_cand ∉ [{M_PROD_H_LO},{M_PROD_H_HI}] "
+            f"(raw-h proxy of ema scale gate)",
+        ),
+        (
+            "prod_m_px_or_h_fail",
+            "baseline",
+            r_m_combo,
+            "m production-shaped composite: px OR h-ratio fail (support gate coverage)",
+        ),
+        (
+            "prod_m_midpoint_bridge_gt_0.4",
+            "baseline",
+            r_m_midpoint_px,
+            "contrast: builder mid-point bridge_dist > 0.4 (not live score)",
+        ),
+        (
+            "prod_s_score_gt_px0.25",
+            "baseline",
+            r_s_px,
+            f"s-shaped contrast: score_m_bridge > {S_PROD_BRIDGE_PX} on m pairs",
+        ),
+        (
+            "prod_s_h_ratio_out_0.75_1.33",
+            "baseline",
+            r_s_h,
+            f"s-shaped contrast: h ratio ∉ [{S_PROD_H_LO},{S_PROD_H_HI}] on m pairs",
+        ),
+        (
+            "prod_s_px_or_h_fail",
+            "baseline",
+            r_s_combo,
+            "s-shaped composite on m pairs (tighter gates → more GT_hurt expected)",
+        ),
+    ]
 
 
 def default_probe_rules() -> list[tuple[str, str, RuleFn, str]]:
@@ -259,6 +382,16 @@ def default_probe_rules() -> list[tuple[str, str, RuleFn, str]]:
     ]
 
 
+def all_audit_rules() -> list[tuple[str, str, RuleFn, str]]:
+    """Production-shaped coverage first, then research probes."""
+    return production_shaped_rules() + default_probe_rules()
+
+
+def seq_bin_masks(seq: np.ndarray) -> list[tuple[str, np.ndarray]]:
+    names = sorted({str(s) for s in seq.tolist() if str(s)})
+    return [(f"seq_{n}", seq == n) for n in names]
+
+
 def evaluate_rules(
     pool: dict[str, np.ndarray],
     rules: list[tuple[str, str, RuleFn, str]],
@@ -350,16 +483,31 @@ def main() -> None:
     ap.add_argument(
         "--by-gap",
         action="store_true",
-        help="also evaluate each probe rule inside gap bins",
+        help="also evaluate each rule inside gap bins",
+    )
+    ap.add_argument(
+        "--by-seq",
+        action="store_true",
+        help="also evaluate each rule per MOT sequence (7-seq coverage)",
+    )
+    ap.add_argument(
+        "--no-prod-shaped",
+        action="store_true",
+        help="skip production-shaped m/s gates (probes only)",
     )
     args = ap.parse_args()
 
     pool = load_gt_valid_pool(args.pairs)
-    rules = default_probe_rules()
+    ensure_prod_proxy_scores(pool)
+    rules = default_probe_rules() if args.no_prod_shaped else all_audit_rules()
     rows = evaluate_rules(pool, rules, coverage_bin="all")
 
     if args.by_gap:
         for bname, mask in gap_bin_masks(pool["gap"]):
+            rows.extend(evaluate_rules(pool, rules, coverage_bin=bname, bin_mask=mask))
+
+    if args.by_seq:
+        for bname, mask in seq_bin_masks(pool["seq"]):
             rows.extend(evaluate_rules(pool, rules, coverage_bin=bname, bin_mask=mask))
 
     # 1D frontiers on key scores (reject when score high = worse)
@@ -367,6 +515,11 @@ def main() -> None:
         "bridge_dist": frontier_fp_removed_at_eps(
             pool["gt_match"],
             pool["bridge_dist"],
+            higher_means_more_reject=True,
+        ),
+        "score_m_bridge": frontier_fp_removed_at_eps(
+            pool["gt_match"],
+            pool["score_m_bridge"],
             higher_means_more_reject=True,
         ),
         "speed_mismatch": frontier_fp_removed_at_eps(
@@ -387,21 +540,48 @@ def main() -> None:
         ),
     }
 
-    # print table
-    print(
-        f"{'rule':<40} {'bin':<12} {'class':<14} "
-        f"{'GTh':>5} {'hurt%':>7} {'FPrm':>6} {'FPrm%':>7} {'ratio':>8} {'lvl':<10}"
-    )
-    for r in rows:
-        if r["coverage_bin"] != "all":
-            continue
-        ratio = r["FP_removed_per_GT_hurt"]
-        ratio_s = ratio if ratio == "safe" else f"{float(ratio):.1f}"
+    def _print_rows(title: str, sel: list[dict[str, Any]], bin_w: int = 12) -> None:
+        print(f"\n=== {title} ===")
         print(
-            f"{r['rule_name']:<40} {r['coverage_bin']:<12} {r['rule_class']:<14} "
-            f"{r['GT_hurt']:5d} {r['GT_hurt_rate'] * 100:6.2f}% "
-            f"{r['FP_removed']:6d} {r['FP_removed_rate'] * 100:6.2f}% "
-            f"{ratio_s:>8} {r['safe_level']:<10}"
+            f"{'rule':<40} {'bin':<{bin_w}} {'class':<14} "
+            f"{'GTh':>5} {'hurt%':>7} {'FPrm':>6} {'FPrm%':>7} {'ratio':>8} {'lvl':<10}"
+        )
+        for r in sel:
+            ratio = r["FP_removed_per_GT_hurt"]
+            ratio_s = ratio if ratio == "safe" else f"{float(ratio):.1f}"
+            print(
+                f"{r['rule_name']:<40} {r['coverage_bin']:<{bin_w}} {r['rule_class']:<14} "
+                f"{r['GT_hurt']:5d} {r['GT_hurt_rate'] * 100:6.2f}% "
+                f"{r['FP_removed']:6d} {r['FP_removed_rate'] * 100:6.2f}% "
+                f"{ratio_s:>8} {r['safe_level']:<10}"
+            )
+
+    # production-shaped coverage (all-pool)
+    prod_all = [
+        r
+        for r in rows
+        if r["coverage_bin"] == "all" and r["rule_name"].startswith("prod_")
+    ]
+    _print_rows("Production-shaped gate coverage (all pool)", prod_all)
+
+    # full all-pool table
+    _print_rows(
+        "All rules (all pool)",
+        [r for r in rows if r["coverage_bin"] == "all"],
+    )
+
+    if args.by_seq:
+        # highlight composite m gate per seq
+        m_combo = [
+            r
+            for r in rows
+            if r["rule_name"] == "prod_m_px_or_h_fail"
+            and str(r["coverage_bin"]).startswith("seq_")
+        ]
+        _print_rows(
+            "prod_m_px_or_h_fail by sequence",
+            m_combo,
+            bin_w=22,
         )
 
     print("\n=== 1D frontier: max FP_removed @ ε ===")
@@ -428,7 +608,7 @@ def main() -> None:
         and r["FP_removed"] > 0
     ]
     safe.sort(key=lambda r: -r["FP_removed"])
-    print("\n=== Safe reject (ε=0, FP_removed>0) ===")
+    print("\n=== Safe reject (ε=0, FP_removed>0; excludes prod_/ceiling baseline) ===")
     if not safe:
         print("  (none in probe set)")
     for r in safe:
@@ -436,6 +616,22 @@ def main() -> None:
             f"  {r['rule_name']}: FP_removed={r['FP_removed']} "
             f"({r['FP_removed_rate'] * 100:.2f}% of FP)"
         )
+
+    seq_summary = {}
+    if args.by_seq:
+        for r in rows:
+            if r["rule_name"] != "prod_m_px_or_h_fail":
+                continue
+            if not str(r["coverage_bin"]).startswith("seq_"):
+                continue
+            seq_summary[r["coverage_bin"]] = {
+                "GT_total": r["GT_total"],
+                "GT_hurt": r["GT_hurt"],
+                "GT_hurt_rate": r["GT_hurt_rate"],
+                "FP_removed": r["FP_removed"],
+                "FP_removed_rate": r["FP_removed_rate"],
+                "safe_level": r["safe_level"],
+            }
 
     summary = {
         "pairs_csv": str(args.pairs.resolve()),
@@ -451,10 +647,25 @@ def main() -> None:
             ),
             "preference": "ε=0 safe_reject over high FP_removed with GT_hurt>0",
         },
+        "production_shaped": {
+            "preset_ref": "mamba_whole_graph_m",
+            "bridge_px": M_PROD_BRIDGE_PX,
+            "h_lo": M_PROD_H_LO,
+            "h_hi": M_PROD_H_HI,
+            "score_proxy": (
+                "score_m_bridge = w*0.5*(fwd+bwd)+(1-w)*dist_h; "
+                "w=sqrt(clip(lost_exit_speed/0.12,0,1)); h_ratio=raw endpoint"
+            ),
+            "not_bit_exact": (
+                "live uses ema_h + foot-ring OLS anchors; this is offline proxy "
+                "on builder pairs for L0 coverage, not live fire counts"
+            ),
+        },
         "epsilons": {"eps0": 0.0, "eps0_1pct": 0.001, "eps1pct": 0.01},
         "audit_rows": rows,
         "frontiers_1d": frontiers,
         "safe_reject_all_pool": safe,
+        "prod_m_combo_by_seq": seq_summary,
     }
 
     out_csv = args.out_csv

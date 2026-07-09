@@ -3025,7 +3025,6 @@ dependencies = [
     { name = "motmetrics" },
     { name = "mypy" },
     { name = "numpy" },
-    { name = "nvidia-dali-cuda120" },
     { name = "nvidia-ml-py" },
     { name = "onnxruntime-gpu" },
     { name = "onnxscript" },
@@ -3058,6 +3057,11 @@ dependencies = [
     { name = "uvicorn" },
 ]
 
+[package.optional-dependencies]
+dali = [
+    { name = "nvidia-dali-cuda120" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "accelerate", specifier = ">=1.13.0" },
@@ -3073,7 +3077,7 @@ requires-dist = [
     { name = "motmetrics", specifier = ">=1.4.0" },
     { name = "mypy", specifier = ">=1.20.0" },
     { name = "numpy" },
-    { name = "nvidia-dali-cuda120", specifier = ">=2.0.0" },
+    { name = "nvidia-dali-cuda120", marker = "extra == 'dali'", specifier = ">=2.0.0" },
     { name = "nvidia-ml-py" },
     { name = "onnxruntime-gpu", specifier = ">=1.24.4" },
     { name = "onnxscript", specifier = ">=0.6.2" },
@@ -3105,6 +3109,7 @@ requires-dist = [
     { name = "ultralytics" },
     { name = "uvicorn" },
 ]
+provides-extras = ["dali"]
 
 [[package]]
 name = "safetensors"

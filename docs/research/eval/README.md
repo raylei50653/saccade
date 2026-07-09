@@ -10,8 +10,9 @@ See [../../ownership/doc_structure_contract.md](../../ownership/doc_structure_co
 | 文件 | 內容 |
 |------|------|
 | [signal_table_schema.md](signal_table_schema.md) | 契約：A/B1/B2；§0.3 風格；§0.4 L0 safe-reject；**§0.5 Gate vs Score**；§8 能用/缺什麼 |
-| [m_b1_substrate_smoke_20260709.md](m_b1_substrate_smoke_20260709.md) | D1：`mamba_whole_graph_m` 上 offline_relink/B1 資料規格煙測（pointer → study_dir） |
-| [m_b1_bridge_discriminability_20260709.md](../../modules/semantic/research/m_b1_bridge_discriminability_20260709.md) | D2：m B1 full/hard + thr 誰傷 GT + thr(gap) 非線性（study_dir master） |
+| **[signal_analysis_ledger.md](signal_analysis_ledger.md)** | **深度訊號分析總帳**（一 gate/訊號一列；study + note pointer） |
+| [../../modules/semantic/research/m_b1_offline_safe_region_phase_20260709.md](../../modules/semantic/research/m_b1_offline_safe_region_phase_20260709.md) | **M-B1 offline phase CLOSED** — hub（方法 as-of notes 見 hub Tier B，勿散落維護） |
+| [m_b1_substrate_smoke_20260709.md](m_b1_substrate_smoke_20260709.md) | D1：`mamba_whole_graph_m` offline_relink/B1 資料規格煙測（pointer → study_dir） |
 | [m_b2_reconnect_bridge_ab_20260709.md](../../modules/semantic/research/m_b2_reconnect_bridge_ab_20260709.md) | D3：m B2 bridge on/off reconnect + e2e（study_dir master） |
 | [fp_classifier_external_only_plan.md](fp_classifier_external_only_plan.md) | 0-shot FP classifier 設計 |
 | [gmc_residual_correction_20260612.md](gmc_residual_correction_20260612.md) | GMC residual 共模修正 ablation |

@@ -5,6 +5,11 @@ from typing import Any
 import pytest
 import torch
 
+pytest.importorskip(
+    "nvidia.dali",
+    reason="DALI optional extra; install with: uv sync --extra dali",
+)
+
 from saccade.media import rtsp_dali_pipeline
 from saccade.media.rtsp_dali_pipeline import DALIRTSPOptimizer
 
