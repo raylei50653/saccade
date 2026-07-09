@@ -216,13 +216,27 @@ These are **suggested command chains**, not automated GO gates. Fill `<…>` fro
 
 ```bash
 # 1) substrate dump (relink-off / interp-off as in offline hub §1)
-uv run scripts/eval/mot17.py --preset mamba_whole_graph --detector SDP \
+#    s historical (offline hub as-of):
+uv run python scripts/eval/mot17.py --preset mamba_whole_graph --detector SDP \
   --no-interpolate-tracklets --output results/<substrate_no_interp>
 
-# 2) candidate table
-uv run python scripts/tools/build_relink_candidates.py ...  # see script --help / offline §2
+#    m mainline B1 (must also force bridge OFF — m preset defaults bridge ON):
+uv run python scripts/eval/mot17.py --preset mamba_whole_graph_m --detector SDP \
+  --double-buffer --detect-barrier event \
+  --no-interpolate-tracklets --no-relink-bridge-enabled \
+  --output results/<m_b1_substrate>
 
-# 3) optional analyses (pick as needed)
+# 2) candidate table → B1 study_dir (see signal_table_schema §0.2)
+uv run python scripts/tools/build_relink_candidates.py \
+  --mot-dir results/<m_b1_substrate> --gt-root datasets/MOT17/train \
+  --out out/signal_study/<id>/pairs
+uv run python scripts/tools/summarize_relink_pairs.py \
+  --pairs out/signal_study/<id>/pairs.csv \
+  --study-dir out/signal_study/<id> --hard-dist 1.0 \
+  --preset mamba_whole_graph_m --mot-dir results/<m_b1_substrate> \
+  --relink off --interpolate off --double-buffer true --copy-pairs
+
+# 3) optional analyses (pick as needed; s-era kinematics helpers)
 uv run python scripts/tools/analyze_preloss_motion.py --window 8
 uv run python scripts/tools/analyze_turn_baseline.py --min-speed 0.03
 uv run python scripts/tools/sweep_speed_turn.py
@@ -230,7 +244,8 @@ uv run python scripts/tools/validate_reach_gate.py
 uv run python scripts/tools/optimize_relink_weight.py
 ```
 
-Artifacts often under `scripts/tools/out/` · `docs/modules/semantic/research/figures/`.
+Verified m smoke (pointer only): [m_b1_substrate_smoke_20260709.md](../../../research/eval/m_b1_substrate_smoke_20260709.md) → `out/signal_study/m_b1_smoke_*`.  
+Artifacts often under `out/signal_study/` · `scripts/tools/out/` · `docs/modules/semantic/research/figures/`.
 
 ### R-B — Depth / swap probe
 

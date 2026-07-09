@@ -73,16 +73,27 @@ out/signal_study/<study_id>/
 **`metrics_thr.csv` 欄位：** `pool,threshold,tp,fp,fn,precision,recall,f1`  
 預設 thr：`0.15, 0.30, 0.50, 1.00`（與 offline_relink §3 對齊）。
 
-**腳本：**
+**腳本（m 主線 B1；production m 預設 bridge/interp ON，substrate 必須 CLI 關掉）：**
 
 ```bash
+# 0) substrate MOT (mamba_whole_graph_m + SDP + double-buffer + bridge/interp OFF)
+uv run python scripts/eval/mot17.py \
+  --preset mamba_whole_graph_m --detector SDP \
+  --double-buffer --detect-barrier event \
+  --no-interpolate-tracklets --no-relink-bridge-enabled \
+  --output results/<substrate>
+
 uv run python scripts/tools/build_relink_candidates.py \
-  --mot-dir <substrate> --out out/signal_study/<id>/pairs
+  --mot-dir results/<substrate> --out out/signal_study/<id>/pairs
 uv run python scripts/tools/summarize_relink_pairs.py \
   --pairs out/signal_study/<id>/pairs.csv \
   --study-dir out/signal_study/<id> \
-  --hard-dist 1.0
+  --hard-dist 1.0 \
+  --preset mamba_whole_graph_m --mot-dir results/<substrate> \
+  --relink off --interpolate off --double-buffer true
 ```
+
+D1 真 m 煙測 pointer： [m_b1_substrate_smoke_20260709.md](m_b1_substrate_smoke_20260709.md)。
 
 **過時策略：** 重測 → **新 `study_id`/stamp**；勿改歷史 markdown 內嵌表。s 文方法仍可引用；m 分數以最新 study_dir 為準。
 
@@ -131,6 +142,7 @@ uv run python scripts/tools/summarize_relink_pairs.py \
 
 ```text
 D1  真 pairs 煙測（任意/m substrate → builder → summarize → 查三檔）
+    → 2026-07-09 m 煙測已過：m_b1_substrate_smoke_20260709.md
 D2  m B1 正式 stamp + 短 note（pointer only）
 D3  B2 reconnect 對照（bridge on/off）
 D4  可選：meta 自動寫入、e2e 灌 context、ledger 升格
