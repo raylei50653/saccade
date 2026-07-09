@@ -12,6 +12,7 @@ from saccade.perception.eval.occ_audit_seq_conditioning import (
     attach_metrics,
     build_applicability_table,
     classify_seq,
+    decide_promotion,
     load_metrics_json,
     load_occ_audit_csv,
     render_applicability_md,
@@ -251,3 +252,44 @@ def test_seq_type_mapping():
     assert seq_type("MOT17-02-SDP") == "crowded_static"
     assert seq_type("MOT17-05") == "moving_low"
     assert seq_type("custom-seq") == "unknown"
+
+
+def test_decide_promotion_promote_default_off_gate():
+    table = [
+        {"seq": "A", "recommendation": "enable_candidate"},
+        {"seq": "B", "recommendation": "enable_candidate"},
+        {"seq": "C", "recommendation": "abstain"},
+        {"seq": "D", "recommendation": "harmful"},
+    ]
+    out = decide_promotion(table, overall_idf1_delta_pp=0.1, overall_ids_delta=-2)
+    assert out["decision"] == "promote_default_off_gate"
+    assert out["gate_implemented"] is False
+    assert "A" in out["enable_seqs"]
+
+
+def test_decide_promotion_no_go_multi_harm():
+    table = [{"seq": f"s{i}", "recommendation": "harmful"} for i in range(3)] + [
+        {"seq": "z", "recommendation": "abstain"}
+    ]
+    out = decide_promotion(table, overall_idf1_delta_pp=-0.5, overall_ids_delta=12)
+    assert out["decision"] == "no_go"
+
+
+def test_decide_promotion_split_feat_local_enable():
+    table = [
+        {"seq": "A", "recommendation": "enable_candidate"},
+        {"seq": "B", "recommendation": "harmful"},
+        {"seq": "C", "recommendation": "abstain"},
+    ]
+    out = decide_promotion(table, overall_idf1_delta_pp=-0.05, overall_ids_delta=2)
+    assert out["decision"] == "split_feat_pr"
+
+
+def test_decide_promotion_research_only_insufficient():
+    table = [
+        {"seq": "A", "recommendation": "insufficient_evidence"},
+        {"seq": "B", "recommendation": "insufficient_evidence"},
+    ]
+    out = decide_promotion(table, overall_idf1_delta_pp=0.0, overall_ids_delta=0)
+    assert out["decision"] == "research_only"
+    assert out["gate_implemented"] is False

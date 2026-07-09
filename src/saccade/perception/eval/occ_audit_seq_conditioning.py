@@ -31,6 +31,7 @@ __all__ = [
     "aggregate_occ_audit_rows",
     "build_applicability_table",
     "classify_seq",
+    "decide_promotion",
     "load_metrics_json",
     "load_occ_audit_csv",
     "render_applicability_md",
@@ -508,3 +509,100 @@ def render_applicability_md(
 
 def evidence_to_dict(ev: SeqEvidence) -> dict[str, Any]:
     return asdict(ev)
+
+
+def decide_promotion(
+    table: list[dict[str, Any]],
+    *,
+    overall_idf1_delta_pp: float,
+    overall_ids_delta: int,
+) -> dict[str, Any]:
+    """WP3 aggregate promotion decision from a WP2 applicability table.
+
+    Decisions (analysis only — never enables a runtime gate)::
+
+      promote_default_off_gate — ≥2 enable_candidate, harmful isolatable,
+        aggregate not clearly worse
+      split_feat_pr — local enable signal needing gate design validation
+      research_only — mixed/thin; keep analyzer/log
+      no_go — multi-seq clear harm without enable_candidate
+
+    ``gate_implemented`` is always False from this function.
+    """
+    counts = {c: 0 for c in CLASSIFICATIONS}
+    for row in table:
+        rec = str(row.get("recommendation") or "insufficient_evidence")
+        counts[rec] = counts.get(rec, 0) + 1
+
+    n_enable = counts.get("enable_candidate", 0)
+    n_harm = counts.get("harmful", 0)
+    n_abstain = counts.get("abstain", 0)
+    n_insuf = counts.get("insufficient_evidence", 0)
+    n_scored = n_enable + n_harm + n_abstain
+    harm_seqs = [r["seq"] for r in table if r.get("recommendation") == "harmful"]
+    enable_seqs = [
+        r["seq"] for r in table if r.get("recommendation") == "enable_candidate"
+    ]
+
+    aggregate_clear_harm = overall_idf1_delta_pp <= -0.30 or overall_ids_delta >= 10
+    aggregate_ok = overall_idf1_delta_pp >= -0.15 and overall_ids_delta <= 5
+
+    if n_scored == 0:
+        decision = "research_only"
+        why = (
+            "No sequence reached enable/abstain/harmful with full evidence "
+            f"(insufficient_evidence={n_insuf}). Keep analyzer/log; re-run with "
+            "complete probe-on metrics before any gate discussion."
+        )
+    elif aggregate_clear_harm and n_harm >= 2 and n_enable == 0:
+        decision = "no_go"
+        why = (
+            f"Multi-seq harm ({n_harm}) with no enable_candidate and aggregate "
+            f"ΔIDF1={overall_idf1_delta_pp:+.2f}pp ΔIDs={overall_ids_delta:+d}."
+        )
+    elif n_enable >= 2 and n_harm <= 2 and aggregate_ok:
+        decision = "promote_default_off_gate"
+        why = (
+            f"{n_enable} enable_candidate seqs, {n_harm} harmful "
+            f"(isolatable: {harm_seqs or 'none'}), aggregate "
+            f"ΔIDF1={overall_idf1_delta_pp:+.2f}pp ΔIDs={overall_ids_delta:+d} "
+            "not clearly worse."
+        )
+    elif n_enable >= 1 and (n_harm >= 1 or not aggregate_ok):
+        decision = "split_feat_pr"
+        why = (
+            f"Local enable signal ({enable_seqs}) coexists with harm/noise "
+            f"(harmful={harm_seqs}, aggregate ΔIDF1={overall_idf1_delta_pp:+.2f}pp "
+            f"ΔIDs={overall_ids_delta:+d}). Needs explicit gate design + "
+            "validation in a feat/ PR, not silent research merge."
+        )
+    elif n_enable >= 1 and n_harm == 0 and aggregate_ok:
+        decision = "split_feat_pr"
+        why = (
+            f"Only {n_enable} enable_candidate (<2 threshold for default-off gate). "
+            "Split a feat/ PR to validate a narrow allowlist."
+        )
+    elif n_harm >= 3 and n_enable == 0:
+        decision = "no_go"
+        why = (
+            f"Widespread harm ({n_harm} seqs) without enable_candidate; "
+            "Cheb-GR probe log alone does not rescue global audit."
+        )
+    else:
+        decision = "research_only"
+        why = (
+            f"Mixed/thin map: enable={n_enable} abstain={n_abstain} "
+            f"harmful={n_harm} insufficient={n_insuf}; aggregate "
+            f"ΔIDF1={overall_idf1_delta_pp:+.2f}pp ΔIDs={overall_ids_delta:+d}."
+        )
+
+    return {
+        "decision": decision,
+        "rationale": why,
+        "counts": counts,
+        "enable_seqs": enable_seqs,
+        "harm_seqs": harm_seqs,
+        "overall_idf1_delta_pp": overall_idf1_delta_pp,
+        "overall_ids_delta": overall_ids_delta,
+        "gate_implemented": False,
+    }
