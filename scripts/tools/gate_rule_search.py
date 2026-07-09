@@ -73,6 +73,11 @@ class Atom:
     description: str
     reject: np.ndarray  # bool, True = reject
     complexity: int = 1  # atom cost
+    # portable definition for LOO / freeze (fit thr on train, apply elsewhere)
+    thr: float | None = None
+    op: str = ">"  # score op thr  (or "in_range" for gap bins)
+    thr_hi: float | None = None  # for gap bins: lo=thr, hi=thr_hi
+    quantile: float | None = None
 
 
 @dataclass
@@ -156,7 +161,97 @@ def extract_signals(pool: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
     }
 
 
+def atom_spec(a: Atom) -> dict[str, Any]:
+    """Serializable portable atom definition (no reject mask)."""
+    return {
+        "atom_id": a.atom_id,
+        "signal": a.signal,
+        "role": a.role,
+        "kind": a.kind,
+        "description": a.description,
+        "thr": a.thr,
+        "thr_hi": a.thr_hi,
+        "op": a.op,
+        "quantile": a.quantile,
+        "complexity": a.complexity,
+    }
+
+
+def apply_atom_spec(spec: dict[str, Any], signals: dict[str, np.ndarray]) -> np.ndarray:
+    """Apply frozen thr definition to any row set."""
+    x = np.asarray(signals[spec["signal"]], dtype=float)
+    x = np.where(np.isfinite(x), x, 0.0)
+    op = spec.get("op", ">")
+    if op == "in_range":
+        lo = float(spec["thr"])
+        hi = float(spec["thr_hi"])
+        return (x >= lo) & (x <= hi)
+    thr = float(spec["thr"])
+    if op == ">":
+        return x > thr
+    if op == ">=":
+        return x >= thr
+    if op == "<":
+        return x < thr
+    raise ValueError(f"unknown op {op}")
+
+
+def apply_clause_specs(
+    clause_atom_ids: list[str],
+    atom_specs: dict[str, dict[str, Any]],
+    signals: dict[str, np.ndarray],
+) -> np.ndarray:
+    """AND of atoms in a clause."""
+    masks = [apply_atom_spec(atom_specs[aid], signals) for aid in clause_atom_ids]
+    out = masks[0].copy()
+    for m in masks[1:]:
+        out &= m
+    return out
+
+
+def apply_policy_or(
+    clause_list: list[list[str]],
+    atom_specs: dict[str, dict[str, Any]],
+    signals: dict[str, np.ndarray],
+) -> np.ndarray:
+    """OR of AND-clauses."""
+    n = next(iter(signals.values())).shape[0]
+    union = np.zeros(n, dtype=bool)
+    for atom_ids in clause_list:
+        union |= apply_clause_specs(atom_ids, atom_specs, signals)
+    return union
+
+
+def slice_pool(pool: dict[str, np.ndarray], mask: np.ndarray) -> dict[str, np.ndarray]:
+    """Boolean-index all equal-length array fields in pool."""
+    out: dict[str, np.ndarray] = {}
+    n = pool["gt_match"].shape[0]
+    for k, v in pool.items():
+        if isinstance(v, np.ndarray) and v.shape[:1] == (n,):
+            out[k] = v[mask]
+        else:
+            out[k] = v
+    return out
+
+
 # ── Layer 1: atom generation ────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class AtomRepairConfig:
+    """Constraints that drop / tighten risky atom families (LOO-driven).
+
+    Defaults preserve legacy behavior (gap bins + zone_q50/70).
+    """
+
+    ban_gap_bins: bool = False
+    min_zone_q: float = 0.0  # e.g. 0.70 drops zone_q50
+    ban_zone: bool = False
+    require_support_in_and: bool = False  # AND size≥2 must include support role
+    ban_signals: tuple[str, ...] = ()
+
+
+DEFAULT_REPAIR = AtomRepairConfig()
 
 
 def generate_atoms(
@@ -165,9 +260,11 @@ def generate_atoms(
     *,
     tail_qs: tuple[float, ...] = (0.85, 0.90, 0.95, 0.99),
     hard_qs: tuple[float, ...] = (0.50, 0.70),
+    repair: AtomRepairConfig = DEFAULT_REPAIR,
 ) -> list[Atom]:
     """Interpretable reject atoms only (no free thr grid explosion)."""
     atoms: list[Atom] = []
+    ban_sig = set(repair.ban_signals)
     # continuous energy atoms (higher = more reject-like)
     energy_sigs = [
         "score_m_bridge",
@@ -180,7 +277,7 @@ def generate_atoms(
         "speed_mismatch",
     ]
     for name in energy_sigs:
-        if name not in signals:
+        if name not in signals or name in ban_sig:
             continue
         role = ROLE_MAP.get(name, "support")
         if role == "diagnostic" and name == "speed_mismatch":
@@ -200,12 +297,17 @@ def generate_atoms(
                     description=f"{name} > q{q:.2f} ({thr:.4g})",
                     reject=rej,
                     complexity=1,
+                    thr=thr,
+                    op=">",
+                    quantile=q,
                 )
             )
         # hard-zone (condition): lower quantile of energy still "in zone"
         # reject candidates that are ABOVE mid energy — operation-zone body+tail
-        if role == "condition":
+        if role == "condition" and not repair.ban_zone:
             for q in hard_qs:
+                if q + 1e-12 < repair.min_zone_q:
+                    continue
                 thr = float(np.quantile(x, q))
                 rej = x > thr
                 atoms.append(
@@ -217,36 +319,43 @@ def generate_atoms(
                         description=f"{name} in hard-zone > q{q:.2f} ({thr:.4g})",
                         reject=rej,
                         complexity=1,
+                        thr=thr,
+                        op=">",
+                        quantile=q,
                     )
                 )
 
     # gap condition bins (reject = True for candidates in that gap bin only
     # used as AND condition, not standalone safe reject)
-    gap = signals["gap"]
-    for lo, hi, tag in (
-        (1, 10, "gap_1_10"),
-        (11, 30, "gap_11_30"),
-        (31, 60, "gap_31_60"),
-        (61, 150, "gap_61_150"),
-        (151, 300, "gap_151_300"),
-    ):
-        # "in bin" as condition: for AND we want reject only if ALSO other evidence
-        # Represent as: atom is true when gap in bin (pattern presence)
-        # For reject mask: we use "gap in bin" as a filter that *enables* reject
-        # when AND with another atom — so the atom reject = (gap in bin) is
-        # "suspect zone by gap" alone would hurt many GT — role=condition
-        rej = (gap >= lo) & (gap <= hi)
-        atoms.append(
-            Atom(
-                atom_id=f"gap:bin_{tag}",
-                signal="gap",
-                role="condition",
-                kind="gap_bin",
-                description=f"gap in [{lo},{hi}]",
-                reject=rej,
-                complexity=1,
+    if not repair.ban_gap_bins and "gap" not in ban_sig:
+        gap = signals["gap"]
+        for lo, hi, tag in (
+            (1, 10, "gap_1_10"),
+            (11, 30, "gap_11_30"),
+            (31, 60, "gap_31_60"),
+            (61, 150, "gap_61_150"),
+            (151, 300, "gap_151_300"),
+        ):
+            # "in bin" as condition: for AND we want reject only if ALSO other evidence
+            # Represent as: atom is true when gap in bin (pattern presence)
+            # For reject mask: we use "gap in bin" as a filter that *enables* reject
+            # when AND with another atom — so the atom reject = (gap in bin) is
+            # "suspect zone by gap" alone would hurt many GT — role=condition
+            rej = (gap >= lo) & (gap <= hi)
+            atoms.append(
+                Atom(
+                    atom_id=f"gap:bin_{tag}",
+                    signal="gap",
+                    role="condition",
+                    kind="gap_bin",
+                    description=f"gap in [{lo},{hi}]",
+                    reject=rej,
+                    complexity=1,
+                    thr=float(lo),
+                    thr_hi=float(hi),
+                    op="in_range",
+                )
             )
-        )
 
     # drop empty / near-empty / all-reject atoms
     pruned: list[Atom] = []
@@ -322,6 +431,7 @@ def mine_conjunctions(
     max_and_size: int = 3,
     min_fp_support: int = 50,
     max_clauses: int = 200,
+    repair: AtomRepairConfig = DEFAULT_REPAIR,
 ) -> list[Clause]:
     """Grow AND clauses with monotone pruning.
 
@@ -331,6 +441,10 @@ def mine_conjunctions(
     Prefer mixing condition + support roles.
     """
     atom_by_id = {a.atom_id: a for a in atoms}
+
+    def _has_support(ids: tuple[str, ...]) -> bool:
+        return any(atom_by_id[i].role == "support" for i in ids if i in atom_by_id)
+
     # evaluate singles first
     singles: list[Clause] = []
     for a in atoms:
@@ -367,6 +481,8 @@ def mine_conjunctions(
                     # prefer different roles when possible
                     pass
                 new_ids = tuple(sorted(base.atom_ids + (a.atom_id,)))
+                if repair.require_support_in_and and not _has_support(new_ids):
+                    continue  # ban pure condition∧condition (e.g. zone∧zone, gap∧zone)
                 cid = " AND ".join(new_ids)
                 if any(c.clause_id == cid for c in clauses):
                     continue
@@ -587,12 +703,13 @@ def run_search(
     max_or_rules: int = 5,
     min_fp_support: int = 80,
     tau_seq_std: float = 0.05,
+    repair: AtomRepairConfig = DEFAULT_REPAIR,
 ) -> dict[str, Any]:
     y = pool["gt_match"].astype(bool)
     seq = pool["seq"]
     signals = extract_signals(pool)
 
-    atoms = generate_atoms(signals, y)
+    atoms = generate_atoms(signals, y, repair=repair)
     # metrics for all atoms
     atom_rows = []
     atom_items = []
@@ -628,6 +745,7 @@ def run_search(
         eps=eps,
         max_and_size=max_and_size,
         min_fp_support=min_fp_support,
+        repair=repair,
     )
     clause_rows = []
     for c in clauses:
@@ -672,6 +790,25 @@ def run_search(
         tau_seq_std=tau_seq_std,
     )
 
+    # portable freeze: thr fitted on this search split
+    atom_by_id = {a.atom_id: a for a in atoms}
+    selected_clause_atom_lists: list[list[str]] = []
+    for cid in policy["selected_clauses"]:
+        cl = next((c for c in clauses if c.clause_id == cid), None)
+        if cl is None:
+            selected_clause_atom_lists.append([p.strip() for p in cid.split(" AND ")])
+        else:
+            selected_clause_atom_lists.append(list(cl.atom_ids))
+    needed_atoms = sorted({aid for cl in selected_clause_atom_lists for aid in cl})
+    portable_atoms = {
+        aid: atom_spec(atom_by_id[aid]) for aid in needed_atoms if aid in atom_by_id
+    }
+    policy["portable"] = {
+        "clauses": selected_clause_atom_lists,
+        "atom_specs": portable_atoms,
+        "eps": eps,
+    }
+
     # baselines: best single atom under eps
     feas_atoms = [r for r in atom_rows if r["GT_hurt_rate"] <= eps + 1e-15]
     best_atom = max(feas_atoms, key=lambda r: r["FP_removed"]) if feas_atoms else None
@@ -680,8 +817,35 @@ def run_search(
         max(feas_clauses, key=lambda r: r["FP_removed"]) if feas_clauses else None
     )
 
+    # per-seq breakdown (in-sample) for freeze card
+    union = np.zeros(y.shape, dtype=bool)
+    for c in clauses:
+        if c.clause_id in set(policy["selected_clauses"]):
+            union |= c.reject
+    per_seq = []
+    for s in sorted(set(seq.tolist())):
+        m = seq == s
+        ys = y[m]
+        if ys.size == 0:
+            continue
+        rs = union[m]
+        n_pos = int(ys.sum())
+        n_neg = int((~ys).sum())
+        per_seq.append(
+            {
+                "seq": str(s),
+                "n_pos": n_pos,
+                "n_neg": n_neg,
+                "FP_removed": int((~ys & rs).sum()),
+                "GT_hurt": int((ys & rs).sum()),
+                "GT_hurt_rate": float((ys & rs).sum() / n_pos) if n_pos else 0.0,
+                "FP_removed_rate": float((~ys & rs).sum() / n_neg) if n_neg else 0.0,
+            }
+        )
+
     return {
         "role_map": ROLE_MAP,
+        "repair": asdict(repair),
         "n_atoms": len(atoms),
         "n_atoms_for_mine": len(atoms_for_mine),
         "n_atom_pareto": len(atom_front),
@@ -692,6 +856,7 @@ def run_search(
         "best_single_atom": best_atom,
         "best_single_clause": best_clause,
         "policy": policy,
+        "per_seq": per_seq,
         "gain_vs_best_atom_FP": (
             policy["final_metrics"]["FP_removed"] - best_atom["FP_removed"]
             if best_atom

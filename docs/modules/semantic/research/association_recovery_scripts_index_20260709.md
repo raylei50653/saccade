@@ -54,6 +54,12 @@
 | energy **transform separability**（d′/Fisher，非 AUC 比 log） | `energy_transform_separability.py --all` | A |
 | **combo AND safe region**（2D thr · 撈門檻） | `combo_gate_safe_region.py --all-default-pairs` | A |
 | **gate rule search**（Pareto·itemset·greedy OR） | `gate_rule_search.py` | A |
+| **gate rule LOO**（strict 6+1） | `gate_rule_search_loo.py` | A |
+| **GT-safe region area**（GT_tail_mass，非 raw） | `gt_safe_region_area.py` | A |
+| **Weight methods × productive plateau**（多核） | `weight_method_safe_region.py` | A |
+| **LOO hurt attribution + atom repair re-LOO** | `loo_hurt_attribution.py` | A |
+| **Repaired all-tail OR region (shared-q / 2D)** | `repaired_tail_or_safe_region.py` | A |
+| **B2/e2e smoke (candidate_id only)** | `smoke_repaired_candidate_b2e2e.py` | A |
 | 面積 / 轉向前 loss | `analyze_preloss_motion.py` · `analyze_turn_baseline.py` | A |
 | speed×turn 分布 | `scripts/tools/sweep_speed_turn.py` | A |
 | 否證 reach / s·G | `scripts/tools/validate_reach_gate.py` | A |

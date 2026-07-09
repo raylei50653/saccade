@@ -186,7 +186,15 @@ summary.json
 
 ---
 
-## 7. 一句
+## 7. Status after LOO (2026-07-09)
+
+| | |
+|:--|:--|
+| In-sample ε=0 OR-5 | FP 9130 / GT0 — [policy card](m_b1_policy_card_eps0_or5_20260709.md) |
+| LOO | **partial** 5/7 — [LOO note](m_b1_gate_rule_search_loo_20260709.md) |
+| Production | **unchanged** |
+
+## 8. 一句
 
 > **連續訊號 → 少量有角色的 atoms → Pareto + itemset AND → submodular greedy OR。**  
-> 多維系統變成可審計的 ε-constrained rule search，而不是排列組合調參。
+> In-sample candidate 成立；LOO 未全過 → 下一關 repair，不是上線。

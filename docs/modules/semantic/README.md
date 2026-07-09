@@ -63,6 +63,15 @@
 | [research/m_b1_energy_transform_separability_20260709.md](research/m_b1_energy_transform_separability_20260709.md) | **raw/log/sqrt/rank** d′·Fisher·logloss；禁 AUC 比 transform |
 | [research/m_b1_combo_gate_safe_region_20260709.md](research/m_b1_combo_gate_safe_region_20260709.md) | **AND 2D thr surface**；safe region / threshold recoverability |
 | [research/m_b1_gate_rule_search_architecture_20260709.md](research/m_b1_gate_rule_search_architecture_20260709.md) | **受約束 rule search**：atoms→AND→OR policy |
+| [research/m_b1_policy_card_eps0_or5_20260709.md](research/m_b1_policy_card_eps0_or5_20260709.md) | **Freeze**：ε=0 OR-5 candidate card（in-sample only） |
+| [research/m_b1_gate_rule_search_loo_20260709.md](research/m_b1_gate_rule_search_loo_20260709.md) | **LOO**：5/7 clean；02/10 leak → loo_partial |
+| [research/m_b1_gt_safe_region_area_20260709.md](research/m_b1_gt_safe_region_area_20260709.md) | **GT-CDF 安全域面積**；ε0 isolated；productive@80 |
+| [research/m_b1_weight_method_safe_region_20260709.md](research/m_b1_weight_method_safe_region_20260709.md) | **五種加權 × productive plateau**；clipped_logz 厚；GT-CDF/soft-AND 穩但薄 |
+| [research/m_b1_loo_hurt_atom_repair_20260709.md](research/m_b1_loo_hurt_atom_repair_20260709.md) | **LOO atom 歸因/repair**；ban_gap+ban_zone → 7/7 GT0 · FP 97% |
+| [research/m_b1_repaired_eps0_loo_pass_candidate_20260709.md](research/m_b1_repaired_eps0_loo_pass_candidate_20260709.md) | **Freeze**：repaired all-tail OR · LOO_pass_region_candidate |
+| [research/m_b1_repaired_tail_or_safe_region_20260709.md](research/m_b1_repaired_tail_or_safe_region_20260709.md) | **q85 區厚度**：ε0 safe~56% · p80~14% · LOO 同向 |
+| [research/m_b1_repaired_candidate_b2e2e_smoke_contract_20260709.md](research/m_b1_repaired_candidate_b2e2e_smoke_contract_20260709.md) | **B2/e2e smoke**：offline pass · online blocked · preset NO |
+| [research/m_b1_portable_or_tail_hook_contract_20260709.md](research/m_b1_portable_or_tail_hook_contract_20260709.md) | **下一關**：research default-off portable OR-tail hook |
 | [research/m_b2_reconnect_bridge_ab_20260709.md](research/m_b2_reconnect_bridge_ab_20260709.md) | **m B2 live**（D3）：bridge on/off reconnect rate + e2e；與 B1 並讀 |
 | 🗺️ **[research/association_recovery_crosswalk_20260709.md](research/association_recovery_crosswalk_20260709.md)** | **D1 對照圖（research-synthesis）**：實驗前導航；production stack 薄摘要 + door/knobs/NO-GO/substrate。**非** sole active、非第二 baseline |
 | 📇 **[research/association_recovery_scripts_index_20260709.md](research/association_recovery_scripts_index_20260709.md)** | **腳本查找表**：task→script、door 分區、wrapper→canonical、R-A/D/F recipes。結論仍手動 |

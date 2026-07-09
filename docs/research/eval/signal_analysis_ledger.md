@@ -49,7 +49,15 @@
 
 | signal_id | 物理量 / gate | Layer | Substrate | Status | Study (master) | Note | One-line verdict (as-of) |
 |:--|:--|:--|:--|:--|:--|:--|:--|
-| `m.gate.rule_search` | atoms→AND→OR：**Pareto + itemset + greedy** | L0–L3 policy | m B1 7-seq | ✅ depth-done | [`m_gate_rule_search_20260709T124534Z`](../../../out/signal_study/m_gate_rule_search_20260709T124534Z/) | [rule search architecture](../../modules/semantic/research/m_b1_gate_rule_search_architecture_20260709.md) | ε=0 OR policy FP **9130** hurt0；vs best atom +5861；condition zone AND + support tails；非排列組合 |
+| `m.gate.portable_or_tail_hook` | **research default-off OR-tail hook** | eng / L2 path | — | ∅ **not-started**（契約已鎖） | — | [hook contract](../../modules/semantic/research/m_b1_portable_or_tail_hook_contract_20260709.md) | **goal:** apply freeze `portable_policy.json` online, default-off, no search/repair/weights/zone/gap/preset；hook 後 A/B → 只產 `e2e_safe_for_default_off: yes/no` |
+| `m.gate.repaired_b2e2e_smoke` | **B2/e2e smoke**（candidate_id only） | validation | m B1 offline + B2 ref | ⚠ **offline_pass / online_blocked** | [`m_b2e2e_smoke_m_b1_repaired_eps0_loo_pass_20260709T151000Z`](../../../out/signal_study/m_b2e2e_smoke_m_b1_repaired_eps0_loo_pass_20260709T151000Z/) | [B2/e2e smoke](../../modules/semantic/research/m_b1_repaired_candidate_b2e2e_smoke_contract_20260709.md) | offline GT0 FP8721；**online_blocked** 是正確邊界非失敗；next=default-off hook；preset NO |
+| `m.gate.repaired_tail_region` | **all-tail OR shared-q / 2D ε=0 region** | validation | m B1 7-seq | ✅ **LOO_pass_region_candidate** | [`m_repaired_tail_region_20260709T150000Z`](../../../out/signal_study/m_repaired_tail_region_20260709T150000Z/) | [tail OR region](../../modules/semantic/research/m_b1_repaired_tail_or_safe_region_20260709.md) | ε0 shared-q safe **56%** · p80 **14%** · best_q**0.83**≈q85；LOO p80 **15%** freeze 7/7；2D pairs **broad**；仍 offline |
+| `m.gate.repaired_eps0_loo_pass` | **Freeze repaired ε=0 all-tail OR candidate** | L0 policy card | m B1 7-seq | ✅ **LOO_pass_region_candidate**（≠ production） | [`m_b1_repaired_eps0_loo_pass_20260709`](../../../out/signal_study/m_b1_repaired_eps0_loo_pass_20260709/) | [repaired candidate card](../../modules/semantic/research/m_b1_repaired_eps0_loo_pass_candidate_20260709.md) · [region](../../modules/semantic/research/m_b1_repaired_tail_or_safe_region_20260709.md) | OR-5 **all tails**；FP **8721** GT0；LOO **7/7** retained **97%**；region audit **厚平台 near q85**；next=B2/e2e；preset NO |
+| `m.gate.loo_atom_repair` | **LOO hurt 歸因 → atom repair → re-LOO** | validation | m B1 7-seq | ✅ **loo_pass under repair**（≠ production） | [`m_loo_attr_20260709T143000Z`](../../../out/signal_study/m_loo_attr_20260709T143000Z/) | [LOO atom repair](../../modules/semantic/research/m_b1_loo_hurt_atom_repair_20260709.md) | 漏點=`zone_q50/70`+`gap_61_150`；**ban_gap+ban_zone → 7/7 GT0**，teFP 1244（**retained 97%**）；speed_mismatch 會在半修時竄入；preset 仍 NO |
+| `m.weight.safe_region` | **加權方法 × productive plateau**（非 best FP） | meta / L1→L0 | m B1 7-seq | ✅ depth-done | [`m_weight_safe_20260709T142000Z`](../../../out/signal_study/m_weight_safe_20260709T142000Z/) | [weight method safe region](../../modules/semantic/research/m_b1_weight_method_safe_region_20260709.md) | **無厚 ε=0 production plateau**；ε0.01 clipped_logz 最厚/最高 FP（relaxed frontier）；GT-CDF/soft-AND 較乾淨但薄；**research-only** → atom repair 主線 |
+| `m.gt.safe_region_area` | **GT_tail_mass** 安全域面積（非 raw thr） | meta / L0 | m B1 7-seq | ✅ 量測完成 | [`m_gt_safe_area_20260709T125933Z`](../../../out/signal_study/m_gt_safe_area_20260709T125933Z/) | [GT safe region area](../../modules/semantic/research/m_b1_gt_safe_region_area_20260709.md) | ε0 safe% **&lt;1%**（isolated）；ε0.01 ~2–5% thin；**productive@80 極薄**；非 production-promising |
+| `m.gate.rule_search` | atoms→AND→OR in-sample | L0–L3 | m B1 7-seq | ✅ **in-sample candidate**（≠ production） | [`m_gate_rule_search_20260709T124534Z`](../../../out/signal_study/m_gate_rule_search_20260709T124534Z/) | [policy card](../../modules/semantic/research/m_b1_policy_card_eps0_or5_20260709.md) · [architecture](../../modules/semantic/research/m_b1_gate_rule_search_architecture_20260709.md) | **2026-07-09T124534Z** ε=0 OR-5 FP **9130** GT_hurt **0**；status=in-sample only；blocked: LOO/B2/e2e；preset unchanged |
+| `m.gate.rule_search.loo` | strict LOO（train 6 搜、held-out 套 thr） | validation | m B1 7-seq | ⚠ **loo_partial**（baseline） | [`m_gate_rule_loo_20260709T125245Z`](../../../out/signal_study/m_gate_rule_loo_20260709T125245Z/) | [LOO note](../../modules/semantic/research/m_b1_gate_rule_search_loo_20260709.md) · [repair](../../modules/semantic/research/m_b1_loo_hurt_atom_repair_20260709.md) | baseline **5/7**；repair 後見 `m.gate.loo_atom_repair` |
 | `m.combo.safe_region` | 2D thr surface AND：**safe region area** vs best | L0 combo | m B1 7-seq | ✅ depth-done | [`m_combo_safe_20260709T124215Z`](../../../out/signal_study/m_combo_safe_20260709T124215Z/) | [combo gate safe region](../../modules/semantic/research/m_b1_combo_gate_safe_region_20260709.md) | **recoverability 主收益**：nv 9→436（33×）；ta 單軸≥10 可放到 4.8；**無** marginal FP gain；勿只報 best FP |
 | `m.energy.transform_separability` | raw/log1p/sqrt/rank：**AUC vs d′/Fisher/logloss** | meta | m B1 7-seq | ✅ depth-done | [`m_energy_xform_20260709T123727Z`](../../../out/signal_study/m_energy_xform_20260709T123727Z/) | [energy transform separability](../../modules/semantic/research/m_b1_energy_transform_separability_20260709.md) | **禁止 AUC 比 transform**；幾何族 log_linear_good（d′ 1.0→1.4）；dir=raw_linear；speed=rank_only/hard no；加權前必須 compressive |
 | `m.dist.stability` | 分布尾部/跨 seq thr 穩定性（實作） | meta | m B1 7-seq | ✅ depth-done | [`m_b1_dist_stability_20260709T124000Z`](../../../out/signal_study/m_b1_dist_stability_20260709T124000Z/) | [distribution stability](../../modules/semantic/research/m_b1_signal_distribution_stability_20260709.md) | linear 重尾 kurt~11；px=0.4 在 GT CDF 30%→跨 seq hurt std **20pp**；log≠修固定 thr；融合須 z-score；h-gate 尾部才穩 |
@@ -130,16 +138,55 @@ uv run python scripts/tools/mine_relink_signals.py \
   --all --study-dir out/signal_study/m_b1_signal_mine_<stamp>
 ```
 
-## 5. 排隊（B1 offline 已閉合後）
+## 5. 排隊
+
+### M-B1 offline gate / signal / safe-region research phase — **CLOSED**
 
 ```text
-1. frame.iou_maha_cost     ← U_cand dump + mine
-2. score.audit.margin      ← L1/L2 誰在池內贏
-3. live.bridge_fire        ← production 觸發率
-4. ε=0 合取 rule search    ← 在 1D ceiling 之上
+phase: M-B1 offline gate / signal / safe-region research
+status: closed successfully (2026-07-09)
+deliverable:
+  - frozen offline region candidate m_b1_repaired_eps0_loo_pass_20260709
+  - LOO_pass_region_candidate + offline_smoke_pass + online_blocked
+  - next-phase contract: research default-off portable OR-tail hook
+NOT delivered: production gate / preset change
 ```
 
-semantic **WIP sole active** 仍是 #55 occ-exit；本線 = D1 RESEARCH 旁線，不佔 sole active。
+Completed stack:
+
+```text
+1. ✅ signal distribution stability
+2. ✅ energy/log/linear 分布診斷
+3. ✅ combo safe region / GT 安全域面積
+4. ✅ gate_rule_search
+5. ✅ weight-method safe-region audit
+6. ✅ LOO hurt attribution
+7. ✅ atom repair
+8. ✅ repaired candidate freeze
+9. ✅ shared-q / 2D region validation
+10. ✅ B2/e2e smoke contract
+11. ✅ portable OR-tail hook contract
+```
+
+**研究階段結束；production 階段還沒開始。下一步不是繼續調 rule，而是補 online hook 做 e2e 驗證。**
+
+### Next phase (engineering validation — not opened in this PR as code)
+
+```text
+1. research-only default-off portable OR-tail hook
+2. baseline B2 vs B2 + hook
+3. e2e_safe_for_default_off: yes / no
+4. production preset: still NO
+```
+
+### Other universes
+
+```text
+- frame.iou_maha_cost
+- score.audit.margin
+```
+
+semantic **WIP sole active** 仍是 #55 occ-exit；本線 = D1 RESEARCH 旁線已結案，不佔 sole active。
 
 ---
 
