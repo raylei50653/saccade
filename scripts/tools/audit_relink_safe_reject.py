@@ -174,21 +174,21 @@ def default_probe_rules() -> list[tuple[str, str, RuleFn, str]]:
     return [
         (
             "ceiling_bridge_dist_gt_all_gt",
-            "safe_reject",
+            "baseline",
             r_bridge_strictly_above_all_gt,
-            "1D ε=0 ceiling: bridge_dist > max(GT); upper bound on 1D safe prune",
+            "oracle 1D ε=0 ceiling (score>max GT); headroom only — NOT a production candidate",
         ),
         (
             "ceiling_log_h_ratio_gt_all_gt",
-            "safe_reject",
+            "baseline",
             r_scale_strictly_above_all_gt,
-            "1D ε=0 ceiling: |log h ratio| > max(GT)",
+            "oracle 1D ε=0 ceiling (|log h|>max GT); headroom only — NOT a production candidate",
         ),
         (
             "ceiling_speed_mismatch_gt_all_gt",
-            "safe_reject",
+            "baseline",
             r_speed_strictly_above_all_gt,
-            "1D ε=0 ceiling: |Δ exit/entry speed| > max(GT)",
+            "oracle 1D ε=0 ceiling (speed mismatch>max GT); headroom only — NOT a production candidate",
         ),
         (
             "baseline_bridge_dist_gt_1",
@@ -282,8 +282,11 @@ def evaluate_rules(
             rule_class=hint,
             notes=notes,
         )
-        # reclassify by actual safe_level if hint was optimistic
-        if m["safe_level"] == "eps0" and m["FP_removed"] > 0:
+        # Preserve baseline / calibration (incl. oracle ceiling_* probes).
+        # Only reclassify optimistic safe_reject / empty hints by measured ε.
+        if hint in ("baseline", "calibration"):
+            m["rule_class"] = hint
+        elif m["safe_level"] == "eps0" and m["FP_removed"] > 0:
             m["rule_class"] = "safe_reject"
         elif m["safe_level"] == "unsafe":
             m["rule_class"] = "risky_reject" if m["FP_removed"] > 0 else m["rule_class"]
@@ -415,10 +418,12 @@ def main() -> None:
             )
 
     # safe winners
+    # Production-candidate safe rules only (exclude baseline / oracle ceilings).
     safe = [
         r
         for r in rows
         if r["coverage_bin"] == "all"
+        and r["rule_class"] == "safe_reject"
         and r["safe_level"] == "eps0"
         and r["FP_removed"] > 0
     ]

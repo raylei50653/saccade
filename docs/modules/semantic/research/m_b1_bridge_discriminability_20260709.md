@@ -213,7 +213,7 @@ Master（同 study）：`metrics_safe_reject_audit.csv` · `metrics_safe_reject_
 |:--|:--|
 | 1D thr baseline (`bridge_dist>1`) | 砍大量 FP，但 **GT_hurt ~38%** → `unsafe` |
 | 合取 probe（長 gap∧dir、∧scale…） | 本 stamp **沒有** 打進 ε=0 的「明顯 safe 合取」；多為 `unsafe` / 高 hurt |
-| **1D ε=0 ceiling**（score > max GT） | 存在可觀 **safe** 頭寸：尤其 **`log_h_ratio`** 與 `bridge_dist` 尾端（見 summary `frontiers_1d` / `ceiling_*` rules） |
+| **1D ε=0 oracle ceiling**（score > max GT；`rule_class=baseline`） | 有 **headroom**（尤其 `log_h_ratio` / `bridge_dist` 尾），**不是** production safe rule 庫（見 `ceiling_*` notes） |
 
 解讀：單維距離門檻與真對重疊多；**scale mismatch 尾端** 比「再調 thr=0.4」更像 safe prune 方向。合取 rule 要繼續挖 **GT-empty region**，不是放棄目標。
 

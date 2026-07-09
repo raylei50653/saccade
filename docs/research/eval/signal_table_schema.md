@@ -199,10 +199,12 @@ Code：`SAFE_REJECT_EPSILONS` / `classify_safe_level` / `constrained_fp_prune_me
 
 | `rule_class` | 意義 |
 |:--|:--|
-| `safe_reject` | ε=0 且 FP_removed>0 → production **候選**（仍要 B2/e2e；FP 為 soft） |
+| `safe_reject` | ε=0 且 FP_removed>0 的 **可解釋 context rule** → production **候選**（仍要 B2/e2e；FP soft） |
 | `risky_reject` | 傷 GT（硬）換 FP 減負（軟）→ research / fallback only |
 | `calibration` | 主要保護 coverage（如 thr(gap)），不保證砍 FP |
-| `baseline` | 對照用 1D thr 等 |
+| `baseline` | 對照用 1D thr、**oracle ceiling**（`ceiling_*`：score>max(GT) 頭寸上界）等 — **不是** production 候選 |
+
+`ceiling_*` 即使 `safe_level=eps0` 仍標 `baseline`：表示 1D headroom，**不得**計入「已找到 safe rule 庫」。
 
 **在 §0.5 中的位置：** 本節 = **Support Gate（L0）** 內的 safe-reject 子契約。  
 `thr(gap)` = L0 **coverage calibration**（`rule_class=calibration`），不是 score term 強度。
