@@ -143,7 +143,7 @@ s/m 共用：`match_thresh`、`new_track_thresh`、`confirm_*`、`oao_*`、
 
 | 旋鈕 | s (`mamba_whole_graph`) | m (`mamba_whole_graph_m`) | 意圖 |
 |:--|:--|:--|:--|
-| `kalman_r_scale` | 2.8 | **3.5** | m 更信任量測、較鬆 process/measure 權衡 |
+| `kalman_r_scale` | 2.8 | **3.5** | ↑R → 更信任 **predict**（量測較噪時）；maha gate 變寬 |
 | `relink_bridge_px` | 0.25 | **0.4** | m 較鬆 height-normalized bridge 距離 |
 | `relink_bridge_h_lo` / `_h_hi` | 0.75 / 1.33 | **0.6 / 1.7** | m 較寬高度比 gate（小框 recovery） |
 | `relink_bridge_dir_bonus` | 0.8 | **0.0**（explicit） | m 關閉方向 bonus；s 保留 |
