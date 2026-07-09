@@ -744,7 +744,7 @@ class SweepAxis:
     def from_mapping(cls, data: Mapping[str, Any]) -> SweepAxis:
         known = {f.name for f in fields(cls)}
         kwargs = {k: v for k, v in data.items() if k in known}
-        return cls(**kwargs)  # type: ignore[arg-type]
+        return cls(**kwargs)
 
     def to_json_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -894,14 +894,14 @@ def summarize_sweep_metric(
     pts: list[tuple[float, float]] = []
     for r in run_rows:
         if axis_name in r:
-            x = float(r[axis_name])  # type: ignore[arg-type]
+            x = float(r[axis_name])
         elif f"param_{axis_name}" in r:
-            x = float(r[f"param_{axis_name}"])  # type: ignore[arg-type]
+            x = float(r[f"param_{axis_name}"])
         else:
             continue
         if r.get(metric) is None:
             continue
-        pts.append((x, float(r[metric])))  # type: ignore[arg-type]
+        pts.append((x, float(r[metric])))
     if not pts:
         raise ValueError(f"no points for axis={axis_name!r} metric={metric!r}")
     pts.sort(key=lambda t: t[0])
@@ -1084,7 +1084,7 @@ class StudyMeta:
     def from_mapping(cls, data: Mapping[str, Any]) -> StudyMeta:
         known = {f.name for f in fields(cls)}
         kwargs = {k: v for k, v in data.items() if k in known}
-        return cls(**kwargs)  # type: ignore[arg-type]
+        return cls(**kwargs)
 
     def parsed_sweep_axes(self) -> list[SweepAxis]:
         return [SweepAxis.from_mapping(a) for a in self.sweep_axes]
