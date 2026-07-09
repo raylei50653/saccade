@@ -195,7 +195,7 @@ uv run python scripts/tools/check_headline_decision_contract.py
 
 - `main` only 合入目標；工作分支 `feat/*` `fix/*` `perf/*` `docs/*` `research/*`
 - 不直接 push `main`；PR + CI
-- 開分支前：工作項落在 **module TODO**（sole active）或全局 [docs/TODO.md](docs/TODO.md)
+- 開分支前：工作項對齊 **module TODO sole active**（WIP 鎖）或全局 [docs/TODO.md](docs/TODO.md)；連續任務先讀 [threads/](docs/research/threads/README.md)
 
 ### 實驗追蹤（可選）
 
@@ -238,6 +238,6 @@ MLflow / Optuna 未啟動不阻 eval。啟動與查詢：
 
 ## 原則（三條）
 
-- 架構與合約決定什麼值得做；TODO / sole active 排現在做什麼。
+- 架構與合約決定什麼值得做；TODO sole active = WIP 鎖；threads = 怎麼接續。
 - 單一原始碼檔原則上不超過 **1000** 行；主熱路徑 GPU / native first。
 - **每個事實一個家**；入口只組合連結，不複製長表。
