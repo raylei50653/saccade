@@ -21,8 +21,8 @@ presets, and research notes.
 |:--|:--|
 | [association_recovery_crosswalk_20260709.md](association_recovery_crosswalk_20260709.md) | Human-readable experiment alignment (may later be partially *rendered*) |
 | [association_recovery_scripts_index_20260709.md](association_recovery_scripts_index_20260709.md) | Human-readable script lookup (may later be partially *rendered*) |
-| `association_tools.yaml` (planned) | **Registry** of door/role/fact-owner/recipe metadata |
-| Checker / printer scripts (planned) | **Check / render / print only** — no research judgment |
+| [association_tools.yaml](association_tools.yaml) | **R** registry — **schema skeleton** (Step 1A); `tools: []` / `recipes: []` until Step 1B |
+| Checker / printer scripts (planned) | **Check / render / print only** — no research judgment (Step 2 / 3) |
 
 ---
 
@@ -45,7 +45,7 @@ contract is amended.
 | Class | What it is allowed to assert | Typical location |
 |:--|:--|:--|
 | **D — Disk** | Path exists; file size / line count; thin-wrapper redirect target (when parseable); mtime | repo tree under `scripts/`, `docs/`, `configs/` |
-| **R — Registry** | Door A–F; role tags; fact-owner path; recipe id; expected artifact *names*; priority P0–P3; canonical vs wrapper intent | planned `docs/modules/semantic/research/association_tools.yaml` (or equivalent under semantic research / tools) |
+| **R — Registry** | Door A–F; role tags; fact-owner path; recipe id; expected artifact *names*; priority P0–P3; canonical vs wrapper intent | [association_tools.yaml](association_tools.yaml) — schema skeleton exists; not populated (Step 1A) |
 | **N — NO-GO master** | Whether a registry id **exists**; body of settled negative results | [no_go_registry.md](../../../reference/no_go_registry.md) (+ details) |
 | **V — Verdict masters** | GO / NO-GO / parked / promotion / narrative mechanism | owning research note · module README GO table · ledger · TODO sole active |
 | **C — Config truth** | Actual knob values for a named preset; schema defaults when no preset | `configs/presets/*.yaml` · `scripts/eval/config/*.py` |
@@ -169,54 +169,36 @@ never the source for knob values or metrics.
 
 ---
 
-## 5. Planned artifacts (do not invent ahead of this contract)
+## 5. Artifacts and step order
 
-| Step | Artifact | Allowed contents |
-|:--|:--|:--|
-| **0 (this doc)** | Information source contract | rules only |
-| **1** | `association_tools.yaml` | **R** fields only; no metric tables; no verdict prose beyond optional `status: curated` |
-| **2** | Checker CLI | compare **R ↔ D ↔ N** (and optional **C** snapshot); exit non-zero on hard inconsistency |
-| **3** | Optional MD render / recipe printer | print **R** + generated check footnotes; do not auto-run MOT eval |
+| Step | Artifact | Status | Allowed contents |
+|:--|:--|:--|:--|
+| **0** | This contract | **sealed** | process rules only |
+| **1A** | [association_tools.yaml](association_tools.yaml) | **schema skeleton** | enums, field schemas, `tools: []`, `recipes: []`; no inventory fill |
+| **1B** | same yaml, populated | not yet | curated tools/recipes (**R** only); seed from scripts_index **H** |
+| **2** | Checker CLI | not yet | compare **R ↔ D ↔ N** (optional **C**); no verdicts |
+| **3** | Optional MD render / recipe printer | not yet | print **R** + generated check footnotes; do not auto-run MOT eval |
 
-**Step order is mandatory.** No checker before **R** exists. No render that invents
-doors not in **R**.
+**Step order is mandatory.**
 
----
-
-## 6. Registry (**R**) content sketch (for Step 1 — not created here)
-
-Illustrative shape only; final schema lands with the yaml file:
-
-```yaml
-# association_tools.yaml — curated navigation metadata (manual)
-version: 1
-tools:
-  - id: build_relink_candidates
-    path: scripts/tools/build_relink_candidates.py
-    door: A
-    role: [canonical, core-pipeline]
-    priority: P0
-    fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
-    no_go_ids: []          # citations only; verdicts live in N/V
-    recipes: [R-A]
-    expected_artifacts:
-      - scripts/tools/out/relink_candidates.csv
-
-recipes:
-  R-A:
-    title: Offline bridge pool + kinematics
-    steps:                 # print-only; human fills flags via --help / research
-      - tool: build_relink_candidates
-      - tool: analyze_preloss_motion
-    notes: "See offline hub §1–§2 for substrate flags; do not execute blindly."
+```text
+No checker before R schema exists.
+No full inventory in Step 1A.
+No render that invents doors not in R.
+No script that writes verdicts / metrics / promotion.
 ```
 
-Rules for **R**:
+Schema / field authority for **R** lives in the yaml file itself
+(`tool_field_schema`, `recipe_field_schema`, `forbidden_fields`,
+`registry_status: schema_skeleton`).
 
-- Every `path` must be intended to exist on **D** (checker enforces).
+Rules for **R** (unchanged intent):
+
+- Every `path` must be intended to exist on **D** (checker enforces, Step 2).
 - Every `fact_owner` must exist on **D** (warn if missing).
 - Every `no_go_ids[]` entry must resolve in **N** (warn/fail).
 - No `metrics:` block. No `verdict: GO`. No duplicated preset knobs.
+- Illustrative entries may appear as **YAML comments only** until Step 1B.
 
 ---
 
@@ -236,13 +218,12 @@ A compliant checker:
 
 ## 8. Map maintenance under this contract
 
-Until Step 1–3 land:
-
-| Map | How to update |
+| Map | How to update (now) |
 |:--|:--|
-| crosswalk | Manual; knobs must **point at** preset/schema paths (**C**), not invent masters |
-| scripts_index | Manual snapshot; label tables as curated; prefer linking fact-owners (**V**) |
+| crosswalk | Manual **H**; knobs must **point at** preset/schema paths (**C**), not invent masters |
+| scripts_index | Manual **H** snapshot until Step 1B; seed for **R** fill, not master |
 | offline hub | Fact-owner for Door A conclusions (**V**); hub rows may point to maps |
+| association_tools.yaml | Step 1A skeleton only; Step 1B adds tools/recipes by hand from inventory |
 
 After Step 3 (optional):
 
@@ -263,13 +244,14 @@ After Step 3 (optional):
 
 | Artifact | Status under contract |
 |:--|:--|
-| This contract | **Authoritative for process** |
-| scripts_index (2026-07-09) | **Curated H snapshot** from disk+docs inventory; not yet **R**-backed |
+| This contract | **Authoritative for process** (Step 0 sealed) |
+| scripts_index (2026-07-09) | **Curated H snapshot**; seed for Step 1B; not yet **R**-backed |
 | crosswalk | **Curated H**; knob table must stay subordinate to **C** |
-| association_tools.yaml | **Not yet created** (Step 1) |
-| list_association_tools / checker | **Not yet created** (Step 2) |
+| association_tools.yaml | **Schema skeleton** (Step 1A); `registry_status: schema_skeleton`; empty tools/recipes |
+| Populated registry | **Not yet** (Step 1B) |
+| list_association_tools / checker | **Not yet** (Step 2) |
 
-The 2026-07-09 inventory is **seed material for Step 1**, not a substitute for **R**.
+The 2026-07-09 inventory is **seed material for Step 1B**, not a substitute for **R**.
 
 ---
 

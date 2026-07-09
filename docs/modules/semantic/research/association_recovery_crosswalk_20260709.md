@@ -20,8 +20,9 @@ status `research-synthesis` means D1 docs-only navigation, not an open workstrea
 
 **Information source contract (who is truth; what scripts may generate):**
 [association_recovery_info_source_contract_20260709.md](association_recovery_info_source_contract_20260709.md)
-— **Step 0 before** `association_tools.yaml` / checker / recipe printer. Maps are curated **H**
-until registry **R** exists; knobs stay subordinate to preset/schema (**C**).
+— Step 0 sealed. **R** schema: [association_tools.yaml](association_tools.yaml)
+(`registry_status: schema_skeleton`, empty tools/recipes). Maps remain curated **H**
+until Step 1B populates **R**; knobs stay subordinate to preset/schema (**C**).
 
 **Governance entry:** [DEVELOPMENT.md](../../../../DEVELOPMENT.md) D1–D2 ·
 [module TODO](../TODO.md) (WIP=1 sole active) · [no_go_registry](../../../reference/no_go_registry.md).
@@ -347,4 +348,4 @@ Summary for editors of *this* file:
 - When preset knobs change: update §2 **from** preset YAML (**C**), not from memory.
 - When sole active changes: fix WIP line in §0 and [TODO.md](../TODO.md).
 - This file stays a **pointer map**; long evidence stays in the fact-owner notes.
-- **Do not** add `list_association_tools.py` until Step 1 registry exists (contract Step 0 → 1 → 2).
+- **Do not** add checker/renderer until Step 1B populates **R** (order: 0 → 1A → 1B → 2 → 3).

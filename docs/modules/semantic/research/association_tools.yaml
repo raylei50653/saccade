@@ -1,0 +1,170 @@
+# Association recovery tools registry
+#
+# R-class source under:
+# docs/modules/semantic/research/association_recovery_info_source_contract_20260709.md
+#
+# This file owns curated navigation metadata only.
+# It must not contain metrics, verdict prose, preset knob truth, or baseline tables.
+#
+# Status: schema_skeleton (Step 1A)
+# - tools / recipes intentionally empty
+# - full inventory population = Step 1B
+# - checker / render = Step 2 / 3 (not yet)
+
+version: 1
+kind: association-tools-registry
+registry_status: schema_skeleton
+doc_module: semantic
+source_contract: docs/modules/semantic/research/association_recovery_info_source_contract_20260709.md
+
+classes:
+  source_class: R
+  meaning: curated navigation metadata
+  generated_by_script: false
+
+allowed_doors:
+  A:
+    name: bridge_relink
+    description: death-to-birth bridge relink / gap recovery
+  B:
+    name: live_crossing_swap
+    description: live occlusion / crossing swap pressure
+  C:
+    name: appearance_online
+    description: appearance or ReID near the online critical path
+  D:
+    name: posthoc_id_cleanup
+    description: offline or output-layer identity cleanup
+  E:
+    name: bank_sparse_embedding
+    description: bank substrate / sparse embedding references
+  F:
+    name: occ_exit_audit
+    description: occ-exit / ABSORB audit family
+
+allowed_roles:
+  - canonical
+  - wrapper
+  - core-pipeline
+  - probe
+  - one-shot
+  - peripheral
+  - historical
+  - diagnostic
+
+allowed_priorities:
+  - P0
+  - P1
+  - P2
+  - P3
+
+tool_field_schema:
+  id:
+    required: true
+    meaning: stable registry id, usually script basename without .py
+  path:
+    required: true
+    source_check: D
+    meaning: repo-relative script path
+  door:
+    required: true
+    allowed: allowed_doors
+  roles:
+    required: true
+    allowed: allowed_roles
+  priority:
+    required: true
+    allowed: allowed_priorities
+  fact_owner:
+    required: true
+    source_check: D
+    meaning: repo-relative research note or module doc that owns conclusions
+  no_go_ids:
+    required: false
+    source_check: N
+    format: "#<number>"
+    meaning: cited NO-GO ids only; verdict text lives in no_go / research docs
+  recipes:
+    required: false
+    meaning: recipe ids this tool participates in
+  expected_artifacts:
+    required: false
+    meaning: artifact names or repo-relative paths that recipes may check
+  canonical_id:
+    required_if_role_contains: wrapper
+    meaning: stable id of canonical tool this wrapper redirects to
+  notes:
+    required: false
+    rule: operational caveat only; no verdicts or metrics
+
+recipe_field_schema:
+  id:
+    required: true
+    meaning: stable recipe id, e.g. R-A
+  title:
+    required: true
+    meaning: human-readable recipe name
+  door:
+    required: true
+    allowed: allowed_doors
+  purpose:
+    required: true
+    rule: operational purpose only; no research verdict
+  steps:
+    required: true
+    meaning: ordered tool ids; print-only, not auto-execute
+  fact_owner:
+    required: true
+    source_check: D
+  expected_artifacts:
+    required: false
+  notes:
+    required: false
+    rule: protocol notes only; no metrics or GO/NO-GO prose
+
+# Names that must never appear as data payload keys on tools/recipes.
+# Listing them here is documentation for humans and future checkers — not data.
+forbidden_fields:
+  - metrics
+  - baseline
+  - idf1
+  - mota
+  - hota
+  - auc
+  - verdict
+  - promotion
+  - preset_knobs
+  - schema_defaults
+  - production_values
+  - default_on_claim
+
+# Example tool entry (comment only — do not uncomment as inventory fill):
+#
+# tools:
+#   - id: build_relink_candidates
+#     path: scripts/tools/build_relink_candidates.py
+#     door: A
+#     roles: [canonical, core-pipeline]
+#     priority: P0
+#     fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
+#     no_go_ids: []
+#     recipes: [R-A]
+#     expected_artifacts:
+#       - scripts/tools/out/relink_candidates.csv
+
+tools: []
+
+# Example recipe entry (comment only):
+#
+# recipes:
+#   - id: R-A
+#     title: Offline bridge pool + kinematics
+#     door: A
+#     purpose: Build offline candidate table and optional kinematics analyses
+#     steps:
+#       - build_relink_candidates
+#       - analyze_preloss_motion
+#     fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
+#     notes: Print-only chain; substrate flags live in fact-owner research note.
+
+recipes: []
