@@ -53,6 +53,37 @@ Proposed → Accepted → (必要時) Superseded by ADR XXX
 
 ---
 
+## Workstream WIP（一模主一目標）
+
+與 [事實所有權](#事實所有權與新鮮度-fact-ownership--freshness) 平行：**每個模組負責人至多一個 concurrent active 目標。**
+
+入口（已結案研究線）：[research/tracker-decision/status_2026-07-09.md](research/tracker-decision/status_2026-07-09.md)（P0–P8 closed；勿與 dual-stability 並開）。
+
+### 規則
+
+```text
+WIP = 1 per module owner
+- DEVELOPMENT.md §6 每個 🔄 列只寫「一個」active 目標字串（不要用頓號並列多個進行中項）
+- 各 docs/modules/<m>/TODO.md 的 🔄 Active 下最多一個未勾選 [ ] 主項
+  （表格式 TODO：最多一列標 🔄；其餘 📋 / ⏸️）
+- 要開第二目標：同一變更內先收合或 park 第一個
+- 已結案研究線（如 tracker-decision P0–P8）僅在新證據下以「具名新線」重開，
+  不做 drive-by 平行重構
+- 寫 paper（paper_outline + evidence_ledger）與改 tracker 行為是不同線；
+  同一負責人不同時並進
+```
+
+### Dashboard
+
+模組現狀一覽：[DEVELOPMENT.md §6](../DEVELOPMENT.md)（鏡射各 module TODO 的 sole active，不另立第二真相）。
+
+### 不在此規則內
+
+- 跨模組 **依賴**（例如 geometry GMC 支援 detection VGT）不算第二目標，但 dashboard 應標註依賴關係。
+- 📋 backlog / ⏸️ 暫緩 / 已結案 可列多項；只有 **🔄 Active** 受 WIP=1 約束。
+
+---
+
 ## 事實所有權與新鮮度 (Fact Ownership & Freshness)
 
 核心原則見 [DEVELOPMENT.md §11](../DEVELOPMENT.md)：**每個事實只有一個家，其餘只鏡射並回連，不複製成獨立事實。** 入口文件最容易 drift 的是 baseline 數字。
@@ -103,6 +134,7 @@ Proposed → Accepted → (必要時) Superseded by ADR XXX
 □ 系統模組實作進度表與代碼一致？
 □ ADR 狀態正確？
 □ TODO.md 已完成項目已勾選？
+□ WIP=1：DEVELOPMENT.md §6 🔄 列只有一個 active 目標；module TODO Active 未雙開？
 □ 必要時通過 scripts/tools/check_gpu_contract.py 靜態效能合約檢查？
 □ 無失效連結或舊模型名稱？
 ```

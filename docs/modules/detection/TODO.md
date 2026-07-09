@@ -1,13 +1,15 @@
 # Detection — 模組 TODO
 
 > 全局進度矩陣、Baseline 表與已 default flags 見 [docs/TODO.md](../../TODO.md)。本檔只列偵測模組待辦。
+>
+> **WIP=1 sole active：** VGT-Mamba（訓練中）。其餘列為 📋，不並進。規則見 [DOC_MAINTENANCE.md](../../DOC_MAINTENANCE.md) § Workstream WIP。
 
 ## 待辦
 
 | 優先 | 項目 | 具體思路 | 預期收益 | 狀態 |
 | :---: | :--- | :--- | :--- | :---: |
-| P2-VGT | **VGT-Mamba (Velocity-Guided Temporal)** | 用 GMC affine flow 將歷史幀 FPN 特徵 warp 對齊到當前幀後再做 temporal Mamba。GMC 已預計算（127 KB）。 | 根治時序對齊，從源頭降低遮擋 FN | 🔄 訓練中（Phase 1） |
-| P3 | **混合 Head 架構 (Hybrid Mamba-ViT)** | 低層 FPN (P3) 採 EfficientViT-style CGA 卷積頭；高層 FPN (P5) 採 Mamba 頭捕捉全局語義。 | 兼顧全局上下文建模與 TensorRT / GPU 友好的推論速度 | 📋 待實作 |
+| P2-VGT | **VGT-Mamba (Velocity-Guided Temporal)** | 用 GMC affine flow 將歷史幀 FPN 特徵 warp 對齊到當前幀後再做 temporal Mamba。GMC 已預計算（127 KB）。 | 根治時序對齊，從源頭降低遮擋 FN | 🔄 **sole active** 訓練中（Phase 1） |
+| P3 | **混合 Head 架構 (Hybrid Mamba-ViT)** | 低層 FPN (P3) 採 EfficientViT-style CGA 卷積頭；高層 FPN (P5) 採 Mamba 頭捕捉全局語義。 | 兼顧全局上下文建模與 TensorRT / GPU 友好的推論速度 | 📋 待實作（VGT 後） |
 | P3 | **偵測器訓練資料改善 / 資料集補強** | `pred_h ≈ 61.4% of gt_h`，77% 近似 FP 其實有真實 GT；針對遮擋與小目標補足半身/腿/腳標註後重新微調。 | 根本解決 FN；目前所有 score-gate 手段天花板已見 | 📋 暫緩（待時序 YOLO 驗證） |
 
 ## 近期結論 / 已完成
