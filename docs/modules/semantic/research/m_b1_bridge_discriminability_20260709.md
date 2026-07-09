@@ -1,5 +1,10 @@
 # m B1 — bridge_dist discriminability on `mamba_whole_graph_m`
 
+<!-- doc-status: active -->
+<!-- doc-promotion: none -->
+<!-- doc-date: 2026-07-09 -->
+<!-- doc-module: semantic -->
+
 **Date:** 2026-07-09  
 **Status:** **RESEARCH live note (D2)** — first m-line B1 read; not a production GO  
 **Study (numbers master):** [`out/signal_study/m_b1_smoke_20260709T092543Z/`](../../../../out/signal_study/m_b1_smoke_20260709T092543Z/)  

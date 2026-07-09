@@ -1,5 +1,10 @@
 # m B2 — reconnect state: bridge ON vs OFF (`mamba_whole_graph_m`)
 
+<!-- doc-status: active -->
+<!-- doc-promotion: none -->
+<!-- doc-date: 2026-07-09 -->
+<!-- doc-module: semantic -->
+
 **Date:** 2026-07-09  
 **Status:** **RESEARCH live note (D3)** — B2 IDs-state; pairs with B1 signal note  
 **Study (numbers master):** [`out/signal_study/m_b2_bridge_ab_20260709T094646Z/`](../../../../out/signal_study/m_b2_bridge_ab_20260709T094646Z/)  
