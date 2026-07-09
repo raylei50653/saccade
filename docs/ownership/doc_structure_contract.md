@@ -19,6 +19,7 @@ frontmatter, topic-hub pages (optional later).
 ```text
 [治理]           docs/ownership/                    O-series · WIP=1 · this contract
 [跨模組研究]     docs/research/                     cross-module experiments, decision semantics, global eval/training
+[任務母線]       docs/research/threads/             navigation-only continuous-task cards (not evidence)
 [模組]           docs/modules/<m>/                  module card + design + module research
 [可引用資產]     report_data/                       paper-rebuild tables/figures + method thesis assets
 [歷史]           docs/archive/                      closed one-shots; not current direction
@@ -38,6 +39,7 @@ Rules of thumb:
 | I did… | Home | Must also… |
 |:--|:--|:--|
 | Single-module experiment / ablation | `docs/modules/<m>/research/` | Index row in parent module `README.md`; numbers must be source-traceable |
+| Multi-home / multi-step research chain (≥2 homes or ≥3 steps or citable policy/hook/audit) | `docs/research/threads/` | Navigation card only; index in `threads/README.md`; **no** long tables / no second evidence home |
 | Cross-module / global eval / pipeline / shared training | `docs/research/<area>/` | Index row in subdir README **or** top `docs/research/README.md` |
 | Decision-layer *why* (association / gates / knobs) | `docs/research/tracker-decision/` | **Closed line is read-only** (P0–P8); reopen only as a *named* new line with evidence |
 | Citable baseline / decision outcome number | `docs/research/evidence_ledger.md` | One ledger row + link to source doc; no chat-only numbers |
@@ -125,7 +127,8 @@ Optional:
 
 | Entry | Obligation |
 |:--|:--|
-| `docs/research/README.md` | Active workstreams (including **pointers** into module research), Closed lines, Paper → `report_data`, subdir entry points; **no phantom paths** |
+| `docs/research/README.md` | Active workstreams (including **pointers** into module research), Closed lines, Paper → `report_data`, subdir entry points（含 `threads/`）; **no phantom paths** |
+| `docs/research/threads/README.md` | Index **all** active thread cards; threads are navigation-only |
 | `docs/research/<sub>/README.md` | Index **all** `.md` in that subdir (except the README itself), **or** state “no index; filenames only” and do not claim a table elsewhere |
 | `docs/modules/<m>/README.md` | If `research/` exists, index **all** research notes |
 | `report_data/README.md` | Start-here list; **one-line** link to decision paper outline |

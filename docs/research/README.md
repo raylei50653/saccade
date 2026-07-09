@@ -46,6 +46,7 @@
 
 | 目錄 | 入口 | 內容 |
 |------|------|------|
+| [threads/](threads/README.md) | [threads/README.md](threads/README.md) | **連續任務母線**（navigation-only；不放長表 / 不取代 ledger） |
 | [pipeline/](pipeline/) | 見下表（本目錄無獨立 README） | Runtime 路徑、perf、sync、CPU |
 | [eval/](eval/README.md) | [eval/README.md](eval/README.md) · **[signal_analysis_ledger](eval/signal_analysis_ledger.md)** | Eval / ablation；**深度訊號總帳** |
 | [training/](training/README.md) | [training/README.md](training/README.md) | 訓練實驗 |
@@ -90,6 +91,7 @@
 ## 規範（摘要）
 
 - 新增檔 → 同一 PR 更新 owning README 索引（[契約 C4](../ownership/doc_structure_contract.md)）
+- 跨子類連續任務 → [threads/](threads/README.md) navigation-only 母線（不放長表）
 - 可引用數字 → [evidence_ledger](evidence_ledger.md) 或 [report_data](../../report_data/README.md)
 - 結案 one-shot → [../archive/](../archive/)
 - Closed tracker-decision：只讀，勿並開

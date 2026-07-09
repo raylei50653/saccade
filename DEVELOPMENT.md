@@ -9,6 +9,8 @@
 長文契約與寫作路由：
 
 - 文件家 / research 索引 / 數字升格 → [docs/ownership/doc_structure_contract.md](docs/ownership/doc_structure_contract.md)（**O1.5**）
+- 跨子類連續研究任務 → [docs/research/threads/](docs/research/threads/) 建 navigation-only thread；不放長表、不取代 evidence_ledger / module research。
+- 接續任務 → [docs/research/threads/README.md](docs/research/threads/README.md)（先看 Active threads，再進單卡）
 - 格式、WIP=1、fact-owner → [docs/DOC_MAINTENANCE.md](docs/DOC_MAINTENANCE.md)
 - 「我去哪寫」決策樹 → [docs/README.md](docs/README.md)
 - 模組目標隔離 → [docs/ownership/README.md](docs/ownership/README.md)
@@ -226,6 +228,7 @@ MLflow / Optuna 未啟動不阻 eval。啟動與查詢：
 | NO-GO 總表 | [docs/reference/no_go_registry.md](docs/reference/no_go_registry.md) |
 | 決策層（closed） | [tracker-decision/](docs/research/tracker-decision/README.md) |
 | 全局 research 入口 | [docs/research/README.md](docs/research/README.md) |
+| 連續任務母線 | [docs/research/threads/](docs/research/threads/README.md) |
 | Paper assets | [report_data/README.md](report_data/README.md) |
 | 倉庫目錄約定 | [REPO_LAYOUT.md](REPO_LAYOUT.md) |
 

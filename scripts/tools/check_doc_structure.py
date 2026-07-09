@@ -7,7 +7,7 @@ Contract (``docs/ownership/doc_structure_contract.md`` § C4 / C9):
 
   S1  Every ``docs/modules/<m>/research/*.md`` must be referenced (by basename)
       in ``docs/modules/<m>/README.md``.
-  S2  Every note under ``docs/research/{pipeline,eval,training,reid}/*.md``
+  S2  Every note under ``docs/research/{pipeline,eval,training,reid,threads}/*.md``
       (except README.md) must be referenced by basename in the subdir README
       if it exists, else in ``docs/research/README.md``.
   S3  Every ``docs/modules/<m>/`` directory must contain README.md and TODO.md.
@@ -33,7 +33,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 MODULES_ROOT = REPO_ROOT / "docs" / "modules"
 RESEARCH_ROOT = REPO_ROOT / "docs" / "research"
-RESEARCH_SUBDIRS = ("pipeline", "eval", "training", "reid")
+RESEARCH_SUBDIRS = ("pipeline", "eval", "training", "reid", "threads")
 
 
 def _read(path: Path) -> str:
