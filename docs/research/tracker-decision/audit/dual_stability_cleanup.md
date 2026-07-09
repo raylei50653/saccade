@@ -182,21 +182,25 @@ hurting explainability; still requires metrics before flipping default.
 | Engineering cost | low (docs) | high (retune) | medium |
 | Fits “no kernel change” phase | **yes** | no | only if default unchanged |
 
-### Recommendation (P4)
+### Recommendation (P4 → P7)
 
 ```text
-Now:     Option A — document + healthcheck awareness only
-Next:    Optional C with default UNCHANGED (mark bid as “env ACTIVE legacy”)
-Later:   B only with 4-way ablation + 7-seq
-Never:   merge casually without naming stages
+P0–P6:  Option A stance — document + healthcheck; production both on
+P7:     4-way ablation protocol (measure first; do not flip defaults yet)
+          → docs/research/tracker-decision/audit/dual_stability_ablation_protocol.md
+Later:  Behavior PR only after results map to keep-both / cost-only / bid-only
+Never:  merge casually without naming stages
 ```
 
-Until A/B/C is chosen and implemented:
+Until architecture A/B/C is chosen **and** backed by the P7 matrix:
 
 - Treat **both** as ACTIVE for healthchecks (cost YAML + env default on).
 - Any PR that touches only one must say so in the description.
 - Do **not** sweep both knobs in one “stability” hyperparam study without
   orthogonal factors.
+- Run matrix **A/B/C/D** (both / cost-only / bid-only / both-off) per the
+  [ablation protocol](dual_stability_ablation_protocol.md) — not architecture
+  labels alone.
 
 ---
 

@@ -352,7 +352,8 @@ Increasing it makes association more permissive, which can recover more occlusio
 | [audit/callpoints.md](audit/callpoints.md) | **done** | schema → preset → inject → native → effect |
 | [audit/native_bridge.md](audit/native_bridge.md) | **done** | Python↔CUDA setters, remaps, packing risks |
 | [audit/math_model_drift_2026-07-09.md](audit/math_model_drift_2026-07-09.md) | **done** | P3 static drift check vs math_model.md |
-| [audit/dual_stability_cleanup.md](audit/dual_stability_cleanup.md) | **done (RFC)** | P4-1 dual stability A/B/C — design only |
+| [audit/dual_stability_cleanup.md](audit/dual_stability_cleanup.md) | **done (RFC)** | P4-1 dual stability architecture A/B/C |
+| [audit/dual_stability_ablation_protocol.md](audit/dual_stability_ablation_protocol.md) | **done (P7 protocol)** | 4-way matrix A–D; smoke → 04 → 7-seq; no default flip |
 | [audit/no_go_guardrails.md](audit/no_go_guardrails.md) | **done (RFC)** | P4-2 NO-GO/LATENT promotion + future validator rules |
 | [audit/active_contract_healthcheck.md](audit/active_contract_healthcheck.md) | **done** | C1–C8 checklist + P5 script link |
 | [scripts/tools/check_headline_decision_contract.py](../../../scripts/tools/check_headline_decision_contract.py) | **done (P5+P5.1)** | YAML contract + inject-map C8 (CI) |
@@ -413,14 +414,15 @@ detector input set → association cost → lifecycle (birth/confirm/lost)
 
 ## Current Priority
 
-P4 RFCs + P5/P6 static guards (no retunes):
+Guardrails (P0–P6) closed. Next is **P7 dual-stability ablation** (measure first):
 
 ```text
-audit/dual_stability_cleanup.md      # A/B/C — do not merge knobs yet
-audit/no_go_guardrails.md            # promotion rules + tier table
-audit/active_contract_healthcheck.md # C1–C9 checklist
-scripts/tools/check_headline_decision_contract.py  # CI YAML + inject + surface
-.github/pull_request_template.md     # decision-layer PR checklist
+audit/dual_stability_ablation_protocol.md  # P7 4-way matrix A–D; no default flip
+audit/dual_stability_cleanup.md            # architecture options after results
+audit/no_go_guardrails.md
+audit/active_contract_healthcheck.md       # C1–C9
+scripts/tools/check_headline_decision_contract.py
+.github/pull_request_template.md
 ```
 
 Still keep fresh when presets or cost kernels change:
@@ -438,17 +440,18 @@ assoc_knobs.md
 | Explicit `occ_state_*` in headline presets | **done** (behavior-preserving) |
 | Explicit `relink_bridge_dir_bonus` on m (`0.0`) | **done** (behavior-preserving; documents s≠m) |
 | NO-GO / LATENT prohibition table | [audit/config_surface.md](audit/config_surface.md) |
-| Dual stability architecture debt | **RFC only** — [audit/dual_stability_cleanup.md](audit/dual_stability_cleanup.md); prefer option A until eval |
+| Dual stability architecture debt | **P7 protocol** — [audit/dual_stability_ablation_protocol.md](audit/dual_stability_ablation_protocol.md); cleanup options [dual_stability_cleanup.md](audit/dual_stability_cleanup.md) |
 | NO-GO guardrail process | **RFC** — [audit/no_go_guardrails.md](audit/no_go_guardrails.md) |
 | Active-path healthcheck | **done** — [audit/active_contract_healthcheck.md](audit/active_contract_healthcheck.md) |
 | `math_model.md` drift check + align | **done** (PR #62 audit, PR #63 align) |
 | P5: preset validator / CI healthcheck script | **done** — YAML C1–C7 |
 | P5.1: inject-map C8 in same checker | **done** — `pipeline.py` setters + private det-set |
 | P6: surface hardening | **done** — C9 allowlist/forbid, help `[NO-GO]`/`[LATENT]`, PR template |
+| P7: dual stability 4-way ablation | **protocol** — [audit/dual_stability_ablation_protocol.md](audit/dual_stability_ablation_protocol.md); results PR later |
 
-Open maintainability questions (answered by RFCs / P6, not closed):
+Open maintainability questions:
 
-1. Large LATENT/NO-GO surface — **guarded** by C9 allowlist + help tags + promotion bar; schema delete still deferred.
-2. Dual height-stability — **choose A/B/C later (P7)**; healthcheck keeps both explicit until then.
+1. Large LATENT/NO-GO surface — **guarded** (C9 + help + promotion bar); schema delete deferred.
+2. Dual height-stability — **P7 measure** (matrix A–D) before any default flip.
 
 The main open question is not just whether the tracker is accurate, but whether the decision layer is understandable, auditable, and maintainable.
