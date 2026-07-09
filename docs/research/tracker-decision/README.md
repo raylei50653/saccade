@@ -413,13 +413,14 @@ detector input set → association cost → lifecycle (birth/confirm/lost)
 
 ## Current Priority
 
-P4 RFCs + P5 static guard (no retunes):
+P4 RFCs + P5/P6 static guards (no retunes):
 
 ```text
 audit/dual_stability_cleanup.md      # A/B/C — do not merge knobs yet
-audit/no_go_guardrails.md            # promotion rules
-audit/active_contract_healthcheck.md # C1–C8 checklist
-scripts/tools/check_headline_decision_contract.py  # CI YAML guard
+audit/no_go_guardrails.md            # promotion rules + tier table
+audit/active_contract_healthcheck.md # C1–C9 checklist
+scripts/tools/check_headline_decision_contract.py  # CI YAML + inject + surface
+.github/pull_request_template.md     # decision-layer PR checklist
 ```
 
 Still keep fresh when presets or cost kernels change:
@@ -443,10 +444,11 @@ assoc_knobs.md
 | `math_model.md` drift check + align | **done** (PR #62 audit, PR #63 align) |
 | P5: preset validator / CI healthcheck script | **done** — YAML C1–C7 |
 | P5.1: inject-map C8 in same checker | **done** — `pipeline.py` setters + private det-set |
+| P6: surface hardening | **done** — C9 allowlist/forbid, help `[NO-GO]`/`[LATENT]`, PR template |
 
-Open maintainability questions (answered by RFCs, not closed):
+Open maintainability questions (answered by RFCs / P6, not closed):
 
-1. Large LATENT/NO-GO surface — **guard with process + future validator**, do not delete schema yet.
-2. Dual height-stability — **choose A/B/C later**; healthcheck keeps both explicit until then.
+1. Large LATENT/NO-GO surface — **guarded** by C9 allowlist + help tags + promotion bar; schema delete still deferred.
+2. Dual height-stability — **choose A/B/C later (P7)**; healthcheck keeps both explicit until then.
 
 The main open question is not just whether the tracker is accurate, but whether the decision layer is understandable, auditable, and maintainable.

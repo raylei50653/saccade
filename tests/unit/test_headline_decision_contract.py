@@ -158,6 +158,54 @@ def test_private_continuation_off_fails(checker):
     assert any("private_continuation" in f for f in failures)
 
 
+def test_unknown_decision_key_surface_creep_fails(checker):
+    s, m = _minimal_ok_pair(checker)
+    s["experimental_ablation_knob"] = 1.0
+    m["experimental_ablation_knob"] = 1.0
+    failures, _ = checker.check_presets(s, m)
+    assert any(
+        "surface creep" in f and "experimental_ablation_knob" in f for f in failures
+    )
+
+
+def test_oao_spatial_family_in_headline_fails(checker):
+    s, m = _minimal_ok_pair(checker)
+    s["oao_contest_thresh"] = 0.4
+    m["oao_contest_thresh"] = 0.4
+    failures, _ = checker.check_presets(s, m)
+    assert any("oao_contest_thresh" in f and "C9" in f for f in failures)
+
+
+def test_nsa_kalman_in_headline_fails(checker):
+    s, m = _minimal_ok_pair(checker)
+    s["nsa_kalman"] = True
+    m["nsa_kalman"] = True
+    failures, _ = checker.check_presets(s, m)
+    # Forbidden key (C9) and/or wrong value (C7)
+    assert any("nsa_kalman" in f for f in failures)
+
+
+def test_reid_mode_not_off_fails(checker):
+    s, m = _minimal_ok_pair(checker)
+    s["reid_mode"] = "sync"
+    m["reid_mode"] = "sync"
+    failures, _ = checker.check_presets(s, m)
+    assert any("reid_mode" in f for f in failures)
+
+
+def test_m_delta_copied_from_s_fails(checker):
+    """m must keep intentional deltas; copying s bridge/r_scale is a regression."""
+    s, m = _minimal_ok_pair(checker)
+    m["kalman_r_scale"] = 2.8
+    m["relink_bridge_px"] = 0.25
+    m["relink_bridge_h_lo"] = 0.75
+    m["relink_bridge_h_hi"] = 1.33
+    m["relink_bridge_dir_bonus"] = 0.8
+    failures, _ = checker.check_presets(s, m)
+    assert any("C3" in f for f in failures)
+    assert any("kalman_r_scale" in f or "relink_bridge" in f for f in failures)
+
+
 def test_real_headline_presets_pass(checker):
     """Regression: production YAMLs must satisfy the locked contract."""
     s = checker.load_preset(checker.PRESET_S)

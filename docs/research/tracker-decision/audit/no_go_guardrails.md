@@ -32,10 +32,11 @@ or inject paths.
 | **T0 Docs** | This file + config_surface + README contract | **done** | none |
 | **T1 Healthcheck** | Active-contract + NO-GO absence checks ([active_contract_healthcheck.md](active_contract_healthcheck.md)) | **done** (manual + script) | none if read-only |
 | **T2 Preset validator** | Fail CI if headline presets violate rules | **done** (`check_headline_decision_contract.py` in `contracts` job) | blocks bad YAML only |
-| **T3 Schema / CLI hygiene** | Demote help text, experimental group, warn on promote | later | none if defaults unchanged |
+| **T3 Schema / CLI hygiene** | Help text `[NO-GO]` / `[LATENT]` tags; no default flips | **done** (P6) | none (help only) |
+| **T3b Surface allowlist** | Unknown / forbidden keys in headline YAML | **done** (C9 in checker) | blocks bad YAML only |
 | **T4 Surface shrink** | Hide/archive knobs, split experimental config | later | risk if defaults change |
 
-P4 only commits to **T0** (+ checklist for T1). T2+ is P5 decision.
+P6 hardens T2/T3 without deleting flags or changing defaults.
 
 ---
 

@@ -255,7 +255,12 @@ def add_reid_args(parser: argparse.ArgumentParser) -> None:
         "--gmc-fg-mask",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="Zero out previous-frame track boxes in GMC downscaled image to reduce foreground bias.",
+        help=_help(
+            "Zero out previous-frame track boxes in GMC downscaled image to reduce "
+            "foreground bias. Does not fix PCR-dominated background; headline keeps "
+            "false (registry #20).",
+            policy="NO-GO",
+        ),
     )
     grp.add_argument(
         "--gmc-pcr-uncertain-thresh",
