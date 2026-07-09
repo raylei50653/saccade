@@ -28,12 +28,15 @@ has **one primary job**, explicit secondaries, and a clear **should-not-own** li
 |:--|:--|:--|:--|
 | **O0** | Workstream WIP Seal | WIP=1 per module owner | **No** (docs) — [DOC_MAINTENANCE § Workstream WIP](../DOC_MAINTENANCE.md) |
 | **O1** | Module Objective Map | this directory | **No** (annotate only) |
+| **O1.5** | Doc Structure Contract | [doc_structure_contract.md](doc_structure_contract.md) | **No** (homes / indexes / promotion) |
 | **O2** | Ownership notes for top modules | deeper notes per module | No |
 | **O3** | Low-risk extraction plan | ordered extract plan | No |
 | **O4** | First mechanical split | code move | Yes — only with checker/smoke |
 
-**O0 entry / dashboard:** [DEVELOPMENT.md §6](../../DEVELOPMENT.md)  
-**Closed decision line (read-only):** [tracker-decision/status_2026-07-09.md](../research/tracker-decision/status_2026-07-09.md)
+**O0 entry / dashboard:** [DEVELOPMENT.md 模組現狀總覽](../../DEVELOPMENT.md)  
+**Dev entry (need levels D0–D4):** [DEVELOPMENT.md](../../DEVELOPMENT.md)  
+**Closed decision line (read-only):** [tracker-decision/status_2026-07-09.md](../research/tracker-decision/status_2026-07-09.md)  
+**Doc homes / research indexes:** [doc_structure_contract.md](doc_structure_contract.md)
 
 ---
 
@@ -45,6 +48,7 @@ has **one primary job**, explicit secondaries, and a clear **should-not-own** li
 | [module_objective_map.md](module_objective_map.md) | Primary / secondary / should-not-own per module & hot file |
 | [change_routing_matrix.md](change_routing_matrix.md) | Objective touched → required checks |
 | [extraction_candidates.md](extraction_candidates.md) | What to extract later (reasons only; no moves) |
+| [doc_structure_contract.md](doc_structure_contract.md) | **O1.5** write-where / index / promotion / lifecycle |
 
 ---
 

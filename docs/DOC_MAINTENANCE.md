@@ -51,6 +51,36 @@ Proposed → Accepted → (必要時) Superseded by ADR XXX
 - 操作步驟放 `reference/runbooks/` 或 `modules/<name>/runbooks/`
 - 目前沒有 `progress/`、`layers/` 或 `modules/<name>/decisions/` 目錄；不要在文件中指向這些路徑
 
+**完整「寫去哪 / 怎麼索引 / 數字升格」契約**見下一節與 [ownership/doc_structure_contract.md](ownership/doc_structure_contract.md)。
+
+---
+
+## Doc Structure Contract（研究 / 模組家與索引）
+
+**This is O1.5 of O-series**（docs-only）：檔案家、入口可發現性、evidence promotion。  
+**不是** tracker-decision P9。全文：[ownership/doc_structure_contract.md](ownership/doc_structure_contract.md)。
+
+### 原則（詳見契約 C0–C9）
+
+- **四家：** `docs/research/`（跨模組）· `docs/modules/<m>/`（模組）· `report_data/`（可重建 paper 資產）· `docs/archive/`（歷史）
+- **數字 master：** 決策 / baseline → [research/evidence_ledger.md](research/evidence_ledger.md)；負結果 → [reference/no_go_registry.md](reference/no_go_registry.md)
+- **入口 = 目錄：** 新增 research 檔的同一 PR **必須**更新對應 README 索引行
+- **禁止幽靈路徑：** README 不得鏈到不存在的子目錄（例如虛構的 `research/tracking/`）
+- **新 research 文首標記**（HTML comment，與 fact-owner 同風格）：
+
+```html
+<!-- doc-status: active | parked | closed | archived -->
+<!-- doc-promotion: none | ledger | report_data | archive | no_go -->
+<!-- doc-date: YYYY-MM-DD -->
+```
+
+- **TODO 不寫長報告：** sole active 一句 + 連到 `research/` 全文
+- **Cheb-GR / bank / occ-exit 文檔家** = `modules/semantic/`（即使 code 在 reid 路徑）
+
+### 相關 checker
+
+- `scripts/tools/check_doc_structure.py`：**warn-only**，research 檔未被 owning README 引用時警告
+
 ---
 
 ## Workstream WIP（一模主一目標）
@@ -69,7 +99,7 @@ WIP=1 是 **ownership governance 的 process seal**（docs-only）：每個模�
 
 ```text
 WIP = 1 per module owner  (O0 seal)
-- DEVELOPMENT.md §6 每個 🔄 列只寫「一個」active 目標字串（不要用頓號並列多個進行中項）
+- DEVELOPMENT.md「模組現狀總覽」每個 🔄 列只寫「一個」active 目標字串（不要用頓號並列多個進行中項）
 - 各 docs/modules/<m>/TODO.md 的 🔄 Active 下最多一個未勾選 [ ] 主項
   （表格式 TODO：最多一列標 🔄；其餘 📋 / ⏸️）
 - 要開第二目標：同一變更內先收合或 park 第一個
@@ -81,7 +111,7 @@ WIP = 1 per module owner  (O0 seal)
 
 ### Dashboard
 
-模組現狀一覽：[DEVELOPMENT.md §6](../DEVELOPMENT.md)（鏡射各 module TODO 的 sole active，不另立第二真相）。
+模組現狀一覽：[DEVELOPMENT.md 模組現狀總覽](../DEVELOPMENT.md)（鏡射各 module TODO 的 sole active，不另立第二真相）。
 
 ### 不在此規則內
 
@@ -92,7 +122,7 @@ WIP = 1 per module owner  (O0 seal)
 
 ## 事實所有權與新鮮度 (Fact Ownership & Freshness)
 
-核心原則見 [DEVELOPMENT.md §11](../DEVELOPMENT.md)：**每個事實只有一個家，其餘只鏡射並回連，不複製成獨立事實。** 入口文件最容易 drift 的是 baseline 數字。
+核心原則見 [DEVELOPMENT.md §6 衝突時誰說了算](../DEVELOPMENT.md) 與本節：**每個事實只有一個家，其餘只鏡射並回連，不複製成獨立事實。** 入口文件最容易 drift 的是 baseline 數字。
 
 ### fact-owner marker
 
@@ -121,6 +151,8 @@ WIP = 1 per module owner  (O0 seal)
 
 - `scripts/tools/check_doc_stale_paths.py`：**hard fail**，禁止引用已搬移文件的舊路徑（固定 denylist）。
 - `scripts/tools/check_doc_freshness.py`：**warn-only**，提醒手寫日期、缺 marker 的鏡射數字、跨入口重複的 baseline 數字；只警告不擋 CI。
+- `scripts/tools/check_doc_structure.py`：**warn-only**，research 索引覆蓋（見 [Doc Structure Contract](#doc-structure-contract研究--模組家與索引)）。
+- `scripts/tools/check_doc_links.py`：**hard fail**，相對 Markdown 連結必須可解析。
 
 ---
 
@@ -137,10 +169,13 @@ WIP = 1 per module owner  (O0 seal)
 ```
 □ 新模組有 architecture/ 版本快照？
 □ 新實驗有 research/ 記錄？
+□ 新 research 檔已更新 owning README 索引行？（Doc Structure C4）
+□ 若數字要被 PR/README/paper 引用：已 promotion 到 ledger / report_data / no_go？（C5）
+□ 無幽靈路徑、無只寫在 chat 的數字？
 □ 系統模組實作進度表與代碼一致？
 □ ADR 狀態正確？
-□ TODO.md 已完成項目已勾選？
-□ WIP=1：DEVELOPMENT.md §6 🔄 列只有一個 active 目標；module TODO Active 未雙開？
+□ TODO.md 已完成項目已勾選？TODO 未塞整份結案長文？（C7）
+□ WIP=1：DEVELOPMENT.md 模組現狀總覽 🔄 列只有一個 active 目標；module TODO Active 未雙開？
 □ 必要時通過 scripts/tools/check_gpu_contract.py 靜態效能合約檢查？
-□ 無失效連結或舊模型名稱？
+□ 無失效連結或舊模型名稱？（check_doc_links / check_doc_stale_paths）
 ```

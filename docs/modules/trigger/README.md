@@ -26,6 +26,12 @@
 | 2026-04-28 | DynamicReIDController（cooldown_frames + birth_death_lost_min） | ✅ GO（`p3_t40_cd8_bm3` 精度優先最佳） |
 | — | Saccade Heartbeat 影格更新隔離閘控 | ✅ GO |
 
+## 📚 研究
+
+| 文件 | 內容 |
+|------|------|
+| [research/dynamic_trigger.md](research/dynamic_trigger.md) | 動態 ReID 觸發機制實驗 |
+
 ## 📋 模組 TODO
 
 詳見 [TODO.md](TODO.md)。

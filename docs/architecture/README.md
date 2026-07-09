@@ -3,7 +3,7 @@
 本文件描述 **目前穩定的系統形狀與責任邊界**。它不是實驗日誌，也不是待辦清單。
 
 - 近期工作方向與 ablation backlog：看 [TODO.md](../TODO.md)
-- 開發入口與 source-of-truth 規則：看 [DEVELOPMENT.md](../../DEVELOPMENT.md)
+- 開發入口（需求層級 → 文檔組合）與 source-of-truth：看 [DEVELOPMENT.md](../../DEVELOPMENT.md)
 - 事件 / API / storage schema：看 [api_spec.md](../modules/storage/api_spec.md)
 
 ---
@@ -278,4 +278,4 @@ not the headline architecture.
 - Tracker 深入說明：[gpubytetracker_deep_dive.md](../modules/geometry/tracker_deep_dive.md)
 
 > 本文件只描述**穩定架構形狀與責任邊界**，不內嵌會隨實驗漂移的數字。
-> baseline 數字見 [TODO.md](../TODO.md)「當前 Baseline」節；模組現狀 dashboard 見 [DEVELOPMENT.md §6](../../DEVELOPMENT.md)。
+> baseline 數字見 [TODO.md](../TODO.md)「當前 Baseline」節；模組現狀 dashboard 見 [DEVELOPMENT.md 模組現狀總覽](../../DEVELOPMENT.md)。

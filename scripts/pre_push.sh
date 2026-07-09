@@ -96,6 +96,11 @@ echo "── doc freshness check (warn-only)"
 uv run python3 scripts/tools/check_doc_freshness.py 2>&1 || true
 ok "doc freshness (warnings only)"
 
+# ── 4.10 doc structure / research index coverage (warn-only) ─────────────────
+echo "── doc structure check (warn-only)"
+uv run python3 scripts/tools/check_doc_structure.py 2>&1 || true
+ok "doc structure (warnings only)"
+
 # ── 5. pytest ────────────────────────────────────────────────────────────────
 echo "── pytest"
 if uv run pytest tests/ -q --ignore=tests/benchmarks 2>&1; then

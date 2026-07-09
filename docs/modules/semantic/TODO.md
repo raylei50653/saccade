@@ -4,7 +4,7 @@
 
 ## 🔄 Active
 
-> **WIP=1 sole active：** occ-exit audit（#55）。 見 [DOC_MAINTENANCE.md](../../DOC_MAINTENANCE.md) § Workstream WIP； dashboard：[DEVELOPMENT.md §6](../../../DEVELOPMENT.md)。
+> **WIP=1 sole active：** occ-exit audit（#55）。 見 [DOC_MAINTENANCE.md](../../DOC_MAINTENANCE.md) § Workstream WIP； dashboard：[DEVELOPMENT.md 模組現狀總覽](../../../DEVELOPMENT.md)。
 
 - [ ] **occ-exit audit 條件化復活**（#55）— 復活條件：C++ occ_state + Cheb-GR graph 決策 + 13-型序列條件化。不動全域。同 #56 教訓：live 修正動作獎金需 ≥~4pp 才蓋得過複利懲罰。**Reference substrate 已就位**（2026-07-04）：`CleanFifoBank.samples_before(tid, occ_start)` = occ-exit audit 的 pre-episode clean reference，evaluator 已 wired（`--occ-audit-bank-reference` flag + `occ_exit_audit_lines_from_bank`），probe = `probe_occ_audit_bank_reference.py`；剩 Cheb-GR graph 決策 + 13-型序列條件化。substrate contract 見 [research/clean_fifo_bank_substrate_20260704.md](research/clean_fifo_bank_substrate_20260704.md)。
 

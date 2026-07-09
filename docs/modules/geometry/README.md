@@ -32,6 +32,23 @@
 | 2026-06-12 | GMC 旋轉系列（LK affine / box-residual probe） | ❌ NO-GO（LK affine −0.8）；tile phase-corr→affine 為唯一未否證路線 |
 | 2026-06-01 | MOT 輸出框 clip | ⚠️ 禁止（GT 大量出界，clip 打斷 IoU → MOTA -6.9pp） |
 
+## 📐 設計入口
+
+| 文件 | 內容 |
+|------|------|
+| [tracker_deep_dive.md](tracker_deep_dive.md) | GPU tracker 深度解析 |
+| [architecture_tracker.md](architecture_tracker.md) | Tracker 架構筆記 |
+| [../../research/tracker-decision/README.md](../../research/tracker-decision/README.md) | **決策語義**（association *why*；P0–P8 closed 只讀） |
+| [../../research/tracker-decision/kalman_gmc_motion.md](../../research/tracker-decision/kalman_gmc_motion.md) | Kalman / GMC 對 matching 的假設 |
+
+## 📚 研究
+
+| 文件 | 內容 |
+|------|------|
+| [research/fp_fn_recovery_and_gmc.md](research/fp_fn_recovery_and_gmc.md) | FP/FN recovery + GMC 診斷與消融 |
+
+相關全局 eval 筆記（GMC residual / Kalman H 等）見 [../../research/eval/README.md](../../research/eval/README.md)。
+
 ## 📋 模組 TODO
 
 詳見 [TODO.md](TODO.md)。
