@@ -268,6 +268,19 @@ uv run python scripts/eval/diagnostics/reconnect_rate.py \
 
 Live pointer: [m_b2_reconnect_bridge_ab_20260709.md](m_b2_reconnect_bridge_ab_20260709.md).
 
+### R-B1s — Safe-reject audit (constrained FP pruning)
+
+```bash
+# After pairs exist (R-A / B1). Does NOT tune thr F1 — reports FP_removed @ GT_hurt<=ε.
+uv run python scripts/tools/audit_relink_safe_reject.py \
+  --pairs out/signal_study/<id>/pairs.csv \
+  --study-dir out/signal_study/<id> \
+  --write-study --by-gap
+```
+
+Contract: [signal_table_schema.md](../../../research/eval/signal_table_schema.md) §0.4.  
+Live: [m_b1_bridge_discriminability_20260709.md](m_b1_bridge_discriminability_20260709.md) §3d.
+
 ### R-B — Depth / swap probe
 
 ```bash

@@ -180,6 +180,40 @@ Master：`metrics_thr_gap_schedules.csv` · `metrics_thr_gap_nonlinear.json` · 
 2. `power` / `sqrt_add` + **short_floor**  
 3. 不要單獨上 `sqrt_mul` / `log_mul` 而不看分 gap hurt  
 
+### 3d. Safe-reject / constrained FP pruning（契約 §0.4）
+
+**目標改寫：** 不是找更合理 thr，而是
+
+```text
+maximize FP_removed          # soft — later stages may still kill FP
+s.t.     GT_hurt_rate <= ε   # hard — early reject usually irreversible for true pairs
+ε ∈ {0, 0.1%, 1%}
+```
+
+**非對稱：** GT 被前面砍掉 ≈ 機會沒了；FP 多留下仍可能被 assignment / scoring / NMS / e2e 抵消。  
+⇒ 約束永遠偏 **ε=0**；`FP_removed` 只當減負上界，不當 e2e 保證。
+
+`thr(gap)` = **calibration**（保護 GT coverage）；真正砍 FP 靠 **context reject rule**。  
+Tool：`scripts/tools/audit_relink_safe_reject.py`  
+Master（同 study）：`metrics_safe_reject_audit.csv` · `metrics_safe_reject_summary.json`
+
+**As-of 探針（all pool，見 audit CSV）：**
+
+| 類型 | 發現 |
+|:--|:--|
+| 1D thr baseline (`bridge_dist>1`) | 砍大量 FP，但 **GT_hurt ~38%** → `unsafe` |
+| 合取 probe（長 gap∧dir、∧scale…） | 本 stamp **沒有** 打進 ε=0 的「明顯 safe 合取」；多為 `unsafe` / 高 hurt |
+| **1D ε=0 ceiling**（score > max GT） | 存在可觀 **safe** 頭寸：尤其 **`log_h_ratio`** 與 `bridge_dist` 尾端（見 summary `frontiers_1d` / `ceiling_*` rules） |
+
+解讀：單維距離門檻與真對重疊多；**scale mismatch 尾端** 比「再調 thr=0.4」更像 safe prune 方向。合取 rule 要繼續挖 **GT-empty region**，不是放棄目標。
+
+```bash
+uv run python scripts/tools/audit_relink_safe_reject.py \
+  --pairs out/signal_study/m_b1_smoke_20260709T092543Z/pairs.csv \
+  --study-dir out/signal_study/m_b1_smoke_20260709T092543Z \
+  --write-study --by-gap
+```
+
 ---
 
 ## 4. Verdicts & non-goals
@@ -189,6 +223,8 @@ Master：`metrics_thr_gap_schedules.csv` · `metrics_thr_gap_nonlinear.json` · 
 | B1 data path on m is valid | **GO (D1)** |
 | Full-pool geometry useful for neg reduction | **GO (signal)** |
 | Hard-pool geometry alone carries precision / identity | **NO** — base-rate + mid AUC |
+| Constrained FP pruning is the right thr-adjacent goal | **GO (method)** — §0.4 / §3d |
+| Probe conjunctions already give production safe rules | **NO** — need better C; ceiling shows headroom |
 | Ship or retune production bridge from this note | **NO** — RESEARCH; needs B2 + e2e |
 | Replace s offline tables with these numbers | **NO** — s remains historical hub |
 

@@ -152,7 +152,87 @@ D3  B2 reconnect 對照（bridge on/off）
       study out/signal_study/m_b2_bridge_ab_20260709T094646Z/
       tool: reconnect_rate.py --json-out / --events-out
 D4  可選：meta 自動寫入、e2e 灌 context、ledger 升格
+D5  B1 safe-reject audit（constrained FP pruning；§0.4）
+    → audit_relink_safe_reject.py → metrics_safe_reject_*
 ```
+
+### 0.4 B1 safe-reject / constrained FP pruning（離線）
+
+**目標重寫（不是 thr F1 調參）：**
+
+```text
+maximize   FP_removed          # soft upper bound — see asymmetry
+subject to GT_hurt_rate <= ε   # hard loss — irreversible if early reject
+ε ∈ {0, 0.1%, 1%}
+```
+
+#### 非對稱代價（為何硬約束在 GT）
+
+| | 被 early gate **reject** 之後 |
+|:--|:--|
+| **GT 真對（pos）** | 機會集合裡 **通常真的沒了** — 後面 assignment / scoring / NMS / metric **救不回** 這條 offline 真 relink 機會。⇒ **GT_hurt = hard loss** |
+| **FP 負例（neg）** | 即使 **沒** 在此砍掉，後面仍可能被 auction、bridge score、NMS、lifecycle、e2e 對齊等 **抵消或稀釋**。⇒ **FP_removed = soft 上界 / 候選減負**，不是 e2e FP 保證下降 |
+
+因此：
+
+- 優化敘事是 **constrained pruning**，不是對稱的 prec/rec 調 thr。  
+- **ε=0（safe reject）優先**；放寬到 ε0.1% / 1% 必須明示「用硬 GT 損失換軟 FP 減負」。  
+- 報 `FP_removed` 時不得寫成「上線必少 FP」；上線仍要 **B2 / e2e**。  
+- 寧可 **少砍 FP、GT_hurt=0**，不可 **多砍 FP、誤傷 GT**（除非有 fallback / 二階段恢復，且另開 study）。
+
+| 概念 | 定義 |
+|:--|:--|
+| Pool | 通常 `gt_valid==1` 的 `U_relink_pair` 列 |
+| GT / pos | `gt_match==1` |
+| FP / neg | `gt_match==0` |
+| Reject rule C | 布林條件；True = **砍掉**該 pair（當負例修剪） |
+| GT_hurt | 被 reject 的 pos 數；rate = hurt / n_pos；**hard** |
+| FP_removed | 被 reject 的 neg 數；**soft upper bound** on early negative reduction |
+| FP_removed_per_GT_hurt | hurt=0 → **`safe`**；否則 removed/hurt（分母是硬損失） |
+
+**ε 與 `safe_level`：** `eps0` (0) · `eps0_1pct` (0.001) · `eps1pct` (0.01) · `unsafe`  
+Code：`SAFE_REJECT_EPSILONS` / `classify_safe_level` / `constrained_fp_prune_metrics`。
+
+**Rule 三類：**
+
+| `rule_class` | 意義 |
+|:--|:--|
+| `safe_reject` | ε=0 且 FP_removed>0 → production **候選**（仍要 B2/e2e；FP 為 soft） |
+| `risky_reject` | 傷 GT（硬）換 FP 減負（軟）→ research / fallback only |
+| `calibration` | 主要保護 coverage（如 thr(gap)），不保證砍 FP |
+| `baseline` | 對照用 1D thr 等 |
+
+**分層：**
+
+```text
+Layer A  thr(gap) / coverage     → calibration（少傷 GT，硬約束）
+Layer B  context reject C        → safe/risky FP pruning（GT hard / FP soft）
+```
+
+先 A 再 B；不要用緊 thr 假裝 safe prune。
+
+**必報表（audit 一列一 rule×bin）：**  
+`rule_name, coverage_bin, rule_class, GT_total, GT_hurt, GT_hurt_rate, FP_total, FP_removed, FP_removed_rate, FP_removed_per_GT_hurt, safe_level, notes`  
+常數：`SAFE_REJECT_AUDIT_COLS` · 檔名 `metrics_safe_reject_audit.csv` / `metrics_safe_reject_summary.json`。
+
+**主問題（每個 gate）：**
+
+1. 被 reject 的有哪些是 GT？  
+2. 被保留的有哪些是 FP？  
+3. 是否存在 FP-heavy / GT-empty 的 context？  
+4. 能否在 GT_hurt=0 下 reject 該區？  
+5. 若否，FP_removed / GT_hurt frontier 為何？
+
+**腳本：**
+
+```bash
+uv run python scripts/tools/audit_relink_safe_reject.py \
+  --pairs out/signal_study/<id>/pairs.csv \
+  --study-dir out/signal_study/<id> \
+  --write-study --by-gap
+```
+
+**非目標：** 改 production preset；把 offline safe rule 直接當 e2e GO。
 
 ---
 
@@ -644,6 +724,7 @@ Code 常數與 dataclass：`signal_tables.py`（`UNIVERSE_COLUMNS`, `load_study_
 | 線 | Doc / tool |
 |:--|:--|
 | B1 hub | [offline_relink_candidate_analysis.md](../../modules/semantic/research/offline_relink_candidate_analysis.md) |
+| B1 safe-reject audit | `scripts/tools/audit_relink_safe_reject.py` · §0.4 |
 | B1 builder | `scripts/tools/build_relink_candidates.py` |
 | B2 reconnect | `scripts/eval/diagnostics/reconnect_rate.py` |
 | A score dist | `scripts/eval/analyze_score_distribution.py` |
