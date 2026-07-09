@@ -6,8 +6,24 @@
 
 | 文件 | 內容 |
 |------|------|
+| [mot17_mamba_whole_graph_m_sdp_double_buffer.md](pipeline/mot17_mamba_whole_graph_m_sdp_double_buffer.md) | `mamba_whole_graph_m` + SDP + double-buffer 實際 runtime 路徑 / 檔案對應 runbook |
 | [gpu_pipeline_m4b_identity_resolver.md](pipeline/gpu_pipeline_m4b_identity_resolver.md) | M4b native identity resolver 設計 |
 | [perf_attribution_whole_graph_m.md](pipeline/perf_attribution_whole_graph_m.md) | whole_graph_m 每幀開銷歸因 + 優化 backlog（nsys, 2026-07） |
+
+## tracker-decision/
+
+| 文件 | 內容 |
+|------|------|
+| [README.md](tracker-decision/README.md) | Tracker 決策層範圍、與 pipeline 分工、文件索引 |
+| [scoring_semantics.md](tracker-decision/scoring_semantics.md) | Association cost / gate / weight / identity 語意 |
+| [assoc_knobs.md](tracker-decision/assoc_knobs.md) | 決策旋鈕卡片（ACTIVE + NO-GO） |
+| [relink_bridge.md](tracker-decision/relink_bridge.md) | Geometry-only bridge relink |
+| [kalman_gmc_motion.md](tracker-decision/kalman_gmc_motion.md) | Kalman / GMC 對 matching 的假設 |
+| [failure_modes.md](tracker-decision/failure_modes.md) | Geometry 側失敗模式 |
+| [audit/config_surface.md](tracker-decision/audit/config_surface.md) | 跨模組決策參數面 |
+| [audit/callpoints.md](tracker-decision/audit/callpoints.md) | schema → inject → native 對照 |
+| [audit/native_bridge.md](tracker-decision/audit/native_bridge.md) | Python↔CUDA bridge / rename 風險 |
+| [audit/math_model_drift_2026-07-09.md](tracker-decision/audit/math_model_drift_2026-07-09.md) | math_model.md 靜態 drift audit（P3） |
 
 ## tracking/
 
