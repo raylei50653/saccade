@@ -5,16 +5,35 @@ import threading
 from pathlib import Path
 from typing import Any, Iterator, List, cast
 
-import nvidia.dali.fn as fn
-import nvidia.dali.types as types
-from nvidia.dali.pipeline import Pipeline
-from nvidia.dali.plugin.pytorch import DALIGenericIterator
+# DALI is an optional extra (`uv sync --extra dali`). Eval/unit tests must import
+# this module without DALI (cloud CI / no-GPU hosts use TorchvisionGpuStreamer).
+try:
+    import nvidia.dali.fn as fn
+    import nvidia.dali.types as types
+    from nvidia.dali.pipeline import Pipeline
+    from nvidia.dali.plugin.pytorch import DALIGenericIterator
+
+    HAS_DALI = True
+except ImportError:  # pragma: no cover - exercised when extra not installed
+    fn = None  # type: ignore[assignment]
+    types = None  # type: ignore[assignment]
+    Pipeline = object  # type: ignore[misc, assignment]
+    DALIGenericIterator = None  # type: ignore[misc, assignment]
+    HAS_DALI = False
+
+_DALI_INSTALL_HINT = "nvidia-dali is not installed. Install with: uv sync --extra dali"
 
 
-class JpgPipe(Pipeline):
+def _require_dali() -> None:
+    if not HAS_DALI:
+        raise ImportError(_DALI_INSTALL_HINT)
+
+
+class JpgPipe(Pipeline):  # type: ignore[misc, valid-type]
     def __init__(
         self, batch_size: int, num_threads: int, device_id: int, files: List[str]
     ):
+        _require_dali()
         cast(Any, super()).__init__(batch_size, num_threads, device_id)
         self.input = fn.readers.file(files=files, name="Reader")
 
@@ -30,6 +49,7 @@ class DALIStreamer:
     """High-speed JPEG sequence streamer using NVIDIA DALI."""
 
     def __init__(self, files: List[str], batch_size: int = 1):
+        _require_dali()
         self.files = files
         self.batch_size = batch_size
         self.pipe = JpgPipe(
@@ -53,6 +73,7 @@ class DALIStreamerStream:
     """Compatibility wrapper used by the eval runner for MOT image folders."""
 
     def __init__(self, img_dir: Path):
+        _require_dali()
         self.img_files = sorted(str(path.absolute()) for path in img_dir.glob("*.jpg"))
         self.file_list_path: str | None = None
         self._setup()
@@ -63,7 +84,7 @@ class DALIStreamerStream:
                 handle.write(f"{img} 0\n")
             self.file_list_path = handle.name
 
-        class _JpgPipe(Pipeline):
+        class _JpgPipe(Pipeline):  # type: ignore[misc, valid-type]
             def __init__(self, file_list: str):
                 cast(Any, super()).__init__(1, 4, 0, prefetch_queue_depth=2)
                 self.input = fn.readers.file(file_list=file_list, name="reader")
