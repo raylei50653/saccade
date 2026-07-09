@@ -66,6 +66,16 @@ interpolate_max_gap: 35
 interpolate_min_track_len: 5
 interpolate_min_h: 0
 
+# --- Occ-state (depth-gated front latch) ---
+# Explicit lock of GeometryConfig schema defaults. Previously silent-ACTIVE when
+# omitted from YAML; written here so the production contract is reviewable.
+# See docs/research/tracker-decision/README.md § Current Active Contract.
+occ_state_enabled: true
+occ_iou_thresh: 0.45
+occ_foot_gap: 0.15
+occ_ttl: 4
+occ_cost_weight: 0.50
+
 # --- Private continuation (track-gated wider-NMS recovery) ---
 # A second, wider NMS pass produces extra candidate boxes that may CONTINUE an
 # existing track (gated by prior IoU to an active track) but are score-clamped

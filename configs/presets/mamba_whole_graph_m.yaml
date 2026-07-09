@@ -61,6 +61,10 @@ relink_bridge_margin: 0.05
 relink_bridge_h_lo: 0.6
 relink_bridge_h_hi: 1.7
 relink_bridge_spatial_gate: 0.0
+# Explicit: m does NOT inherit s's 0.8. Schema default is 0.0; previously this
+# line was missing (silent drift risk vs s). Value 0.0 preserves prior m behavior
+# — do not copy s's 0.8 without a paired A/B. See tracker-decision active contract.
+relink_bridge_dir_bonus: 0.0
 
 # --- Tracker Parameters (identical to mamba_whole_graph; loosening these
 # fragments m's recovered small objects — Exp2 gave IDs +148) ---
@@ -79,6 +83,16 @@ interpolate_tracklets: true
 interpolate_max_gap: 35
 interpolate_min_track_len: 5
 interpolate_min_h: 0
+
+# --- Occ-state (depth-gated front latch) ---
+# Explicit lock of GeometryConfig schema defaults (same as s). Silent-ACTIVE
+# when omitted; written so the production contract is reviewable.
+# See docs/research/tracker-decision/README.md § Current Active Contract.
+occ_state_enabled: true
+occ_iou_thresh: 0.45
+occ_foot_gap: 0.15
+occ_ttl: 4
+occ_cost_weight: 0.50
 
 # --- Recipe parity with mamba_whole_graph (s) (added 2026-06-30) ---
 # The m preset previously predated these; without them m sat at IDF1 76.5.
