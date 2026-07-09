@@ -62,7 +62,8 @@ WIP=1 是 **ownership governance 的 process seal**（docs-only）：每個模�
 
 與 [事實所有權](#事實所有權與新鮮度-fact-ownership--freshness) 平行（fact-owner = 事實家；WIP=1 = 進行中目標家）。
 
-已結案研究線（只讀、勿並開）：[research/tracker-decision/status_2026-07-09.md](research/tracker-decision/status_2026-07-09.md)（P0–P8 closed）。O1+（module objective map 等）另開 named PR，不在本節擴張。
+已結案研究線（只讀、勿並開）：[research/tracker-decision/status_2026-07-09.md](research/tracker-decision/status_2026-07-09.md)（P0–P8 closed）。  
+**O1+** module objective map / routing / extraction：[ownership/README.md](ownership/README.md)（annotate-only；不在本節展開完整表格）。
 
 ### 規則
 
