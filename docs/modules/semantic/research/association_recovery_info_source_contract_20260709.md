@@ -21,8 +21,8 @@ presets, and research notes.
 |:--|:--|
 | [association_recovery_crosswalk_20260709.md](association_recovery_crosswalk_20260709.md) | Human-readable experiment alignment (may later be partially *rendered*) |
 | [association_recovery_scripts_index_20260709.md](association_recovery_scripts_index_20260709.md) | Human-readable script lookup (may later be partially *rendered*) |
-| [association_tools.yaml](association_tools.yaml) | **R** registry — **partial_p0** (Step 1B-1); Door A/D/F P0 tools + R-A/R-D/R-F; P1+ deferred |
-| Checker / printer scripts (planned) | **Check / render / print only** — no research judgment (Step 2 / 3) |
+| [association_tools.yaml](association_tools.yaml) | **R** registry — **populated** (Step 1B); full seed inventory + recipes R-A/B/D/E/F |
+| [check_association_tools.py](../../../../scripts/tools/check_association_tools.py) | **Check / list / print-recipe only** — no research judgment (Step 2) |
 
 ---
 
@@ -45,7 +45,7 @@ contract is amended.
 | Class | What it is allowed to assert | Typical location |
 |:--|:--|:--|
 | **D — Disk** | Path exists; file size / line count; thin-wrapper redirect target (when parseable); mtime | repo tree under `scripts/`, `docs/`, `configs/` |
-| **R — Registry** | Door A–F; role tags; fact-owner path; recipe id; expected artifact *names*; priority P0–P3; canonical vs wrapper intent | [association_tools.yaml](association_tools.yaml) — partial_p0 (Step 1B-1); P0 A/D/F only |
+| **R — Registry** | Door A–F; role tags; fact-owner path; recipe id; expected artifact *names*; priority P0–P3; canonical vs wrapper intent | [association_tools.yaml](association_tools.yaml) — populated (Step 1B) |
 | **N — NO-GO master** | Whether a registry id **exists**; body of settled negative results | [no_go_registry.md](../../../reference/no_go_registry.md) (+ details) |
 | **V — Verdict masters** | GO / NO-GO / parked / promotion / narrative mechanism | owning research note · module README GO table · ledger · TODO sole active |
 | **C — Config truth** | Actual knob values for a named preset; schema defaults when no preset | `configs/presets/*.yaml` · `scripts/eval/config/*.py` |
@@ -149,12 +149,12 @@ not **derive** them from disk heuristics as the system of record.
 └────────────────────────────▲────────────────────────────────┘
                              │ cite / link only
 ┌────────────────────────────┴────────────────────────────────┐
-│  R — association_tools.yaml (planned)                        │
+│  R — association_tools.yaml (populated)                      │
 │       door · role · fact-owner path · recipe · no_go id list │
 └────────────────────────────▲────────────────────────────────┘
                              │ read metadata
 ┌────────────────────────────┴────────────────────────────────┐
-│  Script layer — check / render / print                       │
+│  Script layer — check_association_tools.py (check/list/print)│
 │       never writes V/M; never invents R; may write reports   │
 └───────────────┬─────────────────────────────┬───────────────┘
                 │ scan                        │ extract
@@ -175,10 +175,10 @@ never the source for knob values or metrics.
 |:--|:--|:--|:--|
 | **0** | This contract | **sealed** | process rules only |
 | **1A** | [association_tools.yaml](association_tools.yaml) | **schema skeleton** | enums, field schemas, `tools: []`, `recipes: []`; no inventory fill |
-| **1B-1** | same yaml, P0 fill | **partial_p0** | Door A/D/F P0 tools + R-A/R-D/R-F only; seed from scripts_index **H** |
-| **1B** | same yaml, full inventory | not yet | remaining P1+ tools/recipes (**R** only) |
-| **2** | Checker CLI | not yet | compare **R ↔ D ↔ N** (optional **C**); no verdicts |
-| **3** | Optional MD render / recipe printer | not yet | print **R** + generated check footnotes; do not auto-run MOT eval |
+| **1B-1** | same yaml, P0 fill | done → became **populated** | Door A/D/F P0 tools + R-A/R-D/R-F; seed from scripts_index **H** |
+| **1B** | same yaml, full inventory | **populated** | full curated tools/recipes (**R** only) from scripts_index **H** |
+| **2** | [check_association_tools.py](../../../../scripts/tools/check_association_tools.py) | **done** | compare **R ↔ D ↔ N**; `--list` / `--print-recipe`; no verdicts |
+| **3** | Optional MD render | not required | full map regen deferred; recipe print covered by Step 2 |
 
 **Step order is mandatory.**
 
@@ -191,7 +191,7 @@ No script that writes verdicts / metrics / promotion.
 
 Schema / field authority for **R** lives in the yaml file itself
 (`tool_field_schema`, `recipe_field_schema`, `forbidden_fields`,
-`registry_status: partial_p0` after Step 1B-1; was `schema_skeleton` at 1A).
+`registry_status: populated` after Step 1B; was `schema_skeleton` at 1A / `partial_p0` at 1B-1).
 
 Rules for **R** (unchanged intent):
 
@@ -199,7 +199,7 @@ Rules for **R** (unchanged intent):
 - Every `fact_owner` must exist on **D** (warn if missing).
 - Every `no_go_ids[]` entry must resolve in **N** (warn/fail).
 - No `metrics:` block. No `verdict: GO`. No duplicated preset knobs.
-- Step 1B-1 may populate P0 tools/recipes; remaining inventory stays empty until full 1B.
+- Inventory is human-curated in yaml; checker never auto-adds tools or doors.
 
 ---
 
@@ -222,9 +222,9 @@ A compliant checker:
 | Map | How to update (now) |
 |:--|:--|
 | crosswalk | Manual **H**; knobs must **point at** preset/schema paths (**C**), not invent masters |
-| scripts_index | Manual **H** snapshot until Step 1B; seed for **R** fill, not master |
+| scripts_index | Manual **H** beside **R**; do not re-hardcode inventory as a third truth |
 | offline hub | Fact-owner for Door A conclusions (**V**); hub rows may point to maps |
-| association_tools.yaml | Step 1B-1 partial_p0 (A/D/F P0); remaining inventory by hand from scripts_index **H** |
+| association_tools.yaml | **populated** (Step 1B); update **R** by hand when adding AssA scripts |
 
 After Step 3 (optional):
 
@@ -246,13 +246,12 @@ After Step 3 (optional):
 | Artifact | Status under contract |
 |:--|:--|
 | This contract | **Authoritative for process** (Step 0 sealed) |
-| scripts_index (2026-07-09) | **Curated H snapshot**; seed for Step 1B; not yet **R**-backed |
+| scripts_index (2026-07-09) | **Curated H snapshot**; was seed for Step 1B; prefer **R** + checker for path health |
 | crosswalk | **Curated H**; knob table must stay subordinate to **C** |
-| association_tools.yaml | **partial_p0** (Step 1B-1); Door A/D/F P0 tools + recipes; P1+ empty |
-| Full inventory | **Not yet** (rest of Step 1B) |
-| list_association_tools / checker | **Not yet** (Step 2) |
+| association_tools.yaml | **populated** (Step 1B); `registry_status: populated` |
+| check_association_tools.py | **Step 2 done** — R↔D↔N check, `--list`, `--print-recipe` |
 
-The 2026-07-09 inventory is **seed material for Step 1B**, not a substitute for **R**.
+Long-term: door/role/fact-owner → **R**; path health → checker (**D**); conclusions → research/ledger.
 
 ---
 

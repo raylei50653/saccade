@@ -6,15 +6,15 @@
 # This file owns curated navigation metadata only.
 # It must not contain metrics, verdict prose, preset knob truth, or baseline tables.
 #
-# Status: partial_p0 (Step 1B-1)
-# - P0 tools/recipes for Door A / D / F only
-# - P1+ (B/E/C/occ-signal/FN) deferred
-# - checker / render = Step 2 / 3 (not yet)
+# Status: populated (Step 1B complete)
+# - Full inventory seeded from association_recovery_scripts_index_20260709.md (H)
+# - P0 Door A/D/F + P1+ (B/E/C/A peripherals/wrappers)
+# - checker = scripts/tools/check_association_tools.py (Step 2)
 # Seed: association_recovery_scripts_index_20260709.md (H)
 
 version: 1
 kind: association-tools-registry
-registry_status: partial_p0
+registry_status: populated
 doc_module: semantic
 source_contract: docs/modules/semantic/research/association_recovery_info_source_contract_20260709.md
 
@@ -140,217 +140,616 @@ forbidden_fields:
   - default_on_claim
 
 # ---------------------------------------------------------------------------
-# Tools — Step 1B-1 P0 only (Door A / D / F)
+# Tools — full inventory (Step 1B)
 # ---------------------------------------------------------------------------
 
 tools:
-  # --- Door A: offline bridge geometry (core chain) ---
-  - id: build_relink_candidates
-    path: scripts/tools/build_relink_candidates.py
-    door: A
-    roles: [canonical, core-pipeline]
-    priority: P0
-    fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
-    no_go_ids: []
-    recipes: [R-A]
-    expected_artifacts:
-      - scripts/tools/out/relink_candidates.csv
-    notes: Requires relink-OFF / interpolate-OFF MOT dump substrate (see fact_owner §1–§2).
-
-  - id: analyze_preloss_motion
-    path: scripts/tools/analyze_preloss_motion.py
-    door: A
-    roles: [core-pipeline, diagnostic]
-    priority: P0
-    fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
-    no_go_ids: []
-    recipes: [R-A]
-    notes: Pre-loss area / turn kinematics on candidate pool.
-
-  - id: analyze_turn_baseline
-    path: scripts/tools/analyze_turn_baseline.py
-    door: A
-    roles: [core-pipeline, diagnostic]
-    priority: P0
-    fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
-    no_go_ids: []
-    recipes: [R-A]
-    notes: Pre-loss vs interior control comparison.
-
-  - id: sweep_speed_turn
-    path: scripts/tools/sweep_speed_turn.py
-    door: A
-    roles: [core-pipeline, diagnostic]
-    priority: P0
-    fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
-    no_go_ids: []
-    recipes: [R-A]
-    expected_artifacts:
-      - scripts/tools/out/speed_turn_sweep.npz
-    notes: Speed×turn distribution sweep; default --out under scripts/tools/out/.
-
-  - id: validate_reach_gate
-    path: scripts/tools/validate_reach_gate.py
-    door: A
-    roles: [core-pipeline, diagnostic]
-    priority: P0
-    fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
-    no_go_ids: []
-    recipes: [R-A]
-    notes: Reach / drift vs spatial gate checks on offline pool.
-
-  - id: optimize_relink_weight
-    path: scripts/tools/optimize_relink_weight.py
-    door: A
-    roles: [core-pipeline, diagnostic]
-    priority: P0
-    fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
-    no_go_ids: []
-    recipes: [R-A]
-    notes: Speed-weight grid + LOSO; CLI only — conclusions stay in fact_owner.
-
-  # --- Door D: Cheb-GR offline handover ---
-  - id: run_offline_handover_ablation
-    path: scripts/eval/run_offline_handover_ablation.py
-    door: D
-    roles: [core-pipeline]
-    priority: P0
-    fact_owner: docs/modules/semantic/research/chebgr_handover_signal_map_20260704.md
-    no_go_ids: []
-    recipes: [R-D]
-    notes: Replay handover variants on a frozen MOT substrate.
-
-  - id: cheb_gr_offline_handover_report
-    path: scripts/eval/diagnostics/cheb_gr_offline_handover_report.py
-    door: D
-    roles: [canonical, core-pipeline]
-    priority: P0
-    fact_owner: docs/modules/semantic/research/chebgr_handover_signal_map_20260704.md
-    no_go_ids: []
-    recipes: [R-D]
-    expected_artifacts:
-      - _cheb_gr_offline_handover_labeled.csv
-      - parameter_registry.md
-      - parameter_summary.json
-    notes: Labels handover log + writes registry/summary under the run dir.
-
-  - id: compare_handover_summaries
-    path: scripts/eval/diagnostics/compare_handover_summaries.py
-    door: D
-    roles: [core-pipeline, diagnostic]
-    priority: P0
-    fact_owner: docs/modules/semantic/research/chebgr_handover_signal_map_20260704.md
-    no_go_ids: []
-    recipes: [R-D]
-    notes: Cross-run parameter_summary.json diff.
-
-  - id: synthesize_handover_applicability
-    path: scripts/eval/diagnostics/synthesize_handover_applicability.py
-    door: D
-    roles: [core-pipeline, diagnostic]
-    priority: P0
-    fact_owner: docs/modules/semantic/research/chebgr_handover_signal_map_20260704.md
-    no_go_ids: []
-    recipes: [R-D]
-    notes: Builds applicability map (md/json) from summary JSON inputs.
-
-  - id: compare_detector_suffix_runs
-    path: scripts/eval/diagnostics/compare_detector_suffix_runs.py
-    door: D
-    roles: [core-pipeline, diagnostic]
-    priority: P0
-    fact_owner: docs/modules/semantic/research/chebgr_handover_signal_map_20260704.md
-    no_go_ids: []
-    recipes: [R-D]
-    notes: Guard against fake FRCNN/SDP detector-suffix conditions when claiming splits.
-
-  # --- Door F: occ-exit audit (#55 family) ---
-  - id: probe_occ_audit_bank_reference
-    path: scripts/eval/diagnostics/probe_occ_audit_bank_reference.py
-    door: F
-    roles: [core-pipeline, probe]
-    priority: P0
-    fact_owner: docs/modules/semantic/research/occ_exit_audit_p55_scope_20260709.md
-    no_go_ids: []
-    recipes: [R-F]
-    notes: Bank-sourced ref vs post-hoc re-extract on occ-audit path.
-
-  - id: analyze_occ_audit_seq_conditioning
-    path: scripts/eval/diagnostics/analyze_occ_audit_seq_conditioning.py
-    door: F
-    roles: [core-pipeline, diagnostic]
-    priority: P0
-    fact_owner: docs/modules/semantic/research/occ_exit_audit_p55_wp2_seq_conditioning_20260709.md
-    no_go_ids: []
-    recipes: [R-F]
-    notes: WP2 sequence conditioning map for occ-exit applicability.
-
-  - id: run_occ_audit_wp3_promotion
-    path: scripts/eval/diagnostics/run_occ_audit_wp3_promotion.py
-    door: F
-    roles: [canonical, core-pipeline]
-    priority: P0
-    fact_owner: docs/modules/semantic/research/occ_exit_audit_p55_wp3_promotion_decision_20260709.md
-    no_go_ids: []
-    recipes: [R-F]
-    expected_artifacts:
-      - results/occ_exit_p55_wp3/
-    notes: WP3 control/treatment on frozen substrate; does not change production defaults.
-
-# ---------------------------------------------------------------------------
-# Recipes — print-only chains (Step 1B-1 P0)
-# ---------------------------------------------------------------------------
-
-recipes:
-  - id: R-A
-    title: Offline bridge pool + kinematics
-    door: A
-    purpose: Build offline candidate table and optional kinematics / gate analyses on a fixed no-relink substrate.
-    steps:
-      - build_relink_candidates
-      - analyze_preloss_motion
-      - analyze_turn_baseline
-      - sweep_speed_turn
-      - validate_reach_gate
-      - optimize_relink_weight
-    fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
-    expected_artifacts:
-      - scripts/tools/out/relink_candidates.csv
-      - scripts/tools/out/speed_turn_sweep.npz
-    notes: >
-      Substrate first via scripts/eval/mot17.py (relink-off / interp-off flags live in
-      fact_owner / crosswalk, not here). Print-only chain; analysis steps are pick-as-needed.
-
-  - id: R-D
-    title: Offline handover signal pipeline
-    door: D
-    purpose: Label Cheb-GR offline handover logs, compare run summaries, and synthesize applicability maps.
-    steps:
-      - cheb_gr_offline_handover_report
-      - compare_handover_summaries
-      - synthesize_handover_applicability
-      - compare_detector_suffix_runs
-      - run_offline_handover_ablation
-    fact_owner: docs/modules/semantic/research/chebgr_handover_signal_map_20260704.md
-    expected_artifacts:
-      - _cheb_gr_offline_handover.csv
-      - parameter_summary.json
-    notes: >
-      Handover log substrate via mot17 + module lifecycle YAML (cheb_gr_offline_*);
-      exact flags in fact_owner. compare_detector_suffix_runs only when claiming
-      detector-suffix conditions; ablation is optional frozen-substrate replay.
-
-  - id: R-F
-    title: Occ-exit audit (#55)
-    door: F
-    purpose: Run bank-reference probe, sequence conditioning map, and WP3 control/treatment pipeline for occ-exit.
-    steps:
-      - probe_occ_audit_bank_reference
-      - analyze_occ_audit_seq_conditioning
-      - run_occ_audit_wp3_promotion
-    fact_owner: docs/modules/semantic/research/occ_exit_audit_p55_scope_20260709.md
-    expected_artifacts:
-      - results/occ_exit_p55_wp3/
-    notes: >
-      Frozen substrate path and CLI flags live in WP2/WP3 fact-owner notes and script --help.
-      P1 run_occ_audit_offline.py not registered in this Step 1B-1 slice.
+- id: build_relink_candidates
+  path: scripts/tools/build_relink_candidates.py
+  door: A
+  roles: [canonical, core-pipeline]
+  priority: P0
+  fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
+  no_go_ids: []
+  recipes: [R-A]
+  expected_artifacts: [scripts/tools/out/relink_candidates.csv]
+  notes: Requires relink-OFF / interpolate-OFF MOT dump substrate (see fact_owner §1–§2).
+- id: analyze_preloss_motion
+  path: scripts/tools/analyze_preloss_motion.py
+  door: A
+  roles: [core-pipeline, diagnostic]
+  priority: P0
+  fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
+  no_go_ids: []
+  recipes: [R-A]
+  notes: Pre-loss area / turn kinematics on candidate pool.
+- id: analyze_turn_baseline
+  path: scripts/tools/analyze_turn_baseline.py
+  door: A
+  roles: [core-pipeline, diagnostic]
+  priority: P0
+  fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
+  no_go_ids: []
+  recipes: [R-A]
+  notes: Pre-loss vs interior control comparison.
+- id: sweep_speed_turn
+  path: scripts/tools/sweep_speed_turn.py
+  door: A
+  roles: [core-pipeline, diagnostic]
+  priority: P0
+  fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
+  no_go_ids: []
+  recipes: [R-A]
+  expected_artifacts: [scripts/tools/out/speed_turn_sweep.npz]
+  notes: Speed×turn distribution sweep; default --out under scripts/tools/out/.
+- id: validate_reach_gate
+  path: scripts/tools/validate_reach_gate.py
+  door: A
+  roles: [core-pipeline, diagnostic]
+  priority: P0
+  fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
+  no_go_ids: []
+  recipes: [R-A]
+  notes: Reach / drift vs spatial gate checks on offline pool.
+- id: optimize_relink_weight
+  path: scripts/tools/optimize_relink_weight.py
+  door: A
+  roles: [core-pipeline, diagnostic]
+  priority: P0
+  fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
+  no_go_ids: []
+  recipes: [R-A]
+  notes: Speed-weight grid + LOSO; CLI only — conclusions stay in fact_owner.
+- id: analyze_bidir_relink
+  path: scripts/tools/analyze_bidir_relink.py
+  door: A
+  roles: [diagnostic, probe]
+  priority: P1
+  fact_owner: docs/modules/semantic/research/bidir_relink_data_analysis.md
+  no_go_ids: []
+  recipes: []
+  notes: Live bridge dump per-attempt analysis.
+- id: relink_bridge_guard_report
+  path: scripts/eval/diagnostics/relink_bridge_guard_report.py
+  door: A
+  roles: [diagnostic]
+  priority: P1
+  fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
+  no_go_ids: []
+  recipes: []
+  notes: Guarded bridge run summary.
+- id: analyze_missed_relinks
+  path: scripts/tools/analyze_missed_relinks.py
+  door: A
+  roles: [peripheral, diagnostic]
+  priority: P2
+  fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
+  no_go_ids: []
+  recipes: []
+  notes: GT missed-relink features.
+- id: analyze_relink_stats
+  path: scripts/tools/analyze_relink_stats.py
+  door: A
+  roles: [peripheral, diagnostic]
+  priority: P2
+  fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
+  no_go_ids: []
+  recipes: []
+  notes: Gap-bin separation stats.
+- id: remap_gpu_relinks
+  path: scripts/tools/remap_gpu_relinks.py
+  door: A
+  roles: [peripheral, diagnostic]
+  priority: P2
+  fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
+  no_go_ids: []
+  recipes: []
+  notes: GPU relink id remap utility.
+- id: color_relink_features
+  path: scripts/tools/color_relink_features.py
+  door: A
+  roles: [peripheral, diagnostic]
+  priority: P2
+  fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
+  no_go_ids: []
+  recipes: []
+  notes: Color hist features on candidates.
+- id: osnet_relink_features
+  path: scripts/tools/osnet_relink_features.py
+  door: A
+  roles: [peripheral, diagnostic]
+  priority: P2
+  fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
+  no_go_ids: []
+  recipes: []
+  notes: OSNet upper-bound features on candidates.
+- id: mamba_relink_features
+  path: scripts/tools/mamba_relink_features.py
+  door: A
+  roles: [peripheral, diagnostic]
+  priority: P2
+  fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
+  no_go_ids: []
+  recipes: []
+  notes: Mamba-head features on candidates.
+- id: probe_relink_occlusion_signal
+  path: scripts/tools/probe_relink_occlusion_signal.py
+  door: A
+  roles: [peripheral, diagnostic]
+  priority: P2
+  fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
+  no_go_ids: []
+  recipes: []
+  notes: Occ signal vs true bridge probe.
+- id: gap_occupancy_features
+  path: scripts/tools/gap_occupancy_features.py
+  door: A
+  roles: [peripheral, diagnostic]
+  priority: P2
+  fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
+  no_go_ids: []
+  recipes: []
+  notes: Gap occupancy features.
+- id: depth_ordering_probe
+  path: scripts/tools/depth_ordering_probe.py
+  door: B
+  roles: [canonical, core-pipeline, probe]
+  priority: P1
+  fact_owner: docs/modules/semantic/research/depth_ordering_crossing_swap.md
+  no_go_ids: ['#39']
+  recipes: [R-B]
+  notes: 'Front/back geometry probe. Re-read no_go #39 before reopening live hooks.'
+- id: depth_ordering_auc
+  path: scripts/tools/depth_ordering_auc.py
+  door: B
+  roles: [core-pipeline, diagnostic]
+  priority: P1
+  fact_owner: docs/modules/semantic/research/depth_ordering_crossing_swap.md
+  no_go_ids: ['#39']
+  recipes: [R-B]
+  notes: 'Discrimination AUC on depth ordering. Re-read no_go #39 before reopening live hooks.'
+- id: depth_ordering_gate_sweep
+  path: scripts/tools/depth_ordering_gate_sweep.py
+  door: B
+  roles: [core-pipeline, diagnostic]
+  priority: P1
+  fact_owner: docs/modules/semantic/research/depth_ordering_crossing_swap.md
+  no_go_ids: ['#39']
+  recipes: []
+  notes: 'Same-height gate sweep. Re-read no_go #39 before reopening live hooks.'
+- id: analyze_crossing_swaps
+  path: scripts/eval/diagnostics/analyze_crossing_swaps.py
+  door: B
+  roles: [canonical, diagnostic]
+  priority: P1
+  fact_owner: docs/modules/semantic/research/depth_ordering_crossing_swap.md
+  no_go_ids: ['#39']
+  recipes: [R-B]
+  notes: 'Swap event attribution. Re-read no_go #39 before reopening live hooks.'
+- id: analyze_front_flag_exposure
+  path: scripts/eval/diagnostics/analyze_front_flag_exposure.py
+  door: B
+  roles: [diagnostic]
+  priority: P1
+  fact_owner: docs/modules/semantic/research/depth_ordering_crossing_swap.md
+  no_go_ids: ['#39']
+  recipes: []
+  notes: 'Front-flag exposure analysis. Re-read no_go #39 before reopening live hooks.'
+- id: oracle_occlusion_hold
+  path: scripts/eval/experiments/oracle_occlusion_hold.py
+  door: B
+  roles: [one-shot, probe]
+  priority: P1
+  fact_owner: docs/modules/semantic/research/depth_ordering_crossing_swap.md
+  no_go_ids: ['#39']
+  recipes: []
+  notes: 'Oracle occlusion-hold ceiling experiment. Re-read no_go #39 before reopening live hooks.'
+- id: probe_occ_swap_disambiguation
+  path: scripts/eval/probe_occ_swap_disambiguation.py
+  door: B
+  roles: [probe, peripheral]
+  priority: P2
+  fact_owner: docs/modules/semantic/research/depth_ordering_crossing_swap.md
+  no_go_ids: ['#39']
+  recipes: []
+  notes: 'Occ signal at ABSORB swaps. Re-read no_go #39 before reopening live hooks.'
+- id: reid_id_benchmark
+  path: scripts/eval/appearance/reid_id_benchmark.py
+  door: C
+  roles: [canonical, probe]
+  priority: P2
+  fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
+  no_go_ids: ['#57']
+  recipes: []
+  notes: 'Embedding discriminability benchmark. Sync critical path constrained by no_go #57.'
+- id: reconnect_rate
+  path: scripts/eval/diagnostics/reconnect_rate.py
+  door: C
+  roles: [probe, diagnostic]
+  priority: P2
+  fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
+  no_go_ids: ['#57']
+  recipes: []
+  notes: 'Lost→recover reconnect rate. Sync critical path constrained by no_go #57.'
+- id: probe_assoc_appearance_veto
+  path: scripts/eval/probe_assoc_appearance_veto.py
+  door: C
+  roles: [probe, diagnostic]
+  priority: P2
+  fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
+  no_go_ids: ['#57']
+  recipes: []
+  notes: 'Appearance at primary association probe. Sync critical path constrained by no_go #57.'
+- id: reid_domain_probe
+  path: scripts/train/reid_domain_probe.py
+  door: C
+  roles: [probe, diagnostic]
+  priority: P2
+  fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
+  no_go_ids: ['#57']
+  recipes: []
+  notes: 'MOT-domain ReID head probe. Sync critical path constrained by no_go #57.'
+- id: run_offline_handover_ablation
+  path: scripts/eval/run_offline_handover_ablation.py
+  door: D
+  roles: [core-pipeline]
+  priority: P0
+  fact_owner: docs/modules/semantic/research/chebgr_handover_signal_map_20260704.md
+  no_go_ids: []
+  recipes: [R-D]
+  notes: Replay handover variants on a frozen MOT substrate.
+- id: cheb_gr_offline_handover_report
+  path: scripts/eval/diagnostics/cheb_gr_offline_handover_report.py
+  door: D
+  roles: [canonical, core-pipeline]
+  priority: P0
+  fact_owner: docs/modules/semantic/research/chebgr_handover_signal_map_20260704.md
+  no_go_ids: []
+  recipes: [R-D]
+  expected_artifacts: [_cheb_gr_offline_handover_labeled.csv, parameter_registry.md, parameter_summary.json]
+  notes: Labels handover log + writes registry/summary under the run dir.
+- id: compare_handover_summaries
+  path: scripts/eval/diagnostics/compare_handover_summaries.py
+  door: D
+  roles: [core-pipeline, diagnostic]
+  priority: P0
+  fact_owner: docs/modules/semantic/research/chebgr_handover_signal_map_20260704.md
+  no_go_ids: []
+  recipes: [R-D]
+  notes: Cross-run parameter_summary.json diff.
+- id: synthesize_handover_applicability
+  path: scripts/eval/diagnostics/synthesize_handover_applicability.py
+  door: D
+  roles: [core-pipeline, diagnostic]
+  priority: P0
+  fact_owner: docs/modules/semantic/research/chebgr_handover_signal_map_20260704.md
+  no_go_ids: []
+  recipes: [R-D]
+  notes: Builds applicability map (md/json) from summary JSON inputs.
+- id: compare_detector_suffix_runs
+  path: scripts/eval/diagnostics/compare_detector_suffix_runs.py
+  door: D
+  roles: [core-pipeline, diagnostic]
+  priority: P0
+  fact_owner: docs/modules/semantic/research/chebgr_handover_signal_map_20260704.md
+  no_go_ids: []
+  recipes: [R-D]
+  notes: Guard against fake FRCNN/SDP detector-suffix conditions when claiming splits.
+- id: cheb_gr_osnet_gate
+  path: scripts/eval/appearance/cheb_gr_osnet_gate.py
+  door: D
+  roles: [probe, peripheral]
+  priority: P2
+  fact_owner: docs/modules/semantic/research/chebgr_handover_signal_map_20260704.md
+  no_go_ids: []
+  recipes: []
+  notes: OSNet gate method probe for handover path.
+- id: probe_sparse_bank_equivalence
+  path: scripts/eval/diagnostics/probe_sparse_bank_equivalence.py
+  door: E
+  roles: [core-pipeline, probe]
+  priority: P1
+  fact_owner: docs/modules/semantic/research/clean_fifo_bank_substrate_20260704.md
+  no_go_ids: []
+  recipes: [R-E]
+  notes: Sparse ≡ dense bank equivalence probe.
+- id: probe_track_bank_fifo_replacement
+  path: scripts/eval/diagnostics/probe_track_bank_fifo_replacement.py
+  door: E
+  roles: [core-pipeline, probe]
+  priority: P1
+  fact_owner: docs/modules/semantic/research/clean_fifo_bank_substrate_20260704.md
+  no_go_ids: []
+  recipes: []
+  notes: Track/Output bank FIFO replacement probe.
+- id: probe_forwarded_embedding_assoc_cost
+  path: scripts/eval/diagnostics/probe_forwarded_embedding_assoc_cost.py
+  door: E
+  roles: [core-pipeline, probe]
+  priority: P1
+  fact_owner: docs/modules/semantic/research/clean_fifo_bank_substrate_20260704.md
+  no_go_ids: []
+  recipes: []
+  notes: Forwarded embedding association cost probe.
+- id: bench_bank_scatter
+  path: scripts/tools/bench_bank_scatter.py
+  door: E
+  roles: [peripheral, probe]
+  priority: P2
+  fact_owner: docs/modules/semantic/research/clean_fifo_bank_substrate_20260704.md
+  no_go_ids: []
+  recipes: []
+  notes: Bank scatter microbench.
+- id: probe_occ_audit_bank_reference
+  path: scripts/eval/diagnostics/probe_occ_audit_bank_reference.py
+  door: F
+  roles: [core-pipeline, probe]
+  priority: P0
+  fact_owner: docs/modules/semantic/research/occ_exit_audit_p55_scope_20260709.md
+  no_go_ids: ['#55']
+  recipes: [R-F]
+  notes: Bank-sourced ref vs post-hoc re-extract on occ-audit path.
+- id: analyze_occ_audit_seq_conditioning
+  path: scripts/eval/diagnostics/analyze_occ_audit_seq_conditioning.py
+  door: F
+  roles: [core-pipeline, diagnostic]
+  priority: P0
+  fact_owner: docs/modules/semantic/research/occ_exit_audit_p55_wp2_seq_conditioning_20260709.md
+  no_go_ids: ['#55']
+  recipes: [R-F]
+  notes: WP2 sequence conditioning map for occ-exit applicability.
+- id: run_occ_audit_wp3_promotion
+  path: scripts/eval/diagnostics/run_occ_audit_wp3_promotion.py
+  door: F
+  roles: [canonical, core-pipeline]
+  priority: P0
+  fact_owner: docs/modules/semantic/research/occ_exit_audit_p55_wp3_promotion_decision_20260709.md
+  no_go_ids: ['#55']
+  recipes: [R-F]
+  expected_artifacts: [results/occ_exit_p55_wp3/]
+  notes: WP3 control/treatment on frozen substrate; does not change production defaults.
+- id: run_occ_audit_offline
+  path: scripts/eval/run_occ_audit_offline.py
+  door: F
+  roles: [historical, diagnostic]
+  priority: P1
+  fact_owner: docs/modules/semantic/research/occ_exit_audit_p55_scope_20260709.md
+  no_go_ids: ['#55']
+  recipes: []
+  notes: 'Earlier offline A/B path; prefer WP3 pipeline for current #55 work.'
+- id: probe_occ_separability
+  path: scripts/eval/probe_occ_separability.py
+  door: B
+  roles: [peripheral, historical, probe]
+  priority: P3
+  fact_owner: docs/modules/semantic/research/depth_ordering_crossing_swap.md
+  no_go_ids: ['#39']
+  recipes: []
+  notes: Score vs occlusion separability (closed probe).
+- id: probe_occ_activation_separability
+  path: scripts/eval/probe_occ_activation_separability.py
+  door: B
+  roles: [peripheral, historical, probe]
+  priority: P3
+  fact_owner: docs/modules/semantic/research/depth_ordering_crossing_swap.md
+  no_go_ids: ['#39']
+  recipes: []
+  notes: Head activation vs occ (closed probe).
+- id: probe_occ_pairwise_confound
+  path: scripts/eval/probe_occ_pairwise_confound.py
+  door: B
+  roles: [peripheral, historical, probe]
+  priority: P3
+  fact_owner: docs/modules/semantic/research/depth_ordering_crossing_swap.md
+  no_go_ids: ['#39']
+  recipes: []
+  notes: Non-geo residual confound probe.
+- id: probe_lowiou_occ_gate
+  path: scripts/eval/probe_lowiou_occ_gate.py
+  door: B
+  roles: [peripheral, historical, probe]
+  priority: P3
+  fact_owner: docs/modules/semantic/research/depth_ordering_crossing_swap.md
+  no_go_ids: ['#39']
+  recipes: []
+  notes: Whether occ should relax low-IoU gate.
+- id: occ_event_values
+  path: scripts/tools/occ_event_values.py
+  door: B
+  roles: [peripheral, historical, probe]
+  priority: P3
+  fact_owner: docs/modules/semantic/research/depth_ordering_crossing_swap.md
+  no_go_ids: ['#39']
+  recipes: []
+  notes: GT crossing event values.
+- id: occ_candidate_analyze
+  path: scripts/tools/occ_candidate_analyze.py
+  door: B
+  roles: [peripheral, historical, probe]
+  priority: P3
+  fact_owner: docs/modules/semantic/research/depth_ordering_crossing_swap.md
+  no_go_ids: ['#39']
+  recipes: []
+  notes: Occ candidate analysis.
+- id: analyze_occlusion_events
+  path: scripts/eval/analyze_occlusion_events.py
+  door: B
+  roles: [peripheral, historical, probe]
+  priority: P3
+  fact_owner: docs/modules/semantic/research/depth_ordering_crossing_swap.md
+  no_go_ids: ['#39']
+  recipes: []
+  notes: Occlusion events overview.
+- id: analyze_occ_size
+  path: scripts/eval/analyze_occ_size.py
+  door: B
+  roles: [peripheral, historical, probe]
+  priority: P3
+  fact_owner: docs/modules/semantic/research/depth_ordering_crossing_swap.md
+  no_go_ids: ['#39']
+  recipes: []
+  notes: Occ size analysis.
+- id: occ_rank
+  path: scripts/eval/occ_rank.py
+  door: B
+  roles: [peripheral, historical, probe]
+  priority: P3
+  fact_owner: docs/modules/semantic/research/depth_ordering_crossing_swap.md
+  no_go_ids: ['#39']
+  recipes: []
+  notes: Historical occ rank tool.
+- id: occ_tune
+  path: scripts/eval/occ_tune.py
+  door: B
+  roles: [peripheral, historical, probe]
+  priority: P3
+  fact_owner: docs/modules/semantic/research/depth_ordering_crossing_swap.md
+  no_go_ids: ['#39']
+  recipes: []
+  notes: Historical occ tune tool.
+- id: analyze_assoc_fn
+  path: scripts/eval/diagnostics/analyze_assoc_fn.py
+  door: A
+  roles: [diagnostic, peripheral]
+  priority: P2
+  fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
+  no_go_ids: []
+  recipes: []
+  notes: Assoc-failure FN reasons.
+- id: analyze_fn
+  path: scripts/eval/diagnostics/analyze_fn.py
+  door: A
+  roles: [diagnostic, peripheral]
+  priority: P2
+  fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
+  no_go_ids: []
+  recipes: []
+  notes: FN analysis.
+- id: analyze_near_miss_offsets
+  path: scripts/eval/diagnostics/analyze_near_miss_offsets.py
+  door: A
+  roles: [diagnostic, peripheral]
+  priority: P2
+  fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
+  no_go_ids: []
+  recipes: []
+  notes: Near-miss offsets.
+- id: analyze_near_miss_final_output
+  path: scripts/eval/diagnostics/analyze_near_miss_final_output.py
+  door: A
+  roles: [diagnostic, peripheral]
+  priority: P2
+  fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
+  no_go_ids: []
+  recipes: []
+  notes: Near-miss final output.
+- id: analyze_near_miss_stage_attribution
+  path: scripts/eval/diagnostics/analyze_near_miss_stage_attribution.py
+  door: A
+  roles: [diagnostic, peripheral]
+  priority: P2
+  fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
+  no_go_ids: []
+  recipes: []
+  notes: Near-miss stage attribution.
+- id: label_boosted_birth_rows
+  path: scripts/eval/diagnostics/label_boosted_birth_rows.py
+  door: A
+  roles: [diagnostic, peripheral]
+  priority: P2
+  fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
+  no_go_ids: []
+  recipes: []
+  notes: Birth boost labeling.
+- id: mot17
+  path: scripts/eval/mot17.py
+  door: A
+  roles: [core-pipeline]
+  priority: P0
+  fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
+  no_go_ids: []
+  recipes: [R-A, R-D]
+  notes: Shared full MOT eval entry / substrate producer for AssA recipes (doors A/D/F).
+- id: add_occlusion_to_seq
+  path: scripts/tools/add_occlusion_to_seq.py
+  door: B
+  roles: [peripheral]
+  priority: P2
+  fact_owner: docs/modules/semantic/research/depth_ordering_crossing_swap.md
+  no_go_ids: []
+  recipes: []
+  notes: Inject demo occlusion bar into a sequence.
+- id: reconnect_rate_wrapper
+  path: scripts/eval/reconnect_rate.py
+  door: C
+  roles: [wrapper]
+  priority: P2
+  fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
+  no_go_ids: ['#57']
+  recipes: []
+  canonical_id: reconnect_rate
+  notes: Compat entry only; edit/read canonical tool.
+- id: reid_id_benchmark_wrapper
+  path: scripts/eval/reid_id_benchmark.py
+  door: C
+  roles: [wrapper]
+  priority: P2
+  fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md
+  no_go_ids: ['#57']
+  recipes: []
+  canonical_id: reid_id_benchmark
+  notes: Compat entry only; edit/read canonical tool.
+- id: analyze_crossing_swaps_wrapper
+  path: scripts/eval/analyze_crossing_swaps.py
+  door: B
+  roles: [wrapper]
+  priority: P2
+  fact_owner: docs/modules/semantic/research/depth_ordering_crossing_swap.md
+  no_go_ids: ['#39']
+  recipes: []
+  canonical_id: analyze_crossing_swaps
+  notes: Compat entry only; edit/read canonical tool.
+- id: oracle_occlusion_hold_wrapper
+  path: scripts/eval/oracle_occlusion_hold.py
+  door: B
+  roles: [wrapper]
+  priority: P2
+  fact_owner: docs/modules/semantic/research/depth_ordering_crossing_swap.md
+  no_go_ids: ['#39']
+  recipes: []
+  canonical_id: oracle_occlusion_hold
+  notes: Compat entry only; edit/read canonical tool.
+- id: cheb_gr_osnet_gate_wrapper
+  path: scripts/eval/cheb_gr_osnet_gate.py
+  door: D
+  roles: [wrapper]
+  priority: P2
+  fact_owner: docs/modules/semantic/research/chebgr_handover_signal_map_20260704.md
+  no_go_ids: []
+  recipes: []
+  canonical_id: cheb_gr_osnet_gate
+  notes: Compat entry only; edit/read canonical tool.
+recipes: [{id: R-A, title: Offline bridge pool + kinematics, door: A, purpose: Build offline candidate
+      table and optional kinematics / gate analyses on a fixed no-relink substrate., steps: [mot17, build_relink_candidates,
+      analyze_preloss_motion, analyze_turn_baseline, sweep_speed_turn, validate_reach_gate, optimize_relink_weight],
+    fact_owner: docs/modules/semantic/research/offline_relink_candidate_analysis.md, expected_artifacts: [
+      scripts/tools/out/relink_candidates.csv, scripts/tools/out/speed_turn_sweep.npz], notes: Substrate
+      flags (relink-off / interp-off) live in fact_owner / crosswalk. Print-only; analysis steps pick-as-needed.},
+  {id: R-B, title: Depth / swap probe, door: B, purpose: Run front/back depth probes and crossing-swap
+      attribution diagnostics., steps: [depth_ordering_probe, depth_ordering_auc, analyze_crossing_swaps],
+    fact_owner: docs/modules/semantic/research/depth_ordering_crossing_swap.md, notes: 'Re-read no_go
+      #39 before reopening live hooks. Oracle / gate-sweep are optional side tools.'}, {id: R-D, title: Offline
+      handover signal pipeline, door: D, purpose: 'Label Cheb-GR offline handover logs, compare run summaries,
+      and synthesize applicability maps.', steps: [mot17, cheb_gr_offline_handover_report, compare_handover_summaries,
+      synthesize_handover_applicability, compare_detector_suffix_runs, run_offline_handover_ablation],
+    fact_owner: docs/modules/semantic/research/chebgr_handover_signal_map_20260704.md, expected_artifacts: [
+      _cheb_gr_offline_handover.csv, parameter_summary.json], notes: Handover log via mot17 + module lifecycle
+      YAML. Detector-suffix compare only when claiming splits; ablation optional.}, {id: R-E, title: Sparse
+      bank equivalence, door: E, purpose: Probe sparse vs dense bank equivalence on the CleanFifo substrate.,
+    steps: [probe_sparse_bank_equivalence], fact_owner: docs/modules/semantic/research/clean_fifo_bank_substrate_20260704.md,
+    notes: Optional end-to-end bank mode via run_offline_handover_ablation (Door D tool).}, {id: R-F,
+    title: Occ-exit audit (#55), door: F, purpose: 'Run bank-reference probe, sequence conditioning map,
+      and WP3 control/treatment pipeline for occ-exit.', steps: [probe_occ_audit_bank_reference, analyze_occ_audit_seq_conditioning,
+      run_occ_audit_wp3_promotion], fact_owner: docs/modules/semantic/research/occ_exit_audit_p55_scope_20260709.md,
+    expected_artifacts: [results/occ_exit_p55_wp3/], notes: Frozen substrate path and CLI flags live in
+      WP2/WP3 fact-owner notes. run_occ_audit_offline is historical P1 side path.}]
