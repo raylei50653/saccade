@@ -41,6 +41,7 @@ Rules of thumb:
 | Cross-module / global eval / pipeline / shared training | `docs/research/<area>/` | Index row in subdir README **or** top `docs/research/README.md` |
 | Decision-layer *why* (association / gates / knobs) | `docs/research/tracker-decision/` | **Closed line is read-only** (P0–P8); reopen only as a *named* new line with evidence |
 | Citable baseline / decision outcome number | `docs/research/evidence_ledger.md` | One ledger row + link to source doc; no chat-only numbers |
+| Deep **per-signal / per-gate** analysis progress | `docs/research/eval/signal_analysis_ledger.md` | One row per `signal_id`; numbers master = `out/signal_study/`; contract = `signal_table_schema` |
 | Paper claim / rebuildable tables & figures | `report_data/` | Link from `source_map.md` or `report_data/README.md` back to research |
 | Finished one-shot / abandoned design | `docs/archive/` | Drop from “active” indexes or mark historical |
 | Stable module design | `docs/modules/<m>/architecture*.md` (or detection top-level protocol docs) | Link from module README “設計入口” |

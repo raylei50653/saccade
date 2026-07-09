@@ -765,6 +765,7 @@ regressed  = E(B) \ E(A)
 
 > **維護規則：** 加/改 tool 或「有／缺」狀態時只改**本節**，不另開 inventory 文。  
 > 開發薄入口：[DEVELOPMENT.md](../../../DEVELOPMENT.md) §3「數據驅動 gate / relink」。  
+> **深度分析總帳（一訊號一列）：** [signal_analysis_ledger.md](signal_analysis_ledger.md) — 契約在本檔；**分析進度 / pointer 在 ledger**。  
 > 腳本查找表（無結論）：[association_recovery_scripts_index](../../modules/semantic/research/association_recovery_scripts_index_20260709.md)。
 
 ### 8.1 能用（按問題）
@@ -772,6 +773,10 @@ regressed  = E(B) \ E(A)
 | 我想知道… | 先開 | 狀態 |
 |:--|:--|:--|
 | 契約：A/B1/B2、study_dir、safe-reject | **本檔** §0.1–0.4 | ✅ |
+| **深度分析進度（一訊號一列）** | [signal_analysis_ledger.md](signal_analysis_ledger.md) | ✅ 索引；數字仍在 study_dir |
+| **Energy transform separability**（raw/log/sqrt/rank） | `scripts/tools/energy_transform_separability.py` · [note](../../modules/semantic/research/m_b1_energy_transform_separability_20260709.md) | ✅ **禁 AUC 比 transform**；用 d′/Fisher/logloss |
+| **Combo AND safe region**（2D thr surface） | `scripts/tools/combo_gate_safe_region.py` · [note](../../modules/semantic/research/m_b1_combo_gate_safe_region_20260709.md) | ✅ 報 **area/recoverability**，不只要 best FP |
+| **Gate rule search**（Pareto·itemset·greedy） | `scripts/tools/gate_rule_search.py` · [note](../../modules/semantic/research/m_b1_gate_rule_search_architecture_20260709.md) | ✅ 受約束搜尋，非排列組合 |
 | **Production 開了哪些 identity/assoc 旋鈕**（配置面） | [tracker-decision config_surface](../tracker-decision/audit/config_surface.md) · [assoc_knobs](../tracker-decision/assoc_knobs.md) · `print_assoc_basis.py --preset …` | ✅ 清單/解析；**非**事件觸發率 |
 | B1 pairs + full/hard AUC + thr | `build_relink_candidates` → `summarize_relink_pairs` · `out/signal_study/` | ✅（AUC 屬 L1 term；thr 表屬 L0） |
 | B1：誰傷 GT / thr(gap) 形狀 | study `metrics_thr_*` · 活 note m_b1 §3b–3c | ✅ L0 gate calibration |

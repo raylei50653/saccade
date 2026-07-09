@@ -93,7 +93,7 @@ Cheb-GR / bank / offline identity / occ-exit → 文檔家 **semantic**（非 re
 |:--|:--|:--|
 | 修 crash / flake，行為不變 | **D0** | 測試 + pre_push |
 | 單模組 ablation，default-off | **D1** | module research + README 索引 + TODO 連結 |
-| 數據驅動 gate / relink 訊號（不改 preset） | **D1** | [signal_table_schema §8](docs/research/eval/signal_table_schema.md)（能用/缺什麼；細節不在本檔） |
+| 數據驅動 gate / relink 訊號（不改 preset） | **D1** | 契約 [signal_table_schema](docs/research/eval/signal_table_schema.md) · **深度分析總帳** [signal_analysis_ledger](docs/research/eval/signal_analysis_ledger.md)（一訊號一列；數字在 `out/signal_study/`） |
 | occ-exit / Cheb-GR / sparse bank | **D1→D2** | **semantic** research 全家；引用數字再 D2 promotion |
 | 外觀 ceiling / 特徵抽取實作 | **D1** | **reid** README/research；關聯政策仍看 semantic |
 | GMC / Kalman 實驗 | **D1→D3** | geometry research + eval 筆記；動 default → 加上 tracker-decision + contract |

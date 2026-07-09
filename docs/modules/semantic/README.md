@@ -55,6 +55,14 @@
 |------|------|
 | 🧭 **[research/offline_relink_candidate_analysis.md](research/offline_relink_candidate_analysis.md)** | **relink / crossing-swap / AssA 調查主入口（hub）**。bridge 全池 AUC 0.895、門作用區 ~0.65；面積率閘；reach-gate 速度項死重（**s 歷史**；m 現況見下行） |
 | [research/m_b1_bridge_discriminability_20260709.md](research/m_b1_bridge_discriminability_20260709.md) | **m B1 live**（D2）：`mamba_whole_graph_m` full/hard `bridge_dist`；數字 master 在 `out/signal_study/…` |
+| [research/m_b1_gate_coverage_7seq_20260709.md](research/m_b1_gate_coverage_7seq_20260709.md) | L0 **批量** prod-shaped 覆蓋地圖（非單訊號深度） |
+| [research/m_gate_h_ratio_signal_7seq_20260709.md](research/m_gate_h_ratio_signal_7seq_20260709.md) | **Gate 1 深度**：h-ratio / scale；總帳 [signal_analysis_ledger](../../research/eval/signal_analysis_ledger.md) |
+| [research/m_b1_signal_mine_batch_20260709.md](research/m_b1_signal_mine_batch_20260709.md) | **B1 offline 8 訊號 auto-mine**（hard AUC 排名；study_dir master） |
+| [research/m_b1_signal_scale_linear_log_20260709.md](research/m_b1_signal_scale_linear_log_20260709.md) | **尺度**：linear vs log1p/sqrt；AUC 不變性；h-ratio band 幾何 |
+| [research/m_b1_signal_distribution_stability_20260709.md](research/m_b1_signal_distribution_stability_20260709.md) | **分布→實作穩定性**：尾部/跨 seq thr/權重尺度 |
+| [research/m_b1_energy_transform_separability_20260709.md](research/m_b1_energy_transform_separability_20260709.md) | **raw/log/sqrt/rank** d′·Fisher·logloss；禁 AUC 比 transform |
+| [research/m_b1_combo_gate_safe_region_20260709.md](research/m_b1_combo_gate_safe_region_20260709.md) | **AND 2D thr surface**；safe region / threshold recoverability |
+| [research/m_b1_gate_rule_search_architecture_20260709.md](research/m_b1_gate_rule_search_architecture_20260709.md) | **受約束 rule search**：atoms→AND→OR policy |
 | [research/m_b2_reconnect_bridge_ab_20260709.md](research/m_b2_reconnect_bridge_ab_20260709.md) | **m B2 live**（D3）：bridge on/off reconnect rate + e2e；與 B1 並讀 |
 | 🗺️ **[research/association_recovery_crosswalk_20260709.md](research/association_recovery_crosswalk_20260709.md)** | **D1 對照圖（research-synthesis）**：實驗前導航；production stack 薄摘要 + door/knobs/NO-GO/substrate。**非** sole active、非第二 baseline |
 | 📇 **[research/association_recovery_scripts_index_20260709.md](research/association_recovery_scripts_index_20260709.md)** | **腳本查找表**：task→script、door 分區、wrapper→canonical、R-A/D/F recipes。結論仍手動 |

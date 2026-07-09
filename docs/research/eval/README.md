@@ -10,6 +10,9 @@ See [../../ownership/doc_structure_contract.md](../../ownership/doc_structure_co
 | 文件 | 內容 |
 |------|------|
 | [signal_table_schema.md](signal_table_schema.md) | 契約：A/B1/B2；§0.3 風格；§0.4 L0 safe-reject；**§0.5 Gate vs Score**；§8 能用/缺什麼 |
+| **[signal_analysis_ledger.md](signal_analysis_ledger.md)** | **深度訊號分析總帳**（一 gate/訊號一列；study + note pointer；排隊與必報清單） |
+| [../../modules/semantic/research/m_b1_energy_transform_separability_20260709.md](../../modules/semantic/research/m_b1_energy_transform_separability_20260709.md) | Energy transform audit（d′/Fisher；工具 `energy_transform_separability.py`） |
+| [../../modules/semantic/research/m_b1_signal_mine_batch_20260709.md](../../modules/semantic/research/m_b1_signal_mine_batch_20260709.md) | B1 offline catalog 一次 auto-mine 結果 pointer |
 | [m_b1_substrate_smoke_20260709.md](m_b1_substrate_smoke_20260709.md) | D1：`mamba_whole_graph_m` 上 offline_relink/B1 資料規格煙測（pointer → study_dir） |
 | [m_b1_bridge_discriminability_20260709.md](../../modules/semantic/research/m_b1_bridge_discriminability_20260709.md) | D2：m B1 full/hard + thr 誰傷 GT + thr(gap) 非線性（study_dir master） |
 | [m_b2_reconnect_bridge_ab_20260709.md](../../modules/semantic/research/m_b2_reconnect_bridge_ab_20260709.md) | D3：m B2 bridge on/off reconnect + e2e（study_dir master） |
