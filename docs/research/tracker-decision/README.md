@@ -360,7 +360,8 @@ Increasing it makes association more permissive, which can recover more occlusio
 
 Baseline for ACTIVE labels: `mamba_whole_graph` / `mamba_whole_graph_m`, `reid_mode=off`.
 
-Canonical math companion (not replaced by this tree): [`docs/reference/math_model.md`](../../reference/math_model.md).
+Canonical math companion (not replaced by this tree): [`docs/reference/math_model.md`](../../reference/math_model.md)
+（source audit **2026-07-09**，已對齊本 tree 的 active contract）。
 
 ---
 
@@ -424,7 +425,8 @@ assoc_knobs.md
 | Explicit `relink_bridge_dir_bonus` on m (`0.0`) | **done** (behavior-preserving; documents s≠m) |
 | NO-GO / LATENT prohibition table | see [audit/config_surface.md](audit/config_surface.md) |
 | Dual stability architecture debt | **documented, not merged** — see [scoring_semantics.md](scoring_semantics.md) |
-| `math_model.md` drift check | **done** — [audit/math_model_drift_2026-07-09.md](audit/math_model_drift_2026-07-09.md); math PR still open |
+| `math_model.md` drift check | **done** — [audit/math_model_drift_2026-07-09.md](audit/math_model_drift_2026-07-09.md) |
+| `math_model.md` aligned to production path | **done** — occ on, private continuation, m deltas, inject=`pipeline.py` |
 
 Open maintainability questions:
 
