@@ -20,9 +20,9 @@ status `research-synthesis` means D1 docs-only navigation, not an open workstrea
 
 **Information source contract (who is truth; what scripts may generate):**
 [association_recovery_info_source_contract_20260709.md](association_recovery_info_source_contract_20260709.md)
-— Step 0 sealed. **R** schema: [association_tools.yaml](association_tools.yaml)
-(`registry_status: schema_skeleton`, empty tools/recipes). Maps remain curated **H**
-until Step 1B populates **R**; knobs stay subordinate to preset/schema (**C**).
+— Step 0 sealed. **R** registry: [association_tools.yaml](association_tools.yaml)
+(`registry_status: partial_p0`, Step 1B-1 A/D/F P0 only). Maps remain curated **H**
+for P1+ until full 1B; knobs stay subordinate to preset/schema (**C**).
 
 **Governance entry:** [DEVELOPMENT.md](../../../../DEVELOPMENT.md) D1–D2 ·
 [module TODO](../TODO.md) (WIP=1 sole active) · [no_go_registry](../../../reference/no_go_registry.md).

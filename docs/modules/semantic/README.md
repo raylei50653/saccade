@@ -57,7 +57,7 @@
 | 🗺️ **[research/association_recovery_crosswalk_20260709.md](research/association_recovery_crosswalk_20260709.md)** | **D1 對照圖（research-synthesis）**：實驗前導航；production stack 薄摘要 + door/knobs/NO-GO/substrate。**非** sole active、非第二 baseline |
 | 📇 **[research/association_recovery_scripts_index_20260709.md](research/association_recovery_scripts_index_20260709.md)** | **腳本查找表**：task→script、door 分區、wrapper→canonical、R-A/D/F recipes。結論仍手動 |
 | 📜 **[research/association_recovery_info_source_contract_20260709.md](research/association_recovery_info_source_contract_20260709.md)** | **資訊源契約**：disk / registry / no_go / preset / ledger 誰當 truth；腳本只 check·render·print |
-| 📋 **[research/association_tools.yaml](research/association_tools.yaml)** | **R registry schema skeleton（Step 1A）**：`tools: []` / `recipes: []`；未填 inventory；禁 metrics/verdict/knobs |
+| 📋 **[research/association_tools.yaml](research/association_tools.yaml)** | **R registry partial_p0（Step 1B-1）**：Door A/D/F P0 tools + R-A/R-D/R-F；P1+ 未填；禁 metrics/verdict/knobs |
 | [research/depth_ordering_crossing_swap.md](research/depth_ordering_crossing_swap.md) | foot_y front/back AUC 0.898；same-height gate GO default-on |
 | [research/bidirectional_relink_roadmap.md](research/bidirectional_relink_roadmap.md) | 雙向時空收斂幾何重連路線圖（Phase 0 已落地） |
 | [research/bidir_relink_data_analysis.md](research/bidir_relink_data_analysis.md) | 線上 bridge 候選 per-attempt（hard-case AUC≈0.55） |

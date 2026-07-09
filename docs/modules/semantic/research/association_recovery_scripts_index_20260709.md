@@ -13,7 +13,7 @@
 | 檔 | 管什麼 |
 |:--|:--|
 | [association_recovery_info_source_contract_20260709.md](association_recovery_info_source_contract_20260709.md) | **誰是 truth**；腳本可生成什麼（Step 0） |
-| [association_tools.yaml](association_tools.yaml) | **R** schema skeleton（Step 1A）；empty tools/recipes until 1B |
+| [association_tools.yaml](association_tools.yaml) | **R** partial_p0（Step 1B-1）；Door A/D/F P0 + R-A/R-D/R-F；P1+ 未填 |
 | [association_recovery_crosswalk_20260709.md](association_recovery_crosswalk_20260709.md) | 實驗 ↔ knobs / code / NO-GO / substrate |
 | [offline_relink_candidate_analysis.md](offline_relink_candidate_analysis.md) | Door A 研究 hub（結論在那） |
 | **this file** | 腳本 inventory + 查找（目前 = curated **H** snapshot，尚非 registry **R**） |
