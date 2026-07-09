@@ -7,7 +7,7 @@
 headline presets → schema defaults → `pipeline.py` inject → native  
 (see [callpoints.md](callpoints.md), [native_bridge.md](native_bridge.md)).
 
-**Automated checker (C1–C5, C7 hard; C6 NOTE; C8 inject-map hard):**
+**Automated checker (C1–C5, C7, C9 hard; C6 NOTE; C8 inject-map hard):**
 
 ```bash
 uv run python scripts/tools/check_headline_decision_contract.py
@@ -205,8 +205,21 @@ Active contract healthcheck (manual):
 - [ ] C6 dual stability still separate (or linked decision PR)
 - [ ] C7 NO-GO not on headline
 - [ ] C8 inject still pipeline.py (+ remap + private det-set)
+- [ ] C9 surface allowlist / no forbidden ablation keys
 Behavior change? no / yes → smoke → 04 → 7-seq
 ```
+
+Also see `.github/pull_request_template.md` decision-layer checklist.
+
+---
+
+## C9 — surface allowlist / forbid ablation keys (P6)
+
+| Check | Expected |
+|:--|:--|
+| Every YAML key ∈ `HEADLINE_ALLOWED_KEYS` | fail unknown (surface creep) |
+| No key ∈ `HEADLINE_FORBIDDEN_KEYS` | OAO spatial, NSA, energy mode, bank relink, lifecycle merge, birth experiments, … |
+| New ACTIVE key | update allowlist + README active contract in same PR |
 
 ---
 
@@ -214,10 +227,13 @@ Behavior change? no / yes → smoke → 04 → 7-seq
 
 | Item | Status |
 |:--|:--|
-| `scripts/tools/check_headline_decision_contract.py` | **done** (YAML C1–C7 + inject C8) |
+| `scripts/tools/check_headline_decision_contract.py` | **done** (YAML C1–C7/C9 + inject C8) |
 | pytest `tests/unit/test_headline_decision_contract.py` | **done** |
 | CI `contracts` job | **done** |
 | C8 inject map (`pipeline.py` / private det-set) | **done** (P5.1) |
+| C9 surface allowlist / forbid | **done** (P6) |
+| Argparse help `[NO-GO]` / `[LATENT]` tags | **done** (P6; defaults unchanged) |
+| PR template decision checklist | **done** (`.github/pull_request_template.md`) |
 | Env `SACCADE_STABILITY_W` default assert | **not in CI** (NOTE only; dual-stability RFC) |
 
 **Do not** auto-merge dual stability knobs from this checker.

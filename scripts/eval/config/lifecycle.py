@@ -295,7 +295,11 @@ def add_lifecycle_args(parser: argparse.ArgumentParser) -> None:
         "--lifecycle-merge",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="Enable pre-output lifecycle merge.",
+        help=_help(
+            "Enable pre-output lifecycle merge. Offline/experimental ID merge — "
+            "not headline production policy while reid_mode=off.",
+            policy="LATENT",
+        ),
     )
     grp.add_argument(
         "--lifecycle-ttl",
@@ -348,7 +352,11 @@ def add_lifecycle_args(parser: argparse.ArgumentParser) -> None:
         "--post-lifecycle-merge",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="NO-GO (2026-04-27): Post-output lifecycle merge. Confirmed harmful on baseline.",
+        help=_help(
+            "Post-output lifecycle merge. Confirmed harmful on baseline "
+            "(2026-04-27) — do not enable as headline policy.",
+            policy="NO-GO",
+        ),
     )
     grp.add_argument(
         "--post-lifecycle-ttl",
@@ -1022,8 +1030,12 @@ def add_lifecycle_args(parser: argparse.ArgumentParser) -> None:
         "--relink-enabled",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="Birth-time lost-bank ReID relink: revive a lost identity at spawn "
-        "instead of minting a new id (online, GPU). Needs reid embeddings on.",
+        help=_help(
+            "Birth-time lost-bank ReID relink: revive a lost identity at spawn "
+            "instead of minting a new id (online, GPU). Needs reid embeddings; "
+            "headline path uses geometry bridge only (reid_mode=off).",
+            policy="LATENT",
+        ),
     )
     grp.add_argument(
         "--relink-bank-cap",

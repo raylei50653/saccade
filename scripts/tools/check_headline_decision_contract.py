@@ -15,8 +15,13 @@ Against the locked active contract in
 ``docs/research/tracker-decision/README.md`` and the C1–C8 matrix in
 ``docs/research/tracker-decision/audit/active_contract_healthcheck.md``.
 
+Also enforces P6 surface hardening:
+  - C9 allowlist: unknown keys in headline YAML fail (surface creep)
+  - C9 forbid: LATENT / ablation-only keys must not appear in headline YAML
+  - C7 still enforces known PRESET-OFF / NO-GO keys stay at off values when present
+
 What this does **not** do:
-  - change presets / schema / kernels
+  - change presets / schema defaults / kernels
   - merge dual stability knobs
   - run MOT17 / 7-seq
   - read env vars at runtime (dual-stability bid is a printed NOTE only)
@@ -157,6 +162,115 @@ REQUIRE_EXPLICIT: tuple[str, ...] = (
     "stability_cost_w",
     "multiplicative_cost",
     "fuse_score_weight",
+)
+
+# Keys allowed on headline presets (union of current s + m production YAML).
+# Adding a new ACTIVE key requires updating this set intentionally.
+HEADLINE_ALLOWED_KEYS: frozenset[str] = frozenset(
+    {
+        # Detector / graph path
+        "tiling",
+        "preprocess",
+        "mamba_ckpt",
+        "mamba_teacher_ckpt",
+        "mamba_yolo_weights",
+        "mamba_head_engine",
+        "fpn_backbone_engine",
+        "use_whole_graph",
+        "use_cuda_graph",
+        "use_tracker_graph",
+        "main_nms_graphed",
+        # GMC / ReID surface (headline values locked by SHARED / NO_GO)
+        "gmc",
+        "gmc_downscale",
+        "gmc_fg_mask",
+        "reid_mode",
+        # Association / lifecycle ACTIVE
+        "match_thresh",
+        "new_track_thresh",
+        "confirm_streak",
+        "confirm_score_thresh",
+        "kalman_r_scale",
+        "fuse_score_weight",  # explicit 0.0 (NO-GO if raised)
+        "oao_tau",
+        "oao_ramp_frames",
+        "multiplicative_cost",
+        "sinkhorn_lambda",
+        "stability_cost_w",
+        *OCC_STATE_EXPECTED.keys(),
+        # Private continuation
+        "private_continuation_enabled",
+        "private_candidate_nms_iou",
+        "private_prior_iou_threshold",
+        "private_min_score",
+        "private_max_candidates",
+        "private_selection_mode",
+        # Bridge relink
+        "relink_bridge_enabled",
+        "relink_bridge_px",
+        "relink_bridge_margin",
+        "relink_bridge_h_lo",
+        "relink_bridge_h_hi",
+        "relink_bridge_spatial_gate",
+        "relink_bridge_dir_bonus",
+        # Output continuity
+        "interpolate_tracklets",
+        "interpolate_max_gap",
+        "interpolate_min_track_len",
+        "interpolate_min_h",
+        # PRESET-OFF geometry (must stay false on headline)
+        "track_person_only",
+        "person_geometry_prior",
+        "detection_quality_scaling",
+        "geometry_suspect_support",
+        "id_stability_filter",
+        "per_seq_adapt",
+    }
+)
+
+# LATENT / ablation-only / rejected experiment keys: must not appear in headline
+# YAML at all (even at "off"). Use dedicated ablation presets instead.
+# Keys that are *allowed* only when forced off (e.g. fuse_score_weight: 0) live
+# in HEADLINE_ALLOWED_KEYS + NO_GO_OR_OFF, not here.
+HEADLINE_FORBIDDEN_KEYS: frozenset[str] = frozenset(
+    {
+        # NO-GO / LATENT association
+        "nsa_kalman",
+        "vel_dir_weight",
+        "association_scoring_mode",
+        "assoc_score_cost_w",
+        "assoc_height_cost_w",
+        "assoc_energy_diagnostics",
+        "kalman_adapt_mode",
+        # OAO spatial family (duration ramp is the GO axis)
+        "oao_contest_thresh",
+        "oao_score_w",
+        "oao_occ_mode",
+        "oao_crowd_radius",
+        "oao_height_gate",
+        "oao_foot_gate",
+        # Birth experiments
+        "birth_low_score_thresh",
+        "birth_prox_norm_thresh",
+        "birth_quality_gate",
+        "birth_min_quality",
+        "birth_quality_score_bias",
+        "birth_consecutive_gate",
+        "birth_consecutive_frames",
+        "birth_consecutive_iou",
+        "birth_consecutive_boost",
+        "birth_consecutive_min_score",
+        "birth_consecutive_min_motion",
+        "stage2_quality_gate",
+        "stage2_quality_min",
+        # Bank ReID / offline merge
+        "relink_enabled",
+        "lifecycle_merge",
+        "post_lifecycle_merge",
+        # Bridge extras not on headline contract
+        "relink_bridge_app_veto",
+        "relink_bridge_max_speed",
+    }
 )
 
 
@@ -305,6 +419,32 @@ def check_presets(
         if rm is not None and str(rm).strip().lower() not in ("off", "none", "false"):
             failures.append(
                 f"[{label}] reid_mode={_fmt(rm)}, headline contract requires 'off' (C7)"
+            )
+
+    # C9 — surface hardening: allowlist + forbid ablation keys
+    for label, cfg in ((s_label, s), (m_label, m)):
+        keys = set(cfg.keys())
+        unknown = sorted(keys - HEADLINE_ALLOWED_KEYS)
+        for key in unknown:
+            if key in HEADLINE_FORBIDDEN_KEYS:
+                failures.append(
+                    f"[{label}] forbidden LATENT/ablation key {key!r} in headline "
+                    f"preset (C9 surface) — use an ablation config, not "
+                    f"mamba_whole_graph*.yaml"
+                )
+            else:
+                failures.append(
+                    f"[{label}] unknown headline key {key!r} (C9 surface creep) — "
+                    f"add to HEADLINE_ALLOWED_KEYS only if it is intentional "
+                    f"ACTIVE/production policy"
+                )
+        forbidden_hit = sorted(keys & HEADLINE_FORBIDDEN_KEYS)
+        for key in forbidden_hit:
+            if key in unknown:
+                continue  # already reported
+            failures.append(
+                f"[{label}] forbidden LATENT/ablation key {key!r} in headline "
+                f"preset (C9 surface)"
             )
 
     return failures, notes
@@ -564,7 +704,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     print(
-        "✓ headline decision contract OK (YAML C1–C7 + inject-map C8)"
+        "✓ headline decision contract OK (YAML C1–C7/C9 + inject-map C8)"
         if not args.skip_inject
         else "✓ headline decision contract OK (YAML only; inject skipped)"
     )

@@ -336,7 +336,12 @@ def add_geometry_args(parser: argparse.ArgumentParser) -> None:
         "--nsa-kalman",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="Deprecated; use --kalman-adapt-mode 1 instead. (legacy NSA: score-based R scaling)",
+        help=_help(
+            "Deprecated; use --kalman-adapt-mode 1 instead. "
+            "Legacy NSA score-based R scaling double-compensates with high "
+            "kalman_r_scale — not a headline default.",
+            policy="NO-GO",
+        ),
     )
     grp.add_argument(
         "--kalman-r-scale",
@@ -354,9 +359,11 @@ def add_geometry_args(parser: argparse.ArgumentParser) -> None:
         default=0.0,
         help=_help(
             "OC-SORT velocity direction penalty weight. Penalises matches "
-            "where the detection direction opposes the track's Kalman velocity.",
+            "where the detection direction opposes the track's Kalman velocity. "
+            "Wired for ablation; unvalidated on current multiplicative cost form.",
             range_hint="0.0-0.5",
             edge="too high rejects valid re-entries after direction change",
+            policy="LATENT",
         ),
     )
     grp.add_argument(
@@ -365,9 +372,11 @@ def add_geometry_args(parser: argparse.ArgumentParser) -> None:
         default=0.0,
         help=_help(
             "fuse_score weight (botsort-style): scales IoU by (1 - weight * det_score) "
-            "so low-confidence detections have higher association cost.",
+            "so low-confidence detections have higher association cost. "
+            "Headline keeps 0.0; raising needs 7-seq bipolar check (registry #45).",
             range_hint="0.0-1.0",
             edge="1.0 = full botsort; reduces FP but may drop low-score recall",
+            policy="NO-GO",
         ),
     )
     grp.add_argument(
@@ -391,9 +400,11 @@ def add_geometry_args(parser: argparse.ArgumentParser) -> None:
             "Contention gate for OAO. <0 (default) = plain OAO (penalise every "
             "detection of an overlapped track). >=0 = only penalise detections "
             "also claimed by the track's max-overlap partner (partner-pred IoU "
-            ">= thresh), sparing uncontested side-by-side real pedestrians.",
+            ">= thresh). OAO spatial family failed to separate MOT17-05 harm vs "
+            "04 benefit — duration ramp (oao-ramp-frames) is the GO axis.",
             range_hint="-1 (off) or 0.3-0.5",
             edge="too low penalises almost everything (≈plain OAO); too high never fires",
+            policy="NO-GO",
         ),
     )
     grp.add_argument(
@@ -403,11 +414,11 @@ def add_geometry_args(parser: argparse.ArgumentParser) -> None:
         dest="oao_score_w",
         help=_help(
             "Soft score weighting for OAO. <=0 (default) = full penalty. >0 = "
-            "scale penalty by (1 - score_w * det_score), so confident detections "
-            "get a reduced (not cut) penalty. 0.5 halves the penalty for a "
-            "score-1.0 box; 1.0 zeroes it.",
+            "scale penalty by (1 - score_w * det_score). Part of the OAO spatial "
+            "family rejected as headline policy; keep off unless re-validating.",
             range_hint="-1 (off) or 0.3-0.7",
             edge="too high over-spares low-FP-density seqs; too low ≈ plain OAO",
+            policy="NO-GO",
         ),
     )
     grp.add_argument(
@@ -418,10 +429,10 @@ def add_geometry_args(parser: argparse.ArgumentParser) -> None:
         dest="oao_occ_mode",
         help=_help(
             "OAO occlusion signal. 0 (default) = max single inter-track IoU. "
-            "1 = union coverage (fraction of the track covered by the union of "
-            "other boxes, 8x8 grid), amplifying dense crowds vs sparse overlaps.",
+            "1 = union coverage. Spatial OAO family is NO-GO as headline policy.",
             range_hint="0 (max) or 1 (union)",
             edge="union raises penalty magnitude — pair with a lower oao-tau",
+            policy="NO-GO",
         ),
     )
     grp.add_argument(
@@ -431,10 +442,10 @@ def add_geometry_args(parser: argparse.ArgumentParser) -> None:
         dest="oao_crowd_radius",
         help=_help(
             "OAO crowd multiplier radius (units of box height). <=0 (default) = off. "
-            ">0 = scale penalty by (1 - 1/N), N = tracks within radius*h of t (incl. "
-            "self): sparse overlaps (real side-by-side) damped, dense crowds full.",
+            "Spatial OAO family is NO-GO as headline policy.",
             range_hint="0 (off) or ~0.5-1.0",
             edge="too small N→1 kills penalty everywhere; too large = no damping",
+            policy="NO-GO",
         ),
     )
     grp.add_argument(
@@ -443,11 +454,11 @@ def add_geometry_args(parser: argparse.ArgumentParser) -> None:
         default=0.0,
         dest="oao_height_gate",
         help=_help(
-            "OAO same-height gate. <=0 (default) = off. >0 = only partners with "
-            "|h_t - h_j| <= gate*max(h) contribute to the OAO signal (same-depth "
-            "occlusions only), sparing near/far projection overlaps.",
+            "OAO same-height gate. <=0 (default) = off. "
+            "Spatial OAO family is NO-GO as headline policy.",
             range_hint="0 (off) or ~0.2-0.4",
             edge="too tight drops real same-depth occlusions; too loose ≈ no gate",
+            policy="NO-GO",
         ),
     )
     grp.add_argument(
@@ -456,11 +467,11 @@ def add_geometry_args(parser: argparse.ArgumentParser) -> None:
         default=0.0,
         dest="oao_foot_gate",
         help=_help(
-            "OAO same-foot gate. <=0 (default) = off. >0 = only partners with "
-            "|footy_t - footy_j| <= gate*h_ref contribute (truer same-depth proxy "
-            "than height; matches the proven occ_front foot-gap signal).",
+            "OAO same-foot gate. <=0 (default) = off. "
+            "Spatial OAO family is NO-GO as headline policy.",
             range_hint="0 (off) or ~0.15-0.3",
             edge="too tight drops real same-depth occlusions; too loose ≈ no gate",
+            policy="NO-GO",
         ),
     )
     grp.add_argument(
@@ -569,8 +580,9 @@ def add_geometry_args(parser: argparse.ArgumentParser) -> None:
         default="baseline",
         dest="association_scoring_mode",
         help=_help(
-            "Association scoring variant. baseline preserves existing cost behavior; "
-            "energy enables additional score/height energy terms.",
+            "Association scoring variant. baseline is production; energy enables "
+            "extra score/height Π terms and needs λ/stability retune — not headline.",
+            policy="LATENT",
         ),
     )
     grp.add_argument(
@@ -581,6 +593,7 @@ def add_geometry_args(parser: argparse.ArgumentParser) -> None:
         help=_help(
             "Detector-score penalty weight used only with association_scoring_mode=energy.",
             range_hint="0.0-0.3",
+            policy="LATENT",
         ),
     )
     grp.add_argument(
@@ -592,6 +605,7 @@ def add_geometry_args(parser: argparse.ArgumentParser) -> None:
             "Track/detection height-ratio penalty weight used only with "
             "association_scoring_mode=energy.",
             range_hint="0.0-0.2",
+            policy="LATENT",
         ),
     )
     grp.add_argument(
@@ -599,7 +613,10 @@ def add_geometry_args(parser: argparse.ArgumentParser) -> None:
         action=argparse.BooleanOptionalAction,
         default=False,
         dest="assoc_energy_diagnostics",
-        help="Write a small scoring configuration diagnostic next to eval outputs.",
+        help=_help(
+            "Write a small scoring configuration diagnostic next to eval outputs.",
+            policy="LATENT",
+        ),
     )
     grp.add_argument(
         "--stage2-match-thresh",
@@ -618,9 +635,10 @@ def add_geometry_args(parser: argparse.ArgumentParser) -> None:
         default=0.0,
         help=_help(
             "Tracks born below this score require confirm_streak+1 hits before confirming. "
-            "0.0 = off (backward compat).",
+            "0.0 = off. Experimental birth gate — not on headline presets.",
             range_hint="0.0-0.4",
             edge="too high delays valid low-score person detections",
+            policy="LATENT",
         ),
     )
     grp.add_argument(
@@ -628,10 +646,11 @@ def add_geometry_args(parser: argparse.ArgumentParser) -> None:
         type=float,
         default=0.0,
         help=_help(
-            "NO-GO (2026-05-18): Suppress new track birth near confirmed tracks. "
+            "Suppress new track birth near confirmed tracks. "
             "FP reduced but FN surged — proximity cannot distinguish ghost from real crowd. "
-            "0.0 = off.",
+            "0.0 = off. Do not enable as headline policy.",
             range_hint="0.0-1.0",
             edge="too high suppresses valid new persons in crowded scenes",
+            policy="NO-GO",
         ),
     )
