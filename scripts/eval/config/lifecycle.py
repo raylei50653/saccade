@@ -91,6 +91,16 @@ class LifecycleConfig:
     occ_audit_window: int = 30
     occ_audit_min_occ: int = 2
     occ_audit_log: bool = False
+    # Cheb-GR graph decision probe for occ-exit (#55 WP1b). Default-off /
+    # log-only: never changes cosine flag_frame / cuts / stats.flags.
+    occ_audit_chebgr_probe: bool = False
+    occ_audit_chebgr_max_cost: float = 0.45
+    occ_audit_chebgr_margin: float = 0.0
+    occ_audit_chebgr_pool_frac: float = 0.3
+    occ_audit_chebgr_lambda: float = 2.0
+    occ_audit_chebgr_k2: int = 6
+    occ_audit_chebgr_max_fwd: int = 50
+    occ_audit_chebgr_fuse_lambda: float = 0.3
     # Lost-track memory (ByteTrack track_buffer): frames a lost track survives in
     # the tracker (and stays available for association + bridge relink) before
     # removal. Per-seq fps-scaled when per_seq_adapt is on.
@@ -1025,6 +1035,73 @@ def add_lifecycle_args(parser: argparse.ArgumentParser) -> None:
         action=argparse.BooleanOptionalAction,
         default=False,
         help="Write _occ_audit.csv with one row per audited episode.",
+    )
+    grp.add_argument(
+        "--occ-audit-chebgr-probe",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "RESEARCH/DEBUG: log-only Cheb-GR graph decision probe on the "
+            "bank-reference occ-exit path. Appends chebgr_* columns to "
+            "_occ_audit.csv; does not change cosine flag_frame / cuts / "
+            "stats.flags. Requires --occ-audit-bank-reference for the bank path."
+        ),
+    )
+    grp.add_argument(
+        "--occ-audit-chebgr-max-cost",
+        type=float,
+        default=0.45,
+        help=_help(
+            "Cheb-GR probe: flag when audit↔own-ref graph cost exceeds this "
+            "(high self_cost = post-exit no longer matches pre-episode ref).",
+            range_hint="0-1",
+        ),
+    )
+    grp.add_argument(
+        "--occ-audit-chebgr-margin",
+        type=float,
+        default=0.0,
+        help=_help(
+            "Cheb-GR probe: if >0 and occluder ref exists, require "
+            "self_cost - occluder_cost >= this before flagging.",
+            range_hint=">=0; 0 disables margin gate",
+        ),
+    )
+    grp.add_argument(
+        "--occ-audit-chebgr-pool-frac",
+        type=float,
+        default=0.3,
+        help=_help(
+            "Cheb-GR probe: mean of the smallest pool_frac cross-block distances.",
+            range_hint="(0,1]",
+        ),
+    )
+    grp.add_argument(
+        "--occ-audit-chebgr-lambda",
+        type=float,
+        default=2.0,
+        help=_help("Cheb-GR probe: Chebyshev neighbourhood lambda.", range_hint=">0"),
+    )
+    grp.add_argument(
+        "--occ-audit-chebgr-k2",
+        type=int,
+        default=6,
+        help=_help("Cheb-GR probe: k2 local query expansion.", range_hint=">=1"),
+    )
+    grp.add_argument(
+        "--occ-audit-chebgr-max-fwd",
+        type=int,
+        default=50,
+        help=_help("Cheb-GR probe: max forward neighbourhood size.", range_hint=">=1"),
+    )
+    grp.add_argument(
+        "--occ-audit-chebgr-fuse-lambda",
+        type=float,
+        default=0.3,
+        help=_help(
+            "Cheb-GR probe: Jaccard fusion weight on the distance.",
+            range_hint="0-1",
+        ),
     )
     grp.add_argument(
         "--relink-enabled",

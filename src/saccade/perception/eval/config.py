@@ -344,6 +344,14 @@ class LifecycleView:
     occ_audit_window: int
     occ_audit_min_occ: int
     occ_audit_log: bool
+    occ_audit_chebgr_probe: bool
+    occ_audit_chebgr_max_cost: float
+    occ_audit_chebgr_margin: float
+    occ_audit_chebgr_pool_frac: float
+    occ_audit_chebgr_lambda: float
+    occ_audit_chebgr_k2: int
+    occ_audit_chebgr_max_fwd: int
+    occ_audit_chebgr_fuse_lambda: float
     track_buffer: int
     relink_enabled: bool
     relink_bank_cap: int
@@ -665,6 +673,15 @@ class EvalConfig:
     occ_audit_log: bool
     occ_audit_bank_reference: bool
     occ_audit_bank_n: int
+    # Cheb-GR graph decision probe (default-off / log-only; bank-reference path).
+    occ_audit_chebgr_probe: bool
+    occ_audit_chebgr_max_cost: float
+    occ_audit_chebgr_margin: float
+    occ_audit_chebgr_pool_frac: float
+    occ_audit_chebgr_lambda: float
+    occ_audit_chebgr_k2: int
+    occ_audit_chebgr_max_fwd: int
+    occ_audit_chebgr_fuse_lambda: float
 
     # Birth-time lost-bank ReID relink (online, GPU; default off)
     relink_enabled: bool
@@ -1109,6 +1126,14 @@ class EvalConfig:
             occ_audit_window=self.occ_audit_window,
             occ_audit_min_occ=self.occ_audit_min_occ,
             occ_audit_log=self.occ_audit_log,
+            occ_audit_chebgr_probe=self.occ_audit_chebgr_probe,
+            occ_audit_chebgr_max_cost=self.occ_audit_chebgr_max_cost,
+            occ_audit_chebgr_margin=self.occ_audit_chebgr_margin,
+            occ_audit_chebgr_pool_frac=self.occ_audit_chebgr_pool_frac,
+            occ_audit_chebgr_lambda=self.occ_audit_chebgr_lambda,
+            occ_audit_chebgr_k2=self.occ_audit_chebgr_k2,
+            occ_audit_chebgr_max_fwd=self.occ_audit_chebgr_max_fwd,
+            occ_audit_chebgr_fuse_lambda=self.occ_audit_chebgr_fuse_lambda,
             track_buffer=self.track_buffer,
             relink_enabled=self.relink_enabled,
             relink_bank_cap=self.relink_bank_cap,
@@ -1480,6 +1505,14 @@ _DEFAULTS: dict[str, object] = {
     "occ_audit_log": False,
     "occ_audit_bank_reference": False,
     "occ_audit_bank_n": 20,
+    "occ_audit_chebgr_probe": False,
+    "occ_audit_chebgr_max_cost": 0.45,
+    "occ_audit_chebgr_margin": 0.0,
+    "occ_audit_chebgr_pool_frac": 0.3,
+    "occ_audit_chebgr_lambda": 2.0,
+    "occ_audit_chebgr_k2": 6,
+    "occ_audit_chebgr_max_fwd": 50,
+    "occ_audit_chebgr_fuse_lambda": 0.3,
     "relink_enabled": False,
     "relink_bank_cap": 256,
     "relink_sim_thresh": 0.6,

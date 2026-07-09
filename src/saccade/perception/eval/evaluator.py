@@ -2799,6 +2799,20 @@ def run_eval(
                     decision_log=oa_log_rows
                     if getattr(cfg, "occ_audit_log", False)
                     else None,
+                    chebgr_probe=bool(getattr(cfg, "occ_audit_chebgr_probe", False)),
+                    chebgr_max_cost=float(
+                        getattr(cfg, "occ_audit_chebgr_max_cost", 0.45)
+                    ),
+                    chebgr_margin=float(getattr(cfg, "occ_audit_chebgr_margin", 0.0)),
+                    chebgr_pool_frac=float(
+                        getattr(cfg, "occ_audit_chebgr_pool_frac", 0.3)
+                    ),
+                    chebgr_lambda=float(getattr(cfg, "occ_audit_chebgr_lambda", 2.0)),
+                    chebgr_k2=int(getattr(cfg, "occ_audit_chebgr_k2", 6)),
+                    chebgr_max_fwd=int(getattr(cfg, "occ_audit_chebgr_max_fwd", 50)),
+                    chebgr_fuse_lambda=float(
+                        getattr(cfg, "occ_audit_chebgr_fuse_lambda", 0.3)
+                    ),
                 )
             else:
                 audit_embs = extract_audit_embeddings(

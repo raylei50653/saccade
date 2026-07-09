@@ -2,7 +2,7 @@
   "_meta": {
     "description": "mot17_baseline.yaml (no preset)",
     "preset": "baseline",
-    "field_count": 402,
+    "field_count": 410,
     "generated_by": "scripts/eval/config/gen_golden_snapshot.py"
   },
   "config": {
@@ -204,6 +204,14 @@
     "oao_score_w": -1.0,
     "oao_tau": 0.0,
     "occ_audit": false,
+    "occ_audit_chebgr_fuse_lambda": 0.3,
+    "occ_audit_chebgr_k2": 6,
+    "occ_audit_chebgr_lambda": 2.0,
+    "occ_audit_chebgr_margin": 0.0,
+    "occ_audit_chebgr_max_cost": 0.45,
+    "occ_audit_chebgr_max_fwd": 50,
+    "occ_audit_chebgr_pool_frac": 0.3,
+    "occ_audit_chebgr_probe": false,
     "occ_audit_crops": 3,
     "occ_audit_log": false,
     "occ_audit_min_occ": 2,
