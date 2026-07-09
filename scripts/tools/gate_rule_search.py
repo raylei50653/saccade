@@ -507,11 +507,6 @@ def mine_conjunctions(
                     next_frontier.append(cl)
         # prune frontier to Pareto among new + keep diversity
         if len(next_frontier) > 80:
-            items = [
-                (c.clause_id, RuleMetrics(**{**c.metrics, "complexity": c.complexity}))
-                for c in next_frontier
-            ]
-            # fix: metrics already has complexity
             items = []
             for c in next_frontier:
                 mm = c.metrics
