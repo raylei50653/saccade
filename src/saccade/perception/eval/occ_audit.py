@@ -431,8 +431,12 @@ def _chebgr_occ_exit_probe(
     """
     ref_n = int(ref_stack.shape[0])
     audit_n = int(audit_stack.shape[0])
-    has_occ = occ_stack is not None and int(occ_stack.shape[0]) > 0
-    occ_n = int(occ_stack.shape[0]) if has_occ else 0
+    if occ_stack is None or int(occ_stack.shape[0]) <= 0:
+        has_occ = False
+        occ_n = 0
+    else:
+        has_occ = True
+        occ_n = int(occ_stack.shape[0])
 
     parts: list[Tensor] = [audit_stack, ref_stack]
     if has_occ:
