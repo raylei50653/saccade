@@ -39,6 +39,7 @@ import numpy as np
 import torch
 from torch import Tensor
 
+from ..reid.cheb_gr import cheb_gr_kreciprocal
 from .cheb_gr_merge import _extract_native_crops_trt
 from .clean_fifo_bank import CleanFifoBank
 from .helpers import front_occlusion_mask_xyxy
@@ -387,6 +388,106 @@ def _bank_ref_vecs(
     return torch.stack([emb for _, emb in selected])
 
 
+def _pooled_cross_cost(
+    sdist: Tensor,
+    row_lo: int,
+    row_hi: int,
+    col_lo: int,
+    col_hi: int,
+    pool_frac: float,
+) -> float:
+    """Mean of the smallest ``pool_frac`` block distances (robust min)."""
+    block = sdist[row_lo:row_hi, col_lo:col_hi].reshape(-1)
+    if block.numel() == 0:
+        return float("inf")
+    k = max(1, int(round(pool_frac * block.numel())))
+    return float(torch.topk(block, k, largest=False).values.mean())
+
+
+def _chebgr_occ_exit_probe(
+    ref_stack: Tensor,
+    audit_stack: Tensor,
+    occ_stack: Tensor | None = None,
+    *,
+    max_cost: float = 0.45,
+    margin: float = 0.0,
+    pool_frac: float = 0.3,
+    cheb_lambda: float = 2.0,
+    k2: int = 6,
+    max_fwd: int = 50,
+    fuse_lambda: float = 0.3,
+) -> dict[str, int | float | bool | str]:
+    """Event-local Cheb-GR graph probe for occ-exit (diagnostic only).
+
+    Inputs must already be L2-normalized raw sample rows. No mean prototype,
+    no dupfill, and no in-place mutation of the stacks.
+
+    Graph layout: ``audit_stack + ref_stack + optional occluder stack``.
+    Cost is the mean of the smallest ``pool_frac`` cross-block distances
+    (same pooling as offline handover / merge).
+
+    For occ-exit, *high* ``self_cost`` means post-exit crops no longer match the
+    pre-episode own reference — the opposite of handover accept (low cost).
+    """
+    ref_n = int(ref_stack.shape[0])
+    audit_n = int(audit_stack.shape[0])
+    has_occ = occ_stack is not None and int(occ_stack.shape[0]) > 0
+    occ_n = int(occ_stack.shape[0]) if has_occ else 0
+
+    parts: list[Tensor] = [audit_stack, ref_stack]
+    if has_occ:
+        assert occ_stack is not None
+        parts.append(occ_stack)
+    feats = torch.cat(parts, dim=0)
+    n = int(feats.shape[0])
+    sdist = cheb_gr_kreciprocal(
+        feats,
+        feats,
+        cheb_lambda=cheb_lambda,
+        k2=min(k2, n),
+        max_fwd=max_fwd,
+        fuse_lambda=fuse_lambda,
+    )
+
+    # Layout: [0, audit_n) | [audit_n, audit_n+ref_n) | optional occ
+    self_cost = _pooled_cross_cost(
+        sdist, 0, audit_n, audit_n, audit_n + ref_n, pool_frac
+    )
+    if has_occ:
+        occ_cost = _pooled_cross_cost(
+            sdist, 0, audit_n, audit_n + ref_n, audit_n + ref_n + occ_n, pool_frac
+        )
+        chebgr_margin = float(self_cost - occ_cost)
+    else:
+        occ_cost = -1.0
+        chebgr_margin = 999.0
+
+    # Inverted from handover accept: flag when own-ref cost is too high.
+    if self_cost <= max_cost:
+        chebgr_flag = False
+        chebgr_reason = "accepted"
+    elif has_occ and margin > 0.0 and chebgr_margin < margin:
+        chebgr_flag = False
+        chebgr_reason = "margin"
+    elif not has_occ:
+        chebgr_flag = True
+        chebgr_reason = "no_occluder" if margin > 0.0 else "cost"
+    else:
+        chebgr_flag = True
+        chebgr_reason = "cost"
+
+    return {
+        "chebgr_self_cost": float(self_cost),
+        "chebgr_occluder_cost": float(occ_cost),
+        "chebgr_margin": float(chebgr_margin),
+        "chebgr_flag": bool(chebgr_flag),
+        "chebgr_reason": str(chebgr_reason),
+        "chebgr_ref_n": ref_n,
+        "chebgr_audit_n": audit_n,
+        "chebgr_occ_n": occ_n,
+    }
+
+
 def occ_exit_audit_lines_from_bank(
     results_lines: list[str],
     bank: CleanFifoBank,
@@ -404,6 +505,14 @@ def occ_exit_audit_lines_from_bank(
     self_consistency_min: float = 0.0,
     occluder_margin: float = -1.0,
     decision_log: list[dict[str, int | float | bool | str]] | None = None,
+    chebgr_probe: bool = False,
+    chebgr_max_cost: float = 0.45,
+    chebgr_margin: float = 0.0,
+    chebgr_pool_frac: float = 0.3,
+    chebgr_lambda: float = 2.0,
+    chebgr_k2: int = 6,
+    chebgr_max_fwd: int = 50,
+    chebgr_fuse_lambda: float = 0.3,
 ) -> tuple[list[str], dict[str, int]]:
     """Bank-reference variant of :func:`occ_exit_audit_lines`.
 
@@ -416,6 +525,10 @@ def occ_exit_audit_lines_from_bank(
     exactly what the FIFO bank holds (last N clean samples before the episode),
     so the bank substrate eliminates redundant ref-frame extraction when the
     bank is already built (e.g., for handover).
+
+    ``chebgr_probe`` (default-off) adds Cheb-GR graph decision diagnostics to
+    ``decision_log`` only. It does not change cosine ``flag_frame``, cuts,
+    rewritten lines, or ``stats.flags``.
     """
     stats = _AuditStats()
     if not enabled or not results_lines:
@@ -467,6 +580,7 @@ def occ_exit_audit_lines_from_bank(
             self_consistency = 1.0
 
         occ_ref = None
+        occ_stack: Tensor | None = None
         max_contrast = float("nan")
         if occluder_margin >= 0.0:
             occ_stack = _bank_ref_vecs(bank, ep.occluder_id, ep.occ_start, ref_n, -1)
@@ -495,25 +609,63 @@ def occ_exit_audit_lines_from_bank(
             flag_frame = None
 
         if decision_log is not None:
-            decision_log.append(
-                {
-                    "track_id": int(ep.track_id),
-                    "occ_start": int(ep.occ_start),
-                    "occ_end": int(ep.occ_end),
-                    "ref_n_used": int(ref_stack.shape[0]),
-                    "ref_source": "bank",
-                    "audit_n": int(len(cosines)),
-                    "min_cos": float(min(c for _, c in cosines)),
-                    "median_cos": float(np.median([c for _, c in cosines])),
-                    "self_consistency": float(self_consistency),
-                    "cos_list": " ".join(f"{c:.3f}" for _, c in cosines),
-                    "occluder_id": int(ep.occluder_id),
-                    "max_contrast": float(max_contrast),
-                    "tau": float(tau),
-                    "flagged": bool(flag_frame is not None),
-                    "flag_frame": int(flag_frame if flag_frame is not None else -1),
-                }
-            )
+            min_cos = float(min(c for _, c in cosines))
+            row: dict[str, int | float | bool | str] = {
+                "track_id": int(ep.track_id),
+                "occ_start": int(ep.occ_start),
+                "occ_end": int(ep.occ_end),
+                "ref_n_used": int(ref_stack.shape[0]),
+                "ref_source": "bank",
+                "audit_n": int(len(cosines)),
+                "min_cos": min_cos,
+                "median_cos": float(np.median([c for _, c in cosines])),
+                "self_consistency": float(self_consistency),
+                "cos_list": " ".join(f"{c:.3f}" for _, c in cosines),
+                "occluder_id": int(ep.occluder_id),
+                "max_contrast": float(max_contrast),
+                "tau": float(tau),
+                "flagged": bool(flag_frame is not None),
+                "flag_frame": int(flag_frame if flag_frame is not None else -1),
+            }
+            if chebgr_probe:
+                probe_occ = occ_stack
+                if probe_occ is None and ep.occluder_id >= 0:
+                    probe_occ = _bank_ref_vecs(
+                        bank, ep.occluder_id, ep.occ_start, ref_n, -1
+                    )
+                audit_stack = torch.stack([v for _, v in audit])
+                probe = _chebgr_occ_exit_probe(
+                    ref_stack,
+                    audit_stack,
+                    probe_occ,
+                    max_cost=chebgr_max_cost,
+                    margin=chebgr_margin,
+                    pool_frac=chebgr_pool_frac,
+                    cheb_lambda=chebgr_lambda,
+                    k2=chebgr_k2,
+                    max_fwd=chebgr_max_fwd,
+                    fuse_lambda=chebgr_fuse_lambda,
+                )
+                cosine_flag = bool(flag_frame is not None)
+                chebgr_flag = bool(probe["chebgr_flag"])
+                if cosine_flag == chebgr_flag:
+                    flag_delta = "same"
+                elif cosine_flag:
+                    flag_delta = "cosine_only"
+                else:
+                    flag_delta = "chebgr_only"
+                row["cosine_min"] = min_cos
+                row["cosine_flag"] = cosine_flag
+                row["chebgr_self_cost"] = probe["chebgr_self_cost"]
+                row["chebgr_occluder_cost"] = probe["chebgr_occluder_cost"]
+                row["chebgr_margin"] = probe["chebgr_margin"]
+                row["chebgr_flag"] = chebgr_flag
+                row["chebgr_reason"] = probe["chebgr_reason"]
+                row["chebgr_ref_n"] = probe["chebgr_ref_n"]
+                row["chebgr_audit_n"] = probe["chebgr_audit_n"]
+                row["chebgr_occ_n"] = probe["chebgr_occ_n"]
+                row["flag_delta"] = flag_delta
+            decision_log.append(row)
             stats.decisions_logged += 1
 
         if flag_frame is None:
