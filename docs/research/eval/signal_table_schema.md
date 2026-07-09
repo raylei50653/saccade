@@ -86,6 +86,56 @@ uv run python scripts/tools/summarize_relink_pairs.py \
 
 **過時策略：** 重測 → **新 `study_id`/stamp**；勿改歷史 markdown 內嵌表。s 文方法仍可引用；m 分數以最新 study_dir 為準。
 
+### 0.3 風格參考與注意事項
+
+#### 風格參考（寫 research note / 解讀結果時）
+
+**方法與誠實度**學 [offline_relink_candidate_analysis.md](../../modules/semantic/research/offline_relink_candidate_analysis.md)；**數字壽命**學本契約 §0.2（study_dir），不要複製「大表嵌死正文」。
+
+| 學什麼（offline_relink） | 怎麼落地 |
+|:--|:--|
+| 開場 TL;DR：全池 vs 難池都報、兩者可並存 | 連 `metrics_auc.json`，一句話解讀槓桿 |
+| 明確 substrate（relink-off / interp-off） | `context.substrate` + CLI 可重現 |
+| 候選/事件規則編號列出 | 引用 builder 規則；勿 silently 改 y |
+| n_pos / n_neg / base rate | `context.pool.*` |
+| thr 工作點表（prec/recall） | `metrics_thr.csv`；正文最多摘 1～2 點 |
+| 結論 = **槓桿**（縮負池 / 難池弱…） | 禁止「AUC 高 → 上線」 |
+| 承認舊說法可 retract | 新 note 改 pointer，不改 s 歷史表 |
+| Artifacts & reproduction | study_dir 路徑 + 三步命令 |
+
+**文檔分工：**
+
+| 文類 | 家 | 含數字？ |
+|:--|:--|:--|
+| 契約 / recipe | 本檔 + `signal_tables.py` | 幾乎不（只定義必報什麼） |
+| 方法 hub（s 歷史） | offline_relink 等 | **as-of 凍結**；可引用方法不可當 m 現況 |
+| m 實驗 note | `docs/modules/semantic/research/` 新檔或短節 | **只 pointer + 一行 summary**；master 在 study_dir |
+| 可引用升格 | `evidence_ledger` | 升格後才抄一行 |
+
+#### 注意事項（下一輪灌資料 / 解讀）
+
+1. **主線 preset 是 m**（`mamba_whole_graph_m`）；s 文 AUC/thr **不可默認沿用**。可比方法、不比「還是 0.895」。  
+2. **B1 substrate 必須 interp-off**（否則斷點被填掉，機會集合變了）；relink/bridge 應 off 才枚舉 raw death/birth。  
+3. **B1 ≠ B2：** AUC 高不代表 reconnect success 高；e2e IDs 還看機制與狀態。  
+4. **禁止只報全池 AUC**（easy 遠負例抬分）；合規 = full + hard（預設 `bridge_dist<=1`）+ base rate。  
+5. **`bridge_dist` lower-is-better**；AUC 用 `-score`（summarize 已處理）。  
+6. **Hard pool 定義寫進 context**；若改 m 操作區（非 ≤1）須新 study_id，並與 ≤1 對照時分開報。  
+7. **A / B 勿混旋鈕：** 松 birth 抬 Rcll 可能灌假 IDs；松 bridge 降 IDs 可能假 merge——交叉只做一次檢查，不當同一 sweep。  
+8. **GMC 先於 bridge 解讀：** 無 GMC 時幾何/occ 訊號易髒（累積消融，非 bare 單開相加）。  
+9. **重測 = 新 stamp 目錄**；narrative 改 link，不改舊 study_dir、不改 s 文內嵌表。  
+10. **工具單元測 ≠ 管線驗收：** 下一輪須真 pairs 煙測後才稱 B1 數據就緒。  
+11. **Headline / ACTIVE knobs：** 本線是 RESEARCH；掃參預設 default-off / 實驗目錄，不 silent 改 `mamba_whole_graph*.yaml`。  
+12. **Noise：** 決策旋鈕 ΔIDF1 ≲ 0.2 當 near-noise（見 evidence_ledger）；小 AUC 差同理勿過度解讀。
+
+#### 下一輪建議順序（資料輪）
+
+```text
+D1  真 pairs 煙測（任意/m substrate → builder → summarize → 查三檔）
+D2  m B1 正式 stamp + 短 note（pointer only）
+D3  B2 reconnect 對照（bridge on/off）
+D4  可選：meta 自動寫入、e2e 灌 context、ledger 升格
+```
+
 ---
 
 ## P. Pipeline 結構（層級 · 先後 · 關聯）
