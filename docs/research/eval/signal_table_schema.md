@@ -153,11 +153,12 @@ D3  B2 reconnect 對照（bridge on/off）
       study out/signal_study/m_b2_bridge_ab_20260709T094646Z/
       tool: reconnect_rate.py --json-out / --events-out
 D4  可選：meta 自動寫入、e2e 灌 context、ledger 升格
-D5  B1 safe-reject audit（constrained FP pruning；§0.4）
+D5  B1 safe-reject audit（constrained FP pruning；§0.4 = L0）
     → audit_relink_safe_reject.py → metrics_safe_reject_*
+D6  Score Audit（§0.5 L1/L2；工具待建）— 在保 GT 的 universe 上 term/margin
 ```
 
-### 0.4 B1 safe-reject / constrained FP pruning（離線）
+### 0.4 B1 safe-reject / constrained FP pruning（離線 · L0 Gate）
 
 **目標重寫（不是 thr F1 調參）：**
 
@@ -758,10 +759,11 @@ regressed  = E(B) \ E(A)
 |:--|:--|:--|
 | 契約：A/B1/B2、study_dir、safe-reject | **本檔** §0.1–0.4 | ✅ |
 | **Production 開了哪些 identity/assoc 旋鈕**（配置面） | [tracker-decision config_surface](../tracker-decision/audit/config_surface.md) · [assoc_knobs](../tracker-decision/assoc_knobs.md) · `print_assoc_basis.py --preset …` | ✅ 清單/解析；**非**事件觸發率 |
-| B1 pairs + full/hard AUC + thr | `build_relink_candidates` → `summarize_relink_pairs` · `out/signal_study/` | ✅ |
-| B1：誰傷 GT / thr(gap) 形狀 | study `metrics_thr_*` · 活 note m_b1 §3b–3c | ✅ 當次 study |
-| B1：**constrained FP prune**（ε 下砍 FP） | `audit_relink_safe_reject.py` · §0.4 · study `metrics_safe_reject_*` | ✅ 工具；**探針 rule 仍薄** |
-| B2：斷–接 rate / bridge on-off | `reconnect_rate.py --json-out` · m_b2 note | ✅ |
+| B1 pairs + full/hard AUC + thr | `build_relink_candidates` → `summarize_relink_pairs` · `out/signal_study/` | ✅（AUC 屬 L1 term；thr 表屬 L0） |
+| B1：誰傷 GT / thr(gap) 形狀 | study `metrics_thr_*` · 活 note m_b1 §3b–3c | ✅ L0 gate calibration |
+| B1：**Gate Audit** safe-reject（ε 下砍 FP） | `audit_relink_safe_reject.py` · §0.4 · study `metrics_safe_reject_*` | ✅ 工具；**探針 rule 仍薄** |
+| B1：**Score Audit**（term 分布 / margin / 加權） | §0.5 契約 | ⚠ **缺系統工具**；僅有單 term AUC 片段 |
+| B2：斷–接 rate / bridge on-off | `reconnect_rate.py --json-out` · m_b2 note | ✅ L2 online 後果 |
 | 單題「gate 蓋多少事件」（crossing / handover / occ） | `depth_ordering_gate_sweep`（coverage 定義在腳本）· Cheb-GR `parameter_summary` / applicability · occ-audit 線 | ✅ **各線自有**，非總表 |
 | L0 score×height / stage 殺 GT | `analyze_score_distribution` · `analyze_near_miss_stage_attribution` | ✅ |
 | s 方法祖先（勿當 m 數字） | [offline_relink](../../modules/semantic/research/offline_relink_candidate_analysis.md) | ✅ historical |
@@ -773,18 +775,20 @@ regressed  = E(B) \ E(A)
 | **全 pipeline gate 覆蓋率儀表板** | 無單一報表 | 用 §8.1 分線查，不另維護總 inventory 檔 |
 | **Live 每 gate 觸發次數標準產物** | 部分在 log（如 `bridge_attempts/accepts`），無統一 CSV | 要做就掛在既有 eval 輸出，勿新 doc |
 | **ACTIVE 配置 × e2e 自動對照** | config_surface 與 MOT 分家 | `print_assoc_basis` + 手動 run |
-| **Safe-reject 可上線 rule 庫** | 僅 probe + 1D ε=0 ceiling；合取多 `unsafe` | 先訊號掃描再寫 rule，見 §0.4 |
+| **Safe-reject 可上線 rule 庫** | 僅 probe + 1D ε=0 ceiling；合取多 `unsafe` | 先 L0 訊號掃描再寫 rule，見 §0.4 |
+| **Score Audit CLI**（margin / rank / weight profile） | §0.5 已定契約 | 下一輪工具；勿用 gate thr 代替 |
 | **B1 AUC 與 B2 reconnect 自動 join** | 兩 study_dir 手動並讀 | 契約要求 B1≠B2，不強制同構 |
 | **數字嵌進 markdown master** | 禁止；master 在 `out/signal_study/` | |
 
 ### 8.3 最小路徑（copy-paste）
 
 ```text
-配置面 ACTIVE？  → print_assoc_basis / config_surface
-offline 訊號？   → substrate (bridge/interp off) → pairs → summarize → study_dir
-砍 FP 不傷 GT？  → audit_relink_safe_reject --write-study
-online 斷–接？   → reconnect_rate (bridge on/off MOT)
-某題事件覆蓋？  → 該題腳本（depth / handover / occ），不是本 schema 總表
+配置面 ACTIVE？     → print_assoc_basis / config_surface
+L0 保 GT / safe 砍 FP？ → thr·thr(gap) 敘事 + audit_relink_safe_reject
+L1/L2 誰在池內贏？  → Score Audit（§0.5；工具待建）；暫用 summarize AUC 當單 term
+offline pairs 怎來？ → substrate (bridge/interp off) → build → summarize → study_dir
+online 斷–接？      → reconnect_rate (bridge on/off MOT)
+某題事件覆蓋？     → 該題腳本（depth / handover / occ），不是本 schema 總表
 ```
 
 Code 常數：`signal_tables.py`（`STUDY_SCRIPT_MAP`, `SAFE_REJECT_*`, …）。
@@ -809,6 +813,7 @@ Code 常數：`signal_tables.py`（`STUDY_SCRIPT_MAP`, `SAFE_REJECT_*`, …）�
 - [ ] 報告 AUC 時寫明 `(universe, y, score)` 與 **所在 layer/node**  
 - [ ] **B1：** `hard_pool_rule` 已填；full + hard AUC + base rate + thr 表  
 - [ ] **B1：** substrate = relink-off + interp-off；腳本 = `build_relink_candidates.py`  
+- [ ] **B1：** 結論標明 **L0 gate** vs **L1/L2 score**（§0.5）；勿把 thr 當 signal strength  
 - [ ] **B2：** 狀態用 `reconnect_rate.py`（或等價）；不與 B1 AUC 混稱  
 - [ ] 交集用同一 `*_key` 空間；流水線 Δ 只對相鄰 cumulative 或 base 對  
 - [ ] 分層表帶 n%  
@@ -819,7 +824,8 @@ Code 常數：`signal_tables.py`（`STUDY_SCRIPT_MAP`, `SAFE_REJECT_*`, …）�
 | 線 | Doc / tool |
 |:--|:--|
 | B1 hub | [offline_relink_candidate_analysis.md](../../modules/semantic/research/offline_relink_candidate_analysis.md) |
-| B1 safe-reject audit | `scripts/tools/audit_relink_safe_reject.py` · §0.4 |
+| B1 safe-reject (L0 Gate Audit) | `scripts/tools/audit_relink_safe_reject.py` · §0.4 |
+| Gate vs Score | **§0.5**（L0 support / L1 calibration / L2 policy） |
 | B1 builder | `scripts/tools/build_relink_candidates.py` |
 | B2 reconnect | `scripts/eval/diagnostics/reconnect_rate.py` |
 | A score dist | `scripts/eval/analyze_score_distribution.py` |

@@ -187,7 +187,7 @@ Master：`metrics_thr_gap_schedules.csv` · `metrics_thr_gap_nonlinear.json` · 
 2. `power` / `sqrt_add` + **short_floor**  
 3. 不要單獨上 `sqrt_mul` / `log_mul` 而不看分 gap hurt  
 
-### 3d. Safe-reject / constrained FP pruning（契約 §0.4）
+### 3d. Safe-reject / constrained FP pruning（契約 §0.4 · **L0 Gate Audit**）
 
 **目標改寫：** 不是找更合理 thr，而是
 
@@ -200,7 +200,10 @@ s.t.     GT_hurt_rate <= ε   # hard — early reject usually irreversible for t
 **非對稱：** GT 被前面砍掉 ≈ 機會沒了；FP 多留下仍可能被 assignment / scoring / NMS / e2e 抵消。  
 ⇒ 約束永遠偏 **ε=0**；`FP_removed` 只當減負上界，不當 e2e 保證。
 
-`thr(gap)` = **calibration**（保護 GT coverage）；真正砍 FP 靠 **context reject rule**。  
+**§0.5 對照：** 本節 = Gate Audit。Score Audit（term 分布 / **GT_vs_best_FP_margin** / 加權）另線，工具待建；  
+勿把 safe-reject 表當成「訊號加權已解」。
+
+`thr(gap)` = L0 **coverage calibration**；真正砍 FP 靠 **context reject rule C**。  
 Tool：`scripts/tools/audit_relink_safe_reject.py`  
 Master（同 study）：`metrics_safe_reject_audit.csv` · `metrics_safe_reject_summary.json`
 
@@ -230,7 +233,8 @@ uv run python scripts/tools/audit_relink_safe_reject.py \
 | B1 data path on m is valid | **GO (D1)** |
 | Full-pool geometry useful for neg reduction | **GO (signal)** |
 | Hard-pool geometry alone carries precision / identity | **NO** — base-rate + mid AUC |
-| Constrained FP pruning is the right thr-adjacent goal | **GO (method)** — §0.4 / §3d |
+| Constrained FP pruning is the right **L0** thr-adjacent goal | **GO (method)** — §0.4 / §0.5 / §3d |
+| Gate thr/AUC 混談可代替 Score Audit | **NO** — thr(gap) 成功 ≠ hard-pool margin 已解 |
 | Probe conjunctions already give production safe rules | **NO** — need better C; ceiling shows headroom |
 | Ship or retune production bridge from this note | **NO** — RESEARCH; needs B2 + e2e |
 | Replace s offline tables with these numbers | **NO** — s remains historical hub |
