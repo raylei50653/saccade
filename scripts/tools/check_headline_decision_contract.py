@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 """Static guard for the headline tracker-decision contract (no GPU).
 
-Checks production presets:
+Checks:
 
-  configs/presets/mamba_whole_graph.yaml      (s)
-  configs/presets/mamba_whole_graph_m.yaml    (m)
+1. Production presets (YAML):
+     configs/presets/mamba_whole_graph.yaml      (s)
+     configs/presets/mamba_whole_graph_m.yaml    (m)
+2. Inject-map sanity (source text, C8):
+     pipeline.py remains the production set_* site
+     kalman_r_scale → r_scale remap still present
+     private continuation remains det-set policy (not a tracker setter)
 
 Against the locked active contract in
-``docs/research/tracker-decision/README.md`` and the C1–C7 matrix in
+``docs/research/tracker-decision/README.md`` and the C1–C8 matrix in
 ``docs/research/tracker-decision/audit/active_contract_healthcheck.md``.
 
 What this does **not** do:
@@ -15,17 +20,20 @@ What this does **not** do:
   - merge dual stability knobs
   - run MOT17 / 7-seq
   - read env vars at runtime (dual-stability bid is a printed NOTE only)
+  - execute or import the eval stack (text/regex only for C8)
 
 Exit 0 if all hard checks pass; exit 1 on any failure.
 
 Usage:
   uv run python scripts/tools/check_headline_decision_contract.py
   uv run python scripts/tools/check_headline_decision_contract.py --quiet
+  uv run python scripts/tools/check_headline_decision_contract.py --skip-inject
 """
 
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -35,6 +43,13 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PRESET_S = REPO_ROOT / "configs" / "presets" / "mamba_whole_graph.yaml"
 PRESET_M = REPO_ROOT / "configs" / "presets" / "mamba_whole_graph_m.yaml"
+PIPELINE_PY = REPO_ROOT / "src" / "saccade" / "perception" / "eval" / "pipeline.py"
+DETECTION_FILTERS_PY = (
+    REPO_ROOT / "src" / "saccade" / "perception" / "eval" / "detection_filters.py"
+)
+TRACKER_GPU_PY = (
+    REPO_ROOT / "src" / "saccade" / "perception" / "tracking" / "tracker_gpu.py"
+)
 
 # --- Locked contract values (update with README active contract) ---
 
@@ -295,6 +310,166 @@ def check_presets(
     return failures, notes
 
 
+def _read_text(path: Path) -> str:
+    if not path.is_file():
+        raise FileNotFoundError(f"source missing: {path}")
+    return path.read_text(encoding="utf-8")
+
+
+def check_inject_map(
+    pipeline_src: str,
+    detection_filters_src: str,
+    tracker_gpu_src: str,
+    *,
+    pipeline_label: str = "pipeline.py",
+    filters_label: str = "detection_filters.py",
+    tracker_label: str = "tracker_gpu.py",
+) -> tuple[list[str], list[str]]:
+    """C8 inject-map sanity on source text. Pure function for unit tests.
+
+    Does not import modules — only static patterns that lock the production
+    call map documented in tracker-decision callpoints / native_bridge.
+    """
+    failures: list[str] = []
+    notes: list[str] = []
+
+    # --- pipeline.py is production inject site for tracker setters ---
+    for method in ("set_params", "set_occ_params", "set_relink_params"):
+        # Prefer the real call shape: detector.tracker.set_* (
+        call_pat = re.compile(
+            rf"detector\.tracker\.{re.escape(method)}\s*\(",
+            re.MULTILINE,
+        )
+        if not call_pat.search(pipeline_src):
+            # Fallback: any .set_* (still on tracker path in this file)
+            loose = re.compile(rf"\.{re.escape(method)}\s*\(", re.MULTILINE)
+            if not loose.search(pipeline_src):
+                failures.append(
+                    f"[{pipeline_label}] missing production call "
+                    f"detector.tracker.{method}(...) (C8 inject site)"
+                )
+
+    # kalman_r_scale → r_scale remap at inject
+    if not re.search(r"r_scale\s*=\s*cfg\.geometry\.kalman_r_scale", pipeline_src):
+        failures.append(
+            f"[{pipeline_label}] missing r_scale=cfg.geometry.kalman_r_scale "
+            f"remap (C8 name remap)"
+        )
+
+    # occ_state fields must flow through set_occ_params kwargs
+    for field in (
+        "occ_state_enabled",
+        "occ_iou_thresh",
+        "occ_foot_gap",
+        "occ_ttl",
+        "occ_cost_weight",
+    ):
+        if f"cfg.geometry.{field}" not in pipeline_src:
+            failures.append(
+                f"[{pipeline_label}] set_occ path must reference "
+                f"cfg.geometry.{field} (C8 occ inject)"
+            )
+
+    # stability cost still injected when multiplicative path is used
+    if "set_stability_cost_w" not in pipeline_src:
+        failures.append(f"[{pipeline_label}] missing set_stability_cost_w inject (C8)")
+    if "set_multiplicative_cost" not in pipeline_src:
+        failures.append(
+            f"[{pipeline_label}] missing set_multiplicative_cost inject (C8)"
+        )
+
+    # --- private continuation is det-set policy, not a tracker setter ---
+    if "def _append_private_continuation_candidates" not in detection_filters_src:
+        failures.append(
+            f"[{filters_label}] missing _append_private_continuation_candidates "
+            f"(C8 private is det-set policy)"
+        )
+
+    # Score clamp below birth threshold (continue ≠ birth)
+    if "birth_ceiling" not in detection_filters_src:
+        failures.append(
+            f"[{filters_label}] missing birth_ceiling "
+            f"(C8 private score clamp below new_track_thresh)"
+        )
+    if not re.search(r"frame_new_track_thresh|new_track_thresh", detection_filters_src):
+        failures.append(
+            f"[{filters_label}] private continuation must reference "
+            f"new_track_thresh for birth ceiling (C8)"
+        )
+
+    # Must not become a GPUByteTracker setter API
+    forbidden_tracker_private = (
+        "set_private_continuation",
+        "private_continuation_enabled=",  # kwargs on set_params-style
+    )
+    # Only flag if set_params / tracker methods grow a private_continuation API
+    if re.search(
+        r"def set_params\([\s\S]*?private_continuation",
+        tracker_gpu_src,
+    ):
+        failures.append(
+            f"[{tracker_label}] set_params must not take private_continuation "
+            f"(C8 private is not a tracker setter)"
+        )
+    for token in forbidden_tracker_private:
+        if token in tracker_gpu_src:
+            failures.append(
+                f"[{tracker_label}] unexpected {token!r} — private continuation "
+                f"must remain det-set policy (C8)"
+            )
+
+    # pipeline must not inject private via a tracker setter either
+    if re.search(
+        r"detector\.tracker\.set_private_continuation|"
+        r"set_params\([\s\S]{0,800}?private_continuation",
+        pipeline_src,
+    ):
+        failures.append(
+            f"[{pipeline_label}] private_continuation must not be injected via "
+            f"tracker setters (C8 det-set policy)"
+        )
+
+    # facade still exposes r_scale (not only kalman_r_scale) on set_params
+    if not re.search(
+        r"def set_params\([\s\S]*?\br_scale\b",
+        tracker_gpu_src,
+    ):
+        failures.append(
+            f"[{tracker_label}] set_params signature should accept r_scale "
+            f"(C8 remap target)"
+        )
+
+    notes.append(
+        "NOTE [C8 inject map] production setters: pipeline.py "
+        "set_params / set_occ_params / set_relink_params; "
+        "kalman_r_scale→r_scale; private continuation stays in "
+        "detection_filters (det-set), not GPUByteTracker."
+    )
+    return failures, notes
+
+
+def check_inject_map_from_repo(
+    *,
+    pipeline_path: Path = PIPELINE_PY,
+    filters_path: Path = DETECTION_FILTERS_PY,
+    tracker_path: Path = TRACKER_GPU_PY,
+) -> tuple[list[str], list[str]]:
+    return check_inject_map(
+        _read_text(pipeline_path),
+        _read_text(filters_path),
+        _read_text(tracker_path),
+        pipeline_label=str(pipeline_path.relative_to(REPO_ROOT))
+        if pipeline_path.is_relative_to(REPO_ROOT)
+        else str(pipeline_path),
+        filters_label=str(filters_path.relative_to(REPO_ROOT))
+        if filters_path.is_relative_to(REPO_ROOT)
+        else str(filters_path),
+        tracker_label=str(tracker_path.relative_to(REPO_ROOT))
+        if tracker_path.is_relative_to(REPO_ROOT)
+        else str(tracker_path),
+    )
+
+
 class _Missing:
     def __repr__(self) -> str:
         return "<missing>"
@@ -322,6 +497,29 @@ def main(argv: list[str] | None = None) -> int:
         default=PRESET_M,
         help="override m preset path (tests)",
     )
+    parser.add_argument(
+        "--skip-inject",
+        action="store_true",
+        help="skip C8 inject-map source checks (YAML only)",
+    )
+    parser.add_argument(
+        "--pipeline",
+        type=Path,
+        default=PIPELINE_PY,
+        help="override pipeline.py path (tests)",
+    )
+    parser.add_argument(
+        "--detection-filters",
+        type=Path,
+        default=DETECTION_FILTERS_PY,
+        help="override detection_filters.py path (tests)",
+    )
+    parser.add_argument(
+        "--tracker-gpu",
+        type=Path,
+        default=TRACKER_GPU_PY,
+        help="override tracker_gpu.py path (tests)",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -333,10 +531,25 @@ def main(argv: list[str] | None = None) -> int:
 
     failures, notes = check_presets(s, m)
 
+    if not args.skip_inject:
+        try:
+            inj_f, inj_n = check_inject_map_from_repo(
+                pipeline_path=args.pipeline,
+                filters_path=args.detection_filters,
+                tracker_path=args.tracker_gpu,
+            )
+        except OSError as exc:
+            print(f"✗ failed to load inject sources: {exc}")
+            return 1
+        failures.extend(inj_f)
+        notes.extend(inj_n)
+
     if not args.quiet:
         print("Headline decision contract check")
         print(f"  s: {args.s_preset}")
         print(f"  m: {args.m_preset}")
+        if not args.skip_inject:
+            print(f"  inject: {args.pipeline.name} + private det-set path")
         for note in notes:
             print(f"  {note}")
 
@@ -351,8 +564,9 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     print(
-        "✓ headline decision contract OK "
-        "(shared keys + m deltas + occ_state + private + NO-GO surface)"
+        "✓ headline decision contract OK (YAML C1–C7 + inject-map C8)"
+        if not args.skip_inject
+        else "✓ headline decision contract OK (YAML only; inject skipped)"
     )
     return 0
 

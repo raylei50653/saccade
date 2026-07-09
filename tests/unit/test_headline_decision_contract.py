@@ -1,6 +1,7 @@
 """Unit tests for scripts/tools/check_headline_decision_contract.py.
 
-No GPU. Uses the pure ``check_presets`` helper plus the real headline YAMLs.
+No GPU. Uses pure ``check_presets`` / ``check_inject_map`` helpers plus live
+repo presets and inject sources.
 """
 
 from __future__ import annotations
@@ -60,6 +61,42 @@ def _minimal_ok_pair(checker) -> tuple[dict, dict]:
         "relink_bridge_dir_bonus": 0.0,
     }
     return s, m
+
+
+def _minimal_ok_inject_sources() -> tuple[str, str, str]:
+    """Synthetic sources that satisfy C8 patterns."""
+    pipeline = """
+detector.tracker.set_params(
+    match_thresh=cfg.core.match_thresh,
+    r_scale=cfg.geometry.kalman_r_scale,
+)
+detector.tracker.set_occ_params(
+    enabled=cfg.geometry.occ_state_enabled,
+    iou_thresh=cfg.geometry.occ_iou_thresh,
+    foot_gap=cfg.geometry.occ_foot_gap,
+    ttl=cfg.geometry.occ_ttl,
+    cost_weight=cfg.geometry.occ_cost_weight,
+)
+detector.tracker.set_relink_params(...)
+detector.tracker.set_multiplicative_cost(enabled=True)
+setter = getattr(detector.tracker, "set_stability_cost_w", None)
+"""
+    filters = """
+def _append_private_continuation_candidates(
+    ...,
+    frame_new_track_thresh: float,
+):
+    birth_ceiling = float(frame_new_track_thresh) - score_eps
+"""
+    tracker = """
+def set_params(
+    self,
+    match_thresh: float = 0.8,
+    r_scale: float = 1.0,
+) -> None:
+    self.tracker.set_params(..., r_scale)
+"""
+    return pipeline, filters, tracker
 
 
 def test_synthetic_ok(checker):
@@ -128,6 +165,50 @@ def test_real_headline_presets_pass(checker):
     failures, notes = checker.check_presets(s, m)
     assert failures == [], failures
     assert notes  # dual-stability NOTE always emitted
+
+
+def test_inject_map_synthetic_ok(checker):
+    pipeline, filters, tracker = _minimal_ok_inject_sources()
+    failures, notes = checker.check_inject_map(pipeline, filters, tracker)
+    assert failures == [], failures
+    assert any("C8 inject map" in n for n in notes)
+
+
+def test_inject_map_missing_set_occ_fails(checker):
+    pipeline, filters, tracker = _minimal_ok_inject_sources()
+    pipeline = pipeline.replace("set_occ_params", "set_occ_REMOVED")
+    failures, _ = checker.check_inject_map(pipeline, filters, tracker)
+    assert any("set_occ_params" in f and "C8" in f for f in failures)
+
+
+def test_inject_map_missing_r_scale_remap_fails(checker):
+    pipeline, filters, tracker = _minimal_ok_inject_sources()
+    pipeline = pipeline.replace("r_scale=cfg.geometry.kalman_r_scale", "r_scale=1.0")
+    failures, _ = checker.check_inject_map(pipeline, filters, tracker)
+    assert any("kalman_r_scale" in f and "C8" in f for f in failures)
+
+
+def test_inject_map_private_must_stay_det_set(checker):
+    pipeline, filters, tracker = _minimal_ok_inject_sources()
+    filters = filters.replace(
+        "def _append_private_continuation_candidates",
+        "def _append_other",
+    )
+    failures, _ = checker.check_inject_map(pipeline, filters, tracker)
+    assert any("private" in f.lower() and "C8" in f for f in failures)
+
+
+def test_inject_map_rejects_tracker_private_setter(checker):
+    pipeline, filters, tracker = _minimal_ok_inject_sources()
+    tracker = tracker + "\ndef set_private_continuation(self, enabled: bool): ...\n"
+    failures, _ = checker.check_inject_map(pipeline, filters, tracker)
+    assert any("private" in f.lower() and "C8" in f for f in failures)
+
+
+def test_real_inject_map_pass(checker):
+    failures, notes = checker.check_inject_map_from_repo()
+    assert failures == [], failures
+    assert any("C8" in n for n in notes)
 
 
 def test_main_cli_on_repo_presets(checker):

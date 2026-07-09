@@ -355,7 +355,7 @@ Increasing it makes association more permissive, which can recover more occlusio
 | [audit/dual_stability_cleanup.md](audit/dual_stability_cleanup.md) | **done (RFC)** | P4-1 dual stability A/B/C — design only |
 | [audit/no_go_guardrails.md](audit/no_go_guardrails.md) | **done (RFC)** | P4-2 NO-GO/LATENT promotion + future validator rules |
 | [audit/active_contract_healthcheck.md](audit/active_contract_healthcheck.md) | **done** | C1–C8 checklist + P5 script link |
-| [scripts/tools/check_headline_decision_contract.py](../../../scripts/tools/check_headline_decision_contract.py) | **done (P5)** | Static YAML guard for headline s/m contract (CI) |
+| [scripts/tools/check_headline_decision_contract.py](../../../scripts/tools/check_headline_decision_contract.py) | **done (P5+P5.1)** | YAML contract + inject-map C8 (CI) |
 | [assoc_knobs.md](assoc_knobs.md) | **done** | Knob cards (gate / score / weight / lifecycle) |
 | [scoring_semantics.md](scoring_semantics.md) | **done** | What association cost means on headline path |
 | [relink_bridge.md](relink_bridge.md) | **done** | Geometry-only bridge reconnect semantics |
@@ -441,7 +441,8 @@ assoc_knobs.md
 | NO-GO guardrail process | **RFC** — [audit/no_go_guardrails.md](audit/no_go_guardrails.md) |
 | Active-path healthcheck | **done** — [audit/active_contract_healthcheck.md](audit/active_contract_healthcheck.md) |
 | `math_model.md` drift check + align | **done** (PR #62 audit, PR #63 align) |
-| P5: preset validator / CI healthcheck script | **done** — `scripts/tools/check_headline_decision_contract.py` |
+| P5: preset validator / CI healthcheck script | **done** — YAML C1–C7 |
+| P5.1: inject-map C8 in same checker | **done** — `pipeline.py` setters + private det-set |
 
 Open maintainability questions (answered by RFCs, not closed):
 
