@@ -635,6 +635,7 @@ DEFAULT_RELINK_HARD_POOL_RULE = "bridge_dist<=1.0"
 STUDY_SCRIPT_MAP: dict[str, str] = {
     "A_recall": "scripts/eval/analyze_score_distribution.py",
     "B1_ids_signal": "scripts/tools/build_relink_candidates.py",
+    "B1_summarize": "scripts/tools/summarize_relink_pairs.py",
     "B2_ids_state": "scripts/eval/diagnostics/reconnect_rate.py",
 }
 
@@ -686,6 +687,28 @@ RUN_METRICS_FILENAME = "metrics_by_run.csv"
 SWEEP_CURVE_FILENAME = "sweep_curve_summary.csv"
 
 META_FILENAME = "meta.json"
+
+# B1 offline-relink study directory outputs (see signal_table_schema § B1 output).
+# Narrative notes must link these files; do not embed master thr/AUC tables in markdown.
+CONTEXT_FILENAME = "context.json"
+METRICS_AUC_FILENAME = "metrics_auc.json"
+METRICS_THR_FILENAME = "metrics_thr.csv"
+PAIRS_CSV_FILENAME = "pairs.csv"
+B1_OUTPUT_FILES: tuple[str, ...] = (
+    CONTEXT_FILENAME,
+    METRICS_AUC_FILENAME,
+    METRICS_THR_FILENAME,
+)
+# Default bridge_dist thresholds for metrics_thr.csv (offline_relink note §3).
+DEFAULT_RELINK_THR_GRID: tuple[float, ...] = (0.15, 0.30, 0.50, 1.00)
+# Gap bins for context.json (aligned with offline_relink gap reporting).
+DEFAULT_RELINK_GAP_BINS: tuple[tuple[str, int, int], ...] = (
+    ("1-10", 1, 10),
+    ("11-30", 11, 30),
+    ("31-60", 31, 60),
+    ("61-150", 61, 150),
+    ("151-300", 151, 300),
+)
 
 # ---------------------------------------------------------------------------
 # Sweep axis + run metrics

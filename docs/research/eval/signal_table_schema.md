@@ -36,12 +36,55 @@
 | Study | 問題 | Substrate | 主表 | 權威腳本 | 必報 |
 |:--|:--|:--|:--|:--|:--|
 | **A Recall** | 誰進系統？ | det / score | `U_det` / `U_gt` | `scripts/eval/analyze_score_distribution.py` | thr 曲線 P/R；height bins |
-| **B1 IDs-signal** | 特徵能否排序真 relink？ | **relink-off + interp-off** MOT | `U_relink_pair` | `scripts/tools/build_relink_candidates.py` | **full AUC + hard-pool AUC + base rate + thr P/R** |
+| **B1 IDs-signal** | 特徵能否排序真 relink？ | **relink-off + interp-off** MOT | `U_relink_pair` | `build_relink_candidates.py` → **`summarize_relink_pairs.py`** | **full+hard AUC + base rate + thr**（見輸出契約） |
 | **B2 IDs-state** | 斷–接是否保住 pred id？ | online 整輪（可 ablate bridge） | events / reconnect | `scripts/eval/diagnostics/reconnect_rate.py` | success@gap；IDs/AssA |
 
 - B1 **不**取代 B2；B1 AUC **不是** e2e IDF1。  
-- B1 方法與 easy/hard 池敘事以 [offline_relink_candidate_analysis.md](../../modules/semantic/research/offline_relink_candidate_analysis.md) 為準；預設 hard pool = `bridge_dist<=1.0`。  
-- Code map：`STUDY_SCRIPT_MAP` in `signal_tables.py`。
+- B1 方法敘事以 [offline_relink_candidate_analysis.md](../../modules/semantic/research/offline_relink_candidate_analysis.md) 為準（**s 歷史數字 as-of 該文日期**；m 主線數字只進 study 目錄）。  
+- 預設 hard pool = `bridge_dist<=1.0`。Code：`STUDY_SCRIPT_MAP` / `B1_OUTPUT_FILES`。
+
+### 0.2 B1 輸出契約（分布背景 + 腳本產物）
+
+**目的：** 數字會過時；**當次分布背景**與 **AUC/thr** 必須落在 study 目錄，narrative 只連 path，不嵌 master 表。
+
+```text
+out/signal_study/<study_id>/
+  meta.json           # StudyMeta（可選但建議；含 hard_pool_rule）
+  context.json        # 當次分布背景（必）
+  metrics_auc.json    # full + hard AUC（必）
+  metrics_thr.csv     # 工作點 thr 表（必）
+  pairs.csv           # 可選：builder 輸出副本
+```
+
+常數：`CONTEXT_FILENAME` / `METRICS_AUC_FILENAME` / `METRICS_THR_FILENAME` / `DEFAULT_RELINK_THR_GRID`。
+
+**`context.json` 必填區塊：**
+
+| Block | 內容 |
+|:--|:--|
+| identity | `study_id`, `created_utc`, `commit`, `preset`, `detector` |
+| substrate | `mot_dir`, relink/interp flags, `double_buffer`, notes |
+| input | `pairs_csv`, `n_rows_raw`, `score_field` |
+| pool.full / pool.hard | `n`, `n_pos`, `n_neg`, `base_rate`；hard 含 `hard_pool_rule` |
+| score_dist | pos/neg：`median`, `p05`, `p50`, `p95` |
+| gap_bins | 1-10 / 11-30 / 31-60 / 61-150 / 151-300 的 n（與 pos n） |
+| e2e（可選） | substrate OVERALL 一行 |
+
+**`metrics_thr.csv` 欄位：** `pool,threshold,tp,fp,fn,precision,recall,f1`  
+預設 thr：`0.15, 0.30, 0.50, 1.00`（與 offline_relink §3 對齊）。
+
+**腳本：**
+
+```bash
+uv run python scripts/tools/build_relink_candidates.py \
+  --mot-dir <substrate> --out out/signal_study/<id>/pairs
+uv run python scripts/tools/summarize_relink_pairs.py \
+  --pairs out/signal_study/<id>/pairs.csv \
+  --study-dir out/signal_study/<id> \
+  --hard-dist 1.0
+```
+
+**過時策略：** 重測 → **新 `study_id`/stamp**；勿改歷史 markdown 內嵌表。s 文方法仍可引用；m 分數以最新 study_dir 為準。
 
 ---
 

@@ -48,6 +48,7 @@
 |:--|:--|:--|
 | signal-study 表契約 / B1 宇宙 | [signal_table_schema.md](../../../research/eval/signal_table_schema.md)（`U_relink_pair`） | A |
 | 建 offline 候選池 CSV | `scripts/tools/build_relink_candidates.py` | A |
+| pairs → context/AUC/thr（B1 輸出） | `scripts/tools/summarize_relink_pairs.py` | A |
 | 面積 / 轉向前 loss | `analyze_preloss_motion.py` · `analyze_turn_baseline.py` | A |
 | speed×turn 分布 | `scripts/tools/sweep_speed_turn.py` | A |
 | 否證 reach / s·G | `scripts/tools/validate_reach_gate.py` | A |

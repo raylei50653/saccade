@@ -1,5 +1,14 @@
 # Offline Relink-Candidate Analysis — discriminability & pre-loss kinematics
 
+> **Status:** **s-line historical method hub** (as-of **2026-06-09**, preset
+> `mamba_whole_graph`). **Method** (easy/hard pool, thr table, base rate, builder
+> rules) remains canonical. **Embedded tables/numbers are not the m fact-owner** —
+> for `mamba_whole_graph_m` remeasures write
+> `out/signal_study/<id>/{context,metrics_auc,metrics_thr}.*` via
+> `scripts/tools/summarize_relink_pairs.py` (see
+> [signal_table_schema.md](../../../research/eval/signal_table_schema.md) §0.2).
+> Do not update this file’s thr/AUC tables as the live m baseline.
+
 Offline study of relink discriminability on **MOT17 train, SDP, `mamba_whole_graph`**,
 built from a **relink-OFF / interpolation-OFF** substrate so every track death and birth is
 raw and every (lost → candidate) pair can be enumerated and GT-labelled.

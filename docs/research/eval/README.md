@@ -9,7 +9,7 @@ See [../../ownership/doc_structure_contract.md](../../ownership/doc_structure_co
 
 | 文件 | 內容 |
 |------|------|
-| [signal_table_schema.md](signal_table_schema.md) | 訊號分析 U×M×D×Pipeline 契約；A/B1/B2 雙線；`U_relink_pair` + hard-pool AUC（code: `signal_tables.py`） |
+| [signal_table_schema.md](signal_table_schema.md) | 訊號分析契約；A/B1/B2；B1 輸出 `context.json`+AUC/thr（`summarize_relink_pairs.py`） |
 | [fp_classifier_external_only_plan.md](fp_classifier_external_only_plan.md) | 0-shot FP classifier 設計 |
 | [gmc_residual_correction_20260612.md](gmc_residual_correction_20260612.md) | GMC residual 共模修正 ablation |
 | [kalman_h_recalibration_20260612.md](kalman_h_recalibration_20260612.md) | Kalman H 重校準 |
