@@ -198,10 +198,10 @@ Checks:      native build; pybind/unit; smoke if binding surface changes
 ### `src/tracking/tracker_gpu.cu` (~5.0k LOC)
 
 ```text
-Primary:     RUNTIME + CORRECTNESS (association kernels, auction, OAO, occ, Kalman update)
-Secondary:   PERF (kernel fusion / graph eligibility)
+Primary:     RUNTIME (association kernels, auction, OAO, occ, Kalman update — production path)
+Secondary:   CORRECTNESS, PERF (metric-sensitive identity; kernel fusion / graph eligibility)
 Should-not-own: YAML schema; RESEARCH report text; CLI help tags
-Risk:        single CU owns cost, bid, lifecycle side effects
+Risk:        single CU owns cost, bid, lifecycle side effects (CORRECTNESS coupled to RUNTIME — extract only with parity tests)
 Extraction:  long-term: cost kernel vs auction vs bridge relink vs occ_state (O3+ only)
 Checks:      native build; smoke; MOT17-04 or 7-seq if association behavior changes
 ```
@@ -246,8 +246,8 @@ Checks:      contract checker; golden config snapshots if present
 ### `scripts/tools/check_headline_decision_contract.py`
 
 ```text
-Primary:     CONFIG / CORRECTNESS (guardrail)
-Secondary:   —
+Primary:     CONFIG (headline contract / inject-map guardrail)
+Secondary:   CORRECTNESS (blocks identity-policy drift into bad defaults)
 Should-not-own: PERF; RESEARCH prose
 Risk:        checker drift from actual inject map
 Extraction:  —
