@@ -23,6 +23,7 @@
 | [audit/config_surface.md](tracker-decision/audit/config_surface.md) | 跨模組決策參數面 |
 | [audit/callpoints.md](tracker-decision/audit/callpoints.md) | schema → inject → native 對照 |
 | [audit/native_bridge.md](tracker-decision/audit/native_bridge.md) | Python↔CUDA bridge / rename 風險 |
+| [audit/math_model_drift_2026-07-09.md](tracker-decision/audit/math_model_drift_2026-07-09.md) | math_model.md 靜態 drift audit（P3） |
 
 ## tracking/
 

@@ -351,6 +351,7 @@ Increasing it makes association more permissive, which can recover more occlusio
 | [audit/config_surface.md](audit/config_surface.md) | **done** | Cross-module decision surface + ACTIVE/LATENT/NO-GO |
 | [audit/callpoints.md](audit/callpoints.md) | **done** | schema → preset → inject → native → effect |
 | [audit/native_bridge.md](audit/native_bridge.md) | **done** | Python↔CUDA setters, remaps, packing risks |
+| [audit/math_model_drift_2026-07-09.md](audit/math_model_drift_2026-07-09.md) | **done** | P3 static drift check vs math_model.md (2026-06-19) |
 | [assoc_knobs.md](assoc_knobs.md) | **done** | Knob cards (gate / score / weight / lifecycle) |
 | [scoring_semantics.md](scoring_semantics.md) | **done** | What association cost means on headline path |
 | [relink_bridge.md](relink_bridge.md) | **done** | Geometry-only bridge reconnect semantics |
