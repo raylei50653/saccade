@@ -55,6 +55,7 @@ jitter (see dual-stability protocol).
 | 2026-07-09 | Dual height stability | **Keep both** (`stability_cost_w=0.20` + env bid 0.1); no behavior PR | [results](tracker-decision/audit/dual_stability_ablation_results_2026-07-09.md) |
 | 2026-07-09 | m cost additivity | **Weak / near-noise** when bid on; does not flip global default | same §8.6 |
 | 2026-07-09 | Guardrails P0–P6 | Contract C1–C9 + CI checker + NO-GO process | [status](tracker-decision/status_2026-07-09.md) |
+| 2026-07-09 | P0–P8 research line | **Closed** — status + outline + ledger; keep both production | [status](tracker-decision/status_2026-07-09.md) |
 | ongoing | NO-GO knobs (fuse, NSA, OAO spatial, …) | Stay off headline; promotion bar = 7-seq + bipolar | [no_go_guardrails.md](tracker-decision/audit/no_go_guardrails.md) |
 
 ---

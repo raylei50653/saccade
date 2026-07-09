@@ -418,20 +418,20 @@ detector input set → association cost → lifecycle (birth/confirm/lost)
 
 ## Current Priority
 
-**P0–P7 closed** (guardrails + dual-stability measure → **keep both**).  
-**P8:** narrative consolidation for citation / tech report — start at
-[status_2026-07-09.md](status_2026-07-09.md).
+**tracker-decision / dual-stability / P0–P8: closed.**
+
+Entry point: [status_2026-07-09.md](status_2026-07-09.md).
 
 ```text
-status_2026-07-09.md                       # one-page status
+status_2026-07-09.md                       # one-page status (closed stamp)
 ../paper_outline.md                        # arXiv / report skeleton
 ../evidence_ledger.md                      # metrics + decisions
-audit/dual_stability_ablation_results_2026-07-09.md
+audit/dual_stability_ablation_results_2026-07-09.md  # keep both
 audit/active_contract_healthcheck.md       # C1–C9
 scripts/tools/check_headline_decision_contract.py
 ```
 
-Still keep fresh when presets or cost kernels change:
+**Maintenance only** when presets or cost kernels change:
 
 ```text
 audit/config_surface.md
@@ -440,21 +440,18 @@ assoc_knobs.md
 README.md § Current Active Contract
 ```
 
-### Hygiene (done)
+### Hygiene (closed)
 
 | Item | Status |
 |:--|:--|
-| Explicit `occ_state_*` in headline presets | **done** (behavior-preserving) |
+| Explicit `occ_state_*` in headline presets | **done** |
 | Explicit `relink_bridge_dir_bonus` on m (`0.0`) | **done** |
-| NO-GO / LATENT prohibition table | [audit/config_surface.md](audit/config_surface.md) |
-| Dual stability | **keep both** — [results](audit/dual_stability_ablation_results_2026-07-09.md); m cost additivity weak/near-noise |
-| NO-GO guardrail process | [audit/no_go_guardrails.md](audit/no_go_guardrails.md) |
-| Active-path healthcheck + CI | C1–C9 + `check_headline_decision_contract.py` |
+| NO-GO / LATENT + CI surface | **done** (C1–C9) |
+| Dual stability | **keep both** (m cost weak/near-noise) |
 | `math_model.md` align | **done** |
-| P5–P6 surface hardening | **done** |
 | P7 dual stability 4-way | **done** (s + m) |
-| P8 narrative assets | **this phase** — status + outline + ledger |
+| P8 narrative assets | **done** — status + outline + ledger |
 
-**Not next:** dual-stability behavior PR, default flips, jitter chase, large tracker rewrite.
+**Do not reopen without new evidence:** dual-stability behavior PR, default flips, jitter chase, large tracker rewrite.
 
-The main open question is not just whether the tracker is accurate, but whether the decision layer is understandable, auditable, and maintainable.
+The decision layer is now understandable, auditable, and maintainable under the locked contract — further accuracy work is a **new** line, not P0–P8 rework.
