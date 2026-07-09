@@ -152,7 +152,9 @@ risk:   double-counting stability or producing hard-to-explain ID preference
 preset: stability_cost_w = 0.20 (YAML); SACCADE_STABILITY_W typically ~0.1 (env default)
 ```
 
-**Do not merge casually.** Cleanup options when ready:
+**Do not merge casually.** Full design options, evidence bars, and recommendation
+(default: document-only A until eval):  
+[audit/dual_stability_cleanup.md](audit/dual_stability_cleanup.md).
 
 ```text
 A. Keep both layers, rename so stage ownership is obvious
