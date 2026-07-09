@@ -41,6 +41,74 @@ This document covers the **cost / assignment** layer. Birth thresholds and bridg
                       multi-stage ByteTrack-style score cascade
 ```
 
+### Equation **and** matrix (implementation fact)
+
+Frame association is **not** “equation XOR matrix” — it is **both**:
+
+```text
+CUDA kernel (e.g. stage1_cost_fused_kernel):
+  each thread (t, d) evaluates a *scalar* formula → c_td
+       ↓
+  dense cost_matrix[n_trk × n_det]
+       ↓
+  if c ≤ cand_cost_cap → sparse cand list (≤ K_MAX_CANDIDATES = 16 per track)
+       ↓
+  p = exp(−λ · c) · aspect_penalty   (+ stage score-band filters)
+       ↓
+  parallel auction on bids derived from p
+```
+
+- **Per-cell:** closed-form equation (multiplicative or legacy additive).  
+- **Across tracks/dets:** stored as a **cost matrix**, then **sparse** for auction (not a single BLAS “solve the matrix”).  
+- **Headline m:** `multiplicative_cost: true` →  
+  \(c = \mathrm{clamp}(1 - A\cdot e^{-\Pi}, 0, 1)\).  
+- Code wins over this doc if they disagree (`tracker_gpu.cu`).
+
+---
+
+## Report domain for separability (A / c / p — not dB)
+
+When discussing **score separability**, **margins**, or **distributions** on the frame-association path, always state the **domain**. Do not mix domains in one claim.
+
+| Domain | Symbol | Better direction | Role |
+|:--|:--|:--|:--|
+| Affinity | \(A\) (≈ IoU when `fuse_score_weight=0`) | **higher** | raw overlap-like evidence |
+| Cost | \(c \in [0,1]\) | **lower** | gate enqueue + what sparse list stores; nonlinear in \(A,\Pi\) |
+| Softmin / bid | \(p \propto e^{-\lambda c}\) | **higher** | auction competition; \(\lambda=\) `sinkhorn_lambda` |
+
+**dB:** not a production score. Do **not** use dB as default separability scale; only if an experiment explicitly defines a transform and reference.
+
+### Rank vs margin
+
+| Question | Invariant / not |
+|:--|:--|
+| **Who ranks higher** among the same pair set | Preserved under **strictly monotone** maps (e.g. \(c \mapsto e^{-\lambda c}\)) → rank/AUC-of-rank comparable across \(c\) and \(p\) if mono |
+| **How large is the margin** | **Scale-dependent** → \(\Delta c\) and \(\Delta p\) are **not** interchangeable; report one domain and \(\lambda\) if using \(p\) |
+| **Overlap of pos/neg distributions** | Domain-dependent shape → fix domain before plotting |
+
+### Required report header (Score Audit / any margin study)
+
+```text
+domain: affinity_A | cost_c | softmin_p
+direction: higher_better | lower_better
+lambda: <sinkhorn_lambda if domain=softmin_p else n/a>
+pool: <e.g. same-frame GT-matched candidates / hard bin>
+```
+
+### Prefer order for frame-assoc separability
+
+1. **GT vs best-FP margin on \(c\)** (same space as enqueue / match thresh).  
+2. **GT rank under \(c\)** (top1 / topk).  
+3. Optional: same metrics on \(p\) with **λ stated** (temperature / auction sensitivity).  
+4. **Not:** mix “AUC on \(c\)” with “mean margin on \(p\)” into one “separability improved” sentence.  
+5. **Not:** dB unless experiment-owned.
+
+### Gate vs score (pointer)
+
+Hard rejects (`c=1`, fail IoU/Maha, `c > cand_cost_cap`, stage band miss) are **support gates** — report coverage / hurt, not primary distribution essays.  
+Distribution / weighting / margin essays live on **pairs that still compete** after gates.  
+Cross-study contract: [signal_table_schema §0.5](../eval/signal_table_schema.md) (L0 gate / L1–L2 score).
+
 ---
 
 ## What is measured?

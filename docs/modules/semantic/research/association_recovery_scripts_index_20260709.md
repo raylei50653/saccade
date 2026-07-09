@@ -210,6 +210,9 @@ Redirect helper: `scripts/eval/_redirect.py`.
 
 ## 4. Recipes (CLI assembly only — conclusions stay manual)
 
+**能用 / 缺什麼 + Gate vs Score 分工（不在本檔重複維護）：**  
+[signal_table_schema §8](../../../research/eval/signal_table_schema.md) · [§0.5](../../../research/eval/signal_table_schema.md)（L0 gate / L1–L2 score）。
+
 These are **suggested command chains**, not automated GO gates. Fill `<…>` from crosswalk §5 substrates.
 
 ### R-A — Offline bridge pool + kinematics
@@ -267,6 +270,19 @@ uv run python scripts/eval/diagnostics/reconnect_rate.py \
 ```
 
 Live pointer: [m_b2_reconnect_bridge_ab_20260709.md](m_b2_reconnect_bridge_ab_20260709.md).
+
+### R-B1s — Safe-reject audit (constrained FP pruning)
+
+```bash
+# After pairs exist (R-A / B1). Does NOT tune thr F1 — reports FP_removed @ GT_hurt<=ε.
+uv run python scripts/tools/audit_relink_safe_reject.py \
+  --pairs out/signal_study/<id>/pairs.csv \
+  --study-dir out/signal_study/<id> \
+  --write-study --by-gap
+```
+
+Contract: [signal_table_schema.md](../../../research/eval/signal_table_schema.md) §0.4.  
+Live: [m_b1_bridge_discriminability_20260709.md](m_b1_bridge_discriminability_20260709.md) §3d.
 
 ### R-B — Depth / swap probe
 

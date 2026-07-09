@@ -41,7 +41,8 @@
 
 - B1 **不**取代 B2；B1 AUC **不是** e2e IDF1。  
 - B1 方法敘事以 [offline_relink_candidate_analysis.md](../../modules/semantic/research/offline_relink_candidate_analysis.md) 為準（**s 歷史數字 as-of 該文日期**；m 主線數字只進 study 目錄）。  
-- 預設 hard pool = `bridge_dist<=1.0`。Code：`STUDY_SCRIPT_MAP` / `B1_OUTPUT_FILES`。
+- 預設 hard pool = `bridge_dist<=1.0`。Code：`STUDY_SCRIPT_MAP` / `B1_OUTPUT_FILES`。  
+- **Gate vs Score 分工見 §0.5**（勿把 thr 當訊號強度、勿把分布主討論放在 gate）。
 
 ### 0.2 B1 輸出契約（分布背景 + 腳本產物）
 
@@ -152,7 +153,165 @@ D3  B2 reconnect 對照（bridge on/off）
       study out/signal_study/m_b2_bridge_ab_20260709T094646Z/
       tool: reconnect_rate.py --json-out / --events-out
 D4  可選：meta 自動寫入、e2e 灌 context、ledger 升格
+D5  B1 safe-reject audit（constrained FP pruning；§0.4 = L0）
+    → audit_relink_safe_reject.py → metrics_safe_reject_*
+D6  Score Audit（§0.5 L1/L2；工具待建）— 在保 GT 的 universe 上 term/margin
 ```
+
+### 0.4 B1 safe-reject / constrained FP pruning（離線 · L0 Gate）
+
+**目標重寫（不是 thr F1 調參）：**
+
+```text
+maximize   FP_removed          # soft upper bound — see asymmetry
+subject to GT_hurt_rate <= ε   # hard loss — irreversible if early reject
+ε ∈ {0, 0.1%, 1%}
+```
+
+#### 非對稱代價（為何硬約束在 GT）
+
+| | 被 early gate **reject** 之後 |
+|:--|:--|
+| **GT 真對（pos）** | 機會集合裡 **通常真的沒了** — 後面 assignment / scoring / NMS / metric **救不回** 這條 offline 真 relink 機會。⇒ **GT_hurt = hard loss** |
+| **FP 負例（neg）** | 即使 **沒** 在此砍掉，後面仍可能被 auction、bridge score、NMS、lifecycle、e2e 對齊等 **抵消或稀釋**。⇒ **FP_removed = soft 上界 / 候選減負**，不是 e2e FP 保證下降 |
+
+因此：
+
+- 優化敘事是 **constrained pruning**，不是對稱的 prec/rec 調 thr。  
+- **ε=0（safe reject）優先**；放寬到 ε0.1% / 1% 必須明示「用硬 GT 損失換軟 FP 減負」。  
+- 報 `FP_removed` 時不得寫成「上線必少 FP」；上線仍要 **B2 / e2e**。  
+- 寧可 **少砍 FP、GT_hurt=0**，不可 **多砍 FP、誤傷 GT**（除非有 fallback / 二階段恢復，且另開 study）。
+
+| 概念 | 定義 |
+|:--|:--|
+| Pool | 通常 `gt_valid==1` 的 `U_relink_pair` 列 |
+| GT / pos | `gt_match==1` |
+| FP / neg | `gt_match==0` |
+| Reject rule C | 布林條件；True = **砍掉**該 pair（當負例修剪） |
+| GT_hurt | 被 reject 的 pos 數；rate = hurt / n_pos；**hard** |
+| FP_removed | 被 reject 的 neg 數；**soft upper bound** on early negative reduction |
+| FP_removed_per_GT_hurt | hurt=0 → **`safe`**；否則 removed/hurt（分母是硬損失） |
+
+**ε 與 `safe_level`：** `eps0` (0) · `eps0_1pct` (0.001) · `eps1pct` (0.01) · `unsafe`  
+Code：`SAFE_REJECT_EPSILONS` / `classify_safe_level` / `constrained_fp_prune_metrics`。
+
+**Rule 三類：**
+
+| `rule_class` | 意義 |
+|:--|:--|
+| `safe_reject` | ε=0 且 FP_removed>0 的 **可解釋 context rule** → production **候選**（仍要 B2/e2e；FP soft） |
+| `risky_reject` | 傷 GT（硬）換 FP 減負（軟）→ research / fallback only |
+| `calibration` | 主要保護 coverage（如 thr(gap)），不保證砍 FP |
+| `baseline` | 對照用 1D thr、**oracle ceiling**（`ceiling_*`：score>max(GT) 頭寸上界）等 — **不是** production 候選 |
+
+`ceiling_*` 即使 `safe_level=eps0` 仍標 `baseline`：表示 1D headroom，**不得**計入「已找到 safe rule 庫」。
+
+**在 §0.5 中的位置：** 本節 = **Support Gate（L0）** 內的 safe-reject 子契約。  
+`thr(gap)` = L0 **coverage calibration**（`rule_class=calibration`），不是 score term 強度。
+
+```text
+L0a  thr(gap) / coverage     → 少傷 GT（硬）
+L0b  context reject C        → safe/risky FP pruning（GT hard / FP soft）
+```
+
+先 L0a 再 L0b；不要用緊 thr 假裝 safe prune。
+
+**必報表（audit 一列一 rule×bin）：**  
+`rule_name, coverage_bin, rule_class, GT_total, GT_hurt, GT_hurt_rate, FP_total, FP_removed, FP_removed_rate, FP_removed_per_GT_hurt, safe_level, notes`  
+常數：`SAFE_REJECT_AUDIT_COLS` · 檔名 `metrics_safe_reject_audit.csv` / `metrics_safe_reject_summary.json`。
+
+**主問題（每個 gate rule）：**
+
+1. 被 reject 的有哪些是 GT？  
+2. 被保留的有哪些是 FP？  
+3. 是否存在 FP-heavy / GT-empty 的 context？  
+4. 能否在 GT_hurt=0 下 reject 該區？  
+5. 若否，FP_removed / GT_hurt frontier 為何？
+
+**腳本：**
+
+```bash
+uv run python scripts/tools/audit_relink_safe_reject.py \
+  --pairs out/signal_study/<id>/pairs.csv \
+  --study-dir out/signal_study/<id> \
+  --write-study --by-gap
+```
+
+**非目標：** 改 production preset；把 offline safe rule 直接當 e2e GO；用 gate thr 代替 score 排序討論。
+
+### 0.5 Gate vs Score（support / calibration / policy）
+
+**一句：**
+
+> **Gate 負責「不要讓真對死掉」（必要時安全砍明顯 FP）；  
+> Score weighting 才負責「真對與假對都活著時，讓真對贏」。**
+
+Gate **不主要拿來討論分布**；分布、校準、加權屬 **score layer**。  
+（命名 **L0/L1/L2** 僅用於本節 identity 分析；**≠** §P 的 `PipelineLayer` L0_ingest / L1_detect。）
+
+| 層 | 名稱 | 主問題 | 可看的量 | 禁止當… |
+|:--|:--|:--|:--|:--|
+| **L0** | **Support Gate** | 這條候選**還能否進後段**？ | coverage、GT_hurt、safe FP prune、ε-frontier | 「訊號多強」；對稱 F1 thr 調參當 headline |
+| **L1** | **Signal Calibration** | 各 term **尺度可不可比**？ | pos/neg 分位、單 term AUC、overlap、分 gap 失效 | 直接決定生死（那是 gate 或 assignment） |
+| **L2** | **Policy Weighting / Assignment** | **誰該贏**、margin 穩不穩？ | GT rank、**GT_vs_best_FP_margin**、top1/topk、flip；online 才 IDs/IDF1 | 單 term 平均分代替 margin |
+
+**同一物理量可兩用，audit 必須分家：**
+
+| 用法 | 層 | 例 |
+|:--|:--|:--|
+| 截斷 / reject | L0 gate | `bridge_dist ≤ thr`、`thr(gap)`、safe-reject rule C |
+| 排序 term | L1→L2 | `bridge_dist_score`、`direction_score`、`residual_score`、`speed_score`、`scale_score`、`gap_prior`、`context_penalty` |
+
+```text
+signal measurement  ≠  normalization  ≠  policy weight
+```
+
+異質 cost 裡混「真訊號 / proxy / policy knob」時，先拆 term 再談權重。
+
+#### 兩份 audit（勿混檔、勿混結論）
+
+| | **Gate Audit**（§0.4） | **Score Audit**（契約；工具可後補） |
+|:--|:--|:--|
+| 目標 | 保 GT support；ε 下 safe prune | 在**保留池**內讓 GT 贏過 hard FP |
+| 主指標 | GT_hurt、FP_removed、safe_level | term 分布、AUC、overlap、**GT_vs_best_FP_margin**、GT_best_rank |
+| 已有 | `audit_relink_safe_reject.py` · thr / thr(gap) study 產物 | 單 term AUC 部分見 summarize；**系統 score audit 尚未建**（§8.2） |
+| 成功長相 | thr(gap) 公平 coverage；ε=0 砍明顯 FP | hard pool 裡 margin>0、top1 升；非全池 prec 幻覺 |
+
+**Score term 建議報（每 term × context_bin）：**  
+`signal_name, context_bin, GT_median/p90/p95, FP_median/p10/p05, AUC, overlap_rate, GT_best_rank, GT_vs_best_FP_margin, term_failure_case`  
+
+**加權 profile 建議報：**  
+`weight_profile, GT_top1_rate, GT_topk_rate, mean_margin, negative_margin_count, assignment_flip_count`；（online）IDs/IDF1 Δ 另 study。
+
+**幀內關聯（track↔det）報告域（標準；詳 [scoring_semantics](../tracker-decision/scoring_semantics.md)）：**
+
+| Domain | 符號 | 方向 | 何時用 |
+|:--|:--|:--|:--|
+| affinity | \(A\)≈IoU | 高好 | raw 重疊 |
+| **cost** | \(c\in[0,1]\) | **低好** | **預設 margin / rank**（與 enqueue 同空間） |
+| softmin | \(p\propto e^{-\lambda c}\) | 高好 | auction 溫度；必報 \(\lambda\) |
+
+- 實作：per-pair **方程式** → **cost 矩陣** → sparse → \(p\) → auction（非「只矩陣或只方程」）。  
+- **Rank** 對嚴格單調變換不敏感；**margin 依賴尺度** — 禁混 \(c\) 與 \(p\) 的 margin 句。  
+- **禁止**預設用 dB；非 production 尺度。
+
+**解讀範式（已見現象）：**
+
+```text
+thr(gap) 把 GT_hurt 分配公平  +  全池 prec 仍 ~2–3%
+  ⇒ L0 calibration 可能成功；L1/L2 separability 未解
+  ⇒ 下一步主戰場是 Score Audit，不是再調 gate thr
+```
+
+**與 A/B1/B2：**
+
+| 線 | 偏哪層 |
+|:--|:--|
+| A Recall | 多為 det **gate**（誰進系統） |
+| B1 | L0 gate audit + L1 單 term 排序能力（pairs）；**未自動含 L2 加權** |
+| B2 | L2 **online 後果**（reconnect / e2e），不代替 L0/L1 表 |
+
+**非目標：** 用 gate thr 表驅動 production px；把 full-pool AUC 當 L2 已解；在 DEVELOPMENT 展開本節細節。
 
 ---
 
@@ -602,17 +761,51 @@ regressed  = E(B) \ E(A)
 
 ---
 
-## 8. 與現有工具的映射（實作入口）
+## 8. 與現有工具的映射（實作入口 · 能用 / 缺什麼）
 
-| 需求 | 先用 | 落到 schema |
+> **維護規則：** 加/改 tool 或「有／缺」狀態時只改**本節**，不另開 inventory 文。  
+> 開發薄入口：[DEVELOPMENT.md](../../../DEVELOPMENT.md) §3「數據驅動 gate / relink」。  
+> 腳本查找表（無結論）：[association_recovery_scripts_index](../../modules/semantic/research/association_recovery_scripts_index_20260709.md)。
+
+### 8.1 能用（按問題）
+
+| 我想知道… | 先開 | 狀態 |
 |:--|:--|:--|
-| L0 det 框 | `--debug-dump-csv` + stages | `U_det` |
-| L0 score×height | `analyze_score_distribution.py` | `U_gt` |
-| L2/L3 count | `mot17.py` + method profile | `MethodMetricsRow` |
-| 訊號 AUC 先例 | `neutral_nogo` 文 + tool | 對齊 `U_cand` / 分層表 |
-| Stage 誰殺了 GT | `analyze_near_miss_stage_attribution.py` | join `U_gt`↔stage dump |
+| 契約：A/B1/B2、study_dir、safe-reject | **本檔** §0.1–0.4 | ✅ |
+| **Production 開了哪些 identity/assoc 旋鈕**（配置面） | [tracker-decision config_surface](../tracker-decision/audit/config_surface.md) · [assoc_knobs](../tracker-decision/assoc_knobs.md) · `print_assoc_basis.py --preset …` | ✅ 清單/解析；**非**事件觸發率 |
+| B1 pairs + full/hard AUC + thr | `build_relink_candidates` → `summarize_relink_pairs` · `out/signal_study/` | ✅（AUC 屬 L1 term；thr 表屬 L0） |
+| B1：誰傷 GT / thr(gap) 形狀 | study `metrics_thr_*` · 活 note m_b1 §3b–3c | ✅ L0 gate calibration |
+| B1：**Gate Audit** safe-reject（ε 下砍 FP） | `audit_relink_safe_reject.py` · §0.4 · study `metrics_safe_reject_*` | ✅ 工具；**探針 rule 仍薄** |
+| B1：**Score Audit**（term 分布 / margin / 加權） | §0.5 契約 | ⚠ **缺系統工具**；僅有單 term AUC 片段 |
+| B2：斷–接 rate / bridge on-off | `reconnect_rate.py --json-out` · m_b2 note | ✅ L2 online 後果 |
+| 單題「gate 蓋多少事件」（crossing / handover / occ） | `depth_ordering_gate_sweep`（coverage 定義在腳本）· Cheb-GR `parameter_summary` / applicability · occ-audit 線 | ✅ **各線自有**，非總表 |
+| L0 score×height / stage 殺 GT | `analyze_score_distribution` · `analyze_near_miss_stage_attribution` | ✅ |
+| s 方法祖先（勿當 m 數字） | [offline_relink](../../modules/semantic/research/offline_relink_candidate_analysis.md) | ✅ historical |
 
-Code 常數與 dataclass：`signal_tables.py`（`UNIVERSE_COLUMNS`, `load_study_meta`, …）。
+### 8.2 缺什麼（有意未建 · 需要時再開）
+
+| 缺口 | 現狀 | 不要誤會 |
+|:--|:--|:--|
+| **全 pipeline gate 覆蓋率儀表板** | 無單一報表 | 用 §8.1 分線查，不另維護總 inventory 檔 |
+| **Live 每 gate 觸發次數標準產物** | 部分在 log（如 `bridge_attempts/accepts`），無統一 CSV | 要做就掛在既有 eval 輸出，勿新 doc |
+| **ACTIVE 配置 × e2e 自動對照** | config_surface 與 MOT 分家 | `print_assoc_basis` + 手動 run |
+| **Safe-reject 可上線 rule 庫** | 僅 probe + 1D ε=0 ceiling；合取多 `unsafe` | 先 L0 訊號掃描再寫 rule，見 §0.4 |
+| **Score Audit CLI**（margin / rank / weight profile） | §0.5 已定契約 | 下一輪工具；勿用 gate thr 代替 |
+| **B1 AUC 與 B2 reconnect 自動 join** | 兩 study_dir 手動並讀 | 契約要求 B1≠B2，不強制同構 |
+| **數字嵌進 markdown master** | 禁止；master 在 `out/signal_study/` | |
+
+### 8.3 最小路徑（copy-paste）
+
+```text
+配置面 ACTIVE？     → print_assoc_basis / config_surface
+L0 保 GT / safe 砍 FP？ → thr·thr(gap) 敘事 + audit_relink_safe_reject
+L1/L2 誰在池內贏？  → Score Audit（§0.5；工具待建）；暫用 summarize AUC 當單 term
+offline pairs 怎來？ → substrate (bridge/interp off) → build → summarize → study_dir
+online 斷–接？      → reconnect_rate (bridge on/off MOT)
+某題事件覆蓋？     → 該題腳本（depth / handover / occ），不是本 schema 總表
+```
+
+Code 常數：`signal_tables.py`（`STUDY_SCRIPT_MAP`, `SAFE_REJECT_*`, …）。
 
 ---
 
@@ -634,6 +827,7 @@ Code 常數與 dataclass：`signal_tables.py`（`UNIVERSE_COLUMNS`, `load_study_
 - [ ] 報告 AUC 時寫明 `(universe, y, score)` 與 **所在 layer/node**  
 - [ ] **B1：** `hard_pool_rule` 已填；full + hard AUC + base rate + thr 表  
 - [ ] **B1：** substrate = relink-off + interp-off；腳本 = `build_relink_candidates.py`  
+- [ ] **B1：** 結論標明 **L0 gate** vs **L1/L2 score**（§0.5）；勿把 thr 當 signal strength  
 - [ ] **B2：** 狀態用 `reconnect_rate.py`（或等價）；不與 B1 AUC 混稱  
 - [ ] 交集用同一 `*_key` 空間；流水線 Δ 只對相鄰 cumulative 或 base 對  
 - [ ] 分層表帶 n%  
@@ -644,6 +838,8 @@ Code 常數與 dataclass：`signal_tables.py`（`UNIVERSE_COLUMNS`, `load_study_
 | 線 | Doc / tool |
 |:--|:--|
 | B1 hub | [offline_relink_candidate_analysis.md](../../modules/semantic/research/offline_relink_candidate_analysis.md) |
+| B1 safe-reject (L0 Gate Audit) | `scripts/tools/audit_relink_safe_reject.py` · §0.4 |
+| Gate vs Score | **§0.5**（L0 support / L1 calibration / L2 policy） |
 | B1 builder | `scripts/tools/build_relink_candidates.py` |
 | B2 reconnect | `scripts/eval/diagnostics/reconnect_rate.py` |
 | A score dist | `scripts/eval/analyze_score_distribution.py` |

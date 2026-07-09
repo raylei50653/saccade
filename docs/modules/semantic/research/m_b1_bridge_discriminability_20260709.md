@@ -22,6 +22,10 @@
 
 ## TL;DR（as-of study）
 
+**Layering (schema §0.5):** `thr` / `thr(gap)` / safe-reject = **L0 Gate**（保 GT support）；  
+full/hard AUC on `bridge_dist` = **L1 term** 排序能力。Gate 不主要拿來討論分布；  
+「誰在候選池裡贏」屬 Score（L1/L2）— 本 note 的 thr 節是 gate，AUC 節是 score term，勿混結論。
+
 Same **qualitative** story as offline_relink (s): `bridge_dist` is a **strong full-pool ranker** and a **weaker hard-pool ranker**; precision is still **base-rate limited**.
 
 | Pool | as-of (see `metrics_auc.json`) | How to read |
@@ -151,7 +155,10 @@ n_pos=340（gt_valid）。
 
 **Caveat：** 這是 **B1 offline pair thr**，不是 e2e IDF1；也 **不是** 直接改 `relink_bridge_px`。不傷 offline 真對 ≠ online 無假 merge（見 B2）。
 
-### 3c. 非線性 `thr(gap)` 試算（as-of same study）
+### 3c. 非線性 `thr(gap)` 試算（as-of same study · **L0 gate calibration only**）
+
+> **§0.5：** `thr(gap)` 屬 Support Gate 的 coverage calibration，**不是** signal strength、不是 score weighting。  
+> 保 GT 分配公平 ≠ 解 hard-pool separability（見 §2 hard AUC / 後續 Score Audit）。
 
 Master：`metrics_thr_gap_schedules.csv` · `metrics_thr_gap_nonlinear.json` · `metrics_thr_gap_hybrid.json`。
 
@@ -180,6 +187,43 @@ Master：`metrics_thr_gap_schedules.csv` · `metrics_thr_gap_nonlinear.json` · 
 2. `power` / `sqrt_add` + **short_floor**  
 3. 不要單獨上 `sqrt_mul` / `log_mul` 而不看分 gap hurt  
 
+### 3d. Safe-reject / constrained FP pruning（契約 §0.4 · **L0 Gate Audit**）
+
+**目標改寫：** 不是找更合理 thr，而是
+
+```text
+maximize FP_removed          # soft — later stages may still kill FP
+s.t.     GT_hurt_rate <= ε   # hard — early reject usually irreversible for true pairs
+ε ∈ {0, 0.1%, 1%}
+```
+
+**非對稱：** GT 被前面砍掉 ≈ 機會沒了；FP 多留下仍可能被 assignment / scoring / NMS / e2e 抵消。  
+⇒ 約束永遠偏 **ε=0**；`FP_removed` 只當減負上界，不當 e2e 保證。
+
+**§0.5 對照：** 本節 = Gate Audit。Score Audit（term 分布 / **GT_vs_best_FP_margin** / 加權）另線，工具待建；  
+勿把 safe-reject 表當成「訊號加權已解」。
+
+`thr(gap)` = L0 **coverage calibration**；真正砍 FP 靠 **context reject rule C**。  
+Tool：`scripts/tools/audit_relink_safe_reject.py`  
+Master（同 study）：`metrics_safe_reject_audit.csv` · `metrics_safe_reject_summary.json`
+
+**As-of 探針（all pool，見 audit CSV）：**
+
+| 類型 | 發現 |
+|:--|:--|
+| 1D thr baseline (`bridge_dist>1`) | 砍大量 FP，但 **GT_hurt ~38%** → `unsafe` |
+| 合取 probe（長 gap∧dir、∧scale…） | 本 stamp **沒有** 打進 ε=0 的「明顯 safe 合取」；多為 `unsafe` / 高 hurt |
+| **1D ε=0 oracle ceiling**（score > max GT；`rule_class=baseline`） | 有 **headroom**（尤其 `log_h_ratio` / `bridge_dist` 尾），**不是** production safe rule 庫（見 `ceiling_*` notes） |
+
+解讀：單維距離門檻與真對重疊多；**scale mismatch 尾端** 比「再調 thr=0.4」更像 safe prune 方向。合取 rule 要繼續挖 **GT-empty region**，不是放棄目標。
+
+```bash
+uv run python scripts/tools/audit_relink_safe_reject.py \
+  --pairs out/signal_study/m_b1_smoke_20260709T092543Z/pairs.csv \
+  --study-dir out/signal_study/m_b1_smoke_20260709T092543Z \
+  --write-study --by-gap
+```
+
 ---
 
 ## 4. Verdicts & non-goals
@@ -189,6 +233,9 @@ Master：`metrics_thr_gap_schedules.csv` · `metrics_thr_gap_nonlinear.json` · 
 | B1 data path on m is valid | **GO (D1)** |
 | Full-pool geometry useful for neg reduction | **GO (signal)** |
 | Hard-pool geometry alone carries precision / identity | **NO** — base-rate + mid AUC |
+| Constrained FP pruning is the right **L0** thr-adjacent goal | **GO (method)** — §0.4 / §0.5 / §3d |
+| Gate thr/AUC 混談可代替 Score Audit | **NO** — thr(gap) 成功 ≠ hard-pool margin 已解 |
+| Probe conjunctions already give production safe rules | **NO** — need better C; ceiling shows headroom |
 | Ship or retune production bridge from this note | **NO** — RESEARCH; needs B2 + e2e |
 | Replace s offline tables with these numbers | **NO** — s remains historical hub |
 

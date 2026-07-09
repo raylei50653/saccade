@@ -362,7 +362,7 @@ Increasing it makes association more permissive, which can recover more occlusio
 | [audit/active_contract_healthcheck.md](audit/active_contract_healthcheck.md) | **done** | C1–C8 checklist + P5 script link |
 | [scripts/tools/check_headline_decision_contract.py](../../../scripts/tools/check_headline_decision_contract.py) | **done (P5+P5.1)** | YAML contract + inject-map C8 (CI) |
 | [assoc_knobs.md](assoc_knobs.md) | **done** | Knob cards (gate / score / weight / lifecycle) |
-| [scoring_semantics.md](scoring_semantics.md) | **done** | What association cost means on headline path |
+| [scoring_semantics.md](scoring_semantics.md) | **done** | Frame cost = equation→matrix→auction; separability report domain **A/c/p** (not dB) |
 | [relink_bridge.md](relink_bridge.md) | **done** | Geometry-only bridge reconnect semantics |
 | [kalman_gmc_motion.md](kalman_gmc_motion.md) | **done** | Motion model assumptions for matching |
 | [failure_modes.md](failure_modes.md) | **done** | Geometry-side failure catalog |

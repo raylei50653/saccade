@@ -26,6 +26,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
+import numpy as np
+
 # ---------------------------------------------------------------------------
 # Enums
 # ---------------------------------------------------------------------------
@@ -709,6 +711,184 @@ DEFAULT_RELINK_GAP_BINS: tuple[tuple[str, int, int], ...] = (
     ("61-150", 61, 150),
     ("151-300", 151, 300),
 )
+
+# ---------------------------------------------------------------------------
+# B1 safe-reject / constrained FP pruning (see signal_table_schema §0.4)
+# Goal: maximize FP_removed s.t. GT_hurt_rate <= ε  (not thr F1 tuning)
+#
+# Cost asymmetry at early gates:
+#   GT_hurt  = hard (true pair rejected → usually unrecoverable downstream)
+#   FP_removed = soft upper bound (surviving FPs may still die in assignment /
+#                scoring / NMS / e2e). Prefer ε=0 over trading GT for FP counts.
+# ---------------------------------------------------------------------------
+
+# ε ladders for safe_level classification (fraction of GT true pairs hurt).
+SAFE_REJECT_EPSILONS: tuple[tuple[str, float], ...] = (
+    ("eps0", 0.0),
+    ("eps0_1pct", 0.001),
+    ("eps1pct", 0.01),
+)
+SAFE_REJECT_AUDIT_FILENAME = "metrics_safe_reject_audit.csv"
+SAFE_REJECT_SUMMARY_FILENAME = "metrics_safe_reject_summary.json"
+SAFE_REJECT_AUDIT_COLS: tuple[str, ...] = (
+    "rule_name",
+    "coverage_bin",
+    "rule_class",  # safe_reject | risky_reject | calibration | baseline
+    "GT_total",
+    "GT_hurt",
+    "GT_hurt_rate",
+    "FP_total",
+    "FP_removed",
+    "FP_removed_rate",
+    "FP_removed_per_GT_hurt",  # "safe" when GT_hurt==0 else float
+    "safe_level",  # eps0 | eps0_1pct | eps1pct | unsafe
+    "notes",
+)
+STUDY_SCRIPT_MAP["B1_safe_reject_audit"] = "scripts/tools/audit_relink_safe_reject.py"
+
+
+def classify_safe_level(gt_hurt_rate: float) -> str:
+    """Map GT_hurt_rate to the strictest ε ladder it still satisfies."""
+    if gt_hurt_rate < 0:
+        raise ValueError("gt_hurt_rate must be >= 0")
+    if gt_hurt_rate <= 0.0 + 1e-15:
+        return "eps0"
+    if gt_hurt_rate <= 0.001 + 1e-15:
+        return "eps0_1pct"
+    if gt_hurt_rate <= 0.01 + 1e-15:
+        return "eps1pct"
+    return "unsafe"
+
+
+def constrained_fp_prune_metrics(
+    y_pos: Sequence[bool] | Any,
+    reject_mask: Sequence[bool] | Any,
+    *,
+    rule_name: str = "",
+    coverage_bin: str = "all",
+    rule_class: str = "",
+    notes: str = "",
+) -> dict[str, Any]:
+    """Evaluate a reject rule under constrained FP-pruning semantics.
+
+    Parameters
+    ----------
+    y_pos:
+        True for GT-true relink pairs (``gt_match``), one row per pair in the
+        evaluation pool (typically ``gt_valid`` rows only).
+    reject_mask:
+        True when the rule **rejects** the pair (candidate removed as FP hope).
+    """
+    y = np.asarray(y_pos, dtype=bool)
+    rej = np.asarray(reject_mask, dtype=bool)
+    if y.shape != rej.shape:
+        raise ValueError(
+            f"y_pos and reject_mask shape mismatch: {y.shape} vs {rej.shape}"
+        )
+    n = int(y.size)
+    gt_total = int(y.sum())
+    fp_total = int((~y).sum())
+    gt_hurt = int((y & rej).sum())
+    fp_removed = int((~y & rej).sum())
+    gt_hurt_rate = (gt_hurt / gt_total) if gt_total else 0.0
+    fp_removed_rate = (fp_removed / fp_total) if fp_total else 0.0
+    if gt_hurt == 0:
+        ratio: str | float = "safe"
+    else:
+        ratio = float(fp_removed / gt_hurt)
+    level = classify_safe_level(gt_hurt_rate)
+    # rule_class hint if caller did not set
+    rc = rule_class
+    if not rc:
+        if level == "eps0" and fp_removed > 0:
+            rc = "safe_reject"
+        elif level in ("eps0_1pct", "eps1pct") and fp_removed > 0:
+            rc = "risky_reject"
+        elif fp_removed == 0:
+            rc = "calibration"
+        else:
+            rc = "risky_reject"
+    return {
+        "rule_name": rule_name,
+        "coverage_bin": coverage_bin,
+        "rule_class": rc,
+        "n_pool": n,
+        "GT_total": gt_total,
+        "GT_hurt": gt_hurt,
+        "GT_hurt_rate": gt_hurt_rate,
+        "FP_total": fp_total,
+        "FP_removed": fp_removed,
+        "FP_removed_rate": fp_removed_rate,
+        "FP_removed_per_GT_hurt": ratio,
+        "safe_level": level,
+        "notes": notes,
+    }
+
+
+def frontier_fp_removed_at_eps(
+    y_pos: Sequence[bool] | Any,
+    score: Sequence[float] | Any,
+    *,
+    higher_means_more_reject: bool = True,
+    epsilons: Sequence[float] = (0.0, 0.001, 0.01),
+) -> list[dict[str, Any]]:
+    """1D score frontier: max FP_removed s.t. GT_hurt_rate <= ε.
+
+    Sweep unique score thresholds (reject when score is on the reject side of thr).
+    """
+    y = np.asarray(y_pos, dtype=bool)
+    s = np.asarray(score, dtype=float)
+    if y.shape != s.shape:
+        raise ValueError("y_pos and score shape mismatch")
+    gt_total = int(y.sum())
+    fp_total = int((~y).sum())
+    # candidate thresholds = unique scores
+    thr_vals = np.unique(s[~np.isnan(s)])
+    if thr_vals.size == 0:
+        return []
+    out: list[dict[str, Any]] = []
+    for eps in epsilons:
+        best: dict[str, Any] | None = None
+        for thr in thr_vals:
+            if higher_means_more_reject:
+                rej = s >= thr
+            else:
+                rej = s <= thr
+            m = constrained_fp_prune_metrics(y, rej)
+            if m["GT_hurt_rate"] <= eps + 1e-15:
+                if best is None or m["FP_removed"] > best["FP_removed"]:
+                    best = {
+                        "epsilon": float(eps),
+                        "thr": float(thr),
+                        "higher_means_more_reject": higher_means_more_reject,
+                        "FP_removed": m["FP_removed"],
+                        "FP_removed_rate": m["FP_removed_rate"],
+                        "GT_hurt": m["GT_hurt"],
+                        "GT_hurt_rate": m["GT_hurt_rate"],
+                        "safe_level": m["safe_level"],
+                        "GT_total": gt_total,
+                        "FP_total": fp_total,
+                    }
+        if best is None:
+            out.append(
+                {
+                    "epsilon": float(eps),
+                    "thr": None,
+                    "FP_removed": 0,
+                    "FP_removed_rate": 0.0,
+                    "GT_hurt": 0,
+                    "GT_hurt_rate": 0.0,
+                    "safe_level": classify_safe_level(0.0),
+                    "feasible": False,
+                    "GT_total": gt_total,
+                    "FP_total": fp_total,
+                }
+            )
+        else:
+            best["feasible"] = True
+            out.append(best)
+    return out
+
 
 # ---------------------------------------------------------------------------
 # Sweep axis + run metrics
