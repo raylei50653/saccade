@@ -1,5 +1,14 @@
 # Offline Relink-Candidate Analysis — discriminability & pre-loss kinematics
 
+> **Status:** **s-line historical method hub** (as-of **2026-06-09**, preset
+> `mamba_whole_graph`). **Method** (easy/hard pool, thr table, base rate, builder
+> rules) remains the **style/method reference**. **Embedded tables/numbers are not
+> the m fact-owner** — for `mamba_whole_graph_m` remeasures write
+> `out/signal_study/<id>/{context,metrics_auc,metrics_thr}.*` via
+> `scripts/tools/summarize_relink_pairs.py`. Writing style + caveats for new notes:
+> [signal_table_schema.md](../../../research/eval/signal_table_schema.md) **§0.2–0.3**.
+> Do not update this file’s thr/AUC tables as the live m baseline.
+
 Offline study of relink discriminability on **MOT17 train, SDP, `mamba_whole_graph`**,
 built from a **relink-OFF / interpolation-OFF** substrate so every track death and birth is
 raw and every (lost → candidate) pair can be enumerated and GT-labelled.
@@ -25,6 +34,9 @@ the honest framing is easy-pool vs hard-pool AUC.)
 - **Scripts:** `scripts/tools/build_relink_candidates.py`, `analyze_preloss_motion.py`,
   `analyze_turn_baseline.py`, `sweep_speed_turn.py`
 - **Artifacts:** `scripts/tools/out/relink_candidates.csv`, `speed_turn_sweep.npz`, figures below.
+- **Signal-study contract (B1):** universe `U_relink_pair`, full+hard-pool AUC, base rate —
+  see [signal_table_schema.md](../../../research/eval/signal_table_schema.md) §0.1 / §4.3b
+  and `saccade.perception.eval.signal_tables` (`hard_pool_rule`, `auc_full_and_hard_pool`).
 
 ---
 
