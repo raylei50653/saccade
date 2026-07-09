@@ -5,8 +5,8 @@
 **Architecture map:** [dual_stability_cleanup.md](dual_stability_cleanup.md)
 
 This PR does **not** flip `stability_cost_w`, `SACCADE_STABILITY_W`, checker
-expected values, kernel, or setter. Decision: keep matrix **A** (both on) until a
-future behavior PR reopens the question.
+expected values, kernel, or setter. Decision: **keep both confirmed across s and
+m** (matrix **A**) — no behavior PR; defaults unchanged.
 
 ---
 
@@ -18,11 +18,12 @@ future behavior PR reopens the question.
 | **host** | `DESKTOP-0FLA6SQ` |
 | **GPU** | NVIDIA GeForce RTX 5070 Ti Laptop GPU |
 | **date** | 2026-07-09 (+08:00) |
-| **preset** | `mamba_whole_graph` (**s** only — **m not run**) |
+| **preset** | primary decision path: **`mamba_whole_graph` (s)**; capacity sanity check: **`mamba_whole_graph_m` (m)** — see §8 |
 | **detector** | SDP |
 | **scheduling** | `--double-buffer` |
 | **data** | `datasets/MOT17` train-half SDP 7-seq |
-| **raw outputs** | `results/dual_stability_ablation_20260709/` (local; gitignored) |
+| **raw outputs (s)** | `results/dual_stability_ablation_20260709/` (local; gitignored) |
+| **raw outputs (m)** | `results/dual_stability_ablation_m_20260709/` (local; gitignored) |
 
 ### Static guard (pre-run)
 
@@ -206,7 +207,7 @@ AssA/IDF1 flip.
 
 ---
 
-## 7. Recommendation
+## 7. Recommendation (primary path **s**)
 
 | Option | Verdict |
 |:--|:--|
@@ -215,6 +216,10 @@ AssA/IDF1 flip.
 | Bid-only (`stability_cost_w=0`) | **Reject for now** — C loses ~0.9 IDF1 / ~1.2 AssA vs A |
 | Both off | **Reject** — D loses IDF1/IDs vs A |
 | Inconclusive | No — deltas above noise floor and directionally consistent |
+
+**m capacity check (§8):** does **not** overturn this. On m, A remains best IDF1
+aggregate (A 80.3 ≈ C 80.1 within noise); bid is required; cost is less additive
+than on s. No global default flip.
 
 ### Production defaults (this PR)
 
@@ -229,11 +234,151 @@ AssA/IDF1 flip.
 ### Optional follow-ups (not this PR)
 
 1. **Docs-only polish:** rename / dual-stability narrative still ACTIVE both-on.  
-2. **m capacity path:** optional `mamba_whole_graph_m` 7-seq only if a future
-   behavior PR retunes m’s `kalman_r_scale` stack with stability — **not required**
-   to keep A.  
-3. **Behavior PR** only if new evidence (jitter floor, different detector, m
-   interaction) reopens demotion — then re-run smoke → 04 → 7-seq ladder.
+2. **Behavior PR** only if new evidence (jitter floor, different detector, or m
+   becoming the sole production headline) reopens demotion — then re-run smoke →
+   04 → 7-seq ladder on the target preset.
+
+---
+
+## 8. Capacity check: `mamba_whole_graph_m`
+
+**Why:** not because s was insufficient — to **exclude capacity-path interaction
+risk** (m’s higher `kalman_r_scale` / bridge deltas + denser detections) before
+locking keep-both.
+
+**Jitter:** not run. m A vs C aggregate IDF1 is 0.2 (borderline noise); ranking
+still favors A on IDF1 and does not reverse the s conclusion. Revisit jitter only
+if a future PR treats m as the sole production headline and needs A-vs-C
+separation.
+
+### 8.1 Run identity (m)
+
+| Field | Value |
+|:--|:--|
+| **git SHA** | `1b8b23cb39951232b0c842cf423bcd636d438d06` (results branch @ s report; same main base `2bc556f2`) |
+| **host / GPU** | same as §1 (`DESKTOP-0FLA6SQ` / RTX 5070 Ti Laptop) |
+| **date** | 2026-07-09 (+08:00) |
+| **preset** | `mamba_whole_graph_m` |
+| **detector / sched** | SDP + `--double-buffer` |
+| **raw outputs** | `results/dual_stability_ablation_m_20260709/` |
+| **static guard** | `check_headline_decision_contract.py` ✓ before m runs |
+
+```bash
+PRESET=mamba_whole_graph_m
+DET=SDP
+COMMON=(--preset "$PRESET" --detector "$DET" --double-buffer)
+OUT_ROOT=results/dual_stability_ablation_m_20260709
+# same A–D cost/bid matrix as §1; env re-exported per arm
+```
+
+### 8.2 m smoke — MOT17-04-SDP
+
+| Arm | cost | bid | IDF1 | MOTA | HOTA | AssA | IDs | FP | FN |
+|:--|--:|--:|--:|--:|--:|--:|--:|--:|--:|
+| **A** both | 0.20 | 0.1 | 92.6 | 92.4 | 88.1 | 87.7 | 14 | 146 | 3455 |
+| **B** cost | 0.20 | 0 | 90.6 | 92.3 | 85.7 | 85.2 | 22 | **26** | 3593 |
+| **C** bid | 0.00 | 0.1 | **93.1** | 92.6 | **88.8** | **89.0** | **13** | 31 | 3494 |
+| **D** off | 0.00 | 0 | 91.1 | **92.7** | 86.6 | 84.9 | 22 | 29 | **3435** |
+
+Smoke PASS: all arms ran; knobs move metrics (ΔIDF1 ~2.5; IDs 13–22).  
+Note: on **m-04 alone**, C edges A — do not decide from single-seq.
+
+### 8.3 m 7-seq aggregate
+
+| Arm | IDF1 | MOTA | HOTA | DetA | AssA | IDs | FP | FN |
+|:--|--:|--:|--:|--:|--:|--:|--:|--:|
+| **A** both | **80.3** | 81.9 | 74.3 | **76.1** | 72.8 | **359** | 2067 | **17895** |
+| **B** cost | 78.3 | 81.9 | 72.5 | 75.0 | 70.3 | 401 | 1898 | 18031 |
+| **C** bid | 80.1 | 81.7 | **74.5** | 76.0 | **73.2** | 360 | 2062 | 18086 |
+| **D** off | 78.6 | **82.0** | 73.0 | 75.9 | 70.5 | 400 | **1830** | 17988 |
+
+**Δ vs A (m aggregate):**
+
+| Contrast | ΔIDF1 | ΔAssA | ΔIDs | Read |
+|:--|--:|--:|--:|:--|
+| A − B (bid @ cost on) | **+2.0** | **+2.5** | **−42** | bid strongly helpful |
+| A − C (cost @ bid on) | **+0.2** | −0.4 | −1 | cost ≈ noise on m |
+| A − D | **+1.7** | +2.3 | **−41** | some stability needed |
+| C − D (bid alone) | **+1.5** | **+2.7** | −40 | bid carries m |
+| B − D (cost alone) | −0.3 | −0.2 | +1 | cost alone useless on m |
+
+### 8.4 m per-seq (IDF1 / AssA / IDs)
+
+#### IDF1
+
+| Seq | A both | B cost | C bid | D off |
+|:--|--:|--:|--:|--:|
+| 02 | **60.6** | 58.7 | 60.0 | 59.4 |
+| **04** | 92.6 | 90.6 | **93.1** | 91.1 |
+| **05** | **71.5** | 69.5 | 71.3 | 69.8 |
+| 09 | **67.5** | 63.8 | 65.5 | 63.7 |
+| 10 | **69.6** | 65.6 | 67.5 | 65.2 |
+| 11 | 79.2 | 77.6 | **79.3** | 77.7 |
+| 13 | 79.0 | **80.2** | 79.6 | 79.8 |
+
+#### AssA
+
+| Seq | A both | B cost | C bid | D off |
+|:--|--:|--:|--:|--:|
+| 02 | 49.1 | 47.4 | **49.4** | 48.9 |
+| **04** | 87.7 | 85.2 | **89.0** | 84.9 |
+| **05** | **59.9** | 56.6 | 59.8 | 57.8 |
+| 09 | **51.2** | 44.7 | 49.3 | 47.0 |
+| 10 | **57.1** | 50.7 | 54.4 | 49.8 |
+| 11 | 67.4 | 66.0 | **67.5** | 66.1 |
+| 13 | 64.1 | **66.3** | 65.6 | 66.0 |
+
+#### IDs
+
+| Seq | A both | B cost | C bid | D off |
+|:--|--:|--:|--:|--:|
+| 02 | 73 | 80 | **69** | 72 |
+| **04** | 14 | 22 | **13** | 22 |
+| **05** | **52** | 66 | 53 | 62 |
+| 09 | **20** | 22 | 21 | 25 |
+| 10 | **109** | 113 | 110 | 118 |
+| 11 | 28 | 31 | **27** | 30 |
+| 13 | **63** | 67 | 67 | 71 |
+
+### 8.5 m 04 vs 05 bipolar check
+
+| Metric | Seq | A | B | C | D |
+|:--|:--|--:|--:|--:|--:|
+| IDF1 | **04** | 92.6 | 90.6 | **93.1** | 91.1 |
+| IDF1 | **05** | **71.5** | 69.5 | 71.3 | 69.8 |
+| AssA | **04** | 87.7 | 85.2 | **89.0** | 84.9 |
+| AssA | **05** | **59.9** | 56.6 | 59.8 | 57.8 |
+| IDs | **04** | 14 | 22 | **13** | 22 |
+| IDs | **05** | **52** | 66 | 53 | 62 |
+
+**Bipolar A→B?** No — B loses both 04 and 05 (IDF1/AssA/IDs).  
+**Bipolar A→C?** Mild / not policy-blocking: C slightly better on **04**, A slightly
+better on **05** (ΔIDF1 0.2). Opposite-sign but **within noise** on 05; 04 C edge
+is real (~0.5 IDF1 / +1.3 AssA) yet **7-seq aggregate still has A ≥ C on IDF1**.
+Not a demote-A signal for global defaults.
+
+### 8.6 s vs m conclusion
+
+| Question | s (primary) | m (capacity) |
+|:--|:--|:--|
+| Best matrix arm | **A** clearly | **A** best IDF1; **C** competitive (AssA/HOTA edge) |
+| Bid useful? | yes (A≫B) | **yes strongly** (A,C ≫ B,D) |
+| Cost useful? | yes (A≫C ~0.9 IDF1) | **weak** (A−C = 0.2 IDF1; near noise) |
+| Double-count harm? | no | no (A not worse than single-stage winners) |
+| Bipolar 04/05? | no | mild A↔C only; not A→B |
+
+```text
+Decision: keep both confirmed across s and m.
+- Primary path s: A clearly best; both stages earn their keep.
+- Capacity path m: bid required; cost optional/near-noise when bid is on;
+  A remains aggregate IDF1 winner (A 80.3 vs C 80.1).
+- No behavior PR.
+- Production defaults unchanged.
+```
+
+Open a **m-specific** follow-up only if `mamba_whole_graph_m` becomes the sole
+production headline **and** a cost-only / bid-only retune is still desired after
+jitter separation of A vs C.
 
 ---
 

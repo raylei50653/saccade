@@ -156,7 +156,7 @@ preset: stability_cost_w = 0.20 (YAML); SACCADE_STABILITY_W typically ~0.1 (env 
 [audit/dual_stability_cleanup.md](audit/dual_stability_cleanup.md).  
 **P7 measurement protocol (4-way, no default flip):**  
 [audit/dual_stability_ablation_protocol.md](audit/dual_stability_ablation_protocol.md).  
-**P7 results (2026-07-09, keep both):**  
+**P7 results (2026-07-09, keep both; s primary + m capacity):**  
 [audit/dual_stability_ablation_results_2026-07-09.md](audit/dual_stability_ablation_results_2026-07-09.md).
 
 ```text
