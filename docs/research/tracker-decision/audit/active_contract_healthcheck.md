@@ -1,11 +1,20 @@
-# Active Decision Contract — Healthcheck Draft
+# Active Decision Contract — Healthcheck
 
-**Status:** documentation checklist (manual now; optional script later = P5)  
+**Status:** manual checklist + **P5 static script** (YAML only, no GPU)  
 **Date:** 2026-07-09  
 **Contract owner:** [../README.md](../README.md) § Current Active Contract  
 **Sources of truth:**  
 headline presets → schema defaults → `pipeline.py` inject → native  
 (see [callpoints.md](callpoints.md), [native_bridge.md](native_bridge.md)).
+
+**Automated checker (C1–C5, C7 hard; C6 NOTE):**
+
+```bash
+uv run python scripts/tools/check_headline_decision_contract.py
+```
+
+CI: `contracts` job runs this script. Unit tests:
+`tests/unit/test_headline_decision_contract.py`.
 
 **Goal:** After any change to preset / schema / inject / decision docs, confirm
 the **production decision contract** has not drifted — without running 7-seq
@@ -29,23 +38,22 @@ unless behavior actually changes.
 
 ---
 
-## How to run (manual)
+## How to run
 
 ```bash
-# 1. Diff the two headline presets
+# Automated (P5) — preferred first step on preset PRs
+uv run python scripts/tools/check_headline_decision_contract.py
+
+# Manual supplements (not fully automated yet)
 diff -u configs/presets/mamba_whole_graph.yaml configs/presets/mamba_whole_graph_m.yaml
 
-# 2. Spot-check inject call sites
+# C8 inject map (script does not parse pipeline.py in v1)
 rg -n "set_params|set_occ_params|set_relink_params|set_stability_cost_w|set_multiplicative" \
   src/saccade/perception/eval/pipeline.py
 
-# 3. Optional existing tooling (orthogonal but useful)
 uv run python scripts/tools/check_doc_stale_paths.py
 uv run python scripts/tools/check_doc_freshness.py   # warn-only
 ```
-
-Future P5: single entrypoint, e.g.
-`uv run python scripts/tools/check_headline_decision_contract.py`.
 
 ---
 
@@ -200,24 +208,17 @@ Behavior change? no / yes → smoke → 04 → 7-seq
 
 ---
 
-## Future automation (P5 sketch)
+## Automation status
 
-```text
-check_headline_decision_contract.py
-  ├── parse s/m YAML
-  ├── assert C1–C5, C7 equality/value tables
-  ├── optional: parse pipeline.py for set_occ_params presence (C8 lite)
-  └── print dual-stability NOTE (C6) — never auto-merge knobs
-```
+| Item | Status |
+|:--|:--|
+| `scripts/tools/check_headline_decision_contract.py` | **done** (YAML C1–C5, C7; C6 NOTE) |
+| pytest `tests/unit/test_headline_decision_contract.py` | **done** |
+| CI `contracts` job | **done** |
+| C8 inject map (`pipeline.py`) | **manual** (v1 out of scope) |
+| Env `SACCADE_STABILITY_W` default assert | **not in CI** (NOTE only; dual-stability RFC) |
 
-Integration options:
-
-1. `contracts` CI job (with GPU contract / API layers)  
-2. pytest unit test reading presets (no GPU)  
-3. pre-push optional hook  
-
-**Do not** block CI on env (`SACCADE_STABILITY_W`) readability in GitHub runners
-unless the check only asserts **code default** via source grep.
+**Do not** auto-merge dual stability knobs from this checker.
 
 ---
 

@@ -29,9 +29,9 @@ or inject paths.
 
 | Tier | Mechanism | When | Behavior impact |
 |:--|:--|:--|:--|
-| **T0 Docs** | This file + config_surface + README contract | **now** | none |
-| **T1 Healthcheck** | Active-contract + NO-GO absence checks ([active_contract_healthcheck.md](active_contract_healthcheck.md)) | P5 script optional | none if read-only |
-| **T2 Preset validator** | Fail CI if headline presets violate rules | P5 | blocks bad YAML only |
+| **T0 Docs** | This file + config_surface + README contract | **done** | none |
+| **T1 Healthcheck** | Active-contract + NO-GO absence checks ([active_contract_healthcheck.md](active_contract_healthcheck.md)) | **done** (manual + script) | none if read-only |
+| **T2 Preset validator** | Fail CI if headline presets violate rules | **done** (`check_headline_decision_contract.py` in `contracts` job) | blocks bad YAML only |
 | **T3 Schema / CLI hygiene** | Demote help text, experimental group, warn on promote | later | none if defaults unchanged |
 | **T4 Surface shrink** | Hide/archive knobs, split experimental config | later | risk if defaults change |
 
@@ -143,11 +143,15 @@ Without this checklist, CI / reviewers treat enablement as **out of contract**.
 
 ---
 
-## 4. Preset validator (P5 — design only)
+## 4. Preset validator (P5 — implemented)
 
-**Proposed name:** `scripts/tools/check_headline_decision_contract.py`  
+**Script:** `scripts/tools/check_headline_decision_contract.py`  
 **Inputs:** `configs/presets/mamba_whole_graph.yaml`, `mamba_whole_graph_m.yaml`  
-**Mode:** fail CI on violation (strict), optional local warn.
+**Mode:** fail CI on violation (strict); run locally the same way.
+
+```bash
+uv run python scripts/tools/check_headline_decision_contract.py
+```
 
 ### Suggested checks (YAML static)
 

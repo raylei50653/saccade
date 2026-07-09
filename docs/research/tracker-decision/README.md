@@ -354,7 +354,8 @@ Increasing it makes association more permissive, which can recover more occlusio
 | [audit/math_model_drift_2026-07-09.md](audit/math_model_drift_2026-07-09.md) | **done** | P3 static drift check vs math_model.md |
 | [audit/dual_stability_cleanup.md](audit/dual_stability_cleanup.md) | **done (RFC)** | P4-1 dual stability A/B/C — design only |
 | [audit/no_go_guardrails.md](audit/no_go_guardrails.md) | **done (RFC)** | P4-2 NO-GO/LATENT promotion + future validator rules |
-| [audit/active_contract_healthcheck.md](audit/active_contract_healthcheck.md) | **done (RFC)** | P4-3 manual active-path healthcheck; P5 script later |
+| [audit/active_contract_healthcheck.md](audit/active_contract_healthcheck.md) | **done** | C1–C8 checklist + P5 script link |
+| [scripts/tools/check_headline_decision_contract.py](../../../scripts/tools/check_headline_decision_contract.py) | **done (P5)** | Static YAML guard for headline s/m contract (CI) |
 | [assoc_knobs.md](assoc_knobs.md) | **done** | Knob cards (gate / score / weight / lifecycle) |
 | [scoring_semantics.md](scoring_semantics.md) | **done** | What association cost means on headline path |
 | [relink_bridge.md](relink_bridge.md) | **done** | Geometry-only bridge reconnect semantics |
@@ -412,12 +413,13 @@ detector input set → association cost → lifecycle (birth/confirm/lost)
 
 ## Current Priority
 
-P4 cleanup RFCs (guardrails, not retunes):
+P4 RFCs + P5 static guard (no retunes):
 
 ```text
 audit/dual_stability_cleanup.md      # A/B/C — do not merge knobs yet
-audit/no_go_guardrails.md            # promotion rules + future validator
-audit/active_contract_healthcheck.md # manual checklist; P5 script later
+audit/no_go_guardrails.md            # promotion rules
+audit/active_contract_healthcheck.md # C1–C8 checklist
+scripts/tools/check_headline_decision_contract.py  # CI YAML guard
 ```
 
 Still keep fresh when presets or cost kernels change:
@@ -437,9 +439,9 @@ assoc_knobs.md
 | NO-GO / LATENT prohibition table | [audit/config_surface.md](audit/config_surface.md) |
 | Dual stability architecture debt | **RFC only** — [audit/dual_stability_cleanup.md](audit/dual_stability_cleanup.md); prefer option A until eval |
 | NO-GO guardrail process | **RFC** — [audit/no_go_guardrails.md](audit/no_go_guardrails.md) |
-| Active-path healthcheck | **manual RFC** — [audit/active_contract_healthcheck.md](audit/active_contract_healthcheck.md) |
+| Active-path healthcheck | **done** — [audit/active_contract_healthcheck.md](audit/active_contract_healthcheck.md) |
 | `math_model.md` drift check + align | **done** (PR #62 audit, PR #63 align) |
-| P5: preset validator / CI healthcheck script | **not started** |
+| P5: preset validator / CI healthcheck script | **done** — `scripts/tools/check_headline_decision_contract.py` |
 
 Open maintainability questions (answered by RFCs, not closed):
 
