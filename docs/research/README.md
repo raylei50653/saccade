@@ -2,6 +2,18 @@
 
 活躍的實驗設計與分析。一次性數據報告歸檔至 [../archive/](../archive)。
 
+## O-series governance entry（Ownership / Objective Isolation）
+
+**O0: Workstream WIP Seal**（docs-only process seal；**不是** tracker-decision P9）。
+
+| 文件 | 內容 |
+|------|------|
+| [../DOC_MAINTENANCE.md](../DOC_MAINTENANCE.md) § Workstream WIP | **O0** · **WIP=1**：每模組 sole active；開第二目標須先 park/收合 |
+| [../../DEVELOPMENT.md](../../DEVELOPMENT.md) §6 | 模組現狀 dashboard（每 🔄 一目標） |
+| [tracker-decision/status_2026-07-09.md](tracker-decision/status_2026-07-09.md) | 已結案線（P0–P8 closed）— 只讀；勿 drive-by reopen |
+
+O1 Module Objective Map 等後續 phase 另開 PR；本索引不預建 `docs/ownership/`。
+
 ## pipeline/
 
 | 文件 | 內容 |

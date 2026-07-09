@@ -98,15 +98,17 @@ uv run scripts/eval/mot17.py --preset speed --detector SDP               # 舊 y
 ### 模組現狀總覽
 
 > 入口快照：一眼看現狀。每模組完整待辦見各 `docs/modules/<name>/TODO.md`，全局矩陣 / Baseline 見 [docs/TODO.md](docs/TODO.md)。
+>
+> **O0 / WIP=1**（O-series Ownership / Objective Isolation）：每個 🔄 列只寫**一個** active 目標（不要用頓號並列多個進行中項）。規則：[docs/DOC_MAINTENANCE.md](docs/DOC_MAINTENANCE.md) § Workstream WIP。tracker-decision P0–P8 已結案（[status](docs/research/tracker-decision/status_2026-07-09.md)）— 非本線延續。
 
-| 模組 | 狀態 | active 待辦 | TODO |
-|------|------|-------------|------|
-| 🔍 detection | 🔄 active | VGT-Mamba（訓練中）、Hybrid Mamba-ViT、資料集補強 | [↗](docs/modules/detection/TODO.md) |
-| 📐 geometry | 🔄 active | GMC Warp 精度驗證（支援 VGT-Mamba） | [↗](docs/modules/geometry/TODO.md) |
-| 🧬 reid | ⏸️ 暫緩 | Appearance Bank 尋回（待時序 YOLO 驗證） | [↗](docs/modules/reid/TODO.md) |
+| 模組 | 狀態 | active 待辦（sole） | TODO |
+|------|------|---------------------|------|
+| 🔍 detection | 🔄 active | VGT-Mamba（訓練中） | [↗](docs/modules/detection/TODO.md) |
+| 📐 geometry | 🔄 active | GMC Warp 精度驗證（依賴 VGT） | [↗](docs/modules/geometry/TODO.md) |
+| 🧬 reid | ⏸️ 暫緩 | — | [↗](docs/modules/reid/TODO.md) |
 | 🔄 lifecycle | 📋 待辦 | evaluator.py lifecycle 切片測試覆蓋率 | [↗](docs/modules/lifecycle/TODO.md) |
 | 🌀 motion | 🟢 收斂 | — | [↗](docs/modules/motion/TODO.md) |
-| 🤝 semantic | 🔄 active | phase-1 diff 復查、delayed-claim Cheb-GR 重掃、occ-exit 條件化復活 | [↗](docs/modules/semantic/TODO.md) |
+| 🤝 semantic | 🔄 active | occ-exit audit 條件化復活（#55） | [↗](docs/modules/semantic/TODO.md) |
 | ⚡ trigger | 🟢 收斂 | — | [↗](docs/modules/trigger/TODO.md) |
 | 🖥️ streaming | 🟢 收斂 | — | [↗](docs/modules/streaming/TODO.md) |
 | 💾 storage | 🟢 收斂 | — | [↗](docs/modules/storage/TODO.md) |
