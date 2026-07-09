@@ -1,12 +1,24 @@
 # Saccade 全局數學模型參考
 
-> 最後 source audit：2026-06-19。
+> 最後 source audit：2026-07-09。
 >
-> 範圍：目前 MOT17 baseline：
+> 範圍：目前 MOT17 headline presets：
+> `mamba_whole_graph`（s）與 `mamba_whole_graph_m`（m）；主線範例
 > `uv run scripts/eval/mot17.py --preset mamba_whole_graph --detector SDP`。
-> 這份文件描述已落地的實作，不是 proposal。主要 source anchors：
+> 這份文件描述已落地的實作，不是 proposal。
+>
+> Drift 對照（P3 audit）：
+> [docs/research/tracker-decision/audit/math_model_drift_2026-07-09.md](../research/tracker-decision/audit/math_model_drift_2026-07-09.md)。
+> Active decision contract：
+> [docs/research/tracker-decision/README.md](../research/tracker-decision/README.md)。
+>
+> 主要 source anchors：
 > [configs/presets/mamba_whole_graph.yaml](../../configs/presets/mamba_whole_graph.yaml)、
-> [src/saccade/perception/eval/evaluator.py](../../src/saccade/perception/eval/evaluator.py)、
+> [configs/presets/mamba_whole_graph_m.yaml](../../configs/presets/mamba_whole_graph_m.yaml)、
+> [src/saccade/perception/eval/pipeline.py](../../src/saccade/perception/eval/pipeline.py)
+> （tracker `set_params` / `set_occ_params` / `set_relink_params` inject）、
+> [src/saccade/perception/eval/evaluator.py](../../src/saccade/perception/eval/evaluator.py)
+> （frame stage orchestration）、
 > [src/tracking/tracker_gpu.cu](../../src/tracking/tracker_gpu.cu)、
 > [include/tracking/kalman_gpu.cuh](../../include/tracking/kalman_gpu.cuh)、
 > [src/tracking/gmc_kernel.cu](../../src/tracking/gmc_kernel.cu)、
@@ -104,9 +116,11 @@ frame 灰階影像（+ 上一幀），**不是** detect 的輸出。`track` 才�
 
 ## 1. 現行 Baseline 合約
 
-目前推薦 baseline 是 `mamba_whole_graph`。核心啟用條件如下：
+目前推薦 headline baseline 是 `mamba_whole_graph`（s）。容量路徑
+`mamba_whole_graph_m`（m）共用同一套 association 主閾值與 cost form，
+差異集中在 motion / bridge gates（見 §1.1）。
 
-| 區域 | baseline 值 | 實際效果 |
+| 區域 | baseline 值（s） | 實際效果 |
 |:--|:--|:--|
 | Detector input | `tiling: native_640`, `preprocess: none` | 單一路徑 native 640 detector，不做 gamma/contrast preprocessing |
 | Detector model | `mamba_ckpt: runs/mamba_gt_v14replica_t3_t1/best.ckpt` | preset 使用的 Mamba head checkpoint |
@@ -115,9 +129,28 @@ frame 灰階影像（+ 上一幀），**不是** detect 的輸出。`track` 才�
 | Appearance | `reid_mode: "off"` | baseline 不使用 per-frame appearance association |
 | Bridge relink | `relink_bridge_enabled: true` | tracker-core bidirectional foot bridge 啟用 |
 | Main association | `match_thresh: 0.50`, `new_track_thresh: 0.28` | ByteTrack-like 多階段 gate |
-| Kalman noise | `kalman_r_scale: 2.8` | GPU Kalman measurement noise scale |
+| Kalman noise | `kalman_r_scale: 2.8` | GPU Kalman measurement noise scale（m 見 §1.1） |
 | OAO | `oao_tau: 0.50`, `oao_ramp_frames: 25` | duration-ramped occlusion-aware association penalty |
+| Front-occluder | `occ_state_enabled: true`, `occ_cost_weight: 0.50`, `occ_iou_thresh: 0.45`, `occ_foot_gap: 0.15`, `occ_ttl: 4` | **production-on** under-foot depth consistency penalty（§7.6） |
+| Input-set policy | `private_continuation_enabled: true`（+ NMS/prior IoU knobs） | 在 track 前擴充 det 候選集（**不是** GPUByteTracker setter；§9） |
 | Cost form | `multiplicative_cost: true`, `sinkhorn_lambda: 10`, `stability_cost_w: 0.20` | log-linear cost，加上 size-stability reward |
+
+### 1.1 `mamba_whole_graph_m` delta（相對 s）
+
+s/m 共用：`match_thresh`、`new_track_thresh`、`confirm_*`、`oao_*`、
+`multiplicative_cost` / `sinkhorn_lambda` / `stability_cost_w`、
+`private_continuation_*`、`occ_state_*`、`relink_bridge_enabled`。
+
+| 旋鈕 | s (`mamba_whole_graph`) | m (`mamba_whole_graph_m`) | 意圖 |
+|:--|:--|:--|:--|
+| `kalman_r_scale` | 2.8 | **3.5** | ↑R → 更信任 **predict**（量測較噪時）；maha gate 變寬 |
+| `relink_bridge_px` | 0.25 | **0.4** | m 較鬆 height-normalized bridge 距離 |
+| `relink_bridge_h_lo` / `_h_hi` | 0.75 / 1.33 | **0.6 / 1.7** | m 較寬高度比 gate（小框 recovery） |
+| `relink_bridge_dir_bonus` | 0.8 | **0.0**（explicit） | m 關閉方向 bonus；s 保留 |
+
+完整 pipeline 路徑合約見
+[docs/research/pipeline/](../research/pipeline/)；決策面 ACTIVE/LATENT/NO-GO 見
+[tracker-decision](../research/tracker-decision/README.md)。
 
 幾個容易誤讀的分支：
 
@@ -128,6 +161,11 @@ frame 灰階影像（+ 上一幀），**不是** detect 的輸出。`track` 才�
   讓 hot path 集中在 detector output、GMC、tracker association、bridge relink。
 - `relink_enabled` 與 `relink_bridge_enabled` 是不同機制。baseline 使用
   tracker-core bridge，不是 birth-time appearance lost-bank relinker。
+- **`occ_state_enabled` 在 headline path 為 on**（preset 顯式寫入 + schema
+  default true + `pipeline.py` `set_occ_params`）。Native C++ member 預設
+  `false` 會被 inject 覆寫；不要把 member default 當成 production baseline。
+- **`private_continuation_*` 改的是 association 的輸入 det set**（score-clamp
+  使候選可 CONTINUE、不可 BIRTH ghost），不是 tracker setter。
 
 ---
 
@@ -230,7 +268,7 @@ Tracker state：
 | `x, z, F, M` | 8D constant-velocity state / 4D measurement | — | `kalman_gpu.cuh` | — |
 | `σ_p = h⁻/20` | 位置過程噪聲隨框高縮放 | `std_weight_position`（hardcoded） | `kalman_gpu.cuh:155` | 1/20 |
 | `σ_v = h⁻/160` | 速度過程噪聲隨框高縮放 | `std_weight_velocity`（hardcoded） | `kalman_gpu.cuh:156` | 1/160 |
-| `r_scale` | 測量噪聲整體縮放 | `kalman_r_scale` | — | 2.8 |
+| `r_scale` | 測量噪聲整體縮放 | `kalman_r_scale` | — | s=2.8；m=3.5（§1.1） |
 | `m_NSA` / `λ_light` | NSA / 亮度噪聲調節（baseline 關） | — | — | 1 / 0 |
 | `τ_maha` | IoU 弱時仍可入選的 Mahalanobis gate | `maha_gate` | `stage1_cost_fused_kernel` | 見實作 |
 
@@ -245,7 +283,7 @@ Tracker state：
 | `λ` | cost→value 的 softmin 溫度 | `sinkhorn_lambda` | — | 10 |
 | `o_i` / `τ_OAO` | 被遮擋 track 降低對高分檢測的配對意願 | `oao_tau` / `oao_ramp_frames` | `compute_track_occlusion_kernel`；crowd `/0.25`@cu:500 | 0.50 / 25 |
 | `P_vel` / `w_vel` | 懲罰與預測速度反向的配對 | `vel_dir_weight` | `cu` | 關 |
-| `P_occ_front` / `w_occ` | front-occluder 深度一致懲罰 | `occ_cost_weight` | `cu` | 關 |
+| `P_occ_front` / `w_occ` | front-occluder 深度一致懲罰 | `occ_state_enabled` / `occ_cost_weight` / `occ_*` | `stage1_cost_fused_kernel` + `set_occ_params` | **開**（`w_occ=0.50`） |
 | `R_stability` / `w_stab` | 高度一致 reward（**成本側**） | `stability_cost_w` | §7.7 | 0.20 |
 
 **Auction（§8）**
@@ -253,7 +291,8 @@ Tracker state：
 | 符號 | 用途 | config / env | 代碼錨點 | baseline |
 |:--|:--|:--|:--|:--|
 | `p_ij` | 進入 auction 的概率值 `e^{-λc}·G_aspect` | — | `fused_sinkhorn_multistage_kernel` | — |
-| `G_aspect` / `r_j` | 抑制異常長寬比框 | （hardcoded peak/width） | `cu:186`（2.5 / 1.2） | — |
+| `G_aspect` / `r_j` | auction value 上抑制異常長寬比框 | （hardcoded 0.8 / 0.15） | `fused_sinkhorn_multistage_kernel` ~`cu:917–919` | — |
+| （勿混）quality aspect | det quality-scaling 的 Gaussian aspect（2.5/1.2） | `detection_quality_scaling`（baseline 關） | ~`cu:204–206` | **不同機制**；勿當 `G_aspect` 錨點 |
 | `Δρ_i` / `ε` | best-vs-second 競標 margin | — | `parallel_auction_shmem_kernel` | — |
 | `w_fresh` | 新鮮度 bid bias（age 越小越高） | `SACCADE_FRESHNESS_W` | `cu:2650` | 0.0（關） |
 | `w_{stab,bid}` | 高度一致 bid bias（**競標側**，≠ `w_stab`） | `SACCADE_STABILITY_W` | `cu:2666` | 0.1（**開**） |
@@ -270,9 +309,9 @@ Tracker state：
 
 | 符號 | 用途 | config / env | 代碼錨點 | baseline |
 |:--|:--|:--|:--|:--|
-| `d_bridge` / `τ_bridge` | 雙向中點外推殘差 vs 門檻（已 `h_ref` 正規化） | `relink_bridge_px` | `cu` | 0.25 |
-| `w_dir` / `α` | 方向一致時向 cross-track 誤差偏移 | `relink_bridge_dir_bonus` | §10.4 | 0.8 |
-| `h_lo` / `h_hi` | 高度比 gate | `relink_bridge_h_lo` / `_h_hi` | §10.5 | 0.75 / 1.33 |
+| `d_bridge` / `τ_bridge` | 雙向中點外推殘差 vs 門檻（已 `h_ref` 正規化） | `relink_bridge_px` | `cu` | s=0.25；m=0.4 |
+| `w_dir` / `α` | 方向一致時向 cross-track 誤差偏移 | `relink_bridge_dir_bonus` | §10.4 | s=0.8；m=0.0 |
+| `h_lo` / `h_hi` | 高度比 gate | `relink_bridge_h_lo` / `_h_hi` | §10.5 | s=0.75/1.33；m=0.6/1.7 |
 | `m_bridge` | best-vs-second margin | `relink_bridge_margin` | §10.5 | 0.05 |
 | spatial gate | spatial 距離 gate（baseline 關） | `relink_bridge_spatial_gate` | §10.5 | 0.0 |
 
@@ -436,9 +475,12 @@ high_thresh  <= high-confidence stage lower bound
 new_track_thresh <= unmatched detection may spawn a new track
 ```
 
-實際 thresholds 由 [evaluator.py](../../src/saccade/perception/eval/evaluator.py)
-呼叫 `set_params(...)` 注入，並在 [tracker_gpu.cu](../../src/tracking/tracker_gpu.cu)
-中 clamp/store。
+實際 thresholds 由 [pipeline.py](../../src/saccade/perception/eval/pipeline.py)
+在 tracker setup 時呼叫 `set_params(...)` / `set_occ_params(...)` /
+`set_relink_params(...)` 注入（約 `pipeline.py:951+`），並在
+[tracker_gpu.cu](../../src/tracking/tracker_gpu.cu) 中 clamp/store。
+[evaluator.py](../../src/saccade/perception/eval/evaluator.py) 負責 frame-level
+stage 排程與 CUDA-graph replay，不是這些 setter 的主要 call site。
 
 ---
 
@@ -647,8 +689,8 @@ x \leftarrow x + Ky,
 P \leftarrow (I - KM)P
 $$
 
-baseline preset 設定 `kalman_r_scale: 2.8`。NSA Kalman 是可配置分支；
-停用時 `nsa_multiplier = 1`。
+headline s preset 設定 `kalman_r_scale: 2.8`；m preset 為 `3.5`（§1.1）。
+NSA Kalman 是可配置分支；停用時 `nsa_multiplier = 1`。
 
 ### 6.3 Mahalanobis Gate
 
@@ -884,8 +926,8 @@ baseline preset 未啟用 `vel_dir_weight`，但 kernel 中保留此 term。
 
 ### 7.6 Front-Occluder Cost
 
-optional occlusion-state machine 啟用時，front-occluder TTL 可加入 depth
-consistency penalty：
+headline path **啟用** occlusion-state machine（`occ_state_enabled: true`）。
+front-occluder TTL 加入 depth consistency penalty：
 
 $$
 y^{\mathrm{foot}}_i = c_{y,i} + \frac{h_i}{2}
@@ -901,7 +943,20 @@ P_{\mathrm{occ\_front}}(i,j)
 = w_{\mathrm{occ}}\max(0, u_{ij})
 $$
 
-baseline 沒有設定 `occ_state_enabled`，因此除非另行配置，這個分支關閉。
+s/m 共用 baseline knobs（preset 顯式寫入，與 schema 一致）：
+
+```yaml
+occ_state_enabled: true
+occ_iou_thresh: 0.45
+occ_foot_gap: 0.15
+occ_ttl: 4
+occ_cost_weight: 0.50   # w_occ
+```
+
+Inject：`pipeline.py` → `set_occ_params(...)` → `tracker_gpu.cu`
+`stage1_cost_fused_kernel`（`occ_front_ttl` + `occ_cost_weight`）。
+Native C++ member 預設 `occ_state_enabled_=false` 會被這條 path 覆寫；
+不要把 member default 讀成 production-off。
 
 ### 7.7 Stability Reward
 
@@ -1093,25 +1148,43 @@ per_seq_adapt = false
 [scripts/eval/config/lifecycle.py](../../scripts/eval/config/lifecycle.py)，但目前
 preset 沒有啟用。
 
+### 9.1 Private continuation（input-set policy）
+
+headline s/m 啟用 private continuation。它**不是** association cost 或
+GPUByteTracker setter，而是 track 前的 **detection input-set 擴充**：
+
+```yaml
+private_continuation_enabled: true
+private_candidate_nms_iou: 0.70
+private_prior_iou_threshold: 0.30
+```
+
+被 NMS 壓抑、但與既有 track 有足夠空間重疊的 private candidates 會追加進
+det set，並把 score **clamp 到 `new_track_thresh` 以下**，使它們可以
+CONTINUE 既有 track，但不能 BIRTH 新 ghost track。實作入口在 detection
+filters / stages（含 native append 路徑），見
+[tracker-decision active contract](../research/tracker-decision/README.md)。
+
 ---
 
 ## 10. Bridge Relink 模型
 
-active baseline 啟用 tracker-core bidirectional bridge relink：
+active baseline 啟用 tracker-core bidirectional bridge relink。下列為 **s**
+（`mamba_whole_graph`）值；**m** 差異見 §1.1。
 
 ```yaml
 relink_bridge_enabled: true
-relink_bridge_px: 0.25
-relink_bridge_margin: 0.05
-relink_bridge_h_lo: 0.75
-relink_bridge_h_hi: 1.33
+relink_bridge_px: 0.25          # m: 0.4
+relink_bridge_margin: 0.05      # s/m same
+relink_bridge_h_lo: 0.75        # m: 0.6
+relink_bridge_h_hi: 1.33        # m: 1.7
 relink_bridge_spatial_gate: 0.0
-relink_bridge_dir_bonus: 0.8
+relink_bridge_dir_bonus: 0.8    # m: 0.0 (explicit off)
 relink_bridge_anchor: adaptive  # effective default
 relink_bridge_anchor_rate: 0.03 # effective default
 ```
 
-注意：`relink_bridge_px` 是歷史命名；baseline 的 `0.25` 不是 0.25 pixel。
+注意：`relink_bridge_px` 是歷史命名；s 的 `0.25` / m 的 `0.4` 都不是 pixel。
 它會與 §10.3 的 $d_{\mathrm{bridge}}$ 比較，而 $d_{\mathrm{bridge}}$ 已除以
 `h_ref`，所以單位是 reference-height-normalized distance。
 
@@ -1258,7 +1331,7 @@ d_{\mathrm{bridge}}
 + \alpha d_{\mathrm{cross}}
 $$
 
-baseline 設定 `bridge_dir_bonus: 0.8`。
+s baseline 設定 `bridge_dir_bonus: 0.8`；m 為 `0.0`（§1.1）。
 
 ### 10.5 Gates And Commit
 
@@ -1388,9 +1461,11 @@ sequence 處理完後可能執行 output-level operations：
 
 | 模型區塊 | Source |
 |:--|:--|
-| Preset values | [configs/presets/mamba_whole_graph.yaml](../../configs/presets/mamba_whole_graph.yaml) |
+| Preset values | [configs/presets/mamba_whole_graph.yaml](../../configs/presets/mamba_whole_graph.yaml), [mamba_whole_graph_m.yaml](../../configs/presets/mamba_whole_graph_m.yaml) |
 | Config parsing | [src/saccade/perception/eval/config.py](../../src/saccade/perception/eval/config.py), [scripts/eval/config](../../scripts/eval/config) |
+| Tracker param inject | [src/saccade/perception/eval/pipeline.py](../../src/saccade/perception/eval/pipeline.py)（`set_params` / `set_occ_params` / `set_relink_params`） |
 | Eval stage order | [src/saccade/perception/eval/evaluator.py](../../src/saccade/perception/eval/evaluator.py) |
+| Decision surface (ACTIVE/LATENT/NO-GO) | [docs/research/tracker-decision/](../research/tracker-decision/) |
 | Native postprocess facade | [include/tracking/pipeline.hpp](../../include/tracking/pipeline.hpp), [src/tracking/pipeline.cpp](../../src/tracking/pipeline.cpp) |
 | GMC math | [src/tracking/gmc_kernel.cu](../../src/tracking/gmc_kernel.cu), [include/tracking/gmc.hpp](../../include/tracking/gmc.hpp) |
 | Kalman math | [include/tracking/kalman_gpu.cuh](../../include/tracking/kalman_gpu.cuh) |
