@@ -15,6 +15,11 @@ Contract (``docs/ownership/doc_structure_contract.md`` § C4 / C9):
 This checker is **warn-only** by default (exit 0 even with findings). Pass
 ``--strict`` to exit non-zero (reserved for a later hard phase).
 
+Index detection currently uses basename substring match against the owning
+README body. That is acceptable for warn-only hygiene; before enabling
+``--strict`` in CI, switch to Markdown link parsing to reduce false positives
+(basename mentioned only in prose or stale paths).
+
 Usage: uv run python3 scripts/tools/check_doc_structure.py [--strict]
 """
 
