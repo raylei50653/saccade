@@ -3,11 +3,13 @@
 Normative doc: ``docs/research/eval/signal_table_schema.md``.
 
 Design:
-  * One universe per table (U_gt / U_det / U_cand / U_err).
+  * One universe per table (U_gt / U_det / U_cand / U_relink_pair / U_err).
+  * ``U_cand`` = frame association only; ``U_relink_pair`` = offline lost→cand.
   * Labels ``y`` are frozen by ``StudyMeta``; do not re-greedy with a new IoU
     inside ad-hoc scripts without a new study_id.
   * Methods are gates or pipeline cuts; dimensions are covariates for strata.
   * Pipeline nodes fix **layer + order + parents** so studies can be stacked.
+  * Relink B1 studies must set ``hard_pool_rule`` and report full+hard AUC.
   * Prefer parquet for frame-level tables; small e2e counts may stay CSV.
 
 This module is the typed contract + light IO helpers. It does not run MOT eval.
@@ -30,13 +32,24 @@ from typing import Any, Iterable, Mapping, Sequence
 
 
 class UniverseId(str, Enum):
-    """Sample universe — one parquet table per value."""
+    """Sample universe — one parquet table per value.
+
+    Do **not** mix frame-level association candidates (``U_cand``) with offline
+    relink (lost→cand) pairs (``U_relink_pair``). Their labels and AUC pools differ.
+    """
 
     U_GT = "U_gt"
     U_DET = "U_det"
+    # Frame-level (track, det) association candidates only — not relink pairs.
     U_CAND = "U_cand"
+    # Offline (lost track → birth candidate) pairs; builder: build_relink_candidates.py
+    U_RELINK_PAIR = "U_relink_pair"
     U_ERR = "U_err"
     METHOD_METRICS = "method_metrics"  # small summary, not frame-level
+
+
+# Alias for docs / call sites that prefer an explicit assoc name.
+U_ASSOC_CAND = UniverseId.U_CAND
 
 
 class MethodId(str, Enum):
@@ -106,7 +119,29 @@ class CutDesign(str, Enum):
     CUMULATIVE = "cumulative"  # each row enables one more node along a path
     SINGLE_ON_BASE = "single_on_base"  # each method = base + one module
     ORTHOGONAL = "orthogonal"  # independent ablations (not causal Δ)
+    SWEEP = "sweep"  # fixed method + 1..N continuous/grid axes
     CUSTOM = "custom"
+
+
+class SweepMode(str, Enum):
+    """How a sweep is realized physically."""
+
+    # Re-threshold / re-gate on a frozen dump (no tracker re-run).
+    # Typical: score floor on U_det, cost gate on U_cand.
+    OFFLINE = "offline"
+    # Each grid point is a full (or partial) pipeline re-run.
+    ONLINE = "online"
+    # Mix: some axes offline, some online (document in notes).
+    MIXED = "mixed"
+
+
+class SweepGridKind(str, Enum):
+    """How axis values are generated (stored expanded in ``values``)."""
+
+    MANUAL = "manual"  # only ``values``
+    LINSPACE = "linspace"  # lo, hi, num
+    ARANGE = "arange"  # lo, hi, step (hi exclusive or inclusive via include_hi)
+    LOGSPACE = "logspace"  # lo, hi, num (log10)
 
 
 # Stage names emitted by append_stage_dump_rows / near-miss tools.
@@ -538,6 +573,51 @@ CAND_REQUIRED: tuple[str, ...] = (
     "det_idx",
     "is_correct",
 )
+# Minimal columns aligned with scripts/tools/build_relink_candidates.py COLS.
+# Full builder CSV has more motion/height variants; those are optional extras.
+RELINK_PAIR_REQUIRED: tuple[str, ...] = (
+    "seq",
+    "lost_id",
+    "cand_id",
+    "gt_match",
+    "gt_valid",
+    "bridge_dist",
+    "gap",
+    "lost_last_frame",
+    "cand_first_frame",
+)
+# Optional but expected when importing builder CSV wholesale.
+RELINK_PAIR_BUILDER_COLS: tuple[str, ...] = (
+    "seq",
+    "lost_id",
+    "cand_id",
+    "gt_lost",
+    "gt_cand",
+    "gt_match",
+    "gt_valid",
+    "accepted",
+    "already_linked",
+    "gap",
+    "dist_h",
+    "fwd_resid",
+    "bwd_resid",
+    "bridge_dist",
+    "dir_cos",
+    "speed_h",
+    "lost_exit_speed",
+    "cand_entry_speed",
+    "lost_last_frame",
+    "cand_first_frame",
+    "lost_lifespan",
+    "cand_lifespan",
+    "lost_len",
+    "cand_len",
+    "lost_foot_x",
+    "lost_foot_y",
+    "cand_foot_x",
+    "cand_foot_y",
+    "h_ref",
+)
 ERR_REQUIRED: tuple[str, ...] = (
     "seq",
     "frame",
@@ -546,11 +626,23 @@ ERR_REQUIRED: tuple[str, ...] = (
     "method",
 )
 METHOD_METRICS_REQUIRED: tuple[str, ...] = ("method",)
+# One row per (method × grid point). params_* columns are free-form floats.
+RUN_METRICS_REQUIRED: tuple[str, ...] = ("run_id", "method")
+
+# Default hard-pool for offline relink AUC (see offline_relink_candidate_analysis.md).
+DEFAULT_RELINK_HARD_POOL_RULE = "bridge_dist<=1.0"
+# Canonical tools for dual-line studies (paths relative to repo root).
+STUDY_SCRIPT_MAP: dict[str, str] = {
+    "A_recall": "scripts/eval/analyze_score_distribution.py",
+    "B1_ids_signal": "scripts/tools/build_relink_candidates.py",
+    "B2_ids_state": "scripts/eval/diagnostics/reconnect_rate.py",
+}
 
 UNIVERSE_REQUIRED: dict[UniverseId, tuple[str, ...]] = {
     UniverseId.U_GT: GT_REQUIRED,
     UniverseId.U_DET: DET_REQUIRED,
     UniverseId.U_CAND: CAND_REQUIRED,
+    UniverseId.U_RELINK_PAIR: RELINK_PAIR_REQUIRED,
     UniverseId.U_ERR: ERR_REQUIRED,
     UniverseId.METHOD_METRICS: METHOD_METRICS_REQUIRED,
 }
@@ -561,7 +653,12 @@ DEFAULT_Y_DEFINITIONS: dict[str, str] = {
     ),
     UniverseId.U_DET.value: ("is_tp if claimed a GT with IoU>=iou_match; else FP"),
     UniverseId.U_CAND.value: (
-        "is_correct if det is the GT-matched target of this track at frame"
+        "is_correct if det is the GT-matched target of this track at frame "
+        "(frame-level association only; not relink pairs)"
+    ),
+    UniverseId.U_RELINK_PAIR.value: (
+        "gt_match==1 if lost and cand map to the same GT id under builder rules "
+        "(offline relink pair; substrate: relink-off + interp-off)"
     ),
     UniverseId.U_ERR.value: (
         "event_type in {fn_miss, id_switch, fp_birth, fp_interp, fragment}"
@@ -572,17 +669,342 @@ DEFAULT_SCORE_FIELDS: dict[str, str] = {
     UniverseId.U_GT.value: "match_score",
     UniverseId.U_DET.value: "score",
     UniverseId.U_CAND.value: "iou",  # or -cost; override in StudyMeta
+    UniverseId.U_RELINK_PAIR.value: "bridge_dist",  # lower is better ranker
 }
 
 TABLE_FILENAMES: dict[UniverseId, str] = {
     UniverseId.U_GT: "u_gt.parquet",
     UniverseId.U_DET: "u_det.parquet",
     UniverseId.U_CAND: "u_cand.parquet",
+    UniverseId.U_RELINK_PAIR: "u_relink_pair.parquet",
     UniverseId.U_ERR: "u_err.parquet",
     UniverseId.METHOD_METRICS: "metrics_by_method.csv",
 }
 
+# Sweep / multi-run aggregate table (not a UniverseId; lives next to meta).
+RUN_METRICS_FILENAME = "metrics_by_run.csv"
+SWEEP_CURVE_FILENAME = "sweep_curve_summary.csv"
+
 META_FILENAME = "meta.json"
+
+# ---------------------------------------------------------------------------
+# Sweep axis + run metrics
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class SweepAxis:
+    """One continuous or grid dimension to scan.
+
+    Prefer storing the **expanded** ``values`` actually evaluated. ``lo/hi/num/step``
+    document intent and can regenerate values via ``expanded_values()``.
+    """
+
+    name: str
+    # Pipeline node the knob primarily acts on (for layer bookkeeping).
+    node_id: str
+    kind: str = SweepGridKind.MANUAL.value
+    values: list[float] = field(default_factory=list)
+    lo: float | None = None
+    hi: float | None = None
+    num: int | None = None
+    step: float | None = None
+    include_hi: bool = True
+    unit: str = ""
+    # Offline: apply gate on frozen table column without re-running MOT.
+    offline: bool = False
+    offline_score_col: str = ""  # e.g. "score" on U_det, "iou"/"cost" on U_cand
+    offline_universe: str = ""  # UniverseId value when offline
+    notes: str = ""
+
+    @classmethod
+    def from_mapping(cls, data: Mapping[str, Any]) -> SweepAxis:
+        known = {f.name for f in fields(cls)}
+        kwargs = {k: v for k, v in data.items() if k in known}
+        return cls(**kwargs)  # type: ignore[arg-type]
+
+    def to_json_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    def validate(self) -> None:
+        if not self.name:
+            raise ValueError("SweepAxis.name is required")
+        if self.node_id and self.node_id not in PIPELINE_BY_ID:
+            raise ValueError(
+                f"SweepAxis {self.name!r}: unknown node_id={self.node_id!r}"
+            )
+        if self.kind not in {k.value for k in SweepGridKind}:
+            raise ValueError(f"SweepAxis {self.name!r}: bad kind={self.kind!r}")
+        if self.offline and not self.offline_universe:
+            raise ValueError(
+                f"SweepAxis {self.name!r}: offline=True requires offline_universe"
+            )
+
+    def expanded_values(self) -> list[float]:
+        """Return concrete grid points (sorted unique)."""
+        if self.values:
+            pts = [float(v) for v in self.values]
+        elif self.kind == SweepGridKind.LINSPACE.value:
+            if self.lo is None or self.hi is None or not self.num:
+                raise ValueError(f"{self.name}: linspace needs lo, hi, num")
+            if self.num < 2:
+                raise ValueError(f"{self.name}: linspace num must be >= 2")
+            import numpy as np
+
+            pts = [float(x) for x in np.linspace(self.lo, self.hi, int(self.num))]
+        elif self.kind == SweepGridKind.LOGSPACE.value:
+            if self.lo is None or self.hi is None or not self.num:
+                raise ValueError(f"{self.name}: logspace needs lo, hi, num")
+            import numpy as np
+
+            pts = [
+                float(x)
+                for x in np.logspace(float(self.lo), float(self.hi), int(self.num))
+            ]
+        elif self.kind == SweepGridKind.ARANGE.value:
+            if self.lo is None or self.hi is None or self.step is None:
+                raise ValueError(f"{self.name}: arange needs lo, hi, step")
+            import numpy as np
+
+            stop = float(self.hi) + (float(self.step) * 0.5 if self.include_hi else 0.0)
+            pts = [float(x) for x in np.arange(float(self.lo), stop, float(self.step))]
+            if self.include_hi and pts and pts[-1] < float(self.hi) - 1e-12:
+                pts.append(float(self.hi))
+        else:
+            pts = []
+        # unique preserve order
+        seen: set[float] = set()
+        out: list[float] = []
+        for p in pts:
+            key = round(p, 10)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(p)
+        return out
+
+
+def expand_sweep_grid(axes: Sequence[SweepAxis]) -> list[dict[str, float]]:
+    """Cartesian product of axis values → list of param dicts."""
+    if not axes:
+        return [{}]
+    grids = [(a.name, a.expanded_values()) for a in axes]
+    combos: list[dict[str, float]] = [{}]
+    for name, vals in grids:
+        nxt: list[dict[str, float]] = []
+        for base in combos:
+            for v in vals:
+                row = dict(base)
+                row[name] = v
+                nxt.append(row)
+        combos = nxt
+    return combos
+
+
+def make_run_id(method: str, params: Mapping[str, float]) -> str:
+    """Stable run_id for metrics_by_run rows."""
+    if not params:
+        return method
+    parts = [method] + [f"{k}={params[k]:.6g}" for k in sorted(params)]
+    return "__".join(parts)
+
+
+def offline_threshold_curve(
+    scores: Sequence[float],
+    is_positive: Sequence[bool],
+    thresholds: Sequence[float],
+    *,
+    accept_if_ge: bool = True,
+) -> list[dict[str, Any]]:
+    """Scan a score/cost threshold offline; return P/R/TP/FP/FN per point.
+
+    Does not re-run MOT — only set algebra on a frozen labeled universe.
+    """
+    if len(scores) != len(is_positive):
+        raise ValueError("scores and is_positive length mismatch")
+    n_pos = sum(1 for y in is_positive if y)
+    n_neg = len(is_positive) - n_pos
+    rows: list[dict[str, Any]] = []
+    for t in thresholds:
+        tp = fp = fn = tn = 0
+        for s, y in zip(scores, is_positive, strict=True):
+            accept = (s >= t) if accept_if_ge else (s <= t)
+            if accept and y:
+                tp += 1
+            elif accept and not y:
+                fp += 1
+            elif (not accept) and y:
+                fn += 1
+            else:
+                tn += 1
+        prec = tp / (tp + fp) if (tp + fp) else 0.0
+        rec = tp / n_pos if n_pos else 0.0
+        rows.append(
+            {
+                "threshold": float(t),
+                "tp": tp,
+                "fp": fp,
+                "fn": fn,
+                "tn": tn,
+                "n_pos": n_pos,
+                "n_neg": n_neg,
+                "precision": prec,
+                "recall": rec,
+                "f1": ((2 * prec * rec / (prec + rec)) if (prec + rec) > 0 else 0.0),
+            }
+        )
+    return rows
+
+
+def summarize_sweep_metric(
+    run_rows: Sequence[Mapping[str, Any]],
+    *,
+    axis_name: str,
+    metric: str,
+    higher_is_better: bool = True,
+) -> dict[str, Any]:
+    """Aggregate a 1-D sweep curve: best point, endpoints, monotone-ish stats.
+
+    ``run_rows`` each need ``params``-style key ``axis_name`` (or ``param_{axis}``)
+    and ``metric`` column.
+    """
+    pts: list[tuple[float, float]] = []
+    for r in run_rows:
+        if axis_name in r:
+            x = float(r[axis_name])  # type: ignore[arg-type]
+        elif f"param_{axis_name}" in r:
+            x = float(r[f"param_{axis_name}"])  # type: ignore[arg-type]
+        else:
+            continue
+        if r.get(metric) is None:
+            continue
+        pts.append((x, float(r[metric])))  # type: ignore[arg-type]
+    if not pts:
+        raise ValueError(f"no points for axis={axis_name!r} metric={metric!r}")
+    pts.sort(key=lambda t: t[0])
+    xs = [p[0] for p in pts]
+    ys = [p[1] for p in pts]
+    if higher_is_better:
+        best_i = max(range(len(ys)), key=lambda i: ys[i])
+    else:
+        best_i = min(range(len(ys)), key=lambda i: ys[i])
+    # simple consecutive Δ for noise / flatness
+    deltas = [ys[i + 1] - ys[i] for i in range(len(ys) - 1)]
+    return {
+        "axis": axis_name,
+        "metric": metric,
+        "n_points": len(pts),
+        "x_min": xs[0],
+        "x_max": xs[-1],
+        "y_at_x_min": ys[0],
+        "y_at_x_max": ys[-1],
+        "y_best": ys[best_i],
+        "x_best": xs[best_i],
+        "y_mean": sum(ys) / len(ys),
+        "y_span": max(ys) - min(ys),
+        "delta_mean": (sum(deltas) / len(deltas)) if deltas else 0.0,
+        "delta_max_abs": max((abs(d) for d in deltas), default=0.0),
+        "higher_is_better": higher_is_better,
+    }
+
+
+def parse_simple_hard_pool_rule(rule: str) -> tuple[str, str, float]:
+    """Parse rules like ``bridge_dist<=1.0`` or ``dist_h<0.6``.
+
+    Returns ``(column, op, threshold)`` with op in {``<=``, ``<``, ``>=``, ``>``}.
+    """
+    text = rule.strip().replace(" ", "")
+    for op in ("<=", ">=", "<", ">"):
+        if op in text:
+            col, thr_s = text.split(op, 1)
+            if not col:
+                raise ValueError(f"bad hard_pool_rule (empty column): {rule!r}")
+            return col, op, float(thr_s)
+    raise ValueError(f"hard_pool_rule must look like 'bridge_dist<=1.0' (got {rule!r})")
+
+
+def apply_hard_pool_mask(
+    column_values: Sequence[float],
+    rule: str,
+) -> list[bool]:
+    """Boolean mask for rows inside the hard pool defined by ``rule``."""
+    _col, op, thr = parse_simple_hard_pool_rule(rule)
+    out: list[bool] = []
+    for v in column_values:
+        x = float(v)
+        if op == "<=":
+            out.append(x <= thr)
+        elif op == "<":
+            out.append(x < thr)
+        elif op == ">=":
+            out.append(x >= thr)
+        else:
+            out.append(x > thr)
+    return out
+
+
+def auc_full_and_hard_pool(
+    scores: Sequence[float],
+    is_positive: Sequence[bool],
+    hard_mask: Sequence[bool],
+    *,
+    lower_is_better: bool = True,
+    min_n: int = 20,
+) -> dict[str, Any]:
+    """Compute full-pool and hard-pool AUC with base rates.
+
+    For distance-like scores (``bridge_dist``), set ``lower_is_better=True`` so
+    ranking uses ``-score``. Citing full-pool AUC alone is non-compliant for
+    ``U_relink_pair`` studies — always report both + n_pos/n_neg.
+    """
+    try:
+        from sklearn.metrics import roc_auc_score
+    except ImportError as exc:  # pragma: no cover
+        raise ImportError("auc_full_and_hard_pool requires scikit-learn") from exc
+
+    if not (len(scores) == len(is_positive) == len(hard_mask)):
+        raise ValueError("scores, is_positive, hard_mask length mismatch")
+
+    def _one(s: list[float], y: list[bool], *, label: str) -> dict[str, Any]:
+        n = len(y)
+        n_pos = sum(1 for v in y if v)
+        n_neg = n - n_pos
+        rec: dict[str, Any] = {
+            "pool": label,
+            "n": n,
+            "n_pos": n_pos,
+            "n_neg": n_neg,
+            "base_rate": (n_pos / n) if n else 0.0,
+            "auc": float("nan"),
+            "skipped_reason": "",
+        }
+        if n < min_n:
+            rec["skipped_reason"] = f"n<{min_n}"
+            return rec
+        if n_pos == 0 or n_neg == 0:
+            rec["skipped_reason"] = "single_class"
+            return rec
+        rank = [-x for x in s] if lower_is_better else list(s)
+        rec["auc"] = float(roc_auc_score(y, rank))
+        return rec
+
+    s_all = [float(x) for x in scores]
+    y_all = [bool(v) for v in is_positive]
+    full = _one(s_all, y_all, label="full")
+    s_h = [s for s, m in zip(s_all, hard_mask, strict=True) if m]
+    y_h = [y for y, m in zip(y_all, hard_mask, strict=True) if m]
+    hard = _one(s_h, y_h, label="hard")
+    return {
+        "full": full,
+        "hard": hard,
+        "lower_is_better": lower_is_better,
+        "citation_ok": (
+            full.get("skipped_reason") == ""
+            and hard.get("skipped_reason") == ""
+            and full["n_pos"] > 0
+        ),
+    }
+
 
 # ---------------------------------------------------------------------------
 # Dataclasses
@@ -619,6 +1041,18 @@ class StudyMeta:
     method_terminal_nodes: dict[str, str] = field(default_factory=dict)
     # Ordered spine used for cumulative studies
     cumulative_spine: list[str] = field(default_factory=list)
+    # Continuous / grid sweeps (see SweepAxis). Empty = no sweep.
+    sweep_mode: str = ""
+    sweep_axes: list[dict[str, Any]] = field(default_factory=list)
+    # Method held fixed while axes vary (required when cut_design=sweep)
+    sweep_base_method: str = ""
+    # Offline relink (U_relink_pair) reporting contract — see offline_relink_candidate_analysis.md
+    hard_pool_rule: str = (
+        ""  # e.g. "bridge_dist<=1.0"; required if U_relink_pair in universes
+    )
+    report_base_rate: bool = True
+    # Which dual-line recipe this study follows: A | B1 | B2 | "" (unset)
+    study_line: str = ""
 
     def to_json_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -628,6 +1062,9 @@ class StudyMeta:
         known = {f.name for f in fields(cls)}
         kwargs = {k: v for k, v in data.items() if k in known}
         return cls(**kwargs)  # type: ignore[arg-type]
+
+    def parsed_sweep_axes(self) -> list[SweepAxis]:
+        return [SweepAxis.from_mapping(a) for a in self.sweep_axes]
 
     def score_field_for(self, universe: UniverseId | str) -> str:
         key = universe.value if isinstance(universe, UniverseId) else universe
@@ -646,8 +1083,14 @@ class StudyMeta:
             return self.method_terminal_nodes[method_id]
         return METHOD_TERMINAL_NODE.get(method_id)
 
+    def uses_relink_pair(self) -> bool:
+        return UniverseId.U_RELINK_PAIR.value in self.universes
+
     def validate_pipeline_methods(self) -> None:
         """Raise ValueError if method_ids disagree with cut_design / order."""
+        self._validate_universes_and_relink()
+        if self.cut_design == CutDesign.SWEEP.value:
+            self._validate_sweep()
         if not self.method_ids:
             return
         if self.cut_design == CutDesign.CUMULATIVE.value:
@@ -663,6 +1106,66 @@ class StudyMeta:
             if term is None:
                 raise ValueError(f"method_id {mid!r} has no terminal pipeline node")
             get_pipeline_node(term)  # raises if unknown
+
+    def _validate_universes_and_relink(self) -> None:
+        """Enforce universe naming + B1 relink reporting requirements."""
+        if self.study_line not in ("", "A", "B1", "B2"):
+            raise ValueError(f"study_line must be A|B1|B2|'' (got {self.study_line!r})")
+        known = {u.value for u in UniverseId}
+        for u in self.universes:
+            if u not in known:
+                raise ValueError(f"unknown universe {u!r}; known={sorted(known)}")
+        if not self.uses_relink_pair():
+            return
+        if not self.hard_pool_rule.strip():
+            raise ValueError(
+                "universes includes U_relink_pair: hard_pool_rule is required "
+                f"(default recommendation: {DEFAULT_RELINK_HARD_POOL_RULE!r}). "
+                "Full-pool-only AUC is non-compliant for citation."
+            )
+        y_key = UniverseId.U_RELINK_PAIR.value
+        y_def = self.y_definitions.get(y_key) or DEFAULT_Y_DEFINITIONS.get(y_key, "")
+        if "gt_match" not in y_def:
+            raise ValueError(
+                "U_relink_pair y_definitions must mention gt_match "
+                "(true relink under builder GT mapping)"
+            )
+        score = self.score_fields.get(y_key) or DEFAULT_SCORE_FIELDS.get(y_key, "")
+        if not score:
+            raise ValueError(
+                "U_relink_pair requires score_fields['U_relink_pair'] "
+                "(default bridge_dist)"
+            )
+        if self.study_line == "B1" and not self.report_base_rate:
+            raise ValueError(
+                "study_line=B1 requires report_base_rate=True "
+                "(n_pos/n_neg must be reported with AUC)"
+            )
+
+    def _validate_sweep(self) -> None:
+        if not self.sweep_axes:
+            raise ValueError("cut_design=sweep requires non-empty sweep_axes")
+        base = self.sweep_base_method or (self.method_ids[0] if self.method_ids else "")
+        if not base:
+            raise ValueError(
+                "cut_design=sweep requires sweep_base_method or method_ids[0]"
+            )
+        if base != MethodId.CUSTOM.value and self.resolved_terminal(base) is None:
+            raise ValueError(f"sweep_base_method {base!r} has no terminal node")
+        if self.sweep_mode and self.sweep_mode not in {m.value for m in SweepMode}:
+            raise ValueError(f"unknown sweep_mode={self.sweep_mode!r}")
+        axes = self.parsed_sweep_axes()
+        names = [a.name for a in axes]
+        if len(names) != len(set(names)):
+            raise ValueError(f"duplicate sweep axis names: {names}")
+        for axis in axes:
+            axis.validate()
+            pts = axis.expanded_values()
+            if len(pts) < 2:
+                raise ValueError(
+                    f"sweep axis {axis.name!r} needs >=2 points for a range "
+                    f"(got {len(pts)})"
+                )
 
 
 @dataclass(frozen=True)
@@ -721,6 +1224,8 @@ class DetRow:
 
 @dataclass(frozen=True)
 class CandRow:
+    """Frame-level (track, det) association candidate — not a relink pair."""
+
     seq: str
     frame: int
     track_id: int
@@ -748,6 +1253,41 @@ class CandRow:
 
 
 @dataclass(frozen=True)
+class RelinkPairRow:
+    """Offline (lost → cand) pair from build_relink_candidates.py.
+
+    ``gt_match`` may be int 0/1 in CSV; treat as bool for y.
+    ``bridge_dist`` is lower-is-better; for sklearn roc_auc_score use ``-bridge_dist``.
+    """
+
+    seq: str
+    lost_id: int
+    cand_id: int
+    gt_match: bool
+    gt_valid: bool
+    bridge_dist: float
+    gap: int
+    lost_last_frame: int
+    cand_first_frame: int
+    gt_lost: int = -1
+    gt_cand: int = -1
+    dist_h: float = float("nan")
+    fwd_resid: float = float("nan")
+    bwd_resid: float = float("nan")
+    dir_cos: float = float("nan")
+    speed_h: float = float("nan")
+    accepted: bool = False
+    already_linked: bool = False
+    source: str = DataSourceId.DERIVED.value
+
+    @staticmethod
+    def gt_match_as_bool(value: Any) -> bool:
+        if isinstance(value, bool):
+            return value
+        return bool(int(value))
+
+
+@dataclass(frozen=True)
 class ErrRow:
     seq: str
     frame: int
@@ -763,6 +1303,8 @@ class ErrRow:
 
 @dataclass(frozen=True)
 class MethodMetricsRow:
+    """E2E metrics for a single method cut (no param axes)."""
+
     method: str
     idf1: float | None = None
     mota: float | None = None
@@ -777,6 +1319,64 @@ class MethodMetricsRow:
     n_seq: int | None = None
     output_dir: str = ""
     source: str = DataSourceId.MOTMETRICS_EVAL.value
+
+
+@dataclass(frozen=True)
+class RunMetricsRow:
+    """One pipeline evaluation at a concrete param point (sweep-friendly).
+
+    Store continuous axes as ``params``; CSV export flattens to ``param_<name>``.
+    ``method`` is the base MethodId / terminal cut; ``run_id`` is unique.
+    """
+
+    run_id: str
+    method: str
+    params: dict[str, float] = field(default_factory=dict)
+    idf1: float | None = None
+    mota: float | None = None
+    hota: float | None = None
+    deta: float | None = None
+    assa: float | None = None
+    ids: int | None = None
+    fp: int | None = None
+    fn: int | None = None
+    rcll: float | None = None
+    prcn: float | None = None
+    # Offline gate curves may only fill these:
+    precision: float | None = None
+    recall: float | None = None
+    f1: float | None = None
+    tp: int | None = None
+    n_seq: int | None = None
+    output_dir: str = ""
+    source: str = DataSourceId.MOTMETRICS_EVAL.value
+
+    def to_flat_dict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {
+            "run_id": self.run_id,
+            "method": self.method,
+            "idf1": self.idf1,
+            "mota": self.mota,
+            "hota": self.hota,
+            "deta": self.deta,
+            "assa": self.assa,
+            "ids": self.ids,
+            "fp": self.fp,
+            "fn": self.fn,
+            "rcll": self.rcll,
+            "prcn": self.prcn,
+            "precision": self.precision,
+            "recall": self.recall,
+            "f1": self.f1,
+            "tp": self.tp,
+            "n_seq": self.n_seq,
+            "output_dir": self.output_dir,
+            "source": self.source,
+        }
+        for k, v in self.params.items():
+            d[f"param_{k}"] = v
+            d[k] = v  # convenience for summarize_sweep_metric
+        return d
 
 
 # ---------------------------------------------------------------------------

@@ -46,6 +46,7 @@
 
 | 我要… | 先跑 / 先開 | Door |
 |:--|:--|:--|
+| signal-study 表契約 / B1 宇宙 | [signal_table_schema.md](../../../research/eval/signal_table_schema.md)（`U_relink_pair`） | A |
 | 建 offline 候選池 CSV | `scripts/tools/build_relink_candidates.py` | A |
 | 面積 / 轉向前 loss | `analyze_preloss_motion.py` · `analyze_turn_baseline.py` | A |
 | speed×turn 分布 | `scripts/tools/sweep_speed_turn.py` | A |
