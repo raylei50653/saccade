@@ -13,7 +13,8 @@ Saccade 的文檔庫採用「模組化物理結構」配合「全局共享目錄
 * 📦 **[modules/](modules)**：**核心模組化文檔庫**。物理上按系統功能與 `mot17.py` 評測模組劃分，包含各自的設計、決策 (ADR) 與實驗分析。
 * 📊 **[reference/](reference)**：全局評測基準 (benchmarks)、多進程並行評測手冊與跨模組共享的流程規範。亦含 **[NO-GO 全局登記表](reference/no_go_registry.md)**（已結案/已踩雷方向總覽，探索新方向前先查）。
 * 📦 **[archive/](archive)**：過時或已完成的歷史參考資料（如 Option D 探索結論）。
-* 🔬 **[research/](research)**：全局性的評測與訓練流程（如 evaluator 分析或訓練共享設施）。
+* 🔬 **[research/](research)**：跨模組實驗、決策語義、evidence ledger；結構契約見 [ownership/doc_structure_contract.md](ownership/doc_structure_contract.md)。
+* 📑 **[../report_data/](../report_data)**：Paper 可重建表/圖與 Mamba method 素材（與 `research/paper_outline` 互指、不互相覆寫）。
 
 ---
 
@@ -29,7 +30,7 @@ Saccade 的文檔庫採用「模組化物理結構」配合「全局共享目錄
 | 📐 **[geometry/](modules/geometry)** | GMC 全局運動補償、卡爾曼濾波協方差、寬高比限制與幾何優先級 | * [GPU Tracker 深度解析](modules/geometry/tracker_deep_dive.md)<br>* [GMC 與卡爾曼濾波消融實驗](modules/geometry/research/fp_fn_recovery_and_gmc.md) |
 | 🌀 **[motion/](modules/motion)** | 軌跡速度/加速度 EMA 平滑、運動一致性檢查 (z-score) 與運動 Fallback | * [Motion 參數配置說明](modules/motion/README.md) |
 | 🧬 **[reid/](modules/reid)** | SigLIP 2 特徵提取、Feature Bank 外觀庫更新與去重、裁剪影格邊緣 | * [ReID 與 Feature Bank 架構](modules/reid/architecture.md)<br>* [SigLIP 2 升級決策](decisions/005-yolo26-siglip2-upgrade.md) |
-| 🤝 **[semantic/](modules/semantic)** | 外觀相似度門檻（ReID Threshold）、匈牙利演算法匹配權重、外觀重排 | * [Sinkhorn 混合關聯決策](decisions/015-sinkhorn-auction-hybrid-association.md)<br>* [外觀特徵重排與品質過濾](decisions/016-rerank-phase3-reference-quality.md) |
+| 🤝 **[semantic/](modules/semantic)** | Offline identity / Cheb-GR / bridge relink 研究主家（headline ReID off；critical-path ReID NO-GO #57） | * [模組 README · 研究全表](modules/semantic/README.md)<br>* [occ-exit WP3 promotion](modules/semantic/research/occ_exit_audit_p55_wp3_promotion_decision_20260709.md)（🔄 active）<br>* [offline relink hub](modules/semantic/research/offline_relink_candidate_analysis.md)<br>* ADR [015](decisions/015-sinkhorn-auction-hybrid-association.md) / [016](decisions/016-rerank-phase3-reference-quality.md) |
 | ⚡ **[trigger/](modules/trigger)** | 非同步 ReID 觸發機制（Async ReID Trigger）、外觀抽取預算觸發 | * [動態外觀觸發機制實驗](modules/trigger/research/dynamic_trigger.md)<br>* [Saccade 心跳閘控觸發](decisions/013-gpubytetracker-saccade-heartbeat.md) |
 | 🔄 **[lifecycle/](modules/lifecycle)** | 軌跡生命週期狀態機（Tentative/Confirmed/Lost）判定與 Tracker LRU 釋放 | * [生命週期狀態轉移實驗](modules/lifecycle/research/tentative_confirmed_state.md) |
 
@@ -51,15 +52,22 @@ Saccade 的文檔庫採用「模組化物理結構」配合「全局共享目錄
 當您在開發過程中需要編寫或更新文檔時，請遵循此決策路徑：
 
 ```
-我做了什麼？                     →  去哪個目錄？                →  寫什麼格式/檔案？
-─────────────────────────────────────────────────────────────────────────────────────────────
-1. 修改/優化某模組 (如 ReID)      →  modules/reid/             →  更新 architecture.md 或於 research/ 紀錄實驗
-2. 做了一個重大技術選型           →  decisions/                →  撰寫下一個編號的 ADR 文件 (.md)，並在模組 README/TODO 加連結
-3. 完成全局/多模組系統實驗        →  research/                 →  在對應領域或 training/ 目錄下紀錄配置與結論
-4. 跑了全局效能評測或需維運指南    →  reference/                →  寫入 benchmarks/ 或 runbooks/ 下的 markdown
-5. 新增/完成任務項目              →  TODO.md                   →  更新最上方模組進度矩陣並勾選待辦 checkbox [x]
-─────────────────────────────────────────────────────────────────────────────────────────────
+我做了什麼？                          →  去哪個目錄？                    →  寫什麼 / 必做
+──────────────────────────────────────────────────────────────────────────────────────────────
+1. 單模組實驗 / ablation              →  modules/<m>/research/          →  全文 + 父 README 索引一行
+2. Cheb-GR / bank / occ-exit / offline identity
+                                      →  modules/semantic/              →  非 reid（code 可在 reid 路徑）
+3. 特徵抽取 / Feature Bank 實作       →  modules/reid/                  →  architecture 或 research/
+4. 全局 / 跨模組實驗                  →  research/<area>/               →  子目錄或 research/README 索引
+5. 可引用 baseline / 決策數字         →  research/evidence_ledger.md    →  加列 + 連 source
+6. 論文 claim / 可重建表圖            →  report_data/                   →  source_map 或 README 回連
+7. 結案 one-shot / 廢棄設計           →  archive/                       →  活躍索引移除或標 historical
+8. 重大技術選型                       →  decisions/                     →  下一號 ADR + 模組 README/TODO 連結
+9. 全局效能評測 / 維運                →  reference/                     →  benchmarks/ 或 runbooks/
+10. 任務勾選                          →  TODO.md / modules/<m>/TODO.md  →  WIP=1；長文不塞 TODO
+──────────────────────────────────────────────────────────────────────────────────────────────
 ※ 日常 Bug fix、純重構 (API 外部行為未變) → 無需新增/更新文檔。
+※ 完整契約：ownership/doc_structure_contract.md
 ```
 
 ---

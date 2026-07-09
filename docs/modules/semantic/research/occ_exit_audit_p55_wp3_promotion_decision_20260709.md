@@ -211,4 +211,4 @@ If no capacity for feat work: keep WP1–WP2 tools as research instrumentation; 
 Related:  
 [WP2 report](occ_exit_audit_p55_wp2_seq_conditioning_20260709.md) ·  
 [scope](occ_exit_audit_p55_scope_20260709.md) ·  
-registry [#55](../../reference/no_go_registry.md#55)
+registry [#55](../../../reference/no_go_registry.md#55)

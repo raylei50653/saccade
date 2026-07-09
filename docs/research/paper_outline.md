@@ -4,7 +4,8 @@
 **Date:** 2026-07-09  
 **Purpose:** structure claims, evidence, and limitations before writing prose  
 **Living status snapshot:** [tracker-decision/status_2026-07-09.md](tracker-decision/status_2026-07-09.md)  
-**Numbers ledger:** [evidence_ledger.md](evidence_ledger.md)
+**Numbers ledger:** [evidence_ledger.md](evidence_ledger.md)  
+**Mamba method paper assets (separate line):** [../../report_data/README.md](../../report_data/README.md) — curriculum / detector thesis; do not overwrite this outline’s decision narrative.
 
 Do **not** invent metrics here. Pull every number from the ledger or linked
 ablation reports. Update the outline when the production contract changes.

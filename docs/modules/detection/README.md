@@ -1,8 +1,9 @@
 # Temporal YOLO — 設計文件索引
 
+> **detection 特例（Doc Structure C2）：** 本檔為「協議/程式碼索引庫 + 下方模組卡」雙結構，其餘模組僅用一頁卡片。
+>
 > Option D（Track-Conditioned YOLO）已於 2026-05-19 結案 NO-GO，設計文件移至
 > [docs/archive/option-d/](../../archive/option-d) 保留供歷史參考。
-
 ### 設計 / 訓練協議（頂層）
 
 | 文件 | 內容 | 狀態 |
@@ -25,6 +26,7 @@
 | [research/kernel-fusion-plan.md](research/kernel-fusion-plan.md) | elementwise kernel fusion 計畫（對應上文 fragmentation）| proposed |
 | [research/mamba-dual-resolution-original-detail-plan.md](research/mamba-dual-resolution-original-detail-plan.md) | 640 Mamba global + 原始解析度 detail branch 研究計畫 | proposed |
 | [research/mamba-strip-detail-routing-design.md](research/mamba-strip-detail-routing-design.md) | 小目標 strip detail routing 設計（registry #36 ROI NO-GO，parked）| ⏸ parked |
+| [research/holdout_generalization_plan.md](research/holdout_generalization_plan.md) | Holdout / generalization 計畫 | plan |
 
 ## 設計演進總覽
 

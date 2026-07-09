@@ -26,8 +26,18 @@
 ## 結論
 ```
 
+新文請加狀態標記（[契約 C3](../../ownership/doc_structure_contract.md)）：
+
+```html
+<!-- doc-status: active | parked | closed | archived -->
+<!-- doc-promotion: none | ledger | report_data | archive | no_go -->
+<!-- doc-date: YYYY-MM-DD -->
+```
+
 ## 索引
 
 | 實驗 | 日期 | 狀態 |
 |------|------|------|
 | [jde-market-1501](jde-market-1501.md) | 2026-05-25 | 進行中 (v4) |
+| [pp22_full_cadence_interp_training_plan](pp22_full_cadence_interp_training_plan.md) | 2026-07 | plan |
+| [pp22_stress_test_findings](pp22_stress_test_findings.md) | 2026-07 | findings |

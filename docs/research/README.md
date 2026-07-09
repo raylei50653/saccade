@@ -1,76 +1,95 @@
 # Experiments
 
-活躍的實驗設計與分析。一次性數據報告歸檔至 [../archive/](../archive)。
+跨模組實驗、決策語義、全局 eval / training 與可引用 evidence。  
+**結構契約：** [../ownership/doc_structure_contract.md](../ownership/doc_structure_contract.md)  
+一次性數據報告結案後歸 [../archive/](../archive/)。
 
-## O-series governance entry（Ownership / Objective Isolation）
+---
 
-**不是** tracker-decision P9；tracker-decision P0–P8 維持 closed。
+## 🔄 Active workstreams
+
+| 線 | 家 | 說明 |
+|------|------|------|
+| **occ-exit audit (#55)** | [../modules/semantic/research/](../modules/semantic/research/) · [semantic TODO](../modules/semantic/TODO.md) | Sole active on semantic（WIP=1）。入口：[occ_exit_audit_p55_scope](../modules/semantic/research/occ_exit_audit_p55_scope_20260709.md) → [WP2](../modules/semantic/research/occ_exit_audit_p55_wp2_seq_conditioning_20260709.md) → [WP3 promotion](../modules/semantic/research/occ_exit_audit_p55_wp3_promotion_decision_20260709.md) |
+| **VGT-Mamba** | [../modules/detection/TODO.md](../modules/detection/TODO.md) | Detection sole active（訓練）；模組 research 見 [detection README](../modules/detection/README.md) |
+| **GMC warp（依賴 VGT）** | [../modules/geometry/TODO.md](../modules/geometry/TODO.md) | 非第二獨立目標；見 geometry TODO |
+
+治理（O-series，非實驗正文）：[../ownership/README.md](../ownership/README.md) · [DOC_MAINTENANCE § WIP](../DOC_MAINTENANCE.md) · [DEVELOPMENT.md 模組現狀總覽](../../DEVELOPMENT.md)
+
+---
+
+## 🔒 Closed (read-only)
 
 | 文件 | 內容 |
 |------|------|
-| [../ownership/README.md](../ownership/README.md) | **O-series 入口** · O0–O4 map · module-objective isolation |
-| [../ownership/module_objective_map.md](../ownership/module_objective_map.md) | **O1** primary / secondary / should-not-own |
-| [../ownership/change_routing_matrix.md](../ownership/change_routing_matrix.md) | **O1** objective → required checks |
-| [../DOC_MAINTENANCE.md](../DOC_MAINTENANCE.md) § Workstream WIP | **O0** · **WIP=1** process seal |
-| [../../DEVELOPMENT.md](../../DEVELOPMENT.md) §6 | 模組現狀 dashboard（每 🔄 一目標） |
-| [tracker-decision/status_2026-07-09.md](tracker-decision/status_2026-07-09.md) | 已結案線（P0–P8 closed）— 只讀；勿 drive-by reopen |
+| [tracker-decision/status_2026-07-09.md](tracker-decision/status_2026-07-09.md) | P0–P8 closed — production / contract / dual-stab / NO-GO；**勿 drive-by reopen** |
+| [tracker-decision/README.md](tracker-decision/README.md) | 決策層範圍、文件索引、與 pipeline 分工 |
 
-## pipeline/
+---
+
+## Paper & evidence
+
+兩條敘事線**互指、不互相覆寫**（契約 C5）：
+
+| 線 | 入口 | 用途 |
+|------|------|------|
+| Decision / production | [paper_outline.md](paper_outline.md) · [evidence_ledger.md](evidence_ledger.md) | Geometry-first + whole-graph；可引用 metrics / 決策列 |
+| Mamba method assets | [../../report_data/README.md](../../report_data/README.md) | Curriculum / detector thesis、可重建 tables/figures |
+
+負結果總表：[../reference/no_go_registry.md](../reference/no_go_registry.md)
+
+---
+
+## Subdirectories（全局 research）
+
+子目錄 **完整檔案表** 以各子目錄 README 為準（契約 C4）；此處只列入口。
+
+| 目錄 | 入口 | 內容 |
+|------|------|------|
+| [pipeline/](pipeline/) | 見下表（本目錄無獨立 README） | Runtime 路徑、perf、sync、CPU |
+| [eval/](eval/README.md) | [eval/README.md](eval/README.md) | Eval / ablation 筆記 |
+| [training/](training/README.md) | [training/README.md](training/README.md) | 訓練實驗 |
+| [reid/](reid/) | 見下表 | 外觀能力上限等跨模組 reid 筆記 |
+| [tracker-decision/](tracker-decision/README.md) | [tracker-decision/README.md](tracker-decision/README.md) | 決策語義（closed 線為主） |
+
+### pipeline/（全表）
 
 | 文件 | 內容 |
 |------|------|
-| [mot17_mamba_whole_graph_m_sdp_double_buffer.md](pipeline/mot17_mamba_whole_graph_m_sdp_double_buffer.md) | `mamba_whole_graph_m` + SDP + double-buffer 實際 runtime 路徑 / 檔案對應 runbook |
+| [mot17_mamba_whole_graph_m_sdp_double_buffer.md](pipeline/mot17_mamba_whole_graph_m_sdp_double_buffer.md) | `mamba_whole_graph_m` + SDP + double-buffer 路徑 runbook |
 | [gpu_pipeline_m4b_identity_resolver.md](pipeline/gpu_pipeline_m4b_identity_resolver.md) | M4b native identity resolver 設計 |
-| [perf_attribution_whole_graph_m.md](pipeline/perf_attribution_whole_graph_m.md) | whole_graph_m 每幀開銷歸因 + 優化 backlog（nsys, 2026-07） |
+| [perf_attribution_whole_graph_m.md](pipeline/perf_attribution_whole_graph_m.md) | whole_graph_m 每幀開銷歸因 + backlog |
+| [CPU_BOUND_ANALYSIS.md](pipeline/CPU_BOUND_ANALYSIS.md) | CPU-bound 分析 |
+| [cpu_overhead_analysis_20260707.md](pipeline/cpu_overhead_analysis_20260707.md) | CPU overhead（2026-07） |
+| [optimization_redundant_computations_20260620.md](pipeline/optimization_redundant_computations_20260620.md) | 冗餘計算優化筆記 |
+| [sync_audit_20260706.md](pipeline/sync_audit_20260706.md) | Sync audit |
 
-## Research narrative (P8)
-
-| 文件 | 內容 |
-|------|------|
-| [tracker-decision/status_2026-07-09.md](tracker-decision/status_2026-07-09.md) | 一頁式 production / contract / dual-stab / NO-GO 總結 |
-| [paper_outline.md](paper_outline.md) | arXiv / technical report **skeleton only** |
-| [evidence_ledger.md](evidence_ledger.md) | 可引用 metrics + decision outcomes 總表 |
-
-## tracker-decision/
+### reid/（本樹）
 
 | 文件 | 內容 |
 |------|------|
-| [README.md](tracker-decision/README.md) | Tracker 決策層範圍、與 pipeline 分工、文件索引 |
-| [status_2026-07-09.md](tracker-decision/status_2026-07-09.md) | P8 一頁式現況（keep both + m cost nuance） |
-| [scoring_semantics.md](tracker-decision/scoring_semantics.md) | Association cost / gate / weight / identity 語意 |
-| [assoc_knobs.md](tracker-decision/assoc_knobs.md) | 決策旋鈕卡片（ACTIVE + NO-GO） |
-| [relink_bridge.md](tracker-decision/relink_bridge.md) | Geometry-only bridge relink |
-| [kalman_gmc_motion.md](tracker-decision/kalman_gmc_motion.md) | Kalman / GMC 對 matching 的假設 |
-| [failure_modes.md](tracker-decision/failure_modes.md) | Geometry 側失敗模式 |
-| [audit/config_surface.md](tracker-decision/audit/config_surface.md) | 跨模組決策參數面 |
-| [audit/callpoints.md](tracker-decision/audit/callpoints.md) | schema → inject → native 對照 |
-| [audit/native_bridge.md](tracker-decision/audit/native_bridge.md) | Python↔CUDA bridge / rename 風險 |
-| [audit/math_model_drift_2026-07-09.md](tracker-decision/audit/math_model_drift_2026-07-09.md) | math_model.md 靜態 drift audit（P3） |
-| [audit/dual_stability_ablation_results_2026-07-09.md](tracker-decision/audit/dual_stability_ablation_results_2026-07-09.md) | P7 dual stability A–D（s+m） |
+| [appearance_ceiling_mot17.md](reid/appearance_ceiling_mot17.md) | MOT17 appearance 能力上限 |
 
-## tracking/
+模組側 reid / trigger research 見下方 Related module research。
 
-| 文件 | 內容 |
+---
+
+## Related module research（pointers only）
+
+| 模組 | 入口 |
 |------|------|
-| [fp_fn_recovery_and_gmc.md](../modules/geometry/research/fp_fn_recovery_and_gmc.md) | FP/FN recovery + GMC 診斷 |
-| [tentative_confirmed_state.md](../modules/lifecycle/research/tentative_confirmed_state.md) | Tentative/Confirmed 狀態機設計 |
+| [semantic](../modules/semantic/README.md) | 12 notes — offline relink hub、Cheb-GR bank、**occ-exit active** |
+| [detection](../modules/detection/README.md) | T3→T1、CUDA graph、kernel fusion 等 |
+| [geometry](../modules/geometry/README.md) | [fp_fn_recovery_and_gmc](../modules/geometry/research/fp_fn_recovery_and_gmc.md) |
+| [lifecycle](../modules/lifecycle/README.md) | [tentative_confirmed_state](../modules/lifecycle/research/tentative_confirmed_state.md) |
+| [reid](../modules/reid/README.md) | LaSt-ViT、semantic_relink_and_crop |
+| [trigger](../modules/trigger/README.md) | [dynamic_trigger](../modules/trigger/research/dynamic_trigger.md) |
 
-## reid/
+---
 
-| 文件 | 內容 |
-|------|------|
-| [dynamic_trigger.md](../modules/trigger/research/dynamic_trigger.md) | 動態 ReID 觸發機制設計 |
-| [last_vit_integration_analysis.md](../modules/reid/research/last_vit_integration_analysis.md) | LaSt-ViT frequency-domain 診斷 |
-| [semantic_relink_and_crop.md](../modules/reid/research/semantic_relink_and_crop.md) | Semantic relink + SigLIP2 crop 實驗 |
+## 規範（摘要）
 
-## eval/
-
-| 文件 | 內容 |
-|------|------|
-| [fp_classifier_external_only_plan.md](eval/fp_classifier_external_only_plan.md) | 0-shot FP classifier 設計 |
-| [wsl2_d2h_pinned_memory_leak_20260517.md](eval/wsl2_d2h_pinned_memory_leak_20260517.md) | WSL2 D2H memory leak post-mortem |
-
-## 規範
-
-- 一次性數據報告完成後移入 `archive/`
-- 設計探索文件保留於此（仍在持續參考中）
+- 新增檔 → 同一 PR 更新 owning README 索引（[契約 C4](../ownership/doc_structure_contract.md)）
+- 可引用數字 → [evidence_ledger](evidence_ledger.md) 或 [report_data](../../report_data/README.md)
+- 結案 one-shot → [../archive/](../archive/)
+- Closed tracker-decision：只讀，勿並開

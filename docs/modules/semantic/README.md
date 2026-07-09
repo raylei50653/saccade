@@ -39,13 +39,29 @@
 
 ## 📚 研究 / 設計
 
+> 全表義務見 [Doc Structure Contract C4](../../ownership/doc_structure_contract.md)。Active 對齊 [TODO.md](TODO.md) sole active（WIP=1）。
+
+### 🔄 Active
+
 | 文件 | 內容 |
 |------|------|
-| 🧭 **[research/offline_relink_candidate_analysis.md](research/offline_relink_candidate_analysis.md)** | **relink / crossing-swap / AssA 調查的主入口（hub §0）**。離線候選分析：bridge 全池 AUC 0.895 但**門作用區僅 ~0.65**（easy-pool vs hard-pool）；瓶頸＝base rate；面積率穩健閘；reach-gate 速度項死重；§8 接 occlusion crossing-swap（2026-06-09） |
-| [research/depth_ordering_crossing_swap.md](research/depth_ordering_crossing_swap.md) | occlusion crossing-swap 深度排序：foot_y 判別 front/back **AUC 0.898**（vs 外觀 ≈0.50）；same-height gate **GO default-on**（+0.5 IDF1，commit c418872b）（2026-06-14） |
-| [research/bidirectional_relink_roadmap.md](research/bidirectional_relink_roadmap.md) | 雙向時空收斂幾何重連長期路線圖（Phase 0 已落地，1–4 規劃） |
-| [research/bidir_relink_data_analysis.md](research/bidir_relink_data_analysis.md) | 線上 bridge 候選 per-attempt 分析（hard-case AUC≈0.55，與上文難區 0.65 一致） |
-| [research/sparse_key_embedding_bank_20260704.md](research/sparse_key_embedding_bank_20260704.md) | **Cheb-GR 稀疏 bank 結案（registry #58）**：clean-FIFO-20 = dense 等價偏優（m/s +0.07/+0.05）；embedding 不能平均、copy 重複不進 graph、visclean 後品質訊號零殘餘；stride-3 抽取 ÷3 等價；Python 層已落地（`--cheb-gr-offline-bank-mode recent`） |
+| [research/occ_exit_audit_p55_scope_20260709.md](research/occ_exit_audit_p55_scope_20260709.md) | **#55 occ-exit audit** 範圍與 substrate |
+| [research/occ_exit_audit_p55_wp2_seq_conditioning_20260709.md](research/occ_exit_audit_p55_wp2_seq_conditioning_20260709.md) | WP2 序列條件化標註 |
+| [research/occ_exit_audit_p55_wp3_promotion_decision_20260709.md](research/occ_exit_audit_p55_wp3_promotion_decision_20260709.md) | WP3 promotion 決策（`split_feat_pr`；runtime 未開） |
+
+### 收成 / 結案參考
+
+| 文件 | 內容 |
+|------|------|
+| 🧭 **[research/offline_relink_candidate_analysis.md](research/offline_relink_candidate_analysis.md)** | **relink / crossing-swap / AssA 調查主入口（hub）**。bridge 全池 AUC 0.895、門作用區 ~0.65；面積率閘；reach-gate 速度項死重 |
+| [research/depth_ordering_crossing_swap.md](research/depth_ordering_crossing_swap.md) | foot_y front/back AUC 0.898；same-height gate GO default-on |
+| [research/bidirectional_relink_roadmap.md](research/bidirectional_relink_roadmap.md) | 雙向時空收斂幾何重連路線圖（Phase 0 已落地） |
+| [research/bidir_relink_data_analysis.md](research/bidir_relink_data_analysis.md) | 線上 bridge 候選 per-attempt（hard-case AUC≈0.55） |
+| [research/relink_normalization_gate_analysis.md](research/relink_normalization_gate_analysis.md) | Scale / normalization gate ablation |
+| [research/sparse_key_embedding_bank_20260704.md](research/sparse_key_embedding_bank_20260704.md) | Cheb-GR 稀疏 bank 結案（#58）；clean-FIFO-20；Python 層已落地 |
+| [research/clean_fifo_bank_substrate_20260704.md](research/clean_fifo_bank_substrate_20260704.md) | CleanFifoBank substrate contract（occ-audit / handover 共用） |
+| [research/chebgr_handover_signal_map_20260704.md](research/chebgr_handover_signal_map_20260704.md) | Offline handover 訊號地圖；best_cost frontier |
+| [research/online_sparse_reid_handoff_20260704.md](research/online_sparse_reid_handoff_20260704.md) | Sparse key-crop / async sidecar 接續摘要 |
 
 ## 📋 模組 TODO
 

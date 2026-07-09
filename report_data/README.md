@@ -6,6 +6,11 @@ single-frame, CUDA-graph inference pipeline for MOT**.
 
 ## Start here
 
+**Related decision / production narrative (separate line, do not merge theses):**
+[docs/research/paper_outline.md](../docs/research/paper_outline.md) and
+[docs/research/evidence_ledger.md](../docs/research/evidence_ledger.md).
+Doc homes: [docs/ownership/doc_structure_contract.md](../docs/ownership/doc_structure_contract.md).
+
 1. [paper_direction.md](paper_direction.md): proposed thesis, contributions,
    experiment hierarchy, and claims that are currently defensible.
 2. [algorithms.md](algorithms.md): paper method, equations, curriculum

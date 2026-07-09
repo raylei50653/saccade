@@ -27,6 +27,12 @@
 | 2026-05-18 | P5-5 Proximity Birth Gate | ❌ NO-GO（prox=0.3 已 FN +1038 / Rcll -5.6pp） |
 | 2026-05-11 | P5-4 Scene-Adaptive / P5-3 Consecutive birth gate | ❌ NO-GO / 統計中性 |
 
+## 📚 研究
+
+| 文件 | 內容 |
+|------|------|
+| [research/tentative_confirmed_state.md](research/tentative_confirmed_state.md) | Tentative / Confirmed 狀態機設計與實驗 |
+
 ## 📋 模組 TODO
 
 詳見 [TODO.md](TODO.md)。

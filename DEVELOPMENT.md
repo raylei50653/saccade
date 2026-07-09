@@ -1,105 +1,132 @@
 # Saccade 開發指南
 
-開發者入口。看這一份就能知道架構責任、合約邊界、當前設定、改動驗證方式。
+**角色：** 開發者**薄入口**——先對齊**需求層級**，再取**文檔組合**；細節留在各自的家，本檔不百科化。
 
----
-
-## 1. 開發原則
-
-- 架構與合約決定什麼值得做，TODO 排優先順序。
-- 單一原始碼檔案（.py/.cpp/.cu/.hpp）原則上不超過 **1000 行**；超過則拆模組。
-- 主熱路徑優先走 GPU / native facade；不應輕易引入未說明的 CPU roundtrip。
-
----
-
-## 2. Source of Truth 順序
-
-當文件彼此衝突時，依下列優先順序判讀：
-
-1. **主路徑程式碼**（`src/saccade/perception/`、`src/tracking/`、`scripts/eval/mot17.py`）
-2. **本文件 DEVELOPMENT.md**
-3. **穩定架構 / 合約文件**（`docs/architecture/README.md`、`docs/reference/PIPELINE_REFERENCE.md`、`docs/reference/api_spec.md`、`docs/decisions/`）
-4. **當前待辦**（`docs/TODO.md`）
-5. **歷史脈絡**（`docs/TODO_history.md`、`docs/research/`）
-
----
-
-## 3. 系統分層
-
-| 層 | 責任 | 主要路徑 |
-|---|---|---|
-| **L1 Perception** | YOLO + postprocess + GPU tracker | `src/saccade/perception/`, `src/tracking/` |
-| **L2 Appearance / ReID** | crop / embedding / bank / semantic relink | `src/saccade/perception/tracking/`, `eval/relink.py` |
-| **L3–L4 Streaming / Storage** | Redis / Chroma / microbatch | `src/saccade/storage/`, `src/saccade/pipeline/` |
-| **L5–L6 Cognition / Resource** | orchestrator / resource manager | `src/saccade/cognition/`, `src/saccade/resource/` |
-
-MOT / tracking / relink 主線開發從這些檔案出發：
-
-- `src/saccade/perception/eval/evaluator.py`
-- `src/saccade/perception/eval/relink.py`
-- `src/saccade/perception/tracking/tracker_gpu.py`
-- `src/tracking/tracker_gpu.cu`
-- `src/saccade/perception/eval/detection.py`
-- `scripts/eval/mot17.py`
-
----
-
-## 4. 系統合約（改動時應守住）
-
-### 4.1 Pipeline 合約
-- 主熱路徑優先走 GPU / native。新路徑引入 CPU roundtrip 必須說明必要性。
-- Python 負責 orchestration / 評估 / 整理；不應接回每幀大量資料面工作。
-- CUDA graph capture：graph context 內一律解析 `torch.cuda.current_stream().cuda_stream`，不得重用進 `torch.cuda.graph()` 前取得的 stream pointer（否則 graph 建立成功但 replay 產 garbage）。未來所有 capture site（GMC / post / detect / tracker / NMS）遵守同一規則 → [docs/CUDA_GRAPH_CAPTURE_STREAM_RULE.md](docs/CUDA_GRAPH_CAPTURE_STREAM_RULE.md)。
-
-### 4.2 Tracking / Association 合約
-- ambiguous case 不靠單一固定 threshold；fallback 必須穩定且可解釋（最低保證：IoU-only）。
-- appearance、motion、quality 的責任邊界要清楚，避免同一訊號多層重複加權。
-
-### 4.3 ReID / Reference 合約
-- noisy reference 不進 bank；low-quality observation 不用與 clean 相同 accept 條件。
-- ReID 是稀缺算力資源，不無差別全幀觸發。
-
-### 4.4 Detection / Tiling 合約
-- `native_960` 是 detector path 主控；tiled path 改動先對照 `native_960`。
-- seam duplicate / truncation 汙染在進 tracker 前消化；不把不乾淨的 observation 留給 association / bank。
-
-### 4.5 Documentation 合約
-- 穩定行為 / 責任邊界改動 → 更新架構 / ADR / API 文件。
-- 模組待辦 / 實驗排序 → 更新該 `docs/modules/<m>/TODO.md`；跨模組 / 全局排序 → `docs/TODO.md`。
-- ablation 收斂 → 該 module README `⚖️ GO/NO-GO` 加一行，細節進 `docs/TODO_history.md`。
-- 每個事實只有一個家、其餘只連結（詳見 §11）。
-
----
-
-## 5. 當前 Baseline
-
-**當前生產 baseline = `mamba_whole_graph`**（Option F Mamba 偵測頭 + 整圖 CUDA graph，**ReID off**）。整圖 graph 與 `mamba_optimal` 同路線、純加速 detect（7.4→3.1ms），精度持平、FPS 大幅提升。
-
-> **baseline 數字的唯一來源（single fact owner）是 [docs/TODO.md](docs/TODO.md)「當前 Baseline」節。** 本文件不內嵌 baseline 表或指標數字，避免入口與 fact owner 漂移。完整 baseline 矩陣（含各 Option 歷史指標）見 [docs/TODO.md](docs/TODO.md)；詳細 CLI 默認值見 [docs/reference/mot17_default_config.md](docs/reference/mot17_default_config.md)。
-> mamba preset 自帶 override，不吃 yolo26 path 的部分 default：`reid_mode=off`、`kalman_r_scale=2.8`、`match_thresh=0.50`、`fuse_score_weight=0.0`、`gmc_downscale=4`、`interpolate_max_gap=35`。
-
-使用方式：
-```bash
-uv run scripts/eval/mot17.py --preset mamba_whole_graph --detector SDP   # 當前 baseline
-uv run scripts/eval/mot17.py --preset mamba_optimal --detector SDP       # head-only graph 前身
-uv run scripts/eval/mot17.py --preset speed --detector SDP               # 舊 yolo26 路線（參考）
+```text
+進入 → 選層級 → 打開文檔組合 → 改 code / 寫 note → 對層級做驗證
 ```
 
-預設會將結果登錄到 MLflow（`--mlflow-uri http://localhost:5000`）。若 MLflow 未啟動會自動跳過。
+長文契約與寫作路由：
 
-調參時以 `--preset mamba_whole_graph` 為基準線。
+- 文件家 / research 索引 / 數字升格 → [docs/ownership/doc_structure_contract.md](docs/ownership/doc_structure_contract.md)（**O1.5**）
+- 格式、WIP=1、fact-owner → [docs/DOC_MAINTENANCE.md](docs/DOC_MAINTENANCE.md)
+- 「我去哪寫」決策樹 → [docs/README.md](docs/README.md)
+- 模組目標隔離 → [docs/ownership/README.md](docs/ownership/README.md)
 
 ---
 
-## 6. 目前開發方向
+## 1. 需求層級（先選這個）
 
-詳細待辦、近期 ablation 結論、backlog 見 **[docs/TODO.md](docs/TODO.md)**。
+層級愈高，**必讀 + 必寫 + 必驗**愈重。可只升不降：不確定時往上一級。
+
+| 層級 | 何時用 | 意圖 |
+|:--|:--|:--|
+| **D0** | Bug fix / 純重構 / API 與預設行為不變 | 低摩擦合入 |
+| **D1** | 單模組實驗、ablation、default-off probe、文檔-only | RESEARCH 線；不翻 production default |
+| **D2** | 跨模組實驗、可被 PR/README **引用**的數字、NO-GO 結案 | 要有 evidence 家 |
+| **D3** | 動到 eval 預設路徑、headline preset、inject/contract、native hot path | 行為 / 合約敏感 |
+| **D4** | 架構選型、ADR、paper claim、對外敘事 | 決策或出版物級 |
+
+**與 O-series 對照（不互相取代）：**
+
+| 治理 | 管什麼 |
+|:--|:--|
+| **O0 WIP=1** | 每模組同時最多一個 sole active |
+| **O1 objective** | 這次 PR 的 primary 是 RUNTIME / RESEARCH / … |
+| **O1.5 結構** | 檔案家、README 索引、promotion |
+| **本表 D0–D4** | 這次工作要帶哪一包文檔與驗證 |
+
+---
+
+## 2. 各層文檔組合（讀 / 寫 / 驗）
+
+「組合」= 該層**最低限度**應打開的檔。細節仍以各檔為準。
+
+### D0 — 修復 / 重構
+
+| | 文檔組合 |
+|:--|:--|
+| **讀** | 相關模組 `docs/modules/<m>/README.md`（I/O 一眼）；熱路徑見下方 §5 |
+| **寫** | 通常**不寫**新 docs（見 [DOC_MAINTENANCE](docs/DOC_MAINTENANCE.md)「不需要寫文檔」） |
+| **驗** | 單元 / 既有測試；`bash scripts/pre_push.sh` |
+
+### D1 — 單模組研究 / default-off
+
+| | 文檔組合 |
+|:--|:--|
+| **讀** | 模組 README + TODO；[doc_structure_contract](docs/ownership/doc_structure_contract.md) C1/C4；相關 [no_go_registry](docs/reference/no_go_registry.md) |
+| **寫** | `docs/modules/<m>/research/<note>.md`（或跨模組則 `docs/research/<area>/`）+ **owning README 索引一行** + 文首 `doc-status` / `doc-promotion`；TODO sole active 一句連過去 |
+| **驗** | 實驗協議自洽即可；**不**要求改 headline；`check_doc_structure`（pre_push warn） |
+| **禁** | 同 PR 翻 production default（RESEARCH + default → 拆 PR，見 [change_routing_matrix](docs/ownership/change_routing_matrix.md)） |
+
+Cheb-GR / bank / offline identity / occ-exit → 文檔家 **semantic**（非 reid）。
+
+### D2 — 可引用結果 / 跨模組結論
+
+| | 文檔組合 |
+|:--|:--|
+| **讀** | D1 組合 + [evidence_ledger](docs/research/evidence_ledger.md) 協議列；必要時 [report_data/README](report_data/README.md) |
+| **寫** | D1 正文與索引；**若數字要被引用** → ledger 一列 和/或 no_go 一條 和/或 report_data 表（[契約 C5](docs/ownership/doc_structure_contract.md)）；模組 README GO/NO-GO **一行** |
+| **驗** | 標註 commit/preset/host；noise 意識（決策旋鈕 ΔIDF1 ≲ 0.2 見 ledger） |
+
+### D3 — 生產路徑 / 合約
+
+| | 文檔組合 |
+|:--|:--|
+| **讀** | [PIPELINE.md](docs/PIPELINE.md) 或 [pipeline_flow](docs/reference/pipeline_flow.md)；[mot17_default_config](docs/reference/mot17_default_config.md)；動 association 時 [tracker-decision status](docs/research/tracker-decision/status_2026-07-09.md)（closed 只讀）+ 相關 knobs；CUDA graph → [CUDA_GRAPH_CAPTURE_STREAM_RULE](docs/CUDA_GRAPH_CAPTURE_STREAM_RULE.md)；[change_routing_matrix](docs/ownership/change_routing_matrix.md) |
+| **寫** | 行為變更說明；必要時 ADR；合約 / preset 與 [module TODO](docs/modules/) / [docs/TODO.md](docs/TODO.md) 對齊；**新**決策線不得 silent reopen closed P0–P8 |
+| **驗** | smoke 至少 MOT17-04-SDP；identity/default → 7-seq；headline YAML → `check_headline_decision_contract.py`；native 改動 → build + smoke |
+
+### D4 — 架構 / 論文 / 對外敘事
+
+| | 文檔組合 |
+|:--|:--|
+| **讀** | [docs/architecture/README](docs/architecture/README.md)；決策敘事 [paper_outline](docs/research/paper_outline.md) + ledger；Mamba method [report_data](report_data/README.md)（**兩線互指、不互相覆寫**） |
+| **寫** | ADR（`docs/decisions/`）；paper 素材進 report_data 或 outline；claim 必須能指回 ledger / tables |
+| **驗** | 無「只存在 chat 的數字」；必要時重建 `report_data/build_paper_assets.py` |
+
+---
+
+## 3. 場景速查（靈活微調組合）
+
+| 我要… | 建議層級 | 文檔組合（在層級底稿上加減） |
+|:--|:--|:--|
+| 修 crash / flake，行為不變 | **D0** | 測試 + pre_push |
+| 單模組 ablation，default-off | **D1** | module research + README 索引 + TODO 連結 |
+| occ-exit / Cheb-GR / sparse bank | **D1→D2** | **semantic** research 全家；引用數字再 D2 promotion |
+| 外觀 ceiling / 特徵抽取實作 | **D1** | **reid** README/research；關聯政策仍看 semantic |
+| GMC / Kalman 實驗 | **D1→D3** | geometry research + eval 筆記；動 default → 加上 tracker-decision + contract |
+| 改 `mamba_whole_graph` 預設旋鈕 | **D3** | mot17_default_config + routing matrix + ledger（若報數字） |
+| 新 native kernel / pybind | **D3** | ownership 熱檔卡 + bridge 檢查；CUDA stream 規則 |
+| 訓練 Mamba / VGT | **D1→D2** | detection 協議 + research；可引用結果 → ledger/report_data |
+| 寫 arXiv / tech report 段落 | **D4** | paper_outline **或** report_data（先選線）+ source_map |
+| 工業 RTSP / storage / RAG | **D1–D3** | 對應 `modules/streaming|storage|cognition|resource` + runbooks |
+| 只更新文檔結構 / 索引 | **D1** | O1.5 契約 + DOC_MAINTENANCE checklist |
+
+寫作目錄細節（檔放哪）：[docs/README 決策樹](docs/README.md)。
+
+---
+
+## 4. 現況快照
+
+### Baseline
+
+**生產 baseline preset = `mamba_whole_graph`**（ReID off；whole-graph detect）。
+
+<!-- fact-owner: current-baseline = docs/TODO.md -->
+
+**數字唯一來源：** [docs/TODO.md](docs/TODO.md)「當前 Baseline」——本檔不嵌指標表。  
+CLI 默認細節：[docs/reference/mot17_default_config.md](docs/reference/mot17_default_config.md)。
+
+```bash
+uv run scripts/eval/mot17.py --preset mamba_whole_graph --detector SDP --double-buffer
+```
 
 ### 模組現狀總覽
 
-> 入口快照：一眼看現狀。每模組完整待辦見各 `docs/modules/<name>/TODO.md`，全局矩陣 / Baseline 見 [docs/TODO.md](docs/TODO.md)。
->
-> **O0 / WIP=1**（O-series Ownership / Objective Isolation）：每個 🔄 列只寫**一個** active 目標（不要用頓號並列多個進行中項）。規則：[docs/DOC_MAINTENANCE.md](docs/DOC_MAINTENANCE.md) § Workstream WIP。tracker-decision P0–P8 已結案（[status](docs/research/tracker-decision/status_2026-07-09.md)）— 非本線延續。
+> **Dashboard fact-owner：本節。** 鏡射各 `docs/modules/<m>/TODO.md` 的 sole active，不另立第二待辦清單。  
+> **O0 / WIP=1：** 每模組 🔄 最多一個 active。規則：[DOC_MAINTENANCE § WIP](docs/DOC_MAINTENANCE.md)。  
+> tracker-decision P0–P8 **closed**：[status](docs/research/tracker-decision/status_2026-07-09.md) — 非 O-series 延續。
 
 | 模組 | 狀態 | active 待辦（sole） | TODO |
 |------|------|---------------------|------|
@@ -115,200 +142,96 @@ uv run scripts/eval/mot17.py --preset speed --detector SDP               # 舊 y
 | 🧠 cognition | 🟢 收斂 | — | [↗](docs/modules/cognition/TODO.md) |
 | ⚙️ resource | 🟢 收斂 | — | [↗](docs/modules/resource/TODO.md) |
 
-跨模組待辦（測試覆蓋率）見 [docs/TODO.md](docs/TODO.md) 的「跨模組待辦」節。
-
-### 🔄 Option F — Mamba SSM Detection Head
-
-- 設計文件：[docs/modules/detection/option-f-mamba-head.md](docs/modules/detection/option-f-mamba-head.md)
-- 訓練腳本：`scripts/train/temporal_yolo/`
-- 評估命令：`uv run scripts/eval/mot17.py --preset mamba_whole_graph --detector SDP`（當前 baseline；`mamba_optimal` 為 head-only graph 前身）
-
-### ✅ Option E — GatedYOLODetector（baseline, IDF1 57.2%）
-
-- 設計文件：[docs/modules/detection/option-e-v2-design.md](docs/modules/detection/option-e-v2-design.md)
-
-### ❌ Option D — Track-Conditioned YOLO（NO-GO, 2026-05-19）
-
-- 設計文件移至 [docs/archive/option-d/](docs/archive/option-d) 保留供參考
-
-其餘已結案或延後的方向以 `docs/TODO.md` / `docs/TODO_history.md` 為準。
+全局矩陣 / 跨模組待辦：[docs/TODO.md](docs/TODO.md)。  
+Detection 設計索引（非本檔展開）：[docs/modules/detection/README.md](docs/modules/detection/README.md)。
 
 ---
 
-## 7. 檔案對應指南
+## 5. 熱路徑與高頻命令
 
-### 改 tracking / association
-`src/tracking/tracker_gpu.cu` → `include/tracking/tracker_gpu.hpp` → `src/saccade/perception/tracking/tracker_gpu.py`
+### MOT 主線常改檔
 
-### 改 semantic relink / identity resolve
-`src/saccade/perception/eval/relink.py` → `src/tracking/tracker_gpu_python.cpp`
+| 意圖 | 起點 |
+|:--|:--|
+| Tracker / association | `src/tracking/tracker_gpu.cu` → `tracker_gpu.hpp` → `tracker_gpu.py` |
+| Relink / identity | `src/saccade/perception/eval/relink.py`、native bridge |
+| Detect / post | `eval/detection.py`、Mamba / TRT 路徑 |
+| Eval 編排 | `scripts/eval/mot17.py`、`eval/evaluator.py`、`eval/pipeline.py` |
+| Preset / knobs | `scripts/eval/config/`、`configs/presets/` |
 
-### 改 detection postprocess / tile merge
-`src/saccade/perception/eval/detection.py` → `src/tracking/tracker_gpu.cu` → `scripts/eval/mot17.py`
+系統分層與工業路徑總圖：[docs/architecture/README.md](docs/architecture/README.md)。
 
-### 改 eval config / ablation params
-`scripts/eval/config/` → `src/saccade/perception/eval/config.py` → `src/saccade/perception/eval/evaluator.py`
+### 推送前
 
-### 改 evaluation / ablation 流程
-`scripts/eval/mot17.py` → `src/saccade/perception/eval/evaluator.py`
-
-### DB / Experiment Tracking
-需要查詢時參考：
-- `scripts/ops/mlflow_server.sh` — MLflow tracking server 啟動
-- `scripts/eval/mlflow_logger.py` — MLflow logging 共用工具
-- `scripts/tools/compare_trials.py` — Optuna trial 對比
-- `scripts/tools/average_top_trials.py` — Optuna top-trial 平均
-
----
-
-## 8. 開發流程
-
-### 8.1 實驗追蹤
-
-三個 PostgreSQL 資料庫透過 `docker compose up db -d` 提供：
-
-| 資料庫 | 用途 | 介面 |
-|--------|------|------|
-| `saccade` | 預留（目前空） | — |
-| `mlflow` | 實驗追蹤 (params / metrics / tags) | MLflow UI → `http://localhost:5000` |
-| `optuna` | 超參數調優 (trials / studies) | `scripts/tools/compare_trials.py` / `optuna-dashboard` |
-
-**啟動 MLflow：**
 ```bash
-./scripts/ops/mlflow_server.sh
+git config core.hooksPath .githooks   # 一次
+bash scripts/pre_push.sh              # lockfile + ruff + mypy + pytest + doc checks + C++ 偵測
+bash scripts/pre_push.sh --fix        # 先 ruff fix/format
 ```
 
-**跑 eval 自動登錄：**
-```bash
-uv run python scripts/eval/mot17.py --preset speed --detector SDP \
-    --mlflow-uri http://localhost:5000 \
-    --mlflow-experiment mot17
-```
+Doc 相關（pre_push 已掛）：`check_doc_links` · `check_doc_stale_paths` · freshness warn · **structure warn（O1.5）**。
 
-**跑 ablation 自動登錄每個 variant：**
-```bash
-uv run python -m scripts.eval.ablation_mot17 \
-    --category detection \
-    --mlflow-experiment mot17-ablation
-```
-
-**查詢過往 trial：**
-```bash
-uv run python scripts/tools/compare_trials.py \
-    --study A1_Unified_Score --trials 0 1 2
-```
-
-MLflow 或 Optuna 未啟動時不影嚮 eval — `log_eval_run()` 會印 warning 並退場。
-
-### 改動前
-判斷改動類型：
-- **架構 / 合約** → 更新 `docs/decisions/`、`docs/architecture.md`
-- **近期方向 / 實驗** → 更新 `docs/TODO.md`
-- **bug fix / 實作細節** → commit message 記錄 why
-
-開分支前先確認工作項已落到 `docs/TODO.md`。
-沒有進 TODO 的工作，不直接開新分支。
-
-### 改動中
-- 維持主熱路徑 GPU-first；避免未說明的 `.cpu()` / `numpy()` / host materialization
-- 引入 fallback 時明確定義觸發條件與回退行為
-
-### 改動後
-若影響 default path，應補：
-- `IDF1 / MOTA / IDs / FP / FN / FPS` 與 baseline 對比
-- 哪些 sequence 改善 / 退化
-- 是否屬於 run-to-run noise 還是系統性差異
-
-### 實驗層級
-不要把所有驗證壓成「最後 IDF1 有沒有變好」。分三層：
-1. **baseline**：`./scripts/eval/module_benchmark.sh --mode all`
-2. **module-local**：先看你改的那個模組的主指標
-3. **promotion validate**：local signal 明確後，才升級看整體 e2e 指標
-
-判讀規則：`local improved + downstream worse` = regression，不保留；`local + downstream + e2e` 全改善才是強候選。
-
----
-
-## 9. Branching Policy
-
-- `main`：單一主分支。所有功能開發、修正、文件更新最終都合回 `main`。
-- `feat/*`、`fix/*`、`perf/*`：工作分支。從 `main` 拉出，完成後以 PR 合回 `main`，合併後立即刪除。
-
-### 分支工作流
-
-1. 先在 `docs/TODO.md` 寫清楚要做的工作、目的與驗證方式。
-2. 從 `main` 建立工作分支。
-3. 在工作分支開發與提交。
-4. 推到遠端後，開 PR 指向 `main`。
-5. CI 通過後合併到 `main`，並刪除工作分支。
-
-### 規則
-
-- 不直接 push 到 `main`。
-- 預設所有改動都走 PR，即使是單人倉庫也保留 CI 與變更紀錄。
-- 調整 CI 觸發分支時，必須同步更新 `.github/workflows/` 的 `push` / `pull_request` 觸發條件。
-- 工作樹有未提交變更時，不做分支整理、批次 merge 或預設分支切換。
-
----
-
-## 10. 本地驗證
-
-### 推送前（鏡像 CI）
+### 依層級加驗證
 
 ```bash
-git config core.hooksPath .githooks  # 一次性設定：commit 前自動 ruff format/check staged Python files
-bash scripts/pre_push.sh          # lockfile + ruff + mypy + pytest + C++ build 偵測
-bash scripts/pre_push.sh --fix    # 同上，自動 ruff fix / format 後再檢查
-```
-
-`pre-commit` hook 只處理已暫存的 Python 檔案：先 `ruff format`，再 `ruff check`，最後自動重新 `git add`。`mypy / pytest / C++ build` 仍保留在 `pre_push`，避免每次 commit 過重。
-
-CI 跑兩個 ruff 步驟（`ruff check` 和 `ruff format --check`），腳本一併涵蓋。有 `src/`、`include/`、`CMakeLists.txt` 改動且 `build/` 存在時，自動跑 `make saccade_tracking_ext`。
-
-### 依改動範圍選擇
-
-```bash
+# D0/D1
 uv run pytest tests/ --ignore=tests/benchmarks
-scripts/test_native.sh
-./scripts/eval/module_benchmark.sh --mode all
-uv run scripts/eval/mot17.py --preset mamba_whole_graph --detector SDP
-uv run scripts/eval/mot17.py --preset speed --detector SDP
+
+# D3 常見
+uv run scripts/eval/mot17.py --preset mamba_whole_graph --detector SDP --double-buffer --sequences MOT17-04-SDP
+uv run python scripts/tools/check_headline_decision_contract.py
+
+# native 有改且 build/ 存在時，pre_push 會觸發 tracking ext build
 ```
 
----
+實驗分層（避免只看最終 IDF1）：module-local signal → 再 e2e；`local↑ + downstream↓` = regression。
 
-## 11. 文件更新規則
+### 分支（摘要）
 
-**核心原則：每個事實只有一個家，其餘只連結、不複製。** 模組文檔多檔結構容易 drift，靠單一來源 + 連結檢查維持一致。
+- `main` only 合入目標；工作分支 `feat/*` `fix/*` `perf/*` `docs/*` `research/*`
+- 不直接 push `main`；PR + CI
+- 開分支前：工作項落在 **module TODO**（sole active）或全局 [docs/TODO.md](docs/TODO.md)
 
-| 事實類型 | 唯一的家（single source of truth） |
-|------|---------|
-| 模組狀態 dashboard（🔄/✅/❌ 一覽） | 本文件 §6 模組現狀總覽 |
-| 模組 active 待辦（要做什麼） | `docs/modules/<m>/TODO.md` |
-| 模組職責 / 現況 / I/O & dataflow / GO·NO-GO 短結論 | `docs/modules/<m>/README.md` |
-| 全局矩陣、Baseline、跨模組待辦、模組 TODO 索引 | `docs/TODO.md` |
-| GO/NO-GO 細節、過程、舊參數掃描、舊路線圖 | `docs/TODO_history.md` |
-| 架構決策紀錄（ADR） | `docs/decisions/` |
-| 全局 dataflow 串接（16-stage） | `docs/reference/pipeline_flow.md` |
-| pipeline module 與 metric 對應 | `docs/reference/PIPELINE_REFERENCE.md` |
+### 實驗追蹤（可選）
 
-**維護時機（綁 ablation 流程，避免 drift）：**
-- ablation 收斂 → 在該 module README `⚖️ GO/NO-GO` 加 **一行**（日期＋項目＋結論）；長文進 `TODO_history.md`。
-- 開新工作 → 寫進 `docs/modules/<m>/TODO.md`（**不是**主 TODO）。
-- §6 dashboard 的狀態 icon → **只在階段轉換**（🔄→✅/❌）時改，不隨小改同步。
-- 高頻動作是「加一行 ledger」；不做全套五處同步。連結正確性由 `scripts/pre_push.sh` 的 doc link check（`scripts/tools/check_doc_links.py`）自動把關。
+MLflow / Optuna 未啟動不阻 eval。啟動與查詢：
 
-歸檔原則：主 TODO 保留高訊號摘要；細節、過程、舊參數掃描移入 history。某方向重新啟動再從 history 摘回，不在主 TODO 長期保留已結案脈絡。
+- `scripts/ops/mlflow_server.sh`
+- `scripts/eval/mlflow_logger.py`
+- `scripts/tools/compare_trials.py`
 
 ---
 
-## 12. 補充入口
+## 6. 衝突時誰說了算
 
-- [docs/architecture/README.md](docs/architecture/README.md)
-- [docs/reference/PIPELINE_REFERENCE.md](docs/reference/PIPELINE_REFERENCE.md)
-- [docs/TODO.md](docs/TODO.md)
-- [docs/reference/mot17_default_config.md](docs/reference/mot17_default_config.md)
-- [MLflow UI](http://localhost:5000)（需先啟動 `scripts/ops/mlflow_server.sh`）
-- [scripts/eval/mlflow_logger.py](scripts/eval/mlflow_logger.py)（MLflow logging 工具）
-- [scripts/tools/compare_trials.py](scripts/tools/compare_trials.py)（Optuna trial 對比）
-- [scripts/tools/average_top_trials.py](scripts/tools/average_top_trials.py)（Optuna top-trial 平均）
+1. **主路徑程式碼**（`src/saccade/perception/`、`src/tracking/`、`scripts/eval/mot17.py`）
+2. **合約 / 預設**（headline YAML、`check_headline_decision_contract`、accepted ADR）
+3. **事實家**（baseline → `docs/TODO.md`；決策數字 → `evidence_ledger`；模組 sole active → 本檔 dashboard 鏡射 module TODO）
+4. **入口敘事**（本檔、PIPELINE、showcase）— 只鏡射，不另造數字
+
+本檔**不是** association 語意百科，也**不是** paper 第二真相。
+
+---
+
+## 7. 入口地圖（其餘家）
+
+| 需求 | 去 |
+|:--|:--|
+| 寫 docs / research 路由 | [docs/README.md](docs/README.md) · [O1.5 契約](docs/ownership/doc_structure_contract.md) |
+| 格式 · WIP · fact-owner | [DOC_MAINTENANCE.md](docs/DOC_MAINTENANCE.md) |
+| 目標隔離 · PR 檢查矩陣 | [docs/ownership/](docs/ownership/README.md) |
+| 演算法主線精煉 | [docs/PIPELINE.md](docs/PIPELINE.md) |
+| Stage dataflow | [docs/reference/pipeline_flow.md](docs/reference/pipeline_flow.md) |
+| NO-GO 總表 | [docs/reference/no_go_registry.md](docs/reference/no_go_registry.md) |
+| 決策層（closed） | [tracker-decision/](docs/research/tracker-decision/README.md) |
+| 全局 research 入口 | [docs/research/README.md](docs/research/README.md) |
+| Paper assets | [report_data/README.md](report_data/README.md) |
+| 倉庫目錄約定 | [REPO_LAYOUT.md](REPO_LAYOUT.md) |
+
+---
+
+## 原則（三條）
+
+- 架構與合約決定什麼值得做；TODO / sole active 排現在做什麼。
+- 單一原始碼檔原則上不超過 **1000** 行；主熱路徑 GPU / native first。
+- **每個事實一個家**；入口只組合連結，不複製長表。

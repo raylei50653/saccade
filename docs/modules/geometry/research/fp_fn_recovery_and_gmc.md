@@ -148,7 +148,7 @@ Recommendation after this sweep:
 Ran and recorded in:
 
 - `scripts/eval/output/ablation_rerank.txt`
-- `docs/research/eval/rerank_phase2.md`
+- `docs/archive/rerank_phase2.md`
 
 Important context:
 

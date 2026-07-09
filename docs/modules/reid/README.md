@@ -39,6 +39,23 @@
 | 2026-06-13 | Mamba head 特徵作 relink embedding（含 T3→T1 一致性特徵） | ❌ NO-GO（hard pool AUC 0.438；consistency ≠ discriminability，detection 特徵對個體無區分力，與 ROI FPN 一致），registry [#35](../../reference/no_go_registry.md) |
 | — | ReID stack 疊加 | ⏸️ 暫緩，待 **MOT-域訓練的 ReID 特徵**（非 Market）；先過 `reid_id_benchmark.py` gate |
 
+## 📐 設計入口
+
+| 文件 | 內容 |
+|------|------|
+| [architecture.md](architecture.md) | ReID 與 Feature Bank 架構 |
+| [mobilenetv4_integration_options.md](mobilenetv4_integration_options.md) | MobileNetV4 候選整合與 gate |
+
+關聯政策 / Cheb-GR / offline identity 文檔家在 [semantic](../semantic/README.md)，不在本模組。
+
+## 📚 研究
+
+| 文件 | 內容 |
+|------|------|
+| [research/last_vit_integration_analysis.md](research/last_vit_integration_analysis.md) | LaSt-ViT frequency-domain 診斷 |
+| [research/semantic_relink_and_crop.md](research/semantic_relink_and_crop.md) | Semantic relink + SigLIP2 crop 實驗 |
+| [../../research/reid/appearance_ceiling_mot17.md](../../research/reid/appearance_ceiling_mot17.md) | MOT17 appearance 能力上限（全局 research 家） |
+
 ## 📋 模組 TODO
 
 詳見 [TODO.md](TODO.md)。

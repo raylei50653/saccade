@@ -217,4 +217,4 @@ WP3 should:
 ```
 
 Related: [occ_exit_audit_p55_scope_20260709.md](occ_exit_audit_p55_scope_20260709.md),
-WP1a #74, WP1b #75, registry [#55](../../reference/no_go_registry.md).
+WP1a #74, WP1b #75, registry [#55](../../../reference/no_go_registry.md).
