@@ -93,7 +93,7 @@ Cheb-GR / bank / offline identity / occ-exit → 文檔家 **semantic**（非 re
 |:--|:--|:--|
 | 修 crash / flake，行為不變 | **D0** | 測試 + pre_push |
 | 單模組 ablation，default-off | **D1** | module research + README 索引 + TODO 連結 |
-| **數據驅動 gate / relink 訊號研究**（pairs、AUC、safe-reject；不改 preset） | **D1** | 契約 [signal_table_schema](docs/research/eval/signal_table_schema.md) §0.1–0.4（A/B1/B2 + **constrained FP prune**）；工具 `build_relink_candidates` → `summarize_relink_pairs` → `audit_relink_safe_reject`；數字 master `out/signal_study/<id>/`（gitignore）；活 note [m_b1](docs/modules/semantic/research/m_b1_bridge_discriminability_20260709.md) / [m_b2](docs/modules/semantic/research/m_b2_reconnect_bridge_ab_20260709.md)；s 方法 hub [offline_relink](docs/modules/semantic/research/offline_relink_candidate_analysis.md)（**historical**）；eval 索引 [docs/research/eval/README](docs/research/eval/README.md) |
+| **數據驅動 gate / relink 訊號研究**（pairs、AUC、safe-reject；不改 preset） | **D1** | **入口（能用/缺什麼只維護一處）：** [signal_table_schema §8](docs/research/eval/signal_table_schema.md#8-與現有工具的映射實作入口--能用--缺什麼) · 契約 §0.1–0.4 · 工具 pairs→summarize→`audit_relink_safe_reject` / reconnect · study_dir `out/signal_study/` · 活 note m_b1/m_b2 · s hub offline_relink（historical）· 腳本表 [association_recovery_scripts_index](docs/modules/semantic/research/association_recovery_scripts_index_20260709.md) |
 | occ-exit / Cheb-GR / sparse bank | **D1→D2** | **semantic** research 全家；引用數字再 D2 promotion |
 | 外觀 ceiling / 特徵抽取實作 | **D1** | **reid** README/research；關聯政策仍看 semantic |
 | GMC / Kalman 實驗 | **D1→D3** | geometry research + eval 筆記；動 default → 加上 tracker-decision + contract |

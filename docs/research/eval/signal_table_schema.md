@@ -682,17 +682,48 @@ regressed  = E(B) \ E(A)
 
 ---
 
-## 8. 與現有工具的映射（實作入口）
+## 8. 與現有工具的映射（實作入口 · 能用 / 缺什麼）
 
-| 需求 | 先用 | 落到 schema |
+> **維護規則：** 加/改 tool 或「有／缺」狀態時只改**本節**，不另開 inventory 文。  
+> 開發薄入口：[DEVELOPMENT.md](../../../DEVELOPMENT.md) §3「數據驅動 gate / relink」。  
+> 腳本查找表（無結論）：[association_recovery_scripts_index](../../modules/semantic/research/association_recovery_scripts_index_20260709.md)。
+
+### 8.1 能用（按問題）
+
+| 我想知道… | 先開 | 狀態 |
 |:--|:--|:--|
-| L0 det 框 | `--debug-dump-csv` + stages | `U_det` |
-| L0 score×height | `analyze_score_distribution.py` | `U_gt` |
-| L2/L3 count | `mot17.py` + method profile | `MethodMetricsRow` |
-| 訊號 AUC 先例 | `neutral_nogo` 文 + tool | 對齊 `U_cand` / 分層表 |
-| Stage 誰殺了 GT | `analyze_near_miss_stage_attribution.py` | join `U_gt`↔stage dump |
+| 契約：A/B1/B2、study_dir、safe-reject | **本檔** §0.1–0.4 | ✅ |
+| **Production 開了哪些 identity/assoc 旋鈕**（配置面） | [tracker-decision config_surface](../tracker-decision/audit/config_surface.md) · [assoc_knobs](../tracker-decision/assoc_knobs.md) · `print_assoc_basis.py --preset …` | ✅ 清單/解析；**非**事件觸發率 |
+| B1 pairs + full/hard AUC + thr | `build_relink_candidates` → `summarize_relink_pairs` · `out/signal_study/` | ✅ |
+| B1：誰傷 GT / thr(gap) 形狀 | study `metrics_thr_*` · 活 note m_b1 §3b–3c | ✅ 當次 study |
+| B1：**constrained FP prune**（ε 下砍 FP） | `audit_relink_safe_reject.py` · §0.4 · study `metrics_safe_reject_*` | ✅ 工具；**探針 rule 仍薄** |
+| B2：斷–接 rate / bridge on-off | `reconnect_rate.py --json-out` · m_b2 note | ✅ |
+| 單題「gate 蓋多少事件」（crossing / handover / occ） | `depth_ordering_gate_sweep`（coverage 定義在腳本）· Cheb-GR `parameter_summary` / applicability · occ-audit 線 | ✅ **各線自有**，非總表 |
+| L0 score×height / stage 殺 GT | `analyze_score_distribution` · `analyze_near_miss_stage_attribution` | ✅ |
+| s 方法祖先（勿當 m 數字） | [offline_relink](../../modules/semantic/research/offline_relink_candidate_analysis.md) | ✅ historical |
 
-Code 常數與 dataclass：`signal_tables.py`（`UNIVERSE_COLUMNS`, `load_study_meta`, …）。
+### 8.2 缺什麼（有意未建 · 需要時再開）
+
+| 缺口 | 現狀 | 不要誤會 |
+|:--|:--|:--|
+| **全 pipeline gate 覆蓋率儀表板** | 無單一報表 | 用 §8.1 分線查，不另維護總 inventory 檔 |
+| **Live 每 gate 觸發次數標準產物** | 部分在 log（如 `bridge_attempts/accepts`），無統一 CSV | 要做就掛在既有 eval 輸出，勿新 doc |
+| **ACTIVE 配置 × e2e 自動對照** | config_surface 與 MOT 分家 | `print_assoc_basis` + 手動 run |
+| **Safe-reject 可上線 rule 庫** | 僅 probe + 1D ε=0 ceiling；合取多 `unsafe` | 先訊號掃描再寫 rule，見 §0.4 |
+| **B1 AUC 與 B2 reconnect 自動 join** | 兩 study_dir 手動並讀 | 契約要求 B1≠B2，不強制同構 |
+| **數字嵌進 markdown master** | 禁止；master 在 `out/signal_study/` | |
+
+### 8.3 最小路徑（copy-paste）
+
+```text
+配置面 ACTIVE？  → print_assoc_basis / config_surface
+offline 訊號？   → substrate (bridge/interp off) → pairs → summarize → study_dir
+砍 FP 不傷 GT？  → audit_relink_safe_reject --write-study
+online 斷–接？   → reconnect_rate (bridge on/off MOT)
+某題事件覆蓋？  → 該題腳本（depth / handover / occ），不是本 schema 總表
+```
+
+Code 常數：`signal_tables.py`（`STUDY_SCRIPT_MAP`, `SAFE_REJECT_*`, …）。
 
 ---
 
