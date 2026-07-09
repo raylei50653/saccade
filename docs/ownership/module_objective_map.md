@@ -82,13 +82,15 @@ Checks:      smoke if R-scale / GMC mode defaults change
 ### streaming / storage / cognition / resource / trigger
 
 ```text
-Primary:     RUNTIME (industrial path) or LEGACY (converged MOT-eval secondary)
-Secondary:   CONFIG for RTSP/contracts where applicable
+Primary:     RUNTIME (industrial path; MOT-eval secondary use is incidental)
+Secondary:   LEGACY where applicable (converged MOT-eval side paths); CONFIG for RTSP/contracts where applicable
 Should-not-own: MOT17 association decision contract; dual-stability
 Risk:        industrial features bleed into MOT eval defaults
 Extraction:  keep MOT eval entry (scripts/eval/mot17.py) free of industrial side effects
 Checks:      module-specific runbooks if those services change
 ```
+
+> Secondary may list up to two types. Prefer **one Primary code**; do not write `Primary: A or B`.
 
 ---
 

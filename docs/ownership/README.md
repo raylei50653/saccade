@@ -54,7 +54,10 @@ has **one primary job**, explicit secondaries, and a clear **should-not-own** li
 - [x] Large modules / hot files have primary + should-not-own  
 - [x] Change routing by objective  
 - [x] Extraction candidates with rationale  
-- [ ] **No** behavior change, code movement, runtime/default flip (must hold for O1 PRs)
+
+### O1 invariants (must hold for this PR)
+
+- [x] **No** behavior change, code movement, runtime/default flip
 
 ---
 
