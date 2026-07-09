@@ -351,7 +351,10 @@ Increasing it makes association more permissive, which can recover more occlusio
 | [audit/config_surface.md](audit/config_surface.md) | **done** | Cross-module decision surface + ACTIVE/LATENT/NO-GO |
 | [audit/callpoints.md](audit/callpoints.md) | **done** | schema → preset → inject → native → effect |
 | [audit/native_bridge.md](audit/native_bridge.md) | **done** | Python↔CUDA setters, remaps, packing risks |
-| [audit/math_model_drift_2026-07-09.md](audit/math_model_drift_2026-07-09.md) | **done** | P3 static drift check vs math_model.md (2026-06-19) |
+| [audit/math_model_drift_2026-07-09.md](audit/math_model_drift_2026-07-09.md) | **done** | P3 static drift check vs math_model.md |
+| [audit/dual_stability_cleanup.md](audit/dual_stability_cleanup.md) | **done (RFC)** | P4-1 dual stability A/B/C — design only |
+| [audit/no_go_guardrails.md](audit/no_go_guardrails.md) | **done (RFC)** | P4-2 NO-GO/LATENT promotion + future validator rules |
+| [audit/active_contract_healthcheck.md](audit/active_contract_healthcheck.md) | **done (RFC)** | P4-3 manual active-path healthcheck; P5 script later |
 | [assoc_knobs.md](assoc_knobs.md) | **done** | Knob cards (gate / score / weight / lifecycle) |
 | [scoring_semantics.md](scoring_semantics.md) | **done** | What association cost means on headline path |
 | [relink_bridge.md](relink_bridge.md) | **done** | Geometry-only bridge reconnect semantics |
@@ -409,7 +412,15 @@ detector input set → association cost → lifecycle (birth/confirm/lost)
 
 ## Current Priority
 
-First wave for decision-policy cleanup reviews (keep fresh when presets or cost kernels change):
+P4 cleanup RFCs (guardrails, not retunes):
+
+```text
+audit/dual_stability_cleanup.md      # A/B/C — do not merge knobs yet
+audit/no_go_guardrails.md            # promotion rules + future validator
+audit/active_contract_healthcheck.md # manual checklist; P5 script later
+```
+
+Still keep fresh when presets or cost kernels change:
 
 ```text
 audit/config_surface.md
@@ -423,14 +434,16 @@ assoc_knobs.md
 |:--|:--|
 | Explicit `occ_state_*` in headline presets | **done** (behavior-preserving) |
 | Explicit `relink_bridge_dir_bonus` on m (`0.0`) | **done** (behavior-preserving; documents s≠m) |
-| NO-GO / LATENT prohibition table | see [audit/config_surface.md](audit/config_surface.md) |
-| Dual stability architecture debt | **documented, not merged** — see [scoring_semantics.md](scoring_semantics.md) |
-| `math_model.md` drift check | **done** — [audit/math_model_drift_2026-07-09.md](audit/math_model_drift_2026-07-09.md) |
-| `math_model.md` aligned to production path | **done** — occ on, private continuation, m deltas, inject=`pipeline.py` |
+| NO-GO / LATENT prohibition table | [audit/config_surface.md](audit/config_surface.md) |
+| Dual stability architecture debt | **RFC only** — [audit/dual_stability_cleanup.md](audit/dual_stability_cleanup.md); prefer option A until eval |
+| NO-GO guardrail process | **RFC** — [audit/no_go_guardrails.md](audit/no_go_guardrails.md) |
+| Active-path healthcheck | **manual RFC** — [audit/active_contract_healthcheck.md](audit/active_contract_healthcheck.md) |
+| `math_model.md` drift check + align | **done** (PR #62 audit, PR #63 align) |
+| P5: preset validator / CI healthcheck script | **not started** |
 
-Open maintainability questions:
+Open maintainability questions (answered by RFCs, not closed):
 
-1. Large LATENT/NO-GO surface still in schema vs small ACTIVE subset.
-2. Dual height-stability (`stability_cost_w` vs `SACCADE_STABILITY_W`) — rename, converge, or demote one.
+1. Large LATENT/NO-GO surface — **guard with process + future validator**, do not delete schema yet.
+2. Dual height-stability — **choose A/B/C later**; healthcheck keeps both explicit until then.
 
 The main open question is not just whether the tracker is accurate, but whether the decision layer is understandable, auditable, and maintainable.
