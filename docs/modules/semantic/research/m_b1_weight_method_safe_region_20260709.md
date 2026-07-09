@@ -1,12 +1,15 @@
 # Weight methods × GT-safe productive region（非 best FP）
 
-<!-- doc-status: active -->
+<!-- doc-status: closed -->
 <!-- doc-promotion: none -->
 <!-- doc-date: 2026-07-09 -->
 <!-- doc-module: semantic -->
 
 **Tool:** `scripts/tools/weight_method_safe_region.py`  
 **Study:** [`out/signal_study/m_weight_safe_20260709T142000Z/`](../../../../out/signal_study/m_weight_safe_20260709T142000Z/)  
+
+> **As-of / closed method note.** Numbers live in `out/signal_study/`. Status for the freeze candidate → [candidate card](m_b1_repaired_eps0_loo_pass_candidate_20260709.md); phase nav → [hub](m_b1_offline_safe_region_phase_20260709.md). **Do not churn status here.**
+
 `weight_method_table.csv` · `rank_eps0_by_productive_region.csv` · `summary.json`  
 **Ledger:** `m.weight.safe_region`  
 **Pairs:** 7-seq B1 offline（`m_b1_smoke_20260709T092543Z`）

@@ -1,9 +1,12 @@
 # Candidate policy card — ε=0 OR-5 (in-sample freeze)
 
-<!-- doc-status: active -->
+<!-- doc-status: closed -->
 <!-- doc-promotion: none -->
 <!-- doc-date: 2026-07-09 -->
 <!-- doc-module: semantic -->
+
+
+> **As-of / closed method note.** Numbers live in `out/signal_study/`. Status for the freeze candidate → [candidate card](m_b1_repaired_eps0_loo_pass_candidate_20260709.md); phase nav → [hub](m_b1_offline_safe_region_phase_20260709.md). **Do not churn status here.**
 
 ```text
 status: IN_SAMPLE_CANDIDATE_ONLY  — SUPERSEDED for LOO claims

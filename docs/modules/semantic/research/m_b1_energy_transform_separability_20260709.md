@@ -1,12 +1,15 @@
 # Energy transform separability audit（raw / log / sqrt / rank）
 
-<!-- doc-status: active -->
+<!-- doc-status: closed -->
 <!-- doc-promotion: none -->
 <!-- doc-date: 2026-07-09 -->
 <!-- doc-module: semantic -->
 
 **Tool:** `scripts/tools/energy_transform_separability.py`  
 **Study:** [`out/signal_study/m_energy_xform_20260709T123727Z/`](../../../../out/signal_study/m_energy_xform_20260709T123727Z/)  
+
+> **As-of / closed method note.** Numbers live in `out/signal_study/`. Status for the freeze candidate → [candidate card](m_b1_repaired_eps0_loo_pass_candidate_20260709.md); phase nav → [hub](m_b1_offline_safe_region_phase_20260709.md). **Do not churn status here.**
+
 `energy_transform_separability.csv` · `summary.json` · `rows.json`  
 **Ledger:** `m.energy.transform_separability` → [signal_analysis_ledger](../../../research/eval/signal_analysis_ledger.md)  
 **Pairs:** 7-seq B1 offline (`m_b1_smoke_*`, bridge/interp off)

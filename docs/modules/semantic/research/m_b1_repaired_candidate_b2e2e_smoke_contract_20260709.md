@@ -1,6 +1,6 @@
 # B2/e2e smoke contract — repaired region candidate only
 
-<!-- doc-status: active -->
+<!-- doc-status: closed -->
 <!-- doc-promotion: none -->
 <!-- doc-date: 2026-07-09 -->
 <!-- doc-module: semantic -->
@@ -9,6 +9,9 @@
 **Tool:** `scripts/tools/smoke_repaired_candidate_b2e2e.py`  
 **Smoke study:** [`out/signal_study/m_b2e2e_smoke_m_b1_repaired_eps0_loo_pass_20260709T151000Z/`](../../../../out/signal_study/m_b2e2e_smoke_m_b1_repaired_eps0_loo_pass_20260709T151000Z/)  
 **Ledger:** `m.gate.repaired_b2e2e_smoke`
+
+
+> **As-of / closed method note.** Numbers live in `out/signal_study/`. Status for the freeze candidate → [candidate card](m_b1_repaired_eps0_loo_pass_candidate_20260709.md); phase nav → [hub](m_b1_offline_safe_region_phase_20260709.md). **Do not churn status here.**
 
 ```text
 m_b1_repaired_eps0_loo_pass_20260709

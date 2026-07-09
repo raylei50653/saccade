@@ -142,6 +142,9 @@ uv run python scripts/tools/mine_relink_signals.py \
 
 ### M-B1 offline gate / signal / safe-region research phase — **CLOSED**
 
+**Phase hub (nav + maintenance rules):**  
+[m_b1_offline_safe_region_phase_20260709.md](../../modules/semantic/research/m_b1_offline_safe_region_phase_20260709.md)
+
 ```text
 phase: M-B1 offline gate / signal / safe-region research
 status: closed successfully (2026-07-09)
@@ -150,30 +153,19 @@ deliverable:
   - LOO_pass_region_candidate + offline_smoke_pass + online_blocked
   - next-phase contract: research default-off portable OR-tail hook
 NOT delivered: production gate / preset change
-```
 
-Completed stack:
-
-```text
-1. ✅ signal distribution stability
-2. ✅ energy/log/linear 分布診斷
-3. ✅ combo safe region / GT 安全域面積
-4. ✅ gate_rule_search
-5. ✅ weight-method safe-region audit
-6. ✅ LOO hurt attribution
-7. ✅ atom repair
-8. ✅ repaired candidate freeze
-9. ✅ shared-q / 2D region validation
-10. ✅ B2/e2e smoke contract
-11. ✅ portable OR-tail hook contract
+maintenance:
+  - status/verdict churn → candidate card + this ledger + hook contract only
+  - Tier-B as-of notes → closed; re-run study_id if numbers must change
+  - do not re-edit intermediate method notes for “latest status”
 ```
 
 **研究階段結束；production 階段還沒開始。下一步不是繼續調 rule，而是補 online hook 做 e2e 驗證。**
 
-### Next phase (engineering validation — not opened in this PR as code)
+### Next phase (engineering validation)
 
 ```text
-1. research-only default-off portable OR-tail hook
+1. research-only default-off portable OR-tail hook  ← only living eng doc
 2. baseline B2 vs B2 + hook
 3. e2e_safe_for_default_off: yes / no
 4. production preset: still NO

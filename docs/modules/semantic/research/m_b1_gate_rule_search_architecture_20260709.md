@@ -1,6 +1,6 @@
 # Gate rule search architecture（受約束搜尋，非排列組合）
 
-<!-- doc-status: active -->
+<!-- doc-status: closed -->
 <!-- doc-promotion: none -->
 <!-- doc-date: 2026-07-09 -->
 <!-- doc-module: semantic -->
@@ -9,6 +9,9 @@
 **Study:** [`out/signal_study/m_gate_rule_search_20260709T124534Z/`](../../../../out/signal_study/m_gate_rule_search_20260709T124534Z/)  
 **Ledger:** `m.gate.rule_search` → [signal_analysis_ledger](../../../research/eval/signal_analysis_ledger.md)  
 **Pairs:** 7-seq B1 offline · RESEARCH / default-off
+
+
+> **As-of / closed method note.** Numbers live in `out/signal_study/`. Status for the freeze candidate → [candidate card](m_b1_repaired_eps0_loo_pass_candidate_20260709.md); phase nav → [hub](m_b1_offline_safe_region_phase_20260709.md). **Do not churn status here.**
 
 ---
 

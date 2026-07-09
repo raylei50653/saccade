@@ -1,11 +1,14 @@
 # B1 訊號分布 → 實作穩定性
 
-<!-- doc-status: active -->
+<!-- doc-status: closed -->
 <!-- doc-promotion: none -->
 <!-- doc-date: 2026-07-09 -->
 <!-- doc-module: semantic -->
 
 **Focus:** 分布形態（尾部 / 偏斜 / 跨 seq 漂移）如何影響 **thr、權重、ε-gate 實作穩定性**。  
+
+> **As-of / closed method note.** Numbers live in `out/signal_study/`. Status for the freeze candidate → [candidate card](m_b1_repaired_eps0_loo_pass_candidate_20260709.md); phase nav → [hub](m_b1_offline_safe_region_phase_20260709.md). **Do not churn status here.**
+
 不是 AUC 排行（單調變換 AUC 不變，見 [scale note](m_b1_signal_scale_linear_log_20260709.md)）。
 
 **Study:** [`out/signal_study/m_b1_dist_stability_20260709T124000Z/dist_stability.json`](../../../../out/signal_study/m_b1_dist_stability_20260709T124000Z/dist_stability.json)  

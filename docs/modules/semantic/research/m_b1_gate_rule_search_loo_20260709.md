@@ -1,6 +1,6 @@
 # LOO validation — ε=0 gate rule search
 
-<!-- doc-status: active -->
+<!-- doc-status: closed -->
 <!-- doc-promotion: none -->
 <!-- doc-date: 2026-07-09 -->
 <!-- doc-module: semantic -->
@@ -10,6 +10,9 @@
 **Study:** [`out/signal_study/m_gate_rule_loo_20260709T125245Z/`](../../../../out/signal_study/m_gate_rule_loo_20260709T125245Z/)  
 **Policy card (in-sample freeze):** [m_b1_policy_card_eps0_or5_20260709.md](m_b1_policy_card_eps0_or5_20260709.md)  
 **Ledger:** `m.gate.rule_search.loo`
+
+
+> **As-of / closed method note.** Numbers live in `out/signal_study/`. Status for the freeze candidate → [candidate card](m_b1_repaired_eps0_loo_pass_candidate_20260709.md); phase nav → [hub](m_b1_offline_safe_region_phase_20260709.md). **Do not churn status here.**
 
 ```text
 status: LOO_PARTIAL — not production

@@ -1,9 +1,10 @@
 # Candidate card — repaired ε=0 LOO-pass
 
-<!-- doc-status: active -->
+<!-- doc-status: closed -->
 <!-- doc-promotion: none -->
 <!-- doc-date: 2026-07-09 -->
 <!-- doc-module: semantic -->
+<!-- fact-owner: freeze-identity = this card; phase nav = m_b1_offline_safe_region_phase_20260709.md -->
 
 ```text
 candidate_id:       m_b1_repaired_eps0_loo_pass_20260709
@@ -15,6 +16,8 @@ e2e_safe_for_default_off: no
 production_preset:  unchanged
 ≠ production gate
 ```
+
+> **Phase hub / maintenance:** [m_b1_offline_safe_region_phase_20260709.md](m_b1_offline_safe_region_phase_20260709.md) — intermediate method notes are closed as-of; do not re-edit their verdicts when working the hook.
 
 `lifecycle_status` 與 `validation_status` **不是互斥**：前者是「能不能當 production 物件」，後者是 offline 驗證到哪一層。
 

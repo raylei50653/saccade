@@ -1,6 +1,6 @@
 # GT-safe region area（GT-CDF / tail-mass 空間）
 
-<!-- doc-status: active -->
+<!-- doc-status: closed -->
 <!-- doc-promotion: none -->
 <!-- doc-date: 2026-07-09 -->
 <!-- doc-module: semantic -->
@@ -9,6 +9,9 @@
 **Study:** [`out/signal_study/m_gt_safe_area_20260709T125933Z/`](../../../../out/signal_study/m_gt_safe_area_20260709T125933Z/)  
 **Ledger:** `m.gt.safe_region_area`  
 **Pairs:** 7-seq B1 offline
+
+
+> **As-of / closed method note.** Numbers live in `out/signal_study/`. Status for the freeze candidate → [candidate card](m_b1_repaired_eps0_loo_pass_candidate_20260709.md); phase nav → [hub](m_b1_offline_safe_region_phase_20260709.md). **Do not churn status here.**
 
 ```text
 coordinate_space = GT_tail_mass

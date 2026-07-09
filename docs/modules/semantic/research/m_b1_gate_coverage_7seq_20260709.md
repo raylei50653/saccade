@@ -1,6 +1,6 @@
 # m B1 — production-shaped L0 gate coverage (7-seq)
 
-<!-- doc-status: active -->
+<!-- doc-status: closed -->
 <!-- doc-promotion: none -->
 <!-- doc-date: 2026-07-09 -->
 <!-- doc-module: semantic -->
@@ -12,6 +12,9 @@
 **Pairs substrate:** reuses `m_b1_smoke_20260709T092543Z` 7-seq pairs (bridge/interp off)  
 **Contract:** [signal_table_schema §0.4–0.5](../../../research/eval/signal_table_schema.md) · tool `audit_relink_safe_reject.py`  
 **Sibling:** [m_b1_bridge_discriminability](m_b1_bridge_discriminability_20260709.md) (AUC/thr) · [m_b2 reconnect](m_b2_reconnect_bridge_ab_20260709.md)
+
+
+> **As-of / closed method note.** Numbers live in `out/signal_study/`. Status for the freeze candidate → [candidate card](m_b1_repaired_eps0_loo_pass_candidate_20260709.md); phase nav → [hub](m_b1_offline_safe_region_phase_20260709.md). **Do not churn status here.**
 
 > **Ops note:** full 7-seq MOT on this host is ~30s — treat as cheap. Re-run substrate freely; do not gate experiments on “save the eval.”
 

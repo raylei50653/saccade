@@ -1,6 +1,6 @@
 # B1 signals — linear vs log（尺度分析）
 
-<!-- doc-status: active -->
+<!-- doc-status: closed -->
 <!-- doc-promotion: none -->
 <!-- doc-date: 2026-07-09 -->
 <!-- doc-module: semantic -->
@@ -8,6 +8,9 @@
 **Ledger:** `m.scale.linear_vs_log` → [signal_analysis_ledger](../../../research/eval/signal_analysis_ledger.md)  
 **Study:** [`out/signal_study/m_b1_scale_compare_20260709T123000Z/scale_compare.json`](../../../../out/signal_study/m_b1_scale_compare_20260709T123000Z/scale_compare.json)  
 **Pairs:** 7-seq B1 substrate (same as mine batch)
+
+
+> **As-of / closed method note.** Numbers live in `out/signal_study/`. Status for the freeze candidate → [candidate card](m_b1_repaired_eps0_loo_pass_candidate_20260709.md); phase nav → [hub](m_b1_offline_safe_region_phase_20260709.md). **Do not churn status here.**
 
 ---
 

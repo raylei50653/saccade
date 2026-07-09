@@ -1,11 +1,14 @@
 # LOO hurt attribution → atom repair → re-LOO
 
-<!-- doc-status: active -->
+<!-- doc-status: closed -->
 <!-- doc-promotion: none -->
 <!-- doc-date: 2026-07-09 -->
 <!-- doc-module: semantic -->
 
 **Tool:** `scripts/tools/loo_hurt_attribution.py`  
+
+> **As-of / closed method note.** Numbers live in `out/signal_study/`. Status for the freeze candidate → [candidate card](m_b1_repaired_eps0_loo_pass_candidate_20260709.md); phase nav → [hub](m_b1_offline_safe_region_phase_20260709.md). **Do not churn status here.**
+
 （repair 旗標：`gate_rule_search.AtomRepairConfig`）  
 **Study:** [`out/signal_study/m_loo_attr_20260709T143000Z/`](../../../../out/signal_study/m_loo_attr_20260709T143000Z/)  
 **Ledger:** `m.gate.loo_atom_repair`  

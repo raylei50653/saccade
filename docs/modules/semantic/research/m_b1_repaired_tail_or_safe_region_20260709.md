@@ -1,6 +1,6 @@
 # Repaired all-tail OR — ε=0 safe region near q85
 
-<!-- doc-status: active -->
+<!-- doc-status: closed -->
 <!-- doc-promotion: none -->
 <!-- doc-date: 2026-07-09 -->
 <!-- doc-module: semantic -->
@@ -9,6 +9,9 @@
 **Tool:** `scripts/tools/repaired_tail_or_safe_region.py`  
 **Study:** [`out/signal_study/m_repaired_tail_region_20260709T150000Z/`](../../../../out/signal_study/m_repaired_tail_region_20260709T150000Z/)  
 **Ledger:** `m.gate.repaired_tail_region`
+
+
+> **As-of / closed method note.** Numbers live in `out/signal_study/`. Status for the freeze candidate → [candidate card](m_b1_repaired_eps0_loo_pass_candidate_20260709.md); phase nav → [hub](m_b1_offline_safe_region_phase_20260709.md). **Do not churn status here.**
 
 ```text
 Question:  在 all-tail repaired OR 下，q85 附近是否有厚 ε=0 productive plateau？

@@ -60,6 +60,7 @@
 | **LOO hurt attribution + atom repair re-LOO** | `loo_hurt_attribution.py` | A |
 | **Repaired all-tail OR region (shared-q / 2D)** | `repaired_tail_or_safe_region.py` | A |
 | **B2/e2e smoke (candidate_id only)** | `smoke_repaired_candidate_b2e2e.py` | A |
+| **M-B1 offline phase hub (CLOSED nav)** | — · [hub note](m_b1_offline_safe_region_phase_20260709.md) | A |
 | 面積 / 轉向前 loss | `analyze_preloss_motion.py` · `analyze_turn_baseline.py` | A |
 | speed×turn 分布 | `scripts/tools/sweep_speed_turn.py` | A |
 | 否證 reach / s·G | `scripts/tools/validate_reach_gate.py` | A |

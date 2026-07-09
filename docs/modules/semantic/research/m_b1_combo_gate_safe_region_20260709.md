@@ -1,6 +1,6 @@
 # Combo gate safe region（2D thr surface · AND 撈門檻）
 
-<!-- doc-status: active -->
+<!-- doc-status: closed -->
 <!-- doc-promotion: none -->
 <!-- doc-date: 2026-07-09 -->
 <!-- doc-module: semantic -->
@@ -10,6 +10,9 @@
 **Ledger:** `m.combo.safe_region` → [signal_analysis_ledger](../../../research/eval/signal_analysis_ledger.md)  
 **Pairs:** 7-seq B1 offline substrate  
 **Contract:** GT_hurt hard / FP soft（schema §0.4）
+
+
+> **As-of / closed method note.** Numbers live in `out/signal_study/`. Status for the freeze candidate → [candidate card](m_b1_repaired_eps0_loo_pass_candidate_20260709.md); phase nav → [hub](m_b1_offline_safe_region_phase_20260709.md). **Do not churn status here.**
 
 ---
 

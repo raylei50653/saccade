@@ -10,6 +10,8 @@
 **Blocked by smoke:** [B2/e2e smoke](m_b1_repaired_candidate_b2e2e_smoke_contract_20260709.md)  
   → `offline_smoke_pass__online_blocked`
 
+> **Only living eng doc for next phase.** Intermediate M-B1 notes are closed; nav: [phase hub](m_b1_offline_safe_region_phase_20260709.md).
+
 ### Main line (locked)
 
 ```text

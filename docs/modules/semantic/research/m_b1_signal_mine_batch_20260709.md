@@ -1,6 +1,6 @@
 # m B1 — auto batch signal mine (7-seq)
 
-<!-- doc-status: active -->
+<!-- doc-status: closed -->
 <!-- doc-promotion: none -->
 <!-- doc-date: 2026-07-09 -->
 <!-- doc-module: semantic -->
@@ -12,6 +12,9 @@
 **Tool:** `scripts/tools/mine_relink_signals.py`  
 **Ledger:** [signal_analysis_ledger](../../../research/eval/signal_analysis_ledger.md)  
 **Pairs:** existing 7-seq B1 substrate (bridge/interp off)
+
+
+> **As-of / closed method note.** Numbers live in `out/signal_study/`. Status for the freeze candidate → [candidate card](m_b1_repaired_eps0_loo_pass_candidate_20260709.md); phase nav → [hub](m_b1_offline_safe_region_phase_20260709.md). **Do not churn status here.**
 
 ---
 
