@@ -101,6 +101,11 @@ so no one confuses them.
 **When to pick A:** Default until a controlled A/B shows one stage is redundant
 after multiplicative retune.
 
+**P7 evidence (2026-07-09):** 4-way ablation on `mamba_whole_graph` SDP
+double-buffer → **keep A (both on)**. Full tables:
+[dual_stability_ablation_results_2026-07-09.md](dual_stability_ablation_results_2026-07-09.md).
+Production defaults not flipped.
+
 **Evidence needed to leave A:** none for “document-only A”; for rename-in-code,
 need ABI/CLI migration plan only (not MOT metrics).
 
