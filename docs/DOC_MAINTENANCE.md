@@ -74,7 +74,7 @@ Proposed → Accepted → (必要時) Superseded by ADR XXX
 <!-- doc-date: YYYY-MM-DD -->
 ```
 
-- **TODO 不寫長報告：** sole active 一句 + 連到 `research/` 全文
+- **TODO = WIP 鎖，不是任務管理：** sole active 一句 + 連 thread 和/或 `research/`；無 active 時寫 `⏸️`。長文 / 結果 / 推理 → research 或 [threads/](research/threads/)（見契約 C7）
 - **Cheb-GR / bank / occ-exit 文檔家** = `modules/semantic/`（即使 code 在 reid 路徑）
 
 ### 相關 checker
@@ -99,9 +99,12 @@ WIP=1 是 **ownership governance 的 process seal**（docs-only）：每個模�
 
 ```text
 WIP = 1 per module owner  (O0 seal)
-- DEVELOPMENT.md「模組現狀總覽」每個 🔄 列只寫「一個」active 目標字串（不要用頓號並列多個進行中項）
-- 各 docs/modules/<m>/TODO.md 的 🔄 Active 下最多一個未勾選 [ ] 主項
-  （表格式 TODO：最多一列標 🔄；其餘 📋 / ⏸️）
+- DEVELOPMENT.md「模組現狀總覽」每個 🔄 列只寫「一個」active 目標 one-liner
+- 各 docs/modules/<m>/TODO.md = WIP register：
+    sole active 一句 + link(s) 到 thread / research
+    無 active → 明確 ⏸️ / 無 active
+    不寫長文、結果表、推理流水帳
+- 跨多步 / 跨家任務 → docs/research/threads/ 導航卡（不消耗 WIP 名額以外的敘事空間）
 - 要開第二目標：同一變更內先收合或 park 第一個
 - 已結案研究線（如 tracker-decision P0–P8）僅在新證據下以「具名新線」重開，
   不做 drive-by 平行重構
@@ -111,12 +114,13 @@ WIP = 1 per module owner  (O0 seal)
 
 ### Dashboard
 
-模組現狀一覽：[DEVELOPMENT.md 模組現狀總覽](../DEVELOPMENT.md)（鏡射各 module TODO 的 sole active，不另立第二真相）。
+模組現狀一覽：[DEVELOPMENT.md 模組現狀總覽](../DEVELOPMENT.md)（**只**鏡射 module TODO 的 sole active one-liner；細節與接續在 threads / research）。
 
 ### 不在此規則內
 
 - 跨模組 **依賴**（例如 geometry GMC 支援 detection VGT）不算第二目標，但 dashboard 應標註依賴關係。
-- 📋 backlog / ⏸️ 暫緩 / 已結案 可列多項；只有 **🔄 Active** 受 WIP=1 約束。
+- Parked one-liners 可列多項；只有 **sole active** 受 WIP=1 約束。
+- Research threads 可多張並存（navigation）；**不得**被當成第二個 sole active 來源。
 
 ---
 
@@ -174,8 +178,9 @@ WIP = 1 per module owner  (O0 seal)
 □ 無幽靈路徑、無只寫在 chat 的數字？
 □ 系統模組實作進度表與代碼一致？
 □ ADR 狀態正確？
-□ TODO.md 已完成項目已勾選？TODO 未塞整份結案長文？（C7）
-□ WIP=1：DEVELOPMENT.md 模組現狀總覽 🔄 列只有一個 active 目標；module TODO Active 未雙開？
+□ TODO 仍是 WIP 鎖（sole active 一句 + link），未塞長文 / 結果表？（C7）
+□ WIP=1：DEVELOPMENT dashboard 🔄 one-liner 與 module TODO sole active 一致；未雙開？
+□ 跨多步任務有 threads 卡或已確認不需？（threads README）
 □ 必要時通過 scripts/tools/check_gpu_contract.py 靜態效能合約檢查？
 □ 無失效連結或舊模型名稱？（check_doc_links / check_doc_stale_paths）
 ```

@@ -3,16 +3,18 @@
 **定位：** 跨子類連續任務的**導航卡 / 母線**，不是新的事實家。
 
 ```text
-對話尾部 hook：下一輪怎麼接
-threads/：     這條任務線在哪、狀態是什麼、不能越過什麼邊界
-module research / ledger / report_data：真正事實與數字在哪
+TODO.md              = WIP lock / active pointer（sole active 一句）
+threads/             = 連續任務母線（狀態 · 邊界 · 下一步）
+module research      = 事實與分析
+ledger/report_data/no_go = 升格後的正式事實
+conversation hook    = 短期接力（應收進 thread）
 ```
 
 **不做：**
 
 - 不放長表、完整分析、可引用數字正文
 - 不取代 `evidence_ledger` / `signal_analysis_ledger` / module research / `report_data`
-- 不消耗 WIP=1 sole active（thread 是導航，不是第二 TODO）
+- **不**取代 module TODO 的 WIP=1 鎖（thread 可多張；sole active 仍以 TODO 為準）
 
 **結構契約：** [../../ownership/doc_structure_contract.md](../../ownership/doc_structure_contract.md)（O1.5）  
 **薄入口：** [../../../DEVELOPMENT.md](../../../DEVELOPMENT.md)
@@ -36,9 +38,10 @@ module research / ledger / report_data：真正事實與數字在哪
 
 | Thread | Status (one-line) | Owner |
 |:--|:--|:--|
+| [occ_exit_audit_20260709.md](occ_exit_audit_20260709.md) | **semantic sole active** · substrate wired · remaining graph decision + seq cond | semantic |
 | [m_b1_online_hook_20260709.md](m_b1_online_hook_20260709.md) | Offline phase **CLOSED** · online blocked · next = default-off hook → B2 A/B | semantic |
 | [association_recovery_registry_20260709.md](association_recovery_registry_20260709.md) | Scripts index + tools YAML + contracts 就位；registry 維護母線 | semantic |
-| [doc_structure_o15_followup_20260709.md](doc_structure_o15_followup_20260709.md) | O1.5 landed；follow-up = index debt / slim TODO / optional strict | ownership |
+| [doc_structure_o15_followup_20260709.md](doc_structure_o15_followup_20260709.md) | O1.5 + TODO-as-WIP-lock；follow-up = index debt / optional strict | ownership |
 
 ---
 
@@ -73,7 +76,8 @@ created: YYYY-MM-DD
 
 | 層 | 負責 |
 |:--|:--|
-| [DEVELOPMENT.md](../../../DEVELOPMENT.md) | 分層路由 D0–D4 |
+| [DEVELOPMENT.md](../../../DEVELOPMENT.md) | 分層路由 D0–D4 · dashboard 只鏡射 sole active one-liner |
+| module `TODO.md` | **WIP 鎖**（sole active + links）；非任務敘事 |
 | module / research README | 局部入口與檔案索引 |
 | **threads/** | 連續任務母線（狀態 · 邊界 · 下一步） |
 | ledger / report_data / out/ | 事實與數字升格 |

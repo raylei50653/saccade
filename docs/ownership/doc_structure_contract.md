@@ -84,9 +84,10 @@ Label the dual layout at the top of that README (“detection 特例”).
 
 ### TODO rules (with C7)
 
-- WIP=1: at most one unchecked sole active (see [DOC_MAINTENANCE § WIP](../DOC_MAINTENANCE.md)).
+- WIP=1: at most one sole active (see [DOC_MAINTENANCE § WIP](../DOC_MAINTENANCE.md)).
 - If no active work: explicit `⏸️` or one line “無 active”.
-- TODO holds **one-line** active + checkboxes + **links** to research files — not full reports.
+- TODO is a **WIP register only**: sole active one-liner + link(s) to thread card and/or research note; optional parked one-liners.
+- **No** long prose, metrics, command dumps, or closed-report bodies in TODO (those live in research / threads / ledger).
 
 ---
 
@@ -174,15 +175,39 @@ Numbers: each line keeps its own master. Entry docs that quote baselines still f
 
 ---
 
-## C7 — TODO vs research role split
+## C7 — TODO vs research / threads role split
 
-| Artifact | Role |
-|:--|:--|
-| `TODO.md` | Sole active one-liner, checkboxes, links |
-| `research/*.md` | Full method, commands, tables, conclusions |
-| `evidence_ledger.md` / `report_data/` | Citable aggregates |
+```text
+TODO.md              = WIP lock / active pointer   (not task narrative)
+docs/research/threads/ = continuous-task mother line (navigation-only)
+module|global research = facts, methods, commands, tables
+ledger/report_data/no_go = promoted formal facts
+conversation hook    = short-lived handoff (prefer promote into a thread)
+```
 
-**Do not** paste full closed-out reports into `TODO.md` for new work. Historical dense TODOs may remain until cleaned; new closes write a research file first.
+| Artifact | Role | Must not |
+|:--|:--|:--|
+| `TODO.md` | WIP=1 lock: sole active **one-liner** + links to thread and/or research; parked one-liners; explicit `⏸️` / 無 active when idle | Long prose, metrics tables, reasoning logs, full closed reports |
+| `docs/research/threads/` | Multi-step / multi-home **navigation** card | Evidence tables / second truth |
+| `research/*.md` | Full method, commands, tables, conclusions | Act as WIP lock |
+| `evidence_ledger.md` / `report_data/` / `no_go_registry` | Citable / formal aggregates | |
+
+**TODO template (target ≤ ~20 lines):**
+
+```md
+## Sole active
+🔄 <one-liner>
+- Thread: docs/research/threads/<card>.md   # if multi-step
+- Canonical: docs/modules/<m>/research/<note>.md
+
+## Parked
+- <one-liner> → link
+
+## Done / closed
+See research index / no_go / evidence_ledger.   # no embedded reports
+```
+
+**Do not** paste full closed-out reports into `TODO.md`. New closes write a research file (or ledger/no_go row) first; TODO only points.
 
 ---
 
@@ -223,7 +248,7 @@ uv run python3 scripts/tools/check_doc_stale_paths.py
 ## Explicit backlog (not blocking this contract)
 
 - Full frontmatter backfill on pre-contract notes
-- Semantic `TODO.md` slim-down (move prose into research files)
+- Optional `check_doc_structure` warn: TODO overlong / missing sole-active or ⏸️ / missing link
 - Topic hubs (relink / GMC / whole_graph)
 - Tighten `check_doc_structure.py` to `--strict` after index debt is paid down
 

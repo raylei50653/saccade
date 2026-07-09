@@ -11,8 +11,9 @@ created: 2026-07-09
 
 - O1.5 contract landed（homes / index / promotion / lifecycle）
 - Checker: `check_doc_structure.py` warn-only
-- threads/ navigation layer added（this directory）
-- Backlog open: index debt · semantic TODO slim · optional strict
+- threads/ navigation layer added
+- **TODO demoted to WIP lock**（C7 + module TODOs slimmed 2026-07-10）
+- Backlog open: index debt · optional TODO-length warn · optional `--strict`
 
 ## Current boundary
 
@@ -35,7 +36,7 @@ Docs governance only. No runtime / preset / production path.
 
 ## Current step
 
-Pay down index / discoverability debt; keep entry docs thin; use threads for multi-step research chains only.
+Pay down research-index debt (e.g. semantic README S1 warnings); keep TODO thin; optional structure warn for overlong TODO.
 
 ## Acceptance
 
@@ -56,3 +57,4 @@ Pay down index / discoverability debt; keep entry docs thin; use threads for mul
 - 2026-07-09: O1.5 contract + warn-only structure checker
 - 2026-07-09: DEVELOPMENT thin-entry D0–D4 routing
 - 2026-07-09: threads/ mother-line layer opened
+- 2026-07-10: TODO = WIP lock only；all module TODOs slimmed；C7 role split
