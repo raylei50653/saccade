@@ -281,6 +281,18 @@ signal measurement  ≠  normalization  ≠  policy weight
 **加權 profile 建議報：**  
 `weight_profile, GT_top1_rate, GT_topk_rate, mean_margin, negative_margin_count, assignment_flip_count`；（online）IDs/IDF1 Δ 另 study。
 
+**幀內關聯（track↔det）報告域（標準；詳 [scoring_semantics](../tracker-decision/scoring_semantics.md)）：**
+
+| Domain | 符號 | 方向 | 何時用 |
+|:--|:--|:--|:--|
+| affinity | \(A\)≈IoU | 高好 | raw 重疊 |
+| **cost** | \(c\in[0,1]\) | **低好** | **預設 margin / rank**（與 enqueue 同空間） |
+| softmin | \(p\propto e^{-\lambda c}\) | 高好 | auction 溫度；必報 \(\lambda\) |
+
+- 實作：per-pair **方程式** → **cost 矩陣** → sparse → \(p\) → auction（非「只矩陣或只方程」）。  
+- **Rank** 對嚴格單調變換不敏感；**margin 依賴尺度** — 禁混 \(c\) 與 \(p\) 的 margin 句。  
+- **禁止**預設用 dB；非 production 尺度。
+
 **解讀範式（已見現象）：**
 
 ```text
