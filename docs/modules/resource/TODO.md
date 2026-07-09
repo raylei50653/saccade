@@ -1,5 +1,15 @@
 # Resource — 模組 TODO
 
-> 全局進度矩陣與 Baseline 見 [docs/TODO.md](../../TODO.md)。
+> **WIP register only.**
 
-🟢 目前無待辦事項（模組功能已收斂穩定）。
+## Sole active
+
+⏸️ 無 active（模組已收斂）
+
+## Parked
+
+— none —
+
+## Done / closed
+
+See [README](README.md) · [vram_oom runbook](runbooks/vram_oom.md).

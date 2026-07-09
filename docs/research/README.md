@@ -10,9 +10,10 @@
 
 | 線 | 家 | 說明 |
 |------|------|------|
-| **occ-exit audit (#55)** | [../modules/semantic/research/](../modules/semantic/research/) · [semantic TODO](../modules/semantic/TODO.md) | Sole active on semantic（WIP=1）。入口：[occ_exit_audit_p55_scope](../modules/semantic/research/occ_exit_audit_p55_scope_20260709.md) → [WP2](../modules/semantic/research/occ_exit_audit_p55_wp2_seq_conditioning_20260709.md) → [WP3 promotion](../modules/semantic/research/occ_exit_audit_p55_wp3_promotion_decision_20260709.md) |
-| **VGT-Mamba** | [../modules/detection/TODO.md](../modules/detection/TODO.md) | Detection sole active（訓練）；模組 research 見 [detection README](../modules/detection/README.md) |
-| **GMC warp（依賴 VGT）** | [../modules/geometry/TODO.md](../modules/geometry/TODO.md) | 非第二獨立目標；見 geometry TODO |
+| **occ-exit audit (#55)** | [threads/occ_exit…](threads/occ_exit_audit_20260709.md) · [semantic TODO](../modules/semantic/TODO.md)（WIP 鎖） | Sole active on semantic。Canonical：[scope](../modules/semantic/research/occ_exit_audit_p55_scope_20260709.md) → [WP2](../modules/semantic/research/occ_exit_audit_p55_wp2_seq_conditioning_20260709.md) → [WP3](../modules/semantic/research/occ_exit_audit_p55_wp3_promotion_decision_20260709.md) |
+| **M-B1 portable hook** | [threads/m_b1…](threads/m_b1_online_hook_20260709.md) | Offline closed；**not** semantic sole active；research default-off hook |
+| **VGT-Mamba** | [detection TODO](../modules/detection/TODO.md) | Detection sole active（訓練）；設計見 [detection README](../modules/detection/README.md) |
+| **GMC warp（依賴 VGT）** | [geometry TODO](../modules/geometry/TODO.md) | 非第二獨立目標 |
 
 治理（O-series，非實驗正文）：[../ownership/README.md](../ownership/README.md) · [DOC_MAINTENANCE § WIP](../DOC_MAINTENANCE.md) · [DEVELOPMENT.md 模組現狀總覽](../../DEVELOPMENT.md)
 
@@ -46,6 +47,7 @@
 
 | 目錄 | 入口 | 內容 |
 |------|------|------|
+| [threads/](threads/README.md) | [threads/README.md](threads/README.md) | **連續任務母線**（navigation-only；不放長表 / 不取代 ledger） |
 | [pipeline/](pipeline/) | 見下表（本目錄無獨立 README） | Runtime 路徑、perf、sync、CPU |
 | [eval/](eval/README.md) | [eval/README.md](eval/README.md) · **[signal_analysis_ledger](eval/signal_analysis_ledger.md)** | Eval / ablation；**深度訊號總帳** |
 | [training/](training/README.md) | [training/README.md](training/README.md) | 訓練實驗 |
@@ -90,6 +92,7 @@
 ## 規範（摘要）
 
 - 新增檔 → 同一 PR 更新 owning README 索引（[契約 C4](../ownership/doc_structure_contract.md)）
+- 跨子類連續任務 → [threads/](threads/README.md) navigation-only 母線（不放長表）
 - 可引用數字 → [evidence_ledger](evidence_ledger.md) 或 [report_data](../../report_data/README.md)
 - 結案 one-shot → [../archive/](../archive/)
 - Closed tracker-decision：只讀，勿並開

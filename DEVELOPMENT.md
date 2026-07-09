@@ -9,6 +9,9 @@
 長文契約與寫作路由：
 
 - 文件家 / research 索引 / 數字升格 → [docs/ownership/doc_structure_contract.md](docs/ownership/doc_structure_contract.md)（**O1.5**）
+- 跨子類連續研究任務 → [docs/research/threads/](docs/research/threads/) 建 navigation-only thread；不放長表、不取代 evidence_ledger / module research。
+- 接續任務 → [docs/research/threads/README.md](docs/research/threads/README.md)（先看 Active threads，再進單卡）
+- **TODO = WIP 鎖**（sole active 一句 + link）；**不是**任務敘事 / 上下文恢復 → [DOC_MAINTENANCE § WIP](docs/DOC_MAINTENANCE.md) · [契約 C7](docs/ownership/doc_structure_contract.md)
 - 格式、WIP=1、fact-owner → [docs/DOC_MAINTENANCE.md](docs/DOC_MAINTENANCE.md)
 - 「我去哪寫」決策樹 → [docs/README.md](docs/README.md)
 - 模組目標隔離 → [docs/ownership/README.md](docs/ownership/README.md)
@@ -55,7 +58,7 @@
 | | 文檔組合 |
 |:--|:--|
 | **讀** | 模組 README + TODO；[doc_structure_contract](docs/ownership/doc_structure_contract.md) C1/C4；相關 [no_go_registry](docs/reference/no_go_registry.md) |
-| **寫** | `docs/modules/<m>/research/<note>.md`（或跨模組則 `docs/research/<area>/`）+ **owning README 索引一行** + 文首 `doc-status` / `doc-promotion`；TODO sole active 一句連過去 |
+| **寫** | `docs/modules/<m>/research/<note>.md`（或跨模組則 `docs/research/<area>/`）+ **owning README 索引一行** + 文首 `doc-status` / `doc-promotion`；TODO 只更新 sole active **one-liner + link**；跨多步 → [threads/](docs/research/threads/) |
 | **驗** | 實驗協議自洽即可；**不**要求改 headline；`check_doc_structure`（pre_push warn） |
 | **禁** | 同 PR 翻 production default（RESEARCH + default → 拆 PR，見 [change_routing_matrix](docs/ownership/change_routing_matrix.md)） |
 
@@ -125,16 +128,17 @@ uv run scripts/eval/mot17.py --preset mamba_whole_graph --detector SDP --double-
 
 ### 模組現狀總覽
 
-> **Dashboard fact-owner：本節。** 鏡射各 `docs/modules/<m>/TODO.md` 的 sole active，不另立第二待辦清單。  
+> **Dashboard fact-owner：本節。** 只鏡射各 `docs/modules/<m>/TODO.md` 的 **sole active one-liner**（WIP 鎖），**不**鏡射細節、**不**另立第二待辦清單。  
+> **任務敘事 / 接續** → [docs/research/threads/](docs/research/threads/README.md)；**事實** → module research / ledger。  
 > **O0 / WIP=1：** 每模組 🔄 最多一個 active。規則：[DOC_MAINTENANCE § WIP](docs/DOC_MAINTENANCE.md)。  
 > tracker-decision P0–P8 **closed**：[status](docs/research/tracker-decision/status_2026-07-09.md) — 非 O-series 延續。
 
-| 模組 | 狀態 | active 待辦（sole） | TODO |
+| 模組 | 狀態 | sole active（WIP 鎖） | TODO |
 |------|------|---------------------|------|
 | 🔍 detection | 🔄 active | VGT-Mamba（訓練中） | [↗](docs/modules/detection/TODO.md) |
 | 📐 geometry | 🔄 active | GMC Warp 精度驗證（依賴 VGT） | [↗](docs/modules/geometry/TODO.md) |
 | 🧬 reid | ⏸️ 暫緩 | — | [↗](docs/modules/reid/TODO.md) |
-| 🔄 lifecycle | 📋 待辦 | evaluator.py lifecycle 切片測試覆蓋率 | [↗](docs/modules/lifecycle/TODO.md) |
+| 🔄 lifecycle | 📋 待辦 | evaluator lifecycle 測試切片 | [↗](docs/modules/lifecycle/TODO.md) |
 | 🌀 motion | 🟢 收斂 | — | [↗](docs/modules/motion/TODO.md) |
 | 🤝 semantic | 🔄 active | occ-exit audit 條件化復活（#55） | [↗](docs/modules/semantic/TODO.md) |
 | ⚡ trigger | 🟢 收斂 | — | [↗](docs/modules/trigger/TODO.md) |
@@ -191,7 +195,7 @@ uv run python scripts/tools/check_headline_decision_contract.py
 
 - `main` only 合入目標；工作分支 `feat/*` `fix/*` `perf/*` `docs/*` `research/*`
 - 不直接 push `main`；PR + CI
-- 開分支前：工作項落在 **module TODO**（sole active）或全局 [docs/TODO.md](docs/TODO.md)
+- 開分支前：工作項對齊 **module TODO sole active**（WIP 鎖）或全局 [docs/TODO.md](docs/TODO.md)；連續任務先讀 [threads/](docs/research/threads/README.md)
 
 ### 實驗追蹤（可選）
 
@@ -226,6 +230,7 @@ MLflow / Optuna 未啟動不阻 eval。啟動與查詢：
 | NO-GO 總表 | [docs/reference/no_go_registry.md](docs/reference/no_go_registry.md) |
 | 決策層（closed） | [tracker-decision/](docs/research/tracker-decision/README.md) |
 | 全局 research 入口 | [docs/research/README.md](docs/research/README.md) |
+| 連續任務母線 | [docs/research/threads/](docs/research/threads/README.md) |
 | Paper assets | [report_data/README.md](report_data/README.md) |
 | 倉庫目錄約定 | [REPO_LAYOUT.md](REPO_LAYOUT.md) |
 
@@ -233,6 +238,6 @@ MLflow / Optuna 未啟動不阻 eval。啟動與查詢：
 
 ## 原則（三條）
 
-- 架構與合約決定什麼值得做；TODO / sole active 排現在做什麼。
+- 架構與合約決定什麼值得做；TODO sole active = WIP 鎖；threads = 怎麼接續。
 - 單一原始碼檔原則上不超過 **1000** 行；主熱路徑 GPU / native first。
 - **每個事實一個家**；入口只組合連結，不複製長表。
