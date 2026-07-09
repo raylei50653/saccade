@@ -82,10 +82,19 @@ jobs:
         run: |
           rm -rf /usr/local/cuda/samples 2>/dev/null || true
           rm -rf /usr/local/cuda/doc 2>/dev/null || true
+          # Runner disk is tight; drop unused toolchains/caches when present.
+          rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc 2>/dev/null || true
           df -h
 
-      - name: Sync dependencies
-        run: uv cache clean tensorrt-cu12-libs tensorrt-cu12 || true && uv sync --refresh-package tensorrt-cu12-libs
+      # C++ core + pybind11 extension needs torch / TensorRT / pybind11 paths from
+      # the venv (see CMakeLists.txt). It does NOT need DALI (NVDEC media path).
+      # Installing nvidia-dali-cuda120 has OOM'd the runner ("No space left on device").
+      - name: Sync dependencies (exclude DALI)
+        run: |
+          uv cache clean tensorrt-cu12-libs tensorrt-cu12 nvidia-dali-cuda120 || true
+          uv sync \
+            --no-install-package nvidia-dali-cuda120 \
+            --refresh-package tensorrt-cu12-libs
 
       - name: Install newer CMake
         run: uv pip install "cmake>=3.28"
