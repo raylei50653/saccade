@@ -354,6 +354,7 @@ Increasing it makes association more permissive, which can recover more occlusio
 | [audit/math_model_drift_2026-07-09.md](audit/math_model_drift_2026-07-09.md) | **done** | P3 static drift check vs math_model.md |
 | [audit/dual_stability_cleanup.md](audit/dual_stability_cleanup.md) | **done (RFC)** | P4-1 dual stability architecture A/B/C |
 | [audit/dual_stability_ablation_protocol.md](audit/dual_stability_ablation_protocol.md) | **done (P7 protocol)** | 4-way matrix A–D; smoke → 04 → 7-seq; no default flip |
+| [audit/dual_stability_ablation_results_2026-07-09.md](audit/dual_stability_ablation_results_2026-07-09.md) | **done (P7 results)** | s + m capacity A–D; **keep both** confirmed; defaults unchanged |
 | [audit/no_go_guardrails.md](audit/no_go_guardrails.md) | **done (RFC)** | P4-2 NO-GO/LATENT promotion + future validator rules |
 | [audit/active_contract_healthcheck.md](audit/active_contract_healthcheck.md) | **done** | C1–C8 checklist + P5 script link |
 | [scripts/tools/check_headline_decision_contract.py](../../../scripts/tools/check_headline_decision_contract.py) | **done (P5+P5.1)** | YAML contract + inject-map C8 (CI) |

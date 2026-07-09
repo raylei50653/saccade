@@ -3,7 +3,7 @@
 **Status:** experiment protocol only — **do not change production defaults in this phase**  
 **Date:** 2026-07-09  
 **Follows:** [dual_stability_cleanup.md](dual_stability_cleanup.md) (architecture A/B/C options)  
-**Results:** open a separate report PR after runs (suggested: `docs/research/tracker-decision/audit/dual_stability_ablation_results_YYYY-MM-DD.md`)
+**Results:** [dual_stability_ablation_results_2026-07-09.md](dual_stability_ablation_results_2026-07-09.md) (recommend keep both; defaults unchanged)
 
 Guardrail phase (P0–P6) is closed. This document defines how to **measure** whether
 cost-side and bid-side height stability are both needed, before any behavior PR.
