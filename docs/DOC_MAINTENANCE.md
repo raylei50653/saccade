@@ -55,14 +55,19 @@ Proposed → Accepted → (必要時) Superseded by ADR XXX
 
 ## Workstream WIP（一模主一目標）
 
-與 [事實所有權](#事實所有權與新鮮度-fact-ownership--freshness) 平行：**每個模組負責人至多一個 concurrent active 目標。**
+**This is O0 of O-series: Ownership / Objective Isolation**（模組目標隔離階段）。
 
-入口（已結案研究線）：[research/tracker-decision/status_2026-07-09.md](research/tracker-decision/status_2026-07-09.md)（P0–P8 closed；勿與 dual-stability 並開）。
+WIP=1 是 **ownership governance 的 process seal**（docs-only）：每個模組負責人至多一個 concurrent active 目標。  
+**不是** tracker-decision 的 P9，也**不是** dual-stability / decision-layer 研究線的延伸。
+
+與 [事實所有權](#事實所有權與新鮮度-fact-ownership--freshness) 平行（fact-owner = 事實家；WIP=1 = 進行中目標家）。
+
+已結案研究線（只讀、勿並開）：[research/tracker-decision/status_2026-07-09.md](research/tracker-decision/status_2026-07-09.md)（P0–P8 closed）。O1+（module objective map 等）另開 named PR，不在本節擴張。
 
 ### 規則
 
 ```text
-WIP = 1 per module owner
+WIP = 1 per module owner  (O0 seal)
 - DEVELOPMENT.md §6 每個 🔄 列只寫「一個」active 目標字串（不要用頓號並列多個進行中項）
 - 各 docs/modules/<m>/TODO.md 的 🔄 Active 下最多一個未勾選 [ ] 主項
   （表格式 TODO：最多一列標 🔄；其餘 📋 / ⏸️）

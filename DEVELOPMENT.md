@@ -99,7 +99,7 @@ uv run scripts/eval/mot17.py --preset speed --detector SDP               # 舊 y
 
 > 入口快照：一眼看現狀。每模組完整待辦見各 `docs/modules/<name>/TODO.md`，全局矩陣 / Baseline 見 [docs/TODO.md](docs/TODO.md)。
 >
-> **WIP=1：** 每個 🔄 列只寫**一個** active 目標（不要用頓號並列多個進行中項）。規則：[docs/DOC_MAINTENANCE.md](docs/DOC_MAINTENANCE.md) § Workstream WIP。已結案研究線入口：[docs/research/tracker-decision/status_2026-07-09.md](docs/research/tracker-decision/status_2026-07-09.md)。
+> **O0 / WIP=1**（O-series Ownership / Objective Isolation）：每個 🔄 列只寫**一個** active 目標（不要用頓號並列多個進行中項）。規則：[docs/DOC_MAINTENANCE.md](docs/DOC_MAINTENANCE.md) § Workstream WIP。tracker-decision P0–P8 已結案（[status](docs/research/tracker-decision/status_2026-07-09.md)）— 非本線延續。
 
 | 模組 | 狀態 | active 待辦（sole） | TODO |
 |------|------|---------------------|------|
