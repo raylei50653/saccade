@@ -37,12 +37,18 @@ first, then follow out.
 
 | investigation | doc | scope | verdict |
 |---|---|---|---|
+| **Experiment ↔ implementation crosswalk** | [`association_recovery_crosswalk_20260709.md`](association_recovery_crosswalk_20260709.md) | production stack sketch + doors, knobs, code paths, NO-GO, substrates | **research-synthesis map** (not sole active; not mainline prose) |
+| **Scripts lookup index** | [`association_recovery_scripts_index_20260709.md`](association_recovery_scripts_index_20260709.md) | task→script, door tables, wrappers, CLI recipes | **lookup only** — no GO/NO-GO text |
+| **Information source contract** | [`association_recovery_info_source_contract_20260709.md`](association_recovery_info_source_contract_20260709.md) | disk / registry / no_go / preset / ledger ownership; script non-goals | **Step 0** before yaml or checker |
 | **Offline relink discriminability + kinematics** | *(this file)* | bridge AUC easy/hard pool, pre-loss motion, speed×turn, reach-gate, precision gate | geometry/motion **ceiling** (base-rate wall); one speed-weighted term survives (§6c GO) |
 | **Bridge motion-residual AUC** | [`bidir_relink_data_analysis.md`](bidir_relink_data_analysis.md) | pure-geometry residual ranking on the bridge pool | AUC ≈ 0.55 (hard pool) — reconciled in this file's intro |
 | **Bidirectional bridge relink** | [`bidirectional_relink_roadmap.md`](bidirectional_relink_roadmap.md) | mid-point bridge design + roadmap | default-on GO (+2.1 IDF1) |
 | **Relink normalization gate** | [`relink_normalization_gate_analysis.md`](relink_normalization_gate_analysis.md) | scale/normalization gating | see doc |
-| **Occlusion crossing-swap depth ordering** | [`depth_ordering_crossing_swap.md`](depth_ordering_crossing_swap.md) | foot_y/depth front-back signal (probe AUC **0.898** vs appearance ≈0.50), oracle, same-height gate | **GO**, default-on (+0.5 IDF1; commit `c418872b`) — see §8 |
+| **Occlusion crossing-swap depth ordering** | [`depth_ordering_crossing_swap.md`](depth_ordering_crossing_swap.md) | foot_y/depth front-back signal (probe AUC **0.898** vs appearance ≈0.50), oracle, same-height gate | signal GO; production `occ_state_*` ON — re-read registry **#39** before reopening hooks |
 | **Live-association crossing-swap quantification** | [`mamba-score-distribution-20260613.md`](../../detection/research/mamba-score-distribution-20260613.md) §7–8 | 109 swaps = 22% of IDs, the live counterpart | source of the §8 target |
+| **Cheb-GR offline handover signal map** | [`chebgr_handover_signal_map_20260704.md`](chebgr_handover_signal_map_20260704.md) | post-hoc ID cleanup frontier (`best_cost`) | GO offline; live claims #56 NO-GO |
+| **CleanFifoBank substrate** | [`clean_fifo_bank_substrate_20260704.md`](clean_fifo_bank_substrate_20260704.md) | shared bank API + hard constraints | reusable substrate; async C++ parked |
+| **#55 occ-exit audit** | [`occ_exit_audit_p55_scope_20260709.md`](occ_exit_audit_p55_scope_20260709.md) (+ WP2/WP3) | post-exit identity cut / seq conditioning | WP3 net harm; promotion `split_feat_pr` only |
 
 > The §3–§6 base-rate ceiling is specific to **bridge-relink / velocity-direction**, *not* a
 > universal wall on the crossing-swap door — the depth-ordering channel cracks it (§8 + its
@@ -418,9 +424,11 @@ target. The velocity-lock C++ feature was implemented and reverted after measure
 > pool. That holds for *velocity direction*, but not for *depth ordering*. The follow-up
 > probe ([`depth_ordering_crossing_swap.md`](depth_ordering_crossing_swap.md)) showed
 > pre-occlusion `foot_y` discriminates GT-front from GT-back at **AUC 0.898** (area 0.827)
-> vs the appearance hard-pool's **≈0.50** — geometry, not ReID, is the live lever here. A
-> same-height (`|foot_gap| ≤ 0.15h`) occluder-side depth mutual-exclusion gate is now
-> **default-on GO** (+0.5 IDF1 / +0.4 AssA, 6/7 seqs non-negative; commit `c418872b`). The
-> base-rate wall in §3–§6 is specific to bridge-relink/velocity, not a universal ceiling on
-> the crossing-swap door.
+> vs the appearance hard-pool's **≈0.50** — geometry, not ReID, is the live lever here.
+> Production presets enable **`occ_state_*`** (`occ_foot_gap=0.15`, etc.); peak aggregate
+> gains were measured on occluder-side hooks, but registry **#39** records per-seq overfit
+> risk on some formulations — re-read #39 + depth doc before reopening Door B. Experiment
+> ↔ code map: [`association_recovery_crosswalk_20260709.md`](association_recovery_crosswalk_20260709.md).
+> The base-rate wall in §3–§6 is specific to bridge-relink/velocity, not a universal ceiling
+> on the crossing-swap door.
 

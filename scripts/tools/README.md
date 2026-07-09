@@ -58,6 +58,7 @@ These have known repo references outside this README.
 | Script | Role |
 |---|---|
 | `check_api_layers.py` | Warning-only source layering audit |
+| `check_association_tools.py` | AssA tools registry (**R**) vs disk/NO-GO; `--list` / `--print-recipe` |
 | `check_doc_links.py` | Markdown relative-link checker |
 | `check_gpu_contract.py` | GPU-first host-roundtrip scanner |
 | `gpu_check.py` | Local GPU environment check |
