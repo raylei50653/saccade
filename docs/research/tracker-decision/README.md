@@ -424,7 +424,7 @@ assoc_knobs.md
 | Explicit `relink_bridge_dir_bonus` on m (`0.0`) | **done** (behavior-preserving; documents s≠m) |
 | NO-GO / LATENT prohibition table | see [audit/config_surface.md](audit/config_surface.md) |
 | Dual stability architecture debt | **documented, not merged** — see [scoring_semantics.md](scoring_semantics.md) |
-| `math_model.md` drift check | open (P3) |
+| `math_model.md` drift check | **done** — [audit/math_model_drift_2026-07-09.md](audit/math_model_drift_2026-07-09.md); math PR still open |
 
 Open maintainability questions:
 
