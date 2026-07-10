@@ -5,12 +5,13 @@
 
 ## Sole active
 
-🔄 **Safe-Region Assetization — R0-B-R1 completed, awaiting chat-side re-review**
+🔄 **Safe-Region Assetization — R0-B-R2 typed realization integration**
 
 - Thread: [safe_region_assetization_20260710.md](../../research/threads/safe_region_assetization_20260710.md)
 - Accepted preflight: [research/safe_region_r0_asset_contract_preflight_20260710.md](research/safe_region_r0_asset_contract_preflight_20260710.md) (R0-A ACCEPTED; CR1–CR9)
 - Mathematical contract: [Statistical Robust Feasible-Set Estimation under Asymmetric Loss](../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
-- Deliverable: [safe_region_asset_contract.md](../../research/eval/safe_region_asset_contract.md) (R0-B-R1; RB1–RB4; not self-accepted)
+- Boolean semantics: [Boolean Composition Semantics Contract](../../research/eval/boolean_composition_semantics_contract.md)
+- Deliverable: [safe_region_asset_contract.md](../../research/eval/safe_region_asset_contract.md) (RB1–RB4 PASS; RB5–RB7 current)
 - Boundary: R1/A1 unauthorized; A0 retained; claims G1 1×L0, G2 6×L0+19×L1, G3 1×L0, pack ceiling L1; no asset pack, evaluator, grammar extension, LOO, shadow, hook, production, or ledger work
 
 ## Parked
@@ -20,7 +21,7 @@
 
 ## Related research threads（不佔 WIP 鎖）
 
-- [safe-region assetization](../../research/threads/safe_region_assetization_20260710.md) — **ACTIVE** · R0-B-R1 minimal correction
+- [safe-region assetization](../../research/threads/safe_region_assetization_20260710.md) — **ACTIVE** · R0-B-R2 typed realization integration
 - [composition grammar coverage program](../../research/threads/composition_grammar_coverage_program_20260710.md) — **SUPERSEDED** · producer gates absorbed into R2–R4
 - [composition grammar × safe-region A0](../../research/threads/composition_grammar_safe_region.md) — **CLOSED** · T0-A/B/R1 · terminal B retained
   - A0 source note: [composition_grammar_t0_region_interpretation_20260710.md](research/composition_grammar_t0_region_interpretation_20260710.md)
