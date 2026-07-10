@@ -5,26 +5,32 @@
 
 ## Sole active
 
-🔄 **Safe-Region Assetization — R1 engineering delivery complete (A0 pack candidate; A1 not accepted)**
+🔄 **Safe-Region Assetization — A1 research asset acceptance (A0 retained; eng. MERGED)**
 
 - Thread: [safe_region_assetization_20260710.md](../../research/threads/safe_region_assetization_20260710.md)
-- Delivery path: **PR-driven** — engineering review via pull request against `main` (not direct-agent dispatch)
-- Current engineering state: R1 deterministic converter + unit tests + A0 pack candidate emitted locally
-- Current engineering PR: [#95](https://github.com/raylei50653/saccade/pull/95) (base `main`; head SHA / CI live on the PR)
-- Current review gate: **engineering / PR #95 review** of R1 delivery; **A1 research acceptance remains separate** (chat-side / research-owner)
-- Primary deliverable: accepted R0-B RegionAsset contract + deterministic R1 packer (`scripts/tools/convert_safe_region_asset_r1.py`) + conversion note
+- Delivery path: **PR-driven** (direct-agent dispatch retired)
+- R1 engineering: **MERGED** — converter + unit tests + A0 pack tooling; history [PR #95](https://github.com/raylei50653/saccade/pull/95) (**review COMPLETE**)
+- Current active gate: **A1 research asset acceptance** (chat-side / research-owner) — research-consumption, **not** engineering re-check
+- A1 questions: semantic fidelity · research query utility · decision utility · reusable abstraction
+- A1 terminals: `A1_ACCEPTED` / `A1_ACCEPTED_WITH_LIMITS` / `A1_REJECTED` (`WITH_LIMITS` must list residual raw-artifact queries)
+- Engineering prerequisites already passed (do **not** re-run as A1): determinism · PK/FK · SHA seals · ID/threshold reconstruction · manifest flags
+- Primary deliverable (landed): accepted R0-B RegionAsset contract + deterministic R1 packer (`scripts/tools/convert_safe_region_asset_r1.py`) + conversion note
 - Accepted contract: [safe_region_asset_contract.md](../../research/eval/safe_region_asset_contract.md) — **R0-B: ACCEPTED**; RB1–RB9 PASS; E1 applied
 - R1 conversion note: [research/safe_region_asset_r1_conversion_20260710.md](research/safe_region_asset_r1_conversion_20260710.md)
 - Pack candidate: `out/signal_study/m_b1_5_safe_region_asset_r1_20260710/` (**A0** observation-only; **not A1**)
 - Preserved state:
   ```text
   R0-B: ACCEPTED
-  R1 engineering delivery: completed as A0 pack candidate
+  R1 engineering delivery: MERGED
+  PR #95 engineering review: COMPLETE
+  current active gate: A1 research asset acceptance
+  current maturity: A0 retained
   A1: not accepted
+  R2–R4: unauthorized
   terminal B: unchanged
   production / ledger: unchanged
   ```
-- Boundary: A0→A1 self-promotion, evaluator rerun/modification, threshold search, new research claims, G4–G7, LOO, shadow, hook, production, and ledger work remain unauthorized. PR merge does not grant research acceptance.
+- Boundary: A0→A1 self-promotion, evaluator rerun/modification, threshold search, new research claims, G4–G7, LOO, shadow, hook, production, ledger, R0-C/R1.1 contract expansion, and R2 task creation remain unauthorized until after an A1 terminal + owner gate. PR merge does not grant research acceptance.
 
 ## Parked
 
@@ -33,7 +39,7 @@
 
 ## Related research threads（不佔 WIP 鎖）
 
-- [safe-region assetization](../../research/threads/safe_region_assetization_20260710.md) — **ACTIVE** · R0-B accepted · R1 A0 pack candidate · A1 not accepted · engineering [PR #95](https://github.com/raylei50653/saccade/pull/95)
+- [safe-region assetization](../../research/threads/safe_region_assetization_20260710.md) — **ACTIVE** · R0-B accepted · R1 eng. MERGED · A0 retained · **A1 gate open** · [PR #95](https://github.com/raylei50653/saccade/pull/95) history
 - [composition grammar coverage program](../../research/threads/composition_grammar_coverage_program_20260710.md) — **SUPERSEDED** · coverage map absorbed into assetization R2–R4
 - [composition grammar × safe-region A0](../../research/threads/composition_grammar_safe_region.md) — **CLOSED** · T0-A/B/R1 · terminal B retained
   - A0 source note: [composition_grammar_t0_region_interpretation_20260710.md](research/composition_grammar_t0_region_interpretation_20260710.md)
