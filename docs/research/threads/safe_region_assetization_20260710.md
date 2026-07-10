@@ -22,12 +22,12 @@ created: 2026-07-10
 | R0-B-R3 | `f92340b7` — **RB8–RB9 PASS** |
 | R0-B final contract | **ACCEPTED** (+ editorial E1) |
 | R1 engineering delivery | **MERGED** on `main` (converter, tests, A0 pack tooling) |
-| PR #95 engineering review | **COMPLETE** (history pointer only) |
+| PR #95 engineering path | **closed** — delivery merged; CI PASS; history pointer only (no formal GitHub review record required) |
 | Current active gate | **A1 research asset acceptance** (chat-side / research-owner) |
 | Research asset acceptance (A1) | **not accepted** — open gate; separate from engineering merge |
 | Current maturity | **A0 retained** |
 | R1 output maturity | **A0 pack candidate; R1 does not self-promote A0→A1** |
-| R2–R4 | **unauthorized** (exist only after A1 verdict + owner gate) |
+| R2–R4 | **unauthorized** (fail-closed; see R2–R4 authorization below) |
 | Pack root | `out/signal_study/m_b1_5_safe_region_asset_r1_20260710/` |
 | Conversion note | [safe_region_asset_r1_conversion_20260710.md](../../modules/semantic/research/safe_region_asset_r1_conversion_20260710.md) |
 | Claims | G1 **1×L0**; G2 **6×L0 isolated + 19×L1 multi**; G3 **1×L0**; pack ceiling **L1** |
@@ -36,10 +36,10 @@ created: 2026-07-10
 
 ```text
 R1 engineering delivery: MERGED
-PR #95 engineering review: COMPLETE
+PR #95: engineering delivery merged; CI PASS; engineering path closed
 current active gate: A1 research asset acceptance
 current maturity: A0 retained
-R2–R4: unauthorized
+R2–R4: unauthorized (fail-closed)
 ```
 
 ## Gate separation (normative)
@@ -49,11 +49,10 @@ Keep these distinct:
 | Gate | Owns | Authority | Status |
 |:--|:--|:--|:--|
 | **Engineering delivery** | Converter, tests, pack emission, docs mirrors | implementation branch + PR | **done** |
-| **Engineering review** | Code quality, CI, contract fidelity of implementation | PR reviewers / CI | **COMPLETE** ([#95](https://github.com/raylei50653/saccade/pull/95)) |
-| **Research asset acceptance (A1)** | Whether the A0 pack is a consumable research asset | chat-side / research-owner | **open** |
-| **Maturity promotion** | A0→A1 (and later stages) | research documents + owner gate only | not performed |
+| **Engineering path close** | Landed engineering + CI; closes eng. workstream | merge + CI ([#95](https://github.com/raylei50653/saccade/pull/95)) | **closed** (not a formal review-record claim) |
+| **Research asset acceptance (A1)** | Whether the A0 pack is a consumable research asset; **terminal binds maturity** | chat-side / research-owner | **open** |
 | **Merge** | Landing engineering on `main` | PR merge (does **not** imply research acceptance) | **done** |
-| **Next-stage authorization** | R2+ / production / ledger | research-owner; not implied by merge | unauthorized |
+| **Next-stage authorization** | Named R2+ / production / ledger stages | research-owner; **fail-closed** (see below) | unauthorized |
 
 ```text
 engineering merge on main
@@ -61,6 +60,18 @@ engineering merge on main
 ≠ A0→A1 maturity promotion
 ≠ evidence promotion
 ≠ R2 authorization
+```
+
+### R2–R4 authorization (fail-closed)
+
+```text
+R2–R4 remain unauthorized unless
+  A1 terminal ∈ {A1_ACCEPTED, A1_ACCEPTED_WITH_LIMITS}
+  AND the research owner explicitly authorizes the named next stage.
+
+A1_REJECTED retains A0 and authorizes only bounded R1 repair/re-review.
+Any A1 terminal alone does not authorize R2–R4, transfer, LOO,
+production, or ledger promotion.
 ```
 
 ## Acceptance record
@@ -120,7 +131,7 @@ R1 transforms sealed inputs into deterministic authorities and emission tables o
 8. [Q4.5 manifest](../../modules/semantic/research/evidence/m_b1_5_stage2_q45_20260710/manifest.json)
 9. [Q4.5 SHA inventory](../../modules/semantic/research/evidence/m_b1_5_stage2_q45_20260710/SHA256SUMS.json)
 10. [T0 interpretation evidence](../../modules/semantic/research/evidence/m_b1_5_t0_region_interpretation_20260710/manifest.json)
-11. R1 delivery / engineering review history: [PR #95](https://github.com/raylei50653/saccade/pull/95) (MERGED)
+11. R1 delivery history: [PR #95](https://github.com/raylei50653/saccade/pull/95) (MERGED; CI PASS; engineering path closed)
 
 ## Accepted A0 baseline
 
@@ -143,9 +154,11 @@ R0-B-R3 RB8–RB9                        # PASS
 R0-B final contract                    # ACCEPTED
 
 R1 deterministic G1–G3 conversion    # ENGINEERING DELIVERED
-PR #95 engineering review + merge    # COMPLETE (history)
+PR #95 merge + CI                    # MERGED; path closed (history)
 A1 research asset acceptance         ← current active gate
-R2–R4 conditional maturity stages    # unauthorized until A1 + owner gate
+  (terminal binds A0/A1 maturity)
+R2–R4 named stages                   # unauthorized unless accepting A1
+                                       terminal + explicit owner auth
 A4/L6 separate production approval
 ```
 
@@ -159,7 +172,7 @@ R1 engineering delivery (complete; landed via PR #95):
 - two-run authority fingerprint match; PK/FK/claims/firewall validation PASS;
 - conversion note [safe_region_asset_r1_conversion_20260710.md](../../modules/semantic/research/safe_region_asset_r1_conversion_20260710.md);
 - unit tests `tests/unit/test_safe_region_asset_r1_conversion.py` PASS;
-- engineering review + merge: [PR #95](https://github.com/raylei50653/saccade/pull/95) **COMPLETE / MERGED**.
+- [PR #95](https://github.com/raylei50653/saccade/pull/95): **engineering delivery merged; CI PASS; engineering path closed** (history pointer; not a formal review-record claim).
 
 No evaluator modification, evaluator rerun, threshold search, geometry recomputation, or new research claims.
 
@@ -212,34 +225,43 @@ A1 answers **research consumption**, not engineering re-validation.
    而不需重建另一套物件模型？
 ```
 
-### A1 terminals (fixed)
+### A1 terminals (fixed) — bind maturity
+
+A0–A4 are **asset maturity** levels in the accepted RegionAsset contract. The A1 terminal **directly decides** maturity; do not leave `A1_ACCEPTED` while still marking A0.
 
 ```text
 A1_ACCEPTED
   pack 已成為可信且可消費的研究資產
+  → maturity = A1
 
 A1_ACCEPTED_WITH_LIMITS
   部分資產可消費；必須明列哪些研究查詢仍需回讀原始 artifacts
+  → maturity = A1 + explicit acceptance_limits
 
 A1_REJECTED
   semantic fidelity 或研究效用不足，需要有限修正
+  → maturity = A0 retained
+  → authorizes only bounded R1 repair / re-review
+  → does NOT open R2–R4
 ```
 
-`WITH_LIMITS` **must** enumerate residual raw-artifact queries. A1 verdict does **not** by itself authorize R2–R4, transfer, LOO, production, or ledger promotion — those remain separate owner gates after A1.
+`WITH_LIMITS` **must** enumerate residual raw-artifact queries as `acceptance_limits`.
 
-### A1 out of scope (this gate)
+Even after an accepting terminal (`A1_ACCEPTED` or `A1_ACCEPTED_WITH_LIMITS`), R2–R4 / transfer / LOO / production / ledger remain **unauthorized** until the research owner **explicitly authorizes the named next stage**. Maturity promotion to A1 is bound by the terminal; next-stage work is not.
+
+### A1 out of scope (this write-back / current open gate)
 
 ```text
+no pre-written A1 terminal or maturity promotion
 no R0-C / R1.1 contract refinement as primary progress
 no selecting transfer candidates as a committed next stage
-no R2 task creation until after A1 terminal
+no R2 task creation under A1_REJECTED or without accepting terminal
 no terminal B change
-no A0 maturity self-promotion
 no evidence_ledger promotion
 no RegionAsset contract expansion
 ```
 
-Suggested first consumption probe after/with A1 (not auto-authorized as R2): portfolio interpretation over 26 components / 34 masks into retain / transfer-candidate / null / close — only as evidence for A1 decision utility, not as stage advancement.
+Suggested first consumption probe for the A1 decision (not auto-authorized as R2): portfolio interpretation over 26 components / 34 masks into retain / transfer-candidate / null / close — only as evidence for A1 decision utility, not as stage advancement.
 
 ## Must not
 
@@ -251,11 +273,15 @@ Suggested first consumption probe after/with A1 (not auto-authorized as R2): por
 - compare/compose different universe instances without transport;
 - change terminal B, accepted counts, claim levels, or production defaults;
 - promote to evidence ledger;
-- self-accept the generated pack as A1 or authorize later stages;
+- self-accept the generated pack as A1 without a recorded A1 terminal;
+- leave maturity=A0 after `A1_ACCEPTED` / `A1_ACCEPTED_WITH_LIMITS`, or set maturity=A1 after `A1_REJECTED`;
 - treat PR merge as research acceptance or maturity promotion;
 - treat engineering re-checks (determinism / PK-FK / seals / reconstruction / flags) as A1 research acceptance;
 - expand R0/R1 contract as the primary next action;
-- create R2 tasks or authorize transfer/LOO before an A1 terminal;
+- treat any A1 terminal (including `A1_REJECTED`) as sufficient for R2–R4;
+- create R2 tasks or authorize transfer/LOO without
+  (accepting A1 terminal ∈ {`A1_ACCEPTED`, `A1_ACCEPTED_WITH_LIMITS`}
+   AND explicit owner authorization of the named stage);
 - recreate a direct-agent `*.dispatch.yaml` execution authority.
 
 ## History
@@ -268,5 +294,6 @@ Suggested first consumption probe after/with A1 (not auto-authorized as R2): por
 - 2026-07-10: chat-side final review accepted R0-B and authorized R1 deterministic conversion only; A0 retained; A1 remains a separate gate.
 - 2026-07-10: R1 conversion delivered — A0 pack candidate emitted; two-run determinism + PK/FK/claims PASS; research A1 gate open (not self-accepted).
 - 2026-07-10: **Retired direct-agent dispatch sidecar**; delivery model switched to **PR-driven engineering** + separate research acceptance. Historical note only: Chat-copied hash start protocols and same-name dispatch sidecars are no longer execution authority and must not be recreated.
-- 2026-07-10: PR #95 engineering review + merge **COMPLETE** on `main` (`d963fe21`). Engineering path closed; #95 retained as delivery/history pointer only.
-- 2026-07-10: **Status write-back** — sole active gate reframed to **A1 research asset acceptance** (semantic fidelity · query utility · decision utility · reusable abstraction). Engineering prerequisites marked already-passed. Terminals fixed: `A1_ACCEPTED` / `A1_ACCEPTED_WITH_LIMITS` / `A1_REJECTED`. No R2 authorization, no maturity change, no ledger promotion.
+- 2026-07-10: PR #95 **merged** on `main` (`d963fe21`); CI PASS; engineering path closed. #95 retained as delivery/history pointer only (not a formal GitHub review-record claim).
+- 2026-07-10: **Status write-back** — sole active gate reframed to **A1 research asset acceptance** (semantic fidelity · query utility · decision utility · reusable abstraction). Engineering prerequisites marked already-passed. Terminals fixed with maturity binding: `A1_ACCEPTED`→A1 · `A1_ACCEPTED_WITH_LIMITS`→A1+limits · `A1_REJECTED`→A0 + bounded repair only. R2–R4 fail-closed (accepting terminal + explicit owner auth). No A1 verdict pre-written, no ledger promotion.
+- 2026-07-10: **PR #96 review follow-up** — fail-closed R2 wording; terminal↔maturity binding; soften #95 "engineering review COMPLETE" to merged/CI/path-closed.

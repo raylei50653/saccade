@@ -9,10 +9,13 @@
 
 - Thread: [safe_region_assetization_20260710.md](../../research/threads/safe_region_assetization_20260710.md)
 - Delivery path: **PR-driven** (direct-agent dispatch retired)
-- R1 engineering: **MERGED** — converter + unit tests + A0 pack tooling; history [PR #95](https://github.com/raylei50653/saccade/pull/95) (**review COMPLETE**)
+- R1 engineering: **MERGED** — converter + unit tests + A0 pack tooling; history [PR #95](https://github.com/raylei50653/saccade/pull/95) (delivery merged; CI PASS; engineering path closed)
 - Current active gate: **A1 research asset acceptance** (chat-side / research-owner) — research-consumption, **not** engineering re-check
 - A1 questions: semantic fidelity · research query utility · decision utility · reusable abstraction
-- A1 terminals: `A1_ACCEPTED` / `A1_ACCEPTED_WITH_LIMITS` / `A1_REJECTED` (`WITH_LIMITS` must list residual raw-artifact queries)
+- A1 terminals (**bind maturity**):
+  - `A1_ACCEPTED` → maturity=A1
+  - `A1_ACCEPTED_WITH_LIMITS` → maturity=A1 + explicit `acceptance_limits` (must list residual raw-artifact queries)
+  - `A1_REJECTED` → maturity=A0 retained; **only** bounded R1 repair/re-review
 - Engineering prerequisites already passed (do **not** re-run as A1): determinism · PK/FK · SHA seals · ID/threshold reconstruction · manifest flags
 - Primary deliverable (landed): accepted R0-B RegionAsset contract + deterministic R1 packer (`scripts/tools/convert_safe_region_asset_r1.py`) + conversion note
 - Accepted contract: [safe_region_asset_contract.md](../../research/eval/safe_region_asset_contract.md) — **R0-B: ACCEPTED**; RB1–RB9 PASS; E1 applied
@@ -22,15 +25,15 @@
   ```text
   R0-B: ACCEPTED
   R1 engineering delivery: MERGED
-  PR #95 engineering review: COMPLETE
+  PR #95: engineering delivery merged; CI PASS; engineering path closed
   current active gate: A1 research asset acceptance
   current maturity: A0 retained
   A1: not accepted
-  R2–R4: unauthorized
+  R2–R4: unauthorized (fail-closed)
   terminal B: unchanged
   production / ledger: unchanged
   ```
-- Boundary: A0→A1 self-promotion, evaluator rerun/modification, threshold search, new research claims, G4–G7, LOO, shadow, hook, production, ledger, R0-C/R1.1 contract expansion, and R2 task creation remain unauthorized until after an A1 terminal + owner gate. PR merge does not grant research acceptance.
+- Boundary: R2–R4 remain unauthorized unless A1 terminal ∈ {`A1_ACCEPTED`, `A1_ACCEPTED_WITH_LIMITS`} **and** research owner explicitly authorizes the named next stage. `A1_REJECTED` retains A0 and authorizes only bounded R1 repair/re-review. Evaluator rerun/modification, threshold search, new research claims, G4–G7, LOO, shadow, hook, production, ledger, and R0-C/R1.1 contract expansion remain unauthorized. PR merge does not grant research acceptance or maturity promotion.
 
 ## Parked
 
