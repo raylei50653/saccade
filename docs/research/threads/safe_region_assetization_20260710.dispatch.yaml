@@ -9,8 +9,9 @@ working_branch: research/composition-grammar-coverage-program
 
 # Immutable minimum constraint anchor. Work from the latest branch HEAD that
 # contains this commit; do NOT checkout this commit directly.
-minimum_required_ancestor: 34eab247245ae84bc759ac288ff6900272a716e5
-anchor_generated_from_head: 34eab247245ae84bc759ac288ff6900272a716e5
+minimum_required_ancestor: 9b26ef2593bd317a8749066cc5006c4dc232e4be
+anchor_generated_from_head: 9b26ef2593bd317a8749066cc5006c4dc232e4be
+reviewed_delivery_tip: 34eab247245ae84bc759ac288ff6900272a716e5
 
 entry_thread: docs/research/threads/safe_region_assetization_20260710.md
 deliverable: docs/research/eval/safe_region_asset_contract.md
@@ -58,7 +59,7 @@ start_protocol:
   - git switch research/composition-grammar-coverage-program
   - git pull --ff-only origin research/composition-grammar-coverage-program
   - test "$(git branch --show-current)" = "research/composition-grammar-coverage-program"
-  - git merge-base --is-ancestor 34eab247245ae84bc759ac288ff6900272a716e5 HEAD
+  - git merge-base --is-ancestor 9b26ef2593bd317a8749066cc5006c4dc232e4be HEAD
   - test -z "$(git status --porcelain)"
   - START_HEAD="$(git rev-parse HEAD)"
   - START_REMOTE_HEAD="$(git rev-parse origin/research/composition-grammar-coverage-program)"
