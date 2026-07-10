@@ -10,12 +10,12 @@
 **Entry contract:** [m_b1_5_stage2_entry_contract_20260710.md](m_b1_5_stage2_entry_contract_20260710.md)
 **Thread:** [m_b1_online_hook_20260709.md](../../../research/threads/m_b1_online_hook_20260709.md)
 
-## Terminal classification (evaluator v3 — review #89)
+## Terminal classification (evaluator v4 — review #89 P1/P2)
 
 ```text
 stage2_q45_terminal: isolated_safe_points_only
 terminal_letter: B
-taxonomy_version: stage2_q45_atlas_v3
+taxonomy_version: stage2_q45_atlas_v4
 
 n_primary_negative: 23
 n_primary_positive_protect: 64
@@ -32,27 +32,33 @@ productive_safe (resolved GT_hurt==0 ∧ n_neg>0 ∧ no unresolved capture):
   single: 1
   AND:  153
   OR:     0
+  total: 154
 
-stability (per-grid quotient topology; all mask coordinates retained):
+stability (productive-safe coordinate-union interior; unique-mask nodes retained):
   isolated_safe_point:  7
   edge_candidate:      27
-  has_interior:         0
+  has_interior (coord-union): 0
+  same_mask_plateau_has_interior: 0
   region_candidates:    0
-  max_plateau_n_coords: 19
+  max_component_size_coordinates: 19   # thin strips (e.g. 1×19 / 18×1)
+  max_component_unique_masks: 4
 
 nested LOSO (train lattice → select → freeze → holdout):
   n_folds: 7
   n_clauses_ever_selected: 1352
-  n_clauses_nested_loso_portable: 0   # non-tautological
+  n_exact_absolute_clauses_nested_loso_portable: 0
+  # = exact absolute thr float@12dp repeatability; not quantile/rank region portability
 
 evaluator gates:
   deletion_loo_is_portability: false
   fixed_full_sample_partition_not_portability: true
   nested_loso_required_for_region_A: true
+  nested_loso_is_exact_absolute_clause_repeatability: true
   unresolved_contaminated_blocks_candidate: true
   semantic_duplicate_is_per_grid_not_global: true
   quotient_topology_retains_all_coordinates: true
-  interior_requires_full_neighborhood_in_mask_coordinate_set: true
+  interior_on_productive_safe_coordinate_union: true
+  same_mask_plateau_is_prediction_invariant_only: true
   assignment_group_key_status: invalid_frame_provenance
 
 production_preset: unchanged
@@ -60,12 +66,14 @@ production_preset: unchanged
 
 **Bounded finding (not global thr closure):**
 
-> On the **resolved∧selected** cohort, the restricted atlas reports sample-zero-GT  
-> cells but **no interior multi-sequence thick region** under per-grid quotient  
-> topology (plateau coordinates retained; max plateau width 19 thr-cells still  
-> has no full bilateral/4-neighborhood interior). Nested train-select → holdout  
-> finds **0** portable clauses. Full selected population (incl. 21 unresolved)  
-> still limits safety claims.  
+> On the **resolved∧selected** cohort there are **154** sample-zero-GT atlas cells.  
+> Interior is measured on the **productive-safe coordinate union** (adjacent thr  
+> cells need not share the same mask). After that correction: **0** interior  
+> coordinates, **0** region candidates (largest connected safe components are  
+> thin lattice strips, e.g. 1×19 / 18×1, which cannot form a full bilateral /  
+> 4-neighborhood interior). Exact-absolute nested LOSO finds **0** productive  
+> portable clauses. Full selected population (incl. 21 unresolved) still limits  
+> safety claims.  
 > **Still inadmissible:** portable safe-region · thr global closure ·  
 > hook-policy promotion · e2e effect · production preset change.
 
@@ -102,13 +110,24 @@ Not ranking-path evidence until export provides a stable assignment key.
 | Assignment group | competition features demoted; frame not used as truth |
 | MOT cross-check | prefers `cand_global_id` / `lost_global_id` + `_global_id_map.txt` |
 
-### v3 (this round — review follow-up)
+### v3 (prior — review follow-up)
 
 | Issue | Fix |
 |:--|:--|
 | Tautological “true holdout” | Replaced by **nested LOSO**: rebuild lattice on train fold, select train-safe clauses, freeze thr/Boolean, evaluate holdout. Old fixed-thr partition kept only as `fixed_full_sample_region_partition_check` (not portability). |
 | Global `seen_sig` isolation | **Per-grid** semantic-dup flag; **quotient topology** keeps all coordinates of each unique mask within a feature/direction (or pairwise) grid. Plateau width from full coordinate set. |
 | Stale evidence manifest | Clear `out_dir` → write all artifacts → write **current** manifest (HEAD + evaluator/runner/source SHAs) → **then** copy evidence pack. |
+
+### v4 (this round — REQUEST_CHANGES P1/P2)
+
+| Issue | Fix |
+|:--|:--|
+| Interior = same-mask plateau only | **Safe-region interior** on productive-safe **coordinate union** (1D bilateral / 2D 4-neigh). Same-mask plateau kept as `same_mask_plateau_has_interior` / plateau width = prediction-invariant only. |
+| Missing multi-mask thickness tests | Unit tests: 3 consecutive cells / 3 distinct masks → center interior; 3×3 / 9 masks → center interior. |
+| Nested LOSO over-claim | Report `n_exact_absolute_clauses_nested_loso_portable` (clause_id = feature+dir+thr@12dp). Not quantile/rank region portability. |
+| Heterogeneous CSV fields | `write_csv` unions keys across rows so pairwise stability columns are not dropped when first row is single-atom. |
+
+Re-run under v4: still `has_interior=0`, `region_candidates=0`, exact-absolute portable=0 → **terminal B fully supported** under coordinate-union topology (no Q1–Q4 redo).
 
 ---
 
@@ -183,11 +202,15 @@ descriptors.
 
 | class | meaning |
 |:--|:--|
-| `isolated_safe_point` | productive-safe; no productive-safe lattice neighbor |
-| `thin_safe_edge` | partial neighborhood only |
-| `locally_stable_region` | full local neighborhood; LOO not clean |
-| `loo_stable_region` | neighborhood + LOO GT_hurt=0 + multi-seq non-dominant |
-| `*_but_seq_thin` | geometric/LOO ok but single-seq or <2 seq neg mass |
+| `isolated_safe_point` | productive-safe; no productive-safe lattice neighbor (coord-union) |
+| `edge_candidate` | on a safe component but no interior coordinate under coord-union |
+| `locally_stable_region` | has coord-union interior; multi-seq; not exact-absolute nested-LOSO portable |
+| `loo_stable_region` | interior + exact-absolute nested LOSO portable + multi-seq non-dominant |
+| `*_but_seq_thin` | geometric ok but single-seq or <2 seq neg mass |
+
+**Interior definition (v4):** a thr coordinate is interior iff all required lattice  
+neighbors are also productive-safe **in the coordinate union**, independent of  
+mask identity. Unique-mask nodes still report prediction-invariant plateau width.
 
 Only `loo_stable_region` / `locally_stable_region` set `is_region_candidate=1`.
 
@@ -205,11 +228,11 @@ Not “best threshold only.”
    (`resid_mean` extreme high-tail, **n_neg=1**, single sequence).  
    Matches Q4 pure-neg prefix anecdote — **not** multi-seq.
 
-2. **Pairwise AND productive-safe:** 210 cells (many semantic-duplicate masks).  
-   Max `n_neg_captured` among them = **4**.  
-   Multi-seq neg support on 15 cells; all LOO-reported zero GT on remaining  
-   sequences, but **neighborhood thickness** fails → thin/isolated, not region  
-   candidates.
+2. **Pairwise AND productive-safe:** 153 cells (unknown-blocked; many semantic  
+   duplicate masks collapsed at quotient nodes). Max `n_neg_captured` among  
+   them is small. Largest connected safe components under coordinate-union  
+   topology are **thin lattice strips** (e.g. 1×19, 18×1) → **0** full-neighborhood  
+   interiors → no region candidates.
 
 3. **Pairwise OR productive-safe:** **0** cells  
    (OR inflates support into GT mass).
@@ -218,8 +241,8 @@ Not “best threshold only.”
    neg-capture tradeoff (including non-safe enriching cells). Full table in  
    `pareto_frontier.csv`.
 
-5. **No A-eligible region candidate** under declared multi-seq + neighborhood  
-   + LOO gates.
+5. **No A-eligible region candidate** under coord-union interior + multi-seq +  
+   exact-absolute nested LOSO gates.
 
 ---
 

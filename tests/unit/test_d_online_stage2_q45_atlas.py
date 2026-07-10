@@ -151,39 +151,88 @@ def test_nested_loso_can_fail_when_full_sample_safe() -> None:
     )
 
 
+def _safe_atom(
+    *,
+    thr_index: int,
+    thr_value: float,
+    mask: str,
+    feature: str = "score_m_bridge",
+    direction: str = "high_tail",
+    is_dup: int = 0,
+    n_seq: int = 3,
+) -> dict:
+    return {
+        "atom_id": f"S::{feature}::{direction}::u{thr_index}::{mask[:8]}",
+        "feature": feature,
+        "direction": direction,
+        "thr_index": thr_index,
+        "thr_value": thr_value,
+        "productive_safe_point": 1,
+        "is_secondary_feature": 0,
+        "semantic_duplicate_mask": is_dup,
+        "safety_status": "resolved_sample_zero_gt",
+        "mask_sha256": mask,
+        "support": 4,
+        "n_neg_captured": 4,
+        "gt_hurt": 0,
+        "n_sequences_with_neg": n_seq,
+        "max_neg_sequence_share": 0.4,
+        "single_seq_neg_dominance": 0,
+        "n_unresolved_selected": 0,
+    }
+
+
+def _safe_pair(
+    *,
+    thr_a: int,
+    thr_b: int,
+    mask: str,
+    comb: str = "AND",
+    n_seq: int = 3,
+) -> dict:
+    return {
+        "region_id": f"P::{comb}::{thr_a}::{thr_b}::{mask[:8]}",
+        "feature_a": "score_m_bridge",
+        "direction_a": "high_tail",
+        "feature_b": "abs_log_h",
+        "direction_b": "high_tail",
+        "combinator": comb,
+        "thr_index_a": thr_a,
+        "thr_index_b": thr_b,
+        "thr_value_a": float(thr_a) * 0.1,
+        "thr_value_b": float(thr_b) * 0.1,
+        "productive_safe_point": 1,
+        "semantic_duplicate_mask": 0,
+        "safety_status": "resolved_sample_zero_gt",
+        "mask_sha256": mask,
+        "support": 4,
+        "n_neg_captured": 4,
+        "gt_hurt": 0,
+        "n_sequences_with_neg": n_seq,
+        "max_neg_sequence_share": 0.4,
+        "single_seq_neg_dominance": 0,
+        "n_unresolved_selected": 0,
+    }
+
+
 def test_quotient_keeps_plateau_coordinates_including_dups() -> None:
     """Same mask at thr 0,1,2 is one quotient node with interior at thr 1.
 
     semantic_duplicate_mask on later cells must not discard their coordinates.
     """
     sig = "plateau_abc"
-    atoms = []
-    for ti, tv, is_dup in ((0, 0.1, 0), (1, 0.2, 1), (2, 0.3, 1)):
-        atoms.append(
-            {
-                "atom_id": f"S::f::high::u{ti}",
-                "feature": "score_m_bridge",
-                "direction": "high_tail",
-                "thr_index": ti,
-                "thr_value": tv,
-                "productive_safe_point": 1,
-                "is_secondary_feature": 0,
-                "semantic_duplicate_mask": is_dup,
-                "safety_status": "resolved_sample_zero_gt",
-                "mask_sha256": sig,
-                "support": 4,
-                "n_neg_captured": 4,
-                "gt_hurt": 0,
-                "n_sequences_with_neg": 3,
-                "max_neg_sequence_share": 0.4,
-                "single_seq_neg_dominance": 0,
-                "n_unresolved_selected": 0,
-            }
-        )
+    atoms = [
+        _safe_atom(thr_index=ti, thr_value=tv, mask=sig, is_dup=is_dup)
+        for ti, tv, is_dup in ((0, 0.1, 0), (1, 0.2, 1), (2, 0.3, 1))
+    ]
     stab = classify_region_stability(atoms, [], [])
     assert len(stab) == 1
     assert int(stab[0]["n_coordinates"]) == 3
     assert int(stab[0]["has_interior_coordinate"]) == 1
+    assert int(stab[0]["same_mask_plateau_has_interior"]) == 1
+    assert int(stab[0]["n_interior_coordinates"]) == 1
+    assert int(stab[0]["component_size_coordinates"]) == 3
+    assert int(stab[0]["component_size_unique_masks"]) == 1
     assert stab[0]["stability_class"] in (
         "locally_stable_region",
         "loo_stable_region",
@@ -191,48 +240,72 @@ def test_quotient_keeps_plateau_coordinates_including_dups() -> None:
     assert int(stab[0]["is_region_candidate"]) == 1
 
 
+def test_multi_mask_1d_safe_interval_has_interior() -> None:
+    """Three consecutive productive-safe cells with *different* masks.
+
+    Safe-region thickness is on the coordinate union: center thr must be
+    interior even though each mask occupies only one coordinate.
+    """
+    atoms = [
+        _safe_atom(thr_index=5, thr_value=0.5, mask="mask_A"),
+        _safe_atom(thr_index=6, thr_value=0.6, mask="mask_B"),
+        _safe_atom(thr_index=7, thr_value=0.7, mask="mask_C"),
+    ]
+    stab = classify_region_stability(atoms, [], [])
+    assert len(stab) == 3
+    by_mask = {r["mask_sha256"]: r for r in stab}
+    # Center is interior under coordinate-union topology.
+    assert int(by_mask["mask_B"]["has_interior_coordinate"]) == 1
+    assert int(by_mask["mask_B"]["n_interior_coordinates"]) == 1
+    assert int(by_mask["mask_B"]["is_region_candidate"]) == 1
+    assert by_mask["mask_B"]["stability_class"] in (
+        "locally_stable_region",
+        "loo_stable_region",
+    )
+    # Edges of the interval are not interior, but belong to same component.
+    assert int(by_mask["mask_A"]["has_interior_coordinate"]) == 0
+    assert int(by_mask["mask_C"]["has_interior_coordinate"]) == 0
+    assert by_mask["mask_A"]["stability_class"] == "edge_candidate"
+    assert int(by_mask["mask_A"]["component_size_coordinates"]) == 3
+    assert int(by_mask["mask_A"]["component_size_unique_masks"]) == 3
+    # Same-mask plateau metric stays false (single coord per mask).
+    assert int(by_mask["mask_B"]["same_mask_plateau_has_interior"]) == 0
+
+
+def test_multi_mask_2d_block_center_has_interior() -> None:
+    """3×3 productive-safe block with nine distinct masks → center is interior."""
+    pairs = []
+    mid = None
+    for ia in range(3):
+        for ib in range(3):
+            m = f"m{ia}{ib}"
+            row = _safe_pair(thr_a=ia, thr_b=ib, mask=m)
+            pairs.append(row)
+            if ia == 1 and ib == 1:
+                mid = m
+    assert mid is not None
+    stab = classify_region_stability([], pairs, [])
+    assert len(stab) == 9
+    by_mask = {r["mask_sha256"]: r for r in stab}
+    center = by_mask[mid]
+    assert int(center["has_interior_coordinate"]) == 1
+    assert int(center["n_interior_coordinates"]) == 1
+    assert int(center["is_region_candidate"]) == 1
+    assert int(center["same_mask_plateau_has_interior"]) == 0
+    assert int(center["component_size_coordinates"]) == 9
+    assert int(center["component_size_unique_masks"]) == 9
+    # Corners: no full 4-neighborhood → not interior.
+    corner = by_mask["m00"]
+    assert int(corner["has_interior_coordinate"]) == 0
+    assert corner["stability_class"] == "edge_candidate"
+
+
 def test_thin_two_point_plateau_not_interior() -> None:
     # two thr indices, same mask → width 2 but no thr with both neighbors
     sig = "abc123"
     atoms = [
-        {
-            "atom_id": "S::f::high::u0",
-            "feature": "score_m_bridge",
-            "direction": "high_tail",
-            "thr_index": 0,
-            "thr_value": 0.1,
-            "productive_safe_point": 1,
-            "is_secondary_feature": 0,
-            "semantic_duplicate_mask": 0,
-            "safety_status": "resolved_sample_zero_gt",
-            "mask_sha256": sig,
-            "support": 2,
-            "n_neg_captured": 2,
-            "gt_hurt": 0,
-            "n_sequences_with_neg": 2,
-            "max_neg_sequence_share": 0.5,
-            "single_seq_neg_dominance": 0,
-            "n_unresolved_selected": 0,
-        },
-        {
-            "atom_id": "S::f::high::u1",
-            "feature": "score_m_bridge",
-            "direction": "high_tail",
-            "thr_index": 1,
-            "thr_value": 0.2,
-            "productive_safe_point": 1,
-            "is_secondary_feature": 0,
-            "semantic_duplicate_mask": 1,
-            "safety_status": "resolved_sample_zero_gt",
-            "mask_sha256": sig,
-            "support": 2,
-            "n_neg_captured": 2,
-            "gt_hurt": 0,
-            "n_sequences_with_neg": 2,
-            "max_neg_sequence_share": 0.5,
-            "single_seq_neg_dominance": 0,
-            "n_unresolved_selected": 0,
-        },
+        _safe_atom(thr_index=0, thr_value=0.1, mask=sig, is_dup=0, n_seq=2),
+        _safe_atom(thr_index=1, thr_value=0.2, mask=sig, is_dup=1, n_seq=2),
     ]
     stab = classify_region_stability(atoms, [], [])
     assert len(stab) == 1
@@ -243,6 +316,39 @@ def test_thin_two_point_plateau_not_interior() -> None:
         "isolated_safe_point",
         "edge_candidate",
         "thin_safe_edge",
+    )
+
+
+def test_nested_loso_reports_exact_absolute_portability_name() -> None:
+    """Portability counter is exact-absolute clause repeatability, not region."""
+    primary = []
+    for seq, scores, labels in (
+        ("A", [0.1, 0.2], ["negative", "gt_consistent"]),
+        ("B", [0.15, 0.25], ["negative", "gt_consistent"]),
+        ("C", [0.12, 0.22], ["negative", "gt_consistent"]),
+    ):
+        for i, (sc, lab) in enumerate(zip(scores, labels)):
+            r = make_q4_primary_row(
+                event_id=f"{seq}{i}",
+                sequence=seq,
+                pair_label=lab,
+                score_m_bridge=sc,
+                abs_log_h=sc,
+                dist_h=sc,
+                abs_ratio_m1=sc,
+                resid_mean=sc,
+            )
+            r["q4_y"] = 1 if lab == "negative" else 0
+            primary.append(r)
+    audit = nested_loso_portability_audit(
+        primary, selected_unresolved=[], selected_ambiguous=[]
+    )
+    assert "n_exact_absolute_clauses_nested_loso_portable" in audit
+    assert audit["clause_identity"] == "exact_absolute_threshold_float_round12"
+    # Alias retained for wiring.
+    assert (
+        audit["n_clauses_nested_loso_portable"]
+        == audit["n_exact_absolute_clauses_nested_loso_portable"]
     )
 
 

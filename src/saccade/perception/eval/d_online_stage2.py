@@ -114,7 +114,15 @@ def write_csv(path: Path, rows: Sequence[Mapping[str, Any]]) -> str:
     if not rows:
         path.write_text("", encoding="utf-8")
         return _sha256_bytes(b"")
-    fields = list(rows[0].keys())
+    # Union keys across rows (first-row-only drops heterogeneous fields,
+    # e.g. single-atom vs pairwise stability rows).
+    fields: list[str] = []
+    seen: set[str] = set()
+    for r in rows:
+        for k in r.keys():
+            if k not in seen:
+                seen.add(k)
+                fields.append(k)
     with path.open("w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
         w.writeheader()

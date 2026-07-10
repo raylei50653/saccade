@@ -50,7 +50,7 @@ from saccade.perception.eval.portable_or_tail import ORDERED_SIGNALS
 # Locked constants
 # ---------------------------------------------------------------------------
 
-TAXONOMY_VERSION = "stage2_q45_atlas_v3"
+TAXONOMY_VERSION = "stage2_q45_atlas_v4"
 Q1Q3_STUDY_ID = "m_b1_5_stage2_q1q3_20260710"
 Q4_STUDY_ID = "m_b1_5_stage2_q4_20260710"
 EXPECTED_PRIMARY_N = 87
@@ -933,6 +933,8 @@ def nested_loso_portability_audit(
         clause_stats.items(), key=lambda kv: -kv[1]["n_folds_selected"]
     ):
         freq = st["n_folds_selected"] / n_folds if n_folds else 0.0
+        # Exact absolute-clause repeatability (feature+dir+thr float@12dp),
+        # not quantile/rank-coordinate region portability.
         portable = (
             st["n_folds_selected"] >= max(2, n_folds // 2)
             and st["worst_holdout_gt_hurt"] == 0
@@ -949,14 +951,25 @@ def nested_loso_portability_audit(
                 "n_folds_holdout_gt_zero": st["n_folds_holdout_gt_zero"],
                 "n_folds_holdout_productive": st["n_folds_holdout_productive"],
                 "sum_holdout_n_neg": st["sum_holdout_n_neg"],
+                "exact_absolute_nested_loso_portability_ok": int(portable),
+                # Alias kept for stability_rows / terminal wiring.
                 "nested_loso_portability_ok": int(portable),
             }
         )
 
     return {
         "kind": "nested_loso_train_select_holdout_eval",
+        "clause_identity": "exact_absolute_threshold_float_round12",
+        "portability_definition": (
+            "exact_absolute_clause_repeatability: same clause_id selected in "
+            ">= max(2, n_folds//2) folds, worst holdout GT hurt==0, and at "
+            "least one holdout productive (n_neg>0). Not quantile/rank "
+            "coordinate region portability."
+        ),
         "n_folds": n_folds,
         "n_clauses_ever_selected": len(clause_stats),
+        "n_exact_absolute_clauses_nested_loso_portable": n_portable,
+        # Alias: prefer n_exact_absolute_clauses_nested_loso_portable in claims.
         "n_clauses_nested_loso_portable": n_portable,
         "fold_detail_rows": fold_rows,
         "clause_summary_rows": summary_rows,
@@ -1292,6 +1305,62 @@ def build_pairwise_atlas(
 # ---------------------------------------------------------------------------
 
 
+def _connected_components_1d(coords: set[int]) -> dict[int, int]:
+    """Map thr_index → component id (adjacent indices share a component)."""
+    if not coords:
+        return {}
+    ordered = sorted(coords)
+    parent: dict[int, int] = {c: c for c in ordered}
+
+    def find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a: int, b: int) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[rb] = ra
+
+    for i in range(len(ordered) - 1):
+        if ordered[i + 1] - ordered[i] == 1:
+            union(ordered[i], ordered[i + 1])
+    # compact ids
+    roots = {find(c) for c in ordered}
+    root_to_id = {r: i for i, r in enumerate(sorted(roots))}
+    return {c: root_to_id[find(c)] for c in ordered}
+
+
+def _connected_components_2d(
+    coords: set[tuple[int, int]],
+) -> dict[tuple[int, int], int]:
+    """Map (i,j) → component id (4-neighborhood)."""
+    if not coords:
+        return {}
+    parent: dict[tuple[int, int], tuple[int, int]] = {c: c for c in coords}
+
+    def find(x: tuple[int, int]) -> tuple[int, int]:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a: tuple[int, int], b: tuple[int, int]) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[rb] = ra
+
+    for i, j in coords:
+        for di, dj in ((1, 0), (0, 1)):
+            n = (i + di, j + dj)
+            if n in coords:
+                union((i, j), n)
+    roots = {find(c) for c in coords}
+    root_to_id = {r: i for i, r in enumerate(sorted(roots))}
+    return {c: root_to_id[find(c)] for c in coords}
+
+
 def classify_region_stability(
     atom_rows: Sequence[Mapping[str, Any]],
     pairwise_and: Sequence[Mapping[str, Any]],
@@ -1299,23 +1368,35 @@ def classify_region_stability(
     *,
     nested_loso: Mapping[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
-    """Quotient topology: node = unique mask within each grammar/grid.
+    """Quotient topology with safe-region thickness on coordinate union.
 
-    Per grid (single feature×direction, or pairwise feature-pair×dirs×comb):
-      - node stores **all** thr coordinates sharing the mask
-      - plateau width from full coordinate set
-      - interior if some coordinate has both/full lattice neighbors *in the
-        coordinate set of this node* (same mask plateau), not discarded dups
-      - semantic_duplicate cells still contribute coordinates; they are not
-        independent statistical evidence (counted once per mask)
+    Two layers per grammar/grid:
 
-    Nested LOSO portability is reported separately and required for A.
+    1. **unique-mask node** — retains all thr coordinates sharing that mask
+       (prediction-invariant plateau). Semantic-duplicate cells still
+       contribute coordinates.
+    2. **productive-safe coordinate union** — interior / thickness is computed
+       on the full set of productive-safe lattice coordinates, *regardless of
+       mask identity*. Adjacent thr cells that are all productive-safe form a
+       thick safe region even when masks differ.
+
+    Same-mask plateau width remains reported as prediction-invariant thickness
+    only; it is not the sole gate for interior.
+
+    Nested LOSO exact-absolute portability is reported separately and required
+    for terminal A.
     """
     nested_loso = nested_loso or {}
-    # clause_id -> nested portability
+    # clause_id -> nested exact-absolute portability
     portable_clauses: set[str] = set()
     for row in nested_loso.get("clause_summary_rows") or []:
-        if int(row.get("nested_loso_portability_ok", 0)):
+        ok = int(
+            row.get(
+                "exact_absolute_nested_loso_portability_ok",
+                row.get("nested_loso_portability_ok", 0),
+            )
+        )
+        if ok:
             portable_clauses.add(str(row["clause_id"]))
 
     out: list[dict[str, Any]] = []
@@ -1325,6 +1406,31 @@ def classify_region_stability(
             bool(int(r.get("productive_safe_point", 0)))
             and str(r.get("safety_status", "")) != "unresolved_contaminated"
         )
+
+    def _label_and_cand(
+        *,
+        has_interior: bool,
+        n_coords: int,
+        n_adj_masks: int,
+        n_seq_neg: int,
+        single_dom: bool,
+        portable: bool,
+    ) -> tuple[str, int]:
+        if not has_interior:
+            if n_coords <= 1 and n_adj_masks == 0:
+                label = "isolated_safe_point"
+            else:
+                label = "edge_candidate"
+        elif n_seq_neg < MIN_SEQS_FOR_REGION or single_dom:
+            label = "locally_stable_region_but_seq_thin"
+        elif portable:
+            label = "loo_stable_region"
+        else:
+            label = "locally_stable_region"
+        is_cand = int(
+            label in ("loo_stable_region", "locally_stable_region") and has_interior
+        )
+        return label, is_cand
 
     # ---- single-atom grids ----
     by_grid: dict[tuple[str, str], list[Mapping[str, Any]]] = defaultdict(list)
@@ -1336,7 +1442,6 @@ def classify_region_stability(
         by_grid[(str(r["feature"]), str(r["direction"]))].append(r)
 
     for (feat, direction), cells in by_grid.items():
-        # mask -> list of thr_index
         mask_coords: dict[str, list[int]] = defaultdict(list)
         mask_rep: dict[str, Mapping[str, Any]] = {}
         mask_all: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
@@ -1348,13 +1453,36 @@ def classify_region_stability(
             mask_all[sig].append(r)
             if sig not in mask_rep:
                 mask_rep[sig] = r
+
+        # Layer 2: full productive-safe coordinate union (any mask).
+        safe_coords: set[int] = set()
+        for coords in mask_coords.values():
+            safe_coords.update(coords)
+        safe_interior = {
+            i for i in safe_coords if (i - 1 in safe_coords and i + 1 in safe_coords)
+        }
+        comp_of = _connected_components_1d(safe_coords)
+        # component id → (n_coords, n_unique_masks)
+        comp_coords: dict[int, set[int]] = defaultdict(set)
+        comp_masks: dict[int, set[str]] = defaultdict(set)
+        for sig, coords in mask_coords.items():
+            for i in set(coords):
+                cid_c = comp_of[i]
+                comp_coords[cid_c].add(i)
+                comp_masks[cid_c].add(sig)
+
         for sig, coords in mask_coords.items():
             cset = set(coords)
             width = max(coords) - min(coords) + 1 if coords else 0
             n_coords = len(cset)
-            # interior of plateau: some thr_index with both neighbors in cset
-            has_interior = any((i - 1 in cset and i + 1 in cset) for i in cset)
-            # edges to other masks: thr-adjacent different mask
+            # Safe-region interior: neighborhood in *union*, not same-mask only.
+            mask_interior = cset & safe_interior
+            has_interior = len(mask_interior) > 0
+            n_interior = len(mask_interior)
+            # Prediction-invariant same-mask plateau (diagnostic only).
+            same_mask_plateau_has_interior = any(
+                (i - 1 in cset and i + 1 in cset) for i in cset
+            )
             n_adj_masks = 0
             for other, ocoords in mask_coords.items():
                 if other == sig:
@@ -1362,11 +1490,13 @@ def classify_region_stability(
                 oset = set(ocoords)
                 if any(abs(i - j) == 1 for i in cset for j in oset):
                     n_adj_masks += 1
+            # Component of first coordinate (mask may span one component typically)
+            first_c = next(iter(cset))
+            safe_comp = int(comp_of[first_c])
             rep = mask_rep[sig]
             n_seq_neg = int(rep.get("n_sequences_with_neg", 0))
             single_dom = bool(int(rep.get("single_seq_neg_dominance", 0)))
             cid = _clause_id_single(feat, direction, float(rep["thr_value"]))
-            # also check any coordinate thr for portable clause match
             portable = False
             for r in mask_all[sig]:
                 cid_i = _clause_id_single(feat, direction, float(r["thr_value"]))
@@ -1375,20 +1505,13 @@ def classify_region_stability(
                     cid = cid_i
                     break
 
-            if not has_interior:
-                if n_coords <= 1 and n_adj_masks == 0:
-                    label = "isolated_safe_point"
-                else:
-                    label = "edge_candidate"  # boundary of plateau or thin strip
-            elif n_seq_neg < MIN_SEQS_FOR_REGION or single_dom:
-                label = "locally_stable_region_but_seq_thin"
-            elif portable:
-                label = "loo_stable_region"
-            else:
-                label = "locally_stable_region"
-
-            is_cand = int(
-                label in ("loo_stable_region", "locally_stable_region") and has_interior
+            label, is_cand = _label_and_cand(
+                has_interior=has_interior,
+                n_coords=n_coords,
+                n_adj_masks=n_adj_masks,
+                n_seq_neg=n_seq_neg,
+                single_dom=single_dom,
+                portable=portable,
             )
             out.append(
                 {
@@ -1399,7 +1522,15 @@ def classify_region_stability(
                     "mask_sha256": sig,
                     "n_coordinates": n_coords,
                     "plateau_width_thr_index": width,
+                    "same_mask_plateau_has_interior": int(
+                        same_mask_plateau_has_interior
+                    ),
                     "has_interior_coordinate": int(has_interior),
+                    "has_any_interior_coordinate": int(has_interior),
+                    "n_interior_coordinates": n_interior,
+                    "safe_component_id": safe_comp,
+                    "component_size_coordinates": len(comp_coords[safe_comp]),
+                    "component_size_unique_masks": len(comp_masks[safe_comp]),
                     "n_adjacent_other_masks": n_adj_masks,
                     "support": rep["support"],
                     "n_neg_captured": rep["n_neg_captured"],
@@ -1409,11 +1540,15 @@ def classify_region_stability(
                     "n_sequences_with_neg": n_seq_neg,
                     "max_neg_sequence_share": rep.get("max_neg_sequence_share"),
                     "nested_loso_portability_ok": int(portable),
+                    "exact_absolute_nested_loso_portability_ok": int(portable),
                     "nested_loso_clause_id": cid,
                     "stability_class": label,
                     "is_region_candidate": is_cand,
                     "not_a_safe_rule": 1,
-                    "topology_note": "quotient_by_mask_within_feature_direction_grid",
+                    "topology_note": (
+                        "safe_region_interior_on_productive_safe_coordinate_union;"
+                        "same_mask_plateau_is_prediction_invariant_only"
+                    ),
                 }
             )
 
@@ -1427,12 +1562,11 @@ def classify_region_stability(
             r["combinator"],
         )
 
-    for comb_name, rows in (("AND", pairwise_and), ("OR", pairwise_or)):
+    for _comb_name, rows in (("AND", pairwise_and), ("OR", pairwise_or)):
         by_pg: dict[tuple, list[Mapping[str, Any]]] = defaultdict(list)
         for r in rows:
             if not _prod(r):
                 continue
-            # include semantic dups as coordinates
             by_pg[_pair_grid_key(r)].append(r)
         for gkey, cells in by_pg.items():
             fa, da, fb, db, comb = gkey
@@ -1448,17 +1582,41 @@ def classify_region_stability(
                 mask_all[sig].append(r)
                 if sig not in mask_rep:
                     mask_rep[sig] = r
+
+            safe_coords_2d: set[tuple[int, int]] = set()
+            for coords in mask_coords.values():
+                safe_coords_2d.update(coords)
+            safe_interior_2d = {
+                (i, j)
+                for i, j in safe_coords_2d
+                if (
+                    (i - 1, j) in safe_coords_2d
+                    and (i + 1, j) in safe_coords_2d
+                    and (i, j - 1) in safe_coords_2d
+                    and (i, j + 1) in safe_coords_2d
+                )
+            }
+            comp_of_2d = _connected_components_2d(safe_coords_2d)
+            comp_coords_2d: dict[int, set[tuple[int, int]]] = defaultdict(set)
+            comp_masks_2d: dict[int, set[str]] = defaultdict(set)
+            for sig, coords in mask_coords.items():
+                for c in set(coords):
+                    cid_c = comp_of_2d[c]
+                    comp_coords_2d[cid_c].add(c)
+                    comp_masks_2d[cid_c].add(sig)
+
             for sig, coords in mask_coords.items():
                 cset = set(coords)
-                # bounding box width
                 if not coords:
                     continue
                 as_ = [c[0] for c in coords]
                 bs_ = [c[1] for c in coords]
                 width_a = max(as_) - min(as_) + 1
                 width_b = max(bs_) - min(bs_) + 1
-                # interior: some coord with all 4 neighbors in cset
-                has_interior = any(
+                mask_interior = cset & safe_interior_2d
+                has_interior = len(mask_interior) > 0
+                n_interior = len(mask_interior)
+                same_mask_plateau_has_interior = any(
                     (
                         (i - 1, j) in cset
                         and (i + 1, j) in cset
@@ -1467,7 +1625,6 @@ def classify_region_stability(
                     )
                     for i, j in cset
                 )
-                # edge connectivity to other masks
                 n_adj_masks = 0
                 for other, ocoords in mask_coords.items():
                     if other == sig:
@@ -1479,6 +1636,8 @@ def classify_region_stability(
                         for oi, oj in oset
                     ):
                         n_adj_masks += 1
+                first_c = next(iter(cset))
+                safe_comp = int(comp_of_2d[first_c])
                 rep = mask_rep[sig]
                 n_seq_neg = int(rep.get("n_sequences_with_neg", 0))
                 single_dom = bool(int(rep.get("single_seq_neg_dominance", 0)))
@@ -1498,24 +1657,19 @@ def classify_region_stability(
                         portable = True
                         cid = cid_i
                         break
-                if not has_interior:
-                    if len(cset) <= 1 and n_adj_masks == 0:
-                        label = "isolated_safe_point"
-                    else:
-                        label = "edge_candidate"
-                elif n_seq_neg < MIN_SEQS_FOR_REGION or single_dom:
-                    label = "locally_stable_region_but_seq_thin"
-                elif portable:
-                    label = "loo_stable_region"
-                else:
-                    label = "locally_stable_region"
-                is_cand = int(
-                    label in ("loo_stable_region", "locally_stable_region")
-                    and has_interior
+                label, is_cand = _label_and_cand(
+                    has_interior=has_interior,
+                    n_coords=len(cset),
+                    n_adj_masks=n_adj_masks,
+                    n_seq_neg=n_seq_neg,
+                    single_dom=single_dom,
+                    portable=portable,
                 )
                 out.append(
                     {
-                        "region_id": f"mask::{comb}::{fa}::{da}::{fb}::{db}::{sig[:12]}",
+                        "region_id": (
+                            f"mask::{comb}::{fa}::{da}::{fb}::{db}::{sig[:12]}"
+                        ),
                         "kind": f"pairwise_{comb}_quotient",
                         "feature_a": fa,
                         "feature_b": fb,
@@ -1525,7 +1679,15 @@ def classify_region_stability(
                         "n_coordinates": len(cset),
                         "plateau_width_a": width_a,
                         "plateau_width_b": width_b,
+                        "same_mask_plateau_has_interior": int(
+                            same_mask_plateau_has_interior
+                        ),
                         "has_interior_coordinate": int(has_interior),
+                        "has_any_interior_coordinate": int(has_interior),
+                        "n_interior_coordinates": n_interior,
+                        "safe_component_id": safe_comp,
+                        "component_size_coordinates": len(comp_coords_2d[safe_comp]),
+                        "component_size_unique_masks": len(comp_masks_2d[safe_comp]),
                         "n_adjacent_other_masks": n_adj_masks,
                         "support": rep["support"],
                         "n_neg_captured": rep["n_neg_captured"],
@@ -1535,11 +1697,15 @@ def classify_region_stability(
                         "n_sequences_with_neg": n_seq_neg,
                         "max_neg_sequence_share": rep.get("max_neg_sequence_share"),
                         "nested_loso_portability_ok": int(portable),
+                        "exact_absolute_nested_loso_portability_ok": int(portable),
                         "nested_loso_clause_id": cid,
                         "stability_class": label,
                         "is_region_candidate": is_cand,
                         "not_a_safe_rule": 1,
-                        "topology_note": "quotient_by_mask_within_pairwise_grid",
+                        "topology_note": (
+                            "safe_region_interior_on_productive_safe_coordinate_union;"
+                            "same_mask_plateau_is_prediction_invariant_only"
+                        ),
                     }
                 )
     return out
@@ -1683,16 +1849,16 @@ def classify_q45_terminal(
         and int(r.get("nested_loso_portability_ok", 0)) == 1
     ]
 
-    # A: multi-seq, interior thickness, *true* holdout portability, zero unknown
+    # A: multi-seq, safe-coord-union interior, exact-absolute nested LOSO, zero unknown
     if loo_stable:
         return {
             "stage2_q45_terminal": TERMINAL_A,
             "terminal_letter": "A",
             "reason": (
-                f"{len(loo_stable)} nested-LOSO-portable interior region(s) with "
-                "local thickness under per-grid quotient topology; authorize "
-                "formal restricted safe-region candidate validation "
-                "(still not production rule)"
+                f"{len(loo_stable)} exact-absolute nested-LOSO-portable interior "
+                "region(s) with thickness under productive-safe coordinate-union "
+                "topology; authorize formal restricted safe-region candidate "
+                "validation (still not production rule)"
             ),
             "claims_blocked": blocked,
             "claims_allowed": [
@@ -1727,10 +1893,10 @@ def classify_q45_terminal(
             "terminal_letter": "B",
             "reason": (
                 f"On resolved∧selected cohort: sample-zero-GT cells exist "
-                f"(n_atlas_cells={n_prod}) but no interior multi-seq thick "
-                "region under per-grid quotient topology + nested LOSO "
-                "portability; unknown/unresolved selected coverage further "
-                "limits claims → isolated_safe_points_only"
+                f"(n_atlas_cells={n_prod}) but no multi-seq thick region with "
+                "productive-safe coordinate-union interior + exact-absolute "
+                "nested LOSO portability; unknown/unresolved selected coverage "
+                "further limits claims → isolated_safe_points_only"
             ),
             "claims_blocked": blocked
             + [
@@ -1751,9 +1917,10 @@ def classify_q45_terminal(
                 "key + unknown coverage + nested train-select holdout are closed"
             ),
             "bounded_finding": (
-                "resolved∧selected restricted atlas reports sample-zero-GT cells "
-                "but no interior multi-sequence thick region under quotient "
-                "topology (coordinates retained per unique mask within each grid)"
+                "resolved∧selected restricted atlas reports sample-zero-GT cells; "
+                "interior is measured on productive-safe coordinate union "
+                "(not same-mask plateau alone); exact-absolute nested LOSO "
+                "portability reported separately"
             ),
             "n_productive_safe_cells": n_prod,
             "n_isolated_or_thin": len(isolated),
@@ -2195,8 +2362,17 @@ def run_stage2_q45_atlas(
         "n_clauses_ever_selected_nested_loso": nested_loso_meta.get(
             "n_clauses_ever_selected"
         ),
+        "n_exact_absolute_clauses_nested_loso_portable": nested_loso_meta.get(
+            "n_exact_absolute_clauses_nested_loso_portable",
+            nested_loso_meta.get("n_clauses_nested_loso_portable"),
+        ),
+        # Alias — prefer n_exact_absolute_clauses_nested_loso_portable in claims.
         "n_clauses_nested_loso_portable": nested_loso_meta.get(
-            "n_clauses_nested_loso_portable"
+            "n_exact_absolute_clauses_nested_loso_portable",
+            nested_loso_meta.get("n_clauses_nested_loso_portable"),
+        ),
+        "nested_loso_clause_identity": nested_loso_meta.get(
+            "clause_identity", "exact_absolute_threshold_float_round12"
         ),
         "secondary_competition_features": secondary_names,
         "secondary_competition_trusted": False,
@@ -2206,11 +2382,13 @@ def run_stage2_q45_atlas(
         "evaluator_review_gates": {
             "deletion_loo_is_portability": False,
             "nested_loso_required_for_region_A": True,
+            "nested_loso_is_exact_absolute_clause_repeatability": True,
             "fixed_full_sample_partition_not_portability": True,
             "unresolved_contaminated_blocks_candidate": True,
             "semantic_duplicate_is_per_grid_not_global": True,
             "quotient_topology_retains_all_coordinates": True,
-            "interior_requires_full_neighborhood_in_mask_coordinate_set": True,
+            "interior_on_productive_safe_coordinate_union": True,
+            "same_mask_plateau_is_prediction_invariant_only": True,
         },
         "frame_provenance_kind": frame_prov["semantic"]["kind"],
         "frame_is_absolute_mot": frame_prov["semantic"]["is_absolute_mot_frame"],
@@ -2246,7 +2424,7 @@ def run_stage2_q45_atlas(
 
     # Manifest last among primary artifacts (describes this run only).
     manifest = {
-        "schema": "m_b1_5_stage2_q45_atlas_manifest_v3",
+        "schema": "m_b1_5_stage2_q45_atlas_manifest_v4",
         "study_id": sid,
         "git_commit": git_commit,
         "repository_head_sha": git_commit,
@@ -2267,8 +2445,13 @@ def run_stage2_q45_atlas(
         "created_utc": summary["created_utc"],
         "terminal_letter": terminal.get("terminal_letter"),
         "stage2_q45_terminal": terminal.get("stage2_q45_terminal"),
+        "n_exact_absolute_clauses_nested_loso_portable": nested_loso_meta.get(
+            "n_exact_absolute_clauses_nested_loso_portable",
+            nested_loso_meta.get("n_clauses_nested_loso_portable"),
+        ),
         "n_clauses_nested_loso_portable": nested_loso_meta.get(
-            "n_clauses_nested_loso_portable"
+            "n_exact_absolute_clauses_nested_loso_portable",
+            nested_loso_meta.get("n_clauses_nested_loso_portable"),
         ),
         "production_preset": "unchanged",
         "write_order": (
