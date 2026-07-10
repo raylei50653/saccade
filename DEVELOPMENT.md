@@ -140,7 +140,7 @@ uv run scripts/eval/mot17.py --preset mamba_whole_graph --detector SDP --double-
 | 🧬 reid | ⏸️ 暫緩 | — | [↗](docs/modules/reid/TODO.md) |
 | 🔄 lifecycle | 📋 待辦 | evaluator lifecycle 測試切片 | [↗](docs/modules/lifecycle/TODO.md) |
 | 🌀 motion | 🟢 收斂 | — | [↗](docs/modules/motion/TODO.md) |
-| 🤝 semantic | 🔄 active | Composition Grammar Coverage — C1-A preflight | [↗](docs/modules/semantic/TODO.md) |
+| 🤝 semantic | 🔄 active | Safe-Region Assetization — R0-A preflight | [↗](docs/modules/semantic/TODO.md) |
 | ⚡ trigger | 🟢 收斂 | — | [↗](docs/modules/trigger/TODO.md) |
 | 🖥️ streaming | 🟢 收斂 | — | [↗](docs/modules/streaming/TODO.md) |
 | 💾 storage | 🟢 收斂 | — | [↗](docs/modules/storage/TODO.md) |
