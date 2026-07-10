@@ -9,6 +9,7 @@ See [../../ownership/doc_structure_contract.md](../../ownership/doc_structure_co
 
 | 文件 | 內容 |
 |------|------|
+| **[statistical_robust_feasible_set_estimation_under_asymmetric_loss.md](statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)** | **跨研究數學契約：非對稱損失下的 feasible/productive-safe set、region geometry、有限樣本、transfer 與 claim ladder** |
 | [signal_table_schema.md](signal_table_schema.md) | 契約：A/B1/B2；§0.3 風格；§0.4 L0 safe-reject；**§0.5 Gate vs Score**；§8 能用/缺什麼 |
 | **[signal_analysis_ledger.md](signal_analysis_ledger.md)** | **深度訊號分析總帳**（一 gate/訊號一列；study + note pointer） |
 | [../../modules/semantic/research/m_b1_research_history_20260709_20260710.md](../../modules/semantic/research/m_b1_research_history_20260709_20260710.md) | **M-B1 offline phase CLOSED** — 方法摘要見 §1–§14；原始方法細節由 source blob SHA 回溯（見 consolidation report） |
