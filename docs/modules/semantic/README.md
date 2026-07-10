@@ -53,15 +53,17 @@
 
 | 文件 | 內容 |
 |------|------|
-| 🧭 **[research/offline_relink_candidate_analysis.md](research/offline_relink_candidate_analysis.md)** | **relink / AssA 調查 hub（s 歷史）**；m 現況見下行 phase hub |
-| 📦 **[research/m_b1_offline_safe_region_phase_20260709.md](research/m_b1_offline_safe_region_phase_20260709.md)** | **M-B1 offline gate/safe-region phase CLOSED** — 導航 + 維護契約；**勿在各 as-of note 改 status** |
-| [research/m_b1_repaired_eps0_loo_pass_candidate_20260709.md](research/m_b1_repaired_eps0_loo_pass_candidate_20260709.md) | **Freeze identity**（LOO_pass_region_candidate · offline smoke pass · online blocked） |
-| [research/m_b1_portable_or_tail_hook_contract_20260709.md](research/m_b1_portable_or_tail_hook_contract_20260709.md) | Stage 1 hook contract（default-off；preset NO） |
-| [research/m_b1_hook_stage1_e2e_20260710.md](research/m_b1_hook_stage1_e2e_20260710.md) | Stage 1 **OPEN** · 1a+1b eng PASSED · B-audit pending |
-| [research/m_b1_to_m_b1_5_two_stage_plan_20260710.md](research/m_b1_to_m_b1_5_two_stage_plan_20260710.md) | **Stage 1+2 合同**：frozen hook validation → M-B1.5 domain audit；兩 PR 分離 |
-| [research/m_b1_hook_stage1_wire_20260710.md](research/m_b1_hook_stage1_wire_20260710.md) | Stage 1 **wire status**（loader/CLI/CUDA/runner；e2e done） |
+| 🧭 **[research/offline_relink_candidate_analysis.md](research/offline_relink_candidate_analysis.md)** | **relink / AssA 調查 hub（s 歷史）** |
+| 📜 **[research/m_b1_research_history_20260709_20260710.md](research/m_b1_research_history_20260709_20260710.md)** | **M-B1 offline history** (mine→region→LOO→freeze) · phase CLOSED |
+| [research/m_b1_repaired_eps0_loo_pass_candidate_20260709.md](research/m_b1_repaired_eps0_loo_pass_candidate_20260709.md) | **Freeze identity**（LOO_pass_region_candidate · offline smoke pass） |
+| [research/m_b1_portable_or_tail_hook_contract_20260709.md](research/m_b1_portable_or_tail_hook_contract_20260709.md) | Stage 1 hook **ABI contract**（default-off；preset NO） |
+| [research/m_b1_stage1_online_hook_final_20260710.md](research/m_b1_stage1_online_hook_final_20260710.md) | Stage 1 **CLOSED** · wire + e2e · B-audit 244 · A0/det/runtime |
+| [research/m_b1_5_stage2_entry_contract_20260710.md](research/m_b1_5_stage2_entry_contract_20260710.md) | Stage 2 entry · G0–G4 claim firewall |
+| [research/m_b1_5_stage2_d_online_final_20260710.md](research/m_b1_5_stage2_d_online_final_20260710.md) | Stage 2 **final** · Q1–Q3 mass · Q4 grade C · Q4.5 v4 atlas B (154/0) |
+| [research/m_b1_to_m_b1_5_two_stage_plan_20260710.md](research/m_b1_to_m_b1_5_two_stage_plan_20260710.md) | Stage 1+2 plan body（runner/contract ref） |
+| [research/m_b1_doc_consolidation_report_20260710.md](research/m_b1_doc_consolidation_report_20260710.md) | Doc consolidation + information-preservation report |
 | [research/m_b2_reconnect_bridge_ab_20260709.md](research/m_b2_reconnect_bridge_ab_20260709.md) | **m B2** production-like reconnect A/B（未來 e2e baseline） |
-| 📇 depth index | [signal_analysis_ledger](../../research/eval/signal_analysis_ledger.md) · as-of method notes listed **only in phase hub Tier B** |
+| 📇 depth index | [signal_analysis_ledger](../../research/eval/signal_analysis_ledger.md) · offline history § tools |
 | 🗺️ **[research/association_recovery_crosswalk_20260709.md](research/association_recovery_crosswalk_20260709.md)** | **D1 對照圖（research-synthesis）**：實驗前導航；production stack 薄摘要 + door/knobs/NO-GO/substrate。**非** sole active、非第二 baseline |
 | 📇 **[research/association_recovery_scripts_index_20260709.md](research/association_recovery_scripts_index_20260709.md)** | **腳本查找表**：task→script、door 分區、wrapper→canonical、R-A/D/F recipes。結論仍手動 |
 | 📜 **[research/association_recovery_info_source_contract_20260709.md](research/association_recovery_info_source_contract_20260709.md)** | **資訊源契約**：disk / registry / no_go / preset / ledger 誰當 truth；腳本只 check·render·print |

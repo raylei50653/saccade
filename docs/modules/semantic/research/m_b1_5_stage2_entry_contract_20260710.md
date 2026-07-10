@@ -6,10 +6,12 @@
 <!-- doc-module: semantic -->
 
 **Role:** Stage 2 **entry + acceptance contract** (claim firewall). Not evidence tables.  
-**Prerequisite:** Stage 1 substrate study `m_b1_hook_ab_20260710T071001Z_stage1_close` (B-audit 244-row table) · [e2e note](m_b1_hook_stage1_e2e_20260710.md).  
-**Q1–Q3 evidence:** [m_b1_5_stage2_q1q3_d_online_audit_20260710.md](m_b1_5_stage2_q1q3_d_online_audit_20260710.md) · study `m_b1_5_stage2_q1q3_20260710` (**PASSED / PASSED / SUFFICIENT**).  
-**Q4 evidence:** [m_b1_5_stage2_q4_separability_20260710.md](m_b1_5_stage2_q4_separability_20260710.md) · study `m_b1_5_stage2_q4_20260710` (**C weak/unstable**).  
-**Q4.5 atlas:** [m_b1_5_stage2_q45_threshold_atlas_20260710.md](m_b1_5_stage2_q45_threshold_atlas_20260710.md) · study `m_b1_5_stage2_q45_20260710` (**B isolated_safe_points_only**).  
+**Prerequisite:** Stage 1 overall **CLOSED** — [e2e](m_b1_stage1_online_hook_final_20260710.md) · study `m_b1_hook_ab_20260710T071001Z_stage1_close`.  
+**Q1–Q3 evidence:** [m_b1_5_stage2_d_online_final_20260710.md](m_b1_5_stage2_d_online_final_20260710.md) · study `m_b1_5_stage2_q1q3_20260710` (**PASSED / PASSED / SUFFICIENT**).  
+**Q4 evidence:** [m_b1_5_stage2_d_online_final_20260710.md](m_b1_5_stage2_d_online_final_20260710.md) · study `m_b1_5_stage2_q4_20260710`  
+  (`q4_separability_grade: C` weak/unstable → `stage2_entry_terminal_after_q4: B`).  
+**Q4.5 atlas (v4):** [m_b1_5_stage2_d_online_final_20260710.md](m_b1_5_stage2_d_online_final_20260710.md) · study `m_b1_5_stage2_q45_20260710`  
+  (`q45_atlas_terminal: B` isolated_safe_points_only · **154** productive-safe · 0 region candidates).  
 **Plan body:** [two-stage plan §14+](m_b1_to_m_b1_5_two_stage_plan_20260710.md).  
 **Thread:** [m_b1_online_hook_20260709.md](../../../research/threads/m_b1_online_hook_20260709.md).
 
@@ -85,23 +87,37 @@ First question is **not** “threshold 要設多少”.
 | **Q5** | 若 Q3∧Q4：再研究 threshold / Boolean safe region | only after Q1–Q4 pass |
 | **Q6** | 若無 FP mass：signal 不足 vs **hook placement 太晚**？ | earlier gate / ranking — not offline q85 |
 
-### Three legal terminal conclusions
+### Three legal terminal conclusions (entry-contract namespace)
 
 ```text
-A. FP mass > 0  AND  GT/FP separation stable
-   → enter conditional safe-region (restricted Boolean grammar; plan §18)
+stage2_entry_terminal A.
+  FP mass > 0  AND  GT/FP separation stable
+  → enter conditional safe-region (restricted Boolean grammar; plan §18)
 
-B. FP mass > 0  AND  no stable separation
-   → change signal family / features
-   → DO NOT hard-tune thresholds on inseparable support
+stage2_entry_terminal B.
+  FP mass > 0  AND  no stable separation
+  → change signal family / features
+  → DO NOT hard-tune thresholds on inseparable support
 
-C. FP mass ≈ 0  (or effective reject power underpowered)
-   → placement too late relative to production gates
-   → study earlier placement or ranking/margin
-   → DO NOT conclude “need better offline thr”
+stage2_entry_terminal C.
+  FP mass ≈ 0  (or effective reject power underpowered)
+  → placement too late relative to production gates
+  → study earlier placement or ranking/margin
+  → DO NOT conclude “need better offline thr”
 ```
 
-All three are **valid Stage 2 outcomes**. Only A continues into safe-region thickness / LOO work.
+All three are **valid Stage 2 entry outcomes**. Only A continues into safe-region thickness / LOO work.
+
+**Do not collapse alphabets:**
+
+| Field | Meaning |
+|:--|:--|
+| `stage2_entry_terminal` | this section A/B/C |
+| `q4_separability_grade` | Q4 effect/LOO grade (current **C** weak/unstable) |
+| `q45_atlas_terminal` | Q4.5 atlas taxonomy (current **B** isolated_safe_points_only) |
+
+As-of 2026-07-10: Q4 maps **`q4_separability_grade: C` → `stage2_entry_terminal_after_q4: B`**;  
+Q4.5 v4 reports **`q45_atlas_terminal: B`** with **154** productive-safe / **0** region candidates.
 
 ---
 
@@ -274,11 +290,16 @@ Thr / Boolean grids **must not** start until entry pack exists.
 ```text
 entry contract: fulfilled
 Q1–Q3: completed  (study m_b1_5_stage2_q1q3_20260710 · SUFFICIENT)
-Q4: completed     (study m_b1_5_stage2_q4_20260710 · C weak/unstable)
-Q4.5: completed   (study m_b1_5_stage2_q45_20260710 · B isolated_safe_points_only)
+Q4: completed
+  q4_separability_grade: C (weak/unstable)
+  stage2_entry_terminal_after_q4: B
+Q4.5: completed (evaluator v4 · study m_b1_5_stage2_q45_20260710)
+  q45_atlas_terminal: B (isolated_safe_points_only)
+  productive_safe: 154 · region_candidates: 0 · coord-union interior: 0
 current terminal: isolated_safe_points_only
 next authorized direction:
   ranking / assignment-relative audit
+  (after valid assignment-group key; competition columns currently untrusted)
 secondary:
   thin-edge diagnostics
   absolute MOT frame instrumentation
@@ -286,7 +307,7 @@ threshold/hook-policy promotion: blocked
 production_preset: unchanged
 ```
 
-Evidence narrative: [Stage 2 final](m_b1_5_stage2_q45_threshold_atlas_20260710.md).  
+Evidence narrative: [Stage 2 final](m_b1_5_stage2_d_online_final_20260710.md).  
 G0–G4 claim firewall rules above remain normative (not reopened).
 
 ---
