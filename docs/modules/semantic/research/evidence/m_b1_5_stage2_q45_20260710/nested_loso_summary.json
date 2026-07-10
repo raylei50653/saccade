@@ -1,0 +1,7 @@
+{
+  "kind": "nested_loso_train_select_holdout_eval",
+  "n_clauses_ever_selected": 1352,
+  "n_clauses_nested_loso_portable": 0,
+  "n_folds": 7,
+  "not_fixed_full_sample_partition": true
+}

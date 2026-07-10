@@ -10,12 +10,12 @@
 **Entry contract:** [m_b1_5_stage2_entry_contract_20260710.md](m_b1_5_stage2_entry_contract_20260710.md)
 **Thread:** [m_b1_online_hook_20260709.md](../../../research/threads/m_b1_online_hook_20260709.md)
 
-## Terminal classification (evaluator v2 — review #89)
+## Terminal classification (evaluator v3 — review #89)
 
 ```text
 stage2_q45_terminal: isolated_safe_points_only
 terminal_letter: B
-taxonomy_version: stage2_q45_atlas_v2
+taxonomy_version: stage2_q45_atlas_v3
 
 n_primary_negative: 23
 n_primary_positive_protect: 64
@@ -33,17 +33,26 @@ productive_safe (resolved GT_hurt==0 ∧ n_neg>0 ∧ no unresolved capture):
   AND:  153
   OR:     0
 
-stability (duplicate-free topology):
-  isolated_safe_point: 10
-  edge_candidate:       4
+stability (per-grid quotient topology; all mask coordinates retained):
+  isolated_safe_point:  7
+  edge_candidate:      27
+  has_interior:         0
   region_candidates:    0
+  max_plateau_n_coords: 19
+
+nested LOSO (train lattice → select → freeze → holdout):
+  n_folds: 7
+  n_clauses_ever_selected: 1352
+  n_clauses_nested_loso_portable: 0   # non-tautological
 
 evaluator gates:
   deletion_loo_is_portability: false
-  true_holdout_required_for_region_A: true
+  fixed_full_sample_partition_not_portability: true
+  nested_loso_required_for_region_A: true
   unresolved_contaminated_blocks_candidate: true
-  duplicate_masks_not_neighbors: true
-  interior_requires_full_neighborhood: true
+  semantic_duplicate_is_per_grid_not_global: true
+  quotient_topology_retains_all_coordinates: true
+  interior_requires_full_neighborhood_in_mask_coordinate_set: true
   assignment_group_key_status: invalid_frame_provenance
 
 production_preset: unchanged
@@ -52,8 +61,11 @@ production_preset: unchanged
 **Bounded finding (not global thr closure):**
 
 > On the **resolved∧selected** cohort, the restricted atlas reports sample-zero-GT  
-> cells but **no unique interior multi-sequence thick region**. Full selected  
-> population (incl. 21 unresolved) still limits safety claims.  
+> cells but **no interior multi-sequence thick region** under per-grid quotient  
+> topology (plateau coordinates retained; max plateau width 19 thr-cells still  
+> has no full bilateral/4-neighborhood interior). Nested train-select → holdout  
+> finds **0** portable clauses. Full selected population (incl. 21 unresolved)  
+> still limits safety claims.  
 > **Still inadmissible:** portable safe-region · thr global closure ·  
 > hook-policy promotion · e2e effect · production preset change.
 
@@ -70,7 +82,7 @@ Q4 weak marginal AUC (best oriented ≈ 0.588)
   → does NOT alone authorize: “threshold path fully falsified → ranking only”
 
 Q4.5 maps structure. Ranking is a reasonable next research line after
-valid assignment-group key + unknown coverage + true holdout LOO.
+valid assignment-group key + unknown coverage + nested LOSO portability.
 ```
 
 Competition-relative features: **untrusted** (`invalid_frame_provenance`).  
@@ -78,22 +90,27 @@ Not ranking-path evidence until export provides a stable assignment key.
 
 ---
 
-## Review #89 evaluator fixes (v2)
+## Review #89 evaluator fixes
+
+### v2 (prior)
 
 | Issue | Fix |
 |:--|:--|
 | LOO deletion = portability | Renamed `leave_one_sequence_deleted_*`; **cannot** promote |
-| True holdout | `true_holdout_loo.csv`: freeze thr → held-out GT hurt |
 | Unknown selected | per-cell `n_unresolved_selected`, pessimistic hurt, `unresolved_contaminated` |
-| Duplicate thickness | unique `mask_sha256` topology; dups not neighbors |
 | Boundary interior | bilateral (1D) / full-4 (pairwise); else `edge_candidate` |
 | Assignment group | competition features demoted; frame not used as truth |
 | MOT cross-check | prefers `cand_global_id` / `lost_global_id` + `_global_id_map.txt` |
-| Evidence pack | committed under `evidence/m_b1_5_stage2_q45_20260710/` |
+
+### v3 (this round — review follow-up)
+
+| Issue | Fix |
+|:--|:--|
+| Tautological “true holdout” | Replaced by **nested LOSO**: rebuild lattice on train fold, select train-safe clauses, freeze thr/Boolean, evaluate holdout. Old fixed-thr partition kept only as `fixed_full_sample_region_partition_check` (not portability). |
+| Global `seen_sig` isolation | **Per-grid** semantic-dup flag; **quotient topology** keeps all coordinates of each unique mask within a feature/direction (or pairwise) grid. Plateau width from full coordinate set. |
+| Stale evidence manifest | Clear `out_dir` → write all artifacts → write **current** manifest (HEAD + evaluator/runner/source SHAs) → **then** copy evidence pack. |
 
 ---
-
-## Locked primary cohort
 
 ## Locked primary cohort
 

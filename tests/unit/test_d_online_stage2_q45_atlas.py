@@ -19,8 +19,9 @@ from saccade.perception.eval.d_online_stage2_q45_atlas import (
     check_frame_column_provenance,
     classify_q45_terminal,
     classify_region_stability,
+    fixed_full_sample_region_partition_check,
+    nested_loso_portability_audit,
     region_metrics,
-    true_holdout_sequence_validation,
 )
 from saccade.perception.eval.d_online_stage2_q4 import make_q4_primary_row
 
@@ -61,38 +62,137 @@ def test_unresolved_contamination_blocks_productive_safe() -> None:
     assert m["pessimistic_gt_hurt"] >= 1
 
 
-def test_true_holdout_can_fail_when_deletion_loo_passes() -> None:
-    # Full cohort: high values are pure neg → productive-safe on full data
-    # Holdout A: only GT above thr → true holdout GT hurt > 0
-    x = np.array([0.1, 0.2, 0.9, 0.95, 0.15, 0.12])
-    y = np.array([0, 0, 1, 1, 0, 0])  # high = neg on B; A has only lows as GT
-    seqs = np.array(["A", "A", "B", "B", "C", "C"], dtype=object)
-    # thr such that only 0.9, 0.95 fire — both on B (neg)
-    mask = atom_mask(x, "high_tail", 0.85)
-    m = region_metrics(mask, y, seqs, base_neg_rate=1 / 3)
-    assert m["gt_hurt"] == 0
-    assert m["leave_one_sequence_deleted_all_gt_hurt_zero"] is True
-    # Inject a holdout-specific GT high: change y for evaluation on true holdout
-    # Construct case: thr 0.5 captures GT on A when held out
-    x2 = np.array([0.8, 0.1, 0.9, 0.2])
-    y2 = np.array([0, 1, 1, 0])  # A has GT at 0.8
-    s2 = np.array(["A", "B", "B", "C"], dtype=object)
-    ho = true_holdout_sequence_validation(
-        x_parts={"score_m_bridge": x2},
-        y=y2,
-        sequences=s2,
+def test_fixed_full_sample_partition_is_not_portability() -> None:
+    """Fixed thr on subsets of full sample is diagnostic only, not nested LOSO."""
+    x = np.array([0.8, 0.1, 0.9, 0.2])
+    y = np.array([0, 1, 1, 0])
+    s = np.array(["A", "B", "B", "C"], dtype=object)
+    ho = fixed_full_sample_region_partition_check(
+        x_parts={"score_m_bridge": x},
+        y=y,
+        sequences=s,
         feature="score_m_bridge",
         direction="high_tail",
         thr_value=0.5,
     )
-    # holdout A: x=0.8 GT → gt_hurt 1
-    a_row = next(r for r in ho["true_holdout_rows"] if r["hold_out_sequence"] == "A")
+    assert ho["not_portability_evidence"] is True
+    assert ho["kind"] == "fixed_full_sample_region_partition_check"
+    a_row = next(r for r in ho["rows"] if r["hold_out_sequence"] == "A")
     assert a_row["holdout_gt_hurt"] == 1
-    assert ho["true_holdout_all_gt_hurt_zero"] is False
 
 
-def test_duplicate_masks_do_not_form_thick_region() -> None:
-    # two thr indices, same mask signature → only one unique topology node
+def test_nested_loso_can_fail_when_full_sample_safe() -> None:
+    """Nested train-select → holdout-eval is non-tautological.
+
+    Sequence A has a high GT; sequences B/C have high negatives. Full-sample
+    high_tail thr that only fires on B/C is productive-safe on the full pool,
+    but when B or C is held out the train lattice may select thr that hurt A,
+    or a thr selected without A may still hurt A on holdout.
+    """
+    # Build primary-like rows with make_q4 helper fields + q4_y
+    primary = []
+    # A: GT high scores (would hurt high_tail if selected)
+    for i, score in enumerate([0.95, 0.92]):
+        r = make_q4_primary_row(
+            event_id=f"A{i}",
+            sequence="A",
+            pair_label="gt_consistent",
+            score_m_bridge=score,
+            abs_log_h=0.1,
+            dist_h=0.1,
+            abs_ratio_m1=0.1,
+            resid_mean=0.1,
+        )
+        r["q4_y"] = 0
+        primary.append(r)
+    # B, C: negatives at high scores; GT at low
+    for seq in ("B", "C", "D"):
+        for i, (lab, score, y) in enumerate(
+            [
+                ("negative", 0.91, 1),
+                ("negative", 0.88, 1),
+                ("gt_consistent", 0.05, 0),
+                ("gt_consistent", 0.08, 0),
+            ]
+        ):
+            r = make_q4_primary_row(
+                event_id=f"{seq}{i}",
+                sequence=seq,
+                pair_label=lab,
+                score_m_bridge=score,
+                abs_log_h=0.1,
+                dist_h=0.1,
+                abs_ratio_m1=0.1,
+                resid_mean=0.1,
+            )
+            r["q4_y"] = y
+            primary.append(r)
+
+    audit = nested_loso_portability_audit(
+        primary,
+        selected_unresolved=[],
+        selected_ambiguous=[],
+        signals=("score_m_bridge",),
+    )
+    assert audit["kind"] == "nested_loso_train_select_holdout_eval"
+    assert audit["not_fixed_full_sample_partition"] is True
+    assert audit["n_folds"] == 4
+    # Holding out A: train may select high_tail thr on B/C/D negs; A holdout GT hurt
+    a_folds = [
+        r
+        for r in audit["fold_detail_rows"]
+        if r["hold_out_sequence"] == "A" and r["kind"] == "single"
+    ]
+    assert a_folds, "expected some clauses selected when A held out"
+    assert any(int(r["holdout_gt_hurt"]) > 0 for r in a_folds)
+    # Not every clause is automatically portable
+    assert any(
+        int(r["nested_loso_portability_ok"]) == 0 for r in audit["clause_summary_rows"]
+    )
+
+
+def test_quotient_keeps_plateau_coordinates_including_dups() -> None:
+    """Same mask at thr 0,1,2 is one quotient node with interior at thr 1.
+
+    semantic_duplicate_mask on later cells must not discard their coordinates.
+    """
+    sig = "plateau_abc"
+    atoms = []
+    for ti, tv, is_dup in ((0, 0.1, 0), (1, 0.2, 1), (2, 0.3, 1)):
+        atoms.append(
+            {
+                "atom_id": f"S::f::high::u{ti}",
+                "feature": "score_m_bridge",
+                "direction": "high_tail",
+                "thr_index": ti,
+                "thr_value": tv,
+                "productive_safe_point": 1,
+                "is_secondary_feature": 0,
+                "semantic_duplicate_mask": is_dup,
+                "safety_status": "resolved_sample_zero_gt",
+                "mask_sha256": sig,
+                "support": 4,
+                "n_neg_captured": 4,
+                "gt_hurt": 0,
+                "n_sequences_with_neg": 3,
+                "max_neg_sequence_share": 0.4,
+                "single_seq_neg_dominance": 0,
+                "n_unresolved_selected": 0,
+            }
+        )
+    stab = classify_region_stability(atoms, [], [])
+    assert len(stab) == 1
+    assert int(stab[0]["n_coordinates"]) == 3
+    assert int(stab[0]["has_interior_coordinate"]) == 1
+    assert stab[0]["stability_class"] in (
+        "locally_stable_region",
+        "loo_stable_region",
+    )
+    assert int(stab[0]["is_region_candidate"]) == 1
+
+
+def test_thin_two_point_plateau_not_interior() -> None:
+    # two thr indices, same mask → width 2 but no thr with both neighbors
     sig = "abc123"
     atoms = [
         {
@@ -122,9 +222,9 @@ def test_duplicate_masks_do_not_form_thick_region() -> None:
             "thr_value": 0.2,
             "productive_safe_point": 1,
             "is_secondary_feature": 0,
-            "semantic_duplicate_mask": 0,
+            "semantic_duplicate_mask": 1,
             "safety_status": "resolved_sample_zero_gt",
-            "mask_sha256": sig,  # same mask
+            "mask_sha256": sig,
             "support": 2,
             "n_neg_captured": 2,
             "gt_hurt": 0,
@@ -135,9 +235,10 @@ def test_duplicate_masks_do_not_form_thick_region() -> None:
         },
     ]
     stab = classify_region_stability(atoms, [], [])
-    # only first unique mask kept; thr_index 0 is boundary (no bilateral)
     assert len(stab) == 1
-    assert stab[0]["is_region_candidate"] == 0
+    assert int(stab[0]["n_coordinates"]) == 2
+    assert int(stab[0]["has_interior_coordinate"]) == 0
+    assert int(stab[0]["is_region_candidate"]) == 0
     assert stab[0]["stability_class"] in (
         "isolated_safe_point",
         "edge_candidate",
@@ -146,7 +247,6 @@ def test_duplicate_masks_do_not_form_thick_region() -> None:
 
 
 def test_boundary_never_region_candidate() -> None:
-    # single cell: boundary
     atoms = [
         {
             "atom_id": "solo",
@@ -230,14 +330,11 @@ def test_threshold_registry_complete_unique_single() -> None:
         )
         r["q4_y"] = 1 if lab == "negative" else 0
         rows.append(r)
-    # pad to avoid lock? registry doesn't lock n=87
     reg = build_threshold_registry(rows)
     assert reg["single_lattice_kind"] == "primary_unique_boundaries"
-    # 5 signals * 2 dirs * 5 unique scores
     assert reg["n_single_atoms"] == 5 * 2 * 5
     atoms = build_single_atom_atlas(reg)
     assert len(atoms) == reg["n_single_atoms"]
-    # full family retained — not only best
     supports = {r["support"] for r in atoms if r["feature"] == "score_m_bridge"}
     assert len(supports) >= 2
 
@@ -298,20 +395,18 @@ def test_pareto_keeps_tradeoffs() -> None:
     ]
     front = build_pareto_frontier(rows, kind="single_atom")
     ids = {r["region_id"] for r in front}
-    # a and b trade off; c same objectives as a → one of a/c kept
     assert "b" in ids
     assert ("a" in ids) or ("c" in ids)
 
 
-def test_terminal_a_requires_true_holdout_portability() -> None:
-    # without true holdout flag → not A
+def test_terminal_a_requires_nested_loso_portability() -> None:
     t0 = classify_q45_terminal(
         stability_rows=[
             {
                 "region_id": "R0",
                 "stability_class": "loo_stable_region",
                 "is_region_candidate": 1,
-                "true_holdout_portability_ok": 0,
+                "nested_loso_portability_ok": 0,
             }
         ],
         atom_rows=[],
@@ -325,7 +420,7 @@ def test_terminal_a_requires_true_holdout_portability() -> None:
             "region_id": "R1",
             "stability_class": "loo_stable_region",
             "is_region_candidate": 1,
-            "true_holdout_portability_ok": 1,
+            "nested_loso_portability_ok": 1,
         }
     ]
     t = classify_q45_terminal(

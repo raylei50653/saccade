@@ -1,7 +1,7 @@
 {
   "D_online_total": 244,
   "assignment_group_key_status": "invalid_frame_provenance",
-  "bounded_finding": "resolved\u2227selected restricted atlas reports sample-zero-GT cells but no unique interior multi-sequence thick region",
+  "bounded_finding": "resolved\u2227selected restricted atlas reports sample-zero-GT cells but no interior multi-sequence thick region under quotient topology (coordinates retained per unique mask within each grid)",
   "claims_allowed": [
     "retain_atlas_for_followup",
     "report_isolated_observed_safe_points_descriptively",
@@ -18,7 +18,8 @@
     "formal_safe_region_not_authorized",
     "threshold_formulation_global_closure_not_authorized",
     "portable_safe_region_claim_inadmissible",
-    "deletion_loo_as_portability_forbidden"
+    "deletion_loo_as_portability_forbidden",
+    "fixed_full_sample_partition_as_portability_forbidden"
   ],
   "cohort_definition": {
     "excluded_from_main": "unresolved, ambiguous, non-selected, other labels",
@@ -26,14 +27,18 @@
     "positive_protection_class": "resolved AND baseline_selected AND pair_label==gt_consistent",
     "secondary_analysis": "resolved non-selected negative / gt_consistent"
   },
-  "created_utc": "2026-07-10T08:38:04.618499+00:00",
+  "created_utc": "2026-07-10T08:47:47.412045+00:00",
   "evaluator_review_gates": {
     "deletion_loo_is_portability": false,
-    "duplicate_masks_not_neighbors": true,
-    "interior_requires_full_neighborhood": true,
-    "true_holdout_required_for_region_A": true,
+    "fixed_full_sample_partition_not_portability": true,
+    "interior_requires_full_neighborhood_in_mask_coordinate_set": true,
+    "nested_loso_required_for_region_A": true,
+    "quotient_topology_retains_all_coordinates": true,
+    "semantic_duplicate_is_per_grid_not_global": true,
     "unresolved_contaminated_blocks_candidate": true
   },
+  "evaluator_source": "/home/ray/developer/ai/saccade/src/saccade/perception/eval/d_online_stage2_q45_atlas.py",
+  "evaluator_source_sha256": "30a079de8a79033bee810ff8c96f803fc46e55b146e9dc7b6e242f26e224e862",
   "forbidden_this_round": [
     "single_best_threshold_as_rule",
     "unrestricted_boolean_mining",
@@ -45,14 +50,18 @@
     "production_preset_change",
     "sample_zero_gt_named_safe_rule",
     "q4_weak_auc_means_boolean_impossible",
-    "new_signal_terminal_classification"
+    "new_signal_terminal_classification",
+    "fixed_full_sample_partition_as_portability"
   ],
   "frame_is_absolute_mot": false,
   "frame_observation_limitation_only": true,
   "frame_provenance_kind": "host_audit_propose_invocation_counter",
-  "git_commit": "16031c47efa8bd21f715da1811c3376bb5197b11",
+  "git_commit": "2d0e270d896dfe35d626636da570b5212e1d4eba",
   "n_atom_atlas_rows": 870,
-  "n_isolated_or_thin": 10,
+  "n_clauses_ever_selected_nested_loso": 1352,
+  "n_clauses_nested_loso_portable": 0,
+  "n_isolated_or_thin": 34,
+  "n_nested_loso_folds": 7,
   "n_pairwise_and_rows": 17640,
   "n_pairwise_atoms_registered": 210,
   "n_pairwise_or_rows": 17640,
@@ -64,24 +73,34 @@
   "n_productive_safe_cells": 154,
   "n_productive_safe_or": 0,
   "n_productive_safe_single": 1,
+  "n_region_candidates": 0,
   "n_selected_ambiguous": 0,
   "n_selected_unresolved": 21,
   "n_sequences_with_both_classes": 7,
   "n_single_atoms_registered": 870,
-  "n_stability_rows": 14,
-  "next_authorized_step": "threshold path: no promotable region yet; ranking/assignment is a reasonable next research line AFTER valid assignment-group key + unknown coverage + true holdout LOO are closed",
+  "n_stability_rows": 34,
+  "next_authorized_step": "threshold path: no promotable region yet; ranking/assignment is a reasonable next research line AFTER valid assignment-group key + unknown coverage + nested train-select holdout are closed",
   "pairwise_lattice_kind": "primary_quantile_lattice_q05",
   "production_preset": "unchanged",
   "q4_interpretation": "Q4 weak marginal AUC closes singleton frozen-tail thr promotion; does not forbid threshold/Boolean combination as analysis method.",
-  "reason": "On resolved\u2227selected cohort: sample-zero-GT cells exist (n_atlas_cells=154) but no unique interior multi-seq thick region under duplicate-free topology + true holdout; unknown/unresolved selected coverage further limits claims \u2192 isolated_safe_points_only",
+  "reason": "On resolved\u2227selected cohort: sample-zero-GT cells exist (n_atlas_cells=154) but no interior multi-seq thick region under per-grid quotient topology + nested LOSO portability; unknown/unresolved selected coverage further limits claims \u2192 isolated_safe_points_only",
   "reconciliation_acceptance": "PASS",
-  "secondary_competition_features": [],
+  "repository_head_sha": "2d0e270d896dfe35d626636da570b5212e1d4eba",
+  "runner_source": "/home/ray/developer/ai/saccade/scripts/tools/run_m_b1_5_stage2_q45_atlas.py",
+  "runner_source_sha256": "376b11c0bb9c85823ca6c09eb17ed3044730b3be7bc9fec53888ffde74d5815a",
+  "secondary_competition_features": [
+    "sec_winner_runnerup_score_margin",
+    "sec_delta_vs_ru_abs_log_h",
+    "sec_competitor_count"
+  ],
   "secondary_competition_trusted": false,
   "single_lattice_kind": "primary_unique_boundaries",
+  "source_event_table": "out/signal_study/m_b1_5_stage2_q1q3_20260710/d_online_events.parquet",
+  "source_event_table_sha256": "cfca3818fd8478e6e3dcb12d3976549dab8057a0f2c2e63831f8d3e3a2fffd97",
   "source_q1q3_study": "out/signal_study/m_b1_5_stage2_q1q3_20260710",
   "stage2_q45_terminal": "isolated_safe_points_only",
   "study_id": "m_b1_5_stage2_q45_20260710",
-  "taxonomy_version": "stage2_q45_atlas_v2",
+  "taxonomy_version": "stage2_q45_atlas_v3",
   "terminal_letter": "B",
   "upstream_q4_study": "m_b1_5_stage2_q4_20260710"
 }

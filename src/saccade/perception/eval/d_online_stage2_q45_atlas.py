@@ -21,6 +21,7 @@ import hashlib
 import itertools
 import json
 import math
+import shutil
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -49,7 +50,7 @@ from saccade.perception.eval.portable_or_tail import ORDERED_SIGNALS
 # Locked constants
 # ---------------------------------------------------------------------------
 
-TAXONOMY_VERSION = "stage2_q45_atlas_v2"
+TAXONOMY_VERSION = "stage2_q45_atlas_v3"
 Q1Q3_STUDY_ID = "m_b1_5_stage2_q1q3_20260710"
 Q4_STUDY_ID = "m_b1_5_stage2_q4_20260710"
 EXPECTED_PRIMARY_N = 87
@@ -80,9 +81,9 @@ MIN_ENRICHMENT_USEFUL = 1.25  # 25% above base negative rate
 MIN_SEQS_FOR_REGION = 2
 MAX_SEQ_SHARE_NON_DOMINANT = 0.5
 
-# True held-out LOO: freeze absolute thr on train, evaluate on holdout.
-# Deletion-consistency (old LOO) is NOT portability and cannot promote.
-HOLD_OUT_PORTABILITY_GATE = True
+# Nested LOSO: rebuild lattice + select on train, freeze, evaluate holdout.
+# Deletion-consistency and fixed-full-sample thr re-check are NOT portability.
+NESTED_LOSO_PORTABILITY_GATE = True
 
 ASSIGNMENT_GROUP_KEY_STATUS = (
     "invalid_frame_provenance"  # (seq, frame, cand_slot) uses host counter frame==4
@@ -617,7 +618,7 @@ def region_metrics(
     }
 
 
-def true_holdout_sequence_validation(
+def fixed_full_sample_region_partition_check(
     *,
     x_parts: Mapping[str, np.ndarray],
     y: np.ndarray,
@@ -630,12 +631,10 @@ def true_holdout_sequence_validation(
     thr_value_b: float | None = None,
     combinator: str | None = None,
 ) -> dict[str, Any]:
-    """Freeze absolute thr on train folds; apply to held-out sequence.
+    """Partition check only: same thr on train/holdout subsets of full sample.
 
-    For each holdout H:
-      1. build mask with frozen thr on train (all ≠ H)
-      2. require train has both classes available (else flag)
-      3. apply same thr to H only; report holdout GT hurt / neg capture
+    **Not portability.** If full-cohort GT_hurt==0, every holdout subset also has
+    GT_hurt==0. Kept for diagnostics; never used for A promotion.
     """
     seqs = sorted(set(str(s) for s in sequences))
     rows = []
@@ -660,38 +659,309 @@ def true_holdout_sequence_validation(
                 m_train = m_train & mb_tr
                 m_hold = m_hold & mb_ho
         y_tr, y_ho = y[train], y[hold_m]
-        n_tr_neg = int(np.sum(m_train & (y_tr == 1)))
-        n_tr_gt = int(np.sum(m_train & (y_tr == 0)))
-        n_ho_neg = int(np.sum(m_hold & (y_ho == 1)))
-        n_ho_gt = int(np.sum(m_hold & (y_ho == 0)))
         rows.append(
             {
                 "hold_out_sequence": hold,
-                "train_support": int(m_train.sum()),
-                "train_n_neg": n_tr_neg,
-                "train_gt_hurt": n_tr_gt,
-                "holdout_support": int(m_hold.sum()),
-                "holdout_n_neg": n_ho_neg,
-                "holdout_gt_hurt": n_ho_gt,
-                "holdout_productive_safe": int(n_ho_gt == 0 and n_ho_neg > 0),
-                "train_has_both_classes_in_region": int(n_tr_neg > 0 and n_tr_gt >= 0),
+                "train_gt_hurt": int(np.sum(m_train & (y_tr == 0))),
+                "holdout_gt_hurt": int(np.sum(m_hold & (y_ho == 0))),
+                "holdout_n_neg": int(np.sum(m_hold & (y_ho == 1))),
             }
         )
-    worst = max((r["holdout_gt_hurt"] for r in rows), default=0)
-    all_zero = all(r["holdout_gt_hurt"] == 0 for r in rows) if rows else False
-    any_prod = any(r["holdout_productive_safe"] == 1 for r in rows)
     return {
-        "true_holdout_rows": rows,
-        "true_holdout_worst_gt_hurt": int(worst),
-        "true_holdout_all_gt_hurt_zero": bool(all_zero),
-        "true_holdout_any_productive_safe": bool(any_prod),
-        "true_holdout_portability_ok": bool(all_zero and any_prod),
+        "kind": "fixed_full_sample_region_partition_check",
+        "not_portability_evidence": True,
+        "rows": rows,
     }
 
 
-# ---------------------------------------------------------------------------
-# Single-atom atlas
-# ---------------------------------------------------------------------------
+def _clause_id_single(feature: str, direction: str, thr: float) -> str:
+    return f"S::{feature}::{direction}::t{round(thr, 12)}"
+
+
+def _clause_id_pair(
+    comb: str,
+    fa: str,
+    da: str,
+    ta: float,
+    fb: str,
+    db: str,
+    tb: float,
+) -> str:
+    return f"{comb}::{fa}::{da}::t{round(ta, 12)}::{fb}::{db}::t{round(tb, 12)}"
+
+
+def nested_loso_portability_audit(
+    primary: Sequence[Mapping[str, Any]],
+    *,
+    selected_unresolved: Sequence[Mapping[str, Any]],
+    selected_ambiguous: Sequence[Mapping[str, Any]],
+    signals: Sequence[str] = ORDERED_SIGNALS,
+) -> dict[str, Any]:
+    """Nested leave-one-sequence-out: train lattice → select → freeze → holdout.
+
+    For each held-out sequence H:
+      1. Build single unique thr lattice + pairwise quantile lattice on train only
+      2. Select train cells with train GT_hurt==0, train n_neg>0, train unknown==0
+      3. Freeze absolute thr / Boolean structure
+      4. Apply to H; record holdout GT hurt / neg capture
+    Aggregates selection frequency and worst holdout GT across folds.
+    """
+    primary = list(primary)
+    sequences = np.asarray([str(r["sequence"]) for r in primary], dtype=object)
+    y = np.asarray([int(r["q4_y"]) for r in primary], dtype=int)
+    mats = {
+        s: np.asarray([_f(r.get(s)) for r in primary], dtype=float) for s in signals
+    }
+    unres = list(selected_unresolved)
+    amb = list(selected_ambiguous)
+    unres_seq = (
+        np.asarray([str(r["sequence"]) for r in unres], dtype=object)
+        if unres
+        else np.array([], dtype=object)
+    )
+    amb_seq = (
+        np.asarray([str(r["sequence"]) for r in amb], dtype=object)
+        if amb
+        else np.array([], dtype=object)
+    )
+    unres_mats = {
+        s: np.asarray([_f(r.get(s)) for r in unres], dtype=float) for s in signals
+    }
+    amb_mats = {
+        s: np.asarray([_f(r.get(s)) for r in amb], dtype=float) for s in signals
+    }
+
+    all_seqs = sorted(set(str(s) for s in sequences))
+    # clause_id -> stats
+    clause_stats: dict[str, dict[str, Any]] = {}
+    fold_rows: list[dict[str, Any]] = []
+
+    def _bump(cid: str, **kw: Any) -> None:
+        st = clause_stats.setdefault(
+            cid,
+            {
+                "clause_id": cid,
+                "n_folds_selected": 0,
+                "n_folds_holdout_gt_zero": 0,
+                "n_folds_holdout_productive": 0,
+                "worst_holdout_gt_hurt": 0,
+                "sum_holdout_n_neg": 0,
+                "definitions": [],
+            },
+        )
+        for k, v in kw.items():
+            if k == "definition":
+                st["definitions"].append(v)
+            elif k == "selected":
+                st["n_folds_selected"] += 1
+            elif k == "ho_gt0":
+                st["n_folds_holdout_gt_zero"] += 1
+            elif k == "ho_prod":
+                st["n_folds_holdout_productive"] += 1
+            elif k == "ho_gt":
+                st["worst_holdout_gt_hurt"] = max(st["worst_holdout_gt_hurt"], int(v))
+            elif k == "ho_neg":
+                st["sum_holdout_n_neg"] += int(v)
+
+    for hold in all_seqs:
+        train_m = sequences != hold
+        hold_m = sequences == hold
+        if int(train_m.sum()) < 5 or int(hold_m.sum()) == 0:
+            continue
+        y_tr, y_ho = y[train_m], y[hold_m]
+        # train unknown rows
+        if len(unres_seq):
+            u_tr = unres_seq != hold
+        else:
+            u_tr = np.array([], dtype=bool)
+        if len(amb_seq):
+            a_tr = amb_seq != hold
+        else:
+            a_tr = np.array([], dtype=bool)
+
+        # --- single atoms: unique thr on train ---
+        for sig in signals:
+            x_tr = mats[sig][train_m]
+            x_ho = mats[sig][hold_m]
+            uniq = _sorted_unique(x_tr)
+            for thr in uniq.tolist():
+                for direction in DIRECTIONS:
+                    m_tr = atom_mask(x_tr, direction, float(thr))
+                    n_gt = int(np.sum(m_tr & (y_tr == 0)))
+                    n_neg = int(np.sum(m_tr & (y_tr == 1)))
+                    if n_gt != 0 or n_neg <= 0:
+                        continue
+                    # train unknown capture
+                    n_u = 0
+                    if len(unres) and u_tr.any():
+                        n_u += int(
+                            atom_mask(
+                                unres_mats[sig][u_tr], direction, float(thr)
+                            ).sum()
+                        )
+                    if len(amb) and a_tr.any():
+                        n_u += int(
+                            atom_mask(amb_mats[sig][a_tr], direction, float(thr)).sum()
+                        )
+                    if n_u > 0:
+                        continue
+                    # freeze and apply to holdout
+                    m_ho = atom_mask(x_ho, direction, float(thr))
+                    ho_gt = int(np.sum(m_ho & (y_ho == 0)))
+                    ho_neg = int(np.sum(m_ho & (y_ho == 1)))
+                    cid = _clause_id_single(sig, direction, float(thr))
+                    _bump(
+                        cid,
+                        selected=1,
+                        definition={
+                            "kind": "single",
+                            "feature": sig,
+                            "direction": direction,
+                            "thr_value": float(thr),
+                            "hold_out": hold,
+                        },
+                        ho_gt=ho_gt,
+                        ho_neg=ho_neg,
+                    )
+                    if ho_gt == 0:
+                        _bump(cid, ho_gt0=1)
+                    if ho_gt == 0 and ho_neg > 0:
+                        _bump(cid, ho_prod=1)
+                    fold_rows.append(
+                        {
+                            "hold_out_sequence": hold,
+                            "clause_id": cid,
+                            "kind": "single",
+                            "feature_a": sig,
+                            "direction_a": direction,
+                            "thr_value_a": float(thr),
+                            "train_n_neg": n_neg,
+                            "train_gt_hurt": 0,
+                            "holdout_gt_hurt": ho_gt,
+                            "holdout_n_neg": ho_neg,
+                        }
+                    )
+
+        # --- pairwise: quantile lattice on train ---
+        q_thrs: dict[str, list[float]] = {
+            s: _quantile_thresholds(mats[s][train_m], PAIRWISE_QUANTILE_LATTICE)
+            for s in signals
+        }
+        for f1, f2 in itertools.combinations(list(signals), 2):
+            for d1 in DIRECTIONS:
+                for d2 in DIRECTIONS:
+                    for t1 in q_thrs[f1]:
+                        for t2 in q_thrs[f2]:
+                            for comb in COMBINATORS:
+                                m1 = atom_mask(mats[f1][train_m], d1, float(t1))
+                                m2 = atom_mask(mats[f2][train_m], d2, float(t2))
+                                m_tr = (m1 & m2) if comb == "AND" else (m1 | m2)
+                                n_gt = int(np.sum(m_tr & (y_tr == 0)))
+                                n_neg = int(np.sum(m_tr & (y_tr == 1)))
+                                if n_gt != 0 or n_neg <= 0:
+                                    continue
+                                n_u = 0
+                                if len(unres) and u_tr.any():
+                                    u1 = atom_mask(unres_mats[f1][u_tr], d1, float(t1))
+                                    u2 = atom_mask(unres_mats[f2][u_tr], d2, float(t2))
+                                    n_u += int(
+                                        (
+                                            (u1 & u2) if comb == "AND" else (u1 | u2)
+                                        ).sum()
+                                    )
+                                if len(amb) and a_tr.any():
+                                    a1 = atom_mask(amb_mats[f1][a_tr], d1, float(t1))
+                                    a2 = atom_mask(amb_mats[f2][a_tr], d2, float(t2))
+                                    n_u += int(
+                                        (
+                                            (a1 & a2) if comb == "AND" else (a1 | a2)
+                                        ).sum()
+                                    )
+                                if n_u > 0:
+                                    continue
+                                h1 = atom_mask(mats[f1][hold_m], d1, float(t1))
+                                h2 = atom_mask(mats[f2][hold_m], d2, float(t2))
+                                m_ho = (h1 & h2) if comb == "AND" else (h1 | h2)
+                                ho_gt = int(np.sum(m_ho & (y_ho == 0)))
+                                ho_neg = int(np.sum(m_ho & (y_ho == 1)))
+                                cid = _clause_id_pair(
+                                    comb, f1, d1, float(t1), f2, d2, float(t2)
+                                )
+                                _bump(
+                                    cid,
+                                    selected=1,
+                                    definition={
+                                        "kind": "pairwise",
+                                        "combinator": comb,
+                                        "feature_a": f1,
+                                        "direction_a": d1,
+                                        "thr_value_a": float(t1),
+                                        "feature_b": f2,
+                                        "direction_b": d2,
+                                        "thr_value_b": float(t2),
+                                        "hold_out": hold,
+                                    },
+                                    ho_gt=ho_gt,
+                                    ho_neg=ho_neg,
+                                )
+                                if ho_gt == 0:
+                                    _bump(cid, ho_gt0=1)
+                                if ho_gt == 0 and ho_neg > 0:
+                                    _bump(cid, ho_prod=1)
+                                fold_rows.append(
+                                    {
+                                        "hold_out_sequence": hold,
+                                        "clause_id": cid,
+                                        "kind": f"pairwise_{comb}",
+                                        "feature_a": f1,
+                                        "direction_a": d1,
+                                        "thr_value_a": float(t1),
+                                        "feature_b": f2,
+                                        "direction_b": d2,
+                                        "thr_value_b": float(t2),
+                                        "train_n_neg": n_neg,
+                                        "train_gt_hurt": 0,
+                                        "holdout_gt_hurt": ho_gt,
+                                        "holdout_n_neg": ho_neg,
+                                    }
+                                )
+
+    n_folds = len(all_seqs)
+    summary_rows = []
+    n_portable = 0
+    for cid, st in sorted(
+        clause_stats.items(), key=lambda kv: -kv[1]["n_folds_selected"]
+    ):
+        freq = st["n_folds_selected"] / n_folds if n_folds else 0.0
+        portable = (
+            st["n_folds_selected"] >= max(2, n_folds // 2)
+            and st["worst_holdout_gt_hurt"] == 0
+            and st["n_folds_holdout_productive"] >= 1
+        )
+        if portable:
+            n_portable += 1
+        summary_rows.append(
+            {
+                "clause_id": cid,
+                "n_folds_selected": st["n_folds_selected"],
+                "selection_frequency": freq,
+                "worst_holdout_gt_hurt": st["worst_holdout_gt_hurt"],
+                "n_folds_holdout_gt_zero": st["n_folds_holdout_gt_zero"],
+                "n_folds_holdout_productive": st["n_folds_holdout_productive"],
+                "sum_holdout_n_neg": st["sum_holdout_n_neg"],
+                "nested_loso_portability_ok": int(portable),
+            }
+        )
+
+    return {
+        "kind": "nested_loso_train_select_holdout_eval",
+        "n_folds": n_folds,
+        "n_clauses_ever_selected": len(clause_stats),
+        "n_clauses_nested_loso_portable": n_portable,
+        "fold_detail_rows": fold_rows,
+        "clause_summary_rows": summary_rows,
+        "not_fixed_full_sample_partition": True,
+    }
 
 
 def build_single_atom_atlas(
@@ -883,7 +1153,11 @@ def build_pairwise_atlas(
         )
 
     rows: list[dict[str, Any]] = []
-    seen_sig: set[tuple[Any, ...]] = set()
+    # Per grammar/grid only — never global across feature pairs.
+    # Grid = (feature_a, direction_a, feature_b, direction_b, combinator).
+    # semantic_duplicate_mask means "same mask already seen in this grid";
+    # coordinates still feed quotient topology (see classify_region_stability).
+    seen_sig_by_grid: dict[tuple[Any, ...], set[bytes]] = defaultdict(set)
 
     for f1, f2 in itertools.combinations(features, 2):
         for a in by_feat[f1]:
@@ -926,9 +1200,16 @@ def build_pairwise_atlas(
                         float(b["thr_value"]),
                     )
                     am = (a1m & a2m) if combinator == "AND" else (a1m | a2m)
-                sig = (combinator, m.tobytes())
-                is_dup = sig in seen_sig
-                seen_sig.add(sig)
+                grid_key = (
+                    a["feature"],
+                    a["direction"],
+                    b["feature"],
+                    b["direction"],
+                    combinator,
+                )
+                mask_bytes = m.tobytes()
+                is_dup = mask_bytes in seen_sig_by_grid[grid_key]
+                seen_sig_by_grid[grid_key].add(mask_bytes)
 
                 met = region_metrics(
                     m,
@@ -1016,210 +1297,251 @@ def classify_region_stability(
     pairwise_and: Sequence[Mapping[str, Any]],
     pairwise_or: Sequence[Mapping[str, Any]],
     *,
-    holdout_by_region: Mapping[str, Mapping[str, Any]] | None = None,
+    nested_loso: Mapping[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
-    """Classify productive-safe points with duplicate-free topology.
+    """Quotient topology: node = unique mask within each grammar/grid.
 
-    Rules (review #89):
-      - semantic duplicate masks do not form neighbors (one node per mask_sha256)
-      - interior requires BOTH sides (1D) or full 4-neighborhood (pairwise)
-      - boundary points are edge_candidate only — never thick region
-      - unresolved_contaminated cannot be region_candidate
-      - true_holdout portability required for loo_stable_region; deletion LOO banned
+    Per grid (single feature×direction, or pairwise feature-pair×dirs×comb):
+      - node stores **all** thr coordinates sharing the mask
+      - plateau width from full coordinate set
+      - interior if some coordinate has both/full lattice neighbors *in the
+        coordinate set of this node* (same mask plateau), not discarded dups
+      - semantic_duplicate cells still contribute coordinates; they are not
+        independent statistical evidence (counted once per mask)
+
+    Nested LOSO portability is reported separately and required for A.
     """
-    holdout_by_region = holdout_by_region or {}
+    nested_loso = nested_loso or {}
+    # clause_id -> nested portability
+    portable_clauses: set[str] = set()
+    for row in nested_loso.get("clause_summary_rows") or []:
+        if int(row.get("nested_loso_portability_ok", 0)):
+            portable_clauses.add(str(row["clause_id"]))
+
     out: list[dict[str, Any]] = []
 
-    def _eligible(r: Mapping[str, Any]) -> bool:
-        if not int(r.get("productive_safe_point", 0)):
-            return False
-        if int(r.get("is_secondary_feature", 0)):
-            return False
-        if int(r.get("semantic_duplicate_mask", 0)):
-            return False
-        if str(r.get("safety_status", "")) == "unresolved_contaminated":
-            return False
-        return True
+    def _prod(r: Mapping[str, Any]) -> bool:
+        return (
+            bool(int(r.get("productive_safe_point", 0)))
+            and str(r.get("safety_status", "")) != "unresolved_contaminated"
+        )
 
-    # --- single atoms: unique by mask, topology on thr_index ---
-    by_fd: dict[tuple[str, str], list[Mapping[str, Any]]] = defaultdict(list)
+    # ---- single-atom grids ----
+    by_grid: dict[tuple[str, str], list[Mapping[str, Any]]] = defaultdict(list)
     for r in atom_rows:
-        if not _eligible(r):
+        if int(r.get("is_secondary_feature", 0)):
             continue
-        by_fd[(str(r["feature"]), str(r["direction"]))].append(r)
+        if not _prod(r):
+            continue
+        by_grid[(str(r["feature"]), str(r["direction"]))].append(r)
 
-    for (feat, direction), cells in by_fd.items():
-        # unique mask representatives ordered by thr_index
-        seen_mask: set[str] = set()
-        uniq = []
-        for r in sorted(cells, key=lambda x: int(x["thr_index"])):
-            sig = str(r.get("mask_sha256", ""))
-            if sig and sig in seen_mask:
+    for (feat, direction), cells in by_grid.items():
+        # mask -> list of thr_index
+        mask_coords: dict[str, list[int]] = defaultdict(list)
+        mask_rep: dict[str, Mapping[str, Any]] = {}
+        mask_all: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+        for r in cells:
+            sig = str(r.get("mask_sha256") or "")
+            if not sig:
                 continue
-            if sig:
-                seen_mask.add(sig)
-            uniq.append(r)
-        idx_map = {int(r["thr_index"]): r for r in uniq}
-        for r in uniq:
-            ti = int(r["thr_index"])
-            left = idx_map.get(ti - 1)
-            right = idx_map.get(ti + 1)
-            has_left = left is not None
-            has_right = right is not None
-            left_ok = bool(left and int(left.get("productive_safe_point", 0)))
-            right_ok = bool(right and int(right.get("productive_safe_point", 0)))
-            is_boundary = not (has_left and has_right)
-            n_adj = int(has_left) + int(has_right)
-            n_adj_also = int(left_ok) + int(right_ok)
-            ho = holdout_by_region.get(str(r["atom_id"]), {})
-            true_port = bool(ho.get("true_holdout_portability_ok", False))
-            true_worst = int(ho.get("true_holdout_worst_gt_hurt", 99))
+            mask_coords[sig].append(int(r["thr_index"]))
+            mask_all[sig].append(r)
+            if sig not in mask_rep:
+                mask_rep[sig] = r
+        for sig, coords in mask_coords.items():
+            cset = set(coords)
+            width = max(coords) - min(coords) + 1 if coords else 0
+            n_coords = len(cset)
+            # interior of plateau: some thr_index with both neighbors in cset
+            has_interior = any((i - 1 in cset and i + 1 in cset) for i in cset)
+            # edges to other masks: thr-adjacent different mask
+            n_adj_masks = 0
+            for other, ocoords in mask_coords.items():
+                if other == sig:
+                    continue
+                oset = set(ocoords)
+                if any(abs(i - j) == 1 for i in cset for j in oset):
+                    n_adj_masks += 1
+            rep = mask_rep[sig]
+            n_seq_neg = int(rep.get("n_sequences_with_neg", 0))
+            single_dom = bool(int(rep.get("single_seq_neg_dominance", 0)))
+            cid = _clause_id_single(feat, direction, float(rep["thr_value"]))
+            # also check any coordinate thr for portable clause match
+            portable = False
+            for r in mask_all[sig]:
+                cid_i = _clause_id_single(feat, direction, float(r["thr_value"]))
+                if cid_i in portable_clauses:
+                    portable = True
+                    cid = cid_i
+                    break
 
-            if is_boundary:
-                label = "edge_candidate" if n_adj_also > 0 else "isolated_safe_point"
-            elif n_adj_also < 2:
-                label = "thin_safe_edge" if n_adj_also == 1 else "isolated_safe_point"
-            elif int(r.get("n_sequences_with_neg", 0)) < MIN_SEQS_FOR_REGION or int(
-                r.get("single_seq_neg_dominance", 0)
-            ):
+            if not has_interior:
+                if n_coords <= 1 and n_adj_masks == 0:
+                    label = "isolated_safe_point"
+                else:
+                    label = "edge_candidate"  # boundary of plateau or thin strip
+            elif n_seq_neg < MIN_SEQS_FOR_REGION or single_dom:
                 label = "locally_stable_region_but_seq_thin"
-            elif true_port and true_worst == 0:
+            elif portable:
                 label = "loo_stable_region"
             else:
                 label = "locally_stable_region"
 
             is_cand = int(
-                label in ("loo_stable_region", "locally_stable_region")
-                and not is_boundary
-                and str(r.get("safety_status")) != "unresolved_contaminated"
+                label in ("loo_stable_region", "locally_stable_region") and has_interior
             )
             out.append(
                 {
-                    "region_id": r["atom_id"],
-                    "kind": "single_atom",
+                    "region_id": f"mask::{feat}::{direction}::{sig[:12]}",
+                    "kind": "single_atom_quotient",
                     "feature_a": feat,
-                    "feature_b": "",
                     "direction_a": direction,
-                    "direction_b": "",
-                    "thr_index_a": ti,
-                    "thr_index_b": "",
-                    "thr_value_a": r["thr_value"],
-                    "thr_value_b": "",
-                    "support": r["support"],
-                    "n_neg_captured": r["n_neg_captured"],
-                    "gt_hurt": r["gt_hurt"],
-                    "n_unresolved_selected": r.get("n_unresolved_selected", 0),
-                    "safety_status": r.get("safety_status"),
-                    "mask_sha256": r.get("mask_sha256"),
-                    "n_sequences_with_neg": r["n_sequences_with_neg"],
-                    "max_neg_sequence_share": r["max_neg_sequence_share"],
-                    "is_boundary": int(is_boundary),
-                    "n_adjacent_neighbors": n_adj,
-                    "n_adjacent_also_productive_safe": n_adj_also,
-                    "requires_bilateral_neighbors": 1,
-                    "true_holdout_worst_gt_hurt": true_worst,
-                    "true_holdout_portability_ok": int(true_port),
-                    "loo_deletion_consistency_not_portability": 1,
+                    "mask_sha256": sig,
+                    "n_coordinates": n_coords,
+                    "plateau_width_thr_index": width,
+                    "has_interior_coordinate": int(has_interior),
+                    "n_adjacent_other_masks": n_adj_masks,
+                    "support": rep["support"],
+                    "n_neg_captured": rep["n_neg_captured"],
+                    "gt_hurt": rep["gt_hurt"],
+                    "n_unresolved_selected": rep.get("n_unresolved_selected", 0),
+                    "safety_status": rep.get("safety_status"),
+                    "n_sequences_with_neg": n_seq_neg,
+                    "max_neg_sequence_share": rep.get("max_neg_sequence_share"),
+                    "nested_loso_portability_ok": int(portable),
+                    "nested_loso_clause_id": cid,
                     "stability_class": label,
                     "is_region_candidate": is_cand,
                     "not_a_safe_rule": 1,
+                    "topology_note": "quotient_by_mask_within_feature_direction_grid",
                 }
             )
 
-    # --- pairwise: unique mask only; full 4-neighborhood for interior ---
+    # ---- pairwise grids (per feature-pair × dirs × comb) ----
+    def _pair_grid_key(r: Mapping[str, Any]) -> tuple:
+        return (
+            r["feature_a"],
+            r["direction_a"],
+            r["feature_b"],
+            r["direction_b"],
+            r["combinator"],
+        )
+
     for comb_name, rows in (("AND", pairwise_and), ("OR", pairwise_or)):
-        # first representative per mask
-        by_mask: dict[str, Mapping[str, Any]] = {}
+        by_pg: dict[tuple, list[Mapping[str, Any]]] = defaultdict(list)
         for r in rows:
-            if not _eligible(r):
+            if not _prod(r):
                 continue
-            sig = str(r.get("mask_sha256", ""))
-            if not sig or sig in by_mask:
-                continue
-            by_mask[sig] = r
-        # index by thr coords among unique
-        idx = {}
-        for r in by_mask.values():
-            key = (
-                r["feature_a"],
-                r["direction_a"],
-                int(r["thr_index_a"]),
-                r["feature_b"],
-                r["direction_b"],
-                int(r["thr_index_b"]),
-            )
-            idx[key] = r
-        for r in by_mask.values():
-            key = (
-                r["feature_a"],
-                r["direction_a"],
-                int(r["thr_index_a"]),
-                r["feature_b"],
-                r["direction_b"],
-                int(r["thr_index_b"]),
-            )
-            fa, da, ia, fb, db, ib = key
-            neighbors = []
-            for dia, dib in ((-1, 0), (1, 0), (0, -1), (0, 1)):
-                nb = idx.get((fa, da, ia + dia, fb, db, ib + dib))
-                if nb is not None:
-                    neighbors.append(nb)
-            n_adj = len(neighbors)
-            n_adj_also = sum(
-                1 for a in neighbors if int(a.get("productive_safe_point", 0))
-            )
-            is_boundary = n_adj < 4
-            ho = holdout_by_region.get(str(r["combo_id"]), {})
-            true_port = bool(ho.get("true_holdout_portability_ok", False))
-            true_worst = int(ho.get("true_holdout_worst_gt_hurt", 99))
-            if is_boundary:
-                label = "edge_candidate" if n_adj_also > 0 else "isolated_safe_point"
-            elif n_adj_also < 4:
-                label = "thin_safe_edge"
-            elif int(r.get("n_sequences_with_neg", 0)) < MIN_SEQS_FOR_REGION or int(
-                r.get("single_seq_neg_dominance", 0)
-            ):
-                label = "locally_stable_region_but_seq_thin"
-            elif true_port and true_worst == 0:
-                label = "loo_stable_region"
-            else:
-                label = "locally_stable_region"
-            is_cand = int(
-                label in ("loo_stable_region", "locally_stable_region")
-                and not is_boundary
-            )
-            out.append(
-                {
-                    "region_id": r["combo_id"],
-                    "kind": f"pairwise_{comb_name}",
-                    "feature_a": r["feature_a"],
-                    "feature_b": r["feature_b"],
-                    "direction_a": r["direction_a"],
-                    "direction_b": r["direction_b"],
-                    "thr_index_a": r["thr_index_a"],
-                    "thr_index_b": r["thr_index_b"],
-                    "thr_value_a": r["thr_value_a"],
-                    "thr_value_b": r["thr_value_b"],
-                    "support": r["support"],
-                    "n_neg_captured": r["n_neg_captured"],
-                    "gt_hurt": r["gt_hurt"],
-                    "n_unresolved_selected": r.get("n_unresolved_selected", 0),
-                    "safety_status": r.get("safety_status"),
-                    "mask_sha256": r.get("mask_sha256"),
-                    "n_sequences_with_neg": r["n_sequences_with_neg"],
-                    "max_neg_sequence_share": r["max_neg_sequence_share"],
-                    "is_boundary": int(is_boundary),
-                    "n_adjacent_neighbors": n_adj,
-                    "n_adjacent_also_productive_safe": n_adj_also,
-                    "requires_full_4_neighborhood": 1,
-                    "true_holdout_worst_gt_hurt": true_worst,
-                    "true_holdout_portability_ok": int(true_port),
-                    "loo_deletion_consistency_not_portability": 1,
-                    "stability_class": label,
-                    "is_region_candidate": is_cand,
-                    "not_a_safe_rule": 1,
-                }
-            )
+            # include semantic dups as coordinates
+            by_pg[_pair_grid_key(r)].append(r)
+        for gkey, cells in by_pg.items():
+            fa, da, fb, db, comb = gkey
+            mask_coords: dict[str, list[tuple[int, int]]] = defaultdict(list)
+            mask_rep: dict[str, Mapping[str, Any]] = {}
+            mask_all: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+            for r in cells:
+                sig = str(r.get("mask_sha256") or "")
+                if not sig:
+                    continue
+                coord = (int(r["thr_index_a"]), int(r["thr_index_b"]))
+                mask_coords[sig].append(coord)
+                mask_all[sig].append(r)
+                if sig not in mask_rep:
+                    mask_rep[sig] = r
+            for sig, coords in mask_coords.items():
+                cset = set(coords)
+                # bounding box width
+                if not coords:
+                    continue
+                as_ = [c[0] for c in coords]
+                bs_ = [c[1] for c in coords]
+                width_a = max(as_) - min(as_) + 1
+                width_b = max(bs_) - min(bs_) + 1
+                # interior: some coord with all 4 neighbors in cset
+                has_interior = any(
+                    (
+                        (i - 1, j) in cset
+                        and (i + 1, j) in cset
+                        and (i, j - 1) in cset
+                        and (i, j + 1) in cset
+                    )
+                    for i, j in cset
+                )
+                # edge connectivity to other masks
+                n_adj_masks = 0
+                for other, ocoords in mask_coords.items():
+                    if other == sig:
+                        continue
+                    oset = set(ocoords)
+                    if any(
+                        abs(i - oi) + abs(j - oj) == 1
+                        for i, j in cset
+                        for oi, oj in oset
+                    ):
+                        n_adj_masks += 1
+                rep = mask_rep[sig]
+                n_seq_neg = int(rep.get("n_sequences_with_neg", 0))
+                single_dom = bool(int(rep.get("single_seq_neg_dominance", 0)))
+                portable = False
+                cid = ""
+                for r in mask_all[sig]:
+                    cid_i = _clause_id_pair(
+                        comb,
+                        str(r["feature_a"]),
+                        str(r["direction_a"]),
+                        float(r["thr_value_a"]),
+                        str(r["feature_b"]),
+                        str(r["direction_b"]),
+                        float(r["thr_value_b"]),
+                    )
+                    if cid_i in portable_clauses:
+                        portable = True
+                        cid = cid_i
+                        break
+                if not has_interior:
+                    if len(cset) <= 1 and n_adj_masks == 0:
+                        label = "isolated_safe_point"
+                    else:
+                        label = "edge_candidate"
+                elif n_seq_neg < MIN_SEQS_FOR_REGION or single_dom:
+                    label = "locally_stable_region_but_seq_thin"
+                elif portable:
+                    label = "loo_stable_region"
+                else:
+                    label = "locally_stable_region"
+                is_cand = int(
+                    label in ("loo_stable_region", "locally_stable_region")
+                    and has_interior
+                )
+                out.append(
+                    {
+                        "region_id": f"mask::{comb}::{fa}::{da}::{fb}::{db}::{sig[:12]}",
+                        "kind": f"pairwise_{comb}_quotient",
+                        "feature_a": fa,
+                        "feature_b": fb,
+                        "direction_a": da,
+                        "direction_b": db,
+                        "mask_sha256": sig,
+                        "n_coordinates": len(cset),
+                        "plateau_width_a": width_a,
+                        "plateau_width_b": width_b,
+                        "has_interior_coordinate": int(has_interior),
+                        "n_adjacent_other_masks": n_adj_masks,
+                        "support": rep["support"],
+                        "n_neg_captured": rep["n_neg_captured"],
+                        "gt_hurt": rep["gt_hurt"],
+                        "n_unresolved_selected": rep.get("n_unresolved_selected", 0),
+                        "safety_status": rep.get("safety_status"),
+                        "n_sequences_with_neg": n_seq_neg,
+                        "max_neg_sequence_share": rep.get("max_neg_sequence_share"),
+                        "nested_loso_portability_ok": int(portable),
+                        "nested_loso_clause_id": cid,
+                        "stability_class": label,
+                        "is_region_candidate": is_cand,
+                        "not_a_safe_rule": 1,
+                        "topology_note": "quotient_by_mask_within_pairwise_grid",
+                    }
+                )
     return out
 
 
@@ -1358,7 +1680,7 @@ def classify_q45_terminal(
         r
         for r in region_candidates
         if r.get("stability_class") == "loo_stable_region"
-        and int(r.get("true_holdout_portability_ok", 0)) == 1
+        and int(r.get("nested_loso_portability_ok", 0)) == 1
     ]
 
     # A: multi-seq, interior thickness, *true* holdout portability, zero unknown
@@ -1367,9 +1689,10 @@ def classify_q45_terminal(
             "stage2_q45_terminal": TERMINAL_A,
             "terminal_letter": "A",
             "reason": (
-                f"{len(loo_stable)} true-holdout-portable interior region(s) with "
-                "local thickness; authorize formal restricted safe-region "
-                "candidate validation (still not production rule)"
+                f"{len(loo_stable)} nested-LOSO-portable interior region(s) with "
+                "local thickness under per-grid quotient topology; authorize "
+                "formal restricted safe-region candidate validation "
+                "(still not production rule)"
             ),
             "claims_blocked": blocked,
             "claims_allowed": [
@@ -1388,7 +1711,8 @@ def classify_q45_terminal(
     isolated = [
         r
         for r in stability_rows
-        if r.get("stability_class") in ("isolated_safe_point", "thin_safe_edge")
+        if r.get("stability_class")
+        in ("isolated_safe_point", "thin_safe_edge", "edge_candidate")
     ]
     any_productive_safe = any(
         int(r.get("productive_safe_point", 0)) for r in all_primary_regions
@@ -1403,10 +1727,10 @@ def classify_q45_terminal(
             "terminal_letter": "B",
             "reason": (
                 f"On resolved∧selected cohort: sample-zero-GT cells exist "
-                f"(n_atlas_cells={n_prod}) but no unique interior multi-seq thick "
-                "region under duplicate-free topology + true holdout; "
-                "unknown/unresolved selected coverage further limits claims → "
-                "isolated_safe_points_only"
+                f"(n_atlas_cells={n_prod}) but no interior multi-seq thick "
+                "region under per-grid quotient topology + nested LOSO "
+                "portability; unknown/unresolved selected coverage further "
+                "limits claims → isolated_safe_points_only"
             ),
             "claims_blocked": blocked
             + [
@@ -1414,6 +1738,7 @@ def classify_q45_terminal(
                 "threshold_formulation_global_closure_not_authorized",
                 "portable_safe_region_claim_inadmissible",
                 "deletion_loo_as_portability_forbidden",
+                "fixed_full_sample_partition_as_portability_forbidden",
             ],
             "claims_allowed": [
                 "retain_atlas_for_followup",
@@ -1423,11 +1748,12 @@ def classify_q45_terminal(
             "next_authorized_step": (
                 "threshold path: no promotable region yet; ranking/assignment "
                 "is a reasonable next research line AFTER valid assignment-group "
-                "key + unknown coverage + true holdout LOO are closed"
+                "key + unknown coverage + nested train-select holdout are closed"
             ),
             "bounded_finding": (
                 "resolved∧selected restricted atlas reports sample-zero-GT cells "
-                "but no unique interior multi-sequence thick region"
+                "but no interior multi-sequence thick region under quotient "
+                "topology (coordinates retained per unique mask within each grid)"
             ),
             "n_productive_safe_cells": n_prod,
             "n_isolated_or_thin": len(isolated),
@@ -1541,6 +1867,11 @@ def attach_secondary_competition_features(
 # ---------------------------------------------------------------------------
 
 
+def _file_sha256_if_exists(path: Path) -> str:
+    p = Path(path)
+    return _sha256_file(p) if p.is_file() else ""
+
+
 def run_stage2_q45_atlas(
     *,
     q1q3_study_dir: Path,
@@ -1552,6 +1883,9 @@ def run_stage2_q45_atlas(
 ) -> dict[str, Any]:
     q1q3_study_dir = Path(q1q3_study_dir)
     out_dir = Path(out_dir)
+    # Wipe stale artifacts so evidence pack cannot copy a previous manifest.
+    if out_dir.exists():
+        shutil.rmtree(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     events_raw = load_d_online_events(q1q3_study_dir)
@@ -1559,6 +1893,10 @@ def run_stage2_q45_atlas(
     if not source.is_file():
         source = q1q3_study_dir / "d_online_events.csv"
     source_hash = _sha256_file(source) if source.is_file() else ""
+    evaluator_src = Path(__file__).resolve()
+    runner_src = Path("scripts/tools/run_m_b1_5_stage2_q45_atlas.py").resolve()
+    evaluator_sha = _file_sha256_if_exists(evaluator_src)
+    runner_sha = _file_sha256_if_exists(runner_src)
 
     # Resolve stage1 dir for frame provenance MOT cross-check
     if stage1_study_dir is None:
@@ -1652,54 +1990,16 @@ def run_stage2_q45_atlas(
         ambiguous_matrices=ambiguous_matrices,
     )
 
-    # True holdout validation for productive-safe unique cells
-    y = registry["_y"]
-    sequences = registry["_sequences"]
-    x_parts = {s: registry["_matrices"][s] for s in ORDERED_SIGNALS}
-    holdout_by_region: dict[str, dict[str, Any]] = {}
-    for r in atom_rows:
-        if not int(r.get("productive_safe_point", 0)):
-            continue
-        if int(r.get("is_secondary_feature", 0)):
-            continue
-        if str(r.get("safety_status")) == "unresolved_contaminated":
-            continue
-        ho = true_holdout_sequence_validation(
-            x_parts=x_parts,
-            y=y,
-            sequences=sequences,
-            feature=str(r["feature"]),
-            direction=str(r["direction"]),
-            thr_value=float(r["thr_value"]),
-        )
-        holdout_by_region[str(r["atom_id"])] = ho
-        r["true_holdout_worst_gt_hurt"] = ho["true_holdout_worst_gt_hurt"]
-        r["true_holdout_portability_ok"] = int(ho["true_holdout_portability_ok"])
-    for r in list(pairwise_and) + list(pairwise_or):
-        if not int(r.get("productive_safe_point", 0)):
-            continue
-        if int(r.get("semantic_duplicate_mask", 0)):
-            continue
-        if str(r.get("safety_status")) == "unresolved_contaminated":
-            continue
-        ho = true_holdout_sequence_validation(
-            x_parts=x_parts,
-            y=y,
-            sequences=sequences,
-            feature=str(r["feature_a"]),
-            direction=str(r["direction_a"]),
-            thr_value=float(r["thr_value_a"]),
-            feature_b=str(r["feature_b"]),
-            direction_b=str(r["direction_b"]),
-            thr_value_b=float(r["thr_value_b"]),
-            combinator=str(r["combinator"]),
-        )
-        holdout_by_region[str(r["combo_id"])] = ho
-        r["true_holdout_worst_gt_hurt"] = ho["true_holdout_worst_gt_hurt"]
-        r["true_holdout_portability_ok"] = int(ho["true_holdout_portability_ok"])
+    # Nested LOSO portability (train lattice + select → freeze → holdout)
+    nested_loso = nested_loso_portability_audit(
+        primary,
+        selected_unresolved=selected_unresolved,
+        selected_ambiguous=selected_ambiguous,
+        signals=ORDERED_SIGNALS,
+    )
 
     stability = classify_region_stability(
-        atom_rows, pairwise_and, pairwise_or, holdout_by_region=holdout_by_region
+        atom_rows, pairwise_and, pairwise_or, nested_loso=nested_loso
     )
 
     pareto_single = build_pareto_frontier(
@@ -1840,6 +2140,24 @@ def run_stage2_q45_atlas(
     hashes["cohort_summary"] = write_json(out_dir / "cohort_summary.json", cohort_sum)
     hashes["reconciliation"] = write_json(out_dir / "reconciliation.json", recon)
 
+    # Nested LOSO artifacts before summary/manifest/pack (no stale copies).
+    hashes["nested_loso_fold_detail"] = write_csv(
+        out_dir / "nested_loso_fold_detail.csv",
+        nested_loso.get("fold_detail_rows") or [],
+    )
+    hashes["nested_loso_clause_summary"] = write_csv(
+        out_dir / "nested_loso_clause_summary.csv",
+        nested_loso.get("clause_summary_rows") or [],
+    )
+    nested_loso_meta = {
+        k: v
+        for k, v in nested_loso.items()
+        if k not in ("fold_detail_rows", "clause_summary_rows")
+    }
+    hashes["nested_loso_summary"] = write_json(
+        out_dir / "nested_loso_summary.json", nested_loso_meta
+    )
+
     summary = {
         "study_id": sid,
         "created_utc": datetime.now(timezone.utc).isoformat(),
@@ -1847,6 +2165,13 @@ def run_stage2_q45_atlas(
         "upstream_q4_study": Q4_STUDY_ID,
         "taxonomy_version": TAXONOMY_VERSION,
         "git_commit": git_commit,
+        "repository_head_sha": git_commit,
+        "evaluator_source": str(evaluator_src),
+        "evaluator_source_sha256": evaluator_sha,
+        "runner_source": str(runner_src),
+        "runner_source_sha256": runner_sha,
+        "source_event_table": str(source),
+        "source_event_table_sha256": source_hash,
         "D_online_total": len(events_raw),
         "n_primary": cohort_sum["n_primary"],
         "n_primary_negative": cohort_sum["n_primary_negative"],
@@ -1865,6 +2190,14 @@ def run_stage2_q45_atlas(
         "n_productive_safe_or": n_prod_or,
         "n_pareto_frontier": len(pareto_all),
         "n_stability_rows": len(stability),
+        "n_region_candidates": int(terminal.get("n_region_candidates") or 0),
+        "n_nested_loso_folds": nested_loso_meta.get("n_folds"),
+        "n_clauses_ever_selected_nested_loso": nested_loso_meta.get(
+            "n_clauses_ever_selected"
+        ),
+        "n_clauses_nested_loso_portable": nested_loso_meta.get(
+            "n_clauses_nested_loso_portable"
+        ),
         "secondary_competition_features": secondary_names,
         "secondary_competition_trusted": False,
         "assignment_group_key_status": ASSIGNMENT_GROUP_KEY_STATUS,
@@ -1872,10 +2205,12 @@ def run_stage2_q45_atlas(
         "n_selected_ambiguous": len(selected_ambiguous),
         "evaluator_review_gates": {
             "deletion_loo_is_portability": False,
-            "true_holdout_required_for_region_A": True,
+            "nested_loso_required_for_region_A": True,
+            "fixed_full_sample_partition_not_portability": True,
             "unresolved_contaminated_blocks_candidate": True,
-            "duplicate_masks_not_neighbors": True,
-            "interior_requires_full_neighborhood": True,
+            "semantic_duplicate_is_per_grid_not_global": True,
+            "quotient_topology_retains_all_coordinates": True,
+            "interior_requires_full_neighborhood_in_mask_coordinate_set": True,
         },
         "frame_provenance_kind": frame_prov["semantic"]["kind"],
         "frame_is_absolute_mot": frame_prov["semantic"]["is_absolute_mot_frame"],
@@ -1896,6 +2231,7 @@ def run_stage2_q45_atlas(
             "sample_zero_gt_named_safe_rule",
             "q4_weak_auc_means_boolean_impossible",
             "new_signal_terminal_classification",
+            "fixed_full_sample_partition_as_portability",
         ],
         "q4_interpretation": (
             "Q4 weak marginal AUC closes singleton frozen-tail thr promotion; "
@@ -1904,8 +2240,48 @@ def run_stage2_q45_atlas(
     }
     hashes["summary"] = write_json(out_dir / "summary.json", summary)
 
-    # Canonical evidence pack (small, PR-auditable)
+    md = _render_md(summary, terminal, frame_prov, stability, pareto_all)
+    (out_dir / "summary.md").write_text(md, encoding="utf-8")
+    hashes["summary_md"] = hashlib.sha256(md.encode("utf-8")).hexdigest()
+
+    # Manifest last among primary artifacts (describes this run only).
+    manifest = {
+        "schema": "m_b1_5_stage2_q45_atlas_manifest_v3",
+        "study_id": sid,
+        "git_commit": git_commit,
+        "repository_head_sha": git_commit,
+        "taxonomy_version": TAXONOMY_VERSION,
+        "evaluator_source": str(evaluator_src),
+        "evaluator_source_sha256": evaluator_sha,
+        "runner_source": str(runner_src),
+        "runner_source_sha256": runner_sha,
+        "source_q1q3_study": str(q1q3_study_dir),
+        "source_event_table": str(source),
+        "source_event_table_sha256": source_hash,
+        "upstream_q4_study": Q4_STUDY_ID,
+        "candidate_universe_id": CANDIDATE_UNIVERSE_ID,
+        "substrate_id": SUBSTRATE_ID,
+        "cohort_definition": cohort_sum["cohort_definition"],
+        "sequence_set": sorted({str(r["sequence"]) for r in primary}),
+        "artifact_hashes": hashes,
+        "created_utc": summary["created_utc"],
+        "terminal_letter": terminal.get("terminal_letter"),
+        "stage2_q45_terminal": terminal.get("stage2_q45_terminal"),
+        "n_clauses_nested_loso_portable": nested_loso_meta.get(
+            "n_clauses_nested_loso_portable"
+        ),
+        "production_preset": "unchanged",
+        "write_order": (
+            "artifacts → summary → manifest → evidence_pack "
+            "(pack copies current manifest only)"
+        ),
+    }
+    hashes["manifest"] = write_json(out_dir / "manifest.json", manifest)
+
+    # Evidence pack AFTER current manifest exists (never copy stale prior run).
     evidence_dir = out_dir / "evidence_pack"
+    if evidence_dir.exists():
+        shutil.rmtree(evidence_dir)
     evidence_dir.mkdir(parents=True, exist_ok=True)
     pack_files = {
         "manifest.json": out_dir / "manifest.json",
@@ -1916,14 +2292,9 @@ def run_stage2_q45_atlas(
         "region_stability.csv": out_dir / "region_stability.csv",
         "pareto_frontier.csv": out_dir / "pareto_frontier.csv",
         "frame_column_provenance.json": out_dir / "frame_column_provenance.json",
+        "nested_loso_clause_summary.csv": out_dir / "nested_loso_clause_summary.csv",
+        "nested_loso_summary.json": out_dir / "nested_loso_summary.json",
     }
-    # true holdout table
-    ho_flat = []
-    for rid, ho in holdout_by_region.items():
-        for row in ho.get("true_holdout_rows", []):
-            ho_flat.append({"region_id": rid, **row})
-    hashes["true_holdout_loo"] = write_csv(out_dir / "true_holdout_loo.csv", ho_flat)
-    pack_files["true_holdout_loo.csv"] = out_dir / "true_holdout_loo.csv"
     sha_rows = []
     for name, src in pack_files.items():
         if src.is_file():
@@ -1935,15 +2306,28 @@ def run_stage2_q45_atlas(
                     "bytes": src.stat().st_size,
                 }
             )
-    write_json(evidence_dir / "SHA256SUMS.json", {"files": sha_rows})
+    write_json(
+        evidence_dir / "SHA256SUMS.json",
+        {
+            "taxonomy_version": TAXONOMY_VERSION,
+            "git_commit": git_commit,
+            "study_id": sid,
+            "files": sha_rows,
+        },
+    )
     write_json(
         evidence_dir / "README.json",
         {
             "study_id": sid,
             "taxonomy_version": TAXONOMY_VERSION,
+            "git_commit": git_commit,
+            "evaluator_source_sha256": evaluator_sha,
+            "runner_source_sha256": runner_sha,
+            "source_event_table_sha256": source_hash,
             "note": (
                 "Canonical evidence pack for PR audit. Large full atlases remain "
-                "in parent study dir; rebuild via run_m_b1_5_stage2_q45_atlas.py"
+                "in parent study dir; rebuild via run_m_b1_5_stage2_q45_atlas.py. "
+                "manifest.json is written for this run before pack copy."
             ),
             "reproduce": (
                 "uv run python scripts/tools/run_m_b1_5_stage2_q45_atlas.py "
@@ -1955,30 +2339,6 @@ def run_stage2_q45_atlas(
         },
     )
 
-    md = _render_md(summary, terminal, frame_prov, stability, pareto_all)
-    (out_dir / "summary.md").write_text(md, encoding="utf-8")
-    hashes["summary_md"] = hashlib.sha256(md.encode("utf-8")).hexdigest()
-
-    manifest = {
-        "schema": "m_b1_5_stage2_q45_atlas_manifest_v1",
-        "study_id": sid,
-        "git_commit": git_commit,
-        "source_q1q3_study": str(q1q3_study_dir),
-        "source_event_table": str(source),
-        "source_event_table_hash": source_hash,
-        "upstream_q4_study": Q4_STUDY_ID,
-        "candidate_universe_id": CANDIDATE_UNIVERSE_ID,
-        "substrate_id": SUBSTRATE_ID,
-        "taxonomy_version": TAXONOMY_VERSION,
-        "cohort_definition": cohort_sum["cohort_definition"],
-        "sequence_set": sorted({str(r["sequence"]) for r in primary}),
-        "artifact_hashes": hashes,
-        "created_utc": summary["created_utc"],
-        "terminal_letter": terminal.get("terminal_letter"),
-        "stage2_q45_terminal": terminal.get("stage2_q45_terminal"),
-        "production_preset": "unchanged",
-    }
-    write_json(out_dir / "manifest.json", manifest)
     summary["manifest"] = manifest
     return summary
 
