@@ -404,6 +404,7 @@ def main() -> None:
         "study_id": study.name,
         "created_utc": datetime.now(timezone.utc).isoformat(),
         "pairs_csv": str(args.pairs.resolve()),
+        "exposure": _audit.exposure_summary(pool),
         "coordinate_space": "GT_tail_mass",
         "definition": {
             "u": "P_GT(score > thr)",

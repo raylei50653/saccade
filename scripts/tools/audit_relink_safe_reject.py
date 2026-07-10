@@ -78,6 +78,7 @@ def load_gt_valid_pool(pairs_csv: Path) -> dict[str, np.ndarray]:
         "h_lost_raw": [],
         "h_cand_raw": [],
         "seq": [],
+        "lost_id": [],
     }
     with pairs_csv.open(newline="", encoding="utf-8") as f:
         for row in csv.DictReader(f):
@@ -100,10 +101,11 @@ def load_gt_valid_pool(pairs_csv: Path) -> dict[str, np.ndarray]:
             cols["h_lost_raw"].append(float(row.get("h_lost_raw", 1.0) or 1.0))
             cols["h_cand_raw"].append(float(row.get("h_cand_raw", 1.0) or 1.0))
             cols["seq"].append(row.get("seq", ""))
+            cols["lost_id"].append(str(row.get("lost_id", "")))
 
     out: dict[str, np.ndarray] = {}
     for k, v in cols.items():
-        if k == "seq":
+        if k in ("seq", "lost_id"):
             out[k] = np.asarray(v, dtype=object)
         elif k == "gt_match":
             out[k] = np.asarray(v, dtype=bool)
@@ -115,6 +117,36 @@ def load_gt_valid_pool(pairs_csv: Path) -> dict[str, np.ndarray]:
     out["log_h_ratio"] = np.abs(np.log(hc / hl))
     out["speed_mismatch"] = np.abs(out["lost_exit_speed"] - out["cand_entry_speed"])
     out["resid_max"] = np.maximum(out["fwd_resid"], out["bwd_resid"])
+    return out
+
+
+def exposure_summary(pool: dict[str, np.ndarray]) -> dict[str, Any]:
+    """Independence-unit declaration for exposure counts (framework §8.1).
+
+    Raw exposure unit is one relink pair row. Rows sharing a lost track
+    (seq, lost_id) are correlated trials, so binomial-style bounds on GT0
+    must use the effective (per-lost-track) count, not the raw row count.
+    """
+    y = pool["gt_match"].astype(bool)
+    seq = pool["seq"]
+    out: dict[str, Any] = {
+        "gt_exposure_unit_raw": "relink_pair_row",
+        "n_gt_exposed": int(y.sum()),
+        "n_fp_exposed": int((~y).sum()),
+    }
+    lost = pool.get("lost_id")
+    if lost is None or not any(str(x) for x in np.asarray(lost)[y]):
+        out["gt_exposure_unit"] = "relink_pair_row"
+        out["n_gt_exposed_effective"] = None
+        out["clustering"] = "unknown: pairs CSV lacks lost_id"
+        return out
+    gt_clusters = {(str(s), str(t)) for s, t in zip(seq[y], np.asarray(lost)[y])}
+    per_seq: dict[str, int] = {}
+    for s, _ in gt_clusters:
+        per_seq[s] = per_seq.get(s, 0) + 1
+    out["gt_exposure_unit"] = "lost_track(seq,lost_id)"
+    out["n_gt_exposed_effective"] = len(gt_clusters)
+    out["per_seq_gt_exposed_effective"] = dict(sorted(per_seq.items()))
     return out
 
 
@@ -638,6 +670,7 @@ def main() -> None:
         "n_gt_valid": int(pool["gt_match"].size),
         "n_pos": int(pool["gt_match"].sum()),
         "n_neg": int((~pool["gt_match"]).sum()),
+        "exposure": exposure_summary(pool),
         "goal": "maximize FP_removed s.t. GT_hurt_rate <= ε",
         "cost_asymmetry": {
             "GT_hurt": "hard — early reject of true pairs is usually irreversible",

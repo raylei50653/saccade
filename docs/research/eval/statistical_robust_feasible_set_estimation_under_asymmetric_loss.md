@@ -2,7 +2,7 @@
 
 <!-- doc-status: active -->
 <!-- doc-promotion: none -->
-<!-- doc-date: 2026-07-10 -->
+<!-- doc-date: 2026-07-11 -->
 <!-- doc-module: cross -->
 
 ## 0. Role
@@ -189,6 +189,15 @@ $$
 $$
 
 This is a worst-case intersection. It must not be replaced by an average safe rate unless the study explicitly defines an average-risk objective.
+
+When applied to estimated sets, the intersection is anti-conservative rather than conservative: a domain with little GT exposure excludes almost nothing, so the weakest-evidence domain contributes the least constraint, and
+
+$$
+\bigcap_{d\in\mathcal D}
+\widehat{\mathcal S}^{(d)}
+$$
+
+is not an estimate of $\bigcap_{d}\mathcal S^{\star(d)}$. A domain's feasibility verdict may enter the robust intersection only if that domain's GT exposure meets a declared minimum $n_{\min}$. Domains below the minimum must be reported as insufficient evidence, not as passes (see §8.2).
 
 A relaxed robust set may use a domain-risk budget:
 
@@ -433,6 +442,8 @@ Examples:
 
 A point may have positive nearest-unsafe distance under a censored metric while still having zero full-neighborhood radius. The two quantities must not be conflated.
 
+The censoring policy for unevaluated lattice points must also be declared: whether a missing neighbor truncates the radius (conservative — the ball stops at the last fully evaluated shell, and radius beyond it counts as 0) or renders the radius unknown. Reported radii must state which convention is in force, and the two conventions must not be mixed within one table.
+
 ### 6.4 Connected components
 
 Let:
@@ -582,6 +593,14 @@ $$
 
 The exact interval method must be declared if numerical bounds are used.
 
+Any numerical bound additionally requires a declared **independence unit**. GT exposures in tracking data are typically clustered: one track contributes many frame-level exposures, so $n$ frame-level exposures may represent far fewer effectively independent trials. A binomial or rule-of-three bound computed on frame-level counts is anti-conservative under such clustering.
+
+Required declaration:
+
+- the exposure unit treated as an independent trial (candidate, event, track, sequence);
+- the clustering structure relating the raw exposure count to that unit;
+- when raw counts are clustered, either aggregate to the independence unit before bounding or use a cluster-aware method. The effective sample size must not silently equal the raw count.
+
 ### 8.2 Exposure-aware interpretation
 
 The following observations are not equally strong:
@@ -606,6 +625,8 @@ If the same data are used to:
 then the resulting set is in-sample and selection-biased.
 
 No amount of coordinate thickness inside the same searched sample removes that bias.
+
+The operational rule is disjointness: the data used to generate atoms, search compositions, or choose thresholds must be disjoint from every fold used to claim held-out validity. Selecting atoms on the full pool and then evaluating them under LOO does not satisfy this — every held-out fold has already influenced the selection.
 
 ### 8.4 Held-out set retention
 
@@ -637,6 +658,11 @@ $$
 $$
 
 When parameter spaces differ across folds, a portable coordinate, quantile, policy, or semantic normalization must be defined before computing retention.
+
+Retention has no meaning without a triviality baseline. If $\widehat{\mathcal S}_{\mathrm{tr}}$ covers most of $\Theta$ because the constraints are weak, high $\rho_{\mathrm{set}}$ is guaranteed rather than evidential. Report alongside $\rho_{\mathrm{set}}$:
+
+- the training-set fraction $|\widehat{\mathcal S}_{\mathrm{tr}}|\,/\,|\Theta_{\mathrm{registered}}|$;
+- the retention expected under a null reference of the same size (for example the full lattice, or a random coordinate set).
 
 ### 8.5 Point validation versus region validation
 
@@ -808,6 +834,7 @@ A frozen point passes held-out, LOO, or LOSO evaluation.
 Required:
 
 - freeze before test;
+- selection data disjoint from every test fold (§8.3);
 - fold definitions;
 - per-fold hurt and productivity;
 - aggregation rule.
@@ -887,6 +914,8 @@ parameter-space definition
 
 ```text
 n_gt_exposed
+gt_exposure_unit        (candidate / event / track / sequence)
+n_gt_exposed_effective  (after aggregation to the independence unit, if clustered)
 n_gt_hurt
 gt_hurt_rate
 n_fp_exposed
@@ -914,7 +943,10 @@ full_neighborhood_safe_radius distribution
 ```text
 per-sequence results
 per-fold results
+per-domain GT exposure vs declared minimum
 set-retention ratio
+training-set fraction of registered space
+null-reference retention baseline
 shared-region measure
 shared interior or radius
 portable policy identity
@@ -1157,10 +1189,13 @@ A PR that uses safe-region language should be reviewed against four independent 
 ### Gate B — Statistical validity
 
 - Are GT exposures reported?
+- Is the independence unit for any numerical bound declared (§8.1)?
 - Was the policy frozen before held-out evaluation?
+- Are atom/composition generation data disjoint from every held-out fold?
 - Is selection bias acknowledged?
 - Are per-fold or per-sequence failures visible?
 - Is GT0 interpreted within finite evidence?
+- Do all domains entering a robust intersection meet the declared minimum exposure (§3.3)?
 
 ### Gate C — Substrate validity
 

@@ -638,6 +638,7 @@ def main() -> None:
         "candidate_id": "m_b1_repaired_eps0_loo_pass_20260709",
         "portable": str(args.portable.resolve()),
         "pairs_csv": str(args.pairs.resolve()),
+        "exposure": _audit.exposure_summary(pool),
         "signals": names,
         "freeze_q": freeze_q,
         "question": (
