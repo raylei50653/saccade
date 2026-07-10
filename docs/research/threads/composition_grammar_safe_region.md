@@ -38,7 +38,7 @@ Central judgment (held):
 - G1–G3 treated as fully enumerated **only within registered Q4.5 lattices**.
 - G4–G6 deferred; G7 only after T0 G1/G2 **equivalence audit** and explicit reopen of threshold path.
 - Online: **selected-policy** freeze retention (measured null) ≠ **parameter-region** retention (not measured).
-- T0-A confirms actual artifact contracts before any detailed T0-B implementation assumptions are locked.
+- T0-A preflight complete; T0-B may use only the confirmed surface in the preflight note §6 after separate authorize.
 
 ## Read first
 
