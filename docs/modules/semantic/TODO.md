@@ -5,12 +5,13 @@
 
 ## Sole active
 
-🔄 **Safe-Region Assetization — R0-A-R2 completed, awaiting chat-side re-review**
+🔄 **Safe-Region Assetization — R0-B Final RegionAsset Contract Draft**
 
 - Thread: [safe_region_assetization_20260710.md](../../research/threads/safe_region_assetization_20260710.md)
-- Deliverable: [research/safe_region_r0_asset_contract_preflight_20260710.md](research/safe_region_r0_asset_contract_preflight_20260710.md) (CR1–CR5 retained; CR6–CR9 corrected in place)
+- Accepted preflight: [research/safe_region_r0_asset_contract_preflight_20260710.md](research/safe_region_r0_asset_contract_preflight_20260710.md) (R0-A/R1/R2; CR1–CR9 pass at preflight level)
 - Mathematical contract: [Statistical Robust Feasible-Set Estimation under Asymmetric Loss](../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
-- Boundary: R0-A-R2 not self-accepted; R0-B/R1 unauthorized; A0 retained; claim ceiling L1; no asset pack, evaluator, grammar extension, LOO, shadow, hook, production, or ledger work
+- Current deliverable: `docs/research/eval/safe_region_asset_contract.md`
+- Boundary: contract draft only; R0-B not self-accepted; R1/A1 unauthorized; A0 retained; pack claim ceiling L1 with G1=L0, G2=L1, G3=L0; no asset pack, evaluator, grammar extension, LOO, shadow, hook, production, or ledger work
 
 ## Parked
 
@@ -19,7 +20,7 @@
 
 ## Related research threads（不佔 WIP 鎖）
 
-- [safe-region assetization](../../research/threads/safe_region_assetization_20260710.md) — **ACTIVE** · R0-A-R2 awaiting re-review
+- [safe-region assetization](../../research/threads/safe_region_assetization_20260710.md) — **ACTIVE** · R0-B contract draft only
 - [composition grammar coverage program](../../research/threads/composition_grammar_coverage_program_20260710.md) — **SUPERSEDED** · producer gates absorbed into R2–R4
 - [composition grammar × safe-region A0](../../research/threads/composition_grammar_safe_region.md) — **CLOSED** · T0-A/B/R1 · terminal B retained
   - A0 source note: [composition_grammar_t0_region_interpretation_20260710.md](research/composition_grammar_t0_region_interpretation_20260710.md)
