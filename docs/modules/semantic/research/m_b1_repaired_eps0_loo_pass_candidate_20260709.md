@@ -11,11 +11,15 @@ candidate_id:       m_b1_repaired_eps0_loo_pass_20260709
 lifecycle_status:   candidate_only / pre-production research
 validation_status:  LOO_pass_region_candidate
 offline_smoke:      pass  (GT0 · FP=8721 · freeze-aligned)
-online:             blocked  (no tracker hook)
-e2e_safe_for_default_off: no
+online_hook:        wired_default_off
+e2e:                A1≡B Δ0 · eligible=244 · rejected=0
+e2e_safe_for_default_off: yes
+classification:     online_effect_neutral_but_safe__vacuous_online_thr
 production_preset:  unchanged
-≠ production gate
+≠ production gate  (thr vacuous under prod bridge_px/height)
 ```
+
+E2e study: [`m_b1_hook_ab_20260710T062345Z`](../../../../out/signal_study/m_b1_hook_ab_20260710T062345Z/) · [e2e note](m_b1_hook_stage1_e2e_20260710.md).
 
 > **Phase hub / maintenance:** [m_b1_offline_safe_region_phase_20260709.md](m_b1_offline_safe_region_phase_20260709.md) — intermediate method notes are closed as-of; do not re-edit their verdicts when working the hook.
 

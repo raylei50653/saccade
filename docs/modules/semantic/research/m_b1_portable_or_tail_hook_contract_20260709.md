@@ -16,9 +16,9 @@
 
 ```text
 offline research candidate 已成立
-online/e2e 邊界尚未打通
-下一步只補 default-off hook
+Stage 1 hook wired + e2e safe (vacuous online thr)
 preset 不動
+online B-audit optional; Stage 2 thr re-fit = separate PR only
 ```
 
 ### Development goal (one contract sentence)
@@ -44,16 +44,17 @@ production_preset: unchanged  (always, for this task)
 m_b1_repaired_eps0_loo_pass_20260709
   = LOO_pass_region_candidate
   = offline_smoke_pass
-  = online_blocked
-  ≠ e2e_safe_for_default_off
+  = online_hook_wired__e2e_safe_vacuous
+  = e2e_safe_for_default_off: yes
   ≠ production preset
+  ≠ online reject power under prod bridge_px/height gates
 ```
 
 | layer | result |
 |:--|:--|
 | offline replay | GT_hurt=0 · FP=8721 · freeze-aligned |
-| online / e2e | not wired · reconnect / IDF1 / AssA / coupling **untested** |
-| smoke verdict | `offline_smoke_pass__online_blocked` |
+| online / e2e | A1≡B Δ0 · elig=244 / rej=0 · [e2e note](m_b1_hook_stage1_e2e_20260710.md) |
+| smoke verdict | `offline_smoke_pass` + `e2e_safe_for_default_off=yes` (vacuous thr) |
 
 ---
 

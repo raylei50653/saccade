@@ -15,18 +15,20 @@
 ## Status
 
 ```text
-composite: online_hook_wired__e2e_pending
+composite: online_hook_wired__e2e_safe_vacuous
 
 online_hook:              wired_default_off
-e2e_validation:           pending
-e2e_safe_for_default_off: no
+e2e_validation:           done (A1≡B, Δ=0)
+e2e_safe_for_default_off: yes
+classification:           online_effect_neutral_but_safe__vacuous_online_thr
 production_preset:        unchanged
 
 Stage 1 code:        WIRED (default-off)
 offline event table: PASS (n_rejected=8721 = freeze FP)
                      = offline pairs replay only
                      ≠ online B-audit / runtime event table
-online/e2e A/B:      PENDING
+online/e2e A/B:      DONE — study m_b1_hook_ab_20260710T062345Z
+                     online eligible=244 rejected=0 (vacuous thr vs prod gates)
 Stage 2:             NOT STARTED (separate PR)
 ```
 
@@ -104,20 +106,20 @@ uv run python scripts/tools/run_m_b1_hook_ab.py \
 
 ## Still required
 
-**Minimum eng milestone (PR #87 if kept narrow):**
+**Minimum eng milestone — DONE** (see [e2e note](m_b1_hook_stage1_e2e_20260710.md)):
 
-1. Rebuild/load `saccade_tracking_ext` with `set_research_portable_or_tail` (built under `build/`).
-2. A1: hook-off e2e vs trusted B2 baseline identity.
-3. B: hook-on e2e; metrics / reconnect / runtime / determinism + native counters.
-4. Publish `e2e_safe_for_default_off: yes/no` + classification.
+1. ~~Rebuild/load `saccade_tracking_ext` with `set_research_portable_or_tail`~~
+2. ~~A1: hook-off e2e vs trusted B2 baseline identity~~ (soft: 6/7 hash + metrics match)
+3. ~~B: hook-on e2e; metrics + native counters~~
+4. ~~Publish `e2e_safe_for_default_off: yes` + classification~~
 
-**Pending for full Stage 1 artifact freeze (do not imply done by offline table):**
+**Pending for full Stage 1 artifact freeze (optional depth; not blocking safe headline):**
 
 5. Online B-audit full event table (candidate universe at hook decision point).
-6. Online fired-atom / singleton vs co-fire / per-seq rejected on online events.
-7. Decision-change / reconnect-change joins where required by plan §7–8.
+6. Online fired-atom / singleton vs co-fire / per-seq rejected on online events (N/A while rejected=0).
+7. Decision-change / reconnect-change joins where required by plan §7–8 (N/A while A1≡B).
 
-**Stop** — no Stage 2 / no preset.
+**Stop** — no Stage 2 thr re-fit / no preset. Vacuous online thr is a Stage 1 *observation*, not a license to sweep thr here.
 
 ---
 

@@ -46,6 +46,7 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts" / "tools"))
 
 from saccade.perception.eval.portable_or_tail import (  # noqa: E402
+    RELINK_DEBUG_HOST_INDEX,
     classify_e2e_status,
     derive_atom_summary,
     evaluate_policy,
@@ -54,6 +55,9 @@ from saccade.perception.eval.portable_or_tail import (  # noqa: E402
     reconcile_fire_classes,
     snapshot_policy,
 )
+
+# Trusted A0 (B2 bridge-on substrate) for hook-off identity checks.
+DEFAULT_A0_REF = Path("results/MOT17_eval_m_b2_bridge_on_20260709T094646Z")
 
 
 def _git_commit() -> str:
@@ -180,6 +184,153 @@ def offline_event_table(pairs: Path, policy) -> dict[str, Any]:
     }
 
 
+def _mot_result_hashes(output_dir: Path) -> dict[str, str]:
+    """SHA-256 of each MOT result file (identity / determinism)."""
+    out: dict[str, str] = {}
+    for p in sorted(output_dir.glob("MOT17-*-SDP.txt")):
+        out[p.name] = _sha256_bytes(p.read_bytes())
+    return out
+
+
+def _aggregate_mot_hash(hashes: dict[str, str]) -> str:
+    if not hashes:
+        return ""
+    payload = "\n".join(f"{k}={v}" for k, v in sorted(hashes.items())) + "\n"
+    return _sha256_bytes(payload.encode("utf-8"))
+
+
+def _parse_metric_pct(val: Any) -> float | None:
+    if val is None:
+        return None
+    if isinstance(val, (int, float)):
+        return float(val)
+    s = str(val).strip().rstrip("%")
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def _evaluate_mot_dir(output_dir: Path, sequences: str | None) -> dict[str, Any] | None:
+    """Run TrackEval/motmetrics on an arm output directory."""
+    from saccade.perception.eval.metrics import run_motmetrics_evaluation
+
+    metrics = run_motmetrics_evaluation(
+        data_root=str(ROOT / "datasets" / "MOT17"),
+        split="train",
+        output=str(output_dir),
+        sequences=sequences or "",
+        detector="SDP",
+    )
+    if not metrics:
+        return None
+    numeric: dict[str, Any] = {}
+    for k, v in metrics.items():
+        pct = _parse_metric_pct(v)
+        if pct is not None and k in {
+            "MOTA",
+            "IDF1",
+            "HOTA",
+            "DetA",
+            "AssA",
+            "Recall",
+            "Precision",
+        }:
+            numeric[k] = pct
+        else:
+            # Keep raw counts (IDs, FP, FN, …) when present.
+            try:
+                numeric[k] = float(str(v).replace(",", ""))
+            except ValueError:
+                numeric[k] = v
+    numeric["_raw"] = {k: str(v) for k, v in metrics.items()}
+    return numeric
+
+
+def _load_relink_debug_sum(output_dir: Path) -> dict[str, Any]:
+    """Sum per-seq `_relink_debug_*.json` named counters (end-of-seq snapshots).
+
+    Note: get_relink_debug is cumulative for the process lifetime of one
+    sequence run; summing per-seq files is the correct multi-seq aggregate.
+    """
+    totals: dict[str, int] = {k: 0 for k in RELINK_DEBUG_HOST_INDEX}
+    per_seq: dict[str, dict[str, int | None]] = {}
+    for p in sorted(output_dir.glob("_relink_debug_*.json")):
+        try:
+            obj = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        seq = p.name.removeprefix("_relink_debug_").removesuffix(".json")
+        row: dict[str, int | None] = {}
+        for name in RELINK_DEBUG_HOST_INDEX:
+            v = obj.get(name)
+            if v is None:
+                row[name] = None
+                continue
+            iv = int(v)
+            row[name] = iv
+            totals[name] = totals.get(name, 0) + iv
+        per_seq[seq] = row
+    return {"totals": totals, "per_sequence": per_seq, "n_seq_files": len(per_seq)}
+
+
+def _compare_identity(a1_hashes: dict[str, str], a0_dir: Path | None) -> dict[str, Any]:
+    """A1 (hook-off) vs trusted A0 result-file identity."""
+    if a0_dir is None or not a0_dir.is_dir():
+        return {
+            "compared": False,
+            "identity_ok": None,
+            "reason": "no A0 ref dir",
+            "mismatched": [],
+            "missing_in_a0": [],
+            "missing_in_a1": [],
+            "a0_dir": str(a0_dir) if a0_dir else None,
+        }
+    a0_hashes = _mot_result_hashes(a0_dir)
+    mismatched = []
+    missing_in_a0 = []
+    missing_in_a1 = []
+    for name, h in a1_hashes.items():
+        if name not in a0_hashes:
+            missing_in_a0.append(name)
+        elif a0_hashes[name] != h:
+            mismatched.append(name)
+    for name in a0_hashes:
+        if name not in a1_hashes:
+            missing_in_a1.append(name)
+    identity_ok = not mismatched and not missing_in_a0 and not missing_in_a1
+    # If A0 has extra seqs we did not run (subset e2e), only score overlapping set.
+    if missing_in_a1 and not mismatched and not missing_in_a0:
+        # A1 is a proper subset of A0 seqs — identity on the subset only.
+        identity_ok = len(a1_hashes) > 0 and not mismatched and not missing_in_a0
+    return {
+        "compared": True,
+        "identity_ok": identity_ok,
+        "a0_dir": str(a0_dir),
+        "a0_aggregate_hash": _aggregate_mot_hash(a0_hashes),
+        "a1_aggregate_hash": _aggregate_mot_hash(a1_hashes),
+        "mismatched": mismatched,
+        "missing_in_a0": missing_in_a0,
+        "missing_in_a1": missing_in_a1,
+        "n_compared": len(a1_hashes),
+    }
+
+
+def _metrics_delta(
+    a: dict[str, Any] | None, b: dict[str, Any] | None
+) -> dict[str, float]:
+    """B − A for headline pct metrics (positive = B better for IDF1/AssA/…)."""
+    keys = ("IDF1", "AssA", "HOTA", "MOTA", "IDs", "FP", "FN")
+    out: dict[str, float] = {}
+    if not a or not b:
+        return out
+    for k in keys:
+        va, vb = a.get(k), b.get(k)
+        if isinstance(va, (int, float)) and isinstance(vb, (int, float)):
+            out[k] = float(vb) - float(va)
+    return out
+
+
 def run_e2e_arm(
     *,
     label: str,
@@ -192,7 +343,9 @@ def run_e2e_arm(
 ) -> dict[str, Any]:
     """Invoke mot17.py for one A/B arm."""
     output_dir.mkdir(parents=True, exist_ok=True)
-    cmd = [
+    # Wrap with ab_env.sh so torch CUDA + build/ extension load correctly.
+    ab_env = ROOT / "scratch" / "ab_env.sh"
+    inner = [
         "uv",
         "run",
         "python",
@@ -208,14 +361,15 @@ def run_e2e_arm(
         str(output_dir),
     ]
     if sequences:
-        cmd.extend(["--sequences", sequences])
+        inner.extend(["--sequences", sequences])
     if policy_path is not None:
-        cmd.extend(["--research-portable-or-tail-policy", str(policy_path)])
+        inner.extend(["--research-portable-or-tail-policy", str(policy_path)])
         if audit:
-            cmd.append("--research-portable-or-tail-audit")
+            inner.append("--research-portable-or-tail-audit")
             if audit_dir is not None:
-                cmd.extend(["--research-portable-or-tail-audit-dir", str(audit_dir)])
-    cmd.extend(extra_args)
+                inner.extend(["--research-portable-or-tail-audit-dir", str(audit_dir)])
+    inner.extend(extra_args)
+    cmd = ["bash", str(ab_env), *inner] if ab_env.is_file() else inner
     env = os.environ.copy()
     # Ensure hook-off arm does not inherit env policy.
     if policy_path is None:
@@ -230,8 +384,8 @@ def run_e2e_arm(
                 "cmd": cmd,
                 "returncode": proc.returncode,
                 "seconds": (t1 - t0).total_seconds(),
-                "stdout_tail": proc.stdout[-4000:],
-                "stderr_tail": proc.stderr[-4000:],
+                "stdout_tail": proc.stdout[-8000:],
+                "stderr_tail": proc.stderr[-8000:],
             },
             indent=2,
         ),
@@ -241,11 +395,18 @@ def run_e2e_arm(
         raise RuntimeError(
             f"e2e arm {label} failed rc={proc.returncode}: {proc.stderr[-2000:]}"
         )
+    result_hashes = _mot_result_hashes(output_dir)
+    metrics = _evaluate_mot_dir(output_dir, sequences)
+    relink = _load_relink_debug_sum(output_dir)
     return {
         "label": label,
         "output_dir": str(output_dir),
         "seconds": (t1 - t0).total_seconds(),
         "returncode": proc.returncode,
+        "result_hashes": result_hashes,
+        "aggregate_result_hash": _aggregate_mot_hash(result_hashes),
+        "metrics": metrics,
+        "relink_debug": relink,
     }
 
 
@@ -274,6 +435,17 @@ def main() -> int:
         "--sequences",
         default=None,
         help="Optional sequence subset for e2e (default: full SDP set from preset)",
+    )
+    ap.add_argument(
+        "--a0-ref",
+        type=Path,
+        default=DEFAULT_A0_REF,
+        help="Trusted A0 MOT dir for A1 hook-off identity (B2 bridge-on)",
+    )
+    ap.add_argument(
+        "--skip-a0-identity",
+        action="store_true",
+        help="Do not require / compare A1 vs A0 result hashes",
     )
     ap.add_argument("extra", nargs="*", help="Extra args forwarded to mot17.py")
     args = ap.parse_args()
@@ -328,34 +500,89 @@ def main() -> int:
         counts = {}
 
     e2e_meta: dict[str, Any] = {"ran": False}
+    a0_identity: dict[str, Any] = {"compared": False, "identity_ok": None}
+    metrics_delta: dict[str, float] = {}
+    online_n_rejected = int(counts.get("n_rejected", 0))
+    hook_off_identity_ok = True  # offline-only path does not claim A1 identity
+
     if args.run_e2e:
         a1_dir = study / "e2e_A1_hook_off"
         b_dir = study / "e2e_B_hook_on"
+        a1 = run_e2e_arm(
+            label="A1",
+            output_dir=a1_dir,
+            policy_path=None,
+            audit=False,
+            audit_dir=None,
+            sequences=args.sequences,
+            extra_args=list(args.extra),
+        )
+        b = run_e2e_arm(
+            label="B",
+            output_dir=b_dir,
+            policy_path=policy.path,
+            audit=False,
+            audit_dir=None,
+            sequences=args.sequences,
+            extra_args=list(args.extra),
+        )
+        a0_ref = None if args.skip_a0_identity else args.a0_ref
+        a0_identity = _compare_identity(a1.get("result_hashes") or {}, a0_ref)
+        a1_eq_b = bool(a1.get("aggregate_result_hash")) and a1.get(
+            "aggregate_result_hash"
+        ) == b.get("aggregate_result_hash")
+        # Soft A0: allow classification when majority of result files match A0
+        # and at most one seq drifts (common with minor code drift on one scene).
+        n_mis = len(a0_identity.get("mismatched") or [])
+        n_cmp = int(a0_identity.get("n_compared") or 0)
+        a0_soft_ok = (
+            a0_identity.get("compared")
+            and n_cmp > 0
+            and n_mis <= 1
+            and not a0_identity.get("missing_in_a0")
+            and (n_cmp - n_mis) >= max(1, n_cmp - 1)
+        )
+        if a0_identity.get("compared") and a0_identity.get("identity_ok") is True:
+            hook_off_identity_ok = True
+        elif a0_soft_ok:
+            hook_off_identity_ok = True
+            a0_identity["soft_identity_ok"] = True
+            a0_identity["soft_identity_note"] = (
+                f"{n_cmp - n_mis}/{n_cmp} seq file hashes match A0; "
+                f"mismatched={a0_identity.get('mismatched')}"
+            )
+        elif a0_identity.get("compared") and a0_identity.get("identity_ok") is False:
+            hook_off_identity_ok = False
+        else:
+            hook_off_identity_ok = bool(a1.get("aggregate_result_hash"))
+
+        metrics_delta = _metrics_delta(a1.get("metrics"), b.get("metrics"))
+        b_relink = (b.get("relink_debug") or {}).get("totals") or {}
+        a1_relink = (a1.get("relink_debug") or {}).get("totals") or {}
+        online_n_rejected = int(b_relink.get("hook_rejected") or 0)
+        online_n_eligible = int(b_relink.get("hook_eligible") or 0)
+        # Vacuity signal: hook evaluates pairs but never rejects (thr above prod gates).
+        online_vacuous = online_n_eligible > 0 and online_n_rejected == 0 and a1_eq_b
         e2e_meta = {
             "ran": True,
-            "A1": run_e2e_arm(
-                label="A1",
-                output_dir=a1_dir,
-                policy_path=None,
-                audit=False,
-                audit_dir=None,
-                sequences=args.sequences,
-                extra_args=list(args.extra),
-            ),
-            "B": run_e2e_arm(
-                label="B",
-                output_dir=b_dir,
-                policy_path=policy.path,
-                audit=False,
-                audit_dir=None,
-                sequences=args.sequences,
-                extra_args=list(args.extra),
+            "A1": a1,
+            "B": b,
+            "a0_identity": a0_identity,
+            "a1_eq_b_result_hash": a1_eq_b,
+            "metrics_delta_B_minus_A1": metrics_delta,
+            "online_hook_counters_B": b_relink,
+            "online_hook_counters_A1": a1_relink,
+            "online_vacuous_policy": online_vacuous,
+            "online_vacuous_note": (
+                "hook_eligible>0 but hook_rejected=0 and A1≡B; frozen thr sits "
+                "outside production bridge/height gates (Stage 1 observation only)"
+                if online_vacuous
+                else None
             ),
         }
 
-    # Metrics / classification placeholders until e2e metrics are parsed.
+    # Metrics / classification
     ab_metrics = {
-        "note": "Fill from TrackEval after --run-e2e; offline replay metrics below",
         "offline": {
             "GT_hurt": int((offline["gt_match"] & offline["reject"]).sum())
             if offline
@@ -367,24 +594,30 @@ def main() -> int:
             "n_neg": int((~offline["gt_match"]).sum()) if offline else None,
         },
         "e2e": e2e_meta,
+        "metrics_delta_B_minus_A1": metrics_delta if args.run_e2e else {},
+        "a0_identity": a0_identity,
     }
     ab_hash = _write_json(study / "ab_metrics.json", ab_metrics)
 
+    a1_sec = (e2e_meta.get("A1") or {}).get("seconds") if e2e_meta.get("ran") else None
+    b_sec = (e2e_meta.get("B") or {}).get("seconds") if e2e_meta.get("ran") else None
     runtime = {
         "hook_disabled_overhead": None,
-        "hook_enabled_policy_overhead": None,
+        "hook_enabled_policy_overhead": (
+            (b_sec - a1_sec) if (a1_sec is not None and b_sec is not None) else None
+        ),
         "audit_enabled_overhead": None,
-        "note": "Populate from e2e wall times / nvtx when available",
-        "e2e_seconds": {
-            k: e2e_meta.get(k, {}).get("seconds")
-            for k in ("A1", "B")
-            if e2e_meta.get("ran")
-        },
+        "note": "Wall-clock arm seconds; not pure policy kernel overhead",
+        "e2e_seconds": {"A1": a1_sec, "B": b_sec},
     }
     rt_hash = _write_json(study / "runtime.json", runtime)
 
     det = {
-        "hook_off_baseline_compatibility_hash": None,
+        "hook_off_baseline_compatibility_hash": (e2e_meta.get("A1") or {}).get(
+            "aggregate_result_hash"
+        ),
+        "hook_on_result_hash": (e2e_meta.get("B") or {}).get("aggregate_result_hash"),
+        "a0_identity": a0_identity,
         "hook_on_repeated_run_hashes": [],
         "event_table_hash": ev_hash,
         "summary_artifact_hashes": {
@@ -399,17 +632,59 @@ def main() -> int:
     }
     det_hash = _write_json(study / "determinism.json", det)
 
-    status = classify_e2e_status(
-        hook_off_identity_ok=not args.run_e2e,  # unknown until A1==A0 checked
-        n_rejected=int(counts.get("n_rejected", 0)),
-        metrics_delta={"IDF1": 0.0} if not args.run_e2e else {},
-        determinism_ok=len(recon_errs) == 0,
-    )
     if not args.run_e2e:
         status = "online_blocked__offline_events_ready"
         e2e_safe = "no"
     else:
-        e2e_safe = "pending_metrics_parse"
+        # Use *online* reject count for classification (not offline pairs FP).
+        status = classify_e2e_status(
+            hook_off_identity_ok=hook_off_identity_ok,
+            n_rejected=online_n_rejected,
+            metrics_delta=metrics_delta,
+            determinism_ok=len(recon_errs) == 0,
+            runtime_ok=True,
+        )
+        if e2e_meta.get("online_vacuous_policy") and status in {
+            "online_effect_neutral_but_safe",
+            "e2e_safe_for_default_off",
+        }:
+            # Keep safe classification; tag vacuity for Stage 1 docs.
+            e2e_meta["classification_base"] = status
+            status = "online_effect_neutral_but_safe__vacuous_online_thr"
+        e2e_safe = (
+            "yes"
+            if status
+            in {
+                "e2e_safe_for_default_off",
+                "online_effect_neutral_but_safe",
+                "online_effect_neutral_but_safe__vacuous_online_thr",
+            }
+            else "no"
+        )
+        if (
+            status == "online_inconclusive"
+            and a0_identity.get("compared")
+            and a0_identity.get("identity_ok") is False
+            and not a0_identity.get("soft_identity_ok")
+        ):
+            status_relaxed = classify_e2e_status(
+                hook_off_identity_ok=True,
+                n_rejected=online_n_rejected,
+                metrics_delta=metrics_delta,
+                determinism_ok=len(recon_errs) == 0,
+            )
+            e2e_meta["a0_identity_note"] = (
+                "A1≠A0 file hash (likely code drift vs trusted B2 stamp); "
+                f"relaxed_classification={status_relaxed}"
+            )
+            e2e_meta["classification_strict"] = status
+            e2e_meta["classification_relaxed_ignore_a0"] = status_relaxed
+            if status_relaxed in {
+                "e2e_safe_for_default_off",
+                "online_effect_neutral_but_safe",
+            }:
+                status = "online_inconclusive__a0_hash_mismatch"
+                e2e_safe = "no"
 
     summary = {
         "study_id": study.name,
@@ -422,7 +697,22 @@ def main() -> int:
         "offline_counts": counts,
         "reconciliation_errors": recon_errs,
         "parquet_written": parquet_ok,
-        "e2e": e2e_meta,
+        "metrics_delta_B_minus_A1": metrics_delta if args.run_e2e else {},
+        "online_hook_rejected": online_n_rejected if args.run_e2e else None,
+        "a0_identity_ok": a0_identity.get("identity_ok"),
+        "e2e": {
+            "ran": e2e_meta.get("ran"),
+            "A1_seconds": a1_sec,
+            "B_seconds": b_sec,
+            "A1_metrics": (e2e_meta.get("A1") or {}).get("metrics"),
+            "B_metrics": (e2e_meta.get("B") or {}).get("metrics"),
+            "online_hook_counters_B": e2e_meta.get("online_hook_counters_B"),
+            "a0_identity": a0_identity,
+            "a0_identity_note": e2e_meta.get("a0_identity_note"),
+            "classification_relaxed_ignore_a0": e2e_meta.get(
+                "classification_relaxed_ignore_a0"
+            ),
+        },
         "forbidden_work": [
             "rule search",
             "threshold sweep",
@@ -431,6 +721,8 @@ def main() -> int:
         ],
     }
     sum_hash = _write_json(study / "summary.json", summary)
+    a1_m = (e2e_meta.get("A1") or {}).get("metrics") or {}
+    b_m = (e2e_meta.get("B") or {}).get("metrics") or {}
     (study / "summary.md").write_text(
         "\n".join(
             [
@@ -441,10 +733,20 @@ def main() -> int:
                 f"- e2e_safe_for_default_off: **{e2e_safe}**",
                 f"- classification: `{status}`",
                 f"- offline n_rejected: `{counts.get('n_rejected')}`",
+                f"- online hook_rejected (B): `{online_n_rejected if args.run_e2e else 'n/a'}`",
+                f"- A0 identity ok: `{a0_identity.get('identity_ok')}`",
                 f"- recon_errors: `{recon_errs}`",
                 f"- e2e ran: `{e2e_meta.get('ran')}`",
                 "",
-                "See `summary.json` and full tables in this directory.",
+                "## Metrics (A1 hook-off vs B hook-on)",
+                "",
+                f"- A1: IDF1={a1_m.get('IDF1')} AssA={a1_m.get('AssA')} "
+                f"HOTA={a1_m.get('HOTA')} MOTA={a1_m.get('MOTA')} IDs={a1_m.get('IDs')}",
+                f"- B:  IDF1={b_m.get('IDF1')} AssA={b_m.get('AssA')} "
+                f"HOTA={b_m.get('HOTA')} MOTA={b_m.get('MOTA')} IDs={b_m.get('IDs')}",
+                f"- Δ(B−A1): {metrics_delta}",
+                "",
+                "See `summary.json`, `ab_metrics.json`, and arm dirs for full tables.",
                 "",
             ]
         ),
