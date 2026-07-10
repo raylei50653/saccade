@@ -57,7 +57,7 @@
 | 📦 **[research/m_b1_offline_safe_region_phase_20260709.md](research/m_b1_offline_safe_region_phase_20260709.md)** | **M-B1 offline gate/safe-region phase CLOSED** — 導航 + 維護契約；**勿在各 as-of note 改 status** |
 | [research/m_b1_repaired_eps0_loo_pass_candidate_20260709.md](research/m_b1_repaired_eps0_loo_pass_candidate_20260709.md) | **Freeze identity**（LOO_pass_region_candidate · offline smoke pass · online blocked） |
 | [research/m_b1_portable_or_tail_hook_contract_20260709.md](research/m_b1_portable_or_tail_hook_contract_20260709.md) | Stage 1 hook contract（default-off；preset NO） |
-| [research/m_b1_hook_stage1_e2e_20260710.md](research/m_b1_hook_stage1_e2e_20260710.md) | Stage 1 **e2e A1/B result**（safe / vacuous thr） |
+| [research/m_b1_hook_stage1_e2e_20260710.md](research/m_b1_hook_stage1_e2e_20260710.md) | Stage 1 **CLOSED** e2e（safe；support mismatch；next=B-audit） |
 | [research/m_b1_to_m_b1_5_two_stage_plan_20260710.md](research/m_b1_to_m_b1_5_two_stage_plan_20260710.md) | **Stage 1+2 合同**：frozen hook validation → M-B1.5 domain audit；兩 PR 分離 |
 | [research/m_b1_hook_stage1_wire_20260710.md](research/m_b1_hook_stage1_wire_20260710.md) | Stage 1 **wire status**（loader/CLI/CUDA/runner；e2e done） |
 | [research/m_b2_reconnect_bridge_ab_20260709.md](research/m_b2_reconnect_bridge_ab_20260709.md) | **m B2** production-like reconnect A/B（未來 e2e baseline） |

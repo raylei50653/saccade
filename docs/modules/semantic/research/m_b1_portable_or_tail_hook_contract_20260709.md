@@ -15,10 +15,14 @@
 ### Main line (locked)
 
 ```text
-offline research candidate 已成立
-Stage 1 hook wired + e2e safe (vacuous online thr)
+Stage 1 CLOSED
+  eng safety + wiring OK
+  offline rule failed online relevance (support mismatch), not safety
+  e2e_safe_for_default_off = yes
 preset 不動
-online B-audit optional; Stage 2 thr re-fit = separate PR only
+next = online B-audit event table (redefine D_online)
+  NOT immediate thr re-fit / offline q85 again
+Stage 2 = separate PR only
 ```
 
 ### Development goal (one contract sentence)
@@ -41,20 +45,23 @@ production_preset: unchanged  (always, for this task)
 ## 0. Current status (locked)
 
 ```text
+Stage 1: CLOSED
+
 m_b1_repaired_eps0_loo_pass_20260709
   = LOO_pass_region_candidate
   = offline_smoke_pass
   = online_hook_wired__e2e_safe_vacuous
   = e2e_safe_for_default_off: yes
   ≠ production preset
-  ≠ online reject power under prod bridge_px/height gates
+  ≠ online reject power (support mismatch D_offline vs D_online)
 ```
 
 | layer | result |
 |:--|:--|
 | offline replay | GT_hurt=0 · FP=8721 · freeze-aligned |
-| online / e2e | A1≡B Δ0 · elig=244 / rej=0 · [e2e note](m_b1_hook_stage1_e2e_20260710.md) |
-| smoke verdict | `offline_smoke_pass` + `e2e_safe_for_default_off=yes` (vacuous thr) |
+| online / e2e | A1≡B Δ0 · elig=244 / rej=0 · [e2e close](m_b1_hook_stage1_e2e_20260710.md) |
+| Stage 1 verdict | eng milestone **passed**; portable rule **not online-relevant**; **safe** |
+| next | online B-audit for 244 pairs → redefine Stage 2 on \(D_{\text{online}}\) |
 
 ---
 

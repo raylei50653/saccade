@@ -16,8 +16,8 @@
 
 ## Related research threads（不佔 WIP 鎖）
 
-- [m_b1 online hook](../../research/threads/m_b1_online_hook_20260709.md) — offline closed；Stage 1 e2e **safe/vacuous**；preset NO
-  - E2e: [m_b1_hook_stage1_e2e_20260710.md](research/m_b1_hook_stage1_e2e_20260710.md)
+- [m_b1 online hook](../../research/threads/m_b1_online_hook_20260709.md) — **Stage 1 CLOSED**；e2e_safe；support mismatch；next=B-audit
+  - Close: [m_b1_hook_stage1_e2e_20260710.md](research/m_b1_hook_stage1_e2e_20260710.md)
   - Plan: [m_b1_to_m_b1_5_two_stage_plan_20260710.md](research/m_b1_to_m_b1_5_two_stage_plan_20260710.md)
 - [association recovery registry](../../research/threads/association_recovery_registry_20260709.md)
 

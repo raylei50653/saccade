@@ -9,22 +9,27 @@ doc-module: semantic
 
 > **Role:** Stage 1 + Stage 2 engineering contract (single source).  
 > **Navigation:** [m_b1 online hook thread](../../../research/threads/m_b1_online_hook_20260709.md) · Stage 1 eng task [portable OR-tail hook contract](m_b1_portable_or_tail_hook_contract_20260709.md).  
-> **Not evidence:** numbers and e2e status still live in freeze card / ledger / study dirs.
+> **Stage 1 status (2026-07-10): CLOSED** — eng milestone passed; e2e_safe=yes; offline rule failed **online relevance** (support mismatch), not safety. Close note: [m_b1_hook_stage1_e2e_20260710.md](m_b1_hook_stage1_e2e_20260710.md).  
+> **Not evidence:** numbers live in freeze card / ledger / study dirs.
 
 0. Purpose
 
 下一步工作分成兩個嚴格分離的階段：
 
-Stage 1 — M-B1 frozen hook validation
+Stage 1 — M-B1 frozen hook validation  **← CLOSED 2026-07-10**
   驗證 frozen hard OR 是否能安全接入 online/e2e
+  （已答：安全接入成立；offline thr 對 D_online 無交集 / 無 reject 力）
 
-Stage 2 — M-B1.5 parameterized implication/domain audit
-  驗證不同 signal value 與受限布林條件如何改變 safe region
+Stage 2 — M-B1.5 conditional-domain safe-negative audit  **← not started**
+  在 production baseline 已接受的條件域 D_online 內，
+  是否存在穩定可泛化的 safe-negative region
+  （不是再對全 offline pairs 做 q85）
 
 核心原則：
 
-先驗證 frozen policy 的 online coupling。
-再研究必要條件、充分條件與布林結構對域的影響。
+先驗證 frozen policy 的 online coupling。  ← Stage 1 done
+再在 D_online 上研究 safe-negative / implication。  
+進入 Stage 2 前先完成 **online full B-audit event table**（244 baseline-ok pairs），不要立刻 thr re-fit。
 
 不得在 Stage 1 重新搜尋或修改 policy。
 
@@ -539,32 +544,46 @@ Stage 2 — M-B1.5 parameterized implication and safe-region audit
 
 14. Stage 2 entry condition
 
-Stage 2 在 Stage 1 完成後獨立開始。
+Stage 1 is **CLOSED** (2026-07-10). Stage 2 starts independently.
 
 不得和 Stage 1 hook implementation 放在同一個 policy-remodeling PR。
 
+**Ordered entry (do not skip):**
+
+1. Online full B-audit event table for Stage 1 online candidates (eligible=244):
+   signals · GT/FP · atom margins · final association outcome
+2. Measure FP mass **inside** \(D_{\text{online}}\) (production-accepted conditional domain)
+3. Only then choose: fine cal @ current placement · earlier placement · ranking/margin
+
 Stage 2 可使用：
 
-- M-B1 offline candidate rows
-- frozen five-atom definitions
-- underlying continuous signals
-- Stage 1 full hook event table
-- 明確註冊的 context/support predicates
+- M-B1 offline candidate rows (context only; not the primary domain)
+- frozen five-atom **signal definitions** (not frozen offline thr as truth)
+- underlying continuous signals on **online** events
+- Stage 1 full hook event table / B-audit table
+- 明確註冊的 context/support predicates that define \(D_{\text{online}}\)
 
-Stage 1 是否 online-safe，不阻止 Stage 2 研究 implication structure；但兩者 status 必須分開記錄。
+Stage 1 online-safe **does not** imply offline thr is online-relevant. Status must stay split:
+
+```text
+Stage 1: eng safety + wiring + e2e_safe
+Stage 2: conditional safe-negative region on D_online
+```
+
+If B-audit shows insufficient FP mass in the 244, Stage 2 may conclude **placement too late** rather than “need better thr.”
 
 ---
 
 15. Stage 2 goal
 
-Stage 2 的目標不是找最高分布林規則，而是測量：
+Stage 2 的目標不是再對 \(D_{\text{offline}}\) 做 q85，也不是找最高分布林規則，而是：
 
-不同 signal value
-必要條件
-充分條件
-AND
-OR
-必要條件 violation
+```text
+max_C  FP_removed(C | D_online)
+s.t.   GT_hurt(C | D_online) ≤ ε
+```
+
+並測量不同 signal value / 必要·充分條件 / AND·OR 結構
 
 如何改變：
 

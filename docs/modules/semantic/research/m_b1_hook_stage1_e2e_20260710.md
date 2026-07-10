@@ -1,11 +1,11 @@
 # M-B1 Stage 1 e2e — portable OR-tail hook A1 vs B
 
-<!-- doc-status: active -->
+<!-- doc-status: closed -->
 <!-- doc-promotion: none -->
 <!-- doc-date: 2026-07-10 -->
 <!-- doc-module: semantic -->
 
-**Role:** Stage 1 e2e result note (not production GO).  
+**Role:** Stage 1 **formal close** + e2e evidence (not production GO).  
 **Study:** [`out/signal_study/m_b1_hook_ab_20260710T062345Z/`](../../../../out/signal_study/m_b1_hook_ab_20260710T062345Z/)  
 **Thread:** [m_b1_online_hook_20260709.md](../../../research/threads/m_b1_online_hook_20260709.md)  
 **Plan:** [m_b1_to_m_b1_5_two_stage_plan_20260710.md](m_b1_to_m_b1_5_two_stage_plan_20260710.md)  
@@ -13,7 +13,74 @@
 
 ---
 
-## Headline
+## Stage 1 formal close
+
+```text
+Stage 1 engineering milestone: PASSED / CLOSED
+e2e_safe_for_default_off: yes
+classification: online_effect_neutral_but_safe__vacuous_online_thr
+production_preset: unchanged
+```
+
+> Result is **not** “policy had no effect therefore failed.”  
+> It cleanly shows: **the hook engineering chain is valid**, but the **discriminating domain of the offline policy has almost no intersection with the actual online candidate domain**.
+
+Evidence chain (complete):
+
+| check | result |
+|:--|:--|
+| default-off does not enter policy eval | A1 `hook_eligible=0` |
+| default-on evaluates candidates | B `hook_eligible=244` |
+| A1/B MOT result hashes | **identical** (all 7 seq) |
+| metrics Δ(B−A1) | **0** on IDF1/AssA/HOTA/MOTA/IDs/FP/FN |
+| production preset | unchanged |
+
+Therefore `e2e_safe_for_default_off=yes` **holds**.
+
+### Three locked conclusions
+
+1. **Engineering safety** — hook-off invisible; hook-on does not damage baseline.
+2. **Online wiring** — eligible=244 proves policy path is live (not dead code / mis-indexed counters).
+3. **Offline hypothesis lacks online portability** — offline 8721 rejects mostly sit where production gates already exclude pairs; offline pruning power must not be read as online pruning power.
+
+### Conditional-domain / support mismatch
+
+```text
+D_offline = all recorded pairs
+
+D_online  = D_offline
+            ∩ { bdist ≤ 0.4 }
+            ∩ { 0.6 ≤ hr ≤ 1.7 }
+            ∩ { other baseline gates pass }
+```
+
+q85 thresholds were estimated on \(D_{\text{offline}}\) then applied on the truncated \(D_{\text{online}}\). Thresholds falling outside online support is the **natural** outcome of that domain error — not merely “thr too big.”
+
+### What Stage 1 does **not** authorize
+
+- Immediate thr re-fit on offline pairs
+- Claiming Stage 2 success from this null online reject rate
+- Production preset / default-on
+
+**PR boundary (this close):** wire + A/B runner + counters + Stage 1 evidence only — **no** online thr calibration.
+
+### Next (ordered)
+
+1. **Online full B-audit event table** for the 244 baseline-ok pairs (signals, GT/FP, atom margins, final association) — still pending; do this **before** thr re-fit.
+2. Stage 2 study object becomes:
+
+```text
+max_C  FP_removed(C | D_online)
+s.t.   GT_hurt(C | D_online) ≤ ε
+```
+
+   i.e. safe-negative mass **inside** the production-accepted conditional domain — not another all-pairs q85.
+
+3. If audit shows insufficient FP mass among the 244 → placement may be **too late** (safe negatives already consumed upstream). Then compare: keep placement + fine cal · move hook earlier · ranking/margin instead of reject.
+
+---
+
+## Headline (numeric)
 
 ```text
 e2e_safe_for_default_off: yes
@@ -22,7 +89,7 @@ production_preset: unchanged
 ```
 
 Default-off research hook is **safe** on MOT17-SDP 7-seq (`mamba_whole_graph_m`): A1≡B metrics and result hashes, zero online rejects.  
-It is also **null-effect online**: frozen offline q85 thr never fires inside the production bridge/height gates.
+Null online effect is explained by **domain support mismatch**, not a broken hook.
 
 ---
 
@@ -71,36 +138,30 @@ Offline pairs replay (same study): `n_rejected=8721` on the offline universe —
 
 ---
 
-## Why online thr is vacuous (Stage 1 finding)
+## Why online thr is vacuous (support detail)
 
-Online propose kernel only reaches the OR-tail for pairs that already pass production gates, including:
+Online propose kernel only reaches the OR-tail for pairs that already pass production gates:
 
 ```text
 bdist <= bridge_px          # preset relink_bridge_px = 0.4 (h-normalized)
 hr ∈ [bridge_h_lo, bridge_h_hi]  # [0.6, 1.7]
 ```
 
-Frozen offline thr (q85 of **all** offline pairs, including pairs online would never accept):
+Frozen offline thr (q85 of **all** offline pairs):
 
 | atom | thr | vs online gate |
 |:--|--:|:--|
-| `score_m_bridge` / bdist | **11.91** | must already be ≤ **0.4** → atom0 impossible |
+| `score_m_bridge` / bdist | **11.91** | already ≤ **0.4** → atom0 impossible |
 | `abs_log_h` | **1.35** | hr∈[0.6,1.7] ⇒ max\|log hr\|≈0.51 → atom1 impossible |
-| `dist_h` | **6.73** | constrained by bdist≤0.4 blend → practically unreachable |
+| `dist_h` | **6.73** | constrained by bdist≤0.4 blend → unreachable |
 | `abs_ratio_m1` | **2.09** | max\|hr−1\|≈0.7 under height gate → atom3 impossible |
-| `resid_mean` | **14.04** | same residual scale as bdist → unreachable |
+| `resid_mean` | **14.04** | residual scale gated with bdist → unreachable |
 
-So offline FP mass (8721) lives **outside** the online baseline-ok set. Stage 1 correctly proves:
-
-1. Wiring works (default-off invisible; default-on path counts eligible).
-2. Frozen application is safe (A1≡B).
-3. Frozen thr has **no online reject power** under current production gates.
-
-Stage 1 **must not** re-fit thr (forbidden). Any thr re-calibration on the online candidate universe is **Stage 2 / separate PR** if pursued.
+Offline FP mass (8721) lives **outside** \(D_{\text{online}}\). That is Stage 1’s scientific result, not a wiring failure.
 
 ---
 
-## Acceptance checklist (Stage 1 minimum eng milestone)
+## Acceptance checklist (Stage 1 — CLOSED)
 
 | Item | Result |
 |:--|:--|
@@ -108,9 +169,10 @@ Stage 1 **must not** re-fit thr (forbidden). Any thr re-calibration on the onlin
 | A1 hook-off metrics ≈ B2 / soft A0 identity | yes (6/7 hash + metrics) |
 | B hook-on metrics + native counters | yes |
 | `e2e_safe_for_default_off` published | **yes** |
-| Online full B-audit event table | **still pending** (CLI audit fail-closed) |
+| Domain diagnosis (support mismatch) recorded | **yes** |
+| Online full B-audit event table | **pending** (next ordered step; not Stage 1 blocker) |
 | Production preset change | **no** |
-| Stage 2 | **not started** |
+| Stage 2 thr / domain remodel | **not started** (separate PR) |
 
 ---
 
@@ -118,8 +180,9 @@ Stage 1 **must not** re-fit thr (forbidden). Any thr re-calibration on the onlin
 
 - treat offline `n_rejected=8721` as online effect
 - silent default-on / preset flip
-- thr sweep / rule search in Stage 1
+- thr sweep / rule search as Stage 1 “fix”
 - claim production GO from this note
+- skip B-audit and jump to offline-style q85 re-fit
 
 ---
 
