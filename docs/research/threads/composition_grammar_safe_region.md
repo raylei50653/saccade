@@ -8,7 +8,7 @@ closed: 2026-07-10
 
 # composition grammar × safe-region geometry
 
-> **One-line:** **CLOSED C0 baseline.** T0-A/T0-B/R1 accepted and PR #94 merged. Existing registered Q4.5 G1–G3 atlas has **0/154** productive-safe coordinates with full-neighborhood radius ≥1; terminal B retained. Broader grammar coverage continues only through the separate coverage-program thread.
+> **One-line:** **CLOSED A0 baseline.** T0-A/T0-B/R1 accepted and PR #94 merged. Existing registered Q4.5 G1–G3 atlas has **0/154** productive-safe coordinates with full-neighborhood radius ≥1; terminal B retained. Reuse continues only through the separate Safe-Region Assetization program.
 
 ## Final status
 
@@ -17,13 +17,13 @@ closed: 2026-07-10
 | Coverage audit | **CLOSED** |
 | T0-A preflight | **ACCEPTED** |
 | T0-B interpretation | **ACCEPTED after R1** |
-| Program mapping | **C0 G1–G3 coverage closure** |
+| Asset maturity mapping | **A0 descriptive atlas baseline**; A1 conversion not yet authorized |
 | Q4.5 terminal | **B** `isolated_safe_points_only` |
 | Production preset | **unchanged** |
 | Evidence ledger | **not promoted** |
 | PR | **#94 merged** · merge `acd8e30e` |
 | Next work from this thread | **none** |
-| Separate handoff | [Composition Grammar Coverage Completion Program](composition_grammar_coverage_program_20260710.md) · C1-A only |
+| Separate handoff | [Safe-Region Assetization Program](safe_region_assetization_20260710.md) · R0-A only |
 
 ## Read first
 
@@ -31,7 +31,7 @@ closed: 2026-07-10
 2. [T0-A artifact preflight](../../modules/semantic/research/composition_grammar_t0_artifact_preflight_20260710.md)
 3. [Coverage audit](../../modules/semantic/research/composition_grammar_safe_region_coverage_audit_20260710.md)
 4. [Stage 2 final](../../modules/semantic/research/m_b1_5_stage2_d_online_final_20260710.md)
-5. [Broader coverage program](composition_grammar_coverage_program_20260710.md)
+5. [Safe-region assetization](safe_region_assetization_20260710.md)
 
 ## Final evidence state
 
@@ -87,6 +87,7 @@ accepted bounded descriptive closure of the existing-atlas G1–G3 region questi
 Not promoted to:
 
 ```text
+accepted reusable RegionAsset
 formal or portable safe region
 online parameter-region retention
 productive reject policy
@@ -98,11 +99,12 @@ global threshold-path falsification
 
 ## Research decision
 
-Close the current registered G1–G3 threshold-region line.
+Close the current registered G1–G3 threshold-region interpretation line.
 
 Do **not** authorize from this thread:
 
 ```text
+RegionAsset generation
 evaluator emit
 region-level LOO
 restricted G7 implementation
@@ -117,20 +119,20 @@ Why:
 - G7 is a missing semantic contract, not evidence that the grammar is necessary;
 - more infrastructure inside this closed line would not close a stronger claim.
 
-The separate coverage program may define G4–G7 semantics and later authorize bounded grammar slices. That is a **new staged program**, not a reopen of this C0 evidence line.
+The assetization program may define stable asset identity/schema and later convert this accepted evidence into A1 assets. That is a **new asset contract and maturity transition**, not a reopen or reinterpretation of this A0 evidence.
 
 ## Reopen conditions
 
-A reopen of this exact C0 line requires a separate explicit contract backed by at least one of:
+A reopen of this exact evidence line requires a separate explicit contract backed by at least one of:
 
 ```text
 new signal-family evidence with a declared falsifier
 new hook placement or decision substrate
-valid semantics that invalidate a specific C0 assumption
+valid semantics that invalidate a specific C0/T0 assumption
 a newly registered G1–G3 atlas with nonzero multi-sequence thickness
 ```
 
-No reopen is authorized here.
+Asset conversion alone does not reopen the evidence conclusion.
 
 ## PR boundary
 
@@ -139,6 +141,7 @@ PR #94 contains the preflight, derivation script, evidence pack, R1 corrections,
 ```text
 research acceptance: complete
 engineering merge: complete
+asset maturity: A0 baseline
 production promotion: blocked
 ```
 
@@ -150,4 +153,5 @@ production promotion: blocked
 - 2026-07-10: review requested R1 at `32ecd242`.
 - 2026-07-10: R1 completed at `c0bac5cc`; all correction gates passed.
 - 2026-07-10: bounded verdict manually accepted; thread closed.
-- 2026-07-10: PR #94 merged as `acd8e30e`; this line mapped to C0 baseline; broader work handed to the coverage-program thread.
+- 2026-07-10: PR #94 merged as `acd8e30e`; this line mapped to A0 descriptive baseline.
+- 2026-07-10: handoff changed from grammar-coverage completion to Safe-Region Assetization R0-A.
