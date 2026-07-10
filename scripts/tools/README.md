@@ -19,6 +19,107 @@ README is the classification index for later cleanup.
 
 ## Continuous Decimal Hash
 
+The decimal-hash determinism family has three scripts with distinct roles:
+
+| Script | Role |
+|---|---|
+| `check_continuous_decimal_hash.py` | Primitive: single batch execution with arbitrary `--sequences` order |
+| `check_decimal_matrix_2x2.py` | Pre-push 2×2 matrix: four directed cells between fixed A/B sequences |
+| `check_decimal_matrix_all7.py` | Full all-7 order-contamination matrix (28 runs) |
+
+They share hash, capture, comparison, and artifact-serialization primitives
+from ``src/saccade/perception/eval/_decimal_hash_tools.py``.
+
+### 2×2 Matrix (pre-push regression guard)
+
+The 2×2 matrix runs four directed cells::
+
+    A → A    B → A
+    A → B    B → B
+
+Each cell means two full sequences executed consecutively within the same
+process and runtime state.  The matrix detects:
+
+1. same-sequence continuous-run instability (A→A, B→B self cells);
+2. cross-sequence state or buffer contamination (B→A, A→B);
+3. directional contamination differences (B→A vs A→B may differ);
+4. final serialized-MOT decimal divergence.
+
+**Fixed sequence pair** (frozen 2026-07-10):
+
+* Sequence A: ``MOT17-04-SDP``  (1 050 frames, 44 248 output records)
+* Sequence B: ``MOT17-02-SDP``  (600 frames, 11 722 output records)
+
+B was selected from all-7 matrix evidence.  Its 4× smaller detection footprint
+exercises substantially different postprocess buffer utilisation and CUDA-graph
+static sizing on either side of the 04 footprint.  It was self-consistent in
+all all-7 comparisons and the nearest-neighbour runs survived directional
+cross-contamination at the record level.
+
+**Manual run:**
+
+```bash
+uv run python scripts/tools/check_decimal_matrix_2x2.py \
+  --preset mamba_whole_graph_m --detector SDP --double-buffer
+```
+
+All unrecognised options are forwarded to ``scripts/eval/mot17.py``.
+
+**Pre-push integration:**
+
+The matrix runs automatically in ``scripts/pre_push.sh`` when staged or
+committed changes touch determinism-sensitive paths (native/CUDA filter, NMS,
+postprocess, CUDA graphs, decimal-hash tooling).  To skip:
+
+```bash
+SKIP_DETERMINISM_PREPUSH=1 git push
+```
+
+Skipping is visible in console output and does not count as a validation pass.
+
+The 2×2 matrix is a routine regression guard; it does **not** provide coverage
+equivalent to the all-7 matrix.  For deeper validation, use the all-7 matrix.
+
+### All-7 Matrix (deeper validation)
+
+The all-7 matrix runs the full 28-run order-contamination layout across every
+SDP sequence (forward, reverse, forward again)::
+
+```bash
+uv run python scripts/tools/check_decimal_matrix_all7.py \
+  --preset mamba_whole_graph_m --detector SDP --double-buffer
+```
+
+The 2×2 matrix should pass before the all-7 matrix is used for deeper
+investigation or release validation.
+
+### Failure diagnostics
+
+On divergence the 2×2 matrix prints:
+
+* matrix cell (e.g. ``B_to_A``);
+* preceding and target sequences;
+* reference hash vs observed hash;
+* record counts;
+* first divergent frame;
+* differing serialized records;
+* artifact directory (``out/determinism/matrix_2x2_<timestamp>/``).
+
+Artifacts are organized as::
+
+    out/determinism/matrix_2x2_<timestamp>/
+    ├── manifest.json
+    ├── A_to_A/
+    ├── B_to_B/
+    ├── B_to_A/
+    ├── A_to_B/
+    ├── runs.csv
+    ├── hashes.csv
+    ├── comparisons.csv
+    └── summary.json
+
+### Primitive (single batch)
+
 `check_continuous_decimal_hash.py` runs the complete ordered sequence list once
 inside one Python process and captures each final MOT result before a repeated
 sequence can overwrite its output file. It excludes global track IDs, sorts
@@ -79,6 +180,9 @@ These have known repo references outside this README.
 | `check_doc_links.py` | Relative markdown link checker | `scripts/pre_push.sh` |
 | `check_gpu_contract.py` | GPU-first contract checker | `scripts/pre_push.sh` and docs |
 | `check_continuous_decimal_hash.py` | In-process ID-free final MOT decimal consistency probe | Continuous-run determinism validation |
+| `check_decimal_matrix_2x2.py` | Pre-push 2×2 order-contamination matrix | Routine determinism regression guard |
+| `check_decimal_matrix_all7.py` | Full all-7 order-contamination matrix | Deeper determinism validation |
+| `check_determinism_paths.py` | Detect determinism-sensitive staged/committed changes | Pre-push hook |
 | `depth_ordering_auc.py` | Depth-ordering AUC analysis | Crossing-swap depth ordering doc |
 | `depth_ordering_probe.py` | Crossing-swap depth-ordering probe | NO-GO registry and gate sweep |
 | `diagnose_id_switches.py` | ID-switch diagnostic helper | NO-GO registry / oracle script |

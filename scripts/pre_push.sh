@@ -152,6 +152,28 @@ else
     ok "no C++ changes — build check skipped"
 fi
 
+# ── 7. determinism-sensitive 2×2 matrix ───────────────────────────────────────
+echo "── determinism-sensitive path check"
+if [[ "${SKIP_DETERMINISM_PREPUSH:-0}" == "1" ]]; then
+    warn "SKIP_DETERMINISM_PREPUSH=1 — determinism matrix SKIPPED"
+else
+    DETERM_OUTPUT=$(uv run python3 scripts/tools/check_determinism_paths.py 2>&1) || true
+    if [[ "$DETERM_OUTPUT" == "determinism" ]]; then
+        echo "── 2×2 determinism matrix"
+        echo "    (SKIP_DETERMINISM_PREPUSH=1 to skip)"
+        if uv run python scripts/tools/check_decimal_matrix_2x2.py \
+            --preset mamba_whole_graph_m --detector SDP --double-buffer \
+            2>&1; then
+            ok "2×2 determinism matrix"
+        else
+            fail "2×2 determinism matrix — divergence detected"
+            ERRORS=$((ERRORS + 1))
+        fi
+    else
+        ok "no determinism-sensitive changes"
+    fi
+fi
+
 # ── summary ──────────────────────────────────────────────────────────────────
 echo ""
 if [[ $ERRORS -eq 0 ]]; then

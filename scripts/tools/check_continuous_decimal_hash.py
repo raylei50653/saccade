@@ -11,47 +11,30 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
-import csv
-import dataclasses
 import hashlib
 import json
 import os
 from pathlib import Path
 import platform
 import runpy
-import subprocess
 import sys
-from typing import Any, Sequence
-
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 STAGE_PROBE_STAGES = ("detector_output", "post_nms", "tracker_input")
 
 from saccade.perception.eval.decimal_hash import (  # noqa: E402
-    FIELDS,
-    CanonicalRecord,
     canonicalize_mot_lines,
     decimal_hash,
-    record_as_dict,
 )
-
-
-@dataclasses.dataclass(frozen=True)
-class Run:
-    index: int
-    sequence: str
-    records: tuple[CanonicalRecord, ...]
-    decimal_hash: str
-
-
-def _git_commit() -> str | None:
-    try:
-        return subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, stderr=subprocess.DEVNULL
-        ).strip()
-    except (OSError, subprocess.CalledProcessError):
-        return None
+from saccade.perception.eval._decimal_hash_tools import (  # noqa: E402
+    CANONICAL_FIELDS,
+    Run,
+    _git_commit,
+    diagnose,
+    write_csv,
+)
 
 
 def _parse_args() -> tuple[argparse.Namespace, list[str]]:
@@ -169,85 +152,6 @@ def _score_tie_stats(scores: Any) -> tuple[int, int]:
         for index in range(scores_array.shape[0])
     )
     return len(counts), max(counts.values(), default=0)
-
-
-def _frame_multiset(
-    records: Sequence[CanonicalRecord],
-) -> dict[int, Counter[CanonicalRecord]]:
-    result: dict[int, Counter[CanonicalRecord]] = {}
-    for record in records:
-        result.setdefault(record.frame, Counter())[record] += 1
-    return result
-
-
-def _diagnose(reference: Run, compared: Run, max_records: int) -> dict[str, Any]:
-    count_equal = len(reference.records) == len(compared.records)
-    if not count_equal:
-        classification = "structural_divergence"
-    else:
-        classification = (
-            "decimal_exact_pass"
-            if reference.decimal_hash == compared.decimal_hash
-            else "decimal_divergence"
-        )
-    reference_by_frame = _frame_multiset(reference.records)
-    compared_by_frame = _frame_multiset(compared.records)
-    diff_frames = sorted(
-        frame
-        for frame in set(reference_by_frame) | set(compared_by_frame)
-        if reference_by_frame.get(frame, Counter())
-        != compared_by_frame.get(frame, Counter())
-    )
-    samples = [
-        {
-            "frame": frame,
-            "reference_records": [
-                record_as_dict(record)
-                for record, count in sorted(
-                    reference_by_frame.get(frame, Counter()).items(),
-                    key=lambda item: (item[0].frame, *item[0].values),
-                )
-                for _ in range(count)
-            ],
-            "compared_records": [
-                record_as_dict(record)
-                for record, count in sorted(
-                    compared_by_frame.get(frame, Counter()).items(),
-                    key=lambda item: (item[0].frame, *item[0].values),
-                )
-                for _ in range(count)
-            ],
-        }
-        for frame in diff_frames[:max_records]
-    ]
-    return {
-        "sequence": compared.sequence,
-        "reference_run": reference.index,
-        "compared_run": compared.index,
-        "record_count_ref": len(reference.records),
-        "record_count_test": len(compared.records),
-        "decimal_hash_equal": reference.decimal_hash == compared.decimal_hash,
-        "first_diff_frame": diff_frames[0] if diff_frames else None,
-        "different_frame_count": len(diff_frames),
-        "classification": classification,
-        "frame_multiset_differences": samples,
-    }
-
-
-def _write_csv(path: Path, rows: Sequence[dict[str, Any]]) -> None:
-    keys = sorted({key for row in rows for key in row})
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=keys)
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(
-                {
-                    key: json.dumps(value, sort_keys=True)
-                    if isinstance(value, (dict, list))
-                    else value
-                    for key, value in row.items()
-                }
-            )
 
 
 def main() -> int:
@@ -371,7 +275,7 @@ def main() -> int:
         runs.append(Run(index, sequence, records, decimal_hash(records)))
 
     mismatches = [
-        _diagnose(
+        diagnose(
             next(run for run in runs if run.sequence == current.sequence),
             current,
             args.max_mismatch_records,
@@ -388,7 +292,7 @@ def main() -> int:
         "decimal_exact_pass",
     )
     metadata = {
-        "canonical_fields": list(FIELDS),
+        "canonical_fields": list(CANONICAL_FIELDS),
         "excluded_fields": [
             "global_track_id",
             "timestamps",
@@ -426,11 +330,11 @@ def main() -> int:
         }
         for run in runs
     ]
-    _write_csv(output / "runs.csv", run_rows)
-    _write_csv(output / "hashes.csv", hash_rows)
+    write_csv(output / "runs.csv", run_rows)
+    write_csv(output / "hashes.csv", hash_rows)
     if stage_probe_frames:
-        _write_csv(output / "stage_hashes.csv", stage_rows)
-    _write_csv(
+        write_csv(output / "stage_hashes.csv", stage_rows)
+    write_csv(
         output / "mismatches.csv",
         [
             {
@@ -467,7 +371,7 @@ def main() -> int:
                     "count_equal": row["count"] == reference["count"],
                 }
             )
-        _write_csv(output / "stage_comparisons.csv", stage_comparisons)
+        write_csv(output / "stage_comparisons.csv", stage_comparisons)
     summary = {
         "command": [
             sys.executable,

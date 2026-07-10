@@ -1,7 +1,8 @@
 import pytest
 
 from saccade.perception.eval.decimal_hash import canonicalize_mot_lines, decimal_hash
-from scripts.tools.check_continuous_decimal_hash import Run, _diagnose, _parse_args
+from saccade.perception.eval._decimal_hash_tools import Run, diagnose
+from scripts.tools.check_continuous_decimal_hash import _parse_args
 
 
 def _records(*lines: str):
@@ -42,7 +43,7 @@ def test_count_difference_is_structural_divergence() -> None:
     compared = Run(2, "MOT17-04-SDP", tuple(second), decimal_hash(second))
 
     assert (
-        _diagnose(reference, compared, max_records=20)["classification"]
+        diagnose(reference, compared, max_records=20)["classification"]
         == "structural_divergence"
     )
 
@@ -56,7 +57,7 @@ def test_structural_diagnostic_groups_multiple_records_by_frame() -> None:
     reference = Run(1, "MOT17-04-SDP", tuple(first), decimal_hash(first))
     compared = Run(2, "MOT17-04-SDP", tuple(second), decimal_hash(second))
 
-    diagnosis = _diagnose(reference, compared, max_records=20)
+    diagnosis = diagnose(reference, compared, max_records=20)
 
     assert diagnosis["first_diff_frame"] == 1
     assert len(diagnosis["frame_multiset_differences"][0]["reference_records"]) == 2
@@ -71,7 +72,7 @@ def test_structural_diagnostic_preserves_same_decimal_record_multiplicity() -> N
     reference = Run(1, "MOT17-04-SDP", tuple(first), decimal_hash(first))
     compared = Run(2, "MOT17-04-SDP", tuple(second), decimal_hash(second))
 
-    diagnosis = _diagnose(reference, compared, max_records=20)
+    diagnosis = diagnose(reference, compared, max_records=20)
 
     assert diagnosis["first_diff_frame"] == 1
 
