@@ -5,11 +5,11 @@
 
 ## Sole active
 
-🔄 **Safe-Region Assetization — R0-A asset-contract preflight**
+🔄 **Safe-Region Assetization — R0-A completed, awaiting chat-side review**
 
 - Thread: [safe_region_assetization_20260710.md](../../research/threads/safe_region_assetization_20260710.md)
-- Current deliverable: `research/safe_region_r0_asset_contract_preflight_20260710.md`
-- Boundary: contract/artifact preflight only; no asset pack, evaluator, grammar extension, LOO, shadow, hook, or production work
+- Deliverable: [research/safe_region_r0_asset_contract_preflight_20260710.md](research/safe_region_r0_asset_contract_preflight_20260710.md)
+- Boundary: preflight packet only; R0-A not self-accepted; R0-B/R1 unauthorized; no asset pack, evaluator, grammar extension, LOO, shadow, hook, or production work
 
 ## Parked
 

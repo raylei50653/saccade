@@ -7,17 +7,18 @@ created: 2026-07-10
 
 # Safe-Region Assetization Program
 
-> **One-line:** Convert safe-region observations into stable, comparable, transferable, and action-bounded research assets. Current sole task is **R0-A Region Asset Contract Preflight**. No asset generation, grammar extension, LOO, shadow policy, hook, production change, or ledger promotion is authorized yet.
+> **One-line:** Convert safe-region observations into stable, comparable, transferable, and action-bounded research assets. Current sole task is **R0-A completed — awaiting chat-side review**. No asset generation, grammar extension, LOO, shadow policy, hook, production change, or ledger promotion is authorized yet.
 
 ## Status
 
 | Item | Status |
 |:--|:--|
 | Program | **ACTIVE** — safe-region assetization |
-| Semantic sole active | **R0-A Region Asset Contract Preflight** |
+| Semantic sole active | **R0-A completed — awaiting chat-side review** |
 | Existing G1–G3 T0/C0 result | **A0 descriptive baseline**; A1-derivable evidence exists, but no accepted reusable asset object |
-| R0 asset contract | **PREFLIGHT AUTHORIZED ONLY** |
-| R1 G1–G3 asset conversion | **NOT AUTHORIZED** |
+| R0-A preflight note | **DELIVERED** · not self-accepted · [safe_region_r0_asset_contract_preflight_20260710.md](../../modules/semantic/research/safe_region_r0_asset_contract_preflight_20260710.md) |
+| R0 asset contract | **PREFLIGHT COMPLETE; R0-B NOT AUTHORIZED** |
+| R1 G1–G3 asset conversion | **NOT AUTHORIZED** (recommended as deterministic conversion after R0-B only) |
 | R2 grammar asset extension | **CONDITIONAL** on accepted R0/R1 and declared asset-increment hypothesis |
 | R3 transfer qualification | **CONDITIONAL** on A1 assets worth transferring |
 | R4 intervention qualification | **CONDITIONAL** on A2 assets |
@@ -25,6 +26,7 @@ created: 2026-07-10
 | Occ-exit conditional modeling | **PARKED adapter / future producer-consumer family** |
 | Production / presets | **unchanged** |
 | evidence_ledger | **not promoted** |
+| Maturity | **A0 retained** (no A0→A1 promotion) |
 
 ## Program objective
 
@@ -427,110 +429,63 @@ Promote selected A2 assets toward A3:
 
 Occ-exit episode modeling can later reuse this stage by emitting or consuming RegionAssets rather than inventing a separate applicability abstraction.
 
-## Current authorized task — R0-A Region Asset Contract Preflight
+## Current step — R0-A completed — awaiting chat-side review
 
-**Working branch:** `research/composition-grammar-coverage-program` (legacy branch name retained for the current docs-only stack; program identity is this thread).
+**Working branch:** `research/composition-grammar-coverage-program` (legacy branch name retained; program identity is this thread).
 
-### Objective
-
-Determine exactly which RegionAsset fields and identities are directly available, deterministically derivable, contract-dependent, or blocked from the accepted G1–G3 T0/C0 artifacts—without generating an asset pack or changing research results.
-
-### Inputs
-
-- accepted T0 artifact preflight and region interpretation;
-- committed T0 evidence pack;
-- runtime full Q4.5 atlases where required by the accepted hash contract;
-- Q4.5 threshold registry, evaluator manifest, and label/unresolved contracts;
-- current exact-clause LOO and online-hook claim boundaries;
-- doc-structure and evidence-promotion contracts.
-
-### Required deliverable
-
-Create one research note:
+### Deliverable
 
 ```text
 docs/modules/semantic/research/safe_region_r0_asset_contract_preflight_20260710.md
 ```
 
-It must include:
+### Preflight outcome (summary; not acceptance)
 
-1. **Field derivability matrix** for every proposed identity, semantic, geometry, capacity, applicability, transfer, action, provenance, and claim field, using statuses:
+```text
+Runtime Q4.5 full atlases PRESENT and hash-match accepted manifest.
+T0-B-R1 committed pack hashes verified.
+Terminal B unchanged; maturity remains A0.
 
-   ```text
-   DIRECT
-   DETERMINISTICALLY_DERIVABLE
-   REQUIRES_CONTRACT_DECISION
-   BLOCKED_BY_ARTIFACT
-   BLOCKED_BY_PROVENANCE
-   NOT_APPLICABLE
-   ```
+R1 recommendation: deterministic A0→A1 conversion is FEASIBLE
+  after R0-B accepts identity/schema decisions D1–D12
+  and atlases remain sealed. No evaluator rerun required for A1 core.
 
-2. **Grain decision analysis**:
-   - asset set;
-   - connected region/component;
-   - per-grid mask unit;
-   - coordinate;
-   - null asset;
-   - parent/child relationships and cardinalities.
+Hard findings:
+  - T0 ::compN ordinals are not stable region_asset_id
+  - global mask_sha256 is not primary (multi-grid mask strings observed)
+  - G3 requires first-class null asset (not missing files)
+  - live evaluator/script tree SHAs drift from study-recorded SHAs
+    → pin artifact hashes; do not re-hash live tree for identity
+  - transfer/intervention fields remain A2+/A3 (NOT_APPLICABLE for A1)
+  - G7 roles remain unresolved
+```
 
-3. **Stable-ID proposal**:
-   - canonical serialization inputs;
-   - content-addressed digest policy;
-   - human alias policy;
-   - collision/version behavior;
-   - behavior under row reorder, component reorder, added grammars, and regenerated equivalent artifacts.
+### Blocking decisions before R0-B
 
-4. **Semantic preservation analysis**:
-   - grammar/operator tree;
-   - operand identity and role;
-   - parameter coordinate system;
-   - mask equivalence versus semantic equivalence;
-   - unresolved G7 role fields.
+Primary contract decisions D1–D12 in the preflight note, especially:
 
-5. **A0→A1 gap analysis for G1–G3**:
-   - what already exists;
-   - what can be repackaged;
-   - what needs a contract decision;
-   - whether any required A1 field would force evaluator rerun or is unavailable.
+| ID | Topic |
+|:--|:--|
+| D1 | multi-grammar pack vs per-grammar asset sets |
+| D4 | AND/OR operand order canonicalization |
+| D5 | primary region grain = connected PS component |
+| D7 | G3 null packaging |
+| D8 | per-grid mask unit primary key |
+| D10 | component capacity aggregation without plateau double-count |
+| D12 | default `observation_only` + `production_forbidden` |
 
-6. **Null-asset contract** using G3 as the concrete case.
+### Not authorized
 
-7. **Proposed machine schemas and keys** for the R1 target files, without emitting those files.
+```text
+R0-A research acceptance (chat-side only)
+R0-B final contract
+R1 asset file generation
+A0→A1 maturity promotion
+evaluator rerun / modification
+G4–G7, LOO, shadow, hooks, presets, ledger promotion
+```
 
-8. **Maturity/claim firewall mapping**:
-   - evidence required for A0, A1, A2, A3, A4;
-   - allowed actions at each level;
-   - forbidden promotions;
-   - how `production_forbidden` and abstention are represented.
-
-9. **Cross-family extension boundary**:
-   - which core fields can be shared by grammar, occ-exit, association, and relink;
-   - which producer-specific fields must remain opaque adapter payloads;
-   - no generic framework implementation.
-
-10. **Exact decisions required before R0-B**, with recommended defaults and falsifiers.
-
-### Acceptance
-
-R0-A is accepted only if:
-
-- every proposed field has a bounded derivability status;
-- asset/component/mask/coordinate/null grains are not conflated;
-- stable IDs do not depend on row or component ordinal;
-- per-grid mask identity remains primary;
-- semantic role identity is not collapsed into mask identity;
-- G3 null result has a complete first-class representation;
-- A0–A4 maturity gates and claim firewall are explicit;
-- R1 can be scoped as deterministic conversion or is clearly blocked;
-- cross-family reuse is expressed as a contract boundary, not a premature framework;
-- R1 asset generation remains unauthorized;
-- evaluator, terminal B, production, presets, and ledger remain unchanged.
-
-### Implementation freedom
-
-The research-note layout and inspection helpers are free. The preflight may inspect existing schemas and calculate key/cardinality examples, but it must not generate the final asset pack or alter evaluator outputs.
-
-### Must not
+### Must not (still in force)
 
 - Modify or rerun the Q4.5 evaluator.
 - Generate R1 asset files.
@@ -544,12 +499,13 @@ The research-note layout and inspection helpers are free. The preflight may insp
 - Add hooks, flags, presets, or production behavior.
 - Promote evidence to the ledger.
 - Open an R1 implementation PR.
+- Self-accept R0-A or authorize R0-B/R1 from this thread alone.
 
 ## Review sequence
 
 ```text
 T0/C0 accepted A0 baseline
-→ R0-A asset-contract preflight  ← current
+→ R0-A asset-contract preflight  ← completed; awaiting chat-side review
 → chat-side review
 → R0-B final RegionAsset contract
 → chat-side review
@@ -580,3 +536,4 @@ The accepted #55 evidence remains unchanged: global audit harmful, one local ena
 - 2026-07-10: Composition Grammar Coverage Completion design opened, mapping T0/C0 and proposing C1–C6.
 - 2026-07-10: owner reframed the missing layer as reusable safe-region assets rather than grammar-table completion.
 - 2026-07-10: Safe-Region Assetization Program supersedes coverage completion; R0-A becomes semantic sole active; no asset generation authorized.
+- 2026-07-10: R0-A preflight note delivered; hashes verified; R1 scoped as conditional deterministic conversion; **awaiting chat-side review** (not accepted; R0-B/R1 unauthorized; A0 retained).
