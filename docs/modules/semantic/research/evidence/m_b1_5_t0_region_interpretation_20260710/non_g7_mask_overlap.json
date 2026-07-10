@@ -1,0 +1,13 @@
+{
+  "label": "non_g7_mask_overlap",
+  "not_g7_equivalence": true,
+  "n_g1_masks": 753,
+  "n_g2_and_masks": 6386,
+  "n_mask_string_overlap_all": 220,
+  "n_g1_ps_masks": 1,
+  "n_g2_ps_masks": 15,
+  "n_mask_string_overlap_ps": 1,
+  "ps_overlap_mask_sha256": [
+    "63a907235d6263b0e8c90c26916b88bbb49d49a664518e158faefbdb69f13aca"
+  ]
+}

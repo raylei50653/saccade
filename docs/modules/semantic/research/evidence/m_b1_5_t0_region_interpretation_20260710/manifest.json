@@ -1,0 +1,34 @@
+{
+  "schema": "m_b1_5_t0_region_interpretation_manifest_v1",
+  "created_utc": "2026-07-10T11:46:20.528156+00:00",
+  "script": "/home/ray/developer/ai/saccade/scripts/tools/analyze_m_b1_5_t0_region_interpretation.py",
+  "script_sha256": "6ae9fbe2a1ce3130f96cb503423303cfeca4dd32a94c02f54d62b3101311ebae",
+  "input_study": "/home/ray/developer/ai/saccade/out/signal_study/m_b1_5_stage2_q45_20260710",
+  "input_sha256": {
+    "atom_atlas.parquet": "281cb22bd92daf48d7dfdaaad86efde104bd0b458343d2e5247bd1d58776a0e0",
+    "pairwise_and_atlas.parquet": "ae52bd0cb799aaa8e11a9fa08c341611014839e95ff602f114fc8aecb9eabdac",
+    "pairwise_or_atlas.parquet": "bc1c2938775caa1e8f262fb083131e5f678cf612950e2400516b6d7baeb93323",
+    "region_stability.csv": "87055ef93439ae54d9c3255cb9c3be2d04da786f7b40a5f56d1e6f92046ef243",
+    "per_sequence.csv": "5446ac659ecada38d7ddb26dc1b9c31d61c25f69304ceecbed7f4ddf2570b121",
+    "threshold_registry.json": "d3e3197fa7812a9ec5f9b06cc2286dcce52d49cf805eba6527c3b24b62a585f4",
+    "summary.json": "a88d9dcfc5a614496305303ae3a5c23ec2de72ded44b8524104caa0f2f35d641",
+    "manifest.json": "4213e82e4c05a05247d32cfd387b209bdb20468d6d98038e84325f7a7dc7d568"
+  },
+  "source_manifest_git_commit": "dc758e088de9fe2bfed7e2d4d458a8360a03f712",
+  "source_evaluator_source_sha256": "551284f88710945dc636cb4e13f2b8401948fc717e605738f84be83b9e133643",
+  "artifact_sha256": {
+    "artifact_reconciliation.json": "494ab499457c465a6dd83161d89fc001ddd9ca014596eb3fbe329a095cf9a807",
+    "boundary_margin.csv": "424fe06350000311256ddab9c60518a29e09c40d3678250dc433fb991999b2f0",
+    "component_geometry.csv": "1e4db658e4d3a4b921d01771771e233c3dfabbca5cbd91a720e17914e13d59ef",
+    "cross_sequence_productive_support.csv": "e62d91668f472c23c99945f7852dcde76befc1989232656e84f1d9455d92eff8",
+    "g7_contract_gap.json": "77f08344360e69216ad097f9ecdd0d2d5716b68000127557f75e05a327945163",
+    "grammar_area_summary.csv": "e37d80a6f1b0bec04a1b03ecfb6b6f53b0441c198a38a4db74a824792ab3908b",
+    "non_g7_mask_overlap.json": "875d611625cb878d3c0f5892ec12c619915145055a6bd5f7d743f3170e56ae6d",
+    "productive_capacity.csv": "45ffb6f830eba008d31e36d71191755a14ef2c74da7c8dcfb6f740472c53c362",
+    "productive_capacity_by_per_grid_mask.csv": "7de21fbb6dad4b5daf4b58ad2d8d07db0efff4bdde14c7bf58afd8fc71bfdbe8",
+    "summary.json": "61d5b00c741a20bba811e419ff0f333fc79c084ca4f2b9d8aa026b468fa080d7",
+    "unique_mask_summary.csv": "32c8796d34f30de0f15409bf8bba01931b35ffb21994c3ba13fab43977918778"
+  },
+  "reconciliation": "PASS",
+  "n_productive_safe": 154
+}

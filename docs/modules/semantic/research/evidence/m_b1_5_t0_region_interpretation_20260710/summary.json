@@ -1,0 +1,115 @@
+{
+  "task": "T0-B_existing_atlas_region_interpretation",
+  "created_utc": "2026-07-10T11:46:20.528156+00:00",
+  "input_study": "/home/ray/developer/ai/saccade/out/signal_study/m_b1_5_stage2_q45_20260710",
+  "input_sha256": {
+    "atom_atlas.parquet": "281cb22bd92daf48d7dfdaaad86efde104bd0b458343d2e5247bd1d58776a0e0",
+    "pairwise_and_atlas.parquet": "ae52bd0cb799aaa8e11a9fa08c341611014839e95ff602f114fc8aecb9eabdac",
+    "pairwise_or_atlas.parquet": "bc1c2938775caa1e8f262fb083131e5f678cf612950e2400516b6d7baeb93323",
+    "region_stability.csv": "87055ef93439ae54d9c3255cb9c3be2d04da786f7b40a5f56d1e6f92046ef243",
+    "per_sequence.csv": "5446ac659ecada38d7ddb26dc1b9c31d61c25f69304ceecbed7f4ddf2570b121",
+    "threshold_registry.json": "d3e3197fa7812a9ec5f9b06cc2286dcce52d49cf805eba6527c3b24b62a585f4",
+    "summary.json": "a88d9dcfc5a614496305303ae3a5c23ec2de72ded44b8524104caa0f2f35d641",
+    "manifest.json": "4213e82e4c05a05247d32cfd387b209bdb20468d6d98038e84325f7a7dc7d568"
+  },
+  "dual_margin_policy": {
+    "nearest_unsafe_distance": "shortest same-grid registered-lattice graph distance to a non-productive-safe coordinate",
+    "distance_to_lattice_edge": "min steps to lattice boundary",
+    "nearest_unsafe_edge_censored": "true if nearest unsafe was not found on-lattice or search exhausted",
+    "full_neighborhood_safe_radius": {
+      "G1": "bilateral interval",
+      "G2": "Manhattan / repeated 4-neighbor erosion",
+      "edge_policy": "conservative: missing off-lattice neighbor => radius 0"
+    },
+    "edge_censored_is_not_region_thickness": true
+  },
+  "mask_scope": "per_registered_grid",
+  "g7": {
+    "status": "not_derivable_from_current_artifact_contract",
+    "missing": [
+      "logical NOT / complement predicate identity",
+      "necessary-envelope operand role",
+      "support operand role",
+      "N/P parameterization"
+    ],
+    "maximum_claim": "existing G1/G2 mask-string overlap only; not G7 equivalence",
+    "combinators_present": [
+      "AND",
+      "OR"
+    ],
+    "not_a_g7_audit": true
+  },
+  "headline_geometry": {
+    "n_productive_safe_coordinates": 154,
+    "n_single_sequence_support": 142,
+    "n_multi_sequence_support": 12,
+    "n_components": 26,
+    "shape_class_counts": {
+      "row_strip": 10,
+      "isolated_point": 7,
+      "2d_region": 7,
+      "column_strip": 2
+    },
+    "n_single_cell_width_strip_components": 12,
+    "n_genuine_2d_thick_components": 0,
+    "n_ps_coords_full_neighborhood_radius_ge1": 0,
+    "n_ps_coords_full_neighborhood_radius_0": 154,
+    "n_ps_coords_nearest_unsafe_gt0_and_radius_0": 154,
+    "n_ps_coords_touching_lattice_edge": 85,
+    "n_masks_with_multi_coord_plateau_per_grid": 23,
+    "n_coords_on_multi_coord_plateaus": 143,
+    "g2_unique_ps_masks_global_string_diagnostic": 15,
+    "g2_unique_ps_masks_per_grid_micro_sum": 33
+  },
+  "bounded_verdict_candidate": {
+    "status": "candidate_only_pending_review",
+    "terminal_b_unchanged": true,
+    "descriptive_findings": {
+      "n_productive_safe_coordinates": 154,
+      "n_single_sequence_support": 142,
+      "n_multi_sequence_support": 12,
+      "n_components": 26,
+      "shape_class_counts": {
+        "row_strip": 10,
+        "isolated_point": 7,
+        "2d_region": 7,
+        "column_strip": 2
+      },
+      "n_single_cell_width_strip_components": 12,
+      "n_genuine_2d_thick_components": 0,
+      "n_ps_coords_full_neighborhood_radius_ge1": 0,
+      "n_ps_coords_full_neighborhood_radius_0": 154,
+      "n_ps_coords_nearest_unsafe_gt0_and_radius_0": 154,
+      "n_ps_coords_touching_lattice_edge": 85,
+      "n_masks_with_multi_coord_plateau_per_grid": 23,
+      "n_coords_on_multi_coord_plateaus": 143,
+      "g2_unique_ps_masks_global_string_diagnostic": 15,
+      "g2_unique_ps_masks_per_grid_micro_sum": 33
+    },
+    "interpretation_candidate": "Among 154 productive-safe coordinates, productivity is dominated by single-sequence support and axis-degenerate / edge-touching components; full_neighborhood_safe_radius>=1 count is zero under conservative edge policy. This is a descriptive geometry reading of the registered atlas only \u2014 not a portable safe region, production candidate, or G7 result.",
+    "forbidden_claims_retained": [
+      "formal_or_portable_safe_region",
+      "online_parameter_region_retention",
+      "productive_reject_policy",
+      "production_candidate",
+      "g7_equivalence",
+      "new_grammar_necessity",
+      "threshold_path_global_falsification"
+    ]
+  },
+  "terminal_b": "isolated_safe_points_only",
+  "production_preset": "unchanged",
+  "evidence_ledger": "not_promoted",
+  "outputs": [
+    "artifact_reconciliation.json",
+    "boundary_margin.csv",
+    "component_geometry.csv",
+    "cross_sequence_productive_support.csv",
+    "g7_contract_gap.json",
+    "grammar_area_summary.csv",
+    "non_g7_mask_overlap.json",
+    "productive_capacity.csv",
+    "productive_capacity_by_per_grid_mask.csv",
+    "unique_mask_summary.csv"
+  ]
+}

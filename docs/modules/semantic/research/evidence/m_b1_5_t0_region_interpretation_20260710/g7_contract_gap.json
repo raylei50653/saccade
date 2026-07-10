@@ -1,0 +1,15 @@
+{
+  "status": "not_derivable_from_current_artifact_contract",
+  "missing": [
+    "logical NOT / complement predicate identity",
+    "necessary-envelope operand role",
+    "support operand role",
+    "N/P parameterization"
+  ],
+  "maximum_claim": "existing G1/G2 mask-string overlap only; not G7 equivalence",
+  "combinators_present": [
+    "AND",
+    "OR"
+  ],
+  "not_a_g7_audit": true
+}

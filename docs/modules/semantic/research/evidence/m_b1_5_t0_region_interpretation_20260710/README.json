@@ -1,0 +1,8 @@
+{
+  "study_id": "m_b1_5_t0_region_interpretation_20260710",
+  "task": "T0-B Existing Atlas Region Interpretation Pack",
+  "note": "Derived interpretation only. No evaluator rerun. Full generation: uv run python scripts/tools/analyze_m_b1_5_t0_region_interpretation.py",
+  "terminal_b": "isolated_safe_points_only",
+  "g7": "contract-gap report only; not G7 equivalence",
+  "research_note": "docs/modules/semantic/research/composition_grammar_t0_region_interpretation_20260710.md"
+}

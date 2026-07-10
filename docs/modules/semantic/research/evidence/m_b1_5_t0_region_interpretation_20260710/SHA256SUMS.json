@@ -1,0 +1,68 @@
+{
+  "study_id": "m_b1_5_t0_region_interpretation_20260710",
+  "task": "T0-B",
+  "source_runtime": "out/signal_study/m_b1_5_t0_region_interpretation_20260710",
+  "source_q45_study": "out/signal_study/m_b1_5_stage2_q45_20260710",
+  "files": [
+    {
+      "file": "artifact_reconciliation.json",
+      "bytes": 3699,
+      "sha256": "494ab499457c465a6dd83161d89fc001ddd9ca014596eb3fbe329a095cf9a807"
+    },
+    {
+      "file": "boundary_margin.csv",
+      "bytes": 40964,
+      "sha256": "424fe06350000311256ddab9c60518a29e09c40d3678250dc433fb991999b2f0"
+    },
+    {
+      "file": "component_geometry.csv",
+      "bytes": 5614,
+      "sha256": "1e4db658e4d3a4b921d01771771e233c3dfabbca5cbd91a720e17914e13d59ef"
+    },
+    {
+      "file": "cross_sequence_productive_support.csv",
+      "bytes": 47292,
+      "sha256": "e62d91668f472c23c99945f7852dcde76befc1989232656e84f1d9455d92eff8"
+    },
+    {
+      "file": "g7_contract_gap.json",
+      "bytes": 387,
+      "sha256": "77f08344360e69216ad097f9ecdd0d2d5716b68000127557f75e05a327945163"
+    },
+    {
+      "file": "grammar_area_summary.csv",
+      "bytes": 11245,
+      "sha256": "e37d80a6f1b0bec04a1b03ecfb6b6f53b0441c198a38a4db74a824792ab3908b"
+    },
+    {
+      "file": "manifest.json",
+      "bytes": 2555,
+      "sha256": "bbcad42d6390e1d01a52498249aa8a5ce6f687b0617825cdcf099b914492e53d"
+    },
+    {
+      "file": "non_g7_mask_overlap.json",
+      "bytes": 333,
+      "sha256": "875d611625cb878d3c0f5892ec12c619915145055a6bd5f7d743f3170e56ae6d"
+    },
+    {
+      "file": "productive_capacity.csv",
+      "bytes": 40168,
+      "sha256": "45ffb6f830eba008d31e36d71191755a14ef2c74da7c8dcfb6f740472c53c362"
+    },
+    {
+      "file": "productive_capacity_by_per_grid_mask.csv",
+      "bytes": 7125,
+      "sha256": "7de21fbb6dad4b5daf4b58ad2d8d07db0efff4bdde14c7bf58afd8fc71bfdbe8"
+    },
+    {
+      "file": "summary.json",
+      "bytes": 4952,
+      "sha256": "61d5b00c741a20bba811e419ff0f333fc79c084ca4f2b9d8aa026b468fa080d7"
+    },
+    {
+      "file": "unique_mask_summary.csv",
+      "bytes": 10997,
+      "sha256": "32c8796d34f30de0f15409bf8bba01931b35ffb21994c3ba13fab43977918778"
+    }
+  ]
+}
