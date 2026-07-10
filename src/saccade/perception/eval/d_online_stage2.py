@@ -20,7 +20,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 import numpy as np
 
@@ -133,13 +133,13 @@ def write_csv(path: Path, rows: Sequence[Mapping[str, Any]]) -> str:
 
 def write_parquet(path: Path, rows: Sequence[Mapping[str, Any]]) -> bool:
     try:
-        import pyarrow as pa  # type: ignore
-        import pyarrow.parquet as pq  # type: ignore
+        import pyarrow as pa
+        import pyarrow.parquet as pq_mod
 
         if rows:
-            pq.write_table(pa.Table.from_pylist(list(rows)), path)
+            pq_mod.write_table(pa.Table.from_pylist(list(rows)), path)
         else:
-            pq.write_table(pa.Table.from_pylist([]), path)
+            pq_mod.write_table(pa.Table.from_pylist([]), path)
         return True
     except Exception:
         return False
@@ -149,9 +149,9 @@ def load_event_table(path: Path) -> list[dict[str, Any]]:
     """Load Stage 1 hook_candidate_events from parquet or csv."""
     path = Path(path)
     if path.suffix == ".parquet":
-        import pyarrow.parquet as pq  # type: ignore
+        import pyarrow.parquet as pq_mod
 
-        table = pq.read_table(path)
+        table = pq_mod.read_table(path)
         cols = table.column_names
         col_data = [table.column(i).to_pylist() for i in range(len(cols))]
         n = len(col_data[0]) if col_data else 0
@@ -667,7 +667,10 @@ def classify_negative_status(row: Mapping[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _count_where(rows: Sequence[Mapping[str, Any]], pred) -> int:
+def _count_where(
+    rows: Sequence[Mapping[str, Any]],
+    pred: Callable[[Mapping[str, Any]], bool],
+) -> int:
     return sum(1 for r in rows if pred(r))
 
 
@@ -883,7 +886,7 @@ def build_safe_negative_mass_summary(
     per_seq = build_per_sequence_rows(rows)
     safe_by_seq = {r["sequence"]: int(r["n_safe_removable_negative"]) for r in per_seq}
     total_safe = sum(safe_by_seq.values())
-    max_seq = max(safe_by_seq, key=safe_by_seq.get) if safe_by_seq else ""
+    max_seq = max(safe_by_seq, key=lambda s: safe_by_seq[s]) if safe_by_seq else ""
     max_share = (
         float(safe_by_seq[max_seq]) / float(total_safe) if total_safe > 0 else 0.0
     )

@@ -25,7 +25,7 @@ import shutil
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Sequence, cast
 
 import numpy as np
 
@@ -464,9 +464,9 @@ def build_threshold_registry(
 
 def atom_mask(x: np.ndarray, direction: str, thr: float) -> np.ndarray:
     if direction == "high_tail":
-        return np.isfinite(x) & (x >= thr)
+        return np.asarray(np.isfinite(x) & (x >= thr), dtype=bool)
     if direction == "low_tail":
-        return np.isfinite(x) & (x <= thr)
+        return np.asarray(np.isfinite(x) & (x <= thr), dtype=bool)
     raise Stage2Q45Error(f"unknown direction {direction}")
 
 
@@ -536,8 +536,10 @@ def region_metrics(
                 ),
             }
         )
-    del_max_gt = max((r["gt_hurt"] for r in del_rows), default=0)
-    del_all_safe = all(r["gt_hurt"] == 0 for r in del_rows) if del_rows else False
+    del_max_gt = max((cast(int, r["gt_hurt"]) for r in del_rows), default=0)
+    del_all_safe = (
+        all(cast(int, r["gt_hurt"]) == 0 for r in del_rows) if del_rows else False
+    )
 
     # --- unknown / unresolved contamination (selected only) ---
     n_unresolved = int(unknown_mask.sum()) if unknown_mask is not None else 0
@@ -602,11 +604,11 @@ def region_metrics(
         "productive_safe_point": bool(productive_safe_point),
         "not_a_safe_rule": True,
         # renamed: deletion consistency ≠ portability
-        "leave_one_sequence_deleted_max_gt_hurt": int(del_max_gt),
+        "leave_one_sequence_deleted_max_gt_hurt": del_max_gt,
         "leave_one_sequence_deleted_all_gt_hurt_zero": bool(del_all_safe),
         "leave_one_sequence_deleted_rows": del_rows,
         # legacy aliases kept for readers; explicit non-portability
-        "loo_max_gt_hurt": int(del_max_gt),
+        "loo_max_gt_hurt": del_max_gt,
         "loo_all_gt_hurt_zero": bool(del_all_safe),
         "loo_is_deletion_consistency_only": True,
         "loo_not_portability_evidence": True,
@@ -984,9 +986,9 @@ def build_single_atom_atlas(
     unknown_matrices: Mapping[str, np.ndarray] | None = None,
     ambiguous_matrices: Mapping[str, np.ndarray] | None = None,
 ) -> list[dict[str, Any]]:
-    matrices: dict[str, np.ndarray] = registry["_matrices"]  # type: ignore
-    y: np.ndarray = registry["_y"]  # type: ignore
-    sequences: np.ndarray = registry["_sequences"]  # type: ignore
+    matrices = cast(dict[str, np.ndarray], registry["_matrices"])
+    y = cast(np.ndarray, registry["_y"])
+    sequences = cast(np.ndarray, registry["_sequences"])
     base = float(registry["base_negative_rate"])
     rows: list[dict[str, Any]] = []
     unknown_matrices = unknown_matrices or {}
@@ -1140,9 +1142,9 @@ def build_pairwise_atlas(
     """Complete enumeration of registered pairwise lattice (AND or OR)."""
     if combinator not in COMBINATORS:
         raise Stage2Q45Error(f"bad combinator {combinator}")
-    matrices: dict[str, np.ndarray] = registry["_matrices"]  # type: ignore
-    y: np.ndarray = registry["_y"]  # type: ignore
-    sequences: np.ndarray = registry["_sequences"]  # type: ignore
+    matrices = cast(dict[str, np.ndarray], registry["_matrices"])
+    y = cast(np.ndarray, registry["_y"])
+    sequences = cast(np.ndarray, registry["_sequences"])
     base = float(registry["base_negative_rate"])
     unknown_matrices = unknown_matrices or {}
     ambiguous_matrices = ambiguous_matrices or {}
@@ -1553,7 +1555,9 @@ def classify_region_stability(
             )
 
     # ---- pairwise grids (per feature-pair × dirs × comb) ----
-    def _pair_grid_key(r: Mapping[str, Any]) -> tuple:
+    def _pair_grid_key(
+        r: Mapping[str, Any],
+    ) -> tuple[Any, Any, Any, Any, Any]:
         return (
             r["feature_a"],
             r["direction_a"],
@@ -1563,29 +1567,33 @@ def classify_region_stability(
         )
 
     for _comb_name, rows in (("AND", pairwise_and), ("OR", pairwise_or)):
-        by_pg: dict[tuple, list[Mapping[str, Any]]] = defaultdict(list)
+        by_pg: dict[tuple[Any, Any, Any, Any, Any], list[Mapping[str, Any]]] = (
+            defaultdict(list)
+        )
         for r in rows:
             if not _prod(r):
                 continue
             by_pg[_pair_grid_key(r)].append(r)
         for gkey, cells in by_pg.items():
             fa, da, fb, db, comb = gkey
-            mask_coords: dict[str, list[tuple[int, int]]] = defaultdict(list)
-            mask_rep: dict[str, Mapping[str, Any]] = {}
-            mask_all: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+            # Distinct names from 1D branch so mypy does not merge list[int]
+            # with list[tuple[int, int]] under no-redef.
+            pair_mask_coords: dict[str, list[tuple[int, int]]] = defaultdict(list)
+            pair_mask_rep: dict[str, Mapping[str, Any]] = {}
+            pair_mask_all: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
             for r in cells:
                 sig = str(r.get("mask_sha256") or "")
                 if not sig:
                     continue
                 coord = (int(r["thr_index_a"]), int(r["thr_index_b"]))
-                mask_coords[sig].append(coord)
-                mask_all[sig].append(r)
-                if sig not in mask_rep:
-                    mask_rep[sig] = r
+                pair_mask_coords[sig].append(coord)
+                pair_mask_all[sig].append(r)
+                if sig not in pair_mask_rep:
+                    pair_mask_rep[sig] = r
 
             safe_coords_2d: set[tuple[int, int]] = set()
-            for coords in mask_coords.values():
-                safe_coords_2d.update(coords)
+            for pair_coords in pair_mask_coords.values():
+                safe_coords_2d.update(pair_coords)
             safe_interior_2d = {
                 (i, j)
                 for i, j in safe_coords_2d
@@ -1599,51 +1607,51 @@ def classify_region_stability(
             comp_of_2d = _connected_components_2d(safe_coords_2d)
             comp_coords_2d: dict[int, set[tuple[int, int]]] = defaultdict(set)
             comp_masks_2d: dict[int, set[str]] = defaultdict(set)
-            for sig, coords in mask_coords.items():
-                for c in set(coords):
+            for sig, pair_coords in pair_mask_coords.items():
+                for c in set(pair_coords):
                     cid_c = comp_of_2d[c]
                     comp_coords_2d[cid_c].add(c)
                     comp_masks_2d[cid_c].add(sig)
 
-            for sig, coords in mask_coords.items():
-                cset = set(coords)
-                if not coords:
+            for sig, pair_coords in pair_mask_coords.items():
+                cset_2d = set(pair_coords)
+                if not pair_coords:
                     continue
-                as_ = [c[0] for c in coords]
-                bs_ = [c[1] for c in coords]
+                as_ = [c[0] for c in pair_coords]
+                bs_ = [c[1] for c in pair_coords]
                 width_a = max(as_) - min(as_) + 1
                 width_b = max(bs_) - min(bs_) + 1
-                mask_interior = cset & safe_interior_2d
-                has_interior = len(mask_interior) > 0
-                n_interior = len(mask_interior)
+                mask_interior_2d = cset_2d & safe_interior_2d
+                has_interior = len(mask_interior_2d) > 0
+                n_interior = len(mask_interior_2d)
                 same_mask_plateau_has_interior = any(
                     (
-                        (i - 1, j) in cset
-                        and (i + 1, j) in cset
-                        and (i, j - 1) in cset
-                        and (i, j + 1) in cset
+                        (i - 1, j) in cset_2d
+                        and (i + 1, j) in cset_2d
+                        and (i, j - 1) in cset_2d
+                        and (i, j + 1) in cset_2d
                     )
-                    for i, j in cset
+                    for i, j in cset_2d
                 )
                 n_adj_masks = 0
-                for other, ocoords in mask_coords.items():
+                for other, ocoords_2d in pair_mask_coords.items():
                     if other == sig:
                         continue
-                    oset = set(ocoords)
+                    oset_2d = set(ocoords_2d)
                     if any(
                         abs(i - oi) + abs(j - oj) == 1
-                        for i, j in cset
-                        for oi, oj in oset
+                        for i, j in cset_2d
+                        for oi, oj in oset_2d
                     ):
                         n_adj_masks += 1
-                first_c = next(iter(cset))
-                safe_comp = int(comp_of_2d[first_c])
-                rep = mask_rep[sig]
+                first_c_2d = next(iter(cset_2d))
+                safe_comp = int(comp_of_2d[first_c_2d])
+                rep = pair_mask_rep[sig]
                 n_seq_neg = int(rep.get("n_sequences_with_neg", 0))
                 single_dom = bool(int(rep.get("single_seq_neg_dominance", 0)))
                 portable = False
                 cid = ""
-                for r in mask_all[sig]:
+                for r in pair_mask_all[sig]:
                     cid_i = _clause_id_pair(
                         comb,
                         str(r["feature_a"]),
@@ -1659,7 +1667,7 @@ def classify_region_stability(
                         break
                 label, is_cand = _label_and_cand(
                     has_interior=has_interior,
-                    n_coords=len(cset),
+                    n_coords=len(cset_2d),
                     n_adj_masks=n_adj_masks,
                     n_seq_neg=n_seq_neg,
                     single_dom=single_dom,
@@ -1676,7 +1684,7 @@ def classify_region_stability(
                         "direction_a": da,
                         "direction_b": db,
                         "mask_sha256": sig,
-                        "n_coordinates": len(cset),
+                        "n_coordinates": len(cset_2d),
                         "plateau_width_a": width_a,
                         "plateau_width_b": width_b,
                         "same_mask_plateau_has_interior": int(
@@ -1736,7 +1744,9 @@ def build_pareto_frontier(
     if not candidates:
         return []
 
-    def obj_key(r: Mapping[str, Any]) -> tuple:
+    ObjKey = tuple[int, int, int, float, int, int]
+
+    def obj_key(r: Mapping[str, Any]) -> ObjKey:
         return (
             int(r["gt_hurt"]),
             -int(r["n_neg_captured"]),
@@ -1746,14 +1756,14 @@ def build_pareto_frontier(
             int(r.get("loo_max_gt_hurt", 99)),
         )
 
-    def dominates_tuple(a: tuple, b: tuple) -> bool:
+    def dominates_tuple(a: ObjKey, b: ObjKey) -> bool:
         """a dominates b on the obj_key encoding (lower is better for all)."""
         better_or_eq = all(x <= y for x, y in zip(a, b))
         strictly = any(x < y for x, y in zip(a, b))
         return better_or_eq and strictly
 
     # Keep one representative per identical objective vector
-    best_by_obj: dict[tuple, Mapping[str, Any]] = {}
+    best_by_obj: dict[ObjKey, Mapping[str, Any]] = {}
     for r in candidates:
         k = obj_key(r)
         if k not in best_by_obj:
@@ -1762,7 +1772,7 @@ def build_pareto_frontier(
 
     # Sort by first objective then others; greedy 1D front candidates
     uniq.sort(key=lambda t: t[0])
-    prelim: list[tuple[tuple, Mapping[str, Any]]] = []
+    prelim: list[tuple[ObjKey, Mapping[str, Any]]] = []
     for k, r in uniq:
         if any(dominates_tuple(pk, k) for pk, _ in prelim):
             continue

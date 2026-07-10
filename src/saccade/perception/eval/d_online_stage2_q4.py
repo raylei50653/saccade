@@ -101,9 +101,9 @@ def load_d_online_events(path: Path) -> list[dict[str, Any]]:
         else:
             raise Stage2Q4Error(f"no d_online_events in {path}")
     if path.suffix == ".parquet":
-        import pyarrow.parquet as pq  # type: ignore
+        import pyarrow.parquet as pq_mod
 
-        table = pq.read_table(path)
+        table = pq_mod.read_table(path)
         cols = table.column_names
         col_data = [table.column(i).to_pylist() for i in range(len(cols))]
         n = len(col_data[0]) if col_data else 0
