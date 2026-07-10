@@ -3,12 +3,12 @@
     {
       "bytes": 3724,
       "file": "manifest.json",
-      "sha256": "95fdf9a405c8202a7da216be438be32a44c072bdcffce7859bd2f0d6cbb0012e"
+      "sha256": "3ce78e6f73ace0a07cf57a77e89d5ddf4e3ad91996640b63fc400500e0414eb9"
     },
     {
       "bytes": 5240,
       "file": "summary.json",
-      "sha256": "14113b192b39b8a86a479bad79aaceaba0506a49caf675c051633a845ea84ffc"
+      "sha256": "494b7a579d88b37257f7bbf2bf79d9e552f17923160786f84ff3db5a8a0eeb5d"
     },
     {
       "bytes": 531,
@@ -51,7 +51,7 @@
       "sha256": "7aabfda4ea85f6d2f300c59baa372878cddae3f75e4af94dc0e00a67b35f3246"
     }
   ],
-  "git_commit": "2d0e270d896dfe35d626636da570b5212e1d4eba",
+  "git_commit": "99477bc93d69206ad64bf160115afe4d636426e5",
   "study_id": "m_b1_5_stage2_q45_20260710",
   "taxonomy_version": "stage2_q45_atlas_v3"
 }

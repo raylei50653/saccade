@@ -27,7 +27,7 @@
     "positive_protection_class": "resolved AND baseline_selected AND pair_label==gt_consistent",
     "secondary_analysis": "resolved non-selected negative / gt_consistent"
   },
-  "created_utc": "2026-07-10T08:47:47.412045+00:00",
+  "created_utc": "2026-07-10T08:48:42.808953+00:00",
   "evaluator_review_gates": {
     "deletion_loo_is_portability": false,
     "fixed_full_sample_partition_not_portability": true,
@@ -38,7 +38,7 @@
     "unresolved_contaminated_blocks_candidate": true
   },
   "evaluator_source": "/home/ray/developer/ai/saccade/src/saccade/perception/eval/d_online_stage2_q45_atlas.py",
-  "evaluator_source_sha256": "30a079de8a79033bee810ff8c96f803fc46e55b146e9dc7b6e242f26e224e862",
+  "evaluator_source_sha256": "fb60024f9ffe9e7df7ea49b0e170a83403a0001c655fc2d2e2ac53baae4614f5",
   "forbidden_this_round": [
     "single_best_threshold_as_rule",
     "unrestricted_boolean_mining",
@@ -56,7 +56,7 @@
   "frame_is_absolute_mot": false,
   "frame_observation_limitation_only": true,
   "frame_provenance_kind": "host_audit_propose_invocation_counter",
-  "git_commit": "2d0e270d896dfe35d626636da570b5212e1d4eba",
+  "git_commit": "99477bc93d69206ad64bf160115afe4d636426e5",
   "n_atom_atlas_rows": 870,
   "n_clauses_ever_selected_nested_loso": 1352,
   "n_clauses_nested_loso_portable": 0,
@@ -85,7 +85,7 @@
   "q4_interpretation": "Q4 weak marginal AUC closes singleton frozen-tail thr promotion; does not forbid threshold/Boolean combination as analysis method.",
   "reason": "On resolved\u2227selected cohort: sample-zero-GT cells exist (n_atlas_cells=154) but no interior multi-seq thick region under per-grid quotient topology + nested LOSO portability; unknown/unresolved selected coverage further limits claims \u2192 isolated_safe_points_only",
   "reconciliation_acceptance": "PASS",
-  "repository_head_sha": "2d0e270d896dfe35d626636da570b5212e1d4eba",
+  "repository_head_sha": "99477bc93d69206ad64bf160115afe4d636426e5",
   "runner_source": "/home/ray/developer/ai/saccade/scripts/tools/run_m_b1_5_stage2_q45_atlas.py",
   "runner_source_sha256": "376b11c0bb9c85823ca6c09eb17ed3044730b3be7bc9fec53888ffde74d5815a",
   "secondary_competition_features": [
