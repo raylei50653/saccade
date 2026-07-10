@@ -2751,20 +2751,34 @@ def run_eval(
             detector.tracker, "get_relink_debug"
         ):
             _rd = detector.tracker.get_relink_debug()
-            _gates = (
-                (
-                    f" | no_emb={_rd[5]} bank_lt3={_rd[6]} spatial_ok={_rd[7]} "
-                    f"cheb_ok={_rd[8]} floor_ok={_rd[9]} both_ok={_rd[10]}"
-                )
-                if len(_rd) > 10
-                else ""
+            # Host layout (cursor + d_relink_dbg_): see portable_or_tail.RELINK_DEBUG_HOST_INDEX.
+            # Slots 5+ are portable OR-tail hook counters when Stage 1 hook is built in;
+            # legacy Cheb-gate names no longer apply to these indices.
+            from saccade.perception.eval.portable_or_tail import (
+                RELINK_DEBUG_HOST_INDEX as _RD_IDX,
             )
-            if len(_rd) > 11:
-                _gates += f" bridge_veto={_rd[11]}"
+
+            _rd_named = {
+                name: int(_rd[idx]) if idx < len(_rd) else None
+                for name, idx in _RD_IDX.items()
+            }
+            _rd_named["raw"] = [int(x) for x in _rd]
+            (output_root / f"_relink_debug_{seq}.json").write_text(
+                json.dumps(_rd_named, indent=2) + "\n"
+            )
             print(
-                f"🔗 Relink debug {seq}: archived={_rd[0]} "
-                f"birth_candidates={_rd[1]} revived={_rd[2]} "
-                f"bridge_attempts={_rd[3]} bridge_accepts={_rd[4]}{_gates}"
+                f"🔗 Relink debug {seq}: archived={_rd_named.get('archived_cursor')} "
+                f"births={_rd_named.get('births')} revived={_rd_named.get('revived')} "
+                f"bridge_attempts={_rd_named.get('bridge_attempts')} "
+                f"bridge_accepts={_rd_named.get('bridge_accepts')} "
+                f"hook_eligible={_rd_named.get('hook_eligible')} "
+                f"hook_rejected={_rd_named.get('hook_rejected')} "
+                f"atom0={_rd_named.get('atom0_score_m_bridge')} "
+                f"atom1={_rd_named.get('atom1_abs_log_h')} "
+                f"atom2={_rd_named.get('atom2_dist_h')} "
+                f"atom3={_rd_named.get('atom3_abs_ratio_m1')} "
+                f"atom4={_rd_named.get('atom4_resid_mean')} "
+                f"app_veto={_rd_named.get('app_veto')}"
             )
 
         if _seq_state.relinker is not None and hasattr(

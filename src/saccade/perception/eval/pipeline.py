@@ -666,13 +666,14 @@ class EvalPipeline:
 
                 _logging.getLogger(__name__).info(
                     "research portable OR-tail hook ON policy=%s candidate_id=%s "
-                    "hash=%s thr=%s freeze_locked=%s audit=%s (online B-audit "
-                    "not implemented)",
+                    "hash=%s thr=%s freeze_locked=%s control_arm=%s audit=%s "
+                    "(online B-audit not implemented)",
                     _pol.path,
                     _pol.candidate_id,
                     _pol.file_hash[:12],
                     list(_pol.thr_vector),
                     _pol.freeze_locked,
+                    getattr(_pol, "control_arm", None),
                     _audit,
                 )
                 # Stash snapshot for eval runners / audit manifests.
