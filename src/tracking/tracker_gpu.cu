@@ -4205,6 +4205,10 @@ __global__ void compact_duplicate_clusters_kernel(
     *out_count = out_idx;
 }
 
+// Legacy atomic-compaction kernel — replaced by the three-phase stable path
+// (filter_keep_mask_kernel → CUB exclusive scan → filter_stable_scatter_kernel)
+// in the default production codepath.  Retained as a default-off reference for
+// performance A/B comparison against the stable implementation.
 __global__ void filter_detections_kernel(
     const float* boxes,
     const float* scores,
@@ -4256,10 +4260,11 @@ __global__ void filter_detections_kernel(
     }
 }
 
-// Diagnostic-only control. The production kernel uses atomic compaction, whose
-// output slots are not ordered by input index. This serial version preserves
-// source order so we can determine whether equal-score NMS tie ordering causes
-// a downstream decimal divergence.
+// Default-off serial oracle.  The production path now uses a GPU-parallel
+// predicate-flags + exclusive-scan + stable-scatter pipe (filter_keep_mask_kernel,
+// filter_stable_scatter_kernel).  This single-thread kernel is preserved as a
+// diagnostic control gated by SACCADE_DETERMINISTIC_FILTER_COMPACTION=1 for
+// oracle-comparison validation of the parallel stable path.
 __global__ void filter_detections_stable_kernel(
     const float* boxes,
     const float* scores,
@@ -4873,15 +4878,24 @@ void filter_detections_cuda(
         bool own = false;
 
         if (!_keep) {
-            cudaMallocAsync(reinterpret_cast<void**>(&_keep),
-                            num_dets * sizeof(int), stream);
-            cudaMallocAsync(reinterpret_cast<void**>(&_pref),
-                            num_dets * sizeof(int), stream);
-            cudaMallocAsync(reinterpret_cast<void**>(&_stmp),
-                            num_dets * sizeof(bool), stream);
+            checkCuda(cudaMallocAsync(reinterpret_cast<void**>(&_keep),
+                                      num_dets * sizeof(int), stream));
+            checkCuda(cudaMallocAsync(reinterpret_cast<void**>(&_pref),
+                                      num_dets * sizeof(int), stream));
+            checkCuda(cudaMallocAsync(reinterpret_cast<void**>(&_stmp),
+                                      num_dets * sizeof(bool), stream));
             const size_t req = filter_stable_scan_temp_bytes(num_dets);
-            cudaMallocAsync(&_scan, req, stream);
+            checkCuda(cudaMallocAsync(&_scan, req, stream));
             own = true;
+        } else {
+            const size_t required = filter_stable_scan_temp_bytes(num_dets);
+            if (!_scan || scan_tmp_bytes < required) {
+                std::stringstream _ss;
+                _ss << "filter_detections_cuda: d_scan_tmp capacity "
+                    << scan_tmp_bytes << " too small for " << num_dets
+                    << " detections (need " << required << " bytes)";
+                throw std::runtime_error(_ss.str());
+            }
         }
 
         filter_keep_mask_kernel<<<blk, thr, 0, stream>>>(
@@ -4890,14 +4904,18 @@ void filter_detections_cuda(
 
         {
             size_t sb = 0, rb = 0;
-            cub::DeviceScan::ExclusiveSum(nullptr, sb,
+            checkCuda(cub::DeviceScan::ExclusiveSum(
+                nullptr, sb,
                 static_cast<const int*>(nullptr),
-                static_cast<int*>(nullptr), num_dets);
-            cub::DeviceReduce::Sum(nullptr, rb,
+                static_cast<int*>(nullptr), num_dets));
+            checkCuda(cub::DeviceReduce::Sum(
+                nullptr, rb,
                 static_cast<const int*>(nullptr),
-                static_cast<int*>(nullptr), num_dets);
-            cub::DeviceScan::ExclusiveSum(_scan, sb, _keep, _pref, num_dets, stream);
-            cub::DeviceReduce::Sum(_scan, rb, _keep, out_count_ptr, num_dets, stream);
+                static_cast<int*>(nullptr), num_dets));
+            checkCuda(cub::DeviceScan::ExclusiveSum(
+                _scan, sb, _keep, _pref, num_dets, stream));
+            checkCuda(cub::DeviceReduce::Sum(
+                _scan, rb, _keep, out_count_ptr, num_dets, stream));
         }
 
         filter_stable_scatter_kernel<<<blk, thr, 0, stream>>>(
@@ -4906,10 +4924,10 @@ void filter_detections_cuda(
             keep_indices_ptr, suspect_flags_ptr, quality_scores_ptr, params);
 
         if (own) {
-            cudaFreeAsync(_keep, stream);
-            cudaFreeAsync(_pref, stream);
-            cudaFreeAsync(_stmp, stream);
-            cudaFreeAsync(_scan, stream);
+            checkCuda(cudaFreeAsync(_keep, stream));
+            checkCuda(cudaFreeAsync(_pref, stream));
+            checkCuda(cudaFreeAsync(_stmp, stream));
+            checkCuda(cudaFreeAsync(_scan, stream));
         }
     }
     {

@@ -157,8 +157,15 @@ echo "── determinism-sensitive path check"
 if [[ "${SKIP_DETERMINISM_PREPUSH:-0}" == "1" ]]; then
     warn "SKIP_DETERMINISM_PREPUSH=1 — determinism matrix SKIPPED"
 else
-    DETERM_OUTPUT=$(uv run python3 scripts/tools/check_determinism_paths.py 2>&1) || true
-    if [[ "$DETERM_OUTPUT" == "determinism" ]]; then
+    DETERM_OUTPUT=""
+    set +e
+    DETERM_OUTPUT=$(uv run python3 scripts/tools/check_determinism_paths.py 2>/dev/null)
+    DETERM_RC=$?
+    set -e
+    if [[ $DETERM_RC -eq 2 ]]; then
+        fail "determinism path detection failed (exit $DETERM_RC)"
+        ERRORS=$((ERRORS + 1))
+    elif [[ $DETERM_RC -eq 0 ]] && [[ "$DETERM_OUTPUT" == "determinism" ]]; then
         echo "── 2×2 determinism matrix"
         echo "    (SKIP_DETERMINISM_PREPUSH=1 to skip)"
         if uv run python scripts/tools/check_decimal_matrix_2x2.py \
