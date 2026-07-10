@@ -5,35 +5,28 @@
 
 ## Sole active
 
-🔄 **Safe-Region Assetization — A1 research asset acceptance (A0 retained; eng. MERGED)**
+🔄 **Safe-Region Assetization — A1 terminal decision (audit 26/26 PASS; owner records terminal)**
 
 - Thread: [safe_region_assetization_20260710.md](../../research/threads/safe_region_assetization_20260710.md)
-- Delivery path: **PR-driven** (direct-agent dispatch retired)
-- R1 engineering: **MERGED** — converter + unit tests + A0 pack tooling; history [PR #95](https://github.com/raylei50653/saccade/pull/95) (delivery merged; CI PASS; engineering path closed)
-- Current active gate: **A1 research asset acceptance** (chat-side / research-owner) — research-consumption, **not** engineering re-check
-- A1 questions: semantic fidelity · research query utility · decision utility · reusable abstraction
-- A1 terminals (**bind maturity**):
-  - `A1_ACCEPTED` → maturity=A1
-  - `A1_ACCEPTED_WITH_LIMITS` → maturity=A1 + explicit `acceptance_limits` (must list residual raw-artifact queries)
-  - `A1_REJECTED` → maturity=A0 retained; **only** bounded R1 repair/re-review
-- Engineering prerequisites already passed (do **not** re-run as A1): determinism · PK/FK · SHA seals · ID/threshold reconstruction · manifest flags
-- Primary deliverable (landed): accepted R0-B RegionAsset contract + deterministic R1 packer (`scripts/tools/convert_safe_region_asset_r1.py`) + conversion note
-- Accepted contract: [safe_region_asset_contract.md](../../research/eval/safe_region_asset_contract.md) — **R0-B: ACCEPTED**; RB1–RB9 PASS; E1 applied
-- R1 conversion note: [research/safe_region_asset_r1_conversion_20260710.md](research/safe_region_asset_r1_conversion_20260710.md)
-- Pack candidate: `out/signal_study/m_b1_5_safe_region_asset_r1_20260710/` (**A0** observation-only; **not A1**)
+- **A1 acceptance unit locked** (2026-07-10 chat review): conversion pack `1a180620bc…` (`out/signal_study/m_b1_5_safe_region_asset_r1_20260710/`)
+- **Read-only S0/S1/Q1/N1 audit PASS 26/26** (2026-07-11): [research/safe_region_a1_audit_20260711.md](research/safe_region_a1_audit_20260711.md) · `scripts/tools/run_safe_region_a1_audit.py` · `out/signal_study/safe_region_a1_audit_20260711/`
+- **R1 / R1.1 downgraded to external diagnostic overlay** (not A1 objects; not pack consumers):
+  - R1 V-C = heuristic-specific descriptive failure (LOO pool global-label-screened; class null retracted) — [note](research/safe_region_assetization_r1_20260710.md)
+  - R1.1 = 2 unique harmful AND events + 3 descriptive symptoms; "primary F3" rejected (post-hoc floors, K-duplicated count, alias-ambiguous predicate) — [note](research/safe_region_assetization_r11_20260710.md)
 - Preserved state:
   ```text
-  R0-B: ACCEPTED
-  R1 engineering delivery: MERGED
-  PR #95: engineering delivery merged; CI PASS; engineering path closed
-  current active gate: A1 research asset acceptance
-  current maturity: A0 retained
-  A1: not accepted
-  R2–R4: unauthorized (fail-closed)
-  terminal B: unchanged
-  production / ledger: unchanged
+  A1 acceptance unit: conversion pack 1a180620bc… (locked)
+  A1 state: A1_PENDING_VALIDATION → audit 26/26 PASS
+  maturity: A0 retained (terminal not yet recorded)
+  next: owner records A1 terminal
+    (A1_ACCEPTED_WITH_LIMITS supportable iff limits enumerated:
+     no D1 trace · abstraction usage-based · event-mass/alias queries need raw;
+     no post-hoc D1 required to close A1)
+  R1.1 four next-lines: deferred until terminal
+  R2 / grammar search / hook / ledger: closed
+  terminal B: retained (never rested on the overlay)
   ```
-- Boundary: R2–R4 remain unauthorized unless A1 terminal ∈ {`A1_ACCEPTED`, `A1_ACCEPTED_WITH_LIMITS`} **and** research owner explicitly authorizes the named next stage. `A1_REJECTED` retains A0 and authorizes only bounded R1 repair/re-review. Evaluator rerun/modification, threshold search, new research claims, G4–G7, LOO, shadow, hook, production, ledger, and R0-C/R1.1 contract expansion remain unauthorized. PR merge does not grant research acceptance or maturity promotion.
+- **Do not** restart grammar search, LOO-tune the probe, or treat probe `A1_region_asset` tags as pack maturity.
 
 ## Parked
 
@@ -42,7 +35,7 @@
 
 ## Related research threads（不佔 WIP 鎖）
 
-- [safe-region assetization](../../research/threads/safe_region_assetization_20260710.md) — **ACTIVE** · R0-B accepted · R1 eng. MERGED · A0 retained · **A1 gate open** · [PR #95](https://github.com/raylei50653/saccade/pull/95) history
+- [safe-region assetization](../../research/threads/safe_region_assetization_20260710.md) — **ACTIVE** · R0-B accepted · R1 eng. MERGED · A0 retained · **A1 audit PASS, terminal pending** · [PR #95](https://github.com/raylei50653/saccade/pull/95) history
 - [composition grammar coverage program](../../research/threads/composition_grammar_coverage_program_20260710.md) — **SUPERSEDED** · coverage map absorbed into assetization R2–R4
 - [composition grammar × safe-region A0](../../research/threads/composition_grammar_safe_region.md) — **CLOSED** · T0-A/B/R1 · terminal B retained
   - A0 source note: [composition_grammar_t0_region_interpretation_20260710.md](research/composition_grammar_t0_region_interpretation_20260710.md)
