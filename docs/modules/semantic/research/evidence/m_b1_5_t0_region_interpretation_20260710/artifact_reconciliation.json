@@ -1,4 +1,5 @@
 {
+  "revision": "T0-B-R1",
   "headline_reconciliation": {
     "ok": true,
     "status": "PASS",
@@ -43,10 +44,20 @@
   },
   "per_sequence_cross_check": {
     "ok": true,
+    "status": "PASS",
+    "mode": "bidirectional_equality",
     "n_ps_cells": 154,
+    "n_cells_checked": 154,
     "n_positive_neg_entries_checked": 176,
     "errors": [],
     "n_errors": 0
+  },
+  "per_grid_mask_invariance": {
+    "ok": true,
+    "status": "PASS",
+    "n_per_grid_mask_groups": 34,
+    "n_errors": 0,
+    "errors": []
   },
   "region_stability_quotient_reconciliation": {
     "n_region_stability_rows": 34,
@@ -97,14 +108,33 @@
   "multi_seq_and_summary": {
     "n_multi_seq_and_coordinates": 12,
     "n_single_seq_and_coordinates": 141,
-    "n_per_grid_unique_masks_among_multi_seq_and_coords": 4,
-    "note": "mask count here is global-string among multi-seq AND coords for diagnostic; primary unique-mask metrics remain per-grid",
+    "n_primary_per_registered_grid_unique_masks": 8,
+    "n_global_mask_strings_diagnostic": 4,
     "per_grid_unique_mask_counts": {
       "P::abs_log_h::high_tail__resid_mean::low_tail": 1,
       "P::abs_log_h::high_tail__score_m_bridge::low_tail": 3,
       "P::abs_ratio_m1::high_tail__resid_mean::low_tail": 1,
       "P::abs_ratio_m1::high_tail__score_m_bridge::low_tail": 3
-    }
+    },
+    "check_sum_per_grid_equals_primary": true,
+    "note": "primary unit = sum over grids of nunique(mask) within each grid (8); global mask-string count (4) is diagnostic only and must not use per_grid_* names"
+  },
+  "capacity_concentration": {
+    "unit": "per_registered_grid_mask",
+    "denominator": "sum of mask_n_neg over productive per-grid mask units",
+    "n_productive_per_grid_mask_units": 34,
+    "sum_mask_n_neg": 48,
+    "max_mask_n_neg": 4,
+    "mask_n_neg_distribution": {
+      "1": 26,
+      "2": 4,
+      "3": 2,
+      "4": 2
+    },
+    "top1_share_of_sum_mask_n_neg": 0.08333333333333333,
+    "top3_share_of_sum_mask_n_neg": 0.22916666666666666,
+    "top5_share_of_sum_mask_n_neg": 0.3333333333333333,
+    "note": "global mask-string collapse is diagnostic only; primary unit is per-grid"
   },
   "input_sha256": {
     "atom_atlas.parquet": "281cb22bd92daf48d7dfdaaad86efde104bd0b458343d2e5247bd1d58776a0e0",

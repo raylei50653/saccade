@@ -1,13 +1,14 @@
 {
   "study_id": "m_b1_5_t0_region_interpretation_20260710",
   "task": "T0-B",
+  "revision": "T0-B-R1",
   "source_runtime": "out/signal_study/m_b1_5_t0_region_interpretation_20260710",
   "source_q45_study": "out/signal_study/m_b1_5_stage2_q45_20260710",
   "files": [
     {
       "file": "artifact_reconciliation.json",
-      "bytes": 3699,
-      "sha256": "494ab499457c465a6dd83161d89fc001ddd9ca014596eb3fbe329a095cf9a807"
+      "bytes": 4669,
+      "sha256": "d7512c4cdc6247e82647c151fde4fdac95f230166636bf3fa93b76e903166f1f"
     },
     {
       "file": "boundary_margin.csv",
@@ -16,13 +17,13 @@
     },
     {
       "file": "component_geometry.csv",
-      "bytes": 5614,
-      "sha256": "1e4db658e4d3a4b921d01771771e233c3dfabbca5cbd91a720e17914e13d59ef"
+      "bytes": 5565,
+      "sha256": "ad2dd33b64453a49af605936dbd235965b60e130194b4b304422931bb09d905d"
     },
     {
       "file": "cross_sequence_productive_support.csv",
-      "bytes": 47292,
-      "sha256": "e62d91668f472c23c99945f7852dcde76befc1989232656e84f1d9455d92eff8"
+      "bytes": 47306,
+      "sha256": "a14d045f4234e046c95d8e41234637c17e3b3fa20a4b6f50d0d35e1dc94b772a"
     },
     {
       "file": "g7_contract_gap.json",
@@ -37,7 +38,7 @@
     {
       "file": "manifest.json",
       "bytes": 2555,
-      "sha256": "bbcad42d6390e1d01a52498249aa8a5ce6f687b0617825cdcf099b914492e53d"
+      "sha256": "31cb7f424ab5bf8cd9fca8c5335d4c72308a8820dc726252f048126d518b459a"
     },
     {
       "file": "non_g7_mask_overlap.json",
@@ -46,18 +47,18 @@
     },
     {
       "file": "productive_capacity.csv",
-      "bytes": 40168,
-      "sha256": "45ffb6f830eba008d31e36d71191755a14ef2c74da7c8dcfb6f740472c53c362"
+      "bytes": 40504,
+      "sha256": "84898c23c9bd761152de9ffe6ab921108362e98d8ce1d59e1a78f19e60354a90"
     },
     {
       "file": "productive_capacity_by_per_grid_mask.csv",
-      "bytes": 7125,
-      "sha256": "7de21fbb6dad4b5daf4b58ad2d8d07db0efff4bdde14c7bf58afd8fc71bfdbe8"
+      "bytes": 8984,
+      "sha256": "f8c0e0e45d455a7492f5bac1f1feba07604fde1c7b6d514f4be3f4501dcdb63b"
     },
     {
       "file": "summary.json",
-      "bytes": 4952,
-      "sha256": "61d5b00c741a20bba811e419ff0f333fc79c084ca4f2b9d8aa026b468fa080d7"
+      "bytes": 7944,
+      "sha256": "4d12f1f24448e42dc2340f15136360eaeb9b6a4811fc569f6ff923637c6dd163"
     },
     {
       "file": "unique_mask_summary.csv",

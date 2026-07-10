@@ -39,7 +39,7 @@ conversation hook    = 短期接力（應收進 thread）
 | Thread | Status (one-line) | Owner |
 |:--|:--|:--|
 | [occ_exit_audit_20260709.md](occ_exit_audit_20260709.md) | **semantic sole active** · substrate wired · remaining graph decision + seq cond | semantic |
-| [composition_grammar_safe_region.md](composition_grammar_safe_region.md) | T0-B **DONE** · radius≥1=0 · 142 single-seq · G7 gap only · **awaiting review** | semantic |
+| [composition_grammar_safe_region.md](composition_grammar_safe_region.md) | T0-B-R1 **DONE** · 12→8 per-grid/4 global · radius≥1=0 · **awaiting PR review** | semantic |
 | [association_recovery_registry_20260709.md](association_recovery_registry_20260709.md) | Scripts index + tools YAML + contracts 就位；registry 維護母線 | semantic |
 | [doc_structure_o15_followup_20260709.md](doc_structure_o15_followup_20260709.md) | O1.5 + TODO-as-WIP-lock；follow-up = index debt / optional strict | ownership |
 

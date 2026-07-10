@@ -1,4 +1,4 @@
-unit,grammar,cell_id,grid_id,mask_sha256,n_sequences_with_productive_support,support_class,worst_sequence,worst_sequence_n_neg,max_neg_sequence_share,productive_sequences_json
+unit,grammar,cell_id,grid_id,mask_sha256,n_sequences_with_productive_support,support_class,min_positive_sequence,min_positive_sequence_n_neg,max_neg_sequence_share,productive_sequences_json
 coordinate,G1_atom,S::resid_mean::high_tail::u86,S::resid_mean::high_tail,63a907235d6263b0e8c90c26916b88bbb49d49a664518e158faefbdb69f13aca,1,single_sequence,MOT17-10-SDP,1,1.0,"{""MOT17-10-SDP"": 1}"
 coordinate,G2_and,AND::P::abs_log_h::high_tail::q5::P::abs_ratio_m1::low_tail::q5,P::abs_log_h::high_tail__abs_ratio_m1::low_tail,c4d4ff1a0edd8678d8bfaea8d07f32a79534e2be6837221359a8adf840a97f2c,1,single_sequence,MOT17-13-SDP,1,1.0,"{""MOT17-13-SDP"": 1}"
 coordinate,G2_and,AND::P::abs_log_h::low_tail::q12::P::abs_ratio_m1::high_tail::q12,P::abs_log_h::low_tail__abs_ratio_m1::high_tail,40e749384e73d603c41c1370fc839844583ac0308271ffadd3bea47eee46a3a4,1,single_sequence,MOT17-02-SDP,1,1.0,"{""MOT17-02-SDP"": 1}"

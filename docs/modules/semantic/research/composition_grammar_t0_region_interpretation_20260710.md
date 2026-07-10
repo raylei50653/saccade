@@ -6,14 +6,15 @@
 <!-- doc-module: semantic -->
 <!-- fact-owner: this file for T0-B derived geometry interpretation -->
 
-**Task:** T0-B (authorized after accepted T0-A)  
+**Task:** T0-B · revision **T0-B-R1** (evidence correction after CHANGES REQUESTED)  
 **Branch:** `research/m-b1-5-t0-region-interpretation`  
-**Authorize:** `4c347281` · base T0-A tip `f1981c12`  
+**Authorize:** T0-B `4c347281` · R1 dispatch `32ecd242` · base T0-A tip `f1981c12`  
 **Thread:** [composition_grammar_safe_region.md](../../../research/threads/composition_grammar_safe_region.md)  
 **Preflight (accepted):** [composition_grammar_t0_artifact_preflight_20260710.md](composition_grammar_t0_artifact_preflight_20260710.md)
 
 > Descriptive geometry of the **existing** registered Q4.5 atlas.  
-> **Not** portable safe-region proof · **not** production candidate · **not** G7 equivalence · **not** evaluator rerun.
+> **Not** portable safe-region proof · **not** production candidate · **not** G7 equivalence · **not** evaluator rerun.  
+> **Bounded verdict not self-accepted** — awaiting PR review after R1.
 
 ---
 
@@ -25,10 +26,12 @@
 | Derivation script | `scripts/tools/analyze_m_b1_5_t0_region_interpretation.py` |
 | Runtime outputs | `out/signal_study/m_b1_5_t0_region_interpretation_20260710/` |
 | Committed evidence pack | [evidence/m_b1_5_t0_region_interpretation_20260710/](evidence/m_b1_5_t0_region_interpretation_20260710/) |
-| Input atlas hashes | match Q4.5 `manifest.json` (`artifact_reconciliation.json`) |
+| Input atlas hashes | match Q4.5 `manifest.json`; **unchanged vs T0-B initial** |
 | Headline reconcile | **PASS** — 154 = 1 G1 + 153 G2 + 0 G3 |
-| `per_sequence` PS cross-check | **PASS** |
+| Per-sequence check | **PASS** — bidirectional equality |
+| Per-grid mask invariance | **PASS** |
 | Synthetic dual-margin checks | **PASS** (isolated / strip / 3×3 / diagonal / edge) |
+| Revision | **T0-B-R1** |
 
 ```text
 Terminal B:     isolated_safe_points_only (unchanged)
@@ -81,11 +84,16 @@ never global-collapse mask_sha256 for primary ratios
 | Productive-safe coordinates | **154** (1 + 153 + 0) |
 | Single-sequence productive support | **142** |
 | Multi-sequence productive support | **12** (all G2 AND) |
+| Multi-seq → **primary** per-registered-grid unique masks | **8** (= 1+3+1+3 across 4 grids) |
+| Multi-seq → global mask strings | **4** (**diagnostic only**) |
 | G1 coordinate productive ratio | 1 / 870 ≈ **0.00115** |
 | G2 AND coordinate productive ratio | 153 / 17640 ≈ **0.00867** |
 | G3 OR productive | **0** |
 | G2 unique PS masks (per-grid micro sum) | **33** |
 | G2 unique PS masks (global string, diagnostic only) | **15** |
+| Productive per-grid mask units (all PS) | **34** |
+| Capacity top-1 / top-3 / top-5 share of ∑`mask_n_neg` | **0.083 / 0.229 / 0.333** (denominator = 48) |
+| Max `mask_n_neg` | **4** |
 | Coordinates on multi-coord plateaus (per-grid mask) | **143** / 154 |
 | Distinct per-grid masks with plateau width > 1 | **23** |
 | Reconstructed components | **26** |
@@ -95,7 +103,6 @@ never global-collapse mask_sha256 for primary ratios
 | `full_neighborhood_safe_radius ≥ 1` (any PS coord) | **0** / 154 |
 | `nearest_unsafe_distance > 0` while radius = 0 | **154** / 154 |
 | PS coords touching lattice edge | **85** / 154 |
-| Multi-seq AND coords → distinct global mask strings | **4** (diagnostic; primary scope remains per-grid) |
 
 ### Area (coordinate-weighted grammar aggregates)
 
@@ -107,11 +114,14 @@ never global-collapse mask_sha256 for primary ratios
 
 Do **not** compare raw G1 vs G2 cell counts without lattice-context normalization.
 
-### Capacity
+### Capacity (per-grid mask units)
 
-- `n_neg_captured` on PS cells: almost all **1** (142 cells); max observed **4**.
-- Sequence-support count equals capacity histogram under this atlas (`n_seq` 1→142, 2→6, 3→2, 4→4).
-- Multi-seq AND: **12** coordinates; **not** a large multi-seq productive body.
+- Coordinate-level `n_neg_captured` on PS cells: almost all **1** (142 cells); max **4**.
+- Sequence-support count matches capacity histogram (`n_seq` 1→142, 2→6, 3→2, 4→4).
+- Multi-seq AND: **12** coordinates → **8** primary per-grid masks → **4** global strings (diagnostic).
+- **Per-grid mask capacity** (`mask_n_neg`, not plateau-inflated): 34 units; ∑`mask_n_neg` = **48**; distribution 1→26, 2→4, 3→2, 4→2.
+- Concentration (share of ∑`mask_n_neg`): top-1 **8.3%**, top-3 **22.9%**, top-5 **33.3%** — capacity is **not** dominated by a single mask unit.
+- Field naming: `min_positive_sequence` / `min_positive_sequence_n_neg` (min among positive-support sequences only; not an all-seven “worst”).
 
 ### Components (largest)
 
@@ -206,11 +216,26 @@ Fail-closed if full atlases missing or hashes ≠ Q4.5 manifest.
 
 ---
 
-## 8. Next gate (not authorized here)
+## 8. R1 correction log
+
+| Finding | Fix |
+|:--|:--|
+| Multi-seq “per-grid” field held global count | Primary = sum of per-grid `nunique(mask)` = **8**; global = **4** diagnostic |
+| One-way per-sequence check | Bidirectional equality: missing/extra pos seq, n_neg/n_gt, sums, n_sequences_with_neg |
+| Silent `.first()` / union-max on mask groups | Assert invariance on n_neg/n_gt/n_seq maps before collapse |
+| `worst_sequence` name | Renamed → `min_positive_sequence*` |
+| Capacity concentration missing | Explicit top-1/3/5 on ∑`mask_n_neg` over per-grid mask units |
+| G1 `max_full_neighborhood_safe_radius` blank | Filled **0** |
+
+Dual-margin headline **reproduced**: radius≥1 = 0/154; nearest_unsafe = 1 on all PS.
+
+## 9. Next gate (not authorized here)
 
 ```text
-T0-B execution (this note)
-→ engineering / PR review
-→ bounded research acceptance
+T0-B-R1 evidence correction (this note)
+→ awaiting PR review
+→ bounded research acceptance (human)
 → only then: close line / minimal emit / region-LOO design / restricted G7 contract
 ```
+
+Do **not** self-accept the bounded verdict; do **not** auto-open PR.

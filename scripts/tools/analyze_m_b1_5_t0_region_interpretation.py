@@ -12,7 +12,7 @@ import argparse
 import hashlib
 import json
 import sys
-from collections import deque
+from collections import Counter, deque
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -700,44 +700,219 @@ def build_ps_records(
     return pd.DataFrame.from_records(records)
 
 
+def _positive_map(m: dict[str, int]) -> dict[str, int]:
+    return {str(k): int(v) for k, v in m.items() if int(v) > 0}
+
+
 def cross_check_per_sequence(ps: pd.DataFrame, per: pd.DataFrame) -> dict[str, Any]:
+    """Bidirectional fail-closed equality: atlas embedded maps ↔ per_sequence.csv."""
     errors: list[str] = []
-    per_idx = per.set_index(["region_id", "sequence"])
-    checked = 0
+    per_ps = per[per["region_id"].isin(set(ps["cell_id"]))].copy()
+    checked_cells = 0
+    checked_pos_entries = 0
+
     for _, row in ps.iterrows():
         cell = row["cell_id"]
-        neg = row["per_sequence_neg"]
-        # every seq with n_neg>0 in JSON must appear in per_sequence with same n_neg
-        for seq, n_neg in neg.items():
-            if n_neg <= 0:
-                continue
-            key = (cell, seq)
-            if key not in per_idx.index:
-                errors.append(f"missing per_sequence row for PS cell {cell} seq {seq}")
-                continue
-            got = int(per_idx.loc[key, "n_neg"])
-            if got != int(n_neg):
+        atlas_neg = {str(k): int(v) for k, v in (row["per_sequence_neg"] or {}).items()}
+        atlas_gt = {str(k): int(v) for k, v in (row["per_sequence_gt"] or {}).items()}
+        atlas_neg_pos = _positive_map(atlas_neg)
+        atlas_gt_pos = _positive_map(atlas_gt)
+
+        sub = per_ps.loc[per_ps["region_id"] == cell]
+        per_neg_pos: dict[str, int] = {}
+        per_gt_pos: dict[str, int] = {}
+        for _, pr in sub.iterrows():
+            seq = str(pr["sequence"])
+            n_neg = int(pr["n_neg"])
+            n_gt = int(pr["n_gt"])
+            if n_neg > 0:
+                per_neg_pos[seq] = n_neg
+            if n_gt > 0:
+                per_gt_pos[seq] = n_gt
+
+        # missing / extra positive sequences (neg)
+        for seq in sorted(set(atlas_neg_pos) - set(per_neg_pos)):
+            errors.append(f"missing positive sequence (n_neg) {cell} {seq}")
+        for seq in sorted(set(per_neg_pos) - set(atlas_neg_pos)):
+            errors.append(f"extra positive sequence (n_neg) {cell} {seq}")
+
+        # missing / extra positive sequences (gt)
+        for seq in sorted(set(atlas_gt_pos) - set(per_gt_pos)):
+            errors.append(f"missing positive sequence (n_gt) {cell} {seq}")
+        for seq in sorted(set(per_gt_pos) - set(atlas_gt_pos)):
+            errors.append(f"extra positive sequence (n_gt) {cell} {seq}")
+
+        # per-seq value equality on union of positive keys
+        for seq in sorted(set(atlas_neg_pos) | set(per_neg_pos)):
+            a = atlas_neg_pos.get(seq)
+            b = per_neg_pos.get(seq)
+            if a is not None and b is not None and a != b:
                 errors.append(
-                    f"n_neg mismatch {cell} {seq}: atlas_json={n_neg} per_sequence={got}"
+                    f"n_neg mismatch {cell} {seq}: atlas={a} per_sequence={b}"
                 )
-            checked += 1
-        # atlas field n_sequences_with_neg must match JSON positive count
-        n_json = sum(1 for v in neg.values() if v > 0)
+            checked_pos_entries += 1
+        for seq in sorted(set(atlas_gt_pos) | set(per_gt_pos)):
+            a = atlas_gt_pos.get(seq)
+            b = per_gt_pos.get(seq)
+            if a is not None and b is not None and a != b:
+                errors.append(f"n_gt mismatch {cell} {seq}: atlas={a} per_sequence={b}")
+
+        # sums vs cell-level captures (use atlas maps; must also match per_sequence sums)
+        sum_atlas_neg = sum(atlas_neg.values())
+        sum_atlas_gt = sum(atlas_gt.values())
+        sum_per_neg = int(sub["n_neg"].sum()) if len(sub) else 0
+        sum_per_gt = int(sub["n_gt"].sum()) if len(sub) else 0
+        n_neg_cap = int(row["n_neg_captured"])
+        n_gt_cap = int(row["n_gt_captured"])
+
+        if sum_atlas_neg != n_neg_cap:
+            errors.append(
+                f"sum(seq n_neg) != n_neg_captured {cell}: sum_atlas={sum_atlas_neg} n_neg_captured={n_neg_cap}"
+            )
+        if sum_atlas_gt != n_gt_cap:
+            errors.append(
+                f"sum(seq n_gt) != n_gt_captured {cell}: sum_atlas={sum_atlas_gt} n_gt_captured={n_gt_cap}"
+            )
+        if sum_per_neg != n_neg_cap:
+            errors.append(
+                f"sum(per_sequence n_neg) != n_neg_captured {cell}: sum_per={sum_per_neg} n_neg_captured={n_neg_cap}"
+            )
+        if sum_per_gt != n_gt_cap:
+            errors.append(
+                f"sum(per_sequence n_gt) != n_gt_captured {cell}: sum_per={sum_per_gt} n_gt_captured={n_gt_cap}"
+            )
+
+        n_json = len(atlas_neg_pos)
         if n_json != int(row["n_sequences_with_neg"]):
             errors.append(
-                f"n_sequences_with_neg mismatch {cell}: field={row['n_sequences_with_neg']} json={n_json}"
+                f"n_sequences_with_neg mismatch {cell}: field={row['n_sequences_with_neg']} json_pos={n_json}"
             )
-        # all 154 PS cell_ids must appear at least once in per_sequence
-        if cell not in set(per["region_id"]):
-            errors.append(f"PS cell {cell} absent from per_sequence.csv")
+        if n_json != len(per_neg_pos):
+            errors.append(
+                f"n_sequences_with_neg vs per_sequence positive count {cell}: "
+                f"field={row['n_sequences_with_neg']} per_pos={len(per_neg_pos)}"
+            )
+
+        checked_cells += 1
 
     return {
         "ok": not errors,
+        "status": "PASS" if not errors else "reconciliation_failed",
+        "mode": "bidirectional_equality",
         "n_ps_cells": len(ps),
-        "n_positive_neg_entries_checked": checked,
-        "errors": errors[:50],
+        "n_cells_checked": checked_cells,
+        "n_positive_neg_entries_checked": checked_pos_entries,
+        "errors": errors[:80],
         "n_errors": len(errors),
     }
+
+
+def assert_per_grid_mask_invariance(ps: pd.DataFrame) -> dict[str, Any]:
+    """Fail closed if same (grammar, grid_id, mask) disagrees on capture / maps."""
+    errors: list[str] = []
+    keys = ["grammar", "grid_id", "mask_sha256"]
+    n_groups = 0
+    for key, g in ps.groupby(keys, sort=True):
+        n_groups += 1
+        if len(g) == 1:
+            continue
+        # compare all rows to the first
+        ref = g.iloc[0]
+        ref_neg = json.dumps(
+            {str(k): int(v) for k, v in (ref["per_sequence_neg"] or {}).items()},
+            sort_keys=True,
+        )
+        ref_gt = json.dumps(
+            {str(k): int(v) for k, v in (ref["per_sequence_gt"] or {}).items()},
+            sort_keys=True,
+        )
+        for _, row in g.iloc[1:].iterrows():
+            if int(row["n_neg_captured"]) != int(ref["n_neg_captured"]):
+                errors.append(f"mask invariance n_neg_captured {key}")
+            if int(row["n_gt_captured"]) != int(ref["n_gt_captured"]):
+                errors.append(f"mask invariance n_gt_captured {key}")
+            if int(row["n_sequences_with_neg"]) != int(ref["n_sequences_with_neg"]):
+                errors.append(f"mask invariance n_sequences_with_neg {key}")
+            neg_j = json.dumps(
+                {str(k): int(v) for k, v in (row["per_sequence_neg"] or {}).items()},
+                sort_keys=True,
+            )
+            gt_j = json.dumps(
+                {str(k): int(v) for k, v in (row["per_sequence_gt"] or {}).items()},
+                sort_keys=True,
+            )
+            if neg_j != ref_neg:
+                errors.append(f"mask invariance per_sequence_neg {key}")
+            if gt_j != ref_gt:
+                errors.append(f"mask invariance per_sequence_gt {key}")
+
+    return {
+        "ok": not errors,
+        "status": "PASS" if not errors else "reconciliation_failed",
+        "n_per_grid_mask_groups": n_groups,
+        "n_errors": len(errors),
+        "errors": errors[:40],
+    }
+
+
+def build_per_grid_mask_capacity(
+    ps: pd.DataFrame,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """One row per (grammar, grid_id, mask) after invariance is proven."""
+    rows: list[dict[str, Any]] = []
+    for (grammar, grid_id, mask), g in ps.groupby(
+        ["grammar", "grid_id", "mask_sha256"], sort=True
+    ):
+        r0 = g.iloc[0]
+        neg_pos = _positive_map(r0["per_sequence_neg"] or {})
+        min_seq = min(neg_pos, key=neg_pos.get) if neg_pos else ""
+        min_n = min(neg_pos.values()) if neg_pos else 0
+        rows.append(
+            {
+                "grammar": grammar,
+                "grid_id": grid_id,
+                "mask_sha256": mask,
+                "n_coords": len(g),
+                "mask_n_neg": int(r0["n_neg_captured"]),
+                "mask_n_gt": int(r0["n_gt_captured"]),
+                "n_sequences_with_neg": int(r0["n_sequences_with_neg"]),
+                "min_positive_sequence": min_seq,
+                "min_positive_sequence_n_neg": min_n,
+                "productive_sequences_json": json.dumps(neg_pos, sort_keys=True),
+                "note": (
+                    "mask_n_neg is per prediction mask unit "
+                    "(not multiplied by coordinate plateau width)"
+                ),
+            }
+        )
+    mask_cap = pd.DataFrame(rows)
+    # concentration on per-grid mask units using mask_n_neg (not coord-inflated sum)
+    total = int(mask_cap["mask_n_neg"].sum()) if len(mask_cap) else 0
+    ordered = mask_cap.sort_values(
+        ["mask_n_neg", "grammar", "grid_id", "mask_sha256"],
+        ascending=[False, True, True, True],
+    )
+    vals = ordered["mask_n_neg"].tolist()
+
+    def top_share(k: int) -> float:
+        if total <= 0:
+            return 0.0
+        return float(sum(vals[:k]) / total)
+
+    dist = Counter(int(x) for x in mask_cap["mask_n_neg"].tolist())
+    concentration = {
+        "unit": "per_registered_grid_mask",
+        "denominator": "sum of mask_n_neg over productive per-grid mask units",
+        "n_productive_per_grid_mask_units": int(len(mask_cap)),
+        "sum_mask_n_neg": total,
+        "max_mask_n_neg": int(max(vals)) if vals else 0,
+        "mask_n_neg_distribution": {str(k): int(v) for k, v in sorted(dist.items())},
+        "top1_share_of_sum_mask_n_neg": top_share(1),
+        "top3_share_of_sum_mask_n_neg": top_share(3),
+        "top5_share_of_sum_mask_n_neg": top_share(5),
+        "note": "global mask-string collapse is diagnostic only; primary unit is per-grid",
+    }
+    return mask_cap, concentration
 
 
 def interpret(study: Path, out_dir: Path, script_path: Path) -> dict[str, Any]:
@@ -785,13 +960,17 @@ def interpret(study: Path, out_dir: Path, script_path: Path) -> dict[str, Any]:
     if not pseq_check["ok"]:
         fail(f"per_sequence cross-check failed: {pseq_check['errors'][:5]}")
 
+    mask_inv = assert_per_grid_mask_invariance(ps)
+    if not mask_inv["ok"]:
+        fail(f"per-grid mask invariance failed: {mask_inv['errors'][:5]}")
+
     # --- 3 productive capacity ---
     cap_rows: list[dict[str, Any]] = []
     for _, r in ps.iterrows():
         neg = r["per_sequence_neg"]
-        seq_pos = {k: v for k, v in neg.items() if v > 0}
-        worst_seq = min(seq_pos, key=seq_pos.get) if seq_pos else ""
-        worst_cap = min(seq_pos.values()) if seq_pos else 0
+        seq_pos = _positive_map(neg or {})
+        min_seq = min(seq_pos, key=seq_pos.get) if seq_pos else ""
+        min_cap = min(seq_pos.values()) if seq_pos else 0
         cap_rows.append(
             {
                 "grammar": r["grammar"],
@@ -799,32 +978,19 @@ def interpret(study: Path, out_dir: Path, script_path: Path) -> dict[str, Any]:
                 "grid_id": r["grid_id"],
                 "mask_sha256": r["mask_sha256"],
                 "n_neg_captured": r["n_neg_captured"],
+                "n_gt_captured": r["n_gt_captured"],
                 "neg_capture_rate": r["neg_capture_rate"],
                 "n_sequences_with_neg": r["n_sequences_with_neg"],
                 "max_neg_sequence_share": r["max_neg_sequence_share"],
                 "single_seq_neg_dominance": r["single_seq_neg_dominance"],
-                "worst_sequence": worst_seq,
-                "worst_sequence_n_neg": worst_cap,
+                "min_positive_sequence": min_seq,
+                "min_positive_sequence_n_neg": min_cap,
                 "productive_sequences_json": json.dumps(seq_pos, sort_keys=True),
             }
         )
     capacity = pd.DataFrame(cap_rows)
 
-    # mask-level capacity concentration (per-grid mask, not global)
-    mask_cap = (
-        capacity.groupby(["grammar", "grid_id", "mask_sha256"], sort=True)
-        .agg(
-            n_coords=("cell_id", "count"),
-            total_n_neg=("n_neg_captured", "sum"),
-            # capacity of the prediction outcome: use first cell's n_neg (same mask ⇒ same selection)
-            mask_n_neg=("n_neg_captured", "first"),
-            n_sequences_with_neg=("n_sequences_with_neg", "first"),
-        )
-        .reset_index()
-    )
-    mask_cap["note"] = (
-        "mask_n_neg is per prediction mask (not multiplied by coordinate plateau width)"
-    )
+    mask_cap, capacity_concentration = build_per_grid_mask_capacity(ps)
 
     # --- 4 cross-sequence ---
     xs_rows: list[dict[str, Any]] = []
@@ -844,27 +1010,14 @@ def interpret(study: Path, out_dir: Path, script_path: Path) -> dict[str, Any]:
                     if r["n_sequences_with_neg"] == 1
                     else "none"
                 ),
-                "worst_sequence": r["worst_sequence"],
-                "worst_sequence_n_neg": r["worst_sequence_n_neg"],
+                "min_positive_sequence": r["min_positive_sequence"],
+                "min_positive_sequence_n_neg": r["min_positive_sequence_n_neg"],
                 "max_neg_sequence_share": r["max_neg_sequence_share"],
                 "productive_sequences_json": r["productive_sequences_json"],
             }
         )
-    # per-grid-mask units
+    # per-grid-mask units (maps already proven identical within group)
     for _, r in mask_cap.iterrows():
-        # find sequences from any coord of this mask in grid
-        sub = capacity[
-            (capacity["grammar"] == r["grammar"])
-            & (capacity["grid_id"] == r["grid_id"])
-            & (capacity["mask_sha256"] == r["mask_sha256"])
-        ]
-        # union sequences
-        seq_union: dict[str, int] = {}
-        for _, c in sub.iterrows():
-            d = json.loads(c["productive_sequences_json"])
-            for k, v in d.items():
-                seq_union[k] = max(seq_union.get(k, 0), int(v))
-        n_seq = sum(1 for v in seq_union.values() if v > 0)
         xs_rows.append(
             {
                 "unit": "per_grid_mask",
@@ -872,20 +1025,18 @@ def interpret(study: Path, out_dir: Path, script_path: Path) -> dict[str, Any]:
                 "cell_id": "",
                 "grid_id": r["grid_id"],
                 "mask_sha256": r["mask_sha256"],
-                "n_sequences_with_productive_support": n_seq,
+                "n_sequences_with_productive_support": r["n_sequences_with_neg"],
                 "support_class": (
                     "multi_sequence"
-                    if n_seq >= 2
+                    if r["n_sequences_with_neg"] >= 2
                     else "single_sequence"
-                    if n_seq == 1
+                    if r["n_sequences_with_neg"] == 1
                     else "none"
                 ),
-                "worst_sequence": min(seq_union, key=seq_union.get)
-                if seq_union
-                else "",
-                "worst_sequence_n_neg": min(seq_union.values()) if seq_union else 0,
+                "min_positive_sequence": r["min_positive_sequence"],
+                "min_positive_sequence_n_neg": r["min_positive_sequence_n_neg"],
                 "max_neg_sequence_share": None,
-                "productive_sequences_json": json.dumps(seq_union, sort_keys=True),
+                "productive_sequences_json": r["productive_sequences_json"],
             }
         )
     cross_seq = pd.DataFrame(xs_rows)
@@ -893,7 +1044,9 @@ def interpret(study: Path, out_dir: Path, script_path: Path) -> dict[str, Any]:
     multi_and_coords = capacity[
         (capacity["grammar"] == "G2_and") & (capacity["n_sequences_with_neg"] >= 2)
     ]
-    multi_and_masks = multi_and_coords.groupby("grid_id")["mask_sha256"].nunique()
+    per_grid_nunique = multi_and_coords.groupby("grid_id")["mask_sha256"].nunique()
+    n_primary_per_grid_masks = int(per_grid_nunique.sum())
+    n_global_mask_strings = int(multi_and_coords["mask_sha256"].nunique())
     multi_and_summary = {
         "n_multi_seq_and_coordinates": int(len(multi_and_coords)),
         "n_single_seq_and_coordinates": int(
@@ -902,14 +1055,26 @@ def interpret(study: Path, out_dir: Path, script_path: Path) -> dict[str, Any]:
                 & (capacity["n_sequences_with_neg"] == 1)
             ).sum()
         ),
-        "n_per_grid_unique_masks_among_multi_seq_and_coords": int(
-            multi_and_coords["mask_sha256"].nunique()
-        ),
-        "note": "mask count here is global-string among multi-seq AND coords for diagnostic; primary unique-mask metrics remain per-grid",
+        "n_primary_per_registered_grid_unique_masks": n_primary_per_grid_masks,
+        "n_global_mask_strings_diagnostic": n_global_mask_strings,
         "per_grid_unique_mask_counts": {
-            str(k): int(v) for k, v in multi_and_masks.items()
+            str(k): int(v) for k, v in per_grid_nunique.items()
         },
+        "check_sum_per_grid_equals_primary": int(per_grid_nunique.sum())
+        == n_primary_per_grid_masks,
+        "note": (
+            "primary unit = sum over grids of nunique(mask) within each grid "
+            f"({n_primary_per_grid_masks}); global mask-string count "
+            f"({n_global_mask_strings}) is diagnostic only and must not use per_grid_* names"
+        ),
     }
+    if n_primary_per_grid_masks != 8 or n_global_mask_strings != 4:
+        # soft check against known Q4.5 multi-seq structure; fail if unexpected drift
+        fail(
+            "multi-seq mask unit check failed: "
+            f"per_grid_primary={n_primary_per_grid_masks} expected 8; "
+            f"global_diag={n_global_mask_strings} expected 4"
+        )
 
     # --- 5 components + 6 dual margin ---
     component_rows: list[dict[str, Any]] = []
@@ -932,6 +1097,7 @@ def interpret(study: Path, out_dir: Path, script_path: Path) -> dict[str, Any]:
             shape = classify_component_shape_1d(comp)
             masks = {mask_by_coord[c] for c in comp}
             cid = f"{grid_id}::comp{ci}"
+            radii_1d = [full_neighborhood_radius_1d(x, ps_coords, 0, 86) for x in comp]
             component_rows.append(
                 {
                     "component_id": cid,
@@ -947,6 +1113,9 @@ def interpret(study: Path, out_dir: Path, script_path: Path) -> dict[str, Any]:
                     "shape_class": shape["shape_class"],
                     "is_single_cell_width_strip": shape["is_single_cell_width_strip"],
                     "is_genuine_2d_thick": shape["is_genuine_2d_thick"],
+                    "max_full_neighborhood_safe_radius": max(radii_1d)
+                    if radii_1d
+                    else 0,
                     "coords_json": json.dumps(comp),
                 }
             )
@@ -1159,6 +1328,15 @@ def interpret(study: Path, out_dir: Path, script_path: Path) -> dict[str, Any]:
             "n_productive_safe_coordinates": n_ps,
             "n_single_sequence_support": n_single_seq,
             "n_multi_sequence_support": n_multi_seq,
+            "n_multi_seq_and_coordinates": multi_and_summary[
+                "n_multi_seq_and_coordinates"
+            ],
+            "n_multi_seq_primary_per_registered_grid_unique_masks": multi_and_summary[
+                "n_primary_per_registered_grid_unique_masks"
+            ],
+            "n_multi_seq_global_mask_strings_diagnostic": multi_and_summary[
+                "n_global_mask_strings_diagnostic"
+            ],
             "n_components": len(components),
             "shape_class_counts": shape_counts,
             "n_single_cell_width_strip_components": n_strip,
@@ -1171,6 +1349,7 @@ def interpret(study: Path, out_dir: Path, script_path: Path) -> dict[str, Any]:
             "n_coords_on_multi_coord_plateaus": n_coords_on_multi,
             "g2_unique_ps_masks_global_string_diagnostic": g2_ps_masks_global,
             "g2_unique_ps_masks_per_grid_micro_sum": g2_ps_masks_micro,
+            "capacity_concentration": capacity_concentration,
         },
         "interpretation_candidate": (
             "Among 154 productive-safe coordinates, productivity is dominated by "
@@ -1214,11 +1393,14 @@ def interpret(study: Path, out_dir: Path, script_path: Path) -> dict[str, Any]:
     )
 
     recon_out = {
+        "revision": "T0-B-R1",
         "headline_reconciliation": recon,
         "per_sequence_cross_check": pseq_check,
+        "per_grid_mask_invariance": mask_inv,
         "region_stability_quotient_reconciliation": rs_recon,
         "synthetic_margin_checks": synthetic,
         "multi_seq_and_summary": multi_and_summary,
+        "capacity_concentration": capacity_concentration,
         "input_sha256": input_hashes,
         "study_git_commit": manifest.get("git_commit"),
         "study_schema": manifest.get("schema"),
@@ -1230,9 +1412,12 @@ def interpret(study: Path, out_dir: Path, script_path: Path) -> dict[str, Any]:
     created = datetime.now(timezone.utc).isoformat()
     summary_out = {
         "task": "T0-B_existing_atlas_region_interpretation",
+        "revision": "T0-B-R1",
         "created_utc": created,
         "input_study": str(study),
         "input_sha256": input_hashes,
+        "capacity_concentration": capacity_concentration,
+        "multi_seq_and_summary": multi_and_summary,
         "dual_margin_policy": {
             "nearest_unsafe_distance": (
                 "shortest same-grid registered-lattice graph distance to a "
