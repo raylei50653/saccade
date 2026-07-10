@@ -10,8 +10,8 @@
 - Thread: [safe_region_assetization_20260710.md](../../research/threads/safe_region_assetization_20260710.md)
 - Delivery path: **PR-driven** — engineering review via pull request against `main` (not direct-agent dispatch)
 - Current engineering state: R1 deterministic converter + unit tests + A0 pack candidate emitted locally
-- Current / expected PR: open against `main` for engineering review (see GitHub PR list for head SHA / CI)
-- Current review gate: **engineering / PR review** of R1 delivery; **A1 research acceptance remains separate** (chat-side / research-owner)
+- Current engineering PR: [#95](https://github.com/raylei50653/saccade/pull/95) (base `main`; head SHA / CI live on the PR)
+- Current review gate: **engineering / PR #95 review** of R1 delivery; **A1 research acceptance remains separate** (chat-side / research-owner)
 - Primary deliverable: accepted R0-B RegionAsset contract + deterministic R1 packer (`scripts/tools/convert_safe_region_asset_r1.py`) + conversion note
 - Accepted contract: [safe_region_asset_contract.md](../../research/eval/safe_region_asset_contract.md) — **R0-B: ACCEPTED**; RB1–RB9 PASS; E1 applied
 - R1 conversion note: [research/safe_region_asset_r1_conversion_20260710.md](research/safe_region_asset_r1_conversion_20260710.md)
@@ -33,7 +33,7 @@
 
 ## Related research threads（不佔 WIP 鎖）
 
-- [safe-region assetization](../../research/threads/safe_region_assetization_20260710.md) — **ACTIVE** · R0-B accepted · R1 A0 pack candidate · A1 not accepted · PR engineering review
+- [safe-region assetization](../../research/threads/safe_region_assetization_20260710.md) — **ACTIVE** · R0-B accepted · R1 A0 pack candidate · A1 not accepted · engineering [PR #95](https://github.com/raylei50653/saccade/pull/95)
 - [composition grammar coverage program](../../research/threads/composition_grammar_coverage_program_20260710.md) — **SUPERSEDED** · coverage map absorbed into assetization R2–R4
 - [composition grammar × safe-region A0](../../research/threads/composition_grammar_safe_region.md) — **CLOSED** · T0-A/B/R1 · terminal B retained
   - A0 source note: [composition_grammar_t0_region_interpretation_20260710.md](research/composition_grammar_t0_region_interpretation_20260710.md)

@@ -7,7 +7,7 @@ created: 2026-07-10
 
 # Safe-Region Assetization Program
 
-> **One-line:** R0-B RegionAsset contract is **ACCEPTED** (`f92340b7`, RB1–RB9). **R1 engineering delivery** exists on the research branch as an **A0 observation-only pack candidate**. Engineering/A1 review proceeds through a **PR** (not direct-agent dispatch). **A1 not granted** — research acceptance remains a separate chat-side / research-owner gate. No production/ledger promotion.
+> **One-line:** R0-B RegionAsset contract is **ACCEPTED** (`f92340b7`, RB1–RB9). **R1 engineering delivery** exists as an **A0 observation-only pack candidate**. Engineering review is **[PR #95](https://github.com/raylei50653/saccade/pull/95)**; **A1 not granted** — research acceptance remains a separate chat-side / research-owner gate. No production/ledger promotion.
 
 ## Status
 
@@ -22,7 +22,7 @@ created: 2026-07-10
 | R0-B-R3 | `f92340b7` — **RB8–RB9 PASS** |
 | R0-B final contract | **ACCEPTED** (+ editorial E1) |
 | R1 engineering delivery | **COMPLETE** on branch — converter, tests, A0 pack candidate |
-| Engineering review | via **pull request** against `main` (PR metadata = head/base/CI/files) |
+| Engineering review | **[PR #95](https://github.com/raylei50653/saccade/pull/95)** against `main` (PR metadata = head/base/CI/files) |
 | Research asset acceptance (A1) | **not accepted** — separate from PR engineering review |
 | Current maturity | **A0 retained** |
 | R1 output maturity | **A0 pack candidate; R1 does not self-promote A0→A1** |
@@ -66,7 +66,7 @@ R0-B RegionAsset contract
 
 ### Editorial erratum E1
 
-`safe_region_asset_contract.md` §2.4 contains four editorially inverted positive implications:
+The contract previously contained four inverted implications in §2.4:
 
 ```text
 generator-contract equality ⇒ same sealed universe instance
@@ -75,7 +75,7 @@ policy family ⇒ concrete threshold-executable policy
 thr_index without registry ⇒ reconstructible thr_value
 ```
 
-They are rejected by the accepted model and by the contract's own §12.4 firewall. Before generating a valid R1 pack, the implementation change must replace them with explicit **non-implications / forbidden inferences**. This is a non-substantive text correction; it does not reopen RB8 or RB9.
+E1 was corrected before R1 pack emission: those statements were replaced with explicit **non-implications / forbidden inferences**, matching the accepted model and the contract's own §12.4 firewall. The correction was editorial and did not reopen RB8 or RB9.
 
 ## Current boundary
 
@@ -111,7 +111,7 @@ R1 transforms sealed inputs into deterministic authorities and emission tables o
 8. [Q4.5 manifest](../../modules/semantic/research/evidence/m_b1_5_stage2_q45_20260710/manifest.json)
 9. [Q4.5 SHA inventory](../../modules/semantic/research/evidence/m_b1_5_stage2_q45_20260710/SHA256SUMS.json)
 10. [T0 interpretation evidence](../../modules/semantic/research/evidence/m_b1_5_t0_region_interpretation_20260710/manifest.json)
-11. Current implementation PR on GitHub (when open) — live head SHA, base, CI, files
+11. Current engineering PR: [#95](https://github.com/raylei50653/saccade/pull/95) — live head SHA, base, CI, files
 
 ## Accepted A0 baseline
 
@@ -134,7 +134,7 @@ R0-B-R3 RB8–RB9                        # PASS
 R0-B final contract                    # ACCEPTED
 
 R1 deterministic G1–G3 conversion    # ENGINEERING DELIVERED (A0 pack candidate)
-PR engineering review                ← current engineering path
+PR #95 engineering review            ← current engineering path
 chat-side R1 pack review / A1 gate   ← separate research path (not self-granted)
 R2–R4 conditional maturity stages    # unauthorized until A1 + owner gate
 A4/L6 separate production approval
@@ -168,7 +168,7 @@ On `BLOCKED_BY_ARTIFACT`, emit only a bounded preflight/block report. Do not reb
 
 A delivered R1 pack is reviewable only when:
 
-- E1 is corrected in the accepted contract;
+- E1 was corrected in the accepted contract before R1 pack emission;
 - inputs match recorded SHA seals;
 - two clean converter runs produce identical authority content and IDs;
 - all PKs are unique and every FK resolves exactly once;

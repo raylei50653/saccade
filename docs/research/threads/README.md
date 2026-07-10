@@ -44,7 +44,7 @@ DEVELOPMENT.md → module TODO sole-active → active thread / contract → PR
 
 | Thread | Status (one-line) | Owner |
 |:--|:--|:--|
-| [safe_region_assetization_20260710.md](safe_region_assetization_20260710.md) | **semantic sole active** · R0-B accepted · R1 eng. delivery complete · A0 pack candidate · A1 not accepted · PR review | semantic |
+| [safe_region_assetization_20260710.md](safe_region_assetization_20260710.md) | **semantic sole active** · R0-B accepted · R1 eng. delivery complete · A0 pack candidate · A1 not accepted · [PR #95](https://github.com/raylei50653/saccade/pull/95) | semantic |
 | [association_recovery_registry_20260709.md](association_recovery_registry_20260709.md) | Scripts index + tools YAML + contracts 就位；registry 維護母線 | semantic |
 | [doc_structure_o15_followup_20260709.md](doc_structure_o15_followup_20260709.md) | O1.5 + TODO-as-WIP-lock；follow-up = index debt / optional strict | ownership |
 
