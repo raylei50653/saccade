@@ -5,15 +5,14 @@
 
 ## Sole active
 
-🔄 **Safe-Region Assetization — R0-B-R3 delivered (awaiting chat-side re-review)**
+🔄 **Safe-Region Assetization — R1 deterministic G1–G3 asset conversion**
 
 - Thread: [safe_region_assetization_20260710.md](../../research/threads/safe_region_assetization_20260710.md)
 - Agent execution anchor: [safe_region_assetization_20260710.dispatch.yaml](../../research/threads/safe_region_assetization_20260710.dispatch.yaml) — branch + minimum-required ancestor + ff-only / concurrent-advance gate；chat-side owned，agent 不得自行改寫
-- Accepted preflight: [research/safe_region_r0_asset_contract_preflight_20260710.md](research/safe_region_r0_asset_contract_preflight_20260710.md) (R0-A ACCEPTED; CR1–CR9)
+- Accepted contract: [safe_region_asset_contract.md](../../research/eval/safe_region_asset_contract.md) — R0-B accepted; RB1–RB9 PASS; E1 editorial correction required before valid R1 emission
 - Mathematical contract: [Statistical Robust Feasible-Set Estimation under Asymmetric Loss](../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
 - Boolean semantics: [Boolean Composition Semantics Contract](../../research/eval/boolean_composition_semantics_contract.md)
-- Deliverable: [safe_region_asset_contract.md](../../research/eval/safe_region_asset_contract.md) (RB1–RB7 retained; RB8–RB9 draft integrated; **not self-accepted**)
-- Boundary: R1/A1 unauthorized; A0 retained; claims G1 1×L0, G2 6×L0+19×L1, G3 1×L0, pack ceiling L1; no asset pack, evaluator, threshold search, grammar extension, LOO, shadow, hook, production, or ledger work
+- Boundary: R1 may generate an **A0 observation-only pack candidate** from sealed existing artifacts; evaluator rerun/modification, threshold search, new research claims, A0→A1 self-promotion, G4–G7, LOO, shadow, hook, production, PR, and ledger work remain unauthorized
 
 ## Parked
 
@@ -22,8 +21,8 @@
 
 ## Related research threads（不佔 WIP 鎖）
 
-- [safe-region assetization](../../research/threads/safe_region_assetization_20260710.md) — **ACTIVE** · R0-B-R3 delivered · chat-side re-review
-- [composition grammar coverage program](../../research/threads/composition_grammar_coverage_program_20260710.md) — **SUPERSEDED** · producer gates absorbed into R2–R4
+- [safe-region assetization](../../research/threads/safe_region_assetization_20260710.md) — **ACTIVE** · R0-B accepted · R1 deterministic conversion
+- [composition grammar coverage program](../../research/threads/composition_grammar_coverage_program_20260710.md) — **SUPERSEDED** · coverage map absorbed into assetization R2–R4
 - [composition grammar × safe-region A0](../../research/threads/composition_grammar_safe_region.md) — **CLOSED** · T0-A/B/R1 · terminal B retained
   - A0 source note: [composition_grammar_t0_region_interpretation_20260710.md](research/composition_grammar_t0_region_interpretation_20260710.md)
   - Coverage audit: [composition_grammar_safe_region_coverage_audit_20260710.md](research/composition_grammar_safe_region_coverage_audit_20260710.md)
