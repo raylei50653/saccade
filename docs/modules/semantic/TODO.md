@@ -5,22 +5,23 @@
 
 ## Sole active
 
-🔄 **Composition Grammar Coverage — C1-A semantic-contract preflight**
+🔄 **Safe-Region Assetization — R0-A asset-contract preflight**
 
-- Thread: [composition_grammar_coverage_program_20260710.md](../../research/threads/composition_grammar_coverage_program_20260710.md)
-- Current deliverable: `research/composition_grammar_c1_semantic_contract_preflight_20260710.md`
-- Boundary: docs/research preflight only; C2 evaluator / grammar enumeration not authorized
+- Thread: [safe_region_assetization_20260710.md](../../research/threads/safe_region_assetization_20260710.md)
+- Current deliverable: `research/safe_region_r0_asset_contract_preflight_20260710.md`
+- Boundary: contract/artifact preflight only; no asset pack, evaluator, grammar extension, LOO, shadow, hook, or production work
 
 ## Parked
 
-- Occ-exit conditional intervention modeling — WP1–WP3 complete; global audit harmful; resume only after grammar coverage gate → [occ-exit thread](../../research/threads/occ_exit_audit_20260709.md)
+- Occ-exit conditional intervention modeling — WP1–WP3 complete; future RegionAsset producer/intervention consumer; resume only after assetization owner gate → [occ-exit thread](../../research/threads/occ_exit_audit_20260709.md)
 - Sparse key-embedding bank — C++ async sidecar（#57 禁 sync）→ [sparse_key_embedding_bank_20260704.md](research/sparse_key_embedding_bank_20260704.md)
 
 ## Related research threads（不佔 WIP 鎖）
 
-- [composition grammar coverage program](../../research/threads/composition_grammar_coverage_program_20260710.md) — **ACTIVE** · C0=T0 accepted · C1-A only
-- [composition grammar × safe-region C0](../../research/threads/composition_grammar_safe_region.md) — **CLOSED** · T0-A/B/R1 · terminal B retained
-  - C0 note: [composition_grammar_t0_region_interpretation_20260710.md](research/composition_grammar_t0_region_interpretation_20260710.md)
+- [safe-region assetization](../../research/threads/safe_region_assetization_20260710.md) — **ACTIVE** · R0-A only
+- [composition grammar coverage program](../../research/threads/composition_grammar_coverage_program_20260710.md) — **SUPERSEDED** · producer gates absorbed into R2–R4
+- [composition grammar × safe-region A0](../../research/threads/composition_grammar_safe_region.md) — **CLOSED** · T0-A/B/R1 · terminal B retained
+  - A0 source note: [composition_grammar_t0_region_interpretation_20260710.md](research/composition_grammar_t0_region_interpretation_20260710.md)
   - Coverage audit: [composition_grammar_safe_region_coverage_audit_20260710.md](research/composition_grammar_safe_region_coverage_audit_20260710.md)
 - [m_b1 online hook](../../research/threads/m_b1_online_hook_20260709.md) — **CLOSED** · S1+S2 Q4.5 B · ranking deferred (invalid assignment-group key)
   - Offline history: [m_b1_research_history_20260709_20260710.md](research/m_b1_research_history_20260709_20260710.md)
@@ -29,6 +30,6 @@
 
 ## Done / closed
 
-See [module research index](README.md) · [chebgr signal map](research/chebgr_handover_signal_map_20260704.md) · [no_go_registry](../../reference/no_go_registry.md) · [online sparse handoff](research/online_sparse_reid_handoff_20260704.md).
+See [module research index](README.md) · [chebgr signal map](research/chebgr_handover_signal_map_20260704.md) · [no_go_registry](../../reference/no_go_registry.md) · [online sparse handoff](research/online_sparse_reid_handoff_20260704.md)。
 
-> Code path note: Cheb-GR / relink may live under `perception/reid/` / `tracking/`; **doc home = semantic**. ReID feature unlock → [reid TODO](../reid/TODO.md).
+> Code path note: Cheb-GR / relink may live under `perception/reid/` / `tracking/`; **doc home = semantic**. ReID feature unlock → [reid TODO](../reid/TODO.md)。
