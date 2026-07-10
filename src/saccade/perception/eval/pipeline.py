@@ -576,6 +576,35 @@ class EvalPipeline:
         ):
             detector.tracker.set_reid_min_candidates(1)
         _bridge_enabled = bool(getattr(cfg, "relink_bridge_enabled", False))
+        # Research-only M-B1 portable OR-tail flags: validate *always* (even when
+        # hook policy path is unset or bridge is off) so orphan audit flags cannot
+        # be silently ignored.
+        _kw = getattr(cfg, "kwargs", {}) or {}
+        _audit = bool(_kw.get("research_portable_or_tail_audit", False))
+        _audit_dir = _kw.get("research_portable_or_tail_audit_dir")
+        from saccade.perception.eval.portable_or_tail import (
+            PortableAuditNotImplementedError,
+            PortablePolicyError,
+            load_portable_policy,
+            require_online_audit_available,
+            resolve_policy_path_from_env,
+            snapshot_policy,
+        )
+
+        try:
+            require_online_audit_available(audit_enabled=_audit)
+        except PortableAuditNotImplementedError as exc:
+            raise RuntimeError(str(exc)) from exc
+        if _audit_dir and str(_audit_dir).strip() and not _audit:
+            raise RuntimeError(
+                "--research-portable-or-tail-audit-dir set without "
+                "--research-portable-or-tail-audit; refuse silent partial config"
+            )
+
+        _pol_path = resolve_policy_path_from_env(
+            _kw.get("research_portable_or_tail_policy")
+        )
+
         if (cfg.relink_enabled or _bridge_enabled) and hasattr(
             detector.tracker, "set_relink_params"
         ):
@@ -609,28 +638,7 @@ class EvalPipeline:
                 occ_expand_cover=cfg.relink_bridge_occ_expand_cover,
                 bridge_app_veto=getattr(cfg, "relink_bridge_app_veto", -1.0),
             )
-            # Research-only M-B1 portable OR-tail hook (default-off).
-            # Fail-closed load; never silent enable. Production presets must leave unset.
-            _kw = getattr(cfg, "kwargs", {}) or {}
-            _pol_path = _kw.get("research_portable_or_tail_policy")
-            if not _pol_path:
-                import os as _os
-
-                _pol_path = (
-                    _os.environ.get(
-                        "SACCADE_RESEARCH_PORTABLE_OR_TAIL_POLICY", ""
-                    ).strip()
-                    or None
-                )
             if _pol_path:
-                from saccade.perception.eval.portable_or_tail import (
-                    PortableAuditNotImplementedError,
-                    PortablePolicyError,
-                    load_portable_policy,
-                    require_online_audit_available,
-                    snapshot_policy,
-                )
-
                 try:
                     # Online path: strict freeze lock (thr + hash + op='>').
                     _pol = load_portable_policy(_pol_path, enforce_freeze_lock=True)
@@ -638,18 +646,6 @@ class EvalPipeline:
                     raise RuntimeError(
                         f"portable OR-tail policy load failed (fail-closed): {exc}"
                     ) from exc
-                _audit = bool(_kw.get("research_portable_or_tail_audit", False))
-                _audit_dir = _kw.get("research_portable_or_tail_audit_dir")
-                # Fail closed: audit flag must not claim unimplemented B-audit export.
-                try:
-                    require_online_audit_available(audit_enabled=_audit)
-                except PortableAuditNotImplementedError as exc:
-                    raise RuntimeError(str(exc)) from exc
-                if _audit_dir and not _audit:
-                    raise RuntimeError(
-                        "--research-portable-or-tail-audit-dir set without "
-                        "--research-portable-or-tail-audit; refuse silent partial config"
-                    )
                 _setter = getattr(
                     detector.tracker, "set_research_portable_or_tail", None
                 )
@@ -681,6 +677,11 @@ class EvalPipeline:
                 )
                 # Stash snapshot for eval runners / audit manifests.
                 _kw["research_portable_or_tail_snapshot"] = snapshot_policy(_pol)
+        elif _pol_path:
+            raise RuntimeError(
+                "research portable OR-tail policy set but relink/bridge path is "
+                "disabled or tracker lacks set_relink_params; refuse silent no-op"
+            )
 
         if hasattr(detector.tracker, "set_unified_score_params"):
             detector.tracker.set_unified_score_params(
