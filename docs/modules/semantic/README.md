@@ -60,6 +60,7 @@
 | [research/m_b1_stage1_online_hook_final_20260710.md](research/m_b1_stage1_online_hook_final_20260710.md) | Stage 1 **CLOSED** · wire + e2e · B-audit 244 · A0/det/runtime |
 | [research/m_b1_5_stage2_entry_contract_20260710.md](research/m_b1_5_stage2_entry_contract_20260710.md) | Stage 2 entry · G0–G4 claim firewall |
 | [research/m_b1_5_stage2_d_online_final_20260710.md](research/m_b1_5_stage2_d_online_final_20260710.md) | Stage 2 **final** · Q1–Q3 mass · Q4 grade C · Q4.5 v4 atlas B (154/0) |
+| [research/composition_grammar_safe_region_coverage_audit_20260710.md](research/composition_grammar_safe_region_coverage_audit_20260710.md) | **G1–G7 × R1–R6 coverage audit**（recon closed）· Q4.5 terminal B unchanged · next T0 interpretation pack · [thread](../../research/threads/composition_grammar_safe_region.md) |
 | [research/m_b1_to_m_b1_5_two_stage_plan_20260710.md](research/m_b1_to_m_b1_5_two_stage_plan_20260710.md) | Stage 1+2 plan body（runner/contract ref） |
 | [research/m_b1_doc_consolidation_report_20260710.md](research/m_b1_doc_consolidation_report_20260710.md) | Doc consolidation + information-preservation report |
 | [research/m_b2_reconnect_bridge_ab_20260709.md](research/m_b2_reconnect_bridge_ab_20260709.md) | **m B2** production-like reconnect A/B（未來 e2e baseline） |
