@@ -3045,6 +3045,9 @@ def run_eval(
             Path(output_root / f"{seq}.txt").write_text(
                 "\n".join(_seq_state.results_lines)
             )
+        _sequence_result_callback = kwargs.get("sequence_result_callback")
+        if _sequence_result_callback is not None:
+            _sequence_result_callback(seq, tuple(_seq_state.results_lines))
         print(
             f"✅ Finished {seq} (Total Time: {time.time() - _seq_state.start_time:.2f}s)"
         )

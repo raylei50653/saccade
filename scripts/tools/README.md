@@ -17,6 +17,41 @@ README is the classification index for later cleanup.
 - Manual probes named `test_*.py` are not pytest tests. Rename, move, or document
   them before treating them as automated coverage.
 
+## Continuous Decimal Hash
+
+`check_continuous_decimal_hash.py` runs the complete ordered sequence list once
+inside one Python process and captures each final MOT result before a repeated
+sequence can overwrite its output file. It excludes global track IDs, sorts
+`frame,x,y,w,h,score`, converts bbox fields to `x100` integers and score to an
+`x10000` integer, and emits `summary.json`, `runs.csv`, `hashes.csv`, and
+`mismatches.csv` to the requested output directory. It validates final
+serialized decimal output only; it does not claim to hash internal tensors.
+
+The matching standard eval path is:
+
+```bash
+uv run scripts/eval/mot17.py --preset mamba_whole_graph_m --detector SDP --double-buffer
+```
+
+Use the same runtime path for the in-process consistency probe:
+
+```bash
+uv run python scripts/tools/check_continuous_decimal_hash.py \
+  --sequences MOT17-04-SDP,MOT17-04-SDP,MOT17-04-SDP,MOT17-04-SDP,MOT17-04-SDP \
+  --output out/determinism/continuous_decimal_hash \
+  --preset mamba_whole_graph_m --detector SDP --double-buffer
+```
+
+All options other than the tool's own flags are forwarded to `scripts/eval/mot17.py`.
+Do not pass `--processes` or `--cpp-threads`: the tool rejects them to preserve
+the single-process Python-evaluator contract.
+
+For the order-contamination matrix, pass all blocks as one comma-separated
+argument in this order: `04`, `04,02,04`, `02,04,02`, all seven SDP sequences
+forward, all seven reverse, then all seven forward again. The resulting
+`summary.json` compares every occurrence with the first occurrence of that
+sequence, retaining the run index and full preceding sequence order.
+
 ## Referenced / Path-Sensitive
 
 These have known repo references outside this README.
@@ -35,6 +70,7 @@ These have known repo references outside this README.
 | `check_api_layers.py` | API layering audit | `scripts/pre_push.sh` |
 | `check_doc_links.py` | Relative markdown link checker | `scripts/pre_push.sh` |
 | `check_gpu_contract.py` | GPU-first contract checker | `scripts/pre_push.sh` and docs |
+| `check_continuous_decimal_hash.py` | In-process ID-free final MOT decimal consistency probe | Continuous-run determinism validation |
 | `depth_ordering_auc.py` | Depth-ordering AUC analysis | Crossing-swap depth ordering doc |
 | `depth_ordering_probe.py` | Crossing-swap depth-ordering probe | NO-GO registry and gate sweep |
 | `diagnose_id_switches.py` | ID-switch diagnostic helper | NO-GO registry / oracle script |
