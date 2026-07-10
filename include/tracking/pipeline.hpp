@@ -663,6 +663,13 @@ private:
     void*     d_cub_sort_tmp_         = nullptr;
     size_t    cub_sort_tmp_bytes_     = 0;
 
+    // Stable filter compaction temp buffers (prefix-scan path)
+    int*      d_filter_keep_flags_    = nullptr;
+    int*      d_filter_prefix_        = nullptr;
+    bool*     d_filter_suspect_tmp_   = nullptr;
+    void*     d_filter_scan_tmp_      = nullptr;
+    size_t    filter_scan_tmp_bytes_  = 0;
+
     void ensure_scratch(int n_dets, cudaStream_t stream);
     void ensure_crop_pool();
     bool reid_profiling_enabled_ = false;

@@ -67,6 +67,10 @@ PerceptionPipeline::~PerceptionPipeline() {
     if (d_sort_keys_in_)    cudaFree(d_sort_keys_in_);
     if (d_sort_keys_out_)   cudaFree(d_sort_keys_out_);
     if (d_cub_sort_tmp_)    cudaFree(d_cub_sort_tmp_);
+    if (d_filter_keep_flags_)  cudaFree(d_filter_keep_flags_);
+    if (d_filter_prefix_)      cudaFree(d_filter_prefix_);
+    if (d_filter_suspect_tmp_) cudaFree(d_filter_suspect_tmp_);
+    if (d_filter_scan_tmp_)    cudaFree(d_filter_scan_tmp_);
 }
 
 void PerceptionPipeline::ensure_scratch(int n_dets, cudaStream_t /*stream*/) {
@@ -119,6 +123,20 @@ void PerceptionPipeline::ensure_scratch(int n_dets, cudaStream_t /*stream*/) {
         if (d_cub_sort_tmp_) cudaFree(d_cub_sort_tmp_);
         cudaMalloc(&d_cub_sort_tmp_, new_tmp);
         cub_sort_tmp_bytes_ = new_tmp;
+    }
+
+    if (d_filter_keep_flags_) cudaFree(d_filter_keep_flags_);
+    if (d_filter_prefix_)     cudaFree(d_filter_prefix_);
+    if (d_filter_suspect_tmp_) cudaFree(d_filter_suspect_tmp_);
+    cudaMalloc(&d_filter_keep_flags_, cap * sizeof(int));
+    cudaMalloc(&d_filter_prefix_, cap * sizeof(int));
+    cudaMalloc(&d_filter_suspect_tmp_, cap * sizeof(bool));
+
+    size_t new_scan = filter_stable_scan_temp_bytes(cap);
+    if (new_scan > filter_scan_tmp_bytes_) {
+        if (d_filter_scan_tmp_) cudaFree(d_filter_scan_tmp_);
+        cudaMalloc(&d_filter_scan_tmp_, new_scan);
+        filter_scan_tmp_bytes_ = new_scan;
     }
 
     scratch_capacity_ = cap;
@@ -232,7 +250,9 @@ void PerceptionPipeline::process_detections_into(
             cfg_.person_min_height_ratio,
             cfg_.person_min_aspect, cfg_.person_max_aspect,
             cfg_.person_min_area_ratio, cfg_.person_max_area_ratio,
-            stream);
+            stream,
+            d_filter_keep_flags_, d_filter_prefix_, d_filter_suspect_tmp_,
+            d_filter_scan_tmp_, filter_scan_tmp_bytes_);
     };
     auto launch_gather_compact3 = [&] {
         gather_compact3_counted_cuda(
@@ -582,7 +602,9 @@ void PerceptionPipeline::process_detections_main_nms(
             cfg_.person_min_height_ratio,
             cfg_.person_min_aspect, cfg_.person_max_aspect,
             cfg_.person_min_area_ratio, cfg_.person_max_area_ratio,
-            stream);
+            stream,
+            d_filter_keep_flags_, d_filter_prefix_, d_filter_suspect_tmp_,
+            d_filter_scan_tmp_, filter_scan_tmp_bytes_);
     };
     if (profile_post) {
         measure_gpu_stage(stream, last_postprocess_profile_stats_.native_filter_kernel_ms, launch_filter);
@@ -1019,7 +1041,9 @@ void PerceptionPipeline::process_detections_graph(
         cfg_.person_min_height_ratio,
         cfg_.person_min_aspect, cfg_.person_max_aspect,
         cfg_.person_min_area_ratio, cfg_.person_max_area_ratio,
-        stream);
+        stream,
+        d_filter_keep_flags_, d_filter_prefix_, d_filter_suspect_tmp_,
+        d_filter_scan_tmp_, filter_scan_tmp_bytes_);
 
     gather_compact3_counted_cuda(
         boxes_ptr, scores_ptr, classes_ptr,
@@ -1102,7 +1126,9 @@ void PerceptionPipeline::process_detections_main_nms_graph(
         cfg_.person_min_height_ratio,
         cfg_.person_min_aspect, cfg_.person_max_aspect,
         cfg_.person_min_area_ratio, cfg_.person_max_area_ratio,
-        stream);
+        stream,
+        d_filter_keep_flags_, d_filter_prefix_, d_filter_suspect_tmp_,
+        d_filter_scan_tmp_, filter_scan_tmp_bytes_);
 
     gather_compact3_counted_cuda(
         boxes_ptr, scores_ptr, classes_ptr,
@@ -1174,7 +1200,9 @@ void PerceptionPipeline::process_detections_main_nms_graph_nocopyback(
         cfg_.person_min_height_ratio,
         cfg_.person_min_aspect, cfg_.person_max_aspect,
         cfg_.person_min_area_ratio, cfg_.person_max_area_ratio,
-        stream);
+        stream,
+        d_filter_keep_flags_, d_filter_prefix_, d_filter_suspect_tmp_,
+        d_filter_scan_tmp_, filter_scan_tmp_bytes_);
 
     gather_compact3_counted_cuda(
         boxes_ptr, scores_ptr, classes_ptr,

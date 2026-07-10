@@ -318,7 +318,12 @@ void SACCADE_TRACKING_API filter_detections_cuda(
     float person_max_aspect,
     float person_min_area_ratio,
     float person_max_area_ratio,
-    cudaStream_t stream
+    cudaStream_t stream,
+    int* d_keep_flags = nullptr,
+    int* d_prefix = nullptr,
+    bool* d_suspect_tmp = nullptr,
+    void* d_scan_tmp = nullptr,
+    size_t scan_tmp_bytes = 0
 );
 
 void SACCADE_TRACKING_API nms_cuda(
@@ -420,6 +425,8 @@ void SACCADE_TRACKING_API compact_grid_nms_cuda(
     cudaStream_t stream);
 
 size_t SACCADE_TRACKING_API argsort_scores_descending_bytes(int n);
+
+size_t SACCADE_TRACKING_API filter_stable_scan_temp_bytes(int n);
 
 // Stable descending argsort: equal-score ties break toward lower original index.
 // d_keys_in / d_keys_out are uint64_t scratch buffers of length n each.

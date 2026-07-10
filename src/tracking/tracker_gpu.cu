@@ -4309,6 +4309,93 @@ __global__ void filter_detections_stable_kernel(
     *out_count = out_idx;
 }
 
+// Phase 1: writes keep_flags[idx] = 1 iff detection_keep() passes, and
+// pre-computes the suspect flag for kept detections.  The flags array is
+// consumed by the prefix scan; suspect_tmp is read by the scatter kernel.
+__global__ void filter_keep_mask_kernel(
+    const float* boxes,
+    const float* scores,
+    const int* classes,
+    int num_dets,
+    int* keep_flags,
+    bool* suspect_tmp,
+    tracking::DetectionFilterParams params
+) {
+    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= num_dets) return;
+
+    const float* box = boxes + idx * 4;
+    const float score = scores[idx];
+    const tracking::Box4f box4 = tracking::load_box4(box);
+    bool geometry_clean = true;
+    const bool keep = tracking::detection_keep(box4, score, classes[idx], params, geometry_clean);
+
+    keep_flags[idx] = keep ? 1 : 0;
+    if (keep) {
+        suspect_tmp[idx] = params.person_geometry_prior
+            && params.geometry_suspect_support && !geometry_clean;
+    }
+}
+
+// Phase 3: scatter kept detections to compacted output slots (prefix[idx]).
+// keep_indices[dest] = idx  — original source index for downstream gather.
+// suspect_flags and quality_scores are written at the compacted slot.
+__global__ void filter_stable_scatter_kernel(
+    const float* boxes,
+    const float* scores,
+    const int* classes,
+    int num_dets,
+    const int* keep_flags,
+    const int* prefix,
+    const bool* suspect_tmp,
+    int* keep_indices,
+    bool* suspect_flags,
+    float* quality_scores,
+    tracking::DetectionFilterParams params
+) {
+    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= num_dets) return;
+    if (keep_flags[idx] == 0) return;
+
+    const int dest = prefix[idx];
+    keep_indices[dest] = idx;
+    suspect_flags[dest] = suspect_tmp[idx];
+
+    if (quality_scores) {
+        const float* box = boxes + idx * 4;
+        const float box_w = fmaxf(box[2] - box[0], 1e-6f);
+        const float box_h = fmaxf(box[3] - box[1], 1e-6f);
+        const float aspect = box_h / box_w;
+        const float frame_area = fmaxf(
+            static_cast<float>(params.frame_w) * static_cast<float>(params.frame_h), 1.0f);
+        const float area_ratio = (box_w * box_h) / frame_area;
+        const tracking::Box4f box4 = tracking::load_box4(box);
+
+        const float aspect_q = expf(-0.5f * powf((aspect - 2.5f) / 1.2f, 2.0f));
+        const float cx_norm = tracking::center_x(box4)
+            / fmaxf(static_cast<float>(params.frame_w), 1.0f);
+        const float cy_norm = tracking::center_y(box4)
+            / fmaxf(static_cast<float>(params.frame_h), 1.0f);
+        const float center_q = fmaxf(0.0f, fminf(1.0f,
+            fminf(fminf(cx_norm, 1.0f - cx_norm),
+                  fminf(cy_norm, 1.0f - cy_norm)) * 4.0f));
+        const float area_q = expf(-0.5f * powf((area_ratio - 0.01f) / 0.01f, 2.0f));
+
+        quality_scores[dest] = 0.50f * aspect_q + 0.30f * center_q + 0.20f * area_q;
+    }
+}
+
+size_t filter_stable_scan_temp_bytes(int n) {
+    size_t scan_bytes = 0, reduce_bytes = 0;
+    cub::DeviceScan::ExclusiveSum(
+        nullptr, scan_bytes,
+        static_cast<const int*>(nullptr), static_cast<int*>(nullptr), n);
+    cub::DeviceReduce::Sum(
+        nullptr, reduce_bytes,
+        static_cast<const int*>(nullptr), static_cast<int*>(nullptr), n);
+    return scan_bytes > reduce_bytes ? scan_bytes : reduce_bytes;
+}
+
 constexpr int NMS_BLOCK_SIZE = 64;
 
 // ============================================================================
@@ -4743,7 +4830,12 @@ void filter_detections_cuda(
     float person_max_aspect,
     float person_min_area_ratio,
     float person_max_area_ratio,
-    cudaStream_t stream
+    cudaStream_t stream,
+    int* d_keep_flags,
+    int* d_prefix,
+    bool* d_suspect_tmp,
+    void* d_scan_tmp,
+    size_t scan_tmp_bytes
 ) {
     checkCuda(cudaMemsetAsync(out_count_ptr, 0, sizeof(int), stream));
     if (num_dets <= 0) {
@@ -4764,8 +4856,6 @@ void filter_detections_cuda(
         person_min_area_ratio,
         person_max_area_ratio,
     };
-    // Clear any stale error before kernel launch so cudaGetLastError below
-    // reports only errors from THIS kernel.
     cudaGetLastError();
     if (env_flag_enabled("SACCADE_DETERMINISTIC_FILTER_COMPACTION", false)) {
         filter_detections_stable_kernel<<<1, 1, 0, stream>>>(
@@ -4773,12 +4863,54 @@ void filter_detections_cuda(
             suspect_flags_ptr, quality_scores_ptr, out_count_ptr, params
         );
     } else {
-        const int threads = 256;
-        const int blocks = (num_dets + threads - 1) / threads;
-        filter_detections_kernel<<<blocks, threads, 0, stream>>>(
-            boxes_ptr, scores_ptr, classes_ptr, num_dets, keep_indices_ptr,
-            suspect_flags_ptr, quality_scores_ptr, out_count_ptr, params
-        );
+        const int thr = 256;
+        const int blk = (num_dets + thr - 1) / thr;
+
+        int* _keep = d_keep_flags;
+        int* _pref = d_prefix;
+        bool* _stmp = d_suspect_tmp;
+        void* _scan = d_scan_tmp;
+        bool own = false;
+
+        if (!_keep) {
+            cudaMallocAsync(reinterpret_cast<void**>(&_keep),
+                            num_dets * sizeof(int), stream);
+            cudaMallocAsync(reinterpret_cast<void**>(&_pref),
+                            num_dets * sizeof(int), stream);
+            cudaMallocAsync(reinterpret_cast<void**>(&_stmp),
+                            num_dets * sizeof(bool), stream);
+            const size_t req = filter_stable_scan_temp_bytes(num_dets);
+            cudaMallocAsync(&_scan, req, stream);
+            own = true;
+        }
+
+        filter_keep_mask_kernel<<<blk, thr, 0, stream>>>(
+            boxes_ptr, scores_ptr, classes_ptr, num_dets,
+            _keep, _stmp, params);
+
+        {
+            size_t sb = 0, rb = 0;
+            cub::DeviceScan::ExclusiveSum(nullptr, sb,
+                static_cast<const int*>(nullptr),
+                static_cast<int*>(nullptr), num_dets);
+            cub::DeviceReduce::Sum(nullptr, rb,
+                static_cast<const int*>(nullptr),
+                static_cast<int*>(nullptr), num_dets);
+            cub::DeviceScan::ExclusiveSum(_scan, sb, _keep, _pref, num_dets, stream);
+            cub::DeviceReduce::Sum(_scan, rb, _keep, out_count_ptr, num_dets, stream);
+        }
+
+        filter_stable_scatter_kernel<<<blk, thr, 0, stream>>>(
+            boxes_ptr, scores_ptr, classes_ptr, num_dets,
+            _keep, _pref, _stmp,
+            keep_indices_ptr, suspect_flags_ptr, quality_scores_ptr, params);
+
+        if (own) {
+            cudaFreeAsync(_keep, stream);
+            cudaFreeAsync(_pref, stream);
+            cudaFreeAsync(_stmp, stream);
+            cudaFreeAsync(_scan, stream);
+        }
     }
     {
         cudaError_t _err = cudaGetLastError();
