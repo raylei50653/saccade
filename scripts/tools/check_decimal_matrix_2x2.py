@@ -117,7 +117,7 @@ def _run_cell(
     cell_dir = root_output / label
     eval_out = cell_dir / "mot_output"
     cell_dir.mkdir(parents=True, exist_ok=True)
-    runs = run_sequences([preceding, target], eval_out, forwarded)
+    _, runs = run_sequences([preceding, target], eval_out, forwarded)
     return runs[0], runs[1]
 
 

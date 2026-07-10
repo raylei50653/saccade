@@ -24,7 +24,6 @@ _SRC_DIR = _SCRIPT_DIR.parents[1] / "src"
 sys.path.insert(0, str(_SRC_DIR))
 
 from saccade.perception.eval._decimal_hash_tools import (  # noqa: E402
-    Run,
     CANONICAL_FIELDS,
     HASH_METADATA,
     diagnose,
@@ -93,7 +92,7 @@ def main() -> int:
     print(f"all-7 matrix: {len(_ALL7_ORDER)} runs across {len(_ALL7_SDP)} sequences")
     print(f"order: {','.join(_ALL7_ORDER)}")
 
-    runs: list[Run] = run_sequences(_ALL7_ORDER, eval_out, forwarded)
+    _, runs = run_sequences(_ALL7_ORDER, eval_out, forwarded)
 
     run_rows = [
         {
