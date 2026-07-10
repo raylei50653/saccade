@@ -8,6 +8,7 @@
 🔄 **Safe-Region Assetization — R0-B-R2 typed realization integration**
 
 - Thread: [safe_region_assetization_20260710.md](../../research/threads/safe_region_assetization_20260710.md)
+- Agent execution anchor: [safe_region_assetization_20260710.dispatch.yaml](../../research/threads/safe_region_assetization_20260710.dispatch.yaml) — branch + minimum-required ancestor + ff-only / concurrent-advance gate；chat-side owned，agent 不得自行改寫
 - Accepted preflight: [research/safe_region_r0_asset_contract_preflight_20260710.md](research/safe_region_r0_asset_contract_preflight_20260710.md) (R0-A ACCEPTED; CR1–CR9)
 - Mathematical contract: [Statistical Robust Feasible-Set Estimation under Asymmetric Loss](../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
 - Boolean semantics: [Boolean Composition Semantics Contract](../../research/eval/boolean_composition_semantics_contract.md)
