@@ -8,7 +8,7 @@ closed: 2026-07-10
 
 # composition grammar × safe-region geometry
 
-> **One-line:** T0-A/T0-B/R1 **closed**. Bounded verdict accepted: existing registered Q4.5 atlas has **0/154** productive-safe coordinates with full-neighborhood radius ≥1. Terminal B retained. PR #94 is engineering-only merge work; no further task is authorized from this thread.
+> **One-line:** **CLOSED C0 baseline.** T0-A/T0-B/R1 accepted and PR #94 merged. Existing registered Q4.5 G1–G3 atlas has **0/154** productive-safe coordinates with full-neighborhood radius ≥1; terminal B retained. Broader grammar coverage continues only through the separate coverage-program thread.
 
 ## Final status
 
@@ -17,11 +17,13 @@ closed: 2026-07-10
 | Coverage audit | **CLOSED** |
 | T0-A preflight | **ACCEPTED** |
 | T0-B interpretation | **ACCEPTED after R1** |
+| Program mapping | **C0 G1–G3 coverage closure** |
 | Q4.5 terminal | **B** `isolated_safe_points_only` |
 | Production preset | **unchanged** |
 | Evidence ledger | **not promoted** |
-| PR | **#94 open / mergeable**; engineering merge separate |
-| Next authorized work | **none** |
+| PR | **#94 merged** · merge `acd8e30e` |
+| Next work from this thread | **none** |
+| Separate handoff | [Composition Grammar Coverage Completion Program](composition_grammar_coverage_program_20260710.md) · C1-A only |
 
 ## Read first
 
@@ -29,6 +31,7 @@ closed: 2026-07-10
 2. [T0-A artifact preflight](../../modules/semantic/research/composition_grammar_t0_artifact_preflight_20260710.md)
 3. [Coverage audit](../../modules/semantic/research/composition_grammar_safe_region_coverage_audit_20260710.md)
 4. [Stage 2 final](../../modules/semantic/research/m_b1_5_stage2_d_online_final_20260710.md)
+5. [Broader coverage program](composition_grammar_coverage_program_20260710.md)
 
 ## Final evidence state
 
@@ -78,7 +81,7 @@ no evaluator rerun or modification
 Maximum promotion:
 
 ```text
-accepted bounded descriptive closure of the existing-atlas region question
+accepted bounded descriptive closure of the existing-atlas G1–G3 region question
 ```
 
 Not promoted to:
@@ -95,12 +98,12 @@ global threshold-path falsification
 
 ## Research decision
 
-Close the current registered threshold-region line.
+Close the current registered G1–G3 threshold-region line.
 
 Do **not** authorize from this thread:
 
 ```text
-T1 evaluator emit
+evaluator emit
 region-level LOO
 restricted G7 implementation
 online region sweep
@@ -109,20 +112,22 @@ hook or production preset change
 
 Why:
 
-- no full-neighborhood thickness exists to justify region-transfer work;
+- no full-neighborhood thickness exists inside the registered G1–G3 lattices;
 - the bounded descriptive evidence is already committed;
 - G7 is a missing semantic contract, not evidence that the grammar is necessary;
-- more infrastructure would not close a stronger claim on this substrate.
+- more infrastructure inside this closed line would not close a stronger claim.
+
+The separate coverage program may define G4–G7 semantics and later authorize bounded grammar slices. That is a **new staged program**, not a reopen of this C0 evidence line.
 
 ## Reopen conditions
 
-A future reopen requires a separate explicit contract backed by at least one of:
+A reopen of this exact C0 line requires a separate explicit contract backed by at least one of:
 
 ```text
 new signal-family evidence with a declared falsifier
 new hook placement or decision substrate
-valid NOT / necessary / support role semantics for G7
-a newly registered atlas with nonzero multi-sequence thickness
+valid semantics that invalidate a specific C0 assumption
+a newly registered G1–G3 atlas with nonzero multi-sequence thickness
 ```
 
 No reopen is authorized here.
@@ -133,7 +138,7 @@ PR #94 contains the preflight, derivation script, evidence pack, R1 corrections,
 
 ```text
 research acceptance: complete
-engineering merge: separate repository action
+engineering merge: complete
 production promotion: blocked
 ```
 
@@ -144,4 +149,5 @@ production promotion: blocked
 - 2026-07-10: T0-B executed at `7b54f5c2`.
 - 2026-07-10: review requested R1 at `32ecd242`.
 - 2026-07-10: R1 completed at `c0bac5cc`; all correction gates passed.
-- 2026-07-10: PR #94 opened; bounded verdict manually accepted; thread closed.
+- 2026-07-10: bounded verdict manually accepted; thread closed.
+- 2026-07-10: PR #94 merged as `acd8e30e`; this line mapped to C0 baseline; broader work handed to the coverage-program thread.
