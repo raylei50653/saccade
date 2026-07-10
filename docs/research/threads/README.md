@@ -40,6 +40,7 @@ conversation hook    = 短期接力（應收進 thread）
 |:--|:--|:--|
 | [occ_exit_audit_20260709.md](occ_exit_audit_20260709.md) | **semantic sole active** · substrate wired · remaining graph decision + seq cond | semantic |
 | [m_b1_online_hook_20260709.md](m_b1_online_hook_20260709.md) | **S1 CLOSED** · S2 Q4.5 v4 **B** isolated_safe_points_only (154/0) → ranking/assignment | semantic |
+| [composition_grammar_safe_region.md](composition_grammar_safe_region.md) | Q4.5 coverage audit **closed** · terminal B unchanged · next **T0** interpretation pack | semantic |
 | [association_recovery_registry_20260709.md](association_recovery_registry_20260709.md) | Scripts index + tools YAML + contracts 就位；registry 維護母線 | semantic |
 | [doc_structure_o15_followup_20260709.md](doc_structure_o15_followup_20260709.md) | O1.5 + TODO-as-WIP-lock；follow-up = index debt / optional strict | ownership |
 
@@ -49,7 +50,7 @@ conversation hook    = 短期接力（應收進 thread）
 
 ```md
 ---
-doc-status: active-thread
+doc-status: active
 doc-promotion: navigation-only; not evidence
 owner-module: <module|cross|ownership>
 created: YYYY-MM-DD
