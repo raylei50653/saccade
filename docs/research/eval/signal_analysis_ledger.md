@@ -196,3 +196,8 @@ semantic **WIP sole active** 仍是 #55 occ-exit；本線 = D1 RESEARCH 旁線�
 | `scripts/tools/audit_relink_safe_reject.py` | L0 multi-rule / prod-shaped map |
 | `scripts/tools/summarize_relink_pairs.py` | B1 AUC + thr |
 | `out/signal_study/` | 全部 study 落盤根 |
+
+
+## Stage 2 Q4.5
+
+terminal B isolated_safe_points_only; study m_b1_5_stage2_q45_20260710

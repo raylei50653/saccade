@@ -7,6 +7,13 @@ doc-module: semantic
 
 # MOT M-B1 → M-B1.5 two-stage implementation plan
 
+> **Stage 2 status (minimal, 2026-07-10):** Q1–Q3 SUFFICIENT · Q4 weak/unstable ·  
+> **Q4.5 terminal `isolated_safe_points_only`** (productive_safe=211 · region_candidates=0).  
+> Threshold/hook-policy promotion **blocked**. Next preferred: ranking/assignment-relative.  
+> Evidence: [Q4.5 atlas note](m_b1_5_stage2_q45_threshold_atlas_20260710.md).  
+> Production preset: **unchanged**.
+
+
 > **Role:** Stage 1 + Stage 2 engineering contract (single source).  
 > **Navigation:** [m_b1 online hook thread](../../../research/threads/m_b1_online_hook_20260709.md) · Stage 1 eng task [portable OR-tail hook contract](m_b1_portable_or_tail_hook_contract_20260709.md).  
 > **Stage 1 status (2026-07-10): overall OPEN**  

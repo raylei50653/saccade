@@ -7,7 +7,7 @@ created: 2026-07-09
 
 # m_b1 online hook thread
 
-> **One-line:** **Stage 1a evaluation-entry PASSED**; freeze policy **null online relevance**. **Stage 1b action-path** via plumbing controls (see study). **Stage 1 overall OPEN** until B-audit + strict A0 + determinism. Not “Stage 1 CLOSED” from vacuous freeze alone.
+> **One-line:** Stage 1a/1b eng on branch; **Stage 2 Q4.5 = B isolated_safe_points_only** (211 productive-safe · 0 region candidates). Thr/hook-policy promotion blocked. Next preferred: ranking/assignment-relative. Preset unchanged.
 
 ## Status (honest split)
 

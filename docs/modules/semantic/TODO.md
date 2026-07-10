@@ -16,7 +16,9 @@
 
 ## Related research threads（不佔 WIP 鎖）
 
-- [m_b1 online hook](../../research/threads/m_b1_online_hook_20260709.md) — **Stage 1 OPEN**；1a+1b eng PASSED；B-audit pending
+- [m_b1 online hook](../../research/threads/m_b1_online_hook_20260709.md) — S2 **Q4.5 B isolated_safe_points_only**
+  - Q4.5: [m_b1_5_stage2_q45_threshold_atlas_20260710.md](research/m_b1_5_stage2_q45_threshold_atlas_20260710.md)
+- [m_b1 online hook OLD](../../research/threads/m_b1_online_hook_20260709.md) — **Stage 1 OPEN**；1a+1b eng PASSED；B-audit pending
   - Evidence: [m_b1_hook_stage1_e2e_20260710.md](research/m_b1_hook_stage1_e2e_20260710.md)
   - Plan: [m_b1_to_m_b1_5_two_stage_plan_20260710.md](research/m_b1_to_m_b1_5_two_stage_plan_20260710.md)
 - [association recovery registry](../../research/threads/association_recovery_registry_20260709.md)
