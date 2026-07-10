@@ -15,12 +15,19 @@
 ## Status
 
 ```text
-Stage 1 code:      WIRED (default-off)
+composite: online_hook_wired__e2e_pending
+
+online_hook:              wired_default_off
+e2e_validation:           pending
+e2e_safe_for_default_off: no
+production_preset:        unchanged
+
+Stage 1 code:        WIRED (default-off)
 offline event table: PASS (n_rejected=8721 = freeze FP)
-online/e2e A/B:    PENDING
-e2e_safe_for_default_off: no  (until A/B)
-production_preset: unchanged
-Stage 2:           NOT STARTED (separate PR)
+                     = offline pairs replay only
+                     ≠ online B-audit / runtime event table
+online/e2e A/B:      PENDING
+Stage 2:             NOT STARTED (separate PR)
 ```
 
 ---
@@ -82,13 +89,22 @@ uv run python scripts/tools/run_m_b1_hook_ab.py \
 
 ---
 
-## Still required for Stage 1 close
+## Still required
+
+**Minimum eng milestone (PR #87 if kept narrow):**
 
 1. Rebuild/load `saccade_tracking_ext` with `set_research_portable_or_tail` (built under `build/`).
 2. A1: hook-off e2e vs trusted B2 baseline identity.
-3. B: hook-on e2e; compare metrics / reconnect / runtime / determinism.
+3. B: hook-on e2e; metrics / reconnect / runtime / determinism + native counters.
 4. Publish `e2e_safe_for_default_off: yes/no` + classification.
-5. **Stop** — no Stage 2 / no preset.
+
+**Pending for full Stage 1 artifact freeze (do not imply done by offline table):**
+
+5. Online B-audit full event table (candidate universe at hook decision point).
+6. Online fired-atom / singleton vs co-fire / per-seq rejected on online events.
+7. Decision-change / reconnect-change joins where required by plan §7–8.
+
+**Stop** — no Stage 2 / no preset.
 
 ---
 
