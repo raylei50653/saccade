@@ -7,7 +7,7 @@ created: 2026-07-09
 
 # occ-exit audit (#55) thread
 
-> **One-line:** **PARKED next research family.** WP1–WP3 are complete: global cosine audit is net harmful, Cheb-GR remains log-only, and one local enable candidate does not justify a gate. Resume only after the composition-grammar coverage program reaches a new owner decision.
+> **One-line:** **PARKED future RegionAsset producer/intervention consumer.** WP1–WP3 are complete: global cosine audit is net harmful, Cheb-GR remains log-only, and one local enable candidate does not justify a gate. Resume only after the Safe-Region Assetization program reaches an explicit owner gate.
 
 ## Status
 
@@ -41,7 +41,7 @@ Parking preserves this bounded conclusion. It does not convert the local positiv
 2. [WP2 seq conditioning](../../modules/semantic/research/occ_exit_audit_p55_wp2_seq_conditioning_20260709.md)
 3. [occ_exit scope](../../modules/semantic/research/occ_exit_audit_p55_scope_20260709.md)
 4. [clean_fifo_bank substrate](../../modules/semantic/research/clean_fifo_bank_substrate_20260704.md)
-5. [grammar coverage program](composition_grammar_coverage_program_20260710.md)
+5. [Safe-Region Assetization Program](safe_region_assetization_20260710.md)
 
 ## Artifacts
 
@@ -58,22 +58,39 @@ Parking preserves this bounded conclusion. It does not convert the local positiv
 none — parked
 ```
 
-Potential future family, not currently authorized:
+Potential future assetization path, not currently authorized:
 
 ```text
-episode-level conditional intervention modeling
-→ observable pre-intervention condition
+episode identity + pre-action observables
 → benefit / harm attribution
-→ stable applicability region
+→ applicability-region producer adapter
+→ A1/A2 RegionAsset
+→ shadow/default-off intervention consumer
 ```
 
-Sequence-name allowlists would be comparators only, not final research semantics.
+Sequence-name allowlists remain comparators only, not final research semantics.
+
+## Relationship to RegionAsset
+
+Future occ-exit work should not invent a parallel applicability abstraction.
+
+It may later provide:
+
+```text
+producer side:
+  episode-condition regions with identity, capacity, applicability, and transfer evidence
+
+consumer side:
+  action contract, shadow match, default-off intervention, monitoring, rollback
+```
+
+No current #55 artifact is automatically A1/A2/A3. In particular, sequence-level metric deltas and Cheb-GR log agreement do not constitute an event-level transferable region asset.
 
 ## Reopen conditions
 
 Reopen only after an explicit owner decision and one of:
 
-- composition-grammar coverage reaches a natural pause or closure;
+- assetization R0/R1 establishes an accepted reusable RegionAsset contract;
 - new event-level counterfactual attribution becomes trustworthy;
 - a separate feature proposal defines a default-off action A/B beyond the log-only Cheb-GR probe.
 
@@ -92,6 +109,7 @@ Reopening requires a new staged contract. It does not inherit authorization to i
 - Treat parked as active WIP.
 - Implement a sequence allowlist from WP3 alone.
 - Read Cheb-GR log agreement as a Cheb-GR action benefit.
+- Claim current artifacts already form an intervention asset.
 - Flip global audit or headline presets.
 - Reopen closed NO-GO identity lines as drive-by work.
 
@@ -100,4 +118,5 @@ Reopening requires a new staged contract. It does not inherit authorization to i
 - 2026-07-04: CleanFifoBank substrate + bank reference wired.
 - 2026-07-09: WP1 probe, WP2 conditioning, and WP3 promotion evidence completed.
 - 2026-07-09: WP3 concluded `split_feat_pr`, with no runtime gate or production change.
-- 2026-07-10: parked while Composition Grammar Coverage Completion Program becomes semantic sole active.
+- 2026-07-10: parked while composition grammar work became semantic sole active.
+- 2026-07-10: disposition reframed as future RegionAsset producer/intervention consumer under Safe-Region Assetization.
