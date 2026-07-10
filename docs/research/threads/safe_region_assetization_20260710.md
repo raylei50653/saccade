@@ -7,61 +7,83 @@ created: 2026-07-10
 
 # Safe-Region Assetization Program
 
-> **One-line:** R0-A is **ACCEPTED**. RB1–RB7 remain **PASS**. R0-B-R3 delivered RB8–RB9 identity/reconstruction closure on the RegionAsset contract. **Chat-side re-review required** — not self-accepted. R1 asset generation, A0→A1, transfer, intervention, production, and ledger promotion remain unauthorized. Maturity **A0 retained**.
+> **One-line:** R0-B RegionAsset contract is **ACCEPTED** at reviewed delivery `f92340b7` with RB1–RB9 **PASS**. Current sole task is **R1 deterministic G1–G3 asset conversion**. R1 may package the sealed evidence into an **A0 observation-only pack candidate**; it does not grant A1, L2+, intervention, transfer, production, or ledger promotion.
 
 ## Status
 
 | Item | Status |
 |:--|:--|
 | Program | **ACTIVE** — safe-region assetization |
-| Semantic sole active | **R0-B-R3 delivered — awaiting chat-side re-review** |
+| Semantic sole active | **R1 deterministic asset conversion** |
 | R0-A / CR1–CR9 | **ACCEPTED / PASS** |
 | R0-B-R1 | `e02a5367` — **RB1–RB4 PASS** |
 | R0-B-R2 | `34eab247` — **RB5–RB7 PASS** |
-| R0-B-R3 | **delivered** — RB8–RB9; **not self-accepted** |
-| R0-B final contract | draft pending chat-side re-review after R0-B-R3 |
-| Boolean semantics patch | **NORMATIVE** — [boolean_composition_semantics_contract.md](../eval/boolean_composition_semantics_contract.md) |
-| R1 | **NOT AUTHORIZED** |
-| Maturity | **A0 retained** |
+| R0-B-R3 | `f92340b7` — **RB8–RB9 PASS** |
+| R0-B final contract | **ACCEPTED** |
+| R1 | **AUTHORIZED — deterministic conversion only** |
+| Current maturity | **A0 retained** |
+| R1 output maturity | **A0 pack candidate; separate chat-side acceptance required for A1** |
 | Claims | G1 **1×L0**; G2 **6×L0 isolated + 19×L1 multi**; G3 **1×L0**; pack ceiling **L1** |
 | Production / presets | **unchanged** |
 | evidence_ledger | **not promoted** |
 
+## Acceptance record
+
+Chat-side final review of `f92340b7d5f95b449297fbc141fa028de60a8b87` accepts:
+
+```text
+CR1–CR9
+RB1–RB9
+R0-B RegionAsset contract
+```
+
+### Editorial erratum E1
+
+`safe_region_asset_contract.md` §2.4 contains four editorially inverted positive implications:
+
+```text
+generator-contract equality ⇒ same sealed universe instance
+source_event_table_sha256 ⇒ universe_membership_digest
+policy family ⇒ concrete threshold-executable policy
+thr_index without registry ⇒ reconstructible thr_value
+```
+
+They are rejected by the accepted model and by the contract's own §12.4 firewall. Before generating a valid R1 pack, the implementation change must replace them with explicit **non-implications / forbidden inferences**. This is a non-substantive text correction; it does not reopen RB8 or RB9.
+
 ## Current boundary
 
 ```text
-candidate-universe generator contract
-≠ sealed candidate-universe instance membership
+contract accepted
+≠ asset pack generated
 
-parameterized policy / grammar definition
-≠ concrete threshold-bound executable policy
+asset pack generated
+≠ engineering/research acceptance as A1
 
-raw source-event-table SHA
-≠ normalized candidate-membership digest
+A0 pack candidate
+≠ transferable or actionable policy
 
-threshold index
-≠ reconstructible threshold value without registry authority
+observational composition
+≠ single-step intervention
+≠ closed-loop safety
+
+engineering merge
+≠ research conclusion promotion
 ```
 
-All earlier boundaries remain:
-
-```text
-candidate / reject set in Ω ≠ policy / feasible set in Θ
-truth-level coordinate/mask identity ≠ feasibility-bound realization
-canonical policy semantics ≠ observed-mask equivalence
-observational composition ≠ single-step intervention ≠ closed-loop safety
-artifact generated ≠ A1 accepted ≠ intervention qualified ≠ production approved
-```
+R1 is authorized to transform sealed inputs into deterministic authorities and emission tables only.
 
 ## Read first
 
-1. [R0-B RegionAsset contract](../eval/safe_region_asset_contract.md)
-2. [Boolean Composition Semantics Contract](../eval/boolean_composition_semantics_contract.md)
-3. [Mathematical framework](../eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
-4. [Accepted R0-A preflight](../../modules/semantic/research/safe_region_r0_asset_contract_preflight_20260710.md)
-5. [Sealed Q4.5 threshold registry](../../modules/semantic/research/evidence/m_b1_5_stage2_q45_20260710/threshold_registry.json)
-6. [Q4.5 evidence manifest](../../modules/semantic/research/evidence/m_b1_5_stage2_q45_20260710/manifest.json)
-7. [Q4.5 SHA inventory](../../modules/semantic/research/evidence/m_b1_5_stage2_q45_20260710/SHA256SUMS.json)
+1. [Agent execution dispatch](safe_region_assetization_20260710.dispatch.yaml)
+2. [Accepted R0-B RegionAsset contract](../eval/safe_region_asset_contract.md)
+3. [Boolean Composition Semantics Contract](../eval/boolean_composition_semantics_contract.md)
+4. [Mathematical framework](../eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
+5. [Accepted R0-A preflight](../../modules/semantic/research/safe_region_r0_asset_contract_preflight_20260710.md)
+6. [Q4.5 artifact preflight](../../modules/semantic/research/composition_grammar_t0_artifact_preflight_20260710.md)
+7. [Sealed Q4.5 threshold registry](../../modules/semantic/research/evidence/m_b1_5_stage2_q45_20260710/threshold_registry.json)
+8. [Q4.5 manifest](../../modules/semantic/research/evidence/m_b1_5_stage2_q45_20260710/manifest.json)
+9. [Q4.5 SHA inventory](../../modules/semantic/research/evidence/m_b1_5_stage2_q45_20260710/SHA256SUMS.json)
+10. [T0 interpretation evidence](../../modules/semantic/research/evidence/m_b1_5_t0_region_interpretation_20260710/manifest.json)
 
 ## Accepted A0 baseline
 
@@ -80,142 +102,70 @@ Finite-sample, searched in-sample, registered-lattice evidence only. No populati
 R0-A preflight                         # ACCEPTED
 R0-B-R1 RB1–RB4                        # PASS
 R0-B-R2 RB5–RB7                        # PASS
-R0-B-R3 identity/reconstruction        # delivered; chat-side re-review
-chat-side final contract review
+R0-B-R3 RB8–RB9                        # PASS
+R0-B final contract                    # ACCEPTED
 
-R1 G1–G3 deterministic conversion     # not authorized
+R1 deterministic G1–G3 conversion    ← current
+chat-side R1 pack review / A1 gate
 R2–R4 conditional maturity stages
 A4/L6 separate production approval
 ```
 
-## Accepted contract corrections — retain without regression
+## R1 authorized work
 
-### RB1–RB4
+R1 may:
 
-- object claim level derives from geometry: G1 1×L0; G2 6×L0 isolated + 19×L1 multi; G3 1×L0; pack ceiling L1 aggregate only;
-- `region_asset_manifest.json` is the authoritative `pack_id` row;
-- region/null outcome identities and claims bind `feasibility_contract_id`; masks/coordinates remain feasibility-independent;
-- pairwise leaves canonicalize all `(atom, feature, direction, thr_index, role)` fields before truth digest, axes, coordinate keys, and membership.
+- implement a deterministic, research-only converter/validator;
+- consume the existing sealed Q4.5 runtime full atlases, committed Q4.5 seals, T0 evidence, threshold registry, and source candidate rows when present;
+- emit the authority and membership files required by contract §11;
+- generate a RegionAsset pack under `out/`;
+- validate stable IDs, normalized digests, PK/FK integrity, canonical pair ordering, claim derivation, and byte/content determinism;
+- write an R1 conversion note and update navigation/status mirrors;
+- apply editorial erratum E1 and mark the contract accepted before valid pack emission.
 
-### RB5–RB7
+R1 must run without evaluator modification, evaluator rerun, threshold search, geometry recomputation, or new research claims.
 
-- truth-level `coordinates` / `mask_units` are separated from feasibility-bound `region_coordinate_membership`;
-- candidate-universe and predicate-edge machine authorities are first-class; Q4.5 is observational, `U→no_reject`, no cross-universe composition without transport;
-- canonical Boolean policy/grammar AST identity is separated from observed-mask and logical-equivalence status; role provenance survives canonicalization; no G7 roles are inferred.
+### Artifact availability
 
-These items are **PASS** and must not be reopened by R0-B-R3.
-
-## Blocking corrections — R0-B-R3
-
-### RB8 — Bind sealed candidate membership into universe instance identity
-
-The R0-B-R2 draft defines `candidate_universe_id` primarily from substrate/hook/builder/prefilter/state metadata and stores `universe_hash` beside it. This can assign the same ID to two runs with identical generator metadata but different actual candidate membership.
-
-For direct Boolean composition and mask comparison, the sealed observation set—not only its generator contract—must be identical.
-
-R0-B-R3 must choose one explicit model:
+Runtime full atlases are required machine inputs and are not all in the committed evidence subset. Candidate-level rows are required for `universe_membership_digest`.
 
 ```text
-A. candidate_universe_id is the sealed instance ID and digests
-   normalized universe membership / universe_hash;
+required artifact present → convert deterministically
+required artifact absent  → BLOCKED_BY_ARTIFACT
 ```
 
-or:
+On `BLOCKED_BY_ARTIFACT`, emit only a bounded preflight/block report. Do not rebuild the evaluator outputs, fabricate IDs, substitute dataset names, or use the raw source-event-table SHA as the logical universe digest.
 
-```text
-B. split:
-   candidate_universe_contract_id  # builder/hook/prefilter/key/state schema
-   candidate_universe_instance_id  # contract + normalized membership digest
-```
+## R1 acceptance checklist
 
-Requirements:
+A delivered R1 pack is reviewable only when:
 
-- packs, feasibility contracts, evidence claims, and same-universe comparisons bind the **instance** identity;
-- define the exact normalized universe digest: candidate primary-key columns, exposure/label-bearing columns, canonical sort, missing encoding, duplicate/conflict handling, and hash algorithm;
-- `source_event_table_sha256` remains an exact evidence seal, not a substitute for normalized logical membership identity;
-- if candidate-level rows are unavailable, emit a fail-closed status such as `BLOCKED_BY_ARTIFACT`; do not fabricate a logical universe hash from a dataset name;
-- same generator contract with changed candidate membership must produce a different instance ID/hash.
+- E1 is corrected in the accepted contract;
+- inputs match recorded SHA seals;
+- two clean converter runs produce identical authority content and IDs;
+- all PKs are unique and every FK resolves exactly once;
+- universe contract and sealed instance are distinct, with normalized membership digest;
+- threshold-registry entries reconstruct every coordinate's concrete threshold values;
+- policy family and concrete policy instance identities remain separate;
+- region/mask relations derive only from feasibility-bound membership rows;
+- object claims remain G1 1×L0, G2 6×L0 + 19×L1, G3 null L0, pack ceiling L1;
+- manifest remains `maturity_declared=A0`, `composition_level=observational`, `production_forbidden=true`;
+- no evaluator/threshold search/production/ledger changes occurred.
 
-### RB9 — Add threshold-registry authority and concrete policy reconstruction grain
-
-The sealed Q4.5 evidence already contains `threshold_registry.json` with `thr_index`, `thr_value`, lattice, feature, direction, and quantile-point mappings. The R0-B-R2 output schema does not make that registry an authority: `coordinates.csv` requires only indices and treats threshold aliases/values as optional.
-
-Therefore `policy_definition_id` currently identifies a parameterized AST/family, not by itself a concrete executable threshold policy.
-
-R0-B-R3 must define:
-
-```text
-threshold_registry.json|jsonl
-  PK threshold_registry_id (or registry + entry composite key)
-  exact thr_index → threshold_value_repr mapping
-  feature, direction, lattice_kind, signal unit
-  quantile lattice point/method and canonical float representation
-```
-
-and bind coordinates to exact registry entries for every axis.
-
-It must also explicitly define the concrete policy grain, for example:
-
-```text
-policy_family_definition_id   # canonical parameterized AST / grammar
-policy_instance_id            # family + ordered threshold bindings
-```
-
-or declare an equivalent canonical composite such as:
-
-```text
-(policy_definition_id, coordinate_id, threshold_registry_id)
-```
-
-as the serialized concrete executable policy identity.
-
-Requirements:
-
-- two independent packers reconstruct identical threshold values and concrete policy IDs;
-- `threshold_value_repr` is required for execution/reproduction, while float values remain excluded from coordinate PKs as previously locked;
-- comparator/endpoint/unknown semantics come from predicate authority; threshold values come from the registry; axis binding comes from the coordinate/grid authority;
-- observed masks attach to concrete policy instances/coordinates, not to the parameterized family as identity;
-- Q4.5 uses the existing sealed threshold registry; no evaluator rerun or new threshold search.
-
-## Current step — R0-B-R3 (delivered; re-review)
-
-Revised in place:
-
-```text
-docs/research/eval/safe_region_asset_contract.md
-```
-
-### Delivered corrections
-
-1. **RB8 model B:** `candidate_universe_contract_id` (generator schema) vs `candidate_universe_instance_id` (contract + `universe_membership_digest`); packs/feasibility/same-universe compare bind **instance**; explicit membership digest algorithm; `source_event_table_sha256` remains evidence-only; fail-closed `BLOCKED_BY_ARTIFACT` if candidate rows unavailable.
-2. **RB9:** sealed `threshold_registry` authority (+ entries); coordinates bind per-axis registry entries; `policy_family_definition_id` (parameterized AST) vs `policy_instance_id` (family + ordered thr bindings + registry); thr_value excluded from coordinate PK; Q4.5 uses sealed registry sha `d3e3197f…`.
-3. Identity layers, PK/FK map, invariants, pack manifest, Q4.5 freeze, R1 boundary updated.
-4. CR1–CR9 and RB1–RB7 retained; no asset files; no evaluator/threshold search.
-
-## Acceptance for R0-B-R3 (chat-side checklist)
-
-- a changed sealed candidate membership cannot reuse the same universe instance ID;
-- universe normalization is explicit enough for two implementations to agree;
-- exact raw event-table SHA and normalized universe membership identity remain separate;
-- every coordinate axis resolves to one sealed threshold-registry entry;
-- every concrete threshold policy is reconstructible from machine authorities without guessing float values;
-- parameterized policy-family identity is not mislabeled as a concrete executable policy;
-- policy/coordinate/mask relations preserve the existing Boolean, feasibility, and observed-mask separations;
-- RB1–RB7 and CR1–CR9 remain intact;
-- every FK resolves to exactly one authority;
-- R1 remains unauthorized pending final chat-side acceptance.
+Passing engineering validation creates an **A0 pack candidate**. Chat-side review must separately decide A0→A1; R1 may not self-promote it.
 
 ## Must not
 
 - modify or rerun the Q4.5 evaluator;
-- generate RegionAsset data files;
-- perform new threshold search or recompute research conclusions;
-- implement G4–G7, LOO, shadow, hook, preset, intervention, or production behavior;
-- infer G7 roles or map unknown to reject;
+- run a new threshold search or recompute accepted research conclusions;
+- weaken the contract or tests to make conversion pass;
+- invent candidate rows, universe membership, G7 roles, or missing threshold values;
+- implement G4–G7, NOT authorization, LOO, shadow, hook, preset, intervention, or production behavior;
 - compare/compose different universe instances without transport;
-- change terminal B, maturity A0, accepted counts, or claim levels;
+- change terminal B, accepted counts, claim levels, or production defaults;
 - promote to evidence ledger;
-- self-accept R0-B-R3 or authorize R1.
+- self-accept the generated pack as A1 or authorize later stages;
+- open a PR unless separately authorized.
 
 ## History
 
@@ -223,5 +173,5 @@ docs/research/eval/safe_region_asset_contract.md
 - 2026-07-10: R0-B-R1 delivered; RB1–RB4 pass.
 - 2026-07-10: Boolean composition semantics contract added.
 - 2026-07-10: R0-B-R2 delivered at `34eab247`; RB5–RB7 pass.
-- 2026-07-10: final R0-B-R2 review requested RB8–RB9 identity/reconstruction closure; sole active → R0-B-R3; R1/A1 remain unauthorized.
-- 2026-07-10: R0-B-R3 delivered (RB8–RB9); awaiting chat-side re-review; R1/A1 still unauthorized.
+- 2026-07-10: R0-B-R3 delivered at `f92340b7`; RB8–RB9 pass.
+- 2026-07-10: chat-side final review accepted R0-B and authorized R1 deterministic conversion only; A0 retained; A1 remains a separate gate.
