@@ -1,0 +1,151 @@
+{
+  "revision": "T0-B-R1",
+  "headline_reconciliation": {
+    "ok": true,
+    "status": "PASS",
+    "checks": {
+      "n_atom_rows": {
+        "got": 870,
+        "expected": 870,
+        "summary": 870
+      },
+      "n_and_rows": {
+        "got": 17640,
+        "expected": 17640,
+        "summary": 17640
+      },
+      "n_or_rows": {
+        "got": 17640,
+        "expected": 17640,
+        "summary": 17640
+      },
+      "n_ps_single": {
+        "got": 1,
+        "expected": 1,
+        "summary": 1
+      },
+      "n_ps_and": {
+        "got": 153,
+        "expected": 153,
+        "summary": 153
+      },
+      "n_ps_or": {
+        "got": 0,
+        "expected": 0,
+        "summary": 0
+      },
+      "n_ps_total": {
+        "got": 154,
+        "expected": 154,
+        "summary": 154
+      }
+    },
+    "errors": []
+  },
+  "per_sequence_cross_check": {
+    "ok": true,
+    "status": "PASS",
+    "mode": "bidirectional_equality",
+    "n_ps_cells": 154,
+    "n_cells_checked": 154,
+    "n_positive_neg_entries_checked": 176,
+    "errors": [],
+    "n_errors": 0
+  },
+  "per_grid_mask_invariance": {
+    "ok": true,
+    "status": "PASS",
+    "n_per_grid_mask_groups": 34,
+    "n_errors": 0,
+    "errors": []
+  },
+  "region_stability_quotient_reconciliation": {
+    "n_region_stability_rows": 34,
+    "region_stability_max_component_size_coordinates": 19,
+    "atlas_reconstructed_n_components": 26,
+    "atlas_reconstructed_max_component_n_coords": 19,
+    "region_stability_n_interior_coordinates_sum": 0,
+    "region_stability_has_any_interior": false,
+    "notes": [
+      "region_stability is mask-quotient grain; component sizes are comparable only loosely"
+    ],
+    "ok": true
+  },
+  "synthetic_margin_checks": [
+    {
+      "case": "isolated_point",
+      "nearest_unsafe_distance": 1,
+      "full_neighborhood_safe_radius": 0,
+      "pass": true
+    },
+    {
+      "case": "one_cell_wide_strip",
+      "nearest_unsafe_distance": 1,
+      "full_neighborhood_safe_radius": 0,
+      "pass": true
+    },
+    {
+      "case": "3x3_block_center",
+      "full_neighborhood_safe_radius": 1,
+      "pass": true
+    },
+    {
+      "case": "diagonal_only_disconnected",
+      "n_components": 11,
+      "max_comp_size": 1,
+      "pass": true
+    },
+    {
+      "case": "edge_touching_strip_radius0",
+      "full_neighborhood_safe_radius": 0,
+      "pass": true
+    },
+    {
+      "case": "nearest_gt0_radius0_on_strip",
+      "pass": true
+    }
+  ],
+  "multi_seq_and_summary": {
+    "n_multi_seq_and_coordinates": 12,
+    "n_single_seq_and_coordinates": 141,
+    "n_primary_per_registered_grid_unique_masks": 8,
+    "n_global_mask_strings_diagnostic": 4,
+    "per_grid_unique_mask_counts": {
+      "P::abs_log_h::high_tail__resid_mean::low_tail": 1,
+      "P::abs_log_h::high_tail__score_m_bridge::low_tail": 3,
+      "P::abs_ratio_m1::high_tail__resid_mean::low_tail": 1,
+      "P::abs_ratio_m1::high_tail__score_m_bridge::low_tail": 3
+    },
+    "check_sum_per_grid_equals_primary": true,
+    "note": "primary unit = sum over grids of nunique(mask) within each grid (8); global mask-string count (4) is diagnostic only and must not use per_grid_* names"
+  },
+  "capacity_concentration": {
+    "unit": "per_registered_grid_mask",
+    "denominator": "sum of mask_n_neg over productive per-grid mask units",
+    "n_productive_per_grid_mask_units": 34,
+    "sum_mask_n_neg": 48,
+    "max_mask_n_neg": 4,
+    "mask_n_neg_distribution": {
+      "1": 26,
+      "2": 4,
+      "3": 2,
+      "4": 2
+    },
+    "top1_share_of_sum_mask_n_neg": 0.08333333333333333,
+    "top3_share_of_sum_mask_n_neg": 0.22916666666666666,
+    "top5_share_of_sum_mask_n_neg": 0.3333333333333333,
+    "note": "global mask-string collapse is diagnostic only; primary unit is per-grid"
+  },
+  "input_sha256": {
+    "atom_atlas.parquet": "281cb22bd92daf48d7dfdaaad86efde104bd0b458343d2e5247bd1d58776a0e0",
+    "pairwise_and_atlas.parquet": "ae52bd0cb799aaa8e11a9fa08c341611014839e95ff602f114fc8aecb9eabdac",
+    "pairwise_or_atlas.parquet": "bc1c2938775caa1e8f262fb083131e5f678cf612950e2400516b6d7baeb93323",
+    "region_stability.csv": "87055ef93439ae54d9c3255cb9c3be2d04da786f7b40a5f56d1e6f92046ef243",
+    "per_sequence.csv": "5446ac659ecada38d7ddb26dc1b9c31d61c25f69304ceecbed7f4ddf2570b121",
+    "threshold_registry.json": "d3e3197fa7812a9ec5f9b06cc2286dcce52d49cf805eba6527c3b24b62a585f4",
+    "summary.json": "a88d9dcfc5a614496305303ae3a5c23ec2de72ded44b8524104caa0f2f35d641",
+    "manifest.json": "4213e82e4c05a05247d32cfd387b209bdb20468d6d98038e84325f7a7dc7d568"
+  },
+  "study_git_commit": "dc758e088de9fe2bfed7e2d4d458a8360a03f712",
+  "study_schema": "m_b1_5_stage2_q45_atlas_manifest_v4"
+}

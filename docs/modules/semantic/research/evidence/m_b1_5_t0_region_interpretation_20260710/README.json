@@ -1,0 +1,10 @@
+{
+  "study_id": "m_b1_5_t0_region_interpretation_20260710",
+  "task": "T0-B Existing Atlas Region Interpretation Pack",
+  "revision": "T0-B-R1",
+  "note": "R1: bidirectional per-sequence equality; per-grid multi-seq mask units (8 primary / 4 global diagnostic); mask invariance; capacity concentration. No evaluator rerun.",
+  "terminal_b": "isolated_safe_points_only",
+  "g7": "contract-gap report only; not G7 equivalence",
+  "research_note": "docs/modules/semantic/research/composition_grammar_t0_region_interpretation_20260710.md",
+  "reproduce": "uv run python scripts/tools/analyze_m_b1_5_t0_region_interpretation.py --study out/signal_study/m_b1_5_stage2_q45_20260710 --out out/signal_study/m_b1_5_t0_region_interpretation_20260710"
+}
