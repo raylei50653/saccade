@@ -1,123 +1,87 @@
 ---
-doc-status: active
+doc-status: closed
 doc-promotion: navigation-only; not evidence
 owner-module: semantic
 created: 2026-07-10
+closed: 2026-07-10
 ---
 
 # composition grammar × safe-region geometry
 
-> **One-line:** T0-B-R1 **DONE** · awaiting **PR review**. Terminal B unchanged. Multi-seq = **12 coords → 8 per-grid masks / 4 global diagnostic**; bidirectional per-seq PASS; radius≥1 = **0**. Bounded verdict **not self-accepted**.
+> **One-line:** T0-A/T0-B/R1 **closed**. Bounded verdict accepted: existing registered Q4.5 atlas has **0/154** productive-safe coordinates with full-neighborhood radius ≥1. Terminal B retained. PR #94 is engineering-only merge work; no further task is authorized from this thread.
 
-## Status
+## Final status
 
 | Item | Status |
 |:--|:--|
-| Coverage audit (recon) | **CLOSED** |
-| Q4.5 terminal | **B** `isolated_safe_points_only` (unchanged) |
+| Coverage audit | **CLOSED** |
+| T0-A preflight | **ACCEPTED** |
+| T0-B interpretation | **ACCEPTED after R1** |
+| Q4.5 terminal | **B** `isolated_safe_points_only` |
 | Production preset | **unchanged** |
-| Signal family expansion | **not authorized** |
-| Unrestricted Boolean / 3+ atoms | **forbidden** |
-| T0-A artifact preflight | **ACCEPTED** |
-| T0-A report | [composition_grammar_t0_artifact_preflight_20260710.md](../../modules/semantic/research/composition_grammar_t0_artifact_preflight_20260710.md) |
-| T0-B interpretation pack | **EXECUTED** · R1 corrections applied |
-| T0-B-R1 | **DONE** — unit + reconciliation fixes |
-| T0-B note | [composition_grammar_t0_region_interpretation_20260710.md](../../modules/semantic/research/composition_grammar_t0_region_interpretation_20260710.md) |
-| T0-B evidence | [evidence/m_b1_5_t0_region_interpretation_20260710/](../../modules/semantic/research/evidence/m_b1_5_t0_region_interpretation_20260710/) |
-| Current authorized work | **none pending implementation** — hold for PR review |
-| Bounded verdict | **not yet accepted** (do not self-accept) |
-| G7 item | **contract-gap only** |
-| `evidence_ledger` | **not promoted** |
-
-```text
-Central judgment (held):
-  Primary Q4.5 gap = region observation + validation contraction
-  ≠ missing signals
-  ≠ arbitrary Boolean grammar
-```
-
-## Current boundary
-
-- Fixed frozen 5-signal family; locked \(D_{\text{online}}\) decision cohort.
-- Runtime full atlases required; committed Q4.5 pack alone insufficient.
-- G1 `S::` ⟂ G2/G3 `P::`; `mask_sha256` primary scope = per registered grid.
-- G7 cannot be audited without inventing NOT / operand-role semantics.
-- R1 closed: multi-seq units, bidirectional per-seq equality, mask invariance, capacity concentration, naming.
+| Evidence ledger | **not promoted** |
+| PR | **#94 open / mergeable**; engineering merge separate |
+| Next authorized work | **none** |
 
 ## Read first
 
-1. **[T0-B interpretation note (R1)](../../modules/semantic/research/composition_grammar_t0_region_interpretation_20260710.md)** — review input
-2. **[T0-A preflight](../../modules/semantic/research/composition_grammar_t0_artifact_preflight_20260710.md)**
-3. **[Coverage audit](../../modules/semantic/research/composition_grammar_safe_region_coverage_audit_20260710.md)**
-4. Stage 2 canonical: [m_b1_5_stage2_d_online_final_20260710.md](../../modules/semantic/research/m_b1_5_stage2_d_online_final_20260710.md)
+1. [T0-B final interpretation](../../modules/semantic/research/composition_grammar_t0_region_interpretation_20260710.md)
+2. [T0-A artifact preflight](../../modules/semantic/research/composition_grammar_t0_artifact_preflight_20260710.md)
+3. [Coverage audit](../../modules/semantic/research/composition_grammar_safe_region_coverage_audit_20260710.md)
+4. [Stage 2 final](../../modules/semantic/research/m_b1_5_stage2_d_online_final_20260710.md)
 
-## Truth base
-
-```text
-Q4.5 evaluator:  PR #89 head 6df1739b · merge 234f9f59
-Docs stack:      PR #90 consolidation 51b9c73e
-Integration:     PR #93 merge 8f7a3700
-T0-A accepted:   f8cfff56 + f1981c12
-T0-B executed:   7b54f5c2
-T0-B-R1 dispatch: 32ecd242
-Machine study:   out/signal_study/m_b1_5_stage2_q45_20260710/
-```
-
-## Current step — awaiting PR review
-
-**Branch:** `research/m-b1-5-t0-region-interpretation`  
-**Script:** `scripts/tools/analyze_m_b1_5_t0_region_interpretation.py`  
-**Evidence revision:** `T0-B-R1`
-
-### R1 acceptance checklist (execution)
+## Final evidence state
 
 ```text
-[x] original input hashes unchanged
-[x] no evaluator rerun or modification
-[x] headline 154 = 1 + 153 + 0
-[x] bidirectional per-sequence equality PASS
-[x] per-grid mask invariance PASS
-[x] multi-seq: 12 coords → 8 primary per-grid masks / 4 global diagnostic
-[x] capacity concentration top-1/3/5 reported (∑mask_n_neg denom)
-[x] dual-margin headline reproduced (radius≥1 = 0/154)
-[x] G7 remains contract-gap
-[x] Terminal B / production / ledger unchanged
+154 productive-safe coordinates
+  = 1 G1 atom
+  + 153 G2 AND
+  + 0 G3 OR
+
+142 single-sequence
+12 multi-sequence
+12 multi-seq coordinates
+  → 8 primary per-registered-grid masks
+  → 4 global mask strings (diagnostic only)
+
+34 productive per-grid mask units
+sum(mask_n_neg) = 48
+top-1 / top-3 / top-5 capacity shares
+  = 8.3% / 22.9% / 33.3%
+
+143/154 coordinates on multi-coordinate mask plateaus
+26 components
+12 single-cell-width strips
+0 genuine 2D-thick components
+
+nearest_unsafe_distance = 1 for all 154
+full_neighborhood_safe_radius >= 1 = 0/154
+
+G7 = not_derivable_from_current_artifact_contract
 ```
 
-### Reconciled headline (post-R1)
+Validation gates:
 
 ```text
-154 PS = 1 G1 + 153 G2 + 0 G3
-142 single-seq · 12 multi-seq (AND)
-12 multi-seq coords → 8 per-registered-grid masks · 4 global strings (diagnostic)
-34 productive per-grid mask units · ∑mask_n_neg=48 · top5 share≈33%
-143/154 coords on multi-coord per-grid mask plateaus
-26 components · 12 single-cell-width strips · 0 genuine 2D-thick
-full_neighborhood_safe_radius≥1: 0/154
-nearest_unsafe_distance=1 on all PS
-G7: not_derivable_from_current_artifact_contract
-Terminal B / production / ledger: unchanged
+input hashes unchanged
+headline reconciliation PASS
+bidirectional per-sequence equality PASS
+per-grid mask invariance PASS
+synthetic dual-margin checks PASS
+no evaluator rerun or modification
 ```
 
-### Bounded verdict candidate (still provisional — human accept only)
+## Accepted bounded verdict
 
-> Productivity among the 154 PS cells is explained by threshold-coordinate mask plateaus, single-sequence support, and axis-degenerate / edge-touching components. No registered full-neighborhood thickness under conservative edge policy. Multi-seq body is small (12 coords / 8 per-grid masks). Not a portable region, production candidate, or G7 result.
+> Within the existing registered Q4.5 G1–G3 lattices, productive-safe support is predominantly explained by threshold-coordinate mask plateaus, single-sequence support, and thin or edge-touching components. Under the declared conservative dual-margin policy, no registered full-neighborhood thickness is observed. The atlas therefore remains `isolated_safe_points_only`, and Stage 2 terminal B is retained.
 
-### Review gate
+Maximum promotion:
 
 ```text
-T0-B execution ✓
-→ R1 evidence correction ✓
-→ PR review  ← current (open PR only when ready; not auto)
-→ bounded research acceptance
-→ only then: close line / minimal emit / region-LOO / restricted G7
+accepted bounded descriptive closure of the existing-atlas region question
 ```
 
-## Acceptance boundary (held)
-
-T0-B may conclude only descriptive geometry of the existing registered atlas.
-
-It must not claim:
+Not promoted to:
 
 ```text
 formal or portable safe region
@@ -126,22 +90,58 @@ productive reject policy
 production candidate
 G7 equivalence
 new grammar necessity
-threshold-path global falsification
+global threshold-path falsification
 ```
 
-## Must not (held)
+## Research decision
 
-- Rewrite or rerun the Q4.5 evaluator.
-- Rebuild missing runtime atlases.
-- Expand research scope beyond R1 corrections.
-- Self-accept the bounded verdict.
-- Auto-open PR without explicit request.
-- Promote evidence or change terminal B.
+Close the current registered threshold-region line.
+
+Do **not** authorize from this thread:
+
+```text
+T1 evaluator emit
+region-level LOO
+restricted G7 implementation
+online region sweep
+hook or production preset change
+```
+
+Why:
+
+- no full-neighborhood thickness exists to justify region-transfer work;
+- the bounded descriptive evidence is already committed;
+- G7 is a missing semantic contract, not evidence that the grammar is necessary;
+- more infrastructure would not close a stronger claim on this substrate.
+
+## Reopen conditions
+
+A future reopen requires a separate explicit contract backed by at least one of:
+
+```text
+new signal-family evidence with a declared falsifier
+new hook placement or decision substrate
+valid NOT / necessary / support role semantics for G7
+a newly registered atlas with nonzero multi-sequence thickness
+```
+
+No reopen is authorized here.
+
+## PR boundary
+
+PR #94 contains the preflight, derivation script, evidence pack, R1 corrections, and accepted bounded documentation state.
+
+```text
+research acceptance: complete
+engineering merge: separate repository action
+production promotion: blocked
+```
 
 ## History
 
-- 2026-07-10: coverage audit closed; thread opened.
-- 2026-07-10: T0-A completed/accepted; T0-B authorized.
+- 2026-07-10: coverage audit closed; T0 thread opened.
+- 2026-07-10: T0-A completed and accepted.
 - 2026-07-10: T0-B executed at `7b54f5c2`.
-- 2026-07-10: review CHANGES REQUESTED (R1) at `32ecd242`.
-- 2026-07-10: T0-B-R1 applied; status → awaiting PR review (verdict unaccepted).
+- 2026-07-10: review requested R1 at `32ecd242`.
+- 2026-07-10: R1 completed at `c0bac5cc`; all correction gates passed.
+- 2026-07-10: PR #94 opened; bounded verdict manually accepted; thread closed.
