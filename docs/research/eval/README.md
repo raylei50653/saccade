@@ -11,7 +11,7 @@ See [../../ownership/doc_structure_contract.md](../../ownership/doc_structure_co
 |------|------|
 | [signal_table_schema.md](signal_table_schema.md) | 契約：A/B1/B2；§0.3 風格；§0.4 L0 safe-reject；**§0.5 Gate vs Score**；§8 能用/缺什麼 |
 | **[signal_analysis_ledger.md](signal_analysis_ledger.md)** | **深度訊號分析總帳**（一 gate/訊號一列；study + note pointer） |
-| [../../modules/semantic/research/m_b1_research_history_20260709_20260710.md](../../modules/semantic/research/m_b1_research_history_20260709_20260710.md) | **M-B1 offline phase CLOSED** — hub（方法 as-of notes 見 hub Tier B，勿散落維護） |
+| [../../modules/semantic/research/m_b1_research_history_20260709_20260710.md](../../modules/semantic/research/m_b1_research_history_20260709_20260710.md) | **M-B1 offline phase CLOSED** — 方法摘要見 §1–§14；原始方法細節由 source blob SHA 回溯（見 consolidation report） |
 | [m_b1_substrate_smoke_20260709.md](m_b1_substrate_smoke_20260709.md) | D1：`mamba_whole_graph_m` offline_relink/B1 資料規格煙測（pointer → study_dir） |
 | [m_b2_reconnect_bridge_ab_20260709.md](../../modules/semantic/research/m_b2_reconnect_bridge_ab_20260709.md) | D3：m B2 bridge on/off reconnect + e2e（study_dir master） |
 | [fp_classifier_external_only_plan.md](fp_classifier_external_only_plan.md) | 0-shot FP classifier 設計 |

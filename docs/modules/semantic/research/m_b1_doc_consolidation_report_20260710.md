@@ -71,21 +71,31 @@ pre-v4 atlas language:
 ```text
 stale research-state tokens (must be historical-marked if present):
   Stage 1 overall: OPEN | online_blocked | not e2e_safe_for_default_off |
-  Stage 2 not started | B-audit pending | next: new signal family
+  Stage 2 not started | B-audit pending | next: new signal family |
+  next=default-off hook | next=B2/e2e
 
 pre-v4 atlas tokens (must NOT appear as current truth):
   productive_safe cells: 211 | AND: 210 | loo_stable_region_but_seq_thin
   (except explicit historical / superseded callouts)
 
+bare terminal letters (must be namespaced if current):
+  terminal C  (Q4) without q4_separability_grade / stage2_entry_terminal_after_q4
+
 self-referential Absorbed from:
   Absorbed from: <this canonical basename>  → forbidden
+
+stale nav language:
+  hub Tier B  (history canonical uses §1–§18 + blob SHAs, not Tier B)
 ```
 
 | Result | Count |
 |:--|--:|
 | unmarked stale current-state hits | **0** |
+| unmarked ledger `next=` (default-off hook / B2/e2e) | **0** |
+| bare Q4 `terminal C` without namespace | **0** |
 | current-tense pre-v4 atlas count hits (`211`/`210` as truth) | **0** |
 | self-referential Absorbed-from | **0** |
+| hub Tier B refs | **0** |
 
 ---
 
@@ -275,6 +285,15 @@ rg -n 'm_b1_5_stage2_q45_threshold_atlas|m_b1_gate_rule_search_architecture|m_b1
 # pre-v4 counts as current truth (expect 0 outside explicit historical notes)
 rg -n 'productive_safe cells: 211|AND:    210|loo_stable_region_but_seq_thin' \
   docs/modules/semantic/research docs/research
+
+# unmarked ledger next= (expect historical-marked only)
+rg -n 'next=default-off hook|next=B2/e2e' docs/research/eval/signal_analysis_ledger.md
+
+# bare Q4 terminal C (expect namespaced form only)
+rg -n 'terminal C separability|terminal C weak' docs/research docs/modules/semantic
+
+# stale hub Tier B
+rg -n 'hub Tier B' docs/research docs/modules/semantic
 
 # self-ref Absorbed from
 rg -n 'Absorbed from:.*m_b1_research_history_20260709_20260710|Absorbed from:.*stage1_online_hook_final' \
