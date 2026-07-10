@@ -7,7 +7,7 @@ created: 2026-07-10
 
 # Safe-Region Assetization Program
 
-> **One-line:** A1 acceptance unit **locked** to conversion pack `1a180620bc…`. Chat review (2026-07-10) invalidated the four-part A1 framing and **downgraded R1/R1.1 to diagnostic overlay** (descriptive, heuristic-specific; "primary F3" and the LOO-isolation claim did not survive verification). Read-only S0/S1/Q1/N1 audit (2026-07-11) **26/26 PASS**. State: **A1_PENDING_VALIDATION → audit PASS**; terminal (incl. `A1_ACCEPTED_WITH_LIMITS`) is the owner's next decision.
+> **One-line:** **`A1_ACCEPTED_WITH_LIMITS` recorded (2026-07-11) — A1 gate CLOSED.** Acceptance unit = conversion pack `1a180620bc…`; maturity **A1** with 5 enumerated `acceptance_limits` (see terminal record). Audit 26/26 PASS + mutation sensitivity 5/5. R1/R1.1 remain diagnostic overlay; R2–R4 / production / ledger remain **fail-closed** (accepting terminal alone does not authorize them). Program returns to research mainline: owner picks the next scientific uncertainty.
 
 ## Status
 
@@ -15,9 +15,10 @@ created: 2026-07-10
 |:--|:--|
 | Program | **ACTIVE** — safe-region assetization |
 | Delivery model | **PR-driven** (direct-agent dispatch **retired**) |
-| Semantic sole active | **A1 terminal decision** (audit PASS; owner records terminal) |
+| Semantic sole active | **research mainline** — owner picks next scientific uncertainty (A1 gate closed) |
 | A1 acceptance unit | **locked**: conversion pack `1a180620bc050e70dd4a673f991ab24410e78ab02d2cbe49346414800ca631a7` — probe/R1.1 roots are **overlay, not A1 objects** |
-| A1 state | **A1_PENDING_VALIDATION → S0/S1/Q1/N1 audit 26/26 PASS** (2026-07-11) · [audit note](../../modules/semantic/research/safe_region_a1_audit_20260711.md) |
+| A1 terminal | **`A1_ACCEPTED_WITH_LIMITS` recorded 2026-07-11** (research owner) — gate **CLOSED** · [terminal record](#a1-terminal-record-2026-07-11) |
+| A1 audit trail | S0/S1/Q1/N1 **26/26 PASS** + mutation sensitivity **5/5** (`tests/unit/test_safe_region_a1_audit.py`) · [audit note](../../modules/semantic/research/safe_region_a1_audit_20260711.md) |
 | R0-A / CR1–CR9 | **ACCEPTED / PASS** |
 | R0-B-R1 | `e02a5367` — **RB1–RB4 PASS** |
 | R0-B-R2 | `34eab247` — **RB5–RB7 PASS** |
@@ -33,8 +34,8 @@ created: 2026-07-10
 | R1.1 attribution | **overlay** (downgraded) · [note](../../modules/semantic/research/safe_region_assetization_r11_20260710.md) · study `out/signal_study/safe_region_assetization_r11_20260710/` |
 | R1.1 net contribution | **2 unique harmful AND events located + 3 descriptive symptoms** (role reversal / weak retention / margin contraction); "primary F3" **rejected** (post-hoc floors, K-duplicated reversal count, alias-ambiguous predicate) |
 | A1 audit | **26/26 PASS** — S0 unit lock · S1 crosswalk 0 mismatches · Q1 pack-only · N1 controls · `out/signal_study/safe_region_a1_audit_20260711/` |
-| Next research | **owner records A1 terminal first**; `WITH_LIMITS` 無需先跑 D1（「no D1 trace」直接列為 acceptance_limit）; R1.1's four next-lines deferred until then |
-| Current maturity | **A0 pack retained**; probe `A1_region_asset` tags = overlay labels only (not pack maturity) |
+| Next research | **owner picks next scientific uncertainty** — R1.1's four lines are candidate directions only, none committed; asset-management validation is done |
+| Current maturity | **A1** (`A1_ACCEPTED_WITH_LIMITS`; 5 enumerated limits — see terminal record); probe `A1_region_asset` tags = overlay labels only (not pack maturity) |
 | R2–R4 | **unauthorized** (fail-closed; V-A not met) |
 | Pack root (conversion) | `out/signal_study/m_b1_5_safe_region_asset_r1_20260710/` |
 | Pack root (probe R1) | `out/signal_study/safe_region_assetization_r1_20260710/` |
@@ -45,13 +46,13 @@ created: 2026-07-10
 | evidence_ledger | **not promoted** |
 
 ```text
-R1 engineering delivery: MERGED
-PR #95: engineering delivery merged; CI PASS; engineering path closed
-current active gate: A1 research asset acceptance
+R1 engineering delivery: MERGED (#95); audit + overlay code MERGED (#97)
 A1 acceptance unit: conversion pack 1a180620bc… (locked; probe/R1.1 = overlay)
-A1 state: A1_PENDING_VALIDATION → S0/S1/Q1/N1 audit 26/26 PASS (2026-07-11)
-current maturity: A0 retained (terminal not yet recorded)
-R2–R4: unauthorized (fail-closed)
+A1 terminal: A1_ACCEPTED_WITH_LIMITS (recorded 2026-07-11) — gate CLOSED
+current maturity: A1 + 5 enumerated acceptance_limits
+R2–R4: unauthorized (fail-closed — accepting terminal exists, but each named
+       stage still requires explicit owner authorization)
+next: research mainline — owner picks next scientific uncertainty
 ```
 
 ## Gate separation (normative)
@@ -62,7 +63,7 @@ Keep these distinct:
 |:--|:--|:--|:--|
 | **Engineering delivery** | Converter, tests, pack emission, docs mirrors | implementation branch + PR | **done** |
 | **Engineering path close** | Landed engineering + CI; closes eng. workstream | merge + CI ([#95](https://github.com/raylei50653/saccade/pull/95)) | **closed** (not a formal review-record claim) |
-| **Research asset acceptance (A1)** | Whether the A0 pack is a consumable research asset; **terminal binds maturity** | chat-side / research-owner | **open** |
+| **Research asset acceptance (A1)** | Whether the A0 pack is a consumable research asset; **terminal binds maturity** | chat-side / research-owner | **closed** — `A1_ACCEPTED_WITH_LIMITS` (2026-07-11) |
 | **Merge** | Landing engineering on `main` | PR merge (does **not** imply research acceptance) | **done** |
 | **Next-stage authorization** | Named R2+ / production / ledger stages | research-owner; **fail-closed** (see below) | unauthorized |
 
@@ -85,6 +86,39 @@ A1_REJECTED retains A0 and authorizes only bounded R1 repair/re-review.
 Any A1 terminal alone does not authorize R2–R4, transfer, LOO,
 production, or ledger promotion.
 ```
+
+## A1 terminal record (2026-07-11)
+
+Recorded by the research owner after: acceptance-unit lock → read-only S0/S1/Q1/N1 audit **26/26 PASS** → mutation sensitivity **5/5** (audit FAILs under component-alias tamper, per-sequence-support tamper, forbidden-promotion removal, self-promoted maturity) → repository-wide state consistency audit. No new evidence was produced for this terminal; no post-hoc D1 was run.
+
+```text
+A1_ACCEPTED_WITH_LIMITS
+
+maturity:
+  A1
+
+accepted scope:
+  - semantic crosswalk fidelity
+  - fixed pack-only topology/capacity/support/grain/null queries
+  - encoded negative-control and claim-boundary metadata
+
+acceptance_limits:
+  - decision utility not demonstrated; no pre-declared D1 trace
+  - reusable abstraction not demonstrated; no independent second consumer
+  - event-mass queries require raw event artifacts
+  - non-productive-cell queries require raw artifacts
+  - predicate-alias semantic resolution requires raw/contract-level artifacts
+
+non-authorizations:
+  - R1/R1.1 remain diagnostic overlay only
+  - no class-level transfer null
+  - no R2–R4 authorization
+  - no production or evidence-ledger promotion
+```
+
+Meaning: the pack is a trusted, **boundedly consumable** research asset; it has **not** demonstrated direct decision-making capability or reuse by a second research workflow. Reusable abstraction is validated later, usage-based, when an independent second consumer appears naturally — not by manufacturing one.
+
+The pack's own `maturity_declared=A0` / `review_status=A0_PACK_CANDIDATE_AWAITING_CHAT_REVIEW` fields are **sealed producer-side self-declarations** (the converter must never self-promote); this terminal record is the authority that binds effective maturity **A1**.
 
 ## Acceptance record
 
@@ -168,10 +202,12 @@ R0-B final contract                    # ACCEPTED
 
 R1 deterministic G1–G3 conversion    # ENGINEERING DELIVERED
 PR #95 merge + CI                    # MERGED; path closed (history)
-A1 research asset acceptance         ← current active gate
-  (terminal binds A0/A1 maturity)
-R2–R4 named stages                   # unauthorized unless accepting A1
-                                       terminal + explicit owner auth
+A1 research asset acceptance         # CLOSED — A1_ACCEPTED_WITH_LIMITS
+  (terminal binds maturity → A1)       (recorded 2026-07-11)
+R2–R4 named stages                   ← next decision point: unauthorized
+                                       until owner explicitly authorizes a
+                                       named stage (accepting terminal alone
+                                       is not authorization)
 A4/L6 separate production approval
 ```
 
@@ -252,7 +288,7 @@ A0–A4 are **asset maturity** levels in the accepted RegionAsset contract. The 
 A1_PENDING_VALIDATION          (non-terminal; added 2026-07-10)
   受驗物已鎖定但 audit / terminal 未完成
   → A0 retained; 不表示 pack 有 defect
-  → current: audit PASS, awaiting owner terminal
+  → exited 2026-07-11: terminal A1_ACCEPTED_WITH_LIMITS recorded
 
 A1_ACCEPTED
   pack 已成為可信且可消費的研究資產
@@ -284,7 +320,7 @@ A1_ACCEPTED_WITH_LIMITS:
 
 Even after an accepting terminal (`A1_ACCEPTED` or `A1_ACCEPTED_WITH_LIMITS`), R2–R4 / transfer / LOO / production / ledger remain **unauthorized** until the research owner **explicitly authorizes the named next stage**. Maturity promotion to A1 is bound by the terminal; next-stage work is not.
 
-### A1 out of scope (this write-back / current open gate)
+### A1 out of scope (historical — while the gate was open; gate closed 2026-07-11)
 
 ```text
 no pre-written A1 terminal or maturity promotion
@@ -337,3 +373,5 @@ Suggested first consumption probe for the A1 decision (not auto-authorized as R2
 - 2026-07-10: **R1.1 AUTHORIZED and COMPLETE** — Transfer Failure Attribution Pack. Primary **F3** (train-neg bases fire holdout GT on MOT17-05/11; score_m_bridge-low AND patterns). Secondary **F4** (weak holdout productive retention) + **F1** (margin sign flip 4/14 folds). F2 moderate Jaccard only; F5 rejected (pooled n_neg=8). Decision mapping: no global gate; R2 still closed; owner chooses next among conditional applicability / new signal family / narrow coord-transport spec / formal mainline close.
 - 2026-07-10: **Chat review — A1 framing invalidated; R1/R1.1 downgraded to overlay.** Seven findings, all verified against code/artifacts: (1) acceptance object non-unique (probe writes `A1_region_asset` tags while pack is A0); (2) R1/R1.1 never consume the pack (raw Q4.5/events only); (3) LOO candidate pool is global-label-screened top-48, reused per fold, truncated to top-24 (`r1.py:1010,1625,1372`) — "labels do not select registry" false at the pool layer; V-C survives only as heuristic-specific descriptive failure; (4) F1/F3/F4 hard-floored post-hoc to 40/55/50 (`r11.py:584,598,605`); (5) F3's ≥3-reversal trigger double-counts K2/K5 — 2 unique (basis,event) pairs; (6) harmful basis `b2:07de9243…` has 12 observed-mask aliases — predicate identity not unique; (7) probe `linear_probe_models.csv` writes `multi_sequence_productive_coordinates` (12) into `n_productive_sequences` in a 7-seq cohort (`r1.py:1574`) — semantic counterexample **in the overlay, not the pack**. New non-terminal state **A1_PENDING_VALIDATION**; A1 split into A1-S (hard gate) + A1-Q (pack-only battery); decision utility → pre-declared D1; reusable abstraction → usage-based. R1.1's four next-lines deferred until terminal.
 - 2026-07-11: **A1 acceptance unit locked + read-only audit PASS.** Unit = conversion pack `1a180620bc…` (probe/R1.1 = overlay). `scripts/tools/run_safe_region_a1_audit.py` → **26/26**: S0 4/4 · S1 11/11 (154 memberships, 26↔26 components, 34→15 masks, 1080 registry entries reconstruct sealed values, 0 mismatches) · Q1 5/5 pack-only · N1 6/6. D1 not run (no pre-declared rule). [Audit note](../../modules/semantic/research/safe_region_a1_audit_20260711.md). Maturity stays A0; terminal (e.g. `A1_ACCEPTED_WITH_LIMITS` with enumerated limits) awaits research owner.
+- 2026-07-11: **PR #97 merged** (audit runner + overlay evidence code + docs write-back; CI green). Follow-up review fixes landed in-branch: Q1.sequence claim softened to pack-only *computable* (no per-region goldens predeclared); D1 binding disambiguated (`A1_ACCEPTED` needs pre-declared D1 only if decision utility claimed; `WITH_LIMITS` records absence of D1 as a limit — no post-hoc D1); mutation tests added (`tests/unit/test_safe_region_a1_audit.py`).
+- 2026-07-11: **A1 terminal recorded: `A1_ACCEPTED_WITH_LIMITS` — gate CLOSED.** Post-merge closure sequence per owner: mutation sensitivity **5/5** on `main` → terminal record (see [A1 terminal record](#a1-terminal-record-2026-07-11): maturity A1; accepted scope = crosswalk fidelity + fixed pack-only queries + encoded negative controls; 5 acceptance_limits incl. no D1 trace and no second consumer; non-authorizations unchanged) → repository-wide state consistency audit (no stale "A1 open / A0 retained / terminal pending"; R1/R1.1 still overlay; R2–R4/production/ledger still fail-closed). No new evidence produced; no post-hoc D1. Program returns to research mainline — owner picks the next scientific uncertainty.
