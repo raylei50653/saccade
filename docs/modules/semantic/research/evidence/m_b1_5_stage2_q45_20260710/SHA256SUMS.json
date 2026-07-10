@@ -1,0 +1,49 @@
+{
+  "files": [
+    {
+      "bytes": 2798,
+      "file": "manifest.json",
+      "sha256": "a555ef7044fb252bbc0f293df6600185aebb36166b9ff5eced7aa914900bf0a9"
+    },
+    {
+      "bytes": 3982,
+      "file": "summary.json",
+      "sha256": "e8c15bab0953b4108ca7121220b0dde500dbce8add5f748c466a4cd2753dda23"
+    },
+    {
+      "bytes": 531,
+      "file": "reconciliation.json",
+      "sha256": "64d5c7fe539e0391c743d386bc9225e26febf51753c3f5d08aee8ba2cfdc4611"
+    },
+    {
+      "bytes": 1457,
+      "file": "cohort_summary.json",
+      "sha256": "2b248fbe4c25265a69a46b55197a1f3ededaeac556747d8cdc2a7c6b651cf354"
+    },
+    {
+      "bytes": 373159,
+      "file": "threshold_registry.json",
+      "sha256": "88cbecc2d82a7fd524bf29c6be5526ab2c5182bd1ad6a6ce1f8631fa045097df"
+    },
+    {
+      "bytes": 4665,
+      "file": "region_stability.csv",
+      "sha256": "a4400629a1cec4655ad64816d4abac97b7d22109ae3fc7a956d818604e38022a"
+    },
+    {
+      "bytes": 60028,
+      "file": "pareto_frontier.csv",
+      "sha256": "b49ae10d11a83c87271faf0233ab55b6b1c4e922e52d88dc4b83107cd875c977"
+    },
+    {
+      "bytes": 8174,
+      "file": "frame_column_provenance.json",
+      "sha256": "13dcf2da80e736320f8969a516dfe0a94dab0c97affcb7b66ce87aa0d3d84888"
+    },
+    {
+      "bytes": 9188,
+      "file": "true_holdout_loo.csv",
+      "sha256": "b10cb05fc78df7f06aa796ae8d5e724f781a054ab4c8001008e57fa144b3cc78"
+    }
+  ]
+}

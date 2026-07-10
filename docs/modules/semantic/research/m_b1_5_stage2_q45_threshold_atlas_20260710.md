@@ -10,44 +10,54 @@
 **Entry contract:** [m_b1_5_stage2_entry_contract_20260710.md](m_b1_5_stage2_entry_contract_20260710.md)
 **Thread:** [m_b1_online_hook_20260709.md](../../../research/threads/m_b1_online_hook_20260709.md)
 
-## Terminal classification
+## Terminal classification (evaluator v2 — review #89)
 
 ```text
 stage2_q45_terminal: isolated_safe_points_only
 terminal_letter: B
+taxonomy_version: stage2_q45_atlas_v2
 
 n_primary_negative: 23
 n_primary_positive_protect: 64
-n_primary: 87
-sequences_with_both_classes: 7
+n_primary_resolved_selected: 87
+n_selected_unresolved: 21   # tracked per-cell; not primary labels
+n_selected_total: 108
 
-atlas:
-  single_atom rows:     1086   (unique-boundary lattice × 5 signals × 2 dirs
-                                 + secondary competition columns)
-  pairwise AND rows:   17640   (registered q05 lattice, complete enum)
-  pairwise OR rows:    17640
+atlas (frozen signals only; competition columns demoted):
+  single_atom rows:     870
+  pairwise AND rows:  17640
+  pairwise OR rows:   17640
 
-productive_safe cells (GT_hurt==0 ∧ n_neg>0):
+productive_safe (resolved GT_hurt==0 ∧ n_neg>0 ∧ no unresolved capture):
   single: 1
-  AND:    210
+  AND:  153
   OR:     0
 
-stability:
-  isolated_safe_point:            14
-  thin_safe_edge:                196
-  loo_stable_region_but_seq_thin:  1
-  region_candidates (A-eligible):  0
+stability (duplicate-free topology):
+  isolated_safe_point: 10
+  edge_candidate:       4
+  region_candidates:    0
 
-next_authorized_step:
-  retain full atlas; do not promote isolated points;
-  optional deeper thickness diagnostics or ranking path
+evaluator gates:
+  deletion_loo_is_portability: false
+  true_holdout_required_for_region_A: true
+  unresolved_contaminated_blocks_candidate: true
+  duplicate_masks_not_neighbors: true
+  interior_requires_full_neighborhood: true
+  assignment_group_key_status: invalid_frame_provenance
 
 production_preset: unchanged
 ```
 
-**Interpretation of B:** observed sample-zero-GT cells exist, but **none**  
-meet multi-seq + neighborhood thickness + LOO region-candidate gates.  
-They remain **atlas points**, not safe rules.
+**Bounded finding (not global thr closure):**
+
+> On the **resolved∧selected** cohort, the restricted atlas reports sample-zero-GT  
+> cells but **no unique interior multi-sequence thick region**. Full selected  
+> population (incl. 21 unresolved) still limits safety claims.  
+> **Still inadmissible:** portable safe-region · thr global closure ·  
+> hook-policy promotion · e2e effect · production preset change.
+
+Evidence pack: [evidence/m_b1_5_stage2_q45_20260710/](evidence/m_b1_5_stage2_q45_20260710/)
 
 ---
 
@@ -55,18 +65,35 @@ They remain **atlas points**, not safe rules.
 
 ```text
 Q4 weak marginal AUC (best oriented ≈ 0.588)
-  → closes: singleton frozen-tail threshold promotion / thr-chase as policy
-  → does NOT close: threshold + restricted Boolean as data-analysis methods
+  → closes: singleton frozen-tail threshold *promotion* as policy
+  → does NOT alone close: thr/Boolean as analysis
+  → does NOT alone authorize: “threshold path fully falsified → ranking only”
 
-This round uses thresholds and pairwise AND/OR only as an atlas tool
-to map conditional structure — not to ship a hook policy.
+Q4.5 maps structure. Ranking is a reasonable next research line after
+valid assignment-group key + unknown coverage + true holdout LOO.
 ```
 
-The earlier “new signal-family terminal” path is **parked** (exploratory only).  
-Competition-relative features appear as **secondary** columns in the atom atlas,  
-not as mainline termination.
+Competition-relative features: **untrusted** (`invalid_frame_provenance`).  
+Not ranking-path evidence until export provides a stable assignment key.
 
 ---
+
+## Review #89 evaluator fixes (v2)
+
+| Issue | Fix |
+|:--|:--|
+| LOO deletion = portability | Renamed `leave_one_sequence_deleted_*`; **cannot** promote |
+| True holdout | `true_holdout_loo.csv`: freeze thr → held-out GT hurt |
+| Unknown selected | per-cell `n_unresolved_selected`, pessimistic hurt, `unresolved_contaminated` |
+| Duplicate thickness | unique `mask_sha256` topology; dups not neighbors |
+| Boundary interior | bilateral (1D) / full-4 (pairwise); else `edge_candidate` |
+| Assignment group | competition features demoted; frame not used as truth |
+| MOT cross-check | prefers `cand_global_id` / `lost_global_id` + `_global_id_map.txt` |
+| Evidence pack | committed under `evidence/m_b1_5_stage2_q45_20260710/` |
+
+---
+
+## Locked primary cohort
 
 ## Locked primary cohort
 

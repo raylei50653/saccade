@@ -7,7 +7,7 @@ created: 2026-07-09
 
 # m_b1 online hook thread
 
-> **One-line:** Stage 1a/1b eng on branch; **Stage 2 Q4.5 = B isolated_safe_points_only** (211 productive-safe · 0 region candidates). Thr/hook-policy promotion blocked. Next preferred: ranking/assignment-relative. Preset unchanged.
+> **One-line:** Stage 1a/1b eng on branch; **Stage 2 Q4.5 = B isolated_safe_points_only** (154 productive-safe (v2) · 0 region candidates). Thr/hook-policy promotion blocked. Next preferred: ranking/assignment-relative. Preset unchanged.
 
 ## Status (honest split)
 

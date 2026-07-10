@@ -1,0 +1,49 @@
+{
+  "artifact_hashes": {
+    "atom_atlas": "23db7d6c84c0e637cd147b367bc07d4f7e83c18ef46d0fdde60faaa7ade59414",
+    "atom_atlas_parquet": "31bdbc91fd670abad2d9abf044e63ddcff16427ade5aa098a756298050c82a5c",
+    "cohort_summary": "ca1766aad9aa09bd3802cefe3fa621023fd9b13a7cdf8ebade516a3594edd41d",
+    "frame_column_provenance": "34e3808f82d2aa4475c29de242d316dea1d964f39de427f144039cf299a7a518",
+    "loo": "2353077a996bdb96f181e69b37c346ba4b462f774555029ce4c1bf440dd88e4f",
+    "pairwise_and_atlas": "8acd53b877bbae47bdf07b1fa90cdd356078a72238d4e135af180b7a8c4f1978",
+    "pairwise_and_atlas_parquet": "1a6535053387bed799ea324221747a7c99a6dbeff38442903457f09562c7b0a4",
+    "pairwise_or_atlas": "d5a053a981d87e73637c7f8729b464f26422dbcdb943d0409da65182db2b9b07",
+    "pairwise_or_atlas_parquet": "b69908c3073674a2416d679dc6f4c5c4085a25a04a91276f0fa44abba50e5582",
+    "pareto_frontier": "b49ae10d11a83c87271faf0233ab55b6b1c4e922e52d88dc4b83107cd875c977",
+    "per_sequence": "3eaebbbcd2ea74c5dd7010c651db61549ce44fa54d3fb319b4d4284e1a29de99",
+    "reconciliation": "64d5c7fe539e0391c743d386bc9225e26febf51753c3f5d08aee8ba2cfdc4611",
+    "region_stability": "be090fde61888a8de1009344d5185a60078d64725a56cc6c5600fd836431a7f6",
+    "summary": "072e7de947db10169f1c5016592826845cfbf08c8d5aa2e554387f5b294dd69e",
+    "summary_md": "1fd7fa1073c1b6b6627494aec7200b83c4690283314f7ee8d2e0580ddd9bc843",
+    "threshold_registry": "fd024ab0602a0588a6cc31694bf7de1ffd643834b7ef3fb476194ddb70b4995a"
+  },
+  "candidate_universe_id": "online_hook_eligible",
+  "cohort_definition": {
+    "excluded_from_main": "unresolved, ambiguous, non-selected, other labels",
+    "negative_class": "resolved AND baseline_selected AND pair_label==negative",
+    "positive_protection_class": "resolved AND baseline_selected AND pair_label==gt_consistent",
+    "secondary_analysis": "resolved non-selected negative / gt_consistent"
+  },
+  "created_utc": "2026-07-10T07:55:54.864999+00:00",
+  "git_commit": "20b06f195fd28300ddc730b0485a1dd3b75547ed",
+  "production_preset": "unchanged",
+  "schema": "m_b1_5_stage2_q45_atlas_manifest_v1",
+  "sequence_set": [
+    "MOT17-02-SDP",
+    "MOT17-04-SDP",
+    "MOT17-05-SDP",
+    "MOT17-09-SDP",
+    "MOT17-10-SDP",
+    "MOT17-11-SDP",
+    "MOT17-13-SDP"
+  ],
+  "source_event_table": "out/signal_study/m_b1_5_stage2_q1q3_20260710/d_online_events.parquet",
+  "source_event_table_hash": "cfca3818fd8478e6e3dcb12d3976549dab8057a0f2c2e63831f8d3e3a2fffd97",
+  "source_q1q3_study": "out/signal_study/m_b1_5_stage2_q1q3_20260710",
+  "stage2_q45_terminal": "isolated_safe_points_only",
+  "study_id": "m_b1_5_stage2_q45_20260710",
+  "substrate_id": "stage1_baudit_d_online",
+  "taxonomy_version": "stage2_q45_atlas_v1",
+  "terminal_letter": "B",
+  "upstream_q4_study": "m_b1_5_stage2_q4_20260710"
+}

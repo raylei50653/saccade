@@ -1,0 +1,23 @@
+{
+  "acceptance": "PASS",
+  "checks": {
+    "all_primary_selected": true,
+    "n_neg_matches_summary": true,
+    "n_pos_matches_summary": true,
+    "n_primary_eq_neg_plus_pos": true,
+    "n_primary_matches_summary": true,
+    "no_unresolved_in_primary": true,
+    "partition_covers_d_online": true,
+    "per_seq_neg_sum": true,
+    "per_seq_pos_sum": true,
+    "primary_labels_only_neg_or_gt": true
+  },
+  "counts": {
+    "n_d_online": 244,
+    "n_neg": 23,
+    "n_pos": 64,
+    "n_primary": 87
+  },
+  "errors": [],
+  "ok": true
+}

@@ -49,7 +49,7 @@ from saccade.perception.eval.portable_or_tail import ORDERED_SIGNALS
 # Locked constants
 # ---------------------------------------------------------------------------
 
-TAXONOMY_VERSION = "stage2_q45_atlas_v1"
+TAXONOMY_VERSION = "stage2_q45_atlas_v2"
 Q1Q3_STUDY_ID = "m_b1_5_stage2_q1q3_20260710"
 Q4_STUDY_ID = "m_b1_5_stage2_q4_20260710"
 EXPECTED_PRIMARY_N = 87
@@ -79,6 +79,14 @@ MIN_SUPPORT_FOR_ENRICHMENT = 2
 MIN_ENRICHMENT_USEFUL = 1.25  # 25% above base negative rate
 MIN_SEQS_FOR_REGION = 2
 MAX_SEQ_SHARE_NON_DOMINANT = 0.5
+
+# True held-out LOO: freeze absolute thr on train, evaluate on holdout.
+# Deletion-consistency (old LOO) is NOT portability and cannot promote.
+HOLD_OUT_PORTABILITY_GATE = True
+
+ASSIGNMENT_GROUP_KEY_STATUS = (
+    "invalid_frame_provenance"  # (seq, frame, cand_slot) uses host counter frame==4
+)
 
 
 class Stage2Q45Error(ValueError):
@@ -158,20 +166,49 @@ def check_frame_column_provenance(
                         except ValueError:
                             continue
                         tid_frames[tid].append(fr)
+                # Prefer global_id_map namespace (same as Q1 join); fall back to local
+                gmap_path = a1 / "_global_id_map.txt"
+                local_to_global: dict[int, int] = {}
+                if gmap_path.is_file():
+                    with gmap_path.open(encoding="utf-8") as gf:
+                        for gl in gf:
+                            gp = gl.strip().split()
+                            if len(gp) >= 2:
+                                try:
+                                    # formats vary: local global OR seq local global
+                                    if len(gp) == 2:
+                                        local_to_global[int(gp[0])] = int(gp[1])
+                                    else:
+                                        local_to_global[int(gp[-2])] = int(gp[-1])
+                                except ValueError:
+                                    continue
                 for r in rows[:5]:
-                    for role, key in (
-                        ("cand", "cand_track_id"),
-                        ("lost", "lost_track_id"),
+                    for role, key, gkey in (
+                        ("cand", "cand_track_id", "cand_global_id"),
+                        ("lost", "lost_track_id", "lost_global_id"),
                     ):
-                        tid = _i(r.get(key, -1))
-                        frs = tid_frames.get(tid, [])
+                        local_tid = _i(r.get(key, -1))
+                        # prefer explicit global columns from Q1q3 join
+                        g_tid = (
+                            _i(r.get(gkey, -1)) if r.get(gkey) not in (None, "") else -1
+                        )
+                        if g_tid < 0 and local_tid in local_to_global:
+                            g_tid = local_to_global[local_tid]
+                        # MOT file uses global trajectory ids when map present
+                        query_tid = g_tid if g_tid >= 0 else local_tid
+                        frs = tid_frames.get(query_tid, [])
                         mot_cross.append(
                             {
                                 "sequence": seq,
                                 "event_id": r.get("event_id"),
                                 "audit_frame": int(r.get("frame", -1)),
                                 "role": role,
-                                "track_id": tid,
+                                "local_track_id": local_tid,
+                                "global_track_id": g_tid if g_tid >= 0 else None,
+                                "mot_query_id": query_tid,
+                                "id_namespace": (
+                                    "global" if g_tid >= 0 else "local_fallback"
+                                ),
                                 "mot_frame_min": min(frs) if frs else None,
                                 "mot_frame_max": max(frs) if frs else None,
                                 "mot_n_boxes": len(frs),
@@ -259,6 +296,8 @@ def check_frame_column_provenance(
             "may_claim_temporal_information_unavailable_from_frame_alone": False,
             "observation_limitation_only": True,
             "affects_q45_threshold_atlas_mainline": False,
+            "affects_competition_grouping": True,
+            "assignment_group_key_status": ASSIGNMENT_GROUP_KEY_STATUS,
             "note": (
                 "Do not write 'temporal information unavailable' solely because "
                 "frame==4. The field is not absolute MOT frame. This is an "
@@ -441,7 +480,15 @@ def region_metrics(
     sequences: np.ndarray,
     *,
     base_neg_rate: float,
+    unknown_mask: np.ndarray | None = None,
+    ambiguous_mask: np.ndarray | None = None,
 ) -> dict[str, Any]:
+    """Descriptive region metrics on resolved primary labels.
+
+    LOO-by-deletion fields are renamed to leave_one_sequence_deleted_*;
+    they are **not** portability evidence (deletion cannot increase GT hurt
+    if full-cohort GT_hurt==0).
+    """
     mask = np.asarray(mask, dtype=bool)
     n = len(y)
     support = int(mask.sum())
@@ -468,38 +515,69 @@ def region_metrics(
     n_seq_with_neg = sum(1 for v in seq_neg.values() if v > 0)
     max_seq_share = max(seq_sup.values()) / support if support > 0 else float("nan")
     max_neg_seq_share = max(seq_neg.values()) / n_neg if n_neg > 0 else float("nan")
-    # LOO: drop each sequence present in cohort
-    loo_rows = []
+
+    # --- deletion consistency (NOT portability) ---
+    del_rows = []
     all_seqs = sorted(set(str(s) for s in sequences))
     for hold in all_seqs:
         m = sequences != hold
         mm = mask[m]
         yy = y[m]
-        sup = int(mm.sum())
-        nn = int(np.sum(mm & (yy == 1)))
-        ng = int(np.sum(mm & (yy == 0)))
-        loo_rows.append(
+        del_rows.append(
             {
                 "hold_out_sequence": hold,
-                "support": sup,
-                "n_neg": nn,
-                "n_gt": ng,
-                "gt_hurt": ng,
-                "productive_safe": int(ng == 0 and nn > 0),
+                "support": int(mm.sum()),
+                "n_neg": int(np.sum(mm & (yy == 1))),
+                "n_gt": int(np.sum(mm & (yy == 0))),
+                "gt_hurt": int(np.sum(mm & (yy == 0))),
+                "productive_safe": int(
+                    int(np.sum(mm & (yy == 0))) == 0 and int(np.sum(mm & (yy == 1))) > 0
+                ),
             }
         )
-    loo_max_gt = max((r["gt_hurt"] for r in loo_rows), default=0)
-    loo_all_safe = all(r["gt_hurt"] == 0 for r in loo_rows) if loo_rows else False
-    loo_any_productive = any(r["productive_safe"] == 1 for r in loo_rows)
+    del_max_gt = max((r["gt_hurt"] for r in del_rows), default=0)
+    del_all_safe = all(r["gt_hurt"] == 0 for r in del_rows) if del_rows else False
 
-    observed_safe_point = support > 0 and n_gt == 0  # may be empty
-    productive_safe_point = n_gt == 0 and n_neg > 0
+    # --- unknown / unresolved contamination (selected only) ---
+    n_unresolved = int(unknown_mask.sum()) if unknown_mask is not None else 0
+    n_ambiguous = int(ambiguous_mask.sum()) if ambiguous_mask is not None else 0
+    optimistic_gt_hurt = n_gt  # unresolved treated as non-GT
+    pessimistic_gt_hurt = n_gt + n_unresolved + n_ambiguous  # all unknown as GT
+    unknown_capture = n_unresolved + n_ambiguous
+    unknown_capture_rate = (
+        float(unknown_capture / (support + unknown_capture))
+        if (support + unknown_capture) > 0
+        else float("nan")
+    )
+    if unknown_capture > 0:
+        safety_status = "unresolved_contaminated"
+    elif n_gt == 0 and n_neg > 0:
+        safety_status = "resolved_sample_zero_gt"
+    elif n_gt == 0 and support > 0:
+        safety_status = "resolved_empty_or_no_neg"
+    else:
+        safety_status = "resolved_gt_contaminated"
+
+    observed_safe_point = support > 0 and n_gt == 0 and unknown_capture == 0
+    # productive_safe on resolved only; unknown blocks promotion via safety_status
+    productive_safe_resolved = n_gt == 0 and n_neg > 0
+    productive_safe_point = productive_safe_resolved and unknown_capture == 0
+
+    mask_sig = hashlib.sha256(np.packbits(mask.astype(np.uint8)).tobytes()).hexdigest()
 
     return {
         "support": support,
         "coverage": float(support / n) if n else float("nan"),
         "n_neg_captured": n_neg,
         "n_gt_captured": n_gt,
+        "n_resolved_negative": n_neg,
+        "n_resolved_gt": n_gt,
+        "n_unresolved_selected": n_unresolved,
+        "n_ambiguous_selected": n_ambiguous,
+        "optimistic_gt_hurt": int(optimistic_gt_hurt),
+        "pessimistic_gt_hurt": int(pessimistic_gt_hurt),
+        "unknown_capture_rate": unknown_capture_rate,
+        "safety_status": safety_status,
         "gt_hurt": n_gt,
         "gt_hurt_rate": float(n_gt / int(np.sum(y == 0)))
         if np.sum(y == 0)
@@ -518,17 +596,96 @@ def region_metrics(
             and math.isfinite(max_neg_seq_share)
             and max_neg_seq_share > MAX_SEQ_SHARE_NON_DOMINANT
         ),
-        "observed_safe_point": bool(observed_safe_point and support > 0),
+        "observed_safe_point": bool(observed_safe_point),
+        "productive_safe_resolved_only": bool(productive_safe_resolved),
         "productive_safe_point": bool(productive_safe_point),
-        # Explicit: not a rule
         "not_a_safe_rule": True,
-        "loo_max_gt_hurt": int(loo_max_gt),
-        "loo_all_gt_hurt_zero": bool(loo_all_safe),
-        "loo_any_productive_safe": bool(loo_any_productive),
+        # renamed: deletion consistency ≠ portability
+        "leave_one_sequence_deleted_max_gt_hurt": int(del_max_gt),
+        "leave_one_sequence_deleted_all_gt_hurt_zero": bool(del_all_safe),
+        "leave_one_sequence_deleted_rows": del_rows,
+        # legacy aliases kept for readers; explicit non-portability
+        "loo_max_gt_hurt": int(del_max_gt),
+        "loo_all_gt_hurt_zero": bool(del_all_safe),
+        "loo_is_deletion_consistency_only": True,
+        "loo_not_portability_evidence": True,
         "per_sequence_support": dict(seq_sup),
         "per_sequence_neg": dict(seq_neg),
         "per_sequence_gt": dict(seq_gt),
-        "loo": loo_rows,
+        "mask_sha256": mask_sig,
+        "loo": del_rows,  # backward compat export
+    }
+
+
+def true_holdout_sequence_validation(
+    *,
+    x_parts: Mapping[str, np.ndarray],
+    y: np.ndarray,
+    sequences: np.ndarray,
+    feature: str,
+    direction: str,
+    thr_value: float,
+    feature_b: str | None = None,
+    direction_b: str | None = None,
+    thr_value_b: float | None = None,
+    combinator: str | None = None,
+) -> dict[str, Any]:
+    """Freeze absolute thr on train folds; apply to held-out sequence.
+
+    For each holdout H:
+      1. build mask with frozen thr on train (all ≠ H)
+      2. require train has both classes available (else flag)
+      3. apply same thr to H only; report holdout GT hurt / neg capture
+    """
+    seqs = sorted(set(str(s) for s in sequences))
+    rows = []
+    for hold in seqs:
+        train = sequences != hold
+        hold_m = sequences == hold
+        xa = x_parts[feature]
+        m_train = atom_mask(xa[train], direction, thr_value)
+        m_hold = atom_mask(xa[hold_m], direction, thr_value)
+        if (
+            feature_b is not None
+            and thr_value_b is not None
+            and direction_b is not None
+        ):
+            xb = x_parts[feature_b]
+            mb_tr = atom_mask(xb[train], direction_b, thr_value_b)
+            mb_ho = atom_mask(xb[hold_m], direction_b, thr_value_b)
+            if combinator == "OR":
+                m_train = m_train | mb_tr
+                m_hold = m_hold | mb_ho
+            else:
+                m_train = m_train & mb_tr
+                m_hold = m_hold & mb_ho
+        y_tr, y_ho = y[train], y[hold_m]
+        n_tr_neg = int(np.sum(m_train & (y_tr == 1)))
+        n_tr_gt = int(np.sum(m_train & (y_tr == 0)))
+        n_ho_neg = int(np.sum(m_hold & (y_ho == 1)))
+        n_ho_gt = int(np.sum(m_hold & (y_ho == 0)))
+        rows.append(
+            {
+                "hold_out_sequence": hold,
+                "train_support": int(m_train.sum()),
+                "train_n_neg": n_tr_neg,
+                "train_gt_hurt": n_tr_gt,
+                "holdout_support": int(m_hold.sum()),
+                "holdout_n_neg": n_ho_neg,
+                "holdout_gt_hurt": n_ho_gt,
+                "holdout_productive_safe": int(n_ho_gt == 0 and n_ho_neg > 0),
+                "train_has_both_classes_in_region": int(n_tr_neg > 0 and n_tr_gt >= 0),
+            }
+        )
+    worst = max((r["holdout_gt_hurt"] for r in rows), default=0)
+    all_zero = all(r["holdout_gt_hurt"] == 0 for r in rows) if rows else False
+    any_prod = any(r["holdout_productive_safe"] == 1 for r in rows)
+    return {
+        "true_holdout_rows": rows,
+        "true_holdout_worst_gt_hurt": int(worst),
+        "true_holdout_all_gt_hurt_zero": bool(all_zero),
+        "true_holdout_any_productive_safe": bool(any_prod),
+        "true_holdout_portability_ok": bool(all_zero and any_prod),
     }
 
 
@@ -541,12 +698,16 @@ def build_single_atom_atlas(
     registry: Mapping[str, Any],
     *,
     primary_signals_only: bool = False,
+    unknown_matrices: Mapping[str, np.ndarray] | None = None,
+    ambiguous_matrices: Mapping[str, np.ndarray] | None = None,
 ) -> list[dict[str, Any]]:
     matrices: dict[str, np.ndarray] = registry["_matrices"]  # type: ignore
     y: np.ndarray = registry["_y"]  # type: ignore
     sequences: np.ndarray = registry["_sequences"]  # type: ignore
     base = float(registry["base_negative_rate"])
     rows: list[dict[str, Any]] = []
+    unknown_matrices = unknown_matrices or {}
+    ambiguous_matrices = ambiguous_matrices or {}
 
     # Group atoms by (feature, direction) for neighbor continuity
     by_fd: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
@@ -561,8 +722,17 @@ def build_single_atom_atlas(
         masks = []
         metrics_list = []
         for atom in atoms_sorted:
-            m = atom_mask(x, direction, float(atom["thr_value"]))
-            met = region_metrics(m, y, sequences, base_neg_rate=base)
+            thr = float(atom["thr_value"])
+            m = atom_mask(x, direction, thr)
+            um = None
+            am = None
+            if feature in unknown_matrices:
+                um = atom_mask(unknown_matrices[feature], direction, thr)
+            if feature in ambiguous_matrices:
+                am = atom_mask(ambiguous_matrices[feature], direction, thr)
+            met = region_metrics(
+                m, y, sequences, base_neg_rate=base, unknown_mask=um, ambiguous_mask=am
+            )
             masks.append(m)
             metrics_list.append(met)
 
@@ -619,10 +789,26 @@ def build_single_atom_atlas(
                     "single_seq_neg_dominance": int(met["single_seq_neg_dominance"]),
                     "observed_safe_point": int(met["observed_safe_point"]),
                     "productive_safe_point": int(met["productive_safe_point"]),
+                    "productive_safe_resolved_only": int(
+                        met.get("productive_safe_resolved_only", False)
+                    ),
+                    "n_resolved_negative": met["n_resolved_negative"],
+                    "n_resolved_gt": met["n_resolved_gt"],
+                    "n_unresolved_selected": met["n_unresolved_selected"],
+                    "n_ambiguous_selected": met["n_ambiguous_selected"],
+                    "optimistic_gt_hurt": met["optimistic_gt_hurt"],
+                    "pessimistic_gt_hurt": met["pessimistic_gt_hurt"],
+                    "unknown_capture_rate": met["unknown_capture_rate"],
+                    "safety_status": met["safety_status"],
+                    "mask_sha256": met["mask_sha256"],
                     "not_a_safe_rule": 1,
                     "loo_max_gt_hurt": met["loo_max_gt_hurt"],
                     "loo_all_gt_hurt_zero": int(met["loo_all_gt_hurt_zero"]),
-                    "loo_any_productive_safe": int(met["loo_any_productive_safe"]),
+                    "loo_is_deletion_consistency_only": 1,
+                    "loo_not_portability_evidence": 1,
+                    "leave_one_sequence_deleted_all_gt_hurt_zero": int(
+                        met["leave_one_sequence_deleted_all_gt_hurt_zero"]
+                    ),
                     "n_adjacent_neighbors": len(adj_productive_safe),
                     "n_adjacent_also_productive_safe": sum(adj_productive_safe),
                     "subset_of_prev_thr": (
@@ -665,6 +851,8 @@ def build_pairwise_atlas(
     *,
     combinator: str,
     primary_signals_only: bool = True,
+    unknown_matrices: Mapping[str, np.ndarray] | None = None,
+    ambiguous_matrices: Mapping[str, np.ndarray] | None = None,
 ) -> list[dict[str, Any]]:
     """Complete enumeration of registered pairwise lattice (AND or OR)."""
     if combinator not in COMBINATORS:
@@ -673,6 +861,8 @@ def build_pairwise_atlas(
     y: np.ndarray = registry["_y"]  # type: ignore
     sequences: np.ndarray = registry["_sequences"]  # type: ignore
     base = float(registry["base_negative_rate"])
+    unknown_matrices = unknown_matrices or {}
+    ambiguous_matrices = ambiguous_matrices or {}
 
     atoms = [
         a
@@ -704,14 +894,50 @@ def build_pairwise_atlas(
                     m = m1 & m2
                 else:
                     m = m1 | m2
-                # signature for dedupe of empty/identical sets
-                # use hash of bitmask
+                # unknown masks on selected unresolved/ambiguous
+                um = am = None
+                if (
+                    a["feature"] in unknown_matrices
+                    and b["feature"] in unknown_matrices
+                ):
+                    u1 = atom_mask(
+                        unknown_matrices[a["feature"]],
+                        a["direction"],
+                        float(a["thr_value"]),
+                    )
+                    u2 = atom_mask(
+                        unknown_matrices[b["feature"]],
+                        b["direction"],
+                        float(b["thr_value"]),
+                    )
+                    um = (u1 & u2) if combinator == "AND" else (u1 | u2)
+                if (
+                    a["feature"] in ambiguous_matrices
+                    and b["feature"] in ambiguous_matrices
+                ):
+                    a1m = atom_mask(
+                        ambiguous_matrices[a["feature"]],
+                        a["direction"],
+                        float(a["thr_value"]),
+                    )
+                    a2m = atom_mask(
+                        ambiguous_matrices[b["feature"]],
+                        b["direction"],
+                        float(b["thr_value"]),
+                    )
+                    am = (a1m & a2m) if combinator == "AND" else (a1m | a2m)
                 sig = (combinator, m.tobytes())
-                # Still keep all registered cells; mark semantic_duplicate
                 is_dup = sig in seen_sig
                 seen_sig.add(sig)
 
-                met = region_metrics(m, y, sequences, base_neg_rate=base)
+                met = region_metrics(
+                    m,
+                    y,
+                    sequences,
+                    base_neg_rate=base,
+                    unknown_mask=um,
+                    ambiguous_mask=am,
+                )
                 rows.append(
                     {
                         "combo_id": (f"{combinator}::{a['atom_id']}::{b['atom_id']}"),
@@ -747,10 +973,26 @@ def build_pairwise_atlas(
                         ),
                         "observed_safe_point": int(met["observed_safe_point"]),
                         "productive_safe_point": int(met["productive_safe_point"]),
+                        "productive_safe_resolved_only": int(
+                            met.get("productive_safe_resolved_only", False)
+                        ),
+                        "n_resolved_negative": met["n_resolved_negative"],
+                        "n_resolved_gt": met["n_resolved_gt"],
+                        "n_unresolved_selected": met["n_unresolved_selected"],
+                        "n_ambiguous_selected": met["n_ambiguous_selected"],
+                        "optimistic_gt_hurt": met["optimistic_gt_hurt"],
+                        "pessimistic_gt_hurt": met["pessimistic_gt_hurt"],
+                        "unknown_capture_rate": met["unknown_capture_rate"],
+                        "safety_status": met["safety_status"],
+                        "mask_sha256": met["mask_sha256"],
                         "not_a_safe_rule": 1,
                         "loo_max_gt_hurt": met["loo_max_gt_hurt"],
                         "loo_all_gt_hurt_zero": int(met["loo_all_gt_hurt_zero"]),
-                        "loo_any_productive_safe": int(met["loo_any_productive_safe"]),
+                        "loo_is_deletion_consistency_only": 1,
+                        "loo_not_portability_evidence": 1,
+                        "leave_one_sequence_deleted_all_gt_hurt_zero": int(
+                            met["leave_one_sequence_deleted_all_gt_hurt_zero"]
+                        ),
                         "necessity_neg_coverage": met["neg_capture_rate"],
                         "observed_sufficiency_gt_contamination": met["gt_hurt"],
                         "per_sequence_neg_json": json.dumps(
@@ -773,111 +1015,131 @@ def classify_region_stability(
     atom_rows: Sequence[Mapping[str, Any]],
     pairwise_and: Sequence[Mapping[str, Any]],
     pairwise_or: Sequence[Mapping[str, Any]],
+    *,
+    holdout_by_region: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    """Classify observed productive-safe points by neighborhood + LOO."""
+    """Classify productive-safe points with duplicate-free topology.
+
+    Rules (review #89):
+      - semantic duplicate masks do not form neighbors (one node per mask_sha256)
+      - interior requires BOTH sides (1D) or full 4-neighborhood (pairwise)
+      - boundary points are edge_candidate only — never thick region
+      - unresolved_contaminated cannot be region_candidate
+      - true_holdout portability required for loo_stable_region; deletion LOO banned
+    """
+    holdout_by_region = holdout_by_region or {}
     out: list[dict[str, Any]] = []
 
-    # Index single atoms by (feature, direction, thr_index)
-    single_idx: dict[tuple[str, str, int], Mapping[str, Any]] = {}
-    for r in atom_rows:
-        if int(r.get("is_secondary_feature", 0)):
-            continue
-        single_idx[(str(r["feature"]), str(r["direction"]), int(r["thr_index"]))] = r
-
-    def _stab_label(
-        *,
-        productive: bool,
-        n_adj_also: int,
-        n_adj: int,
-        loo_all_safe: bool,
-        loo_max_gt: int,
-        n_seq_neg: int,
-        single_dom: bool,
-    ) -> str:
-        if not productive:
-            return "not_productive_safe"
-        if n_seq_neg < MIN_SEQS_FOR_REGION or single_dom:
-            # still classify geometric thickness
-            if n_adj_also == 0:
-                return "isolated_safe_point"
-            if n_adj_also < n_adj:
-                return "thin_safe_edge"
-            if loo_all_safe and loo_max_gt == 0:
-                return "loo_stable_region_but_seq_thin"
-            return "locally_stable_region_but_seq_thin"
-        if n_adj_also == 0:
-            return "isolated_safe_point"
-        if n_adj_also < max(n_adj, 1):
-            # partial neighborhood
-            if loo_all_safe:
-                return "thin_safe_edge"
-            return "thin_safe_edge"
-        # full local neighborhood productive-safe
-        if loo_all_safe and loo_max_gt == 0:
-            return "loo_stable_region"
-        return "locally_stable_region"
-
-    for r in atom_rows:
+    def _eligible(r: Mapping[str, Any]) -> bool:
         if not int(r.get("productive_safe_point", 0)):
-            continue
+            return False
         if int(r.get("is_secondary_feature", 0)):
-            continue
-        feat, direction, ti = (
-            str(r["feature"]),
-            str(r["direction"]),
-            int(r["thr_index"]),
-        )
-        adj = []
-        for dti in (-1, 1):
-            nb = single_idx.get((feat, direction, ti + dti))
-            if nb is not None:
-                adj.append(nb)
-        n_adj = len(adj)
-        n_adj_also = sum(1 for a in adj if int(a.get("productive_safe_point", 0)))
-        label = _stab_label(
-            productive=True,
-            n_adj_also=n_adj_also,
-            n_adj=n_adj,
-            loo_all_safe=bool(int(r.get("loo_all_gt_hurt_zero", 0))),
-            loo_max_gt=int(r.get("loo_max_gt_hurt", 99)),
-            n_seq_neg=int(r.get("n_sequences_with_neg", 0)),
-            single_dom=bool(int(r.get("single_seq_neg_dominance", 0))),
-        )
-        out.append(
-            {
-                "region_id": r["atom_id"],
-                "kind": "single_atom",
-                "feature_a": feat,
-                "feature_b": "",
-                "direction_a": direction,
-                "direction_b": "",
-                "thr_index_a": ti,
-                "thr_index_b": "",
-                "thr_value_a": r["thr_value"],
-                "thr_value_b": "",
-                "support": r["support"],
-                "n_neg_captured": r["n_neg_captured"],
-                "gt_hurt": r["gt_hurt"],
-                "n_sequences_with_neg": r["n_sequences_with_neg"],
-                "max_neg_sequence_share": r["max_neg_sequence_share"],
-                "loo_max_gt_hurt": r["loo_max_gt_hurt"],
-                "loo_all_gt_hurt_zero": r["loo_all_gt_hurt_zero"],
-                "n_adjacent_neighbors": n_adj,
-                "n_adjacent_also_productive_safe": n_adj_also,
-                "stability_class": label,
-                "is_region_candidate": int(
-                    label in ("loo_stable_region", "locally_stable_region")
-                ),
-                "not_a_safe_rule": 1,
-            }
-        )
+            return False
+        if int(r.get("semantic_duplicate_mask", 0)):
+            return False
+        if str(r.get("safety_status", "")) == "unresolved_contaminated":
+            return False
+        return True
 
-    # Pairwise: neighborhood = ±1 thr_index on either atom (4-neighborhood in lattice)
-    def _pair_index(
-        rows: Sequence[Mapping[str, Any]],
-    ) -> dict[tuple, Mapping[str, Any]]:
-        idx = {}
+    # --- single atoms: unique by mask, topology on thr_index ---
+    by_fd: dict[tuple[str, str], list[Mapping[str, Any]]] = defaultdict(list)
+    for r in atom_rows:
+        if not _eligible(r):
+            continue
+        by_fd[(str(r["feature"]), str(r["direction"]))].append(r)
+
+    for (feat, direction), cells in by_fd.items():
+        # unique mask representatives ordered by thr_index
+        seen_mask: set[str] = set()
+        uniq = []
+        for r in sorted(cells, key=lambda x: int(x["thr_index"])):
+            sig = str(r.get("mask_sha256", ""))
+            if sig and sig in seen_mask:
+                continue
+            if sig:
+                seen_mask.add(sig)
+            uniq.append(r)
+        idx_map = {int(r["thr_index"]): r for r in uniq}
+        for r in uniq:
+            ti = int(r["thr_index"])
+            left = idx_map.get(ti - 1)
+            right = idx_map.get(ti + 1)
+            has_left = left is not None
+            has_right = right is not None
+            left_ok = bool(left and int(left.get("productive_safe_point", 0)))
+            right_ok = bool(right and int(right.get("productive_safe_point", 0)))
+            is_boundary = not (has_left and has_right)
+            n_adj = int(has_left) + int(has_right)
+            n_adj_also = int(left_ok) + int(right_ok)
+            ho = holdout_by_region.get(str(r["atom_id"]), {})
+            true_port = bool(ho.get("true_holdout_portability_ok", False))
+            true_worst = int(ho.get("true_holdout_worst_gt_hurt", 99))
+
+            if is_boundary:
+                label = "edge_candidate" if n_adj_also > 0 else "isolated_safe_point"
+            elif n_adj_also < 2:
+                label = "thin_safe_edge" if n_adj_also == 1 else "isolated_safe_point"
+            elif int(r.get("n_sequences_with_neg", 0)) < MIN_SEQS_FOR_REGION or int(
+                r.get("single_seq_neg_dominance", 0)
+            ):
+                label = "locally_stable_region_but_seq_thin"
+            elif true_port and true_worst == 0:
+                label = "loo_stable_region"
+            else:
+                label = "locally_stable_region"
+
+            is_cand = int(
+                label in ("loo_stable_region", "locally_stable_region")
+                and not is_boundary
+                and str(r.get("safety_status")) != "unresolved_contaminated"
+            )
+            out.append(
+                {
+                    "region_id": r["atom_id"],
+                    "kind": "single_atom",
+                    "feature_a": feat,
+                    "feature_b": "",
+                    "direction_a": direction,
+                    "direction_b": "",
+                    "thr_index_a": ti,
+                    "thr_index_b": "",
+                    "thr_value_a": r["thr_value"],
+                    "thr_value_b": "",
+                    "support": r["support"],
+                    "n_neg_captured": r["n_neg_captured"],
+                    "gt_hurt": r["gt_hurt"],
+                    "n_unresolved_selected": r.get("n_unresolved_selected", 0),
+                    "safety_status": r.get("safety_status"),
+                    "mask_sha256": r.get("mask_sha256"),
+                    "n_sequences_with_neg": r["n_sequences_with_neg"],
+                    "max_neg_sequence_share": r["max_neg_sequence_share"],
+                    "is_boundary": int(is_boundary),
+                    "n_adjacent_neighbors": n_adj,
+                    "n_adjacent_also_productive_safe": n_adj_also,
+                    "requires_bilateral_neighbors": 1,
+                    "true_holdout_worst_gt_hurt": true_worst,
+                    "true_holdout_portability_ok": int(true_port),
+                    "loo_deletion_consistency_not_portability": 1,
+                    "stability_class": label,
+                    "is_region_candidate": is_cand,
+                    "not_a_safe_rule": 1,
+                }
+            )
+
+    # --- pairwise: unique mask only; full 4-neighborhood for interior ---
+    for comb_name, rows in (("AND", pairwise_and), ("OR", pairwise_or)):
+        # first representative per mask
+        by_mask: dict[str, Mapping[str, Any]] = {}
         for r in rows:
+            if not _eligible(r):
+                continue
+            sig = str(r.get("mask_sha256", ""))
+            if not sig or sig in by_mask:
+                continue
+            by_mask[sig] = r
+        # index by thr coords among unique
+        idx = {}
+        for r in by_mask.values():
             key = (
                 r["feature_a"],
                 r["direction_a"],
@@ -887,16 +1149,7 @@ def classify_region_stability(
                 int(r["thr_index_b"]),
             )
             idx[key] = r
-        return idx
-
-    for comb_name, rows in (("AND", pairwise_and), ("OR", pairwise_or)):
-        idx = _pair_index(rows)
-        for r in rows:
-            if not int(r.get("productive_safe_point", 0)):
-                continue
-            if int(r.get("semantic_duplicate_mask", 0)) and comb_name == "AND":
-                # still evaluate uniques; duplicates marked
-                pass
+        for r in by_mask.values():
             key = (
                 r["feature_a"],
                 r["direction_a"],
@@ -905,8 +1158,8 @@ def classify_region_stability(
                 r["direction_b"],
                 int(r["thr_index_b"]),
             )
-            neighbors = []
             fa, da, ia, fb, db, ib = key
+            neighbors = []
             for dia, dib in ((-1, 0), (1, 0), (0, -1), (0, 1)):
                 nb = idx.get((fa, da, ia + dia, fb, db, ib + dib))
                 if nb is not None:
@@ -915,14 +1168,25 @@ def classify_region_stability(
             n_adj_also = sum(
                 1 for a in neighbors if int(a.get("productive_safe_point", 0))
             )
-            label = _stab_label(
-                productive=True,
-                n_adj_also=n_adj_also,
-                n_adj=n_adj,
-                loo_all_safe=bool(int(r.get("loo_all_gt_hurt_zero", 0))),
-                loo_max_gt=int(r.get("loo_max_gt_hurt", 99)),
-                n_seq_neg=int(r.get("n_sequences_with_neg", 0)),
-                single_dom=bool(int(r.get("single_seq_neg_dominance", 0))),
+            is_boundary = n_adj < 4
+            ho = holdout_by_region.get(str(r["combo_id"]), {})
+            true_port = bool(ho.get("true_holdout_portability_ok", False))
+            true_worst = int(ho.get("true_holdout_worst_gt_hurt", 99))
+            if is_boundary:
+                label = "edge_candidate" if n_adj_also > 0 else "isolated_safe_point"
+            elif n_adj_also < 4:
+                label = "thin_safe_edge"
+            elif int(r.get("n_sequences_with_neg", 0)) < MIN_SEQS_FOR_REGION or int(
+                r.get("single_seq_neg_dominance", 0)
+            ):
+                label = "locally_stable_region_but_seq_thin"
+            elif true_port and true_worst == 0:
+                label = "loo_stable_region"
+            else:
+                label = "locally_stable_region"
+            is_cand = int(
+                label in ("loo_stable_region", "locally_stable_region")
+                and not is_boundary
             )
             out.append(
                 {
@@ -939,25 +1203,24 @@ def classify_region_stability(
                     "support": r["support"],
                     "n_neg_captured": r["n_neg_captured"],
                     "gt_hurt": r["gt_hurt"],
+                    "n_unresolved_selected": r.get("n_unresolved_selected", 0),
+                    "safety_status": r.get("safety_status"),
+                    "mask_sha256": r.get("mask_sha256"),
                     "n_sequences_with_neg": r["n_sequences_with_neg"],
                     "max_neg_sequence_share": r["max_neg_sequence_share"],
-                    "loo_max_gt_hurt": r["loo_max_gt_hurt"],
-                    "loo_all_gt_hurt_zero": r["loo_all_gt_hurt_zero"],
+                    "is_boundary": int(is_boundary),
                     "n_adjacent_neighbors": n_adj,
                     "n_adjacent_also_productive_safe": n_adj_also,
+                    "requires_full_4_neighborhood": 1,
+                    "true_holdout_worst_gt_hurt": true_worst,
+                    "true_holdout_portability_ok": int(true_port),
+                    "loo_deletion_consistency_not_portability": 1,
                     "stability_class": label,
-                    "is_region_candidate": int(
-                        label in ("loo_stable_region", "locally_stable_region")
-                    ),
+                    "is_region_candidate": is_cand,
                     "not_a_safe_rule": 1,
                 }
             )
     return out
-
-
-# ---------------------------------------------------------------------------
-# Pareto frontier
-# ---------------------------------------------------------------------------
 
 
 def build_pareto_frontier(
@@ -1092,16 +1355,19 @@ def classify_q45_terminal(
         )
     ]
     loo_stable = [
-        r for r in region_candidates if r.get("stability_class") == "loo_stable_region"
+        r
+        for r in region_candidates
+        if r.get("stability_class") == "loo_stable_region"
+        and int(r.get("true_holdout_portability_ok", 0)) == 1
     ]
 
-    # A: multi-seq, neighborhood thickness, LOO holds, low/zero GT
+    # A: multi-seq, interior thickness, *true* holdout portability, zero unknown
     if loo_stable:
         return {
             "stage2_q45_terminal": TERMINAL_A,
             "terminal_letter": "A",
             "reason": (
-                f"{len(loo_stable)} LOO-stable productive-safe region(s) with "
+                f"{len(loo_stable)} true-holdout-portable interior region(s) with "
                 "local thickness; authorize formal restricted safe-region "
                 "candidate validation (still not production rule)"
             ),
@@ -1136,18 +1402,32 @@ def classify_q45_terminal(
             "stage2_q45_terminal": TERMINAL_B,
             "terminal_letter": "B",
             "reason": (
-                f"observed productive-safe points exist (n_atlas_cells={n_prod}) "
-                "but neighborhood/LOO thickness fails → isolated_safe_points_only; "
-                "retain atlas, do not promote rules"
+                f"On resolved∧selected cohort: sample-zero-GT cells exist "
+                f"(n_atlas_cells={n_prod}) but no unique interior multi-seq thick "
+                "region under duplicate-free topology + true holdout; "
+                "unknown/unresolved selected coverage further limits claims → "
+                "isolated_safe_points_only"
             ),
-            "claims_blocked": blocked + ["formal_safe_region_not_authorized"],
+            "claims_blocked": blocked
+            + [
+                "formal_safe_region_not_authorized",
+                "threshold_formulation_global_closure_not_authorized",
+                "portable_safe_region_claim_inadmissible",
+                "deletion_loo_as_portability_forbidden",
+            ],
             "claims_allowed": [
                 "retain_atlas_for_followup",
                 "report_isolated_observed_safe_points_descriptively",
+                "ranking_research_reasonable_next_line_not_threshold_closure",
             ],
             "next_authorized_step": (
-                "retain full atlas; do not promote isolated points; "
-                "optional deeper thickness diagnostics or ranking path"
+                "threshold path: no promotable region yet; ranking/assignment "
+                "is a reasonable next research line AFTER valid assignment-group "
+                "key + unknown coverage + true holdout LOO are closed"
+            ),
+            "bounded_finding": (
+                "resolved∧selected restricted atlas reports sample-zero-GT cells "
+                "but no unique interior multi-sequence thick region"
             ),
             "n_productive_safe_cells": n_prod,
             "n_isolated_or_thin": len(isolated),
@@ -1226,11 +1506,11 @@ def classify_q45_terminal(
 def attach_secondary_competition_features(
     events: list[dict[str, Any]],
 ) -> list[str]:
-    """Add a small set of competition-relative columns if reconstructable.
+    """DEPRECATED reconstruction: assignment key uses invalid frame provenance.
 
-    Secondary only — does not replace frozen-signal main atlas.
-    Missing relative fields stay NaN (no zero-fill).
-    Returns list of secondary feature names attached.
+    Host audit `frame` is constant 4 — (seq, frame, cand_slot) is **not** a
+    valid multi-moment assignment group. Values may still be written for
+    audit/debug but are flagged untrusted and excluded from mainline conclusions.
     """
     from collections import defaultdict as dd
 
@@ -1247,31 +1527,12 @@ def attach_secondary_competition_features(
     for i, r in enumerate(events):
         for name in secondary:
             r[name] = float("nan")
-        r["sec_competitor_count"] = float(_i(r.get("competitor_count", 0)))
-        key = (str(r["sequence"]), int(r["frame"]), int(r.get("cand_slot", -1)))
-        idxs = groups[key]
-        ordered = sorted(
-            idxs,
-            key=lambda j: (
-                _f(events[j].get("score_m_bridge")),
-                int(events[j].get("lost_slot", -1)),
-            ),
-        )
-        if (
-            len(ordered) >= 2
-            and _i(r.get("baseline_selected", r.get("baseline_accepted_candidate", 0)))
-            == 1
-        ):
-            win = ordered[0]
-            ru = ordered[1]
-            # if this row is selected it should be ordered[0]
-            if i == win or _i(r.get("baseline_rank", 99)) == 0:
-                r["sec_winner_runnerup_score_margin"] = _f(
-                    events[ru].get("score_m_bridge")
-                ) - _f(events[win].get("score_m_bridge"))
-                r["sec_delta_vs_ru_abs_log_h"] = _f(events[win].get("abs_log_h")) - _f(
-                    events[ru].get("abs_log_h")
-                )
+        r["sec_assignment_group_key_status"] = ASSIGNMENT_GROUP_KEY_STATUS
+        r["sec_competition_features_trusted"] = 0
+        r["sec_competitor_count"] = float("nan")  # do not trust Q1 competitor_count
+        # Intentionally leave margins NaN: do not emit ranking-path evidence
+        # from invalid grouping. Existing competitor_count column remains
+        # descriptive with provenance warning in summary.
     return secondary
 
 
@@ -1319,6 +1580,31 @@ def run_stage2_q45_atlas(
     locked = lock_q45_cohort(events)
     primary = locked["primary"]
     cohort_sum = locked["summary"]
+    # selected unresolved / ambiguous for unknown contamination
+    selected_unresolved = [
+        r
+        for r in events
+        if _i(r.get("baseline_selected", r.get("baseline_accepted_candidate", 0))) == 1
+        and str(r.get("label_status", "")) == "unresolved"
+    ]
+    selected_ambiguous = [
+        r
+        for r in events
+        if _i(r.get("baseline_selected", r.get("baseline_accepted_candidate", 0))) == 1
+        and str(r.get("label_status", "")) == "ambiguous"
+    ]
+    cohort_sum["n_selected_total"] = sum(
+        1
+        for r in events
+        if _i(r.get("baseline_selected", r.get("baseline_accepted_candidate", 0))) == 1
+    )
+    cohort_sum["n_selected_unresolved"] = len(selected_unresolved)
+    cohort_sum["n_selected_ambiguous"] = len(selected_ambiguous)
+    cohort_sum["unknown_coverage_note"] = (
+        "Atlas primary remains resolved∧selected; cells report "
+        "n_unresolved_selected / pessimistic_gt_hurt; unresolved_contaminated "
+        "cannot enter region_candidate"
+    )
     recon = reconcile_q4(n_d_online=len(events_raw), cohort=cohort_sum, primary=primary)
     if not recon["ok"]:
         raise Stage2Q45Error(f"recon FAIL: {recon.get('errors')}")
@@ -1326,28 +1612,95 @@ def run_stage2_q45_atlas(
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     sid = study_id or f"m_b1_5_stage2_q45_{stamp}"
 
+    # secondary features untrusted — still not used for mainline pairwise
     registry = build_threshold_registry(
         primary,
         signals=ORDERED_SIGNALS,
-        secondary_features=secondary_names if include_secondary_competition else None,
+        secondary_features=None,  # demote competition columns from atlas lattice
     )
-    # JSON-safe registry (drop arrays)
     registry_json = {k: v for k, v in registry.items() if not k.startswith("_")}
+    registry_json["assignment_group_key_status"] = ASSIGNMENT_GROUP_KEY_STATUS
+    registry_json["secondary_competition_trusted"] = False
 
-    atom_rows = build_single_atom_atlas(registry, primary_signals_only=False)
-    # Pairwise only on primary frozen signals (mainline)
+    unknown_matrices = {
+        s: np.asarray([_f(r.get(s)) for r in selected_unresolved], dtype=float)
+        for s in ORDERED_SIGNALS
+    }
+    ambiguous_matrices = {
+        s: np.asarray([_f(r.get(s)) for r in selected_ambiguous], dtype=float)
+        for s in ORDERED_SIGNALS
+    }
+
+    atom_rows = build_single_atom_atlas(
+        registry,
+        primary_signals_only=True,
+        unknown_matrices=unknown_matrices,
+        ambiguous_matrices=ambiguous_matrices,
+    )
     pairwise_and = build_pairwise_atlas(
-        registry, combinator="AND", primary_signals_only=True
+        registry,
+        combinator="AND",
+        primary_signals_only=True,
+        unknown_matrices=unknown_matrices,
+        ambiguous_matrices=ambiguous_matrices,
     )
     pairwise_or = build_pairwise_atlas(
-        registry, combinator="OR", primary_signals_only=True
+        registry,
+        combinator="OR",
+        primary_signals_only=True,
+        unknown_matrices=unknown_matrices,
+        ambiguous_matrices=ambiguous_matrices,
     )
 
-    # Secondary-only single-atom rows already mixed with is_secondary flag;
-    # optional secondary pairwise skipped to keep mainline clean (user: secondary
-    # can use same method — provide single-atom secondary in atom_atlas).
+    # True holdout validation for productive-safe unique cells
+    y = registry["_y"]
+    sequences = registry["_sequences"]
+    x_parts = {s: registry["_matrices"][s] for s in ORDERED_SIGNALS}
+    holdout_by_region: dict[str, dict[str, Any]] = {}
+    for r in atom_rows:
+        if not int(r.get("productive_safe_point", 0)):
+            continue
+        if int(r.get("is_secondary_feature", 0)):
+            continue
+        if str(r.get("safety_status")) == "unresolved_contaminated":
+            continue
+        ho = true_holdout_sequence_validation(
+            x_parts=x_parts,
+            y=y,
+            sequences=sequences,
+            feature=str(r["feature"]),
+            direction=str(r["direction"]),
+            thr_value=float(r["thr_value"]),
+        )
+        holdout_by_region[str(r["atom_id"])] = ho
+        r["true_holdout_worst_gt_hurt"] = ho["true_holdout_worst_gt_hurt"]
+        r["true_holdout_portability_ok"] = int(ho["true_holdout_portability_ok"])
+    for r in list(pairwise_and) + list(pairwise_or):
+        if not int(r.get("productive_safe_point", 0)):
+            continue
+        if int(r.get("semantic_duplicate_mask", 0)):
+            continue
+        if str(r.get("safety_status")) == "unresolved_contaminated":
+            continue
+        ho = true_holdout_sequence_validation(
+            x_parts=x_parts,
+            y=y,
+            sequences=sequences,
+            feature=str(r["feature_a"]),
+            direction=str(r["direction_a"]),
+            thr_value=float(r["thr_value_a"]),
+            feature_b=str(r["feature_b"]),
+            direction_b=str(r["direction_b"]),
+            thr_value_b=float(r["thr_value_b"]),
+            combinator=str(r["combinator"]),
+        )
+        holdout_by_region[str(r["combo_id"])] = ho
+        r["true_holdout_worst_gt_hurt"] = ho["true_holdout_worst_gt_hurt"]
+        r["true_holdout_portability_ok"] = int(ho["true_holdout_portability_ok"])
 
-    stability = classify_region_stability(atom_rows, pairwise_and, pairwise_or)
+    stability = classify_region_stability(
+        atom_rows, pairwise_and, pairwise_or, holdout_by_region=holdout_by_region
+    )
 
     pareto_single = build_pareto_frontier(
         [r for r in atom_rows if not int(r.get("is_secondary_feature", 0))],
@@ -1513,6 +1866,17 @@ def run_stage2_q45_atlas(
         "n_pareto_frontier": len(pareto_all),
         "n_stability_rows": len(stability),
         "secondary_competition_features": secondary_names,
+        "secondary_competition_trusted": False,
+        "assignment_group_key_status": ASSIGNMENT_GROUP_KEY_STATUS,
+        "n_selected_unresolved": len(selected_unresolved),
+        "n_selected_ambiguous": len(selected_ambiguous),
+        "evaluator_review_gates": {
+            "deletion_loo_is_portability": False,
+            "true_holdout_required_for_region_A": True,
+            "unresolved_contaminated_blocks_candidate": True,
+            "duplicate_masks_not_neighbors": True,
+            "interior_requires_full_neighborhood": True,
+        },
         "frame_provenance_kind": frame_prov["semantic"]["kind"],
         "frame_is_absolute_mot": frame_prov["semantic"]["is_absolute_mot_frame"],
         "frame_observation_limitation_only": frame_prov["conclusions"][
@@ -1539,6 +1903,58 @@ def run_stage2_q45_atlas(
         ),
     }
     hashes["summary"] = write_json(out_dir / "summary.json", summary)
+
+    # Canonical evidence pack (small, PR-auditable)
+    evidence_dir = out_dir / "evidence_pack"
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+    pack_files = {
+        "manifest.json": out_dir / "manifest.json",
+        "summary.json": out_dir / "summary.json",
+        "reconciliation.json": out_dir / "reconciliation.json",
+        "cohort_summary.json": out_dir / "cohort_summary.json",
+        "threshold_registry.json": out_dir / "threshold_registry.json",
+        "region_stability.csv": out_dir / "region_stability.csv",
+        "pareto_frontier.csv": out_dir / "pareto_frontier.csv",
+        "frame_column_provenance.json": out_dir / "frame_column_provenance.json",
+    }
+    # true holdout table
+    ho_flat = []
+    for rid, ho in holdout_by_region.items():
+        for row in ho.get("true_holdout_rows", []):
+            ho_flat.append({"region_id": rid, **row})
+    hashes["true_holdout_loo"] = write_csv(out_dir / "true_holdout_loo.csv", ho_flat)
+    pack_files["true_holdout_loo.csv"] = out_dir / "true_holdout_loo.csv"
+    sha_rows = []
+    for name, src in pack_files.items():
+        if src.is_file():
+            (evidence_dir / name).write_bytes(src.read_bytes())
+            sha_rows.append(
+                {
+                    "file": name,
+                    "sha256": _sha256_file(src),
+                    "bytes": src.stat().st_size,
+                }
+            )
+    write_json(evidence_dir / "SHA256SUMS.json", {"files": sha_rows})
+    write_json(
+        evidence_dir / "README.json",
+        {
+            "study_id": sid,
+            "taxonomy_version": TAXONOMY_VERSION,
+            "note": (
+                "Canonical evidence pack for PR audit. Large full atlases remain "
+                "in parent study dir; rebuild via run_m_b1_5_stage2_q45_atlas.py"
+            ),
+            "reproduce": (
+                "uv run python scripts/tools/run_m_b1_5_stage2_q45_atlas.py "
+                f"--q1q3-study out/signal_study/{Q1Q3_STUDY_ID} "
+                f"--out out/signal_study/{sid}"
+            ),
+            "terminal": terminal.get("stage2_q45_terminal"),
+            "assignment_group_key_status": ASSIGNMENT_GROUP_KEY_STATUS,
+        },
+    )
+
     md = _render_md(summary, terminal, frame_prov, stability, pareto_all)
     (out_dir / "summary.md").write_text(md, encoding="utf-8")
     hashes["summary_md"] = hashlib.sha256(md.encode("utf-8")).hexdigest()
