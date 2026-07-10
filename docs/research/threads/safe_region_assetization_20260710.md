@@ -17,7 +17,7 @@ created: 2026-07-10
 | Semantic sole active | **R0-A-R1 contract correction** |
 | Existing G1–G3 T0/C0 result | **A0 descriptive baseline**; terminal B retained |
 | R0-A packet | **DELIVERED** at `762adf9a`; provenance/grain/firewall portions pass |
-| Chat-side review | **CHANGES_REQUESTED** — four blocking contract issues |
+| Chat-side review | **CHANGES_REQUESTED** — five blocking contract issues |
 | R0-B final contract | **NOT AUTHORIZED** |
 | R1 G1–G3 asset conversion | **NOT AUTHORIZED** |
 | R2 grammar asset extension | **CONDITIONAL** after accepted R0/R1 and an asset-increment hypothesis |
