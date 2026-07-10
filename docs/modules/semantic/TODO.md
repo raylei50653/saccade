@@ -16,11 +16,13 @@
 
 ## Related research threads（不佔 WIP 鎖）
 
-- [m_b1 online hook](../../research/threads/m_b1_online_hook_20260709.md) — **S1 CLOSED** · S2 Q4.5 v4 **`q45_atlas_terminal: B`** isolated_safe_points_only (154/0) → ranking / assignment
-  - Offline history: [m_b1_research_history_20260709_20260710.md](research/m_b1_research_history_20260709_20260710.md)
-  - S1 final: [m_b1_stage1_online_hook_final_20260710.md](research/m_b1_stage1_online_hook_final_20260710.md)
+- [composition grammar × safe-region](../../research/threads/composition_grammar_safe_region.md) — Q4.5 coverage gate **closed** · terminal B · **next authorized = T0 only**
+  - Coverage audit: [composition_grammar_safe_region_coverage_audit_20260710.md](research/composition_grammar_safe_region_coverage_audit_20260710.md)
   - S2 final: [m_b1_5_stage2_d_online_final_20260710.md](research/m_b1_5_stage2_d_online_final_20260710.md)
   - S2 entry contract: [m_b1_5_stage2_entry_contract_20260710.md](research/m_b1_5_stage2_entry_contract_20260710.md)
+- [m_b1 online hook](../../research/threads/m_b1_online_hook_20260709.md) — **CLOSED** · S1+S2 Q4.5 B · handoff → composition T0 · ranking **deferred** (invalid assignment-group key)
+  - Offline history: [m_b1_research_history_20260709_20260710.md](research/m_b1_research_history_20260709_20260710.md)
+  - S1 final: [m_b1_stage1_online_hook_final_20260710.md](research/m_b1_stage1_online_hook_final_20260710.md)
 - [association recovery registry](../../research/threads/association_recovery_registry_20260709.md)
 
 ## Done / closed

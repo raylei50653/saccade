@@ -298,9 +298,13 @@ Q4.5: completed (evaluator v4 · study m_b1_5_stage2_q45_20260710)
   productive_safe: 154 · region_candidates: 0 · coord-union interior: 0
 current terminal: isolated_safe_points_only
 next authorized direction:
+  T0 Existing Atlas Region Interpretation Pack only
+  (composition_grammar_safe_region thread / coverage audit)
+deferred / blocked (not current next):
   ranking / assignment-relative audit
-  (after valid assignment-group key; competition columns currently untrusted)
-secondary:
+  until valid assignment-group key
+  (competition columns currently untrusted; invalid_frame_provenance)
+secondary (non-authorizing alone):
   thin-edge diagnostics
   absolute MOT frame instrumentation
 threshold/hook-policy promotion: blocked
@@ -308,6 +312,7 @@ production_preset: unchanged
 ```
 
 Evidence narrative: [Stage 2 final](m_b1_5_stage2_d_online_final_20260710.md).  
+Coverage gate / T0: [composition_grammar_safe_region_coverage_audit_20260710.md](composition_grammar_safe_region_coverage_audit_20260710.md).  
 G0–G4 claim firewall rules above remain normative (not reopened).
 
 ---
@@ -335,6 +340,7 @@ frozen policy online relevance: NULL
 Stage 2 entry: fulfilled (Q1–Q4.5 complete)
 current terminal: isolated_safe_points_only
 production promotion: blocked
-next authorized: ranking / assignment-relative audit
+next authorized: T0 region interpretation pack only
+ranking / assignment: deferred until valid assignment-group key
 secondary: thin-edge diagnostics · absolute MOT frame instrumentation
 ```

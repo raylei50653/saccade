@@ -9,7 +9,9 @@
 **Role:** Canonical Stage 2 evidence on \(D_{\text{online}}\) through Q4.5 atlas terminal.  
 **Entry contract (retain separately):** [m_b1_5_stage2_entry_contract_20260710.md](m_b1_5_stage2_entry_contract_20260710.md)  
 **Stage 1 final:** [m_b1_stage1_online_hook_final_20260710.md](m_b1_stage1_online_hook_final_20260710.md)  
-**Thread:** [m_b1_online_hook_20260709.md](../../../research/threads/m_b1_online_hook_20260709.md)  
+**Closed thread (history):** [m_b1_online_hook_20260709.md](../../../research/threads/m_b1_online_hook_20260709.md)  
+**Active next (T0):** [composition_grammar_safe_region.md](../../../research/threads/composition_grammar_safe_region.md)  
+**Coverage audit:** [composition_grammar_safe_region_coverage_audit_20260710.md](composition_grammar_safe_region_coverage_audit_20260710.md)  
 **Consolidation:** [m_b1_doc_consolidation_report_20260710.md](m_b1_doc_consolidation_report_20260710.md)
 
 ```text
@@ -25,7 +27,10 @@ Stage 2 Q4.5 (evaluator v4):
   exact_absolute nested LOSO portable: 0
   selected_unresolved: 21 (blocks candidate; untrusted competition columns)
 threshold / hook-policy promotion: blocked
-next research: ranking / assignment-relative (after valid assignment-group key)
+next authorized: T0 Existing Atlas Region Interpretation Pack only
+  (composition_grammar_safe_region thread)
+ranking / assignment-relative: DEFERRED / BLOCKED
+  until valid assignment-group key (currently invalid_frame_provenance)
 production_preset: unchanged
 ```
 
@@ -776,15 +781,18 @@ Tests: `tests/unit/test_d_online_stage2_q45_atlas.py`
 ## Authorized next steps (only)
 
 ```text
-1. Retain atlas; do not promote isolated productive-safe points to rules
-2. Optional: deeper thickness diagnostics on edge_candidate thin strips
-3. Ranking / assignment-relative research AFTER:
+1. T0 Existing Atlas Region Interpretation Pack only
+   (composition_grammar_safe_region thread / coverage audit)
+2. Retain atlas; do not promote isolated productive-safe points to rules
+3. Ranking / assignment-relative research is DEFERRED / BLOCKED until:
      - valid assignment-group key (fix frame provenance)
      - unknown/unresolved selected coverage policy closed
      - nested train-select holdout semantics understood
+     and only after T0 closes or explicitly re-authorizes
 4. Do NOT start production thr / hook policy from these points
 5. Do NOT claim new-signal terminal A/B/C/D from parked exploratory path
 6. Frame field fix / absolute MOT frame export is instrumentation follow-up
+   (not a substitute for T0; not current sole next)
 ```
 
 ---
@@ -796,7 +804,8 @@ Stage 2 Q4: frozen singleton tails inseparable (q4_separability_grade C)
 Stage 2 Q4.5 v4: thr×AND/OR atlas → q45_atlas_terminal B isolated_safe_points_only
   (154 productive-safe; 0 coord-union interior; 0 region candidates;
    0 exact-absolute nested-LOSO portable; 21 selected unresolved)
-next: retain atlas; no rule promotion; ranking after valid assignment key
+next authorized: T0 region interpretation pack only
+ranking / assignment: deferred until valid assignment-group key
 production: blocked / preset unchanged
 ```
 
@@ -818,8 +827,9 @@ production: blocked / preset unchanged
    → competition-relative columns untrusted.
 6. Selected unresolved (21) further limits safety claims
    (unresolved_contaminated blocks region_candidate).
-7. Authorized next: ranking / assignment-relative modeling
-   (after valid assignment-group key) — not thr-as-rule.
+7. Authorized next: T0 Existing Atlas Region Interpretation Pack only.
+   Ranking / assignment-relative is deferred / blocked until a valid
+   assignment-group key — not thr-as-rule, and not concurrent with T0.
 ```
 
 ## Absorbed source files (git blob provenance)

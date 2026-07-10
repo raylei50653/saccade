@@ -25,7 +25,7 @@
 | **Q4.5 evaluator truth** | PR **#89** final head `6df1739b` · merge commit `234f9f59` | Evaluator v4 + evidence pack refresh; machine study SHAs / terminal B |
 | **Canonical consolidated documentation truth** | stacked docs consolidation merge `51b9c73e` (PR **#90**) | Entry contract + Stage 2 final narrative on top of Q4.5 v4 truth |
 | **Machine study** | `out/signal_study/m_b1_5_stage2_q45_20260710/` | Artifacts used for geometry inventory |
-| **Workspace `main`** | `e8f30e67` (as of audit) | Stage 2 Q1–Q4.5 sources **not** on main; read from research history / branch |
+| **Workspace `main` at audit time** | `e8f30e67` (as of audit, 2026-07-10) | **Historical:** Stage 2 Q1–Q4.5 sources/docs were not yet on main; truth lived on research stack |
 
 ```text
 Do not treat 51b9c73e as the original Q4.5 evaluator branch tip.
@@ -34,7 +34,8 @@ Do not treat 51b9c73e as the original Q4.5 evaluator branch tip.
 that fast-forwards/repoints branch narrative onto Q4.5 v4 truth.
 ```
 
-**Note:** Stage 2 Q1–Q4.5 evaluator/docs are **not on `main`**. Artifacts exist on disk.
+**Historical note (audit-time):** Stage 2 Q1–Q4.5 evaluator/docs were **not on `main`** when this audit was written; machine artifacts already existed on disk under `out/signal_study/`.  
+**Integration (PR #93):** the accepted stack lands on `main` without changing evaluator or documentation **truth identities** (still #89 / #90 / coverage-gate conclusions above).
 
 ---
 
@@ -638,14 +639,14 @@ out/signal_study/m_b1_5_stage2_q45_20260710/nested_loso_summary.json
 out/signal_study/m_b1_5_stage2_q45_20260710/threshold_registry.json
 out/signal_study/m_b1_5_stage2_q45_20260710/per_sequence.csv
 
-# Source (PR #89 evaluator truth @ 6df1739b; not on main)
+# Source (PR #89 evaluator truth @ 6df1739b; integrated via PR #93)
 src/saccade/perception/eval/d_online_stage2.py
 src/saccade/perception/eval/d_online_stage2_q4.py
 src/saccade/perception/eval/d_online_stage2_q45_atlas.py
 scripts/tools/run_m_b1_5_stage2_q45_atlas.py
 tests/unit/test_d_online_stage2_q45_atlas.py
 
-# Contracts (consolidated docs truth @ 51b9c73e)
+# Contracts (consolidated docs truth @ 51b9c73e; integrated via PR #93)
 docs/modules/semantic/research/m_b1_5_stage2_entry_contract_20260710.md
 docs/modules/semantic/research/m_b1_5_stage2_d_online_final_20260710.md
 docs/modules/semantic/research/m_b1_to_m_b1_5_two_stage_plan_20260710.md

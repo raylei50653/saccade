@@ -39,7 +39,7 @@ Central judgment (held):
 
 1. **[Coverage audit (fact-owner)](../../modules/semantic/research/composition_grammar_safe_region_coverage_audit_20260710.md)** — full matrices, T0–T4, bounded verdict
 2. Stage 2 canonical: [m_b1_5_stage2_d_online_final_20260710.md](../../modules/semantic/research/m_b1_5_stage2_d_online_final_20260710.md) · [entry contract](../../modules/semantic/research/m_b1_5_stage2_entry_contract_20260710.md)
-3. Related Stage 1 thread: [m_b1_online_hook_20260709.md](m_b1_online_hook_20260709.md) (S1 CLOSED; freeze null; Q4.5 terminal B)
+3. Closed Stage 1/2 history thread: [m_b1_online_hook_20260709.md](m_b1_online_hook_20260709.md) (CLOSED; handoff here for **T0 only**)
 4. Plan body (runner/contract ref only): [m_b1_to_m_b1_5_two_stage_plan_20260710.md](../../modules/semantic/research/m_b1_to_m_b1_5_two_stage_plan_20260710.md)
 5. Signal table contract: [signal_table_schema.md](../eval/signal_table_schema.md)
 
