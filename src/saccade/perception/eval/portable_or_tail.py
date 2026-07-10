@@ -3,6 +3,10 @@
 Research-only. Fail-closed on schema / identity mismatch.
 Does not search, refit, or repair thresholds.
 
+Online Stage 1 path (``enforce_freeze_lock=True``, default):
+  locks candidate identity, thr vector, file hash, and op='>'
+  to match the CUDA hard-OR ABI.
+
 Contract:
   docs/modules/semantic/research/m_b1_portable_or_tail_hook_contract_20260709.md
   docs/modules/semantic/research/m_b1_to_m_b1_5_two_stage_plan_20260710.md
@@ -19,7 +23,7 @@ from typing import Any, Mapping, Sequence
 
 import numpy as np
 
-# Locked freeze identity for the Stage 1 portable policy.
+# Locked freeze identity for the Stage 1 portable policy (online hook ABI).
 EXPECTED_CANDIDATE_ID = "m_b1_repaired_eps0_loo_pass_20260709"
 
 # Canonical ordered singleton atoms (OR of 5 tails). Order is ABI for native thr[].
@@ -39,12 +43,36 @@ ORDERED_SIGNALS: tuple[str, ...] = (
     "resid_mean",
 )
 
-ALLOWED_OPS = frozenset({">", ">=", "<", "in_range"})
-BANNED_KINDS = frozenset({"zone_q", "gap", "gap_bin", "hard_zone"})
+# CUDA propose-kernel only implements strict greater-than (x > thr).
+STAGE1_OP = ">"
+ALLOWED_OPS_STAGE1 = frozenset({STAGE1_OP})
+
+# Freeze thr vector (7-seq fit) — must match CUDA thr[] order exactly.
+FROZEN_THR_VECTOR: tuple[float, ...] = (
+    11.908911563050141,  # score_m_bridge:tail_q85
+    1.3485465824400666,  # abs_log_h:tail_q85
+    6.732025413759512,  # dist_h:tail_q85
+    2.085930035366586,  # abs_ratio_m1:tail_q85
+    14.043463872732945,  # resid_mean:tail_q85
+)
+FROZEN_EPS = 0.0
+# SHA-256 of freeze portable_policy.json bytes (content lock).
+FROZEN_POLICY_SHA256 = (
+    "3638c2ef48e84d5f7cd3c3ef8ad1fca8414588005a2c33f0d4f6a9490595818b"
+)
+_THR_ATOL = 1e-12
+_THR_RTOL = 0.0
+
+# Online B-audit (full candidate-event export) is NOT implemented.
+ONLINE_BAUDIT_IMPLEMENTED = False
 
 
 class PortablePolicyError(ValueError):
     """Fail-closed portable policy validation error."""
+
+
+class PortableAuditNotImplementedError(RuntimeError):
+    """Raised when --research-portable-or-tail-audit is requested but unimplemented."""
 
 
 @dataclass(frozen=True)
@@ -73,6 +101,7 @@ class PortablePolicy:
     eps: float
     thr_vector: tuple[float, ...]  # length 5, ORDERED_ATOM_IDS order
     schema_version: str = "portable_or_tail_v1"
+    freeze_locked: bool = False
     raw: dict[str, Any] = field(repr=False, default_factory=dict)
 
     @property
@@ -93,13 +122,81 @@ def _require(cond: bool, msg: str) -> None:
         raise PortablePolicyError(msg)
 
 
+def _thr_close(a: float, b: float) -> bool:
+    return abs(float(a) - float(b)) <= _THR_ATOL + _THR_RTOL * abs(float(b))
+
+
+def resolve_candidate_id(
+    raw: Mapping[str, Any],
+    path: Path,
+    *,
+    expected_candidate_id: str | None,
+) -> str:
+    """Resolve candidate identity fail-closed.
+
+    Accepted identity sources (in order):
+      1. explicit ``candidate_id`` (or ``policy_candidate_id``) field in JSON
+      2. parent directory name **exactly** equal to expected_candidate_id
+
+    Soft prefix / inferred fallbacks are rejected.
+    """
+    explicit = raw.get("candidate_id")
+    if explicit is None:
+        explicit = raw.get("policy_candidate_id")
+
+    if explicit is not None:
+        cid = str(explicit)
+        if expected_candidate_id is not None:
+            _require(
+                cid == expected_candidate_id,
+                f"candidate_id mismatch: got {cid!r}, expected {expected_candidate_id!r}",
+            )
+        return cid
+
+    # No field: only exact parent-dir identity (no soft prefix).
+    if expected_candidate_id is not None and path.parent.name == expected_candidate_id:
+        return expected_candidate_id
+
+    raise PortablePolicyError(
+        f"portable policy missing candidate_id and parent dir "
+        f"{path.parent.name!r} is not exactly {expected_candidate_id!r}; "
+        f"refuse soft fallback"
+    )
+
+
+def require_online_audit_available(*, audit_enabled: bool) -> None:
+    """Fail-closed: online B-audit flag must not claim unimplemented export."""
+    if not audit_enabled:
+        return
+    if ONLINE_BAUDIT_IMPLEMENTED:
+        return
+    raise PortableAuditNotImplementedError(
+        "--research-portable-or-tail-audit / research_portable_or_tail_audit "
+        "requests online full candidate-event export, which is NOT implemented "
+        "(Stage 1 online B-audit still PENDING). "
+        "For offline pairs-replay tables use: "
+        "scripts/tools/run_m_b1_hook_ab.py --offline-events-only. "
+        "For A1/B e2e use hook without --research-portable-or-tail-audit "
+        "(native counters via get_relink_debug only)."
+    )
+
+
 def load_portable_policy(
     path: str | Path,
     *,
     expected_candidate_id: str | None = EXPECTED_CANDIDATE_ID,
+    enforce_freeze_lock: bool = True,
     allow_zone_gap: bool = False,
 ) -> PortablePolicy:
-    """Load and validate frozen portable_policy.json (fail-closed)."""
+    """Load and validate portable_policy.json (fail-closed).
+
+    Parameters
+    ----------
+    enforce_freeze_lock:
+        When True (default, online Stage 1 path): lock thr vector, file hash,
+        eps, and op='>' to the freeze constants; CUDA ABI alignment required.
+        Set False only for offline research tools / unit tests with synthetic thr.
+    """
     p = Path(path).expanduser().resolve()
     _require(p.is_file(), f"portable policy file missing: {p}")
     try:
@@ -119,36 +216,9 @@ def load_portable_policy(
         "missing atom_specs",
     )
 
-    candidate_id = str(
-        raw.get("candidate_id")
-        or raw.get("policy_candidate_id")
-        or expected_candidate_id
-        or ""
+    candidate_id = resolve_candidate_id(
+        raw, p, expected_candidate_id=expected_candidate_id
     )
-    if expected_candidate_id is not None:
-        # Allow missing candidate_id in freeze file when parent dir/name matches.
-        if "candidate_id" in raw:
-            _require(
-                str(raw["candidate_id"]) == expected_candidate_id,
-                f"candidate_id mismatch: got {raw['candidate_id']!r}, "
-                f"expected {expected_candidate_id!r}",
-            )
-        else:
-            # Infer from parent directory name (freeze layout).
-            if (
-                p.parent.name != expected_candidate_id
-                and candidate_id != expected_candidate_id
-            ):
-                # Soft identity: accept freeze file when parent is freeze study id.
-                if p.parent.name.startswith("m_b1_repaired_eps0_loo_pass"):
-                    candidate_id = expected_candidate_id
-                else:
-                    raise PortablePolicyError(
-                        f"cannot verify candidate_id for {p}; "
-                        f"parent={p.parent.name!r}, expected={expected_candidate_id!r}"
-                    )
-            else:
-                candidate_id = expected_candidate_id
 
     clauses: list[tuple[str, ...]] = []
     for i, cl in enumerate(clauses_raw):
@@ -171,7 +241,6 @@ def load_portable_policy(
         f"clause atom set mismatch: got {sorted(clause_atom_ids)}, "
         f"expected {list(ORDERED_ATOM_IDS)}",
     )
-    # Preserve freeze clause order for audit; thr_vector uses ORDERED_ATOM_IDS.
 
     atoms: list[PortableAtom] = []
     atom_by_id: dict[str, PortableAtom] = {}
@@ -181,11 +250,15 @@ def load_portable_policy(
         _require(isinstance(spec, dict), f"atom_specs[{aid!r}] must be object")
         signal = str(spec.get("signal", ""))
         kind = str(spec.get("kind", ""))
-        op = str(spec.get("op", ">"))
+        op = str(spec.get("op", STAGE1_OP))
         thr = spec.get("thr")
         _require(signal in ORDERED_SIGNALS, f"{aid}: unexpected signal {signal!r}")
         _require(aid.startswith(signal + ":"), f"{aid}: atom_id/signal mismatch")
-        _require(op in ALLOWED_OPS, f"{aid}: unsupported op {op!r}")
+        # CUDA only implements '>' — reject other ops even offline-schema path.
+        _require(
+            op in ALLOWED_OPS_STAGE1,
+            f"{aid}: op {op!r} unsupported; Stage 1 / CUDA ABI requires op={STAGE1_OP!r}",
+        )
         _require(thr is not None and np.isfinite(float(thr)), f"{aid}: invalid thr")
         if not allow_zone_gap:
             _require(
@@ -218,6 +291,34 @@ def load_portable_policy(
     thr_vector = tuple(atom_by_id[aid].thr for aid in ORDERED_ATOM_IDS)
     eps = float(raw.get("eps", 0.0))
     file_hash = _sha256_file(p)
+    freeze_locked = False
+
+    if enforce_freeze_lock:
+        freeze_locked = True
+        _require(
+            candidate_id == EXPECTED_CANDIDATE_ID,
+            f"enforce_freeze_lock requires candidate_id={EXPECTED_CANDIDATE_ID!r}, "
+            f"got {candidate_id!r}",
+        )
+        _require(
+            abs(eps - FROZEN_EPS) <= _THR_ATOL,
+            f"freeze eps mismatch: got {eps}, expected {FROZEN_EPS}",
+        )
+        mismatches = [
+            f"{ORDERED_ATOM_IDS[i]}: got {thr_vector[i]}, expected {FROZEN_THR_VECTOR[i]}"
+            for i in range(5)
+            if not _thr_close(thr_vector[i], FROZEN_THR_VECTOR[i])
+        ]
+        _require(
+            not mismatches,
+            "freeze thr_vector mismatch (CUDA ABI lock):\n  " + "\n  ".join(mismatches),
+        )
+        _require(
+            file_hash == FROZEN_POLICY_SHA256,
+            f"freeze policy file hash mismatch: got {file_hash}, "
+            f"expected {FROZEN_POLICY_SHA256} "
+            f"(refuse silent thr/schema drift)",
+        )
 
     return PortablePolicy(
         path=p,
@@ -228,24 +329,20 @@ def load_portable_policy(
         atom_by_id=atom_by_id,
         eps=eps,
         thr_vector=thr_vector,
+        freeze_locked=freeze_locked,
         raw=raw,
     )
 
 
 def apply_atom(atom: PortableAtom, values: np.ndarray) -> np.ndarray:
+    """Apply a single atom. Stage 1 only supports op '>' (CUDA ABI)."""
     x = np.asarray(values, dtype=float)
     x = np.where(np.isfinite(x), x, 0.0)
-    if atom.op == "in_range":
-        assert atom.thr_hi is not None
-        return (x >= atom.thr) & (x <= float(atom.thr_hi))
-    thr = atom.thr
-    if atom.op == ">":
-        return x > thr
-    if atom.op == ">=":
-        return x >= thr
-    if atom.op == "<":
-        return x < thr
-    raise PortablePolicyError(f"unknown op {atom.op}")
+    if atom.op != STAGE1_OP:
+        raise PortablePolicyError(
+            f"apply_atom: op {atom.op!r} unsupported; Stage 1 requires {STAGE1_OP!r}"
+        )
+    return x > float(atom.thr)
 
 
 def signals_from_arrays(
@@ -339,9 +436,13 @@ def snapshot_policy(policy: PortablePolicy) -> dict[str, Any]:
         "candidate_id": policy.candidate_id,
         "policy_path": str(policy.path),
         "policy_file_hash": policy.file_hash,
+        "freeze_locked": policy.freeze_locked,
+        "frozen_policy_sha256": FROZEN_POLICY_SHA256,
         "eps": policy.eps,
         "ordered_atom_ids": list(ORDERED_ATOM_IDS),
         "thr_vector": list(policy.thr_vector),
+        "stage1_op": STAGE1_OP,
+        "online_baudit_implemented": ONLINE_BAUDIT_IMPLEMENTED,
         "clauses": [list(c) for c in policy.clauses],
         "atoms": [
             {
@@ -470,3 +571,22 @@ def classify_e2e_status(
     if md.get("IDF1", 0.0) >= -0.2 and not per_seq_regression:
         return "e2e_safe_for_default_off"
     return "online_inconclusive"
+
+
+# Host get_relink_debug() layout (cursor + d_relink_dbg_[0..11]).
+# Use these indices when reading counters from Python.
+RELINK_DEBUG_HOST_INDEX: dict[str, int] = {
+    "archived_cursor": 0,
+    "births": 1,
+    "revived": 2,
+    "bridge_attempts": 3,
+    "bridge_accepts": 4,
+    "hook_eligible": 5,
+    "hook_rejected": 6,
+    "atom0_score_m_bridge": 7,
+    "atom1_abs_log_h": 8,
+    "atom2_dist_h": 9,
+    "atom3_abs_ratio_m1": 10,
+    "app_veto": 11,
+    "atom4_resid_mean": 12,
+}

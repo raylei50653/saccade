@@ -777,12 +777,17 @@ def add_semantic_args(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         default=False,
         help=(
-            "When hook is on, enable full candidate-event audit export "
-            "(separate from policy runtime overhead)."
+            "RESERVED / NOT IMPLEMENTED: online full candidate-event audit export "
+            "(B-audit). Currently fail-closed if set. Use offline pairs replay via "
+            "scripts/tools/run_m_b1_hook_ab.py --offline-events-only; for A1/B e2e "
+            "rely on get_relink_debug native counters only."
         ),
     )
     research.add_argument(
         "--research-portable-or-tail-audit-dir",
         default=None,
-        help="Directory for hook audit artifacts (events/json). Required when audit is on.",
+        help=(
+            "RESERVED with --research-portable-or-tail-audit (not implemented). "
+            "Setting this alone is rejected."
+        ),
     )

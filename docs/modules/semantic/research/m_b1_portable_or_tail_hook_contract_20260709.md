@@ -89,11 +89,18 @@ m_b1_repaired_eps0_loo_pass_20260709
 ```text
 --research-portable-or-tail-policy PATH/portable_policy.json
   default: unset / off
-  when set: load thr; reject relink candidate if ANY tail fires
+  when set: load thr with freeze lock (hash + thr vector + op='>');
+            reject relink candidate if ANY tail fires
   when unset: zero behavior change vs production preset
+
+--research-portable-or-tail-audit
+  RESERVED / NOT IMPLEMENTED (fail-closed if set)
+  online full candidate-event export = PENDING (B-audit)
+  offline pairs replay: run_m_b1_hook_ab.py --offline-events-only
 ```
 
 Must log: `policy_path`, `candidate_id`, `n_rejected`, never enable without explicit flag.
+Loader refuse: missing candidate_id soft-fallback, thr drift, hash drift, op≠`>`.
 
 ---
 

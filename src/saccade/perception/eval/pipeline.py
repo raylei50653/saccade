@@ -624,19 +624,32 @@ class EvalPipeline:
                 )
             if _pol_path:
                 from saccade.perception.eval.portable_or_tail import (
+                    PortableAuditNotImplementedError,
                     PortablePolicyError,
                     load_portable_policy,
+                    require_online_audit_available,
                     snapshot_policy,
                 )
 
                 try:
-                    _pol = load_portable_policy(_pol_path)
+                    # Online path: strict freeze lock (thr + hash + op='>').
+                    _pol = load_portable_policy(_pol_path, enforce_freeze_lock=True)
                 except PortablePolicyError as exc:
                     raise RuntimeError(
                         f"portable OR-tail policy load failed (fail-closed): {exc}"
                     ) from exc
                 _audit = bool(_kw.get("research_portable_or_tail_audit", False))
                 _audit_dir = _kw.get("research_portable_or_tail_audit_dir")
+                # Fail closed: audit flag must not claim unimplemented B-audit export.
+                try:
+                    require_online_audit_available(audit_enabled=_audit)
+                except PortableAuditNotImplementedError as exc:
+                    raise RuntimeError(str(exc)) from exc
+                if _audit_dir and not _audit:
+                    raise RuntimeError(
+                        "--research-portable-or-tail-audit-dir set without "
+                        "--research-portable-or-tail-audit; refuse silent partial config"
+                    )
                 _setter = getattr(
                     detector.tracker, "set_research_portable_or_tail", None
                 )
@@ -645,10 +658,11 @@ class EvalPipeline:
                         "tracker lacks set_research_portable_or_tail; "
                         "rebuild tracking extension or use a native GPUByteTracker path"
                     )
+                # audit_enabled always False until ONLINE_BAUDIT_IMPLEMENTED.
                 _setter(
                     True,
                     list(_pol.thr_vector),
-                    _audit,
+                    False,
                     str(_pol.file_hash),
                     str(_pol.candidate_id),
                 )
@@ -656,13 +670,14 @@ class EvalPipeline:
 
                 _logging.getLogger(__name__).info(
                     "research portable OR-tail hook ON policy=%s candidate_id=%s "
-                    "hash=%s thr=%s audit=%s audit_dir=%s",
+                    "hash=%s thr=%s freeze_locked=%s audit=%s (online B-audit "
+                    "not implemented)",
                     _pol.path,
                     _pol.candidate_id,
                     _pol.file_hash[:12],
                     list(_pol.thr_vector),
+                    _pol.freeze_locked,
                     _audit,
-                    _audit_dir,
                 )
                 # Stash snapshot for eval runners / audit manifests.
                 _kw["research_portable_or_tail_snapshot"] = snapshot_policy(_pol)

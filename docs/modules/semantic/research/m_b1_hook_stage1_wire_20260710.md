@@ -48,23 +48,36 @@ Stage 2:             NOT STARTED (separate PR)
 
 ```text
 unset / empty  → hook OFF (no thr load, no kernel policy path)
-path set       → load portable_policy.json fail-closed; reject if ANY of 5 tails fire
-audit flag     → separate from policy; for full-table export (offline table always via runner)
+path set       → load portable_policy.json fail-closed (freeze thr+hash+op='>' lock);
+                 reject if ANY of 5 frozen tails fire
+--research-portable-or-tail-audit
+               → RESERVED / NOT IMPLEMENTED (fail-closed if set)
+               → online B-audit event export still PENDING
+offline pairs tables
+               → scripts/tools/run_m_b1_hook_ab.py --offline-events-only only
 ```
 
-### Native counters (`get_relink_debug`)
+### Native counters
 
-After host cursor:
+Device `d_relink_dbg_[i]` is copied into host `get_relink_debug()` at **index i+1**
+(host[0] = archived cursor from `d_relink_cursor_`).
 
-| dbg index | meaning |
-|--:|:--|
-| 2 | bridge_attempts |
-| 3 | bridge_accepts |
-| 4 | hook_eligible |
-| 5 | hook_rejected |
-| 6–9 | atom0–3 fires |
-| 10 | app_veto |
-| 11 | atom4 fires |
+| meaning | native `d_relink_dbg_` slot | host `get_relink_debug()` index |
+|:--|--:|--:|
+| births | 0 | 1 |
+| revived | 1 | 2 |
+| bridge_attempts | 2 | 3 |
+| bridge_accepts | 3 | 4 |
+| hook_eligible | 4 | 5 |
+| hook_rejected | 5 | 6 |
+| atom0 score_m_bridge | 6 | 7 |
+| atom1 abs_log_h | 7 | 8 |
+| atom2 dist_h | 8 | 9 |
+| atom3 abs_ratio_m1 | 9 | 10 |
+| app_veto | 10 | 11 |
+| atom4 resid_mean | 11 | 12 |
+
+Do **not** use native slot numbers as host vector indices.
 
 ---
 

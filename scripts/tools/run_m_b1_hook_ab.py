@@ -281,7 +281,9 @@ def main() -> int:
     study = args.study_dir
     study.mkdir(parents=True, exist_ok=True)
 
-    policy = load_portable_policy(args.policy)
+    # Offline runner: still lock freeze thr/hash when loading the Stage 1 freeze file.
+    # Synthetic thr exploration is not this script's job (Stage 2).
+    policy = load_portable_policy(args.policy, enforce_freeze_lock=True)
     snap_hash = _write_json(
         study / "portable_policy.snapshot.json", snapshot_policy(policy)
     )
