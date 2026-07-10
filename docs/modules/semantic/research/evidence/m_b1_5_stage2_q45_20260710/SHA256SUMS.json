@@ -1,0 +1,57 @@
+{
+  "files": [
+    {
+      "bytes": 3778,
+      "file": "manifest.json",
+      "sha256": "4213e82e4c05a05247d32cfd387b209bdb20468d6d98038e84325f7a7dc7d568"
+    },
+    {
+      "bytes": 5523,
+      "file": "summary.json",
+      "sha256": "a88d9dcfc5a614496305303ae3a5c23ec2de72ded44b8524104caa0f2f35d641"
+    },
+    {
+      "bytes": 531,
+      "file": "reconciliation.json",
+      "sha256": "64d5c7fe539e0391c743d386bc9225e26febf51753c3f5d08aee8ba2cfdc4611"
+    },
+    {
+      "bytes": 1457,
+      "file": "cohort_summary.json",
+      "sha256": "2b248fbe4c25265a69a46b55197a1f3ededaeac556747d8cdc2a7c6b651cf354"
+    },
+    {
+      "bytes": 373159,
+      "file": "threshold_registry.json",
+      "sha256": "d3e3197fa7812a9ec5f9b06cc2286dcce52d49cf805eba6527c3b24b62a585f4"
+    },
+    {
+      "bytes": 13945,
+      "file": "region_stability.csv",
+      "sha256": "87055ef93439ae54d9c3255cb9c3be2d04da786f7b40a5f56d1e6f92046ef243"
+    },
+    {
+      "bytes": 60028,
+      "file": "pareto_frontier.csv",
+      "sha256": "b49ae10d11a83c87271faf0233ab55b6b1c4e922e52d88dc4b83107cd875c977"
+    },
+    {
+      "bytes": 8174,
+      "file": "frame_column_provenance.json",
+      "sha256": "13dcf2da80e736320f8969a516dfe0a94dab0c97affcb7b66ce87aa0d3d84888"
+    },
+    {
+      "bytes": 161114,
+      "file": "nested_loso_clause_summary.csv",
+      "sha256": "1dd459879e2db8407181ec43c6e507b706ba24b9ead222b690569ed57e3cc21c"
+    },
+    {
+      "bytes": 550,
+      "file": "nested_loso_summary.json",
+      "sha256": "71c8ea3d59c08c81f527ec6eda0c5150f5fa7681183282b58289f6e89f781566"
+    }
+  ],
+  "git_commit": "dc758e088de9fe2bfed7e2d4d458a8360a03f712",
+  "study_id": "m_b1_5_stage2_q45_20260710",
+  "taxonomy_version": "stage2_q45_atlas_v4"
+}

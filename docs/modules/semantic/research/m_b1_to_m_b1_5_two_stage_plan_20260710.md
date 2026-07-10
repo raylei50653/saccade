@@ -7,30 +7,54 @@ doc-module: semantic
 
 # MOT M-B1 → M-B1.5 two-stage implementation plan
 
-> **Role:** Stage 1 + Stage 2 engineering contract (single source).  
-> **Navigation:** [m_b1 online hook thread](../../../research/threads/m_b1_online_hook_20260709.md) · Stage 1 eng task [portable OR-tail hook contract](m_b1_portable_or_tail_hook_contract_20260709.md).  
-> **Stage 1 status (2026-07-10): overall OPEN**  
-> · 1a evaluation-entry **PASSED** · freeze online relevance **NULL**  
-> · 1b action-path **PASSED** under plumbing controls (not freeze B alone)  
-> · B-audit / strict A0 / determinism **PENDING**  
-> Evidence: [m_b1_hook_stage1_e2e_20260710.md](m_b1_hook_stage1_e2e_20260710.md).  
-> **Not evidence:** numbers live in freeze card / ledger / study dirs.
+> **Role:** Stage 1 + Stage 2 engineering contract (single source; methods + full-table rules).  
+> **Navigation:** [m_b1 online hook thread](../../../research/threads/m_b1_online_hook_20260709.md) · [hook ABI](m_b1_portable_or_tail_hook_contract_20260709.md).  
+> **Evidence:** [Stage 1 final](m_b1_stage1_online_hook_final_20260710.md) · [Stage 2 final](m_b1_5_stage2_d_online_final_20260710.md).  
+> **Not evidence tables:** freeze card / ledger / study dirs own numbers.
+
+### Top summary (current — 2026-07-10)
+
+```text
+Stage 1: CLOSED
+Q1–Q3: SUFFICIENT
+Q4: q4_separability_grade C (weak/unstable; best oriented AUC 0.588)
+     → stage2_entry_terminal_after_q4: B
+Q4.5 (evaluator v4): q45_atlas_terminal B = isolated_safe_points_only
+productive_safe cells: 154   (single 1 / AND 153 / OR 0)
+coordinate-union interior: 0
+stable region candidates: 0
+exact_absolute nested LOSO portable: 0
+selected unresolved: 21 (blocks candidate)
+competition-relative columns: untrusted (invalid_frame_provenance)
+new-signal path: PARKED / secondary
+next preferred direction: ranking / assignment-relative audit
+  (after valid assignment-group key)
+threshold/hook-policy promotion: blocked
+production preset: unchanged
+```
 
 0. Purpose
 
-下一步工作分成兩個嚴格分離的階段：
+工作分成兩個嚴格分離的階段（**both executed** as of 2026-07-10）：
 
-Stage 1 — M-B1 frozen hook + action-path validation  **← overall OPEN**
+Stage 1 — M-B1 frozen hook + action-path validation  
+  **execution_status: completed · terminal: stage1_overall CLOSED**
   1a: policy load + evaluation-entry (eligible counters)  **PASSED**
   freeze B: online relevance NULL (support mismatch)      **observed**
   1b: plumbing controls prove signal→atom→reject→decision **PASSED**
-  still required for Stage 1 CLOSED: online full event table,
-  strict A0 identity, repeated-run determinism, runtime overhead rows
+  B-audit full table + recon + rebased A0 + det + runtime **PASSED**
 
-Stage 2 — M-B1.5 conditional-domain safe-negative audit  **← not started**
+Stage 2 — M-B1.5 conditional-domain safe-negative audit  
+  **execution_status: completed through Q4.5 · thr/hook-policy promotion blocked**
   在 production baseline 已接受的條件域 D_online 內，
   是否存在穩定可泛化的 safe-negative region
   （不是再對全 offline pairs 做 q85）
+  Q1–Q3: m_b1_5_stage2_q1q3_20260710 (SUFFICIENT mass)
+  Q4: m_b1_5_stage2_q4_20260710 → q4_separability_grade C
+      (weak/unstable; best AUC 0.588) → stage2_entry_terminal_after_q4 B
+  Q4.5 v4: m_b1_5_stage2_q45_20260710 → q45_atlas_terminal B
+      isolated_safe_points_only · 154 productive-safe · 0 region candidates
+  next preferred: ranking / assignment-relative audit — not thr-as-rule
 
 核心原則：
 
@@ -126,7 +150,7 @@ Stage 1 不回答：
 
 4. Read first
 
-1. "docs/modules/semantic/research/m_b1_offline_safe_region_phase_20260709.md"
+1. "docs/modules/semantic/research/m_b1_research_history_20260709_20260710.md"
 2. "docs/modules/semantic/research/m_b1_repaired_eps0_loo_pass_candidate_20260709.md"
 3. "docs/modules/semantic/research/m_b1_portable_or_tail_hook_contract_20260709.md"
 4. "docs/research/eval/signal_analysis_ledger.md" §5
@@ -139,17 +163,17 @@ Optional:
 
 5. Locked state
 
-candidate_id:
-  m_b1_repaired_eps0_loo_pass_20260709
+### Current lifecycle (2026-07-10)
 
-status:
-  LOO_pass_region_candidate
-  offline_smoke_pass
-  online_blocked
-
-not:
-  e2e_safe_for_default_off
-  production preset
+```text
+candidate_id: m_b1_repaired_eps0_loo_pass_20260709
+offline freeze: LOO_pass_region_candidate · offline_smoke_pass
+Stage 1 overall: CLOSED
+freeze online relevance: NULL_support_mismatch
+e2e_safe_for_default_off: yes  (= null-effect mount only)
+production preset: unchanged / promotion blocked
+Stage 2 Q4.5: isolated_safe_points_only
+```
 
 Portable policy:
 
@@ -162,6 +186,16 @@ no zone
 no gap
 ban_gap
 ban_zone
+
+### Historical checkpoint as of 2026-07-09 (pre–Stage 1 close)
+
+```text
+prior checkpoint (superseded):
+  online_blocked
+  not e2e_safe_for_default_off
+  next then: implement default-off hook + A/B
+superseded by: Stage 1 CLOSED · Stage 2 Q4.5 terminal B
+```
 
 ---
 
@@ -546,20 +580,51 @@ artifact hashes
 
 Stage 2 — M-B1.5 parameterized implication and safe-region audit
 
+```text
+execution_status: completed through Q4.5 (2026-07-10)
+q45_atlas_terminal: B
+terminal: isolated_safe_points_only
+productive_safe: 154 (v4)
+stable_region_candidates: 0
+coordinate_union_interior: 0
+exact_absolute_nested_loso_portable: 0
+threshold/hook-policy promotion: blocked
+method body below remains normative full-table contract
+```
+
 14. Stage 2 entry condition
 
-Stage 1 overall remains **OPEN** until B-audit / strict A0 / determinism land.
-Stage 1b action-path eng may be treated as **enough to start** domain
-discussion on \(D_{\text{online}}\), but Stage 2 PRs stay separate.
+```text
+execution_status: completed
+entry pack: m_b1_5_stage2_q1q3_20260710 · SUFFICIENT
+Q4: completed · q4_separability_grade C → stage2_entry_terminal_after_q4 B
+Q4.5: completed · q45_atlas_terminal B (v4 · 154 productive-safe · 0 region)
+```
+
+Stage 1 overall is **CLOSED** (eng + B-audit + identity + det + runtime).
+Stage 2 may now use the online full event table as primary domain substrate;
+Stage 2 PRs stay separate from Stage 1 hook implementation.
+
+**Authoritative Stage 2 entry + claim firewall:**  
+[m_b1_5_stage2_entry_contract_20260710.md](m_b1_5_stage2_entry_contract_20260710.md)  
+(G0–G4 · Q1–Q6 order · three legal terminals A/B/C · claim template).
 
 不得和 Stage 1 hook implementation 放在同一個 policy-remodeling PR。
 
-**Ordered entry (do not skip):**
+**Ordered entry (do not skip) — historical plan order; all steps completed:**
 
-1. Online full B-audit event table for Stage 1 online candidates (eligible=244):
-   signals · GT/FP · atom margins · final association outcome
-2. Measure FP mass **inside** \(D_{\text{online}}\) (production-accepted conditional domain)
-3. Only then choose: fine cal @ current placement · earlier placement · ranking/margin
+1. Online full B-audit event table exists (eligible=244) — **done in Stage 1**
+2. Rebuild GT / FP / ambiguous outcomes on those 244 rows (Q1) — **done**
+3. Signal support & distribution on \(D_{\text{online}}\) (Q2) — **done**
+4. Measure FP mass **inside** \(D_{\text{online}}\) (Q3) — **done · SUFFICIENT**
+5. Test GT/FP separation (Q4) — **done · q4_separability_grade C**; thr Boolean atlas Q4.5 — **done · q45_atlas_terminal B (v4)**
+
+**Claim firewall (summary):**  
+`triggered==0` → effect claim inadmissible ·  
+`decision_changed==0` → downstream effect inadmissible ·  
+insufficient coverage → underpowered ·  
+single-seq dominance → portability blocked ·  
+neighbor thr unsupported → stable-region blocked.
 
 Stage 2 可使用：
 

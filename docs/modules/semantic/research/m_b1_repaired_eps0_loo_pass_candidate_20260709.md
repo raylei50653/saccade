@@ -4,26 +4,41 @@
 <!-- doc-promotion: none -->
 <!-- doc-date: 2026-07-09 -->
 <!-- doc-module: semantic -->
-<!-- fact-owner: freeze-identity = this card; phase nav = m_b1_offline_safe_region_phase_20260709.md -->
+<!-- fact-owner: freeze-identity = this card; phase nav = m_b1_research_history_20260709_20260710.md -->
+
+### Offline freeze identity (unchanged historical value)
 
 ```text
 candidate_id:       m_b1_repaired_eps0_loo_pass_20260709
-lifecycle_status:   candidate_only / pre-production research
 validation_status:  LOO_pass_region_candidate
 offline_smoke:      pass  (GT0 · FP=8721 · freeze-aligned)
-Stage 1 overall:    OPEN
-Stage 1a:           evaluation-entry PASSED
-online freeze B:    A1≡B · elig=244 · rej=0 · relevance NULL
-Stage 1b controls:  action-path PASSED (plumbing only; not this freeze thr)
-e2e_safe_for_default_off: yes  (freeze null-effect)
-production_preset:  unchanged
+lifecycle_status:   candidate_only / pre-production research
 ≠ production gate
 ```
 
-Evidence: [e2e note](m_b1_hook_stage1_e2e_20260710.md) ·  
-[`m_b1_hook_ab_20260710T064657Z_stage1b`](../../../../out/signal_study/m_b1_hook_ab_20260710T064657Z_stage1b/).
+### Current lifecycle (as of 2026-07-10 Stage 1 + Stage 2 close)
 
-> **Phase hub / maintenance:** [m_b1_offline_safe_region_phase_20260709.md](m_b1_offline_safe_region_phase_20260709.md) — intermediate method notes are closed as-of; do not re-edit their verdicts when working the hook.
+```text
+Stage 1 overall:              CLOSED
+hook mechanism:               validated
+freeze online relevance:      NULL_support_mismatch
+  (A1≡B · elig=244 · rej=0 · triggered=0)
+e2e_safe_for_default_off:     yes
+  = null-effect mount is safe
+  ≠ online policy effective
+  ≠ freeze thr fires on D_online
+Stage 2 Q4.5 terminal:        isolated_safe_points_only
+  (stable region candidates = 0)
+production promotion:         blocked
+production_preset:            unchanged
+```
+
+Evidence: [Stage 1 final](m_b1_stage1_online_hook_final_20260710.md) ·  
+[Stage 2 final](m_b1_5_stage2_d_online_final_20260710.md) ·  
+[`m_b1_hook_ab_20260710T071001Z_stage1_close`](../../../../out/signal_study/m_b1_hook_ab_20260710T071001Z_stage1_close/).
+
+> **Phase hub / maintenance:** [m_b1_research_history_20260709_20260710.md](m_b1_research_history_20260709_20260710.md) — offline method notes closed as-of.  
+> Do not re-open freeze thr identity when reading Stage 1/2 lifecycle.
 
 `lifecycle_status` 與 `validation_status` **不是互斥**：前者是「能不能當 production 物件」，後者是 offline 驗證到哪一層。
 
@@ -40,9 +55,11 @@ AtomRepairConfig(ban_gap_bins=True, ban_zone=True)
 
 **Headline**
 
-> LOO hurt attribution localized ε=0 transfer failures to `score_m_bridge:zone_q70` plus sequence-specific gap/dist_h zone atoms. Banning gap-bin and zone atoms yields a repaired candidate with **7/7 LOO GT_hurt=0** while retaining **97.3%** test FP removal. Offline-only; half-repair showed replacement risk (`speed_mismatch:tail_q95`). **Repaired shared-q / 2D safe-region audit upgrades this card to `LOO_pass_region_candidate`. B2/e2e is still required before any preset discussion.**
+> LOO hurt attribution localized ε=0 transfer failures to `score_m_bridge:zone_q70` plus sequence-specific gap/dist_h zone atoms. Banning gap-bin and zone atoms yields a repaired candidate with **7/7 LOO GT_hurt=0** while retaining **97.3%** test FP removal. Offline-only; half-repair showed replacement risk (`speed_mismatch:tail_q95`). **Repaired shared-q / 2D safe-region audit upgrades this card to `LOO_pass_region_candidate`.**
 
-中文：這輪不是證明可上線，而是證明 ε=0 failure **可歸因、可修復**，且幾乎不掉 FP；region audit 後升級為 **region candidate**；下一關只剩 **B2/e2e**（preset 仍 NO）。
+**Current (not a re-open of freeze):** Stage 1 hook eng is **CLOSED** with freeze online relevance **NULL**; Stage 2 Q4.5 finds **no stable reject region** on \(D_{\text{online}}\). Preset promotion remains **blocked**.
+
+中文：offline freeze 身份不變（可歸因、可修復、region candidate）；線上 lifecycle 已推進到 Stage 1 CLOSED + Q4.5 isolated_safe_points_only，**不得**把 offline LOO-pass 當 production GO。
 
 ---
 
@@ -219,10 +236,10 @@ e2e brings candidate generation differences, runtime ordering, upstream/downstre
 
 ---
 
-## 7. Region audit (done) + required_before_preset
+## 7. Region audit (done) + completion ledger
 
 **Region study:** [`m_repaired_tail_region_20260709T150000Z`](../../../../out/signal_study/m_repaired_tail_region_20260709T150000Z/)  
-**Note:** [m_b1_repaired_tail_or_safe_region_20260709.md](m_b1_repaired_tail_or_safe_region_20260709.md)
+**Note:** [m_b1_research_history_20260709_20260710.md](m_b1_research_history_20260709_20260710.md)
 
 | check | ε=0 result |
 |:--|:--|
@@ -234,32 +251,33 @@ e2e brings candidate generation differences, runtime ordering, upstream/downstre
 | LOO freeze GT0 | **7/7** |
 | **upgrade** | **`LOO_pass_region_candidate`** |
 
-Still required before preset:
+### Completion ledger (required_before_preset — current)
 
 ```text
-1. ✅ repaired 2D / shared-q productive_safe_area
-2. ✅ B2/e2e smoke (candidate_id-scoped)
-     → offline_smoke_pass__online_blocked
-     → e2e_safe_for_default_off: no
-3. research default-off portable OR-tail hook
-     → m_b1_portable_or_tail_hook_contract_20260709.md
-4. e2e A/B: baseline B2 vs baseline B2 + hook
-5. no metric regression (AssA / IDF1 / reconnect / per-seq)
-6. explicit default-off prototype discussion — not silent preset merge
+✅ repaired 2D / shared-q productive_safe_area
+✅ B2/e2e smoke (candidate_id-scoped)
+   historical as-of 2026-07-09: offline_smoke_pass__online_blocked
+   (online not yet wired at that checkpoint — correct boundary)
+✅ research default-off portable OR-tail hook (Stage 1 CLOSED)
+✅ evaluation-entry A/B + B-audit + strict A0 + determinism + runtime
+✅ e2e_safe_for_default_off = yes  (null-effect mount only)
+   ≠ online policy effective
+✅ freeze online power: ABSENT (NULL_support_mismatch; rejected=0)
+✅ Stage 2 Q1–Q4.5 on D_online
+   Q4.5 terminal: isolated_safe_points_only
+   stable region candidates: 0
+🚫 production preset: unchanged / promotion blocked
 ```
 
-Order:
+### Historical checkpoint as of 2026-07-09 (do not treat as current)
 
 ```text
-✅ offline research candidate 已成立
-✅ online/e2e 邊界尚未打通（smoke 正確暴露）
-→ 下一步只補 default-off hook
-     contract: Implement a research-only, default-off online hook that
-     applies frozen portable OR-tail policy from portable_policy.json,
-     without search/repair/learned weights/zone-gap/preset changes.
-→ then A/B: baseline B2 vs baseline B2 + hook
-→ sole headline: e2e_safe_for_default_off: yes/no
-→ preset 不動（全程）
+prior checkpoint (pre–Stage 1 close):
+  offline_smoke_pass__online_blocked
+  e2e_safe_for_default_off: no   (A/B not yet run)
+  next step then: implement default-off hook + true e2e A/B
+superseded by: Stage 1 close study m_b1_hook_ab_20260710T071001Z_stage1_close
+               + Stage 2 Q4.5 atlas terminal B
 ```
 
 ---
@@ -268,12 +286,12 @@ Order:
 
 | doc | role |
 |:--|:--|
-| [LOO atom repair](m_b1_loo_hurt_atom_repair_20260709.md) | attribution + repair table (source of LOO numbers) |
-| [unrepaired OR-5 card](m_b1_policy_card_eps0_or5_20260709.md) | prior in-sample freeze (**superseded for LOO claims**) |
-| [LOO baseline](m_b1_gate_rule_search_loo_20260709.md) | unrepaired 5/7 partial |
-| [weight methods](m_b1_weight_method_safe_region_20260709.md) | no thick ε=0 weight plateau; motivated atom line |
-| [repaired tail OR region](m_b1_repaired_tail_or_safe_region_20260709.md) | shared-q / 2D ε=0 region → validation upgrade |
-| [GT safe region area](m_b1_gt_safe_region_area_20260709.md) | general 2D area protocol (historical) |
+| [LOO atom repair](m_b1_research_history_20260709_20260710.md) | attribution + repair table (source of LOO numbers) |
+| [unrepaired OR-5 card](m_b1_research_history_20260709_20260710.md) | prior in-sample freeze (**superseded for LOO claims**) |
+| [LOO baseline](m_b1_research_history_20260709_20260710.md) | unrepaired 5/7 partial |
+| [weight methods](m_b1_research_history_20260709_20260710.md) | no thick ε=0 weight plateau; motivated atom line |
+| [repaired tail OR region](m_b1_research_history_20260709_20260710.md) | shared-q / 2D ε=0 region → validation upgrade |
+| [GT safe region area](m_b1_research_history_20260709_20260710.md) | general 2D area protocol (historical) |
 | Ledger | `m.gate.repaired_eps0_loo_pass` |
 
 ---

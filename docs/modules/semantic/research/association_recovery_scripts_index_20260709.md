@@ -60,7 +60,7 @@
 | **LOO hurt attribution + atom repair re-LOO** | `loo_hurt_attribution.py` | A |
 | **Repaired all-tail OR region (shared-q / 2D)** | `repaired_tail_or_safe_region.py` | A |
 | **B2/e2e smoke (candidate_id only)** | `smoke_repaired_candidate_b2e2e.py` | A |
-| **M-B1 offline phase hub (CLOSED nav)** | — · [hub note](m_b1_offline_safe_region_phase_20260709.md) | A |
+| **M-B1 offline phase hub (CLOSED nav)** | — · [hub note](m_b1_research_history_20260709_20260710.md) | A |
 | 面積 / 轉向前 loss | `analyze_preloss_motion.py` · `analyze_turn_baseline.py` | A |
 | speed×turn 分布 | `scripts/tools/sweep_speed_turn.py` | A |
 | 否證 reach / s·G | `scripts/tools/validate_reach_gate.py` | A |
@@ -294,7 +294,7 @@ uv run python scripts/tools/audit_relink_safe_reject.py \
 ```
 
 Contract: [signal_table_schema.md](../../../research/eval/signal_table_schema.md) §0.4.  
-Live: [m_b1_bridge_discriminability_20260709.md](m_b1_bridge_discriminability_20260709.md) §3d.
+Live: [m_b1_research_history_20260709_20260710.md](m_b1_research_history_20260709_20260710.md) §3d.
 
 ### R-B — Depth / swap probe
 

@@ -1,5 +1,5 @@
 ---
-doc-status: active-thread
+doc-status: closed
 doc-promotion: navigation-only; not evidence
 owner-module: semantic
 created: 2026-07-09
@@ -7,114 +7,95 @@ created: 2026-07-09
 
 # m_b1 online hook thread
 
-> **One-line:** **Stage 1a evaluation-entry PASSED**; freeze policy **null online relevance**. **Stage 1b action-path** via plumbing controls (see study). **Stage 1 overall OPEN** until B-audit + strict A0 + determinism. Not “Stage 1 CLOSED” from vacuous freeze alone.
+> **One-line (CLOSED):** Stage 1 **CLOSED** · S2 through Q4.5 **`q45_atlas_terminal: B`**  
+> (154 productive-safe · 0 region candidates · evaluator **v4**).  
+> **Post-#92 / #93 authorization:** handoff to  
+> [composition_grammar_safe_region.md](composition_grammar_safe_region.md) → **T0 only**.  
+> Ranking / assignment is **deferred / blocked** until a valid assignment-group key.  
+> Preset unchanged.
 
 ## Status (honest split)
 
 | Milestone | Status |
 |:--|:--|
-| **Stage 1a evaluation-entry** | **PASSED** — policy load + eval entry; A1 eligible=0; B eligible>0 |
-| **Frozen-policy online relevance** | **NULL** — support mismatch; B rejected=0; A1≡B |
-| **Stage 1b action-path** | plumbing controls P/F (activation thr=0.2 + force-reject) — see latest study |
-| **Online B-audit full event table** | **PENDING** (contract still requires it for full Stage 1) |
-| **Strict A0 identity** | **NOT MET** (6/7 soft identity only) |
-| **Determinism repeated-run / runtime overhead** | **PENDING** |
-| **Stage 1 overall** | **OPEN** |
+| Offline M-B1 freeze | **LOO_pass_region_candidate** (offline only) |
+| **Stage 1 overall** | **CLOSED** |
+| Frozen-policy online relevance | **NULL** (support mismatch; rejected=0) |
+| Stage 1b action-path P/F | **PASSED** |
+| Online B-audit | **PASSED** — 244 rows; recon ok |
+| Stage 2 Q1–Q3 | **PASSED / PASSED / SUFFICIENT** (23 safe-removable) |
+| Stage 2 Q4 | **`q4_separability_grade: C`** · maps to **`stage2_entry_terminal_after_q4: B`** |
+| Stage 2 Q4.5 atlas | **`q45_atlas_terminal: B`** isolated_safe_points_only (v4) |
+| Coverage decision gate | **CLOSED** — [composition thread](composition_grammar_safe_region.md) |
+| **This thread** | **CLOSED** — no longer authorizes next research work |
 | Production preset | **unchanged** |
 
 ```text
 Allowed claim:
-  policy loading and evaluation-entry wiring are valid;
-  online rejection/action chain requires Stage 1b controls (not freeze B alone).
+  Stage 1 eng closure complete — observation + intervention substrate.
+  Stage 2: multi-seq safe-negative mass exists; singleton thr inseparable;
+  restricted thr×AND/OR atlas (v4) has only isolated productive-safe points
+  (0 coordinate-union interior; 0 exact-absolute nested-LOSO portable).
 
 Forbidden claim:
-  “the full hook engineering chain is valid” from freeze A1/B only
-  “Stage 1 CLOSED” while B-audit / strict A0 / action-path incomplete
+  frozen offline thr online-effective
+  observed GT_hurt==0 atlas point = safe rule
+  production preset / default-on
+  this thread still authorizes ranking/assignment as next work
 ```
 
-## What freeze A1/B actually proved
+## Terminal letter namespaces (do not collapse)
 
-1. **Evaluation-entry** — hook-off does not enter policy eval; hook-on increments eligible.
-2. **Freeze null effect** — offline thr outside \(D_{\text{online}}\) support → rejected=0, A1≡B.
-3. **Not proven by freeze B alone** — atom fire → reject → candidate suppression → decision change.
-
-## Domain diagnosis (still valid)
-
-```text
-D_offline = all recorded pairs
-D_online  = D_offline ∩ {bdist≤0.4} ∩ {0.6≤hr≤1.7} ∩ {other baseline gates}
-```
-
-q85 on \(D_{\text{offline}}\) applied on \(D_{\text{online}}\) → natural support mismatch.
-
-## Stage 1b plumbing controls (not production thr search)
-
-Pre-specified, non-metric-picked:
-
-| Arm | Policy | Intent |
+| Field | Value | Rubric |
 |:--|:--|:--|
-| **P** | `control_arm=activation`, atom0 thr=**0.2** (midpoint of bridge_px=0.4), others disabled | signal → comparison → atom0 → reject |
-| **F** | `control_arm=force_reject`, atom0 thr=**−1** | `hook_rejected == hook_eligible` + decision change vs A1 |
+| `q4_separability_grade` | **C** | Q4 effect-size / LOO / pure-neg tail grade (weak/unstable) |
+| `stage2_entry_terminal_after_q4` | **B** | Entry-contract legal set: mass>0 but no stable separation |
+| `q45_atlas_terminal` | **B** | Q4.5 atlas taxonomy: `isolated_safe_points_only` |
 
-Fixtures: `scripts/tools/fixtures/m_b1_stage1/`
+## Read first (canonical)
 
-Accept P: `eligible>0`, `atom0>0`, `rejected==atom0`, **result ≠ A1**.  
-Accept F: `rejected==eligible`, **result ≠ A1**.
-
-## Read first
-
-1. [e2e / close note](../../modules/semantic/research/m_b1_hook_stage1_e2e_20260710.md) — **Stage 1a only; 1b controls**
-2. [wire](../../modules/semantic/research/m_b1_hook_stage1_wire_20260710.md)
-3. [plan](../../modules/semantic/research/m_b1_to_m_b1_5_two_stage_plan_20260710.md)
-4. [ledger](../eval/signal_analysis_ledger.md)
+1. **Active next:** [composition_grammar_safe_region.md](composition_grammar_safe_region.md) — **T0 only**
+2. Coverage audit: [composition_grammar_safe_region_coverage_audit_20260710.md](../../modules/semantic/research/composition_grammar_safe_region_coverage_audit_20260710.md)
+3. [**Stage 2 D_online final**](../../modules/semantic/research/m_b1_5_stage2_d_online_final_20260710.md)
+4. [Stage 2 entry contract](../../modules/semantic/research/m_b1_5_stage2_entry_contract_20260710.md)
+5. [Stage 1 online hook final](../../modules/semantic/research/m_b1_stage1_online_hook_final_20260710.md)
+6. [Hook ABI contract](../../modules/semantic/research/m_b1_portable_or_tail_hook_contract_20260709.md)
 
 ## Artifacts
 
 ```text
-out/signal_study/m_b1_hook_ab_20260710T062345Z/           # Stage 1a freeze A1/B
-out/signal_study/m_b1_hook_ab_*_stage1b/                  # + P/F controls when present
-scripts/tools/fixtures/m_b1_stage1/*.json
-out/signal_study/m_b1_repaired_eps0_loo_pass_20260709/portable_policy.json
+out/signal_study/m_b1_repaired_eps0_loo_pass_20260709/          # offline freeze
+out/signal_study/m_b1_hook_ab_20260710T071001Z_stage1_close/   # Stage 1 CLOSED
+out/signal_study/m_b1_5_stage2_q1q3_20260710/
+out/signal_study/m_b1_5_stage2_q4_20260710/
+out/signal_study/m_b1_5_stage2_q45_20260710/                  # v4 evaluator HEAD
+docs/modules/semantic/research/evidence/m_b1_5_stage2_q45_20260710/
 ```
 
 ## Current step
 
 ```text
-DONE:
-  Stage 1a evaluation-entry + freeze vacuous diagnosis
-  control_arm loader + fixtures + runner --run-action-path-controls
-  milestone classifier (1a / 1b / overall OPEN)
+DONE (this thread):
+  offline freeze + Stage 1 CLOSED + Stage 2 Q1–Q4.5 (evaluator v4)
+  + coverage decision gate (#92)
 
-RUN / RECORD:
-  --run-e2e --run-action-path-controls  (P + F arms)
-  publish Stage 1b pass/fail without claiming Stage 1 CLOSED
+HANDOFF (authorized next — not this thread):
+  → composition_grammar_safe_region thread
+  → T0 Existing Atlas Region Interpretation Pack only
 
-STILL PENDING for Stage 1 overall CLOSED:
-  online full B-audit event table (zero/singleton/cofire/rejected/decision-changed)
-  strict A0 identity (or rebased A0 stamp)
-  hook-on repeated-run hashes
-  proper runtime overhead accounting
+DEFERRED / BLOCKED (not current next):
+  ranking / assignment-relative decision modeling
+  until valid assignment-group key
+  (assignment_group_key_status = invalid_frame_provenance)
+
+FORBIDDEN:
+  thr-as-rule / hook policy / production preset from isolated safe points
+  dual “next authorized” with composition T0
 ```
-
-Runner:
-
-```bash
-bash scratch/ab_env.sh uv run python scripts/tools/run_m_b1_hook_ab.py \
-  --policy out/signal_study/m_b1_repaired_eps0_loo_pass_20260709/portable_policy.json \
-  --study-dir out/signal_study/m_b1_hook_ab_<stamp>_stage1b \
-  --run-e2e --run-action-path-controls
-```
-
-## Must not
-
-- claim Stage 1 CLOSED from freeze vacuous A1/B alone
-- thr search / production re-fit as Stage 1 “fix”
-- silent soft-A0 → strict identity upgrade
-- treat offline 8721 as online pruning power
-- preset / default-on
 
 ## History
 
 - 2026-07-09: offline candidate + thread
-- 2026-07-10: wire + e2e freeze A1/B; over-claimed Stage 1 CLOSED
-- 2026-07-10: **review correction** — Stage 1a only; action path unactivated; split 1a/1b; plumbing controls added; overall remains OPEN
+- 2026-07-10: Stage 1 wire/e2e; Stage 1 CLOSED (B-audit)
+- 2026-07-10: Stage 2 Q1–Q4.5 terminal B; doc consolidation
+- 2026-07-10: coverage audit decision gate; **this thread CLOSED** — handoff T0

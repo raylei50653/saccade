@@ -1,0 +1,53 @@
+{
+  "cohort_definition": {
+    "excluded_from_main": "unresolved, ambiguous, non-selected, other labels",
+    "negative_class": "resolved AND baseline_selected AND pair_label==negative",
+    "positive_protection_class": "resolved AND baseline_selected AND pair_label==gt_consistent",
+    "secondary_analysis": "resolved non-selected negative / gt_consistent"
+  },
+  "n_d_online": 244,
+  "n_excluded": 43,
+  "n_primary": 87,
+  "n_primary_negative": 23,
+  "n_primary_positive_protect": 64,
+  "n_secondary_non_selected": 114,
+  "n_selected_ambiguous": 0,
+  "n_selected_total": 108,
+  "n_selected_unresolved": 21,
+  "n_sequences_with_both_classes": 7,
+  "n_sequences_with_neg": 7,
+  "n_sequences_with_pos": 7,
+  "per_sequence_primary": {
+    "MOT17-02-SDP": {
+      "n_neg": 7,
+      "n_pos": 11
+    },
+    "MOT17-04-SDP": {
+      "n_neg": 1,
+      "n_pos": 6
+    },
+    "MOT17-05-SDP": {
+      "n_neg": 2,
+      "n_pos": 13
+    },
+    "MOT17-09-SDP": {
+      "n_neg": 3,
+      "n_pos": 2
+    },
+    "MOT17-10-SDP": {
+      "n_neg": 5,
+      "n_pos": 17
+    },
+    "MOT17-11-SDP": {
+      "n_neg": 2,
+      "n_pos": 5
+    },
+    "MOT17-13-SDP": {
+      "n_neg": 3,
+      "n_pos": 10
+    }
+  },
+  "sufficient_mass": true,
+  "taxonomy_version": "stage2_q4_separability_v1",
+  "unknown_coverage_note": "Atlas primary remains resolved\u2227selected; cells report n_unresolved_selected / pessimistic_gt_hurt; unresolved_contaminated cannot enter region_candidate"
+}

@@ -1,0 +1,12 @@
+{
+  "assignment_group_key_status": "invalid_frame_provenance",
+  "evaluator_source_sha256": "551284f88710945dc636cb4e13f2b8401948fc717e605738f84be83b9e133643",
+  "git_commit": "dc758e088de9fe2bfed7e2d4d458a8360a03f712",
+  "note": "Canonical evidence pack for PR audit. Large full atlases remain in parent study dir; rebuild via run_m_b1_5_stage2_q45_atlas.py. manifest.json is written for this run before pack copy.",
+  "reproduce": "uv run python scripts/tools/run_m_b1_5_stage2_q45_atlas.py --q1q3-study out/signal_study/m_b1_5_stage2_q1q3_20260710 --out out/signal_study/m_b1_5_stage2_q45_20260710",
+  "runner_source_sha256": "376b11c0bb9c85823ca6c09eb17ed3044730b3be7bc9fec53888ffde74d5815a",
+  "source_event_table_sha256": "cfca3818fd8478e6e3dcb12d3976549dab8057a0f2c2e63831f8d3e3a2fffd97",
+  "study_id": "m_b1_5_stage2_q45_20260710",
+  "taxonomy_version": "stage2_q45_atlas_v4",
+  "terminal": "isolated_safe_points_only"
+}

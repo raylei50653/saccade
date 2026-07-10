@@ -9,7 +9,7 @@
 **Status:** **RESEARCH live note (D3)** — B2 IDs-state; pairs with B1 signal note  
 **Study (numbers master):** [`out/signal_study/m_b2_bridge_ab_20260709T094646Z/`](../../../../out/signal_study/m_b2_bridge_ab_20260709T094646Z/)  
 `context.json` · `metrics_reconnect.json` · `events_bridge_{on,off}.csv`  
-**Sibling B1 (signal, not e2e):** [m_b1_bridge_discriminability_20260709.md](m_b1_bridge_discriminability_20260709.md)  
+**Sibling B1 (signal, not e2e):** [m_b1_research_history_20260709_20260710.md](m_b1_research_history_20260709_20260710.md)  
 **Contract:** [signal_table_schema.md](../../../research/eval/signal_table_schema.md) §0.1 — **B1 ≠ B2**  
 **Tool:** `scripts/eval/diagnostics/reconnect_rate.py` (`--json-out` / `--events-out`)
 
