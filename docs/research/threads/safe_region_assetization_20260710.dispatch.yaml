@@ -9,8 +9,8 @@ working_branch: research/composition-grammar-coverage-program
 
 # Immutable minimum constraint anchor. Work from the latest branch HEAD that
 # contains this chat-owned acceptance state; do NOT checkout this commit directly.
-minimum_required_ancestor: f42b76abb22050eb259cde0c28d736d87f29b20b
-anchor_generated_from_head: f42b76abb22050eb259cde0c28d736d87f29b20b
+minimum_required_ancestor: 55f424d0e8fbf9add5762948f22e5cecd482d299
+anchor_generated_from_head: 55f424d0e8fbf9add5762948f22e5cecd482d299
 reviewed_delivery_tip: f92340b7d5f95b449297fbc141fa028de60a8b87
 chat_acceptance_commit: 01a2ec37634ade73ea1d0238908dccc6fabb4e77
 
@@ -116,7 +116,7 @@ start_protocol:
   - git switch research/composition-grammar-coverage-program
   - git pull --ff-only origin research/composition-grammar-coverage-program
   - test "$(git branch --show-current)" = "research/composition-grammar-coverage-program"
-  - git merge-base --is-ancestor f42b76abb22050eb259cde0c28d736d87f29b20b HEAD
+  - git merge-base --is-ancestor 55f424d0e8fbf9add5762948f22e5cecd482d299 HEAD
   - test -z "$(git status --porcelain)"
   - START_HEAD="$(git rev-parse HEAD)"
   - START_REMOTE_HEAD="$(git rev-parse origin/research/composition-grammar-coverage-program)"
