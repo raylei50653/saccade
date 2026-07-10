@@ -5,28 +5,24 @@
 
 ## Sole active
 
-🔄 **Safe-Region Assetization — A1 terminal decision (audit 26/26 PASS; owner records terminal)**
+🔄 **Safe-Region Assetization — A1 CLOSED (`A1_ACCEPTED_WITH_LIMITS`); owner picks next scientific uncertainty**
 
 - Thread: [safe_region_assetization_20260710.md](../../research/threads/safe_region_assetization_20260710.md)
-- **A1 acceptance unit locked** (2026-07-10 chat review): conversion pack `1a180620bc…` (`out/signal_study/m_b1_5_safe_region_asset_r1_20260710/`)
-- **Read-only S0/S1/Q1/N1 audit PASS 26/26** (2026-07-11): [research/safe_region_a1_audit_20260711.md](research/safe_region_a1_audit_20260711.md) · `scripts/tools/run_safe_region_a1_audit.py` · `out/signal_study/safe_region_a1_audit_20260711/`
-- **R1 / R1.1 downgraded to external diagnostic overlay** (not A1 objects; not pack consumers):
+- **A1 terminal recorded 2026-07-11**: `A1_ACCEPTED_WITH_LIMITS` → **maturity A1**; 5 enumerated limits (no D1 trace · no second consumer · event-mass / non-productive-cell / predicate-alias queries need raw) — [terminal record](../../research/threads/safe_region_assetization_20260710.md#a1-terminal-record-2026-07-11)
+- Acceptance unit: conversion pack `1a180620bc…` (`out/signal_study/m_b1_5_safe_region_asset_r1_20260710/`); audit **26/26 PASS** + mutation sensitivity **5/5** — [audit note](research/safe_region_a1_audit_20260711.md)
+- **R1 / R1.1 remain external diagnostic overlay** (not A1 objects; not pack consumers):
   - R1 V-C = heuristic-specific descriptive failure (LOO pool global-label-screened; class null retracted) — [note](research/safe_region_assetization_r1_20260710.md)
-  - R1.1 = 2 unique harmful AND events + 3 descriptive symptoms; "primary F3" rejected (post-hoc floors, K-duplicated count, alias-ambiguous predicate) — [note](research/safe_region_assetization_r11_20260710.md)
+  - R1.1 = 2 unique harmful AND events + 3 descriptive symptoms; "primary F3" rejected — [note](research/safe_region_assetization_r11_20260710.md)
 - Preserved state:
   ```text
-  A1 acceptance unit: conversion pack 1a180620bc… (locked)
-  A1 state: A1_PENDING_VALIDATION → audit 26/26 PASS
-  maturity: A0 retained (terminal not yet recorded)
-  next: owner records A1 terminal
-    (A1_ACCEPTED_WITH_LIMITS supportable iff limits enumerated:
-     no D1 trace · abstraction usage-based · event-mass/alias queries need raw;
-     no post-hoc D1 required to close A1)
-  R1.1 four next-lines: deferred until terminal
-  R2 / grammar search / hook / ledger: closed
+  A1: CLOSED — A1_ACCEPTED_WITH_LIMITS (2026-07-11) · maturity A1
+  next: research mainline — owner picks next scientific uncertainty
+    (R1.1 four lines = candidate directions only, none committed)
+  R2–R4: unauthorized (fail-closed; accepting terminal ≠ stage authorization)
+  grammar search / hook / production / ledger: closed / unchanged
   terminal B: retained (never rested on the overlay)
   ```
-- **Do not** restart grammar search, LOO-tune the probe, or treat probe `A1_region_asset` tags as pack maturity.
+- **Do not** restart grammar search, LOO-tune the probe, treat probe `A1_region_asset` tags as pack maturity, or invent a post-hoc D1 rule.
 
 ## Parked
 
@@ -35,7 +31,7 @@
 
 ## Related research threads（不佔 WIP 鎖）
 
-- [safe-region assetization](../../research/threads/safe_region_assetization_20260710.md) — **ACTIVE** · R0-B accepted · R1 eng. MERGED · A0 retained · **A1 audit PASS, terminal pending** · [PR #95](https://github.com/raylei50653/saccade/pull/95) history
+- [safe-region assetization](../../research/threads/safe_region_assetization_20260710.md) — **ACTIVE** · R0-B accepted · R1 eng. MERGED · **A1 CLOSED (`A1_ACCEPTED_WITH_LIMITS`, maturity A1)** · [PR #95](https://github.com/raylei50653/saccade/pull/95)/[#97](https://github.com/raylei50653/saccade/pull/97) history
 - [composition grammar coverage program](../../research/threads/composition_grammar_coverage_program_20260710.md) — **SUPERSEDED** · coverage map absorbed into assetization R2–R4
 - [composition grammar × safe-region A0](../../research/threads/composition_grammar_safe_region.md) — **CLOSED** · T0-A/B/R1 · terminal B retained
   - A0 source note: [composition_grammar_t0_region_interpretation_20260710.md](research/composition_grammar_t0_region_interpretation_20260710.md)

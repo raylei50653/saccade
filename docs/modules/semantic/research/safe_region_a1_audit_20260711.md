@@ -7,7 +7,7 @@ created: 2026-07-11
 
 # Safe-Region A1 — Acceptance-Unit Lock + Read-Only S0/S1/Q1/N1 Audit
 
-> **One-line:** A1 acceptance unit **locked** to conversion pack `1a180620bc…`. Read-only audit **26/26 PASS** (S0 unit lock · S1 semantic crosswalk · Q1 pack-only battery · N1 negative controls). R1/R1.1 downgraded to **external diagnostic overlay**. State: **A1_PENDING_VALIDATION → audit PASS**; terminal decision remains research-owner's.
+> **One-line:** A1 acceptance unit **locked** to conversion pack `1a180620bc…`. Read-only audit **26/26 PASS** (S0 unit lock · S1 semantic crosswalk · Q1 pack-only battery · N1 negative controls) + mutation sensitivity **5/5**. R1/R1.1 downgraded to **external diagnostic overlay**. Outcome: **`A1_ACCEPTED_WITH_LIMITS` recorded 2026-07-11 → maturity A1, gate CLOSED** (see Terminal outcome).
 
 ## Context
 
@@ -90,6 +90,16 @@ R1/R1.1: external diagnostic overlay (descriptive only)
 R2–R4: unauthorized (fail-closed; unchanged)
 production / ledger / terminal B: unchanged
 ```
+
+## Terminal outcome (write-back 2026-07-11)
+
+The block above is the pre-terminal state, kept for the record. After PR #97 merged (CI green) and mutation sensitivity passed 5/5 on `main` (`tests/unit/test_safe_region_a1_audit.py`: alias tamper → S1.7 FAIL · per-sequence tamper → S1.8 FAIL · promotion removal → N1 FAIL · self-promoted maturity → S0.3 FAIL), the research owner recorded:
+
+```text
+A1_ACCEPTED_WITH_LIMITS → maturity A1 — gate CLOSED
+```
+
+Authoritative record with full accepted scope / acceptance_limits / non-authorizations: [thread § A1 terminal record](../../../research/threads/safe_region_assetization_20260710.md#a1-terminal-record-2026-07-11). No post-hoc D1 was run; its absence is an enumerated `acceptance_limit`.
 
 ## Reproduce
 
