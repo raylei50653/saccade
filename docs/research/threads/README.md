@@ -38,7 +38,7 @@ conversation hook    = 短期接力（應收進 thread）
 
 | Thread | Status (one-line) | Owner |
 |:--|:--|:--|
-| [safe_region_assetization_20260710.md](safe_region_assetization_20260710.md) | **semantic sole active** · R0-B-R3 identity/reconstruction closure · RB1–RB7 pass · R1 unauthorized | semantic |
+| [safe_region_assetization_20260710.md](safe_region_assetization_20260710.md) | **semantic sole active** · R0-B-R3 delivered (RB8–RB9) · chat re-review · R1 unauthorized | semantic |
 | [association_recovery_registry_20260709.md](association_recovery_registry_20260709.md) | Scripts index + tools YAML + contracts 就位；registry 維護母線 | semantic |
 | [doc_structure_o15_followup_20260709.md](doc_structure_o15_followup_20260709.md) | O1.5 + TODO-as-WIP-lock；follow-up = index debt / optional strict | ownership |
 

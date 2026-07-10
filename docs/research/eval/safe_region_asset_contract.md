@@ -5,8 +5,8 @@
 <!-- doc-date: 2026-07-10 -->
 <!-- doc-module: cross -->
 
-**Role:** Normative cross-cutting **RegionAsset** contract draft (R0-B · revision **R0-B-R2**).  
-**Status:** **DRAFT** — awaiting chat-side re-review after RB5–RB7 typed realization integration. Not self-accepted.  
+**Role:** Normative cross-cutting **RegionAsset** contract draft (R0-B · revision **R0-B-R3**).  
+**Status:** **DRAFT** — awaiting chat-side re-review after RB8–RB9 identity/reconstruction closure. Not self-accepted.  
 **Does not authorize:** R1 asset generation · A0→A1 maturity · transfer · intervention · production · ledger promotion.
 
 ```text
@@ -16,10 +16,14 @@ R0-B-R1 corrections (retained):
   RB3 region/null IDs + claims bind feasibility_contract_id (model A)
   RB4 pairwise leaf a/b full-field canonicalize before truth digest
 
-R0-B-R2 corrections (current):
+R0-B-R2 corrections (retained):
   RB5 stable coordinate/mask identity vs feasibility-bound membership
   RB6 candidate-universe + predicate-edge machine authorities
   RB7 canonical executable Boolean policy identity (≠ observed mask)
+
+R0-B-R3 corrections (current):
+  RB8 sealed candidate-universe contract vs instance membership identity
+  RB9 threshold-registry authority + concrete threshold-bound policy grain
 ```
 
 **Parents**
@@ -46,6 +50,8 @@ R0-B-R2 corrections (current):
 - Separation of mathematical feasibility definition from observed claim level.
 - Separation of truth-level coordinate/mask identity from feasibility-bound realization.
 - Typed candidate-universe, predicate-edge, and executable Boolean policy authorities.
+- Sealed candidate-universe **instance** identity (membership digest) vs generator **contract**.
+- Threshold-registry authority and concrete threshold-bound policy instance reconstruction.
 
 ### Out of scope / non-claims
 
@@ -79,6 +85,18 @@ canonical policy semantics
 observational Boolean composition
 ≠ single-step intervention
 ≠ closed-loop policy safety
+
+candidate-universe generator contract
+≠ sealed candidate-universe instance membership
+
+parameterized policy family (AST / grammar)
+≠ concrete threshold-bound executable policy instance
+
+raw source_event_table_sha256
+≠ normalized universe_membership_digest
+
+threshold index alone
+≠ reconstructible threshold value without registry authority
 ```
 
 ---
@@ -92,7 +110,7 @@ A RegionAsset packages an estimated **productive-safe set** under asymmetric los
 | Symbol | Contract field | Q4.5 G1–G3 freeze |
 |:--|:--|:--|
 | $\Theta$ | `parameter_or_policy_space` | registered thr-index lattices (G1 unique-boundary 870; G2/G3 q05 17640 each) |
-| $\Omega$ | `candidate_universe_id` → **`candidate_universe.json`** | sealed `online_hook_eligible` universe authority (not bare string alone) |
+| $\Omega$ | `candidate_universe_instance_id` → **`candidate_universe_instances`** (+ contract row) | sealed `online_hook_eligible` **instance** (contract + membership digest); not bare string / generator-only |
 | $L_{\mathrm{GT}}$ | `safety_loss_definition` | resolved `GT_hurt == 0` under unresolved-contamination firewall |
 | $\varepsilon$ | `epsilon` | `exact_zero_count` (count hurt $=0$, not a positive rate allowance) |
 | $G_{\mathrm{FP}}$ / productivity | `productivity_definition` | count surrogate `n_neg_captured > 0` |
@@ -129,6 +147,10 @@ reject-only G1/G2/G3 AND/OR
 no NOT/complement authorization
 unknown never maps to reject
 no cross-universe composition without transport
+generator-contract equality ⇒ same sealed universe instance
+source_event_table_sha256 ⇒ universe_membership_digest
+policy family ⇒ concrete threshold-executable policy
+thr_index without registry ⇒ reconstructible thr_value
 ```
 
 Observational mask algebra on frozen rows **does not** establish single-step intervention or closed-loop policy composition.
@@ -141,20 +163,23 @@ Layers are **independent**. Child content IDs must not depend on pack materializ
 
 | Layer | ID | Owns | Must not own |
 |:--|:--|:--|:--|
-| Normalized truth | `truth_contract_id` | substrate, universe FK, signals, sequences, label/unresolved, lattices, **order-insensitive data content digest** | raw file SHAs; pack schema; claim L-level |
-| Candidate universe | `candidate_universe_id` (+ `universe_hash`) | substrate, hook, builder, prefilters, key schema, label/exposure, time/frame, pre-decision state | claim outcomes; pack schema |
-| Predicate edge | `predicate_id` | signal, unit, domain/codomain, unknown/missing/NaN/Inf, comparator, endpoint, tie, quantile, clipping | observed masks; thr_index alone as full identity |
-| Executable policy | `policy_definition_id` / extended `semantic_definition_id` | grammar + truth_semantics versions, **canonical_policy_ast**, roles, universe requirement, composition_level, NOT/complement metadata when applicable | observed_mask_hash; evidence outcomes |
-| Exact evidence seal | `evidence_bundle_id` | study_id, recorded evaluator/runner SHAs, **raw artifact SHA map** | semantic content identity |
-| Feasibility definition | `feasibility_contract_id` | $\Theta$, $\Omega$ FK, $L_{\mathrm{GT}}$, productivity, $\varepsilon$, $g_{\min}$, exposure **definitions and declared denominators**, selection_scope, finite-sample statement, geometry metric/edge policy | **supported claim_level** (outcome) |
-| Pack / materialization | `pack_id` | producer kind/version, schema version, grammar_scope, FKs to truth/feasibility/evidence/universe | local region/mask/coord content |
-| Grid domain | `grid_domain_id` | one registered feature×direction (pair) lattice domain | pack |
+| Normalized truth | `truth_contract_id` | substrate, **universe instance** FK, signals, sequences, label/unresolved, lattices, threshold_registry FK, **order-insensitive data content digest** | raw file SHAs; pack schema; claim L-level |
+| Universe generator contract | `candidate_universe_contract_id` | substrate, hook, builder, prefilters, key schema, label/exposure owner, time/frame range, pre-decision state **schema** | sealed membership; claim outcomes |
+| Universe sealed instance | `candidate_universe_instance_id` | contract_id + **normalized `universe_membership_digest`** | generator-only metadata sold as same-universe equality; raw event-table SHA as sole ID |
+| Predicate edge | `predicate_id` | signal, unit, domain/codomain, unknown/missing/NaN/Inf, comparator, endpoint, tie, quantile method, clipping | observed masks; thr_index alone as full identity; threshold **value** (registry owns value) |
+| Threshold registry | `threshold_registry_id` (+ entry keys) | sealed thr_index → `threshold_value_repr` / thr_value mapping per feature×direction×lattice | coordinate PK floats; claim outcomes |
+| Policy family (parameterized) | `policy_family_definition_id` | grammar + truth_semantics versions, **canonical parameterized AST** (predicate/role leaves **without** thr values), universe **instance** requirement, composition_level, NOT/complement metadata when applicable | thr_index bindings; observed_mask_hash; evidence outcomes |
+| Concrete policy instance | `policy_instance_id` | family + `threshold_registry_id` + **ordered threshold bindings** (thr_index per axis/leaf) | parameterized family alone; observed_mask as identity |
+| Exact evidence seal | `evidence_bundle_id` | study_id, recorded evaluator/runner SHAs, **raw artifact SHA map** including `source_event_table_sha256` | semantic content identity; substitute for universe membership digest |
+| Feasibility definition | `feasibility_contract_id` | $\Theta$, **$\Omega$ instance** FK, $L_{\mathrm{GT}}$, productivity, $\varepsilon$, $g_{\min}$, exposure **definitions and declared denominators**, selection_scope, finite-sample statement, geometry metric/edge policy | **supported claim_level** (outcome) |
+| Pack / materialization | `pack_id` | producer kind/version, schema version, grammar_scope, FKs to truth/feasibility/evidence/**universe instance**/threshold_registry | local region/mask/coord content |
+| Grid domain | `grid_domain_id` | one registered feature×direction (pair) lattice domain + registry lattice_kind | pack |
 | Search domain | `search_domain_id` | membership digest over concrete grid members | summary counts alone |
-| Region content (feasible-set outcome) | `region_asset_id` | connected PS component within one grid **under one** `feasibility_contract_id` (model A) + policy FK | pack_id; evidence_bundle_id; `::compN` |
+| Region content (feasible-set outcome) | `region_asset_id` | connected PS component within one grid **under one** `feasibility_contract_id` (model A) + **policy_family** FK | pack_id; evidence_bundle_id; `::compN`; thr values as PK |
 | Mask unit (truth-level) | `mask_unit_id` | `(truth_contract_id, grid_id, mask_sha256)` — **feasibility-independent** | PS membership counts that change with feasibility; region FKs as identity |
-| Coordinate (truth-level) | `coordinate_id` | `(truth_contract_id, canonical_cell_key)` — **feasibility-independent** | productive-safe flags; capacity under a feasibility; region FK |
-| Membership realization | `(region_asset_id, coordinate_id)` | feasibility-bound PS membership, observed capacity, dual margins, sequence incidence | redefining coordinate/mask content IDs |
-| Null record (feasible-set outcome) | `null_record_id` | search-domain empty under **one** `feasibility_contract_id` | concrete semantic_definition on grammar-level null |
+| Coordinate (truth-level) | `coordinate_id` | `(truth_contract_id, threshold_registry_id, canonical_cell_key)` with **per-axis registry entry FKs** — **feasibility-independent** | productive-safe flags; capacity under a feasibility; region FK; thr_value as PK |
+| Membership realization | `(region_asset_id, coordinate_id)` | feasibility-bound PS membership, observed capacity, dual margins, sequence incidence; may cite `policy_instance_id` | redefining coordinate/mask content IDs |
+| Null record (feasible-set outcome) | `null_record_id` | search-domain empty under **one** `feasibility_contract_id` | concrete policy on grammar-level null |
 | Evidence / claim outcome | `evidence_claim_id` (row) | observed outcomes + **claim_level** bound to **feasibility_contract_id + evidence_bundle_id** | redefining feasibility math |
 | Pack membership | `(pack_id, content_kind, content_id)` | emission listing | redefining content IDs |
 
@@ -164,9 +189,28 @@ Layers are **independent**. Child content IDs must not depend on pack materializ
 asset_set_id (R0-A name)
 truth_context_id that embeds raw SHAs as content parent
 feasibility-independent coordinate_id as sole PK of a table that stores PS flags / margins / capacity
-bare string candidate_universe_id without candidate_universe authority row
+bare string candidate_universe_id without contract + instance authority rows
+generator-only universe ID used for same-universe Boolean / mask comparison
+source_event_table_sha256 used as universe_membership_digest substitute
+fabricated universe_membership_digest from dataset name without candidate rows
+policy_family_definition_id labeled as concrete executable threshold policy
 semantic_definition_id that digests only operator+leaves+lattice without executable AST / roles / truth semantics
 observed_mask_hash as policy identity
+thr_index without threshold_registry entry FK as reconstructible threshold
+```
+
+**Naming aliases (locked semantics):**
+
+```text
+candidate_universe_id  (when used on pack / feasibility / same-universe compare)
+  ≝ candidate_universe_instance_id     # NOT the generator contract alone
+
+policy_definition_id / semantic_definition_id
+  without threshold bindings  ≝ policy_family_definition_id
+  with ordered thr bindings + registry  ≝ policy_instance_id
+
+legacy single-field "universe_hash"
+  ≝ universe_membership_digest on the instance row (name may remain as column alias)
 ```
 
 ---
@@ -256,44 +300,55 @@ Neither ladder implies the other. A future A1 pack of this study remains **L0/L1
 
 ```text
 truth_contract
-candidate_universe ──referenced by──► truth_contract, feasibility_contract, pack, policy
-predicate_definitions ──referenced by──► policy AST leaves
-policy_definitions / semantic_definitions ──FK──► candidate_universe, predicate leaves
-evidence_bundle ──FK──► truth_contract
-feasibility_contract ──FK──► truth_contract, candidate_universe
-pack (region_asset_manifest.json) ──FK──► truth_contract, feasibility_contract, evidence_bundle, candidate_universe
+candidate_universe_contract
+candidate_universe_instance ──FK──► contract; referenced by truth/feasibility/pack/policy
+threshold_registry (+ entries) ──referenced by──► truth_contract, coordinates, policy instances
+predicate_definitions ──referenced by──► policy family AST leaves
+policy_family_definitions ──FK──► universe instance, predicate leaves
+policy_instances ──FK──► policy_family, threshold_registry, ordered thr bindings
+evidence_bundle ──FK──► truth_contract   # owns source_event_table_sha256 (raw seal)
+feasibility_contract ──FK──► truth_contract, candidate_universe_instance
+pack (region_asset_manifest.json) ──FK──► truth, feasibility, evidence, universe instance, threshold_registry
 
 grid_domain                  (registered lattice domain; axes after pairwise canonicalize)
 search_domain
-search_domain_member ──FK──► search_domain, grid_domain, policy/semantic_definition
+search_domain_member ──FK──► search_domain, grid_domain, policy_family_definition
 
-coordinates                  # truth-level only; PK coordinate_id
-mask_units                   # truth-level only; PK mask_unit_id  (file may be region_masks.csv)
+coordinates                  # truth-level; PK coordinate_id; per-axis registry entry FKs
+mask_units                   # truth-level; PK mask_unit_id  (file may be region_masks.csv)
 
-region_asset ──FK──► truth_contract, feasibility_contract, policy/semantic_definition, grid_domain
-null_record ──FK──► truth_contract, feasibility_contract, search_domain; policy/semantic = NULL
+region_asset ──FK──► truth, feasibility, policy_family, grid_domain
+null_record ──FK──► truth, feasibility, search_domain; policy_family = NULL
 region_coordinate_membership ──FK──► region_asset, coordinate, mask_unit
+  # optional policy_instance_id derived from family + coordinate thr bindings
   # feasibility-bound realization; sole region↔mask authority projection source
 
 pack_membership ──FK──► pack, content
 evidence_claim ──FK──► feasibility_contract, evidence_bundle, optional content_id
 ```
 
-**RB3 model A (locked):** feasible-set **outcomes** (`region_asset_id`, `null_record_id`) include `feasibility_contract_id` in their identity digests. Changing $\varepsilon$, $g_{\min}$, loss, universe, or denominators yields new outcome IDs.
+**RB3 model A (locked):** feasible-set **outcomes** (`region_asset_id`, `null_record_id`) include `feasibility_contract_id` in their identity digests. Changing $\varepsilon$, $g_{\min}$, loss, universe instance, or denominators yields new outcome IDs.
 
 **RB5 (locked):** `mask_unit_id` and `coordinate_id` remain feasibility-independent and **must not** own fields that change with feasibility. Those fields live only on membership/realization rows.
+
+**RB8 (locked, model B):** generator **contract** and sealed **instance** are distinct authorities. Packs, feasibility contracts, evidence claims, and same-universe Boolean/mask comparisons bind **`candidate_universe_instance_id`**.
+
+**RB9 (locked):** threshold values come only from `threshold_registry` entries. Parameterized **family** ≠ concrete **instance** (family + ordered thr bindings + registry).
 
 ### 5.1 Primary grains
 
 | Grain | Definition |
 |:--|:--|
-| Region (non-null) | Connected **productive-safe** component within **one** registered grid under declared adjacency and one feasibility contract |
-| Coordinate (truth-level) | Registered thr-index cell identity (`canonical_cell_key`) under one truth contract |
+| Region (non-null) | Connected **productive-safe** component within **one** registered grid under declared adjacency, one feasibility contract, and one **policy family** |
+| Coordinate (truth-level) | Registered thr-index cell (`canonical_cell_key`) under one truth contract and one threshold registry, with per-axis entry FKs |
 | Mask unit (truth-level) | Distinct `mask_sha256` within one `grid_id` under one truth contract |
-| Membership realization | `(region_asset_id, coordinate_id)` with optional `mask_unit_id` + observed PS/capacity/margin fields under that region’s feasibility |
+| Membership realization | `(region_asset_id, coordinate_id)` with optional `mask_unit_id` + observed PS/capacity/margin fields under that region’s feasibility; concrete `policy_instance_id` is reconstructible |
 | Null record | First-class empty productive-safe result on a **search domain**, not missing files |
-| Search domain | Ordered membership of concrete grid domains + concrete policies |
-| Policy definition | Canonical executable Boolean AST + grammar/truth semantics + roles + universe |
+| Search domain | Ordered membership of concrete grid domains + policy **families** |
+| Policy family | Parameterized canonical Boolean AST + grammar/truth semantics + roles + universe instance (no thr values) |
+| Policy instance | Family + threshold_registry + ordered thr_index bindings — concrete executable threshold policy |
+| Universe contract / instance | Generator schema vs sealed membership (RB8 model B) |
+| Threshold registry | Sealed thr_index → threshold_value_repr authority for reconstruction |
 
 ### 5.2 Cardinality rules
 
@@ -310,8 +365,11 @@ global mask_sha256 alone as PK
 pack_id / producer_contract_version / schema_version inside content digests
 raw file SHA maps inside content digests
 human thr_value strings as PKs (aliases only)
-observed_mask_hash inside policy_definition_id / semantic_definition_id
+observed_mask_hash inside policy_family / policy_instance / semantic_definition digests
 feasibility-dependent PS flags inside coordinate_id or mask_unit_id digests
+source_event_table_sha256 inside candidate_universe_instance_id
+dataset name alone as universe_membership_digest
+thr_value float as coordinate_id PK
 ```
 
 ---
@@ -327,7 +385,8 @@ separators = (',', ':')
 arrays in declared sort order
 no insignificant whitespace
 thr_index as JSON integers
-thr_value never used in content IDs
+thr_value never used in coordinate_id / region_asset_id PKs
+threshold_value_repr required on registry entries for execution reconstruction
 ```
 
 ### 6.2 Content ID inputs (normative)
@@ -340,7 +399,7 @@ thr_value never used in content IDs
   "kind": "region_asset",
   "truth_contract_id": "<hex>",
   "feasibility_contract_id": "<hex>",
-  "policy_definition_id": "<hex>",
+  "policy_family_definition_id": "<hex>",
   "grid_domain_id": "<hex>",
   "adjacency": "G1_bilateral" | "G2_4neighbor",
   "membership": "productive_safe",
@@ -348,12 +407,12 @@ thr_value never used in content IDs
 }
 ```
 
-`policy_definition_id` is the executable Boolean identity (§6.6 / §11). Implementations may keep a parallel `semantic_definition_id` column as alias only if it is **byte-equal** to `policy_definition_id` or is a declared synonym field pointing at the same authority row.
+`policy_family_definition_id` is the parameterized Boolean/grammar identity (§6.6). Concrete cell-level executable identity is `policy_instance_id` (§6.7). Legacy column name `policy_definition_id` / `semantic_definition_id` is allowed only as a synonym of **family** when threshold bindings are absent.
 
 Coordinate keys: G1 sorted `[thr_index]`; G2 sorted `[[i,j],…]` with axes in **canonical leaf order** after §6.3 pairwise normalization (not raw evaluator a/b order).
 
 **`mask_unit_id` (truth-level, RB5):** `truth_contract_id` + `grid_id` + `mask_sha256` — **no** feasibility, **no** PS counts, **no** region FK.  
-**`coordinate_id` (truth-level, RB5):** `truth_contract_id` + **canonical_cell_key** (§6.3.1) — **no** feasibility, **no** PS flags, **no** capacity/margins.  
+**`coordinate_id` (truth-level, RB5 + RB9):** `truth_contract_id` + `threshold_registry_id` + **canonical_cell_key** + **per-axis `threshold_registry_entry_id` FKs** — **no** feasibility, **no** PS flags, **no** capacity/margins; **no thr_value in PK**.  
 **`null_record_id` (RB3 model A):**
 
 ```json
@@ -372,9 +431,10 @@ Changing $\varepsilon$ / $g_{\min}$ / loss / universe / denominators ⇒ new `nu
 **`search_domain_id`:** `truth_contract_id` + `membership_digest` over canonical member rows.  
 **`grid_domain_id`:** lattice_kind + **canonical** ordered axis descriptors (pairwise: leaves sorted by `(feature,direction)`).  
 **`pack_id`:** digest of pack authority row fields (or explicit assigned id recorded in `region_asset_manifest.json`).  
-**`candidate_universe_id` / `universe_hash`:** §6.5.  
+**`candidate_universe_contract_id` / `candidate_universe_instance_id` / `universe_membership_digest`:** §6.5 (RB8).  
 **`predicate_id`:** §6.5.  
-**`policy_definition_id`:** §6.6.
+**`policy_family_definition_id`:** §6.6 (RB7 family grain).  
+**`policy_instance_id` / `threshold_registry_id`:** §6.7 (RB9).
 
 ### 6.3 Pairwise operand full-field canonicalization (RB4)
 
@@ -426,27 +486,89 @@ Equivalent `A AND B` ↔ `B AND A` raw rows must produce **identical** truth dig
 | Feasibility $\varepsilon$/$g_{\min}$/loss change | — | stable | **change** | **stable** | **new rows / new region FKs** |
 | Cohort / label / signal / lattice / membership change | changes | changes | change | change | change |
 
-### 6.5 Candidate universe and predicate IDs (RB6)
+### 6.5 Candidate universe contract vs instance (RB6 + RB8 model B)
 
-**`candidate_universe_id`** digests at least:
+**Locked model B:** split generator contract from sealed instance.
+
+#### 6.5.1 `candidate_universe_contract_id`
+
+Digests **generator / schema** fields only (no membership rows):
 
 ```json
 {
-  "kind": "candidate_universe",
+  "kind": "candidate_universe_contract",
   "substrate_id": "...",
   "hook_id": "...",
   "candidate_builder_id": "...",
   "candidate_builder_version": "...",
   "prefilter_contract_id": "...",
   "eligibility_contract": "...",
-  "candidate_key_schema": "...",
+  "candidate_key_schema": {
+    "primary_key_columns": ["..."],
+    "column_types": {"...": "string|int|..."}
+  },
   "label_exposure_contract_id": "...",
+  "label_exposure_columns": ["..."],
   "observation_time_or_frame_range": "...",
   "predecision_state_snapshot_contract": "..."
 }
 ```
 
-**`universe_hash`** (reproducibility seal, not a substitute for identity fields): digest over ordered or canonically sorted candidate identities plus fields required to reconstruct exposure, when the sealed study provides them.
+Same contract_id may apply to multiple sealed instances.
+
+#### 6.5.2 Normalized `universe_membership_digest` algorithm
+
+**Fail-closed.** Do not invent membership from a dataset name or bare `online_hook_eligible` string.
+
+```text
+REQUIRE candidate-level rows that reconstruct the sealed observation set
+  (from sealed study artifacts). If unavailable → BLOCKED_BY_ARTIFACT.
+
+project columns =
+  candidate_key_schema.primary_key_columns
+  ∪ label_exposure_columns
+  ∪ any membership-critical columns declared by predecision_state_snapshot_contract
+
+for each candidate row:
+  project only those columns
+  missing required column → fail closed
+  missing optional → omit key
+  integer/bool → JSON numbers / 0|1 as elsewhere
+  floats (if any membership column) → shortest round-trip decimal (§7.5)
+  row_obj = canonical_json(projected object)   # sorted keys
+  row_digest = SHA256(UTF-8 bytes of row_obj)  # lowercase hex
+
+sort unique row_digests lexicographically as hex strings
+  duplicate PK + identical projected payload → collapse to one
+  duplicate PK + conflicting payload → fail closed
+
+universe_membership_digest =
+  SHA256( UTF-8( join(sorted_row_digests, "\n") + "\n" ) )
+```
+
+**Separation:**
+
+```text
+source_event_table_sha256   ∈ evidence_bundle   # exact raw bytes seal
+universe_membership_digest  ∈ universe instance # normalized logical membership
+```
+
+Changing candidate membership under the same generator contract **must** change `universe_membership_digest` and therefore `candidate_universe_instance_id`.
+
+#### 6.5.3 `candidate_universe_instance_id`
+
+```json
+{
+  "kind": "candidate_universe_instance",
+  "candidate_universe_contract_id": "<hex>",
+  "universe_membership_digest": "<hex>"
+}
+```
+
+Column alias `universe_hash` ≝ `universe_membership_digest`.  
+Field name `candidate_universe_id` on pack/feasibility/policy/**same-universe compare** **must** resolve to **`candidate_universe_instance_id`**.
+
+#### 6.5.4 Predicate IDs (RB6 retained)
 
 **`predicate_id`** digests at least:
 
@@ -472,25 +594,26 @@ Equivalent `A AND B` ↔ `B AND A` raw rows must produce **identical** truth dig
 }
 ```
 
-Two-valued codomain `{T,F}` must be **declared and justified**, never inferred from a sample that happened to contain no unknowns.
+Two-valued codomain `{T,F}` must be **declared and justified**, never inferred from a sample that happened to contain no unknowns.  
+**Threshold numeric values are not part of `predicate_id`** — they come from the threshold registry (RB9).
 
-### 6.6 Executable policy identity (RB7)
+### 6.6 Policy family identity (RB7, parameterized grain)
 
-**`policy_definition_id`** digests the **canonical executable semantics**, not observed masks:
+**`policy_family_definition_id`** digests **parameterized** canonical executable semantics — operator tree, predicate refs, roles, grammar bounds — **without** thr_index / thr_value bindings:
 
 ```json
 {
-  "kind": "policy_definition",
+  "kind": "policy_family_definition",
   "grammar_version": "...",
   "truth_semantics_version": "...",
   "composition_level": "observational" | "single_step" | "closed_loop",
-  "universe_id": "<candidate_universe_id>",
+  "candidate_universe_instance_id": "<hex>",
   "operator_precedence": "NOT>AND>OR",
   "maximum_nesting_depth": <int or null-bound>,
   "maximum_operands_per_node": <int>,
   "not_scope": "none" | "atom_only" | "arbitrary_subtree",
   "mixed_role_policy": "...",
-  "canonical_policy_ast": { "...": "typed AST with roles and predicate refs" },
+  "canonical_policy_ast": { "...": "typed AST with roles and predicate refs; no thr values" },
   "canonical_policy_ast_hash": "<sha256 of canonical AST JSON>"
 }
 ```
@@ -499,15 +622,15 @@ Two-valued codomain `{T,F}` must be **declared and justified**, never inferred f
 
 | Field | Meaning |
 |:--|:--|
-| `canonical_policy_ast_hash` / `policy_definition_id` | syntactic / executable policy identity |
+| `canonical_policy_ast_hash` / `policy_family_definition_id` | parameterized syntactic / grammar identity |
 | `logical_equivalence_status` | policies agree for every legal input under declared truth semantics (optional evidence annotation) |
-| `observed_mask_hash` / `observed_mask_equivalence_status` | sample agreement only |
+| `observed_mask_hash` / `observed_mask_equivalence_status` | sample agreement only — attach to **policy instance** / coordinate, not family alone |
 
 ```text
-observed_mask equality ≠ logical equivalence ≠ policy identity
+observed_mask equality ≠ logical equivalence ≠ policy family identity ≠ policy instance identity
 ```
 
-**Role rules:**
+**Role rules (retained):**
 
 - Every atom and subtree carries a declared role.
 - Q4.5 sealed operands that are not role-qualified use bounded role  
@@ -516,12 +639,97 @@ observed_mask equality ≠ logical equivalence ≠ policy identity
 - Current G1–G3 serialization **must not invent** G7 necessary/support roles.
 - `NOT` / complement metadata are required only when NOT appears; Q4.5 freezes `not_scope=none` and does not authorize complement reject policies.
 
-**RegionAsset / membership rows** must FK to the exact `policy_definition_id` (or synonym `semantic_definition_id` authority row) that generated them.
+**RegionAsset rows** FK to the **`policy_family_definition_id`** of the atlas grammar family.  
+**Observed masks and concrete execution** bind to **`policy_instance_id`** (or the reconstructible composite below).
 
-### 6.7 Aliases
+### 6.7 Threshold registry and concrete policy instance (RB9)
+
+#### 6.7.1 `threshold_registry_id` and entries
+
+Sealed Q4.5 authority: evidence  
+`docs/modules/semantic/research/evidence/m_b1_5_stage2_q45_20260710/threshold_registry.json`  
+(file sha256 in study `SHA256SUMS.json`: `d3e3197fa7812a9ec5f9b06cc2286dcce52d49cf805eba6527c3b24b62a585f4`).
+
+**`threshold_registry_id`** digests at least:
+
+```json
+{
+  "kind": "threshold_registry",
+  "taxonomy_version": "stage2_q45_atlas_v4",
+  "single_lattice_kind": "primary_unique_boundaries",
+  "pairwise_lattice_kind": "primary_quantile_lattice_q05",
+  "signals_primary": ["score_m_bridge", "abs_log_h", "dist_h", "abs_ratio_m1", "resid_mean"],
+  "directions": ["high_tail", "low_tail"],
+  "combinators": ["AND", "OR"],
+  "entries_digest": "<sha256 over sorted entry digests>"
+}
+```
+
+**Entry grain** (`threshold_registry_entry_id` or composite PK):
+
+```text
+(threshold_registry_id, lattice_kind, feature, direction, thr_index)
+```
+
+Required entry fields:
+
+```text
+atom_id
+feature, direction, lattice_kind
+thr_index                 # integer lattice coordinate
+threshold_value_repr      # required reconstruction string (shortest round-trip of thr_value)
+thr_value                 # numeric, for execution; excluded from coordinate PK
+quantile_lattice_point    # when pairwise q05 lattice; omit when N/A
+scope                     # single_atom | pairwise_atom
+```
+
+`entries_digest` algorithm: for each entry, `SHA256(canonical_json(entry without optional display-only fields))`, sort hex digests, hash concat as in §6.5.2.
+
+Two independent packers **must** reconstruct identical `threshold_value_repr` and entry IDs from the sealed registry without guessing floats.
+
+#### 6.7.2 Coordinate ↔ registry binding
+
+Every axis of every coordinate **must** resolve to exactly one registry entry:
+
+```text
+G1 axis: (single_lattice_kind, feature, direction, thr_index) → entry
+G2/G3 axes: for each ordered leaf after §6.3,
+  (pairwise_lattice_kind, feature_i, direction_i, thr_index_i) → entry_i
+```
+
+#### 6.7.3 `policy_instance_id` (concrete executable threshold policy)
+
+```json
+{
+  "kind": "policy_instance",
+  "policy_family_definition_id": "<hex>",
+  "threshold_registry_id": "<hex>",
+  "threshold_bindings": [
+    {"axis": 0, "feature": "...", "direction": "...", "thr_index": 0, "threshold_registry_entry_id": "<hex>"},
+    {"axis": 1, "...": "..."}
+  ]
+}
+```
+
+Bindings are ordered in **canonical leaf / axis order** after §6.3.  
+Equivalent reconstructible composite (must yield the same identity when used):
+
+```text
+(policy_family_definition_id, coordinate_id, threshold_registry_id)
+```
+
+when `coordinate_id` already embeds the ordered thr_index keys and registry entry FKs.
+
+```text
+FORBIDDEN: treat policy_family_definition_id alone as a concrete threshold-executable policy
+FORBIDDEN: attach observed_mask_hash identity only to the family without instance/coordinate
+```
+
+### 6.8 Aliases
 
 Human thr expressions and T0 `::compN` strings are **aliases only**, never join keys.  
-Raw evaluator `combo_id` / pre-swap a/b order are aliases only after §6.3.
+Raw evaluator `combo_id` / pre-swap a/b order are aliases only after §6.3.  
+`threshold_value_repr` may appear as a human alias column; identity uses registry entry IDs + thr_index, not free thr_value floats as PKs.
 
 ---
 
@@ -560,7 +768,7 @@ normalized_data_content_digest =
 
 **Excluded from pairwise truth payload as identity inputs:** raw `combo_id`, pre-swap `atom_a_id`/`atom_b_id` order, pre-swap feature/direction/thr a/b. Those may appear only as non-identity aliases outside the digest.
 
-Truth digest captures **observed atlas tables**. It does **not** replace `policy_definition_id` or `candidate_universe` authorities.
+Truth digest captures **observed atlas tables**. It does **not** replace `policy_family_definition_id`, `policy_instance_id`, `candidate_universe_instance_id`, or `threshold_registry` authorities.
 
 Implementations may read parquet or csv; **logical projection after RB4 canonicalize** is authoritative.
 
@@ -657,7 +865,7 @@ A null result is a first-class `null_records` row:
 
 ```text
 bounded_status = NULL_RESULT
-policy_definition_id / semantic_definition_id = NULL   # grammar/search-domain null
+policy_family_definition_id = NULL   # grammar/search-domain null
 feasibility_contract_id = <required; in null_record_id digest>
 search_domain_id = <membership digest>
 n_non_null_region_assets (grammar summary) = 0
@@ -674,7 +882,7 @@ Null realization is relative to $(\varepsilon,g_{\min},L_{\mathrm{GT}},\Omega,$ 
 ```text
 combinator OR · lattice primary_quantile_lattice_q05
 40 members · 441 coords each · 17640 total
-each member: grid_domain_id + concrete OR policy_definition_id
+each member: grid_domain_id + concrete OR policy_family_definition_id
 productive_safe_count = 0 · observed_safe_count = 0
 ```
 
@@ -684,7 +892,7 @@ productive_safe_count = 0 · observed_safe_count = 0
 missing atlas / failed run → BLOCKED_BY_ARTIFACT, not NULL_RESULT
 empty components file without null_records row
 summary-only domain id without member table
-fake single policy_definition for all 40 grids on the null row
+fake single policy_family for all 40 grids on the null row
 ```
 
 ---
@@ -700,18 +908,37 @@ Every FK target below is an authority. No FK may point to an undefined object.
 | | |
 |:--|:--|
 | PK | `truth_contract_id` |
-| Required | id_scheme, taxonomy_version, substrate_id, **candidate_universe_id** (FK), signal_family[], sequence_set[], label_contract, unresolved_policy, lattice_contract, normalized_data_content_digest |
+| Required | id_scheme, taxonomy_version, substrate_id, **candidate_universe_instance_id** (FK), **threshold_registry_id** (FK), signal_family[], sequence_set[], label_contract, unresolved_policy, lattice_contract, normalized_data_content_digest |
 | Forbidden in identity inputs | raw_artifact_sha256 map |
 
-#### `candidate_universe.json` | `jsonl` (**RB6 authority**)
+#### `candidate_universe_contracts.json` | `jsonl` (**RB6/RB8 generator authority**)
 
 | | |
 |:--|:--|
-| PK | `candidate_universe_id` |
-| Required | universe_id (same as PK or synonym), **universe_hash** (when sealed), substrate_id, hook_id, candidate_builder_id, candidate_builder_version, prefilter_contract_id / eligibility_contract, candidate_key_schema, label_exposure_contract_id / label_exposure_owner, observation_time_or_frame_range, predecision_state_snapshot_contract |
+| PK | `candidate_universe_contract_id` |
+| Required | substrate_id, hook_id, candidate_builder_id, candidate_builder_version, prefilter_contract_id / eligibility_contract, **candidate_key_schema** (primary_key_columns + types), label_exposure_contract_id / label_exposure_columns, observation_time_or_frame_range, predecision_state_snapshot_contract |
+| Notes | Generator schema only; may be shared by many instances |
+
+#### `candidate_universe_instances.json` | `jsonl` (**RB8 sealed instance authority**)
+
+| | |
+|:--|:--|
+| PK | `candidate_universe_instance_id` |
+| FK | **candidate_universe_contract_id** |
+| Required | **universe_membership_digest** (alias column `universe_hash` allowed), membership_digest_algorithm_version, n_candidates (when known), membership_status (`SEALED` \| `BLOCKED_BY_ARTIFACT`) |
 | Optional | transport_id (null for same-universe sealed studies) |
-| Invariants | bare string names without this row are **not** machine-sufficient; every pack/feasibility/policy that references a universe must resolve here |
-| Q4.5 freeze | one sealed row for `online_hook_eligible` on substrate `stage1_baudit_d_online` with hook/builder/prefilter/state fields as recorded by the study; composition remains observational |
+| Invariants | bare string names without this row are **not** machine-sufficient; every pack/feasibility/**same-universe** reference must resolve here; generator-only contract_id is **insufficient** for Boolean/mask comparison; if candidate rows unavailable → `BLOCKED_BY_ARTIFACT` and no fabricated digest |
+| Q4.5 freeze | contract for `online_hook_eligible` on substrate `stage1_baudit_d_online`; instance digests sealed membership from study candidate rows (or blocks); `source_event_table_sha256` stays on evidence_bundle only |
+
+#### `threshold_registry.json` | `jsonl` (**RB9 authority**)
+
+| | |
+|:--|:--|
+| PK | `threshold_registry_id` |
+| Required | taxonomy_version, single_lattice_kind, pairwise_lattice_kind, signals_primary[], directions[], combinators[], entries_digest, n_single_atoms, n_pairwise_atoms |
+| Entry table | `threshold_registry_entries.csv` \| embedded entries: PK `(threshold_registry_id, lattice_kind, feature, direction, thr_index)` or `threshold_registry_entry_id`; required `atom_id`, `threshold_value_repr`, `thr_value`, optional `quantile_lattice_point` |
+| Invariants | every coordinate axis FK resolves to exactly one entry; thr_value excluded from coordinate PK; reconstruction without guessing floats |
+| Q4.5 freeze | sealed evidence `threshold_registry.json` (`taxonomy_version=stage2_q45_atlas_v4`; 870 single + 210 pairwise atoms; lattices `primary_unique_boundaries` / `primary_quantile_lattice_q05`); raw file sha256 `d3e3197fa7812a9ec5f9b06cc2286dcce52d49cf805eba6527c3b24b62a585f4` |
 
 #### `predicate_definitions.csv` | `jsonl` (**RB6 authority**)
 
@@ -719,19 +946,29 @@ Every FK target below is an authority. No FK may point to an undefined object.
 |:--|:--|
 | PK | `predicate_id` |
 | Required | signal_identity, signal_unit, predicate_domain, predicate_codomain (`{T,F,U}` default unless total proven), unknown_value_policy, final_unknown_action, comparator, endpoint_policy, tie_policy, nan_policy, posinf_policy, neginf_policy, missing_value_policy, quantile_method (if quantile lattice), floating_point_tolerance, clipping_domain |
-| Forbidden defaults | silent `U → reject`; silent total two-valued codomain |
+| Forbidden defaults | silent `U → reject`; silent total two-valued codomain; embedding thr_value as predicate identity |
 | Q4.5 freeze | three-valued/fail-safe serialization unless the sealed evaluator contract explicitly proves totality; **final_unknown_action = no_reject**; no NOT predicates authorized |
 
-#### `policy_definitions.csv` | `jsonl` (**RB7 authority**; superseding name for executable semantics)
+#### `policy_family_definitions.csv` | `jsonl` (**RB7 parameterized authority**)
 
 | | |
 |:--|:--|
-| PK | `policy_definition_id` |
-| FK | candidate_universe_id; leaf predicate_ids inside AST |
-| Required | grammar_version, truth_semantics_version, composition_level, operator_precedence, maximum_nesting_depth, maximum_operands_per_node, not_scope, mixed_role_policy, **canonical_policy_ast**, **canonical_policy_ast_hash**, role annotations on every atom/subtree, parameter_system / lattice_kind when atlas-bound |
-| Separate non-identity fields | observed_mask_hash (optional evidence), logical_equivalence_status, observed_mask_equivalence_status, role_validity_result |
-| Notes | `semantic_definitions` may remain as a **synonym table name** only if it carries the same required executable fields; operator+leaves+lattice alone is **insufficient** |
-| Q4.5 freeze | grammar bounds for G1 atom / G2 binary AND / G3 binary OR; `composition_level=observational`; `not_scope=none`; roles = `untyped_observation` (bounded observational), **not** G7 roles; no complement_contract |
+| PK | `policy_family_definition_id` |
+| FK | **candidate_universe_instance_id**; leaf predicate_ids inside AST |
+| Required | grammar_version, truth_semantics_version, composition_level, operator_precedence, maximum_nesting_depth, maximum_operands_per_node, not_scope, mixed_role_policy, **canonical_policy_ast** (no thr values), **canonical_policy_ast_hash**, role annotations on every atom/subtree, parameter_system / lattice_kind when atlas-bound |
+| Separate non-identity fields | logical_equivalence_status, role_validity_result |
+| Notes | filename synonym `policy_definitions` / `semantic_definitions` allowed **only** if grain is family (no thr bindings) and required fields are present |
+| Q4.5 freeze | G1 atom / G2 binary AND / G3 binary OR families; `composition_level=observational`; `not_scope=none`; roles = `untyped_observation`; no G7 roles; no complement_contract |
+
+#### `policy_instances.csv` | `jsonl` (**RB9 concrete authority**)
+
+| | |
+|:--|:--|
+| PK | `policy_instance_id` |
+| FK | **policy_family_definition_id**, **threshold_registry_id**, ordered threshold_registry_entry_ids |
+| Required | threshold_bindings_json (canonical ordered axes), optional coordinate_id when instance 1:1 with a cell |
+| Separate non-identity fields | observed_mask_hash, observed_mask_equivalence_status |
+| Invariants | observed masks attach here (or via coordinate) — **not** to family alone; family without bindings is not a concrete executable threshold policy |
 
 #### `evidence_bundle.json`
 
@@ -739,15 +976,16 @@ Every FK target below is an authority. No FK may point to an undefined object.
 |:--|:--|
 | PK | `evidence_bundle_id` |
 | FK | truth_contract_id |
-| Required | study_id, study_git_commit, evaluator_source_sha256, runner_source_sha256, source_event_table_sha256, raw_artifact_sha256{}, terminal_letter |
+| Required | study_id, study_git_commit, evaluator_source_sha256, runner_source_sha256, **source_event_table_sha256** (raw seal only), raw_artifact_sha256{}, terminal_letter |
+| Notes | `source_event_table_sha256` **≠** `universe_membership_digest` |
 
 #### `feasibility_contract.json`
 
 | | |
 |:--|:--|
 | PK | `feasibility_contract_id` |
-| FK | truth_contract_id, **candidate_universe_id** |
-| Required | parameter_or_policy_space, candidate_universe_id, safety_loss_definition, productivity_definition, epsilon, g_min, n_gt_exposed, n_fp_exposed, denominator_owner, selection_scope, finite_sample_statement, metric_adjacency_edge_policy |
+| FK | truth_contract_id, **candidate_universe_instance_id** |
+| Required | parameter_or_policy_space, candidate_universe_instance_id, safety_loss_definition, productivity_definition, epsilon, g_min, n_gt_exposed, n_fp_exposed, denominator_owner, selection_scope, finite_sample_statement, metric_adjacency_edge_policy |
 | **Forbidden** | claim_level, claim_level_max_supported, observed region counts |
 
 #### `evidence_claims.csv` | `jsonl`
@@ -781,7 +1019,7 @@ Every FK target below is an authority. No FK may point to an undefined object.
 | | |
 |:--|:--|
 | PK | `(search_domain_id, grid_domain_id)` |
-| FK | search_domain_id, **grid_domain_id**, **policy_definition_id** (concrete, non-null) |
+| FK | search_domain_id, **grid_domain_id**, **policy_family_definition_id** (non-null family for that member grid) |
 | Required | grid_id, n_registered_coordinates |
 | Invariants | G3 sealed: exactly 40 rows; membership_digest matches |
 
@@ -790,9 +1028,9 @@ Every FK target below is an authority. No FK may point to an undefined object.
 | | |
 |:--|:--|
 | PK | `region_asset_id` |
-| FK | truth_contract_id, **feasibility_contract_id**, **policy_definition_id**, grid_domain_id |
+| FK | truth_contract_id, **feasibility_contract_id**, **policy_family_definition_id**, grid_domain_id |
 | Required | grammar, bounded_status=HAS_REGION, n_coords, n_mask_units, shape fields, **claim_level** (from §4.3), action_state, production_forbidden |
-| Notes | Non-null only; claim_level from geometry derivation — **not** grammar-wide G2=L1; policy FK is the executable semantics that generated the region |
+| Notes | Non-null only; claim_level from geometry derivation — **not** grammar-wide G2=L1; family FK is the parameterized grammar; concrete cells via coordinates/policy_instances |
 
 #### `null_records.csv`
 
@@ -800,17 +1038,17 @@ Every FK target below is an authority. No FK may point to an undefined object.
 |:--|:--|
 | PK | `null_record_id` |
 | FK | truth_contract_id, **feasibility_contract_id**, search_domain_id |
-| Required | grammar, policy_definition_id **NULL**, null_reason, domain counts, **claim_level=L0**, action_state, production_forbidden |
+| Required | grammar, policy_family_definition_id **NULL**, null_reason, domain counts, **claim_level=L0**, action_state, production_forbidden |
 
-#### `coordinates.csv` (**RB5 truth-level authority**)
+#### `coordinates.csv` (**RB5 truth-level authority + RB9 registry binding**)
 
 | | |
 |:--|:--|
 | PK | `coordinate_id` |
-| FK | truth_contract_id, grid_domain_id |
-| Required | **canonical_cell_key**, thr indices in canonical axis order, optional raw `cell_id` / `combo_id` aliases |
-| **Forbidden on this table** | region_asset_id, productive_safe flags, capacity observations, dual margins, sequence incidence under a feasibility, feasibility_contract_id |
-| Notes | Reusable across feasibility contracts without contradictory rows |
+| FK | truth_contract_id, grid_domain_id, **threshold_registry_id**, **per-axis threshold_registry_entry_id** |
+| Required | **canonical_cell_key**, thr indices in canonical axis order, registry entry FKs for every axis, optional raw `cell_id` / `combo_id` aliases; optional reconstructible `policy_instance_id` |
+| **Forbidden on this table** | region_asset_id, productive_safe flags, capacity observations, dual margins, sequence incidence under a feasibility, feasibility_contract_id, thr_value as PK |
+| Notes | Reusable across feasibility contracts without contradictory rows; threshold **values** recovered only via registry entries |
 
 #### `mask_units.csv` (**RB5 truth-level authority**; filename may remain `region_masks.csv` if grain matches)
 
@@ -839,7 +1077,7 @@ Every FK target below is an authority. No FK may point to an undefined object.
 |:--|:--|
 | Grain | **exactly one pack emission row** |
 | PK | `pack_id` |
-| FK | truth_contract_id, evidence_bundle_id, feasibility_contract_id, **candidate_universe_id** |
+| FK | truth_contract_id, evidence_bundle_id, feasibility_contract_id, **candidate_universe_instance_id**, **threshold_registry_id** |
 | Required | pack_id, producer_kind, producer_contract_version, schema_version, grammar_scope, maturity_declared, pack_claim_ceiling, action_state_default, production_forbidden, counts (`n_non_null_region_assets`, `n_null_records`, …), terminal_letter, composition_level |
 | Invariants | sole authority for `pack_id`; every `pack_membership.pack_id` and `region_claim_contract.pack_id` **must** resolve here |
 | Notes | Not optional/derived. If a multi-pack future needs a table form, `packs.jsonl` may supersede with the same PK/FK fields — until then this file is normative. |
@@ -850,14 +1088,14 @@ Every FK target below is an authority. No FK may point to an undefined object.
 |:--|:--|
 | PK | `(pack_id, content_kind, content_id)` |
 | FK | **pack_id → region_asset_manifest.json** |
-| Required | content_kind ∈ {region_asset, null_record, mask_unit, coordinate, membership, policy_definition, predicate_definition, candidate_universe, …} |
+| Required | content_kind ∈ {region_asset, null_record, mask_unit, coordinate, membership, policy_family, policy_instance, predicate_definition, candidate_universe_contract, candidate_universe_instance, threshold_registry, …} |
 
 #### `region_claim_contract.json`
 
 | | |
 |:--|:--|
 | PK | pack_id (**FK → region_asset_manifest.json**) |
-| Required | pack_claim_ceiling, maturity_declared (A0), action_states allowed/forbidden, production_forbidden, forbidden_promotions[], terminal_b, g7_status, identity_layer_policy, capacity_policy, sequence_policy, claim_ownership_policy (feasibility ⟂ claim_level), claim_level_derivation_policy (§4.3), composition_level_policy (observational only for this study), policy_equivalence_policy (AST ≠ mask), realization_vs_content_policy (RB5) |
+| Required | pack_claim_ceiling, maturity_declared (A0), action_states allowed/forbidden, production_forbidden, forbidden_promotions[], terminal_b, g7_status, identity_layer_policy, capacity_policy, sequence_policy, claim_ownership_policy (feasibility ⟂ claim_level), claim_level_derivation_policy (§4.3), composition_level_policy (observational only for this study), policy_equivalence_policy (family AST ≠ instance ≠ mask), realization_vs_content_policy (RB5), universe_instance_policy (RB8), threshold_registry_policy (RB9) |
 
 ### 11.2 Auxiliary / derived (optional)
 
@@ -869,7 +1107,8 @@ Every FK target below is an authority. No FK may point to an undefined object.
 | `region_sequence_support.csv` | incidence expansion + region union/intersection |
 | `region_margin.csv` | membership / T0 boundary_margin (keyed by region+coordinate) |
 | `grammar_region_summary.csv` | aggregates |
-| `semantic_definitions.*` | only if synonym of `policy_definitions` with full RB7 fields |
+| `semantic_definitions.*` / `policy_definitions.*` | only if synonym of `policy_family_definitions` with full family fields |
+| `policy_instances.*` | family + registry bindings (RB9) |
 
 ### 11.3 Pack emission defaults (locked)
 
@@ -906,16 +1145,22 @@ region_mask_link == DISTINCT(region_asset_id, mask_unit_id) FROM membership
 one coordinate_id may appear under multiple feasibility-bound regions without conflict
 content outcome IDs independent of pack_id and evidence_bundle_id
 
-# RB6
-every pack / feasibility / policy resolves to one candidate_universe authority row
+# RB6 + RB8
+every pack / feasibility / same-universe compare resolves to one candidate_universe_instance row
+every instance FK resolves to one candidate_universe_contract row
+universe_membership_digest uses §6.5.2; no fabrication from dataset name
+source_event_table_sha256 remains evidence-only raw seal
 predicate missing/unknown/comparator/endpoint behavior is machine-reconstructible
 unknown never defaults to reject for this study
-cross-universe composition without transport is invalid
+cross-universe-instance composition without transport is invalid
 
-# RB7
-every non-null region and every search_domain_member resolves to one policy_definition
-policy_definition digests canonical AST (+ grammar/truth semantics/roles/universe)
-observed_mask_hash is not policy identity
+# RB7 + RB9
+every non-null region and every search_domain_member resolves to one policy_family_definition
+policy_family digests parameterized canonical AST (+ grammar/truth semantics/roles/universe instance)
+every coordinate axis resolves to one threshold_registry entry
+threshold_value_repr reconstructible from registry without guessing floats
+policy_instance_id = family + registry + ordered thr bindings (or equivalent composite)
+observed_mask_hash attaches to policy instance / coordinate — not family alone
 role provenance survives commutative canonicalize
 no G7 necessary/support roles inferred for Q4.5
 composition_level=observational for this study pack
@@ -926,7 +1171,7 @@ claim_level derived per §4.3:
 both capacity distributions present for multi-member regions
 no additive region capacity metric
 sequence union and intersection both present when multi-member
-G3: members=40, n_non_null=0, n_null_records≥1, null.policy_definition_id IS NULL
+G3: members=40, n_non_null=0, n_null_records≥1, null.policy_family_definition_id IS NULL
 
 # RB4 / truth
 pairwise truth rows digest only after §6.3 leaf canonicalize
@@ -979,6 +1224,10 @@ untyped observational role ⇒ G7 necessary/support or sufficient_reject authori
 observational composition ⇒ single-step or closed-loop safety
 unknown ⇒ reject
 cross-universe composition without transport
+generator-contract equality ⇒ same sealed universe instance
+source_event_table_sha256 ⇒ universe_membership_digest
+policy family ⇒ concrete threshold-executable policy
+thr_index without registry ⇒ reconstructible thr_value
 ```
 
 ---
@@ -992,8 +1241,10 @@ Deterministic packaging:
 ```text
 inputs:  sealed Q4.5 full atlases + T0-B-R1 pack + this contract
          + boolean_composition_semantics_contract
+         + sealed threshold_registry.json (+ SHA256SUMS)
 outputs: authority + emission tables in §11
-process: no evaluator modification/rerun; no new research geometry claims
+process: no evaluator modification/rerun; no new threshold search;
+         no new research geometry claims
 ```
 
 ### Remains blocked even after R0-B accept until further gates
@@ -1011,7 +1262,7 @@ evidence_ledger promotion
 
 ### R1 readiness (engineering, not authorization)
 
-Existing sealed evidence is sufficient for deterministic conversion under this contract once R0-B is accepted, provided packaging materializes the new authorities (candidate_universe, predicate_definitions, policy_definitions, coordinates, mask_units, membership). Runtime full atlases must remain hash-sealed for lattice membership.
+Existing sealed evidence is sufficient for deterministic conversion under this contract once R0-B is accepted, provided packaging materializes the authorities (universe contract+instance with membership digest or explicit BLOCKED_BY_ARTIFACT, threshold_registry+entries, predicate_definitions, policy_family_definitions, policy_instances, coordinates, mask_units, membership). Runtime full atlases must remain hash-sealed for lattice membership. No new threshold search.
 
 ---
 
@@ -1019,7 +1270,9 @@ Existing sealed evidence is sufficient for deterministic conversion under this c
 
 ```text
 truth: stage2_q45_atlas_v4 · substrate stage1_baudit_d_online
-universe authority: online_hook_eligible (full candidate_universe row required)
+universe: contract online_hook_eligible + sealed instance membership digest (RB8 model B)
+  source_event_table_sha256 = cfca3818… (evidence seal only; ≠ membership digest)
+threshold_registry: sealed Q4.5 registry (sha d3e3197f…; 870 single + 210 pairwise)
 cohort: n_gt_exposed=64 · n_fp_exposed=23 · unresolved firewall on
 PS: 154 = 1 G1 + 153 G2 + 0 G3
 components: 26 = 1 G1 + 25 G2 (6 isolated + 19 multi) · productive mask units: 34
@@ -1030,8 +1283,10 @@ RB3: region/null IDs bind feasibility_contract_id (model A)
 RB2: pack authority = region_asset_manifest.json
 RB4: pairwise a/b full-field canonicalize before truth digest
 RB5: coordinates/mask_units truth-level; membership feasibility-bound
-RB6: candidate_universe + predicate_definitions authorities required
-RB7: policy_definitions canonical AST identity ≠ observed_mask_hash
+RB6: predicate_definitions + universe authorities required
+RB7: policy_family canonical AST ≠ observed_mask_hash
+RB8: universe contract ≠ instance; membership digest algorithm locked
+RB9: threshold_registry authority; policy_instance = family + thr bindings
 ```
 
 ---
@@ -1049,17 +1304,21 @@ RB7: policy_definitions canonical AST identity ≠ observed_mask_hash
 | O7 | Keep filename `region_masks.csv` vs `mask_units.csv` | either OK if grain = truth-level mask |
 | O8 | Synonym `semantic_definitions` vs rename to `policy_definitions` | synonym allowed only with full RB7 fields |
 | O9 | Exact Q4.5 role token string | `untyped_observation` |
+| O10 | RB8 model A (instance-only PK) vs B (contract+instance) | **B locked** for R0-B-R3 |
+| O11 | Store policy_instances table vs derive from (family, coordinate, registry) | either OK if identity equal |
+| O12 | Q4.5 candidate primary-key column list | take from sealed event schema / study contract; if rows unavailable → BLOCKED_BY_ARTIFACT |
 
-No open decision may: re-merge claim_level into feasibility_contract_id; drop `grid_domains`; reintroduce grammar-wide G2=L1; drop pack authority; unbind null/region outcomes from feasibility; skip pairwise leaf canonicalize; put feasibility-bound fields on coordinate/mask content IDs; omit candidate-universe or predicate authorities; digest observed masks into policy identity; invent G7 roles; map unknown to reject; promote observational composition to intervention safety.
+No open decision may: re-merge claim_level into feasibility_contract_id; drop `grid_domains`; reintroduce grammar-wide G2=L1; drop pack authority; unbind null/region outcomes from feasibility; skip pairwise leaf canonicalize; put feasibility-bound fields on coordinate/mask content IDs; omit candidate-universe contract/instance or predicate authorities; collapse universe contract into instance without membership digest; use source_event_table_sha256 as membership digest; omit threshold_registry; treat policy family as concrete threshold policy; digest observed masks into family identity; invent G7 roles; map unknown to reject; promote observational composition to intervention safety; run new threshold search.
 
 ---
 
 ## 16. Explicit non-authorization
 
 ```text
-R0-B / R0-B-R1 / R0-B-R2 draft is not self-accepted
+R0-B / R0-B-R1 / R0-B-R2 / R0-B-R3 draft is not self-accepted
 R1 not authorized
 no evaluator rerun
+no new threshold search
 no asset pack generated
 no A0→A1 promotion
 no PR required for this draft alone

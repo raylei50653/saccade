@@ -7,18 +7,19 @@ created: 2026-07-10
 
 # Safe-Region Assetization Program
 
-> **One-line:** R0-A is **ACCEPTED**. R0-B-R1 RB1–RB4 and R0-B-R2 RB5–RB7 are **PASS**. Final contract review is **CHANGES_REQUESTED** only on **RB8–RB9 identity/reconstruction closure**. Current sole task is **R0-B-R3**. R1 asset generation, A0→A1, transfer, intervention, production, and ledger promotion remain unauthorized. Maturity **A0 retained**.
+> **One-line:** R0-A is **ACCEPTED**. RB1–RB7 remain **PASS**. R0-B-R3 delivered RB8–RB9 identity/reconstruction closure on the RegionAsset contract. **Chat-side re-review required** — not self-accepted. R1 asset generation, A0→A1, transfer, intervention, production, and ledger promotion remain unauthorized. Maturity **A0 retained**.
 
 ## Status
 
 | Item | Status |
 |:--|:--|
 | Program | **ACTIVE** — safe-region assetization |
-| Semantic sole active | **R0-B-R3 identity/reconstruction closure** |
+| Semantic sole active | **R0-B-R3 delivered — awaiting chat-side re-review** |
 | R0-A / CR1–CR9 | **ACCEPTED / PASS** |
 | R0-B-R1 | `e02a5367` — **RB1–RB4 PASS** |
 | R0-B-R2 | `34eab247` — **RB5–RB7 PASS** |
-| R0-B final contract | **CHANGES_REQUESTED** on RB8–RB9 only |
+| R0-B-R3 | **delivered** — RB8–RB9; **not self-accepted** |
+| R0-B final contract | draft pending chat-side re-review after R0-B-R3 |
 | Boolean semantics patch | **NORMATIVE** — [boolean_composition_semantics_contract.md](../eval/boolean_composition_semantics_contract.md) |
 | R1 | **NOT AUTHORIZED** |
 | Maturity | **A0 retained** |
@@ -79,7 +80,7 @@ Finite-sample, searched in-sample, registered-lattice evidence only. No populati
 R0-A preflight                         # ACCEPTED
 R0-B-R1 RB1–RB4                        # PASS
 R0-B-R2 RB5–RB7                        # PASS
-R0-B-R3 identity/reconstruction       ← current
+R0-B-R3 identity/reconstruction        # delivered; chat-side re-review
 chat-side final contract review
 
 R1 G1–G3 deterministic conversion     # not authorized
@@ -176,24 +177,22 @@ Requirements:
 - observed masks attach to concrete policy instances/coordinates, not to the parameterized family as identity;
 - Q4.5 uses the existing sealed threshold registry; no evaluator rerun or new threshold search.
 
-## Current step — R0-B-R3
+## Current step — R0-B-R3 (delivered; re-review)
 
-Revise in place:
+Revised in place:
 
 ```text
 docs/research/eval/safe_region_asset_contract.md
 ```
 
-Required output:
+### Delivered corrections
 
-1. retain CR1–CR9 and RB1–RB7 unchanged;
-2. close sealed universe contract-vs-instance identity (RB8);
-3. add threshold-registry authority and concrete threshold-bound policy grain (RB9);
-4. update identity layers, PK/FK map, validation invariants, pack manifest, Q4.5 freeze, and R1 boundary;
-5. use the existing Q4.5 threshold registry and evidence seals only;
-6. generate no asset data files.
+1. **RB8 model B:** `candidate_universe_contract_id` (generator schema) vs `candidate_universe_instance_id` (contract + `universe_membership_digest`); packs/feasibility/same-universe compare bind **instance**; explicit membership digest algorithm; `source_event_table_sha256` remains evidence-only; fail-closed `BLOCKED_BY_ARTIFACT` if candidate rows unavailable.
+2. **RB9:** sealed `threshold_registry` authority (+ entries); coordinates bind per-axis registry entries; `policy_family_definition_id` (parameterized AST) vs `policy_instance_id` (family + ordered thr bindings + registry); thr_value excluded from coordinate PK; Q4.5 uses sealed registry sha `d3e3197f…`.
+3. Identity layers, PK/FK map, invariants, pack manifest, Q4.5 freeze, R1 boundary updated.
+4. CR1–CR9 and RB1–RB7 retained; no asset files; no evaluator/threshold search.
 
-## Acceptance for R0-B-R3
+## Acceptance for R0-B-R3 (chat-side checklist)
 
 - a changed sealed candidate membership cannot reuse the same universe instance ID;
 - universe normalization is explicit enough for two implementations to agree;
@@ -225,3 +224,4 @@ Required output:
 - 2026-07-10: Boolean composition semantics contract added.
 - 2026-07-10: R0-B-R2 delivered at `34eab247`; RB5–RB7 pass.
 - 2026-07-10: final R0-B-R2 review requested RB8–RB9 identity/reconstruction closure; sole active → R0-B-R3; R1/A1 remain unauthorized.
+- 2026-07-10: R0-B-R3 delivered (RB8–RB9); awaiting chat-side re-review; R1/A1 still unauthorized.
