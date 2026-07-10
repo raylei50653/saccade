@@ -601,6 +601,11 @@ Required declaration:
 - the clustering structure relating the raw exposure count to that unit;
 - when raw counts are clustered, either aggregate to the independence unit before bounding or use a cluster-aware method. The effective sample size must not silently equal the raw count.
 
+Two further cautions:
+
+- a unique-cluster count is an upper bound on the number of independent trials, not automatically an effective sample size; residual clustering above the declared unit (for example sequence-level shared scene and pipeline state) must be named;
+- when observed hurt is non-zero, hurt outcomes must be aggregated to the same trial unit before the cluster count may serve as the binomial denominator.
+
 ### 8.2 Exposure-aware interpretation
 
 The following observations are not equally strong:
@@ -626,7 +631,12 @@ then the resulting set is in-sample and selection-biased.
 
 No amount of coordinate thickness inside the same searched sample removes that bias.
 
-The operational rule is disjointness: the data used to generate atoms, search compositions, or choose thresholds must be disjoint from every fold used to claim held-out validity. Selecting atoms on the full pool and then evaluating them under LOO does not satisfy this — every held-out fold has already influenced the selection.
+The operational rule is per-fold disjointness: for each held-out fold $f$, every operation that determines the policy evaluated on $f$ — atom generation, composition search, threshold choice — must exclude $f$. Two protocols satisfy this:
+
+- a single frozen policy whose selection data are disjoint from the union of all test folds (independent development set);
+- nested per-fold selection, where each fold's policy is selected on that fold's training data only and evaluated once on its held-out fold.
+
+Selecting atoms once on the full pool and then evaluating under LOO satisfies neither — every held-out fold has already influenced the selection.
 
 ### 8.4 Held-out set retention
 
@@ -662,7 +672,8 @@ When parameter spaces differ across folds, a portable coordinate, quantile, poli
 Retention has no meaning without a triviality baseline. If $\widehat{\mathcal S}_{\mathrm{tr}}$ covers most of $\Theta$ because the constraints are weak, high $\rho_{\mathrm{set}}$ is guaranteed rather than evidential. Report alongside $\rho_{\mathrm{set}}$:
 
 - the training-set fraction $|\widehat{\mathcal S}_{\mathrm{tr}}|\,/\,|\Theta_{\mathrm{registered}}|$;
-- the retention expected under a null reference of the same size (for example the full lattice, or a random coordinate set).
+- a size-matched null: the retention expected for a random coordinate set with the same cardinality as $\widehat{\mathcal S}_{\mathrm{tr}}$;
+- the full-lattice baseline, reported as a trivial ceiling — it is not a size-matched null.
 
 ### 8.5 Point validation versus region validation
 
@@ -834,7 +845,7 @@ A frozen point passes held-out, LOO, or LOSO evaluation.
 Required:
 
 - freeze before test;
-- selection data disjoint from every test fold (§8.3);
+- per-fold selection disjointness (§8.3): the data determining each evaluated policy exclude its own test fold;
 - fold definitions;
 - per-fold hurt and productivity;
 - aggregation rule.
@@ -914,8 +925,10 @@ parameter-space definition
 
 ```text
 n_gt_exposed
-gt_exposure_unit        (candidate / event / track / sequence)
-n_gt_exposed_effective  (after aggregation to the independence unit, if clustered)
+gt_exposure_unit_raw     (raw counting unit, e.g. row / candidate)
+declared_trial_unit      (candidate / event / track / sequence)
+n_gt_exposed_clusters    (unique clusters at the declared trial unit; null if metadata incomplete)
+independence_assumption  (what is assumed independent; remaining clustering named)
 n_gt_hurt
 gt_hurt_rate
 n_fp_exposed
@@ -1191,7 +1204,7 @@ A PR that uses safe-region language should be reviewed against four independent 
 - Are GT exposures reported?
 - Is the independence unit for any numerical bound declared (§8.1)?
 - Was the policy frozen before held-out evaluation?
-- Are atom/composition generation data disjoint from every held-out fold?
+- For each held-out fold, do the data determining its evaluated policy exclude that fold (§8.3)?
 - Is selection bias acknowledged?
 - Are per-fold or per-sequence failures visible?
 - Is GT0 interpreted within finite evidence?

@@ -124,29 +124,51 @@ def exposure_summary(pool: dict[str, np.ndarray]) -> dict[str, Any]:
     """Independence-unit declaration for exposure counts (framework §8.1).
 
     Raw exposure unit is one relink pair row. Rows sharing a lost track
-    (seq, lost_id) are correlated trials, so binomial-style bounds on GT0
-    must use the effective (per-lost-track) count, not the raw row count.
+    (seq, lost_id) are correlated trials; the unique-cluster count is an
+    upper bound on the number of independent trials, not automatically an
+    effective sample size — tracks within a sequence still share scene,
+    occlusion, and pipeline state. Cluster counts are declared only when
+    every GT row carries a lost_id; partial metadata is reported as
+    insufficient, never silently collapsed. Binomial-style bounds on
+    non-zero hurt additionally require hurt outcomes aggregated to the
+    same trial unit before using the cluster count as denominator.
     """
     y = pool["gt_match"].astype(bool)
     seq = pool["seq"]
+    n_gt = int(y.sum())
     out: dict[str, Any] = {
         "gt_exposure_unit_raw": "relink_pair_row",
-        "n_gt_exposed": int(y.sum()),
+        "n_gt_exposed": n_gt,
         "n_fp_exposed": int((~y).sum()),
+        "declared_trial_unit": "lost_track(seq,lost_id)",
+        "independence_assumption": (
+            "clusters treated as independent trials; not verified"
+        ),
+        "remaining_clustering": "sequence",
     }
     lost = pool.get("lost_id")
-    if lost is None or not any(str(x) for x in np.asarray(lost)[y]):
-        out["gt_exposure_unit"] = "relink_pair_row"
-        out["n_gt_exposed_effective"] = None
+    if lost is None:
+        out["n_gt_exposed_clusters"] = None
         out["clustering"] = "unknown: pairs CSV lacks lost_id"
         return out
-    gt_clusters = {(str(s), str(t)) for s, t in zip(seq[y], np.asarray(lost)[y])}
+    lost_gt = np.asarray(lost, dtype=object)[y]
+    seq_gt = seq[y]
+    n_missing = int(sum(1 for x in lost_gt if not str(x).strip()))
+    out["n_gt_rows_missing_lost_id"] = n_missing
+    if n_missing > 0:
+        out["n_gt_exposed_clusters"] = None
+        out["clustering"] = (
+            "unknown: pairs CSV lacks lost_id"
+            if n_missing == n_gt
+            else f"insufficient_metadata: {n_missing}/{n_gt} GT rows missing lost_id"
+        )
+        return out
+    clusters = {(str(s), str(t)) for s, t in zip(seq_gt, lost_gt)}
     per_seq: dict[str, int] = {}
-    for s, _ in gt_clusters:
+    for s, _ in clusters:
         per_seq[s] = per_seq.get(s, 0) + 1
-    out["gt_exposure_unit"] = "lost_track(seq,lost_id)"
-    out["n_gt_exposed_effective"] = len(gt_clusters)
-    out["per_seq_gt_exposed_effective"] = dict(sorted(per_seq.items()))
+    out["n_gt_exposed_clusters"] = len(clusters)
+    out["per_seq_gt_exposed_clusters"] = dict(sorted(per_seq.items()))
     return out
 
 
