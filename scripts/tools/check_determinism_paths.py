@@ -2,10 +2,10 @@
 """Detect whether staged/committed changes affect determinism-sensitive paths.
 
 Prints "determinism" to stdout if sensitive paths are changed; prints nothing
-otherwise.  Used by ``scripts/pre_push.sh`` to decide whether to run the 2×2
-matrix.
+otherwise.  Used by ``scripts/pre_push.sh`` to decide whether to run the
+routine continuous-chain sentinel.
 
-Exit codes: 0 = sensitive, 1 = not sensitive, 2 = error.
+Exit codes: 0 = sensitive, 1 = not sensitive, 2 = error (fail-closed).
 """
 
 from __future__ import annotations
@@ -27,9 +27,11 @@ _SENSITIVE_PATTERNS: tuple[str, ...] = (
     r"^src/saccade/perception/eval/_decimal_hash_tools\.py$",
     r"^src/saccade/perception/eval/decimal_hash\.py$",
     r"^scripts/tools/check_continuous_decimal_hash\.py$",
+    r"^scripts/tools/check_decimal_chain_routine\.py$",
     r"^scripts/tools/check_decimal_matrix_2x2\.py$",
     r"^scripts/tools/check_decimal_matrix_all7\.py$",
     r"^tests/unit/eval/test_decimal_hash\.py$",
+    r"^tests/unit/eval/test_decimal_chain_routine\.py$",
     r"^tests/unit/eval/test_decimal_matrix_2x2\.py$",
     r"^scripts/tools/check_determinism_paths\.py$",
     r"^scripts/pre_push\.sh$",

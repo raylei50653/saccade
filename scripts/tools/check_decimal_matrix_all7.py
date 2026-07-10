@@ -5,8 +5,9 @@ Generates the complete 28-run order matrix across all seven MOT17-SDP
 sequences (forward, reverse, forward again) and compares every occurrence
 against the first occurrence of each sequence.
 
-This is the broader validation; for routine pre-push use the faster 2×2
-matrix in ``check_decimal_matrix_2x2.py``.
+This is deep / release validation.  Routine pre-push uses the continuous
+chain sentinel in ``check_decimal_chain_routine.py``.  Directional forensics
+after a failure use ``check_decimal_matrix_2x2.py``.
 
 All unrecognised options are forwarded to ``scripts/eval/mot17.py``.
 """
@@ -26,8 +27,9 @@ sys.path.insert(0, str(_SRC_DIR))
 from saccade.perception.eval._decimal_hash_tools import (  # noqa: E402
     CANONICAL_FIELDS,
     HASH_METADATA,
-    diagnose,
+    compare_chain_to_first_occurrence,
     run_sequences,
+    verdict_from_comparisons,
     write_csv,
     write_summary,
 )
@@ -104,24 +106,10 @@ def main() -> int:
         for run in runs
     ]
 
-    comparisons = [
-        {
-            **diagnose(
-                next(r for r in runs if r.sequence == current.sequence),
-                current,
-                args.max_mismatch_records,
-            ),
-            "run_index": current.index,
-        }
-        for current in runs
-    ]
-
-    verdicts = {c["classification"] for c in comparisons}
-    final_verdict = "decimal_exact_pass"
-    for v in ("structural_divergence", "decimal_divergence"):
-        if v in verdicts:
-            final_verdict = v
-            break
+    comparisons = compare_chain_to_first_occurrence(
+        runs, max_records=args.max_mismatch_records
+    )
+    final_verdict = verdict_from_comparisons(comparisons)
 
     write_csv(root / "runs.csv", run_rows)
     write_csv(

@@ -146,6 +146,45 @@ def diagnose(
     }
 
 
+def compare_chain_to_first_occurrence(
+    runs: Sequence[Run],
+    max_records: int = 20,
+) -> list[dict[str, Any]]:
+    """Compare each run against the first occurrence of its sequence.
+
+    The first appearance of a sequence is that sequence's reference.  Later
+    occurrences are compared to it.  First-occurrence self-comparisons always
+    pass and are retained so artifact rows stay 1:1 with the chain order.
+    """
+    first_by_sequence: dict[str, Run] = {}
+    occurrence_count: dict[str, int] = {}
+    comparisons: list[dict[str, Any]] = []
+    for run in runs:
+        occurrence = occurrence_count.get(run.sequence, 0) + 1
+        occurrence_count[run.sequence] = occurrence
+        reference = first_by_sequence.setdefault(run.sequence, run)
+        diagnosis = diagnose(reference, run, max_records)
+        comparisons.append(
+            {
+                **diagnosis,
+                "sequence_occurrence": occurrence,
+                "reference_hash": reference.decimal_hash,
+                "observed_hash": run.decimal_hash,
+                "run_index": run.index,
+            }
+        )
+    return comparisons
+
+
+def verdict_from_comparisons(comparisons: Sequence[dict[str, Any]]) -> str:
+    """Collapse per-run classifications into a single chain/matrix verdict."""
+    classifications = {row["classification"] for row in comparisons}
+    for value in ("structural_divergence", "decimal_divergence"):
+        if value in classifications:
+            return value
+    return "decimal_exact_pass"
+
+
 def write_csv(path: Path, rows: Sequence[dict[str, Any]]) -> None:
     keys = sorted({key for row in rows for key in row})
     with path.open("w", newline="", encoding="utf-8") as handle:
