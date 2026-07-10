@@ -1,7 +1,10 @@
 {
+  "clause_identity": "exact_absolute_threshold_float_round12",
   "kind": "nested_loso_train_select_holdout_eval",
   "n_clauses_ever_selected": 1352,
   "n_clauses_nested_loso_portable": 0,
+  "n_exact_absolute_clauses_nested_loso_portable": 0,
   "n_folds": 7,
-  "not_fixed_full_sample_partition": true
+  "not_fixed_full_sample_partition": true,
+  "portability_definition": "exact_absolute_clause_repeatability: same clause_id selected in >= max(2, n_folds//2) folds, worst holdout GT hurt==0, and at least one holdout productive (n_neg>0). Not quantile/rank coordinate region portability."
 }

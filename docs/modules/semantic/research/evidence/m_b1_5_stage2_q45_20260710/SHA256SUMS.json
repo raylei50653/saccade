@@ -1,14 +1,14 @@
 {
   "files": [
     {
-      "bytes": 3724,
+      "bytes": 3778,
       "file": "manifest.json",
-      "sha256": "3ce78e6f73ace0a07cf57a77e89d5ddf4e3ad91996640b63fc400500e0414eb9"
+      "sha256": "4213e82e4c05a05247d32cfd387b209bdb20468d6d98038e84325f7a7dc7d568"
     },
     {
-      "bytes": 5240,
+      "bytes": 5523,
       "file": "summary.json",
-      "sha256": "494b7a579d88b37257f7bbf2bf79d9e552f17923160786f84ff3db5a8a0eeb5d"
+      "sha256": "a88d9dcfc5a614496305303ae3a5c23ec2de72ded44b8524104caa0f2f35d641"
     },
     {
       "bytes": 531,
@@ -23,12 +23,12 @@
     {
       "bytes": 373159,
       "file": "threshold_registry.json",
-      "sha256": "aae986d18d2e5e6257fe0da6dbab82f178a4d214414c87659a691421c3b32843"
+      "sha256": "d3e3197fa7812a9ec5f9b06cc2286dcce52d49cf805eba6527c3b24b62a585f4"
     },
     {
-      "bytes": 10108,
+      "bytes": 13945,
       "file": "region_stability.csv",
-      "sha256": "50abcad62513daa6303775b497bd4f6577cea1d64ab696a8bf7cd33d87a04638"
+      "sha256": "87055ef93439ae54d9c3255cb9c3be2d04da786f7b40a5f56d1e6f92046ef243"
     },
     {
       "bytes": 60028,
@@ -41,17 +41,17 @@
       "sha256": "13dcf2da80e736320f8969a516dfe0a94dab0c97affcb7b66ce87aa0d3d84888"
     },
     {
-      "bytes": 158368,
+      "bytes": 161114,
       "file": "nested_loso_clause_summary.csv",
-      "sha256": "97575f2a8e2d097d20e827a7ac827e0e6607c9af99b20cc04313f76893843a7d"
+      "sha256": "1dd459879e2db8407181ec43c6e507b706ba24b9ead222b690569ed57e3cc21c"
     },
     {
-      "bytes": 187,
+      "bytes": 550,
       "file": "nested_loso_summary.json",
-      "sha256": "7aabfda4ea85f6d2f300c59baa372878cddae3f75e4af94dc0e00a67b35f3246"
+      "sha256": "71c8ea3d59c08c81f527ec6eda0c5150f5fa7681183282b58289f6e89f781566"
     }
   ],
-  "git_commit": "99477bc93d69206ad64bf160115afe4d636426e5",
+  "git_commit": "dc758e088de9fe2bfed7e2d4d458a8360a03f712",
   "study_id": "m_b1_5_stage2_q45_20260710",
-  "taxonomy_version": "stage2_q45_atlas_v3"
+  "taxonomy_version": "stage2_q45_atlas_v4"
 }

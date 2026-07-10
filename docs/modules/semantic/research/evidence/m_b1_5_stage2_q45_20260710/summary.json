@@ -1,7 +1,7 @@
 {
   "D_online_total": 244,
   "assignment_group_key_status": "invalid_frame_provenance",
-  "bounded_finding": "resolved\u2227selected restricted atlas reports sample-zero-GT cells but no interior multi-sequence thick region under quotient topology (coordinates retained per unique mask within each grid)",
+  "bounded_finding": "resolved\u2227selected restricted atlas reports sample-zero-GT cells; interior is measured on productive-safe coordinate union (not same-mask plateau alone); exact-absolute nested LOSO portability reported separately",
   "claims_allowed": [
     "retain_atlas_for_followup",
     "report_isolated_observed_safe_points_descriptively",
@@ -27,18 +27,20 @@
     "positive_protection_class": "resolved AND baseline_selected AND pair_label==gt_consistent",
     "secondary_analysis": "resolved non-selected negative / gt_consistent"
   },
-  "created_utc": "2026-07-10T08:48:42.808953+00:00",
+  "created_utc": "2026-07-10T08:58:44.884014+00:00",
   "evaluator_review_gates": {
     "deletion_loo_is_portability": false,
     "fixed_full_sample_partition_not_portability": true,
-    "interior_requires_full_neighborhood_in_mask_coordinate_set": true,
+    "interior_on_productive_safe_coordinate_union": true,
+    "nested_loso_is_exact_absolute_clause_repeatability": true,
     "nested_loso_required_for_region_A": true,
     "quotient_topology_retains_all_coordinates": true,
+    "same_mask_plateau_is_prediction_invariant_only": true,
     "semantic_duplicate_is_per_grid_not_global": true,
     "unresolved_contaminated_blocks_candidate": true
   },
   "evaluator_source": "/home/ray/developer/ai/saccade/src/saccade/perception/eval/d_online_stage2_q45_atlas.py",
-  "evaluator_source_sha256": "fb60024f9ffe9e7df7ea49b0e170a83403a0001c655fc2d2e2ac53baae4614f5",
+  "evaluator_source_sha256": "551284f88710945dc636cb4e13f2b8401948fc717e605738f84be83b9e133643",
   "forbidden_this_round": [
     "single_best_threshold_as_rule",
     "unrestricted_boolean_mining",
@@ -56,10 +58,11 @@
   "frame_is_absolute_mot": false,
   "frame_observation_limitation_only": true,
   "frame_provenance_kind": "host_audit_propose_invocation_counter",
-  "git_commit": "99477bc93d69206ad64bf160115afe4d636426e5",
+  "git_commit": "dc758e088de9fe2bfed7e2d4d458a8360a03f712",
   "n_atom_atlas_rows": 870,
   "n_clauses_ever_selected_nested_loso": 1352,
   "n_clauses_nested_loso_portable": 0,
+  "n_exact_absolute_clauses_nested_loso_portable": 0,
   "n_isolated_or_thin": 34,
   "n_nested_loso_folds": 7,
   "n_pairwise_and_rows": 17640,
@@ -79,13 +82,14 @@
   "n_sequences_with_both_classes": 7,
   "n_single_atoms_registered": 870,
   "n_stability_rows": 34,
+  "nested_loso_clause_identity": "exact_absolute_threshold_float_round12",
   "next_authorized_step": "threshold path: no promotable region yet; ranking/assignment is a reasonable next research line AFTER valid assignment-group key + unknown coverage + nested train-select holdout are closed",
   "pairwise_lattice_kind": "primary_quantile_lattice_q05",
   "production_preset": "unchanged",
   "q4_interpretation": "Q4 weak marginal AUC closes singleton frozen-tail thr promotion; does not forbid threshold/Boolean combination as analysis method.",
-  "reason": "On resolved\u2227selected cohort: sample-zero-GT cells exist (n_atlas_cells=154) but no interior multi-seq thick region under per-grid quotient topology + nested LOSO portability; unknown/unresolved selected coverage further limits claims \u2192 isolated_safe_points_only",
+  "reason": "On resolved\u2227selected cohort: sample-zero-GT cells exist (n_atlas_cells=154) but no multi-seq thick region with productive-safe coordinate-union interior + exact-absolute nested LOSO portability; unknown/unresolved selected coverage further limits claims \u2192 isolated_safe_points_only",
   "reconciliation_acceptance": "PASS",
-  "repository_head_sha": "99477bc93d69206ad64bf160115afe4d636426e5",
+  "repository_head_sha": "dc758e088de9fe2bfed7e2d4d458a8360a03f712",
   "runner_source": "/home/ray/developer/ai/saccade/scripts/tools/run_m_b1_5_stage2_q45_atlas.py",
   "runner_source_sha256": "376b11c0bb9c85823ca6c09eb17ed3044730b3be7bc9fec53888ffde74d5815a",
   "secondary_competition_features": [
@@ -100,7 +104,7 @@
   "source_q1q3_study": "out/signal_study/m_b1_5_stage2_q1q3_20260710",
   "stage2_q45_terminal": "isolated_safe_points_only",
   "study_id": "m_b1_5_stage2_q45_20260710",
-  "taxonomy_version": "stage2_q45_atlas_v3",
+  "taxonomy_version": "stage2_q45_atlas_v4",
   "terminal_letter": "B",
   "upstream_q4_study": "m_b1_5_stage2_q4_20260710"
 }
