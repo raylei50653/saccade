@@ -84,16 +84,23 @@ m_b1_repaired_eps0_loo_pass_20260709
 - expanding policy beyond freeze portable_policy.json
 ```
 
-### Suggested flag shape (design only — not implemented here)
+### Flag shape (Stage 1 — implement against two-stage plan)
 
 ```text
 --research-portable-or-tail-policy PATH/portable_policy.json
   default: unset / off
-  when set: load thr; reject relink candidate if ANY tail fires
+  when set: load thr with freeze lock (hash + thr vector + op='>');
+            reject relink candidate if ANY tail fires
   when unset: zero behavior change vs production preset
+
+--research-portable-or-tail-audit
+  RESERVED / NOT IMPLEMENTED (fail-closed if set)
+  online full candidate-event export = PENDING (B-audit)
+  offline pairs replay: run_m_b1_hook_ab.py --offline-events-only
 ```
 
 Must log: `policy_path`, `candidate_id`, `n_rejected`, never enable without explicit flag.
+Loader refuse: missing candidate_id soft-fallback, thr drift, hash drift, op≠`>`.
 
 ---
 
@@ -180,3 +187,4 @@ with thr from freeze `portable_policy.json` only.
 | [smoke contract](m_b1_repaired_candidate_b2e2e_smoke_contract_20260709.md) | offline pass / online blocked |
 | [region audit](m_b1_repaired_tail_or_safe_region_20260709.md) | q85 productive region |
 | [B2 bridge A/B](m_b2_reconnect_bridge_ab_20260709.md) | baseline B2 recipe |
+| [two-stage plan](m_b1_to_m_b1_5_two_stage_plan_20260710.md) | Stage 1 full eng contract + Stage 2 boundary |

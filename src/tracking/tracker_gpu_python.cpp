@@ -3697,8 +3697,16 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
              "of minting a new id. Precision-first (high sim threshold + spatial gate). "
              "The bridge_* args enable the Phase-4 Kalman-free bidirectional foot-bridge "
              "(adopt a still-live lost id when a young track's foot path bridges to it).")
+        .def("set_research_portable_or_tail", &GPUByteTracker::set_research_portable_or_tail,
+             py::arg("enabled"),
+             py::arg("thr"),
+             py::arg("audit_enabled") = false,
+             "Research-only M-B1 portable OR-tail hook (default-off). "
+             "thr: length-5 list [score_m_bridge, abs_log_h, dist_h, abs_ratio_m1, resid_mean]. "
+             "When enabled=false, production bridge path is bit-identical.")
         .def("get_relink_debug", &GPUByteTracker::get_relink_debug,
-             "Returns (archived, births, revived, bridge_attempts, bridge_accepts) counters.")
+             "Returns counters: [archived, births, revived, bridge_attempts, bridge_accepts, "
+             "hook_eligible, hook_rejected, atom0..3 fires, app_veto, atom4 fires].")
         .def("set_oao_params", &GPUByteTracker::set_oao_params,
              py::arg("tau"), py::arg("contest_thresh") = -1.0f, py::arg("score_w") = -1.0f,
              py::arg("occ_mode") = 0, py::arg("crowd_radius") = 0.0f, py::arg("height_gate") = 0.0f,

@@ -2,7 +2,7 @@
   "_meta": {
     "description": "mot17_baseline.yaml (no preset)",
     "preset": "baseline",
-    "field_count": 410,
+    "field_count": 413,
     "generated_by": "scripts/eval/config/gen_golden_snapshot.py"
   },
   "config": {
@@ -331,6 +331,9 @@
     "relink_max_age": 300,
     "relink_sim_thresh": 0.6,
     "relink_spatial_gate": 4.0,
+    "research_portable_or_tail_audit": false,
+    "research_portable_or_tail_audit_dir": null,
+    "research_portable_or_tail_policy": null,
     "scene_adapt_crowd_thresh": 15.0,
     "scene_adapt_enabled": false,
     "scene_adapt_narrow_aspect_thresh": 2.1,

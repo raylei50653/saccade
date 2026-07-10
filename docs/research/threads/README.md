@@ -39,7 +39,7 @@ conversation hook    = 短期接力（應收進 thread）
 | Thread | Status (one-line) | Owner |
 |:--|:--|:--|
 | [occ_exit_audit_20260709.md](occ_exit_audit_20260709.md) | **semantic sole active** · substrate wired · remaining graph decision + seq cond | semantic |
-| [m_b1_online_hook_20260709.md](m_b1_online_hook_20260709.md) | Offline phase **CLOSED** · online blocked · next = default-off hook → B2 A/B | semantic |
+| [m_b1_online_hook_20260709.md](m_b1_online_hook_20260709.md) | Offline **CLOSED** · `online_hook_wired__e2e_pending` · next = A1/B + counters; B-audit pending | semantic |
 | [association_recovery_registry_20260709.md](association_recovery_registry_20260709.md) | Scripts index + tools YAML + contracts 就位；registry 維護母線 | semantic |
 | [doc_structure_o15_followup_20260709.md](doc_structure_o15_followup_20260709.md) | O1.5 + TODO-as-WIP-lock；follow-up = index debt / optional strict | ownership |
 

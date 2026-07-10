@@ -712,6 +712,30 @@ class GPUByteTracker:
             except TypeError:
                 setter(*base_args)
 
+    def set_research_portable_or_tail(
+        self,
+        enabled: bool,
+        thr: list[float] | tuple[float, ...] | None = None,
+        audit_enabled: bool = False,
+        policy_hash: str = "",
+        candidate_id: str = "",
+    ) -> None:
+        """Research-only M-B1 portable OR-tail hook (default-off).
+
+        Extra kwargs (policy_hash, candidate_id) are accepted for logging by
+        pipeline and ignored by the native binding.
+        """
+        del policy_hash, candidate_id  # audit metadata only
+        setter = getattr(self.tracker, "set_research_portable_or_tail", None)
+        if setter is None:
+            if enabled:
+                raise RuntimeError(
+                    "native tracker missing set_research_portable_or_tail; rebuild extension"
+                )
+            return
+        thr_list = list(thr) if thr is not None else []
+        setter(bool(enabled), thr_list, bool(audit_enabled))
+
     def get_relink_debug(self) -> list[int]:
         getter = getattr(self.tracker, "get_relink_debug", None)
         return list(getter()) if getter is not None else [0, 0, 0, 0, 0]

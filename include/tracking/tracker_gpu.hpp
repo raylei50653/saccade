@@ -118,6 +118,16 @@ public:
                            float occ_gate_cover = 0.0f, int occ_gap_min = 30,
                            float occ_expand_px = 0.0f, float occ_expand_cover = 0.9f,
                            float bridge_app_veto = -1.0f);
+    /**
+     * Research-only M-B1 portable OR-tail hook (default-off).
+     * When enabled, reject bridge pairs if any of 5 frozen tail thresholds fire.
+     * thr must have length 5 in order:
+     *   score_m_bridge, abs_log_h, dist_h, abs_ratio_m1, resid_mean
+     * Production path: enabled=false is bit-identical to prior behavior.
+     */
+    void set_research_portable_or_tail(bool enabled,
+                                       const std::vector<float>& thr,
+                                       bool audit_enabled = false);
     std::vector<int> get_relink_debug();
 
     /**
