@@ -4867,6 +4867,13 @@ void filter_detections_cuda(
             boxes_ptr, scores_ptr, classes_ptr, num_dets, keep_indices_ptr,
             suspect_flags_ptr, quality_scores_ptr, out_count_ptr, params
         );
+    } else if (env_flag_enabled("SACCADE_ATOMIC_FILTER_BASELINE", false)) {
+        const int thr = 256;
+        const int blk = (num_dets + thr - 1) / thr;
+        filter_detections_kernel<<<blk, thr, 0, stream>>>(
+            boxes_ptr, scores_ptr, classes_ptr, num_dets, keep_indices_ptr,
+            suspect_flags_ptr, quality_scores_ptr, out_count_ptr, params
+        );
     } else {
         const int thr = 256;
         const int blk = (num_dets + thr - 1) / thr;
@@ -4876,6 +4883,16 @@ void filter_detections_cuda(
         bool* _stmp = d_suspect_tmp;
         void* _scan = d_scan_tmp;
         bool own = false;
+
+        const bool any_scratch =
+            d_keep_flags || d_prefix || d_suspect_tmp || d_scan_tmp;
+        const bool all_scratch =
+            d_keep_flags && d_prefix && d_suspect_tmp && d_scan_tmp;
+        if (any_scratch && !all_scratch) {
+            throw std::invalid_argument(
+                "filter_detections_cuda: stable compaction scratch "
+                "buffers must be all-or-none");
+        }
 
         if (!_keep) {
             checkCuda(cudaMallocAsync(reinterpret_cast<void**>(&_keep),

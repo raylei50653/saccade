@@ -11,6 +11,7 @@ Exit codes: 0 = sensitive, 1 = not sensitive, 2 = error.
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 from typing import Sequence
 
@@ -37,6 +38,8 @@ _SENSITIVE_PATTERNS: tuple[str, ...] = (
 
 def _changed_files() -> set[str]:
     files: set[str] = set()
+    any_success = False
+
     try:
         output = subprocess.check_output(
             ["git", "diff", "--cached", "--name-only"],
@@ -44,6 +47,7 @@ def _changed_files() -> set[str]:
             text=True,
             stderr=subprocess.DEVNULL,
         ).strip()
+        any_success = True
         if output:
             files.update(line.strip() for line in output.split("\n") if line.strip())
     except (OSError, subprocess.CalledProcessError):
@@ -58,6 +62,7 @@ def _changed_files() -> set[str]:
                 text=True,
                 stderr=subprocess.DEVNULL,
             ).strip()
+            any_success = True
             if output:
                 files.update(
                     line.strip() for line in output.split("\n") if line.strip()
@@ -72,10 +77,16 @@ def _changed_files() -> set[str]:
             text=True,
             stderr=subprocess.DEVNULL,
         ).strip()
+        any_success = True
         if output:
             files.update(line.strip() for line in output.split("\n") if line.strip())
     except (OSError, subprocess.CalledProcessError):
         pass
+
+    if not any_success:
+        raise RuntimeError(
+            "all git diff commands failed — cannot determine changed files"
+        )
 
     return files
 
@@ -101,7 +112,11 @@ def _matches_patterns(path: str, patterns: Sequence[str]) -> bool:
 
 
 def main() -> int:
-    files = _changed_files()
+    try:
+        files = _changed_files()
+    except Exception as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     for f in sorted(files):
         if _matches_patterns(f, _SENSITIVE_PATTERNS):
             print("determinism")

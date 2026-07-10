@@ -223,7 +223,7 @@ def run_sequences(
         kwargs["sequence_result_callback"] = _cb
         return original_run_eval(**kwargs)
 
-    runner.run_eval = _capture
+    runner.run_eval = _capture  # type: ignore[assignment]
 
     original_argv = sys.argv[:]
     inserted_dir = eval_script_dir not in sys.path

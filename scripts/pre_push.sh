@@ -162,7 +162,7 @@ else
     DETERM_OUTPUT=$(uv run python3 scripts/tools/check_determinism_paths.py 2>/dev/null)
     DETERM_RC=$?
     set -e
-    if [[ $DETERM_RC -eq 2 ]]; then
+    if [[ $DETERM_RC -ne 0 ]] && [[ $DETERM_RC -ne 1 ]]; then
         fail "determinism path detection failed (exit $DETERM_RC)"
         ERRORS=$((ERRORS + 1))
     elif [[ $DETERM_RC -eq 0 ]] && [[ "$DETERM_OUTPUT" == "determinism" ]]; then
