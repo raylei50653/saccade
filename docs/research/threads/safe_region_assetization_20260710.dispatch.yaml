@@ -49,6 +49,7 @@ start_protocol:
   - test -z "$(git status --porcelain)"
   - START_HEAD="$(git rev-parse HEAD)"
   - START_REMOTE_HEAD="$(git rev-parse origin/research/composition-grammar-coverage-program)"
+  - test "$START_HEAD" = "$START_REMOTE_HEAD"
 
 anchor_semantics:
   branch_is_mutable_pointer: true
@@ -60,21 +61,37 @@ anchor_semantics:
 concurrency_protocol:
   before_edit:
     - read entry_thread and all normative_inputs from START_HEAD
-    - record START_HEAD in the return packet
-  before_push_or_handoff:
+    - record START_HEAD and START_REMOTE_HEAD in the return packet
+  before_commit_or_push:
     - git fetch origin
-    - END_REMOTE_HEAD="$(git rev-parse origin/research/composition-grammar-coverage-program)"
-    - require END_REMOTE_HEAD == START_REMOTE_HEAD
-    - require minimum_required_ancestor is ancestor of final_tip
+    - PRE_PUSH_REMOTE_HEAD="$(git rev-parse origin/research/composition-grammar-coverage-program)"
+    - require PRE_PUSH_REMOTE_HEAD == START_REMOTE_HEAD
+    - require minimum_required_ancestor is ancestor of local final_tip
+    - require no unrelated or out-of-scope files changed
+  push_policy:
+    permitted: true
+    command_shape: git push origin HEAD:research/composition-grammar-coverage-program
+    forbidden:
+      - force push
+      - force-with-lease
+      - reset
+      - rebase
+      - merge over a concurrent branch advance
+  after_push_or_handoff:
+    - git fetch origin
+    - FINAL_REMOTE_HEAD="$(git rev-parse origin/research/composition-grammar-coverage-program)"
+    - if push_performed, require FINAL_REMOTE_HEAD == final_tip
+    - if no_push, require FINAL_REMOTE_HEAD == START_REMOTE_HEAD
     - require clean worktree after commit
-  on_remote_advance:
+  on_external_remote_advance:
     status: BLOCKED_BY_BRANCH_ADVANCE
-    action: do not force-push, reset, rebase, merge, or overwrite; report both hashes and stop
+    action: do not force-push, reset, rebase, merge, or overwrite; report START_REMOTE_HEAD and PRE_PUSH_REMOTE_HEAD and stop
 
 failure_status:
   wrong_branch: BLOCKED_BY_BRANCH
   missing_required_ancestor: BLOCKED_BY_CONSTRAINT_ANCESTRY
   dirty_start_tree: BLOCKED_BY_DIRTY_TREE
+  local_remote_start_mismatch: BLOCKED_BY_STALE_LOCAL_BRANCH
   remote_branch_advanced: BLOCKED_BY_BRANCH_ADVANCE
   missing_normative_input: BLOCKED_BY_CONTRACT_INPUT
 
@@ -99,7 +116,9 @@ return_packet_required:
   - start_head
   - start_remote_head
   - final_tip
-  - end_remote_head
+  - pre_push_remote_head
+  - final_remote_head
+  - push_performed
   - required_ancestor_is_ancestor_of_final_tip
   - files_changed
   - validation_commands_and_results
