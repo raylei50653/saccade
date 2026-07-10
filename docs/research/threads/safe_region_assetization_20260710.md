@@ -7,19 +7,19 @@ created: 2026-07-10
 
 # Safe-Region Assetization Program
 
-> **One-line:** R0-A is **ACCEPTED**. R0-B-R1 minimal contract correction is **delivered** and **awaiting chat-side re-review**. R1 asset generation, A0→A1, transfer, intervention, production, and ledger promotion remain unauthorized. Maturity **A0 retained**; pack claim ceiling **L1** with G1=1×L0 · G2=6×L0+19×L1 · G3=1×L0.
+> **One-line:** R0-A is **ACCEPTED**. R0-B-R1 at `e02a5367` passes RB1–RB4, but integrated review against the new Boolean semantics contract is **CHANGES_REQUESTED** on RB5–RB7. Current sole task is **R0-B-R2 typed realization integration**. R1 asset generation, A0→A1, transfer, intervention, production, and ledger promotion remain unauthorized. Maturity **A0 retained**.
 
 ## Status
 
 | Item | Status |
 |:--|:--|
 | Program | **ACTIVE** — safe-region assetization |
-| Semantic sole active | **R0-B-R1 completed — awaiting chat-side re-review** |
+| Semantic sole active | **R0-B-R2 typed realization integration** |
 | R0-A research review | **ACCEPTED** |
-| CR1–CR9 | **PASS** (retained) |
-| R0-B draft | `75dec59a` CHANGES_REQUESTED → **R0-B-R1 delivered** (RB1–RB4) · not self-accepted |
-| Contract | [safe_region_asset_contract.md](../eval/safe_region_asset_contract.md) |
-| Boolean semantics | [boolean_composition_semantics_contract.md](../eval/boolean_composition_semantics_contract.md) — normative Ω/Θ, partial-predicate, role, grammar, threshold, universe and closed-loop boundary |
+| CR1–CR9 | **PASS** (retain) |
+| R0-B draft | `75dec59a` CHANGES_REQUESTED |
+| R0-B-R1 | `e02a5367` — **RB1–RB4 PASS**; overall contract still CHANGES_REQUESTED on RB5–RB7 |
+| Boolean semantics patch | **NORMATIVE** — [boolean_composition_semantics_contract.md](../eval/boolean_composition_semantics_contract.md) |
 | R1 | **NOT AUTHORIZED** |
 | Maturity | **A0 retained** |
 | Claims | G1 **1×L0**; G2 **6×L0 isolated + 19×L1 multi**; G3 **1×L0**; pack ceiling **L1** |
@@ -27,6 +27,23 @@ created: 2026-07-10
 | evidence_ledger | **not promoted** |
 
 ## Current boundary
+
+```text
+candidate / reject set in Ω
+≠ policy / feasible set in Θ
+
+truth-level coordinate or mask identity
+≠ feasibility-bound region membership / outcome
+
+canonical policy semantics
+≠ observed-mask equivalence
+
+observational Boolean composition
+≠ single-step intervention
+≠ closed-loop policy safety
+```
+
+Hard separation remains:
 
 ```text
 artifact generated
@@ -38,14 +55,13 @@ artifact generated
 ≠ production approved
 ```
 
-Boolean set algebra is additionally bounded to same-universe, same-pre-decision-state composition. Observational mask equality does not imply logical equivalence or closed-loop intervention equivalence.
-
 ## Read first
 
-1. [R0-B / R0-B-R1 RegionAsset contract draft](../eval/safe_region_asset_contract.md)
-2. [Mathematical framework](../eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
-3. [Boolean composition semantics contract](../eval/boolean_composition_semantics_contract.md)
+1. [R0-B / R0-B-R1 RegionAsset contract](../eval/safe_region_asset_contract.md)
+2. [Boolean Composition Semantics Contract](../eval/boolean_composition_semantics_contract.md)
+3. [Mathematical framework](../eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
 4. [Accepted R0-A preflight](../../modules/semantic/research/safe_region_r0_asset_contract_preflight_20260710.md)
+5. [T0 component geometry evidence](../../modules/semantic/research/evidence/m_b1_5_t0_region_interpretation_20260710/component_geometry.csv)
 
 ## Accepted A0 baseline
 
@@ -53,51 +69,189 @@ Boolean set algebra is additionally bounded to same-universe, same-pre-decision-
 154 PS = 1 G1 + 153 G2 + 0 G3
 26 components = 1 G1 + 25 G2 (6 isolated + 19 multi)
 radius≥1: 0/154 · terminal B · G3 domain null
+claims: G1 1×L0 · G2 6×L0 + 19×L1 · G3 1×L0 · pack ceiling L1
 ```
+
+This is finite-sample, searched in-sample, registered-lattice evidence. It is not population safety, held-out retention, intervention evidence, or a production candidate.
 
 ## Program stages
 
 ```text
-R0-A ACCEPTED
-R0-B draft CHANGES_REQUESTED
-R0-B-R1 delivered ← awaiting re-review
-R1 not authorized
+R0-A preflight                         # ACCEPTED
+R0-B draft                             # CHANGES_REQUESTED
+R0-B-R1 RB1–RB4                        # PASS
+R0-B-R2 typed realization integration ← current
+chat-side final contract review
+
+R1 G1–G3 deterministic conversion     # not authorized
+R2–R4 conditional maturity stages
+A4/L6 separate production approval
 ```
 
-## R0-B-R1 correction summary (RB1–RB4)
+## R0-B-R1 integrated review
 
-| ID | Fix |
-|:--|:--|
-| RB1 | claim_level from geometry: G2 6×L0 + 19×L1; no grammar-wide G2=L1 |
-| RB2 | `region_asset_manifest.json` authoritative pack row for all `pack_id` FKs |
-| RB3 | model A: `region_asset_id` / `null_record_id` + claims bind `feasibility_contract_id` |
-| RB4 | pairwise full leaf swap before truth digest / coords / grid axes; must also preserve typed Boolean AST/universe/role semantics |
+### Pass — RB1–RB4
 
-R0-B-R1 re-review must treat the Boolean semantics contract as normative for any AST, operand-role, threshold-edge, observed-mask-equivalence, NOT/complement, or online-composition field. It must not authorize G7 or closed-loop intervention merely because those semantics are now specified.
+- **RB1:** claim level is geometry-derived: G1 1×L0; G2 6×L0 isolated + 19×L1 multi; G3 1×L0; pack ceiling L1 only as aggregate.
+- **RB2:** `region_asset_manifest.json` is the authoritative one-row `pack_id` owner.
+- **RB3:** model A binds `region_asset_id`, `null_record_id`, and evidence claims to `feasibility_contract_id`; masks and coordinate identities stay feasibility-independent.
+- **RB4:** pairwise leaves swap all `(atom, feature, direction, thr_index)` fields before truth digest, axes, coordinate keys, and membership geometry.
 
-### Not authorized
+These corrections are accepted and must not regress.
+
+## Blocking corrections — R0-B-R2
+
+### RB5 — Separate stable coordinate/mask identity from feasibility-bound realization
+
+The current contract keeps `coordinate_id` and `mask_unit_id` feasibility-independent, but `region_coordinates.csv` uses `coordinate_id` as its sole PK while carrying `region_asset_id`, productive-safe flags, capacity, and margins. The same coordinate can have different membership/outcome fields under another feasibility contract, so one feasibility-independent PK cannot authoritatively own those changing fields.
+
+R0-B-R2 must normalize the relation, for example:
 
 ```text
-R0-B / R0-B-R1 acceptance (chat-side only)
-R1 asset generation
-A0→A1 · L2+ · evaluator rerun · G4–G7 · hooks · ledger
+coordinates.csv
+  PK coordinate_id
+  truth-level fields only: truth_contract_id, grid_domain_id,
+  canonical_cell_key, threshold indices / aliases
+
+mask_units.csv (or renamed region_masks authority)
+  PK mask_unit_id
+  truth-level mask fields only: truth_contract_id, grid_domain_id,
+  mask_sha256 and invariant mask facts
+
+region_coordinate_membership.csv
+  PK (region_asset_id, coordinate_id)
+  FK region_asset_id, coordinate_id, mask_unit_id
+  feasibility-bound fields: productive-safe membership,
+  capacity observation, dual margins, sequence incidence as applicable
 ```
+
+The filename may remain `region_coordinates.csv`, but its grain and composite PK must be the feasibility-bound membership relation, and a separate coordinate authority must exist.
+
+Requirements:
+
+- no feasibility-independent content ID may own fields that can change with `epsilon`, `g_min`, loss, universe, or denominators;
+- region↔mask authority remains the projection of the feasibility-bound membership rows;
+- mask/coordinate content identities remain reusable without creating contradictory rows across packs;
+- any mask field whose value is conditional on productive-safe membership must move to a realization/membership or aggregate table.
+
+### RB6 — Add an authoritative candidate-universe and predicate-edge contract
+
+The Boolean semantics contract requires the observation space and partial predicate behavior to be reconstructible. A bare string such as `online_hook_eligible` is insufficient as the only machine authority.
+
+R0-B-R2 must define an authority such as:
+
+```text
+candidate_universe.json|jsonl
+  universe_id, universe_hash
+  substrate_id, hook_id, candidate_builder_id/version
+  prefilter/eligibility contract
+  candidate key schema
+  label/exposure owner
+  time/frame range
+  pre-decision state-snapshot contract
+```
+
+It must also define predicate/atom semantics, either in a new authority or by extending a uniquely named existing authority:
+
+```text
+predicate_id
+signal_identity / unit
+predicate_domain / codomain
+unknown_value_policy and final_unknown_action
+comparator, endpoint, tie, NaN, ±Inf, missing policy
+quantile method, tolerance, clipping domain
+```
+
+For the current Q4.5 pack, freeze only what is supported:
+
+```text
+composition_level = observational
+same declared universe and pre-decision state
+reject-only G1/G2/G3 AND/OR
+no NOT/complement authorization
+unknown never maps to reject
+no cross-universe composition without transport
+```
+
+Do not infer total two-valued predicates unless the source contract establishes them; otherwise serialize the explicit three-valued/fail-safe behavior.
+
+### RB7 — Make executable Boolean policy identity first-class
+
+`semantic_definition_id = operator + leaves + lattice` is not sufficient under the normative Boolean contract. The final machine contract must preserve executable semantics independently from the observed mask.
+
+Define a policy/semantic authority that owns at least:
+
+```text
+grammar_version
+truth_semantics_version
+canonical_policy_ast
+operator precedence and grammar bounds
+predicate references / threshold-edge contract
+operand and subtree roles
+universe requirement
+composition level
+NOT/complement metadata when applicable
+canonical_policy_ast_hash
+```
+
+Requirements:
+
+- `semantic_definition_id` or a dedicated `policy_definition_id` must digest the canonical executable semantics, not `observed_mask_hash` or evidence outcomes;
+- observed-mask equivalence, syntactic identity, and logical-equivalence status remain separate fields;
+- role metadata must not disappear during commutative sorting or operand canonicalization;
+- current G1–G3 serialization must not invent G7 necessary/support roles;
+- if current search operands are not role-qualified, declare the bounded untyped/observational role rather than silently granting reject authorization;
+- RegionAsset / coordinate realization rows must resolve to the exact policy semantics that generated them.
+
+## Current step — R0-B-R2
+
+Revise in place:
+
+```text
+docs/research/eval/safe_region_asset_contract.md
+```
+
+Required output:
+
+1. retain RB1–RB4 unchanged;
+2. normalize coordinate/mask content versus feasibility realization (RB5);
+3. add candidate-universe and predicate-edge authorities (RB6);
+4. add canonical executable Boolean policy identity and equivalence separation (RB7);
+5. update PK/FK map, pack membership, validation invariants, Q4.5 freeze, and R1 boundary;
+6. cite the Boolean semantics contract as a normative parent;
+7. generate no asset data files.
+
+## Acceptance for R0-B-R2
+
+- one stable `coordinate_id` can be reused across feasibility contracts without contradictory authority rows;
+- every feasibility-bound membership/outcome row resolves to exactly one region and feasibility contract;
+- region↔mask remains derivable from one declared membership authority;
+- every pack resolves to one fully identified candidate universe and pre-decision state contract;
+- predicate missing/unknown/comparator/endpoint behavior is machine-reconstructible;
+- current pack is explicitly observational and cannot be mistaken for single-step or closed-loop evidence;
+- policy identity uses a canonical AST and remains separate from observed-mask equality;
+- role provenance survives canonicalization and no G7 role is inferred;
+- RB1–RB4 and CR1–CR9 remain intact;
+- every FK resolves to one authority;
+- R1 remains unauthorized pending final chat-side acceptance.
 
 ## Must not
 
 - modify or rerun the Q4.5 evaluator;
 - generate RegionAsset data files;
-- implement framework / G4–G7 / LOO / shadow / hook / preset / production;
-- infer missing/unknown predicates as reject;
-- compare or compose masks across different universes without a transport contract;
-- promote observational Boolean algebra to single-step or closed-loop safety;
-- change terminal B or maturity A0;
+- implement a generic runtime/framework library;
+- implement G4–G7, LOO, shadow, hook, preset, or production behavior;
+- infer G7 roles or map unknown to reject;
+- compare/compose different universes without transport;
+- promote observational algebra to intervention safety;
+- change terminal B, maturity A0, or accepted T0 numbers;
 - promote to evidence ledger;
-- self-accept R0-B-R1 or authorize R1.
+- self-accept R0-B-R2 or authorize R1.
 
 ## History
 
 - 2026-07-10: R0-A accepted; R0-B draft `75dec59a`.
-- 2026-07-10: R0-B review CHANGES_REQUESTED (RB1–RB4).
-- 2026-07-10: R0-B-R1 delivered; **awaiting chat-side re-review**.
-- 2026-07-10: typed Boolean composition semantics contract added and bound into R0-B-R1 review; program verdict unchanged.
+- 2026-07-10: R0-B review requested RB1–RB4.
+- 2026-07-10: R0-B-R1 delivered at `e02a5367`; RB1–RB4 pass on re-review.
+- 2026-07-10: Boolean composition semantics contract added at branch tip after `e02a5367`.
+- 2026-07-10: integrated review requested RB5–RB7; sole active → R0-B-R2; R1/A1 remain unauthorized.
