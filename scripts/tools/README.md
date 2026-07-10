@@ -46,6 +46,14 @@ All options other than the tool's own flags are forwarded to `scripts/eval/mot17
 Do not pass `--processes` or `--cpp-threads`: the tool rejects them to preserve
 the single-process Python-evaluator contract.
 
+For native postprocess attribution, `--stage-probe-frames 120-130` emits
+ordered and multiset hashes for `detector_output`, `post_nms`, and
+`tracker_input`. The default `passive` mode uses D2D snapshots and defers D2H
+hashing until sequence completion; `fenced` synchronizes before each snapshot.
+`SACCADE_DETERMINISTIC_FILTER_COMPACTION=1` is a diagnostic-only native control
+that preserves source-index order during filter compaction. It is not a
+production setting because its single-thread CUDA kernel is intentionally slow.
+
 For the order-contamination matrix, pass all blocks as one comma-separated
 argument in this order: `04`, `04,02,04`, `02,04,02`, all seven SDP sequences
 forward, all seven reverse, then all seven forward again. The resulting

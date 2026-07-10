@@ -4256,6 +4256,59 @@ __global__ void filter_detections_kernel(
     }
 }
 
+// Diagnostic-only control. The production kernel uses atomic compaction, whose
+// output slots are not ordered by input index. This serial version preserves
+// source order so we can determine whether equal-score NMS tie ordering causes
+// a downstream decimal divergence.
+__global__ void filter_detections_stable_kernel(
+    const float* boxes,
+    const float* scores,
+    const int* classes,
+    int num_dets,
+    int* keep_indices,
+    bool* suspect_flags,
+    float* quality_scores,
+    int* out_count,
+    tracking::DetectionFilterParams params
+) {
+    if (blockIdx.x != 0 || threadIdx.x != 0) return;
+
+    int out_idx = 0;
+    for (int idx = 0; idx < num_dets; ++idx) {
+        const float* box = boxes + idx * 4;
+        const float score = scores[idx];
+        const tracking::Box4f box4 = tracking::load_box4(box);
+        const float box_w = fmaxf(box[2] - box[0], 1e-6f);
+        const float box_h = fmaxf(box[3] - box[1], 1e-6f);
+        const float aspect = box_h / box_w;
+        const float frame_area = fmaxf(
+            static_cast<float>(params.frame_w) * static_cast<float>(params.frame_h), 1.0f);
+        const float area_ratio = (box_w * box_h) / frame_area;
+        bool geometry_clean = true;
+        if (!tracking::detection_keep(box4, score, classes[idx], params, geometry_clean)) {
+            continue;
+        }
+
+        keep_indices[out_idx] = idx;
+        suspect_flags[out_idx] = params.person_geometry_prior
+            && params.geometry_suspect_support && !geometry_clean;
+        if (quality_scores) {
+            const float aspect_q = expf(-0.5f * powf((aspect - 2.5f) / 1.2f, 2.0f));
+            const float cx_norm = tracking::center_x(box4)
+                / fmaxf(static_cast<float>(params.frame_w), 1.0f);
+            const float cy_norm = tracking::center_y(box4)
+                / fmaxf(static_cast<float>(params.frame_h), 1.0f);
+            const float center_q = fmaxf(0.0f, fminf(1.0f,
+                fminf(fminf(cx_norm, 1.0f - cx_norm),
+                      fminf(cy_norm, 1.0f - cy_norm)) * 4.0f));
+            const float area_q = expf(-0.5f * powf((area_ratio - 0.01f) / 0.01f, 2.0f));
+            quality_scores[out_idx] = 0.50f * aspect_q + 0.30f * center_q + 0.20f * area_q;
+        }
+        ++out_idx;
+    }
+    *out_count = out_idx;
+}
+
 constexpr int NMS_BLOCK_SIZE = 64;
 
 // ============================================================================
@@ -4714,19 +4767,19 @@ void filter_detections_cuda(
     // Clear any stale error before kernel launch so cudaGetLastError below
     // reports only errors from THIS kernel.
     cudaGetLastError();
-    const int threads = 256;
-    const int blocks = (num_dets + threads - 1) / threads;
-    filter_detections_kernel<<<blocks, threads, 0, stream>>>(
-        boxes_ptr,
-        scores_ptr,
-        classes_ptr,
-        num_dets,
-        keep_indices_ptr,
-        suspect_flags_ptr,
-        quality_scores_ptr,
-        out_count_ptr,
-        params
-    );
+    if (env_flag_enabled("SACCADE_DETERMINISTIC_FILTER_COMPACTION", false)) {
+        filter_detections_stable_kernel<<<1, 1, 0, stream>>>(
+            boxes_ptr, scores_ptr, classes_ptr, num_dets, keep_indices_ptr,
+            suspect_flags_ptr, quality_scores_ptr, out_count_ptr, params
+        );
+    } else {
+        const int threads = 256;
+        const int blocks = (num_dets + threads - 1) / threads;
+        filter_detections_kernel<<<blocks, threads, 0, stream>>>(
+            boxes_ptr, scores_ptr, classes_ptr, num_dets, keep_indices_ptr,
+            suspect_flags_ptr, quality_scores_ptr, out_count_ptr, params
+        );
+    }
     {
         cudaError_t _err = cudaGetLastError();
         if (_err != cudaSuccess) {
