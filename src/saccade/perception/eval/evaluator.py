@@ -325,6 +325,7 @@ def _run_frame(
     warmup_frames = state.warmup_frames
     wb = state.wb
     wb_scene_policy = state.wb_scene_policy
+    _stage_probe_callback = getattr(state, "stage_probe_callback", None)
     # -----------------------------------------------
     if _defer_emit and state.defer_emit_event is not None:
         _lines, state.prev_track_ids = _flush_deferred_emit(
@@ -662,6 +663,15 @@ def _run_frame(
             raw_dump_boxes = fused_boxes
             raw_dump_scores = fused_scores
             raw_dump_classes = fused_classes
+            if _stage_probe_callback is not None:
+                _stage_probe_callback(
+                    seq,
+                    frame_id,
+                    "detector_output",
+                    raw_dump_boxes,
+                    raw_dump_scores,
+                    raw_dump_classes,
+                )
             frame_birth_events = []
 
             # Update seq_stage_totals for the skipped stages
@@ -739,6 +749,15 @@ def _run_frame(
             raw_dump_boxes = fused_boxes
             raw_dump_scores = fused_scores
             raw_dump_classes = fused_classes
+            if _stage_probe_callback is not None:
+                _stage_probe_callback(
+                    seq,
+                    frame_id,
+                    "detector_output",
+                    raw_dump_boxes,
+                    raw_dump_scores,
+                    raw_dump_classes,
+                )
 
             # P5-4: scene-adaptive observation and one-shot classification.
             if _scene_policy is not None and not _scene_policy.is_classified:
@@ -1212,6 +1231,16 @@ def _run_frame(
                     classes=fused_classes,
                 )
 
+            if _stage_probe_callback is not None:
+                _stage_probe_callback(
+                    seq,
+                    frame_id,
+                    "post_nms",
+                    fused_boxes,
+                    fused_scores,
+                    fused_classes,
+                )
+
             if cfg.detection.tile_diagnostics and is_tiled:
                 seq_tile_diag["frames_tiled"] += 1
                 seq_tile_diag["pre_merge_seam_boxes"] += _count_tile_seam_boxes(
@@ -1628,6 +1657,16 @@ def _run_frame(
             ):
                 geometry_suspect_mask = (
                     geometry_suspect_mask | appearance_occlusion_mask
+                )
+
+            if _stage_probe_callback is not None:
+                _stage_probe_callback(
+                    seq,
+                    frame_id,
+                    "tracker_input",
+                    fused_boxes,
+                    fused_scores,
+                    fused_classes,
                 )
 
             state.tracker_result_buffers = _run_track(
@@ -2505,6 +2544,7 @@ def run_eval(
             external_fp_logistic_model=external_fp_logistic_model,
             frame_ledger=frame_ledger,
         )
+        _seq_state.stage_probe_callback = kwargs.get("stage_probe_callback")
 
         from .pipeline import _explicit_stream_probe_enabled, _stream_mode_ptds_probe
 
@@ -3045,6 +3085,9 @@ def run_eval(
             Path(output_root / f"{seq}.txt").write_text(
                 "\n".join(_seq_state.results_lines)
             )
+        _sequence_result_callback = kwargs.get("sequence_result_callback")
+        if _sequence_result_callback is not None:
+            _sequence_result_callback(seq, tuple(_seq_state.results_lines))
         print(
             f"✅ Finished {seq} (Total Time: {time.time() - _seq_state.start_time:.2f}s)"
         )
