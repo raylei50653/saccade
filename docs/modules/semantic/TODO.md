@@ -5,11 +5,11 @@
 
 ## Sole active
 
-🔄 **Safe-Region Assetization — R0-A completed, awaiting chat-side review**
+🔄 **Safe-Region Assetization — R0-A-R1 contract correction**
 
 - Thread: [safe_region_assetization_20260710.md](../../research/threads/safe_region_assetization_20260710.md)
-- Deliverable: [research/safe_region_r0_asset_contract_preflight_20260710.md](research/safe_region_r0_asset_contract_preflight_20260710.md)
-- Boundary: preflight packet only; R0-A not self-accepted; R0-B/R1 unauthorized; no asset pack, evaluator, grammar extension, LOO, shadow, hook, or production work
+- Deliverable: revise [research/safe_region_r0_asset_contract_preflight_20260710.md](research/safe_region_r0_asset_contract_preflight_20260710.md) in place
+- Boundary: docs/research correction only; fix stable identity, non-additive component capacity, sequence union/intersection, G3 null grain, and region↔mask relation; R0-B/R1 remain unauthorized
 
 ## Parked
 
@@ -18,7 +18,7 @@
 
 ## Related research threads（不佔 WIP 鎖）
 
-- [safe-region assetization](../../research/threads/safe_region_assetization_20260710.md) — **ACTIVE** · R0-A only
+- [safe-region assetization](../../research/threads/safe_region_assetization_20260710.md) — **ACTIVE** · R0-A-R1 only
 - [composition grammar coverage program](../../research/threads/composition_grammar_coverage_program_20260710.md) — **SUPERSEDED** · producer gates absorbed into R2–R4
 - [composition grammar × safe-region A0](../../research/threads/composition_grammar_safe_region.md) — **CLOSED** · T0-A/B/R1 · terminal B retained
   - A0 source note: [composition_grammar_t0_region_interpretation_20260710.md](research/composition_grammar_t0_region_interpretation_20260710.md)
