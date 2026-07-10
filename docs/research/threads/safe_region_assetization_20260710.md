@@ -205,4 +205,4 @@ Passing engineering validation creates an **A0 pack candidate**. Chat-side / res
 - 2026-07-10: R0-B-R3 delivered at `f92340b7`; RB8–RB9 pass.
 - 2026-07-10: chat-side final review accepted R0-B and authorized R1 deterministic conversion only; A0 retained; A1 remains a separate gate.
 - 2026-07-10: R1 conversion delivered — A0 pack candidate emitted; two-run determinism + PK/FK/claims PASS; awaiting research A1 gate (not self-accepted).
-- 2026-07-10: **Retired direct-agent dispatch sidecar**; delivery model switched to **PR-driven engineering** + separate research acceptance. Historical note only: `safe_region_assetization_20260710.dispatch.yaml` and Chat-copied hash start protocols are no longer execution authority.
+- 2026-07-10: **Retired direct-agent dispatch sidecar**; delivery model switched to **PR-driven engineering** + separate research acceptance. Historical note only: Chat-copied hash start protocols and same-name dispatch sidecars are no longer execution authority and must not be recreated.
