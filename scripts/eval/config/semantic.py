@@ -749,3 +749,36 @@ def add_semantic_args(parser: argparse.ArgumentParser) -> None:
         default=0.15,
         help="Crowd-density exponential decay multiplier for Mahalanobis threshold.",
     )
+    # ── M-B1 research-only default-off portable OR-tail hook (Stage 1) ──
+    # Not a production preset knob. Unset/empty = hook disabled (zero behavior change).
+    research = parser.add_argument_group(
+        _tier("Research portable OR-tail hook (M-B1 Stage 1)", "Experimental")
+    )
+    research.description = (
+        "Default-off frozen portable OR-tail policy injection for online e2e A/B. "
+        "See docs/modules/semantic/research/m_b1_portable_or_tail_hook_contract_20260709.md "
+        "and m_b1_to_m_b1_5_two_stage_plan_20260710.md. Never enable from production presets."
+    )
+    research.add_argument(
+        "--research-portable-or-tail-policy",
+        default=None,
+        help=(
+            "Path to freeze portable_policy.json. Default: off (also env "
+            "SACCADE_RESEARCH_PORTABLE_OR_TAIL_POLICY). When set, load thr and reject "
+            "bridge candidates if ANY frozen tail atom fires. Fail-closed on schema mismatch."
+        ),
+    )
+    research.add_argument(
+        "--research-portable-or-tail-audit",
+        action="store_true",
+        default=False,
+        help=(
+            "When hook is on, enable full candidate-event audit export "
+            "(separate from policy runtime overhead)."
+        ),
+    )
+    research.add_argument(
+        "--research-portable-or-tail-audit-dir",
+        default=None,
+        help="Directory for hook audit artifacts (events/json). Required when audit is on.",
+    )

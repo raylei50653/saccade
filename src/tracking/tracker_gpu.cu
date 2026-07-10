@@ -1963,6 +1963,9 @@ __global__ void relink_bidir_propose_kernel(
     float occ_gate_cover, int occ_gap_min, float occ_expand_px, float occ_expand_cover,
     int frame_w, int frame_h,
     const float* features, int embed_dim, float app_veto_cos,
+    // Research portable OR-tail (default-off): thr=null or portable_or_tail_enabled=0 → no-op.
+    int portable_or_tail_enabled,
+    const float* portable_thr,  // [5] score_m_bridge, abs_log_h, dist_h, abs_ratio_m1, resid_mean
     int* track_revived, int* bridge_claim, int* bridge_cand_lost, int* dbg)
 {
     int cand = blockIdx.x * blockDim.x + threadIdx.x;
@@ -2121,6 +2124,33 @@ __global__ void relink_bidir_propose_kernel(
             for (int k = 0; k < embed_dim; ++k) { dot += le[k] * cand_emb[k]; n2l += le[k] * le[k]; }
             if (n2l > 1e-6f && dot * rsqrtf(n2l) * cand_inv_norm < app_veto_cos) {
                 if (dbg) atomicAdd(&dbg[10], 1);  // bridge pair vetoed by appearance
+                continue;
+            }
+        }
+        // Research portable OR-tail: reject baseline-ok pairs if any frozen tail fires.
+        // Disabled path (enabled==0 or thr==null) is a pure no-op → bit-identical.
+        if (portable_or_tail_enabled && portable_thr) {
+            float hr = fmaxf(ema_lost, 1e-3f) / fmaxf(ema_cand, 1e-3f);
+            float abs_log_h = fabsf(logf(hr));
+            float abs_ratio_m1 = fabsf(hr - 1.0f);
+            float resid_mean = 0.5f * (fwd_r + bwd_r);
+            // Atom order matches portable_or_tail.ORDERED_ATOM_IDS / thr_vector.
+            int mask = 0;
+            if (bdist > portable_thr[0]) mask |= 1;
+            if (abs_log_h > portable_thr[1]) mask |= 2;
+            if (dist_h > portable_thr[2]) mask |= 4;
+            if (abs_ratio_m1 > portable_thr[3]) mask |= 8;
+            if (resid_mean > portable_thr[4]) mask |= 16;
+            if (dbg) {
+                atomicAdd(&dbg[4], 1);  // hook_eligible (baseline-ok pair at policy eval)
+                if (mask & 1) atomicAdd(&dbg[6], 1);
+                if (mask & 2) atomicAdd(&dbg[7], 1);
+                if (mask & 4) atomicAdd(&dbg[8], 1);
+                if (mask & 8) atomicAdd(&dbg[9], 1);
+                if (mask & 16) atomicAdd(&dbg[11], 1);
+            }
+            if (mask) {
+                if (dbg) atomicAdd(&dbg[5], 1);  // hook_rejected
                 continue;
             }
         }
@@ -2732,6 +2762,7 @@ public:
         cudaFree(d_score_sum_);
         cudaFree(d_foot_ring_); cudaFree(d_foot_len_); cudaFree(d_ema_h_);
         cudaFree(d_track_revived_); cudaFree(d_bridge_claim_); cudaFree(d_bridge_cand_lost_);
+        if (d_portable_thr_) cudaFree(d_portable_thr_);
         if (d_occ_grid_) cudaFree(d_occ_grid_);
         if (d_occ_frame_) cudaFree(d_occ_frame_);
         cudaFree(d_has_clean_embedding_); cudaFree(d_candidate_count_);
@@ -3210,6 +3241,8 @@ public:
                 occ_gate_cover_, occ_gap_min_, occ_expand_px_, occ_expand_cover_,
                 frame_w_, frame_h_,
                 d_features_, embed_dim_, bridge_app_veto_,
+                research_portable_or_tail_enabled_ ? 1 : 0,
+                research_portable_or_tail_enabled_ ? d_portable_thr_ : nullptr,
                 d_track_revived_, d_bridge_claim_, d_bridge_cand_lost_, d_relink_dbg_);
             relink_bidir_commit_kernel<<<grid, 256, 0, stream>>>(
                 d_active_, d_track_ids_, max_objs_,
@@ -3304,6 +3337,7 @@ public:
         occ_expand_px_ = std::max(0.0f, occ_expand_px);
         occ_expand_cover_ = std::clamp(occ_expand_cover, 0.0f, 1.0f);
         bridge_app_veto_ = std::min(bridge_app_veto, 1.0f);  // <= -1 disables
+        // Research portable OR-tail is set via set_research_portable_or_tail (not here).
         // Occupancy ring (~72 KB): lazily allocated only when an occ gate is on.
         if (bidirectional_ && (occ_gate_cover_ > 0.0f || occ_expand_px_ > 0.0f) &&
             d_occ_grid_ == nullptr) {
@@ -3355,8 +3389,49 @@ public:
             relink_alloc_cap_ = cap;
         }
     }
+    void set_research_portable_or_tail(bool enabled, const std::vector<float>& thr,
+                                       bool audit_enabled) {
+        // Default-off research hook. When disabled, free thr buffer so propose
+        // kernel keeps portable_thr==nullptr (bit-identical production path).
+        research_portable_or_tail_audit_ = audit_enabled;
+        if (!enabled) {
+            research_portable_or_tail_enabled_ = false;
+            if (d_portable_thr_) {
+                cudaFree(d_portable_thr_);
+                d_portable_thr_ = nullptr;
+            }
+            return;
+        }
+        if (thr.size() != 5) {
+            throw std::invalid_argument(
+                "set_research_portable_or_tail: thr must have length 5 "
+                "(score_m_bridge, abs_log_h, dist_h, abs_ratio_m1, resid_mean)");
+        }
+        for (int i = 0; i < 5; ++i) {
+            if (!std::isfinite(static_cast<double>(thr[i]))) {
+                throw std::invalid_argument(
+                    "set_research_portable_or_tail: thr contains non-finite value");
+            }
+            portable_thr_host_[i] = thr[i];
+        }
+        if (d_portable_thr_ == nullptr) {
+            checkCuda(cudaMalloc(&d_portable_thr_, 5 * sizeof(float)));
+        }
+        checkCuda(cudaMemcpy(d_portable_thr_, portable_thr_host_, 5 * sizeof(float),
+                             cudaMemcpyHostToDevice));
+        // Ensure dbg buffer exists for hook counters (slots 4-11).
+        if (d_relink_dbg_ == nullptr) {
+            checkCuda(cudaMalloc(&d_relink_dbg_, 12 * sizeof(int)));
+            checkCuda(cudaMemset(d_relink_dbg_, 0, 12 * sizeof(int)));
+        }
+        research_portable_or_tail_enabled_ = true;
+        (void)research_portable_or_tail_audit_;  // event ring reserved for audit mode
+    }
+
     // Debug accumulated over the sequence:
     //   [0]=archived(cursor) [1]=births [2]=revived [3]=bridge_attempts [4]=bridge_accepts
+    //   [5]=hook_eligible [6]=hook_rejected [7..10]=atom0..3 fires [11]=app_veto [12]=atom4
+    // Note: host vector layout is cursor + d_relink_dbg_[0..11] (length 13).
     std::vector<int> get_relink_debug() {
         std::vector<int> out(13, 0);
         if (d_relink_cursor_) checkCuda(cudaMemcpy(out.data(), d_relink_cursor_, sizeof(int), cudaMemcpyDeviceToHost));
@@ -3786,6 +3861,11 @@ private:
     float bridge_h_hi_          = 0.0f; // scale gate: max ratio (<=0 disables the gate)
     float bridge_dir_bonus_     = 0.0f; // directional consistency relaxation multiplier
     float bridge_app_veto_      = -1.0f; // appearance cosine veto floor (<=-1 off)
+    // Research M-B1 portable OR-tail (default-off; thr on device only when enabled).
+    bool  research_portable_or_tail_enabled_ = false;
+    bool  research_portable_or_tail_audit_   = false;
+    float portable_thr_host_[5] = {0.f, 0.f, 0.f, 0.f, 0.f};
+    float* d_portable_thr_ = nullptr;  // [5] device thr vector
     float occ_gate_cover_       = 0.0f; // gap-occupancy veto: min occ_cover (0=off)
     int   occ_gap_min_          = 30;   // occ gates apply only to gaps >= this (short-gap occ is noise)
     float occ_expand_px_        = 0.0f; // tiered expansion: looser bridge_px when occ high (0=off)
@@ -3997,6 +4077,11 @@ void GPUByteTracker::set_relink_params(bool enabled, int bank_cap, float sim_thr
                               bridge_h_lo, bridge_h_hi, bridge_dir_bonus,
                               occ_gate_cover, occ_gap_min, occ_expand_px, occ_expand_cover,
                               bridge_app_veto);
+}
+void GPUByteTracker::set_research_portable_or_tail(bool enabled,
+                                                   const std::vector<float>& thr,
+                                                   bool audit_enabled) {
+    pimpl_->set_research_portable_or_tail(enabled, thr, audit_enabled);
 }
 std::vector<int> GPUByteTracker::get_relink_debug() { return pimpl_->get_relink_debug(); }
 void GPUByteTracker::set_oao_params(float tau, float contest_thresh, float score_w, int occ_mode,

@@ -13,9 +13,10 @@ created: 2026-07-09
 
 - **M-B1 offline gate / safe-region research = CLOSED**
 - Offline: `LOO_pass_region_candidate` · offline smoke pass (GT0, FP=8721)
-- Online: **blocked**
-- `e2e_safe_for_default_off`: **no** (until A/B)
+- Online: **hook wired (default-off)** · e2e A/B **not finished**
+- `e2e_safe_for_default_off`: **no** (until A/B metrics land)
 - Production: **not** preset · **not** default-on
+- Stage 1 plan: [two-stage plan](../../modules/semantic/research/m_b1_to_m_b1_5_two_stage_plan_20260710.md)
 
 ```text
 candidate_id: m_b1_repaired_eps0_loo_pass_20260709
@@ -45,8 +46,9 @@ policy shape:
 
 1. [m_b1 offline phase hub](../../modules/semantic/research/m_b1_offline_safe_region_phase_20260709.md) — closed nav
 2. [candidate card](../../modules/semantic/research/m_b1_repaired_eps0_loo_pass_candidate_20260709.md) — freeze identity
-3. [portable OR-tail hook contract](../../modules/semantic/research/m_b1_portable_or_tail_hook_contract_20260709.md) — **only next eng doc**
-4. [signal_analysis_ledger](../eval/signal_analysis_ledger.md) §5
+3. [portable OR-tail hook contract](../../modules/semantic/research/m_b1_portable_or_tail_hook_contract_20260709.md) — Stage 1 eng task
+4. [two-stage plan](../../modules/semantic/research/m_b1_to_m_b1_5_two_stage_plan_20260710.md) — Stage 1 full contract + Stage 2 boundary
+5. [signal_analysis_ledger](../eval/signal_analysis_ledger.md) §5
 
 Also: [DEVELOPMENT.md](../../../DEVELOPMENT.md) D1/D3 · [semantic TODO](../../modules/semantic/TODO.md)
 
@@ -74,14 +76,28 @@ out/signal_study/m_b2_bridge_ab_*/
 ## Current step
 
 ```text
-Implement research-only default-off online hook that applies:
-  out/signal_study/m_b1_repaired_eps0_loo_pass_20260709/portable_policy.json
-
-Follow:
-  docs/modules/semantic/research/m_b1_portable_or_tail_hook_contract_20260709.md
+DONE (code): policy loader + CLI default-off + CUDA thr inject + offline full event table
+NEXT: run Stage 1 e2e A/B (A1 hook-off identity + B hook-on) on B2 substrate
+      → publish e2e_safe_for_default_off + freeze Stage 1 artifacts
+STOP after Stage 1; do not start Stage 2 in same PR
 ```
 
-Then: **baseline B2 vs B2+hook** e2e A/B.
+Runner:
+
+```bash
+# offline full tables (already validated: n_rejected=8721 = freeze)
+uv run python scripts/tools/run_m_b1_hook_ab.py \
+  --policy out/signal_study/m_b1_repaired_eps0_loo_pass_20260709/portable_policy.json \
+  --pairs out/signal_study/m_b1_smoke_20260709T092543Z/pairs.csv \
+  --study-dir out/signal_study/m_b1_hook_ab_<stamp> \
+  --offline-events-only
+
+# e2e (after rebuild tracking ext)
+uv run python scripts/tools/run_m_b1_hook_ab.py \
+  --policy out/signal_study/m_b1_repaired_eps0_loo_pass_20260709/portable_policy.json \
+  --study-dir out/signal_study/m_b1_hook_ab_<stamp> \
+  --run-e2e
+```
 
 ## Acceptance
 
@@ -139,3 +155,5 @@ Plus this thread’s Status / Current step / History.
 - 2026-07-09: offline research candidate established (`m_b1_repaired_eps0_loo_pass_20260709`)
 - 2026-07-09: offline smoke pass · online_blocked（correct boundary）
 - 2026-07-09: offline phase CLOSED; thread opened with session hook consolidated
+- 2026-07-10: two-stage plan landed (`m_b1_to_m_b1_5_two_stage_plan_20260710`); Stage 1 eng starts
+- 2026-07-10: Stage 1 wire — `portable_or_tail.py` loader, CLI flags, CUDA thr inject, `run_m_b1_hook_ab.py`; offline events n_rejected=8721; e2e A/B pending

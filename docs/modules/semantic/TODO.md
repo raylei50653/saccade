@@ -16,7 +16,8 @@
 
 ## Related research threads（不佔 WIP 鎖）
 
-- [m_b1 online hook](../../research/threads/m_b1_online_hook_20260709.md) — offline closed；default-off hook → e2e A/B
+- [m_b1 online hook](../../research/threads/m_b1_online_hook_20260709.md) — offline closed；Stage 1 plan landed；default-off hook → e2e A/B
+  - Plan: [m_b1_to_m_b1_5_two_stage_plan_20260710.md](research/m_b1_to_m_b1_5_two_stage_plan_20260710.md)
 - [association recovery registry](../../research/threads/association_recovery_registry_20260709.md)
 
 ## Done / closed
