@@ -7,7 +7,7 @@ created: 2026-07-10
 
 # composition grammar × safe-region geometry
 
-> **One-line:** Q4.5 G1–G3 atlas coverage audit **closed** as region-observation gap. Terminal B **unchanged**. Current authorized work = **T0-A artifact preflight**; T0-B execution waits for preflight review.
+> **One-line:** T0-A **PASS** (schema inventory complete). Terminal B **unchanged**. Full atlases runtime-only; outputs 1–5 D/J, dual-margin J+edge policy, G7 form **N**. Next = **T0-A review gate** — T0-B still **not authorized**.
 
 ## Status
 
@@ -18,8 +18,11 @@ created: 2026-07-10
 | Production preset | **unchanged** |
 | Signal family expansion | **not authorized** by this thread |
 | Unrestricted Boolean / 3+ atoms | **forbidden** |
-| Current authorized work | **T0-A** existing-artifact schema / derivability preflight |
-| T0-B seven-output execution | **not yet authorized** — issue after T0-A review |
+| T0-A artifact preflight | **DONE** — awaiting review |
+| T0-A report | [composition_grammar_t0_artifact_preflight_20260710.md](../../modules/semantic/research/composition_grammar_t0_artifact_preflight_20260710.md) |
+| T0-A headline | runtime atlases hash-match; pack ⊂ runtime; 1–5 D/J; margin J+edge; G7 **N** |
+| Current authorized work | **none pending implementation** — hold for T0-A review |
+| T0-B seven-output execution | **not authorized** — issue only after review accepts §6 surface |
 | `evidence_ledger` | **not promoted** (coverage / task-design only) |
 
 ```text
@@ -39,11 +42,12 @@ Central judgment (held):
 
 ## Read first
 
-1. **[Coverage audit (fact-owner)](../../modules/semantic/research/composition_grammar_safe_region_coverage_audit_20260710.md)** — full matrices, T0–T4, bounded verdict
-2. Stage 2 canonical: [m_b1_5_stage2_d_online_final_20260710.md](../../modules/semantic/research/m_b1_5_stage2_d_online_final_20260710.md) · [entry contract](../../modules/semantic/research/m_b1_5_stage2_entry_contract_20260710.md)
-3. Closed Stage 1/2 history thread: [m_b1_online_hook_20260709.md](m_b1_online_hook_20260709.md) (CLOSED; handoff here for **T0 only**)
-4. Plan body (runner/contract ref only): [m_b1_to_m_b1_5_two_stage_plan_20260710.md](../../modules/semantic/research/m_b1_to_m_b1_5_two_stage_plan_20260710.md)
-5. Signal table contract: [signal_table_schema.md](../eval/signal_table_schema.md)
+1. **[T0-A preflight (schema / derivability)](../../modules/semantic/research/composition_grammar_t0_artifact_preflight_20260710.md)** — current gate input
+2. **[Coverage audit (fact-owner)](../../modules/semantic/research/composition_grammar_safe_region_coverage_audit_20260710.md)** — full matrices, T0–T4, bounded verdict
+3. Stage 2 canonical: [m_b1_5_stage2_d_online_final_20260710.md](../../modules/semantic/research/m_b1_5_stage2_d_online_final_20260710.md) · [entry contract](../../modules/semantic/research/m_b1_5_stage2_entry_contract_20260710.md)
+4. Closed Stage 1/2 history thread: [m_b1_online_hook_20260709.md](m_b1_online_hook_20260709.md) (CLOSED; handoff here for **T0 only**)
+5. Plan body (runner/contract ref only): [m_b1_to_m_b1_5_two_stage_plan_20260710.md](../../modules/semantic/research/m_b1_to_m_b1_5_two_stage_plan_20260710.md)
+6. Signal table contract: [signal_table_schema.md](../eval/signal_table_schema.md)
 
 Truth base (do not collapse):
 
@@ -67,74 +71,44 @@ out/signal_study/m_b1_hook_ab_20260710T071001Z_stage1_close/   # freeze policy o
 docs/modules/semantic/research/evidence/m_b1_5_stage2_q45_20260710/
 ```
 
-## Current step — T0-A artifact preflight
+## Current step — awaiting T0-A review
 
-**Branch:** `research/m-b1-5-t0-region-preflight`
+**Branch:** `research/m-b1-5-t0-region-preflight`  
+**Preflight note:** [composition_grammar_t0_artifact_preflight_20260710.md](../../modules/semantic/research/composition_grammar_t0_artifact_preflight_20260710.md)
 
-### Objective
-
-Confirm the actual existing artifact schemas, identity keys, and derivability of the seven T0 outputs before issuing the implementation task.
-
-This step answers **what can be faithfully derived**, not the region-geometry research questions themselves.
-
-### Required checks
-
-1. Confirm branch ancestry from current `main`; record base commit.
-2. Inventory runtime artifacts and committed evidence-pack files; distinguish present / missing / evidence-only.
-3. Record actual schemas and key fields for atom, AND, OR, region-stability, per-sequence, threshold-registry, and supporting event artifacts.
-4. Build a seven-output derivability matrix using only:
-   - `directly_derivable`
-   - `derivable_by_deterministic_join`
-   - `partially_derivable`
-   - `not_derivable_from_current_artifact_contract`
-5. Explicitly verify:
-   - registered coordinate / grid identity and ordering;
-   - `mask_sha256` quotient scope and whether cross-grid collapse is legal;
-   - per-sequence productive-support representation and join keys;
-   - whether component adjacency can be reconstructed without guessing;
-   - whether both boundary metrics can be computed exactly, including lattice-edge semantics;
-   - whether G7 mask equivalence can be audited without inventing operand-role metadata.
-6. Reconcile the available artifacts with canonical headline counts where possible, but do not produce a new research verdict.
-
-### Deliverable
-
-Create a concise preflight note:
+### T0-A result (navigation summary)
 
 ```text
-docs/modules/semantic/research/
-composition_grammar_t0_artifact_preflight_20260710.md
+T0-A PASS (schema inventory complete):
+  runtime atlases hash-match manifest; committed pack is subset (no full atlases).
+  G1 S:: unique-boundary 0..86 ⟂ G2/G3 P:: quantile 0..20 complete 21×21×40.
+  Outputs 1–5 derivable (D/J); dual-margin J with explicit edge policy;
+  G7 form N (no role/NOT metadata). Fail-closed gaps recorded.
 ```
 
-It must contain:
+| Output | Class |
+|:--|:--|
+| 1 raw-coordinate area ratios | D |
+| 2 unique-mask area ratios | J (per-grid scope) |
+| 3 productive capacity distribution | D |
+| 4 multi-seq productive-support geometry | J |
+| 5 component shape / axis degeneracy | J |
+| 6 dual margin | J (+ declared lattice-edge policy) |
+| 7 G7 semantic equivalence | **N** (G1/G2 mask-equality only = P, not G7) |
 
-```text
-- base commit and inspected artifact identities
-- file inventory and actual schema/key map
-- seven-output derivability matrix
-- observation gaps / ambiguous semantics
-- minimum proposed T0-B implementation surface
-- explicit list of assumptions that T0-B must not make
-```
+### Review gate (do not skip)
 
-Then update this thread with only the preflight headline, note pointer, and next review gate.
+1. Review preflight note (inventory · matrix · gaps · §6 T0-B surface).
+2. If accepted: **separately authorize** bounded T0-B quoting only the confirmed surface.
+3. Do **not** auto-start T0-B, region-LOO, G7 evaluator work, or ledger promotion.
 
-### T0-A acceptance
+### T0-A acceptance (execution checklist)
 
-- Every T0-B input/key assumption is tied to an observed field or marked unavailable.
-- Runtime artifacts and committed evidence are not silently treated as identical.
-- Missing data produces an observation gap, not an evaluator rerun.
-- No research terminal, policy, production, or promotion conclusion is changed.
-- Next state is **awaiting T0-A review**, not automatic T0-B execution.
-
-### T0-A must not
-
-- Implement the seven final interpretation tables.
-- Rewrite or rerun the Q4.5 evaluator.
-- Search thresholds or modify lattices.
-- Add signals or grammar enumeration.
-- Invent coordinate adjacency, mask scope, sequence keys, or G7 role semantics.
-- Start region-LOO, ranking/assignment, online region sweeps, or hook work.
-- Change terminal B, production defaults, presets, or evidence-ledger status.
+- [x] Every T0-B input/key assumption tied to observed field or marked unavailable
+- [x] Runtime vs committed pack distinguished
+- [x] Missing data → observation gaps (no evaluator rerun)
+- [x] Terminal B / production / ledger unchanged
+- [x] Next state = **awaiting T0-A review**
 
 ## Planned T0-B outputs — pending authorization
 
@@ -171,3 +145,4 @@ Only after completed T0-B evidence and review: decide T1 emit / region-LOO desig
 
 - 2026-07-10: coverage audit reconnaissance closed; thread opened; next = T0.
 - 2026-07-10: PR #93 merged; split T0 into T0-A preflight → review → T0-B execution to avoid schema assumptions outrunning artifacts.
+- 2026-07-10: T0-A executed on `research/m-b1-5-t0-region-preflight` @ `6ef90ac8` base; preflight note landed; status → awaiting review (T0-B still unauthorized).
