@@ -32,7 +32,8 @@ from saccade.perception.eval._decimal_hash_tools import (  # noqa: E402
     CANONICAL_FIELDS,
     Run,
     _git_commit,
-    diagnose,
+    compare_chain_to_first_occurrence,
+    verdict_from_comparisons,
     write_csv,
 )
 
@@ -274,23 +275,10 @@ def main() -> int:
         records = tuple(canonicalize_mot_lines(lines))
         runs.append(Run(index, sequence, records, decimal_hash(records)))
 
-    mismatches = [
-        diagnose(
-            next(run for run in runs if run.sequence == current.sequence),
-            current,
-            args.max_mismatch_records,
-        )
-        for current in runs
-    ]
-    verdicts = {row["classification"] for row in mismatches}
-    final_verdict = next(
-        (
-            value
-            for value in ("structural_divergence", "decimal_divergence")
-            if value in verdicts
-        ),
-        "decimal_exact_pass",
+    mismatches = compare_chain_to_first_occurrence(
+        runs, max_records=args.max_mismatch_records
     )
+    final_verdict = verdict_from_comparisons(mismatches)
     metadata = {
         "canonical_fields": list(CANONICAL_FIELDS),
         "excluded_fields": [

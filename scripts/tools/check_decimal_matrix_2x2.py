@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pre-push 2x2 sequence-order determinism matrix.
+"""Forensic / directional 2×2 sequence-order determinism matrix.
 
 Runs the complete directed matrix::
 
@@ -7,12 +7,14 @@ Runs the complete directed matrix::
     A → B    B → B
 
 Each cell means two full sequences executed consecutively within the same
-process and runtime state.  The matrix detects:
+process and runtime state.  This tool is **not** the routine pre-push guard;
+use ``check_decimal_chain_routine.py`` for that.  The 2×2 matrix is retained
+for post-failure directional diagnosis:
 
-1. same-sequence continuous-run instability;
-2. cross-sequence state or buffer contamination;
-3. directional contamination differences;
-4. final serialized-MOT decimal divergence.
+1. same-sequence continuous-run instability (A→A, B→B);
+2. cross-sequence state or buffer contamination (B→A, A→B);
+3. directional contamination differences (B→A vs A→B);
+4. final serialized-MOT decimal divergence with cleaner cell-level references.
 
 Fixed sequence pair (frozen 2026-07-10):
 
