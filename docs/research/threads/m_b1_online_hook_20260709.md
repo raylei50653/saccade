@@ -58,8 +58,8 @@ Pre-specified, non-metric-picked:
 
 Fixtures: `scripts/tools/fixtures/m_b1_stage1/`
 
-Accept P: `eligible>0`, `atom0>0`, `rejected==atom0` (and preferably result ≠ A1).  
-Accept F: `rejected==eligible`, result ≠ A1.
+Accept P: `eligible>0`, `atom0>0`, `rejected==atom0`, **result ≠ A1**.  
+Accept F: `rejected==eligible`, **result ≠ A1**.
 
 ## Read first
 

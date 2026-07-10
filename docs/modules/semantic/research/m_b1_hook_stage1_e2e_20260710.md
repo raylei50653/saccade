@@ -95,8 +95,10 @@ Fixtures: `scripts/tools/fixtures/m_b1_stage1/`
 | atom0 | **168** | **305** |
 | hook_rejected | **168** | **305** |
 | rejected == atom0 / eligible | yes | yes (rej==elig) |
-| result differs from A1 | **yes** | **yes** |
+| result differs from A1 (required) | **yes** | **yes** |
 | pass | **yes** | **yes** |
+
+Machine gate: `activation_ok` requires `p_differs`; `force_reject_ok` requires `f_differs`.
 
 Eligible counts differ from freeze B (244) because rejects change track state — further evidence the action path is live.
 

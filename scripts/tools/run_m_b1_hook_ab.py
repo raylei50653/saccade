@@ -677,11 +677,17 @@ def main() -> int:
             a1_hash = a1.get("aggregate_result_hash")
             p_differs = bool(a1_hash) and p_arm.get("aggregate_result_hash") != a1_hash
             f_differs = bool(a1_hash) and f_arm.get("aggregate_result_hash") != a1_hash
-            # Activation: must fire atom0, reject>0, prefer decision change.
+            # Activation: full arrow signal → atom → reject → downstream delta.
+            # Require p_differs so Stage 1b cannot pass on counters alone if
+            # rejects never change MOT output (same bar as F for result delta).
             activation_ok = (
-                p_elig > 0 and p_atom0 > 0 and p_rej > 0 and p_rej == p_atom0
+                p_elig > 0
+                and p_atom0 > 0
+                and p_rej > 0
+                and p_rej == p_atom0
+                and p_differs
             )
-            # Force-reject: every eligible pair rejected via atom0.
+            # Force-reject: every eligible pair rejected via atom0 + decision change.
             force_reject_ok = (
                 f_elig > 0 and f_rej == f_elig and f_atom0 >= f_rej and f_differs
             )
