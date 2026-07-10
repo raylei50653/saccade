@@ -1,14 +1,13 @@
 # M-B1 Stage 1 wire — default-off portable OR-tail hook
 
-<!-- doc-status: closed -->
+<!-- doc-status: active -->
 <!-- doc-promotion: none -->
 <!-- doc-date: 2026-07-10 -->
 <!-- doc-module: semantic -->
 
-**Role:** Stage 1 wire inventory (closed with e2e).  
-**Close:** [m_b1_hook_stage1_e2e_20260710.md](m_b1_hook_stage1_e2e_20260710.md)  
+**Role:** Stage 1 wire inventory.  
+**Evidence:** [m_b1_hook_stage1_e2e_20260710.md](m_b1_hook_stage1_e2e_20260710.md)  
 **Plan:** [m_b1_to_m_b1_5_two_stage_plan_20260710.md](m_b1_to_m_b1_5_two_stage_plan_20260710.md)  
-**Eng contract:** [m_b1_portable_or_tail_hook_contract_20260709.md](m_b1_portable_or_tail_hook_contract_20260709.md)  
 **Thread:** [m_b1_online_hook_20260709.md](../../../research/threads/m_b1_online_hook_20260709.md)
 
 ---
@@ -16,23 +15,18 @@
 ## Status
 
 ```text
-Stage 1: CLOSED
-composite: online_hook_wired__e2e_safe_vacuous
+Stage 1 overall: OPEN
+Stage 1a evaluation-entry: PASSED
+Stage 1b action-path (controls): PASSED
+frozen online relevance: NULL (support mismatch)
 
 online_hook:              wired_default_off
-e2e_validation:           done (A1≡B, Δ=0)
-e2e_safe_for_default_off: yes
-classification:           online_effect_neutral_but_safe__vacuous_online_thr
+freeze e2e B:             eligible=244 rejected=0 A1≡B
+control P/F:              atom fire + reject + decision change proven
+e2e_safe_for_default_off: yes (freeze null-effect only)
 production_preset:        unchanged
-
-Stage 1 code:        WIRED (default-off)
-offline event table: PASS (n_rejected=8721 = freeze FP)
-                     = offline pairs replay only
-                     ≠ online B-audit / runtime event table
-online/e2e A/B:      DONE — study m_b1_hook_ab_20260710T062345Z
-                     online eligible=244 rejected=0
-                     (support mismatch vs prod gates — not eng failure)
-Stage 2:             NOT STARTED — first do online B-audit, not thr re-fit
+online B-audit:           PENDING
+strict A0 identity:       NOT MET (soft 6/7)
 ```
 
 ---
@@ -47,7 +41,8 @@ Stage 2:             NOT STARTED — first do online B-audit, not thr re-fit
 | CLI (default-off) | `--research-portable-or-tail-policy` · `--research-portable-or-tail-audit` · env `SACCADE_RESEARCH_PORTABLE_OR_TAIL_POLICY` |
 | Pipeline wire | `src/saccade/perception/eval/pipeline.py` |
 | Native thr inject | `tracker_gpu.cu` `set_research_portable_or_tail` · propose-kernel OR-tail reject |
-| A/B runner | `scripts/tools/run_m_b1_hook_ab.py` |
+| A/B + Stage 1b control runner | `scripts/tools/run_m_b1_hook_ab.py` (`--run-action-path-controls`) |
+| Control fixtures | `scripts/tools/fixtures/m_b1_stage1/` (activation thr=0.2, force_reject thr=-1) |
 
 ### Flag semantics
 
@@ -109,15 +104,17 @@ uv run python scripts/tools/run_m_b1_hook_ab.py \
 
 ## Still required
 
-**Stage 1 eng milestone — CLOSED** (see [e2e close](m_b1_hook_stage1_e2e_20260710.md)).
+**Done:** Stage 1a entry + Stage 1b plumbing controls (see [e2e](m_b1_hook_stage1_e2e_20260710.md)).
 
-**Ordered next (post–Stage 1; separate PR):**
+**Still pending for Stage 1 overall CLOSED:**
 
-1. Online B-audit full event table for the 244 baseline-ok pairs.
-2. Only then redefine Stage 2 domain on \(D_{\text{online}}\) (not offline q85 re-fit).
-3. If FP mass insufficient → placement / ranking alternatives (plan + thread).
+1. Online B-audit full event table (zero/singleton/cofire/rejected/decision-changed).
+2. Strict A0 identity or rebased A0 stamp.
+3. Hook-on repeated-run hashes + honest runtime overhead rows.
 
-**Stop** — no thr re-fit / no preset in Stage 1 PRs.
+**After that / Stage 2:** redefine safe-negative on \(D_{\text{online}}\) — not offline q85 re-fit first.
+
+**Stop** — no production thr search / no preset in this PR.
 
 ---
 

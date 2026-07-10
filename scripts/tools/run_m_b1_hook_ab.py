@@ -1,26 +1,22 @@
 #!/usr/bin/env python3
-"""Stage 1 A/B runner scaffold: frozen portable OR-tail online hook.
+"""Stage 1 A/B + Stage 1b action-path control runner for portable OR-tail hook.
 
-Arms (plan §9):
-  A1 — new code, hook disabled (must match production baseline identity)
-  B  — frozen hook enabled
-  B-audit — hook + full event audit (runtime not mixed into policy overhead)
+Arms:
+  A1 — hook disabled (baseline)
+  B  — frozen offline policy on (may be vacuous online)
+  P  — Stage 1b activation control (atom0 thr=0.2 pre-specified; plumbing only)
+  F  — Stage 1b force-reject-all (atom0 thr=-1; plumbing only)
+  B-audit — still NOT implemented (fail-closed CLI)
 
-Does **not** search thresholds or remodel policy.
+Stage 1a = evaluation-entry (eligible counters + freeze B load).
+Stage 1b = action path (atom fire → reject → decision change under controls).
+Does **not** search production thr or remodel freeze candidate.
 
 Usage:
-  # Dry: loader + offline event table + summary skeleton (no e2e)
-  uv run python scripts/tools/run_m_b1_hook_ab.py \\
-    --policy out/signal_study/m_b1_repaired_eps0_loo_pass_20260709/portable_policy.json \\
-    --pairs out/signal_study/m_b1_smoke_20260709T092543Z/pairs.csv \\
-    --study-dir out/signal_study/m_b1_hook_ab_<stamp> \\
-    --offline-events-only
-
-  # Full online A/B (requires GPU + MOT17 data + rebuilt tracking ext):
-  uv run python scripts/tools/run_m_b1_hook_ab.py \\
+  bash scratch/ab_env.sh uv run python scripts/tools/run_m_b1_hook_ab.py \\
     --policy out/signal_study/m_b1_repaired_eps0_loo_pass_20260709/portable_policy.json \\
     --study-dir out/signal_study/m_b1_hook_ab_<stamp> \\
-    --run-e2e
+    --run-e2e --run-action-path-controls
 
 Contract:
   docs/modules/semantic/research/m_b1_to_m_b1_5_two_stage_plan_20260710.md §Stage 1
@@ -48,6 +44,7 @@ sys.path.insert(0, str(ROOT / "scripts" / "tools"))
 from saccade.perception.eval.portable_or_tail import (  # noqa: E402
     RELINK_DEBUG_HOST_INDEX,
     classify_e2e_status,
+    classify_stage1_milestones,
     derive_atom_summary,
     evaluate_policy,
     fire_class_counts,
@@ -58,6 +55,12 @@ from saccade.perception.eval.portable_or_tail import (  # noqa: E402
 
 # Trusted A0 (B2 bridge-on substrate) for hook-off identity checks.
 DEFAULT_A0_REF = Path("results/MOT17_eval_m_b2_bridge_on_20260709T094646Z")
+DEFAULT_ACTIVATION_POLICY = Path(
+    "scripts/tools/fixtures/m_b1_stage1/activation_control_policy.json"
+)
+DEFAULT_FORCE_REJECT_POLICY = Path(
+    "scripts/tools/fixtures/m_b1_stage1/force_reject_policy.json"
+)
 
 
 def _git_commit() -> str:
@@ -430,7 +433,31 @@ def main() -> int:
         action="store_true",
         help="Build offline full event table + summaries without e2e runs",
     )
-    ap.add_argument("--run-e2e", action="store_true", help="Run A1 vs B e2e arms")
+    ap.add_argument(
+        "--run-e2e",
+        action="store_true",
+        help="Run Stage 1a A1 (hook-off) vs B (frozen policy) e2e arms",
+    )
+    ap.add_argument(
+        "--run-action-path-controls",
+        action="store_true",
+        help=(
+            "Run Stage 1b plumbing arms P (activation thr=0.2) and F "
+            "(force-reject-all). Requires --run-e2e for A1 baseline compare."
+        ),
+    )
+    ap.add_argument(
+        "--activation-policy",
+        type=Path,
+        default=DEFAULT_ACTIVATION_POLICY,
+        help="Stage 1b activation-control policy JSON (control_arm=activation)",
+    )
+    ap.add_argument(
+        "--force-reject-policy",
+        type=Path,
+        default=DEFAULT_FORCE_REJECT_POLICY,
+        help="Stage 1b force-reject policy JSON (control_arm=force_reject)",
+    )
     ap.add_argument(
         "--sequences",
         default=None,
@@ -449,6 +476,8 @@ def main() -> int:
     )
     ap.add_argument("extra", nargs="*", help="Extra args forwarded to mot17.py")
     args = ap.parse_args()
+    if args.run_action_path_controls and not args.run_e2e:
+        ap.error("--run-action-path-controls requires --run-e2e (needs A1 baseline)")
 
     study = args.study_dir
     study.mkdir(parents=True, exist_ok=True)
@@ -503,7 +532,14 @@ def main() -> int:
     a0_identity: dict[str, Any] = {"compared": False, "identity_ok": None}
     metrics_delta: dict[str, float] = {}
     online_n_rejected = int(counts.get("n_rejected", 0))
-    hook_off_identity_ok = True  # offline-only path does not claim A1 identity
+    online_n_eligible = 0
+    a1_eq_b = False
+    online_vacuous = False
+    a0_soft_ok = False
+    a0_strict_ok: bool | None = None
+    activation_ok: bool | None = None
+    force_reject_ok: bool | None = None
+    control_meta: dict[str, Any] = {"ran": False}
 
     if args.run_e2e:
         a1_dir = study / "e2e_A1_hook_off"
@@ -531,37 +567,43 @@ def main() -> int:
         a1_eq_b = bool(a1.get("aggregate_result_hash")) and a1.get(
             "aggregate_result_hash"
         ) == b.get("aggregate_result_hash")
-        # Soft A0: allow classification when majority of result files match A0
-        # and at most one seq drifts (common with minor code drift on one scene).
         n_mis = len(a0_identity.get("mismatched") or [])
         n_cmp = int(a0_identity.get("n_compared") or 0)
-        a0_soft_ok = (
+        a0_strict_ok = (
+            bool(a0_identity.get("identity_ok"))
+            if a0_identity.get("compared")
+            else None
+        )
+        a0_soft_ok = bool(
             a0_identity.get("compared")
             and n_cmp > 0
             and n_mis <= 1
             and not a0_identity.get("missing_in_a0")
             and (n_cmp - n_mis) >= max(1, n_cmp - 1)
         )
-        if a0_identity.get("compared") and a0_identity.get("identity_ok") is True:
-            hook_off_identity_ok = True
-        elif a0_soft_ok:
-            hook_off_identity_ok = True
+        if a0_soft_ok and a0_strict_ok is not True:
             a0_identity["soft_identity_ok"] = True
             a0_identity["soft_identity_note"] = (
                 f"{n_cmp - n_mis}/{n_cmp} seq file hashes match A0; "
-                f"mismatched={a0_identity.get('mismatched')}"
+                f"mismatched={a0_identity.get('mismatched')}; "
+                "soft-pass only — not contract strict A1==A0 identity"
             )
-        elif a0_identity.get("compared") and a0_identity.get("identity_ok") is False:
-            hook_off_identity_ok = False
-        else:
-            hook_off_identity_ok = bool(a1.get("aggregate_result_hash"))
+        a0_identity["strict_identity_ok"] = a0_strict_ok
+        a0_identity["default_off_compatibility"] = (
+            "strict_pass"
+            if a0_strict_ok is True
+            else (
+                "soft_pass"
+                if a0_soft_ok
+                else ("fail" if a0_strict_ok is False else "not_compared")
+            )
+        )
 
         metrics_delta = _metrics_delta(a1.get("metrics"), b.get("metrics"))
         b_relink = (b.get("relink_debug") or {}).get("totals") or {}
         a1_relink = (a1.get("relink_debug") or {}).get("totals") or {}
         online_n_rejected = int(b_relink.get("hook_rejected") or 0)
         online_n_eligible = int(b_relink.get("hook_eligible") or 0)
-        # Vacuity signal: hook evaluates pairs but never rejects (thr above prod gates).
         online_vacuous = online_n_eligible > 0 and online_n_rejected == 0 and a1_eq_b
         e2e_meta = {
             "ran": True,
@@ -574,12 +616,99 @@ def main() -> int:
             "online_hook_counters_A1": a1_relink,
             "online_vacuous_policy": online_vacuous,
             "online_vacuous_note": (
-                "hook_eligible>0 but hook_rejected=0 and A1≡B; frozen thr sits "
-                "outside production bridge/height gates (Stage 1 observation only)"
+                "Stage 1a: evaluation-entry only — eligible>0 proves path is "
+                "entered; rejected=0 means freeze thr never activated rejection "
+                "(support mismatch). Does NOT prove action path."
                 if online_vacuous
                 else None
             ),
         }
+
+        if args.run_action_path_controls:
+            act_pol = load_portable_policy(
+                args.activation_policy, enforce_freeze_lock=True
+            )
+            fr_pol = load_portable_policy(
+                args.force_reject_policy, enforce_freeze_lock=True
+            )
+            _require_control = (
+                act_pol.control_arm == "activation"
+                and fr_pol.control_arm == "force_reject"
+            )
+            if not _require_control:
+                raise RuntimeError(
+                    "action-path control policies must declare control_arm="
+                    "activation|force_reject"
+                )
+            _write_json(
+                study / "activation_control_policy.snapshot.json",
+                snapshot_policy(act_pol),
+            )
+            _write_json(
+                study / "force_reject_policy.snapshot.json",
+                snapshot_policy(fr_pol),
+            )
+            p_arm = run_e2e_arm(
+                label="P_activation",
+                output_dir=study / "e2e_P_activation_control",
+                policy_path=act_pol.path,
+                audit=False,
+                audit_dir=None,
+                sequences=args.sequences,
+                extra_args=list(args.extra),
+            )
+            f_arm = run_e2e_arm(
+                label="F_force_reject",
+                output_dir=study / "e2e_F_force_reject",
+                policy_path=fr_pol.path,
+                audit=False,
+                audit_dir=None,
+                sequences=args.sequences,
+                extra_args=list(args.extra),
+            )
+            p_tot = (p_arm.get("relink_debug") or {}).get("totals") or {}
+            f_tot = (f_arm.get("relink_debug") or {}).get("totals") or {}
+            p_elig = int(p_tot.get("hook_eligible") or 0)
+            p_rej = int(p_tot.get("hook_rejected") or 0)
+            p_atom0 = int(p_tot.get("atom0_score_m_bridge") or 0)
+            f_elig = int(f_tot.get("hook_eligible") or 0)
+            f_rej = int(f_tot.get("hook_rejected") or 0)
+            f_atom0 = int(f_tot.get("atom0_score_m_bridge") or 0)
+            a1_hash = a1.get("aggregate_result_hash")
+            p_differs = bool(a1_hash) and p_arm.get("aggregate_result_hash") != a1_hash
+            f_differs = bool(a1_hash) and f_arm.get("aggregate_result_hash") != a1_hash
+            # Activation: must fire atom0, reject>0, prefer decision change.
+            activation_ok = (
+                p_elig > 0 and p_atom0 > 0 and p_rej > 0 and p_rej == p_atom0
+            )
+            # Force-reject: every eligible pair rejected via atom0.
+            force_reject_ok = (
+                f_elig > 0 and f_rej == f_elig and f_atom0 >= f_rej and f_differs
+            )
+            control_meta = {
+                "ran": True,
+                "P": p_arm,
+                "F": f_arm,
+                "P_counters": p_tot,
+                "F_counters": f_tot,
+                "activation_checks": {
+                    "hook_eligible": p_elig,
+                    "atom0": p_atom0,
+                    "hook_rejected": p_rej,
+                    "rejected_eq_atom0": p_rej == p_atom0,
+                    "result_differs_from_A1": p_differs,
+                    "pass": activation_ok,
+                },
+                "force_reject_checks": {
+                    "hook_eligible": f_elig,
+                    "atom0": f_atom0,
+                    "hook_rejected": f_rej,
+                    "rejected_eq_eligible": f_rej == f_elig,
+                    "result_differs_from_A1": f_differs,
+                    "pass": force_reject_ok,
+                },
+            }
+            e2e_meta["controls"] = control_meta
 
     # Metrics / classification
     ab_metrics = {
@@ -596,19 +725,33 @@ def main() -> int:
         "e2e": e2e_meta,
         "metrics_delta_B_minus_A1": metrics_delta if args.run_e2e else {},
         "a0_identity": a0_identity,
+        "controls": control_meta,
     }
     ab_hash = _write_json(study / "ab_metrics.json", ab_metrics)
 
     a1_sec = (e2e_meta.get("A1") or {}).get("seconds") if e2e_meta.get("ran") else None
     b_sec = (e2e_meta.get("B") or {}).get("seconds") if e2e_meta.get("ran") else None
+    p_sec = (
+        (control_meta.get("P") or {}).get("seconds")
+        if control_meta.get("ran")
+        else None
+    )
+    f_sec = (
+        (control_meta.get("F") or {}).get("seconds")
+        if control_meta.get("ran")
+        else None
+    )
     runtime = {
         "hook_disabled_overhead": None,
         "hook_enabled_policy_overhead": (
             (b_sec - a1_sec) if (a1_sec is not None and b_sec is not None) else None
         ),
         "audit_enabled_overhead": None,
-        "note": "Wall-clock arm seconds; not pure policy kernel overhead",
-        "e2e_seconds": {"A1": a1_sec, "B": b_sec},
+        "note": (
+            "Wall-clock arm seconds only; not pure policy kernel overhead. "
+            "hook_disabled/audit overhead and pure policy overhead: PENDING."
+        ),
+        "e2e_seconds": {"A1": a1_sec, "B": b_sec, "P": p_sec, "F": f_sec},
     }
     rt_hash = _write_json(study / "runtime.json", runtime)
 
@@ -619,6 +762,10 @@ def main() -> int:
         "hook_on_result_hash": (e2e_meta.get("B") or {}).get("aggregate_result_hash"),
         "a0_identity": a0_identity,
         "hook_on_repeated_run_hashes": [],
+        "note": (
+            "hook_on_repeated_run_hashes empty — repeated-run determinism PENDING; "
+            "not claimed as Stage 1 pass evidence"
+        ),
         "event_table_hash": ev_hash,
         "summary_artifact_hashes": {
             "atom_summary": atom_hash,
@@ -632,59 +779,58 @@ def main() -> int:
     }
     det_hash = _write_json(study / "determinism.json", det)
 
+    # --- Stage 1a / 1b milestone split (do not over-claim) ---
+    evaluation_entry_ok = bool(
+        args.run_e2e
+        and online_n_eligible > 0
+        and int(
+            (e2e_meta.get("online_hook_counters_A1") or {}).get("hook_eligible") or 0
+        )
+        == 0
+    )
+    milestones = classify_stage1_milestones(
+        evaluation_entry_ok=evaluation_entry_ok,
+        frozen_policy_null_effect=online_vacuous,
+        activation_action_path_ok=activation_ok,
+        force_reject_path_ok=force_reject_ok,
+        online_baudit_ok=False,
+        strict_a0_identity_ok=a0_strict_ok,
+        soft_a0_identity_ok=a0_soft_ok if args.run_e2e else None,
+        determinism_repeated_ok=False,
+        runtime_overhead_ok=False,
+    )
+
     if not args.run_e2e:
         status = "online_blocked__offline_events_ready"
         e2e_safe = "no"
     else:
-        # Use *online* reject count for classification (not offline pairs FP).
-        status = classify_e2e_status(
-            hook_off_identity_ok=hook_off_identity_ok,
-            n_rejected=online_n_rejected,
-            metrics_delta=metrics_delta,
-            determinism_ok=len(recon_errs) == 0,
-            runtime_ok=True,
-        )
-        if e2e_meta.get("online_vacuous_policy") and status in {
-            "online_effect_neutral_but_safe",
-            "e2e_safe_for_default_off",
-        }:
-            # Keep safe classification; tag vacuity for Stage 1 docs.
-            e2e_meta["classification_base"] = status
-            status = "online_effect_neutral_but_safe__vacuous_online_thr"
-        e2e_safe = (
-            "yes"
-            if status
-            in {
-                "e2e_safe_for_default_off",
-                "online_effect_neutral_but_safe",
-                "online_effect_neutral_but_safe__vacuous_online_thr",
-            }
-            else "no"
-        )
-        if (
-            status == "online_inconclusive"
-            and a0_identity.get("compared")
-            and a0_identity.get("identity_ok") is False
-            and not a0_identity.get("soft_identity_ok")
-        ):
-            status_relaxed = classify_e2e_status(
-                hook_off_identity_ok=True,
+        # Freeze-policy safety headline only (null effect under production gates).
+        # Uses soft A0 only for narrative; does not claim strict identity pass.
+        status = (
+            "online_effect_neutral_but_safe__vacuous_online_thr"
+            if online_vacuous
+            else classify_e2e_status(
+                hook_off_identity_ok=True,  # A1 ran; strict A0 tracked separately
                 n_rejected=online_n_rejected,
                 metrics_delta=metrics_delta,
                 determinism_ok=len(recon_errs) == 0,
+                runtime_ok=True,
             )
-            e2e_meta["a0_identity_note"] = (
-                "A1≠A0 file hash (likely code drift vs trusted B2 stamp); "
-                f"relaxed_classification={status_relaxed}"
+        )
+        e2e_safe = (
+            "yes"
+            if online_vacuous
+            or (
+                abs(metrics_delta.get("IDF1", 0.0)) < 1e-9
+                and abs(metrics_delta.get("AssA", 0.0)) < 1e-9
             )
-            e2e_meta["classification_strict"] = status
-            e2e_meta["classification_relaxed_ignore_a0"] = status_relaxed
-            if status_relaxed in {
-                "e2e_safe_for_default_off",
-                "online_effect_neutral_but_safe",
-            }:
-                status = "online_inconclusive__a0_hash_mismatch"
-                e2e_safe = "no"
+            else "no"
+        )
+        if activation_ok is True and force_reject_ok is True:
+            status = "stage1b_action_path_proven__stage1_overall_still_open"
+        elif activation_ok is False or force_reject_ok is False:
+            status = "stage1b_action_path_failed"
+            e2e_safe = "no" if force_reject_ok is False else e2e_safe
 
     summary = {
         "study_id": study.name,
@@ -694,12 +840,22 @@ def main() -> int:
         "policy_file_hash": policy.file_hash,
         "e2e_safe_for_default_off": e2e_safe,
         "classification": status,
+        "stage1_milestones": milestones,
+        "stage1_overall": milestones["stage1_overall"],
+        "stage1a_evaluation_entry": milestones["stage1a_evaluation_entry"],
+        "stage1b_action_path": milestones["stage1b_action_path"],
+        "headline_claim_allowed": milestones["headline_claim_allowed"],
         "offline_counts": counts,
         "reconciliation_errors": recon_errs,
         "parquet_written": parquet_ok,
         "metrics_delta_B_minus_A1": metrics_delta if args.run_e2e else {},
+        "online_hook_eligible": online_n_eligible if args.run_e2e else None,
         "online_hook_rejected": online_n_rejected if args.run_e2e else None,
-        "a0_identity_ok": a0_identity.get("identity_ok"),
+        "a0_identity_strict": a0_strict_ok,
+        "a0_identity_soft": a0_soft_ok if args.run_e2e else None,
+        "default_off_compatibility": a0_identity.get("default_off_compatibility"),
+        "activation_action_path_ok": activation_ok,
+        "force_reject_path_ok": force_reject_ok,
         "e2e": {
             "ran": e2e_meta.get("ran"),
             "A1_seconds": a1_sec,
@@ -707,38 +863,54 @@ def main() -> int:
             "A1_metrics": (e2e_meta.get("A1") or {}).get("metrics"),
             "B_metrics": (e2e_meta.get("B") or {}).get("metrics"),
             "online_hook_counters_B": e2e_meta.get("online_hook_counters_B"),
+            "online_hook_counters_A1": e2e_meta.get("online_hook_counters_A1"),
             "a0_identity": a0_identity,
-            "a0_identity_note": e2e_meta.get("a0_identity_note"),
-            "classification_relaxed_ignore_a0": e2e_meta.get(
-                "classification_relaxed_ignore_a0"
-            ),
+            "online_vacuous_policy": online_vacuous,
+            "controls": {
+                "ran": control_meta.get("ran"),
+                "activation_checks": control_meta.get("activation_checks"),
+                "force_reject_checks": control_meta.get("force_reject_checks"),
+            },
         },
         "forbidden_work": [
             "rule search",
             "threshold sweep",
             "zone/gap atoms",
             "production preset change",
+            "claim Stage 1 CLOSED from evaluation-entry alone",
         ],
     }
     sum_hash = _write_json(study / "summary.json", summary)
     a1_m = (e2e_meta.get("A1") or {}).get("metrics") or {}
     b_m = (e2e_meta.get("B") or {}).get("metrics") or {}
+    act_chk = control_meta.get("activation_checks") or {}
+    fr_chk = control_meta.get("force_reject_checks") or {}
     (study / "summary.md").write_text(
         "\n".join(
             [
                 f"# M-B1 Stage 1 hook A/B — `{study.name}`",
                 "",
-                f"- candidate_id: `{policy.candidate_id}`",
-                f"- policy_hash: `{policy.file_hash[:16]}…`",
-                f"- e2e_safe_for_default_off: **{e2e_safe}**",
+                f"- freeze candidate_id: `{policy.candidate_id}`",
+                f"- **stage1_overall: `{milestones['stage1_overall']}`**",
+                f"- stage1a_evaluation_entry: `{milestones['stage1a_evaluation_entry']}`",
+                f"- stage1b_action_path: `{milestones['stage1b_action_path']}`",
+                f"- frozen_policy_online_relevance: "
+                f"`{milestones['frozen_policy_online_relevance']}`",
+                f"- e2e_safe_for_default_off (freeze B null-effect): **{e2e_safe}**",
                 f"- classification: `{status}`",
-                f"- offline n_rejected: `{counts.get('n_rejected')}`",
-                f"- online hook_rejected (B): `{online_n_rejected if args.run_e2e else 'n/a'}`",
-                f"- A0 identity ok: `{a0_identity.get('identity_ok')}`",
-                f"- recon_errors: `{recon_errs}`",
-                f"- e2e ran: `{e2e_meta.get('ran')}`",
+                f"- default-off compatibility: "
+                f"`{a0_identity.get('default_off_compatibility')}` "
+                f"(strict={a0_strict_ok}, soft={a0_soft_ok})",
+                f"- online B eligible/rejected: `{online_n_eligible}/{online_n_rejected}`",
+                f"- activation control pass: `{activation_ok}` {act_chk}",
+                f"- force-reject control pass: `{force_reject_ok}` {fr_chk}",
+                f"- online B-audit: `{milestones['online_baudit']}`",
+                f"- determinism repeated-run: `{milestones['determinism_repeated_run']}`",
+                f"- runtime overhead contract: `{milestones['runtime_overhead']}`",
                 "",
-                "## Metrics (A1 hook-off vs B hook-on)",
+                f"**Allowed claim:** {milestones['headline_claim_allowed']}",
+                "",
+                "## Metrics (A1 hook-off vs B frozen)",
                 "",
                 f"- A1: IDF1={a1_m.get('IDF1')} AssA={a1_m.get('AssA')} "
                 f"HOTA={a1_m.get('HOTA')} MOTA={a1_m.get('MOTA')} IDs={a1_m.get('IDs')}",
@@ -746,7 +918,7 @@ def main() -> int:
                 f"HOTA={b_m.get('HOTA')} MOTA={b_m.get('MOTA')} IDs={b_m.get('IDs')}",
                 f"- Δ(B−A1): {metrics_delta}",
                 "",
-                "See `summary.json`, `ab_metrics.json`, and arm dirs for full tables.",
+                "See `summary.json`, `ab_metrics.json`, and arm dirs.",
                 "",
             ]
         ),

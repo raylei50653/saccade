@@ -1,188 +1,123 @@
-# M-B1 Stage 1 e2e — portable OR-tail hook A1 vs B
+# M-B1 Stage 1 e2e — portable OR-tail hook (1a entry + 1b controls)
 
-<!-- doc-status: closed -->
+<!-- doc-status: active -->
 <!-- doc-promotion: none -->
 <!-- doc-date: 2026-07-10 -->
 <!-- doc-module: semantic -->
 
-**Role:** Stage 1 **formal close** + e2e evidence (not production GO).  
-**Study:** [`out/signal_study/m_b1_hook_ab_20260710T062345Z/`](../../../../out/signal_study/m_b1_hook_ab_20260710T062345Z/)  
+**Role:** Stage 1 evidence with **honest milestone split** (not production GO).  
 **Thread:** [m_b1_online_hook_20260709.md](../../../research/threads/m_b1_online_hook_20260709.md)  
-**Plan:** [m_b1_to_m_b1_5_two_stage_plan_20260710.md](m_b1_to_m_b1_5_two_stage_plan_20260710.md)  
-**Wire:** [m_b1_hook_stage1_wire_20260710.md](m_b1_hook_stage1_wire_20260710.md)
+**Plan:** [m_b1_to_m_b1_5_two_stage_plan_20260710.md](m_b1_to_m_b1_5_two_stage_plan_20260710.md)
 
----
-
-## Stage 1 formal close
-
-```text
-Stage 1 engineering milestone: PASSED / CLOSED
-e2e_safe_for_default_off: yes
-classification: online_effect_neutral_but_safe__vacuous_online_thr
-production_preset: unchanged
-```
-
-> Result is **not** “policy had no effect therefore failed.”  
-> It cleanly shows: **the hook engineering chain is valid**, but the **discriminating domain of the offline policy has almost no intersection with the actual online candidate domain**.
-
-Evidence chain (complete):
-
-| check | result |
+| Study | Arms |
 |:--|:--|
-| default-off does not enter policy eval | A1 `hook_eligible=0` |
-| default-on evaluates candidates | B `hook_eligible=244` |
-| A1/B MOT result hashes | **identical** (all 7 seq) |
-| metrics Δ(B−A1) | **0** on IDF1/AssA/HOTA/MOTA/IDs/FP/FN |
-| production preset | unchanged |
+| [`m_b1_hook_ab_20260710T062345Z`](../../../../out/signal_study/m_b1_hook_ab_20260710T062345Z/) | A1 + freeze B only |
+| [`m_b1_hook_ab_20260710T064657Z_stage1b`](../../../../out/signal_study/m_b1_hook_ab_20260710T064657Z_stage1b/) | A1 + B + **P** + **F** controls |
 
-Therefore `e2e_safe_for_default_off=yes` **holds**.
+---
 
-### Three locked conclusions
-
-1. **Engineering safety** — hook-off invisible; hook-on does not damage baseline.
-2. **Online wiring** — eligible=244 proves policy path is live (not dead code / mis-indexed counters).
-3. **Offline hypothesis lacks online portability** — offline 8721 rejects mostly sit where production gates already exclude pairs; offline pruning power must not be read as online pruning power.
-
-### Conditional-domain / support mismatch
+## Milestone status (locked language)
 
 ```text
-D_offline = all recorded pairs
-
-D_online  = D_offline
-            ∩ { bdist ≤ 0.4 }
-            ∩ { 0.6 ≤ hr ≤ 1.7 }
-            ∩ { other baseline gates pass }
+stage1a_evaluation_entry:     PASSED
+frozen_policy_online_relevance: NULL_support_mismatch
+stage1b_action_path:          PASSED   (plumbing controls P/F)
+stage1b_eng_milestone:        PASSED
+online_baudit:                PENDING
+a0_identity:                  soft_pass / strict unresolved (6/7)
+determinism_repeated_run:     PENDING
+runtime_overhead:             PENDING
+stage1_overall:               OPEN
+e2e_safe_for_default_off:     yes  (freeze B null-effect only)
+production_preset:            unchanged
 ```
 
-q85 thresholds were estimated on \(D_{\text{offline}}\) then applied on the truncated \(D_{\text{online}}\). Thresholds falling outside online support is the **natural** outcome of that domain error — not merely “thr too big.”
+### Allowed claim
 
-### What Stage 1 does **not** authorize
+> Policy loading and **evaluation-entry** wiring are valid;  
+> online **rejection/action** chain is proven **under Stage 1b control arms**  
+> (not by freeze B alone).
 
-- Immediate thr re-fit on offline pairs
-- Claiming Stage 2 success from this null online reject rate
-- Production preset / default-on
+### Forbidden claim
 
-**PR boundary (this close):** wire + A/B runner + counters + Stage 1 evidence only — **no** online thr calibration.
+> “The full hook engineering chain is valid” / “Stage 1 CLOSED”  
+> from freeze A1/B vacuous results alone.
 
-### Next (ordered)
+---
 
-1. **Online full B-audit event table** for the 244 baseline-ok pairs (signals, GT/FP, atom margins, final association) — still pending; do this **before** thr re-fit.
-2. Stage 2 study object becomes:
+## Stage 1a — evaluation-entry (freeze A1 / B)
+
+| | IDF1 | AssA | HOTA | MOTA | IDs | FP |
+|:--|--:|--:|--:|--:|--:|--:|
+| A1 hook-off | 80.3 | 72.8 | 74.3 | 81.9 | 359 | 2067 |
+| B freeze on | 80.3 | 72.8 | 74.3 | 81.9 | 359 | 2067 |
+| Δ | 0 | 0 | 0 | 0 | 0 | 0 |
+
+| counter | A1 | B |
+|:--|--:|--:|
+| hook_eligible | **0** | **244** |
+| hook_rejected | 0 | **0** |
+| atom0..4 | 0 | **0** |
+
+- A1≡B MOT hashes (all 7 seq)
+- A0: **strict fail** (MOT17-04 differs); **soft 6/7**
+- Offline pairs replay n_rejected=8721 ≠ online pruning power
+
+**Proved:** candidate reaches evaluator; freeze thr never fires on \(D_{\text{online}}\).  
+**Not proved by B alone:** atom→reject→suppress→decision change.
+
+### Support mismatch
 
 ```text
-max_C  FP_removed(C | D_online)
-s.t.   GT_hurt(C | D_online) ≤ ε
+D_online = D_offline ∩ {bdist≤0.4} ∩ {0.6≤hr≤1.7} ∩ {other gates}
 ```
 
-   i.e. safe-negative mass **inside** the production-accepted conditional domain — not another all-pairs q85.
-
-3. If audit shows insufficient FP mass among the 244 → placement may be **too late** (safe negatives already consumed upstream). Then compare: keep placement + fine cal · move hook earlier · ranking/margin instead of reject.
+Freeze q85 thr lives outside online support → vacuous thr is domain error, not eng failure.
 
 ---
 
-## Headline (numeric)
+## Stage 1b — action-path plumbing controls
+
+Pre-specified (not metric-picked; not GT-safe; not candidate/preset):
+
+| Arm | control_arm | atom0 thr | others |
+|:--|:--|--:|:--|
+| **P** activation | `activation` | **0.2** (midpoint of bridge_px=0.4) | disabled (1e9) |
+| **F** force-reject | `force_reject` | **−1** | disabled |
+
+Fixtures: `scripts/tools/fixtures/m_b1_stage1/`
+
+### Results (`m_b1_hook_ab_20260710T064657Z_stage1b`)
+
+| check | P activation | F force-reject |
+|:--|--:|--:|
+| hook_eligible | 265 | 305 |
+| atom0 | **168** | **305** |
+| hook_rejected | **168** | **305** |
+| rejected == atom0 / eligible | yes | yes (rej==elig) |
+| result differs from A1 | **yes** | **yes** |
+| pass | **yes** | **yes** |
+
+Eligible counts differ from freeze B (244) because rejects change track state — further evidence the action path is live.
+
+**Proved under controls:**
 
 ```text
-e2e_safe_for_default_off: yes
-classification: online_effect_neutral_but_safe__vacuous_online_thr
-production_preset: unchanged
+signal > thr → atom counter ↑ → hook_rejected ↑ → candidate suppressed → MOT hash ≠ A1
 ```
 
-Default-off research hook is **safe** on MOT17-SDP 7-seq (`mamba_whole_graph_m`): A1≡B metrics and result hashes, zero online rejects.  
-Null online effect is explained by **domain support mismatch**, not a broken hook.
-
 ---
 
-## Arms
+## Still open (why stage1_overall = OPEN)
 
-| Arm | Policy | Preset |
-|:--|:--|:--|
-| A1 | hook **off** | `mamba_whole_graph_m` + SDP + double-buffer |
-| B | frozen `portable_policy.json` **on** | same |
-| A0 ref | `results/MOT17_eval_m_b2_bridge_on_20260709T094646Z` | trusted B2 stamp |
-
-Policy: `out/signal_study/m_b1_repaired_eps0_loo_pass_20260709/portable_policy.json`  
-`candidate_id = m_b1_repaired_eps0_loo_pass_20260709` · freeze hash lock enforced.
-
----
-
-## Metrics (7-seq SDP)
-
-| | IDF1 | AssA | HOTA | MOTA | IDs | FP | FN |
-|:--|--:|--:|--:|--:|--:|--:|--:|
-| A1 (hook off) | 80.3 | 72.8 | 74.3 | 81.9 | 359 | 2067 | 17895 |
-| B (hook on) | 80.3 | 72.8 | 74.3 | 81.9 | 359 | 2067 | 17895 |
-| Δ(B−A1) | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-
-Matches published B2 bridge-on headline (IDF1≈80.3 · AssA≈72.8 · IDs 359 · FP≈2067).
-
-**Result-file identity**
-
-- A1≡B aggregate MOT hash: **yes** (all 7 seq)
-- A0 strict hash: **no** (only `MOT17-04-SDP.txt` differs)
-- A0 soft identity: **yes** (6/7 seq hash match; metrics match B2 stamp)
-
----
-
-## Native counters (`get_relink_debug`)
-
-| | bridge_attempts | bridge_accepts | hook_eligible | hook_rejected | atom0..4 |
-|:--|--:|--:|--:|--:|--:|
-| A1 | 878 | 189 | **0** | 0 | 0 |
-| B | 878 | 189 | **244** | **0** | **0** |
-
-Hook-off path does not enter policy eval (eligible=0).  
-Hook-on evaluates 244 baseline-ok pairs and rejects **none**.
-
-Offline pairs replay (same study): `n_rejected=8721` on the offline universe — **not** interchangeable with online counters.
-
----
-
-## Why online thr is vacuous (support detail)
-
-Online propose kernel only reaches the OR-tail for pairs that already pass production gates:
-
-```text
-bdist <= bridge_px          # preset relink_bridge_px = 0.4 (h-normalized)
-hr ∈ [bridge_h_lo, bridge_h_hi]  # [0.6, 1.7]
-```
-
-Frozen offline thr (q85 of **all** offline pairs):
-
-| atom | thr | vs online gate |
-|:--|--:|:--|
-| `score_m_bridge` / bdist | **11.91** | already ≤ **0.4** → atom0 impossible |
-| `abs_log_h` | **1.35** | hr∈[0.6,1.7] ⇒ max\|log hr\|≈0.51 → atom1 impossible |
-| `dist_h` | **6.73** | constrained by bdist≤0.4 blend → unreachable |
-| `abs_ratio_m1` | **2.09** | max\|hr−1\|≈0.7 under height gate → atom3 impossible |
-| `resid_mean` | **14.04** | residual scale gated with bdist → unreachable |
-
-Offline FP mass (8721) lives **outside** \(D_{\text{online}}\). That is Stage 1’s scientific result, not a wiring failure.
-
----
-
-## Acceptance checklist (Stage 1 — CLOSED)
-
-| Item | Result |
+| Contract item | Status |
 |:--|:--|
-| Extension exposes `set_research_portable_or_tail` | yes |
-| A1 hook-off metrics ≈ B2 / soft A0 identity | yes (6/7 hash + metrics) |
-| B hook-on metrics + native counters | yes |
-| `e2e_safe_for_default_off` published | **yes** |
-| Domain diagnosis (support mismatch) recorded | **yes** |
-| Online full B-audit event table | **pending** (next ordered step; not Stage 1 blocker) |
-| Production preset change | **no** |
-| Stage 2 thr / domain remodel | **not started** (separate PR) |
+| Online full event table (zero/singleton/cofire/rejected/decision-changed) | PENDING |
+| Strict A1==A0 result-file identity | NOT MET (soft only) |
+| Hook-on repeated-run hashes | PENDING |
+| Hook-disabled / policy / audit runtime overhead (pure) | PENDING |
 
----
-
-## Must not (reaffirmed)
-
-- treat offline `n_rejected=8721` as online effect
-- silent default-on / preset flip
-- thr sweep / rule search as Stage 1 “fix”
-- claim production GO from this note
-- skip B-audit and jump to offline-style q85 re-fit
+PR may merge Stage 1a+1b eng evidence while overall stays **OPEN**.
 
 ---
 
@@ -192,6 +127,16 @@ Offline FP mass (8721) lives **outside** \(D_{\text{online}}\). That is Stage 1�
 bash scratch/ab_env.sh uv run python scripts/tools/run_m_b1_hook_ab.py \
   --policy out/signal_study/m_b1_repaired_eps0_loo_pass_20260709/portable_policy.json \
   --pairs out/signal_study/m_b1_smoke_20260709T092543Z/pairs.csv \
-  --study-dir out/signal_study/m_b1_hook_ab_<stamp> \
-  --run-e2e
+  --study-dir out/signal_study/m_b1_hook_ab_<stamp>_stage1b \
+  --run-e2e --run-action-path-controls
 ```
+
+---
+
+## Must not
+
+- claim Stage 1 CLOSED from freeze vacuous A1/B
+- thr search as Stage 1 fix
+- soft A0 → silent strict identity
+- production preset / default-on
+- treat control thr=0.2 as production candidate

@@ -15,14 +15,15 @@
 ### Main line (locked)
 
 ```text
-Stage 1 CLOSED
-  eng safety + wiring OK
-  offline rule failed online relevance (support mismatch), not safety
-  e2e_safe_for_default_off = yes
+Stage 1 overall OPEN
+  Stage 1a evaluation-entry: PASSED
+  freeze online relevance: NULL (support mismatch)
+  Stage 1b action-path (plumbing controls): PASSED
+  e2e_safe_for_default_off (freeze null-effect): yes
+  online B-audit / strict A0 / determinism: PENDING
 preset 不動
-next = online B-audit event table (redefine D_online)
-  NOT immediate thr re-fit / offline q85 again
-Stage 2 = separate PR only
+next for Stage 1 close = B-audit + strict A0 + determinism rows
+Stage 2 thr domain work = separate PR; not offline q85 first
 ```
 
 ### Development goal (one contract sentence)
@@ -45,23 +46,27 @@ production_preset: unchanged  (always, for this task)
 ## 0. Current status (locked)
 
 ```text
-Stage 1: CLOSED
+Stage 1 overall: OPEN
 
 m_b1_repaired_eps0_loo_pass_20260709
   = LOO_pass_region_candidate
   = offline_smoke_pass
-  = online_hook_wired__e2e_safe_vacuous
-  = e2e_safe_for_default_off: yes
+  = Stage 1a evaluation-entry PASSED
+  = freeze online relevance NULL (support mismatch)
+  = Stage 1b action-path PASSED under control arms only
+  = e2e_safe_for_default_off: yes  (freeze B null-effect)
   ≠ production preset
-  ≠ online reject power (support mismatch D_offline vs D_online)
+  ≠ full Stage 1 CLOSED
 ```
 
 | layer | result |
 |:--|:--|
 | offline replay | GT_hurt=0 · FP=8721 · freeze-aligned |
-| online / e2e | A1≡B Δ0 · elig=244 / rej=0 · [e2e close](m_b1_hook_stage1_e2e_20260710.md) |
-| Stage 1 verdict | eng milestone **passed**; portable rule **not online-relevant**; **safe** |
-| next | online B-audit for 244 pairs → redefine Stage 2 on \(D_{\text{online}}\) |
+| Stage 1a | A1 eligible=0 · B eligible=244 · freeze rej=0 · A1≡B |
+| Stage 1b controls | P atom0=168 rej=168 · F rej=elig=305 · decision Δ vs A1 |
+| A0 identity | soft 6/7 · **strict not met** |
+| B-audit / determinism / runtime contract | **PENDING** |
+| next for overall close | online full event table + strict A0 + repeated-run hashes |
 
 ---
 

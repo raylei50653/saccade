@@ -1,0 +1,72 @@
+{
+  "control_arm": "force_reject",
+  "candidate_id": "stage1b_force_reject_all",
+  "eps": 0.0,
+  "schema_version": "portable_or_tail_v1",
+  "role": "stage1b_plumbing_only",
+  "description": "Test-only Stage 1b control. Not a freeze candidate, not GT-safe, not production. Pre-specified thr; no metric search.",
+  "clauses": [
+    [
+      "score_m_bridge:tail_q85"
+    ],
+    [
+      "abs_log_h:tail_q85"
+    ],
+    [
+      "dist_h:tail_q85"
+    ],
+    [
+      "abs_ratio_m1:tail_q85"
+    ],
+    [
+      "resid_mean:tail_q85"
+    ]
+  ],
+  "atom_specs": {
+    "score_m_bridge:tail_q85": {
+      "atom_id": "score_m_bridge:tail_q85",
+      "signal": "score_m_bridge",
+      "kind": "control",
+      "op": ">",
+      "thr": -1.0,
+      "role": "plumbing",
+      "description": "score_m_bridge > -1 (all eligible fire atom0)"
+    },
+    "abs_log_h:tail_q85": {
+      "atom_id": "abs_log_h:tail_q85",
+      "signal": "abs_log_h",
+      "kind": "control",
+      "op": ">",
+      "thr": 1000000000.0,
+      "role": "plumbing",
+      "description": "disabled unreachable thr"
+    },
+    "dist_h:tail_q85": {
+      "atom_id": "dist_h:tail_q85",
+      "signal": "dist_h",
+      "kind": "control",
+      "op": ">",
+      "thr": 1000000000.0,
+      "role": "plumbing",
+      "description": "disabled unreachable thr"
+    },
+    "abs_ratio_m1:tail_q85": {
+      "atom_id": "abs_ratio_m1:tail_q85",
+      "signal": "abs_ratio_m1",
+      "kind": "control",
+      "op": ">",
+      "thr": 1000000000.0,
+      "role": "plumbing",
+      "description": "disabled unreachable thr"
+    },
+    "resid_mean:tail_q85": {
+      "atom_id": "resid_mean:tail_q85",
+      "signal": "resid_mean",
+      "kind": "control",
+      "op": ">",
+      "thr": 1000000000.0,
+      "role": "plumbing",
+      "description": "disabled unreachable thr"
+    }
+  }
+}

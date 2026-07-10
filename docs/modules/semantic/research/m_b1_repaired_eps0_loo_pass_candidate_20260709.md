@@ -11,18 +11,17 @@ candidate_id:       m_b1_repaired_eps0_loo_pass_20260709
 lifecycle_status:   candidate_only / pre-production research
 validation_status:  LOO_pass_region_candidate
 offline_smoke:      pass  (GT0 · FP=8721 · freeze-aligned)
-Stage 1:            CLOSED
-online_hook:        wired_default_off
-e2e:                A1≡B Δ0 · eligible=244 · rejected=0
-e2e_safe_for_default_off: yes
-classification:     online_effect_neutral_but_safe__vacuous_online_thr
-diagnosis:          support mismatch D_offline vs D_online
-                    (failed online relevance, not safety)
+Stage 1 overall:    OPEN
+Stage 1a:           evaluation-entry PASSED
+online freeze B:    A1≡B · elig=244 · rej=0 · relevance NULL
+Stage 1b controls:  action-path PASSED (plumbing only; not this freeze thr)
+e2e_safe_for_default_off: yes  (freeze null-effect)
 production_preset:  unchanged
 ≠ production gate
 ```
 
-Stage 1 close: [e2e note](m_b1_hook_stage1_e2e_20260710.md) · study [`m_b1_hook_ab_20260710T062345Z`](../../../../out/signal_study/m_b1_hook_ab_20260710T062345Z/).
+Evidence: [e2e note](m_b1_hook_stage1_e2e_20260710.md) ·  
+[`m_b1_hook_ab_20260710T064657Z_stage1b`](../../../../out/signal_study/m_b1_hook_ab_20260710T064657Z_stage1b/).
 
 > **Phase hub / maintenance:** [m_b1_offline_safe_region_phase_20260709.md](m_b1_offline_safe_region_phase_20260709.md) — intermediate method notes are closed as-of; do not re-edit their verdicts when working the hook.
 

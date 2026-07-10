@@ -9,16 +9,23 @@ doc-module: semantic
 
 > **Role:** Stage 1 + Stage 2 engineering contract (single source).  
 > **Navigation:** [m_b1 online hook thread](../../../research/threads/m_b1_online_hook_20260709.md) · Stage 1 eng task [portable OR-tail hook contract](m_b1_portable_or_tail_hook_contract_20260709.md).  
-> **Stage 1 status (2026-07-10): CLOSED** — eng milestone passed; e2e_safe=yes; offline rule failed **online relevance** (support mismatch), not safety. Close note: [m_b1_hook_stage1_e2e_20260710.md](m_b1_hook_stage1_e2e_20260710.md).  
+> **Stage 1 status (2026-07-10): overall OPEN**  
+> · 1a evaluation-entry **PASSED** · freeze online relevance **NULL**  
+> · 1b action-path **PASSED** under plumbing controls (not freeze B alone)  
+> · B-audit / strict A0 / determinism **PENDING**  
+> Evidence: [m_b1_hook_stage1_e2e_20260710.md](m_b1_hook_stage1_e2e_20260710.md).  
 > **Not evidence:** numbers live in freeze card / ledger / study dirs.
 
 0. Purpose
 
 下一步工作分成兩個嚴格分離的階段：
 
-Stage 1 — M-B1 frozen hook validation  **← CLOSED 2026-07-10**
-  驗證 frozen hard OR 是否能安全接入 online/e2e
-  （已答：安全接入成立；offline thr 對 D_online 無交集 / 無 reject 力）
+Stage 1 — M-B1 frozen hook + action-path validation  **← overall OPEN**
+  1a: policy load + evaluation-entry (eligible counters)  **PASSED**
+  freeze B: online relevance NULL (support mismatch)      **observed**
+  1b: plumbing controls prove signal→atom→reject→decision **PASSED**
+  still required for Stage 1 CLOSED: online full event table,
+  strict A0 identity, repeated-run determinism, runtime overhead rows
 
 Stage 2 — M-B1.5 conditional-domain safe-negative audit  **← not started**
   在 production baseline 已接受的條件域 D_online 內，
@@ -27,13 +34,10 @@ Stage 2 — M-B1.5 conditional-domain safe-negative audit  **← not started**
 
 核心原則：
 
-先驗證 frozen policy 的 online coupling。  ← Stage 1 done
-再在 D_online 上研究 safe-negative / implication。  
-進入 Stage 2 前先完成 **online full B-audit event table**（244 baseline-ok pairs），不要立刻 thr re-fit。
-
-不得在 Stage 1 重新搜尋或修改 policy。
-
-不得在 Stage 2 直接修改 production preset 或取代 Stage 1 frozen hook。
+不得把「eligible>0 且 freeze 未 reject」寫成「hook 全鏈已驗證」。
+1a ≠ 1b ≠ Stage 1 CLOSED。
+不得在 Stage 1 對 production freeze 做 thr search；plumbing control thr 是預先固定的測試臂。
+不得在 Stage 2 直接修改 production preset。
 
 ---
 
@@ -544,7 +548,9 @@ Stage 2 — M-B1.5 parameterized implication and safe-region audit
 
 14. Stage 2 entry condition
 
-Stage 1 is **CLOSED** (2026-07-10). Stage 2 starts independently.
+Stage 1 overall remains **OPEN** until B-audit / strict A0 / determinism land.
+Stage 1b action-path eng may be treated as **enough to start** domain
+discussion on \(D_{\text{online}}\), but Stage 2 PRs stay separate.
 
 不得和 Stage 1 hook implementation 放在同一個 policy-remodeling PR。
 

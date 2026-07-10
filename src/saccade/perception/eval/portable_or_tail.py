@@ -66,6 +66,17 @@ _THR_RTOL = 0.0
 # Online B-audit (full candidate-event export) is NOT implemented.
 ONLINE_BAUDIT_IMPLEMENTED = False
 
+# Stage 1b plumbing controls (not production / not freeze candidates).
+# Explicit control_arm in JSON skips freeze thr/hash lock so we can prove
+# signal → atom → reject → decision change without Stage 2 thr search.
+ALLOWED_CONTROL_ARMS: frozenset[str] = frozenset({"activation", "force_reject"})
+# atom0 midpoint of production bridge_px=0.4 — pre-specified, not metric-picked.
+ACTIVATION_CONTROL_ATOM0_THR = 0.2
+# Unreachable thr for non-tested atoms on control arms.
+CONTROL_DISABLED_THR = 1.0e9
+# force_reject: every finite score_m_bridge / bdist > -1 fires atom0.
+FORCE_REJECT_ATOM0_THR = -1.0
+
 
 class PortablePolicyError(ValueError):
     """Fail-closed portable policy validation error."""
@@ -90,7 +101,7 @@ class PortableAtom:
 
 @dataclass(frozen=True)
 class PortablePolicy:
-    """Frozen hard-OR of singleton tail atoms."""
+    """Hard-OR of singleton tail atoms (freeze or Stage 1b control)."""
 
     path: Path
     file_hash: str
@@ -102,11 +113,16 @@ class PortablePolicy:
     thr_vector: tuple[float, ...]  # length 5, ORDERED_ATOM_IDS order
     schema_version: str = "portable_or_tail_v1"
     freeze_locked: bool = False
+    control_arm: str | None = None  # None | activation | force_reject
     raw: dict[str, Any] = field(repr=False, default_factory=dict)
 
     @property
     def n_atoms(self) -> int:
         return len(self.atoms)
+
+    @property
+    def is_control_arm(self) -> bool:
+        return self.control_arm is not None
 
 
 def _sha256_file(path: Path) -> str:
@@ -193,8 +209,11 @@ def load_portable_policy(
     Parameters
     ----------
     enforce_freeze_lock:
-        When True (default, online Stage 1 path): lock thr vector, file hash,
-        eps, and op='>' to the freeze constants; CUDA ABI alignment required.
+        When True (default, online Stage 1 freeze path): lock thr vector, file
+        hash, eps, and op='>' to the freeze constants; CUDA ABI alignment
+        required. **Exception:** JSON with explicit ``control_arm`` in
+        ``ALLOWED_CONTROL_ARMS`` skips freeze thr/hash lock (Stage 1b plumbing
+        only; never a production candidate).
         Set False only for offline research tools / unit tests with synthetic thr.
     """
     p = Path(path).expanduser().resolve()
@@ -216,9 +235,19 @@ def load_portable_policy(
         "missing atom_specs",
     )
 
-    candidate_id = resolve_candidate_id(
-        raw, p, expected_candidate_id=expected_candidate_id
-    )
+    control_raw = raw.get("control_arm")
+    control_arm: str | None = None
+    if control_raw is not None and str(control_raw).strip() != "":
+        control_arm = str(control_raw).strip()
+        _require(
+            control_arm in ALLOWED_CONTROL_ARMS,
+            f"unknown control_arm {control_arm!r}; "
+            f"allowed={sorted(ALLOWED_CONTROL_ARMS)}",
+        )
+
+    # Control arms carry their own candidate_id; do not force freeze id.
+    cid_expected = None if control_arm is not None else expected_candidate_id
+    candidate_id = resolve_candidate_id(raw, p, expected_candidate_id=cid_expected)
 
     clauses: list[tuple[str, ...]] = []
     for i, cl in enumerate(clauses_raw):
@@ -268,9 +297,17 @@ def load_portable_policy(
                 and "gap" not in aid,
                 f"{aid}: zone/gap atoms banned in Stage 1 (kind={kind!r})",
             )
-            _require(
-                kind in {"tail_q", "tail"}, f"{aid}: expected tail kind, got {kind!r}"
-            )
+            if control_arm is None:
+                _require(
+                    kind in {"tail_q", "tail"},
+                    f"{aid}: expected tail kind, got {kind!r}",
+                )
+            else:
+                # Control arms may use kind=control / thr_fixed plumbing labels.
+                _require(
+                    kind in {"tail_q", "tail", "control", "thr_fixed"},
+                    f"{aid}: control arm kind {kind!r} not allowed",
+                )
         thr_hi = spec.get("thr_hi")
         atom = PortableAtom(
             atom_id=aid,
@@ -293,7 +330,32 @@ def load_portable_policy(
     file_hash = _sha256_file(p)
     freeze_locked = False
 
-    if enforce_freeze_lock:
+    if control_arm is not None:
+        # Stage 1b plumbing: validate intentional thr shapes; never freeze-lock.
+        freeze_locked = False
+        _require(
+            abs(eps - FROZEN_EPS) <= _THR_ATOL,
+            f"control_arm eps must be 0, got {eps}",
+        )
+        if control_arm == "activation":
+            _require(
+                _thr_close(thr_vector[0], ACTIVATION_CONTROL_ATOM0_THR),
+                f"activation control atom0 thr must be "
+                f"{ACTIVATION_CONTROL_ATOM0_THR}, got {thr_vector[0]}",
+            )
+            for i in range(1, 5):
+                _require(
+                    thr_vector[i] >= CONTROL_DISABLED_THR * 0.5,
+                    f"activation control atom{i} must be disabled "
+                    f"(thr>={CONTROL_DISABLED_THR * 0.5}), got {thr_vector[i]}",
+                )
+        elif control_arm == "force_reject":
+            _require(
+                thr_vector[0] <= FORCE_REJECT_ATOM0_THR + 1e-9,
+                f"force_reject atom0 thr must be <= {FORCE_REJECT_ATOM0_THR}, "
+                f"got {thr_vector[0]}",
+            )
+    elif enforce_freeze_lock:
         freeze_locked = True
         _require(
             candidate_id == EXPECTED_CANDIDATE_ID,
@@ -330,6 +392,7 @@ def load_portable_policy(
         eps=eps,
         thr_vector=thr_vector,
         freeze_locked=freeze_locked,
+        control_arm=control_arm,
         raw=raw,
     )
 
@@ -437,6 +500,7 @@ def snapshot_policy(policy: PortablePolicy) -> dict[str, Any]:
         "policy_path": str(policy.path),
         "policy_file_hash": policy.file_hash,
         "freeze_locked": policy.freeze_locked,
+        "control_arm": policy.control_arm,
         "frozen_policy_sha256": FROZEN_POLICY_SHA256,
         "eps": policy.eps,
         "ordered_atom_ids": list(ORDERED_ATOM_IDS),
@@ -457,6 +521,93 @@ def snapshot_policy(policy: PortablePolicy) -> dict[str, Any]:
             }
             for a in policy.atoms
         ],
+    }
+
+
+def classify_stage1_milestones(
+    *,
+    evaluation_entry_ok: bool,
+    frozen_policy_null_effect: bool,
+    activation_action_path_ok: bool | None,
+    force_reject_path_ok: bool | None,
+    online_baudit_ok: bool = False,
+    strict_a0_identity_ok: bool | None = None,
+    soft_a0_identity_ok: bool | None = None,
+    determinism_repeated_ok: bool = False,
+    runtime_overhead_ok: bool = False,
+) -> dict[str, Any]:
+    """Split Stage 1a evaluation-entry vs Stage 1b action-path claims.
+
+    Does **not** promote soft A0 identity or vacuous freeze-B into full Stage 1
+    CLOSED. Full Stage 1 remains OPEN until action-path (+ preferred B-audit /
+    strict A0 / determinism) land.
+    """
+    stage1a = "PASSED" if evaluation_entry_ok else "FAILED"
+    frozen_relevance = (
+        "NULL_support_mismatch"
+        if frozen_policy_null_effect
+        else ("UNKNOWN" if evaluation_entry_ok else "NOT_EVALUATED")
+    )
+    if activation_action_path_ok is None and force_reject_path_ok is None:
+        action = "NOT_ACTIVATED"
+    elif activation_action_path_ok is False or force_reject_path_ok is False:
+        action = "FAILED"
+    elif activation_action_path_ok is True and force_reject_path_ok is True:
+        action = "PASSED"
+    elif activation_action_path_ok is True or force_reject_path_ok is True:
+        action = "PARTIAL"
+    else:
+        action = "NOT_ACTIVATED"
+
+    baudit = "PASSED" if online_baudit_ok else "PENDING"
+    if strict_a0_identity_ok is True:
+        a0 = "strict_pass"
+    elif soft_a0_identity_ok is True:
+        a0 = "soft_pass_strict_unresolved"
+    elif strict_a0_identity_ok is False:
+        a0 = "strict_fail"
+    else:
+        a0 = "not_compared"
+
+    # Full Stage 1 closed only when evaluation-entry + both action controls pass.
+    # B-audit / strict A0 / determinism remain separate contract rows.
+    stage1_overall = (
+        "CLOSED"
+        if (
+            stage1a == "PASSED"
+            and action == "PASSED"
+            and online_baudit_ok
+            and strict_a0_identity_ok is True
+            and determinism_repeated_ok
+            and runtime_overhead_ok
+        )
+        else "OPEN"
+    )
+    # Engineering milestone for "action-path proven" without full audit freeze.
+    stage1b_eng = (
+        "PASSED"
+        if stage1a == "PASSED" and action == "PASSED"
+        else ("PARTIAL" if action == "PARTIAL" else "OPEN")
+    )
+    return {
+        "stage1a_evaluation_entry": stage1a,
+        "frozen_policy_online_relevance": frozen_relevance,
+        "stage1b_action_path": action,
+        "stage1b_eng_milestone": stage1b_eng,
+        "online_baudit": baudit,
+        "a0_identity": a0,
+        "determinism_repeated_run": "PASSED" if determinism_repeated_ok else "PENDING",
+        "runtime_overhead": "PASSED" if runtime_overhead_ok else "PENDING",
+        "stage1_overall": stage1_overall,
+        "headline_claim_allowed": (
+            "policy loading and evaluation-entry wiring are valid; "
+            "online rejection/action chain "
+            + (
+                "proven under control arms"
+                if action == "PASSED"
+                else "remains unactivated or incomplete e2e"
+            )
+        ),
     }
 
 

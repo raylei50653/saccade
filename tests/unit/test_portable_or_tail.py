@@ -9,7 +9,10 @@ import numpy as np
 import pytest
 
 from saccade.perception.eval.portable_or_tail import (
+    ACTIVATION_CONTROL_ATOM0_THR,
+    CONTROL_DISABLED_THR,
     EXPECTED_CANDIDATE_ID,
+    FORCE_REJECT_ATOM0_THR,
     FROZEN_POLICY_SHA256,
     FROZEN_THR_VECTOR,
     ORDERED_ATOM_IDS,
@@ -17,6 +20,7 @@ from saccade.perception.eval.portable_or_tail import (
     PortablePolicyError,
     STAGE1_OP,
     classify_e2e_status,
+    classify_stage1_milestones,
     evaluate_policy,
     evaluate_policy_row,
     fire_class_counts,
@@ -26,6 +30,8 @@ from saccade.perception.eval.portable_or_tail import (
     resolve_policy_path_from_env,
     snapshot_policy,
 )
+
+CONTROL_FIX_DIR = Path("scripts/tools/fixtures/m_b1_stage1")
 
 FREEZE = Path(
     "out/signal_study/m_b1_repaired_eps0_loo_pass_20260709/portable_policy.json"
@@ -266,3 +272,87 @@ def test_classify_e2e_status() -> None:
         )
         == "online_unsafe"
     )
+
+
+def test_classify_stage1_milestones_entry_only_keeps_overall_open() -> None:
+    m = classify_stage1_milestones(
+        evaluation_entry_ok=True,
+        frozen_policy_null_effect=True,
+        activation_action_path_ok=None,
+        force_reject_path_ok=None,
+        soft_a0_identity_ok=True,
+        strict_a0_identity_ok=False,
+    )
+    assert m["stage1a_evaluation_entry"] == "PASSED"
+    assert m["stage1b_action_path"] == "NOT_ACTIVATED"
+    assert m["stage1_overall"] == "OPEN"
+    assert m["a0_identity"] == "soft_pass_strict_unresolved"
+    assert "evaluation-entry" in m["headline_claim_allowed"]
+    assert "unactivated" in m["headline_claim_allowed"]
+
+
+def test_classify_stage1_milestones_action_path_still_not_full_close() -> None:
+    m = classify_stage1_milestones(
+        evaluation_entry_ok=True,
+        frozen_policy_null_effect=True,
+        activation_action_path_ok=True,
+        force_reject_path_ok=True,
+        online_baudit_ok=False,
+        strict_a0_identity_ok=False,
+        soft_a0_identity_ok=True,
+    )
+    assert m["stage1b_action_path"] == "PASSED"
+    assert m["stage1b_eng_milestone"] == "PASSED"
+    # Full Stage 1 still open without B-audit + strict A0 + determinism.
+    assert m["stage1_overall"] == "OPEN"
+
+
+@pytest.mark.skipif(
+    not (CONTROL_FIX_DIR / "activation_control_policy.json").is_file(),
+    reason="activation control fixture missing",
+)
+def test_load_activation_control_skips_freeze_lock() -> None:
+    pol = load_portable_policy(
+        CONTROL_FIX_DIR / "activation_control_policy.json",
+        enforce_freeze_lock=True,
+    )
+    assert pol.control_arm == "activation"
+    assert pol.freeze_locked is False
+    assert pol.thr_vector[0] == ACTIVATION_CONTROL_ATOM0_THR
+    assert all(t >= CONTROL_DISABLED_THR * 0.5 for t in pol.thr_vector[1:])
+    # In-domain synthetic: thr=0.2 fires on score 0.3
+    out = evaluate_policy_row(
+        pol,
+        {
+            "score_m_bridge": 0.3,
+            "abs_log_h": 0.0,
+            "dist_h": 0.0,
+            "abs_ratio_m1": 0.0,
+            "resid_mean": 0.0,
+        },
+    )
+    assert out["reject"] is True
+
+
+@pytest.mark.skipif(
+    not (CONTROL_FIX_DIR / "force_reject_policy.json").is_file(),
+    reason="force_reject fixture missing",
+)
+def test_load_force_reject_control() -> None:
+    pol = load_portable_policy(
+        CONTROL_FIX_DIR / "force_reject_policy.json",
+        enforce_freeze_lock=True,
+    )
+    assert pol.control_arm == "force_reject"
+    assert pol.thr_vector[0] == FORCE_REJECT_ATOM0_THR
+    out = evaluate_policy(
+        pol,
+        {
+            "score_m_bridge": np.array([0.0, 0.1, 0.5]),
+            "abs_log_h": np.zeros(3),
+            "dist_h": np.zeros(3),
+            "abs_ratio_m1": np.zeros(3),
+            "resid_mean": np.zeros(3),
+        },
+    )
+    assert bool(out["reject"].all())
