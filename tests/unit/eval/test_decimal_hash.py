@@ -1,7 +1,12 @@
 import pytest
 
 from saccade.perception.eval.decimal_hash import canonicalize_mot_lines, decimal_hash
-from saccade.perception.eval._decimal_hash_tools import Run, diagnose
+from saccade.perception.eval._decimal_hash_tools import (
+    Run,
+    compare_chain_to_first_occurrence,
+    diagnose,
+    verdict_from_comparisons,
+)
 from scripts.tools.check_continuous_decimal_hash import _parse_args
 
 
@@ -105,3 +110,19 @@ def test_cpp_threads_is_rejected_before_evaluator(monkeypatch, flag: str) -> Non
 
     with pytest.raises(SystemExit):
         _parse_args()
+
+
+def test_compare_chain_enriches_first_occurrence_artifacts() -> None:
+    first = _records("1,1,1.00,2.00,3.00,4.00,0.5000")
+    second = _records("1,1,1.01,2.00,3.00,4.00,0.5000")
+    runs = [
+        Run(1, "MOT17-04-SDP", tuple(first), decimal_hash(first)),
+        Run(2, "MOT17-04-SDP", tuple(second), decimal_hash(second)),
+    ]
+    comparisons = compare_chain_to_first_occurrence(runs)
+
+    assert comparisons[0]["sequence_occurrence"] == 1
+    assert comparisons[1]["sequence_occurrence"] == 2
+    assert comparisons[1]["reference_hash"] == runs[0].decimal_hash
+    assert comparisons[1]["observed_hash"] == runs[1].decimal_hash
+    assert verdict_from_comparisons(comparisons) == "decimal_divergence"

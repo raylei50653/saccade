@@ -152,10 +152,10 @@ else
     ok "no C++ changes — build check skipped"
 fi
 
-# ── 7. determinism-sensitive 2×2 matrix ───────────────────────────────────────
+# ── 7. determinism-sensitive continuous chain ────────────────────────────────
 echo "── determinism-sensitive path check"
 if [[ "${SKIP_DETERMINISM_PREPUSH:-0}" == "1" ]]; then
-    warn "SKIP_DETERMINISM_PREPUSH=1 — determinism matrix SKIPPED"
+    warn "SKIP_DETERMINISM_PREPUSH=1 — determinism chain SKIPPED"
 else
     DETERM_OUTPUT=""
     set +e
@@ -166,14 +166,14 @@ else
         fail "determinism path detection failed (exit $DETERM_RC)"
         ERRORS=$((ERRORS + 1))
     elif [[ $DETERM_RC -eq 0 ]] && [[ "$DETERM_OUTPUT" == "determinism" ]]; then
-        echo "── 2×2 determinism matrix"
+        echo "── routine continuous chain (A,A,B,A,B,B)"
         echo "    (SKIP_DETERMINISM_PREPUSH=1 to skip)"
-        if uv run python scripts/tools/check_decimal_matrix_2x2.py \
+        if uv run python scripts/tools/check_decimal_chain_routine.py \
             --preset mamba_whole_graph_m --detector SDP --double-buffer \
             2>&1; then
-            ok "2×2 determinism matrix"
+            ok "routine continuous chain"
         else
-            fail "2×2 determinism matrix — divergence detected"
+            fail "routine continuous chain — divergence detected"
             ERRORS=$((ERRORS + 1))
         fi
     else
