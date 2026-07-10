@@ -5,9 +5,17 @@
 <!-- doc-date: 2026-07-10 -->
 <!-- doc-module: cross -->
 
-**Role:** Normative cross-cutting **RegionAsset** contract draft (R0-B).  
-**Status:** **DRAFT** — awaiting chat-side acceptance. Not self-accepted.  
+**Role:** Normative cross-cutting **RegionAsset** contract draft (R0-B · revision **R0-B-R1**).  
+**Status:** **DRAFT** — awaiting chat-side re-review after RB1–RB4 corrections. Not self-accepted.  
 **Does not authorize:** R1 asset generation · A0→A1 maturity · transfer · intervention · production · ledger promotion.
+
+```text
+R0-B-R1 corrections:
+  RB1 object claim_level from geometry (not grammar-wide G2=L1)
+  RB2 region_asset_manifest.json is authoritative pack row
+  RB3 region/null IDs + claims bind feasibility_contract_id (model A)
+  RB4 pairwise leaf a/b full-field canonicalize before truth digest
+```
 
 **Parents**
 
@@ -100,12 +108,13 @@ Layers are **independent**. Child content IDs must not depend on pack materializ
 | Concrete semantics | `semantic_definition_id` | operator tree + operand leaves + lattice kind + roles | thr indices; masks |
 | Grid domain | `grid_domain_id` | one registered feature×direction (pair) lattice domain | pack |
 | Search domain | `search_domain_id` | membership digest over concrete grid members | summary counts alone |
-| Region content | `region_asset_id` | connected PS component membership within one grid | pack_id; evidence_bundle_id; `::compN` |
-| Mask unit | `mask_unit_id` | `(truth_contract_id, grid_id, mask_sha256)` | global mask alone |
-| Coordinate | `coordinate_id` | `(truth_contract_id, cell_id)` | thr_value floats as PK |
-| Null record | `null_record_id` | search-domain empty result | concrete semantic_definition on grammar-level null |
-| Evidence / claim outcome | `evidence_claim_id` (row) | observed exposures, counts, **claim_level**, finite-sample notes tied to a sealed bundle | redefining feasibility math |
-| Pack membership | `(pack_id, content_kind, content_id)` | which content objects appear in an emission | redefining content IDs |
+| Region content (feasible-set outcome) | `region_asset_id` | connected PS component within one grid **under one** `feasibility_contract_id` (model A) | pack_id; evidence_bundle_id; `::compN` |
+| Mask unit | `mask_unit_id` | `(truth_contract_id, grid_id, mask_sha256)` — **feasibility-independent** | global mask alone |
+| Coordinate | `coordinate_id` | `(truth_contract_id, canonical_cell_key)` — **feasibility-independent** | thr_value floats as PK; raw unordered a/b cell_id alone |
+| Null record (feasible-set outcome) | `null_record_id` | search-domain empty under **one** `feasibility_contract_id` | concrete semantic_definition on grammar-level null |
+| Evidence / claim outcome | `evidence_claim_id` (row) | observed outcomes + **claim_level** bound to **feasibility_contract_id + evidence_bundle_id** | redefining feasibility math |
+| Pack | `pack_id` | one authoritative pack row (`region_asset_manifest.json`) | optional/derived headers |
+| Pack membership | `(pack_id, content_kind, content_id)` | emission listing | redefining content IDs |
 
 **Retired names:** `asset_set_id` (R0-A); using `truth_context_id` that embedded raw SHAs as content parent.
 
@@ -138,21 +147,50 @@ Feasibility **may** include declared denominators (`n_gt_exposed`, `n_fp_exposed
 | **`claim_level` per object** | evidence_claims / region_assets.claim_level / null_records.claim_level |
 | **`pack_claim_ceiling`** | region_claim_contract.json / pack manifest |
 
-### 4.3 Q4.5 per-object claim levels (locked)
+### 4.3 Object claim_level derivation (RB1 — not grammar-hardcoded)
 
-| Object class | claim_level | Rationale |
-|:--|:--|:--|
-| G1 non-null region (single isolated PS coordinate) | **L0** | observed safe/productive point; not multi-coordinate region thickness claim |
-| G2 non-null region (multi-coordinate in-sample component geometry) | **L1** | in-sample safe-region geometry under registered adjacency |
-| G3 grammar/search-domain null | **L0** | declared-domain empty productive-safe observation |
-| Pack aggregate ceiling | **L1** | max over objects; **not** inherited by every object |
+**Rule (fail-closed):** derive `claim_level` from **object geometry / evidence shape**, never from grammar name alone.
 
 ```text
-pack_claim_ceiling = L1
-⇏ every region_asset.claim_level = L1
+IF object is grammar/search-domain NULL_RESULT:
+  claim_level = L0
+
+ELSE IF non-null region with n_coords == 1
+     OR shape_class == isolated_point
+     OR not a multi-coordinate connected PS component:
+  claim_level = L0   # observed productive-safe point only
+
+ELSE IF non-null region with n_coords >= 2
+     AND connected PS component under declared adjacency
+     AND in-sample selection_scope only:
+  claim_level = L1   # in-sample multi-coordinate region geometry
+
+ELSE:
+  fail closed or leave claim_level unset until shape is declared
 ```
 
-### 4.4 Orthogonal ladders
+**Forbidden:** `G2 → L1` as a grammar-wide constant. Isolated G2 components are **L0**.
+
+### 4.4 Q4.5 sealed counts (from T0 `component_geometry.csv`)
+
+| Object class | Count | claim_level |
+|:--|--:|:--|
+| G1 non-null (isolated, n_coords=1) | 1 | **L0** |
+| G2 isolated (`isolated_point`, n_coords=1) | **6** | **L0** |
+| G2 multi-coordinate (n_coords≥2) | **19** | **L1** |
+| G3 grammar/search-domain null | 1 | **L0** |
+| Pack aggregate ceiling | — | **L1** (max over objects only) |
+
+```text
+G1: 1 × L0
+G2: 6 × L0 isolated + 19 × L1 multi-coordinate
+G3: 1 × L0 domain null
+pack_claim_ceiling = L1
+⇏ every region_asset.claim_level = L1
+⇏ every G2 region_asset.claim_level = L1
+```
+
+### 4.5 Orthogonal ladders
 
 ```text
 A0–A4  asset maturity / packaging / action readiness
@@ -169,19 +207,21 @@ Neither ladder implies the other. A future A1 pack of this study remains **L0/L1
 truth_contract
 evidence_bundle ──FK──► truth_contract
 feasibility_contract ──FK──► truth_contract
-pack ──FK──► truth_contract, feasibility_contract, evidence_bundle
+pack (region_asset_manifest.json) ──FK──► truth_contract, feasibility_contract, evidence_bundle
 
 semantic_definition          (concrete operator tree)
-grid_domain                  (registered lattice domain)
+grid_domain                  (registered lattice domain; axes after pairwise canonicalize)
 search_domain
 search_domain_member ──FK──► search_domain, grid_domain, semantic_definition
-region_asset ──FK──► truth_contract, semantic_definition, grid_domain
-null_record ──FK──► truth_contract, search_domain; semantic_definition = NULL
-mask_unit ──FK──► truth_contract, grid_domain
+region_asset ──FK──► truth_contract, feasibility_contract, semantic_definition, grid_domain
+null_record ──FK──► truth_contract, feasibility_contract, search_domain; semantic_definition = NULL
+mask_unit ──FK──► truth_contract, grid_domain          # no feasibility FK
 coordinate ──FK──► truth_contract, region_asset, mask_unit, grid_domain
 pack_membership ──FK──► pack, content
-evidence_claim ──FK──► evidence_bundle, optional content_id
+evidence_claim ──FK──► feasibility_contract, evidence_bundle, optional content_id
 ```
+
+**RB3 model A (locked):** feasible-set **outcomes** (`region_asset_id`, `null_record_id`) include `feasibility_contract_id` in their identity digests. Changing $\varepsilon$, $g_{\min}$, loss, universe, or denominators yields new outcome IDs. Mask/coordinate IDs remain feasibility-independent.
 
 ### 5.1 Primary grains
 
@@ -227,43 +267,91 @@ thr_value never used in content IDs
 
 ### 6.2 Content ID inputs (normative)
 
-**`region_asset_id`**
+**`region_asset_id` (RB3 model A)**
 
 ```json
 {
   "id_scheme": "region_asset_id_v2",
   "kind": "region_asset",
   "truth_contract_id": "<hex>",
+  "feasibility_contract_id": "<hex>",
   "semantic_definition_id": "<hex>",
   "grid_domain_id": "<hex>",
   "adjacency": "G1_bilateral" | "G2_4neighbor",
   "membership": "productive_safe",
-  "coordinate_digest": "<sha256 of sorted thr-index keys>"
+  "coordinate_digest": "<sha256 of sorted canonical thr-index keys>"
 }
 ```
 
-Coordinate keys: G1 sorted `[thr_index]`; G2/G3 sorted `[[i,j],…]` with axis order fixed by `grid_domain` operand order after lex sort of leaves.
+Coordinate keys: G1 sorted `[thr_index]`; G2 sorted `[[i,j],…]` with axes in **canonical leaf order** after §6.3 pairwise normalization (not raw evaluator a/b order).
 
-**`mask_unit_id`:** `truth_contract_id` + `grid_id` + `mask_sha256`.  
-**`coordinate_id`:** `truth_contract_id` + native `cell_id` (`S::…` / `AND::…` / `OR::…`).  
-**`null_record_id`:** `truth_contract_id` + `search_domain_id` + `null_reason_class`.  
+**`mask_unit_id`:** `truth_contract_id` + `grid_id` + `mask_sha256` (no feasibility).  
+**`coordinate_id`:** `truth_contract_id` + **canonical_cell_key** (§6.3.1) — not raw unordered `combo_id` alone.  
+**`null_record_id` (RB3 model A):**
+
+```json
+{
+  "id_scheme": "region_asset_id_v2",
+  "kind": "null_record",
+  "truth_contract_id": "<hex>",
+  "feasibility_contract_id": "<hex>",
+  "search_domain_id": "<hex>",
+  "null_reason_class": "no_productive_safe_on_registered_domain"
+}
+```
+
+Changing $\varepsilon$ / $g_{\min}$ / loss / universe / denominators ⇒ new `null_record_id` and new `region_asset_id`s even if geometry matches.
+
 **`semantic_definition_id`:** grammar, operator, lex-sorted operands `(feature,direction)`, lattice_kind, `roles=null`.  
 **`search_domain_id`:** `truth_contract_id` + `membership_digest` over canonical member rows.  
-**`grid_domain_id`:** lattice_kind + ordered axis descriptors (G1: feature,direction; pairwise: two leaves lex-sorted for domain identity of the **grid**, while combinator is property of the semantic definition / search domain).
+**`grid_domain_id`:** lattice_kind + **canonical** ordered axis descriptors (pairwise: leaves sorted by `(feature,direction)`).  
+**`pack_id`:** digest of pack authority row fields (or explicit assigned id recorded in `region_asset_manifest.json`).
 
-### 6.3 AND/OR operand symmetry
+### 6.3 Pairwise operand full-field canonicalization (RB4)
 
-For symmetric hard AND/OR leaves without roles: sort operands lexicographically by `(feature, direction)` before digesting `semantic_definition_id`.
+For symmetric hard AND/OR **without roles**, before any of: semantic digest, grid_domain axes, truth-row digest, coordinate keys, region membership coordinates:
+
+```text
+leaf_a = (atom_id, feature, direction, thr_index)_a
+leaf_b = (atom_id, feature, direction, thr_index)_b
+
+if (feature_a, direction_a) > (feature_b, direction_b)  # lexicographic
+  swap leaf_a ↔ leaf_b entirely
+  # after swap, all of: atom_id, feature, direction, thr_index move together
+```
+
+Tie-break if `(feature, direction)` equal (should not occur for distinct pairwise axes): sort by `(atom_id, thr_index)`.
+
+After swap:
+
+| Use | Canonical form |
+|:--|:--|
+| Semantic operands | sorted leaves without thr_index |
+| Grid axes / `grid_id` logical form | `P::{feat0}::{dir0}__{feat1}::{dir1}` with feat0/dir0 ≤ feat1/dir1 |
+| Truth row fields | store as `atom_0_id`, `feature_0`, `direction_0`, `thr_index_0`, `atom_1_id`, … (or a/b **after** swap) |
+| Coordinate key | `(thr_index_0, thr_index_1)` in that axis order |
+| Region membership | same remapped indices |
+
+**Native evaluator `combo_id` / raw `cell_id`:** may be retained as **alias** only.  
+**`canonical_cell_key` for identity:**
+
+```text
+G1: "S::{feature}::{direction}::u{thr_index}"
+G2/G3: "{AND|OR}::{atom_0_id}::{atom_1_id}"   # atoms already thr-indexed P::…::qK after leaf swap
+```
+
+Equivalent `A AND B` ↔ `B AND A` raw rows must produce **identical** truth digests, semantic_ids, grid_domain_ids, coordinate_ids, and region membership digests.
 
 ### 6.4 Stability requirements
 
-| Event | evidence_bundle | truth_contract | content IDs |
-|:--|:--|:--|:--|
-| Row reorder, same logical rows | may change | stable | stable |
-| CSV↔Parquet rematerialization, same logical rows | may change | stable | stable |
-| Pack/schema version only | stable (if raw same) | stable | stable |
-| Unrelated grammar in another pack | — | stable | stable |
-| Cohort / label / signal / lattice / membership change | changes | changes | affected IDs change |
+| Event | evidence_bundle | truth_contract | region/null outcome IDs | mask/coord IDs |
+|:--|:--|:--|:--|:--|
+| Row reorder, same logical rows | may change | stable | stable | stable |
+| Symmetric a/b operand swap | may change raw bytes | **stable** (after RB4) | stable | stable |
+| CSV↔Parquet rematerialization | may change | stable | stable | stable |
+| Pack/schema version only | stable (if raw same) | stable | stable | stable |
+| Feasibility $\varepsilon$/$g_{\min}$/loss change | — | stable | **change** | stable |
+| Cohort / label / signal / lattice / membership change | changes | changes | change | change |
 
 ### 6.5 Aliases
 
@@ -281,6 +369,9 @@ Human thr expressions and T0 `::compN` strings are **aliases only**, never join 
 for each declared truth table T:
   project only truth-bearing columns (§7.2)
   drop excluded columns (§7.3)
+  if T is pairwise_and_atlas or pairwise_or_atlas:
+    apply §6.3 full-field leaf swap to every row  # RB4 — before key/digest
+    replace raw combo_id with canonical_cell_key for identity fields
   apply missing/float/duplicate rules (§7.4–7.5)
   sort rows by stable row key ascending
   for each row: row_digest = SHA256(canonical_json(row))
@@ -292,22 +383,25 @@ normalized_data_content_digest =
 
 ### 7.2 Truth-bearing tables and stable row keys
 
-| Table (logical) | Stable row key | Truth-bearing columns (ordered list is for documentation; JSON keys still sorted) |
+| Table (logical) | Stable row key | Truth-bearing columns |
 |:--|:--|:--|
-| `atom_atlas` | `atom_id` | `atom_id`, `feature`, `direction`, `thr_index`, `lattice_kind`, `observed_safe_point`, `productive_safe_point`, `gt_hurt`, `n_neg_captured`, `n_gt_captured`, `n_unresolved_selected`, `safety_status`, `mask_sha256`, `per_sequence_neg_json`, `per_sequence_gt_json` |
-| `pairwise_and_atlas` | `combo_id` | `combo_id`, `combinator`, `atom_a_id`, `atom_b_id`, `feature_a`, `direction_a`, `thr_index_a`, `feature_b`, `direction_b`, `thr_index_b`, `lattice_kind`, `observed_safe_point`, `productive_safe_point`, `gt_hurt`, `n_neg_captured`, `n_gt_captured`, `n_unresolved_selected`, `safety_status`, `mask_sha256`, `semantic_duplicate_mask`, `empty_region`, `per_sequence_neg_json`, `per_sequence_gt_json` |
-| `pairwise_or_atlas` | `combo_id` | same column set as AND |
+| `atom_atlas` | `atom_id` | `atom_id`, `feature`, `direction`, `thr_index`, `lattice_kind`, `observed_safe_point`, `productive_safe_point`, `gt_hurt`, `n_neg_captured`, `n_gt_captured`, `n_unresolved_selected`, `safety_status`, `mask_sha256`, nested `per_sequence_neg`, nested `per_sequence_gt` |
+| `pairwise_and_atlas` | **`canonical_cell_key`** (after §6.3) | `canonical_cell_key`, `combinator`, `atom_0_id`, `atom_1_id`, `feature_0`, `direction_0`, `thr_index_0`, `feature_1`, `direction_1`, `thr_index_1`, `lattice_kind`, `observed_safe_point`, `productive_safe_point`, `gt_hurt`, `n_neg_captured`, `n_gt_captured`, `n_unresolved_selected`, `safety_status`, `mask_sha256`, `semantic_duplicate_mask`, `empty_region`, nested sequence maps |
+| `pairwise_or_atlas` | **`canonical_cell_key`** (after §6.3) | same column set as AND |
 | `threshold_registry_meta` | single logical row | `taxonomy_version`, `signals_primary` (sorted), `directions` (sorted), `combinators` (sorted), `single_lattice_kind`, `pairwise_lattice_kind`, `n_single_atoms`, `n_pairwise_atoms`, `assignment_group_key_status` |
 | `cohort_contract` | single logical row | canonical `cohort_definition` object + sorted `sequence_set` + `n_primary_negative` + `n_primary_positive_protect` |
-| `t0_component_membership` | `grid_id` + sorted `coords_json` normalized | `grammar`, `grid_id`, `adjacency`, sorted coordinate key list (not T0 `component_id` ordinal) |
+| `t0_component_membership` | `grid_domain_id` + sorted canonical coord keys | `grammar`, canonical `grid_id`/axes, `adjacency`, sorted coordinate key list (**not** T0 `component_id`; pairwise coords remapped via §6.3) |
 
-Implementations may read parquet or csv; **logical projection** above is authoritative.
+**Excluded from pairwise truth payload as identity inputs:** raw `combo_id`, pre-swap `atom_a_id`/`atom_b_id` order, pre-swap feature/direction/thr a/b. Those may appear only as non-identity aliases outside the digest.
+
+Implementations may read parquet or csv; **logical projection after RB4 canonicalize** is authoritative.
 
 ### 7.3 Excluded from truth digest
 
 ```text
 raw file paths, timestamps, write order
 thr_value / thr_value_a / thr_value_b   # alias material; thr_index is coordinate
+raw combo_id and pre-canonical a/b field order (aliases only after §6.3)
 display aliases, nested_loso clause float strings used only as labels
 T0 component_id ordinals (::compN)
 row numbers, parquet row groups
@@ -392,6 +486,7 @@ A null result is a first-class `null_records` row:
 ```text
 bounded_status = NULL_RESULT
 semantic_definition_id = NULL          # grammar/search-domain null
+feasibility_contract_id = <required; in null_record_id digest>
 search_domain_id = <membership digest>
 n_non_null_region_assets (grammar summary) = 0
 n_null_records ≥ 1
@@ -399,6 +494,8 @@ observed_safe_count / productive_safe_count on domain
 null_reason
 claim_level = L0 for Q4.5 G3
 ```
+
+Null realization is relative to $(\varepsilon,g_{\min},L_{\mathrm{GT}},\Omega,$ denominators$)$. A new feasibility contract **must not** reuse the prior `null_record_id`.
 
 ### 10.2 G3 sealed instance
 
@@ -456,9 +553,10 @@ Every FK target below is an authority. No FK may point to an undefined object.
 | | |
 |:--|:--|
 | PK | `evidence_claim_id` |
-| FK | evidence_bundle_id; optional content_id + content_kind |
+| FK | **`feasibility_contract_id` (required)**, **`evidence_bundle_id` (required)**; optional content_id + content_kind (`region_asset` \| `null_record` \| …) |
 | Required | claim_level (L0–L6), claim_scope (`object`\|`pack`\|`grammar`), selection_scope_note, finite_sample_statement, observed summary fields as applicable |
-| Notes | Pack ceiling row: claim_scope=pack, claim_level=L1 for this study; object rows carry G1=L0, G2=L1, G3=L0 |
+| Invariants | every claim resolves to exactly one feasibility + one evidence bundle; object claim_level follows §4.3 derivation |
+| Notes | Pack ceiling row: claim_scope=pack, claim_level=L1; object rows: G1 L0; G2 isolated L0 / multi L1; G3 null L0 |
 
 #### `semantic_definitions.csv` | `jsonl`
 
@@ -498,16 +596,16 @@ Every FK target below is an authority. No FK may point to an undefined object.
 | | |
 |:--|:--|
 | PK | `region_asset_id` |
-| FK | truth_contract_id, semantic_definition_id, grid_domain_id |
-| Required | grammar, bounded_status=HAS_REGION, n_coords, n_mask_units, shape fields, **claim_level**, action_state, production_forbidden |
-| Notes | Non-null only; claim_level from evidence ladder (G1→L0, G2→L1) |
+| FK | truth_contract_id, **feasibility_contract_id**, semantic_definition_id, grid_domain_id |
+| Required | grammar, bounded_status=HAS_REGION, n_coords, n_mask_units, shape fields, **claim_level** (from §4.3), action_state, production_forbidden |
+| Notes | Non-null only; claim_level from geometry derivation — **not** grammar-wide G2=L1 |
 
 #### `null_records.csv`
 
 | | |
 |:--|:--|
 | PK | `null_record_id` |
-| FK | truth_contract_id, search_domain_id |
+| FK | truth_contract_id, **feasibility_contract_id**, search_domain_id |
 | Required | grammar, semantic_definition_id **NULL**, null_reason, domain counts, **claim_level=L0**, action_state, production_forbidden |
 
 #### `region_masks.csv`
@@ -525,22 +623,34 @@ Every FK target below is an authority. No FK may point to an undefined object.
 |:--|:--|
 | PK | `coordinate_id` |
 | FK | truth_contract_id, **region_asset_id**, **mask_unit_id**, grid_domain_id |
-| Required | cell_id, thr indices, PS flags, capacity, dual margins |
+| Required | **canonical_cell_key**, thr indices in canonical axis order, optional raw `cell_id` alias, PS flags, capacity, dual margins |
 | **Authority** | sole authoritative region↔mask derivation source |
+
+#### `region_asset_manifest.json` (**AUTHORITATIVE pack row — RB2**)
+
+| | |
+|:--|:--|
+| Grain | **exactly one pack emission row** |
+| PK | `pack_id` |
+| FK | truth_contract_id, evidence_bundle_id, feasibility_contract_id |
+| Required | pack_id, producer_kind, producer_contract_version, schema_version, grammar_scope, maturity_declared, pack_claim_ceiling, action_state_default, production_forbidden, counts (`n_non_null_region_assets`, `n_null_records`, …), terminal_letter |
+| Invariants | sole authority for `pack_id`; every `pack_membership.pack_id` and `region_claim_contract.pack_id` **must** resolve here |
+| Notes | Not optional/derived. If a multi-pack future needs a table form, `packs.jsonl` may supersede with the same PK/FK fields — until then this file is normative. |
 
 #### `pack_membership.csv`
 
 | | |
 |:--|:--|
 | PK | `(pack_id, content_kind, content_id)` |
+| FK | **pack_id → region_asset_manifest.json** |
 | Required | content_kind ∈ {region_asset, null_record, mask_unit, coordinate, semantic_definition, …} |
 
 #### `region_claim_contract.json`
 
 | | |
 |:--|:--|
-| PK | pack_id (emission) |
-| Required | pack_claim_ceiling, maturity_declared (A0), action_states allowed/forbidden, production_forbidden, forbidden_promotions[], terminal_b, g7_status, identity_layer_policy, capacity_policy, sequence_policy, claim_ownership_policy (feasibility ⟂ claim_level) |
+| PK | pack_id (**FK → region_asset_manifest.json**) |
+| Required | pack_claim_ceiling, maturity_declared (A0), action_states allowed/forbidden, production_forbidden, forbidden_promotions[], terminal_b, g7_status, identity_layer_policy, capacity_policy, sequence_policy, claim_ownership_policy (feasibility ⟂ claim_level), claim_level_derivation_policy (§4.3) |
 
 ### 11.2 Auxiliary / derived (optional)
 
@@ -552,7 +662,6 @@ Every FK target below is an authority. No FK may point to an undefined object.
 | `region_sequence_support.csv` | incidence expansion + region union/intersection |
 | `region_margin.csv` | coordinates / T0 boundary_margin |
 | `grammar_region_summary.csv` | aggregates |
-| `region_asset_manifest.json` | pack emission header |
 
 ### 11.3 Pack emission defaults (locked)
 
@@ -569,13 +678,20 @@ pack_claim_ceiling: L1
 
 ```text
 every FK resolves to exactly one authority row
-content IDs independent of pack_id and evidence_bundle_id
+pack_id FK → region_asset_manifest.json only (not optional headers)
+region_asset and null_record rows carry feasibility_contract_id;
+  their IDs digest includes feasibility_contract_id
+evidence_claim rows require feasibility_contract_id + evidence_bundle_id
+mask/coordinate IDs remain feasibility-independent
+content outcome IDs independent of pack_id and evidence_bundle_id
 region_mask_link == DISTINCT(region_asset_id, mask_unit_id) FROM coordinates
 both capacity distributions present for multi-member regions
 no additive region capacity metric
 sequence union and intersection both present when multi-member
 G3: members=40, n_non_null=0, n_null_records≥1, null.semantic_definition_id IS NULL
-claim_level: G1 objects L0; G2 objects L1; G3 null L0; pack ceiling L1
+claim_level derived per §4.3:
+  G1: 1×L0; G2: 6×L0 isolated + 19×L1 multi; G3 null L0; pack ceiling L1
+pairwise truth rows digest only after §6.3 leaf canonicalize
 feasibility_contract has no claim_level fields
 truth_contract has no raw SHA map
 production_forbidden=true; action_state=observation_only for this study pack
@@ -616,6 +732,7 @@ union sequences ⇒ applicability
 component capacity sum ⇒ simultaneous multi-mask action
 observed GT0 ⇒ population risk zero
 pack L1 ceiling ⇒ every object L1
+grammar G2 ⇒ every G2 object L1
 A1 packaging ⇒ transferable or actionable
 missing files ⇒ NULL_RESULT
 mask equality ⇒ semantic / G7 equivalence
@@ -658,32 +775,34 @@ Existing sealed evidence is sufficient for deterministic conversion under this c
 truth: stage2_q45_atlas_v4 · substrate stage1_baudit_d_online · universe online_hook_eligible
 cohort: n_gt_exposed=64 · n_fp_exposed=23 · unresolved firewall on
 PS: 154 = 1 G1 + 153 G2 + 0 G3
-components: 26 · productive mask units: 34
+components: 26 = 1 G1 + 25 G2 (6 isolated + 19 multi) · productive mask units: 34
 radius≥1: 0/154 · terminal B
-claims: G1 L0 · G2 L1 · G3 L0 · pack ceiling L1 · maturity A0
+claims: G1 1×L0 · G2 6×L0 + 19×L1 · G3 1×L0 · pack ceiling L1 · maturity A0
+RB3: region/null IDs bind feasibility_contract_id (model A)
+RB2: pack authority = region_asset_manifest.json
+RB4: pairwise a/b full-field canonicalize before truth digest
 ```
 
 ---
 
-## 15. Open decisions (non-blocking for R0-B draft review)
-
-These may be fixed at acceptance without reopening R0-A:
+## 15. Open decisions (non-blocking)
 
 | ID | Topic | Default if silent-accept |
 |:--|:--|:--|
 | O1 | Display truncation length for IDs | 32 hex + full digest column |
 | O2 | Whether `evidence_claims` is csv or jsonl | jsonl |
 | O3 | Robust floor definition | min member capacity |
-| O4 | Whether G1 low-population isolated points may carry optional L0+geometry tags | tags ≠ L1 |
+| O4 | Optional L0 geometry tags on isolated points | tags ≠ L1 |
+| O5 | Future multi-pack table `packs.jsonl` | only if multi-pack needed; same fields as manifest |
 
-No open decision may re-merge claim_level into feasibility_contract_id or drop `grid_domains` authority.
+No open decision may: re-merge claim_level into feasibility_contract_id; drop `grid_domains`; reintroduce grammar-wide G2=L1; drop pack authority; unbind null/region outcomes from feasibility; skip pairwise leaf canonicalize.
 
 ---
 
 ## 16. Explicit non-authorization
 
 ```text
-R0-B draft is not self-accepted
+R0-B / R0-B-R1 draft is not self-accepted
 R1 not authorized
 no evaluator rerun
 no asset pack generated

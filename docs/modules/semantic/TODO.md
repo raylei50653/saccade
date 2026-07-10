@@ -5,13 +5,13 @@
 
 ## Sole active
 
-🔄 **Safe-Region Assetization — R0-B-R1 minimal contract correction**
+🔄 **Safe-Region Assetization — R0-B-R1 completed, awaiting chat-side re-review**
 
 - Thread: [safe_region_assetization_20260710.md](../../research/threads/safe_region_assetization_20260710.md)
 - Accepted preflight: [research/safe_region_r0_asset_contract_preflight_20260710.md](research/safe_region_r0_asset_contract_preflight_20260710.md) (R0-A ACCEPTED; CR1–CR9)
 - Mathematical contract: [Statistical Robust Feasible-Set Estimation under Asymmetric Loss](../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
-- Deliverable: revise [safe_region_asset_contract.md](../../research/eval/safe_region_asset_contract.md) in place (RB1–RB4)
-- Boundary: R0-B not accepted; R1/A1 unauthorized; A0 retained; corrected claims G1 L0, G2 6 isolated L0 + 19 multi-coordinate L1, G3 L0, pack ceiling L1; no asset pack, evaluator, grammar extension, LOO, shadow, hook, production, or ledger work
+- Deliverable: [safe_region_asset_contract.md](../../research/eval/safe_region_asset_contract.md) (R0-B-R1; RB1–RB4; not self-accepted)
+- Boundary: R1/A1 unauthorized; A0 retained; claims G1 1×L0, G2 6×L0+19×L1, G3 1×L0, pack ceiling L1; no asset pack, evaluator, grammar extension, LOO, shadow, hook, production, or ledger work
 
 ## Parked
 
