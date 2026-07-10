@@ -833,6 +833,9 @@ def test_build_cpp_seq_config(tmp_path):
         reid_engine="dummy.engine",
         reid_model="dinov2",
         crop_hw=(112, 112),
+        track_buffer=30,
+        # Nested core view matches EvalConfig module-view shape used by cpp_runner.
+        core=SimpleNamespace(confirm_streak=2, confirm_score_thresh=0.1),
         kwargs={"confirm_streak": 2, "confirm_score_thresh": 0.1},
     )
 

@@ -8,7 +8,7 @@ doc-module: semantic
 # MOT M-B1 → M-B1.5 two-stage implementation plan
 
 > **Role:** Stage 1 + Stage 2 engineering contract (single source).  
-> **Navigation:** [m_b1 online hook thread](../../research/threads/m_b1_online_hook_20260709.md) · Stage 1 eng task [portable OR-tail hook contract](m_b1_portable_or_tail_hook_contract_20260709.md).  
+> **Navigation:** [m_b1 online hook thread](../../../research/threads/m_b1_online_hook_20260709.md) · Stage 1 eng task [portable OR-tail hook contract](m_b1_portable_or_tail_hook_contract_20260709.md).  
 > **Not evidence:** numbers and e2e status still live in freeze card / ledger / study dirs.
 
 0. Purpose

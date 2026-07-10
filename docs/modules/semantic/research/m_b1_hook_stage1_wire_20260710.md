@@ -8,7 +8,7 @@
 **Role:** Stage 1 implementation status note (not e2e results).  
 **Plan:** [m_b1_to_m_b1_5_two_stage_plan_20260710.md](m_b1_to_m_b1_5_two_stage_plan_20260710.md)  
 **Eng contract:** [m_b1_portable_or_tail_hook_contract_20260709.md](m_b1_portable_or_tail_hook_contract_20260709.md)  
-**Thread:** [m_b1_online_hook_20260709.md](../../research/threads/m_b1_online_hook_20260709.md)
+**Thread:** [m_b1_online_hook_20260709.md](../../../research/threads/m_b1_online_hook_20260709.md)
 
 ---
 
