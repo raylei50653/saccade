@@ -9,6 +9,9 @@ See [../../ownership/doc_structure_contract.md](../../ownership/doc_structure_co
 
 | 文件 | 內容 |
 |------|------|
+| **[statistical_robust_feasible_set_estimation_under_asymmetric_loss.md](statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)** | **跨研究數學契約：非對稱損失下的 feasible/productive-safe set、region geometry、有限樣本、transfer 與 claim ladder** |
+| **[boolean_composition_semantics_contract.md](boolean_composition_semantics_contract.md)** | **Boolean 正式語義補丁：Ω/Θ 分型、三值 predicate、universe identity、threshold edge、role closure、canonical grammar 與 closed-loop firewall** |
+| **[safe_region_asset_contract.md](safe_region_asset_contract.md)** | **R0-B RegionAsset 規範契約 — ACCEPTED**（RB1–RB9 PASS；E1 applied；R1 eng. delivery = A0 pack candidate；A1 not accepted；see [thread](../threads/safe_region_assetization_20260710.md) · [R1 note](../../modules/semantic/research/safe_region_asset_r1_conversion_20260710.md) · engineering [PR #95](https://github.com/raylei50653/saccade/pull/95)） |
 | [signal_table_schema.md](signal_table_schema.md) | 契約：A/B1/B2；§0.3 風格；§0.4 L0 safe-reject；**§0.5 Gate vs Score**；§8 能用/缺什麼 |
 | **[signal_analysis_ledger.md](signal_analysis_ledger.md)** | **深度訊號分析總帳**（一 gate/訊號一列；study + note pointer） |
 | [../../modules/semantic/research/m_b1_research_history_20260709_20260710.md](../../modules/semantic/research/m_b1_research_history_20260709_20260710.md) | **M-B1 offline phase CLOSED** — 方法摘要見 §1–§14；原始方法細節由 source blob SHA 回溯（見 consolidation report） |
