@@ -5,22 +5,24 @@
 
 ## Sole active
 
-🔄 **occ-exit audit 條件化復活（#55）**
+🔄 **Composition Grammar Coverage — C1-A semantic-contract preflight**
 
-- Thread: [occ_exit_audit_20260709.md](../../research/threads/occ_exit_audit_20260709.md)
-- Canonical: [scope](research/occ_exit_audit_p55_scope_20260709.md) · [WP2](research/occ_exit_audit_p55_wp2_seq_conditioning_20260709.md) · [WP3](research/occ_exit_audit_p55_wp3_promotion_decision_20260709.md) · [substrate](research/clean_fifo_bank_substrate_20260704.md)
+- Thread: [composition_grammar_coverage_program_20260710.md](../../research/threads/composition_grammar_coverage_program_20260710.md)
+- Current deliverable: `research/composition_grammar_c1_semantic_contract_preflight_20260710.md`
+- Boundary: docs/research preflight only; C2 evaluator / grammar enumeration not authorized
 
 ## Parked
 
+- Occ-exit conditional intervention modeling — WP1–WP3 complete; global audit harmful; resume only after grammar coverage gate → [occ-exit thread](../../research/threads/occ_exit_audit_20260709.md)
 - Sparse key-embedding bank — C++ async sidecar（#57 禁 sync）→ [sparse_key_embedding_bank_20260704.md](research/sparse_key_embedding_bank_20260704.md)
 
 ## Related research threads（不佔 WIP 鎖）
 
-- [composition grammar × safe-region](../../research/threads/composition_grammar_safe_region.md) — Q4.5 coverage gate **closed** · terminal B · **next authorized = T0 only**
+- [composition grammar coverage program](../../research/threads/composition_grammar_coverage_program_20260710.md) — **ACTIVE** · C0=T0 accepted · C1-A only
+- [composition grammar × safe-region C0](../../research/threads/composition_grammar_safe_region.md) — **CLOSED** · T0-A/B/R1 · terminal B retained
+  - C0 note: [composition_grammar_t0_region_interpretation_20260710.md](research/composition_grammar_t0_region_interpretation_20260710.md)
   - Coverage audit: [composition_grammar_safe_region_coverage_audit_20260710.md](research/composition_grammar_safe_region_coverage_audit_20260710.md)
-  - S2 final: [m_b1_5_stage2_d_online_final_20260710.md](research/m_b1_5_stage2_d_online_final_20260710.md)
-  - S2 entry contract: [m_b1_5_stage2_entry_contract_20260710.md](research/m_b1_5_stage2_entry_contract_20260710.md)
-- [m_b1 online hook](../../research/threads/m_b1_online_hook_20260709.md) — **CLOSED** · S1+S2 Q4.5 B · handoff → composition T0 · ranking **deferred** (invalid assignment-group key)
+- [m_b1 online hook](../../research/threads/m_b1_online_hook_20260709.md) — **CLOSED** · S1+S2 Q4.5 B · ranking deferred (invalid assignment-group key)
   - Offline history: [m_b1_research_history_20260709_20260710.md](research/m_b1_research_history_20260709_20260710.md)
   - S1 final: [m_b1_stage1_online_hook_final_20260710.md](research/m_b1_stage1_online_hook_final_20260710.md)
 - [association recovery registry](../../research/threads/association_recovery_registry_20260709.md)
