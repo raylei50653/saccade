@@ -145,7 +145,7 @@ D1 真 m 煙測 pointer： [m_b1_substrate_smoke_20260709.md](m_b1_substrate_smo
 D1  真 pairs 煙測（任意/m substrate → builder → summarize → 查三檔）
     → 2026-07-09 m 煙測已過：m_b1_substrate_smoke_20260709.md
 D2  m B1 正式 stamp + 短 note（pointer only）
-    → 2026-07-09：m_b1_bridge_discriminability_20260709.md
+    → 2026-07-09：m_b1_research_history_20260709_20260710.md
       study out/signal_study/m_b1_smoke_20260709T092543Z/
       + thr GT_hurt / thr(gap) 非線性試算（note §3b–3c；metrics_thr_* in study_dir）
 D3  B2 reconnect 對照（bridge on/off）
@@ -774,14 +774,14 @@ regressed  = E(B) \ E(A)
 |:--|:--|:--|
 | 契約：A/B1/B2、study_dir、safe-reject | **本檔** §0.1–0.4 | ✅ |
 | **深度分析進度（一訊號一列）** | [signal_analysis_ledger.md](signal_analysis_ledger.md) | ✅ 索引；數字仍在 study_dir |
-| **Energy transform separability**（raw/log/sqrt/rank） | `scripts/tools/energy_transform_separability.py` · [note](../../modules/semantic/research/m_b1_energy_transform_separability_20260709.md) | ✅ **禁 AUC 比 transform**；用 d′/Fisher/logloss |
-| **Combo AND safe region**（2D thr surface） | `scripts/tools/combo_gate_safe_region.py` · [note](../../modules/semantic/research/m_b1_combo_gate_safe_region_20260709.md) | ✅ 報 **area/recoverability**，不只要 best FP |
-| **Gate rule search**（Pareto·itemset·greedy） | `scripts/tools/gate_rule_search.py` · [note](../../modules/semantic/research/m_b1_gate_rule_search_architecture_20260709.md) | ✅ 受約束搜尋，非排列組合 |
-| **GT-safe region area**（GT_tail_mass） | `scripts/tools/gt_safe_region_area.py` · [note](../../modules/semantic/research/m_b1_gt_safe_region_area_20260709.md) | ✅ 面積在 **u=P_GT(score>thr)**；主看 productive@80+robust |
-| **Weight methods × productive region** | `scripts/tools/weight_method_safe_region.py` · [note](../../modules/semantic/research/m_b1_weight_method_safe_region_20260709.md) | ✅ 1D 用 plateau/σ 非 GT-tail area；多核 `--jobs` |
-| **LOO hurt attribution + atom repair** | `scripts/tools/loo_hurt_attribution.py` · [note](../../modules/semantic/research/m_b1_loo_hurt_atom_repair_20260709.md) | ✅ ban_gap+ban_zone → loo_pass；FP retained |
+| **Energy transform separability**（raw/log/sqrt/rank） | `scripts/tools/energy_transform_separability.py` · [note](../../modules/semantic/research/m_b1_research_history_20260709_20260710.md) | ✅ **禁 AUC 比 transform**；用 d′/Fisher/logloss |
+| **Combo AND safe region**（2D thr surface） | `scripts/tools/combo_gate_safe_region.py` · [note](../../modules/semantic/research/m_b1_research_history_20260709_20260710.md) | ✅ 報 **area/recoverability**，不只要 best FP |
+| **Gate rule search**（Pareto·itemset·greedy） | `scripts/tools/gate_rule_search.py` · [note](../../modules/semantic/research/m_b1_research_history_20260709_20260710.md) | ✅ 受約束搜尋，非排列組合 |
+| **GT-safe region area**（GT_tail_mass） | `scripts/tools/gt_safe_region_area.py` · [note](../../modules/semantic/research/m_b1_research_history_20260709_20260710.md) | ✅ 面積在 **u=P_GT(score>thr)**；主看 productive@80+robust |
+| **Weight methods × productive region** | `scripts/tools/weight_method_safe_region.py` · [note](../../modules/semantic/research/m_b1_research_history_20260709_20260710.md) | ✅ 1D 用 plateau/σ 非 GT-tail area；多核 `--jobs` |
+| **LOO hurt attribution + atom repair** | `scripts/tools/loo_hurt_attribution.py` · [note](../../modules/semantic/research/m_b1_research_history_20260709_20260710.md) | ✅ ban_gap+ban_zone → loo_pass；FP retained |
 | **Repaired ε=0 LOO-pass candidate freeze** | study `m_b1_repaired_eps0_loo_pass_20260709` · [card](../../modules/semantic/research/m_b1_repaired_eps0_loo_pass_candidate_20260709.md) | ✅ LOO_pass_region_candidate；preset unchanged |
-| **Repaired all-tail OR region near q85** | `scripts/tools/repaired_tail_or_safe_region.py` · [note](../../modules/semantic/research/m_b1_repaired_tail_or_safe_region_20260709.md) | ✅ ε0 safe~56% · p80~14% · LOO region |
+| **Repaired all-tail OR region near q85** | `scripts/tools/repaired_tail_or_safe_region.py` · [note](../../modules/semantic/research/m_b1_research_history_20260709_20260710.md) | ✅ ε0 safe~56% · p80~14% · LOO region |
 | **Production 開了哪些 identity/assoc 旋鈕**（配置面） | [tracker-decision config_surface](../tracker-decision/audit/config_surface.md) · [assoc_knobs](../tracker-decision/assoc_knobs.md) · `print_assoc_basis.py --preset …` | ✅ 清單/解析；**非**事件觸發率 |
 | B1 pairs + full/hard AUC + thr | `build_relink_candidates` → `summarize_relink_pairs` · `out/signal_study/` | ✅（AUC 屬 L1 term；thr 表屬 L0） |
 | B1：誰傷 GT / thr(gap) 形狀 | study `metrics_thr_*` · 活 note m_b1 §3b–3c | ✅ L0 gate calibration |

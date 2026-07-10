@@ -21,7 +21,7 @@
 **一句：** B1 管道在真 m 資料上驗收通過。
 
 **D2 解讀（同 study stamp）：**  
-[m_b1_bridge_discriminability_20260709.md](../../modules/semantic/research/m_b1_bridge_discriminability_20260709.md)
+[m_b1_research_history_20260709_20260710.md](../../modules/semantic/research/m_b1_research_history_20260709_20260710.md)
 
 ## Recipe（摘要）
 
