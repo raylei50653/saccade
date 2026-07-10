@@ -7,18 +7,19 @@ created: 2026-07-10
 
 # Safe-Region Assetization Program
 
-> **One-line:** R0-A is **ACCEPTED**. R0-B-R1 at `e02a5367` passes RB1–RB4, but integrated review against the new Boolean semantics contract is **CHANGES_REQUESTED** on RB5–RB7. Current sole task is **R0-B-R2 typed realization integration**. R1 asset generation, A0→A1, transfer, intervention, production, and ledger promotion remain unauthorized. Maturity **A0 retained**.
+> **One-line:** R0-A is **ACCEPTED**. RB1–RB4 remain **PASS**. R0-B-R2 delivered a typed realization integration draft on the RegionAsset contract (RB5–RB7). **Chat-side re-review required** — not self-accepted. R1 asset generation, A0→A1, transfer, intervention, production, and ledger promotion remain unauthorized. Maturity **A0 retained**.
 
 ## Status
 
 | Item | Status |
 |:--|:--|
 | Program | **ACTIVE** — safe-region assetization |
-| Semantic sole active | **R0-B-R2 typed realization integration** |
+| Semantic sole active | **R0-B-R2 delivered — awaiting chat-side re-review** |
 | R0-A research review | **ACCEPTED** |
 | CR1–CR9 | **PASS** (retain) |
 | R0-B draft | `75dec59a` CHANGES_REQUESTED |
-| R0-B-R1 | `e02a5367` — **RB1–RB4 PASS**; overall contract still CHANGES_REQUESTED on RB5–RB7 |
+| R0-B-R1 | `e02a5367` — **RB1–RB4 PASS** (retain) |
+| R0-B-R2 | **delivered** — RB5–RB7 typed realization integration; **not self-accepted** |
 | Boolean semantics patch | **NORMATIVE** — [boolean_composition_semantics_contract.md](../eval/boolean_composition_semantics_contract.md) |
 | R1 | **NOT AUTHORIZED** |
 | Maturity | **A0 retained** |
@@ -79,8 +80,8 @@ This is finite-sample, searched in-sample, registered-lattice evidence. It is no
 ```text
 R0-A preflight                         # ACCEPTED
 R0-B draft                             # CHANGES_REQUESTED
-R0-B-R1 RB1–RB4                        # PASS
-R0-B-R2 typed realization integration ← current
+R0-B-R1 RB1–RB4                        # PASS (retain)
+R0-B-R2 typed realization integration  # delivered; chat-side re-review
 chat-side final contract review
 
 R1 G1–G3 deterministic conversion     # not authorized
@@ -203,25 +204,23 @@ Requirements:
 - if current search operands are not role-qualified, declare the bounded untyped/observational role rather than silently granting reject authorization;
 - RegionAsset / coordinate realization rows must resolve to the exact policy semantics that generated them.
 
-## Current step — R0-B-R2
+## Current step — R0-B-R2 (delivered; re-review)
 
-Revise in place:
+Revised in place:
 
 ```text
 docs/research/eval/safe_region_asset_contract.md
 ```
 
-Required output:
+### Delivered corrections
 
-1. retain RB1–RB4 unchanged;
-2. normalize coordinate/mask content versus feasibility realization (RB5);
-3. add candidate-universe and predicate-edge authorities (RB6);
-4. add canonical executable Boolean policy identity and equivalence separation (RB7);
-5. update PK/FK map, pack membership, validation invariants, Q4.5 freeze, and R1 boundary;
-6. cite the Boolean semantics contract as a normative parent;
-7. generate no asset data files.
+1. **RB5:** truth-level `coordinates.csv` + `mask_units.csv` (feasibility-independent) vs feasibility-bound `region_coordinate_membership.csv` with PK `(region_asset_id, coordinate_id)`; region↔mask projects from membership.
+2. **RB6:** `candidate_universe.json|jsonl` and `predicate_definitions` authorities; Q4.5 freeze observational / U→no_reject / no cross-universe without transport.
+3. **RB7:** `policy_definitions` with canonical AST hash; AST ≠ observed_mask ≠ logical equivalence; roles survive commutative sort; Q4.5 roles = `untyped_observation`; no G7 inference.
+4. Boolean semantics contract cited as normative parent; PK/FK map, invariants, Q4.5 freeze, R1 boundary updated.
+5. RB1–RB4 retained; no asset files generated.
 
-## Acceptance for R0-B-R2
+## Acceptance for R0-B-R2 (chat-side checklist)
 
 - one stable `coordinate_id` can be reused across feasibility contracts without contradictory authority rows;
 - every feasibility-bound membership/outcome row resolves to exactly one region and feasibility contract;
@@ -255,3 +254,4 @@ Required output:
 - 2026-07-10: R0-B-R1 delivered at `e02a5367`; RB1–RB4 pass on re-review.
 - 2026-07-10: Boolean composition semantics contract added at branch tip after `e02a5367`.
 - 2026-07-10: integrated review requested RB5–RB7; sole active → R0-B-R2; R1/A1 remain unauthorized.
+- 2026-07-10: R0-B-R2 delivered (RB5–RB7 typed realization integration); awaiting chat-side re-review; R1/A1 still unauthorized.

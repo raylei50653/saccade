@@ -5,22 +5,28 @@
 <!-- doc-date: 2026-07-10 -->
 <!-- doc-module: cross -->
 
-**Role:** Normative cross-cutting **RegionAsset** contract draft (R0-B · revision **R0-B-R1**).  
-**Status:** **DRAFT** — awaiting chat-side re-review after RB1–RB4 corrections. Not self-accepted.  
+**Role:** Normative cross-cutting **RegionAsset** contract draft (R0-B · revision **R0-B-R2**).  
+**Status:** **DRAFT** — awaiting chat-side re-review after RB5–RB7 typed realization integration. Not self-accepted.  
 **Does not authorize:** R1 asset generation · A0→A1 maturity · transfer · intervention · production · ledger promotion.
 
 ```text
-R0-B-R1 corrections:
+R0-B-R1 corrections (retained):
   RB1 object claim_level from geometry (not grammar-wide G2=L1)
   RB2 region_asset_manifest.json is authoritative pack row
   RB3 region/null IDs + claims bind feasibility_contract_id (model A)
   RB4 pairwise leaf a/b full-field canonicalize before truth digest
+
+R0-B-R2 corrections (current):
+  RB5 stable coordinate/mask identity vs feasibility-bound membership
+  RB6 candidate-universe + predicate-edge machine authorities
+  RB7 canonical executable Boolean policy identity (≠ observed mask)
 ```
 
 **Parents**
 
 | Document | Role |
 |:--|:--|
+| [boolean_composition_semantics_contract.md](boolean_composition_semantics_contract.md) | **normative** Boolean / Ω / predicate / policy AST semantics |
 | [statistical_robust_feasible_set_estimation_under_asymmetric_loss.md](statistical_robust_feasible_set_estimation_under_asymmetric_loss.md) | mathematical / claim-ladder semantics |
 | [safe_region_r0_asset_contract_preflight_20260710.md](../../modules/semantic/research/safe_region_r0_asset_contract_preflight_20260710.md) | accepted R0-A derivability packet (CR1–CR9) |
 | [safe_region_assetization_20260710.md](../threads/safe_region_assetization_20260710.md) | program ownership thread |
@@ -38,6 +44,8 @@ R0-B-R1 corrections:
 - Normative identity layers, grains, machine schemas, validation invariants.
 - Mapping of accepted Q4.5 G1–G3 / T0 evidence into a future deterministic pack.
 - Separation of mathematical feasibility definition from observed claim level.
+- Separation of truth-level coordinate/mask identity from feasibility-bound realization.
+- Typed candidate-universe, predicate-edge, and executable Boolean policy authorities.
 
 ### Out of scope / non-claims
 
@@ -47,12 +55,31 @@ R0-B-R1 corrections:
 ≠ held-out / LOO / LOSO region transfer (L2+)
 ≠ online retention (L5) or production (L6 / A4)
 ≠ G4–G7 implementation or G7 role invention
+≠ NOT / complement as reject authorization
+≠ single-step intervention or closed-loop policy safety
 ≠ evaluator rerun or modification
 ≠ production preset / hook / shadow policy change
 ≠ evidence_ledger promotion
 ```
 
 Current sealed study remains **A0** descriptive atlas with terminal **B** `isolated_safe_points_only`.
+
+### Typed-space boundary (from Boolean semantics)
+
+```text
+candidate / reject set in Ω
+≠ policy / feasible set in Θ
+
+truth-level coordinate or mask identity
+≠ feasibility-bound region membership / outcome
+
+canonical policy semantics
+≠ observed-mask equivalence
+
+observational Boolean composition
+≠ single-step intervention
+≠ closed-loop policy safety
+```
 
 ---
 
@@ -65,7 +92,7 @@ A RegionAsset packages an estimated **productive-safe set** under asymmetric los
 | Symbol | Contract field | Q4.5 G1–G3 freeze |
 |:--|:--|:--|
 | $\Theta$ | `parameter_or_policy_space` | registered thr-index lattices (G1 unique-boundary 870; G2/G3 q05 17640 each) |
-| $\Omega$ | `candidate_universe_id` | `online_hook_eligible` |
+| $\Omega$ | `candidate_universe_id` → **`candidate_universe.json`** | sealed `online_hook_eligible` universe authority (not bare string alone) |
 | $L_{\mathrm{GT}}$ | `safety_loss_definition` | resolved `GT_hurt == 0` under unresolved-contamination firewall |
 | $\varepsilon$ | `epsilon` | `exact_zero_count` (count hurt $=0$, not a positive rate allowance) |
 | $G_{\mathrm{FP}}$ / productivity | `productivity_definition` | count surrogate `n_neg_captured > 0` |
@@ -93,6 +120,19 @@ selection_scope = in_sample_searched_and_evaluated
 
 Search and evaluation use the same registered cohort/lattices. This is not a frozen held-out selection.
 
+### 2.4 Composition level freeze (Q4.5)
+
+```text
+composition_level = observational
+same declared universe and pre-decision state
+reject-only G1/G2/G3 AND/OR
+no NOT/complement authorization
+unknown never maps to reject
+no cross-universe composition without transport
+```
+
+Observational mask algebra on frozen rows **does not** establish single-step intervention or closed-loop policy composition.
+
 ---
 
 ## 3. Identity layers
@@ -101,22 +141,33 @@ Layers are **independent**. Child content IDs must not depend on pack materializ
 
 | Layer | ID | Owns | Must not own |
 |:--|:--|:--|:--|
-| Normalized truth | `truth_contract_id` | substrate, universe, signals, sequences, label/unresolved, lattices, **order-insensitive data content digest** | raw file SHAs; pack schema; claim L-level |
+| Normalized truth | `truth_contract_id` | substrate, universe FK, signals, sequences, label/unresolved, lattices, **order-insensitive data content digest** | raw file SHAs; pack schema; claim L-level |
+| Candidate universe | `candidate_universe_id` (+ `universe_hash`) | substrate, hook, builder, prefilters, key schema, label/exposure, time/frame, pre-decision state | claim outcomes; pack schema |
+| Predicate edge | `predicate_id` | signal, unit, domain/codomain, unknown/missing/NaN/Inf, comparator, endpoint, tie, quantile, clipping | observed masks; thr_index alone as full identity |
+| Executable policy | `policy_definition_id` / extended `semantic_definition_id` | grammar + truth_semantics versions, **canonical_policy_ast**, roles, universe requirement, composition_level, NOT/complement metadata when applicable | observed_mask_hash; evidence outcomes |
 | Exact evidence seal | `evidence_bundle_id` | study_id, recorded evaluator/runner SHAs, **raw artifact SHA map** | semantic content identity |
-| Feasibility definition | `feasibility_contract_id` | $\Theta$, $\Omega$, $L_{\mathrm{GT}}$, productivity, $\varepsilon$, $g_{\min}$, exposure **definitions and declared denominators**, selection_scope, finite-sample statement, geometry metric/edge policy | **supported claim_level** (outcome) |
-| Pack / materialization | `pack_id` | producer kind/version, schema version, grammar_scope, FKs to truth/feasibility/evidence | local region/mask/coord content |
-| Concrete semantics | `semantic_definition_id` | operator tree + operand leaves + lattice kind + roles | thr indices; masks |
+| Feasibility definition | `feasibility_contract_id` | $\Theta$, $\Omega$ FK, $L_{\mathrm{GT}}$, productivity, $\varepsilon$, $g_{\min}$, exposure **definitions and declared denominators**, selection_scope, finite-sample statement, geometry metric/edge policy | **supported claim_level** (outcome) |
+| Pack / materialization | `pack_id` | producer kind/version, schema version, grammar_scope, FKs to truth/feasibility/evidence/universe | local region/mask/coord content |
 | Grid domain | `grid_domain_id` | one registered feature×direction (pair) lattice domain | pack |
 | Search domain | `search_domain_id` | membership digest over concrete grid members | summary counts alone |
-| Region content (feasible-set outcome) | `region_asset_id` | connected PS component within one grid **under one** `feasibility_contract_id` (model A) | pack_id; evidence_bundle_id; `::compN` |
-| Mask unit | `mask_unit_id` | `(truth_contract_id, grid_id, mask_sha256)` — **feasibility-independent** | global mask alone |
-| Coordinate | `coordinate_id` | `(truth_contract_id, canonical_cell_key)` — **feasibility-independent** | thr_value floats as PK; raw unordered a/b cell_id alone |
+| Region content (feasible-set outcome) | `region_asset_id` | connected PS component within one grid **under one** `feasibility_contract_id` (model A) + policy FK | pack_id; evidence_bundle_id; `::compN` |
+| Mask unit (truth-level) | `mask_unit_id` | `(truth_contract_id, grid_id, mask_sha256)` — **feasibility-independent** | PS membership counts that change with feasibility; region FKs as identity |
+| Coordinate (truth-level) | `coordinate_id` | `(truth_contract_id, canonical_cell_key)` — **feasibility-independent** | productive-safe flags; capacity under a feasibility; region FK |
+| Membership realization | `(region_asset_id, coordinate_id)` | feasibility-bound PS membership, observed capacity, dual margins, sequence incidence | redefining coordinate/mask content IDs |
 | Null record (feasible-set outcome) | `null_record_id` | search-domain empty under **one** `feasibility_contract_id` | concrete semantic_definition on grammar-level null |
 | Evidence / claim outcome | `evidence_claim_id` (row) | observed outcomes + **claim_level** bound to **feasibility_contract_id + evidence_bundle_id** | redefining feasibility math |
-| Pack | `pack_id` | one authoritative pack row (`region_asset_manifest.json`) | optional/derived headers |
 | Pack membership | `(pack_id, content_kind, content_id)` | emission listing | redefining content IDs |
 
-**Retired names:** `asset_set_id` (R0-A); using `truth_context_id` that embedded raw SHAs as content parent.
+**Retired / forbidden patterns:**
+
+```text
+asset_set_id (R0-A name)
+truth_context_id that embeds raw SHAs as content parent
+feasibility-independent coordinate_id as sole PK of a table that stores PS flags / margins / capacity
+bare string candidate_universe_id without candidate_universe authority row
+semantic_definition_id that digests only operator+leaves+lattice without executable AST / roles / truth semantics
+observed_mask_hash as policy identity
+```
 
 ---
 
@@ -141,7 +192,7 @@ Feasibility **may** include declared denominators (`n_gt_exposed`, `n_fp_exposed
 
 | Field | Owner |
 |:--|:--|
-| Observed `n_gt_hurt`, `n_neg_captured`, per-object geometry | content / capacity / margin tables + evidence_bundle seal |
+| Observed `n_gt_hurt`, `n_neg_captured`, per-object geometry | membership / capacity / margin tables + evidence_bundle seal |
 | `selection_scope` realization note | evidence_claims / claim contract |
 | `finite_sample_statement` restatement | claim contract (definition text may be shared) |
 | **`claim_level` per object** | evidence_claims / region_assets.claim_level / null_records.claim_level |
@@ -205,38 +256,50 @@ Neither ladder implies the other. A future A1 pack of this study remains **L0/L1
 
 ```text
 truth_contract
+candidate_universe ──referenced by──► truth_contract, feasibility_contract, pack, policy
+predicate_definitions ──referenced by──► policy AST leaves
+policy_definitions / semantic_definitions ──FK──► candidate_universe, predicate leaves
 evidence_bundle ──FK──► truth_contract
-feasibility_contract ──FK──► truth_contract
-pack (region_asset_manifest.json) ──FK──► truth_contract, feasibility_contract, evidence_bundle
+feasibility_contract ──FK──► truth_contract, candidate_universe
+pack (region_asset_manifest.json) ──FK──► truth_contract, feasibility_contract, evidence_bundle, candidate_universe
 
-semantic_definition          (concrete operator tree)
 grid_domain                  (registered lattice domain; axes after pairwise canonicalize)
 search_domain
-search_domain_member ──FK──► search_domain, grid_domain, semantic_definition
-region_asset ──FK──► truth_contract, feasibility_contract, semantic_definition, grid_domain
-null_record ──FK──► truth_contract, feasibility_contract, search_domain; semantic_definition = NULL
-mask_unit ──FK──► truth_contract, grid_domain          # no feasibility FK
-coordinate ──FK──► truth_contract, region_asset, mask_unit, grid_domain
+search_domain_member ──FK──► search_domain, grid_domain, policy/semantic_definition
+
+coordinates                  # truth-level only; PK coordinate_id
+mask_units                   # truth-level only; PK mask_unit_id  (file may be region_masks.csv)
+
+region_asset ──FK──► truth_contract, feasibility_contract, policy/semantic_definition, grid_domain
+null_record ──FK──► truth_contract, feasibility_contract, search_domain; policy/semantic = NULL
+region_coordinate_membership ──FK──► region_asset, coordinate, mask_unit
+  # feasibility-bound realization; sole region↔mask authority projection source
+
 pack_membership ──FK──► pack, content
 evidence_claim ──FK──► feasibility_contract, evidence_bundle, optional content_id
 ```
 
-**RB3 model A (locked):** feasible-set **outcomes** (`region_asset_id`, `null_record_id`) include `feasibility_contract_id` in their identity digests. Changing $\varepsilon$, $g_{\min}$, loss, universe, or denominators yields new outcome IDs. Mask/coordinate IDs remain feasibility-independent.
+**RB3 model A (locked):** feasible-set **outcomes** (`region_asset_id`, `null_record_id`) include `feasibility_contract_id` in their identity digests. Changing $\varepsilon$, $g_{\min}$, loss, universe, or denominators yields new outcome IDs.
+
+**RB5 (locked):** `mask_unit_id` and `coordinate_id` remain feasibility-independent and **must not** own fields that change with feasibility. Those fields live only on membership/realization rows.
 
 ### 5.1 Primary grains
 
 | Grain | Definition |
 |:--|:--|
-| Region (non-null) | Connected **productive-safe** component within **one** registered grid under declared adjacency |
-| Per-grid mask unit | `mask_sha256` within one `grid_id` (primary); global mask string is diagnostic only |
-| Coordinate | Registered thr-index cell (`cell_id`) |
+| Region (non-null) | Connected **productive-safe** component within **one** registered grid under declared adjacency and one feasibility contract |
+| Coordinate (truth-level) | Registered thr-index cell identity (`canonical_cell_key`) under one truth contract |
+| Mask unit (truth-level) | Distinct `mask_sha256` within one `grid_id` under one truth contract |
+| Membership realization | `(region_asset_id, coordinate_id)` with optional `mask_unit_id` + observed PS/capacity/margin fields under that region’s feasibility |
 | Null record | First-class empty productive-safe result on a **search domain**, not missing files |
-| Search domain | Ordered membership of concrete grid domains + concrete semantics |
+| Search domain | Ordered membership of concrete grid domains + concrete policies |
+| Policy definition | Canonical executable Boolean AST + grammar/truth semantics + roles + universe |
 
 ### 5.2 Cardinality rules
 
-- One region may contain many mask units; one mask unit may appear in many regions **in schema** (M:N). Observed Q4.5: multi-mask regions exist; multi-region masks not observed — still do not assume many-to-one.
-- **Authoritative** region↔mask relation: projection from `region_coordinates` FKs. Optional `region_mask_link` is derived only.
+- One region may contain many mask units; one mask unit may appear in many regions **in schema** (M:N via membership). Observed Q4.5: multi-mask regions exist; multi-region masks not observed — still do not assume many-to-one.
+- **Authoritative** region↔mask relation: projection from **`region_coordinate_membership`** FKs. Optional `region_mask_link` is derived only.
+- One truth-level `coordinate_id` **may** appear under multiple `region_asset_id`s across different feasibility contracts without row conflict, because membership tables are separate from coordinate authority.
 - G3 sealed study: `n_non_null_region_assets = 0`, `n_null_records = 1`, `search_domain_members = 40`.
 
 ### 5.3 Forbidden identity inputs
@@ -247,6 +310,8 @@ global mask_sha256 alone as PK
 pack_id / producer_contract_version / schema_version inside content digests
 raw file SHA maps inside content digests
 human thr_value strings as PKs (aliases only)
+observed_mask_hash inside policy_definition_id / semantic_definition_id
+feasibility-dependent PS flags inside coordinate_id or mask_unit_id digests
 ```
 
 ---
@@ -275,7 +340,7 @@ thr_value never used in content IDs
   "kind": "region_asset",
   "truth_contract_id": "<hex>",
   "feasibility_contract_id": "<hex>",
-  "semantic_definition_id": "<hex>",
+  "policy_definition_id": "<hex>",
   "grid_domain_id": "<hex>",
   "adjacency": "G1_bilateral" | "G2_4neighbor",
   "membership": "productive_safe",
@@ -283,10 +348,12 @@ thr_value never used in content IDs
 }
 ```
 
+`policy_definition_id` is the executable Boolean identity (§6.6 / §11). Implementations may keep a parallel `semantic_definition_id` column as alias only if it is **byte-equal** to `policy_definition_id` or is a declared synonym field pointing at the same authority row.
+
 Coordinate keys: G1 sorted `[thr_index]`; G2 sorted `[[i,j],…]` with axes in **canonical leaf order** after §6.3 pairwise normalization (not raw evaluator a/b order).
 
-**`mask_unit_id`:** `truth_contract_id` + `grid_id` + `mask_sha256` (no feasibility).  
-**`coordinate_id`:** `truth_contract_id` + **canonical_cell_key** (§6.3.1) — not raw unordered `combo_id` alone.  
+**`mask_unit_id` (truth-level, RB5):** `truth_contract_id` + `grid_id` + `mask_sha256` — **no** feasibility, **no** PS counts, **no** region FK.  
+**`coordinate_id` (truth-level, RB5):** `truth_contract_id` + **canonical_cell_key** (§6.3.1) — **no** feasibility, **no** PS flags, **no** capacity/margins.  
 **`null_record_id` (RB3 model A):**
 
 ```json
@@ -300,33 +367,39 @@ Coordinate keys: G1 sorted `[thr_index]`; G2 sorted `[[i,j],…]` with axes in *
 }
 ```
 
-Changing $\varepsilon$ / $g_{\min}$ / loss / universe / denominators ⇒ new `null_record_id` and new `region_asset_id`s even if geometry matches.
+Changing $\varepsilon$ / $g_{\min}$ / loss / universe / denominators ⇒ new `null_record_id` and new `region_asset_id`s even if geometry coordinate keys match.
 
-**`semantic_definition_id`:** grammar, operator, lex-sorted operands `(feature,direction)`, lattice_kind, `roles=null`.  
 **`search_domain_id`:** `truth_contract_id` + `membership_digest` over canonical member rows.  
 **`grid_domain_id`:** lattice_kind + **canonical** ordered axis descriptors (pairwise: leaves sorted by `(feature,direction)`).  
-**`pack_id`:** digest of pack authority row fields (or explicit assigned id recorded in `region_asset_manifest.json`).
+**`pack_id`:** digest of pack authority row fields (or explicit assigned id recorded in `region_asset_manifest.json`).  
+**`candidate_universe_id` / `universe_hash`:** §6.5.  
+**`predicate_id`:** §6.5.  
+**`policy_definition_id`:** §6.6.
 
 ### 6.3 Pairwise operand full-field canonicalization (RB4)
 
-For symmetric hard AND/OR **without roles**, before any of: semantic digest, grid_domain axes, truth-row digest, coordinate keys, region membership coordinates:
+For symmetric hard AND/OR **without differentiated roles**, before any of: policy AST digest, semantic digest, grid_domain axes, truth-row digest, coordinate keys, region membership coordinates:
 
 ```text
-leaf_a = (atom_id, feature, direction, thr_index)_a
-leaf_b = (atom_id, feature, direction, thr_index)_b
+leaf_a = (atom_id, feature, direction, thr_index, role)_a
+leaf_b = (atom_id, feature, direction, thr_index, role)_b
 
 if (feature_a, direction_a) > (feature_b, direction_b)  # lexicographic
   swap leaf_a ↔ leaf_b entirely
-  # after swap, all of: atom_id, feature, direction, thr_index move together
+  # after swap, all of: atom_id, feature, direction, thr_index, role move together
 ```
 
-Tie-break if `(feature, direction)` equal (should not occur for distinct pairwise axes): sort by `(atom_id, thr_index)`.
+**Role provenance survives the swap** (RB7). Roles are not dropped during commutative sorting.
+
+Tie-break if `(feature, direction)` equal (should not occur for distinct pairwise axes): sort by `(atom_id, thr_index, role)`.
+
+If roles differ across commutative children, sorting is still by the full leaf key after binding roles; role fields remain on each child in the canonical AST.
 
 After swap:
 
 | Use | Canonical form |
 |:--|:--|
-| Semantic operands | sorted leaves without thr_index |
+| Semantic / policy operands | sorted leaves; thr_index excluded from policy leaf identity when thr is grid axis (policy leaf refs predicate + direction; thr is coordinate) |
 | Grid axes / `grid_id` logical form | `P::{feat0}::{dir0}__{feat1}::{dir1}` with feat0/dir0 ≤ feat1/dir1 |
 | Truth row fields | store as `atom_0_id`, `feature_0`, `direction_0`, `thr_index_0`, `atom_1_id`, … (or a/b **after** swap) |
 | Coordinate key | `(thr_index_0, thr_index_1)` in that axis order |
@@ -340,22 +413,115 @@ G1: "S::{feature}::{direction}::u{thr_index}"
 G2/G3: "{AND|OR}::{atom_0_id}::{atom_1_id}"   # atoms already thr-indexed P::…::qK after leaf swap
 ```
 
-Equivalent `A AND B` ↔ `B AND A` raw rows must produce **identical** truth digests, semantic_ids, grid_domain_ids, coordinate_ids, and region membership digests.
+Equivalent `A AND B` ↔ `B AND A` raw rows must produce **identical** truth digests, policy_ids, grid_domain_ids, coordinate_ids, and region membership digests **when roles and other non-order fields match**.
 
 ### 6.4 Stability requirements
 
-| Event | evidence_bundle | truth_contract | region/null outcome IDs | mask/coord IDs |
-|:--|:--|:--|:--|:--|
-| Row reorder, same logical rows | may change | stable | stable | stable |
-| Symmetric a/b operand swap | may change raw bytes | **stable** (after RB4) | stable | stable |
-| CSV↔Parquet rematerialization | may change | stable | stable | stable |
-| Pack/schema version only | stable (if raw same) | stable | stable | stable |
-| Feasibility $\varepsilon$/$g_{\min}$/loss change | — | stable | **change** | stable |
-| Cohort / label / signal / lattice / membership change | changes | changes | change | change |
+| Event | evidence_bundle | truth_contract | region/null outcome IDs | mask/coord IDs | membership rows |
+|:--|:--|:--|:--|:--|:--|
+| Row reorder, same logical rows | may change | stable | stable | stable | stable (content) |
+| Symmetric a/b operand swap | may change raw bytes | **stable** (after RB4) | stable | stable | stable |
+| CSV↔Parquet rematerialization | may change | stable | stable | stable | stable |
+| Pack/schema version only | stable (if raw same) | stable | stable | stable | stable |
+| Feasibility $\varepsilon$/$g_{\min}$/loss change | — | stable | **change** | **stable** | **new rows / new region FKs** |
+| Cohort / label / signal / lattice / membership change | changes | changes | change | change | change |
 
-### 6.5 Aliases
+### 6.5 Candidate universe and predicate IDs (RB6)
 
-Human thr expressions and T0 `::compN` strings are **aliases only**, never join keys.
+**`candidate_universe_id`** digests at least:
+
+```json
+{
+  "kind": "candidate_universe",
+  "substrate_id": "...",
+  "hook_id": "...",
+  "candidate_builder_id": "...",
+  "candidate_builder_version": "...",
+  "prefilter_contract_id": "...",
+  "eligibility_contract": "...",
+  "candidate_key_schema": "...",
+  "label_exposure_contract_id": "...",
+  "observation_time_or_frame_range": "...",
+  "predecision_state_snapshot_contract": "..."
+}
+```
+
+**`universe_hash`** (reproducibility seal, not a substitute for identity fields): digest over ordered or canonically sorted candidate identities plus fields required to reconstruct exposure, when the sealed study provides them.
+
+**`predicate_id`** digests at least:
+
+```json
+{
+  "kind": "predicate",
+  "signal_identity": "...",
+  "signal_unit": "...",
+  "predicate_domain": "...",
+  "predicate_codomain": "{T,F,U}" | "{T,F}",
+  "unknown_value_policy": "...",
+  "final_unknown_action": "no_reject" | "reject" | "...",
+  "comparator": ">" | ">=" | "<" | "<=" | "...",
+  "endpoint_policy": "...",
+  "tie_policy": "...",
+  "nan_policy": "...",
+  "posinf_policy": "...",
+  "neginf_policy": "...",
+  "missing_value_policy": "...",
+  "quantile_method": "...",
+  "floating_point_tolerance": "...",
+  "clipping_domain": "..."
+}
+```
+
+Two-valued codomain `{T,F}` must be **declared and justified**, never inferred from a sample that happened to contain no unknowns.
+
+### 6.6 Executable policy identity (RB7)
+
+**`policy_definition_id`** digests the **canonical executable semantics**, not observed masks:
+
+```json
+{
+  "kind": "policy_definition",
+  "grammar_version": "...",
+  "truth_semantics_version": "...",
+  "composition_level": "observational" | "single_step" | "closed_loop",
+  "universe_id": "<candidate_universe_id>",
+  "operator_precedence": "NOT>AND>OR",
+  "maximum_nesting_depth": <int or null-bound>,
+  "maximum_operands_per_node": <int>,
+  "not_scope": "none" | "atom_only" | "arbitrary_subtree",
+  "mixed_role_policy": "...",
+  "canonical_policy_ast": { "...": "typed AST with roles and predicate refs" },
+  "canonical_policy_ast_hash": "<sha256 of canonical AST JSON>"
+}
+```
+
+**Three distinct equivalence fields** (never collapsed into one ID):
+
+| Field | Meaning |
+|:--|:--|
+| `canonical_policy_ast_hash` / `policy_definition_id` | syntactic / executable policy identity |
+| `logical_equivalence_status` | policies agree for every legal input under declared truth semantics (optional evidence annotation) |
+| `observed_mask_hash` / `observed_mask_equivalence_status` | sample agreement only |
+
+```text
+observed_mask equality ≠ logical equivalence ≠ policy identity
+```
+
+**Role rules:**
+
+- Every atom and subtree carries a declared role.
+- Q4.5 sealed operands that are not role-qualified use bounded role  
+  `untyped_observation` (or an explicit pack-declared `observational_reject_candidate` alias) — **not** silent `sufficient_reject` upgrade, and **not** G7 `necessary_envelope` / `support`.
+- Role metadata must not disappear during commutative sorting or operand canonicalization.
+- Current G1–G3 serialization **must not invent** G7 necessary/support roles.
+- `NOT` / complement metadata are required only when NOT appears; Q4.5 freezes `not_scope=none` and does not authorize complement reject policies.
+
+**RegionAsset / membership rows** must FK to the exact `policy_definition_id` (or synonym `semantic_definition_id` authority row) that generated them.
+
+### 6.7 Aliases
+
+Human thr expressions and T0 `::compN` strings are **aliases only**, never join keys.  
+Raw evaluator `combo_id` / pre-swap a/b order are aliases only after §6.3.
 
 ---
 
@@ -394,6 +560,8 @@ normalized_data_content_digest =
 
 **Excluded from pairwise truth payload as identity inputs:** raw `combo_id`, pre-swap `atom_a_id`/`atom_b_id` order, pre-swap feature/direction/thr a/b. Those may appear only as non-identity aliases outside the digest.
 
+Truth digest captures **observed atlas tables**. It does **not** replace `policy_definition_id` or `candidate_universe` authorities.
+
 Implementations may read parquet or csv; **logical projection after RB4 canonicalize** is authoritative.
 
 ### 7.3 Excluded from truth digest
@@ -408,6 +576,7 @@ row numbers, parquet row groups
 evaluator live source path
 pack schema fields
 loo_* portability marketing flags (may appear on evidence tables, not truth digest)
+observed_mask_hash as if it were truth contract identity
 ```
 
 ### 7.4 Missing values and types
@@ -440,15 +609,16 @@ loo_* portability marketing flags (may appear on evidence tables, not truth dige
 ### 8.1 Geometry
 
 - Dual area: coordinate registered counts vs per-grid unique-mask counts; **never** compare raw G1 vs G2 counts without lattice note.
-- Dual margin: `nearest_unsafe_distance` and `full_neighborhood_safe_radius` both required; edge-censored distance ≠ thickness.
-- Components: connected PS under §2 metric; membership from coordinates, not `region_stability` mask-quotient rows alone.
+- Dual margin: `nearest_unsafe_distance` and `full_neighborhood_safe_radius` both required on **membership realization** rows (or a derived margin table keyed by membership); edge-censored distance ≠ thickness.
+- Components: connected PS under §2 metric; membership from **membership coordinates**, not `region_stability` mask-quotient rows alone.
 - Global mask collapse across grids is diagnostic only.
+- Truth-level coordinate/mask rows do not themselves assert productive-safe geometry under a feasibility contract.
 
 ### 8.2 Capacity (non-additive)
 
 | Metric family | Member grain | Required stats |
 |:--|:--|:--|
-| `coordinate_member_capacity_distribution` | PS coordinates in region | n_members, min, max, median, q25, q75, robust_floor |
+| `coordinate_member_capacity_distribution` | PS coordinates in region (via membership) | n_members, min, max, median, q25, q75, robust_floor |
 | `mask_member_capacity_distribution` | distinct per-grid mask units in region | same stats |
 
 ```text
@@ -461,13 +631,15 @@ FORBIDDEN as region mass:
 
 Both distribution families are required for multi-member regions. Neither is event-union capacity.
 
+Mask fields that are conditional on productive-safe membership (e.g. mask capacity under a changed $\varepsilon$) belong on realization/aggregate tables, not on truth-level `mask_units` identity rows. Truth-level mask rows may store only feasibility-invariant facts (mask bitstring hash, coordinate support of that mask on the registered grid as a static signature if sealed as invariant).
+
 ---
 
 ## 9. Sequence / applicability descriptions
 
 | Field | Meaning | Promotion ban |
 |:--|:--|:--|
-| Incidence `(unit, sequence)` | coordinate or mask productive support | not a policy feature |
+| Incidence `(unit, sequence)` | coordinate or mask productive support under a realization | not a policy feature |
 | `sequence_support_union` | some member choice had productive mass on sequence | **≠** region applicability |
 | `sequence_support_intersection` | every member supports sequence | still descriptive |
 | min/max member `n_sequences` | range across alternative parameters | descriptive |
@@ -485,7 +657,7 @@ A null result is a first-class `null_records` row:
 
 ```text
 bounded_status = NULL_RESULT
-semantic_definition_id = NULL          # grammar/search-domain null
+policy_definition_id / semantic_definition_id = NULL   # grammar/search-domain null
 feasibility_contract_id = <required; in null_record_id digest>
 search_domain_id = <membership digest>
 n_non_null_region_assets (grammar summary) = 0
@@ -502,7 +674,7 @@ Null realization is relative to $(\varepsilon,g_{\min},L_{\mathrm{GT}},\Omega,$ 
 ```text
 combinator OR · lattice primary_quantile_lattice_q05
 40 members · 441 coords each · 17640 total
-each member: grid_domain_id + concrete OR semantic_definition_id
+each member: grid_domain_id + concrete OR policy_definition_id
 productive_safe_count = 0 · observed_safe_count = 0
 ```
 
@@ -512,7 +684,7 @@ productive_safe_count = 0 · observed_safe_count = 0
 missing atlas / failed run → BLOCKED_BY_ARTIFACT, not NULL_RESULT
 empty components file without null_records row
 summary-only domain id without member table
-fake single semantic_definition for all 40 grids on the null row
+fake single policy_definition for all 40 grids on the null row
 ```
 
 ---
@@ -528,8 +700,38 @@ Every FK target below is an authority. No FK may point to an undefined object.
 | | |
 |:--|:--|
 | PK | `truth_contract_id` |
-| Required | id_scheme, taxonomy_version, substrate_id, candidate_universe_id, signal_family[], sequence_set[], label_contract, unresolved_policy, lattice_contract, normalized_data_content_digest |
+| Required | id_scheme, taxonomy_version, substrate_id, **candidate_universe_id** (FK), signal_family[], sequence_set[], label_contract, unresolved_policy, lattice_contract, normalized_data_content_digest |
 | Forbidden in identity inputs | raw_artifact_sha256 map |
+
+#### `candidate_universe.json` | `jsonl` (**RB6 authority**)
+
+| | |
+|:--|:--|
+| PK | `candidate_universe_id` |
+| Required | universe_id (same as PK or synonym), **universe_hash** (when sealed), substrate_id, hook_id, candidate_builder_id, candidate_builder_version, prefilter_contract_id / eligibility_contract, candidate_key_schema, label_exposure_contract_id / label_exposure_owner, observation_time_or_frame_range, predecision_state_snapshot_contract |
+| Optional | transport_id (null for same-universe sealed studies) |
+| Invariants | bare string names without this row are **not** machine-sufficient; every pack/feasibility/policy that references a universe must resolve here |
+| Q4.5 freeze | one sealed row for `online_hook_eligible` on substrate `stage1_baudit_d_online` with hook/builder/prefilter/state fields as recorded by the study; composition remains observational |
+
+#### `predicate_definitions.csv` | `jsonl` (**RB6 authority**)
+
+| | |
+|:--|:--|
+| PK | `predicate_id` |
+| Required | signal_identity, signal_unit, predicate_domain, predicate_codomain (`{T,F,U}` default unless total proven), unknown_value_policy, final_unknown_action, comparator, endpoint_policy, tie_policy, nan_policy, posinf_policy, neginf_policy, missing_value_policy, quantile_method (if quantile lattice), floating_point_tolerance, clipping_domain |
+| Forbidden defaults | silent `U → reject`; silent total two-valued codomain |
+| Q4.5 freeze | three-valued/fail-safe serialization unless the sealed evaluator contract explicitly proves totality; **final_unknown_action = no_reject**; no NOT predicates authorized |
+
+#### `policy_definitions.csv` | `jsonl` (**RB7 authority**; superseding name for executable semantics)
+
+| | |
+|:--|:--|
+| PK | `policy_definition_id` |
+| FK | candidate_universe_id; leaf predicate_ids inside AST |
+| Required | grammar_version, truth_semantics_version, composition_level, operator_precedence, maximum_nesting_depth, maximum_operands_per_node, not_scope, mixed_role_policy, **canonical_policy_ast**, **canonical_policy_ast_hash**, role annotations on every atom/subtree, parameter_system / lattice_kind when atlas-bound |
+| Separate non-identity fields | observed_mask_hash (optional evidence), logical_equivalence_status, observed_mask_equivalence_status, role_validity_result |
+| Notes | `semantic_definitions` may remain as a **synonym table name** only if it carries the same required executable fields; operator+leaves+lattice alone is **insufficient** |
+| Q4.5 freeze | grammar bounds for G1 atom / G2 binary AND / G3 binary OR; `composition_level=observational`; `not_scope=none`; roles = `untyped_observation` (bounded observational), **not** G7 roles; no complement_contract |
 
 #### `evidence_bundle.json`
 
@@ -544,7 +746,7 @@ Every FK target below is an authority. No FK may point to an undefined object.
 | | |
 |:--|:--|
 | PK | `feasibility_contract_id` |
-| FK | truth_contract_id |
+| FK | truth_contract_id, **candidate_universe_id** |
 | Required | parameter_or_policy_space, candidate_universe_id, safety_loss_definition, productivity_definition, epsilon, g_min, n_gt_exposed, n_fp_exposed, denominator_owner, selection_scope, finite_sample_statement, metric_adjacency_edge_policy |
 | **Forbidden** | claim_level, claim_level_max_supported, observed region counts |
 
@@ -554,17 +756,9 @@ Every FK target below is an authority. No FK may point to an undefined object.
 |:--|:--|
 | PK | `evidence_claim_id` |
 | FK | **`feasibility_contract_id` (required)**, **`evidence_bundle_id` (required)**; optional content_id + content_kind (`region_asset` \| `null_record` \| …) |
-| Required | claim_level (L0–L6), claim_scope (`object`\|`pack`\|`grammar`), selection_scope_note, finite_sample_statement, observed summary fields as applicable |
+| Required | claim_level (L0–L6), claim_scope (`object`\|`pack`\|`grammar`), selection_scope_note, finite_sample_statement, observed summary fields as applicable; composition_level note when claim is composition-sensitive |
 | Invariants | every claim resolves to exactly one feasibility + one evidence bundle; object claim_level follows §4.3 derivation |
 | Notes | Pack ceiling row: claim_scope=pack, claim_level=L1; object rows: G1 L0; G2 isolated L0 / multi L1; G3 null L0 |
-
-#### `semantic_definitions.csv` | `jsonl`
-
-| | |
-|:--|:--|
-| PK | `semantic_definition_id` |
-| Required | grammar, operator, operands_json, lattice_kind, roles_json, parameter_system |
-| Notes | Concrete trees only; includes all 40 G3 OR pair definitions |
 
 #### `grid_domains.csv` | `jsonl`
 
@@ -587,7 +781,7 @@ Every FK target below is an authority. No FK may point to an undefined object.
 | | |
 |:--|:--|
 | PK | `(search_domain_id, grid_domain_id)` |
-| FK | search_domain_id, **grid_domain_id**, **semantic_definition_id** (concrete, non-null) |
+| FK | search_domain_id, **grid_domain_id**, **policy_definition_id** (concrete, non-null) |
 | Required | grid_id, n_registered_coordinates |
 | Invariants | G3 sealed: exactly 40 rows; membership_digest matches |
 
@@ -596,9 +790,9 @@ Every FK target below is an authority. No FK may point to an undefined object.
 | | |
 |:--|:--|
 | PK | `region_asset_id` |
-| FK | truth_contract_id, **feasibility_contract_id**, semantic_definition_id, grid_domain_id |
+| FK | truth_contract_id, **feasibility_contract_id**, **policy_definition_id**, grid_domain_id |
 | Required | grammar, bounded_status=HAS_REGION, n_coords, n_mask_units, shape fields, **claim_level** (from §4.3), action_state, production_forbidden |
-| Notes | Non-null only; claim_level from geometry derivation — **not** grammar-wide G2=L1 |
+| Notes | Non-null only; claim_level from geometry derivation — **not** grammar-wide G2=L1; policy FK is the executable semantics that generated the region |
 
 #### `null_records.csv`
 
@@ -606,25 +800,38 @@ Every FK target below is an authority. No FK may point to an undefined object.
 |:--|:--|
 | PK | `null_record_id` |
 | FK | truth_contract_id, **feasibility_contract_id**, search_domain_id |
-| Required | grammar, semantic_definition_id **NULL**, null_reason, domain counts, **claim_level=L0**, action_state, production_forbidden |
+| Required | grammar, policy_definition_id **NULL**, null_reason, domain counts, **claim_level=L0**, action_state, production_forbidden |
 
-#### `region_masks.csv`
+#### `coordinates.csv` (**RB5 truth-level authority**)
+
+| | |
+|:--|:--|
+| PK | `coordinate_id` |
+| FK | truth_contract_id, grid_domain_id |
+| Required | **canonical_cell_key**, thr indices in canonical axis order, optional raw `cell_id` / `combo_id` aliases |
+| **Forbidden on this table** | region_asset_id, productive_safe flags, capacity observations, dual margins, sequence incidence under a feasibility, feasibility_contract_id |
+| Notes | Reusable across feasibility contracts without contradictory rows |
+
+#### `mask_units.csv` (**RB5 truth-level authority**; filename may remain `region_masks.csv` if grain matches)
 
 | | |
 |:--|:--|
 | PK | `mask_unit_id` |
 | FK | truth_contract_id, grid_domain_id |
-| Required | grid_id, mask_sha256, n_coords, mask_n_neg, sequence fields |
-| Forbidden as authority | region_asset_ids_json |
+| Required | grid_id, mask_sha256; optional feasibility-invariant mask signature fields |
+| **Forbidden on this table** | region_asset_ids_json as authority; feasibility-conditional PS capacity as identity; claim_level |
+| Notes | If legacy filename `region_masks.csv` is kept, schema grain must still be truth-level only |
 
-#### `region_coordinates.csv`
+#### `region_coordinate_membership.csv` (**RB5 feasibility-bound realization authority**)
 
 | | |
 |:--|:--|
-| PK | `coordinate_id` |
-| FK | truth_contract_id, **region_asset_id**, **mask_unit_id**, grid_domain_id |
-| Required | **canonical_cell_key**, thr indices in canonical axis order, optional raw `cell_id` alias, PS flags, capacity, dual margins |
-| **Authority** | sole authoritative region↔mask derivation source |
+| PK | `(region_asset_id, coordinate_id)` |
+| FK | **region_asset_id**, **coordinate_id**, **mask_unit_id**, (region implies feasibility) |
+| Required | productive-safe membership flags as applicable, observed capacity fields, dual margins (or FK to margin table keyed by this PK), sequence incidence fields as applicable |
+| **Authority** | sole authoritative region↔mask derivation source:  
+  `region_mask_link == DISTINCT(region_asset_id, mask_unit_id) FROM region_coordinate_membership` |
+| Notes | Filename may remain `region_coordinates.csv` **only if** grain and composite PK are this membership relation — not truth-level coordinate identity |
 
 #### `region_asset_manifest.json` (**AUTHORITATIVE pack row — RB2**)
 
@@ -632,8 +839,8 @@ Every FK target below is an authority. No FK may point to an undefined object.
 |:--|:--|
 | Grain | **exactly one pack emission row** |
 | PK | `pack_id` |
-| FK | truth_contract_id, evidence_bundle_id, feasibility_contract_id |
-| Required | pack_id, producer_kind, producer_contract_version, schema_version, grammar_scope, maturity_declared, pack_claim_ceiling, action_state_default, production_forbidden, counts (`n_non_null_region_assets`, `n_null_records`, …), terminal_letter |
+| FK | truth_contract_id, evidence_bundle_id, feasibility_contract_id, **candidate_universe_id** |
+| Required | pack_id, producer_kind, producer_contract_version, schema_version, grammar_scope, maturity_declared, pack_claim_ceiling, action_state_default, production_forbidden, counts (`n_non_null_region_assets`, `n_null_records`, …), terminal_letter, composition_level |
 | Invariants | sole authority for `pack_id`; every `pack_membership.pack_id` and `region_claim_contract.pack_id` **must** resolve here |
 | Notes | Not optional/derived. If a multi-pack future needs a table form, `packs.jsonl` may supersede with the same PK/FK fields — until then this file is normative. |
 
@@ -643,25 +850,26 @@ Every FK target below is an authority. No FK may point to an undefined object.
 |:--|:--|
 | PK | `(pack_id, content_kind, content_id)` |
 | FK | **pack_id → region_asset_manifest.json** |
-| Required | content_kind ∈ {region_asset, null_record, mask_unit, coordinate, semantic_definition, …} |
+| Required | content_kind ∈ {region_asset, null_record, mask_unit, coordinate, membership, policy_definition, predicate_definition, candidate_universe, …} |
 
 #### `region_claim_contract.json`
 
 | | |
 |:--|:--|
 | PK | pack_id (**FK → region_asset_manifest.json**) |
-| Required | pack_claim_ceiling, maturity_declared (A0), action_states allowed/forbidden, production_forbidden, forbidden_promotions[], terminal_b, g7_status, identity_layer_policy, capacity_policy, sequence_policy, claim_ownership_policy (feasibility ⟂ claim_level), claim_level_derivation_policy (§4.3) |
+| Required | pack_claim_ceiling, maturity_declared (A0), action_states allowed/forbidden, production_forbidden, forbidden_promotions[], terminal_b, g7_status, identity_layer_policy, capacity_policy, sequence_policy, claim_ownership_policy (feasibility ⟂ claim_level), claim_level_derivation_policy (§4.3), composition_level_policy (observational only for this study), policy_equivalence_policy (AST ≠ mask), realization_vs_content_policy (RB5) |
 
 ### 11.2 Auxiliary / derived (optional)
 
 | File | Authority source |
 |:--|:--|
-| `region_components.csv` | region_assets + coordinates |
-| `region_mask_link.csv` | **derived from** region_coordinates |
-| `region_capacity.csv` | coordinates + masks; dual distributions |
+| `region_components.csv` | region_assets + membership |
+| `region_mask_link.csv` | **derived from** region_coordinate_membership |
+| `region_capacity.csv` | membership + mask units; dual distributions |
 | `region_sequence_support.csv` | incidence expansion + region union/intersection |
-| `region_margin.csv` | coordinates / T0 boundary_margin |
+| `region_margin.csv` | membership / T0 boundary_margin (keyed by region+coordinate) |
 | `grammar_region_summary.csv` | aggregates |
+| `semantic_definitions.*` | only if synonym of `policy_definitions` with full RB7 fields |
 
 ### 11.3 Pack emission defaults (locked)
 
@@ -672,6 +880,10 @@ action_state: observation_only
 production_forbidden: true
 maturity_declared: A0
 pack_claim_ceiling: L1
+composition_level: observational
+not_scope: none
+g7_roles: not_inferred
+final_unknown_action: no_reject
 ```
 
 ### 11.4 Validation invariants
@@ -679,21 +891,47 @@ pack_claim_ceiling: L1
 ```text
 every FK resolves to exactly one authority row
 pack_id FK → region_asset_manifest.json only (not optional headers)
+
+# RB2 / RB3
 region_asset and null_record rows carry feasibility_contract_id;
   their IDs digest includes feasibility_contract_id
 evidence_claim rows require feasibility_contract_id + evidence_bundle_id
-mask/coordinate IDs remain feasibility-independent
+feasibility_contract has no claim_level fields
+
+# RB5
+coordinate_id and mask_unit_id are feasibility-independent
+coordinates / mask_units tables contain no feasibility-bound outcome fields
+region_coordinate_membership PK = (region_asset_id, coordinate_id)
+region_mask_link == DISTINCT(region_asset_id, mask_unit_id) FROM membership
+one coordinate_id may appear under multiple feasibility-bound regions without conflict
 content outcome IDs independent of pack_id and evidence_bundle_id
-region_mask_link == DISTINCT(region_asset_id, mask_unit_id) FROM coordinates
+
+# RB6
+every pack / feasibility / policy resolves to one candidate_universe authority row
+predicate missing/unknown/comparator/endpoint behavior is machine-reconstructible
+unknown never defaults to reject for this study
+cross-universe composition without transport is invalid
+
+# RB7
+every non-null region and every search_domain_member resolves to one policy_definition
+policy_definition digests canonical AST (+ grammar/truth semantics/roles/universe)
+observed_mask_hash is not policy identity
+role provenance survives commutative canonicalize
+no G7 necessary/support roles inferred for Q4.5
+composition_level=observational for this study pack
+
+# RB1 / geometry claims
+claim_level derived per §4.3:
+  G1: 1×L0; G2: 6×L0 isolated + 19×L1 multi; G3 null L0; pack ceiling L1
 both capacity distributions present for multi-member regions
 no additive region capacity metric
 sequence union and intersection both present when multi-member
-G3: members=40, n_non_null=0, n_null_records≥1, null.semantic_definition_id IS NULL
-claim_level derived per §4.3:
-  G1: 1×L0; G2: 6×L0 isolated + 19×L1 multi; G3 null L0; pack ceiling L1
+G3: members=40, n_non_null=0, n_null_records≥1, null.policy_definition_id IS NULL
+
+# RB4 / truth
 pairwise truth rows digest only after §6.3 leaf canonicalize
-feasibility_contract has no claim_level fields
 truth_contract has no raw SHA map
+
 production_forbidden=true; action_state=observation_only for this study pack
 ```
 
@@ -736,6 +974,11 @@ grammar G2 ⇒ every G2 object L1
 A1 packaging ⇒ transferable or actionable
 missing files ⇒ NULL_RESULT
 mask equality ⇒ semantic / G7 equivalence
+observed_mask equality ⇒ policy identity or logical equivalence
+untyped observational role ⇒ G7 necessary/support or sufficient_reject authorization
+observational composition ⇒ single-step or closed-loop safety
+unknown ⇒ reject
+cross-universe composition without transport
 ```
 
 ---
@@ -748,6 +991,7 @@ Deterministic packaging:
 
 ```text
 inputs:  sealed Q4.5 full atlases + T0-B-R1 pack + this contract
+         + boolean_composition_semantics_contract
 outputs: authority + emission tables in §11
 process: no evaluator modification/rerun; no new research geometry claims
 ```
@@ -759,28 +1003,35 @@ A1 research maturity acceptance
 L2+ claim levels
 event-union capacity
 G4–G7 / G7 roles
+NOT/complement reject policies
+single-step / closed-loop composition claims
 LOO/shadow/hook/preset/production
 evidence_ledger promotion
 ```
 
 ### R1 readiness (engineering, not authorization)
 
-Existing sealed evidence is sufficient for deterministic conversion under this contract once R0-B is accepted. Runtime full atlases must remain hash-sealed for lattice membership.
+Existing sealed evidence is sufficient for deterministic conversion under this contract once R0-B is accepted, provided packaging materializes the new authorities (candidate_universe, predicate_definitions, policy_definitions, coordinates, mask_units, membership). Runtime full atlases must remain hash-sealed for lattice membership.
 
 ---
 
 ## 14. Q4.5 instance snapshot (normative freeze, not new results)
 
 ```text
-truth: stage2_q45_atlas_v4 · substrate stage1_baudit_d_online · universe online_hook_eligible
+truth: stage2_q45_atlas_v4 · substrate stage1_baudit_d_online
+universe authority: online_hook_eligible (full candidate_universe row required)
 cohort: n_gt_exposed=64 · n_fp_exposed=23 · unresolved firewall on
 PS: 154 = 1 G1 + 153 G2 + 0 G3
 components: 26 = 1 G1 + 25 G2 (6 isolated + 19 multi) · productive mask units: 34
 radius≥1: 0/154 · terminal B
 claims: G1 1×L0 · G2 6×L0 + 19×L1 · G3 1×L0 · pack ceiling L1 · maturity A0
+composition_level: observational · not_scope: none · U→no_reject · no G7 roles
 RB3: region/null IDs bind feasibility_contract_id (model A)
 RB2: pack authority = region_asset_manifest.json
 RB4: pairwise a/b full-field canonicalize before truth digest
+RB5: coordinates/mask_units truth-level; membership feasibility-bound
+RB6: candidate_universe + predicate_definitions authorities required
+RB7: policy_definitions canonical AST identity ≠ observed_mask_hash
 ```
 
 ---
@@ -794,15 +1045,19 @@ RB4: pairwise a/b full-field canonicalize before truth digest
 | O3 | Robust floor definition | min member capacity |
 | O4 | Optional L0 geometry tags on isolated points | tags ≠ L1 |
 | O5 | Future multi-pack table `packs.jsonl` | only if multi-pack needed; same fields as manifest |
+| O6 | Keep filename `region_coordinates.csv` vs rename to `region_coordinate_membership.csv` | either OK if grain = membership composite PK |
+| O7 | Keep filename `region_masks.csv` vs `mask_units.csv` | either OK if grain = truth-level mask |
+| O8 | Synonym `semantic_definitions` vs rename to `policy_definitions` | synonym allowed only with full RB7 fields |
+| O9 | Exact Q4.5 role token string | `untyped_observation` |
 
-No open decision may: re-merge claim_level into feasibility_contract_id; drop `grid_domains`; reintroduce grammar-wide G2=L1; drop pack authority; unbind null/region outcomes from feasibility; skip pairwise leaf canonicalize.
+No open decision may: re-merge claim_level into feasibility_contract_id; drop `grid_domains`; reintroduce grammar-wide G2=L1; drop pack authority; unbind null/region outcomes from feasibility; skip pairwise leaf canonicalize; put feasibility-bound fields on coordinate/mask content IDs; omit candidate-universe or predicate authorities; digest observed masks into policy identity; invent G7 roles; map unknown to reject; promote observational composition to intervention safety.
 
 ---
 
 ## 16. Explicit non-authorization
 
 ```text
-R0-B / R0-B-R1 draft is not self-accepted
+R0-B / R0-B-R1 / R0-B-R2 draft is not self-accepted
 R1 not authorized
 no evaluator rerun
 no asset pack generated
@@ -810,4 +1065,6 @@ no A0→A1 promotion
 no PR required for this draft alone
 evidence_ledger unchanged
 production/presets unchanged
+no G4–G7 implementation
+no research verdict self-acceptance
 ```
