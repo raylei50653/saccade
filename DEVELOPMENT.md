@@ -11,6 +11,7 @@
 - 文件家 / research 索引 / 數字升格 → [docs/ownership/doc_structure_contract.md](docs/ownership/doc_structure_contract.md)（**O1.5**）
 - 跨子類連續研究任務 → [docs/research/threads/](docs/research/threads/) 建 navigation-only thread；不放長表、不取代 evidence_ledger / module research。
 - 接續任務 → [docs/research/threads/README.md](docs/research/threads/README.md)（先看 Active threads，再進單卡）
+- 若 active thread 有同名 `*.dispatch.yaml`，該 sidecar 是 branch／ancestor／scope／concurrency／return-packet 的 execution authority；Chat 複製文字只作導航，不能擴 scope，衝突時 fail closed。
 - **TODO = WIP 鎖**（sole active 一句 + link）；**不是**任務敘事 / 上下文恢復 → [DOC_MAINTENANCE § WIP](docs/DOC_MAINTENANCE.md) · [契約 C7](docs/ownership/doc_structure_contract.md)
 - 格式、WIP=1、fact-owner → [docs/DOC_MAINTENANCE.md](docs/DOC_MAINTENANCE.md)
 - 「我去哪寫」決策樹 → [docs/README.md](docs/README.md)
@@ -140,7 +141,7 @@ uv run scripts/eval/mot17.py --preset mamba_whole_graph --detector SDP --double-
 | 🧬 reid | ⏸️ 暫緩 | — | [↗](docs/modules/reid/TODO.md) |
 | 🔄 lifecycle | 📋 待辦 | evaluator lifecycle 測試切片 | [↗](docs/modules/lifecycle/TODO.md) |
 | 🌀 motion | 🟢 收斂 | — | [↗](docs/modules/motion/TODO.md) |
-| 🤝 semantic | 🔄 active | Safe-Region Assetization — R0-A preflight | [↗](docs/modules/semantic/TODO.md) |
+| 🤝 semantic | 🔄 active | Safe-Region Assetization — R0-B-R3 identity/reconstruction closure | [↗](docs/modules/semantic/TODO.md) |
 | ⚡ trigger | 🟢 收斂 | — | [↗](docs/modules/trigger/TODO.md) |
 | 🖥️ streaming | 🟢 收斂 | — | [↗](docs/modules/streaming/TODO.md) |
 | 💾 storage | 🟢 收斂 | — | [↗](docs/modules/storage/TODO.md) |
@@ -208,6 +209,8 @@ MLflow / Optuna 未啟動不阻 eval。啟動與查詢：
 ---
 
 ## 6. 衝突時誰說了算
+
+對有 chat-owned dispatch 的 governed research task：dispatch 只負責 branch、ancestor、current gate、write scope、concurrency、authorization 與 return packet；它不改寫主程式或研究事實。任何複製進 agent 的 Chat 尾部都只是導航，與 repo authority 衝突時必須 fail closed。
 
 1. **主路徑程式碼**（`src/saccade/perception/`、`src/tracking/`、`scripts/eval/mot17.py`）
 2. **合約 / 預設**（headline YAML、`check_headline_decision_contract`、accepted ADR）
