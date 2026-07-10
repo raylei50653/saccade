@@ -7,22 +7,24 @@ created: 2026-07-10
 
 # Safe-Region Assetization Program
 
-> **One-line:** R0-B RegionAsset contract is **ACCEPTED** at reviewed delivery `f92340b7` with RB1–RB9 **PASS**. Current sole task is **R1 deterministic G1–G3 asset conversion**. R1 may package the sealed evidence into an **A0 observation-only pack candidate**; it does not grant A1, L2+, intervention, transfer, production, or ledger promotion.
+> **One-line:** R0-B RegionAsset contract is **ACCEPTED** (`f92340b7`, RB1–RB9). **R1 conversion delivered** as an **A0 observation-only pack candidate** under `out/signal_study/m_b1_5_safe_region_asset_r1_20260710/`. Engineering validation PASS (two-run determinism, PK/FK, claims). **A1 not granted** — chat-side pack review required. No production/ledger promotion.
 
 ## Status
 
 | Item | Status |
 |:--|:--|
 | Program | **ACTIVE** — safe-region assetization |
-| Semantic sole active | **R1 deterministic asset conversion** |
+| Semantic sole active | **R1 delivered — A0 pack candidate awaiting chat-side review** |
 | R0-A / CR1–CR9 | **ACCEPTED / PASS** |
 | R0-B-R1 | `e02a5367` — **RB1–RB4 PASS** |
 | R0-B-R2 | `34eab247` — **RB5–RB7 PASS** |
 | R0-B-R3 | `f92340b7` — **RB8–RB9 PASS** |
-| R0-B final contract | **ACCEPTED** |
-| R1 | **AUTHORIZED — deterministic conversion only** |
+| R0-B final contract | **ACCEPTED** (+ editorial E1) |
+| R1 | **DELIVERED** — A0 pack candidate; not self-accepted as A1 |
 | Current maturity | **A0 retained** |
 | R1 output maturity | **A0 pack candidate; separate chat-side acceptance required for A1** |
+| Pack root | `out/signal_study/m_b1_5_safe_region_asset_r1_20260710/` |
+| Conversion note | [safe_region_asset_r1_conversion_20260710.md](../../modules/semantic/research/safe_region_asset_r1_conversion_20260710.md) |
 | Claims | G1 **1×L0**; G2 **6×L0 isolated + 19×L1 multi**; G3 **1×L0**; pack ceiling **L1** |
 | Production / presets | **unchanged** |
 | evidence_ledger | **not promoted** |
@@ -105,25 +107,24 @@ R0-B-R2 RB5–RB7                        # PASS
 R0-B-R3 RB8–RB9                        # PASS
 R0-B final contract                    # ACCEPTED
 
-R1 deterministic G1–G3 conversion    ← current
-chat-side R1 pack review / A1 gate
+R1 deterministic G1–G3 conversion    # DELIVERED (A0 pack candidate)
+chat-side R1 pack review / A1 gate   ← current
 R2–R4 conditional maturity stages
 A4/L6 separate production approval
 ```
 
-## R1 authorized work
+## R1 delivery record
 
-R1 may:
+R1 delivered:
 
-- implement a deterministic, research-only converter/validator;
-- consume the existing sealed Q4.5 runtime full atlases, committed Q4.5 seals, T0 evidence, threshold registry, and source candidate rows when present;
-- emit the authority and membership files required by contract §11;
-- generate a RegionAsset pack under `out/`;
-- validate stable IDs, normalized digests, PK/FK integrity, canonical pair ordering, claim derivation, and byte/content determinism;
-- write an R1 conversion note and update navigation/status mirrors;
-- apply editorial erratum E1 and mark the contract accepted before valid pack emission.
+- editorial E1 applied; contract marked ACCEPTED;
+- deterministic converter `scripts/tools/convert_safe_region_asset_r1.py`;
+- pack root `out/signal_study/m_b1_5_safe_region_asset_r1_20260710/`;
+- two-run authority fingerprint match; PK/FK/claims/firewall validation PASS;
+- conversion note [safe_region_asset_r1_conversion_20260710.md](../../modules/semantic/research/safe_region_asset_r1_conversion_20260710.md);
+- unit tests `tests/unit/test_safe_region_asset_r1_conversion.py` PASS.
 
-R1 must run without evaluator modification, evaluator rerun, threshold search, geometry recomputation, or new research claims.
+No evaluator modification, evaluator rerun, threshold search, geometry recomputation, or new research claims.
 
 ### Artifact availability
 
@@ -175,3 +176,4 @@ Passing engineering validation creates an **A0 pack candidate**. Chat-side revie
 - 2026-07-10: R0-B-R2 delivered at `34eab247`; RB5–RB7 pass.
 - 2026-07-10: R0-B-R3 delivered at `f92340b7`; RB8–RB9 pass.
 - 2026-07-10: chat-side final review accepted R0-B and authorized R1 deterministic conversion only; A0 retained; A1 remains a separate gate.
+- 2026-07-10: R1 conversion delivered — A0 pack candidate emitted; two-run determinism + PK/FK/claims PASS; awaiting chat-side A1 gate (not self-accepted).

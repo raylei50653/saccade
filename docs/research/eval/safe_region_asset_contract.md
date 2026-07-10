@@ -1,13 +1,14 @@
-# Safe-Region Asset Contract (R0-B Draft)
+# Safe-Region Asset Contract (R0-B)
 
 <!-- doc-status: active -->
 <!-- doc-promotion: none; method/schema contract only; not evidence_ledger -->
 <!-- doc-date: 2026-07-10 -->
 <!-- doc-module: cross -->
 
-**Role:** Normative cross-cutting **RegionAsset** contract draft (R0-B · revision **R0-B-R3**).  
-**Status:** **DRAFT** — awaiting chat-side re-review after RB8–RB9 identity/reconstruction closure. Not self-accepted.  
-**Does not authorize:** R1 asset generation · A0→A1 maturity · transfer · intervention · production · ledger promotion.
+**Role:** Normative cross-cutting **RegionAsset** contract (R0-B · revision **R0-B-R3** + editorial **E1**).  
+**Status:** **ACCEPTED** — chat-side final review of delivery tip `f92340b7` (acceptance commit `01a2ec37`); RB1–RB9 **PASS**.  
+**R1 authorization:** deterministic G1–G3 packaging of sealed evidence into an **A0 observation-only pack candidate** only.  
+**Still not authorized:** A0→A1 maturity · transfer · intervention · production · ledger promotion · evaluator rerun · new threshold/geometry search · research verdict self-acceptance.
 
 ```text
 R0-B-R1 corrections (retained):
@@ -21,9 +22,12 @@ R0-B-R2 corrections (retained):
   RB6 candidate-universe + predicate-edge machine authorities
   RB7 canonical executable Boolean policy identity (≠ observed mask)
 
-R0-B-R3 corrections (current):
+R0-B-R3 corrections (retained):
   RB8 sealed candidate-universe contract vs instance membership identity
   RB9 threshold-registry authority + concrete threshold-bound policy grain
+
+Editorial E1 (non-substantive; does not reopen RB8/RB9):
+  §2.4 inverted positive implications → explicit non-implications / forbidden inferences
 ```
 
 **Parents**
@@ -147,11 +151,18 @@ reject-only G1/G2/G3 AND/OR
 no NOT/complement authorization
 unknown never maps to reject
 no cross-universe composition without transport
-generator-contract equality ⇒ same sealed universe instance
-source_event_table_sha256 ⇒ universe_membership_digest
-policy family ⇒ concrete threshold-executable policy
-thr_index without registry ⇒ reconstructible thr_value
 ```
+
+**Forbidden inferences (editorial E1 — non-implications):**
+
+```text
+generator-contract equality ⇏ same sealed universe instance
+source_event_table_sha256 ⇏ universe_membership_digest
+policy family ⇏ concrete threshold-executable policy
+thr_index without registry ⇏ reconstructible thr_value
+```
+
+These four implications are **rejected** by the accepted RB8/RB9 model and by §12.4 firewalls. Implementations must treat them as invalid inferences, not as reconstruction rules.
 
 Observational mask algebra on frozen rows **does not** establish single-step intervention or closed-loop policy composition.
 
@@ -1234,23 +1245,25 @@ thr_index without registry ⇒ reconstructible thr_value
 
 ## 13. R1 conversion boundary
 
-### Authorized only after chat-side R0-B acceptance (not now)
+### Authorized now (chat-side R0-B accept + R1 gate)
 
-Deterministic packaging:
+Deterministic packaging only:
 
 ```text
-inputs:  sealed Q4.5 full atlases + T0-B-R1 pack + this contract
+inputs:  sealed Q4.5 full atlases + T0-B-R1 pack + this contract (E1 applied)
          + boolean_composition_semantics_contract
          + sealed threshold_registry.json (+ SHA256SUMS)
-outputs: authority + emission tables in §11
+         + candidate-level rows for universe_membership_digest
+outputs: authority + emission tables in §11 under declared out root
+         A0 observation-only pack candidate (not A1)
 process: no evaluator modification/rerun; no new threshold search;
-         no new research geometry claims
+         no new research geometry claims; no self-promotion to A1
 ```
 
-### Remains blocked even after R0-B accept until further gates
+### Remains blocked even after successful R1 emission until further gates
 
 ```text
-A1 research maturity acceptance
+A1 research maturity acceptance (separate chat-side gate)
 L2+ claim levels
 event-union capacity
 G4–G7 / G7 roles
@@ -1260,9 +1273,9 @@ LOO/shadow/hook/preset/production
 evidence_ledger promotion
 ```
 
-### R1 readiness (engineering, not authorization)
+### R1 engineering requirements
 
-Existing sealed evidence is sufficient for deterministic conversion under this contract once R0-B is accepted, provided packaging materializes the authorities (universe contract+instance with membership digest or explicit BLOCKED_BY_ARTIFACT, threshold_registry+entries, predicate_definitions, policy_family_definitions, policy_instances, coordinates, mask_units, membership). Runtime full atlases must remain hash-sealed for lattice membership. No new threshold search.
+Packaging must materialize the authorities (universe contract+instance with membership digest or explicit BLOCKED_BY_ARTIFACT, threshold_registry+entries, predicate_definitions, policy_family_definitions, policy_instances, coordinates, mask_units, membership). Runtime full atlases must remain hash-sealed for lattice membership. Two clean converter runs must yield identical authority content and IDs. No new threshold search.
 
 ---
 
@@ -1312,16 +1325,16 @@ No open decision may: re-merge claim_level into feasibility_contract_id; drop `g
 
 ---
 
-## 16. Explicit non-authorization
+## 16. Explicit non-authorization / residual gates
 
 ```text
-R0-B / R0-B-R1 / R0-B-R2 / R0-B-R3 draft is not self-accepted
-R1 not authorized
-no evaluator rerun
-no new threshold search
-no asset pack generated
-no A0→A1 promotion
-no PR required for this draft alone
+R0-B contract: ACCEPTED (chat-side; not agent self-accept)
+R1: authorized for deterministic A0 pack candidate only
+R1 pack: NOT self-accepted as A1
+no evaluator rerun or modification
+no new threshold / policy / geometry search
+no A0→A1 promotion by the converter
+no PR required for R1 alone unless separately authorized
 evidence_ledger unchanged
 production/presets unchanged
 no G4–G7 implementation

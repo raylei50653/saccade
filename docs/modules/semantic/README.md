@@ -45,7 +45,8 @@
 
 | 文件 | 內容 |
 |------|------|
-| [research/safe_region_r0_asset_contract_preflight_20260710.md](research/safe_region_r0_asset_contract_preflight_20260710.md) | **R0-A–R2 Region Asset Contract Preflight** · CR1–CR5 retained · CR6–CR9 truth_contract/evidence_bundle/feasibility/domain membership/FK tables · A0 ⟂ L1 · **awaiting chat-side re-review** · [thread](../../research/threads/safe_region_assetization_20260710.md) · [math](../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md) |
+| [research/safe_region_r0_asset_contract_preflight_20260710.md](research/safe_region_r0_asset_contract_preflight_20260710.md) | **R0-A Region Asset Contract Preflight** · CR1–CR9 **ACCEPTED** · [thread](../../research/threads/safe_region_assetization_20260710.md) · [math](../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md) |
+| [research/safe_region_asset_r1_conversion_20260710.md](research/safe_region_asset_r1_conversion_20260710.md) | **R1 conversion note** · A0 pack candidate under `out/signal_study/m_b1_5_safe_region_asset_r1_20260710/` · two-run determinism PASS · A1 chat gate · [contract](../../research/eval/safe_region_asset_contract.md) · [thread](../../research/threads/safe_region_assetization_20260710.md) |
 | [research/occ_exit_audit_p55_scope_20260709.md](research/occ_exit_audit_p55_scope_20260709.md) | **#55 occ-exit audit** 範圍與 substrate |
 | [research/occ_exit_audit_p55_wp2_seq_conditioning_20260709.md](research/occ_exit_audit_p55_wp2_seq_conditioning_20260709.md) | WP2 序列條件化標註 |
 | [research/occ_exit_audit_p55_wp3_promotion_decision_20260709.md](research/occ_exit_audit_p55_wp3_promotion_decision_20260709.md) | WP3 promotion 決策（`split_feat_pr`；runtime 未開） |
