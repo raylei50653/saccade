@@ -33,7 +33,7 @@ created: 2026-07-10
 | R1.1 attribution | **overlay** (downgraded) · [note](../../modules/semantic/research/safe_region_assetization_r11_20260710.md) · study `out/signal_study/safe_region_assetization_r11_20260710/` |
 | R1.1 net contribution | **2 unique harmful AND events located + 3 descriptive symptoms** (role reversal / weak retention / margin contraction); "primary F3" **rejected** (post-hoc floors, K-duplicated reversal count, alias-ambiguous predicate) |
 | A1 audit | **26/26 PASS** — S0 unit lock · S1 crosswalk 0 mismatches · Q1 pack-only · N1 controls · `out/signal_study/safe_region_a1_audit_20260711/` |
-| Next research | **owner records A1 terminal first** (D1 rule + acceptance_limits if WITH_LIMITS); R1.1's four next-lines deferred until then |
+| Next research | **owner records A1 terminal first**; `WITH_LIMITS` 無需先跑 D1（「no D1 trace」直接列為 acceptance_limit）; R1.1's four next-lines deferred until then |
 | Current maturity | **A0 pack retained**; probe `A1_region_asset` tags = overlay labels only (not pack maturity) |
 | R2–R4 | **unauthorized** (fail-closed; V-A not met) |
 | Pack root (conversion) | `out/signal_study/m_b1_5_safe_region_asset_r1_20260710/` |
@@ -230,8 +230,10 @@ A1-S  semantic fidelity (hard gate)
       → audited 2026-07-11: S1 crosswalk 0 mismatches (11/11 PASS)
 
 A1-Q  fixed, pack-only research query battery
-      topology · dual capacity · sequence union/intersection ·
-      duplicate-mask grain · G3 null — 全部 pack-only 精確回答
+      topology · dual capacity · duplicate-mask grain · G3 null —
+      pack-only 精確回答（predeclared goldens）；
+      sequence union/intersection — pack-only **computable**
+      （驗證可計算性＋封閉性；未建 per-region golden，不宣稱精確回答）
       → audited 2026-07-11: 5/5 PASS · N1 negative controls 6/6 PASS
 
 D1    decision utility — 只驗證「事前固定」的 bounded decision trace；
@@ -267,7 +269,18 @@ A1_REJECTED
   → does NOT open R2–R4
 ```
 
-`WITH_LIMITS` **must** enumerate residual raw-artifact queries as `acceptance_limits`. Per the 2026-07-10 review: `A1_ACCEPTED` additionally requires S0/S1/Q1/N1 all PASS with zero semantic mismatch (met 2026-07-11) and, if decision utility stays in A1, a pre-declared **D1** trace (not yet run); `A1_REJECTED` applies on non-unique acceptance object, any critical semantic mismatch, any false-promoted negative control, or limits describable only vaguely. Semantic errors must **not** be packaged as limits. Known candidate limits: no D1 trace · reusable abstraction unproven (usage-based) · event-mass / non-productive-cell / predicate-alias queries need raw artifacts.
+`WITH_LIMITS` **must** enumerate residual raw-artifact queries as `acceptance_limits`. Per the 2026-07-10 review: `A1_ACCEPTED` additionally requires S0/S1/Q1/N1 all PASS with zero semantic mismatch (met 2026-07-11); `A1_REJECTED` applies on non-unique acceptance object, any critical semantic mismatch, any false-promoted negative control, or limits describable only vaguely. Semantic errors must **not** be packaged as limits. Known candidate limits: no D1 trace · reusable abstraction unproven (usage-based) · event-mass / non-productive-cell / predicate-alias queries need raw artifacts.
+
+D1 binding (disambiguated 2026-07-11 — closing A1 must not spawn a decision experiment):
+
+```text
+A1_ACCEPTED:
+  requires pre-declared D1 only if decision utility is claimed.
+
+A1_ACCEPTED_WITH_LIMITS:
+  may record absence of D1 as an explicit acceptance_limit;
+  no post-hoc D1 is required to close A1.
+```
 
 Even after an accepting terminal (`A1_ACCEPTED` or `A1_ACCEPTED_WITH_LIMITS`), R2–R4 / transfer / LOO / production / ledger remain **unauthorized** until the research owner **explicitly authorizes the named next stage**. Maturity promotion to A1 is bound by the terminal; next-stage work is not.
 

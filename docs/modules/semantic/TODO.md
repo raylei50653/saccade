@@ -20,7 +20,8 @@
   maturity: A0 retained (terminal not yet recorded)
   next: owner records A1 terminal
     (A1_ACCEPTED_WITH_LIMITS supportable iff limits enumerated:
-     no D1 trace · abstraction usage-based · event-mass/alias queries need raw)
+     no D1 trace · abstraction usage-based · event-mass/alias queries need raw;
+     no post-hoc D1 required to close A1)
   R1.1 four next-lines: deferred until terminal
   R2 / grammar search / hook / ledger: closed
   terminal B: retained (never rested on the overlay)

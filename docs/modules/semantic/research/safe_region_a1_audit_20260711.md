@@ -46,7 +46,7 @@ Neither probe consumes the pack: both read sealed Q4.5 registry + raw events dir
 
 ### Q1 pack-only battery (5/5 PASS)
 
-topology (1+153+0 coords; 1+25 components) · dual capacity (denominators 870/17640/17640; cohort 23 neg / 64 GT) · per-region sequence union/intersection computable pack-only for all 26 regions · duplicate-mask grain (34 units vs 15 masks distinguishable pack-only) · G3 null precise.
+topology (1+153+0 coords; 1+25 components) · dual capacity (denominators 870/17640/17640; cohort 23 neg / 64 GT) · duplicate-mask grain (34 units vs 15 masks distinguishable pack-only) · G3 null precise — these four against predeclared goldens. Sequence union/intersection is verified as pack-only **computable** with closure (∩ ⊆ ∪ ⊆ cohort, all 26 regions), **not** as exact-answer against per-region goldens (none were predeclared; claim capability, not exactness).
 
 ### N1 negative controls (6/6 PASS)
 
@@ -54,7 +54,7 @@ topology (1+153+0 coords; 1+25 components) · dual capacity (denominators 870/17
 
 ### Not audited (stays open for the terminal)
 
-- **D1 decision trace** — no pre-declared bounded decision rule exists yet; running one post-hoc would repeat the R1.1 error. Owner must fix the rule first if decision utility stays inside A1.
+- **D1 decision trace** — no pre-declared bounded decision rule exists yet; running one post-hoc would repeat the R1.1 error. Binding: a pre-declared D1 is required **only** for an `A1_ACCEPTED` that claims decision utility; `A1_ACCEPTED_WITH_LIMITS` may record the absence of D1 as an explicit `acceptance_limit` — **no post-hoc D1 is required to close A1**.
 - **Reusable abstraction** — usage-based; requires a second independent consumer adopting RegionAsset IDs/relations. Not verifiable today.
 
 ## Verified review findings (basis for the overlay downgrade)
