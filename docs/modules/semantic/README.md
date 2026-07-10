@@ -45,7 +45,7 @@
 
 | 文件 | 內容 |
 |------|------|
-| [research/safe_region_r0_asset_contract_preflight_20260710.md](research/safe_region_r0_asset_contract_preflight_20260710.md) | **R0-A / R0-A-R1 Region Asset Contract Preflight** · CR1–CR5 identity/capacity/sequence/null/M:N corrections · R1 conditional on R0-B · **awaiting chat-side re-review** · [thread](../../research/threads/safe_region_assetization_20260710.md) |
+| [research/safe_region_r0_asset_contract_preflight_20260710.md](research/safe_region_r0_asset_contract_preflight_20260710.md) | **R0-A–R2 Region Asset Contract Preflight** · CR1–CR5 retained · CR6–CR9 truth_contract/evidence_bundle/feasibility/domain membership/FK tables · A0 ⟂ L1 · **awaiting chat-side re-review** · [thread](../../research/threads/safe_region_assetization_20260710.md) · [math](../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md) |
 | [research/occ_exit_audit_p55_scope_20260709.md](research/occ_exit_audit_p55_scope_20260709.md) | **#55 occ-exit audit** 範圍與 substrate |
 | [research/occ_exit_audit_p55_wp2_seq_conditioning_20260709.md](research/occ_exit_audit_p55_wp2_seq_conditioning_20260709.md) | WP2 序列條件化標註 |
 | [research/occ_exit_audit_p55_wp3_promotion_decision_20260709.md](research/occ_exit_audit_p55_wp3_promotion_decision_20260709.md) | WP3 promotion 決策（`split_feat_pr`；runtime 未開） |
