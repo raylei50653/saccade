@@ -97,6 +97,10 @@ class SemanticConfig:
     semantic_clean_max_aspect: float = 4.5
     semantic_clean_margin_ratio: float = 0.0
     semantic_strict_sim_threshold: float = 0.0
+    # Research-only M-B1 portable OR-tail hook (default-off; not production preset)
+    research_portable_or_tail_policy: str | None = None
+    research_portable_or_tail_audit: bool = False
+    research_portable_or_tail_audit_dir: str | None = None
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> "SemanticConfig":

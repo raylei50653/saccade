@@ -110,8 +110,14 @@ def load_portable_policy(
     _require(isinstance(raw, dict), "portable policy root must be object")
     clauses_raw = raw.get("clauses")
     atom_specs = raw.get("atom_specs")
-    _require(isinstance(clauses_raw, list) and clauses_raw, "missing clauses")
-    _require(isinstance(atom_specs, dict) and atom_specs, "missing atom_specs")
+    _require(
+        isinstance(clauses_raw, list) and bool(clauses_raw),
+        "missing clauses",
+    )
+    _require(
+        isinstance(atom_specs, dict) and bool(atom_specs),
+        "missing atom_specs",
+    )
 
     candidate_id = str(
         raw.get("candidate_id")
@@ -146,7 +152,10 @@ def load_portable_policy(
 
     clauses: list[tuple[str, ...]] = []
     for i, cl in enumerate(clauses_raw):
-        _require(isinstance(cl, list) and cl, f"clause[{i}] must be non-empty list")
+        _require(
+            isinstance(cl, list) and bool(cl),
+            f"clause[{i}] must be non-empty list",
+        )
         aids = tuple(str(a) for a in cl)
         clauses.append(aids)
 

@@ -239,6 +239,17 @@ KWARGS_DIRECT: dict[str, str] = {
     "semantic_spatial_gate": "[C] experimental semantic — dead when reid_mode=off",
     "semantic_threshold": "[C] experimental semantic — dead when reid_mode=off",
     "semantic_ttl": "[C] experimental semantic — dead when reid_mode=off",
+    # M-B1 Stage 1 research-only portable OR-tail hook (default-off; kwargs path)
+    "research_portable_or_tail_policy": (
+        "[C] research-only M-B1 portable OR-tail policy path — default off; "
+        "consumed via cfg.kwargs / pipeline, not production preset"
+    ),
+    "research_portable_or_tail_audit": (
+        "[C] research-only M-B1 hook audit flag — default off; kwargs path"
+    ),
+    "research_portable_or_tail_audit_dir": (
+        "[C] research-only M-B1 hook audit output dir — kwargs path"
+    ),
 }
 
 # (C) Consumed as direct function parameter of run_eval().
