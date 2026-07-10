@@ -220,7 +220,9 @@ MLflow / Optuna 未啟動不阻 eval。啟動與查詢：
 
 ## 6. 衝突時誰說了算
 
-For governed research delivery, **PR metadata** owns engineering location and concurrency (head/base, merge base, head SHA, files, CI, reviews). **Research documents** (thread + accepted contracts + module research notes) own research gate, scope, claim boundaries, research acceptance, and next-stage authorization. Chat text is navigation only; it cannot expand scope or override repo authorities.
+For governed research delivery, **PR metadata** owns engineering location and concurrency (head/base, merge base, head SHA, files, CI, reviews). **Research documents** (thread + accepted contracts + module research notes) own research gate, scope, claim boundaries, research acceptance, and next-stage authorization.
+
+**Chat text is navigation until written back:** Chat may propose fixes, scope adjustments, or verdicts. It does **not** become cross-conversation authority until those decisions are recorded in the thread, contract, and/or PR. Chat cannot expand scope or override repo authorities merely by being pasted into an agent session.
 
 ```text
 PR merge ≠ research acceptance

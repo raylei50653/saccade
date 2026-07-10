@@ -1334,7 +1334,8 @@ R1 pack: NOT self-accepted as A1
 no evaluator rerun or modification
 no new threshold / policy / geometry search
 no A0→A1 promotion by the converter
-no PR required for R1 alone unless separately authorized
+R1 conversion did not itself grant research acceptance or merge authorization
+engineering delivery and review now proceed through the active implementation PR
 evidence_ledger unchanged
 production/presets unchanged
 no G4–G7 implementation

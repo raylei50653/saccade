@@ -128,16 +128,18 @@ threshold_registry_id:           a9d37931aed66356…
 ## Explicit non-claims
 
 ```text
-≠ A1 research acceptance (chat-side gate still required)
+≠ A1 research acceptance (chat-side / research-owner gate still required)
 ≠ evaluator rerun or modification
 ≠ new threshold / policy / geometry search
 ≠ L2+ claims
 ≠ G4–G7 / NOT / complement reject
 ≠ LOO / shadow / hook / preset / production
 ≠ evidence_ledger promotion
-≠ PR required for this conversion alone
+≠ research acceptance or merge authorization from R1 conversion alone
 ≠ research verdict self-acceptance
 ```
+
+R1 conversion did not itself grant research acceptance or merge authorization. Engineering delivery and review now proceed through the active implementation PR: [#95](https://github.com/raylei50653/saccade/pull/95).
 
 ## History
 
