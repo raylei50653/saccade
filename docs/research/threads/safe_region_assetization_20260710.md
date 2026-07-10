@@ -7,27 +7,52 @@ created: 2026-07-10
 
 # Safe-Region Assetization Program
 
-> **One-line:** R0-B RegionAsset contract is **ACCEPTED** (`f92340b7`, RB1–RB9). **R1 conversion delivered** as an **A0 observation-only pack candidate** under `out/signal_study/m_b1_5_safe_region_asset_r1_20260710/`. Engineering validation PASS (two-run determinism, PK/FK, claims). **A1 not granted** — chat-side pack review required. No production/ledger promotion.
+> **One-line:** R0-B RegionAsset contract is **ACCEPTED** (`f92340b7`, RB1–RB9). **R1 engineering delivery** exists on the research branch as an **A0 observation-only pack candidate**. Engineering/A1 review proceeds through a **PR** (not direct-agent dispatch). **A1 not granted** — research acceptance remains a separate chat-side / research-owner gate. No production/ledger promotion.
 
 ## Status
 
 | Item | Status |
 |:--|:--|
 | Program | **ACTIVE** — safe-region assetization |
-| Semantic sole active | **R1 delivered — A0 pack candidate awaiting chat-side review** |
+| Delivery model | **PR-driven** (direct-agent dispatch **retired**) |
+| Semantic sole active | **R1 engineering delivery complete — A0 pack candidate; A1 not accepted** |
 | R0-A / CR1–CR9 | **ACCEPTED / PASS** |
 | R0-B-R1 | `e02a5367` — **RB1–RB4 PASS** |
 | R0-B-R2 | `34eab247` — **RB5–RB7 PASS** |
 | R0-B-R3 | `f92340b7` — **RB8–RB9 PASS** |
 | R0-B final contract | **ACCEPTED** (+ editorial E1) |
-| R1 | **DELIVERED** — A0 pack candidate; not self-accepted as A1 |
+| R1 engineering delivery | **COMPLETE** on branch — converter, tests, A0 pack candidate |
+| Engineering review | via **pull request** against `main` (PR metadata = head/base/CI/files) |
+| Research asset acceptance (A1) | **not accepted** — separate from PR engineering review |
 | Current maturity | **A0 retained** |
-| R1 output maturity | **A0 pack candidate; separate chat-side acceptance required for A1** |
+| R1 output maturity | **A0 pack candidate; R1 does not self-promote A0→A1** |
 | Pack root | `out/signal_study/m_b1_5_safe_region_asset_r1_20260710/` |
 | Conversion note | [safe_region_asset_r1_conversion_20260710.md](../../modules/semantic/research/safe_region_asset_r1_conversion_20260710.md) |
 | Claims | G1 **1×L0**; G2 **6×L0 isolated + 19×L1 multi**; G3 **1×L0**; pack ceiling **L1** |
 | Production / presets | **unchanged** |
 | evidence_ledger | **not promoted** |
+
+## Gate separation (normative)
+
+Keep these distinct:
+
+| Gate | Owns | Authority |
+|:--|:--|:--|
+| **Engineering delivery** | Converter, tests, pack emission, docs mirrors | implementation branch + PR |
+| **Engineering review** | Code quality, CI, contract fidelity of implementation | PR reviewers / CI |
+| **Research asset acceptance (A1)** | Whether the A0 pack may be treated as accepted research asset | chat-side / research-owner |
+| **Maturity promotion** | A0→A1 (and later stages) | research documents + owner gate only |
+| **Merge** | Landing engineering on `main` | PR merge (does **not** imply research acceptance) |
+| **Next-stage authorization** | R2+ / production / ledger | research-owner; not implied by merge |
+
+```text
+R1 implementation exists on the branch
+A0 pack candidate emitted locally
+engineering / A1 review should occur through a PR
+R1 delivery does not self-promote A0→A1
+PR merge ≠ research acceptance
+engineering-ready ≠ evidence promotion
+```
 
 ## Acceptance record
 
@@ -72,20 +97,21 @@ engineering merge
 ≠ research conclusion promotion
 ```
 
-R1 is authorized to transform sealed inputs into deterministic authorities and emission tables only.
+R1 transforms sealed inputs into deterministic authorities and emission tables only. It does not authorize maturity promotion.
 
 ## Read first
 
-1. [Agent execution dispatch](safe_region_assetization_20260710.dispatch.yaml)
-2. [Accepted R0-B RegionAsset contract](../eval/safe_region_asset_contract.md)
-3. [Boolean Composition Semantics Contract](../eval/boolean_composition_semantics_contract.md)
-4. [Mathematical framework](../eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
+1. [Accepted R0-B RegionAsset contract](../eval/safe_region_asset_contract.md)
+2. [Boolean Composition Semantics Contract](../eval/boolean_composition_semantics_contract.md)
+3. [Mathematical framework](../eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
+4. [R1 conversion note](../../modules/semantic/research/safe_region_asset_r1_conversion_20260710.md)
 5. [Accepted R0-A preflight](../../modules/semantic/research/safe_region_r0_asset_contract_preflight_20260710.md)
 6. [Q4.5 artifact preflight](../../modules/semantic/research/composition_grammar_t0_artifact_preflight_20260710.md)
 7. [Sealed Q4.5 threshold registry](../../modules/semantic/research/evidence/m_b1_5_stage2_q45_20260710/threshold_registry.json)
 8. [Q4.5 manifest](../../modules/semantic/research/evidence/m_b1_5_stage2_q45_20260710/manifest.json)
 9. [Q4.5 SHA inventory](../../modules/semantic/research/evidence/m_b1_5_stage2_q45_20260710/SHA256SUMS.json)
 10. [T0 interpretation evidence](../../modules/semantic/research/evidence/m_b1_5_t0_region_interpretation_20260710/manifest.json)
+11. Current implementation PR on GitHub (when open) — live head SHA, base, CI, files
 
 ## Accepted A0 baseline
 
@@ -107,15 +133,16 @@ R0-B-R2 RB5–RB7                        # PASS
 R0-B-R3 RB8–RB9                        # PASS
 R0-B final contract                    # ACCEPTED
 
-R1 deterministic G1–G3 conversion    # DELIVERED (A0 pack candidate)
-chat-side R1 pack review / A1 gate   ← current
-R2–R4 conditional maturity stages
+R1 deterministic G1–G3 conversion    # ENGINEERING DELIVERED (A0 pack candidate)
+PR engineering review                ← current engineering path
+chat-side R1 pack review / A1 gate   ← separate research path (not self-granted)
+R2–R4 conditional maturity stages    # unauthorized until A1 + owner gate
 A4/L6 separate production approval
 ```
 
 ## R1 delivery record
 
-R1 delivered:
+R1 engineering delivery:
 
 - editorial E1 applied; contract marked ACCEPTED;
 - deterministic converter `scripts/tools/convert_safe_region_asset_r1.py`;
@@ -153,7 +180,7 @@ A delivered R1 pack is reviewable only when:
 - manifest remains `maturity_declared=A0`, `composition_level=observational`, `production_forbidden=true`;
 - no evaluator/threshold search/production/ledger changes occurred.
 
-Passing engineering validation creates an **A0 pack candidate**. Chat-side review must separately decide A0→A1; R1 may not self-promote it.
+Passing engineering validation creates an **A0 pack candidate**. Chat-side / research-owner review must separately decide A0→A1; R1 may not self-promote it. PR merge does not decide A1.
 
 ## Must not
 
@@ -166,7 +193,8 @@ Passing engineering validation creates an **A0 pack candidate**. Chat-side revie
 - change terminal B, accepted counts, claim levels, or production defaults;
 - promote to evidence ledger;
 - self-accept the generated pack as A1 or authorize later stages;
-- open a PR unless separately authorized.
+- treat PR merge as research acceptance or maturity promotion;
+- recreate a direct-agent `*.dispatch.yaml` execution authority.
 
 ## History
 
@@ -176,4 +204,5 @@ Passing engineering validation creates an **A0 pack candidate**. Chat-side revie
 - 2026-07-10: R0-B-R2 delivered at `34eab247`; RB5–RB7 pass.
 - 2026-07-10: R0-B-R3 delivered at `f92340b7`; RB8–RB9 pass.
 - 2026-07-10: chat-side final review accepted R0-B and authorized R1 deterministic conversion only; A0 retained; A1 remains a separate gate.
-- 2026-07-10: R1 conversion delivered — A0 pack candidate emitted; two-run determinism + PK/FK/claims PASS; awaiting chat-side A1 gate (not self-accepted).
+- 2026-07-10: R1 conversion delivered — A0 pack candidate emitted; two-run determinism + PK/FK/claims PASS; awaiting research A1 gate (not self-accepted).
+- 2026-07-10: **Retired direct-agent dispatch sidecar**; delivery model switched to **PR-driven engineering** + separate research acceptance. Historical note only: `safe_region_assetization_20260710.dispatch.yaml` and Chat-copied hash start protocols are no longer execution authority.

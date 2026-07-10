@@ -3,11 +3,16 @@
 **定位：** 跨子類連續任務的**導航卡 / 母線**，不是新的事實家。
 
 ```text
+DEVELOPMENT.md       = stable global router (D0–D4 · dashboard)
 TODO.md              = WIP lock / active pointer（sole active 一句）
-threads/             = 連續任務母線（狀態 · 邊界 · 下一步）
+threads/             = 連續任務母線（狀態 · 邊界 · 下一步 · normative links）
+implementation PR    = engineering delivery authority (head/base/SHA/CI/files)
 module research      = 事實與分析
 ledger/report_data/no_go = 升格後的正式事實
-conversation hook    = 短期接力（應收進 thread）
+```
+
+```text
+DEVELOPMENT.md → module TODO sole-active → active thread / contract → PR
 ```
 
 **不做：**
@@ -15,6 +20,7 @@ conversation hook    = 短期接力（應收進 thread）
 - 不放長表、完整分析、可引用數字正文
 - 不取代 `evidence_ledger` / `signal_analysis_ledger` / module research / `report_data`
 - **不**取代 module TODO 的 WIP=1 鎖（thread 可多張；sole active 仍以 TODO 為準）
+- **不**使用 direct-agent `*.dispatch.yaml` sidecars（retired; do not recreate）
 
 **結構契約：** [../../ownership/doc_structure_contract.md](../../ownership/doc_structure_contract.md)（O1.5）  
 **薄入口：** [../../../DEVELOPMENT.md](../../../DEVELOPMENT.md)
@@ -38,7 +44,7 @@ conversation hook    = 短期接力（應收進 thread）
 
 | Thread | Status (one-line) | Owner |
 |:--|:--|:--|
-| [safe_region_assetization_20260710.md](safe_region_assetization_20260710.md) | **semantic sole active** · R0-B accepted · R1 A0 pack candidate delivered · A1 chat review | semantic |
+| [safe_region_assetization_20260710.md](safe_region_assetization_20260710.md) | **semantic sole active** · R0-B accepted · R1 eng. delivery complete · A0 pack candidate · A1 not accepted · PR review | semantic |
 | [association_recovery_registry_20260709.md](association_recovery_registry_20260709.md) | Scripts index + tools YAML + contracts 就位；registry 維護母線 | semantic |
 | [doc_structure_o15_followup_20260709.md](doc_structure_o15_followup_20260709.md) | O1.5 + TODO-as-WIP-lock；follow-up = index debt / optional strict | ownership |
 
@@ -89,8 +95,15 @@ created: YYYY-MM-DD
 
 | 層 | 負責 |
 |:--|:--|
-| [DEVELOPMENT.md](../../../DEVELOPMENT.md) | 分層路由 D0–D4 · dashboard 只鏡射 sole active one-liner |
+| [DEVELOPMENT.md](../../../DEVELOPMENT.md) | 分層路由 D0–D4 · dashboard 只鏡射 sole active one-liner · PR-driven research routing |
 | module `TODO.md` | **WIP 鎖**（sole active + links）；非任務敘事 |
 | module / research README | 局部入口與檔案索引 |
-| **threads/** | 連續任務母線（狀態 · 邊界 · 下一步） |
+| **threads/** | 連續任務母線（狀態 · 邊界 · 研究 gate · next step） |
+| **implementation PR** | engineering delivery：branch tips、SHA、CI、changed files、review findings |
+| research contracts / notes | normative inputs · claim boundaries · research acceptance · stage authorization |
 | ledger / report_data / out/ | 事實與數字升格 |
+
+```text
+PR merge ≠ research acceptance
+engineering-ready ≠ evidence promotion
+```

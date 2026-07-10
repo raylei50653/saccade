@@ -5,14 +5,26 @@
 
 ## Sole active
 
-🔄 **Safe-Region Assetization — R1 delivered (A0 pack candidate awaiting chat review)**
+🔄 **Safe-Region Assetization — R1 engineering delivery complete (A0 pack candidate; A1 not accepted)**
 
 - Thread: [safe_region_assetization_20260710.md](../../research/threads/safe_region_assetization_20260710.md)
-- Agent execution anchor: [safe_region_assetization_20260710.dispatch.yaml](../../research/threads/safe_region_assetization_20260710.dispatch.yaml) — branch + minimum-required ancestor + ff-only / concurrent-advance gate；chat-side owned，agent 不得自行改寫
-- Accepted contract: [safe_region_asset_contract.md](../../research/eval/safe_region_asset_contract.md) — R0-B ACCEPTED; RB1–RB9 PASS; E1 applied
+- Delivery path: **PR-driven** — engineering review via pull request against `main` (not direct-agent dispatch)
+- Current engineering state: R1 deterministic converter + unit tests + A0 pack candidate emitted locally
+- Current / expected PR: open against `main` for engineering review (see GitHub PR list for head SHA / CI)
+- Current review gate: **engineering / PR review** of R1 delivery; **A1 research acceptance remains separate** (chat-side / research-owner)
+- Primary deliverable: accepted R0-B RegionAsset contract + deterministic R1 packer (`scripts/tools/convert_safe_region_asset_r1.py`) + conversion note
+- Accepted contract: [safe_region_asset_contract.md](../../research/eval/safe_region_asset_contract.md) — **R0-B: ACCEPTED**; RB1–RB9 PASS; E1 applied
 - R1 conversion note: [research/safe_region_asset_r1_conversion_20260710.md](research/safe_region_asset_r1_conversion_20260710.md)
-- Pack candidate: `out/signal_study/m_b1_5_safe_region_asset_r1_20260710/` (A0 observation-only; not A1)
-- Boundary: A0→A1 self-promotion, evaluator rerun/modification, threshold search, new research claims, G4–G7, LOO, shadow, hook, production, PR, and ledger work remain unauthorized
+- Pack candidate: `out/signal_study/m_b1_5_safe_region_asset_r1_20260710/` (**A0** observation-only; **not A1**)
+- Preserved state:
+  ```text
+  R0-B: ACCEPTED
+  R1 engineering delivery: completed as A0 pack candidate
+  A1: not accepted
+  terminal B: unchanged
+  production / ledger: unchanged
+  ```
+- Boundary: A0→A1 self-promotion, evaluator rerun/modification, threshold search, new research claims, G4–G7, LOO, shadow, hook, production, and ledger work remain unauthorized. PR merge does not grant research acceptance.
 
 ## Parked
 
@@ -21,7 +33,7 @@
 
 ## Related research threads（不佔 WIP 鎖）
 
-- [safe-region assetization](../../research/threads/safe_region_assetization_20260710.md) — **ACTIVE** · R0-B accepted · R1 A0 pack candidate · A1 chat gate
+- [safe-region assetization](../../research/threads/safe_region_assetization_20260710.md) — **ACTIVE** · R0-B accepted · R1 A0 pack candidate · A1 not accepted · PR engineering review
 - [composition grammar coverage program](../../research/threads/composition_grammar_coverage_program_20260710.md) — **SUPERSEDED** · coverage map absorbed into assetization R2–R4
 - [composition grammar × safe-region A0](../../research/threads/composition_grammar_safe_region.md) — **CLOSED** · T0-A/B/R1 · terminal B retained
   - A0 source note: [composition_grammar_t0_region_interpretation_20260710.md](research/composition_grammar_t0_region_interpretation_20260710.md)
