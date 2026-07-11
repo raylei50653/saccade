@@ -6,7 +6,7 @@ Phase 2 (#119) executes terminal states in small reviewable batches.
 **Progress**
 - Batch 1: `external_fp/test_external_fp_filter_runtime.py` → T2 promote to `tests/unit/eval/` (done, PR #120)
 - Batch 2: gap_conditioned_motion e0–e3 → T4 delete (done, PR #121); phase_b retained (line still warm)
-- Batch 3: `misc/test_boolean_atom_partial_order.py` → T3/T4 delete (this PR); sealed packet remains under contract checkers
+- Batch 3: `misc/test_boolean_atom_partial_order.py` → T3/T4 delete (done, PR #122); sealed packet remains under contract checkers
 
 Each research test file must eventually reach one of four terminal states:
 
