@@ -1,0 +1,403 @@
+{
+ "description": "Dependency DAG for composite/derived atoms. Edges are provenance only — not closure arcs and not weights.",
+ "frozen_atoms": [
+  "score_m_bridge",
+  "bridge_dist",
+  "dist_h",
+  "log_h_ratio",
+  "resid_mean",
+  "dir_cos",
+  "speed_mismatch",
+  "gap"
+ ],
+ "nodes": {
+  "score_m_bridge": {
+   "kind": "weighted_composite",
+   "parents": [
+    "resid_mean",
+    "dist_h",
+    "lost_exit_speed"
+   ],
+   "transform": "speed-weighted linear mix of height-normalized terms",
+   "motion_derived": true
+  },
+  "bridge_dist": {
+   "kind": "motion_extrapolation_composite",
+   "parents": [
+    "lost_foot_xy",
+    "cand_foot_xy",
+    "lost_exit_velocity",
+    "cand_entry_velocity",
+    "gap",
+    "h_ref"
+   ],
+   "transform": "m_l=x_l+v_l*gap/2; m_c=x_c-v_c*gap/2; bridge_dist=||m_l-m_c||/h_ref",
+   "formula_source": "src/saccade/perception/eval/relink.py::_midpoint_bridge_dist (pair-builder column of the same form)",
+   "motion_derived": true,
+   "note": "Not a parentless geometry leaf. Explicitly depends on endpoint velocities and gap; constant-velocity mid-gap extrapolation."
+  },
+  "dist_h": {
+   "kind": "builder_raw",
+   "parents": [
+    "lost_foot_xy",
+    "cand_foot_xy",
+    "h_ref"
+   ],
+   "transform": "||x_c - x_l|| / h_ref (endpoint geometry only)",
+   "motion_derived": false
+  },
+  "log_h_ratio": {
+   "kind": "derived",
+   "parents": [
+    "h_lost_raw",
+    "h_cand_raw"
+   ],
+   "transform": "abs(log(h_cand/h_lost))",
+   "motion_derived": false
+  },
+  "resid_mean": {
+   "kind": "derived",
+   "parents": [
+    "fwd_resid",
+    "bwd_resid"
+   ],
+   "transform": "0.5*(fwd+bwd) (each residual is /h_ref in the builder)",
+   "motion_derived": true
+  },
+  "dir_cos": {
+   "kind": "derived",
+   "parents": [
+    "lost_exit_velocity",
+    "lost_foot_xy",
+    "cand_foot_xy"
+   ],
+   "transform": "cos(v_lost_exit, x_cand - x_lost); does NOT use candidate entry velocity",
+   "formula_source": "scripts/tools/build_relink_candidates.py::pair_features (dir_cos = (v_lost · displacement) / (|v|·|d|))",
+   "motion_derived": true
+  },
+  "speed_mismatch": {
+   "kind": "derived",
+   "parents": [
+    "lost_exit_speed",
+    "cand_entry_speed"
+   ],
+   "transform": "abs(exit_speed - entry_speed) (speeds are /h_ref)",
+   "motion_derived": true
+  },
+  "gap": {
+   "kind": "builder_raw",
+   "parents": [
+    "lost_last_frame",
+    "cand_first_frame"
+   ],
+   "transform": "cand_first_frame - lost_last_frame",
+   "motion_derived": false,
+   "regime_descriptor": true
+  },
+  "h_lost_raw": {
+   "kind": "builder_raw",
+   "parents": [],
+   "transform": null,
+   "motion_derived": false
+  },
+  "h_cand_raw": {
+   "kind": "builder_raw",
+   "parents": [],
+   "transform": null,
+   "motion_derived": false
+  },
+  "h_ref": {
+   "kind": "builder_raw",
+   "parents": [
+    "h_lost_raw",
+    "h_cand_raw"
+   ],
+   "transform": "max(0.5*(h_lost+h_cand), 1)",
+   "motion_derived": false
+  },
+  "fwd_resid": {
+   "kind": "derived",
+   "parents": [
+    "lost_foot_xy",
+    "cand_foot_xy",
+    "lost_exit_velocity",
+    "gap",
+    "h_ref"
+   ],
+   "transform": "||(x_l + v_l*gap) - x_c|| / h_ref (forward CV extrapolation residual)",
+   "formula_source": "scripts/tools/build_relink_candidates.py::pair_features",
+   "motion_derived": true
+  },
+  "bwd_resid": {
+   "kind": "derived",
+   "parents": [
+    "lost_foot_xy",
+    "cand_foot_xy",
+    "cand_entry_velocity",
+    "gap",
+    "h_ref"
+   ],
+   "transform": "||(x_c - v_c*gap) - x_l|| / h_ref (backward CV extrapolation residual)",
+   "formula_source": "scripts/tools/build_relink_candidates.py::pair_features",
+   "motion_derived": true
+  },
+  "lost_exit_speed": {
+   "kind": "builder_raw",
+   "parents": [
+    "lost_exit_velocity",
+    "h_ref"
+   ],
+   "transform": "||v_l|| / h_ref",
+   "motion_derived": true
+  },
+  "cand_entry_speed": {
+   "kind": "builder_raw",
+   "parents": [
+    "cand_entry_velocity",
+    "h_ref"
+   ],
+   "transform": "||v_c|| / h_ref",
+   "motion_derived": true
+  },
+  "lost_exit_velocity": {
+   "kind": "builder_raw",
+   "parents": [],
+   "transform": "endpoint velocity of lost track",
+   "motion_derived": true
+  },
+  "cand_entry_velocity": {
+   "kind": "builder_raw",
+   "parents": [],
+   "transform": "endpoint velocity of candidate track",
+   "motion_derived": true
+  },
+  "lost_foot_xy": {
+   "kind": "builder_raw",
+   "parents": [],
+   "transform": "lost endpoint foot position",
+   "motion_derived": false
+  },
+  "cand_foot_xy": {
+   "kind": "builder_raw",
+   "parents": [],
+   "transform": "candidate endpoint foot position",
+   "motion_derived": false
+  },
+  "lost_last_frame": {
+   "kind": "builder_raw",
+   "parents": [],
+   "transform": null,
+   "motion_derived": false
+  },
+  "cand_first_frame": {
+   "kind": "builder_raw",
+   "parents": [],
+   "transform": null,
+   "motion_derived": false
+  }
+ },
+ "edges": [
+  {
+   "source": "resid_mean",
+   "target": "score_m_bridge",
+   "relation": "depends_on"
+  },
+  {
+   "source": "dist_h",
+   "target": "score_m_bridge",
+   "relation": "depends_on"
+  },
+  {
+   "source": "lost_exit_speed",
+   "target": "score_m_bridge",
+   "relation": "depends_on"
+  },
+  {
+   "source": "lost_foot_xy",
+   "target": "bridge_dist",
+   "relation": "depends_on"
+  },
+  {
+   "source": "cand_foot_xy",
+   "target": "bridge_dist",
+   "relation": "depends_on"
+  },
+  {
+   "source": "lost_exit_velocity",
+   "target": "bridge_dist",
+   "relation": "depends_on"
+  },
+  {
+   "source": "cand_entry_velocity",
+   "target": "bridge_dist",
+   "relation": "depends_on"
+  },
+  {
+   "source": "gap",
+   "target": "bridge_dist",
+   "relation": "depends_on"
+  },
+  {
+   "source": "h_ref",
+   "target": "bridge_dist",
+   "relation": "depends_on"
+  },
+  {
+   "source": "lost_foot_xy",
+   "target": "dist_h",
+   "relation": "depends_on"
+  },
+  {
+   "source": "cand_foot_xy",
+   "target": "dist_h",
+   "relation": "depends_on"
+  },
+  {
+   "source": "h_ref",
+   "target": "dist_h",
+   "relation": "depends_on"
+  },
+  {
+   "source": "h_lost_raw",
+   "target": "log_h_ratio",
+   "relation": "depends_on"
+  },
+  {
+   "source": "h_cand_raw",
+   "target": "log_h_ratio",
+   "relation": "depends_on"
+  },
+  {
+   "source": "fwd_resid",
+   "target": "resid_mean",
+   "relation": "depends_on"
+  },
+  {
+   "source": "bwd_resid",
+   "target": "resid_mean",
+   "relation": "depends_on"
+  },
+  {
+   "source": "lost_exit_velocity",
+   "target": "dir_cos",
+   "relation": "depends_on"
+  },
+  {
+   "source": "lost_foot_xy",
+   "target": "dir_cos",
+   "relation": "depends_on"
+  },
+  {
+   "source": "cand_foot_xy",
+   "target": "dir_cos",
+   "relation": "depends_on"
+  },
+  {
+   "source": "lost_exit_speed",
+   "target": "speed_mismatch",
+   "relation": "depends_on"
+  },
+  {
+   "source": "cand_entry_speed",
+   "target": "speed_mismatch",
+   "relation": "depends_on"
+  },
+  {
+   "source": "lost_last_frame",
+   "target": "gap",
+   "relation": "depends_on"
+  },
+  {
+   "source": "cand_first_frame",
+   "target": "gap",
+   "relation": "depends_on"
+  },
+  {
+   "source": "h_lost_raw",
+   "target": "h_ref",
+   "relation": "depends_on"
+  },
+  {
+   "source": "h_cand_raw",
+   "target": "h_ref",
+   "relation": "depends_on"
+  },
+  {
+   "source": "lost_foot_xy",
+   "target": "fwd_resid",
+   "relation": "depends_on"
+  },
+  {
+   "source": "cand_foot_xy",
+   "target": "fwd_resid",
+   "relation": "depends_on"
+  },
+  {
+   "source": "lost_exit_velocity",
+   "target": "fwd_resid",
+   "relation": "depends_on"
+  },
+  {
+   "source": "gap",
+   "target": "fwd_resid",
+   "relation": "depends_on"
+  },
+  {
+   "source": "h_ref",
+   "target": "fwd_resid",
+   "relation": "depends_on"
+  },
+  {
+   "source": "lost_foot_xy",
+   "target": "bwd_resid",
+   "relation": "depends_on"
+  },
+  {
+   "source": "cand_foot_xy",
+   "target": "bwd_resid",
+   "relation": "depends_on"
+  },
+  {
+   "source": "cand_entry_velocity",
+   "target": "bwd_resid",
+   "relation": "depends_on"
+  },
+  {
+   "source": "gap",
+   "target": "bwd_resid",
+   "relation": "depends_on"
+  },
+  {
+   "source": "h_ref",
+   "target": "bwd_resid",
+   "relation": "depends_on"
+  },
+  {
+   "source": "lost_exit_velocity",
+   "target": "lost_exit_speed",
+   "relation": "depends_on"
+  },
+  {
+   "source": "h_ref",
+   "target": "lost_exit_speed",
+   "relation": "depends_on"
+  },
+  {
+   "source": "cand_entry_velocity",
+   "target": "cand_entry_speed",
+   "relation": "depends_on"
+  },
+  {
+   "source": "h_ref",
+   "target": "cand_entry_speed",
+   "relation": "depends_on"
+  }
+ ],
+ "motion_derived_frozen_atoms": [
+  "bridge_dist",
+  "dir_cos",
+  "resid_mean",
+  "score_m_bridge",
+  "speed_mismatch"
+ ]
+}

@@ -1,0 +1,706 @@
+{
+ "study_id": "boolean_atom_partial_order_20260711",
+ "issue": 106,
+ "pr_ladder": "PR-D gate (partial-order audit only)",
+ "role_assignment_mode": "research_judgment_with_executable_guards; V_i / shell / threshold metrics are descriptive and do not alone control role assignment",
+ "statistics_role": "descriptive_only",
+ "research_acceptance": {
+  "status": "ACCEPTED_WITH_LIMITS",
+  "recorded": "2026-07-11",
+  "authority": "PR #107 research-owner final review",
+  "pr_url": "https://github.com/raylei50653/saccade/pull/107",
+  "issue": 106,
+  "pr": 107,
+  "accepted_aggregate_terminal": "GLOBAL_PARTIAL_ORDER_READY",
+  "accepted_roles": {
+   "dist_h": "global_orderable",
+   "log_h_ratio": "global_orderable",
+   "bridge_dist": "conditional_orderable",
+   "speed_mismatch": "conditional_orderable",
+   "dir_cos": "conditional_orderable",
+   "resid_mean": "conditional_orderable",
+   "score_m_bridge": "context_only",
+   "gap": "context_only"
+  },
+  "accepted_global_atoms": [
+   "dist_h",
+   "log_h_ratio"
+  ],
+  "claim_ceiling": "L1 partial-order contract on sealed 7-seq substrate; PR-C motion evidence remains L1 single-seq bound",
+  "limits": [
+   "L1 order contract only — not L2+ / nested confirmation",
+   "conditional arcs remain proposal-only",
+   "bridge_dist and other conditional atoms must not enter global MWC",
+   "score_m_bridge / gap remain context_only",
+   "no production / preset / ledger promotion",
+   "no escape-tail veto"
+  ],
+  "authorizes": [
+   "a separate restricted global-closure prototype after merge, using only accepted global_orderable atoms {dist_h, log_h_ratio}"
+  ],
+  "does_not_authorize": [
+   "global arcs on bridge_dist / motion atoms / score_m_bridge / gap",
+   "MWC inside the audit PR",
+   "production / preset / gate changes",
+   "evidence_ledger promotion beyond this bounded acceptance",
+   "L2+ morphology claims without nested held-out confirmation"
+  ],
+  "initial_operational_terminal": "GLOBAL_PARTIAL_ORDER_READY",
+  "initial_global_atoms": [
+   "bridge_dist",
+   "dist_h",
+   "log_h_ratio"
+  ],
+  "review_history": "Initial push misclassified bridge_dist as pure geometry global; review demoted it to motion-extrapolation conditional_orderable, fixed score_m_bridge unit claim, formula-level dir_cos/residual DAG, and governance UNDER REVIEW stamps. Final acceptance ACCEPTED_WITH_LIMITS.",
+  "restricted_closure": "AUTHORIZED_as_separate_task_after_merge; global_solve_atoms_only={dist_h, log_h_ratio}"
+ },
+ "roles": {
+  "score_m_bridge": "context_only",
+  "bridge_dist": "conditional_orderable",
+  "dist_h": "global_orderable",
+  "log_h_ratio": "global_orderable",
+  "resid_mean": "conditional_orderable",
+  "dir_cos": "conditional_orderable",
+  "speed_mismatch": "conditional_orderable",
+  "gap": "context_only"
+ },
+ "cards": {
+  "speed_mismatch": {
+   "atom": "speed_mismatch",
+   "role": "conditional_orderable",
+   "role_assignment": "research_judgment",
+   "provenance": "derived",
+   "declared_safer_direction": "lower",
+   "physical_interpretation": "exit/entry speed continuity",
+   "admissible_contexts": [
+    {
+     "name": "short_gap_continuous_association",
+     "observable_without_gt_outcome": true,
+     "definition": "gap <= 60.0 frames (declared short-gap regime); excludes long-gap re-entry regime where PR-C accepted role reversal and constant-velocity mid-gap extrapolation breaks",
+     "proposal_only_conditional_arcs": true,
+     "note": "Conditional orderability is a contract proposal for a later conditional-closure study; not a sealed global arc."
+    }
+   ],
+   "V_i": {
+    "n_tracks": 209,
+    "n_violations": 57,
+    "V_i": 0.2727272727272727,
+    "P_z1_gt_track": 0.7272727272727273,
+    "violation_track_keys": [
+     "MOT17-02-SDP|31",
+     "MOT17-02-SDP|37",
+     "MOT17-02-SDP|84",
+     "MOT17-05-SDP|212",
+     "MOT17-05-SDP|213",
+     "MOT17-05-SDP|214",
+     "MOT17-05-SDP|218",
+     "MOT17-05-SDP|219",
+     "MOT17-05-SDP|220",
+     "MOT17-05-SDP|246",
+     "MOT17-05-SDP|279",
+     "MOT17-05-SDP|280",
+     "MOT17-05-SDP|281",
+     "MOT17-05-SDP|291",
+     "MOT17-05-SDP|297",
+     "MOT17-05-SDP|362",
+     "MOT17-10-SDP|415",
+     "MOT17-10-SDP|419",
+     "MOT17-10-SDP|420",
+     "MOT17-10-SDP|426",
+     "MOT17-10-SDP|428",
+     "MOT17-10-SDP|453",
+     "MOT17-10-SDP|455",
+     "MOT17-10-SDP|458",
+     "MOT17-10-SDP|459",
+     "MOT17-10-SDP|460",
+     "MOT17-10-SDP|467",
+     "MOT17-10-SDP|473",
+     "MOT17-10-SDP|474",
+     "MOT17-10-SDP|478",
+     "MOT17-10-SDP|479",
+     "MOT17-10-SDP|482",
+     "MOT17-10-SDP|495",
+     "MOT17-10-SDP|496",
+     "MOT17-10-SDP|501",
+     "MOT17-10-SDP|503",
+     "MOT17-10-SDP|506",
+     "MOT17-10-SDP|518",
+     "MOT17-10-SDP|521",
+     "MOT17-10-SDP|522",
+     "MOT17-10-SDP|523",
+     "MOT17-10-SDP|525",
+     "MOT17-10-SDP|532",
+     "MOT17-10-SDP|547",
+     "MOT17-10-SDP|554",
+     "MOT17-10-SDP|561",
+     "MOT17-10-SDP|565",
+     "MOT17-10-SDP|567",
+     "MOT17-10-SDP|569",
+     "MOT17-11-SDP|575",
+     "MOT17-11-SDP|639",
+     "MOT17-13-SDP|687",
+     "MOT17-13-SDP|691",
+     "MOT17-13-SDP|696",
+     "MOT17-13-SDP|715",
+     "MOT17-13-SDP|723",
+     "MOT17-13-SDP|748"
+    ],
+    "per_sequence_violation_counts": {
+     "MOT17-02-SDP": 3,
+     "MOT17-05-SDP": 13,
+     "MOT17-10-SDP": 33,
+     "MOT17-11-SDP": 2,
+     "MOT17-13-SDP": 6
+    },
+    "n_sequences_with_violation": 5
+   },
+   "tail_violations_d_h_ge_3": 4,
+   "threshold_flip_p40_p60": {
+    "n_flips": 35,
+    "n_tracks": 209,
+    "flip_rate": 0.1674641148325359
+   },
+   "global_admissibility": {
+    "atom": "speed_mismatch",
+    "global_admissible": false,
+    "block_reasons": [
+     "PR-C accepted motion role-reversal atom"
+    ]
+   },
+   "prc_binding": {
+    "role_reversal_supported": true,
+    "source": "PR-C #102 / PR #104 ACCEPTED_WITH_LIMITS",
+    "claim_ceiling": "L1 single-sequence MOT17-10-SDP forensic",
+    "blocks_global_orderable": true
+   },
+   "supporting_evidence": [
+    "PR-C aggregate ROLE_REVERSAL_SUPPORTED on long-gap re-entry",
+    "far-Hamming tail violations: 4/4 at median split",
+    "direction remains mechanism-plausible under short-gap continuity"
+   ],
+   "competing_explanations": [
+    "even short-gap V_i is non-trivial under pool-median split (threshold is exploratory, not a sealed operating point)",
+    "L1 single-seq forensic cannot prove multi-sequence conditional order"
+   ],
+   "confidence_boundary": "L1 conditional proposal only; may not enter global closure arcs; nested confirmation (PR-E) required before any stronger claim"
+  },
+  "dir_cos": {
+   "atom": "dir_cos",
+   "role": "conditional_orderable",
+   "role_assignment": "research_judgment",
+   "provenance": "derived",
+   "declared_safer_direction": "higher",
+   "physical_interpretation": "cos(lost_exit_velocity, endpoint displacement); not cand-entry-velocity cosine",
+   "admissible_contexts": [
+    {
+     "name": "short_gap_continuous_association",
+     "observable_without_gt_outcome": true,
+     "definition": "gap <= 60.0 frames (declared short-gap regime); excludes long-gap re-entry regime where PR-C accepted role reversal and constant-velocity mid-gap extrapolation breaks",
+     "proposal_only_conditional_arcs": true,
+     "note": "Conditional orderability is a contract proposal for a later conditional-closure study; not a sealed global arc."
+    }
+   ],
+   "V_i": {
+    "n_tracks": 209,
+    "n_violations": 39,
+    "V_i": 0.18660287081339713,
+    "P_z1_gt_track": 0.8133971291866029,
+    "violation_track_keys": [
+     "MOT17-02-SDP|11",
+     "MOT17-02-SDP|21",
+     "MOT17-02-SDP|36",
+     "MOT17-02-SDP|40",
+     "MOT17-02-SDP|42",
+     "MOT17-02-SDP|56",
+     "MOT17-02-SDP|6",
+     "MOT17-02-SDP|68",
+     "MOT17-04-SDP|160",
+     "MOT17-05-SDP|264",
+     "MOT17-05-SDP|266",
+     "MOT17-05-SDP|274",
+     "MOT17-05-SDP|275",
+     "MOT17-05-SDP|291",
+     "MOT17-05-SDP|296",
+     "MOT17-05-SDP|353",
+     "MOT17-05-SDP|362",
+     "MOT17-09-SDP|374",
+     "MOT17-09-SDP|377",
+     "MOT17-09-SDP|394",
+     "MOT17-10-SDP|420",
+     "MOT17-10-SDP|429",
+     "MOT17-10-SDP|454",
+     "MOT17-10-SDP|459",
+     "MOT17-10-SDP|467",
+     "MOT17-10-SDP|469",
+     "MOT17-10-SDP|470",
+     "MOT17-10-SDP|503",
+     "MOT17-10-SDP|524",
+     "MOT17-10-SDP|532",
+     "MOT17-10-SDP|537",
+     "MOT17-10-SDP|552",
+     "MOT17-10-SDP|565",
+     "MOT17-11-SDP|584",
+     "MOT17-11-SDP|591",
+     "MOT17-11-SDP|620",
+     "MOT17-11-SDP|624",
+     "MOT17-13-SDP|691",
+     "MOT17-13-SDP|748"
+    ],
+    "per_sequence_violation_counts": {
+     "MOT17-02-SDP": 8,
+     "MOT17-04-SDP": 1,
+     "MOT17-05-SDP": 8,
+     "MOT17-09-SDP": 3,
+     "MOT17-10-SDP": 13,
+     "MOT17-11-SDP": 4,
+     "MOT17-13-SDP": 2
+    },
+    "n_sequences_with_violation": 7
+   },
+   "tail_violations_d_h_ge_3": 3,
+   "threshold_flip_p40_p60": {
+    "n_flips": 29,
+    "n_tracks": 209,
+    "flip_rate": 0.13875598086124402
+   },
+   "global_admissibility": {
+    "atom": "dir_cos",
+    "global_admissible": false,
+    "block_reasons": [
+     "PR-C accepted motion role-reversal atom"
+    ]
+   },
+   "prc_binding": {
+    "role_reversal_supported": true,
+    "source": "PR-C #102 / PR #104 ACCEPTED_WITH_LIMITS",
+    "claim_ceiling": "L1 single-sequence MOT17-10-SDP forensic",
+    "blocks_global_orderable": true
+   },
+   "supporting_evidence": [
+    "PR-C aggregate ROLE_REVERSAL_SUPPORTED on long-gap re-entry",
+    "far-Hamming tail violations: 3/4 at median split",
+    "direction remains mechanism-plausible under short-gap continuity"
+   ],
+   "competing_explanations": [
+    "even short-gap V_i is non-trivial under pool-median split (threshold is exploratory, not a sealed operating point)",
+    "L1 single-seq forensic cannot prove multi-sequence conditional order"
+   ],
+   "confidence_boundary": "L1 conditional proposal only; may not enter global closure arcs; nested confirmation (PR-E) required before any stronger claim"
+  },
+  "resid_mean": {
+   "atom": "resid_mean",
+   "role": "conditional_orderable",
+   "role_assignment": "research_judgment",
+   "provenance": "derived",
+   "declared_safer_direction": "lower",
+   "physical_interpretation": "bidirectional residual mean (motion fit quality)",
+   "admissible_contexts": [
+    {
+     "name": "short_gap_continuous_association",
+     "observable_without_gt_outcome": true,
+     "definition": "gap <= 60.0 frames (declared short-gap regime); excludes long-gap re-entry regime where PR-C accepted role reversal and constant-velocity mid-gap extrapolation breaks",
+     "proposal_only_conditional_arcs": true,
+     "note": "Conditional orderability is a contract proposal for a later conditional-closure study; not a sealed global arc."
+    }
+   ],
+   "V_i": {
+    "n_tracks": 209,
+    "n_violations": 3,
+    "V_i": 0.014354066985645933,
+    "P_z1_gt_track": 0.9856459330143541,
+    "violation_track_keys": [
+     "MOT17-10-SDP|455",
+     "MOT17-10-SDP|459",
+     "MOT17-10-SDP|503"
+    ],
+    "per_sequence_violation_counts": {
+     "MOT17-10-SDP": 3
+    },
+    "n_sequences_with_violation": 1
+   },
+   "tail_violations_d_h_ge_3": 3,
+   "threshold_flip_p40_p60": {
+    "n_flips": 5,
+    "n_tracks": 209,
+    "flip_rate": 0.023923444976076555
+   },
+   "global_admissibility": {
+    "atom": "resid_mean",
+    "global_admissible": false,
+    "block_reasons": [
+     "PR-C accepted motion role-reversal atom"
+    ]
+   },
+   "prc_binding": {
+    "role_reversal_supported": true,
+    "source": "PR-C #102 / PR #104 ACCEPTED_WITH_LIMITS",
+    "claim_ceiling": "L1 single-sequence MOT17-10-SDP forensic",
+    "blocks_global_orderable": true
+   },
+   "supporting_evidence": [
+    "PR-C aggregate ROLE_REVERSAL_SUPPORTED on long-gap re-entry",
+    "far-Hamming tail violations: 3/4 at median split",
+    "direction remains mechanism-plausible under short-gap continuity"
+   ],
+   "competing_explanations": [
+    "even short-gap V_i is non-trivial under pool-median split (threshold is exploratory, not a sealed operating point)",
+    "L1 single-seq forensic cannot prove multi-sequence conditional order"
+   ],
+   "confidence_boundary": "L1 conditional proposal only; may not enter global closure arcs; nested confirmation (PR-E) required before any stronger claim"
+  },
+  "gap": {
+   "atom": "gap",
+   "role": "context_only",
+   "role_assignment": "research_judgment",
+   "provenance": "builder_raw",
+   "declared_safer_direction": "lower",
+   "physical_interpretation": "occlusion / lost duration (frames); regime descriptor rather than a monotone safety dimension",
+   "admissible_contexts": [],
+   "V_i": {
+    "n_tracks": 209,
+    "n_violations": 9,
+    "V_i": 0.0430622009569378,
+    "P_z1_gt_track": 0.9569377990430622,
+    "violation_track_keys": [
+     "MOT17-02-SDP|11",
+     "MOT17-02-SDP|13",
+     "MOT17-02-SDP|26",
+     "MOT17-02-SDP|37",
+     "MOT17-02-SDP|38",
+     "MOT17-02-SDP|41",
+     "MOT17-02-SDP|5",
+     "MOT17-04-SDP|160",
+     "MOT17-10-SDP|503"
+    ],
+    "per_sequence_violation_counts": {
+     "MOT17-02-SDP": 7,
+     "MOT17-04-SDP": 1,
+     "MOT17-10-SDP": 1
+    },
+    "n_sequences_with_violation": 3
+   },
+   "tail_violations_d_h_ge_3": 1,
+   "threshold_flip_p40_p60": {
+    "n_flips": 15,
+    "n_tracks": 209,
+    "flip_rate": 0.07177033492822966
+   },
+   "global_admissibility": {
+    "atom": "gap",
+    "global_admissible": false,
+    "block_reasons": [
+     "regime descriptor, not a monotone safety dimension"
+    ]
+   },
+   "prc_binding": {
+    "role_reversal_supported": false,
+    "blocks_global_orderable": true
+   },
+   "supporting_evidence": [
+    "gap defines short vs long-gap regimes used to condition motion atoms",
+    "long gap is not intrinsically unsafe (true re-entries exist)",
+    "threshold flip rate p40→p60 = 0.072"
+   ],
+   "competing_explanations": [
+    "some safe-reject studies treat very large gap as FP-enriched; that is a coverage heuristic, not a global GT-order proof"
+   ],
+   "confidence_boundary": "context/regime only; forbidden as a global order dimension"
+  },
+  "score_m_bridge": {
+   "atom": "score_m_bridge",
+   "role": "context_only",
+   "role_assignment": "research_judgment",
+   "provenance": "weighted_composite",
+   "declared_safer_direction": "lower",
+   "physical_interpretation": "production-shaped speed-weighted mix of height-normalized residual mean and dist_h",
+   "admissible_contexts": [],
+   "V_i": {
+    "n_tracks": 209,
+    "n_violations": 1,
+    "V_i": 0.004784688995215311,
+    "P_z1_gt_track": 0.9952153110047847,
+    "violation_track_keys": [
+     "MOT17-10-SDP|503"
+    ],
+    "per_sequence_violation_counts": {
+     "MOT17-10-SDP": 1
+    },
+    "n_sequences_with_violation": 1
+   },
+   "tail_violations_d_h_ge_3": 1,
+   "threshold_flip_p40_p60": {
+    "n_flips": 3,
+    "n_tracks": 209,
+    "flip_rate": 0.014354066985645933
+   },
+   "global_admissibility": {
+    "atom": "score_m_bridge",
+    "global_admissible": false,
+    "block_reasons": [
+     "weighted composite with motion parent and/or regime-dependent mix",
+     "direct parent role conflict with PR-C motion atoms: ['resid_mean']"
+    ]
+   },
+   "prc_binding": {
+    "role_reversal_supported": false,
+    "indirect_via_parent": "resid_mean",
+    "blocks_global_orderable": true
+   },
+   "scale_guard": {
+    "blocks_global_orderable": true,
+    "block_reasons": [
+     "parent role conflict: resid_mean is PR-C motion role-reversal atom",
+     "residual dominance: composite tracks resid_mean more than dist_h (empirical term-fraction / correlation, within a shared unit)",
+     "hidden context dependence via speed-dependent mixing weight w"
+    ],
+    "correlations": {
+     "score_vs_resid_mean_gt": 0.977177962796444,
+     "score_vs_dist_h_gt": 0.6580080702102223,
+     "score_vs_resid_mean_fp": 0.9468268261138001,
+     "score_vs_dist_h_fp": 0.5847565037044558,
+     "resid_mean_vs_dist_h_gt": 0.5701194821760018
+    },
+    "unit_scale_compatibility": {
+     "compatible": true,
+     "detail": "All mixands are height-normalized dimensionless quantities from the pair builder: fwd_resid/h_ref, bwd_resid/h_ref, dist_h/h_ref (and bridge_dist/h_ref). There is no px-vs-h unit incompatibility in score_m_bridge. Residual dominance is an empirical scale/weight effect within a common unit, not a unit mismatch.",
+     "unit_incompatibility_is_block_reason": false
+    }
+   },
+   "supporting_evidence": [
+    "composite parents include resid_mean (PR-C motion role-reversal atom)",
+    "residual dominance within a shared height-normalized unit (not a unit-mismatch claim)",
+    "speed-dependent mixing weight injects hidden context dependence"
+   ],
+   "competing_explanations": [
+    "as a production proxy the score remains useful for FP ranking, but ranking utility ≠ global monotone order legitimacy"
+   ],
+   "confidence_boundary": "context/diagnostic only on this substrate; parent role conflict and residual dominance block global promotion without a redesign that removes the motion parent or re-proves direction under nested folds"
+  },
+  "bridge_dist": {
+   "atom": "bridge_dist",
+   "role": "conditional_orderable",
+   "role_assignment": "research_judgment",
+   "provenance": "motion_extrapolation_composite",
+   "declared_safer_direction": "lower",
+   "physical_interpretation": "constant-velocity mid-gap extrapolation distance: m_l=x_l+v_l*gap/2, m_c=x_c-v_c*gap/2, bridge_dist=||m_l-m_c||/h_ref. Depends on endpoint velocities, gap, geometry, and height normalization — not a parentless structural leaf.",
+   "admissible_contexts": [
+    {
+     "name": "short_gap_continuous_association",
+     "observable_without_gt_outcome": true,
+     "definition": "gap <= 60.0 frames (declared short-gap regime); excludes long-gap re-entry regime where PR-C accepted role reversal and constant-velocity mid-gap extrapolation breaks",
+     "proposal_only_conditional_arcs": true,
+     "note": "Conditional orderability is a contract proposal for a later conditional-closure study; not a sealed global arc."
+    }
+   ],
+   "V_i": {
+    "n_tracks": 209,
+    "n_violations": 2,
+    "V_i": 0.009569377990430622,
+    "P_z1_gt_track": 0.9904306220095693,
+    "violation_track_keys": [
+     "MOT17-10-SDP|455",
+     "MOT17-10-SDP|503"
+    ],
+    "per_sequence_violation_counts": {
+     "MOT17-10-SDP": 2
+    },
+    "n_sequences_with_violation": 1
+   },
+   "tail_violations_d_h_ge_3": 2,
+   "threshold_flip_p40_p60": {
+    "n_flips": 1,
+    "n_tracks": 209,
+    "flip_rate": 0.004784688995215311
+   },
+   "global_admissibility": {
+    "atom": "bridge_dist",
+    "global_admissible": false,
+    "block_reasons": [
+     "motion-extrapolation composite (endpoint velocities × gap); not a pure structural leaf"
+    ]
+   },
+   "prc_binding": {
+    "role_reversal_supported": false,
+    "related_to_prc_motion_reversal": true,
+    "relation": "Long-gap re-entry (PR-C TRUE_LONG_GAP_REENTRY) is exactly the regime where constant-velocity mid-gap extrapolation is least defensible; velocity parents share the motion substrate that carries accepted role-reversal evidence. No independent mechanism evidence authorizes global promotion of bridge_dist.",
+    "blocks_global_orderable": true
+   },
+   "supporting_evidence": [
+    "builder formula explicitly multiplies endpoint velocities by gap/2",
+    "dependency DAG lists lost/cand exit-entry velocities + gap + h_ref",
+    "global_admissibility_check blocks motion-extrapolation composites",
+    "short-gap CV regime remains a plausible conditional context"
+   ],
+   "competing_explanations": [
+    "low V_i alone cannot reclassify a motion-derived composite as global_orderable (statistics are descriptive only)",
+    "tail co-violations with geometry do not prove pure structural role"
+   ],
+   "confidence_boundary": "L1 conditional proposal only; forbidden as a global order dimension until independent multi-seq mechanism evidence is reviewed"
+  },
+  "dist_h": {
+   "atom": "dist_h",
+   "role": "global_orderable",
+   "role_assignment": "research_judgment",
+   "provenance": "builder_raw",
+   "declared_safer_direction": "lower",
+   "physical_interpretation": "height-normalized endpoint foot distance (geometry only)",
+   "admissible_contexts": [],
+   "V_i": {
+    "n_tracks": 209,
+    "n_violations": 2,
+    "V_i": 0.009569377990430622,
+    "P_z1_gt_track": 0.9904306220095693,
+    "violation_track_keys": [
+     "MOT17-10-SDP|455",
+     "MOT17-10-SDP|467"
+    ],
+    "per_sequence_violation_counts": {
+     "MOT17-10-SDP": 2
+    },
+    "n_sequences_with_violation": 1
+   },
+   "tail_violations_d_h_ge_3": 2,
+   "threshold_flip_p40_p60": {
+    "n_flips": 7,
+    "n_tracks": 209,
+    "flip_rate": 0.03349282296650718
+   },
+   "global_admissibility": {
+    "atom": "dist_h",
+    "global_admissible": true,
+    "block_reasons": []
+   },
+   "prc_binding": {
+    "role_reversal_supported": false,
+    "blocks_global_orderable": false
+   },
+   "supporting_evidence": [
+    "global_admissibility_check passed for dist_h",
+    "low track-level V_i under median split: 2/209",
+    "protected-tail violations: 2/4 ",
+    "no accepted mechanism-level role reversal on current evidence",
+    "no motion parents / not a motion-extrapolation composite",
+    "p40→p60 flip rate 0.033 (direction not a pure exploratory split artifact)"
+   ],
+   "competing_explanations": [
+    "sparse violations concentrate on MOT17-10-SDP (sequence clustering); multi-seq confirmation still pending",
+    "pool-median thresholds remain audit-only"
+   ],
+   "confidence_boundary": "L1 global-order *contract* only — authorizes a separate restricted-closure prototype task, not nested L2+ claims, not production/preset/ledger changes"
+  },
+  "log_h_ratio": {
+   "atom": "log_h_ratio",
+   "role": "global_orderable",
+   "role_assignment": "research_judgment",
+   "provenance": "derived",
+   "declared_safer_direction": "lower",
+   "physical_interpretation": "absolute log height ratio (scale consistency)",
+   "admissible_contexts": [],
+   "V_i": {
+    "n_tracks": 209,
+    "n_violations": 2,
+    "V_i": 0.009569377990430622,
+    "P_z1_gt_track": 0.9904306220095693,
+    "violation_track_keys": [
+     "MOT17-10-SDP|479",
+     "MOT17-11-SDP|636"
+    ],
+    "per_sequence_violation_counts": {
+     "MOT17-10-SDP": 1,
+     "MOT17-11-SDP": 1
+    },
+    "n_sequences_with_violation": 2
+   },
+   "tail_violations_d_h_ge_3": 0,
+   "threshold_flip_p40_p60": {
+    "n_flips": 4,
+    "n_tracks": 209,
+    "flip_rate": 0.019138755980861243
+   },
+   "global_admissibility": {
+    "atom": "log_h_ratio",
+    "global_admissible": true,
+    "block_reasons": []
+   },
+   "prc_binding": {
+    "role_reversal_supported": false,
+    "blocks_global_orderable": false
+   },
+   "supporting_evidence": [
+    "global_admissibility_check passed for log_h_ratio",
+    "low track-level V_i under median split: 2/209",
+    "protected-tail violations: 0/4 (log_h_ratio remains 0/4 — height preserved on escape tail)",
+    "no accepted mechanism-level role reversal on current evidence",
+    "no motion parents / not a motion-extrapolation composite",
+    "p40→p60 flip rate 0.019 (direction not a pure exploratory split artifact)"
+   ],
+   "competing_explanations": [
+    "sparse violations concentrate on MOT17-10-SDP (sequence clustering); multi-seq confirmation still pending",
+    "pool-median thresholds remain audit-only"
+   ],
+   "confidence_boundary": "L1 global-order *contract* only — authorizes a separate restricted-closure prototype task, not nested L2+ claims, not production/preset/ledger changes"
+  }
+ },
+ "role_vocabulary": [
+  "global_orderable",
+  "conditional_orderable",
+  "context_only",
+  "unresolved"
+ ],
+ "n_atoms": 8,
+ "executable_global_guards": {
+  "score_m_bridge": {
+   "atom": "score_m_bridge",
+   "global_admissible": false,
+   "block_reasons": [
+    "weighted composite with motion parent and/or regime-dependent mix",
+    "direct parent role conflict with PR-C motion atoms: ['resid_mean']"
+   ]
+  },
+  "bridge_dist": {
+   "atom": "bridge_dist",
+   "global_admissible": false,
+   "block_reasons": [
+    "motion-extrapolation composite (endpoint velocities × gap); not a pure structural leaf"
+   ]
+  },
+  "dist_h": {
+   "atom": "dist_h",
+   "global_admissible": true,
+   "block_reasons": []
+  },
+  "log_h_ratio": {
+   "atom": "log_h_ratio",
+   "global_admissible": true,
+   "block_reasons": []
+  },
+  "resid_mean": {
+   "atom": "resid_mean",
+   "global_admissible": false,
+   "block_reasons": [
+    "PR-C accepted motion role-reversal atom"
+   ]
+  },
+  "dir_cos": {
+   "atom": "dir_cos",
+   "global_admissible": false,
+   "block_reasons": [
+    "PR-C accepted motion role-reversal atom"
+   ]
+  },
+  "speed_mismatch": {
+   "atom": "speed_mismatch",
+   "global_admissible": false,
+   "block_reasons": [
+    "PR-C accepted motion role-reversal atom"
+   ]
+  },
+  "gap": {
+   "atom": "gap",
+   "global_admissible": false,
+   "block_reasons": [
+    "regime descriptor, not a monotone safety dimension"
+   ]
+  }
+ }
+}

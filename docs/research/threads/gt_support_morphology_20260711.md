@@ -19,6 +19,8 @@ created: 2026-07-11
 | Step-0 verdict | **`UNRESOLVED`**（no valid cluster-aware UCB · core 未求解 · nested 未重跑）+ bounded descriptive hypothesis: corner-concentrated placement + far-Hamming motion-violation-enriched tail |
 | Far-Hamming descriptive tail | 4/209 tracks，**4/4 全在 MOT17-10-SDP**（sequence clustering 為實據）；motion-atom 集中（speed_mismatch 4/4 · dir_cos 3/4 · resid_mean 3/4 · log_h_ratio 0/4）；nominal CP x=4→4.33% 不得跨界 |
 | Forensics (PR-C / #102) | **`ACCEPTED_WITH_LIMITS`** ([PR #104](https://github.com/raylei50653/saccade/pull/104)) · 3×`TRUE_LONG_GAP_REENTRY` + 1×`UNRESOLVED` · aggregate **`ROLE_REVERSAL_SUPPORTED`** · L1 single-seq (MOT17-10) only · authorizes partial-order audit only · [note](../../modules/semantic/research/escape_tail_forensic_20260711.md) · [packet](../../modules/semantic/research/evidence/escape_tail_forensic_20260711/manifest.json) |
+| Partial-order audit (PR-D gate / #106 · [PR #107](https://github.com/raylei50653/saccade/pull/107)) | **`ACCEPTED_WITH_LIMITS`** · terminal **`GLOBAL_PARTIAL_ORDER_READY`** · global=`{dist_h, log_h_ratio}` · conditional=`{bridge_dist}`+motion · context=`{score_m_bridge, gap}` · [note](../../modules/semantic/research/boolean_atom_partial_order_20260711.md) · [packet](../../modules/semantic/research/evidence/boolean_atom_partial_order_20260711/manifest.json) |
+| Restricted closure prototype | **authorized as separate post-merge task only** · global solve atoms = `{dist_h, log_h_ratio}` · conditional atoms **forbidden** in global solve |
 | Nested per-fold rerun | **not run**（升 L2+ 的 confirmatory unit） |
 | Production / presets / ledger | **unchanged** |
 
@@ -30,6 +32,25 @@ procedure v1 sealed (#100); PR-B line doc sealed (#101)
 PR-C forensic ACCEPTED_WITH_LIMITS（PR #104）
   aggregate = ROLE_REVERSAL_SUPPORTED（L1 single-seq MOT17-10 bound）
   → authorizes partial-order audit only; NOT global motion closure / MWC / veto / production
+
+Partial-order audit (PR #107 / #106):
+ACCEPTED_WITH_LIMITS
+
+Accepted map:
+- global_orderable: dist_h, log_h_ratio
+- conditional_orderable: bridge_dist, speed_mismatch, dir_cos, resid_mean
+  (short-gap proposal-only; bridge_dist = motion-extrapolation composite)
+- context_only: score_m_bridge, gap
+- unresolved: ∅
+
+Aggregate terminal:
+GLOBAL_PARTIAL_ORDER_READY (accepted with limits)
+
+Restricted closure prototype:
+AUTHORIZED only as a separate post-merge task
+  global solve atoms = {dist_h, log_h_ratio}
+  bridge_dist and other conditional atoms MUST NOT enter the global solve
+
 不得 veto escape tail（protected GT mass）
 零 exposure cells = UNRESOLVED，不是障壁（framework §19.2）
 不碰 safe-region assetization 的 closed gates（A1 / terminal B / R2–R4）
@@ -40,30 +61,34 @@ PR-C forensic ACCEPTED_WITH_LIMITS（PR #104）
 1. [Framework §19 — GT-support morphology predeclared procedure](../eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
 2. [布林閉包域研究線 normative doc（PR-B）](../../modules/semantic/research/boolean_closure_domain_line_20260711.md)
 3. [Step-0 note](../../modules/semantic/research/gt_support_morphology_step0_20260711.md)
-4. Study artifacts: `out/signal_study/gt_support_morphology_step0_20260711/`
-5. 前線 handoff: [safe-region assetization thread](safe_region_assetization_20260710.md)（A1 CLOSED；R1.1 role-reversal 症狀 = 本線 escape-tail 機制的描述性前身）
+4. [Partial-order audit note](../../modules/semantic/research/boolean_atom_partial_order_20260711.md)
+5. Study artifacts: `out/signal_study/gt_support_morphology_step0_20260711/`
+6. 前線 handoff: [safe-region assetization thread](safe_region_assetization_20260710.md)（A1 CLOSED；R1.1 role-reversal 症狀 = 本線 escape-tail 機制的描述性前身）
 
 ## Artifacts
 
 - `out/signal_study/gt_support_morphology_step0_20260711/step0_identifiability_audit.py` + `results.txt`
 - `out/signal_study/gt_support_morphology_step0_20260711/hamming_profile.py` + `hamming_profile.txt`
 - 上游 pool: `out/signal_study/m_b1_gate_coverage_7seq_20260709T121326Z/pairs.csv`
+- Partial-order packet: [evidence/boolean_atom_partial_order_20260711/](../../modules/semantic/research/evidence/boolean_atom_partial_order_20260711/manifest.json)
 
 ## Current step
 
-**PR-C forensic `ACCEPTED_WITH_LIMITS`**（issue #102 / [PR #104](https://github.com/raylei50653/saccade/pull/104)）：3×TRUE + 1×UNRESOLVED · aggregate `ROLE_REVERSAL_SUPPORTED` · L1 single-seq only。Next = **PR-D partial-order audit**（motion = conditional/context candidates；不得建 global motion closure arcs）。
+**PR-D gate / #106 via [PR #107](https://github.com/raylei50653/saccade/pull/107): `ACCEPTED_WITH_LIMITS`.**
 
-PR ladder（2026-07-11 owner 定版，五段）：
+Next = **separate restricted global-closure prototype** after merge：global solve only `{dist_h, log_h_ratio}`；vs frozen OR-tail；candidate-only；不得併入 audit PR；`bridge_dist` 與其他 conditional atoms 不得進入 global solve。
+
+PR ladder（2026-07-11 owner 定版；#106 將 partial-order gate 與 closure prototype 拆開）：
 
 ```text
 PR-A  #100  Step-0 + morphology procedure seal（MERGED = seal）
 PR-B  #101  布林閉包域研究線 normative doc（MERGED）
-PR-C  #102  4-track escape-tail forensic（this unit；aggregate
-            ROLE_REVERSAL_SUPPORTED；3 TRUE + 1 UNRESOLVED）
-PR-D        partial-order audit + restricted closure prototype
-            （global_orderable atoms only for hard arcs；motion =
-            conditional/context candidate per PR-C；parametric MWC
-            vs frozen OR-tail；read-only candidate-only）
+PR-C  #102  4-track escape-tail forensic（MERGED #104；aggregate
+            ROLE_REVERSAL_SUPPORTED；ACCEPTED_WITH_LIMITS）
+PR-D  #106  partial-order audit gate（PR #107 ACCEPTED_WITH_LIMITS；
+            terminal GLOBAL_PARTIAL_ORDER_READY；
+            global = {dist_h, log_h_ratio}）
+            → restricted-closure prototype = separate post-merge task
 PR-E        nested held-out validation（outer-fold full replay；
             首個可超 L1 的確認單元）
 ```
@@ -73,7 +98,13 @@ PR-E        nested held-out validation（outer-fold full replay；
 ```text
 step-1 forensics: DONE — 3×TRUE_LONG_GAP_REENTRY + 1×UNRESOLVED
        aggregate ROLE_REVERSAL_SUPPORTED（MOT17-10 single-seq bound）
-step-2 partial-order audit + restricted closure prototype (PR-D)
+step-2 partial-order audit: ACCEPTED_WITH_LIMITS (PR #107)
+       terminal GLOBAL_PARTIAL_ORDER_READY
+       global = dist_h · log_h_ratio
+       conditional = bridge_dist · speed_mismatch · dir_cos · resid_mean
+       context_only = score_m_bridge · gap
+step-2b restricted-closure prototype: AUTHORIZED as separate post-merge task
+       global solve atoms ONLY = {dist_h, log_h_ratio}
 step-3 nested per-fold: 整條鏈（atom 發現/定向/二值化/verdict）per-fold 重跑，
        verdict 以 sealed boundaries 判定；此為 L2+ 的 confirmatory unit
 closing hypothesis: GT 是否形成 corner-concentrated core
@@ -83,9 +114,11 @@ closing hypothesis: GT 是否形成 corner-concentrated core
 ## Must not
 
 - 把零 exposure 解讀為高風險 / 障壁；
-- veto escape tail；motion atoms 直接當全域 closure 維度（PR-C 只授權 conditional/context 候選 audit）；
+- veto escape tail；motion atoms、bridge_dist 或 score_m_bridge 直接當全域 closure 維度；
+- 在 restricted-closure global solve 中使用 bridge_dist 或其他 conditional atoms；
 - merge tree / barrier height / per-cell UCB 進主線（低於宣告密度）；
 - 以 pooled audit 或單序列 forensic 充當 confirmatory 證據；
+- 將 partial-order audit 與 MWC prototype 併入同一 PR；
 - 動 production preset、evidence_ledger、或 safe-region closed gates。
 
 ## History
@@ -95,3 +128,4 @@ closing hypothesis: GT 是否形成 corner-concentrated core
 - 2026-07-11: Owner 定版 **PR ladder A–E**；[PR #101](https://github.com/raylei50653/saccade/pull/101) **PR-B** boolean closure-domain normative doc **MERGED**。
 - 2026-07-11: **PR #100 review = REQUEST_CHANGES（research seal 層；engineering PASS）**，五點修正全數落地：①§19.5 加 UCB validity（residual clustering 下 plain CP = nominal diagnostic，不得跨 ε_morph；須 cluster-aware 或再聚合）②§19.4 GT trial 改 set-valued semantics（Z_u 全集 + H_C(u)=1[Z_u∩C=∅]；min-d_H representative 降 descriptive-only）③Step-0 terminal 改 **UNRESOLVED** + bounded descriptive hypothesis（`CORE_PLUS_…` token 撤回；「out-of-core mass」保留給 C* 求解後）④core 定義補全：C* = argmin retained-FP s.t. valid UCB[P(H_C=1)] ≤ ε_morph；up-set 方向 + deterministic tie-breaks + complexity cap + Ω/missing-value 宣告 ⑤committed reproduction packet（[evidence/](../../modules/semantic/research/evidence/gt_support_morphology_step0_20260711/manifest.json)：gt_rows / occupancy k4–k8 / tail_tracks / cp_ucb + scripts + pairs.csv SHA seal）。**副發現：tail 4/4 全在 MOT17-10-SDP** —— sequence clustering 為實據非假設，直接支持 UNRESOLVED，並成為 PR-C forensic 的關鍵 context。
 - 2026-07-11: **PR-C / issue #102 escape-tail forensic** via [PR #104](https://github.com/raylei50653/saccade/pull/104). Review blockers fixed (signal non-tautology · scene sheets · operationalization honesty). Research acceptance **`ACCEPTED_WITH_LIMITS`**: 3×TRUE + 1×UNRESOLVED · aggregate `ROLE_REVERSAL_SUPPORTED` · L1 single-seq only · authorizes partial-order audit only.
+- 2026-07-11: **PR-D gate / issue #106 Boolean-atom partial-order audit** via [PR #107](https://github.com/raylei50653/saccade/pull/107). **Initial operational terminal** = `GLOBAL_PARTIAL_ORDER_READY` with global=`{bridge_dist, dist_h, log_h_ratio}`. Research-owner review found `bridge_dist` provenance misclassification and incorrect `score_m_bridge` unit claim; revisions demoted `bridge_dist`, fixed units/guards/DAG, and held status UNDER REVIEW. **Final research acceptance `ACCEPTED_WITH_LIMITS`**: terminal `GLOBAL_PARTIAL_ORDER_READY` · global=`{dist_h, log_h_ratio}` · conditional includes `bridge_dist` · authorizes only a separate restricted-closure prototype on the accepted global pair.

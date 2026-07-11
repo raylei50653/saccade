@@ -1,0 +1,521 @@
+{
+ "quantiles": {
+  "p40": {
+   "thresholds": {
+    "score_m_bridge": 3.734968150771817,
+    "bridge_dist": 3.766983015023119,
+    "dist_h": 1.8424625262637193,
+    "log_h_ratio": 0.42970254409510156,
+    "resid_mean": 4.770405563607097,
+    "dir_cos": -0.8633337484334648,
+    "speed_mismatch": 0.018955184245988157,
+    "gap": 101.0
+   },
+   "n_tracks": 209,
+   "n_tail_tracks_d_h_ge_3": 7,
+   "V_i": {
+    "score_m_bridge": {
+     "n_violations": 3,
+     "V_i": 0.014354066985645933
+    },
+    "bridge_dist": {
+     "n_violations": 2,
+     "V_i": 0.009569377990430622
+    },
+    "dist_h": {
+     "n_violations": 8,
+     "V_i": 0.03827751196172249
+    },
+    "log_h_ratio": {
+     "n_violations": 5,
+     "V_i": 0.023923444976076555
+    },
+    "resid_mean": {
+     "n_violations": 5,
+     "V_i": 0.023923444976076555
+    },
+    "dir_cos": {
+     "n_violations": 24,
+     "V_i": 0.11483253588516747
+    },
+    "speed_mismatch": {
+     "n_violations": 74,
+     "V_i": 0.35406698564593303
+    },
+    "gap": {
+     "n_violations": 20,
+     "V_i": 0.09569377990430622
+    }
+   },
+   "tail_V_i": {
+    "score_m_bridge": {
+     "n_violations": 3,
+     "V_i_tail": 0.42857142857142855
+    },
+    "bridge_dist": {
+     "n_violations": 2,
+     "V_i_tail": 0.2857142857142857
+    },
+    "dist_h": {
+     "n_violations": 4,
+     "V_i_tail": 0.5714285714285714
+    },
+    "log_h_ratio": {
+     "n_violations": 1,
+     "V_i_tail": 0.14285714285714285
+    },
+    "resid_mean": {
+     "n_violations": 5,
+     "V_i_tail": 0.7142857142857143
+    },
+    "dir_cos": {
+     "n_violations": 3,
+     "V_i_tail": 0.42857142857142855
+    },
+    "speed_mismatch": {
+     "n_violations": 5,
+     "V_i_tail": 0.7142857142857143
+    },
+    "gap": {
+     "n_violations": 5,
+     "V_i_tail": 0.7142857142857143
+    }
+   }
+  },
+  "median": {
+   "thresholds": {
+    "score_m_bridge": 4.785528277259689,
+    "bridge_dist": 4.896242267101591,
+    "dist_h": 2.4864200240534564,
+    "log_h_ratio": 0.567380497694944,
+    "resid_mean": 5.959967542676205,
+    "dir_cos": -0.6935323377365586,
+    "speed_mismatch": 0.02620862344601995,
+    "gap": 129.0
+   },
+   "n_tracks": 209,
+   "n_tail_tracks_d_h_ge_3": 4,
+   "V_i": {
+    "score_m_bridge": {
+     "n_violations": 1,
+     "V_i": 0.004784688995215311
+    },
+    "bridge_dist": {
+     "n_violations": 2,
+     "V_i": 0.009569377990430622
+    },
+    "dist_h": {
+     "n_violations": 2,
+     "V_i": 0.009569377990430622
+    },
+    "log_h_ratio": {
+     "n_violations": 2,
+     "V_i": 0.009569377990430622
+    },
+    "resid_mean": {
+     "n_violations": 3,
+     "V_i": 0.014354066985645933
+    },
+    "dir_cos": {
+     "n_violations": 39,
+     "V_i": 0.18660287081339713
+    },
+    "speed_mismatch": {
+     "n_violations": 57,
+     "V_i": 0.2727272727272727
+    },
+    "gap": {
+     "n_violations": 9,
+     "V_i": 0.0430622009569378
+    }
+   },
+   "tail_V_i": {
+    "score_m_bridge": {
+     "n_violations": 1,
+     "V_i_tail": 0.25
+    },
+    "bridge_dist": {
+     "n_violations": 2,
+     "V_i_tail": 0.5
+    },
+    "dist_h": {
+     "n_violations": 2,
+     "V_i_tail": 0.5
+    },
+    "log_h_ratio": {
+     "n_violations": 0,
+     "V_i_tail": 0.0
+    },
+    "resid_mean": {
+     "n_violations": 3,
+     "V_i_tail": 0.75
+    },
+    "dir_cos": {
+     "n_violations": 3,
+     "V_i_tail": 0.75
+    },
+    "speed_mismatch": {
+     "n_violations": 4,
+     "V_i_tail": 1.0
+    },
+    "gap": {
+     "n_violations": 1,
+     "V_i_tail": 0.25
+    }
+   }
+  },
+  "p60": {
+   "thresholds": {
+    "score_m_bridge": 5.947053016560876,
+    "bridge_dist": 6.162199687719389,
+    "dist_h": 3.3766324681003024,
+    "log_h_ratio": 0.7210375129649739,
+    "resid_mean": 7.2879287309555325,
+    "dir_cos": -0.3058811533583808,
+    "speed_mismatch": 0.03458576160352416,
+    "gap": 159.0
+   },
+   "n_tracks": 209,
+   "n_tail_tracks_d_h_ge_3": 1,
+   "V_i": {
+    "score_m_bridge": {
+     "n_violations": 0,
+     "V_i": 0.0
+    },
+    "bridge_dist": {
+     "n_violations": 1,
+     "V_i": 0.004784688995215311
+    },
+    "dist_h": {
+     "n_violations": 1,
+     "V_i": 0.004784688995215311
+    },
+    "log_h_ratio": {
+     "n_violations": 1,
+     "V_i": 0.004784688995215311
+    },
+    "resid_mean": {
+     "n_violations": 0,
+     "V_i": 0.0
+    },
+    "dir_cos": {
+     "n_violations": 51,
+     "V_i": 0.24401913875598086
+    },
+    "speed_mismatch": {
+     "n_violations": 41,
+     "V_i": 0.19617224880382775
+    },
+    "gap": {
+     "n_violations": 5,
+     "V_i": 0.023923444976076555
+    }
+   },
+   "tail_V_i": {
+    "score_m_bridge": {
+     "n_violations": 0,
+     "V_i_tail": 0.0
+    },
+    "bridge_dist": {
+     "n_violations": 1,
+     "V_i_tail": 1.0
+    },
+    "dist_h": {
+     "n_violations": 0,
+     "V_i_tail": 0.0
+    },
+    "log_h_ratio": {
+     "n_violations": 0,
+     "V_i_tail": 0.0
+    },
+    "resid_mean": {
+     "n_violations": 0,
+     "V_i_tail": 0.0
+    },
+    "dir_cos": {
+     "n_violations": 1,
+     "V_i_tail": 1.0
+    },
+    "speed_mismatch": {
+     "n_violations": 1,
+     "V_i_tail": 1.0
+    },
+    "gap": {
+     "n_violations": 0,
+     "V_i_tail": 0.0
+    }
+   }
+  }
+ },
+ "direction_flip_p40_to_p60": {
+  "score_m_bridge": {
+   "n_flips": 3,
+   "n_tracks": 209,
+   "flip_rate": 0.014354066985645933
+  },
+  "bridge_dist": {
+   "n_flips": 1,
+   "n_tracks": 209,
+   "flip_rate": 0.004784688995215311
+  },
+  "dist_h": {
+   "n_flips": 7,
+   "n_tracks": 209,
+   "flip_rate": 0.03349282296650718
+  },
+  "log_h_ratio": {
+   "n_flips": 4,
+   "n_tracks": 209,
+   "flip_rate": 0.019138755980861243
+  },
+  "resid_mean": {
+   "n_flips": 5,
+   "n_tracks": 209,
+   "flip_rate": 0.023923444976076555
+  },
+  "dir_cos": {
+   "n_flips": 29,
+   "n_tracks": 209,
+   "flip_rate": 0.13875598086124402
+  },
+  "speed_mismatch": {
+   "n_flips": 35,
+   "n_tracks": 209,
+   "flip_rate": 0.1674641148325359
+  },
+  "gap": {
+   "n_flips": 15,
+   "n_tracks": 209,
+   "flip_rate": 0.07177033492822966
+  }
+ },
+ "note": "p40/median/p60 are declared sensitivity diagnostics only; median remains the frozen descriptive split (Step-0)",
+ "gap_regime_profile": {
+  "short_gap_max_frames": 60.0,
+  "regimes": {
+   "short_gap_le_60": {
+    "score_m_bridge": {
+     "n": 159,
+     "n_violations": 0,
+     "V_i": 0.0
+    },
+    "bridge_dist": {
+     "n": 159,
+     "n_violations": 1,
+     "V_i": 0.006289308176100629
+    },
+    "dist_h": {
+     "n": 159,
+     "n_violations": 1,
+     "V_i": 0.006289308176100629
+    },
+    "log_h_ratio": {
+     "n": 159,
+     "n_violations": 1,
+     "V_i": 0.006289308176100629
+    },
+    "resid_mean": {
+     "n": 159,
+     "n_violations": 1,
+     "V_i": 0.006289308176100629
+    },
+    "dir_cos": {
+     "n": 159,
+     "n_violations": 25,
+     "V_i": 0.15723270440251572
+    },
+    "speed_mismatch": {
+     "n": 159,
+     "n_violations": 48,
+     "V_i": 0.3018867924528302
+    },
+    "gap": {
+     "n": 159,
+     "n_violations": 0,
+     "V_i": 0.0
+    }
+   },
+   "long_gap_gt_60": {
+    "score_m_bridge": {
+     "n": 50,
+     "n_violations": 1,
+     "V_i": 0.02
+    },
+    "bridge_dist": {
+     "n": 50,
+     "n_violations": 1,
+     "V_i": 0.02
+    },
+    "dist_h": {
+     "n": 50,
+     "n_violations": 1,
+     "V_i": 0.02
+    },
+    "log_h_ratio": {
+     "n": 50,
+     "n_violations": 1,
+     "V_i": 0.02
+    },
+    "resid_mean": {
+     "n": 50,
+     "n_violations": 2,
+     "V_i": 0.04
+    },
+    "dir_cos": {
+     "n": 50,
+     "n_violations": 14,
+     "V_i": 0.28
+    },
+    "speed_mismatch": {
+     "n": 50,
+     "n_violations": 9,
+     "V_i": 0.18
+    },
+    "gap": {
+     "n": 50,
+     "n_violations": 9,
+     "V_i": 0.18
+    }
+   },
+   "long_gap_gt_pool_median_129": {
+    "score_m_bridge": {
+     "n": 9,
+     "n_violations": 1,
+     "V_i": 0.1111111111111111
+    },
+    "bridge_dist": {
+     "n": 9,
+     "n_violations": 1,
+     "V_i": 0.1111111111111111
+    },
+    "dist_h": {
+     "n": 9,
+     "n_violations": 0,
+     "V_i": 0.0
+    },
+    "log_h_ratio": {
+     "n": 9,
+     "n_violations": 0,
+     "V_i": 0.0
+    },
+    "resid_mean": {
+     "n": 9,
+     "n_violations": 1,
+     "V_i": 0.1111111111111111
+    },
+    "dir_cos": {
+     "n": 9,
+     "n_violations": 3,
+     "V_i": 0.3333333333333333
+    },
+    "speed_mismatch": {
+     "n": 9,
+     "n_violations": 2,
+     "V_i": 0.2222222222222222
+    },
+    "gap": {
+     "n": 9,
+     "n_violations": 9,
+     "V_i": 1.0
+    }
+   }
+  }
+ },
+ "shell_contribution": {
+  "representation": "descriptive min-d_H representative (framework §19.4)",
+  "shell_sizes": {
+   "0": 117,
+   "1": 77,
+   "2": 11,
+   "3": 2,
+   "4": 1,
+   "6": 1
+  },
+  "per_atom_shell_violations": {
+   "score_m_bridge": {
+    "0": 0,
+    "1": 0,
+    "2": 0,
+    "3": 0,
+    "4": 0,
+    "6": 1
+   },
+   "bridge_dist": {
+    "0": 0,
+    "1": 0,
+    "2": 0,
+    "3": 0,
+    "4": 1,
+    "6": 1
+   },
+   "dist_h": {
+    "0": 0,
+    "1": 0,
+    "2": 0,
+    "3": 1,
+    "4": 1,
+    "6": 0
+   },
+   "log_h_ratio": {
+    "0": 0,
+    "1": 1,
+    "2": 1,
+    "3": 0,
+    "4": 0,
+    "6": 0
+   },
+   "resid_mean": {
+    "0": 0,
+    "1": 0,
+    "2": 0,
+    "3": 1,
+    "4": 1,
+    "6": 1
+   },
+   "dir_cos": {
+    "0": 0,
+    "1": 27,
+    "2": 9,
+    "3": 2,
+    "4": 0,
+    "6": 1
+   },
+   "speed_mismatch": {
+    "0": 0,
+    "1": 44,
+    "2": 9,
+    "3": 2,
+    "4": 1,
+    "6": 1
+   },
+   "gap": {
+    "0": 0,
+    "1": 5,
+    "2": 3,
+    "3": 0,
+    "4": 0,
+    "6": 1
+   }
+  },
+  "protected_tail_d_h_ge_3": {
+   "track_keys": [
+    "MOT17-10-SDP|455",
+    "MOT17-10-SDP|459",
+    "MOT17-10-SDP|467",
+    "MOT17-10-SDP|503"
+   ],
+   "n": 4,
+   "per_atom_violations": {
+    "score_m_bridge": 1,
+    "bridge_dist": 2,
+    "dist_h": 2,
+    "log_h_ratio": 0,
+    "resid_mean": 3,
+    "dir_cos": 3,
+    "speed_mismatch": 4,
+    "gap": 1
+   },
+   "note": "protected GT mass candidate; never a veto (framework §19)"
+  }
+ }
+}

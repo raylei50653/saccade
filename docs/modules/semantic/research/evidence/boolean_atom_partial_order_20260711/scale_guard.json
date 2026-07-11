@@ -1,0 +1,89 @@
+{
+ "atom": "score_m_bridge",
+ "formula": "w=sqrt(clip(lost_exit_speed/0.12,0,1)); score_m_bridge = w*0.5*(fwd_resid+bwd_resid) + (1-w)*dist_h",
+ "formula_source": "scripts/tools/audit_relink_safe_reject.ensure_prod_proxy_scores (live kernel proxy: tracker_gpu.cu bridge score)",
+ "terms": {
+  "resid_term": "w * resid_mean",
+  "dist_term": "(1-w) * dist_h",
+  "bounded_or_clipped": [
+   "w clipped via clip(s/0.12, 0, 1) then sqrt → [0,1]"
+  ],
+  "raw_unbounded": [
+   "fwd_resid",
+   "bwd_resid",
+   "dist_h",
+   "resid_mean"
+  ]
+ },
+ "parents": {
+  "resid_mean": {
+   "role_conflict_risk": "PR-C accepted role reversal on long-gap re-entry",
+   "formula_role": "motion residual mean 0.5*(fwd+bwd)",
+   "declared_safer": "lower"
+  },
+  "dist_h": {
+   "role_conflict_risk": "structural/height-normalized distance; no PR-C reversal",
+   "formula_role": "endpoint height-normalized foot distance",
+   "declared_safer": "lower"
+  },
+  "lost_exit_speed": {
+   "role_conflict_risk": "mixer only; introduces speed-dependent context",
+   "formula_role": "w = sqrt(clip(s/0.12, 0, 1))",
+   "declared_safer": "n/a (weight, not order atom)"
+  }
+ },
+ "recompute_vs_sealed_max_abs": 0.0,
+ "w_stats": {
+  "min": 0.01130532400946039,
+  "median": 0.5420945626130966,
+  "max": 1.0,
+  "frac_high_w_ge_0.9": 0.09596585433016659,
+  "frac_low_w_le_0.1": 0.013079994492633898
+ },
+ "resid_term_fraction": {
+  "all": {
+   "p10": 0.2485878971142475,
+   "p50": 0.7310855461317519,
+   "p90": 0.9791245848859016,
+   "mean": 0.6683356556295503
+  },
+  "gt": {
+   "p10": 0.19325606544344587,
+   "p50": 0.5878990052072812,
+   "p90": 0.9486637305695491,
+   "mean": 0.5822237369302562
+  },
+  "fp": {
+   "p10": 0.25033862251516487,
+   "p50": 0.7329781878854901,
+   "p90": 0.9795348961997105,
+   "mean": 0.6697006634321406
+  },
+  "high_w_mean": 0.9884293005245948,
+  "low_w_mean": 0.13776054628423975
+ },
+ "correlations": {
+  "score_vs_resid_mean_gt": 0.977177962796444,
+  "score_vs_dist_h_gt": 0.6580080702102223,
+  "score_vs_resid_mean_fp": 0.9468268261138001,
+  "score_vs_dist_h_fp": 0.5847565037044558,
+  "resid_mean_vs_dist_h_gt": 0.5701194821760018
+ },
+ "unit_scale_compatibility": {
+  "compatible": true,
+  "detail": "All mixands are height-normalized dimensionless quantities from the pair builder: fwd_resid/h_ref, bwd_resid/h_ref, dist_h/h_ref (and bridge_dist/h_ref). There is no px-vs-h unit incompatibility in score_m_bridge. Residual dominance is an empirical scale/weight effect within a common unit, not a unit mismatch.",
+  "unit_incompatibility_is_block_reason": false
+ },
+ "findings": [
+  "score_m_bridge is a speed-weighted mix of resid_mean and dist_h",
+  "parent resid_mean carries accepted PR-C role-reversal evidence",
+  "high correlation with resid_mean indicates residual dominance on the declared safer direction of the composite",
+  "w depends on lost_exit_speed → hidden short/fast vs slow mixing regime"
+ ],
+ "blocks_global_orderable": true,
+ "block_reasons": [
+  "parent role conflict: resid_mean is PR-C motion role-reversal atom",
+  "residual dominance: composite tracks resid_mean more than dist_h (empirical term-fraction / correlation, within a shared unit)",
+  "hidden context dependence via speed-dependent mixing weight w"
+ ]
+}

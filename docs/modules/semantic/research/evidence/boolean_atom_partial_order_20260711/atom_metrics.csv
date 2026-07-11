@@ -1,0 +1,9 @@
+atom,role,safer_direction,provenance,n_tracks,n_violations_V_i,V_i,P_z1_gt_track,n_sequences_with_violation,tail_violations_d_h_ge_3,threshold_flip_p40_p60,prc_blocks_global
+score_m_bridge,context_only,lower,weighted_composite,209,1,0.00478469,0.995215,1,1,3,True
+bridge_dist,conditional_orderable,lower,motion_extrapolation_composite,209,2,0.00956938,0.990431,1,2,1,True
+dist_h,global_orderable,lower,builder_raw,209,2,0.00956938,0.990431,1,2,7,False
+log_h_ratio,global_orderable,lower,derived,209,2,0.00956938,0.990431,2,0,4,False
+resid_mean,conditional_orderable,lower,derived,209,3,0.0143541,0.985646,1,3,5,True
+dir_cos,conditional_orderable,higher,derived,209,39,0.186603,0.813397,7,3,29,True
+speed_mismatch,conditional_orderable,lower,derived,209,57,0.272727,0.727273,5,4,35,True
+gap,context_only,lower,builder_raw,209,9,0.0430622,0.956938,3,1,15,True

@@ -1,0 +1,38 @@
+{
+ "z_convention": "z_i = 1 means the declared safer side; later reject domains must be downward-closed in this orientation",
+ "global_atoms": [
+  "dist_h",
+  "log_h_ratio"
+ ],
+ "allowed_global_order_dimensions": [
+  {
+   "atom": "dist_h",
+   "safer_direction": "lower",
+   "may_participate_in_global_closure_arcs": true
+  },
+  {
+   "atom": "log_h_ratio",
+   "safer_direction": "lower",
+   "may_participate_in_global_closure_arcs": true
+  }
+ ],
+ "allowed_global_arcs": [
+  {
+   "type": "coordinate_monotone",
+   "atom": "dist_h",
+   "meaning": "moving toward safer side of dist_h is a legal global closure step (contract only; no weights assigned)"
+  },
+  {
+   "type": "coordinate_monotone",
+   "atom": "log_h_ratio",
+   "meaning": "moving toward safer side of log_h_ratio is a legal global closure step (contract only; no weights assigned)"
+  }
+ ],
+ "graph_contract_for_next_task": {
+  "vertices": "Boolean cells on the global_orderable subcube only",
+  "orientation": "z=1 safer; reject domain downward-closed",
+  "optimization": "forbidden in this task; deferred to separate prototype",
+  "baseline_comparison_if_prototype_authorized": "frozen OR-tail under exact GT-UCB"
+ },
+ "claim_ceiling": "L1 order contract; not L2+; not production"
+}
