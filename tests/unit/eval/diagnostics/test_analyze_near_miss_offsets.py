@@ -3,7 +3,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from scripts.eval.analyze_near_miss_offsets import (
+from scripts.eval.diagnostics.analyze_near_miss_offsets import (
     BoxTransform,
     analyze_sequence,
     apply_box_transform,

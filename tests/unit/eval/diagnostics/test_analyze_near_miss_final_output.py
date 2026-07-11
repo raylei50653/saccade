@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from scripts.eval.analyze_near_miss_final_output import (
+from scripts.eval.diagnostics.analyze_near_miss_final_output import (
     analyze_final_output,
     classify_final_output,
     summarize,
