@@ -1232,6 +1232,7 @@ A PR that uses safe-region language should be reviewed against four independent 
 - Are stop conditions predeclared (§20.6)?
 - Is every cited result classified into a §20.4 output class?
 - Does any promotion of a diagnostic or upper-bound result violate §20.5?
+- If the study claims mainline cadence: does every predeclared terminal outcome produce a state transition (§20.7)?
 
 A PR may pass engineering review while remaining statistically or scientifically inconclusive.
 
@@ -1532,6 +1533,10 @@ Design objective role-legal per §20.3; "maximize FP removed" alone is invalid
 Selection rule   the ordered criteria of §20.4; "best performer" alone is invalid
 Stop condition   predeclared sufficiency and futility stops per §20.6
 Output class     which §20.4 classes the study's results may claim
+Mainline transition
+                 which mainline state transition each terminal outcome
+                 produces (§20.7); a study with none is diagnostic and
+                 must not occupy mainline cadence
 ```
 
 ### 20.3 Role-legal design objectives
@@ -1582,6 +1587,22 @@ Futility stops (mandatory): stop when
 The governing principle:
 
 > Define the module responsibility and design purpose first, then design the experiment. Optimization serves the purpose; it does not define it.
+
+### 20.7 Mainline progress accounting
+
+Progress is counted in **mainline state transitions**, not in artifacts produced. A completed study moves the mainline only if it does at least one of:
+
+1. **closes a core unknown** — e.g. establishes that the current signal family has no usable ranking power in the retained ambiguous band, formally terminating that path;
+2. **adds a decision capability** — e.g. a validated interaction enters the score layer and changes candidate ordering;
+3. **changes production behavior or metrics** — e.g. fewer ID switches, higher AssA, or the same effect from a structurally simpler gate.
+
+Another morphology map, a tighter closure, an additional safe candidate, or a more precisely described boundary are diagnostic results (§20.4). They may proceed, but they must not occupy mainline cadence, and completing them does not count as mainline progress.
+
+A mainline study must therefore be designed so that **every predeclared terminal outcome produces a state transition — including the negative one**. A study whose failure mode is "describe more completely and continue" is not a mainline study. Ambiguous results do not open a third door: if the predeclared minimum effect (§20.6) is not met, the futility terminal applies and the corresponding path closes.
+
+The task-selection question is not *what can be validated next*, but:
+
+> After this task terminates, which mainline state transition has occurred?
 
 ---
 
