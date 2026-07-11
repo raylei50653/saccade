@@ -176,15 +176,21 @@ Detection 設計索引（非本檔展開）：[docs/modules/detection/README.md]
 
 系統分層與工業路徑總圖：[docs/architecture/README.md](docs/architecture/README.md)。
 
-### 推送前
+### 推送前（約束）
+
+```text
+修改 → 必要時 pre_push --fix → commit → pre_push（必須綠、working tree clean）→ push 工作分支 → PR + CI
+```
+
+- `pre_push` 失敗**不得** push。`--fix` 會改 working tree；修完（含 auto-fix / review 補丁）須**先 re-commit 或 amend**，確認 clean 後再重跑至綠——綠燈只對**已提交**內容有效。
+- 不直推 `main`。檢查清單以 [`scripts/pre_push.sh`](scripts/pre_push.sh) 為準，本檔不展開。
+- PR merge ≠ research acceptance（§6）。
 
 ```bash
 git config core.hooksPath .githooks   # 一次
-bash scripts/pre_push.sh              # lockfile + ruff + mypy + pytest + doc checks + C++ 偵測
-bash scripts/pre_push.sh --fix        # 先 ruff fix/format
+bash scripts/pre_push.sh --fix        # 可選；改檔後必須再 commit
+bash scripts/pre_push.sh              # 每次 push 前；須綠且 tree clean
 ```
-
-Doc 相關（pre_push 已掛）：`check_doc_links` · `check_doc_stale_paths` · freshness warn · **structure warn（O1.5）**。
 
 ### 依層級加驗證
 
