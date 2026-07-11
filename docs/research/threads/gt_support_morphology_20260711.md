@@ -14,7 +14,7 @@ created: 2026-07-11
 | Program | **ACTIVE** — semantic sole active（接替 safe-region assetization A1 closed 後的 research mainline） |
 | Research object | μ_GT placement distribution on the atom lattice（**不是** per-cell risk field —— step-0 判定其不可識別） |
 | Step-0 audit | **recorded** · [note](../../modules/semantic/research/gt_support_morphology_step0_20260711.md) · `out/signal_study/gt_support_morphology_step0_20260711/` |
-| Procedure | framework §19 **v1 — PROPOSED（awaiting owner seal）** |
+| Procedure | framework §19 **v1 — PROPOSED**；seal unit = [PR #100](https://github.com/raylei50653/saccade/pull/100)（Draft；merge = owner seal） |
 | Initial verdict | `CORE_PLUS_CONDITIONAL_ESCAPE_TAIL`（candidate；exploratory；L1 ceiling） |
 | Escape tail | 4/209 tracks；motion-atom 集中（speed_mismatch 4/4 · dir_cos 3/4 · resid_mean 3/4 · log_h_ratio 0/4） |
 | Forensics | **not run**（排在 procedure seal 之後） |
@@ -72,3 +72,4 @@ closing hypothesis: GT 是否形成 corner-concentrated core
 ## History
 
 - 2026-07-11: Line opened（owner 選定 next scientific uncertainty）。Step-0 identifiability + placement audit recorded：per-cell risk field 不可識別（任何 k 僅 1 cell 達 ε≤0.05）；GT placement 可識別（M₀=97.1% @ k=5 median-split；4/209 escape tail，motion-atom 集中，log_h_ratio 0/4）。研究物件轉換為 μ_GT；framework §19 procedure v1 起草（PROPOSED）。
+- 2026-07-11: [PR #100](https://github.com/raylei50653/saccade/pull/100)（Draft）opened as **procedure v1 seal unit**：§19 含 ε_morph=5% CP-UCB 界線 + 四 terminals；boundaries 在 review 定版；forensic 結果排除在外（時間邊界）。
