@@ -29,7 +29,7 @@ PACKET_BOUND_FILES = {
     "test_d_online_stage2_q4.py",
     "test_d_online_stage2_q45_atlas.py",
     # misc
-    "test_boolean_atom_partial_order.py",
+    # boolean_atom_partial_order deleted as T3/T4 (#119 batch 3); packet preserves it
     "test_d0_bridge_estimator_fidelity.py",
     "test_portable_or_tail.py",
 }

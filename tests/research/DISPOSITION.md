@@ -5,7 +5,8 @@ Phase 2 (#119) executes terminal states in small reviewable batches.
 
 **Progress**
 - Batch 1: `external_fp/test_external_fp_filter_runtime.py` → T2 promote to `tests/unit/eval/` (done, PR #120)
-- Batch 2: gap_conditioned_motion e0–e3 → T4 delete (this PR); phase_b retained (line still warm)
+- Batch 2: gap_conditioned_motion e0–e3 → T4 delete (done, PR #121); phase_b retained (line still warm)
+- Batch 3: `misc/test_boolean_atom_partial_order.py` → T3/T4 delete (this PR); sealed packet remains under contract checkers
 
 Each research test file must eventually reach one of four terminal states:
 
@@ -32,7 +33,7 @@ Nothing was deleted in phase 1. "Seal status" reflects 2026-07-11 knowledge.
 | d_online_stage2/test_d_online_stage2_q1q3.py | out/signal_study m_b1_5 …_20260710 | sealed | T4 | Pins dated out/ artifacts + MOT17 GT; skips when absent |
 | d_online_stage2/test_d_online_stage2_q4.py | same | sealed | T4 | Same |
 | d_online_stage2/test_d_online_stage2_q45_atlas.py | m_b1_5_stage2_q45_20260710 | sealed | T4 | Same; see "known gaps" for external artifact_hashes |
-| misc/test_boolean_atom_partial_order.py | boolean_atom_partial_order_20260711 (#106) | sealed | T3/T4 | Packet-integrity parts → T3; partial-order proposition replays → T4 |
+| ~~misc/test_boolean_atom_partial_order.py~~ | boolean_atom_partial_order_20260711 (#106) | sealed | **done — T3/T4** (#119 batch 3) | Packet integrity → generic checkers (T3); atom roles/terminal/PRC binding → sealed verdict (T4); no live `src/saccade` imports |
 | misc/test_d0_bridge_estimator_fidelity.py | d0_bridge_estimator_fidelity_20260711 (PR #115) | sealed | T4 | D0 certifies bridge atoms only; packet + recipe preserve it |
 | misc/test_portable_or_tail.py | frozen portable_policy.json (M-B1 OR-tail) | frozen; kernel acceptance PENDING (ONLINE_BAUDIT_IMPLEMENTED=False) | keep in research | Still active: hook acceptance outstanding. On acceptance, promote the acceptance-relevant assertions (T1), delete the rest (T4) |
 | misc/test_cheb_gr_offline_handover_report.py | chebgr handover applicability study | study sealed | T4 | 315 lines / 1 test driving a diagnostics report script |
