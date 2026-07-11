@@ -95,7 +95,7 @@ archived  →  不再當現況導航                               →  docs/arc
    - 全庫把指向舊路徑的 link 改成 `threads/closed/<card>.md`
 4. **本 README**
    - 從 Proposed / Active / Parked **移出**
-   - 加入 **Closed** 表一行：連結 `close/<card>.md` · terminal one-liner · close date
+   - 加入 **Closed** 表一行：連結 `closed/<card>.md` · terminal one-liner · close date
 5. **下游**
    - module `TODO.md` sole-active 若仍指此 thread → 改指 handoff 目標或清掉
    - 若有 superseding thread → 雙方交叉連結

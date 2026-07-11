@@ -51,6 +51,14 @@ Context (predeclared, simple, reproducible):
   Prefer residual OU: v = v̄(c) + u, du = −γ u dt + σ dW
   No held-out retune of μ(c), γ, σ, or calibration
 
+  LOO firewall (sequence context):
+    sequence-conditioned context is diagnostic / in-sample only
+    unless a predeclared train-only fallback or transferable
+    context mapping exists; it is NOT eligible for LOO headline
+    comparison by default.
+    Forbidden: held-out sequence stats · ad-hoc held-out fallback ·
+    mixing sequence-conditioned in-sample into LOO headline.
+
 Scope:
   frozen pair table offline only
   independent of restricted global-closure prototype
@@ -164,6 +172,7 @@ Until then: no evidence_ledger · no production preset · no online-safe claim �
 - start with Fokker–Planck PDE · neural SDE · unrestricted mixtures · particle filters · production runtime work
 - large unrestricted hyperparameter search; per-sequence pick-best then aggregate; label-aware held-out selection
 - retune context mean / γ / σ / calibration on held-out sequences
+- use pure `sequence` context as LOO headline without predeclared train-only fallback / transferable mapping; steal held-out sequence stats; ad-hoc held-out fallback; mix sequence-conditioned in-sample into LOO headline
 - silent repair: drop hard sequences, exclude long-gap failures, different regularization for GT vs FP, post-hoc model redefine without new model ID
 - compare position-only / velocity-only / joint NLL as same-dimension quantities without recording \(d\) and per-term splits
 - modify tracker · online association hook · production preset · baseline behavior · default-on new signals
@@ -173,3 +182,4 @@ Until then: no evidence_ledger · no production preset · no online-safe claim �
 ## History
 
 - 2026-07-11: Task proposed as independent research-exploration-analysis thread. Captured full program (M0–M2 ladder, E0–E3 / A1–A8, V1–V5, DoD) as navigation-only mother line. **Not executed.** Not sole active; does not authorize engineering delivery or ledger promotion.
+- 2026-07-11: PR #108 review — lock LOO firewall: sequence-conditioned context is diagnostic/in-sample only by default (not LOO headline without predeclared train-only fallback / transferable mapping).

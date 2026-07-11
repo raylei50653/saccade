@@ -3,6 +3,7 @@ doc-status: closed
 doc-promotion: navigation-only; not evidence
 owner-module: semantic
 created: 2026-07-09
+closed: 2026-07-10
 ---
 
 # m_b1 online hook thread
