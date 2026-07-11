@@ -1,0 +1,47 @@
+{
+  "a1_a8_computed": false,
+  "capture_mode": "kernel_formula_substrate_replay",
+  "capture_sha256": "cef78c63e885ae2ec4837e8666e63cb171bc58e788d4b6925671212c09451ed2",
+  "consumer_a_source_sha256": "07848dabc58067207b952d0e89db0915f21d06800635e1896ede66519428e928",
+  "coverage_gates_pass": false,
+  "gap_cell_details": [
+    {
+      "gt_predicate_agreement": 0.803921568627451,
+      "gt_spearman": 0.6447963800904977,
+      "n_gt": 51,
+      "slice": "gap_1_10"
+    },
+    {
+      "gt_predicate_agreement": 0.7213114754098361,
+      "gt_spearman": 0.7429402432575356,
+      "n_gt": 61,
+      "slice": "gap_11_26"
+    }
+  ],
+  "git_commit": "a912705f2fbfe0179d091c0ebd9f3597142e902d",
+  "join_sha256": "da2964e4b9db71c4bb486887b758d3fb6a405860ba6ae8316a5498668f5617d2",
+  "live_cuda_event_ring_implemented": false,
+  "phase_b_authorized": false,
+  "preset_config_hash": "e794868ffb1ee70c6c06ae31a8284e1453856113a743f2635ee51381dc7b95de",
+  "primary_support": "gt_valid && 1 <= gap <= 26",
+  "production_changed": false,
+  "production_threshold": 0.4,
+  "research_bridge_fidelity_audit_default": false,
+  "runner_sha256": "41442606fa903366e23ff5207b48b4bb2d1b882b2b86413d19f0bc8681ac1590",
+  "schema_version": 1,
+  "source_pairs_sha256": "0ae3896791ec074fbe951198752c17385c4ee0770a7ec3831225d3ea56a69d17",
+  "status": "D0_SEALED",
+  "verdict": "not_fidelity_aligned",
+  "verdict_checks": {
+    "gt_safe_unsafe_count": 24,
+    "gt_safe_unsafe_rate": 0.21428571428571427,
+    "pred_agree_fp": 0.9586177474402731,
+    "pred_agree_gt": 0.7589285714285714,
+    "pred_agree_overall": 0.9495114006514658,
+    "q85_abs_error": 0.21306757666155995,
+    "quantile_monotone_both": true,
+    "spearman_fp": 0.9661178364009686,
+    "spearman_gt": 0.7144223869887587,
+    "spearman_overall": 0.9645023402030639
+  }
+}

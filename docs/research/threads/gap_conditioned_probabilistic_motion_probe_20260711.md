@@ -18,7 +18,7 @@ default-behavior-change: forbidden
 | Research object | gap-conditioned transition density \(p(x_1,v_1 \mid x_0,v_0,\Delta t,c)\) → standardized mismatch / NLL / optional reach mass |
 | Motivation | deterministic motion atoms 在 long-gap slice 出現 GT role reversal（short: high-mismatch→FP；部分 long: high-mismatch 集中 GT） |
 | Relation to mainline | **parallel / independent** · 不納入 restricted global closure · 不改 \(\{dist_h,\log h_{ratio}\}\) 安全域主線 |
-| Execution | **E0–E2 accepted** · E2 freeze `FROZEN_ACCEPTED_WITH_LIMITS` · **E3 signals `E3_SIGNALS_SEALED`** · Phase B unauthorized |
+| Execution | **E0–E2 accepted** · E2 freeze `FROZEN_ACCEPTED_WITH_LIMITS` · **E3 signals `E3_SIGNALS_SEALED`** · **D0 `D0_SEALED` / `not_fidelity_aligned`** · Phase B unauthorized · A1–A8 not executed |
 | Research acceptance | **`ACCEPTED_WITH_LIMITS`** for E0–E2 · E0 `ACCEPT` · E1 marginal baseline `ACCEPTED_WITH_LIMITS` · E2 family + LOO lineage `ACCEPTED_WITH_LIMITS` · E3 signals sealed (not Phase B) |
 | Probabilistic verdict | **`NOT_YET_EVALUATED`** · no V1–V5 verdict · Phase B / A1–A8 unauthorized |
 | Engineering / production | **none** · no tracker / preset / online hook / baseline change |
@@ -91,6 +91,8 @@ Scope:
 | [E3 research note](../../modules/semantic/research/gap_conditioned_motion_e3_signals_20260711.md) | LOO fold signal generation · 28 parameter + 7 selection artifacts · all-four scores per pair · no A1–A8 |
 | [E3 packet](../../modules/semantic/research/evidence/gap_conditioned_motion_e3_signals_20260711/manifest.json) | sealed pair×fold×model score table · fold artifacts · manifest (signals only) |
 | [Phase B design note](../../modules/semantic/research/gap_conditioned_motion_phase_b_design_20260711.md) | predeclared A1–A8 protocol · support layers (primary=\(S_A\)) · frozen numeric criteria · V1–V5 decision rule · D0 claim-ceiling coupling |
+| [D0 fidelity note](../../modules/semantic/research/d0_bridge_estimator_fidelity_20260711.md) | Consumer-A bridge estimator fidelity · terminal **`not_fidelity_aligned`** · claim ceiling locked |
+| [D0 packet](../../modules/semantic/research/evidence/d0_bridge_estimator_fidelity_20260711/manifest.json) | capture · same-event join · metrics · decomposition · verdict |
 | Final research note | problem · equations · context · substrate · fit/LOO protocol · limitations · bounded verdict |
 | Pair-level signal table | M0 + M1 + M2 signals · gap/context · model/parameter IDs · labels · regularization flags |
 | Model artifacts / fold | γ, σ, drift/context mean, covariance def, coordinate system, time unit, fit/exclude rows, code version |
@@ -101,7 +103,8 @@ Scope:
 ## Current step
 
 **E0–E2 `ACCEPTED_WITH_LIMITS`; E2 freeze `FROZEN_ACCEPTED_WITH_LIMITS`;
-E3 `E3_SIGNALS_SEALED`; Phase B / A1–A8 unauthorized.**
+E3 `E3_SIGNALS_SEALED`; D0 `D0_SEALED` / `not_fidelity_aligned`;
+Phase B / A1–A8 unauthorized.**
 
 Frozen E0/E2/E3 boundary:
 
@@ -128,6 +131,11 @@ Binding since PR #111 (production substrate mapping):
   E3/A1–A8 headline = E_motion on S_A=[1,26] (consumer A);
   S_C2/S_B secondary; all-gap exploratory only (§8)
   threshold transfer additionally gated by D0 (Issue #112, §6)
+  D0 sealed: not_fidelity_aligned
+    → offline bridge_dist numeric thresholds may NOT transfer to Consumer A
+    → E3 signals: sealed
+    → Phase B: unauthorized
+    → A1–A8: not executed
 
 A1–A8 protocol predeclared (design sealed; execution still unauthorized):
   docs/modules/semantic/research/gap_conditioned_motion_phase_b_design_20260711.md
@@ -263,3 +271,11 @@ Until then: no evidence_ledger · no production preset · no online-safe claim �
 - 2026-07-11: PR #113 final review — **review-accepted / merge-ready**; no remaining merge blockers. The PR #113 merge commit is the **Phase B predeclaration seal**. Next authorized step: **E3 signal generation only** (sealed E2 contract; no A-table may be computed in the E3 PR). A1–A8 execution still requires an explicit owner authorization recorded in this thread after E3 signals are sealed.
 - 2026-07-11: **E3 signals sealed** (`E3_SIGNALS_SEALED`): rebuilt 7 LOO folds via the E2 lineage-aware fold builder; persisted 28 parameter + 7 selection artifacts matching sealed train-GT counts/hashes; emitted full fold×pair×model cube (679,952 rows = 24,284 × 7 × 4) with `evaluation_role=held_out|train` so A6 can select τ on train clusters under fold-frozen parameters; energy terms split; no winner-only filter; Phase B design seal `69b0e5be…` + content sha256 recorded in manifest. Packet [evidence/gap_conditioned_motion_e3_signals_20260711/](../../modules/semantic/research/evidence/gap_conditioned_motion_e3_signals_20260711/manifest.json) · [note](../../modules/semantic/research/gap_conditioned_motion_e3_signals_20260711.md). **No A1–A8 tables · no V1–V5 · Phase B still unauthorized** until owner authorization in this thread.
 - 2026-07-11: PR #114 review — structural gap closed: prior held-out-only surface (97,136 rows) was insufficient for A6 training-side threshold selection; cube + role tag is the seal revision (signal completion, not Phase B execution).
+- 2026-07-11: **D0 sealed** (`D0_SEALED`): Consumer-A bridge estimator fidelity audit ([Issue #112](https://github.com/raylei50653/saccade/issues/112)) on frozen pairs SHA `0ae38967…` vs `relink_bidir_propose_kernel` formula capture. Coverage gates FAIL (GT 95.7% / overall 95.9% on \(S_A\)); GT Spearman 0.71; GT predicate agreement @0.4 = 0.76; GT offline-safe/online-unsafe = 24. Decomposition: horizon (`la`) + EMA `h_ref` dominate residual after velocity swap. Terminal verdict **`not_fidelity_aligned`**. [Note](../../modules/semantic/research/d0_bridge_estimator_fidelity_20260711.md) · [packet](../../modules/semantic/research/evidence/d0_bridge_estimator_fidelity_20260711/manifest.json).
+  ```text
+  D0 verdict: not_fidelity_aligned
+  E3 signals: sealed
+  Phase B: unauthorized
+  A1–A8: not executed
+  production/default/preset: unchanged
+  ```
