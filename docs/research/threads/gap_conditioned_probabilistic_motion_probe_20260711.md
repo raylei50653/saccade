@@ -193,7 +193,8 @@ escape cohort not high-energy under E_motion
 no new aggregate reversal + positive held-out direction
   (weakened per PR #113 review; M0 baseline is already 0/20, so
    "more consistent than M0" is not establishable)
-LOO conditional safe region no thinner (non-vacuous FP_removed)
+LOO conditional safe region no thinner
+  (held-out GT-leakage ≤ ε precondition; non-vacuous FP_removed)
 improvement not explained by unrestricted diffusion
 ```
 
@@ -205,7 +206,7 @@ improvement not explained by unrestricted diffusion
 | **V2** | integrated OU supported — M2 beats M1 under LOO + matched uncertainty + short-gap retention |
 | **V3** | position-only supported — joint velocity too noisy |
 | **V4** | inconclusive — support / velocity quality / context identifiability insufficient |
-| **V5** | not supported — no real RR fix or only via over-diffusion |
+| **V5** | representation + attribution contract not established — no member both passes all success boxes and holds a claimable verdict slot（redefined per PR #113 second review; includes the anomaly case: a member passes boxes but fails A8 dominance while M1 fails boxes — anomaly note mandatory. The pre-partition wording "no real RR fix or only via over-diffusion" is retired） |
 
 ### Definition of Done (close only when all true)
 
@@ -253,3 +254,4 @@ Until then: no evidence_ledger · no production preset · no online-safe claim �
 - 2026-07-11: PR #111 merged the [production substrate mapping](../../modules/semantic/research/production_substrate_mapping_20260711.md) as canonical precondition: E3/A1–A8 headline constrained to \(S_A=[1,26]\) (consumer A) with secondary/exploratory layering (§8); threshold transfer gated by the D0 estimator-fidelity study opened as [Issue #112](https://github.com/raylei50653/saccade/issues/112) (three-verdict contract; parallel to Phase B, gates claim ceiling only). Sealed E2 family / LOO firewall / E3 output contract unchanged.
 - 2026-07-11: A1–A8 Phase B protocol predeclared in the [design note](../../modules/semantic/research/gap_conditioned_motion_phase_b_design_20260711.md): frozen numeric criteria (calibration classes · retention margin 0.05 · escape-tail ≥3/4 · A6 ε=0.05 no-thinner · A8 dominance rule), support floors (LOW_SUPPORT <15 GT · qualifying fold ≥20 held-out GT · folds 04/09 diagnostic-only), success-box mapping, and V1–V5 decision rule (V3 predeclared unreachable; V4 only via named routes). Design-only: Phase B execution remains unauthorized until design review acceptance + sealed E3 signals.
 - 2026-07-11: PR #113 review (5 merge blockers, all accepted): ① D0 ceiling scope-limited to bridge atoms — \(E_{motion}\) is research-only for consumer A, no D0 outcome upgrades \(S_{new}\); level 2 needs a future \(E_{motion}\)/\(d\) consumer contract. ② A6 bound frozen in-design (one-sided CP 95% on `(sequence, lost_id)` cluster containment; train-cluster-only selection; `NO_FEASIBLE_THRESHOLD`/`BOTH_EMPTY` terminal semantics; positive-productivity clause; metric renamed `FP_removed`) — morphology step-0 established no cluster-aware bound to inherit; sequence-level residual clustering stays a declared limitation. ③④ Success boxes weakened: "no new aggregate reversal + positive held-out direction" (M0 already 0/20) and "escape cohort not high-energy under \(E_{motion}\)" (min-\(d_H\) representative pairs frozen from the forensic packet; single pooled-q90 reference population; no M0-relative reduction claim). ⑤ V1–V5 rewritten as a priority partition (V4 routes → V2 → V1 → V5) with a mandatory anomaly note for the boxes-without-slot residual case.
+- 2026-07-11: PR #113 second review — five original blockers confirmed closed; two semantic blockers fixed: ① A6 held-out safety precondition frozen (every qualifying fold × non-BOTH_EMPTY primary cell must show held-out cluster-level empirical GT leakage ≤ ε = 0.05 for \(S_{new}\) **before** any FP_removed comparison; \(S_{old}\) leakage descriptive), and the CP bound renamed to a **model-based bound under the track-cluster independence assumption** (not a cluster-robust population bound; sequence-level residual clustering stays a declared limitation). ② V5 redefined as "representation + attribution contract not established" (verdict table updated; the pre-partition "no real RR fix or only via over-diffusion" wording retired), so the boxes-without-slot residual case is inside V5's definition instead of contradicting it. PR body synchronized with the final frozen design.

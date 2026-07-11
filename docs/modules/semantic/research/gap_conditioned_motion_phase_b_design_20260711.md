@@ -205,9 +205,11 @@ Frozen A6 estimator:
 ```text
 bound        one-sided exact binomial (Clopper–Pearson) upper confidence
              bound at 95% (one-sided α = 0.05) on cluster-level GT
-             containment
+             containment. This is a MODEL-BASED CP bound valid under the
+             track-cluster independence assumption below; it must NOT be
+             described as a cluster-robust 95% population bound
 cluster unit (sequence, lost_id); a cluster is "contained" if ANY of its
-             GT pairs falls in D. Independence is assumed across clusters
+             GT pairs falls in D. Independence is ASSUMED across clusters
              within a fold; sequence-level residual clustering remains a
              DECLARED LIMITATION (undischarged since morphology step-0) —
              per-fold tables are the primary reading, pooled numbers are
@@ -231,7 +233,17 @@ both infeasible in a cell              → cell recorded BOTH_EMPTY;
                                          excluded from the criterion and
                                          can NEVER support a pass (no
                                          vacuous 0 ≥ 0)
-no-thinner(member) := pooled held-out FP_removed(S_new) ≥ FP_removed(S_old)
+
+held-out safety precondition (evaluated BEFORE any FP_removed comparison):
+  for EVERY qualifying fold × non-BOTH_EMPTY primary cell, the held-out
+  cluster-level empirical GT leakage of S_new must be ≤ ε = 0.05
+  (leakage = fraction of held-out (sequence, lost_id) clusters contained
+  in D — same unit as the bound); any violation → no-thinner FAILS for
+  that member. S_old held-out leakage is reported alongside as a
+  descriptive diagnostic (the baseline is not the object under test).
+
+no-thinner(member) := held-out safety precondition holds,
+                      AND pooled held-out FP_removed(S_new) ≥ FP_removed(S_old)
                       on S_A, AND pooled held-out FP_removed(S_new) > 0,
                       AND no qualifying fold with
                       FP_removed(S_new) < 0.8 × FP_removed(S_old)
@@ -280,7 +292,7 @@ If multiple M2 members dominate: declared order H270 → H90 → H30.
 | short-gap discrimination retained | A3 |
 | escape cohort not high-energy under `E_motion` (weakened; no M0-relative reduction claim) | A4 (≥3/4, exploratory layer) |
 | no new aggregate reversal + positive held-out direction (weakened; not "more consistent than M0") | A2 (`R_flip = 0`) + A7 (every qualifying fold) |
-| LOO conditional safe region no thinner (non-vacuous `FP_removed`) | A6 |
+| LOO conditional safe region no thinner (held-out GT-leakage ≤ ε precondition; non-vacuous `FP_removed`) | A6 |
 | improvement not explained by unrestricted diffusion | A1 (winning member never over-dispersed in a primary cell) + A4 tie + A8 matched uncertainty |
 
 The second and third boxes are deliberately weaker than the thread's
@@ -308,11 +320,15 @@ Priority partition (evaluate top-down; exactly one fires):
   elif boxes(M1P-GLOBAL-CV):                            V1
   else:                                                 V5
 
-Residual-case note: a configuration where some M2 passes boxes but fails
-dominance while M1 fails boxes maps to V5 by this rule; the verdict
-record must then carry an explicit anomaly note ("a member passed all
-success boxes without a claimable verdict slot") rather than silently
-reporting "not supported".
+V5 semantics (redefined; the thread's verdict table is updated to match
+in this PR): V5 = "representation + attribution contract NOT
+ESTABLISHED" — no member both passes all success boxes AND holds a
+claimable verdict slot. V5 does NOT assert "no real fix / only
+over-diffusion"; that stronger reading was the pre-partition wording and
+is retired. The residual case — some M2 passes boxes but fails dominance
+while M1 fails boxes — falls INSIDE this definition by construction and
+must still carry an explicit anomaly note ("a member passed all success
+boxes without a claimable verdict slot") in the verdict record.
 
 V3  is UNREACHABLE this round and is predeclared as such: the frozen table
     never identified velocity/joint observations (E0), so "joint velocity
