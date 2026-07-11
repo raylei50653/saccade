@@ -1,0 +1,4 @@
+status=PHASE_B_EXECUTED
+verdict=V5
+models=M1P-GLOBAL-CV,M2P-GLOBAL-OU-H270,M2P-GLOBAL-OU-H90,M2P-GLOBAL-OU-H30
+claim_ceiling=representation-level only

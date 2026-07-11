@@ -18,11 +18,11 @@ default-behavior-change: forbidden
 | Research object | gap-conditioned transition density \(p(x_1,v_1 \mid x_0,v_0,\Delta t,c)\) → standardized mismatch / NLL / optional reach mass |
 | Motivation | deterministic motion atoms 在 long-gap slice 出現 GT role reversal（short: high-mismatch→FP；部分 long: high-mismatch 集中 GT） |
 | Relation to mainline | **parallel / independent** · 不納入 restricted global closure · 不改 \(\{dist_h,\log h_{ratio}\}\) 安全域主線 |
-| Execution | **E0–E2 accepted** · E2 freeze `FROZEN_ACCEPTED_WITH_LIMITS` · **E3 signals `E3_SIGNALS_SEALED`** · **D0 fail-closed** (`not_fidelity_aligned` / `runtime_capture_unavailable`; Issue #112 incomplete) · Phase B unauthorized · A1–A8 not executed |
-| Research acceptance | **`ACCEPTED_WITH_LIMITS`** for E0–E2 · E0 `ACCEPT` · E1 marginal baseline `ACCEPTED_WITH_LIMITS` · E2 family + LOO lineage `ACCEPTED_WITH_LIMITS` · E3 signals sealed (not Phase B) |
-| Probabilistic verdict | **`NOT_YET_EVALUATED`** · no V1–V5 verdict · Phase B / A1–A8 unauthorized |
+| Execution | **E0–E2 accepted** · E2 freeze `FROZEN_ACCEPTED_WITH_LIMITS` · **E3 signals `E3_SIGNALS_SEALED`** · **Phase B `PHASE_B_EXECUTED` → `V5`** · **D0 fail-closed** (`not_fidelity_aligned` / `runtime_capture_unavailable`; Issue #112 incomplete) |
+| Research acceptance | **`ACCEPTED_WITH_LIMITS`** for E0–E2 and **Phase-B `V5 ACCEPTED_WITH_LIMITS`** · E0 `ACCEPT` · E1 marginal baseline `ACCEPTED_WITH_LIMITS` · E2 family + LOO lineage `ACCEPTED_WITH_LIMITS` · E3 signals sealed |
+| Probabilistic verdict | **`V5 ACCEPTED_WITH_LIMITS`** · representation + attribution contract not established · claim ceiling = representation / level 1 |
 | Engineering / production | **none** · no tracker / preset / online hook / baseline change |
-| Research promotion | **none** until LOO + bounded V1–V5 verdict |
+| Research promotion | **none** · accepted V5 authorizes no ledger, production, threshold-transfer, or hook promotion |
 
 ## Current boundary
 
@@ -91,6 +91,8 @@ Scope:
 | [E3 research note](../../modules/semantic/research/gap_conditioned_motion_e3_signals_20260711.md) | LOO fold signal generation · 28 parameter + 7 selection artifacts · all-four scores per pair · no A1–A8 |
 | [E3 packet](../../modules/semantic/research/evidence/gap_conditioned_motion_e3_signals_20260711/manifest.json) | sealed pair×fold×model score table · fold artifacts · manifest (signals only) |
 | [Phase B design note](../../modules/semantic/research/gap_conditioned_motion_phase_b_design_20260711.md) | predeclared A1–A8 protocol · support layers (primary=\(S_A\)) · frozen numeric criteria · V1–V5 decision rule · D0 claim-ceiling coupling |
+| [Phase B research note](../../modules/semantic/research/gap_conditioned_motion_phase_b_20260711.md) | A1–A8 execution from sealed E3 cube · **`V5 ACCEPTED_WITH_LIMITS`** · representation / level 1 only |
+| [Phase B packet](../../modules/semantic/research/evidence/gap_conditioned_motion_phase_b_20260711/manifest.json) | deterministic tables / A6 train-firewall audit / verdict record / full E3→Phase-B verifier |
 | [D0 fidelity note](../../modules/semantic/research/d0_bridge_estimator_fidelity_20260711.md) | fail-closed capture unavailable · terminal **`not_fidelity_aligned`** · Issue #112 incomplete |
 | [D0 packet](../../modules/semantic/research/evidence/d0_bridge_estimator_fidelity_20260711/manifest.json) | reconstruction diagnostics · same-event join · single-factor decomp · verdict |
 | Final research note | problem · equations · context · substrate · fit/LOO protocol · limitations · bounded verdict |
@@ -103,8 +105,9 @@ Scope:
 ## Current step
 
 **E0–E2 `ACCEPTED_WITH_LIMITS`; E2 freeze `FROZEN_ACCEPTED_WITH_LIMITS`;
-E3 `E3_SIGNALS_SEALED`; D0 `D0_FAIL_CLOSED_CAPTURE_UNAVAILABLE` /
-`not_fidelity_aligned` (Issue #112 incomplete); Phase B / A1–A8 unauthorized.**
+E3 `E3_SIGNALS_SEALED`; Phase B **`V5 ACCEPTED_WITH_LIMITS`**
+(representation / level 1); D0 `D0_FAIL_CLOSED_CAPTURE_UNAVAILABLE` /
+`not_fidelity_aligned` (Issue #112 incomplete).**
 
 Frozen E0/E2/E3 boundary:
 
@@ -124,8 +127,9 @@ LOO headline context:
 E3 sealed: 7 LOO folds · 28 parameter + 7 selection artifacts ·
 full fold×pair×model cube 679,952 rows (24,284 × 7 × 4) with
 evaluation_role=held_out|train (A6 train-side surface sealed) ·
-no A1–A8 · no verdict
-Phase B remains unauthorized until owner authorization in this thread.
+one sealed A1–A8 run completed → **`V5 ACCEPTED_WITH_LIMITS`**; no
+criterion/model/input deviation. The accepted claim ceiling is representation /
+level 1 only.
 
 Binding since PR #111 (production substrate mapping):
   E3/A1–A8 headline = E_motion on S_A=[1,26] (consumer A);
@@ -137,13 +141,13 @@ Binding since PR #111 (production substrate mapping):
     → offline bridge_dist numeric thresholds may NOT transfer to Consumer A
     → Issue #112 incomplete until default-off CUDA capture exists
     → E3 signals: sealed
-    → Phase B: unauthorized
-    → A1–A8: not executed
+    → Phase B: executed; representation-level V5
+    → A1–A8: executed; no production threshold transfer
 
 A1–A8 protocol predeclared (design sealed; execution still unauthorized):
   docs/modules/semantic/research/gap_conditioned_motion_phase_b_design_20260711.md
-  ordering: design merge (seal) ✓ → E3 signals sealed ✓ → owner authorization
-  → single Phase B run → one V1–V5 verdict (V3 predeclared unreachable)
+  ordering: design merge (seal) ✓ → E3 signals sealed ✓ → owner authorization ✓
+  → single Phase B run ✓ → V5 recorded (V3 predeclared unreachable)
 ```
 
 PR #109 acceptance limit: the E1 `AUC < 0.5 AND pooled within-bin q90 GT
@@ -172,7 +176,7 @@ Phase A — exploration
      E3_SIGNALS_SEALED (28+7 artifacts · full cube + evaluation_role · no A-tables)
   freeze model family + analysis inputs — DONE for E2
 
-Phase B — analysis (UNAUTHORIZED)
+Phase B — analysis (`V5 ACCEPTED_WITH_LIMITS`; representation / level 1)
   A1 gap-bin calibration (χ² coverage; under/approx/over dispersed)
   A2 role-reversal rate R_flip + sequence attribution
   A3 short-gap retention (must not collapse)
@@ -181,7 +185,7 @@ Phase B — analysis (UNAUTHORIZED)
   A6 conditional safe-region S_old vs S_new
   A7 LOO sequence transfer (params/calibration frozen per fold)
   A8 M1 vs M2 attribution (matched coverage / log det Σ / short-gap)
-  → single V1–V5 bounded verdict
+  → V5 bounded verdict (representation + attribution contract not established)
 ```
 
 ### Model comparison logic
@@ -230,10 +234,10 @@ improvement not explained by unrestricted diffusion
 - [x] M0 role-reversal baseline rebuilt
 - [x] M1-P and M2-P reproducible fit/scoring primitives + machine-readable family freeze
 - [x] position-only vs joint outputs separated; energy terms stored separately (E3 score table)
-- [ ] gap-bin calibration · RR rate · short-gap retention · escape-tail · conditional SR · LOO · M1 vs M2 attribution · failure/scale/regularization audit
-- [ ] single reproduction entrypoint rebuilds all headline results (E3 packet sealed; Phase B entrypoint unauthorized)
-- [ ] exactly one V1–V5 bounded verdict
-- [ ] explicit note: whether a follow-up default-off online hook task is warranted
+- [x] gap-bin calibration · RR rate · short-gap retention · escape-tail · conditional SR · LOO · M1 vs M2 attribution · failure/scale/regularization audit
+- [x] single reproduction entrypoint rebuilds E3 then all headline results from the frozen pair table
+- [x] exactly one V1–V5 bounded verdict (`V5 ACCEPTED_WITH_LIMITS`; representation / level 1)
+- [x] explicit note: a default-off online hook follow-up is **not warranted** from V5; post-verdict hook discussion is limited to V1/V2/V3
 - [x] production preset and baseline behavior **unchanged**
 
 ### Post-verdict promotion gate
@@ -284,3 +288,31 @@ Until then: no evidence_ledger · no production preset · no online-safe claim �
   A1–A8: not executed
   production/default/preset: unchanged
   ```
+- 2026-07-11: **Owner authorization recorded; Phase B executed once** over the
+  sealed E3 cube. The new [Phase-B packet](../../modules/semantic/research/evidence/gap_conditioned_motion_phase_b_20260711/manifest.json)
+  and [result note](../../modules/semantic/research/gap_conditioned_motion_phase_b_20260711.md)
+  contain A1–A8, A6 train/held-out firewall evidence, and the single bounded
+  verdict **`V5`**. All members fail the non-vacuous A6/no-thinner success box;
+  primary `1–10` calibration is under-dispersed. This is representation-level
+  only; research acceptance remains pending, D0 stays fail-closed, and no
+  production/hook/preset follow-up is authorized.
+- 2026-07-11: **Phase-B review correction:** regenerated the packet without
+  changing E3, the family, or predeclared criteria. A5 now covers every frozen
+  support-layer/cell intersection plus all four M0 atoms; A6 pools captured FP
+  counts over \(S_A\) and applies the 0.8 guard after fold pooling; A3/A4/A7/A8
+  now emit their committed auxiliary outputs. Criterion and mutation tests
+  cover tail, retention, A5 fields, A6 pooling, A8 dominance, and the role
+  firewall. The bounded runner verdict remains `V5`; research acceptance is
+  still pending.
+- 2026-07-11: **Phase-B second review correction:** A5 now scores the frozen
+  `1 - dir_cos` mismatch directly (no collision with the raw cosine column);
+  the all-gap `11–30` M1 AUC is `0.71884494`, aligned with the E1 direction.
+  Added exact synthetic M0-direction assertions and pure V4/V2/V1/V5
+  priority-partition transition tests. Packet hashes were regenerated; V5 is
+  unchanged and research acceptance remains pending.
+- 2026-07-11: **Research-owner acceptance:** sealed Phase-B A1–A8 execution
+  **`ACCEPTED_WITH_LIMITS`**; bounded verdict **`V5 ACCEPTED_WITH_LIMITS`**.
+  The accepted claim ceiling is representation / level 1. This accepts neither
+  production behavior nor threshold transfer: D0 remains fail-closed, and
+  tracker / preset / production threshold / online hook work remains
+  unauthorized.
