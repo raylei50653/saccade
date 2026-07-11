@@ -1,21 +1,22 @@
-"""Consumer-A bridge estimator fidelity audit — research contract (D0).
+"""Consumer-A bridge estimator fidelity — research contract (D0).
 
 Default-off observational surface.  Does **not** change production bridge
 decisions, thresholds, ordering, lifecycle, or presets.
 
-Production surface under audit (read-only):
+Production surface named by the audit (read-only reference):
   ``src/tracking/tracker_gpu.cu`` :: ``relink_bidir_propose_kernel``
   primary quantity ``bdist`` vs production threshold ``0.4``.
 
-Capture modes
--------------
-* ``kernel_formula_substrate_replay`` (D0 sealed path): bit-faithful host
-  replica of the CUDA estimator applied to sealed no-relink substrate
-  tracklets that define the offline pair universe.  Same event keys as
-  ``pairs.csv``; not a substitute Python semantic relinker and not the C++
-  ``midpoint_bridge_dist`` mirror (lost-only EMA / different history).
-* Live CUDA event-ring export remains reserved (default off); enabling it
-  must not alter ranking or accept/reject.
+Capture identity (binding)
+-------------------------
+* Live CUDA event-ring export is **not implemented**
+  (``LIVE_CUDA_EVENT_RING_IMPLEMENTED = False``).
+* The sealed D0 path is therefore a **kernel-formula reconstruction** from
+  no-relink MOT tracklets — **not** runtime Consumer-A capture of
+  ``foot_ring`` / ``ema_h`` / float32 kernel outputs.
+* Issue #112 runtime fidelity remains **incomplete** until default-off,
+  decision-neutral CUDA capture exists.  Reconstruction metrics are
+  diagnostics only and must not be labeled ``D4 exact captured Consumer-A``.
 
 This module never mounts a production policy change.
 """
@@ -38,16 +39,27 @@ SPEED_WEIGHT_REF: Final[float] = 0.12  # s_lost reference for w
 RESEARCH_BRIDGE_FIDELITY_AUDIT_DEFAULT: Final[bool] = False
 LIVE_CUDA_EVENT_RING_IMPLEMENTED: Final[bool] = False
 
+# Capture mode vocabulary (sealed packet must use reconstruction, not "exact").
+CAPTURE_MODE_RECONSTRUCTION: Final[str] = "kernel_formula_reconstruction"
+CAPTURE_MODE_RUNTIME_CUDA: Final[str] = "runtime_cuda_event_ring"  # reserved
+
+# Issue / packet identity when live capture is unavailable.
+ISSUE_112_STATUS: Final[str] = "incomplete_runtime_capture_unavailable"
+PACKET_STATUS_FAIL_CLOSED: Final[str] = "D0_FAIL_CLOSED_CAPTURE_UNAVAILABLE"
+PRIMARY_FAIL_REASON: Final[str] = "runtime_capture_unavailable"
+
 ANCHOR_MODE: Final[dict[str, int]] = {
     "center": 0,
     "foot": 1,
     "adaptive": 2,
 }
 
+HEADLINE_PRESET_REL: Final[str] = "configs/presets/mamba_whole_graph_m.yaml"
+
 
 @dataclass(frozen=True)
 class BridgeEstimate:
-    """One Consumer-A-style bridge evaluation on a single event."""
+    """One kernel-formula reconstruction of the Consumer-A bridge score."""
 
     bdist: float
     dist_h: float
@@ -248,13 +260,14 @@ def consumer_a_estimate_from_rings(
     anchor_mode: int = ANCHOR_MODE[PRODUCTION_BRIDGE_ANCHOR],
     rate_gate: float = PRODUCTION_BRIDGE_ANCHOR_RATE,
 ) -> BridgeEstimate:
-    """Full Consumer-A estimator on pre-extracted rings + EMA heights.
+    """Kernel-formula reconstruction on pre-extracted rings + EMA heights.
 
-    Matches ``relink_bidir_propose_kernel``:
+    Matches ``relink_bidir_propose_kernel`` algebra on reconstructed inputs:
     * candidate requires >=4 ring samples (kernel early-return otherwise);
     * lost with >=4 uses ``bridge_anchor4`` on last-4;
-    * lost with 1–3 samples anchors the last point with zero velocity
-      (foot y when ``anchor_mode==1``, else centre y).
+    * lost with 1–3 samples anchors the last point with zero velocity.
+
+    This is **not** a dump of live CUDA ``foot_ring`` / ``ema_h``.
     """
     if len(cand_ring) < 4:
         raise ValueError("Consumer-A path requires >=4 cand foot-ring samples")

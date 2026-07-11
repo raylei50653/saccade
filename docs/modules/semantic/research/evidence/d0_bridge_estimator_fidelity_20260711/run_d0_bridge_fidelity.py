@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 """D0 — Consumer-A bridge estimator fidelity audit (Issue #112).
 
-Authorized scope:
-  exact same-event join of frozen offline pairs.csv vs Consumer-A
-  kernel-formula capture (substrate tracklet replay of
-  relink_bidir_propose_kernel estimator equations)
-  rank / quantile / predicate metrics on S_A
-  stepwise estimator decomposition (velocity / horizon / normalization)
-  single three-value terminal verdict
+This PR path is **fail-closed on runtime capture unavailable**.
+
+What is sealed here:
+  kernel-formula reconstruction from frozen pairs + no-relink MOT substrate
+  same-event exact-key join · S_A metrics as **reconstruction diagnostics**
+  single three-value terminal verdict (forced not_fidelity_aligned while
+  LIVE_CUDA_EVENT_RING_IMPLEMENTED is False)
+
+What is NOT sealed:
+  live CUDA Consumer-A event capture of foot_ring / ema_h / float32 bdist
+  Issue #112 runtime fidelity completion
+  D4 "exact captured Consumer-A" claim
 
 Explicitly out of scope:
   A1–A8 tables · V1–V5 · threshold search · offline estimator repair ·
@@ -32,6 +37,7 @@ from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 import numpy as np
+import yaml
 from scipy.stats import spearmanr
 
 REPO = Path(__file__).resolve().parents[6]
@@ -40,12 +46,16 @@ if str(REPO) not in sys.path:
 
 from saccade.perception.eval.consumer_a_bridge_fidelity import (  # noqa: E402
     ANCHOR_MODE,
+    CAPTURE_MODE_RECONSTRUCTION,
+    HEADLINE_PRESET_REL,
+    ISSUE_112_STATUS,
     LIVE_CUDA_EVENT_RING_IMPLEMENTED,
+    PACKET_STATUS_FAIL_CLOSED,
+    PRIMARY_FAIL_REASON,
     PRODUCTION_BRIDGE_ANCHOR,
     PRODUCTION_BRIDGE_ANCHOR_RATE,
     PRODUCTION_BRIDGE_AT,
     PRODUCTION_BRIDGE_PX,
-    PRODUCTION_EMA_ALPHA,
     RESEARCH_BRIDGE_FIDELITY_AUDIT_DEFAULT,
     bridge_anchor4,
     consumer_a_estimate_from_rings,
@@ -62,8 +72,13 @@ CANONICAL_PAIRS = Path(
 SOURCE_SHA256 = "0ae3896791ec074fbe951198752c17385c4ee0770a7ec3831225d3ea56a69d17"
 SUBSTRATE_MOT_DIR = Path("results/MOT17_eval_m_b1_substrate_20260709T092543Z")
 KERNEL_SOURCE = Path("src/tracking/tracker_gpu.cu")
-PACKET_STATUS = "D0_SEALED"
+HEADLINE_PRESET = Path(HEADLINE_PRESET_REL)
+PACKET_STATUS = PACKET_STATUS_FAIL_CLOSED
 PRIMARY_SUPPORT = "gt_valid && 1 <= gap <= 26"
+# Metrics compare offline atoms to reconstruction quantities — not runtime CA.
+RECONSTRUCTION_QUANTITY_NOTE = (
+    "reconstruction_diagnostic_not_runtime_consumer_a_capture"
+)
 BOOTSTRAP_SEED = 20260711
 BOOTSTRAP_REPS = 400
 CLUSTER_QUANTILES = (0.50, 0.70, 0.85, 0.90, 0.95)
@@ -105,9 +120,7 @@ CAPTURE_FIELDS = (
     "w",
     "production_threshold",
     "capture_mode",
-    "git_commit",
-    "kernel_source_sha256",
-    "preset_config_hash",
+    "evidence_role",
     "anchor_mode",
     "anchor_rate",
 )
@@ -128,21 +141,23 @@ JOIN_FIELDS = (
     "offline_bwd_r",
     "offline_h_ref",
     "offline_lost_exit_speed",
-    "ca_bdist",
-    "ca_dist_h",
-    "ca_fwd_r",
-    "ca_bwd_r",
-    "ca_h_ref",
-    "ca_la",
-    "ca_ema_lost",
-    "ca_ema_cand",
-    "ca_v_lost_x",
-    "ca_v_lost_y",
-    "ca_v_cand_x",
-    "ca_v_cand_y",
-    "d1_bdist",
-    "d2_bdist",
-    "d3_bdist",
+    "recon_bdist",
+    "recon_dist_h",
+    "recon_fwd_r",
+    "recon_bwd_r",
+    "recon_h_ref",
+    "recon_la",
+    "recon_ema_lost",
+    "recon_ema_cand",
+    "recon_v_lost_x",
+    "recon_v_lost_y",
+    "recon_v_cand_x",
+    "recon_v_cand_y",
+    "s1_aggregation",
+    "s2_anchor_endpoints",
+    "s3_velocity",
+    "s4_horizon",
+    "s5_normalization",
 )
 
 # Frozen terminal gates (predeclared; do not retune after seeing data).
@@ -266,19 +281,59 @@ def git_commit() -> str:
         return "unknown"
 
 
-def preset_config_hash() -> str:
-    """Hash production-facing bridge constants + default-off audit flags."""
-    payload = {
-        "relink_bridge_px": PRODUCTION_BRIDGE_PX,
-        "relink_bridge_at": PRODUCTION_BRIDGE_AT,
-        "relink_bridge_anchor": PRODUCTION_BRIDGE_ANCHOR,
-        "relink_bridge_anchor_rate": PRODUCTION_BRIDGE_ANCHOR_RATE,
-        "research_bridge_fidelity_audit_default": RESEARCH_BRIDGE_FIDELITY_AUDIT_DEFAULT,
-        "live_cuda_event_ring_implemented": LIVE_CUDA_EVENT_RING_IMPLEMENTED,
-        "ema_alpha": PRODUCTION_EMA_ALPHA,
+def load_headline_preset_bridge() -> dict[str, Any]:
+    """Load and validate bridge fields from the actual m headline preset file."""
+    path = REPO / HEADLINE_PRESET
+    if not path.is_file():
+        raise FileNotFoundError(f"headline preset missing: {path}")
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    # Fields written in mamba_whole_graph_m.yaml
+    file_fields = {
+        "relink_bridge_enabled": raw.get("relink_bridge_enabled"),
+        "relink_bridge_px": raw.get("relink_bridge_px"),
+        "relink_bridge_margin": raw.get("relink_bridge_margin"),
+        "relink_bridge_h_lo": raw.get("relink_bridge_h_lo"),
+        "relink_bridge_h_hi": raw.get("relink_bridge_h_hi"),
+        "relink_bridge_spatial_gate": raw.get("relink_bridge_spatial_gate"),
+        "relink_bridge_dir_bonus": raw.get("relink_bridge_dir_bonus"),
     }
-    blob = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    return hashlib.sha256(blob).hexdigest()
+    # Schema defaults used when preset omits keys (config.py TRACKING defaults).
+    resolved = {
+        **file_fields,
+        "relink_bridge_at": raw.get("relink_bridge_at", PRODUCTION_BRIDGE_AT),
+        "relink_bridge_anchor": raw.get(
+            "relink_bridge_anchor", PRODUCTION_BRIDGE_ANCHOR
+        ),
+        "relink_bridge_anchor_rate": raw.get(
+            "relink_bridge_anchor_rate", PRODUCTION_BRIDGE_ANCHOR_RATE
+        ),
+    }
+    # Fail closed if headline production threshold drifts.
+    if float(resolved["relink_bridge_px"]) != float(PRODUCTION_BRIDGE_PX):
+        raise ValueError(
+            f"headline preset bridge_px={resolved['relink_bridge_px']} "
+            f"!= production constant {PRODUCTION_BRIDGE_PX}"
+        )
+    if float(resolved["relink_bridge_dir_bonus"]) != 0.0:
+        raise ValueError(
+            "headline preset dir_bonus must be 0.0 for D0 dir-bonus-off algebra"
+        )
+    return {
+        "preset_path": str(HEADLINE_PRESET),
+        "preset_file_sha256": sha256(path),
+        "file_fields": file_fields,
+        "resolved_bridge": resolved,
+        "schema_default_note": (
+            "bridge_at/anchor/anchor_rate omitted in yaml → schema defaults "
+            f"at={PRODUCTION_BRIDGE_AT} anchor={PRODUCTION_BRIDGE_ANCHOR} "
+            f"rate={PRODUCTION_BRIDGE_ANCHOR_RATE}"
+        ),
+    }
+
+
+def preset_config_hash() -> str:
+    """SHA-256 of the actual headline preset file bytes (not hand-written constants)."""
+    return sha256(REPO / HEADLINE_PRESET)
 
 
 # ── Track / capture ───────────────────────────────────────────────────────────
@@ -325,12 +380,13 @@ def capture_consumer_a_for_pair(
     gap: int,
     meta: dict[str, Any],
 ) -> dict[str, Any] | None:
-    """Kernel-formula capture for one offline pair event.
+    """Kernel-formula **reconstruction** for one offline pair event.
 
-    Candidate requires >=4 frames (kernel ``foot_len[cand] < 4`` early return).
-    Lost may be short (kernel anchors last point with zero velocity).
-    EMA: causal tracklet replay matching ``update_foot_history_kernel``.
-    Cand EMA evaluated on the first ``bridge_at`` matched frames (fire point).
+    Not a live CUDA dump of ``foot_ring`` / ``ema_h`` / float32 ``bdist``.
+    Candidate requires >=4 frames (kernel early return). Lost may be short.
+    EMA is causal MOT-tracklet replay matching the kernel algebra only.
+    Per-row git/kernel/preset hashes are omitted so capture is a pure function
+    of pairs + substrate + estimator code (enables capture-origin --verify).
     """
     if len(lost_traj) < 1 or len(cand_traj) < 4:
         return None
@@ -350,7 +406,7 @@ def capture_consumer_a_for_pair(
         ema_lost=ema_lost,
         ema_cand=ema_cand,
     )
-    row = {
+    return {
         "event_key": event_key_from_row(meta),
         "seq": meta["seq"],
         "lost_id": meta["lost_id"],
@@ -378,14 +434,11 @@ def capture_consumer_a_for_pair(
         "s_lost": _stable_float(est.s_lost),
         "w": _stable_float(est.w),
         "production_threshold": PRODUCTION_BRIDGE_PX,
-        "capture_mode": "kernel_formula_substrate_replay",
-        "git_commit": meta["git_commit"],
-        "kernel_source_sha256": meta["kernel_source_sha256"],
-        "preset_config_hash": meta["preset_config_hash"],
+        "capture_mode": CAPTURE_MODE_RECONSTRUCTION,
+        "evidence_role": "reconstruction_diagnostic",
         "anchor_mode": PRODUCTION_BRIDGE_ANCHOR,
         "anchor_rate": PRODUCTION_BRIDGE_ANCHOR_RATE,
     }
-    return row
 
 
 def decompose_estimators(
@@ -394,22 +447,27 @@ def decompose_estimators(
     *,
     gap: int,
     offline_h_ref: float,
-    ca_row: dict[str, Any],
 ) -> dict[str, float]:
-    """Progressive D0–D4 estimator scalars (speed-weighted bdist surface).
+    """Single-factor progressive steps on the reconstruction surface.
 
-    D0-offline uses frozen midpoint ``bridge_dist`` (reported separately).
-    D1–D3 rebuild speed-weighted scores while swapping one suspect at a time.
-    D4 is the exact captured Consumer-A ``bdist``.
+    Each SW step changes one declared factor vs the previous SW step:
+
+    * S0  offline midpoint (frozen pairs ``bridge_dist``; not SW)
+    * S1  aggregation only (offline geometry → speed-weighted)
+    * S2  anchor endpoints only (CA adaptive positions; offline window-mean vel)
+    * S3  velocity only (CA adaptive vel; keep S2 endpoints)
+    * S4  horizon only (gap → la)
+    * S5  normalization only (offline h_ref → reconstructed bilateral EMA)
+    * S6  reconstruction (equals S5)
+
+    Step deltas are descriptive attribution only — not single-cause claims.
     """
     lost_ring = _traj_slice_for_pair(
         lost_traj, last_or_first="last", n=min(4, len(lost_traj))
     )
     cand_ring = _traj_slice_for_pair(cand_traj, last_or_first="first", n=4)
-    # Offline window-mean velocity on foot points (builder default).
     v_off_l = window_mean_velocity(_feet_from_ring(lost_ring))
     v_off_c = window_mean_velocity(_feet_from_ring(cand_ring))
-    # Consumer-A adaptive anchor-4 (or short-lost zero-velocity branch).
     if len(lost_ring) >= 4:
         ax_ca, ay_ca, vxl_ca, vyl_ca = bridge_anchor4(
             lost_ring,
@@ -420,7 +478,7 @@ def decompose_estimators(
     else:
         lc_x, lc_y, lh = lost_ring[-1]
         ax_ca = float(lc_x)
-        ay_ca = float(lc_y)  # adaptive/center short path (mode != foot)
+        ay_ca = float(lc_y)
         vxl_ca, vyl_ca = 0.0, 0.0
     cx_ca, cy_ca, vxc_ca, vyc_ca = bridge_anchor4(
         cand_ring,
@@ -428,17 +486,13 @@ def decompose_estimators(
         rate_gate=PRODUCTION_BRIDGE_ANCHOR_RATE,
         endpoint_idx=0,
     )
-    # Offline endpoints = last/first foot.
     lx_off, ly_off = _feet_from_ring(lost_ring)[-1]
     cx_off, cy_off = _feet_from_ring(cand_ring)[0]
     la = gap + PRODUCTION_BRIDGE_AT - 1
     h_off = max(float(offline_h_ref), 1.0)
-    # Recompute EMA/h_ref from tracklets (not serialized capture floats) so
-    # decomposition is byte-stable across capture reload rebuilds.
     ema_lost = ema_height([h for _f, _cx, _cy, h in lost_traj])
     ema_cand = ema_height([h for _f, _cx, _cy, h in cand_traj[:PRODUCTION_BRIDGE_AT]])
     h_ca = max(0.5 * (ema_lost + ema_cand), 1.0)
-    del ca_row  # D4 is the sealed capture bdist; D1–D3 do not depend on it.
 
     def _sw(
         lx: float,
@@ -466,47 +520,7 @@ def decompose_estimators(
         )
         return bdist
 
-    # D1: CA velocity + offline horizon + offline h_ref (endpoints from CA anchor).
-    d1 = _sw(
-        ax_ca,
-        ay_ca,
-        cx_ca,
-        cy_ca,
-        vxl_ca,
-        vyl_ca,
-        vxc_ca,
-        vyc_ca,
-        float(gap),
-        h_off,
-    )
-    # D2: CA velocity + CA horizon + offline h_ref.
-    d2 = _sw(
-        ax_ca,
-        ay_ca,
-        cx_ca,
-        cy_ca,
-        vxl_ca,
-        vyl_ca,
-        vxc_ca,
-        vyc_ca,
-        float(la),
-        h_off,
-    )
-    # D3: CA velocity + CA horizon + CA normalization.
-    d3 = _sw(
-        ax_ca,
-        ay_ca,
-        cx_ca,
-        cy_ca,
-        vxl_ca,
-        vyl_ca,
-        vxc_ca,
-        vyc_ca,
-        float(la),
-        h_ca,
-    )
-    # Reference offline midpoint (for decomposition table context).
-    d0_mid = midpoint_bridge_dist(
+    s0_mid = midpoint_bridge_dist(
         lx=lx_off,
         ly=ly_off,
         cx0=cx_off,
@@ -518,8 +532,7 @@ def decompose_estimators(
         gap=float(gap),
         h_ref=h_off,
     )
-    # Offline speed-weighted with offline components (aggregation control).
-    d0_sw = _sw(
+    s1 = _sw(
         lx_off,
         ly_off,
         cx_off,
@@ -531,13 +544,62 @@ def decompose_estimators(
         float(gap),
         h_off,
     )
+    s2 = _sw(
+        ax_ca,
+        ay_ca,
+        cx_ca,
+        cy_ca,
+        v_off_l[0],
+        v_off_l[1],
+        v_off_c[0],
+        v_off_c[1],
+        float(gap),
+        h_off,
+    )
+    s3 = _sw(
+        ax_ca,
+        ay_ca,
+        cx_ca,
+        cy_ca,
+        vxl_ca,
+        vyl_ca,
+        vxc_ca,
+        vyc_ca,
+        float(gap),
+        h_off,
+    )
+    s4 = _sw(
+        ax_ca,
+        ay_ca,
+        cx_ca,
+        cy_ca,
+        vxl_ca,
+        vyl_ca,
+        vxc_ca,
+        vyc_ca,
+        float(la),
+        h_off,
+    )
+    s5 = _sw(
+        ax_ca,
+        ay_ca,
+        cx_ca,
+        cy_ca,
+        vxl_ca,
+        vyl_ca,
+        vxc_ca,
+        vyc_ca,
+        float(la),
+        h_ca,
+    )
     return {
-        "d0_midpoint": _stable_float(d0_mid),
-        "d0_speed_weighted": _stable_float(d0_sw),
-        "d1_bdist": _stable_float(d1),
-        "d2_bdist": _stable_float(d2),
-        "d3_bdist": _stable_float(d3),
-        "d4_bdist": _stable_float(d3),
+        "s0_midpoint": _stable_float(s0_mid),
+        "s1_aggregation": _stable_float(s1),
+        "s2_anchor_endpoints": _stable_float(s2),
+        "s3_velocity": _stable_float(s3),
+        "s4_horizon": _stable_float(s4),
+        "s5_normalization": _stable_float(s5),
+        "s6_reconstruction": _stable_float(s5),
     }
 
 
@@ -760,14 +822,31 @@ def evaluate_verdict(
         and mono
     )
     if thr_ok:
-        verdict = "threshold_transfer_supported"
+        metric_verdict = "threshold_transfer_supported"
     elif rank_ok:
-        verdict = "rank_only_transfer_supported"
+        metric_verdict = "rank_only_transfer_supported"
     else:
+        metric_verdict = "not_fidelity_aligned"
+
+    # Binding fail-closed: without live CUDA capture, Issue #112 cannot certify
+    # runtime Consumer-A fidelity. Reconstruction metrics stay diagnostic only.
+    primary_fail_reason: str | None
+    if not LIVE_CUDA_EVENT_RING_IMPLEMENTED:
         verdict = "not_fidelity_aligned"
+        primary_fail_reason = PRIMARY_FAIL_REASON
+    else:
+        verdict = metric_verdict
+        primary_fail_reason = (
+            None if metric_verdict != "not_fidelity_aligned" else "metric_gates_failed"
+        )
 
     return {
         "verdict": verdict,
+        "primary_fail_reason": primary_fail_reason,
+        "metric_based_verdict_diagnostic_only": metric_verdict,
+        "runtime_capture_available": LIVE_CUDA_EVENT_RING_IMPLEMENTED,
+        "evidence_role": RECONSTRUCTION_QUANTITY_NOTE,
+        "issue_112_status": ISSUE_112_STATUS,
         "coverage_gates_pass": cov_pass,
         "threshold_transfer_criteria_pass": thr_ok,
         "rank_only_criteria_pass": rank_ok,
@@ -854,6 +933,9 @@ def build_capture(
     commit: str,
     config_hash: str,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    # kernel_sha/commit/config_hash kept for call-site compatibility; capture
+    # rows intentionally omit them (packet-level provenance only).
+    del kernel_sha, commit, config_hash
     tracks_by_seq: dict[str, dict[int, list[tuple[int, float, float, float]]]] = {}
     capture_rows: list[dict[str, Any]] = []
     skip_reasons: Counter[str] = Counter()
@@ -878,9 +960,6 @@ def build_capture(
             "cand_id": str(cid),
             "lost_last_frame": str(row["lost_last_frame"]),
             "cand_first_frame": str(row["cand_first_frame"]),
-            "git_commit": commit,
-            "kernel_source_sha256": kernel_sha,
-            "preset_config_hash": config_hash,
         }
         cap = capture_consumer_a_for_pair(tracks[lid], tracks[cid], gap=gap, meta=meta)
         if cap is None:
@@ -891,9 +970,11 @@ def build_capture(
         "n_pairs": len(pairs),
         "n_captured": len(capture_rows),
         "skip_reasons": dict(skip_reasons),
-        "capture_mode": "kernel_formula_substrate_replay",
+        "capture_mode": CAPTURE_MODE_RECONSTRUCTION,
+        "evidence_role": "reconstruction_diagnostic",
         "live_cuda_event_ring_implemented": LIVE_CUDA_EVENT_RING_IMPLEMENTED,
         "research_audit_default": RESEARCH_BRIDGE_FIDELITY_AUDIT_DEFAULT,
+        "issue_112_status": ISSUE_112_STATUS,
     }
     return capture_rows, stats
 
@@ -955,18 +1036,18 @@ def join_events(
         base.update(
             {
                 "join_status": "exact_match",
-                "ca_bdist": float(crow["bdist"]),
-                "ca_dist_h": float(crow["dist_h"]),
-                "ca_fwd_r": float(crow["fwd_r"]),
-                "ca_bwd_r": float(crow["bwd_r"]),
-                "ca_h_ref": float(crow["h_ref"]),
-                "ca_la": int(crow["la"]),
-                "ca_ema_lost": float(crow["ema_lost"]),
-                "ca_ema_cand": float(crow["ema_cand"]),
-                "ca_v_lost_x": float(crow["v_lost_x"]),
-                "ca_v_lost_y": float(crow["v_lost_y"]),
-                "ca_v_cand_x": float(crow["v_cand_x"]),
-                "ca_v_cand_y": float(crow["v_cand_y"]),
+                "recon_bdist": float(crow["bdist"]),
+                "recon_dist_h": float(crow["dist_h"]),
+                "recon_fwd_r": float(crow["fwd_r"]),
+                "recon_bwd_r": float(crow["bwd_r"]),
+                "recon_h_ref": float(crow["h_ref"]),
+                "recon_la": int(crow["la"]),
+                "recon_ema_lost": float(crow["ema_lost"]),
+                "recon_ema_cand": float(crow["ema_cand"]),
+                "recon_v_lost_x": float(crow["v_lost_x"]),
+                "recon_v_lost_y": float(crow["v_lost_y"]),
+                "recon_v_cand_x": float(crow["v_cand_x"]),
+                "recon_v_cand_y": float(crow["v_cand_y"]),
             }
         )
         # Decomposition when tracks available.
@@ -986,13 +1067,12 @@ def join_events(
                 tracks[cid],
                 gap=gap,
                 offline_h_ref=float(prow["h_ref"]),
-                ca_row=crow,
             )
-            base["d1_bdist"] = decomp["d1_bdist"]
-            base["d2_bdist"] = decomp["d2_bdist"]
-            base["d3_bdist"] = decomp["d3_bdist"]
-            base["d0_speed_weighted"] = decomp["d0_speed_weighted"]
-            base["d0_midpoint_rebuilt"] = decomp["d0_midpoint"]
+            base["s1_aggregation"] = decomp["s1_aggregation"]
+            base["s2_anchor_endpoints"] = decomp["s2_anchor_endpoints"]
+            base["s3_velocity"] = decomp["s3_velocity"]
+            base["s4_horizon"] = decomp["s4_horizon"]
+            base["s5_normalization"] = decomp["s5_normalization"]
         join_rows.append(base)
 
     capture_keys = set(cap_by_key)
@@ -1062,12 +1142,18 @@ def _arrays_from_join(matched: list[dict[str, Any]]) -> dict[str, np.ndarray]:
         "offline_bwd_r": np.array(
             [float(r["offline_bwd_r"]) for r in matched], dtype=np.float64
         ),
-        "ca_bdist": np.array([float(r["ca_bdist"]) for r in matched], dtype=np.float64),
-        "ca_dist_h": np.array(
-            [float(r["ca_dist_h"]) for r in matched], dtype=np.float64
+        "recon_bdist": np.array(
+            [float(r["recon_bdist"]) for r in matched], dtype=np.float64
         ),
-        "ca_fwd_r": np.array([float(r["ca_fwd_r"]) for r in matched], dtype=np.float64),
-        "ca_bwd_r": np.array([float(r["ca_bwd_r"]) for r in matched], dtype=np.float64),
+        "recon_dist_h": np.array(
+            [float(r["recon_dist_h"]) for r in matched], dtype=np.float64
+        ),
+        "recon_fwd_r": np.array(
+            [float(r["recon_fwd_r"]) for r in matched], dtype=np.float64
+        ),
+        "recon_bwd_r": np.array(
+            [float(r["recon_bwd_r"]) for r in matched], dtype=np.float64
+        ),
         "gt_match": np.array([bool(int(r["gt_match"])) for r in matched]),
         "gt_valid": np.array([bool(int(r["gt_valid"])) for r in matched]),
         "gap": np.array([int(r["gap"]) for r in matched], dtype=np.int32),
@@ -1075,20 +1161,30 @@ def _arrays_from_join(matched: list[dict[str, Any]]) -> dict[str, np.ndarray]:
         "cluster": np.array(
             [f"{r['seq']}|{r['lost_id']}" for r in matched], dtype=object
         ),
-        "d1": np.array(
-            [float(r.get("d1_bdist", np.nan)) for r in matched], dtype=np.float64
+        "s1": np.array(
+            [float(r.get("s1_aggregation", np.nan)) for r in matched], dtype=np.float64
         ),
-        "d2": np.array(
-            [float(r.get("d2_bdist", np.nan)) for r in matched], dtype=np.float64
+        "s2": np.array(
+            [float(r.get("s2_anchor_endpoints", np.nan)) for r in matched],
+            dtype=np.float64,
         ),
-        "d3": np.array(
-            [float(r.get("d3_bdist", np.nan)) for r in matched], dtype=np.float64
+        "s3": np.array(
+            [float(r.get("s3_velocity", np.nan)) for r in matched], dtype=np.float64
+        ),
+        "s4": np.array(
+            [float(r.get("s4_horizon", np.nan)) for r in matched], dtype=np.float64
+        ),
+        "s5": np.array(
+            [float(r.get("s5_normalization", np.nan)) for r in matched],
+            dtype=np.float64,
         ),
         "offline_h_ref": np.array(
             [float(r["offline_h_ref"]) for r in matched], dtype=np.float64
         ),
-        "ca_h_ref": np.array([float(r["ca_h_ref"]) for r in matched], dtype=np.float64),
-        "ca_la": np.array([int(r["ca_la"]) for r in matched], dtype=np.int32),
+        "recon_h_ref": np.array(
+            [float(r["recon_h_ref"]) for r in matched], dtype=np.float64
+        ),
+        "recon_la": np.array([int(r["recon_la"]) for r in matched], dtype=np.int32),
     }
 
 
@@ -1096,10 +1192,10 @@ def compute_all_metrics(matched: list[dict[str, Any]]) -> dict[str, Any]:
     arr = _arrays_from_join(matched)
     sa = _mask_s_a(arr["gt_valid"], arr["gap"])
     quantities = {
-        "bdist": ("offline_bridge_dist", "ca_bdist"),
-        "dist_h": ("offline_dist_h", "ca_dist_h"),
-        "fwd_r": ("offline_fwd_r", "ca_fwd_r"),
-        "bwd_r": ("offline_bwd_r", "ca_bwd_r"),
+        "bdist": ("offline_bridge_dist", "recon_bdist"),
+        "dist_h": ("offline_dist_h", "recon_dist_h"),
+        "fwd_r": ("offline_fwd_r", "recon_fwd_r"),
+        "bwd_r": ("offline_bwd_r", "recon_bwd_r"),
     }
 
     def _select(mask: np.ndarray) -> list[dict[str, Any]]:
@@ -1163,65 +1259,60 @@ def compute_all_metrics(matched: list[dict[str, Any]]) -> dict[str, Any]:
             )
         metrics["by_quantity"][qname] = qmetrics
 
-    # Decomposition table vs D4 on S_A
+    # Decomposition table vs reconstruction S6 on S_A (diagnostic only).
     decomp_rows: list[dict[str, Any]] = []
     sa_idx = np.flatnonzero(sa)
     if sa_idx.size:
-        d4 = arr["ca_bdist"][sa_idx]
+        ref = arr["recon_bdist"][sa_idx]
         gt_sa = arr["gt_match"][sa_idx]
         cl_sa = arr["cluster"][sa_idx]
-        for step, key in (
-            ("D0_offline_bridge_dist", "offline_bridge_dist"),
-            ("D0_offline_speed_weighted", "d0_sw"),
-            ("D1_velocity_only", "d1"),
-            ("D2_velocity_horizon", "d2"),
-            ("D3_velocity_horizon_norm", "d3"),
-            ("D4_exact_consumer_a", "d4"),
-        ):
+        step_specs = (
+            ("S0_offline_midpoint", "offline_bridge_dist"),
+            ("S1_aggregation_only", "s1"),
+            ("S2_anchor_endpoints_only", "s2"),
+            ("S3_velocity_only", "s3"),
+            ("S4_horizon_only", "s4"),
+            ("S5_normalization_only", "s5"),
+            ("S6_kernel_formula_reconstruction", "ref"),
+        )
+        for step, key in step_specs:
             if key == "offline_bridge_dist":
                 x = arr["offline_bridge_dist"][sa_idx]
-            elif key == "d0_sw":
-                x = np.array(
-                    [
-                        float(matched[i].get("d0_speed_weighted", np.nan))
-                        for i in sa_idx
-                    ],
-                    dtype=np.float64,
-                )
-            elif key == "d4":
-                x = d4
+            elif key == "ref":
+                x = ref
             else:
                 x = arr[key][sa_idx]
-            finite = np.isfinite(x) & np.isfinite(d4)
+            finite = np.isfinite(x) & np.isfinite(ref)
             if finite.sum() < 3:
                 decomp_rows.append(
                     {
                         "step": step,
+                        "factor_changed": step.split("_", 1)[0],
                         "n": int(finite.sum()),
-                        "spearman_rho_vs_d4": float("nan"),
-                        "q85_abs_error_vs_d4": float("nan"),
+                        "spearman_rho_vs_reconstruction": float("nan"),
+                        "q85_abs_error_vs_reconstruction": float("nan"),
                         "predicate_agreement_at_0.4": float("nan"),
-                        "gt_offline_safe_online_unsafe_count": 0,
+                        "gt_step_safe_recon_unsafe_count": 0,
                     }
                 )
                 continue
-            sp = spearman_with_cluster_ci(x[finite], d4[finite], cl_sa[finite])
+            sp = spearman_with_cluster_ci(x[finite], ref[finite], cl_sa[finite])
             q_x = float(np.quantile(x[finite], 0.85))
-            q_d4 = float(np.quantile(d4[finite], 0.85))
-            conf = predicate_confusion(x[finite], d4[finite])
-            # GT offline-safe / D4-unsafe where "offline" means this step's value
+            q_ref = float(np.quantile(ref[finite], 0.85))
+            conf = predicate_confusion(x[finite], ref[finite])
             gt_f = gt_sa[finite]
             step_safe = x[finite] <= PRODUCTION_BRIDGE_PX
-            d4_unsafe = d4[finite] > PRODUCTION_BRIDGE_PX
-            gt_su = int(np.sum(gt_f & step_safe & d4_unsafe))
+            ref_unsafe = ref[finite] > PRODUCTION_BRIDGE_PX
+            gt_su = int(np.sum(gt_f & step_safe & ref_unsafe))
             decomp_rows.append(
                 {
                     "step": step,
+                    "factor_changed": step.split("_", 1)[0],
                     "n": int(finite.sum()),
-                    "spearman_rho_vs_d4": sp["rho"],
-                    "q85_abs_error_vs_d4": abs(q_x - q_d4),
+                    "spearman_rho_vs_reconstruction": sp["rho"],
+                    "q85_abs_error_vs_reconstruction": abs(q_x - q_ref),
                     "predicate_agreement_at_0.4": conf["predicate_agreement"],
-                    "gt_offline_safe_online_unsafe_count": gt_su,
+                    "gt_step_safe_recon_unsafe_count": gt_su,
                 }
             )
     metrics["estimator_decomposition"] = decomp_rows
@@ -1235,7 +1326,7 @@ def disagreement_localization(matched: list[dict[str, Any]]) -> list[dict[str, A
         r
         for r in sa
         if float(r["offline_bridge_dist"]) <= PRODUCTION_BRIDGE_PX
-        and float(r["ca_bdist"]) > PRODUCTION_BRIDGE_PX
+        and float(r["recon_bdist"]) > PRODUCTION_BRIDGE_PX
     ]
     if not sa:
         return rows
@@ -1251,9 +1342,9 @@ def disagreement_localization(matched: list[dict[str, Any]]) -> list[dict[str, A
         return ">q75"
 
     offline_h = np.array([float(r["offline_h_ref"]) for r in sa])
-    ca_h = np.array([float(r["ca_h_ref"]) for r in sa])
+    ca_h = np.array([float(r["recon_h_ref"]) for r in sa])
     offline_bd = np.array([float(r["offline_bridge_dist"]) for r in sa])
-    ca_bd = np.array([float(r["ca_bdist"]) for r in sa])
+    ca_bd = np.array([float(r["recon_bdist"]) for r in sa])
     gap_arr = np.array([int(r["gap"]) for r in sa])
 
     for r in su:
@@ -1264,24 +1355,24 @@ def disagreement_localization(matched: list[dict[str, Any]]) -> list[dict[str, A
                 "gap": r["gap"],
                 "gt_match": r["gt_match"],
                 "offline_bridge_dist": r["offline_bridge_dist"],
-                "ca_bdist": r["ca_bdist"],
+                "recon_bdist": r["recon_bdist"],
                 "offline_h_ref": r["offline_h_ref"],
-                "ca_h_ref": r["ca_h_ref"],
-                "ca_la": r["ca_la"],
+                "recon_h_ref": r["recon_h_ref"],
+                "recon_la": r["recon_la"],
                 "true_gap": r["gap"],
                 "offline_fwd_r": r["offline_fwd_r"],
                 "offline_bwd_r": r["offline_bwd_r"],
-                "ca_fwd_r": r["ca_fwd_r"],
-                "ca_bwd_r": r["ca_bwd_r"],
+                "recon_fwd_r": r["recon_fwd_r"],
+                "recon_bwd_r": r["recon_bwd_r"],
                 "offline_dist_h": r["offline_dist_h"],
-                "ca_dist_h": r["ca_dist_h"],
+                "recon_dist_h": r["recon_dist_h"],
                 "gap_bin": "1-10" if int(r["gap"]) <= 10 else "11-26",
                 "offline_h_ref_bin": _qbin(float(r["offline_h_ref"]), offline_h),
-                "ca_h_ref_bin": _qbin(float(r["ca_h_ref"]), ca_h),
+                "recon_h_ref_bin": _qbin(float(r["recon_h_ref"]), ca_h),
                 "offline_bridge_bin": _qbin(
                     float(r["offline_bridge_dist"]), offline_bd
                 ),
-                "ca_bdist_bin": _qbin(float(r["ca_bdist"]), ca_bd),
+                "recon_bdist_bin": _qbin(float(r["recon_bdist"]), ca_bd),
                 "regime": (
                     f"gap={('1-10' if int(r['gap']) <= 10 else '11-26')}"
                     f"|seq={r['seq']}"
@@ -1387,7 +1478,7 @@ def boundary_diagnostics(matched: list[dict[str, Any]]) -> list[dict[str, Any]]:
     band = [
         r
         for r in sa
-        if BOUNDARY_LO <= float(r["ca_bdist"]) <= BOUNDARY_HI
+        if BOUNDARY_LO <= float(r["recon_bdist"]) <= BOUNDARY_HI
         or BOUNDARY_LO <= float(r["offline_bridge_dist"]) <= BOUNDARY_HI
     ]
     if not band:
@@ -1402,7 +1493,7 @@ def boundary_diagnostics(matched: list[dict[str, Any]]) -> list[dict[str, Any]]:
             }
         ]
     o = np.array([float(r["offline_bridge_dist"]) for r in band])
-    c = np.array([float(r["ca_bdist"]) for r in band])
+    c = np.array([float(r["recon_bdist"]) for r in band])
     conf = predicate_confusion(o, c)
     n_gt = sum(int(r["gt_match"]) for r in band)
     return [
@@ -1444,22 +1535,22 @@ def run_pipeline(
     pairs = load_pairs(pairs_path)
 
     if capture_path is not None:
+        # Optional external capture input (tests only). Production --verify
+        # always rebuilds capture from pairs+substrate with capture_path=None.
         cap_p = capture_path if capture_path.is_absolute() else REPO / capture_path
         capture_rows = load_capture_csv(cap_p)
-        # Pin provenance from sealed capture so --verify is byte-stable
-        # across later commits (HEAD moves; sealed evidence must not).
-        if capture_rows:
-            commit = str(capture_rows[0].get("git_commit") or commit)
-            kernel_sha = str(capture_rows[0].get("kernel_source_sha256") or kernel_sha)
-            config_hash = str(capture_rows[0].get("preset_config_hash") or config_hash)
         capture_stats = {
             "n_pairs": len(pairs),
             "n_captured": len(capture_rows),
-            "capture_mode": capture_rows[0].get("capture_mode", "external")
+            "capture_mode": capture_rows[0].get(
+                "capture_mode", CAPTURE_MODE_RECONSTRUCTION
+            )
             if capture_rows
             else "empty",
+            "evidence_role": "reconstruction_diagnostic",
             "live_cuda_event_ring_implemented": LIVE_CUDA_EVENT_RING_IMPLEMENTED,
             "research_audit_default": RESEARCH_BRIDGE_FIDELITY_AUDIT_DEFAULT,
+            "issue_112_status": ISSUE_112_STATUS,
         }
     else:
         capture_rows, capture_stats = build_capture(
@@ -1469,15 +1560,18 @@ def run_pipeline(
             commit=commit,
             config_hash=config_hash,
         )
-        # Drop path-local skip diagnostics from sealed summary for stability.
         capture_stats = {
             "n_pairs": capture_stats["n_pairs"],
             "n_captured": capture_stats["n_captured"],
             "capture_mode": capture_stats["capture_mode"],
+            "evidence_role": capture_stats.get(
+                "evidence_role", "reconstruction_diagnostic"
+            ),
             "live_cuda_event_ring_implemented": capture_stats[
                 "live_cuda_event_ring_implemented"
             ],
             "research_audit_default": capture_stats["research_audit_default"],
+            "issue_112_status": ISSUE_112_STATUS,
         }
 
     tracks_cache: dict[str, dict[int, list[tuple[int, float, float, float]]]] = {}
@@ -1712,6 +1806,13 @@ def run_pipeline(
         "phase_b_authorized": False,
         "a1_a8_computed": False,
         "production_changed": False,
+        "evidence_role": RECONSTRUCTION_QUANTITY_NOTE,
+        "runtime_capture_available": LIVE_CUDA_EVENT_RING_IMPLEMENTED,
+        "issue_112_status": ISSUE_112_STATUS,
+        "primary_fail_reason": verdict_info.get("primary_fail_reason"),
+        "metric_based_verdict_diagnostic_only": verdict_info.get(
+            "metric_based_verdict_diagnostic_only"
+        ),
     }
     write_json(output_dir / "metrics_summary.json", metrics_summary)
 
@@ -1821,11 +1922,12 @@ def run_pipeline(
         output_dir / "estimator_decomposition.csv",
         [
             "step",
+            "factor_changed",
             "n",
-            "spearman_rho_vs_d4",
-            "q85_abs_error_vs_d4",
+            "spearman_rho_vs_reconstruction",
+            "q85_abs_error_vs_reconstruction",
             "predicate_agreement_at_0.4",
-            "gt_offline_safe_online_unsafe_count",
+            "gt_step_safe_recon_unsafe_count",
         ],
         decomp_rows,
     )
@@ -1837,22 +1939,22 @@ def run_pipeline(
             "gap",
             "gt_match",
             "offline_bridge_dist",
-            "ca_bdist",
+            "recon_bdist",
             "offline_h_ref",
-            "ca_h_ref",
-            "ca_la",
+            "recon_h_ref",
+            "recon_la",
             "true_gap",
             "offline_fwd_r",
             "offline_bwd_r",
-            "ca_fwd_r",
-            "ca_bwd_r",
+            "recon_fwd_r",
+            "recon_bwd_r",
             "offline_dist_h",
-            "ca_dist_h",
+            "recon_dist_h",
             "gap_bin",
             "offline_h_ref_bin",
-            "ca_h_ref_bin",
+            "recon_h_ref_bin",
             "offline_bridge_bin",
-            "ca_bdist_bin",
+            "recon_bdist_bin",
             "regime",
             "regime_count",
             "n_su_total",
@@ -1863,15 +1965,27 @@ def run_pipeline(
     )
 
     runner_sha = sha256(Path(__file__))
+    module_sha = sha256(
+        REPO / "src/saccade/perception/eval/consumer_a_bridge_fidelity.py"
+    )
+    preset_info = load_headline_preset_bridge()
     verdict_payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "status": PACKET_STATUS,
         "verdict": verdict_info["verdict"],
+        "primary_fail_reason": verdict_info.get("primary_fail_reason"),
+        "metric_based_verdict_diagnostic_only": verdict_info.get(
+            "metric_based_verdict_diagnostic_only"
+        ),
+        "issue_112_status": ISSUE_112_STATUS,
+        "runtime_capture_available": LIVE_CUDA_EVENT_RING_IMPLEMENTED,
+        "evidence_role": RECONSTRUCTION_QUANTITY_NOTE,
         "primary_support": PRIMARY_SUPPORT,
         "production_threshold": PRODUCTION_BRIDGE_PX,
         "source_pairs_sha256": source_sha,
         "consumer_a_source_sha256": kernel_sha,
         "runner_sha256": runner_sha,
+        "module_sha256": module_sha,
         "capture_sha256": capture_sha,
         "join_sha256": join_sha,
         "phase_b_authorized": False,
@@ -1880,80 +1994,29 @@ def run_pipeline(
         "coverage_gates_pass": verdict_info["coverage_gates_pass"],
         "verdict_checks": verdict_info["checks"],
         "gap_cell_details": verdict_info["gap_cell_details"],
-        "capture_mode": capture_stats.get("capture_mode"),
+        "capture_mode": CAPTURE_MODE_RECONSTRUCTION,
         "research_bridge_fidelity_audit_default": RESEARCH_BRIDGE_FIDELITY_AUDIT_DEFAULT,
         "live_cuda_event_ring_implemented": LIVE_CUDA_EVENT_RING_IMPLEMENTED,
         "git_commit": commit,
-        "preset_config_hash": config_hash,
+        "headline_preset_path": preset_info["preset_path"],
+        "headline_preset_sha256": preset_info["preset_file_sha256"],
+        "headline_preset_resolved_bridge": preset_info["resolved_bridge"],
+        "preset_config_hash": preset_info["preset_file_sha256"],
+        "substrate_mot_dir": str(SUBSTRATE_MOT_DIR),
     }
     write_json(output_dir / "verdict.json", verdict_payload)
-
-    # Manifest hashes all artifacts
-    artifact_names = [
-        "consumer_a_capture.csv.gz",
-        "same_event_join.csv.gz",
-        "metrics_summary.json",
-        "metrics_overall.csv",
-        "metrics_by_gap.csv",
-        "metrics_by_sequence.csv",
-        "quantile_alignment.csv",
-        "predicate_confusion.csv",
-        "boundary_diagnostics.csv",
-        "estimator_decomposition.csv",
-        "disagreement_localization.csv",
-        "verdict.json",
-        "run_d0_bridge_fidelity.py",
-    ]
-    artifacts: dict[str, str] = {}
-    for name in artifact_names:
-        p = output_dir / name if name != "run_d0_bridge_fidelity.py" else Path(__file__)
-        if name == "run_d0_bridge_fidelity.py":
-            # copy runner into packet for sealed path
-            dest = output_dir / "run_d0_bridge_fidelity.py"
-            if dest.resolve() != Path(__file__).resolve():
-                dest.write_text(
-                    Path(__file__).read_text(encoding="utf-8"), encoding="utf-8"
-                )
-            artifacts[name] = sha256(dest if dest.exists() else Path(__file__))
-        else:
-            artifacts[name] = sha256(p)
-
-    manifest = {
-        "schema_version": 1,
-        "status": PACKET_STATUS,
-        "freeze_id": "D0-BRIDGE-ESTIMATOR-FIDELITY-v1",
-        "source_pairs_csv": str(CANONICAL_PAIRS),
-        "source_pairs_sha256": source_sha,
-        "substrate_mot_dir": str(SUBSTRATE_MOT_DIR),
-        "kernel_source": str(KERNEL_SOURCE),
-        "kernel_source_sha256": kernel_sha,
-        "runner_sha256": runner_sha,
-        "consumer_a_bridge_fidelity_module": str(
-            Path("src/saccade/perception/eval/consumer_a_bridge_fidelity.py")
-        ),
-        "consumer_a_bridge_fidelity_module_sha256": sha256(
-            REPO / "src/saccade/perception/eval/consumer_a_bridge_fidelity.py"
-        ),
-        "production_threshold": PRODUCTION_BRIDGE_PX,
-        "primary_support": PRIMARY_SUPPORT,
-        "verdict": verdict_info["verdict"],
-        "phase_b_authorized": False,
-        "a1_a8_computed": False,
-        "production_changed": False,
-        "artifacts": artifacts,
-        "git_commit": commit,
-        "preset_config_hash": config_hash,
-    }
-    write_json(output_dir / "manifest.json", manifest)
-    # re-hash manifest after write
-    manifest["artifacts"]["manifest.json"] = sha256(output_dir / "manifest.json")
-    # don't rewrite to avoid cyclic hash; leave recorded separately
 
     recorded_lines = [
         f"status={PACKET_STATUS}",
         f"verdict={verdict_info['verdict']}",
+        f"primary_fail_reason={verdict_info.get('primary_fail_reason')}",
+        f"issue_112_status={ISSUE_112_STATUS}",
+        f"runtime_capture_available={LIVE_CUDA_EVENT_RING_IMPLEMENTED}",
+        f"evidence_role={RECONSTRUCTION_QUANTITY_NOTE}",
         f"source_pairs_sha256={source_sha}",
         f"kernel_source_sha256={kernel_sha}",
+        f"headline_preset_sha256={preset_info['preset_file_sha256']}",
+        f"module_sha256={module_sha}",
         f"capture_sha256={capture_sha}",
         f"join_sha256={join_sha}",
         f"coverage_gates_pass={coverage['gates_pass']}",
@@ -1970,11 +2033,75 @@ def run_pipeline(
         "phase_b_authorized=false",
         "a1_a8_computed=false",
         "production_changed=false",
-        f"capture_mode={capture_stats.get('capture_mode')}",
+        f"capture_mode={CAPTURE_MODE_RECONSTRUCTION}",
         f"research_audit_default={RESEARCH_BRIDGE_FIDELITY_AUDIT_DEFAULT}",
+        f"git_commit={commit}",
     ]
     recorded_path = output_dir / "recorded_output.txt"
     recorded_path.write_text("\n".join(recorded_lines) + "\n", encoding="utf-8")
+
+    # Manifest hashes all artifacts (recorded_output written above).
+    artifact_names = [
+        "consumer_a_capture.csv.gz",
+        "same_event_join.csv.gz",
+        "metrics_summary.json",
+        "metrics_overall.csv",
+        "metrics_by_gap.csv",
+        "metrics_by_sequence.csv",
+        "quantile_alignment.csv",
+        "predicate_confusion.csv",
+        "boundary_diagnostics.csv",
+        "estimator_decomposition.csv",
+        "disagreement_localization.csv",
+        "verdict.json",
+        "recorded_output.txt",
+        "run_d0_bridge_fidelity.py",
+    ]
+    artifacts: dict[str, str] = {}
+    for name in artifact_names:
+        p = output_dir / name if name != "run_d0_bridge_fidelity.py" else Path(__file__)
+        if name == "run_d0_bridge_fidelity.py":
+            dest = output_dir / "run_d0_bridge_fidelity.py"
+            if dest.resolve() != Path(__file__).resolve():
+                dest.write_text(
+                    Path(__file__).read_text(encoding="utf-8"), encoding="utf-8"
+                )
+            artifacts[name] = sha256(dest if dest.exists() else Path(__file__))
+        else:
+            artifacts[name] = sha256(p)
+
+    manifest = {
+        "schema_version": 2,
+        "status": PACKET_STATUS,
+        "freeze_id": "D0-BRIDGE-ESTIMATOR-FIDELITY-v1",
+        "issue_112_status": ISSUE_112_STATUS,
+        "runtime_capture_available": LIVE_CUDA_EVENT_RING_IMPLEMENTED,
+        "evidence_role": RECONSTRUCTION_QUANTITY_NOTE,
+        "primary_fail_reason": verdict_info.get("primary_fail_reason"),
+        "source_pairs_csv": str(CANONICAL_PAIRS),
+        "source_pairs_sha256": source_sha,
+        "substrate_mot_dir": str(SUBSTRATE_MOT_DIR),
+        "kernel_source": str(KERNEL_SOURCE),
+        "kernel_source_sha256": kernel_sha,
+        "runner_sha256": runner_sha,
+        "consumer_a_bridge_fidelity_module": str(
+            Path("src/saccade/perception/eval/consumer_a_bridge_fidelity.py")
+        ),
+        "consumer_a_bridge_fidelity_module_sha256": module_sha,
+        "headline_preset_path": preset_info["preset_path"],
+        "headline_preset_sha256": preset_info["preset_file_sha256"],
+        "headline_preset_resolved_bridge": preset_info["resolved_bridge"],
+        "production_threshold": PRODUCTION_BRIDGE_PX,
+        "primary_support": PRIMARY_SUPPORT,
+        "verdict": verdict_info["verdict"],
+        "phase_b_authorized": False,
+        "a1_a8_computed": False,
+        "production_changed": False,
+        "artifacts": artifacts,
+        "git_commit": commit,
+        "preset_config_hash": preset_info["preset_file_sha256"],
+    }
+    write_json(output_dir / "manifest.json", manifest)
 
     return {
         "verdict": verdict_info["verdict"],
@@ -1990,18 +2117,38 @@ def run_pipeline(
 
 
 def verify_packet(output_dir: Path, pairs_path: Path, mot_dir: Path) -> None:
-    """Rebuild into a temp dir and require byte-identical sealed artifacts."""
+    """Rebuild capture from frozen pairs+substrate and require byte identity.
+
+    Guarantees:
+    * capture is regenerated from pairs + MOT substrate (not re-read sealed bytes)
+    * all downstream artifacts match the sealed packet
+    * kernel / module / headline preset provenance hashes match sealed verdict
+    """
     output_dir = output_dir if output_dir.is_absolute() else REPO / output_dir
-    sealed_capture = output_dir / "consumer_a_capture.csv.gz"
+    pairs_path = pairs_path if pairs_path.is_absolute() else REPO / pairs_path
+    mot_dir = mot_dir if mot_dir.is_absolute() else REPO / mot_dir
+
+    sealed = json.loads((output_dir / "verdict.json").read_text(encoding="utf-8"))
+    # Provenance gates before rebuild
+    if sha256(pairs_path) != SOURCE_SHA256:
+        raise AssertionError("frozen pairs SHA mismatch")
+    if sha256(REPO / KERNEL_SOURCE) != sealed["consumer_a_source_sha256"]:
+        raise AssertionError("kernel source hash drift")
+    if sha256(REPO / HEADLINE_PRESET) != sealed["headline_preset_sha256"]:
+        raise AssertionError("headline preset hash drift")
+    module_path = REPO / "src/saccade/perception/eval/consumer_a_bridge_fidelity.py"
+    if sha256(module_path) != sealed["module_sha256"]:
+        raise AssertionError("fidelity module hash drift")
+    if sealed.get("live_cuda_event_ring_implemented") is not False:
+        raise AssertionError("live capture must remain unimplemented in this packet")
+    if sealed.get("issue_112_status") != ISSUE_112_STATUS:
+        raise AssertionError("issue_112_status drift")
+
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
-        run_pipeline(
-            pairs_path,
-            mot_dir,
-            tmp_path,
-            capture_path=sealed_capture,
-        )
-        # Compare key artifacts
+        # Full rebuild: regenerate capture from pairs + substrate (no capture_path).
+        run_pipeline(pairs_path, mot_dir, tmp_path, capture_path=None)
+        # Capture origin byte-compare (pure reconstruction content).
         for name in (
             "consumer_a_capture.csv.gz",
             "same_event_join.csv.gz",
@@ -2014,16 +2161,43 @@ def verify_packet(output_dir: Path, pairs_path: Path, mot_dir: Path) -> None:
             "boundary_diagnostics.csv",
             "estimator_decomposition.csv",
             "disagreement_localization.csv",
-            "verdict.json",
         ):
             a = sha256(output_dir / name)
             b = sha256(tmp_path / name)
             if a != b:
                 raise AssertionError(f"--verify mismatch on {name}: {a} != {b}")
-    # Structural checks
-    verdict = json.loads((output_dir / "verdict.json").read_text(encoding="utf-8"))
+        # Verdict/manifest/recorded embed git_commit/runner_sha — compare after
+        # normalizing to sealed provenance for fields that track HEAD.
+        rebuilt = json.loads((tmp_path / "verdict.json").read_text(encoding="utf-8"))
+        for key in (
+            "verdict",
+            "status",
+            "primary_fail_reason",
+            "issue_112_status",
+            "source_pairs_sha256",
+            "consumer_a_source_sha256",
+            "headline_preset_sha256",
+            "module_sha256",
+            "capture_sha256",
+            "join_sha256",
+            "phase_b_authorized",
+            "a1_a8_computed",
+            "production_changed",
+            "production_threshold",
+            "capture_mode",
+            "runtime_capture_available",
+        ):
+            if rebuilt.get(key) != sealed.get(key):
+                raise AssertionError(
+                    f"--verify verdict field {key}: {rebuilt.get(key)!r} != {sealed.get(key)!r}"
+                )
+        # Capture sha must equal sealed (regenerated without sealed input).
+        if rebuilt["capture_sha256"] != sealed["capture_sha256"]:
+            raise AssertionError("regenerated capture_sha256 does not match sealed")
+
+    verdict = sealed
     if verdict["status"] != PACKET_STATUS:
-        raise AssertionError("status must be D0_SEALED")
+        raise AssertionError(f"status must be {PACKET_STATUS}")
     if verdict["verdict"] not in {
         "threshold_transfer_supported",
         "rank_only_transfer_supported",
@@ -2040,6 +2214,14 @@ def verify_packet(output_dir: Path, pairs_path: Path, mot_dir: Path) -> None:
         raise AssertionError("production threshold drift")
     if RESEARCH_BRIDGE_FIDELITY_AUDIT_DEFAULT is not False:
         raise AssertionError("audit default must be off")
+    if LIVE_CUDA_EVENT_RING_IMPLEMENTED is not False:
+        raise AssertionError("live CUDA capture must be unimplemented")
+    if verdict["verdict"] != "not_fidelity_aligned":
+        raise AssertionError(
+            "capture-unavailable fail-closed requires not_fidelity_aligned"
+        )
+    if verdict.get("primary_fail_reason") != PRIMARY_FAIL_REASON:
+        raise AssertionError("primary_fail_reason must be runtime_capture_unavailable")
     print("VERIFY_PASS")
 
 

@@ -50,7 +50,9 @@
     }
   },
   "capture_stats": {
-    "capture_mode": "kernel_formula_substrate_replay",
+    "capture_mode": "kernel_formula_reconstruction",
+    "evidence_role": "reconstruction_diagnostic",
+    "issue_112_status": "incomplete_runtime_capture_unavailable",
     "live_cuda_event_ring_implemented": false,
     "n_captured": 22465,
     "n_pairs": 24284,
@@ -82,58 +84,78 @@
   "disagreement_n_su": 84,
   "estimator_decomposition": [
     {
-      "gt_offline_safe_online_unsafe_count": 24,
+      "factor_changed": "S0",
+      "gt_step_safe_recon_unsafe_count": 24,
       "n": 2456,
       "predicate_agreement_at_0.4": 0.9495114006514658,
-      "q85_abs_error_vs_d4": 0.21306757666155995,
-      "spearman_rho_vs_d4": 0.9645023402030639,
-      "step": "D0_offline_bridge_dist"
+      "q85_abs_error_vs_reconstruction": 0.21306757666155995,
+      "spearman_rho_vs_reconstruction": 0.9645023402030639,
+      "step": "S0_offline_midpoint"
     },
     {
-      "gt_offline_safe_online_unsafe_count": 8,
+      "factor_changed": "S1",
+      "gt_step_safe_recon_unsafe_count": 8,
       "n": 2456,
       "predicate_agreement_at_0.4": 0.9719055374592834,
-      "q85_abs_error_vs_d4": 0.1738546227000004,
-      "spearman_rho_vs_d4": 0.9867089176814061,
-      "step": "D0_offline_speed_weighted"
+      "q85_abs_error_vs_reconstruction": 0.1738546227000004,
+      "spearman_rho_vs_reconstruction": 0.9867089176814061,
+      "step": "S1_aggregation_only"
     },
     {
-      "gt_offline_safe_online_unsafe_count": 7,
+      "factor_changed": "S2",
+      "gt_step_safe_recon_unsafe_count": 7,
+      "n": 2456,
+      "predicate_agreement_at_0.4": 0.9776058631921825,
+      "q85_abs_error_vs_reconstruction": 0.2191194638749998,
+      "spearman_rho_vs_reconstruction": 0.9878226227224814,
+      "step": "S2_anchor_endpoints_only"
+    },
+    {
+      "factor_changed": "S3",
+      "gt_step_safe_recon_unsafe_count": 7,
       "n": 2456,
       "predicate_agreement_at_0.4": 0.9816775244299675,
-      "q85_abs_error_vs_d4": 0.19958644352499988,
-      "spearman_rho_vs_d4": 0.9888241860385396,
-      "step": "D1_velocity_only"
+      "q85_abs_error_vs_reconstruction": 0.19958644352499988,
+      "spearman_rho_vs_reconstruction": 0.9888241860385396,
+      "step": "S3_velocity_only"
     },
     {
-      "gt_offline_safe_online_unsafe_count": 2,
+      "factor_changed": "S4",
+      "gt_step_safe_recon_unsafe_count": 2,
       "n": 2456,
       "predicate_agreement_at_0.4": 0.9947068403908795,
-      "q85_abs_error_vs_d4": 0.1685500327999998,
-      "spearman_rho_vs_d4": 0.9929938504913463,
-      "step": "D2_velocity_horizon"
+      "q85_abs_error_vs_reconstruction": 0.1685500327999998,
+      "spearman_rho_vs_reconstruction": 0.9929938504913463,
+      "step": "S4_horizon_only"
     },
     {
-      "gt_offline_safe_online_unsafe_count": 0,
+      "factor_changed": "S5",
+      "gt_step_safe_recon_unsafe_count": 0,
       "n": 2456,
       "predicate_agreement_at_0.4": 1.0,
-      "q85_abs_error_vs_d4": 0.0,
-      "spearman_rho_vs_d4": 1.0,
-      "step": "D3_velocity_horizon_norm"
+      "q85_abs_error_vs_reconstruction": 0.0,
+      "spearman_rho_vs_reconstruction": 1.0,
+      "step": "S5_normalization_only"
     },
     {
-      "gt_offline_safe_online_unsafe_count": 0,
+      "factor_changed": "S6",
+      "gt_step_safe_recon_unsafe_count": 0,
       "n": 2456,
       "predicate_agreement_at_0.4": 1.0,
-      "q85_abs_error_vs_d4": 0.0,
-      "spearman_rho_vs_d4": 1.0,
-      "step": "D4_exact_consumer_a"
+      "q85_abs_error_vs_reconstruction": 0.0,
+      "spearman_rho_vs_reconstruction": 1.0,
+      "step": "S6_kernel_formula_reconstruction"
     }
   ],
+  "evidence_role": "reconstruction_diagnostic_not_runtime_consumer_a_capture",
+  "issue_112_status": "incomplete_runtime_capture_unavailable",
+  "metric_based_verdict_diagnostic_only": "not_fidelity_aligned",
   "phase_b_authorized": false,
+  "primary_fail_reason": "runtime_capture_unavailable",
   "primary_support": "gt_valid && 1 <= gap <= 26",
   "production_changed": false,
   "production_threshold": 0.4,
+  "runtime_capture_available": false,
   "schema_version": 1,
   "verdict": "not_fidelity_aligned",
   "verdict_checks": {
