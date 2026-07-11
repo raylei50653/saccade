@@ -11,16 +11,16 @@
     "metrics_summary.json": "91203ec22e96990081b42545b03ea3ae0f5044255f0a3a69fbbe3e10b4ae1041",
     "predicate_confusion.csv": "8e2f3eb8948e0aa256c6bff01107ca88add4b89c7726ae81289bc817a7e57a65",
     "quantile_alignment.csv": "e49f5d1f251b85b9ad2d3b83489580b0496764200ea86a0b99a79587d5e5f076",
-    "recorded_output.txt": "f80866ca01cdb5af65e8665f759d143b93a997e326d29ce86b8d5d655932ca68",
+    "recorded_output.txt": "e18a5ad61250d3ba968a1e36789cddfd4300644333210f0d4eef73f651d54efd",
     "run_d0_bridge_fidelity.py": "081e2399a6c09a6e7192b73fce21d982923f895a270057ed2f87b995d0f2e10f",
     "same_event_join.csv.gz": "5f60d8fda0e22bcc53265e39662c3fb7b0ce867ab28aee5ace5676ecf1e4807b",
-    "verdict.json": "074a460c19a63b073ff17a20becc2f361e69617b63d7e83b113cf7965bd18d43"
+    "verdict.json": "64501b5c0bb27f4be583ff0b7251ea3da92d21187fdd1fb49b1c757da40009c1"
   },
   "consumer_a_bridge_fidelity_module": "src/saccade/perception/eval/consumer_a_bridge_fidelity.py",
   "consumer_a_bridge_fidelity_module_sha256": "20f91438b937ad6aa1153f330353b0eeb41d4bbbc9e5ba49164e2d617425b8b5",
   "evidence_role": "reconstruction_diagnostic_not_runtime_consumer_a_capture",
   "freeze_id": "D0-BRIDGE-ESTIMATOR-FIDELITY-v1",
-  "git_commit": "e662dbce950aa2399747c9a656e0ba3639437307",
+  "git_commit": "c65e5669b4c972063dee2b291bf1b9c5709ae7a7",
   "headline_preset_path": "configs/presets/mamba_whole_graph_m.yaml",
   "headline_preset_resolved_bridge": {
     "relink_bridge_anchor": "adaptive",

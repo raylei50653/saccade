@@ -26,4 +26,4 @@ a1_a8_computed=false
 production_changed=false
 capture_mode=kernel_formula_reconstruction
 research_audit_default=False
-git_commit=e662dbce950aa2399747c9a656e0ba3639437307
+git_commit=c65e5669b4c972063dee2b291bf1b9c5709ae7a7
