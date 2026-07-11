@@ -73,10 +73,13 @@
   - 跨模組 helper / edge-case 測試
 - `tests/integration/`
   - 整合、pipeline、parity、e2e 測試
+- `tests/contract/`
+  - 長期不變的工程契約；含通用 research packet schema / manifest 驗證
 - `tests/golden/`
   - golden fixtures / reference data
-- `tests/experimental/`
-  - 實驗性或研究輔助測試；不作為一般主線覆蓋率判讀依據
+- `tests/research/`
+  - study-scoped 研究測試隔離區（取代舊 `tests/experimental/`）；標
+    `research` marker，**預設不收集**，治理規則見 `tests/research/README.md`
 - `tests/native/`
   - C++ / native tests
 - `tests/benchmarks/`
@@ -102,7 +105,24 @@ uv run pytest
 uv run pytest -m gpu
 ```
 
-### 2.4 優先補哪些測試
+### 2.4 Research 測試
+
+- 綁定 dated research packet、exec 研究 runner、或釘研究命題凍結數字的測試
+  一律放 `tests/research/`（目錄 conftest 自動加 `research` /
+  `packet_bound` marker）。
+- 預設收集排除（`addopts = -m 'not research'`）；pre_push 與 CI 都不跑。
+  研究 PR 自行執行：
+
+```bash
+uv run pytest tests/research/ -m research
+```
+
+- 測現行模組行為的測試（即使 feature default-off）不算 research，照常放
+  `tests/unit/`。
+- study seal 後測試的終態處理（升格 / 合併 / 通用覆蓋 / 刪除）見
+  `tests/research/README.md` 與 `tests/research/DISPOSITION.md`。
+
+### 2.5 優先補哪些測試
 
 若改 tracking / relink / runner 主路徑，優先補：
 
@@ -149,7 +169,9 @@ uv run coverage html
 - `testpaths = ["tests"]`
 - `python_files = ["test_*.py"]`
 - `asyncio_mode = "strict"`
-- 預設帶 coverage
+- 預設排除 `research` marker（`addopts = -m 'not research'`）
+- coverage 不再預設開啟；本地需要時自行加 `--cov=saccade
+  --cov-report=term-missing`（CI 的 pytest job 帶 coverage）
 
 ### 4.2 Mypy
 

@@ -16,7 +16,7 @@ from typing import Any
 import pandas as pd
 import pytest
 
-REPO = Path(__file__).resolve().parents[2]
+REPO = Path(__file__).resolve().parents[3]
 PACK = REPO / "out/signal_study/m_b1_5_safe_region_asset_r1_20260710"
 T0 = (
     REPO

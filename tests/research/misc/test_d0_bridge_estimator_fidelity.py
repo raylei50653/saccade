@@ -24,7 +24,7 @@ from saccade.perception.eval.consumer_a_bridge_fidelity import (
     speed_weighted_bdist,
 )
 
-REPO = Path(__file__).resolve().parents[2]
+REPO = Path(__file__).resolve().parents[3]
 RUNNER = (
     REPO
     / "docs/modules/semantic/research/evidence"
