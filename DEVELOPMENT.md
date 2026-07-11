@@ -176,56 +176,27 @@ Detection 設計索引（非本檔展開）：[docs/modules/detection/README.md]
 
 系統分層與工業路徑總圖：[docs/architecture/README.md](docs/architecture/README.md)。
 
-### 標準 push 流程（必做）
-
-本地推送前**必須**綠燈；`pre_push` 失敗不得 push。Agent / 人手同一條路。
+### 推送前（約束）
 
 ```text
-1. 改 code / docs（對齊 sole active · thread · PR base）
-2. commit（.githooks 會跑 staged ruff；hooks 一次設定見下）
-3. bash scripts/pre_push.sh          # 必須 exit 0
-4. 若失敗 → 修 → 必要時再 commit → 重跑 pre_push 至綠
-5. git push -u origin HEAD           # 僅工作分支；禁止直推 main
-6. 開 / 更新 PR（CI 再跑一遍；CI 綠 ≠ research acceptance）
+commit → bash scripts/pre_push.sh（必須綠）→ push 工作分支 → PR + CI
 ```
 
+- `pre_push` 失敗**不得** push；修完（含 review 補丁）須**重跑**至綠再推。
+- 不直推 `main`。檢查清單以 [`scripts/pre_push.sh`](scripts/pre_push.sh) 為準，本檔不展開。
+- PR merge ≠ research acceptance（§6）。
+
 ```bash
-# 一次（repo 根）
-git config core.hooksPath .githooks
-
-# 每次 push 前（必跑）
-bash scripts/pre_push.sh              # lock · ruff · mypy · GPU contract · docs · pytest · C++/determinism 偵測
-bash scripts/pre_push.sh --fix        # 先 ruff fix/format，再整套檢查
-
-# 綠了才 push
-git push -u origin HEAD
+git config core.hooksPath .githooks   # 一次
+bash scripts/pre_push.sh              # 每次 push 前
+bash scripts/pre_push.sh --fix        # 先 ruff fix/format
 ```
 
-**`pre_push` 涵蓋（與 CI 對齊的本地鏡像）：**
-
-| 階段 | 內容 |
-|:--|:--|
-| 硬失敗 | `uv lock --check` · `ruff check/format` · `mypy` · GPU-first contract · doc links · stale paths · `pytest`（略 benchmarks） |
-| 條件硬失敗 | 有 C++ 改動且存在 `build/` → `make saccade_tracking_ext`；determinism-sensitive 路徑 → routine continuous chain（可 `SKIP_DETERMINISM_PREPUSH=1` 跳過，僅明示例外） |
-| 僅警告 | API layer audit · doc freshness · doc structure（O1.5） |
-
-Doc 掛勾細節：`check_doc_links` · `check_doc_stale_paths` · freshness warn · **structure warn（O1.5）**。
-
-**硬規則：**
-
-- **順序固定：** commit → `pre_push` 綠 → push。不要「先 push 再補跑」。
-- **修完再 push：** review 修復、mypy/ruff 補丁、packet re-emit 後都要**重跑** `pre_push`，不可假設上次綠燈仍有效。
-- **不直推 `main`；** 合入只走 **PR + CI**（含 governed research 的 engineering 交付）。
-- **PR merge ≠ research acceptance**（見 §6）；工程綠燈不自動升格 evidence / 下一階段授權。
-- 不把 live branch tip / commit SHA 寫進本檔；以 PR metadata 為準。
-
-### 依層級加驗證（pre_push 之上）
-
-`pre_push` 是**所有層級的共同底線**。D3+ 另加：
+### 依層級加驗證
 
 ```bash
-# D0/D1 額外（pre_push 已含全量 unit；可加聚焦）
-uv run pytest tests/ --ignore=tests/benchmarks -k <pattern>
+# D0/D1
+uv run pytest tests/ --ignore=tests/benchmarks
 
 # D3 常見
 uv run scripts/eval/mot17.py --preset mamba_whole_graph --detector SDP --double-buffer --sequences MOT17-04-SDP
@@ -239,7 +210,9 @@ uv run python scripts/tools/check_headline_decision_contract.py
 ### 分支（摘要）
 
 - `main` only 合入目標；工作分支 `feat/*` `fix/*` `perf/*` `docs/*` `research/*`
+- 不直接 push `main`；**PR + CI** is the delivery path for engineering work (including governed research implementation)
 - 開分支前：工作項對齊 **module TODO sole active**（WIP 鎖）或全局 [docs/TODO.md](docs/TODO.md)；連續任務先讀 [threads/](docs/research/threads/README.md) → normative contract → open/update PR against the agreed base
+- Do **not** put mutable branch tips or commit hashes in this file; live tip/SHA/CI live on the PR
 
 ### 實驗追蹤（可選）
 
