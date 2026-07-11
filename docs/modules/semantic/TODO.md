@@ -5,11 +5,13 @@
 
 ## Sole active
 
-🔄 **GT-Support Morphology — step-0 recorded; procedure v1 awaiting owner seal**
+🔄 **GT-Support Morphology — PR-C `ACCEPTED_WITH_LIMITS`; next = PR-D partial-order audit**
 
 - Thread: [gt_support_morphology_20260711.md](../../research/threads/gt_support_morphology_20260711.md)
-- Step-0: per-cell risk field 不可識別；**verdict `UNRESOLVED`** + descriptive hypothesis（corner-concentrated + 4-track far-Hamming motion tail，**4/4 在 MOT17-10**）→ [note](research/gt_support_morphology_step0_20260711.md) · packet [evidence/](research/evidence/gt_support_morphology_step0_20260711/manifest.json) · procedure = [framework §19](../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)（v1 PROPOSED；review 五修已落地）
-- Next（PR ladder A–E）: **PR-A** [#100](https://github.com/raylei50653/saccade/pull/100) seal → **PR-B** [#101](https://github.com/raylei50653/saccade/pull/101) 布林閉包域研究線 doc → **PR-C** 4-track forensic → **PR-D** restricted closure prototype（MWC vs OR-tail）→ **PR-E** nested validation
+- Step-0: per-cell risk field 不可識別；**verdict `UNRESOLVED`** + descriptive hypothesis（corner-concentrated + 4-track far-Hamming motion tail，**4/4 在 MOT17-10**）→ [note](research/gt_support_morphology_step0_20260711.md) · packet [evidence/](research/evidence/gt_support_morphology_step0_20260711/manifest.json) · procedure = [framework §19](../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)（**v1 sealed** via [#100](https://github.com/raylei50653/saccade/pull/100)）
+- PR-B: [boolean closure-domain line](research/boolean_closure_domain_line_20260711.md) **merged** ([#101](https://github.com/raylei50653/saccade/pull/101))
+- PR-C / [#102](https://github.com/raylei50653/saccade/issues/102) · [PR #104](https://github.com/raylei50653/saccade/pull/104): 3×TRUE + 1×UNRESOLVED · aggregate `ROLE_REVERSAL_SUPPORTED` · **`ACCEPTED_WITH_LIMITS`** (L1 single-seq; partial-order audit only) → [forensic note](research/escape_tail_forensic_20260711.md) · [packet](research/evidence/escape_tail_forensic_20260711/manifest.json)
+- Next: **PR-D** partial-order audit + restricted closure prototype（motion = conditional/context only）→ **PR-E** nested validation
 
 ## Previous line（closed; nav only）
 
@@ -40,7 +42,7 @@
 
 ## Related research threads（不佔 WIP 鎖）
 
-- [gt-support morphology](../../research/threads/gt_support_morphology_20260711.md) — **ACTIVE**（sole active 本體）· step-0 recorded · procedure v1 awaiting seal
+- [gt-support morphology](../../research/threads/gt_support_morphology_20260711.md) — **ACTIVE**（sole active 本體）· PR-A/B sealed · PR-C `ACCEPTED_WITH_LIMITS` · next PR-D
 - [safe-region assetization](../../research/threads/safe_region_assetization_20260710.md) — **A1 CLOSED (`A1_ACCEPTED_WITH_LIMITS`, maturity A1)** · mainline handed off → gt-support morphology · [PR #95](https://github.com/raylei50653/saccade/pull/95)/[#97](https://github.com/raylei50653/saccade/pull/97) history
 - [composition grammar coverage program](../../research/threads/composition_grammar_coverage_program_20260710.md) — **SUPERSEDED** · coverage map absorbed into assetization R2–R4
 - [composition grammar × safe-region A0](../../research/threads/composition_grammar_safe_region.md) — **CLOSED** · T0-A/B/R1 · terminal B retained

@@ -105,9 +105,10 @@ Descriptive morphology hypothesis（bounded；無 terminal 效力）:
 
 ## 5. Next（evidence order，framework §19.6）
 
-1. Owner seal procedure v1 = **PR 1（Draft）review + merge**（framework §19；ε_morph/UCB 界線已入草案；forensic 結果不得進此 PR）。
-2. Escape-tail forensics：4 條 tracks 逐件，僅得落入預宣告類別（true long-occlusion re-entry / annotation issue / signal computation issue / threshold artifact / unresolved）。
-3. Nested per-fold rerun 整條鏈（atom 發現、定向、二值化、verdict）→ 才可能升 L2+。
+1. ~~Owner seal procedure v1~~ → **done** ([PR #100](https://github.com/raylei50653/saccade/pull/100)).
+2. ~~Escape-tail forensics~~ → **done** ([PR-C / #102](https://github.com/raylei50653/saccade/issues/102)；[forensic note](escape_tail_forensic_20260711.md)；aggregate `ROLE_REVERSAL_SUPPORTED`)。
+3. Partial-order audit + restricted closure prototype（PR-D）— motion 僅 conditional/context 候選。
+4. Nested per-fold rerun 整條鏈（atom 發現、定向、二值化、verdict）→ 才可能升 L2+（PR-E）。
 
 ## Must not
 

@@ -1,0 +1,69 @@
+{
+ "study_id": "escape_tail_forensic_20260711",
+ "issue": 102,
+ "pr_ladder": "PR-C",
+ "depends_on": {
+  "step0_packet": "docs/modules/semantic/research/evidence/gt_support_morphology_step0_20260711",
+  "step0_manifest_sha256": "faad88d4d3e389ea11eb2418ed9a27671a704d16c7ce0c5d37c59f0bf4b0c62f",
+  "source_pairs_csv": "out/signal_study/m_b1_gate_coverage_7seq_20260709T121326Z/pairs.csv",
+  "source_pairs_csv_sha256": "0ae3896791ec074fbe951198752c17385c4ee0770a7ec3831225d3ea56a69d17",
+  "procedure": "framework §19 v1 (PR-A #100 sealed)",
+  "research_line": "boolean_closure_domain_line_20260711 (PR-B #101)"
+ },
+ "scope": "read-only offline forensic; no gate/preset/ledger/closure-search changes",
+ "rule_provenance": "terminal vocabulary from #102; numerical cutoffs are PR-C implementation-time operationalization (not sealed in #102)",
+ "research_acceptance": {
+  "status": "ACCEPTED_WITH_LIMITS",
+  "recorded": "2026-07-11",
+  "authority": "PR #104 research-owner review",
+  "pr_url": "https://github.com/raylei50653/saccade/pull/104",
+  "issue": 102,
+  "accepted_aggregate": "ROLE_REVERSAL_SUPPORTED",
+  "accepted_per_track": {
+   "MOT17-10-SDP|455": "TRUE_LONG_GAP_REENTRY",
+   "MOT17-10-SDP|459": "UNRESOLVED",
+   "MOT17-10-SDP|467": "TRUE_LONG_GAP_REENTRY",
+   "MOT17-10-SDP|503": "TRUE_LONG_GAP_REENTRY"
+  },
+  "claim_ceiling": "L1 single-sequence forensic (MOT17-10-SDP only)",
+  "authorizes": [
+   "a separate partial-order audit treating motion atoms as conditional_orderable / context_only candidates"
+  ],
+  "does_not_authorize": [
+   "global motion closure arcs",
+   "MWC conclusions",
+   "escape-tail veto",
+   "production / preset / gate changes",
+   "evidence_ledger promotion",
+   "multi-sequence generalization from this cohort alone",
+   "L2+ morphology claims without nested confirmation"
+  ]
+ },
+ "frozen_cohort": [
+  "MOT17-10-SDP|455",
+  "MOT17-10-SDP|459",
+  "MOT17-10-SDP|467",
+  "MOT17-10-SDP|503"
+ ],
+ "aggregate_terminal": "ROLE_REVERSAL_SUPPORTED",
+ "per_track_categories": {
+  "MOT17-10-SDP|455": "TRUE_LONG_GAP_REENTRY",
+  "MOT17-10-SDP|459": "UNRESOLVED",
+  "MOT17-10-SDP|467": "TRUE_LONG_GAP_REENTRY",
+  "MOT17-10-SDP|503": "TRUE_LONG_GAP_REENTRY"
+ },
+ "files": {
+  "cohort.json": "f82d64f18686ff31541d516bae02bcd120cbfde5df97ca52e9243e7bfe112aa3",
+  "track_cards.json": "9ffae6b212fa6e18576ac2da8d890155ab8a12dddd803c45d01dfa6eef386089",
+  "aggregate.json": "5977cdb93c142526c93a755502ae10d92e29dcf25873a11660ec2118ec64bada",
+  "per_row_evidence.csv": "ee9992612203dca675a6eac599f1dc2255e03db7f51442599f2be44f010eb877",
+  "threshold_sensitivity.json": "f2b3b1bad3b39f516116324d6bc85508727679d7e8a6c0e4c3152d87021d7459",
+  "classification_rules.json": "627ccbdb7c2100e027075de266c6d1a435537f44f72e293475a01e9e538da6f8",
+  "scene_evidence.json": "3bb369028520f87818a8de67c11f9c6b9efa65646c7335aed332f7f76f277753",
+  "run_escape_tail_forensic.py": "2bc59515d06081597c040ec7594964562e27cc03cf28c663d8245cca9800844d",
+  "scene_sheets/MOT17-10-SDP_455_min_dh.jpg": "070ab9a56ddcf89da4c733bb8c4e8c4996b45b697d26ffbb2039b01b47f643fc",
+  "scene_sheets/MOT17-10-SDP_459_min_dh.jpg": "a3076e8efb6969698b849fea512128f1096cc92e22fbbf391d9092e1aa351ec5",
+  "scene_sheets/MOT17-10-SDP_467_min_dh.jpg": "29ffdb516ae6ba61dc719dd81b4049ed37d8a2b44a634c7ec23806cdec093349",
+  "scene_sheets/MOT17-10-SDP_503_min_dh.jpg": "302e13b8026ec4e4c5132fc173642e67cfd8b0160e4d9959084f73441403c41d"
+ }
+}

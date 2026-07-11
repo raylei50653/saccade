@@ -1,0 +1,54 @@
+{
+ "terminal": "ROLE_REVERSAL_SUPPORTED",
+ "per_track_category_counts": {
+  "TRUE_LONG_GAP_REENTRY": 3,
+  "ANNOTATION_ISSUE": 0,
+  "SIGNAL_COMPUTATION_ISSUE": 0,
+  "THRESHOLD_ARTIFACT": 0,
+  "UNRESOLVED": 1
+ },
+ "n_true_long_gap_reentry": 3,
+ "n_artifact": 0,
+ "n_unresolved": 1,
+ "authorizes": [
+  "A later partial-order audit may consider motion atoms as conditional_orderable or context_only (research-line Phase B / PR-D prep) — contingent on research-owner acceptance of this operational mapping."
+ ],
+ "remains_blocked": [
+  "global closure arcs on motion atoms",
+  "veto against the protected escape tail",
+  "production rule / preset / gate change",
+  "evidence_ledger promotion beyond this bounded forensic result",
+  "L2+ morphology claims without nested held-out confirmation",
+  "claiming signal bugs are fully ruled out at pixel-trajectory level (builder path untested)"
+ ],
+ "rule_provenance": "PR-C implementation-time operationalization of #102 aggregate terminals; ROLE_REVERSAL_SUPPORTED uses operational cutoff n(TRUE)>=3 and n(artifact)==0",
+ "research_acceptance": {
+  "status": "ACCEPTED_WITH_LIMITS",
+  "recorded": "2026-07-11",
+  "authority": "PR #104 research-owner review",
+  "pr_url": "https://github.com/raylei50653/saccade/pull/104",
+  "issue": 102,
+  "accepted_aggregate": "ROLE_REVERSAL_SUPPORTED",
+  "accepted_per_track": {
+   "MOT17-10-SDP|455": "TRUE_LONG_GAP_REENTRY",
+   "MOT17-10-SDP|459": "UNRESOLVED",
+   "MOT17-10-SDP|467": "TRUE_LONG_GAP_REENTRY",
+   "MOT17-10-SDP|503": "TRUE_LONG_GAP_REENTRY"
+  },
+  "claim_ceiling": "L1 single-sequence forensic (MOT17-10-SDP only)",
+  "authorizes": [
+   "a separate partial-order audit treating motion atoms as conditional_orderable / context_only candidates"
+  ],
+  "does_not_authorize": [
+   "global motion closure arcs",
+   "MWC conclusions",
+   "escape-tail veto",
+   "production / preset / gate changes",
+   "evidence_ledger promotion",
+   "multi-sequence generalization from this cohort alone",
+   "L2+ morphology claims without nested confirmation"
+  ]
+ },
+ "routing": "open separate partial-order audit before any MWC prototype",
+ "confidence_boundary": "ACCEPTED_WITH_LIMITS (PR #104): L1 single-sequence (MOT17-10-SDP) forensic only. Numerical cutoffs remain PR-C operationalizations (not sealed in #102). Builder residual/speed pixel-replay untested. Authorizes only a separate partial-order audit; not global motion closure, MWC conclusions, tail veto, production, or ledger promotion."
+}

@@ -1,0 +1,874 @@
+{
+ "MOT17-10-SDP|455": {
+  "contact_sheet_available": true,
+  "contact_sheet": "scene_sheets/MOT17-10-SDP_455_min_dh.jpg",
+  "contact_sheet_sha256": "070ab9a56ddcf89da4c733bb8c4e8c4996b45b697d26ffbb2039b01b47f643fc",
+  "truncation_any_on_endpoints": false,
+  "nearby_close_on_reentry": true,
+  "scene_supports_occlusion_or_crowd": true,
+  "camera_motion_proxy_min_dh": {
+   "n_tracks_with_both_frames": 21,
+   "median_foot_disp_px": 180.23595645708434,
+   "mean_foot_disp_px": 176.22467808508213,
+   "p90_foot_disp_px": 214.88659799996836,
+   "definition": "median Euclidean foot displacement of GT ids present at both frame 114 and 171; proxy for camera+scene motion, not GMC"
+  },
+  "panels": [
+   {
+    "frame": 114,
+    "label": "exit",
+    "image_found": true,
+    "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000114.jpg",
+    "sha256": "d494724e5cacaf5bc2e78fc03985b92f377143ff0c0032a18629637b26d0aaf6"
+   },
+   {
+    "frame": 115,
+    "label": "gap1",
+    "image_found": true,
+    "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000115.jpg",
+    "sha256": "b8f338a2042fefbb5cfb52ce235f4815b441c8cd1f25a8737d58982c2edf65c6"
+   },
+   {
+    "frame": 142,
+    "label": "gap2",
+    "image_found": true,
+    "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000142.jpg",
+    "sha256": "10377a88264fe0d3c9d2b3fc47cf5207d868643d6de04d3070ded7dfd9337e4b"
+   },
+   {
+    "frame": 170,
+    "label": "gap3",
+    "image_found": true,
+    "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000170.jpg",
+    "sha256": "189a9d4c37fb41383263f0b9024573acf064b15ee5e8ae1a81937e0326f55bf3"
+   },
+   {
+    "frame": 171,
+    "label": "reentry",
+    "image_found": true,
+    "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000171.jpg",
+    "sha256": "22d57063049ae32b2f107f80b547ca67d9860df6c14678facb95fa760533b1a2"
+   }
+  ],
+  "min_dh_frames": [
+   114,
+   115,
+   142,
+   170,
+   171
+  ],
+  "exit_nearby": [
+   {
+    "id": 30,
+    "foot_dist_px": 36.43144246389374,
+    "iou": 0.014026402640264026,
+    "vis": 0.62963,
+    "xywh": [
+     296.0,
+     414.0,
+     26.0,
+     76.0
+    ]
+   },
+   {
+    "id": 29,
+    "foot_dist_px": 55.13846207503434,
+    "iou": 0.0,
+    "vis": 1.0,
+    "xywh": [
+     313.0,
+     399.0,
+     34.0,
+     94.0
+    ]
+   },
+   {
+    "id": 34,
+    "foot_dist_px": 91.84906096417099,
+    "iou": 0.0,
+    "vis": 0.057143,
+    "xywh": [
+     350.0,
+     406.0,
+     34.0,
+     95.0
+    ]
+   },
+   {
+    "id": 12,
+    "foot_dist_px": 115.76268828944843,
+    "iou": 0.0,
+    "vis": 0.48571,
+    "xywh": [
+     352.0,
+     386.0,
+     59.0,
+     139.0
+    ]
+   },
+   {
+    "id": 19,
+    "foot_dist_px": 145.89036979869508,
+    "iou": 0.0,
+    "vis": 1.0,
+    "xywh": [
+     352.0,
+     454.0,
+     117.0,
+     81.0
+    ]
+   }
+  ],
+  "reentry_nearby": [
+   {
+    "id": 71,
+    "foot_dist_px": 33.55964838909967,
+    "iou": 0.0,
+    "vis": 0.23113,
+    "xywh": [
+     516.0,
+     373.0,
+     23.0,
+     52.0
+    ]
+   },
+   {
+    "id": 29,
+    "foot_dist_px": 51.58730463980455,
+    "iou": 0.04132091447925487,
+    "vis": 0.78665,
+    "xywh": [
+     446.0,
+     353.0,
+     39.0,
+     117.0
+    ]
+   },
+   {
+    "id": 34,
+    "foot_dist_px": 65.41597664179601,
+    "iou": 0.0,
+    "vis": 0.45455,
+    "xywh": [
+     523.0,
+     365.0,
+     33.0,
+     109.0
+    ]
+   },
+   {
+    "id": 30,
+    "foot_dist_px": 66.2872536767062,
+    "iou": 0.0,
+    "vis": 0.74074,
+    "xywh": [
+     426.0,
+     368.0,
+     26.0,
+     96.0
+    ]
+   },
+   {
+    "id": 36,
+    "foot_dist_px": 85.85598406634216,
+    "iou": 0.0,
+    "vis": 0.020244,
+    "xywh": [
+     516.0,
+     415.0,
+     97.0,
+     61.0
+    ]
+   }
+  ],
+  "truncation": {
+   "exit": {
+    "left": false,
+    "top": false,
+    "right": false,
+    "bottom": false,
+    "any": false,
+    "margin_px": 8,
+    "frame_wh": [
+     1920,
+     1080
+    ]
+   },
+   "reentry": {
+    "left": false,
+    "top": false,
+    "right": false,
+    "bottom": false,
+    "any": false,
+    "margin_px": 8,
+    "frame_wh": [
+     1920,
+     1080
+    ]
+   }
+  },
+  "gap_visibility": {
+   "n_annotated_in_gap": 56,
+   "vis_mean": 0.1932238142857143,
+   "vis_min": 0.0,
+   "frac_vis_lt_0_3": 0.7321428571428571,
+   "frac_vis_eq_0": 0.35714285714285715,
+   "longest_full_invis_stretch": 8,
+   "occlusion_strong_operational": true
+  }
+ },
+ "MOT17-10-SDP|459": {
+  "contact_sheet_available": true,
+  "contact_sheet": "scene_sheets/MOT17-10-SDP_459_min_dh.jpg",
+  "contact_sheet_sha256": "a3076e8efb6969698b849fea512128f1096cc92e22fbbf391d9092e1aa351ec5",
+  "truncation_any_on_endpoints": false,
+  "nearby_close_on_reentry": true,
+  "scene_supports_occlusion_or_crowd": false,
+  "camera_motion_proxy_min_dh": {
+   "n_tracks_with_both_frames": 24,
+   "median_foot_disp_px": 123.90888732938916,
+   "mean_foot_disp_px": 128.6361249482875,
+   "p90_foot_disp_px": 219.86612876178867,
+   "definition": "median Euclidean foot displacement of GT ids present at both frame 160 and 276; proxy for camera+scene motion, not GMC"
+  },
+  "panels": [
+   {
+    "frame": 160,
+    "label": "exit",
+    "image_found": true,
+    "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000160.jpg",
+    "sha256": "21741f1d015dd6ac89414603093055fc7789db956a4ee67e31c039749f9330a9"
+   },
+   {
+    "frame": 161,
+    "label": "gap1",
+    "image_found": true,
+    "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000161.jpg",
+    "sha256": "068ea596c3903b6228132371f25ac098dcc46ca90254ea83e13f8693e38da120"
+   },
+   {
+    "frame": 218,
+    "label": "gap2",
+    "image_found": true,
+    "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000218.jpg",
+    "sha256": "62cb2ba017efc7868b0ff06ce948eefe1ee9600b85c347af280157dea2701800"
+   },
+   {
+    "frame": 275,
+    "label": "gap3",
+    "image_found": true,
+    "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000275.jpg",
+    "sha256": "9e0d679940eb984abfd2f57a53e8f70a635039fd9033fbe1887bb095e8f124e8"
+   },
+   {
+    "frame": 276,
+    "label": "reentry",
+    "image_found": true,
+    "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000276.jpg",
+    "sha256": "d43b83ff1f30fce2f53243d8efcaa7f0404c356c9777354e83a5d8d7afa5d946"
+   }
+  ],
+  "min_dh_frames": [
+   160,
+   161,
+   218,
+   275,
+   276
+  ],
+  "exit_nearby": [
+   {
+    "id": 30,
+    "foot_dist_px": 32.7566787083184,
+    "iou": 0.0,
+    "vis": 0.96429,
+    "xywh": [
+     515.0,
+     368.0,
+     27.0,
+     88.0
+    ]
+   },
+   {
+    "id": 41,
+    "foot_dist_px": 39.38591118661596,
+    "iou": 0.4156358238495794,
+    "vis": 0.0095188,
+    "xywh": [
+     551.0,
+     364.0,
+     30.0,
+     60.0
+    ]
+   },
+   {
+    "id": 71,
+    "foot_dist_px": 40.496913462633174,
+    "iou": 0.20378054402950668,
+    "vis": 0.29608,
+    "xywh": [
+     562.0,
+     373.0,
+     25.0,
+     52.0
+    ]
+   },
+   {
+    "id": 34,
+    "foot_dist_px": 45.27692569068709,
+    "iou": 0.0,
+    "vis": 0.57108,
+    "xywh": [
+     589.0,
+     361.0,
+     33.0,
+     107.0
+    ]
+   },
+   {
+    "id": 19,
+    "foot_dist_px": 69.9088692513332,
+    "iou": 0.0702482574986295,
+    "vis": 1.0,
+    "xywh": [
+     556.0,
+     424.0,
+     116.0,
+     84.0
+    ]
+   }
+  ],
+  "reentry_nearby": [
+   {
+    "id": 30,
+    "foot_dist_px": 33.8710791088799,
+    "iou": 0.17954282407407407,
+    "vis": 0.57143,
+    "xywh": [
+     475.0,
+     305.0,
+     41.0,
+     146.0
+    ]
+   },
+   {
+    "id": 23,
+    "foot_dist_px": 68.60029154456998,
+    "iou": 0.0,
+    "vis": 0.72174,
+    "xywh": [
+     560.0,
+     301.0,
+     48.0,
+     114.0
+    ]
+   },
+   {
+    "id": 19,
+    "foot_dist_px": 85.33024082938006,
+    "iou": 0.10683743996251317,
+    "vis": 0.78977,
+    "xywh": [
+     521.0,
+     384.0,
+     175.0,
+     103.0
+    ]
+   },
+   {
+    "id": 55,
+    "foot_dist_px": 166.1061407654756,
+    "iou": 0.0,
+    "vis": 0.73602,
+    "xywh": [
+     332.0,
+     322.0,
+     85.0,
+     73.0
+    ]
+   },
+   {
+    "id": 36,
+    "foot_dist_px": 183.09833423600554,
+    "iou": 0.0,
+    "vis": 0.15459,
+    "xywh": [
+     646.0,
+     369.0,
+     132.0,
+     81.0
+    ]
+   }
+  ],
+  "truncation": {
+   "exit": {
+    "left": false,
+    "top": false,
+    "right": false,
+    "bottom": false,
+    "any": false,
+    "margin_px": 8,
+    "frame_wh": [
+     1920,
+     1080
+    ]
+   },
+   "reentry": {
+    "left": false,
+    "top": false,
+    "right": false,
+    "bottom": false,
+    "any": false,
+    "margin_px": 8,
+    "frame_wh": [
+     1920,
+     1080
+    ]
+   }
+  },
+  "gap_visibility": {
+   "n_annotated_in_gap": 115,
+   "vis_mean": 0.6534857391304347,
+   "vis_min": 0.36138,
+   "frac_vis_lt_0_3": 0.0,
+   "frac_vis_eq_0": 0.0,
+   "longest_full_invis_stretch": 0,
+   "occlusion_strong_operational": false
+  }
+ },
+ "MOT17-10-SDP|467": {
+  "contact_sheet_available": true,
+  "contact_sheet": "scene_sheets/MOT17-10-SDP_467_min_dh.jpg",
+  "contact_sheet_sha256": "29ffdb516ae6ba61dc719dd81b4049ed37d8a2b44a634c7ec23806cdec093349",
+  "truncation_any_on_endpoints": false,
+  "nearby_close_on_reentry": true,
+  "scene_supports_occlusion_or_crowd": true,
+  "camera_motion_proxy_min_dh": {
+   "n_tracks_with_both_frames": 27,
+   "median_foot_disp_px": 131.05056276109616,
+   "mean_foot_disp_px": 144.62817273022242,
+   "p90_foot_disp_px": 213.08241606834804,
+   "definition": "median Euclidean foot displacement of GT ids present at both frame 168 and 240; proxy for camera+scene motion, not GMC"
+  },
+  "panels": [
+   {
+    "frame": 168,
+    "label": "exit",
+    "image_found": true,
+    "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000168.jpg",
+    "sha256": "cedd7e1e9a4b8f140624bd0840a853b8f1d32698ce0da155df8e042424b446c3"
+   },
+   {
+    "frame": 169,
+    "label": "gap1",
+    "image_found": true,
+    "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000169.jpg",
+    "sha256": "c5037a376dc962a5c6a63e0577d35c5fa76d3ca8cad337829b596f7c70614403"
+   },
+   {
+    "frame": 204,
+    "label": "gap2",
+    "image_found": true,
+    "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000204.jpg",
+    "sha256": "bbcb64b223d0e0f9a4134e5b577feee4d594443f853443bb9ee9351f63fe3986"
+   },
+   {
+    "frame": 239,
+    "label": "gap3",
+    "image_found": true,
+    "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000239.jpg",
+    "sha256": "999482a580443f2f10828932c8f96ec51c3b3187ce0f949984b712607b502850"
+   },
+   {
+    "frame": 240,
+    "label": "reentry",
+    "image_found": true,
+    "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000240.jpg",
+    "sha256": "b9c2ab4082631f001eabcd4dec013c7822ca92ae5f3c991dcc255e85fc98b5ee"
+   }
+  ],
+  "min_dh_frames": [
+   168,
+   169,
+   204,
+   239,
+   240
+  ],
+  "exit_nearby": [
+   {
+    "id": 41,
+    "foot_dist_px": 21.37755832643195,
+    "iou": 0.09715994020926756,
+    "vis": 0.57377,
+    "xywh": [
+     510.0,
+     369.0,
+     29.0,
+     60.0
+    ]
+   },
+   {
+    "id": 34,
+    "foot_dist_px": 50.695167422546305,
+    "iou": 0.10820809248554913,
+    "vis": 0.48182,
+    "xywh": [
+     548.0,
+     363.0,
+     33.0,
+     109.0
+    ]
+   },
+   {
+    "id": 29,
+    "foot_dist_px": 62.659795722616266,
+    "iou": 0.0,
+    "vis": 0.71594,
+    "xywh": [
+     480.0,
+     353.0,
+     38.0,
+     114.0
+    ]
+   },
+   {
+    "id": 36,
+    "foot_dist_px": 68.01470429252781,
+    "iou": 0.016493585827733658,
+    "vis": 0.021383,
+    "xywh": [
+     545.0,
+     416.0,
+     91.0,
+     60.0
+    ]
+   },
+   {
+    "id": 35,
+    "foot_dist_px": 73.49319696407281,
+    "iou": 0.0,
+    "vis": 0.0066047,
+    "xywh": [
+     573.0,
+     407.0,
+     72.0,
+     55.0
+    ]
+   }
+  ],
+  "reentry_nearby": [
+   {
+    "id": 59,
+    "foot_dist_px": 18.439088914585774,
+    "iou": 0.09261939218523878,
+    "vis": 0.0,
+    "xywh": [
+     694.0,
+     351.0,
+     21.0,
+     52.0
+    ]
+   },
+   {
+    "id": 57,
+    "foot_dist_px": 44.05961870012041,
+    "iou": 0.0,
+    "vis": 0.57648,
+    "xywh": [
+     757.0,
+     343.0,
+     18.0,
+     63.0
+    ]
+   },
+   {
+    "id": 35,
+    "foot_dist_px": 59.77457653551382,
+    "iou": 0.023551784669397308,
+    "vis": 0.53161,
+    "xywh": [
+     695.0,
+     392.0,
+     91.0,
+     64.0
+    ]
+   },
+   {
+    "id": 56,
+    "foot_dist_px": 61.0,
+    "iou": 0.0,
+    "vis": 0.80513,
+    "xywh": [
+     771.0,
+     346.0,
+     23.0,
+     64.0
+    ]
+   },
+   {
+    "id": 34,
+    "foot_dist_px": 66.85057965343307,
+    "iou": 0.0,
+    "vis": 0.0,
+    "xywh": [
+     667.0,
+     343.0,
+     35.0,
+     111.0
+    ]
+   }
+  ],
+  "truncation": {
+   "exit": {
+    "left": false,
+    "top": false,
+    "right": false,
+    "bottom": false,
+    "any": false,
+    "margin_px": 8,
+    "frame_wh": [
+     1920,
+     1080
+    ]
+   },
+   "reentry": {
+    "left": false,
+    "top": false,
+    "right": false,
+    "bottom": false,
+    "any": false,
+    "margin_px": 8,
+    "frame_wh": [
+     1920,
+     1080
+    ]
+   }
+  },
+  "gap_visibility": {
+   "n_annotated_in_gap": 71,
+   "vis_mean": 0.03057460563380282,
+   "vis_min": 0.0,
+   "frac_vis_lt_0_3": 0.9577464788732394,
+   "frac_vis_eq_0": 0.8028169014084507,
+   "longest_full_invis_stretch": 44,
+   "occlusion_strong_operational": true
+  }
+ },
+ "MOT17-10-SDP|503": {
+  "contact_sheet_available": true,
+  "contact_sheet": "scene_sheets/MOT17-10-SDP_503_min_dh.jpg",
+  "contact_sheet_sha256": "302e13b8026ec4e4c5132fc173642e67cfd8b0160e4d9959084f73441403c41d",
+  "truncation_any_on_endpoints": false,
+  "nearby_close_on_reentry": true,
+  "scene_supports_occlusion_or_crowd": true,
+  "camera_motion_proxy_min_dh": {
+   "n_tracks_with_both_frames": 23,
+   "median_foot_disp_px": 123.98487811019535,
+   "mean_foot_disp_px": 192.23237380471426,
+   "p90_foot_disp_px": 499.9116580626476,
+   "definition": "median Euclidean foot displacement of GT ids present at both frame 293 and 429; proxy for camera+scene motion, not GMC"
+  },
+  "panels": [
+   {
+    "frame": 293,
+    "label": "exit",
+    "image_found": true,
+    "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000293.jpg",
+    "sha256": "43c030102d19eebae20484e8b9c2910e26f086bee8b91016dd2d3f9f71830088"
+   },
+   {
+    "frame": 294,
+    "label": "gap1",
+    "image_found": true,
+    "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000294.jpg",
+    "sha256": "48869cf8051192ea8e6cbb6bf07626ee8b114b78fa82ce343d92f1eeaba83395"
+   },
+   {
+    "frame": 361,
+    "label": "gap2",
+    "image_found": true,
+    "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000361.jpg",
+    "sha256": "abe13ff6c23499396a3c84b326cc30d48d529cb884d7dc15728228832cd1cf35"
+   },
+   {
+    "frame": 428,
+    "label": "gap3",
+    "image_found": true,
+    "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000428.jpg",
+    "sha256": "74d66c00b6f4861a0b0aae5ede046f793b4b4cf871b4ac185007ac7a3f9726fe"
+   },
+   {
+    "frame": 429,
+    "label": "reentry",
+    "image_found": true,
+    "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000429.jpg",
+    "sha256": "082e1f7e5b2d01b53dacbe5ae59ac706496b8e4a3bfb00a03271d272e9ead7c6"
+   }
+  ],
+  "min_dh_frames": [
+   293,
+   294,
+   361,
+   428,
+   429
+  ],
+  "exit_nearby": [
+   {
+    "id": 71,
+    "foot_dist_px": 36.718523935474316,
+    "iou": 0.0,
+    "vis": 1.0,
+    "xywh": [
+     702.0,
+     288.0,
+     25.0,
+     54.0
+    ]
+   },
+   {
+    "id": 57,
+    "foot_dist_px": 62.47599539022968,
+    "iou": 0.0,
+    "vis": 0.79104,
+    "xywh": [
+     730.0,
+     291.0,
+     19.0,
+     66.0
+    ]
+   },
+   {
+    "id": 35,
+    "foot_dist_px": 72.2357252334328,
+    "iou": 0.0054107230693556324,
+    "vis": 0.64668,
+    "xywh": [
+     655.0,
+     344.0,
+     100.0,
+     69.0
+    ]
+   },
+   {
+    "id": 34,
+    "foot_dist_px": 77.89736837660179,
+    "iou": 0.0,
+    "vis": 0.46094,
+    "xywh": [
+     618.0,
+     283.0,
+     44.0,
+     131.0
+    ]
+   },
+   {
+    "id": 56,
+    "foot_dist_px": 88.59034936154163,
+    "iou": 0.0,
+    "vis": 1.0,
+    "xywh": [
+     756.0,
+     286.0,
+     21.0,
+     64.0
+    ]
+   }
+  ],
+  "reentry_nearby": [
+   {
+    "id": 57,
+    "foot_dist_px": 10.816653826391969,
+    "iou": 0.3936587103669398,
+    "vis": 1.0,
+    "xywh": [
+     692.0,
+     317.0,
+     28.0,
+     84.0
+    ]
+   },
+   {
+    "id": 56,
+    "foot_dist_px": 27.04163456597992,
+    "iou": 0.017573221757322177,
+    "vis": 0.98265,
+    "xywh": [
+     726.0,
+     332.0,
+     29.0,
+     72.0
+    ]
+   },
+   {
+    "id": 71,
+    "foot_dist_px": 30.59411708155671,
+    "iou": 0.0,
+    "vis": 0.13315,
+    "xywh": [
+     734.0,
+     326.0,
+     22.0,
+     63.0
+    ]
+   },
+   {
+    "id": 23,
+    "foot_dist_px": 59.682493245507096,
+    "iou": 0.0,
+    "vis": 0.76699,
+    "xywh": [
+     644.0,
+     324.0,
+     40.0,
+     102.0
+    ]
+   },
+   {
+    "id": 35,
+    "foot_dist_px": 129.56176133412202,
+    "iou": 0.0,
+    "vis": 0.89982,
+    "xywh": [
+     579.0,
+     403.0,
+     165.0,
+     110.0
+    ]
+   }
+  ],
+  "truncation": {
+   "exit": {
+    "left": false,
+    "top": false,
+    "right": false,
+    "bottom": false,
+    "any": false,
+    "margin_px": 8,
+    "frame_wh": [
+     1920,
+     1080
+    ]
+   },
+   "reentry": {
+    "left": false,
+    "top": false,
+    "right": false,
+    "bottom": false,
+    "any": false,
+    "margin_px": 8,
+    "frame_wh": [
+     1920,
+     1080
+    ]
+   }
+  },
+  "gap_visibility": {
+   "n_annotated_in_gap": 135,
+   "vis_mean": 0.47707621481481477,
+   "vis_min": 0.0,
+   "frac_vis_lt_0_3": 0.4148148148148148,
+   "frac_vis_eq_0": 0.26666666666666666,
+   "longest_full_invis_stretch": 20,
+   "occlusion_strong_operational": true
+  }
+ }
+}

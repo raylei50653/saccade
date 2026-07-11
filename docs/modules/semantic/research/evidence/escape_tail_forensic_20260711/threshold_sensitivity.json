@@ -1,0 +1,93 @@
+{
+ "quantiles": {
+  "p40": {
+   "thresholds": {
+    "score_m_bridge": 3.734968150771817,
+    "bridge_dist": 3.766983015023119,
+    "dist_h": 1.8424625262637193,
+    "log_h_ratio": 0.42970254409510156,
+    "resid_mean": 4.770405563607097,
+    "dir_cos": -0.8633337484334648,
+    "speed_mismatch": 0.018955184245988157,
+    "gap": 101.0
+   },
+   "n_tail_tracks_d_h_ge_3": 7,
+   "frozen_tracks_min_d_h": {
+    "MOT17-10-SDP|455": 5,
+    "MOT17-10-SDP|459": 4,
+    "MOT17-10-SDP|467": 4,
+    "MOT17-10-SDP|503": 6
+   },
+   "frozen_tracks_still_in_tail": [
+    "MOT17-10-SDP|455",
+    "MOT17-10-SDP|459",
+    "MOT17-10-SDP|467",
+    "MOT17-10-SDP|503"
+   ]
+  },
+  "median": {
+   "thresholds": {
+    "score_m_bridge": 4.785528277259689,
+    "bridge_dist": 4.896242267101591,
+    "dist_h": 2.4864200240534564,
+    "log_h_ratio": 0.567380497694944,
+    "resid_mean": 5.959967542676205,
+    "dir_cos": -0.6935323377365586,
+    "speed_mismatch": 0.02620862344601995,
+    "gap": 129.0
+   },
+   "n_tail_tracks_d_h_ge_3": 4,
+   "frozen_tracks_min_d_h": {
+    "MOT17-10-SDP|455": 4,
+    "MOT17-10-SDP|459": 3,
+    "MOT17-10-SDP|467": 3,
+    "MOT17-10-SDP|503": 6
+   },
+   "frozen_tracks_still_in_tail": [
+    "MOT17-10-SDP|455",
+    "MOT17-10-SDP|459",
+    "MOT17-10-SDP|467",
+    "MOT17-10-SDP|503"
+   ]
+  },
+  "p60": {
+   "thresholds": {
+    "score_m_bridge": 5.947053016560876,
+    "bridge_dist": 6.162199687719389,
+    "dist_h": 3.3766324681003024,
+    "log_h_ratio": 0.7210375129649739,
+    "resid_mean": 7.2879287309555325,
+    "dir_cos": -0.3058811533583808,
+    "speed_mismatch": 0.03458576160352416,
+    "gap": 159.0
+   },
+   "n_tail_tracks_d_h_ge_3": 1,
+   "frozen_tracks_min_d_h": {
+    "MOT17-10-SDP|455": 2,
+    "MOT17-10-SDP|459": 2,
+    "MOT17-10-SDP|467": 1,
+    "MOT17-10-SDP|503": 3
+   },
+   "frozen_tracks_still_in_tail": [
+    "MOT17-10-SDP|503"
+   ]
+  }
+ },
+ "frozen_tracks_remain_in_tail": {
+  "p40": [
+   "MOT17-10-SDP|455",
+   "MOT17-10-SDP|459",
+   "MOT17-10-SDP|467",
+   "MOT17-10-SDP|503"
+  ],
+  "median": [
+   "MOT17-10-SDP|455",
+   "MOT17-10-SDP|459",
+   "MOT17-10-SDP|467",
+   "MOT17-10-SDP|503"
+  ],
+  "p60": [
+   "MOT17-10-SDP|503"
+  ]
+ }
+}
