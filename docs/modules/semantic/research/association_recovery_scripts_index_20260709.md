@@ -91,7 +91,7 @@
 |:--|:--|
 | **P0** | 現用開工鏈；壞了會卡住 AssA 實驗 |
 | **P1** | 常用探針 / 第二門 |
-| **P2** | 結案重跑、appearance 旁線 |
+| **P2** | 結案重跑、cold-supported / diagnostic 旁線（可重播，非現用開工） |
 | **P3** | 冷存 / 歷史 occ 調參 |
 
 ### Door A — Bridge offline geometry
@@ -140,16 +140,21 @@ Fact-owner: [depth_ordering_crossing_swap.md](depth_ordering_crossing_swap.md). 
 | P2 | `scripts/eval/probe_assoc_appearance_veto.py` | appearance at primary assoc |
 | P2 | `scripts/train/reid_domain_probe.py` | MOT-domain head probe |
 
-### Door D — Cheb-GR offline handover
+### Door D — Cheb-GR offline handover (**P2 cold-supported / closed**)
+
+> **Owner status (2026-07-12):** `research_status=closed`, `support_status=cold-supported`,
+> `production_status=default-off non-headline`, `active_optimization=no`.
+> Keep replay + diagnostic CLI; demote from P0 active work queue. See fact-owner status block.
+> Authority for door/role/priority: [association_tools.yaml](association_tools.yaml).
 
 | P | Path | Role |
 |:--|:--|:--|
-| P0 | `scripts/eval/run_offline_handover_ablation.py` | replay variants on frozen MOT |
-| P0 | `scripts/eval/diagnostics/cheb_gr_offline_handover_report.py` | label + registry/summary (~2k L) |
-| P0 | `scripts/eval/diagnostics/compare_handover_summaries.py` | cross-run summary diff |
-| P0 | `scripts/eval/diagnostics/synthesize_handover_applicability.py` | applicability map |
-| P0 | `scripts/eval/diagnostics/compare_detector_suffix_runs.py` | guard fake detector conditions |
-| P2 | `scripts/eval/appearance/cheb_gr_osnet_gate.py` | OSNet gate method probe |
+| P2 | `scripts/eval/run_offline_handover_ablation.py` | historical / diagnostic / replay |
+| P2 | `scripts/eval/diagnostics/cheb_gr_offline_handover_report.py` | canonical / diagnostic label + registry |
+| P2 | `scripts/eval/diagnostics/compare_handover_summaries.py` | diagnostic cross-run summary diff |
+| P2 | `scripts/eval/diagnostics/synthesize_handover_applicability.py` | diagnostic applicability map |
+| P2 | `scripts/eval/diagnostics/compare_detector_suffix_runs.py` | diagnostic detector-suffix guard |
+| P2 | `scripts/eval/appearance/cheb_gr_osnet_gate.py` | probe / historical OSNet gate |
 
 Fact-owner: [chebgr_handover_signal_map_20260704.md](chebgr_handover_signal_map_20260704.md).
 
@@ -398,18 +403,18 @@ Checker: `uv run python3 scripts/tools/check_association_tools.py` (`--list`, `-
 
 ---
 
-## 7. Count snapshot (2026-07-09)
+## 7. Count snapshot (2026-07-09; Door D priority refreshed 2026-07-12)
 
 | Cluster | Approx. paths (incl. wrappers) | P0 canonical |
 |:--|:--|:--|
 | A offline + features | ~16 | 6 tools chain |
 | B depth / swap | ~9 | — (P1 set) |
 | C appearance | ~6 | — |
-| D Cheb-GR | ~7 | 5 pipeline |
+| D Cheb-GR | ~7 | — (**all P2 cold-supported**; was 5×P0) |
 | E bank | 4 | — (P1) |
 | F occ-exit | 4 | 3 diagnostics |
 | occ-signal / FN / misc | ~15 | — |
-| **Total tracked** | **~60 paths** | **~20–25 worth recipe care** |
+| **Total tracked** | **~60 paths** | **~15–20** active-work P0 (Door A/F) |
 
 Re-count after large moves; prefer updating tables over inventing a second index.
 
