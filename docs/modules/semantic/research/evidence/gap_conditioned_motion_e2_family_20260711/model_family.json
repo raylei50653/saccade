@@ -1,8 +1,11 @@
 {
   "schema_version": 1,
   "freeze_id": "GCM-E2-POSITION-ONLY-v1",
-  "status": "FROZEN_PENDING_RESEARCH_ACCEPTANCE",
-  "claim_ceiling": "position-only global transition marginal; not joint x/v, not sequence-conditioned LOO, not a V1-V5 verdict",
+  "status": "FROZEN_ACCEPTED_WITH_LIMITS",
+  "research_acceptance": "ACCEPTED_WITH_LIMITS",
+  "e3_signal_generation": "AUTHORIZED",
+  "phase_b_authorized": false,
+  "claim_ceiling": "position-only global transition marginal; E3 signal generation authorized under sealed LOO/output contracts; not joint x/v, not sequence-conditioned LOO, not Phase B, not a V1-V5 verdict",
   "source": {
     "pairs_csv": "out/signal_study/m_b1_gate_coverage_7seq_20260709T121326Z/pairs.csv",
     "sha256": "0ae3896791ec074fbe951198752c17385c4ee0770a7ec3831225d3ea56a69d17",

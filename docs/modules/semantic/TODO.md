@@ -5,13 +5,13 @@
 
 ## Sole active
 
-🔄 **Gap-conditioned probabilistic motion probe — E2 position-only family packet `FROZEN_PENDING_RESEARCH_ACCEPTANCE`; E3 unauthorized pending owner gate**
+🔄 **Gap-conditioned probabilistic motion probe — E2 `FROZEN_ACCEPTED_WITH_LIMITS`; E3 signal generation AUTHORIZED; Phase B unauthorized**
 
 - Thread: [gap_conditioned_probabilistic_motion_probe_20260711.md](../../research/threads/gap_conditioned_probabilistic_motion_probe_20260711.md)
 - E0: [note](research/gap_conditioned_motion_e0_20260711.md) · [packet](research/evidence/gap_conditioned_motion_e0_20260711/manifest.json)
 - E1: [note](research/gap_conditioned_motion_e1_m0_20260711.md) · [packet](research/evidence/gap_conditioned_motion_e1_m0_20260711/manifest.json)
 - E2: [note](research/gap_conditioned_motion_e2_family_20260711.md) · [packet](research/evidence/gap_conditioned_motion_e2_family_20260711/manifest.json)
-- Boundary: frozen pair table only · position-only next · joint/velocity + Phase B fail-closed · no production/default/global-closure change
+- Boundary: frozen pair table only · E3 = LOO fold signals for all four models · Phase B / A1–A8 + joint/velocity fail-closed · no production/default/global-closure change
 
 ## Previous line（closed; nav only）
 
@@ -43,7 +43,7 @@
 
 ## Related research threads（不佔 WIP 鎖）
 
-- [gap-conditioned probabilistic motion](../../research/threads/gap_conditioned_probabilistic_motion_probe_20260711.md) — **ACTIVE**（sole active）· E0–E1 `ACCEPTED_WITH_LIMITS` · probabilistic verdict `NOT_YET_EVALUATED` · next E2 position-only family freeze
+- [gap-conditioned probabilistic motion](../../research/threads/gap_conditioned_probabilistic_motion_probe_20260711.md) — **ACTIVE**（sole active）· E0–E2 `ACCEPTED_WITH_LIMITS` · E3 AUTHORIZED · Phase B unauthorized · probabilistic verdict `NOT_YET_EVALUATED`
 - [gt-support morphology](../../research/threads/gt_support_morphology_20260711.md) — **PARKED** · PR-A/B/C sealed · PR-D / #107 **`ACCEPTED_WITH_LIMITS`** · restricted-closure prototype not started
 - [safe-region assetization](../../research/threads/closed/safe_region_assetization_20260710.md) — **A1 CLOSED (`A1_ACCEPTED_WITH_LIMITS`, maturity A1)** · mainline handed off → gt-support morphology · [PR #95](https://github.com/raylei50653/saccade/pull/95)/[#97](https://github.com/raylei50653/saccade/pull/97) history
 - [composition grammar coverage program](../../research/threads/closed/composition_grammar_coverage_program_20260710.md) — **SUPERSEDED** · coverage map absorbed into assetization R2–R4

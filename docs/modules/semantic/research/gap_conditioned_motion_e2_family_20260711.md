@@ -5,10 +5,12 @@
 
 # Gap-conditioned probabilistic motion — E2 position-only family freeze
 
-> **E2 delivery state:** `FROZEN_PENDING_RESEARCH_ACCEPTANCE`. This packet
-> freezes a reduced, global, position-only M1-P/M2-P transition marginal and
-> its train-only fitting rules. It does not fit headline folds, generate E3
-> pair signals, authorize Phase B, or claim a V1–V5 verdict.
+> **E2 research acceptance:** `ACCEPTED_WITH_LIMITS` · freeze status
+> `FROZEN_ACCEPTED_WITH_LIMITS`. This packet freezes a reduced, global,
+> position-only M1-P/M2-P transition marginal and its train-only fitting rules.
+> It does not persist or analyze E3 headline fold outputs, authorize Phase B,
+> or claim a V1–V5 verdict. E3 signal generation is authorized under the sealed
+> family and LOO/output contracts only.
 
 Thread: [gap-conditioned probabilistic motion probe](../../../research/threads/gap_conditioned_probabilistic_motion_probe_20260711.md)
 
@@ -138,7 +140,9 @@ source SHA:        0ae3896791ec074fbe951198752c17385c4ee0770a7ec3831225d3ea56a69
 finite/support:    PASS
 GT fit rows:       340
 LOO support:       PASS (minimum training fold = 183 rows)
+LOO artifact:      PASS (per-fold parameter + selection lineage)
 headline context:  global only
+E3:                AUTHORIZED (signal generation only)
 Phase B:           unauthorized
 ```
 
@@ -157,8 +161,34 @@ The sealed per-sequence support is:
 Full hashes and both count maps are sealed in `model_family.json`. Every fold
 exceeds the numerical primitive's minimum support of three fit rows.
 
-This is an engineering-complete freeze candidate, not chat-side research
-acceptance. E3 remains gated on owner acceptance of this family and packet.
+### 5.1 Review acceptance boundary
+
+PR #110 research review (second pass) records:
+
+```text
+Engineering / reproducibility: PASS
+E2 position-only family mathematics: ACCEPT
+LOO lineage and selection contract: ACCEPT
+E2 research acceptance: ACCEPTED_WITH_LIMITS
+E3 signal generation: AUTHORIZED
+Phase B / A1–A8: NONE
+V1–V5 verdict: NOT_YET_EVALUATED
+Production / hook authorization: NONE
+```
+
+Authorized E3 scope is only:
+
+```text
+rebuild 7 LOO folds
+persist 28 parameter artifacts
+persist 7 selection artifacts
+emit all 4 model scores per pair × fold
+```
+
+The canonical verifier may temporarily rebuild seven-fold fitting to check
+lineage. That rebuild is not E3 evidence and must not be treated as Phase B
+analysis. E3 must not calibrate, run A1–A8, change the family, or issue a
+V1–V5 verdict.
 
 ## 6. Reproduction
 

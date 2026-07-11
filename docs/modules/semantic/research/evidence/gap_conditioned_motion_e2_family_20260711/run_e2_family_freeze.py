@@ -428,10 +428,14 @@ def family_spec(source_sha: str, audit: dict[str, Any]) -> dict[str, Any]:
     return {
         "schema_version": 1,
         "freeze_id": "GCM-E2-POSITION-ONLY-v1",
-        "status": "FROZEN_PENDING_RESEARCH_ACCEPTANCE",
+        "status": "FROZEN_ACCEPTED_WITH_LIMITS",
+        "research_acceptance": "ACCEPTED_WITH_LIMITS",
+        "e3_signal_generation": "AUTHORIZED",
+        "phase_b_authorized": False,
         "claim_ceiling": (
-            "position-only global transition marginal; not joint x/v, not "
-            "sequence-conditioned LOO, not a V1-V5 verdict"
+            "position-only global transition marginal; E3 signal generation "
+            "authorized under sealed LOO/output contracts; not joint x/v, not "
+            "sequence-conditioned LOO, not Phase B, not a V1-V5 verdict"
         ),
         "source": {
             "pairs_csv": str(CANONICAL_PAIRS),
@@ -573,7 +577,8 @@ def _render(spec: dict[str, Any]) -> str:
                 f"loo_artifact_gate={audit['loo_artifact_contract_gate']}",
                 f"models={','.join(model['model_id'] for model in spec['models'])}",
                 "headline_context=global",
-                "phase_b_authorized=false",
+                f"e3_authorized={str(spec.get('e3_signal_generation') == 'AUTHORIZED').lower()}",
+                f"phase_b_authorized={str(bool(spec.get('phase_b_authorized'))).lower()}",
             ]
         )
         + "\n"
