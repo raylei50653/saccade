@@ -107,8 +107,9 @@ Descriptive morphology hypothesis（bounded；無 terminal 效力）:
 
 1. ~~Owner seal procedure v1~~ → **done** ([PR #100](https://github.com/raylei50653/saccade/pull/100)).
 2. ~~Escape-tail forensics~~ → **done** ([PR-C / #102](https://github.com/raylei50653/saccade/issues/102)；[forensic note](escape_tail_forensic_20260711.md)；aggregate `ROLE_REVERSAL_SUPPORTED`)。
-3. Partial-order audit + restricted closure prototype（PR-D）— motion 僅 conditional/context 候選。
-4. Nested per-fold rerun 整條鏈（atom 發現、定向、二值化、verdict）→ 才可能升 L2+（PR-E）。
+3. ~~Partial-order audit（PR-D gate / #106）~~ → **done** · terminal **`GLOBAL_PARTIAL_ORDER_READY`** · [note](boolean_atom_partial_order_20260711.md)。
+4. Restricted-closure prototype（separate task；global=`{bridge_dist, dist_h, log_h_ratio}` only）。
+5. Nested per-fold rerun 整條鏈（atom 發現、定向、二值化、verdict）→ 才可能升 L2+（PR-E）。
 
 ## Must not
 

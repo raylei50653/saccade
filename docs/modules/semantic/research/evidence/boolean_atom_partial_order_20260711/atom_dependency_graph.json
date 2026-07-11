@@ -1,0 +1,168 @@
+{
+ "description": "Dependency DAG for composite/derived atoms. Edges are provenance only — not closure arcs and not weights.",
+ "frozen_atoms": [
+  "score_m_bridge",
+  "bridge_dist",
+  "dist_h",
+  "log_h_ratio",
+  "resid_mean",
+  "dir_cos",
+  "speed_mismatch",
+  "gap"
+ ],
+ "nodes": {
+  "score_m_bridge": {
+   "kind": "composite_derived",
+   "parents": [
+    "resid_mean",
+    "dist_h",
+    "lost_exit_speed"
+   ],
+   "transform": "speed-weighted linear mix"
+  },
+  "bridge_dist": {
+   "kind": "builder_raw",
+   "parents": [],
+   "transform": "mid-point bridge distance from pair builder"
+  },
+  "dist_h": {
+   "kind": "builder_raw",
+   "parents": [],
+   "transform": "height-normalized foot distance"
+  },
+  "log_h_ratio": {
+   "kind": "derived",
+   "parents": [
+    "h_lost_raw",
+    "h_cand_raw"
+   ],
+   "transform": "abs(log(h_cand/h_lost))"
+  },
+  "resid_mean": {
+   "kind": "derived",
+   "parents": [
+    "fwd_resid",
+    "bwd_resid"
+   ],
+   "transform": "0.5*(fwd+bwd)"
+  },
+  "dir_cos": {
+   "kind": "builder_raw",
+   "parents": [],
+   "transform": "direction cosine of exit/entry motion"
+  },
+  "speed_mismatch": {
+   "kind": "derived",
+   "parents": [
+    "lost_exit_speed",
+    "cand_entry_speed"
+   ],
+   "transform": "abs(exit_speed - entry_speed)"
+  },
+  "gap": {
+   "kind": "builder_raw",
+   "parents": [
+    "lost_last_frame",
+    "cand_first_frame"
+   ],
+   "transform": "cand_first_frame - lost_last_frame"
+  },
+  "h_lost_raw": {
+   "kind": "builder_raw",
+   "parents": [],
+   "transform": null
+  },
+  "h_cand_raw": {
+   "kind": "builder_raw",
+   "parents": [],
+   "transform": null
+  },
+  "fwd_resid": {
+   "kind": "builder_raw",
+   "parents": [],
+   "transform": null
+  },
+  "bwd_resid": {
+   "kind": "builder_raw",
+   "parents": [],
+   "transform": null
+  },
+  "lost_exit_speed": {
+   "kind": "builder_raw",
+   "parents": [],
+   "transform": null
+  },
+  "cand_entry_speed": {
+   "kind": "builder_raw",
+   "parents": [],
+   "transform": null
+  },
+  "lost_last_frame": {
+   "kind": "builder_raw",
+   "parents": [],
+   "transform": null
+  },
+  "cand_first_frame": {
+   "kind": "builder_raw",
+   "parents": [],
+   "transform": null
+  }
+ },
+ "edges": [
+  {
+   "source": "resid_mean",
+   "target": "score_m_bridge",
+   "relation": "depends_on"
+  },
+  {
+   "source": "dist_h",
+   "target": "score_m_bridge",
+   "relation": "depends_on"
+  },
+  {
+   "source": "lost_exit_speed",
+   "target": "score_m_bridge",
+   "relation": "depends_on"
+  },
+  {
+   "source": "h_lost_raw",
+   "target": "log_h_ratio",
+   "relation": "depends_on"
+  },
+  {
+   "source": "h_cand_raw",
+   "target": "log_h_ratio",
+   "relation": "depends_on"
+  },
+  {
+   "source": "fwd_resid",
+   "target": "resid_mean",
+   "relation": "depends_on"
+  },
+  {
+   "source": "bwd_resid",
+   "target": "resid_mean",
+   "relation": "depends_on"
+  },
+  {
+   "source": "lost_exit_speed",
+   "target": "speed_mismatch",
+   "relation": "depends_on"
+  },
+  {
+   "source": "cand_entry_speed",
+   "target": "speed_mismatch",
+   "relation": "depends_on"
+  },
+  {
+   "source": "lost_last_frame",
+   "target": "gap",
+   "relation": "depends_on"
+  },
+  {
+   "source": "cand_first_frame",
+   "target": "gap",
+   "relation": "depends_on"
+  }
+ ]
+}

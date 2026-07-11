@@ -7,7 +7,7 @@ created: 2026-07-11
 
 # 布林閉包域研究線：從 GT placement morphology 到結構約束 reject-domain 抽取
 
-> **One-line:** 把「布林超立方體能量地形」收斂為一條可執行、可驗證、可停止的研究線：**資料決定合法偏序，偏序限制域搜尋，統計界決定域是否可接受**。PR ladder = **PR-B**（本文檔）；上游 = [PR-A #100 procedure seal](https://github.com/raylei50653/saccade/pull/100)；下游 = PR-C forensic → PR-D restricted closure prototype → PR-E nested validation。
+> **One-line:** 把「布林超立方體能量地形」收斂為一條可執行、可驗證、可停止的研究線：**資料決定合法偏序，偏序限制域搜尋，統計界決定域是否可接受**。PR ladder = **PR-B**（本文檔）；上游 = [PR-A #100](https://github.com/raylei50653/saccade/pull/100) · [PR-C #104](https://github.com/raylei50653/saccade/pull/104) · [PR-D gate #106](https://github.com/raylei50653/saccade/issues/106) `GLOBAL_PARTIAL_ORDER_READY`；下游 = separate restricted-closure prototype → PR-E nested validation。
 
 Thread: [gt_support_morphology_20260711.md](../../../research/threads/gt_support_morphology_20260711.md) ·
 Procedure: [framework §19](../../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)（terminal 判準的唯一權威）·
@@ -400,8 +400,9 @@ Verdict E — Non-identifiable
 |:--|:--|:--|
 | Task 1 — Seal morphology procedure | unit of analysis、atom family eligibility、nested threshold generation、corner／shell／tail 指標、orderability 分類規則、verdict 邊界、無 exposure 處理規則 | **PR-A [#100](https://github.com/raylei50653/saccade/pull/100)（done pending merge）** |
 | Task 2 — Four-track forensic | Step-0 四條 $d\ge3$ GT tracks（**4/4 在 MOT17-10-SDP**，見 packet `tail_tracks.json`）逐件落入五個預宣告類別；判定 motion atom role reversal 是否具真實機制來源，並分辨單場景 vs 通用機制 | **PR-C / #102 · [PR #104](https://github.com/raylei50653/saccade/pull/104)** · aggregate `ROLE_REVERSAL_SUPPORTED` · **`ACCEPTED_WITH_LIMITS`** · [note](escape_tail_forensic_20260711.md) · [packet](evidence/escape_tail_forensic_20260711/manifest.json) |
-| Task 3 — Restricted closure prototype | 只用 `global_orderable` atoms 建 closure graph，parametric MWC，vs frozen OR-tail；read-only、offline、candidate-only，不改 production preset | **PR-D** |
-| Task 4 — Conditional closure probe | 若 Task 2 支持 re-entry mechanism：short-gap／re-entry conditional closure，檢查保護 GT tail 並維持 FP removal | **PR-D**（依 PR-C 結果併入） |
+| Task 2b — Partial-order audit gate | 8 frozen atoms → `global_orderable` / `conditional_orderable` / `context_only` / `unresolved`；allowed/forbidden graph contract；**no** MWC | **PR-D gate / [#106](https://github.com/raylei50653/saccade/issues/106)** · terminal **`GLOBAL_PARTIAL_ORDER_READY`** · global=`{bridge_dist, dist_h, log_h_ratio}` · [note](boolean_atom_partial_order_20260711.md) · [packet](evidence/boolean_atom_partial_order_20260711/manifest.json) |
+| Task 3 — Restricted closure prototype | 只用 `global_orderable` atoms 建 closure graph，parametric MWC，vs frozen OR-tail；read-only、offline、candidate-only，不改 production preset | **separate task**（authorized only by #106 `GLOBAL_PARTIAL_ORDER_READY`；不得與 audit 同 PR） |
+| Task 4 — Conditional closure probe | 若 Task 2 支持 re-entry mechanism：short-gap／re-entry conditional closure，檢查保護 GT tail 並維持 FP removal | **separate conditional-representation task**（motion arcs = proposal-only per #106） |
 | Task 5 — Nested validation | 只有 Task 3／4 出現實質增益後，才進 outer-fold full replay | **PR-E** |
 
 （本文檔 = **PR-B**，在 Task 1 seal 與 Task 2 forensic 之間入庫，不含任何 forensic 結果或新數字。）

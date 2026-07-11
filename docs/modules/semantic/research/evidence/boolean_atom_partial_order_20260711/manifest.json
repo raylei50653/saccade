@@ -1,0 +1,65 @@
+{
+ "study_id": "boolean_atom_partial_order_20260711",
+ "issue": 106,
+ "pr_ladder": "PR-D gate (partial-order audit; closure prototype separate)",
+ "depends_on": {
+  "step0_packet": "docs/modules/semantic/research/evidence/gt_support_morphology_step0_20260711",
+  "step0_manifest_sha256": "faad88d4d3e389ea11eb2418ed9a27671a704d16c7ce0c5d37c59f0bf4b0c62f",
+  "prc_packet": "docs/modules/semantic/research/evidence/escape_tail_forensic_20260711",
+  "prc_aggregate_sha256": "5977cdb93c142526c93a755502ae10d92e29dcf25873a11660ec2118ec64bada",
+  "prc_aggregate_terminal": "ROLE_REVERSAL_SUPPORTED",
+  "prc_research_acceptance": "ACCEPTED_WITH_LIMITS",
+  "source_pairs_csv": "out/signal_study/m_b1_gate_coverage_7seq_20260709T121326Z/pairs.csv",
+  "source_pairs_csv_sha256": "0ae3896791ec074fbe951198752c17385c4ee0770a7ec3831225d3ea56a69d17",
+  "procedure": "framework §19 v1 (PR-A #100 sealed)",
+  "research_line": "boolean_closure_domain_line_20260711 (PR-B #101)"
+ },
+ "atom_order": [
+  "score_m_bridge",
+  "bridge_dist",
+  "dist_h",
+  "log_h_ratio",
+  "resid_mean",
+  "dir_cos",
+  "speed_mismatch",
+  "gap"
+ ],
+ "atom_safer_directions": {
+  "score_m_bridge": "lower",
+  "bridge_dist": "lower",
+  "dist_h": "lower",
+  "log_h_ratio": "lower",
+  "resid_mean": "lower",
+  "dir_cos": "higher",
+  "speed_mismatch": "lower",
+  "gap": "lower"
+ },
+ "binarization": "pool median (audit-only; matches Step-0)",
+ "trial_unit": "(seq, lost_id); descriptive min-d_H representative",
+ "n_gt_tracks": 209,
+ "n_gt_rows": 340,
+ "aggregate_terminal": "GLOBAL_PARTIAL_ORDER_READY",
+ "roles": {
+  "score_m_bridge": "context_only",
+  "bridge_dist": "global_orderable",
+  "dist_h": "global_orderable",
+  "log_h_ratio": "global_orderable",
+  "resid_mean": "conditional_orderable",
+  "dir_cos": "conditional_orderable",
+  "speed_mismatch": "conditional_orderable",
+  "gap": "context_only"
+ },
+ "scope": "read-only offline partial-order audit; no MWC/min-cut/rule-search/weight-opt; no production/preset/ledger changes",
+ "files": {
+  "atom_roles.json": "d3709b102ca42d40c5e741ba813254685e493fed39c16209777ac8517c29919c",
+  "atom_dependency_graph.json": "86a22858f06c078a5e0f1b6b5f250ec3ca8d1ed74e89b3ab324d808527f123b4",
+  "atom_metrics.csv": "5aa3e5f54bc0c08236aa6e33296d91b015cdf305e085e9cc13d7c3a3e5024470",
+  "pairwise_violation_profile.csv": "87a8934952cd7fb8de94774f3f0ba151d26436e2575acf76147c0d7b1805d7ff",
+  "threshold_sensitivity.json": "2f45259724075b69e440e80559bc2551adb5015420b8162a32f0d57eced3c1b0",
+  "allowed_global_order.json": "4d476e2e1fe2c615f676925dc8f4dcc9cd6a73105bd952c290f303b08ac233ff",
+  "forbidden_order.json": "6e2bcaf428cff54b6a739622909813675c9a4005948dd7e9b16152acfa951e25",
+  "scale_guard.json": "af03178b99a5ca22020f559e6f08ea8fd369148fae2e4ee3e093ffde7f2513fa",
+  "aggregate.json": "b169b017df8bec4b2b9db1ce1e3e4d65dc3bbb589fc20a465ea7873b04707026",
+  "run_partial_order_audit.py": "d338e298d9cfea5bd055f8041b8196dfb2a1128aa6fe9316c59dbb2bcd83b28d"
+ }
+}

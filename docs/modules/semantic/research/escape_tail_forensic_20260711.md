@@ -212,7 +212,7 @@ counts:
 
 ### Downstream routing
 
-`ROLE_REVERSAL_SUPPORTED` under `ACCEPTED_WITH_LIMITS` → open partial-order audit (PR-D prep) before any MWC prototype.
+`ROLE_REVERSAL_SUPPORTED` under `ACCEPTED_WITH_LIMITS` → partial-order audit (#106) **done** (`GLOBAL_PARTIAL_ORDER_READY`); open separate restricted-closure prototype next.
 
 ## 6. Response to PR #104 research-owner review
 
@@ -235,4 +235,4 @@ counts:
 |:--|:--|
 | Engineering | deterministic runner + committed packet + `--verify` + scene sheets |
 | Research acceptance | **`ACCEPTED_WITH_LIMITS`** ([PR #104](https://github.com/raylei50653/saccade/pull/104) research-owner review) |
-| Next | PR-D partial-order audit (motion = conditional/context candidates only) |
+| Next | PR-D gate #106 **done** (`GLOBAL_PARTIAL_ORDER_READY`) → separate restricted-closure prototype |
