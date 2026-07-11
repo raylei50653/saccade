@@ -1,0 +1,106 @@
+---
+doc-status: active
+doc-promotion: research note only; not evidence_ledger
+owner-module: semantic
+created: 2026-07-11
+---
+
+# GT-Support Morphology — Step-0 Identifiability + Placement Audit
+
+> **One-line:** 7-seq relink pair pool 上，Boolean atom lattice 的 **per-cell risk field 不可識別**（任何 k 下僅 1 個 cell 達 ε≤0.05 支撐），但 **GT placement distribution 可識別且形態明確**：GT 質量高度集中 all-safe corner（k=5 median-split 下 M₀=97.1%），僅 4/209 tracks 形成 motion-atom 集中的 escape tail（log_h_ratio 0/4 違反）。**Pooled, in-sample, boundaries-calibrated L1 candidate: `CORE_PLUS_CONDITIONAL_ESCAPE_TAIL`**（tail UCB 4.33% ≤ ε_morph 5%；procedure v1 未 seal）。
+
+Procedure: [framework §19（v1 — PROPOSED, awaiting owner seal）](../../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
+Study artifacts: `out/signal_study/gt_support_morphology_step0_20260711/`（scripts + recorded outputs）
+
+## 0. Scope and claim ceiling
+
+- Read-only counting probe。無 gate、無 rule search、無 threshold 掃描、不碰 Q4.5 evaluator、不碰任何 closed gate（A1 / terminal B / R2–R4 均不變）。
+- Pooled、in-sample、選在既有 8 條已挖掘訊號上 → **§8.3 選擇偏誤全額適用；claim ceiling = L1 descriptive**。
+- 二值化 = **pool median（探索性、佔用率最佳情形上界）**：真 sealed threshold 只會讓佔用更差。corner 集中的**形狀**對此穩健（各 atom P(z=1|GT) ∈ 0.66–0.98），tail 的**成員名單**不穩健。
+- Procedure v1 的 class boundaries 由本 audit 校準（framework §19.6 允許但須明說）：confirmatory unit = 未來 nested per-fold rerun，非本 audit。
+
+## 1. Declared choices
+
+| Item | Value |
+|:--|:--|
+| Pool | `m_b1_gate_coverage_7seq_20260709T121326Z/pairs.csv`，gt_valid only：21,789 rows（GT 340 / FP 21,449） |
+| Trial unit（§8.1） | lost track `(seq, lost_id)` → **209 GT tracks**；殘餘 clustering = sequence |
+| Atoms（8，mining-AUC 序） | score_m_bridge · bridge_dist · dist_h · log_h_ratio · resid_mean · dir_cos · speed_mismatch · gap（定向 z=1 = 較安全側；衍生式 = `audit_relink_safe_reject.ensure_prod_proxy_scores`） |
+| Binarization | pool median per signal（宣告為 audit-only） |
+| GT cell 映射 | track 取其 gt_match rows 的最小 Hamming cell |
+
+Pooled GT0 的 95% UCB（rule of three, track 單位）= **3/209 ≈ 1.4%** — 這是任何 reject-domain claim 的 pooled 下限精度。
+
+## 2. Per-cell identifiability（class-6 gate）— FAIL
+
+| k | cells | ≥1 GT track | n≥30（UCB≤10%） | n≥59（UCB≤5%） |
+|--:|--:|--:|--:|--:|
+| 4 | 16 | 11 | 1 | 1 |
+| 5 | 32 | 15 | 1 | 1 |
+| 6 | 64 | 23 | 2 | 1 |
+| 8 | 256 | 44 | 3 | 1 |
+
+唯一達 ε≤0.05 支撐的 cell 恆為 all-safe corner 本身。Per-fold 更強：**04 / 09 各 12 tracks 全落 corner**，其餘 31 cells GT exposure = 0 → per-fold morphology 不可判定，僅 pooled 可作描述。
+
+**結論：cell-level 風險場（merge tree / barrier / per-cell UCB）在本資料密度下不進主線（framework §19.1）。研究物件 = μ_GT placement distribution。**
+
+## 3. GT placement morphology
+
+Hamming distance to all-safe corner（track = min-d cell）：
+
+| | d=0 | d=1 | d=2 | d≥3 |
+|--:|--:|--:|--:|--:|
+| k=5 | **203（97.1%）** | 4（1.9%） | 0 | 2（1.0%） |
+| k=8 | 117（56.0%） | 77（36.8%） | 11（5.3%） | **4（1.9%）** |
+
+FP 質量分佈相反：k=8 時 **67.7% FP rows 位於 d≥3**（k=5：51.4%）——該區僅 4 個 GT tracks。coverage–risk 交換在遠區結構性有利。
+
+**Escape tail 違反側寫（k=8，d≥3 的 4 tracks）：**
+
+| atom | violated |
+|:--|--:|
+| speed_mismatch | 4/4 |
+| dir_cos | 3/4 |
+| resid_mean | 3/4 |
+| bridge_dist / dist_h | 2/4 |
+| score_m_bridge / gap | 1/4 |
+| **log_h_ratio** | **0/4** |
+
+機制解讀（候選）：長遮擋重入的真 relink **保高度、破運動連續性** — 與 R1.1 的 role-reversal 描述症狀及長 gap ReID 族群一致。含義：**motion 類 atoms（speed_mismatch / dir_cos / resid_mean）非全域單調**，不得直接作為全域 closure 維度；height 類（log_h_ratio）是目前唯一 0 違反的全域單調候選。
+
+## 4. Verdict（pooled, in-sample, boundaries-calibrated L1 candidate）
+
+```text
+L1 candidate: CORE_PLUS_CONDITIONAL_ESCAPE_TAIL
+  - out-of-core GT mass (track unit, n=209, one-sided 95% Clopper–Pearson):
+      x=0 -> UCB 1.42%   x=4 -> UCB 4.33%  (<= epsilon_morph = 5%)
+    => 4-track tail 在描述層級成立 "thin tail"；1% 等級界線目前樣本量
+       無法證明
+  - violation profile: motion group 集中（speed_mismatch 4/4 · dir_cos 3/4 ·
+    resid_mean 3/4），log_h_ratio 0/4 -> mechanism-consistent（候選）
+  - 描述量：M0 = 97.1%（k=5 median-split lattice）——依 §19.5，shell 量
+    不作跨 atom-set 類別界線；正式 core = 最小 monotone closure（未定，
+    屬 nested per-fold）
+  - 其餘 cells: UNRESOLVED（not barriers; framework §19.2）
+NOT a sealed-procedure verdict, because:
+  - atoms 與 median thresholds 用同一 pool；
+  - epsilon_morph 界線是看過本 audit 後定的（§19.6 已申報）；
+  - 4 條 tail 未 forensic；
+  - nested chain 未重跑。
+```
+
+尾巴是 **protected GT mass，不是 unsafe hole**：介入方向 = 移除或 regime-條件化被違反的 motion atoms，**不得 veto** 尾巴區域。
+
+## 5. Next（evidence order，framework §19.6）
+
+1. Owner seal procedure v1 = **PR 1（Draft）review + merge**（framework §19；ε_morph/UCB 界線已入草案；forensic 結果不得進此 PR）。
+2. Escape-tail forensics：4 條 tracks 逐件，僅得落入預宣告類別（true long-occlusion re-entry / annotation issue / signal computation issue / threshold artifact / unresolved）。
+3. Nested per-fold rerun 整條鏈（atom 發現、定向、二值化、verdict）→ 才可能升 L2+。
+
+## Must not
+
+- 把本 note 的 verdict 當 sealed procedure 的輸出引用；
+- 把零 exposure cells 解讀為高風險 / 障壁；
+- 對 escape tail 加 veto；
+- 以本 audit 直接授權任何 gate / preset / ledger 變更；
+- 重啟 grammar search 或碰 safe-region assetization 的 closed gates。

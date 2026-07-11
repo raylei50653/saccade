@@ -1297,7 +1297,151 @@ Production preset:
 
 ---
 
-## 19. Summary
+## 19. GT-support morphology on Boolean atom lattices (predeclared procedure)
+
+### 19.0 Status
+
+Procedure version **v1 — PROPOSED (calibrated on pooled Step-0 audit; seal = research-owner acceptance via the procedure PR merge)**. Until sealed, results computed under it are exploratory. Studies must cite the procedure version they ran under. Evidence order is normative: calibrated step-0 → procedure seal → escape-tail forensics → nested confirmation; forensic results must not enter the sealing PR, so that mechanism information cannot feed back into the boundaries.
+
+### 19.1 When this section applies
+
+For a Boolean atom lattice $z\in\{0,1\}^k$ over a candidate universe, the per-cell risk field
+
+$$
+E(z)=P(\text{error}\mid Z=z)
+$$
+
+is **identifiable only where cell-level GT exposure meets the §3.3 / §8.1 requirements**. A study must first run an occupancy audit (cells reaching the declared per-cell $n_{\min}$ at the declared trial unit). If fewer than a declared fraction of cells are identifiable, the study object switches from the risk field to the **GT placement distribution**:
+
+$$
+\mu_{\mathrm{GT}}(z)=P(Z=z\mid \text{GT trial unit})
+$$
+
+together with the FP mass $\mu_{\mathrm{FP}}(z)$. The decision problem becomes:
+
+$$
+\max_D \; P_{\mathrm{FP}}(Z\in D)
+\quad\text{s.t.}\quad
+\operatorname{UCB}_\alpha\!\left[P_{\mathrm{GT}}(Z\in D)\right]\le \varepsilon
+$$
+
+with the UCB computed at the §8.1 independence unit. Merge-tree, barrier-height, and per-cell UCB analyses are **out of mainline** below the declared identifiability density.
+
+### 19.2 Hard interpretation rule
+
+$$
+\text{not observed} \neq \text{unsafe}
+$$
+
+Cells with zero GT exposure are **unresolved**, never "high-risk", never "barriers". A gap in $\mu_{\mathrm{GT}}$ support is evidence about where GT mass does not go only to the extent bounded by the placement UCB; it is not evidence about conditional risk in that cell.
+
+### 19.3 Required declarations (before computing)
+
+```text
+atom set + per-atom safe orientation (z_i = 1 == safer side)
+binarization rule (sealed thresholds, or per-fold rule)
+trial unit (§8.1) and clustering structure
+epsilon, alpha, per-cell n_min, identifiability fraction
+atom grouping for distance decomposition (e.g. structural vs motion)
+morphology budget epsilon_morph + interval method (§19.5)
+allowed closure complexity class (which monotone families C may range over)
+conditionable atom family for escape tails (e.g. motion)
+```
+
+For any claim above L1, atom discovery, orientation, and binarization must satisfy §8.3 per-fold disjointness.
+
+### 19.4 Fixed morphology statistics
+
+Let $d_H(z)$ be Hamming distance to the all-safe corner $\mathbf 1$; a GT trial unit maps to its minimum-$d_H$ cell.
+
+```text
+M_0        = P_GT(d_H = 0)                     corner mass
+M_r, T_>=r = P_GT(d_H = r), P_GT(d_H >= r)     shell / tail profile
+V_i        = P_GT(z_i = 0)                     atom violation profile
+V_ij       = P_GT(z_i = 0, z_j = 0)            joint violation profile
+d_H        = d_structural + d_motion           declared-group decomposition
+```
+
+FP mass is reported on the same shells (rejectable material per shell).
+
+### 19.5 Verdict typology (fixed terminals) and class boundaries
+
+#### Morphology budget
+
+Class boundaries bind to the asymmetric-loss budget and a confidence upper bound — **not** to raw shell fractions or fixed Hamming radii, which depend on $k$, atom correlation, and the binarization rule.
+
+$$
+\varepsilon_{\mathrm{morph}} = 5\%
+$$
+
+evaluated as a **one-sided 95% Clopper–Pearson upper bound at the §8.1 trial unit**. $\varepsilon_{\mathrm{morph}}$ governs morphology classification (thin tail vs diffuse) only; it is **not** a production GT-hurt budget (0 / 0.1% / 1% budgets are separate contracts).
+
+#### Core definition
+
+The core is **not** a fixed Hamming radius. It is defined as:
+
+> the minimal closure $C$ in the declared monotone atom family / partial order such that
+> $\operatorname{UCB}_{95}\!\left[P_{\mathrm{GT}}(Z\notin C)\right] \le \varepsilon_{\mathrm{morph}}$.
+
+Hamming shell quantities ($M_r$, $T_{\ge r}$, $R_{95}$) remain **descriptive** reporting and must not serve as cross-atom-set class boundaries.
+
+#### Terminals
+
+Each study must land on exactly one verdict:
+
+```text
+MONOTONE_CORE
+  A predeclared monotone closure C exists with
+  UCB95[P_GT(Z ∉ C)] <= epsilon_morph, and out-of-core GT events do not
+  form a repeatable, mechanism-consistent true GT regime.
+
+CORE_PLUS_CONDITIONAL_ESCAPE_TAIL
+  Such a closure C exists, 0 < N_GT(Z ∉ C), and
+  UCB95[P_GT(Z ∉ C)] <= epsilon_morph, AND forensics (post-seal) confirm:
+    - the tail is true GT (not annotation / signal-computation issues);
+    - violations concentrate on the predeclared conditionable family
+      (e.g. motion) while structural/height conditions are retained;
+    - intervention = remove the violated partial-order dimension or
+      regime-condition it — NEVER veto the tail (protected GT mass).
+  With very small tails, do not invent precision ratios (e.g. "75%
+  consistent"): enumerate per event; require no mutually conflicting
+  confirmed mechanisms; mixed or unresolved forensics block promotion.
+
+DIFFUSE_OR_NONMONOTONE
+  No allowed low-complexity closure achieves the epsilon_morph UCB, or
+  the required atom family / orientations flip persistently across
+  nested folds.
+
+UNRESOLVED
+  Any of: the confidence bound straddles epsilon_morph; exposure for a
+  key family is insufficient; the terminal is unstable under sealed
+  thresholds; nested folds yield mutually exclusive verdicts; forensics
+  leave unexcluded annotation or signal-computation issues.
+  Verdict is "collect exposure / resolve the blocker", not "search rules".
+```
+
+Escape-tail forensics must classify each tail unit into predeclared categories only:
+
+```text
+true long-occlusion re-entry | annotation issue |
+signal computation issue | threshold artifact | unresolved
+```
+
+### 19.6 Evidence order
+
+```text
+step-0 occupancy + placement audit (descriptive, L1 ceiling)
+→ owner seals procedure (this section, versioned)
+→ escape-tail forensics (predeclared categories)
+→ nested per-fold rerun of the full chain
+  (atom discovery, orientation, binarization, verdict)
+```
+
+A pooled in-sample audit may inform the choice of class boundaries; when it does, the study must say so, and the confirmatory unit is the nested per-fold rerun, not the pooled audit.
+
+---
+
+## 20. Summary
 
 The framework treats safe decision research as the estimation of a constrained feasible set under asymmetric costs:
 

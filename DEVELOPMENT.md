@@ -150,7 +150,7 @@ uv run scripts/eval/mot17.py --preset mamba_whole_graph --detector SDP --double-
 | 🧬 reid | ⏸️ 暫緩 | — | [↗](docs/modules/reid/TODO.md) |
 | 🔄 lifecycle | 📋 待辦 | evaluator lifecycle 測試切片 | [↗](docs/modules/lifecycle/TODO.md) |
 | 🌀 motion | 🟢 收斂 | — | [↗](docs/modules/motion/TODO.md) |
-| 🤝 semantic | 🔄 active | Safe-Region Assetization — A1 CLOSED (ACCEPTED_WITH_LIMITS, maturity A1); owner picks next research line | [↗](docs/modules/semantic/TODO.md) |
+| 🤝 semantic | 🔄 active | GT-Support Morphology — step-0 recorded; procedure v1 awaiting owner seal | [↗](docs/modules/semantic/TODO.md) |
 | ⚡ trigger | 🟢 收斂 | — | [↗](docs/modules/trigger/TODO.md) |
 | 🖥️ streaming | 🟢 收斂 | — | [↗](docs/modules/streaming/TODO.md) |
 | 💾 storage | 🟢 收斂 | — | [↗](docs/modules/storage/TODO.md) |

@@ -5,7 +5,15 @@
 
 ## Sole active
 
-🔄 **Safe-Region Assetization — A1 CLOSED (`A1_ACCEPTED_WITH_LIMITS`); owner picks next scientific uncertainty**
+🔄 **GT-Support Morphology — step-0 recorded; procedure v1 awaiting owner seal**
+
+- Thread: [gt_support_morphology_20260711.md](../../research/threads/gt_support_morphology_20260711.md)
+- Step-0: per-cell risk field 不可識別；μ_GT = corner core（M₀=97.1%）+ 4-track motion-atom escape tail → [note](research/gt_support_morphology_step0_20260711.md) · procedure = [framework §19](../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)（v1 PROPOSED）
+- Next: owner seal → escape-tail forensics（預宣告類別）→ nested per-fold rerun
+
+## Previous line（closed; nav only）
+
+**Safe-Region Assetization — A1 CLOSED (`A1_ACCEPTED_WITH_LIMITS`)**
 
 - Thread: [safe_region_assetization_20260710.md](../../research/threads/safe_region_assetization_20260710.md)
 - **A1 terminal recorded 2026-07-11**: `A1_ACCEPTED_WITH_LIMITS` → **maturity A1**; 5 enumerated limits (no D1 trace · no second consumer · event-mass / non-productive-cell / predicate-alias queries need raw) — [terminal record](../../research/threads/safe_region_assetization_20260710.md#a1-terminal-record-2026-07-11)
@@ -16,8 +24,9 @@
 - Preserved state:
   ```text
   A1: CLOSED — A1_ACCEPTED_WITH_LIMITS (2026-07-11) · maturity A1
-  next: research mainline — owner picks next scientific uncertainty
-    (R1.1 four lines = candidate directions only, none committed)
+  next-line pick: DONE 2026-07-11 → GT-Support Morphology（見 Sole active）
+    (R1.1 four lines = candidate directions; escape-tail 機制化吸收其
+     role-reversal 症狀)
   R2–R4: unauthorized (fail-closed; accepting terminal ≠ stage authorization)
   grammar search / hook / production / ledger: closed / unchanged
   terminal B: retained (never rested on the overlay)
@@ -31,7 +40,8 @@
 
 ## Related research threads（不佔 WIP 鎖）
 
-- [safe-region assetization](../../research/threads/safe_region_assetization_20260710.md) — **ACTIVE** · R0-B accepted · R1 eng. MERGED · **A1 CLOSED (`A1_ACCEPTED_WITH_LIMITS`, maturity A1)** · [PR #95](https://github.com/raylei50653/saccade/pull/95)/[#97](https://github.com/raylei50653/saccade/pull/97) history
+- [gt-support morphology](../../research/threads/gt_support_morphology_20260711.md) — **ACTIVE**（sole active 本體）· step-0 recorded · procedure v1 awaiting seal
+- [safe-region assetization](../../research/threads/safe_region_assetization_20260710.md) — **A1 CLOSED (`A1_ACCEPTED_WITH_LIMITS`, maturity A1)** · mainline handed off → gt-support morphology · [PR #95](https://github.com/raylei50653/saccade/pull/95)/[#97](https://github.com/raylei50653/saccade/pull/97) history
 - [composition grammar coverage program](../../research/threads/composition_grammar_coverage_program_20260710.md) — **SUPERSEDED** · coverage map absorbed into assetization R2–R4
 - [composition grammar × safe-region A0](../../research/threads/composition_grammar_safe_region.md) — **CLOSED** · T0-A/B/R1 · terminal B retained
   - A0 source note: [composition_grammar_t0_region_interpretation_20260710.md](research/composition_grammar_t0_region_interpretation_20260710.md)
