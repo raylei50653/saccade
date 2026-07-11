@@ -14,6 +14,21 @@
 **Coverage audit:** [composition_grammar_safe_region_coverage_audit_20260710.md](composition_grammar_safe_region_coverage_audit_20260710.md)  
 **Consolidation:** [m_b1_doc_consolidation_report_20260710.md](m_b1_doc_consolidation_report_20260710.md)
 
+## Owner / support status (2026-07-12)
+
+| Field | Value |
+|---|---|
+| `research_status` | **closed** |
+| `support_status` | **supported research infrastructure** |
+| `production_status` | no production authority; preset unchanged |
+| `maintenance_scope` | audit taxonomy + claim firewall + atlas semantics |
+| `active_optimization` | **no** |
+
+Stage 2 is closed as a research line but remains the foundation for composition-grammar /
+safe-region work. Keep modules + synthetic unit tests under `tests/unit/eval/test_d_online_stage2_*.py`
+(Q1–Q3 / Q4 / Q4.5). Dated authoritative smokes are not part of the default suite
+(recipe/history preserve them).
+
 ```text
 Stage 1: CLOSED · freeze online relevance NULL · production blocked
 Stage 2 Q1–Q3: label join PASSED · population PASSED · safe-negative mass SUFFICIENT
@@ -100,7 +115,7 @@ uv run python scripts/tools/run_m_b1_5_stage2_q1q3.py \
   --out out/signal_study/m_b1_5_stage2_q1q3_20260710
 ```
 
-Code: `src/saccade/perception/eval/d_online_stage2.py` · tests `tests/unit/test_d_online_stage2_q1q3.py`
+Code: `src/saccade/perception/eval/d_online_stage2.py` · tests `tests/unit/eval/test_d_online_stage2_q1q3.py`
 
 ---
 
@@ -439,7 +454,7 @@ uv run python scripts/tools/run_m_b1_5_stage2_q4.py \
 ```
 
 Code: `src/saccade/perception/eval/d_online_stage2_q4.py`  
-Tests: `tests/unit/test_d_online_stage2_q4.py`
+Tests: `tests/unit/eval/test_d_online_stage2_q4.py`
 
 ---
 
@@ -774,7 +789,7 @@ uv run python scripts/tools/run_m_b1_5_stage2_q45_atlas.py \
 ```
 
 Code: `src/saccade/perception/eval/d_online_stage2_q45_atlas.py`  
-Tests: `tests/unit/test_d_online_stage2_q45_atlas.py`
+Tests: `tests/unit/eval/test_d_online_stage2_q45_atlas.py`
 
 ---
 

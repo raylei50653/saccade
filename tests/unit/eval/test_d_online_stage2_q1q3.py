@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 
 from saccade.perception.eval.d_online_stage2 import (
-    EXPECTED_D_ONLINE_N,
     Stage2AuditError,
     apply_claim_firewall,
     build_per_sequence_rows,
@@ -18,9 +17,6 @@ from saccade.perception.eval.d_online_stage2 import (
     make_synthetic_d_online_row,
     reconcile_stage2,
 )
-
-STAGE1 = Path("out/signal_study/m_b1_hook_ab_20260710T071001Z_stage1_close")
-GT_ROOT = Path("datasets/MOT17/train")
 
 
 def _row(**kw):
@@ -472,51 +468,4 @@ def test_fixture_terminal_c_no_negatives() -> None:
     )
     assert fw["stage2_q3_safe_negative_mass"] == (
         "CURRENT_PLACEMENT_TOO_LATE_CANDIDATE"
-    )
-
-
-# ---------------------------------------------------------------------------
-# 9. Authoritative 244-row smoke (if study present)
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.skipif(
-    not (STAGE1 / "hook_candidate_events.parquet").is_file(),
-    reason="Stage 1 close study missing",
-)
-@pytest.mark.skipif(not GT_ROOT.is_dir(), reason="MOT17 GT missing")
-def test_authoritative_244_smoke(tmp_path: Path) -> None:
-    from saccade.perception.eval.d_online_stage2 import run_stage2_q1q3_audit
-
-    out = tmp_path / "stage2_q1q3"
-    summary = run_stage2_q1q3_audit(
-        stage1_study_dir=STAGE1,
-        out_dir=out,
-        gt_root=GT_ROOT,
-        git_commit="test",
-        study_id="test_auth_244",
-        expected_n=EXPECTED_D_ONLINE_N,
-        enforce_n_total=True,
-    )
-    assert summary["D_online_total"] == 244
-    assert summary["reconciliation_acceptance"] == "PASS"
-    assert summary["stage2_q1_label_join"] == "PASSED"
-    assert summary["stage2_q2_population_support"] == "PASSED"
-    assert summary["stage2_q3_safe_negative_mass"] in {
-        "SUFFICIENT",
-        "INSUFFICIENT_DECISION_RELEVANT_MASS",
-        "CURRENT_PLACEMENT_TOO_LATE_CANDIDATE",
-    }
-    assert summary["production_preset"] == "unchanged"
-    assert summary["policy_effect_supported"] is False
-    assert (out / "d_online_events.csv").is_file()
-    assert (out / "label_join_summary.json").is_file()
-    assert (out / "safe_negative_mass_summary.json").is_file()
-    assert (out / "manifest.json").is_file()
-    # unresolved must not be counted as negative
-    assert (
-        summary["label_resolved"]
-        + summary["label_unresolved"]
-        + summary["label_ambiguous"]
-        == 244
     )

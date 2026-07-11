@@ -10,6 +10,7 @@ Phase 2 (#119) executes terminal states in small reviewable batches.
 - Batch 4: near_miss trio → T2 promote to `tests/unit/eval/diagnostics/` (done, PR #124); scripts remain supported eval diagnostics
 - Batch 5A: Cheb-GR Door D owner status → **cold-supported / closed** (P0→P2 registry + docs; done, PR #126); tests not moved
 - Batch 5B: cheb_gr handover report + synthesize → T2 promote to `tests/unit/eval/diagnostics/` (done, PR #128)
+- Batch 6: d_online_stage2 Q1–Q3/Q4/Q4.5 → T2/T4 split to `tests/unit/eval/` (this PR); drop 2 dated authoritative smokes
 
 Each research test file must eventually reach one of four terminal states:
 
@@ -33,9 +34,9 @@ Nothing was deleted in phase 1. "Seal status" reflects 2026-07-11 knowledge.
 | ~~gap_conditioned_motion/test_gap_conditioned_motion_e2_family.py~~ | …e2_family_20260711 | sealed | **done — T4** (#119 batch 2) | Same |
 | ~~gap_conditioned_motion/test_gap_conditioned_motion_e3_signals.py~~ | …e3_signals_20260711 | sealed | **done — T4** (#119 batch 2) | Same |
 | gap_conditioned_motion/test_gap_conditioned_motion_phase_b.py | …phase_b_20260711 | sealed (PR #116) | T4 | Line still warm — keep until the gap-motion line closes, then delete |
-| d_online_stage2/test_d_online_stage2_q1q3.py | out/signal_study m_b1_5 …_20260710 | sealed | T4 | Pins dated out/ artifacts + MOT17 GT; skips when absent |
-| d_online_stage2/test_d_online_stage2_q4.py | same | sealed | T4 | Same |
-| d_online_stage2/test_d_online_stage2_q45_atlas.py | m_b1_5_stage2_q45_20260710 | sealed | T4 | Same; see "known gaps" for external artifact_hashes |
+| ~~d_online_stage2/test_d_online_stage2_q1q3.py~~ | Stage 2 closed; modules retained | infrastructure | **done — T2/T4 split** → `tests/unit/eval/` (#119 batch 6) | Synthetic/live-module kept; `test_authoritative_244_smoke` T4-deleted |
+| ~~d_online_stage2/test_d_online_stage2_q4.py~~ | same | infrastructure | **done — T2/T4 split** (#119 batch 6) | Synthetic kept; `test_authoritative_q4_smoke` T4-deleted |
+| ~~d_online_stage2/test_d_online_stage2_q45_atlas.py~~ | same | infrastructure | **done — T2** (#119 batch 6) | Atlas algorithm synthetic behavior; optional real-cohort lock retained |
 | ~~misc/test_boolean_atom_partial_order.py~~ | boolean_atom_partial_order_20260711 (#106) | sealed | **done — T3/T4** (#119 batch 3) | Packet integrity → generic checkers (T3); atom roles/terminal/PRC binding → sealed verdict (T4); no live `src/saccade` imports |
 | misc/test_d0_bridge_estimator_fidelity.py | d0_bridge_estimator_fidelity_20260711 (PR #115) | sealed | T4 | D0 certifies bridge atoms only; packet + recipe preserve it |
 | misc/test_portable_or_tail.py | frozen portable_policy.json (M-B1 OR-tail) | frozen; kernel acceptance PENDING (ONLINE_BAUDIT_IMPLEMENTED=False) | keep in research | Still active: hook acceptance outstanding. On acceptance, promote the acceptance-relevant assertions (T1), delete the rest (T4) |

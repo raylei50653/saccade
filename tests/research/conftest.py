@@ -24,10 +24,7 @@ PACKET_BOUND_FILES = {
     # gap_conditioned_motion (exec runners inside dated evidence dirs)
     # e0–e3 deleted as T4 (#119 batch 2); packets + recipes preserve them
     "test_gap_conditioned_motion_phase_b.py",
-    # d_online_stage2 (dated out/signal_study artifacts)
-    "test_d_online_stage2_q1q3.py",
-    "test_d_online_stage2_q4.py",
-    "test_d_online_stage2_q45_atlas.py",
+    # d_online_stage2 promoted T2/T4 split (#119 batch 6) → tests/unit/eval/
     # misc
     # boolean_atom_partial_order deleted as T3/T4 (#119 batch 3); packet preserves it
     "test_d0_bridge_estimator_fidelity.py",

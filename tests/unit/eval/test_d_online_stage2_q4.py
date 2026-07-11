@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import numpy as np
 import pytest
 
@@ -20,8 +18,6 @@ from saccade.perception.eval.d_online_stage2_q4 import (
     loo_sequence_feature_rows,
     _pair_auc_and_cliff,
 )
-
-Q1Q3 = Path("out/signal_study/m_b1_5_stage2_q1q3_20260710")
 
 
 def test_cohort_excludes_unresolved_and_non_selected() -> None:
@@ -338,42 +334,3 @@ def test_loo_and_per_seq_run() -> None:
     pooled = evaluate_feature("x", x, y, seqs)
     stab = stability_flags(pooled, per, loo)
     assert "loo_direction_flip" in stab
-
-
-@pytest.mark.skipif(
-    not (Q1Q3 / "d_online_events.parquet").is_file(),
-    reason="Q1–Q3 study missing",
-)
-def test_authoritative_q4_smoke(tmp_path: Path) -> None:
-    from saccade.perception.eval.d_online_stage2_q4 import run_stage2_q4_audit
-
-    out = tmp_path / "q4"
-    summary = run_stage2_q4_audit(
-        q1q3_study_dir=Q1Q3,
-        out_dir=out,
-        git_commit="test",
-        study_id="test_q4",
-    )
-    assert summary["D_online_total"] == 244
-    assert summary["n_primary_negative"] == 23
-    assert summary["n_primary_positive_protect"] == 64
-    assert summary["reconciliation_acceptance"] == "PASS"
-    assert summary["stage2_q4_separability"] in {
-        "single_signal_separability_supported",
-        "conditional_separability_supported",
-        "separability_weak_or_unstable",
-        "insufficient_labeled_decision_mass",
-    }
-    assert summary["production_preset"] == "unchanged"
-    assert "threshold_search_not_authorized" in summary["claims_blocked"]
-    assert (out / "q4_cohort.csv").is_file()
-    assert (out / "q4_signal_separability.csv").is_file()
-    assert (out / "q4_loo.csv").is_file()
-    assert (out / "manifest.json").is_file()
-    # primary must not mix non-selected
-    import csv
-
-    with (out / "q4_cohort.csv").open() as f:
-        for row in csv.DictReader(f):
-            assert int(row["baseline_selected"]) == 1
-            assert row["pair_label"] in ("negative", "gt_consistent")
