@@ -7,7 +7,7 @@ created: 2026-07-11
 
 # Escape-Tail Forensic — Four-Track PR-C (issue #102)
 
-> **One-line (operational, research acceptance pending):** Sealed Step-0 far-Hamming descriptive tail（4 tracks，`k=8`，`d_H >= 3`，**4/4 MOT17-10-SDP**）under the #102 terminal vocabulary → operational assignment **3× `TRUE_LONG_GAP_REENTRY` + 1× `UNRESOLVED`** · aggregate operational **`ROLE_REVERSAL_SUPPORTED`**. Numerical cutoffs are **PR-C implementation-time operationalizations** (not sealed in #102). Research-owner acceptance remains open.
+> **One-line:** Sealed Step-0 far-Hamming descriptive tail（4 tracks，`k=8`，`d_H >= 3`，**4/4 MOT17-10-SDP**）→ **3× `TRUE_LONG_GAP_REENTRY` + 1× `UNRESOLVED`** · aggregate **`ROLE_REVERSAL_SUPPORTED`**. Research acceptance = **`ACCEPTED_WITH_LIMITS`**（[PR #104](https://github.com/raylei50653/saccade/pull/104) review）：L1 单序列 forensic only；仅授权后续独立 partial-order audit。Numerical cutoffs remain **PR-C operationalizations** (not sealed in #102).
 
 Thread: [gt_support_morphology_20260711.md](../../../research/threads/gt_support_morphology_20260711.md) ·
 Procedure: [framework §19](../../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md) ·
@@ -183,8 +183,10 @@ Threshold membership (diagnostic only):
 ## 5. Aggregate (operational)
 
 ```text
-Aggregate terminal (operational): ROLE_REVERSAL_SUPPORTED
-research_acceptance: pending
+Aggregate terminal: ROLE_REVERSAL_SUPPORTED
+research_acceptance: ACCEPTED_WITH_LIMITS
+authority: PR #104 research-owner review (2026-07-11)
+claim_ceiling: L1 single-sequence forensic (MOT17-10-SDP only)
 
 counts:
   TRUE_LONG_GAP_REENTRY     3
@@ -194,13 +196,14 @@ counts:
   THRESHOLD_ARTIFACT        0
 ```
 
-### What this *would* authorize after research-owner acceptance
+### What this authorizes (within limits)
 
 - A **separate** partial-order audit may treat motion atoms as candidates for `conditional_orderable` or `context_only`.
 
-### What remains blocked regardless
+### What remains blocked
 
 - global closure arcs on motion atoms;
+- MWC conclusions from this forensic alone;
 - veto against the protected escape tail;
 - production rules / presets / ledger promotion;
 - claiming pixel-level signal bugs are fully ruled out;
@@ -209,8 +212,7 @@ counts:
 
 ### Downstream routing
 
-If research acceptance confirms the operational aggregate → open partial-order audit (PR-D prep) before any MWC prototype.  
-If owner rejects the operational cutoffs or scene reading → hold at descriptive morphology only (`TAIL_MECHANISM_UNRESOLVED` routing).
+`ROLE_REVERSAL_SUPPORTED` under `ACCEPTED_WITH_LIMITS` → open partial-order audit (PR-D prep) before any MWC prototype.
 
 ## 6. Response to PR #104 research-owner review
 
@@ -218,19 +220,19 @@ If owner rejects the operational cutoffs or scene reading → hold at descriptiv
 |:--|:--|
 | 1. Signal check tautology | Recompute from pairs raw **vs sealed Step-0 `gt_rows`**; plus gap/frame + domain checks. `SIGNAL_COMPUTATION_ISSUE` is reachable on sealed mismatch. Builder pixel-replay declared untested. |
 | 2. Missing scene evidence | Contact sheets + nearby IDs + truncation + camera-motion proxy in packet; note no longer asserts unaudited “crowd/moving-camera” without sheet/proxy fields. |
-| 3. Numerical rules not predeclared | Relabeled as **PR-C implementation-time operationalization**; #102 only owns terminal vocabulary. `research_acceptance: pending`. |
+| 3. Numerical rules not predeclared | Relabeled as **PR-C implementation-time operationalization**; #102 only owns terminal vocabulary. |
 
 ## 7. Must not (reaffirmed)
 
 - change atom definitions, directions, or sealed thresholds;
 - run gate-rule search / MWC / min-cut / closure compression in this unit;
 - revise framework §19 morphology terminals from these four cases;
-- promote the aggregate terminal into production or the evidence ledger without research-owner acceptance.
+- promote beyond the bounded forensic result (no production / ledger / global motion closure).
 
 ## 8. Engineering vs research acceptance
 
 | layer | status |
 |:--|:--|
 | Engineering | deterministic runner + committed packet + `--verify` + scene sheets |
-| Research acceptance | **pending** (owner interpretation of operational cutoffs + scene reading) |
-| Next | partial-order audit / PR-D only after acceptance; else hold descriptive-only |
+| Research acceptance | **`ACCEPTED_WITH_LIMITS`** ([PR #104](https://github.com/raylei50653/saccade/pull/104) research-owner review) |
+| Next | PR-D partial-order audit (motion = conditional/context candidates only) |

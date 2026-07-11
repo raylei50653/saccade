@@ -110,6 +110,35 @@ AGGREGATE_TERMINALS = (
     "TAIL_MECHANISM_UNRESOLVED",
 )
 
+# Research-owner stamp (PR #104 review, 2026-07-11). Emitted into committed packet.
+RESEARCH_ACCEPTANCE: dict[str, Any] = {
+    "status": "ACCEPTED_WITH_LIMITS",
+    "recorded": "2026-07-11",
+    "authority": "PR #104 research-owner review",
+    "pr_url": "https://github.com/raylei50653/saccade/pull/104",
+    "issue": 102,
+    "accepted_aggregate": "ROLE_REVERSAL_SUPPORTED",
+    "accepted_per_track": {
+        "MOT17-10-SDP|455": "TRUE_LONG_GAP_REENTRY",
+        "MOT17-10-SDP|459": "UNRESOLVED",
+        "MOT17-10-SDP|467": "TRUE_LONG_GAP_REENTRY",
+        "MOT17-10-SDP|503": "TRUE_LONG_GAP_REENTRY",
+    },
+    "claim_ceiling": "L1 single-sequence forensic (MOT17-10-SDP only)",
+    "authorizes": [
+        "a separate partial-order audit treating motion atoms as conditional_orderable / context_only candidates",
+    ],
+    "does_not_authorize": [
+        "global motion closure arcs",
+        "MWC conclusions",
+        "escape-tail veto",
+        "production / preset / gate changes",
+        "evidence_ledger promotion",
+        "multi-sequence generalization from this cohort alone",
+        "L2+ morphology claims without nested confirmation",
+    ],
+}
+
 # Body files hashed in manifest (manifest itself excluded to avoid self-hash).
 PACKET_BODY_FILES = (
     "cohort.json",
@@ -825,18 +854,18 @@ def aggregate_terminal(track_cards: dict[str, Any]) -> dict[str, Any]:
             f"ROLE_REVERSAL_SUPPORTED uses operational cutoff "
             f"n(TRUE)>={AGGREGATE_MIN_TRUE_FOR_ROLE_REVERSAL} and n(artifact)==0"
         ),
-        "research_acceptance": "pending research-owner interpretation of operational cutoffs",
+        "research_acceptance": RESEARCH_ACCEPTANCE,
         "routing": {
             "ROLE_REVERSAL_SUPPORTED": "open separate partial-order audit before any MWC prototype",
             "TAIL_ARTIFACT_DOMINATED": "repair/re-audit substrate; closure work remains blocked",
             "TAIL_MECHANISM_UNRESOLVED": "retain descriptive morphology only; closure conditioning remains blocked",
         }[terminal],
         "confidence_boundary": (
-            "All four sealed tail tracks sit on MOT17-10-SDP (sequence clustering is fact). "
-            "Numerical classification cutoffs were not sealed in #102. Builder residual/speed "
-            "pixel-replay remains untested. This aggregate at most suggests a research-line "
-            "partial-order audit probe after owner acceptance; it does not change framework §19 "
-            "morphology terminals, sealed thresholds, or production behavior."
+            "ACCEPTED_WITH_LIMITS (PR #104): L1 single-sequence (MOT17-10-SDP) forensic only. "
+            "Numerical cutoffs remain PR-C operationalizations (not sealed in #102). "
+            "Builder residual/speed pixel-replay untested. Authorizes only a separate "
+            "partial-order audit; not global motion closure, MWC conclusions, tail veto, "
+            "production, or ledger promotion."
         ),
     }
 
@@ -1441,7 +1470,7 @@ def emit(pairs: Path, gt_path: Path, img_root: Path, out: Path) -> dict[str, Any
             "terminal vocabulary from #102; numerical cutoffs are PR-C "
             "implementation-time operationalization (not sealed in #102)"
         ),
-        "research_acceptance": "pending",
+        "research_acceptance": RESEARCH_ACCEPTANCE,
         "frozen_cohort": track_keys,
         "aggregate_terminal": aggregate["terminal"],
         "per_track_categories": {
@@ -1454,36 +1483,54 @@ def emit(pairs: Path, gt_path: Path, img_root: Path, out: Path) -> dict[str, Any
 
 
 def _compare_packet(expected_dir: Path, rebuilt_dir: Path) -> list[str]:
+    """Strict packet equality: non-files manifest fields + files map digests + bytes."""
     mismatched: list[str] = []
     exp_manifest = load_json(expected_dir / "manifest.json")
     reb_manifest = load_json(rebuilt_dir / "manifest.json")
+    if not isinstance(exp_manifest, dict) or not isinstance(reb_manifest, dict):
+        return ["manifest.json:not_an_object"]
+
     for key in set(exp_manifest) | set(reb_manifest):
         if key == "files":
             continue
         if exp_manifest.get(key) != reb_manifest.get(key):
             mismatched.append(f"manifest.json:{key}")
-    # compare every hashed body file
-    for name, digest in exp_manifest.get("files", {}).items():
+
+    exp_files = exp_manifest.get("files", {})
+    reb_files = reb_manifest.get("files", {})
+    if not isinstance(exp_files, dict) or not isinstance(reb_files, dict):
+        mismatched.append("manifest.json:files:not_an_object")
+        return mismatched
+
+    exp_names = set(exp_files)
+    reb_names = set(reb_files)
+    for name in sorted(exp_names - reb_names):
+        mismatched.append(f"manifest.json:files:missing_in_rebuilt:{name}")
+    for name in sorted(reb_names - exp_names):
+        mismatched.append(f"manifest.json:files:extra_in_rebuilt:{name}")
+
+    for name in sorted(exp_names & reb_names):
+        exp_digest = str(exp_files[name])
+        reb_digest = str(reb_files[name])
         path_e = expected_dir / name
         path_r = rebuilt_dir / name
-        if not path_e.is_file() or not path_r.is_file():
-            mismatched.append(f"missing:{name}")
+        if not path_e.is_file():
+            mismatched.append(f"missing_on_disk:expected:{name}")
             continue
-        if name == "run_escape_tail_forensic.py":
-            if path_e.read_bytes() != path_r.read_bytes():
-                mismatched.append(name)
+        if not path_r.is_file():
+            mismatched.append(f"missing_on_disk:rebuilt:{name}")
             continue
-        if sha256(path_e) != sha256(path_r) or digest != sha256(path_e):
-            # allow re-hash: content must match between expected and rebuilt
-            if path_e.read_bytes() != path_r.read_bytes():
-                mismatched.append(name)
-    # rebuilt must not add extra sheets with different content
-    exp_sheets = {p.name for p in (expected_dir / "scene_sheets").glob("*.jpg")}
-    reb_sheets = {p.name for p in (rebuilt_dir / "scene_sheets").glob("*.jpg")}
-    if exp_sheets != reb_sheets:
-        mismatched.append(
-            f"scene_sheets set {sorted(exp_sheets)} vs {sorted(reb_sheets)}"
-        )
+        actual_e = sha256(path_e)
+        actual_r = sha256(path_r)
+        if exp_digest != actual_e:
+            mismatched.append(f"manifest.json:files:stale_digest:expected:{name}")
+        if reb_digest != actual_r:
+            mismatched.append(f"manifest.json:files:stale_digest:rebuilt:{name}")
+        if exp_digest != reb_digest:
+            mismatched.append(f"manifest.json:files:digest_mismatch:{name}")
+        if path_e.read_bytes() != path_r.read_bytes():
+            mismatched.append(f"bytes_mismatch:{name}")
+
     return mismatched
 
 
@@ -1518,7 +1565,9 @@ def main() -> None:
     print(f"packet emitted: {args.out}")
     print(f"aggregate terminal: {manifest['aggregate_terminal']}")
     print(f"per-track: {manifest['per_track_categories']}")
-    print(f"research_acceptance: {manifest['research_acceptance']}")
+    acc = manifest.get("research_acceptance", {})
+    status = acc.get("status", acc) if isinstance(acc, dict) else acc
+    print(f"research_acceptance: {status}")
 
 
 if __name__ == "__main__":

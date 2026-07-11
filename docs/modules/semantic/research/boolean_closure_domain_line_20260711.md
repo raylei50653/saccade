@@ -399,7 +399,7 @@ Verdict E — Non-identifiable
 | Task | 內容 | PR |
 |:--|:--|:--|
 | Task 1 — Seal morphology procedure | unit of analysis、atom family eligibility、nested threshold generation、corner／shell／tail 指標、orderability 分類規則、verdict 邊界、無 exposure 處理規則 | **PR-A [#100](https://github.com/raylei50653/saccade/pull/100)（done pending merge）** |
-| Task 2 — Four-track forensic | Step-0 四條 $d\ge3$ GT tracks（**4/4 在 MOT17-10-SDP**，見 packet `tail_tracks.json`）逐件落入五個預宣告類別；判定 motion atom role reversal 是否具真實機制來源，並分辨單場景 vs 通用機制 | **PR-C / #102 packet in [PR #104](https://github.com/raylei50653/saccade/pull/104)** · operational aggregate `ROLE_REVERSAL_SUPPORTED` · **research acceptance pending** · [note](escape_tail_forensic_20260711.md) · [packet](evidence/escape_tail_forensic_20260711/manifest.json) |
+| Task 2 — Four-track forensic | Step-0 四條 $d\ge3$ GT tracks（**4/4 在 MOT17-10-SDP**，見 packet `tail_tracks.json`）逐件落入五個預宣告類別；判定 motion atom role reversal 是否具真實機制來源，並分辨單場景 vs 通用機制 | **PR-C / #102 · [PR #104](https://github.com/raylei50653/saccade/pull/104)** · aggregate `ROLE_REVERSAL_SUPPORTED` · **`ACCEPTED_WITH_LIMITS`** · [note](escape_tail_forensic_20260711.md) · [packet](evidence/escape_tail_forensic_20260711/manifest.json) |
 | Task 3 — Restricted closure prototype | 只用 `global_orderable` atoms 建 closure graph，parametric MWC，vs frozen OR-tail；read-only、offline、candidate-only，不改 production preset | **PR-D** |
 | Task 4 — Conditional closure probe | 若 Task 2 支持 re-entry mechanism：short-gap／re-entry conditional closure，檢查保護 GT tail 並維持 FP removal | **PR-D**（依 PR-C 結果併入） |
 | Task 5 — Nested validation | 只有 Task 3／4 出現實質增益後，才進 outer-fold full replay | **PR-E** |

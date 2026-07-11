@@ -22,7 +22,33 @@
   "claiming signal bugs are fully ruled out at pixel-trajectory level (builder path untested)"
  ],
  "rule_provenance": "PR-C implementation-time operationalization of #102 aggregate terminals; ROLE_REVERSAL_SUPPORTED uses operational cutoff n(TRUE)>=3 and n(artifact)==0",
- "research_acceptance": "pending research-owner interpretation of operational cutoffs",
+ "research_acceptance": {
+  "status": "ACCEPTED_WITH_LIMITS",
+  "recorded": "2026-07-11",
+  "authority": "PR #104 research-owner review",
+  "pr_url": "https://github.com/raylei50653/saccade/pull/104",
+  "issue": 102,
+  "accepted_aggregate": "ROLE_REVERSAL_SUPPORTED",
+  "accepted_per_track": {
+   "MOT17-10-SDP|455": "TRUE_LONG_GAP_REENTRY",
+   "MOT17-10-SDP|459": "UNRESOLVED",
+   "MOT17-10-SDP|467": "TRUE_LONG_GAP_REENTRY",
+   "MOT17-10-SDP|503": "TRUE_LONG_GAP_REENTRY"
+  },
+  "claim_ceiling": "L1 single-sequence forensic (MOT17-10-SDP only)",
+  "authorizes": [
+   "a separate partial-order audit treating motion atoms as conditional_orderable / context_only candidates"
+  ],
+  "does_not_authorize": [
+   "global motion closure arcs",
+   "MWC conclusions",
+   "escape-tail veto",
+   "production / preset / gate changes",
+   "evidence_ledger promotion",
+   "multi-sequence generalization from this cohort alone",
+   "L2+ morphology claims without nested confirmation"
+  ]
+ },
  "routing": "open separate partial-order audit before any MWC prototype",
- "confidence_boundary": "All four sealed tail tracks sit on MOT17-10-SDP (sequence clustering is fact). Numerical classification cutoffs were not sealed in #102. Builder residual/speed pixel-replay remains untested. This aggregate at most suggests a research-line partial-order audit probe after owner acceptance; it does not change framework §19 morphology terminals, sealed thresholds, or production behavior."
+ "confidence_boundary": "ACCEPTED_WITH_LIMITS (PR #104): L1 single-sequence (MOT17-10-SDP) forensic only. Numerical cutoffs remain PR-C operationalizations (not sealed in #102). Builder residual/speed pixel-replay untested. Authorizes only a separate partial-order audit; not global motion closure, MWC conclusions, tail veto, production, or ledger promotion."
 }
