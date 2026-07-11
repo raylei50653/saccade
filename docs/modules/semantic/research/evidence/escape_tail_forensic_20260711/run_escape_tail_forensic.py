@@ -1,19 +1,33 @@
 """Read-only four-track escape-tail forensic runner (PR-C / issue #102).
 
 Frozen cohort = Step-0 sealed far-Hamming descriptive tail at k=8, min d_H >= 3
-(``docs/modules/semantic/research/evidence/gt_support_morphology_step0_20260711/tail_tracks.json``).
+(``.../gt_support_morphology_step0_20260711/tail_tracks.json``).
 
 Scope (hard):
-  - read-only offline evidence extraction + predeclared classification;
+  - read-only offline evidence extraction + category assignment;
   - no atom / threshold / gate / preset / ledger / closure-search changes;
-  - categories are only the five predeclared terminals; aggregate is one of three.
+  - per-track categories are only the five #102 terminals; aggregate is one of three.
+
+**Rule provenance (research-owner review, PR #104):**
+  Issue #102 predeclared the *terminal vocabulary* and qualitative meanings only.
+  Numerical operational cutoffs used by this runner
+  (``occlusion_strong``, ``>=2`` motion violations, aggregate ``>=3 TRUE``)
+  are **PR-C implementation-time operationalizations**, not sealed in #102.
+  They are recorded for reproducibility and remain subject to research-owner
+  interpretation before research acceptance.
+
+**Signal-computation check (non-tautological):**
+  Derived atoms are recomputed from pairs.csv *raw* columns under declared
+  formulas and compared to the *independent sealed* Step-0 ``gt_rows.csv``
+  values (plus frame-gap consistency). Builder-emitted residual/speed/dir
+  trajectories are **not** pixel-replayed; that residual risk is declared
+  untested at the substrate level.
 
 Usage::
 
     uv run python docs/modules/semantic/research/evidence/escape_tail_forensic_20260711/run_escape_tail_forensic.py \\
       --pairs out/signal_study/m_b1_gate_coverage_7seq_20260709T121326Z/pairs.csv
 
-    # verify committed packet is bit-identical under re-emission
     uv run python .../run_escape_tail_forensic.py --pairs ... --verify
 """
 
@@ -30,6 +44,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+import cv2
 import numpy as np
 
 PACKET = Path(__file__).resolve().parent
@@ -42,6 +57,7 @@ CANONICAL_SOURCE = Path(
     "out/signal_study/m_b1_gate_coverage_7seq_20260709T121326Z/pairs.csv"
 )
 DEFAULT_GT = REPO / "datasets/MOT17/train/MOT17-10-SDP/gt/gt.txt"
+DEFAULT_IMG_ROOT = REPO / "datasets/MOT17/train/MOT17-10-SDP/img1"
 
 sys.path.insert(0, str(REPO / "scripts/tools"))
 import audit_relink_safe_reject as ar  # noqa: E402
@@ -60,15 +76,24 @@ ATOM_NAMES = [name for name, _ in ATOMS]
 MOTION_ATOMS = ("speed_mismatch", "dir_cos", "resid_mean")
 HEIGHT_ATOMS = ("log_h_ratio",)
 GEOM_ATOMS = ("score_m_bridge", "bridge_dist", "dist_h", "gap")
+DERIVED_ATOMS = ("log_h_ratio", "speed_mismatch", "resid_mean", "score_m_bridge")
 
-# Predeclared decision thresholds (fixed before viewing outcomes; recorded here
-# so re-runs are deterministic). Occlusion uses GT visibility on MOT17.
+# ---------------------------------------------------------------------------
+# PR-C implementation-time operationalization (NOT sealed in issue #102).
+# Recorded for deterministic re-runs; research acceptance may override.
+# ---------------------------------------------------------------------------
 OCCLUSION_VIS_MEAN_MAX = 0.35
 OCCLUSION_FRAC_ZERO_MIN = 0.25
-THRESHOLD_REL_FLIP_MAX = 0.05  # relative thr move that would flip a violation
+MIN_MOTION_VIOLATIONS_FOR_TRUE = 2
+AGGREGATE_MIN_TRUE_FOR_ROLE_REVERSAL = 3
+THRESHOLD_REL_FLIP_MAX = 0.05
+NEARBY_TOP_K = 5
+TRUNCATION_MARGIN_PX = 8
+SCENE_MID_SAMPLES = 3
+CONTACT_SHEET_MAX_WIDTH = 1600
+
 SIGNAL_ABS_TOL = 1e-9
 SIGNAL_REL_TOL = 1e-6
-# Step-0 gt_rows.csv stores values with ``f"{value:.6g}"``; allow that rounding.
 STEP0_VALUE_REL_TOL = 5e-6
 STEP0_VALUE_ABS_TOL = 5e-6
 
@@ -85,14 +110,15 @@ AGGREGATE_TERMINALS = (
     "TAIL_MECHANISM_UNRESOLVED",
 )
 
-PACKET_FILES = (
-    "manifest.json",
+# Body files hashed in manifest (manifest itself excluded to avoid self-hash).
+PACKET_BODY_FILES = (
     "cohort.json",
     "track_cards.json",
     "aggregate.json",
     "per_row_evidence.csv",
     "threshold_sensitivity.json",
     "classification_rules.json",
+    "scene_evidence.json",
     "run_escape_tail_forensic.py",
 )
 
@@ -118,7 +144,6 @@ def z_bit(value: float, threshold: float, lower_is_safe: bool) -> int:
 def flip_delta(
     value: float, threshold: float, lower_is_safe: bool, z: int
 ) -> float | None:
-    """Absolute threshold move needed to flip a VIOLATION to safe. None if already safe."""
     if z == 1:
         return None
     if lower_is_safe:
@@ -126,7 +151,17 @@ def flip_delta(
     return float(threshold - value)
 
 
-def recompute_signals(row: dict[str, str]) -> dict[str, float]:
+def close(
+    a: float,
+    b: float,
+    abs_tol: float = SIGNAL_ABS_TOL,
+    rel_tol: float = SIGNAL_REL_TOL,
+) -> bool:
+    return abs(a - b) <= max(abs_tol, rel_tol * max(abs(a), abs(b), 1.0))
+
+
+def recompute_derived_from_pairs_raw(row: dict[str, str]) -> dict[str, float]:
+    """Derive atom values from pairs.csv raw columns under declared formulas."""
     hl = max(float(row["h_lost_raw"]), 1e-6)
     hc = max(float(row["h_cand_raw"]), 1e-6)
     fwd = float(row["fwd_resid"])
@@ -145,12 +180,6 @@ def recompute_signals(row: dict[str, str]) -> dict[str, float]:
         "dir_cos": float(row["dir_cos"]),
         "gap": float(row["gap"]),
     }
-
-
-def close(
-    a: float, b: float, abs_tol: float = SIGNAL_ABS_TOL, rel_tol: float = SIGNAL_REL_TOL
-) -> bool:
-    return abs(a - b) <= max(abs_tol, rel_tol * max(abs(a), abs(b), 1.0))
 
 
 def load_gt_table(path: Path) -> list[dict[str, float]]:
@@ -190,6 +219,26 @@ def annotation_gaps(frames: list[int]) -> list[tuple[int, int, int]]:
     return gaps
 
 
+def box_at(gt_id_list: list[dict[str, float]], frame: int) -> dict[str, Any] | None:
+    for row in gt_id_list:
+        if int(row["frame"]) == frame:
+            return {
+                "frame": frame,
+                "xywh": [
+                    float(row["x"]),
+                    float(row["y"]),
+                    float(row["w"]),
+                    float(row["h"]),
+                ],
+                "vis": float(row["vis"]),
+                "foot_xy": [
+                    float(row["x"] + row["w"] / 2.0),
+                    float(row["y"] + row["h"]),
+                ],
+            }
+    return None
+
+
 def visibility_stats(
     gt_rows: list[dict[str, float]], gid: int, f0: int, f1: int
 ) -> dict[str, Any]:
@@ -202,7 +251,7 @@ def visibility_stats(
             "frac_vis_lt_0_3": None,
             "frac_vis_eq_0": None,
             "longest_full_invis_stretch": 0,
-            "occlusion_strong": False,
+            "occlusion_strong_operational": False,
         }
     vis = np.asarray([r["vis"] for r in mid], dtype=float)
     zero = (vis <= 0.0).astype(int)
@@ -222,30 +271,610 @@ def visibility_stats(
         "frac_vis_lt_0_3": float((vis < 0.3).mean()),
         "frac_vis_eq_0": frac0,
         "longest_full_invis_stretch": int(longest),
-        "occlusion_strong": occlusion_strong,
+        "occlusion_strong_operational": occlusion_strong,
     }
 
 
-def box_snapshot(
-    gt_id_list: list[dict[str, float]], frame: int
-) -> dict[str, Any] | None:
-    for row in gt_id_list:
-        if int(row["frame"]) == frame:
-            return {
-                "frame": frame,
+def truncation_flags(
+    xywh: list[float], frame_w: int, frame_h: int, margin: int = TRUNCATION_MARGIN_PX
+) -> dict[str, Any]:
+    x, y, w, h = xywh
+    left = x <= margin
+    top = y <= margin
+    right = x + w >= frame_w - margin
+    bottom = y + h >= frame_h - margin
+    return {
+        "left": bool(left),
+        "top": bool(top),
+        "right": bool(right),
+        "bottom": bool(bottom),
+        "any": bool(left or top or right or bottom),
+        "margin_px": margin,
+        "frame_wh": [frame_w, frame_h],
+    }
+
+
+def nearby_identities(
+    gt_rows: list[dict[str, float]],
+    frame: int,
+    primary_gid: int,
+    top_k: int = NEARBY_TOP_K,
+) -> list[dict[str, Any]]:
+    primary = None
+    others: list[dict[str, float]] = []
+    for row in gt_rows:
+        if int(row["frame"]) != frame:
+            continue
+        if int(row["id"]) == primary_gid:
+            primary = row
+        else:
+            others.append(row)
+    if primary is None:
+        return []
+    px = primary["x"] + primary["w"] / 2.0
+    py = primary["y"] + primary["h"]
+    ranked: list[dict[str, Any]] = []
+    for row in others:
+        cx = row["x"] + row["w"] / 2.0
+        cy = row["y"] + row["h"]
+        # axis-aligned IoU
+        x1 = max(primary["x"], row["x"])
+        y1 = max(primary["y"], row["y"])
+        x2 = min(primary["x"] + primary["w"], row["x"] + row["w"])
+        y2 = min(primary["y"] + primary["h"], row["y"] + row["h"])
+        inter = max(0.0, x2 - x1) * max(0.0, y2 - y1)
+        a1 = primary["w"] * primary["h"]
+        a2 = row["w"] * row["h"]
+        iou = inter / max(a1 + a2 - inter, 1e-9)
+        ranked.append(
+            {
+                "id": int(row["id"]),
+                "foot_dist_px": float(math.hypot(cx - px, cy - py)),
+                "iou": float(iou),
+                "vis": float(row["vis"]),
                 "xywh": [
                     float(row["x"]),
                     float(row["y"]),
                     float(row["w"]),
                     float(row["h"]),
                 ],
-                "vis": float(row["vis"]),
-                "foot_xy": [
-                    float(row["x"] + row["w"] / 2.0),
-                    float(row["y"] + row["h"]),
-                ],
             }
-    return None
+        )
+    ranked.sort(key=lambda item: (item["foot_dist_px"], -item["iou"]))
+    return ranked[:top_k]
+
+
+def camera_motion_proxy(
+    gt_rows: list[dict[str, float]], f0: int, f1: int
+) -> dict[str, Any]:
+    """Median per-track foot displacement between f0 and f1 as a camera/scene motion proxy.
+
+    Not a full GMC estimate; auditable and independent of the relink ledger.
+    """
+    by_id: dict[int, dict[int, tuple[float, float]]] = {}
+    for row in gt_rows:
+        frm = int(row["frame"])
+        if frm not in (f0, f1):
+            continue
+        gid = int(row["id"])
+        by_id.setdefault(gid, {})[frm] = (
+            float(row["x"] + row["w"] / 2.0),
+            float(row["y"] + row["h"]),
+        )
+    displacements: list[float] = []
+    for pts in by_id.values():
+        if f0 in pts and f1 in pts:
+            displacements.append(
+                float(math.hypot(pts[f1][0] - pts[f0][0], pts[f1][1] - pts[f0][1]))
+            )
+    if not displacements:
+        return {
+            "n_tracks_with_both_frames": 0,
+            "median_foot_disp_px": None,
+            "mean_foot_disp_px": None,
+            "p90_foot_disp_px": None,
+        }
+    arr = np.asarray(displacements, dtype=float)
+    return {
+        "n_tracks_with_both_frames": int(arr.size),
+        "median_foot_disp_px": float(np.median(arr)),
+        "mean_foot_disp_px": float(arr.mean()),
+        "p90_foot_disp_px": float(np.quantile(arr, 0.90)),
+        "definition": (
+            "median Euclidean foot displacement of GT ids present at both "
+            f"frame {f0} and {f1}; proxy for camera+scene motion, not GMC"
+        ),
+    }
+
+
+def frame_path(img_root: Path, frame: int) -> Path:
+    return img_root / f"{frame:06d}.jpg"
+
+
+def render_contact_sheet(
+    img_root: Path,
+    gt_rows: list[dict[str, float]],
+    primary_gid: int,
+    frames: list[int],
+    labels: list[str],
+    out_path: Path,
+    frame_w: int,
+    frame_h: int,
+) -> dict[str, Any]:
+    """Draw GT boxes for primary + nearby ids on selected frames; write a contact sheet."""
+    panels: list[np.ndarray] = []
+    panel_meta: list[dict[str, Any]] = []
+    for frame, label in zip(frames, labels):
+        path = frame_path(img_root, frame)
+        if not path.is_file():
+            panel_meta.append(
+                {
+                    "frame": frame,
+                    "label": label,
+                    "image_found": False,
+                    "path": str(path),
+                }
+            )
+            # grey placeholder
+            panel = np.full((270, 480, 3), 40, dtype=np.uint8)
+            cv2.putText(
+                panel,
+                f"missing {frame}",
+                (20, 140),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (200, 200, 200),
+                2,
+                cv2.LINE_AA,
+            )
+            panels.append(panel)
+            continue
+        img = cv2.imread(str(path))
+        if img is None:
+            panel_meta.append(
+                {
+                    "frame": frame,
+                    "label": label,
+                    "image_found": False,
+                    "path": str(path),
+                }
+            )
+            panel = np.full((270, 480, 3), 40, dtype=np.uint8)
+            panels.append(panel)
+            continue
+        # draw all boxes this frame; primary in green, others in orange
+        for row in gt_rows:
+            if int(row["frame"]) != frame:
+                continue
+            x, y, w, h = (
+                int(row["x"]),
+                int(row["y"]),
+                int(row["w"]),
+                int(row["h"]),
+            )
+            gid = int(row["id"])
+            color = (0, 220, 0) if gid == primary_gid else (0, 140, 255)
+            thickness = 3 if gid == primary_gid else 1
+            cv2.rectangle(img, (x, y), (x + w, y + h), color, thickness)
+            cv2.putText(
+                img,
+                f"{gid}",
+                (x, max(15, y - 4)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                color,
+                1,
+                cv2.LINE_AA,
+            )
+        # banner
+        cv2.rectangle(img, (0, 0), (img.shape[1], 36), (0, 0, 0), -1)
+        cv2.putText(
+            img,
+            f"{label}  f={frame}  GT={primary_gid}",
+            (10, 26),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            (255, 255, 255),
+            2,
+            cv2.LINE_AA,
+        )
+        # resize panel to fixed height
+        target_h = 360
+        scale = target_h / img.shape[0]
+        panel = cv2.resize(img, (int(img.shape[1] * scale), target_h))
+        panels.append(panel)
+        # Prefer repo-relative path when possible; never embed temp out dirs.
+        try:
+            img_rel = str(path.relative_to(REPO))
+        except ValueError:
+            img_rel = path.name
+        panel_meta.append(
+            {
+                "frame": frame,
+                "label": label,
+                "image_found": True,
+                "path": img_rel,
+                "sha256": sha256(path),
+            }
+        )
+
+    if not panels:
+        raise RuntimeError("no panels for contact sheet")
+    # pad to same height (already), stack horizontally then maybe wrap
+    max_h = max(p.shape[0] for p in panels)
+    normed = []
+    for p in panels:
+        if p.shape[0] != max_h:
+            p = cv2.resize(p, (int(p.shape[1] * max_h / p.shape[0]), max_h))
+        normed.append(p)
+    sheet = np.hstack(normed)
+    if sheet.shape[1] > CONTACT_SHEET_MAX_WIDTH:
+        scale = CONTACT_SHEET_MAX_WIDTH / sheet.shape[1]
+        sheet = cv2.resize(
+            sheet, (CONTACT_SHEET_MAX_WIDTH, int(sheet.shape[0] * scale))
+        )
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    # deterministic JPEG quality
+    cv2.imwrite(str(out_path), sheet, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
+    # Packet-relative path only (stable under --verify temp rebuilds).
+    packet_rel = f"scene_sheets/{out_path.name}"
+    return {
+        "contact_sheet": packet_rel,
+        "contact_sheet_sha256": sha256(out_path),
+        "panels": panel_meta,
+        "frame_wh": [frame_w, frame_h],
+    }
+
+
+def load_step0_by_track_gap() -> dict[tuple[str, int], dict[str, str]]:
+    """Independent sealed expected atom values from Step-0 gt_rows.csv."""
+    out: dict[tuple[str, int], dict[str, str]] = {}
+    with (STEP0 / "gt_rows.csv").open(encoding="utf-8") as handle:
+        for row in csv.DictReader(handle):
+            key = (row["track_key"], int(float(row["v_gap"])))
+            out[key] = row
+    return out
+
+
+def atom_analysis(
+    values: dict[str, float], thresholds: dict[str, float]
+) -> dict[str, Any]:
+    bits: dict[str, int] = {}
+    violated: list[str] = []
+    sides: dict[str, Any] = {}
+    for name, lower in ATOMS:
+        v = float(values[name])
+        t = float(thresholds[name])
+        z = z_bit(v, t, lower)
+        bits[name] = z
+        fd = flip_delta(v, t, lower, z)
+        sides[name] = {
+            "value": v,
+            "threshold": t,
+            "safe_side": "<= thr" if lower else ">= thr",
+            "z": z,
+            "side": "SAFE" if z == 1 else "VIOL",
+            "flip_delta_if_viol": fd,
+            "flip_rel_if_viol": (None if fd is None else fd / max(abs(t), 1e-12)),
+        }
+        if z == 0:
+            violated.append(name)
+    return {
+        "bits_atom0_first": "".join(str(bits[n]) for n in ATOM_NAMES),
+        "d_h": len(violated),
+        "violated": violated,
+        "motion_violated": [a for a in violated if a in MOTION_ATOMS],
+        "height_violated": [a for a in violated if a in HEIGHT_ATOMS],
+        "geom_violated": [a for a in violated if a in GEOM_ATOMS],
+        "atoms": sides,
+    }
+
+
+def signal_computation_check(
+    row: dict[str, str],
+    recomputed: dict[str, float],
+    step0_row: dict[str, str] | None,
+) -> dict[str, Any]:
+    """Non-tautological signal checks.
+
+    1. Recompute derived atoms from pairs raw columns under declared formulas.
+    2. Compare to independent sealed Step-0 gt_rows values (same row identity).
+    3. Frame-gap consistency: gap == cand_first_frame - lost_last_frame.
+    4. Builder field domain checks (|dir_cos|<=1+eps, non-neg distances/heights).
+
+    Explicitly **untested**: pixel-level replay of builder residual / speed /
+    dir_cos emission from raw trajectories.
+    """
+    failures: list[str] = []
+    step0_compare: dict[str, Any] = {
+        "available": step0_row is not None,
+        "mismatches": [],
+    }
+    if step0_row is None:
+        failures.append("missing sealed Step-0 gt_rows entry for this (track, gap)")
+    else:
+        for name in ATOM_NAMES:
+            a = float(recomputed[name])
+            b = float(step0_row[f"v_{name}"])
+            if not close(
+                a, b, abs_tol=STEP0_VALUE_ABS_TOL, rel_tol=STEP0_VALUE_REL_TOL
+            ):
+                failures.append(f"step0 mismatch {name}: recompute={a} sealed={b}")
+                step0_compare["mismatches"].append(
+                    {"atom": name, "recompute": a, "step0": b}
+                )
+
+    lf = int(float(row["lost_last_frame"]))
+    cf = int(float(row["cand_first_frame"]))
+    gap = int(float(row["gap"]))
+    if gap != cf - lf:
+        failures.append(
+            f"gap inconsistency: gap={gap} != cand_first-lost_last={cf - lf}"
+        )
+
+    domain: list[str] = []
+    dir_cos = float(row["dir_cos"])
+    if abs(dir_cos) > 1.0 + 1e-5:
+        domain.append(f"|dir_cos|={abs(dir_cos)} > 1")
+    for col in (
+        "dist_h",
+        "bridge_dist",
+        "fwd_resid",
+        "bwd_resid",
+        "h_lost_raw",
+        "h_cand_raw",
+        "gap",
+    ):
+        val = float(row[col])
+        if val < -1e-9:
+            domain.append(f"{col}={val} < 0")
+    if domain:
+        failures.extend(domain)
+
+    return {
+        "ok": len(failures) == 0,
+        "failures": failures,
+        "step0_compare": step0_compare,
+        "frame_gap_check": {
+            "lost_last_frame": lf,
+            "cand_first_frame": cf,
+            "gap": gap,
+            "expected_gap_eq_cand_minus_lost": True,
+            "ok": gap == cf - lf,
+        },
+        "domain_check_ok": len(domain) == 0,
+        "tested": [
+            "derived atoms recomputed from pairs raw columns vs sealed Step-0 gt_rows",
+            "gap == cand_first_frame - lost_last_frame",
+            "builder field domain: |dir_cos|<=1, non-negative distances/heights/gap",
+        ],
+        "untested": [
+            "pixel/trajectory replay of builder-emitted fwd_resid/bwd_resid/dir_cos/speeds",
+            "GMC / camera-compensation correctness inside residual construction",
+        ],
+        "formulas": {
+            "log_h_ratio": "abs(log(h_cand_raw / h_lost_raw))",
+            "speed_mismatch": "abs(lost_exit_speed - cand_entry_speed)",
+            "resid_mean": "0.5 * (fwd_resid + bwd_resid)",
+            "score_m_bridge": (
+                "w*0.5*(fwd+bwd)+(1-w)*dist_h with w=sqrt(clip(exit_speed/0.12,0,1))"
+            ),
+        },
+    }
+
+
+def classify_track(card: dict[str, Any]) -> dict[str, Any]:
+    """Apply PR-C operational category rules (not #102-sealed numerical bounds)."""
+    ann = card["annotation_check"]
+    sig = card["signal_computation_check"]
+    thr = card["threshold_artifact_check"]
+    mech = card["mechanism_features"]
+    scene = card["scene_evidence_summary"]
+    competing: list[str] = []
+
+    if not ann["same_identity_on_all_gt_rows"] or not ann["annotation_continuous"]:
+        category = "ANNOTATION_ISSUE"
+        support = [
+            "GT identity continuity failed on at least one gt_match row, or GT id has internal annotation gaps."
+        ]
+    elif not sig["all_rows_ok"]:
+        category = "SIGNAL_COMPUTATION_ISSUE"
+        support = [
+            "Independent signal checks failed (Step-0 sealed value mismatch, gap/frame inconsistency, or domain violation).",
+            f"row failures: {sig.get('failed_rows', [])}",
+        ]
+    elif thr["threshold_artifact_dominates"]:
+        category = "THRESHOLD_ARTIFACT"
+        support = thr["reasons"]
+    elif (
+        mech["height_safe_on_min_dh_row"]
+        and mech["n_motion_violations_min_dh"] >= MIN_MOTION_VIOLATIONS_FOR_TRUE
+        and mech["occlusion_strong_operational_on_min_dh_row"]
+        and ann["same_identity_on_all_gt_rows"]
+        and sig["all_rows_ok"]
+        and scene["contact_sheet_available"]
+        and scene["scene_supports_occlusion_or_crowd"]
+    ):
+        category = "TRUE_LONG_GAP_REENTRY"
+        support = [
+            "min-d_H row keeps log_h_ratio on the safe side of the sealed exploratory median.",
+            f"motion atoms violated on min-d_H row: {mech['motion_violated_min_dh']} "
+            f"(operational cutoff: >={MIN_MOTION_VIOLATIONS_FOR_TRUE}).",
+            "gap-window GT visibility meets the operational occlusion_strong cutoff.",
+            "scene packet provides contact sheet + nearby-id / truncation / camera-motion proxy.",
+            "annotation and independent signal checks pass.",
+        ]
+        if thr["any_violation_near_threshold"]:
+            competing.append(
+                "Some motion violations sit near the exploratory median; membership is threshold-sensitive."
+            )
+        if scene["truncation_any_on_endpoints"]:
+            competing.append(
+                "Endpoint truncation flags present; partial-box effects remain a residual alternative."
+            )
+        if scene["nearby_close_on_reentry"]:
+            competing.append(
+                "Nearby GT identities at re-entry; identity-swap / interference remains residual."
+            )
+        if not mech["all_gt_rows_height_safe"]:
+            competing.append(
+                "At least one non-min-d_H gt_match row violates height; classification uses min-d_H representative only."
+            )
+    else:
+        category = "UNRESOLVED"
+        support = [
+            "No single #102 category is decisive under the operational rule set and available scene evidence."
+        ]
+        if (
+            mech["height_safe_on_min_dh_row"]
+            and mech["n_motion_violations_min_dh"] >= MIN_MOTION_VIOLATIONS_FOR_TRUE
+            and not mech["occlusion_strong_operational_on_min_dh_row"]
+        ):
+            competing.append(
+                "Motion fails and height is safe, but operational occlusion_strong is false "
+                "(visible fragmentation / non-occlusion loss remains open)."
+            )
+        if thr["any_violation_near_threshold"]:
+            competing.append(
+                "Near-threshold violations leave a residual THRESHOLD_ARTIFACT hypothesis."
+            )
+        if not scene["contact_sheet_available"]:
+            competing.append("Contact sheet missing; scene audit incomplete.")
+        if sig.get("untested_residual_risk"):
+            competing.append(
+                "Builder residual/speed trajectory emission is not pixel-replayed "
+                "(declared untested substrate risk)."
+            )
+
+    if category not in PER_TRACK_TERMINALS:
+        raise RuntimeError(f"illegal category {category}")
+    return {
+        "category": category,
+        "supporting_evidence": support,
+        "competing_explanations": competing,
+        "rule_provenance": "PR-C implementation-time operationalization; numerical cutoffs not sealed in #102",
+        "confidence_boundary": (
+            "Single-sequence (MOT17-10-SDP) forensic only; exploratory median binarization; "
+            "descriptive min-d_H layer; operational numerical cutoffs subject to research-owner "
+            "interpretation; builder residual/speed pixel-replay untested; does not seal morphology "
+            "terminals or orderability classes."
+        ),
+    }
+
+
+def aggregate_terminal(track_cards: dict[str, Any]) -> dict[str, Any]:
+    counts = {name: 0 for name in PER_TRACK_TERMINALS}
+    for card in track_cards.values():
+        counts[card["verdict"]["category"]] += 1
+    artifact = (
+        counts["ANNOTATION_ISSUE"]
+        + counts["SIGNAL_COMPUTATION_ISSUE"]
+        + counts["THRESHOLD_ARTIFACT"]
+    )
+    true_n = counts["TRUE_LONG_GAP_REENTRY"]
+    unresolved_n = counts["UNRESOLVED"]
+
+    # Operational aggregate mapping (not sealed in #102).
+    if artifact >= 3 or (artifact > true_n and artifact >= 2):
+        terminal = "TAIL_ARTIFACT_DOMINATED"
+        authorizes = [
+            "Repair or re-audit the substrate (annotation / signal / threshold) before any conditional-closure claim."
+        ]
+        blocks = [
+            "partial-order promotion of motion atoms",
+            "conditional closure probe",
+            "any production / preset / ledger change",
+        ]
+    elif true_n >= AGGREGATE_MIN_TRUE_FOR_ROLE_REVERSAL and artifact == 0:
+        terminal = "ROLE_REVERSAL_SUPPORTED"
+        authorizes = [
+            "A later partial-order audit may consider motion atoms as conditional_orderable or context_only "
+            "(research-line Phase B / PR-D prep) — contingent on research-owner acceptance of this operational mapping.",
+        ]
+        blocks = [
+            "global closure arcs on motion atoms",
+            "veto against the protected escape tail",
+            "production rule / preset / gate change",
+            "evidence_ledger promotion beyond this bounded forensic result",
+            "L2+ morphology claims without nested held-out confirmation",
+            "claiming signal bugs are fully ruled out at pixel-trajectory level (builder path untested)",
+        ]
+    else:
+        terminal = "TAIL_MECHANISM_UNRESOLVED"
+        authorizes = [
+            "Retain only the pooled L1 descriptive morphology claim from Step-0."
+        ]
+        blocks = [
+            "role-reversal justification for conditional closure",
+            "orderability promotion of motion atoms from this tail alone",
+            "production / preset / ledger change",
+        ]
+
+    if terminal not in AGGREGATE_TERMINALS:
+        raise RuntimeError(f"illegal aggregate {terminal}")
+    return {
+        "terminal": terminal,
+        "per_track_category_counts": counts,
+        "n_true_long_gap_reentry": true_n,
+        "n_artifact": artifact,
+        "n_unresolved": unresolved_n,
+        "authorizes": authorizes,
+        "remains_blocked": blocks,
+        "rule_provenance": (
+            "PR-C implementation-time operationalization of #102 aggregate terminals; "
+            f"ROLE_REVERSAL_SUPPORTED uses operational cutoff "
+            f"n(TRUE)>={AGGREGATE_MIN_TRUE_FOR_ROLE_REVERSAL} and n(artifact)==0"
+        ),
+        "research_acceptance": "pending research-owner interpretation of operational cutoffs",
+        "routing": {
+            "ROLE_REVERSAL_SUPPORTED": "open separate partial-order audit before any MWC prototype",
+            "TAIL_ARTIFACT_DOMINATED": "repair/re-audit substrate; closure work remains blocked",
+            "TAIL_MECHANISM_UNRESOLVED": "retain descriptive morphology only; closure conditioning remains blocked",
+        }[terminal],
+        "confidence_boundary": (
+            "All four sealed tail tracks sit on MOT17-10-SDP (sequence clustering is fact). "
+            "Numerical classification cutoffs were not sealed in #102. Builder residual/speed "
+            "pixel-replay remains untested. This aggregate at most suggests a research-line "
+            "partial-order audit probe after owner acceptance; it does not change framework §19 "
+            "morphology terminals, sealed thresholds, or production behavior."
+        ),
+    }
+
+
+def build_threshold_sensitivity(
+    pool: dict[str, np.ndarray], track_keys: list[str]
+) -> dict[str, Any]:
+    pool = dict(pool)
+    pool["resid_mean"] = 0.5 * (pool["fwd_resid"] + pool["bwd_resid"])
+    ar.ensure_prod_proxy_scores(pool)
+    y = pool["gt_match"].astype(bool)
+    seq = pool["seq"].astype(str)
+    lost = pool["lost_id"].astype(str)
+    keys = np.asarray([f"{s}|{lid}" for s, lid in zip(seq, lost)], dtype=object)
+
+    quantiles = {"p40": 0.40, "median": 0.50, "p60": 0.60}
+    out: dict[str, Any] = {"quantiles": {}, "frozen_tracks_remain_in_tail": {}}
+    for qname, q in quantiles.items():
+        thrs = {name: float(np.quantile(pool[name], q)) for name, _ in ATOMS}
+        min_dh: dict[str, int] = {}
+        for i in np.where(y)[0]:
+            key = str(keys[i])
+            dh = 0
+            for name, lower in ATOMS:
+                z = z_bit(float(pool[name][i]), thrs[name], lower)
+                if z == 0:
+                    dh += 1
+            min_dh[key] = min(min_dh.get(key, 99), dh)
+        n_tail = sum(1 for d in min_dh.values() if d >= 3)
+        remain = sorted(k for k in track_keys if min_dh.get(k, 0) >= 3)
+        out["quantiles"][qname] = {
+            "thresholds": thrs,
+            "n_tail_tracks_d_h_ge_3": n_tail,
+            "frozen_tracks_min_d_h": {k: min_dh.get(k) for k in track_keys},
+            "frozen_tracks_still_in_tail": remain,
+        }
+        out["frozen_tracks_remain_in_tail"][qname] = remain
+    return out
 
 
 def verify_source(pairs: Path, step0_manifest: dict[str, Any]) -> None:
@@ -294,228 +923,11 @@ def collect_gt_match_rows(pairs: Path, track_keys: set[str]) -> list[dict[str, s
     return rows
 
 
-def atom_analysis(
-    values: dict[str, float], thresholds: dict[str, float]
-) -> dict[str, Any]:
-    bits: dict[str, int] = {}
-    violated: list[str] = []
-    sides: dict[str, Any] = {}
-    for name, lower in ATOMS:
-        v = float(values[name])
-        t = float(thresholds[name])
-        z = z_bit(v, t, lower)
-        bits[name] = z
-        fd = flip_delta(v, t, lower, z)
-        sides[name] = {
-            "value": v,
-            "threshold": t,
-            "safe_side": "<= thr" if lower else ">= thr",
-            "z": z,
-            "side": "SAFE" if z == 1 else "VIOL",
-            "flip_delta_if_viol": fd,
-            "flip_rel_if_viol": (None if fd is None else fd / max(abs(t), 1e-12)),
-        }
-        if z == 0:
-            violated.append(name)
-    return {
-        "bits_atom0_first": "".join(str(bits[n]) for n in ATOM_NAMES),
-        "d_h": len(violated),
-        "violated": violated,
-        "motion_violated": [a for a in violated if a in MOTION_ATOMS],
-        "height_violated": [a for a in violated if a in HEIGHT_ATOMS],
-        "geom_violated": [a for a in violated if a in GEOM_ATOMS],
-        "atoms": sides,
-    }
-
-
-def classify_track(card: dict[str, Any]) -> dict[str, Any]:
-    """Apply predeclared deterministic category rules (see classification_rules.json)."""
-    ann = card["annotation_check"]
-    sig = card["signal_computation_check"]
-    thr = card["threshold_artifact_check"]
-    mech = card["mechanism_features"]
-    competing: list[str] = []
-
-    if not ann["same_identity_on_all_gt_rows"] or not ann["annotation_continuous"]:
-        category = "ANNOTATION_ISSUE"
-        support = [
-            "GT identity continuity failed on at least one gt_match row, or GT id has internal annotation gaps."
-        ]
-    elif not sig["all_signals_recompute_ok"]:
-        category = "SIGNAL_COMPUTATION_ISSUE"
-        support = [
-            "Recomputed log_h_ratio / speed_mismatch / resid_mean / score_m_bridge disagree with ledger."
-        ]
-    elif thr["threshold_artifact_dominates"]:
-        category = "THRESHOLD_ARTIFACT"
-        support = thr["reasons"]
-    elif (
-        mech["height_safe_on_min_dh_row"]
-        and mech["n_motion_violations_min_dh"] >= 2
-        and mech["occlusion_strong_on_min_dh_row"]
-        and ann["same_identity_on_all_gt_rows"]
-        and sig["all_signals_recompute_ok"]
-    ):
-        category = "TRUE_LONG_GAP_REENTRY"
-        support = [
-            "min-d_H row keeps log_h_ratio on the safe side of the sealed exploratory median.",
-            f"motion atoms violated on min-d_H row: {mech['motion_violated_min_dh']}.",
-            "gap-window GT visibility meets the predeclared occlusion_strong criterion.",
-            "annotation and signal recomputation checks pass.",
-        ]
-        if thr["any_violation_near_threshold"]:
-            competing.append(
-                "Some motion violations sit near the exploratory median; membership is threshold-sensitive, but occlusion + multi-atom motion break remain."
-            )
-        if not mech["all_gt_rows_height_safe"]:
-            competing.append(
-                "At least one non-min-d_H gt_match row violates height; classification uses min-d_H representative only."
-            )
-    else:
-        category = "UNRESOLVED"
-        support = [
-            "No single predeclared category is decisive after annotation, signal, threshold, occlusion, and motion/height checks."
-        ]
-        if (
-            mech["height_safe_on_min_dh_row"]
-            and mech["n_motion_violations_min_dh"] >= 2
-        ):
-            competing.append(
-                "Motion fails and height is safe, but occlusion_strong is false — tracker fragmentation on a still-visible target is not cleanly long-occlusion re-entry."
-            )
-        if thr["any_violation_near_threshold"]:
-            competing.append(
-                "Near-threshold violations leave a residual THRESHOLD_ARTIFACT hypothesis."
-            )
-        if mech["occlusion_strong_on_min_dh_row"]:
-            competing.append(
-                "Occlusion evidence is present but other decisive conditions failed."
-            )
-
-    if category not in PER_TRACK_TERMINALS:
-        raise RuntimeError(f"illegal category {category}")
-    return {
-        "category": category,
-        "supporting_evidence": support,
-        "competing_explanations": competing,
-        "confidence_boundary": (
-            "Single-sequence (MOT17-10-SDP) forensic only; exploratory median binarization; "
-            "descriptive min-d_H layer; does not seal morphology terminals or orderability classes."
-        ),
-    }
-
-
-def aggregate_terminal(track_cards: dict[str, Any]) -> dict[str, Any]:
-    counts = {name: 0 for name in PER_TRACK_TERMINALS}
-    for card in track_cards.values():
-        counts[card["verdict"]["category"]] += 1
-    artifact = (
-        counts["ANNOTATION_ISSUE"]
-        + counts["SIGNAL_COMPUTATION_ISSUE"]
-        + counts["THRESHOLD_ARTIFACT"]
-    )
-    true_n = counts["TRUE_LONG_GAP_REENTRY"]
-    unresolved_n = counts["UNRESOLVED"]
-
-    if artifact >= 3 or (artifact > true_n and artifact >= 2):
-        terminal = "TAIL_ARTIFACT_DOMINATED"
-        authorizes = [
-            "Repair or re-audit the substrate (annotation / signal / threshold) before any conditional-closure claim."
-        ]
-        blocks = [
-            "partial-order promotion of motion atoms",
-            "conditional closure probe",
-            "any production / preset / ledger change",
-        ]
-    elif true_n >= 3 and artifact == 0:
-        terminal = "ROLE_REVERSAL_SUPPORTED"
-        authorizes = [
-            "A later partial-order audit may consider motion atoms as conditional_orderable or context_only.",
-        ]
-        blocks = [
-            "global closure arcs on motion atoms",
-            "veto against the protected escape tail",
-            "production rule / preset / gate change",
-            "evidence_ledger promotion beyond this bounded forensic result",
-            "L2+ morphology claims without nested held-out confirmation",
-        ]
-    else:
-        terminal = "TAIL_MECHANISM_UNRESOLVED"
-        authorizes = [
-            "Retain only the pooled L1 descriptive morphology claim from Step-0."
-        ]
-        blocks = [
-            "role-reversal justification for conditional closure",
-            "orderability promotion of motion atoms from this tail alone",
-            "production / preset / ledger change",
-        ]
-
-    if terminal not in AGGREGATE_TERMINALS:
-        raise RuntimeError(f"illegal aggregate {terminal}")
-    return {
-        "terminal": terminal,
-        "per_track_category_counts": counts,
-        "n_true_long_gap_reentry": true_n,
-        "n_artifact": artifact,
-        "n_unresolved": unresolved_n,
-        "authorizes": authorizes,
-        "remains_blocked": blocks,
-        "routing": {
-            "ROLE_REVERSAL_SUPPORTED": "open separate partial-order audit before any MWC prototype",
-            "TAIL_ARTIFACT_DOMINATED": "repair/re-audit substrate; closure work remains blocked",
-            "TAIL_MECHANISM_UNRESOLVED": "retain descriptive morphology only; closure conditioning remains blocked",
-        }[terminal],
-        "confidence_boundary": (
-            "All four sealed tail tracks sit on MOT17-10-SDP (sequence clustering is fact, not hypothesis). "
-            "This aggregate authorizes at most a research-line partial-order audit probe; it does not "
-            "change framework §19 morphology terminals, sealed thresholds, or production behavior."
-        ),
-    }
-
-
-def build_threshold_sensitivity(
-    pool: dict[str, np.ndarray], track_keys: list[str]
-) -> dict[str, Any]:
-    pool = dict(pool)
-    pool["resid_mean"] = 0.5 * (pool["fwd_resid"] + pool["bwd_resid"])
-    ar.ensure_prod_proxy_scores(pool)
-    y = pool["gt_match"].astype(bool)
-    seq = pool["seq"].astype(str)
-    lost = pool["lost_id"].astype(str)
-    keys = np.asarray([f"{s}|{lid}" for s, lid in zip(seq, lost)], dtype=object)
-
-    quantiles = {
-        "p40": 0.40,
-        "median": 0.50,
-        "p60": 0.60,
-    }
-    out: dict[str, Any] = {"quantiles": {}, "frozen_tracks_remain_in_tail": {}}
-    for qname, q in quantiles.items():
-        thrs = {name: float(np.quantile(pool[name], q)) for name, _ in ATOMS}
-        # per-track min d_H over gt rows
-        min_dh: dict[str, int] = {}
-        for i in np.where(y)[0]:
-            key = str(keys[i])
-            dh = 0
-            for name, lower in ATOMS:
-                z = z_bit(float(pool[name][i]), thrs[name], lower)
-                if z == 0:
-                    dh += 1
-            min_dh[key] = min(min_dh.get(key, 99), dh)
-        n_tail = sum(1 for d in min_dh.values() if d >= 3)
-        remain = sorted(k for k in track_keys if min_dh.get(k, 0) >= 3)
-        out["quantiles"][qname] = {
-            "thresholds": thrs,
-            "n_tail_tracks_d_h_ge_3": n_tail,
-            "frozen_tracks_min_d_h": {k: min_dh.get(k) for k in track_keys},
-            "frozen_tracks_still_in_tail": remain,
-        }
-        out["frozen_tracks_remain_in_tail"][qname] = remain
-    return out
-
-
-def emit(pairs: Path, gt_path: Path, out: Path) -> dict[str, Any]:
+def emit(pairs: Path, gt_path: Path, img_root: Path, out: Path) -> dict[str, Any]:
     out.mkdir(parents=True, exist_ok=True)
+    sheets_dir = out / "scene_sheets"
+    sheets_dir.mkdir(parents=True, exist_ok=True)
+
     step0_manifest = load_json(STEP0 / "manifest.json")
     verify_source(pairs, step0_manifest)
     tail = load_frozen_cohort()
@@ -524,17 +936,31 @@ def emit(pairs: Path, gt_path: Path, out: Path) -> dict[str, Any]:
         name: float(step0_manifest["atom_thresholds"][name]["pool_median_threshold"])
         for name, _ in ATOMS
     }
+    step0_by_gap = load_step0_by_track_gap()
 
     if not gt_path.is_file():
         raise FileNotFoundError(
             f"MOT17 GT not found at {gt_path}. Pass --gt or place MOT17-10-SDP under datasets/."
         )
+    if not img_root.is_dir():
+        raise FileNotFoundError(
+            f"MOT17 image root not found at {img_root}. Pass --img-root."
+        )
+
+    # frame geometry from first available image
+    sample_img = frame_path(img_root, 1)
+    if not sample_img.is_file():
+        raise FileNotFoundError(f"expected frame image missing: {sample_img}")
+    sample = cv2.imread(str(sample_img))
+    if sample is None:
+        raise RuntimeError(f"failed to read {sample_img}")
+    frame_h, frame_w = sample.shape[:2]
+
     gt_table = load_gt_table(gt_path)
     gt_match_rows = collect_gt_match_rows(pairs, set(track_keys))
     if not gt_match_rows:
         raise RuntimeError("no gt_match rows found for frozen cohort")
 
-    # index rows by track
     by_track: dict[str, list[dict[str, str]]] = {k: [] for k in track_keys}
     for row in gt_match_rows:
         key = f"{row['seq']}|{row['lost_id']}"
@@ -552,33 +978,20 @@ def emit(pairs: Path, gt_path: Path, out: Path) -> dict[str, Any]:
 
     per_row_csv: list[dict[str, Any]] = []
     track_cards: dict[str, Any] = {}
+    scene_bundle: dict[str, Any] = {}
 
     for key in track_keys:
         rows = by_track[key]
         row_payloads: list[dict[str, Any]] = []
-        signal_ok_all = True
+        signal_row_results: list[dict[str, Any]] = []
         same_id_all = True
         height_safe_all = True
+
         for row in rows:
-            recomputed = recompute_signals(row)
-            ledger_vals = {
-                "bridge_dist": float(row["bridge_dist"]),
-                "dist_h": float(row["dist_h"]),
-                "dir_cos": float(row["dir_cos"]),
-                "gap": float(row["gap"]),
-                **{
-                    name: recomputed[name]
-                    for name in (
-                        "log_h_ratio",
-                        "speed_mismatch",
-                        "resid_mean",
-                        "score_m_bridge",
-                    )
-                },
-            }
-            # compare recomputed derived fields to formula (self-consistent) and to
-            # committed step0 gt_rows later; here check internal formula vs raw cols.
-            analysis = atom_analysis(ledger_vals, thresholds)
+            recomputed = recompute_derived_from_pairs_raw(row)
+            # values used for morphology = recompute from pairs raw (explicit source)
+            values = dict(recomputed)
+            analysis = atom_analysis(values, thresholds)
             gt_lost = int(float(row["gt_lost"]))
             gt_cand = int(float(row["gt_cand"]))
             if gt_lost != gt_cand:
@@ -586,24 +999,37 @@ def emit(pairs: Path, gt_path: Path, out: Path) -> dict[str, Any]:
             lf = int(float(row["lost_last_frame"]))
             cf = int(float(row["cand_first_frame"]))
             vis = visibility_stats(gt_table, gt_lost, lf, cf)
-            # signal check: recompute from raw equals ledger_vals (tautological for
-            # derived) — also check against pairs raw residual/speed fields already used.
-            signal_ok = all(
-                close(recomputed[n], ledger_vals[n])
-                for n in (
-                    "log_h_ratio",
-                    "speed_mismatch",
-                    "resid_mean",
-                    "score_m_bridge",
-                )
+
+            step0_row = step0_by_gap.get((key, int(float(row["gap"]))))
+            sig_row = signal_computation_check(row, recomputed, step0_row)
+            signal_row_results.append(
+                {
+                    "gap": int(float(row["gap"])),
+                    "cand_id": str(row["cand_id"]),
+                    **sig_row,
+                }
             )
-            # Cross-check vs sealed step0 gt_rows.csv values when present.
-            signal_ok_all = signal_ok_all and signal_ok
             if analysis["atoms"]["log_h_ratio"]["z"] == 0:
                 height_safe_all = False
 
             gid_rows = gt_id_rows(gt_table, gt_lost)
             frames = [int(r["frame"]) for r in gid_rows]
+            exit_box = box_at(gid_rows, lf)
+            reentry_box = box_at(gid_rows, cf)
+            exit_trunc = (
+                truncation_flags(exit_box["xywh"], frame_w, frame_h)
+                if exit_box
+                else None
+            )
+            reentry_trunc = (
+                truncation_flags(reentry_box["xywh"], frame_w, frame_h)
+                if reentry_box
+                else None
+            )
+            nearby_exit = nearby_identities(gt_table, lf, gt_lost)
+            nearby_reentry = nearby_identities(gt_table, cf, gt_lost)
+            cam = camera_motion_proxy(gt_table, lf, cf)
+
             payload = {
                 "track_key": key,
                 "seq": row["seq"],
@@ -649,13 +1075,19 @@ def emit(pairs: Path, gt_path: Path, out: Path) -> dict[str, Any]:
                     "fwd_resid": float(row["fwd_resid"]),
                     "bwd_resid": float(row["bwd_resid"]),
                 },
-                "values": ledger_vals,
-                "recomputed": recomputed,
-                "signal_recompute_ok": signal_ok,
+                "values_source": "recomputed_from_pairs_raw_columns",
+                "values": values,
                 "atom_analysis": analysis,
+                "signal_computation_check": sig_row,
                 "gap_visibility": vis,
-                "gt_box_before_exit": box_snapshot(gid_rows, lf),
-                "gt_box_after_reentry": box_snapshot(gid_rows, cf),
+                "gt_box_before_exit": exit_box,
+                "gt_box_after_reentry": reentry_box,
+                "truncation": {"exit": exit_trunc, "reentry": reentry_trunc},
+                "nearby_identities": {
+                    "exit_frame": nearby_exit,
+                    "reentry_frame": nearby_reentry,
+                },
+                "camera_motion_proxy": cam,
                 "gt_id_frame_span": {
                     "first": frames[0] if frames else None,
                     "last": frames[-1] if frames else None,
@@ -679,32 +1111,37 @@ def emit(pairs: Path, gt_path: Path, out: Path) -> dict[str, Any]:
                     "violated": "|".join(analysis["violated"]),
                     "motion_violated": "|".join(analysis["motion_violated"]),
                     "height_violated": "|".join(analysis["height_violated"]),
-                    "log_h_ratio": ledger_vals["log_h_ratio"],
-                    "speed_mismatch": ledger_vals["speed_mismatch"],
-                    "dir_cos": ledger_vals["dir_cos"],
-                    "resid_mean": ledger_vals["resid_mean"],
-                    "score_m_bridge": ledger_vals["score_m_bridge"],
-                    "bridge_dist": ledger_vals["bridge_dist"],
-                    "dist_h": ledger_vals["dist_h"],
+                    "log_h_ratio": values["log_h_ratio"],
+                    "speed_mismatch": values["speed_mismatch"],
+                    "dir_cos": values["dir_cos"],
+                    "resid_mean": values["resid_mean"],
+                    "score_m_bridge": values["score_m_bridge"],
+                    "bridge_dist": values["bridge_dist"],
+                    "dist_h": values["dist_h"],
                     "vis_mean": vis["vis_mean"],
                     "frac_vis_eq_0": vis["frac_vis_eq_0"],
-                    "occlusion_strong": vis["occlusion_strong"],
-                    "signal_recompute_ok": signal_ok,
+                    "occlusion_strong_operational": vis["occlusion_strong_operational"],
+                    "signal_ok": sig_row["ok"],
                     "foot_euclid_px": payload["feet"]["euclid_px"],
+                    "reentry_truncation_any": bool(
+                        reentry_trunc["any"] if reentry_trunc else False
+                    ),
+                    "nearby_min_foot_dist_reentry": (
+                        nearby_reentry[0]["foot_dist_px"] if nearby_reentry else None
+                    ),
+                    "cam_median_foot_disp_px": cam["median_foot_disp_px"],
                 }
             )
 
-        # min-d_H representative among this track's gt rows
         min_row = min(row_payloads, key=lambda p: (p["atom_analysis"]["d_h"], p["gap"]))
         min_analysis = min_row["atom_analysis"]
-        # cross-check sealed min_d_h
         if int(min_analysis["d_h"]) != int(tail["tracks"][key]["min_d_h"]):
             raise RuntimeError(
                 f"{key}: recomputed min d_H={min_analysis['d_h']} != sealed "
                 f"{tail['tracks'][key]['min_d_h']}"
             )
 
-        # threshold artifact check on min-d_H row
+        # threshold artifact check on min-d_H row (operational)
         near = []
         strong = []
         for name in min_analysis["violated"]:
@@ -715,27 +1152,101 @@ def emit(pairs: Path, gt_path: Path, out: Path) -> dict[str, Any]:
                 near.append(name)
             else:
                 strong.append(name)
-        # Dominates only if EVERY violation is near-threshold AND no occlusion-backed multi-atom motion story
         threshold_dominates = bool(min_analysis["violated"]) and not strong
         thr_reasons = []
         if threshold_dominates:
             thr_reasons.append(
-                f"All violated atoms on min-d_H row flip under <= {THRESHOLD_REL_FLIP_MAX:.0%} relative threshold move: {near}."
+                f"All violated atoms on min-d_H row flip under <= {THRESHOLD_REL_FLIP_MAX:.0%} "
+                f"relative threshold move: {near}."
             )
-        # Also note p60 sensitivity
         p60_remain = key in sensitivity["frozen_tracks_remain_in_tail"]["p60"]
         if not p60_remain:
             thr_reasons.append(
                 "Track leaves the d_H>=3 tail under pool p60 binarization (membership is median-sensitive)."
             )
-            # membership sensitivity alone is NOT enough for THRESHOLD_ARTIFACT if strong violations exist
 
-        # annotation continuity for primary gt id
         primary_gid = int(min_row["gt_lost"])
         gid_rows = gt_id_rows(gt_table, primary_gid)
         frames = [int(r["frame"]) for r in gid_rows]
         ann_gaps = annotation_gaps(frames)
         annotation_continuous = len(ann_gaps) == 0 and len(frames) > 0
+
+        # scene contact sheet for min-d_H timeline
+        lf = int(min_row["lost_last_frame"])
+        cf = int(min_row["cand_first_frame"])
+        mid_frames: list[int] = []
+        if cf - lf > 1:
+            mids = np.linspace(lf + 1, cf - 1, num=min(SCENE_MID_SAMPLES, cf - lf - 1))
+            mid_frames = sorted({int(round(x)) for x in mids})
+        sheet_frames = [lf, *mid_frames, cf]
+        sheet_labels = (
+            ["exit"] + [f"gap{i + 1}" for i in range(len(mid_frames))] + ["reentry"]
+        )
+        sheet_name = key.replace("|", "_") + "_min_dh.jpg"
+        sheet_path = sheets_dir / sheet_name
+        sheet_meta = render_contact_sheet(
+            img_root,
+            gt_table,
+            primary_gid,
+            sheet_frames,
+            sheet_labels,
+            sheet_path,
+            frame_w,
+            frame_h,
+        )
+
+        nearby_re = min_row["nearby_identities"]["reentry_frame"]
+        nearby_close = bool(
+            nearby_re and nearby_re[0]["foot_dist_px"] < 40.0
+        )  # diagnostic, not a sealed cutoff
+        trunc_any = bool(
+            (min_row["truncation"]["exit"] or {}).get("any")
+            or (min_row["truncation"]["reentry"] or {}).get("any")
+        )
+        # Scene supports occlusion/crowd if operational occlusion OR (mid-gap low vis + nearby)
+        scene_supports = bool(
+            min_row["gap_visibility"]["occlusion_strong_operational"]
+            or (
+                (min_row["gap_visibility"]["vis_mean"] is not None)
+                and min_row["gap_visibility"]["vis_mean"] < 0.5
+                and nearby_close
+            )
+        )
+
+        failed_rows = [
+            {"gap": r["gap"], "cand_id": r["cand_id"], "failures": r["failures"]}
+            for r in signal_row_results
+            if not r["ok"]
+        ]
+        signal_summary = {
+            "all_rows_ok": len(failed_rows) == 0,
+            "failed_rows": failed_rows,
+            "n_rows_checked": len(signal_row_results),
+            "tested": signal_row_results[0]["tested"] if signal_row_results else [],
+            "untested": signal_row_results[0]["untested"] if signal_row_results else [],
+            "untested_residual_risk": True,
+            "formulas": signal_row_results[0]["formulas"] if signal_row_results else {},
+            "per_row": signal_row_results,
+        }
+
+        scene_summary = {
+            "contact_sheet_available": bool(sheet_meta.get("contact_sheet")),
+            "contact_sheet": sheet_meta.get("contact_sheet"),
+            "contact_sheet_sha256": sheet_meta.get("contact_sheet_sha256"),
+            "truncation_any_on_endpoints": trunc_any,
+            "nearby_close_on_reentry": nearby_close,
+            "scene_supports_occlusion_or_crowd": scene_supports,
+            "camera_motion_proxy_min_dh": min_row["camera_motion_proxy"],
+            "panels": sheet_meta.get("panels"),
+        }
+        scene_bundle[key] = {
+            **scene_summary,
+            "min_dh_frames": sheet_frames,
+            "exit_nearby": min_row["nearby_identities"]["exit_frame"],
+            "reentry_nearby": nearby_re,
+            "truncation": min_row["truncation"],
+            "gap_visibility": min_row["gap_visibility"],
+        }
 
         card = {
             "track_key": key,
@@ -750,12 +1261,15 @@ def emit(pairs: Path, gt_path: Path, out: Path) -> dict[str, Any]:
                 "gt_txt": str(gt_path.relative_to(REPO))
                 if gt_path.is_relative_to(REPO)
                 else str(gt_path),
+                "img_root": str(img_root.relative_to(REPO))
+                if img_root.is_relative_to(REPO)
+                else str(img_root),
             },
             "timeline": {
                 "n_gt_match_rows": len(row_payloads),
                 "primary_gt_id": primary_gid,
-                "exit_frame": int(min_row["lost_last_frame"]),
-                "reentry_frame_min_dh_row": int(min_row["cand_first_frame"]),
+                "exit_frame": lf,
+                "reentry_frame_min_dh_row": cf,
                 "gap_min_dh_row": int(min_row["gap"]),
                 "all_gaps": [int(p["gap"]) for p in row_payloads],
                 "all_cand_ids": [p["cand_id"] for p in row_payloads],
@@ -763,15 +1277,15 @@ def emit(pairs: Path, gt_path: Path, out: Path) -> dict[str, Any]:
             "min_d_h_row": {
                 "cand_id": min_row["cand_id"],
                 "gap": int(min_row["gap"]),
-                "frames": [
-                    int(min_row["lost_last_frame"]),
-                    int(min_row["cand_first_frame"]),
-                ],
+                "frames": [lf, cf],
                 "atom_analysis": min_analysis,
                 "values": min_row["values"],
                 "gap_visibility": min_row["gap_visibility"],
                 "feet": min_row["feet"],
                 "heights": min_row["heights"],
+                "truncation": min_row["truncation"],
+                "nearby_identities": min_row["nearby_identities"],
+                "camera_motion_proxy": min_row["camera_motion_proxy"],
             },
             "all_gt_match_rows": row_payloads,
             "annotation_check": {
@@ -782,21 +1296,11 @@ def emit(pairs: Path, gt_path: Path, out: Path) -> dict[str, Any]:
                 "n_annotated_frames": len(frames),
                 "internal_annotation_gaps": ann_gaps,
                 "notes": (
-                    "GT remains annotated across the tracker gap (fragmentation / occlusion), "
-                    "which is expected for MOT17 and does not by itself imply ANNOTATION_ISSUE."
+                    "GT remaining annotated across the tracker gap is expected for MOT17 "
+                    "and does not by itself imply ANNOTATION_ISSUE."
                 ),
             },
-            "signal_computation_check": {
-                "all_signals_recompute_ok": signal_ok_all,
-                "formulas": {
-                    "log_h_ratio": "abs(log(h_cand_raw / h_lost_raw))",
-                    "speed_mismatch": "abs(lost_exit_speed - cand_entry_speed)",
-                    "resid_mean": "0.5 * (fwd_resid + bwd_resid)",
-                    "score_m_bridge": (
-                        "w*0.5*(fwd+bwd)+(1-w)*dist_h with w=sqrt(clip(exit_speed/0.12,0,1))"
-                    ),
-                },
-            },
+            "signal_computation_check": signal_summary,
             "threshold_artifact_check": {
                 "any_violation_near_threshold": bool(near),
                 "near_threshold_violations": near,
@@ -804,6 +1308,7 @@ def emit(pairs: Path, gt_path: Path, out: Path) -> dict[str, Any]:
                 "threshold_artifact_dominates": threshold_dominates,
                 "remains_in_tail_under_p60": p60_remain,
                 "reasons": thr_reasons,
+                "rule_provenance": "PR-C operationalization (THRESHOLD_REL_FLIP_MAX)",
             },
             "mechanism_features": {
                 "height_safe_on_min_dh_row": min_analysis["atoms"]["log_h_ratio"]["z"]
@@ -812,89 +1317,60 @@ def emit(pairs: Path, gt_path: Path, out: Path) -> dict[str, Any]:
                 "motion_violated_min_dh": min_analysis["motion_violated"],
                 "n_motion_violations_min_dh": len(min_analysis["motion_violated"]),
                 "geom_violated_min_dh": min_analysis["geom_violated"],
-                "occlusion_strong_on_min_dh_row": bool(
-                    min_row["gap_visibility"]["occlusion_strong"]
+                "occlusion_strong_operational_on_min_dh_row": bool(
+                    min_row["gap_visibility"]["occlusion_strong_operational"]
                 ),
                 "gap_vis_mean_min_dh": min_row["gap_visibility"]["vis_mean"],
             },
+            "scene_evidence_summary": scene_summary,
         }
         card["verdict"] = classify_track(card)
         track_cards[key] = card
 
     aggregate = aggregate_terminal(track_cards)
 
-    # cross-check step0 gt_rows signal values
-    step0_rows = list(csv.DictReader((STEP0 / "gt_rows.csv").open(encoding="utf-8")))
-    step0_by_key_gap: dict[tuple[str, str], dict[str, str]] = {}
-    for r in step0_rows:
-        step0_by_key_gap[(r["track_key"], f"{float(r['v_gap']):.6g}")] = r
-    mismatches = []
-    for key, card in track_cards.items():
-        for prow in card["all_gt_match_rows"]:
-            k = (key, f"{float(prow['gap']):.6g}")
-            if k not in step0_by_key_gap:
-                # gap formatting fallback
-                alt = (key, str(int(prow["gap"])))
-                ref = step0_by_key_gap.get(alt)
-            else:
-                ref = step0_by_key_gap[k]
-            if ref is None:
-                # try match by d_h + bits
-                candidates = [
-                    r
-                    for r in step0_rows
-                    if r["track_key"] == key
-                    and int(r["d_h_k8"]) == int(prow["atom_analysis"]["d_h"])
-                ]
-                ref = candidates[0] if len(candidates) == 1 else None
-            if ref is None:
-                mismatches.append(f"{key} gap={prow['gap']}: missing step0 row")
-                continue
-            for name in ATOM_NAMES:
-                a = float(prow["values"][name])
-                b = float(ref[f"v_{name}"])
-                if not close(
-                    a,
-                    b,
-                    abs_tol=STEP0_VALUE_ABS_TOL,
-                    rel_tol=STEP0_VALUE_REL_TOL,
-                ):
-                    mismatches.append(
-                        f"{key} gap={prow['gap']} {name}: {a} vs step0 {b}"
-                    )
-    if mismatches:
-        raise RuntimeError("step0 value mismatches:\n" + "\n".join(mismatches))
-
     classification_rules = {
+        "terminal_vocabulary_source": "issue #102 (predeclared categories + aggregate names)",
+        "numerical_cutoff_provenance": (
+            "PR-C implementation-time operationalization — NOT sealed in #102; "
+            "subject to research-owner interpretation before research acceptance"
+        ),
         "per_track_terminals": list(PER_TRACK_TERMINALS),
         "aggregate_terminals": list(AGGREGATE_TERMINALS),
-        "occlusion_strong": {
-            "vis_mean_max": OCCLUSION_VIS_MEAN_MAX,
-            "frac_vis_eq_0_min": OCCLUSION_FRAC_ZERO_MIN,
-            "definition": "occlusion_strong iff gap_vis_mean <= vis_mean_max OR frac_vis_eq_0 >= frac_vis_eq_0_min",
+        "operational_cutoffs": {
+            "occlusion_strong": {
+                "vis_mean_max": OCCLUSION_VIS_MEAN_MAX,
+                "frac_vis_eq_0_min": OCCLUSION_FRAC_ZERO_MIN,
+                "definition": (
+                    "occlusion_strong_operational iff gap_vis_mean <= vis_mean_max "
+                    "OR frac_vis_eq_0 >= frac_vis_eq_0_min"
+                ),
+            },
+            "min_motion_violations_for_true": MIN_MOTION_VIOLATIONS_FOR_TRUE,
+            "aggregate_min_true_for_role_reversal": AGGREGATE_MIN_TRUE_FOR_ROLE_REVERSAL,
+            "threshold_rel_flip_max": THRESHOLD_REL_FLIP_MAX,
+            "truncation_margin_px": TRUNCATION_MARGIN_PX,
         },
-        "threshold_artifact_dominates": {
-            "rel_flip_max": THRESHOLD_REL_FLIP_MAX,
-            "definition": (
-                "All min-d_H violations flip under relative threshold move <= rel_flip_max "
-                "(no strong violation remains)."
-            ),
-        },
-        "TRUE_LONG_GAP_REENTRY": [
+        "TRUE_LONG_GAP_REENTRY_operational": [
             "annotation same-identity + continuous",
-            "signal recompute ok",
-            "not threshold_artifact_dominates",
+            "independent signal checks ok (step0 sealed compare + gap/frame + domain)",
+            "not threshold_artifact_dominates (operational)",
             "height safe on min-d_H row (log_h_ratio z=1)",
-            ">=2 motion atom violations on min-d_H row",
-            "occlusion_strong on min-d_H gap window",
+            f">={MIN_MOTION_VIOLATIONS_FOR_TRUE} motion atom violations on min-d_H row",
+            "occlusion_strong_operational on min-d_H gap window",
+            "contact sheet available",
+            "scene_supports_occlusion_or_crowd",
         ],
-        "aggregate_ROLE_REVERSAL_SUPPORTED": (
-            "n(TRUE_LONG_GAP_REENTRY) >= 3 AND n(annotation|signal|threshold artifacts) == 0"
-        ),
-        "aggregate_TAIL_ARTIFACT_DOMINATED": (
-            "n(artifacts) >= 3 OR (n(artifacts) > n(TRUE) AND n(artifacts) >= 2)"
-        ),
-        "aggregate_else": "TAIL_MECHANISM_UNRESOLVED",
+        "signal_computation_check": {
+            "tested": [
+                "recompute derived atoms from pairs raw vs sealed Step-0 gt_rows",
+                "gap == cand_first_frame - lost_last_frame",
+                "domain checks on builder fields",
+            ],
+            "untested": [
+                "pixel/trajectory replay of builder residual/speed/dir_cos emission",
+            ],
+        },
         "atom_groups": {
             "motion": list(MOTION_ATOMS),
             "height": list(HEIGHT_ATOMS),
@@ -915,7 +1391,6 @@ def emit(pairs: Path, gt_path: Path, out: Path) -> dict[str, Any]:
         "note": "Cohort is frozen from Step-0; this forensic does not add or remove tracks.",
     }
 
-    # write CSV
     csv_path = out / "per_row_evidence.csv"
     fieldnames = list(per_row_csv[0].keys())
     with csv_path.open("w", newline="", encoding="utf-8") as handle:
@@ -929,16 +1404,21 @@ def emit(pairs: Path, gt_path: Path, out: Path) -> dict[str, Any]:
     write_json(out / "aggregate.json", aggregate)
     write_json(out / "threshold_sensitivity.json", sensitivity)
     write_json(out / "classification_rules.json", classification_rules)
+    write_json(out / "scene_evidence.json", scene_bundle)
 
-    # copy runner into packet when emitting elsewhere
     runner_src = Path(__file__).resolve()
     runner_dst = out / "run_escape_tail_forensic.py"
     if runner_src != runner_dst.resolve():
         shutil.copy2(runner_src, runner_dst)
 
-    file_hashes = {
-        name: sha256(out / name) for name in PACKET_FILES if (out / name).is_file()
+    # hash body files + every scene sheet
+    file_hashes: dict[str, str] = {
+        name: sha256(out / name) for name in PACKET_BODY_FILES if (out / name).is_file()
     }
+    for sheet in sorted(sheets_dir.glob("*.jpg")):
+        rel = f"scene_sheets/{sheet.name}"
+        file_hashes[rel] = sha256(sheet)
+
     manifest = {
         "study_id": "escape_tail_forensic_20260711",
         "issue": 102,
@@ -952,6 +1432,11 @@ def emit(pairs: Path, gt_path: Path, out: Path) -> dict[str, Any]:
             "research_line": "boolean_closure_domain_line_20260711 (PR-B #101)",
         },
         "scope": "read-only offline forensic; no gate/preset/ledger/closure-search changes",
+        "rule_provenance": (
+            "terminal vocabulary from #102; numerical cutoffs are PR-C "
+            "implementation-time operationalization (not sealed in #102)"
+        ),
+        "research_acceptance": "pending",
         "frozen_cohort": track_keys,
         "aggregate_terminal": aggregate["terminal"],
         "per_track_categories": {
@@ -960,59 +1445,48 @@ def emit(pairs: Path, gt_path: Path, out: Path) -> dict[str, Any]:
         "files": file_hashes,
     }
     write_json(out / "manifest.json", manifest)
-    # refresh manifest hash inclusion: re-hash without self, store files including manifest last
-    file_hashes = {
-        name: sha256(out / name) for name in PACKET_FILES if name != "manifest.json"
-    }
-    file_hashes["manifest.json"] = "see_files_excluding_self"
-    manifest["files"] = {
-        name: sha256(out / name) for name in PACKET_FILES if (out / name).is_file()
-    }
-    # Avoid circular hash: hash all except manifest, record those; manifest lists them only.
-    body_files = [n for n in PACKET_FILES if n != "manifest.json"]
-    manifest["files"] = {name: sha256(out / name) for name in body_files}
-    write_json(out / "manifest.json", manifest)
     return manifest
 
 
-def verify(pairs: Path, gt_path: Path) -> None:
-    expected_names = list(PACKET_FILES)
+def _compare_packet(expected_dir: Path, rebuilt_dir: Path) -> list[str]:
+    mismatched: list[str] = []
+    exp_manifest = load_json(expected_dir / "manifest.json")
+    reb_manifest = load_json(rebuilt_dir / "manifest.json")
+    for key in set(exp_manifest) | set(reb_manifest):
+        if key == "files":
+            continue
+        if exp_manifest.get(key) != reb_manifest.get(key):
+            mismatched.append(f"manifest.json:{key}")
+    # compare every hashed body file
+    for name, digest in exp_manifest.get("files", {}).items():
+        path_e = expected_dir / name
+        path_r = rebuilt_dir / name
+        if not path_e.is_file() or not path_r.is_file():
+            mismatched.append(f"missing:{name}")
+            continue
+        if name == "run_escape_tail_forensic.py":
+            if path_e.read_bytes() != path_r.read_bytes():
+                mismatched.append(name)
+            continue
+        if sha256(path_e) != sha256(path_r) or digest != sha256(path_e):
+            # allow re-hash: content must match between expected and rebuilt
+            if path_e.read_bytes() != path_r.read_bytes():
+                mismatched.append(name)
+    # rebuilt must not add extra sheets with different content
+    exp_sheets = {p.name for p in (expected_dir / "scene_sheets").glob("*.jpg")}
+    reb_sheets = {p.name for p in (rebuilt_dir / "scene_sheets").glob("*.jpg")}
+    if exp_sheets != reb_sheets:
+        mismatched.append(
+            f"scene_sheets set {sorted(exp_sheets)} vs {sorted(reb_sheets)}"
+        )
+    return mismatched
+
+
+def verify(pairs: Path, gt_path: Path, img_root: Path) -> None:
     with tempfile.TemporaryDirectory(prefix="escape-tail-forensic-") as tmp:
         rebuilt = Path(tmp) / PACKET.name
-        emit(pairs, gt_path, rebuilt)
-        mismatched = []
-        for name in expected_names:
-            if name == "manifest.json":
-                # compare semantic fields, not self-hash circularity
-                a = load_json(PACKET / name)
-                b = load_json(rebuilt / name)
-                for drop in ("files",):
-                    a = dict(a)
-                    b = dict(b)
-                    a.pop(drop, None)
-                    b.pop(drop, None)
-                # compare files excluding manifest script may differ only by path — compare body hashes
-                a_files = load_json(PACKET / name).get("files", {})
-                b_files = load_json(rebuilt / name).get("files", {})
-                if a_files != b_files:
-                    mismatched.append("manifest.json:files")
-                a.pop("files", None)
-                b.pop("files", None)
-                # re-load clean
-                a = load_json(PACKET / name)
-                b = load_json(rebuilt / name)
-                for k in set(a) | set(b):
-                    if k == "files":
-                        continue
-                    if a.get(k) != b.get(k):
-                        mismatched.append(f"manifest.json:{k}")
-                continue
-            if name == "run_escape_tail_forensic.py":
-                if (PACKET / name).read_bytes() != (rebuilt / name).read_bytes():
-                    mismatched.append(name)
-                continue
-            if (PACKET / name).read_bytes() != (rebuilt / name).read_bytes():
-                mismatched.append(name)
+        emit(pairs, gt_path, img_root, rebuilt)
+        mismatched = _compare_packet(PACKET, rebuilt)
     if mismatched:
         raise AssertionError(f"packet is not reproducible: {mismatched}")
     print("forensic packet verification passed")
@@ -1022,6 +1496,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pairs", type=Path, required=True)
     parser.add_argument("--gt", type=Path, default=DEFAULT_GT)
+    parser.add_argument("--img-root", type=Path, default=DEFAULT_IMG_ROOT)
     parser.add_argument("--out", type=Path, default=PACKET)
     parser.add_argument(
         "--verify",
@@ -1032,12 +1507,13 @@ def main() -> None:
     if args.verify:
         if args.out.resolve() != PACKET.resolve():
             parser.error("--verify cannot be combined with a non-default --out")
-        verify(args.pairs, args.gt)
+        verify(args.pairs, args.gt, args.img_root)
         return
-    manifest = emit(args.pairs, args.gt, args.out)
+    manifest = emit(args.pairs, args.gt, args.img_root, args.out)
     print(f"packet emitted: {args.out}")
     print(f"aggregate terminal: {manifest['aggregate_terminal']}")
     print(f"per-track: {manifest['per_track_categories']}")
+    print(f"research_acceptance: {manifest['research_acceptance']}")
 
 
 if __name__ == "__main__":

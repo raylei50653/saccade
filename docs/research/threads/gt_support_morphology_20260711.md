@@ -18,7 +18,7 @@ created: 2026-07-11
 | Boolean closure-domain line | **PR-B normative doc merged** · [PR #101](https://github.com/raylei50653/saccade/pull/101) · [doc](../../modules/semantic/research/boolean_closure_domain_line_20260711.md) |
 | Step-0 verdict | **`UNRESOLVED`**（no valid cluster-aware UCB · core 未求解 · nested 未重跑）+ bounded descriptive hypothesis: corner-concentrated placement + far-Hamming motion-violation-enriched tail |
 | Far-Hamming descriptive tail | 4/209 tracks，**4/4 全在 MOT17-10-SDP**（sequence clustering 為實據）；motion-atom 集中（speed_mismatch 4/4 · dir_cos 3/4 · resid_mean 3/4 · log_h_ratio 0/4）；nominal CP x=4→4.33% 不得跨界 |
-| Forensics (PR-C / #102) | **recorded** · 3×`TRUE_LONG_GAP_REENTRY` + 1×`UNRESOLVED` · aggregate **`ROLE_REVERSAL_SUPPORTED`** · [note](../../modules/semantic/research/escape_tail_forensic_20260711.md) · [packet](../../modules/semantic/research/evidence/escape_tail_forensic_20260711/manifest.json) |
+| Forensics (PR-C / #102) | **packet recorded; research acceptance pending** · operational 3×`TRUE_LONG_GAP_REENTRY` + 1×`UNRESOLVED` · operational aggregate **`ROLE_REVERSAL_SUPPORTED`** · numerical cutoffs = PR-C operationalization (not #102-sealed) · [note](../../modules/semantic/research/escape_tail_forensic_20260711.md) · [packet](../../modules/semantic/research/evidence/escape_tail_forensic_20260711/manifest.json) · [PR #104](https://github.com/raylei50653/saccade/pull/104) |
 | Nested per-fold rerun | **not run**（升 L2+ 的 confirmatory unit） |
 | Production / presets / ledger | **unchanged** |
 
@@ -27,8 +27,9 @@ created: 2026-07-11
 ```text
 step-0 = pooled + in-sample + median-split ⇒ L1 descriptive ceiling
 procedure v1 sealed (#100); PR-B line doc sealed (#101)
-PR-C forensic aggregate = ROLE_REVERSAL_SUPPORTED（single-seq MOT17-10 bound）
-  → authorizes partial-order audit only; NOT global motion closure / veto / production
+PR-C forensic packet recorded; research acceptance pending（PR #104 review）
+  operational aggregate = ROLE_REVERSAL_SUPPORTED（single-seq MOT17-10 bound）
+  → after acceptance: partial-order audit only; NOT global motion closure / veto / production
 不得 veto escape tail（protected GT mass）
 零 exposure cells = UNRESOLVED，不是障壁（framework §19.2）
 不碰 safe-region assetization 的 closed gates（A1 / terminal B / R2–R4）
@@ -50,7 +51,7 @@ PR-C forensic aggregate = ROLE_REVERSAL_SUPPORTED（single-seq MOT17-10 bound）
 
 ## Current step
 
-**PR-C forensic recorded**（issue #102）：aggregate `ROLE_REVERSAL_SUPPORTED`。Next = **PR-D partial-order audit + restricted closure prototype**（motion 僅能以 conditional/context 候選進入 audit，不得直接建全域 closure arcs）。
+**PR-C forensic packet under review**（issue #102 / [PR #104](https://github.com/raylei50653/saccade/pull/104)）：engineering packet + scene sheets landed；research acceptance **pending**（owner interpretation of operational cutoffs）。Accepted aggregate would route to **PR-D partial-order audit**；rejected cutoffs hold descriptive-only。
 
 PR ladder（2026-07-11 owner 定版，五段）：
 
@@ -93,4 +94,4 @@ closing hypothesis: GT 是否形成 corner-concentrated core
 - 2026-07-11: [PR #100](https://github.com/raylei50653/saccade/pull/100) opened as **procedure v1 seal unit**；review fixes #1–#5 landed；**MERGED = seal**。
 - 2026-07-11: Owner 定版 **PR ladder A–E**；[PR #101](https://github.com/raylei50653/saccade/pull/101) **PR-B** boolean closure-domain normative doc **MERGED**。
 - 2026-07-11: **PR #100 review = REQUEST_CHANGES（research seal 層；engineering PASS）**，五點修正全數落地：①§19.5 加 UCB validity（residual clustering 下 plain CP = nominal diagnostic，不得跨 ε_morph；須 cluster-aware 或再聚合）②§19.4 GT trial 改 set-valued semantics（Z_u 全集 + H_C(u)=1[Z_u∩C=∅]；min-d_H representative 降 descriptive-only）③Step-0 terminal 改 **UNRESOLVED** + bounded descriptive hypothesis（`CORE_PLUS_…` token 撤回；「out-of-core mass」保留給 C* 求解後）④core 定義補全：C* = argmin retained-FP s.t. valid UCB[P(H_C=1)] ≤ ε_morph；up-set 方向 + deterministic tie-breaks + complexity cap + Ω/missing-value 宣告 ⑤committed reproduction packet（[evidence/](../../modules/semantic/research/evidence/gt_support_morphology_step0_20260711/manifest.json)：gt_rows / occupancy k4–k8 / tail_tracks / cp_ucb + scripts + pairs.csv SHA seal）。**副發現：tail 4/4 全在 MOT17-10-SDP** —— sequence clustering 為實據非假設，直接支持 UNRESOLVED，並成為 PR-C forensic 的關鍵 context。
-- 2026-07-11: **PR-C / issue #102 escape-tail forensic recorded** — frozen 4-track cohort；3×`TRUE_LONG_GAP_REENTRY`（455/467/503）+ 1×`UNRESOLVED`（459，visible approaching pedestrian / scale change）；aggregate **`ROLE_REVERSAL_SUPPORTED`**；authorizes partial-order audit only；packet [evidence/escape_tail_forensic_20260711/](../../modules/semantic/research/evidence/escape_tail_forensic_20260711/manifest.json) · [note](../../modules/semantic/research/escape_tail_forensic_20260711.md)。
+- 2026-07-11: **PR-C / issue #102 escape-tail forensic packet** opened as [PR #104](https://github.com/raylei50653/saccade/pull/104). Research-owner review requested changes: (1) signal check was tautological (2) scene evidence incomplete (3) numerical cutoffs were not #102-predeclared. Revision: independent Step-0 sealed signal compare + gap/domain checks; contact sheets / nearby / truncation / camera-motion proxy; cutoffs relabeled as PR-C operationalization with `research_acceptance: pending`.

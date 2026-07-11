@@ -11,15 +11,18 @@
  "n_artifact": 0,
  "n_unresolved": 1,
  "authorizes": [
-  "A later partial-order audit may consider motion atoms as conditional_orderable or context_only."
+  "A later partial-order audit may consider motion atoms as conditional_orderable or context_only (research-line Phase B / PR-D prep) — contingent on research-owner acceptance of this operational mapping."
  ],
  "remains_blocked": [
   "global closure arcs on motion atoms",
   "veto against the protected escape tail",
   "production rule / preset / gate change",
   "evidence_ledger promotion beyond this bounded forensic result",
-  "L2+ morphology claims without nested held-out confirmation"
+  "L2+ morphology claims without nested held-out confirmation",
+  "claiming signal bugs are fully ruled out at pixel-trajectory level (builder path untested)"
  ],
+ "rule_provenance": "PR-C implementation-time operationalization of #102 aggregate terminals; ROLE_REVERSAL_SUPPORTED uses operational cutoff n(TRUE)>=3 and n(artifact)==0",
+ "research_acceptance": "pending research-owner interpretation of operational cutoffs",
  "routing": "open separate partial-order audit before any MWC prototype",
- "confidence_boundary": "All four sealed tail tracks sit on MOT17-10-SDP (sequence clustering is fact, not hypothesis). This aggregate authorizes at most a research-line partial-order audit probe; it does not change framework §19 morphology terminals, sealed thresholds, or production behavior."
+ "confidence_boundary": "All four sealed tail tracks sit on MOT17-10-SDP (sequence clustering is fact). Numerical classification cutoffs were not sealed in #102. Builder residual/speed pixel-replay remains untested. This aggregate at most suggests a research-line partial-order audit probe after owner acceptance; it does not change framework §19 morphology terminals, sealed thresholds, or production behavior."
 }

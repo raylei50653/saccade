@@ -1,4 +1,6 @@
 {
+ "terminal_vocabulary_source": "issue #102 (predeclared categories + aggregate names)",
+ "numerical_cutoff_provenance": "PR-C implementation-time operationalization — NOT sealed in #102; subject to research-owner interpretation before research acceptance",
  "per_track_terminals": [
   "TRUE_LONG_GAP_REENTRY",
   "ANNOTATION_ISSUE",
@@ -11,26 +13,37 @@
   "TAIL_ARTIFACT_DOMINATED",
   "TAIL_MECHANISM_UNRESOLVED"
  ],
- "occlusion_strong": {
-  "vis_mean_max": 0.35,
-  "frac_vis_eq_0_min": 0.25,
-  "definition": "occlusion_strong iff gap_vis_mean <= vis_mean_max OR frac_vis_eq_0 >= frac_vis_eq_0_min"
+ "operational_cutoffs": {
+  "occlusion_strong": {
+   "vis_mean_max": 0.35,
+   "frac_vis_eq_0_min": 0.25,
+   "definition": "occlusion_strong_operational iff gap_vis_mean <= vis_mean_max OR frac_vis_eq_0 >= frac_vis_eq_0_min"
+  },
+  "min_motion_violations_for_true": 2,
+  "aggregate_min_true_for_role_reversal": 3,
+  "threshold_rel_flip_max": 0.05,
+  "truncation_margin_px": 8
  },
- "threshold_artifact_dominates": {
-  "rel_flip_max": 0.05,
-  "definition": "All min-d_H violations flip under relative threshold move <= rel_flip_max (no strong violation remains)."
- },
- "TRUE_LONG_GAP_REENTRY": [
+ "TRUE_LONG_GAP_REENTRY_operational": [
   "annotation same-identity + continuous",
-  "signal recompute ok",
-  "not threshold_artifact_dominates",
+  "independent signal checks ok (step0 sealed compare + gap/frame + domain)",
+  "not threshold_artifact_dominates (operational)",
   "height safe on min-d_H row (log_h_ratio z=1)",
   ">=2 motion atom violations on min-d_H row",
-  "occlusion_strong on min-d_H gap window"
+  "occlusion_strong_operational on min-d_H gap window",
+  "contact sheet available",
+  "scene_supports_occlusion_or_crowd"
  ],
- "aggregate_ROLE_REVERSAL_SUPPORTED": "n(TRUE_LONG_GAP_REENTRY) >= 3 AND n(annotation|signal|threshold artifacts) == 0",
- "aggregate_TAIL_ARTIFACT_DOMINATED": "n(artifacts) >= 3 OR (n(artifacts) > n(TRUE) AND n(artifacts) >= 2)",
- "aggregate_else": "TAIL_MECHANISM_UNRESOLVED",
+ "signal_computation_check": {
+  "tested": [
+   "recompute derived atoms from pairs raw vs sealed Step-0 gt_rows",
+   "gap == cand_first_frame - lost_last_frame",
+   "domain checks on builder fields"
+  ],
+  "untested": [
+   "pixel/trajectory replay of builder residual/speed/dir_cos emission"
+  ]
+ },
  "atom_groups": {
   "motion": [
    "speed_mismatch",

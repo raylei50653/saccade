@@ -9,7 +9,8 @@
    "sealed_min_d_h": 4,
    "source_pairs_csv": "out/signal_study/m_b1_gate_coverage_7seq_20260709T121326Z/pairs.csv",
    "source_pairs_csv_sha256": "0ae3896791ec074fbe951198752c17385c4ee0770a7ec3831225d3ea56a69d17",
-   "gt_txt": "datasets/MOT17/train/MOT17-10-SDP/gt/gt.txt"
+   "gt_txt": "datasets/MOT17/train/MOT17-10-SDP/gt/gt.txt",
+   "img_root": "datasets/MOT17/train/MOT17-10-SDP/img1"
   },
   "timeline": {
    "n_gt_match_rows": 1,
@@ -125,14 +126,14 @@
     }
    },
    "values": {
-    "bridge_dist": 5.979898565566743,
-    "dist_h": 3.5289772278394054,
-    "dir_cos": 0.9641842931819048,
-    "gap": 57.0,
     "log_h_ratio": 0.006606134677117269,
     "speed_mismatch": 0.08595848922556658,
     "resid_mean": 5.980521465573062,
-    "score_m_bridge": 4.286207448768069
+    "score_m_bridge": 4.286207448768069,
+    "bridge_dist": 5.979898565566743,
+    "dist_h": 3.5289772278394054,
+    "dir_cos": 0.9641842931819048,
+    "gap": 57.0
    },
    "gap_visibility": {
     "n_annotated_in_gap": 56,
@@ -141,7 +142,7 @@
     "frac_vis_lt_0_3": 0.7321428571428571,
     "frac_vis_eq_0": 0.35714285714285715,
     "longest_full_invis_stretch": 8,
-    "occlusion_strong": true
+    "occlusion_strong_operational": true
    },
    "feet": {
     "lost_xy": [
@@ -165,6 +166,165 @@
     "h_cand_win6": 63.58166666666667,
     "h_lost_extrap": 52.12499999999981,
     "h_cand_extrap": 34.2877142857142
+   },
+   "truncation": {
+    "exit": {
+     "left": false,
+     "top": false,
+     "right": false,
+     "bottom": false,
+     "any": false,
+     "margin_px": 8,
+     "frame_wh": [
+      1920,
+      1080
+     ]
+    },
+    "reentry": {
+     "left": false,
+     "top": false,
+     "right": false,
+     "bottom": false,
+     "any": false,
+     "margin_px": 8,
+     "frame_wh": [
+      1920,
+      1080
+     ]
+    }
+   },
+   "nearby_identities": {
+    "exit_frame": [
+     {
+      "id": 30,
+      "foot_dist_px": 36.43144246389374,
+      "iou": 0.014026402640264026,
+      "vis": 0.62963,
+      "xywh": [
+       296.0,
+       414.0,
+       26.0,
+       76.0
+      ]
+     },
+     {
+      "id": 29,
+      "foot_dist_px": 55.13846207503434,
+      "iou": 0.0,
+      "vis": 1.0,
+      "xywh": [
+       313.0,
+       399.0,
+       34.0,
+       94.0
+      ]
+     },
+     {
+      "id": 34,
+      "foot_dist_px": 91.84906096417099,
+      "iou": 0.0,
+      "vis": 0.057143,
+      "xywh": [
+       350.0,
+       406.0,
+       34.0,
+       95.0
+      ]
+     },
+     {
+      "id": 12,
+      "foot_dist_px": 115.76268828944843,
+      "iou": 0.0,
+      "vis": 0.48571,
+      "xywh": [
+       352.0,
+       386.0,
+       59.0,
+       139.0
+      ]
+     },
+     {
+      "id": 19,
+      "foot_dist_px": 145.89036979869508,
+      "iou": 0.0,
+      "vis": 1.0,
+      "xywh": [
+       352.0,
+       454.0,
+       117.0,
+       81.0
+      ]
+     }
+    ],
+    "reentry_frame": [
+     {
+      "id": 71,
+      "foot_dist_px": 33.55964838909967,
+      "iou": 0.0,
+      "vis": 0.23113,
+      "xywh": [
+       516.0,
+       373.0,
+       23.0,
+       52.0
+      ]
+     },
+     {
+      "id": 29,
+      "foot_dist_px": 51.58730463980455,
+      "iou": 0.04132091447925487,
+      "vis": 0.78665,
+      "xywh": [
+       446.0,
+       353.0,
+       39.0,
+       117.0
+      ]
+     },
+     {
+      "id": 34,
+      "foot_dist_px": 65.41597664179601,
+      "iou": 0.0,
+      "vis": 0.45455,
+      "xywh": [
+       523.0,
+       365.0,
+       33.0,
+       109.0
+      ]
+     },
+     {
+      "id": 30,
+      "foot_dist_px": 66.2872536767062,
+      "iou": 0.0,
+      "vis": 0.74074,
+      "xywh": [
+       426.0,
+       368.0,
+       26.0,
+       96.0
+      ]
+     },
+     {
+      "id": 36,
+      "foot_dist_px": 85.85598406634216,
+      "iou": 0.0,
+      "vis": 0.020244,
+      "xywh": [
+       516.0,
+       415.0,
+       97.0,
+       61.0
+      ]
+     }
+    ]
+   },
+   "camera_motion_proxy": {
+    "n_tracks_with_both_frames": 21,
+    "median_foot_disp_px": 180.23595645708434,
+    "mean_foot_disp_px": 176.22467808508213,
+    "p90_foot_disp_px": 214.88659799996836,
+    "definition": "median Euclidean foot displacement of GT ids present at both frame 114 and 171; proxy for camera+scene motion, not GMC"
    }
   },
   "all_gt_match_rows": [
@@ -214,17 +374,8 @@
      "fwd_resid": 2.9049327340491327,
      "bwd_resid": 9.056110197096991
     },
+    "values_source": "recomputed_from_pairs_raw_columns",
     "values": {
-     "bridge_dist": 5.979898565566743,
-     "dist_h": 3.5289772278394054,
-     "dir_cos": 0.9641842931819048,
-     "gap": 57.0,
-     "log_h_ratio": 0.006606134677117269,
-     "speed_mismatch": 0.08595848922556658,
-     "resid_mean": 5.980521465573062,
-     "score_m_bridge": 4.286207448768069
-    },
-    "recomputed": {
      "log_h_ratio": 0.006606134677117269,
      "speed_mismatch": 0.08595848922556658,
      "resid_mean": 5.980521465573062,
@@ -234,7 +385,6 @@
      "dir_cos": 0.9641842931819048,
      "gap": 57.0
     },
-    "signal_recompute_ok": true,
     "atom_analysis": {
      "bits_atom0_first": "10010101",
      "d_h": 4,
@@ -328,6 +478,37 @@
       }
      }
     },
+    "signal_computation_check": {
+     "ok": true,
+     "failures": [],
+     "step0_compare": {
+      "available": true,
+      "mismatches": []
+     },
+     "frame_gap_check": {
+      "lost_last_frame": 114,
+      "cand_first_frame": 171,
+      "gap": 57,
+      "expected_gap_eq_cand_minus_lost": true,
+      "ok": true
+     },
+     "domain_check_ok": true,
+     "tested": [
+      "derived atoms recomputed from pairs raw columns vs sealed Step-0 gt_rows",
+      "gap == cand_first_frame - lost_last_frame",
+      "builder field domain: |dir_cos|<=1, non-negative distances/heights/gap"
+     ],
+     "untested": [
+      "pixel/trajectory replay of builder-emitted fwd_resid/bwd_resid/dir_cos/speeds",
+      "GMC / camera-compensation correctness inside residual construction"
+     ],
+     "formulas": {
+      "log_h_ratio": "abs(log(h_cand_raw / h_lost_raw))",
+      "speed_mismatch": "abs(lost_exit_speed - cand_entry_speed)",
+      "resid_mean": "0.5 * (fwd_resid + bwd_resid)",
+      "score_m_bridge": "w*0.5*(fwd+bwd)+(1-w)*dist_h with w=sqrt(clip(exit_speed/0.12,0,1))"
+     }
+    },
     "gap_visibility": {
      "n_annotated_in_gap": 56,
      "vis_mean": 0.1932238142857143,
@@ -335,7 +516,7 @@
      "frac_vis_lt_0_3": 0.7321428571428571,
      "frac_vis_eq_0": 0.35714285714285715,
      "longest_full_invis_stretch": 8,
-     "occlusion_strong": true
+     "occlusion_strong_operational": true
     },
     "gt_box_before_exit": {
      "frame": 114,
@@ -365,6 +546,165 @@
       427.0
      ]
     },
+    "truncation": {
+     "exit": {
+      "left": false,
+      "top": false,
+      "right": false,
+      "bottom": false,
+      "any": false,
+      "margin_px": 8,
+      "frame_wh": [
+       1920,
+       1080
+      ]
+     },
+     "reentry": {
+      "left": false,
+      "top": false,
+      "right": false,
+      "bottom": false,
+      "any": false,
+      "margin_px": 8,
+      "frame_wh": [
+       1920,
+       1080
+      ]
+     }
+    },
+    "nearby_identities": {
+     "exit_frame": [
+      {
+       "id": 30,
+       "foot_dist_px": 36.43144246389374,
+       "iou": 0.014026402640264026,
+       "vis": 0.62963,
+       "xywh": [
+        296.0,
+        414.0,
+        26.0,
+        76.0
+       ]
+      },
+      {
+       "id": 29,
+       "foot_dist_px": 55.13846207503434,
+       "iou": 0.0,
+       "vis": 1.0,
+       "xywh": [
+        313.0,
+        399.0,
+        34.0,
+        94.0
+       ]
+      },
+      {
+       "id": 34,
+       "foot_dist_px": 91.84906096417099,
+       "iou": 0.0,
+       "vis": 0.057143,
+       "xywh": [
+        350.0,
+        406.0,
+        34.0,
+        95.0
+       ]
+      },
+      {
+       "id": 12,
+       "foot_dist_px": 115.76268828944843,
+       "iou": 0.0,
+       "vis": 0.48571,
+       "xywh": [
+        352.0,
+        386.0,
+        59.0,
+        139.0
+       ]
+      },
+      {
+       "id": 19,
+       "foot_dist_px": 145.89036979869508,
+       "iou": 0.0,
+       "vis": 1.0,
+       "xywh": [
+        352.0,
+        454.0,
+        117.0,
+        81.0
+       ]
+      }
+     ],
+     "reentry_frame": [
+      {
+       "id": 71,
+       "foot_dist_px": 33.55964838909967,
+       "iou": 0.0,
+       "vis": 0.23113,
+       "xywh": [
+        516.0,
+        373.0,
+        23.0,
+        52.0
+       ]
+      },
+      {
+       "id": 29,
+       "foot_dist_px": 51.58730463980455,
+       "iou": 0.04132091447925487,
+       "vis": 0.78665,
+       "xywh": [
+        446.0,
+        353.0,
+        39.0,
+        117.0
+       ]
+      },
+      {
+       "id": 34,
+       "foot_dist_px": 65.41597664179601,
+       "iou": 0.0,
+       "vis": 0.45455,
+       "xywh": [
+        523.0,
+        365.0,
+        33.0,
+        109.0
+       ]
+      },
+      {
+       "id": 30,
+       "foot_dist_px": 66.2872536767062,
+       "iou": 0.0,
+       "vis": 0.74074,
+       "xywh": [
+        426.0,
+        368.0,
+        26.0,
+        96.0
+       ]
+      },
+      {
+       "id": 36,
+       "foot_dist_px": 85.85598406634216,
+       "iou": 0.0,
+       "vis": 0.020244,
+       "xywh": [
+        516.0,
+        415.0,
+        97.0,
+        61.0
+       ]
+      }
+     ]
+    },
+    "camera_motion_proxy": {
+     "n_tracks_with_both_frames": 21,
+     "median_foot_disp_px": 180.23595645708434,
+     "mean_foot_disp_px": 176.22467808508213,
+     "p90_foot_disp_px": 214.88659799996836,
+     "definition": "median Euclidean foot displacement of GT ids present at both frame 114 and 171; proxy for camera+scene motion, not GMC"
+    },
     "gt_id_frame_span": {
      "first": 10,
      "last": 200,
@@ -384,16 +724,63 @@
    ],
    "n_annotated_frames": 191,
    "internal_annotation_gaps": [],
-   "notes": "GT remains annotated across the tracker gap (fragmentation / occlusion), which is expected for MOT17 and does not by itself imply ANNOTATION_ISSUE."
+   "notes": "GT remaining annotated across the tracker gap is expected for MOT17 and does not by itself imply ANNOTATION_ISSUE."
   },
   "signal_computation_check": {
-   "all_signals_recompute_ok": true,
+   "all_rows_ok": true,
+   "failed_rows": [],
+   "n_rows_checked": 1,
+   "tested": [
+    "derived atoms recomputed from pairs raw columns vs sealed Step-0 gt_rows",
+    "gap == cand_first_frame - lost_last_frame",
+    "builder field domain: |dir_cos|<=1, non-negative distances/heights/gap"
+   ],
+   "untested": [
+    "pixel/trajectory replay of builder-emitted fwd_resid/bwd_resid/dir_cos/speeds",
+    "GMC / camera-compensation correctness inside residual construction"
+   ],
+   "untested_residual_risk": true,
    "formulas": {
     "log_h_ratio": "abs(log(h_cand_raw / h_lost_raw))",
     "speed_mismatch": "abs(lost_exit_speed - cand_entry_speed)",
     "resid_mean": "0.5 * (fwd_resid + bwd_resid)",
     "score_m_bridge": "w*0.5*(fwd+bwd)+(1-w)*dist_h with w=sqrt(clip(exit_speed/0.12,0,1))"
-   }
+   },
+   "per_row": [
+    {
+     "gap": 57,
+     "cand_id": "468",
+     "ok": true,
+     "failures": [],
+     "step0_compare": {
+      "available": true,
+      "mismatches": []
+     },
+     "frame_gap_check": {
+      "lost_last_frame": 114,
+      "cand_first_frame": 171,
+      "gap": 57,
+      "expected_gap_eq_cand_minus_lost": true,
+      "ok": true
+     },
+     "domain_check_ok": true,
+     "tested": [
+      "derived atoms recomputed from pairs raw columns vs sealed Step-0 gt_rows",
+      "gap == cand_first_frame - lost_last_frame",
+      "builder field domain: |dir_cos|<=1, non-negative distances/heights/gap"
+     ],
+     "untested": [
+      "pixel/trajectory replay of builder-emitted fwd_resid/bwd_resid/dir_cos/speeds",
+      "GMC / camera-compensation correctness inside residual construction"
+     ],
+     "formulas": {
+      "log_h_ratio": "abs(log(h_cand_raw / h_lost_raw))",
+      "speed_mismatch": "abs(lost_exit_speed - cand_entry_speed)",
+      "resid_mean": "0.5 * (fwd_resid + bwd_resid)",
+      "score_m_bridge": "w*0.5*(fwd+bwd)+(1-w)*dist_h with w=sqrt(clip(exit_speed/0.12,0,1))"
+     }
+    }
+   ]
   },
   "threshold_artifact_check": {
    "any_violation_near_threshold": true,
@@ -409,7 +796,8 @@
    "remains_in_tail_under_p60": false,
    "reasons": [
     "Track leaves the d_H>=3 tail under pool p60 binarization (membership is median-sensitive)."
-   ]
+   ],
+   "rule_provenance": "PR-C operationalization (THRESHOLD_REL_FLIP_MAX)"
   },
   "mechanism_features": {
    "height_safe_on_min_dh_row": true,
@@ -423,21 +811,76 @@
     "bridge_dist",
     "dist_h"
    ],
-   "occlusion_strong_on_min_dh_row": true,
+   "occlusion_strong_operational_on_min_dh_row": true,
    "gap_vis_mean_min_dh": 0.1932238142857143
+  },
+  "scene_evidence_summary": {
+   "contact_sheet_available": true,
+   "contact_sheet": "scene_sheets/MOT17-10-SDP_455_min_dh.jpg",
+   "contact_sheet_sha256": "070ab9a56ddcf89da4c733bb8c4e8c4996b45b697d26ffbb2039b01b47f643fc",
+   "truncation_any_on_endpoints": false,
+   "nearby_close_on_reentry": true,
+   "scene_supports_occlusion_or_crowd": true,
+   "camera_motion_proxy_min_dh": {
+    "n_tracks_with_both_frames": 21,
+    "median_foot_disp_px": 180.23595645708434,
+    "mean_foot_disp_px": 176.22467808508213,
+    "p90_foot_disp_px": 214.88659799996836,
+    "definition": "median Euclidean foot displacement of GT ids present at both frame 114 and 171; proxy for camera+scene motion, not GMC"
+   },
+   "panels": [
+    {
+     "frame": 114,
+     "label": "exit",
+     "image_found": true,
+     "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000114.jpg",
+     "sha256": "d494724e5cacaf5bc2e78fc03985b92f377143ff0c0032a18629637b26d0aaf6"
+    },
+    {
+     "frame": 115,
+     "label": "gap1",
+     "image_found": true,
+     "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000115.jpg",
+     "sha256": "b8f338a2042fefbb5cfb52ce235f4815b441c8cd1f25a8737d58982c2edf65c6"
+    },
+    {
+     "frame": 142,
+     "label": "gap2",
+     "image_found": true,
+     "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000142.jpg",
+     "sha256": "10377a88264fe0d3c9d2b3fc47cf5207d868643d6de04d3070ded7dfd9337e4b"
+    },
+    {
+     "frame": 170,
+     "label": "gap3",
+     "image_found": true,
+     "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000170.jpg",
+     "sha256": "189a9d4c37fb41383263f0b9024573acf064b15ee5e8ae1a81937e0326f55bf3"
+    },
+    {
+     "frame": 171,
+     "label": "reentry",
+     "image_found": true,
+     "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000171.jpg",
+     "sha256": "22d57063049ae32b2f107f80b547ca67d9860df6c14678facb95fa760533b1a2"
+    }
+   ]
   },
   "verdict": {
    "category": "TRUE_LONG_GAP_REENTRY",
    "supporting_evidence": [
     "min-d_H row keeps log_h_ratio on the safe side of the sealed exploratory median.",
-    "motion atoms violated on min-d_H row: ['resid_mean', 'speed_mismatch'].",
-    "gap-window GT visibility meets the predeclared occlusion_strong criterion.",
-    "annotation and signal recomputation checks pass."
+    "motion atoms violated on min-d_H row: ['resid_mean', 'speed_mismatch'] (operational cutoff: >=2).",
+    "gap-window GT visibility meets the operational occlusion_strong cutoff.",
+    "scene packet provides contact sheet + nearby-id / truncation / camera-motion proxy.",
+    "annotation and independent signal checks pass."
    ],
    "competing_explanations": [
-    "Some motion violations sit near the exploratory median; membership is threshold-sensitive, but occlusion + multi-atom motion break remain."
+    "Some motion violations sit near the exploratory median; membership is threshold-sensitive.",
+    "Nearby GT identities at re-entry; identity-swap / interference remains residual."
    ],
-   "confidence_boundary": "Single-sequence (MOT17-10-SDP) forensic only; exploratory median binarization; descriptive min-d_H layer; does not seal morphology terminals or orderability classes."
+   "rule_provenance": "PR-C implementation-time operationalization; numerical cutoffs not sealed in #102",
+   "confidence_boundary": "Single-sequence (MOT17-10-SDP) forensic only; exploratory median binarization; descriptive min-d_H layer; operational numerical cutoffs subject to research-owner interpretation; builder residual/speed pixel-replay untested; does not seal morphology terminals or orderability classes."
   }
  },
  "MOT17-10-SDP|459": {
@@ -450,7 +893,8 @@
    "sealed_min_d_h": 3,
    "source_pairs_csv": "out/signal_study/m_b1_gate_coverage_7seq_20260709T121326Z/pairs.csv",
    "source_pairs_csv_sha256": "0ae3896791ec074fbe951198752c17385c4ee0770a7ec3831225d3ea56a69d17",
-   "gt_txt": "datasets/MOT17/train/MOT17-10-SDP/gt/gt.txt"
+   "gt_txt": "datasets/MOT17/train/MOT17-10-SDP/gt/gt.txt",
+   "img_root": "datasets/MOT17/train/MOT17-10-SDP/img1"
   },
   "timeline": {
    "n_gt_match_rows": 1,
@@ -563,14 +1007,14 @@
     }
    },
    "values": {
-    "bridge_dist": 2.024788660512916,
-    "dist_h": 0.5547429121296215,
-    "dir_cos": -0.8255088444544604,
-    "gap": 116.0,
     "log_h_ratio": 0.541222092440556,
     "speed_mismatch": 0.04101348632390175,
     "resid_mean": 5.984298174867677,
-    "score_m_bridge": 3.331098015688252
+    "score_m_bridge": 3.331098015688252,
+    "bridge_dist": 2.024788660512916,
+    "dist_h": 0.5547429121296215,
+    "dir_cos": -0.8255088444544604,
+    "gap": 116.0
    },
    "gap_visibility": {
     "n_annotated_in_gap": 115,
@@ -579,7 +1023,7 @@
     "frac_vis_lt_0_3": 0.0,
     "frac_vis_eq_0": 0.0,
     "longest_full_invis_stretch": 0,
-    "occlusion_strong": false
+    "occlusion_strong_operational": false
    },
    "feet": {
     "lost_xy": [
@@ -603,6 +1047,165 @@
     "h_cand_win6": 172.09,
     "h_lost_extrap": 63.88229508196705,
     "h_cand_extrap": 70.86199999999977
+   },
+   "truncation": {
+    "exit": {
+     "left": false,
+     "top": false,
+     "right": false,
+     "bottom": false,
+     "any": false,
+     "margin_px": 8,
+     "frame_wh": [
+      1920,
+      1080
+     ]
+    },
+    "reentry": {
+     "left": false,
+     "top": false,
+     "right": false,
+     "bottom": false,
+     "any": false,
+     "margin_px": 8,
+     "frame_wh": [
+      1920,
+      1080
+     ]
+    }
+   },
+   "nearby_identities": {
+    "exit_frame": [
+     {
+      "id": 30,
+      "foot_dist_px": 32.7566787083184,
+      "iou": 0.0,
+      "vis": 0.96429,
+      "xywh": [
+       515.0,
+       368.0,
+       27.0,
+       88.0
+      ]
+     },
+     {
+      "id": 41,
+      "foot_dist_px": 39.38591118661596,
+      "iou": 0.4156358238495794,
+      "vis": 0.0095188,
+      "xywh": [
+       551.0,
+       364.0,
+       30.0,
+       60.0
+      ]
+     },
+     {
+      "id": 71,
+      "foot_dist_px": 40.496913462633174,
+      "iou": 0.20378054402950668,
+      "vis": 0.29608,
+      "xywh": [
+       562.0,
+       373.0,
+       25.0,
+       52.0
+      ]
+     },
+     {
+      "id": 34,
+      "foot_dist_px": 45.27692569068709,
+      "iou": 0.0,
+      "vis": 0.57108,
+      "xywh": [
+       589.0,
+       361.0,
+       33.0,
+       107.0
+      ]
+     },
+     {
+      "id": 19,
+      "foot_dist_px": 69.9088692513332,
+      "iou": 0.0702482574986295,
+      "vis": 1.0,
+      "xywh": [
+       556.0,
+       424.0,
+       116.0,
+       84.0
+      ]
+     }
+    ],
+    "reentry_frame": [
+     {
+      "id": 30,
+      "foot_dist_px": 33.8710791088799,
+      "iou": 0.17954282407407407,
+      "vis": 0.57143,
+      "xywh": [
+       475.0,
+       305.0,
+       41.0,
+       146.0
+      ]
+     },
+     {
+      "id": 23,
+      "foot_dist_px": 68.60029154456998,
+      "iou": 0.0,
+      "vis": 0.72174,
+      "xywh": [
+       560.0,
+       301.0,
+       48.0,
+       114.0
+      ]
+     },
+     {
+      "id": 19,
+      "foot_dist_px": 85.33024082938006,
+      "iou": 0.10683743996251317,
+      "vis": 0.78977,
+      "xywh": [
+       521.0,
+       384.0,
+       175.0,
+       103.0
+      ]
+     },
+     {
+      "id": 55,
+      "foot_dist_px": 166.1061407654756,
+      "iou": 0.0,
+      "vis": 0.73602,
+      "xywh": [
+       332.0,
+       322.0,
+       85.0,
+       73.0
+      ]
+     },
+     {
+      "id": 36,
+      "foot_dist_px": 183.09833423600554,
+      "iou": 0.0,
+      "vis": 0.15459,
+      "xywh": [
+       646.0,
+       369.0,
+       132.0,
+       81.0
+      ]
+     }
+    ]
+   },
+   "camera_motion_proxy": {
+    "n_tracks_with_both_frames": 24,
+    "median_foot_disp_px": 123.90888732938916,
+    "mean_foot_disp_px": 128.6361249482875,
+    "p90_foot_disp_px": 219.86612876178867,
+    "definition": "median Euclidean foot displacement of GT ids present at both frame 160 and 276; proxy for camera+scene motion, not GMC"
    }
   },
   "all_gt_match_rows": [
@@ -652,17 +1255,8 @@
      "fwd_resid": 4.109548549901806,
      "bwd_resid": 7.859047799833547
     },
+    "values_source": "recomputed_from_pairs_raw_columns",
     "values": {
-     "bridge_dist": 2.024788660512916,
-     "dist_h": 0.5547429121296215,
-     "dir_cos": -0.8255088444544604,
-     "gap": 116.0,
-     "log_h_ratio": 0.541222092440556,
-     "speed_mismatch": 0.04101348632390175,
-     "resid_mean": 5.984298174867677,
-     "score_m_bridge": 3.331098015688252
-    },
-    "recomputed": {
      "log_h_ratio": 0.541222092440556,
      "speed_mismatch": 0.04101348632390175,
      "resid_mean": 5.984298174867677,
@@ -672,7 +1266,6 @@
      "dir_cos": -0.8255088444544604,
      "gap": 116.0
     },
-    "signal_recompute_ok": true,
     "atom_analysis": {
      "bits_atom0_first": "11110001",
      "d_h": 3,
@@ -763,6 +1356,37 @@
       }
      }
     },
+    "signal_computation_check": {
+     "ok": true,
+     "failures": [],
+     "step0_compare": {
+      "available": true,
+      "mismatches": []
+     },
+     "frame_gap_check": {
+      "lost_last_frame": 160,
+      "cand_first_frame": 276,
+      "gap": 116,
+      "expected_gap_eq_cand_minus_lost": true,
+      "ok": true
+     },
+     "domain_check_ok": true,
+     "tested": [
+      "derived atoms recomputed from pairs raw columns vs sealed Step-0 gt_rows",
+      "gap == cand_first_frame - lost_last_frame",
+      "builder field domain: |dir_cos|<=1, non-negative distances/heights/gap"
+     ],
+     "untested": [
+      "pixel/trajectory replay of builder-emitted fwd_resid/bwd_resid/dir_cos/speeds",
+      "GMC / camera-compensation correctness inside residual construction"
+     ],
+     "formulas": {
+      "log_h_ratio": "abs(log(h_cand_raw / h_lost_raw))",
+      "speed_mismatch": "abs(lost_exit_speed - cand_entry_speed)",
+      "resid_mean": "0.5 * (fwd_resid + bwd_resid)",
+      "score_m_bridge": "w*0.5*(fwd+bwd)+(1-w)*dist_h with w=sqrt(clip(exit_speed/0.12,0,1))"
+     }
+    },
     "gap_visibility": {
      "n_annotated_in_gap": 115,
      "vis_mean": 0.6534857391304347,
@@ -770,7 +1394,7 @@
      "frac_vis_lt_0_3": 0.0,
      "frac_vis_eq_0": 0.0,
      "longest_full_invis_stretch": 0,
-     "occlusion_strong": false
+     "occlusion_strong_operational": false
     },
     "gt_box_before_exit": {
      "frame": 160,
@@ -800,6 +1424,165 @@
       456.0
      ]
     },
+    "truncation": {
+     "exit": {
+      "left": false,
+      "top": false,
+      "right": false,
+      "bottom": false,
+      "any": false,
+      "margin_px": 8,
+      "frame_wh": [
+       1920,
+       1080
+      ]
+     },
+     "reentry": {
+      "left": false,
+      "top": false,
+      "right": false,
+      "bottom": false,
+      "any": false,
+      "margin_px": 8,
+      "frame_wh": [
+       1920,
+       1080
+      ]
+     }
+    },
+    "nearby_identities": {
+     "exit_frame": [
+      {
+       "id": 30,
+       "foot_dist_px": 32.7566787083184,
+       "iou": 0.0,
+       "vis": 0.96429,
+       "xywh": [
+        515.0,
+        368.0,
+        27.0,
+        88.0
+       ]
+      },
+      {
+       "id": 41,
+       "foot_dist_px": 39.38591118661596,
+       "iou": 0.4156358238495794,
+       "vis": 0.0095188,
+       "xywh": [
+        551.0,
+        364.0,
+        30.0,
+        60.0
+       ]
+      },
+      {
+       "id": 71,
+       "foot_dist_px": 40.496913462633174,
+       "iou": 0.20378054402950668,
+       "vis": 0.29608,
+       "xywh": [
+        562.0,
+        373.0,
+        25.0,
+        52.0
+       ]
+      },
+      {
+       "id": 34,
+       "foot_dist_px": 45.27692569068709,
+       "iou": 0.0,
+       "vis": 0.57108,
+       "xywh": [
+        589.0,
+        361.0,
+        33.0,
+        107.0
+       ]
+      },
+      {
+       "id": 19,
+       "foot_dist_px": 69.9088692513332,
+       "iou": 0.0702482574986295,
+       "vis": 1.0,
+       "xywh": [
+        556.0,
+        424.0,
+        116.0,
+        84.0
+       ]
+      }
+     ],
+     "reentry_frame": [
+      {
+       "id": 30,
+       "foot_dist_px": 33.8710791088799,
+       "iou": 0.17954282407407407,
+       "vis": 0.57143,
+       "xywh": [
+        475.0,
+        305.0,
+        41.0,
+        146.0
+       ]
+      },
+      {
+       "id": 23,
+       "foot_dist_px": 68.60029154456998,
+       "iou": 0.0,
+       "vis": 0.72174,
+       "xywh": [
+        560.0,
+        301.0,
+        48.0,
+        114.0
+       ]
+      },
+      {
+       "id": 19,
+       "foot_dist_px": 85.33024082938006,
+       "iou": 0.10683743996251317,
+       "vis": 0.78977,
+       "xywh": [
+        521.0,
+        384.0,
+        175.0,
+        103.0
+       ]
+      },
+      {
+       "id": 55,
+       "foot_dist_px": 166.1061407654756,
+       "iou": 0.0,
+       "vis": 0.73602,
+       "xywh": [
+        332.0,
+        322.0,
+        85.0,
+        73.0
+       ]
+      },
+      {
+       "id": 36,
+       "foot_dist_px": 183.09833423600554,
+       "iou": 0.0,
+       "vis": 0.15459,
+       "xywh": [
+        646.0,
+        369.0,
+        132.0,
+        81.0
+       ]
+      }
+     ]
+    },
+    "camera_motion_proxy": {
+     "n_tracks_with_both_frames": 24,
+     "median_foot_disp_px": 123.90888732938916,
+     "mean_foot_disp_px": 128.6361249482875,
+     "p90_foot_disp_px": 219.86612876178867,
+     "definition": "median Euclidean foot displacement of GT ids present at both frame 160 and 276; proxy for camera+scene motion, not GMC"
+    },
     "gt_id_frame_span": {
      "first": 90,
      "last": 351,
@@ -819,16 +1602,63 @@
    ],
    "n_annotated_frames": 262,
    "internal_annotation_gaps": [],
-   "notes": "GT remains annotated across the tracker gap (fragmentation / occlusion), which is expected for MOT17 and does not by itself imply ANNOTATION_ISSUE."
+   "notes": "GT remaining annotated across the tracker gap is expected for MOT17 and does not by itself imply ANNOTATION_ISSUE."
   },
   "signal_computation_check": {
-   "all_signals_recompute_ok": true,
+   "all_rows_ok": true,
+   "failed_rows": [],
+   "n_rows_checked": 1,
+   "tested": [
+    "derived atoms recomputed from pairs raw columns vs sealed Step-0 gt_rows",
+    "gap == cand_first_frame - lost_last_frame",
+    "builder field domain: |dir_cos|<=1, non-negative distances/heights/gap"
+   ],
+   "untested": [
+    "pixel/trajectory replay of builder-emitted fwd_resid/bwd_resid/dir_cos/speeds",
+    "GMC / camera-compensation correctness inside residual construction"
+   ],
+   "untested_residual_risk": true,
    "formulas": {
     "log_h_ratio": "abs(log(h_cand_raw / h_lost_raw))",
     "speed_mismatch": "abs(lost_exit_speed - cand_entry_speed)",
     "resid_mean": "0.5 * (fwd_resid + bwd_resid)",
     "score_m_bridge": "w*0.5*(fwd+bwd)+(1-w)*dist_h with w=sqrt(clip(exit_speed/0.12,0,1))"
-   }
+   },
+   "per_row": [
+    {
+     "gap": 116,
+     "cand_id": "498",
+     "ok": true,
+     "failures": [],
+     "step0_compare": {
+      "available": true,
+      "mismatches": []
+     },
+     "frame_gap_check": {
+      "lost_last_frame": 160,
+      "cand_first_frame": 276,
+      "gap": 116,
+      "expected_gap_eq_cand_minus_lost": true,
+      "ok": true
+     },
+     "domain_check_ok": true,
+     "tested": [
+      "derived atoms recomputed from pairs raw columns vs sealed Step-0 gt_rows",
+      "gap == cand_first_frame - lost_last_frame",
+      "builder field domain: |dir_cos|<=1, non-negative distances/heights/gap"
+     ],
+     "untested": [
+      "pixel/trajectory replay of builder-emitted fwd_resid/bwd_resid/dir_cos/speeds",
+      "GMC / camera-compensation correctness inside residual construction"
+     ],
+     "formulas": {
+      "log_h_ratio": "abs(log(h_cand_raw / h_lost_raw))",
+      "speed_mismatch": "abs(lost_exit_speed - cand_entry_speed)",
+      "resid_mean": "0.5 * (fwd_resid + bwd_resid)",
+      "score_m_bridge": "w*0.5*(fwd+bwd)+(1-w)*dist_h with w=sqrt(clip(exit_speed/0.12,0,1))"
+     }
+    }
+   ]
   },
   "threshold_artifact_check": {
    "any_violation_near_threshold": true,
@@ -843,7 +1673,8 @@
    "remains_in_tail_under_p60": false,
    "reasons": [
     "Track leaves the d_H>=3 tail under pool p60 binarization (membership is median-sensitive)."
-   ]
+   ],
+   "rule_provenance": "PR-C operationalization (THRESHOLD_REL_FLIP_MAX)"
   },
   "mechanism_features": {
    "height_safe_on_min_dh_row": true,
@@ -855,19 +1686,73 @@
    ],
    "n_motion_violations_min_dh": 3,
    "geom_violated_min_dh": [],
-   "occlusion_strong_on_min_dh_row": false,
+   "occlusion_strong_operational_on_min_dh_row": false,
    "gap_vis_mean_min_dh": 0.6534857391304347
+  },
+  "scene_evidence_summary": {
+   "contact_sheet_available": true,
+   "contact_sheet": "scene_sheets/MOT17-10-SDP_459_min_dh.jpg",
+   "contact_sheet_sha256": "a3076e8efb6969698b849fea512128f1096cc92e22fbbf391d9092e1aa351ec5",
+   "truncation_any_on_endpoints": false,
+   "nearby_close_on_reentry": true,
+   "scene_supports_occlusion_or_crowd": false,
+   "camera_motion_proxy_min_dh": {
+    "n_tracks_with_both_frames": 24,
+    "median_foot_disp_px": 123.90888732938916,
+    "mean_foot_disp_px": 128.6361249482875,
+    "p90_foot_disp_px": 219.86612876178867,
+    "definition": "median Euclidean foot displacement of GT ids present at both frame 160 and 276; proxy for camera+scene motion, not GMC"
+   },
+   "panels": [
+    {
+     "frame": 160,
+     "label": "exit",
+     "image_found": true,
+     "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000160.jpg",
+     "sha256": "21741f1d015dd6ac89414603093055fc7789db956a4ee67e31c039749f9330a9"
+    },
+    {
+     "frame": 161,
+     "label": "gap1",
+     "image_found": true,
+     "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000161.jpg",
+     "sha256": "068ea596c3903b6228132371f25ac098dcc46ca90254ea83e13f8693e38da120"
+    },
+    {
+     "frame": 218,
+     "label": "gap2",
+     "image_found": true,
+     "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000218.jpg",
+     "sha256": "62cb2ba017efc7868b0ff06ce948eefe1ee9600b85c347af280157dea2701800"
+    },
+    {
+     "frame": 275,
+     "label": "gap3",
+     "image_found": true,
+     "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000275.jpg",
+     "sha256": "9e0d679940eb984abfd2f57a53e8f70a635039fd9033fbe1887bb095e8f124e8"
+    },
+    {
+     "frame": 276,
+     "label": "reentry",
+     "image_found": true,
+     "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000276.jpg",
+     "sha256": "d43b83ff1f30fce2f53243d8efcaa7f0404c356c9777354e83a5d8d7afa5d946"
+    }
+   ]
   },
   "verdict": {
    "category": "UNRESOLVED",
    "supporting_evidence": [
-    "No single predeclared category is decisive after annotation, signal, threshold, occlusion, and motion/height checks."
+    "No single #102 category is decisive under the operational rule set and available scene evidence."
    ],
    "competing_explanations": [
-    "Motion fails and height is safe, but occlusion_strong is false — tracker fragmentation on a still-visible target is not cleanly long-occlusion re-entry.",
-    "Near-threshold violations leave a residual THRESHOLD_ARTIFACT hypothesis."
+    "Motion fails and height is safe, but operational occlusion_strong is false (visible fragmentation / non-occlusion loss remains open).",
+    "Near-threshold violations leave a residual THRESHOLD_ARTIFACT hypothesis.",
+    "Builder residual/speed trajectory emission is not pixel-replayed (declared untested substrate risk)."
    ],
-   "confidence_boundary": "Single-sequence (MOT17-10-SDP) forensic only; exploratory median binarization; descriptive min-d_H layer; does not seal morphology terminals or orderability classes."
+   "rule_provenance": "PR-C implementation-time operationalization; numerical cutoffs not sealed in #102",
+   "confidence_boundary": "Single-sequence (MOT17-10-SDP) forensic only; exploratory median binarization; descriptive min-d_H layer; operational numerical cutoffs subject to research-owner interpretation; builder residual/speed pixel-replay untested; does not seal morphology terminals or orderability classes."
   }
  },
  "MOT17-10-SDP|467": {
@@ -880,7 +1765,8 @@
    "sealed_min_d_h": 3,
    "source_pairs_csv": "out/signal_study/m_b1_gate_coverage_7seq_20260709T121326Z/pairs.csv",
    "source_pairs_csv_sha256": "0ae3896791ec074fbe951198752c17385c4ee0770a7ec3831225d3ea56a69d17",
-   "gt_txt": "datasets/MOT17/train/MOT17-10-SDP/gt/gt.txt"
+   "gt_txt": "datasets/MOT17/train/MOT17-10-SDP/gt/gt.txt",
+   "img_root": "datasets/MOT17/train/MOT17-10-SDP/img1"
   },
   "timeline": {
    "n_gt_match_rows": 7,
@@ -1006,14 +1892,14 @@
     }
    },
    "values": {
-    "bridge_dist": 2.820774225548746,
-    "dist_h": 3.0740121024556104,
-    "dir_cos": -0.9486645768376765,
-    "gap": 72.0,
     "log_h_ratio": 0.05436400671512813,
     "speed_mismatch": 0.03434879908106268,
     "resid_mean": 5.279561724542736,
-    "score_m_bridge": 4.5408385788089785
+    "score_m_bridge": 4.5408385788089785,
+    "bridge_dist": 2.820774225548746,
+    "dist_h": 3.0740121024556104,
+    "dir_cos": -0.9486645768376765,
+    "gap": 72.0
    },
    "gap_visibility": {
     "n_annotated_in_gap": 71,
@@ -1022,7 +1908,7 @@
     "frac_vis_lt_0_3": 0.9577464788732394,
     "frac_vis_eq_0": 0.8028169014084507,
     "longest_full_invis_stretch": 44,
-    "occlusion_strong": true
+    "occlusion_strong_operational": true
    },
    "feet": {
     "lost_xy": [
@@ -1046,6 +1932,165 @@
     "h_cand_win6": 51.815,
     "h_lost_extrap": 1.0,
     "h_cand_extrap": 37.249999999999915
+   },
+   "truncation": {
+    "exit": {
+     "left": false,
+     "top": false,
+     "right": false,
+     "bottom": false,
+     "any": false,
+     "margin_px": 8,
+     "frame_wh": [
+      1920,
+      1080
+     ]
+    },
+    "reentry": {
+     "left": false,
+     "top": false,
+     "right": false,
+     "bottom": false,
+     "any": false,
+     "margin_px": 8,
+     "frame_wh": [
+      1920,
+      1080
+     ]
+    }
+   },
+   "nearby_identities": {
+    "exit_frame": [
+     {
+      "id": 41,
+      "foot_dist_px": 21.37755832643195,
+      "iou": 0.09715994020926756,
+      "vis": 0.57377,
+      "xywh": [
+       510.0,
+       369.0,
+       29.0,
+       60.0
+      ]
+     },
+     {
+      "id": 34,
+      "foot_dist_px": 50.695167422546305,
+      "iou": 0.10820809248554913,
+      "vis": 0.48182,
+      "xywh": [
+       548.0,
+       363.0,
+       33.0,
+       109.0
+      ]
+     },
+     {
+      "id": 29,
+      "foot_dist_px": 62.659795722616266,
+      "iou": 0.0,
+      "vis": 0.71594,
+      "xywh": [
+       480.0,
+       353.0,
+       38.0,
+       114.0
+      ]
+     },
+     {
+      "id": 36,
+      "foot_dist_px": 68.01470429252781,
+      "iou": 0.016493585827733658,
+      "vis": 0.021383,
+      "xywh": [
+       545.0,
+       416.0,
+       91.0,
+       60.0
+      ]
+     },
+     {
+      "id": 35,
+      "foot_dist_px": 73.49319696407281,
+      "iou": 0.0,
+      "vis": 0.0066047,
+      "xywh": [
+       573.0,
+       407.0,
+       72.0,
+       55.0
+      ]
+     }
+    ],
+    "reentry_frame": [
+     {
+      "id": 59,
+      "foot_dist_px": 18.439088914585774,
+      "iou": 0.09261939218523878,
+      "vis": 0.0,
+      "xywh": [
+       694.0,
+       351.0,
+       21.0,
+       52.0
+      ]
+     },
+     {
+      "id": 57,
+      "foot_dist_px": 44.05961870012041,
+      "iou": 0.0,
+      "vis": 0.57648,
+      "xywh": [
+       757.0,
+       343.0,
+       18.0,
+       63.0
+      ]
+     },
+     {
+      "id": 35,
+      "foot_dist_px": 59.77457653551382,
+      "iou": 0.023551784669397308,
+      "vis": 0.53161,
+      "xywh": [
+       695.0,
+       392.0,
+       91.0,
+       64.0
+      ]
+     },
+     {
+      "id": 56,
+      "foot_dist_px": 61.0,
+      "iou": 0.0,
+      "vis": 0.80513,
+      "xywh": [
+       771.0,
+       346.0,
+       23.0,
+       64.0
+      ]
+     },
+     {
+      "id": 34,
+      "foot_dist_px": 66.85057965343307,
+      "iou": 0.0,
+      "vis": 0.0,
+      "xywh": [
+       667.0,
+       343.0,
+       35.0,
+       111.0
+      ]
+     }
+    ]
+   },
+   "camera_motion_proxy": {
+    "n_tracks_with_both_frames": 27,
+    "median_foot_disp_px": 131.05056276109616,
+    "mean_foot_disp_px": 144.62817273022242,
+    "p90_foot_disp_px": 213.08241606834804,
+    "definition": "median Euclidean foot displacement of GT ids present at both frame 168 and 240; proxy for camera+scene motion, not GMC"
    }
   },
   "all_gt_match_rows": [
@@ -1095,17 +2140,8 @@
      "fwd_resid": 6.807526420854888,
      "bwd_resid": 3.751597028230585
     },
+    "values_source": "recomputed_from_pairs_raw_columns",
     "values": {
-     "bridge_dist": 2.820774225548746,
-     "dist_h": 3.0740121024556104,
-     "dir_cos": -0.9486645768376765,
-     "gap": 72.0,
-     "log_h_ratio": 0.05436400671512813,
-     "speed_mismatch": 0.03434879908106268,
-     "resid_mean": 5.279561724542736,
-     "score_m_bridge": 4.5408385788089785
-    },
-    "recomputed": {
      "log_h_ratio": 0.05436400671512813,
      "speed_mismatch": 0.03434879908106268,
      "resid_mean": 5.279561724542736,
@@ -1115,7 +2151,6 @@
      "dir_cos": -0.9486645768376765,
      "gap": 72.0
     },
-    "signal_recompute_ok": true,
     "atom_analysis": {
      "bits_atom0_first": "11011001",
      "d_h": 3,
@@ -1207,6 +2242,37 @@
       }
      }
     },
+    "signal_computation_check": {
+     "ok": true,
+     "failures": [],
+     "step0_compare": {
+      "available": true,
+      "mismatches": []
+     },
+     "frame_gap_check": {
+      "lost_last_frame": 168,
+      "cand_first_frame": 240,
+      "gap": 72,
+      "expected_gap_eq_cand_minus_lost": true,
+      "ok": true
+     },
+     "domain_check_ok": true,
+     "tested": [
+      "derived atoms recomputed from pairs raw columns vs sealed Step-0 gt_rows",
+      "gap == cand_first_frame - lost_last_frame",
+      "builder field domain: |dir_cos|<=1, non-negative distances/heights/gap"
+     ],
+     "untested": [
+      "pixel/trajectory replay of builder-emitted fwd_resid/bwd_resid/dir_cos/speeds",
+      "GMC / camera-compensation correctness inside residual construction"
+     ],
+     "formulas": {
+      "log_h_ratio": "abs(log(h_cand_raw / h_lost_raw))",
+      "speed_mismatch": "abs(lost_exit_speed - cand_entry_speed)",
+      "resid_mean": "0.5 * (fwd_resid + bwd_resid)",
+      "score_m_bridge": "w*0.5*(fwd+bwd)+(1-w)*dist_h with w=sqrt(clip(exit_speed/0.12,0,1))"
+     }
+    },
     "gap_visibility": {
      "n_annotated_in_gap": 71,
      "vis_mean": 0.03057460563380282,
@@ -1214,7 +2280,7 @@
      "frac_vis_lt_0_3": 0.9577464788732394,
      "frac_vis_eq_0": 0.8028169014084507,
      "longest_full_invis_stretch": 44,
-     "occlusion_strong": true
+     "occlusion_strong_operational": true
     },
     "gt_box_before_exit": {
      "frame": 168,
@@ -1243,6 +2309,165 @@
       722.5,
       399.0
      ]
+    },
+    "truncation": {
+     "exit": {
+      "left": false,
+      "top": false,
+      "right": false,
+      "bottom": false,
+      "any": false,
+      "margin_px": 8,
+      "frame_wh": [
+       1920,
+       1080
+      ]
+     },
+     "reentry": {
+      "left": false,
+      "top": false,
+      "right": false,
+      "bottom": false,
+      "any": false,
+      "margin_px": 8,
+      "frame_wh": [
+       1920,
+       1080
+      ]
+     }
+    },
+    "nearby_identities": {
+     "exit_frame": [
+      {
+       "id": 41,
+       "foot_dist_px": 21.37755832643195,
+       "iou": 0.09715994020926756,
+       "vis": 0.57377,
+       "xywh": [
+        510.0,
+        369.0,
+        29.0,
+        60.0
+       ]
+      },
+      {
+       "id": 34,
+       "foot_dist_px": 50.695167422546305,
+       "iou": 0.10820809248554913,
+       "vis": 0.48182,
+       "xywh": [
+        548.0,
+        363.0,
+        33.0,
+        109.0
+       ]
+      },
+      {
+       "id": 29,
+       "foot_dist_px": 62.659795722616266,
+       "iou": 0.0,
+       "vis": 0.71594,
+       "xywh": [
+        480.0,
+        353.0,
+        38.0,
+        114.0
+       ]
+      },
+      {
+       "id": 36,
+       "foot_dist_px": 68.01470429252781,
+       "iou": 0.016493585827733658,
+       "vis": 0.021383,
+       "xywh": [
+        545.0,
+        416.0,
+        91.0,
+        60.0
+       ]
+      },
+      {
+       "id": 35,
+       "foot_dist_px": 73.49319696407281,
+       "iou": 0.0,
+       "vis": 0.0066047,
+       "xywh": [
+        573.0,
+        407.0,
+        72.0,
+        55.0
+       ]
+      }
+     ],
+     "reentry_frame": [
+      {
+       "id": 59,
+       "foot_dist_px": 18.439088914585774,
+       "iou": 0.09261939218523878,
+       "vis": 0.0,
+       "xywh": [
+        694.0,
+        351.0,
+        21.0,
+        52.0
+       ]
+      },
+      {
+       "id": 57,
+       "foot_dist_px": 44.05961870012041,
+       "iou": 0.0,
+       "vis": 0.57648,
+       "xywh": [
+        757.0,
+        343.0,
+        18.0,
+        63.0
+       ]
+      },
+      {
+       "id": 35,
+       "foot_dist_px": 59.77457653551382,
+       "iou": 0.023551784669397308,
+       "vis": 0.53161,
+       "xywh": [
+        695.0,
+        392.0,
+        91.0,
+        64.0
+       ]
+      },
+      {
+       "id": 56,
+       "foot_dist_px": 61.0,
+       "iou": 0.0,
+       "vis": 0.80513,
+       "xywh": [
+        771.0,
+        346.0,
+        23.0,
+        64.0
+       ]
+      },
+      {
+       "id": 34,
+       "foot_dist_px": 66.85057965343307,
+       "iou": 0.0,
+       "vis": 0.0,
+       "xywh": [
+        667.0,
+        343.0,
+        35.0,
+        111.0
+       ]
+      }
+     ]
+    },
+    "camera_motion_proxy": {
+     "n_tracks_with_both_frames": 27,
+     "median_foot_disp_px": 131.05056276109616,
+     "mean_foot_disp_px": 144.62817273022242,
+     "p90_foot_disp_px": 213.08241606834804,
+     "definition": "median Euclidean foot displacement of GT ids present at both frame 168 and 240; proxy for camera+scene motion, not GMC"
     },
     "gt_id_frame_span": {
      "first": 143,
@@ -1298,17 +2523,8 @@
      "fwd_resid": 9.738750088254191,
      "bwd_resid": 6.264698528299912
     },
+    "values_source": "recomputed_from_pairs_raw_columns",
     "values": {
-     "bridge_dist": 7.961935884424981,
-     "dist_h": 4.469697550146648,
-     "dir_cos": -0.924146707160914,
-     "gap": 97.0,
-     "log_h_ratio": 0.1780243433656862,
-     "speed_mismatch": 0.026931597345699575,
-     "resid_mean": 8.001724308277051,
-     "score_m_bridge": 6.88812598418386
-    },
-    "recomputed": {
      "log_h_ratio": 0.1780243433656862,
      "speed_mismatch": 0.026931597345699575,
      "resid_mean": 8.001724308277051,
@@ -1318,7 +2534,6 @@
      "dir_cos": -0.924146707160914,
      "gap": 97.0
     },
-    "signal_recompute_ok": true,
     "atom_analysis": {
      "bits_atom0_first": "00010001",
      "d_h": 6,
@@ -1416,6 +2631,37 @@
       }
      }
     },
+    "signal_computation_check": {
+     "ok": true,
+     "failures": [],
+     "step0_compare": {
+      "available": true,
+      "mismatches": []
+     },
+     "frame_gap_check": {
+      "lost_last_frame": 168,
+      "cand_first_frame": 265,
+      "gap": 97,
+      "expected_gap_eq_cand_minus_lost": true,
+      "ok": true
+     },
+     "domain_check_ok": true,
+     "tested": [
+      "derived atoms recomputed from pairs raw columns vs sealed Step-0 gt_rows",
+      "gap == cand_first_frame - lost_last_frame",
+      "builder field domain: |dir_cos|<=1, non-negative distances/heights/gap"
+     ],
+     "untested": [
+      "pixel/trajectory replay of builder-emitted fwd_resid/bwd_resid/dir_cos/speeds",
+      "GMC / camera-compensation correctness inside residual construction"
+     ],
+     "formulas": {
+      "log_h_ratio": "abs(log(h_cand_raw / h_lost_raw))",
+      "speed_mismatch": "abs(lost_exit_speed - cand_entry_speed)",
+      "resid_mean": "0.5 * (fwd_resid + bwd_resid)",
+      "score_m_bridge": "w*0.5*(fwd+bwd)+(1-w)*dist_h with w=sqrt(clip(exit_speed/0.12,0,1))"
+     }
+    },
     "gap_visibility": {
      "n_annotated_in_gap": 96,
      "vis_mean": 0.1578395,
@@ -1423,7 +2669,7 @@
      "frac_vis_lt_0_3": 0.7708333333333334,
      "frac_vis_eq_0": 0.59375,
      "longest_full_invis_stretch": 44,
-     "occlusion_strong": true
+     "occlusion_strong_operational": true
     },
     "gt_box_before_exit": {
      "frame": 168,
@@ -1452,6 +2698,165 @@
       782.0,
       378.0
      ]
+    },
+    "truncation": {
+     "exit": {
+      "left": false,
+      "top": false,
+      "right": false,
+      "bottom": false,
+      "any": false,
+      "margin_px": 8,
+      "frame_wh": [
+       1920,
+       1080
+      ]
+     },
+     "reentry": {
+      "left": false,
+      "top": false,
+      "right": false,
+      "bottom": false,
+      "any": false,
+      "margin_px": 8,
+      "frame_wh": [
+       1920,
+       1080
+      ]
+     }
+    },
+    "nearby_identities": {
+     "exit_frame": [
+      {
+       "id": 41,
+       "foot_dist_px": 21.37755832643195,
+       "iou": 0.09715994020926756,
+       "vis": 0.57377,
+       "xywh": [
+        510.0,
+        369.0,
+        29.0,
+        60.0
+       ]
+      },
+      {
+       "id": 34,
+       "foot_dist_px": 50.695167422546305,
+       "iou": 0.10820809248554913,
+       "vis": 0.48182,
+       "xywh": [
+        548.0,
+        363.0,
+        33.0,
+        109.0
+       ]
+      },
+      {
+       "id": 29,
+       "foot_dist_px": 62.659795722616266,
+       "iou": 0.0,
+       "vis": 0.71594,
+       "xywh": [
+        480.0,
+        353.0,
+        38.0,
+        114.0
+       ]
+      },
+      {
+       "id": 36,
+       "foot_dist_px": 68.01470429252781,
+       "iou": 0.016493585827733658,
+       "vis": 0.021383,
+       "xywh": [
+        545.0,
+        416.0,
+        91.0,
+        60.0
+       ]
+      },
+      {
+       "id": 35,
+       "foot_dist_px": 73.49319696407281,
+       "iou": 0.0,
+       "vis": 0.0066047,
+       "xywh": [
+        573.0,
+        407.0,
+        72.0,
+        55.0
+       ]
+      }
+     ],
+     "reentry_frame": [
+      {
+       "id": 59,
+       "foot_dist_px": 12.619429464123963,
+       "iou": 0.27123287671232876,
+       "vis": 0.061404,
+       "xywh": [
+        761.0,
+        315.0,
+        21.0,
+        56.0
+       ]
+      },
+      {
+       "id": 57,
+       "foot_dist_px": 49.751884386422994,
+       "iou": 0.0,
+       "vis": 0.73134,
+       "xywh": [
+        823.0,
+        317.0,
+        17.0,
+        66.0
+       ]
+      },
+      {
+       "id": 35,
+       "foot_dist_px": 57.578207683115664,
+       "iou": 0.038852097130242826,
+       "vis": 0.60688,
+       "xywh": [
+        759.0,
+        366.0,
+        91.0,
+        65.0
+       ]
+      },
+      {
+       "id": 34,
+       "foot_dist_px": 62.40392615853589,
+       "iou": 0.0,
+       "vis": 0.0,
+       "xywh": [
+        728.0,
+        310.0,
+        39.0,
+        120.0
+       ]
+      },
+      {
+       "id": 56,
+       "foot_dist_px": 75.0066663703967,
+       "iou": 0.0,
+       "vis": 0.95091,
+       "xywh": [
+        846.0,
+        318.0,
+        22.0,
+        61.0
+       ]
+      }
+     ]
+    },
+    "camera_motion_proxy": {
+     "n_tracks_with_both_frames": 27,
+     "median_foot_disp_px": 193.96133635340834,
+     "mean_foot_disp_px": 209.1692045626844,
+     "p90_foot_disp_px": 268.98061121260145,
+     "definition": "median Euclidean foot displacement of GT ids present at both frame 168 and 265; proxy for camera+scene motion, not GMC"
     },
     "gt_id_frame_span": {
      "first": 143,
@@ -1507,17 +2912,8 @@
      "fwd_resid": 9.25742641669885,
      "bwd_resid": 5.5177051736502385
     },
+    "values_source": "recomputed_from_pairs_raw_columns",
     "values": {
-     "bridge_dist": 5.943283541976607,
-     "dist_h": 2.459292387556721,
-     "dir_cos": -0.6834284749460396,
-     "gap": 143.0,
-     "log_h_ratio": 0.003176463424843913,
-     "speed_mismatch": 0.024031044433355728,
-     "resid_mean": 7.387565795174544,
-     "score_m_bridge": 5.695817794788478
-    },
-    "recomputed": {
      "log_h_ratio": 0.003176463424843913,
      "speed_mismatch": 0.024031044433355728,
      "resid_mean": 7.387565795174544,
@@ -1527,7 +2923,6 @@
      "dir_cos": -0.6834284749460396,
      "gap": 143.0
     },
-    "signal_recompute_ok": true,
     "atom_analysis": {
      "bits_atom0_first": "00110110",
      "d_h": 4,
@@ -1621,6 +3016,37 @@
       }
      }
     },
+    "signal_computation_check": {
+     "ok": true,
+     "failures": [],
+     "step0_compare": {
+      "available": true,
+      "mismatches": []
+     },
+     "frame_gap_check": {
+      "lost_last_frame": 168,
+      "cand_first_frame": 311,
+      "gap": 143,
+      "expected_gap_eq_cand_minus_lost": true,
+      "ok": true
+     },
+     "domain_check_ok": true,
+     "tested": [
+      "derived atoms recomputed from pairs raw columns vs sealed Step-0 gt_rows",
+      "gap == cand_first_frame - lost_last_frame",
+      "builder field domain: |dir_cos|<=1, non-negative distances/heights/gap"
+     ],
+     "untested": [
+      "pixel/trajectory replay of builder-emitted fwd_resid/bwd_resid/dir_cos/speeds",
+      "GMC / camera-compensation correctness inside residual construction"
+     ],
+     "formulas": {
+      "log_h_ratio": "abs(log(h_cand_raw / h_lost_raw))",
+      "speed_mismatch": "abs(lost_exit_speed - cand_entry_speed)",
+      "resid_mean": "0.5 * (fwd_resid + bwd_resid)",
+      "score_m_bridge": "w*0.5*(fwd+bwd)+(1-w)*dist_h with w=sqrt(clip(exit_speed/0.12,0,1))"
+     }
+    },
     "gap_visibility": {
      "n_annotated_in_gap": 142,
      "vis_mean": 0.33436445070422527,
@@ -1628,7 +3054,7 @@
      "frac_vis_lt_0_3": 0.5492957746478874,
      "frac_vis_eq_0": 0.4014084507042254,
      "longest_full_invis_stretch": 44,
-     "occlusion_strong": true
+     "occlusion_strong_operational": true
     },
     "gt_box_before_exit": {
      "frame": 168,
@@ -1657,6 +3083,165 @@
       659.5,
       341.0
      ]
+    },
+    "truncation": {
+     "exit": {
+      "left": false,
+      "top": false,
+      "right": false,
+      "bottom": false,
+      "any": false,
+      "margin_px": 8,
+      "frame_wh": [
+       1920,
+       1080
+      ]
+     },
+     "reentry": {
+      "left": false,
+      "top": false,
+      "right": false,
+      "bottom": false,
+      "any": false,
+      "margin_px": 8,
+      "frame_wh": [
+       1920,
+       1080
+      ]
+     }
+    },
+    "nearby_identities": {
+     "exit_frame": [
+      {
+       "id": 41,
+       "foot_dist_px": 21.37755832643195,
+       "iou": 0.09715994020926756,
+       "vis": 0.57377,
+       "xywh": [
+        510.0,
+        369.0,
+        29.0,
+        60.0
+       ]
+      },
+      {
+       "id": 34,
+       "foot_dist_px": 50.695167422546305,
+       "iou": 0.10820809248554913,
+       "vis": 0.48182,
+       "xywh": [
+        548.0,
+        363.0,
+        33.0,
+        109.0
+       ]
+      },
+      {
+       "id": 29,
+       "foot_dist_px": 62.659795722616266,
+       "iou": 0.0,
+       "vis": 0.71594,
+       "xywh": [
+        480.0,
+        353.0,
+        38.0,
+        114.0
+       ]
+      },
+      {
+       "id": 36,
+       "foot_dist_px": 68.01470429252781,
+       "iou": 0.016493585827733658,
+       "vis": 0.021383,
+       "xywh": [
+        545.0,
+        416.0,
+        91.0,
+        60.0
+       ]
+      },
+      {
+       "id": 35,
+       "foot_dist_px": 73.49319696407281,
+       "iou": 0.0,
+       "vis": 0.0066047,
+       "xywh": [
+        573.0,
+        407.0,
+        72.0,
+        55.0
+       ]
+      }
+     ],
+     "reentry_frame": [
+      {
+       "id": 59,
+       "foot_dist_px": 20.886598574205422,
+       "iou": 0.06387832699619772,
+       "vis": 0.7,
+       "xywh": [
+        628.0,
+        278.0,
+        22.0,
+        59.0
+       ]
+      },
+      {
+       "id": 57,
+       "foot_dist_px": 45.5,
+       "iou": 0.0,
+       "vis": 0.0,
+       "xywh": [
+        695.0,
+        271.0,
+        20.0,
+        70.0
+       ]
+      },
+      {
+       "id": 56,
+       "foot_dist_px": 64.07027391856539,
+       "iou": 0.0,
+       "vis": 0.0,
+       "xywh": [
+        713.0,
+        274.0,
+        21.0,
+        64.0
+       ]
+      },
+      {
+       "id": 35,
+       "foot_dist_px": 64.19501538281614,
+       "iou": 0.026835551738943753,
+       "vis": 0.59091,
+       "xywh": [
+        610.0,
+        331.0,
+        109.0,
+        74.0
+       ]
+      },
+      {
+       "id": 32,
+       "foot_dist_px": 70.7248188403477,
+       "iou": 0.0,
+       "vis": 0.59879,
+       "xywh": [
+        690.0,
+        271.0,
+        37.0,
+        121.0
+       ]
+      }
+     ]
+    },
+    "camera_motion_proxy": {
+     "n_tracks_with_both_frames": 26,
+     "median_foot_disp_px": 134.17840524049313,
+     "mean_foot_disp_px": 131.926324224838,
+     "p90_foot_disp_px": 211.30096904150088,
+     "definition": "median Euclidean foot displacement of GT ids present at both frame 168 and 311; proxy for camera+scene motion, not GMC"
     },
     "gt_id_frame_span": {
      "first": 143,
@@ -1712,17 +3297,8 @@
      "fwd_resid": 9.911032836730403,
      "bwd_resid": 4.084487096651491
     },
+    "values_source": "recomputed_from_pairs_raw_columns",
     "values": {
-     "bridge_dist": 2.9696255028877463,
-     "dist_h": 2.707379416274464,
-     "dir_cos": -0.7371222308538118,
-     "gap": 151.0,
-     "log_h_ratio": 0.014746352876287769,
-     "speed_mismatch": 0.007068423394214179,
-     "resid_mean": 6.997759966690946,
-     "score_m_bridge": 5.512351019197314
-    },
-    "recomputed": {
      "log_h_ratio": 0.014746352876287769,
      "speed_mismatch": 0.007068423394214179,
      "resid_mean": 6.997759966690946,
@@ -1732,7 +3308,6 @@
      "dir_cos": -0.7371222308538118,
      "gap": 151.0
     },
-    "signal_recompute_ok": true,
     "atom_analysis": {
      "bits_atom0_first": "01010010",
      "d_h": 5,
@@ -1828,6 +3403,37 @@
       }
      }
     },
+    "signal_computation_check": {
+     "ok": true,
+     "failures": [],
+     "step0_compare": {
+      "available": true,
+      "mismatches": []
+     },
+     "frame_gap_check": {
+      "lost_last_frame": 168,
+      "cand_first_frame": 319,
+      "gap": 151,
+      "expected_gap_eq_cand_minus_lost": true,
+      "ok": true
+     },
+     "domain_check_ok": true,
+     "tested": [
+      "derived atoms recomputed from pairs raw columns vs sealed Step-0 gt_rows",
+      "gap == cand_first_frame - lost_last_frame",
+      "builder field domain: |dir_cos|<=1, non-negative distances/heights/gap"
+     ],
+     "untested": [
+      "pixel/trajectory replay of builder-emitted fwd_resid/bwd_resid/dir_cos/speeds",
+      "GMC / camera-compensation correctness inside residual construction"
+     ],
+     "formulas": {
+      "log_h_ratio": "abs(log(h_cand_raw / h_lost_raw))",
+      "speed_mismatch": "abs(lost_exit_speed - cand_entry_speed)",
+      "resid_mean": "0.5 * (fwd_resid + bwd_resid)",
+      "score_m_bridge": "w*0.5*(fwd+bwd)+(1-w)*dist_h with w=sqrt(clip(exit_speed/0.12,0,1))"
+     }
+    },
     "gap_visibility": {
      "n_annotated_in_gap": 150,
      "vis_mean": 0.3578768133333333,
@@ -1835,7 +3441,7 @@
      "frac_vis_lt_0_3": 0.52,
      "frac_vis_eq_0": 0.38,
      "longest_full_invis_stretch": 44,
-     "occlusion_strong": true
+     "occlusion_strong_operational": true
     },
     "gt_box_before_exit": {
      "frame": 168,
@@ -1864,6 +3470,165 @@
       681.5,
       341.0
      ]
+    },
+    "truncation": {
+     "exit": {
+      "left": false,
+      "top": false,
+      "right": false,
+      "bottom": false,
+      "any": false,
+      "margin_px": 8,
+      "frame_wh": [
+       1920,
+       1080
+      ]
+     },
+     "reentry": {
+      "left": false,
+      "top": false,
+      "right": false,
+      "bottom": false,
+      "any": false,
+      "margin_px": 8,
+      "frame_wh": [
+       1920,
+       1080
+      ]
+     }
+    },
+    "nearby_identities": {
+     "exit_frame": [
+      {
+       "id": 41,
+       "foot_dist_px": 21.37755832643195,
+       "iou": 0.09715994020926756,
+       "vis": 0.57377,
+       "xywh": [
+        510.0,
+        369.0,
+        29.0,
+        60.0
+       ]
+      },
+      {
+       "id": 34,
+       "foot_dist_px": 50.695167422546305,
+       "iou": 0.10820809248554913,
+       "vis": 0.48182,
+       "xywh": [
+        548.0,
+        363.0,
+        33.0,
+        109.0
+       ]
+      },
+      {
+       "id": 29,
+       "foot_dist_px": 62.659795722616266,
+       "iou": 0.0,
+       "vis": 0.71594,
+       "xywh": [
+        480.0,
+        353.0,
+        38.0,
+        114.0
+       ]
+      },
+      {
+       "id": 36,
+       "foot_dist_px": 68.01470429252781,
+       "iou": 0.016493585827733658,
+       "vis": 0.021383,
+       "xywh": [
+        545.0,
+        416.0,
+        91.0,
+        60.0
+       ]
+      },
+      {
+       "id": 35,
+       "foot_dist_px": 73.49319696407281,
+       "iou": 0.0,
+       "vis": 0.0066047,
+       "xywh": [
+        573.0,
+        407.0,
+        72.0,
+        55.0
+       ]
+      }
+     ],
+     "reentry_frame": [
+      {
+       "id": 59,
+       "foot_dist_px": 30.103986446980738,
+       "iou": 0.0,
+       "vis": 0.86441,
+       "xywh": [
+        641.0,
+        289.0,
+        22.0,
+        58.0
+       ]
+      },
+      {
+       "id": 57,
+       "foot_dist_px": 35.415392133929565,
+       "iou": 0.0,
+       "vis": 0.0093897,
+       "xywh": [
+        706.0,
+        279.0,
+        20.0,
+        70.0
+       ]
+      },
+      {
+       "id": 32,
+       "foot_dist_px": 57.87054518492115,
+       "iou": 0.15730337078651685,
+       "vis": 0.52893,
+       "xywh": [
+        680.0,
+        276.0,
+        39.0,
+        120.0
+       ]
+      },
+      {
+       "id": 56,
+       "foot_dist_px": 64.6297145282261,
+       "iou": 0.0,
+       "vis": 0.63636,
+       "xywh": [
+        735.0,
+        286.0,
+        21.0,
+        64.0
+       ]
+      },
+      {
+       "id": 31,
+       "foot_dist_px": 65.17860078277225,
+       "iou": 0.0,
+       "vis": 0.31038,
+       "xywh": [
+        694.0,
+        281.0,
+        48.0,
+        114.0
+       ]
+      }
+     ]
+    },
+    "camera_motion_proxy": {
+     "n_tracks_with_both_frames": 26,
+     "median_foot_disp_px": 118.41386671419366,
+     "mean_foot_disp_px": 132.6785367715649,
+     "p90_foot_disp_px": 234.81348270487058,
+     "definition": "median Euclidean foot displacement of GT ids present at both frame 168 and 319; proxy for camera+scene motion, not GMC"
     },
     "gt_id_frame_span": {
      "first": 143,
@@ -1919,17 +3684,8 @@
      "fwd_resid": 11.22209098458107,
      "bwd_resid": 6.254825447780463
     },
+    "values_source": "recomputed_from_pairs_raw_columns",
     "values": {
-     "bridge_dist": 7.759294498972399,
-     "dist_h": 2.6258047541724805,
-     "dir_cos": -0.8426608369584905,
-     "gap": 173.0,
-     "log_h_ratio": 0.004330453136426949,
-     "speed_mismatch": 0.026928267067761056,
-     "resid_mean": 8.738458216180767,
-     "score_m_bridge": 6.632614436516252
-    },
-    "recomputed": {
      "log_h_ratio": 0.004330453136426949,
      "speed_mismatch": 0.026928267067761056,
      "resid_mean": 8.738458216180767,
@@ -1939,7 +3695,6 @@
      "dir_cos": -0.8426608369584905,
      "gap": 173.0
     },
-    "signal_recompute_ok": true,
     "atom_analysis": {
      "bits_atom0_first": "00010000",
      "d_h": 7,
@@ -2039,6 +3794,37 @@
       }
      }
     },
+    "signal_computation_check": {
+     "ok": true,
+     "failures": [],
+     "step0_compare": {
+      "available": true,
+      "mismatches": []
+     },
+     "frame_gap_check": {
+      "lost_last_frame": 168,
+      "cand_first_frame": 341,
+      "gap": 173,
+      "expected_gap_eq_cand_minus_lost": true,
+      "ok": true
+     },
+     "domain_check_ok": true,
+     "tested": [
+      "derived atoms recomputed from pairs raw columns vs sealed Step-0 gt_rows",
+      "gap == cand_first_frame - lost_last_frame",
+      "builder field domain: |dir_cos|<=1, non-negative distances/heights/gap"
+     ],
+     "untested": [
+      "pixel/trajectory replay of builder-emitted fwd_resid/bwd_resid/dir_cos/speeds",
+      "GMC / camera-compensation correctness inside residual construction"
+     ],
+     "formulas": {
+      "log_h_ratio": "abs(log(h_cand_raw / h_lost_raw))",
+      "speed_mismatch": "abs(lost_exit_speed - cand_entry_speed)",
+      "resid_mean": "0.5 * (fwd_resid + bwd_resid)",
+      "score_m_bridge": "w*0.5*(fwd+bwd)+(1-w)*dist_h with w=sqrt(clip(exit_speed/0.12,0,1))"
+     }
+    },
     "gap_visibility": {
      "n_annotated_in_gap": 172,
      "vis_mean": 0.32237557558139535,
@@ -2046,7 +3832,7 @@
      "frac_vis_lt_0_3": 0.5697674418604651,
      "frac_vis_eq_0": 0.4186046511627907,
      "longest_full_invis_stretch": 44,
-     "occlusion_strong": true
+     "occlusion_strong_operational": true
     },
     "gt_box_before_exit": {
      "frame": 168,
@@ -2075,6 +3861,165 @@
       688.5,
       370.0
      ]
+    },
+    "truncation": {
+     "exit": {
+      "left": false,
+      "top": false,
+      "right": false,
+      "bottom": false,
+      "any": false,
+      "margin_px": 8,
+      "frame_wh": [
+       1920,
+       1080
+      ]
+     },
+     "reentry": {
+      "left": false,
+      "top": false,
+      "right": false,
+      "bottom": false,
+      "any": false,
+      "margin_px": 8,
+      "frame_wh": [
+       1920,
+       1080
+      ]
+     }
+    },
+    "nearby_identities": {
+     "exit_frame": [
+      {
+       "id": 41,
+       "foot_dist_px": 21.37755832643195,
+       "iou": 0.09715994020926756,
+       "vis": 0.57377,
+       "xywh": [
+        510.0,
+        369.0,
+        29.0,
+        60.0
+       ]
+      },
+      {
+       "id": 34,
+       "foot_dist_px": 50.695167422546305,
+       "iou": 0.10820809248554913,
+       "vis": 0.48182,
+       "xywh": [
+        548.0,
+        363.0,
+        33.0,
+        109.0
+       ]
+      },
+      {
+       "id": 29,
+       "foot_dist_px": 62.659795722616266,
+       "iou": 0.0,
+       "vis": 0.71594,
+       "xywh": [
+        480.0,
+        353.0,
+        38.0,
+        114.0
+       ]
+      },
+      {
+       "id": 36,
+       "foot_dist_px": 68.01470429252781,
+       "iou": 0.016493585827733658,
+       "vis": 0.021383,
+       "xywh": [
+        545.0,
+        416.0,
+        91.0,
+        60.0
+       ]
+      },
+      {
+       "id": 35,
+       "foot_dist_px": 73.49319696407281,
+       "iou": 0.0,
+       "vis": 0.0066047,
+       "xywh": [
+        573.0,
+        407.0,
+        72.0,
+        55.0
+       ]
+      }
+     ],
+     "reentry_frame": [
+      {
+       "id": 59,
+       "foot_dist_px": 20.223748416156685,
+       "iou": 0.06507105459985041,
+       "vis": 0.0,
+       "xywh": [
+        658.0,
+        304.0,
+        21.0,
+        63.0
+       ]
+      },
+      {
+       "id": 57,
+       "foot_dist_px": 33.54101966249684,
+       "iou": 0.0,
+       "vis": 0.36512,
+       "xywh": [
+        709.0,
+        292.0,
+        25.0,
+        72.0
+       ]
+      },
+      {
+       "id": 31,
+       "foot_dist_px": 49.64876634922564,
+       "iou": 0.04289732770745429,
+       "vis": 0.5,
+       "xywh": [
+        641.0,
+        298.0,
+        39.0,
+        113.0
+       ]
+      },
+      {
+       "id": 56,
+       "foot_dist_px": 63.788713735268246,
+       "iou": 0.0,
+       "vis": 0.0,
+       "xywh": [
+        741.0,
+        296.0,
+        21.0,
+        64.0
+       ]
+      },
+      {
+       "id": 32,
+       "foot_dist_px": 67.20119046564577,
+       "iou": 0.0,
+       "vis": 0.22337,
+       "xywh": [
+        612.0,
+        291.0,
+        45.0,
+        119.0
+       ]
+      }
+     ]
+    },
+    "camera_motion_proxy": {
+     "n_tracks_with_both_frames": 24,
+     "median_foot_disp_px": 149.5256116608646,
+     "mean_foot_disp_px": 163.9361159431311,
+     "p90_foot_disp_px": 270.5546062039386,
+     "definition": "median Euclidean foot displacement of GT ids present at both frame 168 and 341; proxy for camera+scene motion, not GMC"
     },
     "gt_id_frame_span": {
      "first": 143,
@@ -2130,17 +4075,8 @@
      "fwd_resid": 12.012345306994357,
      "bwd_resid": 11.705354234809954
     },
+    "values_source": "recomputed_from_pairs_raw_columns",
     "values": {
-     "bridge_dist": 1.8930819217120505,
-     "dist_h": 1.9790314583512068,
-     "dir_cos": -0.9230449095520415,
-     "gap": 201.0,
-     "log_h_ratio": 0.043282660141222215,
-     "speed_mismatch": 0.017526398482070354,
-     "resid_mean": 11.858849770902156,
-     "score_m_bridge": 8.391693874973692
-    },
-    "recomputed": {
      "log_h_ratio": 0.043282660141222215,
      "speed_mismatch": 0.017526398482070354,
      "resid_mean": 11.858849770902156,
@@ -2150,7 +4086,6 @@
      "dir_cos": -0.9230449095520415,
      "gap": 201.0
     },
-    "signal_recompute_ok": true,
     "atom_analysis": {
      "bits_atom0_first": "01110010",
      "d_h": 4,
@@ -2244,6 +4179,37 @@
       }
      }
     },
+    "signal_computation_check": {
+     "ok": true,
+     "failures": [],
+     "step0_compare": {
+      "available": true,
+      "mismatches": []
+     },
+     "frame_gap_check": {
+      "lost_last_frame": 168,
+      "cand_first_frame": 369,
+      "gap": 201,
+      "expected_gap_eq_cand_minus_lost": true,
+      "ok": true
+     },
+     "domain_check_ok": true,
+     "tested": [
+      "derived atoms recomputed from pairs raw columns vs sealed Step-0 gt_rows",
+      "gap == cand_first_frame - lost_last_frame",
+      "builder field domain: |dir_cos|<=1, non-negative distances/heights/gap"
+     ],
+     "untested": [
+      "pixel/trajectory replay of builder-emitted fwd_resid/bwd_resid/dir_cos/speeds",
+      "GMC / camera-compensation correctness inside residual construction"
+     ],
+     "formulas": {
+      "log_h_ratio": "abs(log(h_cand_raw / h_lost_raw))",
+      "speed_mismatch": "abs(lost_exit_speed - cand_entry_speed)",
+      "resid_mean": "0.5 * (fwd_resid + bwd_resid)",
+      "score_m_bridge": "w*0.5*(fwd+bwd)+(1-w)*dist_h with w=sqrt(clip(exit_speed/0.12,0,1))"
+     }
+    },
     "gap_visibility": {
      "n_annotated_in_gap": 200,
      "vis_mean": 0.2993950825,
@@ -2251,7 +4217,7 @@
      "frac_vis_lt_0_3": 0.595,
      "frac_vis_eq_0": 0.45,
      "longest_full_invis_stretch": 44,
-     "occlusion_strong": true
+     "occlusion_strong_operational": true
     },
     "gt_box_before_exit": {
      "frame": 168,
@@ -2280,6 +4246,165 @@
       660.0,
       404.0
      ]
+    },
+    "truncation": {
+     "exit": {
+      "left": false,
+      "top": false,
+      "right": false,
+      "bottom": false,
+      "any": false,
+      "margin_px": 8,
+      "frame_wh": [
+       1920,
+       1080
+      ]
+     },
+     "reentry": {
+      "left": false,
+      "top": false,
+      "right": false,
+      "bottom": false,
+      "any": false,
+      "margin_px": 8,
+      "frame_wh": [
+       1920,
+       1080
+      ]
+     }
+    },
+    "nearby_identities": {
+     "exit_frame": [
+      {
+       "id": 41,
+       "foot_dist_px": 21.37755832643195,
+       "iou": 0.09715994020926756,
+       "vis": 0.57377,
+       "xywh": [
+        510.0,
+        369.0,
+        29.0,
+        60.0
+       ]
+      },
+      {
+       "id": 34,
+       "foot_dist_px": 50.695167422546305,
+       "iou": 0.10820809248554913,
+       "vis": 0.48182,
+       "xywh": [
+        548.0,
+        363.0,
+        33.0,
+        109.0
+       ]
+      },
+      {
+       "id": 29,
+       "foot_dist_px": 62.659795722616266,
+       "iou": 0.0,
+       "vis": 0.71594,
+       "xywh": [
+        480.0,
+        353.0,
+        38.0,
+        114.0
+       ]
+      },
+      {
+       "id": 36,
+       "foot_dist_px": 68.01470429252781,
+       "iou": 0.016493585827733658,
+       "vis": 0.021383,
+       "xywh": [
+        545.0,
+        416.0,
+        91.0,
+        60.0
+       ]
+      },
+      {
+       "id": 35,
+       "foot_dist_px": 73.49319696407281,
+       "iou": 0.0,
+       "vis": 0.0066047,
+       "xywh": [
+        573.0,
+        407.0,
+        72.0,
+        55.0
+       ]
+      }
+     ],
+     "reentry_frame": [
+      {
+       "id": 57,
+       "foot_dist_px": 20.396078054371138,
+       "iou": 0.07984790874524715,
+       "vis": 0.9125,
+       "xywh": [
+        668.0,
+        329.0,
+        24.0,
+        79.0
+       ]
+      },
+      {
+       "id": 59,
+       "foot_dist_px": 21.095023109728988,
+       "iou": 0.06334371754932502,
+       "vis": 0.0,
+       "xywh": [
+        627.0,
+        337.0,
+        24.0,
+        65.0
+       ]
+      },
+      {
+       "id": 56,
+       "foot_dist_px": 63.0317380372777,
+       "iou": 0.0,
+       "vis": 1.0,
+       "xywh": [
+        712.0,
+        342.0,
+        22.0,
+        64.0
+       ]
+      },
+      {
+       "id": 23,
+       "foot_dist_px": 80.87799453497843,
+       "iou": 0.0,
+       "vis": 0.0,
+       "xywh": [
+        564.0,
+        324.0,
+        41.0,
+        109.0
+       ]
+      },
+      {
+       "id": 35,
+       "foot_dist_px": 84.33415678122358,
+       "iou": 0.004292613128241817,
+       "vis": 0.42982,
+       "xywh": [
+        596.0,
+        402.0,
+        113.0,
+        86.0
+       ]
+      }
+     ]
+    },
+    "camera_motion_proxy": {
+     "n_tracks_with_both_frames": 21,
+     "median_foot_disp_px": 185.129684275645,
+     "mean_foot_disp_px": 167.49255788749437,
+     "p90_foot_disp_px": 279.42798714516766,
+     "definition": "median Euclidean foot displacement of GT ids present at both frame 168 and 369; proxy for camera+scene motion, not GMC"
     },
     "gt_id_frame_span": {
      "first": 143,
@@ -2335,17 +4460,8 @@
      "fwd_resid": 15.028908085390366,
      "bwd_resid": 5.7610927747070315
     },
+    "values_source": "recomputed_from_pairs_raw_columns",
     "values": {
-     "bridge_dist": 8.045314175961193,
-     "dist_h": 3.283043473679093,
-     "dir_cos": -0.8809339963747268,
-     "gap": 237.0,
-     "log_h_ratio": 0.03105992836781162,
-     "speed_mismatch": 0.027899358071393585,
-     "resid_mean": 10.395000430048698,
-     "score_m_bridge": 7.913568832756355
-    },
-    "recomputed": {
      "log_h_ratio": 0.03105992836781162,
      "speed_mismatch": 0.027899358071393585,
      "resid_mean": 10.395000430048698,
@@ -2355,7 +4471,6 @@
      "dir_cos": -0.8809339963747268,
      "gap": 237.0
     },
-    "signal_recompute_ok": true,
     "atom_analysis": {
      "bits_atom0_first": "00010000",
      "d_h": 7,
@@ -2455,6 +4570,37 @@
       }
      }
     },
+    "signal_computation_check": {
+     "ok": true,
+     "failures": [],
+     "step0_compare": {
+      "available": true,
+      "mismatches": []
+     },
+     "frame_gap_check": {
+      "lost_last_frame": 168,
+      "cand_first_frame": 405,
+      "gap": 237,
+      "expected_gap_eq_cand_minus_lost": true,
+      "ok": true
+     },
+     "domain_check_ok": true,
+     "tested": [
+      "derived atoms recomputed from pairs raw columns vs sealed Step-0 gt_rows",
+      "gap == cand_first_frame - lost_last_frame",
+      "builder field domain: |dir_cos|<=1, non-negative distances/heights/gap"
+     ],
+     "untested": [
+      "pixel/trajectory replay of builder-emitted fwd_resid/bwd_resid/dir_cos/speeds",
+      "GMC / camera-compensation correctness inside residual construction"
+     ],
+     "formulas": {
+      "log_h_ratio": "abs(log(h_cand_raw / h_lost_raw))",
+      "speed_mismatch": "abs(lost_exit_speed - cand_entry_speed)",
+      "resid_mean": "0.5 * (fwd_resid + bwd_resid)",
+      "score_m_bridge": "w*0.5*(fwd+bwd)+(1-w)*dist_h with w=sqrt(clip(exit_speed/0.12,0,1))"
+     }
+    },
     "gap_visibility": {
      "n_annotated_in_gap": 236,
      "vis_mean": 0.2758084576271187,
@@ -2462,7 +4608,7 @@
      "frac_vis_lt_0_3": 0.6313559322033898,
      "frac_vis_eq_0": 0.4025423728813559,
      "longest_full_invis_stretch": 44,
-     "occlusion_strong": true
+     "occlusion_strong_operational": true
     },
     "gt_box_before_exit": {
      "frame": 168,
@@ -2492,6 +4638,165 @@
       368.0
      ]
     },
+    "truncation": {
+     "exit": {
+      "left": false,
+      "top": false,
+      "right": false,
+      "bottom": false,
+      "any": false,
+      "margin_px": 8,
+      "frame_wh": [
+       1920,
+       1080
+      ]
+     },
+     "reentry": {
+      "left": false,
+      "top": false,
+      "right": false,
+      "bottom": false,
+      "any": false,
+      "margin_px": 8,
+      "frame_wh": [
+       1920,
+       1080
+      ]
+     }
+    },
+    "nearby_identities": {
+     "exit_frame": [
+      {
+       "id": 41,
+       "foot_dist_px": 21.37755832643195,
+       "iou": 0.09715994020926756,
+       "vis": 0.57377,
+       "xywh": [
+        510.0,
+        369.0,
+        29.0,
+        60.0
+       ]
+      },
+      {
+       "id": 34,
+       "foot_dist_px": 50.695167422546305,
+       "iou": 0.10820809248554913,
+       "vis": 0.48182,
+       "xywh": [
+        548.0,
+        363.0,
+        33.0,
+        109.0
+       ]
+      },
+      {
+       "id": 29,
+       "foot_dist_px": 62.659795722616266,
+       "iou": 0.0,
+       "vis": 0.71594,
+       "xywh": [
+        480.0,
+        353.0,
+        38.0,
+        114.0
+       ]
+      },
+      {
+       "id": 36,
+       "foot_dist_px": 68.01470429252781,
+       "iou": 0.016493585827733658,
+       "vis": 0.021383,
+       "xywh": [
+        545.0,
+        416.0,
+        91.0,
+        60.0
+       ]
+      },
+      {
+       "id": 35,
+       "foot_dist_px": 73.49319696407281,
+       "iou": 0.0,
+       "vis": 0.0066047,
+       "xywh": [
+        573.0,
+        407.0,
+        72.0,
+        55.0
+       ]
+      }
+     ],
+     "reentry_frame": [
+      {
+       "id": 56,
+       "foot_dist_px": 19.90602923739438,
+       "iou": 0.12209302325581395,
+       "vis": 1.0,
+       "xywh": [
+        739.0,
+        300.0,
+        29.0,
+        72.0
+       ]
+      },
+      {
+       "id": 57,
+       "foot_dist_px": 23.200215516240362,
+       "iou": 0.13387978142076504,
+       "vis": 0.92683,
+       "xywh": [
+        701.0,
+        301.0,
+        29.0,
+        81.0
+       ]
+      },
+      {
+       "id": 59,
+       "foot_dist_px": 26.30589287593181,
+       "iou": 0.0,
+       "vis": 0.22424,
+       "xywh": [
+        696.0,
+        299.0,
+        24.0,
+        65.0
+       ]
+      },
+      {
+       "id": 23,
+       "foot_dist_px": 93.51604140467025,
+       "iou": 0.0,
+       "vis": 0.77064,
+       "xywh": [
+        626.0,
+        293.0,
+        41.0,
+        108.0
+       ]
+      },
+      {
+       "id": 35,
+       "foot_dist_px": 123.1665539016173,
+       "iou": 0.0,
+       "vis": 0.80955,
+       "xywh": [
+        598.0,
+        377.0,
+        150.0,
+        98.0
+       ]
+      }
+     ]
+    },
+    "camera_motion_proxy": {
+     "n_tracks_with_both_frames": 18,
+     "median_foot_disp_px": 206.56736852469453,
+     "mean_foot_disp_px": 233.55517098729837,
+     "p90_foot_disp_px": 409.54454803815185,
+     "definition": "median Euclidean foot displacement of GT ids present at both frame 168 and 405; proxy for camera+scene motion, not GMC"
+    },
     "gt_id_frame_span": {
      "first": 143,
      "last": 562,
@@ -2511,16 +4816,261 @@
    ],
    "n_annotated_frames": 420,
    "internal_annotation_gaps": [],
-   "notes": "GT remains annotated across the tracker gap (fragmentation / occlusion), which is expected for MOT17 and does not by itself imply ANNOTATION_ISSUE."
+   "notes": "GT remaining annotated across the tracker gap is expected for MOT17 and does not by itself imply ANNOTATION_ISSUE."
   },
   "signal_computation_check": {
-   "all_signals_recompute_ok": true,
+   "all_rows_ok": true,
+   "failed_rows": [],
+   "n_rows_checked": 7,
+   "tested": [
+    "derived atoms recomputed from pairs raw columns vs sealed Step-0 gt_rows",
+    "gap == cand_first_frame - lost_last_frame",
+    "builder field domain: |dir_cos|<=1, non-negative distances/heights/gap"
+   ],
+   "untested": [
+    "pixel/trajectory replay of builder-emitted fwd_resid/bwd_resid/dir_cos/speeds",
+    "GMC / camera-compensation correctness inside residual construction"
+   ],
+   "untested_residual_risk": true,
    "formulas": {
     "log_h_ratio": "abs(log(h_cand_raw / h_lost_raw))",
     "speed_mismatch": "abs(lost_exit_speed - cand_entry_speed)",
     "resid_mean": "0.5 * (fwd_resid + bwd_resid)",
     "score_m_bridge": "w*0.5*(fwd+bwd)+(1-w)*dist_h with w=sqrt(clip(exit_speed/0.12,0,1))"
-   }
+   },
+   "per_row": [
+    {
+     "gap": 72,
+     "cand_id": "489",
+     "ok": true,
+     "failures": [],
+     "step0_compare": {
+      "available": true,
+      "mismatches": []
+     },
+     "frame_gap_check": {
+      "lost_last_frame": 168,
+      "cand_first_frame": 240,
+      "gap": 72,
+      "expected_gap_eq_cand_minus_lost": true,
+      "ok": true
+     },
+     "domain_check_ok": true,
+     "tested": [
+      "derived atoms recomputed from pairs raw columns vs sealed Step-0 gt_rows",
+      "gap == cand_first_frame - lost_last_frame",
+      "builder field domain: |dir_cos|<=1, non-negative distances/heights/gap"
+     ],
+     "untested": [
+      "pixel/trajectory replay of builder-emitted fwd_resid/bwd_resid/dir_cos/speeds",
+      "GMC / camera-compensation correctness inside residual construction"
+     ],
+     "formulas": {
+      "log_h_ratio": "abs(log(h_cand_raw / h_lost_raw))",
+      "speed_mismatch": "abs(lost_exit_speed - cand_entry_speed)",
+      "resid_mean": "0.5 * (fwd_resid + bwd_resid)",
+      "score_m_bridge": "w*0.5*(fwd+bwd)+(1-w)*dist_h with w=sqrt(clip(exit_speed/0.12,0,1))"
+     }
+    },
+    {
+     "gap": 97,
+     "cand_id": "494",
+     "ok": true,
+     "failures": [],
+     "step0_compare": {
+      "available": true,
+      "mismatches": []
+     },
+     "frame_gap_check": {
+      "lost_last_frame": 168,
+      "cand_first_frame": 265,
+      "gap": 97,
+      "expected_gap_eq_cand_minus_lost": true,
+      "ok": true
+     },
+     "domain_check_ok": true,
+     "tested": [
+      "derived atoms recomputed from pairs raw columns vs sealed Step-0 gt_rows",
+      "gap == cand_first_frame - lost_last_frame",
+      "builder field domain: |dir_cos|<=1, non-negative distances/heights/gap"
+     ],
+     "untested": [
+      "pixel/trajectory replay of builder-emitted fwd_resid/bwd_resid/dir_cos/speeds",
+      "GMC / camera-compensation correctness inside residual construction"
+     ],
+     "formulas": {
+      "log_h_ratio": "abs(log(h_cand_raw / h_lost_raw))",
+      "speed_mismatch": "abs(lost_exit_speed - cand_entry_speed)",
+      "resid_mean": "0.5 * (fwd_resid + bwd_resid)",
+      "score_m_bridge": "w*0.5*(fwd+bwd)+(1-w)*dist_h with w=sqrt(clip(exit_speed/0.12,0,1))"
+     }
+    },
+    {
+     "gap": 143,
+     "cand_id": "512",
+     "ok": true,
+     "failures": [],
+     "step0_compare": {
+      "available": true,
+      "mismatches": []
+     },
+     "frame_gap_check": {
+      "lost_last_frame": 168,
+      "cand_first_frame": 311,
+      "gap": 143,
+      "expected_gap_eq_cand_minus_lost": true,
+      "ok": true
+     },
+     "domain_check_ok": true,
+     "tested": [
+      "derived atoms recomputed from pairs raw columns vs sealed Step-0 gt_rows",
+      "gap == cand_first_frame - lost_last_frame",
+      "builder field domain: |dir_cos|<=1, non-negative distances/heights/gap"
+     ],
+     "untested": [
+      "pixel/trajectory replay of builder-emitted fwd_resid/bwd_resid/dir_cos/speeds",
+      "GMC / camera-compensation correctness inside residual construction"
+     ],
+     "formulas": {
+      "log_h_ratio": "abs(log(h_cand_raw / h_lost_raw))",
+      "speed_mismatch": "abs(lost_exit_speed - cand_entry_speed)",
+      "resid_mean": "0.5 * (fwd_resid + bwd_resid)",
+      "score_m_bridge": "w*0.5*(fwd+bwd)+(1-w)*dist_h with w=sqrt(clip(exit_speed/0.12,0,1))"
+     }
+    },
+    {
+     "gap": 151,
+     "cand_id": "516",
+     "ok": true,
+     "failures": [],
+     "step0_compare": {
+      "available": true,
+      "mismatches": []
+     },
+     "frame_gap_check": {
+      "lost_last_frame": 168,
+      "cand_first_frame": 319,
+      "gap": 151,
+      "expected_gap_eq_cand_minus_lost": true,
+      "ok": true
+     },
+     "domain_check_ok": true,
+     "tested": [
+      "derived atoms recomputed from pairs raw columns vs sealed Step-0 gt_rows",
+      "gap == cand_first_frame - lost_last_frame",
+      "builder field domain: |dir_cos|<=1, non-negative distances/heights/gap"
+     ],
+     "untested": [
+      "pixel/trajectory replay of builder-emitted fwd_resid/bwd_resid/dir_cos/speeds",
+      "GMC / camera-compensation correctness inside residual construction"
+     ],
+     "formulas": {
+      "log_h_ratio": "abs(log(h_cand_raw / h_lost_raw))",
+      "speed_mismatch": "abs(lost_exit_speed - cand_entry_speed)",
+      "resid_mean": "0.5 * (fwd_resid + bwd_resid)",
+      "score_m_bridge": "w*0.5*(fwd+bwd)+(1-w)*dist_h with w=sqrt(clip(exit_speed/0.12,0,1))"
+     }
+    },
+    {
+     "gap": 173,
+     "cand_id": "518",
+     "ok": true,
+     "failures": [],
+     "step0_compare": {
+      "available": true,
+      "mismatches": []
+     },
+     "frame_gap_check": {
+      "lost_last_frame": 168,
+      "cand_first_frame": 341,
+      "gap": 173,
+      "expected_gap_eq_cand_minus_lost": true,
+      "ok": true
+     },
+     "domain_check_ok": true,
+     "tested": [
+      "derived atoms recomputed from pairs raw columns vs sealed Step-0 gt_rows",
+      "gap == cand_first_frame - lost_last_frame",
+      "builder field domain: |dir_cos|<=1, non-negative distances/heights/gap"
+     ],
+     "untested": [
+      "pixel/trajectory replay of builder-emitted fwd_resid/bwd_resid/dir_cos/speeds",
+      "GMC / camera-compensation correctness inside residual construction"
+     ],
+     "formulas": {
+      "log_h_ratio": "abs(log(h_cand_raw / h_lost_raw))",
+      "speed_mismatch": "abs(lost_exit_speed - cand_entry_speed)",
+      "resid_mean": "0.5 * (fwd_resid + bwd_resid)",
+      "score_m_bridge": "w*0.5*(fwd+bwd)+(1-w)*dist_h with w=sqrt(clip(exit_speed/0.12,0,1))"
+     }
+    },
+    {
+     "gap": 201,
+     "cand_id": "525",
+     "ok": true,
+     "failures": [],
+     "step0_compare": {
+      "available": true,
+      "mismatches": []
+     },
+     "frame_gap_check": {
+      "lost_last_frame": 168,
+      "cand_first_frame": 369,
+      "gap": 201,
+      "expected_gap_eq_cand_minus_lost": true,
+      "ok": true
+     },
+     "domain_check_ok": true,
+     "tested": [
+      "derived atoms recomputed from pairs raw columns vs sealed Step-0 gt_rows",
+      "gap == cand_first_frame - lost_last_frame",
+      "builder field domain: |dir_cos|<=1, non-negative distances/heights/gap"
+     ],
+     "untested": [
+      "pixel/trajectory replay of builder-emitted fwd_resid/bwd_resid/dir_cos/speeds",
+      "GMC / camera-compensation correctness inside residual construction"
+     ],
+     "formulas": {
+      "log_h_ratio": "abs(log(h_cand_raw / h_lost_raw))",
+      "speed_mismatch": "abs(lost_exit_speed - cand_entry_speed)",
+      "resid_mean": "0.5 * (fwd_resid + bwd_resid)",
+      "score_m_bridge": "w*0.5*(fwd+bwd)+(1-w)*dist_h with w=sqrt(clip(exit_speed/0.12,0,1))"
+     }
+    },
+    {
+     "gap": 237,
+     "cand_id": "531",
+     "ok": true,
+     "failures": [],
+     "step0_compare": {
+      "available": true,
+      "mismatches": []
+     },
+     "frame_gap_check": {
+      "lost_last_frame": 168,
+      "cand_first_frame": 405,
+      "gap": 237,
+      "expected_gap_eq_cand_minus_lost": true,
+      "ok": true
+     },
+     "domain_check_ok": true,
+     "tested": [
+      "derived atoms recomputed from pairs raw columns vs sealed Step-0 gt_rows",
+      "gap == cand_first_frame - lost_last_frame",
+      "builder field domain: |dir_cos|<=1, non-negative distances/heights/gap"
+     ],
+     "untested": [
+      "pixel/trajectory replay of builder-emitted fwd_resid/bwd_resid/dir_cos/speeds",
+      "GMC / camera-compensation correctness inside residual construction"
+     ],
+     "formulas": {
+      "log_h_ratio": "abs(log(h_cand_raw / h_lost_raw))",
+      "speed_mismatch": "abs(lost_exit_speed - cand_entry_speed)",
+      "resid_mean": "0.5 * (fwd_resid + bwd_resid)",
+      "score_m_bridge": "w*0.5*(fwd+bwd)+(1-w)*dist_h with w=sqrt(clip(exit_speed/0.12,0,1))"
+     }
+    }
+   ]
   },
   "threshold_artifact_check": {
    "any_violation_near_threshold": false,
@@ -2534,7 +5084,8 @@
    "remains_in_tail_under_p60": false,
    "reasons": [
     "Track leaves the d_H>=3 tail under pool p60 binarization (membership is median-sensitive)."
-   ]
+   ],
+   "rule_provenance": "PR-C operationalization (THRESHOLD_REL_FLIP_MAX)"
   },
   "mechanism_features": {
    "height_safe_on_min_dh_row": true,
@@ -2547,19 +5098,75 @@
    "geom_violated_min_dh": [
     "dist_h"
    ],
-   "occlusion_strong_on_min_dh_row": true,
+   "occlusion_strong_operational_on_min_dh_row": true,
    "gap_vis_mean_min_dh": 0.03057460563380282
+  },
+  "scene_evidence_summary": {
+   "contact_sheet_available": true,
+   "contact_sheet": "scene_sheets/MOT17-10-SDP_467_min_dh.jpg",
+   "contact_sheet_sha256": "29ffdb516ae6ba61dc719dd81b4049ed37d8a2b44a634c7ec23806cdec093349",
+   "truncation_any_on_endpoints": false,
+   "nearby_close_on_reentry": true,
+   "scene_supports_occlusion_or_crowd": true,
+   "camera_motion_proxy_min_dh": {
+    "n_tracks_with_both_frames": 27,
+    "median_foot_disp_px": 131.05056276109616,
+    "mean_foot_disp_px": 144.62817273022242,
+    "p90_foot_disp_px": 213.08241606834804,
+    "definition": "median Euclidean foot displacement of GT ids present at both frame 168 and 240; proxy for camera+scene motion, not GMC"
+   },
+   "panels": [
+    {
+     "frame": 168,
+     "label": "exit",
+     "image_found": true,
+     "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000168.jpg",
+     "sha256": "cedd7e1e9a4b8f140624bd0840a853b8f1d32698ce0da155df8e042424b446c3"
+    },
+    {
+     "frame": 169,
+     "label": "gap1",
+     "image_found": true,
+     "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000169.jpg",
+     "sha256": "c5037a376dc962a5c6a63e0577d35c5fa76d3ca8cad337829b596f7c70614403"
+    },
+    {
+     "frame": 204,
+     "label": "gap2",
+     "image_found": true,
+     "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000204.jpg",
+     "sha256": "bbcb64b223d0e0f9a4134e5b577feee4d594443f853443bb9ee9351f63fe3986"
+    },
+    {
+     "frame": 239,
+     "label": "gap3",
+     "image_found": true,
+     "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000239.jpg",
+     "sha256": "999482a580443f2f10828932c8f96ec51c3b3187ce0f949984b712607b502850"
+    },
+    {
+     "frame": 240,
+     "label": "reentry",
+     "image_found": true,
+     "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000240.jpg",
+     "sha256": "b9c2ab4082631f001eabcd4dec013c7822ca92ae5f3c991dcc255e85fc98b5ee"
+    }
+   ]
   },
   "verdict": {
    "category": "TRUE_LONG_GAP_REENTRY",
    "supporting_evidence": [
     "min-d_H row keeps log_h_ratio on the safe side of the sealed exploratory median.",
-    "motion atoms violated on min-d_H row: ['dir_cos', 'speed_mismatch'].",
-    "gap-window GT visibility meets the predeclared occlusion_strong criterion.",
-    "annotation and signal recomputation checks pass."
+    "motion atoms violated on min-d_H row: ['dir_cos', 'speed_mismatch'] (operational cutoff: >=2).",
+    "gap-window GT visibility meets the operational occlusion_strong cutoff.",
+    "scene packet provides contact sheet + nearby-id / truncation / camera-motion proxy.",
+    "annotation and independent signal checks pass."
    ],
-   "competing_explanations": [],
-   "confidence_boundary": "Single-sequence (MOT17-10-SDP) forensic only; exploratory median binarization; descriptive min-d_H layer; does not seal morphology terminals or orderability classes."
+   "competing_explanations": [
+    "Nearby GT identities at re-entry; identity-swap / interference remains residual."
+   ],
+   "rule_provenance": "PR-C implementation-time operationalization; numerical cutoffs not sealed in #102",
+   "confidence_boundary": "Single-sequence (MOT17-10-SDP) forensic only; exploratory median binarization; descriptive min-d_H layer; operational numerical cutoffs subject to research-owner interpretation; builder residual/speed pixel-replay untested; does not seal morphology terminals or orderability classes."
   }
  },
  "MOT17-10-SDP|503": {
@@ -2572,7 +5179,8 @@
    "sealed_min_d_h": 6,
    "source_pairs_csv": "out/signal_study/m_b1_gate_coverage_7seq_20260709T121326Z/pairs.csv",
    "source_pairs_csv_sha256": "0ae3896791ec074fbe951198752c17385c4ee0770a7ec3831225d3ea56a69d17",
-   "gt_txt": "datasets/MOT17/train/MOT17-10-SDP/gt/gt.txt"
+   "gt_txt": "datasets/MOT17/train/MOT17-10-SDP/gt/gt.txt",
+   "img_root": "datasets/MOT17/train/MOT17-10-SDP/img1"
   },
   "timeline": {
    "n_gt_match_rows": 2,
@@ -2694,14 +5302,14 @@
     }
    },
    "values": {
-    "bridge_dist": 6.376868179792702,
-    "dist_h": 1.1396341293607681,
-    "dir_cos": -0.979854161493933,
-    "gap": 136.0,
     "log_h_ratio": 0.18453022912793904,
     "speed_mismatch": 0.07027720978670098,
     "resid_mean": 6.390440291577603,
-    "score_m_bridge": 5.2843468039880355
+    "score_m_bridge": 5.2843468039880355,
+    "bridge_dist": 6.376868179792702,
+    "dist_h": 1.1396341293607681,
+    "dir_cos": -0.979854161493933,
+    "gap": 136.0
    },
    "gap_visibility": {
     "n_annotated_in_gap": 135,
@@ -2710,7 +5318,7 @@
     "frac_vis_lt_0_3": 0.4148148148148148,
     "frac_vis_eq_0": 0.26666666666666666,
     "longest_full_invis_stretch": 20,
-    "occlusion_strong": true
+    "occlusion_strong_operational": true
    },
    "feet": {
     "lost_xy": [
@@ -2734,6 +5342,165 @@
     "h_cand_win6": 67.81,
     "h_lost_extrap": 1.0,
     "h_cand_extrap": 1.0
+   },
+   "truncation": {
+    "exit": {
+     "left": false,
+     "top": false,
+     "right": false,
+     "bottom": false,
+     "any": false,
+     "margin_px": 8,
+     "frame_wh": [
+      1920,
+      1080
+     ]
+    },
+    "reentry": {
+     "left": false,
+     "top": false,
+     "right": false,
+     "bottom": false,
+     "any": false,
+     "margin_px": 8,
+     "frame_wh": [
+      1920,
+      1080
+     ]
+    }
+   },
+   "nearby_identities": {
+    "exit_frame": [
+     {
+      "id": 71,
+      "foot_dist_px": 36.718523935474316,
+      "iou": 0.0,
+      "vis": 1.0,
+      "xywh": [
+       702.0,
+       288.0,
+       25.0,
+       54.0
+      ]
+     },
+     {
+      "id": 57,
+      "foot_dist_px": 62.47599539022968,
+      "iou": 0.0,
+      "vis": 0.79104,
+      "xywh": [
+       730.0,
+       291.0,
+       19.0,
+       66.0
+      ]
+     },
+     {
+      "id": 35,
+      "foot_dist_px": 72.2357252334328,
+      "iou": 0.0054107230693556324,
+      "vis": 0.64668,
+      "xywh": [
+       655.0,
+       344.0,
+       100.0,
+       69.0
+      ]
+     },
+     {
+      "id": 34,
+      "foot_dist_px": 77.89736837660179,
+      "iou": 0.0,
+      "vis": 0.46094,
+      "xywh": [
+       618.0,
+       283.0,
+       44.0,
+       131.0
+      ]
+     },
+     {
+      "id": 56,
+      "foot_dist_px": 88.59034936154163,
+      "iou": 0.0,
+      "vis": 1.0,
+      "xywh": [
+       756.0,
+       286.0,
+       21.0,
+       64.0
+      ]
+     }
+    ],
+    "reentry_frame": [
+     {
+      "id": 57,
+      "foot_dist_px": 10.816653826391969,
+      "iou": 0.3936587103669398,
+      "vis": 1.0,
+      "xywh": [
+       692.0,
+       317.0,
+       28.0,
+       84.0
+      ]
+     },
+     {
+      "id": 56,
+      "foot_dist_px": 27.04163456597992,
+      "iou": 0.017573221757322177,
+      "vis": 0.98265,
+      "xywh": [
+       726.0,
+       332.0,
+       29.0,
+       72.0
+      ]
+     },
+     {
+      "id": 71,
+      "foot_dist_px": 30.59411708155671,
+      "iou": 0.0,
+      "vis": 0.13315,
+      "xywh": [
+       734.0,
+       326.0,
+       22.0,
+       63.0
+      ]
+     },
+     {
+      "id": 23,
+      "foot_dist_px": 59.682493245507096,
+      "iou": 0.0,
+      "vis": 0.76699,
+      "xywh": [
+       644.0,
+       324.0,
+       40.0,
+       102.0
+      ]
+     },
+     {
+      "id": 35,
+      "foot_dist_px": 129.56176133412202,
+      "iou": 0.0,
+      "vis": 0.89982,
+      "xywh": [
+       579.0,
+       403.0,
+       165.0,
+       110.0
+      ]
+     }
+    ]
+   },
+   "camera_motion_proxy": {
+    "n_tracks_with_both_frames": 23,
+    "median_foot_disp_px": 123.98487811019535,
+    "mean_foot_disp_px": 192.23237380471426,
+    "p90_foot_disp_px": 499.9116580626476,
+    "definition": "median Euclidean foot displacement of GT ids present at both frame 293 and 429; proxy for camera+scene motion, not GMC"
    }
   },
   "all_gt_match_rows": [
@@ -2783,17 +5550,8 @@
      "fwd_resid": 11.287473609793146,
      "bwd_resid": 1.4934069733620603
     },
+    "values_source": "recomputed_from_pairs_raw_columns",
     "values": {
-     "bridge_dist": 6.376868179792702,
-     "dist_h": 1.1396341293607681,
-     "dir_cos": -0.979854161493933,
-     "gap": 136.0,
-     "log_h_ratio": 0.18453022912793904,
-     "speed_mismatch": 0.07027720978670098,
-     "resid_mean": 6.390440291577603,
-     "score_m_bridge": 5.2843468039880355
-    },
-    "recomputed": {
      "log_h_ratio": 0.18453022912793904,
      "speed_mismatch": 0.07027720978670098,
      "resid_mean": 6.390440291577603,
@@ -2803,7 +5561,6 @@
      "dir_cos": -0.979854161493933,
      "gap": 136.0
     },
-    "signal_recompute_ok": true,
     "atom_analysis": {
      "bits_atom0_first": "00110000",
      "d_h": 6,
@@ -2901,6 +5658,37 @@
       }
      }
     },
+    "signal_computation_check": {
+     "ok": true,
+     "failures": [],
+     "step0_compare": {
+      "available": true,
+      "mismatches": []
+     },
+     "frame_gap_check": {
+      "lost_last_frame": 293,
+      "cand_first_frame": 429,
+      "gap": 136,
+      "expected_gap_eq_cand_minus_lost": true,
+      "ok": true
+     },
+     "domain_check_ok": true,
+     "tested": [
+      "derived atoms recomputed from pairs raw columns vs sealed Step-0 gt_rows",
+      "gap == cand_first_frame - lost_last_frame",
+      "builder field domain: |dir_cos|<=1, non-negative distances/heights/gap"
+     ],
+     "untested": [
+      "pixel/trajectory replay of builder-emitted fwd_resid/bwd_resid/dir_cos/speeds",
+      "GMC / camera-compensation correctness inside residual construction"
+     ],
+     "formulas": {
+      "log_h_ratio": "abs(log(h_cand_raw / h_lost_raw))",
+      "speed_mismatch": "abs(lost_exit_speed - cand_entry_speed)",
+      "resid_mean": "0.5 * (fwd_resid + bwd_resid)",
+      "score_m_bridge": "w*0.5*(fwd+bwd)+(1-w)*dist_h with w=sqrt(clip(exit_speed/0.12,0,1))"
+     }
+    },
     "gap_visibility": {
      "n_annotated_in_gap": 135,
      "vis_mean": 0.47707621481481477,
@@ -2908,7 +5696,7 @@
      "frac_vis_lt_0_3": 0.4148148148148148,
      "frac_vis_eq_0": 0.26666666666666666,
      "longest_full_invis_stretch": 20,
-     "occlusion_strong": true
+     "occlusion_strong_operational": true
     },
     "gt_box_before_exit": {
      "frame": 293,
@@ -2937,6 +5725,165 @@
       715.0,
       395.0
      ]
+    },
+    "truncation": {
+     "exit": {
+      "left": false,
+      "top": false,
+      "right": false,
+      "bottom": false,
+      "any": false,
+      "margin_px": 8,
+      "frame_wh": [
+       1920,
+       1080
+      ]
+     },
+     "reentry": {
+      "left": false,
+      "top": false,
+      "right": false,
+      "bottom": false,
+      "any": false,
+      "margin_px": 8,
+      "frame_wh": [
+       1920,
+       1080
+      ]
+     }
+    },
+    "nearby_identities": {
+     "exit_frame": [
+      {
+       "id": 71,
+       "foot_dist_px": 36.718523935474316,
+       "iou": 0.0,
+       "vis": 1.0,
+       "xywh": [
+        702.0,
+        288.0,
+        25.0,
+        54.0
+       ]
+      },
+      {
+       "id": 57,
+       "foot_dist_px": 62.47599539022968,
+       "iou": 0.0,
+       "vis": 0.79104,
+       "xywh": [
+        730.0,
+        291.0,
+        19.0,
+        66.0
+       ]
+      },
+      {
+       "id": 35,
+       "foot_dist_px": 72.2357252334328,
+       "iou": 0.0054107230693556324,
+       "vis": 0.64668,
+       "xywh": [
+        655.0,
+        344.0,
+        100.0,
+        69.0
+       ]
+      },
+      {
+       "id": 34,
+       "foot_dist_px": 77.89736837660179,
+       "iou": 0.0,
+       "vis": 0.46094,
+       "xywh": [
+        618.0,
+        283.0,
+        44.0,
+        131.0
+       ]
+      },
+      {
+       "id": 56,
+       "foot_dist_px": 88.59034936154163,
+       "iou": 0.0,
+       "vis": 1.0,
+       "xywh": [
+        756.0,
+        286.0,
+        21.0,
+        64.0
+       ]
+      }
+     ],
+     "reentry_frame": [
+      {
+       "id": 57,
+       "foot_dist_px": 10.816653826391969,
+       "iou": 0.3936587103669398,
+       "vis": 1.0,
+       "xywh": [
+        692.0,
+        317.0,
+        28.0,
+        84.0
+       ]
+      },
+      {
+       "id": 56,
+       "foot_dist_px": 27.04163456597992,
+       "iou": 0.017573221757322177,
+       "vis": 0.98265,
+       "xywh": [
+        726.0,
+        332.0,
+        29.0,
+        72.0
+       ]
+      },
+      {
+       "id": 71,
+       "foot_dist_px": 30.59411708155671,
+       "iou": 0.0,
+       "vis": 0.13315,
+       "xywh": [
+        734.0,
+        326.0,
+        22.0,
+        63.0
+       ]
+      },
+      {
+       "id": 23,
+       "foot_dist_px": 59.682493245507096,
+       "iou": 0.0,
+       "vis": 0.76699,
+       "xywh": [
+        644.0,
+        324.0,
+        40.0,
+        102.0
+       ]
+      },
+      {
+       "id": 35,
+       "foot_dist_px": 129.56176133412202,
+       "iou": 0.0,
+       "vis": 0.89982,
+       "xywh": [
+        579.0,
+        403.0,
+        165.0,
+        110.0
+       ]
+      }
+     ]
+    },
+    "camera_motion_proxy": {
+     "n_tracks_with_both_frames": 23,
+     "median_foot_disp_px": 123.98487811019535,
+     "mean_foot_disp_px": 192.23237380471426,
+     "p90_foot_disp_px": 499.9116580626476,
+     "definition": "median Euclidean foot displacement of GT ids present at both frame 293 and 429; proxy for camera+scene motion, not GMC"
     },
     "gt_id_frame_span": {
      "first": 235,
@@ -2992,17 +5939,8 @@
      "fwd_resid": 12.909145510995337,
      "bwd_resid": 7.136877352577557
     },
+    "values_source": "recomputed_from_pairs_raw_columns",
     "values": {
-     "bridge_dist": 7.947895933379673,
-     "dist_h": 1.1523034286702247,
-     "dir_cos": -0.9288690631942202,
-     "gap": 165.0,
-     "log_h_ratio": 0.25980230590861897,
-     "speed_mismatch": 0.03158172296730923,
-     "resid_mean": 10.023011431786447,
-     "score_m_bridge": 8.00955609757649
-    },
-    "recomputed": {
      "log_h_ratio": 0.25980230590861897,
      "speed_mismatch": 0.03158172296730923,
      "resid_mean": 10.023011431786447,
@@ -3012,7 +5950,6 @@
      "dir_cos": -0.9288690631942202,
      "gap": 165.0
     },
-    "signal_recompute_ok": true,
     "atom_analysis": {
      "bits_atom0_first": "00110000",
      "d_h": 6,
@@ -3110,6 +6047,37 @@
       }
      }
     },
+    "signal_computation_check": {
+     "ok": true,
+     "failures": [],
+     "step0_compare": {
+      "available": true,
+      "mismatches": []
+     },
+     "frame_gap_check": {
+      "lost_last_frame": 293,
+      "cand_first_frame": 458,
+      "gap": 165,
+      "expected_gap_eq_cand_minus_lost": true,
+      "ok": true
+     },
+     "domain_check_ok": true,
+     "tested": [
+      "derived atoms recomputed from pairs raw columns vs sealed Step-0 gt_rows",
+      "gap == cand_first_frame - lost_last_frame",
+      "builder field domain: |dir_cos|<=1, non-negative distances/heights/gap"
+     ],
+     "untested": [
+      "pixel/trajectory replay of builder-emitted fwd_resid/bwd_resid/dir_cos/speeds",
+      "GMC / camera-compensation correctness inside residual construction"
+     ],
+     "formulas": {
+      "log_h_ratio": "abs(log(h_cand_raw / h_lost_raw))",
+      "speed_mismatch": "abs(lost_exit_speed - cand_entry_speed)",
+      "resid_mean": "0.5 * (fwd_resid + bwd_resid)",
+      "score_m_bridge": "w*0.5*(fwd+bwd)+(1-w)*dist_h with w=sqrt(clip(exit_speed/0.12,0,1))"
+     }
+    },
     "gap_visibility": {
      "n_annotated_in_gap": 164,
      "vis_mean": 0.41892233902439036,
@@ -3117,7 +6085,7 @@
      "frac_vis_lt_0_3": 0.4878048780487805,
      "frac_vis_eq_0": 0.23780487804878048,
      "longest_full_invis_stretch": 20,
-     "occlusion_strong": false
+     "occlusion_strong_operational": false
     },
     "gt_box_before_exit": {
      "frame": 293,
@@ -3147,6 +6115,165 @@
       408.0
      ]
     },
+    "truncation": {
+     "exit": {
+      "left": false,
+      "top": false,
+      "right": false,
+      "bottom": false,
+      "any": false,
+      "margin_px": 8,
+      "frame_wh": [
+       1920,
+       1080
+      ]
+     },
+     "reentry": {
+      "left": false,
+      "top": false,
+      "right": false,
+      "bottom": false,
+      "any": false,
+      "margin_px": 8,
+      "frame_wh": [
+       1920,
+       1080
+      ]
+     }
+    },
+    "nearby_identities": {
+     "exit_frame": [
+      {
+       "id": 71,
+       "foot_dist_px": 36.718523935474316,
+       "iou": 0.0,
+       "vis": 1.0,
+       "xywh": [
+        702.0,
+        288.0,
+        25.0,
+        54.0
+       ]
+      },
+      {
+       "id": 57,
+       "foot_dist_px": 62.47599539022968,
+       "iou": 0.0,
+       "vis": 0.79104,
+       "xywh": [
+        730.0,
+        291.0,
+        19.0,
+        66.0
+       ]
+      },
+      {
+       "id": 35,
+       "foot_dist_px": 72.2357252334328,
+       "iou": 0.0054107230693556324,
+       "vis": 0.64668,
+       "xywh": [
+        655.0,
+        344.0,
+        100.0,
+        69.0
+       ]
+      },
+      {
+       "id": 34,
+       "foot_dist_px": 77.89736837660179,
+       "iou": 0.0,
+       "vis": 0.46094,
+       "xywh": [
+        618.0,
+        283.0,
+        44.0,
+        131.0
+       ]
+      },
+      {
+       "id": 56,
+       "foot_dist_px": 88.59034936154163,
+       "iou": 0.0,
+       "vis": 1.0,
+       "xywh": [
+        756.0,
+        286.0,
+        21.0,
+        64.0
+       ]
+      }
+     ],
+     "reentry_frame": [
+      {
+       "id": 71,
+       "foot_dist_px": 21.70829334609241,
+       "iou": 0.02180232558139535,
+       "vis": 1.0,
+       "xywh": [
+        701.0,
+        348.0,
+        22.0,
+        63.0
+       ]
+      },
+      {
+       "id": 56,
+       "foot_dist_px": 21.93171219946131,
+       "iou": 0.11839592616168046,
+       "vis": 1.0,
+       "xywh": [
+        656.0,
+        345.0,
+        29.0,
+        72.0
+       ]
+      },
+      {
+       "id": 23,
+       "foot_dist_px": 67.994485070482,
+       "iou": 0.0,
+       "vis": 0.82524,
+       "xywh": [
+        609.0,
+        335.0,
+        40.0,
+        102.0
+       ]
+      },
+      {
+       "id": 57,
+       "foot_dist_px": 71.35299573248484,
+       "iou": 0.0,
+       "vis": 0.18919,
+       "xywh": [
+        602.0,
+        336.0,
+        36.0,
+        83.0
+       ]
+      },
+      {
+       "id": 4,
+       "foot_dist_px": 163.23679119610262,
+       "iou": 0.0,
+       "vis": 1.0,
+       "xywh": [
+        808.0,
+        320.0,
+        58.0,
+        160.0
+       ]
+      }
+     ]
+    },
+    "camera_motion_proxy": {
+     "n_tracks_with_both_frames": 20,
+     "median_foot_disp_px": 127.43024064179252,
+     "mean_foot_disp_px": 194.38679737709597,
+     "p90_foot_disp_px": 369.37084865019773,
+     "definition": "median Euclidean foot displacement of GT ids present at both frame 293 and 458; proxy for camera+scene motion, not GMC"
+    },
     "gt_id_frame_span": {
      "first": 235,
      "last": 530,
@@ -3166,16 +6293,96 @@
    ],
    "n_annotated_frames": 296,
    "internal_annotation_gaps": [],
-   "notes": "GT remains annotated across the tracker gap (fragmentation / occlusion), which is expected for MOT17 and does not by itself imply ANNOTATION_ISSUE."
+   "notes": "GT remaining annotated across the tracker gap is expected for MOT17 and does not by itself imply ANNOTATION_ISSUE."
   },
   "signal_computation_check": {
-   "all_signals_recompute_ok": true,
+   "all_rows_ok": true,
+   "failed_rows": [],
+   "n_rows_checked": 2,
+   "tested": [
+    "derived atoms recomputed from pairs raw columns vs sealed Step-0 gt_rows",
+    "gap == cand_first_frame - lost_last_frame",
+    "builder field domain: |dir_cos|<=1, non-negative distances/heights/gap"
+   ],
+   "untested": [
+    "pixel/trajectory replay of builder-emitted fwd_resid/bwd_resid/dir_cos/speeds",
+    "GMC / camera-compensation correctness inside residual construction"
+   ],
+   "untested_residual_risk": true,
    "formulas": {
     "log_h_ratio": "abs(log(h_cand_raw / h_lost_raw))",
     "speed_mismatch": "abs(lost_exit_speed - cand_entry_speed)",
     "resid_mean": "0.5 * (fwd_resid + bwd_resid)",
     "score_m_bridge": "w*0.5*(fwd+bwd)+(1-w)*dist_h with w=sqrt(clip(exit_speed/0.12,0,1))"
-   }
+   },
+   "per_row": [
+    {
+     "gap": 136,
+     "cand_id": "536",
+     "ok": true,
+     "failures": [],
+     "step0_compare": {
+      "available": true,
+      "mismatches": []
+     },
+     "frame_gap_check": {
+      "lost_last_frame": 293,
+      "cand_first_frame": 429,
+      "gap": 136,
+      "expected_gap_eq_cand_minus_lost": true,
+      "ok": true
+     },
+     "domain_check_ok": true,
+     "tested": [
+      "derived atoms recomputed from pairs raw columns vs sealed Step-0 gt_rows",
+      "gap == cand_first_frame - lost_last_frame",
+      "builder field domain: |dir_cos|<=1, non-negative distances/heights/gap"
+     ],
+     "untested": [
+      "pixel/trajectory replay of builder-emitted fwd_resid/bwd_resid/dir_cos/speeds",
+      "GMC / camera-compensation correctness inside residual construction"
+     ],
+     "formulas": {
+      "log_h_ratio": "abs(log(h_cand_raw / h_lost_raw))",
+      "speed_mismatch": "abs(lost_exit_speed - cand_entry_speed)",
+      "resid_mean": "0.5 * (fwd_resid + bwd_resid)",
+      "score_m_bridge": "w*0.5*(fwd+bwd)+(1-w)*dist_h with w=sqrt(clip(exit_speed/0.12,0,1))"
+     }
+    },
+    {
+     "gap": 165,
+     "cand_id": "541",
+     "ok": true,
+     "failures": [],
+     "step0_compare": {
+      "available": true,
+      "mismatches": []
+     },
+     "frame_gap_check": {
+      "lost_last_frame": 293,
+      "cand_first_frame": 458,
+      "gap": 165,
+      "expected_gap_eq_cand_minus_lost": true,
+      "ok": true
+     },
+     "domain_check_ok": true,
+     "tested": [
+      "derived atoms recomputed from pairs raw columns vs sealed Step-0 gt_rows",
+      "gap == cand_first_frame - lost_last_frame",
+      "builder field domain: |dir_cos|<=1, non-negative distances/heights/gap"
+     ],
+     "untested": [
+      "pixel/trajectory replay of builder-emitted fwd_resid/bwd_resid/dir_cos/speeds",
+      "GMC / camera-compensation correctness inside residual construction"
+     ],
+     "formulas": {
+      "log_h_ratio": "abs(log(h_cand_raw / h_lost_raw))",
+      "speed_mismatch": "abs(lost_exit_speed - cand_entry_speed)",
+      "resid_mean": "0.5 * (fwd_resid + bwd_resid)",
+      "score_m_bridge": "w*0.5*(fwd+bwd)+(1-w)*dist_h with w=sqrt(clip(exit_speed/0.12,0,1))"
+     }
+    }
+   ]
   },
   "threshold_artifact_check": {
    "any_violation_near_threshold": false,
@@ -3190,7 +6397,8 @@
    ],
    "threshold_artifact_dominates": false,
    "remains_in_tail_under_p60": true,
-   "reasons": []
+   "reasons": [],
+   "rule_provenance": "PR-C operationalization (THRESHOLD_REL_FLIP_MAX)"
   },
   "mechanism_features": {
    "height_safe_on_min_dh_row": true,
@@ -3206,19 +6414,75 @@
     "bridge_dist",
     "gap"
    ],
-   "occlusion_strong_on_min_dh_row": true,
+   "occlusion_strong_operational_on_min_dh_row": true,
    "gap_vis_mean_min_dh": 0.47707621481481477
+  },
+  "scene_evidence_summary": {
+   "contact_sheet_available": true,
+   "contact_sheet": "scene_sheets/MOT17-10-SDP_503_min_dh.jpg",
+   "contact_sheet_sha256": "302e13b8026ec4e4c5132fc173642e67cfd8b0160e4d9959084f73441403c41d",
+   "truncation_any_on_endpoints": false,
+   "nearby_close_on_reentry": true,
+   "scene_supports_occlusion_or_crowd": true,
+   "camera_motion_proxy_min_dh": {
+    "n_tracks_with_both_frames": 23,
+    "median_foot_disp_px": 123.98487811019535,
+    "mean_foot_disp_px": 192.23237380471426,
+    "p90_foot_disp_px": 499.9116580626476,
+    "definition": "median Euclidean foot displacement of GT ids present at both frame 293 and 429; proxy for camera+scene motion, not GMC"
+   },
+   "panels": [
+    {
+     "frame": 293,
+     "label": "exit",
+     "image_found": true,
+     "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000293.jpg",
+     "sha256": "43c030102d19eebae20484e8b9c2910e26f086bee8b91016dd2d3f9f71830088"
+    },
+    {
+     "frame": 294,
+     "label": "gap1",
+     "image_found": true,
+     "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000294.jpg",
+     "sha256": "48869cf8051192ea8e6cbb6bf07626ee8b114b78fa82ce343d92f1eeaba83395"
+    },
+    {
+     "frame": 361,
+     "label": "gap2",
+     "image_found": true,
+     "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000361.jpg",
+     "sha256": "abe13ff6c23499396a3c84b326cc30d48d529cb884d7dc15728228832cd1cf35"
+    },
+    {
+     "frame": 428,
+     "label": "gap3",
+     "image_found": true,
+     "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000428.jpg",
+     "sha256": "74d66c00b6f4861a0b0aae5ede046f793b4b4cf871b4ac185007ac7a3f9726fe"
+    },
+    {
+     "frame": 429,
+     "label": "reentry",
+     "image_found": true,
+     "path": "datasets/MOT17/train/MOT17-10-SDP/img1/000429.jpg",
+     "sha256": "082e1f7e5b2d01b53dacbe5ae59ac706496b8e4a3bfb00a03271d272e9ead7c6"
+    }
+   ]
   },
   "verdict": {
    "category": "TRUE_LONG_GAP_REENTRY",
    "supporting_evidence": [
     "min-d_H row keeps log_h_ratio on the safe side of the sealed exploratory median.",
-    "motion atoms violated on min-d_H row: ['resid_mean', 'dir_cos', 'speed_mismatch'].",
-    "gap-window GT visibility meets the predeclared occlusion_strong criterion.",
-    "annotation and signal recomputation checks pass."
+    "motion atoms violated on min-d_H row: ['resid_mean', 'dir_cos', 'speed_mismatch'] (operational cutoff: >=2).",
+    "gap-window GT visibility meets the operational occlusion_strong cutoff.",
+    "scene packet provides contact sheet + nearby-id / truncation / camera-motion proxy.",
+    "annotation and independent signal checks pass."
    ],
-   "competing_explanations": [],
-   "confidence_boundary": "Single-sequence (MOT17-10-SDP) forensic only; exploratory median binarization; descriptive min-d_H layer; does not seal morphology terminals or orderability classes."
+   "competing_explanations": [
+    "Nearby GT identities at re-entry; identity-swap / interference remains residual."
+   ],
+   "rule_provenance": "PR-C implementation-time operationalization; numerical cutoffs not sealed in #102",
+   "confidence_boundary": "Single-sequence (MOT17-10-SDP) forensic only; exploratory median binarization; descriptive min-d_H layer; operational numerical cutoffs subject to research-owner interpretation; builder residual/speed pixel-replay untested; does not seal morphology terminals or orderability classes."
   }
  }
 }

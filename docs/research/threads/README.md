@@ -44,7 +44,7 @@ DEVELOPMENT.md → module TODO sole-active → active thread / contract → PR
 
 | Thread | Status (one-line) | Owner |
 |:--|:--|:--|
-| [gt_support_morphology_20260711.md](gt_support_morphology_20260711.md) | **semantic sole active** · PR-A/B sealed · PR-C forensic `ROLE_REVERSAL_SUPPORTED`（3 TRUE + 1 UNRESOLVED；MOT17-10 bound）· next PR-D partial-order audit | semantic |
+| [gt_support_morphology_20260711.md](gt_support_morphology_20260711.md) | **semantic sole active** · PR-A/B sealed · PR-C packet under review（`research_acceptance: pending`；PR #104） | semantic |
 | [safe_region_assetization_20260710.md](safe_region_assetization_20260710.md) | **A1 CLOSED**（`A1_ACCEPTED_WITH_LIMITS`, maturity A1）· R2–R4 fail-closed · mainline handed off → gt_support_morphology · [PR #95](https://github.com/raylei50653/saccade/pull/95)/[#97](https://github.com/raylei50653/saccade/pull/97) history | semantic |
 | [association_recovery_registry_20260709.md](association_recovery_registry_20260709.md) | Scripts index + tools YAML + contracts 就位；registry 維護母線 | semantic |
 | [doc_structure_o15_followup_20260709.md](doc_structure_o15_followup_20260709.md) | O1.5 + TODO-as-WIP-lock；follow-up = index debt / optional strict | ownership |

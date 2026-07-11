@@ -5,13 +5,13 @@
 
 ## Sole active
 
-🔄 **GT-Support Morphology — PR-C forensic recorded (`ROLE_REVERSAL_SUPPORTED`); next = PR-D partial-order audit**
+🔄 **GT-Support Morphology — PR-C packet under review (`research_acceptance: pending`)**
 
 - Thread: [gt_support_morphology_20260711.md](../../research/threads/gt_support_morphology_20260711.md)
 - Step-0: per-cell risk field 不可識別；**verdict `UNRESOLVED`** + descriptive hypothesis（corner-concentrated + 4-track far-Hamming motion tail，**4/4 在 MOT17-10**）→ [note](research/gt_support_morphology_step0_20260711.md) · packet [evidence/](research/evidence/gt_support_morphology_step0_20260711/manifest.json) · procedure = [framework §19](../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)（**v1 sealed** via [#100](https://github.com/raylei50653/saccade/pull/100)）
 - PR-B: [boolean closure-domain line](research/boolean_closure_domain_line_20260711.md) **merged** ([#101](https://github.com/raylei50653/saccade/pull/101))
-- PR-C / [#102](https://github.com/raylei50653/saccade/issues/102): 3×`TRUE_LONG_GAP_REENTRY` + 1×`UNRESOLVED` · aggregate **`ROLE_REVERSAL_SUPPORTED`** → [forensic note](research/escape_tail_forensic_20260711.md) · [packet](research/evidence/escape_tail_forensic_20260711/manifest.json)
-- Next（PR ladder）: **PR-D** partial-order audit + restricted closure prototype（motion = conditional/context candidate only；MWC vs OR-tail；read-only）→ **PR-E** nested validation
+- PR-C / [#102](https://github.com/raylei50653/saccade/issues/102) · [PR #104](https://github.com/raylei50653/saccade/pull/104): operational 3×TRUE + 1×UNRESOLVED · operational aggregate `ROLE_REVERSAL_SUPPORTED` · numerical cutoffs = PR-C operationalization · scene sheets + independent signal checks · **research acceptance pending** → [forensic note](research/escape_tail_forensic_20260711.md) · [packet](research/evidence/escape_tail_forensic_20260711/manifest.json)
+- Next: research-owner acceptance of PR-C operational mapping → then **PR-D** partial-order audit；else hold descriptive-only
 
 ## Previous line（closed; nav only）
 

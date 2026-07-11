@@ -11,6 +11,8 @@
   "research_line": "boolean_closure_domain_line_20260711 (PR-B #101)"
  },
  "scope": "read-only offline forensic; no gate/preset/ledger/closure-search changes",
+ "rule_provenance": "terminal vocabulary from #102; numerical cutoffs are PR-C implementation-time operationalization (not sealed in #102)",
+ "research_acceptance": "pending",
  "frozen_cohort": [
   "MOT17-10-SDP|455",
   "MOT17-10-SDP|459",
@@ -26,11 +28,16 @@
  },
  "files": {
   "cohort.json": "f82d64f18686ff31541d516bae02bcd120cbfde5df97ca52e9243e7bfe112aa3",
-  "track_cards.json": "a3519edbded6f18077bcca482037b3eeb8b01cf9571ecdd82e8acb9ac5d334ed",
-  "aggregate.json": "9aff15eb82d6cbe9ec54f3115900bf4bf71a68168d7150b3b0eea0fe8860f804",
-  "per_row_evidence.csv": "fb27b858b8d40bc03ac5f39a1bd6cb280d1ac07f85dfca8fe6c37c2f9c0cbf65",
+  "track_cards.json": "9ffae6b212fa6e18576ac2da8d890155ab8a12dddd803c45d01dfa6eef386089",
+  "aggregate.json": "a76f2ea77f64fcdc8f2a4393b614e642da6a798527607d5f13dc66f34c1a7510",
+  "per_row_evidence.csv": "ee9992612203dca675a6eac599f1dc2255e03db7f51442599f2be44f010eb877",
   "threshold_sensitivity.json": "f2b3b1bad3b39f516116324d6bc85508727679d7e8a6c0e4c3152d87021d7459",
-  "classification_rules.json": "a394f17b6670caa0011d935979cd8bfa36b4c00dcd786c12fb49b6e02e3d9c3d",
-  "run_escape_tail_forensic.py": "2019305b295ec580854bdbc8c10eecbf23e382196271fc8dc8c83da26fc19d36"
+  "classification_rules.json": "627ccbdb7c2100e027075de266c6d1a435537f44f72e293475a01e9e538da6f8",
+  "scene_evidence.json": "3bb369028520f87818a8de67c11f9c6b9efa65646c7335aed332f7f76f277753",
+  "run_escape_tail_forensic.py": "e8fceb0a3d186452fb3ce75fb5ff9650732de6b86d5a868ff5057e394239b37e",
+  "scene_sheets/MOT17-10-SDP_455_min_dh.jpg": "070ab9a56ddcf89da4c733bb8c4e8c4996b45b697d26ffbb2039b01b47f643fc",
+  "scene_sheets/MOT17-10-SDP_459_min_dh.jpg": "a3076e8efb6969698b849fea512128f1096cc92e22fbbf391d9092e1aa351ec5",
+  "scene_sheets/MOT17-10-SDP_467_min_dh.jpg": "29ffdb516ae6ba61dc719dd81b4049ed37d8a2b44a634c7ec23806cdec093349",
+  "scene_sheets/MOT17-10-SDP_503_min_dh.jpg": "302e13b8026ec4e4c5132fc173642e67cfd8b0160e4d9959084f73441403c41d"
  }
 }
