@@ -406,7 +406,20 @@ def test_decomposition_steps_are_single_factor_named() -> None:
 
 
 def test_verify_rebuilds_capture_from_substrate() -> None:
+    """Full capture-origin verify needs frozen pairs + MOT substrate on disk.
+
+    CI runners do not ship the signal-study pair table or MOT eval dump; skip
+    there. Local / research machines with the sealed substrate still exercise
+    byte-identical rebuild.
+    """
     d0 = _load_runner()
+    pairs = REPO / d0.CANONICAL_PAIRS
+    mot = REPO / d0.SUBSTRATE_MOT_DIR
+    if not pairs.is_file() or not mot.is_dir():
+        pytest.skip(
+            "frozen pairs/substrate not available in this environment "
+            f"(pairs={pairs.is_file()}, mot={mot.is_dir()})"
+        )
     d0.verify_packet(PACKET, d0.CANONICAL_PAIRS, d0.SUBSTRATE_MOT_DIR)
 
 
