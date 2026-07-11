@@ -1,0 +1,25 @@
+[k=5] GT tracks by min Hamming distance to all-safe corner (n=209):
+   d=0:  203 tracks  (97.1%)
+   d=1:    4 tracks  (1.9%)
+   d=3:    2 tracks  (1.0%)
+   FP rows by cell distance: {0: 3477, 1: 4608, 2: 2346, 3: 2385, 4: 5277, 5: 3356}
+   FP rows at d>=3: 11018 (51.4% of all FP)
+[k=8] GT tracks by min Hamming distance to all-safe corner (n=209):
+   d=0:  117 tracks  (56.0%)
+   d=1:   77 tracks  (36.8%)
+   d=2:   11 tracks  (5.3%)
+   d=3:    2 tracks  (1.0%)
+   d=4:    1 tracks  (0.5%)
+   d=6:    1 tracks  (0.5%)
+   FP rows by cell distance: {0: 1043, 1: 2731, 2: 3151, 3: 2617, 4: 1979, 5: 2702, 6: 3207, 7: 2964, 8: 1055}
+   FP rows at d>=3: 14524 (67.7% of all FP)
+
+[k=8] GT tracks with min-distance>=3: 4
+   atom violated: score_m_bridge     1/4
+   atom violated: bridge_dist        2/4
+   atom violated: dist_h             2/4
+   atom violated: log_h_ratio        0/4
+   atom violated: resid_mean         3/4
+   atom violated: dir_cos            3/4
+   atom violated: speed_mismatch     4/4
+   atom violated: gap                1/4
