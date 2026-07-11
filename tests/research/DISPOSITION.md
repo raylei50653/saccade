@@ -8,8 +8,8 @@ Phase 2 (#119) executes terminal states in small reviewable batches.
 - Batch 2: gap_conditioned_motion e0–e3 → T4 delete (done, PR #121); phase_b retained (line still warm)
 - Batch 3: `misc/test_boolean_atom_partial_order.py` → T3/T4 delete (done, PR #122); sealed packet remains under contract checkers
 - Batch 4: near_miss trio → T2 promote to `tests/unit/eval/diagnostics/` (done, PR #124); scripts remain supported eval diagnostics
-- Batch 5A: Cheb-GR Door D owner status → **cold-supported / closed** (P0→P2 registry + docs; this PR); tests not moved
-- Batch 5B: cheb_gr handover report + synthesize → T2 promote (pending 5A merge)
+- Batch 5A: Cheb-GR Door D owner status → **cold-supported / closed** (P0→P2 registry + docs; done, PR #126); tests not moved
+- Batch 5B: cheb_gr handover report + synthesize → T2 promote to `tests/unit/eval/diagnostics/` (this PR)
 
 Each research test file must eventually reach one of four terminal states:
 
@@ -39,8 +39,8 @@ Nothing was deleted in phase 1. "Seal status" reflects 2026-07-11 knowledge.
 | ~~misc/test_boolean_atom_partial_order.py~~ | boolean_atom_partial_order_20260711 (#106) | sealed | **done — T3/T4** (#119 batch 3) | Packet integrity → generic checkers (T3); atom roles/terminal/PRC binding → sealed verdict (T4); no live `src/saccade` imports |
 | misc/test_d0_bridge_estimator_fidelity.py | d0_bridge_estimator_fidelity_20260711 (PR #115) | sealed | T4 | D0 certifies bridge atoms only; packet + recipe preserve it |
 | misc/test_portable_or_tail.py | frozen portable_policy.json (M-B1 OR-tail) | frozen; kernel acceptance PENDING (ONLINE_BAUDIT_IMPLEMENTED=False) | keep in research | Still active: hook acceptance outstanding. On acceptance, promote the acceptance-relevant assertions (T1), delete the rest (T4) |
-| misc/test_cheb_gr_offline_handover_report.py | chebgr Door D (cold-supported) | study sealed; tools P2 | **T2 pending batch 5B** | Live diagnostic script; promote after owner-status 5A, do not T4-delete |
-| misc/test_synthesize_handover_applicability.py | same | study sealed; tools P2 | **T2 pending batch 5B** | Same; sibling `test_compare_handover_summaries.py` already in unit |
+| ~~misc/test_cheb_gr_offline_handover_report.py~~ | chebgr Door D (cold-supported) | tools P2 | **done — T2** → `tests/unit/eval/diagnostics/` (#119 batch 5B) | Live diagnostic CLI/schema; cold-supported after 5A |
+| ~~misc/test_synthesize_handover_applicability.py~~ | same | tools P2 | **done — T2** (#119 batch 5B) | Same; sibling compare already in unit |
 | ~~near_miss/test_analyze_near_miss_offsets.py~~ | scripts/eval/diagnostics (supported tooling) | study concluded | **done — T2** → `tests/unit/eval/diagnostics/` (#119 batch 4) | Live script behavior; listed in scripts/eval README as current helpers |
 | ~~near_miss/test_analyze_near_miss_final_output.py~~ | same | concluded | **done — T2** (#119 batch 4) | Same |
 | ~~near_miss/test_analyze_near_miss_stage_attribution.py~~ | same | concluded | **done — T2** (#119 batch 4) | Same |

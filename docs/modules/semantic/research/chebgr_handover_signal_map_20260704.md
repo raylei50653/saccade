@@ -163,11 +163,10 @@ now holds under a genuine cross-condition test, not just the m-substrate A/B.
 - Applicability map: `scripts/eval/diagnostics/synthesize_handover_applicability.py` (nargs ≥ 2 summaries)
 - Detector-suffix guard: `scripts/eval/diagnostics/compare_detector_suffix_runs.py`
 - Veto flags (default off): `--cheb-gr-offline-center-dist-veto` / `--cheb-gr-offline-pollution-veto` / `--cheb-gr-offline-neighbor-iou-max`
-- Regression tests (expected under unit suite; cold-supported maintenance):
-  `tests/unit/eval/test_compare_handover_summaries.py` (already core);
-  report + synthesize promote tracked as #119 batch 5B after this owner-status PR
-  (`tests/research/misc/test_cheb_gr_offline_handover_report.py`,
-  `test_synthesize_handover_applicability.py` → `tests/unit/eval/diagnostics/`)
+- Regression tests (unit suite; cold-supported maintenance):
+  `tests/unit/eval/test_compare_handover_summaries.py`,
+  `tests/unit/eval/diagnostics/test_cheb_gr_offline_handover_report.py`,
+  `tests/unit/eval/diagnostics/test_synthesize_handover_applicability.py`
 
 ---
 
