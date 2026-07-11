@@ -1,16 +1,10 @@
 {
  "z_convention": "z_i = 1 means the declared safer side; later reject domains must be downward-closed in this orientation",
  "global_atoms": [
-  "bridge_dist",
   "dist_h",
   "log_h_ratio"
  ],
  "allowed_global_order_dimensions": [
-  {
-   "atom": "bridge_dist",
-   "safer_direction": "lower",
-   "may_participate_in_global_closure_arcs": true
-  },
   {
    "atom": "dist_h",
    "safer_direction": "lower",
@@ -23,11 +17,6 @@
   }
  ],
  "allowed_global_arcs": [
-  {
-   "type": "coordinate_monotone",
-   "atom": "bridge_dist",
-   "meaning": "moving toward safer side of bridge_dist is a legal global closure step (contract only; no weights assigned)"
-  },
   {
    "type": "coordinate_monotone",
    "atom": "dist_h",

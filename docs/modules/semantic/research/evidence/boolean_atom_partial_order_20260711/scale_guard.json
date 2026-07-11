@@ -69,7 +69,11 @@
   "score_vs_dist_h_fp": 0.5847565037044558,
   "resid_mean_vs_dist_h_gt": 0.5701194821760018
  },
- "unit_scale_compatibility": "resid (px-like residual) and dist_h (height-normalized distance) are mixed without an explicit unit normalizer beyond speed weight; scale dominance is empirical, not unit-justified",
+ "unit_scale_compatibility": {
+  "compatible": true,
+  "detail": "All mixands are height-normalized dimensionless quantities from the pair builder: fwd_resid/h_ref, bwd_resid/h_ref, dist_h/h_ref (and bridge_dist/h_ref). There is no px-vs-h unit incompatibility in score_m_bridge. Residual dominance is an empirical scale/weight effect within a common unit, not a unit mismatch.",
+  "unit_incompatibility_is_block_reason": false
+ },
  "findings": [
   "score_m_bridge is a speed-weighted mix of resid_mean and dist_h",
   "parent resid_mean carries accepted PR-C role-reversal evidence",
@@ -79,7 +83,7 @@
  "blocks_global_orderable": true,
  "block_reasons": [
   "parent role conflict: resid_mean is PR-C motion role-reversal atom",
-  "scale dominance: composite tracks resid_mean more than dist_h",
+  "residual dominance: composite tracks resid_mean more than dist_h (empirical term-fraction / correlation, within a shared unit)",
   "hidden context dependence via speed-dependent mixing weight w"
  ]
 }

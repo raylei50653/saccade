@@ -43,6 +43,10 @@ TERMINALS = {
     "ORDERABILITY_UNRESOLVED",
 }
 MOTION = {"speed_mismatch", "dir_cos", "resid_mean"}
+# Nontrivial global subcube after demoting bridge_dist (PR #107 review).
+GLOBAL = {"dist_h", "log_h_ratio"}
+CONDITIONAL = MOTION | {"bridge_dist"}
+CONTEXT_ONLY = {"score_m_bridge", "gap"}
 
 
 def _load_runner() -> Any:
@@ -80,20 +84,30 @@ def test_eight_atoms_exactly_one_role() -> None:
     roles = _j("atom_roles.json")["roles"]
     assert set(roles) == set(ATOMS)
     assert all(r in ROLES for r in roles.values())
-    # Exactly one role each (dict values already unique per key).
     assert len(roles) == 8
+
+
+def test_role_assignment_self_declared_research_judgment() -> None:
+    roles_doc = _j("atom_roles.json")
+    assert "research_judgment" in roles_doc["role_assignment_mode"]
+    assert roles_doc["statistics_role"] == "descriptive_only"
+    for name in ATOMS:
+        card = roles_doc["cards"][name]
+        assert card["role_assignment"] == "research_judgment"
+        assert "global_admissibility" in card
 
 
 def test_aggregate_terminal_and_global_set() -> None:
     agg = _j("aggregate.json")
     assert agg["terminal"] in TERMINALS
     assert agg["terminal"] == "GLOBAL_PARTIAL_ORDER_READY"
-    assert set(agg["global_atoms"]) == {"bridge_dist", "dist_h", "log_h_ratio"}
-    assert set(agg["conditional_atoms"]) == MOTION
-    assert set(agg["context_only_atoms"]) == {"score_m_bridge", "gap"}
+    assert set(agg["global_atoms"]) == GLOBAL
+    assert set(agg["conditional_atoms"]) == CONDITIONAL
+    assert set(agg["context_only_atoms"]) == CONTEXT_ONLY
     assert agg["unresolved_atoms"] == []
     assert agg["prc_binding_respected"] is True
     assert agg["score_m_bridge_not_global"] is True
+    assert agg["bridge_dist_not_global"] is True
     assert agg["authorizes_restricted_closure_prototype"] is True
 
 
@@ -104,10 +118,57 @@ def test_prc_motion_not_global() -> None:
         assert roles[name] == "conditional_orderable"
 
 
-def test_score_m_bridge_scale_guard_blocks_global() -> None:
+def test_bridge_dist_is_motion_extrapolation_not_global() -> None:
+    """PR #107 review blocker: bridge_dist is not a parentless geometry leaf."""
+    roles = _j("atom_roles.json")
+    assert roles["roles"]["bridge_dist"] == "conditional_orderable"
+    card = roles["cards"]["bridge_dist"]
+    assert card["provenance"] == "motion_extrapolation_composite"
+    assert card["global_admissibility"]["global_admissible"] is False
+    assert any(
+        "motion-extrapolation" in r
+        for r in card["global_admissibility"]["block_reasons"]
+    )
+
+    dep = _j("atom_dependency_graph.json")
+    node = dep["nodes"]["bridge_dist"]
+    assert node["kind"] == "motion_extrapolation_composite"
+    parents = set(node["parents"])
+    assert "lost_exit_velocity" in parents
+    assert "cand_entry_velocity" in parents
+    assert "gap" in parents
+    assert "h_ref" in parents
+    assert node["motion_derived"] is True
+    # Must not be recorded as a parentless builder_raw leaf.
+    assert node["parents"]  # non-empty
+
+
+def test_motion_derived_composites_cannot_silent_global_promote() -> None:
+    """Executable guard: motion-derived composites fail global admissibility."""
+    mod = _load_runner()
+    dep = mod.dependency_graph()
+    for name in ("bridge_dist", "score_m_bridge", *MOTION):
+        check = mod.global_admissibility_check(name, dep)
+        assert check["global_admissible"] is False, name
+        assert check["block_reasons"], name
+    # Pure structural / height leaves pass.
+    for name in ("dist_h", "log_h_ratio"):
+        check = mod.global_admissibility_check(name, dep)
+        assert check["global_admissible"] is True, (name, check)
+
+
+def test_score_m_bridge_scale_guard_blocks_without_unit_mismatch() -> None:
     sg = _j("scale_guard.json")
     assert sg["blocks_global_orderable"] is True
     assert sg["recompute_vs_sealed_max_abs"] == 0.0
+    units = sg["unit_scale_compatibility"]
+    assert units["compatible"] is True
+    assert units["unit_incompatibility_is_block_reason"] is False
+    # Block reasons must not claim px-vs-h unit mismatch.
+    joined = " ".join(sg["block_reasons"]).lower()
+    assert "px-like" not in joined
+    assert "unit incompatibility" not in joined
+    assert any("resid_mean" in r or "parent" in r for r in sg["block_reasons"])
     roles = _j("atom_roles.json")["roles"]
     assert roles["score_m_bridge"] == "context_only"
 
@@ -115,18 +176,18 @@ def test_score_m_bridge_scale_guard_blocks_global() -> None:
 def test_allowed_forbidden_contract_complete() -> None:
     allowed = _j("allowed_global_order.json")
     forbidden = _j("forbidden_order.json")
-    assert set(allowed["global_atoms"]) == {"bridge_dist", "dist_h", "log_h_ratio"}
+    assert set(allowed["global_atoms"]) == GLOBAL
     assert "z_convention" in allowed
     forbidden_atoms = {d["atom"] for d in forbidden["forbidden_global_dimensions"]}
     assert forbidden_atoms == set(ATOMS) - set(allowed["global_atoms"])
-    for name in MOTION:
+    for name in CONDITIONAL | CONTEXT_ONLY:
         assert name in forbidden_atoms
-    assert "score_m_bridge" in forbidden_atoms
-    assert "gap" in forbidden_atoms
-    # Conditional proposals marked proposal-only.
+    # Conditional proposals marked proposal-only (motion + bridge_dist).
+    prop_atoms = {prop["atom"] for prop in forbidden["conditional_arc_proposals"]}
+    assert prop_atoms == CONDITIONAL
     for prop in forbidden["conditional_arc_proposals"]:
         assert prop["status"] == "proposal-only"
-        assert prop["atom"] in MOTION
+    assert any("bridge_dist" in b for b in forbidden["hard_blocks"])
 
 
 def test_dependency_graph_covers_composites() -> None:
@@ -138,6 +199,7 @@ def test_dependency_graph_covers_composites() -> None:
     assert "dist_h" in parents
     assert "lost_exit_speed" in parents
     assert set(dep["frozen_atoms"]) == set(ATOMS)
+    assert "bridge_dist" in dep["motion_derived_frozen_atoms"]
 
 
 def test_metrics_csv_rows() -> None:
@@ -146,6 +208,9 @@ def test_metrics_csv_rows() -> None:
     assert [r["atom"] for r in rows] == ATOMS
     assert all(r["role"] in ROLES for r in rows)
     assert all(int(r["n_tracks"]) == 209 for r in rows)
+    by_atom = {r["atom"]: r for r in rows}
+    assert by_atom["bridge_dist"]["role"] == "conditional_orderable"
+    assert by_atom["dist_h"]["role"] == "global_orderable"
 
 
 def test_manifest_seals_step0_source() -> None:

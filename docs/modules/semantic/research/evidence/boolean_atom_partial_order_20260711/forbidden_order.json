@@ -41,8 +41,17 @@
    "role": "context_only",
    "forbidden_global_arcs": true,
    "reasons": [
-    "composite parent role conflict + scale dominance",
+    "weighted composite parent role conflict + residual dominance (units are height-normalized / compatible)",
     "context_only role"
+   ]
+  },
+  {
+   "atom": "bridge_dist",
+   "role": "conditional_orderable",
+   "forbidden_global_arcs": true,
+   "reasons": [
+    "motion-extrapolation composite (endpoint velocities × gap); related to PR-C long-gap re-entry regime",
+    "only conditionally orderable; not global"
    ]
   }
  ],
@@ -65,10 +74,28 @@
   },
   {
    "atom": "score_m_bridge",
-   "reason": "composite parent role conflict + scale dominance; context_only role"
+   "reason": "weighted composite parent role conflict + residual dominance (units are height-normalized / compatible); context_only role"
+  },
+  {
+   "atom": "bridge_dist",
+   "reason": "motion-extrapolation composite (endpoint velocities × gap); related to PR-C long-gap re-entry regime; only conditionally orderable; not global"
   }
  ],
  "conditional_arc_proposals": [
+  {
+   "atom": "bridge_dist",
+   "status": "proposal-only",
+   "contexts": [
+    {
+     "name": "short_gap_continuous_association",
+     "observable_without_gt_outcome": true,
+     "definition": "gap <= 60.0 frames (declared short-gap regime); excludes long-gap re-entry regime where PR-C accepted role reversal and constant-velocity mid-gap extrapolation breaks",
+     "proposal_only_conditional_arcs": true,
+     "note": "Conditional orderability is a contract proposal for a later conditional-closure study; not a sealed global arc."
+    }
+   ],
+   "note": "not authorized for global MWC; requires a separately reviewed conditional-representation task"
+  },
   {
    "atom": "dir_cos",
    "status": "proposal-only",
@@ -76,7 +103,7 @@
     {
      "name": "short_gap_continuous_association",
      "observable_without_gt_outcome": true,
-     "definition": "gap <= 60.0 frames (declared short-gap regime); excludes long-gap re-entry regime where PR-C accepted role reversal",
+     "definition": "gap <= 60.0 frames (declared short-gap regime); excludes long-gap re-entry regime where PR-C accepted role reversal and constant-velocity mid-gap extrapolation breaks",
      "proposal_only_conditional_arcs": true,
      "note": "Conditional orderability is a contract proposal for a later conditional-closure study; not a sealed global arc."
     }
@@ -90,7 +117,7 @@
     {
      "name": "short_gap_continuous_association",
      "observable_without_gt_outcome": true,
-     "definition": "gap <= 60.0 frames (declared short-gap regime); excludes long-gap re-entry regime where PR-C accepted role reversal",
+     "definition": "gap <= 60.0 frames (declared short-gap regime); excludes long-gap re-entry regime where PR-C accepted role reversal and constant-velocity mid-gap extrapolation breaks",
      "proposal_only_conditional_arcs": true,
      "note": "Conditional orderability is a contract proposal for a later conditional-closure study; not a sealed global arc."
     }
@@ -104,7 +131,7 @@
     {
      "name": "short_gap_continuous_association",
      "observable_without_gt_outcome": true,
-     "definition": "gap <= 60.0 frames (declared short-gap regime); excludes long-gap re-entry regime where PR-C accepted role reversal",
+     "definition": "gap <= 60.0 frames (declared short-gap regime); excludes long-gap re-entry regime where PR-C accepted role reversal and constant-velocity mid-gap extrapolation breaks",
      "proposal_only_conditional_arcs": true,
      "note": "Conditional orderability is a contract proposal for a later conditional-closure study; not a sealed global arc."
     }
@@ -114,6 +141,7 @@
  ],
  "hard_blocks": [
   "global closure arcs on motion atoms (PR-C binding)",
+  "global arcs on bridge_dist (motion-extrapolation composite)",
   "global arcs on score_m_bridge without redesign",
   "global arcs on gap",
   "escape-tail veto",

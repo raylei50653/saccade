@@ -7,7 +7,7 @@ created: 2026-07-11
 
 # Boolean-Atom Partial-Order Audit — PR-D Gate (issue #106)
 
-> **One-line:** Sealed 8-atom substrate → roles **`global_orderable`** = `{bridge_dist, dist_h, log_h_ratio}` · **`conditional_orderable`** = `{speed_mismatch, dir_cos, resid_mean}` (short-gap only) · **`context_only`** = `{score_m_bridge, gap}` · **`unresolved`** = ∅. Aggregate terminal **`GLOBAL_PARTIAL_ORDER_READY`**. Authorizes only a **separate** restricted-closure prototype on the global triple; motion global arcs remain blocked by PR-C.
+> **One-line:** Sealed 8-atom substrate → roles **`global_orderable`** = `{dist_h, log_h_ratio}` · **`conditional_orderable`** = `{bridge_dist, speed_mismatch, dir_cos, resid_mean}` (short-gap only) · **`context_only`** = `{score_m_bridge, gap}` · **`unresolved`** = ∅. Aggregate terminal **`GLOBAL_PARTIAL_ORDER_READY`**. Authorizes only a **separate** restricted-closure prototype on the global pair; motion / motion-extrapolation global arcs remain blocked. Role assignment is **research judgment** with executable global-admissibility guards (statistics are descriptive only).
 
 Thread: [gt_support_morphology_20260711.md](../../../research/threads/gt_support_morphology_20260711.md) ·
 Procedure: [framework §19](../../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md) ·
@@ -57,15 +57,18 @@ uv run python docs/modules/semantic/research/evidence/boolean_atom_partial_order
 ```text
 GLOBAL_PARTIAL_ORDER_READY
 
-global_orderable:     bridge_dist, dist_h, log_h_ratio
-conditional_orderable: dir_cos, resid_mean, speed_mismatch
+global_orderable:     dist_h, log_h_ratio
+conditional_orderable: bridge_dist, dir_cos, resid_mean, speed_mismatch
                        context = short_gap_continuous_association (gap ≤ 60)
 context_only:         score_m_bridge, gap
 unresolved:           (none)
 
-→ authorizes a SEPARATE restricted-closure prototype on the global triple only
-→ does NOT authorize MWC inside this PR, motion global arcs, tail veto, or production
+→ authorizes a SEPARATE restricted-closure prototype on the global pair only
+→ does NOT authorize MWC inside this PR, motion / bridge_dist global arcs,
+  tail veto, or production
 ```
+
+**Role-assignment self-declaration:** roles are research judgment under closed rules, not a fitted classifier. `V_i` / shells / threshold flips are descriptive. Executable `global_admissibility_check` may only **block** `global_orderable` (PR-C motion, motion-extrapolation composites, weighted composites with motion parents, regime descriptors).
 
 Routing detail: [`aggregate.json`](evidence/boolean_atom_partial_order_20260711/aggregate.json).
 
@@ -91,45 +94,49 @@ Height is preserved on the protected escape tail. Direction is mechanism-stable 
 | Field | Value |
 |:--|:--|
 | Safer | lower (geometry) |
-| Provenance | builder raw |
+| Provenance | builder raw — endpoint foot distance / `h_ref` only |
 | V_i | 2/209 (MOT17-10 only) |
 | Tail d_H≥3 | 2/4 |
 | p40→p60 flips | 7/209 |
 | PR-C reversal | no |
+| Global admissibility | **pass** |
 
-Structural distance with low GT violation rate. Sequence clustering of the few violations is recorded as a competing explanation; no accepted role-reversal mechanism blocks global promotion.
+Pure structural leaf (no velocity parents). Sequence clustering of the few violations is a competing explanation; no accepted role-reversal mechanism blocks global promotion.
 
-### 3.3 `bridge_dist` — `global_orderable`
+### 3.3 `bridge_dist` — `conditional_orderable` (demoted; PR #107 review)
 
 | Field | Value |
 |:--|:--|
-| Safer | lower (geometry) |
-| Provenance | builder mid-point bridge distance |
+| Safer (declared) | lower |
+| Provenance | **motion-extrapolation composite** (not parentless geometry) |
+| Formula | \(m_l=x_l+v_l\frac{gap}{2}\), \(m_c=x_c-v_c\frac{gap}{2}\), \(\mathrm{bridge\_dist}=\|m_l-m_c\|/h_{\mathrm{ref}}\) |
+| Parents | lost/cand foot xy · exit/entry **velocities** · **gap** · `h_ref` |
 | V_i | 2/209 (MOT17-10 only) |
 | Tail d_H≥3 | 2/4 |
 | p40→p60 flips | 1/209 |
-| PR-C reversal | no |
+| Global admissibility | **blocked** (motion-extrapolation composite) |
 
-Most threshold-stable structural atom. Eligible for global closure arcs in a later prototype.
+**PR-C relation:** long-gap re-entry (`TRUE_LONG_GAP_REENTRY`) is exactly where constant-velocity mid-gap extrapolation is least defensible; velocity parents share the motion substrate that carries accepted role-reversal evidence. Without independent multi-seq mechanism evidence, **not** `global_orderable`. Short-gap CV regime remains a **proposal-only** conditional context.
 
 ### 3.4 `score_m_bridge` — `context_only`
 
 | Field | Value |
 |:--|:--|
 | Safer (declared) | lower |
-| Provenance | **composite**: `w·resid_mean + (1-w)·dist_h`, `w=√clip(exit_speed/0.12)` |
+| Provenance | **weighted composite**: `w·resid_mean + (1-w)·dist_h`, `w=√clip(exit_speed/0.12)` |
 | V_i | 1/209 |
 | Tail d_H≥3 | 1/4 |
-| Scale-guard | **blocks global** |
+| Scale-guard | **blocks global** (not for unit mismatch) |
 
 Scale-guard ([`scale_guard.json`](evidence/boolean_atom_partial_order_20260711/scale_guard.json)):
 
+- **Units are compatible:** `fwd_resid`, `bwd_resid`, `dist_h`, and `bridge_dist` are all height-normalized dimensionless (`/h_ref`). There is **no** px-vs-h unit incompatibility block.
 - parent `resid_mean` carries PR-C role-reversal evidence → parent role conflict;
-- GT corr(score, resid_mean) ≈ **0.977** vs corr(score, dist_h) ≈ **0.658** → residual dominance;
+- GT corr(score, resid_mean) ≈ **0.977** vs corr(score, dist_h) ≈ **0.658** → residual dominance within a shared unit;
 - high-w regime (w≥0.9, ~10% of pool) has mean residual-term fraction ≈ **0.99**;
 - speed-dependent mixing injects hidden context dependence.
 
-Issue #106 rule: composite with incompatible parent roles or scale dominance → **not** `global_orderable`. Ranking utility as a production proxy is acknowledged but is not order legitimacy.
+Blocks: parent role conflict · residual dominance · regime-dependent `w`. Ranking utility as a production proxy is not order legitimacy.
 
 ### 3.5 `resid_mean` — `conditional_orderable`
 
@@ -188,8 +195,9 @@ Long gap is not intrinsically unsafe (true re-entries exist). `gap` defines the 
 h_lost_raw, h_cand_raw  →  log_h_ratio
 fwd_resid, bwd_resid    →  resid_mean
 lost_exit_speed, cand_entry_speed → speed_mismatch
-resid_mean, dist_h, lost_exit_speed → score_m_bridge   (blocked composite)
-bridge_dist, dist_h, dir_cos, gap   → builder raw leaves
+resid_mean, dist_h, lost_exit_speed → score_m_bridge   (blocked weighted composite)
+lost/cand foot, velocities, gap, h_ref → bridge_dist   (motion-extrapolation; blocked)
+lost/cand foot, h_ref → dist_h                         (pure geometry leaf)
 ```
 
 Edges are provenance only — not closure arcs and not weights.
@@ -200,7 +208,7 @@ Edges are provenance only — not closure arcs and not weights.
 
 ```text
 z_i = 1  ⇔  declared safer side
-global dimensions: bridge_dist↓, dist_h↓, log_h_ratio↓
+global dimensions: dist_h↓, log_h_ratio↓
 reject domains in a later study must be downward-closed on this orientation
 graph vertices (next task only): Boolean cells on the global_orderable subcube
 optimization weights / MWC solve: forbidden here
@@ -211,7 +219,8 @@ optimization weights / MWC solve: forbidden here
 | Dimension | Why forbidden globally |
 |:--|:--|
 | `speed_mismatch`, `dir_cos`, `resid_mean` | PR-C role-reversal; conditional only |
-| `score_m_bridge` | parent role conflict + scale dominance |
+| `bridge_dist` | motion-extrapolation composite; related to PR-C long-gap regime |
+| `score_m_bridge` | parent role conflict + residual dominance (units OK) |
 | `gap` | regime descriptor |
 
 Conditional arc proposals for the three motion atoms are marked **proposal-only**.
@@ -230,15 +239,15 @@ This audit uses only GT placement morphology, PR-C mechanism evidence, threshold
 
 | If terminal | Action |
 |:--|:--|
-| **`GLOBAL_PARTIAL_ORDER_READY` (this result)** | Open a **new** restricted global-closure prototype issue/task using only `{bridge_dist, dist_h, log_h_ratio}`; compare candidates to frozen OR-tail under exact GT-UCB; still candidate-only |
-| Conditional proposals | May seed a **separately reviewed** conditional-representation task; not part of the global prototype |
-| Must not | Combine this audit with the MWC prototype in the same PR; promote motion or `score_m_bridge` to global arcs without new independent evidence + owner override |
+| **`GLOBAL_PARTIAL_ORDER_READY` (this result)** | Open a **new** restricted global-closure prototype issue/task using only `{dist_h, log_h_ratio}`; compare candidates to frozen OR-tail under exact GT-UCB; still candidate-only |
+| Conditional proposals | May seed a **separately reviewed** conditional-representation task (`bridge_dist` + motion); not part of the global prototype |
+| Must not | Combine this audit with the MWC prototype in the same PR; promote motion, `bridge_dist`, or `score_m_bridge` to global arcs without new independent evidence + owner override |
 
 ## 9. Must not
 
 - Treat this note as evidence_ledger promotion;
 - Run MWC / min-cut / rule search in this unit;
-- Promote motion atoms or `score_m_bridge` to global order from the same pooled substrate without resolving the documented contradictions;
+- Promote motion atoms, `bridge_dist`, or `score_m_bridge` to global order from the same pooled substrate without resolving the documented contradictions;
 - Veto the protected escape tail;
 - Change production presets, defaults, tracker behavior, or closed OR-tail policy;
 - Claim L2+ or multi-sequence confirmation from this L1 contract.

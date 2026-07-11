@@ -29,8 +29,9 @@ import json
 import shutil
 import sys
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
@@ -60,16 +61,28 @@ ATOMS: list[tuple[str, bool]] = [
 ]
 ATOM_NAMES = [name for name, _ in ATOMS]
 MOTION_ATOMS = ("speed_mismatch", "dir_cos", "resid_mean")
-STRUCTURAL_ATOMS = ("bridge_dist", "dist_h")
+# Pure structural / height leaves (no motion parents in the builder formula).
+STRUCTURAL_LEAVES = ("dist_h",)
 HEIGHT_ATOMS = ("log_h_ratio",)
-COMPOSITE_ATOMS = ("score_m_bridge",)
-REGIME_ATOMS = ("gap",)
+# Motion-extrapolation composite: mid-point bridge uses endpoint velocities × gap.
+MOTION_EXTRAPOLATION_COMPOSITES = frozenset({"bridge_dist"})
+# Weighted / multi-parent composites with explicit scale-guard.
+WEIGHTED_COMPOSITES = frozenset({"score_m_bridge"})
+REGIME_ATOMS = frozenset({"gap"})
 
 # PR-C binding (issue #102 / PR #104, ACCEPTED_WITH_LIMITS).
 # These three atoms carry accepted long-gap re-entry role-reversal evidence.
 PRC_ROLE_REVERSAL_ATOMS = frozenset(MOTION_ATOMS)
 PRC_AGGREGATE = "ROLE_REVERSAL_SUPPORTED"
 PRC_ACCEPTANCE = "ACCEPTED_WITH_LIMITS"
+
+# Role assignment is research judgment; statistics are descriptive only.
+# Executable guards below can only *block* global promotion, not invent it.
+ROLE_ASSIGNMENT_MODE = (
+    "research_judgment_with_executable_guards; "
+    "V_i / shell / threshold metrics are descriptive and do not alone "
+    "control role assignment"
+)
 
 # Observable contexts for conditional_orderable motion atoms (no GT outcome used).
 SHORT_GAP_MAX = 60.0  # frames; regime descriptor only
@@ -248,7 +261,7 @@ def prepare_pool(pairs: Path) -> dict[str, np.ndarray]:
     pool = ar.load_gt_valid_pool(pairs)
     pool["resid_mean"] = 0.5 * (pool["fwd_resid"] + pool["bwd_resid"])
     ar.ensure_prod_proxy_scores(pool)
-    return pool
+    return cast(dict[str, np.ndarray], pool)
 
 
 def threshold_sensitivity(pool: dict[str, np.ndarray]) -> dict[str, Any]:
@@ -441,16 +454,24 @@ def scale_guard_score_m_bridge(pool: dict[str, np.ndarray]) -> dict[str, Any]:
                 np.asarray(pool["resid_mean"], float)[y], dist_h[y]
             ),
         },
-        "unit_scale_compatibility": (
-            "resid (px-like residual) and dist_h (height-normalized distance) "
-            "are mixed without an explicit unit normalizer beyond speed weight; "
-            "scale dominance is empirical, not unit-justified"
-        ),
+        "unit_scale_compatibility": {
+            "compatible": True,
+            "detail": (
+                "All mixands are height-normalized dimensionless quantities "
+                "from the pair builder: fwd_resid/h_ref, bwd_resid/h_ref, "
+                "dist_h/h_ref (and bridge_dist/h_ref). There is no px-vs-h "
+                "unit incompatibility in score_m_bridge. Residual dominance "
+                "is an empirical scale/weight effect within a common unit, "
+                "not a unit mismatch."
+            ),
+            "unit_incompatibility_is_block_reason": False,
+        },
         "findings": findings,
         "blocks_global_orderable": blocks_global,
         "block_reasons": [
             "parent role conflict: resid_mean is PR-C motion role-reversal atom",
-            "scale dominance: composite tracks resid_mean more than dist_h",
+            "residual dominance: composite tracks resid_mean more than dist_h "
+            "(empirical term-fraction / correlation, within a shared unit)",
             "hidden context dependence via speed-dependent mixing weight w",
         ],
     }
@@ -458,59 +479,160 @@ def scale_guard_score_m_bridge(pool: dict[str, np.ndarray]) -> dict[str, Any]:
 
 def dependency_graph() -> dict[str, Any]:
     """Static provenance DAG for frozen atoms (no optimization edges)."""
-    nodes = {
+    # bridge_dist formula (pair builder / relink._midpoint_bridge_dist):
+    #   m_l = x_l + v_l * gap/2
+    #   m_c = x_c - v_c * gap/2
+    #   bridge_dist = ||m_l - m_c|| / h_ref
+    nodes: dict[str, dict[str, Any]] = {
         "score_m_bridge": {
-            "kind": "composite_derived",
+            "kind": "weighted_composite",
             "parents": ["resid_mean", "dist_h", "lost_exit_speed"],
-            "transform": "speed-weighted linear mix",
+            "transform": "speed-weighted linear mix of height-normalized terms",
+            "motion_derived": True,
         },
         "bridge_dist": {
-            "kind": "builder_raw",
-            "parents": [],
-            "transform": "mid-point bridge distance from pair builder",
+            "kind": "motion_extrapolation_composite",
+            "parents": [
+                "lost_foot_xy",
+                "cand_foot_xy",
+                "lost_exit_velocity",
+                "cand_entry_velocity",
+                "gap",
+                "h_ref",
+            ],
+            "transform": (
+                "m_l=x_l+v_l*gap/2; m_c=x_c-v_c*gap/2; bridge_dist=||m_l-m_c||/h_ref"
+            ),
+            "formula_source": (
+                "src/saccade/perception/eval/relink.py::_midpoint_bridge_dist "
+                "(pair-builder column of the same form)"
+            ),
+            "motion_derived": True,
+            "note": (
+                "Not a parentless geometry leaf. Explicitly depends on endpoint "
+                "velocities and gap; constant-velocity mid-gap extrapolation."
+            ),
         },
         "dist_h": {
             "kind": "builder_raw",
-            "parents": [],
-            "transform": "height-normalized foot distance",
+            "parents": ["lost_foot_xy", "cand_foot_xy", "h_ref"],
+            "transform": "||x_c - x_l|| / h_ref (endpoint geometry only)",
+            "motion_derived": False,
         },
         "log_h_ratio": {
             "kind": "derived",
             "parents": ["h_lost_raw", "h_cand_raw"],
             "transform": "abs(log(h_cand/h_lost))",
+            "motion_derived": False,
         },
         "resid_mean": {
             "kind": "derived",
             "parents": ["fwd_resid", "bwd_resid"],
-            "transform": "0.5*(fwd+bwd)",
+            "transform": "0.5*(fwd+bwd) (each residual is /h_ref in the builder)",
+            "motion_derived": True,
         },
         "dir_cos": {
             "kind": "builder_raw",
-            "parents": [],
+            "parents": ["lost_exit_velocity", "cand_entry_velocity"],
             "transform": "direction cosine of exit/entry motion",
+            "motion_derived": True,
         },
         "speed_mismatch": {
             "kind": "derived",
             "parents": ["lost_exit_speed", "cand_entry_speed"],
-            "transform": "abs(exit_speed - entry_speed)",
+            "transform": "abs(exit_speed - entry_speed) (speeds are /h_ref)",
+            "motion_derived": True,
         },
         "gap": {
             "kind": "builder_raw",
             "parents": ["lost_last_frame", "cand_first_frame"],
             "transform": "cand_first_frame - lost_last_frame",
+            "motion_derived": False,
+            "regime_descriptor": True,
         },
-        "h_lost_raw": {"kind": "builder_raw", "parents": [], "transform": None},
-        "h_cand_raw": {"kind": "builder_raw", "parents": [], "transform": None},
-        "fwd_resid": {"kind": "builder_raw", "parents": [], "transform": None},
-        "bwd_resid": {"kind": "builder_raw", "parents": [], "transform": None},
-        "lost_exit_speed": {"kind": "builder_raw", "parents": [], "transform": None},
-        "cand_entry_speed": {"kind": "builder_raw", "parents": [], "transform": None},
-        "lost_last_frame": {"kind": "builder_raw", "parents": [], "transform": None},
-        "cand_first_frame": {"kind": "builder_raw", "parents": [], "transform": None},
+        "h_lost_raw": {
+            "kind": "builder_raw",
+            "parents": [],
+            "transform": None,
+            "motion_derived": False,
+        },
+        "h_cand_raw": {
+            "kind": "builder_raw",
+            "parents": [],
+            "transform": None,
+            "motion_derived": False,
+        },
+        "h_ref": {
+            "kind": "builder_raw",
+            "parents": ["h_lost_raw", "h_cand_raw"],
+            "transform": "max(0.5*(h_lost+h_cand), 1)",
+            "motion_derived": False,
+        },
+        "fwd_resid": {
+            "kind": "builder_raw",
+            "parents": [],
+            "transform": "forward residual / h_ref (dimensionless)",
+            "motion_derived": True,
+        },
+        "bwd_resid": {
+            "kind": "builder_raw",
+            "parents": [],
+            "transform": "backward residual / h_ref (dimensionless)",
+            "motion_derived": True,
+        },
+        "lost_exit_speed": {
+            "kind": "builder_raw",
+            "parents": ["lost_exit_velocity", "h_ref"],
+            "transform": "||v_l|| / h_ref",
+            "motion_derived": True,
+        },
+        "cand_entry_speed": {
+            "kind": "builder_raw",
+            "parents": ["cand_entry_velocity", "h_ref"],
+            "transform": "||v_c|| / h_ref",
+            "motion_derived": True,
+        },
+        "lost_exit_velocity": {
+            "kind": "builder_raw",
+            "parents": [],
+            "transform": "endpoint velocity of lost track",
+            "motion_derived": True,
+        },
+        "cand_entry_velocity": {
+            "kind": "builder_raw",
+            "parents": [],
+            "transform": "endpoint velocity of candidate track",
+            "motion_derived": True,
+        },
+        "lost_foot_xy": {
+            "kind": "builder_raw",
+            "parents": [],
+            "transform": "lost endpoint foot position",
+            "motion_derived": False,
+        },
+        "cand_foot_xy": {
+            "kind": "builder_raw",
+            "parents": [],
+            "transform": "candidate endpoint foot position",
+            "motion_derived": False,
+        },
+        "lost_last_frame": {
+            "kind": "builder_raw",
+            "parents": [],
+            "transform": None,
+            "motion_derived": False,
+        },
+        "cand_first_frame": {
+            "kind": "builder_raw",
+            "parents": [],
+            "transform": None,
+            "motion_derived": False,
+        },
     }
-    edges = []
+    edges: list[dict[str, str]] = []
     for child, meta in nodes.items():
-        for parent in meta["parents"]:
+        parents = cast(list[str], meta["parents"])
+        for parent in parents:
             edges.append({"source": parent, "target": child, "relation": "depends_on"})
     return {
         "description": (
@@ -520,6 +642,79 @@ def dependency_graph() -> dict[str, Any]:
         "frozen_atoms": ATOM_NAMES,
         "nodes": nodes,
         "edges": edges,
+        "motion_derived_frozen_atoms": sorted(
+            name
+            for name in ATOM_NAMES
+            if bool(nodes[name].get("motion_derived", False))
+        ),
+    }
+
+
+def global_admissibility_check(atom: str, dep: dict[str, Any]) -> dict[str, Any]:
+    """Executable guards that may only *block* global_orderable promotion.
+
+    These checks do not assign roles by themselves. Research judgment still
+    chooses among the non-blocked roles (conditional / context_only /
+    unresolved / global when all guards pass).
+    """
+    nodes = cast(dict[str, dict[str, Any]], dep["nodes"])
+    meta = nodes[atom]
+    reasons: list[str] = []
+    if atom in PRC_ROLE_REVERSAL_ATOMS:
+        reasons.append("PR-C accepted motion role-reversal atom")
+    if atom in REGIME_ATOMS:
+        reasons.append("regime descriptor, not a monotone safety dimension")
+    if atom in MOTION_EXTRAPOLATION_COMPOSITES:
+        reasons.append(
+            "motion-extrapolation composite (endpoint velocities × gap); "
+            "not a pure structural leaf"
+        )
+    if atom in WEIGHTED_COMPOSITES:
+        reasons.append(
+            "weighted composite with motion parent and/or regime-dependent mix"
+        )
+    if bool(meta.get("motion_derived", False)) and atom not in (
+        *STRUCTURAL_LEAVES,
+        *HEIGHT_ATOMS,
+    ):
+        # Belt-and-suspenders: any motion-derived frozen atom is blocked unless
+        # it is an explicitly enumerated pure structural/height leaf.
+        if atom not in STRUCTURAL_LEAVES and atom not in HEIGHT_ATOMS:
+            if "motion-extrapolation" not in " ".join(reasons):
+                if (
+                    atom not in PRC_ROLE_REVERSAL_ATOMS
+                    and atom not in WEIGHTED_COMPOSITES
+                ):
+                    reasons.append("motion_derived=true in dependency DAG")
+    # Parent-level conflict: direct parents that are PR-C motion atoms.
+    parent_names = cast(list[str], meta.get("parents", []))
+    prc_parents = sorted(set(parent_names) & set(PRC_ROLE_REVERSAL_ATOMS))
+    if prc_parents:
+        reasons.append(
+            f"direct parent role conflict with PR-C motion atoms: {prc_parents}"
+        )
+    # Parent-level: any velocity/residual parents make silent global promotion illegal.
+    motion_parent_markers = {
+        "lost_exit_velocity",
+        "cand_entry_velocity",
+        "lost_exit_speed",
+        "cand_entry_speed",
+        "fwd_resid",
+        "bwd_resid",
+        "resid_mean",
+        "dir_cos",
+        "speed_mismatch",
+    }
+    motion_parents = sorted(set(parent_names) & motion_parent_markers)
+    if motion_parents and atom not in STRUCTURAL_LEAVES and atom not in HEIGHT_ATOMS:
+        tag = f"motion parents in formula: {motion_parents}"
+        if tag not in reasons and not any("motion" in r for r in reasons):
+            reasons.append(tag)
+    admissible = len(reasons) == 0
+    return {
+        "atom": atom,
+        "global_admissible": admissible,
+        "block_reasons": reasons,
     }
 
 
@@ -548,15 +743,24 @@ def gap_regime_profile(
             best_dh[key] = dh
             best_i[key] = int(i)
 
-    regimes = {
-        f"short_gap_le_{int(SHORT_GAP_MAX)}": lambda i: gap[i] <= SHORT_GAP_MAX,
-        f"long_gap_gt_{int(SHORT_GAP_MAX)}": lambda i: gap[i] > SHORT_GAP_MAX,
-        "long_gap_gt_pool_median_129": lambda i: gap[i] > 129.0,
+    def short_gap(i: int) -> bool:
+        return bool(gap[i] <= SHORT_GAP_MAX)
+
+    def long_gap(i: int) -> bool:
+        return bool(gap[i] > SHORT_GAP_MAX)
+
+    def long_gap_median(i: int) -> bool:
+        return bool(gap[i] > 129.0)
+
+    regimes: dict[str, Callable[[int], bool]] = {
+        f"short_gap_le_{int(SHORT_GAP_MAX)}": short_gap,
+        f"long_gap_gt_{int(SHORT_GAP_MAX)}": long_gap,
+        "long_gap_gt_pool_median_129": long_gap_median,
     }
     out: dict[str, Any] = {"short_gap_max_frames": SHORT_GAP_MAX, "regimes": {}}
     for rname, pred in regimes.items():
         idxs = [i for i in best_i.values() if pred(i)]
-        vi = {}
+        vi: dict[str, Any] = {}
         for name, lower in ATOMS:
             n_viol = sum(
                 1 for i in idxs if z_bit(float(pool[name][i]), thrs[name], lower) == 0
@@ -576,18 +780,30 @@ def assign_roles(
     sensitivity: dict[str, Any],
     scale_guard: dict[str, Any],
     prc_aggregate: dict[str, Any],
+    dep: dict[str, Any],
 ) -> dict[str, Any]:
-    """Deterministic role assignment under issue #106 rules + PR-C binding.
+    """Research-judgment role assignment under issue #106 + PR-C binding.
 
-    Rules (closed; no fifth role):
-    1. PR-C role-reversal motion atoms → not global_orderable; default
-       conditional_orderable under short-gap continuous regime.
-    2. score_m_bridge fails composite/scale-guard → context_only.
-    3. gap is a regime descriptor → context_only.
-    4. height/structural atoms with no accepted role reversal and non-artifactual
-       safer direction → global_orderable.
-    5. Anything failing the above with insufficient evidence → unresolved
-       (not used on this substrate under current rules).
+    Self-declaration
+    ----------------
+    Role assignment is **research judgment**, not a fitted classifier.
+    Morphology statistics (V_i, shells, threshold flips) are **descriptive
+    only** and do not alone control the role. Executable
+    ``global_admissibility_check`` may only *block* ``global_orderable``.
+
+    Closed role rules
+    -----------------
+    1. PR-C role-reversal motion atoms → not global; default
+       ``conditional_orderable`` under short-gap continuous regime.
+    2. ``score_m_bridge`` fails weighted-composite / parent-conflict guard →
+       ``context_only`` (units are compatible; block is role/dominance/w).
+    3. ``bridge_dist`` is a motion-extrapolation composite (velocities × gap)
+       → not global; ``conditional_orderable`` under short-gap CV regime
+       (no independent multi-seq mechanism evidence for global promotion).
+    4. ``gap`` is a regime descriptor → ``context_only``.
+    5. Pure height / structural leaves that pass admissibility
+       (``log_h_ratio``, ``dist_h``) → ``global_orderable``.
+    6. No fifth role.
     """
     if prc_aggregate.get("terminal") != PRC_AGGREGATE:
         raise ValueError(
@@ -603,15 +819,16 @@ def assign_roles(
 
     tail_viol = shell["protected_tail_d_h_ge_3"]["per_atom_violations"]
     flips = sensitivity["direction_flip_p40_to_p60"]
+    admissibility = {name: global_admissibility_check(name, dep) for name in ATOM_NAMES}
     cards: dict[str, Any] = {}
 
-    # --- motion atoms ---
     short_gap_context = {
         "name": "short_gap_continuous_association",
         "observable_without_gt_outcome": True,
         "definition": (
             f"gap <= {SHORT_GAP_MAX} frames (declared short-gap regime); "
-            "excludes long-gap re-entry regime where PR-C accepted role reversal"
+            "excludes long-gap re-entry regime where PR-C accepted role "
+            "reversal and constant-velocity mid-gap extrapolation breaks"
         ),
         "proposal_only_conditional_arcs": True,
         "note": (
@@ -619,11 +836,14 @@ def assign_roles(
             "conditional-closure study; not a sealed global arc."
         ),
     }
+
+    # --- motion atoms (PR-C binding) ---
     for name in MOTION_ATOMS:
         lower = dict(ATOMS)[name]
         cards[name] = {
             "atom": name,
             "role": "conditional_orderable",
+            "role_assignment": "research_judgment",
             "provenance": "derived" if name != "dir_cos" else "builder_raw",
             "declared_safer_direction": "lower" if lower else "higher",
             "physical_interpretation": {
@@ -635,6 +855,7 @@ def assign_roles(
             "V_i": vi[name],
             "tail_violations_d_h_ge_3": tail_viol[name],
             "threshold_flip_p40_p60": flips[name],
+            "global_admissibility": admissibility[name],
             "prc_binding": {
                 "role_reversal_supported": True,
                 "source": "PR-C #102 / PR #104 ACCEPTED_WITH_LIMITS",
@@ -661,6 +882,7 @@ def assign_roles(
     cards["gap"] = {
         "atom": "gap",
         "role": "context_only",
+        "role_assignment": "research_judgment",
         "provenance": "builder_raw",
         "declared_safer_direction": "lower",
         "physical_interpretation": (
@@ -671,6 +893,7 @@ def assign_roles(
         "V_i": vi["gap"],
         "tail_violations_d_h_ge_3": tail_viol["gap"],
         "threshold_flip_p40_p60": flips["gap"],
+        "global_admissibility": admissibility["gap"],
         "prc_binding": {
             "role_reversal_supported": False,
             "blocks_global_orderable": True,
@@ -689,19 +912,22 @@ def assign_roles(
         ),
     }
 
-    # --- score_m_bridge composite ---
+    # --- score_m_bridge weighted composite ---
     cards["score_m_bridge"] = {
         "atom": "score_m_bridge",
         "role": "context_only",
-        "provenance": "composite_derived",
+        "role_assignment": "research_judgment",
+        "provenance": "weighted_composite",
         "declared_safer_direction": "lower",
         "physical_interpretation": (
-            "production-shaped speed-weighted mix of residual and dist_h"
+            "production-shaped speed-weighted mix of height-normalized "
+            "residual mean and dist_h"
         ),
         "admissible_contexts": [],
         "V_i": vi["score_m_bridge"],
         "tail_violations_d_h_ge_3": tail_viol["score_m_bridge"],
         "threshold_flip_p40_p60": flips["score_m_bridge"],
+        "global_admissibility": admissibility["score_m_bridge"],
         "prc_binding": {
             "role_reversal_supported": False,
             "indirect_via_parent": "resid_mean",
@@ -711,10 +937,12 @@ def assign_roles(
             "blocks_global_orderable": scale_guard["blocks_global_orderable"],
             "block_reasons": scale_guard["block_reasons"],
             "correlations": scale_guard["correlations"],
+            "unit_scale_compatibility": scale_guard["unit_scale_compatibility"],
         },
         "supporting_evidence": [
             "composite parents include resid_mean (PR-C motion role-reversal atom)",
-            "scale-guard: residual term dominates the composite",
+            "residual dominance within a shared height-normalized unit "
+            "(not a unit-mismatch claim)",
             "speed-dependent mixing weight injects hidden context dependence",
         ],
         "competing_explanations": [
@@ -723,33 +951,87 @@ def assign_roles(
         ],
         "confidence_boundary": (
             "context/diagnostic only on this substrate; parent role conflict "
-            "blocks global promotion without a redesign that removes the "
-            "motion parent or re-proves direction under nested folds"
+            "and residual dominance block global promotion without a redesign "
+            "that removes the motion parent or re-proves direction under nested folds"
         ),
     }
 
-    # --- structural + height ---
-    for name in (*STRUCTURAL_ATOMS, *HEIGHT_ATOMS):
+    # --- bridge_dist: motion-extrapolation composite (NOT pure geometry) ---
+    cards["bridge_dist"] = {
+        "atom": "bridge_dist",
+        "role": "conditional_orderable",
+        "role_assignment": "research_judgment",
+        "provenance": "motion_extrapolation_composite",
+        "declared_safer_direction": "lower",
+        "physical_interpretation": (
+            "constant-velocity mid-gap extrapolation distance: "
+            "m_l=x_l+v_l*gap/2, m_c=x_c-v_c*gap/2, bridge_dist=||m_l-m_c||/h_ref. "
+            "Depends on endpoint velocities, gap, geometry, and height normalization "
+            "— not a parentless structural leaf."
+        ),
+        "admissible_contexts": [short_gap_context],
+        "V_i": vi["bridge_dist"],
+        "tail_violations_d_h_ge_3": tail_viol["bridge_dist"],
+        "threshold_flip_p40_p60": flips["bridge_dist"],
+        "global_admissibility": admissibility["bridge_dist"],
+        "prc_binding": {
+            "role_reversal_supported": False,
+            "related_to_prc_motion_reversal": True,
+            "relation": (
+                "Long-gap re-entry (PR-C TRUE_LONG_GAP_REENTRY) is exactly the "
+                "regime where constant-velocity mid-gap extrapolation is least "
+                "defensible; velocity parents share the motion substrate that "
+                "carries accepted role-reversal evidence. No independent "
+                "mechanism evidence authorizes global promotion of bridge_dist."
+            ),
+            "blocks_global_orderable": True,
+        },
+        "supporting_evidence": [
+            "builder formula explicitly multiplies endpoint velocities by gap/2",
+            "dependency DAG lists lost/cand exit-entry velocities + gap + h_ref",
+            "global_admissibility_check blocks motion-extrapolation composites",
+            "short-gap CV regime remains a plausible conditional context",
+        ],
+        "competing_explanations": [
+            "low V_i alone cannot reclassify a motion-derived composite as "
+            "global_orderable (statistics are descriptive only)",
+            "tail co-violations with geometry do not prove pure structural role",
+        ],
+        "confidence_boundary": (
+            "L1 conditional proposal only; forbidden as a global order dimension "
+            "until independent multi-seq mechanism evidence is reviewed"
+        ),
+    }
+
+    # --- pure structural / height leaves that pass global admissibility ---
+    for name in (*STRUCTURAL_LEAVES, *HEIGHT_ATOMS):
+        if not admissibility[name]["global_admissible"]:
+            raise AssertionError(
+                f"expected {name} to pass global admissibility, got "
+                f"{admissibility[name]['block_reasons']}"
+            )
         lower = dict(ATOMS)[name]
         cards[name] = {
             "atom": name,
             "role": "global_orderable",
+            "role_assignment": "research_judgment",
             "provenance": "derived" if name == "log_h_ratio" else "builder_raw",
             "declared_safer_direction": "lower" if lower else "higher",
             "physical_interpretation": {
-                "bridge_dist": "mid-point bridge distance (geometry)",
-                "dist_h": "height-normalized foot distance (geometry)",
+                "dist_h": "height-normalized endpoint foot distance (geometry only)",
                 "log_h_ratio": "absolute log height ratio (scale consistency)",
             }[name],
             "admissible_contexts": [],
             "V_i": vi[name],
             "tail_violations_d_h_ge_3": tail_viol[name],
             "threshold_flip_p40_p60": flips[name],
+            "global_admissibility": admissibility[name],
             "prc_binding": {
                 "role_reversal_supported": False,
                 "blocks_global_orderable": False,
             },
             "supporting_evidence": [
+                f"global_admissibility_check passed for {name}",
                 f"low track-level V_i under median split: {vi[name]['n_violations']}/"
                 f"{vi[name]['n_tracks']}",
                 f"protected-tail violations: {tail_viol[name]}/4 "
@@ -759,12 +1041,12 @@ def assign_roles(
                     else ""
                 ),
                 "no accepted mechanism-level role reversal on current evidence",
-                "parents (if any) do not include PR-C motion role-reversal atoms",
+                "no motion parents / not a motion-extrapolation composite",
                 f"p40→p60 flip rate {flips[name]['flip_rate']:.3f} "
                 "(direction not a pure exploratory split artifact)",
             ],
             "competing_explanations": [
-                "most structural violations concentrate on MOT17-10-SDP "
+                "sparse violations concentrate on MOT17-10-SDP "
                 "(sequence clustering); multi-seq confirmation still pending",
                 "pool-median thresholds remain audit-only",
             ],
@@ -775,7 +1057,7 @@ def assign_roles(
             ),
         }
 
-    # Integrity: all eight atoms exactly once.
+    # Integrity: all eight atoms exactly once + executable guards.
     if set(cards) != set(ATOM_NAMES):
         raise AssertionError(
             f"role cards incomplete: {sorted(set(ATOM_NAMES) - set(cards))}"
@@ -783,14 +1065,28 @@ def assign_roles(
     for name, card in cards.items():
         if card["role"] not in ROLES:
             raise AssertionError(f"illegal role for {name}: {card['role']}")
-        # Hard guard: PR-C motion atoms never global.
+        if (
+            card["role"] == "global_orderable"
+            and not admissibility[name]["global_admissible"]
+        ):
+            raise AssertionError(
+                f"{name} marked global_orderable but admissibility blocked: "
+                f"{admissibility[name]['block_reasons']}"
+            )
         if name in PRC_ROLE_REVERSAL_ATOMS and card["role"] == "global_orderable":
             raise AssertionError(
                 f"PR-C motion atom {name} must not be global_orderable"
             )
-        if name == "score_m_bridge" and card["role"] == "global_orderable":
+        if (
+            name in MOTION_EXTRAPOLATION_COMPOSITES
+            and card["role"] == "global_orderable"
+        ):
             raise AssertionError(
-                "score_m_bridge blocked by scale-guard/parent conflict"
+                f"motion-extrapolation composite {name} must not be global_orderable"
+            )
+        if name in WEIGHTED_COMPOSITES and card["role"] == "global_orderable":
+            raise AssertionError(
+                f"weighted composite {name} must not be global_orderable"
             )
 
     return cards
@@ -853,8 +1149,16 @@ def build_order_contract(
         reasons = []
         if name in PRC_ROLE_REVERSAL_ATOMS:
             reasons.append("PR-C accepted motion role-reversal evidence")
+        if name in MOTION_EXTRAPOLATION_COMPOSITES:
+            reasons.append(
+                "motion-extrapolation composite (endpoint velocities × gap); "
+                "related to PR-C long-gap re-entry regime"
+            )
         if name == "score_m_bridge":
-            reasons.append("composite parent role conflict + scale dominance")
+            reasons.append(
+                "weighted composite parent role conflict + residual dominance "
+                "(units are height-normalized / compatible)"
+            )
         if name == "gap":
             reasons.append("regime descriptor, not monotone safety dimension")
         if c["role"] == "conditional_orderable":
@@ -895,6 +1199,7 @@ def build_order_contract(
         ],
         "hard_blocks": [
             "global closure arcs on motion atoms (PR-C binding)",
+            "global arcs on bridge_dist (motion-extrapolation composite)",
             "global arcs on score_m_bridge without redesign",
             "global arcs on gap",
             "escape-tail veto",
@@ -1072,7 +1377,7 @@ def emit(pairs: Path, out: Path) -> dict[str, Any]:
     scale_guard = scale_guard_score_m_bridge(pool)
     dep = dependency_graph()
     regimes = gap_regime_profile(pool)
-    cards = assign_roles(vi, shell, sensitivity, scale_guard, prc_aggregate)
+    cards = assign_roles(vi, shell, sensitivity, scale_guard, prc_aggregate, dep)
     allowed, forbidden = build_order_contract(cards)
     terminal = decide_terminal(cards, allowed)
 
@@ -1087,10 +1392,15 @@ def emit(pairs: Path, out: Path) -> dict[str, Any]:
         "study_id": "boolean_atom_partial_order_20260711",
         "issue": 106,
         "pr_ladder": "PR-D gate (partial-order audit only)",
+        "role_assignment_mode": ROLE_ASSIGNMENT_MODE,
+        "statistics_role": "descriptive_only",
         "roles": {name: cards[name]["role"] for name in ATOM_NAMES},
         "cards": cards,
         "role_vocabulary": list(ROLES),
         "n_atoms": len(ATOM_NAMES),
+        "executable_global_guards": {
+            name: cards[name]["global_admissibility"] for name in ATOM_NAMES
+        },
     }
     write_json(out / "atom_roles.json", atom_roles)
     write_json(out / "atom_dependency_graph.json", dep)
@@ -1130,6 +1440,8 @@ def emit(pairs: Path, out: Path) -> dict[str, Any]:
         ),
         "score_m_bridge_not_global": cards["score_m_bridge"]["role"]
         != "global_orderable",
+        "bridge_dist_not_global": cards["bridge_dist"]["role"] != "global_orderable",
+        "role_assignment_mode": ROLE_ASSIGNMENT_MODE,
         "claim_ceiling": terminal["claim_ceiling"],
         "scope_guards": [
             "no MWC / min-cut / rule search / weight optimization",
@@ -1137,6 +1449,7 @@ def emit(pairs: Path, out: Path) -> dict[str, Any]:
             "no escape-tail veto",
             "not observed != unsafe",
             "zero exposure != ordering proof",
+            "motion-derived composites cannot silent-global-promote",
         ],
     }
     write_json(out / "aggregate.json", aggregate)

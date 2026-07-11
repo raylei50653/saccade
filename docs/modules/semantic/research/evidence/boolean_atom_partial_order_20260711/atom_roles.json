@@ -2,9 +2,11 @@
  "study_id": "boolean_atom_partial_order_20260711",
  "issue": 106,
  "pr_ladder": "PR-D gate (partial-order audit only)",
+ "role_assignment_mode": "research_judgment_with_executable_guards; V_i / shell / threshold metrics are descriptive and do not alone control role assignment",
+ "statistics_role": "descriptive_only",
  "roles": {
   "score_m_bridge": "context_only",
-  "bridge_dist": "global_orderable",
+  "bridge_dist": "conditional_orderable",
   "dist_h": "global_orderable",
   "log_h_ratio": "global_orderable",
   "resid_mean": "conditional_orderable",
@@ -16,6 +18,7 @@
   "speed_mismatch": {
    "atom": "speed_mismatch",
    "role": "conditional_orderable",
+   "role_assignment": "research_judgment",
    "provenance": "derived",
    "declared_safer_direction": "lower",
    "physical_interpretation": "exit/entry speed continuity",
@@ -23,7 +26,7 @@
     {
      "name": "short_gap_continuous_association",
      "observable_without_gt_outcome": true,
-     "definition": "gap <= 60.0 frames (declared short-gap regime); excludes long-gap re-entry regime where PR-C accepted role reversal",
+     "definition": "gap <= 60.0 frames (declared short-gap regime); excludes long-gap re-entry regime where PR-C accepted role reversal and constant-velocity mid-gap extrapolation breaks",
      "proposal_only_conditional_arcs": true,
      "note": "Conditional orderability is a contract proposal for a later conditional-closure study; not a sealed global arc."
     }
@@ -107,6 +110,13 @@
     "n_tracks": 209,
     "flip_rate": 0.1674641148325359
    },
+   "global_admissibility": {
+    "atom": "speed_mismatch",
+    "global_admissible": false,
+    "block_reasons": [
+     "PR-C accepted motion role-reversal atom"
+    ]
+   },
    "prc_binding": {
     "role_reversal_supported": true,
     "source": "PR-C #102 / PR #104 ACCEPTED_WITH_LIMITS",
@@ -127,6 +137,7 @@
   "dir_cos": {
    "atom": "dir_cos",
    "role": "conditional_orderable",
+   "role_assignment": "research_judgment",
    "provenance": "builder_raw",
    "declared_safer_direction": "higher",
    "physical_interpretation": "exit/entry direction continuity",
@@ -134,7 +145,7 @@
     {
      "name": "short_gap_continuous_association",
      "observable_without_gt_outcome": true,
-     "definition": "gap <= 60.0 frames (declared short-gap regime); excludes long-gap re-entry regime where PR-C accepted role reversal",
+     "definition": "gap <= 60.0 frames (declared short-gap regime); excludes long-gap re-entry regime where PR-C accepted role reversal and constant-velocity mid-gap extrapolation breaks",
      "proposal_only_conditional_arcs": true,
      "note": "Conditional orderability is a contract proposal for a later conditional-closure study; not a sealed global arc."
     }
@@ -202,6 +213,13 @@
     "n_tracks": 209,
     "flip_rate": 0.13875598086124402
    },
+   "global_admissibility": {
+    "atom": "dir_cos",
+    "global_admissible": false,
+    "block_reasons": [
+     "PR-C accepted motion role-reversal atom"
+    ]
+   },
    "prc_binding": {
     "role_reversal_supported": true,
     "source": "PR-C #102 / PR #104 ACCEPTED_WITH_LIMITS",
@@ -222,6 +240,7 @@
   "resid_mean": {
    "atom": "resid_mean",
    "role": "conditional_orderable",
+   "role_assignment": "research_judgment",
    "provenance": "derived",
    "declared_safer_direction": "lower",
    "physical_interpretation": "bidirectional residual mean (motion fit quality)",
@@ -229,7 +248,7 @@
     {
      "name": "short_gap_continuous_association",
      "observable_without_gt_outcome": true,
-     "definition": "gap <= 60.0 frames (declared short-gap regime); excludes long-gap re-entry regime where PR-C accepted role reversal",
+     "definition": "gap <= 60.0 frames (declared short-gap regime); excludes long-gap re-entry regime where PR-C accepted role reversal and constant-velocity mid-gap extrapolation breaks",
      "proposal_only_conditional_arcs": true,
      "note": "Conditional orderability is a contract proposal for a later conditional-closure study; not a sealed global arc."
     }
@@ -255,6 +274,13 @@
     "n_tracks": 209,
     "flip_rate": 0.023923444976076555
    },
+   "global_admissibility": {
+    "atom": "resid_mean",
+    "global_admissible": false,
+    "block_reasons": [
+     "PR-C accepted motion role-reversal atom"
+    ]
+   },
    "prc_binding": {
     "role_reversal_supported": true,
     "source": "PR-C #102 / PR #104 ACCEPTED_WITH_LIMITS",
@@ -275,6 +301,7 @@
   "gap": {
    "atom": "gap",
    "role": "context_only",
+   "role_assignment": "research_judgment",
    "provenance": "builder_raw",
    "declared_safer_direction": "lower",
    "physical_interpretation": "occlusion / lost duration (frames); regime descriptor rather than a monotone safety dimension",
@@ -308,6 +335,13 @@
     "n_tracks": 209,
     "flip_rate": 0.07177033492822966
    },
+   "global_admissibility": {
+    "atom": "gap",
+    "global_admissible": false,
+    "block_reasons": [
+     "regime descriptor, not a monotone safety dimension"
+    ]
+   },
    "prc_binding": {
     "role_reversal_supported": false,
     "blocks_global_orderable": true
@@ -325,9 +359,10 @@
   "score_m_bridge": {
    "atom": "score_m_bridge",
    "role": "context_only",
-   "provenance": "composite_derived",
+   "role_assignment": "research_judgment",
+   "provenance": "weighted_composite",
    "declared_safer_direction": "lower",
-   "physical_interpretation": "production-shaped speed-weighted mix of residual and dist_h",
+   "physical_interpretation": "production-shaped speed-weighted mix of height-normalized residual mean and dist_h",
    "admissible_contexts": [],
    "V_i": {
     "n_tracks": 209,
@@ -348,6 +383,14 @@
     "n_tracks": 209,
     "flip_rate": 0.014354066985645933
    },
+   "global_admissibility": {
+    "atom": "score_m_bridge",
+    "global_admissible": false,
+    "block_reasons": [
+     "weighted composite with motion parent and/or regime-dependent mix",
+     "direct parent role conflict with PR-C motion atoms: ['resid_mean']"
+    ]
+   },
    "prc_binding": {
     "role_reversal_supported": false,
     "indirect_via_parent": "resid_mean",
@@ -357,7 +400,7 @@
     "blocks_global_orderable": true,
     "block_reasons": [
      "parent role conflict: resid_mean is PR-C motion role-reversal atom",
-     "scale dominance: composite tracks resid_mean more than dist_h",
+     "residual dominance: composite tracks resid_mean more than dist_h (empirical term-fraction / correlation, within a shared unit)",
      "hidden context dependence via speed-dependent mixing weight w"
     ],
     "correlations": {
@@ -366,25 +409,39 @@
      "score_vs_resid_mean_fp": 0.9468268261138001,
      "score_vs_dist_h_fp": 0.5847565037044558,
      "resid_mean_vs_dist_h_gt": 0.5701194821760018
+    },
+    "unit_scale_compatibility": {
+     "compatible": true,
+     "detail": "All mixands are height-normalized dimensionless quantities from the pair builder: fwd_resid/h_ref, bwd_resid/h_ref, dist_h/h_ref (and bridge_dist/h_ref). There is no px-vs-h unit incompatibility in score_m_bridge. Residual dominance is an empirical scale/weight effect within a common unit, not a unit mismatch.",
+     "unit_incompatibility_is_block_reason": false
     }
    },
    "supporting_evidence": [
     "composite parents include resid_mean (PR-C motion role-reversal atom)",
-    "scale-guard: residual term dominates the composite",
+    "residual dominance within a shared height-normalized unit (not a unit-mismatch claim)",
     "speed-dependent mixing weight injects hidden context dependence"
    ],
    "competing_explanations": [
     "as a production proxy the score remains useful for FP ranking, but ranking utility ≠ global monotone order legitimacy"
    ],
-   "confidence_boundary": "context/diagnostic only on this substrate; parent role conflict blocks global promotion without a redesign that removes the motion parent or re-proves direction under nested folds"
+   "confidence_boundary": "context/diagnostic only on this substrate; parent role conflict and residual dominance block global promotion without a redesign that removes the motion parent or re-proves direction under nested folds"
   },
   "bridge_dist": {
    "atom": "bridge_dist",
-   "role": "global_orderable",
-   "provenance": "builder_raw",
+   "role": "conditional_orderable",
+   "role_assignment": "research_judgment",
+   "provenance": "motion_extrapolation_composite",
    "declared_safer_direction": "lower",
-   "physical_interpretation": "mid-point bridge distance (geometry)",
-   "admissible_contexts": [],
+   "physical_interpretation": "constant-velocity mid-gap extrapolation distance: m_l=x_l+v_l*gap/2, m_c=x_c-v_c*gap/2, bridge_dist=||m_l-m_c||/h_ref. Depends on endpoint velocities, gap, geometry, and height normalization — not a parentless structural leaf.",
+   "admissible_contexts": [
+    {
+     "name": "short_gap_continuous_association",
+     "observable_without_gt_outcome": true,
+     "definition": "gap <= 60.0 frames (declared short-gap regime); excludes long-gap re-entry regime where PR-C accepted role reversal and constant-velocity mid-gap extrapolation breaks",
+     "proposal_only_conditional_arcs": true,
+     "note": "Conditional orderability is a contract proposal for a later conditional-closure study; not a sealed global arc."
+    }
+   ],
    "V_i": {
     "n_tracks": 209,
     "n_violations": 2,
@@ -405,29 +462,38 @@
     "n_tracks": 209,
     "flip_rate": 0.004784688995215311
    },
+   "global_admissibility": {
+    "atom": "bridge_dist",
+    "global_admissible": false,
+    "block_reasons": [
+     "motion-extrapolation composite (endpoint velocities × gap); not a pure structural leaf"
+    ]
+   },
    "prc_binding": {
     "role_reversal_supported": false,
-    "blocks_global_orderable": false
+    "related_to_prc_motion_reversal": true,
+    "relation": "Long-gap re-entry (PR-C TRUE_LONG_GAP_REENTRY) is exactly the regime where constant-velocity mid-gap extrapolation is least defensible; velocity parents share the motion substrate that carries accepted role-reversal evidence. No independent mechanism evidence authorizes global promotion of bridge_dist.",
+    "blocks_global_orderable": true
    },
    "supporting_evidence": [
-    "low track-level V_i under median split: 2/209",
-    "protected-tail violations: 2/4 ",
-    "no accepted mechanism-level role reversal on current evidence",
-    "parents (if any) do not include PR-C motion role-reversal atoms",
-    "p40→p60 flip rate 0.005 (direction not a pure exploratory split artifact)"
+    "builder formula explicitly multiplies endpoint velocities by gap/2",
+    "dependency DAG lists lost/cand exit-entry velocities + gap + h_ref",
+    "global_admissibility_check blocks motion-extrapolation composites",
+    "short-gap CV regime remains a plausible conditional context"
    ],
    "competing_explanations": [
-    "most structural violations concentrate on MOT17-10-SDP (sequence clustering); multi-seq confirmation still pending",
-    "pool-median thresholds remain audit-only"
+    "low V_i alone cannot reclassify a motion-derived composite as global_orderable (statistics are descriptive only)",
+    "tail co-violations with geometry do not prove pure structural role"
    ],
-   "confidence_boundary": "L1 global-order *contract* only — authorizes a separate restricted-closure prototype task, not nested L2+ claims, not production/preset/ledger changes"
+   "confidence_boundary": "L1 conditional proposal only; forbidden as a global order dimension until independent multi-seq mechanism evidence is reviewed"
   },
   "dist_h": {
    "atom": "dist_h",
    "role": "global_orderable",
+   "role_assignment": "research_judgment",
    "provenance": "builder_raw",
    "declared_safer_direction": "lower",
-   "physical_interpretation": "height-normalized foot distance (geometry)",
+   "physical_interpretation": "height-normalized endpoint foot distance (geometry only)",
    "admissible_contexts": [],
    "V_i": {
     "n_tracks": 209,
@@ -449,19 +515,25 @@
     "n_tracks": 209,
     "flip_rate": 0.03349282296650718
    },
+   "global_admissibility": {
+    "atom": "dist_h",
+    "global_admissible": true,
+    "block_reasons": []
+   },
    "prc_binding": {
     "role_reversal_supported": false,
     "blocks_global_orderable": false
    },
    "supporting_evidence": [
+    "global_admissibility_check passed for dist_h",
     "low track-level V_i under median split: 2/209",
     "protected-tail violations: 2/4 ",
     "no accepted mechanism-level role reversal on current evidence",
-    "parents (if any) do not include PR-C motion role-reversal atoms",
+    "no motion parents / not a motion-extrapolation composite",
     "p40→p60 flip rate 0.033 (direction not a pure exploratory split artifact)"
    ],
    "competing_explanations": [
-    "most structural violations concentrate on MOT17-10-SDP (sequence clustering); multi-seq confirmation still pending",
+    "sparse violations concentrate on MOT17-10-SDP (sequence clustering); multi-seq confirmation still pending",
     "pool-median thresholds remain audit-only"
    ],
    "confidence_boundary": "L1 global-order *contract* only — authorizes a separate restricted-closure prototype task, not nested L2+ claims, not production/preset/ledger changes"
@@ -469,6 +541,7 @@
   "log_h_ratio": {
    "atom": "log_h_ratio",
    "role": "global_orderable",
+   "role_assignment": "research_judgment",
    "provenance": "derived",
    "declared_safer_direction": "lower",
    "physical_interpretation": "absolute log height ratio (scale consistency)",
@@ -494,19 +567,25 @@
     "n_tracks": 209,
     "flip_rate": 0.019138755980861243
    },
+   "global_admissibility": {
+    "atom": "log_h_ratio",
+    "global_admissible": true,
+    "block_reasons": []
+   },
    "prc_binding": {
     "role_reversal_supported": false,
     "blocks_global_orderable": false
    },
    "supporting_evidence": [
+    "global_admissibility_check passed for log_h_ratio",
     "low track-level V_i under median split: 2/209",
     "protected-tail violations: 0/4 (log_h_ratio remains 0/4 — height preserved on escape tail)",
     "no accepted mechanism-level role reversal on current evidence",
-    "parents (if any) do not include PR-C motion role-reversal atoms",
+    "no motion parents / not a motion-extrapolation composite",
     "p40→p60 flip rate 0.019 (direction not a pure exploratory split artifact)"
    ],
    "competing_explanations": [
-    "most structural violations concentrate on MOT17-10-SDP (sequence clustering); multi-seq confirmation still pending",
+    "sparse violations concentrate on MOT17-10-SDP (sequence clustering); multi-seq confirmation still pending",
     "pool-median thresholds remain audit-only"
    ],
    "confidence_boundary": "L1 global-order *contract* only — authorizes a separate restricted-closure prototype task, not nested L2+ claims, not production/preset/ledger changes"
@@ -518,5 +597,60 @@
   "context_only",
   "unresolved"
  ],
- "n_atoms": 8
+ "n_atoms": 8,
+ "executable_global_guards": {
+  "score_m_bridge": {
+   "atom": "score_m_bridge",
+   "global_admissible": false,
+   "block_reasons": [
+    "weighted composite with motion parent and/or regime-dependent mix",
+    "direct parent role conflict with PR-C motion atoms: ['resid_mean']"
+   ]
+  },
+  "bridge_dist": {
+   "atom": "bridge_dist",
+   "global_admissible": false,
+   "block_reasons": [
+    "motion-extrapolation composite (endpoint velocities × gap); not a pure structural leaf"
+   ]
+  },
+  "dist_h": {
+   "atom": "dist_h",
+   "global_admissible": true,
+   "block_reasons": []
+  },
+  "log_h_ratio": {
+   "atom": "log_h_ratio",
+   "global_admissible": true,
+   "block_reasons": []
+  },
+  "resid_mean": {
+   "atom": "resid_mean",
+   "global_admissible": false,
+   "block_reasons": [
+    "PR-C accepted motion role-reversal atom"
+   ]
+  },
+  "dir_cos": {
+   "atom": "dir_cos",
+   "global_admissible": false,
+   "block_reasons": [
+    "PR-C accepted motion role-reversal atom"
+   ]
+  },
+  "speed_mismatch": {
+   "atom": "speed_mismatch",
+   "global_admissible": false,
+   "block_reasons": [
+    "PR-C accepted motion role-reversal atom"
+   ]
+  },
+  "gap": {
+   "atom": "gap",
+   "global_admissible": false,
+   "block_reasons": [
+    "regime descriptor, not a monotone safety dimension"
+   ]
+  }
+ }
 }

@@ -41,7 +41,7 @@
  "aggregate_terminal": "GLOBAL_PARTIAL_ORDER_READY",
  "roles": {
   "score_m_bridge": "context_only",
-  "bridge_dist": "global_orderable",
+  "bridge_dist": "conditional_orderable",
   "dist_h": "global_orderable",
   "log_h_ratio": "global_orderable",
   "resid_mean": "conditional_orderable",
@@ -51,15 +51,15 @@
  },
  "scope": "read-only offline partial-order audit; no MWC/min-cut/rule-search/weight-opt; no production/preset/ledger changes",
  "files": {
-  "atom_roles.json": "d3709b102ca42d40c5e741ba813254685e493fed39c16209777ac8517c29919c",
-  "atom_dependency_graph.json": "86a22858f06c078a5e0f1b6b5f250ec3ca8d1ed74e89b3ab324d808527f123b4",
-  "atom_metrics.csv": "5aa3e5f54bc0c08236aa6e33296d91b015cdf305e085e9cc13d7c3a3e5024470",
+  "atom_roles.json": "afa37cc7fecc3ae3efc25928d9c66c54de44b162f8fc039840f66fac6a0dbbdc",
+  "atom_dependency_graph.json": "6b2dde3a4d43806f35aaf1ee8ff89caabc125a2dbedb25ea0172be820280b46b",
+  "atom_metrics.csv": "cd10ee6d6d1205b9c73c98737f7f669a1ab44aebbf68b9f1fc87043f71b78e47",
   "pairwise_violation_profile.csv": "87a8934952cd7fb8de94774f3f0ba151d26436e2575acf76147c0d7b1805d7ff",
   "threshold_sensitivity.json": "2f45259724075b69e440e80559bc2551adb5015420b8162a32f0d57eced3c1b0",
-  "allowed_global_order.json": "4d476e2e1fe2c615f676925dc8f4dcc9cd6a73105bd952c290f303b08ac233ff",
-  "forbidden_order.json": "6e2bcaf428cff54b6a739622909813675c9a4005948dd7e9b16152acfa951e25",
-  "scale_guard.json": "af03178b99a5ca22020f559e6f08ea8fd369148fae2e4ee3e093ffde7f2513fa",
-  "aggregate.json": "b169b017df8bec4b2b9db1ce1e3e4d65dc3bbb589fc20a465ea7873b04707026",
-  "run_partial_order_audit.py": "6984045f6b746dbd30b332c70a881928be7971b841f975188702f5636317bf89"
+  "allowed_global_order.json": "7f105b294a96e190a14b9f4b81258849e109987892764c4793313f484a4336c6",
+  "forbidden_order.json": "92e361fffe0dc1c79228a5c657a40e37eb5b16725e00f20c07848ae5dc066637",
+  "scale_guard.json": "b2fa21f0cd97bb743b8fb8ae3d8a367010e2df53e199ace8bbf8083070dadec2",
+  "aggregate.json": "500338a14e2ed5f1b01d1a5ec51518257f72f7c34b3f6f9f70f4d4e9d0be8547",
+  "run_partial_order_audit.py": "05860031e03bdaffb58f4e4c9f7ca98ddf16ad963d2e0f52cbd9822ec786ad2e"
  }
 }

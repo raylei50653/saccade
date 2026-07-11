@@ -1,14 +1,14 @@
 {
  "terminal": "GLOBAL_PARTIAL_ORDER_READY",
- "reason": "nontrivial global_orderable set ['bridge_dist', 'dist_h', 'log_h_ratio']; all eight atoms have bounded roles; allowed/forbidden contract complete",
+ "reason": "nontrivial global_orderable set ['dist_h', 'log_h_ratio']; all eight atoms have bounded roles; allowed/forbidden contract complete",
  "routing": "open a **separate** restricted global-closure prototype task using only global_orderable atoms; compare against frozen OR-tail under exact GT-UCB; still candidate-only",
  "authorizes_restricted_closure_prototype": true,
  "global_atoms": [
-  "bridge_dist",
   "dist_h",
   "log_h_ratio"
  ],
  "conditional_atoms": [
+  "bridge_dist",
   "dir_cos",
   "resid_mean",
   "speed_mismatch"
@@ -20,7 +20,7 @@
  "unresolved_atoms": [],
  "roles": {
   "score_m_bridge": "context_only",
-  "bridge_dist": "global_orderable",
+  "bridge_dist": "conditional_orderable",
   "dist_h": "global_orderable",
   "log_h_ratio": "global_orderable",
   "resid_mean": "conditional_orderable",
@@ -30,12 +30,15 @@
  },
  "prc_binding_respected": true,
  "score_m_bridge_not_global": true,
+ "bridge_dist_not_global": true,
+ "role_assignment_mode": "research_judgment_with_executable_guards; V_i / shell / threshold metrics are descriptive and do not alone control role assignment",
  "claim_ceiling": "L1 partial-order contract on sealed 7-seq substrate; PR-C motion evidence remains L1 single-seq bound",
  "scope_guards": [
   "no MWC / min-cut / rule search / weight optimization",
   "no production / preset / ledger change",
   "no escape-tail veto",
   "not observed != unsafe",
-  "zero exposure != ordering proof"
+  "zero exposure != ordering proof",
+  "motion-derived composites cannot silent-global-promote"
  ]
 }
