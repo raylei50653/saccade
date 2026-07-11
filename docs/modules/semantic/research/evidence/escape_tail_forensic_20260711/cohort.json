@@ -1,0 +1,24 @@
+{
+ "definition": "GT tracks with min over their gt rows of d_H(k=8) >= 3",
+ "representation": "descriptive min-d_H layer only (framework §19.4)",
+ "n_tail_tracks": 4,
+ "track_keys": [
+  "MOT17-10-SDP|455",
+  "MOT17-10-SDP|459",
+  "MOT17-10-SDP|467",
+  "MOT17-10-SDP|503"
+ ],
+ "per_sequence_tail_counts": {
+  "MOT17-10-SDP": 4
+ },
+ "sealed_min_d_h": {
+  "MOT17-10-SDP|455": 4,
+  "MOT17-10-SDP|459": 3,
+  "MOT17-10-SDP|467": 3,
+  "MOT17-10-SDP|503": 6
+ },
+ "source_pairs_csv": "out/signal_study/m_b1_gate_coverage_7seq_20260709T121326Z/pairs.csv",
+ "source_pairs_csv_sha256": "0ae3896791ec074fbe951198752c17385c4ee0770a7ec3831225d3ea56a69d17",
+ "step0_packet": "docs/modules/semantic/research/evidence/gt_support_morphology_step0_20260711",
+ "note": "Cohort is frozen from Step-0; this forensic does not add or remove tracks."
+}

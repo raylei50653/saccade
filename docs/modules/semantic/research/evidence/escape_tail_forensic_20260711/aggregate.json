@@ -1,0 +1,25 @@
+{
+ "terminal": "ROLE_REVERSAL_SUPPORTED",
+ "per_track_category_counts": {
+  "TRUE_LONG_GAP_REENTRY": 3,
+  "ANNOTATION_ISSUE": 0,
+  "SIGNAL_COMPUTATION_ISSUE": 0,
+  "THRESHOLD_ARTIFACT": 0,
+  "UNRESOLVED": 1
+ },
+ "n_true_long_gap_reentry": 3,
+ "n_artifact": 0,
+ "n_unresolved": 1,
+ "authorizes": [
+  "A later partial-order audit may consider motion atoms as conditional_orderable or context_only."
+ ],
+ "remains_blocked": [
+  "global closure arcs on motion atoms",
+  "veto against the protected escape tail",
+  "production rule / preset / gate change",
+  "evidence_ledger promotion beyond this bounded forensic result",
+  "L2+ morphology claims without nested held-out confirmation"
+ ],
+ "routing": "open separate partial-order audit before any MWC prototype",
+ "confidence_boundary": "All four sealed tail tracks sit on MOT17-10-SDP (sequence clustering is fact, not hypothesis). This aggregate authorizes at most a research-line partial-order audit probe; it does not change framework §19 morphology terminals, sealed thresholds, or production behavior."
+}

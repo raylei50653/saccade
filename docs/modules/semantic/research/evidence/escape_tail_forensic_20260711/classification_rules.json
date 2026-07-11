@@ -1,0 +1,50 @@
+{
+ "per_track_terminals": [
+  "TRUE_LONG_GAP_REENTRY",
+  "ANNOTATION_ISSUE",
+  "SIGNAL_COMPUTATION_ISSUE",
+  "THRESHOLD_ARTIFACT",
+  "UNRESOLVED"
+ ],
+ "aggregate_terminals": [
+  "ROLE_REVERSAL_SUPPORTED",
+  "TAIL_ARTIFACT_DOMINATED",
+  "TAIL_MECHANISM_UNRESOLVED"
+ ],
+ "occlusion_strong": {
+  "vis_mean_max": 0.35,
+  "frac_vis_eq_0_min": 0.25,
+  "definition": "occlusion_strong iff gap_vis_mean <= vis_mean_max OR frac_vis_eq_0 >= frac_vis_eq_0_min"
+ },
+ "threshold_artifact_dominates": {
+  "rel_flip_max": 0.05,
+  "definition": "All min-d_H violations flip under relative threshold move <= rel_flip_max (no strong violation remains)."
+ },
+ "TRUE_LONG_GAP_REENTRY": [
+  "annotation same-identity + continuous",
+  "signal recompute ok",
+  "not threshold_artifact_dominates",
+  "height safe on min-d_H row (log_h_ratio z=1)",
+  ">=2 motion atom violations on min-d_H row",
+  "occlusion_strong on min-d_H gap window"
+ ],
+ "aggregate_ROLE_REVERSAL_SUPPORTED": "n(TRUE_LONG_GAP_REENTRY) >= 3 AND n(annotation|signal|threshold artifacts) == 0",
+ "aggregate_TAIL_ARTIFACT_DOMINATED": "n(artifacts) >= 3 OR (n(artifacts) > n(TRUE) AND n(artifacts) >= 2)",
+ "aggregate_else": "TAIL_MECHANISM_UNRESOLVED",
+ "atom_groups": {
+  "motion": [
+   "speed_mismatch",
+   "dir_cos",
+   "resid_mean"
+  ],
+  "height": [
+   "log_h_ratio"
+  ],
+  "geometry": [
+   "score_m_bridge",
+   "bridge_dist",
+   "dist_h",
+   "gap"
+  ]
+ }
+}
