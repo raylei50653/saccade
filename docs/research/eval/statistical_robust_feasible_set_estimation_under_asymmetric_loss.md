@@ -1311,21 +1311,21 @@ $$
 E(z)=P(\text{error}\mid Z=z)
 $$
 
-is **identifiable only where cell-level GT exposure meets the §3.3 / §8.1 requirements**. A study must first run an occupancy audit (cells reaching the declared per-cell $n_{\min}$ at the declared trial unit). If fewer than a declared fraction of cells are identifiable, the study object switches from the risk field to the **GT placement distribution**:
+is **identifiable only where cell-level GT exposure meets the §3.3 / §8.1 requirements**. A study must first run an occupancy audit (cells reaching the declared per-cell $n_{\min}$ at the declared trial unit). If fewer than a declared fraction of cells are identifiable, the study no longer estimates the risk field. The **GT placement distribution**
 
 $$
 \mu_{\mathrm{GT}}(z)=P(Z=z\mid \text{GT trial unit})
 $$
 
-together with the FP mass $\mu_{\mathrm{FP}}(z)$. The decision problem becomes:
+together with the FP mass $\mu_{\mathrm{FP}}(z)$ remains a **descriptive placement layer** for morphology and candidate construction. Formal decision feasibility is evaluated at the declared independent trial unit. Let $Z_u$ be all valid GT cells owned by unit $u$; the decision problem becomes:
 
 $$
 \max_D \; P_{\mathrm{FP}}(Z\in D)
 \quad\text{s.t.}\quad
-\operatorname{UCB}_\alpha\!\left[P_{\mathrm{GT}}(Z\in D)\right]\le \varepsilon
+\operatorname{UCB}_\alpha\!\left[P_u(Z_u\subseteq D)\right]\le \varepsilon
 $$
 
-with the UCB computed at the §8.1 independence unit. Merge-tree, barrier-height, and per-cell UCB analyses are **out of mainline** below the declared identifiability density.
+with the UCB computed at the §8.1 independence unit. Equivalently, for the complementary safe closure $C=\Omega\setminus D$, the hurt indicator is $H_C(u)=\mathbf 1[Z_u\cap C=\varnothing]$. The descriptive placement mass $\mu_{\mathrm{GT}}(z)$ must not be substituted for this unit-level hurt probability. Merge-tree, barrier-height, and per-cell UCB analyses are **out of mainline** below the declared identifiability density.
 
 ### 19.2 Hard interpretation rule
 
@@ -1425,7 +1425,7 @@ $$
 
 with $H_C(u)$ the set-valued hurt of §19.4 and the UCB satisfying the validity conditions above. Minimizing retained FP mass makes $D^\star = \Omega \setminus C^\star$ the maximal-FP-removal reject domain of §19.1 under the same constraint — the two problems are complementary by construction.
 
-**Deterministic tie-breaks** (applied in order among constraint-feasible minimizers): (1) smaller registered cell count $|C|$; (2) lexicographically smallest sorted cell-index sequence. The candidate universe $\Omega$ and missing-value behavior must be declared (§19.3); incomparable minimizers after both tie-breaks indicate an under-declared complexity class and must be reported, not silently resolved.
+**Deterministic tie-breaks** (applied in order among constraint-feasible minimizers): (1) smaller registered cell count $|C|$; (2) lexicographically smallest sorted cell-index sequence. The candidate universe $\Omega$ and missing-value behavior must be declared (§19.3). The lexicographic sequence is a total order on finite cell-index sets; if these tie-breaks do not yield a unique result, the indexing or tie-break declaration is incomplete and must be repaired before reporting a core.
 
 Hamming shell quantities ($M_r$, $T_{\ge r}$, $R_{95}$) remain **descriptive** reporting and must not serve as cross-atom-set class boundaries.
 
