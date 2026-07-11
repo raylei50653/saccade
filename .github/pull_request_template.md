@@ -37,7 +37,14 @@ Do **not** merge dual-stability (`stability_cost_w` vs `SACCADE_STABILITY_W`) or
 
 ### Research study? (new decision-layer experiment or result promotion)
 
-- [ ] Role-aligned experiment contract declared per [framework §20](docs/research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md) (system role / design objective / selection rule / stop condition / output class)
+- [ ] Role-aligned experiment contract declared per [framework §20](docs/research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md), auditable at:
+
+```text
+Contract declaration location:  <issue / study doc / framework anchor>
+Primary target layer:           <coarse gate / score-ranking / assignment / calibration / none>
+Primary study intent:           <design evaluation / capability map / boundary diagnostic / upper-bound probe>
+Mainline terminal mapping:      <terminal -> state transition per outcome, or "diagnostic-only">
+```
 
 ## Test plan
 

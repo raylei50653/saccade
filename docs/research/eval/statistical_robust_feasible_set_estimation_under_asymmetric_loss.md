@@ -1226,9 +1226,10 @@ A PR that uses safe-region language should be reviewed against four independent 
 
 ### Gate E — Role alignment (§20)
 
-- Is exactly one primary system role declared?
-- Is the design objective legal for that role (§20.3)?
+- Are the target decision layer and one primary study intent declared as separate axes (§20.2)?
+- Is the objective legal for the declared layer and intent (§20.3)? For assignment / calibration targets: is the intent diagnostic-only?
 - Is the selection rule the ordered form of §20.4, not "best performer"?
+- Is the observation-validity / identifiability gate predeclared, and is UNRESOLVED distinguished from the futility terminal (§20.7)?
 - Are stop conditions predeclared (§20.6)?
 - Is every cited result classified into a §20.4 output class?
 - Does any promotion of a diagnostic or upper-bound result violate §20.5?
@@ -1524,13 +1525,20 @@ is a **capability-exploration tool**: it probes signal upper bounds, maps GT-sup
 ### 20.2 Required declarations (before running)
 
 ```text
-System role      exactly one primary role:
-                   coarse gate / score-ranking / assignment / calibration /
-                   capability map / boundary diagnostic / performance upper bound
-                 (secondary uses may be listed, but one primary role governs
-                  objectives, metrics, and selection)
-Design objective role-legal per §20.3; "maximize FP removed" alone is invalid
+Target decision layer
+                 exactly one: coarse gate / score-ranking / assignment /
+                 calibration / none (cross-layer substrate work)
+Study intent     exactly one primary intent:
+                   design evaluation / capability map /
+                   boundary diagnostic / performance upper-bound probe
+                 (secondary uses may be listed, but the primary intent
+                  governs objectives, metrics, and selection)
+Design objective role-legal per §20.3 for the declared layer and intent;
+                 "maximize FP removed" alone is invalid
 Selection rule   the ordered criteria of §20.4; "best performer" alone is invalid
+Validity gate    predeclared observation-validity / identifiability
+                 requirements (minimum exposure, trial-unit and bound
+                 validity) separating UNRESOLVED from futility (§20.7)
 Stop condition   predeclared sufficiency and futility stops per §20.6
 Output class     which §20.4 classes the study's results may claim
 Mainline transition
@@ -1539,13 +1547,19 @@ Mainline transition
                  must not occupy mainline cadence
 ```
 
-### 20.3 Role-legal design objectives
+The target layer and the study intent are independent axes: a boundary diagnostic *of the gate layer*, an upper-bound probe *of score-layer ranking*, and a capability map *of the ambiguous band* are all expressible and must be declared as such. Collapsing the two axes into one "role" is not permitted.
+
+### 20.3 Role-legal objectives
+
+A **design evaluation** pursues the design objective of its declared target layer. Contract v1 defines design objectives for two layers:
 
 **Coarse gate.** Subject to a minimum-utility threshold, find a **large-margin, monotone, structurally simple, mechanism-interpretable obvious-negative region** — candidates that are geometrically impossible, temporally implausible, scale/position-degenerate, or in extreme low-credibility tails. The gate question is *where should the gate stop*, not *how far can the gate safely reach*. Gates deliberately retain the ambiguous band for downstream layers; a gate is not required to approximate the full decision boundary.
 
 **Score / ranking.** Within the retained ambiguous band, establish whether conditional interactions **stably and interpretably improve the relative ordering** of GT versus FP candidates. Primary metrics are event-local ranking quantities: pairwise ranking accuracy, GT rank / reciprocal rank, top-k GT recall, positive–negative score margin, assignment-flip attribution, per-sequence interaction stability, LOO interaction retention, online MOT retention. FP-removed and GT-hurt remain reportable but are not score-study objectives. Weak signals that are individually inconclusive but jointly informative (e.g. large distance ∧ long gap ∧ weak motion consistency) belong here as interaction terms $s(x)=s_0(x)+\Delta s_{\mathrm{condition}}(x)$, not as hard rejections.
 
-**Capability map / boundary diagnostic / performance upper bound.** The §14 constrained-optimization forms are the appropriate instruments here. Outputs are bounded by §20.4 classes and §20.5: they describe what the signal family can resolve and where it stops, and they never carry design authority on their own.
+**Assignment / calibration.** Contract v1 does **not** define design objectives for these layers. They may be declared as target layers for diagnostic intents (capability map, boundary diagnostic, upper-bound probe); a design evaluation targeting them is blocked until a contract revision defines their role-legal objective and is sealed.
+
+**Capability map / boundary diagnostic / performance upper-bound probe (intents).** The §14 constrained-optimization forms are the appropriate instruments here. These intents must still name the target layer they diagnose or bound. Outputs are limited to the diagnostic and upper-bound classes of §20.4 and are subject to §20.5: they describe what the signal family can resolve and where it stops, and they never carry design authority on their own.
 
 The gate and score layers share one substrate — raw signals → normalized measurements → Boolean atoms and conditions → statistical validation → role-specific decision. The gate reads only the extreme, monotone, large-margin projection and emits hard reject/retain; the score layer reads interactions and conditional reliability and emits relative preference. Complex Boolean interaction structure belongs to the score/decision layer, not the coarse gate.
 
@@ -1570,7 +1584,7 @@ Among candidates that clear the utility bar, prefer the simplest, most stable, b
 
 ### 20.5 Promotion constraint
 
-A result classified as *diagnostic* or *performance upper bound* must not be promoted — directly or by re-labeling — into a production design recommendation. Promotion requires a new evaluation declared under the target role, passing that role's legal objective (§20.3) and the full selection order (§20.4). Re-labeling is not promotion. This constraint is what prevents the highest-utility candidate from re-entering the gate under a new name.
+A result classified as *diagnostic* or *performance upper bound* must not be promoted — directly or by re-labeling — into a production design recommendation. Promotion requires a new evaluation declared with design-evaluation intent under the target decision layer, passing that layer's legal objective (§20.3) and the full selection order (§20.4). Re-labeling is not promotion. This constraint is what prevents the highest-utility candidate from re-entering the gate under a new name.
 
 ### 20.6 Stop conditions
 
@@ -1599,6 +1613,8 @@ Progress is counted in **mainline state transitions**, not in artifacts produced
 Another morphology map, a tighter closure, an additional safe candidate, or a more precisely described boundary are diagnostic results (§20.4). They may proceed, but they must not occupy mainline cadence, and completing them does not count as mainline progress.
 
 A mainline study must therefore be designed so that **every predeclared terminal outcome produces a state transition — including the negative one**. A study whose failure mode is "describe more completely and continue" is not a mainline study. Ambiguous results do not open a third door: if the predeclared minimum effect (§20.6) is not met, the futility terminal applies and the corresponding path closes.
+
+**Observation-validity gate (precondition).** The two-door efficacy terminal applies only after the study's predeclared observation-validity / identifiability gate (§20.2) passes. A validly powered experiment that misses the minimum effect closes the path. Validity failure — insufficient exposure (§3.3), an invalid trial unit or confidence bound (§8.1; e.g. unresolved residual clustering as in §19.5), substrate corruption, or conflicting fold verdicts — yields **UNRESOLVED / INVALID-STUDY** instead. This terminal closes the current experiment, not the scientific hypothesis path, and does not count as mainline progress. This is not a third door for ambiguous efficacy: it separates "the experiment answered no" from "the experiment could not answer the question"; only the former closes a path, and the latter must not be reported as signal-family exhaustion.
 
 The task-selection question is not *what can be validated next*, but:
 
