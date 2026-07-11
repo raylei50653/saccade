@@ -21,7 +21,7 @@ Step-0: [gt_support_morphology_step0_20260711.md](gt_support_morphology_step0_20
 
 目前的核心問題是：
 
-> 先由 GT placement morphology 判定哪些 atom 維度具備合法的單調偏序，再在該偏序下使用 maximum-weight closure 搜尋結構一致的最佳 reject domain，最後以真實 pooled GT-UCB 與 nested held-out folds 決定候選域是否成立。
+> 先由 GT placement morphology 判定哪些 atom 維度具備合法的單調偏序，再在該偏序下使用 maximum-weight closure 產生結構一致的 reject-domain candidate frontier，最後以真實 pooled GT-UCB 與 nested held-out folds 決定候選域是否成立。
 
 核心原則：
 
@@ -257,6 +257,8 @@ $$
 
 **MWC 是候選域最佳化器，不是 safety proof。**
 
+由於 MWC 的 $G_z$ 僅是 placement surrogate，lambda-parametric frontier **不保證覆蓋** non-linear、set-valued GT-UCB 約束下的全部可行 closure。除非另有 exhaustive enumeration、exact constrained optimizer，或 completeness／upper-bound certificate，研究不得把「frontier 中無增益」表述為整個 closure family 的近似最佳性。
+
 ## 7. 與現有 OR-tail 的關係
 
 現有 OR-tail policy 通常形式為：
@@ -272,14 +274,14 @@ $$
 $$
 \boxed{\text{OR-tail = 低複雜度 closure family}}
 \qquad
-\boxed{\text{MWC = 一般 closure-domain optimizer}}
+\boxed{\text{MWC = restricted candidate-frontier optimizer}}
 $$
 
 正式比較問題：
 
-> 在相同 pooled GT-UCB 與 held-out 約束下，一般 closure 是否能比 frozen OR-tail 額外移除有實質意義的 FP 質量？
+> 在相同 pooled GT-UCB 與 held-out 約束下，**已搜尋的 MWC-generated candidate frontier** 是否能比 frozen OR-tail 額外移除有實質意義的 FP 質量？
 
-若不能，則 OR-tail 已是較佳工程表示；若能，才有必要研究 closure 壓縮。
+若不能，則 OR-tail 是該已搜尋 frontier 內較佳的工程表示；若能，才有必要研究 closure 壓縮。這不對未被 MWC frontier 覆蓋的 closure 作全域最優性主張。
 
 ## 8. 正式實驗管線
 
@@ -333,13 +335,15 @@ $$
 本研究線不以「成功找到更複雜 gate」為完成條件，而要求輸出以下其中一種 bounded verdict：
 
 ```text
-Verdict A — OR-tail sufficient
-  相同 GT-UCB 下 MWC 無實質 FP removal 增益；
-  現有 OR-tail 已近似最佳低複雜度 closure。
+Verdict A — OR-tail sufficient within searched frontier
+  在預先宣告、已搜尋且逐一經 exact track-level UCB 驗證的
+  MWC-generated candidate frontier 內，MWC 對 frozen OR-tail 無實質
+  FP removal 增益；OR-tail 是該 frontier 內較佳的低複雜度工程表示。
+  這不是對整個 allowed closure family 的 near-optimal certificate。
 
 Verdict B — Restricted closure advantage
   只用 morphology-supported global-orderable atoms 時，
-  MWC 在 held-out folds 穩定優於 OR-tail。
+  已搜尋 MWC frontier 的候選在 held-out folds 穩定優於 OR-tail。
 
 Verdict C — Conditional closure required
   全域 closure 失敗，但分 regime closure 在 held-out 中成立，
