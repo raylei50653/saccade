@@ -55,6 +55,8 @@ HALF_LIFE_BY_MODEL = {
 DIMENSION = 2
 EIGEN_ABS_FLOOR = 1e-8
 EIGEN_REL_FLOOR = 1e-6
+SELECTION_REL_TOLERANCE = 1e-12
+MINIMUM_FIT_ROWS = 3
 
 
 def sha256(path: Path) -> str:
@@ -113,8 +115,10 @@ def fit_model(
     t = np.asarray(gaps, dtype=np.float64)
     if d.ndim != 2 or d.shape[1] != DIMENSION or d.shape[0] != t.shape[0]:
         raise ValueError("displacements must have shape (n, 2) aligned with gaps")
-    if d.shape[0] < 3 or not np.all(np.isfinite(d)):
-        raise ValueError("at least three finite training displacements are required")
+    if d.shape[0] < MINIMUM_FIT_ROWS or not np.all(np.isfinite(d)):
+        raise ValueError(
+            f"at least {MINIMUM_FIT_ROWS} finite training displacements are required"
+        )
     k = kernel_scale(model_id, t)
     denominator = float(np.sum(t * t / k))
     drift = np.sum((t / k)[:, None] * d, axis=0) / denominator
@@ -169,12 +173,176 @@ def select_family_member(training_total_nll: dict[str, float]) -> str:
     if not all(math.isfinite(value) for value in training_total_nll.values()):
         raise ValueError("training NLL values must be finite")
     best = min(training_total_nll.values())
-    tolerance = 1e-12 * max(1.0, abs(best))
+    tolerance = SELECTION_REL_TOLERANCE * max(1.0, abs(best))
     return next(
         model_id
         for model_id in MODEL_ORDER
         if training_total_nll[model_id] <= best + tolerance
     )
+
+
+def _canonical_json_sha256(value: Any) -> str:
+    payload = json.dumps(
+        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _fit_row_key(row: dict[str, Any]) -> tuple[str, str, str]:
+    return str(row["seq"]), str(row["lost_id"]), str(row["cand_id"])
+
+
+def fit_row_key_sha256(rows: list[dict[str, Any]]) -> str:
+    """Hash the sorted `(seq, lost_id, cand_id)` fit-row lineage."""
+    keys = [list(_fit_row_key(row)) for row in sorted(rows, key=_fit_row_key)]
+    return _canonical_json_sha256(keys)
+
+
+def load_gt_fit_rows(pairs: Path) -> list[dict[str, Any]]:
+    """Load the only rows eligible for fitting, with deterministic ordering."""
+    rows: list[dict[str, Any]] = []
+    with pairs.open(newline="", encoding="utf-8") as stream:
+        reader = csv.DictReader(stream)
+        missing = sorted(REQUIRED_FIELDS - set(reader.fieldnames or []))
+        if missing:
+            raise ValueError(f"missing E2 fields: {missing}")
+        for source_row in reader:
+            if not (
+                _as_bool(source_row["gt_valid"]) and _as_bool(source_row["gt_match"])
+            ):
+                continue
+            gap = int(source_row["gap"])
+            h_ref = float(source_row["h_ref"])
+            endpoints = np.asarray(
+                [
+                    float(source_row["lost_foot_x"]),
+                    float(source_row["lost_foot_y"]),
+                    float(source_row["cand_foot_x"]),
+                    float(source_row["cand_foot_y"]),
+                ],
+                dtype=np.float64,
+            )
+            if (
+                h_ref <= 0
+                or not math.isfinite(h_ref)
+                or not np.all(np.isfinite(endpoints))
+            ):
+                raise ValueError("invalid GT fit row passed the E2 support contract")
+            displacement = [
+                float((endpoints[2] - endpoints[0]) / h_ref),
+                float((endpoints[3] - endpoints[1]) / h_ref),
+            ]
+            if gap < 1 or gap > 300 or not np.all(np.isfinite(displacement)):
+                raise ValueError("invalid GT fit row passed the E2 support contract")
+            rows.append(
+                {
+                    "seq": source_row["seq"],
+                    "lost_id": source_row["lost_id"],
+                    "cand_id": source_row["cand_id"],
+                    "gap": gap,
+                    "displacement": displacement,
+                }
+            )
+    return sorted(rows, key=_fit_row_key)
+
+
+def build_fold_artifacts(
+    pairs: Path, held_out_sequence: str
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Build auditable train-only parameter and selection artifacts for one LOO fold."""
+    source_sha = sha256(pairs)
+    all_rows = load_gt_fit_rows(pairs)
+    all_sequences = sorted({str(row["seq"]) for row in all_rows})
+    if held_out_sequence not in all_sequences:
+        raise ValueError(f"unknown held-out sequence: {held_out_sequence}")
+    train_rows = [row for row in all_rows if row["seq"] != held_out_sequence]
+    train_sequences = sorted({str(row["seq"]) for row in train_rows})
+    if len(train_rows) < MINIMUM_FIT_ROWS:
+        raise ValueError("LOO fold has insufficient training support")
+
+    displacements = np.asarray(
+        [row["displacement"] for row in train_rows], dtype=np.float64
+    )
+    gaps = np.asarray([row["gap"] for row in train_rows], dtype=np.float64)
+    fold_id = f"LOO::{held_out_sequence}"
+    lineage_hash = fit_row_key_sha256(train_rows)
+    parameter_artifacts: list[dict[str, Any]] = []
+    training_nll_by_model: dict[str, float] = {}
+
+    for model_id in MODEL_ORDER:
+        fitted = fit_model(model_id, displacements, gaps)
+        scores = score_model(fitted, displacements, gaps)
+        training_total_nll = float(np.sum(scores["nll_motion"]))
+        payload = {
+            "schema_version": 1,
+            "freeze_id": "GCM-E2-POSITION-ONLY-v1",
+            "model_id": model_id,
+            "fold_id": fold_id,
+            "held_out_sequence": held_out_sequence,
+            "train_sequences": train_sequences,
+            "fit_row_count": len(train_rows),
+            "fit_row_key_sha256": lineage_hash,
+            "source_pairs_sha256": source_sha,
+            "dimension": fitted["dimension"],
+            "drift_per_frame": fitted["drift_per_frame"],
+            "base_covariance": fitted["base_covariance"],
+            "regularization_applied": fitted["regularization_applied"],
+            "eigenvalue_floor": fitted["eigenvalue_floor"],
+            "training_total_nll": training_total_nll,
+        }
+        artifact = {
+            **payload,
+            "parameter_artifact_id": f"sha256:{_canonical_json_sha256(payload)}",
+        }
+        parameter_artifacts.append(artifact)
+        training_nll_by_model[model_id] = training_total_nll
+
+    selected_model_id = select_family_member(training_nll_by_model)
+    selection_payload = {
+        "schema_version": 1,
+        "freeze_id": "GCM-E2-POSITION-ONLY-v1",
+        "fold_id": fold_id,
+        "held_out_sequence": held_out_sequence,
+        "train_sequences": train_sequences,
+        "fit_row_count": len(train_rows),
+        "fit_row_key_sha256": lineage_hash,
+        "source_pairs_sha256": source_sha,
+        "training_nll_by_model": training_nll_by_model,
+        "selected_model_id": selected_model_id,
+        "selection_tolerance": SELECTION_REL_TOLERANCE,
+        "model_order": list(MODEL_ORDER),
+    }
+    selection_artifact = {
+        **selection_payload,
+        "selection_artifact_id": f"sha256:{_canonical_json_sha256(selection_payload)}",
+    }
+    return parameter_artifacts, selection_artifact
+
+
+def validate_loo_artifact_contract(pairs: Path, audit: dict[str, Any]) -> None:
+    """Exercise every canonical fold and match it to the sealed lineage map."""
+    for held_out, expected_count in audit[
+        "loo_training_fit_rows_by_held_out_sequence"
+    ].items():
+        parameters, selection = build_fold_artifacts(pairs, held_out)
+        expected_hash = audit["loo_fit_row_key_sha256_by_held_out_sequence"][held_out]
+        if len(parameters) != len(MODEL_ORDER):
+            raise ValueError(f"LOO artifact model count mismatch for {held_out}")
+        if set(selection["training_nll_by_model"]) != set(MODEL_ORDER):
+            raise ValueError(f"LOO selection family mismatch for {held_out}")
+        if (
+            selection["fit_row_count"] != expected_count
+            or selection["fit_row_key_sha256"] != expected_hash
+        ):
+            raise ValueError(f"LOO selection lineage mismatch for {held_out}")
+        for parameter in parameters:
+            if (
+                parameter["held_out_sequence"] != held_out
+                or held_out in parameter["train_sequences"]
+                or parameter["fit_row_count"] != expected_count
+                or parameter["fit_row_key_sha256"] != expected_hash
+            ):
+                raise ValueError(f"LOO parameter lineage mismatch for {held_out}")
 
 
 def audit_substrate(pairs: Path) -> dict[str, Any]:
@@ -188,6 +356,7 @@ def audit_substrate(pairs: Path) -> dict[str, Any]:
         "invalid_frame_window": 0,
     }
     sequences: set[str] = set()
+    gt_fit_rows_by_sequence: dict[str, int] = {}
     with pairs.open(newline="", encoding="utf-8") as stream:
         reader = csv.DictReader(stream)
         missing = sorted(REQUIRED_FIELDS - set(reader.fieldnames or []))
@@ -219,6 +388,9 @@ def audit_substrate(pairs: Path) -> dict[str, Any]:
                 counts["invalid_h_ref"] += 1
             if _as_bool(row["gt_match"]):
                 counts["rows_gt_fit_eligible"] += 1
+                gt_fit_rows_by_sequence[row["seq"]] = (
+                    gt_fit_rows_by_sequence.get(row["seq"], 0) + 1
+                )
     valid = not any(
         counts[name]
         for name in (
@@ -228,10 +400,25 @@ def audit_substrate(pairs: Path) -> dict[str, Any]:
             "invalid_frame_window",
         )
     )
+    fit_rows = load_gt_fit_rows(pairs)
+    loo_training_counts: dict[str, int] = {}
+    loo_training_hashes: dict[str, str] = {}
+    for held_out in sorted(sequences):
+        train_rows = [row for row in fit_rows if row["seq"] != held_out]
+        loo_training_counts[held_out] = len(train_rows)
+        loo_training_hashes[held_out] = fit_row_key_sha256(train_rows)
+    loo_support_ok = bool(loo_training_counts) and all(
+        count >= MINIMUM_FIT_ROWS for count in loo_training_counts.values()
+    )
     return {
         **counts,
         "sequence_count": len(sequences),
         "finite_support_gate": "PASS" if valid else "FAIL",
+        "minimum_fit_rows_required": MINIMUM_FIT_ROWS,
+        "gt_fit_rows_by_sequence": dict(sorted(gt_fit_rows_by_sequence.items())),
+        "loo_training_fit_rows_by_held_out_sequence": loo_training_counts,
+        "loo_fit_row_key_sha256_by_held_out_sequence": loo_training_hashes,
+        "loo_minimum_support_gate": "PASS" if loo_support_ok else "FAIL",
         "coordinate_semantics": "foot-point displacement divided by pair h_ref",
         "time_semantics": "integer frame gap = cand_first_frame - lost_last_frame",
     }
@@ -291,6 +478,8 @@ def family_spec(source_sha: str, audit: dict[str, Any]) -> dict[str, Any]:
                 "ties within 1e-12 relative use declared model order"
             ),
             "model_order": list(MODEL_ORDER),
+            "selection_tolerance": SELECTION_REL_TOLERANCE,
+            "fit_row_key": "sorted canonical JSON of [seq,lost_id,cand_id] rows",
             "large_search": False,
         },
         "regularization": {
@@ -299,18 +488,50 @@ def family_spec(source_sha: str, audit: dict[str, Any]) -> dict[str, Any]:
             "same_for_gt_and_fp": True,
             "must_record_flag_and_floor": True,
         },
-        "required_signal_fields": [
+        "required_parameter_artifact_fields": [
+            "freeze_id",
             "model_id",
             "parameter_artifact_id",
             "fold_id",
+            "held_out_sequence",
+            "train_sequences",
             "fit_row_count",
+            "fit_row_key_sha256",
+            "source_pairs_sha256",
             "dimension",
+            "drift_per_frame",
+            "base_covariance",
+            "regularization_applied",
+            "eigenvalue_floor",
+            "training_total_nll",
+        ],
+        "required_fold_selection_artifact_fields": [
+            "selection_artifact_id",
+            "fold_id",
+            "held_out_sequence",
+            "train_sequences",
+            "fit_row_count",
+            "fit_row_key_sha256",
+            "source_pairs_sha256",
+            "training_nll_by_model",
+            "selected_model_id",
+            "selection_tolerance",
+            "model_order",
+        ],
+        "required_signal_fields": [
+            "freeze_id",
+            "model_id",
+            "parameter_artifact_id",
+            "fold_id",
             "q_motion",
             "log_det_covariance",
             "gaussian_constant",
             "nll_motion",
-            "regularization_applied",
         ],
+        "e3_score_retention": (
+            "emit pair scores for all four frozen members; selected_model_id is "
+            "an additional fold marker and must not filter non-winners"
+        ),
         "blocked": [
             "velocity-only or joint position-velocity likelihood",
             "sequence-conditioned LOO headline",
@@ -328,8 +549,13 @@ def _stable_spec(pairs: Path) -> dict[str, Any]:
             f"source SHA mismatch: expected {SOURCE_SHA256}, got {source_sha}"
         )
     audit = audit_substrate(pairs)
-    if audit["finite_support_gate"] != "PASS":
+    if (
+        audit["finite_support_gate"] != "PASS"
+        or audit["loo_minimum_support_gate"] != "PASS"
+    ):
         raise ValueError("E2 finite/support/window gate failed")
+    validate_loo_artifact_contract(pairs, audit)
+    audit["loo_artifact_contract_gate"] = "PASS"
     return family_spec(source_sha, audit)
 
 
@@ -343,6 +569,8 @@ def _render(spec: dict[str, Any]) -> str:
                 f"source_sha256={spec['source']['sha256']}",
                 f"support_gate={audit['finite_support_gate']}",
                 f"fit_eligible_gt={audit['rows_gt_fit_eligible']}",
+                f"loo_support_gate={audit['loo_minimum_support_gate']}",
+                f"loo_artifact_gate={audit['loo_artifact_contract_gate']}",
                 f"models={','.join(model['model_id'] for model in spec['models'])}",
                 "headline_context=global",
                 "phase_b_authorized=false",

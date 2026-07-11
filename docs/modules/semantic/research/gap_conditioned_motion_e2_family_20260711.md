@@ -78,15 +78,45 @@ member with minimum summed **training-GT** NLL is selected; numerical ties at
 fit, covariance, calibration, fallback, or selection statistic. Full-pool fits
 may be diagnostic only and must have distinct artifact/fold IDs.
 
+E3 must build each fold through the lineage-aware fold builder, not call the
+array-only numerical primitive as an artifact boundary. Fit-row lineage is the
+SHA256 of the canonical compact JSON array of sorted
+`[seq, lost_id, cand_id]` keys.
+
+Every parameter artifact requires:
+
+```text
+freeze_id · model_id · parameter_artifact_id · fold_id
+held_out_sequence · train_sequences · fit_row_count · fit_row_key_sha256
+source_pairs_sha256 · dimension · drift_per_frame · base_covariance
+regularization_applied · eigenvalue_floor · training_total_nll
+```
+
+Every fold-selection artifact requires:
+
+```text
+selection_artifact_id · fold_id · held_out_sequence · train_sequences
+fit_row_count · fit_row_key_sha256 · source_pairs_sha256
+training_nll_by_model · selected_model_id · selection_tolerance · model_order
+```
+
+Artifact IDs are SHA256 digests of canonical JSON payloads before the ID field
+is added. This makes both parameter and selection records independently
+rebuildable and prevents a free-form `fold_id` from serving as lineage proof.
+
 ## 4. Frozen E3 output contract
 
 Every pair/model output must retain:
 
-- `model_id`, `parameter_artifact_id`, `fold_id`, fit-row count;
-- dimension `d=2` and regularization flag/floor provenance;
+- `freeze_id`, `model_id`, `parameter_artifact_id`, and `fold_id`;
+- parameter lineage through the required artifact above;
 - \(q_{motion}\), `log_det_covariance`, Gaussian constant, and full NLL as
   separate fields;
 - source pair identity, gap, sequence, label, and source SHA lineage.
+
+E3 must emit pair scores for **all four** frozen members. The selected model is
+an additional fold marker only; non-winner scores must not be filtered, because
+A8 requires the complete matched M1/M2 surface.
 
 The scoring identity is
 
@@ -107,9 +137,25 @@ On the frozen seven-sequence table:
 source SHA:        0ae3896791ec074fbe951198752c17385c4ee0770a7ec3831225d3ea56a69d17
 finite/support:    PASS
 GT fit rows:       340
+LOO support:       PASS (minimum training fold = 183 rows)
 headline context:  global only
 Phase B:           unauthorized
 ```
+
+The sealed per-sequence support is:
+
+| Held-out sequence | Held-out GT | Training GT | Fit-row hash prefix |
+|:--|--:|--:|:--|
+| MOT17-02-SDP | 72 | 268 | `9e7fe454…` |
+| MOT17-04-SDP | 12 | 328 | `9caca30e…` |
+| MOT17-05-SDP | 42 | 298 | `ada1a106…` |
+| MOT17-09-SDP | 14 | 326 | `164034ec…` |
+| MOT17-10-SDP | 157 | 183 | `8b1e67dd…` |
+| MOT17-11-SDP | 20 | 320 | `0aa3abb4…` |
+| MOT17-13-SDP | 23 | 317 | `a88c8ed7…` |
+
+Full hashes and both count maps are sealed in `model_family.json`. Every fold
+exceeds the numerical primitive's minimum support of three fit rows.
 
 This is an engineering-complete freeze candidate, not chat-side research
 acceptance. E3 remains gated on owner acceptance of this family and packet.

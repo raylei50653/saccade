@@ -16,8 +16,38 @@
       "invalid_frame_window": 0,
       "sequence_count": 7,
       "finite_support_gate": "PASS",
+      "minimum_fit_rows_required": 3,
+      "gt_fit_rows_by_sequence": {
+        "MOT17-02-SDP": 72,
+        "MOT17-04-SDP": 12,
+        "MOT17-05-SDP": 42,
+        "MOT17-09-SDP": 14,
+        "MOT17-10-SDP": 157,
+        "MOT17-11-SDP": 20,
+        "MOT17-13-SDP": 23
+      },
+      "loo_training_fit_rows_by_held_out_sequence": {
+        "MOT17-02-SDP": 268,
+        "MOT17-04-SDP": 328,
+        "MOT17-05-SDP": 298,
+        "MOT17-09-SDP": 326,
+        "MOT17-10-SDP": 183,
+        "MOT17-11-SDP": 320,
+        "MOT17-13-SDP": 317
+      },
+      "loo_fit_row_key_sha256_by_held_out_sequence": {
+        "MOT17-02-SDP": "9e7fe45468f37db1c53eb40b4d2f119674b9276a27543d055d05f306300cba0a",
+        "MOT17-04-SDP": "9caca30ef899259101d64b7af65690e2ead48f9b1fb9d8e258f927eb90e0e020",
+        "MOT17-05-SDP": "ada1a106fdb9163957be49d1c5820154578c13471ba3b3a81d9f7f63cdbcc4e7",
+        "MOT17-09-SDP": "164034ec762604c73d488dd5e964d0886e01059af556c8ea36c5fb6ecd2ba01c",
+        "MOT17-10-SDP": "8b1e67dd9aba0f2705349c7a23caf7681957c9e9439cff118d9609351c0d7eae",
+        "MOT17-11-SDP": "0aa3abb410de384d4cc1d667ee25585dbcc3283da2186ec3201a00ce8a4ed784",
+        "MOT17-13-SDP": "a88c8ed7c35a833b2d66c04344cb2fca3dc16969b4f8ecacdc55c96a5ee0fafb"
+      },
+      "loo_minimum_support_gate": "PASS",
       "coordinate_semantics": "foot-point displacement divided by pair h_ref",
-      "time_semantics": "integer frame gap = cand_first_frame - lost_last_frame"
+      "time_semantics": "integer frame gap = cand_first_frame - lost_last_frame",
+      "loo_artifact_contract_gate": "PASS"
     }
   },
   "observation": {
@@ -67,6 +97,8 @@
       "M2P-GLOBAL-OU-H90",
       "M2P-GLOBAL-OU-H30"
     ],
+    "selection_tolerance": 1e-12,
+    "fit_row_key": "sorted canonical JSON of [seq,lost_id,cand_id] rows",
     "large_search": false
   },
   "regularization": {
@@ -75,18 +107,47 @@
     "same_for_gt_and_fp": true,
     "must_record_flag_and_floor": true
   },
-  "required_signal_fields": [
+  "required_parameter_artifact_fields": [
+    "freeze_id",
     "model_id",
     "parameter_artifact_id",
     "fold_id",
+    "held_out_sequence",
+    "train_sequences",
     "fit_row_count",
+    "fit_row_key_sha256",
+    "source_pairs_sha256",
     "dimension",
+    "drift_per_frame",
+    "base_covariance",
+    "regularization_applied",
+    "eigenvalue_floor",
+    "training_total_nll"
+  ],
+  "required_fold_selection_artifact_fields": [
+    "selection_artifact_id",
+    "fold_id",
+    "held_out_sequence",
+    "train_sequences",
+    "fit_row_count",
+    "fit_row_key_sha256",
+    "source_pairs_sha256",
+    "training_nll_by_model",
+    "selected_model_id",
+    "selection_tolerance",
+    "model_order"
+  ],
+  "required_signal_fields": [
+    "freeze_id",
+    "model_id",
+    "parameter_artifact_id",
+    "fold_id",
     "q_motion",
     "log_det_covariance",
     "gaussian_constant",
-    "nll_motion",
-    "regularization_applied"
+    "nll_motion"
   ],
+  "e3_score_retention": "emit pair scores for all four frozen members; selected_model_id is an additional fold marker and must not filter non-winners",
   "blocked": [
     "velocity-only or joint position-velocity likelihood",
     "sequence-conditioned LOO headline",
