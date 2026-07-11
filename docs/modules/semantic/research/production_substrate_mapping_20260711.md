@@ -5,9 +5,10 @@
 
 # Boolean-domain / gap-conditioned motion — production substrate mapping
 
-> **Step-0 audit terminal (rev. 2, post PR #111 review):** `CONSUMER_SPLIT`.
-> Production relink is **three distinct consumers** with different decision
-> algebra and different reachable gap supports; no single verdict covers them.
+> **Step-0 audit terminal (rev. 3, post PR #111 review):** `CONSUMER_SPLIT`.
+> Production relink is **four surfaces (A / B / C1 / C2)** with different
+> decision algebra and different reachable gap supports; no single verdict
+> covers them.
 > The active headline consumer (tracker-core bridge) ranks by a **continuous
 > speed-weighted motion aggregate** — the earlier claim that motion atoms
 > never enter an aggregate score was wrong and is withdrawn. What survives:
@@ -178,8 +179,10 @@ Both rank by the same appearance-only pooled cost —
 
 \[
 c_{\mathrm{app}}(i)
-=\operatorname{mean}\bigl(\text{lowest }\lceil\text{pool\_frac}\cdot n_i\rceil
+=\operatorname{mean}\bigl(\text{lowest }k_i
 \text{ pairwise head×bank distances}\bigr),
+\qquad
+k_i=\max\bigl(1,\operatorname{round}(\text{pool\_frac}\cdot n_i)\bigr),
 \]
 
 accepted iff \(c_{\mathrm{app}}(i^*)\le\) `max_cost (0.45)` and runner-up
