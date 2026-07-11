@@ -1,8 +1,22 @@
 {
  "terminal": "GLOBAL_PARTIAL_ORDER_READY",
+ "terminal_status": "provisional_operational",
  "reason": "nontrivial global_orderable set ['dist_h', 'log_h_ratio']; all eight atoms have bounded roles; allowed/forbidden contract complete",
- "routing": "open a **separate** restricted global-closure prototype task using only global_orderable atoms; compare against frozen OR-tail under exact GT-UCB; still candidate-only",
+ "routing": "operational only: after research acceptance, open a **separate** restricted global-closure prototype using only accepted global_orderable atoms; compare against frozen OR-tail under exact GT-UCB; still candidate-only. While research_acceptance is PENDING, restricted-closure remains BLOCKED.",
  "authorizes_restricted_closure_prototype": true,
+ "research_acceptance": {
+  "status": "PENDING",
+  "pr": 107,
+  "issue": 106,
+  "note": "Operational terminal is provisional. Research-owner review found initial bridge_dist provenance misclassification; revised map is not yet accepted. Restricted-closure remains BLOCKED until research acceptance is recorded on PR #107.",
+  "initial_operational_terminal": "GLOBAL_PARTIAL_ORDER_READY",
+  "initial_global_atoms": [
+   "bridge_dist",
+   "dist_h",
+   "log_h_ratio"
+  ],
+  "restricted_closure": "BLOCKED_until_research_acceptance"
+ },
  "global_atoms": [
   "dist_h",
   "log_h_ratio"
@@ -39,6 +53,7 @@
   "no escape-tail veto",
   "not observed != unsafe",
   "zero exposure != ordering proof",
-  "motion-derived composites cannot silent-global-promote"
+  "motion-derived composites cannot silent-global-promote",
+  "provisional operational terminal != research acceptance"
  ]
 }

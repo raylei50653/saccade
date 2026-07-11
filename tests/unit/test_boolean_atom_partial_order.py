@@ -101,6 +101,7 @@ def test_aggregate_terminal_and_global_set() -> None:
     agg = _j("aggregate.json")
     assert agg["terminal"] in TERMINALS
     assert agg["terminal"] == "GLOBAL_PARTIAL_ORDER_READY"
+    assert agg["terminal_status"] == "provisional_operational"
     assert set(agg["global_atoms"]) == GLOBAL
     assert set(agg["conditional_atoms"]) == CONDITIONAL
     assert set(agg["context_only_atoms"]) == CONTEXT_ONLY
@@ -108,7 +109,12 @@ def test_aggregate_terminal_and_global_set() -> None:
     assert agg["prc_binding_respected"] is True
     assert agg["score_m_bridge_not_global"] is True
     assert agg["bridge_dist_not_global"] is True
+    # Operational flag may be true; research acceptance must stay PENDING.
     assert agg["authorizes_restricted_closure_prototype"] is True
+    acc = agg["research_acceptance"]
+    assert acc["status"] == "PENDING"
+    assert acc["restricted_closure"] == "BLOCKED_until_research_acceptance"
+    assert "bridge_dist" in acc["initial_global_atoms"]
 
 
 def test_prc_motion_not_global() -> None:

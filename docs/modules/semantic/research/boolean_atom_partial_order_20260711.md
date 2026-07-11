@@ -7,7 +7,7 @@ created: 2026-07-11
 
 # Boolean-Atom Partial-Order Audit — PR-D Gate (issue #106)
 
-> **One-line:** Sealed 8-atom substrate → roles **`global_orderable`** = `{dist_h, log_h_ratio}` · **`conditional_orderable`** = `{bridge_dist, speed_mismatch, dir_cos, resid_mean}` (short-gap only) · **`context_only`** = `{score_m_bridge, gap}` · **`unresolved`** = ∅. Aggregate terminal **`GLOBAL_PARTIAL_ORDER_READY`**. Authorizes only a **separate** restricted-closure prototype on the global pair; motion / motion-extrapolation global arcs remain blocked. Role assignment is **research judgment** with executable global-admissibility guards (statistics are descriptive only).
+> **One-line (provisional operational map):** Sealed 8-atom substrate → candidate **`global_orderable`** = `{dist_h, log_h_ratio}` · **`conditional_orderable`** = `{bridge_dist, speed_mismatch, dir_cos, resid_mean}` (short-gap only) · **`context_only`** = `{score_m_bridge, gap}` · **`unresolved`** = ∅. Packet operational terminal = **`GLOBAL_PARTIAL_ORDER_READY`** (provisional). **Research acceptance: PENDING** on [PR #107](https://github.com/raylei50653/saccade/pull/107). Restricted-closure prototype remains **BLOCKED**.
 
 Thread: [gt_support_morphology_20260711.md](../../../research/threads/gt_support_morphology_20260711.md) ·
 Procedure: [framework §19](../../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md) ·
@@ -16,23 +16,45 @@ Step-0: [gt_support_morphology_step0_20260711.md](gt_support_morphology_step0_20
 PR-C: [escape_tail_forensic_20260711.md](escape_tail_forensic_20260711.md) ·
 Packet: [evidence/boolean_atom_partial_order_20260711/](evidence/boolean_atom_partial_order_20260711/manifest.json)
 
+## Research acceptance status
+
+```text
+PR #107 / issue #106: UNDER REVIEW
+Research acceptance: PENDING
+
+Initial operational terminal (first PR push) = GLOBAL_PARTIAL_ORDER_READY
+  with global = {bridge_dist, dist_h, log_h_ratio}
+
+Research-owner review found:
+  - bridge_dist provenance misclassification (motion-extrapolation composite,
+    not pure geometry) → role re-audit / demotion required
+  - score_m_bridge unit-incompatibility claim incorrect (all terms /h_ref)
+
+Revised operational map is in the packet (candidate global = {dist_h, log_h_ratio}).
+That revision is still provisional until research acceptance is recorded.
+
+Restricted closure prototype: BLOCKED
+Do not start MWC / min-cut / weight optimization from this note.
+```
+
 ## 0. Scope and claim ceiling
 
 - **Read-only / offline / evidence-and-contract** ([issue #106](https://github.com/raylei50653/saccade/issues/106)).
 - Frozen atoms, safer directions, pool-median descriptive split, source SHA, and GT trial unit match Step-0 / PR-C.
 - Explicitly **not** done: MWC, min-cut, graph-cut, parametric closure, rule search, DNF compression, weight optimization, production/preset/ledger changes, escape-tail veto.
-- Claim ceiling = **L1 order contract**. Nested held-out (PR-E) remains the only confirmatory unit for L2+.
+- Claim ceiling = **L1 order contract** (provisional until research acceptance). Nested held-out (PR-E) remains the only confirmatory unit for L2+.
 - PR-C motion role-reversal evidence is **binding negative evidence** against unqualified global promotion of `speed_mismatch` / `dir_cos` / `resid_mean`.
+- Engineering merge of the packet ≠ research acceptance of the terminal.
 
 ### 0.1 Terminal vocabulary (closed)
 
 | Terminal | Meaning |
 |:--|:--|
-| `GLOBAL_PARTIAL_ORDER_READY` | ≥1 nontrivial global-orderable dimension; all eight atoms bounded; allowed/forbidden contract complete → **separate** restricted-closure prototype only |
+| `GLOBAL_PARTIAL_ORDER_READY` | ≥1 nontrivial global-orderable dimension; all eight atoms bounded; allowed/forbidden contract complete → **separate** restricted-closure prototype only **after research acceptance** |
 | `CONDITIONAL_STRUCTURE_ONLY` | No defensible global partial order; conditional/context structure only |
 | `ORDERABILITY_UNRESOLVED` | Role map not defensible; closure work blocked |
 
-This audit ends in **`GLOBAL_PARTIAL_ORDER_READY`**.
+Packet operational terminal (revised): **`GLOBAL_PARTIAL_ORDER_READY`** — **provisional only; research acceptance PENDING**.
 
 ## 1. Frozen substrate
 
@@ -55,17 +77,17 @@ uv run python docs/modules/semantic/research/evidence/boolean_atom_partial_order
 ## 2. Aggregate terminal
 
 ```text
-GLOBAL_PARTIAL_ORDER_READY
+Operational (packet, provisional): GLOBAL_PARTIAL_ORDER_READY
+Research acceptance: PENDING
 
-global_orderable:     dist_h, log_h_ratio
-conditional_orderable: bridge_dist, dir_cos, resid_mean, speed_mismatch
-                       context = short_gap_continuous_association (gap ≤ 60)
-context_only:         score_m_bridge, gap
-unresolved:           (none)
+global_orderable (candidate): dist_h, log_h_ratio
+conditional_orderable:        bridge_dist, dir_cos, resid_mean, speed_mismatch
+                              context = short_gap_continuous_association (gap ≤ 60)
+context_only:                 score_m_bridge, gap
+unresolved:                   (none)
 
-→ authorizes a SEPARATE restricted-closure prototype on the global pair only
-→ does NOT authorize MWC inside this PR, motion / bridge_dist global arcs,
-  tail veto, or production
+→ does NOT yet authorize restricted-closure / MWC
+→ does NOT authorize motion / bridge_dist global arcs, tail veto, or production
 ```
 
 **Role-assignment self-declaration:** roles are research judgment under closed rules, not a fitted classifier. `V_i` / shells / threshold flips are descriptive. Executable `global_admissibility_check` may only **block** `global_orderable` (PR-C motion, motion-extrapolation composites, weighted composites with motion parents, regime descriptors).
@@ -239,9 +261,10 @@ This audit uses only GT placement morphology, PR-C mechanism evidence, threshold
 
 | If terminal | Action |
 |:--|:--|
-| **`GLOBAL_PARTIAL_ORDER_READY` (this result)** | Open a **new** restricted global-closure prototype issue/task using only `{dist_h, log_h_ratio}`; compare candidates to frozen OR-tail under exact GT-UCB; still candidate-only |
-| Conditional proposals | May seed a **separately reviewed** conditional-representation task (`bridge_dist` + motion); not part of the global prototype |
-| Must not | Combine this audit with the MWC prototype in the same PR; promote motion, `bridge_dist`, or `score_m_bridge` to global arcs without new independent evidence + owner override |
+| Packet operational `GLOBAL_PARTIAL_ORDER_READY` (provisional) | **No action** until research acceptance is recorded on PR #107 |
+| After research acceptance only | Open a **new** restricted global-closure prototype using accepted global atoms; vs frozen OR-tail under exact GT-UCB; candidate-only |
+| Conditional proposals | May seed a **separately reviewed** conditional-representation task (`bridge_dist` + motion); not part of any global prototype while #107 is pending |
+| Must not | Start MWC from provisional terminal; combine audit with MWC in the same PR; promote motion / `bridge_dist` / `score_m_bridge` to global arcs without independent evidence + owner override |
 
 ## 9. Must not
 

@@ -1243,9 +1243,11 @@ def decide_terminal(
 
     routing = {
         "GLOBAL_PARTIAL_ORDER_READY": (
-            "open a **separate** restricted global-closure prototype task using "
-            "only global_orderable atoms; compare against frozen OR-tail under "
-            "exact GT-UCB; still candidate-only"
+            "operational only: after research acceptance, open a **separate** "
+            "restricted global-closure prototype using only accepted "
+            "global_orderable atoms; compare against frozen OR-tail under exact "
+            "GT-UCB; still candidate-only. While research_acceptance is PENDING, "
+            "restricted-closure remains BLOCKED."
         ),
         "CONDITIONAL_STRUCTURE_ONLY": (
             "do not run global MWC; separately design and review the observable "
@@ -1419,11 +1421,32 @@ def emit(pairs: Path, out: Path) -> dict[str, Any]:
 
     aggregate = {
         "terminal": terminal["terminal"],
+        "terminal_status": "provisional_operational",
         "reason": terminal["reason"],
         "routing": terminal["routing"],
+        # Operational true when terminal is GLOBAL_PARTIAL_ORDER_READY; research
+        # acceptance may still leave restricted-closure BLOCKED until stamped.
         "authorizes_restricted_closure_prototype": terminal[
             "authorizes_restricted_closure_prototype"
         ],
+        "research_acceptance": {
+            "status": "PENDING",
+            "pr": 107,
+            "issue": 106,
+            "note": (
+                "Operational terminal is provisional. Research-owner review "
+                "found initial bridge_dist provenance misclassification; "
+                "revised map is not yet accepted. Restricted-closure remains "
+                "BLOCKED until research acceptance is recorded on PR #107."
+            ),
+            "initial_operational_terminal": "GLOBAL_PARTIAL_ORDER_READY",
+            "initial_global_atoms": [
+                "bridge_dist",
+                "dist_h",
+                "log_h_ratio",
+            ],
+            "restricted_closure": "BLOCKED_until_research_acceptance",
+        },
         "global_atoms": allowed["global_atoms"],
         "conditional_atoms": sorted(
             n for n, c in cards.items() if c["role"] == "conditional_orderable"
@@ -1450,6 +1473,7 @@ def emit(pairs: Path, out: Path) -> dict[str, Any]:
             "not observed != unsafe",
             "zero exposure != ordering proof",
             "motion-derived composites cannot silent-global-promote",
+            "provisional operational terminal != research acceptance",
         ],
     }
     write_json(out / "aggregate.json", aggregate)
