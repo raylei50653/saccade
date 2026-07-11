@@ -118,7 +118,7 @@ archived  →  不再當現況導航                               →  docs/arc
 
 | Thread | Status (one-line) | Owner |
 |:--|:--|:--|
-| [gap_conditioned_probabilistic_motion_probe_20260711.md](gap_conditioned_probabilistic_motion_probe_20260711.md) | **semantic sole active** · E0–E1 complete · no aggregate sign flip, gap degradation retained · next E2 position-only M1-P/M2-P freeze | semantic |
+| [gap_conditioned_probabilistic_motion_probe_20260711.md](gap_conditioned_probabilistic_motion_probe_20260711.md) | **semantic sole active** · E0–E1 `ACCEPTED_WITH_LIMITS` · probabilistic verdict `NOT_YET_EVALUATED` · next E2 position-only M1-P/M2-P freeze | semantic |
 | [association_recovery_registry_20260709.md](association_recovery_registry_20260709.md) | Scripts index + tools YAML + contracts 就位；registry 維護母線 | semantic |
 | [doc_structure_o15_followup_20260709.md](doc_structure_o15_followup_20260709.md) | O1.5 + TODO-as-WIP-lock；follow-up = index debt / optional strict | ownership |
 

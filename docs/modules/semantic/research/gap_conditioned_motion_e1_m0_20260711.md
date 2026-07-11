@@ -7,10 +7,12 @@
 
 > **E1 terminal:** the aggregate pair-level baseline does **not** show a
 > marginal sign flip under the frozen definition. All 20 `(gap bin, M0 atom)`
-> cells retain GT AUC above 0.5 and none meet the predeclared descriptive
+> cells retain GT AUC above 0.5 and none meet the frozen descriptive reporting
 > reversal criterion. `bridge_dist` and `resid_mean` nevertheless lose marked
 > discrimination as gap grows. The earlier four-track escape-tail finding
 > remains a local conditional phenomenon, not an aggregate gap-bin reversal.
+> Research acceptance = **`ACCEPTED_WITH_LIMITS`**; probabilistic
+> representation verdict = **`NOT_YET_EVALUATED`**.
 
 Thread: [gap-conditioned probabilistic motion probe](../../../research/threads/gap_conditioned_probabilistic_motion_probe_20260711.md)  
 E0: [substrate audit](gap_conditioned_motion_e0_20260711.md)  
@@ -35,8 +37,8 @@ Per cell E1 records:
 - tail GT enrichment relative to that bin's GT base rate;
 - descriptive reversal only if `AUC < 0.5` **and** q90 GT enrichment `> 1`.
 
-This criterion was fixed before reading E1 outputs. It is descriptive, not a
-hypothesis-test threshold or a model-family acceptance gate.
+This frozen descriptive criterion is used for E1 reporting; it is not a
+hypothesis-test threshold or model-family acceptance gate.
 
 ## 2. Aggregate result
 
@@ -84,6 +86,30 @@ addressing the declared escape-tail cohort without unrestricted diffusion.
 No V1–V5 verdict follows from E1. A probabilistic family that merely improves
 pooled AUC while leaving the escape cohort untouched does not satisfy the
 thread's success boxes.
+
+### 3.1 Review acceptance boundary
+
+PR #109 research review records:
+
+```text
+Engineering / reproducibility: PASS
+E0 substrate verdict: ACCEPT
+E1 marginal baseline: ACCEPTED_WITH_LIMITS
+Probabilistic representation verdict: NOT_YET_EVALUATED
+Production / hook authorization: NONE
+Next authorized task: E2 position-only M1-P / M2-P family freeze
+```
+
+The limit is procedural as well as statistical: the exact AUC+q90 reporting
+criterion was introduced in the same PR as its results and has no earlier
+immutable task seal. It is reproducible and frozen for this E1 packet, but it
+must not be described as predeclared or used as a confirmatory acceptance gate.
+
+E0 is also a schema-identifiability audit, not a future vector-state acceptance
+test. Before any added velocity columns can upgrade velocity/joint
+identifiability, E2 or its substrate prerequisite must audit finite values,
+usable row and gap-bin support, velocity time windows, coordinate semantics,
+and observation provenance. Column names alone are insufficient.
 
 ## 4. Reproduction
 

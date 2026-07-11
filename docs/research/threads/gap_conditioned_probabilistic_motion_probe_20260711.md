@@ -19,6 +19,8 @@ default-behavior-change: forbidden
 | Motivation | deterministic motion atoms 在 long-gap slice 出現 GT role reversal（short: high-mismatch→FP；部分 long: high-mismatch 集中 GT） |
 | Relation to mainline | **parallel / independent** · 不納入 restricted global closure · 不改 \(\{dist_h,\log h_{ratio}\}\) 安全域主線 |
 | Execution | **E0–E1 complete** · E0 `PARTIALLY_IDENTIFIABLE` · E1 0/20 aggregate reversal cells but clear gap degradation · substrate frozen pair table only |
+| Research acceptance | **`ACCEPTED_WITH_LIMITS`** for E0–E1 packet · E0 `ACCEPT` · E1 marginal baseline `ACCEPTED_WITH_LIMITS` |
+| Probabilistic verdict | **`NOT_YET_EVALUATED`** · no V1–V5 verdict · Phase B unauthorized |
 | Engineering / production | **none** · no tracker / preset / online hook / baseline change |
 | Research promotion | **none** until LOO + bounded V1–V5 verdict |
 
@@ -92,7 +94,7 @@ Scope:
 
 ## Current step
 
-**E0–E1 COMPLETE; next = E2 position-only M1-P/M2-P family freeze.**
+**E0–E1 `ACCEPTED_WITH_LIMITS`; next = E2 position-only M1-P/M2-P family freeze.**
 
 Frozen E0 boundary:
 
@@ -111,6 +113,13 @@ LOO headline context:
 
 Phase B remains unauthorized.
 ```
+
+PR #109 acceptance limit: the E1 `AUC < 0.5 AND pooled within-bin q90 GT
+enrichment > 1` rule is a frozen descriptive reporting criterion, not an
+auditable predeclared or confirmatory gate. E0 is schema-identifiability only;
+future vector fields require finite-value, usable-support, time-window,
+coordinate-semantics, and provenance audits before joint identifiability can be
+upgraded.
 
 When opened, follow Phase A → freeze → Phase B（不得在 exploration 中途挑單一漂亮結果作結論）:
 
@@ -210,3 +219,4 @@ Until then: no evidence_ledger · no production preset · no online-safe claim �
 - 2026-07-11: Owner task direction activates this independent probe as semantic sole active; the not-yet-started restricted-closure continuation is parked without changing its accepted global/conditional boundary.
 - 2026-07-11: E0 sealed `PARTIALLY_IDENTIFIABLE` on the existing seven-sequence pair table (SHA `0ae38967…`): M0 + position-only observation available; vector velocity and transferable contexts absent. Canonical gap bins frozen; Phase B remains unauthorized. [Note](../../modules/semantic/research/gap_conditioned_motion_e0_20260711.md) · [packet](../../modules/semantic/research/evidence/gap_conditioned_motion_e0_20260711/manifest.json).
 - 2026-07-11: E1 rebuilt the four-atom deterministic baseline across five canonical gap bins. Frozen aggregate criterion found 0/20 marginal reversal cells; `bridge_dist`/`resid_mean` AUC still erodes strongly with gap. Claim narrowed: PR-C role reversal is local/conditional, not a whole-bin sign flip. [Note](../../modules/semantic/research/gap_conditioned_motion_e1_m0_20260711.md) · [packet](../../modules/semantic/research/evidence/gap_conditioned_motion_e1_m0_20260711/manifest.json).
+- 2026-07-11: PR #109 review: engineering/reproducibility `PASS`; E0 `ACCEPT`; E1 marginal baseline **`ACCEPTED_WITH_LIMITS`**; probabilistic representation **`NOT_YET_EVALUATED`**; production/hook authorization `NONE`. Removed the unauditable claim that the exact AUC+q90 criterion was fixed before outputs; it remains frozen for descriptive E1 reporting only. E2 must add finite/support/window/coordinate/provenance gates before any vector-state identifiability upgrade.
