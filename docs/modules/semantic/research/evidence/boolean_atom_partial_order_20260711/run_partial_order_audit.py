@@ -532,9 +532,16 @@ def dependency_graph() -> dict[str, Any]:
             "motion_derived": True,
         },
         "dir_cos": {
-            "kind": "builder_raw",
-            "parents": ["lost_exit_velocity", "cand_entry_velocity"],
-            "transform": "direction cosine of exit/entry motion",
+            "kind": "derived",
+            "parents": ["lost_exit_velocity", "lost_foot_xy", "cand_foot_xy"],
+            "transform": (
+                "cos(v_lost_exit, x_cand - x_lost); "
+                "does NOT use candidate entry velocity"
+            ),
+            "formula_source": (
+                "scripts/tools/build_relink_candidates.py::pair_features "
+                "(dir_cos = (v_lost · displacement) / (|v|·|d|))"
+            ),
             "motion_derived": True,
         },
         "speed_mismatch": {
@@ -569,15 +576,33 @@ def dependency_graph() -> dict[str, Any]:
             "motion_derived": False,
         },
         "fwd_resid": {
-            "kind": "builder_raw",
-            "parents": [],
-            "transform": "forward residual / h_ref (dimensionless)",
+            "kind": "derived",
+            "parents": [
+                "lost_foot_xy",
+                "cand_foot_xy",
+                "lost_exit_velocity",
+                "gap",
+                "h_ref",
+            ],
+            "transform": (
+                "||(x_l + v_l*gap) - x_c|| / h_ref (forward CV extrapolation residual)"
+            ),
+            "formula_source": "scripts/tools/build_relink_candidates.py::pair_features",
             "motion_derived": True,
         },
         "bwd_resid": {
-            "kind": "builder_raw",
-            "parents": [],
-            "transform": "backward residual / h_ref (dimensionless)",
+            "kind": "derived",
+            "parents": [
+                "lost_foot_xy",
+                "cand_foot_xy",
+                "cand_entry_velocity",
+                "gap",
+                "h_ref",
+            ],
+            "transform": (
+                "||(x_c - v_c*gap) - x_l|| / h_ref (backward CV extrapolation residual)"
+            ),
+            "formula_source": "scripts/tools/build_relink_candidates.py::pair_features",
             "motion_derived": True,
         },
         "lost_exit_speed": {
@@ -844,11 +869,14 @@ def assign_roles(
             "atom": name,
             "role": "conditional_orderable",
             "role_assignment": "research_judgment",
-            "provenance": "derived" if name != "dir_cos" else "builder_raw",
+            "provenance": "derived",
             "declared_safer_direction": "lower" if lower else "higher",
             "physical_interpretation": {
                 "speed_mismatch": "exit/entry speed continuity",
-                "dir_cos": "exit/entry direction continuity",
+                "dir_cos": (
+                    "cos(lost_exit_velocity, endpoint displacement); "
+                    "not cand-entry-velocity cosine"
+                ),
                 "resid_mean": "bidirectional residual mean (motion fit quality)",
             }[name],
             "admissible_contexts": [short_gap_context],

@@ -138,9 +138,9 @@
    "atom": "dir_cos",
    "role": "conditional_orderable",
    "role_assignment": "research_judgment",
-   "provenance": "builder_raw",
+   "provenance": "derived",
    "declared_safer_direction": "higher",
-   "physical_interpretation": "exit/entry direction continuity",
+   "physical_interpretation": "cos(lost_exit_velocity, endpoint displacement); not cand-entry-velocity cosine",
    "admissible_contexts": [
     {
      "name": "short_gap_continuous_association",

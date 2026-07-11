@@ -208,6 +208,40 @@ def test_dependency_graph_covers_composites() -> None:
     assert "bridge_dist" in dep["motion_derived_frozen_atoms"]
 
 
+def test_dir_cos_parents_match_builder_formula() -> None:
+    """dir_cos = cos(v_lost_exit, x_cand - x_lost); no cand entry velocity."""
+    node = _j("atom_dependency_graph.json")["nodes"]["dir_cos"]
+    parents = set(node["parents"])
+    assert parents == {"lost_exit_velocity", "lost_foot_xy", "cand_foot_xy"}
+    assert "cand_entry_velocity" not in parents
+    assert "cosine" in node["transform"].lower() or "cos(" in node["transform"]
+
+
+def test_residual_parents_are_formula_level() -> None:
+    """fwd/bwd residuals are not parentless builder_raw leaves."""
+    nodes = _j("atom_dependency_graph.json")["nodes"]
+    fwd = set(nodes["fwd_resid"]["parents"])
+    bwd = set(nodes["bwd_resid"]["parents"])
+    assert fwd == {
+        "lost_foot_xy",
+        "cand_foot_xy",
+        "lost_exit_velocity",
+        "gap",
+        "h_ref",
+    }
+    assert bwd == {
+        "lost_foot_xy",
+        "cand_foot_xy",
+        "cand_entry_velocity",
+        "gap",
+        "h_ref",
+    }
+    assert nodes["fwd_resid"]["kind"] == "derived"
+    assert nodes["bwd_resid"]["kind"] == "derived"
+    # Residual role of resid_mean is unchanged (still conditional via PR-C).
+    assert _j("atom_roles.json")["roles"]["resid_mean"] == "conditional_orderable"
+
+
 def test_metrics_csv_rows() -> None:
     with (PACKET / "atom_metrics.csv").open(encoding="utf-8") as handle:
         rows = list(csv.DictReader(handle))

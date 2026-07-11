@@ -215,14 +215,18 @@ Long gap is not intrinsically unsafe (true re-entries exist). `gap` defines the 
 
 ```text
 h_lost_raw, h_cand_raw  →  log_h_ratio
+lost foot, cand foot, lost_exit_velocity, gap, h_ref → fwd_resid
+lost foot, cand foot, cand_entry_velocity, gap, h_ref → bwd_resid
 fwd_resid, bwd_resid    →  resid_mean
+lost_exit_velocity, lost foot, cand foot → dir_cos
+  (cos(v_lost_exit, displacement); NOT cand entry velocity)
 lost_exit_speed, cand_entry_speed → speed_mismatch
 resid_mean, dist_h, lost_exit_speed → score_m_bridge   (blocked weighted composite)
 lost/cand foot, velocities, gap, h_ref → bridge_dist   (motion-extrapolation; blocked)
 lost/cand foot, h_ref → dist_h                         (pure geometry leaf)
 ```
 
-Edges are provenance only — not closure arcs and not weights.
+Edges are provenance only — not closure arcs and not weights. Formula-level parents for `dir_cos` / residuals match `build_relink_candidates.pair_features`.
 
 ## 6. Allowed / forbidden global order contract
 

@@ -65,12 +65,14 @@
    "motion_derived": true
   },
   "dir_cos": {
-   "kind": "builder_raw",
+   "kind": "derived",
    "parents": [
     "lost_exit_velocity",
-    "cand_entry_velocity"
+    "lost_foot_xy",
+    "cand_foot_xy"
    ],
-   "transform": "direction cosine of exit/entry motion",
+   "transform": "cos(v_lost_exit, x_cand - x_lost); does NOT use candidate entry velocity",
+   "formula_source": "scripts/tools/build_relink_candidates.py::pair_features (dir_cos = (v_lost · displacement) / (|v|·|d|))",
    "motion_derived": true
   },
   "speed_mismatch": {
@@ -114,15 +116,29 @@
    "motion_derived": false
   },
   "fwd_resid": {
-   "kind": "builder_raw",
-   "parents": [],
-   "transform": "forward residual / h_ref (dimensionless)",
+   "kind": "derived",
+   "parents": [
+    "lost_foot_xy",
+    "cand_foot_xy",
+    "lost_exit_velocity",
+    "gap",
+    "h_ref"
+   ],
+   "transform": "||(x_l + v_l*gap) - x_c|| / h_ref (forward CV extrapolation residual)",
+   "formula_source": "scripts/tools/build_relink_candidates.py::pair_features",
    "motion_derived": true
   },
   "bwd_resid": {
-   "kind": "builder_raw",
-   "parents": [],
-   "transform": "backward residual / h_ref (dimensionless)",
+   "kind": "derived",
+   "parents": [
+    "lost_foot_xy",
+    "cand_foot_xy",
+    "cand_entry_velocity",
+    "gap",
+    "h_ref"
+   ],
+   "transform": "||(x_c - v_c*gap) - x_l|| / h_ref (backward CV extrapolation residual)",
+   "formula_source": "scripts/tools/build_relink_candidates.py::pair_features",
    "motion_derived": true
   },
   "lost_exit_speed": {
@@ -267,7 +283,12 @@
    "relation": "depends_on"
   },
   {
-   "source": "cand_entry_velocity",
+   "source": "lost_foot_xy",
+   "target": "dir_cos",
+   "relation": "depends_on"
+  },
+  {
+   "source": "cand_foot_xy",
    "target": "dir_cos",
    "relation": "depends_on"
   },
@@ -299,6 +320,56 @@
   {
    "source": "h_cand_raw",
    "target": "h_ref",
+   "relation": "depends_on"
+  },
+  {
+   "source": "lost_foot_xy",
+   "target": "fwd_resid",
+   "relation": "depends_on"
+  },
+  {
+   "source": "cand_foot_xy",
+   "target": "fwd_resid",
+   "relation": "depends_on"
+  },
+  {
+   "source": "lost_exit_velocity",
+   "target": "fwd_resid",
+   "relation": "depends_on"
+  },
+  {
+   "source": "gap",
+   "target": "fwd_resid",
+   "relation": "depends_on"
+  },
+  {
+   "source": "h_ref",
+   "target": "fwd_resid",
+   "relation": "depends_on"
+  },
+  {
+   "source": "lost_foot_xy",
+   "target": "bwd_resid",
+   "relation": "depends_on"
+  },
+  {
+   "source": "cand_foot_xy",
+   "target": "bwd_resid",
+   "relation": "depends_on"
+  },
+  {
+   "source": "cand_entry_velocity",
+   "target": "bwd_resid",
+   "relation": "depends_on"
+  },
+  {
+   "source": "gap",
+   "target": "bwd_resid",
+   "relation": "depends_on"
+  },
+  {
+   "source": "h_ref",
+   "target": "bwd_resid",
    "relation": "depends_on"
   },
   {

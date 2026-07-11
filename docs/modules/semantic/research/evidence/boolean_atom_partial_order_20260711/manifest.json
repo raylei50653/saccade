@@ -51,15 +51,15 @@
  },
  "scope": "read-only offline partial-order audit; no MWC/min-cut/rule-search/weight-opt; no production/preset/ledger changes",
  "files": {
-  "atom_roles.json": "afa37cc7fecc3ae3efc25928d9c66c54de44b162f8fc039840f66fac6a0dbbdc",
-  "atom_dependency_graph.json": "6b2dde3a4d43806f35aaf1ee8ff89caabc125a2dbedb25ea0172be820280b46b",
-  "atom_metrics.csv": "cd10ee6d6d1205b9c73c98737f7f669a1ab44aebbf68b9f1fc87043f71b78e47",
+  "atom_roles.json": "904d3f660250bac41512e25639c769eb260542d042e8911c5e1469cbf7cbe2e0",
+  "atom_dependency_graph.json": "efeb1c5621c041d8e4bcb593d7d5ea4f104b3eb9728b9304d109a1c3932aeef0",
+  "atom_metrics.csv": "ccfecce57d4c80b12f17be58ceddfcbb680b00cc456ee700936eea786ab3c3ae",
   "pairwise_violation_profile.csv": "87a8934952cd7fb8de94774f3f0ba151d26436e2575acf76147c0d7b1805d7ff",
   "threshold_sensitivity.json": "2f45259724075b69e440e80559bc2551adb5015420b8162a32f0d57eced3c1b0",
   "allowed_global_order.json": "7f105b294a96e190a14b9f4b81258849e109987892764c4793313f484a4336c6",
   "forbidden_order.json": "92e361fffe0dc1c79228a5c657a40e37eb5b16725e00f20c07848ae5dc066637",
   "scale_guard.json": "b2fa21f0cd97bb743b8fb8ae3d8a367010e2df53e199ace8bbf8083070dadec2",
   "aggregate.json": "dcf2c321b6964ee4bc2aa8a41cc8a16d2a8547f5415090387e37a7301857b55b",
-  "run_partial_order_audit.py": "a90706d901190d62c544d092c6699b54b660080261a5568dafdcd8dad7506b77"
+  "run_partial_order_audit.py": "aa54b8429318eca5734248ca01e3e6ebb7c561b543f5d942cd3769cf902443ff"
  }
 }
