@@ -70,22 +70,34 @@ qualifying fold:    held-out GT rows ≥ 20 on the evaluated support
                      04 and 09 are diagnostic-only at every layer)
 ```
 
-## 3. D0 coupling (parallel precondition gate for threshold transfer)
+## 3. D0 coupling (parallel gate; scope-limited to bridge atoms)
 
 A1–A8 consume **offline-builder atoms** and the E2 observation
 \(d=\Delta\text{foot}/h_{ref}\) only; they never cite consumer-A kernel
-quantities and do **not** wait on D0 execution. D0 (Issue #112) gates the
-**claim ceiling** of the outputs, per the substrate-mapping claim ladder:
+quantities and do **not** wait on D0 execution.
 
-| D0 verdict | Ceiling for A6 / verdict language |
+D0 (Issue #112) certifies estimator fidelity for the **bridge atoms
+only**: `bdist`/`score_m_bridge`, `dist_h`, `fwd_r`/`bwd_r`.
+\(E_{motion}\) is classified **research-only** for consumer A (substrate
+mapping §7) — it has no kernel counterpart — so **no D0 outcome can
+upgrade an \(E_{motion}\) statement**:
+
+| D0 verdict | Ceiling it sets |
 |:--|:--|
-| `threshold_transfer_supported` | A6 threshold schedules may be phrased as consumer-A predicate candidates (claim level 2) |
-| `rank_only_transfer_supported` | rank/shape/morphology statements only; numeric thresholds do not port |
+| `threshold_transfer_supported` | numeric statements about the **`bridge_dist` baseline (A6 `S_old`)** may be phrased as consumer-A `bdist` schedule candidates (claim level 2) |
+| `rank_only_transfer_supported` | rank/shape statements about `bridge_dist` only; numeric thresholds do not port |
 | `not_fidelity_aligned` (or D0 not yet run) | signal-level regularity only (claim level 1) |
 
-The V1–V5 verdict itself is a **representation** verdict and is independent
-of D0. Any follow-up hook proposal inherits both this verdict and the D0
-ceiling separately.
+\(S_{new}=\{E_{motion}>\tau\}\) and every A6 / verdict statement about it
+remain **representation-level regardless of the D0 verdict**. Upgrading
+them to a level-2 predicate candidate requires a separate, future
+contract: a named production consumer that actually computes the
+reconstructable observation \(d\) (substrate mapping §7), plus its own
+reconstruction-fidelity gate. That contract is out of scope for Phase B.
+
+The V1–V5 verdict itself is a **representation** verdict and is
+independent of D0. Any follow-up hook proposal inherits this verdict, the
+D0 ceiling, and the missing \(E_{motion}\) consumer contract separately.
 
 ## 4. A1–A8 specifications
 
@@ -118,6 +130,13 @@ all-gap layer, with per-cell sequence attribution of tail GT.
 **Criterion: `R_flip = 0` new aggregate reversal cells.** Descriptive
 comparability with E1 is the point; this is not a hypothesis test.
 
+Because the M0 baseline is already 0/20, A2 can only establish **absence
+of regression** — it cannot establish "more consistent than M0", and no
+relative-consistency claim may appear in the verdict record. The
+corresponding success box is accordingly named "no new aggregate reversal
++ positive held-out direction" (§5), with the direction half supplied by
+A7.
+
 ### A3 — short-gap retention
 
 On the two primary cells, per member, recompute `bridge_dist` AUC on the
@@ -132,18 +151,36 @@ retention(member) := AUC(−E_motion) ≥ AUC(−bridge_dist) − 0.05
 
 ### A4 — escape-tail audit
 
-Cohort = the four sealed far-Hamming GT tracks (all MOT17-10-SDP) from the
-escape-tail forensic packet, keyed by `[seq, lost_id, cand_id]`. All four
-are scored under the genuinely held-out fold-10 parameters. Per track ×
-member: within-native-gap-bin percentile of `E_motion` among that bin's FP
-rows, and whether the pair sits inside the pooled q90 tail.
+Cohort = **exactly four pairs**, one per sealed far-Hamming GT lost track
+(all MOT17-10-SDP): for each track, the min-\(d_H\) representative — the
+GT-matched pair with the **minimal** Hamming distance \(d_H\) recorded in
+the escape-tail forensic packet (the track's best-case pair; the cohort is
+"escape" precisely because even this pair is far);
+ties broken by smaller gap, then smaller `cand_id`. The runner must
+resolve the four exact `[seq, lost_id, cand_id]` keys from the sealed
+packet and record them (with the packet hash) in the Phase B packet
+**before** any pair is scored. All four are scored under the genuinely
+held-out fold-10 parameters.
+
+Reference population (single, frozen): the within-native-gap-bin **pooled
+(GT + FP) q90 tail** of `E_motion`, ties inclusive — the E1 tail
+definition. No other population defines the criterion.
 
 ```text
-addressed(track, member) := E_motion below the within-bin pooled q90 tail
-tail-reduction box       := addressed for ≥ 3 of 4 tracks
-anti-over-diffusion tie  := no native cohort bin classified over-dispersed
-                            (A1) for that member
+not-high-energy(pair, member) := E_motion below the within-bin pooled
+                                 q90 tail
+escape-cohort box             := not-high-energy for ≥ 3 of 4 pairs
+anti-over-diffusion tie       := no native cohort bin classified
+                                 over-dispersed (A1) for that member
 ```
+
+This box is deliberately **weakened**: it claims only that the escape
+cohort is not high-energy under `E_motion`. It is **not** a "tail
+reduction relative to M0" claim — E1 already showed the cohort need not
+occupy any single M0 score's pooled q90 tail, so an improvement-over-M0
+statement is not identifiable here. The within-bin FP-referenced
+percentile and the same pairs' `bridge_dist` / `resid_mean` pooled-q90
+membership are reported as descriptive diagnostics only.
 
 Cohort gaps are long-gap → this analysis lives on the **exploratory**
 layer (substrate mapping §8): it may support the representation verdict
@@ -158,24 +195,55 @@ No gate; feeds no criterion except through A3.
 ### A6 — conditional safe region, S_old vs S_new
 
 Anchor form: \(\max_D P_{FP}(D)\ \text{s.t.}\ \operatorname{UCB}[P_{GT}(D)]\le\epsilon\),
-ε = 0.05, with the **identical cluster-aware UCB estimator and clustering
-unit as the `gt_support_morphology_step0_20260711` packet**. Regions are
-upper cuts `D = {score > τ}` per primary gap cell; τ grid = train-fold
-pooled FP quantiles {50, 60, 70, 75, 80, 85, 90, 95}%. Threshold selection
-uses **train-fold rows only**; evaluation is held-out (LOO), calibration
-frozen per fold (feeds A7).
+ε = 0.05. **The bound is frozen here, not inherited**: the morphology
+step-0 packet's own terminal states that a cluster-aware bound was *not*
+established (its track-level CP was a nominal diagnostic only), so there
+is no existing estimator to reuse.
+
+Frozen A6 estimator:
 
 ```text
-S_old: score = bridge_dist (offline builder), same grid/UCB/rows
-S_new: score = E_motion per member
-no-thinner(member) := pooled held-out retained-FP(S_new) ≥ retained-FP(S_old)
-                      on S_A, AND no qualifying fold with
-                      retained-FP(S_new) < 0.8 × retained-FP(S_old)
+bound        one-sided exact binomial (Clopper–Pearson) upper confidence
+             bound at 95% (one-sided α = 0.05) on cluster-level GT
+             containment
+cluster unit (sequence, lost_id); a cluster is "contained" if ANY of its
+             GT pairs falls in D. Independence is assumed across clusters
+             within a fold; sequence-level residual clustering remains a
+             DECLARED LIMITATION (undischarged since morphology step-0) —
+             per-fold tables are the primary reading, pooled numbers are
+             supplements
+region       upper cut D = {score > τ} per primary gap cell
+grid         τ = train-fold pooled FP quantiles {50,60,70,75,80,85,90,95}%
+selection    per fold × cell, τ = grid value maximizing training FP_removed
+             subject to the CP bound ≤ ε on TRAINING clusters only;
+             held-out rows contribute nothing to selection (LOO firewall)
+metric       FP_removed := P_FP(D), the fraction of the cell's FP rows
+             captured by D (rename of "retained-FP"; same object)
 ```
 
-A6 numeric τ values are offline-builder quantities; their mapping onto
-consumer-A `bdist` (production 0.4 / gap-conditioned schedule) is governed
-by the D0 ceiling of §3.
+Terminal semantics and non-vacuity (frozen):
+
+```text
+NO_FEASIBLE_THRESHOLD  cell×score where no grid τ satisfies the bound
+                       on training clusters
+S_new infeasible where S_old feasible  → no-thinner FAILS for that member
+both infeasible in a cell              → cell recorded BOTH_EMPTY;
+                                         excluded from the criterion and
+                                         can NEVER support a pass (no
+                                         vacuous 0 ≥ 0)
+no-thinner(member) := pooled held-out FP_removed(S_new) ≥ FP_removed(S_old)
+                      on S_A, AND pooled held-out FP_removed(S_new) > 0,
+                      AND no qualifying fold with
+                      FP_removed(S_new) < 0.8 × FP_removed(S_old)
+```
+
+`S_old` uses `bridge_dist` (offline builder); `S_new` uses `E_motion` per
+member; identical grid, bound, and rows. Held-out evaluation reports
+realized FP_removed and GT leakage per fold (feeds A7).
+
+Claim ceilings differ by side (§3): `S_old` τ values map onto consumer-A
+`bdist` (production 0.4 / gap-conditioned schedule) only under the D0
+ceiling; `S_new` τ values are representation-level regardless of D0.
 
 ### A7 — LOO sequence transfer
 
@@ -207,27 +275,44 @@ If multiple M2 members dominate: declared order H270 → H90 → H30.
 
 ## 5. Success boxes → analysis mapping
 
-| Thread success box (all required for V1/V2) | Decided by |
+| Success box (all required for V1/V2) | Decided by |
 |:--|:--|
 | short-gap discrimination retained | A3 |
-| long-gap GT tail concentration reduced | A4 (≥3/4, exploratory layer) |
-| effect direction more consistent across gap bins | A2 (`R_flip = 0`) + A7 (every qualifying fold) |
-| LOO conditional safe region no thinner | A6 |
+| escape cohort not high-energy under `E_motion` (weakened; no M0-relative reduction claim) | A4 (≥3/4, exploratory layer) |
+| no new aggregate reversal + positive held-out direction (weakened; not "more consistent than M0") | A2 (`R_flip = 0`) + A7 (every qualifying fold) |
+| LOO conditional safe region no thinner (non-vacuous `FP_removed`) | A6 |
 | improvement not explained by unrestricted diffusion | A1 (winning member never over-dispersed in a primary cell) + A4 tie + A8 matched uncertainty |
+
+The second and third boxes are deliberately weaker than the thread's
+original mother-line phrasing ("tail concentration reduced" / "more
+consistent"); the thread's box list is updated to match in the same PR.
+The stronger readings are not identifiable on this substrate (A2/A4
+rationale above) and must not be claimed.
 
 ## 6. Verdict decision rule (exactly one)
 
 ```text
-V4  if > 50% of primary GT cells are LOW_SUPPORT, or the E3 lineage audit
-    fails, or an E0-style identifiability blocker is documented.
-    V4 is reachable ONLY through these predeclared routes — never as a
-    post-hoc soft landing for a failed criterion.
+boxes(member)  := all five §5 rows hold for that member
+dominates(M2)  := the A8 dominance rule over M1P-GLOBAL-CV
 
-boxes(member) := all five §5 rows hold for that member
+V4 routes (exhaustive): > 50% of primary GT cells are LOW_SUPPORT, or the
+E3 lineage audit fails, or an E0-style identifiability blocker is
+documented. V4 is reachable ONLY through these routes — never as a
+post-hoc soft landing for a failed criterion.
 
-V5  if boxes(member) fails for every member (and V4 route not triggered)
-V1  if boxes(M1P-GLOBAL-CV) holds and no M2 member dominates M1 (A8)
-V2  if boxes(M2 member) holds and that member dominates M1 (A8)
+Priority partition (evaluate top-down; exactly one fires):
+
+  if any V4 route triggered:                            V4
+  elif exists M2 with boxes(M2) AND dominates(M2):      V2
+       (multiple qualifying M2: declared order H270 → H90 → H30)
+  elif boxes(M1P-GLOBAL-CV):                            V1
+  else:                                                 V5
+
+Residual-case note: a configuration where some M2 passes boxes but fails
+dominance while M1 fails boxes maps to V5 by this rule; the verdict
+record must then carry an explicit anomaly note ("a member passed all
+success boxes without a claimable verdict slot") rather than silently
+reporting "not supported".
 
 V3  is UNREACHABLE this round and is predeclared as such: the frozen table
     never identified velocity/joint observations (E0), so "joint velocity
@@ -268,8 +353,13 @@ Everything in the thread's Must-not list, plus:
 - compute any §4 table inside the E3 signal-generation PR
 - change a numeric criterion after E3 signals exist without a sealed
   design revision + deviation note
-- cite consumer-A kernel quantities or claim threshold transfer without
-  the D0 verdict (Issue #112)
+- cite consumer-A kernel quantities or claim `bridge_dist` threshold
+  transfer without the D0 verdict (Issue #112)
+- phrase \(S_{new}\)/\(E_{motion}\) as a consumer-A predicate candidate
+  under **any** D0 outcome — no consumer-A counterpart exists (§3);
+  level 2 requires a future \(E_{motion}\)/\(d\) consumer contract
+- let an empty region pass A6 vacuously (`BOTH_EMPTY` cells never
+  support a pass)
 - use exploratory-layer (all-gap) results to drive a deployment narrative
   (substrate mapping §8)
 - declare V3, or reach V4 outside its predeclared routes
