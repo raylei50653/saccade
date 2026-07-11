@@ -9,7 +9,7 @@ Phase 2 (#119) executes terminal states in small reviewable batches.
 - Batch 3: `misc/test_boolean_atom_partial_order.py` → T3/T4 delete (done, PR #122); sealed packet remains under contract checkers
 - Batch 4: near_miss trio → T2 promote to `tests/unit/eval/diagnostics/` (done, PR #124); scripts remain supported eval diagnostics
 - Batch 5A: Cheb-GR Door D owner status → **cold-supported / closed** (P0→P2 registry + docs; done, PR #126); tests not moved
-- Batch 5B: cheb_gr handover report + synthesize → T2 promote to `tests/unit/eval/diagnostics/` (this PR)
+- Batch 5B: cheb_gr handover report + synthesize → T2 promote to `tests/unit/eval/diagnostics/` (done, PR #128)
 
 Each research test file must eventually reach one of four terminal states:
 
