@@ -8,7 +8,7 @@
 
 **Task:** R0-A Region Asset Contract Preflight · revision **R0-A-R2** (mathematical/identity normalization)  
 **Branch:** `research/composition-grammar-coverage-program`  
-**Program thread:** [safe_region_assetization_20260710.md](../../../research/threads/safe_region_assetization_20260710.md)  
+**Program thread:** [safe_region_assetization_20260710.md](../../../research/threads/closed/safe_region_assetization_20260710.md)  
 **Mathematical contract (canonical):** [statistical_robust_feasible_set_estimation_under_asymmetric_loss.md](../../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)  
 **A0 baseline:** [composition_grammar_t0_region_interpretation_20260710.md](composition_grammar_t0_region_interpretation_20260710.md)  
 **T0-A preflight:** [composition_grammar_t0_artifact_preflight_20260710.md](composition_grammar_t0_artifact_preflight_20260710.md)

@@ -114,7 +114,7 @@ Read:
 
 1. [Safe-Region Assetization Program](safe_region_assetization_20260710.md) — active task and maturity model.
 2. [Closed G1–G3 T0/C0 thread](composition_grammar_safe_region.md) — accepted descriptive truth.
-3. [T0 region interpretation](../../modules/semantic/research/composition_grammar_t0_region_interpretation_20260710.md) — current source evidence.
+3. [T0 region interpretation](../../../modules/semantic/research/composition_grammar_t0_region_interpretation_20260710.md) — current source evidence.
 
 ## History
 

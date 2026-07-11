@@ -11,7 +11,7 @@
 **Authorize:** T0-B `4c347281` · R1 dispatch `32ecd242` · base T0-A tip `f1981c12`  
 **Execution:** `7b54f5c2` · R1 `c0bac5cc`  
 **PR:** #94 — engineering merge remains separate from research acceptance  
-**Thread:** [composition_grammar_safe_region.md](../../../research/threads/composition_grammar_safe_region.md)  
+**Thread:** [composition_grammar_safe_region.md](../../../research/threads/closed/composition_grammar_safe_region.md)  
 **Preflight:** [composition_grammar_t0_artifact_preflight_20260710.md](composition_grammar_t0_artifact_preflight_20260710.md)
 
 > Descriptive geometry of the **existing registered Q4.5 atlas**.  

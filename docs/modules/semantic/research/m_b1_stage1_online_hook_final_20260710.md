@@ -9,7 +9,7 @@
 **Role:** Canonical Stage 1 eng + evidence close (wire + e2e + B-audit + A0 + det + runtime).  
 **Hook ABI contract (retain separately):** [m_b1_portable_or_tail_hook_contract_20260709.md](m_b1_portable_or_tail_hook_contract_20260709.md)  
 **Plan (retain):** [m_b1_to_m_b1_5_two_stage_plan_20260710.md](m_b1_to_m_b1_5_two_stage_plan_20260710.md)  
-**Thread:** [m_b1_online_hook_20260709.md](../../../research/threads/m_b1_online_hook_20260709.md)  
+**Thread:** [m_b1_online_hook_20260709.md](../../../research/threads/closed/m_b1_online_hook_20260709.md)  
 **Offline freeze:** [m_b1_repaired_eps0_loo_pass_candidate_20260709.md](m_b1_repaired_eps0_loo_pass_candidate_20260709.md)  
 **Stage 2 final:** [m_b1_5_stage2_d_online_final_20260710.md](m_b1_5_stage2_d_online_final_20260710.md)  
 **Consolidation:** [m_b1_doc_consolidation_report_20260710.md](m_b1_doc_consolidation_report_20260710.md)

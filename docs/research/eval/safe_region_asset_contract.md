@@ -37,7 +37,7 @@ Editorial E1 (non-substantive; does not reopen RB8/RB9):
 | [boolean_composition_semantics_contract.md](boolean_composition_semantics_contract.md) | **normative** Boolean / Ω / predicate / policy AST semantics |
 | [statistical_robust_feasible_set_estimation_under_asymmetric_loss.md](statistical_robust_feasible_set_estimation_under_asymmetric_loss.md) | mathematical / claim-ladder semantics |
 | [safe_region_r0_asset_contract_preflight_20260710.md](../../modules/semantic/research/safe_region_r0_asset_contract_preflight_20260710.md) | accepted R0-A derivability packet (CR1–CR9) |
-| [safe_region_assetization_20260710.md](../threads/safe_region_assetization_20260710.md) | program ownership thread |
+| [safe_region_assetization_20260710.md](../threads/closed/safe_region_assetization_20260710.md) | program ownership thread |
 
 **Contract version:** `region_asset_contract_v0`  
 **ID scheme:** `region_asset_id_v2`  

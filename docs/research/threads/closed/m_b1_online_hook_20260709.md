@@ -55,11 +55,11 @@ Forbidden claim:
 ## Read first (canonical)
 
 1. **Active next:** [composition_grammar_safe_region.md](composition_grammar_safe_region.md) — **T0 only**
-2. Coverage audit: [composition_grammar_safe_region_coverage_audit_20260710.md](../../modules/semantic/research/composition_grammar_safe_region_coverage_audit_20260710.md)
-3. [**Stage 2 D_online final**](../../modules/semantic/research/m_b1_5_stage2_d_online_final_20260710.md)
-4. [Stage 2 entry contract](../../modules/semantic/research/m_b1_5_stage2_entry_contract_20260710.md)
-5. [Stage 1 online hook final](../../modules/semantic/research/m_b1_stage1_online_hook_final_20260710.md)
-6. [Hook ABI contract](../../modules/semantic/research/m_b1_portable_or_tail_hook_contract_20260709.md)
+2. Coverage audit: [composition_grammar_safe_region_coverage_audit_20260710.md](../../../modules/semantic/research/composition_grammar_safe_region_coverage_audit_20260710.md)
+3. [**Stage 2 D_online final**](../../../modules/semantic/research/m_b1_5_stage2_d_online_final_20260710.md)
+4. [Stage 2 entry contract](../../../modules/semantic/research/m_b1_5_stage2_entry_contract_20260710.md)
+5. [Stage 1 online hook final](../../../modules/semantic/research/m_b1_stage1_online_hook_final_20260710.md)
+6. [Hook ABI contract](../../../modules/semantic/research/m_b1_portable_or_tail_hook_contract_20260709.md)
 
 ## Artifacts
 

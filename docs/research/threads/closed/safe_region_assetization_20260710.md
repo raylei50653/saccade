@@ -1,8 +1,10 @@
 ---
-doc-status: active
+doc-status: closed
 doc-promotion: navigation-only; not evidence
 owner-module: semantic
 created: 2026-07-10
+closed: 2026-07-11
+closed-verdict: A1_ACCEPTED_WITH_LIMITS
 ---
 
 # Safe-Region Assetization Program
@@ -13,12 +15,12 @@ created: 2026-07-10
 
 | Item | Status |
 |:--|:--|
-| Program | **ACTIVE** — safe-region assetization |
+| Program | **CLOSED** — A1 gate closed; mainline handed off → [gt_support_morphology](../gt_support_morphology_20260711.md) |
 | Delivery model | **PR-driven** (direct-agent dispatch **retired**) |
-| Semantic sole active | **handed off 2026-07-11** → [GT-Support Morphology](gt_support_morphology_20260711.md)（owner 選定的 next scientific uncertainty） |
+| Semantic sole active | **handed off 2026-07-11** → [GT-Support Morphology](../gt_support_morphology_20260711.md)（owner 選定的 next scientific uncertainty） |
 | A1 acceptance unit | **locked**: conversion pack `1a180620bc050e70dd4a673f991ab24410e78ab02d2cbe49346414800ca631a7` — probe/R1.1 roots are **overlay, not A1 objects** |
 | A1 terminal | **`A1_ACCEPTED_WITH_LIMITS` recorded 2026-07-11** (research owner) — gate **CLOSED** · [terminal record](#a1-terminal-record-2026-07-11) |
-| A1 audit trail | S0/S1/Q1/N1 **26/26 PASS** + mutation sensitivity **5/5** (`tests/unit/test_safe_region_a1_audit.py`) · [audit note](../../modules/semantic/research/safe_region_a1_audit_20260711.md) |
+| A1 audit trail | S0/S1/Q1/N1 **26/26 PASS** + mutation sensitivity **5/5** (`tests/unit/test_safe_region_a1_audit.py`) · [audit note](../../../modules/semantic/research/safe_region_a1_audit_20260711.md) |
 | R0-A / CR1–CR9 | **ACCEPTED / PASS** |
 | R0-B-R1 | `e02a5367` — **RB1–RB4 PASS** |
 | R0-B-R2 | `34eab247` — **RB5–RB7 PASS** |
@@ -26,12 +28,12 @@ created: 2026-07-10
 | R0-B final contract | **ACCEPTED** (+ editorial E1) |
 | R1 pack conversion eng. | **MERGED** on `main` (converter, tests, A0 pack tooling) |
 | PR #95 engineering path | **closed** — delivery merged; CI PASS; history pointer only |
-| R1 capacity probe | **overlay** (downgraded 2026-07-10) · [note](../../modules/semantic/research/safe_region_assetization_r1_20260710.md) · study `out/signal_study/safe_region_assetization_r1_20260710/` |
+| R1 capacity probe | **overlay** (downgraded 2026-07-10) · [note](../../../modules/semantic/research/safe_region_assetization_r1_20260710.md) · study `out/signal_study/safe_region_assetization_r1_20260710/` |
 | Probe verdict | **V-C as heuristic-specific descriptive failure** — LOO candidate pool is global-label-screened (`r1.py:1010,1625,1372`), so **not** an inductive class null; pooled 4→8 in-sample witness stands |
 | Identity hygiene | **34 grid-local mask assets ≠ 15 unique prediction masks** (reconciled) |
 | LOO protocol name | `transductive_globally_registered_basis_LOO` **with global-label-screened candidate pool** (notes' "labels do not select registry" claim was false at the pool layer) |
 | R2 grammar distillation | **NOT authorized** (requires V-A) |
-| R1.1 attribution | **overlay** (downgraded) · [note](../../modules/semantic/research/safe_region_assetization_r11_20260710.md) · study `out/signal_study/safe_region_assetization_r11_20260710/` |
+| R1.1 attribution | **overlay** (downgraded) · [note](../../../modules/semantic/research/safe_region_assetization_r11_20260710.md) · study `out/signal_study/safe_region_assetization_r11_20260710/` |
 | R1.1 net contribution | **2 unique harmful AND events located + 3 descriptive symptoms** (role reversal / weak retention / margin contraction); "primary F3" **rejected** (post-hoc floors, K-duplicated reversal count, alias-ambiguous predicate) |
 | A1 audit | **26/26 PASS** — S0 unit lock · S1 crosswalk 0 mismatches · Q1 pack-only · N1 controls · `out/signal_study/safe_region_a1_audit_20260711/` |
 | Next research | **owner picks next scientific uncertainty** — R1.1's four lines are candidate directions only, none committed; asset-management validation is done |
@@ -39,8 +41,8 @@ created: 2026-07-10
 | R2–R4 | **unauthorized** (fail-closed; V-A not met) |
 | Pack root (conversion) | `out/signal_study/m_b1_5_safe_region_asset_r1_20260710/` |
 | Pack root (probe R1) | `out/signal_study/safe_region_assetization_r1_20260710/` |
-| Conversion note | [safe_region_asset_r1_conversion_20260710.md](../../modules/semantic/research/safe_region_asset_r1_conversion_20260710.md) |
-| Probe note | [safe_region_assetization_r1_20260710.md](../../modules/semantic/research/safe_region_assetization_r1_20260710.md) |
+| Conversion note | [safe_region_asset_r1_conversion_20260710.md](../../../modules/semantic/research/safe_region_asset_r1_conversion_20260710.md) |
+| Probe note | [safe_region_assetization_r1_20260710.md](../../../modules/semantic/research/safe_region_assetization_r1_20260710.md) |
 | Claims | G1 **1×L0**; G2 **6×L0 isolated + 19×L1 multi**; G3 **1×L0**; pack ceiling **L1** |
 | Production / presets | **unchanged** |
 | evidence_ledger | **not promoted** |
@@ -167,17 +169,17 @@ R1 transforms sealed inputs into deterministic authorities and emission tables o
 
 ## Read first
 
-1. [Accepted R0-B RegionAsset contract](../eval/safe_region_asset_contract.md)
-2. [Boolean Composition Semantics Contract](../eval/boolean_composition_semantics_contract.md)
-3. [Mathematical framework](../eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
-4. [R1 conversion note](../../modules/semantic/research/safe_region_asset_r1_conversion_20260710.md)
-5. [A1 acceptance-unit lock + audit (2026-07-11)](../../modules/semantic/research/safe_region_a1_audit_20260711.md)
-6. [Accepted R0-A preflight](../../modules/semantic/research/safe_region_r0_asset_contract_preflight_20260710.md)
-7. [Q4.5 artifact preflight](../../modules/semantic/research/composition_grammar_t0_artifact_preflight_20260710.md)
-8. [Sealed Q4.5 threshold registry](../../modules/semantic/research/evidence/m_b1_5_stage2_q45_20260710/threshold_registry.json)
-9. [Q4.5 manifest](../../modules/semantic/research/evidence/m_b1_5_stage2_q45_20260710/manifest.json)
-10. [Q4.5 SHA inventory](../../modules/semantic/research/evidence/m_b1_5_stage2_q45_20260710/SHA256SUMS.json)
-11. [T0 interpretation evidence](../../modules/semantic/research/evidence/m_b1_5_t0_region_interpretation_20260710/manifest.json)
+1. [Accepted R0-B RegionAsset contract](../../eval/safe_region_asset_contract.md)
+2. [Boolean Composition Semantics Contract](../../eval/boolean_composition_semantics_contract.md)
+3. [Mathematical framework](../../eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
+4. [R1 conversion note](../../../modules/semantic/research/safe_region_asset_r1_conversion_20260710.md)
+5. [A1 acceptance-unit lock + audit (2026-07-11)](../../../modules/semantic/research/safe_region_a1_audit_20260711.md)
+6. [Accepted R0-A preflight](../../../modules/semantic/research/safe_region_r0_asset_contract_preflight_20260710.md)
+7. [Q4.5 artifact preflight](../../../modules/semantic/research/composition_grammar_t0_artifact_preflight_20260710.md)
+8. [Sealed Q4.5 threshold registry](../../../modules/semantic/research/evidence/m_b1_5_stage2_q45_20260710/threshold_registry.json)
+9. [Q4.5 manifest](../../../modules/semantic/research/evidence/m_b1_5_stage2_q45_20260710/manifest.json)
+10. [Q4.5 SHA inventory](../../../modules/semantic/research/evidence/m_b1_5_stage2_q45_20260710/SHA256SUMS.json)
+11. [T0 interpretation evidence](../../../modules/semantic/research/evidence/m_b1_5_t0_region_interpretation_20260710/manifest.json)
 12. R1 delivery history: [PR #95](https://github.com/raylei50653/saccade/pull/95) (MERGED; CI PASS; engineering path closed)
 
 ## Accepted A0 baseline
@@ -219,7 +221,7 @@ R1 engineering delivery (complete; landed via PR #95):
 - deterministic converter `scripts/tools/convert_safe_region_asset_r1.py`;
 - pack root `out/signal_study/m_b1_5_safe_region_asset_r1_20260710/`;
 - two-run authority fingerprint match; PK/FK/claims/firewall validation PASS;
-- conversion note [safe_region_asset_r1_conversion_20260710.md](../../modules/semantic/research/safe_region_asset_r1_conversion_20260710.md);
+- conversion note [safe_region_asset_r1_conversion_20260710.md](../../../modules/semantic/research/safe_region_asset_r1_conversion_20260710.md);
 - unit tests `tests/unit/test_safe_region_asset_r1_conversion.py` PASS;
 - [PR #95](https://github.com/raylei50653/saccade/pull/95): **engineering delivery merged; CI PASS; engineering path closed** (history pointer; not a formal review-record claim).
 
@@ -372,7 +374,7 @@ Suggested first consumption probe for the A1 decision (not auto-authorized as R2
 - 2026-07-10: **Research acceptance of V-C** — refined as `in-sample grammar-limited` + `cross-sequence invariance-limited` (not blanket signal-limited). Phase A ACCEPTED after 34-vs-15 identity reconciliation (`n_unique_prediction_masks=15`, `n_grid_local_mask_assets=34`). LOO named transductive global label-free basis registry + train-only supervised fit. R2/G4–G7/hook/ledger closed. Suggested next: R1.1 transfer-failure attribution (F1–F5), not grammar search.
 - 2026-07-10: **R1.1 AUTHORIZED and COMPLETE** — Transfer Failure Attribution Pack. Primary **F3** (train-neg bases fire holdout GT on MOT17-05/11; score_m_bridge-low AND patterns). Secondary **F4** (weak holdout productive retention) + **F1** (margin sign flip 4/14 folds). F2 moderate Jaccard only; F5 rejected (pooled n_neg=8). Decision mapping: no global gate; R2 still closed; owner chooses next among conditional applicability / new signal family / narrow coord-transport spec / formal mainline close.
 - 2026-07-10: **Chat review — A1 framing invalidated; R1/R1.1 downgraded to overlay.** Seven findings, all verified against code/artifacts: (1) acceptance object non-unique (probe writes `A1_region_asset` tags while pack is A0); (2) R1/R1.1 never consume the pack (raw Q4.5/events only); (3) LOO candidate pool is global-label-screened top-48, reused per fold, truncated to top-24 (`r1.py:1010,1625,1372`) — "labels do not select registry" false at the pool layer; V-C survives only as heuristic-specific descriptive failure; (4) F1/F3/F4 hard-floored post-hoc to 40/55/50 (`r11.py:584,598,605`); (5) F3's ≥3-reversal trigger double-counts K2/K5 — 2 unique (basis,event) pairs; (6) harmful basis `b2:07de9243…` has 12 observed-mask aliases — predicate identity not unique; (7) probe `linear_probe_models.csv` writes `multi_sequence_productive_coordinates` (12) into `n_productive_sequences` in a 7-seq cohort (`r1.py:1574`) — semantic counterexample **in the overlay, not the pack**. New non-terminal state **A1_PENDING_VALIDATION**; A1 split into A1-S (hard gate) + A1-Q (pack-only battery); decision utility → pre-declared D1; reusable abstraction → usage-based. R1.1's four next-lines deferred until terminal.
-- 2026-07-11: **A1 acceptance unit locked + read-only audit PASS.** Unit = conversion pack `1a180620bc…` (probe/R1.1 = overlay). `scripts/tools/run_safe_region_a1_audit.py` → **26/26**: S0 4/4 · S1 11/11 (154 memberships, 26↔26 components, 34→15 masks, 1080 registry entries reconstruct sealed values, 0 mismatches) · Q1 5/5 pack-only · N1 6/6. D1 not run (no pre-declared rule). [Audit note](../../modules/semantic/research/safe_region_a1_audit_20260711.md). Maturity stays A0; terminal (e.g. `A1_ACCEPTED_WITH_LIMITS` with enumerated limits) awaits research owner.
+- 2026-07-11: **A1 acceptance unit locked + read-only audit PASS.** Unit = conversion pack `1a180620bc…` (probe/R1.1 = overlay). `scripts/tools/run_safe_region_a1_audit.py` → **26/26**: S0 4/4 · S1 11/11 (154 memberships, 26↔26 components, 34→15 masks, 1080 registry entries reconstruct sealed values, 0 mismatches) · Q1 5/5 pack-only · N1 6/6. D1 not run (no pre-declared rule). [Audit note](../../../modules/semantic/research/safe_region_a1_audit_20260711.md). Maturity stays A0; terminal (e.g. `A1_ACCEPTED_WITH_LIMITS` with enumerated limits) awaits research owner.
 - 2026-07-11: **PR #97 merged** (audit runner + overlay evidence code + docs write-back; CI green). Follow-up review fixes landed in-branch: Q1.sequence claim softened to pack-only *computable* (no per-region goldens predeclared); D1 binding disambiguated (`A1_ACCEPTED` needs pre-declared D1 only if decision utility claimed; `WITH_LIMITS` records absence of D1 as a limit — no post-hoc D1); mutation tests added (`tests/unit/test_safe_region_a1_audit.py`).
 - 2026-07-11: **A1 terminal recorded: `A1_ACCEPTED_WITH_LIMITS` — gate CLOSED.** Post-merge closure sequence per owner: mutation sensitivity **5/5** on `main` → terminal record (see [A1 terminal record](#a1-terminal-record-2026-07-11): maturity A1; accepted scope = crosswalk fidelity + fixed pack-only queries + encoded negative controls; 5 acceptance_limits incl. no D1 trace and no second consumer; non-authorizations unchanged) → repository-wide state consistency audit (no stale "A1 open / A0 retained / terminal pending"; R1/R1.1 still overlay; R2–R4/production/ledger still fail-closed). No new evidence produced; no post-hoc D1. Program returns to research mainline — owner picks the next scientific uncertainty.
-- 2026-07-11: **Next-line pick recorded** — owner selected **GT-Support Morphology** as the next scientific uncertainty（[thread](gt_support_morphology_20260711.md)）；R1.1 的 role-reversal 症狀由該線的 escape-tail 機制化吸收。本 thread 轉為 CLOSED-state 導航（A1 terminal / limits / R2–R4 fail-closed 不變）。
+- 2026-07-11: **Next-line pick recorded** — owner selected **GT-Support Morphology** as the next scientific uncertainty（[thread](../gt_support_morphology_20260711.md)）；R1.1 的 role-reversal 症狀由該線的 escape-tail 機制化吸收。本 thread 轉為 CLOSED-state 導航（A1 terminal / limits / R2–R4 fail-closed 不變）。

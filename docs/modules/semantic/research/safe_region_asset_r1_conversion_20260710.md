@@ -19,7 +19,7 @@ created: 2026-07-10
 | R0-B acceptance | `01a2ec37` |
 | Delivery path | PR-driven engineering (direct-agent dispatch retired; no longer execution authority) |
 | Contract | [safe_region_asset_contract.md](../../../research/eval/safe_region_asset_contract.md) (ACCEPTED + editorial E1) |
-| Thread | [safe_region_assetization_20260710.md](../../../research/threads/safe_region_assetization_20260710.md) |
+| Thread | [safe_region_assetization_20260710.md](../../../research/threads/closed/safe_region_assetization_20260710.md) |
 
 ## Deliverables
 

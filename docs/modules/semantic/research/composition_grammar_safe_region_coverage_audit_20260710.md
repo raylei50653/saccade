@@ -10,7 +10,7 @@
 **No implementation performed**  
 **Date:** 2026-07-10  
 **Revision:** post-review decision-gate edition (branch truth, dual area, dual margin, G7 gate, online split)  
-**Thread (navigation only):** [composition_grammar_safe_region.md](../../../research/threads/composition_grammar_safe_region.md)
+**Thread (navigation only):** [composition_grammar_safe_region.md](../../../research/threads/closed/composition_grammar_safe_region.md)
 
 > Coverage / task-design conclusion for Q4.5 region geometry.  
 > **Not** rule search · **not** new Boolean framework · **not** production change.  

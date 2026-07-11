@@ -57,7 +57,7 @@ frozen 5 signals
 | Task | G1–G3 Region Asset Pack + Linearized Feasibility Probe |
 | Type | offline research tooling + derived evidence |
 | Level | D1 |
-| Thread | [safe_region_assetization_20260710.md](../../../research/threads/safe_region_assetization_20260710.md) |
+| Thread | [safe_region_assetization_20260710.md](../../../research/threads/closed/safe_region_assetization_20260710.md) |
 | Study | `out/signal_study/safe_region_assetization_r1_20260710/` |
 | Code | `src/saccade/perception/eval/safe_region_assetization_r1.py` · `scripts/tools/run_safe_region_assetization_r1.py` |
 | Tests | `tests/unit/test_safe_region_assetization_r1.py` (T1–T10) |

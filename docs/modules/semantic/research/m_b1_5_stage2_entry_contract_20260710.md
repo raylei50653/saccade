@@ -13,7 +13,7 @@
 **Q4.5 atlas (v4):** [m_b1_5_stage2_d_online_final_20260710.md](m_b1_5_stage2_d_online_final_20260710.md) · study `m_b1_5_stage2_q45_20260710`  
   (`q45_atlas_terminal: B` isolated_safe_points_only · **154** productive-safe · 0 region candidates).  
 **Plan body:** [two-stage plan §14+](m_b1_to_m_b1_5_two_stage_plan_20260710.md).  
-**Thread:** [m_b1_online_hook_20260709.md](../../../research/threads/m_b1_online_hook_20260709.md).
+**Thread:** [m_b1_online_hook_20260709.md](../../../research/threads/closed/m_b1_online_hook_20260709.md).
 
 ---
 
