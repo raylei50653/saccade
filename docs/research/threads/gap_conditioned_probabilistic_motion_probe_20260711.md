@@ -18,9 +18,9 @@ default-behavior-change: forbidden
 | Research object | gap-conditioned transition density \(p(x_1,v_1 \mid x_0,v_0,\Delta t,c)\) → standardized mismatch / NLL / optional reach mass |
 | Motivation | deterministic motion atoms 在 long-gap slice 出現 GT role reversal（short: high-mismatch→FP；部分 long: high-mismatch 集中 GT） |
 | Relation to mainline | **parallel / independent** · 不納入 restricted global closure · 不改 \(\{dist_h,\log h_{ratio}\}\) 安全域主線 |
-| Execution | **E0–E1 complete** · E0 `PARTIALLY_IDENTIFIABLE` · E1 0/20 aggregate reversal cells but clear gap degradation · substrate frozen pair table only |
-| Research acceptance | **`ACCEPTED_WITH_LIMITS`** for E0–E1 packet · E0 `ACCEPT` · E1 marginal baseline `ACCEPTED_WITH_LIMITS` |
-| Probabilistic verdict | **`NOT_YET_EVALUATED`** · no V1–V5 verdict · Phase B unauthorized |
+| Execution | **E0–E2 accepted** · E2 freeze `FROZEN_ACCEPTED_WITH_LIMITS` · **E3 signal generation AUTHORIZED** · Phase B unauthorized |
+| Research acceptance | **`ACCEPTED_WITH_LIMITS`** for E0–E2 · E0 `ACCEPT` · E1 marginal baseline `ACCEPTED_WITH_LIMITS` · E2 family + LOO lineage `ACCEPTED_WITH_LIMITS` |
+| Probabilistic verdict | **`NOT_YET_EVALUATED`** · no V1–V5 verdict · Phase B / A1–A8 unauthorized |
 | Engineering / production | **none** · no tracker / preset / online hook / baseline change |
 | Research promotion | **none** until LOO + bounded V1–V5 verdict |
 
@@ -85,6 +85,8 @@ Scope:
 | [E0 packet](../../modules/semantic/research/evidence/gap_conditioned_motion_e0_20260711/manifest.json) | source SHA seal · schema/integrity audit · byte verification |
 | [E1 research note](../../modules/semantic/research/gap_conditioned_motion_e1_m0_20260711.md) | deterministic baseline · aggregate-vs-local role-reversal boundary |
 | [E1 packet](../../modules/semantic/research/evidence/gap_conditioned_motion_e1_m0_20260711/manifest.json) | 20 gap×atom cells · AUC · frozen q90 tail · sequence attribution |
+| [E2 research note](../../modules/semantic/research/gap_conditioned_motion_e2_family_20260711.md) | reduced position-only M1-P/M2-P equations · train-only fit/LOO firewall · E3 signal contract |
+| [E2 packet](../../modules/semantic/research/evidence/gap_conditioned_motion_e2_family_20260711/manifest.json) | machine-readable four-member family · finite/support/window/provenance audit · per-fold LOO lineage hashes · parameter/selection artifact schemas · fit/scoring primitives |
 | Final research note | problem · equations · context · substrate · fit/LOO protocol · limitations · bounded verdict |
 | Pair-level signal table | M0 + M1 + M2 signals · gap/context · model/parameter IDs · labels · regularization flags |
 | Model artifacts / fold | γ, σ, drift/context mean, covariance def, coordinate system, time unit, fit/exclude rows, code version |
@@ -94,9 +96,10 @@ Scope:
 
 ## Current step
 
-**E0–E1 `ACCEPTED_WITH_LIMITS`; next = E2 position-only M1-P/M2-P family freeze.**
+**E0–E2 `ACCEPTED_WITH_LIMITS`; E2 freeze `FROZEN_ACCEPTED_WITH_LIMITS`;
+E3 signal generation AUTHORIZED; Phase B / A1–A8 unauthorized.**
 
-Frozen E0 boundary:
+Frozen E0/E2 boundary:
 
 ```text
 identifiable:
@@ -111,6 +114,8 @@ LOO headline context:
   global only
   sequence remains diagnostic / in-sample only
 
+E3 authorized: rebuild 7 LOO folds · persist 28 parameter + 7 selection
+artifacts · emit all 4 model scores per pair×fold
 Phase B remains unauthorized.
 ```
 
@@ -121,6 +126,11 @@ future vector fields require finite-value, usable-support, time-window,
 coordinate-semantics, and provenance audits before joint identifiability can be
 upgraded.
 
+PR #110 acceptance limit: E2 family mathematics and LOO lineage are accepted
+with limits; E3 may only generate sealed fold signals. Verifier temporary
+seven-fold rebuild is not E3 evidence. No calibration, A1–A8, family change,
+or V1–V5 verdict.
+
 When opened, follow Phase A → freeze → Phase B（不得在 exploration 中途挑單一漂亮結果作結論）:
 
 ```text
@@ -129,11 +139,12 @@ Phase A — exploration
   E1 M0 deterministic role-reversal baseline — DONE:
      0/20 aggregate reversal cells; gap degradation retained;
      PR-C escape tail remains local/conditional
-  E2 M1/M2 limited predeclared parameter family
-  E3 signal generation (position-only · velocity-only · joint; terms split)
-  freeze model family + analysis inputs
+  E2 M1-P/M2-P limited predeclared parameter family — ACCEPTED_WITH_LIMITS:
+     GCM-E2-POSITION-ONLY-v1; FROZEN_ACCEPTED_WITH_LIMITS
+  E3 signal generation (position-only only; terms split) — AUTHORIZED
+  freeze model family + analysis inputs — DONE for E2
 
-Phase B — analysis
+Phase B — analysis (UNAUTHORIZED)
   A1 gap-bin calibration (χ² coverage; under/approx/over dispersed)
   A2 role-reversal rate R_flip + sequence attribution
   A3 short-gap retention (must not collapse)
@@ -184,7 +195,7 @@ improvement not explained by unrestricted diffusion
 
 - [x] substrate audit complete (`PARTIALLY_IDENTIFIABLE`)
 - [x] M0 role-reversal baseline rebuilt
-- [ ] M1 and M2 reproducible implementations
+- [x] M1-P and M2-P reproducible fit/scoring primitives + machine-readable family freeze
 - [ ] position-only vs joint outputs separated; energy terms stored separately
 - [ ] gap-bin calibration · RR rate · short-gap retention · escape-tail · conditional SR · LOO · M1 vs M2 attribution · failure/scale/regularization audit
 - [ ] single reproduction entrypoint rebuilds all headline results
@@ -220,3 +231,6 @@ Until then: no evidence_ledger · no production preset · no online-safe claim �
 - 2026-07-11: E0 sealed `PARTIALLY_IDENTIFIABLE` on the existing seven-sequence pair table (SHA `0ae38967…`): M0 + position-only observation available; vector velocity and transferable contexts absent. Canonical gap bins frozen; Phase B remains unauthorized. [Note](../../modules/semantic/research/gap_conditioned_motion_e0_20260711.md) · [packet](../../modules/semantic/research/evidence/gap_conditioned_motion_e0_20260711/manifest.json).
 - 2026-07-11: E1 rebuilt the four-atom deterministic baseline across five canonical gap bins. Frozen aggregate criterion found 0/20 marginal reversal cells; `bridge_dist`/`resid_mean` AUC still erodes strongly with gap. Claim narrowed: PR-C role reversal is local/conditional, not a whole-bin sign flip. [Note](../../modules/semantic/research/gap_conditioned_motion_e1_m0_20260711.md) · [packet](../../modules/semantic/research/evidence/gap_conditioned_motion_e1_m0_20260711/manifest.json).
 - 2026-07-11: PR #109 review: engineering/reproducibility `PASS`; E0 `ACCEPT`; E1 marginal baseline **`ACCEPTED_WITH_LIMITS`**; probabilistic representation **`NOT_YET_EVALUATED`**; production/hook authorization `NONE`. Removed the unauditable claim that the exact AUC+q90 criterion was fixed before outputs; it remains frozen for descriptive E1 reporting only. E2 must add finite/support/window/coordinate/provenance gates before any vector-state identifiability upgrade.
+- 2026-07-11: E2 engineering packet freezes `GCM-E2-POSITION-ONLY-v1`: global random-CV marginal M1-P plus integrated-OU M2-P half-lives 30/90/270 frames, train-GT-only fitting, global LOO firewall, deterministic covariance regularization, and split `q`/`log det`/constant/NLL output contract. Frozen-source finite/support/window/provenance gate passes with 340 eligible GT rows. [Note](../../modules/semantic/research/gap_conditioned_motion_e2_family_20260711.md) · [packet](../../modules/semantic/research/evidence/gap_conditioned_motion_e2_family_20260711/manifest.json).
+- 2026-07-11: PR #110 review follow-up closes the engineering-side LOO artifact gap without changing model mathematics: packet now seals GT support and training-row lineage hash for every held-out sequence (minimum train fold 183), requires explicit parameter and fold-selection artifacts, records all four training NLL values, and forbids winner-only E3 output. Tests mutate held-out observations to prove fit hash/NLL exclusion and reproduce identical artifacts from identical fold input.
+- 2026-07-11: PR #110 second review acceptance: engineering/reproducibility `PASS`; E2 mathematics `ACCEPT`; LOO lineage/selection `ACCEPT`; E2 research acceptance **`ACCEPTED_WITH_LIMITS`** · freeze status `FROZEN_ACCEPTED_WITH_LIMITS`; **E3 signal generation AUTHORIZED**; Phase B / A1–A8 `NONE`; V1–V5 `NOT_YET_EVALUATED`; production/hook `NONE`.
