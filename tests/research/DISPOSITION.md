@@ -4,7 +4,8 @@ Produced during the 2026-07-11 pytest reorganization (phase 1: quarantine).
 Phase 2 (#119) executes terminal states in small reviewable batches.
 
 **Progress**
-- Batch 1: `external_fp/test_external_fp_filter_runtime.py` → T2 promote to `tests/unit/eval/` (done)
+- Batch 1: `external_fp/test_external_fp_filter_runtime.py` → T2 promote to `tests/unit/eval/` (done, PR #120)
+- Batch 2: gap_conditioned_motion e0–e3 → T4 delete (this PR); phase_b retained (line still warm)
 
 Each research test file must eventually reach one of four terminal states:
 
@@ -23,10 +24,10 @@ Nothing was deleted in phase 1. "Seal status" reflects 2026-07-11 knowledge.
 | safe_region/test_safe_region_asset_r1_conversion.py | R1 conversion pack | CLOSED | T3/T4 | Pack-shape checks → T3; frozen-number replays → T4 |
 | safe_region/test_safe_region_assetization_r1.py | assetization apparatus (live src module) | study CLOSED, module retained | T2 | Synthetic tests of `saccade.perception.eval.safe_region_assetization_r1`; keep only if the apparatus serves the active gt_support_morphology line, else delete with the module |
 | safe_region/test_safe_region_assetization_r11.py | same (R1.1 attribution) | study CLOSED | T2 | Same as above |
-| gap_conditioned_motion/test_gap_conditioned_motion_e0.py | gap_conditioned_motion_e0_20260711 | sealed | T4 | Execs runner frozen inside the packet; replay = run the recipe, not pytest |
-| gap_conditioned_motion/test_gap_conditioned_motion_e1_m0.py | …e1_m0_20260711 | sealed | T4 | Same pattern |
-| gap_conditioned_motion/test_gap_conditioned_motion_e2_family.py | …e2_family_20260711 | sealed | T4 | Same pattern |
-| gap_conditioned_motion/test_gap_conditioned_motion_e3_signals.py | …e3_signals_20260711 | sealed | T4 | Same pattern |
+| ~~gap_conditioned_motion/test_gap_conditioned_motion_e0.py~~ | gap_conditioned_motion_e0_20260711 | sealed | **done — T4** (#119 batch 2) | Packet + runner in evidence dir; contract tests cover integrity |
+| ~~gap_conditioned_motion/test_gap_conditioned_motion_e1_m0.py~~ | …e1_m0_20260711 | sealed | **done — T4** (#119 batch 2) | Same |
+| ~~gap_conditioned_motion/test_gap_conditioned_motion_e2_family.py~~ | …e2_family_20260711 | sealed | **done — T4** (#119 batch 2) | Same |
+| ~~gap_conditioned_motion/test_gap_conditioned_motion_e3_signals.py~~ | …e3_signals_20260711 | sealed | **done — T4** (#119 batch 2) | Same |
 | gap_conditioned_motion/test_gap_conditioned_motion_phase_b.py | …phase_b_20260711 | sealed (PR #116) | T4 | Line still warm — keep until the gap-motion line closes, then delete |
 | d_online_stage2/test_d_online_stage2_q1q3.py | out/signal_study m_b1_5 …_20260710 | sealed | T4 | Pins dated out/ artifacts + MOT17 GT; skips when absent |
 | d_online_stage2/test_d_online_stage2_q4.py | same | sealed | T4 | Same |
