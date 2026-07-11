@@ -7,6 +7,30 @@
 > Purpose of this doc: harvest item 2 into **one clean signal + what it is
 > for + the experiment that earns it**, so no future consumer re-derives it.
 
+## Owner status (Door D)
+
+| Field | Value |
+|---|---|
+| `research_status` | **closed** |
+| `support_status` | **cold-supported** |
+| `production_status` | default-off, non-headline |
+| `maintenance_scope` | reproducibility + diagnostic CLI/schema |
+| `active_optimization` | **no** |
+
+**Boundaries**
+
+* Keep post-hoc replay and the ability to reproduce sealed historical conclusions.
+* Do **not** promise continued tuning or headline-metric improvement on this line.
+* Do **not** auto-promote stable-veto / support zones into production gates.
+* Reopening requires a **new** action point, appearance substrate, or async consumer —
+  not another threshold sweep on the same operating point.
+* Offline post-hoc GO remains valid as output-layer cleanup (see semantic README);
+  live/online claims stay NO-GO under [#56](../../../reference/no_go_registry.md#56) /
+  [#57](../../../reference/no_go_registry.md#57). Mixed offline verdict [#58](../../../reference/no_go_registry.md#58)
+  (quality gates no-go; clean-FIFO sparse bank usable) is the governing closed-line evidence.
+* Tool priority in [association_tools.yaml](association_tools.yaml) / scripts index: **P2**
+  (cold-supported diagnostic / replay), not P0 active work queue.
+
 ---
 
 ## 1. The clean signal
@@ -139,8 +163,11 @@ now holds under a genuine cross-condition test, not just the m-substrate A/B.
 - Applicability map: `scripts/eval/diagnostics/synthesize_handover_applicability.py` (nargs ≥ 2 summaries)
 - Detector-suffix guard: `scripts/eval/diagnostics/compare_detector_suffix_runs.py`
 - Veto flags (default off): `--cheb-gr-offline-center-dist-veto` / `--cheb-gr-offline-pollution-veto` / `--cheb-gr-offline-neighbor-iou-max`
-- Regression tests: `tests/unit/eval/test_cheb_gr_offline_handover_report.py`,
-  `test_compare_handover_summaries.py`, `test_synthesize_handover_applicability.py`
+- Regression tests (expected under unit suite; cold-supported maintenance):
+  `tests/unit/eval/test_compare_handover_summaries.py` (already core);
+  report + synthesize promote tracked as #119 batch 5B after this owner-status PR
+  (`tests/research/misc/test_cheb_gr_offline_handover_report.py`,
+  `test_synthesize_handover_applicability.py` → `tests/unit/eval/diagnostics/`)
 
 ---
 

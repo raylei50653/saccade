@@ -37,6 +37,20 @@
 | 2026-07-04 | Sync online ReID in tracker critical path（mnv4 dynamic / bridge appearance veto） | ❌ NO-GO（cost-benefit 不成立）。無 ReID `mamba_whole_graph_m` 79.5 / IDs 335 / ~241 FPS；修掉 live handover 污染後同步 `reid_mnv4_dynamic` 79.7 / IDs 333 / ~193 FPS，吞吐約 −20% 只換 +0.2 IDF1。`relink_bridge_app_veto=0.20` 無實際 veto；`veto=1.0` 僅 33 veto 且 IDs 341。**主線：geometry + conservative relink；ReID 只能 async sidecar / offline，不得阻塞 double-buffer critical path。** registry [#57](../../reference/no_go_registry.md#57) |
 | 2026-07-04 | Cheb-GR offline handover（output-layer，mnv4 h2 margin0.05） | ✅ GO as post-hoc cleanup；`--cheb-gr-offline-handover --cheb-gr-model mobilenetv4_reid --cheb-gr-offline-min-head 2 --cheb-gr-offline-margin 0.05`：IDF1 80.3 / IDs 311 / ~219 FPS；先輸出 MOT 再 crop/extract/relabel，不進 tracker critical path |
 
+### Cheb-GR Door D owner status (2026-07-12)
+
+| Field | Value |
+|---|---|
+| `research_status` | **closed** |
+| `support_status` | **cold-supported**（非 retire） |
+| `production_status` | default-off, non-headline |
+| `maintenance_scope` | reproducibility + diagnostic CLI/schema |
+| `active_optimization` | **no** |
+
+- Offline post-hoc GO 仍成立（上表）；live/online claims 仍 NO-GO（#56 / #57）。
+- Tool registry Door D = **P2**（結案重跑／旁線診斷），不再是 P0 現用開工鏈。
+- 詳見 fact-owner [research/chebgr_handover_signal_map_20260704.md](research/chebgr_handover_signal_map_20260704.md) · registry [research/association_tools.yaml](research/association_tools.yaml)。
+
 ## 📚 研究 / 設計
 
 > 全表義務見 [Doc Structure Contract C4](../../ownership/doc_structure_contract.md)。Active 對齊 [TODO.md](TODO.md) sole active（WIP=1）。

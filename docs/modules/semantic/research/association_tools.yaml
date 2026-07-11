@@ -8,7 +8,8 @@
 #
 # Status: populated (Step 1B complete)
 # - Full inventory seeded from association_recovery_scripts_index_20260709.md (H)
-# - P0 Door A/D/F + P1+ (B/E/C/A peripherals/wrappers)
+# - P0 Door A/F; Door D demoted to P2 cold-supported (2026-07-12, #119 batch 5A)
+# - P1+ (B/E/C/A peripherals/wrappers)
 # - checker = scripts/tools/check_association_tools.py (Step 2)
 # Seed: association_recovery_scripts_index_20260709.md (H)
 
@@ -392,58 +393,58 @@ tools:
 - id: run_offline_handover_ablation
   path: scripts/eval/run_offline_handover_ablation.py
   door: D
-  roles: [core-pipeline]
-  priority: P0
+  roles: [historical, diagnostic]
+  priority: P2
   fact_owner: docs/modules/semantic/research/chebgr_handover_signal_map_20260704.md
-  no_go_ids: []
+  no_go_ids: ['#58']
   recipes: [R-D]
-  notes: Replay handover variants on a frozen MOT substrate.
+  notes: 'Cold-supported closed line; retain for replay/diagnostics. Reopening requires a new action point or substrate. Historical/diagnostic replay of handover variants on a frozen MOT substrate.'
 - id: cheb_gr_offline_handover_report
   path: scripts/eval/diagnostics/cheb_gr_offline_handover_report.py
   door: D
-  roles: [canonical, core-pipeline]
-  priority: P0
+  roles: [canonical, diagnostic]
+  priority: P2
   fact_owner: docs/modules/semantic/research/chebgr_handover_signal_map_20260704.md
-  no_go_ids: []
+  no_go_ids: ['#58']
   recipes: [R-D]
   expected_artifacts: [_cheb_gr_offline_handover_labeled.csv, parameter_registry.md, parameter_summary.json]
-  notes: Labels handover log + writes registry/summary under the run dir.
+  notes: 'Cold-supported closed line; retain for replay/diagnostics. Reopening requires a new action point or substrate. Canonical offline handover label + registry/summary writer.'
 - id: compare_handover_summaries
   path: scripts/eval/diagnostics/compare_handover_summaries.py
   door: D
-  roles: [core-pipeline, diagnostic]
-  priority: P0
+  roles: [diagnostic]
+  priority: P2
   fact_owner: docs/modules/semantic/research/chebgr_handover_signal_map_20260704.md
-  no_go_ids: []
+  no_go_ids: ['#58']
   recipes: [R-D]
-  notes: Cross-run parameter_summary.json diff.
+  notes: 'Cold-supported closed line; retain for replay/diagnostics. Reopening requires a new action point or substrate. Cross-run parameter_summary.json diff.'
 - id: synthesize_handover_applicability
   path: scripts/eval/diagnostics/synthesize_handover_applicability.py
   door: D
-  roles: [core-pipeline, diagnostic]
-  priority: P0
+  roles: [diagnostic]
+  priority: P2
   fact_owner: docs/modules/semantic/research/chebgr_handover_signal_map_20260704.md
-  no_go_ids: []
+  no_go_ids: ['#58']
   recipes: [R-D]
-  notes: Builds applicability map (md/json) from summary JSON inputs.
+  notes: 'Cold-supported closed line; retain for replay/diagnostics. Reopening requires a new action point or substrate. Builds applicability map (md/json) from summary JSON inputs.'
 - id: compare_detector_suffix_runs
   path: scripts/eval/diagnostics/compare_detector_suffix_runs.py
   door: D
-  roles: [core-pipeline, diagnostic]
-  priority: P0
+  roles: [diagnostic]
+  priority: P2
   fact_owner: docs/modules/semantic/research/chebgr_handover_signal_map_20260704.md
-  no_go_ids: []
+  no_go_ids: ['#58']
   recipes: [R-D]
-  notes: Guard against fake FRCNN/SDP detector-suffix conditions when claiming splits.
+  notes: 'Cold-supported closed line; retain for replay/diagnostics. Reopening requires a new action point or substrate. Diagnostic guard against fake FRCNN/SDP detector-suffix conditions when claiming splits.'
 - id: cheb_gr_osnet_gate
   path: scripts/eval/appearance/cheb_gr_osnet_gate.py
   door: D
-  roles: [probe, peripheral]
+  roles: [probe, historical]
   priority: P2
   fact_owner: docs/modules/semantic/research/chebgr_handover_signal_map_20260704.md
-  no_go_ids: []
+  no_go_ids: ['#58']
   recipes: []
-  notes: OSNet gate method probe for handover path.
+  notes: 'Cold-supported closed line; retain for replay/diagnostics. Reopening requires a new action point or substrate. OSNet gate method probe (historical) for handover path.'
 - id: probe_sparse_bank_equivalence
   path: scripts/eval/diagnostics/probe_sparse_bank_equivalence.py
   door: E
@@ -725,10 +726,10 @@ tools:
   roles: [wrapper]
   priority: P2
   fact_owner: docs/modules/semantic/research/chebgr_handover_signal_map_20260704.md
-  no_go_ids: []
+  no_go_ids: ['#58']
   recipes: []
   canonical_id: cheb_gr_osnet_gate
-  notes: Compat entry only; edit/read canonical tool.
+  notes: Compat entry only; edit/read canonical tool. Door D cold-supported (P2).
 recipes: [{id: R-A, title: Offline bridge pool + kinematics, door: A, purpose: Build offline candidate
       table and optional kinematics / gate analyses on a fixed no-relink substrate., steps: [mot17, build_relink_candidates,
       analyze_preloss_motion, analyze_turn_baseline, sweep_speed_turn, validate_reach_gate, optimize_relink_weight],
@@ -743,8 +744,10 @@ recipes: [{id: R-A, title: Offline bridge pool + kinematics, door: A, purpose: B
       and synthesize applicability maps.', steps: [mot17, cheb_gr_offline_handover_report, compare_handover_summaries,
       synthesize_handover_applicability, compare_detector_suffix_runs, run_offline_handover_ablation],
     fact_owner: docs/modules/semantic/research/chebgr_handover_signal_map_20260704.md, expected_artifacts: [
-      _cheb_gr_offline_handover.csv, parameter_summary.json], notes: Handover log via mot17 + module lifecycle
-      YAML. Detector-suffix compare only when claiming splits; ablation optional.}, {id: R-E, title: Sparse
+      _cheb_gr_offline_handover.csv, parameter_summary.json], notes: 'Door D is cold-supported closed research
+      (P2): retain for replay/diagnostics, not active optimization. Handover log via mot17 + module lifecycle
+      YAML. Detector-suffix compare only when claiming splits; ablation optional. Reopening requires a new
+      action point or substrate (see #58).'}, {id: R-E, title: Sparse
       bank equivalence, door: E, purpose: Probe sparse vs dense bank equivalence on the CleanFifo substrate.,
     steps: [probe_sparse_bank_equivalence], fact_owner: docs/modules/semantic/research/clean_fifo_bank_substrate_20260704.md,
     notes: Optional end-to-end bank mode via run_offline_handover_ablation (Door D tool).}, {id: R-F,
