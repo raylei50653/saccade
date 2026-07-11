@@ -18,8 +18,8 @@
 
 **Safe-Region Assetization — A1 CLOSED (`A1_ACCEPTED_WITH_LIMITS`)**
 
-- Thread: [safe_region_assetization_20260710.md](../../research/threads/safe_region_assetization_20260710.md)
-- **A1 terminal recorded 2026-07-11**: `A1_ACCEPTED_WITH_LIMITS` → **maturity A1**; 5 enumerated limits (no D1 trace · no second consumer · event-mass / non-productive-cell / predicate-alias queries need raw) — [terminal record](../../research/threads/safe_region_assetization_20260710.md#a1-terminal-record-2026-07-11)
+- Thread: [safe_region_assetization_20260710.md](../../research/threads/closed/safe_region_assetization_20260710.md)
+- **A1 terminal recorded 2026-07-11**: `A1_ACCEPTED_WITH_LIMITS` → **maturity A1**; 5 enumerated limits (no D1 trace · no second consumer · event-mass / non-productive-cell / predicate-alias queries need raw) — [terminal record](../../research/threads/closed/safe_region_assetization_20260710.md#a1-terminal-record-2026-07-11)
 - Acceptance unit: conversion pack `1a180620bc…` (`out/signal_study/m_b1_5_safe_region_asset_r1_20260710/`); audit **26/26 PASS** + mutation sensitivity **5/5** — [audit note](research/safe_region_a1_audit_20260711.md)
 - **R1 / R1.1 remain external diagnostic overlay** (not A1 objects; not pack consumers):
   - R1 V-C = heuristic-specific descriptive failure (LOO pool global-label-screened; class null retracted) — [note](research/safe_region_assetization_r1_20260710.md)
@@ -44,12 +44,12 @@
 ## Related research threads（不佔 WIP 鎖）
 
 - [gt-support morphology](../../research/threads/gt_support_morphology_20260711.md) — **ACTIVE**（sole active 本體）· PR-A/B/C sealed · PR-D / #107 **`ACCEPTED_WITH_LIMITS`** · next restricted-closure prototype
-- [safe-region assetization](../../research/threads/safe_region_assetization_20260710.md) — **A1 CLOSED (`A1_ACCEPTED_WITH_LIMITS`, maturity A1)** · mainline handed off → gt-support morphology · [PR #95](https://github.com/raylei50653/saccade/pull/95)/[#97](https://github.com/raylei50653/saccade/pull/97) history
-- [composition grammar coverage program](../../research/threads/composition_grammar_coverage_program_20260710.md) — **SUPERSEDED** · coverage map absorbed into assetization R2–R4
-- [composition grammar × safe-region A0](../../research/threads/composition_grammar_safe_region.md) — **CLOSED** · T0-A/B/R1 · terminal B retained
+- [safe-region assetization](../../research/threads/closed/safe_region_assetization_20260710.md) — **A1 CLOSED (`A1_ACCEPTED_WITH_LIMITS`, maturity A1)** · mainline handed off → gt-support morphology · [PR #95](https://github.com/raylei50653/saccade/pull/95)/[#97](https://github.com/raylei50653/saccade/pull/97) history
+- [composition grammar coverage program](../../research/threads/closed/composition_grammar_coverage_program_20260710.md) — **SUPERSEDED** · coverage map absorbed into assetization R2–R4
+- [composition grammar × safe-region A0](../../research/threads/closed/composition_grammar_safe_region.md) — **CLOSED** · T0-A/B/R1 · terminal B retained
   - A0 source note: [composition_grammar_t0_region_interpretation_20260710.md](research/composition_grammar_t0_region_interpretation_20260710.md)
   - Coverage audit: [composition_grammar_safe_region_coverage_audit_20260710.md](research/composition_grammar_safe_region_coverage_audit_20260710.md)
-- [m_b1 online hook](../../research/threads/m_b1_online_hook_20260709.md) — **CLOSED** · S1+S2 Q4.5 B · ranking deferred (invalid assignment-group key)
+- [m_b1 online hook](../../research/threads/closed/m_b1_online_hook_20260709.md) — **CLOSED** · S1+S2 Q4.5 B · ranking deferred (invalid assignment-group key)
   - Offline history: [m_b1_research_history_20260709_20260710.md](research/m_b1_research_history_20260709_20260710.md)
   - S1 final: [m_b1_stage1_online_hook_final_20260710.md](research/m_b1_stage1_online_hook_final_20260710.md)
 - [association recovery registry](../../research/threads/association_recovery_registry_20260709.md)

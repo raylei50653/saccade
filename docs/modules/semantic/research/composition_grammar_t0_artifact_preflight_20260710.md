@@ -9,7 +9,7 @@
 **Task:** T0-A artifact preflight only  
 **Branch:** `research/m-b1-5-t0-region-preflight`  
 **Authorize commit:** `6ef90ac80d52153e02b7445736ed1c15cecf8d3e`  
-**Thread:** [composition_grammar_safe_region.md](../../../research/threads/composition_grammar_safe_region.md)
+**Thread:** [composition_grammar_safe_region.md](../../../research/threads/closed/composition_grammar_safe_region.md)
 
 > Answers **what can be faithfully derived** from existing artifacts.  
 > **Not** seven-output implementation · **not** terminal change · **not** T0-B · **not** evaluator rerun.

@@ -230,7 +230,7 @@ These are **not** interchangeable with Q4 grades or Q4.5 atlas letters.
 |:--|:--|
 | `docs/modules/semantic/README.md` | 3 canonicals + retained contracts + this report |
 | `docs/modules/semantic/TODO.md` | S1/S2 finals; Q4.5 terminal language |
-| `docs/research/threads/m_b1_online_hook_20260709.md` | v4 one-liner + namespaces |
+| `docs/research/threads/closed/m_b1_online_hook_20260709.md` | v4 one-liner + namespaces |
 | `docs/research/threads/README.md` | one-line status |
 | `docs/research/eval/signal_analysis_ledger.md` | doc links → history/finals |
 | retained contracts + plan | evidence links → finals; plan top summary **154** |
@@ -315,5 +315,5 @@ git cat-file -t e25574d9bc28955e2b94bfb0c1e053e4382b8935   # blob
 5. [Stage 2 entry contract](m_b1_5_stage2_entry_contract_20260710.md)
 6. [Stage 2 D_online final](m_b1_5_stage2_d_online_final_20260710.md) — **v4 truth**
 7. [Two-stage plan](m_b1_to_m_b1_5_two_stage_plan_20260710.md)
-8. Thread: [m_b1_online_hook_20260709.md](../../../research/threads/m_b1_online_hook_20260709.md)
+8. Thread: [m_b1_online_hook_20260709.md](../../../research/threads/closed/m_b1_online_hook_20260709.md)
 9. Evidence pack: [evidence/m_b1_5_stage2_q45_20260710/](evidence/m_b1_5_stage2_q45_20260710/)

@@ -41,7 +41,7 @@ Parking preserves this bounded conclusion. It does not convert the local positiv
 2. [WP2 seq conditioning](../../modules/semantic/research/occ_exit_audit_p55_wp2_seq_conditioning_20260709.md)
 3. [occ_exit scope](../../modules/semantic/research/occ_exit_audit_p55_scope_20260709.md)
 4. [clean_fifo_bank substrate](../../modules/semantic/research/clean_fifo_bank_substrate_20260704.md)
-5. [Safe-Region Assetization Program](safe_region_assetization_20260710.md)
+5. [Safe-Region Assetization Program](closed/safe_region_assetization_20260710.md)
 
 ## Artifacts
 

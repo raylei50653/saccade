@@ -31,7 +31,7 @@ from pathlib import Path
 import pandas as pd
 
 # Predeclared golden answers: the accepted A0 baseline recorded in
-# docs/research/threads/safe_region_assetization_20260710.md BEFORE this audit.
+# docs/research/threads/closed/safe_region_assetization_20260710.md BEFORE this audit.
 GOLDEN = {
     "n_productive_safe": 154,
     "split_g1_g2_g3": (1, 153, 0),
@@ -463,7 +463,7 @@ def main() -> int:
             "S0/S1/Q1/N1 only. No D1 decision-trace, no terminal; "
             "A1 terminal remains a research-owner decision."
         ),
-        "golden_source": "docs/research/threads/safe_region_assetization_20260710.md accepted A0 baseline (predeclared)",
+        "golden_source": "docs/research/threads/closed/safe_region_assetization_20260710.md accepted A0 baseline (predeclared)",
     }
     (args.out / "a1_audit_report.json").write_text(json.dumps(report, indent=2))
     with pd.option_context("display.width", 200, "display.max_colwidth", 110):

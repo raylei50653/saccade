@@ -27,10 +27,10 @@ closed: 2026-07-10
 
 ## Read first
 
-1. [T0-B final interpretation](../../modules/semantic/research/composition_grammar_t0_region_interpretation_20260710.md)
-2. [T0-A artifact preflight](../../modules/semantic/research/composition_grammar_t0_artifact_preflight_20260710.md)
-3. [Coverage audit](../../modules/semantic/research/composition_grammar_safe_region_coverage_audit_20260710.md)
-4. [Stage 2 final](../../modules/semantic/research/m_b1_5_stage2_d_online_final_20260710.md)
+1. [T0-B final interpretation](../../../modules/semantic/research/composition_grammar_t0_region_interpretation_20260710.md)
+2. [T0-A artifact preflight](../../../modules/semantic/research/composition_grammar_t0_artifact_preflight_20260710.md)
+3. [Coverage audit](../../../modules/semantic/research/composition_grammar_safe_region_coverage_audit_20260710.md)
+4. [Stage 2 final](../../../modules/semantic/research/m_b1_5_stage2_d_online_final_20260710.md)
 5. [Safe-region assetization](safe_region_assetization_20260710.md)
 
 ## Final evidence state

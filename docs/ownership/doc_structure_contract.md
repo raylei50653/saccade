@@ -102,7 +102,7 @@ Place near the top of each new note under:
 - other dated research notes under `docs/research/` as applicable
 
 ```html
-<!-- doc-status: active | parked | closed | archived -->
+<!-- doc-status: proposed | active | parked | closed | archived -->
 <!-- doc-promotion: none | ledger | report_data | archive | no_go -->
 <!-- doc-date: YYYY-MM-DD -->
 ```
@@ -112,6 +112,8 @@ Optional:
 ```html
 <!-- doc-module: semantic | detection | cross | … -->
 ```
+
+Thread cards under `docs/research/threads/` may use YAML frontmatter instead of HTML comments; same status vocabulary. Closed threads also set `closed: YYYY-MM-DD` (optional `closed-verdict`).
 
 | Field | Meaning |
 |:--|:--|
@@ -129,7 +131,7 @@ Optional:
 | Entry | Obligation |
 |:--|:--|
 | `docs/research/README.md` | Active workstreams (including **pointers** into module research), Closed lines, Paper → `report_data`, subdir entry points（含 `threads/`）; **no phantom paths** |
-| `docs/research/threads/README.md` | Index **all** active thread cards; threads are navigation-only |
+| `docs/research/threads/README.md` | Index **all** thread cards by lifecycle table (Proposed / Active / Parked / Closed); closed cards live under `threads/closed/`; close = move + row + frontmatter; navigation-only |
 | `docs/research/<sub>/README.md` | Index **all** `.md` in that subdir (except the README itself), **or** state “no index; filenames only” and do not claim a table elsewhere |
 | `docs/modules/<m>/README.md` | If `research/` exists, index **all** research notes |
 | `report_data/README.md` | Start-here list; **one-line** link to decision paper outline |
@@ -166,10 +168,13 @@ Numbers: each line keeps its own master. Entry docs that quote baselines still f
 
 | status | Meaning | Entry behavior |
 |:--|:--|:--|
+| `proposed` | Spec / mother-line written; not started or not authorized as sole active | Proposed section (threads); does not consume WIP |
 | `active` | In progress; should align with module sole active or a named cross-module line | README Active section |
 | `parked` | Intentionally paused | Parked section; does not consume WIP |
-| `closed` | Done but still citable | May stay in place; mark closed; ledger / no_go as needed |
+| `closed` | Done but still citable as navigation | **Move** card to `docs/research/threads/closed/`; Closed index row + `closed:` date; ledger / no_go only if claims promote |
 | `archived` | One-shot / not current | Move to `docs/archive/` or archive index only |
+
+**Threads close protocol (summary):** same change updates (1) thread frontmatter `doc-status: closed` + `closed: YYYY-MM-DD`, (2) body `Final status` / terminal + History close line, (3) **`git mv` into `docs/research/threads/closed/`** + fix relative links / repo pointers, (4) `docs/research/threads/README.md` Closed row + `closed/README.md` index. Do not delete the card; do not leave closed cards in `threads/` root. Full checklist: [threads/README.md § How to close](../research/threads/README.md).
 
 **Closed decision line:** [tracker-decision/status_2026-07-09.md](../research/tracker-decision/status_2026-07-09.md) (P0–P8) is read-only; no drive-by reopen (WIP rules).
 

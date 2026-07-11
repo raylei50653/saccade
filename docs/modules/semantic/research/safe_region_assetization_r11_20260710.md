@@ -209,7 +209,7 @@ Terminal **B retained and mechanistically strengthened**.
 
 ## Next-stage gate (owner only)
 
-**2026-07-10 review superseded this ordering; terminal now recorded:** `A1_ACCEPTED_WITH_LIMITS` was recorded 2026-07-11 (maturity A1, gate closed — see [thread terminal record](../../../research/threads/safe_region_assetization_20260710.md#a1-terminal-record-2026-07-11)). The four lines below are **candidate directions only, none committed**; the owner picks the next scientific uncertainty on the research mainline. Choose **one** narrow line (not all):
+**2026-07-10 review superseded this ordering; terminal now recorded:** `A1_ACCEPTED_WITH_LIMITS` was recorded 2026-07-11 (maturity A1, gate closed — see [thread terminal record](../../../research/threads/closed/safe_region_assetization_20260710.md#a1-terminal-record-2026-07-11)). The four lines below are **candidate directions only, none committed**; the owner picks the next scientific uncertainty on the research mainline. Choose **one** narrow line (not all):
 
 1. **Conditional applicability** research (F3+F4) — sequence/context-gated use of residual predicates; still no global gate.
 2. **New signal family** (F3) — only with explicit owner auth and new cohort contract.

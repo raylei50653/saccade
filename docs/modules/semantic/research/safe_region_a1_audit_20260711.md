@@ -99,7 +99,7 @@ The block above is the pre-terminal state, kept for the record. After PR #97 mer
 A1_ACCEPTED_WITH_LIMITS → maturity A1 — gate CLOSED
 ```
 
-Authoritative record with full accepted scope / acceptance_limits / non-authorizations: [thread § A1 terminal record](../../../research/threads/safe_region_assetization_20260710.md#a1-terminal-record-2026-07-11). No post-hoc D1 was run; its absence is an enumerated `acceptance_limit`.
+Authoritative record with full accepted scope / acceptance_limits / non-authorizations: [thread § A1 terminal record](../../../research/threads/closed/safe_region_assetization_20260710.md#a1-terminal-record-2026-07-11). No post-hoc D1 was run; its absence is an enumerated `acceptance_limit`.
 
 ## Reproduce
 

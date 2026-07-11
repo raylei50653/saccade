@@ -8,7 +8,7 @@ doc-module: semantic
 # MOT M-B1 → M-B1.5 two-stage implementation plan
 
 > **Role:** Stage 1 + Stage 2 engineering contract (single source; methods + full-table rules).  
-> **Navigation:** [m_b1 online hook thread](../../../research/threads/m_b1_online_hook_20260709.md) · [hook ABI](m_b1_portable_or_tail_hook_contract_20260709.md).  
+> **Navigation:** [m_b1 online hook thread](../../../research/threads/closed/m_b1_online_hook_20260709.md) · [hook ABI](m_b1_portable_or_tail_hook_contract_20260709.md).  
 > **Evidence:** [Stage 1 final](m_b1_stage1_online_hook_final_20260710.md) · [Stage 2 final](m_b1_5_stage2_d_online_final_20260710.md).  
 > **Not evidence tables:** freeze card / ledger / study dirs own numbers.
 

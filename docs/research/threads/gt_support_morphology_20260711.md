@@ -63,7 +63,7 @@ AUTHORIZED only as a separate post-merge task
 3. [Step-0 note](../../modules/semantic/research/gt_support_morphology_step0_20260711.md)
 4. [Partial-order audit note](../../modules/semantic/research/boolean_atom_partial_order_20260711.md)
 5. Study artifacts: `out/signal_study/gt_support_morphology_step0_20260711/`
-6. 前線 handoff: [safe-region assetization thread](safe_region_assetization_20260710.md)（A1 CLOSED；R1.1 role-reversal 症狀 = 本線 escape-tail 機制的描述性前身）
+6. 前線 handoff: [safe-region assetization thread](closed/safe_region_assetization_20260710.md)（A1 CLOSED；R1.1 role-reversal 症狀 = 本線 escape-tail 機制的描述性前身）
 
 ## Artifacts
 

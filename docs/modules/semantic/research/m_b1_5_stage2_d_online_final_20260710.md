@@ -9,8 +9,8 @@
 **Role:** Canonical Stage 2 evidence on \(D_{\text{online}}\) through Q4.5 atlas terminal.  
 **Entry contract (retain separately):** [m_b1_5_stage2_entry_contract_20260710.md](m_b1_5_stage2_entry_contract_20260710.md)  
 **Stage 1 final:** [m_b1_stage1_online_hook_final_20260710.md](m_b1_stage1_online_hook_final_20260710.md)  
-**Closed thread (history):** [m_b1_online_hook_20260709.md](../../../research/threads/m_b1_online_hook_20260709.md)  
-**Active next (T0):** [composition_grammar_safe_region.md](../../../research/threads/composition_grammar_safe_region.md)  
+**Closed thread (history):** [m_b1_online_hook_20260709.md](../../../research/threads/closed/m_b1_online_hook_20260709.md)  
+**Active next (T0):** [composition_grammar_safe_region.md](../../../research/threads/closed/composition_grammar_safe_region.md)  
 **Coverage audit:** [composition_grammar_safe_region_coverage_audit_20260710.md](composition_grammar_safe_region_coverage_audit_20260710.md)  
 **Consolidation:** [m_b1_doc_consolidation_report_20260710.md](m_b1_doc_consolidation_report_20260710.md)
 
