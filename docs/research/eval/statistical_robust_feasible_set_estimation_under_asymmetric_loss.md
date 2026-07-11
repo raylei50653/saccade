@@ -1340,19 +1340,40 @@ Cells with zero GT exposure are **unresolved**, never "high-risk", never "barrie
 ```text
 atom set + per-atom safe orientation (z_i = 1 == safer side)
 binarization rule (sealed thresholds, or per-fold rule)
-trial unit (§8.1) and clustering structure
+trial unit (§8.1), clustering structure, and the UCB method
+  (incl. cluster handling when residual clustering is declared)
+candidate universe Omega + missing-value behavior
 epsilon, alpha, per-cell n_min, identifiability fraction
 atom grouping for distance decomposition (e.g. structural vs motion)
 morphology budget epsilon_morph + interval method (§19.5)
-allowed closure complexity class (which monotone families C may range over)
+allowed closure complexity class (which up-set families C may range over)
+closure direction convention + deterministic tie-break order
 conditionable atom family for escape tails (e.g. motion)
 ```
 
 For any claim above L1, atom discovery, orientation, and binarization must satisfy §8.3 per-fold disjointness.
 
-### 19.4 Fixed morphology statistics
+### 19.4 Fixed morphology statistics and trial semantics
 
-Let $d_H(z)$ be Hamming distance to the all-safe corner $\mathbf 1$; a GT trial unit maps to its minimum-$d_H$ cell.
+#### Set-valued trial semantics (normative)
+
+A GT trial unit $u$ generally owns **multiple** valid GT rows. Define:
+
+$$
+Z_u = \{\,\text{cells of all valid GT rows of } u\,\}
+$$
+
+For any candidate safe closure $C$, track-level hurt is **set-valued**:
+
+$$
+H_C(u) = \mathbf 1\left[\, Z_u \cap C = \varnothing \,\right]
+$$
+
+i.e. a unit is hurt only when the closure retains **none** of its valid GT candidates. All formal core/closure feasibility statistics must use $H_C(u)$.
+
+The **minimum-$d_H$ representative** (the unit's Hamming-closest cell to the all-safe corner $\mathbf 1$) is a **descriptive statistic only** — it may be used for shell profiles, never as the trial representation for closure validation: the Hamming-closest row need not be the safest row under the declared partial order, and ties can arbitrarily flip closure membership.
+
+#### Descriptive statistics
 
 ```text
 M_0        = P_GT(d_H = 0)                     corner mass
@@ -1362,7 +1383,9 @@ V_ij       = P_GT(z_i = 0, z_j = 0)            joint violation profile
 d_H        = d_structural + d_motion           declared-group decomposition
 ```
 
-FP mass is reported on the same shells (rejectable material per shell).
+(all computed on the min-$d_H$ representative; descriptive layer only.)
+
+FP mass is reported on the same shells (rejectable material per shell). A tail identified by Hamming distance is a **far-Hamming descriptive tail**; the term *out-of-core GT mass* is reserved for $\{u : H_{C^\star}(u)=1\}$ after the core $C^\star$ has actually been solved.
 
 ### 19.5 Verdict typology (fixed terminals) and class boundaries
 
@@ -1374,14 +1397,35 @@ $$
 \varepsilon_{\mathrm{morph}} = 5\%
 $$
 
-evaluated as a **one-sided 95% Clopper–Pearson upper bound at the §8.1 trial unit**. $\varepsilon_{\mathrm{morph}}$ governs morphology classification (thin tail vs diffuse) only; it is **not** a production GT-hurt budget (0 / 0.1% / 1% budgets are separate contracts).
+evaluated as a **one-sided 95% upper confidence bound at the §8.1 trial unit**. $\varepsilon_{\mathrm{morph}}$ governs morphology classification (thin tail vs diffuse) only; it is **not** a production GT-hurt budget (0 / 0.1% / 1% budgets are separate contracts).
+
+#### UCB validity (cluster condition)
+
+A Clopper–Pearson bound is valid **only when the declared trial units are independent Bernoulli trials**. When the study declares residual clustering above the trial unit (per §8.1 — e.g. sequence-level shared scene and pipeline state), the unique-unit count is only an upper bound on the number of independent trials, and a plain CP bound is anti-conservative. In that case the study must either:
+
+- use a **cluster-aware bound** (e.g. aggregate to the clustering level, or a declared cluster-robust method), or
+- further aggregate the trial unit until the independence assumption is defensible.
+
+A plain CP number computed under declared residual clustering may be reported only as a **nominal diagnostic** (`nominal; not cluster-adjusted`) and **must not be used to cross the $\varepsilon_{\mathrm{morph}}$ boundary**; a terminal that would depend on it stays `UNRESOLVED`.
 
 #### Core definition
 
-The core is **not** a fixed Hamming radius. It is defined as:
+The core is **not** a fixed Hamming radius and **not** bare set-inclusion minimality. Fix the safe-orientation partial order ($z' \ge z$ = coordinate-wise at least as safe); let $\mathcal C$ be the declared family of **upper sets (up-sets)** over the morphology-supported atoms, subject to the declared complexity cap; the reject domain $D = \Omega \setminus C$ is the complementary down-set. The core is:
 
-> the minimal closure $C$ in the declared monotone atom family / partial order such that
-> $\operatorname{UCB}_{95}\!\left[P_{\mathrm{GT}}(Z\notin C)\right] \le \varepsilon_{\mathrm{morph}}$.
+$$
+C^\star \in
+\arg\min_{C \in \mathcal C}
+P_{\mathrm{FP}}(Z \in C)
+\quad
+\text{s.t.}
+\quad
+\operatorname{UCB}\!\left[\, P\!\left(H_C(u)=1\right) \,\right]
+\le \varepsilon_{\mathrm{morph}}
+$$
+
+with $H_C(u)$ the set-valued hurt of §19.4 and the UCB satisfying the validity conditions above. Minimizing retained FP mass makes $D^\star = \Omega \setminus C^\star$ the maximal-FP-removal reject domain of §19.1 under the same constraint — the two problems are complementary by construction.
+
+**Deterministic tie-breaks** (applied in order among constraint-feasible minimizers): (1) smaller registered cell count $|C|$; (2) lexicographically smallest sorted cell-index sequence. The candidate universe $\Omega$ and missing-value behavior must be declared (§19.3); incomparable minimizers after both tie-breaks indicate an under-declared complexity class and must be reported, not silently resolved.
 
 Hamming shell quantities ($M_r$, $T_{\ge r}$, $R_{95}$) remain **descriptive** reporting and must not serve as cross-atom-set class boundaries.
 
@@ -1391,13 +1435,15 @@ Each study must land on exactly one verdict:
 
 ```text
 MONOTONE_CORE
-  A predeclared monotone closure C exists with
-  UCB95[P_GT(Z ∉ C)] <= epsilon_morph, and out-of-core GT events do not
-  form a repeatable, mechanism-consistent true GT regime.
+  A predeclared monotone closure C has been SOLVED (per the core
+  definition above) with a VALID (cluster-condition-satisfying)
+  UCB[P(H_C(u)=1)] <= epsilon_morph, and out-of-core units
+  {u : H_C(u)=1} do not form a repeatable, mechanism-consistent
+  true GT regime.
 
 CORE_PLUS_CONDITIONAL_ESCAPE_TAIL
-  Such a closure C exists, 0 < N_GT(Z ∉ C), and
-  UCB95[P_GT(Z ∉ C)] <= epsilon_morph, AND forensics (post-seal) confirm:
+  Such a closure C has been solved, 0 < #{u : H_C(u)=1}, and a VALID
+  UCB[P(H_C(u)=1)] <= epsilon_morph, AND forensics (post-seal) confirm:
     - the tail is true GT (not annotation / signal-computation issues);
     - violations concentrate on the predeclared conditionable family
       (e.g. motion) while structural/height conditions are retained;
@@ -1413,11 +1459,17 @@ DIFFUSE_OR_NONMONOTONE
   nested folds.
 
 UNRESOLVED
-  Any of: the confidence bound straddles epsilon_morph; exposure for a
-  key family is insufficient; the terminal is unstable under sealed
-  thresholds; nested folds yield mutually exclusive verdicts; forensics
-  leave unexcluded annotation or signal-computation issues.
+  Any of: no valid (cluster-condition-satisfying) UCB is available at
+  the declared trial unit; the confidence bound straddles epsilon_morph;
+  the core C has not been solved under the declared partial order;
+  exposure for a key family is insufficient; the terminal is unstable
+  under sealed thresholds; nested folds yield mutually exclusive
+  verdicts; forensics leave unexcluded annotation or signal-computation
+  issues.
   Verdict is "collect exposure / resolve the blocker", not "search rules".
+  An UNRESOLVED study may still record a bounded DESCRIPTIVE MORPHOLOGY
+  HYPOTHESIS (e.g. shell profile + violation profile) without terminal
+  force.
 ```
 
 Escape-tail forensics must classify each tail unit into predeclared categories only:

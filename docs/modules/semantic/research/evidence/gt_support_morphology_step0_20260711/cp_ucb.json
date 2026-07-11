@@ -1,0 +1,19 @@
+{
+ "trial_unit": "lost_track(seq,lost_id)",
+ "n_tracks": 209,
+ "numerator_x": 4,
+ "numerator_definition": "far-Hamming descriptive tail (k=8, min d_H >= 3)",
+ "method": "Clopper-Pearson one-sided 95% upper bound",
+ "value_x0": 0.01423140958268787,
+ "value_x": 0.043258946170651215,
+ "status": "nominal; not cluster-adjusted (sequence-level residual clustering declared)",
+ "boundary_use": "forbidden for epsilon_morph classification (framework \u00a719.5 UCB validity)",
+ "min_d_h_histogram_k8": {
+  "0": 117,
+  "1": 77,
+  "2": 11,
+  "3": 2,
+  "4": 1,
+  "6": 1
+ }
+}

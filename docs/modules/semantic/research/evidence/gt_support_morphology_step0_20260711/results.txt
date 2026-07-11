@@ -1,0 +1,106 @@
+pool rows (gt_valid): 21789
+GT rows: 340  FP rows: 21449
+GT unique lost tracks: 209
+pooled GT0 95% UCB (rule of 3, track unit): 0.014
+  MOT17-02-SDP: GT rows   72  tracks   48
+  MOT17-04-SDP: GT rows   12  tracks   12
+  MOT17-05-SDP: GT rows   42  tracks   34
+  MOT17-09-SDP: GT rows   14  tracks   12
+  MOT17-10-SDP: GT rows  157  tracks   71
+  MOT17-11-SDP: GT rows   20  tracks   16
+  MOT17-13-SDP: GT rows   23  tracks   16
+
+atom binarization (pool median):
+  score_m_bridge   thr=    4.7855  P(z=1)=0.500  P(z=1|GT)=0.906
+  bridge_dist      thr=    4.8962  P(z=1)=0.500  P(z=1|GT)=0.929
+  dist_h           thr=    2.4864  P(z=1)=0.500  P(z=1|GT)=0.921
+  log_h_ratio      thr=    0.5674  P(z=1)=0.500  P(z=1|GT)=0.976
+  resid_mean       thr=    5.9600  P(z=1)=0.500  P(z=1|GT)=0.894
+  dir_cos          thr=   -0.6935  P(z=1)=0.500  P(z=1|GT)=0.788
+  speed_mismatch   thr=    0.0262  P(z=1)=0.500  P(z=1|GT)=0.659
+  gap              thr=  129.0000  P(z=1)=0.502  P(z=1|GT)=0.815
+
+[k=4] pooled 7-seq  cells=16
+  occupied cells (any row): 16/16 (100.0%)
+  cells with >=1 GT track: 11/16
+  cells with >=  5 GT tracks:    5   (GT0 cell-level UCB <= 0.60)
+  cells with >= 10 GT tracks:    2   (GT0 cell-level UCB <= 0.30)
+  cells with >= 20 GT tracks:    1   (GT0 cell-level UCB <= 0.15)
+  cells with >= 30 GT tracks:    1   (GT0 cell-level UCB <= 0.10)
+  cells with >= 59 GT tracks:    1   (GT0 cell-level UCB <= 0.05)
+  GT track-cell mass: total=248 (tracks span multiple cells) top5 cells share=94.4%
+    cell z=1111  GT tracks= 204  FP rows=  3618
+    cell z=1101  GT tracks=  10  FP rows=  1147
+    cell z=0011  GT tracks=   9  FP rows=   871
+    cell z=0111  GT tracks=   6  FP rows=   262
+    cell z=0001  GT tracks=   5  FP rows=  3670
+
+[k=5] pooled 7-seq  cells=32
+  occupied cells (any row): 32/32 (100.0%)
+  cells with >=1 GT track: 15/32
+  cells with >=  5 GT tracks:    5   (GT0 cell-level UCB <= 0.60)
+  cells with >= 10 GT tracks:    2   (GT0 cell-level UCB <= 0.30)
+  cells with >= 20 GT tracks:    1   (GT0 cell-level UCB <= 0.15)
+  cells with >= 30 GT tracks:    1   (GT0 cell-level UCB <= 0.10)
+  cells with >= 59 GT tracks:    1   (GT0 cell-level UCB <= 0.05)
+  GT track-cell mass: total=251 (tracks span multiple cells) top5 cells share=92.4%
+    cell z=11111  GT tracks= 203  FP rows=  3477
+    cell z=11011  GT tracks=  10  FP rows=  1127
+    cell z=00110  GT tracks=   9  FP rows=   862
+    cell z=00010  GT tracks=   5  FP rows=  3329
+    cell z=01110  GT tracks=   5  FP rows=   246
+
+[k=6] pooled 7-seq  cells=64
+  occupied cells (any row): 63/64 (98.4%)
+  cells with >=1 GT track: 23/64
+  cells with >=  5 GT tracks:    4   (GT0 cell-level UCB <= 0.60)
+  cells with >= 10 GT tracks:    2   (GT0 cell-level UCB <= 0.30)
+  cells with >= 20 GT tracks:    2   (GT0 cell-level UCB <= 0.15)
+  cells with >= 30 GT tracks:    2   (GT0 cell-level UCB <= 0.10)
+  cells with >= 59 GT tracks:    1   (GT0 cell-level UCB <= 0.05)
+  GT track-cell mass: total=259 (tracks span multiple cells) top5 cells share=87.6%
+    cell z=111111  GT tracks= 168  FP rows=  2251
+    cell z=111110  GT tracks=  42  FP rows=  1226
+    cell z=001101  GT tracks=   7  FP rows=   412
+    cell z=110111  GT tracks=   6  FP rows=   845
+    cell z=110110  GT tracks=   4  FP rows=   282
+
+[k=8] pooled 7-seq  cells=256
+  occupied cells (any row): 227/256 (88.7%)
+  cells with >=1 GT track: 44/256
+  cells with >=  5 GT tracks:    6   (GT0 cell-level UCB <= 0.60)
+  cells with >= 10 GT tracks:    4   (GT0 cell-level UCB <= 0.30)
+  cells with >= 20 GT tracks:    3   (GT0 cell-level UCB <= 0.15)
+  cells with >= 30 GT tracks:    3   (GT0 cell-level UCB <= 0.10)
+  cells with >= 59 GT tracks:    1   (GT0 cell-level UCB <= 0.05)
+  GT track-cell mass: total=287 (tracks span multiple cells) top5 cells share=78.0%
+    cell z=11111111  GT tracks= 117  FP rows=  1043
+    cell z=11111101  GT tracks=  52  FP rows=   562
+    cell z=11111011  GT tracks=  31  FP rows=   559
+    cell z=11111110  GT tracks=  15  FP rows=   557
+    cell z=11111001  GT tracks=   9  FP rows=   348
+
+--- weakest folds, k=5 ---
+
+[k=5] MOT17-04-SDP  cells=32
+  occupied cells (any row): 15/32 (46.9%)
+  cells with >=1 GT track: 1/32
+  cells with >=  5 GT tracks:    1   (GT0 cell-level UCB <= 0.60)
+  cells with >= 10 GT tracks:    1   (GT0 cell-level UCB <= 0.30)
+  cells with >= 20 GT tracks:    0   (GT0 cell-level UCB <= 0.15)
+  cells with >= 30 GT tracks:    0   (GT0 cell-level UCB <= 0.10)
+  cells with >= 59 GT tracks:    0   (GT0 cell-level UCB <= 0.05)
+  GT track-cell mass: total=12 (tracks span multiple cells) top5 cells share=100.0%
+    cell z=11111  GT tracks=  12  FP rows=   161
+
+[k=5] MOT17-09-SDP  cells=32
+  occupied cells (any row): 23/32 (71.9%)
+  cells with >=1 GT track: 2/32
+  cells with >=  5 GT tracks:    1   (GT0 cell-level UCB <= 0.60)
+  cells with >= 10 GT tracks:    1   (GT0 cell-level UCB <= 0.30)
+  cells with >= 20 GT tracks:    0   (GT0 cell-level UCB <= 0.15)
+  cells with >= 30 GT tracks:    0   (GT0 cell-level UCB <= 0.10)
+  cells with >= 59 GT tracks:    0   (GT0 cell-level UCB <= 0.05)
+  GT track-cell mass: total=13 (tracks span multiple cells) top5 cells share=100.0%
+    cell z=11111  GT tracks=  12  FP rows=   133
+    cell z=11001  GT tracks=   1  FP rows=    42

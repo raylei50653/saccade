@@ -1,0 +1,74 @@
+{
+ "definition": "GT tracks with min over their gt rows of d_H(k=8) >= 3",
+ "representation": "descriptive min-d_H layer only (framework \u00a719.4)",
+ "n_tail_tracks": 4,
+ "per_sequence_tail_counts": {
+  "MOT17-10-SDP": 4
+ },
+ "tracks": {
+  "MOT17-10-SDP|455": {
+   "min_d_h": 4,
+   "gt_rows": [
+    {
+     "frame_row_bits_atom0_first": "10010101",
+     "d_h": 4
+    }
+   ]
+  },
+  "MOT17-10-SDP|459": {
+   "min_d_h": 3,
+   "gt_rows": [
+    {
+     "frame_row_bits_atom0_first": "11110001",
+     "d_h": 3
+    }
+   ]
+  },
+  "MOT17-10-SDP|467": {
+   "min_d_h": 3,
+   "gt_rows": [
+    {
+     "frame_row_bits_atom0_first": "11011001",
+     "d_h": 3
+    },
+    {
+     "frame_row_bits_atom0_first": "00010001",
+     "d_h": 6
+    },
+    {
+     "frame_row_bits_atom0_first": "00110110",
+     "d_h": 4
+    },
+    {
+     "frame_row_bits_atom0_first": "01010010",
+     "d_h": 5
+    },
+    {
+     "frame_row_bits_atom0_first": "00010000",
+     "d_h": 7
+    },
+    {
+     "frame_row_bits_atom0_first": "01110010",
+     "d_h": 4
+    },
+    {
+     "frame_row_bits_atom0_first": "00010000",
+     "d_h": 7
+    }
+   ]
+  },
+  "MOT17-10-SDP|503": {
+   "min_d_h": 6,
+   "gt_rows": [
+    {
+     "frame_row_bits_atom0_first": "00110000",
+     "d_h": 6
+    },
+    {
+     "frame_row_bits_atom0_first": "00110000",
+     "d_h": 6
+    }
+   ]
+  }
+ }
+}

@@ -7,10 +7,11 @@ created: 2026-07-11
 
 # GT-Support Morphology — Step-0 Identifiability + Placement Audit
 
-> **One-line:** 7-seq relink pair pool 上，Boolean atom lattice 的 **per-cell risk field 不可識別**（任何 k 下僅 1 個 cell 達 ε≤0.05 支撐），但 **GT placement distribution 可識別且形態明確**：GT 質量高度集中 all-safe corner（k=5 median-split 下 M₀=97.1%），僅 4/209 tracks 形成 motion-atom 集中的 escape tail（log_h_ratio 0/4 違反）。**Pooled, in-sample, boundaries-calibrated L1 candidate: `CORE_PLUS_CONDITIONAL_ESCAPE_TAIL`**（tail UCB 4.33% ≤ ε_morph 5%；procedure v1 未 seal）。
+> **One-line:** 7-seq relink pair pool 上，Boolean atom lattice 的 **per-cell risk field 不可識別**（任何 k 下僅 1 個 cell 達 ε≤0.05 支撐），但 **GT placement distribution 可識別**。**Procedure verdict: `UNRESOLVED`**（cluster-aware UCB 未建立、core closure 未求解、forensic 未跑、nested chain 未重跑）。**Descriptive morphology hypothesis（無 terminal 效力）**：corner-concentrated placement（k=5 median-split 下 M₀=97.1%）+ 一條 far-Hamming、motion-violation-enriched 的 descriptive tail（4/209 tracks；log_h_ratio 0/4 違反）。Track-level CP UCB x=4→4.33% 僅為 **nominal diagnostic（not cluster-adjusted）**，不得用於跨 ε_morph=5% 界線。
 
 Procedure: [framework §19（v1 — PROPOSED, awaiting owner seal）](../../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
-Study artifacts: `out/signal_study/gt_support_morphology_step0_20260711/`（scripts + recorded outputs）
+**Reproduction packet（committed, auditable from PR branch）**: [evidence/gt_support_morphology_step0_20260711/](evidence/gt_support_morphology_step0_20260711/manifest.json) — gt_rows.csv（340 GT rows × atom bits/values/d_H）· cell_occupancy_k{4,5,6,8}.csv · tail_tracks.json（4 tracks 全列 + per-seq 分布）· cp_ucb.json（numerator 出處 + nominal 標記）· audit scripts + recorded outputs · manifest 含 pairs.csv SHA256 seal
+Working dir（not tracked）: `out/signal_study/gt_support_morphology_step0_20260711/`
 
 ## 0. Scope and claim ceiling
 
@@ -27,9 +28,9 @@ Study artifacts: `out/signal_study/gt_support_morphology_step0_20260711/`（scri
 | Trial unit（§8.1） | lost track `(seq, lost_id)` → **209 GT tracks**；殘餘 clustering = sequence |
 | Atoms（8，mining-AUC 序） | score_m_bridge · bridge_dist · dist_h · log_h_ratio · resid_mean · dir_cos · speed_mismatch · gap（定向 z=1 = 較安全側；衍生式 = `audit_relink_safe_reject.ensure_prod_proxy_scores`） |
 | Binarization | pool median per signal（宣告為 audit-only） |
-| GT cell 映射 | track 取其 gt_match rows 的最小 Hamming cell |
+| GT cell 映射 | **descriptive layer**：track 取其 gt_match rows 的最小 Hamming cell（min-d_H representative）。正式 closure 驗證須用 §19.4 set-valued semantics（Z_u 全集 + H_C(u)），本 audit 未做 |
 
-Pooled GT0 的 95% UCB（rule of three, track 單位）= **3/209 ≈ 1.4%** — 這是任何 reject-domain claim 的 pooled 下限精度。
+Pooled GT0 的 95% UCB（rule of three, track 單位）= **3/209 ≈ 1.4%**，**nominal（not cluster-adjusted）**：209 tracks 之上仍有宣告的 sequence-level residual clustering，此值只是 pooled 精度的樂觀下限示意，不得直接作 boundary 判定（framework §19.5 UCB validity）。
 
 ## 2. Per-cell identifiability（class-6 gate）— FAIL
 
@@ -55,7 +56,9 @@ Hamming distance to all-safe corner（track = min-d cell）：
 
 FP 質量分佈相反：k=8 時 **67.7% FP rows 位於 d≥3**（k=5：51.4%）——該區僅 4 個 GT tracks。coverage–risk 交換在遠區結構性有利。
 
-**Escape tail 違反側寫（k=8，d≥3 的 4 tracks）：**
+**Far-Hamming descriptive tail 違反側寫（k=8，d≥3 的 4 tracks；min-d_H representative）：**
+
+> ⚠ **Per-sequence 分布：4/4 全在 MOT17-10-SDP**（packet `tail_tracks.json`）。tail 的「4 個 trial」共享同一場景與 pipeline state —— sequence-level clustering 在此不是理論疑慮而是實據，任何把 4 當獨立試驗數的 bound 都不成立；這也是 verdict 停在 UNRESOLVED 的直接證物，並且是 PR-C forensic 的關鍵 context（單場景機制 vs 通用機制待分辨）。
 
 | atom | violated |
 |:--|--:|
@@ -68,28 +71,37 @@ FP 質量分佈相反：k=8 時 **67.7% FP rows 位於 d≥3**（k=5：51.4%）�
 
 機制解讀（候選）：長遮擋重入的真 relink **保高度、破運動連續性** — 與 R1.1 的 role-reversal 描述症狀及長 gap ReID 族群一致。含義：**motion 類 atoms（speed_mismatch / dir_cos / resid_mean）非全域單調**，不得直接作為全域 closure 維度；height 類（log_h_ratio）是目前唯一 0 違反的全域單調候選。
 
-## 4. Verdict（pooled, in-sample, boundaries-calibrated L1 candidate）
+## 4. Verdict
 
 ```text
-L1 candidate: CORE_PLUS_CONDITIONAL_ESCAPE_TAIL
-  - out-of-core GT mass (track unit, n=209, one-sided 95% Clopper–Pearson):
-      x=0 -> UCB 1.42%   x=4 -> UCB 4.33%  (<= epsilon_morph = 5%)
-    => 4-track tail 在描述層級成立 "thin tail"；1% 等級界線目前樣本量
-       無法證明
-  - violation profile: motion group 集中（speed_mismatch 4/4 · dir_cos 3/4 ·
+Procedure verdict: UNRESOLVED（framework §19.5）
+
+觸發的 UNRESOLVED 條件：
+  - 無 valid UCB：209 tracks 之上有宣告的 sequence-level residual
+    clustering（§8.1），且 tail 4/4 集中於 MOT17-10-SDP 單一序列
+    （clustering 為實據非假設）；plain CP 只算 nominal diagnostic，
+    不得跨 epsilon_morph 界線；cluster-aware bound 未建立
+  - core closure C* 未在宣告偏序下求解（out-of-core mass 無法計算）
+  - 4 條 far-Hamming tail 未 forensic
+  - nested chain（atom 發現/定向/二值化/verdict）未重跑
+
+Descriptive morphology hypothesis（bounded；無 terminal 效力）:
+  corner-concentrated placement with a small far-Hamming,
+  motion-violation-enriched tail
+  - M0 = 97.1%（k=5 median-split lattice；min-d_H representative，
+    descriptive layer only）
+  - far-Hamming descriptive tail: 4/209 tracks（k=8, d_H>=3）；
+    violation 集中 motion group（speed_mismatch 4/4 · dir_cos 3/4 ·
     resid_mean 3/4），log_h_ratio 0/4 -> mechanism-consistent（候選）
-  - 描述量：M0 = 97.1%（k=5 median-split lattice）——依 §19.5，shell 量
-    不作跨 atom-set 類別界線；正式 core = 最小 monotone closure（未定，
-    屬 nested per-fold）
-  - 其餘 cells: UNRESOLVED（not barriers; framework §19.2）
-NOT a sealed-procedure verdict, because:
-  - atoms 與 median thresholds 用同一 pool；
-  - epsilon_morph 界線是看過本 audit 後定的（§19.6 已申報）；
-  - 4 條 tail 未 forensic；
-  - nested chain 未重跑。
+  - nominal track-level CP diagnostic（not cluster-adjusted）:
+      x=0 -> 1.42%   x=4 -> 4.33%（n=209）
+    距 5% 界線僅 0.67pp，分類完全依賴未滿足的獨立性假設 -> 不採用
+  - 此 tail 是 Hamming 描述量，「out-of-core GT mass」一詞保留給
+    C* 求解後的 {u : H_C*(u)=1}（framework §19.4）
+  - 其餘 cells: UNRESOLVED support（not barriers; framework §19.2）
 ```
 
-尾巴是 **protected GT mass，不是 unsafe hole**：介入方向 = 移除或 regime-條件化被違反的 motion atoms，**不得 veto** 尾巴區域。
+尾巴仍是 **protected GT mass 候選，不是 unsafe hole**：介入方向 = 移除或 regime-條件化被違反的 motion atoms，**不得 veto**（此保護規則不依賴 terminal 判定）。
 
 ## 5. Next（evidence order，framework §19.6）
 

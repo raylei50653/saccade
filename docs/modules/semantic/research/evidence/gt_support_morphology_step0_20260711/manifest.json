@@ -1,0 +1,85 @@
+{
+ "study_id": "gt_support_morphology_step0_20260711",
+ "source_pairs_csv": "out/signal_study/m_b1_gate_coverage_7seq_20260709T121326Z/pairs.csv",
+ "source_pairs_csv_sha256": "0ae3896791ec074fbe951198752c17385c4ee0770a7ec3831225d3ea56a69d17",
+ "pool_filter": "gt_valid==1 (audit_relink_safe_reject.load_gt_valid_pool)",
+ "n_pool_rows": 21789,
+ "n_gt_rows": 340,
+ "n_gt_tracks": 209,
+ "atom_order": [
+  "score_m_bridge",
+  "bridge_dist",
+  "dist_h",
+  "log_h_ratio",
+  "resid_mean",
+  "dir_cos",
+  "speed_mismatch",
+  "gap"
+ ],
+ "binarization": "pool median (audit-only; best-case occupancy upper bound)",
+ "atom_thresholds": {
+  "score_m_bridge": {
+   "pool_median_threshold": 4.785528277259689,
+   "safe_side": "<= threshold",
+   "p_z1_pool": 0.500022947358759,
+   "p_z1_gt": 0.9058823529411765
+  },
+  "bridge_dist": {
+   "pool_median_threshold": 4.896242267101591,
+   "safe_side": "<= threshold",
+   "p_z1_pool": 0.500022947358759,
+   "p_z1_gt": 0.9294117647058824
+  },
+  "dist_h": {
+   "pool_median_threshold": 2.4864200240534564,
+   "safe_side": "<= threshold",
+   "p_z1_pool": 0.500022947358759,
+   "p_z1_gt": 0.9205882352941176
+  },
+  "log_h_ratio": {
+   "pool_median_threshold": 0.567380497694944,
+   "safe_side": "<= threshold",
+   "p_z1_pool": 0.500022947358759,
+   "p_z1_gt": 0.9764705882352941
+  },
+  "resid_mean": {
+   "pool_median_threshold": 5.959967542676205,
+   "safe_side": "<= threshold",
+   "p_z1_pool": 0.500022947358759,
+   "p_z1_gt": 0.8941176470588236
+  },
+  "dir_cos": {
+   "pool_median_threshold": -0.6935323377365586,
+   "safe_side": ">= threshold",
+   "p_z1_pool": 0.500022947358759,
+   "p_z1_gt": 0.788235294117647
+  },
+  "speed_mismatch": {
+   "pool_median_threshold": 0.02620862344601995,
+   "safe_side": "<= threshold",
+   "p_z1_pool": 0.500022947358759,
+   "p_z1_gt": 0.6588235294117647
+  },
+  "gap": {
+   "pool_median_threshold": 129.0,
+   "safe_side": "<= threshold",
+   "p_z1_pool": 0.5015833677543715,
+   "p_z1_gt": 0.8147058823529412
+  }
+ },
+ "trial_mapping": "descriptive min-d_H representative; set-valued H_C(u) NOT computed here",
+ "files": {
+  "cell_occupancy_k4.csv": "0d2288e6682aba3225fa1ade57de7b806825662a2cd761318630137a193a1687",
+  "cell_occupancy_k5.csv": "c09a47426ba918e46a6a41f822ce9fa25e409cbfd05b404adbaadd670ac25780",
+  "cell_occupancy_k6.csv": "83424d434b8fc828057a1a2dc98a64df3461fff08ba4603370d0a007517d8d96",
+  "cell_occupancy_k8.csv": "09f9fe002ab2c5d274cbb65699017c6c5a3600df646f402b056bb15ae50e8327",
+  "cp_ucb.json": "57e5b43aa52a75ba7de1d8e5a966ba48089a4c226d8fe3c7d88123b23a0b08e0",
+  "emit_reproduction_packet.py": "d3562d77b8fe1c75db02469e56ef285282dc1dc62b64db3bf7aae3f7a3cd4965",
+  "gt_rows.csv": "2e9d8a0259fc0bf8d2e6e20fac5d38ee9d18484f7be1f8be44dc182d017d18c6",
+  "hamming_profile.py": "9400db292b9f9f9d787377e60d58d995cc517b76bc4d191bc5a8ce07c31f201f",
+  "hamming_profile.txt": "d50c178c7190c5a2c5e0152ee43add90959d4e763338eb08d80ffaf7166f2002",
+  "results.txt": "deab4b38289ac42f79776d3656fd0a1a44479cf0295776f5c2410c8f0be60d51",
+  "step0_identifiability_audit.py": "5601be51d375a57b74ee4834b4ce1b54db61ca3506f173922e20b5dd805c5564",
+  "tail_tracks.json": "3f82ec1d088f335985d1ef0080a670afe9927bbd14537e7e27efb2766fb4d481"
+ }
+}
