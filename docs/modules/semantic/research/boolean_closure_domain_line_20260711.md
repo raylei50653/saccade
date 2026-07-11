@@ -41,12 +41,12 @@ $$
 - 哪些 atoms 在特定 regime 中發生 role reversal；
 - 現有 OR-tail 是否已接近最佳結構域，還是仍有更大的安全 reject closure。
 
-[Step-0 identifiability audit](gt_support_morphology_step0_20260711.md) 已表明：
+[Step-0 identifiability audit](gt_support_morphology_step0_20260711.md)（procedure verdict = **UNRESOLVED**；以下為 bounded descriptive hypothesis，無 terminal 效力）已表明：
 
 - 完整 per-cell GT risk landscape 在目前資料密度下不可識別；
 - GT placement distribution 可識別；
-- GT 質量呈現 corner-concentrated monotone core，另有極薄、機制可解釋的 long-gap re-entry tail；
-- motion 類 atoms 並非全域單調；height／scale 類 atoms 較接近全域單調候選。
+- 描述層假說：GT 質量 corner-concentrated，另有極薄的 far-Hamming、motion-violation-enriched descriptive tail（4/209，**4/4 集中 MOT17-10-SDP** —— sequence clustering 為實據，nominal CP 不得跨 ε_morph 界線）；
+- 假說層面：motion 類 atoms 可能非全域單調；height／scale 類 atoms 較接近全域單調候選（log_h_ratio 0/4 違反）——均待 PR-C forensic 與 Phase B partial-order audit 確認。
 
 因此研究物件應由：
 
@@ -92,7 +92,7 @@ $$
 
 （$\epsilon$ 為該 study 宣告的 GT-hurt budget；它與 §19.5 的形態分類預算 $\varepsilon_{\mathrm{morph}}=5\%$ 是**不同**的量，per-study 宣告。）
 
-reject domain $D$ 的 downward-closed 條件與 §19.5 的 core（最小 monotone **upper** closure $C$）是同一結構的兩面：$D \subseteq \Theta\setminus C$，$z\in D,\ z'\le z \Rightarrow z'\in D$。
+reject domain $D$ 的 downward-closed 條件與 §19.5 的 core（argmin retained-FP 的 monotone **upper** closure $C$）是同一結構的兩面：$D \subseteq \Theta\setminus C$，$z\in D,\ z'\le z \Rightarrow z'\in D$。**Track-level hurt 採 §19.4 set-valued semantics**：$Z_u$ = track $u$ 的所有有效 GT cells，$H_{C}(u)=\mathbf 1[Z_u\cap C=\varnothing]$（closure 未保留該 track 任何有效 GT candidate 才算 hurt）；$P_{\mathrm{GT}}(Z\in D)$ 類約束一律在此語意下計算，min-d_H representative 不得作 closure 驗證的 trial 表示。
 
 本問題包含兩個相互分離的研究責任：
 
@@ -154,11 +154,11 @@ $$
 | 5. threshold-sensitive morphology（形態對二值 threshold 高度敏感） | `UNRESOLVED`（sealed thresholds 下 terminal 不穩） |
 | 6. unresolved / non-identifiable | `UNRESOLVED` |
 
-目前 Step-0 的描述性初判：
+目前 Step-0 的 **procedure verdict = `UNRESOLVED`**（無 valid cluster-aware UCB、core 未求解、forensic 未跑、nested 未重跑；見 [Step-0 note §4](gt_support_morphology_step0_20260711.md)）。其 bounded descriptive hypothesis：
 
-> monotone core 為主體，另有 long-gap re-entry 的 conditional escape tail；tail 主要違反 motion continuity，而非 height consistency。
+> corner-concentrated placement 為主體，另有 far-Hamming、motion-violation-enriched 的 descriptive tail（違反 motion continuity 而非 height consistency；**4/4 集中單一序列 MOT17-10-SDP**）。
 
-此 verdict 目前僅屬 **pooled、in-sample、boundaries-calibrated L1 candidate**（見 [Step-0 note §4](gt_support_morphology_step0_20260711.md)）。
+此假說僅屬 pooled、in-sample 描述層，**不佔用任何 §19.5 terminal token**；正式 trial 表示須用 §19.4 set-valued semantics（$Z_u$ 全集 + $H_C(u)$），min-d_H representative 只作描述。
 
 ## 5. Atom 角色與偏序資格
 
@@ -396,7 +396,7 @@ Verdict E — Non-identifiable
 | Task | 內容 | PR |
 |:--|:--|:--|
 | Task 1 — Seal morphology procedure | unit of analysis、atom family eligibility、nested threshold generation、corner／shell／tail 指標、orderability 分類規則、verdict 邊界、無 exposure 處理規則 | **PR-A [#100](https://github.com/raylei50653/saccade/pull/100)（done pending merge）** |
-| Task 2 — Four-track forensic | Step-0 四條 $d\ge3$ GT tracks 逐件落入五個預宣告類別；判定 motion atom role reversal 是否具真實機制來源 | **PR-C** |
+| Task 2 — Four-track forensic | Step-0 四條 $d\ge3$ GT tracks（**4/4 在 MOT17-10-SDP**，見 packet `tail_tracks.json`）逐件落入五個預宣告類別；判定 motion atom role reversal 是否具真實機制來源，並分辨單場景 vs 通用機制 | **PR-C** |
 | Task 3 — Restricted closure prototype | 只用 `global_orderable` atoms 建 closure graph，parametric MWC，vs frozen OR-tail；read-only、offline、candidate-only，不改 production preset | **PR-D** |
 | Task 4 — Conditional closure probe | 若 Task 2 支持 re-entry mechanism：short-gap／re-entry conditional closure，檢查保護 GT tail 並維持 FP removal | **PR-D**（依 PR-C 結果併入） |
 | Task 5 — Nested validation | 只有 Task 3／4 出現實質增益後，才進 outer-fold full replay | **PR-E** |
