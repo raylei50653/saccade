@@ -1,6 +1,11 @@
-# Phase-2 disposition inventory (proposed — not yet executed)
+# Phase-2 disposition inventory
 
 Produced during the 2026-07-11 pytest reorganization (phase 1: quarantine).
+Phase 2 (#119) executes terminal states in small reviewable batches.
+
+**Progress**
+- Batch 1: `external_fp/test_external_fp_filter_runtime.py` → T2 promote to `tests/unit/eval/` (done)
+
 Each research test file must eventually reach one of four terminal states:
 
 - **T1 promote** — durable engineering contract → `tests/contract/`
@@ -35,7 +40,7 @@ Nothing was deleted in phase 1. "Seal status" reflects 2026-07-11 knowledge.
 | near_miss/test_analyze_near_miss_final_output.py | same | concluded | T2/T4 | Same |
 | near_miss/test_analyze_near_miss_stage_attribution.py | same | concluded | T2/T4 | Same |
 | external_fp/test_external_fp_model.py | external-FP model (live src module) | study line inactive | T4 | Fits logistic/softmax classifiers; research apparatus test |
-| external_fp/test_external_fp_filter_runtime.py | evaluator `_apply_external_fp_filter` hook | hook wired, default-off | **T2 — move back to tests/unit/eval** | Borderline: tests live evaluator wiring; if the filter stays wired it deserves default-collection coverage |
+| ~~external_fp/test_external_fp_filter_runtime.py~~ | evaluator `_apply_external_fp_filter` hook | hook wired | **done — T2** → `tests/unit/eval/test_external_fp_filter_runtime.py` (#119 batch 1) | Live evaluator wiring; default-collection coverage restored |
 | external_fp/test_external_fp_rows.py | external_fp_rows module | inactive | T4 | Row-extraction apparatus for the study |
 
 ## Considered and left in place (rubric: tests live module behavior)
