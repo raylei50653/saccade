@@ -1,0 +1,8 @@
+step,factor_changed,n,spearman_rho_vs_reconstruction,q85_abs_error_vs_reconstruction,predicate_agreement_at_0.4,gt_step_safe_recon_unsafe_count
+S0_offline_midpoint,S0,2456,0.9645023402,0.2130675767,0.9495114007,24
+S1_aggregation_only,S1,2456,0.9867089177,0.1738546227,0.9719055375,8
+S2_anchor_endpoints_only,S2,2456,0.9878226227,0.2191194639,0.9776058632,7
+S3_velocity_only,S3,2456,0.988824186,0.1995864435,0.9816775244,7
+S4_horizon_only,S4,2456,0.9929938505,0.1685500328,0.9947068404,2
+S5_normalization_only,S5,2456,1,0,1,0
+S6_kernel_formula_reconstruction,S6,2456,1,0,1,0

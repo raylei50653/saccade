@@ -1,0 +1,68 @@
+{
+  "a1_a8_computed": false,
+  "capture_mode": "kernel_formula_reconstruction",
+  "capture_sha256": "8a29da1c5dc8044dc162f1688d17c9b2f0714e4dd3ab3ca9a81a5dc15d34ebfc",
+  "consumer_a_source_sha256": "07848dabc58067207b952d0e89db0915f21d06800635e1896ede66519428e928",
+  "coverage_gates_pass": false,
+  "evidence_role": "reconstruction_diagnostic_not_runtime_consumer_a_capture",
+  "gap_cell_details": [
+    {
+      "gt_predicate_agreement": 0.803921568627451,
+      "gt_spearman": 0.6447963800904977,
+      "n_gt": 51,
+      "slice": "gap_1_10"
+    },
+    {
+      "gt_predicate_agreement": 0.7213114754098361,
+      "gt_spearman": 0.7429402432575356,
+      "n_gt": 61,
+      "slice": "gap_11_26"
+    }
+  ],
+  "git_commit": "c65e5669b4c972063dee2b291bf1b9c5709ae7a7",
+  "headline_preset_path": "configs/presets/mamba_whole_graph_m.yaml",
+  "headline_preset_resolved_bridge": {
+    "relink_bridge_anchor": "adaptive",
+    "relink_bridge_anchor_rate": 0.03,
+    "relink_bridge_at": 4,
+    "relink_bridge_dir_bonus": 0.0,
+    "relink_bridge_enabled": true,
+    "relink_bridge_h_hi": 1.7,
+    "relink_bridge_h_lo": 0.6,
+    "relink_bridge_margin": 0.05,
+    "relink_bridge_px": 0.4,
+    "relink_bridge_spatial_gate": 0.0
+  },
+  "headline_preset_sha256": "496c4ec22b497c70bc8409227513939b4cd86834bf2210475d0ad655be6937af",
+  "issue_112_status": "incomplete_runtime_capture_unavailable",
+  "join_sha256": "5f60d8fda0e22bcc53265e39662c3fb7b0ce867ab28aee5ace5676ecf1e4807b",
+  "live_cuda_event_ring_implemented": false,
+  "metric_based_verdict_diagnostic_only": "not_fidelity_aligned",
+  "module_sha256": "20f91438b937ad6aa1153f330353b0eeb41d4bbbc9e5ba49164e2d617425b8b5",
+  "phase_b_authorized": false,
+  "preset_config_hash": "496c4ec22b497c70bc8409227513939b4cd86834bf2210475d0ad655be6937af",
+  "primary_fail_reason": "runtime_capture_unavailable",
+  "primary_support": "gt_valid && 1 <= gap <= 26",
+  "production_changed": false,
+  "production_threshold": 0.4,
+  "research_bridge_fidelity_audit_default": false,
+  "runner_sha256": "081e2399a6c09a6e7192b73fce21d982923f895a270057ed2f87b995d0f2e10f",
+  "runtime_capture_available": false,
+  "schema_version": 2,
+  "source_pairs_sha256": "0ae3896791ec074fbe951198752c17385c4ee0770a7ec3831225d3ea56a69d17",
+  "status": "D0_FAIL_CLOSED_CAPTURE_UNAVAILABLE",
+  "substrate_mot_dir": "results/MOT17_eval_m_b1_substrate_20260709T092543Z",
+  "verdict": "not_fidelity_aligned",
+  "verdict_checks": {
+    "gt_safe_unsafe_count": 24,
+    "gt_safe_unsafe_rate": 0.21428571428571427,
+    "pred_agree_fp": 0.9586177474402731,
+    "pred_agree_gt": 0.7589285714285714,
+    "pred_agree_overall": 0.9495114006514658,
+    "q85_abs_error": 0.21306757666155995,
+    "quantile_monotone_both": true,
+    "spearman_fp": 0.9661178364009686,
+    "spearman_gt": 0.7144223869887587,
+    "spearman_overall": 0.9645023402030639
+  }
+}
