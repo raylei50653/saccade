@@ -5,15 +5,16 @@
 
 ## Sole active
 
-🔄 **Gap-conditioned probabilistic motion probe — E2 `FROZEN_ACCEPTED_WITH_LIMITS`; E3 signal generation AUTHORIZED; Phase B unauthorized**
+🔄 **Gap-conditioned probabilistic motion probe — E3 `E3_SIGNALS_SEALED`; Phase B unauthorized (await owner authorization)**
 
 - Thread: [gap_conditioned_probabilistic_motion_probe_20260711.md](../../research/threads/gap_conditioned_probabilistic_motion_probe_20260711.md)
 - E0: [note](research/gap_conditioned_motion_e0_20260711.md) · [packet](research/evidence/gap_conditioned_motion_e0_20260711/manifest.json)
 - E1: [note](research/gap_conditioned_motion_e1_m0_20260711.md) · [packet](research/evidence/gap_conditioned_motion_e1_m0_20260711/manifest.json)
 - E2: [note](research/gap_conditioned_motion_e2_family_20260711.md) · [packet](research/evidence/gap_conditioned_motion_e2_family_20260711/manifest.json)
+- E3: [note](research/gap_conditioned_motion_e3_signals_20260711.md) · [packet](research/evidence/gap_conditioned_motion_e3_signals_20260711/manifest.json) — 7 folds · 28 parameter + 7 selection artifacts · 97,136 score rows (all four members) · no A1–A8
 - Substrate mapping（PR #111, canonical precondition）: [note](research/production_substrate_mapping_20260711.md) — headline=\(S_A=[1,26]\)（consumer A）· D0 estimator-fidelity gate = [Issue #112](https://github.com/raylei50653/saccade/issues/112)（parallel; gates threshold-transfer claim ceiling only）
-- Phase B design（predeclared, execution unauthorized）: [A1–A8 protocol](research/gap_conditioned_motion_phase_b_design_20260711.md) — frozen criteria + V1–V5 rule; ordering = design seal → E3 signals → owner authorization → single run
-- Boundary: frozen pair table only · E3 = LOO fold signals for all four models · Phase B / A1–A8 + joint/velocity fail-closed · no production/default/global-closure change
+- Phase B design（predeclared, execution unauthorized）: [A1–A8 protocol](research/gap_conditioned_motion_phase_b_design_20260711.md) — frozen criteria + V1–V5 rule; ordering = design seal → E3 signals sealed → **owner authorization** → single run
+- Boundary: frozen pair table only · E3 signals sealed · Phase B / A1–A8 + joint/velocity fail-closed · no production/default/global-closure change
 
 ## Previous line（closed; nav only）
 
@@ -45,7 +46,7 @@
 
 ## Related research threads（不佔 WIP 鎖）
 
-- [gap-conditioned probabilistic motion](../../research/threads/gap_conditioned_probabilistic_motion_probe_20260711.md) — **ACTIVE**（sole active）· E0–E2 `ACCEPTED_WITH_LIMITS` · E3 AUTHORIZED · Phase B unauthorized · probabilistic verdict `NOT_YET_EVALUATED`
+- [gap-conditioned probabilistic motion](../../research/threads/gap_conditioned_probabilistic_motion_probe_20260711.md) — **ACTIVE**（sole active）· E0–E2 `ACCEPTED_WITH_LIMITS` · E3 `E3_SIGNALS_SEALED` · Phase B unauthorized · probabilistic verdict `NOT_YET_EVALUATED`
 - [gt-support morphology](../../research/threads/gt_support_morphology_20260711.md) — **PARKED** · PR-A/B/C sealed · PR-D / #107 **`ACCEPTED_WITH_LIMITS`** · restricted-closure prototype not started
 - [safe-region assetization](../../research/threads/closed/safe_region_assetization_20260710.md) — **A1 CLOSED (`A1_ACCEPTED_WITH_LIMITS`, maturity A1)** · mainline handed off → gt-support morphology · [PR #95](https://github.com/raylei50653/saccade/pull/95)/[#97](https://github.com/raylei50653/saccade/pull/97) history
 - [composition grammar coverage program](../../research/threads/closed/composition_grammar_coverage_program_20260710.md) — **SUPERSEDED** · coverage map absorbed into assetization R2–R4

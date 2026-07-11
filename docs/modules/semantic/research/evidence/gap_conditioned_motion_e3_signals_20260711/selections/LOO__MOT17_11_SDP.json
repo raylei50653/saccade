@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "freeze_id": "GCM-E2-POSITION-ONLY-v1",
+  "fold_id": "LOO::MOT17-11-SDP",
+  "held_out_sequence": "MOT17-11-SDP",
+  "train_sequences": [
+    "MOT17-02-SDP",
+    "MOT17-04-SDP",
+    "MOT17-05-SDP",
+    "MOT17-09-SDP",
+    "MOT17-10-SDP",
+    "MOT17-13-SDP"
+  ],
+  "fit_row_count": 320,
+  "fit_row_key_sha256": "0aa3abb410de384d4cc1d667ee25585dbcc3283da2186ec3201a00ce8a4ed784",
+  "source_pairs_sha256": "0ae3896791ec074fbe951198752c17385c4ee0770a7ec3831225d3ea56a69d17",
+  "training_nll_by_model": {
+    "M1P-GLOBAL-CV": 1031.0409662196125,
+    "M2P-GLOBAL-OU-H270": 1015.3613659511481,
+    "M2P-GLOBAL-OU-H90": 987.1450381055646,
+    "M2P-GLOBAL-OU-H30": 922.0698111318682
+  },
+  "selected_model_id": "M2P-GLOBAL-OU-H30",
+  "selection_tolerance": 1e-12,
+  "model_order": [
+    "M1P-GLOBAL-CV",
+    "M2P-GLOBAL-OU-H270",
+    "M2P-GLOBAL-OU-H90",
+    "M2P-GLOBAL-OU-H30"
+  ],
+  "selection_artifact_id": "sha256:b0ea2758a5e0dd740dc7dc9496d10977dd7e22e36be0045c2ca284f21d445176"
+}

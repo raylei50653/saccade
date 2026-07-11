@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "freeze_id": "GCM-E2-POSITION-ONLY-v1",
+  "model_id": "M2P-GLOBAL-OU-H90",
+  "fold_id": "LOO::MOT17-05-SDP",
+  "held_out_sequence": "MOT17-05-SDP",
+  "train_sequences": [
+    "MOT17-02-SDP",
+    "MOT17-04-SDP",
+    "MOT17-09-SDP",
+    "MOT17-10-SDP",
+    "MOT17-11-SDP",
+    "MOT17-13-SDP"
+  ],
+  "fit_row_count": 298,
+  "fit_row_key_sha256": "ada1a106fdb9163957be49d1c5820154578c13471ba3b3a81d9f7f63cdbcc4e7",
+  "source_pairs_sha256": "0ae3896791ec074fbe951198752c17385c4ee0770a7ec3831225d3ea56a69d17",
+  "dimension": 2,
+  "drift_per_frame": [
+    -0.002626169871742553,
+    -0.0005305007839655811
+  ],
+  "base_covariance": [
+    [
+      0.0019906897743774605,
+      -0.00022595063789001608
+    ],
+    [
+      -0.00022595063789001608,
+      0.0004988919786689027
+    ]
+  ],
+  "regularization_applied": false,
+  "eigenvalue_floor": 1e-08,
+  "training_total_nll": 992.1301221175064,
+  "parameter_artifact_id": "sha256:d31874aa670141702024deca28de6c7d654ad15cfd732f3c61278f56355832d1"
+}

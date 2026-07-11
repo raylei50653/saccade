@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "freeze_id": "GCM-E2-POSITION-ONLY-v1",
+  "model_id": "M1P-GLOBAL-CV",
+  "fold_id": "LOO::MOT17-04-SDP",
+  "held_out_sequence": "MOT17-04-SDP",
+  "train_sequences": [
+    "MOT17-02-SDP",
+    "MOT17-05-SDP",
+    "MOT17-09-SDP",
+    "MOT17-10-SDP",
+    "MOT17-11-SDP",
+    "MOT17-13-SDP"
+  ],
+  "fit_row_count": 328,
+  "fit_row_key_sha256": "9caca30ef899259101d64b7af65690e2ead48f9b1fb9d8e258f927eb90e0e020",
+  "source_pairs_sha256": "0ae3896791ec074fbe951198752c17385c4ee0770a7ec3831225d3ea56a69d17",
+  "dimension": 2,
+  "drift_per_frame": [
+    -0.0032954558845585177,
+    -0.00040170898023928484
+  ],
+  "base_covariance": [
+    [
+      0.002047775196915889,
+      -0.0002195108511910874
+    ],
+    [
+      -0.00021951085119108739,
+      0.0004522488479088542
+    ]
+  ],
+  "regularization_applied": false,
+  "eigenvalue_floor": 1e-08,
+  "training_total_nll": 1063.1438024633867,
+  "parameter_artifact_id": "sha256:3c5721f54b123a747ba879a7a1fe4a3925e3df68036a54238bcc65f11cd2df2b"
+}

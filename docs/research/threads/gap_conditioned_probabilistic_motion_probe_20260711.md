@@ -18,8 +18,8 @@ default-behavior-change: forbidden
 | Research object | gap-conditioned transition density \(p(x_1,v_1 \mid x_0,v_0,\Delta t,c)\) → standardized mismatch / NLL / optional reach mass |
 | Motivation | deterministic motion atoms 在 long-gap slice 出現 GT role reversal（short: high-mismatch→FP；部分 long: high-mismatch 集中 GT） |
 | Relation to mainline | **parallel / independent** · 不納入 restricted global closure · 不改 \(\{dist_h,\log h_{ratio}\}\) 安全域主線 |
-| Execution | **E0–E2 accepted** · E2 freeze `FROZEN_ACCEPTED_WITH_LIMITS` · **E3 signal generation AUTHORIZED** · Phase B unauthorized |
-| Research acceptance | **`ACCEPTED_WITH_LIMITS`** for E0–E2 · E0 `ACCEPT` · E1 marginal baseline `ACCEPTED_WITH_LIMITS` · E2 family + LOO lineage `ACCEPTED_WITH_LIMITS` |
+| Execution | **E0–E2 accepted** · E2 freeze `FROZEN_ACCEPTED_WITH_LIMITS` · **E3 signals `E3_SIGNALS_SEALED`** · Phase B unauthorized |
+| Research acceptance | **`ACCEPTED_WITH_LIMITS`** for E0–E2 · E0 `ACCEPT` · E1 marginal baseline `ACCEPTED_WITH_LIMITS` · E2 family + LOO lineage `ACCEPTED_WITH_LIMITS` · E3 signals sealed (not Phase B) |
 | Probabilistic verdict | **`NOT_YET_EVALUATED`** · no V1–V5 verdict · Phase B / A1–A8 unauthorized |
 | Engineering / production | **none** · no tracker / preset / online hook / baseline change |
 | Research promotion | **none** until LOO + bounded V1–V5 verdict |
@@ -88,6 +88,8 @@ Scope:
 | [E1 packet](../../modules/semantic/research/evidence/gap_conditioned_motion_e1_m0_20260711/manifest.json) | 20 gap×atom cells · AUC · frozen q90 tail · sequence attribution |
 | [E2 research note](../../modules/semantic/research/gap_conditioned_motion_e2_family_20260711.md) | reduced position-only M1-P/M2-P equations · train-only fit/LOO firewall · E3 signal contract |
 | [E2 packet](../../modules/semantic/research/evidence/gap_conditioned_motion_e2_family_20260711/manifest.json) | machine-readable four-member family · finite/support/window/provenance audit · per-fold LOO lineage hashes · parameter/selection artifact schemas · fit/scoring primitives |
+| [E3 research note](../../modules/semantic/research/gap_conditioned_motion_e3_signals_20260711.md) | LOO fold signal generation · 28 parameter + 7 selection artifacts · all-four scores per pair · no A1–A8 |
+| [E3 packet](../../modules/semantic/research/evidence/gap_conditioned_motion_e3_signals_20260711/manifest.json) | sealed pair×fold×model score table · fold artifacts · manifest (signals only) |
 | [Phase B design note](../../modules/semantic/research/gap_conditioned_motion_phase_b_design_20260711.md) | predeclared A1–A8 protocol · support layers (primary=\(S_A\)) · frozen numeric criteria · V1–V5 decision rule · D0 claim-ceiling coupling |
 | Final research note | problem · equations · context · substrate · fit/LOO protocol · limitations · bounded verdict |
 | Pair-level signal table | M0 + M1 + M2 signals · gap/context · model/parameter IDs · labels · regularization flags |
@@ -99,9 +101,9 @@ Scope:
 ## Current step
 
 **E0–E2 `ACCEPTED_WITH_LIMITS`; E2 freeze `FROZEN_ACCEPTED_WITH_LIMITS`;
-E3 signal generation AUTHORIZED; Phase B / A1–A8 unauthorized.**
+E3 `E3_SIGNALS_SEALED`; Phase B / A1–A8 unauthorized.**
 
-Frozen E0/E2 boundary:
+Frozen E0/E2/E3 boundary:
 
 ```text
 identifiable:
@@ -116,18 +118,18 @@ LOO headline context:
   global only
   sequence remains diagnostic / in-sample only
 
-E3 authorized: rebuild 7 LOO folds · persist 28 parameter + 7 selection
-artifacts · emit all 4 model scores per pair×fold
-Phase B remains unauthorized.
+E3 sealed: 7 LOO folds · 28 parameter + 7 selection artifacts ·
+97,136 score rows (24,284 pairs × 4 models) · no A1–A8 · no verdict
+Phase B remains unauthorized until owner authorization in this thread.
 
 Binding since PR #111 (production substrate mapping):
   E3/A1–A8 headline = E_motion on S_A=[1,26] (consumer A);
   S_C2/S_B secondary; all-gap exploratory only (§8)
   threshold transfer additionally gated by D0 (Issue #112, §6)
 
-A1–A8 protocol predeclared (design-only; execution still unauthorized):
+A1–A8 protocol predeclared (design sealed; execution still unauthorized):
   docs/modules/semantic/research/gap_conditioned_motion_phase_b_design_20260711.md
-  ordering: design merge (seal) → E3 signals sealed → owner authorization
+  ordering: design merge (seal) ✓ → E3 signals sealed ✓ → owner authorization
   → single Phase B run → one V1–V5 verdict (V3 predeclared unreachable)
 ```
 
@@ -153,7 +155,8 @@ Phase A — exploration
      PR-C escape tail remains local/conditional
   E2 M1-P/M2-P limited predeclared parameter family — ACCEPTED_WITH_LIMITS:
      GCM-E2-POSITION-ONLY-v1; FROZEN_ACCEPTED_WITH_LIMITS
-  E3 signal generation (position-only only; terms split) — AUTHORIZED
+  E3 signal generation (position-only only; terms split) — DONE:
+     E3_SIGNALS_SEALED (28+7 artifacts · all-four scores · no A-tables)
   freeze model family + analysis inputs — DONE for E2
 
 Phase B — analysis (UNAUTHORIZED)
@@ -213,12 +216,12 @@ improvement not explained by unrestricted diffusion
 - [x] substrate audit complete (`PARTIALLY_IDENTIFIABLE`)
 - [x] M0 role-reversal baseline rebuilt
 - [x] M1-P and M2-P reproducible fit/scoring primitives + machine-readable family freeze
-- [ ] position-only vs joint outputs separated; energy terms stored separately
+- [x] position-only vs joint outputs separated; energy terms stored separately (E3 score table)
 - [ ] gap-bin calibration · RR rate · short-gap retention · escape-tail · conditional SR · LOO · M1 vs M2 attribution · failure/scale/regularization audit
-- [ ] single reproduction entrypoint rebuilds all headline results
+- [ ] single reproduction entrypoint rebuilds all headline results (E3 packet sealed; Phase B entrypoint unauthorized)
 - [ ] exactly one V1–V5 bounded verdict
 - [ ] explicit note: whether a follow-up default-off online hook task is warranted
-- [ ] production preset and baseline behavior **unchanged**
+- [x] production preset and baseline behavior **unchanged**
 
 ### Post-verdict promotion gate
 
@@ -256,3 +259,4 @@ Until then: no evidence_ledger · no production preset · no online-safe claim �
 - 2026-07-11: PR #113 review (5 merge blockers, all accepted): ① D0 ceiling scope-limited to bridge atoms — \(E_{motion}\) is research-only for consumer A, no D0 outcome upgrades \(S_{new}\); level 2 needs a future \(E_{motion}\)/\(d\) consumer contract. ② A6 bound frozen in-design (one-sided CP 95% on `(sequence, lost_id)` cluster containment; train-cluster-only selection; `NO_FEASIBLE_THRESHOLD`/`BOTH_EMPTY` terminal semantics; positive-productivity clause; metric renamed `FP_removed`) — morphology step-0 established no cluster-aware bound to inherit; sequence-level residual clustering stays a declared limitation. ③④ Success boxes weakened: "no new aggregate reversal + positive held-out direction" (M0 already 0/20) and "escape cohort not high-energy under \(E_{motion}\)" (min-\(d_H\) representative pairs frozen from the forensic packet; single pooled-q90 reference population; no M0-relative reduction claim). ⑤ V1–V5 rewritten as a priority partition (V4 routes → V2 → V1 → V5) with a mandatory anomaly note for the boxes-without-slot residual case.
 - 2026-07-11: PR #113 second review — five original blockers confirmed closed; two semantic blockers fixed: ① A6 held-out safety precondition frozen (every qualifying fold × non-BOTH_EMPTY primary cell must show held-out cluster-level empirical GT leakage ≤ ε = 0.05 for \(S_{new}\) **before** any FP_removed comparison; \(S_{old}\) leakage descriptive), and the CP bound renamed to a **model-based bound under the track-cluster independence assumption** (not a cluster-robust population bound; sequence-level residual clustering stays a declared limitation). ② V5 redefined as "representation + attribution contract not established" (verdict table updated; the pre-partition "no real RR fix or only via over-diffusion" wording retired), so the boxes-without-slot residual case is inside V5's definition instead of contradicting it. PR body synchronized with the final frozen design.
 - 2026-07-11: PR #113 final review — **review-accepted / merge-ready**; no remaining merge blockers. The PR #113 merge commit is the **Phase B predeclaration seal**. Next authorized step: **E3 signal generation only** (sealed E2 contract; no A-table may be computed in the E3 PR). A1–A8 execution still requires an explicit owner authorization recorded in this thread after E3 signals are sealed.
+- 2026-07-11: **E3 signals sealed** (`E3_SIGNALS_SEALED`): rebuilt 7 LOO folds via the E2 lineage-aware fold builder; persisted 28 parameter + 7 selection artifacts matching sealed train-GT counts/hashes; emitted 97,136 pair×fold×model score rows (24,284 pairs × all four members; energy terms split; no winner-only filter). Packet [evidence/gap_conditioned_motion_e3_signals_20260711/](../../modules/semantic/research/evidence/gap_conditioned_motion_e3_signals_20260711/manifest.json) · [note](../../modules/semantic/research/gap_conditioned_motion_e3_signals_20260711.md). **No A1–A8 tables · no V1–V5 · Phase B still unauthorized** until owner authorization in this thread.
