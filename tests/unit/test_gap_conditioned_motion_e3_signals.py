@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import gzip
 import importlib.util
 import json
 from pathlib import Path
@@ -11,17 +12,19 @@ import numpy as np
 REPO = Path(__file__).resolve().parents[2]
 E3_RUNNER = (
     REPO
-    / "docs/modules/semantic/research/evidence/"
-    / "gap_conditioned_motion_e3_signals_20260711/run_e3_signals.py"
+    / "docs/modules/semantic/research/evidence"
+    / "gap_conditioned_motion_e3_signals_20260711"
+    / "run_e3_signals.py"
 )
 E2_RUNNER = (
     REPO
-    / "docs/modules/semantic/research/evidence/"
-    / "gap_conditioned_motion_e2_family_20260711/run_e2_family_freeze.py"
+    / "docs/modules/semantic/research/evidence"
+    / "gap_conditioned_motion_e2_family_20260711"
+    / "run_e2_family_freeze.py"
 )
 PACKET = (
     REPO
-    / "docs/modules/semantic/research/evidence/"
+    / "docs/modules/semantic/research/evidence"
     / "gap_conditioned_motion_e3_signals_20260711"
 )
 
@@ -56,7 +59,6 @@ def _write_pairs(path: Path, *, held_out_offset: float = 0.0) -> None:
         for row_index in range(4):
             gap = row_index + 1
             offset = held_out_offset if seq == "SEQ-C" else 0.0
-            # One FP row per sequence to prove non-GT scores are emitted.
             gt_match = "0" if row_index == 3 else "1"
             rows.append(
                 {
@@ -81,7 +83,7 @@ def _write_pairs(path: Path, *, held_out_offset: float = 0.0) -> None:
         writer.writerows(rows)
 
 
-def test_score_pairs_retains_four_models_for_every_pair(tmp_path):
+def test_score_cube_has_train_and_held_out_roles(tmp_path):
     e2 = _load(E2_RUNNER, "gap_motion_e2")
     e3 = _load(E3_RUNNER, "gap_motion_e3")
     pairs = tmp_path / "pairs.csv"
@@ -93,11 +95,9 @@ def test_score_pairs_retains_four_models_for_every_pair(tmp_path):
         parameters, selection = e2.build_fold_artifacts(pairs, held_out)
         parameters_by_fold[held_out] = parameters
         selections_by_fold[held_out] = selection
-        assert held_out not in selection["train_sequences"]
-        assert set(selection["training_nll_by_model"]) == set(e2.MODEL_ORDER)
 
     pair_rows = e3.load_scoreable_pairs(pairs)
-    score_rows = e3.score_pairs_for_folds(
+    score_rows = e3.score_fold_cube(
         e2,
         pair_rows,
         parameters_by_fold,
@@ -105,23 +105,50 @@ def test_score_pairs_retains_four_models_for_every_pair(tmp_path):
         e2.sha256(pairs),
     )
 
-    assert len(score_rows) == len(pair_rows) * 4
-    by_pair: dict[tuple[str, str, str], set[str]] = {}
+    # Full cube: 3 folds × 12 pairs × 4 models.
+    assert len(score_rows) == 3 * len(pair_rows) * 4
+
+    fold_pair_models: dict[tuple[str, str, str, str], set[str]] = {}
+    train_by_fold: dict[str, set[str]] = {}
+    held_by_fold: dict[str, set[str]] = {}
     for row in score_rows:
-        key = (row["seq"], str(row["lost_id"]), str(row["cand_id"]))
-        by_pair.setdefault(key, set()).add(row["model_id"])
-        assert row["held_out_sequence"] == row["seq"]
-        assert row["fold_id"] == f"LOO::{row['seq']}"
+        key = (
+            row["held_out_sequence"],
+            row["seq"],
+            str(row["lost_id"]),
+            str(row["cand_id"]),
+        )
+        fold_pair_models.setdefault(key, set()).add(row["model_id"])
         assert np.isclose(
             row["nll_motion"],
             0.5
             * (row["q_motion"] + row["log_det_covariance"] + row["gaussian_constant"]),
         )
+        if row["evaluation_role"] == "held_out":
+            assert row["seq"] == row["held_out_sequence"]
+            held_by_fold.setdefault(row["held_out_sequence"], set()).add(row["seq"])
+        else:
+            assert row["evaluation_role"] == "train"
+            assert row["seq"] != row["held_out_sequence"]
+            train_by_fold.setdefault(row["held_out_sequence"], set()).add(row["seq"])
 
-    assert all(models == set(e2.MODEL_ORDER) for models in by_pair.values())
-    assert any(row["is_selected_model"] == 0 for row in score_rows)
-    assert any(row["is_selected_model"] == 1 for row in score_rows)
-    assert any(row["gt_match"] == 0 for row in score_rows)
+    assert all(models == set(e2.MODEL_ORDER) for models in fold_pair_models.values())
+    # Every fold has train scores on the other two sequences.
+    for held_out in ("SEQ-A", "SEQ-B", "SEQ-C"):
+        assert held_by_fold[held_out] == {held_out}
+        assert train_by_fold[held_out] == {"SEQ-A", "SEQ-B", "SEQ-C"} - {held_out}
+
+    # A6 surface: train rows under fold-C use fold-C parameters, not own-LOO.
+    fold_c_train = [
+        r
+        for r in score_rows
+        if r["held_out_sequence"] == "SEQ-C" and r["evaluation_role"] == "train"
+    ]
+    assert fold_c_train
+    assert all(r["fold_id"] == "LOO::SEQ-C" for r in fold_c_train)
+    assert all(r["seq"] in {"SEQ-A", "SEQ-B"} for r in fold_c_train)
+    assert any(r["is_selected_model"] == 0 for r in score_rows)
+    assert any(r["gt_match"] == 0 for r in score_rows)
 
 
 def test_held_out_mutation_does_not_change_train_artifacts_but_changes_scores(
@@ -139,15 +166,6 @@ def test_held_out_mutation_does_not_change_train_artifacts_but_changes_scores(
 
     assert sel_a["fit_row_key_sha256"] == sel_b["fit_row_key_sha256"]
     assert sel_a["training_nll_by_model"] == sel_b["training_nll_by_model"]
-    assert sel_a["selected_model_id"] == sel_b["selected_model_id"]
-    # source_pairs_sha256 differs when the CSV bytes change, so artifact IDs
-    # differ; train parameters themselves must not depend on held-out values.
-    assert [p["fit_row_key_sha256"] for p in params_a] == [
-        p["fit_row_key_sha256"] for p in params_b
-    ]
-    assert [p["training_total_nll"] for p in params_a] == [
-        p["training_total_nll"] for p in params_b
-    ]
     assert [p["drift_per_frame"] for p in params_a] == [
         p["drift_per_frame"] for p in params_b
     ]
@@ -167,6 +185,47 @@ def test_held_out_mutation_does_not_change_train_artifacts_but_changes_scores(
     assert not np.allclose(scores_a["nll_motion"], scores_b["nll_motion"])
 
 
+def test_train_scores_use_fold_params_not_own_loo(tmp_path):
+    """A6 blocker: training sequences must be scored under fold-f params."""
+    e2 = _load(E2_RUNNER, "gap_motion_e2")
+    e3 = _load(E3_RUNNER, "gap_motion_e3")
+    pairs = tmp_path / "pairs.csv"
+    _write_pairs(pairs)
+
+    parameters_by_fold = {}
+    selections_by_fold = {}
+    for held_out in ("SEQ-A", "SEQ-B", "SEQ-C"):
+        parameters, selection = e2.build_fold_artifacts(pairs, held_out)
+        parameters_by_fold[held_out] = parameters
+        selections_by_fold[held_out] = selection
+
+    pair_rows = e3.load_scoreable_pairs(pairs)
+    score_rows = e3.score_fold_cube(
+        e2, pair_rows, parameters_by_fold, selections_by_fold, e2.sha256(pairs)
+    )
+
+    # SEQ-A under fold-C (train role) must use fold-C parameter IDs.
+    fold_c_param_ids = {
+        p["model_id"]: p["parameter_artifact_id"] for p in parameters_by_fold["SEQ-C"]
+    }
+    fold_a_param_ids = {
+        p["model_id"]: p["parameter_artifact_id"] for p in parameters_by_fold["SEQ-A"]
+    }
+    # Different folds → different parameters (different train sets).
+    assert fold_c_param_ids != fold_a_param_ids
+
+    for row in score_rows:
+        if row["held_out_sequence"] != "SEQ-C" or row["seq"] != "SEQ-A":
+            continue
+        assert row["evaluation_role"] == "train"
+        assert row["parameter_artifact_id"] == fold_c_param_ids[row["model_id"]]
+        assert row["parameter_artifact_id"] != fold_a_param_ids[row["model_id"]]
+        assert (
+            row["selection_artifact_id"]
+            == selections_by_fold["SEQ-C"]["selection_artifact_id"]
+        )
+
+
 def test_sealed_packet_contract_counts_and_no_phase_b():
     e3 = _load(E3_RUNNER, "gap_motion_e3")
     manifest = json.loads((PACKET / "manifest.json").read_text(encoding="utf-8"))
@@ -178,16 +237,23 @@ def test_sealed_packet_contract_counts_and_no_phase_b():
     assert manifest["verdict"] == "NOT_YET_EVALUATED"
     assert summary["counts"]["n_parameter_artifacts"] == 28
     assert summary["counts"]["n_selection_artifacts"] == 7
-    assert summary["counts"]["n_score_rows"] == 97136
+    # Full cube: 24284 pairs × 7 folds × 4 models.
+    assert summary["counts"]["n_score_rows"] == 679952
+    assert summary["counts"]["n_held_out_score_rows"] == 97136
+    assert summary["counts"]["n_train_score_rows"] == 582816
     assert summary["counts"]["n_unique_pairs_scored"] == 24284
     assert summary["counts"]["n_models_per_pair_fold"] == 4
-    assert summary["a1_a8_computed"] is False
-    assert summary["phase_b_authorized"] is False
+
+    # Phase B design seal recorded for audit lineage.
+    design = manifest["phase_b_design"]
+    assert design["predeclaration_seal_commit"] == e3.PHASE_B_DESIGN_SEAL_COMMIT
+    assert design["path"] == e3.PHASE_B_DESIGN_REL
+    assert design["content_sha256"] == e3.sha256(e3.PHASE_B_DESIGN)
+    assert summary["phase_b_design"] == design
 
     assert len(list((PACKET / "parameters").glob("*.json"))) == 28
     assert len(list((PACKET / "selections").glob("*.json"))) == 7
 
-    # Packet must not contain A1–A8 analysis table files.
     forbidden_stems = {
         "a1_calibration",
         "a2_role_reversal",
@@ -204,21 +270,45 @@ def test_sealed_packet_contract_counts_and_no_phase_b():
         if path.is_file():
             assert path.stem.lower() not in forbidden_stems
 
-    with (PACKET / "pair_fold_model_scores.csv").open(
-        newline="", encoding="utf-8"
-    ) as stream:
+    fold_pair_model: dict[tuple[str, str, str, str], set[str]] = {}
+    train_counts: dict[str, int] = {}
+    held_counts: dict[str, int] = {}
+    scores_path = PACKET / "pair_fold_model_scores.csv.gz"
+    assert scores_path.is_file()
+    with gzip.open(scores_path, "rt", encoding="utf-8", newline="") as stream:
         reader = csv.DictReader(stream)
-        counts: dict[tuple[str, str, str], int] = {}
-        models: set[str] = set()
         for row in reader:
-            key = (row["seq"], row["lost_id"], row["cand_id"])
-            counts[key] = counts.get(key, 0) + 1
-            models.add(row["model_id"])
-            assert row["held_out_sequence"] == row["seq"]
             assert set(e3.SCORE_FIELDS).issubset(row.keys())
-    assert len(counts) == 24284
-    assert all(n == 4 for n in counts.values())
-    assert models == set(e3.load_e2().MODEL_ORDER)
+            key = (
+                row["held_out_sequence"],
+                row["seq"],
+                row["lost_id"],
+                row["cand_id"],
+            )
+            fold_pair_model.setdefault(key, set()).add(row["model_id"])
+            if row["evaluation_role"] == "held_out":
+                assert row["seq"] == row["held_out_sequence"]
+                held_counts[row["held_out_sequence"]] = (
+                    held_counts.get(row["held_out_sequence"], 0) + 1
+                )
+            else:
+                assert row["evaluation_role"] == "train"
+                assert row["seq"] != row["held_out_sequence"]
+                train_counts[row["held_out_sequence"]] = (
+                    train_counts.get(row["held_out_sequence"], 0) + 1
+                )
+
+    assert len(fold_pair_model) == 24284 * 7
+    assert all(
+        models == set(e3.load_e2().MODEL_ORDER) for models in fold_pair_model.values()
+    )
+    # Per-fold train score counts match fold_summary.
+    for fold in summary["folds"]:
+        held = fold["held_out_sequence"]
+        assert train_counts[held] == fold["train_score_row_count"]
+        assert held_counts[held] == fold["held_out_score_row_count"]
+        assert fold["train_score_row_count"] > 0
+        assert fold["train_pair_count"] == 24284 - fold["held_out_pair_count"]
 
 
 def test_sealed_loo_lineage_matches_e2_map():

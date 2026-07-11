@@ -1,20 +1,27 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "freeze_id": "GCM-E2-POSITION-ONLY-v1",
   "status": "E3_SIGNALS_SEALED",
   "phase_b_authorized": false,
   "a1_a8_computed": false,
   "verdict": "NOT_YET_EVALUATED",
-  "claim_ceiling": "sealed LOO fold signals only; not Phase B; not V1-V5; not calibration; not production",
+  "claim_ceiling": "sealed LOO fold×pair×model score cube only; not Phase B; not V1-V5; not calibration; not production",
   "source": {
     "pairs_csv": "out/signal_study/m_b1_gate_coverage_7seq_20260709T121326Z/pairs.csv",
     "sha256": "0ae3896791ec074fbe951198752c17385c4ee0770a7ec3831225d3ea56a69d17"
+  },
+  "phase_b_design": {
+    "path": "docs/modules/semantic/research/gap_conditioned_motion_phase_b_design_20260711.md",
+    "predeclaration_seal_commit": "69b0e5be0c26d6fa9f460f90aef37e891555da67",
+    "content_sha256": "caa35a261072eff36ced13bb430e7108c24f46603693b69722471684cfafbd9b"
   },
   "counts": {
     "n_folds": 7,
     "n_parameter_artifacts": 28,
     "n_selection_artifacts": 7,
-    "n_score_rows": 97136,
+    "n_score_rows": 679952,
+    "n_held_out_score_rows": 97136,
+    "n_train_score_rows": 582816,
     "n_unique_pairs_scored": 24284,
     "n_models_per_pair_fold": 4,
     "models": [
@@ -53,7 +60,10 @@
         "M2P-GLOBAL-OU-H30": 734.6245910130268
       },
       "held_out_pair_count": 3434,
-      "score_row_count": 13736
+      "train_pair_count": 20850,
+      "held_out_score_row_count": 13736,
+      "train_score_row_count": 83400,
+      "score_row_count": 97136
     },
     {
       "fold_id": "LOO::MOT17-04-SDP",
@@ -83,7 +93,10 @@
         "M2P-GLOBAL-OU-H30": 951.4079588621044
       },
       "held_out_pair_count": 687,
-      "score_row_count": 2748
+      "train_pair_count": 23597,
+      "held_out_score_row_count": 2748,
+      "train_score_row_count": 94388,
+      "score_row_count": 97136
     },
     {
       "fold_id": "LOO::MOT17-05-SDP",
@@ -113,7 +126,10 @@
         "M2P-GLOBAL-OU-H30": 926.5362419690101
       },
       "held_out_pair_count": 6519,
-      "score_row_count": 26076
+      "train_pair_count": 17765,
+      "held_out_score_row_count": 26076,
+      "train_score_row_count": 71060,
+      "score_row_count": 97136
     },
     {
       "fold_id": "LOO::MOT17-09-SDP",
@@ -143,7 +159,10 @@
         "M2P-GLOBAL-OU-H30": 920.6753839592187
       },
       "held_out_pair_count": 411,
-      "score_row_count": 1644
+      "train_pair_count": 23873,
+      "held_out_score_row_count": 1644,
+      "train_score_row_count": 95492,
+      "score_row_count": 97136
     },
     {
       "fold_id": "LOO::MOT17-10-SDP",
@@ -173,7 +192,10 @@
         "M2P-GLOBAL-OU-H30": 373.8320525730385
       },
       "held_out_pair_count": 6793,
-      "score_row_count": 27172
+      "train_pair_count": 17491,
+      "held_out_score_row_count": 27172,
+      "train_score_row_count": 69964,
+      "score_row_count": 97136
     },
     {
       "fold_id": "LOO::MOT17-11-SDP",
@@ -203,7 +225,10 @@
         "M2P-GLOBAL-OU-H30": 922.0698111318682
       },
       "held_out_pair_count": 1485,
-      "score_row_count": 5940
+      "train_pair_count": 22799,
+      "held_out_score_row_count": 5940,
+      "train_score_row_count": 91196,
+      "score_row_count": 97136
     },
     {
       "fold_id": "LOO::MOT17-13-SDP",
@@ -233,23 +258,28 @@
         "M2P-GLOBAL-OU-H30": 932.9197318446063
       },
       "held_out_pair_count": 4955,
-      "score_row_count": 19820
+      "train_pair_count": 19329,
+      "held_out_score_row_count": 19820,
+      "train_score_row_count": 77316,
+      "score_row_count": 97136
     }
   ],
   "output_contract": {
-    "score_unit": "each pair scored under LOO fold holding out its own sequence; all four frozen members retained; selected_model_id is a marker only",
+    "score_unit": "full fold × pair × model cube; evaluation_role=held_out for the fold's held-out sequence pairs; evaluation_role=train for the six training sequences under the same fold-frozen parameters (A6 τ selection); all four members retained; selected_model_id is a marker only",
     "energy_terms_split": [
       "q_motion",
       "log_det_covariance",
       "gaussian_constant",
       "nll_motion"
     ],
+    "a6_train_surface": "filter evaluation_role=train; parameters/lineage already bound per row via parameter_artifact_id + selection_artifact_id",
     "forbidden_in_this_packet": [
       "A1-A8 tables",
       "V1-V5 verdict",
       "held-out calibration",
       "family redefinition",
-      "winner-only score filtering"
+      "winner-only score filtering",
+      "using held_out rows for A6 threshold selection"
     ]
   }
 }

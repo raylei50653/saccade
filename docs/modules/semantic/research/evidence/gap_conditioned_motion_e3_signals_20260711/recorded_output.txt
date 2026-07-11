@@ -1,19 +1,23 @@
 freeze_id=GCM-E2-POSITION-ONLY-v1
 status=E3_SIGNALS_SEALED
 source_sha256=0ae3896791ec074fbe951198752c17385c4ee0770a7ec3831225d3ea56a69d17
+phase_b_design_seal=69b0e5be0c26
+phase_b_design_sha256=caa35a261072
 n_folds=7
 n_parameter_artifacts=28
 n_selection_artifacts=7
-n_score_rows=97136
+n_score_rows=679952
+n_held_out_score_rows=97136
+n_train_score_rows=582816
 n_unique_pairs_scored=24284
 models=M1P-GLOBAL-CV,M2P-GLOBAL-OU-H270,M2P-GLOBAL-OU-H30,M2P-GLOBAL-OU-H90
 phase_b_authorized=false
 a1_a8_computed=false
 verdict=NOT_YET_EVALUATED
-fold=MOT17-02-SDP train_gt=268 held_out_pairs=3434 selected=M2P-GLOBAL-OU-H30 hash=9e7fe45468f3
-fold=MOT17-04-SDP train_gt=328 held_out_pairs=687 selected=M2P-GLOBAL-OU-H30 hash=9caca30ef899
-fold=MOT17-05-SDP train_gt=298 held_out_pairs=6519 selected=M2P-GLOBAL-OU-H30 hash=ada1a106fdb9
-fold=MOT17-09-SDP train_gt=326 held_out_pairs=411 selected=M2P-GLOBAL-OU-H30 hash=164034ec7626
-fold=MOT17-10-SDP train_gt=183 held_out_pairs=6793 selected=M2P-GLOBAL-OU-H30 hash=8b1e67dd9aba
-fold=MOT17-11-SDP train_gt=320 held_out_pairs=1485 selected=M2P-GLOBAL-OU-H30 hash=0aa3abb410de
-fold=MOT17-13-SDP train_gt=317 held_out_pairs=4955 selected=M2P-GLOBAL-OU-H30 hash=a88c8ed7c35a
+fold=MOT17-02-SDP train_gt=268 held_out_pairs=3434 train_pairs=20850 held_out_scores=13736 train_scores=83400 selected=M2P-GLOBAL-OU-H30 hash=9e7fe45468f3
+fold=MOT17-04-SDP train_gt=328 held_out_pairs=687 train_pairs=23597 held_out_scores=2748 train_scores=94388 selected=M2P-GLOBAL-OU-H30 hash=9caca30ef899
+fold=MOT17-05-SDP train_gt=298 held_out_pairs=6519 train_pairs=17765 held_out_scores=26076 train_scores=71060 selected=M2P-GLOBAL-OU-H30 hash=ada1a106fdb9
+fold=MOT17-09-SDP train_gt=326 held_out_pairs=411 train_pairs=23873 held_out_scores=1644 train_scores=95492 selected=M2P-GLOBAL-OU-H30 hash=164034ec7626
+fold=MOT17-10-SDP train_gt=183 held_out_pairs=6793 train_pairs=17491 held_out_scores=27172 train_scores=69964 selected=M2P-GLOBAL-OU-H30 hash=8b1e67dd9aba
+fold=MOT17-11-SDP train_gt=320 held_out_pairs=1485 train_pairs=22799 held_out_scores=5940 train_scores=91196 selected=M2P-GLOBAL-OU-H30 hash=0aa3abb410de
+fold=MOT17-13-SDP train_gt=317 held_out_pairs=4955 train_pairs=19329 held_out_scores=19820 train_scores=77316 selected=M2P-GLOBAL-OU-H30 hash=a88c8ed7c35a

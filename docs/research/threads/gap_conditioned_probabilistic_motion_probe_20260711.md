@@ -119,7 +119,9 @@ LOO headline context:
   sequence remains diagnostic / in-sample only
 
 E3 sealed: 7 LOO folds · 28 parameter + 7 selection artifacts ·
-97,136 score rows (24,284 pairs × 4 models) · no A1–A8 · no verdict
+full fold×pair×model cube 679,952 rows (24,284 × 7 × 4) with
+evaluation_role=held_out|train (A6 train-side surface sealed) ·
+no A1–A8 · no verdict
 Phase B remains unauthorized until owner authorization in this thread.
 
 Binding since PR #111 (production substrate mapping):
@@ -156,7 +158,7 @@ Phase A — exploration
   E2 M1-P/M2-P limited predeclared parameter family — ACCEPTED_WITH_LIMITS:
      GCM-E2-POSITION-ONLY-v1; FROZEN_ACCEPTED_WITH_LIMITS
   E3 signal generation (position-only only; terms split) — DONE:
-     E3_SIGNALS_SEALED (28+7 artifacts · all-four scores · no A-tables)
+     E3_SIGNALS_SEALED (28+7 artifacts · full cube + evaluation_role · no A-tables)
   freeze model family + analysis inputs — DONE for E2
 
 Phase B — analysis (UNAUTHORIZED)
@@ -259,4 +261,5 @@ Until then: no evidence_ledger · no production preset · no online-safe claim �
 - 2026-07-11: PR #113 review (5 merge blockers, all accepted): ① D0 ceiling scope-limited to bridge atoms — \(E_{motion}\) is research-only for consumer A, no D0 outcome upgrades \(S_{new}\); level 2 needs a future \(E_{motion}\)/\(d\) consumer contract. ② A6 bound frozen in-design (one-sided CP 95% on `(sequence, lost_id)` cluster containment; train-cluster-only selection; `NO_FEASIBLE_THRESHOLD`/`BOTH_EMPTY` terminal semantics; positive-productivity clause; metric renamed `FP_removed`) — morphology step-0 established no cluster-aware bound to inherit; sequence-level residual clustering stays a declared limitation. ③④ Success boxes weakened: "no new aggregate reversal + positive held-out direction" (M0 already 0/20) and "escape cohort not high-energy under \(E_{motion}\)" (min-\(d_H\) representative pairs frozen from the forensic packet; single pooled-q90 reference population; no M0-relative reduction claim). ⑤ V1–V5 rewritten as a priority partition (V4 routes → V2 → V1 → V5) with a mandatory anomaly note for the boxes-without-slot residual case.
 - 2026-07-11: PR #113 second review — five original blockers confirmed closed; two semantic blockers fixed: ① A6 held-out safety precondition frozen (every qualifying fold × non-BOTH_EMPTY primary cell must show held-out cluster-level empirical GT leakage ≤ ε = 0.05 for \(S_{new}\) **before** any FP_removed comparison; \(S_{old}\) leakage descriptive), and the CP bound renamed to a **model-based bound under the track-cluster independence assumption** (not a cluster-robust population bound; sequence-level residual clustering stays a declared limitation). ② V5 redefined as "representation + attribution contract not established" (verdict table updated; the pre-partition "no real RR fix or only via over-diffusion" wording retired), so the boxes-without-slot residual case is inside V5's definition instead of contradicting it. PR body synchronized with the final frozen design.
 - 2026-07-11: PR #113 final review — **review-accepted / merge-ready**; no remaining merge blockers. The PR #113 merge commit is the **Phase B predeclaration seal**. Next authorized step: **E3 signal generation only** (sealed E2 contract; no A-table may be computed in the E3 PR). A1–A8 execution still requires an explicit owner authorization recorded in this thread after E3 signals are sealed.
-- 2026-07-11: **E3 signals sealed** (`E3_SIGNALS_SEALED`): rebuilt 7 LOO folds via the E2 lineage-aware fold builder; persisted 28 parameter + 7 selection artifacts matching sealed train-GT counts/hashes; emitted 97,136 pair×fold×model score rows (24,284 pairs × all four members; energy terms split; no winner-only filter). Packet [evidence/gap_conditioned_motion_e3_signals_20260711/](../../modules/semantic/research/evidence/gap_conditioned_motion_e3_signals_20260711/manifest.json) · [note](../../modules/semantic/research/gap_conditioned_motion_e3_signals_20260711.md). **No A1–A8 tables · no V1–V5 · Phase B still unauthorized** until owner authorization in this thread.
+- 2026-07-11: **E3 signals sealed** (`E3_SIGNALS_SEALED`): rebuilt 7 LOO folds via the E2 lineage-aware fold builder; persisted 28 parameter + 7 selection artifacts matching sealed train-GT counts/hashes; emitted full fold×pair×model cube (679,952 rows = 24,284 × 7 × 4) with `evaluation_role=held_out|train` so A6 can select τ on train clusters under fold-frozen parameters; energy terms split; no winner-only filter; Phase B design seal `69b0e5be…` + content sha256 recorded in manifest. Packet [evidence/gap_conditioned_motion_e3_signals_20260711/](../../modules/semantic/research/evidence/gap_conditioned_motion_e3_signals_20260711/manifest.json) · [note](../../modules/semantic/research/gap_conditioned_motion_e3_signals_20260711.md). **No A1–A8 tables · no V1–V5 · Phase B still unauthorized** until owner authorization in this thread.
+- 2026-07-11: PR #114 review — structural gap closed: prior held-out-only surface (97,136 rows) was insufficient for A6 training-side threshold selection; cube + role tag is the seal revision (signal completion, not Phase B execution).

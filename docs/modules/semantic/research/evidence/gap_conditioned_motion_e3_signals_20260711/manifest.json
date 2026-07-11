@@ -1,11 +1,16 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "freeze_id": "GCM-E2-POSITION-ONLY-v1",
   "status": "E3_SIGNALS_SEALED",
   "source_pairs_csv": "out/signal_study/m_b1_gate_coverage_7seq_20260709T121326Z/pairs.csv",
   "source_pairs_csv_sha256": "0ae3896791ec074fbe951198752c17385c4ee0770a7ec3831225d3ea56a69d17",
   "e2_family_packet": "docs/modules/semantic/research/evidence/gap_conditioned_motion_e2_family_20260711/manifest.json",
-  "runner_sha256": "a3b3656dca06d33db13bcc0c4dfee795600a162dfe518d646a5cc7bcfd47bfa1",
+  "phase_b_design": {
+    "path": "docs/modules/semantic/research/gap_conditioned_motion_phase_b_design_20260711.md",
+    "predeclaration_seal_commit": "69b0e5be0c26d6fa9f460f90aef37e891555da67",
+    "content_sha256": "caa35a261072eff36ced13bb430e7108c24f46603693b69722471684cfafbd9b"
+  },
+  "runner_sha256": "74a1983d568ee0082dfeafebc9856de8635a38cf4e462e1eee73baf4424631ee",
   "e2_runner_sha256": "981089ff4173e79fd25ecf4255128b614a111f3f7cd68a24fd43352a1a07f102",
   "phase_b_authorized": false,
   "a1_a8_computed": false,
@@ -14,7 +19,9 @@
     "n_folds": 7,
     "n_parameter_artifacts": 28,
     "n_selection_artifacts": 7,
-    "n_score_rows": 97136,
+    "n_score_rows": 679952,
+    "n_held_out_score_rows": 97136,
+    "n_train_score_rows": 582816,
     "n_unique_pairs_scored": 24284,
     "n_models_per_pair_fold": 4,
     "models": [
@@ -25,9 +32,9 @@
     ]
   },
   "artifacts": {
-    "fold_summary.json": "b26f6f69927c013eada586d91ffb0e979feff36f0bdf5daacbc50062a62317ff",
-    "recorded_output.txt": "ca6f9d4ccf727bf28446a3cd11b0ce2c03caa7e7f0c73c0db7a388938b907248",
-    "pair_fold_model_scores.csv": "c3d50ac401195f49ef144dfdacc85e5ec37220722b31f732197fa6889e02ac8c",
+    "fold_summary.json": "f648a3a7e796a301f820aa48d0043430375ca05c952584726059dc391404a827",
+    "recorded_output.txt": "e23e446129e1cb6205551a72e498565a008d1ad66a03a52f76123d9cd8efb72e",
+    "pair_fold_model_scores.csv.gz": "9419cee2a79021a0b3819bd46ea2acec8b70139d663b88b4caa1c7a89974a5d5",
     "selections/LOO__MOT17_02_SDP.json": "11e3fb067b3292e1c8932b07a100e689e8476004d43f5aa5b784d7a5781d8ccf",
     "parameters/LOO__MOT17_02_SDP__M1P-GLOBAL-CV.json": "a9a006e4936ffe65bef539c181db16e6cc780ff25dabb04660f2bce090967fbd",
     "parameters/LOO__MOT17_02_SDP__M2P-GLOBAL-OU-H270.json": "336f46b7b94c368babd644ec65584b7c99cfdd75fb9a100c54112ed8431e8c15",
