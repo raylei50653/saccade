@@ -480,9 +480,9 @@ def render_contact_sheet(
         )
         # resize panel to fixed height
         target_h = 360
-        scale = target_h / img.shape[0]
-        panel = cv2.resize(img, (int(img.shape[1] * scale), target_h))
-        panels.append(panel)
+        scale = target_h / float(img.shape[0])
+        resized = cv2.resize(img, (int(img.shape[1] * scale), target_h))
+        panels.append(np.asarray(resized, dtype=np.uint8))
         # Prefer repo-relative path when possible; never embed temp out dirs.
         try:
             img_rel = str(path.relative_to(REPO))
@@ -890,8 +890,13 @@ def verify_source(pairs: Path, step0_manifest: dict[str, Any]) -> None:
 
 
 def load_frozen_cohort() -> dict[str, Any]:
-    tail = load_json(STEP0 / "tail_tracks.json")
+    tail_raw = load_json(STEP0 / "tail_tracks.json")
+    if not isinstance(tail_raw, dict):
+        raise TypeError("tail_tracks.json must be a JSON object")
+    tail: dict[str, Any] = tail_raw
     tracks = tail["tracks"]
+    if not isinstance(tracks, dict):
+        raise TypeError("tail_tracks.json 'tracks' must be an object")
     if set(tracks) != {
         "MOT17-10-SDP|455",
         "MOT17-10-SDP|459",
@@ -905,15 +910,15 @@ def load_frozen_cohort() -> dict[str, Any]:
 
 
 def collect_gt_match_rows(pairs: Path, track_keys: set[str]) -> list[dict[str, str]]:
-    wanted = set()
-    for key in track_keys:
-        seq, lost = key.split("|", maxsplit=1)
+    wanted: set[tuple[str, str]] = set()
+    for track_key in track_keys:
+        seq, lost = track_key.split("|", maxsplit=1)
         wanted.add((seq, lost))
     rows: list[dict[str, str]] = []
     with pairs.open(encoding="utf-8") as handle:
         for row in csv.DictReader(handle):
-            key = (row["seq"], str(row["lost_id"]))
-            if key not in wanted:
+            pair_key = (str(row["seq"]), str(row["lost_id"]))
+            if pair_key not in wanted:
                 continue
             if row.get("gt_valid") not in ("1", "True", "true"):
                 continue
