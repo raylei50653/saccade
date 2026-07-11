@@ -538,6 +538,7 @@ def main() -> None:
         "study_id": study.name,
         "created_utc": datetime.now(timezone.utc).isoformat(),
         "pairs_csv": str(args.pairs.resolve()),
+        "exposure": _audit.exposure_summary(pool),
         "n_grid_per_axis": args.n_grid,
         "modes": list(modes),
         "epsilons": list(EPSILONS),

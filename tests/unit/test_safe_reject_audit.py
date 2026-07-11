@@ -85,3 +85,106 @@ def test_prod_proxy_score_and_h_ratio() -> None:
     rules = {name: fn for name, _hint, fn, _n in mod.production_shaped_rules()}
     # second row: h_ratio 0.5 < 0.6 → m h-gate reject
     assert rules["prod_m_h_ratio_out_0.6_1.7"](pool).tolist() == [False, True]
+
+
+def _load_audit_module():
+    import importlib.util
+    from pathlib import Path
+
+    path = Path("scripts/tools/audit_relink_safe_reject.py")
+    spec = importlib.util.spec_from_file_location("audit_relink_safe_reject", path)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _exposure_pool(
+    gt: list[bool], seq: list[str], lost: list[str] | None
+) -> dict[str, np.ndarray]:
+    pool: dict[str, np.ndarray] = {
+        "gt_match": np.array(gt, dtype=bool),
+        "seq": np.asarray(seq, dtype=object),
+    }
+    if lost is not None:
+        pool["lost_id"] = np.asarray(lost, dtype=object)
+    return pool
+
+
+def test_exposure_summary_full_metadata_counts_clusters() -> None:
+    mod = _load_audit_module()
+    # 3 GT rows but only 2 lost tracks in seq A; 1 FP row ignored
+    pool = _exposure_pool(
+        gt=[True, True, True, False],
+        seq=["A", "A", "A", "A"],
+        lost=["1", "1", "2", "9"],
+    )
+    e = mod.exposure_summary(pool)
+    assert e["n_gt_exposed"] == 3
+    assert e["n_gt_rows_missing_lost_id"] == 0
+    assert e["n_gt_exposed_clusters"] == 2
+    assert e["per_seq_gt_exposed_clusters"] == {"A": 2}
+    assert e["declared_trial_unit"] == "lost_track(seq,lost_id)"
+    assert e["remaining_clustering"] == "sequence"
+
+
+def test_exposure_summary_cross_seq_same_id_distinct_clusters() -> None:
+    mod = _load_audit_module()
+    # same lost_id "1" in two sequences must be two clusters
+    pool = _exposure_pool(
+        gt=[True, True],
+        seq=["A", "B"],
+        lost=["1", "1"],
+    )
+    e = mod.exposure_summary(pool)
+    assert e["n_gt_exposed_clusters"] == 2
+    assert e["per_seq_gt_exposed_clusters"] == {"A": 1, "B": 1}
+
+
+def test_exposure_summary_all_missing_is_unknown() -> None:
+    mod = _load_audit_module()
+    pool = _exposure_pool(
+        gt=[True, True, False],
+        seq=["A", "A", "A"],
+        lost=["", "  ", "9"],
+    )
+    e = mod.exposure_summary(pool)
+    assert e["n_gt_rows_missing_lost_id"] == 2
+    assert e["n_gt_exposed_clusters"] is None
+    assert e["clustering"] == "unknown: pairs CSV lacks lost_id"
+
+
+def test_exposure_summary_partial_missing_is_insufficient_not_collapsed() -> None:
+    mod = _load_audit_module()
+    # one GT row missing lost_id must NOT silently merge into a "" cluster
+    pool = _exposure_pool(
+        gt=[True, True, True],
+        seq=["A", "A", "A"],
+        lost=["1", "", "2"],
+    )
+    e = mod.exposure_summary(pool)
+    assert e["n_gt_rows_missing_lost_id"] == 1
+    assert e["n_gt_exposed_clusters"] is None
+    assert e["clustering"].startswith("insufficient_metadata: 1/3")
+    assert "per_seq_gt_exposed_clusters" not in e
+
+
+def test_exposure_summary_missing_column_is_unknown() -> None:
+    mod = _load_audit_module()
+    pool = _exposure_pool(gt=[True, False], seq=["A", "A"], lost=None)
+    e = mod.exposure_summary(pool)
+    assert e["n_gt_exposed_clusters"] is None
+    assert e["clustering"] == "unknown: pairs CSV lacks lost_id"
+    assert "n_gt_rows_missing_lost_id" not in e
+
+
+def test_exposure_summary_zero_gt_rows() -> None:
+    mod = _load_audit_module()
+    pool = _exposure_pool(gt=[False, False], seq=["A", "A"], lost=["9", ""])
+    e = mod.exposure_summary(pool)
+    assert e["n_gt_exposed"] == 0
+    assert e["n_fp_exposed"] == 2
+    # FP rows missing lost_id are irrelevant to the GT trial-unit claim
+    assert e["n_gt_rows_missing_lost_id"] == 0
+    assert e["n_gt_exposed_clusters"] == 0
+    assert e["per_seq_gt_exposed_clusters"] == {}

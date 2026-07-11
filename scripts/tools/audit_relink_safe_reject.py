@@ -78,6 +78,7 @@ def load_gt_valid_pool(pairs_csv: Path) -> dict[str, np.ndarray]:
         "h_lost_raw": [],
         "h_cand_raw": [],
         "seq": [],
+        "lost_id": [],
     }
     with pairs_csv.open(newline="", encoding="utf-8") as f:
         for row in csv.DictReader(f):
@@ -100,10 +101,11 @@ def load_gt_valid_pool(pairs_csv: Path) -> dict[str, np.ndarray]:
             cols["h_lost_raw"].append(float(row.get("h_lost_raw", 1.0) or 1.0))
             cols["h_cand_raw"].append(float(row.get("h_cand_raw", 1.0) or 1.0))
             cols["seq"].append(row.get("seq", ""))
+            cols["lost_id"].append(str(row.get("lost_id", "")))
 
     out: dict[str, np.ndarray] = {}
     for k, v in cols.items():
-        if k == "seq":
+        if k in ("seq", "lost_id"):
             out[k] = np.asarray(v, dtype=object)
         elif k == "gt_match":
             out[k] = np.asarray(v, dtype=bool)
@@ -115,6 +117,58 @@ def load_gt_valid_pool(pairs_csv: Path) -> dict[str, np.ndarray]:
     out["log_h_ratio"] = np.abs(np.log(hc / hl))
     out["speed_mismatch"] = np.abs(out["lost_exit_speed"] - out["cand_entry_speed"])
     out["resid_max"] = np.maximum(out["fwd_resid"], out["bwd_resid"])
+    return out
+
+
+def exposure_summary(pool: dict[str, np.ndarray]) -> dict[str, Any]:
+    """Independence-unit declaration for exposure counts (framework §8.1).
+
+    Raw exposure unit is one relink pair row. Rows sharing a lost track
+    (seq, lost_id) are correlated trials; the unique-cluster count is an
+    upper bound on the number of independent trials, not automatically an
+    effective sample size — tracks within a sequence still share scene,
+    occlusion, and pipeline state. Cluster counts are declared only when
+    every GT row carries a lost_id; partial metadata is reported as
+    insufficient, never silently collapsed. Binomial-style bounds on
+    non-zero hurt additionally require hurt outcomes aggregated to the
+    same trial unit before using the cluster count as denominator.
+    """
+    y = pool["gt_match"].astype(bool)
+    seq = pool["seq"]
+    n_gt = int(y.sum())
+    out: dict[str, Any] = {
+        "gt_exposure_unit_raw": "relink_pair_row",
+        "n_gt_exposed": n_gt,
+        "n_fp_exposed": int((~y).sum()),
+        "declared_trial_unit": "lost_track(seq,lost_id)",
+        "independence_assumption": (
+            "clusters treated as independent trials; not verified"
+        ),
+        "remaining_clustering": "sequence",
+    }
+    lost = pool.get("lost_id")
+    if lost is None:
+        out["n_gt_exposed_clusters"] = None
+        out["clustering"] = "unknown: pairs CSV lacks lost_id"
+        return out
+    lost_gt = np.asarray(lost, dtype=object)[y]
+    seq_gt = seq[y]
+    n_missing = int(sum(1 for x in lost_gt if not str(x).strip()))
+    out["n_gt_rows_missing_lost_id"] = n_missing
+    if n_missing > 0:
+        out["n_gt_exposed_clusters"] = None
+        out["clustering"] = (
+            "unknown: pairs CSV lacks lost_id"
+            if n_missing == n_gt
+            else f"insufficient_metadata: {n_missing}/{n_gt} GT rows missing lost_id"
+        )
+        return out
+    clusters = {(str(s), str(t)) for s, t in zip(seq_gt, lost_gt)}
+    per_seq: dict[str, int] = {}
+    for s, _ in clusters:
+        per_seq[s] = per_seq.get(s, 0) + 1
+    out["n_gt_exposed_clusters"] = len(clusters)
+    out["per_seq_gt_exposed_clusters"] = dict(sorted(per_seq.items()))
     return out
 
 
@@ -638,6 +692,7 @@ def main() -> None:
         "n_gt_valid": int(pool["gt_match"].size),
         "n_pos": int(pool["gt_match"].sum()),
         "n_neg": int((~pool["gt_match"]).sum()),
+        "exposure": exposure_summary(pool),
         "goal": "maximize FP_removed s.t. GT_hurt_rate <= ε",
         "cost_asymmetry": {
             "GT_hurt": "hard — early reject of true pairs is usually irreversible",
