@@ -1,6 +1,6 @@
 import pandas as pd
 
-from scripts.eval.analyze_near_miss_stage_attribution import (
+from scripts.eval.diagnostics.analyze_near_miss_stage_attribution import (
     attribute_rows,
     best_stage_match,
     classify_stage_attribution,

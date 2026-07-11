@@ -7,6 +7,7 @@ Phase 2 (#119) executes terminal states in small reviewable batches.
 - Batch 1: `external_fp/test_external_fp_filter_runtime.py` → T2 promote to `tests/unit/eval/` (done, PR #120)
 - Batch 2: gap_conditioned_motion e0–e3 → T4 delete (done, PR #121); phase_b retained (line still warm)
 - Batch 3: `misc/test_boolean_atom_partial_order.py` → T3/T4 delete (done, PR #122); sealed packet remains under contract checkers
+- Batch 4: near_miss trio → T2 promote to `tests/unit/eval/diagnostics/` (this PR); scripts remain supported eval diagnostics
 
 Each research test file must eventually reach one of four terminal states:
 
@@ -38,9 +39,9 @@ Nothing was deleted in phase 1. "Seal status" reflects 2026-07-11 knowledge.
 | misc/test_portable_or_tail.py | frozen portable_policy.json (M-B1 OR-tail) | frozen; kernel acceptance PENDING (ONLINE_BAUDIT_IMPLEMENTED=False) | keep in research | Still active: hook acceptance outstanding. On acceptance, promote the acceptance-relevant assertions (T1), delete the rest (T4) |
 | misc/test_cheb_gr_offline_handover_report.py | chebgr handover applicability study | study sealed | T4 | 315 lines / 1 test driving a diagnostics report script |
 | misc/test_synthesize_handover_applicability.py | same | study sealed | T4 | Subprocess smoke of the synthesis script |
-| near_miss/test_analyze_near_miss_offsets.py | near-miss analysis scripts (scripts/eval) | study concluded | T2/T4 | If the analysis scripts remain supported tooling → consolidate; otherwise delete with the scripts |
-| near_miss/test_analyze_near_miss_final_output.py | same | concluded | T2/T4 | Same |
-| near_miss/test_analyze_near_miss_stage_attribution.py | same | concluded | T2/T4 | Same |
+| ~~near_miss/test_analyze_near_miss_offsets.py~~ | scripts/eval/diagnostics (supported tooling) | study concluded | **done — T2** → `tests/unit/eval/diagnostics/` (#119 batch 4) | Live script behavior; listed in scripts/eval README as current helpers |
+| ~~near_miss/test_analyze_near_miss_final_output.py~~ | same | concluded | **done — T2** (#119 batch 4) | Same |
+| ~~near_miss/test_analyze_near_miss_stage_attribution.py~~ | same | concluded | **done — T2** (#119 batch 4) | Same |
 | external_fp/test_external_fp_model.py | external-FP model (live src module) | study line inactive | T4 | Fits logistic/softmax classifiers; research apparatus test |
 | ~~external_fp/test_external_fp_filter_runtime.py~~ | evaluator `_apply_external_fp_filter` hook | hook wired | **done — T2** → `tests/unit/eval/test_external_fp_filter_runtime.py` (#119 batch 1) | Live evaluator wiring; default-collection coverage restored |
 | external_fp/test_external_fp_rows.py | external_fp_rows module | inactive | T4 | Row-extraction apparatus for the study |
