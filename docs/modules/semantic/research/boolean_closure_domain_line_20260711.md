@@ -60,10 +60,10 @@ $$
 P(Z=z\mid \text{GT track})
 $$
 
-以及對整個 reject domain 的非對稱損失約束：
+以及對整個 reject domain 的 unit-level 非對稱損失約束：
 
 $$
-P_{\mathrm{GT}}(Z\in D).
+P_u(Z_u\subseteq D).
 $$
 
 ## 2. 正式研究問題
@@ -73,7 +73,8 @@ $$
 - $Z\in\{0,1\}^k$：Boolean atom state；
 - $z_i=1$：該 atom 位於宣告的較安全側；
 - $F_z$：cell $z$ 中可被 reject 的 FP 質量；
-- $G_z$：cell $z$ 中的 GT track 質量；
+- $G_z$：cell $z$ 的 GT placement mass（僅 descriptive／MWC 線性化 surrogate；同一 track 可跨多個 cell，不可作正式 hurt 計數）；
+- $Z_u$：GT trial unit $u$ 的所有有效 GT cells；
 - $P$：由 morphology-supported atoms 定義的偏序；
 - $\mathcal C(P)$：滿足該偏序的 downward-closed reject domains。
 
@@ -84,7 +85,7 @@ $$
 \max_D\quad
 & P_{\mathrm{FP}}(Z\in D)\\
 \text{s.t.}\quad
-& \operatorname{UCB}\!\left[P_{\mathrm{GT}}(Z\in D)\right]\le \epsilon,\\
+& \operatorname{UCB}\!\left[P_u(Z_u\subseteq D)\right]\le \epsilon,\\
 & D\in\mathcal C(P),\\
 & P\text{ 僅由 morphology-supported atoms 定義。}
 \end{aligned}
@@ -92,7 +93,7 @@ $$
 
 （$\epsilon$ 為該 study 宣告的 GT-hurt budget；它與 §19.5 的形態分類預算 $\varepsilon_{\mathrm{morph}}=5\%$ 是**不同**的量，per-study 宣告。）
 
-reject domain $D$ 的 downward-closed 條件與 §19.5 的 core（argmin retained-FP 的 monotone **upper** closure $C$）是同一結構的兩面：$D \subseteq \Theta\setminus C$，$z\in D,\ z'\le z \Rightarrow z'\in D$。**Track-level hurt 採 §19.4 set-valued semantics**：$Z_u$ = track $u$ 的所有有效 GT cells，$H_{C}(u)=\mathbf 1[Z_u\cap C=\varnothing]$（closure 未保留該 track 任何有效 GT candidate 才算 hurt）；$P_{\mathrm{GT}}(Z\in D)$ 類約束一律在此語意下計算，min-d_H representative 不得作 closure 驗證的 trial 表示。
+reject domain $D$ 的 downward-closed 條件與 §19.5 的 core（argmin retained-FP 的 monotone **upper** closure $C$）是同一結構的兩面：$D=\Omega\setminus C$，$z\in D,\ z'\le z \Rightarrow z'\in D$。**Track-level hurt 採 §19.4 set-valued semantics**：$H_C(u)=\mathbf 1[Z_u\cap C=\varnothing]$（closure 未保留該 track 任何有效 GT candidate 才算 hurt）；因此 $P_u(Z_u\subseteq D)=P(H_{\Omega\setminus D}(u)=1)$。min-d_H representative 不得作 closure 驗證的 trial 表示。
 
 本問題包含兩個相互分離的研究責任：
 
@@ -205,7 +206,7 @@ $$
 
 ### 6.2 線性化候選問題
 
-給每個 cell 權重：
+以 placement mass 建立每個 cell 的**候選權重**：
 
 $$
 w_\lambda(z)=F_z-\lambda G_z
@@ -231,14 +232,12 @@ $$
 真實安全條件為：
 
 $$
-\operatorname{UCB}
-\left(
-\frac{\sum_{z\in D}G_z}{N_{\mathrm{GT}}}
-\right)
-\le\epsilon.
+\operatorname{UCB}\!\left[P_u(Z_u\subseteq D)\right]
+\le\epsilon,
 $$
 
-此 UCB 是 domain-level 非線性函數，不能直接分解為單次 MWC 的節點權重。因此正確流程是：
+等價地，令 $C=\Omega\setminus D$ 後評估
+$\operatorname{UCB}[P(H_C(u)=1)]$。此 unit-level UCB 是 domain-level 非線性函數，且同一 track 可跨多個 cell；$G_z$ 因而不能直接作為正式 hurt 的可加總計數，也不能把安全條件直接分解為單次 MWC 的節點權重。因此正確流程是：
 
 1. 掃描 $\lambda$；
 2. 用 MWC 產生 closure candidate frontier；
