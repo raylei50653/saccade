@@ -10,7 +10,7 @@ Phase 2 (#119) executes terminal states in small reviewable batches.
 - Batch 4: near_miss trio → T2 promote to `tests/unit/eval/diagnostics/` (done, PR #124); scripts remain supported eval diagnostics
 - Batch 5A: Cheb-GR Door D owner status → **cold-supported / closed** (P0→P2 registry + docs; done, PR #126); tests not moved
 - Batch 5B: cheb_gr handover report + synthesize → T2 promote to `tests/unit/eval/diagnostics/` (done, PR #128)
-- Batch 6: d_online_stage2 Q1–Q3/Q4/Q4.5 → T2/T4 split to `tests/unit/eval/` (this PR); drop 2 dated authoritative smokes
+- Batch 6: d_online_stage2 Q1–Q3/Q4/Q4.5 → T2/T4 split to `tests/unit/eval/` (done, PR #130); drop 2 dated authoritative smokes
 
 Each research test file must eventually reach one of four terminal states:
 
