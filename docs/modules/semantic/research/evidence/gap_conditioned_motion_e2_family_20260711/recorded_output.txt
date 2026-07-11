@@ -1,0 +1,8 @@
+freeze_id=GCM-E2-POSITION-ONLY-v1
+status=FROZEN_PENDING_RESEARCH_ACCEPTANCE
+source_sha256=0ae3896791ec074fbe951198752c17385c4ee0770a7ec3831225d3ea56a69d17
+support_gate=PASS
+fit_eligible_gt=340
+models=M1P-GLOBAL-CV,M2P-GLOBAL-OU-H30,M2P-GLOBAL-OU-H90,M2P-GLOBAL-OU-H270
+headline_context=global
+phase_b_authorized=false

@@ -5,11 +5,12 @@
 
 ## Sole active
 
-🔄 **Gap-conditioned probabilistic motion probe — E0–E1 `ACCEPTED_WITH_LIMITS`; next = E2 position-only M1-P/M2-P family freeze**
+🔄 **Gap-conditioned probabilistic motion probe — E2 position-only family packet `FROZEN_PENDING_RESEARCH_ACCEPTANCE`; E3 unauthorized pending owner gate**
 
 - Thread: [gap_conditioned_probabilistic_motion_probe_20260711.md](../../research/threads/gap_conditioned_probabilistic_motion_probe_20260711.md)
 - E0: [note](research/gap_conditioned_motion_e0_20260711.md) · [packet](research/evidence/gap_conditioned_motion_e0_20260711/manifest.json)
 - E1: [note](research/gap_conditioned_motion_e1_m0_20260711.md) · [packet](research/evidence/gap_conditioned_motion_e1_m0_20260711/manifest.json)
+- E2: [note](research/gap_conditioned_motion_e2_family_20260711.md) · [packet](research/evidence/gap_conditioned_motion_e2_family_20260711/manifest.json)
 - Boundary: frozen pair table only · position-only next · joint/velocity + Phase B fail-closed · no production/default/global-closure change
 
 ## Previous line（closed; nav only）

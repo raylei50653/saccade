@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "freeze_id": "GCM-E2-POSITION-ONLY-v1",
+  "status": "FROZEN_PENDING_RESEARCH_ACCEPTANCE",
+  "claim_ceiling": "position-only global transition marginal; not joint x/v, not sequence-conditioned LOO, not a V1-V5 verdict",
+  "source": {
+    "pairs_csv": "out/signal_study/m_b1_gate_coverage_7seq_20260709T121326Z/pairs.csv",
+    "sha256": "0ae3896791ec074fbe951198752c17385c4ee0770a7ec3831225d3ea56a69d17",
+    "audit": {
+      "rows_total": 24284,
+      "rows_gt_valid": 21789,
+      "rows_gt_fit_eligible": 340,
+      "invalid_nonfinite": 0,
+      "invalid_h_ref": 0,
+      "invalid_gap": 0,
+      "invalid_frame_window": 0,
+      "sequence_count": 7,
+      "finite_support_gate": "PASS",
+      "coordinate_semantics": "foot-point displacement divided by pair h_ref",
+      "time_semantics": "integer frame gap = cand_first_frame - lost_last_frame"
+    }
+  },
+  "observation": {
+    "symbol": "d",
+    "definition": "(cand_foot_xy - lost_foot_xy) / h_ref",
+    "dimension": 2,
+    "coordinate_system": "image x-right/y-down; dimensionless by pair h_ref",
+    "delta_t": "gap in frames; allowed integer range 1..300"
+  },
+  "mean": "E[d|dt] = beta * dt; beta is global train-GT weighted MLE",
+  "models": [
+    {
+      "model_id": "M1P-GLOBAL-CV",
+      "equation": "d|dt ~ N(beta*dt, dt^2 * Sigma_v)",
+      "interpretation": "global random constant residual velocity marginal"
+    },
+    {
+      "model_id": "M2P-GLOBAL-OU-H30",
+      "half_life_frames": 30,
+      "gamma": "log(2)/30",
+      "equation": "d|dt ~ N(beta*dt, k_gamma(dt)*Sigma_u); k_gamma=2*(gamma*dt-1+exp(-gamma*dt))/gamma^2",
+      "interpretation": "integrated stationary residual OU marginal"
+    },
+    {
+      "model_id": "M2P-GLOBAL-OU-H90",
+      "half_life_frames": 90,
+      "gamma": "log(2)/90",
+      "equation": "d|dt ~ N(beta*dt, k_gamma(dt)*Sigma_u); k_gamma=2*(gamma*dt-1+exp(-gamma*dt))/gamma^2",
+      "interpretation": "integrated stationary residual OU marginal"
+    },
+    {
+      "model_id": "M2P-GLOBAL-OU-H270",
+      "half_life_frames": 270,
+      "gamma": "log(2)/270",
+      "equation": "d|dt ~ N(beta*dt, k_gamma(dt)*Sigma_u); k_gamma=2*(gamma*dt-1+exp(-gamma*dt))/gamma^2",
+      "interpretation": "integrated stationary residual OU marginal"
+    }
+  ],
+  "fit_protocol": {
+    "fit_rows": "gt_valid AND gt_match from training sequences only",
+    "headline_context": "global only",
+    "loo_firewall": "held-out sequence contributes no fit, covariance, calibration, fallback, or family selection statistic",
+    "selection": "minimum summed training-GT NLL across the four frozen members; ties within 1e-12 relative use declared model order",
+    "model_order": [
+      "M1P-GLOBAL-CV",
+      "M2P-GLOBAL-OU-H270",
+      "M2P-GLOBAL-OU-H90",
+      "M2P-GLOBAL-OU-H30"
+    ],
+    "large_search": false
+  },
+  "regularization": {
+    "covariance": "full 2x2 MLE after kernel standardization",
+    "eigen_floor": "max(1e-8, 1e-6 * max(trace(Sigma)/2, 0))",
+    "same_for_gt_and_fp": true,
+    "must_record_flag_and_floor": true
+  },
+  "required_signal_fields": [
+    "model_id",
+    "parameter_artifact_id",
+    "fold_id",
+    "fit_row_count",
+    "dimension",
+    "q_motion",
+    "log_det_covariance",
+    "gaussian_constant",
+    "nll_motion",
+    "regularization_applied"
+  ],
+  "blocked": [
+    "velocity-only or joint position-velocity likelihood",
+    "sequence-conditioned LOO headline",
+    "held-out retuning or calibration",
+    "Phase B analysis or V1-V5 verdict",
+    "tracker, hook, preset, baseline, or production change"
+  ]
+}

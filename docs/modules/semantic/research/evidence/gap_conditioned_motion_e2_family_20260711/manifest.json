@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "freeze_id": "GCM-E2-POSITION-ONLY-v1",
+  "status": "FROZEN_PENDING_RESEARCH_ACCEPTANCE",
+  "source_pairs_csv": "out/signal_study/m_b1_gate_coverage_7seq_20260709T121326Z/pairs.csv",
+  "source_pairs_csv_sha256": "0ae3896791ec074fbe951198752c17385c4ee0770a7ec3831225d3ea56a69d17",
+  "runner_sha256": "a0b26be126f617fd26307b54255a29c179d8b338e88e631d4deef7a96b9ec124",
+  "artifacts": {
+    "model_family.json": "709fadb7e2301d89e80b7a40a8d3eb27c124f0f49246cf4497a6af4fe407984f",
+    "recorded_output.txt": "3f3f103ab3665cae863abb0fca53baf8a040782e2a48a936eb4e05c59b0180e6"
+  }
+}
