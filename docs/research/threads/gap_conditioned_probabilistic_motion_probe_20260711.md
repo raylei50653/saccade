@@ -74,6 +74,7 @@ Scope:
 3. Boolean-atom partial-order note — `bridge_dist` + motion atoms = conditional_orderable
 4. Existing frozen pair substrate used by morphology / motion studies（pool path TBD at E0；do not invent a new unlabeled table）
 5. Framework / safe-region contracts only as **reference for analysis language** — this probe does **not** reopen closed A1 / R2–R4 gates
+6. [Production substrate mapping](../../modules/semantic/research/production_substrate_mapping_20260711.md) — **binding** on E3/A1–A8: §5 support cuts（primary=\(S_A=[1,26]\)）· §6 D0 estimator-fidelity gate（[Issue #112](https://github.com/raylei50653/saccade/issues/112)）· §8 headline constraint · §9 claim ladder
 
 ## Artifacts
 
@@ -87,6 +88,7 @@ Scope:
 | [E1 packet](../../modules/semantic/research/evidence/gap_conditioned_motion_e1_m0_20260711/manifest.json) | 20 gap×atom cells · AUC · frozen q90 tail · sequence attribution |
 | [E2 research note](../../modules/semantic/research/gap_conditioned_motion_e2_family_20260711.md) | reduced position-only M1-P/M2-P equations · train-only fit/LOO firewall · E3 signal contract |
 | [E2 packet](../../modules/semantic/research/evidence/gap_conditioned_motion_e2_family_20260711/manifest.json) | machine-readable four-member family · finite/support/window/provenance audit · per-fold LOO lineage hashes · parameter/selection artifact schemas · fit/scoring primitives |
+| [Phase B design note](../../modules/semantic/research/gap_conditioned_motion_phase_b_design_20260711.md) | predeclared A1–A8 protocol · support layers (primary=\(S_A\)) · frozen numeric criteria · V1–V5 decision rule · D0 claim-ceiling coupling |
 | Final research note | problem · equations · context · substrate · fit/LOO protocol · limitations · bounded verdict |
 | Pair-level signal table | M0 + M1 + M2 signals · gap/context · model/parameter IDs · labels · regularization flags |
 | Model artifacts / fold | γ, σ, drift/context mean, covariance def, coordinate system, time unit, fit/exclude rows, code version |
@@ -117,6 +119,16 @@ LOO headline context:
 E3 authorized: rebuild 7 LOO folds · persist 28 parameter + 7 selection
 artifacts · emit all 4 model scores per pair×fold
 Phase B remains unauthorized.
+
+Binding since PR #111 (production substrate mapping):
+  E3/A1–A8 headline = E_motion on S_A=[1,26] (consumer A);
+  S_C2/S_B secondary; all-gap exploratory only (§8)
+  threshold transfer additionally gated by D0 (Issue #112, §6)
+
+A1–A8 protocol predeclared (design-only; execution still unauthorized):
+  docs/modules/semantic/research/gap_conditioned_motion_phase_b_design_20260711.md
+  ordering: design merge (seal) → E3 signals sealed → owner authorization
+  → single Phase B run → one V1–V5 verdict (V3 predeclared unreachable)
 ```
 
 PR #109 acceptance limit: the E1 `AUC < 0.5 AND pooled within-bin q90 GT
@@ -234,3 +246,5 @@ Until then: no evidence_ledger · no production preset · no online-safe claim �
 - 2026-07-11: E2 engineering packet freezes `GCM-E2-POSITION-ONLY-v1`: global random-CV marginal M1-P plus integrated-OU M2-P half-lives 30/90/270 frames, train-GT-only fitting, global LOO firewall, deterministic covariance regularization, and split `q`/`log det`/constant/NLL output contract. Frozen-source finite/support/window/provenance gate passes with 340 eligible GT rows. [Note](../../modules/semantic/research/gap_conditioned_motion_e2_family_20260711.md) · [packet](../../modules/semantic/research/evidence/gap_conditioned_motion_e2_family_20260711/manifest.json).
 - 2026-07-11: PR #110 review follow-up closes the engineering-side LOO artifact gap without changing model mathematics: packet now seals GT support and training-row lineage hash for every held-out sequence (minimum train fold 183), requires explicit parameter and fold-selection artifacts, records all four training NLL values, and forbids winner-only E3 output. Tests mutate held-out observations to prove fit hash/NLL exclusion and reproduce identical artifacts from identical fold input.
 - 2026-07-11: PR #110 second review acceptance: engineering/reproducibility `PASS`; E2 mathematics `ACCEPT`; LOO lineage/selection `ACCEPT`; E2 research acceptance **`ACCEPTED_WITH_LIMITS`** · freeze status `FROZEN_ACCEPTED_WITH_LIMITS`; **E3 signal generation AUTHORIZED**; Phase B / A1–A8 `NONE`; V1–V5 `NOT_YET_EVALUATED`; production/hook `NONE`.
+- 2026-07-11: PR #111 merged the [production substrate mapping](../../modules/semantic/research/production_substrate_mapping_20260711.md) as canonical precondition: E3/A1–A8 headline constrained to \(S_A=[1,26]\) (consumer A) with secondary/exploratory layering (§8); threshold transfer gated by the D0 estimator-fidelity study opened as [Issue #112](https://github.com/raylei50653/saccade/issues/112) (three-verdict contract; parallel to Phase B, gates claim ceiling only). Sealed E2 family / LOO firewall / E3 output contract unchanged.
+- 2026-07-11: A1–A8 Phase B protocol predeclared in the [design note](../../modules/semantic/research/gap_conditioned_motion_phase_b_design_20260711.md): frozen numeric criteria (calibration classes · retention margin 0.05 · escape-tail ≥3/4 · A6 ε=0.05 no-thinner · A8 dominance rule), support floors (LOW_SUPPORT <15 GT · qualifying fold ≥20 held-out GT · folds 04/09 diagnostic-only), success-box mapping, and V1–V5 decision rule (V3 predeclared unreachable; V4 only via named routes). Design-only: Phase B execution remains unauthorized until design review acceptance + sealed E3 signals.
