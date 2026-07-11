@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 
 
-REPO = Path(__file__).resolve().parents[2]
+REPO = Path(__file__).resolve().parents[3]
 RUNNER = (
     REPO / "docs/modules/semantic/research/evidence/"
     "gap_conditioned_motion_e2_family_20260711/run_e2_family_freeze.py"

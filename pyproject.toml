@@ -109,7 +109,7 @@ ignore = ["E701"]
 "scripts/**" = ["E402"]
 
 [tool.pytest.ini_options]
-addopts = "--cov=saccade --cov-report=term-missing"
+addopts = "-m 'not research'"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 asyncio_mode = "strict"
@@ -117,4 +117,6 @@ pythonpath = ["src"]
 markers = [
     "gpu: tests that require a CUDA device or GPU-only native extension path",
     "dali: tests that require a CUDA device and nvidia-dali (NVDEC decode path)",
+    "research: dated research / study-scoped tests under tests/research, excluded from the default collection (run with -m research)",
+    "packet_bound: reads a sealed research evidence packet or frozen dated artifact",
 ]

@@ -5,7 +5,7 @@ import importlib.util
 from pathlib import Path
 
 
-REPO = Path(__file__).resolve().parents[2]
+REPO = Path(__file__).resolve().parents[3]
 RUNNER = (
     REPO / "docs/modules/semantic/research/evidence/"
     "gap_conditioned_motion_e0_20260711/run_e0_audit.py"

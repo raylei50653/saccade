@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-REPO = Path(__file__).resolve().parents[2]
+REPO = Path(__file__).resolve().parents[3]
 SCRIPT = REPO / "scripts/tools/convert_safe_region_asset_r1.py"
 PACK = REPO / "out/signal_study/m_b1_5_safe_region_asset_r1_20260710"
 Q45 = REPO / "out/signal_study/m_b1_5_stage2_q45_20260710"

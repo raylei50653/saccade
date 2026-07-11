@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-_REPO = Path(__file__).resolve().parents[2]
+_REPO = Path(__file__).resolve().parents[3]
 _SCRIPT = _REPO / "scripts" / "tools" / "check_association_tools.py"
 
 

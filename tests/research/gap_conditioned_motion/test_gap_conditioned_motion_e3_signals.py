@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 
 
-REPO = Path(__file__).resolve().parents[2]
+REPO = Path(__file__).resolve().parents[3]
 E3_RUNNER = (
     REPO
     / "docs/modules/semantic/research/evidence"

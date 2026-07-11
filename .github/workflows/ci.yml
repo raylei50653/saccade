@@ -139,4 +139,4 @@ jobs:
         run: uv cache clean tensorrt-cu12-libs tensorrt-cu12 || true && uv sync --refresh-package tensorrt-cu12-libs
       - name: Run Pytest (exclude GPU benchmarks and rely on Python fallbacks)
         run: |
-          uv run pytest tests/ -v --ignore=tests/benchmarks
+          uv run pytest tests/ -v --ignore=tests/benchmarks --cov=saccade --cov-report=term-missing
