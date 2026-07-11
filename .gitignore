@@ -113,12 +113,8 @@ scratch/pipeline_math_validation/output/
 report_data/*/
 !report_data/figures/
 
-# graphify generated (reproducible via graphify export)
-graphify-out/cache/
-graphify-out/**/*.json
-graphify-out/**/*.js
-graphify-out/**/.graphify_*
-graphify-out/**/graph.html
+# Graphify output is a local, reproducible knowledge-graph cache/export.
+graphify-out/
 
 # Build artifacts accidentally committed
 src/tracking/topk_test
