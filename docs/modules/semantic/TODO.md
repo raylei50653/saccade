@@ -11,6 +11,8 @@
 - E0: [note](research/gap_conditioned_motion_e0_20260711.md) · [packet](research/evidence/gap_conditioned_motion_e0_20260711/manifest.json)
 - E1: [note](research/gap_conditioned_motion_e1_m0_20260711.md) · [packet](research/evidence/gap_conditioned_motion_e1_m0_20260711/manifest.json)
 - E2: [note](research/gap_conditioned_motion_e2_family_20260711.md) · [packet](research/evidence/gap_conditioned_motion_e2_family_20260711/manifest.json)
+- Substrate mapping（PR #111, canonical precondition）: [note](research/production_substrate_mapping_20260711.md) — headline=\(S_A=[1,26]\)（consumer A）· D0 estimator-fidelity gate = [Issue #112](https://github.com/raylei50653/saccade/issues/112)（parallel; gates threshold-transfer claim ceiling only）
+- Phase B design（predeclared, execution unauthorized）: [A1–A8 protocol](research/gap_conditioned_motion_phase_b_design_20260711.md) — frozen criteria + V1–V5 rule; ordering = design seal → E3 signals → owner authorization → single run
 - Boundary: frozen pair table only · E3 = LOO fold signals for all four models · Phase B / A1–A8 + joint/velocity fail-closed · no production/default/global-closure change
 
 ## Previous line（closed; nav only）
