@@ -11,9 +11,11 @@
 > The active headline consumer (tracker-core bridge) ranks by a **continuous
 > speed-weighted motion aggregate** — the earlier claim that motion atoms
 > never enter an aggregate score was wrong and is withdrawn. What survives:
-> the aggregate and its components are **exactly the frozen research atoms**,
-> computed natively in the kernel, and a default-off Boolean OR-tail hook over
-> those atoms already ships in that kernel. Three bounded gaps (consumer-
+> the aggregate and its components are **production-native counterparts of
+> the frozen atom family** (same names/formulas/ABI, estimator-shifted
+> numerically, §2.2), computed natively in the kernel, and a default-off
+> Boolean OR-tail hook over that family already ships in that kernel
+> (plumbing only; level-3 acceptance pending, §2.3). Three bounded gaps (consumer-
 > specific support, estimator fidelity, candidate context) bind E3/A1–A8 and
 > any deployment-facing claim. This document is a **binding precondition**
 > for E3 analysis design.
@@ -29,10 +31,13 @@ Audited surfaces (2026-07-11, branch base `99c163da`):
 - **Consumer B** — optional Python semantic relinker:
   `src/saccade/perception/eval/relink.py` (`resolve()` L1433, gate helpers
   L889–L1007).
-- **Consumer C** — Cheb-GR handover:
-  `src/saccade/perception/eval/relink.py` (`_cheb_gr_claim_best` L1236),
-  `src/saccade/perception/eval/cheb_gr_online.py`,
-  `include/tracking/cheb_gr_online.hpp`.
+- **Consumer C1** — Cheb-GR semantic live claim:
+  `src/saccade/perception/eval/relink.py` (`_cheb_gr_claim_best` L1236).
+- **Consumer C2** — evfifo live-bank output handover:
+  `src/tracking/cheb_gr_online.cpp` (`causal_handover_lines`, gap gate
+  L246–L247), `src/saccade/perception/eval/cheb_gr_online.py`,
+  `include/tracking/cheb_gr_online.hpp`; live-bank switch
+  `src/saccade/perception/eval/pipeline.py` L908–L928.
 - Wiring/presets: `configs/presets/mamba_whole_graph_m.yaml`
   (`reid_mode: off`, `relink_bridge_enabled: true`, `relink_bridge_px: 0.4`),
   `configs/presets/mamba_whole_graph_m_extract_ho_live.yaml`,
@@ -48,12 +53,14 @@ Audited surfaces (2026-07-11, branch base `99c163da`):
 |:--|:--|:--|:--|
 | **A** tracker-core bridge | **yes** (`relink_bridge_enabled: true`, `reid_mode: off`) | continuous `bdist` vs `bridge_px = 0.4` + distance ranking + margin | **continuous speed-weighted aggregate** of motion atoms |
 | **B** Python semantic relinker | no (reid presets only) | Boolean gate chain, then appearance/unified scoring | Boolean pre-gates; motion enters soft scoring only in non-default configs |
-| **C** Cheb-GR handover | separate ho-live preset track | pooled-low-mean appearance cost + max-cost + runner-up margin | motion as Boolean pre-gates and gap cutoff only |
+| **C1** Cheb-GR semantic live claim | no (lives inside B) | pooled-low-mean appearance cost + max-cost + runner-up margin | inherits B's Boolean motion/spatial pre-gates |
+| **C2** evfifo live-bank output handover | separate ho-live preset track | pooled-low-mean appearance cost + max-cost + runner-up margin | **gap window only** (`1 ≤ gap ≤ max_gap`); no motion pre-gates |
 
 **Consumer A governs E3/A1–A8 deployment claims**: it is the default-on
 headline surface, owns `bridge_px = 0.4`, and already contains the research
-hook. B and C are named secondary surfaces with their own supports; results
-for one consumer must not be reported under another's support.
+hook plumbing. B, C1, and C2 are named secondary surfaces with their own
+supports; results for one consumer must not be reported under another's
+support.
 
 ## 2. Consumer A — active tracker-core bridge
 
@@ -104,15 +111,21 @@ Same-named atoms differ between `pairs.csv` and the kernel:
    lost-side EMA only and a midpoint formula — a third estimator; D0 must
    name which path it certifies.)
 
-### 2.3 Native hook (claim-ladder level 3 already exists)
+### 2.3 Native hook (claim-ladder level-3 plumbing available; acceptance pending)
 
 `relink_bidir_propose_kernel` contains a default-off **portable OR-tail**
 hook (L2130–L2156): after all baseline gates pass, a frozen threshold vector
 over atoms `[score_m_bridge, abs_log_h, dist_h, abs_ratio_m1, resid_mean]`
 rejects the pair if any tail fires; disabled it is a bit-identical no-op.
-For consumer A, the "online intervention candidate" rung does not need new
-plumbing — it needs only a frozen threshold vector that has passed support
-(§5) and fidelity (§6).
+
+This establishes **level-3 plumbing** for consumer A — no new wiring is
+needed. It does **not** establish the level-3 verdict: level 3 requires the
+predicate to be *exactly replayed* on the live path, and the full
+candidate-event online audit is explicitly not implemented
+(`ONLINE_BAUDIT_IMPLEMENTED = False`, `portable_or_tail.py` L67). Level-3
+acceptance remains pending activation, disabled-arm no-op verification, and
+live atom/predicate parity evidence. The D0 gate (§6) resolves estimator
+fidelity; it does not by itself prove hook runtime replay parity.
 
 ### 2.4 Reachable support \(S_A\)
 
@@ -159,11 +172,9 @@ S_B=\{2\le\text{gap}\le 45\}.
 \(S_B\) applies **only** when this consumer is enabled; it is not the
 headline support and must not be reported as such.
 
-## 4. Consumer C — Cheb-GR handover
+## 4. Consumers C1 / C2 — the two Cheb-GR paths
 
-Live claim path (`_cheb_gr_claim_best`, L1236): motion enters only as the
-inherited Boolean pre-gates plus the spatial/min-sim screens; the ranking
-cost is appearance-only —
+Both rank by the same appearance-only pooled cost —
 
 \[
 c_{\mathrm{app}}(i)
@@ -171,23 +182,37 @@ c_{\mathrm{app}}(i)
 \text{ pairwise head×bank distances}\bigr),
 \]
 
-accepted iff \(c_{\mathrm{app}}(i^*)\le\) `max_cost (0.45)` and
-runner-up margin ≥ `margin (0.05)`. The \(\mu-\lambda\sigma\) Chebyshev
-threshold belongs to the **separate birth-bank relink path**
-(`cheb_lambda`, off in headline) and must not be written as the live
-handover objective. Support: `max_gap = 60` (`cheb_gr_online.py` L143) →
+accepted iff \(c_{\mathrm{app}}(i^*)\le\) `max_cost (0.45)` and runner-up
+margin ≥ `margin (0.05)` — but their upstream screens and lifecycles differ
+and must not be conflated:
+
+- **C1 — semantic live claim** (`_cheb_gr_claim_best`, relink.py L1236):
+  runs inside consumer B's `resolve()`, so it **inherits B's Boolean
+  motion/spatial pre-gates** and B's candidate lifecycle; its reachable
+  support is \(S_B\) (§3), conditional on that consumer being enabled.
+- **C2 — evfifo live-bank output handover**: under the ho-live preset
+  (`cheb_gr_online_live_bank: true`), the pipeline **disables the
+  per-frame handover** (`enabled = not _live_bank`, pipeline.py L908–L928)
+  and runs `causal_handover_lines` over output tracklets at sequence end.
+  Its only motion screen is the tracklet gap window
+  (`gap >= 1 && gap <= max_gap`, `cheb_gr_online.cpp` L246–L247); there
+  are **no inherited motion pre-gates**. Support with `max_gap = 60`:
 
 \[
-S_C=\{\text{gap}\le 60\}.
+S_{C2}=\{1\le\text{gap}\le 60\}.
 \]
+
+The \(\mu-\lambda\sigma\) Chebyshev threshold belongs to the **separate
+birth-bank relink path** (`cheb_lambda`, off in headline) and must not be
+written as either Cheb-GR objective.
 
 ## 5. Support rules (binding)
 
 | Cut | Consumer | Role | Claim level |
 |:--|:--|:--|:--|
 | \(S_A\): gap ∈ [1, 26] (row-level) | A (active bridge, `bridge_px = 0.4`) | **headline deployable surface** | **primary** |
-| \(S_C\): gap ≤ 60 (row-level) | C (Cheb-GR handover) | ho-live consumable surface | secondary deployment |
-| \(S_B\): gap ∈ [2, 45] (row-level) | B (semantic relinker) | conditional (reid presets only) | secondary, conditional |
+| \(S_{C2}\): gap ∈ [1, 60] (row-level) | C2 (evfifo output handover) | ho-live consumable surface | secondary deployment |
+| \(S_B\): gap ∈ [2, 45] (row-level) | B (semantic relinker; also bounds C1) | conditional (reid presets only) | secondary, conditional |
 | gap beyond the named consumer | — | future TTL/lifecycle extension | exploratory only |
 
 - All cuts are **row-level** gap filters. Canonical bins remain frozen for
@@ -245,8 +270,8 @@ consumer. For consumer A:
 
 For consumer B, the earlier proxy-aligned vocabulary applies to
 `_midpoint_bridge_dist`, `log_h_ratio`, `speed_mismatch`, `dir_cos`
-(Boolean gates over near-analogs). For consumer C, motion atoms beyond the
-pre-gates and `gap` have no counterpart.
+(Boolean gates over near-analogs; C1 inherits these). For consumer C2,
+motion atoms beyond the gap window have no counterpart.
 
 ## 8. E3 headline constraint
 
@@ -254,8 +279,8 @@ E3/A1–A8 must not use the full 1–300 gap population as the primary
 statistic. The layered design is:
 
 - **Primary:** \(E_{motion}\) on \(S_A\) (the governing consumer);
-- **Secondary:** \(E_{motion}\) on \(S_C\) (and \(S_B\) when that consumer
-  is under study);
+- **Secondary:** \(E_{motion}\) on \(S_{C2}\) (and \(S_B\) when consumer
+  B/C1 is under study);
 - **Exploratory:** \(E_{motion}\) on long-gap support.
 
 The acceptance question is fixed as:
@@ -277,9 +302,11 @@ pairs) are unchanged.
 2. **Production-aligned predicate candidate** — support (§5) and fidelity
    (§6) both pass for a named consumer.
 3. **Online intervention candidate** — a default-off hook replays the
-   predicate exactly on the live path. For consumer A this rung already
-   exists (portable OR-tail, §2.3); for B/C it requires new plumbing kept
-   bit-faithful across Python/GPU/C++ mirrors or explicitly fallback-gated.
+   predicate exactly on the live path. For consumer A the plumbing exists
+   (portable OR-tail, §2.3) but acceptance is pending activation,
+   disabled-arm no-op, and live parity evidence; for B/C1/C2 it requires
+   new plumbing kept bit-faithful across Python/GPU/C++ mirrors or
+   explicitly fallback-gated.
 4. **Pipeline-safe candidate** — A/B shows no unacceptable harm from greedy
    claims, score-keyed conflict resolution, or downstream candidate-set
    rewriting (live feedback compounding is a known, quantified effect).
