@@ -35,6 +35,10 @@ smoke → MOT17-04-SDP → 7-seq
 
 Do **not** merge dual-stability (`stability_cost_w` vs `SACCADE_STABILITY_W`) or flip NO-GO defaults without a dedicated behavior PR.
 
+### Research study? (new decision-layer experiment or result promotion)
+
+- [ ] Role-aligned experiment contract declared per [framework §20](docs/research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md) (system role / design objective / selection rule / stop condition / output class)
+
 ## Test plan
 
 - [ ] …
