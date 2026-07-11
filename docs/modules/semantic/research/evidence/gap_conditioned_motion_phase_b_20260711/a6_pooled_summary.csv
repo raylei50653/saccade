@@ -1,0 +1,5 @@
+model_id,n_qualifying_cells,n_non_both_empty_cells,n_complete_cells,held_out_safety,fold_pools,pooled_s_a_old,pooled_s_a_new,no_thinner
+M1P-GLOBAL-CV,2,0,0,False,[],,,False
+M2P-GLOBAL-OU-H270,2,0,0,False,[],,,False
+M2P-GLOBAL-OU-H90,2,0,0,False,[],,,False
+M2P-GLOBAL-OU-H30,2,0,0,False,[],,,False

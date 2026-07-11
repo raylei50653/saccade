@@ -1,0 +1,21 @@
+{
+  "a1_a8_computed": true,
+  "artifacts": {
+    "a1_calibration.csv": "20765bc0856658136428e97498599a2f35b610a16bd02671e03fbb91dbc6ac68",
+    "a2_role_reversal.csv": "89a36769d709fc796b87b39060920a2a7ea0d86d639652685e1b8502c10e462f",
+    "a3_short_gap_retention.csv": "790d72528ce6eb8bedeb6a8e0a46c8c619c2e9e4cd659bfaade6a60c1b89af95",
+    "a4_escape_tail.csv": "d8becdf62cd36054ae0ac81c0250577cf3276ccd900ed0c2b2edf1b507f55f9c",
+    "a5_separability.csv": "dbcff2ed642856dc0ff7037f67f85d1fb686a45396531569bb8fa33bb21e7a40",
+    "a6_pooled_summary.csv": "43ee2203e651513d2bfdcbbb51606ae6d56c5091e2b6ade3d8c65434ec696568",
+    "a7_loo_transfer.csv": "bb7c3e7b6e2bbd52119ba58f13f5c82b868bfaad0634884c7866a5f7c0790642",
+    "a8_attribution.csv": "82dce611d78396bc5df5575c0122f831bd3ee91986217cc547b6e16dc3e3e000",
+    "phase_b_result.json": "e33c35b716f099985a3945708171851736a443d0b3fa057e823fc9c5c0beca8b",
+    "recorded_output.txt": "d8c1d4180feb24e18b2c89885cc3cd6d9a8b88ae283e46ae0601b34885d65493",
+    "run_phase_b.py": "556d39b1b3596cf5f0ff3ebbc31716c2fe23cf40f6ff7244c6d6c4f450cf8273"
+  },
+  "phase_b_authorized": true,
+  "runner_sha256": "556d39b1b3596cf5f0ff3ebbc31716c2fe23cf40f6ff7244c6d6c4f450cf8273",
+  "schema_version": 1,
+  "status": "PHASE_B_EXECUTED",
+  "verdict": "V5"
+}
