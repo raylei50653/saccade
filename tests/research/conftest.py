@@ -22,10 +22,7 @@ PACKET_BOUND_FILES = {
     "test_safe_region_a1_audit.py",
     "test_safe_region_asset_r1_conversion.py",
     # gap_conditioned_motion (exec runners inside dated evidence dirs)
-    "test_gap_conditioned_motion_e0.py",
-    "test_gap_conditioned_motion_e1_m0.py",
-    "test_gap_conditioned_motion_e2_family.py",
-    "test_gap_conditioned_motion_e3_signals.py",
+    # e0–e3 deleted as T4 (#119 batch 2); packets + recipes preserve them
     "test_gap_conditioned_motion_phase_b.py",
     # d_online_stage2 (dated out/signal_study artifacts)
     "test_d_online_stage2_q1q3.py",
