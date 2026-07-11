@@ -37,6 +37,22 @@ def packet_dirs() -> list[Path]:
     return sorted(p for p in EVIDENCE_ROOT.iterdir() if p.is_dir())
 
 
+def resolve_inventory_path(packet: Path, name: str) -> Path | None:
+    """Resolve an inventory entry safely, or None if it escapes the packet.
+
+    Rejects absolute paths and any entry whose resolved location falls
+    outside the packet root (e.g. `../`), so a manifest can never point the
+    integrity check at a file it does not own.
+    """
+    candidate = Path(name)
+    if candidate.is_absolute():
+        return None
+    resolved = (packet / candidate).resolve()
+    if not resolved.is_relative_to(packet.resolve()):
+        return None
+    return resolved
+
+
 def packet_ids() -> list[str]:
     return [p.name for p in packet_dirs()]
 

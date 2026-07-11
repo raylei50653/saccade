@@ -34,7 +34,6 @@ PACKET_BOUND_FILES = {
     # misc
     "test_boolean_atom_partial_order.py",
     "test_d0_bridge_estimator_fidelity.py",
-    "test_check_association_tools.py",
     "test_portable_or_tail.py",
 }
 

@@ -10,7 +10,7 @@ Each research test file must eventually reach one of four terminal states:
 
 Nothing was deleted in phase 1. "Seal status" reflects 2026-07-11 knowledge.
 
-## Moved to tests/research/ (24 files)
+## Moved to tests/research/ (23 files)
 
 | File | Packet / study | Seal status | Proposed | Rationale |
 |---|---|---|---|---|
@@ -28,7 +28,6 @@ Nothing was deleted in phase 1. "Seal status" reflects 2026-07-11 knowledge.
 | d_online_stage2/test_d_online_stage2_q45_atlas.py | m_b1_5_stage2_q45_20260710 | sealed | T4 | Same; see "known gaps" for external artifact_hashes |
 | misc/test_boolean_atom_partial_order.py | boolean_atom_partial_order_20260711 (#106) | sealed | T3/T4 | Packet-integrity parts → T3; partial-order proposition replays → T4 |
 | misc/test_d0_bridge_estimator_fidelity.py | d0_bridge_estimator_fidelity_20260711 (PR #115) | sealed | T4 | D0 certifies bridge atoms only; packet + recipe preserve it |
-| misc/test_check_association_tools.py | association-tools evidence checks | sealed | T4 | One-shot tool-output verification |
 | misc/test_portable_or_tail.py | frozen portable_policy.json (M-B1 OR-tail) | frozen; kernel acceptance PENDING (ONLINE_BAUDIT_IMPLEMENTED=False) | keep in research | Still active: hook acceptance outstanding. On acceptance, promote the acceptance-relevant assertions (T1), delete the rest (T4) |
 | misc/test_cheb_gr_offline_handover_report.py | chebgr handover applicability study | study sealed | T4 | 315 lines / 1 test driving a diagnostics report script |
 | misc/test_synthesize_handover_applicability.py | same | study sealed | T4 | Subprocess smoke of the synthesis script |
@@ -43,6 +42,7 @@ Nothing was deleted in phase 1. "Seal status" reflects 2026-07-11 knowledge.
 
 | File | Why it stayed | Phase-2 note |
 |---|---|---|
+| tests/unit/test_check_association_tools.py | Unit test of live `check_association_tools.py` (DEFAULT_REGISTRY, `--list`/`--print-recipe` CLI, synthetic schema/error paths); no dated packet read. Initially misfiled into research (PR #118 review), moved back | Core; keep |
 | tests/unit/reid/test_occ_audit.py | Numeric core of live `occ_audit` module | If the occ-exit line is retired, delete module + tests together |
 | tests/unit/eval/test_occ_audit_bank_reference.py | Live module + bank behavior | Same retirement coupling |
 | tests/unit/eval/test_occ_audit_chebgr_probe.py | Default-off but wired probe | Same |

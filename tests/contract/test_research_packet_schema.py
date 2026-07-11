@@ -20,11 +20,20 @@ from tests.contract.packet_inventory import (
     packet_ids,
 )
 
-pytestmark = pytest.mark.skipif(
-    not EVIDENCE_ROOT.is_dir(), reason="evidence root not present"
-)
-
 _DATED_NAME = re.compile(r".+_\d{8}(T\d{6}Z)?$")
+
+
+def test_evidence_root_exists() -> None:
+    # Deliberately NOT a skip: losing or renaming the evidence root must
+    # fail CI, otherwise the whole packet contract is fail-open.
+    assert EVIDENCE_ROOT.is_dir(), f"evidence root missing: {EVIDENCE_ROOT}"
+
+
+def test_packet_set_nonempty() -> None:
+    assert packet_dirs(), (
+        f"no sealed packets found under {EVIDENCE_ROOT}; an empty packet set "
+        "would silently skip every parameterized contract check"
+    )
 
 
 @pytest.fixture(params=packet_dirs(), ids=packet_ids())
