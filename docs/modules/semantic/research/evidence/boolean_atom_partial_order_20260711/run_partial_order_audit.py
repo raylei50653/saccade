@@ -84,6 +84,63 @@ ROLE_ASSIGNMENT_MODE = (
     "control role assignment"
 )
 
+# Research-owner stamp (PR #107 final review, 2026-07-11). Emitted into packet.
+RESEARCH_ACCEPTANCE: dict[str, Any] = {
+    "status": "ACCEPTED_WITH_LIMITS",
+    "recorded": "2026-07-11",
+    "authority": "PR #107 research-owner final review",
+    "pr_url": "https://github.com/raylei50653/saccade/pull/107",
+    "issue": 106,
+    "pr": 107,
+    "accepted_aggregate_terminal": "GLOBAL_PARTIAL_ORDER_READY",
+    "accepted_roles": {
+        "dist_h": "global_orderable",
+        "log_h_ratio": "global_orderable",
+        "bridge_dist": "conditional_orderable",
+        "speed_mismatch": "conditional_orderable",
+        "dir_cos": "conditional_orderable",
+        "resid_mean": "conditional_orderable",
+        "score_m_bridge": "context_only",
+        "gap": "context_only",
+    },
+    "accepted_global_atoms": ["dist_h", "log_h_ratio"],
+    "claim_ceiling": (
+        "L1 partial-order contract on sealed 7-seq substrate; "
+        "PR-C motion evidence remains L1 single-seq bound"
+    ),
+    "limits": [
+        "L1 order contract only — not L2+ / nested confirmation",
+        "conditional arcs remain proposal-only",
+        "bridge_dist and other conditional atoms must not enter global MWC",
+        "score_m_bridge / gap remain context_only",
+        "no production / preset / ledger promotion",
+        "no escape-tail veto",
+    ],
+    "authorizes": [
+        "a separate restricted global-closure prototype after merge, "
+        "using only accepted global_orderable atoms {dist_h, log_h_ratio}"
+    ],
+    "does_not_authorize": [
+        "global arcs on bridge_dist / motion atoms / score_m_bridge / gap",
+        "MWC inside the audit PR",
+        "production / preset / gate changes",
+        "evidence_ledger promotion beyond this bounded acceptance",
+        "L2+ morphology claims without nested held-out confirmation",
+    ],
+    "initial_operational_terminal": "GLOBAL_PARTIAL_ORDER_READY",
+    "initial_global_atoms": ["bridge_dist", "dist_h", "log_h_ratio"],
+    "review_history": (
+        "Initial push misclassified bridge_dist as pure geometry global; "
+        "review demoted it to motion-extrapolation conditional_orderable, "
+        "fixed score_m_bridge unit claim, formula-level dir_cos/residual DAG, "
+        "and governance UNDER REVIEW stamps. Final acceptance ACCEPTED_WITH_LIMITS."
+    ),
+    "restricted_closure": (
+        "AUTHORIZED_as_separate_task_after_merge; "
+        "global_solve_atoms_only={dist_h, log_h_ratio}"
+    ),
+}
+
 # Observable contexts for conditional_orderable motion atoms (no GT outcome used).
 SHORT_GAP_MAX = 60.0  # frames; regime descriptor only
 SPEED_MIX_REF = 0.12  # matches live kernel / ensure_prod_proxy_scores
@@ -1271,11 +1328,11 @@ def decide_terminal(
 
     routing = {
         "GLOBAL_PARTIAL_ORDER_READY": (
-            "operational only: after research acceptance, open a **separate** "
-            "restricted global-closure prototype using only accepted "
-            "global_orderable atoms; compare against frozen OR-tail under exact "
-            "GT-UCB; still candidate-only. While research_acceptance is PENDING, "
-            "restricted-closure remains BLOCKED."
+            "research acceptance ACCEPTED_WITH_LIMITS: after merge, open a "
+            "**separate** restricted global-closure prototype using only "
+            "accepted global_orderable atoms {dist_h, log_h_ratio}; compare "
+            "against frozen OR-tail under exact GT-UCB; still candidate-only. "
+            "bridge_dist and other conditional atoms must not enter the global solve."
         ),
         "CONDITIONAL_STRUCTURE_ONLY": (
             "do not run global MWC; separately design and review the observable "
@@ -1424,6 +1481,7 @@ def emit(pairs: Path, out: Path) -> dict[str, Any]:
         "pr_ladder": "PR-D gate (partial-order audit only)",
         "role_assignment_mode": ROLE_ASSIGNMENT_MODE,
         "statistics_role": "descriptive_only",
+        "research_acceptance": RESEARCH_ACCEPTANCE,
         "roles": {name: cards[name]["role"] for name in ATOM_NAMES},
         "cards": cards,
         "role_vocabulary": list(ROLES),
@@ -1447,34 +1505,27 @@ def emit(pairs: Path, out: Path) -> dict[str, Any]:
     write_json(out / "forbidden_order.json", forbidden)
     write_json(out / "scale_guard.json", scale_guard)
 
+    # Integrity: accepted roles must match the research stamp.
+    for name, expected_role in RESEARCH_ACCEPTANCE["accepted_roles"].items():
+        if cards[name]["role"] != expected_role:
+            raise AssertionError(
+                f"role drift vs RESEARCH_ACCEPTANCE: {name}="
+                f"{cards[name]['role']} expected {expected_role}"
+            )
+    if allowed["global_atoms"] != list(RESEARCH_ACCEPTANCE["accepted_global_atoms"]):
+        raise AssertionError(
+            f"global atoms drift vs RESEARCH_ACCEPTANCE: {allowed['global_atoms']}"
+        )
+
     aggregate = {
         "terminal": terminal["terminal"],
-        "terminal_status": "provisional_operational",
+        "terminal_status": "accepted_with_limits",
         "reason": terminal["reason"],
         "routing": terminal["routing"],
-        # Operational true when terminal is GLOBAL_PARTIAL_ORDER_READY; research
-        # acceptance may still leave restricted-closure BLOCKED until stamped.
         "authorizes_restricted_closure_prototype": terminal[
             "authorizes_restricted_closure_prototype"
         ],
-        "research_acceptance": {
-            "status": "PENDING",
-            "pr": 107,
-            "issue": 106,
-            "note": (
-                "Operational terminal is provisional. Research-owner review "
-                "found initial bridge_dist provenance misclassification; "
-                "revised map is not yet accepted. Restricted-closure remains "
-                "BLOCKED until research acceptance is recorded on PR #107."
-            ),
-            "initial_operational_terminal": "GLOBAL_PARTIAL_ORDER_READY",
-            "initial_global_atoms": [
-                "bridge_dist",
-                "dist_h",
-                "log_h_ratio",
-            ],
-            "restricted_closure": "BLOCKED_until_research_acceptance",
-        },
+        "research_acceptance": RESEARCH_ACCEPTANCE,
         "global_atoms": allowed["global_atoms"],
         "conditional_atoms": sorted(
             n for n, c in cards.items() if c["role"] == "conditional_orderable"
@@ -1495,13 +1546,14 @@ def emit(pairs: Path, out: Path) -> dict[str, Any]:
         "role_assignment_mode": ROLE_ASSIGNMENT_MODE,
         "claim_ceiling": terminal["claim_ceiling"],
         "scope_guards": [
-            "no MWC / min-cut / rule search / weight optimization",
+            "no MWC / min-cut / rule search / weight optimization in this audit",
+            "restricted-closure only as separate post-merge task on {dist_h, log_h_ratio}",
             "no production / preset / ledger change",
             "no escape-tail veto",
             "not observed != unsafe",
             "zero exposure != ordering proof",
             "motion-derived composites cannot silent-global-promote",
-            "provisional operational terminal != research acceptance",
+            "engineering merge != unrestricted scientific expansion",
         ],
     }
     write_json(out / "aggregate.json", aggregate)
@@ -1534,10 +1586,12 @@ def emit(pairs: Path, out: Path) -> dict[str, Any]:
         "n_gt_tracks": len(tracks),
         "n_gt_rows": len(gt_rows),
         "aggregate_terminal": terminal["terminal"],
+        "research_acceptance": RESEARCH_ACCEPTANCE,
         "roles": {name: cards[name]["role"] for name in ATOM_NAMES},
         "scope": (
             "read-only offline partial-order audit; no MWC/min-cut/rule-search/"
-            "weight-opt; no production/preset/ledger changes"
+            "weight-opt in this packet; restricted-closure only as separate "
+            "post-merge task on accepted global atoms; no production/preset/ledger"
         ),
         "files": body_hashes,
     }

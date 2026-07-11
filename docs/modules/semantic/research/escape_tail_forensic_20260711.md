@@ -212,7 +212,7 @@ counts:
 
 ### Downstream routing
 
-`ROLE_REVERSAL_SUPPORTED` under `ACCEPTED_WITH_LIMITS` → partial-order audit (#106 / [PR #107](https://github.com/raylei50653/saccade/pull/107)) **UNDER REVIEW** (research acceptance pending); restricted-closure remains **BLOCKED**.
+`ROLE_REVERSAL_SUPPORTED` under `ACCEPTED_WITH_LIMITS` → partial-order audit (#106 / [PR #107](https://github.com/raylei50653/saccade/pull/107)) **`ACCEPTED_WITH_LIMITS`** (`GLOBAL_PARTIAL_ORDER_READY`; global=`{dist_h, log_h_ratio}`); next = separate restricted-closure prototype.
 
 ## 6. Response to PR #104 research-owner review
 
@@ -235,4 +235,4 @@ counts:
 |:--|:--|
 | Engineering | deterministic runner + committed packet + `--verify` + scene sheets |
 | Research acceptance | **`ACCEPTED_WITH_LIMITS`** ([PR #104](https://github.com/raylei50653/saccade/pull/104) research-owner review) |
-| Next | PR-D gate #106 / [PR #107](https://github.com/raylei50653/saccade/pull/107) **UNDER REVIEW** (acceptance pending); restricted-closure **BLOCKED** |
+| Next | PR-D gate #106 / [PR #107](https://github.com/raylei50653/saccade/pull/107) **`ACCEPTED_WITH_LIMITS`** → separate restricted-closure prototype on `{dist_h, log_h_ratio}` |

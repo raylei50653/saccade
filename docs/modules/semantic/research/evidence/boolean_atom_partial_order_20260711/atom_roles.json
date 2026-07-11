@@ -4,6 +4,56 @@
  "pr_ladder": "PR-D gate (partial-order audit only)",
  "role_assignment_mode": "research_judgment_with_executable_guards; V_i / shell / threshold metrics are descriptive and do not alone control role assignment",
  "statistics_role": "descriptive_only",
+ "research_acceptance": {
+  "status": "ACCEPTED_WITH_LIMITS",
+  "recorded": "2026-07-11",
+  "authority": "PR #107 research-owner final review",
+  "pr_url": "https://github.com/raylei50653/saccade/pull/107",
+  "issue": 106,
+  "pr": 107,
+  "accepted_aggregate_terminal": "GLOBAL_PARTIAL_ORDER_READY",
+  "accepted_roles": {
+   "dist_h": "global_orderable",
+   "log_h_ratio": "global_orderable",
+   "bridge_dist": "conditional_orderable",
+   "speed_mismatch": "conditional_orderable",
+   "dir_cos": "conditional_orderable",
+   "resid_mean": "conditional_orderable",
+   "score_m_bridge": "context_only",
+   "gap": "context_only"
+  },
+  "accepted_global_atoms": [
+   "dist_h",
+   "log_h_ratio"
+  ],
+  "claim_ceiling": "L1 partial-order contract on sealed 7-seq substrate; PR-C motion evidence remains L1 single-seq bound",
+  "limits": [
+   "L1 order contract only — not L2+ / nested confirmation",
+   "conditional arcs remain proposal-only",
+   "bridge_dist and other conditional atoms must not enter global MWC",
+   "score_m_bridge / gap remain context_only",
+   "no production / preset / ledger promotion",
+   "no escape-tail veto"
+  ],
+  "authorizes": [
+   "a separate restricted global-closure prototype after merge, using only accepted global_orderable atoms {dist_h, log_h_ratio}"
+  ],
+  "does_not_authorize": [
+   "global arcs on bridge_dist / motion atoms / score_m_bridge / gap",
+   "MWC inside the audit PR",
+   "production / preset / gate changes",
+   "evidence_ledger promotion beyond this bounded acceptance",
+   "L2+ morphology claims without nested held-out confirmation"
+  ],
+  "initial_operational_terminal": "GLOBAL_PARTIAL_ORDER_READY",
+  "initial_global_atoms": [
+   "bridge_dist",
+   "dist_h",
+   "log_h_ratio"
+  ],
+  "review_history": "Initial push misclassified bridge_dist as pure geometry global; review demoted it to motion-extrapolation conditional_orderable, fixed score_m_bridge unit claim, formula-level dir_cos/residual DAG, and governance UNDER REVIEW stamps. Final acceptance ACCEPTED_WITH_LIMITS.",
+  "restricted_closure": "AUTHORIZED_as_separate_task_after_merge; global_solve_atoms_only={dist_h, log_h_ratio}"
+ },
  "roles": {
   "score_m_bridge": "context_only",
   "bridge_dist": "conditional_orderable",
