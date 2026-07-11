@@ -1,0 +1,9 @@
+verdict=PARTIALLY_IDENTIFIABLE
+source_sha256=0ae3896791ec074fbe951198752c17385c4ee0770a7ec3831225d3ea56a69d17
+pool=21789 (GT=340, FP=21449)
+sequences=7
+m0_identifiable=true
+position_only_identifiable=true
+joint_identifiable=false
+loo_headline_contexts=global
+phase_b_authorized=false

@@ -112,17 +112,13 @@ archived  →  不再當現況導航                               →  docs/arc
 
 ## Proposed threads
 
-任務已寫成母線、**尚未開跑**或未進入 sole-active 授權。
-
-| Thread | Status (one-line) | Owner |
-|:--|:--|:--|
-| [gap_conditioned_probabilistic_motion_probe_20260711.md](gap_conditioned_probabilistic_motion_probe_20260711.md) | **PROPOSED** · independent conditional motion probe (M0→M1 CV-Gaussian → M2 integrated OU) · offline frozen-pair only · no production / no global closure | semantic |
+目前無 proposed thread。
 
 ## Active threads
 
 | Thread | Status (one-line) | Owner |
 |:--|:--|:--|
-| [gt_support_morphology_20260711.md](gt_support_morphology_20260711.md) | **semantic sole active** · PR-A/B/C sealed · PR-D / [#107](https://github.com/raylei50653/saccade/pull/107) **`ACCEPTED_WITH_LIMITS`** · global=`{dist_h,log_h_ratio}` · next separate restricted-closure | semantic |
+| [gap_conditioned_probabilistic_motion_probe_20260711.md](gap_conditioned_probabilistic_motion_probe_20260711.md) | **semantic sole active** · E0–E1 `ACCEPTED_WITH_LIMITS` · probabilistic verdict `NOT_YET_EVALUATED` · next E2 position-only M1-P/M2-P freeze | semantic |
 | [association_recovery_registry_20260709.md](association_recovery_registry_20260709.md) | Scripts index + tools YAML + contracts 就位；registry 維護母線 | semantic |
 | [doc_structure_o15_followup_20260709.md](doc_structure_o15_followup_20260709.md) | O1.5 + TODO-as-WIP-lock；follow-up = index debt / optional strict | ownership |
 
@@ -130,6 +126,7 @@ archived  →  不再當現況導航                               →  docs/arc
 
 | Thread | Status (one-line) | Owner |
 |:--|:--|:--|
+| [gt_support_morphology_20260711.md](gt_support_morphology_20260711.md) | **PARKED after PR-D** · #107 `ACCEPTED_WITH_LIMITS` boundary preserved · restricted-closure prototype not started · resume after semantic owner gate | semantic |
 | [occ_exit_audit_20260709.md](occ_exit_audit_20260709.md) | **PARKED** · WP1–WP3 complete · future RegionAsset producer/intervention consumer after assetization gate | semantic |
 
 ## Closed threads（檔案在 [`closed/`](closed/)）

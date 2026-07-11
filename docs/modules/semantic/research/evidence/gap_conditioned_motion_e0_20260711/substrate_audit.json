@@ -1,0 +1,191 @@
+{
+  "schema_version": 1,
+  "source": {
+    "pairs_csv": "out/signal_study/m_b1_gate_coverage_7seq_20260709T121326Z/pairs.csv",
+    "sha256": "0ae3896791ec074fbe951198752c17385c4ee0770a7ec3831225d3ea56a69d17",
+    "columns": [
+      "seq",
+      "lost_id",
+      "cand_id",
+      "gt_lost",
+      "gt_cand",
+      "gt_match",
+      "gt_valid",
+      "accepted",
+      "already_linked",
+      "gap",
+      "dist_h",
+      "fwd_resid",
+      "bwd_resid",
+      "bridge_dist",
+      "dir_cos",
+      "speed_h",
+      "lost_exit_speed",
+      "cand_entry_speed",
+      "lost_last_frame",
+      "cand_first_frame",
+      "lost_lifespan",
+      "cand_lifespan",
+      "lost_len",
+      "cand_len",
+      "lost_foot_x",
+      "lost_foot_y",
+      "cand_foot_x",
+      "cand_foot_y",
+      "h_ref",
+      "h_lost_raw",
+      "h_cand_raw",
+      "h_lost_trim1",
+      "h_cand_trim1",
+      "h_lost_win6",
+      "h_cand_win6",
+      "h_lost_extrap",
+      "h_cand_extrap",
+      "fwd_v4ols",
+      "bwd_v4ols",
+      "sl_v4ols",
+      "fwd_v8ols",
+      "bwd_v8ols",
+      "sl_v8ols",
+      "fwd_v16ols",
+      "bwd_v16ols",
+      "sl_v16ols",
+      "fwd_v32ols",
+      "bwd_v32ols",
+      "sl_v32ols",
+      "fwd_lb10",
+      "bwd_lb10",
+      "sl_lb10",
+      "fwd_lb20",
+      "bwd_lb20",
+      "sl_lb20",
+      "fwd_lb30",
+      "bwd_lb30",
+      "sl_lb30"
+    ]
+  },
+  "integrity": {
+    "rows_total": 24284,
+    "rows_gt_valid": 21789,
+    "gt_total": 340,
+    "fp_total": 21449,
+    "sequence_count": 7,
+    "invalid_gap_identity": 0,
+    "invalid_position_rows": 0,
+    "duplicate_pair_keys": 0
+  },
+  "gap_bins": {
+    "1-10": {
+      "pairs": 1037,
+      "gt": 53,
+      "fp": 984
+    },
+    "11-30": {
+      "pairs": 1895,
+      "gt": 76,
+      "fp": 1819
+    },
+    "31-60": {
+      "pairs": 2549,
+      "gt": 63,
+      "fp": 2486
+    },
+    "61-150": {
+      "pairs": 6979,
+      "gt": 100,
+      "fp": 6879
+    },
+    "151-300": {
+      "pairs": 9329,
+      "gt": 48,
+      "fp": 9281
+    }
+  },
+  "sequences": {
+    "MOT17-02-SDP": {
+      "pairs": 3290,
+      "gt": 72
+    },
+    "MOT17-04-SDP": {
+      "pairs": 687,
+      "gt": 12
+    },
+    "MOT17-05-SDP": {
+      "pairs": 5265,
+      "gt": 42
+    },
+    "MOT17-09-SDP": {
+      "pairs": 411,
+      "gt": 14
+    },
+    "MOT17-10-SDP": {
+      "pairs": 6170,
+      "gt": 157
+    },
+    "MOT17-11-SDP": {
+      "pairs": 1431,
+      "gt": 20
+    },
+    "MOT17-13-SDP": {
+      "pairs": 4535,
+      "gt": 23
+    }
+  },
+  "identifiability": {
+    "verdict": "PARTIALLY_IDENTIFIABLE",
+    "m0_deterministic": {
+      "identifiable": true,
+      "missing_fields": []
+    },
+    "position_only_transition": {
+      "identifiable": true,
+      "missing_fields": [],
+      "allowed_observation": "delta_foot_xy / h_ref conditioned on gap"
+    },
+    "velocity_only_transition": {
+      "identifiable": false,
+      "missing_fields": [
+        "cand_entry_vx",
+        "cand_entry_vy",
+        "lost_exit_vx",
+        "lost_exit_vy"
+      ]
+    },
+    "joint_position_velocity_transition": {
+      "identifiable": false,
+      "missing_fields": [
+        "cand_entry_vx",
+        "cand_entry_vy",
+        "lost_exit_vx",
+        "lost_exit_vy"
+      ]
+    },
+    "contexts": {
+      "loo_headline_eligible": [
+        "global"
+      ],
+      "diagnostic_only": [
+        "sequence"
+      ],
+      "missing_transferable_fields": [
+        "exit_zone",
+        "gmc_direction_cluster",
+        "image_height",
+        "image_width",
+        "route_group"
+      ]
+    }
+  },
+  "gate": {
+    "phase_b_authorized": false,
+    "next_allowed": [
+      "rebuild M0 role-reversal baseline on canonical gap bins",
+      "specify a position-only M1-P/M2-P family without vector velocity claims"
+    ],
+    "blocked": [
+      "velocity-only and joint NLL/q_motion",
+      "sequence-conditioned LOO headline",
+      "exit-zone/GMC/route context claims"
+    ]
+  }
+}

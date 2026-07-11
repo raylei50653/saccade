@@ -1,5 +1,5 @@
 ---
-doc-status: active
+doc-status: parked
 doc-promotion: navigation-only; not evidence
 owner-module: semantic
 created: 2026-07-11
@@ -11,7 +11,7 @@ created: 2026-07-11
 
 | Item | Status |
 |:--|:--|
-| Program | **ACTIVE** — semantic sole active（接替 safe-region assetization A1 closed 後的 research mainline） |
+| Program | **PARKED** — PR-D accepted boundary preserved；restricted-closure continuation not started |
 | Research object | μ_GT placement distribution on the atom lattice（**不是** per-cell risk field —— step-0 判定其不可識別） |
 | Step-0 audit | **recorded** · [note](../../modules/semantic/research/gt_support_morphology_step0_20260711.md) · committed packet: [evidence/gt_support_morphology_step0_20260711/](../../modules/semantic/research/evidence/gt_support_morphology_step0_20260711/manifest.json) |
 | Procedure | framework §19 **v1 sealed** via [PR #100](https://github.com/raylei50653/saccade/pull/100) merge |
@@ -74,9 +74,14 @@ AUTHORIZED only as a separate post-merge task
 
 ## Current step
 
-**PR-D gate / #106 via [PR #107](https://github.com/raylei50653/saccade/pull/107): `ACCEPTED_WITH_LIMITS`.**
+**PARKED after PR-D / #107 `ACCEPTED_WITH_LIMITS`.**
 
-Next = **separate restricted global-closure prototype** after merge：global solve only `{dist_h, log_h_ratio}`；vs frozen OR-tail；candidate-only；不得併入 audit PR；`bridge_dist` 與其他 conditional atoms 不得進入 global solve。
+Resume condition = explicit owner reauthorization after the independent
+[gap-conditioned probabilistic motion probe](gap_conditioned_probabilistic_motion_probe_20260711.md)
+releases the semantic WIP lock. The still-unstarted next task remains a
+**separate restricted global-closure prototype**：global solve only
+`{dist_h, log_h_ratio}`；vs frozen OR-tail；candidate-only；不得併入 audit PR；
+`bridge_dist` 與其他 conditional atoms不得進入 global solve。
 
 PR ladder（2026-07-11 owner 定版；#106 將 partial-order gate 與 closure prototype 拆開）：
 
@@ -129,3 +134,4 @@ closing hypothesis: GT 是否形成 corner-concentrated core
 - 2026-07-11: **PR #100 review = REQUEST_CHANGES（research seal 層；engineering PASS）**，五點修正全數落地：①§19.5 加 UCB validity（residual clustering 下 plain CP = nominal diagnostic，不得跨 ε_morph；須 cluster-aware 或再聚合）②§19.4 GT trial 改 set-valued semantics（Z_u 全集 + H_C(u)=1[Z_u∩C=∅]；min-d_H representative 降 descriptive-only）③Step-0 terminal 改 **UNRESOLVED** + bounded descriptive hypothesis（`CORE_PLUS_…` token 撤回；「out-of-core mass」保留給 C* 求解後）④core 定義補全：C* = argmin retained-FP s.t. valid UCB[P(H_C=1)] ≤ ε_morph；up-set 方向 + deterministic tie-breaks + complexity cap + Ω/missing-value 宣告 ⑤committed reproduction packet（[evidence/](../../modules/semantic/research/evidence/gt_support_morphology_step0_20260711/manifest.json)：gt_rows / occupancy k4–k8 / tail_tracks / cp_ucb + scripts + pairs.csv SHA seal）。**副發現：tail 4/4 全在 MOT17-10-SDP** —— sequence clustering 為實據非假設，直接支持 UNRESOLVED，並成為 PR-C forensic 的關鍵 context。
 - 2026-07-11: **PR-C / issue #102 escape-tail forensic** via [PR #104](https://github.com/raylei50653/saccade/pull/104). Review blockers fixed (signal non-tautology · scene sheets · operationalization honesty). Research acceptance **`ACCEPTED_WITH_LIMITS`**: 3×TRUE + 1×UNRESOLVED · aggregate `ROLE_REVERSAL_SUPPORTED` · L1 single-seq only · authorizes partial-order audit only.
 - 2026-07-11: **PR-D gate / issue #106 Boolean-atom partial-order audit** via [PR #107](https://github.com/raylei50653/saccade/pull/107). **Initial operational terminal** = `GLOBAL_PARTIAL_ORDER_READY` with global=`{bridge_dist, dist_h, log_h_ratio}`. Research-owner review found `bridge_dist` provenance misclassification and incorrect `score_m_bridge` unit claim; revisions demoted `bridge_dist`, fixed units/guards/DAG, and held status UNDER REVIEW. **Final research acceptance `ACCEPTED_WITH_LIMITS`**: terminal `GLOBAL_PARTIAL_ORDER_READY` · global=`{dist_h, log_h_ratio}` · conditional includes `bridge_dist` · authorizes only a separate restricted-closure prototype on the accepted global pair.
+- 2026-07-11: Parked before the restricted-closure prototype started so the independent gap-conditioned motion probe can hold semantic WIP=1. Accepted PR-D roles and the resume boundary remain unchanged; no closure prototype artifact exists yet.

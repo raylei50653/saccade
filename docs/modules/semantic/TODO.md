@@ -5,14 +5,12 @@
 
 ## Sole active
 
-🔄 **GT-Support Morphology — PR-D / #107 `ACCEPTED_WITH_LIMITS`; next = restricted-closure prototype (separate task)**
+🔄 **Gap-conditioned probabilistic motion probe — E0–E1 `ACCEPTED_WITH_LIMITS`; next = E2 position-only M1-P/M2-P family freeze**
 
-- Thread: [gt_support_morphology_20260711.md](../../research/threads/gt_support_morphology_20260711.md)
-- Step-0: per-cell risk field 不可識別；**verdict `UNRESOLVED`** + descriptive hypothesis（corner-concentrated + 4-track far-Hamming motion tail，**4/4 在 MOT17-10**）→ [note](research/gt_support_morphology_step0_20260711.md) · packet [evidence/](research/evidence/gt_support_morphology_step0_20260711/manifest.json) · procedure = [framework §19](../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)（**v1 sealed** via [#100](https://github.com/raylei50653/saccade/pull/100)）
-- PR-B: [boolean closure-domain line](research/boolean_closure_domain_line_20260711.md) **merged** ([#101](https://github.com/raylei50653/saccade/pull/101))
-- PR-C / [#102](https://github.com/raylei50653/saccade/issues/102) · [PR #104](https://github.com/raylei50653/saccade/pull/104): 3×TRUE + 1×UNRESOLVED · aggregate `ROLE_REVERSAL_SUPPORTED` · **`ACCEPTED_WITH_LIMITS`** (L1 single-seq; partial-order audit only) → [forensic note](research/escape_tail_forensic_20260711.md) · [packet](research/evidence/escape_tail_forensic_20260711/manifest.json)
-- PR-D gate / [#106](https://github.com/raylei50653/saccade/issues/106) · [PR #107](https://github.com/raylei50653/saccade/pull/107): **`ACCEPTED_WITH_LIMITS`** · terminal **`GLOBAL_PARTIAL_ORDER_READY`** · global=`{dist_h, log_h_ratio}` · conditional includes `bridge_dist` (motion-extrapolation) · [note](research/boolean_atom_partial_order_20260711.md) · [packet](research/evidence/boolean_atom_partial_order_20260711/manifest.json)
-- Next: **separate restricted-closure prototype** after merge（global solve ONLY `{dist_h, log_h_ratio}`；conditional atoms forbidden in global solve）→ **PR-E** nested validation
+- Thread: [gap_conditioned_probabilistic_motion_probe_20260711.md](../../research/threads/gap_conditioned_probabilistic_motion_probe_20260711.md)
+- E0: [note](research/gap_conditioned_motion_e0_20260711.md) · [packet](research/evidence/gap_conditioned_motion_e0_20260711/manifest.json)
+- E1: [note](research/gap_conditioned_motion_e1_m0_20260711.md) · [packet](research/evidence/gap_conditioned_motion_e1_m0_20260711/manifest.json)
+- Boundary: frozen pair table only · position-only next · joint/velocity + Phase B fail-closed · no production/default/global-closure change
 
 ## Previous line（closed; nav only）
 
@@ -38,12 +36,14 @@
 
 ## Parked
 
+- GT-Support Morphology — PR-D / #107 `ACCEPTED_WITH_LIMITS`; restricted-closure prototype not started; accepted global=`{dist_h, log_h_ratio}` boundary preserved → [thread](../../research/threads/gt_support_morphology_20260711.md)
 - Occ-exit conditional intervention modeling — WP1–WP3 complete; future RegionAsset producer/intervention consumer; resume only after assetization owner gate → [occ-exit thread](../../research/threads/occ_exit_audit_20260709.md)
 - Sparse key-embedding bank — C++ async sidecar（#57 禁 sync）→ [sparse_key_embedding_bank_20260704.md](research/sparse_key_embedding_bank_20260704.md)
 
 ## Related research threads（不佔 WIP 鎖）
 
-- [gt-support morphology](../../research/threads/gt_support_morphology_20260711.md) — **ACTIVE**（sole active 本體）· PR-A/B/C sealed · PR-D / #107 **`ACCEPTED_WITH_LIMITS`** · next restricted-closure prototype
+- [gap-conditioned probabilistic motion](../../research/threads/gap_conditioned_probabilistic_motion_probe_20260711.md) — **ACTIVE**（sole active）· E0–E1 `ACCEPTED_WITH_LIMITS` · probabilistic verdict `NOT_YET_EVALUATED` · next E2 position-only family freeze
+- [gt-support morphology](../../research/threads/gt_support_morphology_20260711.md) — **PARKED** · PR-A/B/C sealed · PR-D / #107 **`ACCEPTED_WITH_LIMITS`** · restricted-closure prototype not started
 - [safe-region assetization](../../research/threads/closed/safe_region_assetization_20260710.md) — **A1 CLOSED (`A1_ACCEPTED_WITH_LIMITS`, maturity A1)** · mainline handed off → gt-support morphology · [PR #95](https://github.com/raylei50653/saccade/pull/95)/[#97](https://github.com/raylei50653/saccade/pull/97) history
 - [composition grammar coverage program](../../research/threads/closed/composition_grammar_coverage_program_20260710.md) — **SUPERSEDED** · coverage map absorbed into assetization R2–R4
 - [composition grammar × safe-region A0](../../research/threads/closed/composition_grammar_safe_region.md) — **CLOSED** · T0-A/B/R1 · terminal B retained
