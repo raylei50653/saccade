@@ -1,0 +1,285 @@
+{
+  "schema_version": 2,
+  "freeze_id": "GCM-E2-POSITION-ONLY-v1",
+  "status": "E3_SIGNALS_SEALED",
+  "phase_b_authorized": false,
+  "a1_a8_computed": false,
+  "verdict": "NOT_YET_EVALUATED",
+  "claim_ceiling": "sealed LOO fold×pair×model score cube only; not Phase B; not V1-V5; not calibration; not production",
+  "source": {
+    "pairs_csv": "out/signal_study/m_b1_gate_coverage_7seq_20260709T121326Z/pairs.csv",
+    "sha256": "0ae3896791ec074fbe951198752c17385c4ee0770a7ec3831225d3ea56a69d17"
+  },
+  "phase_b_design": {
+    "path": "docs/modules/semantic/research/gap_conditioned_motion_phase_b_design_20260711.md",
+    "predeclaration_seal_commit": "69b0e5be0c26d6fa9f460f90aef37e891555da67",
+    "content_sha256": "caa35a261072eff36ced13bb430e7108c24f46603693b69722471684cfafbd9b"
+  },
+  "counts": {
+    "n_folds": 7,
+    "n_parameter_artifacts": 28,
+    "n_selection_artifacts": 7,
+    "n_score_rows": 679952,
+    "n_held_out_score_rows": 97136,
+    "n_train_score_rows": 582816,
+    "n_unique_pairs_scored": 24284,
+    "n_models_per_pair_fold": 4,
+    "models": [
+      "M1P-GLOBAL-CV",
+      "M2P-GLOBAL-OU-H270",
+      "M2P-GLOBAL-OU-H30",
+      "M2P-GLOBAL-OU-H90"
+    ]
+  },
+  "folds": [
+    {
+      "fold_id": "LOO::MOT17-02-SDP",
+      "held_out_sequence": "MOT17-02-SDP",
+      "train_sequences": [
+        "MOT17-04-SDP",
+        "MOT17-05-SDP",
+        "MOT17-09-SDP",
+        "MOT17-10-SDP",
+        "MOT17-11-SDP",
+        "MOT17-13-SDP"
+      ],
+      "fit_row_count": 268,
+      "fit_row_key_sha256": "9e7fe45468f37db1c53eb40b4d2f119674b9276a27543d055d05f306300cba0a",
+      "selected_model_id": "M2P-GLOBAL-OU-H30",
+      "selection_artifact_id": "sha256:54c0ff9ff90825aa22d69ffd83704beaa32d6199783057900216895512ad6741",
+      "parameter_artifact_ids": {
+        "M1P-GLOBAL-CV": "sha256:1adf070f424549121b31120a86780d62f6771243b149b9d2f0e3c2fbebf91345",
+        "M2P-GLOBAL-OU-H270": "sha256:9495436cd96996970d4cc533bf0a542005135a962632fee6a7d53ff011f49b00",
+        "M2P-GLOBAL-OU-H90": "sha256:248548e9bdb90a428cbe7eaa1ebd775801ce3a29b1930ff41179b5762dab3c65",
+        "M2P-GLOBAL-OU-H30": "sha256:07fb707ba559f34074a3334dacb9af50860d20bafb5f95c5bba91bcc992caadd"
+      },
+      "training_nll_by_model": {
+        "M1P-GLOBAL-CV": 811.5233868130312,
+        "M2P-GLOBAL-OU-H270": 800.6020338354314,
+        "M2P-GLOBAL-OU-H90": 780.8264218523517,
+        "M2P-GLOBAL-OU-H30": 734.6245910130268
+      },
+      "held_out_pair_count": 3434,
+      "train_pair_count": 20850,
+      "held_out_score_row_count": 13736,
+      "train_score_row_count": 83400,
+      "score_row_count": 97136
+    },
+    {
+      "fold_id": "LOO::MOT17-04-SDP",
+      "held_out_sequence": "MOT17-04-SDP",
+      "train_sequences": [
+        "MOT17-02-SDP",
+        "MOT17-05-SDP",
+        "MOT17-09-SDP",
+        "MOT17-10-SDP",
+        "MOT17-11-SDP",
+        "MOT17-13-SDP"
+      ],
+      "fit_row_count": 328,
+      "fit_row_key_sha256": "9caca30ef899259101d64b7af65690e2ead48f9b1fb9d8e258f927eb90e0e020",
+      "selected_model_id": "M2P-GLOBAL-OU-H30",
+      "selection_artifact_id": "sha256:373ed0b866ba98af4ba9d73dc44c5ff52250ec3b2274fa8ad98e2bd4b711f24f",
+      "parameter_artifact_ids": {
+        "M1P-GLOBAL-CV": "sha256:3c5721f54b123a747ba879a7a1fe4a3925e3df68036a54238bcc65f11cd2df2b",
+        "M2P-GLOBAL-OU-H270": "sha256:06ca74600aa178ee89d5017401b4bf166304c9c27e4462894910a93523d31b4c",
+        "M2P-GLOBAL-OU-H90": "sha256:0d6c11f00ece1e343b80d7cb98a25a3d7855c43ae7021a9a6bf095064fda3193",
+        "M2P-GLOBAL-OU-H30": "sha256:b10e827fd28b514c0099efc97e4797b41b9424f38b5536155d93534f52d21fac"
+      },
+      "training_nll_by_model": {
+        "M1P-GLOBAL-CV": 1063.1438024633867,
+        "M2P-GLOBAL-OU-H270": 1047.0582822964975,
+        "M2P-GLOBAL-OU-H90": 1018.1176335576743,
+        "M2P-GLOBAL-OU-H30": 951.4079588621044
+      },
+      "held_out_pair_count": 687,
+      "train_pair_count": 23597,
+      "held_out_score_row_count": 2748,
+      "train_score_row_count": 94388,
+      "score_row_count": 97136
+    },
+    {
+      "fold_id": "LOO::MOT17-05-SDP",
+      "held_out_sequence": "MOT17-05-SDP",
+      "train_sequences": [
+        "MOT17-02-SDP",
+        "MOT17-04-SDP",
+        "MOT17-09-SDP",
+        "MOT17-10-SDP",
+        "MOT17-11-SDP",
+        "MOT17-13-SDP"
+      ],
+      "fit_row_count": 298,
+      "fit_row_key_sha256": "ada1a106fdb9163957be49d1c5820154578c13471ba3b3a81d9f7f63cdbcc4e7",
+      "selected_model_id": "M2P-GLOBAL-OU-H30",
+      "selection_artifact_id": "sha256:8e3ee1edf41f7babd603d54e9920a5a30befd6be18280dd8ad91495300706e00",
+      "parameter_artifact_ids": {
+        "M1P-GLOBAL-CV": "sha256:d3db454dc9e94a78f6faf87f493cc71026959a0e801dcb8daed10bc1eec794be",
+        "M2P-GLOBAL-OU-H270": "sha256:d195948bf27e5c6261400936553d7077b91d8263a90aef2ac35ac2b570800102",
+        "M2P-GLOBAL-OU-H90": "sha256:d31874aa670141702024deca28de6c7d654ad15cfd732f3c61278f56355832d1",
+        "M2P-GLOBAL-OU-H30": "sha256:9dc988a64f7e18184e117688e19395a8b0c56c31df759382f0bce12ecde71e13"
+      },
+      "training_nll_by_model": {
+        "M1P-GLOBAL-CV": 1036.5082685058596,
+        "M2P-GLOBAL-OU-H270": 1020.6460212923524,
+        "M2P-GLOBAL-OU-H90": 992.1301221175064,
+        "M2P-GLOBAL-OU-H30": 926.5362419690101
+      },
+      "held_out_pair_count": 6519,
+      "train_pair_count": 17765,
+      "held_out_score_row_count": 26076,
+      "train_score_row_count": 71060,
+      "score_row_count": 97136
+    },
+    {
+      "fold_id": "LOO::MOT17-09-SDP",
+      "held_out_sequence": "MOT17-09-SDP",
+      "train_sequences": [
+        "MOT17-02-SDP",
+        "MOT17-04-SDP",
+        "MOT17-05-SDP",
+        "MOT17-10-SDP",
+        "MOT17-11-SDP",
+        "MOT17-13-SDP"
+      ],
+      "fit_row_count": 326,
+      "fit_row_key_sha256": "164034ec762604c73d488dd5e964d0886e01059af556c8ea36c5fb6ecd2ba01c",
+      "selected_model_id": "M2P-GLOBAL-OU-H30",
+      "selection_artifact_id": "sha256:74ea576627c63726bb288089439baa14486ae34c3e73d76ed6e9a8628bcbde22",
+      "parameter_artifact_ids": {
+        "M1P-GLOBAL-CV": "sha256:27970639aa0815928bb79590e0a10d1d920aa553784f30eafa01e23574db04fd",
+        "M2P-GLOBAL-OU-H270": "sha256:ca7ca1658f7b1076cee7d6650e58f29042e458b18243aa960326b4abf36779a8",
+        "M2P-GLOBAL-OU-H90": "sha256:510315b13964e34a6bac047801546b985c4dd7520ca86cf91d270aad24695dc5",
+        "M2P-GLOBAL-OU-H30": "sha256:ec962a4d94412aba7931fd955ffc1a70154df59b9bdf1fc31bc12de43e7276ff"
+      },
+      "training_nll_by_model": {
+        "M1P-GLOBAL-CV": 1028.740601016692,
+        "M2P-GLOBAL-OU-H270": 1013.110612624916,
+        "M2P-GLOBAL-OU-H90": 985.0440637999835,
+        "M2P-GLOBAL-OU-H30": 920.6753839592187
+      },
+      "held_out_pair_count": 411,
+      "train_pair_count": 23873,
+      "held_out_score_row_count": 1644,
+      "train_score_row_count": 95492,
+      "score_row_count": 97136
+    },
+    {
+      "fold_id": "LOO::MOT17-10-SDP",
+      "held_out_sequence": "MOT17-10-SDP",
+      "train_sequences": [
+        "MOT17-02-SDP",
+        "MOT17-04-SDP",
+        "MOT17-05-SDP",
+        "MOT17-09-SDP",
+        "MOT17-11-SDP",
+        "MOT17-13-SDP"
+      ],
+      "fit_row_count": 183,
+      "fit_row_key_sha256": "8b1e67dd9aba0f2705349c7a23caf7681957c9e9439cff118d9609351c0d7eae",
+      "selected_model_id": "M2P-GLOBAL-OU-H30",
+      "selection_artifact_id": "sha256:5b475817bea50b8ed456db069eb83b1e392f3de02c7fb00cd78ae905f3df0664",
+      "parameter_artifact_ids": {
+        "M1P-GLOBAL-CV": "sha256:08507df9a48a127c3d8efd0ab3569e859811b7812694b694da51c5f1c098d166",
+        "M2P-GLOBAL-OU-H270": "sha256:791ec9e835606003ef65a4957223484544fce35867e22f87dfe28f1dbb4aa501",
+        "M2P-GLOBAL-OU-H90": "sha256:448b742a9abf52854c79a50c3b9d36d783e57912bea05f6375201e4e4494450b",
+        "M2P-GLOBAL-OU-H30": "sha256:c01d2d4c66f1d898d2dc7e848ec562b3fc90f5a6dd73d0ffe27f1fa6b3f70e6c"
+      },
+      "training_nll_by_model": {
+        "M1P-GLOBAL-CV": 427.01307171376,
+        "M2P-GLOBAL-OU-H270": 419.32331889447494,
+        "M2P-GLOBAL-OU-H90": 405.5229705398579,
+        "M2P-GLOBAL-OU-H30": 373.8320525730385
+      },
+      "held_out_pair_count": 6793,
+      "train_pair_count": 17491,
+      "held_out_score_row_count": 27172,
+      "train_score_row_count": 69964,
+      "score_row_count": 97136
+    },
+    {
+      "fold_id": "LOO::MOT17-11-SDP",
+      "held_out_sequence": "MOT17-11-SDP",
+      "train_sequences": [
+        "MOT17-02-SDP",
+        "MOT17-04-SDP",
+        "MOT17-05-SDP",
+        "MOT17-09-SDP",
+        "MOT17-10-SDP",
+        "MOT17-13-SDP"
+      ],
+      "fit_row_count": 320,
+      "fit_row_key_sha256": "0aa3abb410de384d4cc1d667ee25585dbcc3283da2186ec3201a00ce8a4ed784",
+      "selected_model_id": "M2P-GLOBAL-OU-H30",
+      "selection_artifact_id": "sha256:b0ea2758a5e0dd740dc7dc9496d10977dd7e22e36be0045c2ca284f21d445176",
+      "parameter_artifact_ids": {
+        "M1P-GLOBAL-CV": "sha256:b35375a9d8fdb45d27c1bbe2ae5b89b1775da2eb6f3610ae791af8b2e5056263",
+        "M2P-GLOBAL-OU-H270": "sha256:d91c249ba0f991415ef1341f02cf58ca8c468be3ce1ecb350b7bc3d553bb9ce1",
+        "M2P-GLOBAL-OU-H90": "sha256:ff1255aae90f19577eb8ebf2f8b863f682dd3557445feac3263a1853bb7dc8b7",
+        "M2P-GLOBAL-OU-H30": "sha256:73e24c50bfcc28618b5bf670460d990b4c93bb8da39a21a446680e85fefb8d6b"
+      },
+      "training_nll_by_model": {
+        "M1P-GLOBAL-CV": 1031.0409662196125,
+        "M2P-GLOBAL-OU-H270": 1015.3613659511481,
+        "M2P-GLOBAL-OU-H90": 987.1450381055646,
+        "M2P-GLOBAL-OU-H30": 922.0698111318682
+      },
+      "held_out_pair_count": 1485,
+      "train_pair_count": 22799,
+      "held_out_score_row_count": 5940,
+      "train_score_row_count": 91196,
+      "score_row_count": 97136
+    },
+    {
+      "fold_id": "LOO::MOT17-13-SDP",
+      "held_out_sequence": "MOT17-13-SDP",
+      "train_sequences": [
+        "MOT17-02-SDP",
+        "MOT17-04-SDP",
+        "MOT17-05-SDP",
+        "MOT17-09-SDP",
+        "MOT17-10-SDP",
+        "MOT17-11-SDP"
+      ],
+      "fit_row_count": 317,
+      "fit_row_key_sha256": "a88c8ed7c35a833b2d66c04344cb2fca3dc16969b4f8ecacdc55c96a5ee0fafb",
+      "selected_model_id": "M2P-GLOBAL-OU-H30",
+      "selection_artifact_id": "sha256:8e49184e905d7ebcb12aa69dd3481481092aef35ab2f53774b9c3dbe6ad0b0a5",
+      "parameter_artifact_ids": {
+        "M1P-GLOBAL-CV": "sha256:1ed0fb84f9a5229eb1d8bdcfc5d331832941543540e01650d827ff1169ca5aed",
+        "M2P-GLOBAL-OU-H270": "sha256:99089e16a35b3b430e2d265873b38daebc5921a7c71d718d147f5b65644d3857",
+        "M2P-GLOBAL-OU-H90": "sha256:be18396e72098646516f93f660d06d9eb45e1f687b36795ef3799e8e76aa4221",
+        "M2P-GLOBAL-OU-H30": "sha256:aa30a63ba303236003361fb846dd4ba447b9794a91d52d5e74fc809f0aa0f0f3"
+      },
+      "training_nll_by_model": {
+        "M1P-GLOBAL-CV": 1046.0548672151742,
+        "M2P-GLOBAL-OU-H270": 1029.8253769150435,
+        "M2P-GLOBAL-OU-H90": 1000.58406191997,
+        "M2P-GLOBAL-OU-H30": 932.9197318446063
+      },
+      "held_out_pair_count": 4955,
+      "train_pair_count": 19329,
+      "held_out_score_row_count": 19820,
+      "train_score_row_count": 77316,
+      "score_row_count": 97136
+    }
+  ],
+  "output_contract": {
+    "score_unit": "full fold × pair × model cube; evaluation_role=held_out for the fold's held-out sequence pairs; evaluation_role=train for the six training sequences under the same fold-frozen parameters (A6 τ selection); all four members retained; selected_model_id is a marker only",
+    "energy_terms_split": [
+      "q_motion",
+      "log_det_covariance",
+      "gaussian_constant",
+      "nll_motion"
+    ],
+    "a6_train_surface": "filter evaluation_role=train; parameters/lineage already bound per row via parameter_artifact_id + selection_artifact_id",
+    "forbidden_in_this_packet": [
+      "A1-A8 tables",
+      "V1-V5 verdict",
+      "held-out calibration",
+      "family redefinition",
+      "winner-only score filtering",
+      "using held_out rows for A6 threshold selection"
+    ]
+  }
+}

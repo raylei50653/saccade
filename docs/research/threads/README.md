@@ -118,7 +118,7 @@ archived  →  不再當現況導航                               →  docs/arc
 
 | Thread | Status (one-line) | Owner |
 |:--|:--|:--|
-| [gap_conditioned_probabilistic_motion_probe_20260711.md](gap_conditioned_probabilistic_motion_probe_20260711.md) | **semantic sole active** · E0–E2 `ACCEPTED_WITH_LIMITS` · E3 AUTHORIZED · Phase B unauthorized · probabilistic verdict `NOT_YET_EVALUATED` | semantic |
+| [gap_conditioned_probabilistic_motion_probe_20260711.md](gap_conditioned_probabilistic_motion_probe_20260711.md) | **semantic sole active** · E0–E2 `ACCEPTED_WITH_LIMITS` · E3 `E3_SIGNALS_SEALED` · Phase B unauthorized · probabilistic verdict `NOT_YET_EVALUATED` | semantic |
 | [association_recovery_registry_20260709.md](association_recovery_registry_20260709.md) | Scripts index + tools YAML + contracts 就位；registry 維護母線 | semantic |
 | [doc_structure_o15_followup_20260709.md](doc_structure_o15_followup_20260709.md) | O1.5 + TODO-as-WIP-lock；follow-up = index debt / optional strict | ownership |
 
