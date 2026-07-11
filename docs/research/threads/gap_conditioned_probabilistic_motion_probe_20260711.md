@@ -1,5 +1,5 @@
 ---
-doc-status: proposed
+doc-status: active
 doc-promotion: navigation-only; not evidence
 owner-module: semantic
 created: 2026-07-11
@@ -14,11 +14,11 @@ default-behavior-change: forbidden
 
 | Item | Status |
 |:--|:--|
-| Program | **PROPOSED** — independent conditional motion representation probe；**not** semantic sole active |
+| Program | **ACTIVE** — semantic sole active；independent conditional motion representation probe |
 | Research object | gap-conditioned transition density \(p(x_1,v_1 \mid x_0,v_0,\Delta t,c)\) → standardized mismatch / NLL / optional reach mass |
 | Motivation | deterministic motion atoms 在 long-gap slice 出現 GT role reversal（short: high-mismatch→FP；部分 long: high-mismatch 集中 GT） |
 | Relation to mainline | **parallel / independent** · 不納入 restricted global closure · 不改 \(\{dist_h,\log h_{ratio}\}\) 安全域主線 |
-| Execution | **not started** · substrate frozen pair table only · offline exploration + analysis |
+| Execution | **E0–E1 complete** · E0 `PARTIALLY_IDENTIFIABLE` · E1 0/20 aggregate reversal cells but clear gap degradation · substrate frozen pair table only |
 | Engineering / production | **none** · no tracker / preset / online hook / baseline change |
 | Research promotion | **none** until LOO + bounded V1–V5 verdict |
 
@@ -75,11 +75,15 @@ Scope:
 
 ## Artifacts
 
-**Planned (none produced yet):**
+**Produced / planned:**
 
 | Artifact | Role |
 |:--|:--|
-| Research note | problem · equations · context · substrate · fit/LOO protocol · limitations · bounded verdict |
+| [E0 research note](../../modules/semantic/research/gap_conditioned_motion_e0_20260711.md) | substrate audit · canonical bins · `PARTIALLY_IDENTIFIABLE` gate |
+| [E0 packet](../../modules/semantic/research/evidence/gap_conditioned_motion_e0_20260711/manifest.json) | source SHA seal · schema/integrity audit · byte verification |
+| [E1 research note](../../modules/semantic/research/gap_conditioned_motion_e1_m0_20260711.md) | deterministic baseline · aggregate-vs-local role-reversal boundary |
+| [E1 packet](../../modules/semantic/research/evidence/gap_conditioned_motion_e1_m0_20260711/manifest.json) | 20 gap×atom cells · AUC · frozen q90 tail · sequence attribution |
+| Final research note | problem · equations · context · substrate · fit/LOO protocol · limitations · bounded verdict |
 | Pair-level signal table | M0 + M1 + M2 signals · gap/context · model/parameter IDs · labels · regularization flags |
 | Model artifacts / fold | γ, σ, drift/context mean, covariance def, coordinate system, time unit, fit/exclude rows, code version |
 | Summary tables (12) | substrate · M0 RR baseline · cal by gap/seq · short-gap retention · escape-tail · separability · RR rate · LOO · conditional SR · M1 vs M2 · failure attribution |
@@ -88,14 +92,34 @@ Scope:
 
 ## Current step
 
-**PROPOSED — not authorized as sole active; not started.**
+**E0–E1 COMPLETE; next = E2 position-only M1-P/M2-P family freeze.**
+
+Frozen E0 boundary:
+
+```text
+identifiable:
+  M0 deterministic atoms
+  position-only observation = delta_foot_xy / h_ref conditioned on gap
+
+not identifiable on the frozen table:
+  velocity-only / joint position-velocity observations
+  exit-zone / image-normalized / GMC-cluster / route contexts
+
+LOO headline context:
+  global only
+  sequence remains diagnostic / in-sample only
+
+Phase B remains unauthorized.
+```
 
 When opened, follow Phase A → freeze → Phase B（不得在 exploration 中途挑單一漂亮結果作結論）:
 
 ```text
 Phase A — exploration
-  E0 substrate / identifiability audit
-  E1 M0 deterministic role-reversal baseline (gap bins)
+  E0 substrate / identifiability audit — DONE: PARTIALLY_IDENTIFIABLE
+  E1 M0 deterministic role-reversal baseline — DONE:
+     0/20 aggregate reversal cells; gap degradation retained;
+     PR-C escape tail remains local/conditional
   E2 M1/M2 limited predeclared parameter family
   E3 signal generation (position-only · velocity-only · joint; terms split)
   freeze model family + analysis inputs
@@ -149,8 +173,8 @@ improvement not explained by unrestricted diffusion
 
 ### Definition of Done (close only when all true)
 
-- [ ] substrate audit complete (`identifiable` / `partially_identifiable` / `not_identifiable`)
-- [ ] M0 role-reversal baseline rebuilt
+- [x] substrate audit complete (`PARTIALLY_IDENTIFIABLE`)
+- [x] M0 role-reversal baseline rebuilt
 - [ ] M1 and M2 reproducible implementations
 - [ ] position-only vs joint outputs separated; energy terms stored separately
 - [ ] gap-bin calibration · RR rate · short-gap retention · escape-tail · conditional SR · LOO · M1 vs M2 attribution · failure/scale/regularization audit
@@ -183,3 +207,6 @@ Until then: no evidence_ledger · no production preset · no online-safe claim �
 
 - 2026-07-11: Task proposed as independent research-exploration-analysis thread. Captured full program (M0–M2 ladder, E0–E3 / A1–A8, V1–V5, DoD) as navigation-only mother line. **Not executed.** Not sole active; does not authorize engineering delivery or ledger promotion.
 - 2026-07-11: PR #108 review — lock LOO firewall: sequence-conditioned context is diagnostic/in-sample only by default (not LOO headline without predeclared train-only fallback / transferable mapping).
+- 2026-07-11: Owner task direction activates this independent probe as semantic sole active; the not-yet-started restricted-closure continuation is parked without changing its accepted global/conditional boundary.
+- 2026-07-11: E0 sealed `PARTIALLY_IDENTIFIABLE` on the existing seven-sequence pair table (SHA `0ae38967…`): M0 + position-only observation available; vector velocity and transferable contexts absent. Canonical gap bins frozen; Phase B remains unauthorized. [Note](../../modules/semantic/research/gap_conditioned_motion_e0_20260711.md) · [packet](../../modules/semantic/research/evidence/gap_conditioned_motion_e0_20260711/manifest.json).
+- 2026-07-11: E1 rebuilt the four-atom deterministic baseline across five canonical gap bins. Frozen aggregate criterion found 0/20 marginal reversal cells; `bridge_dist`/`resid_mean` AUC still erodes strongly with gap. Claim narrowed: PR-C role reversal is local/conditional, not a whole-bin sign flip. [Note](../../modules/semantic/research/gap_conditioned_motion_e1_m0_20260711.md) · [packet](../../modules/semantic/research/evidence/gap_conditioned_motion_e1_m0_20260711/manifest.json).

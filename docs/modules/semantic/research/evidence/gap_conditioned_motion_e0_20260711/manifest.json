@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "verdict": "PARTIALLY_IDENTIFIABLE",
+  "source_pairs_csv": "out/signal_study/m_b1_gate_coverage_7seq_20260709T121326Z/pairs.csv",
+  "source_pairs_csv_sha256": "0ae3896791ec074fbe951198752c17385c4ee0770a7ec3831225d3ea56a69d17",
+  "runner_sha256": "320e05f1171c4d60378a8a535cea83d754760b7f49326db81af89876a3af9f1d",
+  "artifacts": {
+    "substrate_audit.json": "388d88fb9989d82852db489d706aad6bff1df011ea0cc7ae19e6cf813c48a97e",
+    "recorded_output.txt": "26e6602d96a48cab111b928bf97ac0dd1e642b8e909fdb9cccc4289711122db4"
+  }
+}
