@@ -34,9 +34,10 @@ procedure v1 未 seal ⇒ 一切 verdict 皆 exploratory
 ## Read first
 
 1. [Framework §19 — GT-support morphology predeclared procedure](../eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
-2. [Step-0 note](../../modules/semantic/research/gt_support_morphology_step0_20260711.md)
-3. Study artifacts: `out/signal_study/gt_support_morphology_step0_20260711/`
-4. 前線 handoff: [safe-region assetization thread](safe_region_assetization_20260710.md)（A1 CLOSED；R1.1 role-reversal 症狀 = 本線 escape-tail 機制的描述性前身）
+2. [布林閉包域研究線 normative doc（PR-B）](../../modules/semantic/research/boolean_closure_domain_line_20260711.md)
+3. [Step-0 note](../../modules/semantic/research/gt_support_morphology_step0_20260711.md)
+4. Study artifacts: `out/signal_study/gt_support_morphology_step0_20260711/`
+5. 前線 handoff: [safe-region assetization thread](safe_region_assetization_20260710.md)（A1 CLOSED；R1.1 role-reversal 症狀 = 本線 escape-tail 機制的描述性前身）
 
 ## Artifacts
 
@@ -52,9 +53,10 @@ PR ladder（2026-07-11 owner 定版，五段）：
 
 ```text
 PR-A  #100  Step-0 + morphology procedure seal（本 PR；merge = seal）
-PR-B        布林閉包域研究線 normative doc（placement morphology →
+PR-B  #101  布林閉包域研究線 normative doc（placement morphology →
             partial-order audit → MWC → exact GT-UCB validation →
-            optional gate compression；含 Verdict A–E 完成條件）
+            optional gate compression；含 Verdict A–E 完成條件；
+            stacked on PR-A）
 PR-C        4-track escape-tail forensic（五類別；判 motion role-reversal
             是否真機制）
 PR-D        restricted closure prototype（global_orderable atoms only；
@@ -87,4 +89,5 @@ closing hypothesis: GT 是否形成 corner-concentrated core
 
 - 2026-07-11: Line opened（owner 選定 next scientific uncertainty）。Step-0 identifiability + placement audit recorded：per-cell risk field 不可識別（任何 k 僅 1 cell 達 ε≤0.05）；GT placement 可識別（M₀=97.1% @ k=5 median-split；4/209 escape tail，motion-atom 集中，log_h_ratio 0/4）。研究物件轉換為 μ_GT；framework §19 procedure v1 起草（PROPOSED）。
 - 2026-07-11: [PR #100](https://github.com/raylei50653/saccade/pull/100)（Draft）opened as **procedure v1 seal unit**：§19 含 ε_morph=5% CP-UCB 界線 + 四 terminals；boundaries 在 review 定版；forensic 結果排除在外（時間邊界）。
+- 2026-07-11: Owner 定版 **PR ladder A–E**；[PR #101](https://github.com/raylei50653/saccade/pull/101)（Draft, stacked on #100）opened as **PR-B = 布林閉包域研究線 normative doc**（正式問題 / atom orderability 四分類 / MWC candidate frontier + exact UCB 判定 / OR-tail 比較 / Verdict A–E / 排除方法登錄）；terminal 權威留在 §19，六描述子類附 binding-terminal 對映表。
 - 2026-07-11: **PR #100 review = REQUEST_CHANGES（research seal 層；engineering PASS）**，五點修正全數落地：①§19.5 加 UCB validity（residual clustering 下 plain CP = nominal diagnostic，不得跨 ε_morph；須 cluster-aware 或再聚合）②§19.4 GT trial 改 set-valued semantics（Z_u 全集 + H_C(u)=1[Z_u∩C=∅]；min-d_H representative 降 descriptive-only）③Step-0 terminal 改 **UNRESOLVED** + bounded descriptive hypothesis（`CORE_PLUS_…` token 撤回；「out-of-core mass」保留給 C* 求解後）④core 定義補全：C* = argmin retained-FP s.t. valid UCB[P(H_C=1)] ≤ ε_morph；up-set 方向 + deterministic tie-breaks + complexity cap + Ω/missing-value 宣告 ⑤committed reproduction packet（[evidence/](../../modules/semantic/research/evidence/gt_support_morphology_step0_20260711/manifest.json)：gt_rows / occupancy k4–k8 / tail_tracks / cp_ucb + scripts + pairs.csv SHA seal）。**副發現：tail 4/4 全在 MOT17-10-SDP** —— sequence clustering 為實據非假設，直接支持 UNRESOLVED，並成為 PR-C forensic 的關鍵 context。
