@@ -9,7 +9,7 @@
 
 - Thread: [gt_support_morphology_20260711.md](../../research/threads/gt_support_morphology_20260711.md)
 - Step-0: per-cell risk field 不可識別；μ_GT = corner core（M₀=97.1%）+ 4-track motion-atom escape tail → [note](research/gt_support_morphology_step0_20260711.md) · procedure = [framework §19](../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)（v1 PROPOSED）
-- Next: owner seal = [PR #100](https://github.com/raylei50653/saccade/pull/100) review+merge → escape-tail forensics（預宣告類別，PR 2）→ nested per-fold rerun（PR 3）
+- Next（PR ladder A–E）: **PR-A** [#100](https://github.com/raylei50653/saccade/pull/100) seal → **PR-B** 布林閉包域研究線 doc → **PR-C** 4-track forensic → **PR-D** restricted closure prototype（MWC vs OR-tail）→ **PR-E** nested validation
 
 ## Previous line（closed; nav only）
 

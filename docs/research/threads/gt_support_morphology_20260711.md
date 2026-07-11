@@ -48,7 +48,21 @@ procedure v1 未 seal ⇒ 一切 verdict 皆 exploratory
 
 **PR 1（Draft）= procedure seal unit**：framework §19（含 ε_morph=5% / CP-UCB 界線與四 terminals）+ Step-0 note + 治理配線。Review 中定版界線，owner merge = seal。**Forensic 結果不得進 PR 1**（時間邊界：機制資訊不可反饋 boundary）。Seal 前不跑 forensics、不跑 per-fold。
 
-PR 切法：PR 1 seal → PR 2 escape-tail forensic（4 tracks、五類別）→ PR 3 nested confirmation（首個可超 L1 的確認單元）。
+PR ladder（2026-07-11 owner 定版，五段）：
+
+```text
+PR-A  #100  Step-0 + morphology procedure seal（本 PR；merge = seal）
+PR-B        布林閉包域研究線 normative doc（placement morphology →
+            partial-order audit → MWC → exact GT-UCB validation →
+            optional gate compression；含 Verdict A–E 完成條件）
+PR-C        4-track escape-tail forensic（五類別；判 motion role-reversal
+            是否真機制）
+PR-D        restricted closure prototype（global_orderable atoms only；
+            parametric MWC vs frozen OR-tail；read-only candidate-only；
+            conditional closure probe 依 PR-C 結果併入）
+PR-E        nested held-out validation（outer-fold full replay；
+            首個可超 L1 的確認單元）
+```
 
 ## Acceptance
 
