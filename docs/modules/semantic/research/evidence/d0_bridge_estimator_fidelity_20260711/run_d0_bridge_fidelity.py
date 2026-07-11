@@ -682,7 +682,7 @@ def quantile_alignment(offline: np.ndarray, online: np.ndarray) -> list[dict[str
             {
                 "quantile": f"q{int(q * 100)}",
                 "offline_quantile": oq,
-                "consumer_a_quantile": cq,
+                "recon_quantile": cq,
                 "absolute_error": abs_err,
                 "relative_error": rel_err,
                 "headline": q == 0.85,
@@ -705,13 +705,13 @@ def predicate_confusion(
     rate = su / n if n else float("nan")
     return {
         "n": n,
-        "offline_safe_online_safe": ss,
-        "offline_safe_online_unsafe": su,
-        "offline_unsafe_online_safe": us,
-        "offline_unsafe_online_unsafe": uu,
+        "offline_safe_recon_safe": ss,
+        "offline_safe_recon_unsafe": su,
+        "offline_unsafe_recon_safe": us,
+        "offline_unsafe_recon_unsafe": uu,
         "predicate_agreement": agree,
-        "offline_safe_online_unsafe_count": su,
-        "offline_safe_online_unsafe_rate": rate,
+        "offline_safe_recon_unsafe_count": su,
+        "offline_safe_recon_unsafe_rate": rate,
     }
 
 
@@ -738,15 +738,15 @@ def slice_metrics(
         "spearman_ci_high": sp["ci_high"],
         "n_clusters": sp["n_clusters"],
         "q85_offline": q85["offline_quantile"],
-        "q85_consumer_a": q85["consumer_a_quantile"],
+        "q85_recon": q85["recon_quantile"],
         "q85_abs_error": q85["absolute_error"],
         "q85_rel_error": q85["relative_error"],
         "predicate": conf,
         "quantiles": qrows,
         "offline_quantiles": quantiles(offline),
-        "consumer_a_quantiles": quantiles(online),
+        "recon_quantiles": quantiles(online),
         "quantile_monotone_offline": _monotone(quantiles(offline)),
-        "quantile_monotone_consumer_a": _monotone(quantiles(online)),
+        "quantile_monotone_recon": _monotone(quantiles(online)),
     }
 
 
@@ -805,12 +805,12 @@ def evaluate_verdict(
         and float(pred_o["predicate_agreement"]) >= GATE_PRED_AGREE
         and float(pred_g["predicate_agreement"]) >= GATE_PRED_AGREE
         and float(pred_f["predicate_agreement"]) >= GATE_PRED_AGREE
-        and int(pred_g["offline_safe_online_unsafe_count"]) <= GATE_GT_SAFE_UNSAFE_COUNT
-        and float(pred_g["offline_safe_online_unsafe_rate"]) <= GATE_GT_SAFE_UNSAFE_RATE
+        and int(pred_g["offline_safe_recon_unsafe_count"]) <= GATE_GT_SAFE_UNSAFE_COUNT
+        and float(pred_g["offline_safe_recon_unsafe_rate"]) <= GATE_GT_SAFE_UNSAFE_RATE
         and gap_pred_ok
     )
     mono = bool(
-        overall["quantile_monotone_offline"] and overall["quantile_monotone_consumer_a"]
+        overall["quantile_monotone_offline"] and overall["quantile_monotone_recon"]
     )
     rank_ok = (
         (not thr_ok)
@@ -859,8 +859,8 @@ def evaluate_verdict(
             "pred_agree_overall": float(pred_o["predicate_agreement"]),
             "pred_agree_gt": float(pred_g["predicate_agreement"]),
             "pred_agree_fp": float(pred_f["predicate_agreement"]),
-            "gt_safe_unsafe_count": int(pred_g["offline_safe_online_unsafe_count"]),
-            "gt_safe_unsafe_rate": float(pred_g["offline_safe_online_unsafe_rate"]),
+            "gt_safe_unsafe_count": int(pred_g["offline_safe_recon_unsafe_count"]),
+            "gt_safe_unsafe_rate": float(pred_g["offline_safe_recon_unsafe_rate"]),
             "quantile_monotone_both": mono,
         },
     }
@@ -1107,7 +1107,7 @@ def join_events(
         "offline_s_a_rows": len(sa_pairs),
         "offline_s_a_gt": len(sa_gt_keys),
         "offline_s_a_fp": len(fp_keys),
-        "consumer_a_captured_rows": len(capture_rows),
+        "reconstruction_captured_rows": len(capture_rows),
         "exact_matched_rows": matched,
         "offline_only_rows": offline_only,
         "online_only_rows": online_only,
@@ -1236,7 +1236,7 @@ def compute_all_metrics(matched: list[dict[str, Any]]) -> dict[str, Any]:
                     "spearman_ci_high": float("nan"),
                     "n_clusters": 0,
                     "q85_offline": float("nan"),
-                    "q85_consumer_a": float("nan"),
+                    "q85_recon": float("nan"),
                     "q85_abs_error": float("nan"),
                     "q85_rel_error": float("nan"),
                     "predicate": predicate_confusion(np.array([]), np.array([]))
@@ -1244,9 +1244,9 @@ def compute_all_metrics(matched: list[dict[str, Any]]) -> dict[str, Any]:
                     else None,
                     "quantiles": [],
                     "offline_quantiles": quantiles(np.array([])),
-                    "consumer_a_quantiles": quantiles(np.array([])),
+                    "recon_quantiles": quantiles(np.array([])),
                     "quantile_monotone_offline": False,
-                    "quantile_monotone_consumer_a": False,
+                    "quantile_monotone_recon": False,
                 }
                 continue
             qmetrics[sname] = slice_metrics(
@@ -1409,14 +1409,14 @@ def flatten_metrics_tables(
                 "spearman_ci_low": m["spearman_ci_low"],
                 "spearman_ci_high": m["spearman_ci_high"],
                 "q85_offline": m["q85_offline"],
-                "q85_consumer_a": m["q85_consumer_a"],
+                "q85_recon": m["q85_recon"],
                 "q85_abs_error": m["q85_abs_error"],
                 "predicate_agreement": pred.get("predicate_agreement", ""),
-                "offline_safe_online_unsafe_count": pred.get(
-                    "offline_safe_online_unsafe_count", ""
+                "offline_safe_recon_unsafe_count": pred.get(
+                    "offline_safe_recon_unsafe_count", ""
                 ),
-                "offline_safe_online_unsafe_rate": pred.get(
-                    "offline_safe_online_unsafe_rate", ""
+                "offline_safe_recon_unsafe_rate": pred.get(
+                    "offline_safe_recon_unsafe_rate", ""
                 ),
             }
             if sname.startswith("seq::"):
@@ -1439,16 +1439,16 @@ def build_predicate_table(metrics: dict[str, Any]) -> list[dict[str, Any]]:
             {
                 "slice": sname,
                 "n": pred["n"],
-                "offline_safe_online_safe": pred["offline_safe_online_safe"],
-                "offline_safe_online_unsafe": pred["offline_safe_online_unsafe"],
-                "offline_unsafe_online_safe": pred["offline_unsafe_online_safe"],
-                "offline_unsafe_online_unsafe": pred["offline_unsafe_online_unsafe"],
+                "offline_safe_recon_safe": pred["offline_safe_recon_safe"],
+                "offline_safe_recon_unsafe": pred["offline_safe_recon_unsafe"],
+                "offline_unsafe_recon_safe": pred["offline_unsafe_recon_safe"],
+                "offline_unsafe_recon_unsafe": pred["offline_unsafe_recon_unsafe"],
                 "predicate_agreement": pred["predicate_agreement"],
-                "offline_safe_online_unsafe_count": pred[
-                    "offline_safe_online_unsafe_count"
+                "offline_safe_recon_unsafe_count": pred[
+                    "offline_safe_recon_unsafe_count"
                 ],
-                "offline_safe_online_unsafe_rate": pred[
-                    "offline_safe_online_unsafe_rate"
+                "offline_safe_recon_unsafe_rate": pred[
+                    "offline_safe_recon_unsafe_rate"
                 ],
             }
         )
@@ -1489,7 +1489,7 @@ def boundary_diagnostics(matched: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "n_gt": 0,
                 "n_fp": 0,
                 "predicate_disagreement": 0,
-                "offline_safe_online_unsafe_rate": float("nan"),
+                "offline_safe_recon_unsafe_rate": float("nan"),
             }
         ]
     o = np.array([float(r["offline_bridge_dist"]) for r in band])
@@ -1502,9 +1502,9 @@ def boundary_diagnostics(matched: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "row_count": len(band),
             "n_gt": n_gt,
             "n_fp": len(band) - n_gt,
-            "predicate_disagreement": conf["offline_safe_online_unsafe"]
-            + conf["offline_unsafe_online_safe"],
-            "offline_safe_online_unsafe_rate": conf["offline_safe_online_unsafe_rate"],
+            "predicate_disagreement": conf["offline_safe_recon_unsafe"]
+            + conf["offline_unsafe_recon_safe"],
+            "offline_safe_recon_unsafe_rate": conf["offline_safe_recon_unsafe_rate"],
             "predicate_agreement": conf["predicate_agreement"],
         }
     ]
@@ -1596,15 +1596,15 @@ def run_pipeline(
                         "spearman_ci_high": float("nan"),
                         "n_clusters": 0,
                         "q85_offline": float("nan"),
-                        "q85_consumer_a": float("nan"),
+                        "q85_recon": float("nan"),
                         "q85_abs_error": float("nan"),
                         "q85_rel_error": float("nan"),
                         "predicate": predicate_confusion(np.array([]), np.array([])),
                         "quantiles": [],
                         "offline_quantiles": quantiles(np.array([])),
-                        "consumer_a_quantiles": quantiles(np.array([])),
+                        "recon_quantiles": quantiles(np.array([])),
                         "quantile_monotone_offline": False,
-                        "quantile_monotone_consumer_a": False,
+                        "quantile_monotone_recon": False,
                     },
                     "S_A_GT": {
                         "slice": "S_A_GT",
@@ -1617,15 +1617,15 @@ def run_pipeline(
                         "spearman_ci_high": float("nan"),
                         "n_clusters": 0,
                         "q85_offline": float("nan"),
-                        "q85_consumer_a": float("nan"),
+                        "q85_recon": float("nan"),
                         "q85_abs_error": float("nan"),
                         "q85_rel_error": float("nan"),
                         "predicate": predicate_confusion(np.array([]), np.array([])),
                         "quantiles": [],
                         "offline_quantiles": quantiles(np.array([])),
-                        "consumer_a_quantiles": quantiles(np.array([])),
+                        "recon_quantiles": quantiles(np.array([])),
                         "quantile_monotone_offline": False,
-                        "quantile_monotone_consumer_a": False,
+                        "quantile_monotone_recon": False,
                     },
                     "S_A_FP": {
                         "slice": "S_A_FP",
@@ -1638,15 +1638,15 @@ def run_pipeline(
                         "spearman_ci_high": float("nan"),
                         "n_clusters": 0,
                         "q85_offline": float("nan"),
-                        "q85_consumer_a": float("nan"),
+                        "q85_recon": float("nan"),
                         "q85_abs_error": float("nan"),
                         "q85_rel_error": float("nan"),
                         "predicate": predicate_confusion(np.array([]), np.array([])),
                         "quantiles": [],
                         "offline_quantiles": quantiles(np.array([])),
-                        "consumer_a_quantiles": quantiles(np.array([])),
+                        "recon_quantiles": quantiles(np.array([])),
                         "quantile_monotone_offline": False,
-                        "quantile_monotone_consumer_a": False,
+                        "quantile_monotone_recon": False,
                     },
                     "gap_1_10": {
                         "slice": "gap_1_10",
@@ -1659,15 +1659,15 @@ def run_pipeline(
                         "spearman_ci_high": float("nan"),
                         "n_clusters": 0,
                         "q85_offline": float("nan"),
-                        "q85_consumer_a": float("nan"),
+                        "q85_recon": float("nan"),
                         "q85_abs_error": float("nan"),
                         "q85_rel_error": float("nan"),
                         "predicate": predicate_confusion(np.array([]), np.array([])),
                         "quantiles": [],
                         "offline_quantiles": quantiles(np.array([])),
-                        "consumer_a_quantiles": quantiles(np.array([])),
+                        "recon_quantiles": quantiles(np.array([])),
                         "quantile_monotone_offline": False,
-                        "quantile_monotone_consumer_a": False,
+                        "quantile_monotone_recon": False,
                     },
                     "gap_11_26": {
                         "slice": "gap_11_26",
@@ -1680,15 +1680,15 @@ def run_pipeline(
                         "spearman_ci_high": float("nan"),
                         "n_clusters": 0,
                         "q85_offline": float("nan"),
-                        "q85_consumer_a": float("nan"),
+                        "q85_recon": float("nan"),
                         "q85_abs_error": float("nan"),
                         "q85_rel_error": float("nan"),
                         "predicate": predicate_confusion(np.array([]), np.array([])),
                         "quantiles": [],
                         "offline_quantiles": quantiles(np.array([])),
-                        "consumer_a_quantiles": quantiles(np.array([])),
+                        "recon_quantiles": quantiles(np.array([])),
                         "quantile_monotone_offline": False,
-                        "quantile_monotone_consumer_a": False,
+                        "quantile_monotone_recon": False,
                     },
                     "gap_1_10_GT": {
                         "slice": "gap_1_10_GT",
@@ -1701,15 +1701,15 @@ def run_pipeline(
                         "spearman_ci_high": float("nan"),
                         "n_clusters": 0,
                         "q85_offline": float("nan"),
-                        "q85_consumer_a": float("nan"),
+                        "q85_recon": float("nan"),
                         "q85_abs_error": float("nan"),
                         "q85_rel_error": float("nan"),
                         "predicate": predicate_confusion(np.array([]), np.array([])),
                         "quantiles": [],
                         "offline_quantiles": quantiles(np.array([])),
-                        "consumer_a_quantiles": quantiles(np.array([])),
+                        "recon_quantiles": quantiles(np.array([])),
                         "quantile_monotone_offline": False,
-                        "quantile_monotone_consumer_a": False,
+                        "quantile_monotone_recon": False,
                     },
                     "gap_11_26_GT": {
                         "slice": "gap_11_26_GT",
@@ -1722,15 +1722,15 @@ def run_pipeline(
                         "spearman_ci_high": float("nan"),
                         "n_clusters": 0,
                         "q85_offline": float("nan"),
-                        "q85_consumer_a": float("nan"),
+                        "q85_recon": float("nan"),
                         "q85_abs_error": float("nan"),
                         "q85_rel_error": float("nan"),
                         "predicate": predicate_confusion(np.array([]), np.array([])),
                         "quantiles": [],
                         "offline_quantiles": quantiles(np.array([])),
-                        "consumer_a_quantiles": quantiles(np.array([])),
+                        "recon_quantiles": quantiles(np.array([])),
                         "quantile_monotone_offline": False,
-                        "quantile_monotone_consumer_a": False,
+                        "quantile_monotone_recon": False,
                     },
                 }
                 for q in ("bdist", "dist_h", "fwd_r", "bwd_r")
@@ -1828,11 +1828,11 @@ def run_pipeline(
             "spearman_ci_low",
             "spearman_ci_high",
             "q85_offline",
-            "q85_consumer_a",
+            "q85_recon",
             "q85_abs_error",
             "predicate_agreement",
-            "offline_safe_online_unsafe_count",
-            "offline_safe_online_unsafe_rate",
+            "offline_safe_recon_unsafe_count",
+            "offline_safe_recon_unsafe_rate",
         ],
         overall_rows,
     )
@@ -1848,11 +1848,11 @@ def run_pipeline(
             "spearman_ci_low",
             "spearman_ci_high",
             "q85_offline",
-            "q85_consumer_a",
+            "q85_recon",
             "q85_abs_error",
             "predicate_agreement",
-            "offline_safe_online_unsafe_count",
-            "offline_safe_online_unsafe_rate",
+            "offline_safe_recon_unsafe_count",
+            "offline_safe_recon_unsafe_rate",
         ],
         gap_rows,
     )
@@ -1868,11 +1868,11 @@ def run_pipeline(
             "spearman_ci_low",
             "spearman_ci_high",
             "q85_offline",
-            "q85_consumer_a",
+            "q85_recon",
             "q85_abs_error",
             "predicate_agreement",
-            "offline_safe_online_unsafe_count",
-            "offline_safe_online_unsafe_rate",
+            "offline_safe_recon_unsafe_count",
+            "offline_safe_recon_unsafe_rate",
         ],
         seq_rows,
     )
@@ -1883,7 +1883,7 @@ def run_pipeline(
             "slice",
             "quantile",
             "offline_quantile",
-            "consumer_a_quantile",
+            "recon_quantile",
             "absolute_error",
             "relative_error",
             "headline",
@@ -1895,13 +1895,13 @@ def run_pipeline(
         [
             "slice",
             "n",
-            "offline_safe_online_safe",
-            "offline_safe_online_unsafe",
-            "offline_unsafe_online_safe",
-            "offline_unsafe_online_unsafe",
+            "offline_safe_recon_safe",
+            "offline_safe_recon_unsafe",
+            "offline_unsafe_recon_safe",
+            "offline_unsafe_recon_unsafe",
             "predicate_agreement",
-            "offline_safe_online_unsafe_count",
-            "offline_safe_online_unsafe_rate",
+            "offline_safe_recon_unsafe_count",
+            "offline_safe_recon_unsafe_rate",
         ],
         pred_rows,
     )
@@ -1913,7 +1913,7 @@ def run_pipeline(
             "n_gt",
             "n_fp",
             "predicate_disagreement",
-            "offline_safe_online_unsafe_rate",
+            "offline_safe_recon_unsafe_rate",
             "predicate_agreement",
         ],
         boundary_rows,
@@ -2249,12 +2249,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--capture",
         type=Path,
         default=None,
-        help="Optional pre-built consumer_a_capture.csv[.gz]",
+        help="Optional pre-built reconstruction capture.csv[.gz] (tests only; --verify ignores this)",
     )
     parser.add_argument(
         "--verify",
         action="store_true",
-        help="Rebuild from sealed capture and require byte-identical artifacts",
+        help="Rebuild capture from frozen pairs+substrate; require byte-identical sealed artifacts",
     )
     args = parser.parse_args(argv)
 

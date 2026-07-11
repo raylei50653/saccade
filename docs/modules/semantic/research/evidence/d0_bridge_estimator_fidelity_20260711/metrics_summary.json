@@ -20,32 +20,32 @@
     },
     "predicate_fp": {
       "n": 2344,
-      "offline_safe_online_safe": 63,
-      "offline_safe_online_unsafe": 60,
-      "offline_safe_online_unsafe_count": 60,
-      "offline_safe_online_unsafe_rate": 0.025597269624573378,
-      "offline_unsafe_online_safe": 37,
-      "offline_unsafe_online_unsafe": 2184,
+      "offline_safe_recon_safe": 63,
+      "offline_safe_recon_unsafe": 60,
+      "offline_safe_recon_unsafe_count": 60,
+      "offline_safe_recon_unsafe_rate": 0.025597269624573378,
+      "offline_unsafe_recon_safe": 37,
+      "offline_unsafe_recon_unsafe": 2184,
       "predicate_agreement": 0.9586177474402731
     },
     "predicate_gt": {
       "n": 112,
-      "offline_safe_online_safe": 55,
-      "offline_safe_online_unsafe": 24,
-      "offline_safe_online_unsafe_count": 24,
-      "offline_safe_online_unsafe_rate": 0.21428571428571427,
-      "offline_unsafe_online_safe": 3,
-      "offline_unsafe_online_unsafe": 30,
+      "offline_safe_recon_safe": 55,
+      "offline_safe_recon_unsafe": 24,
+      "offline_safe_recon_unsafe_count": 24,
+      "offline_safe_recon_unsafe_rate": 0.21428571428571427,
+      "offline_unsafe_recon_safe": 3,
+      "offline_unsafe_recon_unsafe": 30,
       "predicate_agreement": 0.7589285714285714
     },
     "predicate_overall": {
       "n": 2456,
-      "offline_safe_online_safe": 118,
-      "offline_safe_online_unsafe": 84,
-      "offline_safe_online_unsafe_count": 84,
-      "offline_safe_online_unsafe_rate": 0.03420195439739414,
-      "offline_unsafe_online_safe": 40,
-      "offline_unsafe_online_unsafe": 2214,
+      "offline_safe_recon_safe": 118,
+      "offline_safe_recon_unsafe": 84,
+      "offline_safe_recon_unsafe_count": 84,
+      "offline_safe_recon_unsafe_rate": 0.03420195439739414,
+      "offline_unsafe_recon_safe": 40,
+      "offline_unsafe_recon_unsafe": 2214,
       "predicate_agreement": 0.9495114006514658
     }
   },
@@ -60,7 +60,6 @@
   },
   "coverage": {
     "ambiguous_keys": 0,
-    "consumer_a_captured_rows": 22465,
     "duplicate_keys_capture": 0,
     "duplicate_keys_offline": 0,
     "exact_matched_rows": 22465,
@@ -79,7 +78,8 @@
     "offline_s_a_gt": 117,
     "offline_s_a_rows": 2561,
     "online_only_rows": 0,
-    "overall_match_coverage_s_a": 0.9590003904724717
+    "overall_match_coverage_s_a": 0.9590003904724717,
+    "reconstruction_captured_rows": 22465
   },
   "disagreement_n_su": 84,
   "estimator_decomposition": [

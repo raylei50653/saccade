@@ -122,7 +122,7 @@ def test_duplicate_event_key_fails_coverage_gate() -> None:
             "q85_abs_error": 0.01,
             "predicate": empty_pred,
             "quantile_monotone_offline": True,
-            "quantile_monotone_consumer_a": True,
+            "quantile_monotone_recon": True,
         },
         "S_A_GT": {
             "spearman_rho": 0.99,
@@ -183,13 +183,13 @@ def test_predicate_confusion_known_case_fixture() -> None:
     offline = np.array([0.2, 0.3, 0.5, 0.6])
     online = np.array([0.2, 0.5, 0.3, 0.6])
     conf = d0.predicate_confusion(offline, online, thr=0.4)
-    assert conf["offline_safe_online_safe"] == 1
-    assert conf["offline_safe_online_unsafe"] == 1
-    assert conf["offline_unsafe_online_safe"] == 1
-    assert conf["offline_unsafe_online_unsafe"] == 1
+    assert conf["offline_safe_recon_safe"] == 1
+    assert conf["offline_safe_recon_unsafe"] == 1
+    assert conf["offline_unsafe_recon_safe"] == 1
+    assert conf["offline_unsafe_recon_unsafe"] == 1
     assert conf["predicate_agreement"] == pytest.approx(0.5)
-    assert conf["offline_safe_online_unsafe_count"] == 1
-    assert conf["offline_safe_online_unsafe_rate"] == pytest.approx(0.25)
+    assert conf["offline_safe_recon_unsafe_count"] == 1
+    assert conf["offline_safe_recon_unsafe_rate"] == pytest.approx(0.25)
 
 
 def test_cluster_bootstrap_deterministic_seed() -> None:
@@ -220,13 +220,13 @@ def _perfect_metrics(
     def pred(n_rows: int, su_count: int, agreement: float):
         return {
             "n": n_rows,
-            "offline_safe_online_safe": n_rows - su_count,
-            "offline_safe_online_unsafe": su_count,
-            "offline_unsafe_online_safe": 0,
-            "offline_unsafe_online_unsafe": 0,
+            "offline_safe_recon_safe": n_rows - su_count,
+            "offline_safe_recon_unsafe": su_count,
+            "offline_unsafe_recon_safe": 0,
+            "offline_unsafe_recon_unsafe": 0,
             "predicate_agreement": agreement,
-            "offline_safe_online_unsafe_count": su_count,
-            "offline_safe_online_unsafe_rate": su_count / n_rows if n_rows else 0.0,
+            "offline_safe_recon_unsafe_count": su_count,
+            "offline_safe_recon_unsafe_rate": su_count / n_rows if n_rows else 0.0,
         }
 
     base = {
@@ -234,7 +234,7 @@ def _perfect_metrics(
         "q85_abs_error": q85,
         "predicate": pred(n, su, agree),
         "quantile_monotone_offline": True,
-        "quantile_monotone_consumer_a": True,
+        "quantile_monotone_recon": True,
         "n_gt": n,
     }
     return {

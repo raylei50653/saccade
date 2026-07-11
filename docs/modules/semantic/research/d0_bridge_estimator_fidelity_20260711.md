@@ -130,7 +130,7 @@ failure is an additional independent fail reason under the frozen metric gates.
 These numbers compare offline atoms to **kernel-formula reconstruction**, not
 to live CUDA `bdist`. They **cannot** support threshold transfer.
 
-| Slice | n | Spearman ρ | q85 \|err\| | pred. agree @0.4 | GT offline-safe/recon-unsafe |
+| Slice | n | Spearman ρ | q85 \|err\| | pred. agree @0.4 | GT offline-safe / recon-unsafe |
 |:--|--:|--:|--:|--:|--:|
 | overall | 2,456 | 0.965 | 0.213 | 0.950 | 84 (3.4%) |
 | GT | 112 | 0.714 | 0.469 | 0.759 | **24 (21.4%)** |

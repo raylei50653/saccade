@@ -1,4 +1,4 @@
-quantity,slice,n,n_gt,n_fp,spearman_rho,spearman_ci_low,spearman_ci_high,q85_offline,q85_consumer_a,q85_abs_error,predicate_agreement,offline_safe_online_unsafe_count,offline_safe_online_unsafe_rate
+quantity,slice,n,n_gt,n_fp,spearman_rho,spearman_ci_low,spearman_ci_high,q85_offline,q85_recon,q85_abs_error,predicate_agreement,offline_safe_recon_unsafe_count,offline_safe_recon_unsafe_rate
 bdist,seq::MOT17-02-SDP,340,5,335,0.9842936765,0.969108368,0.9924565868,6.1290793149,6.169724602,0.0406452871,0.9794117647,1,0.0029411765
 bdist,seq::MOT17-04-SDP,71,6,65,0.9948356808,0.9850701913,0.9983785509,8.850980376,8.5938007948,0.2571795812,1,0,0
 bdist,seq::MOT17-05-SDP,622,28,594,0.895338881,0.8598974558,0.9247944793,2.37473663,2.6284681116,0.2537314817,0.9276527331,26,0.0418006431

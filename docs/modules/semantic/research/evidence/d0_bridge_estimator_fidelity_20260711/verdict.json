@@ -19,7 +19,7 @@
       "slice": "gap_11_26"
     }
   ],
-  "git_commit": "78f14a27f08efa130c9ecb4ec217b6e1c12c41d3",
+  "git_commit": "e662dbce950aa2399747c9a656e0ba3639437307",
   "headline_preset_path": "configs/presets/mamba_whole_graph_m.yaml",
   "headline_preset_resolved_bridge": {
     "relink_bridge_anchor": "adaptive",
@@ -46,7 +46,7 @@
   "production_changed": false,
   "production_threshold": 0.4,
   "research_bridge_fidelity_audit_default": false,
-  "runner_sha256": "5dbe0e89e95c4e9a579e1644a7672c9335e342b677c692f8171d8ba861c8614c",
+  "runner_sha256": "081e2399a6c09a6e7192b73fce21d982923f895a270057ed2f87b995d0f2e10f",
   "runtime_capture_available": false,
   "schema_version": 2,
   "source_pairs_sha256": "0ae3896791ec074fbe951198752c17385c4ee0770a7ec3831225d3ea56a69d17",
