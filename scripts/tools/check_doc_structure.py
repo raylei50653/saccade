@@ -12,13 +12,14 @@ Contract (``docs/ownership/doc_structure_contract.md`` § C4 / C9):
       if it exists, else in ``docs/research/README.md``.
   S3  Every ``docs/modules/<m>/`` directory must contain README.md and TODO.md.
 
-This checker is **warn-only** by default (exit 0 even with findings). Pass
-``--strict`` to exit non-zero (reserved for a later hard phase).
+This checker is **warn-only** by default for index-coverage findings (exit 0
+even with findings). ``--strict`` exits non-zero on C6.4 lifecycle violations
+(L1–L4); ``scripts/pre_push.sh`` uses that mode. Index coverage remains
+warn-only in either mode.
 
 Index detection currently uses basename substring match against the owning
-README body. That is acceptable for warn-only hygiene; before enabling
-``--strict`` in CI, switch to Markdown link parsing to reduce false positives
-(basename mentioned only in prose or stale paths).
+README body. It remains warn-only hygiene; Markdown link parsing would reduce
+false positives (basename mentioned only in prose or stale paths).
 
 Usage: uv run python3 scripts/tools/check_doc_structure.py [--strict]
 """

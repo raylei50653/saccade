@@ -33,7 +33,7 @@ has **one primary job**, explicit secondaries, and a clear **should-not-own** li
 | **O3** | Low-risk extraction plan | ordered extract plan | No |
 | **O4** | First mechanical split | code move | Yes — only with checker/smoke |
 
-**O0 entry / dashboard:** [DEVELOPMENT.md 模組現狀總覽](../../DEVELOPMENT.md)  
+**O0 entry:** module `TODO.md`（穩定入口：[DEVELOPMENT.md 模組現狀總覽](../../DEVELOPMENT.md#模組現狀總覽)）
 **Dev entry (need levels D0–D4):** [DEVELOPMENT.md](../../DEVELOPMENT.md)  
 **Closed decision line (read-only):** [tracker-decision/status_2026-07-09.md](../research/tracker-decision/status_2026-07-09.md)  
 **Doc homes / research indexes:** [doc_structure_contract.md](doc_structure_contract.md)

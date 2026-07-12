@@ -44,7 +44,7 @@ Rules of thumb:
 | `docs/modules/<m>/TODO.md` | WIP=1 鎖（sole active 一行 + link） | 任務敘事、進度報告 |
 
 **規則：** 決策層**不得**新增 prose 檔。要解釋 → research note；要導覽 → thread；要規則 → `contracts/`。
-`DEVELOPMENT.md` 與各 README 對決策層**只做投影**（公告選擇結果），**不得**重述任何 object 的
+`DEVELOPMENT.md` 只提供穩定路由；各 README 只做索引或指標。兩者都**不得**重述任何 object 的
 rung / limits / substrate — 那是 registry 的 fact-ownership（C5 的「不得有第二真相」在狀態上的推論）。
 
 ---
@@ -147,7 +147,6 @@ Thread cards under `docs/research/threads/` may use YAML frontmatter instead of 
 |:--|:--|
 | `docs/research/README.md` | Active workstreams (including **pointers** into module research), Closed lines, Paper → `report_data`, subdir entry points（含 `threads/`）; **no phantom paths** |
 | `docs/research/threads/README.md` | Index **all** thread cards by lifecycle table (Proposed / Active / Parked / Closed); closed cards live under `threads/closed/`; close = move + row + frontmatter; navigation-only |
-| `docs/research/<sub>/README.md` | Index **all** `.md` in that subdir (except the README itself), **or** state “no index; filenames only” and do not claim a table elsewhere |
 | `docs/modules/<m>/README.md` | If `research/` exists, index **all** research notes |
 | `report_data/README.md` | Start-here list; **one-line** link to decision paper outline |
 | `docs/research/paper_outline.md` | Links to `evidence_ledger.md` **and** `report_data/README.md` |
@@ -160,13 +159,15 @@ Checker: `scripts/tools/check_doc_structure.py` (warn-only) flags research notes
 
 ## C5 — Evidence & promotion
 
-```text
-Research body
-  ├─ cited as decision / production baseline  → evidence_ledger row + source link
-  ├─ paper claim / rebuildable table-figure → report_data (+ source_map)
-  ├─ negative / default-off outcome         → no_go_registry (+ optional ledger decision row)
-  └─ engineering-only process                → stay in research; promotion: none
-```
+`research/*.md` 是 method、結論與完整證據的 canonical body；它不是第二真相。
+第二真相是入口或摘要另行複製它的裁決、數字或表格。note 外需要引用結果時，選下列 owner：
+
+| 使用目的 | 必要 promotion | 可並存 |
+|:--|:--|:--|
+| 純工程過程；不在 note 外作決策引用 | 留在 research；`doc-promotion: none` | — |
+| 決策或 production baseline 數字 | `evidence_ledger` 一列，連回 source note | 同時可進 report_data 或 no-go |
+| Paper claim、可重建表或圖 | `report_data` + `source_map` / README 回連 | 決策數字仍另進 ledger |
+| Negative、default-off、NO-GO 裁決 | `no_go_registry` 一條 | 若同時是正式決策數字，可加 ledger |
 
 ### Dual paper lines (must cross-link; do not overwrite each other)
 
@@ -180,9 +181,6 @@ Numbers: each line keeps its own master. Entry docs that quote baselines still f
 ---
 
 ## C6 — Lifecycle（適用**所有** doc class，不只 threads）
-
-歷史上 C6 只寫了 threads 的 close 協議：research note 拿到 `doc-status` 欄位卻**沒有轉移**——
-closed 的 note 不搬家、不離開索引、沒有觸發條件。note 只增不減**是這個機制的產物，不是紀律問題**。
 
 | status | Meaning | Entry behavior |
 |:--|:--|:--|
@@ -198,12 +196,11 @@ closed 的 note 不搬家、不離開索引、沒有觸發條件。note 只增�
 說清楚**裁決**、**適用範圍**、**限制**、**證據在哪裡**。一份，不是三份。
 
 **2 · 細節退出 active 視野，但內容不改。**
-封存 ＝ 移出索引、移入 `closed/`／`archive/`、降低可見性。
-**不需要**也**不得**重寫、壓縮、合併——sealed declaration 與 evidence packet 的價值就是
-「封的時候寫了什麼，事後不能改」。整理只動**位置與可見性**，不動**內容**（修正相對連結深度與 frontmatter 中的狀態標記如 `doc-status` 是搬移檔案的必要維護，不在「不得改內容」的限制內；不得改內容指的是禁止修改實質研究結論、證據數據與公式判定）。
+封存 ＝ 移出索引、移入 `closed/`／`archive/`、降低可見性；不重寫、壓縮或合併
+實質研究結論、證據數據與公式判定。修正相對連結深度與 `doc-status` 等搬移必要維護不算內容改寫。
 
 **3 · 關閉流程必須同時完成整理。**
-**不得**先宣布實驗關閉、之後再開一個「整理文檔」任務。之後不會來——那正是 doc 只增不減的原因。
+**不得**先宣布實驗關閉、之後再開一個「整理文檔」任務。
 owner 接受 terminal 的**同一個 PR** 內：結論就位 → 細節搬家 → 移出 active 索引 →
 [registry](../research/contracts/claim_state_registry.md) 狀態更新。
 
@@ -235,9 +232,8 @@ owner 接受 terminal 的**同一個 PR** 內：結論就位 → 細節搬家 �
 | 模組的 sole active（WIP 鎖） | `docs/modules/<m>/TODO.md` |
 | thread 自身的 wip-role | thread frontmatter（索引列只是投影，**L4 檢查一致性**） |
 
-**手寫的投影必然漂移**——實測：`DEVELOPMENT.md` dashboard 與 `research/README.md` 在被發現時都還停在
-一個**已關閉**的單元上。因此索引與入口表只列「這是什麼 + 去哪裡」：**不列裁決、不列數字、不列狀態**。
-module README 的 research 索引尤其如此（它一度整段抄錄裁決與指標，那是 C5 違規）。
+索引與入口表只列「這是什麼 + 去哪裡」：**不列裁決、不列數字、不列狀態**。
+module README 的 research 索引尤其不複製裁決或指標。
 
 **Closed decision line:** [tracker-decision/status_2026-07-09.md](../research/tracker-decision/status_2026-07-09.md) (P0–P8) is read-only; no drive-by reopen (WIP rules).
 
@@ -297,7 +293,7 @@ Not P9; not dual-stability reopen.
 |:--|:--|
 | Human | [DOC_MAINTENANCE PR checklist](../DOC_MAINTENANCE.md) — index row, promotion, no phantom paths |
 | Machine (existing) | `check_doc_links.py` hard · `check_doc_stale_paths.py` hard · `check_doc_freshness.py` warn |
-| Machine (this contract) | `check_doc_structure.py` **warn-only** — research file not referenced by owning README |
+| Machine (this contract) | `check_doc_structure.py` 預設只 warn 索引覆蓋；`--strict` 對 C6.4 lifecycle L1–L4 非零退出（pre-push 使用 strict） |
 
 ```bash
 uv run python3 scripts/tools/check_doc_structure.py
@@ -318,7 +314,6 @@ uv run python3 scripts/tools/check_doc_stale_paths.py
 - Full frontmatter backfill on pre-contract notes
 - Optional `check_doc_structure` warn: TODO overlong / missing sole-active or ⏸️ / missing link
 - Topic hubs (relink / GMC / whole_graph)
-- Tighten `check_doc_structure.py` to `--strict` after index debt is paid down
 
 ---
 

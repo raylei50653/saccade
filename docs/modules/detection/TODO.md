@@ -1,6 +1,6 @@
 # Detection — 模組 TODO
 
-> **WIP register only.** 詳情 → [README](README.md) / research 協議。Dashboard：[DEVELOPMENT.md](../../../DEVELOPMENT.md)。
+> **WIP register only.** 詳情 → [README](README.md) / research 協議。開發路由：[DEVELOPMENT.md](../../../DEVELOPMENT.md#agent-action-cards)。
 
 ## Sole active
 

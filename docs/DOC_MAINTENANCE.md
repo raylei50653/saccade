@@ -50,40 +50,20 @@ Proposed → Accepted → (必要時) Superseded by ADR XXX
 - 操作步驟放 `reference/runbooks/` 或 `modules/<name>/runbooks/`
 - 目前沒有 `progress/`、`layers/` 或 `modules/<name>/decisions/` 目錄；不要在文件中指向這些路徑
 
-**生命週期＝ [契約 C6](ownership/doc_structure_contract.md#c6--lifecycle適用所有-doc-class不只-threads)（三條規則），本檔不複述：**
-① 關閉必須產出一份高密度結論（裁決／範圍／限制／證據在哪）；
-② 細節退出 active 視野但**內容不改**（只動位置與可見性，不重寫不壓縮）；
-③ 關閉與整理**同一個 PR 完成**——不得事後再開「整理文檔」任務。
-`check_doc_structure.py --strict`（pre_push）對 ②③ 的可機械判定部分紅燈。
+生命週期、promotion 與收尾的唯一規則在
+[契約 C4–C7](ownership/doc_structure_contract.md#c4--index-freshness-entry--catalog)；執行順序看
+[DEVELOPMENT 研究收尾卡](../DEVELOPMENT.md#研究收尾卡)。本檔不重述它們。
 
 ---
 
-## Doc Structure Contract（研究 / 模組家與索引）
+## O1.5 boundary
 
-**This is O1.5 of O-series**（docs-only）：檔案家、入口可發現性、evidence promotion。  
-**不是** tracker-decision P9。全文：[ownership/doc_structure_contract.md](ownership/doc_structure_contract.md)。
+[Doc Structure Contract](ownership/doc_structure_contract.md) 是檔案家、狀態標記、索引、promotion、
+lifecycle 與 artifact role 的唯一 owner。新增文件與研究收尾請從
+[DEVELOPMENT action cards](../DEVELOPMENT.md#agent-action-cards) 進入。
 
-### 規則的唯一 owner ＝ 契約本身（本檔只指路，不複述）
-
-規則重複陳述會漂移，漂移時沒人知道哪份是真的——那是「以後還是打補釘」的溫床。所以：
-
-| 我要查 | 唯一 owner |
-|:--|:--|
-| 檔案家 / 分層 · **決策層不出文檔** | [C0 · C0.1](ownership/doc_structure_contract.md#c0--homes-layering) |
-| 寫去哪（決策樹） | [C1](ownership/doc_structure_contract.md#c1--writing-decision-tree) |
-| 文首狀態標記（`doc-status` / `doc-promotion` / `doc-date`） | [C3](ownership/doc_structure_contract.md#c3--research-note-status-markers-new-notes-required) |
-| 索引新鮮度（入口＝目錄） | [C4](ownership/doc_structure_contract.md#c4--index-freshness-entry--catalog) |
-| 數字升格 / 不得有第二真相 | [C5](ownership/doc_structure_contract.md#c5--evidence--promotion) |
-| **生命週期 · 檔名 vs 目錄 · 收單觸發器 · enforcement** | [C6 · C6.1–C6.4](ownership/doc_structure_contract.md#c6--lifecycle適用所有-doc-class不只-threads) |
-| TODO vs research vs threads 角色分工 | [C7](ownership/doc_structure_contract.md#c7--todo-vs-research--threads-role-split) |
-| 研究方法 / 證據語義 / claim ladder | [research/contracts/](research/contracts/README.md) |
-| 研究對象的**當前狀態** | [claim_state_registry](research/contracts/claim_state_registry.md) |
-
-僅此一條本檔自有：**Cheb-GR / bank / occ-exit 的文檔家 = `modules/semantic/`**（即使 code 在 reid 路徑）。
-
-### 相關 checker
-
-- `scripts/tools/check_doc_structure.py`：索引覆蓋率 warn；**`--strict`（pre_push 使用）對 C6.4 的 L1–L3 違規紅燈**
+`check_doc_structure.py` 的索引覆蓋在任何模式下都是 warn；`--strict`（pre-push 使用）只對
+C6.4 lifecycle L1–L4 紅燈。
 
 ---
 
@@ -103,7 +83,6 @@ WIP=1 是 **ownership governance 的 process seal**（docs-only）：每個模�
 
 ```text
 WIP = 1 per module owner  (O0 seal)
-- DEVELOPMENT.md「模組現狀總覽」每個 🔄 列只寫「一個」active 目標 one-liner
 - 各 docs/modules/<m>/TODO.md = WIP register：
     sole active 一句 + link(s) 到 thread / research
     無 active → 明確 ⏸️ / 無 active
@@ -116,13 +95,14 @@ WIP = 1 per module owner  (O0 seal)
   同一負責人不同時並進
 ```
 
-### Dashboard
+### Live entry
 
-模組現狀一覽：[DEVELOPMENT.md 模組現狀總覽](../DEVELOPMENT.md)（**只**鏡射 module TODO 的 sole active one-liner；細節與接續在 threads / research）。
+各 module `TODO.md` 是 sole active 的唯一 live entry；
+[DEVELOPMENT.md 模組現狀總覽](../DEVELOPMENT.md#模組現狀總覽) 只提供穩定入口。
 
 ### 不在此規則內
 
-- 跨模組 **依賴**（例如 geometry GMC 支援 detection VGT）不算第二目標，但 dashboard 應標註依賴關係。
+- 跨模組 **依賴**（例如 geometry GMC 支援 detection VGT）不算第二目標；依賴細節放 thread 或 research，不做 dashboard 投影。
 - Parked one-liners 可列多項；只有 **sole active** 受 WIP=1 約束。
 - Research threads 可多張並存（navigation）；**不得**被當成第二個 sole active 來源。
 
@@ -159,7 +139,7 @@ WIP = 1 per module owner  (O0 seal)
 
 - `scripts/tools/check_doc_stale_paths.py`：**hard fail**，禁止引用已搬移文件的舊路徑（固定 denylist）。
 - `scripts/tools/check_doc_freshness.py`：**warn-only**，提醒手寫日期、缺 marker 的鏡射數字、跨入口重複的 baseline 數字；只警告不擋 CI。
-- `scripts/tools/check_doc_structure.py`：**warn-only**，research 索引覆蓋（見 [Doc Structure Contract](#doc-structure-contract研究--模組家與索引)）。
+- `scripts/tools/check_doc_structure.py`：索引覆蓋 **warn-only**；`--strict` 對 lifecycle L1–L4 hard fail（見 [Doc Structure Contract](ownership/doc_structure_contract.md)）。
 - `scripts/tools/check_doc_links.py`：**hard fail**，相對 Markdown 連結必須可解析。
 
 ---
@@ -183,7 +163,7 @@ WIP = 1 per module owner  (O0 seal)
 □ 系統模組實作進度表與代碼一致？
 □ ADR 狀態正確？
 □ TODO 仍是 WIP 鎖（sole active 一句 + link），未塞長文 / 結果表？（C7）
-□ WIP=1：DEVELOPMENT dashboard 🔄 one-liner 與 module TODO sole active 一致；未雙開？
+□ WIP=1：module TODO 的 sole active 未雙開，且不再有手動 dashboard 投影？
 □ 跨多步任務有 threads 卡或已確認不需？（threads README）
 □ 必要時通過 scripts/tools/check_gpu_contract.py 靜態效能合約檢查？
 □ 無失效連結或舊模型名稱？（check_doc_links / check_doc_stale_paths）

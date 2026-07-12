@@ -3,7 +3,7 @@
 **定位：** 跨子類連續任務的**導航卡 / 母線**，不是新的事實家。
 
 ```text
-DEVELOPMENT.md       = stable global router (D0–D4 · dashboard)
+DEVELOPMENT.md       = stable global action router (D0–D4)
 TODO.md              = WIP lock / active pointer（sole active 一句）
 threads/             = 進行中母線（proposed · active · parked）
 threads/closed/       = 已結案 thread 檔案家（歷史導航；非 evidence）
@@ -24,7 +24,7 @@ DEVELOPMENT.md → module TODO sole-active → active thread / contract → PR
 - **不**使用 direct-agent `*.dispatch.yaml` sidecars（retired; do not recreate）
 
 **結構契約：** [../../ownership/doc_structure_contract.md](../../ownership/doc_structure_contract.md)（O1.5）  
-**薄入口：** [../../../DEVELOPMENT.md](../../../DEVELOPMENT.md)
+**行動入口：** [../../../DEVELOPMENT.md](../../../DEVELOPMENT.md#agent-action-cards)
 
 ---
 
@@ -126,6 +126,9 @@ archived  →  不再當現況導航                               →  docs/arc
 ---
 
 ## How to close a thread
+
+先完成 [通用研究收尾卡](../../../DEVELOPMENT.md#研究收尾卡)；本節只補 thread 特有的
+frontmatter、搬移與索引要求。
 
 關閉時 **同一變更** 做齊：
 
@@ -254,7 +257,7 @@ closed-verdict: <optional token>
 
 | 層 | 負責 |
 |:--|:--|
-| [DEVELOPMENT.md](../../../DEVELOPMENT.md) | 分層路由 D0–D4 · dashboard 只鏡射 sole active one-liner · PR-driven research routing |
+| [DEVELOPMENT.md](../../../DEVELOPMENT.md) | D0–D4 action cards；模組入口不承載 live status |
 | module `TODO.md` | **WIP 鎖**（sole active + links）；非任務敘事 |
 | module / research README | 局部入口與檔案索引 |
 | **threads/** | 進行中母線（proposed · active · parked） |
