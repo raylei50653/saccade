@@ -23,8 +23,11 @@ Consequence for **this** study's terminal:
   orderings are not interchangeable, so this study does not establish the absence
   of ranking power over production's actual score.
 * **Scoping limit, not a reversal.** The study remains valid; its reach is
-  narrower than originally recorded. Whether step ⑤ keeps its mainline-transition
-  status under this narrower reading is an **owner call**, left open here.
+  narrower than originally recorded.
+
+**Owner ruling (PR #141):** transfer of this closure to the production `bdist`
+ordering is **withdrawn**. Whether step ⑤ still counts as a **mainline
+transition** under the narrower reading remains an open owner call (§20.7).
 
 Everything below is unmodified and must be read under this scope.
 
