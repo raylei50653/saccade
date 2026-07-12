@@ -150,7 +150,7 @@ uv run scripts/eval/mot17.py --preset mamba_whole_graph --detector SDP --double-
 | 🧬 reid | ⏸️ 暫緩 | — | [↗](docs/modules/reid/TODO.md) |
 | 🔄 lifecycle | 📋 待辦 | evaluator lifecycle 測試切片 | [↗](docs/modules/lifecycle/TODO.md) |
 | 🌀 motion | 🟢 收斂 | — | [↗](docs/modules/motion/TODO.md) |
-| 🤝 semantic | 🔄 active | Gap-conditioned probabilistic motion probe — Phase B `V5 ACCEPTED_WITH_LIMITS`; representation / level 1 only | [↗](docs/modules/semantic/TODO.md) |
+| 🤝 semantic | 🔄 active | Ambiguous-band ranking-power probe (Door 0) — declaration sealed via PR merge; single-run execution next | [↗](docs/modules/semantic/TODO.md) |
 | ⚡ trigger | 🟢 收斂 | — | [↗](docs/modules/trigger/TODO.md) |
 | 🖥️ streaming | 🟢 收斂 | — | [↗](docs/modules/streaming/TODO.md) |
 | 💾 storage | 🟢 收斂 | — | [↗](docs/modules/storage/TODO.md) |
