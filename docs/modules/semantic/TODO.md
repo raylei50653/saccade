@@ -5,7 +5,7 @@
 
 ## Sole active
 
-**Score temporal-to-stable-domain modeling — discrete-\(M\) declaration drafted, owner seal pending**
+**Score temporal-to-stable-domain modeling — discrete-\(M\) declaration in `draft`, owner seal pending**
 
 - Thread: [score_temporal_to_stable_domain_20260712.md](../../research/threads/score_temporal_to_stable_domain_20260712.md)
 - Canonical: [research charter](research/score_temporal_to_stable_domain_20260712.md)
@@ -14,9 +14,14 @@
   Consumer-A headline adaptive-anchor config + seven-seq MOT17 support.
 - Only current work: owner review / seal of the
   [discrete-\(M\) declaration](research/discrete_m_capability_declaration_20260712.md)
-  (`m0_state_capture_v1` per-frame capture; \(z_{t+1}\approx Mz_t+c\) on \(z^{R}\)).
-  **Nothing may be captured, exported, or fitted before that seal**; no score,
-  gate, preset, or \(e^{A\Delta t}\) work is authorized by R1 alone.
+  (`m0_state_capture_v1` per-frame capture; \(z_{t+1}\approx Mz_t+c\) on the
+  lost-side \(z^{R}\); scope = **anchor propagation**, terminals `ANCHOR_*`).
+  Rev. 2 after owner `REQUEST_CHANGES`: eligibility-before-ceiling, all-horizon
+  ceiling, finite-horizon \(M^k\) stability, pinned float64 SVD solver, and 0.40
+  demoted to a **heuristic** ceiling (no `bdist` quantity-equivalence claim).
+  **Nothing may be captured, exported, or fitted before the seal event
+  (declaration § 12)**; no score, gate, preset, or \(e^{A\Delta t}\) work is
+  authorized by R1 alone.
 
 ## Previous line 0（closed; nav only）
 

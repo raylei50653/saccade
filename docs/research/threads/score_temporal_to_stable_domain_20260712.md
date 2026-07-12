@@ -48,26 +48,41 @@ is declared and accepted on its own contract.
 
 ## Current step
 
-**Discrete-\(M\) declaration drafted; owner seal pending.**
+**Discrete-\(M\) declaration in `draft`; owner seal pending (rev. 2 after review).**
 
 Do **not** open score fitting, gate sweeps, or preset changes from R1. The
 [discrete-\(M\) declaration](../../modules/semantic/research/discrete_m_capability_declaration_20260712.md)
-freezes, before any data are read: the new per-frame capture contract
-`m0_state_capture_v1`; the terminal-bearing state \(z^{R}\) (R1 reduction) with
-\(z^{K}\) demoted to diagnostic; the pair universe (observed-contiguous,
-confirmed, full-window) with partition conservation; the five-member affine
-family powered from a one-step OLS fit; the \(h\)-normalized anchor-error metric
-under leave-one-sequence-out; and the ordered decision rule
-(ceiling 0.40 = production threshold → \(\rho(M)\le 1.001\) → ≥10 % over
-constant velocity, ≥6/7 folds, ≥50 % gain surviving de-concentration).
+freezes, before any data are read: the per-frame capture contract
+`m0_state_capture_v1`; the terminal-bearing state \(z^{R}\) (the **lost-side** R1
+reduction) with \(z^{K}\) demoted to diagnostic; the pair universe with a frozen
+exclusion **precedence ladder** and partition conservation; the five-member
+affine family with a fully pinned **float64 SVD solver contract** (explicit
+`rcond`, condition-number and minimum-sample failure rules); the
+\(h\)-normalized **anchor-position** metric under leave-one-sequence-out; and an
+ordered decision rule — stability eligibility **first**
+(\(\rho\le1.001\) **plus** finite-horizon \(\|\tilde M^k\|_2\le2.0\) and affine
+drift bounds), **then** a ceiling required across **all four** horizons, then
+≥10 % over constant velocity with ≥6/7 folds and ≥50 % gain surviving
+de-concentration.
+
+**Two claim boundaries are binding.** (1) The scope is **anchor propagation**,
+not "state sufficiency": terminals are named `ANCHOR_*` and no terminal claims
+velocity or scale predictability. (2) The 0.40 bar is a
+**production-inspired heuristic ceiling**, *not* a quantity-equivalent accept
+margin — production `bdist` is pair-level (candidate head-4, two-sided
+\(h_{\mathrm{ref}}\), speed weight, `dist_h` blend, real `la`), and none of that
+enters this metric. What the study *is* relevant to: production's `fwd_r` already
+propagates this very state by the **constant-velocity rule**, and this study asks
+whether a stable linear operator beats that rule.
 
 **Blocking precondition recorded:** the sealed R1 packet **cannot** carry this
 study — it holds only the effective four-sample window at bridge events, so
 horizons 4 and 8 and \(M^k\) stability are unmeasurable on it. Hence a new,
 separately versioned capture rather than a post-hoc relaxation of charter § 5.
 
-Nothing may be captured, exported, or fitted until the owner seals the
-declaration.
+Nothing may be captured, exported, or fitted until the seal event in
+[declaration § 12](../../modules/semantic/research/discrete_m_capability_declaration_20260712.md#12-seal-transition-the-single-authoritative-event)
+occurs. PR merge alone is **not** the seal.
 
 ## Acceptance
 
@@ -115,3 +130,17 @@ R1_FAITHFUL (closed under sealed config + seven-seq support)
 - 2026-07-12: Discrete-\(M\) declaration **drafted** (`m0_state_capture_v1`,
   study `discrete_m_capability_20260712`); **owner seal pending**. No capture,
   fit, or metric authorized yet.
+- 2026-07-12: Owner review returned `REQUEST_CHANGES` on the draft (research
+  layer; engineering layer clean). Four defects were real and are now repaired:
+  (a) the ceiling was evaluated **before** stability eligibility, so an unstable
+  fitted family could carry it and leave a mislabelled `CV_DOMINANT`; (b) a
+  one-step-only ceiling was being narrated as 1/2/4/8 short-horizon sufficiency;
+  (c) 0.40 was described as the same production accept margin although the metric
+  is single-track/lost-side/anchor-only while `bdist` is pair-level; (d) the
+  terminal read anchor error yet claimed full-state sufficiency. Also repaired:
+  spectral radius alone cannot certify \(M^k\) stability (non-normal transient
+  growth) → finite-horizon norm and affine-drift gates added; the OLS calculator
+  was underspecified → full float64 SVD solver contract pinned; exclusion-bucket
+  precedence, G3c drop/tie/recompute rule, and parameter counts made explicit;
+  and the document's self-declared "sealed" status was contradicting the pending
+  seal → now `draft` with a single authoritative seal event (§ 12).

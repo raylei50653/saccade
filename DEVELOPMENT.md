@@ -150,7 +150,7 @@ uv run scripts/eval/mot17.py --preset mamba_whole_graph --detector SDP --double-
 | 🧬 reid | ⏸️ 暫緩 | — | [↗](docs/modules/reid/TODO.md) |
 | 🔄 lifecycle | 📋 待辦 | evaluator lifecycle 測試切片 | [↗](docs/modules/lifecycle/TODO.md) |
 | 🌀 motion | 🟢 收斂 | — | [↗](docs/modules/motion/TODO.md) |
-| 🤝 semantic | 🔄 active | Score temporal-to-stable-domain — discrete-\(M\) 宣告待 owner seal（R1 已 closed @ `R1_FAITHFUL`；未封前不得 capture／fit） | [↗](docs/modules/semantic/TODO.md) |
+| 🤝 semantic | 🔄 active | Score temporal-to-stable-domain — discrete-\(M\) 宣告 `draft`，待 owner seal（R1 已 closed @ `R1_FAITHFUL`；未封前不得 capture／fit） | [↗](docs/modules/semantic/TODO.md) |
 | ⚡ trigger | 🟢 收斂 | — | [↗](docs/modules/trigger/TODO.md) |
 | 🖥️ streaming | 🟢 收斂 | — | [↗](docs/modules/streaming/TODO.md) |
 | 💾 storage | 🟢 收斂 | — | [↗](docs/modules/storage/TODO.md) |
