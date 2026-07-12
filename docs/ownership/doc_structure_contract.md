@@ -18,6 +18,8 @@ frontmatter, topic-hub pages (optional later).
 
 ```text
 [治理]           docs/ownership/                    O-series · WIP=1 · this contract
+[研究規範]       docs/research/contracts/           method / evidence semantics / claim ladders（規則）
+[研究狀態]       docs/research/contracts/claim_state_registry.md   每個 object 現在站在哪一格（狀態）
 [跨模組研究]     docs/research/                     cross-module experiments, decision semantics, global eval/training
 [任務母線]       docs/research/threads/             navigation-only continuous-task cards (not evidence)
 [模組]           docs/modules/<m>/                  module card + design + module research
@@ -31,6 +33,19 @@ Rules of thumb:
 
 - **One home per note.** Do not duplicate long reports across `modules/` and `docs/research/`.
 - **Pointers are free; second truths are not.** Entry READMEs link; they do not restate full metrics without promotion rules (C5).
+
+### C0.1 — 決策層不出文檔（decision layer carries state, not prose）
+
+**決策層只有兩個 artifact，兩者都是狀態，不是散文：**
+
+| 決策層 artifact | 內容 | 明確**不是** |
+|:--|:--|:--|
+| [claim_state_registry](../research/contracts/claim_state_registry.md) | 每個 research object 的當前狀態 + 合法候選集 | 證據、統計理由、數字 |
+| `docs/modules/<m>/TODO.md` | WIP=1 鎖（sole active 一行 + link） | 任務敘事、進度報告 |
+
+**規則：** 決策層**不得**新增 prose 檔。要解釋 → research note；要導覽 → thread；要規則 → `contracts/`。
+`DEVELOPMENT.md` 與各 README 對決策層**只做投影**（公告選擇結果），**不得**重述任何 object 的
+rung / limits / substrate — 那是 registry 的 fact-ownership（C5 的「不得有第二真相」在狀態上的推論）。
 
 ---
 
@@ -164,17 +179,65 @@ Numbers: each line keeps its own master. Entry docs that quote baselines still f
 
 ---
 
-## C6 — Lifecycle
+## C6 — Lifecycle（適用**所有** doc class，不只 threads）
+
+歷史上 C6 只寫了 threads 的 close 協議：research note 拿到 `doc-status` 欄位卻**沒有轉移**——
+closed 的 note 不搬家、不離開索引、沒有觸發條件。note 只增不減**是這個機制的產物，不是紀律問題**。
 
 | status | Meaning | Entry behavior |
 |:--|:--|:--|
 | `proposed` | Spec / mother-line written; not started or not authorized as sole active | Proposed section (threads); does not consume WIP |
 | `active` | In progress; should align with module sole active or a named cross-module line | README Active section |
 | `parked` | Intentionally paused | Parked section; does not consume WIP |
-| `closed` | Done but still citable as navigation | **Move** card to `docs/research/threads/closed/`; Closed index row + `closed:` date; ledger / no_go only if claims promote |
+| `closed` | Done but still citable as navigation | **Move** into the owner's `closed/`; Closed index row + `closed:` date; ledger / no_go only if claims promote |
 | `archived` | One-shot / not current | Move to `docs/archive/` or archive index only |
 
-**Threads close protocol (summary):** same change updates (1) thread frontmatter `doc-status: closed` + `closed: YYYY-MM-DD`, (2) body `Final status` / terminal + History close line, (3) **`git mv` into `docs/research/threads/closed/`** + fix relative links / repo pointers, (4) `docs/research/threads/README.md` Closed row + `closed/README.md` index. Do not delete the card; do not leave closed cards in `threads/` root. Full checklist: [threads/README.md § How to close](../research/threads/README.md).
+### 關閉一個研究單元：三條規則（沒有第四條）
+
+**1 · 關閉必須產出一份高密度結論。**
+說清楚**裁決**、**適用範圍**、**限制**、**證據在哪裡**。一份，不是三份。
+
+**2 · 細節退出 active 視野，但內容不改。**
+封存 ＝ 移出索引、移入 `closed/`／`archive/`、降低可見性。
+**不需要**也**不得**重寫、壓縮、合併——sealed declaration 與 evidence packet 的價值就是
+「封的時候寫了什麼，事後不能改」。整理只動**位置與可見性**，不動**內容**（修正相對連結深度與 frontmatter 中的狀態標記如 `doc-status` 是搬移檔案的必要維護，不在「不得改內容」的限制內；不得改內容指的是禁止修改實質研究結論、證據數據與公式判定）。
+
+**3 · 關閉流程必須同時完成整理。**
+**不得**先宣布實驗關閉、之後再開一個「整理文檔」任務。之後不會來——那正是 doc 只增不減的原因。
+owner 接受 terminal 的**同一個 PR** 內：結論就位 → 細節搬家 → 移出 active 索引 →
+[registry](../research/contracts/claim_state_registry.md) 狀態更新。
+
+**實作細節（不是規則）：** 檔名保持穩定語義、不寫 terminal（否則收單改名會斷連結）；
+生命週期由**目錄**表達。thread 的既有 close checklist：
+[threads/README.md § How to close](../research/threads/README.md)。
+
+### Enforcement
+
+`check_doc_structure.py --strict`（pre_push 執行）**紅燈**：
+
+| | 擋什麼 | 對應 |
+|:--|:--|:--|
+| **L1** | `doc-status: closed` 卻仍在 active 路徑 | 規則 2 · 3 |
+| **L2** | closed note 仍佔用 owning README 的 Active 區塊 | 規則 2 · 3 |
+| **L3** | 決策層（`research/contracts/`）長出 prose | C0.1（**與這三條無關**，是另一條規則） |
+| **L4** | thread 的 `wip-role` 與 threads 索引列不一致 | C5.1（投影不得與 owner 矛盾） |
+
+**規則 1 不機械化**：結論夠不夠高密度，checker 判不了——它由 review 擋。假的牙齒比沒有牙齒更糟。
+既有 7 份 closed-in-active note 已 allowlist：**回填是清潔工作，不阻擋主線；但新違規一律擋。**
+
+### C5.1 — 狀態只有一個寫入者（推論自 C5）
+
+**狀態只能寫在它的 owner；其他表面只能連結或投影，不得複述。**
+
+| 狀態 | 唯一寫入者 |
+|:--|:--|
+| 研究對象的 rung / substrate / limits / 候選集 | [claim_state_registry](../research/contracts/claim_state_registry.md) |
+| 模組的 sole active（WIP 鎖） | `docs/modules/<m>/TODO.md` |
+| thread 自身的 wip-role | thread frontmatter（索引列只是投影，**L4 檢查一致性**） |
+
+**手寫的投影必然漂移**——實測：`DEVELOPMENT.md` dashboard 與 `research/README.md` 在被發現時都還停在
+一個**已關閉**的單元上。因此索引與入口表只列「這是什麼 + 去哪裡」：**不列裁決、不列數字、不列狀態**。
+module README 的 research 索引尤其如此（它一度整段抄錄裁決與指標，那是 C5 違規）。
 
 **Closed decision line:** [tracker-decision/status_2026-07-09.md](../research/tracker-decision/status_2026-07-09.md) (P0–P8) is read-only; no drive-by reopen (WIP rules).
 

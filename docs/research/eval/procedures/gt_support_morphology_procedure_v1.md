@@ -8,7 +8,7 @@
 > **Provenance / numbering.** This file is the normative home of morphology
 > procedure **v1**, sealed via [PR #100](https://github.com/raylei50653/saccade/pull/100)
 > merge as §19 of the
-> [framework doc](../statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
+> [framework doc](../../contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
 > and moved here verbatim on 2026-07-12 (bookkeeping; no content change, seal
 > unchanged). The §19.x sub-section numbering is **preserved** so that existing
 > citations (§19.2, §19.4, §19.5, …) across the repo resolve here unchanged;

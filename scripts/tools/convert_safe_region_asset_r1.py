@@ -279,9 +279,9 @@ def default_paths() -> Paths:
         / "docs/modules/semantic/research/evidence/m_b1_5_stage2_q45_20260710",
         candidate_events=REPO_ROOT
         / "out/signal_study/m_b1_5_stage2_q1q3_20260710/d_online_events.parquet",
-        contract=REPO_ROOT / "docs/research/eval/safe_region_asset_contract.md",
+        contract=REPO_ROOT / "docs/research/contracts/safe_region_asset_contract.md",
         boolean_contract=REPO_ROOT
-        / "docs/research/eval/boolean_composition_semantics_contract.md",
+        / "docs/research/contracts/boolean_composition_semantics_contract.md",
     )
 
 

@@ -96,7 +96,7 @@ and the **temporal-reduction operator `R` differs**:
 So `s0 = f(R_off(x))` and `bdist = f(R_ker(x))`. **The shared `f` creates the
 illusion of one quantity; the differing `R` makes them two.** This is the general
 lesson, not a bridge-specific quirk — see the
-[runtime-quantity fidelity protocol](../../../research/eval/runtime_quantity_fidelity_protocol.md).
+[runtime-quantity fidelity protocol](../../../research/contracts/runtime_quantity_fidelity_protocol.md).
 
 ### 3.2 Two reduction errors, with different signatures
 

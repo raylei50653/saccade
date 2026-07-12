@@ -32,7 +32,7 @@ hard-pool definition.
 ## 2. Canonical gap bins are frozen
 
 The repository already defines canonical relink bins in
-[`signal_table_schema.md`](../../../research/eval/signal_table_schema.md), so
+[`signal_table_schema.md`](../../../research/contracts/signal_table_schema.md), so
 this probe adopts them without rebinning:
 
 | Gap | Pairs | GT | FP |

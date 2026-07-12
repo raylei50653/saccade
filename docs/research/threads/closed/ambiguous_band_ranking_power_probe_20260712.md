@@ -43,7 +43,7 @@ default-behavior-change: forbidden
 ## Read first
 
 1. [Declaration(§20.2 block+boxes+terminals)](../../../modules/semantic/research/ambiguous_band_ranking_power_probe_declaration_20260712.md)
-2. [Framework §20 contract](../../eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
+2. [Framework §20 contract](../../contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
 3. [Production substrate mapping(consumer split;s0 proxy 語意)](../../../modules/semantic/research/production_substrate_mapping_20260711.md)
 4. 上游 capability maps:[GT-support morphology thread](../gt_support_morphology_20260711.md)(diagnostic;SUSPENDED prototype 與本 probe 的 re-charter score 方向相接)
 

@@ -17,7 +17,7 @@ implied: against the live CUDA `bdist`, `s0` shows decision agreement 95.07 %
 equivalent of production `bdist`. Mainline consumes the real captured `bdist`
 from the runtime shadow capture. See
 [s0 proxy validity amendment](s0_proxy_validity_amendment_20260712.md) and the
-[runtime-quantity fidelity protocol](../../../research/eval/runtime_quantity_fidelity_protocol.md).
+[runtime-quantity fidelity protocol](../../../research/contracts/runtime_quantity_fidelity_protocol.md).
 
 Everything below is unmodified and must be read under this scope.
 

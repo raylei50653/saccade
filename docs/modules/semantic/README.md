@@ -53,77 +53,99 @@
 
 ## 📚 研究 / 設計
 
-> 全表義務見 [Doc Structure Contract C4](../../ownership/doc_structure_contract.md)。Active 對齊 [TODO.md](TODO.md) sole active（WIP=1）。
+> **這是目錄，不是狀態表。** 每列只說「這份文件是什麼」。
+> **裁決 / terminal / 數字不寫在這裡**——狀態的家是
+> [claim_state_registry](../../research/contracts/claim_state_registry.md)，
+> 數字的家是 [evidence_ledger](../../research/evidence_ledger.md) 與各 note 的 evidence packet
+> （[契約 C5](../../ownership/doc_structure_contract.md)：不得有第二真相）。
+> WIP 鎖見 [TODO.md](TODO.md)。
 
-### 🔄 Active mainline（sole active）
+### 安全域 / gate（現行主線）
 
-| 文件 | 內容 |
+| 文件 | 這是什麼 |
 |------|------|
-| [research/score_temporal_to_stable_domain_20260712.md](research/score_temporal_to_stable_domain_20260712.md) | **score 時域→穩定域建模（sole active）** · **R1 closed @ `R1_FAITHFUL`**；下一步僅 **separately declared discrete-\(M\)** representation-capability study（尚未宣告）。不重開 `s0`、不調 gate／權重／preset。對應 [active thread](../../research/threads/score_temporal_to_stable_domain_20260712.md)。 |
-| [research/r1_temporal_reduction_capture_results_20260712.md](research/r1_temporal_reduction_capture_results_20260712.md) | **R1 results — terminal `R1_FAITHFUL`（owner accepted）** · 封印範圍＝Consumer-A `bridge_anchor4` temporal reduction + headline adaptive-anchor + MOT17 七序列 support · authority `device_bridge_anchor4` · V1–V6／逐欄 `1e-5`／predicate／order／serialization／sensitivity 非補償通過 · 授權下一步＝獨立 discrete-\(M\) 宣告 · **不**授權 score fit／gate／preset · packet [evidence/](research/evidence/r1_temporal_reduction_capture_20260712/manifest.json) |
-| [research/r1_temporal_reduction_capture_declaration_20260712.md](research/r1_temporal_reduction_capture_declaration_20260712.md) | **R1 capture-contract preflight（sealed）** · `r1_temporal_reduction_capture_v1` validity／R0 replay／stability 契約；outcomes 見 [results](research/r1_temporal_reduction_capture_results_20260712.md)。 |
+| [research/safe_domain_runtime_transfer_declaration_20260712.md](research/safe_domain_runtime_transfer_declaration_20260712.md) | S0 預宣告：已接受的 safe 軸能否從 offline 座標轉移到 runtime 座標 |
+| [research/boolean_atom_partial_order_20260711.md](research/boolean_atom_partial_order_20260711.md) | Boolean atom 偏序稽核 — 全域可排序軸的認定 |
+| [research/boolean_closure_domain_line_20260711.md](research/boolean_closure_domain_line_20260711.md) | 布林閉包域研究線的 normative doc |
+| [research/gt_support_morphology_step0_20260711.md](research/gt_support_morphology_step0_20260711.md) | GT-support morphology Step-0：placement 分佈與 escape tail |
+| [research/escape_tail_forensic_20260711.md](research/escape_tail_forensic_20260711.md) | escape-tail 四軌 forensic |
+| [research/safe_region_a1_audit_20260711.md](research/safe_region_a1_audit_20260711.md) | Safe-region A1 acceptance 稽核 |
+| [research/safe_region_asset_r1_conversion_20260710.md](research/safe_region_asset_r1_conversion_20260710.md) | RegionAsset R1 轉換（sealed evidence → pack） |
+| [research/safe_region_r0_asset_contract_preflight_20260710.md](research/safe_region_r0_asset_contract_preflight_20260710.md) | RegionAsset 契約 preflight |
+| [research/safe_region_assetization_r1_20260710.md](research/safe_region_assetization_r1_20260710.md) | Assetization R1 診斷 overlay（非 A1 物件） |
+| [research/safe_region_assetization_r11_20260710.md](research/safe_region_assetization_r11_20260710.md) | Assetization R1.1 診斷 overlay |
+| [research/composition_grammar_safe_region_coverage_audit_20260710.md](research/composition_grammar_safe_region_coverage_audit_20260710.md) | 組合文法 × safe-region 覆蓋稽核 |
+| [research/composition_grammar_t0_region_interpretation_20260710.md](research/composition_grammar_t0_region_interpretation_20260710.md) | 組合文法 T0 區域解讀 |
+| [research/composition_grammar_t0_artifact_preflight_20260710.md](research/composition_grammar_t0_artifact_preflight_20260710.md) | 組合文法 T0 artifact preflight |
+| [research/m_gate_h_ratio_signal_7seq_20260709.md](research/m_gate_h_ratio_signal_7seq_20260709.md) | h-ratio gate 訊號的七序列分析 |
 
-### 🔄 Active
+### runtime 量的忠實性（safe domain 的前提）
 
-| 文件 | 內容 |
+| 文件 | 這是什麼 |
 |------|------|
-| [research/d0_runtime_shadow_fidelity_results_20260712.md](research/d0_runtime_shadow_fidelity_results_20260712.md) | **D0 runtime shadow fidelity — terminal `T2 PROXY_UNFAITHFUL`（= issue vocabulary `not_fidelity_aligned`）· Issue #112 COMPLETE** · 首次以**真實 runtime CUDA `bdist`** 認證（非 reconstruction）· shadow bridge（propose+capture，skip commit）→ 7-seq 輸出**逐 byte 等同 bridge-off** · 1,684 exact-joined pairs · **三個 non-compensatory box 全 FAIL**：B1 決策一致 95.07%（bar 99%）／B2 \|Δ\| q95 = 1.417（bar 0.05；= 0.4 門檻的 3.54×）／B3 Spearman ρ = 0.9558（bar 0.98）· coverage **PASS**（accept 區 −1.68pp）→ 非抽樣偏差,反而**加強** T2 · **GT boundary 確實扭曲**：GT-conditional ρ=0.874／agreement 85.16%／offline-safe-online-unsafe 7.03%（FP 僅 2.26%）· 機制＝**同一個 `f`,不同的時域化約算子 `R`**（scale 算子＝**與 horizon 無關的地板**,gap→0 也不收斂；velocity 算子＝**被 horizon 放大**）· packet [evidence/](research/evidence/d0_runtime_shadow_fidelity_20260712/manifest.json) · verifier `scripts/tools/run_d0_runtime_shadow_fidelity.py` · [Issue #112](https://github.com/raylei50653/saccade/issues/112) |
-| [research/d0_runtime_shadow_fidelity_declaration_20260712.md](research/d0_runtime_shadow_fidelity_declaration_20260712.md) | **D0 runtime shadow fidelity 預宣告（§20.2；sealed）** · **execution seal ＝ owner 於 2026-07-12 確認三個 box（在 F1–F3／C3 計算之前）；PR merge ＝ research acceptance,非執行授權** · layer=none（cross-layer substrate work）· intent=boundary diagnostic · frozen inputs 四個 SHA256 · v2 event key `(seq, lost_global_id, cand_global_id)` · partition 窮盡守恆（matched 1,684／cohort_gap 539／unemitted 354 = 2,577）· boxes B1–B3 **non-compensatory** · validity V1–V6 · terminals T0–T3 |
-| [research/s0_proxy_validity_amendment_20260712.md](research/s0_proxy_validity_amendment_20260712.md) | **Validity amendment（append-only）— `score_m_bridge`／`s0` 自此為 offline quantity** · 不得再當作 production `bdist` 的等效量 · 主線改用 shadow capture 的真實 `bdist` · **#136 RULED：維持 CLOSED,但撤銷 mainline-transition 身分,改列 `proxy-space capability closure`；無 owner call 未決** · `m_b1` gate-coverage 的 `s0 ≤ 0.4` 解讀撤回 · sealed 2026-07-11 packet 不受影響且保持凍結 |
-| [research/door0_ranking_probe_results_20260712.md](research/door0_ranking_probe_results_20260712.md) | **Door 0 probe results — terminal `T2 NO_USABLE_RANKING_POWER_IN_CLASS`（12-member tested class）** · ⚠️ **2026-07-12 validity amendment：mainline-transition 身分已撤銷,重分類為 `proxy-space capability closure`**（baseline `s0` 對 production `bdist` 的 ρ=0.956 < 0.98；closure 只對 `s0` 成立）· 見 [amendment](research/s0_proxy_validity_amendment_20260712.md) · V1–V5 PASS · H 未觸發（baseline PWA 0.878／top-1 0.590；P3=84/205 top-1 miss＝headroom 真實存在）· 12/12 candidates fail boxes（best ΔPWA=+0.0011，距 B1 約 18×）· 機制：class 可見 tail 已被 `s0` 排序（demote 無效），殘餘混淆在 in-band 聯合分佈內；motion conditions 淨有害（escape-tail 一致）· 無條件 reachable-set caveat · step ⑤ class-scoped closure；step ④ 未開 · packet [evidence/](research/evidence/door0_ranking_probe_20260712/manifest.json) · [thread](../../research/threads/closed/ambiguous_band_ranking_power_probe_20260712.md) |
-| [research/ambiguous_band_ranking_power_probe_declaration_20260712.md](research/ambiguous_band_ranking_power_probe_declaration_20260712.md) | **Door 0 — ambiguous-band ranking-power probe 預宣告（realignment step ③；seal = PR merge）** · §20.2 block（layer=score-ranking · intent=capability map · output=diagnostic only）· substrate=frozen pairs `0ae38967…`（205 rankable events）· coarse gate=production h-window proxy · baseline `s0=score_m_bridge` · 12 frozen candidates（6 singles+6 ANDs；q85/q15；lexicographic demotion，無 λ）· headroom H + boxes B1–B6 · validity V1–V5 · terminals T0–T3 全部映射主線 transition（§20.7）· [thread](../../research/threads/closed/ambiguous_band_ranking_power_probe_20260712.md) |
-| [research/d0_bridge_estimator_fidelity_20260711.md](research/d0_bridge_estimator_fidelity_20260711.md) | ⚠️ **SUPERSEDED（legacy v1 reconstruction packet；保持凍結,語義不變）** — **legacy packet status ＝ `D0_FAIL_CLOSED_CAPTURE_UNAVAILABLE`（primary=`runtime_capture_unavailable`）**,這是**該 packet 自身**的狀態,**不是 Issue #112 的現況**。**Issue #112 現況 ＝ COMPLETE**,由 v2 runtime-shadow packet 認證（見 [results](research/d0_runtime_shadow_fidelity_results_20260712.md)）。此 packet 以 reconstruction 診斷**已懷疑** `not_fidelity_aligned` 但無法認證；v2 以真實 CUDA 捕獲**證實**之。以下為原始內容：terminal **`not_fidelity_aligned`** · reconstruction diagnostics only (not runtime CA capture) · \(S_A\) coverage FAIL · GT boundary distorted · single-factor S0–S6 decomp · headline preset file hash · Phase-B V5 remains representation-level · production unchanged · packet [evidence/](research/evidence/d0_bridge_estimator_fidelity_20260711/manifest.json) · [thread](../../research/threads/gap_conditioned_probabilistic_motion_probe_20260711.md) · [Issue #112](https://github.com/raylei50653/saccade/issues/112) |
-| [research/gap_conditioned_motion_phase_b_20260711.md](research/gap_conditioned_motion_phase_b_20260711.md) | **Gap-conditioned motion Phase B `V5 ACCEPTED_WITH_LIMITS`** · sealed A1–A8 execution · no five-box representation/attribution contract · claim ceiling = representation / level 1 · no tracker/preset/hook change · packet [evidence/](research/evidence/gap_conditioned_motion_phase_b_20260711/manifest.json) · [thread](../../research/threads/gap_conditioned_probabilistic_motion_probe_20260711.md) |
-| [research/production_substrate_mapping_20260711.md](research/production_substrate_mapping_20260711.md) | **Production substrate mapping（Step-0 abstraction-chain audit · binding precondition for E3/A1–A8）** · terminal **`CONSUMER_SPLIT`**：consumer A＝active tracker-core bridge（連續 speed-weighted `bdist` 聚合＋距離排序＋margin）；B＝optional semantic relinker（Boolean gate chain）；C1＝semantic live claim（繼承 B pre-gates）／C2＝evfifo live-bank output handover（僅 gap window，無 motion pre-gates），皆 pooled-low-mean `c_app` · **A governs deployment claims** · atoms 對 A 為 production-native counterparts（同名／同式／同 ABI，estimator-shifted）；kernel 內 default-off portable OR-tail hook＝level-3 plumbing available，acceptance pending（`ONLINE_BAUDIT_IMPLEMENTED=False`） · lifecycle-derived support `S_A=[1,26]`／`S_C2=[1,60]`／`S_B=[2,45]`（row-level 切面） · deployment claim 須在 named consumer support 單獨成立 · claim ladder 四級 · D0 bridge-score estimator fidelity gate（三值 verdict；**executed → `not_fidelity_aligned`**） · [thread](../../research/threads/gap_conditioned_probabilistic_motion_probe_20260711.md) |
-| [research/gap_conditioned_motion_phase_b_design_20260711.md](research/gap_conditioned_motion_phase_b_design_20260711.md) | **Gap-conditioned motion Phase B predeclared design** · frozen A1–A8 numeric criteria / support / V1–V5 partition · seal consumed without deviation by the Phase-B `V5` run · [thread](../../research/threads/gap_conditioned_probabilistic_motion_probe_20260711.md) |
-| [research/gap_conditioned_motion_e3_signals_20260711.md](research/gap_conditioned_motion_e3_signals_20260711.md) | **Gap-conditioned motion E3 LOO fold signals `E3_SIGNALS_SEALED`** · 7 folds · 28 parameter + 7 selection · full fold×pair×model cube 679,952 rows (`evaluation_role=held_out|train` · A6 train-side surface) · energy terms split · no winner-only filter · Phase B design seal recorded · **no A1–A8/V1–V5 inside E3** · downstream Phase B recorded `V5` · packet [evidence/](research/evidence/gap_conditioned_motion_e3_signals_20260711/manifest.json) · [thread](../../research/threads/gap_conditioned_probabilistic_motion_probe_20260711.md) |
-| [research/gap_conditioned_motion_e2_family_20260711.md](research/gap_conditioned_motion_e2_family_20260711.md) | **Gap-conditioned motion E2 position-only family `ACCEPTED_WITH_LIMITS`** · `GCM-E2-POSITION-ONLY-v1` · `FROZEN_ACCEPTED_WITH_LIMITS` · global M1-P + three predeclared M2-P half-lives · finite/support + per-fold LOO lineage gates PASS · E3 sealed downstream · Phase-B `V5 ACCEPTED_WITH_LIMITS` (representation / level 1) · packet [evidence/](research/evidence/gap_conditioned_motion_e2_family_20260711/manifest.json) · [thread](../../research/threads/gap_conditioned_probabilistic_motion_probe_20260711.md) |
-| [research/gap_conditioned_motion_e1_m0_20260711.md](research/gap_conditioned_motion_e1_m0_20260711.md) | **Gap-conditioned motion E1 M0 baseline `ACCEPTED_WITH_LIMITS`** · 0/20 aggregate reversal cells under frozen reporting criterion · bridge/residual AUC erodes with gap · later Phase-B `V5 ACCEPTED_WITH_LIMITS` (representation / level 1) · packet [evidence/](research/evidence/gap_conditioned_motion_e1_m0_20260711/manifest.json) · [thread](../../research/threads/gap_conditioned_probabilistic_motion_probe_20260711.md) |
-| [research/gap_conditioned_motion_e0_20260711.md](research/gap_conditioned_motion_e0_20260711.md) | **Gap-conditioned probabilistic motion E0** · `PARTIALLY_IDENTIFIABLE` · M0 + position-only observation available · joint/velocity/context claims fail-closed · packet [evidence/](research/evidence/gap_conditioned_motion_e0_20260711/manifest.json) · [thread](../../research/threads/gap_conditioned_probabilistic_motion_probe_20260711.md) |
-| [research/boolean_atom_partial_order_20260711.md](research/boolean_atom_partial_order_20260711.md) | **PR-D gate partial-order audit（#106 / [PR #107](https://github.com/raylei50653/saccade/pull/107)）** · **`ACCEPTED_WITH_LIMITS`** · terminal **`GLOBAL_PARTIAL_ORDER_READY`** · global=`{dist_h, log_h_ratio}` · packet [evidence/](research/evidence/boolean_atom_partial_order_20260711/manifest.json) · [thread](../../research/threads/gt_support_morphology_20260711.md) |
-| [research/escape_tail_forensic_20260711.md](research/escape_tail_forensic_20260711.md) | **PR-C four-track escape-tail forensic（#102 / [PR #104](https://github.com/raylei50653/saccade/pull/104)）** · 3×TRUE + 1×UNRESOLVED · aggregate `ROLE_REVERSAL_SUPPORTED` · **`ACCEPTED_WITH_LIMITS`** (L1 single-seq; partial-order audit only) · packet [evidence/](research/evidence/escape_tail_forensic_20260711/manifest.json) · [thread](../../research/threads/gt_support_morphology_20260711.md) |
-| [research/boolean_closure_domain_line_20260711.md](research/boolean_closure_domain_line_20260711.md) | **布林閉包域研究線（normative doc, PR-B）** · placement morphology → partial-order audit → MWC → exact GT-UCB validation → optional compression · atom orderability 四分類 · Verdict A–E 完成條件 · terminal 權威 = framework §19 · [thread](../../research/threads/gt_support_morphology_20260711.md) |
-| [research/m_gate_h_ratio_signal_7seq_20260709.md](research/m_gate_h_ratio_signal_7seq_20260709.md) | **Gate 1 — height-ratio signal（7-seq B1 substrate）** · `h_ratio = h_lost_raw / h_cand_raw` · production band `[0.6, 1.7]` 的 L0 support-gate coverage 與 1D ranking readout · 單一訊號分析，不延伸為 identity 解或新的 current work |
-| [research/gt_support_morphology_step0_20260711.md](research/gt_support_morphology_step0_20260711.md) | **GT-Support Morphology Step-0 audit** · per-cell risk field 不可識別（任何 k 僅 1 cell 達 ε≤0.05）· **verdict `UNRESOLVED`** + descriptive hypothesis：corner-concentrated（M₀=97.1%）+ far-Hamming motion tail 4/209（**4/4 在 MOT17-10**；log_h_ratio 0/4；nominal CP 4.33% 不得跨界）· packet [evidence/](research/evidence/gt_support_morphology_step0_20260711/manifest.json) · [thread](../../research/threads/gt_support_morphology_20260711.md) · [procedure §19](../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md) |
-| [research/safe_region_r0_asset_contract_preflight_20260710.md](research/safe_region_r0_asset_contract_preflight_20260710.md) | **R0-A Region Asset Contract Preflight** · CR1–CR9 **ACCEPTED** · [thread](../../research/threads/closed/safe_region_assetization_20260710.md) · [math](../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md) |
-| [research/safe_region_a1_audit_20260711.md](research/safe_region_a1_audit_20260711.md) | **A1 acceptance-unit lock + read-only audit · 26/26 PASS + mutation 5/5** · unit = conversion pack `1a180620bc…` · S0/S1/Q1/N1 · **terminal recorded: `A1_ACCEPTED_WITH_LIMITS` → maturity A1 (gate closed)** · [thread](../../research/threads/closed/safe_region_assetization_20260710.md) |
-| [research/safe_region_assetization_r11_20260710.md](research/safe_region_assetization_r11_20260710.md) | **R1.1 attribution · DOWNGRADED to diagnostic overlay** · 2 unique harmful AND events + 3 descriptive symptoms · "primary F3" rejected (post-hoc floors / K-duplicated count / alias-ambiguous predicate) · study `out/signal_study/safe_region_assetization_r11_20260710/` · [thread](../../research/threads/closed/safe_region_assetization_20260710.md) |
-| [research/safe_region_assetization_r1_20260710.md](research/safe_region_assetization_r1_20260710.md) | **R1 capacity probe · DOWNGRADED to diagnostic overlay** · V-C = heuristic-specific descriptive failure (LOO pool global-label-screened; class null retracted) · 15 unique masks / 34 grid-local assets · study `out/signal_study/safe_region_assetization_r1_20260710/` · R2 blocked · [thread](../../research/threads/closed/safe_region_assetization_20260710.md) |
-| [research/safe_region_asset_r1_conversion_20260710.md](research/safe_region_asset_r1_conversion_20260710.md) | **R1 conversion note** · A0 pack candidate under `out/signal_study/m_b1_5_safe_region_asset_r1_20260710/` · eng. MERGED ([PR #95](https://github.com/raylei50653/saccade/pull/95) history) · [contract](../../research/eval/safe_region_asset_contract.md) · [thread](../../research/threads/closed/safe_region_assetization_20260710.md) · [math](../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md) · [boolean](../../research/eval/boolean_composition_semantics_contract.md) |
-| [research/occ_exit_audit_p55_scope_20260709.md](research/occ_exit_audit_p55_scope_20260709.md) | **#55 occ-exit audit** 範圍與 substrate |
-| [research/occ_exit_audit_p55_wp2_seq_conditioning_20260709.md](research/occ_exit_audit_p55_wp2_seq_conditioning_20260709.md) | WP2 序列條件化標註 |
-| [research/occ_exit_audit_p55_wp3_promotion_decision_20260709.md](research/occ_exit_audit_p55_wp3_promotion_decision_20260709.md) | WP3 promotion 決策（`split_feat_pr`；runtime 未開） |
+| [research/d0_runtime_shadow_fidelity_results_20260712.md](research/d0_runtime_shadow_fidelity_results_20260712.md) | D0：以真實 runtime CUDA `bdist` 認證 offline proxy 的忠實性（結果） |
+| [research/d0_runtime_shadow_fidelity_declaration_20260712.md](research/d0_runtime_shadow_fidelity_declaration_20260712.md) | D0 預宣告（sealed） |
+| [research/s0_proxy_validity_amendment_20260712.md](research/s0_proxy_validity_amendment_20260712.md) | `s0` 自此為 offline-only 量的效力修訂（append-only） |
+| [research/r1_temporal_reduction_capture_results_20260712.md](research/r1_temporal_reduction_capture_results_20260712.md) | R1：時域化約算子 \(R\) 的捕獲／重播認證（結果） |
+| [research/r1_temporal_reduction_capture_declaration_20260712.md](research/r1_temporal_reduction_capture_declaration_20260712.md) | R1 預宣告（sealed） |
+| [research/d0_bridge_estimator_fidelity_20260711.md](research/d0_bridge_estimator_fidelity_20260711.md) | ⚠️ legacy v1 reconstruction packet（已被 v2 取代，保持凍結） |
+| [research/production_substrate_mapping_20260711.md](research/production_substrate_mapping_20260711.md) | production consumer / substrate 對照（binding precondition） |
 
-### 收成 / 結案參考
+### score 線（parked：保留域建立前不開）
 
-| 文件 | 內容 |
+| 文件 | 這是什麼 |
 |------|------|
-| 🧭 **[research/offline_relink_candidate_analysis.md](research/offline_relink_candidate_analysis.md)** | **relink / AssA 調查 hub（s 歷史）** |
-| 📜 **[research/m_b1_research_history_20260709_20260710.md](research/m_b1_research_history_20260709_20260710.md)** | **M-B1 offline history** (mine→region→LOO→freeze) · phase CLOSED |
-| [research/m_b1_repaired_eps0_loo_pass_candidate_20260709.md](research/m_b1_repaired_eps0_loo_pass_candidate_20260709.md) | **Freeze identity**（LOO_pass_region_candidate · offline smoke pass） |
-| [research/m_b1_portable_or_tail_hook_contract_20260709.md](research/m_b1_portable_or_tail_hook_contract_20260709.md) | Stage 1 hook **ABI contract**（default-off；preset NO） |
-| [research/m_b1_stage1_online_hook_final_20260710.md](research/m_b1_stage1_online_hook_final_20260710.md) | Stage 1 **CLOSED** · wire + e2e · B-audit 244 · A0/det/runtime |
-| [research/m_b1_5_stage2_entry_contract_20260710.md](research/m_b1_5_stage2_entry_contract_20260710.md) | Stage 2 entry · G0–G4 claim firewall |
-| [research/m_b1_5_stage2_d_online_final_20260710.md](research/m_b1_5_stage2_d_online_final_20260710.md) | Stage 2 **final** · Q1–Q3 mass · Q4 grade C · Q4.5 v4 atlas B (154/0) |
-| [research/composition_grammar_safe_region_coverage_audit_20260710.md](research/composition_grammar_safe_region_coverage_audit_20260710.md) | **G1–G7 × R1–R6 coverage audit**（recon closed）· Q4.5 terminal B unchanged · next T0 interpretation pack · [thread](../../research/threads/closed/composition_grammar_safe_region.md) |
-| [research/composition_grammar_t0_artifact_preflight_20260710.md](research/composition_grammar_t0_artifact_preflight_20260710.md) | **T0-A preflight** · schema/key map · 7-output derivability · G7 N · T0-B surface proposed only · [thread](../../research/threads/closed/composition_grammar_safe_region.md) |
-| [research/composition_grammar_t0_region_interpretation_20260710.md](research/composition_grammar_t0_region_interpretation_20260710.md) | **T0-B interpretation** · 154 PS geometry · radius≥1=0 · G7 contract-gap · [evidence](research/evidence/m_b1_5_t0_region_interpretation_20260710/) · [thread](../../research/threads/closed/composition_grammar_safe_region.md) |
-| [research/m_b1_to_m_b1_5_two_stage_plan_20260710.md](research/m_b1_to_m_b1_5_two_stage_plan_20260710.md) | Stage 1+2 plan body（runner/contract ref） |
-| [research/m_b1_doc_consolidation_report_20260710.md](research/m_b1_doc_consolidation_report_20260710.md) | Doc consolidation + information-preservation report |
-| [research/m_b2_reconnect_bridge_ab_20260709.md](research/m_b2_reconnect_bridge_ab_20260709.md) | **m B2** production-like reconnect A/B（未來 e2e baseline） |
-| 📇 depth index | [signal_analysis_ledger](../../research/eval/signal_analysis_ledger.md) · offline history § tools |
-| 🗺️ **[research/association_recovery_crosswalk_20260709.md](research/association_recovery_crosswalk_20260709.md)** | **D1 對照圖（research-synthesis）**：實驗前導航；production stack 薄摘要 + door/knobs/NO-GO/substrate。**非** sole active、非第二 baseline |
-| 📇 **[research/association_recovery_scripts_index_20260709.md](research/association_recovery_scripts_index_20260709.md)** | **腳本查找表**：task→script、door 分區、wrapper→canonical、R-A/D/F recipes。結論仍手動 |
-| 📜 **[research/association_recovery_info_source_contract_20260709.md](research/association_recovery_info_source_contract_20260709.md)** | **資訊源契約**：disk / registry / no_go / preset / ledger 誰當 truth；腳本只 check·render·print |
-| 📋 **[research/association_tools.yaml](research/association_tools.yaml)** | **R registry populated（Step 1B）**：~64 tools · R-A/B/D/E/F；禁 metrics/verdict/knobs。Checker：`scripts/tools/check_association_tools.py` |
-| [research/depth_ordering_crossing_swap.md](research/depth_ordering_crossing_swap.md) | foot_y front/back AUC 0.898；same-height gate GO default-on |
-| [research/bidirectional_relink_roadmap.md](research/bidirectional_relink_roadmap.md) | 雙向時空收斂幾何重連路線圖（Phase 0 已落地） |
-| [research/bidir_relink_data_analysis.md](research/bidir_relink_data_analysis.md) | 線上 bridge 候選 per-attempt（hard-case AUC≈0.55） |
-| [research/relink_normalization_gate_analysis.md](research/relink_normalization_gate_analysis.md) | Scale / normalization gate ablation |
-| [research/sparse_key_embedding_bank_20260704.md](research/sparse_key_embedding_bank_20260704.md) | Cheb-GR 稀疏 bank 結案（#58）；clean-FIFO-20；Python 層已落地 |
-| [research/clean_fifo_bank_substrate_20260704.md](research/clean_fifo_bank_substrate_20260704.md) | CleanFifoBank substrate contract（occ-audit / handover 共用） |
-| [research/chebgr_handover_signal_map_20260704.md](research/chebgr_handover_signal_map_20260704.md) | Offline handover 訊號地圖；best_cost frontier |
-| [research/online_sparse_reid_handoff_20260704.md](research/online_sparse_reid_handoff_20260704.md) | Sparse key-crop / async sidecar 接續摘要 |
+| [research/score_temporal_to_stable_domain_20260712.md](research/score_temporal_to_stable_domain_20260712.md) | score 時域→穩定域建模的 charter |
+| [research/discrete_m_capability_declaration_20260712.md](research/discrete_m_capability_declaration_20260712.md) | discrete-\(M\) anchor propagation 宣告（parked、未 seal） |
+| [research/door0_ranking_probe_results_20260712.md](research/door0_ranking_probe_results_20260712.md) | Door 0 ambiguous-band ranking-power probe（結果） |
+| [research/ambiguous_band_ranking_power_probe_declaration_20260712.md](research/ambiguous_band_ranking_power_probe_declaration_20260712.md) | Door 0 預宣告（sealed） |
+
+### gap-conditioned motion
+
+| 文件 | 這是什麼 |
+|------|------|
+| [research/gap_conditioned_motion_e0_20260711.md](research/gap_conditioned_motion_e0_20260711.md) | E0 可識別性 |
+| [research/gap_conditioned_motion_e1_m0_20260711.md](research/gap_conditioned_motion_e1_m0_20260711.md) | E1 M0 baseline |
+| [research/gap_conditioned_motion_e2_family_20260711.md](research/gap_conditioned_motion_e2_family_20260711.md) | E2 position-only 模型族 |
+| [research/gap_conditioned_motion_e3_signals_20260711.md](research/gap_conditioned_motion_e3_signals_20260711.md) | E3 LOO fold 訊號（sealed cube） |
+| [research/gap_conditioned_motion_phase_b_design_20260711.md](research/gap_conditioned_motion_phase_b_design_20260711.md) | Phase B 預宣告設計（A1–A8） |
+| [research/gap_conditioned_motion_phase_b_20260711.md](research/gap_conditioned_motion_phase_b_20260711.md) | Phase B 執行結果 |
+
+### occ-exit / m_b1 hook（closed 線的參考）
+
+| 文件 | 這是什麼 |
+|------|------|
+| [research/occ_exit_audit_p55_scope_20260709.md](research/occ_exit_audit_p55_scope_20260709.md) | occ-exit 稽核 WP1 範圍 |
+| [research/occ_exit_audit_p55_wp2_seq_conditioning_20260709.md](research/occ_exit_audit_p55_wp2_seq_conditioning_20260709.md) | occ-exit WP2 序列條件化 |
+| [research/occ_exit_audit_p55_wp3_promotion_decision_20260709.md](research/occ_exit_audit_p55_wp3_promotion_decision_20260709.md) | occ-exit WP3 升格決策 |
+| [research/m_b1_research_history_20260709_20260710.md](research/m_b1_research_history_20260709_20260710.md) | 📜 M-B1 offline 階段的歷史彙整 |
+| [research/m_b1_repaired_eps0_loo_pass_candidate_20260709.md](research/m_b1_repaired_eps0_loo_pass_candidate_20260709.md) | M-B1 候選規則 |
+| [research/m_b1_portable_or_tail_hook_contract_20260709.md](research/m_b1_portable_or_tail_hook_contract_20260709.md) | M-B1 portable OR-tail hook 契約 |
+| [research/m_b1_stage1_online_hook_final_20260710.md](research/m_b1_stage1_online_hook_final_20260710.md) | M-B1 Stage-1 online hook 收尾 |
+| [research/m_b1_5_stage2_entry_contract_20260710.md](research/m_b1_5_stage2_entry_contract_20260710.md) | M-B1.5 Stage-2 進入契約 |
+| [research/m_b1_5_stage2_d_online_final_20260710.md](research/m_b1_5_stage2_d_online_final_20260710.md) | M-B1.5 Stage-2D online 收尾 |
+| [research/m_b1_to_m_b1_5_two_stage_plan_20260710.md](research/m_b1_to_m_b1_5_two_stage_plan_20260710.md) | M-B1 → M-B1.5 兩階段計畫 |
+| [research/m_b1_doc_consolidation_report_20260710.md](research/m_b1_doc_consolidation_report_20260710.md) | M-B1 文檔彙整報告 |
+| [research/m_b2_reconnect_bridge_ab_20260709.md](research/m_b2_reconnect_bridge_ab_20260709.md) | m B2 bridge on/off 重連 A/B |
+
+### relink / bank / Cheb-GR（基礎與工具）
+
+| 文件 | 這是什麼 |
+|------|------|
+| 🧭 [research/offline_relink_candidate_analysis.md](research/offline_relink_candidate_analysis.md) | relink 候選池的離線分析（bridge score 的來源設計） |
+| [research/bidirectional_relink_roadmap.md](research/bidirectional_relink_roadmap.md) | 雙向時空收斂幾何重連路線圖 |
+| [research/bidir_relink_data_analysis.md](research/bidir_relink_data_analysis.md) | 線上 bridge 候選 per-attempt 分析 |
+| [research/relink_normalization_gate_analysis.md](research/relink_normalization_gate_analysis.md) | scale / normalization gate 分析 |
+| [research/depth_ordering_crossing_swap.md](research/depth_ordering_crossing_swap.md) | 深度排序與交錯換位 |
+| [research/sparse_key_embedding_bank_20260704.md](research/sparse_key_embedding_bank_20260704.md) | 稀疏 key-embedding bank |
+| [research/clean_fifo_bank_substrate_20260704.md](research/clean_fifo_bank_substrate_20260704.md) | CleanFIFO bank substrate |
+| [research/chebgr_handover_signal_map_20260704.md](research/chebgr_handover_signal_map_20260704.md) | Cheb-GR handover 訊號圖（Door D fact-owner） |
+| [research/online_sparse_reid_handoff_20260704.md](research/online_sparse_reid_handoff_20260704.md) | 線上 sparse ReID handoff |
+| 🗺️ [research/association_recovery_crosswalk_20260709.md](research/association_recovery_crosswalk_20260709.md) | 關聯回復研究的 crosswalk |
+| 📇 [research/association_recovery_scripts_index_20260709.md](research/association_recovery_scripts_index_20260709.md) | 關聯回復腳本索引 |
+| 📜 [research/association_recovery_info_source_contract_20260709.md](research/association_recovery_info_source_contract_20260709.md) | 關聯回復資訊來源契約 |
+| 📋 [research/association_tools.yaml](research/association_tools.yaml) | 工具 registry |
+| 📇 深度訊號總帳 | [signal_analysis_ledger](../../research/eval/signal_analysis_ledger.md) |
 
 ## 📋 模組 TODO
 

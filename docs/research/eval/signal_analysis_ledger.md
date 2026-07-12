@@ -12,7 +12,7 @@
 |:--|:--|
 | **本檔** | 深度分析**索引**（一訊號一列；狀態；一句 verdict；連 note + study） |
 | **數字 master** | `out/signal_study/<study_id>/`（json/csv；禁止把大表嵌死 markdown） |
-| **契約 / recipe** | [signal_table_schema.md](signal_table_schema.md)（A/B1/B2、L0/L1/L2、§0.5 Gate vs Score） |
+| **契約 / recipe** | [signal_table_schema.md](../contracts/signal_table_schema.md)（A/B1/B2、L0/L1/L2、§0.5 Gate vs Score） |
 | **可引用 e2e / 決策數字** | [evidence_ledger.md](../evidence_ledger.md)（升格後才抄一行） |
 | **NO-GO 結案** | [no_go_registry.md](../../reference/no_go_registry.md) |
 | **長 note 正文** | 通常 `docs/modules/semantic/research/`（relink/gate）或本目錄 eval note |
@@ -200,7 +200,7 @@ semantic **WIP sole active** 仍是 #55 occ-exit；本線 = D1 RESEARCH 旁線�
 
 | 資源 | 角色 |
 |:--|:--|
-| [signal_table_schema.md](signal_table_schema.md) | 宇宙 / L0–L2 / study_dir 契約 |
+| [signal_table_schema.md](../contracts/signal_table_schema.md) | 宇宙 / L0–L2 / study_dir 契約 |
 | [eval/README.md](README.md) | 本目錄索引 |
 | [association_recovery_scripts_index](../../modules/semantic/research/association_recovery_scripts_index_20260709.md) | 腳本查找 |
 | `scripts/tools/mine_relink_signals.py` | **B1 offline 全 catalog 自動深度 mine** |

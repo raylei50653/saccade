@@ -161,13 +161,14 @@ archived  →  不再當現況導航                               →  docs/arc
 
 ## Proposed threads
 
-目前無 proposed thread。
+| Thread | Work class / WIP role | Current concrete work / Intent | Owner |
+|:--|:--|:--|:--|
+| [runtime_faithful_safe_domain_20260712.md](runtime_faithful_safe_domain_20260712.md) | mainline-study · **non-WIP** | (Seal pending) Gate builds a safe domain (coarse, one-sided GT-retention guarantee); S0 audits whether the accepted axes `{dist_h, log_h_ratio}` — certified on offline coordinates D0 ruled unfaithful — keep their \(L_{GT}\) bound at runtime (framework L4), before the closure is solved on them. | semantic |
 
 ## Active threads
 
 | Thread | Work class / WIP role | Current concrete work | Owner |
 |:--|:--|:--|:--|
-| [score_temporal_to_stable_domain_20260712.md](score_temporal_to_stable_domain_20260712.md) | mainline-study · **sole-active** | Define R1's versioned shadow-capture state for the two `bridge_anchor4` windows, then seal replay/stability criteria before data capture. | semantic |
 | [gap_conditioned_probabilistic_motion_probe_20260711.md](gap_conditioned_probabilistic_motion_probe_20260711.md) | engineering follow-up · **non-WIP** | **Only:** D0 / #112 runtime CUDA capture；Phase B `V5` is already recorded and authorizes no new semantic mainline work | semantic |
 | [association_recovery_registry_20260709.md](association_recovery_registry_20260709.md) | maintenance · **non-WIP** | Keep R/H ownership and path-health registry current | semantic |
 | [doc_structure_o15_followup_20260709.md](doc_structure_o15_followup_20260709.md) | governance · **non-WIP** | Pay down research-index debt; optional structure checks remain non-blocking | ownership |
@@ -176,6 +177,7 @@ archived  →  不再當現況導航                               →  docs/arc
 
 | Thread | Work class / WIP role | Pause / resume boundary | Owner |
 |:--|:--|:--|:--|
+| [score_temporal_to_stable_domain_20260712.md](score_temporal_to_stable_domain_20260712.md) | mainline-study · **parked** | `R1_FAITHFUL` closed (it is what made runtime coordinates auditable); discrete-\(M\) follow-on **reclassified as a score-ranking feature, not a gate** → parked unsealed. | semantic |
 | [gt_support_morphology_20260711.md](gt_support_morphology_20260711.md) | mainline-study · **parked** | Score continuation is closed for Door 0's tested class; gate direction remains parked pending explicit re-charter and WIP authorization | semantic |
 | [occ_exit_audit_20260709.md](occ_exit_audit_20260709.md) | mainline-study · **parked** | WP1–WP3 complete; waits for a RegionAsset producer/intervention consumer after the assetization gate | semantic |
 

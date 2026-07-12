@@ -22,7 +22,7 @@ Two statuses, never conflated
   ``not_fidelity_aligned``) — ``score_m_bridge`` is an **offline quantity** and
   must not be used as an equivalent of production ``bdist``.
   See ``docs/modules/semantic/research/d0_runtime_shadow_fidelity_results_20260712.md``
-  and the binding ``docs/research/eval/runtime_quantity_fidelity_protocol.md``.
+  and the binding ``docs/research/contracts/runtime_quantity_fidelity_protocol.md``.
 
 Reconstruction metrics remain diagnostics only and must never be labeled
 ``D4 exact captured Consumer-A``.

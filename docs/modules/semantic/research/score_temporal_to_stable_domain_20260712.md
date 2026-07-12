@@ -10,8 +10,8 @@
 Thread: [score temporal-to-stable-domain](../../../research/threads/score_temporal_to_stable_domain_20260712.md) ·
 Runtime fact: [D0 runtime-shadow fidelity](d0_runtime_shadow_fidelity_results_20260712.md) ·
 Scope amendment: [`s0` is offline-only](s0_proxy_validity_amendment_20260712.md) ·
-Layer contract: [gate vs score](../../../research/eval/signal_table_schema.md#05-gate-vs-score-support--calibration--policy) ·
-Fidelity protocol: [runtime-quantity fidelity](../../../research/eval/runtime_quantity_fidelity_protocol.md)
+Layer contract: [gate vs score](../../../research/contracts/signal_table_schema.md#05-gate-vs-score-support--calibration--policy) ·
+Fidelity protocol: [runtime-quantity fidelity](../../../research/contracts/runtime_quantity_fidelity_protocol.md)
 
 ## 1. Why this is a separate score problem
 

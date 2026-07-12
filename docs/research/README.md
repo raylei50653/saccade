@@ -6,14 +6,15 @@
 
 ---
 
-## 🔄 Active workstreams
+## 🔄 現在在做什麼
 
-| 線 | 家 | 說明 |
-|------|------|------|
-| **semantic mainline** | [semantic TODO](../modules/semantic/TODO.md)（WIP 鎖） · [R1 thread](threads/score_temporal_to_stable_domain_20260712.md) | **R1 temporal-reduction capture contract** — capture the effective runtime windows needed to replay \(R\), then seal fidelity/stability before any real-`bdist` score study. |
-| **M-B1 portable hook** | [threads/m_b1…](threads/closed/m_b1_online_hook_20260709.md) | Offline closed；**not** semantic sole active；research default-off hook |
-| **VGT-Mamba** | [detection TODO](../modules/detection/TODO.md) | Detection sole active（訓練）；設計見 [detection README](../modules/detection/README.md) |
-| **GMC warp（依賴 VGT）** | [geometry TODO](../modules/geometry/TODO.md) | 非第二獨立目標 |
+**這裡不列狀態**（列了就會漂移——實測如此）。三個入口，各有唯一 owner：
+
+| 我要知道 | 去 |
+|------|------|
+| 每個研究對象**現在站在哪一格**（state / substrate / limits / 合法候選集） | **[claim_state_registry](contracts/claim_state_registry.md)** |
+| 哪一個被選為 **sole active**（WIP 鎖） | 對應的 [module TODO](../modules/) |
+| 這條線**怎麼接續**（敘事導覽） | [threads/](threads/README.md) |
 
 治理（O-series，非實驗正文）：[../ownership/README.md](../ownership/README.md) · [DOC_MAINTENANCE § WIP](../DOC_MAINTENANCE.md) · [DEVELOPMENT.md 模組現狀總覽](../../DEVELOPMENT.md)
 
@@ -49,7 +50,8 @@
 |------|------|------|
 | [threads/](threads/README.md) | [threads/README.md](threads/README.md) | **連續任務母線**（navigation-only；不放長表 / 不取代 ledger） |
 | [pipeline/](pipeline/) | 見下表（本目錄無獨立 README） | Runtime 路徑、perf、sync、CPU |
-| [eval/](eval/README.md) | [eval/README.md](eval/README.md) · **[signal_analysis_ledger](eval/signal_analysis_ledger.md)** | Eval / ablation；**深度訊號總帳** |
+| **[contracts/](contracts/README.md)** | **[contracts/README.md](contracts/README.md)** | **跨研究規範層（先讀，勿自造統計）**：feasible-set 數學框架（ε／independence unit／claim ladder L0–L6／forbidden shortcuts）· runtime-quantity fidelity protocol · gate-vs-score 分層 · Boolean 組合語義 · RegionAsset 打包契約 |
+| [eval/](eval/README.md) | [eval/README.md](eval/README.md) · **[signal_analysis_ledger](eval/signal_analysis_ledger.md)** | Eval / ablation 筆記；**深度訊號總帳**（規範層見 contracts/） |
 | [training/](training/README.md) | [training/README.md](training/README.md) | 訓練實驗 |
 | [reid/](reid/) | 見下表 | 外觀能力上限等跨模組 reid 筆記 |
 | [tracker-decision/](tracker-decision/README.md) | [tracker-decision/README.md](tracker-decision/README.md) | 決策語義（closed 線為主） |

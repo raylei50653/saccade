@@ -28,7 +28,7 @@ Usage:
 Includes production-shaped m gates (px=0.4, h∈[0.6,1.7] offline proxy)
 unless --no-prod-shaped. 7-seq MOT is cheap (~30s); re-run substrate freely.
 
-Contract: docs/research/eval/signal_table_schema.md §0.4
+Contract: docs/research/contracts/signal_table_schema.md §0.4
 """
 
 from __future__ import annotations

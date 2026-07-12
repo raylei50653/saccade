@@ -15,7 +15,7 @@ origin: Issue #112 (T2 — PROXY_UNFAITHFUL)
 > what those conclusions are permitted to *say about production*.
 
 Evidence: [d0_runtime_shadow_fidelity_results_20260712](d0_runtime_shadow_fidelity_results_20260712.md) ·
-Protocol: [runtime-quantity fidelity protocol](../../../research/eval/runtime_quantity_fidelity_protocol.md)
+Protocol: [runtime-quantity fidelity protocol](../../../research/contracts/runtime_quantity_fidelity_protocol.md)
 
 ## 1. The measurement
 

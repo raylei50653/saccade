@@ -10,11 +10,11 @@ created: 2026-07-11
 > **One-line:** 把「布林超立方體能量地形」收斂為一條可執行、可驗證、可停止的研究線：**資料決定合法偏序，偏序限制域搜尋，統計界決定域是否可接受**。PR ladder = **PR-B**（本文檔）；上游 = [PR-A #100](https://github.com/raylei50653/saccade/pull/100) · [PR-C #104](https://github.com/raylei50653/saccade/pull/104) · [PR-D gate #106](https://github.com/raylei50653/saccade/issues/106) / [PR #107](https://github.com/raylei50653/saccade/pull/107) **`ACCEPTED_WITH_LIMITS`**（`GLOBAL_PARTIAL_ORDER_READY`；global=`{dist_h, log_h_ratio}`）；下游 = separate restricted-closure prototype → PR-E nested validation。
 
 Thread: [gt_support_morphology_20260711.md](../../../research/threads/gt_support_morphology_20260711.md) ·
-Procedure: [framework §19](../../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)（terminal 判準的唯一權威；2026-07-12 起 §19 本體移至 [procedures/gt_support_morphology_procedure_v1.md](../../../research/eval/procedures/gt_support_morphology_procedure_v1.md)，§19.x 編號保留）·
+Procedure: [framework §19](../../../research/contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)（terminal 判準的唯一權威；2026-07-12 起 §19 本體移至 [procedures/gt_support_morphology_procedure_v1.md](../../../research/eval/procedures/gt_support_morphology_procedure_v1.md)，§19.x 編號保留）·
 Step-0: [gt_support_morphology_step0_20260711.md](gt_support_morphology_step0_20260711.md)
 
 > **§20 classification note (2026-07-12, bookkeeping).** Under the sealed
-> role-aligned experiment contract（[framework §20](../../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)，contract v1，PR #133）：本研究線的 decision form——§2 的
+> role-aligned experiment contract（[framework §20](../../../research/contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)，contract v1，PR #133）：本研究線的 decision form——§2 的
 > max-FP-removal constrained optimization——屬 **capability-exploration
 > instrument**（§20.1／§20.3 diagnostic intents）。因此本線產出**只能** claim
 > §20.4 的 **diagnostic result** 與 **performance upper-bound candidate** 兩類,
@@ -39,7 +39,7 @@ $$
 \boxed{\text{資料決定合法偏序，偏序限制域搜尋，統計界決定域是否可接受。}}
 $$
 
-**權威分界（one fact one home）：** morphology 的 terminal 判準、ε_morph 界線、UCB 方法、escape-tail 保護規則的家在 [framework §19](../../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)（PR-A seal）。本文檔擁有的是**研究線本身**：正式問題、atom 偏序資格分類、MWC pipeline、Verdict A–E 完成條件、任務包與 PR ladder。本文檔不得重定義 §19 的 terminal 或界線。
+**權威分界（one fact one home）：** morphology 的 terminal 判準、ε_morph 界線、UCB 方法、escape-tail 保護規則的家在 [framework §19](../../../research/contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)（PR-A seal）。本文檔擁有的是**研究線本身**：正式問題、atom 偏序資格分類、MWC pipeline、Verdict A–E 完成條件、任務包與 PR ladder。本文檔不得重定義 §19 的 terminal 或界線。
 
 ## 1. 研究動機
 

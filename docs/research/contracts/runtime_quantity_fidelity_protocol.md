@@ -13,6 +13,11 @@ origin: Issue #112 (D0 runtime shadow bridge fidelity)
 > must earn that claim by measurement, through this protocol, before any
 > conclusion drawn from it may be read as a statement about production.
 
+> **Related contracts** ([index](README.md)) — editorial cross-reference added 2026-07-12; no semantic change to this protocol.
+>
+> - **[feasible-set framework § 9.3 / § 10 / § 13](statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)** — this protocol's core lemma is that framework's **substrate robustness** seen from the quantity side. Consequence, binding on safe-region work: **a decision region certified on offline coordinates does not inherit its \(L_{\mathrm{GT}}\) bound at runtime** — coordinate provenance *is* substrate, so the region must earn rung **L4 (cross-substrate portable)** rather than assume it. This is § 13's *offline safe \(\not\Rightarrow\) online effective*.
+> - A quantity that fails this protocol may still be used as a **pure offline** morphology / capability signal, **provided it is explicitly marked non-transferable** — but it may **not** carry a safety guarantee into a runtime gate.
+
 ## 0. Why this exists
 
 Issue #112 measured the offline proxy `score_m_bridge` against the live CUDA

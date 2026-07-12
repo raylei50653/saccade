@@ -45,13 +45,16 @@ Proposed → Accepted → (必要時) Superseded by ADR XXX
 ## TODO / research / archive 維護規範
 
 - 完成項目時立即勾選 `[x]`
-- 已完成、收斂或放棄的長篇脈絡移至 [TODO_history.md](TODO_history.md) 或 [archive/](archive/)
 - 實驗、ablation、訓練記錄放 `research/` 或 `modules/<name>/research/`
 - 穩定架構說明放 `architecture/` 或 `modules/<name>/architecture.md`
 - 操作步驟放 `reference/runbooks/` 或 `modules/<name>/runbooks/`
 - 目前沒有 `progress/`、`layers/` 或 `modules/<name>/decisions/` 目錄；不要在文件中指向這些路徑
 
-**完整「寫去哪 / 怎麼索引 / 數字升格」契約**見下一節與 [ownership/doc_structure_contract.md](ownership/doc_structure_contract.md)。
+**生命週期＝ [契約 C6](ownership/doc_structure_contract.md#c6--lifecycle適用所有-doc-class不只-threads)（三條規則），本檔不複述：**
+① 關閉必須產出一份高密度結論（裁決／範圍／限制／證據在哪）；
+② 細節退出 active 視野但**內容不改**（只動位置與可見性，不重寫不壓縮）；
+③ 關閉與整理**同一個 PR 完成**——不得事後再開「整理文檔」任務。
+`check_doc_structure.py --strict`（pre_push）對 ②③ 的可機械判定部分紅燈。
 
 ---
 
@@ -60,26 +63,27 @@ Proposed → Accepted → (必要時) Superseded by ADR XXX
 **This is O1.5 of O-series**（docs-only）：檔案家、入口可發現性、evidence promotion。  
 **不是** tracker-decision P9。全文：[ownership/doc_structure_contract.md](ownership/doc_structure_contract.md)。
 
-### 原則（詳見契約 C0–C9）
+### 規則的唯一 owner ＝ 契約本身（本檔只指路，不複述）
 
-- **四家：** `docs/research/`（跨模組）· `docs/modules/<m>/`（模組）· `report_data/`（可重建 paper 資產）· `docs/archive/`（歷史）
-- **數字 master：** 決策 / baseline → [research/evidence_ledger.md](research/evidence_ledger.md)；負結果 → [reference/no_go_registry.md](reference/no_go_registry.md)
-- **入口 = 目錄：** 新增 research 檔的同一 PR **必須**更新對應 README 索引行
-- **禁止幽靈路徑：** README 不得鏈到不存在的子目錄（例如虛構的 `research/tracking/`）
-- **新 research 文首標記**（HTML comment，與 fact-owner 同風格）：
+規則重複陳述會漂移，漂移時沒人知道哪份是真的——那是「以後還是打補釘」的溫床。所以：
 
-```html
-<!-- doc-status: active | parked | closed | archived -->
-<!-- doc-promotion: none | ledger | report_data | archive | no_go -->
-<!-- doc-date: YYYY-MM-DD -->
-```
+| 我要查 | 唯一 owner |
+|:--|:--|
+| 檔案家 / 分層 · **決策層不出文檔** | [C0 · C0.1](ownership/doc_structure_contract.md#c0--homes-layering) |
+| 寫去哪（決策樹） | [C1](ownership/doc_structure_contract.md#c1--writing-decision-tree) |
+| 文首狀態標記（`doc-status` / `doc-promotion` / `doc-date`） | [C3](ownership/doc_structure_contract.md#c3--research-note-status-markers-new-notes-required) |
+| 索引新鮮度（入口＝目錄） | [C4](ownership/doc_structure_contract.md#c4--index-freshness-entry--catalog) |
+| 數字升格 / 不得有第二真相 | [C5](ownership/doc_structure_contract.md#c5--evidence--promotion) |
+| **生命週期 · 檔名 vs 目錄 · 收單觸發器 · enforcement** | [C6 · C6.1–C6.4](ownership/doc_structure_contract.md#c6--lifecycle適用所有-doc-class不只-threads) |
+| TODO vs research vs threads 角色分工 | [C7](ownership/doc_structure_contract.md#c7--todo-vs-research--threads-role-split) |
+| 研究方法 / 證據語義 / claim ladder | [research/contracts/](research/contracts/README.md) |
+| 研究對象的**當前狀態** | [claim_state_registry](research/contracts/claim_state_registry.md) |
 
-- **TODO = WIP 鎖，不是任務管理：** sole active 一句 + 連 thread 和/或 `research/`；無 active 時寫 `⏸️`。長文 / 結果 / 推理 → research 或 [threads/](research/threads/)（見契約 C7）
-- **Cheb-GR / bank / occ-exit 文檔家** = `modules/semantic/`（即使 code 在 reid 路徑）
+僅此一條本檔自有：**Cheb-GR / bank / occ-exit 的文檔家 = `modules/semantic/`**（即使 code 在 reid 路徑）。
 
 ### 相關 checker
 
-- `scripts/tools/check_doc_structure.py`：**warn-only**，research 檔未被 owning README 引用時警告
+- `scripts/tools/check_doc_structure.py`：索引覆蓋率 warn；**`--strict`（pre_push 使用）對 C6.4 的 L1–L3 違規紅燈**
 
 ---
 
