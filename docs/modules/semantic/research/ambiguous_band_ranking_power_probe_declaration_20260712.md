@@ -40,6 +40,13 @@ reachable-slice caveat is now **unconditional** — every recorded terminal
 (T0–T3) carries the §3 scope clause verbatim, with no directional trigger to
 evaluate, so no implementer choice can decide its presence.
 
+**Revision 4 (2026-07-12, pre-seal — final review, one clause fix):** the
+universal caveat's opening ("established on the gate-retained band")
+contradicted T0, which establishes nothing; the clause is now neutral
+("study scope is the gate-retained band; this terminal establishes no claim
+inside the production-reachable set …") and holds identically for T0–T3.
+No terminal, box, candidate, or protocol change.
+
 ---
 
 ## 1. §20.2 declaration block
@@ -115,10 +122,11 @@ Pools (per owner Door-0 spec):
   condition):** the results PR must report the slice for the baseline and
   every candidate, and the recorded terminal statement — whichever of T0–T3
   — **always** carries the following clause verbatim, with no directional
-  test deciding its presence: *"established on the gate-retained band; not
-  established inside the production-reachable set (s0 ≤ 0.4; 34 events,
-  descriptive only); any step-④ decision must treat the decision surface
-  (threshold/margin interplay), not assume in-place reranking behavior."*
+  test deciding its presence: *"study scope is the gate-retained band; this
+  terminal establishes no claim inside the production-reachable set
+  (s0 ≤ 0.4; 34 events, descriptive only); any step-④ decision must treat
+  the decision surface (threshold/margin interplay), not assume in-place
+  reranking behavior."*
 
 ## 4. Event and trial semantics
 
