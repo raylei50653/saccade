@@ -11,13 +11,19 @@
 - 文件家 / research 索引 / 數字升格 → [docs/ownership/doc_structure_contract.md](docs/ownership/doc_structure_contract.md)（**O1.5**）
 - 跨子類連續研究任務 → [docs/research/threads/](docs/research/threads/) 建 navigation-only thread；不放長表、不取代 evidence_ledger / module research。
 - 接續任務 → [docs/research/threads/README.md](docs/research/threads/README.md)（先看 Active threads，再進單卡）
-- **Active research task routing（PR-driven）：**
+- **Active research task routing（contract-driven；四層分離）：**
   ```text
-  DEVELOPMENT.md
-  → module TODO sole-active item
-  → active research thread / normative contract
-  → current implementation PR, when one exists
+  registry    決定「現在是什麼」  → docs/research/contracts/claim_state_registry.md（state fact-owner）
+  contracts   決定「可以去哪裡」  → docs/research/contracts/（合法轉移 / 證據型別 / claim ladder）
+  O0          決定「現在選哪一個」→ module TODO sole active（從候選集中選,WIP=1）
+  DEVELOPMENT 只公告選擇結果      → 本檔（projection;不得成為第二個狀態源）
   ```
+  registry **只產生合法候選集**，**不選任務**：`next admissible unit ≠ next task`。
+  推導規則：**證據型別錯層 → 改層**（不是修統計）；**substrate 未證（L4 缺）→ 先做 transfer 審計**
+  （「已被授權」≠「admissible」）；**blocker 分型**（inadmissibility ＝排除／dependency ＝展開依賴）；
+  **decision relevance 過不了反事實測試（正反結果都不改變任何已知決策）→ 不得取得 WIP 鎖**。
+  某 layer 若無契約，其 object ＝ `transition_semantics: unavailable`（**合法狀態**，把缺口顯式化）。
+  **本檔不重述任何 object 的 rung／limits／substrate**——那些只從 registry 投影。
   GitHub PR metadata is the authority for head/base branch, merge base, head SHA, changed files, CI/test status, review findings, and update history. Research documents remain the authority for research gate, accepted priors, normative inputs, authorized/unauthorized scope, claim boundaries, research acceptance, and next-stage authorization.
 - **Lock:** PR merge ≠ research acceptance; engineering-ready ≠ evidence promotion; research acceptance and next-stage authorization remain chat-side / research-owner gates.
 - **TODO = WIP 鎖**（sole active 一句 + link）；**不是**任務敘事 / 上下文恢復 → [DOC_MAINTENANCE § WIP](docs/DOC_MAINTENANCE.md) · [契約 C7](docs/ownership/doc_structure_contract.md)
