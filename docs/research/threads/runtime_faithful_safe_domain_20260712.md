@@ -81,14 +81,15 @@ D0 has already ruled unfaithful.
 **Framework position of this line:** the offline→runtime coordinate change is a
 **substrate** change in the framework's own sense (§ 9.3 names *score definitions,
 feature extraction, hook placement* as substrate), so S0 is precisely the
-framework's **L4 cross-substrate portability** audit of an existing region — not a
-new region search.
+framework's **L4 cross-substrate signal portability** audit of the accepted axes
+and partial orders — not a true region portability check of a solved region.
 
 ## Unit ladder
 
 ```text
-S0  transfer audit  — do the accepted axes keep their L_GT bound (L4 portability)
-                      in runtime coordinates?               ← current unit (draft)
+S0  transfer audit  — do the accepted axes and partial orders keep their safety
+                      characteristics (L4 signal portability) in runtime coordinates?
+                                                            ← proposed unit (draft)
 S1  impossible-region closed form — v_max·la / px_per_m, scale ratio;
                       coarse, no fitting, one-sided coverage proof
 S2  restricted-closure solve on whichever axes survived S0  (separately declared)
@@ -98,8 +99,9 @@ S3  production hook — relink_bridge_max_speed / spatial_gate / h_lo,h_hi are
                       (separately declared; no authorization from S0–S2)
 ```
 
-Only **S0** is open. S1–S3 are named so the direction is legible; none is
-authorized, and each needs its own declaration.
+S0 is a proposed draft; no unit on this line is currently open or active.
+S1–S3 are named so the direction is legible; none is authorized, and each
+needs its own declaration.
 
 ## Must not
 
@@ -111,10 +113,10 @@ authorized, and each needs its own declaration.
 
 ## History
 
-- 2026-07-12: Opened. Owner set the architecture — *gate builds a safe domain;
+- 2026-07-12: Proposed. Owner set the architecture — *gate builds a safe domain;
   score ranking separates GT* — which reclassified the discrete-\(M\) study as a
-  score-ranking feature question (parked, unsealed) and returned the WIP lock to
-  the gate-shaped line. Audit then found the accepted safe axes are built on
+  score-ranking feature question (parked, unsealed) and proposed S0 as the next
+  candidate unit. Audit then found the accepted safe axes are built on
   offline proxy coordinates that D0 already ruled unfaithful, and that the
   closure solve which would consume them has not started. S0 declared as the
-  first unit.
+  proposed draft.
