@@ -118,7 +118,6 @@ archived  →  不再當現況導航                               →  docs/arc
 
 | Thread | Status (one-line) | Owner |
 |:--|:--|:--|
-| [ambiguous_band_ranking_power_probe_20260712.md](ambiguous_band_ranking_power_probe_20260712.md) | **semantic sole active** · Door 0（realignment step ③）· EXECUTED → **`T2 NO_USABLE_RANKING_POWER_IN_CLASS`**（12-member class-scoped）· research acceptance pending | semantic |
 | [gap_conditioned_probabilistic_motion_probe_20260711.md](gap_conditioned_probabilistic_motion_probe_20260711.md) | Phase B **`V5 ACCEPTED_WITH_LIMITS`** recorded · D0 fail-closed pending #112 · E0–E2 `ACCEPTED_WITH_LIMITS` · E3 `E3_SIGNALS_SEALED` · representation / level 1 only | semantic |
 | [association_recovery_registry_20260709.md](association_recovery_registry_20260709.md) | Scripts index + tools YAML + contracts 就位；registry 維護母線 | semantic |
 | [doc_structure_o15_followup_20260709.md](doc_structure_o15_followup_20260709.md) | O1.5 + TODO-as-WIP-lock；follow-up = index debt / optional strict | ownership |
@@ -134,6 +133,7 @@ archived  →  不再當現況導航                               →  docs/arc
 
 | Thread | Closed | Terminal (one-line) | Owner |
 |:--|:--|:--|:--|
+| [ambiguous_band_ranking_power_probe_20260712.md](closed/ambiguous_band_ranking_power_probe_20260712.md) | 2026-07-12 | **T2 `NO_USABLE_RANKING_POWER_IN_CLASS` ACCEPTED**（12-member class-scoped；step ⑤ 生效；step ④ 未開）· [PR #135](https://github.com/raylei50653/saccade/pull/135) seal／[PR #136](https://github.com/raylei50653/saccade/pull/136) acceptance | semantic |
 | [safe_region_assetization_20260710.md](closed/safe_region_assetization_20260710.md) | 2026-07-11 | **A1 CLOSED**（`A1_ACCEPTED_WITH_LIMITS`）· R2–R4 fail-closed · handoff → [gt_support_morphology](gt_support_morphology_20260711.md) · [PR #95](https://github.com/raylei50653/saccade/pull/95)/[#97](https://github.com/raylei50653/saccade/pull/97) | semantic |
 | [composition_grammar_coverage_program_20260710.md](closed/composition_grammar_coverage_program_20260710.md) | 2026-07-10 | **SUPERSEDED** · coverage map absorbed into assetization R2–R4 · no C1–C6 execution | semantic |
 | [composition_grammar_safe_region.md](closed/composition_grammar_safe_region.md) | 2026-07-10 | **CLOSED A0 baseline** · T0-A/B/R1 · radius≥1=0 · terminal B · handoff → assetization | semantic |

@@ -8,8 +8,8 @@
 > **Terminal: `T2 NO_USABLE_RANKING_POWER_IN_CLASS` (12-member tested
 > class).** Validity V1–V5 all PASS; headroom exists (H not triggered:
 > baseline PWA 0.878, top-1 0.590; 84/205 events are baseline top-1 misses);
-> **no candidate passes the B1–B6 boxes** — best in-sample ΔPWA = **+0.0011**
-> (`c_log_h_ratio`), two orders of magnitude below the +0.02 bar; the motion
+> **no candidate passes the B1–B6 boxes** — best in-sample ΔPWA =
+> **+0.001097** (`c_log_h_ratio`), ≈18× below the +0.02 bar; the motion
 > conditions (`speed_mismatch`, `dir_cos`) are actively harmful.
 >
 > **Unconditional scope caveat (declaration §3, verbatim):** study scope is
@@ -19,7 +19,7 @@
 > interplay), not assume in-place reranking behavior.
 
 Declaration (sealed, PR #135 merge = seal): [ambiguous_band_ranking_power_probe_declaration_20260712.md](ambiguous_band_ranking_power_probe_declaration_20260712.md) ·
-Thread: [thread card](../../../research/threads/ambiguous_band_ranking_power_probe_20260712.md) ·
+Thread: [thread card](../../../research/threads/closed/ambiguous_band_ranking_power_probe_20260712.md) ·
 Runner: `scripts/tools/run_door0_ranking_probe.py` ·
 Packet: [evidence/door0_ranking_probe_20260712/](evidence/door0_ranking_probe_20260712/manifest.json) ·
 Study dir: `out/signal_study/door0_ranking_probe_20260712/`
@@ -69,8 +69,8 @@ class simply cannot reach it.
 
 Reading:
 
-- **No candidate approaches B1** (+0.02): the best is +0.0011 — a 20×
-  shortfall. This is not a near-miss.
+- **No candidate approaches B1** (+0.02): the best is +0.001097 — an ≈18×
+  shortfall. This is not a near-miss (owner acceptance: not a boundary case).
 - The "clean" conditions (`dist_h`, `resid_mean`, the ANDs) fire almost
   exclusively on FPs (fire GT = 0.000) but those FPs are already ranked
   *below* the GT by `s0` — demoting them changes nothing (`good/bad = 0/0`
