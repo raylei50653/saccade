@@ -39,18 +39,24 @@ temporal state or a new scoring formula.
 
 ## Artifacts
 
-None yet. A future activated unit must create a versioned temporal-reduction
-contract and a runtime-shadow evidence packet; it must not reuse an offline
-MOT-row reconstruction as production score data.
+- [R1 temporal-reduction capture declaration](../../modules/semantic/research/r1_temporal_reduction_capture_declaration_20260712.md)
+  — sealed pre-outcome contract for the nested runtime payload, replay, and
+  temporal-sensitivity readout; it is not evidence and contains no outcomes.
+- `scripts/tools/export_r1_temporal_reduction_capture.py` — fail-closed export
+  of native shadow observations into `r1_temporal_reduction_payload_v1`.
+- `scripts/tools/verify_r1_temporal_reduction_replay.py` — label-free R0 replay
+  and declared causal-sensitivity calculator.
 
 ## Current step
 
-**R1 capture-contract preflight:** existing D0 shadow rows contain reduced
-terms but not the two effective four-sample windows consumed by
-`bridge_anchor4`; they cannot independently replay \(R\). Define and add a
-versioned, default-off capture of those windows and the short-lost fallback,
-then seal replay/stability criteria before collecting outcomes. Score fitting,
-gate sweep, and production change remain unauthorized.
+**R1 capture-contract preflight:** the capture contract is sealed and the
+default-off payload/export path is implemented. Execute only the declared
+shadow capture and label-free replay/sensitivity checks next. The one-sequence
+engineering smoke exported its complete nested payload but exceeded the sealed
+float32 replay tolerance in several components; repair host replay fidelity
+without changing the tolerance, then collect the declared full-support packet.
+Do not interpret outcomes until that packet is complete and owner-reviewed.
+Score fitting, gate sweep, and production change remain unauthorized.
 
 ## Acceptance
 
@@ -83,3 +89,13 @@ boundary-preservation, and coverage criteria before outcome metrics are read.
 - 2026-07-12: Owner activated the line. Initial source audit found that D0
   captures reduced anchor/velocity outputs but not the effective input windows;
   first unit narrowed to a versioned R1 capture-contract preflight.
+- 2026-07-12: Sealed `r1_temporal_reduction_capture_v1` before data collection:
+  independent nested-window export, strict source/provenance gates, label-free
+  R0 replay, predicate/order checks, and causal-sensitivity reporting. D0's
+  fixed evidence packet remains unchanged.
+- 2026-07-12: Non-terminal MOT17-04-SDP engineering smoke: 121 native rows,
+  zero overflow, nested export complete; 24 rows had no output-layer global id
+  and were retained under native identity. Predicate and comparable-order
+  replay agreed, but component replay exceeded the presealed `1e-5` tolerance.
+  This is instrumentation/replay repair only (not `R1_FAITHFUL`, no full-support
+  packet, no score/gate/preset conclusion).

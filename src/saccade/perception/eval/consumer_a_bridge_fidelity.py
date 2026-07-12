@@ -294,8 +294,9 @@ def speed_weighted_bdist(
     vyc: float,
     horizon: float,
     h_ref: float,
+    bridge_dir_bonus: float = 0.0,
 ) -> tuple[float, float, float, float, float, float]:
-    """CUDA speed-weighted bridge score (dir_bonus = 0 path).
+    """CUDA speed-weighted bridge score, including the optional direction bonus.
 
     Returns ``(bdist, dist_h, fwd_r, bwd_r, s_lost, w)``.
     """
@@ -311,6 +312,34 @@ def speed_weighted_bdist(
     s_lost = math.hypot(vxl, vyl) / href
     w = math.sqrt(min(max(s_lost / SPEED_WEIGHT_REF, 0.0), 1.0))
     bdist = w * 0.5 * (fwd_r + bwd_r) + (1.0 - w) * dist_h
+    # Keep this branch line-for-line aligned with relink_bidir_propose_kernel.
+    # It is normally dormant in the active preset, but an R1 replay cannot
+    # silently change the quantity when a capture records a non-zero bonus.
+    if bridge_dir_bonus > 0.0:
+        sl = math.hypot(vxl, vyl)
+        sc = math.hypot(vxc, vyc)
+        min_speed = min(sl, sc)
+        speed_trust = min(min_speed / max(href * 0.005, 1e-3), 1.0)
+        if speed_trust > 0.0:
+            cos_sim = (vxl * vxc + vyl * vyc) / max(sl * sc, 1e-9)
+            if cos_sim > 0.5:
+                ux = vxl / sl + vxc / sc
+                uy = vyl / sl + vyc / sc
+                un = math.hypot(ux, uy)
+                ux /= un
+                uy /= un
+                px, py = -uy, ux
+                fe_x = (lx + vxl * la) - cx0
+                fe_y = (ly + vyl * la) - cy0
+                fwd_cross = abs(fe_x * px + fe_y * py) / href
+                be_x = (cx0 - vxc * la) - lx
+                be_y = (cy0 - vyc * la) - ly
+                bwd_cross = abs(be_x * px + be_y * py) / href
+                bdist_dir = 0.5 * (fwd_cross + bwd_cross)
+                gap_scale = min(la / 30.0, 1.0)
+                alpha = bridge_dir_bonus * cos_sim * cos_sim * speed_trust * gap_scale
+                alpha = min(alpha, 1.0)
+                bdist = bdist * (1.0 - alpha) + bdist_dir * alpha
     return bdist, dist_h, fwd_r, bwd_r, s_lost, w
 
 
@@ -347,6 +376,7 @@ def consumer_a_estimate_from_rings(
     bridge_at: int = PRODUCTION_BRIDGE_AT,
     anchor_mode: int = ANCHOR_MODE[PRODUCTION_BRIDGE_ANCHOR],
     rate_gate: float = PRODUCTION_BRIDGE_ANCHOR_RATE,
+    bridge_dir_bonus: float = 0.0,
 ) -> BridgeEstimate:
     """Kernel-formula reconstruction on pre-extracted rings + EMA heights.
 
@@ -393,6 +423,7 @@ def consumer_a_estimate_from_rings(
         vyc=vyc,
         horizon=float(la),
         h_ref=h_ref,
+        bridge_dir_bonus=float(bridge_dir_bonus),
     )
     return BridgeEstimate(
         bdist=bdist,

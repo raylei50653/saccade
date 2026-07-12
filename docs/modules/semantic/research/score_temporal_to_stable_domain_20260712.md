@@ -344,15 +344,17 @@ copies those two effective windows, their consumed lengths, and
 `bridge_dir_bonus` into `BridgeFidelityEvent`; the Python binding exports them
 as chronological sample lists. D0's fixed v2 CSV field list is deliberately
 unchanged, so this does not reinterpret or modify its sealed packet. The new
-payload is not yet a versioned R1 artifact and no capture has been run.
+payload is promoted by the separately versioned R1 exporter rather than by
+mutating D0's flat CSV artifact. See the sealed
+[R1 capture declaration](r1_temporal_reduction_capture_declaration_20260712.md).
 
-**Active first unit:** define capture contract `R1` and promote this
-default-off observation state into a versioned payload rather than mutating
-D0's sealed v2 packet. Before capture data are read, it will seal: source/payload
-hashes, shadow byte-identity, zero overflow, all source-field completeness,
-component replay tolerance, predicate agreement, and event-local rank policy.
-Only this instrumentation-and-replay unit is active; it does not fit \(M\),
-\(A\), \(J_f\), or a score model yet.
+**Active first unit:** capture contract `R1` is sealed before any capture data
+are read. It promotes the default-off observation state into a versioned nested
+payload rather than mutating D0's sealed v2 packet; source/payload hashes,
+shadow byte-identity, zero overflow, field completeness, component replay
+tolerance, predicate agreement, event-local rank policy, and causal-sensitivity
+readout are frozen. Only this instrumentation-and-replay unit is active; it
+does not fit \(M\), \(A\), \(J_f\), or a score model yet.
 
 ## Status
 
