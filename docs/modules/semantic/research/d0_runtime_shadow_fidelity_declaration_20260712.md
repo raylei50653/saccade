@@ -11,7 +11,7 @@
 > and over what domain that fidelity holds. Substrate validation, not a design
 > search. Every terminal is a mainline state transition (§20.7).
 
-Contract: [framework §20](../../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md) (v1, PR #133) ·
+Contract: [framework §20](../../../research/contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md) (v1, PR #133) ·
 Prior packet (sealed, v1 legacy): [d0_bridge_estimator_fidelity_20260711](d0_bridge_estimator_fidelity_20260711.md)
 
 **Seal semantics (two distinct events — do not conflate them).**

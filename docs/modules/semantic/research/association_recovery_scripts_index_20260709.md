@@ -46,7 +46,7 @@
 
 | 我要… | 先跑 / 先開 | Door |
 |:--|:--|:--|
-| signal-study 表契約 / B1 宇宙 | [signal_table_schema.md](../../../research/eval/signal_table_schema.md)（`U_relink_pair`） | A |
+| signal-study 表契約 / B1 宇宙 | [signal_table_schema.md](../../../research/contracts/signal_table_schema.md)（`U_relink_pair`） | A |
 | 建 offline 候選池 CSV | `scripts/tools/build_relink_candidates.py` | A |
 | pairs → context/AUC/thr（B1 輸出） | `scripts/tools/summarize_relink_pairs.py` | A |
 | B1 L0 gate coverage（prod-shaped + by-seq） | `audit_relink_safe_reject.py --by-gap --by-seq` | A |
@@ -228,7 +228,7 @@ Redirect helper: `scripts/eval/_redirect.py`.
 ## 4. Recipes (CLI assembly only — conclusions stay manual)
 
 **能用 / 缺什麼 + Gate vs Score 分工（不在本檔重複維護）：**  
-[signal_table_schema §8](../../../research/eval/signal_table_schema.md) · [§0.5](../../../research/eval/signal_table_schema.md)（L0 gate / L1–L2 score）。
+[signal_table_schema §8](../../../research/contracts/signal_table_schema.md) · [§0.5](../../../research/contracts/signal_table_schema.md)（L0 gate / L1–L2 score）。
 
 These are **suggested command chains**, not automated GO gates. Fill `<…>` from crosswalk §5 substrates.
 
@@ -298,7 +298,7 @@ uv run python scripts/tools/audit_relink_safe_reject.py \
   --write-study --by-gap
 ```
 
-Contract: [signal_table_schema.md](../../../research/eval/signal_table_schema.md) §0.4.  
+Contract: [signal_table_schema.md](../../../research/contracts/signal_table_schema.md) §0.4.  
 Live: [m_b1_research_history_20260709_20260710.md](m_b1_research_history_20260709_20260710.md) §3d.
 
 ### R-B — Depth / swap probe

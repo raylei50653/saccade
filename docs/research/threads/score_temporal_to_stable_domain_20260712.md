@@ -39,7 +39,7 @@ is declared and accepted on its own contract.
 - [R1 capture declaration](../../modules/semantic/research/r1_temporal_reduction_capture_declaration_20260712.md)
 - [D0 runtime-shadow fidelity result](../../modules/semantic/research/d0_runtime_shadow_fidelity_results_20260712.md)
 - [`s0` validity amendment](../../modules/semantic/research/s0_proxy_validity_amendment_20260712.md)
-- [runtime-quantity fidelity protocol](../eval/runtime_quantity_fidelity_protocol.md)
+- [runtime-quantity fidelity protocol](../contracts/runtime_quantity_fidelity_protocol.md)
 
 ## Artifacts
 

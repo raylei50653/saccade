@@ -61,7 +61,7 @@ Parent: [score temporal-to-stable-domain charter § 5](score_temporal_to_stable_
 Navigation: [active thread](../../../research/threads/score_temporal_to_stable_domain_20260712.md) ·
 Prior terminal: [R1 results — `R1_FAITHFUL`](r1_temporal_reduction_capture_results_20260712.md) ·
 Inherited contract: [R1 capture declaration](r1_temporal_reduction_capture_declaration_20260712.md) ·
-Fidelity vocabulary: [runtime-quantity protocol](../../../research/eval/runtime_quantity_fidelity_protocol.md)
+Fidelity vocabulary: [runtime-quantity protocol](../../../research/contracts/runtime_quantity_fidelity_protocol.md)
 
 ## 1. Scope (binding at seal)
 

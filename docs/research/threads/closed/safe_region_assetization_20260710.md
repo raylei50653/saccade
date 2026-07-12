@@ -169,9 +169,9 @@ R1 transforms sealed inputs into deterministic authorities and emission tables o
 
 ## Read first
 
-1. [Accepted R0-B RegionAsset contract](../../eval/safe_region_asset_contract.md)
-2. [Boolean Composition Semantics Contract](../../eval/boolean_composition_semantics_contract.md)
-3. [Mathematical framework](../../eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
+1. [Accepted R0-B RegionAsset contract](../../contracts/safe_region_asset_contract.md)
+2. [Boolean Composition Semantics Contract](../../contracts/boolean_composition_semantics_contract.md)
+3. [Mathematical framework](../../contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
 4. [R1 conversion note](../../../modules/semantic/research/safe_region_asset_r1_conversion_20260710.md)
 5. [A1 acceptance-unit lock + audit (2026-07-11)](../../../modules/semantic/research/safe_region_a1_audit_20260711.md)
 6. [Accepted R0-A preflight](../../../modules/semantic/research/safe_region_r0_asset_contract_preflight_20260710.md)

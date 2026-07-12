@@ -10,7 +10,7 @@ created: 2026-07-11
 > **One-line:** Sealed 8-atom substrate → **`global_orderable`** = `{dist_h, log_h_ratio}` · **`conditional_orderable`** = `{bridge_dist, speed_mismatch, dir_cos, resid_mean}` (short-gap only) · **`context_only`** = `{score_m_bridge, gap}` · **`unresolved`** = ∅. Aggregate terminal **`GLOBAL_PARTIAL_ORDER_READY`**. Research acceptance = **`ACCEPTED_WITH_LIMITS`** on [PR #107](https://github.com/raylei50653/saccade/pull/107). Authorizes a **separate** restricted-closure prototype on the accepted global pair only.
 
 Thread: [gt_support_morphology_20260711.md](../../../research/threads/gt_support_morphology_20260711.md) ·
-Procedure: [framework §19](../../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md) ·
+Procedure: [framework §19](../../../research/contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md) ·
 Research line: [boolean_closure_domain_line_20260711.md](boolean_closure_domain_line_20260711.md) ·
 Step-0: [gt_support_morphology_step0_20260711.md](gt_support_morphology_step0_20260711.md) ·
 PR-C: [escape_tail_forensic_20260711.md](escape_tail_forensic_20260711.md) ·
@@ -61,7 +61,7 @@ this offline substrate is **`T2 PROXY_UNFAITHFUL`**, with a **distorted GT
 boundary** (7.03 % offline-safe-but-online-unsafe). A GT-retention guarantee
 proved in offline coordinates therefore does **not** transfer to runtime
 coordinates by formula shape or field name (see the
-[runtime-quantity fidelity protocol](../../../research/eval/runtime_quantity_fidelity_protocol.md)).
+[runtime-quantity fidelity protocol](../../../research/contracts/runtime_quantity_fidelity_protocol.md)).
 
 **Binding consequence:** the authorized restricted-closure prototype **may not be
 solved on these axes** until their runtime transfer is audited. That audit is

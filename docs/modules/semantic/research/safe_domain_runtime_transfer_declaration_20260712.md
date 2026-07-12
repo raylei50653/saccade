@@ -17,10 +17,10 @@
 > number in this file may be read from data.
 
 **Normative inputs (cited, never re-derived):**
-[feasible-set framework](../../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md) ·
-[RegionAsset contract](../../../research/eval/safe_region_asset_contract.md) ·
-[gate-vs-score layer contract](../../../research/eval/signal_table_schema.md#05-gate-vs-score-support--calibration--policy) ·
-[runtime-quantity fidelity protocol](../../../research/eval/runtime_quantity_fidelity_protocol.md)
+[feasible-set framework](../../../research/contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md) ·
+[RegionAsset contract](../../../research/contracts/safe_region_asset_contract.md) ·
+[gate-vs-score layer contract](../../../research/contracts/signal_table_schema.md#05-gate-vs-score-support--calibration--policy) ·
+[runtime-quantity fidelity protocol](../../../research/contracts/runtime_quantity_fidelity_protocol.md)
 
 Thread: [runtime-faithful safe domain](../../../research/threads/runtime_faithful_safe_domain_20260712.md) ·
 Accepted axes: [partial-order note](boolean_atom_partial_order_20260711.md) ·

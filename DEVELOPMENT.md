@@ -106,8 +106,8 @@ Cheb-GR / bank / offline identity / occ-exit → 文檔家 **semantic**（非 re
 |:--|:--|:--|
 | 修 crash / flake，行為不變 | **D0** | 測試 + pre_push |
 | 單模組 ablation，default-off | **D1** | module research + README 索引 + TODO 連結 |
-| 數據驅動 gate / relink 訊號（不改 preset） | **D1** | 契約 [signal_table_schema](docs/research/eval/signal_table_schema.md) · **深度分析總帳** [signal_analysis_ledger](docs/research/eval/signal_analysis_ledger.md)（一訊號一列；數字在 `out/signal_study/`） |
-| **安全域 / safe region / reject 規則**（`max G_FP` s.t. `L_GT ≤ ε`） | **D2** | **數學契約（先讀，勿自造統計）** [feasible-set framework](docs/research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)（feasible/productive-safe set · region geometry · **independence unit 強制宣告** · claim ladder L0–L6 · §13 forbidden shortcuts）· 打包 [RegionAsset 契約](docs/research/eval/safe_region_asset_contract.md) · 分層 [gate vs score](docs/research/eval/signal_table_schema.md) |
+| 數據驅動 gate / relink 訊號（不改 preset） | **D1** | 契約 [signal_table_schema](docs/research/contracts/signal_table_schema.md) · **深度分析總帳** [signal_analysis_ledger](docs/research/eval/signal_analysis_ledger.md)（一訊號一列；數字在 `out/signal_study/`） |
+| **安全域 / safe region / reject 規則**（`max G_FP` s.t. `L_GT ≤ ε`） | **D2** | **數學契約（先讀，勿自造統計）** [feasible-set framework](docs/research/contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)（feasible/productive-safe set · region geometry · **independence unit 強制宣告** · claim ladder L0–L6 · §13 forbidden shortcuts）· 打包 [RegionAsset 契約](docs/research/contracts/safe_region_asset_contract.md) · 分層 [gate vs score](docs/research/contracts/signal_table_schema.md) |
 | occ-exit / Cheb-GR / sparse bank | **D1→D2** | **semantic** research 全家；引用數字再 D2 promotion |
 | 外觀 ceiling / 特徵抽取實作 | **D1** | **reid** README/research；關聯政策仍看 semantic |
 | GMC / Kalman 實驗 | **D1→D3** | geometry research + eval 筆記；動 default → 加上 tracker-decision + contract |
@@ -258,6 +258,7 @@ research acceptance / next-stage auth = chat-side / research-owner gates
 | Stage dataflow | [docs/reference/pipeline_flow.md](docs/reference/pipeline_flow.md) |
 | NO-GO 總表 | [docs/reference/no_go_registry.md](docs/reference/no_go_registry.md) |
 | 決策層（closed） | [tracker-decision/](docs/research/tracker-decision/README.md) |
+| **研究規範層**（方法／統計／claim ladder；**先讀，勿自造**） | **[docs/research/contracts/](docs/research/contracts/README.md)** |
 | 全局 research 入口 | [docs/research/README.md](docs/research/README.md) |
 | 連續任務母線 | [docs/research/threads/](docs/research/threads/README.md) |
 | Paper assets | [report_data/README.md](report_data/README.md) |

@@ -31,13 +31,13 @@ Separation is the score's job.
 
 **This is not a new method.** The canonical mathematical framework already exists
 and is normative:
-[Statistical Robust Feasible-Set Estimation under Asymmetric Loss](../eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
+[Statistical Robust Feasible-Set Estimation under Asymmetric Loss](../contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
 — \(\max_\theta G_{\mathrm{FP}}(\theta)\) s.t. \(L_{\mathrm{GT}}(\theta)\le\varepsilon\),
 feasible / productive-safe / robust-feasible sets, region geometry, the mandatory
 **independence-unit** declaration (§ 8.1), the **claim ladder L0–L6** (§ 10), and
 the forbidden shortcuts (§ 13, including *offline safe \(\not\Rightarrow\) online
 effective*). The RegionAsset packaging contract
-([safe_region_asset_contract](../eval/safe_region_asset_contract.md)) lists
+([safe_region_asset_contract](../contracts/safe_region_asset_contract.md)) lists
 **transfer as not yet authorized**. This line's units instantiate that framework;
 they do not invent statistics.
 
@@ -68,7 +68,7 @@ is distorted** — 7.03 % offline-safe-but-online-unsafe).
 **Consequence (the reason this line exists):** a region proved safe in offline
 coordinates does **not** inherit its GT-retention guarantee in runtime
 coordinates. Formula shape and field name do not transfer semantics — see the
-[runtime-quantity fidelity protocol](../eval/runtime_quantity_fidelity_protocol.md).
+[runtime-quantity fidelity protocol](../contracts/runtime_quantity_fidelity_protocol.md).
 Solving the closure on unverified axes would build the safe domain on a substrate
 D0 has already ruled unfaithful.
 

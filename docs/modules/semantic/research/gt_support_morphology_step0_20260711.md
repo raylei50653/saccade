@@ -9,7 +9,7 @@ created: 2026-07-11
 
 > **One-line:** 7-seq relink pair pool 上，Boolean atom lattice 的 **per-cell risk field 不可識別**（任何 k 下僅 1 個 cell 達 ε≤0.05 支撐），但 **GT placement distribution 可識別**。**Procedure verdict: `UNRESOLVED`**（cluster-aware UCB 未建立、core closure 未求解、forensic 未跑、nested chain 未重跑）。**Descriptive morphology hypothesis（無 terminal 效力）**：corner-concentrated placement（k=5 median-split 下 M₀=97.1%）+ 一條 far-Hamming、motion-violation-enriched 的 descriptive tail（4/209 tracks；log_h_ratio 0/4 違反）。Track-level CP UCB x=4→4.33% 僅為 **nominal diagnostic（not cluster-adjusted）**，不得用於跨 ε_morph=5% 界線。
 
-Procedure: [framework §19（v1 — PROPOSED, awaiting owner seal）](../../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
+Procedure: [framework §19（v1 — PROPOSED, awaiting owner seal）](../../../research/contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
 **Committed audit packet**: [evidence/gt_support_morphology_step0_20260711/](evidence/gt_support_morphology_step0_20260711/manifest.json) — gt_rows.csv（340 GT rows × atom bits/values/d_H）· cell_occupancy_k{4,5,6,8}.csv · tail_tracks.json（4 tracks 全列 + per-seq 分布）· cp_ucb.json（numerator 出處 + nominal 標記）· audit scripts + recorded outputs · manifest 含 `pairs.csv` SHA256 seal。原始 `pairs.csv` 不納入 branch；re-emission 必須由呼叫端提供、且 SHA256 必須與 manifest 相符：`uv run python docs/modules/semantic/research/evidence/gt_support_morphology_step0_20260711/emit_reproduction_packet.py --pairs /path/to/pairs.csv --verify`。此命令在暫存目錄重建並逐位元比對 committed packet，不會修改 packet。
 Working dir（not tracked）: `out/signal_study/gt_support_morphology_step0_20260711/`
 
