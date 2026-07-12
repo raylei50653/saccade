@@ -145,24 +145,25 @@ uv run scripts/eval/mot17.py --preset mamba_whole_graph --detector SDP --double-
 
 ### 模組現狀總覽
 
-> **Dashboard fact-owner：本節。** 只鏡射各 `docs/modules/<m>/TODO.md` 的 **sole active one-liner**（WIP 鎖），**不**鏡射細節、**不**另立第二待辦清單。  
-> **任務敘事 / 接續** → [docs/research/threads/](docs/research/threads/README.md)；**事實** → module research / ledger。  
+> **本表不是狀態源。** 它只列模組與入口——**sole active 的內容寫在 module TODO（WIP 鎖），研究對象的狀態寫在
+> [claim_state_registry](docs/research/contracts/claim_state_registry.md)**。本檔一旦複述那些內容就會漂移
+> （實測：這張表曾停在一個已關閉的單元上）。**要知道現在在做什麼 → 點進去。**  
 > **O0 / WIP=1：** 每模組 🔄 最多一個 active。規則：[DOC_MAINTENANCE § WIP](docs/DOC_MAINTENANCE.md)。  
 > tracker-decision P0–P8 **closed**：[status](docs/research/tracker-decision/status_2026-07-09.md) — 非 O-series 延續。
 
-| 模組 | 狀態 | sole active（WIP 鎖） | TODO |
-|------|------|---------------------|------|
-| 🔍 detection | 🔄 active | VGT-Mamba（訓練中） | [↗](docs/modules/detection/TODO.md) |
-| 📐 geometry | 🔄 active | GMC Warp 精度驗證（依賴 VGT） | [↗](docs/modules/geometry/TODO.md) |
-| 🧬 reid | ⏸️ 暫緩 | — | [↗](docs/modules/reid/TODO.md) |
-| 🔄 lifecycle | 📋 待辦 | evaluator lifecycle 測試切片 | [↗](docs/modules/lifecycle/TODO.md) |
-| 🌀 motion | 🟢 收斂 | — | [↗](docs/modules/motion/TODO.md) |
-| 🤝 semantic | 🔄 active | Runtime-faithful safe domain — S0 axis-transfer 宣告 `draft`，待 owner seal（gate 建安全域／score 負責分離；未封前不得執行） | [↗](docs/modules/semantic/TODO.md) |
-| ⚡ trigger | 🟢 收斂 | — | [↗](docs/modules/trigger/TODO.md) |
-| 🖥️ streaming | 🟢 收斂 | — | [↗](docs/modules/streaming/TODO.md) |
-| 💾 storage | 🟢 收斂 | — | [↗](docs/modules/storage/TODO.md) |
-| 🧠 cognition | 🟢 收斂 | — | [↗](docs/modules/cognition/TODO.md) |
-| ⚙️ resource | 🟢 收斂 | — | [↗](docs/modules/resource/TODO.md) |
+| 模組 | 狀態 | 入口（sole active 的內容在這裡） |
+|------|------|------|
+| 🔍 detection | 🔄 active | [TODO](docs/modules/detection/TODO.md) · [README](docs/modules/detection/README.md) |
+| 📐 geometry | 🔄 active | [TODO](docs/modules/geometry/TODO.md) |
+| 🧬 reid | ⏸️ 暫緩 | [TODO](docs/modules/reid/TODO.md) |
+| 🔄 lifecycle | 📋 待辦 | [TODO](docs/modules/lifecycle/TODO.md) |
+| 🌀 motion | 🟢 收斂 | [TODO](docs/modules/motion/TODO.md) |
+| 🤝 semantic | 🔄 active | [TODO](docs/modules/semantic/TODO.md) · [registry](docs/research/contracts/claim_state_registry.md) |
+| ⚡ trigger | 🟢 收斂 | [TODO](docs/modules/trigger/TODO.md) |
+| 🖥️ streaming | 🟢 收斂 | [TODO](docs/modules/streaming/TODO.md) |
+| 💾 storage | 🟢 收斂 | [TODO](docs/modules/storage/TODO.md) |
+| 🧠 cognition | 🟢 收斂 | [TODO](docs/modules/cognition/TODO.md) |
+| ⚙️ resource | 🟢 收斂 | [TODO](docs/modules/resource/TODO.md) |
 
 全局矩陣 / 跨模組待辦：[docs/TODO.md](docs/TODO.md)。  
 Detection 設計索引（非本檔展開）：[docs/modules/detection/README.md](docs/modules/detection/README.md)。

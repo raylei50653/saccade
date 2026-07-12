@@ -201,8 +201,44 @@ def _active_section_body(readme: Path) -> str:
     return "\n".join(chunks)
 
 
+def _check_thread_status_projection() -> list[str]:
+    """L4 — the threads index projects thread state; it must not restate it wrongly.
+
+    A projection maintained by hand drifts. This is the one status surface worth
+    a checker, because agreement between the card's ``wip-role`` and the index
+    row is a mechanical equality, not a judgement.
+    """
+    violations: list[str] = []
+    threads_dir = RESEARCH_ROOT / "threads"
+    index = threads_dir / "README.md"
+    if not index.is_file():
+        return violations
+    index_lines = _read(index).splitlines()
+
+    for card in sorted(threads_dir.glob("*.md")):
+        if card.name == "README.md":
+            continue
+        role = ""
+        for line in _read(card).splitlines()[:HEADER_LINES]:
+            if line.startswith("wip-role:"):
+                role = line.split(":", 1)[1].strip()
+                break
+        if not role:
+            continue
+        row = next((ln for ln in index_lines if f"({card.name})" in ln), "")
+        if not row:
+            continue  # index coverage is S2's warning, not a violation
+        if role.lower() not in row.lower():
+            rel = card.relative_to(REPO_ROOT).as_posix()
+            violations.append(
+                f"[L4] {rel}: card declares wip-role '{role}' but the threads index "
+                "row says otherwise (state has one writer; the index only projects it)"
+            )
+    return violations
+
+
 def check_lifecycle() -> list[str]:
-    """C6.4 L1–L3 — violations, not warnings."""
+    """C6.4 L1–L4 — violations, not warnings."""
     violations: list[str] = []
 
     for note in sorted(REPO_ROOT.joinpath("docs").rglob("*.md")):
@@ -229,6 +265,8 @@ def check_lifecycle() -> list[str]:
                 f"{owner_rel} (Doc Structure C6.3 — leave one pointer row, not an "
                 "active row)"
             )
+
+    violations.extend(_check_thread_status_projection())
 
     contracts_dir = RESEARCH_ROOT / "contracts"
     if contracts_dir.is_dir():

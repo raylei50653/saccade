@@ -6,15 +6,15 @@
 
 ---
 
-## 🔄 Active workstreams
+## 🔄 現在在做什麼
 
-| 線 | 家 | 說明 |
-|------|------|------|
-| **semantic mainline** | [semantic TODO](../modules/semantic/TODO.md)（WIP 鎖） · [safe-domain thread](threads/runtime_faithful_safe_domain_20260712.md) | **Runtime-faithful safe domain** — 架構＝*gate 建安全域（粗門檻／單向 GT-retention 保證）；score ranking 才負責分離*。S0 ＝已接受的 safe 軸 `{dist_h, log_h_ratio}` 建在 **offline 座標**（D0 已判該 substrate 不忠實）→ 先審 **L4 substrate transfer**，再 solve closure。方法契約見 [contracts/](contracts/README.md)。 |
-| **score temporal → stable domain** | [thread（parked）](threads/score_temporal_to_stable_domain_20260712.md) | `R1_FAITHFUL` closed（正是它讓 runtime 座標可稽核）；discrete-\(M\) 後續**重新歸類為 score-ranking feature、非 gate** → parked，待保留域建立後才開 |
-| **M-B1 portable hook** | [threads/m_b1…](threads/closed/m_b1_online_hook_20260709.md) | Offline closed；**not** semantic sole active；research default-off hook |
-| **VGT-Mamba** | [detection TODO](../modules/detection/TODO.md) | Detection sole active（訓練）；設計見 [detection README](../modules/detection/README.md) |
-| **GMC warp（依賴 VGT）** | [geometry TODO](../modules/geometry/TODO.md) | 非第二獨立目標 |
+**這裡不列狀態**（列了就會漂移——實測如此）。三個入口，各有唯一 owner：
+
+| 我要知道 | 去 |
+|------|------|
+| 每個研究對象**現在站在哪一格**（state / substrate / limits / 合法候選集） | **[claim_state_registry](contracts/claim_state_registry.md)** |
+| 哪一個被選為 **sole active**（WIP 鎖） | 對應的 [module TODO](../modules/) |
+| 這條線**怎麼接續**（敘事導覽） | [threads/](threads/README.md) |
 
 治理（O-series，非實驗正文）：[../ownership/README.md](../ownership/README.md) · [DOC_MAINTENANCE § WIP](../DOC_MAINTENANCE.md) · [DEVELOPMENT.md 模組現狀總覽](../../DEVELOPMENT.md)
 

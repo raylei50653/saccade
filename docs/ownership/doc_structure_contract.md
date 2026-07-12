@@ -220,9 +220,24 @@ owner 接受 terminal 的**同一個 PR** 內：結論就位 → 細節搬家 �
 | **L1** | `doc-status: closed` 卻仍在 active 路徑 | 規則 2 · 3 |
 | **L2** | closed note 仍佔用 owning README 的 Active 區塊 | 規則 2 · 3 |
 | **L3** | 決策層（`research/contracts/`）長出 prose | C0.1（**與這三條無關**，是另一條規則） |
+| **L4** | thread 的 `wip-role` 與 threads 索引列不一致 | C5.1（投影不得與 owner 矛盾） |
 
 **規則 1 不機械化**：結論夠不夠高密度，checker 判不了——它由 review 擋。假的牙齒比沒有牙齒更糟。
 既有 7 份 closed-in-active note 已 allowlist：**回填是清潔工作，不阻擋主線；但新違規一律擋。**
+
+### C5.1 — 狀態只有一個寫入者（推論自 C5）
+
+**狀態只能寫在它的 owner；其他表面只能連結或投影，不得複述。**
+
+| 狀態 | 唯一寫入者 |
+|:--|:--|
+| 研究對象的 rung / substrate / limits / 候選集 | [claim_state_registry](../research/contracts/claim_state_registry.md) |
+| 模組的 sole active（WIP 鎖） | `docs/modules/<m>/TODO.md` |
+| thread 自身的 wip-role | thread frontmatter（索引列只是投影，**L4 檢查一致性**） |
+
+**手寫的投影必然漂移**——實測：`DEVELOPMENT.md` dashboard 與 `research/README.md` 在被發現時都還停在
+一個**已關閉**的單元上。因此索引與入口表只列「這是什麼 + 去哪裡」：**不列裁決、不列數字、不列狀態**。
+module README 的 research 索引尤其如此（它一度整段抄錄裁決與指標，那是 C5 違規）。
 
 **Closed decision line:** [tracker-decision/status_2026-07-09.md](../research/tracker-decision/status_2026-07-09.md) (P0–P8) is read-only; no drive-by reopen (WIP rules).
 
