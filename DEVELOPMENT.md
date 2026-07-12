@@ -150,7 +150,7 @@ uv run scripts/eval/mot17.py --preset mamba_whole_graph --detector SDP --double-
 | 🧬 reid | ⏸️ 暫緩 | — | [↗](docs/modules/reid/TODO.md) |
 | 🔄 lifecycle | 📋 待辦 | evaluator lifecycle 測試切片 | [↗](docs/modules/lifecycle/TODO.md) |
 | 🌀 motion | 🟢 收斂 | — | [↗](docs/modules/motion/TODO.md) |
-| 🤝 semantic | 🔄 active | Ambiguous-band ranking-power probe (Door 0) — declaration sealed via PR merge; single-run execution next | [↗](docs/modules/semantic/TODO.md) |
+| 🤝 semantic | 🔄 active | Ambiguous-band ranking-power probe (Door 0) — EXECUTED → `T2 NO_USABLE_RANKING_POWER_IN_CLASS`; acceptance pending | [↗](docs/modules/semantic/TODO.md) |
 | ⚡ trigger | 🟢 收斂 | — | [↗](docs/modules/trigger/TODO.md) |
 | 🖥️ streaming | 🟢 收斂 | — | [↗](docs/modules/streaming/TODO.md) |
 | 💾 storage | 🟢 收斂 | — | [↗](docs/modules/storage/TODO.md) |

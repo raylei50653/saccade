@@ -5,12 +5,13 @@
 
 ## Sole active
 
-🔄 **Ambiguous-band ranking-power probe (Door 0) — declaration sealed by its PR merge; single-run execution next**
+🔄 **Ambiguous-band ranking-power probe (Door 0) — EXECUTED → terminal `T2 NO_USABLE_RANKING_POWER_IN_CLASS`; research acceptance pending owner review of results PR**
 
 - Thread: [ambiguous_band_ranking_power_probe_20260712.md](../../research/threads/ambiguous_band_ranking_power_probe_20260712.md)
-- Declaration（§20.2 block · 12 frozen candidates · B1–B6 boxes · T0–T3 terminals）: [declaration doc](research/ambiguous_band_ranking_power_probe_declaration_20260712.md)
-- Mainline position: realignment sealed order **step ③**（PR #133 contract → PR #134 bookkeeping → 本 probe → ④/⑤依 terminal）
-- Boundary: read-only on frozen pairs `0ae38967…` · production / preset / ledger unchanged · execution 只准 seal 後單次 run · 偏離宣告=作廢重宣告
+- Declaration（sealed via PR #135 merge, main `f864a6e2`）: [declaration doc](research/ambiguous_band_ranking_power_probe_declaration_20260712.md)
+- **Results**: [results note](research/door0_ranking_probe_results_20260712.md) · [packet](research/evidence/door0_ranking_probe_20260712/manifest.json) — V1–V5 PASS · H not triggered（baseline PWA 0.878/top-1 0.590;P3=84/205）· 12/12 fail（best ΔPWA=+0.0011）· unconditional reachable-set caveat attached
+- Mainline position: realignment **step ③ 完成 → step ⑤ class-scoped closure**（12-member tested class 封;9 個未測 AND pair/連續訊號/有限 λ 不被耗盡;step ④ 未開;擴 class=新 §20.2 宣告+owner charter）
+- Boundary: production / preset / ledger unchanged · 單次授權執行已用畢,無宣告偏離
 
 ## Previous line（Phase B V5 recorded; D0 fail-closed pending [#112](https://github.com/raylei50653/saccade/issues/112); nav only）
 

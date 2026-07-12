@@ -1,0 +1,44 @@
+V1 PASS  pairs.csv sha256=0ae3896791ec074fbe951198752c17385c4ee0770a7ec3831225d3ea56a69d17
+pool gt_valid rows=21789  GT=340  FP=21449
+band rows=10170  (GT 329)  nan_dropped=0  V5 PASS
+V4 PASS  GT-row retention=0.968
+V2 PASS  rankable events=205
+V3 PASS  per-seq={'MOT17-02-SDP': 50, 'MOT17-04-SDP': 12, 'MOT17-05-SDP': 32, 'MOT17-09-SDP': 12, 'MOT17-10-SDP': 69, 'MOT17-11-SDP': 13, 'MOT17-13-SDP': 17}
+baseline (s0): PWA=0.8778  MRR=0.7327  top1=0.5902
+H: H1(PWA>=0.98)=False  H2(top1>=0.98)=False
+in-sample thresholds: {"dir_cos": -0.9860330341904961, "dist_h": 7.2953221223549685, "gap": 233.0, "log_h_ratio": 0.42593570385276047, "resid_mean": 13.465860823299778, "speed_mismatch": 0.060624770526910246}
+P3 (baseline top-1 miss events): 84/205
+c_dist_h                         dPWA=+0.0006 dMRR=+0.0000 dtop1=+0.0000 B3min=+0.0003 LOO=+0.0004(7/7) fire FP/GT=0.095/0.000 good/bad=11/0 -> fail[---4-6]
+c_log_h_ratio                    dPWA=+0.0011 dMRR=+0.0057 dtop1=+0.0049 B3min=+0.0005 LOO=+0.0017(7/7) fire FP/GT=0.152/0.012 good/bad=156/55 -> fail[---4-6]
+c_resid_mean                     dPWA=+0.0000 dMRR=+0.0000 dtop1=+0.0000 B3min=+0.0000 LOO=+0.0000(7/7) fire FP/GT=0.096/0.000 good/bad=0/0 -> fail[---4--]
+c_speed_mismatch                 dPWA=-0.0173 dMRR=-0.0049 dtop1=-0.0049 B3min=-0.0227 LOO=-0.0219(3/7) fire FP/GT=0.098/0.086 good/bad=32/216 -> fail[------]
+c_gap                            dPWA=-0.0065 dMRR=+0.0002 dtop1=+0.0000 B3min=-0.0133 LOO=-0.0064(6/7) fire FP/GT=0.170/0.031 good/bad=96/141 -> fail[---4--]
+c_dir_cos                        dPWA=-0.0354 dMRR=-0.0260 dtop1=-0.0244 B3min=-0.0426 LOO=-0.0360(1/7) fire FP/GT=0.128/0.043 good/bad=70/190 -> fail[------]
+c_dist_h_AND_gap                 dPWA=+0.0002 dMRR=+0.0000 dtop1=+0.0000 B3min=+0.0001 LOO=+0.0000(7/7) fire FP/GT=0.020/0.000 good/bad=3/0 -> fail[---4-6]
+c_dist_h_AND_speed_mismatch      dPWA=+0.0000 dMRR=+0.0000 dtop1=+0.0000 B3min=+0.0000 LOO=+0.0000(7/7) fire FP/GT=0.019/0.000 good/bad=0/0 -> fail[---4--]
+c_gap_AND_speed_mismatch         dPWA=+0.0000 dMRR=+0.0000 dtop1=+0.0000 B3min=+0.0000 LOO=+0.0000(7/7) fire FP/GT=0.023/0.000 good/bad=0/0 -> fail[---4--]
+c_gap_AND_dir_cos                dPWA=+0.0003 dMRR=+0.0001 dtop1=+0.0000 B3min=+0.0002 LOO=+0.0002(7/7) fire FP/GT=0.019/0.000 good/bad=6/0 -> fail[---4-6]
+c_dist_h_AND_log_h_ratio         dPWA=+0.0002 dMRR=+0.0000 dtop1=+0.0000 B3min=+0.0001 LOO=+0.0002(7/7) fire FP/GT=0.013/0.000 good/bad=3/0 -> fail[---4-6]
+c_resid_mean_AND_gap             dPWA=+0.0000 dMRR=+0.0000 dtop1=+0.0000 B3min=+0.0000 LOO=+0.0000(7/7) fire FP/GT=0.048/0.000 good/bad=0/0 -> fail[---4--]
+P1 dist_h           tail=hi pooled separability=0.8258
+P1 log_h_ratio      tail=hi pooled separability=0.7226
+P1 resid_mean       tail=hi pooled separability=0.8333
+P1 speed_mismatch   tail=hi pooled separability=0.5139
+P1 gap              tail=hi pooled separability=0.7337
+P1 dir_cos          tail=lo pooled separability=0.6483
+reachable slice: rankable events=34 (descriptive only)
+  slice baseline PWA=0.5882 top1=0.5294
+  slice c_dist_h                         dPWA=+0.0000
+  slice c_log_h_ratio                    dPWA=+0.0294
+  slice c_resid_mean                     dPWA=+0.0000
+  slice c_speed_mismatch                 dPWA=+0.0000
+  slice c_gap                            dPWA=+0.0000
+  slice c_dir_cos                        dPWA=-0.0294
+  slice c_dist_h_AND_gap                 dPWA=+0.0000
+  slice c_dist_h_AND_speed_mismatch      dPWA=+0.0000
+  slice c_gap_AND_speed_mismatch         dPWA=+0.0000
+  slice c_gap_AND_dir_cos                dPWA=+0.0000
+  slice c_dist_h_AND_log_h_ratio         dPWA=+0.0000
+  slice c_resid_mean_AND_gap             dPWA=+0.0000
+TERMINAL: T2 NO_USABLE_RANKING_POWER_IN_CLASS (12-member tested class)
+CAVEAT: study scope is the gate-retained band; this terminal establishes no claim inside the production-reachable set (s0 <= 0.4; 34 events, descriptive only); any step-4 decision must treat the decision surface (threshold/margin interplay), not assume in-place reranking behavior.

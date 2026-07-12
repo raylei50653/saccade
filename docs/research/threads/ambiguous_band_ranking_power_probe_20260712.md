@@ -14,8 +14,9 @@ default-behavior-change: forbidden
 
 | Item | Status |
 |:--|:--|
-| Program | **DECLARED — awaiting seal**（declaration PR open;exec行須 seal 後） |
-| Mainline position | realignment sealed 順序 **step ③**（①contract v1 PR #133 → ②bookkeeping PR #134 → ③本 probe → ④/⑤依 terminal） |
+| Program | **EXECUTED — terminal `T2 NO_USABLE_RANKING_POWER_IN_CLASS`**;declaration sealed via PR #135 merge(main `f864a6e2`);research acceptance pending owner review of results PR |
+| Terminal record | V1–V5 全 PASS · H 未觸發(baseline PWA 0.878/top-1 0.590;P3=84/205 top-1 miss)· **12/12 candidates fail boxes**(best ΔPWA=+0.0011,距 B1 +0.02 差 20×)· motion conditions 有害(與 escape-tail forensics 一致)· [results note](../../modules/semantic/research/door0_ranking_probe_results_20260712.md) · [packet](../../modules/semantic/research/evidence/door0_ranking_probe_20260712/manifest.json) |
+| Mainline position | realignment sealed 順序 **step ③ 完成**(①contract v1 PR #133 → ②bookkeeping PR #134 → ③本 probe **T2** → **⑤ class-scoped closure**;step ④ 未開,擴 class=新宣告+owner charter) |
 | §20.2 declaration | [declaration doc](../../modules/semantic/research/ambiguous_band_ranking_power_probe_declaration_20260712.md)（target layer=score-ranking · intent=capability map · output class=diagnostic result only） |
 | Core question | 凍結 signal family 在 gate-retained ambiguous band 內,對 GT vs FP 的相對排序是否存在**穩定、可解釋、LOO 保留**的改善(超越 production `s0=score_m_bridge` baseline)? |
 | Substrate | frozen pairs `0ae38967…`(7-seq SDP;21,789 gt_valid rows;340 GT);coarse gate=production h-window proxy;**210/205 rankable events**(gate 前/後) |
@@ -26,10 +27,11 @@ default-behavior-change: forbidden
 
 ## Current step
 
-**Declaration PR open = seal unit.** Execution(single run)authorized only
-after merge. Runner script written post-seal against the declaration
-verbatim;results PR carries the committed evidence packet + exactly one
-terminal.
+**Executed(single authorized run,無宣告偏離)→ terminal `T2` recorded.**
+Results PR open = research-acceptance unit;owner accepts or challenges the
+terminal there. After acceptance:step ⑤ class-scoped closure statement 生效;
+mainline 下一步選擇(擴 class probe/其他方向)=owner charter 決定,非本線
+auto-continuation。
 
 ## Read first
 
@@ -62,3 +64,5 @@ then: T1→step ④ design-evaluation charter;T2→step ⑤ closure statement;
 - 2026-07-12: **Owner seal review = SEAL BLOCKED(四組 terminal-affecting 自由度)→ Revision 2 落地**:①H/T3 改 joint(H1 PWA≥0.98 ∧ H2 top-1≥0.98),撤「算術不可能」錯誤理由,明定 H-over-boxes precedence;②凍結 rank tie policy(pessimistic against GT)與 quantile estimator(`numpy.quantile method="linear"`),B3 明定 metric-level re-aggregation 不重 fit threshold(refit 只在 B5);③B6 改機械判定(B6a fire-rate P(c|FP)>P(c|GT) ∧ B6b flip decomposition n_good>n_bad,均 strict),排除 reviewer 事後判斷;④T2 更名 `NO_USABLE_RANKING_POWER_IN_CLASS` 並限 Door-0 complexity class(擴 class=新宣告+owner charter),reachable-slice limit rule 改為適用全部 terminal。等第二輪 seal review。
 - 2026-07-12: **Round-2 owner review = SEAL BLOCKED(narrow scope fix)→ Revision 3 落地**:①class 定義從「up to second-order AND」收斂為**恰好 §6 列舉的 12 members**(15 個二階 AND 中 9 個未測,不得被 T2 耗盡);②reachable-slice caveat 改**無條件**——T0–T3 每個 recorded terminal 一律附 §3 verbatim clause,無方向 trigger,消除 implementer 選擇。等最終 seal review。
 - 2026-07-12: **Final review = 一個 clause-level blocker → Revision 4**:universal caveat 開頭「established on the gate-retained band」與 T0(UNRESOLVED,不建立任何結論)矛盾;改為中性措辭「study scope is the gate-retained band; this terminal establishes no claim inside the production-reachable set…」,對 T0–T3 一致成立。無 terminal/box/candidate/protocol 變更。
+- 2026-07-12: **SEAL ACCEPTED → PR #135 MERGED(main `f864a6e2`)= declaration sealed。**
+- 2026-07-12: **Post-seal 單次執行完成(無宣告偏離)**:runner `scripts/tools/run_door0_ranking_probe.py`(V1 SHA 拒跑;合成資料 self-test 先行,未觸 substrate)。V1–V5 全 PASS;H 未觸發;**12/12 fail → terminal `T2 NO_USABLE_RANKING_POWER_IN_CLASS`** + 無條件 caveat。關鍵機制發現:class 可見的 unsafe tail 幾乎全是 `s0` 已排後的 FP(demote 無效,good/bad=0/0 多例);殘餘 84 個 top-1-miss events 的混淆在 in-band 聯合分佈內,tail conditions 無法分離;motion conditions 因 band 內 GT fire rate 不低而淨有害。Results PR open = research-acceptance unit。
