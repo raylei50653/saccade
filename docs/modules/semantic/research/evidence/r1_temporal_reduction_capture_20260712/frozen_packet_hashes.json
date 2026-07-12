@@ -1,0 +1,55 @@
+{
+  "id_map_sha256": "ae3b6441d1712bcce0826d611cee2cfdf7a01b4d37ec331336f91a0b9148f366",
+  "local_artifacts": {
+    "events.jsonl": "2410149bd38295696a485fd75a1378bd35eed398b1348e92d7a65838f1d0d37d",
+    "events.jsonl.path": "out/r1_temporal_20260712T115004Z/events.jsonl",
+    "export_manifest": "5d60e3baa0e3c192964c4e58ab6ed7ae01b7cc2e9139e5739f3815fa7a66d115",
+    "owner_terminal_review.json": "97e2d8848b8d46b8d840a24c560fd2d60b70a58372b539dd1d535ace5d4d2703",
+    "packet_summary.json": "c551526371a31ff13daa774fac14a40b80fa2a450f0a06918bd429bfe55f1427",
+    "replay.json": "8942132b827885d6177c9b889af455cc245bab4cb76ec42ccd58f735a05b6e0b"
+  },
+  "native_capture_sources": {
+    "MOT17-02-SDP.json": "21e2fa2a01f1739ea987cde9cb00e78dd91270976c1e6b0e3c3084c52c305a32",
+    "MOT17-04-SDP.json": "f5766a58f64790c008282b193e046e0c2f175b1e4ff272b5ebeefc1dfac2a373",
+    "MOT17-05-SDP.json": "eae9893b7384354ccc79f88d927955a969c3508a5430032b14008751b6e89cf7",
+    "MOT17-09-SDP.json": "25963a1c0aeabd464694e1bfe73f44d97232dcffdce020779bedcadb2cee5c3b",
+    "MOT17-10-SDP.json": "b75f778230698895d484a3961f53b24cb21b9f684e2ea5bfd35901fb63f57472",
+    "MOT17-11-SDP.json": "deba24ca6eda87ce326563362d4813daa139d95dc670a2ad25c514e6a2af3b1d",
+    "MOT17-13-SDP.json": "9dd6e60795546382b7f9989b4285e9b381e7c9dd173bda95d9a40b4e48b5c326"
+  },
+  "scope": {
+    "anchor_mode": "adaptive (mode 2)",
+    "capture_contract": "r1_temporal_reduction_capture_v1",
+    "consumer": "Consumer-A bridge_anchor4 temporal reduction",
+    "preset": "configs/presets/mamba_whole_graph_m.yaml",
+    "sequences": [
+      "MOT17-02-SDP",
+      "MOT17-04-SDP",
+      "MOT17-05-SDP",
+      "MOT17-09-SDP",
+      "MOT17-10-SDP",
+      "MOT17-11-SDP",
+      "MOT17-13-SDP"
+    ]
+  },
+  "stamp": "20260712T115004Z",
+  "terminal": "R1_FAITHFUL",
+  "v1_shadow_mot": {
+    "MOT17-02-SDP.txt": "9a4ac0f64dd43f6b9cabc3bb733c1b42041efe9b4309d85d0844d3b78b53085e",
+    "MOT17-04-SDP.txt": "783e7956595e3d64006555479ff3d85e0a0cf145b76ea30a28b8dda06be4dbc9",
+    "MOT17-05-SDP.txt": "bc25a6df6fee4cc03f46ff1de4b8d6015d7f2771c8a02ac5c9cae92d26f03333",
+    "MOT17-09-SDP.txt": "1a46185ce764297886ec28c2474ccfa5536ff7e483566f8ba18d88acb062ff19",
+    "MOT17-10-SDP.txt": "217590a1776b0a54aeb41ee78ac6c7e04e0e7341d4ef7b3da69b07b93f43af17",
+    "MOT17-11-SDP.txt": "1153c965ec34362fd2a061b22f513f1c83a206d093e1b0412d9f4efc8d9cc7a7",
+    "MOT17-13-SDP.txt": "0524ed7bea9226c203d072237d50613c154d7cd9f7c4a01eb6c657fbeba5fd59"
+  },
+  "v1_substrate_mot": {
+    "MOT17-02-SDP.txt": "9a4ac0f64dd43f6b9cabc3bb733c1b42041efe9b4309d85d0844d3b78b53085e",
+    "MOT17-04-SDP.txt": "783e7956595e3d64006555479ff3d85e0a0cf145b76ea30a28b8dda06be4dbc9",
+    "MOT17-05-SDP.txt": "bc25a6df6fee4cc03f46ff1de4b8d6015d7f2771c8a02ac5c9cae92d26f03333",
+    "MOT17-09-SDP.txt": "1a46185ce764297886ec28c2474ccfa5536ff7e483566f8ba18d88acb062ff19",
+    "MOT17-10-SDP.txt": "217590a1776b0a54aeb41ee78ac6c7e04e0e7341d4ef7b3da69b07b93f43af17",
+    "MOT17-11-SDP.txt": "1153c965ec34362fd2a061b22f513f1c83a206d093e1b0412d9f4efc8d9cc7a7",
+    "MOT17-13-SDP.txt": "0524ed7bea9226c203d072237d50613c154d7cd9f7c4a01eb6c657fbeba5fd59"
+  }
+}

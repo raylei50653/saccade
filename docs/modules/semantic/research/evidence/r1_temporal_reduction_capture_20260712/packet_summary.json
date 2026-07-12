@@ -1,0 +1,90 @@
+{
+  "abs_tolerance": 1e-05,
+  "all_terms_within_abs_tolerance": true,
+  "authority_require_device": true,
+  "bdist_gt_threshold": 2266,
+  "bdist_le_threshold": 311,
+  "capture_contract": "r1_temporal_reduction_capture_v1",
+  "causal_sensitivity_interpretable": true,
+  "device_anchor_replay": true,
+  "event_local_order": {
+    "comparable_pairs": 6566,
+    "groups": 618,
+    "near_ties": 0,
+    "order_disagreements": 0
+  },
+  "events": 2577,
+  "events_without_global_id": 354,
+  "field_max_abs_error": {
+    "ax": 0.0,
+    "ay": 0.0,
+    "bdist": 1.9073486328125e-06,
+    "bwd_r": 2.86102294921875e-06,
+    "cx0": 0.0,
+    "cy0": 0.0,
+    "dist_h": 1.9073486328125e-06,
+    "fwd_r": 3.814697265625e-06,
+    "h_ref": 0.0,
+    "s_lost": 5.960464477539063e-08,
+    "v_cand_x": 0.0,
+    "v_cand_y": 0.0,
+    "v_lost_x": 0.0,
+    "v_lost_y": 0.0,
+    "w": 1.1920928955078125e-07
+  },
+  "notes": [
+    "Host R0 uses device bridge_anchor4/bridge_vel4 (libr1_bridge_replay.so) for bit-exact temporal reduction.",
+    "Host FMA fallback remains for environments without the research .so.",
+    "Presealed abs tolerance remains 1e-5; no score/gate/preset conclusion."
+  ],
+  "owner_review_status": "pending",
+  "paths": {
+    "native": "out/r1_native_20260712T115004Z_full",
+    "payload": "out/r1_temporal_20260712T115004Z/events.jsonl",
+    "replay": "out/r1_temporal_20260712T115004Z/replay.json",
+    "shadow": "results/MOT17_eval_r1_shadow_20260712T115004Z_full",
+    "substrate": "results/MOT17_eval_r1_substrate_20260712T115004Z"
+  },
+  "payload_sha256": "2410149bd38295696a485fd75a1378bd35eed398b1348e92d7a65838f1d0d37d",
+  "per_sequence_events": {
+    "MOT17-02-SDP": 355,
+    "MOT17-04-SDP": 121,
+    "MOT17-05-SDP": 657,
+    "MOT17-09-SDP": 78,
+    "MOT17-10-SDP": 565,
+    "MOT17-11-SDP": 90,
+    "MOT17-13-SDP": 711
+  },
+  "predicate_disagreements": 0,
+  "replay_backend": {
+    "compile_flags": [
+      "-shared",
+      "-Xcompiler",
+      "-fPIC,-O3",
+      "-O3",
+      "-arch=native"
+    ],
+    "consumer_module_path": "src/saccade/perception/eval/consumer_a_bridge_fidelity.py",
+    "consumer_module_sha256": "5e923dd0af4e6fdad963ae8499cdb3294c31fb71193cc8e537cd45cbfcf645ec",
+    "cuda_architectures": "-arch=native",
+    "cuda_runtime_available": true,
+    "device_helper_binary_path": "src/saccade/perception/eval/_cuda/libr1_bridge_replay.so",
+    "device_helper_binary_sha256": "32c88a7330b74b9427df622ecf132c8bcacbbefcfc0bcfa80100ed0069cf96e2",
+    "device_helper_build_meta_path": "src/saccade/perception/eval/_cuda/libr1_bridge_replay.build.json",
+    "device_helper_load_error": null,
+    "device_helper_loadable": true,
+    "device_helper_source_path": "src/saccade/perception/eval/_cuda/r1_bridge_replay.cu",
+    "device_helper_source_sha256": "ac8b8abda6217ae21e1f815f12463478f1f10bdd91c62b7e74d0e72d916daa77",
+    "gpu_compute_capability": "12.0",
+    "gpu_name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+    "nvcc_version": "nvcc: NVIDIA (R) Cuda compiler driver Copyright (c) 2005-2026 NVIDIA Corporation Built on Tue_Jun_09_02:43:40_PM_PDT_2026 Cuda compilation tools, release 13.3, V13.3.73 Build cuda_13.3.r13.3/compiler.38244171_0 ",
+    "production_tracker_source_path": "src/tracking/tracker_gpu.cu",
+    "production_tracker_source_sha256": "36a0c7f952e99aee309c7fe4c9187852d070ee0ae600cd737a0beeeb55904e55",
+    "replay_backend": "device_bridge_anchor4",
+    "require_device": true
+  },
+  "research_terminal_claimed": null,
+  "stamp": "20260712T115004Z",
+  "v1_shadow_byte_identity": true,
+  "v2_complete_capture": true
+}

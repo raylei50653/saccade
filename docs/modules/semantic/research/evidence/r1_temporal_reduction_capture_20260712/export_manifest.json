@@ -1,0 +1,76 @@
+{
+  "capture_contract": "r1_temporal_reduction_capture_v1",
+  "events": 2577,
+  "events_without_global_id": 354,
+  "exporter": {
+    "path": "scripts/tools/export_r1_temporal_reduction_capture.py",
+    "sha256": "8e0a7bd9f3f273680e0cb7af0e77e57352f06a99c851ee368af4c8dfc13ffad8"
+  },
+  "id_map": {
+    "path": "/home/ray/developer/ai/saccade/results/MOT17_eval_r1_shadow_20260712T115004Z_full/_global_id_map.txt",
+    "sha256": "ae3b6441d1712bcce0826d611cee2cfdf7a01b4d37ec331336f91a0b9148f366"
+  },
+  "overflow_events": 0,
+  "payload": "/home/ray/developer/ai/saccade/out/r1_temporal_20260712T115004Z/events.jsonl",
+  "payload_kind": "TemporalReductionContract",
+  "payload_schema_version": "r1_temporal_reduction_payload_v1",
+  "payload_sha256": "2410149bd38295696a485fd75a1378bd35eed398b1348e92d7a65838f1d0d37d",
+  "provenance": {
+    "bridge": {
+      "anchor": "adaptive",
+      "anchor_rate": 0.03,
+      "at": 4,
+      "dir_bonus": 0.0,
+      "min_lost": 2,
+      "px": 0.4,
+      "ttl": 120
+    },
+    "capture_contract": "r1_temporal_reduction_capture_v1",
+    "detector": {
+      "detector_type": "MambaGatedDetector",
+      "fpn_backbone_engine": "models/yolo/yolo26m_backbone_640_best.engine",
+      "mamba_ckpt": "runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt",
+      "mamba_head_engine": "models/yolo/mamba_head_26m.engine",
+      "tiling": "native_640"
+    },
+    "git_commit": "94c54299ab4c412ef5312cc37f0a897149c27852",
+    "shadow": true
+  },
+  "sources": [
+    {
+      "events": 355,
+      "path": "/home/ray/developer/ai/saccade/out/r1_native_20260712T115004Z_full/MOT17-02-SDP.json",
+      "sha256": "21e2fa2a01f1739ea987cde9cb00e78dd91270976c1e6b0e3c3084c52c305a32"
+    },
+    {
+      "events": 121,
+      "path": "/home/ray/developer/ai/saccade/out/r1_native_20260712T115004Z_full/MOT17-04-SDP.json",
+      "sha256": "f5766a58f64790c008282b193e046e0c2f175b1e4ff272b5ebeefc1dfac2a373"
+    },
+    {
+      "events": 657,
+      "path": "/home/ray/developer/ai/saccade/out/r1_native_20260712T115004Z_full/MOT17-05-SDP.json",
+      "sha256": "eae9893b7384354ccc79f88d927955a969c3508a5430032b14008751b6e89cf7"
+    },
+    {
+      "events": 78,
+      "path": "/home/ray/developer/ai/saccade/out/r1_native_20260712T115004Z_full/MOT17-09-SDP.json",
+      "sha256": "25963a1c0aeabd464694e1bfe73f44d97232dcffdce020779bedcadb2cee5c3b"
+    },
+    {
+      "events": 565,
+      "path": "/home/ray/developer/ai/saccade/out/r1_native_20260712T115004Z_full/MOT17-10-SDP.json",
+      "sha256": "b75f778230698895d484a3961f53b24cb21b9f684e2ea5bfd35901fb63f57472"
+    },
+    {
+      "events": 90,
+      "path": "/home/ray/developer/ai/saccade/out/r1_native_20260712T115004Z_full/MOT17-11-SDP.json",
+      "sha256": "deba24ca6eda87ce326563362d4813daa139d95dc670a2ad25c514e6a2af3b1d"
+    },
+    {
+      "events": 711,
+      "path": "/home/ray/developer/ai/saccade/out/r1_native_20260712T115004Z_full/MOT17-13-SDP.json",
+      "sha256": "9dd6e60795546382b7f9989b4285e9b381e7c9dd173bda95d9a40b4e48b5c326"
+    }
+  ]
+}

@@ -59,8 +59,9 @@
 
 | 文件 | 內容 |
 |------|------|
-| [research/score_temporal_to_stable_domain_20260712.md](research/score_temporal_to_stable_domain_20260712.md) | **score 時域→穩定域建模（sole active）** · 第一單元：為兩端 `bridge_anchor4` 的有效四點 window 與 short-lost fallback 建立 versioned shadow capture，先驗證 \(R\) 再談 retained-pair 排序；不重開 `s0` proxy 結論、不調 gate／權重／preset。對應 [active thread](../../research/threads/score_temporal_to_stable_domain_20260712.md)。 |
-| [research/r1_temporal_reduction_capture_declaration_20260712.md](research/r1_temporal_reduction_capture_declaration_20260712.md) | **R1 capture-contract preflight（sealed, no outcomes）** · `r1_temporal_reduction_capture_v1` 將兩組有效 window／short-lost branch 升格為獨立 nested payload，預先固定 validity、R0 replay（`1e-5`）、predicate／event-local order 與 causal-sensitivity readout；無 score fit／gate／preset 改動。 |
+| [research/score_temporal_to_stable_domain_20260712.md](research/score_temporal_to_stable_domain_20260712.md) | **score 時域→穩定域建模（sole active）** · **R1 closed @ `R1_FAITHFUL`**；下一步僅 **separately declared discrete-\(M\)** representation-capability study（尚未宣告）。不重開 `s0`、不調 gate／權重／preset。對應 [active thread](../../research/threads/score_temporal_to_stable_domain_20260712.md)。 |
+| [research/r1_temporal_reduction_capture_results_20260712.md](research/r1_temporal_reduction_capture_results_20260712.md) | **R1 results — terminal `R1_FAITHFUL`（owner accepted）** · 封印範圍＝Consumer-A `bridge_anchor4` temporal reduction + headline adaptive-anchor + MOT17 七序列 support · authority `device_bridge_anchor4` · V1–V6／逐欄 `1e-5`／predicate／order／serialization／sensitivity 非補償通過 · 授權下一步＝獨立 discrete-\(M\) 宣告 · **不**授權 score fit／gate／preset · packet [evidence/](research/evidence/r1_temporal_reduction_capture_20260712/manifest.json) |
+| [research/r1_temporal_reduction_capture_declaration_20260712.md](research/r1_temporal_reduction_capture_declaration_20260712.md) | **R1 capture-contract preflight（sealed）** · `r1_temporal_reduction_capture_v1` validity／R0 replay／stability 契約；outcomes 見 [results](research/r1_temporal_reduction_capture_results_20260712.md)。 |
 
 ### 🔄 Active
 

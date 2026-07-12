@@ -1,0 +1,32 @@
+{
+  "abs_tolerance": 1e-05,
+  "authority_backend": "device_bridge_anchor4",
+  "authorized_next": "separately_declared_discrete_M_representation_capability_study",
+  "capture_contract": "r1_temporal_reduction_capture_v1",
+  "declaration": "docs/modules/semantic/research/r1_temporal_reduction_capture_declaration_20260712.md",
+  "device_helper_source": "src/saccade/perception/eval/_cuda/r1_bridge_replay.cu",
+  "events": 2577,
+  "exporter": "scripts/tools/export_r1_temporal_reduction_capture.py",
+  "files": {
+    "export_manifest.json": "5d60e3baa0e3c192964c4e58ab6ed7ae01b7cc2e9139e5739f3815fa7a66d115",
+    "frozen_packet_hashes.json": "6d609da372a399aaa144d736f5971788476d68e253d628baa34b53e0e73a07c1",
+    "owner_terminal_review.json": "97e2d8848b8d46b8d840a24c560fd2d60b70a58372b539dd1d535ace5d4d2703",
+    "packet_summary.json": "c551526371a31ff13daa774fac14a40b80fa2a450f0a06918bd429bfe55f1427",
+    "replay.json": "8942132b827885d6177c9b889af455cc245bab4cb76ec42ccd58f735a05b6e0b"
+  },
+  "local_events_jsonl_sha256": "2410149bd38295696a485fd75a1378bd35eed398b1348e92d7a65838f1d0d37d",
+  "local_packet_dir": "out/r1_temporal_20260712T115004Z",
+  "not_authorized": [
+    "score_fitting",
+    "gate_or_threshold_sweeps",
+    "preset_changes",
+    "production_policy_changes",
+    "generalization_beyond_sealed_configuration_and_declared_support"
+  ],
+  "payload_schema_version": "r1_temporal_reduction_payload_v1",
+  "results": "docs/modules/semantic/research/r1_temporal_reduction_capture_results_20260712.md",
+  "runner": "scripts/tools/verify_r1_temporal_reduction_replay.py",
+  "stamp": "20260712T115004Z",
+  "study": "r1_temporal_reduction_capture_20260712",
+  "terminal": "R1_FAITHFUL"
+}
