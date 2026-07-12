@@ -25,11 +25,41 @@ They are not the same quantity:
 | \|Δ\| q95 | ≤ 0.05 | **1.417** (3.54× the whole threshold) |
 | Spearman ρ | ≥ 0.98 | **0.9558** |
 
-The formula shape was identical; the **estimators feeding it** were not
-(`bridge_anchor4` foot-ring OLS + adaptive edge weighting + EMA heights, versus
-window-mean velocity + raw endpoint heights), and the divergence concentrated
-exactly where those inputs entered. The static term transferred (ρ = 0.991);
-everything touching velocity extrapolation did not (`w`: ρ = 0.866).
+### The core lemma: same `f`, different `R`
+
+Both sides evaluated the *same* function of state. But state is not observed —
+it is **reduced from a time series**:
+
+```text
+    s_offline = f( R_offline(trajectory) )
+    q_runtime = f( R_runtime(trajectory) )
+```
+
+`f` was shared. The **temporal-reduction operator `R`** was not: the kernel
+reduced a stride-3 foot-ring via an OLS slope, an adaptive edge-weighted anchor,
+and a causal EMA height; the offline builder used a window-mean velocity, a raw
+endpoint, and a raw endpoint height — over a different horizon.
+
+**A shared `f` creates the illusion of one quantity. A differing `R` makes them
+two.** Fidelity degraded monotonically with how much temporal reduction each term
+required: the 0th-order distance term transferred best (ρ = 0.991), the
+velocity-extrapolated terms worse, and the pure speed weight — with no positional
+anchor to stabilize it — worst (ρ = 0.866).
+
+Two error signatures, separable by binning on the extrapolation horizon:
+
+* **a horizon-independent floor** from the *scale* operator (EMA vs raw height).
+  Even the 0th-order term, which needs no extrapolation, held a flat ≈ 0.10 error
+  in every horizon bin. The two quantities therefore **do not converge even as
+  the gap → 0**; there is no region where they agree.
+* **a horizon-amplified error** from the *velocity* operator, growing with the
+  extrapolation length exactly as `x + v·horizon` predicts.
+
+**Corollary (this is why the protocol forbids re-fitting).** The divergence is
+systematic, not noise. It does not shrink with more data and has no vanishing
+limit. Fitting a new proxy to agree with the runtime value only produces a
+*third* quantity `f(R_fit(·))` — perhaps well-correlated, still not production's
+reduction. **Only reproducing `R` itself works.**
 
 **The lesson generalizes.** Semantic identity is never inherited from a shared
 name or a shared formula. It is established by measurement or not at all.

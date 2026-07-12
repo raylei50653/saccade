@@ -105,11 +105,21 @@ The formula shape was right; the **estimators feeding it** were not.
 | `fwd_r` | 0.9292 |
 | `w` (speed weight) | **0.8656** |
 
-Static geometry transfers. Everything involving velocity extrapolation and the
-speed weight does not — precisely the terms the kernel computes with
-`bridge_anchor4` (foot-ring OLS, adaptive edge-weighted anchor, EMA heights) and
-the offline builder approximated with window-mean velocity and raw endpoint
-heights. The two also extrapolate over **different horizons** (kernel `la` vs
-offline frame gap; `gap = la − bridge_at + 1`).
+Both sides evaluate the same `f(state)`. But `state = R(trajectory)`, and the
+**temporal-reduction operator `R` differs** — foot-ring OLS slope + adaptive
+edge-weighted anchor + causal EMA height over horizon `la`, versus window-mean
+velocity + raw endpoint + raw endpoint height over the offline frame gap. So
+`s0 = f(R_off(x))` and `bdist = f(R_ker(x))`: **a shared `f` creates the illusion
+of one quantity; the differing `R` makes them two.**
 
-This is what a faithful replay (§2.2) must align.
+Fidelity degrades monotonically with how much temporal reduction each term
+requires, and the errors split into two signatures (see results §3.2):
+
+* a **horizon-independent floor** (≈ 0.10, flat across every horizon bin) from
+  the scale operator — so the two quantities **do not converge even as gap → 0**;
+* a **horizon-amplified** error from the velocity operator, growing as
+  `x + v·horizon` predicts.
+
+**Therefore re-fitting a closer proxy is not a repair.** It would produce a third
+quantity `f(R_fit(x))`, not production's reduction. A faithful replay must
+reproduce `R` itself (§2.2).

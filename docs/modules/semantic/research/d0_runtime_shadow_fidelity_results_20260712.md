@@ -67,20 +67,63 @@ survive intact.
 | `fwd_r` | 0.183 | **2.020** | 0.9292 |
 | `w` (speed weight) | 0.034 | 0.356 | **0.8656** |
 
-The pattern is unambiguous: **the static distance term transfers well; every
-quantity involving velocity extrapolation and the speed weight does not.**
+Fidelity degrades **monotonically with how much temporal reduction the term
+requires**: the 0th-order distance term transfers best, first-order
+(velocity-extrapolated) terms are worse, and the pure speed weight — which has no
+positional anchor to stabilize it — is worst.
 
-That is exactly the boundary between the two estimators. The kernel computes
-velocity and anchors with `bridge_anchor4` — an OLS fit over the foot-ring with
-an adaptive, edge-weighted anchor and EMA heights. The offline builder
-approximates the same concept with a window-mean velocity and raw endpoint
-heights. The formula shape is shared; the *inputs to it* are different
-estimators, and the divergence concentrates precisely where those inputs enter.
+### 3.1 The two quantities are not the same random variable
 
-A second, independent contributor: the two sides extrapolate over **different
-horizons**. The kernel uses `la`; the offline builder uses its own frame gap
-(median 14 vs 13). Since `fwd = lost + v·horizon`, a horizon that differs even
-by one frame compounds with an already-divergent velocity estimate.
+Both sides evaluate the *same* function
+`f(state) = w·½(fwd_r + bwd_r) + (1 − w)·dist_h`. But `state = R(trajectory)`,
+and the **temporal-reduction operator `R` differs**:
+
+| | kernel `R` | offline `R` |
+| --- | --- | --- |
+| samples | foot-ring, stride-3, last 4 | per-frame MOT rows |
+| velocity | `bridge_vel4` OLS slope | window-mean difference |
+| anchor | adaptive edge-weighted (top/bottom edge trajectories weighted by inverse residual) | raw endpoint |
+| scale | EMA height (α = 0.05, causal) | raw endpoint height |
+| horizon | `la` | offline frame gap (`gap = la − bridge_at + 1`) |
+
+So `s0 = f(R_off(x))` and `bdist = f(R_ker(x))`. **The shared `f` creates the
+illusion of one quantity; the differing `R` makes them two.** This is the general
+lesson, not a bridge-specific quirk — see the
+[runtime-quantity fidelity protocol](../../../research/eval/runtime_quantity_fidelity_protocol.md).
+
+### 3.2 Two reduction errors, with different signatures
+
+Binning the matched events by extrapolation horizon `la` separates them:
+
+| `la` bin | n | median \|Δ `dist_h`\| | median \|Δ `fwd_r`\| |
+| --- | ---: | ---: | ---: |
+| [0, 6) | 305 | 0.1003 | 0.1398 |
+| [6, 11) | 326 | 0.1096 | 0.1659 |
+| [11, 16) | 310 | 0.1010 | 0.2038 |
+| [16, 22) | 346 | 0.1061 | 0.2144 |
+| [22, ∞) | 397 | 0.1002 | 0.1997 |
+| | | ρ(`la`, \|Δ\|) = **−0.012** | ρ(`la`, \|Δ\|) = **+0.099** |
+
+**① Scale operator (EMA vs raw height) — a horizon-independent floor.**
+`dist_h` is 0th-order and needs no extrapolation, so it *should* transfer
+perfectly. It does not: its error sits at ≈ 0.10 in **every** horizon bin, flat
+(ρ = −0.012). The residual comes from the `h_ref` normalizer. The consequence is
+sharp — **the two quantities do not converge even as `gap → 0`.** There is no
+region where they agree. Against the 0.4 threshold, that floor alone is 25 %.
+
+**② Velocity operator (foot-ring OLS vs window-mean) — amplified by horizon.**
+`fwd_r`'s error grows with `la` (0.140 → 0.214, ρ = +0.099), exactly the
+signature of `fwd = lost + v·horizon`: a velocity error multiplied by ~14 frames.
+This is why `fwd_r` carries the worst tail (q95 = 2.02).
+
+### 3.3 Corollary — why re-fitting is the wrong repair
+
+The divergence is **systematic, not noise**: it does not shrink with more data,
+and it has no vanishing limit. Fitting a new proxy to agree with `bdist` would
+merely produce a *third* quantity `f(R_fit(x))` — well-correlated, perhaps, but
+still not production's reduction. **Only reproducing `R` itself works**, which is
+why a faithful replay must share or line-by-line replicate the estimator rather
+than approximate it.
 
 ## 4. Join validity (checked, because a bad join would fake this result)
 
