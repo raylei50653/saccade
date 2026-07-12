@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import importlib.util
 import json
 from pathlib import Path
@@ -164,11 +165,84 @@ def test_r1_verifier_replays_without_labels_or_score_fit(tmp_path: Path) -> None
     assert result["predicate_disagreements"] == 0
     assert result["outcome_labels_read"] is False
     assert result["score_fit_performed"] is False
+    assert result["causal_sensitivity_interpretable"] is True
     assert {row["mutation"] for row in result["causal_sensitivity"]} == {
         "cyclic_window_shift",
         "omit_oldest_candidate_sample",
         "omit_oldest_lost_sample",
     }
+
+
+def test_r1_verifier_counts_replay_tie_as_order_disagreement_regardless_of_order(
+    tmp_path: Path,
+) -> None:
+    exporter = _load(EXPORTER, "r1_export_order")
+    verifier = _load(VERIFIER, "r1_verify_order")
+    capture_dir, id_map = _capture_fixture(tmp_path)
+    output = tmp_path / "events.jsonl"
+    exporter.export_r1_capture(capture_dir, output, id_map_path=id_map)
+    first = json.loads(output.read_text())
+    second = copy.deepcopy(first)
+    second["event_key"] = "MOT17-02|capture_ordinal=1|lost_slot=4|cand_slot=4"
+    second["native_capture_ordinal"] = 1
+    second["lost_slot"] = 4
+    second["kernel_terms"]["bdist"] = float(first["kernel_terms"]["bdist"]) + 0.1
+    output.write_text(
+        "\n".join(json.dumps(row, sort_keys=True) for row in (first, second)) + "\n",
+        encoding="utf-8",
+    )
+
+    forward = verifier.verify(output)
+    output.write_text(
+        "\n".join(json.dumps(row, sort_keys=True) for row in (second, first)) + "\n",
+        encoding="utf-8",
+    )
+    reverse = verifier.verify(output)
+
+    assert forward["event_local_order"]["comparable_pairs"] == 1
+    assert forward["event_local_order"]["order_disagreements"] == 1
+    assert reverse["event_local_order"]["order_disagreements"] == 1
+
+
+def test_r1_sensitivity_uses_untouched_host_replay_and_is_uninterpretable_on_r0_failure(
+    tmp_path: Path,
+) -> None:
+    exporter = _load(EXPORTER, "r1_export_sensitivity")
+    verifier = _load(VERIFIER, "r1_verify_sensitivity")
+    capture_dir, id_map = _capture_fixture(tmp_path)
+    output = tmp_path / "events.jsonl"
+    exporter.export_r1_capture(capture_dir, output, id_map_path=id_map)
+    row = json.loads(output.read_text())
+    baseline = verifier.replay_record(row)
+    lost = verifier._ring(row["lost_reduction"], name="lost")
+    candidate = verifier._ring(row["candidate_reduction"], name="candidate")
+    shifted = verifier._estimate_values(
+        row, lost=lost[1:] + lost[:1], candidate=candidate[1:] + candidate[:1]
+    )
+    expected = abs(float(shifted["bdist"]) - float(baseline["bdist"]))
+    row["kernel_terms"]["bdist"] = float(baseline["bdist"]) + 0.2
+    output.write_text(json.dumps(row, sort_keys=True) + "\n", encoding="utf-8")
+
+    result = verifier.verify(output)
+    cyclic = next(
+        item
+        for item in result["causal_sensitivity"]
+        if item["mutation"] == "cyclic_window_shift"
+    )
+
+    assert cyclic["max_abs_mutation_delta"]["bdist"] == pytest.approx(expected)
+    assert result["causal_sensitivity_interpretable"] is False
+
+
+def test_r1_verifier_rejects_post_seal_tolerance_override(tmp_path: Path) -> None:
+    exporter = _load(EXPORTER, "r1_export_tolerance")
+    verifier = _load(VERIFIER, "r1_verify_tolerance")
+    capture_dir, id_map = _capture_fixture(tmp_path)
+    output = tmp_path / "events.jsonl"
+    exporter.export_r1_capture(capture_dir, output, id_map_path=id_map)
+
+    with pytest.raises(ValueError, match="tolerance is sealed"):
+        verifier.verify(output, abs_tolerance=1e-3)
 
 
 def test_r1_export_and_replay_preserve_short_lost_fallback(tmp_path: Path) -> None:
@@ -206,3 +280,27 @@ def test_r1_export_rejects_d0_provenance_but_preserves_unemitted_native_state(
     manifest = exporter.export_r1_capture(capture_dir, output, id_map_path=id_map)
     assert manifest["events_without_global_id"] == 1
     assert json.loads(output.read_text())["cand_global_id"] is None
+
+
+def test_r1_export_rejects_all_reduction_configuration_mismatches(
+    tmp_path: Path,
+) -> None:
+    exporter = _load(EXPORTER, "r1_export_provenance")
+    capture_dir, id_map = _capture_fixture(tmp_path)
+    payload_path = capture_dir / "MOT17-02.json"
+    payload = json.loads(payload_path.read_text())
+    checks = (
+        ("at", 5, "bridge_at"),
+        ("anchor", "foot", "anchor_mode"),
+        ("anchor_rate", 0.04, "anchor_rate"),
+        ("px", 0.5, "production_threshold"),
+        ("dir_bonus", 0.1, "bridge_dir_bonus"),
+    )
+    for field, value, expected in checks:
+        mutated = copy.deepcopy(payload)
+        mutated["provenance"]["bridge"][field] = value
+        payload_path.write_text(json.dumps(mutated), encoding="utf-8")
+        with pytest.raises(ValueError, match=expected):
+            exporter.export_r1_capture(
+                capture_dir, tmp_path / f"bad-{field}.jsonl", id_map_path=id_map
+            )

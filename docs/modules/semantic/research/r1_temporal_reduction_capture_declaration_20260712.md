@@ -46,7 +46,7 @@ One JSONL event contains these source-owned fields:
 |---|---|---|
 | candidate head | four chronological `(cx, cy, h)` samples consumed by `bridge_anchor4` | exactly four; index 0 is the kernel's candidate endpoint |
 | lost exit | last four chronological samples, or one final sample for short-lost | branch is explicit: `bridge_anchor4_last4` or `short_lost_last_point_zero_velocity`; unused tail must be zero |
-| reduction configuration | `gap`, `bridge_at`, `la`, anchor mode/rate, `bridge_dir_bonus` | require `la = gap + bridge_at - 1`; row bonus must equal provenance configuration |
+| reduction configuration | `gap`, `bridge_at`, `la`, anchor mode/rate, production threshold, `bridge_dir_bonus` | require `la = gap + bridge_at - 1`; `bridge_at`/anchor mode are exact and rate/threshold/bonus must equal the provenance under float32 representation |
 | causal normalizer | `ema_lost`, `ema_cand`, derived `h_ref` | replay uses recorded pre-score EMA state, never a row/global reconstruction |
 | native terms | anchors, OLS velocities, `dist_h`, `fwd_r`, `bwd_r`, `s_lost`, `w`, `bdist`, production threshold | capture before any threshold / occupancy / appearance policy action |
 | provenance | shadow flag, bridge/detector configuration, source JSON SHA256, optional id-map SHA256, payload SHA256 | mixed provenance, overflow, invalid native identity, or duplicate event keys fail closed |
@@ -78,12 +78,12 @@ fit a proxy, select a threshold, or modify a tracker decision.
 
 | Check | Frozen calculation / criterion |
 |---|---|
-| R0 term replay | recompute `bdist`, `dist_h`, `fwd_r`, `bwd_r`, four velocity components, both anchors, `h_ref`, `s_lost`, and `w`; each maximum absolute error must be `<= 1e-5` |
+| R0 term replay | recompute `bdist`, `dist_h`, `fwd_r`, `bwd_r`, four velocity components, both anchors, `h_ref`, `s_lost`, and `w`; each maximum absolute error must be `<= 1e-5` (the verifier rejects tolerance overrides) |
 | R0 structural replay | `gap`, `bridge_at`, and `la` must match exactly for every event |
 | Predicate preservation | `replayed_bdist <= captured_production_threshold` agrees for every event |
 | Event-local order | group only by `(seq, cand_local_id)` within the native capture; for every pair with captured separation `> 2e-5`, replay order must agree; pairs at or below that separation are reported as near ties, never counted as agreement |
 | Serialization stability | canonical JSONL parse/replay is deterministic; a byte-identical payload rerun must produce byte-identical verifier JSON under the same tool revision and tolerance |
-| Causal sensitivity report | process every event under (a) omission of the oldest available lost/candidate sample and (b) cyclic shift of a four-sample window; aggregate the resulting effects by lost branch and `la`, with per-term maxima, predicate flips, and explicit unavailable branches. These are **non-equivalent inputs**, not fidelity substitutions; do not pool them into a score claim |
+| Causal sensitivity report | process every event under (a) omission of the oldest available lost/candidate sample and (b) cyclic shift of a four-sample window; aggregate mutation deltas **against the untouched host replay**, by lost branch and `la`, with per-term maxima, predicate flips, and explicit unavailable branches. When R0 fails, `causal_sensitivity_interpretable=false`; these are **non-equivalent inputs**, not fidelity substitutions or score claims |
 | Stability disposition | absent mutation reporting, an order/predicate change under equivalent serialization, or an unprovenanced window-order transformation yields `R_STABILITY_UNRESOLVED` even if untouched R0 replay passes |
 
 The (10^{-5}) tolerance is an a-priori float32 reconstruction budget, not a

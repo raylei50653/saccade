@@ -32,6 +32,7 @@ import argparse
 import hashlib
 import json
 import math
+import struct
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
@@ -90,6 +91,13 @@ def _finite(value: object, *, field: str) -> float:
     if not math.isfinite(result):
         raise ValueError(f"non-finite {field}")
     return result
+
+
+def _same_f32(left: object, right: object, *, field: str) -> bool:
+    """Compare the exact float32 values consumed by the CUDA kernel."""
+    lhs = _finite(left, field=field)
+    rhs = _finite(right, field=field)
+    return struct.pack("<f", lhs) == struct.pack("<f", rhs)
 
 
 def _window(value: object, *, field: str, consumed: int) -> list[list[float]]:
@@ -217,10 +225,25 @@ def _records(
             )
         if scalar["la"] != scalar["gap"] + scalar["bridge_at"] - 1:
             raise ValueError("R1 la must equal gap + bridge_at - 1")
-        if scalar["bridge_dir_bonus"] != _finite(
-            bridge.get("dir_bonus"), field="provenance.bridge.dir_bonus"
+        anchor_modes = {"center": 0, "foot": 1, "adaptive": 2}
+        provenance_anchor = bridge.get("anchor")
+        if provenance_anchor not in anchor_modes:
+            raise ValueError("R1 provenance bridge.anchor is invalid")
+        if scalar["bridge_at"] != int(bridge.get("at", -1)):
+            raise ValueError("R1 row/config bridge_at mismatch")
+        if scalar["anchor_mode"] != anchor_modes[provenance_anchor]:
+            raise ValueError("R1 row/config anchor_mode mismatch")
+        for field, provenance_field in (
+            ("anchor_rate", "anchor_rate"),
+            ("production_threshold", "px"),
+            ("bridge_dir_bonus", "dir_bonus"),
         ):
-            raise ValueError("R1 row/config bridge_dir_bonus mismatch")
+            if not _same_f32(
+                scalar[field],
+                bridge.get(provenance_field),
+                field=f"provenance.bridge.{provenance_field}",
+            ):
+                raise ValueError(f"R1 row/config {field} mismatch")
 
         lost_window = _window(
             row.get("lost_anchor_window"),
