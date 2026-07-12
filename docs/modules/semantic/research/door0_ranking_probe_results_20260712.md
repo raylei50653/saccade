@@ -25,9 +25,15 @@ Consequence for **this** study's terminal:
 * **Scoping limit, not a reversal.** The study remains valid; its reach is
   narrower than originally recorded.
 
-**Owner ruling (PR #141):** transfer of this closure to the production `bdist`
-ordering is **withdrawn**. Whether step ⑤ still counts as a **mainline
-transition** under the narrower reading remains an open owner call (§20.7).
+**Owner ruling (2026-07-12, PR #141) — final:** this study **stays CLOSED**, but
+its **mainline-transition status is revoked**; it is reclassified as a
+**`proxy-space capability closure`**. It remains a valid completed study (the
+12-member class is closed with respect to `s0`), it is not a mainline state
+transition (§20.7) because it cannot change the research status of the production
+`bdist` ordering, and it does **not** need to be reopened. No owner call remains
+open.
+
+Everything below is unmodified and must be read under this scope.
 
 Everything below is unmodified and must be read under this scope.
 

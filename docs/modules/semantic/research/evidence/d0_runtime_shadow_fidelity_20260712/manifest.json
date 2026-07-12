@@ -1,0 +1,38 @@
+{
+  "box_bars": {
+    "B1_decision_agreement_min": 0.99,
+    "B2_absdelta_q95_max": 0.05,
+    "B3_spearman_rho_min": 0.98,
+    "non_compensatory": true
+  },
+  "boxes": {
+    "B1": false,
+    "B2": false,
+    "B3": false
+  },
+  "declaration": "docs/modules/semantic/research/d0_runtime_shadow_fidelity_declaration_20260712.md",
+  "declaration_seal": "execution seal = owner confirmation of the \u00a75 boxes on 2026-07-12, before F1-F3 and C3 were computed. PR #141 merge = research acceptance, not the authorization to execute.",
+  "files": {
+    "frozen_inputs.json": "fb4886de0c8e225b11a75cf1419bcfd7075934d4f2f05aad2a00a8a83ce54c8b",
+    "metrics.json": "41e807f4b7dad13759e4d452965f4cfa1ca89cd7af2004fd97c984486eab812d"
+  },
+  "frozen_inputs": {
+    "_global_id_map.txt": "ae3b6441d1712bcce0826d611cee2cfdf7a01b4d37ec331336f91a0b9148f366",
+    "capture.csv.gz": "96093b9b723ed4500b389f8ad74600d75bb49a75064630dd2205cea0b0887047",
+    "pairs.csv": "ee2898a25ef7f01ed46331c49c12d667846975f25769bc4c3e6b8bad493f8e87",
+    "substrate_mot_concat": "4c5e322a3b8c026de584baa883e26353720837ffa2bf146dfcef2679426a670e"
+  },
+  "issue": "https://github.com/raylei50653/saccade/issues/112",
+  "partition": {
+    "cohort_gap": 539,
+    "matched": 1684,
+    "unemitted": 354
+  },
+  "runner": "scripts/tools/run_d0_runtime_shadow_fidelity.py",
+  "runner_sha256": "e1e9668a085a32843b3b6b84cca762d9c5347d764f8f51f2503edf712e2998b5",
+  "study": "d0_runtime_shadow_fidelity_20260712",
+  "study_dir": "out/signal_study/d0_runtime_shadow_fidelity_20260712T085642Z",
+  "substrate_dir": "results/MOT17_eval_d0_shadow_substrate_20260712T085642Z",
+  "terminal": "T2_PROXY_UNFAITHFUL",
+  "terminal_issue_vocabulary": "not_fidelity_aligned"
+}

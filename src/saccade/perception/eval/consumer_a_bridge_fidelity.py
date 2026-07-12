@@ -7,18 +7,25 @@ Production surface named by the audit (read-only reference):
   ``src/tracking/tracker_gpu.cu`` :: ``relink_bidir_propose_kernel``
   primary quantity ``bdist`` vs production threshold ``0.4``.
 
-Capture identity (binding)
--------------------------
-* The native CUDA event buffer may be present, but it is not a completed D0
-  evidence packet until an evaluation run exports its exact-join rows with no
-  overflow. ``LIVE_CUDA_EVENT_RING_IMPLEMENTED`` therefore remains false for
-  the sealed reconstruction packet.
-* The sealed D0 path is therefore a **kernel-formula reconstruction** from
-  no-relink MOT tracklets — **not** runtime Consumer-A capture of
-  ``foot_ring`` / ``ema_h`` / float32 kernel outputs.
-* Issue #112 runtime fidelity remains **incomplete** until default-off,
-  decision-neutral CUDA capture exists.  Reconstruction metrics are
-  diagnostics only and must not be labeled ``D4 exact captured Consumer-A``.
+Two statuses, never conflated
+-----------------------------
+* **Legacy v1 reconstruction packet (2026-07-11):** status
+  ``D0_FAIL_CLOSED_CAPTURE_UNAVAILABLE``.  It is a **kernel-formula
+  reconstruction** from no-relink MOT tracklets — *not* runtime Consumer-A
+  capture of ``foot_ring`` / ``ema_h`` / float32 kernel outputs.  That packet
+  stays frozen and its constants below keep their original meaning; they are
+  prefixed ``V1_LEGACY_`` so they cannot be read as the current status.
+* **Issue #112 (current): COMPLETE.**  A shadow bridge (propose + capture with
+  the commit kernel skipped) produces output byte-identical to a bridge-off run
+  while emitting real float32 CUDA values, so runtime capture now exists and is
+  joinable.  Terminal: **T2 PROXY_UNFAITHFUL** (the issue's own vocabulary:
+  ``not_fidelity_aligned``) — ``score_m_bridge`` is an **offline quantity** and
+  must not be used as an equivalent of production ``bdist``.
+  See ``docs/modules/semantic/research/d0_runtime_shadow_fidelity_results_20260712.md``
+  and the binding ``docs/research/eval/runtime_quantity_fidelity_protocol.md``.
+
+Reconstruction metrics remain diagnostics only and must never be labeled
+``D4 exact captured Consumer-A``.
 
 This module never mounts a production policy change.
 """
@@ -39,12 +46,17 @@ SPEED_WEIGHT_REF: Final[float] = 0.12  # s_lost reference for w
 
 # Research audit defaults — production path must leave these off.
 RESEARCH_BRIDGE_FIDELITY_AUDIT_DEFAULT: Final[bool] = False
-# Native capture plumbing exists behind an explicit tracker method. Keep this
-# distinct from LIVE_CUDA_EVENT_RING_IMPLEMENTED: the latter is an evidence
-# status for the sealed D0 packet, not a claim that a compiled buffer alone
-# completes Issue #112.
 NATIVE_CUDA_BRIDGE_FIDELITY_CAPTURE_IMPLEMENTED: Final[bool] = True
-LIVE_CUDA_EVENT_RING_IMPLEMENTED: Final[bool] = False
+
+# ── Issue #112: CURRENT status ──────────────────────────────────────────────
+# Runtime capture exists (shadow bridge: propose + capture, commit skipped) and
+# the fidelity question is answered. Use these, not the V1_LEGACY_* constants,
+# for any statement about Issue #112 today.
+ISSUE_112_CURRENT_STATUS: Final[str] = "complete_runtime_shadow_capture"
+ISSUE_112_TERMINAL: Final[str] = "T2_PROXY_UNFAITHFUL"  # issue: not_fidelity_aligned
+# `score_m_bridge` is an offline quantity. It is NOT an equivalent of the
+# production CUDA `bdist` and must not be cited as one.
+SCORE_M_BRIDGE_IS_PRODUCTION_EQUIVALENT: Final[bool] = False
 
 # Capture mode vocabulary (sealed packet must use reconstruction, not "exact").
 CAPTURE_MODE_RECONSTRUCTION: Final[str] = "kernel_formula_reconstruction"
@@ -103,10 +115,26 @@ def event_key_v2(seq: str, lost_global_id: int, cand_global_id: int) -> str:
     return f"{seq}|{int(lost_global_id)}|{int(cand_global_id)}"
 
 
-# Issue / packet identity when live capture is unavailable.
-ISSUE_112_STATUS: Final[str] = "incomplete_runtime_capture_unavailable"
-PACKET_STATUS_FAIL_CLOSED: Final[str] = "D0_FAIL_CLOSED_CAPTURE_UNAVAILABLE"
-PRIMARY_FAIL_REASON: Final[str] = "runtime_capture_unavailable"
+# ── V1 LEGACY (frozen) ──────────────────────────────────────────────────────
+# Status of the sealed 2026-07-11 *reconstruction* packet, which had no runtime
+# capture. These describe THAT PACKET, not Issue #112 today -- see
+# ISSUE_112_CURRENT_STATUS above.
+#
+# The names are kept because the sealed packet's runner imports them verbatim;
+# renaming them would mutate a frozen artifact. The V1_LEGACY_* aliases are the
+# preferred spelling for any new code.
+V1_LEGACY_ISSUE_112_STATUS: Final[str] = "incomplete_runtime_capture_unavailable"
+V1_LEGACY_PACKET_STATUS_FAIL_CLOSED: Final[str] = "D0_FAIL_CLOSED_CAPTURE_UNAVAILABLE"
+V1_LEGACY_PRIMARY_FAIL_REASON: Final[str] = "runtime_capture_unavailable"
+V1_LEGACY_LIVE_CUDA_EVENT_RING_IMPLEMENTED: Final[bool] = False
+
+# Frozen import surface of the sealed v1 runner. Do not rename.
+ISSUE_112_STATUS: Final[str] = V1_LEGACY_ISSUE_112_STATUS
+PACKET_STATUS_FAIL_CLOSED: Final[str] = V1_LEGACY_PACKET_STATUS_FAIL_CLOSED
+PRIMARY_FAIL_REASON: Final[str] = V1_LEGACY_PRIMARY_FAIL_REASON
+LIVE_CUDA_EVENT_RING_IMPLEMENTED: Final[bool] = (
+    V1_LEGACY_LIVE_CUDA_EVENT_RING_IMPLEMENTED
+)
 
 ANCHOR_MODE: Final[dict[str, int]] = {
     "center": 0,

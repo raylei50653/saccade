@@ -49,10 +49,17 @@ most 16. The disagreement is roughly symmetric and must not be netted:
 proxy rejects. Against only 161 true joint accepts, the off-diagonal is large:
 **the proxy misclassifies about a third as many pairs as it correctly accepts.**
 
-**B2 — numeric calibration.** |Δ| q95 = 1.417 is **3.54× the entire 0.4
-threshold**, and even the median |Δ| is 0.148 — over a third of the threshold.
-Δ median = −0.035, IQR [−0.261, +0.079]: the error is not a small bias, it is a
-wide dispersion.
+**B2 — numeric calibration.** Δ median = −0.035, IQR [−0.261, +0.079]: the error
+is not a small bias, it is a wide dispersion.
+
+| \|Δ\| | absolute | as a fraction of the 0.4 threshold |
+| --- | ---: | ---: |
+| q50 | 0.1480 | **0.37×** |
+| q90 | 0.8477 | **2.12×** |
+| q95 | 1.4171 | **3.54×** |
+
+Even the **median** error is over a third of the threshold, and by q90 the error
+already exceeds the entire threshold twice over.
 
 **B3 — rank transfer.** ρ = 0.9558 < 0.98. The proxy does not preserve the
 kernel's ordering to the standard required for existing ranking-class studies to
@@ -143,12 +150,45 @@ join artifact.
 
 ## 5. Coverage verdict — would have passed, which *strengthens* T2
 
-| Criterion | Result |
-| --- | --- |
-| C1 matched share | 65.35 % of all captured; 75.75 % of mappable |
-| C2 bias: matched vs `cohort_gap` (`bdist`) | KS = 0.075 — nearly identical (medians 1.674 vs 1.667) |
-| C2 bias: matched vs `unemitted` (`bdist`) | KS = 0.271 — `unemitted` are far-apart, high-`bdist` proposals (median 4.011) the tracker never emitted |
-| **C3 accept region (`bdist ≤ 0.4`)** | **matched 63.67 % vs 65.35 % overall — only −1.68 pp** |
+**C1 — share.** 65.35 % of all captured; 75.75 % of mappable.
+
+**C2 — structural bias (two-sample KS).**
+
+| Quantity | matched vs `cohort_gap` | matched vs `unemitted` |
+| --- | ---: | ---: |
+| `bdist` | KS = 0.0751 (p = 1.9e−2) | KS = 0.2712 (p = 1.8e−19) |
+| `gap` | KS = 0.3224 (p = 4.1e−38) | KS = 0.1186 (p = 4.8e−4) |
+
+`bdist` medians: matched 1.674, `cohort_gap` 1.667, `unemitted` 4.011.
+
+On `bdist` — the quantity the fidelity claim is about — `matched` and
+`cohort_gap` are nearly indistinguishable (KS = 0.075). `unemitted` are
+far-apart, high-`bdist` proposals the tracker never emitted, which is what that
+partition means. The larger `gap` KS against `cohort_gap` (0.322) says the
+offline builder's *enumeration window* differs from the runtime's, not that the
+score distribution does — and it is `bdist`, not `gap`, that the terminal rests
+on.
+
+**C2 — per-sequence composition.**
+
+| Sequence | matched | `cohort_gap` | `unemitted` | matched % |
+| --- | ---: | ---: | ---: | ---: |
+| MOT17-02-SDP | 235 | 99 | 21 | 66.2 % |
+| MOT17-04-SDP | 66 | 31 | 24 | 54.5 % |
+| MOT17-05-SDP | 551 | 66 | 40 | 83.9 % |
+| MOT17-09-SDP | 56 | 16 | 6 | 71.8 % |
+| MOT17-10-SDP | 378 | 131 | 56 | 66.9 % |
+| MOT17-11-SDP | 71 | 17 | 2 | 78.9 % |
+| MOT17-13-SDP | 327 | 179 | 205 | **46.0 %** |
+
+Coverage is not uniform: MOT17-13 is the weakest (46.0 % matched, and 205 of the
+354 `unemitted` events are there). No sequence is absent from `matched`, so the
+fidelity set spans all seven, but MOT17-13-heavy conclusions would be the least
+supported. This is recorded as a limit, and it does not bear on the terminal —
+the boxes failed on the pooled matched set by wide margins.
+
+**C3 — accept region (`bdist ≤ 0.4`): matched 63.67 % vs 65.35 % overall,
+only −1.68 pp.**
 
 C3 is the criterion that mattered, and it is clean: of the 311 runtime proposals
 in the production-accept region, the matched set's share (63.67 %) is
@@ -159,7 +199,69 @@ This does not rescue the fidelity result — the boxes are non-compensatory — 
 it removes the most attractive escape from it. The proxy did not fail because it
 was measured on an unrepresentative slice. It failed on the slice that counts.
 
-## 6. Terminal and mainline transition (§20.7)
+## 6. Issue #112's original reporting surface (diagnostic — the terminal was already fixed)
+
+Issue #112 asked for each metric **GT-conditional, FP-conditional, and by gap
+slice within `S_A = {1 ≤ gap ≤ 26}`**, and warned:
+
+> *High aggregate correlation does not pass if the GT boundary is distorted.*
+
+**It is distorted, and in the worst possible direction.**
+
+| Slice | n | ρ | decision agreement | q85↔q85 error | offline-safe / online-unsafe |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| overall | 1,684 | 0.9558 | 95.07 % | 0.2032 | 46 (2.73 %) |
+| **GT-conditional** | 128 | **0.8742** | **85.16 %** | 0.2941 | **9 (7.03 %)** |
+| FP-conditional | 1,373 | 0.9611 | 96.07 % | 0.1924 | 31 (2.26 %) |
+
+The aggregate ρ = 0.956 is carried almost entirely by the FP mass. On the true
+relink opportunities — the only pairs a bridge exists to catch — the proxy is far
+worse: **ρ = 0.874, and 15 % of GT decisions flip.** The
+`offline-safe / online-unsafe` rate (proxy accepts, kernel rejects) is **7.03 % on
+GT versus 2.26 % on FP**: offline analysis systematically believes production
+will capture true bridges that production actually rejects.
+
+This is precisely the failure mode the issue told us to look for, and it means
+the aggregate numbers *understate* the problem for gate-coverage purposes.
+
+By gap slice within `S_A`:
+
+| gap slice | n | ρ | decision agreement | offline-safe / online-unsafe |
+| --- | ---: | ---: | ---: | ---: |
+| [1, 6) | 351 | 0.9698 | 91.74 % | 19 (5.41 %) |
+| [6, 11) | 319 | 0.9543 | 93.10 % | 14 (4.39 %) |
+| [11, 16) | 316 | 0.9444 | 96.20 % | 8 (2.53 %) |
+| [16, 21) | 273 | 0.9468 | 97.44 % | 1 (0.37 %) |
+| [21, 27) | 283 | 0.9217 | 97.17 % | 4 (1.41 %) |
+
+Decision disagreement concentrates at **short gaps** (91.7 % agreement at
+gap ∈ [1,6)), while rank agreement decays at **long gaps** (ρ = 0.922 at
+[21,27)) — the two reduction errors of §3.2 showing up in their respective
+regimes.
+
+### 6.1 Reconciliation with the `Closes #112` contract
+
+| Original issue requirement | Status | Note |
+| --- | --- | --- |
+| Certify the CUDA path only (`relink_bidir_propose_kernel`), not the Python relinker or the C++ `midpoint_bridge_dist` mirror | **retained** | capture is emitted from inside the kernel itself |
+| Compute offline `pairs.csv` values **and** Consumer-A kernel values on the same events | **retained** | 1,684 exactly-joined events; join validity checked (§4) |
+| Prior suspect: velocity estimator (anchor-4 foot-ring vs window-mean) | **confirmed** | §3.1, §3.2 — horizon-amplified error |
+| Prior suspect: extrapolation horizon (`la` vs offline pair gap) | **confirmed** | §3.1 — `gap = la − bridge_at + 1` |
+| Prior suspect: normalization (bilateral EMA `h_ref` vs raw endpoint height) | **confirmed** | §3.2 — the horizon-independent floor |
+| Spearman rank correlation | **retained** | F3 = 0.9558 |
+| Predicate agreement at `bdist ≤ 0.4` | **retained** | F1 = 95.07 %, confusion un-netted |
+| `offline-safe / online-unsafe` count and rate | **retained** | 46 (2.73 %) overall; **7.03 % on GT** |
+| Quantile-alignment error, incl. q85↔q85 | **retained** | table above; plus per-event \|Δ\| q50/q90/q95 (§2) |
+| GT-conditional / FP-conditional / gap slices in `S_A` | **retained** | tables above |
+| Localize disagreement by height / velocity regime | **superseded** | replaced by the stronger `R`-operator attribution (§3), which explains the mechanism rather than locating it |
+| Terminal: one of `threshold_transfer_supported` / `rank_only_transfer_supported` / `not_fidelity_aligned` | **retained** | **`not_fidelity_aligned`** (= T2 PROXY_UNFAITHFUL) |
+
+The sealed §20.2 declaration adds what the original issue lacked: a coverage
+verdict, partition conservation, and non-compensatory boxes fixed before any
+metric was seen. The terminal is unchanged by anything in this section — these
+are diagnostics, and they were computed after the boxes had already decided.
+
+## 7. Terminal and mainline transition (§20.7)
 
 **T2 — PROXY_UNFAITHFUL.** `score_m_bridge` is not a valid stand-in for
 consumer-A `bdist`. Per the sealed declaration, every prior study that used it

@@ -5,6 +5,28 @@
 
 # D0 — Consumer-A bridge estimator fidelity audit
 
+## 2026-07-12 — SUPERSEDED (historical pointer; this document is unchanged below)
+
+**This is the legacy v1 reconstruction packet. It stays frozen and its semantics
+are not redefined.** Two statuses must be kept apart:
+
+| | Status |
+| --- | --- |
+| **This legacy packet** | `D0_FAIL_CLOSED_CAPTURE_UNAVAILABLE` — primary reason `runtime_capture_unavailable`. Correct, and unchanged. |
+| **Issue #112 (current)** | **COMPLETE.** Certified by the v2 runtime-shadow packet against real CUDA `bdist`. |
+
+This packet reached `not_fidelity_aligned` as a **reconstruction diagnostic** — it
+*suspected* the answer but could not certify it, because no runtime capture
+existed. That gap is now closed: a shadow bridge (propose + capture, commit
+skipped) yields output byte-identical to bridge-off while emitting real float32
+kernel values, and 1,684 exactly-joined pairs **confirm** the verdict.
+
+* Results (v2, authoritative for Issue #112): [d0_runtime_shadow_fidelity_results_20260712.md](d0_runtime_shadow_fidelity_results_20260712.md)
+* Sealed declaration: [d0_runtime_shadow_fidelity_declaration_20260712.md](d0_runtime_shadow_fidelity_declaration_20260712.md)
+* Scope amendment: [s0_proxy_validity_amendment_20260712.md](s0_proxy_validity_amendment_20260712.md)
+
+Everything below is the original 2026-07-11 content, retained verbatim.
+
 > **Status:** `D0_FAIL_CLOSED_CAPTURE_UNAVAILABLE`  
 > **Terminal verdict:** `not_fidelity_aligned`  
 > **Primary fail reason:** `runtime_capture_unavailable`  

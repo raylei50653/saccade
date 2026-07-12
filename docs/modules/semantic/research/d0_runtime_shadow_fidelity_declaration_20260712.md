@@ -14,11 +14,24 @@
 Contract: [framework §20](../../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md) (v1, PR #133) ·
 Prior packet (sealed, v1 legacy): [d0_bridge_estimator_fidelity_20260711](d0_bridge_estimator_fidelity_20260711.md)
 
-**Seal semantics:** this document is the study's §20.2 declaration. Merge of the
-PR carrying it = research-owner seal. Execution (one run) is authorized only
-after seal; results land in a follow-up PR with a committed evidence packet.
-Any deviation from this declaration (metrics, boxes, partition, terminals)
-voids the run and requires a new declaration.
+**Seal semantics (two distinct events — do not conflate them).**
+
+This document is the study's §20.2 declaration. Its authorization chain, as it
+actually happened, was:
+
+| Event | What it is | When |
+| --- | --- | --- |
+| **Execution seal** | Explicit owner confirmation of the §5 boxes (B1 ≥ 99 %, B2 ≤ 0.05, B3 ≥ 0.98) and of the frozen conventions. This is the authorization to execute. | **2026-07-12, before F1–F3 and C3 were computed.** |
+| **Research acceptance** | Merge of PR #141: repository promotion of the declaration, the verifier, and the evidence packet. | at merge |
+
+The execution seal was **owner confirmation, not PR merge**. The terminal was
+computed only after that confirmation, and the boxes were fixed before any
+metric was seen — which is the property the seal exists to guarantee. PR merge
+constitutes research acceptance and repository promotion; it is **not** the
+original authorization to execute, and this document does not claim it was.
+
+Any deviation from this declaration (metrics, boxes, partition, terminals) voids
+the run and requires a new declaration.
 
 ---
 

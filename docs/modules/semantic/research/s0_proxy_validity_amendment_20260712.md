@@ -50,11 +50,20 @@ slice that counts.
 
 ## 3. Affected conclusions — scope, not retraction
 
-### 3.1 Door-0 ranking-power probe / step ⑤ class closure (#136)
+### 3.1 Door-0 ranking-power probe / step ⑤ class closure (#136) — RULED
 
-**Owner ruling (PR #141):** transfer of the closure to the production `bdist`
-ordering is **withdrawn — not reversed**. The closure stands with respect to
-`s0`; it no longer carries to production's ordering.
+**Owner ruling (2026-07-12, PR #141) — final, no open items:**
+
+> **#136 stays CLOSED, but its mainline-transition status is revoked. It is
+> reclassified as a `proxy-space capability closure`.**
+
+* It **remains a valid, completed study**: the 12-member class is closed with
+  respect to `s0`.
+* It is **no longer a mainline state transition** (§20.7): it cannot change the
+  research status of the production `bdist` ordering, and mainline progress is
+  measured against production.
+* It **does not need to be reopened**. Reopening would be a new study against
+  the real captured `bdist`, under a new §20.2 declaration.
 
 The probe's baseline ordering was `s0 = score_m_bridge`. With
 ρ(`s0`, `bdist`) = 0.9558 < 0.98, the terminal
@@ -70,10 +79,8 @@ ordering, not production's ordering**.
 * **This is a scoping limit, not a reversal.** The study is valid; its reach is
   narrower than it was recorded as being.
 
-**Still open (owner call, not a research finding):** whether step ⑤ retains its
-**mainline-transition** status under this narrower reading. PR #141 ruled on the
-*scope* of the closure; it did not rule on whether a closure that no longer
-reaches production still counts as mainline progress (§20.7).
+**No owner call remains open on #136.** Scope and mainline status are both ruled
+above.
 
 ### 3.2 `m_b1` production-shaped gate-coverage claims
 
