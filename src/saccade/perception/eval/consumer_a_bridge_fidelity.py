@@ -32,9 +32,76 @@ This module never mounts a production policy change.
 
 from __future__ import annotations
 
+import ctypes
 import math
+import struct
 from dataclasses import dataclass
-from typing import Final, Sequence
+from functools import lru_cache
+from pathlib import Path
+from typing import Any, Final, Sequence
+
+
+def _f32(value: float) -> float:
+    """Round ``value`` to IEEE-754 binary32 (CUDA ``float``)."""
+    return struct.unpack("<f", struct.pack("<f", float(value)))[0]
+
+
+@lru_cache(maxsize=1)
+def _fmaf_impl() -> Any:
+    """Resolve libc ``fmaf`` once — CUDA contracts ``bridge_vel4`` to FMAs."""
+    # Python 3.12 has no math.fma; match device bit-patterns via libm.
+    for lib_name in ("libm.so.6", "libm.so", "libSystem.dylib", "msvcrt"):
+        try:
+            lib = ctypes.CDLL(lib_name)
+            fn = lib.fmaf
+            fn.argtypes = (ctypes.c_float, ctypes.c_float, ctypes.c_float)
+            fn.restype = ctypes.c_float
+            return fn
+        except (OSError, AttributeError):
+            continue
+    raise RuntimeError(
+        "libc fmaf is required for CUDA-faithful Consumer-A host replay "
+        "(bridge_vel4 FMA contraction)"
+    )
+
+
+def _fmaf(a: float, b: float, c: float) -> float:
+    """``fmaf(a, b, c)`` → binary32 fused multiply-add, matching CUDA FMAs."""
+    return float(_fmaf_impl()(_f32(a), _f32(b), _f32(c)))
+
+
+@lru_cache(maxsize=1)
+def _device_replay_lib() -> Any | None:
+    """Optional research .so that runs ``bridge_anchor4`` on device.
+
+    Host FMA replicas match ``bridge_vel4`` bit-exactly but still drift on
+    adaptive-anchor residuals (``ay``/``cy0``) by a few 1e-5.  The sealed R1
+    budget is 1e-5, so R0 prefers the device kernel when the library is built.
+    """
+    so_path = Path(__file__).resolve().parent / "_cuda" / "libr1_bridge_replay.so"
+    if not so_path.is_file():
+        return None
+    try:
+        lib = ctypes.CDLL(str(so_path))
+    except OSError:
+        return None
+    lib.r1_bridge_anchor4_batch.argtypes = (
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_int),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_int),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.c_int,
+    )
+    lib.r1_bridge_anchor4_batch.restype = ctypes.c_int
+    lib.r1_bridge_vel4_batch.argtypes = (
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.c_int,
+    )
+    lib.r1_bridge_vel4_batch.restype = ctypes.c_int
+    return lib
+
 
 # ── Production constants (must match headline preset / kernel defaults) ──────
 PRODUCTION_BRIDGE_PX: Final[float] = 0.4
@@ -189,27 +256,50 @@ def decide_bridge(
 
 
 def bridge_vel4(samples: Sequence[float]) -> float:
-    """CUDA ``bridge_vel4``: v = (3 y3 + y2 − y1 − 3 y0) / 10."""
-    y0, y1, y2, y3 = (float(samples[i]) for i in range(4))
-    return (3.0 * y3 + y2 - y1 - 3.0 * y0) / 10.0
+    """CUDA ``bridge_vel4``: v = (3 y3 + y2 − y1 − 3 y0) / 10.
+
+    Prefer the device batch helper when available.  Host float64 evaluation of
+    the closed form diverges by up to ~6e-5 on real MOT rings (above the sealed
+    R1 1e-5 budget); the libc-FMA binary32 fallback contracts like ``-O3`` nvcc.
+    """
+    lib = _device_replay_lib()
+    if lib is not None:
+        buf = (ctypes.c_float * 4)(*(_f32(samples[i]) for i in range(4)))
+        out = (ctypes.c_float * 1)()
+        err = int(lib.r1_bridge_vel4_batch(buf, out, 1))
+        if err != 0:
+            raise RuntimeError(f"device bridge_vel4 failed with cuda error {err}")
+        return float(out[0])
+    y0, y1, y2, y3 = (_f32(samples[i]) for i in range(4))
+    # Matches device: fmaf(y3,3,y2) → fmaf(y1,-1,t) → fmaf(y0,-3,t) → /10.
+    acc = _fmaf(y3, 3.0, y2)
+    acc = _fmaf(y1, -1.0, acc)
+    acc = _fmaf(y0, -3.0, acc)
+    return _f32(acc / 10.0)
 
 
 def bridge_linres4(samples: Sequence[float]) -> float:
-    """CUDA ``bridge_linres4`` residual sum of squares vs OLS line."""
-    y = [float(samples[i]) for i in range(4)]
-    ybar = 0.25 * sum(y)
-    sxy = (
-        -1.5 * (y[0] - ybar)
-        - 0.5 * (y[1] - ybar)
-        + 0.5 * (y[2] - ybar)
-        + 1.5 * (y[3] - ybar)
-    )
-    slope = sxy / 5.0
+    """CUDA ``bridge_linres4`` residual sum of squares vs OLS line (float32+FMA).
+
+    Adaptive-anchor weights depend on these residuals; plain binary32 multiply-
+    add drifts ``ay``/``cy0`` by up to ~1.2e-4 on real MOT rings, above the
+    sealed R1 1e-5 budget. Matching the device FMA contraction restores them.
+    """
+    y = [_f32(samples[i]) for i in range(4)]
+    total = _f32(y[0] + y[1])
+    total = _f32(total + y[2])
+    total = _f32(total + y[3])
+    ybar = _f32(0.25 * total)
+    # sxy = Σ c_i (y_i - ybar) with c = (-1.5, -0.5, 0.5, 1.5)
+    sxy = 0.0
+    for coeff, yi in zip((-1.5, -0.5, 0.5, 1.5), y):
+        sxy = _fmaf(_f32(yi - ybar), coeff, sxy)
+    slope = _f32(sxy / 5.0)
     res = 0.0
     for i in range(4):
-        fit = ybar + slope * (float(i) - 1.5)
-        d = y[i] - fit
-        res += d * d
+        fit = _fmaf(slope, _f32(_f32(i) - 1.5), ybar)
+        d = _f32(y[i] - fit)
+        res = _fmaf(d, d, res)
     return res
 
 
@@ -220,36 +310,56 @@ def bridge_anchor4(
     rate_gate: float,
     endpoint_idx: int,
 ) -> tuple[float, float, float, float]:
-    """CUDA ``bridge_anchor4`` host replica.
+    """CUDA ``bridge_anchor4`` host replica (device kernel when available).
 
-    ``ring4`` is four chronological ``(cx, cy, h)`` samples (foot-ring stride-3).
-    Returns ``(ax, ay, vx, vy)``.
+    ``ring4`` is four chronological ``(cx, cy, h)`` samples consumed by the
+    kernel (candidate head-4 or lost last-4).  Returns ``(ax, ay, vx, vy)``.
     """
     if len(ring4) != 4:
         raise ValueError("bridge_anchor4 requires exactly 4 samples")
-    cx = [float(p[0]) for p in ring4]
-    cy = [float(p[1]) for p in ring4]
-    h = [float(p[2]) for p in ring4]
-    yt = [c - 0.5 * hh for c, hh in zip(cy, h)]
-    yb = [c + 0.5 * hh for c, hh in zip(cy, h)]
-    hbar = 0.25 * sum(h)
+    lib = _device_replay_lib()
+    if lib is not None:
+        flat = (ctypes.c_float * 12)(*(_f32(v) for sample in ring4 for v in sample))
+        modes = (ctypes.c_int * 1)(int(anchor_mode))
+        rates = (ctypes.c_float * 1)(_f32(rate_gate))
+        endpoints = (ctypes.c_int * 1)(int(endpoint_idx))
+        out = (ctypes.c_float * 4)()
+        err = int(lib.r1_bridge_anchor4_batch(flat, modes, rates, endpoints, out, 1))
+        if err != 0:
+            raise RuntimeError(f"device bridge_anchor4 failed with cuda error {err}")
+        return float(out[0]), float(out[1]), float(out[2]), float(out[3])
+
+    # Host fallback: binary32 + FMA.  Exact on center velocity; adaptive
+    # residual weights may still drift a few 1e-5 without the device lib.
+    cx = [_f32(p[0]) for p in ring4]
+    cy = [_f32(p[1]) for p in ring4]
+    h = [_f32(p[2]) for p in ring4]
+    yt = [_f32(c - _f32(0.5 * hh)) for c, hh in zip(cy, h)]
+    yb = [_f32(c + _f32(0.5 * hh)) for c, hh in zip(cy, h)]
+    hbar = 0.0
+    for hh in h:
+        hbar = _f32(hbar + _f32(0.25 * hh))
     vx = bridge_vel4(cx)
     ax = cx[endpoint_idx]
     use_edges = anchor_mode == 2
-    if use_edges and rate_gate > 0.0:
-        dh = (abs(h[1] - h[0]) + abs(h[2] - h[1]) + abs(h[3] - h[2])) / 3.0
-        if dh / (hbar + 1e-3) <= rate_gate:
+    rate = _f32(rate_gate)
+    if use_edges and rate > 0.0:
+        dh = _f32(
+            (abs(_f32(h[1] - h[0])) + abs(_f32(h[2] - h[1])) + abs(_f32(h[3] - h[2])))
+            / 3.0
+        )
+        if _f32(dh / _f32(hbar + 1e-3)) <= rate:
             use_edges = False
     if anchor_mode == 1:
         vy = bridge_vel4(yb)
         ay = yb[endpoint_idx]
     elif use_edges:
-        hn = hbar * hbar + 1e-3
-        wt = 1.0 / (bridge_linres4(yt) / hn + 0.01)
-        wb = 1.0 / (bridge_linres4(yb) / hn + 0.01)
-        ws = wt + wb
-        vy = (wt * bridge_vel4(yt) + wb * bridge_vel4(yb)) / ws
-        ay = (wt * yt[endpoint_idx] + wb * yb[endpoint_idx]) / ws
+        hn = _f32(_f32(hbar * hbar) + 1e-3)
+        wt = _f32(1.0 / _f32(_f32(bridge_linres4(yt) / hn) + 0.01))
+        wb = _f32(1.0 / _f32(_f32(bridge_linres4(yb) / hn) + 0.01))
+        ws = _f32(wt + wb)
+        vy = _f32(_fmaf(wt, bridge_vel4(yt), _fmaf(wb, bridge_vel4(yb), 0.0)) / ws)
+        ay = _f32(_fmaf(wt, yt[endpoint_idx], _fmaf(wb, yb[endpoint_idx], 0.0)) / ws)
     else:
         vy = bridge_vel4(cy)
         ay = cy[endpoint_idx]
@@ -282,6 +392,13 @@ def window_mean_velocity(
     return (vx / n, vy / n) if n else (0.0, 0.0)
 
 
+def _hypot_f32(dx: float, dy: float) -> float:
+    """CUDA ``sqrtf(dx*dx + dy*dy)`` host replica."""
+    dx_f = _f32(dx)
+    dy_f = _f32(dy)
+    return _f32(math.sqrt(_f32(_f32(dx_f * dx_f) + _f32(dy_f * dy_f))))
+
+
 def speed_weighted_bdist(
     *,
     lx: float,
@@ -298,48 +415,58 @@ def speed_weighted_bdist(
 ) -> tuple[float, float, float, float, float, float]:
     """CUDA speed-weighted bridge score, including the optional direction bonus.
 
-    Returns ``(bdist, dist_h, fwd_r, bwd_r, s_lost, w)``.
+    Returns ``(bdist, dist_h, fwd_r, bwd_r, s_lost, w)`` in binary32 algebra.
     """
-    href = max(float(h_ref), 1.0)
-    la = float(horizon)
-    fwd_x = lx + vxl * la
-    fwd_y = ly + vyl * la
-    bwd_x = cx0 - vxc * la
-    bwd_y = cy0 - vyc * la
-    fwd_r = math.hypot(fwd_x - cx0, fwd_y - cy0) / href
-    bwd_r = math.hypot(bwd_x - lx, bwd_y - ly) / href
-    dist_h = math.hypot(lx - cx0, ly - cy0) / href
-    s_lost = math.hypot(vxl, vyl) / href
-    w = math.sqrt(min(max(s_lost / SPEED_WEIGHT_REF, 0.0), 1.0))
-    bdist = w * 0.5 * (fwd_r + bwd_r) + (1.0 - w) * dist_h
+    href = _f32(max(_f32(h_ref), 1.0))
+    la = _f32(horizon)
+    lx_f, ly_f = _f32(lx), _f32(ly)
+    cx0_f, cy0_f = _f32(cx0), _f32(cy0)
+    vxl_f, vyl_f = _f32(vxl), _f32(vyl)
+    vxc_f, vyc_f = _f32(vxc), _f32(vyc)
+    fwd_x = _f32(lx_f + _f32(vxl_f * la))
+    fwd_y = _f32(ly_f + _f32(vyl_f * la))
+    bwd_x = _f32(cx0_f - _f32(vxc_f * la))
+    bwd_y = _f32(cy0_f - _f32(vyc_f * la))
+    fwd_r = _f32(_hypot_f32(fwd_x - cx0_f, fwd_y - cy0_f) / href)
+    bwd_r = _f32(_hypot_f32(bwd_x - lx_f, bwd_y - ly_f) / href)
+    dist_h = _f32(_hypot_f32(lx_f - cx0_f, ly_f - cy0_f) / href)
+    s_lost = _f32(_hypot_f32(vxl_f, vyl_f) / href)
+    w = _f32(math.sqrt(min(max(_f32(s_lost / _f32(SPEED_WEIGHT_REF)), 0.0), 1.0)))
+    bdist = _f32(
+        _f32(_f32(w * 0.5) * _f32(fwd_r + bwd_r)) + _f32(_f32(1.0 - w) * dist_h)
+    )
     # Keep this branch line-for-line aligned with relink_bidir_propose_kernel.
     # It is normally dormant in the active preset, but an R1 replay cannot
     # silently change the quantity when a capture records a non-zero bonus.
-    if bridge_dir_bonus > 0.0:
-        sl = math.hypot(vxl, vyl)
-        sc = math.hypot(vxc, vyc)
+    bonus = _f32(bridge_dir_bonus)
+    if bonus > 0.0:
+        sl = _hypot_f32(vxl_f, vyl_f)
+        sc = _hypot_f32(vxc_f, vyc_f)
         min_speed = min(sl, sc)
-        speed_trust = min(min_speed / max(href * 0.005, 1e-3), 1.0)
+        speed_trust = min(_f32(min_speed / max(_f32(href * 0.005), 1e-3)), 1.0)
         if speed_trust > 0.0:
-            cos_sim = (vxl * vxc + vyl * vyc) / max(sl * sc, 1e-9)
+            cos_sim = _f32(
+                _f32(_f32(vxl_f * vxc_f) + _f32(vyl_f * vyc_f))
+                / max(_f32(sl * sc), 1e-9)
+            )
             if cos_sim > 0.5:
-                ux = vxl / sl + vxc / sc
-                uy = vyl / sl + vyc / sc
-                un = math.hypot(ux, uy)
-                ux /= un
-                uy /= un
-                px, py = -uy, ux
-                fe_x = (lx + vxl * la) - cx0
-                fe_y = (ly + vyl * la) - cy0
-                fwd_cross = abs(fe_x * px + fe_y * py) / href
-                be_x = (cx0 - vxc * la) - lx
-                be_y = (cy0 - vyc * la) - ly
-                bwd_cross = abs(be_x * px + be_y * py) / href
-                bdist_dir = 0.5 * (fwd_cross + bwd_cross)
-                gap_scale = min(la / 30.0, 1.0)
-                alpha = bridge_dir_bonus * cos_sim * cos_sim * speed_trust * gap_scale
+                ux = _f32(_f32(vxl_f / sl) + _f32(vxc_f / sc))
+                uy = _f32(_f32(vyl_f / sl) + _f32(vyc_f / sc))
+                un = _hypot_f32(ux, uy)
+                ux = _f32(ux / un)
+                uy = _f32(uy / un)
+                px, py = _f32(-uy), ux
+                fe_x = _f32(_f32(lx_f + _f32(vxl_f * la)) - cx0_f)
+                fe_y = _f32(_f32(ly_f + _f32(vyl_f * la)) - cy0_f)
+                fwd_cross = _f32(abs(_f32(_f32(fe_x * px) + _f32(fe_y * py))) / href)
+                be_x = _f32(_f32(cx0_f - _f32(vxc_f * la)) - lx_f)
+                be_y = _f32(_f32(cy0_f - _f32(vyc_f * la)) - ly_f)
+                bwd_cross = _f32(abs(_f32(_f32(be_x * px) + _f32(be_y * py))) / href)
+                bdist_dir = _f32(0.5 * _f32(fwd_cross + bwd_cross))
+                gap_scale = min(_f32(la / 30.0), 1.0)
+                alpha = _f32(bonus * cos_sim * cos_sim * speed_trust * gap_scale)
                 alpha = min(alpha, 1.0)
-                bdist = bdist * (1.0 - alpha) + bdist_dir * alpha
+                bdist = _f32(_f32(bdist * _f32(1.0 - alpha)) + _f32(bdist_dir * alpha))
     return bdist, dist_h, fwd_r, bwd_r, s_lost, w
 
 
@@ -401,9 +528,9 @@ def consumer_a_estimate_from_rings(
         )
     else:
         # tracker_gpu.cu short-lost branch: last point, zero velocity.
-        lc_x, lc_y, lh = lost_ring[-1]
-        lx = float(lc_x)
-        ly = float(lc_y + 0.5 * lh) if anchor_mode == 1 else float(lc_y)
+        lc_x, lc_y, lh = (_f32(v) for v in lost_ring[-1])
+        lx = lc_x
+        ly = _f32(lc_y + _f32(0.5 * lh)) if anchor_mode == 1 else lc_y
         vxl, vyl = 0.0, 0.0
     cx0, cy0, vxc, vyc = bridge_anchor4(
         cand_ring[:4],
@@ -411,7 +538,7 @@ def consumer_a_estimate_from_rings(
         rate_gate=rate_gate,
         endpoint_idx=0,
     )
-    h_ref = max(0.5 * (float(ema_lost) + float(ema_cand)), 1.0)
+    h_ref = _f32(max(_f32(0.5 * _f32(_f32(ema_lost) + _f32(ema_cand))), 1.0))
     bdist, dist_h, fwd_r, bwd_r, s_lost, w = speed_weighted_bdist(
         lx=lx,
         ly=ly,

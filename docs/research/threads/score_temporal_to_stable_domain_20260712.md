@@ -49,14 +49,14 @@ temporal state or a new scoring formula.
 
 ## Current step
 
-**R1 capture-contract preflight:** the capture contract is sealed and the
-default-off payload/export path is implemented. Execute only the declared
-shadow capture and label-free replay/sensitivity checks next. The one-sequence
-engineering smoke exported its complete nested payload but exceeded the sealed
-float32 replay tolerance in several components; repair host replay fidelity
-without changing the tolerance, then collect the declared full-support packet.
-Do not interpret outcomes until that packet is complete and owner-reviewed.
-Score fitting, gate sweep, and production change remain unauthorized.
+**R1 capture-contract preflight — packet ready for owner review.** Host R0
+replay was repaired (device-bit-exact `bridge_anchor4` / FMA `bridge_vel4`;
+presealed `1e-5` unchanged). The declared seven-sequence shadow packet is at
+`out/r1_temporal_20260712T115004Z/` (2577 events; V1 MOT byte-identity;
+R0 terms within tolerance; predicate/order clean;
+`causal_sensitivity_interpretable=true`). **No research terminal is accepted
+until owner review** — do not promote `R1_FAITHFUL` or open score fitting /
+gate / preset work from this handoff alone.
 
 ## Acceptance
 
@@ -99,3 +99,9 @@ boundary-preservation, and coverage criteria before outcome metrics are read.
   replay agreed, but component replay exceeded the presealed `1e-5` tolerance.
   This is instrumentation/replay repair only (not `R1_FAITHFUL`, no full-support
   packet, no score/gate/preset conclusion).
+- 2026-07-12: Host R0 repair: plain float64 / naive float32 missed CUDA FMA
+  contraction on `bridge_vel4` (~6e-5) and adaptive residual weights on
+  `ay`/`cy0`. Device-backed `libr1_bridge_replay.so` (+ host FMA fallback)
+  restores bit-exact anchors/velocities; score terms remain within `1e-5`.
+  Full seven-seq packet collected under stamp `20260712T115004Z` for owner
+  review (see `out/r1_temporal_20260712T115004Z/packet_summary.json`).

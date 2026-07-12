@@ -76,6 +76,25 @@ def test_bridge_vel4_matches_cuda_closed_form() -> None:
     assert bridge_vel4(samples) == pytest.approx(1.0)
 
 
+def test_bridge_vel4_matches_cuda_fma_on_real_ring() -> None:
+    """Host float64 of (3y3+y2-y1-3y0)/10 exceeds R1's 1e-5; FMA binary32 does not.
+
+    Captured from MOT17-04-SDP R1 smoke (ordinal 105): device ``v_lost_x`` was
+    -1.06658935546875 while plain float32/float64 both land 6.1e-5 away.
+    """
+    samples = [
+        1821.7423095703125,
+        1822.1490478515625,
+        1821.5411376953125,
+        1818.3895263671875,
+    ]
+    device = -1.06658935546875
+    assert bridge_vel4(samples) == pytest.approx(device, abs=0.0)
+    # Guard against a silent regression to plain multiply-add (no FMA).
+    plain = (3.0 * samples[3] + samples[2] - samples[1] - 3.0 * samples[0]) / 10.0
+    assert abs(plain - device) > 1e-5
+
+
 def test_capture_mode_is_reconstruction_not_runtime() -> None:
     assert CAPTURE_MODE_RECONSTRUCTION == "kernel_formula_reconstruction"
     assert "exact" not in CAPTURE_MODE_RECONSTRUCTION
