@@ -2,6 +2,8 @@
 doc-status: active
 doc-promotion: navigation-only; not evidence
 owner-module: semantic
+work-class: engineering-follow-up
+wip-role: non-wip
 created: 2026-07-11
 task-type: research-exploration-analysis
 production-impact: none
@@ -14,7 +16,7 @@ default-behavior-change: forbidden
 
 | Item | Status |
 |:--|:--|
-| Program | **ACTIVE** — semantic sole active；independent conditional motion representation probe |
+| Program | **ACTIVE — non-WIP engineering follow-up only.** Semantic sole-active is **none**; Phase B is concluded and this card retains only D0 / #112 capture closure. |
 | Research object | gap-conditioned transition density \(p(x_1,v_1 \mid x_0,v_0,\Delta t,c)\) → standardized mismatch / NLL / optional reach mass |
 | Motivation | deterministic motion atoms 在 long-gap slice 出現 GT role reversal（short: high-mismatch→FP；部分 long: high-mismatch 集中 GT） |
 | Relation to mainline | **parallel / independent** · 不納入 restricted global closure · 不改 \(\{dist_h,\log h_{ratio}\}\) 安全域主線 |
@@ -104,10 +106,13 @@ Scope:
 
 ## Current step
 
-**E0–E2 `ACCEPTED_WITH_LIMITS`; E2 freeze `FROZEN_ACCEPTED_WITH_LIMITS`;
-E3 `E3_SIGNALS_SEALED`; Phase B **`V5 ACCEPTED_WITH_LIMITS`**
-(representation / level 1); D0 `D0_FAIL_CLOSED_CAPTURE_UNAVAILABLE` /
-`not_fidelity_aligned` (Issue #112 incomplete).**
+**Current concrete work (non-WIP):** resolve D0 / [Issue #112](https://github.com/raylei50653/saccade/issues/112) by obtaining the default-off runtime CUDA capture required to replace `runtime_capture_unavailable`. This is an engineering fidelity follow-up only; it does **not** reopen Phase B, create a semantic mainline, or authorize threshold transfer.
+
+**Recorded research state:** E0–E2 `ACCEPTED_WITH_LIMITS`; E2 freeze
+`FROZEN_ACCEPTED_WITH_LIMITS`; E3 `E3_SIGNALS_SEALED`; Phase B
+**`V5 ACCEPTED_WITH_LIMITS`** (representation / level 1); D0
+`D0_FAIL_CLOSED_CAPTURE_UNAVAILABLE` / `not_fidelity_aligned` (Issue #112
+incomplete).
 
 Frozen E0/E2/E3 boundary:
 

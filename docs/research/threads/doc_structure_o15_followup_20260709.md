@@ -1,7 +1,9 @@
 ---
-doc-status: active-thread
+doc-status: active
 doc-promotion: navigation-only; not evidence
 owner-module: ownership
+work-class: governance
+wip-role: non-wip
 created: 2026-07-09
 ---
 

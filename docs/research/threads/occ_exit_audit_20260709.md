@@ -2,6 +2,8 @@
 doc-status: parked
 doc-promotion: navigation-only; not evidence
 owner-module: semantic
+work-class: mainline-study
+wip-role: parked
 created: 2026-07-09
 ---
 
