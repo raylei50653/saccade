@@ -348,15 +348,15 @@ payload is promoted by the separately versioned R1 exporter rather than by
 mutating D0's flat CSV artifact. See the sealed
 [R1 capture declaration](r1_temporal_reduction_capture_declaration_20260712.md).
 
-**Active first unit:** capture contract `R1` is sealed; host R0 replay fidelity
-was repaired without relaxing the presealed `1e-5` tolerance; the declared
-seven-sequence shadow packet lives under
-`out/r1_temporal_20260712T115004Z/` for **owner review**. No research terminal
-is accepted, and no \(M\), \(A\), \(J_f\), score, gate, or preset work is
-authorized, until that review.
+**First unit closed:** owner terminal
+[`R1_FAITHFUL`](r1_temporal_reduction_capture_results_20260712.md) accepted for
+the sealed Consumer-A headline configuration and seven-sequence support
+([packet](evidence/r1_temporal_reduction_capture_20260712/manifest.json)).
+R1 capture/replay is complete. The only authorized next transition is a
+**separately predeclared** discrete-\(M\) representation-capability study.
 
 ## Status
 
-**ACTIVE, sole semantic WIP.** Modeling order and claim boundaries are
-authorized. The R1 preflight packet is complete and awaiting owner review; no
-score model, gate change, or production change has been made.
+**ACTIVE, sole semantic WIP.** R1 is closed. Modeling order and claim boundaries
+remain: discrete-\(M\) declaration pending — no score model, gate change, or
+production change is authorized by `R1_FAITHFUL` alone.

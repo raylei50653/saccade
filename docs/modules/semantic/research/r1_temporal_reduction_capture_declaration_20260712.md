@@ -144,3 +144,15 @@ results and is not evidence promotion.
 No terminal authorizes a score fit, gate sweep, preset change, ledger entry, or
 online policy evaluation. Research acceptance remains owner-side after the
 future packet is reviewed.
+
+### Append (2026-07-12 — owner terminal; does not amend sealed gates)
+
+Owner review accepted **`R1_FAITHFUL`** for this contract under the declared
+Consumer-A headline adaptive-anchor configuration and seven-sequence MOT17
+support. See
+[r1_temporal_reduction_capture_results_20260712.md](r1_temporal_reduction_capture_results_20260712.md)
+and the sealed packet
+[evidence/r1_temporal_reduction_capture_20260712/](evidence/r1_temporal_reduction_capture_20260712/manifest.json).
+The acceptance does **not** generalize beyond that support and does **not**
+open score/gate/preset work; it only authorizes a separately declared
+discrete-\(M\) representation-capability study.

@@ -5,13 +5,16 @@
 
 ## Sole active
 
-**Score temporal-to-stable-domain modeling — R1 capture contract**
+**Score temporal-to-stable-domain modeling — discrete-\(M\) declaration pending**
 
 - Thread: [score_temporal_to_stable_domain_20260712.md](../../research/threads/score_temporal_to_stable_domain_20260712.md)
 - Canonical: [research charter](research/score_temporal_to_stable_domain_20260712.md)
-- Only current work: versioned default-off shadow capture of the two effective
-  `bridge_anchor4` windows / short-lost fallback, then predeclare replay and
-  temporal-stability criteria. No score fitting, gate change, or preset change.
+- **R1 closed** at terminal [`R1_FAITHFUL`](research/r1_temporal_reduction_capture_results_20260712.md)
+  ([packet](research/evidence/r1_temporal_reduction_capture_20260712/manifest.json)) under sealed
+  Consumer-A headline adaptive-anchor config + seven-seq MOT17 support.
+- Only current work: draft a **separate** discrete-\(M\) representation-capability
+  declaration (short-horizon \(z_{t+1}\approx Mz_t+c\)) — do **not** fit \(M\),
+  scores, gates, or presets until that declaration is sealed.
 
 ## Previous line 0（closed; nav only）
 
