@@ -121,9 +121,18 @@ or claimed in this unit.
 
 ## 3. Frozen pair universe
 
-For a track \(u\) in sequence \(s\), a candidate pair at horizon \(k\) is
-\((z_t, z_{t+k})\) with \(t\) and \(t+k\) both **observed frames** of \(u\).
-Horizons are frozen at \(k \in \{1,2,4,8\}\) frames.
+**Enumeration (frozen).** Horizons are frozen at \(k \in \{1,2,4,8\}\) frames.
+For every track \(u\) in sequence \(s\), for **every** observed frame \(t\) of
+\(u\), and for every \(k\), the ordered pair \((z_t, z_{t+k})\) is a **candidate
+pair** iff \(t+k\) is also an observed frame of \(u\). Windows therefore **slide
+and overlap** (frame \(t\) contributes at every horizon, and consecutive \(t\)
+reuse samples); no thinning, striding, or per-track subsampling is applied.
+
+**No independence or significance claim is made.** Overlapping pairs are
+statistically dependent, so this study reports **medians, per-fold sign counts,
+and de-concentration retention** — never a p-value, confidence interval, or
+significance test. Leave-one-sequence-out is the only generalization claim, and
+it is made at the **sequence** level.
 
 Every candidate pair is assigned to exactly one bucket by this **frozen
 precedence ladder** (first matching rule wins; the ladder is what makes "exactly
@@ -175,8 +184,10 @@ D = \operatorname{diag}\!\big(1/h_0,\ 1/h_0,\ \Delta t/h_0,\ \Delta t/h_0,\ 1/h_
 \qquad \Delta t = 1\ \text{frame},
 \]
 
-where \(h_0\) is the **median of \(e_t\) over that fold's training pairs**
-(frozen rule; never computed on held-out data). Because inputs and targets are
+where \(h_0\) is the **median of \(e_t\) over that fold's one-step (\(k=1\))
+primary training pairs** — the same set the fit consumes, so \(h_0\) does not
+depend on which horizon is being evaluated (frozen rule; never computed on
+held-out data). Because inputs and targets are
 scaled by the same \(D\) and there is no regularizer, this is an exact
 reparameterization: \(\tilde M = D M D^{-1}\), \(\tilde c = D c\), and
 predictions map back exactly. It only fixes conditioning and gives
@@ -205,9 +216,18 @@ A family that fails in **any** fold fails as a family: no fold-level substitutio
 Regimes are assigned **causally, from \(z_t\) only**: scale terciles of
 \(e = \texttt{ema\_h}\). Boundaries are the empirical 1/3 and 2/3 quantiles
 (linear interpolation, i.e. numpy `method="linear"`) of \(e_t\) over **that
-fold's training pairs only**; a value exactly on a boundary takes the **lower**
-regime index. Boundaries are therefore refit per fold by a fixed rule, never
-hand-picked, never computed on held-out data.
+fold's one-step primary training pairs only**; a value exactly on a boundary
+takes the **lower** regime index. Boundaries are therefore refit per fold by a
+fixed rule, never hand-picked, never computed on held-out data.
+
+**Regime is fixed at \(t\) for the whole propagation (frozen).** For a pair
+\((z_t, z_{t+k})\), the regime \(r\) is assigned once from \(e_t\), and the
+prediction is \(\hat z_{t+k} = M_r^{k} z_t + (\sum_{j<k} M_r^{j}) c_r\). The
+operator is **never** switched mid-horizon on a predicted (or observed) state:
+switching on a predicted \(\hat e\) would make the model non-affine and its
+powers uninterpretable, and switching on the observed \(e_{t+j}\) would leak the
+future into the input. Eligibility (§ 7 G1) is likewise evaluated per regime on
+that regime's own \(M_r\).
 
 ## 5. Frozen metric
 
@@ -294,12 +314,22 @@ nondimensionalized operator \(\tilde M\) of § 4.1:
 | G1a asymptotic | \(\rho(\tilde M) \le 1.001\) | no long-run explosion |
 | G1b **finite-horizon transient** | \(\|\tilde M^{k}\|_2 \le 2.0\) for every \(k\in\{1,2,4,8\}\) | a non-normal \(\tilde M\) can have \(\rho<1\) and still amplify hugely within 8 steps; charter § 5 asks for the stability of the **repeated powers**, not of the eigenvalues |
 | G1c **affine drift** | \(\big\|\big(\sum_{j=0}^{k-1}\tilde M^{j}\big)\tilde c\big\|_2 \le 0.40\) for every \(k\) | the intercept accumulates even when \(\tilde M\) is contractive |
-| G1d finiteness | every held-out prediction is finite | — |
+| G1d finiteness | every held-out prediction is finite (applied to **baselines too**: a non-finite prediction from any family is a validity failure, not a large error) | — |
+
+G1c reuses the numeral 0.40 as a **bound on an \(h_0\)-normalized accumulated
+offset**. It is the same a-priori heuristic constant as the § 7 G2 ceiling, but
+it is **not the same quantity** (that one is a per-pair error normalized by
+\(e_t\)); neither is a production-equivalence claim (§ 5.1).
 
 Ineligible families are **reported and excluded from G2/G3** — a matrix whose
 powers blow up cannot buy a low one-step error and call itself a stable
 short-horizon transition. Evaluating eligibility *first* is what stops an
 unstable fitted family from carrying the ceiling for everybody else.
+
+Baselines are exempt from G1a–G1c only because they have no fitted operator:
+`identity` is \(\tilde M = I\) and `const_velocity` is a fixed physical rule
+whose growth is linear in \(k\) by construction. They are **not** exempt from
+G1d.
 
 **G2 — ceiling, over all four horizons, over eligible families only.** For each
 family \(F \in B \cup \{\text{eligible fitted}\}\) define
