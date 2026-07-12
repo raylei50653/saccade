@@ -40,6 +40,34 @@ Restricted closure prototype:
   bridge_dist and other conditional atoms MUST NOT enter the global solve
 ```
 
+### Amendment (2026-07-12, append-only) — the accepted axes are **offline-coordinate** axes
+
+`GLOBAL_PARTIAL_ORDER_READY` stands **on its own substrate**; this amendment
+retracts nothing. It records a limit that was not visible when the terminal was
+accepted.
+
+The atoms were derived through `audit_relink_safe_reject.ensure_prod_proxy_scores`,
+which builds **offline proxies** of the live quantities — its own docstring states
+"Height ratio uses raw endpoint heights (ema proxy)". So both accepted global axes
+are offline-coordinate axes:
+
+| Axis | Accepted (offline) | Runtime (kernel) |
+|---|---|---|
+| `dist_h` | rebuilt from the offline pair table | \(\|a_{\mathrm{lost}}-a_{\mathrm{cand}}\|/h_{\mathrm{ref}}\), kernel `bridge_anchor4` anchors |
+| `log_h_ratio` | \(\log(h^{\mathrm{raw}}_{\mathrm{lost}}/h^{\mathrm{raw}}_{\mathrm{cand}})\) — **raw box heights** | \(\log(e_{\mathrm{lost}}/e_{\mathrm{cand}})\) — **EMA state** |
+
+[D0](d0_runtime_shadow_fidelity_results_20260712.md) subsequently certified that
+this offline substrate is **`T2 PROXY_UNFAITHFUL`**, with a **distorted GT
+boundary** (7.03 % offline-safe-but-online-unsafe). A GT-retention guarantee
+proved in offline coordinates therefore does **not** transfer to runtime
+coordinates by formula shape or field name (see the
+[runtime-quantity fidelity protocol](../../../research/eval/runtime_quantity_fidelity_protocol.md)).
+
+**Binding consequence:** the authorized restricted-closure prototype **may not be
+solved on these axes** until their runtime transfer is audited. That audit is
+[S0](safe_domain_runtime_transfer_declaration_20260712.md)
+([thread](../../../research/threads/runtime_faithful_safe_domain_20260712.md)).
+
 ## 0. Scope and claim ceiling
 
 - **Read-only / offline / evidence-and-contract** ([issue #106](https://github.com/raylei50653/saccade/issues/106)).

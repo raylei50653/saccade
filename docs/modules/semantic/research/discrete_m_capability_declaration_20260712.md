@@ -3,18 +3,59 @@
 <!-- doc-date: 2026-07-12 -->
 <!-- doc-module: semantic -->
 
-# Discrete-\(M\) anchor-propagation capability — **draft** preflight declaration
+# Discrete-\(M\) anchor propagation — **parked score-feature candidate** (not a gate; not sealed)
 
 > **One-line:** `m0_state_capture_v1` records the runtime **lost-side local
 > reduction** at every observed frame, and a frozen affine family
-> (\(z_{t+1}\approx Mz_t+c\)) is asked one narrow question — **can that state's
-> anchor be propagated over 1–8 frames better than the constant-velocity rule
-> production already uses?** It is not a score model, not a `bdist` claim, not a
-> gate study, not \(e^{A\Delta t}\), and not a production change.
+> (\(z_{t+1}\approx Mz_t+c\)) asks whether that state's anchor can be propagated
+> better than the constant-velocity rule production already uses. **This is a
+> score-ranking feature question, not a support gate** (§ 0), and it is **parked**.
 
-> **⚠️ NOT SEALED.** This document is a **draft**. It becomes binding only at the
-> seal event defined in § 12. Until then, **no capture, export, fit, or metric is
-> authorized**, and no number in this file may be read from data.
+> **⚠️ PARKED · NOT SEALED.** No capture, export, fit, or metric is authorized. No
+> number in this file may be read from data. This document is retained as a
+> **designed, unsealed candidate** so the analysis is not re-derived when the
+> score line opens.
+
+## 0. Reclassification (2026-07-12) — why this is not a gate
+
+The owner's architecture is:
+
+```text
+gate   : build a safe domain — exclude the impossible region, one-sided guarantee
+score  : inside the retained domain, separate GT from FP
+```
+
+Propagation accuracy changes **which retained candidate wins**, not **which
+candidates remain in the decision set**. By the repo's own layer contract that is
+**L2 score-ranking**, not an L0 support gate. This declaration's machinery — a
+fitted operator, a 10 % margin over a baseline, LOO retention, de-concentration —
+is score-layer machinery: it measures *discriminative improvement*, which a gate
+neither needs nor is allowed to optimize.
+
+The word collision came from charter § 5, which calls this a "transition **gate**"
+in the sense of a **research-stage checkpoint** (pass before \(e^{A\Delta t}\) may
+be opened), not a decision-layer support gate. Building it as if it gated
+candidates was the error.
+
+**Therefore:** this unit is **parked**, and the WIP lock returns to the
+gate-shaped line —
+[runtime-faithful safe domain](../../../research/threads/runtime_faithful_safe_domain_20260712.md).
+It may be revisited **only** as a feature study *inside* a separately declared
+score-ranking line, and it still carries no authorization of any kind.
+
+Two findings from the design work are worth keeping (they are **priors, not
+results** — nothing was measured):
+
+1. The only mechanism worth betting on is **velocity shrinkage** (four-sample OLS
+   velocity is noisy, so the optimal one-step predictor damps it), whose gain
+   grows with the horizon. \(k=1\) is noise-dominated, and no linear operator can
+   remove observation noise.
+2. The declared horizons \(\{1,2,4,8\}\) are **mismatched to the consumer**:
+   production's own extrapolation horizon `la` has median **12** and p90 **26**
+   in the sealed R1 packet, and only 6.9 % of bridge events have `la ≤ 2`. A
+   future score-feature study must test the horizons production actually uses.
+
+Everything below is the unsealed design, kept verbatim.
 
 Parent: [score temporal-to-stable-domain charter § 5](score_temporal_to_stable_domain_20260712.md) ·
 Navigation: [active thread](../../../research/threads/score_temporal_to_stable_domain_20260712.md) ·

@@ -107,6 +107,7 @@ Cheb-GR / bank / offline identity / occ-exit → 文檔家 **semantic**（非 re
 | 修 crash / flake，行為不變 | **D0** | 測試 + pre_push |
 | 單模組 ablation，default-off | **D1** | module research + README 索引 + TODO 連結 |
 | 數據驅動 gate / relink 訊號（不改 preset） | **D1** | 契約 [signal_table_schema](docs/research/eval/signal_table_schema.md) · **深度分析總帳** [signal_analysis_ledger](docs/research/eval/signal_analysis_ledger.md)（一訊號一列；數字在 `out/signal_study/`） |
+| **安全域 / safe region / reject 規則**（`max G_FP` s.t. `L_GT ≤ ε`） | **D2** | **數學契約（先讀，勿自造統計）** [feasible-set framework](docs/research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)（feasible/productive-safe set · region geometry · **independence unit 強制宣告** · claim ladder L0–L6 · §13 forbidden shortcuts）· 打包 [RegionAsset 契約](docs/research/eval/safe_region_asset_contract.md) · 分層 [gate vs score](docs/research/eval/signal_table_schema.md) |
 | occ-exit / Cheb-GR / sparse bank | **D1→D2** | **semantic** research 全家；引用數字再 D2 promotion |
 | 外觀 ceiling / 特徵抽取實作 | **D1** | **reid** README/research；關聯政策仍看 semantic |
 | GMC / Kalman 實驗 | **D1→D3** | geometry research + eval 筆記；動 default → 加上 tracker-decision + contract |
@@ -150,7 +151,7 @@ uv run scripts/eval/mot17.py --preset mamba_whole_graph --detector SDP --double-
 | 🧬 reid | ⏸️ 暫緩 | — | [↗](docs/modules/reid/TODO.md) |
 | 🔄 lifecycle | 📋 待辦 | evaluator lifecycle 測試切片 | [↗](docs/modules/lifecycle/TODO.md) |
 | 🌀 motion | 🟢 收斂 | — | [↗](docs/modules/motion/TODO.md) |
-| 🤝 semantic | 🔄 active | Score temporal-to-stable-domain — discrete-\(M\) 宣告 `draft`，待 owner seal（R1 已 closed @ `R1_FAITHFUL`；未封前不得 capture／fit） | [↗](docs/modules/semantic/TODO.md) |
+| 🤝 semantic | 🔄 active | Runtime-faithful safe domain — S0 axis-transfer 宣告 `draft`，待 owner seal（gate 建安全域／score 負責分離；未封前不得執行） | [↗](docs/modules/semantic/TODO.md) |
 | ⚡ trigger | 🟢 收斂 | — | [↗](docs/modules/trigger/TODO.md) |
 | 🖥️ streaming | 🟢 收斂 | — | [↗](docs/modules/streaming/TODO.md) |
 | 💾 storage | 🟢 收斂 | — | [↗](docs/modules/storage/TODO.md) |
