@@ -74,6 +74,7 @@ def _run_sequence(
     bidirectional: bool,
     competing_candidates: bool = False,
     fidelity_audit: bool = False,
+    shadow: bool = False,
 ) -> tuple[dict[int, list[int]], list[int], dict[str, object] | None]:
     tracker = _tracker(
         bidirectional=bidirectional,
@@ -81,6 +82,8 @@ def _run_sequence(
     )
     if fidelity_audit:
         tracker.set_research_bridge_fidelity_audit(True, capacity=64)
+    if shadow:
+        tracker.set_research_bridge_shadow(True)
     buffers = tracker.allocate_result_buffers(device="cuda")
     gmc = torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float32, device="cuda")
     detections = (
@@ -162,6 +165,31 @@ def test_bidirectional_bridge_revives_live_lost_identity() -> None:
     assert without_debug[4] == 0
     assert with_debug[3] >= with_debug[4]
     assert with_debug[4] == 1
+
+
+def test_shadow_bridge_proposes_and_captures_without_changing_identity() -> None:
+    """Issue #112: shadow mode must be output-equivalent to a bridge-off run.
+
+    The fidelity capture only runs inside the propose kernel, which is gated on
+    the bridge being enabled -- but a committing bridge rewrites track identity,
+    so captured events could not be joined against a bridge-off pair cohort.
+    Shadow mode skips only the commit kernel, so the bridge still attempts (and
+    captures) while output identity stays bit-identical to bridge-off.
+    """
+    without_bridge, without_debug, _ = _run_sequence(bidirectional=False)
+    shadow, shadow_debug, capture = _run_sequence(
+        bidirectional=True, fidelity_audit=True, shadow=True
+    )
+
+    assert shadow == without_bridge
+    assert without_debug[3] == 0
+    assert shadow_debug[3] > 0  # bridge attempted
+    assert shadow_debug[4] == 0  # but never committed
+
+    assert capture is not None
+    events = capture["events"]
+    assert isinstance(events, list) and events
+    assert capture["overflow_events"] == 0
 
 
 def test_bidirectional_bridge_prefers_higher_score_candidate() -> None:

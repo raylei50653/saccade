@@ -3297,9 +3297,14 @@ public:
                 research_bridge_fidelity_audit_ ? d_bridge_fidelity_cursor_ : nullptr,
                 research_bridge_fidelity_audit_ ? d_bridge_fidelity_overflow_ : nullptr,
                 d_track_revived_, d_bridge_claim_, d_bridge_cand_lost_, d_relink_dbg_);
-            relink_bidir_commit_kernel<<<grid, 256, 0, stream>>>(
-                d_active_, d_track_ids_, max_objs_,
-                d_bridge_claim_, d_bridge_cand_lost_, d_relink_dbg_);
+            // Shadow mode (Issue #112): commit is the only bridge write to
+            // track_ids/active, so skipping it leaves output bit-identical to a
+            // bridge-off run while propose still captures real CUDA scores.
+            if (!research_bridge_shadow_) {
+                relink_bidir_commit_kernel<<<grid, 256, 0, stream>>>(
+                    d_active_, d_track_ids_, max_objs_,
+                    d_bridge_claim_, d_bridge_cand_lost_, d_relink_dbg_);
+            }
         }
 
         // Compact: always launch
@@ -3479,6 +3484,10 @@ public:
         }
         research_portable_or_tail_enabled_ = true;
         (void)research_portable_or_tail_audit_;  // event ring reserved for audit mode
+    }
+
+    void set_research_bridge_shadow(bool enabled) {
+        research_bridge_shadow_ = enabled;
     }
 
     void set_research_bridge_fidelity_audit(bool enabled, int capacity) {
@@ -3972,6 +3981,7 @@ private:
     float portable_thr_host_[5] = {0.f, 0.f, 0.f, 0.f, 0.f};
     float* d_portable_thr_ = nullptr;  // [5] device thr vector
     // Issue #112 default-off bounded native event buffer.
+    bool research_bridge_shadow_ = false;
     bool research_bridge_fidelity_audit_ = false;
     int bridge_fidelity_capacity_ = 0;
     int bridge_fidelity_frame_ = 0;
@@ -4196,6 +4206,9 @@ void GPUByteTracker::set_research_portable_or_tail(bool enabled,
     pimpl_->set_research_portable_or_tail(enabled, thr, audit_enabled);
 }
 std::vector<int> GPUByteTracker::get_relink_debug() { return pimpl_->get_relink_debug(); }
+void GPUByteTracker::set_research_bridge_shadow(bool enabled) {
+    pimpl_->set_research_bridge_shadow(enabled);
+}
 void GPUByteTracker::set_research_bridge_fidelity_audit(bool enabled, int capacity) {
     pimpl_->set_research_bridge_fidelity_audit(enabled, capacity);
 }

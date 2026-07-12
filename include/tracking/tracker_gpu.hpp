@@ -178,6 +178,22 @@ public:
     BridgeFidelityCapture drain_research_bridge_fidelity_events();
 
     /**
+     * @brief Issue #112 shadow bridge: propose (and capture) but never commit.
+     *
+     * The fidelity capture only runs inside relink_bidir_propose_kernel, which
+     * is gated on the bridge being enabled -- but an enabled bridge rewrites
+     * track identity in relink_bidir_commit_kernel, so captured events cannot
+     * be joined against a bridge-off pair cohort. Shadow mode skips the commit
+     * kernel: propose writes only bridge-private state (bridge_claim,
+     * bridge_cand_lost, track_revived, dbg, fidelity events), none of which is
+     * read by compact_results_kernel, and spawn only zeroes that state on slot
+     * reuse. Commit is the sole bridge write to track_ids/active, so skipping
+     * it makes output bit-identical to a bridge-off run while still emitting
+     * real float32 CUDA bridge scores.
+     */
+    void set_research_bridge_shadow(bool enabled);
+
+    /**
      * @brief OA-SORT Occlusion-Aware Offset (OAO) penalty weight.
      * @param tau Cost penalty scale in [0, 1]. 0 = disabled (default).
      *            When > 0, tracks whose predicted boxes overlap other tracks get

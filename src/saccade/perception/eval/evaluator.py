@@ -2807,6 +2807,15 @@ def run_eval(
             _d0_capture["provenance"] = {
                 "capture_contract": "d0_runtime_cuda_v1",
                 "git_commit": _d0_commit,
+                # Shadow = propose+capture without commit. A committing bridge
+                # rewrites track identity, so a non-shadow capture cannot be
+                # joined against a bridge-off pair cohort; the v2 exporter
+                # fails closed on it.
+                "shadow": bool(
+                    (getattr(cfg, "kwargs", {}) or {}).get(
+                        "research_bridge_fidelity_capture_shadow", False
+                    )
+                ),
                 "bridge": {
                     "px": float(cfg.relink_bridge_px),
                     "at": int(cfg.relink_bridge_at),

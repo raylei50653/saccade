@@ -50,6 +50,59 @@ LIVE_CUDA_EVENT_RING_IMPLEMENTED: Final[bool] = False
 CAPTURE_MODE_RECONSTRUCTION: Final[str] = "kernel_formula_reconstruction"
 CAPTURE_MODE_RUNTIME_CUDA: Final[str] = "runtime_cuda_event_ring"  # reserved
 
+# ── Event-key contract versions ─────────────────────────────────────────────
+#
+# v1 (LEGACY, frozen): the 5-field key used by the sealed reconstruction packet
+# in ``run_d0_bridge_fidelity.py``. It is retained *only* so historical sealed
+# packets keep validating under their original semantics. It must never be
+# reinterpreted: two of its fields are unsound for runtime capture.
+#
+#   * ``lost_id`` / ``cand_id`` are tracker-**local** ids. The evaluator remaps
+#     them to global ids before writing MOT output, and the offline pair cohort
+#     is built from that MOT output -- so local ids do not address the cohort.
+#     Joining on them yields *false* matches wherever the remap happens to be
+#     the identity (observed: MOT17-02, MOT17-05).
+#   * ``lost_last_frame`` / ``cand_first_frame`` are not real frame indices. The
+#     kernel derives them from a capture-local counter minus a track age
+#     (``fidelity_frame - la``); the tracker has no absolute frame counter, so
+#     they underflow to negative values. They are unusable as identity.
+#
+# v2 (runtime shadow fidelity): global-id key, no frame fields.
+EVENT_KEY_VERSION_V1_LEGACY: Final[str] = "d0_event_key_v1_local_legacy"
+EVENT_KEY_VERSION_V2: Final[str] = "d0_event_key_v2_global"
+
+EVENT_KEY_FIELDS_V2: Final[tuple[str, ...]] = (
+    "seq",
+    "lost_global_id",
+    "cand_global_id",
+)
+
+# Fields the v2 packet must NOT emit: they looked valid but carried impossible
+# (negative) frame indices. Dropped rather than deprecated-in-place.
+EVENT_KEY_V1_UNSOUND_FIELDS: Final[tuple[str, ...]] = (
+    "lost_last_frame",
+    "cand_first_frame",
+)
+
+# Exhaustive, mutually exclusive partition of every captured runtime proposal.
+# Fidelity may only be computed on MATCHED; the other two bound how far a
+# fidelity conclusion extrapolates and must never enter an agreement
+# denominator.
+PARTITION_MATCHED: Final[str] = "matched"  # joins the offline cohort
+PARTITION_COHORT_GAP: Final[str] = "cohort_gap"  # ids emitted, pair not enumerated
+PARTITION_UNEMITTED: Final[str] = "unemitted"  # id never reached MOT output
+PARTITIONS: Final[tuple[str, ...]] = (
+    PARTITION_MATCHED,
+    PARTITION_COHORT_GAP,
+    PARTITION_UNEMITTED,
+)
+
+
+def event_key_v2(seq: str, lost_global_id: int, cand_global_id: int) -> str:
+    """Canonical v2 event key. Global ids only -- local ids are a contract error."""
+    return f"{seq}|{int(lost_global_id)}|{int(cand_global_id)}"
+
+
 # Issue / packet identity when live capture is unavailable.
 ISSUE_112_STATUS: Final[str] = "incomplete_runtime_capture_unavailable"
 PACKET_STATUS_FAIL_CLOSED: Final[str] = "D0_FAIL_CLOSED_CAPTURE_UNAVAILABLE"

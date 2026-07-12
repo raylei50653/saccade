@@ -3707,6 +3707,11 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         .def("get_relink_debug", &GPUByteTracker::get_relink_debug,
              "Returns counters: [archived, births, revived, bridge_attempts, bridge_accepts, "
              "hook_eligible, hook_rejected, atom0..3 fires, app_veto, atom4 fires].")
+        .def("set_research_bridge_shadow", &GPUByteTracker::set_research_bridge_shadow,
+             py::arg("enabled"),
+             "Issue #112 shadow bridge: propose and capture but skip the commit kernel, "
+             "so tracker output stays bit-identical to a bridge-off run and captured "
+             "events remain joinable against a bridge-off pair cohort.")
         .def("set_research_bridge_fidelity_audit", &GPUByteTracker::set_research_bridge_fidelity_audit,
              py::arg("enabled"), py::arg("capacity") = 65536,
              "Issue #112 default-off native Consumer-A bridge-score capture. "

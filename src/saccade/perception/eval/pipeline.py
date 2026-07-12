@@ -602,6 +602,12 @@ class EvalPipeline:
             raise RuntimeError(
                 "SACCADE_RESEARCH_BRIDGE_FIDELITY_CAPTURE_CAPACITY must be an integer"
             ) from exc
+        # Shadow mode: propose and capture, never commit. Required to join the
+        # capture against a bridge-off pair cohort, whose track ids a committing
+        # bridge would rewrite.
+        _d0_capture_shadow = os.environ.get(
+            "SACCADE_RESEARCH_BRIDGE_FIDELITY_CAPTURE_SHADOW", ""
+        ).strip().lower() in {"1", "true"}
         from saccade.perception.eval.portable_or_tail import (
             PortableAuditNotImplementedError,
             PortablePolicyError,
@@ -722,8 +728,18 @@ class EvalPipeline:
                     "tracker lacks bridge-fidelity audit; rebuild tracking extension"
                 )
             _d0_setter(True, capacity=_d0_capture_capacity)
+            if _d0_capture_shadow:
+                _d0_shadow_setter = getattr(
+                    detector.tracker, "set_research_bridge_shadow", None
+                )
+                if _d0_shadow_setter is None:
+                    raise RuntimeError(
+                        "tracker lacks bridge shadow mode; rebuild tracking extension"
+                    )
+                _d0_shadow_setter(True)
             _kw["research_bridge_fidelity_capture_dir"] = _d0_capture_dir
             _kw["research_bridge_fidelity_capture_capacity"] = _d0_capture_capacity
+            _kw["research_bridge_fidelity_capture_shadow"] = _d0_capture_shadow
 
         if hasattr(detector.tracker, "set_unified_score_params"):
             detector.tracker.set_unified_score_params(

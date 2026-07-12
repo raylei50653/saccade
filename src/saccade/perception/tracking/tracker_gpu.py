@@ -740,6 +740,23 @@ class GPUByteTracker:
         getter = getattr(self.tracker, "get_relink_debug", None)
         return list(getter()) if getter is not None else [0, 0, 0, 0, 0]
 
+    def set_research_bridge_shadow(self, enabled: bool) -> None:
+        """Propose and capture bridge events without committing them.
+
+        The capture only runs when the bridge is enabled, but a committing
+        bridge rewrites track identity, so captured events would not join a
+        bridge-off pair cohort. Shadow mode keeps output bit-identical to
+        bridge-off while still emitting real CUDA bridge scores.
+        """
+        setter = getattr(self.tracker, "set_research_bridge_shadow", None)
+        if setter is None:
+            if enabled:
+                raise RuntimeError(
+                    "native tracker missing bridge shadow mode; rebuild extension"
+                )
+            return
+        setter(bool(enabled))
+
     def set_research_bridge_fidelity_audit(
         self, enabled: bool, *, capacity: int = 65536
     ) -> None:
@@ -810,8 +827,8 @@ class GPUByteTracker:
         rows.sort(
             key=lambda row: (
                 str(row["event_key"]),
-                int(row["lost_slot"]),
-                int(row["cand_slot"]),
+                cast(int, row["lost_slot"]),
+                cast(int, row["cand_slot"]),
             )
         )
         total = int(native.get("total_events", len(rows)))

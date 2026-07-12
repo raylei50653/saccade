@@ -47,7 +47,6 @@ if str(REPO) not in sys.path:
 from saccade.perception.eval.consumer_a_bridge_fidelity import (  # noqa: E402
     ANCHOR_MODE,
     CAPTURE_MODE_RECONSTRUCTION,
-    CAPTURE_MODE_RUNTIME_CUDA,
     HEADLINE_PRESET_REL,
     ISSUE_112_STATUS,
     LIVE_CUDA_EVENT_RING_IMPLEMENTED,
@@ -1536,27 +1535,19 @@ def run_pipeline(
     pairs = load_pairs(pairs_path)
 
     if capture_path is not None:
-        # Optional external capture input. ``runtime_cuda_event_ring`` rows are
-        # accepted for diagnostics, but a historical reconstruction packet must
-        # never be reclassified merely because a native buffer now exists.
-        # Production --verify always rebuilds its sealed reconstruction path.
+        # Optional external capture input (tests only). Production --verify
+        # always rebuilds capture from pairs+substrate with capture_path=None.
         cap_p = capture_path if capture_path.is_absolute() else REPO / capture_path
         capture_rows = load_capture_csv(cap_p)
-        capture_mode = (
-            capture_rows[0].get("capture_mode", CAPTURE_MODE_RECONSTRUCTION)
-            if capture_rows
-            else "empty"
-        )
-        evidence_role = (
-            "runtime_cuda_observation"
-            if capture_mode == CAPTURE_MODE_RUNTIME_CUDA
-            else "reconstruction_diagnostic"
-        )
         capture_stats = {
             "n_pairs": len(pairs),
             "n_captured": len(capture_rows),
-            "capture_mode": capture_mode,
-            "evidence_role": evidence_role,
+            "capture_mode": capture_rows[0].get(
+                "capture_mode", CAPTURE_MODE_RECONSTRUCTION
+            )
+            if capture_rows
+            else "empty",
+            "evidence_role": "reconstruction_diagnostic",
             "live_cuda_event_ring_implemented": LIVE_CUDA_EVENT_RING_IMPLEMENTED,
             "research_audit_default": RESEARCH_BRIDGE_FIDELITY_AUDIT_DEFAULT,
             "issue_112_status": ISSUE_112_STATUS,
@@ -2258,7 +2249,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--capture",
         type=Path,
         default=None,
-        help="Optional reconstruction or runtime-CUDA capture.csv[.gz]; --verify ignores this",
+        help="Optional pre-built reconstruction capture.csv[.gz] (tests only; --verify ignores this)",
     )
     parser.add_argument(
         "--verify",
