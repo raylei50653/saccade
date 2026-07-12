@@ -41,6 +41,48 @@ struct TrackCandidateSnapshot {
     float x1, y1, x2, y2;
 };
 
+// Default-off research capture of the values actually computed by the
+// Consumer-A bridge kernel. This POD is written directly by CUDA and read back
+// unchanged by the host; no field participates in the bridge decision.
+struct BridgeFidelityEvent {
+    int frame = 0;
+    int lost_id = -1;
+    int cand_id = -1;
+    int lost_slot = -1;
+    int cand_slot = -1;
+    int lost_last_frame = 0;
+    int cand_first_frame = 0;
+    int gap = 0;
+    int bridge_at = 0;
+    int la = 0;
+    int anchor_mode = 0;
+    float anchor_rate = 0.0f;
+    float bdist = 0.0f;
+    float dist_h = 0.0f;
+    float fwd_r = 0.0f;
+    float bwd_r = 0.0f;
+    float v_lost_x = 0.0f;
+    float v_lost_y = 0.0f;
+    float v_cand_x = 0.0f;
+    float v_cand_y = 0.0f;
+    float ax = 0.0f;
+    float ay = 0.0f;
+    float cx0 = 0.0f;
+    float cy0 = 0.0f;
+    float ema_lost = 0.0f;
+    float ema_cand = 0.0f;
+    float h_ref = 0.0f;
+    float s_lost = 0.0f;
+    float w = 0.0f;
+    float production_threshold = 0.0f;
+};
+
+struct BridgeFidelityCapture {
+    std::vector<BridgeFidelityEvent> events;
+    int total_events = 0;
+    int overflow_events = 0;
+};
+
 struct UnifiedScoreParams {
     float w_sim_base = 0.0f;
     float w_iou_base = 0.0f;
@@ -129,6 +171,27 @@ public:
                                        const std::vector<float>& thr,
                                        bool audit_enabled = false);
     std::vector<int> get_relink_debug();
+
+    // Issue #112: default-off, decision-neutral native bridge-score capture.
+    void set_research_bridge_fidelity_audit(bool enabled, int capacity = 65536);
+    void clear_research_bridge_fidelity_audit();
+    BridgeFidelityCapture drain_research_bridge_fidelity_events();
+
+    /**
+     * @brief Issue #112 shadow bridge: propose (and capture) but never commit.
+     *
+     * The fidelity capture only runs inside relink_bidir_propose_kernel, which
+     * is gated on the bridge being enabled -- but an enabled bridge rewrites
+     * track identity in relink_bidir_commit_kernel, so captured events cannot
+     * be joined against a bridge-off pair cohort. Shadow mode skips the commit
+     * kernel: propose writes only bridge-private state (bridge_claim,
+     * bridge_cand_lost, track_revived, dbg, fidelity events), none of which is
+     * read by compact_results_kernel, and spawn only zeroes that state on slot
+     * reuse. Commit is the sole bridge write to track_ids/active, so skipping
+     * it makes output bit-identical to a bridge-off run while still emitting
+     * real float32 CUDA bridge scores.
+     */
+    void set_research_bridge_shadow(bool enabled);
 
     /**
      * @brief OA-SORT Occlusion-Aware Offset (OAO) penalty weight.

@@ -3707,6 +3707,60 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         .def("get_relink_debug", &GPUByteTracker::get_relink_debug,
              "Returns counters: [archived, births, revived, bridge_attempts, bridge_accepts, "
              "hook_eligible, hook_rejected, atom0..3 fires, app_veto, atom4 fires].")
+        .def("set_research_bridge_shadow", &GPUByteTracker::set_research_bridge_shadow,
+             py::arg("enabled"),
+             "Issue #112 shadow bridge: propose and capture but skip the commit kernel, "
+             "so tracker output stays bit-identical to a bridge-off run and captured "
+             "events remain joinable against a bridge-off pair cohort.")
+        .def("set_research_bridge_fidelity_audit", &GPUByteTracker::set_research_bridge_fidelity_audit,
+             py::arg("enabled"), py::arg("capacity") = 65536,
+             "Issue #112 default-off native Consumer-A bridge-score capture. "
+             "It records observations only and never changes bridge decisions.")
+        .def("clear_research_bridge_fidelity_audit", &GPUByteTracker::clear_research_bridge_fidelity_audit,
+             "Clear captured Issue #112 bridge events and restart the 1-based frame counter.")
+        .def("drain_research_bridge_fidelity_events", [](GPUByteTracker& self) {
+            const BridgeFidelityCapture capture = self.drain_research_bridge_fidelity_events();
+            py::list events;
+            for (const BridgeFidelityEvent& ev : capture.events) {
+                py::dict row;
+                row["frame"] = ev.frame;
+                row["lost_id"] = ev.lost_id;
+                row["cand_id"] = ev.cand_id;
+                row["lost_slot"] = ev.lost_slot;
+                row["cand_slot"] = ev.cand_slot;
+                row["lost_last_frame"] = ev.lost_last_frame;
+                row["cand_first_frame"] = ev.cand_first_frame;
+                row["gap"] = ev.gap;
+                row["bridge_at"] = ev.bridge_at;
+                row["la"] = ev.la;
+                row["anchor_mode"] = ev.anchor_mode;
+                row["anchor_rate"] = ev.anchor_rate;
+                row["bdist"] = ev.bdist;
+                row["dist_h"] = ev.dist_h;
+                row["fwd_r"] = ev.fwd_r;
+                row["bwd_r"] = ev.bwd_r;
+                row["v_lost_x"] = ev.v_lost_x;
+                row["v_lost_y"] = ev.v_lost_y;
+                row["v_cand_x"] = ev.v_cand_x;
+                row["v_cand_y"] = ev.v_cand_y;
+                row["ax"] = ev.ax;
+                row["ay"] = ev.ay;
+                row["cx0"] = ev.cx0;
+                row["cy0"] = ev.cy0;
+                row["ema_lost"] = ev.ema_lost;
+                row["ema_cand"] = ev.ema_cand;
+                row["h_ref"] = ev.h_ref;
+                row["s_lost"] = ev.s_lost;
+                row["w"] = ev.w;
+                row["production_threshold"] = ev.production_threshold;
+                events.append(std::move(row));
+            }
+            py::dict result;
+            result["events"] = std::move(events);
+            result["total_events"] = capture.total_events;
+            result["overflow_events"] = capture.overflow_events;
+            return result;
+        }, "Drain native Issue #112 events plus total and overflow counters.")
         .def("set_oao_params", &GPUByteTracker::set_oao_params,
              py::arg("tau"), py::arg("contest_thresh") = -1.0f, py::arg("score_w") = -1.0f,
              py::arg("occ_mode") = 0, py::arg("crowd_radius") = 0.0f, py::arg("height_gate") = 0.0f,

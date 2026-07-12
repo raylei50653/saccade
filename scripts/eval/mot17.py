@@ -378,6 +378,16 @@ if __name__ == "__main__":
         eval_kwargs["tiling"] = _tiling
         eval_kwargs["engine"] = "mamba"
 
+    # Recorded only when the opt-in D0 capture is enabled; harmless runtime
+    # metadata otherwise. These options are consumed before EvalConfig is
+    # built, so preserve them explicitly for the capture provenance packet.
+    eval_kwargs["research_bridge_fidelity_detector_provenance"] = {
+        "detector_type": type(eval_kwargs.get("detector")).__name__,
+        "mamba_ckpt": str(getattr(args, "mamba_ckpt", "") or ""),
+        "mamba_head_engine": str(getattr(args, "mamba_head_engine", "") or ""),
+        "fpn_backbone_engine": str(getattr(args, "fpn_backbone_engine", "") or ""),
+    }
+
     if getattr(args, "cpp_threads", 0) > 0:
         n = args.cpp_threads
         print(f"🚀 [C++ EvaluatorPool] Running with {n} threads")

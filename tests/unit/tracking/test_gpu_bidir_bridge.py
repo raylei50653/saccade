@@ -70,12 +70,20 @@ def _box(
 
 
 def _run_sequence(
-    *, bidirectional: bool, competing_candidates: bool = False
-) -> tuple[dict[int, list[int]], list[int]]:
+    *,
+    bidirectional: bool,
+    competing_candidates: bool = False,
+    fidelity_audit: bool = False,
+    shadow: bool = False,
+) -> tuple[dict[int, list[int]], list[int], dict[str, object] | None]:
     tracker = _tracker(
         bidirectional=bidirectional,
         bridge_px=0.7 if competing_candidates else 0.25,
     )
+    if fidelity_audit:
+        tracker.set_research_bridge_fidelity_audit(True, capacity=64)
+    if shadow:
+        tracker.set_research_bridge_shadow(True)
     buffers = tracker.allocate_result_buffers(device="cuda")
     gmc = torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float32, device="cuda")
     detections = (
@@ -132,12 +140,17 @@ def _run_sequence(
         torch.cuda.synchronize()
         count = int(buffers["count"].item())
         outputs[frame_id] = buffers["ids"][:count].detach().cpu().tolist()
-    return outputs, tracker.get_relink_debug()
+    capture = (
+        tracker.drain_research_bridge_fidelity_events(seq="bridge_fixture")
+        if fidelity_audit
+        else None
+    )
+    return outputs, tracker.get_relink_debug(), capture
 
 
 def test_bidirectional_bridge_revives_live_lost_identity() -> None:
-    without_bridge, without_debug = _run_sequence(bidirectional=False)
-    with_bridge, with_debug = _run_sequence(bidirectional=True)
+    without_bridge, without_debug, _ = _run_sequence(bidirectional=False)
+    with_bridge, with_debug, _ = _run_sequence(bidirectional=True)
 
     assert without_bridge[11] == [2]
     assert without_bridge[12] == [2]
@@ -154,8 +167,33 @@ def test_bidirectional_bridge_revives_live_lost_identity() -> None:
     assert with_debug[4] == 1
 
 
+def test_shadow_bridge_proposes_and_captures_without_changing_identity() -> None:
+    """Issue #112: shadow mode must be output-equivalent to a bridge-off run.
+
+    The fidelity capture only runs inside the propose kernel, which is gated on
+    the bridge being enabled -- but a committing bridge rewrites track identity,
+    so captured events could not be joined against a bridge-off pair cohort.
+    Shadow mode skips only the commit kernel, so the bridge still attempts (and
+    captures) while output identity stays bit-identical to bridge-off.
+    """
+    without_bridge, without_debug, _ = _run_sequence(bidirectional=False)
+    shadow, shadow_debug, capture = _run_sequence(
+        bidirectional=True, fidelity_audit=True, shadow=True
+    )
+
+    assert shadow == without_bridge
+    assert without_debug[3] == 0
+    assert shadow_debug[3] > 0  # bridge attempted
+    assert shadow_debug[4] == 0  # but never committed
+
+    assert capture is not None
+    events = capture["events"]
+    assert isinstance(events, list) and events
+    assert capture["overflow_events"] == 0
+
+
 def test_bidirectional_bridge_prefers_higher_score_candidate() -> None:
-    outputs, debug = _run_sequence(
+    outputs, debug, _ = _run_sequence(
         bidirectional=True,
         competing_candidates=True,
     )
@@ -172,7 +210,25 @@ def test_cost_mode_settings_do_not_leak_between_trackers() -> None:
     other.set_stability_cost_w(10.0)
     other.set_sinkhorn_lambda(7.0)
 
-    outputs, _debug = _run_sequence(bidirectional=False)
+    outputs, _debug, _ = _run_sequence(bidirectional=False)
 
     assert outputs[11] == [2]
     assert outputs[12] == [2]
+
+
+def test_bridge_fidelity_audit_is_observational_and_exports_native_values() -> None:
+    baseline, _debug, _ = _run_sequence(bidirectional=True)
+    captured, _debug, capture = _run_sequence(bidirectional=True, fidelity_audit=True)
+
+    assert captured == baseline
+    assert capture is not None
+    assert capture["complete"] is True
+    assert capture["overflow_events"] == 0
+    events = capture["events"]
+    assert isinstance(events, list)
+    assert events
+    event = events[0]
+    assert event["capture_mode"] == "runtime_cuda_event_ring"
+    assert event["production_threshold"] == pytest.approx(0.25)
+    assert event["h_ref"] >= 1.0
+    assert event["la"] == event["gap"] + event["bridge_at"] - 1

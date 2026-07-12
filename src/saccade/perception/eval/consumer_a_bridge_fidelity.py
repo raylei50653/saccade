@@ -7,16 +7,25 @@ Production surface named by the audit (read-only reference):
   ``src/tracking/tracker_gpu.cu`` :: ``relink_bidir_propose_kernel``
   primary quantity ``bdist`` vs production threshold ``0.4``.
 
-Capture identity (binding)
--------------------------
-* Live CUDA event-ring export is **not implemented**
-  (``LIVE_CUDA_EVENT_RING_IMPLEMENTED = False``).
-* The sealed D0 path is therefore a **kernel-formula reconstruction** from
-  no-relink MOT tracklets — **not** runtime Consumer-A capture of
-  ``foot_ring`` / ``ema_h`` / float32 kernel outputs.
-* Issue #112 runtime fidelity remains **incomplete** until default-off,
-  decision-neutral CUDA capture exists.  Reconstruction metrics are
-  diagnostics only and must not be labeled ``D4 exact captured Consumer-A``.
+Two statuses, never conflated
+-----------------------------
+* **Legacy v1 reconstruction packet (2026-07-11):** status
+  ``D0_FAIL_CLOSED_CAPTURE_UNAVAILABLE``.  It is a **kernel-formula
+  reconstruction** from no-relink MOT tracklets — *not* runtime Consumer-A
+  capture of ``foot_ring`` / ``ema_h`` / float32 kernel outputs.  That packet
+  stays frozen and its constants below keep their original meaning; they are
+  prefixed ``V1_LEGACY_`` so they cannot be read as the current status.
+* **Issue #112 (current): COMPLETE.**  A shadow bridge (propose + capture with
+  the commit kernel skipped) produces output byte-identical to a bridge-off run
+  while emitting real float32 CUDA values, so runtime capture now exists and is
+  joinable.  Terminal: **T2 PROXY_UNFAITHFUL** (the issue's own vocabulary:
+  ``not_fidelity_aligned``) — ``score_m_bridge`` is an **offline quantity** and
+  must not be used as an equivalent of production ``bdist``.
+  See ``docs/modules/semantic/research/d0_runtime_shadow_fidelity_results_20260712.md``
+  and the binding ``docs/research/eval/runtime_quantity_fidelity_protocol.md``.
+
+Reconstruction metrics remain diagnostics only and must never be labeled
+``D4 exact captured Consumer-A``.
 
 This module never mounts a production policy change.
 """
@@ -37,16 +46,95 @@ SPEED_WEIGHT_REF: Final[float] = 0.12  # s_lost reference for w
 
 # Research audit defaults — production path must leave these off.
 RESEARCH_BRIDGE_FIDELITY_AUDIT_DEFAULT: Final[bool] = False
-LIVE_CUDA_EVENT_RING_IMPLEMENTED: Final[bool] = False
+NATIVE_CUDA_BRIDGE_FIDELITY_CAPTURE_IMPLEMENTED: Final[bool] = True
+
+# ── Issue #112: CURRENT status ──────────────────────────────────────────────
+# Runtime capture exists (shadow bridge: propose + capture, commit skipped) and
+# the fidelity question is answered. Use these, not the V1_LEGACY_* constants,
+# for any statement about Issue #112 today.
+ISSUE_112_CURRENT_STATUS: Final[str] = "complete_runtime_shadow_capture"
+ISSUE_112_TERMINAL: Final[str] = "T2_PROXY_UNFAITHFUL"  # issue: not_fidelity_aligned
+# `score_m_bridge` is an offline quantity. It is NOT an equivalent of the
+# production CUDA `bdist` and must not be cited as one.
+SCORE_M_BRIDGE_IS_PRODUCTION_EQUIVALENT: Final[bool] = False
 
 # Capture mode vocabulary (sealed packet must use reconstruction, not "exact").
 CAPTURE_MODE_RECONSTRUCTION: Final[str] = "kernel_formula_reconstruction"
 CAPTURE_MODE_RUNTIME_CUDA: Final[str] = "runtime_cuda_event_ring"  # reserved
 
-# Issue / packet identity when live capture is unavailable.
-ISSUE_112_STATUS: Final[str] = "incomplete_runtime_capture_unavailable"
-PACKET_STATUS_FAIL_CLOSED: Final[str] = "D0_FAIL_CLOSED_CAPTURE_UNAVAILABLE"
-PRIMARY_FAIL_REASON: Final[str] = "runtime_capture_unavailable"
+# ── Event-key contract versions ─────────────────────────────────────────────
+#
+# v1 (LEGACY, frozen): the 5-field key used by the sealed reconstruction packet
+# in ``run_d0_bridge_fidelity.py``. It is retained *only* so historical sealed
+# packets keep validating under their original semantics. It must never be
+# reinterpreted: two of its fields are unsound for runtime capture.
+#
+#   * ``lost_id`` / ``cand_id`` are tracker-**local** ids. The evaluator remaps
+#     them to global ids before writing MOT output, and the offline pair cohort
+#     is built from that MOT output -- so local ids do not address the cohort.
+#     Joining on them yields *false* matches wherever the remap happens to be
+#     the identity (observed: MOT17-02, MOT17-05).
+#   * ``lost_last_frame`` / ``cand_first_frame`` are not real frame indices. The
+#     kernel derives them from a capture-local counter minus a track age
+#     (``fidelity_frame - la``); the tracker has no absolute frame counter, so
+#     they underflow to negative values. They are unusable as identity.
+#
+# v2 (runtime shadow fidelity): global-id key, no frame fields.
+EVENT_KEY_VERSION_V1_LEGACY: Final[str] = "d0_event_key_v1_local_legacy"
+EVENT_KEY_VERSION_V2: Final[str] = "d0_event_key_v2_global"
+
+EVENT_KEY_FIELDS_V2: Final[tuple[str, ...]] = (
+    "seq",
+    "lost_global_id",
+    "cand_global_id",
+)
+
+# Fields the v2 packet must NOT emit: they looked valid but carried impossible
+# (negative) frame indices. Dropped rather than deprecated-in-place.
+EVENT_KEY_V1_UNSOUND_FIELDS: Final[tuple[str, ...]] = (
+    "lost_last_frame",
+    "cand_first_frame",
+)
+
+# Exhaustive, mutually exclusive partition of every captured runtime proposal.
+# Fidelity may only be computed on MATCHED; the other two bound how far a
+# fidelity conclusion extrapolates and must never enter an agreement
+# denominator.
+PARTITION_MATCHED: Final[str] = "matched"  # joins the offline cohort
+PARTITION_COHORT_GAP: Final[str] = "cohort_gap"  # ids emitted, pair not enumerated
+PARTITION_UNEMITTED: Final[str] = "unemitted"  # id never reached MOT output
+PARTITIONS: Final[tuple[str, ...]] = (
+    PARTITION_MATCHED,
+    PARTITION_COHORT_GAP,
+    PARTITION_UNEMITTED,
+)
+
+
+def event_key_v2(seq: str, lost_global_id: int, cand_global_id: int) -> str:
+    """Canonical v2 event key. Global ids only -- local ids are a contract error."""
+    return f"{seq}|{int(lost_global_id)}|{int(cand_global_id)}"
+
+
+# ── V1 LEGACY (frozen) ──────────────────────────────────────────────────────
+# Status of the sealed 2026-07-11 *reconstruction* packet, which had no runtime
+# capture. These describe THAT PACKET, not Issue #112 today -- see
+# ISSUE_112_CURRENT_STATUS above.
+#
+# The names are kept because the sealed packet's runner imports them verbatim;
+# renaming them would mutate a frozen artifact. The V1_LEGACY_* aliases are the
+# preferred spelling for any new code.
+V1_LEGACY_ISSUE_112_STATUS: Final[str] = "incomplete_runtime_capture_unavailable"
+V1_LEGACY_PACKET_STATUS_FAIL_CLOSED: Final[str] = "D0_FAIL_CLOSED_CAPTURE_UNAVAILABLE"
+V1_LEGACY_PRIMARY_FAIL_REASON: Final[str] = "runtime_capture_unavailable"
+V1_LEGACY_LIVE_CUDA_EVENT_RING_IMPLEMENTED: Final[bool] = False
+
+# Frozen import surface of the sealed v1 runner. Do not rename.
+ISSUE_112_STATUS: Final[str] = V1_LEGACY_ISSUE_112_STATUS
+PACKET_STATUS_FAIL_CLOSED: Final[str] = V1_LEGACY_PACKET_STATUS_FAIL_CLOSED
+PRIMARY_FAIL_REASON: Final[str] = V1_LEGACY_PRIMARY_FAIL_REASON
+LIVE_CUDA_EVENT_RING_IMPLEMENTED: Final[bool] = (
+    V1_LEGACY_LIVE_CUDA_EVENT_RING_IMPLEMENTED
+)
 
 ANCHOR_MODE: Final[dict[str, int]] = {
     "center": 0,

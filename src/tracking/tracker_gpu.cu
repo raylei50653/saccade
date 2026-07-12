@@ -1966,6 +1966,9 @@ __global__ void relink_bidir_propose_kernel(
     // Research portable OR-tail (default-off): thr=null or portable_or_tail_enabled=0 → no-op.
     int portable_or_tail_enabled,
     const float* portable_thr,  // [5] score_m_bridge, abs_log_h, dist_h, abs_ratio_m1, resid_mean
+    // Issue #112 native fidelity capture. Default-off and decision-neutral.
+    int fidelity_audit_enabled, int fidelity_frame, BridgeFidelityEvent* fidelity_events,
+    int fidelity_capacity, int* fidelity_cursor, int* fidelity_overflow,
     int* track_revived, int* bridge_claim, int* bridge_cand_lost, int* dbg)
 {
     int cand = blockIdx.x * blockDim.x + threadIdx.x;
@@ -2095,8 +2098,49 @@ __global__ void relink_bidir_propose_kernel(
                 }
             }
         }
-        bool ok = bdist <= bridge_px;
         int gap_len = la - bridge_at + 1;
+        // Record the native float32 score before threshold/policy gates. An
+        // overflow is exported and invalidates a capture rather than silently
+        // dropping events from a later fidelity verdict.
+        if (fidelity_audit_enabled && fidelity_events && fidelity_cursor && fidelity_overflow) {
+            int event_idx = atomicAdd(fidelity_cursor, 1);
+            if (event_idx < fidelity_capacity) {
+                BridgeFidelityEvent& ev = fidelity_events[event_idx];
+                ev.frame = fidelity_frame;
+                ev.lost_id = track_ids[lost];
+                ev.cand_id = track_ids[cand];
+                ev.lost_slot = lost;
+                ev.cand_slot = cand;
+                ev.lost_last_frame = fidelity_frame - la;
+                ev.cand_first_frame = fidelity_frame - bridge_at + 1;
+                ev.gap = gap_len;
+                ev.bridge_at = bridge_at;
+                ev.la = la;
+                ev.anchor_mode = bridge_anchor;
+                ev.anchor_rate = bridge_anchor_rate;
+                ev.bdist = bdist;
+                ev.dist_h = dist_h;
+                ev.fwd_r = fwd_r;
+                ev.bwd_r = bwd_r;
+                ev.v_lost_x = vxl;
+                ev.v_lost_y = vyl;
+                ev.v_cand_x = vxc;
+                ev.v_cand_y = vyc;
+                ev.ax = lx;
+                ev.ay = ly;
+                ev.cx0 = cx0;
+                ev.cy0 = cy0;
+                ev.ema_lost = ema_lost;
+                ev.ema_cand = ema_cand;
+                ev.h_ref = h_ref;
+                ev.s_lost = s_lost;
+                ev.w = w;
+                ev.production_threshold = bridge_px;
+            } else {
+                atomicAdd(fidelity_overflow, 1);
+            }
+        }
+        bool ok = bdist <= bridge_px;
         // Gap-occupancy gate (long gaps only). Veto: an unexplained long-gap
         // bridge (path not covered by another track) is likely a different
         // person. Tiered expansion: a highly-covered path unlocks a looser
@@ -2796,6 +2840,9 @@ public:
         if (d_det_revive_uid_) cudaFree(d_det_revive_uid_);
         if (d_det_revive_generation_) cudaFree(d_det_revive_generation_);
         if (d_relink_dbg_) cudaFree(d_relink_dbg_);
+        if (d_bridge_fidelity_events_) cudaFree(d_bridge_fidelity_events_);
+        if (d_bridge_fidelity_cursor_) cudaFree(d_bridge_fidelity_cursor_);
+        if (d_bridge_fidelity_overflow_) cudaFree(d_bridge_fidelity_overflow_);
     }
 
     std::vector<TrackResult> update(float* d_boxes, float* d_scores, int* d_classes, int num_dets,
@@ -3243,10 +3290,21 @@ public:
                 d_features_, embed_dim_, bridge_app_veto_,
                 research_portable_or_tail_enabled_ ? 1 : 0,
                 research_portable_or_tail_enabled_ ? d_portable_thr_ : nullptr,
+                research_bridge_fidelity_audit_ ? 1 : 0,
+                research_bridge_fidelity_audit_ ? ++bridge_fidelity_frame_ : 0,
+                research_bridge_fidelity_audit_ ? d_bridge_fidelity_events_ : nullptr,
+                bridge_fidelity_capacity_,
+                research_bridge_fidelity_audit_ ? d_bridge_fidelity_cursor_ : nullptr,
+                research_bridge_fidelity_audit_ ? d_bridge_fidelity_overflow_ : nullptr,
                 d_track_revived_, d_bridge_claim_, d_bridge_cand_lost_, d_relink_dbg_);
-            relink_bidir_commit_kernel<<<grid, 256, 0, stream>>>(
-                d_active_, d_track_ids_, max_objs_,
-                d_bridge_claim_, d_bridge_cand_lost_, d_relink_dbg_);
+            // Shadow mode (Issue #112): commit is the only bridge write to
+            // track_ids/active, so skipping it leaves output bit-identical to a
+            // bridge-off run while propose still captures real CUDA scores.
+            if (!research_bridge_shadow_) {
+                relink_bidir_commit_kernel<<<grid, 256, 0, stream>>>(
+                    d_active_, d_track_ids_, max_objs_,
+                    d_bridge_claim_, d_bridge_cand_lost_, d_relink_dbg_);
+            }
         }
 
         // Compact: always launch
@@ -3426,6 +3484,62 @@ public:
         }
         research_portable_or_tail_enabled_ = true;
         (void)research_portable_or_tail_audit_;  // event ring reserved for audit mode
+    }
+
+    void set_research_bridge_shadow(bool enabled) {
+        research_bridge_shadow_ = enabled;
+    }
+
+    void set_research_bridge_fidelity_audit(bool enabled, int capacity) {
+        if (!enabled) {
+            research_bridge_fidelity_audit_ = false;
+            if (d_bridge_fidelity_events_) cudaFree(d_bridge_fidelity_events_);
+            if (d_bridge_fidelity_cursor_) cudaFree(d_bridge_fidelity_cursor_);
+            if (d_bridge_fidelity_overflow_) cudaFree(d_bridge_fidelity_overflow_);
+            d_bridge_fidelity_events_ = nullptr;
+            d_bridge_fidelity_cursor_ = nullptr;
+            d_bridge_fidelity_overflow_ = nullptr;
+            bridge_fidelity_capacity_ = 0;
+            bridge_fidelity_frame_ = 0;
+            return;
+        }
+        if (capacity <= 0) {
+            throw std::invalid_argument("bridge fidelity audit capacity must be positive");
+        }
+        if (bridge_fidelity_capacity_ != capacity || !d_bridge_fidelity_events_) {
+            if (d_bridge_fidelity_events_) cudaFree(d_bridge_fidelity_events_);
+            if (d_bridge_fidelity_cursor_) cudaFree(d_bridge_fidelity_cursor_);
+            if (d_bridge_fidelity_overflow_) cudaFree(d_bridge_fidelity_overflow_);
+            checkCuda(cudaMalloc(&d_bridge_fidelity_events_,
+                                 static_cast<size_t>(capacity) * sizeof(BridgeFidelityEvent)));
+            checkCuda(cudaMalloc(&d_bridge_fidelity_cursor_, sizeof(int)));
+            checkCuda(cudaMalloc(&d_bridge_fidelity_overflow_, sizeof(int)));
+            bridge_fidelity_capacity_ = capacity;
+        }
+        clear_research_bridge_fidelity_audit();
+        research_bridge_fidelity_audit_ = true;
+    }
+
+    void clear_research_bridge_fidelity_audit() {
+        bridge_fidelity_frame_ = 0;
+        if (d_bridge_fidelity_cursor_) checkCuda(cudaMemset(d_bridge_fidelity_cursor_, 0, sizeof(int)));
+        if (d_bridge_fidelity_overflow_) checkCuda(cudaMemset(d_bridge_fidelity_overflow_, 0, sizeof(int)));
+    }
+
+    BridgeFidelityCapture drain_research_bridge_fidelity_events() {
+        BridgeFidelityCapture capture;
+        if (!d_bridge_fidelity_cursor_ || !d_bridge_fidelity_overflow_) return capture;
+        checkCuda(cudaMemcpy(&capture.total_events, d_bridge_fidelity_cursor_, sizeof(int), cudaMemcpyDeviceToHost));
+        checkCuda(cudaMemcpy(&capture.overflow_events, d_bridge_fidelity_overflow_, sizeof(int), cudaMemcpyDeviceToHost));
+        int n = std::max(0, std::min(capture.total_events, bridge_fidelity_capacity_));
+        capture.events.resize(static_cast<size_t>(n));
+        if (n > 0) {
+            checkCuda(cudaMemcpy(capture.events.data(), d_bridge_fidelity_events_,
+                                 static_cast<size_t>(n) * sizeof(BridgeFidelityEvent),
+                                 cudaMemcpyDeviceToHost));
+        }
+        clear_research_bridge_fidelity_audit();
+        return capture;
     }
 
     // Debug accumulated over the sequence:
@@ -3866,6 +3980,14 @@ private:
     bool  research_portable_or_tail_audit_   = false;
     float portable_thr_host_[5] = {0.f, 0.f, 0.f, 0.f, 0.f};
     float* d_portable_thr_ = nullptr;  // [5] device thr vector
+    // Issue #112 default-off bounded native event buffer.
+    bool research_bridge_shadow_ = false;
+    bool research_bridge_fidelity_audit_ = false;
+    int bridge_fidelity_capacity_ = 0;
+    int bridge_fidelity_frame_ = 0;
+    BridgeFidelityEvent* d_bridge_fidelity_events_ = nullptr;
+    int* d_bridge_fidelity_cursor_ = nullptr;
+    int* d_bridge_fidelity_overflow_ = nullptr;
     float occ_gate_cover_       = 0.0f; // gap-occupancy veto: min occ_cover (0=off)
     int   occ_gap_min_          = 30;   // occ gates apply only to gaps >= this (short-gap occ is noise)
     float occ_expand_px_        = 0.0f; // tiered expansion: looser bridge_px when occ high (0=off)
@@ -4084,6 +4206,18 @@ void GPUByteTracker::set_research_portable_or_tail(bool enabled,
     pimpl_->set_research_portable_or_tail(enabled, thr, audit_enabled);
 }
 std::vector<int> GPUByteTracker::get_relink_debug() { return pimpl_->get_relink_debug(); }
+void GPUByteTracker::set_research_bridge_shadow(bool enabled) {
+    pimpl_->set_research_bridge_shadow(enabled);
+}
+void GPUByteTracker::set_research_bridge_fidelity_audit(bool enabled, int capacity) {
+    pimpl_->set_research_bridge_fidelity_audit(enabled, capacity);
+}
+void GPUByteTracker::clear_research_bridge_fidelity_audit() {
+    pimpl_->clear_research_bridge_fidelity_audit();
+}
+BridgeFidelityCapture GPUByteTracker::drain_research_bridge_fidelity_events() {
+    return pimpl_->drain_research_bridge_fidelity_events();
+}
 void GPUByteTracker::set_oao_params(float tau, float contest_thresh, float score_w, int occ_mode,
                                     float crowd_radius, float height_gate, float foot_gate,
                                     float ramp_frames) {

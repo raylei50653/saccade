@@ -5,6 +5,38 @@
 <!-- doc-date: 2026-07-12 -->
 <!-- doc-module: semantic -->
 
+## 2026-07-12 validity amendment (normative — read before the rest)
+
+Issue #112 measured this study's baseline ordering `s0 = score_m_bridge` against
+the live CUDA `bdist` it was assumed to represent. It **failed all three fidelity
+boxes** — decision agreement 95.07 % (bar 99 %), |Δ| q95 = 1.417 (bar 0.05),
+**Spearman ρ = 0.9558 (bar 0.98)** — with every validity gate passing and
+coverage passing. Terminal: `T2 PROXY_UNFAITHFUL`.
+See [s0 proxy validity amendment](s0_proxy_validity_amendment_20260712.md).
+
+Consequence for **this** study's terminal:
+
+* **Still true:** the 12-member Door-0 class contains no candidate that usably
+  improves ranking **over `s0`**. The class remains closed with respect to `s0`.
+* **No longer supported:** reading `T2 NO_USABLE_RANKING_POWER_IN_CLASS` as a
+  statement about the **production `bdist` ordering**. With ρ = 0.9558 the two
+  orderings are not interchangeable, so this study does not establish the absence
+  of ranking power over production's actual score.
+* **Scoping limit, not a reversal.** The study remains valid; its reach is
+  narrower than originally recorded.
+
+**Owner ruling (2026-07-12, PR #141) — final:** this study **stays CLOSED**, but
+its **mainline-transition status is revoked**; it is reclassified as a
+**`proxy-space capability closure`**. It remains a valid completed study (the
+12-member class is closed with respect to `s0`), it is not a mainline state
+transition (§20.7) because it cannot change the research status of the production
+`bdist` ordering, and it does **not** need to be reopened. No owner call remains
+open.
+
+Everything below is unmodified and must be read under this scope.
+
+Everything below is unmodified and must be read under this scope.
+
 > **Terminal: `T2 NO_USABLE_RANKING_POWER_IN_CLASS` (12-member tested
 > class).** Validity V1–V5 all PASS; headroom exists (H not triggered:
 > baseline PWA 0.878, top-1 0.590; 84/205 events are baseline top-1 misses);

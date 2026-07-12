@@ -5,6 +5,22 @@
 
 # Boolean-domain / gap-conditioned motion — production substrate mapping
 
+## 2026-07-12 validity amendment (normative — read before the rest)
+
+This document's "estimator-shifted" caveat on `score_m_bridge` was
+**unquantified**. Issue #112 quantified it, and it is worse than the caveat
+implied: against the live CUDA `bdist`, `s0` shows decision agreement 95.07 %
+(bar 99 %), |Δ| q95 = 1.417 — **3.54× the entire 0.4 threshold** — and Spearman
+ρ = 0.9558 (bar 0.98). Terminal: `T2 PROXY_UNFAITHFUL`.
+
+**`score_m_bridge` / `s0` is an offline quantity** and must not be cited as an
+equivalent of production `bdist`. Mainline consumes the real captured `bdist`
+from the runtime shadow capture. See
+[s0 proxy validity amendment](s0_proxy_validity_amendment_20260712.md) and the
+[runtime-quantity fidelity protocol](../../../research/eval/runtime_quantity_fidelity_protocol.md).
+
+Everything below is unmodified and must be read under this scope.
+
 > **Step-0 audit terminal (rev. 3, post PR #111 review):** `CONSUMER_SPLIT`.
 > Production relink is **four surfaces (A / B / C1 / C2)** with different
 > decision algebra and different reachable gap supports; no single verdict
