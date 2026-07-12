@@ -8,7 +8,8 @@
 > **Status:** `D0_FAIL_CLOSED_CAPTURE_UNAVAILABLE`  
 > **Terminal verdict:** `not_fidelity_aligned`  
 > **Primary fail reason:** `runtime_capture_unavailable`  
-> **Issue #112:** **incomplete** (runtime capture not implemented)  
+> **Issue #112:** **incomplete** (native capture buffer exists; no captured
+> evidence packet has yet been executed and accepted)
 > **Packet:** [evidence/d0_bridge_estimator_fidelity_20260711/](evidence/d0_bridge_estimator_fidelity_20260711/)
 
 Thread: [gap-conditioned probabilistic motion probe](../../../research/threads/gap_conditioned_probabilistic_motion_probe_20260711.md)
@@ -69,6 +70,7 @@ observation substrate**. Metrics are **reconstruction diagnostics only**.
 capture_mode = kernel_formula_reconstruction
 evidence_role = reconstruction_diagnostic_not_runtime_consumer_a_capture
 LIVE_CUDA_EVENT_RING_IMPLEMENTED = false
+NATIVE_CUDA_BRIDGE_FIDELITY_CAPTURE_IMPLEMENTED = true
 primary_fail_reason = runtime_capture_unavailable
 ```
 
@@ -77,7 +79,7 @@ primary_fail_reason = runtime_capture_unavailable
 | Field | Value |
 |:--|:--|
 | Research audit default | **off** |
-| Live CUDA event ring | **not implemented** |
+| Native CUDA event buffer | **implemented, default-off**; no D0 packet yet |
 | Sealed artifact | reconstruction from pairs + substrate |
 | Event key | `(seq, lost_id, cand_id, lost_last_frame, cand_first_frame)` exact |
 | Decision path | audit flag does not change accept/reject |
@@ -171,7 +173,8 @@ not_fidelity_aligned
 ```
 
 **Primary reason:** `runtime_capture_unavailable`  
-(live CUDA event ring not implemented; host reconstruction is not Consumer-A capture)
+(the sealed packet contains no native CUDA capture; host reconstruction is not
+Consumer-A capture)
 
 **Secondary reasons (diagnostics):** coverage gates fail; reconstruction GT
 boundary metrics fail threshold and rank-only floors.
@@ -209,7 +212,11 @@ Preset asserts `relink_bridge_px=0.4` and `relink_bridge_dir_bonus=0.0`.
 
 ## Limitations
 
-1. **No live CUDA capture** — primary blocker for Issue #112 completion.
+1. **No accepted live CUDA packet** — the default-off native buffer is present,
+   but the archived frozen substrate contains MOT outputs, not the detector and
+   frame-level inputs needed to reproduce the same live kernel events. A
+   current-main smoke capture therefore cannot be substituted for the frozen
+   exact-key cohort.
 2. MOT-tracklet EMA/foot reconstruction ≠ live `d_foot_ring_` / `d_ema_h_`.
 3. Coverage incomplete for `cand_len < 4`.
 4. Decomposition is ordered single-factor; interactions remain possible.
@@ -228,6 +235,24 @@ uv run python \
 uv run python \
   docs/modules/semantic/research/evidence/d0_bridge_estimator_fidelity_20260711/run_d0_bridge_fidelity.py \
   --verify
+
+# To collect a new native capture, set this only on the frozen evaluator run
+# with relink_bridge_enabled=true. It is default-off and aborts on overflow.
+export SACCADE_RESEARCH_BRIDGE_FIDELITY_CAPTURE_DIR=out/d0_runtime_capture
+export SACCADE_RESEARCH_BRIDGE_FIDELITY_CAPTURE_CAPACITY=65536
+
+# After the evaluator writes one JSON file per sequence, merge only complete
+# native captures into the verifier's exact-key CSV contract.
+uv run python scripts/tools/export_d0_runtime_capture.py \
+  --capture-dir out/d0_runtime_capture \
+  --output out/d0_runtime_capture/consumer_a_capture.csv.gz
+
+# This accepts runtime_cuda_event_ring rows for diagnostics. It does not
+# replace the sealed historical reconstruction packet or its fail-closed status.
+uv run python \
+  docs/modules/semantic/research/evidence/d0_bridge_estimator_fidelity_20260711/run_d0_bridge_fidelity.py \
+  --capture out/d0_runtime_capture/consumer_a_capture.csv.gz \
+  --output-dir out/d0_runtime_capture/packet
 
 uv run pytest tests/unit/test_d0_bridge_estimator_fidelity.py -q
 

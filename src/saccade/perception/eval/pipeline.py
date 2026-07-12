@@ -579,9 +579,29 @@ class EvalPipeline:
         # Research-only M-B1 portable OR-tail flags: validate *always* (even when
         # hook policy path is unset or bridge is off) so orphan audit flags cannot
         # be silently ignored.
-        _kw = getattr(cfg, "kwargs", {}) or {}
+        _kw = getattr(cfg, "kwargs", None)
+        if _kw is None:
+            _kw = {}
+            cfg.kwargs = _kw
         _audit = bool(_kw.get("research_portable_or_tail_audit", False))
         _audit_dir = _kw.get("research_portable_or_tail_audit_dir")
+        # Issue #112 is intentionally opt-in outside the production config
+        # surface. A capture directory enables a decision-neutral native score
+        # export; absence of the environment variable leaves allocation and
+        # kernel writes entirely disabled.
+        _d0_capture_dir = os.environ.get(
+            "SACCADE_RESEARCH_BRIDGE_FIDELITY_CAPTURE_DIR", ""
+        ).strip()
+        try:
+            _d0_capture_capacity = int(
+                os.environ.get(
+                    "SACCADE_RESEARCH_BRIDGE_FIDELITY_CAPTURE_CAPACITY", "65536"
+                )
+            )
+        except ValueError as exc:
+            raise RuntimeError(
+                "SACCADE_RESEARCH_BRIDGE_FIDELITY_CAPTURE_CAPACITY must be an integer"
+            ) from exc
         from saccade.perception.eval.portable_or_tail import (
             PortableAuditNotImplementedError,
             PortablePolicyError,
@@ -683,6 +703,27 @@ class EvalPipeline:
                 "research portable OR-tail policy set but relink/bridge path is "
                 "disabled or tracker lacks set_relink_params; refuse silent no-op"
             )
+
+        if _d0_capture_dir:
+            if not _bridge_enabled:
+                raise RuntimeError(
+                    "SACCADE_RESEARCH_BRIDGE_FIDELITY_CAPTURE_DIR requires "
+                    "relink_bridge_enabled=true"
+                )
+            if _d0_capture_capacity <= 0:
+                raise RuntimeError(
+                    "SACCADE_RESEARCH_BRIDGE_FIDELITY_CAPTURE_CAPACITY must be positive"
+                )
+            _d0_setter = getattr(
+                detector.tracker, "set_research_bridge_fidelity_audit", None
+            )
+            if _d0_setter is None:
+                raise RuntimeError(
+                    "tracker lacks bridge-fidelity audit; rebuild tracking extension"
+                )
+            _d0_setter(True, capacity=_d0_capture_capacity)
+            _kw["research_bridge_fidelity_capture_dir"] = _d0_capture_dir
+            _kw["research_bridge_fidelity_capture_capacity"] = _d0_capture_capacity
 
         if hasattr(detector.tracker, "set_unified_score_params"):
             detector.tracker.set_unified_score_params(

@@ -740,6 +740,89 @@ class GPUByteTracker:
         getter = getattr(self.tracker, "get_relink_debug", None)
         return list(getter()) if getter is not None else [0, 0, 0, 0, 0]
 
+    def set_research_bridge_fidelity_audit(
+        self, enabled: bool, *, capacity: int = 65536
+    ) -> None:
+        """Enable Issue #112's default-off, decision-neutral CUDA capture."""
+        setter = getattr(self.tracker, "set_research_bridge_fidelity_audit", None)
+        if setter is None:
+            if enabled:
+                raise RuntimeError(
+                    "native tracker missing bridge-fidelity audit; rebuild extension"
+                )
+            return
+        setter(bool(enabled), int(capacity))
+
+    def clear_research_bridge_fidelity_audit(self) -> None:
+        """Start a fresh capture sequence (including a fresh 1-based frame index)."""
+        clearer = getattr(self.tracker, "clear_research_bridge_fidelity_audit", None)
+        if clearer is None:
+            raise RuntimeError(
+                "native tracker missing bridge-fidelity audit; rebuild extension"
+            )
+        clearer()
+
+    def drain_research_bridge_fidelity_events(self, *, seq: str) -> dict[str, object]:
+        """Drain native Issue #112 events into the D0 exact-join row shape.
+
+        ``seq`` is intentionally supplied by the MOT/evaluation caller rather
+        than inferred from tracker state: a GPU tracker has no dataset identity.
+        The native layer exports overflow separately so an incomplete capture
+        cannot be mistaken for a valid fidelity sample.
+        """
+        if not str(seq).strip():
+            raise ValueError(
+                "bridge-fidelity capture requires a non-empty sequence name"
+            )
+        getter = getattr(self.tracker, "drain_research_bridge_fidelity_events", None)
+        if getter is None:
+            raise RuntimeError(
+                "native tracker missing bridge-fidelity audit; rebuild extension"
+            )
+        native = dict(getter())
+        from saccade.perception.eval.consumer_a_bridge_fidelity import (
+            CAPTURE_MODE_RUNTIME_CUDA,
+        )
+
+        rows: list[dict[str, object]] = []
+        for event in native.get("events", []):
+            row = dict(event)
+            row["seq"] = str(seq)
+            row["lost_id"] = int(row["lost_id"])
+            row["cand_id"] = int(row["cand_id"])
+            row["lost_last_frame"] = int(row["lost_last_frame"])
+            row["cand_first_frame"] = int(row["cand_first_frame"])
+            row["event_key"] = "|".join(
+                str(row[field])
+                for field in (
+                    "seq",
+                    "lost_id",
+                    "cand_id",
+                    "lost_last_frame",
+                    "cand_first_frame",
+                )
+            )
+            row["capture_mode"] = CAPTURE_MODE_RUNTIME_CUDA
+            row["evidence_role"] = "runtime_cuda_observation"
+            rows.append(row)
+        # Atomic append order is intentionally unspecified. Canonicalize the
+        # host export so packet serialization is deterministic.
+        rows.sort(
+            key=lambda row: (
+                str(row["event_key"]),
+                int(row["lost_slot"]),
+                int(row["cand_slot"]),
+            )
+        )
+        total = int(native.get("total_events", len(rows)))
+        overflow = int(native.get("overflow_events", 0))
+        return {
+            "events": rows,
+            "total_events": total,
+            "overflow_events": overflow,
+            "complete": overflow == 0 and total == len(rows),
+        }
+
     def set_oao_params(
         self,
         tau: float = 0.0,

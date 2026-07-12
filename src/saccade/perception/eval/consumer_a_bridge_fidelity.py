@@ -9,8 +9,10 @@ Production surface named by the audit (read-only reference):
 
 Capture identity (binding)
 -------------------------
-* Live CUDA event-ring export is **not implemented**
-  (``LIVE_CUDA_EVENT_RING_IMPLEMENTED = False``).
+* The native CUDA event buffer may be present, but it is not a completed D0
+  evidence packet until an evaluation run exports its exact-join rows with no
+  overflow. ``LIVE_CUDA_EVENT_RING_IMPLEMENTED`` therefore remains false for
+  the sealed reconstruction packet.
 * The sealed D0 path is therefore a **kernel-formula reconstruction** from
   no-relink MOT tracklets — **not** runtime Consumer-A capture of
   ``foot_ring`` / ``ema_h`` / float32 kernel outputs.
@@ -37,6 +39,11 @@ SPEED_WEIGHT_REF: Final[float] = 0.12  # s_lost reference for w
 
 # Research audit defaults — production path must leave these off.
 RESEARCH_BRIDGE_FIDELITY_AUDIT_DEFAULT: Final[bool] = False
+# Native capture plumbing exists behind an explicit tracker method. Keep this
+# distinct from LIVE_CUDA_EVENT_RING_IMPLEMENTED: the latter is an evidence
+# status for the sealed D0 packet, not a claim that a compiled buffer alone
+# completes Issue #112.
+NATIVE_CUDA_BRIDGE_FIDELITY_CAPTURE_IMPLEMENTED: Final[bool] = True
 LIVE_CUDA_EVENT_RING_IMPLEMENTED: Final[bool] = False
 
 # Capture mode vocabulary (sealed packet must use reconstruction, not "exact").

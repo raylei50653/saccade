@@ -1,6 +1,7 @@
 # mypy: ignore-errors
 import json
 import os
+import subprocess
 import threading
 import time
 from collections import OrderedDict
@@ -2780,6 +2781,60 @@ def run_eval(
                 f"atom4={_rd_named.get('atom4_resid_mean')} "
                 f"app_veto={_rd_named.get('app_veto')}"
             )
+
+        _d0_capture_dir = str(
+            (getattr(cfg, "kwargs", {}) or {}).get(
+                "research_bridge_fidelity_capture_dir", ""
+            )
+        ).strip()
+        if _d0_capture_dir:
+            _d0_drain = getattr(
+                detector.tracker, "drain_research_bridge_fidelity_events", None
+            )
+            if _d0_drain is None:
+                raise RuntimeError(
+                    "bridge-fidelity capture was enabled but the tracker cannot drain it"
+                )
+            _d0_capture = _d0_drain(seq=seq)
+            try:
+                _d0_commit = subprocess.check_output(
+                    ["git", "rev-parse", "HEAD"],
+                    cwd=Path(__file__).resolve().parents[4],
+                    text=True,
+                ).strip()
+            except (OSError, subprocess.CalledProcessError):
+                _d0_commit = "unknown"
+            _d0_capture["provenance"] = {
+                "capture_contract": "d0_runtime_cuda_v1",
+                "git_commit": _d0_commit,
+                "bridge": {
+                    "px": float(cfg.relink_bridge_px),
+                    "at": int(cfg.relink_bridge_at),
+                    "min_lost": int(cfg.relink_bridge_min_lost),
+                    "ttl": int(cfg.relink_bridge_ttl),
+                    "anchor": str(cfg.relink_bridge_anchor),
+                    "anchor_rate": float(cfg.relink_bridge_anchor_rate),
+                    "dir_bonus": float(cfg.relink_bridge_dir_bonus),
+                },
+                "detector": {
+                    **dict(
+                        (getattr(cfg, "kwargs", {}) or {}).get(
+                            "research_bridge_fidelity_detector_provenance", {}
+                        )
+                    ),
+                    "tiling": str(getattr(cfg, "tiling", "")),
+                },
+            }
+            _d0_path = Path(_d0_capture_dir)
+            _d0_path.mkdir(parents=True, exist_ok=True)
+            (_d0_path / f"{seq}.json").write_text(
+                json.dumps(_d0_capture, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            if not bool(_d0_capture.get("complete", False)):
+                raise RuntimeError(
+                    "bridge-fidelity capture overflowed; refuse an incomplete D0 packet"
+                )
 
         if _seq_state.relinker is not None and hasattr(
             _seq_state.relinker, "handover_count"
