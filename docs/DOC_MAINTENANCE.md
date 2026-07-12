@@ -50,9 +50,11 @@ Proposed → Accepted → (必要時) Superseded by ADR XXX
 - 操作步驟放 `reference/runbooks/` 或 `modules/<name>/runbooks/`
 - 目前沒有 `progress/`、`layers/` 或 `modules/<name>/decisions/` 目錄；不要在文件中指向這些路徑
 
-**生命週期（何時搬家 / 何時收單 / 誰觸發）＝ [契約 C6](ownership/doc_structure_contract.md#c6--lifecycle適用所有-doc-class不只-threads)，本檔不複述。**
-重點：**owner 接受 terminal 的同一個 PR 必須完成收單**（registry 更新 → terminal record → note 搬進 `closed/` → 移出 active 索引），
-`check_doc_structure.py --strict` 對違規紅燈。「之後再整理」是 doc 只增不減的主因，契約不允許。
+**生命週期＝ [契約 C6](ownership/doc_structure_contract.md#c6--lifecycle適用所有-doc-class不只-threads)（三條規則），本檔不複述：**
+① 關閉必須產出一份高密度結論（裁決／範圍／限制／證據在哪）；
+② 細節退出 active 視野但**內容不改**（只動位置與可見性，不重寫不壓縮）；
+③ 關閉與整理**同一個 PR 完成**——不得事後再開「整理文檔」任務。
+`check_doc_structure.py --strict`（pre_push）對 ②③ 的可機械判定部分紅燈。
 
 ---
 

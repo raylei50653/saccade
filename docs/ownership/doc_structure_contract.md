@@ -181,9 +181,8 @@ Numbers: each line keeps its own master. Entry docs that quote baselines still f
 
 ## C6 — Lifecycle（適用**所有** doc class，不只 threads）
 
-歷史上 C6 只寫了 threads 的 close 協議，research note 拿到了 `doc-status` 欄位卻**沒有轉移協議**：
-closed 的 note 不搬家、不離開索引、沒有觸發條件、checker 不擋。結果是 note 只增不減——
-**那是定義域的洞，不是紀律問題。** 本節補完它。
+歷史上 C6 只寫了 threads 的 close 協議：research note 拿到 `doc-status` 欄位卻**沒有轉移**——
+closed 的 note 不搬家、不離開索引、沒有觸發條件。note 只增不減**是這個機制的產物，不是紀律問題**。
 
 | status | Meaning | Entry behavior |
 |:--|:--|:--|
@@ -193,59 +192,37 @@ closed 的 note 不搬家、不離開索引、沒有觸發條件、checker 不�
 | `closed` | Done but still citable as navigation | **Move** into the owner's `closed/`; Closed index row + `closed:` date; ledger / no_go only if claims promote |
 | `archived` | One-shot / not current | Move to `docs/archive/` or archive index only |
 
-### C6.1 — 檔名承擔語義；目錄承擔生命週期
+### 關閉一個研究單元：三條規則（沒有第四條）
 
-- **檔名**：穩定的 `<object|unit>_<YYYYMMDD>.md` 語義名。**不得**把 terminal / 狀態寫進檔名
-  （否則收單時要改名，連結全斷）。檔名是**抽象語意連接**——看名字就知道它屬於哪個 object。
-- **目錄**：`<home>/` = active；`<home>/closed/` = 已收單；`docs/archive/` = 一次性 / 不再是方向。
-  **狀態的可見性由目錄表達，不由檔名。**
+**1 · 關閉必須產出一份高密度結論。**
+說清楚**裁決**、**適用範圍**、**限制**、**證據在哪裡**。一份，不是三份。
 
-### C6.2 — 細節與總結解耦（且細節**不可改寫**）
+**2 · 細節退出 active 視野，但內容不改。**
+封存 ＝ 移出索引、移入 `closed/`／`archive/`、降低可見性。
+**不需要**也**不得**重寫、壓縮、合併——sealed declaration 與 evidence packet 的價值就是
+「封的時候寫了什麼，事後不能改」。整理只動**位置與可見性**，不動**內容**。
 
-一個研究單元收單後，**只留三種東西**：
+**3 · 關閉流程必須同時完成整理。**
+**不得**先宣布實驗關閉、之後再開一個「整理文檔」任務。之後不會來——那正是 doc 只增不減的原因。
+owner 接受 terminal 的**同一個 PR** 內：結論就位 → 細節搬家 → 移出 active 索引 →
+[registry](../research/contracts/claim_state_registry.md) 狀態更新。
 
-```text
-state          → registry 一列（無散文、無數字）
-terminal record→ 恰好一份高密度總結：裁決 / 範圍 / 限制 / 指回證據
-detail         → declaration + evidence packet + 中間 note:內容 byte 不變,移出 active 視野
-```
+**實作細節（不是規則）：** 檔名保持穩定語義、不寫 terminal（否則收單改名會斷連結）；
+生命週期由**目錄**表達。thread 的既有 close checklist：
+[threads/README.md § How to close](../research/threads/README.md)。
 
-**硬約束：** sealed declaration 與 evidence packet **不得**為了「整理」而被壓縮、改寫或合併。
-封印的價值就在於「封的時候寫了什麼，事後不能改」。**「封存細節」只能是索引層與目錄層的動作**
-（移出視野、留一行 pointer），**不能是內容層的動作**。為了乾淨而砍掉稽核性，是把成本轉嫁給未來。
+### Enforcement
 
-### C6.3 — 觸發器：研究狀態轉移**驅動**文檔收單（這是本契約唯一有牙齒的地方）
+`check_doc_structure.py --strict`（pre_push 執行）**紅燈**：
 
-收單不是自律，是**合入條件**。觸發事件在研究層，執行動作在文檔層：
+| | 擋什麼 | 對應 |
+|:--|:--|:--|
+| **L1** | `doc-status: closed` 卻仍在 active 路徑 | 規則 2 · 3 |
+| **L2** | closed note 仍佔用 owning README 的 Active 區塊 | 規則 2 · 3 |
+| **L3** | 決策層（`research/contracts/`）長出 prose | C0.1（**與這三條無關**，是另一條規則） |
 
-```text
-觸發:  owner 接受一個 terminal（registry 的 state transition）
-         │
-         ▼
-同一個 PR 內必須完成（缺一項 = pre_push 紅燈）:
-  1. registry 對應 object 的 state / last_transition 更新
-  2. 恰好一份 terminal record（高密度;不複述統計 → 指回 declaration）
-  3. 該單元的 note / declaration `git mv` 進 owner 的 closed/（內容不變）
-  4. 從所有 active 索引移除,只留一行 pointer
-  5. 若該單元有 thread → thread 移入 threads/closed/（既有協議）
-```
-
-**不得**：在 owner 接受 terminal 的 PR 裡「之後再整理」。之後不會來——這正是 doc 只增不減的機制。
-
-**Threads close protocol (summary):** same change updates (1) thread frontmatter `doc-status: closed` + `closed: YYYY-MM-DD`, (2) body `Final status` / terminal + History close line, (3) **`git mv` into `docs/research/threads/closed/`** + fix relative links / repo pointers, (4) `docs/research/threads/README.md` Closed row + `closed/README.md` index. Do not delete the card; do not leave closed cards in `threads/` root. Full checklist: [threads/README.md § How to close](../research/threads/README.md).
-
-### C6.4 — Enforcement（fail-closed）
-
-`scripts/tools/check_doc_structure.py --strict` 對以下情形**紅燈**（其餘維持 warn-only）：
-
-| 規則 | 條件 |
-|:--|:--|
-| **L1 closed 必須搬家** | `doc-status: closed` 的 note 仍在 active 路徑（不在 `closed/` 或 `archive/` 下） |
-| **L2 closed 不得佔用 active 索引** | closed note 仍被 owning README 的 active 區塊索引 |
-| **L3 決策層不得長 prose** | `docs/research/contracts/` 下新增非契約 prose 檔（C0.1） |
-
-pre_push 以 `--strict` 執行。舊有未遷移的 note **豁免**（allowlist），新違規一律擋——
-**回填是清潔工作，不阻擋主線；但不得再製造新的違規。**
+**規則 1 不機械化**：結論夠不夠高密度，checker 判不了——它由 review 擋。假的牙齒比沒有牙齒更糟。
+既有 7 份 closed-in-active note 已 allowlist：**回填是清潔工作，不阻擋主線；但新違規一律擋。**
 
 **Closed decision line:** [tracker-decision/status_2026-07-09.md](../research/tracker-decision/status_2026-07-09.md) (P0–P8) is read-only; no drive-by reopen (WIP rules).
 
