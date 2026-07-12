@@ -8,19 +8,21 @@
 
 **這張表解決的是「可判定性」，不是「任務選擇」。** 它不決定要做什麼；它決定**什麼是合法的**。
 
-四層必須分開，否則這張表會退化成一個會自行膨脹的規劃系統：
+state、intent 與 execution 必須分開，否則這張表會退化成一個會自行膨脹的規劃系統：
 
 ```text
-registry   決定「現在是什麼」   —— state（本檔）
-contracts  決定「可以去哪裡」   —— admissible transitions（規則在 contracts/）
-O0         決定「現在選哪一個」 —— priority + WIP=1（module TODO）
-DEVELOPMENT 只公告選擇結果      —— projection,不得成為第二個狀態源
+registry       已接受的「現在是什麼」 —— state（本檔；慢）
+contracts      「可以去哪裡」          —— admissible transitions
+O0 / TODO      選一個 mainline charter —— WIP=1
+linked charter expected-state lease    —— 預計去哪；可替換，不是 state
+Current step / PR                       —— probes；可丟棄，不是 authority
+DEVELOPMENT                             —— 穩定路由，不承載 live state
 ```
 
 > **`next admissible unit` ≠ `next task`。**
 > 一個 object 可以同時有兩個合法後續（補 L4 transfer／因 decision relevance 消失而停止研究）。
 > **兩者都 admissible，但值不值得做不由 ladder 自己決定。** registry 只產生**合法候選集**；
-> 從候選集裡選出唯一 sole active 是 O0 的事（§ 5）。否則只是把「機械爬梯」換成
+> 從候選集裡選出唯一 decision-changing mainline charter 是 O0 的事（§ 5）。否則只是把「機械爬梯」換成
 > 「機械執行 next_admissible_unit」。
 
 ---
@@ -37,6 +39,9 @@ DEVELOPMENT 只公告選擇結果      —— projection,不得成為第二個�
 本表**不得**重新描述統計理由、不得抄結論、不得放數字。每一列必須附
 `supporting_declaration` / `accepting_review` / `blocking_clause` / `last_transition`，
 否則它就是一份會漂移的摘要表（[C5](../../ownership/doc_structure_contract.md)：不得有第二真相）。
+
+本表也**不得**記錄 expected / hoped-for state、正在跑的 probe 或僅因工作開始／停止而更新
+`last_transition`。這些只屬於 linked charter / `Current step`；只有 owner 接受 object state 改變才回寫本表。
 
 ---
 
@@ -297,7 +302,7 @@ last_reviewed_at: 2026-07-12
 
 **O0 的選擇（不是 registry 的）：** 候選集目前為空。目前除維護、治理與工程收尾外，無科學主線 WIP 鎖被授權。
 若候選集有多個成員，**由 O0 依 decision relevance、依賴關係與 WIP=1 選出唯一 active**，
-並在 module TODO 記錄選擇；DEVELOPMENT 只公告結果，不重述狀態。
+並在 module TODO 記錄唯一 charter pointer；預計狀態與 probe 放 linked charter，DEVELOPMENT 只提供穩定入口。
 
 **入口：** [semantic TODO](../../modules/semantic/TODO.md)
 

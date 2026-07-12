@@ -5,7 +5,9 @@
 ```text
 DEVELOPMENT.md       = stable global action router (D0–D4)
 TODO.md              = WIP lock / active pointer（sole active 一句）
-threads/             = 進行中母線（proposed · active · parked）
+threads/             = 進行中 charter（proposed · active · parked）
+Expected state       = charter 內可替換的 planning lease（非 accepted state）
+Current step / PR    = fast probes（可停止、替換、丟棄）
 threads/closed/       = 已結案 thread 檔案家（歷史導航；非 evidence）
 implementation PR    = engineering delivery authority (head/base/SHA/CI/files)
 module research      = 事實與分析
@@ -15,6 +17,17 @@ ledger/report_data/no_go = 升格後的正式事實
 ```text
 DEVELOPMENT.md → module TODO sole-active → active thread / contract → PR
 ```
+
+## Mainline charter / expected state / probe
+
+| 層 | 作用 | 更新代價 |
+|:--|:--|:--|
+| Mainline charter | 定義 decision question、boundary 與下一個 commit point；只有它可取得 `sole-active` | 中；改主線才 park / close / replace charter |
+| Expected state lease | 寫「預計抵達什麼」與 disconfirm / discard condition | 低；可在同一 charter 內替換或刪除，不改 registry |
+| Probe | `Current step` 或 implementation PR 中的執行嘗試 | 最低；可停止、替換、丟棄；無可重用 evidence 就不建 formal note |
+
+WIP=1 **只綁 mainline charter**。工程 follow-up、資料補件、文件收尾與 probe 可同時以
+`non-wip` 執行；它們只有在 owner 指定為新的 decision-changing charter 時才取得 WIP 鎖。
 
 **不做：**
 
@@ -64,6 +77,7 @@ DEVELOPMENT.md → module TODO sole-active → active thread / contract → PR
   不得冒充為 handoff。
 - `active` 不等於 sole-active。active 卡必須標出工作類別與 WIP 角色，
   讓工程收尾、維護、治理不會被誤讀為科學主線。
+- 同一 charter 內替換 expected-state lease 或 probe 不是另開主線；不得因此更新 registry 或製造 handoff。
 - `parked` 的既有分支只記 pause／resume 條件；它不是本輪可執行工作。
 - 新研究候選只有在 owner 明示要排下一個 charter 時才另列；在此之前不進
   交接帳、Active 表或 `Current step`。
@@ -120,6 +134,7 @@ archived  →  不再當現況導航                               →  docs/arc
 ```
 
 **不建：** 單次 bug fix、單次 ablation、一步能在 module research 結案的工作。
+沒有可重用 evidence 的 disposable probe 也不建 thread / research note；直接從 `Current step` 或 PR 移除即可。
 
 **Same-PR：** 新增 / 改狀態 thread → 更新本 README 對應表（Proposed / Active / Parked / Closed）。
 
@@ -129,6 +144,8 @@ archived  →  不再當現況導航                               →  docs/arc
 
 先完成 [通用研究收尾卡](../../../DEVELOPMENT.md#研究收尾卡)；本節只補 thread 特有的
 frontmatter、搬移與索引要求。
+
+只有整個 charter terminal 才關 thread。丟棄 probe 或替換 expected-state lease 不走此流程。
 
 關閉時 **同一變更** 做齊：
 
@@ -216,9 +233,12 @@ created: YYYY-MM-DD
 
 ## Status                 # work class + WIP role; proposed=non-wip; sole-active links to module TODO
 ## Current boundary
+## Expected state (lease) # target only;not accepted state;replaceable
+## Commit point           # when owner reviews whether state changed
+## Discard when           # disconfirm / expiry / replacement condition
 ## Read first
 ## Artifacts
-## Current step
+## Current step           # disposable probe(s);may be replaced without close / registry update
 ## Acceptance
 ## Must not
 ## History
@@ -258,9 +278,10 @@ closed-verdict: <optional token>
 | 層 | 負責 |
 |:--|:--|
 | [DEVELOPMENT.md](../../../DEVELOPMENT.md) | D0–D4 action cards；模組入口不承載 live status |
-| module `TODO.md` | **WIP 鎖**（sole active + links）；非任務敘事 |
+| module `TODO.md` | **mainline-charter WIP 鎖**（sole active + links）；不放 expected state / probe / 任務敘事 |
 | module / research README | 局部入口與檔案索引 |
 | **threads/** | 進行中母線（proposed · active · parked） |
+| Expected state / Current step | charter 內 planning lease / probe；可替換，不是 accepted state |
 | **threads/closed/** | 已結案 thread 檔案家；本 README Closed 表 = 索引 |
 | **implementation PR** | engineering delivery：branch tips、SHA、CI、changed files、review findings |
 | research contracts / notes | normative inputs · claim boundaries · research acceptance · stage authorization |

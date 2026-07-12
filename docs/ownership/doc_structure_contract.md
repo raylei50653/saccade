@@ -20,6 +20,8 @@ frontmatter, topic-hub pages (optional later).
 [治理]           docs/ownership/                    O-series · WIP=1 · this contract
 [研究規範]       docs/research/contracts/           method / evidence semantics / claim ladders（規則）
 [研究狀態]       docs/research/contracts/claim_state_registry.md   每個 object 現在站在哪一格（狀態）
+[主線意圖]       module TODO → linked thread/note   one charter + disposable expected-state lease
+[快速執行]       charter Current step / PR          probes; no authority until evidence is accepted
 [跨模組研究]     docs/research/                     cross-module experiments, decision semantics, global eval/training
 [任務母線]       docs/research/threads/             navigation-only continuous-task cards (not evidence)
 [模組]           docs/modules/<m>/                  module card + design + module research
@@ -36,16 +38,17 @@ Rules of thumb:
 
 ### C0.1 — 決策層不出文檔（decision layer carries state, not prose）
 
-**決策層只有兩個 artifact，兩者都是狀態，不是散文：**
+**決策層只有兩個 process surface，不是研究散文：**
 
 | 決策層 artifact | 內容 | 明確**不是** |
 |:--|:--|:--|
 | [claim_state_registry](../research/contracts/claim_state_registry.md) | 每個 research object 的當前狀態 + 合法候選集 | 證據、統計理由、數字 |
-| `docs/modules/<m>/TODO.md` | WIP=1 鎖（sole active 一行 + link） | 任務敘事、進度報告 |
+| `docs/modules/<m>/TODO.md` | WIP=1 鎖（decision-changing mainline charter 一行 + link） | expected state、probe、任務敘事、進度報告 |
 
 **規則：** 決策層**不得**新增 prose 檔。要解釋 → research note；要導覽 → thread；要規則 → `contracts/`。
 `DEVELOPMENT.md` 只提供穩定路由；各 README 只做索引或指標。兩者都**不得**重述任何 object 的
 rung / limits / substrate — 那是 registry 的 fact-ownership（C5 的「不得有第二真相」在狀態上的推論）。
+Expected state 是 linked charter 中可替換的 planning lease，不是 registry state；probe 是 execution，不是 decision artifact。
 
 ---
 
@@ -87,9 +90,9 @@ architecture*.md | research/ | runbooks/
 
 ### README four blocks
 
-1. **Card** — 職責 / 現況 / I/O / GO·NO-GO (existing template).
+1. **Card** — 職責 / I/O / stable design boundary；不複製 live status、數字或 GO·NO-GO verdict.
 2. **Design entry** — `architecture*` and/or “see tracker-decision / ADR …”.
-3. **Research index** (if `research/` exists) — **list every** `research/*.md` with status; put `🔄 Active` first.
+3. **Research index** (if `research/` exists) — **list every** `research/*.md` with neutral title + link；不複製 status / verdict / metrics.
 4. **TODO link** — `TODO.md` only.
 
 ### Detection exception
@@ -99,9 +102,9 @@ Label the dual layout at the top of that README (“detection 特例”).
 
 ### TODO rules (with C7)
 
-- WIP=1: at most one sole active (see [DOC_MAINTENANCE § WIP](../DOC_MAINTENANCE.md)).
+- WIP=1: at most one decision-changing mainline charter (see [DOC_MAINTENANCE § WIP](../DOC_MAINTENANCE.md)).
 - If no active work: explicit `⏸️` or one line “無 active”.
-- TODO is a **WIP register only**: sole active one-liner + link(s) to thread card and/or research note; optional parked one-liners.
+- TODO is a **WIP register only**: sole active charter one-liner + link(s) to thread card and/or research note; optional parked one-liners.
 - **No** long prose, metrics, command dumps, or closed-report bodies in TODO (those live in research / threads / ledger).
 
 ---
@@ -186,7 +189,7 @@ Numbers: each line keeps its own master. Entry docs that quote baselines still f
 | status | Meaning | Entry behavior |
 |:--|:--|:--|
 | `proposed` | Spec / mother-line written; not started or not authorized as sole active | Proposed section (threads); does not consume WIP |
-| `active` | In progress; should align with module sole active or a named cross-module line | README Active section |
+| `active` | In progress; `wip-role` distinguishes the sole-active charter from non-WIP follow-up / maintenance | README Active section |
 | `parked` | Intentionally paused | Parked section; does not consume WIP |
 | `closed` | Done but still citable as navigation | **Move** into the owner's `closed/`; Closed index row + `closed:` date; ledger / no_go only if claims promote |
 | `archived` | One-shot / not current | Move to `docs/archive/` or archive index only |
@@ -245,8 +248,9 @@ module README 的 research 索引尤其不複製裁決或指標。
 ## C7 — TODO vs research / threads role split
 
 ```text
-TODO.md              = WIP lock / active pointer   (not task narrative)
-docs/research/threads/ = continuous-task mother line (navigation-only)
+TODO.md              = one mainline-charter lock / pointer (not task narrative)
+docs/research/threads/ = charter navigation + disposable expected-state lease
+Current step / PR    = fast probe execution (replaceable; not authority)
 module|global research = facts, methods, commands, tables
 ledger/report_data/no_go = promoted formal facts
 conversation hook    = short-lived handoff (prefer promote into a thread)
@@ -254,8 +258,9 @@ conversation hook    = short-lived handoff (prefer promote into a thread)
 
 | Artifact | Role | Must not |
 |:--|:--|:--|
-| `TODO.md` | WIP=1 lock: sole active **one-liner** + links to thread and/or research; parked one-liners; explicit `⏸️` / 無 active when idle | Long prose, metrics tables, reasoning logs, full closed reports |
-| `docs/research/threads/` | Multi-step / multi-home **navigation** card | Evidence tables / second truth |
+| `TODO.md` | WIP=1 lock: one decision-changing charter **one-liner** + links; parked one-liners; explicit `⏸️` / 無 active when idle | Expected state、probe details、long prose、metrics、closed reports |
+| `docs/research/threads/` | Multi-step / multi-home charter navigation；可放 expected-state lease / commit point / discard condition | Accepted state、evidence tables、second truth |
+| `Current step` / implementation PR | Fast probe execution；可停止、替換、丟棄 | 冒充 accepted state；無 evidence 卻製造 formal note / close debt |
 | `research/*.md` | Full method, commands, tables, conclusions | Act as WIP lock |
 | `evidence_ledger.md` / `report_data/` / `no_go_registry` | Citable / formal aggregates | |
 
@@ -276,13 +281,23 @@ See research index / no_go / evidence_ledger.   # no embedded reports
 
 **Do not** paste full closed-out reports into `TODO.md`. New closes write a research file (or ledger/no_go row) first; TODO only points.
 
+### C7.1 — Three speeds
+
+| Speed | Owner | Rule |
+|:--|:--|:--|
+| Slow accepted state | `claim_state_registry` | 只有 owner 接受的 object transition；沒有 expected / hoped-for state |
+| Medium mainline intent | TODO pointer + linked thread/note | 一個 charter；`expected state` 是可替換 lease，必須附 commit point 與 discard condition |
+| Fast execution | `Current step` / PR | probe 可丟棄；只有可重用 evidence 才寫 research，只有 accepted transition 才回 registry |
+
+替換或刪除 expected-state lease、停止 probe，均不等於 research terminal，不觸發 registry transition、thread close 或 promotion。
+
 ---
 
 ## C8 — Relationship to O0 / O1
 
 | Layer | Owns |
 |:--|:--|
-| **O0 WIP=1** | At most one concurrent active goal per module owner |
+| **O0 WIP=1** | At most one decision-changing mainline charter per module owner；probe / evidence / close 可為 non-WIP |
 | **O1 objectives** | Primary / should-not-own; RESEARCH PRs must not flip production defaults ([routing](change_routing_matrix.md)) |
 | **This contract** | File homes, index discoverability, promotion paths |
 

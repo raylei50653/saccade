@@ -62,6 +62,6 @@ uv run scripts/eval/mot17.py \
 □ Primary objective named in PR description
 □ File cards: no should-not-own expansion without extraction note
 □ Checks from matrix run (or waived with reason)
-□ O0 WIP=1: same module not opening a second active goal
+□ O0 WIP=1: same module not opening a second decision-changing charter; probe / evidence / close stays non-WIP unless explicitly promoted
 □ No drive-by dual-stability / preset default in “docs” PR
 ```

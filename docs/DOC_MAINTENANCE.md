@@ -71,10 +71,11 @@ C6.4 lifecycle L1–L4 紅燈。
 
 **This is O0 of O-series: Ownership / Objective Isolation**（模組目標隔離階段）。
 
-WIP=1 是 **ownership governance 的 process seal**（docs-only）：每個模組負責人至多一個 concurrent active 目標。  
+WIP=1 是 **ownership governance 的 process seal**（docs-only）：每個模組負責人至多一個會改變正式決策的
+mainline charter。Expected-state lease、probe、證據補件、工程 follow-up 與文件收尾不因「正在做」就取得 WIP 鎖。
 **不是** tracker-decision 的 P9，也**不是** dual-stability / decision-layer 研究線的延伸。
 
-與 [事實所有權](#事實所有權與新鮮度-fact-ownership--freshness) 平行（fact-owner = 事實家；WIP=1 = 進行中目標家）。
+與 [事實所有權](#事實所有權與新鮮度-fact-ownership--freshness) 平行（fact-owner = 事實家；WIP=1 = mainline-charter owner）。
 
 已結案研究線（只讀、勿並開）：[research/tracker-decision/status_2026-07-09.md](research/tracker-decision/status_2026-07-09.md)（P0–P8 closed）。  
 **O1+** module objective map / routing / extraction：[ownership/README.md](ownership/README.md)（annotate-only；不在本節展開完整表格）。
@@ -84,15 +85,16 @@ WIP=1 是 **ownership governance 的 process seal**（docs-only）：每個模�
 ```text
 WIP = 1 per module owner  (O0 seal)
 - 各 docs/modules/<m>/TODO.md = WIP register：
-    sole active 一句 + link(s) 到 thread / research
+    sole active mainline charter 一句 + link(s) 到 thread / research
     無 active → 明確 ⏸️ / 無 active
     不寫長文、結果表、推理流水帳
+- charter 的 expected state / commit point / discard condition 放 linked thread 或 research note；不是 registry state
+- probe 放 charter Current step 或短期執行面；可替換或丟棄，不消耗 WIP、不觸發 formal close
 - 跨多步 / 跨家任務 → docs/research/threads/ 導航卡（不消耗 WIP 名額以外的敘事空間）
-- 要開第二目標：同一變更內先收合或 park 第一個
+- 要開第二個 decision-changing charter：同一變更內先收合或 park 第一個
 - 已結案研究線（如 tracker-decision P0–P8）僅在新證據下以「具名新線」重開，
   不做 drive-by 平行重構
-- 寫 paper（paper_outline + evidence_ledger）與改 tracker 行為是不同線；
-  同一負責人不同時並進
+- 寫 paper、工程 follow-up 或補 evidence 只有在被指定為 decision-changing charter 時才占 WIP
 ```
 
 ### Live entry
@@ -105,6 +107,7 @@ WIP = 1 per module owner  (O0 seal)
 - 跨模組 **依賴**（例如 geometry GMC 支援 detection VGT）不算第二目標；依賴細節放 thread 或 research，不做 dashboard 投影。
 - Parked one-liners 可列多項；只有 **sole active** 受 WIP=1 約束。
 - Research threads 可多張並存（navigation）；**不得**被當成第二個 sole active 來源。
+- 同一 charter 可依證據快速替換 expected state 與 probe；這不是開第二主線。
 
 ---
 
@@ -162,8 +165,8 @@ WIP = 1 per module owner  (O0 seal)
 □ 無幽靈路徑、無只寫在 chat 的數字？
 □ 系統模組實作進度表與代碼一致？
 □ ADR 狀態正確？
-□ TODO 仍是 WIP 鎖（sole active 一句 + link），未塞長文 / 結果表？（C7）
-□ WIP=1：module TODO 的 sole active 未雙開，且不再有手動 dashboard 投影？
+□ TODO 仍是 mainline-charter WIP 鎖（sole active 一句 + link），未塞 expected state / probe / 長文 / 結果表？（C7）
+□ WIP=1：module TODO 的 decision-changing charter 未雙開；non-WIP probe / 補件 / 收尾未冒充主線？
 □ 跨多步任務有 threads 卡或已確認不需？（threads README）
 □ 必要時通過 scripts/tools/check_gpu_contract.py 靜態效能合約檢查？
 □ 無失效連結或舊模型名稱？（check_doc_links / check_doc_stale_paths）

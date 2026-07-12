@@ -62,6 +62,6 @@ A candidate may enter an extraction **plan** PR when:
 1. Card exists in [module_objective_map.md](module_objective_map.md)  
 2. Routing checks are known ([change_routing_matrix.md](change_routing_matrix.md))  
 3. Parity / smoke owner is named  
-4. O0 WIP=1: extracting module is not mid-flight on an unrelated active goal  
+4. O0 WIP=1: extraction does not open a second decision-changing charter; unrelated probes / evidence / close may remain non-WIP
 
 O4 may move code only after those hold.

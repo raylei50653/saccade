@@ -13,6 +13,32 @@ created: 2026-07-12
 
 **PROPOSED · mainline-study · non-WIP (unauthorized, seal pending)** (2026-07-12).
 
+## Expected state (lease)
+
+If owner seals this charter, S0 is expected to decide one disposable planning target:
+whether the accepted axes keep the required safety characteristics on runtime
+coordinates. This is **not** an accepted registry state or an authorization to run.
+The lease may be replaced or dropped without a registry transition if the charter
+is not sealed, its decision relevance becomes zero, or a dependency changes.
+
+## Commit point
+
+Owner review of a sealed S0 evidence packet. Only that review may decide whether an
+already-registered object's accepted state, substrate, limits, or transition metadata
+changed. Opening, editing, or discarding this lease does not.
+
+## Discard when
+
+- owner declines to seal the S0 charter;
+- runtime fidelity is no longer decision-relevant to the safe-domain consumer;
+- a superseding substrate or contract makes this target obsolete.
+
+## Current step
+
+`none — proposed / seal pending`. No probe is authorized. A later probe may be
+replaced or discarded here without closing the charter; reusable evidence, if any,
+must move to the canonical module research home.
+
 ## Design (the architecture this line serves)
 
 ```text

@@ -26,7 +26,7 @@ has **one primary job**, explicit secondaries, and a clear **should-not-own** li
 
 | Phase | Name | Deliverable | Behavior? |
 |:--|:--|:--|:--|
-| **O0** | Workstream WIP Seal | WIP=1 per module owner | **No** (docs) — [DOC_MAINTENANCE § Workstream WIP](../DOC_MAINTENANCE.md) |
+| **O0** | Mainline-charter WIP Seal | One decision-changing charter per module owner; probes / evidence / close may be non-WIP | **No** (docs) — [DOC_MAINTENANCE § Workstream WIP](../DOC_MAINTENANCE.md) |
 | **O1** | Module Objective Map | this directory | **No** (annotate only) |
 | **O1.5** | Doc Structure Contract | [doc_structure_contract.md](doc_structure_contract.md) | **No** (homes / indexes / promotion) |
 | **O2** | Ownership notes for top modules | deeper notes per module | No |
