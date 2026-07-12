@@ -2136,6 +2136,26 @@ __global__ void relink_bidir_propose_kernel(
                 ev.s_lost = s_lost;
                 ev.w = w;
                 ev.production_threshold = bridge_px;
+                // The short-lost branch consumes only its final point; do not
+                // expose earlier ring entries as if they affected R.
+                ev.lost_window_size = (ln >= 4) ? 4 : 1;
+                ev.cand_window_size = 4;
+                ev.bridge_dir_bonus = bridge_dir_bonus;
+#pragma unroll
+                for (int i = 0; i < 12; ++i) {
+                    ev.lost_anchor_window[i] = 0.0f;
+                    ev.cand_anchor_window[i] = cring[i];
+                }
+                // The candidate ring is chronological, so bridge_anchor4
+                // consumes indices 0..3. The lost window is its chronological
+                // last-four; the short-lost branch consumes only the final
+                // point, preserved at index 0 with lost_window_size == 1..3.
+                int lost_window_start = (ln >= 4) ? (ln - 4) : (ln - 1);
+                for (int k = 0; k < ev.lost_window_size; ++k) {
+                    ev.lost_anchor_window[k * 3 + 0] = lring[(lost_window_start + k) * 3 + 0];
+                    ev.lost_anchor_window[k * 3 + 1] = lring[(lost_window_start + k) * 3 + 1];
+                    ev.lost_anchor_window[k * 3 + 2] = lring[(lost_window_start + k) * 3 + 2];
+                }
             } else {
                 atomicAdd(fidelity_overflow, 1);
             }

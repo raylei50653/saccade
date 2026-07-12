@@ -55,6 +55,12 @@
 
 > 全表義務見 [Doc Structure Contract C4](../../ownership/doc_structure_contract.md)。Active 對齊 [TODO.md](TODO.md) sole active（WIP=1）。
 
+### 🔄 Active mainline（sole active）
+
+| 文件 | 內容 |
+|------|------|
+| [research/score_temporal_to_stable_domain_20260712.md](research/score_temporal_to_stable_domain_20260712.md) | **score 時域→穩定域建模（sole active）** · 第一單元：為兩端 `bridge_anchor4` 的有效四點 window 與 short-lost fallback 建立 versioned shadow capture，先驗證 \(R\) 再談 retained-pair 排序；不重開 `s0` proxy 結論、不調 gate／權重／preset。對應 [active thread](../../research/threads/score_temporal_to_stable_domain_20260712.md)。 |
+
 ### 🔄 Active
 
 | 文件 | 內容 |

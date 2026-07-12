@@ -71,6 +71,21 @@ class _NativeCaptureStub:
             "s_lost": 0.01,
             "w": 0.3,
             "production_threshold": 0.4,
+            "lost_window_size": 4,
+            "cand_window_size": 4,
+            "lost_anchor_window": [
+                [90.0, 190.0, 80.0],
+                [94.0, 193.0, 80.0],
+                [98.0, 196.0, 80.0],
+                [100.0, 200.0, 80.0],
+            ],
+            "cand_anchor_window": [
+                [110.0, 200.0, 82.0],
+                [114.0, 203.0, 82.0],
+                [118.0, 206.0, 82.0],
+                [122.0, 209.0, 82.0],
+            ],
+            "bridge_dir_bonus": 0.0,
         }
         second = dict(base, lost_id=2, cand_id=4, lost_slot=1, cand_slot=2)
         return {"events": [base, second], "total_events": 2, "overflow_events": 0}
@@ -105,6 +120,10 @@ def test_runtime_capture_export_builds_exact_join_keys_and_is_complete() -> None
     assert rows[0]["capture_mode"] == CAPTURE_MODE_RUNTIME_CUDA
     assert rows[0]["evidence_role"] == "runtime_cuda_observation"
     assert rows[0]["bdist"] == pytest.approx(0.2)
+    assert rows[0]["lost_window_size"] == 4
+    assert rows[0]["cand_window_size"] == 4
+    assert rows[0]["lost_anchor_window"][0] == [90.0, 190.0, 80.0]
+    assert rows[0]["cand_anchor_window"][3] == [122.0, 209.0, 82.0]
 
 
 def test_runtime_capture_requires_sequence_identity() -> None:

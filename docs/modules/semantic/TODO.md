@@ -5,7 +5,13 @@
 
 ## Sole active
 
-**none** — Door 0 probe **CLOSED**（terminal `T2` RESEARCH ACCEPTED, [PR #136](https://github.com/raylei50653/saccade/pull/136) `9ec583c7`）；下一個 mainline study = **owner charter 決定**（擴 class probe／新訊號／其他方向皆須新 §20.2 宣告）。
+**Score temporal-to-stable-domain modeling — R1 capture contract**
+
+- Thread: [score_temporal_to_stable_domain_20260712.md](../../research/threads/score_temporal_to_stable_domain_20260712.md)
+- Canonical: [research charter](research/score_temporal_to_stable_domain_20260712.md)
+- Only current work: versioned default-off shadow capture of the two effective
+  `bridge_anchor4` windows / short-lost fallback, then predeclare replay and
+  temporal-stability criteria. No score fitting, gate change, or preset change.
 
 ## Previous line 0（closed; nav only）
 

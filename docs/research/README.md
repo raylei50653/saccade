@@ -10,7 +10,7 @@
 
 | 線 | 家 | 說明 |
 |------|------|------|
-| **semantic mainline** | [semantic TODO](../modules/semantic/TODO.md)（WIP 鎖） · [thread routing](threads/README.md) | **none** — Door 0 closed at T2. Motion retains only non-WIP #112 CUDA-capture follow-up; GT-support morphology and occ-exit remain parked. |
+| **semantic mainline** | [semantic TODO](../modules/semantic/TODO.md)（WIP 鎖） · [R1 thread](threads/score_temporal_to_stable_domain_20260712.md) | **R1 temporal-reduction capture contract** — capture the effective runtime windows needed to replay \(R\), then seal fidelity/stability before any real-`bdist` score study. |
 | **M-B1 portable hook** | [threads/m_b1…](threads/closed/m_b1_online_hook_20260709.md) | Offline closed；**not** semantic sole active；research default-off hook |
 | **VGT-Mamba** | [detection TODO](../modules/detection/TODO.md) | Detection sole active（訓練）；設計見 [detection README](../modules/detection/README.md) |
 | **GMC warp（依賴 VGT）** | [geometry TODO](../modules/geometry/TODO.md) | 非第二獨立目標 |

@@ -3723,6 +3723,17 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             py::list events;
             for (const BridgeFidelityEvent& ev : capture.events) {
                 py::dict row;
+                auto as_window = [](const float* values) {
+                    py::list window;
+                    for (int i = 0; i < 4; ++i) {
+                        py::list sample;
+                        sample.append(values[i * 3 + 0]);
+                        sample.append(values[i * 3 + 1]);
+                        sample.append(values[i * 3 + 2]);
+                        window.append(std::move(sample));
+                    }
+                    return window;
+                };
                 row["frame"] = ev.frame;
                 row["lost_id"] = ev.lost_id;
                 row["cand_id"] = ev.cand_id;
@@ -3753,6 +3764,11 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
                 row["s_lost"] = ev.s_lost;
                 row["w"] = ev.w;
                 row["production_threshold"] = ev.production_threshold;
+                row["lost_window_size"] = ev.lost_window_size;
+                row["cand_window_size"] = ev.cand_window_size;
+                row["lost_anchor_window"] = as_window(ev.lost_anchor_window);
+                row["cand_anchor_window"] = as_window(ev.cand_anchor_window);
+                row["bridge_dir_bonus"] = ev.bridge_dir_bonus;
                 events.append(std::move(row));
             }
             py::dict result;
