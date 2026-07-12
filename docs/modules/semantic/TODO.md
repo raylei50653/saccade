@@ -5,6 +5,10 @@
 
 ## Sole active
 
+*(none — S0 draft unauthorized; candidate set is empty)*
+
+## Proposed (unauthorized; draft)
+
 **Runtime-faithful safe domain — S0 axis-transfer declaration in `draft`, owner seal pending**
 
 - Thread: [runtime_faithful_safe_domain_20260712.md](../../research/threads/runtime_faithful_safe_domain_20260712.md)
@@ -17,12 +21,10 @@
   were certified on **offline proxy coordinates**
   (`ensure_prod_proxy_scores`; height ratio uses **raw** box heights, not runtime EMA),
   and [D0](research/d0_runtime_shadow_fidelity_results_20260712.md) already ruled that
-  substrate `T2 PROXY_UNFAITHFUL` with a **distorted GT boundary** (7.03 %
-  offline-safe/online-unsafe). A region proved safe offline does **not** inherit its
-  GT-retention guarantee at runtime. The closure prototype that would consume those
-  axes **has not started** — so the transfer must be audited first.
-- S0 needs **no new capture**: runtime coordinates + GT already coexist in the sealed
-  D0 v2 packet (1,684 exact-joined pairs; 893 unjoined are **fail-closed**).
+  substrate `T2 PROXY_UNFAITHFUL` (with a 7.03 % offline-safe/online-unsafe inversion on GT under the s0 proxy).
+  A region proved safe offline does **not** inherit its GT-retention guarantee at runtime.
+  The closure prototype that would consume those axes **has not started** — so the transfer must be audited first.
+- S0 draft proposes using the existing sealed D0 v2 packet; whether a new capture is required remains undecidable until the audit is sealed and executed.
 - **Nothing may be run before the seal event (declaration § 9).**
 
 ## Previous line 0（closed; nav only）

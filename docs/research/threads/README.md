@@ -161,13 +161,14 @@ archived  →  不再當現況導航                               →  docs/arc
 
 ## Proposed threads
 
-目前無 proposed thread。
+| Thread | Work class / WIP role | Current concrete work / Intent | Owner |
+|:--|:--|:--|:--|
+| [runtime_faithful_safe_domain_20260712.md](runtime_faithful_safe_domain_20260712.md) | mainline-study · **non-WIP** | (Seal pending) Gate builds a safe domain (coarse, one-sided GT-retention guarantee); S0 audits whether the accepted axes `{dist_h, log_h_ratio}` — certified on offline coordinates D0 ruled unfaithful — keep their \(L_{GT}\) bound at runtime (framework L4), before the closure is solved on them. | semantic |
 
 ## Active threads
 
 | Thread | Work class / WIP role | Current concrete work | Owner |
 |:--|:--|:--|:--|
-| [runtime_faithful_safe_domain_20260712.md](runtime_faithful_safe_domain_20260712.md) | mainline-study · **sole-active** | Gate builds a safe domain (coarse, one-sided GT-retention guarantee); score ranking separates GT. S0 = audit whether the accepted axes `{dist_h, log_h_ratio}` — certified on **offline** coordinates D0 ruled unfaithful — keep their \(L_{GT}\) bound at runtime (framework L4), **before** the closure is solved on them. | semantic |
 | [gap_conditioned_probabilistic_motion_probe_20260711.md](gap_conditioned_probabilistic_motion_probe_20260711.md) | engineering follow-up · **non-WIP** | **Only:** D0 / #112 runtime CUDA capture；Phase B `V5` is already recorded and authorizes no new semantic mainline work | semantic |
 | [association_recovery_registry_20260709.md](association_recovery_registry_20260709.md) | maintenance · **non-WIP** | Keep R/H ownership and path-health registry current | semantic |
 | [doc_structure_o15_followup_20260709.md](doc_structure_o15_followup_20260709.md) | governance · **non-WIP** | Pay down research-index debt; optional structure checks remain non-blocking | ownership |

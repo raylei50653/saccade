@@ -216,8 +216,8 @@ def _check_thread_status_projection() -> list[str]:
 
     # Parse index into sections and rows
     current_section = ""
-    # Map card name (e.g. "foo.md") -> (section_name, row_text)
-    card_rows: dict[str, tuple[str, str]] = {}
+    # Map card name (e.g. "foo.md") -> list of (section_name, row_text)
+    card_occurrences: dict[str, list[tuple[str, str]]] = {}
     import re
 
     for line in _read(index).splitlines():
@@ -240,7 +240,9 @@ def _check_thread_status_projection() -> list[str]:
             match = re.search(r"\[([^\]]+\.md)\]", line)
             if match:
                 card_name = match.group(1)
-                card_rows[card_name] = (current_section, line)
+                card_occurrences.setdefault(card_name, []).append(
+                    (current_section, line)
+                )
 
     all_cards = list(threads_dir.glob("*.md")) + list(
         (threads_dir / "closed").glob("*.md")
@@ -276,31 +278,35 @@ def _check_thread_status_projection() -> list[str]:
                 f"[L4] {rel}: card doc-status is 'proposed' but wip-role is '{role}' (must be 'non-wip')"
             )
 
-        if card.name not in card_rows:
-            continue  # index coverage is S2's warning, not a violation
-
-        indexed_section, row = card_rows[card.name]
-
-        # 1. Section validation
-        if indexed_section != status:
+        occurrences = card_occurrences.get(card.name, [])
+        if len(occurrences) > 1:
             rel = card.relative_to(REPO_ROOT).as_posix()
+            sections_str = ", ".join(f"'{sec}'" for sec, _ in occurrences)
             violations.append(
-                f"[L4] {rel}: card declares doc-status '{status}' but is listed in the "
-                f"'{indexed_section.capitalize()}' section of the threads index"
+                f"[L4] {rel}: card is projected multiple times in the index README (found in sections: {sections_str}; must appear exactly once)"
             )
 
-        # 2. WIP role validation (only for non-closed)
-        if status in ("active", "parked", "proposed") and role:
-            parts = [p.strip() for p in row.split("|")]
-            if len(parts) >= 3:
-                role_cell = parts[2]
-                expected_role_token = f"**{role}**"
-                if expected_role_token.lower() not in role_cell.lower():
-                    rel = card.relative_to(REPO_ROOT).as_posix()
-                    violations.append(
-                        f"[L4] {rel}: card declares wip-role '{role}' but the threads index "
-                        f"row WIP role cell '{role_cell}' does not match (expected '{expected_role_token}')"
-                    )
+        for indexed_section, row in occurrences:
+            # 1. Section validation
+            if indexed_section != status:
+                rel = card.relative_to(REPO_ROOT).as_posix()
+                violations.append(
+                    f"[L4] {rel}: card declares doc-status '{status}' but is listed in the "
+                    f"'{indexed_section.capitalize()}' section of the threads index"
+                )
+
+            # 2. WIP role validation (only for non-closed)
+            if status in ("active", "parked", "proposed") and role:
+                parts = [p.strip() for p in row.split("|")]
+                if len(parts) >= 3:
+                    role_cell = parts[2]
+                    expected_role_token = f"**{role}**"
+                    if expected_role_token.lower() not in role_cell.lower():
+                        rel = card.relative_to(REPO_ROOT).as_posix()
+                        violations.append(
+                            f"[L4] {rel}: card declares wip-role '{role}' but the threads index "
+                            f"row WIP role cell '{role_cell}' does not match (expected '{expected_role_token}')"
+                        )
     return violations
 
 

@@ -1,9 +1,9 @@
 ---
-doc-status: active
+doc-status: proposed
 doc-promotion: navigation-only; not evidence
 owner-module: semantic
 work-class: mainline-study
-wip-role: sole-active
+wip-role: non-wip
 created: 2026-07-12
 ---
 
@@ -11,9 +11,7 @@ created: 2026-07-12
 
 ## Status
 
-**ACTIVE · mainline-study · sole-active** (2026-07-12; took the WIP lock from
-[score temporal-to-stable-domain](score_temporal_to_stable_domain_20260712.md),
-which is now parked).
+**PROPOSED · mainline-study · non-WIP (unauthorized, seal pending)** (2026-07-12).
 
 ## Design (the architecture this line serves)
 

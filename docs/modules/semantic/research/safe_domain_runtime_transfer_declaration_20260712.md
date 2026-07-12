@@ -116,7 +116,7 @@ Exposure counts are reported wherever a rate is reported (framework § 2.2).
 |---|---|
 | Independence unit | the **lost track** |
 | Clustering structure | one lost track contributes many candidate pairs across slots and frames; pair-level counts are **not** independent trials |
-| Aggregation | hurt is aggregated to the unit **before** bounding: a track counts once iff ≥ 1 of its GT pairs falls inside \(D\). For the 893 unjoined events (539 cohort_gap and 354 unemitted):<br>1. **cohort_gap**: aggregated by track ID if present; events without a track ID are treated as separate individual units.<br>2. **unemitted**: since they lack global track IDs, each unemitted event falling inside \(D\) is conservatively treated as a distinct, independent lost-track unit (adding 1 to both \(N_{\mathrm{GT,exposed}}\) and \(N_{\mathrm{GT,hurt}}\)). |
+| Aggregation | hurt is aggregated to the unit **before** bounding: a track counts once iff ≥ 1 of its GT pairs falls inside \(D\). Base Clopper-Pearson UCB safety calculations are performed **only** on the matched pairs that have valid track identities. The 893 unjoined events (539 cohort_gap and 354 unemitted) represent coverage ambiguity, which is evaluated on their runtime coordinates and checked as a fail-closed flip condition (see V5). |
 | Bound | one-sided 95 % **Clopper–Pearson** upper bound \(\mathrm{UCB}(x,N)\) on the track-level counts |
 | Residual clustering (named, not dismissed) | **sequence-level** shared scene / pipeline state remains above the declared unit; the bound is therefore not claimed to be sequence-robust, and § 9.1 sequence robustness is **not** established by this unit |
 
@@ -135,9 +135,9 @@ constraint is one-sided (framework § 2.1 asymmetric loss).
 | V2 partition conservation | `matched + cohort_gap + unemitted = 2,577`, reproduced from the sealed packet |
 | V3 join integrity | every matched pair carries **both** coordinate systems and a GT flag; keys unique |
 | V4 exposure floor | \(N_{\mathrm{GT,exposed}} \ge 59\) lost tracks (mathematically required for 95% CP UCB ≤ 0.05 at zero harm) and ≥ 1,000 matched pairs, else `S0_UNDECIDABLE` |
-| V5 **worst-case unjoined bound** | the 893 unjoined events are **fail-closed** and aggregated deterministically: cohort_gap by track ID (or individually if missing), and each unemitted event inside \(D\) as a separate hurt unit. If recomputing UCB under this worst-case flips any certified point to unsafe, the terminal is `S0_UNDECIDABLE`. |
+| V5 **worst-case unjoined ambiguity (evaluated on \(D_{\mathrm{rt}}\))** | the 893 unjoined events are evaluated on their **runtime coordinates** (\(D_{\mathrm{rt}}\)). If \(M\) unjoined events fall inside \(D_{\mathrm{rt}}\) at a given grid point, they represent potential GT losses. We compute the worst-case UCB by adding \(M\) to both numerator and denominator of the matched UCB: \(\mathrm{UCB}_{\mathrm{worst}} = \mathrm{UCB}(X_{\mathrm{matched}} + M, N_{\mathrm{matched}} + M)\). If this flips a base-safe point to unsafe (\(\mathrm{UCB}_{\mathrm{worst}} > 0.05\)), the safety certification at this point is denied. If this worst-case flip occurs for any grid point certified safe offline, the terminal is `S0_UNDECIDABLE`. |
 | V6 no leakage | GT is used **only** to count \(L_{\mathrm{GT}}\); it never enters a coordinate, a threshold, or the region definition |
-| V7 non-empty offline safe set | ∃ at least one grid point with \(\mathrm{UCB}_{\mathrm{off}} \le \varepsilon\), else `S0_UNDECIDABLE` (prevents vacuous transfer approval when the offline safe set is empty) |
+| V7 non-empty active safe set | ∃ at least one grid point certified safe on offline coordinates (\(\mathrm{UCB}_{\mathrm{off}} \le \varepsilon\)) that is **active** (i.e. its offline reject mask is non-empty, meaning \(N_{\mathrm{FP,removed,off}} > 0\) on matched pairs), else `S0_UNDECIDABLE` (prevents vacuous transfer when the safe set is empty or rejects nothing) |
 
 ## 7. Frozen readouts
 
@@ -148,8 +148,8 @@ with exposures, and the safe/unsafe certification. Plus:
 | Readout | Frozen definition |
 |---|---|
 | axis agreement | per-axis Spearman \(\rho\) between offline and runtime values, on matched pairs |
-| direction agreement | count of pairs whose safer-side classification flips between substrates, per axis |
-| region agreement | Jaccard \(|D_{\mathrm{off}} \cap D_{\mathrm{rt}}|/|D_{\mathrm{off}} \cup D_{\mathrm{rt}}|\) |
+| direction agreement | count of matched pairs whose safer-side classification flips between substrates (i.e., \(\texttt{dist\_h}_{\mathrm{off}} \ge \theta_d \iff \texttt{dist\_h}_{\mathrm{rt}} < \theta_d\), or same for \(|\texttt{log\_h\_ratio}|\)), evaluated on all points. For any offline-safe grid point, the direction flips must be exactly zero on all axes |
+| region agreement | Jaccard similarity \(|D_{\mathrm{off}} \cap D_{\mathrm{rt}}|/|D_{\mathrm{off}} \cup D_{\mathrm{rt}}|\) of the reject masks. If both masks are empty (no pairs rejected by either), Jaccard is defined as 1.0; if only one is empty, it is 0.0 |
 | **the decisive readout** | for every \(\theta\) the **offline** substrate certifies safe, the **runtime** \(\mathrm{UCB}\) of that same region |
 
 ## 8. Terminal mapping (ordered, disjoint)
@@ -160,7 +160,7 @@ with exposures, and the safe/unsafe certification. Plus:
 | 1 | `S0_UNDECIDABLE` | V4 or V7 fails, **or** V5's worst-case unjoined bound flips the terminal | fail-closed; **no** portability claim in either direction; a wider runtime join is required before any closure solve |
 | 2 | **`AXES_TRANSFER_BROKEN`** | ∃ a grid point certified safe on **offline** coordinates (\(\mathrm{UCB}_{\mathrm{off}}\le\varepsilon\)) whose **runtime** harm exceeds the bound (\(\mathrm{UCB}_{\mathrm{rt}}>\varepsilon\)) | the signal axes do not transfer: the offline safety certification is denied by the runtime substrate. Morphology limits amended (§ 8.1); the closure **must** be solved on runtime coordinates. This is what D0's 7.03 % offline-safe/online-unsafe inversion on GT under the s0 proxy warns us about |
 | 3 | `AXES_TRANSFER_DEGRADED` | no safety inversion, but \(\rho < 0.98\) on either axis, **or** any safer-side direction flip, **or** Jaccard \(< 0.90\) | axes are **not interchangeable**: definitions may be reused, but every certification must be re-earned at runtime; **no offline number carries over** |
-| 4 | `AXES_TRANSFER_HOLDS` | every offline-certified point is runtime-certified and all agreement bars pass | the axes may carry into a separately declared closure solve (S2) as a prerequisite for L4, but region-level portability remains unestablished until a closure is solved and tested |
+| 4 | `AXES_TRANSFER_HOLDS` | every point in the active safe set is runtime-certified, and all agreement bars pass (\(\rho \ge 0.98\) on both axes, zero direction flips, and Jaccard \(\ge 0.90\)) | the axes may carry into a separately declared closure solve (S2) as a prerequisite for L4, but region-level portability remains unestablished until a closure is solved and tested |
 
 ### 8.1 Pre-authorized consequence (documentation only)
 
