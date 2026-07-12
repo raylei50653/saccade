@@ -11,13 +11,19 @@
 - 文件家 / research 索引 / 數字升格 → [docs/ownership/doc_structure_contract.md](docs/ownership/doc_structure_contract.md)（**O1.5**）
 - 跨子類連續研究任務 → [docs/research/threads/](docs/research/threads/) 建 navigation-only thread；不放長表、不取代 evidence_ledger / module research。
 - 接續任務 → [docs/research/threads/README.md](docs/research/threads/README.md)（先看 Active threads，再進單卡）
-- **Active research task routing（PR-driven）：**
+- **Active research task routing（contract-driven；四層分離）：**
   ```text
-  DEVELOPMENT.md
-  → module TODO sole-active item
-  → active research thread / normative contract
-  → current implementation PR, when one exists
+  registry    決定「現在是什麼」  → docs/research/contracts/claim_state_registry.md（state fact-owner）
+  contracts   決定「可以去哪裡」  → docs/research/contracts/（合法轉移 / 證據型別 / claim ladder）
+  O0          決定「現在選哪一個」→ module TODO sole active（從候選集中選,WIP=1）
+  DEVELOPMENT 只公告選擇結果      → 本檔（projection;不得成為第二個狀態源）
   ```
+  registry **只產生合法候選集**，**不選任務**：`next admissible unit ≠ next task`。
+  推導規則：**證據型別錯層 → 改層**（不是修統計）；**substrate 未證（L4 缺）→ 先做 transfer 審計**
+  （「已被授權」≠「admissible」）；**blocker 分型**（inadmissibility ＝排除／dependency ＝展開依賴）；
+  **decision relevance 過不了反事實測試（正反結果都不改變任何已知決策）→ 不得取得 WIP 鎖**。
+  某 layer 若無契約，其 object ＝ `transition_semantics: unavailable`（**合法狀態**，把缺口顯式化）。
+  **本檔不重述任何 object 的 rung／limits／substrate**——那些只從 registry 投影。
   GitHub PR metadata is the authority for head/base branch, merge base, head SHA, changed files, CI/test status, review findings, and update history. Research documents remain the authority for research gate, accepted priors, normative inputs, authorized/unauthorized scope, claim boundaries, research acceptance, and next-stage authorization.
 - **Lock:** PR merge ≠ research acceptance; engineering-ready ≠ evidence promotion; research acceptance and next-stage authorization remain chat-side / research-owner gates.
 - **TODO = WIP 鎖**（sole active 一句 + link）；**不是**任務敘事 / 上下文恢復 → [DOC_MAINTENANCE § WIP](docs/DOC_MAINTENANCE.md) · [契約 C7](docs/ownership/doc_structure_contract.md)
@@ -106,7 +112,8 @@ Cheb-GR / bank / offline identity / occ-exit → 文檔家 **semantic**（非 re
 |:--|:--|:--|
 | 修 crash / flake，行為不變 | **D0** | 測試 + pre_push |
 | 單模組 ablation，default-off | **D1** | module research + README 索引 + TODO 連結 |
-| 數據驅動 gate / relink 訊號（不改 preset） | **D1** | 契約 [signal_table_schema](docs/research/eval/signal_table_schema.md) · **深度分析總帳** [signal_analysis_ledger](docs/research/eval/signal_analysis_ledger.md)（一訊號一列；數字在 `out/signal_study/`） |
+| 數據驅動 gate / relink 訊號（不改 preset） | **D1** | 契約 [signal_table_schema](docs/research/contracts/signal_table_schema.md) · **深度分析總帳** [signal_analysis_ledger](docs/research/eval/signal_analysis_ledger.md)（一訊號一列；數字在 `out/signal_study/`） |
+| **安全域 / safe region / reject 規則**（`max G_FP` s.t. `L_GT ≤ ε`） | **D2** | **數學契約（先讀，勿自造統計）** [feasible-set framework](docs/research/contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)（feasible/productive-safe set · region geometry · **independence unit 強制宣告** · claim ladder L0–L6 · §13 forbidden shortcuts）· 打包 [RegionAsset 契約](docs/research/contracts/safe_region_asset_contract.md) · 分層 [gate vs score](docs/research/contracts/signal_table_schema.md) |
 | occ-exit / Cheb-GR / sparse bank | **D1→D2** | **semantic** research 全家；引用數字再 D2 promotion |
 | 外觀 ceiling / 特徵抽取實作 | **D1** | **reid** README/research；關聯政策仍看 semantic |
 | GMC / Kalman 實驗 | **D1→D3** | geometry research + eval 筆記；動 default → 加上 tracker-decision + contract |
@@ -138,24 +145,25 @@ uv run scripts/eval/mot17.py --preset mamba_whole_graph --detector SDP --double-
 
 ### 模組現狀總覽
 
-> **Dashboard fact-owner：本節。** 只鏡射各 `docs/modules/<m>/TODO.md` 的 **sole active one-liner**（WIP 鎖），**不**鏡射細節、**不**另立第二待辦清單。  
-> **任務敘事 / 接續** → [docs/research/threads/](docs/research/threads/README.md)；**事實** → module research / ledger。  
+> **本表不是狀態源。** 它只列模組與入口——**sole active 的內容寫在 module TODO（WIP 鎖），研究對象的狀態寫在
+> [claim_state_registry](docs/research/contracts/claim_state_registry.md)**。本檔一旦複述那些內容就會漂移
+> （實測：這張表曾停在一個已關閉的單元上）。**要知道現在在做什麼 → 點進去。**  
 > **O0 / WIP=1：** 每模組 🔄 最多一個 active。規則：[DOC_MAINTENANCE § WIP](docs/DOC_MAINTENANCE.md)。  
 > tracker-decision P0–P8 **closed**：[status](docs/research/tracker-decision/status_2026-07-09.md) — 非 O-series 延續。
 
-| 模組 | 狀態 | sole active（WIP 鎖） | TODO |
-|------|------|---------------------|------|
-| 🔍 detection | 🔄 active | VGT-Mamba（訓練中） | [↗](docs/modules/detection/TODO.md) |
-| 📐 geometry | 🔄 active | GMC Warp 精度驗證（依賴 VGT） | [↗](docs/modules/geometry/TODO.md) |
-| 🧬 reid | ⏸️ 暫緩 | — | [↗](docs/modules/reid/TODO.md) |
-| 🔄 lifecycle | 📋 待辦 | evaluator lifecycle 測試切片 | [↗](docs/modules/lifecycle/TODO.md) |
-| 🌀 motion | 🟢 收斂 | — | [↗](docs/modules/motion/TODO.md) |
-| 🤝 semantic | 🔄 active | Score temporal-to-stable-domain R1 capture contract（先驗證 runtime \(R\)，不擬合 score） | [↗](docs/modules/semantic/TODO.md) |
-| ⚡ trigger | 🟢 收斂 | — | [↗](docs/modules/trigger/TODO.md) |
-| 🖥️ streaming | 🟢 收斂 | — | [↗](docs/modules/streaming/TODO.md) |
-| 💾 storage | 🟢 收斂 | — | [↗](docs/modules/storage/TODO.md) |
-| 🧠 cognition | 🟢 收斂 | — | [↗](docs/modules/cognition/TODO.md) |
-| ⚙️ resource | 🟢 收斂 | — | [↗](docs/modules/resource/TODO.md) |
+| 模組 | 狀態 | 入口（sole active 的內容在這裡） |
+|------|------|------|
+| 🔍 detection | 🔄 active | [TODO](docs/modules/detection/TODO.md) · [README](docs/modules/detection/README.md) |
+| 📐 geometry | 🔄 active | [TODO](docs/modules/geometry/TODO.md) |
+| 🧬 reid | ⏸️ 暫緩 | [TODO](docs/modules/reid/TODO.md) |
+| 🔄 lifecycle | 📋 待辦 | [TODO](docs/modules/lifecycle/TODO.md) |
+| 🌀 motion | 🟢 收斂 | [TODO](docs/modules/motion/TODO.md) |
+| 🤝 semantic | 🔄 active | [TODO](docs/modules/semantic/TODO.md) · [registry](docs/research/contracts/claim_state_registry.md) |
+| ⚡ trigger | 🟢 收斂 | [TODO](docs/modules/trigger/TODO.md) |
+| 🖥️ streaming | 🟢 收斂 | [TODO](docs/modules/streaming/TODO.md) |
+| 💾 storage | 🟢 收斂 | [TODO](docs/modules/storage/TODO.md) |
+| 🧠 cognition | 🟢 收斂 | [TODO](docs/modules/cognition/TODO.md) |
+| ⚙️ resource | 🟢 收斂 | [TODO](docs/modules/resource/TODO.md) |
 
 全局矩陣 / 跨模組待辦：[docs/TODO.md](docs/TODO.md)。  
 Detection 設計索引（非本檔展開）：[docs/modules/detection/README.md](docs/modules/detection/README.md)。
@@ -257,6 +265,7 @@ research acceptance / next-stage auth = chat-side / research-owner gates
 | Stage dataflow | [docs/reference/pipeline_flow.md](docs/reference/pipeline_flow.md) |
 | NO-GO 總表 | [docs/reference/no_go_registry.md](docs/reference/no_go_registry.md) |
 | 決策層（closed） | [tracker-decision/](docs/research/tracker-decision/README.md) |
+| **研究規範層**（方法／統計／claim ladder；**先讀，勿自造**） | **[docs/research/contracts/](docs/research/contracts/README.md)** |
 | 全局 research 入口 | [docs/research/README.md](docs/research/README.md) |
 | 連續任務母線 | [docs/research/threads/](docs/research/threads/README.md) |
 | Paper assets | [report_data/README.md](report_data/README.md) |

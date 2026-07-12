@@ -18,7 +18,7 @@
 
 > **§20 re-classification (2026-07-12, bookkeeping).** Under the sealed
 > role-aligned experiment contract
-> ([framework §20](../../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md),
+> ([framework §20](../../../research/contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md),
 > PR #133), the frozen portable OR-tail is a **performance upper-bound
 > candidate** (§20.4) — it documents what the frozen atom family can remove
 > offline under the permitted complexity class — **not a gate design

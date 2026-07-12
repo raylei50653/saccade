@@ -94,7 +94,7 @@ uv run python scripts/tools/summarize_relink_pairs.py \
   --relink off --interpolate off --double-buffer true
 ```
 
-D1 真 m 煙測 pointer： [m_b1_substrate_smoke_20260709.md](m_b1_substrate_smoke_20260709.md)。
+D1 真 m 煙測 pointer： [m_b1_substrate_smoke_20260709.md](../eval/m_b1_substrate_smoke_20260709.md)。
 
 **過時策略：** 重測 → **新 `study_id`/stamp**；勿改歷史 markdown 內嵌表。s 文方法仍可引用；m 分數以最新 study_dir 為準。
 
@@ -765,7 +765,7 @@ regressed  = E(B) \ E(A)
 
 > **維護規則：** 加/改 tool 或「有／缺」狀態時只改**本節**，不另開 inventory 文。  
 > 開發薄入口：[DEVELOPMENT.md](../../../DEVELOPMENT.md) §3「數據驅動 gate / relink」。  
-> **深度分析總帳（一訊號一列）：** [signal_analysis_ledger.md](signal_analysis_ledger.md) — 契約在本檔；**分析進度 / pointer 在 ledger**。  
+> **深度分析總帳（一訊號一列）：** [signal_analysis_ledger.md](../eval/signal_analysis_ledger.md) — 契約在本檔；**分析進度 / pointer 在 ledger**。  
 > 腳本查找表（無結論）：[association_recovery_scripts_index](../../modules/semantic/research/association_recovery_scripts_index_20260709.md)。
 
 ### 8.1 能用（按問題）
@@ -773,7 +773,7 @@ regressed  = E(B) \ E(A)
 | 我想知道… | 先開 | 狀態 |
 |:--|:--|:--|
 | 契約：A/B1/B2、study_dir、safe-reject | **本檔** §0.1–0.4 | ✅ |
-| **深度分析進度（一訊號一列）** | [signal_analysis_ledger.md](signal_analysis_ledger.md) | ✅ 索引；數字仍在 study_dir |
+| **深度分析進度（一訊號一列）** | [signal_analysis_ledger.md](../eval/signal_analysis_ledger.md) | ✅ 索引；數字仍在 study_dir |
 | **Energy transform separability**（raw/log/sqrt/rank） | `scripts/tools/energy_transform_separability.py` · [note](../../modules/semantic/research/m_b1_research_history_20260709_20260710.md) | ✅ **禁 AUC 比 transform**；用 d′/Fisher/logloss |
 | **Combo AND safe region**（2D thr surface） | `scripts/tools/combo_gate_safe_region.py` · [note](../../modules/semantic/research/m_b1_research_history_20260709_20260710.md) | ✅ 報 **area/recoverability**，不只要 best FP |
 | **Gate rule search**（Pareto·itemset·greedy） | `scripts/tools/gate_rule_search.py` · [note](../../modules/semantic/research/m_b1_research_history_20260709_20260710.md) | ✅ 受約束搜尋，非排列組合 |
@@ -859,7 +859,7 @@ Code 常數：`signal_tables.py`（`STUDY_SCRIPT_MAP`, `SAFE_REJECT_*`, …）�
 
 ## Related
 
-- [neutral_nogo_signal_attribution_20260612.md](neutral_nogo_signal_attribution_20260612.md) — 訊號層 AUC 方法先例  
+- [neutral_nogo_signal_attribution_20260612.md](../eval/neutral_nogo_signal_attribution_20260612.md) — 訊號層 AUC 方法先例  
 - [mamba-score-distribution](../../modules/detection/research/mamba-score-distribution-20260613.md) — U_gt 協變量先例  
 - [tracker-decision/scoring_semantics.md](../tracker-decision/scoring_semantics.md) — cost 語義（非本表）  
 - [evidence_ledger.md](../evidence_ledger.md) — 可引用 e2e 數字  

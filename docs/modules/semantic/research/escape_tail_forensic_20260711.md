@@ -10,7 +10,7 @@ created: 2026-07-11
 > **One-line:** Sealed Step-0 far-Hamming descriptive tail（4 tracks，`k=8`，`d_H >= 3`，**4/4 MOT17-10-SDP**）→ **3× `TRUE_LONG_GAP_REENTRY` + 1× `UNRESOLVED`** · aggregate **`ROLE_REVERSAL_SUPPORTED`**. Research acceptance = **`ACCEPTED_WITH_LIMITS`**（[PR #104](https://github.com/raylei50653/saccade/pull/104) review）：L1 单序列 forensic only；仅授权后续独立 partial-order audit。Numerical cutoffs remain **PR-C operationalizations** (not sealed in #102).
 
 Thread: [gt_support_morphology_20260711.md](../../../research/threads/gt_support_morphology_20260711.md) ·
-Procedure: [framework §19](../../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md) ·
+Procedure: [framework §19](../../../research/contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md) ·
 Research line: [boolean_closure_domain_line_20260711.md](boolean_closure_domain_line_20260711.md) ·
 Step-0: [gt_support_morphology_step0_20260711.md](gt_support_morphology_step0_20260711.md) ·
 Packet: [evidence/escape_tail_forensic_20260711/](evidence/escape_tail_forensic_20260711/manifest.json)

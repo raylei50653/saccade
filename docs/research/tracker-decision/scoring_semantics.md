@@ -107,7 +107,7 @@ pool: <e.g. same-frame GT-matched candidates / hard bin>
 
 Hard rejects (`c=1`, fail IoU/Maha, `c > cand_cost_cap`, stage band miss) are **support gates** — report coverage / hurt, not primary distribution essays.  
 Distribution / weighting / margin essays live on **pairs that still compete** after gates.  
-Cross-study contract: [signal_table_schema §0.5](../eval/signal_table_schema.md) (L0 gate / L1–L2 score).
+Cross-study contract: [signal_table_schema §0.5](../contracts/signal_table_schema.md) (L0 gate / L1–L2 score).
 
 ---
 

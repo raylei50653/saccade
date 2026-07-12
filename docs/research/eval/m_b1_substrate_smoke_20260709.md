@@ -7,7 +7,7 @@
 （`context.json` · `metrics_auc.json` · `metrics_thr.csv` · `pairs.csv` · study `README.md`）
 
 > 本檔 **只 pointer + 驗收一句**。AUC / thr / base rate **以 study_dir 為準**，不在此嵌 master 表。  
-> 方法樣式與注意事項： [signal_table_schema.md](signal_table_schema.md) **§0.2–0.3**。  
+> 方法樣式與注意事項： [signal_table_schema.md](../contracts/signal_table_schema.md) **§0.2–0.3**。  
 > s 歷史 hub： [offline_relink_candidate_analysis.md](../../modules/semantic/research/offline_relink_candidate_analysis.md)（數字 as-of 該文，**非** m 現況）。
 
 ## Verdict

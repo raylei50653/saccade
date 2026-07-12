@@ -7,7 +7,7 @@
 <!-- fact-owner: freeze-identity = this card; phase nav = m_b1_research_history_20260709_20260710.md -->
 
 > **§20 re-classification (2026-07-12, bookkeeping).** Under
-> [framework §20](../../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
+> [framework §20](../../../research/contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
 > (contract v1, PR #133) this freeze is classified as a **performance
 > upper-bound candidate** (§20.4): it documents the offline FP-removal
 > capability of the frozen atom family under the permitted complexity class.

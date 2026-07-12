@@ -145,7 +145,7 @@ def test_pack_validation_and_firewalls(mod) -> None:
 
 @pytest.mark.skipif(not PACK.is_dir(), reason="R1 pack not generated yet")
 def test_e1_contract_non_implications() -> None:
-    text = (REPO / "docs/research/eval/safe_region_asset_contract.md").read_text(
+    text = (REPO / "docs/research/contracts/safe_region_asset_contract.md").read_text(
         encoding="utf-8"
     )
     assert "**Status:** **ACCEPTED**" in text

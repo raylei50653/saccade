@@ -7,6 +7,12 @@
 
 ## 0. Role
 
+> **Related contracts** ([index](README.md)) — editorial cross-reference added 2026-07-12; no semantic change to this framework.
+>
+> - **[runtime-quantity fidelity protocol](runtime_quantity_fidelity_protocol.md)** — its core lemma (*same \(f\), different temporal reduction \(R\)*) is **the same phenomenon as § 9.3 substrate robustness**, viewed from the quantity side. **A change of coordinate provenance (offline reconstruction → runtime kernel term) is a substrate change**, so a region's \(L_{\mathrm{GT}}\) bound proved on offline coordinates does **not** transfer: it must earn rung **L4** (§ 10), and § 13's *offline safe \(\not\Rightarrow\) online effective* applies directly.
+> - **[signal_table_schema § 0.5](signal_table_schema.md)** — decides whether a question is a **gate** (membership) or a **score** (ordering) before this framework's machinery is applied. A gate is not required to discriminate.
+> - **[boolean_composition_semantics_contract](boolean_composition_semantics_contract.md)** — semantics for composed rules. **[safe_region_asset_contract](safe_region_asset_contract.md)** — packaging of sealed evidence into a RegionAsset.
+
 This document defines the shared mathematical framework for studying **safe regions** in MOT decision systems.
 
 It is a method and evidence-semantics contract. It does not introduce a new production policy, reopen a closed research line, or promote any existing candidate. Its purpose is to provide one canonical language for reasoning about:
@@ -1313,7 +1319,7 @@ Production preset:
 **Moved (2026-07-12, bookkeeping — no content or seal change).** Procedure v1
 (sealed via [PR #100](https://github.com/raylei50653/saccade/pull/100) merge)
 now lives at
-[procedures/gt_support_morphology_procedure_v1.md](procedures/gt_support_morphology_procedure_v1.md).
+[procedures/gt_support_morphology_procedure_v1.md](../eval/procedures/gt_support_morphology_procedure_v1.md).
 The §19.x sub-section numbering (§19.0–§19.6) is preserved verbatim in that
 file, so existing §19.2 / §19.4 / §19.5 citations across the repo resolve
 there unchanged. This section number is retired and will not be reused; §19
@@ -1327,7 +1333,7 @@ is the historical exception to the §20.0 hosting rule.
 
 Contract version **v1 (2026-07-12)**. This section is the normative home of the experiment contract. Issue threads, study notes, and PR descriptions must **reference** this section; they must not restate or fork it. Every new decision-layer study that uses this framework's language or infrastructure runs under this contract. Studies opened before v1 keep their sealed procedures but must be re-classified under §20.4 before any result is cited as a design recommendation.
 
-**Hosting rule.** This framework hosts cross-line semantics only. Line-specific predeclared procedures are hosted as standalone files under [`procedures/`](procedures/), referencing this framework for shared terms; they are not added as new framework sections. §19 (GT-support morphology) was drafted in-framework and is the historical exception — its sealed v1 body has been moved to [procedures/gt_support_morphology_procedure_v1.md](procedures/gt_support_morphology_procedure_v1.md) with §19.x numbering preserved, and the §19 slot is a tombstone.
+**Hosting rule.** This framework hosts cross-line semantics only. Line-specific predeclared procedures are hosted as standalone files under [`procedures/`](../eval/procedures/), referencing this framework for shared terms; they are not added as new framework sections. §19 (GT-support morphology) was drafted in-framework and is the historical exception — its sealed v1 body has been moved to [procedures/gt_support_morphology_procedure_v1.md](../eval/procedures/gt_support_morphology_procedure_v1.md) with §19.x numbering preserved, and the §19 slot is a tombstone.
 
 ### 20.1 Why this contract exists
 

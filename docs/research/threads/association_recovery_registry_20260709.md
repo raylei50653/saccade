@@ -29,7 +29,7 @@ Navigation + tooling registry only. Does not own GO/NO-GO or baseline metrics.
 - [association_tools.yaml](../../modules/semantic/research/association_tools.yaml)
 - [crosswalk](../../modules/semantic/research/association_recovery_crosswalk_20260709.md)
 - [offline relink hub](../../modules/semantic/research/offline_relink_candidate_analysis.md)
-- [signal_table_schema](../eval/signal_table_schema.md) · [signal_analysis_ledger](../eval/signal_analysis_ledger.md)
+- [signal_table_schema](../contracts/signal_table_schema.md) · [signal_analysis_ledger](../eval/signal_analysis_ledger.md)
 
 ## Artifacts
 

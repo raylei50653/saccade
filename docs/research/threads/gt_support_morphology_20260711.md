@@ -29,7 +29,7 @@ created: 2026-07-11
 
 ## §20 re-classification (2026-07-12)
 
-Role-aligned experiment contract v1 sealed（[framework §20](../eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)，PR #133 merged）後的簿記重分類。純 §20.4 output-class 標籤，不改任何已 accepted 的結果、limit、或本線 PARKED 狀態與 resume condition。
+Role-aligned experiment contract v1 sealed（[framework §20](../contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)，PR #133 merged）後的簿記重分類。純 §20.4 output-class 標籤，不改任何已 accepted 的結果、limit、或本線 PARKED 狀態與 resume condition。
 
 **已完成產出 = diagnostic result（§20.4）：**
 
@@ -89,7 +89,7 @@ SUSPENDED pending re-charter; not a current authorized task
 
 ## Read first
 
-1. [Framework §19 — GT-support morphology predeclared procedure](../eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
+1. [Framework §19 — GT-support morphology predeclared procedure](../contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
 2. [布林閉包域研究線 normative doc（PR-B）](../../modules/semantic/research/boolean_closure_domain_line_20260711.md)
 3. [Step-0 note](../../modules/semantic/research/gt_support_morphology_step0_20260711.md)
 4. [Partial-order audit note](../../modules/semantic/research/boolean_atom_partial_order_20260711.md)

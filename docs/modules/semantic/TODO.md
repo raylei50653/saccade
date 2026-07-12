@@ -5,16 +5,27 @@
 
 ## Sole active
 
-**Score temporal-to-stable-domain modeling — discrete-\(M\) declaration pending**
+*(none — S0 draft unauthorized; candidate set is empty)*
 
-- Thread: [score_temporal_to_stable_domain_20260712.md](../../research/threads/score_temporal_to_stable_domain_20260712.md)
-- Canonical: [research charter](research/score_temporal_to_stable_domain_20260712.md)
-- **R1 closed** at terminal [`R1_FAITHFUL`](research/r1_temporal_reduction_capture_results_20260712.md)
-  ([packet](research/evidence/r1_temporal_reduction_capture_20260712/manifest.json)) under sealed
-  Consumer-A headline adaptive-anchor config + seven-seq MOT17 support.
-- Only current work: draft a **separate** discrete-\(M\) representation-capability
-  declaration (short-horizon \(z_{t+1}\approx Mz_t+c\)) — do **not** fit \(M\),
-  scores, gates, or presets until that declaration is sealed.
+## Proposed (unauthorized; draft)
+
+**Runtime-faithful safe domain — S0 axis-transfer declaration in `draft`, owner seal pending**
+
+- Thread: [runtime_faithful_safe_domain_20260712.md](../../research/threads/runtime_faithful_safe_domain_20260712.md)
+- Declaration (draft): [safe_domain_runtime_transfer_declaration_20260712.md](research/safe_domain_runtime_transfer_declaration_20260712.md)
+- **Architecture** (owner, 2026-07-12): *gate 在數學上建一個安全域（排除不可能區，
+  單向保證不刪 GT）；score ranking 負責在保留域內把 GT 分離*。Gate = coarse
+  threshold + closed form + retention guarantee，**不擬合邊界、不需要分離力**。
+- **Defect this opens on:** the accepted safe axes `{dist_h, log_h_ratio}`
+  ([partial-order note](research/boolean_atom_partial_order_20260711.md), `ACCEPTED_WITH_LIMITS`)
+  were certified on **offline proxy coordinates**
+  (`ensure_prod_proxy_scores`; height ratio uses **raw** box heights, not runtime EMA),
+  and [D0](research/d0_runtime_shadow_fidelity_results_20260712.md) already ruled that
+  substrate `T2 PROXY_UNFAITHFUL` (with a 7.03 % offline-safe/online-unsafe inversion on GT under the s0 proxy).
+  A region proved safe offline does **not** inherit its GT-retention guarantee at runtime.
+  The closure prototype that would consume those axes **has not started** — so the transfer must be audited first.
+- S0 draft proposes using the existing sealed D0 v2 packet; whether a new capture is required remains undecidable until the audit is sealed and executed.
+- **Nothing may be run before the seal event (declaration § 9).**
 
 ## Previous line 0（closed; nav only）
 
@@ -65,7 +76,8 @@
 
 ## Parked
 
-- GT-Support Morphology — PR-D / #107 `ACCEPTED_WITH_LIMITS`; restricted-closure prototype not started; accepted global=`{dist_h, log_h_ratio}` boundary preserved → [thread](../../research/threads/gt_support_morphology_20260711.md)
+- **Score temporal-to-stable-domain** — `R1_FAITHFUL` closed (that result stands and enables the runtime coordinates the safe-domain line uses). Follow-on **discrete-\(M\) reclassified as a score-ranking feature, not a gate** → parked unsealed; resume only inside a declared score line, after the retained domain exists → [thread](../../research/threads/score_temporal_to_stable_domain_20260712.md) · [declaration § 0](research/discrete_m_capability_declaration_20260712.md)
+- GT-Support Morphology — PR-D / #107 `ACCEPTED_WITH_LIMITS`; restricted-closure prototype not started; accepted global=`{dist_h, log_h_ratio}` boundary preserved, **but certified on offline coordinates — runtime transfer is what S0 now audits** → [thread](../../research/threads/gt_support_morphology_20260711.md)
 - Occ-exit conditional intervention modeling — WP1–WP3 complete; future RegionAsset producer/intervention consumer; resume only after assetization owner gate → [occ-exit thread](../../research/threads/occ_exit_audit_20260709.md)
 - Sparse key-embedding bank — C++ async sidecar（#57 禁 sync）→ [sparse_key_embedding_bank_20260704.md](research/sparse_key_embedding_bank_20260704.md)
 

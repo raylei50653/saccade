@@ -96,10 +96,17 @@ echo "── doc freshness check (warn-only)"
 uv run python3 scripts/tools/check_doc_freshness.py 2>&1 || true
 ok "doc freshness (warnings only)"
 
-# ── 4.10 doc structure / research index coverage (warn-only) ─────────────────
-echo "── doc structure check (warn-only)"
-uv run python3 scripts/tools/check_doc_structure.py 2>&1 || true
-ok "doc structure (warnings only)"
+# ── 4.10 doc structure: index coverage (warn) + C6.4 lifecycle (fail-closed) ─
+# Closing a research unit is a merge condition, not a matter of discipline:
+# a note that declares itself closed must leave the active path and the active
+# index in the same PR that accepted its terminal (Doc Structure C6.3).
+echo "── doc structure check (index warn; lifecycle fail-closed)"
+if uv run python3 scripts/tools/check_doc_structure.py --strict 2>&1; then
+  ok "doc structure"
+else
+  fail "doc structure — C6.4 lifecycle violation(s); see docs/ownership/doc_structure_contract.md"
+  ERRORS=$((ERRORS + 1))
+fi
 
 # ── 5. pytest ────────────────────────────────────────────────────────────────
 echo "── pytest"
