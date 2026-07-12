@@ -1,7 +1,9 @@
 ---
-doc-status: active-thread
+doc-status: active
 doc-promotion: navigation-only; not evidence
 owner-module: semantic
+work-class: maintenance
+wip-role: non-wip
 created: 2026-07-09
 ---
 
@@ -12,7 +14,7 @@ created: 2026-07-09
 - Step maps: scripts index + info-source contract + crosswalk landed
 - Registry seed: `association_tools.yaml` populated（R）
 - Checker: `check_association_tools.py` path health
-- Not sole active（docs/registry hygiene；實驗 sole active 仍 occ-exit）
+- Not sole active（registry hygiene only；semantic sole-active is currently none）
 
 ## Current boundary
 

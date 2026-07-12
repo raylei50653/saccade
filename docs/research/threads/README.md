@@ -28,6 +28,55 @@ DEVELOPMENT.md → module TODO sole-active → active thread / contract → PR
 
 ---
 
+## 統一工作／交接匯報
+
+任何會改變 thread 狀態、WIP 指向或 handoff 的更新，先用下列四段
+匯報；**先說現有工作怎麼收尾，再談是否另開新題**。
+
+```text
+全域 WIP／既有工作帳
+- sole active：<以 module TODO 為準；可為 none>
+- active but non-WIP：<工程 follow-up / 維護 / 治理卡>
+- parked：<暫停中的既有母線>
+- closed：<本輪剛結案的母線>
+
+交接帳（只記 direct handoff disposition）
+來源／terminal → direct receiver（或 no receiver） → 被交接的工作／class → 現在狀態
+
+跨 thread consequence（非 handoff）
+<terminal 對其他既有卡造成的 constraint / closure；既有卡仍留在全域工作帳>
+
+本輪唯一具體工作
+- thread：
+- 工作：
+- 完成條件：
+
+不在本輪
+- 未授權的新研究、擴 class、或候選方向；不得寫成既有 handoff 或 current step。
+```
+
+**判讀規則：**
+
+- `closed` 的交接帳只記 terminal **直接**交出的工作或 class：交給 direct
+  receiver，或 **no receiver / no continuation**；不能只寫抽象的「下一步」。
+- 已存在於其他卡的工程債、maintenance、parked branch 一律留在「全域 WIP／
+  既有工作帳」。terminal 對它們的影響只能寫為 **cross-thread consequence**，
+  不得冒充為 handoff。
+- `active` 不等於 sole-active。active 卡必須標出工作類別與 WIP 角色，
+  讓工程收尾、維護、治理不會被誤讀為科學主線。
+- `parked` 的既有分支只記 pause／resume 條件；它不是本輪可執行工作。
+- 新研究候選只有在 owner 明示要排下一個 charter 時才另列；在此之前不進
+  交接帳、Active 表或 `Current step`。
+
+**卡片標記：** proposed／active／parked 卡都必須以 frontmatter 補充
+`work-class: mainline-study | engineering-follow-up | maintenance | governance`
+與 `wip-role: sole-active | non-wip | parked`。**proposed 一律必填
+`work-class` 並使用 `wip-role: non-wip`，直到 owner activation；**不得在
+proposed 階段使用 `sole-active` 或 `parked`。`TODO.md` 仍是 sole-active 的
+唯一權威；這些標記只消除導航歧義。
+
+---
+
 ## Lifecycle（thread 狀態機）
 
 狀態以 frontmatter `doc-status` + 本 README 分表為準。  
@@ -35,7 +84,7 @@ DEVELOPMENT.md → module TODO sole-active → active thread / contract → PR
 只有不再需要 threads 導航的 one-shot 才進 `docs/archive/`。
 
 ```text
-proposed  →  任務已成文、未開跑 / 未授權 sole-active     →  threads/
+proposed  →  任務已成文、未開跑 / 未授權 sole-active；`wip-role: non-wip` →  threads/
 active    →  進行中（可多張；sole active 以 module TODO） →  threads/
 parked    →  有意暫停；不佔 WIP；可再激活                 →  threads/
 closed    →  結案；terminal + handoff 導航               →  threads/closed/
@@ -86,7 +135,7 @@ archived  →  不再當現況導航                               →  docs/arc
    - 可選：`closed-verdict: <token>`（如 `A1_ACCEPTED_WITH_LIMITS` · `V5` · `SUPERSEDED`）
 2. **thread body**
    - 頂部 one-liner 標 **CLOSED** / **SUPERSEDED** / **PARKED→CLOSED**
-   - 補或改寫 `## Final status`（或等價 terminal 表）：verdict · handoff · preset 未改 · 不再授權 next work
+   - 補或改寫 `## Final status`（或等價 terminal 表）：verdict · **direct handoff（direct receiver 或 no receiver）** · cross-thread consequence（若有，須明標非 handoff）· preset 未改 · 不再授權 next work
    - `## History` 末行記關閉事件 + 指向事實 note / PR / packet
    - `## Current step` 改為 **none — closed**（勿留假 next step）
 3. **移動檔案**
@@ -95,7 +144,7 @@ archived  →  不再當現況導航                               →  docs/arc
    - 全庫把指向舊路徑的 link 改成 `threads/closed/<card>.md`
 4. **本 README**
    - 從 Proposed / Active / Parked **移出**
-   - 加入 **Closed** 表一行：連結 `closed/<card>.md` · terminal one-liner · close date
+   - 加入 **Closed** 表一行：連結 `closed/<card>.md` · terminal one-liner · **direct handoff disposition** · close date；cross-thread consequence 另欄記錄
 5. **下游**
    - module `TODO.md` sole-active 若仍指此 thread → 改指 handoff 目標或清掉
    - 若有 superseding thread → 雙方交叉連結
@@ -116,28 +165,28 @@ archived  →  不再當現況導航                               →  docs/arc
 
 ## Active threads
 
-| Thread | Status (one-line) | Owner |
-|:--|:--|:--|
-| [gap_conditioned_probabilistic_motion_probe_20260711.md](gap_conditioned_probabilistic_motion_probe_20260711.md) | Phase B **`V5 ACCEPTED_WITH_LIMITS`** recorded · D0 fail-closed pending #112 · E0–E2 `ACCEPTED_WITH_LIMITS` · E3 `E3_SIGNALS_SEALED` · representation / level 1 only | semantic |
-| [association_recovery_registry_20260709.md](association_recovery_registry_20260709.md) | Scripts index + tools YAML + contracts 就位；registry 維護母線 | semantic |
-| [doc_structure_o15_followup_20260709.md](doc_structure_o15_followup_20260709.md) | O1.5 + TODO-as-WIP-lock；follow-up = index debt / optional strict | ownership |
+| Thread | Work class / WIP role | Current concrete work | Owner |
+|:--|:--|:--|:--|
+| [gap_conditioned_probabilistic_motion_probe_20260711.md](gap_conditioned_probabilistic_motion_probe_20260711.md) | engineering follow-up · **non-WIP** | **Only:** D0 / #112 runtime CUDA capture；Phase B `V5` is already recorded and authorizes no new semantic mainline work | semantic |
+| [association_recovery_registry_20260709.md](association_recovery_registry_20260709.md) | maintenance · **non-WIP** | Keep R/H ownership and path-health registry current | semantic |
+| [doc_structure_o15_followup_20260709.md](doc_structure_o15_followup_20260709.md) | governance · **non-WIP** | Pay down research-index debt; optional structure checks remain non-blocking | ownership |
 
 ## Parked threads
 
-| Thread | Status (one-line) | Owner |
-|:--|:--|:--|
-| [gt_support_morphology_20260711.md](gt_support_morphology_20260711.md) | **PARKED after PR-D** · #107 `ACCEPTED_WITH_LIMITS` boundary preserved · restricted-closure prototype not started · resume after semantic owner gate | semantic |
-| [occ_exit_audit_20260709.md](occ_exit_audit_20260709.md) | **PARKED** · WP1–WP3 complete · future RegionAsset producer/intervention consumer after assetization gate | semantic |
+| Thread | Work class / WIP role | Pause / resume boundary | Owner |
+|:--|:--|:--|:--|
+| [gt_support_morphology_20260711.md](gt_support_morphology_20260711.md) | mainline-study · **parked** | Score continuation is closed for Door 0's tested class; gate direction remains parked pending explicit re-charter and WIP authorization | semantic |
+| [occ_exit_audit_20260709.md](occ_exit_audit_20260709.md) | mainline-study · **parked** | WP1–WP3 complete; waits for a RegionAsset producer/intervention consumer after the assetization gate | semantic |
 
 ## Closed threads（檔案在 [`closed/`](closed/)）
 
-| Thread | Closed | Terminal (one-line) | Owner |
-|:--|:--|:--|:--|
-| [ambiguous_band_ranking_power_probe_20260712.md](closed/ambiguous_band_ranking_power_probe_20260712.md) | 2026-07-12 | **T2 `NO_USABLE_RANKING_POWER_IN_CLASS` ACCEPTED**（12-member class-scoped；step ⑤ 生效；step ④ 未開）· [PR #135](https://github.com/raylei50653/saccade/pull/135) seal／[PR #136](https://github.com/raylei50653/saccade/pull/136) acceptance | semantic |
-| [safe_region_assetization_20260710.md](closed/safe_region_assetization_20260710.md) | 2026-07-11 | **A1 CLOSED**（`A1_ACCEPTED_WITH_LIMITS`）· R2–R4 fail-closed · handoff → [gt_support_morphology](gt_support_morphology_20260711.md) · [PR #95](https://github.com/raylei50653/saccade/pull/95)/[#97](https://github.com/raylei50653/saccade/pull/97) | semantic |
-| [composition_grammar_coverage_program_20260710.md](closed/composition_grammar_coverage_program_20260710.md) | 2026-07-10 | **SUPERSEDED** · coverage map absorbed into assetization R2–R4 · no C1–C6 execution | semantic |
-| [composition_grammar_safe_region.md](closed/composition_grammar_safe_region.md) | 2026-07-10 | **CLOSED A0 baseline** · T0-A/B/R1 · radius≥1=0 · terminal B · handoff → assetization | semantic |
-| [m_b1_online_hook_20260709.md](closed/m_b1_online_hook_20260709.md) | 2026-07-10 | **CLOSED** · S1+S2 Q4.5 B complete · handoff → composition T0/A0 · ranking deferred | semantic |
+| Thread | Closed | Terminal (one-line) | Direct handoff disposition | Cross-thread consequence (not handoff) | Owner |
+|:--|:--|:--|:--|:--|:--|
+| [ambiguous_band_ranking_power_probe_20260712.md](closed/ambiguous_band_ranking_power_probe_20260712.md) | 2026-07-12 | **T2 `NO_USABLE_RANKING_POWER_IN_CLASS` ACCEPTED**（12-member class-scoped；step ⑤ 生效；step ④ 未開）· [PR #135](https://github.com/raylei50653/saccade/pull/135) seal／[PR #136](https://github.com/raylei50653/saccade/pull/136) acceptance | tested 12-member score class → **no receiver / no continuation** | morphology score branch is closed for this class; its gate branch remains parked in its own card | semantic |
+| [safe_region_assetization_20260710.md](closed/safe_region_assetization_20260710.md) | 2026-07-11 | **A1 CLOSED**（`A1_ACCEPTED_WITH_LIMITS`）· R2–R4 fail-closed | → [gt-support morphology](gt_support_morphology_20260711.md) (parked) | — | semantic |
+| [composition_grammar_coverage_program_20260710.md](closed/composition_grammar_coverage_program_20260710.md) | 2026-07-10 | **SUPERSEDED** · coverage map absorbed into assetization R2–R4 · no C1–C6 execution | → assetization closed line; **no further continuation** | — | semantic |
+| [composition_grammar_safe_region.md](closed/composition_grammar_safe_region.md) | 2026-07-10 | **CLOSED A0 baseline** · T0-A/B/R1 · radius≥1=0 · terminal B | → assetization closed line | — | semantic |
+| [m_b1_online_hook_20260709.md](closed/m_b1_online_hook_20260709.md) | 2026-07-10 | **CLOSED** · S1+S2 Q4.5 B complete | → composition T0/A0 closed line; ranking deferred, **no active receiver** | — | semantic |
 
 > 目錄索引見 [closed/README.md](closed/README.md)。數字與 claim 在 module research / ledger。
 
@@ -152,12 +201,14 @@ archived  →  不再當現況導航                               →  docs/arc
 doc-status: proposed | active | parked
 doc-promotion: navigation-only; not evidence
 owner-module: <module|cross|ownership>
+work-class: mainline-study | engineering-follow-up | maintenance | governance
+wip-role: sole-active | non-wip | parked
 created: YYYY-MM-DD
 ---
 
 # <short title>
 
-## Status
+## Status                 # work class + WIP role; proposed=non-wip; sole-active links to module TODO
 ## Current boundary
 ## Read first
 ## Artifacts
@@ -183,7 +234,7 @@ closed-verdict: <optional token>
 
 > **One-line (CLOSED):** …
 
-## Final status          # terminal table · handoff · preset unchanged
+## Final status          # terminal table · direct handoff (receiver or no receiver) · cross-thread consequence (if any) · preset unchanged
 ## Read first            # 結案後仍需要的入口
 ## Final evidence state  # optional；只放 pointer / 一句，不放長表
 ## Must not              # 關閉後仍禁止的 claim

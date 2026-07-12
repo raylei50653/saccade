@@ -2,6 +2,8 @@
 doc-status: parked
 doc-promotion: navigation-only; not evidence
 owner-module: semantic
+work-class: mainline-study
+wip-role: parked
 created: 2026-07-11
 ---
 
@@ -11,7 +13,7 @@ created: 2026-07-11
 
 | Item | Status |
 |:--|:--|
-| Program | **PARKED** — PR-D accepted boundary preserved；restricted-closure continuation not started |
+| Program | **PARKED** — PR-D accepted boundary preserved；restricted-closure prototype and PR-E are **SUSPENDED pending re-charter** |
 | Research object | μ_GT placement distribution on the atom lattice（**不是** per-cell risk field —— step-0 判定其不可識別） |
 | Step-0 audit | **recorded** · [note](../../modules/semantic/research/gt_support_morphology_step0_20260711.md) · committed packet: [evidence/gt_support_morphology_step0_20260711/](../../modules/semantic/research/evidence/gt_support_morphology_step0_20260711/manifest.json) |
 | Procedure | framework §19 **v1 sealed** via [PR #100](https://github.com/raylei50653/saccade/pull/100) merge |
@@ -20,8 +22,8 @@ created: 2026-07-11
 | Far-Hamming descriptive tail | 4/209 tracks，**4/4 全在 MOT17-10-SDP**（sequence clustering 為實據）；motion-atom 集中（speed_mismatch 4/4 · dir_cos 3/4 · resid_mean 3/4 · log_h_ratio 0/4）；nominal CP x=4→4.33% 不得跨界 |
 | Forensics (PR-C / #102) | **`ACCEPTED_WITH_LIMITS`** ([PR #104](https://github.com/raylei50653/saccade/pull/104)) · 3×`TRUE_LONG_GAP_REENTRY` + 1×`UNRESOLVED` · aggregate **`ROLE_REVERSAL_SUPPORTED`** · L1 single-seq (MOT17-10) only · authorizes partial-order audit only · [note](../../modules/semantic/research/escape_tail_forensic_20260711.md) · [packet](../../modules/semantic/research/evidence/escape_tail_forensic_20260711/manifest.json) |
 | Partial-order audit (PR-D gate / #106 · [PR #107](https://github.com/raylei50653/saccade/pull/107)) | **`ACCEPTED_WITH_LIMITS`** · terminal **`GLOBAL_PARTIAL_ORDER_READY`** · global=`{dist_h, log_h_ratio}` · conditional=`{bridge_dist}`+motion · context=`{score_m_bridge, gap}` · [note](../../modules/semantic/research/boolean_atom_partial_order_20260711.md) · [packet](../../modules/semantic/research/evidence/boolean_atom_partial_order_20260711/manifest.json) |
-| Restricted closure prototype | **authorized as separate post-merge task only** · global solve atoms = `{dist_h, log_h_ratio}` · conditional atoms **forbidden** in global solve |
-| Nested per-fold rerun | **not run**（升 L2+ 的 confirmatory unit） |
+| Restricted closure prototype | **SUSPENDED pending re-charter** · historical global-map boundary = `{dist_h, log_h_ratio}` only; conditional atoms remain **forbidden** in any future global solve |
+| Nested per-fold rerun | **SUSPENDED** with its prototype charter; not run |
 | Production / presets / ledger | **unchanged** |
 | §20 classification (2026-07-12) | completed outputs = **diagnostic result**；restricted-closure prototype + PR-E = **SUSPENDED pending re-charter**（見下方區塊） |
 
@@ -73,10 +75,12 @@ Accepted map:
 Aggregate terminal:
 GLOBAL_PARTIAL_ORDER_READY (accepted with limits)
 
-Restricted closure prototype:
-AUTHORIZED only as a separate post-merge task
-  global solve atoms = {dist_h, log_h_ratio}
-  bridge_dist and other conditional atoms MUST NOT enter the global solve
+Restricted closure prototype / PR-E:
+SUSPENDED pending re-charter; not a current authorized task
+  historical global-map limit = {dist_h, log_h_ratio}
+  bridge_dist and other conditional atoms MUST NOT enter any future global solve
+  Door 0 T2 closes the score continuation for its tested 12-member class;
+  only a gate re-charter remains as a parked existing branch
 
 不得 veto escape tail（protected GT mass）
 零 exposure cells = UNRESOLVED，不是障壁（framework §19.2）
@@ -101,14 +105,12 @@ AUTHORIZED only as a separate post-merge task
 
 ## Current step
 
-**PARKED after PR-D / #107 `ACCEPTED_WITH_LIMITS`.**
-
-Resume condition = explicit owner reauthorization after the independent
-[gap-conditioned probabilistic motion probe](gap_conditioned_probabilistic_motion_probe_20260711.md)
-releases the semantic WIP lock. The still-unstarted next task remains a
-**separate restricted global-closure prototype**：global solve only
-`{dist_h, log_h_ratio}`；vs frozen OR-tail；candidate-only；不得併入 audit PR；
-`bridge_dist` 與其他 conditional atoms不得進入 global solve。
+**PARKED; no current work.** Door 0's `T2` closes the pre-existing **score**
+continuation for its tested 12-member class, so that branch has **no
+continuation**. The only retained existing branch is the **gate** direction,
+which remains parked until an explicit owner re-charter and semantic WIP
+authorization. It must not be described as an already-authorized restricted
+closure prototype.
 
 PR ladder（2026-07-11 owner 定版；#106 將 partial-order gate 與 closure prototype 拆開）：
 
@@ -135,10 +137,10 @@ step-2 partial-order audit: ACCEPTED_WITH_LIMITS (PR #107)
        global = dist_h · log_h_ratio
        conditional = bridge_dist · speed_mismatch · dir_cos · resid_mean
        context_only = score_m_bridge · gap
-step-2b restricted-closure prototype: AUTHORIZED as separate post-merge task
-       global solve atoms ONLY = {dist_h, log_h_ratio}
-step-3 nested per-fold: 整條鏈（atom 發現/定向/二值化/verdict）per-fold 重跑，
-       verdict 以 sealed boundaries 判定；此為 L2+ 的 confirmatory unit
+step-2b restricted-closure prototype: SUSPENDED pending re-charter
+       historical global-map limit ONLY = {dist_h, log_h_ratio}
+step-3 nested per-fold: SUSPENDED with the prototype charter; no current
+       confirmatory unit is authorized
 closing hypothesis: GT 是否形成 corner-concentrated core
        + 可解釋的 conditional escape tail？
 ```
