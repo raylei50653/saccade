@@ -16,6 +16,20 @@
 > Do not read residual “implement hook” language as current work — see §0 and Stage 1 final.  
 > Offline nav: [history](m_b1_research_history_20260709_20260710.md).
 
+> **§20 re-classification (2026-07-12, bookkeeping).** Under the sealed
+> role-aligned experiment contract
+> ([framework §20](../../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md),
+> PR #133), the frozen portable OR-tail is a **performance upper-bound
+> candidate** (§20.4) — it documents what the frozen atom family can remove
+> offline under the permitted complexity class — **not a gate design
+> candidate**. The hook's level-3 acceptance path is unaffected: it is
+> engineering **plumbing**, and its value is (a) intervention-chain
+> validation on the live surface, (b) online-retention measurement of the
+> offline upper bound, and (c) a control arm for any future monotone-CORE
+> comparison. Any promotion of the OR-tail toward a design recommendation
+> requires a new design-evaluation study passing §20.5; re-labeling is not
+> promotion. No result, limit, or ABI in this file changes.
+
 ### Main line (locked — current)
 
 ```text
