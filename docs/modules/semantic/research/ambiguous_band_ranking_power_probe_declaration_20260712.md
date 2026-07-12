@@ -11,7 +11,7 @@
 > gate-retained ambiguous band, before any score-layer interaction interface
 > (step ④) is built. Every terminal is a mainline state transition (§20.7).
 
-Thread: [ambiguous_band_ranking_power_probe_20260712.md](../../../research/threads/ambiguous_band_ranking_power_probe_20260712.md) ·
+Thread: [ambiguous_band_ranking_power_probe_20260712.md](../../../research/threads/closed/ambiguous_band_ranking_power_probe_20260712.md) ·
 Contract: [framework §20](../../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md) (v1, PR #133) ·
 Substrate precondition: [production substrate mapping](production_substrate_mapping_20260711.md)
 

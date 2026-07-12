@@ -5,12 +5,16 @@
 
 ## Sole active
 
-🔄 **Ambiguous-band ranking-power probe (Door 0) — EXECUTED → terminal `T2 NO_USABLE_RANKING_POWER_IN_CLASS`; research acceptance pending owner review of results PR**
+**none** — Door 0 probe **CLOSED**（terminal `T2` RESEARCH ACCEPTED, [PR #136](https://github.com/raylei50653/saccade/pull/136) `9ec583c7`）；下一個 mainline study = **owner charter 決定**（擴 class probe／新訊號／其他方向皆須新 §20.2 宣告）。
 
-- Thread: [ambiguous_band_ranking_power_probe_20260712.md](../../research/threads/ambiguous_band_ranking_power_probe_20260712.md)
-- Declaration（sealed via PR #135 merge, main `f864a6e2`）: [declaration doc](research/ambiguous_band_ranking_power_probe_declaration_20260712.md)
-- **Results**: [results note](research/door0_ranking_probe_results_20260712.md) · [packet](research/evidence/door0_ranking_probe_20260712/manifest.json) — V1–V5 PASS · H not triggered（baseline PWA 0.878/top-1 0.590;P3=84/205）· 12/12 fail（best ΔPWA=+0.0011）· unconditional reachable-set caveat attached
-- Mainline position: realignment **step ③ 完成 → step ⑤ class-scoped closure**（12-member tested class 封;9 個未測 AND pair/連續訊號/有限 λ 不被耗盡;step ④ 未開;擴 class=新 §20.2 宣告+owner charter）
+## Previous line 0（closed; nav only）
+
+**Ambiguous-band ranking-power probe (Door 0) — `T2 NO_USABLE_RANKING_POWER_IN_CLASS` ACCEPTED**
+
+- Thread（closed）: [ambiguous_band_ranking_power_probe_20260712.md](../../research/threads/closed/ambiguous_band_ranking_power_probe_20260712.md)
+- Declaration（sealed via PR #135, main `f864a6e2`）: [declaration doc](research/ambiguous_band_ranking_power_probe_declaration_20260712.md)
+- **Results（accepted `9ec583c7`）**: [results note](research/door0_ranking_probe_results_20260712.md) · [packet](research/evidence/door0_ranking_probe_20260712/manifest.json) — V1–V5 PASS · H not triggered（baseline PWA 0.878/top-1 0.590;P3=84/205）· 12/12 fail（best ΔPWA=+0.001097,距 B1 約 18×）· unconditional reachable-set caveat
+- **Closure in effect（step ⑤ class-scoped）**: 12 members 不得在相同 family/substrate 重跑;9 個未測 AND pair/其他 quantile/連續訊號/有限 λ/learned score 不被耗盡;step ④ 未開
 - Boundary: production / preset / ledger unchanged · 單次授權執行已用畢,無宣告偏離
 
 ## Previous line（Phase B V5 recorded; D0 fail-closed pending [#112](https://github.com/raylei50653/saccade/issues/112); nav only）
@@ -58,7 +62,7 @@
 
 ## Related research threads（不佔 WIP 鎖）
 
-- [ambiguous-band ranking-power probe](../../research/threads/ambiguous_band_ranking_power_probe_20260712.md) — **ACTIVE（sole active）** · Door 0 · declaration sealed via PR merge · execution pending
+- [ambiguous-band ranking-power probe](../../research/threads/closed/ambiguous_band_ranking_power_probe_20260712.md) — **CLOSED** · Door 0 · **`T2 NO_USABLE_RANKING_POWER_IN_CLASS` ACCEPTED**（#135 seal／#136 acceptance）· step ⑤ class-scoped closure 生效
 - [gap-conditioned probabilistic motion](../../research/threads/gap_conditioned_probabilistic_motion_probe_20260711.md) — **ACTIVE**（不佔 WIP;剩 D0/#112 engineering follow-up）· E0–E2 `ACCEPTED_WITH_LIMITS` · E3 `E3_SIGNALS_SEALED` · Phase B **`V5 ACCEPTED_WITH_LIMITS`** (representation / level 1) · D0 fail-closed · no production change
 - [gt-support morphology](../../research/threads/gt_support_morphology_20260711.md) — **PARKED** · PR-A/B/C sealed · PR-D / #107 **`ACCEPTED_WITH_LIMITS`** · restricted-closure prototype not started
 - [safe-region assetization](../../research/threads/closed/safe_region_assetization_20260710.md) — **A1 CLOSED (`A1_ACCEPTED_WITH_LIMITS`, maturity A1)** · mainline handed off → gt-support morphology · [PR #95](https://github.com/raylei50653/saccade/pull/95)/[#97](https://github.com/raylei50653/saccade/pull/97) history
