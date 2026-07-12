@@ -20,7 +20,7 @@ default-behavior-change: forbidden
 | Core question | 凍結 signal family 在 gate-retained ambiguous band 內,對 GT vs FP 的相對排序是否存在**穩定、可解釋、LOO 保留**的改善(超越 production `s0=score_m_bridge` baseline)? |
 | Substrate | frozen pairs `0ae38967…`(7-seq SDP;21,789 gt_valid rows;340 GT);coarse gate=production h-window proxy;**210/205 rankable events**(gate 前/後) |
 | Probe family | 6 single-atom + 6 second-order AND conditions;lexicographic demotion(parameter-free;不 fit λ);q85/q15 band quantiles |
-| Terminals | T1 `RANKING_SIGNAL_PRESENT`→開 step ④ / T2 `NO_USABLE_RANKING_POWER_IN_CLASS`→封 **Door-0 complexity class**(step ⑤ class-scoped;unexplained residual set w.r.t. class;不及於連續訊號/有限 λ)/ T3 `NO_HEADROOM`(H1 PWA∧H2 top-1 joint)→step ④ 在 Door-0 resolution 下不必要 / T0 `UNRESOLVED/INVALID-STUDY`→只關實驗;reachable-slice limit rule 適用全部 terminal |
+| Terminals | T1 `RANKING_SIGNAL_PRESENT`→開 step ④ / T2 `NO_USABLE_RANKING_POWER_IN_CLASS`→只封 **12-member tested class**(step ⑤ class-scoped;9 個未測 AND pair/其他 quantile/連續訊號/有限 λ 均不被耗盡)/ T3 `NO_HEADROOM`(H1 PWA∧H2 top-1 joint)→step ④ 在 Door-0 resolution 下不必要 / T0 `UNRESOLVED/INVALID-STUDY`→只關實驗;**每個 terminal 無條件附 reachable-set scope caveat**(無方向判斷) |
 | Prior risk | [幾何 AUC≈0.55 前例](../../modules/semantic/research/boolean_closure_domain_line_20260711.md)——band 內 ranking power 可能本來就弱;此即 Door 0 存在的理由(先驗證有訊號再投資 ④) |
 | Production / presets / ledger | **unchanged**(read-only probe) |
 
@@ -60,3 +60,4 @@ then: T1→step ④ design-evaluation charter;T2→step ⑤ closure statement;
 
 - 2026-07-12: Realignment step ③ 開工。Counts-only recon(event 結構/pool 大小,無 ranking 指標):210 rankable events(gate 後 205,per-seq min 12);reachable slice(s0≤0.4)僅 34 events→降 descriptive-only。Declaration doc 完成,PR open = seal unit。
 - 2026-07-12: **Owner seal review = SEAL BLOCKED(四組 terminal-affecting 自由度)→ Revision 2 落地**:①H/T3 改 joint(H1 PWA≥0.98 ∧ H2 top-1≥0.98),撤「算術不可能」錯誤理由,明定 H-over-boxes precedence;②凍結 rank tie policy(pessimistic against GT)與 quantile estimator(`numpy.quantile method="linear"`),B3 明定 metric-level re-aggregation 不重 fit threshold(refit 只在 B5);③B6 改機械判定(B6a fire-rate P(c|FP)>P(c|GT) ∧ B6b flip decomposition n_good>n_bad,均 strict),排除 reviewer 事後判斷;④T2 更名 `NO_USABLE_RANKING_POWER_IN_CLASS` 並限 Door-0 complexity class(擴 class=新宣告+owner charter),reachable-slice limit rule 改為適用全部 terminal。等第二輪 seal review。
+- 2026-07-12: **Round-2 owner review = SEAL BLOCKED(narrow scope fix)→ Revision 3 落地**:①class 定義從「up to second-order AND」收斂為**恰好 §6 列舉的 12 members**(15 個二階 AND 中 9 個未測,不得被 T2 耗盡);②reachable-slice caveat 改**無條件**——T0–T3 每個 recorded terminal 一律附 §3 verbatim clause,無方向 trigger,消除 implementer 選擇。等最終 seal review。

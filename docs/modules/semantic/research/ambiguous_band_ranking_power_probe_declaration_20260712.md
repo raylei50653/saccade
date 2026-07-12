@@ -31,6 +31,15 @@ check (fire-rate direction + flip decomposition); ④ T2 scoped to the Door-0
 complexity class, and the reachable-slice limit made mandatory for **all**
 terminals, not only T1.
 
+**Revision 3 (2026-07-12, pre-seal — round-2 owner review, two scope
+closures; no outcome information involved):** ① the Door-0 class is now
+**exactly the 12 enumerated §6 candidates** (frozen q85/q15 + λ→∞
+lexicographic transform) — not "up to second-order AND", which would have
+exhausted the 9 untested AND pairs; T2 closes only these 12 members; ② the
+reachable-slice caveat is now **unconditional** — every recorded terminal
+(T0–T3) carries the §3 scope clause verbatim, with no directional trigger to
+evaluate, so no implementer choice can decide its presence.
+
 ---
 
 ## 1. §20.2 declaration block
@@ -52,14 +61,16 @@ Stop condition          §9 — sufficiency: ≥1 candidate passes all boxes;
                         futility: none passes; no third door (§20.7).
 Output class            diagnostic result (capability map); on futility the
                         band is additionally recorded as an unexplained
-                        residual set with respect to the Door-0 complexity
-                        class (§10). No design candidate may be claimed;
-                        §20.5 applies to every number in the results.
-Mainline transition     §10 — T1 opens step ④; T2 closes the Door-0-class
-                        ranking path (step ⑤, class-scoped); T3 closes
+                        residual set with respect to the 12-member Door-0
+                        tested class (§10). No design candidate may be
+                        claimed; §20.5 applies to every number in the
+                        results.
+Mainline transition     §10 — T1 opens step ④; T2 closes the 12-member
+                        tested class (step ⑤, class-scoped); T3 closes
                         step ④ as unnecessary at Door-0 resolution;
                         T0 = UNRESOLVED/INVALID-STUDY closes the experiment
-                        only.
+                        only. Every terminal carries the §3 unconditional
+                        reachable-set scope caveat.
 ```
 
 ## 2. Substrate (frozen)
@@ -100,14 +111,14 @@ Pools (per owner Door-0 spec):
 - **Reachable slice (descriptive only):** P2 restricted to rows with
   `s0 ≤ 0.4` (production-reachable candidates). Counts-only recon: 34
   rankable events, median size 2 — predeclared as **too thin for terminal
-  force**. **Mandatory limit rule (all terminals):** the results PR must
-  report the slice for the baseline and every candidate; whenever the slice
-  direction is ≤ 0 or opposite to the pooled band for the terminal-relevant
-  quantity (T1: the passing candidate's ΔPWA; T2/T3: the baseline behavior),
-  the recorded terminal statement must carry the limit clause verbatim:
-  *"not demonstrated / not confirmed inside the production-reachable set;
-  any step-④ decision must treat the decision surface (threshold/margin
-  interplay), not assume in-place reranking behavior."*
+  force**. **Unconditional scope caveat (all terminals, no trigger
+  condition):** the results PR must report the slice for the baseline and
+  every candidate, and the recorded terminal statement — whichever of T0–T3
+  — **always** carries the following clause verbatim, with no directional
+  test deciding its presence: *"established on the gate-retained band; not
+  established inside the production-reachable set (s0 ≤ 0.4; 34 events,
+  descriptive only); any step-④ decision must treat the decision surface
+  (threshold/margin interplay), not assume in-place reranking behavior."*
 
 ## 4. Event and trial semantics
 
@@ -292,11 +303,14 @@ information did not feed back into this declaration.
 
 ## 10. Terminals → mainline transitions (§20.7)
 
-The **Door-0 complexity class** is: q85/q15 unsafe-tail Boolean conditions
-over the §6 atom family, up to second-order AND, composed with `s0` by
-λ→∞ lexicographic demotion. Every terminal claim below is bounded by this
-class; none extends to continuous signals, finite-λ weightings, learned
-scores, or other transform families.
+The **Door-0 tested class** is: **exactly the 12 enumerated candidates of
+§6** (the 6 singles and the 6 listed ANDs), with the frozen q85/q15
+thresholds (§6 estimator) and the λ→∞ lexicographic transform. It is **not**
+"all second-order ANDs over the atom family" — 9 of the 15 possible pairs
+are untested and are **not** exhausted by any terminal below. No terminal
+claim extends beyond these 12 members; none extends to untested AND pairs,
+other quantiles, continuous signals, finite-λ weightings, learned scores, or
+other transform families.
 
 ```text
 T0  UNRESOLVED / INVALID-STUDY (validity failure)
@@ -309,15 +323,15 @@ T1  RANKING_SIGNAL_PRESENT (H not triggered; ≥1 candidate passes B1–B6)
       step ④ passes §20.4 selection.
 T2  NO_USABLE_RANKING_POWER_IN_CLASS
     (validity pass, H not triggered, no passer)
-    → transition: closes the core unknown FOR THE DOOR-0 COMPLEXITY
-      CLASS on this substrate (step ⑤, class-scoped); the band is
-      recorded as an unexplained residual set WITH RESPECT TO THIS
-      CLASS; further studies inside the class on this family/substrate
-      are blocked. T2 does NOT establish that continuous signals or
-      finite weightings carry no ranking information; probing a wider
-      class is not an auto-continuation (§20.7 no-third-door applies to
-      this study's path) — it requires a new §20.2 declaration and an
-      explicit owner charter decision.
+    → transition: closes the core unknown FOR THE 12-MEMBER DOOR-0
+      TESTED CLASS on this substrate (step ⑤, class-scoped); the band
+      is recorded as an unexplained residual set WITH RESPECT TO THESE
+      12 MEMBERS; re-running any of the 12 on this family/substrate is
+      blocked. T2 does NOT establish anything about the 9 untested AND
+      pairs, other quantiles, continuous signals, or finite weightings;
+      probing any wider or different set is not an auto-continuation
+      (§20.7 no-third-door applies to this study's path) — it requires
+      a new §20.2 declaration and an explicit owner charter decision.
 T3  NO_HEADROOM (H1 ∧ H2 triggered)
     → transition: closes step ④ as unnecessary AT DOOR-0 RESOLUTION
       (+2 pp / 2 %) on this pool — the band is already ordered by
@@ -326,8 +340,9 @@ T3  NO_HEADROOM (H1 ∧ H2 triggered)
       resolution.
 ```
 
-Exactly one terminal must be recorded. **The §3 mandatory reachable-slice
-limit rule applies to every recorded terminal**, not only T1.
+Exactly one terminal must be recorded. **The §3 unconditional reachable-set
+scope caveat attaches to every recorded terminal** — always, with no
+directional trigger to evaluate.
 
 ## 11. Execution and evidence order
 
@@ -350,5 +365,5 @@ verbatim; it must recompute V1 and refuse to run on SHA mismatch.
 - 不得對任何 §7 界線使用未解決 clustering 下的 CP bound（§19.5 類推）；
 - 不得把 T1 重貼標籤為 design candidate（§20.5）；
 - 不得在 futility 後擴家族續跑（§20.7 無第三扇門）；
-- 不得把 T2 解讀為超出 Door-0 complexity class 的耗盡宣稱（連續訊號／有限 λ 權重／learned score 均不在本 probe 測試範圍；擴 class＝新 §20.2 宣告＋owner charter 決定）；
-- 不得省略任何 terminal 的 reachable-slice limit 檢查（§3 mandatory rule 適用全部 terminal）。
+- 不得把 T2 解讀為超出 **12-member tested class** 的耗盡宣稱（9 個未測 AND pair／其他 quantile／連續訊號／有限 λ 權重／learned score 均不在本 probe 測試範圍；任何擴集＝新 §20.2 宣告＋owner charter 決定）；
+- 不得省略或條件化 reachable-set scope caveat（§3 無條件規則：每個 recorded terminal 一律附 verbatim clause，無方向判斷）。
