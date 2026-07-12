@@ -2805,7 +2805,15 @@ def run_eval(
             except (OSError, subprocess.CalledProcessError):
                 _d0_commit = "unknown"
             _d0_capture["provenance"] = {
-                "capture_contract": "d0_runtime_cuda_v1",
+                # D0's sealed packet remains on its frozen contract. R1 uses
+                # the same observation buffer but emits a separate versioned
+                # temporal-reduction payload through its own exporter.
+                "capture_contract": str(
+                    (getattr(cfg, "kwargs", {}) or {}).get(
+                        "research_bridge_fidelity_capture_contract",
+                        "d0_runtime_cuda_v1",
+                    )
+                ),
                 "git_commit": _d0_commit,
                 # Shadow = propose+capture without commit. A committing bridge
                 # rewrites track identity, so a non-shadow capture cannot be
@@ -2842,7 +2850,7 @@ def run_eval(
             )
             if not bool(_d0_capture.get("complete", False)):
                 raise RuntimeError(
-                    "bridge-fidelity capture overflowed; refuse an incomplete D0 packet"
+                    "bridge-fidelity capture overflowed; refuse an incomplete packet"
                 )
 
         if _seq_state.relinker is not None and hasattr(

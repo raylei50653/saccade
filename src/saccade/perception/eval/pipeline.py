@@ -592,6 +592,17 @@ class EvalPipeline:
         _d0_capture_dir = os.environ.get(
             "SACCADE_RESEARCH_BRIDGE_FIDELITY_CAPTURE_DIR", ""
         ).strip()
+        # R1 is a distinct, versioned temporal-reduction capture. It shares
+        # the decision-neutral native observation buffer with D0 but must not
+        # be serialized under D0's frozen packet contract.
+        _r1_capture_dir = os.environ.get(
+            "SACCADE_RESEARCH_R1_TEMPORAL_REDUCTION_CAPTURE_DIR", ""
+        ).strip()
+        if _d0_capture_dir and _r1_capture_dir:
+            raise RuntimeError(
+                "D0 and R1 bridge capture directories are mutually exclusive; "
+                "run one versioned capture contract at a time"
+            )
         try:
             _d0_capture_capacity = int(
                 os.environ.get(
@@ -710,15 +721,25 @@ class EvalPipeline:
                 "disabled or tracker lacks set_relink_params; refuse silent no-op"
             )
 
-        if _d0_capture_dir:
+        _capture_dir = _r1_capture_dir or _d0_capture_dir
+        _capture_contract = (
+            "r1_temporal_reduction_capture_v1"
+            if _r1_capture_dir
+            else "d0_runtime_cuda_v1"
+        )
+        if _capture_dir:
             if not _bridge_enabled:
                 raise RuntimeError(
-                    "SACCADE_RESEARCH_BRIDGE_FIDELITY_CAPTURE_DIR requires "
-                    "relink_bridge_enabled=true"
+                    "research bridge capture requires relink_bridge_enabled=true"
                 )
             if _d0_capture_capacity <= 0:
                 raise RuntimeError(
                     "SACCADE_RESEARCH_BRIDGE_FIDELITY_CAPTURE_CAPACITY must be positive"
+                )
+            if _r1_capture_dir and not _d0_capture_shadow:
+                raise RuntimeError(
+                    "R1 temporal-reduction capture requires "
+                    "SACCADE_RESEARCH_BRIDGE_FIDELITY_CAPTURE_SHADOW=1"
                 )
             _d0_setter = getattr(
                 detector.tracker, "set_research_bridge_fidelity_audit", None
@@ -737,9 +758,10 @@ class EvalPipeline:
                         "tracker lacks bridge shadow mode; rebuild tracking extension"
                     )
                 _d0_shadow_setter(True)
-            _kw["research_bridge_fidelity_capture_dir"] = _d0_capture_dir
+            _kw["research_bridge_fidelity_capture_dir"] = _capture_dir
             _kw["research_bridge_fidelity_capture_capacity"] = _d0_capture_capacity
             _kw["research_bridge_fidelity_capture_shadow"] = _d0_capture_shadow
+            _kw["research_bridge_fidelity_capture_contract"] = _capture_contract
 
         if hasattr(detector.tracker, "set_unified_score_params"):
             detector.tracker.set_unified_score_params(

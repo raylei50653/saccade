@@ -75,6 +75,15 @@ struct BridgeFidelityEvent {
     float s_lost = 0.0f;
     float w = 0.0f;
     float production_threshold = 0.0f;
+    // R1 temporal-reduction capture: exact chronological windows consumed by
+    // bridge_anchor4. The candidate uses its head-four; the lost track uses
+    // its last-four, or a single fallback point when it has fewer than four
+    // samples. These are observational inputs only, never bridge state.
+    int lost_window_size = 0;
+    int cand_window_size = 0;
+    float lost_anchor_window[12] = {};  // 4 × (cx, cy, h)
+    float cand_anchor_window[12] = {};  // 4 × (cx, cy, h)
+    float bridge_dir_bonus = 0.0f;
 };
 
 struct BridgeFidelityCapture {
