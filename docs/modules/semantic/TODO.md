@@ -5,7 +5,16 @@
 
 ## Sole active
 
-🔄 **Gap-conditioned probabilistic motion probe — Phase B `V5 ACCEPTED_WITH_LIMITS` (representation / level 1); D0 fail-closed; no production authorization**
+🔄 **Ambiguous-band ranking-power probe (Door 0) — declaration sealed by its PR merge; single-run execution next**
+
+- Thread: [ambiguous_band_ranking_power_probe_20260712.md](../../research/threads/ambiguous_band_ranking_power_probe_20260712.md)
+- Declaration（§20.2 block · 12 frozen candidates · B1–B6 boxes · T0–T3 terminals）: [declaration doc](research/ambiguous_band_ranking_power_probe_declaration_20260712.md)
+- Mainline position: realignment sealed order **step ③**（PR #133 contract → PR #134 bookkeeping → 本 probe → ④/⑤依 terminal）
+- Boundary: read-only on frozen pairs `0ae38967…` · production / preset / ledger unchanged · execution 只准 seal 後單次 run · 偏離宣告=作廢重宣告
+
+## Previous line（Phase B V5 recorded; D0 fail-closed pending [#112](https://github.com/raylei50653/saccade/issues/112); nav only）
+
+**Gap-conditioned probabilistic motion probe — Phase B `V5 ACCEPTED_WITH_LIMITS` (representation / level 1); D0 fail-closed; no production authorization**
 
 - Thread: [gap_conditioned_probabilistic_motion_probe_20260711.md](../../research/threads/gap_conditioned_probabilistic_motion_probe_20260711.md)
 - E0: [note](research/gap_conditioned_motion_e0_20260711.md) · [packet](research/evidence/gap_conditioned_motion_e0_20260711/manifest.json)
@@ -18,7 +27,7 @@
 - Phase B design（predeclared; executed without criterion deviation）: [A1–A8 protocol](research/gap_conditioned_motion_phase_b_design_20260711.md) — frozen criteria + V1–V5 rule; sealed entrypoint verified
 - Boundary: frozen pair table only · E3 signals sealed · Phase B `V5 ACCEPTED_WITH_LIMITS` · D0 fail-closed · joint/velocity fail-closed · no production/default/global-closure change
 
-## Previous line（closed; nav only）
+## Previous line 2（closed; nav only）
 
 **Safe-Region Assetization — A1 CLOSED (`A1_ACCEPTED_WITH_LIMITS`)**
 
@@ -48,7 +57,8 @@
 
 ## Related research threads（不佔 WIP 鎖）
 
-- [gap-conditioned probabilistic motion](../../research/threads/gap_conditioned_probabilistic_motion_probe_20260711.md) — **ACTIVE**（sole active）· E0–E2 `ACCEPTED_WITH_LIMITS` · E3 `E3_SIGNALS_SEALED` · Phase B **`V5 ACCEPTED_WITH_LIMITS`** (representation / level 1) · D0 fail-closed · no production change
+- [ambiguous-band ranking-power probe](../../research/threads/ambiguous_band_ranking_power_probe_20260712.md) — **ACTIVE（sole active）** · Door 0 · declaration sealed via PR merge · execution pending
+- [gap-conditioned probabilistic motion](../../research/threads/gap_conditioned_probabilistic_motion_probe_20260711.md) — **ACTIVE**（不佔 WIP;剩 D0/#112 engineering follow-up）· E0–E2 `ACCEPTED_WITH_LIMITS` · E3 `E3_SIGNALS_SEALED` · Phase B **`V5 ACCEPTED_WITH_LIMITS`** (representation / level 1) · D0 fail-closed · no production change
 - [gt-support morphology](../../research/threads/gt_support_morphology_20260711.md) — **PARKED** · PR-A/B/C sealed · PR-D / #107 **`ACCEPTED_WITH_LIMITS`** · restricted-closure prototype not started
 - [safe-region assetization](../../research/threads/closed/safe_region_assetization_20260710.md) — **A1 CLOSED (`A1_ACCEPTED_WITH_LIMITS`, maturity A1)** · mainline handed off → gt-support morphology · [PR #95](https://github.com/raylei50653/saccade/pull/95)/[#97](https://github.com/raylei50653/saccade/pull/97) history
 - [composition grammar coverage program](../../research/threads/closed/composition_grammar_coverage_program_20260710.md) — **SUPERSEDED** · coverage map absorbed into assetization R2–R4
