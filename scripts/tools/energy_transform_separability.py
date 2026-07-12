@@ -20,7 +20,7 @@ Usage
     --study-dir out/signal_study/m_energy_xform_<stamp> \\
     --all
 
-Contract: docs/research/eval/signal_table_schema.md §0.5
+Contract: docs/research/contracts/signal_table_schema.md §0.5
 Ledger:   docs/research/eval/signal_analysis_ledger.md
 """
 

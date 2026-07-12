@@ -1,5 +1,5 @@
 ---
-doc-status: active
+doc-status: parked
 doc-promotion: navigation-only; not evidence
 owner-module: semantic
 work-class: mainline-study

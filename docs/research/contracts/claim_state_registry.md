@@ -148,27 +148,26 @@ layer: L0 gate
 ladder: feasible-set L0–L6            transition_semantics: defined
 state: L1 in-sample region (GLOBAL_PARTIAL_ORDER_READY / ACCEPTED_WITH_LIMITS)
 substrate: offline proxy coordinates (ensure_prod_proxy_scores; 高度比用原始框高)
-target_substrate: runtime CUDA kernel terms          # ⇒ 需要 L4
+target_substrate: offline proxy coordinates (coordinate transfer to runtime is not yet established)
 open_limits: [axes 建於 offline 座標, track-level CP UCB 為 nominal 非 cluster-adjusted,
               restricted closure 未 solve]
 blockers:
-  - type: inadmissibility            # ← 不是「等待」,是「不合法」
-    what: restricted-closure solve（即使 #107 已授權）
+  - type: inadmissibility
+    what: restricted-closure solve
     clause: framework §9.3 + §13; fidelity_protocol core lemma
-    because: state 的 substrate ≠ target_substrate,且 L4 未證
+    because: the underlying offline proxy coordinates are unfaithful (T2_PROXY_UNFAITHFUL) and no coordinate transfer has been accepted
 dependencies: []
 decision_relevance:
   variable: bridge candidate 的 gate membership rule
             （production 粗篩層現幾乎全關:max_speed=0, spatial_gate=0,僅 h_lo/h_hi
               ⇒ 目前是 bdist 這個 score 在兼任 gate）
-  if_pass: axes 可攜 → closure solve 合法 → 粗篩層有機會被正確打開
-  if_fail: offline safe axis 廢止 → closure 不得建於其上 → 安全域須在 runtime 座標重建
-  # 正反都改變已知決策 ⇒ relevance ≠ zero
+  if_pass: N/A (no transfer is currently active)
+  if_fail: N/A
 supporting_declaration: ../../modules/semantic/research/boolean_atom_partial_order_20260711.md
 accepting_review: PR #107 (ACCEPTED_WITH_LIMITS)
 last_transition: 2026-07-12 — offline-coordinate limit 追記（append-only）
-admissible_units: [S0 axis-transfer 審計（L4）]        # [cached derivation]
-derived_from: §4.2 substrate + §4.3 inadmissibility blocker
+admissible_units: []
+derived_from: §4.2 substrate
 last_reviewed_at: 2026-07-12
 ```
 
@@ -186,7 +185,7 @@ blockers:
   - type: dependency                   # ← 合法,但要等
     what: transfer / intervention / production promotion
     clause: safe_region_asset_contract（transfer 尚未授權）
-    depends_on: gate.safe_region.dist_h_log_h_ratio 的 L4 結果
+    depends_on: gate.safe_region.dist_h_log_h_ratio (unfaithful offline substrate)
 decision_relevance: 隨上游 object;本身不獨立驅動決策
 supporting_declaration: safe_region_asset_contract.md
 last_transition: 2026-07-11
@@ -294,14 +293,13 @@ last_reviewed_at: 2026-07-12
 
 | 候選 | Object | 為何合法 |
 |---|---|---|
-| **S0 axis-transfer 審計（L4）** | `gate.safe_region.dist_h_log_h_ratio` | layer 正確；substrate blocker 指向它；decision relevance 正反皆改變決策 |
-| *(空)* | 其餘 object | 已達 terminal／被 inadmissibility 排除／依賴未解／relevance zero |
+| *(空)* | 所有 object | 已達 terminal／被 inadmissibility 排除／依賴未解／relevance zero |
 
-**O0 的選擇（不是 registry 的）：** 候選集目前只有一個成員 → sole active = S0。
+**O0 的選擇（不是 registry 的）：** 候選集目前為空。目前除維護、治理與工程收尾外，無科學主線 WIP 鎖被授權。
 若候選集有多個成員，**由 O0 依 decision relevance、依賴關係與 WIP=1 選出唯一 active**，
 並在 module TODO 記錄選擇；DEVELOPMENT 只公告結果，不重述狀態。
 
-**入口：** [semantic TODO](../../modules/semantic/TODO.md) · [thread](../threads/runtime_faithful_safe_domain_20260712.md)
+**入口：** [semantic TODO](../../modules/semantic/TODO.md)
 
 ---
 

@@ -1,6 +1,6 @@
 """Signal-table schema for transparent multi-method / multi-dimension analysis.
 
-Normative doc: ``docs/research/eval/signal_table_schema.md``.
+Normative doc: ``docs/research/contracts/signal_table_schema.md``.
 
 Design:
   * One universe per table (U_gt / U_det / U_cand / U_relink_pair / U_err).

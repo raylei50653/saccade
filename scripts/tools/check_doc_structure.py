@@ -213,27 +213,94 @@ def _check_thread_status_projection() -> list[str]:
     index = threads_dir / "README.md"
     if not index.is_file():
         return violations
-    index_lines = _read(index).splitlines()
 
-    for card in sorted(threads_dir.glob("*.md")):
+    # Parse index into sections and rows
+    current_section = ""
+    # Map card name (e.g. "foo.md") -> (section_name, row_text)
+    card_rows: dict[str, tuple[str, str]] = {}
+    import re
+
+    for line in _read(index).splitlines():
+        if line.startswith("##"):
+            heading = line.lower()
+            if "active" in heading:
+                current_section = "active"
+            elif "parked" in heading:
+                current_section = "parked"
+            elif "proposed" in heading:
+                current_section = "proposed"
+            elif "closed" in heading:
+                current_section = "closed"
+            else:
+                current_section = ""
+        elif current_section and line.strip().startswith("|"):
+            if ":--" in line or "---" in line:
+                continue
+            # Extract link e.g. [foo.md](path/to/foo.md) or similar
+            match = re.search(r"\[([^\]]+\.md)\]", line)
+            if match:
+                card_name = match.group(1)
+                card_rows[card_name] = (current_section, line)
+
+    all_cards = list(threads_dir.glob("*.md")) + list(
+        (threads_dir / "closed").glob("*.md")
+    )
+    for card in sorted(all_cards):
         if card.name == "README.md":
             continue
+        status = ""
         role = ""
         for line in _read(card).splitlines()[:HEADER_LINES]:
-            if line.startswith("wip-role:"):
-                role = line.split(":", 1)[1].strip()
-                break
-        if not role:
+            if line.startswith("doc-status:"):
+                status = line.split(":", 1)[1].strip().lower()
+            elif line.startswith("wip-role:"):
+                role = line.split(":", 1)[1].strip().lower()
+
+        if not status:
             continue
-        row = next((ln for ln in index_lines if f"({card.name})" in ln), "")
-        if not row:
-            continue  # index coverage is S2's warning, not a violation
-        if role.lower() not in row.lower():
+
+        # Card-level status and wip-role consistency
+        if status == "parked" and role != "parked":
             rel = card.relative_to(REPO_ROOT).as_posix()
             violations.append(
-                f"[L4] {rel}: card declares wip-role '{role}' but the threads index "
-                "row says otherwise (state has one writer; the index only projects it)"
+                f"[L4] {rel}: card doc-status is 'parked' but wip-role is '{role}' (must be 'parked')"
             )
+        elif role == "parked" and status != "parked":
+            rel = card.relative_to(REPO_ROOT).as_posix()
+            violations.append(
+                f"[L4] {rel}: card wip-role is 'parked' but doc-status is '{status}' (must be 'parked')"
+            )
+        elif status == "proposed" and role != "non-wip":
+            rel = card.relative_to(REPO_ROOT).as_posix()
+            violations.append(
+                f"[L4] {rel}: card doc-status is 'proposed' but wip-role is '{role}' (must be 'non-wip')"
+            )
+
+        if card.name not in card_rows:
+            continue  # index coverage is S2's warning, not a violation
+
+        indexed_section, row = card_rows[card.name]
+
+        # 1. Section validation
+        if indexed_section != status:
+            rel = card.relative_to(REPO_ROOT).as_posix()
+            violations.append(
+                f"[L4] {rel}: card declares doc-status '{status}' but is listed in the "
+                f"'{indexed_section.capitalize()}' section of the threads index"
+            )
+
+        # 2. WIP role validation (only for non-closed)
+        if status in ("active", "parked", "proposed") and role:
+            parts = [p.strip() for p in row.split("|")]
+            if len(parts) >= 3:
+                role_cell = parts[2]
+                expected_role_token = f"**{role}**"
+                if expected_role_token.lower() not in role_cell.lower():
+                    rel = card.relative_to(REPO_ROOT).as_posix()
+                    violations.append(
+                        f"[L4] {rel}: card declares wip-role '{role}' but the threads index "
+                        f"row WIP role cell '{role_cell}' does not match (expected '{expected_role_token}')"
+                    )
     return violations
 
 
@@ -257,7 +324,17 @@ def check_lifecycle() -> list[str]:
             "the same PR that accepted the terminal)"
         )
 
-        owner_readme = note.parent.parent / "README.md"
+        if "modules" in parts:
+            owner_readme = note.parent.parent / "README.md"
+        elif "research" in parts:
+            subdir_readme = note.parent / "README.md"
+            if subdir_readme.is_file():
+                owner_readme = subdir_readme
+            else:
+                owner_readme = note.parent.parent / "README.md"
+        else:
+            owner_readme = note.parent / "README.md"
+
         if owner_readme.is_file() and note.name in _active_section_body(owner_readme):
             owner_rel = owner_readme.relative_to(REPO_ROOT).as_posix()
             violations.append(
