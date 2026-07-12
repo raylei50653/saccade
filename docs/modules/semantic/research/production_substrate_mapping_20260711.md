@@ -126,7 +126,10 @@ candidate-event online audit is explicitly not implemented
 (`ONLINE_BAUDIT_IMPLEMENTED = False`, `portable_or_tail.py` L67). Level-3
 acceptance remains pending activation, disabled-arm no-op verification, and
 live atom/predicate parity evidence. The D0 gate (§6) resolves estimator
-fidelity; it does not by itself prove hook runtime replay parity.
+fidelity; it does not by itself prove hook runtime replay parity. Under
+framework §20 (2026-07-12) this acceptance is engineering **plumbing** —
+intervention-chain validation for a policy classified as a performance
+upper-bound candidate (§20.4), not a gate design evaluation.
 
 ### 2.4 Reachable support \(S_A\)
 

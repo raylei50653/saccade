@@ -6,6 +6,17 @@
 <!-- doc-module: semantic -->
 <!-- fact-owner: freeze-identity = this card; phase nav = m_b1_research_history_20260709_20260710.md -->
 
+> **§20 re-classification (2026-07-12, bookkeeping).** Under
+> [framework §20](../../../research/eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
+> (contract v1, PR #133) this freeze is classified as a **performance
+> upper-bound candidate** (§20.4): it documents the offline FP-removal
+> capability of the frozen atom family under the permitted complexity class.
+> It is **not a gate design candidate** — its selection rule was max FP
+> removed, which §20.2/§20.4 no longer accept as a design objective or
+> selection criterion. `validation_status`/`lifecycle_status` and all frozen
+> numbers below are unchanged; promotion toward any design recommendation
+> requires a new design-evaluation study passing §20.5.
+
 ### Offline freeze identity (unchanged historical value)
 
 ```text

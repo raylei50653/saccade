@@ -23,6 +23,33 @@ created: 2026-07-11
 | Restricted closure prototype | **authorized as separate post-merge task only** · global solve atoms = `{dist_h, log_h_ratio}` · conditional atoms **forbidden** in global solve |
 | Nested per-fold rerun | **not run**（升 L2+ 的 confirmatory unit） |
 | Production / presets / ledger | **unchanged** |
+| §20 classification (2026-07-12) | completed outputs = **diagnostic result**；restricted-closure prototype + PR-E = **SUSPENDED pending re-charter**（見下方區塊） |
+
+## §20 re-classification (2026-07-12)
+
+Role-aligned experiment contract v1 sealed（[framework §20](../eval/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)，PR #133 merged）後的簿記重分類。純 §20.4 output-class 標籤，不改任何已 accepted 的結果、limit、或本線 PARKED 狀態與 resume condition。
+
+**已完成產出 = diagnostic result（§20.4）：**
+
+| 產出 | §20.2 declaration（追認） | §20.4 output class |
+|:--|:--|:--|
+| Step-0 identifiability + placement audit（#100） | target layer=coarse gate · intent=boundary diagnostic | **diagnostic result**（identifiability verdict + boundary morphology） |
+| PR-C escape-tail forensic（#104） | target layer=coarse gate · intent=boundary diagnostic | **diagnostic result**（exceptional-tail attribution） |
+| PR-D partial-order audit（#107） | target layer=coarse gate · intent=capability map | **diagnostic result**（capability map：atom 偏序資格） |
+
+依 §20.5,這些結果不得直接或經重貼標籤升格為 design recommendation;依 §20.7,它們是 diagnostic,不佔主線節奏,完成不計主線 transition。
+
+**未動工項目 = SUSPENDED pending re-charter：**
+
+- **Restricted-closure prototype**（原 step-2b,PR-D 授權的 separate post-merge task）：**SUSPENDED**。原 selection rule——max FP removed、vs frozen OR-tail、candidate-only——已被 §20 廢止（§20.2「maximize FP removed alone is invalid」；§20.4「best performer alone is invalid」）。
+- **PR-E nested held-out validation**（原「首個可超 L1 的確認單元」）：**SUSPENDED**。其確認對象是上述 prototype 的 closure candidate,charter 隨之失效。
+
+**Re-charter 條件（resume 時二選一,先於任何求解宣告）：**
+
+1. **Gate 方向（design evaluation @ coarse gate,§20.3）**：問題改為「CORE 簡化在大 margin 下能否以更簡結構達到最低 obvious-negative coverage」——不是「closure 能安全推到多遠」;或
+2. **Score 方向（design evaluation @ score-ranking,§20.3）**：ambiguous band 內 atom interactions 是否穩定改善 GT vs FP 的相對排序（event-local ranking metrics）。
+
+若 re-charter 後的答案仍然只是「gate 多移除 FP」,本線**不續**（§20.6 futility）。PARKED 狀態與 resume condition（gap-conditioned motion probe 釋放 semantic WIP lock 後 owner 明示再授權）不變;re-charter 是 resume 時的**額外**前置條件。
 
 ## Current boundary
 
@@ -135,3 +162,4 @@ closing hypothesis: GT 是否形成 corner-concentrated core
 - 2026-07-11: **PR-C / issue #102 escape-tail forensic** via [PR #104](https://github.com/raylei50653/saccade/pull/104). Review blockers fixed (signal non-tautology · scene sheets · operationalization honesty). Research acceptance **`ACCEPTED_WITH_LIMITS`**: 3×TRUE + 1×UNRESOLVED · aggregate `ROLE_REVERSAL_SUPPORTED` · L1 single-seq only · authorizes partial-order audit only.
 - 2026-07-11: **PR-D gate / issue #106 Boolean-atom partial-order audit** via [PR #107](https://github.com/raylei50653/saccade/pull/107). **Initial operational terminal** = `GLOBAL_PARTIAL_ORDER_READY` with global=`{bridge_dist, dist_h, log_h_ratio}`. Research-owner review found `bridge_dist` provenance misclassification and incorrect `score_m_bridge` unit claim; revisions demoted `bridge_dist`, fixed units/guards/DAG, and held status UNDER REVIEW. **Final research acceptance `ACCEPTED_WITH_LIMITS`**: terminal `GLOBAL_PARTIAL_ORDER_READY` · global=`{dist_h, log_h_ratio}` · conditional includes `bridge_dist` · authorizes only a separate restricted-closure prototype on the accepted global pair.
 - 2026-07-11: Parked before the restricted-closure prototype started so the independent gap-conditioned motion probe can hold semantic WIP=1. Accepted PR-D roles and the resume boundary remain unchanged; no closure prototype artifact exists yet.
+- 2026-07-12: **§20 re-classification（bookkeeping）**。Contract v1（PR #133）生效後追認分類：step-0 / PR-C / PR-D 全部 = diagnostic result（coarse-gate boundary diagnostic / capability map）；restricted-closure prototype 與 PR-E 標 **SUSPENDED pending re-charter**（原 max-FP-removed selection rule 被 §20 廢止；re-charter = gate 方向或 score 方向二選一）。PARKED 狀態與 resume condition 不變。同 PR 將 framework §19 procedure v1 抽出為獨立檔 [procedures/gt_support_morphology_procedure_v1.md](../eval/procedures/gt_support_morphology_procedure_v1.md)（§19.x 編號保留；§19 留 tombstone）。
