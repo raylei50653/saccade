@@ -42,7 +42,7 @@
 |:--|:--|:--|:--|
 | 新增單模組 research note（D1） | note 本體；owning module README 索引；若選為 sole active，module TODO 只留 pointer | 契約 C1、C3、C4、C7；module README/TODO | `check_doc_structure.py`（索引為 warn）|
 | 將結果作決策、baseline、NO-GO 或 paper 引用（D2） | 上列 + C5 選定的 `evidence_ledger`、`no_go_registry` 和/或 `report_data` owner | D1 包 + C5 + 對應 evidence 文件 | source 可追溯；commit/preset/host 齊全 |
-| 收尾 research（不論 D1/D2） | canonical 高密度結論；檔案/索引；registry 狀態；module TODO；有 thread 才更新 thread | C4、C6、C7；有 promotion 再讀 C5；有 thread 再讀 [thread close checklist](docs/research/threads/README.md#how-to-close-a-thread) | `check_doc_structure.py --strict` + link/stale-path checks |
+| 收尾 research（不論 D1/D2） | canonical 高密度結論；檔案/索引；module TODO；**只有**已登記 object 的 accepted state / substrate / limits / transition metadata 改變才更新 registry；有 thread 才更新 thread | C4、C6、C7；有 promotion 再讀 C5；有 thread 再讀 [thread close checklist](docs/research/threads/README.md#how-to-close-a-thread) | `check_doc_structure.py --strict` + link/stale-path checks |
 
 ### 研究收尾卡
 
@@ -50,7 +50,7 @@
 
 1. 在 canonical research note 寫一份結論：裁決、適用範圍、限制、證據位置。
 2. 將狀態改為 `closed`，移出 active 路徑到 owner 的 `closed/`（或僅在 one-shot 時 archive）；更新 owning README 的索引。
-3. 更新 [claim state registry](docs/research/contracts/claim_state_registry.md)；TODO 只改 sole-active pointer 或標成無 active，不能貼結案正文。
+3. 只有 terminal acceptance 改變**已登記** object 的 accepted state、substrate、limits 或 transition metadata 時，才更新 [claim state registry](docs/research/contracts/claim_state_registry.md)；否則不碰 registry。TODO 只改 sole-active pointer 或標成無 active，不能貼結案正文。
 4. 有 thread 才依 thread close checklist 更新 frontmatter、`threads/closed/` 與 Closed 表；沒有 thread 不需建立一張。
 5. 若結果在 note 外被引用，依 C5 promotion；否則 `doc-promotion: none`。
 6. 跑 strict lifecycle、link 與 stale-path checks。預設 `check_doc_structure.py` 只警告索引；`--strict` 使 lifecycle L1–L4 失敗，且 pre-push 使用它。
@@ -97,7 +97,7 @@
 | | 文檔組合 |
 |:--|:--|
 | **讀** | 模組 README + TODO；[doc_structure_contract](docs/ownership/doc_structure_contract.md) C1/C3/C4/C7；相關 [no_go_registry](docs/reference/no_go_registry.md) |
-| **寫** | `docs/modules/<m>/research/<note>.md`（或跨模組則 `docs/research/<area>/`）+ **owning README 索引一行** + 文首 `doc-status` / `doc-promotion`；TODO 只更新 sole active **one-liner + link**；跨多步 → [threads/](docs/research/threads/) |
+| **寫** | `docs/modules/<m>/research/<note>.md`（或跨模組則 `docs/research/<area>/`）+ **owning README 索引一行**（跨模組：local `<area>/README.md` 優先；不存在才 `docs/research/README.md`）+ 文首 `doc-status` / `doc-promotion`；TODO 只更新 sole active **one-liner + link**；跨多步 → [threads/](docs/research/threads/) |
 | **驗** | 實驗協議自洽即可；**不**要求改 headline；`check_doc_structure` 索引覆蓋為 warn（pre-push 對 lifecycle 另跑 strict） |
 | **禁** | 同 PR 翻 production default（RESEARCH + default → 拆 PR，見 [change_routing_matrix](docs/ownership/change_routing_matrix.md)） |
 
@@ -108,7 +108,7 @@ Cheb-GR / bank / offline identity / occ-exit → 文檔家 **semantic**（非 re
 | | 文檔組合 |
 |:--|:--|
 | **讀** | D1 組合 + [契約 C5](docs/ownership/doc_structure_contract.md#c5--evidence--promotion)；[evidence_ledger](docs/research/evidence_ledger.md) 協議列；必要時 [report_data/README](report_data/README.md) |
-| **寫** | D1 正文與索引；**若數字要被引用** → ledger 一列 和/或 no_go 一條 和/或 report_data 表（[契約 C5](docs/ownership/doc_structure_contract.md)）；模組 README GO/NO-GO **一行** |
+| **寫** | D1 正文與索引；**若數字要被引用** → ledger 一列 和/或 no_go 一條 和/或 report_data 表（[契約 C5](docs/ownership/doc_structure_contract.md)）；module README 只保留中性索引與連結，不複製 GO/NO-GO |
 | **驗** | 標註 commit/preset/host；noise 意識（決策旋鈕 ΔIDF1 ≲ 0.2 見 ledger） |
 
 ### D3 — 生產路徑 / 合約

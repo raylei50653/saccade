@@ -7,9 +7,9 @@ Contract (``docs/ownership/doc_structure_contract.md`` § C4 / C9):
 
   S1  Every ``docs/modules/<m>/research/*.md`` must be referenced (by basename)
       in ``docs/modules/<m>/README.md``.
-  S2  Every note under ``docs/research/{pipeline,eval,training,reid,threads}/*.md``
-      (except README.md) must be referenced by basename in the subdir README
-      if it exists, else in ``docs/research/README.md``.
+  S2  Every note under a general ``docs/research/<area>/*.md`` directory
+      (except README.md) must be referenced by basename in that directory's
+      README if it exists, else in ``docs/research/README.md``.
   S3  Every ``docs/modules/<m>/`` directory must contain README.md and TODO.md.
 
 This checker is **warn-only** by default for index-coverage findings (exit 0
@@ -34,7 +34,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 MODULES_ROOT = REPO_ROOT / "docs" / "modules"
 RESEARCH_ROOT = REPO_ROOT / "docs" / "research"
-RESEARCH_SUBDIRS = ("pipeline", "eval", "training", "reid", "threads")
+# These directories own different kinds of artifacts and have their own rules:
+# contracts holds rules/state, threads has lifecycle/index projection checks, and
+# tracker-decision is a closed decision line. Every other direct research
+# subdirectory follows C4's local-README-then-top-level fallback.
+RESEARCH_SPECIAL_SUBDIRS = frozenset({"contracts", "threads", "tracker-decision"})
 
 
 def _read(path: Path) -> str:
@@ -98,10 +102,12 @@ def check_global_research_indexes() -> list[str]:
     top_readme = RESEARCH_ROOT / "README.md"
     top_body = _read(top_readme)
 
-    for sub in RESEARCH_SUBDIRS:
-        sub_dir = RESEARCH_ROOT / sub
-        if not sub_dir.is_dir():
-            continue
+    for sub_dir in sorted(
+        p
+        for p in RESEARCH_ROOT.iterdir()
+        if p.is_dir() and p.name not in RESEARCH_SPECIAL_SUBDIRS
+    ):
+        sub = sub_dir.name
         sub_readme = sub_dir / "README.md"
         if sub_readme.is_file():
             index_body = _read(sub_readme)

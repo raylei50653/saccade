@@ -55,7 +55,7 @@ rung / limits / substrate — 那是 registry 的 fact-ownership（C5 的「不�
 |:--|:--|:--|
 | Single-module experiment / ablation | `docs/modules/<m>/research/` | Index row in parent module `README.md`; numbers must be source-traceable |
 | Multi-home / multi-step research chain (≥2 homes or ≥3 steps or citable policy/hook/audit) | `docs/research/threads/` | Navigation card only; index in `threads/README.md`; **no** long tables / no second evidence home |
-| Cross-module / global eval / pipeline / shared training | `docs/research/<area>/` | Index row in subdir README **or** top `docs/research/README.md` |
+| Cross-module / global eval / pipeline / shared training | `docs/research/<area>/` | Index row in local `<area>/README.md`; **only if it does not exist**, use top `docs/research/README.md` |
 | Decision-layer *why* (association / gates / knobs) | `docs/research/tracker-decision/` | **Closed line is read-only** (P0–P8); reopen only as a *named* new line with evidence |
 | Citable baseline / decision outcome number | `docs/research/evidence_ledger.md` | One ledger row + link to source doc; no chat-only numbers |
 | Deep **per-signal / per-gate** analysis progress | `docs/research/eval/signal_analysis_ledger.md` | One row per `signal_id`; numbers master = `out/signal_study/`; contract = `signal_table_schema` |
@@ -146,6 +146,7 @@ Thread cards under `docs/research/threads/` may use YAML frontmatter instead of 
 | Entry | Obligation |
 |:--|:--|
 | `docs/research/README.md` | Active workstreams (including **pointers** into module research), Closed lines, Paper → `report_data`, subdir entry points（含 `threads/`）; **no phantom paths** |
+| `docs/research/<area>/README.md` | For a general research area, index **all** `.md` in that area (except the README itself). If the local README does not exist, `docs/research/README.md` owns the index instead. Threads and decision/rule homes follow their own rows. |
 | `docs/research/threads/README.md` | Index **all** thread cards by lifecycle table (Proposed / Active / Parked / Closed); closed cards live under `threads/closed/`; close = move + row + frontmatter; navigation-only |
 | `docs/modules/<m>/README.md` | If `research/` exists, index **all** research notes |
 | `report_data/README.md` | Start-here list; **one-line** link to decision paper outline |
@@ -202,7 +203,9 @@ Numbers: each line keeps its own master. Entry docs that quote baselines still f
 **3 · 關閉流程必須同時完成整理。**
 **不得**先宣布實驗關閉、之後再開一個「整理文檔」任務。
 owner 接受 terminal 的**同一個 PR** 內：結論就位 → 細節搬家 → 移出 active 索引 →
-[registry](../research/contracts/claim_state_registry.md) 狀態更新。
+若 terminal 改變**已登記** object 的 accepted state、substrate、limits 或 transition metadata，才更新
+[registry](../research/contracts/claim_state_registry.md)。關閉 artifact、失敗 probe 或只補證據而沒有 state
+transition 時，不得製造 registry `last_transition`。
 
 **實作細節（不是規則）：** 檔名保持穩定語義、不寫 terminal（否則收單改名會斷連結）；
 生命週期由**目錄**表達。thread 的既有 close checklist：
