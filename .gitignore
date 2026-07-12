@@ -120,3 +120,6 @@ graphify-out/
 src/tracking/topk_test
 src/tracking/topk_test_fixed
 models/**/*.pth
+
+# R1 research device helper build artifacts (gitignored *.so already)
+src/saccade/perception/eval/_cuda/libr1_bridge_replay.build.json

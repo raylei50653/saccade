@@ -108,6 +108,26 @@ uv run python scripts/tools/verify_r1_temporal_reduction_replay.py \
   --output out/r1-temporal/replay.json
 ```
 
+### Append (2026-07-12, engineering — does not relax any sealed gate)
+
+Authority seven-sequence packets must use a fail-closed device backend (no
+silent host FMA fallback). Build the research helper (gitignored `.so`) then
+pass `--require-device`:
+
+```bash
+bash scripts/tools/build_r1_bridge_replay.sh
+uv run python scripts/tools/verify_r1_temporal_reduction_replay.py \
+  --payload out/r1-temporal/events.jsonl \
+  --output out/r1-temporal/replay.json \
+  --require-device
+```
+
+The verifier JSON records a `replay_backend` provenance block (consumer module
+hash, device helper source/binary hashes, nvcc flags / architectures, GPU
+identity when available, and production `tracker_gpu.cu` hash) so a
+byte-identical payload under the same tool revision is auditable. Unit tests
+may still use the host binary32+FMA fallback.
+
 The exporter's manifest is the pre-outcome evidence index. A future capture
 must add its own packet directory and hashes; this declaration contains no
 results and is not evidence promotion.

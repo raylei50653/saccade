@@ -19,8 +19,12 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from saccade.perception.eval.consumer_a_bridge_fidelity import (
+    REPLAY_BACKEND_DEVICE,
+    active_replay_backend,
     consumer_a_estimate_from_rings,
     production_safe,
+    replay_backend_provenance,
+    set_require_device_replay,
 )
 
 
@@ -206,155 +210,190 @@ def _mutation_bucket(
         bucket["predicate_flips"] += 1
 
 
-def verify(path: Path, *, abs_tolerance: float = ABS_TOLERANCE) -> dict[str, Any]:
-    """Return deterministic replay measurements; does not assign a terminal."""
+def verify(
+    path: Path,
+    *,
+    abs_tolerance: float = ABS_TOLERANCE,
+    require_device: bool = False,
+) -> dict[str, Any]:
+    """Return deterministic replay measurements; does not assign a terminal.
+
+    ``require_device=True`` is the authority fail-closed mode: the device
+    ``bridge_anchor4`` helper must load, and host FMA fallback is rejected.
+    Unit tests leave it false so they exercise algebra without a GPU ``.so``.
+    """
     if abs_tolerance != ABS_TOLERANCE:
         raise ValueError(
             f"R1 replay tolerance is sealed at {ABS_TOLERANCE}; overrides are forbidden"
         )
-    rows = _load(path)
-    errors: dict[str, list[float]] = defaultdict(list)
-    predicate_disagreements = 0
-    grouped: dict[tuple[str, int], list[tuple[str, float, float]]] = defaultdict(list)
-    mutation_buckets: dict[str, dict[str, Any]] = {}
-    for row in rows:
-        terms = row["kernel_terms"]
-        assert isinstance(terms, dict)
-        replay = replay_record(row)
-        for field in REPLAY_FIELDS:
-            errors[field].append(abs(float(replay[field]) - float(terms[field])))
-        for field in ("gap", "bridge_at", "la"):
-            if int(replay[field]) != int(terms[field]):
-                raise ValueError(
-                    f"structural replay mismatch for {field}: {row['event_key']}"
-                )
-        if production_safe(
-            float(replay["bdist"]), float(terms["production_threshold"])
-        ) != production_safe(
-            float(terms["bdist"]), float(terms["production_threshold"])
-        ):
-            predicate_disagreements += 1
-        # Candidate event is the natural local ranking group. This tool does not
-        # invent a label or a global comparison universe.
-        grouped[(str(row["seq"]), int(row["cand_local_id"]))].append(
-            (str(row["event_key"]), float(terms["bdist"]), float(replay["bdist"]))
+    set_require_device_replay(require_device)
+    try:
+        # Resolve backend before any event math so a missing .so fails closed
+        # under authority mode rather than half-way through the packet.
+        backend = active_replay_backend()
+        if require_device and backend != REPLAY_BACKEND_DEVICE:
+            raise RuntimeError(
+                "R1 authority replay requires replay_backend="
+                f"{REPLAY_BACKEND_DEVICE!r}; got {backend!r}. "
+                "Build with bash scripts/tools/build_r1_bridge_replay.sh"
+            )
+        provenance = replay_backend_provenance()
+        rows = _load(path)
+        errors: dict[str, list[float]] = defaultdict(list)
+        predicate_disagreements = 0
+        grouped: dict[tuple[str, int], list[tuple[str, float, float]]] = defaultdict(
+            list
         )
-        lost = _ring(row.get("lost_reduction"), name="lost")
-        candidate = _ring(row.get("candidate_reduction"), name="candidate")
-        # A cyclic shift is intentionally not an equivalent serialization: it
-        # exercises the declared window-order sensitivity while keeping the
-        # same sample multiset. It must never be read as an R0 substitute.
-        shifted_lost = lost[1:] + lost[:1] if len(lost) == 4 else lost
-        shifted_candidate = candidate[1:] + candidate[:1]
-        _mutation_bucket(
-            mutation_buckets,
-            mutation="cyclic_window_shift",
-            row=row,
-            baseline=replay,
-            values=_estimate_values(
-                row, lost=shifted_lost, candidate=shifted_candidate
-            ),
-        )
-        # Removing the oldest candidate sample triggers the real kernel's
-        # <4 early return, so it has no score to compare. Removing the oldest
-        # lost sample switches a full lost window to the explicit short-lost
-        # fallback. Both dispositions are recorded instead of imputed.
-        _mutation_bucket(
-            mutation_buckets,
-            mutation="omit_oldest_candidate_sample",
-            row=row,
-            baseline=replay,
-            values=None,
-            unavailable="candidate_early_return",
-        )
-        if len(lost) == 4:
+        mutation_buckets: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            terms = row["kernel_terms"]
+            assert isinstance(terms, dict)
+            replay = replay_record(row)
+            for field in REPLAY_FIELDS:
+                errors[field].append(abs(float(replay[field]) - float(terms[field])))
+            for field in ("gap", "bridge_at", "la"):
+                if int(replay[field]) != int(terms[field]):
+                    raise ValueError(
+                        f"structural replay mismatch for {field}: {row['event_key']}"
+                    )
+            if production_safe(
+                float(replay["bdist"]), float(terms["production_threshold"])
+            ) != production_safe(
+                float(terms["bdist"]), float(terms["production_threshold"])
+            ):
+                predicate_disagreements += 1
+            # Candidate event is the natural local ranking group. This tool does not
+            # invent a label or a global comparison universe.
+            grouped[(str(row["seq"]), int(row["cand_local_id"]))].append(
+                (str(row["event_key"]), float(terms["bdist"]), float(replay["bdist"]))
+            )
+            lost = _ring(row.get("lost_reduction"), name="lost")
+            candidate = _ring(row.get("candidate_reduction"), name="candidate")
+            # A cyclic shift is intentionally not an equivalent serialization: it
+            # exercises the declared window-order sensitivity while keeping the
+            # same sample multiset. It must never be read as an R0 substitute.
+            shifted_lost = lost[1:] + lost[:1] if len(lost) == 4 else lost
+            shifted_candidate = candidate[1:] + candidate[:1]
             _mutation_bucket(
                 mutation_buckets,
-                mutation="omit_oldest_lost_sample",
+                mutation="cyclic_window_shift",
                 row=row,
                 baseline=replay,
-                values=_estimate_values(row, lost=lost[-1:], candidate=candidate),
+                values=_estimate_values(
+                    row, lost=shifted_lost, candidate=shifted_candidate
+                ),
             )
-        else:
+            # Removing the oldest candidate sample triggers the real kernel's
+            # <4 early return, so it has no score to compare. Removing the oldest
+            # lost sample switches a full lost window to the explicit short-lost
+            # fallback. Both dispositions are recorded instead of imputed.
             _mutation_bucket(
                 mutation_buckets,
-                mutation="omit_oldest_lost_sample",
+                mutation="omit_oldest_candidate_sample",
                 row=row,
                 baseline=replay,
                 values=None,
-                unavailable="no_older_lost_sample",
+                unavailable="candidate_early_return",
             )
+            if len(lost) == 4:
+                _mutation_bucket(
+                    mutation_buckets,
+                    mutation="omit_oldest_lost_sample",
+                    row=row,
+                    baseline=replay,
+                    values=_estimate_values(row, lost=lost[-1:], candidate=candidate),
+                )
+            else:
+                _mutation_bucket(
+                    mutation_buckets,
+                    mutation="omit_oldest_lost_sample",
+                    row=row,
+                    baseline=replay,
+                    values=None,
+                    unavailable="no_older_lost_sample",
+                )
 
-    comparable_pairs = order_disagreements = near_ties = 0
-    for values in grouped.values():
-        for left in range(len(values)):
-            for right in range(left + 1, len(values)):
-                _, captured_l, replay_l = values[left]
-                _, captured_r, replay_r = values[right]
-                captured_delta = captured_l - captured_r
-                replay_delta = replay_l - replay_r
-                if abs(captured_delta) <= 2.0 * abs_tolerance:
-                    near_ties += 1
-                    continue
-                comparable_pairs += 1
-                if replay_delta == 0.0 or captured_delta * replay_delta < 0.0:
-                    order_disagreements += 1
+        comparable_pairs = order_disagreements = near_ties = 0
+        for values in grouped.values():
+            for left in range(len(values)):
+                for right in range(left + 1, len(values)):
+                    _, captured_l, replay_l = values[left]
+                    _, captured_r, replay_r = values[right]
+                    captured_delta = captured_l - captured_r
+                    replay_delta = replay_l - replay_r
+                    if abs(captured_delta) <= 2.0 * abs_tolerance:
+                        near_ties += 1
+                        continue
+                    comparable_pairs += 1
+                    if replay_delta == 0.0 or captured_delta * replay_delta < 0.0:
+                        order_disagreements += 1
 
-    field_summary = {
-        field: {
-            "max_abs_error": max(values),
-            "within_abs_tolerance": max(values) <= abs_tolerance,
+        field_summary = {
+            field: {
+                "max_abs_error": max(values),
+                "within_abs_tolerance": max(values) <= abs_tolerance,
+            }
+            for field, values in errors.items()
         }
-        for field, values in errors.items()
-    }
-    all_terms_within_abs_tolerance = all(
-        summary["within_abs_tolerance"] for summary in field_summary.values()
-    )
-    causal_sensitivity_interpretable = (
-        all_terms_within_abs_tolerance
-        and predicate_disagreements == 0
-        and order_disagreements == 0
-    )
-    return {
-        "payload_schema_version": PAYLOAD_SCHEMA_VERSION,
-        "verifier": {
-            "path": "scripts/tools/verify_r1_temporal_reduction_replay.py",
-            "sha256": _sha256(Path(__file__)),
-        },
-        "events": len(rows),
-        "abs_tolerance": abs_tolerance,
-        "fields": field_summary,
-        "all_terms_within_abs_tolerance": all_terms_within_abs_tolerance,
-        "predicate_disagreements": predicate_disagreements,
-        "event_local_order": {
-            "groups": len(grouped),
-            "comparable_pairs": comparable_pairs,
-            "near_ties": near_ties,
-            "order_disagreements": order_disagreements,
-        },
-        "causal_sensitivity": sorted(
-            mutation_buckets.values(),
-            key=lambda item: (
-                str(item["mutation"]),
-                str(item["lost_branch"]),
-                int(item["la"]),
+        all_terms_within_abs_tolerance = all(
+            summary["within_abs_tolerance"] for summary in field_summary.values()
+        )
+        causal_sensitivity_interpretable = (
+            all_terms_within_abs_tolerance
+            and predicate_disagreements == 0
+            and order_disagreements == 0
+        )
+        return {
+            "payload_schema_version": PAYLOAD_SCHEMA_VERSION,
+            "verifier": {
+                "path": "scripts/tools/verify_r1_temporal_reduction_replay.py",
+                "sha256": _sha256(Path(__file__)),
+            },
+            "replay_backend": provenance,
+            "events": len(rows),
+            "abs_tolerance": abs_tolerance,
+            "fields": field_summary,
+            "all_terms_within_abs_tolerance": all_terms_within_abs_tolerance,
+            "predicate_disagreements": predicate_disagreements,
+            "event_local_order": {
+                "groups": len(grouped),
+                "comparable_pairs": comparable_pairs,
+                "near_ties": near_ties,
+                "order_disagreements": order_disagreements,
+            },
+            "causal_sensitivity": sorted(
+                mutation_buckets.values(),
+                key=lambda item: (
+                    str(item["mutation"]),
+                    str(item["lost_branch"]),
+                    int(item["la"]),
+                ),
             ),
-        ),
-        "causal_sensitivity_interpretable": causal_sensitivity_interpretable,
-        "outcome_labels_read": False,
-        "score_fit_performed": False,
-    }
+            "causal_sensitivity_interpretable": causal_sensitivity_interpretable,
+            "outcome_labels_read": False,
+            "score_fit_performed": False,
+        }
+    finally:
+        set_require_device_replay(None)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--payload", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--require-device",
+        action="store_true",
+        help=(
+            "Authority fail-closed mode: require libr1_bridge_replay.so and "
+            "reject host FMA fallback. Recommended for seven-sequence owner packets."
+        ),
+    )
     args = parser.parse_args(argv)
 
     payload = args.payload if args.payload.is_absolute() else REPO / args.payload
     output = args.output if args.output.is_absolute() else REPO / args.output
-    result = verify(payload)
+    result = verify(payload, require_device=bool(args.require_device))
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(
         json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"

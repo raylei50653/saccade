@@ -33,17 +33,24 @@ This module never mounts a production policy change.
 from __future__ import annotations
 
 import ctypes
+import hashlib
+import json
 import math
+import os
 import struct
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Final, Sequence
 
+# ── Float32 / FMA host helpers ───────────────────────────────────────────────
+
 
 def _f32(value: float) -> float:
     """Round ``value`` to IEEE-754 binary32 (CUDA ``float``)."""
-    return struct.unpack("<f", struct.pack("<f", float(value)))[0]
+    packed = struct.pack("<f", float(value))
+    # Explicit float() keeps mypy strict (struct.unpack is typed as Any).
+    return float(struct.unpack("<f", packed)[0])
 
 
 @lru_cache(maxsize=1)
@@ -70,37 +77,181 @@ def _fmaf(a: float, b: float, c: float) -> float:
     return float(_fmaf_impl()(_f32(a), _f32(b), _f32(c)))
 
 
-@lru_cache(maxsize=1)
-def _device_replay_lib() -> Any | None:
-    """Optional research .so that runs ``bridge_anchor4`` on device.
+# ── Device replay backend (research-only) ────────────────────────────────────
 
-    Host FMA replicas match ``bridge_vel4`` bit-exactly but still drift on
-    adaptive-anchor residuals (``ay``/``cy0``) by a few 1e-5.  The sealed R1
-    budget is 1e-5, so R0 prefers the device kernel when the library is built.
-    """
-    so_path = Path(__file__).resolve().parent / "_cuda" / "libr1_bridge_replay.so"
-    if not so_path.is_file():
+REPLAY_BACKEND_DEVICE: Final[str] = "device_bridge_anchor4"
+REPLAY_BACKEND_HOST_FMA: Final[str] = "host_binary32_fma"
+REQUIRE_DEVICE_ENV: Final[str] = "SACCADE_RESEARCH_R1_REQUIRE_DEVICE_REPLAY"
+
+_EVAL_DIR: Final[Path] = Path(__file__).resolve().parent
+_DEVICE_SO_PATH: Final[Path] = _EVAL_DIR / "_cuda" / "libr1_bridge_replay.so"
+_DEVICE_SRC_PATH: Final[Path] = _EVAL_DIR / "_cuda" / "r1_bridge_replay.cu"
+_DEVICE_BUILD_META_PATH: Final[Path] = (
+    _EVAL_DIR / "_cuda" / "libr1_bridge_replay.build.json"
+)
+_PRODUCTION_TRACKER_PATH: Final[Path] = (
+    _EVAL_DIR.parents[2] / "tracking" / "tracker_gpu.cu"
+)  # src/tracking/tracker_gpu.cu
+
+# Programmatic override for tests / authority verifier. None → read env.
+_REQUIRE_DEVICE_OVERRIDE: bool | None = None
+
+
+def set_require_device_replay(required: bool | None) -> None:
+    """Force device backend (True), allow host fallback (False), or env (None)."""
+    global _REQUIRE_DEVICE_OVERRIDE
+    _REQUIRE_DEVICE_OVERRIDE = required
+
+
+def require_device_replay() -> bool:
+    """Whether R0 must use the device helper (authority fail-closed)."""
+    if _REQUIRE_DEVICE_OVERRIDE is not None:
+        return _REQUIRE_DEVICE_OVERRIDE
+    return os.environ.get(REQUIRE_DEVICE_ENV, "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def _sha256_file(path: Path) -> str | None:
+    if not path.is_file():
         return None
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _load_build_meta() -> dict[str, Any]:
+    if not _DEVICE_BUILD_META_PATH.is_file():
+        return {}
     try:
-        lib = ctypes.CDLL(str(so_path))
-    except OSError:
-        return None
-    lib.r1_bridge_anchor4_batch.argtypes = (
-        ctypes.POINTER(ctypes.c_float),
-        ctypes.POINTER(ctypes.c_int),
-        ctypes.POINTER(ctypes.c_float),
-        ctypes.POINTER(ctypes.c_int),
-        ctypes.POINTER(ctypes.c_float),
-        ctypes.c_int,
-    )
-    lib.r1_bridge_anchor4_batch.restype = ctypes.c_int
-    lib.r1_bridge_vel4_batch.argtypes = (
-        ctypes.POINTER(ctypes.c_float),
-        ctypes.POINTER(ctypes.c_float),
-        ctypes.c_int,
-    )
-    lib.r1_bridge_vel4_batch.restype = ctypes.c_int
+        payload = json.loads(_DEVICE_BUILD_META_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _gpu_runtime_info() -> dict[str, Any]:
+    """Best-effort GPU identity for authority provenance (optional)."""
+    info: dict[str, Any] = {
+        "gpu_name": None,
+        "gpu_compute_capability": None,
+        "cuda_runtime_available": False,
+    }
+    try:
+        import torch
+
+        if not torch.cuda.is_available():
+            return info
+        info["cuda_runtime_available"] = True
+        info["gpu_name"] = torch.cuda.get_device_name(0)
+        major, minor = torch.cuda.get_device_capability(0)
+        info["gpu_compute_capability"] = f"{major}.{minor}"
+    except Exception:
+        return info
+    return info
+
+
+@lru_cache(maxsize=1)
+def _device_replay_lib_state() -> tuple[Any | None, str | None]:
+    """Return ``(lib, load_error)``.  Host fallback is only silent when allowed."""
+    if not _DEVICE_SO_PATH.is_file():
+        return None, f"missing device helper: {_DEVICE_SO_PATH}"
+    try:
+        lib = ctypes.CDLL(str(_DEVICE_SO_PATH))
+    except OSError as exc:
+        return None, f"failed to load {_DEVICE_SO_PATH}: {exc}"
+    try:
+        lib.r1_bridge_anchor4_batch.argtypes = (
+            ctypes.POINTER(ctypes.c_float),
+            ctypes.POINTER(ctypes.c_int),
+            ctypes.POINTER(ctypes.c_float),
+            ctypes.POINTER(ctypes.c_int),
+            ctypes.POINTER(ctypes.c_float),
+            ctypes.c_int,
+        )
+        lib.r1_bridge_anchor4_batch.restype = ctypes.c_int
+        lib.r1_bridge_vel4_batch.argtypes = (
+            ctypes.POINTER(ctypes.c_float),
+            ctypes.POINTER(ctypes.c_float),
+            ctypes.c_int,
+        )
+        lib.r1_bridge_vel4_batch.restype = ctypes.c_int
+    except AttributeError as exc:
+        return None, f"device helper missing exported symbols: {exc}"
+    return lib, None
+
+
+def _device_replay_lib() -> Any | None:
+    lib, error = _device_replay_lib_state()
+    if lib is None and require_device_replay():
+        raise RuntimeError(
+            "R1 authority replay requires the device backend "
+            f"({REQUIRE_DEVICE_ENV}=1 / --require-device), but it is unavailable: "
+            f"{error}. Build with: bash scripts/tools/build_r1_bridge_replay.sh"
+        )
     return lib
+
+
+def active_replay_backend() -> str:
+    """Backend that will serve the next ``bridge_anchor4`` / ``bridge_vel4`` call."""
+    lib, _error = _device_replay_lib_state()
+    if lib is not None:
+        return REPLAY_BACKEND_DEVICE
+    if require_device_replay():
+        # Surface the same failure path before any silent host math.
+        _device_replay_lib()
+    return REPLAY_BACKEND_HOST_FMA
+
+
+def replay_backend_provenance() -> dict[str, Any]:
+    """Auditable identity of the R0 calculator (source + optional .so + GPU).
+
+    Authority packets must record this block so a byte-identical payload under
+    the same tool revision and tolerance can be re-checked without guessing
+    whether host FMA or the device helper produced the numbers.
+    """
+    lib, load_error = _device_replay_lib_state()
+    backend = REPLAY_BACKEND_DEVICE if lib is not None else REPLAY_BACKEND_HOST_FMA
+    if require_device_replay() and lib is None:
+        backend = "unavailable_device_required"
+    build_meta = _load_build_meta()
+    gpu = _gpu_runtime_info()
+    return {
+        "replay_backend": backend,
+        "require_device": require_device_replay(),
+        "consumer_module_path": str(
+            Path("src/saccade/perception/eval/consumer_a_bridge_fidelity.py")
+        ),
+        "consumer_module_sha256": _sha256_file(Path(__file__).resolve()),
+        "device_helper_source_path": "src/saccade/perception/eval/_cuda/r1_bridge_replay.cu",
+        "device_helper_source_sha256": _sha256_file(_DEVICE_SRC_PATH),
+        "device_helper_binary_path": (
+            "src/saccade/perception/eval/_cuda/libr1_bridge_replay.so"
+            if _DEVICE_SO_PATH.is_file()
+            else None
+        ),
+        "device_helper_binary_sha256": _sha256_file(_DEVICE_SO_PATH),
+        "device_helper_loadable": lib is not None,
+        "device_helper_load_error": load_error if lib is None else None,
+        "device_helper_build_meta_path": (
+            "src/saccade/perception/eval/_cuda/libr1_bridge_replay.build.json"
+            if _DEVICE_BUILD_META_PATH.is_file()
+            else None
+        ),
+        "nvcc_version": build_meta.get("nvcc_version"),
+        "compile_flags": build_meta.get("compile_flags"),
+        "cuda_architectures": build_meta.get("cuda_architectures"),
+        "gpu_name": gpu["gpu_name"],
+        "gpu_compute_capability": gpu["gpu_compute_capability"],
+        "cuda_runtime_available": gpu["cuda_runtime_available"],
+        "production_tracker_source_path": "src/tracking/tracker_gpu.cu",
+        "production_tracker_source_sha256": _sha256_file(_PRODUCTION_TRACKER_PATH),
+    }
 
 
 # ── Production constants (must match headline preset / kernel defaults) ──────
