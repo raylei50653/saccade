@@ -171,6 +171,42 @@ def test_r1_verifier_replays_without_labels_or_score_fit(tmp_path: Path) -> None
         "omit_oldest_candidate_sample",
         "omit_oldest_lost_sample",
     }
+    # Provenance must name the actual calculator, not only the verifier script.
+    backend = result["replay_backend"]
+    assert backend["replay_backend"] in {
+        "device_bridge_anchor4",
+        "host_binary32_fma",
+    }
+    assert backend["require_device"] is False
+    assert backend["consumer_module_sha256"]
+    assert backend["device_helper_source_sha256"]
+    assert backend["production_tracker_source_sha256"]
+    assert "nvcc_version" in backend
+    assert "compile_flags" in backend
+    assert "gpu_name" in backend
+    assert "gpu_compute_capability" in backend
+
+
+def test_r1_authority_require_device_fails_closed_without_helper(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Authority mode must not silently fall back to host FMA."""
+    from saccade.perception.eval import consumer_a_bridge_fidelity as fidelity
+
+    exporter = _load(EXPORTER, "r1_export_req_dev")
+    verifier = _load(VERIFIER, "r1_verify_req_dev")
+    capture_dir, id_map = _capture_fixture(tmp_path)
+    output = tmp_path / "events.jsonl"
+    exporter.export_r1_capture(capture_dir, output, id_map_path=id_map)
+
+    monkeypatch.setattr(
+        fidelity,
+        "_device_replay_lib_state",
+        lambda: (None, "missing device helper: test"),
+    )
+    # lru_cache on the real function is bypassed by the monkeypatch above.
+    with pytest.raises(RuntimeError, match="requires the device backend|device"):
+        verifier.verify(output, require_device=True)
 
 
 def test_r1_verifier_counts_replay_tie_as_order_disagreement_regardless_of_order(

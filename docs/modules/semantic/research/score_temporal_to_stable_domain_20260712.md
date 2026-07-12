@@ -348,16 +348,15 @@ payload is promoted by the separately versioned R1 exporter rather than by
 mutating D0's flat CSV artifact. See the sealed
 [R1 capture declaration](r1_temporal_reduction_capture_declaration_20260712.md).
 
-**Active first unit:** capture contract `R1` is sealed before any capture data
-are read. It promotes the default-off observation state into a versioned nested
-payload rather than mutating D0's sealed v2 packet; source/payload hashes,
-shadow byte-identity, zero overflow, field completeness, component replay
-tolerance, predicate agreement, event-local rank policy, and causal-sensitivity
-readout are frozen. Only this instrumentation-and-replay unit is active; it
-does not fit \(M\), \(A\), \(J_f\), or a score model yet.
+**Active first unit:** capture contract `R1` is sealed; host R0 replay fidelity
+was repaired without relaxing the presealed `1e-5` tolerance; the declared
+seven-sequence shadow packet lives under
+`out/r1_temporal_20260712T115004Z/` for **owner review**. No research terminal
+is accepted, and no \(M\), \(A\), \(J_f\), score, gate, or preset work is
+authorized, until that review.
 
 ## Status
 
-**ACTIVE, sole semantic WIP.** The modeling order and claim boundaries above
-are now authorized. This is not yet a sealed execution declaration: no runtime
-capture result, score model, gate change, or production change has been made.
+**ACTIVE, sole semantic WIP.** Modeling order and claim boundaries are
+authorized. The R1 preflight packet is complete and awaiting owner review; no
+score model, gate change, or production change has been made.

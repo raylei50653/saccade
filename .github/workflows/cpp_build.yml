@@ -118,3 +118,17 @@ jobs:
           export PYTHONPATH=$PYTHONPATH:$(pwd)/build
           # 僅驗證匯入，不執行推論 (因為無 GPU)
           uv run python -c "import saccade_media_ext; print('✅ C++ Python Binding is loadable')"
+
+      # Research-only R1 device helper: compile + exported-symbol check on the
+      # CUDA devel image (no GPU required). Explicit gencode — `-arch=native`
+      # needs a live device and would fail on this runner.
+      - name: Build R1 research bridge-replay helper
+        env:
+          SACCADE_R1_CUDA_ARCH: "-gencode=arch=compute_75,code=sm_75"
+        run: |
+          bash scripts/tools/build_r1_bridge_replay.sh
+          test -f src/saccade/perception/eval/_cuda/libr1_bridge_replay.so
+          test -f src/saccade/perception/eval/_cuda/libr1_bridge_replay.build.json
+          nm -D src/saccade/perception/eval/_cuda/libr1_bridge_replay.so \
+            | grep -E 'r1_bridge_(anchor4|vel4)_batch'
+          echo "✅ R1 device helper compiled and exports required symbols"
