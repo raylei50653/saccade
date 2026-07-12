@@ -21,6 +21,16 @@ only after seal; results land in a follow-up PR with a committed evidence
 packet. Any deviation from this declaration (atoms, thresholds, metrics,
 boxes, terminals) voids the run and requires a new declaration.
 
+**Revision 2 (2026-07-12, pre-seal — owner seal-review fixes; no outcome
+information involved):** ① H/T3 headroom made joint (PWA **and** top-1) and
+the false "arithmetically unavailable" rationale removed, with explicit
+H-over-boxes precedence; ② tie policy for ranks and the quantile estimator
+frozen; B3 clarified as metric-level re-aggregation with **no** threshold
+re-fit; ③ B6 replaced by a mechanically decidable construction-invariant
+check (fire-rate direction + flip decomposition); ④ T2 scoped to the Door-0
+complexity class, and the reachable-slice limit made mandatory for **all**
+terminals, not only T1.
+
 ---
 
 ## 1. §20.2 declaration block
@@ -42,12 +52,14 @@ Stop condition          §9 — sufficiency: ≥1 candidate passes all boxes;
                         futility: none passes; no third door (§20.7).
 Output class            diagnostic result (capability map); on futility the
                         band is additionally recorded as an unexplained
-                        residual set. No design candidate may be claimed;
+                        residual set with respect to the Door-0 complexity
+                        class (§10). No design candidate may be claimed;
                         §20.5 applies to every number in the results.
-Mainline transition     §10 — T1 opens step ④; T2 closes the signal-family
-                        ranking path (step ⑤); T3 closes step ④ as
-                        unnecessary; T0 = UNRESOLVED/INVALID-STUDY closes the
-                        experiment only.
+Mainline transition     §10 — T1 opens step ④; T2 closes the Door-0-class
+                        ranking path (step ⑤, class-scoped); T3 closes
+                        step ④ as unnecessary at Door-0 resolution;
+                        T0 = UNRESOLVED/INVALID-STUDY closes the experiment
+                        only.
 ```
 
 ## 2. Substrate (frozen)
@@ -88,11 +100,14 @@ Pools (per owner Door-0 spec):
 - **Reachable slice (descriptive only):** P2 restricted to rows with
   `s0 ≤ 0.4` (production-reachable candidates). Counts-only recon: 34
   rankable events, median size 2 — predeclared as **too thin for terminal
-  force**. Interpretation rule: if T1 passes on P2 while this slice shows
-  pooled ΔPWA ≤ 0, the T1 statement must carry the limit *"ranking power not
-  demonstrated inside the production-reachable set; step ④ must treat the
-  decision surface (threshold/margin interplay), not assume in-place
-  reranking gain."*
+  force**. **Mandatory limit rule (all terminals):** the results PR must
+  report the slice for the baseline and every candidate; whenever the slice
+  direction is ≤ 0 or opposite to the pooled band for the terminal-relevant
+  quantity (T1: the passing candidate's ΔPWA; T2/T3: the baseline behavior),
+  the recorded terminal statement must carry the limit clause verbatim:
+  *"not demonstrated / not confirmed inside the production-reachable set;
+  any step-④ decision must treat the decision surface (threshold/margin
+  interplay), not assume in-place reranking behavior."*
 
 ## 4. Event and trial semantics
 
@@ -116,18 +131,34 @@ Pools (per owner Door-0 spec):
 
 For a ranking r of an event's candidates:
 
+**Ranking keys (frozen):** baseline key = `s0` (scalar); candidate key =
+the lexicographic tuple `(c, s0)` (§6). Two rows are **tied** iff their keys
+are exactly equal under the applicable key.
+
+**Tie policy (frozen):**
+
+- **PWA pairs:** GT strictly better = 1; tied = 0.5; worse = 0.
+- **Ranks (MRR / top-1):** pessimistic against GT —
+  `rank(GT row) = 1 + #{FP rows with strictly better key} + #{FP rows with
+  tied key}`. A GT row therefore holds rank 1 only if it is strictly better
+  than every FP row in the event. The same formula applies to baseline and
+  candidate keys; no random or index-order tie-breaking anywhere.
+
+Metrics:
+
 - **PWA** (pairwise ranking accuracy): over all (GT, FP) pairs in the event,
-  fraction where the GT row ranks strictly better; ties count 0.5.
-  Event PWA = mean over its pairs; **pooled PWA = macro-average over
-  rankable events** (equal event weight). Per-seq PWA = macro over the
-  sequence's rankable events.
-- **MRR**: reciprocal of the best GT rank, macro-averaged.
-- **top-1**: fraction of rankable events with a GT row at rank 1.
+  scored per the tie policy. Event PWA = mean over its pairs; **pooled PWA =
+  macro-average over rankable events** (equal event weight). Per-seq PWA =
+  macro over the sequence's rankable events.
+- **MRR**: reciprocal of the best (smallest) GT rank under the pessimistic
+  rank formula, macro-averaged over rankable events.
+- **top-1**: fraction of rankable events whose best GT rank = 1 (i.e. a GT
+  row strictly beats all FP rows).
 - **margin** (descriptive): `s0(best FP) − s0(best GT)` per event; reported,
   no box.
 
-Baseline metrics use `s0` alone. Candidate metrics use the §6 transform.
-Δmetric = candidate − baseline on the identical event set.
+Baseline metrics use the baseline key. Candidate metrics use the candidate
+key. Δmetric = candidate − baseline on the identical event set.
 
 ## 6. Probe candidate family (frozen; 12 candidates)
 
@@ -139,9 +170,13 @@ family): `dist_h`; `log_h_ratio = |log(h_cand_raw/h_lost_raw)|`;
 **Binarization (fixed, no search):** condition fires on the unsafe tail —
 `c_a = 1[v_a ≥ q85(v_a | band rows)]` for lower-is-better atoms;
 `c_dir = 1[dir_cos ≤ q15(dir_cos | band rows)]`. Quantiles are computed on
-gate-retained band rows (GT+FP) of the fitting fold set (§6.1). No other
-quantiles, thresholds, atoms, or operators may be evaluated under this seal;
-OR-of-AND and any third-order form are forbidden.
+gate-retained band rows (GT+FP) of the fitting fold set (§6.1) with the
+**frozen estimator `numpy.quantile(values, q, method="linear")`** on
+float64 values (integer-valued atoms such as `gap` are cast to float64 and
+use the same linear interpolation; no alternative `method` may be used).
+Condition comparisons use `≥` / `≤` exactly as written. No other quantiles,
+thresholds, atoms, or operators may be evaluated under this seal; OR-of-AND
+and any third-order form are forbidden.
 
 **Singles (6):** `c_dist_h`, `c_log_h_ratio`, `c_resid_mean`,
 `c_speed_mismatch`, `c_gap`, `c_dir_cos_low`.
@@ -157,16 +192,18 @@ candidates; `s0` orders within each group. This is the λ→∞ limit of
 `s = s0 + λ·c` and introduces **no tunable weight**; Door 0 deliberately does
 not fit λ.
 
-**A-priori mechanism direction (B6, written before execution):** every
+**A-priori mechanism direction (construction invariant, feeds B6):** every
 candidate demotes geometrically/temporally strained pairs — larger
 height-normalized displacement (`dist_h`), larger height inconsistency
 (`log_h_ratio`), larger midpoint residual (`resid_mean`), larger
 entry/exit speed mismatch (`speed_mismatch`), longer occlusion (`gap`),
-reversed direction (`dir_cos` low). A candidate whose observed improvement
-depends on the opposite direction fails B6 regardless of magnitude. Known
-prior risk (recorded, not disqualifying for a diagnostic probe): `gap`-family
-conditions were sequence-specific in the ε=0 repair line; B3/B5 are the
-guards.
+reversed direction (`dir_cos` low). Under lexicographic demotion with this
+fixed direction, no reversed-direction variant exists in the run, and B6 is
+decided **mechanically** by the two §7 decomposition inequalities — no
+post-hoc reviewer judgment of "mechanism consistency" may enter the
+terminal. Known prior risk (recorded, not disqualifying for a diagnostic
+probe): `gap`-family conditions were sequence-specific in the ε=0 repair
+line; B3/B5 are the guards.
 
 ### 6.1 Threshold fitting protocol
 
@@ -178,21 +215,49 @@ guards.
 
 ## 7. Headroom check and minimum-effect boxes
 
-**H (headroom, evaluated first):** if baseline pooled PWA ≥ 0.98 in-sample,
-terminal = T3 (no candidate evaluation can override; +2 pp is arithmetically
-unavailable).
+**H (headroom, evaluated first; joint condition):** terminal = T3 iff, on
+the in-sample baseline (key = `s0`, pessimistic ranks):
+
+```text
+H1  baseline pooled PWA ≥ 0.98
+H2  baseline pooled top-1 ≥ 0.98
+    (equivalently: P3 top-1-miss events ≤ 2 % of rankable events)
+```
+
+Both must hold. Rationale: high PWA alone does not establish that the
+decision-relevant ordering is solved — an event can carry near-perfect PWA
+while a single FP still outranks the GT (top-1 miss); T3's "step ④
+unnecessary" claim therefore requires the pairwise **and** the top-1 ceiling
+jointly. **Precedence (predeclared):** if H holds, the 12 candidates are
+still computed and reported descriptively, but the terminal is T3 regardless
+of box outcomes — within ≤ 2 % residual headroom, a box pass is
+indistinguishable from selection noise at this probe's resolution, and
+Door 0 does not adjudicate it.
 
 A candidate **passes** iff all of:
 
 ```text
 B1  in-sample pooled ΔPWA ≥ +0.02
 B2  per-seq in-sample ΔPWA ≥ 0 in ≥ 5/7 seqs AND > 0 in ≥ 4/7
-B3  concentration: min over s of pooled ΔPWA recomputed excluding
-    sequence s ≥ +0.01  (leave-one-seq-out of the improvement)
+B3  concentration: min over s of pooled ΔPWA re-aggregated over all
+    rankable events excluding sequence s ≥ +0.01. Metric-level
+    re-aggregation ONLY — the in-sample thresholds (fit on all 7 seqs)
+    are held fixed; no threshold re-fit occurs in B3. Threshold-refit
+    robustness is exclusively B5's axis.
 B4  in-sample pooled ΔMRR ≥ 0 AND Δtop-1 ≥ 0
 B5  LOO: LOO-pooled ΔPWA ≥ +0.01 AND per-fold ΔPWA ≥ 0 in ≥ 5/7 folds
-B6  observed improvement direction consistent with the §6 a-priori
-    mechanism note (no post-hoc flip)
+    (thresholds re-fit per fold per §6.1)
+B6  mechanical direction decomposition (in-sample, pooled over rankable
+    events; no judgment call):
+      B6a  fire-rate direction: P(c=1 | FP rows) > P(c=1 | GT rows),
+           computed on rankable-event rows
+      B6b  flip decomposition: n_good > n_bad, where over all in-event
+           (GT, FP) pairs, n_good = pairs whose PWA contribution
+           increased under the candidate key vs the baseline key, and
+           n_bad = pairs whose contribution decreased
+    Both inequalities strict. B6 is a construction-invariant check —
+    the demotion direction is fixed a priori (§6) and no reversed
+    variant exists in the run.
 ```
 
 **Multiplicity guard:** 12 candidates are evaluated; no p-values are claimed
@@ -227,29 +292,42 @@ information did not feed back into this declaration.
 
 ## 10. Terminals → mainline transitions (§20.7)
 
+The **Door-0 complexity class** is: q85/q15 unsafe-tail Boolean conditions
+over the §6 atom family, up to second-order AND, composed with `s0` by
+λ→∞ lexicographic demotion. Every terminal claim below is bounded by this
+class; none extends to continuous signals, finite-λ weightings, learned
+scores, or other transform families.
+
 ```text
 T0  UNRESOLVED / INVALID-STUDY (validity failure)
     → closes this experiment only; hypothesis path stays open;
-      not reportable as signal-family exhaustion.
-T1  RANKING_SIGNAL_PRESENT (≥1 candidate passes B1–B6)
+      not reportable as any form of exhaustion.
+T1  RANKING_SIGNAL_PRESENT (H not triggered; ≥1 candidate passes B1–B6)
     → transition: authorizes step ④ — a design evaluation declared at
-      target layer = score-ranking (interaction interface); carries the
-      §3 reachable-slice limit if triggered. T1 itself remains a
-      diagnostic result; no design candidate exists until step ④ passes
-      §20.4 selection.
-T2  NO_USABLE_RANKING_POWER (validity pass, H not triggered, no passer)
-    → transition: closes the core unknown — the current frozen signal
-      family has no usable ranking power in the retained ambiguous band
-      (step ⑤); the band is recorded as an unexplained residual set;
-      further Boolean ranking studies on this family/substrate are
-      blocked pending genuinely new signals.
-T3  NO_HEADROOM (H triggered)
-    → transition: closes step ④ as unnecessary on this substrate — the
-      band is already ordered by baseline geometry; residual IDs pain
-      must be attributed outside this pool.
+      target layer = score-ranking (interaction interface). T1 itself
+      remains a diagnostic result; no design candidate exists until
+      step ④ passes §20.4 selection.
+T2  NO_USABLE_RANKING_POWER_IN_CLASS
+    (validity pass, H not triggered, no passer)
+    → transition: closes the core unknown FOR THE DOOR-0 COMPLEXITY
+      CLASS on this substrate (step ⑤, class-scoped); the band is
+      recorded as an unexplained residual set WITH RESPECT TO THIS
+      CLASS; further studies inside the class on this family/substrate
+      are blocked. T2 does NOT establish that continuous signals or
+      finite weightings carry no ranking information; probing a wider
+      class is not an auto-continuation (§20.7 no-third-door applies to
+      this study's path) — it requires a new §20.2 declaration and an
+      explicit owner charter decision.
+T3  NO_HEADROOM (H1 ∧ H2 triggered)
+    → transition: closes step ④ as unnecessary AT DOOR-0 RESOLUTION
+      (+2 pp / 2 %) on this pool — the band is already ordered by
+      baseline geometry to within the probe's resolution; residual IDs
+      pain must be attributed outside this pool or below this
+      resolution.
 ```
 
-Exactly one terminal must be recorded.
+Exactly one terminal must be recorded. **The §3 mandatory reachable-slice
+limit rule applies to every recorded terminal**, not only T1.
 
 ## 11. Execution and evidence order
 
@@ -271,4 +349,6 @@ verbatim; it must recompute V1 and refuse to run on SHA mismatch.
 - 不得以 P1 pooled 分離度或 reachable slice 取代 P2 boxes 判 terminal；
 - 不得對任何 §7 界線使用未解決 clustering 下的 CP bound（§19.5 類推）；
 - 不得把 T1 重貼標籤為 design candidate（§20.5）；
-- 不得在 futility 後擴家族續跑（§20.7 無第三扇門）。
+- 不得在 futility 後擴家族續跑（§20.7 無第三扇門）；
+- 不得把 T2 解讀為超出 Door-0 complexity class 的耗盡宣稱（連續訊號／有限 λ 權重／learned score 均不在本 probe 測試範圍；擴 class＝新 §20.2 宣告＋owner charter 決定）；
+- 不得省略任何 terminal 的 reachable-slice limit 檢查（§3 mandatory rule 適用全部 terminal）。
