@@ -12,8 +12,10 @@ created: 2026-07-12
 ## Status
 
 **ACTIVE · mainline-study · sole-active.** R1 capture/replay is **closed** at
-terminal `R1_FAITHFUL`. The sole open next step is a **separately declared**
-discrete-\(M\) representation-capability study (not yet declared).
+terminal `R1_FAITHFUL`. The discrete-\(M\) representation-capability study is
+**drafted and pending owner seal** —
+[declaration](../../modules/semantic/research/discrete_m_capability_declaration_20260712.md).
+No capture, fit, or metric may be run until that seal.
 
 ## Current boundary
 
@@ -46,12 +48,26 @@ is declared and accepted on its own contract.
 
 ## Current step
 
-**R1 closed / discrete-\(M\) declaration pending.**
+**Discrete-\(M\) declaration drafted; owner seal pending.**
 
-Do **not** open score fitting, gate sweeps, or preset changes from R1. The only
-authorized transition is a **new, separately predeclared** discrete-\(M\)
-representation-capability study on R1-faithful local state. That study must
-carry its own §-style declaration before any fit or metric is read.
+Do **not** open score fitting, gate sweeps, or preset changes from R1. The
+[discrete-\(M\) declaration](../../modules/semantic/research/discrete_m_capability_declaration_20260712.md)
+freezes, before any data are read: the new per-frame capture contract
+`m0_state_capture_v1`; the terminal-bearing state \(z^{R}\) (R1 reduction) with
+\(z^{K}\) demoted to diagnostic; the pair universe (observed-contiguous,
+confirmed, full-window) with partition conservation; the five-member affine
+family powered from a one-step OLS fit; the \(h\)-normalized anchor-error metric
+under leave-one-sequence-out; and the ordered decision rule
+(ceiling 0.40 = production threshold → \(\rho(M)\le 1.001\) → ≥10 % over
+constant velocity, ≥6/7 folds, ≥50 % gain surviving de-concentration).
+
+**Blocking precondition recorded:** the sealed R1 packet **cannot** carry this
+study — it holds only the effective four-sample window at bridge events, so
+horizons 4 and 8 and \(M^k\) stability are unmeasurable on it. Hence a new,
+separately versioned capture rather than a post-hoc relaxation of charter § 5.
+
+Nothing may be captured, exported, or fitted until the owner seals the
+declaration.
 
 ## Acceptance
 
@@ -90,3 +106,12 @@ R1_FAITHFUL (closed under sealed config + seven-seq support)
   headline adaptive-anchor configuration and declared seven-sequence support.
   R1 capture/replay unit closed. Discrete-\(M\) study authorized only as a
   separately declared follow-on (not opened here).
+- 2026-07-12: Substrate audit for the discrete-\(M\) follow-on. The runtime foot
+  ring (`FOOT_RING_CAP = 8`, written only on observed frames, frozen while
+  coasting) and the Kalman posterior are the state the bridge actually reads;
+  the sealed R1 packet exports only the four-sample effective window, so it
+  cannot supply horizons 4/8 or \(M^k\) stability. Owner chose a **new per-frame
+  state capture** over relaxing charter § 5.
+- 2026-07-12: Discrete-\(M\) declaration **drafted** (`m0_state_capture_v1`,
+  study `discrete_m_capability_20260712`); **owner seal pending**. No capture,
+  fit, or metric authorized yet.

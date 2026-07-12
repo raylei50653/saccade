@@ -5,16 +5,18 @@
 
 ## Sole active
 
-**Score temporal-to-stable-domain modeling — discrete-\(M\) declaration pending**
+**Score temporal-to-stable-domain modeling — discrete-\(M\) declaration drafted, owner seal pending**
 
 - Thread: [score_temporal_to_stable_domain_20260712.md](../../research/threads/score_temporal_to_stable_domain_20260712.md)
 - Canonical: [research charter](research/score_temporal_to_stable_domain_20260712.md)
 - **R1 closed** at terminal [`R1_FAITHFUL`](research/r1_temporal_reduction_capture_results_20260712.md)
   ([packet](research/evidence/r1_temporal_reduction_capture_20260712/manifest.json)) under sealed
   Consumer-A headline adaptive-anchor config + seven-seq MOT17 support.
-- Only current work: draft a **separate** discrete-\(M\) representation-capability
-  declaration (short-horizon \(z_{t+1}\approx Mz_t+c\)) — do **not** fit \(M\),
-  scores, gates, or presets until that declaration is sealed.
+- Only current work: owner review / seal of the
+  [discrete-\(M\) declaration](research/discrete_m_capability_declaration_20260712.md)
+  (`m0_state_capture_v1` per-frame capture; \(z_{t+1}\approx Mz_t+c\) on \(z^{R}\)).
+  **Nothing may be captured, exported, or fitted before that seal**; no score,
+  gate, preset, or \(e^{A\Delta t}\) work is authorized by R1 alone.
 
 ## Previous line 0（closed; nav only）
 
