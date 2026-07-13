@@ -16,7 +16,7 @@ Before Phase A, two distinct owner actions are required:
 
 The seal authorizes only an observational H0 implementation and its Phase A/B unlabelled captures. It authorizes no GT/FP read, threshold variation, policy choice, registry/ledger modification, or production-preset change.
 
-## 2. Frozen headline target and pre-seal fingerprint
+## 2. Frozen policy base, resolved configuration, and instrumentation provenance
 
 The sole policy target is `configs/presets/mamba_whole_graph.yaml`:
 
@@ -30,16 +30,71 @@ The sole policy target is `configs/presets/mamba_whole_graph.yaml`:
 | `relink_bridge_dir_bonus` | `0.8` |
 | `reid_mode` | `off` |
 
-Pre-seal source fingerprint:
+The sealed **policy base** is the pre-H0 decision path against which the H0
+observer is assessed. It is deliberately distinct from the later
+instrumented build: an observer necessarily changes source files and therefore
+must not be required to have the same source-file hashes as its base.
 
-| Item | SHA-256 / value |
+| Policy-base item | SHA-256 / value |
 | --- | --- |
-| Git head | `7581c9720569e17593d1844ad494253ce664fed8` |
+| `policy_base_head` | `7581c9720569e17593d1844ad494253ce664fed8` |
+| `policy_base_tree` | `2706ee3af0ddd6cd304f83289b575b2ae9b72fc6` |
 | headline preset | `093b66ed124063f035ae9cf2a76e4f5426743cd819fb66e3e54994c97ea42cd1` |
-| `src/tracking/tracker_gpu.cu` | `36a0c7f952e99aee309c7fe4c9187852d070ee0ae600cd737a0beeeb55904e55` |
-| `include/tracking/tracker_gpu.hpp` | `b97a145a12a8f7ae3f6f055b210675f02d68d39a0d312f3e606a469d00272124` |
+| base `src/tracking/tracker_gpu.cu` | `36a0c7f952e99aee309c7fe4c9187852d070ee0ae600cd737a0beeeb55904e55` |
+| base `include/tracking/tracker_gpu.hpp` | `b97a145a12a8f7ae3f6f055b210675f02d68d39a0d312f3e606a469d00272124` |
 
-At execution, the manifest must additionally freeze the exact source commit, resolved effective bridge configuration, CUDA build/compiler/extension identity, GPU identity, seven-sequence set, capture schema version, and every kernel or host-helper SHA-256. A mismatch is `H0_PROVENANCE_INVALID` before replay.
+`resolved_bridge_policy_config_v1` is canonical UTF-8 JSON with lexicographic
+keys, no insignificant whitespace, JSON `true`/`false`, and finite JSON
+numbers. It contains exactly these post-preset, post-default, post-CLI
+resolution fields:
+
+```text
+reid_mode
+relink_enabled, relink_bank_cap, relink_sim_thresh, relink_lambda,
+relink_spatial_gate, relink_max_age
+relink_bridge_enabled, relink_bridge_px, relink_bridge_at,
+relink_bridge_min_lost, relink_bridge_ttl, relink_bridge_max_speed,
+relink_bridge_person_height, relink_bridge_fps, relink_bridge_margin,
+relink_bridge_spatial_gate, relink_bridge_anchor,
+relink_bridge_anchor_rate, relink_bridge_h_lo, relink_bridge_h_hi,
+relink_bridge_dir_bonus, relink_bridge_occ_gate_cover,
+relink_bridge_occ_gap_min, relink_bridge_occ_expand_px,
+relink_bridge_occ_expand_cover, relink_bridge_app_veto
+```
+
+For the sole headline invocation (no module or CLI override), its canonical
+SHA-256 is
+`b1b78318ccbb87a701986f71c86147d83058e598ffd3b21e06f42d6116a51ae6`.
+This includes disabled paths and their values; the short authority table above
+is only a review aid, never the configuration fingerprint. H0 additionally
+freezes `research_portable_or_tail_enabled=false`, a null portable-tail
+threshold pointer, and `research_bridge_shadow=false`.
+
+Each execution manifest must separately record all of the following:
+
+- the preceding `policy_base_head`, base-tree, base-source, preset, and
+  resolved-config fingerprints;
+- `instrumentation_head`, its complete source tree hash, the machine-readable
+  diff from `policy_base_head`, and that diff's SHA-256;
+- the sealed `h0_observational_diff_v1` admission result; and
+- CUDA build/compiler/extension identity, GPU identity, seven-sequence set,
+  capture-schema version, and every instrumented kernel and host-helper
+  SHA-256.
+
+`instrumentation_head` must descend from `policy_base_head`. Its diff may add
+only H0-owned trace schema/storage, deterministic instance-UID state,
+trace-only allocation/clear/drain/serialization, and trace-pointer arguments
+or writes at the observation points sealed in §4. It may use atomics only on
+H0-owned cursors, overflow counters, or trace buffers. It may not change an
+existing policy input, arithmetic operation, comparison, branch predicate,
+loop/order used for policy selection, policy-state write, launch geometry, or
+the values written to `track_ids`, `active`, claims, proposals, debug counters,
+or MOT output. Trace-only source additions are not policy-base drift.
+
+Any base/config mismatch, non-descendant instrumentation head, missing diff, or
+diff outside `h0_observational_diff_v1` is `H0_PROVENANCE_INVALID` before
+replay. A different instrumentation hash by itself is expected and is not a
+provenance failure.
 
 ## 3. Canonical native decision graph
 
@@ -74,52 +129,76 @@ compares this canonical semantic SHA-256. Raw-stream hashes remain provenance
 only and are not expected to agree across runs.
 
 Every semantic record carries `seq`, `frame`, a schema version, and the stable
-pre-commit identity defined in §4.4. No record may use final MOT output or a
-local ID as its identity.
+instance identity defined in §4.5. Visible `track_id` values are observations,
+not identity keys: no record may use final MOT output or a local ID as its
+cross-record identity.
 
 ### 4.1 Pair record
 
-Key: `(seq, frame, cand_slot, cand_precommit_global_id, lost_slot, lost_precommit_global_id)`.
+Key: `(seq, frame, cand_slot, cand_instance_uid, lost_slot, lost_instance_uid)`.
 
 It is emitted after structural eligibility and **before** the height gate. It contains `la`, `bridge_at`, both ring lengths, EMA heights, height ratio and verdict; speed/spatial verdicts; anchors, velocities, `h_ref`, `fwd_r`, `bwd_r`, `dist_h`, `s_lost`, `w`, directional inputs, `bdist_before_direction`, `bdist_after_direction`; cutoff and all post-cutoff veto verdicts; final pair eligibility; and one ordered rejection reason. Values not reached because of an earlier rejection are a tagged `not_computed` value, never zero.
 
+For both referenced instances it also records the visible pre-commit `track_id`.
+
 ### 4.2 Candidate-decision record
 
-Key: `(seq, frame, cand_slot, cand_precommit_global_id)`. Native production-loop state, not an offline sort, writes the structural-competitor count, pre-score-pass count, cutoff/veto-pass count, best/second lost pre-commit identities and slots, best/second `bdist`, margin, margin verdict, proposal verdict, and proposal rejection reason.
+Key: `(seq, frame, cand_slot, cand_instance_uid)`. Native production-loop state,
+not an offline sort, writes the candidate visible pre-commit `track_id`,
+structural-competitor count, pre-score-pass count, cutoff/veto-pass count,
+best/second lost instance UIDs, slots, and visible pre-commit `track_id`s,
+native best/second `bdist` values, `no_second_competitor`, native margin,
+margin verdict, proposal verdict, and proposal rejection reason.
 
 ### 4.3 Claim record
 
-Key: `(seq, frame, proposing_cand_slot, proposing_cand_precommit_global_id,
-proposed_lost_slot, proposed_lost_precommit_global_id)`. Each proposal and each
+Key: `(seq, frame, proposing_cand_slot, proposing_cand_instance_uid,
+proposed_lost_slot, proposed_lost_instance_uid)`. Each proposal and each
 lost-claim outcome are linked by the pair/candidate key. The record preserves
-the unquantized detection score, `sq`, exact packed atomic key,
-candidate-index component, proposed lost identity, winning candidate identity,
-and `claim_won` verdict.
+the proposing and proposed-lost visible pre-commit `track_id`s, unquantized
+detection score, `sq`, exact packed atomic key, candidate-index component,
+winning candidate slot, instance UID, and visible pre-commit `track_id`, and
+`claim_won` verdict.
 
 ### 4.4 Commit record
 
-Key: the winning claim-record key. Each claim winner emits one commit record with
-the candidate and lost pre-commit identities, candidate post-commit global
-identity, commit verdict, and lost-slot deactivation verdict. A non-winning
-claim emits no commit record.
+Key: the winning claim-record key. Each claim winner emits one commit record
+with candidate and lost immutable instance UIDs; candidate and lost visible
+pre-commit `track_id`s; candidate and lost visible post-commit `track_id`s;
+candidate active state before/after; lost active state before/after; commit
+verdict; and an explicit `lost_slot_deactivated` verdict. The verifier must
+prove from these observations that
+`candidate_postcommit_track_id == lost_precommit_track_id` and that the lost
+slot changed `active: true -> false`. A non-winning claim emits no commit
+record.
 
 ### 4.5 `track_instance_uid_v1` identity contract
 
-`*_precommit_global_id` is a `uint64` `track_instance_uid_v1`, not a tracker
-local ID and not a MOT-output ID. The contract is fixed before seal:
+`*_instance_uid` is a `uint64` `track_instance_uid_v1`, not a tracker local ID
+and not a visible/MOT-output `track_id`. Its allocation is deterministic and
+fixed before seal:
 
-- allocate a fresh nonzero UID when a slot first becomes a new track instance;
-- allocate a fresh UID again on every slot reuse, even if its local `track_id`
-  repeats;
-- retain the UID unchanged for the entire instance lifetime;
-- relink commit changes the visible track ID but never overwrites either the
-  candidate or lost instance UID; and
-- record both candidate and lost UIDs before commit in every linked record.
+- Each sequence owns a `uint32` generation counter for every tracker slot,
+  initialized to zero at sequence start.
+- Immediately when a slot becomes a new track instance, before that instance
+  can enter an H0 record, its own generation counter increments by one. The
+  value must never wrap; a pending wrap is fail-closed.
+- The UID is exactly `(uint64_t(slot_generation) << 32) | uint32_t(slot)`.
+  Thus `(seq, track_instance_uid_v1)` is unique for the capture, nonzero for
+  every allocated instance, and independent of GPU block scheduling or a
+  global atomic allocator.
+- A slot reuse receives its new generation and therefore a new UID even if the
+  visible `track_id` repeats. The UID remains unchanged throughout that
+  instance's lifetime.
+- Relink commit changes only the candidate's visible `track_id`; it never
+  overwrites candidate or lost instance UID. Every linked record retains both
+  instance UIDs and records visible IDs in fields explicitly named
+  `*_precommit_track_id` or `*_postcommit_track_id`.
 
-The allocator may choose storage layout, but not allocation event, lifetime,
-width, or immutability. It may not reconstruct a UID from final MOT output or
-substitute a local ID. If this contract cannot be implemented, Phase A stops at
-`H0_CAPTURE_PARTIAL` without a capture packet.
+The implementation may choose storage layout but not this allocator, allocation
+event, formula, width, lifetime, or immutability. It may not reconstruct a UID
+from final MOT output or substitute a local ID. If this contract cannot be
+implemented, Phase A stops at `H0_CAPTURE_PARTIAL` without a capture packet.
 
 ### 4.6 Candidate-state and scalar encoding
 
@@ -131,12 +210,21 @@ pairs. Candidate status is one of `no_structural_competitors`,
 otherwise zero pre-score passes; otherwise zero final-eligible pairs; otherwise
 margin rejection; otherwise proposal emitted.
 
-`not_computed`, `+inf`, and `NaN` are distinct tagged encodings, never inferred
-from an IEEE payload: `not_computed` means an earlier gate prevented evaluation;
-`+inf` is the sealed `second_best_bdist` when exactly one final-eligible
-competitor exists; `NaN` is forbidden in all semantic scalar fields. The margin
-verdict for a singleton is therefore computed using `second_best_bdist=+inf` and
-passes whenever the candidate has a best pair.
+Every scalar is serialized as raw IEEE-754 binary32 bits plus an explicit
+status tag: `computed_finite`, `computed_pos_inf`, `computed_neg_inf`,
+`computed_nan`, or `not_computed`. The special states are never inferred from
+an IEEE payload; a `computed_nan` policy input invalidates the packet.
+
+The native candidate-ranking initialization is preserved exactly:
+`best_dist = second_dist = 1e30f`. Therefore a candidate with exactly one
+selected best competitor records the native finite binary32 `1e30f` for
+`second_best_bdist`, `no_second_competitor=true`, and the native float32 margin
+subtraction used by the consumer. It must not substitute `+inf`. A candidate
+with no selected best records both native initialized scalars, no best/second
+lost identity, `no_second_competitor=false`, and `margin=not_computed` because
+production returns before the margin branch. A candidate with two or more
+selected competitors records the native runner-up scalar and
+`no_second_competitor=false`.
 
 ## 5. Conservation and replay verifier
 
