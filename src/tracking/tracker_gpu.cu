@@ -1520,7 +1520,8 @@ __global__ void spawn_new_tracks_kernel(
     const int* d_det_revive_id, float* d_covs,
     int* d_foot_len, float* d_ema_h, int* d_track_revived,  // bridge foot-state reset (null when off)
     uint64_t* d_track_uid, uint64_t* d_track_uid_ctr, int* d_generation,
-    const uint64_t* d_det_revive_uid, const int* d_det_revive_generation){
+    const uint64_t* d_det_revive_uid, const int* d_det_revive_generation,
+    uint32_t* h0_slot_generation, int* h0_uid_wrap_events){
     int tid = threadIdx.x;
     __shared__ int s_counts[256];
     __shared__ int s_offsets[256];
@@ -1627,6 +1628,18 @@ __global__ void spawn_new_tracks_kernel(
             d_score_sum[slot]   = d_det_scores[det_idx];
             d_trk_scores[slot]  = d_det_scores[det_idx];
             d_classes[slot]     = d_det_classes[det_idx];
+            // H0 track_instance_uid_v1: a per-slot monotonically increasing
+            // generation is allocated exactly when this new slot instance is
+            // created.  It is trace-only and never aliases the tracker's
+            // production uid/id state.
+            if (h0_slot_generation) {
+                const uint32_t current_generation = h0_slot_generation[slot];
+                if (current_generation == UINT32_MAX) {
+                    if (h0_uid_wrap_events) atomicAdd(h0_uid_wrap_events, 1);
+                } else {
+                    h0_slot_generation[slot] = current_generation + 1u;
+                }
+            }
             d_active[slot]      = true;
             // Bridge: a recycled slot must start with clean foot history so the
             // new identity does not inherit the previous track's footprint.
@@ -1945,6 +1958,68 @@ __device__ float occ_gap_cover(
     return n > 0 ? (float)cov / (float)n : -1.0f;
 }
 
+// H0 owns all of the following buffers.  They are intentionally disjoint from
+// bridge policy state: their atomics only allocate trace slots or flag capture
+// invalidity, and no decision later reads them.
+struct H0TraceDeviceBuffers {
+    int enabled = 0;
+    int frame = 0;
+    const uint32_t* slot_generation = nullptr;
+    H0BridgePairRecord* pair_records = nullptr;
+    int pair_capacity = 0;
+    int* pair_cursor = nullptr;
+    int* pair_overflow = nullptr;
+    H0BridgeCandidateRecord* candidate_records = nullptr;
+    int candidate_capacity = 0;
+    int* candidate_cursor = nullptr;
+    int* candidate_overflow = nullptr;
+    H0BridgeClaimRecord* claim_records = nullptr;
+    int claim_capacity = 0;
+    int* claim_cursor = nullptr;
+    int* claim_overflow = nullptr;
+    H0BridgeCommitRecord* commit_records = nullptr;
+    int commit_capacity = 0;
+    int* commit_cursor = nullptr;
+    int* commit_overflow = nullptr;
+    int* candidate_claim_record_index = nullptr;
+};
+
+__device__ inline H0Float32 h0_not_computed_scalar() {
+    return H0Float32{};
+}
+
+__device__ inline H0Float32 h0_scalar(float value) {
+    H0Float32 out{};
+    out.bits = __float_as_uint(value);
+    if (isnan(value)) {
+        out.status = H0_COMPUTED_NAN;
+    } else if (isinf(value)) {
+        out.status = value > 0.0f ? H0_COMPUTED_POS_INF : H0_COMPUTED_NEG_INF;
+    } else {
+        out.status = H0_COMPUTED_FINITE;
+    }
+    return out;
+}
+
+__device__ inline uint64_t h0_instance_uid(const uint32_t* slot_generation, int slot) {
+    if (!slot_generation || slot < 0) return 0;
+    return (static_cast<uint64_t>(slot_generation[slot]) << 32) |
+           static_cast<uint32_t>(slot);
+}
+
+template <typename Record>
+__device__ inline int h0_append_record(
+    Record* records, int capacity, int* cursor, int* overflow, const Record& record) {
+    if (!records || !cursor || !overflow || capacity <= 0) return -1;
+    const int index = atomicAdd(cursor, 1);
+    if (index < capacity) {
+        records[index] = record;
+        return index;
+    }
+    atomicAdd(overflow, 1);
+    return -1;
+}
+
 // Pass 1 (propose): one thread per candidate track that first hits hit_streak==
 // bridge_at. Scan live lost tracks, foot-bridge each, keep the closest under
 // bridge_px (with optional speed/spatial/margin gates), then claim the chosen
@@ -1969,7 +2044,8 @@ __global__ void relink_bidir_propose_kernel(
     // Issue #112 native fidelity capture. Default-off and decision-neutral.
     int fidelity_audit_enabled, int fidelity_frame, BridgeFidelityEvent* fidelity_events,
     int fidelity_capacity, int* fidelity_cursor, int* fidelity_overflow,
-    int* track_revived, int* bridge_claim, int* bridge_cand_lost, int* dbg)
+    int* track_revived, int* bridge_claim, int* bridge_cand_lost, int* dbg,
+    H0TraceDeviceBuffers h0)
 {
     int cand = blockIdx.x * blockDim.x + threadIdx.x;
     if (cand >= max_objs) return;
@@ -1977,6 +2053,10 @@ __global__ void relink_bidir_propose_kernel(
     if (!active[cand] || trk_to_det[cand] < 0) return;
     if (hit_streak[cand] != bridge_at || track_revived[cand]) return;
     if (foot_len[cand] < 4) return;
+
+    if (h0.enabled && h0.candidate_claim_record_index) {
+        h0.candidate_claim_record_index[cand] = -1;
+    }
 
     if (dbg) atomicAdd(&dbg[2], 1);  // bridge attempt
     track_revived[cand] = 1;         // fire once per track life
@@ -2009,6 +2089,21 @@ __global__ void relink_bidir_propose_kernel(
 
     float best_dist = 1e30f, second_dist = 1e30f;
     int best_lost = -1;
+    int second_lost = -1;
+    H0BridgeCandidateRecord h0_candidate{};
+    const bool h0_candidate_enabled = h0.enabled && h0.candidate_records &&
+        h0.candidate_cursor && h0.candidate_overflow;
+    if (h0_candidate_enabled) {
+        h0_candidate.frame = h0.frame;
+        h0_candidate.cand_slot = cand;
+        h0_candidate.cand_precommit_track_id = track_ids[cand];
+        h0_candidate.cand_instance_uid = h0_instance_uid(h0.slot_generation, cand);
+        h0_candidate.best_bdist = h0_scalar(best_dist);
+        h0_candidate.second_best_bdist = h0_scalar(second_dist);
+        h0_candidate.margin = h0_not_computed_scalar();
+        h0_candidate.proposal_emitted = H0_REJECT;
+        h0_candidate.proposal_reject_reason = H0_PROPOSAL_REJECT_NO_COMPETITOR;
+    }
     for (int lost = 0; lost < max_objs; ++lost) {
         if (lost == cand) continue;
         if (!active[lost] || trk_to_det[lost] >= 0) continue;   // must be lost this frame
@@ -2018,6 +2113,26 @@ __global__ void relink_bidir_propose_kernel(
         if (track_ids[lost] < 0) continue;
         int ln = foot_len[lost];
         if (ln < 1) continue;
+
+        H0BridgePairRecord h0_pair{};
+        const bool h0_pair_enabled = h0.enabled && h0.pair_records && h0.pair_cursor &&
+            h0.pair_overflow;
+        if (h0_pair_enabled) {
+            h0_pair.frame = h0.frame;
+            h0_pair.cand_slot = cand;
+            h0_pair.lost_slot = lost;
+            h0_pair.cand_precommit_track_id = track_ids[cand];
+            h0_pair.lost_precommit_track_id = track_ids[lost];
+            h0_pair.cand_instance_uid = h0_instance_uid(h0.slot_generation, cand);
+            h0_pair.lost_instance_uid = h0_instance_uid(h0.slot_generation, lost);
+            h0_pair.la = la;
+            h0_pair.bridge_at = bridge_at;
+            h0_pair.cand_ring_length = foot_len[cand];
+            h0_pair.lost_ring_length = ln;
+            h0_pair.occupancy_coverage = h0_not_computed_scalar();
+            h0_pair.appearance_cosine = h0_not_computed_scalar();
+            if (h0_candidate_enabled) ++h0_candidate.structural_competitors;
+        }
 
         const float* lring = foot_ring + (size_t)lost * ring_cap * 3;  // stride 3
         float vxl = 0.0f, vyl = 0.0f, lx, ly;
@@ -2031,12 +2146,41 @@ __global__ void relink_bidir_propose_kernel(
         }
         float lost_h = states[lost * 8 + 3], ema_lost = ema_h[lost];
         float h_ref = fmaxf((ema_lost + ema_cand) * 0.5f, 1.0f);
+        if (h0_pair_enabled) {
+            h0_pair.ema_lost = h0_scalar(ema_lost);
+            h0_pair.ema_cand = h0_scalar(ema_cand);
+            h0_pair.h_ref = h0_scalar(h_ref);
+            h0_pair.lost_anchor_x = h0_scalar(lx);
+            h0_pair.lost_anchor_y = h0_scalar(ly);
+            h0_pair.cand_anchor_x = h0_scalar(cx0);
+            h0_pair.cand_anchor_y = h0_scalar(cy0);
+            h0_pair.lost_velocity_x = h0_scalar(vxl);
+            h0_pair.lost_velocity_y = h0_scalar(vyl);
+            h0_pair.cand_velocity_x = h0_scalar(vxc);
+            h0_pair.cand_velocity_y = h0_scalar(vyc);
+        }
 
         // Scale gate (disabled when bridge_h_hi<=0): lost/cand height ratio must
         // stay inside [h_lo, h_hi]; large size jumps across the gap are bogus.
         if (bridge_h_hi > 0.0f) {
             float hr = fmaxf(ema_lost, 1e-3f) / fmaxf(ema_cand, 1e-3f);
-            if (hr < bridge_h_lo || hr > bridge_h_hi) continue;
+            if (h0_pair_enabled) {
+                h0_pair.height_ratio = h0_scalar(hr);
+                h0_pair.height_verdict = (hr < bridge_h_lo || hr > bridge_h_hi)
+                    ? H0_REJECT : H0_PASS;
+            }
+            if (hr < bridge_h_lo || hr > bridge_h_hi) {
+                if (h0_pair_enabled) {
+                    h0_pair.reject_reason = H0_PAIR_REJECT_HEIGHT;
+                    h0_append_record(h0.pair_records, h0.pair_capacity, h0.pair_cursor,
+                                     h0.pair_overflow, h0_pair);
+                }
+                continue;
+            }
+        } else if (h0_pair_enabled) {
+            const float hr = fmaxf(ema_lost, 1e-3f) / fmaxf(ema_cand, 1e-3f);
+            h0_pair.height_ratio = h0_scalar(hr);
+            h0_pair.height_verdict = H0_DISABLED;
         }
         // Physical speed gate (disabled when bridge_max_speed<=0).
         if (bridge_max_speed > 0.0f && bridge_person_height > 0.0f) {
@@ -2045,14 +2189,41 @@ __global__ void relink_bidir_propose_kernel(
             float dt_s = fmaxf((float)la, 1.0f) / fmaxf(bridge_fps, 1e-6f);
             float px_per_m = 0.5f * (fmaxf(lost_h, 1e-3f) + fmaxf(cand_h, 1e-3f)) / bridge_person_height;
             float speed = dpx / dt_s / fmaxf(px_per_m, 1e-6f);
-            if (speed > bridge_max_speed) continue;
+            if (h0_pair_enabled) {
+                h0_pair.speed = h0_scalar(speed);
+                h0_pair.speed_verdict = speed > bridge_max_speed ? H0_REJECT : H0_PASS;
+            }
+            if (speed > bridge_max_speed) {
+                if (h0_pair_enabled) {
+                    h0_pair.reject_reason = H0_PAIR_REJECT_SPEED;
+                    h0_append_record(h0.pair_records, h0.pair_capacity, h0.pair_cursor,
+                                     h0.pair_overflow, h0_pair);
+                }
+                continue;
+            }
+        } else if (h0_pair_enabled) {
+            h0_pair.speed_verdict = H0_DISABLED;
         }
         // Optional spatial gate (center distance / h_ref).
         if (bridge_spatial_gate > 0.0f) {
             float lcx = states[lost * 8 + 0], lcy = states[lost * 8 + 1];
             float cdist = sqrtf((cand_cx - lcx) * (cand_cx - lcx) + (cand_cy - lcy) * (cand_cy - lcy)) / h_ref;
-            if (cdist > bridge_spatial_gate) continue;
+            if (h0_pair_enabled) {
+                h0_pair.spatial_distance = h0_scalar(cdist);
+                h0_pair.spatial_verdict = cdist > bridge_spatial_gate ? H0_REJECT : H0_PASS;
+            }
+            if (cdist > bridge_spatial_gate) {
+                if (h0_pair_enabled) {
+                    h0_pair.reject_reason = H0_PAIR_REJECT_SPATIAL;
+                    h0_append_record(h0.pair_records, h0.pair_capacity, h0.pair_cursor,
+                                     h0.pair_overflow, h0_pair);
+                }
+                continue;
+            }
+        } else if (h0_pair_enabled) {
+            h0_pair.spatial_verdict = H0_DISABLED;
         }
+        if (h0_candidate_enabled) ++h0_candidate.pre_score_passes;
         // Speed-weighted foot-bridge score (offline-optimised + online-validated, see
         // docs/modules/semantic/research/offline_relink_candidate_analysis.md §6c-d):
         // symmetric full extrapolation 0.5*(fwd+bwd) blended with spatial proximity
@@ -2066,6 +2237,18 @@ __global__ void relink_bidir_propose_kernel(
         float s_lost = sqrtf(vxl * vxl + vyl * vyl) / h_ref;           // exit speed (h/f)
         float w = sqrtf(fminf(fmaxf(s_lost / 0.12f, 0.0f), 1.0f));
         float bdist = w * 0.5f * (fwd_r + bwd_r) + (1.0f - w) * dist_h;
+        const float bdist_before_direction = bdist;
+        if (h0_pair_enabled) {
+            h0_pair.fwd_r = h0_scalar(fwd_r);
+            h0_pair.bwd_r = h0_scalar(bwd_r);
+            h0_pair.dist_h = h0_scalar(dist_h);
+            h0_pair.s_lost = h0_scalar(s_lost);
+            h0_pair.w = h0_scalar(w);
+            h0_pair.bdist_before_direction = h0_scalar(bdist_before_direction);
+            h0_pair.direction_cosine = h0_not_computed_scalar();
+            h0_pair.directional_alpha = h0_scalar(0.0f);
+            h0_pair.directional_cross_bdist = h0_not_computed_scalar();
+        }
         // Directional bridge: when velocities point the same way, speed
         // mismatch along the track may be due to acceleration.  Decompose
         // forward/backward extrapolation errors into along-track and cross-track
@@ -2078,6 +2261,7 @@ __global__ void relink_bidir_propose_kernel(
             float speed_trust = fminf(min_speed / fmaxf(h_ref * 0.005f, 1e-3f), 1.0f);
             if (speed_trust > 0.0f) {
                 float cos_sim = (vxl * vxc + vyl * vyc) / fmaxf(sl * sc, 1e-9f);
+                if (h0_pair_enabled) h0_pair.direction_cosine = h0_scalar(cos_sim);
                 if (cos_sim > 0.5f) {
                     float ux = vxl / sl + vxc / sc;
                     float uy = vyl / sl + vyc / sc;
@@ -2095,9 +2279,14 @@ __global__ void relink_bidir_propose_kernel(
                     float alpha = bridge_dir_bonus * cos_sim * cos_sim * speed_trust * gap_scale;
                     alpha = fminf(alpha, 1.0f);
                     bdist = bdist * (1.0f - alpha) + bdist_dir * alpha;
+                    if (h0_pair_enabled) {
+                        h0_pair.directional_alpha = h0_scalar(alpha);
+                        h0_pair.directional_cross_bdist = h0_scalar(bdist_dir);
+                    }
                 }
             }
         }
+        if (h0_pair_enabled) h0_pair.bdist_after_direction = h0_scalar(bdist);
         int gap_len = la - bridge_at + 1;
         // Record the native float32 score before threshold/policy gates. An
         // overflow is exported and invalidates a capture rather than silently
@@ -2161,6 +2350,12 @@ __global__ void relink_bidir_propose_kernel(
             }
         }
         bool ok = bdist <= bridge_px;
+        if (h0_pair_enabled) {
+            h0_pair.cutoff_verdict = ok ? H0_PASS : H0_REJECT;
+            h0_pair.occupancy_verdict = H0_DISABLED;
+            h0_pair.appearance_verdict = H0_DISABLED;
+            h0_pair.portable_tail_verdict = H0_DISABLED;
+        }
         // Gap-occupancy gate (long gaps only). Veto: an unexplained long-gap
         // bridge (path not covered by another track) is likely a different
         // person. Tiered expansion: a highly-covered path unlocks a looser
@@ -2173,11 +2368,31 @@ __global__ void relink_bidir_propose_kernel(
                 float occ = occ_gap_cover(occ_grid, occ_fcur, lfx, lfy, cand_fx, cand_fy,
                                           occ_fcur - la, occ_fcur - bridge_at + 1,
                                           occ_inv_cw, occ_inv_ch);
-                if (occ_gate_cover > 0.0f && occ >= 0.0f && occ < occ_gate_cover) continue;
+                if (h0_pair_enabled) {
+                    h0_pair.occupancy_coverage = h0_scalar(occ);
+                    h0_pair.occupancy_verdict =
+                        (occ_gate_cover > 0.0f && occ >= 0.0f && occ < occ_gate_cover)
+                        ? H0_REJECT : H0_PASS;
+                }
+                if (occ_gate_cover > 0.0f && occ >= 0.0f && occ < occ_gate_cover) {
+                    if (h0_pair_enabled) {
+                        h0_pair.reject_reason = H0_PAIR_REJECT_OCCUPANCY;
+                        h0_append_record(h0.pair_records, h0.pair_capacity, h0.pair_cursor,
+                                         h0.pair_overflow, h0_pair);
+                    }
+                    continue;
+                }
                 if (expandable && occ >= occ_expand_cover) ok = true;
             }
         }
-        if (!ok) continue;
+        if (!ok) {
+            if (h0_pair_enabled) {
+                h0_pair.reject_reason = H0_PAIR_REJECT_CUTOFF;
+                h0_append_record(h0.pair_records, h0.pair_capacity, h0.pair_cursor,
+                                 h0.pair_overflow, h0_pair);
+            }
+            continue;
+        }
         // Appearance veto (ranking use of the embedding: prune clearly-different
         // identities from the geometry shortlist; the correct runner-up then wins
         // the bdist ranking). Calibrated on the 2026-07-02 m candidate probe:
@@ -2186,8 +2401,19 @@ __global__ void relink_bidir_propose_kernel(
             const float* le = features + (size_t)lost * embed_dim;
             float dot = 0.0f, n2l = 0.0f;
             for (int k = 0; k < embed_dim; ++k) { dot += le[k] * cand_emb[k]; n2l += le[k] * le[k]; }
-            if (n2l > 1e-6f && dot * rsqrtf(n2l) * cand_inv_norm < app_veto_cos) {
+            const float cosine = n2l > 1e-6f ? dot * rsqrtf(n2l) * cand_inv_norm : 0.0f;
+            if (h0_pair_enabled) {
+                h0_pair.appearance_cosine = h0_scalar(cosine);
+                h0_pair.appearance_verdict =
+                    (n2l > 1e-6f && cosine < app_veto_cos) ? H0_REJECT : H0_PASS;
+            }
+            if (n2l > 1e-6f && cosine < app_veto_cos) {
                 if (dbg) atomicAdd(&dbg[10], 1);  // bridge pair vetoed by appearance
+                if (h0_pair_enabled) {
+                    h0_pair.reject_reason = H0_PAIR_REJECT_APPEARANCE;
+                    h0_append_record(h0.pair_records, h0.pair_capacity, h0.pair_cursor,
+                                     h0.pair_overflow, h0_pair);
+                }
                 continue;
             }
         }
@@ -2213,16 +2439,85 @@ __global__ void relink_bidir_propose_kernel(
                 if (mask & 8) atomicAdd(&dbg[9], 1);
                 if (mask & 16) atomicAdd(&dbg[11], 1);
             }
+            if (h0_pair_enabled) {
+                h0_pair.portable_tail_mask = mask;
+                h0_pair.portable_tail_verdict = mask ? H0_REJECT : H0_PASS;
+            }
             if (mask) {
                 if (dbg) atomicAdd(&dbg[5], 1);  // hook_rejected
+                if (h0_pair_enabled) {
+                    h0_pair.reject_reason = H0_PAIR_REJECT_PORTABLE_TAIL;
+                    h0_append_record(h0.pair_records, h0.pair_capacity, h0.pair_cursor,
+                                     h0.pair_overflow, h0_pair);
+                }
                 continue;
             }
         }
-        if (bdist < best_dist) { second_dist = best_dist; best_dist = bdist; best_lost = lost; }
-        else if (bdist < second_dist) { second_dist = bdist; }
+        if (h0_pair_enabled) {
+            h0_pair.final_pair_eligible = H0_PASS;
+            h0_append_record(h0.pair_records, h0.pair_capacity, h0.pair_cursor,
+                             h0.pair_overflow, h0_pair);
+        }
+        if (h0_candidate_enabled) ++h0_candidate.final_pair_eligible_count;
+        if (bdist < best_dist) {
+            second_dist = best_dist;
+            second_lost = best_lost;
+            best_dist = bdist;
+            best_lost = lost;
+        } else if (bdist < second_dist) {
+            second_dist = bdist;
+            second_lost = lost;
+        }
     }
-    if (best_lost < 0) return;
-    if (bridge_margin > 0.0f && (second_dist - best_dist) < bridge_margin) return;  // ambiguous
+    if (h0_candidate_enabled) {
+        h0_candidate.best_bdist = h0_scalar(best_dist);
+        h0_candidate.second_best_bdist = h0_scalar(second_dist);
+        h0_candidate.no_second_competitor = best_lost >= 0 && second_lost < 0;
+        if (best_lost >= 0) {
+            h0_candidate.best_lost_slot = best_lost;
+            h0_candidate.best_lost_precommit_track_id = track_ids[best_lost];
+            h0_candidate.best_lost_instance_uid = h0_instance_uid(h0.slot_generation, best_lost);
+        }
+        if (second_lost >= 0) {
+            h0_candidate.second_lost_slot = second_lost;
+            h0_candidate.second_lost_precommit_track_id = track_ids[second_lost];
+            h0_candidate.second_lost_instance_uid = h0_instance_uid(h0.slot_generation, second_lost);
+        }
+        if (best_lost < 0) {
+            h0_candidate.margin = h0_not_computed_scalar();
+            h0_candidate.margin_verdict = H0_NOT_EVALUATED;
+            h0_candidate.proposal_emitted = H0_REJECT;
+            h0_candidate.proposal_reject_reason = H0_PROPOSAL_REJECT_NO_COMPETITOR;
+            h0_candidate.candidate_status = h0_candidate.structural_competitors == 0
+                ? H0_CAND_NO_STRUCTURAL_COMPETITORS
+                : (h0_candidate.pre_score_passes == 0
+                    ? H0_CAND_ALL_REJECTED_PRE_SCORE
+                    : H0_CAND_ALL_REJECTED_CUTOFF_OR_VETO);
+            h0_append_record(h0.candidate_records, h0.candidate_capacity,
+                             h0.candidate_cursor, h0.candidate_overflow, h0_candidate);
+            return;
+        }
+        const float margin = second_dist - best_dist;
+        h0_candidate.margin = h0_scalar(margin);
+        h0_candidate.margin_verdict = bridge_margin > 0.0f
+            ? (margin < bridge_margin ? H0_REJECT : H0_PASS) : H0_DISABLED;
+        if (bridge_margin > 0.0f && margin < bridge_margin) {
+            h0_candidate.proposal_emitted = H0_REJECT;
+            h0_candidate.proposal_reject_reason = H0_PROPOSAL_REJECT_MARGIN;
+            h0_candidate.candidate_status = H0_CAND_MARGIN_REJECTED;
+            h0_append_record(h0.candidate_records, h0.candidate_capacity,
+                             h0.candidate_cursor, h0.candidate_overflow, h0_candidate);
+            return;
+        }
+        h0_candidate.proposal_emitted = H0_PASS;
+        h0_candidate.proposal_reject_reason = H0_PROPOSAL_REJECT_NONE;
+        h0_candidate.candidate_status = H0_CAND_PROPOSAL_EMITTED;
+        h0_append_record(h0.candidate_records, h0.candidate_capacity,
+                         h0.candidate_cursor, h0.candidate_overflow, h0_candidate);
+    } else {
+        if (best_lost < 0) return;
+        if (bridge_margin > 0.0f && (second_dist - best_dist) < bridge_margin) return;
+    }
 
     bridge_cand_lost[cand] = best_lost;
     // Higher detection score wins the lost id (deterministic); cand index breaks ties.
@@ -2230,6 +2525,25 @@ __global__ void relink_bidir_propose_kernel(
     // max key = (32767<<16)|65535 = INT_MAX, never overflows atomicMax.
     int sq = (int)(fminf(fmaxf(trk_scores[cand], 0.0f), 1.0f) * 32767.0f);
     int key = (sq << 16) | (cand & 0xFFFF);
+    if (h0.enabled) {
+        H0BridgeClaimRecord h0_claim{};
+        h0_claim.frame = h0.frame;
+        h0_claim.proposing_cand_slot = cand;
+        h0_claim.proposed_lost_slot = best_lost;
+        h0_claim.proposing_cand_precommit_track_id = track_ids[cand];
+        h0_claim.proposed_lost_precommit_track_id = track_ids[best_lost];
+        h0_claim.proposing_cand_instance_uid = h0_instance_uid(h0.slot_generation, cand);
+        h0_claim.proposed_lost_instance_uid = h0_instance_uid(h0.slot_generation, best_lost);
+        h0_claim.detection_score = h0_scalar(trk_scores[cand]);
+        h0_claim.sq = sq;
+        h0_claim.packed_atomic_key = key;
+        h0_claim.candidate_index_component = cand & 0xFFFF;
+        const int claim_record_index = h0_append_record(
+            h0.claim_records, h0.claim_capacity, h0.claim_cursor, h0.claim_overflow, h0_claim);
+        if (h0.candidate_claim_record_index) {
+            h0.candidate_claim_record_index[cand] = claim_record_index;
+        }
+    }
     atomicMax(&bridge_claim[best_lost], key);
 }
 
@@ -2238,15 +2552,57 @@ __global__ void relink_bidir_propose_kernel(
 // disjoint (trk_to_det>=0 vs <0), so adoptions never race.
 __global__ void relink_bidir_commit_kernel(
     bool* active, int* track_ids, int max_objs,
-    const int* bridge_claim, const int* bridge_cand_lost, int* dbg)
+    const int* bridge_claim, const int* bridge_cand_lost, int* dbg,
+    H0TraceDeviceBuffers h0)
 {
     int cand = blockIdx.x * blockDim.x + threadIdx.x;
     if (cand >= max_objs) return;
     int lost = bridge_cand_lost[cand];
     if (lost < 0) return;
-    if ((bridge_claim[lost] & 0xFFFF) != (cand & 0xFFFF)) return;  // a higher-score candidate won
+    const int winning_cand = bridge_claim[lost] & 0xFFFF;
+    if (h0.enabled && h0.candidate_claim_record_index && h0.claim_records) {
+        const int claim_index = h0.candidate_claim_record_index[cand];
+        if (claim_index >= 0 && claim_index < h0.claim_capacity) {
+            H0BridgeClaimRecord& claim = h0.claim_records[claim_index];
+            claim.claim_won = winning_cand == (cand & 0xFFFF) ? H0_PASS : H0_REJECT;
+            claim.winning_cand_slot = winning_cand;
+            const int winning_claim_index = h0.candidate_claim_record_index[winning_cand];
+            if (winning_claim_index >= 0 && winning_claim_index < h0.claim_capacity) {
+                const H0BridgeClaimRecord& winner = h0.claim_records[winning_claim_index];
+                claim.winning_cand_precommit_track_id = winner.proposing_cand_precommit_track_id;
+                claim.winning_cand_instance_uid = winner.proposing_cand_instance_uid;
+            }
+        }
+    }
+    if (winning_cand != (cand & 0xFFFF)) return;  // a higher-score candidate won
+
+    H0BridgeCommitRecord h0_commit{};
+    const bool h0_commit_enabled = h0.enabled && h0.commit_records && h0.commit_cursor &&
+        h0.commit_overflow;
+    if (h0_commit_enabled) {
+        h0_commit.frame = h0.frame;
+        h0_commit.cand_slot = cand;
+        h0_commit.lost_slot = lost;
+        h0_commit.cand_precommit_track_id = track_ids[cand];
+        h0_commit.lost_precommit_track_id = track_ids[lost];
+        h0_commit.cand_instance_uid = h0_instance_uid(h0.slot_generation, cand);
+        h0_commit.lost_instance_uid = h0_instance_uid(h0.slot_generation, lost);
+        h0_commit.cand_active_before = active[cand] ? 1 : 0;
+        h0_commit.lost_active_before = active[lost] ? 1 : 0;
+    }
     track_ids[cand] = track_ids[lost];
     active[lost] = false;
+    if (h0_commit_enabled) {
+        h0_commit.cand_postcommit_track_id = track_ids[cand];
+        h0_commit.lost_postcommit_track_id = track_ids[lost];
+        h0_commit.cand_active_after = active[cand] ? 1 : 0;
+        h0_commit.lost_active_after = active[lost] ? 1 : 0;
+        h0_commit.commit_executed = H0_PASS;
+        h0_commit.lost_slot_deactivated =
+            h0_commit.lost_active_before && !h0_commit.lost_active_after ? H0_PASS : H0_REJECT;
+        h0_append_record(h0.commit_records, h0.commit_capacity, h0.commit_cursor,
+                         h0.commit_overflow, h0_commit);
+    }
     if (dbg) atomicAdd(&dbg[3], 1);  // bridge accept
 }
 
@@ -2863,6 +3219,21 @@ public:
         if (d_bridge_fidelity_events_) cudaFree(d_bridge_fidelity_events_);
         if (d_bridge_fidelity_cursor_) cudaFree(d_bridge_fidelity_cursor_);
         if (d_bridge_fidelity_overflow_) cudaFree(d_bridge_fidelity_overflow_);
+        if (d_h0_slot_generation_) cudaFree(d_h0_slot_generation_);
+        if (d_h0_uid_wrap_events_) cudaFree(d_h0_uid_wrap_events_);
+        if (d_h0_pair_records_) cudaFree(d_h0_pair_records_);
+        if (d_h0_pair_cursor_) cudaFree(d_h0_pair_cursor_);
+        if (d_h0_pair_overflow_) cudaFree(d_h0_pair_overflow_);
+        if (d_h0_candidate_records_) cudaFree(d_h0_candidate_records_);
+        if (d_h0_candidate_cursor_) cudaFree(d_h0_candidate_cursor_);
+        if (d_h0_candidate_overflow_) cudaFree(d_h0_candidate_overflow_);
+        if (d_h0_claim_records_) cudaFree(d_h0_claim_records_);
+        if (d_h0_claim_cursor_) cudaFree(d_h0_claim_cursor_);
+        if (d_h0_claim_overflow_) cudaFree(d_h0_claim_overflow_);
+        if (d_h0_commit_records_) cudaFree(d_h0_commit_records_);
+        if (d_h0_commit_cursor_) cudaFree(d_h0_commit_cursor_);
+        if (d_h0_commit_overflow_) cudaFree(d_h0_commit_overflow_);
+        if (d_h0_candidate_claim_record_index_) cudaFree(d_h0_candidate_claim_record_index_);
     }
 
     std::vector<TrackResult> update(float* d_boxes, float* d_scores, int* d_classes, int num_dets,
@@ -2966,6 +3337,7 @@ public:
         if (num_dets > max_assoc_) {
             throw std::invalid_argument("GPUByteTracker::update num_dets exceeds max_assoc");
         }
+        ++processed_frame_count_;
 
         int threads = 256;
 
@@ -3267,7 +3639,9 @@ public:
             bidirectional_ ? d_ema_h_ : nullptr,
             bidirectional_ ? d_track_revived_ : nullptr,
             d_track_uid_, d_track_uid_ctr_, d_generation_,
-            d_det_revive_uid_, d_det_revive_generation_);
+            d_det_revive_uid_, d_det_revive_generation_,
+            research_h0_bridge_trace_ ? d_h0_slot_generation_ : nullptr,
+            research_h0_bridge_trace_ ? d_h0_uid_wrap_events_ : nullptr);
         init_covariance_if_new_kernel<<<(max_objs_ + 255) / 256, 256, 0, stream>>>(
             d_active_, d_state_, d_hit_streak_, d_covs_, max_objs_,
             d_features_, embed_dim_);
@@ -3279,6 +3653,29 @@ public:
         // kernels use fixed grids + no host sync → CUDA-graph capture-safe.
         if (bidirectional_) {
             int grid = (max_objs_ + 255) / 256;
+            H0TraceDeviceBuffers h0_trace{};
+            if (research_h0_bridge_trace_) {
+                h0_trace.enabled = 1;
+                h0_trace.frame = ++h0_trace_frame_;
+                h0_trace.slot_generation = d_h0_slot_generation_;
+                h0_trace.pair_records = d_h0_pair_records_;
+                h0_trace.pair_capacity = h0_pair_capacity_;
+                h0_trace.pair_cursor = d_h0_pair_cursor_;
+                h0_trace.pair_overflow = d_h0_pair_overflow_;
+                h0_trace.candidate_records = d_h0_candidate_records_;
+                h0_trace.candidate_capacity = h0_candidate_capacity_;
+                h0_trace.candidate_cursor = d_h0_candidate_cursor_;
+                h0_trace.candidate_overflow = d_h0_candidate_overflow_;
+                h0_trace.claim_records = d_h0_claim_records_;
+                h0_trace.claim_capacity = h0_claim_capacity_;
+                h0_trace.claim_cursor = d_h0_claim_cursor_;
+                h0_trace.claim_overflow = d_h0_claim_overflow_;
+                h0_trace.commit_records = d_h0_commit_records_;
+                h0_trace.commit_capacity = h0_commit_capacity_;
+                h0_trace.commit_cursor = d_h0_commit_cursor_;
+                h0_trace.commit_overflow = d_h0_commit_overflow_;
+                h0_trace.candidate_claim_record_index = d_h0_candidate_claim_record_index_;
+            }
             update_foot_history_kernel<<<grid, 256, 0, stream>>>(
                 d_active_, d_state_, d_age_, d_states_,
                 max_objs_, FOOT_RING_CAP, d_foot_ring_, d_foot_len_, d_ema_h_);
@@ -3316,14 +3713,15 @@ public:
                 bridge_fidelity_capacity_,
                 research_bridge_fidelity_audit_ ? d_bridge_fidelity_cursor_ : nullptr,
                 research_bridge_fidelity_audit_ ? d_bridge_fidelity_overflow_ : nullptr,
-                d_track_revived_, d_bridge_claim_, d_bridge_cand_lost_, d_relink_dbg_);
+                d_track_revived_, d_bridge_claim_, d_bridge_cand_lost_, d_relink_dbg_,
+                h0_trace);
             // Shadow mode (Issue #112): commit is the only bridge write to
             // track_ids/active, so skipping it leaves output bit-identical to a
             // bridge-off run while propose still captures real CUDA scores.
             if (!research_bridge_shadow_) {
                 relink_bidir_commit_kernel<<<grid, 256, 0, stream>>>(
                     d_active_, d_track_ids_, max_objs_,
-                    d_bridge_claim_, d_bridge_cand_lost_, d_relink_dbg_);
+                    d_bridge_claim_, d_bridge_cand_lost_, d_relink_dbg_, h0_trace);
             }
         }
 
@@ -3559,6 +3957,165 @@ public:
                                  cudaMemcpyDeviceToHost));
         }
         clear_research_bridge_fidelity_audit();
+        return capture;
+    }
+
+    void release_research_h0_bridge_trace() {
+        if (d_h0_slot_generation_) cudaFree(d_h0_slot_generation_);
+        if (d_h0_uid_wrap_events_) cudaFree(d_h0_uid_wrap_events_);
+        if (d_h0_pair_records_) cudaFree(d_h0_pair_records_);
+        if (d_h0_pair_cursor_) cudaFree(d_h0_pair_cursor_);
+        if (d_h0_pair_overflow_) cudaFree(d_h0_pair_overflow_);
+        if (d_h0_candidate_records_) cudaFree(d_h0_candidate_records_);
+        if (d_h0_candidate_cursor_) cudaFree(d_h0_candidate_cursor_);
+        if (d_h0_candidate_overflow_) cudaFree(d_h0_candidate_overflow_);
+        if (d_h0_claim_records_) cudaFree(d_h0_claim_records_);
+        if (d_h0_claim_cursor_) cudaFree(d_h0_claim_cursor_);
+        if (d_h0_claim_overflow_) cudaFree(d_h0_claim_overflow_);
+        if (d_h0_commit_records_) cudaFree(d_h0_commit_records_);
+        if (d_h0_commit_cursor_) cudaFree(d_h0_commit_cursor_);
+        if (d_h0_commit_overflow_) cudaFree(d_h0_commit_overflow_);
+        if (d_h0_candidate_claim_record_index_) cudaFree(d_h0_candidate_claim_record_index_);
+        d_h0_slot_generation_ = nullptr;
+        d_h0_uid_wrap_events_ = nullptr;
+        d_h0_pair_records_ = nullptr;
+        d_h0_pair_cursor_ = nullptr;
+        d_h0_pair_overflow_ = nullptr;
+        d_h0_candidate_records_ = nullptr;
+        d_h0_candidate_cursor_ = nullptr;
+        d_h0_candidate_overflow_ = nullptr;
+        d_h0_claim_records_ = nullptr;
+        d_h0_claim_cursor_ = nullptr;
+        d_h0_claim_overflow_ = nullptr;
+        d_h0_commit_records_ = nullptr;
+        d_h0_commit_cursor_ = nullptr;
+        d_h0_commit_overflow_ = nullptr;
+        d_h0_candidate_claim_record_index_ = nullptr;
+        h0_pair_capacity_ = 0;
+        h0_candidate_capacity_ = 0;
+        h0_claim_capacity_ = 0;
+        h0_commit_capacity_ = 0;
+    }
+
+    void set_research_h0_bridge_trace(
+        bool enabled, int pair_capacity, int candidate_capacity, int claim_capacity,
+        int commit_capacity) {
+        if (!enabled) {
+            research_h0_bridge_trace_ = false;
+            release_research_h0_bridge_trace();
+            h0_trace_frame_ = 0;
+            return;
+        }
+        if (processed_frame_count_ != 0) {
+            throw std::invalid_argument(
+                "H0 bridge trace must be enabled before the first tracker update");
+        }
+        if (research_bridge_shadow_) {
+            throw std::invalid_argument(
+                "H0 bridge trace observes the real commit path; bridge shadow must be disabled");
+        }
+        if (pair_capacity <= 0 || candidate_capacity <= 0 || claim_capacity <= 0 ||
+            commit_capacity <= 0) {
+            throw std::invalid_argument("H0 bridge trace capacities must be positive");
+        }
+        const bool same_capacity = d_h0_pair_records_ &&
+            h0_pair_capacity_ == pair_capacity &&
+            h0_candidate_capacity_ == candidate_capacity &&
+            h0_claim_capacity_ == claim_capacity &&
+            h0_commit_capacity_ == commit_capacity;
+        if (!same_capacity) {
+            release_research_h0_bridge_trace();
+            checkCuda(cudaMalloc(&d_h0_slot_generation_, max_objs_ * sizeof(uint32_t)));
+            checkCuda(cudaMalloc(&d_h0_uid_wrap_events_, sizeof(int)));
+            checkCuda(cudaMalloc(&d_h0_pair_records_,
+                                 static_cast<size_t>(pair_capacity) * sizeof(H0BridgePairRecord)));
+            checkCuda(cudaMalloc(&d_h0_pair_cursor_, sizeof(int)));
+            checkCuda(cudaMalloc(&d_h0_pair_overflow_, sizeof(int)));
+            checkCuda(cudaMalloc(&d_h0_candidate_records_,
+                                 static_cast<size_t>(candidate_capacity) * sizeof(H0BridgeCandidateRecord)));
+            checkCuda(cudaMalloc(&d_h0_candidate_cursor_, sizeof(int)));
+            checkCuda(cudaMalloc(&d_h0_candidate_overflow_, sizeof(int)));
+            checkCuda(cudaMalloc(&d_h0_claim_records_,
+                                 static_cast<size_t>(claim_capacity) * sizeof(H0BridgeClaimRecord)));
+            checkCuda(cudaMalloc(&d_h0_claim_cursor_, sizeof(int)));
+            checkCuda(cudaMalloc(&d_h0_claim_overflow_, sizeof(int)));
+            checkCuda(cudaMalloc(&d_h0_commit_records_,
+                                 static_cast<size_t>(commit_capacity) * sizeof(H0BridgeCommitRecord)));
+            checkCuda(cudaMalloc(&d_h0_commit_cursor_, sizeof(int)));
+            checkCuda(cudaMalloc(&d_h0_commit_overflow_, sizeof(int)));
+            checkCuda(cudaMalloc(&d_h0_candidate_claim_record_index_, max_objs_ * sizeof(int)));
+            h0_pair_capacity_ = pair_capacity;
+            h0_candidate_capacity_ = candidate_capacity;
+            h0_claim_capacity_ = claim_capacity;
+            h0_commit_capacity_ = commit_capacity;
+        }
+        checkCuda(cudaMemset(d_h0_slot_generation_, 0, max_objs_ * sizeof(uint32_t)));
+        clear_research_h0_bridge_trace();
+        h0_trace_frame_ = 0;
+        research_h0_bridge_trace_ = true;
+    }
+
+    void clear_research_h0_bridge_trace() {
+        if (d_h0_pair_cursor_) checkCuda(cudaMemset(d_h0_pair_cursor_, 0, sizeof(int)));
+        if (d_h0_pair_overflow_) checkCuda(cudaMemset(d_h0_pair_overflow_, 0, sizeof(int)));
+        if (d_h0_candidate_cursor_) checkCuda(cudaMemset(d_h0_candidate_cursor_, 0, sizeof(int)));
+        if (d_h0_candidate_overflow_) checkCuda(cudaMemset(d_h0_candidate_overflow_, 0, sizeof(int)));
+        if (d_h0_claim_cursor_) checkCuda(cudaMemset(d_h0_claim_cursor_, 0, sizeof(int)));
+        if (d_h0_claim_overflow_) checkCuda(cudaMemset(d_h0_claim_overflow_, 0, sizeof(int)));
+        if (d_h0_commit_cursor_) checkCuda(cudaMemset(d_h0_commit_cursor_, 0, sizeof(int)));
+        if (d_h0_commit_overflow_) checkCuda(cudaMemset(d_h0_commit_overflow_, 0, sizeof(int)));
+        if (d_h0_uid_wrap_events_) checkCuda(cudaMemset(d_h0_uid_wrap_events_, 0, sizeof(int)));
+        if (d_h0_candidate_claim_record_index_) {
+            checkCuda(cudaMemset(d_h0_candidate_claim_record_index_, 0xFF,
+                                 max_objs_ * sizeof(int)));
+        }
+    }
+
+    H0BridgeDecisionTraceCapture drain_research_h0_bridge_trace() {
+        H0BridgeDecisionTraceCapture capture;
+        if (!d_h0_pair_cursor_ || !d_h0_candidate_cursor_ || !d_h0_claim_cursor_ ||
+            !d_h0_commit_cursor_) {
+            return capture;
+        }
+        checkCuda(cudaMemcpy(&capture.total_pair_records, d_h0_pair_cursor_, sizeof(int),
+                             cudaMemcpyDeviceToHost));
+        checkCuda(cudaMemcpy(&capture.total_candidate_records, d_h0_candidate_cursor_, sizeof(int),
+                             cudaMemcpyDeviceToHost));
+        checkCuda(cudaMemcpy(&capture.total_claim_records, d_h0_claim_cursor_, sizeof(int),
+                             cudaMemcpyDeviceToHost));
+        checkCuda(cudaMemcpy(&capture.total_commit_records, d_h0_commit_cursor_, sizeof(int),
+                             cudaMemcpyDeviceToHost));
+        checkCuda(cudaMemcpy(&capture.overflow_pair_records, d_h0_pair_overflow_, sizeof(int),
+                             cudaMemcpyDeviceToHost));
+        checkCuda(cudaMemcpy(&capture.overflow_candidate_records, d_h0_candidate_overflow_, sizeof(int),
+                             cudaMemcpyDeviceToHost));
+        checkCuda(cudaMemcpy(&capture.overflow_claim_records, d_h0_claim_overflow_, sizeof(int),
+                             cudaMemcpyDeviceToHost));
+        checkCuda(cudaMemcpy(&capture.overflow_commit_records, d_h0_commit_overflow_, sizeof(int),
+                             cudaMemcpyDeviceToHost));
+        checkCuda(cudaMemcpy(&capture.identity_uid_wrap_events, d_h0_uid_wrap_events_, sizeof(int),
+                             cudaMemcpyDeviceToHost));
+        const int n_pair = std::max(0, std::min(capture.total_pair_records, h0_pair_capacity_));
+        const int n_candidate = std::max(0, std::min(capture.total_candidate_records, h0_candidate_capacity_));
+        const int n_claim = std::max(0, std::min(capture.total_claim_records, h0_claim_capacity_));
+        const int n_commit = std::max(0, std::min(capture.total_commit_records, h0_commit_capacity_));
+        capture.pair_records.resize(static_cast<size_t>(n_pair));
+        capture.candidate_records.resize(static_cast<size_t>(n_candidate));
+        capture.claim_records.resize(static_cast<size_t>(n_claim));
+        capture.commit_records.resize(static_cast<size_t>(n_commit));
+        if (n_pair > 0) checkCuda(cudaMemcpy(capture.pair_records.data(), d_h0_pair_records_,
+                                              static_cast<size_t>(n_pair) * sizeof(H0BridgePairRecord),
+                                              cudaMemcpyDeviceToHost));
+        if (n_candidate > 0) checkCuda(cudaMemcpy(capture.candidate_records.data(), d_h0_candidate_records_,
+                                                   static_cast<size_t>(n_candidate) * sizeof(H0BridgeCandidateRecord),
+                                                   cudaMemcpyDeviceToHost));
+        if (n_claim > 0) checkCuda(cudaMemcpy(capture.claim_records.data(), d_h0_claim_records_,
+                                               static_cast<size_t>(n_claim) * sizeof(H0BridgeClaimRecord),
+                                               cudaMemcpyDeviceToHost));
+        if (n_commit > 0) checkCuda(cudaMemcpy(capture.commit_records.data(), d_h0_commit_records_,
+                                                static_cast<size_t>(n_commit) * sizeof(H0BridgeCommitRecord),
+                                                cudaMemcpyDeviceToHost));
+        clear_research_h0_bridge_trace();
         return capture;
     }
 
@@ -4008,6 +4565,29 @@ private:
     BridgeFidelityEvent* d_bridge_fidelity_events_ = nullptr;
     int* d_bridge_fidelity_cursor_ = nullptr;
     int* d_bridge_fidelity_overflow_ = nullptr;
+    // H0 full bridge decision trace (four independent bounded streams).
+    bool research_h0_bridge_trace_ = false;
+    int processed_frame_count_ = 0;
+    int h0_trace_frame_ = 0;
+    int h0_pair_capacity_ = 0;
+    int h0_candidate_capacity_ = 0;
+    int h0_claim_capacity_ = 0;
+    int h0_commit_capacity_ = 0;
+    uint32_t* d_h0_slot_generation_ = nullptr;
+    int* d_h0_uid_wrap_events_ = nullptr;
+    H0BridgePairRecord* d_h0_pair_records_ = nullptr;
+    int* d_h0_pair_cursor_ = nullptr;
+    int* d_h0_pair_overflow_ = nullptr;
+    H0BridgeCandidateRecord* d_h0_candidate_records_ = nullptr;
+    int* d_h0_candidate_cursor_ = nullptr;
+    int* d_h0_candidate_overflow_ = nullptr;
+    H0BridgeClaimRecord* d_h0_claim_records_ = nullptr;
+    int* d_h0_claim_cursor_ = nullptr;
+    int* d_h0_claim_overflow_ = nullptr;
+    H0BridgeCommitRecord* d_h0_commit_records_ = nullptr;
+    int* d_h0_commit_cursor_ = nullptr;
+    int* d_h0_commit_overflow_ = nullptr;
+    int* d_h0_candidate_claim_record_index_ = nullptr;
     float occ_gate_cover_       = 0.0f; // gap-occupancy veto: min occ_cover (0=off)
     int   occ_gap_min_          = 30;   // occ gates apply only to gaps >= this (short-gap occ is noise)
     float occ_expand_px_        = 0.0f; // tiered expansion: looser bridge_px when occ high (0=off)
@@ -4237,6 +4817,18 @@ void GPUByteTracker::clear_research_bridge_fidelity_audit() {
 }
 BridgeFidelityCapture GPUByteTracker::drain_research_bridge_fidelity_events() {
     return pimpl_->drain_research_bridge_fidelity_events();
+}
+void GPUByteTracker::set_research_h0_bridge_trace(
+    bool enabled, int pair_capacity, int candidate_capacity, int claim_capacity,
+    int commit_capacity) {
+    pimpl_->set_research_h0_bridge_trace(
+        enabled, pair_capacity, candidate_capacity, claim_capacity, commit_capacity);
+}
+void GPUByteTracker::clear_research_h0_bridge_trace() {
+    pimpl_->clear_research_h0_bridge_trace();
+}
+H0BridgeDecisionTraceCapture GPUByteTracker::drain_research_h0_bridge_trace() {
+    return pimpl_->drain_research_h0_bridge_trace();
 }
 void GPUByteTracker::set_oao_params(float tau, float contest_thresh, float score_w, int occ_mode,
                                     float crowd_radius, float height_gate, float foot_gate,

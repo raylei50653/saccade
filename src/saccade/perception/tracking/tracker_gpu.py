@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import sys
 from typing import List, Any, cast, Optional, TypedDict, Callable
+import uuid
 from saccade.perception.box_ops import box_iou
 
 try:
@@ -839,6 +840,91 @@ class GPUByteTracker:
             "overflow_events": overflow,
             "complete": overflow == 0 and total == len(rows),
         }
+
+    def set_research_h0_bridge_trace(
+        self,
+        enabled: bool,
+        *,
+        pair_capacity: int = 65536,
+        candidate_capacity: int = 16384,
+        claim_capacity: int = 16384,
+        commit_capacity: int = 16384,
+    ) -> None:
+        """Enable H0's real-commit, four-stream decision trace before frame one."""
+        setter = getattr(self.tracker, "set_research_h0_bridge_trace", None)
+        if setter is None:
+            if enabled:
+                raise RuntimeError(
+                    "native tracker missing H0 bridge trace; rebuild extension"
+                )
+            return
+        setter(
+            bool(enabled),
+            int(pair_capacity),
+            int(candidate_capacity),
+            int(claim_capacity),
+            int(commit_capacity),
+        )
+
+    def clear_research_h0_bridge_trace(self) -> None:
+        """Clear H0 stream cursors while preserving the immutable slot generations."""
+        clearer = getattr(self.tracker, "clear_research_h0_bridge_trace", None)
+        if clearer is None:
+            raise RuntimeError(
+                "native tracker missing H0 bridge trace; rebuild extension"
+            )
+        clearer()
+
+    def drain_research_h0_bridge_trace(
+        self, *, seq: str, capture_run_uuid: str | None = None
+    ) -> dict[str, object]:
+        """Drain H0 records without treating CUDA append order as semantic order.
+
+        Sequence identity is supplied by the evaluation caller, never inferred
+        from a local tracker ID.  ``capture_run_uuid`` belongs to the raw-stream
+        provenance envelope and is intentionally excluded from semantic records.
+        """
+        if not str(seq).strip():
+            raise ValueError("H0 bridge trace requires a non-empty sequence name")
+        getter = getattr(self.tracker, "drain_research_h0_bridge_trace", None)
+        if getter is None:
+            raise RuntimeError(
+                "native tracker missing H0 bridge trace; rebuild extension"
+            )
+        native = dict(getter())
+        streams = (
+            "pair_records",
+            "candidate_records",
+            "claim_records",
+            "commit_records",
+        )
+        for stream in streams:
+            rows = [dict(row) for row in native.get(stream, [])]
+            for row in rows:
+                row["seq"] = str(seq)
+            native[stream] = rows
+        native["capture_schema_version"] = "h0_bridge_decision_trace_v1"
+        native["capture_run_uuid"] = capture_run_uuid or str(uuid.uuid4())
+        totals = {
+            "pair_records": int(native.get("total_pair_records", 0)),
+            "candidate_records": int(native.get("total_candidate_records", 0)),
+            "claim_records": int(native.get("total_claim_records", 0)),
+            "commit_records": int(native.get("total_commit_records", 0)),
+        }
+        overflow = {
+            "pair_records": int(native.get("overflow_pair_records", 0)),
+            "candidate_records": int(native.get("overflow_candidate_records", 0)),
+            "claim_records": int(native.get("overflow_claim_records", 0)),
+            "commit_records": int(native.get("overflow_commit_records", 0)),
+        }
+        native["stream_totals"] = totals
+        native["stream_overflow"] = overflow
+        native["complete"] = (
+            int(native.get("identity_uid_wrap_events", 0)) == 0
+            and all(value == 0 for value in overflow.values())
+            and all(totals[name] == len(native[name]) for name in totals)
+        )
+        return native
 
     def set_oao_params(
         self,

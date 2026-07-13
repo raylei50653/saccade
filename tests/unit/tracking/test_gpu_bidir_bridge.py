@@ -10,6 +10,7 @@ import torch
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT / "build"))
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
+sys.path.insert(0, str(PROJECT_ROOT / "scripts/tools"))
 
 pytest.importorskip("saccade_tracking_ext", exc_type=ImportError)
 pytestmark = [
@@ -18,6 +19,8 @@ pytestmark = [
 ]
 
 from saccade.perception.tracking.tracker_gpu import GPUByteTracker  # noqa: E402
+from export_headline_bridge_decision_trace import semantic_digest  # noqa: E402
+from verify_headline_bridge_decision_trace import verify_capture  # noqa: E402
 
 
 def _tracker(*, bidirectional: bool, bridge_px: float = 0.25) -> GPUByteTracker:
@@ -74,6 +77,7 @@ def _run_sequence(
     bidirectional: bool,
     competing_candidates: bool = False,
     fidelity_audit: bool = False,
+    h0_trace: bool = False,
     shadow: bool = False,
 ) -> tuple[dict[int, list[int]], list[int], dict[str, object] | None]:
     tracker = _tracker(
@@ -82,6 +86,14 @@ def _run_sequence(
     )
     if fidelity_audit:
         tracker.set_research_bridge_fidelity_audit(True, capacity=64)
+    if h0_trace:
+        tracker.set_research_h0_bridge_trace(
+            True,
+            pair_capacity=64,
+            candidate_capacity=32,
+            claim_capacity=32,
+            commit_capacity=32,
+        )
     if shadow:
         tracker.set_research_bridge_shadow(True)
     buffers = tracker.allocate_result_buffers(device="cuda")
@@ -140,11 +152,11 @@ def _run_sequence(
         torch.cuda.synchronize()
         count = int(buffers["count"].item())
         outputs[frame_id] = buffers["ids"][:count].detach().cpu().tolist()
-    capture = (
-        tracker.drain_research_bridge_fidelity_events(seq="bridge_fixture")
-        if fidelity_audit
-        else None
-    )
+    capture = None
+    if fidelity_audit:
+        capture = tracker.drain_research_bridge_fidelity_events(seq="bridge_fixture")
+    if h0_trace:
+        capture = tracker.drain_research_h0_bridge_trace(seq="bridge_fixture")
     return outputs, tracker.get_relink_debug(), capture
 
 
@@ -232,3 +244,33 @@ def test_bridge_fidelity_audit_is_observational_and_exports_native_values() -> N
     assert event["production_threshold"] == pytest.approx(0.25)
     assert event["h_ref"] >= 1.0
     assert event["la"] == event["gap"] + event["bridge_at"] - 1
+
+
+def test_h0_trace_observes_real_commit_without_changing_bridge_output() -> None:
+    baseline, baseline_debug, _ = _run_sequence(bidirectional=True)
+    captured, captured_debug, trace = _run_sequence(bidirectional=True, h0_trace=True)
+
+    assert captured == baseline
+    assert captured_debug == baseline_debug
+    assert trace is not None
+    assert trace["complete"] is True
+    assert trace["stream_overflow"] == {
+        "pair_records": 0,
+        "candidate_records": 0,
+        "claim_records": 0,
+        "commit_records": 0,
+    }
+    assert trace["claim_records"]
+    assert trace["commit_records"]
+    commit = trace["commit_records"][0]
+    assert commit["cand_postcommit_track_id"] == commit["lost_precommit_track_id"]
+    assert (commit["lost_active_before"], commit["lost_active_after"]) == (1, 0)
+    assert verify_capture(trace)["replay"] == "full_commit_decision_trace_v1"
+
+    repeated, repeated_debug, repeated_trace = _run_sequence(
+        bidirectional=True, h0_trace=True
+    )
+    assert repeated == baseline
+    assert repeated_debug == baseline_debug
+    assert repeated_trace is not None
+    assert semantic_digest(repeated_trace) == semantic_digest(trace)
