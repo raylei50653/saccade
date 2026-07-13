@@ -12,11 +12,8 @@
 
 這裡是研究任務的總入口。本圖只擁有**路由拓撲、型別與轉移邊**；
 每個可點節點都連到狀態或事實 owner，不在入口複寫 terminal、數字或 live state。
-每個可判定任務必須宣告
-
-\[
-\kappa=(\text{quantification space},\ \text{comparison relation},\ \text{decision rule}).
-\]
+宣告邊界規則的唯一 owner 是 [experiment contract §20.2 / §20.8](contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)：
+每個可判定任務宣告 typed κ（§20.2），宣告可封印性由 §20.8 seal bar 判定。
 
 ### Typed route — runtime representation → reduction → validation
 
