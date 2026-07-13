@@ -935,18 +935,25 @@ class GPUByteTracker:
                 "native tracker missing H0 bridge trace; rebuild extension"
             )
         native = dict(getter())
-        streams = (
+        record_streams = (
             "pair_records",
             "candidate_records",
             "claim_records",
             "commit_records",
         )
-        for stream in streams:
+        native_universe_streams = (
+            "native_candidate_keys",
+            "native_pair_keys",
+            "native_proposal_keys",
+            "native_claim_winner_keys",
+            "native_commit_keys",
+        )
+        for stream in record_streams + native_universe_streams:
             rows = [dict(row) for row in native.get(stream, [])]
             for row in rows:
                 row["seq"] = str(seq)
             native[stream] = rows
-        native["capture_schema_version"] = "h0_bridge_decision_trace_v1"
+        native["capture_schema_version"] = "h0_bridge_decision_trace_v2"
         native["capture_run_uuid"] = capture_run_uuid or str(uuid.uuid4())
         totals = {
             "pair_records": int(native.get("total_pair_records", 0)),
@@ -954,18 +961,45 @@ class GPUByteTracker:
             "claim_records": int(native.get("total_claim_records", 0)),
             "commit_records": int(native.get("total_commit_records", 0)),
         }
+        native_universe_totals = {
+            "native_candidate_keys": int(native.get("total_native_candidate_keys", 0)),
+            "native_pair_keys": int(native.get("total_native_pair_keys", 0)),
+            "native_proposal_keys": int(native.get("total_native_proposal_keys", 0)),
+            "native_claim_winner_keys": int(
+                native.get("total_native_claim_winner_keys", 0)
+            ),
+            "native_commit_keys": int(native.get("total_native_commit_keys", 0)),
+        }
         overflow = {
             "pair_records": int(native.get("overflow_pair_records", 0)),
             "candidate_records": int(native.get("overflow_candidate_records", 0)),
             "claim_records": int(native.get("overflow_claim_records", 0)),
             "commit_records": int(native.get("overflow_commit_records", 0)),
         }
+        native_universe_overflow = {
+            "native_candidate_keys": int(
+                native.get("overflow_native_candidate_keys", 0)
+            ),
+            "native_pair_keys": int(native.get("overflow_native_pair_keys", 0)),
+            "native_proposal_keys": int(native.get("overflow_native_proposal_keys", 0)),
+            "native_claim_winner_keys": int(
+                native.get("overflow_native_claim_winner_keys", 0)
+            ),
+            "native_commit_keys": int(native.get("overflow_native_commit_keys", 0)),
+        }
         native["stream_totals"] = totals
         native["stream_overflow"] = overflow
+        native["native_universe_totals"] = native_universe_totals
+        native["native_universe_overflow"] = native_universe_overflow
         native["complete"] = (
             int(native.get("identity_uid_wrap_events", 0)) == 0
             and all(value == 0 for value in overflow.values())
+            and all(value == 0 for value in native_universe_overflow.values())
             and all(totals[name] == len(native[name]) for name in totals)
+            and all(
+                native_universe_totals[name] == len(native[name])
+                for name in native_universe_totals
+            )
         )
         return native
 

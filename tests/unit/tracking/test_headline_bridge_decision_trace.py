@@ -25,6 +25,7 @@ def _load(name: str):
 
 EXPORT = _load("export_headline_bridge_decision_trace")
 VERIFY = _load("verify_headline_bridge_decision_trace")
+CHECK = _load("check_h0_bridge_decision_trace_contract")
 
 
 def _scalar(value: float, status: int = 1) -> dict[str, int]:
@@ -154,13 +155,31 @@ def _packet(*, run_uuid: str = "raw-run-a") -> dict[str, object]:
         "commit_executed": 1,
         "lost_slot_deactivated": 1,
     }
+    candidate_key = {
+        name: candidate[name]
+        for name in EXPORT.UNIVERSE_STREAMS["native_candidate_keys"]
+    }
+    pair_key = {
+        name: pair[name] for name in EXPORT.UNIVERSE_STREAMS["native_pair_keys"]
+    }
+    claim_key = {
+        name: claim[name] for name in EXPORT.UNIVERSE_STREAMS["native_proposal_keys"]
+    }
+    commit_key = {
+        name: commit[name] for name in EXPORT.UNIVERSE_STREAMS["native_commit_keys"]
+    }
     return {
-        "capture_schema_version": "h0_bridge_decision_trace_v1",
+        "capture_schema_version": EXPORT.SCHEMA_VERSION,
         "capture_run_uuid": run_uuid,
         "pair_records": [pair],
         "candidate_records": [candidate],
         "claim_records": [claim],
         "commit_records": [commit],
+        "native_candidate_keys": [candidate_key],
+        "native_pair_keys": [pair_key],
+        "native_proposal_keys": [claim_key],
+        "native_claim_winner_keys": [claim_key],
+        "native_commit_keys": [commit_key],
         "total_pair_records": 1,
         "total_candidate_records": 1,
         "total_claim_records": 1,
@@ -169,6 +188,16 @@ def _packet(*, run_uuid: str = "raw-run-a") -> dict[str, object]:
         "overflow_candidate_records": 0,
         "overflow_claim_records": 0,
         "overflow_commit_records": 0,
+        "total_native_candidate_keys": 1,
+        "total_native_pair_keys": 1,
+        "total_native_proposal_keys": 1,
+        "total_native_claim_winner_keys": 1,
+        "total_native_commit_keys": 1,
+        "overflow_native_candidate_keys": 0,
+        "overflow_native_pair_keys": 0,
+        "overflow_native_proposal_keys": 0,
+        "overflow_native_claim_winner_keys": 0,
+        "overflow_native_commit_keys": 0,
         "identity_uid_wrap_events": 0,
     }
 
@@ -183,12 +212,19 @@ def test_h0_semantic_digest_excludes_run_uuid_and_raw_stream_order() -> None:
 def test_h0_verifier_replays_full_single_claim_commit() -> None:
     result = VERIFY.verify_capture(_packet())
 
-    assert result["replay"] == "full_commit_decision_trace_v1"
+    assert result["replay"] == "full_commit_decision_trace_v2"
     assert result["stream_totals"] == {
         "pair_records": 1,
         "candidate_records": 1,
         "claim_records": 1,
         "commit_records": 1,
+    }
+    assert result["native_universe_totals"] == {
+        "native_candidate_keys": 1,
+        "native_pair_keys": 1,
+        "native_proposal_keys": 1,
+        "native_claim_winner_keys": 1,
+        "native_commit_keys": 1,
     }
 
 
@@ -209,14 +245,51 @@ def test_h0_packet_rejects_missing_evaluation_frame_identity() -> None:
         EXPORT.canonical_semantic_packet(packet)
 
 
+def test_h0_packet_rejects_incomplete_frozen_field_schema() -> None:
+    packet = _packet()
+    del packet["candidate_records"][0]["margin"]
+
+    with pytest.raises(ValueError, match="field schema mismatch"):
+        EXPORT.canonical_semantic_packet(packet)
+
+
+def test_h0_packet_rejects_missing_record_even_when_packet_remains_internal() -> None:
+    packet = _packet()
+    packet["pair_records"] = []
+    packet["candidate_records"] = []
+    packet["total_pair_records"] = 0
+    packet["total_candidate_records"] = 0
+
+    with pytest.raises(ValueError, match="native_candidate_keys does not equal"):
+        EXPORT.canonical_semantic_packet(packet)
+
+
 def test_h0_native_source_keeps_observer_state_separate_from_policy_state() -> None:
     source = (ROOT / "src/tracking/tracker_gpu.cu").read_text(encoding="utf-8")
 
     assert "struct H0TraceDeviceBuffers" in source
     assert "h0_append_record" in source
+    assert "native_candidate_keys" in source
+    assert "native_claim_winner_keys" in source
     assert "track_ids[cand] = track_ids[lost];" in source
     assert "H0 bridge trace observes the real commit path" in source
     assert "research_h0_bridge_trace_ ? d_h0_slot_generation_ : nullptr" in source
     assert "relink_bidir_propose_kernel<false>" in source
     assert "relink_bidir_propose_kernel<true>" in source
     assert "frame_input = d_h0_trace_frame_input_" in source
+
+
+def test_h0_static_coverage_is_a_replayable_contract_artifact() -> None:
+    report, failures = CHECK.coverage_report()
+
+    assert failures == []
+    assert report["coverage_schema_version"] == "h0_coverage_v2"
+    assert report["all_components_true"] is True
+    assert report["coverage_components"] == {
+        "track_instance_uid_v1": True,
+        "pair_record": True,
+        "candidate_record": True,
+        "claim_record": True,
+        "commit_record": True,
+        "native_universe_v2": True,
+    }

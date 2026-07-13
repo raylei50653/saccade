@@ -1,0 +1,70 @@
+{
+  "capture_schema_version": "h0_bridge_decision_trace_v2",
+  "record_fields": {
+    "pair_records": [
+      "schema_version", "seq", "frame", "cand_slot", "lost_slot",
+      "cand_precommit_track_id", "lost_precommit_track_id", "cand_instance_uid",
+      "lost_instance_uid", "la", "bridge_at", "cand_ring_length",
+      "lost_ring_length", "ema_lost", "ema_cand", "height_ratio",
+      "height_verdict", "speed", "speed_verdict", "spatial_distance",
+      "spatial_verdict", "lost_anchor_x", "lost_anchor_y", "cand_anchor_x",
+      "cand_anchor_y", "lost_velocity_x", "lost_velocity_y", "cand_velocity_x",
+      "cand_velocity_y", "h_ref", "fwd_r", "bwd_r", "dist_h", "s_lost",
+      "w", "direction_cosine", "directional_alpha", "directional_cross_bdist",
+      "bdist_before_direction", "bdist_after_direction", "cutoff_verdict",
+      "occupancy_verdict", "occupancy_coverage", "appearance_verdict",
+      "appearance_cosine", "portable_tail_verdict", "portable_tail_mask",
+      "final_pair_eligible", "reject_reason"
+    ],
+    "candidate_records": [
+      "schema_version", "seq", "frame", "cand_slot", "cand_precommit_track_id",
+      "cand_instance_uid", "structural_competitors", "pre_score_passes",
+      "final_pair_eligible_count", "best_lost_slot", "second_lost_slot",
+      "best_lost_precommit_track_id", "second_lost_precommit_track_id",
+      "best_lost_instance_uid", "second_lost_instance_uid", "best_bdist",
+      "second_best_bdist", "margin", "no_second_competitor", "margin_verdict",
+      "proposal_emitted", "proposal_reject_reason", "candidate_status"
+    ],
+    "claim_records": [
+      "schema_version", "seq", "frame", "proposing_cand_slot", "proposed_lost_slot",
+      "proposing_cand_precommit_track_id", "proposed_lost_precommit_track_id",
+      "proposing_cand_instance_uid", "proposed_lost_instance_uid", "detection_score",
+      "sq", "packed_atomic_key", "candidate_index_component", "winning_cand_slot",
+      "winning_cand_precommit_track_id", "winning_cand_instance_uid", "claim_won"
+    ],
+    "commit_records": [
+      "schema_version", "seq", "frame", "cand_slot", "lost_slot",
+      "cand_precommit_track_id", "lost_precommit_track_id", "cand_postcommit_track_id",
+      "lost_postcommit_track_id", "cand_instance_uid", "lost_instance_uid",
+      "cand_active_before", "cand_active_after", "lost_active_before",
+      "lost_active_after", "commit_executed", "lost_slot_deactivated"
+    ]
+  },
+  "stable_keys": {
+    "pair_records": ["seq", "frame", "cand_slot", "cand_instance_uid", "lost_slot", "lost_instance_uid"],
+    "candidate_records": ["seq", "frame", "cand_slot", "cand_instance_uid"],
+    "claim_records": ["seq", "frame", "proposing_cand_slot", "proposing_cand_instance_uid", "proposed_lost_slot", "proposed_lost_instance_uid"],
+    "commit_records": ["seq", "frame", "cand_slot", "cand_instance_uid", "lost_slot", "lost_instance_uid"]
+  },
+  "native_universe_keys": {
+    "native_candidate_keys": ["seq", "frame", "cand_slot", "cand_instance_uid"],
+    "native_pair_keys": ["seq", "frame", "cand_slot", "cand_instance_uid", "lost_slot", "lost_instance_uid"],
+    "native_proposal_keys": ["seq", "frame", "proposing_cand_slot", "proposing_cand_instance_uid", "proposed_lost_slot", "proposed_lost_instance_uid"],
+    "native_claim_winner_keys": ["seq", "frame", "proposing_cand_slot", "proposing_cand_instance_uid", "proposed_lost_slot", "proposed_lost_instance_uid"],
+    "native_commit_keys": ["seq", "frame", "cand_slot", "cand_instance_uid", "lost_slot", "lost_instance_uid"]
+  },
+  "native_universe_observed_stream": {
+    "native_candidate_keys": "candidate_records",
+    "native_pair_keys": "pair_records",
+    "native_proposal_keys": "claim_records",
+    "native_commit_keys": "commit_records"
+  },
+  "coverage_components": [
+    "track_instance_uid_v1",
+    "pair_record",
+    "candidate_record",
+    "claim_record",
+    "commit_record",
+    "native_universe_v2"
+  ]
+}

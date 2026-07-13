@@ -1984,6 +1984,29 @@ struct H0TraceDeviceBuffers {
     int commit_capacity = 0;
     int* commit_cursor = nullptr;
     int* commit_overflow = nullptr;
+    // The native-universe sidecar is deliberately independent from the record
+    // append cursors above. A record drop must not erase the corresponding
+    // expected production decision key.
+    H0BridgeCandidateKey* native_candidate_keys = nullptr;
+    int native_candidate_capacity = 0;
+    int* native_candidate_cursor = nullptr;
+    int* native_candidate_overflow = nullptr;
+    H0BridgePairKey* native_pair_keys = nullptr;
+    int native_pair_capacity = 0;
+    int* native_pair_cursor = nullptr;
+    int* native_pair_overflow = nullptr;
+    H0BridgeClaimKey* native_proposal_keys = nullptr;
+    int native_proposal_capacity = 0;
+    int* native_proposal_cursor = nullptr;
+    int* native_proposal_overflow = nullptr;
+    H0BridgeClaimKey* native_claim_winner_keys = nullptr;
+    int native_claim_winner_capacity = 0;
+    int* native_claim_winner_cursor = nullptr;
+    int* native_claim_winner_overflow = nullptr;
+    H0BridgePairKey* native_commit_keys = nullptr;
+    int native_commit_capacity = 0;
+    int* native_commit_cursor = nullptr;
+    int* native_commit_overflow = nullptr;
     int* candidate_claim_record_index = nullptr;
 };
 
@@ -2112,6 +2135,17 @@ __global__ void relink_bidir_propose_kernel(
     if constexpr (H0Trace) {
         h0_frame = *h0.frame_input;
     }
+    const bool h0_native_candidate_enabled = H0TraceCompileMode<H0Trace>::enabled &&
+        h0.enabled && h0.native_candidate_keys && h0.native_candidate_cursor &&
+        h0.native_candidate_overflow;
+    if (h0_native_candidate_enabled) {
+        H0BridgeCandidateKey key{};
+        key.frame = h0_frame;
+        key.cand_slot = cand;
+        key.cand_instance_uid = h0_instance_uid(h0.slot_generation, cand);
+        h0_append_record(h0.native_candidate_keys, h0.native_candidate_capacity,
+                         h0.native_candidate_cursor, h0.native_candidate_overflow, key);
+    }
     if (h0_candidate_enabled) {
         h0_candidate.frame = h0_frame;
         h0_candidate.cand_slot = cand;
@@ -2137,6 +2171,19 @@ __global__ void relink_bidir_propose_kernel(
         const bool h0_pair_enabled = H0TraceCompileMode<H0Trace>::enabled &&
             h0.enabled && h0.pair_records && h0.pair_cursor &&
             h0.pair_overflow;
+        const bool h0_native_pair_enabled = H0TraceCompileMode<H0Trace>::enabled &&
+            h0.enabled && h0.native_pair_keys && h0.native_pair_cursor &&
+            h0.native_pair_overflow;
+        if (h0_native_pair_enabled) {
+            H0BridgePairKey key{};
+            key.frame = h0_frame;
+            key.cand_slot = cand;
+            key.lost_slot = lost;
+            key.cand_instance_uid = h0_instance_uid(h0.slot_generation, cand);
+            key.lost_instance_uid = h0_instance_uid(h0.slot_generation, lost);
+            h0_append_record(h0.native_pair_keys, h0.native_pair_capacity,
+                             h0.native_pair_cursor, h0.native_pair_overflow, key);
+        }
         if (h0_pair_enabled) {
             h0_pair.frame = h0_frame;
             h0_pair.cand_slot = cand;
@@ -2545,6 +2592,19 @@ __global__ void relink_bidir_propose_kernel(
     // max key = (32767<<16)|65535 = INT_MAX, never overflows atomicMax.
     int sq = (int)(fminf(fmaxf(trk_scores[cand], 0.0f), 1.0f) * 32767.0f);
     int key = (sq << 16) | (cand & 0xFFFF);
+    const bool h0_native_proposal_enabled = H0TraceCompileMode<H0Trace>::enabled &&
+        h0.enabled && h0.native_proposal_keys && h0.native_proposal_cursor &&
+        h0.native_proposal_overflow;
+    if (h0_native_proposal_enabled) {
+        H0BridgeClaimKey proposal{};
+        proposal.frame = h0_frame;
+        proposal.proposing_cand_slot = cand;
+        proposal.proposed_lost_slot = best_lost;
+        proposal.proposing_cand_instance_uid = h0_instance_uid(h0.slot_generation, cand);
+        proposal.proposed_lost_instance_uid = h0_instance_uid(h0.slot_generation, best_lost);
+        h0_append_record(h0.native_proposal_keys, h0.native_proposal_capacity,
+                         h0.native_proposal_cursor, h0.native_proposal_overflow, proposal);
+    }
     if (H0TraceCompileMode<H0Trace>::enabled && h0.enabled) {
         H0BridgeClaimRecord h0_claim{};
         h0_claim.frame = h0_frame;
@@ -2597,6 +2657,35 @@ __global__ void relink_bidir_commit_kernel(
         }
     }
     if (winning_cand != (cand & 0xFFFF)) return;  // a higher-score candidate won
+
+    const bool h0_native_winner_enabled = H0TraceCompileMode<H0Trace>::enabled &&
+        h0.enabled && h0.native_claim_winner_keys && h0.native_claim_winner_cursor &&
+        h0.native_claim_winner_overflow;
+    if (h0_native_winner_enabled) {
+        const int h0_frame = *h0.frame_input;
+        H0BridgeClaimKey winner{};
+        winner.frame = h0_frame;
+        winner.proposing_cand_slot = cand;
+        winner.proposed_lost_slot = lost;
+        winner.proposing_cand_instance_uid = h0_instance_uid(h0.slot_generation, cand);
+        winner.proposed_lost_instance_uid = h0_instance_uid(h0.slot_generation, lost);
+        h0_append_record(h0.native_claim_winner_keys, h0.native_claim_winner_capacity,
+                         h0.native_claim_winner_cursor, h0.native_claim_winner_overflow, winner);
+    }
+    const bool h0_native_commit_enabled = H0TraceCompileMode<H0Trace>::enabled &&
+        h0.enabled && h0.native_commit_keys && h0.native_commit_cursor &&
+        h0.native_commit_overflow;
+    if (h0_native_commit_enabled) {
+        const int h0_frame = *h0.frame_input;
+        H0BridgePairKey commit{};
+        commit.frame = h0_frame;
+        commit.cand_slot = cand;
+        commit.lost_slot = lost;
+        commit.cand_instance_uid = h0_instance_uid(h0.slot_generation, cand);
+        commit.lost_instance_uid = h0_instance_uid(h0.slot_generation, lost);
+        h0_append_record(h0.native_commit_keys, h0.native_commit_capacity,
+                         h0.native_commit_cursor, h0.native_commit_overflow, commit);
+    }
 
     H0BridgeCommitRecord h0_commit{};
     const bool h0_commit_enabled = H0TraceCompileMode<H0Trace>::enabled &&
@@ -3257,6 +3346,21 @@ public:
         if (d_h0_commit_records_) cudaFree(d_h0_commit_records_);
         if (d_h0_commit_cursor_) cudaFree(d_h0_commit_cursor_);
         if (d_h0_commit_overflow_) cudaFree(d_h0_commit_overflow_);
+        if (d_h0_native_candidate_keys_) cudaFree(d_h0_native_candidate_keys_);
+        if (d_h0_native_candidate_cursor_) cudaFree(d_h0_native_candidate_cursor_);
+        if (d_h0_native_candidate_overflow_) cudaFree(d_h0_native_candidate_overflow_);
+        if (d_h0_native_pair_keys_) cudaFree(d_h0_native_pair_keys_);
+        if (d_h0_native_pair_cursor_) cudaFree(d_h0_native_pair_cursor_);
+        if (d_h0_native_pair_overflow_) cudaFree(d_h0_native_pair_overflow_);
+        if (d_h0_native_proposal_keys_) cudaFree(d_h0_native_proposal_keys_);
+        if (d_h0_native_proposal_cursor_) cudaFree(d_h0_native_proposal_cursor_);
+        if (d_h0_native_proposal_overflow_) cudaFree(d_h0_native_proposal_overflow_);
+        if (d_h0_native_claim_winner_keys_) cudaFree(d_h0_native_claim_winner_keys_);
+        if (d_h0_native_claim_winner_cursor_) cudaFree(d_h0_native_claim_winner_cursor_);
+        if (d_h0_native_claim_winner_overflow_) cudaFree(d_h0_native_claim_winner_overflow_);
+        if (d_h0_native_commit_keys_) cudaFree(d_h0_native_commit_keys_);
+        if (d_h0_native_commit_cursor_) cudaFree(d_h0_native_commit_cursor_);
+        if (d_h0_native_commit_overflow_) cudaFree(d_h0_native_commit_overflow_);
         if (d_h0_candidate_claim_record_index_) cudaFree(d_h0_candidate_claim_record_index_);
     }
 
@@ -3702,6 +3806,26 @@ public:
                 h0_trace.commit_capacity = h0_commit_capacity_;
                 h0_trace.commit_cursor = d_h0_commit_cursor_;
                 h0_trace.commit_overflow = d_h0_commit_overflow_;
+                h0_trace.native_candidate_keys = d_h0_native_candidate_keys_;
+                h0_trace.native_candidate_capacity = h0_candidate_capacity_;
+                h0_trace.native_candidate_cursor = d_h0_native_candidate_cursor_;
+                h0_trace.native_candidate_overflow = d_h0_native_candidate_overflow_;
+                h0_trace.native_pair_keys = d_h0_native_pair_keys_;
+                h0_trace.native_pair_capacity = h0_pair_capacity_;
+                h0_trace.native_pair_cursor = d_h0_native_pair_cursor_;
+                h0_trace.native_pair_overflow = d_h0_native_pair_overflow_;
+                h0_trace.native_proposal_keys = d_h0_native_proposal_keys_;
+                h0_trace.native_proposal_capacity = h0_claim_capacity_;
+                h0_trace.native_proposal_cursor = d_h0_native_proposal_cursor_;
+                h0_trace.native_proposal_overflow = d_h0_native_proposal_overflow_;
+                h0_trace.native_claim_winner_keys = d_h0_native_claim_winner_keys_;
+                h0_trace.native_claim_winner_capacity = h0_claim_capacity_;
+                h0_trace.native_claim_winner_cursor = d_h0_native_claim_winner_cursor_;
+                h0_trace.native_claim_winner_overflow = d_h0_native_claim_winner_overflow_;
+                h0_trace.native_commit_keys = d_h0_native_commit_keys_;
+                h0_trace.native_commit_capacity = h0_commit_capacity_;
+                h0_trace.native_commit_cursor = d_h0_native_commit_cursor_;
+                h0_trace.native_commit_overflow = d_h0_native_commit_overflow_;
                 h0_trace.candidate_claim_record_index = d_h0_candidate_claim_record_index_;
             }
             update_foot_history_kernel<<<grid, 256, 0, stream>>>(
@@ -4054,6 +4178,21 @@ public:
         d_h0_commit_records_ = nullptr;
         d_h0_commit_cursor_ = nullptr;
         d_h0_commit_overflow_ = nullptr;
+        d_h0_native_candidate_keys_ = nullptr;
+        d_h0_native_candidate_cursor_ = nullptr;
+        d_h0_native_candidate_overflow_ = nullptr;
+        d_h0_native_pair_keys_ = nullptr;
+        d_h0_native_pair_cursor_ = nullptr;
+        d_h0_native_pair_overflow_ = nullptr;
+        d_h0_native_proposal_keys_ = nullptr;
+        d_h0_native_proposal_cursor_ = nullptr;
+        d_h0_native_proposal_overflow_ = nullptr;
+        d_h0_native_claim_winner_keys_ = nullptr;
+        d_h0_native_claim_winner_cursor_ = nullptr;
+        d_h0_native_claim_winner_overflow_ = nullptr;
+        d_h0_native_commit_keys_ = nullptr;
+        d_h0_native_commit_cursor_ = nullptr;
+        d_h0_native_commit_overflow_ = nullptr;
         d_h0_candidate_claim_record_index_ = nullptr;
         // Externally owned by the evaluation wrapper; never cudaFree here.
         d_h0_trace_frame_input_ = nullptr;
@@ -4108,6 +4247,26 @@ public:
                                  static_cast<size_t>(commit_capacity) * sizeof(H0BridgeCommitRecord)));
             checkCuda(cudaMalloc(&d_h0_commit_cursor_, sizeof(int)));
             checkCuda(cudaMalloc(&d_h0_commit_overflow_, sizeof(int)));
+            checkCuda(cudaMalloc(&d_h0_native_candidate_keys_,
+                                 static_cast<size_t>(candidate_capacity) * sizeof(H0BridgeCandidateKey)));
+            checkCuda(cudaMalloc(&d_h0_native_candidate_cursor_, sizeof(int)));
+            checkCuda(cudaMalloc(&d_h0_native_candidate_overflow_, sizeof(int)));
+            checkCuda(cudaMalloc(&d_h0_native_pair_keys_,
+                                 static_cast<size_t>(pair_capacity) * sizeof(H0BridgePairKey)));
+            checkCuda(cudaMalloc(&d_h0_native_pair_cursor_, sizeof(int)));
+            checkCuda(cudaMalloc(&d_h0_native_pair_overflow_, sizeof(int)));
+            checkCuda(cudaMalloc(&d_h0_native_proposal_keys_,
+                                 static_cast<size_t>(claim_capacity) * sizeof(H0BridgeClaimKey)));
+            checkCuda(cudaMalloc(&d_h0_native_proposal_cursor_, sizeof(int)));
+            checkCuda(cudaMalloc(&d_h0_native_proposal_overflow_, sizeof(int)));
+            checkCuda(cudaMalloc(&d_h0_native_claim_winner_keys_,
+                                 static_cast<size_t>(claim_capacity) * sizeof(H0BridgeClaimKey)));
+            checkCuda(cudaMalloc(&d_h0_native_claim_winner_cursor_, sizeof(int)));
+            checkCuda(cudaMalloc(&d_h0_native_claim_winner_overflow_, sizeof(int)));
+            checkCuda(cudaMalloc(&d_h0_native_commit_keys_,
+                                 static_cast<size_t>(commit_capacity) * sizeof(H0BridgePairKey)));
+            checkCuda(cudaMalloc(&d_h0_native_commit_cursor_, sizeof(int)));
+            checkCuda(cudaMalloc(&d_h0_native_commit_overflow_, sizeof(int)));
             checkCuda(cudaMalloc(&d_h0_candidate_claim_record_index_, max_objs_ * sizeof(int)));
             h0_pair_capacity_ = pair_capacity;
             h0_candidate_capacity_ = candidate_capacity;
@@ -4139,6 +4298,16 @@ public:
         if (d_h0_claim_overflow_) checkCuda(cudaMemset(d_h0_claim_overflow_, 0, sizeof(int)));
         if (d_h0_commit_cursor_) checkCuda(cudaMemset(d_h0_commit_cursor_, 0, sizeof(int)));
         if (d_h0_commit_overflow_) checkCuda(cudaMemset(d_h0_commit_overflow_, 0, sizeof(int)));
+        if (d_h0_native_candidate_cursor_) checkCuda(cudaMemset(d_h0_native_candidate_cursor_, 0, sizeof(int)));
+        if (d_h0_native_candidate_overflow_) checkCuda(cudaMemset(d_h0_native_candidate_overflow_, 0, sizeof(int)));
+        if (d_h0_native_pair_cursor_) checkCuda(cudaMemset(d_h0_native_pair_cursor_, 0, sizeof(int)));
+        if (d_h0_native_pair_overflow_) checkCuda(cudaMemset(d_h0_native_pair_overflow_, 0, sizeof(int)));
+        if (d_h0_native_proposal_cursor_) checkCuda(cudaMemset(d_h0_native_proposal_cursor_, 0, sizeof(int)));
+        if (d_h0_native_proposal_overflow_) checkCuda(cudaMemset(d_h0_native_proposal_overflow_, 0, sizeof(int)));
+        if (d_h0_native_claim_winner_cursor_) checkCuda(cudaMemset(d_h0_native_claim_winner_cursor_, 0, sizeof(int)));
+        if (d_h0_native_claim_winner_overflow_) checkCuda(cudaMemset(d_h0_native_claim_winner_overflow_, 0, sizeof(int)));
+        if (d_h0_native_commit_cursor_) checkCuda(cudaMemset(d_h0_native_commit_cursor_, 0, sizeof(int)));
+        if (d_h0_native_commit_overflow_) checkCuda(cudaMemset(d_h0_native_commit_overflow_, 0, sizeof(int)));
         if (d_h0_uid_wrap_events_) checkCuda(cudaMemset(d_h0_uid_wrap_events_, 0, sizeof(int)));
         if (d_h0_candidate_claim_record_index_) {
             checkCuda(cudaMemset(d_h0_candidate_claim_record_index_, 0xFF,
@@ -4149,7 +4318,9 @@ public:
     H0BridgeDecisionTraceCapture drain_research_h0_bridge_trace() {
         H0BridgeDecisionTraceCapture capture;
         if (!d_h0_pair_cursor_ || !d_h0_candidate_cursor_ || !d_h0_claim_cursor_ ||
-            !d_h0_commit_cursor_) {
+            !d_h0_commit_cursor_ || !d_h0_native_candidate_cursor_ ||
+            !d_h0_native_pair_cursor_ || !d_h0_native_proposal_cursor_ ||
+            !d_h0_native_claim_winner_cursor_ || !d_h0_native_commit_cursor_) {
             return capture;
         }
         checkCuda(cudaMemcpy(&capture.total_pair_records, d_h0_pair_cursor_, sizeof(int),
@@ -4160,6 +4331,16 @@ public:
                              cudaMemcpyDeviceToHost));
         checkCuda(cudaMemcpy(&capture.total_commit_records, d_h0_commit_cursor_, sizeof(int),
                              cudaMemcpyDeviceToHost));
+        checkCuda(cudaMemcpy(&capture.total_native_candidate_keys, d_h0_native_candidate_cursor_, sizeof(int),
+                             cudaMemcpyDeviceToHost));
+        checkCuda(cudaMemcpy(&capture.total_native_pair_keys, d_h0_native_pair_cursor_, sizeof(int),
+                             cudaMemcpyDeviceToHost));
+        checkCuda(cudaMemcpy(&capture.total_native_proposal_keys, d_h0_native_proposal_cursor_, sizeof(int),
+                             cudaMemcpyDeviceToHost));
+        checkCuda(cudaMemcpy(&capture.total_native_claim_winner_keys, d_h0_native_claim_winner_cursor_, sizeof(int),
+                             cudaMemcpyDeviceToHost));
+        checkCuda(cudaMemcpy(&capture.total_native_commit_keys, d_h0_native_commit_cursor_, sizeof(int),
+                             cudaMemcpyDeviceToHost));
         checkCuda(cudaMemcpy(&capture.overflow_pair_records, d_h0_pair_overflow_, sizeof(int),
                              cudaMemcpyDeviceToHost));
         checkCuda(cudaMemcpy(&capture.overflow_candidate_records, d_h0_candidate_overflow_, sizeof(int),
@@ -4168,16 +4349,36 @@ public:
                              cudaMemcpyDeviceToHost));
         checkCuda(cudaMemcpy(&capture.overflow_commit_records, d_h0_commit_overflow_, sizeof(int),
                              cudaMemcpyDeviceToHost));
+        checkCuda(cudaMemcpy(&capture.overflow_native_candidate_keys, d_h0_native_candidate_overflow_, sizeof(int),
+                             cudaMemcpyDeviceToHost));
+        checkCuda(cudaMemcpy(&capture.overflow_native_pair_keys, d_h0_native_pair_overflow_, sizeof(int),
+                             cudaMemcpyDeviceToHost));
+        checkCuda(cudaMemcpy(&capture.overflow_native_proposal_keys, d_h0_native_proposal_overflow_, sizeof(int),
+                             cudaMemcpyDeviceToHost));
+        checkCuda(cudaMemcpy(&capture.overflow_native_claim_winner_keys, d_h0_native_claim_winner_overflow_, sizeof(int),
+                             cudaMemcpyDeviceToHost));
+        checkCuda(cudaMemcpy(&capture.overflow_native_commit_keys, d_h0_native_commit_overflow_, sizeof(int),
+                             cudaMemcpyDeviceToHost));
         checkCuda(cudaMemcpy(&capture.identity_uid_wrap_events, d_h0_uid_wrap_events_, sizeof(int),
                              cudaMemcpyDeviceToHost));
         const int n_pair = std::max(0, std::min(capture.total_pair_records, h0_pair_capacity_));
         const int n_candidate = std::max(0, std::min(capture.total_candidate_records, h0_candidate_capacity_));
         const int n_claim = std::max(0, std::min(capture.total_claim_records, h0_claim_capacity_));
         const int n_commit = std::max(0, std::min(capture.total_commit_records, h0_commit_capacity_));
+        const int n_native_candidate = std::max(0, std::min(capture.total_native_candidate_keys, h0_candidate_capacity_));
+        const int n_native_pair = std::max(0, std::min(capture.total_native_pair_keys, h0_pair_capacity_));
+        const int n_native_proposal = std::max(0, std::min(capture.total_native_proposal_keys, h0_claim_capacity_));
+        const int n_native_claim_winner = std::max(0, std::min(capture.total_native_claim_winner_keys, h0_claim_capacity_));
+        const int n_native_commit = std::max(0, std::min(capture.total_native_commit_keys, h0_commit_capacity_));
         capture.pair_records.resize(static_cast<size_t>(n_pair));
         capture.candidate_records.resize(static_cast<size_t>(n_candidate));
         capture.claim_records.resize(static_cast<size_t>(n_claim));
         capture.commit_records.resize(static_cast<size_t>(n_commit));
+        capture.native_candidate_keys.resize(static_cast<size_t>(n_native_candidate));
+        capture.native_pair_keys.resize(static_cast<size_t>(n_native_pair));
+        capture.native_proposal_keys.resize(static_cast<size_t>(n_native_proposal));
+        capture.native_claim_winner_keys.resize(static_cast<size_t>(n_native_claim_winner));
+        capture.native_commit_keys.resize(static_cast<size_t>(n_native_commit));
         if (n_pair > 0) checkCuda(cudaMemcpy(capture.pair_records.data(), d_h0_pair_records_,
                                               static_cast<size_t>(n_pair) * sizeof(H0BridgePairRecord),
                                               cudaMemcpyDeviceToHost));
@@ -4190,6 +4391,21 @@ public:
         if (n_commit > 0) checkCuda(cudaMemcpy(capture.commit_records.data(), d_h0_commit_records_,
                                                 static_cast<size_t>(n_commit) * sizeof(H0BridgeCommitRecord),
                                                 cudaMemcpyDeviceToHost));
+        if (n_native_candidate > 0) checkCuda(cudaMemcpy(capture.native_candidate_keys.data(), d_h0_native_candidate_keys_,
+                                                          static_cast<size_t>(n_native_candidate) * sizeof(H0BridgeCandidateKey),
+                                                          cudaMemcpyDeviceToHost));
+        if (n_native_pair > 0) checkCuda(cudaMemcpy(capture.native_pair_keys.data(), d_h0_native_pair_keys_,
+                                                     static_cast<size_t>(n_native_pair) * sizeof(H0BridgePairKey),
+                                                     cudaMemcpyDeviceToHost));
+        if (n_native_proposal > 0) checkCuda(cudaMemcpy(capture.native_proposal_keys.data(), d_h0_native_proposal_keys_,
+                                                         static_cast<size_t>(n_native_proposal) * sizeof(H0BridgeClaimKey),
+                                                         cudaMemcpyDeviceToHost));
+        if (n_native_claim_winner > 0) checkCuda(cudaMemcpy(capture.native_claim_winner_keys.data(), d_h0_native_claim_winner_keys_,
+                                                             static_cast<size_t>(n_native_claim_winner) * sizeof(H0BridgeClaimKey),
+                                                             cudaMemcpyDeviceToHost));
+        if (n_native_commit > 0) checkCuda(cudaMemcpy(capture.native_commit_keys.data(), d_h0_native_commit_keys_,
+                                                       static_cast<size_t>(n_native_commit) * sizeof(H0BridgePairKey),
+                                                       cudaMemcpyDeviceToHost));
         clear_research_h0_bridge_trace();
         return capture;
     }
@@ -4663,6 +4879,21 @@ private:
     H0BridgeCommitRecord* d_h0_commit_records_ = nullptr;
     int* d_h0_commit_cursor_ = nullptr;
     int* d_h0_commit_overflow_ = nullptr;
+    H0BridgeCandidateKey* d_h0_native_candidate_keys_ = nullptr;
+    int* d_h0_native_candidate_cursor_ = nullptr;
+    int* d_h0_native_candidate_overflow_ = nullptr;
+    H0BridgePairKey* d_h0_native_pair_keys_ = nullptr;
+    int* d_h0_native_pair_cursor_ = nullptr;
+    int* d_h0_native_pair_overflow_ = nullptr;
+    H0BridgeClaimKey* d_h0_native_proposal_keys_ = nullptr;
+    int* d_h0_native_proposal_cursor_ = nullptr;
+    int* d_h0_native_proposal_overflow_ = nullptr;
+    H0BridgeClaimKey* d_h0_native_claim_winner_keys_ = nullptr;
+    int* d_h0_native_claim_winner_cursor_ = nullptr;
+    int* d_h0_native_claim_winner_overflow_ = nullptr;
+    H0BridgePairKey* d_h0_native_commit_keys_ = nullptr;
+    int* d_h0_native_commit_cursor_ = nullptr;
+    int* d_h0_native_commit_overflow_ = nullptr;
     int* d_h0_candidate_claim_record_index_ = nullptr;
     float occ_gate_cover_       = 0.0f; // gap-occupancy veto: min occ_cover (0=off)
     int   occ_gap_min_          = 30;   // occ gates apply only to gaps >= this (short-gap occ is noise)

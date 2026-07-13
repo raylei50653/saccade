@@ -505,3 +505,168 @@ Phase A may emit only terminals 1–5. Terminal 6 is unavailable until the
 seven-sequence Phase-B artifact exists. This amendment adds no policy evidence,
 does not authorize Phase A or B, and leaves registry, ledger, preset, and
 production behavior unchanged.
+
+## Amendment 2 — pre-seal coverage and independent native completeness (2026-07-13; pre-seal)
+
+This is an **append-only** correction to Amendment 1. Its A2 three-attempt
+repair budget is not a sealable experiment: it lets an executor choose a new
+trace implementation between attempts, and its Boolean map has no frozen
+checker, field schema, or static evidence. Its packet-defined κ universes also
+cannot detect a native candidate or pair that was never appended. Amendment 2
+supersedes A1–A3 wherever they conflict. In particular, it retires
+`H0_CAPTURE_PARTIAL` as an H0 execution terminal and replaces A1's
+packet-derived pair/candidate/claim/commit quantification spaces.
+
+For avoidance of doubt, this also supersedes the old `H0_CAPTURE_PARTIAL`
+sentence in §4.5, the “Phase A may repair instrumentation” sentence in §6,
+and §7 item 4. Those retained passages are historical draft text only; the
+state effect, A2.1 progression, and A2.4 partition below are authoritative.
+
+### Amendment state effect
+
+- §1 item 2 is **satisfied by Amendment 2's declaration repair**. This is a
+  statement about the executable contract, not an admission that a future
+  instrumentation head has already passed it.
+- §1 item 3 — a literal owner `SEALED` review — is now the sole pending gate.
+  An owner may make that review only after the pre-seal freeze artifact in A2.2
+  is complete and all of its coverage components are `true`.
+- The §8 table remains unsealed. No pre-seal check, build, or dry run is a
+  Phase-A/B capture or evidence. The TODO pointer must name owner seal as the
+  sole pending gate and must retain the pre-seal-freeze condition on that gate.
+
+### A2.1. Engineering boundary and coverage component/field authority
+
+All instrumentation repair is **pre-seal engineering**, not a sealed Phase-A
+activity. It has no fixed number of edits or attempts and may not emit an H0
+terminal. The only permitted progression is:
+
+```text
+pre-seal engineering
+  -> choose one fixed instrumentation head
+  -> run the frozen static coverage checker and obtain all true
+  -> record the schema/checker/source hashes in one freeze artifact
+  -> owner reviews and writes SEALED for that exact head
+  -> sealed Phase A, then (only if admitted) Phase B; no repair is permitted
+```
+
+Thus neither implementer discretion nor an engineering failure can determine a
+research terminal. A failed or incomplete pre-seal checker result is simply
+`H0_PRESEAL_COVERAGE_INCOMPLETE`, an engineering status that prohibits seal and
+capture. It is not an H0 observability terminal and supplies no result. After
+seal, a missing checker artifact, altered hash, false coverage value, build
+failure, runner failure, timeout, unreadable artifact, or any attempted repair
+is `H0_EXECUTION_INVALID`; it never becomes `H0_CAPTURE_PARTIAL`.
+
+The frozen complete field authority is
+`scripts/tools/h0_bridge_decision_trace_schema_v2.json`. It fixes the exact
+field list (not merely stable keys) for each of `pair_records`,
+`candidate_records`, `claim_records`, and `commit_records`; it also fixes all
+five native-universe key schemas, their observed-stream relations, and this
+lexicographically ordered component set:
+
+```text
+track_instance_uid_v1
+pair_record
+candidate_record
+claim_record
+commit_record
+native_universe_v2
+```
+
+`scripts/tools/check_h0_bridge_decision_trace_contract.py` is the corresponding
+frozen checker. It verifies every declared C++ record field and Python drain
+field (except externally supplied `seq`), every CUDA writer/key-field mapping,
+each native writer marker, independent native-universe cursor path, and
+`track_instance_uid_v1` marker. It emits a
+canonical `h0_coverage_v2` object with the ordered Boolean map, its own SHA-256,
+the schema SHA-256, and SHA-256 values for the admitted H0 source files. The
+exporter consumes the same schema and rejects a missing or unexpected record
+field, so a coverage `true` is backed by static source evidence and by packet
+admission rather than a self-declaration.
+
+This amendment extends the §2 `h0_observational_diff_v1` offline-tool allowance
+only with these non-production inputs:
+
+```text
+scripts/tools/h0_bridge_decision_trace_schema_v2.json
+scripts/tools/check_h0_bridge_decision_trace_contract.py
+```
+
+They may read H0 source and trace-output schemas only; they may not be a build
+input or runtime-policy path. The checker and schema are subject to the same
+complete repository provenance and runtime-projection record as every other
+non-governance changed path.
+
+### A2.2. Freeze artifact and deterministic progression rule
+
+Before owner seal, `h0_preseal_freeze_v2` must canonically record:
+
+```text
+instrumentation_head and complete tree/projection evidence
+capture_schema_version = h0_bridge_decision_trace_v2
+the complete h0_coverage_v2 object, with every component true
+SHA-256 of h0_bridge_decision_trace_schema_v2.json
+SHA-256 of check_h0_bridge_decision_trace_contract.py
+the checker-recorded SHA-256 values of every admitted H0 source file
+the exact command line and tool/runtime identity that produced the check
+```
+
+The `instrumentation_head` named by the freeze artifact is the only head that
+an owner may seal. The owner review verifies that all listed hashes, the
+checker object, the resolved configuration, and §2 provenance agree. Capture
+does not begin otherwise. A head change, checker/schema change, source hash
+change, absent field, or false component returns the work to pre-seal
+engineering; it cannot be repaired within an execution or counted as a retry.
+
+`seq` is an external immutable sequence authority, inserted once by the frozen
+capture serializer into both the observed records and the native-universe keys.
+It comes from the frozen manifest, never a stream row or final MOT output.
+
+### A2.3. Native κ universes and completeness authority
+
+The four semantic record streams remain append-only observations. Amendment 2
+adds a separate, H0-owned **native-universe sidecar** with its own five buffers,
+capacities, cursors, and overflow counters. Its append paths are independent
+of all four record cursors: a dropped semantic record leaves its expected
+native key present, while an exhausted sidecar buffer fails closed by overflow.
+The sidecar is an expected-key authority, not a fifth semantic replay stream.
+
+| Decidable unit | Native quantification space and observation point | Comparison relation and decision rule |
+| --- | --- | --- |
+| Candidate completeness | Every native structural candidate instance entering the production candidate loop, keyed by `(seq, frame, cand_slot, cand_instance_uid)` before the candidate-record append | `native_candidate_keys` equals the canonical candidate-record key set exactly. Missing, extra, duplicate, or sidecar overflow is `H0_PACKET_INVALID`. |
+| Pair completeness | Every native candidate–lost structural evaluation after the production structural filters and before the pair-record append, keyed by `(seq, frame, cand_slot, cand_instance_uid, lost_slot, lost_instance_uid)` | `native_pair_keys` equals the canonical pair-record key set exactly. Any inequality or overflow is `H0_PACKET_INVALID`. |
+| Proposal completeness | Every native proposal that passes native best/second/margin selection, immediately before claim-record append and `atomicMax`, keyed by the claim key | `native_proposal_keys` equals the canonical claim-record key set exactly. Any inequality or overflow is `H0_PACKET_INVALID`. |
+| Claim-winner completeness | Every native winner after atomic-claim resolution and before the commit-record append or policy-state write, keyed by the winning claim key | `native_claim_winner_keys` equals precisely the canonical claim keys with `claim_won=pass`. Any inequality or overflow is `H0_PACKET_INVALID`. |
+| Commit completeness | Every native winner entering the actual commit branch immediately before the production `track_ids`/`active` writes, keyed by the commit key | `native_commit_keys` equals the canonical commit-record key set exactly. Any inequality or overflow is `H0_PACKET_INVALID`. |
+
+The native sidecar is therefore the κ quantification space. The packet does
+not enumerate its own universe. Only after these five exact expected-versus-
+observed comparisons pass does the existing fieldwise replay quantify over the
+observed record at every expected native key. The four replay units from A1
+(pair, candidate, claim, commit), §5 conservation, and §6 non-perturbation
+remain required, but their old phrase “every `*_record` key in the packet” is
+replaced by “every observed record at every expected native-universe key.”
+
+### A2.4. Sealed terminal partition replacement
+
+For a sealed invocation, the ordered partition is:
+
+1. `H0_PROVENANCE_INVALID` — any §2 or A2.2 provenance/freeze mismatch. Stop
+   before capture.
+2. `H0_EXECUTION_INVALID` — any non-success controller result, deadline,
+   incomplete required artifact, altered checker/schema/source hash, false
+   coverage value, or attempted trace repair after seal. Stop; there is no
+   partial-capture reinterpretation.
+3. `H0_CAPTURE_PERTURBS_POLICY` — the §6 capture-off/on comparison differs.
+4. `H0_PACKET_INVALID` — any packet/schema violation, native-universe or
+   observed-stream inequality, duplicate, overflow, identity collision,
+   scalar invalidity, conservation failure, canonical-digest mismatch, or
+   pair/candidate/claim/commit replay disagreement.
+5. `H0_FULL_COMMIT_CAPTURE_FAITHFUL` — Phase A then the frozen unlabelled
+   seven-sequence Phase B complete with every preceding predicate false and
+   every replay bar true.
+
+The first applicable terminal remains authoritative. Phase A may emit only
+1–4. Terminal 5 remains unavailable until the seven-sequence Phase-B artifact
+exists. This amendment changes no policy selection or production write and
+does not itself authorize Phase A, Phase B, or any downstream claim.

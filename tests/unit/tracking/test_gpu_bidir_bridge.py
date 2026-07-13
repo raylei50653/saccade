@@ -275,7 +275,7 @@ def test_h0_trace_observes_real_commit_without_changing_bridge_output() -> None:
     commit = trace["commit_records"][0]
     assert commit["cand_postcommit_track_id"] == commit["lost_precommit_track_id"]
     assert (commit["lost_active_before"], commit["lost_active_after"]) == (1, 0)
-    assert verify_capture(trace)["replay"] == "full_commit_decision_trace_v1"
+    assert verify_capture(trace)["replay"] == "full_commit_decision_trace_v2"
 
     repeated, repeated_debug, repeated_trace = _run_sequence(
         bidirectional=True, h0_trace=True
@@ -382,7 +382,7 @@ def test_h0_trace_graph_replay_uses_evaluator_frame_input() -> None:
     assert eager_trace is not None
     assert graph_trace is not None
     assert graph_outputs == eager_outputs
-    assert verify_capture(graph_trace)["replay"] == "full_commit_decision_trace_v1"
+    assert verify_capture(graph_trace)["replay"] == "full_commit_decision_trace_v2"
     assert semantic_digest(graph_trace) == semantic_digest(eager_trace)
 
     # The two bridge events occur on distinct, evaluator-supplied MOT frames.
