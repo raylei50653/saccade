@@ -258,7 +258,34 @@ implementation bugs — may proceed under the same seal.
 
 ## 7. Terminal and post-terminal boundary
 
-The ordered terminal is one of `H0_FULL_COMMIT_CAPTURE_FAITHFUL`, `H0_CAPTURE_PARTIAL`, `H0_CAPTURE_PERTURBS_POLICY`, `H0_PROVENANCE_INVALID`, or `H0_PACKET_INVALID`.
+Terminals are evaluated in this exact order. The **first applicable terminal is
+authoritative**; an executor may not select a later terminal when an earlier
+condition holds.
+
+1. `H0_PROVENANCE_INVALID` — any mismatch of `policy_base_head`, base tree or
+   source fingerprint, resolved configuration fingerprint, preset, sequence
+   authority, or `h0_observational_diff_v1` admission; a missing required
+   instrumentation provenance field; or a non-descendant instrumentation head.
+   Stop before replay.
+2. `H0_CAPTURE_PERTURBS_POLICY` — capture-on/off differs in MOT output, final
+   IDs, proposal or commit winner, bridge debug counters, proposal/commit
+   counts, or scheduling-/memory-visible policy state.
+3. `H0_PACKET_INVALID` — a produced packet has overflow, duplicate key,
+   identity collision, a `computed_nan` policy input or other scalar invalidity, canonical
+   semantic-digest mismatch across repeated capture-on runs, or any scalar,
+   gate, ranking, margin, claim, or commit replay disagreement.
+4. `H0_CAPTURE_PARTIAL` — with 1–3 false, Phase A proves that a required DAG
+   stage cannot be observed by the sealed ABI without changing policy
+   semantics. It must name the highest replay level and missing field(s); it
+   produces no valid full packet and forbids Phase B.
+5. `H0_FULL_COMMIT_CAPTURE_FAITHFUL` — only after Phase A passes and Phase B
+   completes the frozen unlabelled seven-sequence capture, with all provenance,
+   non-perturbation, capacity/conservation, canonical-determinism, and 100%
+   full-commit replay bars passing for every sequence.
+
+Phase A is a one-sequence preflight only: it may emit terminals 1–4, but never
+`H0_FULL_COMMIT_CAPTURE_FAITHFUL`. `H0_FULL_COMMIT_CAPTURE_FAITHFUL` is
+therefore unavailable until the seven-sequence Phase B evidence exists.
 
 Only owner acceptance of `H0_FULL_COMMIT_CAPTURE_FAITHFUL` makes a separately declared B1 consumer-faithful operating-curve study a candidate. It is never a direct handoff.
 
