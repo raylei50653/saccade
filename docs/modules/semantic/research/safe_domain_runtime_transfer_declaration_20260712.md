@@ -185,6 +185,13 @@ any preset, ledger, no-go, or RegionAsset maturity change; any score-ranking cla
 PR merge alone is **not** the seal (framework § 13: *engineering merge \(\not\Rightarrow\)
 research acceptance*). Before the seal: no run, no number.
 
+### Seal candidate
+
+- Prepared: 2026-07-13
+- Scope: the frozen declaration in §§ 1–8, submitted for owner review
+- Authority: **none until** the PR receives the literal owner token `SEALED`;
+  preparing this candidate does not authorize a run or a number
+
 ### Seal record
 
 *(none — not sealed)*
