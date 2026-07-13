@@ -14,7 +14,7 @@ created: 2026-07-12
 **PARKED** (2026-07-12). R1 capture/replay is **closed** at terminal
 `R1_FAITHFUL` — that result stands and is what made runtime coordinates
 auditable. The WIP lock has moved to the gate-shaped line,
-[runtime-faithful safe domain](runtime_faithful_safe_domain_20260712.md).
+[runtime-faithful safe domain](closed/runtime_faithful_safe_domain_20260712.md).
 
 The discrete-\(M\) follow-on was **reclassified as a score-ranking feature
 question, not a gate**, and is parked unsealed
@@ -158,7 +158,7 @@ R1_FAITHFUL (closed under sealed config + seven-seq support)
   accuracy is a **score-ranking feature**, not a gate: it changes which retained
   candidate wins, not which candidates remain. The discrete-\(M\) unit is parked
   unsealed and the WIP lock moves to
-  [runtime-faithful safe domain](runtime_faithful_safe_domain_20260712.md).
+  [runtime-faithful safe domain](closed/runtime_faithful_safe_domain_20260712.md).
   `R1_FAITHFUL` stands and is the enabler there: it is what makes the runtime
   coordinates auditable.
 - 2026-07-12: Owner review returned `REQUEST_CHANGES` on the draft (research

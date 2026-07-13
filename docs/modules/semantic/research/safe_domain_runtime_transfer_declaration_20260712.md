@@ -24,7 +24,7 @@
 [gate-vs-score layer contract](../../../research/contracts/signal_table_schema.md#05-gate-vs-score-support--calibration--policy) ·
 [runtime-quantity fidelity protocol](../../../research/contracts/runtime_quantity_fidelity_protocol.md)
 
-Thread: [runtime-faithful safe domain](../../../research/threads/runtime_faithful_safe_domain_20260712.md) ·
+Thread: [runtime-faithful safe domain](../../../research/threads/closed/runtime_faithful_safe_domain_20260712.md) ·
 Accepted axes: [partial-order note](boolean_atom_partial_order_20260711.md) ·
 Fidelity fact: [D0 results](d0_runtime_shadow_fidelity_results_20260712.md)
 

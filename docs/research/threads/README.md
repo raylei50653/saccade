@@ -189,7 +189,6 @@ frontmatter、搬移與索引要求。
 
 | Thread | Work class / WIP role | Current concrete work | Owner |
 |:--|:--|:--|:--|
-| [runtime_faithful_safe_domain_20260712.md](runtime_faithful_safe_domain_20260712.md) | mainline-study · **sole-active** | **Only:** compute sealed S0 Amendment 1 §§ 3–7, apply § 8, emit the evidence packet and terminal, then stop for owner review; no closure solve or production change | semantic |
 | [gap_conditioned_probabilistic_motion_probe_20260711.md](gap_conditioned_probabilistic_motion_probe_20260711.md) | engineering follow-up · **non-WIP** | **Only:** D0 / #112 runtime CUDA capture；Phase B `V5` is already recorded and authorizes no new semantic mainline work | semantic |
 | [association_recovery_registry_20260709.md](association_recovery_registry_20260709.md) | maintenance · **non-WIP** | Keep R/H ownership and path-health registry current | semantic |
 | [doc_structure_o15_followup_20260709.md](doc_structure_o15_followup_20260709.md) | governance · **non-WIP** | Pay down research-index debt; optional structure checks remain non-blocking | ownership |
@@ -206,6 +205,7 @@ frontmatter、搬移與索引要求。
 
 | Thread | Closed | Terminal (one-line) | Direct handoff disposition | Cross-thread consequence (not handoff) | Owner |
 |:--|:--|:--|:--|:--|:--|
+| [runtime_faithful_safe_domain_20260712.md](closed/runtime_faithful_safe_domain_20260712.md) | 2026-07-13 | **S0 `S0_UNDECIDABLE` ACCEPTED** · V7 has no offline-safe grid point, so runtime transfer is not assessed · [PR #152](https://github.com/raylei50653/saccade/pull/152) | **no receiver / no continuation** — wider runtime join requires a new decision-relevance and O0 decision | offline partial-order state unchanged; runtime transfer unaccepted and closure remains inadmissible | semantic |
 | [ambiguous_band_ranking_power_probe_20260712.md](closed/ambiguous_band_ranking_power_probe_20260712.md) | 2026-07-12 | **T2 `NO_USABLE_RANKING_POWER_IN_CLASS` ACCEPTED**（12-member class-scoped；step ⑤ 生效；step ④ 未開）· [PR #135](https://github.com/raylei50653/saccade/pull/135) seal／[PR #136](https://github.com/raylei50653/saccade/pull/136) acceptance | tested 12-member score class → **no receiver / no continuation** | morphology score branch is closed for this class; its gate branch remains parked in its own card | semantic |
 | [safe_region_assetization_20260710.md](closed/safe_region_assetization_20260710.md) | 2026-07-11 | **A1 CLOSED**（`A1_ACCEPTED_WITH_LIMITS`）· R2–R4 fail-closed | → [gt-support morphology](gt_support_morphology_20260711.md) (parked) | — | semantic |
 | [composition_grammar_coverage_program_20260710.md](closed/composition_grammar_coverage_program_20260710.md) | 2026-07-10 | **SUPERSEDED** · coverage map absorbed into assetization R2–R4 · no C1–C6 execution | → assetization closed line; **no further continuation** | — | semantic |

@@ -39,7 +39,7 @@ candidates was the error.
 
 **Therefore:** this unit is **parked**, and the WIP lock returns to the
 gate-shaped line —
-[runtime-faithful safe domain](../../../research/threads/runtime_faithful_safe_domain_20260712.md).
+[runtime-faithful safe domain](../../../research/threads/closed/runtime_faithful_safe_domain_20260712.md).
 It may be revisited **only** as a feature study *inside* a separately declared
 score-ranking line, and it still carries no authorization of any kind.
 

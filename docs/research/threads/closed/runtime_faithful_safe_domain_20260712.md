@@ -1,20 +1,31 @@
 ---
-doc-status: active
+doc-status: closed
 doc-promotion: navigation-only; not evidence
 owner-module: semantic
 work-class: mainline-study
-wip-role: sole-active
 created: 2026-07-12
+closed: 2026-07-13
+closed-verdict: S0_UNDECIDABLE
 ---
 
 # Runtime-faithful safe domain
 
 ## Status
 
-**ACTIVE · mainline-study · sole-active (S0 terminal emitted; owner review
-pending)** (2026-07-13; PR #152). Amendment 1 was reviewed and resealed at exact
-head `70a40cf9d61eb6512b9b5096049ca59efd58aa95`; the bounded S0 run emitted
-`S0_UNDECIDABLE` and grants no follow-on authority.
+**CLOSED · mainline-study · `S0_UNDECIDABLE` accepted** (2026-07-13; PR #152).
+Amendment 1 was reviewed and resealed at exact head
+`70a40cf9d61eb6512b9b5096049ca59efd58aa95`; the bounded S0 run emitted the
+accepted fail-closed terminal and grants no follow-on authority.
+
+## Final status
+
+| Item | Disposition |
+|:--|:--|
+| Terminal | **`S0_UNDECIDABLE` accepted** — V7 has no offline-safe grid point, so the ordered mapping does not assess runtime transfer. |
+| Evidence | [canonical S0 packet](../../../modules/semantic/research/evidence/s0_safe_domain_runtime_transfer_20260713/manifest.json) · [results](../../../modules/semantic/research/closed/safe_domain_runtime_transfer_results_20260713.md) · PR #152. |
+| Direct handoff | **No receiver / no continuation.** A wider runtime join is only a possible future prerequisite; it is not opened by this terminal and needs fresh decision-relevance and O0 authorization. |
+| Cross-thread consequence (not handoff) | The existing offline partial-order state remains unchanged; runtime transfer remains unaccepted and any closure solve remains inadmissible. |
+| Production / registry | Unchanged. No preset, production, or registry transition is authorized. |
 
 ## Expected state (lease)
 
@@ -37,10 +48,7 @@ changed. Opening, editing, or discarding this lease does not.
 
 ## Current step
 
-No further execution. The canonical S0 evidence packet is awaiting owner review;
-only that review may accept or reject its `S0_UNDECIDABLE` terminal. This grants
-no closure solve, wider join, threshold selection, preset change, production hook,
-or score-ranking claim.
+**none — closed.**
 
 ## Design (the architecture this line serves)
 
@@ -58,20 +66,20 @@ Separation is the score's job.
 
 **This is not a new method.** The canonical mathematical framework already exists
 and is normative:
-[Statistical Robust Feasible-Set Estimation under Asymmetric Loss](../contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
+[Statistical Robust Feasible-Set Estimation under Asymmetric Loss](../../contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
 — \(\max_\theta G_{\mathrm{FP}}(\theta)\) s.t. \(L_{\mathrm{GT}}(\theta)\le\varepsilon\),
 feasible / productive-safe / robust-feasible sets, region geometry, the mandatory
 **independence-unit** declaration (§ 8.1), the **claim ladder L0–L6** (§ 10), and
 the forbidden shortcuts (§ 13, including *offline safe \(\not\Rightarrow\) online
 effective*). The RegionAsset packaging contract
-([safe_region_asset_contract](../contracts/safe_region_asset_contract.md)) lists
+([safe_region_asset_contract](../../contracts/safe_region_asset_contract.md)) lists
 **transfer as not yet authorized**. This line's units instantiate that framework;
 they do not invent statistics.
 
 ## The blocking defect this line opens on
 
 The accepted global safe axes are `{dist_h, log_h_ratio}`
-([partial-order note](../../modules/semantic/research/boolean_atom_partial_order_20260711.md),
+([partial-order note](../../../modules/semantic/research/boolean_atom_partial_order_20260711.md),
 `GLOBAL_PARTIAL_ORDER_READY` / `ACCEPTED_WITH_LIMITS`, PR #107), and the
 restricted-closure prototype that would actually **solve** the safe domain on those
 axes **has not started**.
@@ -86,7 +94,7 @@ endpoint heights (ema proxy)"):
 | `dist_h` | rebuilt from the offline pair table's reduced terms | `‖a_lost − a_cand‖ / h_ref`, from the kernel's own `bridge_anchor4` anchors |
 | `log_h_ratio` | `log(h_lost_raw / h_cand_raw)` — **raw box heights** | `log(ema_lost / ema_cand)` — **EMA state**, and `h_ref = max((ema_lost+ema_cand)/2, 1)` |
 
-[D0](../../modules/semantic/research/d0_runtime_shadow_fidelity_results_20260712.md)
+[D0](../../../modules/semantic/research/d0_runtime_shadow_fidelity_results_20260712.md)
 already certified that this offline reconstruction is **not fidelity-aligned**
 with the runtime quantity (`T2 PROXY_UNFAITHFUL`: decision agreement 95.07 % vs a
 99 % bar; \(|\Delta|\) q95 = 1.417 ≈ 3.54× the 0.4 threshold; and the **GT boundary
@@ -95,18 +103,18 @@ is distorted** — 7.03 % offline-safe-but-online-unsafe).
 **Consequence (the reason this line exists):** a region proved safe in offline
 coordinates does **not** inherit its GT-retention guarantee in runtime
 coordinates. Formula shape and field name do not transfer semantics — see the
-[runtime-quantity fidelity protocol](../contracts/runtime_quantity_fidelity_protocol.md).
+[runtime-quantity fidelity protocol](../../contracts/runtime_quantity_fidelity_protocol.md).
 Solving the closure on unverified axes would build the safe domain on a substrate
 D0 has already ruled unfaithful.
 
 ## Read first
 
-- [S0 results](../../modules/semantic/research/safe_domain_runtime_transfer_results_20260713.md) — **current owner-review packet**
-- [safe-domain runtime-transfer declaration](../../modules/semantic/research/safe_domain_runtime_transfer_declaration_20260712.md) — sealed execution authority
-- [partial-order note](../../modules/semantic/research/boolean_atom_partial_order_20260711.md) — the accepted axes, and their offline-coordinate limit
-- [D0 runtime-shadow fidelity](../../modules/semantic/research/d0_runtime_shadow_fidelity_results_20260712.md) — why offline coordinates cannot carry the guarantee
-- [R1 results](../../modules/semantic/research/r1_temporal_reduction_capture_results_20260712.md) — what made runtime coordinates auditable
-- [gt-support morphology thread](gt_support_morphology_20260711.md) · [safe-region assetization (closed)](closed/safe_region_assetization_20260710.md)
+- [S0 results](../../../modules/semantic/research/closed/safe_domain_runtime_transfer_results_20260713.md) — accepted terminal packet
+- [safe-domain runtime-transfer declaration](../../../modules/semantic/research/safe_domain_runtime_transfer_declaration_20260712.md) — sealed execution authority
+- [partial-order note](../../../modules/semantic/research/boolean_atom_partial_order_20260711.md) — the accepted axes, and their offline-coordinate limit
+- [D0 runtime-shadow fidelity](../../../modules/semantic/research/d0_runtime_shadow_fidelity_results_20260712.md) — why offline coordinates cannot carry the guarantee
+- [R1 results](../../../modules/semantic/research/r1_temporal_reduction_capture_results_20260712.md) — what made runtime coordinates auditable
+- [gt-support morphology thread](../gt_support_morphology_20260711.md) · [safe-region assetization (closed)](safe_region_assetization_20260710.md)
 
 **Framework position of this line:** the offline→runtime coordinate change is a
 **substrate** change in the framework's own sense (§ 9.3 names *score definitions,
@@ -129,8 +137,8 @@ S3  production hook — relink_bridge_max_speed / spatial_gate / h_lo,h_hi are
                       (separately declared; no authorization from S0–S2)
 ```
 
-S0 Amendment 1 is sealed and active. S1–S3 are named so the direction is legible;
-none is authorized, and each needs its own declaration.
+S0 Amendment 1 is complete and closed. S1–S3 are named so the direction is
+legible; none is authorized, and each needs its own declaration.
 
 ## Must not
 
@@ -160,7 +168,13 @@ none is authorized, and each needs its own declaration.
   `70a40cf9d61eb6512b9b5096049ca59efd58aa95`; thread restored to active / sole-active.
   Execution is compute §§ 3–7 and apply § 8; later units remain unauthorized.
 - 2026-07-13: Executed the frozen S0 grid and emitted the canonical
-  [evidence packet](../../modules/semantic/research/evidence/s0_safe_domain_runtime_transfer_20260713/manifest.json).
+  [evidence packet](../../../modules/semantic/research/evidence/s0_safe_domain_runtime_transfer_20260713/manifest.json).
   V1–V4 and V6 pass; V7 has no offline-safe grid point, so the ordered terminal
   is `S0_UNDECIDABLE`. V5 is not evaluated because its domain is the empty active
   offline-safe set. Execution stopped for owner review; no research state changed.
+- 2026-07-13: **Owner accepted `S0_UNDECIDABLE` on PR #152.** S0 closed and its
+  sole-active WIP lock released. No direct receiver was opened: wider runtime
+  join remains only a possible future prerequisite, subject to fresh
+  decision-relevance and O0 authorization; the offline partial-order state,
+  runtime-transfer status, closure admissibility, registry, and production state
+  remain unchanged.

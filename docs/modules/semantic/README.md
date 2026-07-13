@@ -60,11 +60,11 @@
 > （[契約 C5](../../ownership/doc_structure_contract.md)：不得有第二真相）。
 > WIP 鎖見 [TODO.md](TODO.md)。
 
-### 安全域 / gate（現行主線）
+### 安全域 / gate
 
 | 文件 | 這是什麼 |
 |------|------|
-| [research/safe_domain_runtime_transfer_results_20260713.md](research/safe_domain_runtime_transfer_results_20260713.md) | S0：offline→runtime safe-axis transfer audit（結果；owner acceptance pending） |
+| [research/closed/safe_domain_runtime_transfer_results_20260713.md](research/closed/safe_domain_runtime_transfer_results_20260713.md) | S0：offline→runtime safe-axis transfer audit（closed results） |
 | [research/safe_domain_runtime_transfer_declaration_20260712.md](research/safe_domain_runtime_transfer_declaration_20260712.md) | S0 declaration：已接受的 safe 軸能否從 offline 座標轉移到 runtime 座標 |
 | [research/boolean_atom_partial_order_20260711.md](research/boolean_atom_partial_order_20260711.md) | Boolean atom 偏序稽核 — 全域可排序軸的認定 |
 | [research/boolean_closure_domain_line_20260711.md](research/boolean_closure_domain_line_20260711.md) | 布林閉包域研究線的 normative doc |

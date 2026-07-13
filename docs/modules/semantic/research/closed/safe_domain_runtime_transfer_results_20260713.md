@@ -1,19 +1,19 @@
 # S0 — safe-domain axis transfer to runtime coordinates: results
 
-<!-- doc-status: active -->
-<!-- doc-promotion: evidence packet; terminal output pending owner acceptance -->
+<!-- doc-status: closed -->
+<!-- doc-promotion: none -->
 <!-- doc-date: 2026-07-13 -->
 <!-- doc-module: semantic -->
 
-> **Terminal output: `S0_UNDECIDABLE` (owner acceptance pending).** None of the
+> **Terminal output: `S0_UNDECIDABLE` (owner accepted).** None of the
 > 228 frozen grid points is safe on the offline substrate, so the required active
 > offline-safe set is empty. Per declaration §8, this is a fail-closed
 > non-portability result: it makes **no** claim that the axes hold, break, or
 > degrade at runtime.
 
-Declaration: [sealed Amendment 1](safe_domain_runtime_transfer_declaration_20260712.md) ·
-Thread: [runtime-faithful safe domain](../../../research/threads/runtime_faithful_safe_domain_20260712.md) ·
-Canonical packet: [manifest](evidence/s0_safe_domain_runtime_transfer_20260713/manifest.json)
+Declaration: [sealed Amendment 1](../safe_domain_runtime_transfer_declaration_20260712.md) ·
+Thread: [runtime-faithful safe domain](../../../../research/threads/closed/runtime_faithful_safe_domain_20260712.md) ·
+Canonical packet: [manifest](../evidence/s0_safe_domain_runtime_transfer_20260713/manifest.json)
 
 ---
 
@@ -72,9 +72,9 @@ to test transfer.
 
 ## 4. Reproduction record
 
-The canonical packet contains the complete [grid](evidence/s0_safe_domain_runtime_transfer_20260713/grid.csv),
-[metrics](evidence/s0_safe_domain_runtime_transfer_20260713/metrics.json), and
-[manifest](evidence/s0_safe_domain_runtime_transfer_20260713/manifest.json).
+The canonical packet contains the complete [grid](../evidence/s0_safe_domain_runtime_transfer_20260713/grid.csv),
+[metrics](../evidence/s0_safe_domain_runtime_transfer_20260713/metrics.json), and
+[manifest](../evidence/s0_safe_domain_runtime_transfer_20260713/manifest.json).
 Its runner SHA256 is `07d4eb40433e915a4335f44756ab2e0a3e4b8d5b5f86bfe190193070867da4e2`.
 
 Before publishing the packet, the runner's representation of V5 in the
@@ -82,4 +82,10 @@ V7-empty case was corrected from `false` to `not evaluated`. This is a reporting
 correction only: it changes no frozen input, grid row, safety statistic, or
 terminal. The packet linked above is the canonical regenerated output.
 
-Owner acceptance is required before any accepted research state changes.
+## 5. Owner acceptance and closure
+
+The owner accepted `S0_UNDECIDABLE` on 2026-07-13. This closes S0 and releases
+its sole-active WIP lock. It does not change the accepted offline partial-order
+state, accept runtime transfer, or authorize a closure solve. There is no direct
+handoff: a wider runtime join is only a possible future prerequisite and must
+first receive new decision-relevance and O0 authorization.
