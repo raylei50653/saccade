@@ -370,3 +370,138 @@ Only owner acceptance of `H0_FULL_COMMIT_CAPTURE_FAITHFUL` makes a separately de
 | Date | Reviewed head | Owner token | Transition |
 | --- | --- | --- | --- |
 | — | — | — | Draft only; execution prohibited |
+
+## Amendment 1 — §20.2 / §20.8 sealability repair (2026-07-13; pre-seal)
+
+This is an **append-only** correction to the draft declaration. It replaces
+only the three pending conditions named in §1 item 2: the missing typed
+\(\kappa\) declarations, the non-mechanical `H0_CAPTURE_PARTIAL` condition,
+and the missing no-packet execution terminal. It changes no policy-base input,
+observation point, physical stream, record ABI, stable key, identity contract,
+conservation equation, replay bar, or authorized scope. It is not an execution
+seal: the table above remains unsealed until an owner records a literal
+`SEALED` review at a reviewed descendant head.
+
+### A1. Required declaration block and typed \(\kappa\)
+
+```text
+Target decision layer   none (cross-layer substrate / observability work).
+Study intent            boundary diagnostic. It determines whether the frozen
+                        full native bridge-decision path can be observed and
+                        replayed without changing that path.
+Design objective        n/a. No policy, threshold, candidate, ranking, or
+                        production action is selected or evaluated.
+Selection rule          none. There are no competing candidates; the first
+                        applicable ordered terminal in A3 is the result.
+Validity gate           §2 provenance admission; A2 coverage admission;
+                        capture-on/off non-perturbation (§6); zero stream
+                        overflow, exact conservation (§5), and 100% replay.
+Stop condition          exactly three Phase-A coverage attempts at most;
+                        then one Phase-A capture only when A2 passes. Phase B
+                        is available only after every Phase-A bar passes.
+                        No retry, threshold sweep, policy change, or scope
+                        expansion follows a terminal.
+Output class            diagnostic result only. It cannot be promoted into a
+                        design candidate or a policy claim.
+Mainline transition     none / diagnostic-only. No H0 terminal occupies
+                        mainline cadence. Only owner acceptance of
+                        H0_FULL_COMMIT_CAPTURE_FAITHFUL makes a separately
+                        declared B1 study a candidate; it is not a handoff.
+```
+
+Every comparison below consumes the canonical records or artifacts named in
+this declaration, never final MOT output reconstructed offline. `exact` means
+equality of keys, enum/status tags, integer fields, and raw IEEE-754 binary32
+bits after the sealed canonical ordering. A scalar tagged `not_computed` is
+compared as that tag, not as a numeric zero.
+
+| Decidable unit | Quantification space | Comparison relation | Decision rule |
+| --- | --- | --- | --- |
+| Pair replay | Every `pair_record` key in the canonical Phase-A/B packet | Exact fieldwise equality between the native trace and independent replay, including the ordered gate/rejection result | Every record and gate agrees; any missing, extra, duplicate, or disagreeing pair is `H0_PACKET_INVALID`. |
+| Candidate replay | Every `candidate_record` key in the canonical packet | Exact fieldwise equality of native loop state, best/second construction, margin, and proposal result | Every candidate agrees; any mismatch is `H0_PACKET_INVALID`. |
+| Claim replay | Every `claim_record` key in the canonical packet | Exact fieldwise equality of proposal inputs, packed key, winner identity, and `claim_won` outcome | Every claim agrees; any mismatch is `H0_PACKET_INVALID`. |
+| Commit replay | Every `commit_record` key in the canonical packet | Exact fieldwise equality of winning claim identity, visible IDs, active-state transition, and commit result | Every commit agrees and satisfies §4.4; any mismatch is `H0_PACKET_INVALID`. |
+| Packet conservation | The four canonical streams as a single packet | Exact equality of the six §5 conservation equations and their keyed joins | All equations and joins hold with zero overflow and no identity collision; otherwise `H0_PACKET_INVALID`. |
+| Capture non-perturbation | A capture-off / capture-on pair using the same frozen input and resolved configuration | Byte equality of MOT output and final IDs; exact equality of bridge debug counters, proposal/commit counts, winners, and scheduling-/memory-visible policy state | Every listed comparison agrees; any difference is `H0_CAPTURE_PERTURBS_POLICY`. |
+| Coverage admission | The five required H0 components in A2, for each numbered coverage attempt | Exact equality of the sealed component set and the attempt's `h0_coverage_v1` Boolean map | All five values are `true` before capture; a remaining `false` after attempt 3 is `H0_CAPTURE_PARTIAL`. |
+| Execution completion | Each invoked coverage, capture, verification, or serialization phase | The controller's frozen result enum and required artifact set | A non-success controller result or a missing/unreadable required phase artifact is `H0_EXECUTION_INVALID`. |
+| Ordered terminal | One completed Phase-A or Phase-B attempt | First applicable predicate in A3, evaluated in order | Record exactly that terminal; no later terminal may be substituted. |
+
+### A2. Mechanical coverage budget for `H0_CAPTURE_PARTIAL`
+
+The required H0 component set is fixed as:
+
+```text
+track_instance_uid_v1
+pair_record
+candidate_record
+claim_record
+commit_record
+```
+
+Before any Phase-A capture, the sealed H0 controller writes one canonical
+`h0_coverage_v1` artifact for each numbered coverage attempt. It contains
+exactly the five names above as lexicographically ordered Boolean keys. A
+`true` value means the admitted instrumentation build contains the sealed
+writer and required field mapping for that component; it is a static capture
+capability assertion, not a count of data-dependent runtime events. Thus an
+otherwise valid sequence with zero commits does not by itself create a coverage
+gap.
+
+There are exactly three coverage attempts, `1`, `2`, and `3`. An attempt is
+counted only after its controller exits successfully and emits a parseable,
+complete `h0_coverage_v1` artifact. Between attempts, a repair may change only
+trace-owned code allowed by `h0_observational_diff_v1`; every repair must again
+pass the §2 provenance admission. No fourth attempt is permitted under this
+declaration.
+
+`H0_CAPTURE_PARTIAL` is mechanically selected only when attempts 1–3 all
+complete, attempts 1–2 did not admit all five components, and attempt 3 still
+has at least one `false` component. Its required terminal artifact is the three
+coverage maps plus the lexicographically ordered set of false component names.
+It produces no valid full-capture packet and forbids Phase B. This fixed
+predicate replaces the earlier judgment phrased as a stage being impossible to
+observe without changing policy semantics.
+
+### A3. Exhaustive ordered terminal partition
+
+For every controller invocation, the wall-clock deadline is 3,600 seconds from
+process launch, measured by a monotonic clock. Its result enum is exactly
+`success`, `build_failed`, `extension_load_failed`, `runner_nonzero`,
+`runner_timeout`, `serialization_failed`, `artifact_missing_or_unreadable`, or
+`unclassified_execution_failure`. The last value is mandatory for any
+no-artifact failure not covered by a preceding value, so a failure can never be
+left unmapped. A complete packet that is emitted but malformed is a packet
+validity failure, not a serialization success.
+
+The following order supersedes §7's draft list while preserving the meaning of
+its existing terminals:
+
+1. `H0_PROVENANCE_INVALID` — §2 provenance or projection admission fails.
+   **Transition: none / diagnostic-only.** Stop before coverage, capture, or
+   replay.
+2. `H0_EXECUTION_INVALID` — after provenance passes, a required controller
+   invocation has any non-`success` enum, exceeds its deadline, or fails to
+   emit the required complete phase artifact. This includes build failure,
+   runner crash/nonzero exit, and serialization failure that yields no complete
+   artifact. **Transition: none / diagnostic-only.** Stop; do not reinterpret
+   it as partial observability.
+3. `H0_CAPTURE_PERTURBS_POLICY` — the §6 capture-on/off comparison differs.
+   **Transition: none / diagnostic-only.** Stop before replay or Phase B.
+4. `H0_PACKET_INVALID` — a complete emitted packet has overflow, duplicate
+   key, identity collision, invalid scalar, canonical-digest mismatch, failed
+   conservation, or any pair/candidate/claim/commit replay disagreement.
+   **Transition: none / diagnostic-only.** Stop before Phase B.
+5. `H0_CAPTURE_PARTIAL` — only the exact A2 three-attempt predicate holds,
+   with terminals 1–4 false. **Transition: none / diagnostic-only.** Its
+   coverage artifacts are diagnostic only; Phase B is forbidden.
+6. `H0_FULL_COMMIT_CAPTURE_FAITHFUL` — Phase A and the frozen unlabelled
+   seven-sequence Phase B both complete with every preceding predicate false
+   and every §2, §5, §6, and A1 replay bar true. **Transition: none /
+   diagnostic-only.** It may be owner-accepted, after which a new B1
+   declaration is merely a candidate.
+
+Phase A may emit only terminals 1–5. Terminal 6 is unavailable until the
+seven-sequence Phase-B artifact exists. This amendment adds no policy evidence,
+does not authorize Phase A or B, and leaves registry, ledger, preset, and
+production behavior unchanged.
