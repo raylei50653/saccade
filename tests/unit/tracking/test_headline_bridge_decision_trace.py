@@ -382,6 +382,25 @@ def test_h0_static_coverage_is_a_replayable_contract_artifact() -> None:
     }
 
 
+def test_h0_comment_mask_preserves_offsets_but_not_comment_evidence() -> None:
+    source = (
+        'const char* literal = "// not a comment";\n'
+        "/* h0_append_record(h0.claim_records, cap, cursor, overflow, record);\n"
+        "   key.cand_slot = cand; */\n"
+        "// h0_append_record(h0.claim_records, cap, cursor, overflow, record);\n"
+        'const char* raw = R"tag(// not a comment)tag";\n'
+    )
+
+    masked = CHECK.strip_cpp_comments(source)
+
+    assert len(masked) == len(source)
+    assert masked.count("\n") == source.count("\n")
+    assert "h0_append_record" not in masked
+    assert "key.cand_slot = cand" not in masked
+    assert '"// not a comment"' in masked
+    assert 'R"tag(// not a comment)tag"' in masked
+
+
 def test_h0_static_checker_rejects_writer_wiring_mutations() -> None:
     cuda_path = ROOT / "src/tracking/tracker_gpu.cu"
     source = cuda_path.read_text(encoding="utf-8")
@@ -393,6 +412,20 @@ def test_h0_static_checker_rejects_writer_wiring_mutations() -> None:
         1,
     )
     report, failures = CHECK.coverage_report({cuda_path: missing_claim_append})
+    assert report["coverage_components"]["claim_record"] is False
+    assert any(
+        "claim_records has no h0_append_record" in failure for failure in failures
+    )
+
+    commented_claim_append = source.replace(
+        "const int claim_record_index = h0_append_record(\n"
+        "            h0.claim_records, h0.claim_capacity, h0.claim_cursor, h0.claim_overflow, h0_claim);",
+        "const int claim_record_index = -1;\n"
+        "        /* h0_append_record(\n"
+        "            h0.claim_records, h0.claim_capacity, h0.claim_cursor, h0.claim_overflow, h0_claim); */",
+        1,
+    )
+    report, failures = CHECK.coverage_report({cuda_path: commented_claim_append})
     assert report["coverage_components"]["claim_record"] is False
     assert any(
         "claim_records has no h0_append_record" in failure for failure in failures
@@ -418,6 +451,23 @@ def test_h0_static_checker_rejects_writer_wiring_mutations() -> None:
         1,
     )
     report, failures = CHECK.coverage_report({cuda_path: moved_field_after_append})
+    assert report["coverage_components"]["native_universe_v2"] is False
+    assert any(
+        "native_candidate_keys fields must be assigned before" in failure
+        for failure in failures
+    )
+
+    commented_field_before_append = source.replace(
+        before,
+        "        // key.cand_slot = cand;\n        key.cand_instance_uid",
+        1,
+    ).replace(
+        "                         h0.native_candidate_cursor, h0.native_candidate_overflow, key);",
+        "                         h0.native_candidate_cursor, h0.native_candidate_overflow, key);\n"
+        "        key.cand_slot = cand;",
+        1,
+    )
+    report, failures = CHECK.coverage_report({cuda_path: commented_field_before_append})
     assert report["coverage_components"]["native_universe_v2"] is False
     assert any(
         "native_candidate_keys fields must be assigned before" in failure

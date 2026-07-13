@@ -230,6 +230,66 @@ def _normalise(value: str) -> str:
     return re.sub(r"\s+", "", value)
 
 
+def strip_cpp_comments(source: str) -> str:
+    """Mask C/C++ comments while preserving every offset and newline.
+
+    The static checker uses source offsets to constrain each append and writer
+    slice to its production kernel. Replacing comments with spaces (rather
+    than deleting them) preserves that relation while preventing commented-out
+    calls or assignments from becoming admission evidence. String, character,
+    and raw-string literal contents are retained unchanged.
+    """
+    masked = list(source)
+    index = 0
+    normal = "normal"
+    state = normal
+    raw_end = ""
+    while index < len(source):
+        char = source[index]
+        if state == normal:
+            if source.startswith("//", index):
+                end = source.find("\n", index)
+                end = len(source) if end < 0 else end
+                for masked_index in range(index, end):
+                    masked[masked_index] = " "
+                index = end
+                continue
+            if source.startswith("/*", index):
+                end = source.find("*/", index + 2)
+                end = len(source) if end < 0 else end + 2
+                for masked_index in range(index, end):
+                    if masked[masked_index] != "\n":
+                        masked[masked_index] = " "
+                index = end
+                continue
+            if source.startswith('R"', index):
+                delimiter_end = source.find("(", index + 2)
+                if delimiter_end >= 0:
+                    raw_end = ")" + source[index + 2 : delimiter_end] + '"'
+                    state = "raw"
+                    index = delimiter_end + 1
+                    continue
+            if char == '"':
+                state = "string"
+            elif char == "'":
+                state = "character"
+        elif state == "raw":
+            if source.startswith(raw_end, index):
+                index += len(raw_end)
+                state = normal
+                continue
+        elif state in {"string", "character"}:
+            if char == "\\":
+                index += 2
+                continue
+            if (state == "string" and char == '"') or (
+                state == "character" and char == "'"
+            ):
+                state = normal
+        index += 1
+    return "".join(masked)
+
+
 def _split_arguments(value: str) -> tuple[str, ...]:
     args: list[str] = []
     start = 0
@@ -291,7 +351,7 @@ def kernel_scopes(cuda: str) -> dict[str, KernelScope]:
     ranges = {
         "propose": (
             "__global__ void relink_bidir_propose_kernel(",
-            "// Pass 2 (commit):",
+            "__global__ void relink_bidir_commit_kernel(",
         ),
         "commit": (
             "__global__ void relink_bidir_commit_kernel(",
@@ -530,6 +590,7 @@ def coverage_report(
     overrides = source_overrides or {}
     header = _read(HEADER_PATH, overrides)
     cuda = _read(CUDA_PATH, overrides)
+    analysis_cuda = strip_cpp_comments(cuda)
     binding = _read(PYTHON_BINDING_PATH, overrides)
     wrapper = _read(TRACKER_WRAPPER_PATH, overrides)
     exporter = _read(EXPORT_PATH, overrides)
@@ -537,17 +598,19 @@ def coverage_report(
     components: dict[str, bool] = {}
     failures: list[str] = []
 
-    uid_markers = ("track_instance_uid_v1", "h0_instance_uid", "d_h0_slot_generation_")
-    uid_failures = [
-        marker for marker in uid_markers if marker not in header and marker not in cuda
-    ]
+    uid_markers = (
+        "__device__ inline uint64_t h0_instance_uid(",
+        "h0_slot_generation[slot] = current_generation + 1u;",
+        "d_h0_slot_generation_",
+    )
+    uid_failures = [marker for marker in uid_markers if marker not in analysis_cuda]
     components["track_instance_uid_v1"] = not uid_failures
     if uid_failures:
         failures.append(f"track_instance_uid_v1 markers are incomplete: {uid_failures}")
 
     try:
-        scopes = kernel_scopes(cuda)
-        calls = append_calls(cuda)
+        scopes = kernel_scopes(analysis_cuda)
+        calls = append_calls(analysis_cuda)
     except ValueError as exc:
         scopes = {}
         calls = []
@@ -555,7 +618,9 @@ def coverage_report(
     for stream in RECORD_STRUCTS:
         component = stream.removesuffix("s")
         component_failures = (
-            _validate_record_component(stream, header, binding, scopes, cuda, calls)
+            _validate_record_component(
+                stream, header, binding, scopes, analysis_cuda, calls
+            )
             if scopes
             else ["CUDA kernel scopes unavailable"]
         )
@@ -563,7 +628,9 @@ def coverage_report(
         failures.extend(component_failures)
 
     native_failures = (
-        _validate_native_component(header, binding, wrapper, cuda, calls, scopes)
+        _validate_native_component(
+            header, binding, wrapper, analysis_cuda, calls, scopes
+        )
         if scopes
         else ["CUDA kernel scopes unavailable"]
     )

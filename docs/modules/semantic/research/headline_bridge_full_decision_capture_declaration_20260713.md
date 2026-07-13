@@ -761,3 +761,28 @@ complete `h0_preseal_freeze_v2` artifact records the amended schema, checker,
 all admitted source hashes, and all-true coverage. This amendment neither
 authorizes capture nor changes policy behavior, and it creates no new
 observability terminal.
+
+## Amendment 4 — comment-free static evidence (2026-07-13; pre-seal)
+
+This is an **append-only** correction to Amendment 3's mechanical-admission
+implementation. All CUDA evidence used by `kernel_scopes()`,
+`h0_append_record(...)` parsing, local construction-to-append slicing, and
+pre-append field-assignment matching is taken from a comment-masked analysis
+source. The mask replaces every `//...` and `/*...*/` non-newline character
+with whitespace while preserving total length and each newline offset. It does
+not alter string, character, or raw-string literal contents.
+
+Consequently a commented-out append, a stale commented field assignment, or a
+commented kernel-boundary marker cannot be writer evidence, while every parsed
+offset still identifies the same location in the frozen source. Pre-seal
+mutation tests must demonstrate both of these cases:
+
+```text
+live claim append replaced by an exact commented append -> claim_record = false
+native key assignment only commented before append, live only after append
+    -> native_universe_v2 = false
+```
+
+This correction changes neither the envelope/exposure predicates nor any
+policy behavior. §1 item 2 remains satisfied; §1 item 3 owner `SEALED` after a
+complete freeze artifact remains the sole pending gate.
