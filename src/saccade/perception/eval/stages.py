@@ -559,6 +559,7 @@ def _run_track(
             fused_scores,
             fused_classes.to(torch.int32),
             gmc=gmc_warp,
+            frame_id=state.current_frame_id,
         )
         tracker_result_buffers, _ = time_stage(
             seq_stage_totals,
@@ -578,6 +579,7 @@ def _run_track(
                 embeddings=embeddings if cfg.use_tracker_reid else None,
                 gmc=gmc_warp,
                 mid_thresh_scale=mid_thresh_scale,
+                h0_frame_id=state.current_frame_id,
             ),
             sync_cuda=synchronize,
         )
