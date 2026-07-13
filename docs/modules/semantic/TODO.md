@@ -5,7 +5,7 @@
 
 ## Sole active
 
-- Runtime-faithful safe domain — S0 Amendment 1 sealed; execution authorized → [charter](../../research/threads/runtime_faithful_safe_domain_20260712.md) · [declaration](research/safe_domain_runtime_transfer_declaration_20260712.md)
+- Runtime-faithful safe domain — S0 Amendment 1 executed; `S0_UNDECIDABLE` packet awaits owner review → [charter](../../research/threads/runtime_faithful_safe_domain_20260712.md) · [results](research/safe_domain_runtime_transfer_results_20260713.md)
 
 ## Proposed（non-WIP）
 

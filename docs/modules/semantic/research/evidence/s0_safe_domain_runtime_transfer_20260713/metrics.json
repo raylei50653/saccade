@@ -1,0 +1,90 @@
+{
+  "axis_agreement": {
+    "abs_log_h_ratio_spearman_rho": 0.7102216090694512,
+    "dist_h_spearman_rho": 0.9908561101173261,
+    "minimum": 0.98
+  },
+  "conventions": {
+    "abs_log_h_ratio_thresholds": [
+      0.05,
+      0.1,
+      0.15,
+      0.2,
+      0.25,
+      0.3,
+      0.35,
+      0.4,
+      0.45,
+      0.5,
+      0.55,
+      0.6
+    ],
+    "confidence": 0.95,
+    "dist_thresholds": [
+      0.2,
+      0.3,
+      0.4,
+      0.5,
+      0.6,
+      0.7,
+      0.8,
+      0.9,
+      1.0,
+      1.1,
+      1.2,
+      1.3,
+      1.4,
+      1.5,
+      1.6,
+      1.7,
+      1.8,
+      1.9,
+      2.0
+    ],
+    "epsilon": 0.05,
+    "jaccard_min": 0.9,
+    "rho_min": 0.98,
+    "selection": "none",
+    "unjoined_events_are_statistical_trials": false
+  },
+  "declaration": "docs/modules/semantic/research/safe_domain_runtime_transfer_declaration_20260712.md",
+  "exposures": {
+    "fp_pairs": 1373,
+    "fp_reporting_unit": "matched_pair",
+    "gt_tracks": 116,
+    "matched_pairs": 1684,
+    "trial_unit": "lost_track(seq,lost_global_id)",
+    "unjoined_events": 893
+  },
+  "grid_summary": {
+    "active_offline_safe_points": 0,
+    "active_safe_points_with_unjoined_m_gt_zero": 0,
+    "offline_safe_points": 0,
+    "points": 228,
+    "runtime_safe_among_offline_safe": 0
+  },
+  "input_hashes": {
+    "_global_id_map.txt": "ae3b6441d1712bcce0826d611cee2cfdf7a01b4d37ec331336f91a0b9148f366",
+    "capture.csv.gz": "96093b9b723ed4500b389f8ad74600d75bb49a75064630dd2205cea0b0887047",
+    "pairs.csv": "ee2898a25ef7f01ed46331c49c12d667846975f25769bc4c3e6b8bad493f8e87",
+    "substrate_mot_concat": "4c5e322a3b8c026de584baa883e26353720837ffa2bf146dfcef2679426a670e"
+  },
+  "partition": {
+    "cohort_gap": 539,
+    "matched": 1684,
+    "unemitted": 354
+  },
+  "reviewed_head": "70a40cf9d61eb6512b9b5096049ca59efd58aa95",
+  "study": "s0_safe_domain_runtime_transfer_20260713",
+  "terminal": "S0_UNDECIDABLE",
+  "validity": {
+    "V1_provenance": true,
+    "V2_partition_conservation": true,
+    "V3_join_integrity": true,
+    "V4_exposure_floor": true,
+    "V5_adversarial_unjoined_coverage": null,
+    "V5_evaluated": false,
+    "V6_no_gt_leakage": true,
+    "V7_nonempty_active_safe_set": false
+  }
+}

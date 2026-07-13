@@ -11,10 +11,10 @@ created: 2026-07-12
 
 ## Status
 
-**ACTIVE · mainline-study · sole-active (Amendment 1 `SEALED`; S0 execution
-authorized)** (2026-07-13; PR #152). The original authority was suspended before
-any run; the corrected V5 was reviewed and resealed at exact head
-`70a40cf9d61eb6512b9b5096049ca59efd58aa95`.
+**ACTIVE · mainline-study · sole-active (S0 terminal emitted; owner review
+pending)** (2026-07-13; PR #152). Amendment 1 was reviewed and resealed at exact
+head `70a40cf9d61eb6512b9b5096049ca59efd58aa95`; the bounded S0 run emitted
+`S0_UNDECIDABLE` and grants no follow-on authority.
 
 ## Expected state (lease)
 
@@ -37,10 +37,10 @@ changed. Opening, editing, or discarding this lease does not.
 
 ## Current step
 
-Compute the frozen declaration §§ 3–7, apply the ordered terminal mapping in § 8,
-emit the canonical evidence packet, and stop for owner review. This authorizes no
-closure solve, threshold selection, preset change, production hook, or score-ranking
-claim.
+No further execution. The canonical S0 evidence packet is awaiting owner review;
+only that review may accept or reject its `S0_UNDECIDABLE` terminal. This grants
+no closure solve, wider join, threshold selection, preset change, production hook,
+or score-ranking claim.
 
 ## Design (the architecture this line serves)
 
@@ -101,7 +101,8 @@ D0 has already ruled unfaithful.
 
 ## Read first
 
-- [safe-domain runtime-transfer declaration (draft)](../../modules/semantic/research/safe_domain_runtime_transfer_declaration_20260712.md) — **current unit**
+- [S0 results](../../modules/semantic/research/safe_domain_runtime_transfer_results_20260713.md) — **current owner-review packet**
+- [safe-domain runtime-transfer declaration](../../modules/semantic/research/safe_domain_runtime_transfer_declaration_20260712.md) — sealed execution authority
 - [partial-order note](../../modules/semantic/research/boolean_atom_partial_order_20260711.md) — the accepted axes, and their offline-coordinate limit
 - [D0 runtime-shadow fidelity](../../modules/semantic/research/d0_runtime_shadow_fidelity_results_20260712.md) — why offline coordinates cannot carry the guarantee
 - [R1 results](../../modules/semantic/research/r1_temporal_reduction_capture_results_20260712.md) — what made runtime coordinates auditable
@@ -158,3 +159,8 @@ none is authorized, and each needs its own declaration.
 - 2026-07-13: Amendment 1 resealed on PR #152 at reviewed head
   `70a40cf9d61eb6512b9b5096049ca59efd58aa95`; thread restored to active / sole-active.
   Execution is compute §§ 3–7 and apply § 8; later units remain unauthorized.
+- 2026-07-13: Executed the frozen S0 grid and emitted the canonical
+  [evidence packet](../../modules/semantic/research/evidence/s0_safe_domain_runtime_transfer_20260713/manifest.json).
+  V1–V4 and V6 pass; V7 has no offline-safe grid point, so the ordered terminal
+  is `S0_UNDECIDABLE`. V5 is not evaluated because its domain is the empty active
+  offline-safe set. Execution stopped for owner review; no research state changed.
