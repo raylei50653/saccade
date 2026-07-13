@@ -34,7 +34,7 @@ Everything below is the original 2026-07-11 content, retained verbatim.
 > evidence packet has yet been executed and accepted)
 > **Packet:** [evidence/d0_bridge_estimator_fidelity_20260711/](evidence/d0_bridge_estimator_fidelity_20260711/)
 
-Thread: [gap-conditioned probabilistic motion probe](../../../research/threads/gap_conditioned_probabilistic_motion_probe_20260711.md)
+Thread: [gap-conditioned probabilistic motion probe](../../../research/threads/closed/gap_conditioned_probabilistic_motion_probe_20260711.md)
 
 ---
 

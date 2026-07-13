@@ -1240,6 +1240,7 @@ A PR that uses safe-region language should be reviewed against four independent 
 - Is every cited result classified into a §20.4 output class?
 - Does any promotion of a diagnostic or upper-bound result violate §20.5?
 - If the study claims mainline cadence: does every predeclared terminal outcome produce a state transition (§20.7)?
+- Does the declaration pass the §20.8 seal bar (frozen degrees of freedom, mechanical decidability, exhaustive terminal mapping, scoped exhaustion naming, joint headroom, blind→reveal hash binding)?
 
 A PR may pass engineering review while remaining statistically or scientifically inconclusive.
 
@@ -1331,7 +1332,7 @@ is the historical exception to the §20.0 hosting rule.
 
 ### 20.0 Status and scope
 
-Contract version **v1 (2026-07-12)**. This section is the normative home of the experiment contract. Issue threads, study notes, and PR descriptions must **reference** this section; they must not restate or fork it. Every new decision-layer study that uses this framework's language or infrastructure runs under this contract. Studies opened before v1 keep their sealed procedures but must be re-classified under §20.4 before any result is cited as a design recommendation.
+Contract version **v1.1 (2026-07-13; append-only — v1 2026-07-12 text unchanged, §20.8 and the §20.2 κ line added to consolidate the declaration seal bar accrued in owner reviews)**. This section is the normative home of the experiment contract. Issue threads, study notes, and PR descriptions must **reference** this section; they must not restate or fork it. Every new decision-layer study that uses this framework's language or infrastructure runs under this contract. Studies opened before v1 keep their sealed procedures but must be re-classified under §20.4 before any result is cited as a design recommendation.
 
 **Hosting rule.** This framework hosts cross-line semantics only. Line-specific predeclared procedures are hosted as standalone files under [`procedures/`](../eval/procedures/), referencing this framework for shared terms; they are not added as new framework sections. §19 (GT-support morphology) was drafted in-framework and is the historical exception — its sealed v1 body has been moved to [procedures/gt_support_morphology_procedure_v1.md](../eval/procedures/gt_support_morphology_procedure_v1.md) with §19.x numbering preserved, and the §19 slot is a tombstone.
 
@@ -1370,6 +1371,15 @@ Mainline transition
                  which mainline state transition each terminal outcome
                  produces (§20.7); a study with none is diagnostic and
                  must not occupy mainline cadence
+Type κ           for every decidable unit:
+                 κ = (quantification space, comparison relation, decision rule),
+                 declared as three separate components — the space says what is
+                 quantified over, the relation and rule say how it is judged.
+                 Fidelity claims (e.g. exact or tolerance-bounded comparisons
+                 over event/pair units) and claim-level statements (e.g.
+                 ε-level bounds over trial units) route to different
+                 falsification rules; sealability of the declaration is
+                 governed by §20.8
 ```
 
 The target layer and the study intent are independent axes: a boundary diagnostic *of the gate layer*, an upper-bound probe *of score-layer ranking*, and a capability map *of the ambiguous band* are all expressible and must be declared as such. Collapsing the two axes into one "role" is not permitted.
@@ -1444,6 +1454,49 @@ A mainline study must therefore be designed so that **every predeclared terminal
 The task-selection question is not *what can be validated next*, but:
 
 > After this task terminates, which mainline state transition has occurred?
+
+### 20.8 Declaration seal bar (v1.1)
+
+This section consolidates the sealability requirements accrued in owner reviews
+(PRs #135, #152, #154–#157). It is the single normative home for "what a
+declaration must pin down before it can be sealed"; declarations, threads, and
+review checklists reference it and must not restate or fork it. The governing
+test for the whole bar:
+
+> **Two independent implementers, given only the sealed declaration and its
+> frozen inputs, would record the bit-identical terminal.**
+
+A declaration is sealable only if every item below holds:
+
+1. **Frozen degrees of freedom.** Every terminal-affecting choice is pinned in
+   the declaration — tie-breaking, quantile method, refit policy, gate
+   ordering, rounding/precision. A choice discovered later to affect the
+   terminal is a declaration defect and is repaired by an append-only
+   amendment, never an inline edit.
+2. **Mechanical decidability.** Every acceptance and terminal criterion is
+   decidable from frozen artifacts with no post-hoc judgment; language like
+   "clearly better" or "reasonable margin" is not sealable.
+3. **Exhaustive terminal mapping.** The declared terminal set partitions all
+   reachable outcomes, including validity failure (§20.7 UNRESOLVED) and
+   execution-invalid outcomes that produce no packet (build failure, runner
+   crash, serialization failure — all fail-closed, never unmapped); there is
+   no residual "describe more and continue" outcome, and every terminal names
+   its mainline transition — or explicitly maps to `none / diagnostic-only`
+   when the declaration claims no mainline cadence under §20.2. A diagnostic
+   declaration is sealable; what it may not do is occupy mainline cadence.
+4. **Scoped exhaustion and naming.** A negative terminal claims exhaustion
+   only over the declared complexity class, and terminal naming must not
+   exceed what the partition definitions entail — an outcome that is zero by
+   construction is bookkeeping, not futility.
+5. **Joint headroom.** Headroom and feasibility statements are judged jointly
+   on the decision-relevant quantities, never per-quantity.
+6. **Blind→reveal binding.** Where the study has a blind phase, the reveal is
+   bound to the sealed runner and blind artifacts by recorded hashes (runner,
+   blind artifacts, capture, manifest).
+
+How other documents may cite a sealed boundary is doc governance, not part of
+this bar: projections copy the owner document's self-designation verbatim
+(doc structure contract C5.1 — link, don't relabel).
 
 ---
 

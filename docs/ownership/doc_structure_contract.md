@@ -242,6 +242,11 @@ transition 時，不得製造 registry `last_transition`。
 索引與入口表只列「這是什麼 + 去哪裡」：**不列裁決、不列數字、不列狀態**。
 module README 的 research 索引尤其不複製裁決或指標。
 
+**Link, don't relabel（2026-07-13 追加，同為 C5 推論）**：投影引用 owner doc 時，
+label **照抄 owner doc 的自稱**（title / terminal token 原詞），不得發明新名詞、
+不得改寫範圍或邊界。複寫即漂移：一個邊界只在它的 owner（宣告→
+[experiment contract §20.8](../research/contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)）被定義一次。
+
 **Closed decision line:** [tracker-decision/status_2026-07-09.md](../research/tracker-decision/status_2026-07-09.md) (P0–P8) is read-only; no drive-by reopen (WIP rules).
 
 ---

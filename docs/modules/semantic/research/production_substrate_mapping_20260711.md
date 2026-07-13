@@ -37,7 +37,7 @@ Everything below is unmodified and must be read under this scope.
 > any deployment-facing claim. This document is a **binding precondition**
 > for E3 analysis design.
 
-Thread: [gap-conditioned probabilistic motion probe](../../../research/threads/gap_conditioned_probabilistic_motion_probe_20260711.md)
+Thread: [gap-conditioned probabilistic motion probe](../../../research/threads/closed/gap_conditioned_probabilistic_motion_probe_20260711.md)
 
 Audited surfaces (2026-07-11, branch base `99c163da`):
 

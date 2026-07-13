@@ -1,6 +1,6 @@
 # Semantic Relink — 模組 TODO
 
-> **WIP register only**（O0）：只鎖 decision-changing mainline charter。Expected state / probe 在 linked charter；事實與結論在 [research](research/) / [README](README.md)。
+> **WIP register only**（O0）：只鎖 decision-changing mainline charter。高階型別與 owner 路由見 [research control plane](../../research/README.md#research-control-plane)；Expected state / probe 在 linked charter；事實與結論在 [research](research/) / [README](README.md)。
 > 開發路由：[DEVELOPMENT action cards](../../../DEVELOPMENT.md#agent-action-cards) · 規則：[DOC_MAINTENANCE § WIP](../../DOC_MAINTENANCE.md) · [契約 C7](../../ownership/doc_structure_contract.md)。
 
 ## Sole active
@@ -9,7 +9,7 @@
 
 ## Proposed（non-WIP）
 
-*(none)*
+- H0 full bridge-decision trace capture（pending declaration repair under contract §20.2/§20.8, then owner seal；不得執行或開下游 claim）→ [declaration](research/headline_bridge_full_decision_capture_declaration_20260713.md)
 
 ## Parked
 

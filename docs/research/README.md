@@ -6,17 +6,55 @@
 
 ---
 
-## 🔄 現在在做什麼
+<a id="research-control-plane"></a>
 
-**這裡不列狀態**（列了就會漂移——實測如此）。三個入口，各有唯一 owner：
+## 🧭 Research control plane
 
-| 我要知道 | 去 |
-|------|------|
-| 每個研究對象**現在站在哪一格**（state / substrate / limits / 合法候選集） | **[claim_state_registry](contracts/claim_state_registry.md)** |
-| 哪一個被選為 **sole active**（WIP 鎖） | 對應的 [module TODO](../modules/) |
-| 這條線**怎麼接續**（敘事導覽） | [threads/](threads/README.md) |
+這裡是研究任務的總入口。本圖只擁有**路由拓撲、型別與轉移邊**；
+每個可點節點都連到狀態或事實 owner，不在入口複寫 terminal、數字或 live state。
+宣告邊界規則的唯一 owner 是 [experiment contract §20.2 / §20.8](contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)：
+每個可判定任務宣告 typed κ（§20.2），宣告可封印性由 §20.8 seal bar 判定。
 
-治理（O-series，非實驗正文）：[../ownership/README.md](../ownership/README.md) · [DOC_MAINTENANCE § WIP](../DOC_MAINTENANCE.md) · [DEVELOPMENT.md 模組現狀總覽](../../DEVELOPMENT.md)
+### Typed route — runtime representation → reduction → validation
+
+下圖按**量化空間**分層；各節點完整的 κ（comparison relation 與 decision rule）
+以 linked owner document 為準，此處不複寫判準或數字。
+
+- **Captured runtime event space** — partition 依 owner 定義:`matched ˙∪ cohort_gap ˙∪ unemitted`
+  - κ quantification space = captured events:
+    [R1 temporal-reduction capture — owner terminal results](../modules/semantic/research/r1_temporal_reduction_capture_results_20260712.md)
+    — captured runtime ↔ canonical replay
+  - **Joined `matched` pair space**(event-level fidelity 帳目)
+    - κ quantification space = matched joined pairs；relation / rule = owner-defined fidelity boxes:
+      [D0 — runtime shadow bridge fidelity: results](../modules/semantic/research/d0_runtime_shadow_fidelity_results_20260712.md)
+      — offline proxy ↔ runtime quantity
+    - `ρ_v: event → trial unit` ↓
+    - **Trial-unit claim space**(track-level independence unit)
+      - κ quantification space = trial units:
+        [S0 — safe-domain axis transfer to runtime coordinates: results](../modules/semantic/research/closed/safe_domain_runtime_transfer_results_20260713.md)
+        — runtime-coordinate transfer / claim support
+  - **Frozen-packet bookkeeping**(κ quantification space = frozen unjoined runtime events)
+    - [EK0 — frozen-packet exact-key recoverability — results](../modules/semantic/research/frozen_packet_exact_key_recoverability_results_20260713.md)
+      — consistency audit
+  - **Runtime decision-path observability**(κ quantification space = frozen evidence under examination — capture 與 provenance records)
+    - [P0 — runtime bridge decision-path identifiability: results](../modules/semantic/research/closed/runtime_bridge_decision_path_identifiability_results_20260713.md)
+      → [H0 — headline-s full bridge-decision trace capture](../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md)（native capture 宣告）
+      → downstream claim 必須另行宣告。
+
+### State resolution
+
+| 圖上要讀的東西 | 唯一 owner |
+|---|---|
+| research-object accepted state / substrate / limits / admissible units | [claim-state registry](contracts/claim_state_registry.md) |
+| closed diagnostic（S0 / EK0 / P0）的 terminal | 圖上 linked results note；registry 只承接其誘發的 object limits，不鏡射 diagnostic terminal |
+| sole-active selection / module transition pointer | 對應 [module TODO](../modules/)；本線見 [semantic TODO](../modules/semantic/TODO.md) |
+| charter lifecycle / sequence / expected-state lease / handoff | [research threads](threads/README.md) 與 linked declaration |
+| verdict / statistics / reproducible evidence | 圖上 linked fact owner；可引用數字見 [evidence ledger](evidence_ledger.md) |
+
+關閉一個節點不會自動授權下一個節點。任務只能由 owner-accepted terminal
+觸發新的 admissible transition，再由 TODO 的 WIP 鎖選定是否執行。
+
+治理（O-series，非實驗正文）：[../ownership/README.md](../ownership/README.md) · [DOC_MAINTENANCE § WIP](../DOC_MAINTENANCE.md) · [DEVELOPMENT.md](../../DEVELOPMENT.md)
 
 ---
 
@@ -82,7 +120,7 @@
 
 | 模組 | 入口 |
 |------|------|
-| [semantic](../modules/semantic/README.md) | 12 notes — offline relink hub、Cheb-GR bank、**occ-exit active** |
+| [semantic](../modules/semantic/README.md) | Semantic relink / runtime bridge / safe-domain research index |
 | [detection](../modules/detection/README.md) | T3→T1、CUDA graph、kernel fusion 等 |
 | [geometry](../modules/geometry/README.md) | [fp_fn_recovery_and_gmc](../modules/geometry/research/fp_fn_recovery_and_gmc.md) |
 | [lifecycle](../modules/lifecycle/README.md) | [tentative_confirmed_state](../modules/lifecycle/research/tentative_confirmed_state.md) |

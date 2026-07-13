@@ -86,6 +86,9 @@
 
 | 文件 | 這是什麼 |
 |------|------|
+| [research/headline_bridge_full_decision_capture_declaration_20260713.md](research/headline_bridge_full_decision_capture_declaration_20260713.md) | H0：headline-s full bridge-decision trace capture 宣告 |
+| [research/closed/runtime_bridge_decision_path_identifiability_results_20260713.md](research/closed/runtime_bridge_decision_path_identifiability_results_20260713.md) | P0：既有 frozen capture 的 decision-path 可識別性結果 |
+| [research/runtime_bridge_decision_path_identifiability_declaration_20260713.md](research/runtime_bridge_decision_path_identifiability_declaration_20260713.md) | P0：decision-path identifiability 預宣告 |
 | [research/d0_runtime_shadow_fidelity_results_20260712.md](research/d0_runtime_shadow_fidelity_results_20260712.md) | D0：以真實 runtime CUDA `bdist` 認證 offline proxy 的忠實性（結果） |
 | [research/d0_runtime_shadow_fidelity_declaration_20260712.md](research/d0_runtime_shadow_fidelity_declaration_20260712.md) | D0 預宣告（sealed） |
 | [research/s0_proxy_validity_amendment_20260712.md](research/s0_proxy_validity_amendment_20260712.md) | `s0` 自此為 offline-only 量的效力修訂（append-only） |

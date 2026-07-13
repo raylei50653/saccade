@@ -12,7 +12,7 @@
 > ceiling = representation / level 1. Production, preset, tracker, threshold
 > transfer, and hook state remain unchanged and unauthorized.
 
-Thread: [gap-conditioned probabilistic motion probe](../../../research/threads/gap_conditioned_probabilistic_motion_probe_20260711.md)  
+Thread: [gap-conditioned probabilistic motion probe](../../../research/threads/closed/gap_conditioned_probabilistic_motion_probe_20260711.md)  
 Protocol: [frozen A1–A8 design](gap_conditioned_motion_phase_b_design_20260711.md)  
 E3 input: [sealed signals](gap_conditioned_motion_e3_signals_20260711.md) ·
 [packet](evidence/gap_conditioned_motion_e3_signals_20260711/manifest.json)  
