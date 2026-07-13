@@ -1,8 +1,11 @@
-"""Contracts for the two-phase EK0 frozen-packet exact-key recoverability audit."""
+"""Contracts for the single-phase EK0 frozen-packet consistency audit."""
 
 from __future__ import annotations
 
+import gzip
+import hashlib
 import importlib.util
+import json
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +14,12 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[3]
 RUNNER = REPO / "scripts/tools/audit_frozen_packet_exact_key_recoverability.py"
+
+CAPTURE_HEADER = (
+    "event_key,event_key_version,partition,seq,lost_global_id,cand_global_id,"
+    "lost_local_id,cand_local_id,dist_h,ema_lost,ema_cand"
+)
+PAIRS_HEADER = "seq,lost_id,cand_id,dist_h,h_lost_raw,h_cand_raw"
 
 
 def _load_runner() -> Any:
@@ -40,15 +49,59 @@ def _event(**override: Any) -> dict[str, Any]:
     return {**event, **override}
 
 
-def _j3_row(**override: Any) -> dict[str, Any]:
-    row = {
-        "partition": "cohort_gap",
-        "seq": "S",
-        "lost_global_id": 1,
-        "classification": "exact-key reconstructable",
-        "reason": "exact_v2_global_pair_key",
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _build_fixture(
+    root: Path, module: Any, *, cohort_pair_in_offline_universe: bool
+) -> tuple[Path, Path]:
+    """Write a tiny synthetic frozen packet and freeze the module onto it.
+
+    One event per partition.  The cohort_gap event's canonical pair is absent
+    from pairs.csv for a well-formed packet; placing it there instead makes
+    the packet contradict its own partition label.
+    """
+    study_dir = root / "study"
+    substrate_dir = root / "substrate"
+    study_dir.mkdir()
+    substrate_dir.mkdir()
+    capture_rows = [
+        "S|1|2,d0_event_key_v2_global,matched,S,1,2,5,6,0.1,10,10",
+        "S|3|4,d0_event_key_v2_global,cohort_gap,S,3,4,7,8,0.2,10,10",
+        ",d0_event_key_v2_global,unemitted,S,-1,-1,9,10,0.3,10,10",
+    ]
+    with gzip.open(study_dir / "capture.csv.gz", "wt", encoding="utf-8") as stream:
+        stream.write(CAPTURE_HEADER + "\n" + "\n".join(capture_rows) + "\n")
+    pairs_rows = ["S,1,2,0.1,10,10"]
+    if cohort_pair_in_offline_universe:
+        pairs_rows.append("S,3,4,0.2,10,10")
+    (study_dir / "pairs.csv").write_text(
+        PAIRS_HEADER + "\n" + "\n".join(pairs_rows) + "\n", encoding="utf-8"
+    )
+    (substrate_dir / "_global_id_map.txt").write_text("S 1 1\n", encoding="utf-8")
+    (substrate_dir / "MOT17-99.txt").write_text("1,1,0,0,1,1,1,-1,-1,-1\n")
+    partition = {"matched": 1, "cohort_gap": 1, "unemitted": 1}
+    (study_dir / "capture.csv.gz.manifest.json").write_text(
+        json.dumps(
+            {
+                "event_key_version": "d0_event_key_v2_global",
+                "event_key_fields": ["seq", "lost_global_id", "cand_global_id"],
+                "partition": partition,
+                "provenance": {"shadow": True},
+                "overflow_events": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+    module.EXPECTED_PARTITION = partition
+    module.EXPECTED_INPUT_HASHES = {
+        "pairs.csv": _sha256(study_dir / "pairs.csv"),
+        "capture.csv.gz": _sha256(study_dir / "capture.csv.gz"),
+        "_global_id_map.txt": _sha256(substrate_dir / "_global_id_map.txt"),
+        "substrate_mot_concat": _sha256(substrate_dir / "MOT17-99.txt"),
     }
-    return {**row, **override}
+    return study_dir, substrate_dir
 
 
 def test_classification_is_outcome_blind_and_never_uses_local_id_fallback() -> None:
@@ -98,143 +151,117 @@ def test_classification_is_outcome_blind_and_never_uses_local_id_fallback() -> N
     )
 
 
-def test_j3_reduces_events_and_excludes_tracks_already_in_joined_partition() -> None:
+def test_j3_reduction_is_descriptive_and_terminal_mapping_exhaustive() -> None:
     runner = _load_runner()
-    records = [
-        _j3_row(),
-        _j3_row(),
-        _j3_row(lost_global_id=2),
-        _j3_row(
-            partition="unemitted",
-            lost_global_id=-1,
-            classification="structurally unjoinable",
-            reason="unresolved_global_identity_no_local_id_fallback",
-        ),
-    ]
-    reduced = runner.reduce_j3(records, joined_tracks={("S", 1)})
-    cohort = reduced["partitions"]["cohort_gap"]
-    assert cohort["events"] == 3
-    assert cohort["identified_unique_lost_tracks"] == 2
-    assert cohort["identified_unique_lost_tracks_not_in_joined_partition"] == 1
-    assert cohort["reconstructable_unique_lost_track_upper_bound"] == 2
-    assert cohort["reconstructable_new_unique_lost_tracks"] == 1
+    consistent = runner.reduce_j3(
+        [
+            {
+                "partition": "cohort_gap",
+                "seq": "S",
+                "lost_global_id": 1,
+                "classification": "structurally unjoinable",
+                "reason": "same_global_pair_absent_from_offline_universe",
+            },
+            {
+                "partition": "cohort_gap",
+                "seq": "S",
+                "lost_global_id": 1,
+                "classification": "structurally unjoinable",
+                "reason": "same_global_pair_absent_from_offline_universe",
+            },
+            {
+                "partition": "unemitted",
+                "seq": "S",
+                "lost_global_id": -1,
+                "classification": "structurally unjoinable",
+                "reason": "unresolved_global_identity_no_local_id_fallback",
+            },
+        ]
+    )
+    cohort = consistent["partitions"]["cohort_gap"]
+    assert cohort["events"] == 2
+    assert cohort["identified_unique_lost_tracks"] == 1
     assert cohort["repeat_events_after_lost_track_reduction"] == 1
-    assert reduced["reconstructable_unique_lost_track_upper_bound"] == 2
-    assert reduced["reconstructable_tracks_already_in_joined_partition"] == 1
-    assert reduced["reconstructable_new_unique_lost_tracks"] == 1
-    # Track ("S", 1) is already base exposure: only one new track merges.
-    assert reduced["n_max_zero_new_hurt"] == 117
-    assert reduced["partitions"]["unemitted"]["identified_unique_lost_tracks"] == 0
+    assert consistent["reconstructable_events"] == 0
+    assert consistent["provenance_ambiguous_events"] == 0
+    assert runner.determine_terminal(consistent) == "EK0_NO_RECOVERABLE_SUPPORT"
+    # No exposure/floor/UCB machinery may exist in the audit.
+    assert "n_max_zero_new_hurt" not in consistent
+    assert not hasattr(runner, "clopper_pearson_upper")
+
+    reconstructable = dict(consistent, reconstructable_events=1)
+    assert runner.determine_terminal(reconstructable) == "EK0_PACKET_INCONSISTENT"
+    ambiguous = dict(consistent, provenance_ambiguous_events=2)
+    assert runner.determine_terminal(ambiguous) == "EK0_PACKET_INCONSISTENT"
 
 
-def test_terminal_mapping_is_ordered_and_exhaustive() -> None:
+def test_consistent_fixture_lands_no_recoverable_support(tmp_path: Path) -> None:
     runner = _load_runner()
-    assert runner.clopper_pearson_upper(3, 152) > 0.05
-    assert runner.clopper_pearson_upper(3, 153) <= 0.05
-
-    def j3(new: int, n_max: int) -> dict[str, int]:
-        return {
-            "reconstructable_new_unique_lost_tracks": new,
-            "n_max_zero_new_hurt": n_max,
-        }
-
-    def reveal(counts: list[dict[str, Any]]) -> dict[str, Any]:
-        return {"possible_merged_counts": counts}
-
-    assert (
-        runner.determine_terminal(
-            j3=j3(0, 116), reveal=reveal([{"n": 116, "k": 3, "ucb": 0.0655}])
-        )
-        == "EK0_NO_RECOVERABLE_SUPPORT"
+    study, substrate = _build_fixture(
+        tmp_path, runner, cohort_pair_in_offline_universe=False
     )
-    assert (
-        runner.determine_terminal(
-            j3=j3(10, 126), reveal=reveal([{"n": 126, "k": 3, "ucb": 0.06}])
-        )
-        == "EK0_RECOVERABLE_SUPPORT_BELOW_FLOOR"
-    )
-    # Reaches the floor in zero-hurt terms, but realized hurt keeps UCB > 0.05:
-    # this must NOT be reported as below-floor futility.
-    assert (
-        runner.determine_terminal(
-            j3=j3(40, 156), reveal=reveal([{"n": 156, "k": 5, "ucb": 0.066}])
-        )
-        == "EK0_RECOVERABLE_SUPPORT_UCB_NOT_MET"
-    )
-    assert (
-        runner.determine_terminal(
-            j3=j3(40, 156), reveal=reveal([{"n": 156, "k": 3, "ucb": 0.049}])
-        )
-        == "EK0_RECOVERABLE_SUPPORT_SUFFICIENT"
-    )
+    out = tmp_path / "out"
+    metrics = runner.run_audit(study_dir=study, substrate_dir=substrate, output_dir=out)
+    assert metrics["terminal"] == "EK0_NO_RECOVERABLE_SUPPORT"
+    assert metrics["gt_label_accessed"] is False
+    manifest = json.loads((out / "manifest.json").read_text())
+    assert manifest["terminal"] == "EK0_NO_RECOVERABLE_SUPPORT"
+    assert manifest["runner_sha256"] == _sha256(RUNNER)
+    assert manifest["files"]["inventory.csv"] == _sha256(out / "inventory.csv")
+    assert manifest["files"]["metrics.json"] == _sha256(out / "metrics.json")
 
 
-def test_reveal_seal_refuses_swapped_runner_or_tampered_artifacts() -> None:
+def test_rescuable_row_lands_packet_inconsistent(tmp_path: Path) -> None:
     runner = _load_runner()
-    sealed = {
-        "phase": "outcome_blind_sealed",
-        "terminal": None,
-        "declaration_sha256": "d" * 64,
-        "runner_sha256": "r" * 64,
-        "pre_gt_seal": {"gt_label_accessed": False, "inventory_sha256": "i" * 64},
-        "files": {"inventory.csv": "i" * 64, "metrics.json": "m" * 64},
-    }
-    intact = dict(
-        declaration_sha256="d" * 64,
-        runner_sha256="r" * 64,
-        metrics_sha256="m" * 64,
-        inventory_sha256="i" * 64,
+    study, substrate = _build_fixture(
+        tmp_path, runner, cohort_pair_in_offline_universe=True
     )
-    runner.verify_reveal_seal(sealed, **intact)
-
-    for field, bad in (
-        ("runner_sha256", "x" * 64),
-        ("declaration_sha256", "x" * 64),
-        ("metrics_sha256", "x" * 64),
-        ("inventory_sha256", "x" * 64),
-    ):
-        with pytest.raises(runner.AuditInvalid):
-            runner.verify_reveal_seal(sealed, **{**intact, field: bad})
-
-    with pytest.raises(runner.AuditInvalid):
-        runner.verify_reveal_seal({**sealed, "phase": "complete"}, **intact)
+    metrics = runner.run_audit(
+        study_dir=study, substrate_dir=substrate, output_dir=tmp_path / "out"
+    )
+    assert metrics["terminal"] == "EK0_PACKET_INCONSISTENT"
+    assert metrics["j3_reduction"]["reconstructable_events"] == 1
 
 
-def test_empty_new_track_stratum_does_not_read_gt() -> None:
+@pytest.mark.parametrize("mutated", ["pairs.csv", "capture.csv.gz"])
+def test_mutated_frozen_input_is_invalid(tmp_path: Path, mutated: str) -> None:
     runner = _load_runner()
-    reveal = runner.evaluate_reveal(
-        inventory=[],
-        pairs_path=Path("unused"),
-        grid_path=Path("unused"),
-        joined_tracks=set(),
+    study, substrate = _build_fixture(
+        tmp_path, runner, cohort_pair_in_offline_universe=False
     )
-    assert reveal["gt_label_accessed"] is False
-    assert reveal["additional_gt_valid_match_unique_lost_tracks"] == 0
-    assert reveal["additional_hurt_observable_range"] == [0, 0]
-    assert reveal["possible_merged_counts"] == [
-        {
-            "n": 116,
-            "k": 3,
-            "ucb": pytest.approx(runner.clopper_pearson_upper(3, 116)),
-        }
-    ]
+    target = study / mutated
+    target.write_bytes(target.read_bytes() + b"tamper")
+    with pytest.raises(runner.AuditInvalid, match="hash mismatch"):
+        runner.run_audit(
+            study_dir=study, substrate_dir=substrate, output_dir=tmp_path / "out"
+        )
 
 
-def test_reconstructable_rows_overlapping_base_are_excluded_without_gt() -> None:
+def test_completed_packet_is_immutable(tmp_path: Path) -> None:
     runner = _load_runner()
-    row = {
-        "seq": "S",
-        "lost_global_id": "1",
-        "cand_global_id": "2",
-        "classification": "exact-key reconstructable",
-    }
-    reveal = runner.evaluate_reveal(
-        inventory=[row],
-        pairs_path=Path("unused"),
-        grid_path=Path("unused"),
-        joined_tracks={("S", 1)},
+    study, substrate = _build_fixture(
+        tmp_path, runner, cohort_pair_in_offline_universe=False
     )
-    assert reveal["gt_label_accessed"] is False
-    assert reveal["reconstructable_rows_total"] == 1
-    assert reveal["reconstructable_tracks_overlapping_base_excluded"] == 1
-    assert reveal["additional_gt_valid_match_unique_lost_tracks"] == 0
+    out = tmp_path / "out"
+    runner.run_audit(study_dir=study, substrate_dir=substrate, output_dir=out)
+    sealed = {name: _sha256(out / name) for name in ("manifest.json", "metrics.json")}
+
+    # A plain rerun must fail closed before touching the packet.
+    with pytest.raises(runner.AuditInvalid, match="immutable"):
+        runner.run_audit(study_dir=study, substrate_dir=substrate, output_dir=out)
+
+    # Even a failing run routed through main() must not clobber the packet.
+    (study / "pairs.csv").write_bytes((study / "pairs.csv").read_bytes() + b"x")
+    exit_code = runner.main(
+        [
+            "--output-dir",
+            str(out),
+            "--study-dir",
+            str(study),
+            "--substrate-dir",
+            str(substrate),
+        ]
+    )
+    assert exit_code == 1
+    for name, digest in sealed.items():
+        assert _sha256(out / name) == digest

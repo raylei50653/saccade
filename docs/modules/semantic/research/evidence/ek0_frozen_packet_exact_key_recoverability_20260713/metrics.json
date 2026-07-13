@@ -1,12 +1,6 @@
 {
-  "frozen_reference": {
-    "base_k": 3,
-    "base_n": 116,
-    "confidence": 0.95,
-    "epsilon": 0.05,
-    "zero_new_hurt_pass_floor_n": 153
-  },
   "gt_label_accessed": false,
+  "inventory_sha256": "a90c424dc6a74fbbb0bdb3997e388517e56f0b237fa4f65384046510c3590d92",
   "j1_provenance": {
     "capture_overflow_events": 0,
     "capture_shadow": true,
@@ -30,13 +24,7 @@
       "unemitted": 354
     },
     "partition_total": 2577,
-    "passed": true,
-    "s0_packet_hashes": {
-      "grid.csv": "300bdd6ea670f4c0ea236d69d3c625cfe9a4da2c71ccbbbc24b30bacec471e04",
-      "manifest.json": "423591cb2b8e18a7129ce4e375c9dc55cfa588892c9e599c25de95f216fc8cdb",
-      "metrics.json": "296fb996f65b9ec3c2a845962e8dfde6cedafe9d32bdf746933840c5e2531009"
-    },
-    "s0_runner_sha256": "07d4eb40433e915a4335f44756ab2e0a3e4b8d5b5f86bfe190193070867da4e2"
+    "passed": true
   },
   "j2_classification": {
     "classification_rules": "sealed declaration \u00a73",
@@ -48,10 +36,7 @@
       "unemitted": 354
     }
   },
-  "j3_independence_reduction": {
-    "best_case_floor_n": 153,
-    "joined_partition_unique_lost_tracks": 515,
-    "n_max_zero_new_hurt": 116,
+  "j3_reduction": {
     "partitions": {
       "cohort_gap": {
         "by_sequence": {
@@ -97,12 +82,10 @@
         "events": 539,
         "events_with_identified_lost_track": 539,
         "identified_unique_lost_tracks": 169,
-        "identified_unique_lost_tracks_not_in_joined_partition": 57,
         "reasons": {
           "same_global_pair_absent_from_offline_universe": 539
         },
-        "reconstructable_new_unique_lost_tracks": 0,
-        "reconstructable_unique_lost_track_upper_bound": 0,
+        "reconstructable_unique_lost_tracks": 0,
         "repeat_events_after_lost_track_reduction": 370,
         "repeat_rate_among_identified_events": 0.686456400742115,
         "unidentified_events": 0
@@ -151,54 +134,20 @@
         "events": 354,
         "events_with_identified_lost_track": 0,
         "identified_unique_lost_tracks": 0,
-        "identified_unique_lost_tracks_not_in_joined_partition": 0,
         "reasons": {
           "unresolved_global_identity_no_local_id_fallback": 354
         },
-        "reconstructable_new_unique_lost_tracks": 0,
-        "reconstructable_unique_lost_track_upper_bound": 0,
+        "reconstructable_unique_lost_tracks": 0,
         "repeat_events_after_lost_track_reduction": 0,
         "repeat_rate_among_identified_events": null,
         "unidentified_events": 354
       }
     },
-    "reconstructable_new_unique_lost_tracks": 0,
-    "reconstructable_tracks_already_in_joined_partition": 0,
-    "reconstructable_unique_lost_track_upper_bound": 0,
+    "provenance_ambiguous_events": 0,
+    "reconstructable_events": 0,
     "trial_unit": "(seq, lost_global_id)"
   },
-  "j4_gt_reveal": {
-    "additional_gt_valid_match_unique_lost_tracks": 0,
-    "additional_hurt_observable_range": [
-      0,
-      0
-    ],
-    "gt_label_accessed": false,
-    "possible_merged_counts": [
-      {
-        "k": 3,
-        "n": 116,
-        "ucb": 0.06548327985535148
-      }
-    ],
-    "reason": "no new-track reconstructable rows; no GT-label projection exists",
-    "reconstructable_rows_total": 0,
-    "reconstructable_tracks_overlapping_base_excluded": 0,
-    "reference_cells": []
-  },
-  "j5_join_semantic_invariants": {
-    "invariant_note": "Any violation is an EK0_INVALID packet, not a separate terminal; no reconstructable support may be replaced by an alternate join key.",
-    "local_id_fallback_used": false,
-    "new_proxy_or_refit": false,
-    "outcome_conditioned_join_selection": false,
-    "production_state_mutation": false,
-    "same_frozen_axes_and_grid": true,
-    "same_lost_track_independence_unit": true,
-    "same_offline_runtime_coordinate_definitions": true,
-    "same_research_population": true
-  },
   "phase": "complete",
-  "pre_gt_inventory_sha256": "a90c424dc6a74fbbb0bdb3997e388517e56f0b237fa4f65384046510c3590d92",
   "study": "ek0_frozen_packet_exact_key_recoverability_20260713",
   "terminal": "EK0_NO_RECOVERABLE_SUPPORT"
 }

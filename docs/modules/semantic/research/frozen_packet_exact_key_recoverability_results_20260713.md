@@ -1,5 +1,5 @@
 <!-- doc-status: active -->
-<!-- doc-promotion: evidence packet; executed under a sealed rev.2 declaration -->
+<!-- doc-promotion: evidence packet; executed under a sealed rev.3 declaration -->
 <!-- doc-date: 2026-07-13 -->
 <!-- doc-module: semantic -->
 
@@ -7,22 +7,22 @@
 
 ## Terminal: `EK0_NO_RECOVERABLE_SUPPORT`
 
-Within the frozen D0/S0 packet, none of the 893 unjoined runtime events is
-recoverable through the exact v2 event key or its canonical-field triple.
-The reconstructable-new-track stratum is empty, so the exposure envelope is
-the unchanged base point `(N, k) = (116, 3)` with one-sided 95%
-Clopper–Pearson UCB `0.06548`.
+The frozen D0 capture packet is internally consistent.  None of the 893
+unjoined runtime events is recoverable through the exact v2 event key or its
+canonical-field triple, and none has ambiguous provenance: every event is
+structurally unjoinable, exactly as its partition label asserts.
 
-**What this does and does not say.**  This is a bookkeeping statement about
-the frozen artifacts.  Per the sealed declaration (§0/§3), for a well-formed
-v2 packet both reconstructable classes are unreachable by the exporter's own
-partition definitions, so an empty stratum is the expected outcome; the
-audit's informative content is the consistency check and the pinned counts
-below.  It says nothing about wider runtime joins — expanding the offline
-cohort export, adding identity observability for `unemitted` events, or
-re-capturing — each of which would need its own declaration.  A previous
-framing of this study (RJ0, `RJ0_EXPANSION_FUTILE`) over-claimed exactly that
-and was rescinded in owner review (PR #156).
+**What this does and does not say.**  This is a consistency statement about
+the frozen artifacts.  Per the sealed declaration (§2), for a well-formed v2
+packet both reconstructable classes are unreachable by the exporter's own
+partition definitions, so this outcome is the expected one; the audit's
+informative content is the consistency check and the pinned counts below.
+EK0 computes no exposure, floor, or UCB quantity and says nothing about wider
+runtime joins — expanding the offline cohort export, adding identity
+observability for `unemitted` events, or re-capturing — each of which would
+need its own declaration.  Two earlier framings of this study (RJ0
+`RJ0_EXPANSION_FUTILE`; EK0 rev.2 with a feasibility envelope) over-claimed
+and were rescinded in owner review (PR #156, declaration §0).
 
 Canonical packet: [manifest](evidence/ek0_frozen_packet_exact_key_recoverability_20260713/manifest.json) ·
 [metrics](evidence/ek0_frozen_packet_exact_key_recoverability_20260713/metrics.json) ·
@@ -30,39 +30,32 @@ Canonical packet: [manifest](evidence/ek0_frozen_packet_exact_key_recoverability
 
 ## J1 — provenance reproduction
 
-PASS.  The four frozen source hashes reproduce exactly; S0 `grid.csv`,
-`metrics.json`, and runner hashes reproduce; partition conservation is
-`1,684 + 539 + 354 = 2,577`; and all capture rows carry
+PASS.  The four frozen source hashes reproduce exactly; partition
+conservation is `1,684 + 539 + 354 = 2,577`; and all capture rows carry
 `d0_event_key_v2_global` with `(seq, lost_global_id, cand_global_id)`.  The
 capture remains shadow provenance with zero overflow.
 
-The rev.2 seal additionally binds the runner and blind metrics: the reveal
-phase re-verified the declaration, runner, sealed inventory, and blind
-metrics hashes against the blind-phase manifest, and re-checked the frozen
-hashes of `pairs.csv`, `capture.csv.gz`, and S0 `grid.csv` before the (empty)
-GT projection.
+The audit is single-phase and never reads a GT/outcome column
+(`gt_label_accessed = false` by construction).  The packet manifest seals the
+declaration, runner, inventory, and metrics hashes; a completed packet is
+immutable — reruns against it fail closed without modifying it.
 
-## J2–J3 — sealed outcome-blind inventory
+## J2–J3 — outcome-blind inventory
 
-Before any GT-label projection, the sealed declaration classified all 893
-unjoined events using only identity, event provenance, frozen offline pair
-membership, and frozen coordinate availability.  The pre-GT inventory SHA256
-is `a90c424dc6a74fbbb0bdb3997e388517e56f0b237fa4f65384046510c3590d92`
+All 893 unjoined events were classified using only identity, event
+provenance, frozen offline pair membership, and frozen coordinate
+availability.  The inventory SHA256 is
+`a90c424dc6a74fbbb0bdb3997e388517e56f0b237fa4f65384046510c3590d92`
 (byte-identical to the rev.1 packet; classification rules are unchanged).
 
-| Partition | Events | Identified unique lost tracks | …not in joined partition | Reconstructable (new) | Class / reason |
+| Partition | Events | Identified unique lost tracks | Reconstructable | Ambiguous | Class / reason |
 |---|---:|---:|---:|---:|---|
-| `cohort_gap` | 539 | 169 | 57 | 0 | all structurally unjoinable: same global pair absent from frozen offline universe |
+| `cohort_gap` | 539 | 169 | 0 | 0 | all structurally unjoinable: same global pair absent from frozen offline universe |
 | `unemitted` | 354 | 0 | 0 | 0 | all structurally unjoinable: global identity unresolved; no local-ID fallback |
 
-The joined (`matched`) partition covers 515 unique lost tracks; the
-base-overlap exclusion (declaration §4) removes the other 112 identified
-`cohort_gap` tracks from any exposure headroom.  Notably, the 57 remaining
-identity-new tracks would have been numerically sufficient to reach the
-`N = 153` floor (116 + 57 = 173) — the binding constraint in this packet is
-recoverability, not track count.  `cohort_gap` has 370 repeat events after
-lost-track reduction (68.65% among identified events).  `unemitted` has no
-valid `(seq, lost_global_id)` trial identity.
+`cohort_gap` has 370 repeat events after lost-track reduction (68.65% among
+identified events).  `unemitted` has no valid `(seq, lost_global_id)` trial
+identity.  These counts are descriptive only.
 
 | Sequence | `cohort_gap` events / tracks | `unemitted` events / tracks |
 |---|---:|---:|
@@ -75,22 +68,8 @@ valid `(seq, lost_global_id)` trial identity.
 | MOT17-13-SDP | 179 / 43 | 205 / 0 |
 
 There were no duplicate target event keys and no non-unique offline pair
-identities.  The packet is internally consistent: the exporter's partition
-labels agree with frozen offline universe membership for every event, and no
-event is rescuable under the sealed key rules.
-
-## J4–J5 — empty reveal and invariant check
-
-The frozen reconstructable-new-track stratum is empty, so the permitted GT
-projection is also empty: `gt_label_accessed = false`, additional
-`gt_valid ∧ gt_match` tracks = 0, base-overlap exclusions = 0, and the
-observable added-hurt range is `[0, 0]`.  The sole envelope point is
-`(N, k) = (116, 3)`, UCB `0.06548327985535148`.
-
-All J5 semantic invariants hold (no local-ID fallback, no
-outcome-conditioned selection, no new proxy/refit, no coordinate, population,
-trial-unit, or grid change, no production mutation); any violation would have
-been `EK0_INVALID` rather than a terminal.
+identities.  The exporter's partition labels agree with frozen offline
+universe membership for every event.
 
 ## Closure boundary
 

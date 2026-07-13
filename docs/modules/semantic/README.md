@@ -64,8 +64,8 @@
 
 | 文件 | 這是什麼 |
 |------|------|
-| [research/frozen_packet_exact_key_recoverability_results_20260713.md](research/frozen_packet_exact_key_recoverability_results_20260713.md) | EK0：frozen packet 內 exact-key 可恢復性 bookkeeping audit（結果） |
-| [research/frozen_packet_exact_key_recoverability_declaration_20260713.md](research/frozen_packet_exact_key_recoverability_declaration_20260713.md) | EK0 預宣告（sealed，rev.2 rescope） |
+| [research/frozen_packet_exact_key_recoverability_results_20260713.md](research/frozen_packet_exact_key_recoverability_results_20260713.md) | EK0：frozen packet exact-key 可恢復性 consistency audit（結果） |
+| [research/frozen_packet_exact_key_recoverability_declaration_20260713.md](research/frozen_packet_exact_key_recoverability_declaration_20260713.md) | EK0 預宣告（sealed，rev.3 pure consistency audit） |
 | [research/closed/safe_domain_runtime_transfer_results_20260713.md](research/closed/safe_domain_runtime_transfer_results_20260713.md) | S0：offline→runtime safe-axis transfer audit（closed results） |
 | [research/safe_domain_runtime_transfer_declaration_20260712.md](research/safe_domain_runtime_transfer_declaration_20260712.md) | S0 declaration：已接受的 safe 軸能否從 offline 座標轉移到 runtime 座標 |
 | [research/boolean_atom_partial_order_20260711.md](research/boolean_atom_partial_order_20260711.md) | Boolean atom 偏序稽核 — 全域可排序軸的認定 |

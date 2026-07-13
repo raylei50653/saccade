@@ -1,17 +1,23 @@
 #!/usr/bin/env python3
-"""EK0 frozen-packet exact-key recoverability audit.
+"""EK0 frozen-packet exact-key recoverability audit (pure consistency audit).
 
-Scope: within the frozen D0 capture / S0 packet only, can unjoined runtime
-events be recovered through the exact v2 event key (or its redundant
-canonical-field triple) into additional legal lost-track exposure?  The audit
-claims nothing about wider runtime joins that would expand the offline
-universe, add identity observability, or re-capture.
+Scope: within the frozen D0 capture packet only, does any unjoined runtime
+event contradict its own partition label — i.e. is it recoverable through the
+exact v2 event key (or its redundant canonical-field triple) into the frozen
+offline pair universe, or is its identity provenance ambiguous?  For a
+well-formed v2 packet both are unreachable by the exporter's partition
+definitions, so the audit is a consistency check that pins the counts.
 
-The audit is intentionally two-phase.  ``blind`` verifies frozen provenance and
-seals an outcome-blind inventory.  ``reveal`` refuses to run unless the sealed
-declaration, the sealed inventory, the blind metrics, this runner, and every
-frozen input it reads are all still hash-intact; it may read GT labels only
-for the inventory's already-reconstructable rows.
+The audit never reads GT/outcome columns: classification uses only identity,
+event provenance, frozen offline pair membership, and frozen coordinate
+availability.  It is single-phase; the packet manifest seals the declaration,
+this runner, the inventory, and the metrics by SHA256, and a completed packet
+is immutable — reruns against it fail closed without touching it.
+
+The audit claims nothing about wider runtime joins that would expand the
+offline universe, add identity observability, or re-capture, and it carries
+no statistical exposure machinery: presence/absence of recoverable rows is
+the entire outcome.
 """
 
 from __future__ import annotations
@@ -26,8 +32,6 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
-from scipy import stats
-
 
 REPO = Path(__file__).resolve().parents[2]
 STUDY = "ek0_frozen_packet_exact_key_recoverability_20260713"
@@ -36,20 +40,10 @@ DECLARATION = (
     "frozen_packet_exact_key_recoverability_declaration_20260713.md"
 )
 RUNNER_RELPATH = "scripts/tools/audit_frozen_packet_exact_key_recoverability.py"
-S0_PACKET = (
-    "docs/modules/semantic/research/evidence/s0_safe_domain_runtime_transfer_20260713"
-)
 STUDY_DIR = "out/signal_study/d0_runtime_shadow_fidelity_20260712T085642Z"
 SUBSTRATE_DIR = "results/MOT17_eval_d0_shadow_substrate_20260712T085642Z"
 
-BASE_N = 116
-BASE_K = 3
-EPSILON = 0.05
-CONFIDENCE = 0.95
-CP_ZERO_HURT_FLOOR = 153
-
 PARTITIONS = ("matched", "cohort_gap", "unemitted")
-JOINED_PARTITION = "matched"
 TARGET_PARTITIONS = ("cohort_gap", "unemitted")
 EXPECTED_PARTITION = {"matched": 1684, "cohort_gap": 539, "unemitted": 354}
 EVENT_KEY_VERSION = "d0_event_key_v2_global"
@@ -58,6 +52,7 @@ RECONSTRUCTABLE = {
     "exact-key reconstructable",
     "deterministic auxiliary-key reconstructable",
 }
+AMBIGUOUS = "provenance ambiguous"
 
 EXPECTED_INPUT_HASHES = {
     "pairs.csv": "ee2898a25ef7f01ed46331c49c12d667846975f25769bc4c3e6b8bad493f8e87",
@@ -65,17 +60,10 @@ EXPECTED_INPUT_HASHES = {
     "_global_id_map.txt": "ae3b6441d1712bcce0826d611cee2cfdf7a01b4d37ec331336f91a0b9148f366",
     "substrate_mot_concat": "4c5e322a3b8c026de584baa883e26353720837ffa2bf146dfcef2679426a670e",
 }
-EXPECTED_S0_FILES = {
-    "grid.csv": "300bdd6ea670f4c0ea236d69d3c625cfe9a4da2c71ccbbbc24b30bacec471e04",
-    "metrics.json": "296fb996f65b9ec3c2a845962e8dfde6cedafe9d32bdf746933840c5e2531009",
-}
-EXPECTED_S0_RUNNER_SHA256 = (
-    "07d4eb40433e915a4335f44756ab2e0a3e4b8d5b5f86bfe190193070867da4e2"
-)
 
 
 class AuditInvalid(RuntimeError):
-    """A frozen provenance or pre-GT seal condition failed."""
+    """A frozen provenance, partition, or immutability condition failed."""
 
 
 def _sha256(path: Path) -> str:
@@ -105,24 +93,6 @@ def _positive_finite(value: str) -> bool:
         return math.isfinite(float(value)) and float(value) > 0.0
     except (TypeError, ValueError):
         return False
-
-
-def _as_bool01(value: str) -> bool:
-    normalized = value.strip().lower()
-    if normalized in {"1", "true", "yes"}:
-        return True
-    if normalized in {"0", "false", "no", ""}:
-        return False
-    raise AuditInvalid(f"invalid frozen GT boolean encoding: {value!r}")
-
-
-def clopper_pearson_upper(hurt: int, exposed: int) -> float:
-    """One-sided 95% Clopper–Pearson upper bound at lost-track unit."""
-    if exposed <= 0 or hurt < 0 or hurt > exposed:
-        raise ValueError(f"invalid binomial counts: hurt={hurt}, exposed={exposed}")
-    if hurt == exposed:
-        return 1.0
-    return float(stats.beta.ppf(CONFIDENCE, hurt + 1, exposed - hurt))
 
 
 def _absolute(path: str | Path) -> Path:
@@ -211,21 +181,6 @@ def _read_capture_identity(capture_path: Path) -> list[dict[str, Any]]:
     return records
 
 
-def joined_track_identities(capture: list[dict[str, Any]]) -> set[tuple[str, int]]:
-    """Trial identities already present in the joined partition.
-
-    A lost track that already appears among joined events cannot contribute a
-    *new* trial: it is either one of the base-N trials (counting it again would
-    double-count exposure) or was excluded there by GT validity (it cannot
-    re-enter as a new trial).  Both facts are identity-level and outcome-blind.
-    """
-    return {
-        (row["seq"], row["lost_global_id"])
-        for row in capture
-        if row["partition"] == JOINED_PARTITION and row["lost_global_id"] >= 0
-    }
-
-
 def _read_offline_universe_blind(
     pairs_path: Path,
 ) -> tuple[dict[tuple[str, int, int], dict[str, Any]], set[tuple[str, int, int]], int]:
@@ -264,38 +219,6 @@ def _read_offline_universe_blind(
     return universe, nonunique, rows
 
 
-def _read_offline_gt(
-    pairs_path: Path, keys: set[tuple[str, int, int]]
-) -> dict[tuple[str, int, int], dict[str, str]]:
-    """J4-only projection.  This is the sole GT-label reader in the program."""
-    needed = {
-        "seq",
-        "lost_id",
-        "cand_id",
-        "gt_valid",
-        "gt_match",
-        "dist_h",
-        "h_lost_raw",
-        "h_cand_raw",
-    }
-    found: dict[tuple[str, int, int], dict[str, str]] = {}
-    with pairs_path.open(newline="", encoding="utf-8") as stream:
-        reader = csv.DictReader(stream)
-        _require_columns(reader.fieldnames, needed, "pairs.csv")
-        for row in reader:
-            key = (row["seq"], int(row["lost_id"]), int(row["cand_id"]))
-            if key in keys:
-                if key in found:
-                    raise AuditInvalid(f"J4 found non-unique frozen pair key: {key}")
-                found[key] = row
-    missing = keys - set(found)
-    if missing:
-        raise AuditInvalid(
-            f"J4 inventory key absent from frozen pair universe: {sorted(missing)[:3]}"
-        )
-    return found
-
-
 def _mot_concat_sha256(substrate_dir: Path) -> str:
     mot_files = sorted(substrate_dir.glob("MOT17-*.txt"))
     if not mot_files:
@@ -306,10 +229,8 @@ def _mot_concat_sha256(substrate_dir: Path) -> str:
     return digest.hexdigest()
 
 
-def verify_j1(
-    *, study_dir: Path, substrate_dir: Path, s0_packet: Path
-) -> dict[str, Any]:
-    """Reproduce S0/D0 frozen inputs, artifact hashes, partition, and key version."""
+def verify_j1(*, study_dir: Path, substrate_dir: Path) -> dict[str, Any]:
+    """Reproduce the frozen input hashes, partition, and event-key version."""
     paths = {
         "pairs.csv": study_dir / "pairs.csv",
         "capture.csv.gz": study_dir / "capture.csv.gz",
@@ -331,32 +252,9 @@ def verify_j1(
     ):
         failures.append("substrate_mot_concat hash mismatch")
 
-    s0_manifest_path = s0_packet / "manifest.json"
-    if not s0_manifest_path.is_file():
-        failures.append(f"missing S0 manifest: {s0_manifest_path}")
-        s0_manifest: dict[str, Any] = {}
-    else:
-        s0_manifest = json.loads(s0_manifest_path.read_text(encoding="utf-8"))
-        if s0_manifest.get("input_hashes") != EXPECTED_INPUT_HASHES:
-            failures.append("S0 manifest input_hashes do not match frozen declaration")
-        if s0_manifest.get("files") != EXPECTED_S0_FILES:
-            failures.append(
-                "S0 manifest packet-file hashes do not match frozen declaration"
-            )
-        if s0_manifest.get("runner_sha256") != EXPECTED_S0_RUNNER_SHA256:
-            failures.append("S0 manifest runner hash does not match frozen declaration")
-    for name, expected in EXPECTED_S0_FILES.items():
-        path = s0_packet / name
-        if not path.is_file() or _sha256(path) != expected:
-            failures.append(f"S0 {name} hash mismatch")
-    runner_path = REPO / "scripts/tools/run_s0_safe_domain_runtime_transfer.py"
-    if not runner_path.is_file() or _sha256(runner_path) != EXPECTED_S0_RUNNER_SHA256:
-        failures.append("S0 runner hash mismatch")
-
     capture_manifest_path = study_dir / "capture.csv.gz.manifest.json"
     if not capture_manifest_path.is_file():
         failures.append(f"missing capture manifest: {capture_manifest_path}")
-        capture_manifest: dict[str, Any] = {}
     else:
         capture_manifest = json.loads(capture_manifest_path.read_text(encoding="utf-8"))
         if capture_manifest.get("event_key_version") != EVENT_KEY_VERSION:
@@ -369,6 +267,9 @@ def verify_j1(
             failures.append("capture provenance is not shadow")
         if int(capture_manifest.get("overflow_events", -1)) != 0:
             failures.append("capture overflow is non-zero")
+
+    if any(name not in observed for name in paths) or failures:
+        raise AuditInvalid("J1 provenance failed: " + "; ".join(failures))
 
     capture = _read_capture_identity(study_dir / "capture.csv.gz")
     partition = {
@@ -384,12 +285,6 @@ def verify_j1(
     return {
         "passed": True,
         "input_hashes": observed,
-        "s0_packet_hashes": {
-            "grid.csv": _sha256(s0_packet / "grid.csv"),
-            "metrics.json": _sha256(s0_packet / "metrics.json"),
-            "manifest.json": _sha256(s0_manifest_path),
-        },
-        "s0_runner_sha256": _sha256(runner_path),
         "partition": partition,
         "partition_total": len(capture),
         "event_key": {"version": EVENT_KEY_VERSION, "fields": list(EVENT_KEY_FIELDS)},
@@ -503,13 +398,11 @@ def _sequence_distribution(records: list[dict[str, Any]]) -> dict[str, dict[str,
     return out
 
 
-def reduce_j3(
-    records: list[dict[str, Any]], *, joined_tracks: set[tuple[str, int]]
-) -> dict[str, Any]:
-    """Reduce event inventory to the declared (seq, lost_global_id) trial unit.
+def reduce_j3(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """Reduce the event inventory to descriptive (seq, lost_global_id) counts.
 
-    Recoverable exposure is counted only for lost tracks *not* already present
-    in the joined partition; see ``joined_track_identities``.
+    Purely descriptive: EK0 carries no exposure or feasibility arithmetic, so
+    nothing here feeds a statistical envelope.
     """
     partitions: dict[str, Any] = {}
     for partition in TARGET_PARTITIONS:
@@ -529,13 +422,7 @@ def reduce_j3(
             "events": len(rows),
             "events_with_identified_lost_track": events_with_identity,
             "identified_unique_lost_tracks": len(identified),
-            "identified_unique_lost_tracks_not_in_joined_partition": len(
-                identified - joined_tracks
-            ),
-            "reconstructable_unique_lost_track_upper_bound": len(reconstructable),
-            "reconstructable_new_unique_lost_tracks": len(
-                reconstructable - joined_tracks
-            ),
+            "reconstructable_unique_lost_tracks": len(reconstructable),
             "repeat_events_after_lost_track_reduction": events_with_identity
             - len(identified),
             "repeat_rate_among_identified_events": (
@@ -550,24 +437,27 @@ def reduce_j3(
             "reasons": dict(sorted(Counter(row["reason"] for row in rows).items())),
             "by_sequence": _sequence_distribution(rows),
         }
-    all_reconstructable = {
-        (row["seq"], row["lost_global_id"])
-        for row in records
-        if row["classification"] in RECONSTRUCTABLE
-    }
-    new_reconstructable = all_reconstructable - joined_tracks
     return {
         "trial_unit": "(seq, lost_global_id)",
         "partitions": partitions,
-        "joined_partition_unique_lost_tracks": len(joined_tracks),
-        "reconstructable_unique_lost_track_upper_bound": len(all_reconstructable),
-        "reconstructable_tracks_already_in_joined_partition": len(
-            all_reconstructable & joined_tracks
+        "reconstructable_events": sum(
+            row["classification"] in RECONSTRUCTABLE for row in records
         ),
-        "reconstructable_new_unique_lost_tracks": len(new_reconstructable),
-        "n_max_zero_new_hurt": BASE_N + len(new_reconstructable),
-        "best_case_floor_n": CP_ZERO_HURT_FLOOR,
+        "provenance_ambiguous_events": sum(
+            row["classification"] == AMBIGUOUS for row in records
+        ),
     }
+
+
+def determine_terminal(j3: dict[str, Any]) -> str:
+    """Apply EK0's ordered, exhaustive terminal mapping.
+
+    ``EK0_INVALID`` is raised out-of-band via ``AuditInvalid``; every valid run
+    lands in exactly one of the two remaining terminals.
+    """
+    if j3["reconstructable_events"] or j3["provenance_ambiguous_events"]:
+        return "EK0_PACKET_INCONSISTENT"
+    return "EK0_NO_RECOVERABLE_SUPPORT"
 
 
 def _write_inventory(path: Path, records: list[dict[str, Any]]) -> None:
@@ -595,15 +485,28 @@ def _write_inventory(path: Path, records: list[dict[str, Any]]) -> None:
         writer.writerows({name: record[name] for name in fields} for record in records)
 
 
-def run_blind(
-    *, study_dir: Path, substrate_dir: Path, s0_packet: Path, output_dir: Path
+def _require_mutable_output(output_dir: Path) -> None:
+    """A completed packet is immutable; refuse to run against it."""
+    manifest_path = output_dir / "manifest.json"
+    if not manifest_path.is_file():
+        return
+    try:
+        existing = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    if existing.get("phase") == "complete":
+        raise AuditInvalid(
+            f"output dir holds a completed immutable packet: {manifest_path}"
+        )
+
+
+def run_audit(
+    *, study_dir: Path, substrate_dir: Path, output_dir: Path
 ) -> dict[str, Any]:
-    """J1–J3.  No GT label reader is called on this path."""
-    j1 = verify_j1(
-        study_dir=study_dir, substrate_dir=substrate_dir, s0_packet=s0_packet
-    )
+    """Single-phase J1–J3 consistency audit.  No GT column is ever read."""
+    _require_mutable_output(output_dir)
+    j1 = verify_j1(study_dir=study_dir, substrate_dir=substrate_dir)
     capture = _read_capture_identity(study_dir / "capture.csv.gz")
-    joined_tracks = joined_track_identities(capture)
     universe, nonunique, offline_rows = _read_offline_universe_blind(
         study_dir / "pairs.csv"
     )
@@ -627,14 +530,16 @@ def run_blind(
                 "frozen_coordinate_pair_available": coordinates,
             }
         )
-    j3 = reduce_j3(inventory, joined_tracks=joined_tracks)
+    j3 = reduce_j3(inventory)
+    terminal = determine_terminal(j3)
     output_dir.mkdir(parents=True, exist_ok=True)
     inventory_path = output_dir / "inventory.csv"
     _write_inventory(inventory_path, inventory)
     inventory_hash = _sha256(inventory_path)
     metrics = {
         "study": STUDY,
-        "phase": "outcome_blind_sealed",
+        "phase": "complete",
+        "terminal": terminal,
         "gt_label_accessed": False,
         "j1_provenance": j1,
         "j2_classification": {
@@ -647,33 +552,25 @@ def run_blind(
             "duplicate_target_event_keys": len(duplicated),
             "classification_rules": "sealed declaration §3",
         },
-        "j3_independence_reduction": j3,
-        "frozen_reference": {
-            "base_n": BASE_N,
-            "base_k": BASE_K,
-            "epsilon": EPSILON,
-            "confidence": CONFIDENCE,
-            "zero_new_hurt_pass_floor_n": CP_ZERO_HURT_FLOOR,
-        },
-        "pre_gt_inventory_sha256": inventory_hash,
+        "j3_reduction": j3,
+        "inventory_sha256": inventory_hash,
     }
     metrics_path = output_dir / "metrics.json"
     _json_write(metrics_path, metrics)
     manifest = {
         "study": STUDY,
-        "phase": "outcome_blind_sealed",
-        "terminal": None,
+        "phase": "complete",
+        "terminal": terminal,
         "declaration": DECLARATION,
         "declaration_sha256": _sha256(_absolute(DECLARATION)),
         "runner": RUNNER_RELPATH,
         "runner_sha256": _sha256(Path(__file__)),
         "input_hashes": j1["input_hashes"],
         "event_key": j1["event_key"],
-        "pre_gt_seal": {
+        "seal": {
             "inventory_sha256": inventory_hash,
             "gt_label_accessed": False,
             "classification_rules": "sealed declaration §3",
-            "trial_unit": "(seq, lost_global_id)",
         },
         "files": {
             "inventory.csv": inventory_hash,
@@ -682,280 +579,6 @@ def run_blind(
     }
     _json_write(output_dir / "manifest.json", manifest)
     return metrics
-
-
-def _read_inventory(path: Path) -> list[dict[str, str]]:
-    with path.open(newline="", encoding="utf-8") as stream:
-        return list(csv.DictReader(stream))
-
-
-def _read_reference_cells(grid_path: Path) -> list[dict[str, float]]:
-    """Use every frozen S0 cell with the supplied base (N, k); choose none."""
-    required = {
-        "theta_dist_h",
-        "theta_abs_log_h_ratio",
-        "n_gt_exposed_tracks",
-        "n_gt_hurt_runtime_tracks",
-    }
-    cells: list[dict[str, float]] = []
-    with grid_path.open(newline="", encoding="utf-8") as stream:
-        reader = csv.DictReader(stream)
-        _require_columns(reader.fieldnames, required, "S0 grid.csv")
-        for row in reader:
-            if (
-                int(row["n_gt_exposed_tracks"]) == BASE_N
-                and int(row["n_gt_hurt_runtime_tracks"]) == BASE_K
-            ):
-                cells.append(
-                    {
-                        "theta_dist_h": float(row["theta_dist_h"]),
-                        "theta_abs_log_h_ratio": float(row["theta_abs_log_h_ratio"]),
-                    }
-                )
-    if not cells:
-        raise AuditInvalid("S0 grid does not contain the supplied frozen base (N, k)")
-    return cells
-
-
-def _runtime_reject(inventory: dict[str, str], cell: dict[str, float]) -> bool:
-    dist = float(inventory["runtime_dist_h"])
-    ratio = abs(
-        math.log(
-            float(inventory["runtime_ema_lost"]) / float(inventory["runtime_ema_cand"])
-        )
-    )
-    return dist >= cell["theta_dist_h"] or ratio >= cell["theta_abs_log_h_ratio"]
-
-
-def evaluate_reveal(
-    *,
-    inventory: list[dict[str, str]],
-    pairs_path: Path,
-    grid_path: Path,
-    joined_tracks: set[tuple[str, int]],
-) -> dict[str, Any]:
-    """J4 on exactly the sealed reconstructable inventory; no strata mutation.
-
-    Rows whose lost track already appears in the joined partition are counted
-    and excluded: they cannot add a new trial (see ``reduce_j3``), and mutating
-    an existing base trial's hurt status is out of this audit's scope.
-    """
-    reconstructable = [
-        row for row in inventory if row["classification"] in RECONSTRUCTABLE
-    ]
-    eligible = [
-        row
-        for row in reconstructable
-        if (row["seq"], int(row["lost_global_id"])) not in joined_tracks
-    ]
-    overlap_tracks = {
-        (row["seq"], int(row["lost_global_id"]))
-        for row in reconstructable
-        if (row["seq"], int(row["lost_global_id"])) in joined_tracks
-    }
-    keys = {
-        (row["seq"], int(row["lost_global_id"]), int(row["cand_global_id"]))
-        for row in eligible
-    }
-    if not eligible:
-        base_ucb = clopper_pearson_upper(BASE_K, BASE_N)
-        return {
-            "gt_label_accessed": False,
-            "reason": (
-                "no new-track reconstructable rows; no GT-label projection exists"
-            ),
-            "reconstructable_rows_total": len(reconstructable),
-            "reconstructable_tracks_overlapping_base_excluded": len(overlap_tracks),
-            "additional_gt_valid_match_unique_lost_tracks": 0,
-            "additional_hurt_observable_range": [0, 0],
-            "reference_cells": [],
-            "possible_merged_counts": [{"n": BASE_N, "k": BASE_K, "ucb": base_ucb}],
-        }
-    pairs = _read_offline_gt(pairs_path, keys)
-    cells = _read_reference_cells(grid_path)
-    gt_rows = []
-    for row in eligible:
-        key = (row["seq"], int(row["lost_global_id"]), int(row["cand_global_id"]))
-        pair = pairs[key]
-        if _as_bool01(pair["gt_valid"]) and _as_bool01(pair["gt_match"]):
-            gt_rows.append(row)
-    gt_tracks = {(row["seq"], int(row["lost_global_id"])) for row in gt_rows}
-    combinations: list[dict[str, Any]] = []
-    for cell in cells:
-        hurt_tracks = {
-            (row["seq"], int(row["lost_global_id"]))
-            for row in gt_rows
-            if _runtime_reject(row, cell)
-        }
-        n = BASE_N + len(gt_tracks)
-        k = BASE_K + len(hurt_tracks)
-        combinations.append(
-            {
-                **cell,
-                "additional_gt_valid_match_unique_lost_tracks": len(gt_tracks),
-                "additional_hurt_tracks": len(hurt_tracks),
-                "n": n,
-                "k": k,
-                "ucb": clopper_pearson_upper(k, n),
-            }
-        )
-    return {
-        "gt_label_accessed": True,
-        "reason": "GT projected only for pre-GT sealed reconstructable new-track rows",
-        "reconstructable_rows_total": len(reconstructable),
-        "reconstructable_tracks_overlapping_base_excluded": len(overlap_tracks),
-        "additional_gt_valid_match_unique_lost_tracks": len(gt_tracks),
-        "additional_hurt_observable_range": [
-            min(row["additional_hurt_tracks"] for row in combinations),
-            max(row["additional_hurt_tracks"] for row in combinations),
-        ],
-        "reference_cells": cells,
-        "possible_merged_counts": combinations,
-    }
-
-
-def determine_terminal(*, j3: dict[str, Any], reveal: dict[str, Any]) -> str:
-    """Apply EK0's ordered, exhaustive terminal mapping to frozen J1–J4 evidence.
-
-    ``EK0_INVALID`` is raised out-of-band via ``AuditInvalid``; every non-invalid
-    run lands in exactly one of the remaining four terminals.
-    """
-    if j3["reconstructable_new_unique_lost_tracks"] == 0:
-        return "EK0_NO_RECOVERABLE_SUPPORT"
-    if j3["n_max_zero_new_hurt"] < CP_ZERO_HURT_FLOOR:
-        return "EK0_RECOVERABLE_SUPPORT_BELOW_FLOOR"
-    if any(row["ucb"] <= EPSILON for row in reveal["possible_merged_counts"]):
-        return "EK0_RECOVERABLE_SUPPORT_SUFFICIENT"
-    return "EK0_RECOVERABLE_SUPPORT_UCB_NOT_MET"
-
-
-def verify_reveal_seal(
-    manifest: dict[str, Any],
-    *,
-    declaration_sha256: str,
-    runner_sha256: str,
-    metrics_sha256: str,
-    inventory_sha256: str,
-) -> None:
-    """Refuse J4 unless every blind-phase artifact is exactly as sealed.
-
-    This closes the blind→reveal gap: the declaration, the current runner, the
-    blind metrics, and the sealed inventory must all still hash-match the
-    blind-phase manifest before any GT projection is permitted.
-    """
-    if manifest.get("phase") != "outcome_blind_sealed" or manifest.get("terminal"):
-        raise AuditInvalid("J4 requires an unmodified outcome_blind_sealed manifest")
-    if manifest.get("declaration_sha256") != declaration_sha256:
-        raise AuditInvalid("EK0 declaration changed after the blind seal")
-    if manifest.get("runner_sha256") != runner_sha256:
-        raise AuditInvalid("runner changed between the blind seal and reveal")
-    if manifest.get("files", {}).get("metrics.json") != metrics_sha256:
-        raise AuditInvalid("blind metrics changed after the blind seal")
-    if manifest.get("pre_gt_seal", {}).get("gt_label_accessed") is not False:
-        raise AuditInvalid("blind seal does not prove GT was unread")
-    if manifest.get("pre_gt_seal", {}).get("inventory_sha256") != inventory_sha256:
-        raise AuditInvalid("inventory changed after the blind seal")
-    if manifest.get("files", {}).get("inventory.csv") != inventory_sha256:
-        raise AuditInvalid("manifest inventory hash is self-inconsistent")
-
-
-def _verify_reveal_inputs(*, study_dir: Path, s0_packet: Path) -> None:
-    """Re-verify the frozen hash of every input the reveal phase will read."""
-    checks = {
-        "pairs.csv": (study_dir / "pairs.csv", EXPECTED_INPUT_HASHES["pairs.csv"]),
-        "capture.csv.gz": (
-            study_dir / "capture.csv.gz",
-            EXPECTED_INPUT_HASHES["capture.csv.gz"],
-        ),
-        "S0 grid.csv": (s0_packet / "grid.csv", EXPECTED_S0_FILES["grid.csv"]),
-    }
-    for name, (path, expected) in checks.items():
-        if not path.is_file() or _sha256(path) != expected:
-            raise AuditInvalid(f"reveal input {name} failed frozen hash re-check")
-
-
-def run_reveal(*, study_dir: Path, s0_packet: Path, output_dir: Path) -> dict[str, Any]:
-    """J4–J5, allowed only after an intact outcome-blind packet seal."""
-    manifest_path = output_dir / "manifest.json"
-    metrics_path = output_dir / "metrics.json"
-    inventory_path = output_dir / "inventory.csv"
-    if not all(
-        path.is_file() for path in (manifest_path, metrics_path, inventory_path)
-    ):
-        raise AuditInvalid("J4 requires an existing J1–J3 blind packet")
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    blind_metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
-    verify_reveal_seal(
-        manifest,
-        declaration_sha256=_sha256(_absolute(DECLARATION)),
-        runner_sha256=_sha256(Path(__file__)),
-        metrics_sha256=_sha256(metrics_path),
-        inventory_sha256=_sha256(inventory_path),
-    )
-    if (
-        blind_metrics.get("phase") != "outcome_blind_sealed"
-        or blind_metrics.get("gt_label_accessed") is not False
-    ):
-        raise AuditInvalid("metrics do not prove an outcome-blind J1–J3 phase")
-    _verify_reveal_inputs(study_dir=study_dir, s0_packet=s0_packet)
-
-    inventory = _read_inventory(inventory_path)
-    capture = _read_capture_identity(study_dir / "capture.csv.gz")
-    joined_tracks = joined_track_identities(capture)
-    reveal = evaluate_reveal(
-        inventory=inventory,
-        pairs_path=study_dir / "pairs.csv",
-        grid_path=s0_packet / "grid.csv",
-        joined_tracks=joined_tracks,
-    )
-    j5 = {
-        "same_research_population": True,
-        "same_offline_runtime_coordinate_definitions": True,
-        "same_lost_track_independence_unit": True,
-        "same_frozen_axes_and_grid": True,
-        "local_id_fallback_used": False,
-        "outcome_conditioned_join_selection": False,
-        "new_proxy_or_refit": False,
-        "production_state_mutation": False,
-        "invariant_note": (
-            "Any violation is an EK0_INVALID packet, not a separate terminal; "
-            "no reconstructable support may be replaced by an alternate join key."
-        ),
-    }
-    violated = (
-        not j5["same_research_population"]
-        or not j5["same_offline_runtime_coordinate_definitions"]
-        or not j5["same_lost_track_independence_unit"]
-        or not j5["same_frozen_axes_and_grid"]
-        or j5["local_id_fallback_used"]
-        or j5["outcome_conditioned_join_selection"]
-        or j5["new_proxy_or_refit"]
-        or j5["production_state_mutation"]
-    )
-    if violated:
-        raise AuditInvalid("J5 semantic invariant violated; packet is not legal EK0")
-    terminal = determine_terminal(
-        j3=blind_metrics["j3_independence_reduction"], reveal=reveal
-    )
-    final_metrics = {
-        **blind_metrics,
-        "phase": "complete",
-        "terminal": terminal,
-        "j4_gt_reveal": reveal,
-        "j5_join_semantic_invariants": j5,
-    }
-    _json_write(metrics_path, final_metrics)
-    final_manifest = {
-        **manifest,
-        "phase": "complete",
-        "terminal": terminal,
-        "files": {
-            "inventory.csv": _sha256(inventory_path),
-            "metrics.json": _sha256(metrics_path),
-        },
-    }
-    _json_write(manifest_path, final_manifest)
-    return final_metrics
 
 
 def _invalid_packet(output_dir: Path, failure: str) -> None:
@@ -992,27 +615,17 @@ def _invalid_packet(output_dir: Path, failure: str) -> None:
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--phase", choices=("blind", "reveal"), required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--study-dir", type=Path, default=Path(STUDY_DIR))
     parser.add_argument("--substrate-dir", type=Path, default=Path(SUBSTRATE_DIR))
-    parser.add_argument("--s0-packet", type=Path, default=Path(S0_PACKET))
     args = parser.parse_args(argv)
     output_dir = _absolute(args.output_dir)
     try:
-        if args.phase == "blind":
-            result = run_blind(
-                study_dir=_absolute(args.study_dir),
-                substrate_dir=_absolute(args.substrate_dir),
-                s0_packet=_absolute(args.s0_packet),
-                output_dir=output_dir,
-            )
-        else:
-            result = run_reveal(
-                study_dir=_absolute(args.study_dir),
-                s0_packet=_absolute(args.s0_packet),
-                output_dir=output_dir,
-            )
+        result = run_audit(
+            study_dir=_absolute(args.study_dir),
+            substrate_dir=_absolute(args.substrate_dir),
+            output_dir=output_dir,
+        )
     except AuditInvalid as exc:
         _invalid_packet(output_dir, str(exc))
         print(json.dumps({"terminal": "EK0_INVALID", "failure": str(exc)}, indent=2))
@@ -1022,7 +635,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             {
                 "study": STUDY,
                 "phase": result["phase"],
-                "terminal": result.get("terminal"),
+                "terminal": result["terminal"],
             },
             indent=2,
         )

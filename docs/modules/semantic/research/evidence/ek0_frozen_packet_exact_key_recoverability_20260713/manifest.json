@@ -1,6 +1,6 @@
 {
   "declaration": "docs/modules/semantic/research/frozen_packet_exact_key_recoverability_declaration_20260713.md",
-  "declaration_sha256": "5ed564284a6bc23963fc6953202be1d6c2b9c6a1084f7745838a055051efb015",
+  "declaration_sha256": "0f119254419a91dc592eba5475cec671b9e5b66a4b0c30f4c93db56107b4ee7e",
   "event_key": {
     "fields": [
       "seq",
@@ -11,7 +11,7 @@
   },
   "files": {
     "inventory.csv": "a90c424dc6a74fbbb0bdb3997e388517e56f0b237fa4f65384046510c3590d92",
-    "metrics.json": "f40a0b794f55656cd3209c15841d7b892bba02a3f52fc4beab4bccccbb44d95e"
+    "metrics.json": "3bb85803a3cc77f58d145e409fdc38043ee2e85885dde6372717ae80aa8a63a8"
   },
   "input_hashes": {
     "_global_id_map.txt": "ae3b6441d1712bcce0826d611cee2cfdf7a01b4d37ec331336f91a0b9148f366",
@@ -20,14 +20,13 @@
     "substrate_mot_concat": "4c5e322a3b8c026de584baa883e26353720837ffa2bf146dfcef2679426a670e"
   },
   "phase": "complete",
-  "pre_gt_seal": {
+  "runner": "scripts/tools/audit_frozen_packet_exact_key_recoverability.py",
+  "runner_sha256": "7b64df98425d5013c288ed5f3388e87130a1c385be0d969b0e431f9c50ed2bf1",
+  "seal": {
     "classification_rules": "sealed declaration \u00a73",
     "gt_label_accessed": false,
-    "inventory_sha256": "a90c424dc6a74fbbb0bdb3997e388517e56f0b237fa4f65384046510c3590d92",
-    "trial_unit": "(seq, lost_global_id)"
+    "inventory_sha256": "a90c424dc6a74fbbb0bdb3997e388517e56f0b237fa4f65384046510c3590d92"
   },
-  "runner": "scripts/tools/audit_frozen_packet_exact_key_recoverability.py",
-  "runner_sha256": "5af358c154cd216d0440b31617d18d2512634b9bc744f5fed22197bdb79e6f60",
   "study": "ek0_frozen_packet_exact_key_recoverability_20260713",
   "terminal": "EK0_NO_RECOVERABLE_SUPPORT"
 }
