@@ -46,7 +46,7 @@
 | 開立／替換 mainline charter | module TODO 只放唯一 pointer；target、commit point、discard condition 放 linked thread / research note | 契約 C7；[thread role split](docs/research/threads/README.md#mainline-charter--expected-state--probe) | expected state 不得進 registry；WIP=1 只計 charter |
 | 執行／丟棄 probe | 放在 charter 的 `Current step` 或短期執行面；沒有可重用證據就不建正式文件 | charter 的 boundary / commit point | 丟棄 probe 不觸發 registry transition、thread close 或 promotion |
 | 將結果作決策、baseline、NO-GO 或 paper 引用（D2） | 上列 + C5 選定的 `evidence_ledger`、`no_go_registry` 和/或 `report_data` owner | D1 包 + C5 + 對應 evidence 文件 | source 可追溯；commit/preset/host 齊全 |
-| 收尾 research（不論 D1/D2） | canonical 高密度結論；檔案/索引；module TODO；**只有**已登記 object 的 accepted state / substrate / limits / transition metadata 改變才更新 registry；有 thread 才更新 thread | C4、C6、C7；有 promotion 再讀 C5；有 thread 再讀 [thread close checklist](docs/research/threads/README.md#how-to-close-a-thread) | `check_doc_structure.py --strict` + link/stale-path checks |
+| 收尾 research（不論 D1/D2） | canonical 高密度結論；檔案/索引；module TODO；**只有** object 的 accepted state / substrate / limits / transition metadata 改變才更新 registry（該 object 尚未登記 → 同一 PR 新增 record）；有 thread 才更新 thread | C4、C6、C7；有 promotion 再讀 C5；有 thread 再讀 [thread close checklist](docs/research/threads/README.md#how-to-close-a-thread) | `check_doc_structure.py --strict` + link/stale-path checks |
 
 ### 研究收尾卡
 
@@ -55,7 +55,7 @@ probe，不是 research close。正式收尾在同一個 PR 依此順序完成�
 
 1. 在 canonical research note 寫一份結論：裁決、適用範圍、限制、證據位置。
 2. 將狀態改為 `closed`，移出 active 路徑到 owner 的 `closed/`（或僅在 one-shot 時 archive）；更新 owning README 的索引。
-3. 只有 terminal acceptance 改變**已登記** object 的 accepted state、substrate、limits 或 transition metadata 時，才更新 [claim state registry](docs/research/contracts/claim_state_registry.md)；否則不碰 registry。TODO 只改 sole-active pointer 或標成無 active，不能貼結案正文。
+3. 只有 terminal acceptance 改變 object 的 accepted state、substrate、limits 或 transition metadata 時，才更新 [claim state registry](docs/research/contracts/claim_state_registry.md)；該 object 尚未登記且這是它第一個被接受的 terminal → 同一 PR 新增 record。其餘情況不碰 registry。TODO 只改 sole-active pointer 或標成無 active，不能貼結案正文。
 4. 有 thread 才依 thread close checklist 更新 frontmatter、`threads/closed/` 與 Closed 表；沒有 thread 不需建立一張。
 5. 若結果在 note 外被引用，依 C5 promotion；否則 `doc-promotion: none`。
 6. 跑 strict lifecycle、link 與 stale-path checks。預設 `check_doc_structure.py` 只警告索引；`--strict` 使 lifecycle L1–L4 失敗，且 pre-push 使用它。

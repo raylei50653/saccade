@@ -206,8 +206,9 @@ Numbers: each line keeps its own master. Entry docs that quote baselines still f
 **3 · 關閉流程必須同時完成整理。**
 **不得**先宣布實驗關閉、之後再開一個「整理文檔」任務。
 owner 接受 terminal 的**同一個 PR** 內：結論就位 → 細節搬家 → 移出 active 索引 →
-若 terminal 改變**已登記** object 的 accepted state、substrate、limits 或 transition metadata，才更新
-[registry](../research/contracts/claim_state_registry.md)。關閉 artifact、失敗 probe 或只補證據而沒有 state
+若 terminal 改變 object 的 accepted state、substrate、limits 或 transition metadata，才更新
+[registry](../research/contracts/claim_state_registry.md)（object 尚未登記且這是它第一個被接受的 terminal →
+同一 PR 依 registry § 2/§ 3 新增 record）。關閉 artifact、失敗 probe 或只補證據而沒有 state
 transition 時，不得製造 registry `last_transition`。
 
 **實作細節（不是規則）：** 檔名保持穩定語義、不寫 terminal（否則收單改名會斷連結）；

@@ -60,7 +60,7 @@ truth unless a result is explicitly promoted into a tracked report or decision.
 |---|---|---|---|
 | `report_data/` | Tracked paper/report source material | Contains curated tables, figures, and report notes. Generated JSON is ignored. | Reviewed 2026-06-18 |
 | `README.md` | Public project entry point | Keep synchronized with accepted project direction and frozen headline numbers. | Reviewed 2026-06-18 |
-| `DEVELOPMENT.md` | Developer thin entry | Need levels D0–D4 → doc combos; dashboard + commands; details live elsewhere. | Reviewed 2026-07-09 |
+| `DEVELOPMENT.md` | Developer thin entry | Need levels D0–D4 → action cards → doc combos + commands; no live status; details live elsewhere. | Reviewed 2026-07-13 |
 | `REPO_LAYOUT.md` | Top-level repository map | Update when a top-level directory changes role. | Reviewed 2026-06-18 |
 | `LICENSE` | License text | Keep at repo root. | Reviewed 2026-06-18 |
 

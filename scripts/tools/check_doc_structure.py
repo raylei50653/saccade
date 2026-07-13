@@ -35,10 +35,12 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 MODULES_ROOT = REPO_ROOT / "docs" / "modules"
 RESEARCH_ROOT = REPO_ROOT / "docs" / "research"
 # These directories own different kinds of artifacts and have their own rules:
-# contracts holds rules/state, threads has lifecycle/index projection checks, and
-# tracker-decision is a closed decision line. Every other direct research
-# subdirectory follows C4's local-README-then-top-level fallback.
-RESEARCH_SPECIAL_SUBDIRS = frozenset({"contracts", "threads", "tracker-decision"})
+# contracts holds rules/state (L3), and tracker-decision is a closed decision
+# line. Every other direct research subdirectory — threads included — follows
+# C4's local-README-then-top-level fallback. threads additionally gets the L4
+# projection check, which only compares cards that *are* indexed; S2 is what
+# catches a card that is missing from the index entirely.
+RESEARCH_SPECIAL_SUBDIRS = frozenset({"contracts", "tracker-decision"})
 
 
 def _read(path: Path) -> str:

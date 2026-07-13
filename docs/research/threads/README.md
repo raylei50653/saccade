@@ -4,7 +4,7 @@
 
 ```text
 DEVELOPMENT.md       = stable global action router (D0–D4)
-TODO.md              = WIP lock / active pointer（sole active 一句）
+TODO.md              = mainline-charter WIP lock / pointer（sole active 一句）
 threads/             = 進行中 charter（proposed · active · parked）
 Expected state       = charter 內可替換的 planning lease（非 accepted state）
 Current step / PR    = fast probes（可停止、替換、丟棄）

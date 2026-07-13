@@ -71,7 +71,7 @@ CUDA hardware、TensorRT engines 與 local MOT datasets。
 
 開發前建議閱讀順序：
 
-1. [DEVELOPMENT.md](DEVELOPMENT.md) — 開發薄入口（需求層級 D0–D4 → 文檔組合 → dashboard / 命令）
+1. [DEVELOPMENT.md](DEVELOPMENT.md) — 開發薄入口（需求層級 D0–D4 → action cards → 文檔組合 / 命令）
 2. [docs/architecture/README.md](docs/architecture/README.md) — 穩定架構邊界
 3. [docs/reference/pipeline_flow.md](docs/reference/pipeline_flow.md) — 主路徑 flow
 4. [docs/TODO.md](docs/TODO.md) — 當前工作與 ablation backlog
