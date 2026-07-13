@@ -50,6 +50,7 @@
   },
   "j3_independence_reduction": {
     "best_case_floor_n": 153,
+    "joined_partition_unique_lost_tracks": 515,
     "n_max_zero_new_hurt": 116,
     "partitions": {
       "cohort_gap": {
@@ -96,9 +97,11 @@
         "events": 539,
         "events_with_identified_lost_track": 539,
         "identified_unique_lost_tracks": 169,
+        "identified_unique_lost_tracks_not_in_joined_partition": 57,
         "reasons": {
           "same_global_pair_absent_from_offline_universe": 539
         },
+        "reconstructable_new_unique_lost_tracks": 0,
         "reconstructable_unique_lost_track_upper_bound": 0,
         "repeat_events_after_lost_track_reduction": 370,
         "repeat_rate_among_identified_events": 0.686456400742115,
@@ -148,15 +151,19 @@
         "events": 354,
         "events_with_identified_lost_track": 0,
         "identified_unique_lost_tracks": 0,
+        "identified_unique_lost_tracks_not_in_joined_partition": 0,
         "reasons": {
           "unresolved_global_identity_no_local_id_fallback": 354
         },
+        "reconstructable_new_unique_lost_tracks": 0,
         "reconstructable_unique_lost_track_upper_bound": 0,
         "repeat_events_after_lost_track_reduction": 0,
         "repeat_rate_among_identified_events": null,
         "unidentified_events": 354
       }
     },
+    "reconstructable_new_unique_lost_tracks": 0,
+    "reconstructable_tracks_already_in_joined_partition": 0,
     "reconstructable_unique_lost_track_upper_bound": 0,
     "trial_unit": "(seq, lost_global_id)"
   },
@@ -174,11 +181,13 @@
         "ucb": 0.06548327985535148
       }
     ],
-    "reason": "frozen reconstructable inventory is empty; no GT-label projection exists",
+    "reason": "no new-track reconstructable rows; no GT-label projection exists",
+    "reconstructable_rows_total": 0,
+    "reconstructable_tracks_overlapping_base_excluded": 0,
     "reference_cells": []
   },
-  "j5_join_semantic_admissibility": {
-    "admissibility_note": "No reconstructable support may be replaced by an alternate join key.",
+  "j5_join_semantic_invariants": {
+    "invariant_note": "Any violation is an EK0_INVALID packet, not a separate terminal; no reconstructable support may be replaced by an alternate join key.",
     "local_id_fallback_used": false,
     "new_proxy_or_refit": false,
     "outcome_conditioned_join_selection": false,
@@ -190,6 +199,6 @@
   },
   "phase": "complete",
   "pre_gt_inventory_sha256": "a90c424dc6a74fbbb0bdb3997e388517e56f0b237fa4f65384046510c3590d92",
-  "study": "rj0_runtime_join_support_sufficiency_20260713",
-  "terminal": "RJ0_EXPANSION_FUTILE"
+  "study": "ek0_frozen_packet_exact_key_recoverability_20260713",
+  "terminal": "EK0_NO_RECOVERABLE_SUPPORT"
 }

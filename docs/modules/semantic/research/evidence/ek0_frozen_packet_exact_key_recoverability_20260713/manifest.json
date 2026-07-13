@@ -1,6 +1,6 @@
 {
-  "declaration": "docs/modules/semantic/research/runtime_join_support_sufficiency_declaration_20260713.md",
-  "declaration_sha256": "657b665a4a732388db7ea7bb69d3317a2134970411f5790c1c44dd515d311ed2",
+  "declaration": "docs/modules/semantic/research/frozen_packet_exact_key_recoverability_declaration_20260713.md",
+  "declaration_sha256": "5ed564284a6bc23963fc6953202be1d6c2b9c6a1084f7745838a055051efb015",
   "event_key": {
     "fields": [
       "seq",
@@ -11,7 +11,7 @@
   },
   "files": {
     "inventory.csv": "a90c424dc6a74fbbb0bdb3997e388517e56f0b237fa4f65384046510c3590d92",
-    "metrics.json": "32d3f9979e4269cbe2195a8203f401e36a6c58d6195f7e095d7c290fdf749fd9"
+    "metrics.json": "f40a0b794f55656cd3209c15841d7b892bba02a3f52fc4beab4bccccbb44d95e"
   },
   "input_hashes": {
     "_global_id_map.txt": "ae3b6441d1712bcce0826d611cee2cfdf7a01b4d37ec331336f91a0b9148f366",
@@ -26,8 +26,8 @@
     "inventory_sha256": "a90c424dc6a74fbbb0bdb3997e388517e56f0b237fa4f65384046510c3590d92",
     "trial_unit": "(seq, lost_global_id)"
   },
-  "runner": "scripts/tools/audit_runtime_join_support_sufficiency.py",
-  "runner_sha256": "0eed3f0a301d5159a2f505fdbf1f4c5b8e04507ae2f7bbf4e02588db648e33a6",
-  "study": "rj0_runtime_join_support_sufficiency_20260713",
-  "terminal": "RJ0_EXPANSION_FUTILE"
+  "runner": "scripts/tools/audit_frozen_packet_exact_key_recoverability.py",
+  "runner_sha256": "5af358c154cd216d0440b31617d18d2512634b9bc744f5fed22197bdb79e6f60",
+  "study": "ek0_frozen_packet_exact_key_recoverability_20260713",
+  "terminal": "EK0_NO_RECOVERABLE_SUPPORT"
 }
