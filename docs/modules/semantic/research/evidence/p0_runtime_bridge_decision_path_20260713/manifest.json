@@ -1,4 +1,9 @@
 {
+  "files": {
+    "decision_funnel.csv": "de58ac635fb155e04c24908ae41b7596140ea1bae5a3cd50071a43da4d866b6c",
+    "field_sufficiency.json": "7fb36d9ba9f10458ca8c9a254a62e56c48598e0ab9e1ea41f683996c88553296",
+    "metrics.json": "eb4e0173e7efdca66604639ca510a09275383c0ee456324dcf81fc6cac14ad2e"
+  },
   "inputs": {
     "docs/modules/semantic/research/evidence/d0_runtime_shadow_fidelity_20260712/manifest.json": "c61ba49aac2871793a72b7b1772d48077b72abd57ce9aaa5ca63b91b47cbb6d7",
     "docs/modules/semantic/research/evidence/r1_temporal_reduction_capture_20260712/export_manifest.json": "5d60e3baa0e3c192964c4e58ab6ed7ae01b7cc2e9139e5739f3815fa7a66d115",
@@ -14,12 +19,12 @@
     "p5": "not_entered"
   },
   "outputs": {
-    "decision_funnel.csv": "5f663214be60edfb633c600253331b642c9e00c6350355a9d13efb2490a80153",
+    "decision_funnel.csv": "de58ac635fb155e04c24908ae41b7596140ea1bae5a3cd50071a43da4d866b6c",
     "field_sufficiency.json": "7fb36d9ba9f10458ca8c9a254a62e56c48598e0ab9e1ea41f683996c88553296",
     "metrics.json": "eb4e0173e7efdca66604639ca510a09275383c0ee456324dcf81fc6cac14ad2e"
   },
   "runner": "scripts/tools/audit_runtime_bridge_decision_path.py",
-  "runner_sha256": "841db5ff328c1baf478ac6bb5b6b2588a321ea56ed8271fb68eaa73b8903cde9",
+  "runner_sha256": "93e11b038d12738b756dda48a5fa66347fd7bd4c8911e7db761d979682dd5688",
   "study": "p0_runtime_bridge_decision_path_20260713",
   "terminal": "P0_CAPTURE_SEMANTICS_INVALID"
 }

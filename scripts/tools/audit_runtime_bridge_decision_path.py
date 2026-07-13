@@ -66,6 +66,14 @@ def csv_header_gzip(path: Path) -> list[str]:
     return header
 
 
+def input_key(path: Path, root: Path) -> str:
+    """Use a stable explicit key for a test-injected input outside the repo."""
+    try:
+        return str(path.relative_to(root))
+    except ValueError:
+        return f"external_injected/{path.name}"
+
+
 def _eq(actual: Any, expected: Any) -> bool:
     if isinstance(expected, float):
         try:
@@ -202,7 +210,7 @@ def _field_matrix(header: set[str]) -> list[dict[str, Any]]:
     ]
 
 
-def audit(root: Path = REPO) -> dict[str, Any]:
+def audit(root: Path = REPO, *, d0_capture_dir: Path | None = None) -> dict[str, Any]:
     evidence = root / "docs/modules/semantic/research/evidence"
     d0_packet_path = evidence / "d0_runtime_shadow_fidelity_20260712/manifest.json"
     r1_packet_path = evidence / "r1_temporal_reduction_capture_20260712/manifest.json"
@@ -213,7 +221,9 @@ def audit(root: Path = REPO) -> dict[str, Any]:
         evidence / "r1_temporal_reduction_capture_20260712/export_manifest.json"
     )
     s0_packet_path = evidence / "s0_safe_domain_runtime_transfer_20260713/manifest.json"
-    d0_dir = root / "out/signal_study/d0_runtime_shadow_fidelity_20260712T085642Z"
+    d0_dir = d0_capture_dir or (
+        root / "out/signal_study/d0_runtime_shadow_fidelity_20260712T085642Z"
+    )
     d0_capture = d0_dir / "capture.csv.gz"
     d0_capture_manifest_path = d0_dir / "capture.csv.gz.manifest.json"
     declaration = (
@@ -307,7 +317,7 @@ def audit(root: Path = REPO) -> dict[str, Any]:
         },
         "decision_funnel_status": "not_entered_due_to_capture_semantics_invalid",
         "inputs": {
-            str(path.relative_to(root)): sha256(path)
+            input_key(path, root): sha256(path)
             for path in (
                 d0_packet_path,
                 d0_capture_manifest_path,
@@ -362,6 +372,7 @@ def write_packet(result: dict[str, Any], output_dir: Path) -> None:
                 "observability",
                 "reason",
             ],
+            lineterminator="\n",
         )
         writer.writeheader()
         writer.writerows(funnel_rows)
@@ -373,20 +384,22 @@ def write_packet(result: dict[str, Any], output_dir: Path) -> None:
     (output_dir / "metrics.json").write_text(
         json.dumps(metrics, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
+    output_hashes = {
+        name: sha256(output_dir / name)
+        for name in (
+            "field_sufficiency.json",
+            "decision_funnel.csv",
+            "metrics.json",
+        )
+    }
     manifest = {
         "study": result["study"],
         "terminal": result["terminal"],
         "runner": "scripts/tools/audit_runtime_bridge_decision_path.py",
         "runner_sha256": sha256(Path(__file__)),
         "inputs": result["inputs"],
-        "outputs": {
-            name: sha256(output_dir / name)
-            for name in (
-                "field_sufficiency.json",
-                "decision_funnel.csv",
-                "metrics.json",
-            )
-        },
+        "outputs": output_hashes,
+        "files": output_hashes,
         "label_access": result["label_access"],
     }
     (output_dir / "manifest.json").write_text(

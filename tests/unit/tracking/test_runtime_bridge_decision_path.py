@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import gzip
 import importlib.util
+import json
 from pathlib import Path
 
 
@@ -18,9 +20,34 @@ def _load_runner():
     return module
 
 
-def test_p0_detects_foreign_m_capture_before_label_access() -> None:
+def _synthetic_d0_capture_dir(tmp_path: Path) -> Path:
+    """Create only the outcome-free D0 fields read before P0 fails closed."""
+    d0_dir = tmp_path / "d0"
+    d0_dir.mkdir()
+    with gzip.open(d0_dir / "capture.csv.gz", "wt", encoding="utf-8") as handle:
+        handle.write("seq,lost_global_id,cand_global_id,bdist\\n")
+    (d0_dir / "capture.csv.gz.manifest.json").write_text(
+        json.dumps(
+            {
+                "provenance": {
+                    "bridge": {
+                        "at": 4,
+                        "dir_bonus": 0.0,
+                        "min_lost": 2,
+                        "px": 0.4,
+                        "ttl": 120,
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    return d0_dir
+
+
+def test_p0_detects_foreign_m_capture_before_label_access(tmp_path: Path) -> None:
     runner = _load_runner()
-    result = runner.audit(ROOT)
+    result = runner.audit(ROOT, d0_capture_dir=_synthetic_d0_capture_dir(tmp_path))
 
     assert result["terminal"] == "P0_CAPTURE_SEMANTICS_INVALID"
     assert result["label_access"] == {
@@ -31,9 +58,9 @@ def test_p0_detects_foreign_m_capture_before_label_access() -> None:
     assert result["provenance"]["r1_frozen_preset"].endswith("mamba_whole_graph_m.yaml")
 
 
-def test_p0_keeps_candidate_and_commit_replay_below_l2() -> None:
+def test_p0_keeps_candidate_and_commit_replay_below_l2(tmp_path: Path) -> None:
     runner = _load_runner()
-    result = runner.audit(ROOT)
+    result = runner.audit(ROOT, d0_capture_dir=_synthetic_d0_capture_dir(tmp_path))
     matrix = {row["stage"]: row for row in result["field_sufficiency"]}
 
     assert matrix["D_pair_cutoff"]["complete"] is False
