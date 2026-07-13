@@ -3957,6 +3957,10 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
                 return rows;
             };
             py::dict result;
+            result["trace_armed"] = capture.trace_armed != 0;
+            result["processed_frame_count"] = capture.processed_frame_count;
+            result["bridge_attempt_count"] = capture.bridge_attempt_count;
+            result["bridge_commit_count"] = capture.bridge_commit_count;
             result["pair_records"] = std::move(pairs);
             result["candidate_records"] = std::move(candidates);
             result["claim_records"] = std::move(claims);

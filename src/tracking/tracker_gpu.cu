@@ -2151,6 +2151,7 @@ __global__ void relink_bidir_propose_kernel(
         h0_candidate.cand_slot = cand;
         h0_candidate.cand_precommit_track_id = track_ids[cand];
         h0_candidate.cand_instance_uid = h0_instance_uid(h0.slot_generation, cand);
+        h0_candidate.final_pair_eligible_count = 0;
         h0_candidate.best_bdist = h0_scalar(best_dist);
         h0_candidate.second_best_bdist = h0_scalar(second_dist);
         h0_candidate.margin = h0_not_computed_scalar();
@@ -2618,6 +2619,13 @@ __global__ void relink_bidir_propose_kernel(
         h0_claim.sq = sq;
         h0_claim.packed_atomic_key = key;
         h0_claim.candidate_index_component = cand & 0xFFFF;
+        // These fields are resolved in the commit kernel after atomicMax. Set
+        // explicit pre-append sentinels so the record has a complete ABI at
+        // allocation time; the commit kernel replaces all four before drain.
+        h0_claim.winning_cand_slot = -1;
+        h0_claim.winning_cand_precommit_track_id = -1;
+        h0_claim.winning_cand_instance_uid = 0;
+        h0_claim.claim_won = H0_DISABLED;
         const int claim_record_index = h0_append_record(
             h0.claim_records, h0.claim_capacity, h0.claim_cursor, h0.claim_overflow, h0_claim);
         if (h0.candidate_claim_record_index) {
@@ -4317,12 +4325,28 @@ public:
 
     H0BridgeDecisionTraceCapture drain_research_h0_bridge_trace() {
         H0BridgeDecisionTraceCapture capture;
-        if (!d_h0_pair_cursor_ || !d_h0_candidate_cursor_ || !d_h0_claim_cursor_ ||
-            !d_h0_commit_cursor_ || !d_h0_native_candidate_cursor_ ||
-            !d_h0_native_pair_cursor_ || !d_h0_native_proposal_cursor_ ||
-            !d_h0_native_claim_winner_cursor_ || !d_h0_native_commit_cursor_) {
+        capture.processed_frame_count = processed_frame_count_;
+        const bool trace_buffers_ready = d_h0_pair_records_ && d_h0_pair_cursor_ &&
+            d_h0_pair_overflow_ && d_h0_candidate_records_ && d_h0_candidate_cursor_ &&
+            d_h0_candidate_overflow_ && d_h0_claim_records_ && d_h0_claim_cursor_ &&
+            d_h0_claim_overflow_ && d_h0_commit_records_ && d_h0_commit_cursor_ &&
+            d_h0_commit_overflow_ && d_h0_native_candidate_keys_ &&
+            d_h0_native_candidate_cursor_ && d_h0_native_candidate_overflow_ &&
+            d_h0_native_pair_keys_ && d_h0_native_pair_cursor_ &&
+            d_h0_native_pair_overflow_ && d_h0_native_proposal_keys_ &&
+            d_h0_native_proposal_cursor_ && d_h0_native_proposal_overflow_ &&
+            d_h0_native_claim_winner_keys_ && d_h0_native_claim_winner_cursor_ &&
+            d_h0_native_claim_winner_overflow_ && d_h0_native_commit_keys_ &&
+            d_h0_native_commit_cursor_ && d_h0_native_commit_overflow_ &&
+            d_h0_uid_wrap_events_ && d_h0_candidate_claim_record_index_ && d_relink_dbg_;
+        capture.trace_armed = research_h0_bridge_trace_ && trace_buffers_ready ? 1 : 0;
+        if (!capture.trace_armed) {
             return capture;
         }
+        checkCuda(cudaMemcpy(&capture.bridge_attempt_count, d_relink_dbg_ + 2, sizeof(int),
+                             cudaMemcpyDeviceToHost));
+        checkCuda(cudaMemcpy(&capture.bridge_commit_count, d_relink_dbg_ + 3, sizeof(int),
+                             cudaMemcpyDeviceToHost));
         checkCuda(cudaMemcpy(&capture.total_pair_records, d_h0_pair_cursor_, sizeof(int),
                              cudaMemcpyDeviceToHost));
         checkCuda(cudaMemcpy(&capture.total_candidate_records, d_h0_candidate_cursor_, sizeof(int),

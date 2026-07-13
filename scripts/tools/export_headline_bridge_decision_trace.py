@@ -59,6 +59,16 @@ UNIVERSE_OVERFLOW_KEYS = {
 OBSERVED_UNIVERSE: dict[str, str] = dict(
     CAPTURE_SCHEMA["native_universe_observed_stream"]
 )
+ENVELOPE_FIELDS: tuple[str, ...] = tuple(CAPTURE_SCHEMA["envelope_fields"])
+SEMANTIC_ENVELOPE_FIELDS = (
+    "trace_armed",
+    "bridge_attempt_count",
+    "bridge_commit_count",
+    "capture_phase",
+    "require_candidate_exposure",
+    "require_commit_exposure",
+    "identity_uid_wrap_events",
+)
 
 
 def canonical_json(value: object) -> bytes:
@@ -101,16 +111,80 @@ def _validate_record_schema(stream: str, row: Mapping[str, Any]) -> None:
         )
 
 
+def _validate_envelope(capture: Mapping[str, Any]) -> dict[str, Any]:
+    missing = [field for field in ENVELOPE_FIELDS if field not in capture]
+    if missing:
+        raise ValueError(f"H0 capture envelope missing required fields: {missing}")
+    if capture["capture_schema_version"] != SCHEMA_VERSION:
+        raise ValueError("unexpected H0 capture schema version")
+    if (
+        not isinstance(capture["capture_run_uuid"], str)
+        or not capture["capture_run_uuid"].strip()
+    ):
+        raise ValueError("H0 capture envelope has no capture_run_uuid")
+    if capture["trace_armed"] is not True:
+        raise ValueError("H0 capture envelope is not trace_armed")
+    if capture["capture_phase"] not in {"phase_a", "phase_b"}:
+        raise ValueError("H0 capture envelope has an invalid capture_phase")
+    for field in ("require_candidate_exposure", "require_commit_exposure"):
+        if not isinstance(capture[field], bool):
+            raise ValueError(f"H0 capture envelope {field} must be boolean")
+    if (
+        capture["capture_phase"] == "phase_a"
+        and not capture["require_candidate_exposure"]
+    ):
+        raise ValueError("Phase A capture must require candidate exposure")
+    if capture["capture_phase"] == "phase_b" and (
+        not capture["require_candidate_exposure"]
+        or not capture["require_commit_exposure"]
+    ):
+        raise ValueError("Phase B capture must require candidate and commit exposure")
+    counter_fields = {
+        "processed_frame_count",
+        "bridge_attempt_count",
+        "bridge_commit_count",
+        "identity_uid_wrap_events",
+    }
+    invalid_counter_types = [
+        field
+        for field in counter_fields
+        if not isinstance(capture[field], int) or isinstance(capture[field], bool)
+    ]
+    if invalid_counter_types:
+        raise ValueError(
+            f"H0 capture envelope counters must be integers: {invalid_counter_types}"
+        )
+    try:
+        envelope = {
+            "trace_armed": capture["trace_armed"],
+            "processed_frame_count": int(capture["processed_frame_count"]),
+            "bridge_attempt_count": int(capture["bridge_attempt_count"]),
+            "bridge_commit_count": int(capture["bridge_commit_count"]),
+            "capture_phase": capture["capture_phase"],
+            "require_candidate_exposure": capture["require_candidate_exposure"],
+            "require_commit_exposure": capture["require_commit_exposure"],
+            "identity_uid_wrap_events": int(capture["identity_uid_wrap_events"]),
+        }
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "H0 capture envelope has a non-integer native counter"
+        ) from exc
+    if envelope["processed_frame_count"] <= 0:
+        raise ValueError("H0 capture envelope has no processed-frame provenance")
+    if envelope["bridge_attempt_count"] < 0 or envelope["bridge_commit_count"] < 0:
+        raise ValueError("H0 capture envelope has a negative production exposure count")
+    if envelope["identity_uid_wrap_events"] != 0:
+        raise ValueError("track_instance_uid_v1 generation wrap detected")
+    return envelope
+
+
 def canonical_semantic_packet(capture: Mapping[str, Any]) -> dict[str, Any]:
     """Validate counters and return the UUID-free stable-key ordered packet."""
-    if capture.get("capture_schema_version") != SCHEMA_VERSION:
-        raise ValueError("unexpected H0 capture schema version")
-    if int(capture.get("identity_uid_wrap_events", 0)) != 0:
-        raise ValueError("track_instance_uid_v1 generation wrap detected")
+    envelope = _validate_envelope(capture)
 
     streams: dict[str, list[dict[str, Any]]] = {}
     for stream in STREAMS:
-        raw_rows = capture.get(stream)
+        raw_rows = capture[stream]
         if not isinstance(raw_rows, Sequence) or isinstance(raw_rows, (str, bytes)):
             raise ValueError(f"{stream} must be a record list")
         if not all(isinstance(row, Mapping) for row in raw_rows):
@@ -118,8 +192,8 @@ def canonical_semantic_packet(capture: Mapping[str, Any]) -> dict[str, Any]:
         rows = [dict(row) for row in raw_rows]
         for row in rows:
             _validate_record_schema(stream, row)
-        overflow = int(capture.get(OVERFLOW_KEYS[stream], 0))
-        total = int(capture.get(TOTAL_KEYS[stream], len(rows)))
+        overflow = int(capture[OVERFLOW_KEYS[stream]])
+        total = int(capture[TOTAL_KEYS[stream]])
         if overflow != 0:
             raise ValueError(f"{stream} overflow={overflow}")
         if total != len(rows):
@@ -138,12 +212,12 @@ def canonical_semantic_packet(capture: Mapping[str, Any]) -> dict[str, Any]:
 
     native_universe: dict[str, list[dict[str, Any]]] = {}
     for stream in UNIVERSE_STREAMS:
-        raw_rows = capture.get(stream)
+        raw_rows = capture[stream]
         if not isinstance(raw_rows, Sequence) or isinstance(raw_rows, (str, bytes)):
             raise ValueError(f"{stream} must be a key list")
         rows = [dict(row) for row in raw_rows]
-        overflow = int(capture.get(UNIVERSE_OVERFLOW_KEYS[stream], 0))
-        total = int(capture.get(UNIVERSE_TOTAL_KEYS[stream], len(rows)))
+        overflow = int(capture[UNIVERSE_OVERFLOW_KEYS[stream]])
+        total = int(capture[UNIVERSE_TOTAL_KEYS[stream]])
         if overflow != 0:
             raise ValueError(f"{stream} overflow={overflow}")
         if total != len(rows):
@@ -174,7 +248,7 @@ def canonical_semantic_packet(capture: Mapping[str, Any]) -> dict[str, Any]:
     observed_winners = sorted(
         stable_key("claim_records", row)
         for row in streams["claim_records"]
-        if int(row.get("claim_won", 0)) == 1
+        if int(row["claim_won"]) == 1
     )
     expected_winners = [
         universe_key("native_claim_winner_keys", row)
@@ -184,9 +258,24 @@ def canonical_semantic_packet(capture: Mapping[str, Any]) -> dict[str, Any]:
         raise ValueError(
             "native_claim_winner_keys does not equal observed winning claim keys"
         )
+    if envelope["bridge_attempt_count"] != len(
+        native_universe["native_candidate_keys"]
+    ):
+        raise ValueError(
+            "bridge_attempt_count does not equal native candidate exposure keys"
+        )
+    if envelope["bridge_commit_count"] != len(native_universe["native_commit_keys"]):
+        raise ValueError(
+            "bridge_commit_count does not equal native commit exposure keys"
+        )
+    if envelope["require_candidate_exposure"] and envelope["bridge_attempt_count"] == 0:
+        raise ValueError("H0 capture required candidate exposure but observed none")
+    if envelope["require_commit_exposure"] and envelope["bridge_commit_count"] == 0:
+        raise ValueError("H0 capture required commit exposure but observed none")
 
     return {
         "capture_schema_version": SCHEMA_VERSION,
+        "envelope": envelope,
         "streams": streams,
         "stream_totals": {stream: len(rows) for stream, rows in streams.items()},
         "native_universe": native_universe,
@@ -197,10 +286,13 @@ def canonical_semantic_packet(capture: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def semantic_digest(capture: Mapping[str, Any]) -> str:
-    """SHA-256 of semantic fields only; raw order/UUID cannot affect it."""
-    return hashlib.sha256(
-        canonical_json(canonical_semantic_packet(capture))
-    ).hexdigest()
+    """SHA-256 of semantic fields only; raw order/provenance cannot affect it."""
+    packet = canonical_semantic_packet(capture)
+    semantic_packet = dict(packet)
+    semantic_packet["envelope"] = {
+        field: packet["envelope"][field] for field in SEMANTIC_ENVELOPE_FIELDS
+    }
+    return hashlib.sha256(canonical_json(semantic_packet)).hexdigest()
 
 
 def write_packet(capture: Mapping[str, Any], output_dir: Path) -> dict[str, Any]:
@@ -219,11 +311,12 @@ def write_packet(capture: Mapping[str, Any], output_dir: Path) -> dict[str, Any]
 
     manifest = {
         "capture_schema_version": SCHEMA_VERSION,
-        "capture_run_uuid": capture.get("capture_run_uuid"),
+        "capture_run_uuid": capture["capture_run_uuid"],
         "raw_stream_order_authoritative": False,
         "semantic_digest_sha256": semantic_digest(capture),
         "stream_totals": packet["stream_totals"],
         "native_universe_totals": packet["native_universe_totals"],
+        "envelope": packet["envelope"],
         "files": files,
     }
     (output_dir / "manifest.json").write_bytes(canonical_json(manifest) + b"\n")

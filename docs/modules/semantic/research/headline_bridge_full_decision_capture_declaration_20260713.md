@@ -670,3 +670,94 @@ The first applicable terminal remains authoritative. Phase A may emit only
 1–4. Terminal 5 remains unavailable until the seven-sequence Phase-B artifact
 exists. This amendment changes no policy selection or production write and
 does not itself authorize Phase A, Phase B, or any downstream claim.
+
+## Amendment 3 — fail-closed envelope and mechanical writer admission (2026-07-13; pre-seal)
+
+This is an **append-only** correction to Amendment 2. Amendment 2 fixed the
+native κ universe but still allowed an unarmed native drain to be rewritten by
+the Python wrapper into an apparently complete all-zero v2 packet. It also
+described a mechanical writer checker whose earlier implementation could accept
+a stale occurrence of a buffer name, a comment about cursor independence, or a
+field assignment outside the actual writer. Amendment 3 supersedes A2.1–A2.4
+where they conflict and makes these admission and execution predicates
+fail-closed.
+
+### A3.1. Complete capture envelope and production exposure authority
+
+`h0_bridge_decision_trace_schema_v2.json`'s ordered `envelope_fields` list is
+the complete top-level packet ABI. Every listed record/native stream, every
+total and overflow counter, `identity_uid_wrap_events`, `trace_armed`,
+`processed_frame_count`, `bridge_attempt_count`, `bridge_commit_count`,
+`capture_phase`, and both exposure requirements must be present. A wrapper,
+exporter, or verifier may not synthesize a missing field, stream, total, or
+overflow value. In particular, it may not interpret an absent cursor as the
+number of drained rows or an absent overflow counter as zero.
+
+`trace_armed` is native provenance, not a Python convenience flag. It is true
+only when H0 tracing is enabled and all semantic/native buffers, capacities,
+cursors, overflow counters, identity state, claim-index state, and the native
+bridge-debug authority are allocated. An unarmed or partly allocated native
+drain is not a capture packet: the wrapper rejects it before adding the v2
+envelope. `processed_frame_count > 0` is mandatory invocation provenance.
+`complete` is a derived convenience value only and has no terminal authority.
+The manifest preserves this provenance field, but the semantic digest excludes
+it so CUDA-graph bookkeeping cannot make otherwise equal decision packets
+non-deterministic.
+
+The native bridge debug counter `dbg[2]`, incremented before the candidate
+sidecar append, is the independent candidate-exposure authority:
+
+```text
+bridge_attempt_count == len(native_candidate_keys)
+```
+
+Likewise `dbg[3]`, incremented on the actual commit path, is the independent
+commit-exposure authority:
+
+```text
+bridge_commit_count == len(native_commit_keys)
+```
+
+Both equalities are exact and are checked in the wrapper and exporter in
+addition to all native-sidecar comparisons. Phase A must declare and satisfy
+nonzero candidate exposure. Phase B must declare and satisfy nonzero candidate
+and commit exposure. Thus a Phase-B artifact with no actual commit path cannot
+support `H0_FULL_COMMIT_CAPTURE_FAITHFUL`; any missing, unarmed, malformed,
+truncated, or zero-required-exposure packet is `H0_PACKET_INVALID` (after the
+earlier partition predicates).
+
+### A3.2. Mechanical writer and cursor proof
+
+The frozen checker parses whitespace-tolerant `h0_append_record(...)` calls;
+it does not treat a broad source-string occurrence as evidence. For all four
+semantic and five native append paths it must prove, in the named production
+propose or commit kernel, the exact five-argument tuple:
+
+```text
+(buffer, capacity, cursor, overflow, local record/key)
+```
+
+It then limits field evidence to the local record/key construction through the
+matching append call. Each frozen field (other than serializer-owned `seq` and
+the fixed record schema tag) must have an assignment in that slice. The native
+key cursor in the checked tuple must be the named native cursor rather than the
+paired observed-record cursor; a prose comment cannot establish independence.
+The checker also verifies the native binding/wrapper envelope gate, exporter
+absence of `capture.get(...)` fallbacks, exact exposure comparisons, and that
+the verifier enters through canonical fail-closed packet validation.
+
+The checker-recorded source set explicitly includes
+`scripts/tools/verify_headline_bridge_decision_trace.py` as well as the header,
+CUDA source, Python binding, wrapper, and exporter. Its mutation tests are part
+of the pre-seal admission proof: deleting the claim append, substituting the
+record cursor for a native cursor, or moving a native key-field assignment
+after its append must each make the relevant coverage component false.
+
+### A3.3. State effect
+
+§1 item 2 remains satisfied by the repaired executable declaration. The sole
+pending gate remains §1 item 3: an owner may write `SEALED` only after one
+complete `h0_preseal_freeze_v2` artifact records the amended schema, checker,
+all admitted source hashes, and all-true coverage. This amendment neither
+authorizes capture nor changes policy behavior, and it creates no new
+observability terminal.

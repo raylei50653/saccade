@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Statically admit the complete H0 capture ABI before an owner seal.
+"""Statically admit H0's complete capture ABI before an owner seal.
 
-The check emits the machine-readable ``h0_coverage_v2`` artifact.  It checks
-the frozen field schema against the C++ record declarations and Python drain
-serializer, and verifies that each native-universe writer is independent of
-the corresponding record append path.  It is an engineering-time check: it
-does not run a capture and cannot produce an H0 execution terminal.
+The emitted ``h0_coverage_v2`` artifact is a source-level admission check. It
+validates the frozen field schema, exact append wiring, writer-local field
+evidence, cursor separation, the fail-closed native envelope, and every H0
+source consumed by export or replay. It never runs a capture or emits an H0
+execution terminal.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping, NamedTuple
 
 from export_headline_bridge_decision_trace import (
     CAPTURE_SCHEMA,
@@ -32,7 +32,32 @@ CUDA_PATH = ROOT / "src/tracking/tracker_gpu.cu"
 PYTHON_BINDING_PATH = ROOT / "src/tracking/tracker_gpu_python.cpp"
 TRACKER_WRAPPER_PATH = ROOT / "src/saccade/perception/tracking/tracker_gpu.py"
 EXPORT_PATH = ROOT / "scripts/tools/export_headline_bridge_decision_trace.py"
+VERIFIER_PATH = ROOT / "scripts/tools/verify_headline_bridge_decision_trace.py"
 CHECKER_PATH = Path(__file__).resolve()
+
+
+class AppendSpec(NamedTuple):
+    buffer: str
+    capacity: str
+    cursor: str
+    overflow: str
+    record: str
+    declaration: str
+    scope: str
+    field_instances: tuple[str, ...]
+    preappend_fields: tuple[str, ...]
+
+
+class AppendCall(NamedTuple):
+    start: int
+    end: int
+    args: tuple[str, ...]
+
+
+class KernelScope(NamedTuple):
+    start: int
+    end: int
+
 
 RECORD_STRUCTS = {
     "pair_records": "H0BridgePairRecord",
@@ -46,39 +71,149 @@ RECORD_SERIALIZER_END = {
     "claim_records": "claims.append(std::move(row));",
     "commit_records": "commits.append(std::move(row));",
 }
-RECORD_WRITER_MARKERS = {
-    "pair_records": "h0_append_record(h0.pair_records",
-    "candidate_records": "h0_append_record(h0.candidate_records",
-    "claim_records": "h0.claim_records",
-    "commit_records": "h0_append_record(h0.commit_records",
-}
-RECORD_WRITER_INSTANCES = {
-    "pair_records": ("h0_pair",),
-    "candidate_records": ("h0_candidate",),
-    "claim_records": ("h0_claim", "claim"),
-    "commit_records": ("h0_commit",),
-}
-NATIVE_UNIVERSE_MARKERS = {
-    "native_candidate_keys": ("H0BridgeCandidateKey", "h0.native_candidate_keys"),
-    "native_pair_keys": ("H0BridgePairKey", "h0.native_pair_keys"),
-    "native_proposal_keys": ("H0BridgeClaimKey", "h0.native_proposal_keys"),
-    "native_claim_winner_keys": (
-        "H0BridgeClaimKey",
-        "h0.native_claim_winner_keys",
+RECORD_APPEND_SPECS = {
+    "pair_records": AppendSpec(
+        "h0.pair_records",
+        "h0.pair_capacity",
+        "h0.pair_cursor",
+        "h0.pair_overflow",
+        "h0_pair",
+        "H0BridgePairRecord h0_pair{};",
+        "propose",
+        ("h0_pair",),
+        ("frame", "cand_slot", "lost_slot", "cand_instance_uid", "lost_instance_uid"),
     ),
-    "native_commit_keys": ("H0BridgePairKey", "h0.native_commit_keys"),
+    "candidate_records": AppendSpec(
+        "h0.candidate_records",
+        "h0.candidate_capacity",
+        "h0.candidate_cursor",
+        "h0.candidate_overflow",
+        "h0_candidate",
+        "H0BridgeCandidateRecord h0_candidate{};",
+        "propose",
+        ("h0_candidate",),
+        ("frame", "cand_slot", "cand_instance_uid"),
+    ),
+    "claim_records": AppendSpec(
+        "h0.claim_records",
+        "h0.claim_capacity",
+        "h0.claim_cursor",
+        "h0.claim_overflow",
+        "h0_claim",
+        "H0BridgeClaimRecord h0_claim{};",
+        "propose",
+        ("h0_claim", "claim"),
+        (
+            "frame",
+            "proposing_cand_slot",
+            "proposed_lost_slot",
+            "proposing_cand_instance_uid",
+            "proposed_lost_instance_uid",
+        ),
+    ),
+    "commit_records": AppendSpec(
+        "h0.commit_records",
+        "h0.commit_capacity",
+        "h0.commit_cursor",
+        "h0.commit_overflow",
+        "h0_commit",
+        "H0BridgeCommitRecord h0_commit{};",
+        "commit",
+        ("h0_commit",),
+        ("frame", "cand_slot", "lost_slot", "cand_instance_uid", "lost_instance_uid"),
+    ),
 }
-NATIVE_UNIVERSE_WRITER_INSTANCES = {
-    "native_candidate_keys": ("key",),
-    "native_pair_keys": ("key",),
-    "native_proposal_keys": ("proposal",),
-    "native_claim_winner_keys": ("winner",),
-    "native_commit_keys": ("commit",),
+NATIVE_APPEND_SPECS = {
+    "native_candidate_keys": AppendSpec(
+        "h0.native_candidate_keys",
+        "h0.native_candidate_capacity",
+        "h0.native_candidate_cursor",
+        "h0.native_candidate_overflow",
+        "key",
+        "H0BridgeCandidateKey key{};",
+        "propose",
+        ("key",),
+        ("frame", "cand_slot", "cand_instance_uid"),
+    ),
+    "native_pair_keys": AppendSpec(
+        "h0.native_pair_keys",
+        "h0.native_pair_capacity",
+        "h0.native_pair_cursor",
+        "h0.native_pair_overflow",
+        "key",
+        "H0BridgePairKey key{};",
+        "propose",
+        ("key",),
+        ("frame", "cand_slot", "lost_slot", "cand_instance_uid", "lost_instance_uid"),
+    ),
+    "native_proposal_keys": AppendSpec(
+        "h0.native_proposal_keys",
+        "h0.native_proposal_capacity",
+        "h0.native_proposal_cursor",
+        "h0.native_proposal_overflow",
+        "proposal",
+        "H0BridgeClaimKey proposal{};",
+        "propose",
+        ("proposal",),
+        (
+            "frame",
+            "proposing_cand_slot",
+            "proposed_lost_slot",
+            "proposing_cand_instance_uid",
+            "proposed_lost_instance_uid",
+        ),
+    ),
+    "native_claim_winner_keys": AppendSpec(
+        "h0.native_claim_winner_keys",
+        "h0.native_claim_winner_capacity",
+        "h0.native_claim_winner_cursor",
+        "h0.native_claim_winner_overflow",
+        "winner",
+        "H0BridgeClaimKey winner{};",
+        "commit",
+        ("winner",),
+        (
+            "frame",
+            "proposing_cand_slot",
+            "proposed_lost_slot",
+            "proposing_cand_instance_uid",
+            "proposed_lost_instance_uid",
+        ),
+    ),
+    "native_commit_keys": AppendSpec(
+        "h0.native_commit_keys",
+        "h0.native_commit_capacity",
+        "h0.native_commit_cursor",
+        "h0.native_commit_overflow",
+        "commit",
+        "H0BridgePairKey commit{};",
+        "commit",
+        ("commit",),
+        ("frame", "cand_slot", "lost_slot", "cand_instance_uid", "lost_instance_uid"),
+    ),
 }
+NATIVE_OBSERVED_CURSORS = {
+    "native_candidate_keys": "h0.candidate_cursor",
+    "native_pair_keys": "h0.pair_cursor",
+    "native_proposal_keys": "h0.claim_cursor",
+    "native_claim_winner_keys": "h0.claim_cursor",
+    "native_commit_keys": "h0.commit_cursor",
+}
+NATIVE_ENVELOPE_FIELDS = (
+    "trace_armed",
+    "processed_frame_count",
+    "bridge_attempt_count",
+    "bridge_commit_count",
+    "identity_uid_wrap_events",
+)
 
 
-def sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+def _read(path: Path, overrides: Mapping[Path, str]) -> str:
+    return overrides.get(path, path.read_text(encoding="utf-8"))
+
+
+def _sha256(path: Path, overrides: Mapping[Path, str]) -> str:
+    return hashlib.sha256(_read(path, overrides).encode("utf-8")).hexdigest()
 
 
 def canonical_json(value: object) -> bytes:
@@ -89,6 +224,47 @@ def canonical_json(value: object) -> bytes:
         separators=(",", ":"),
         allow_nan=False,
     ).encode("utf-8")
+
+
+def _normalise(value: str) -> str:
+    return re.sub(r"\s+", "", value)
+
+
+def _split_arguments(value: str) -> tuple[str, ...]:
+    args: list[str] = []
+    start = 0
+    depth = 0
+    for index, char in enumerate(value):
+        if char in "([{":
+            depth += 1
+        elif char in ")]}":
+            depth -= 1
+        elif char == "," and depth == 0:
+            args.append(value[start:index])
+            start = index + 1
+    args.append(value[start:])
+    return tuple(args)
+
+
+def append_calls(cuda: str) -> list[AppendCall]:
+    calls: list[AppendCall] = []
+    for match in re.finditer(r"\bh0_append_record\s*\(", cuda):
+        depth = 1
+        index = match.end()
+        while index < len(cuda) and depth:
+            if cuda[index] == "(":
+                depth += 1
+            elif cuda[index] == ")":
+                depth -= 1
+            index += 1
+        if depth:
+            continue
+        calls.append(
+            AppendCall(
+                match.start(), index, _split_arguments(cuda[match.end() : index - 1])
+            )
+        )
+    return calls
 
 
 def struct_body(header: str, name: str) -> str:
@@ -105,112 +281,303 @@ def serializer_body(binding: str, name: str, end_marker: str) -> str:
     )
     if match is None:
         raise ValueError(f"missing Python serializer loop for {name}")
-    start = match.start()
-    end = binding.find(end_marker, start)
+    end = binding.find(end_marker, match.start())
     if end < 0:
         raise ValueError(f"missing Python serializer end for {name}")
-    return binding[start : end + len(end_marker)]
+    return binding[match.start() : end + len(end_marker)]
 
 
-def coverage_report() -> tuple[dict[str, Any], list[str]]:
-    header = HEADER_PATH.read_text(encoding="utf-8")
-    cuda = CUDA_PATH.read_text(encoding="utf-8")
-    binding = PYTHON_BINDING_PATH.read_text(encoding="utf-8")
-    wrapper = TRACKER_WRAPPER_PATH.read_text(encoding="utf-8")
+def kernel_scopes(cuda: str) -> dict[str, KernelScope]:
+    ranges = {
+        "propose": (
+            "__global__ void relink_bidir_propose_kernel(",
+            "// Pass 2 (commit):",
+        ),
+        "commit": (
+            "__global__ void relink_bidir_commit_kernel(",
+            "__global__ void compact_results_kernel(",
+        ),
+    }
+    scopes: dict[str, KernelScope] = {}
+    for name, (start_marker, end_marker) in ranges.items():
+        start = cuda.find(start_marker)
+        end = cuda.find(end_marker, start)
+        if start < 0 or end < 0:
+            raise ValueError(f"missing {name} kernel boundary")
+        scopes[name] = KernelScope(start, end)
+    return scopes
+
+
+def _matching_calls(calls: list[AppendCall], spec: AppendSpec) -> list[AppendCall]:
+    return [
+        call for call in calls if call.args and _normalise(call.args[0]) == spec.buffer
+    ]
+
+
+def _validate_append_wiring(
+    label: str,
+    cuda: str,
+    calls: list[AppendCall],
+    spec: AppendSpec,
+    scope: KernelScope,
+) -> tuple[list[str], list[str]]:
+    matching = _matching_calls(calls, spec)
+    if not matching:
+        return [], [f"{label} has no h0_append_record call for {spec.buffer}"]
+    expected = (spec.buffer, spec.capacity, spec.cursor, spec.overflow, spec.record)
+    failures: list[str] = []
+    slices: list[str] = []
+    for call in matching:
+        actual = tuple(_normalise(arg) for arg in call.args)
+        if actual != expected:
+            failures.append(f"{label} append wiring must be {expected}, found {actual}")
+            continue
+        if not scope.start <= call.start < scope.end:
+            failures.append(f"{label} append is outside its {spec.scope} writer kernel")
+            continue
+        construct_start = cuda.rfind(spec.declaration, 0, call.start)
+        if construct_start < scope.start:
+            failures.append(
+                f"{label} append has no local {spec.declaration} construction"
+            )
+            continue
+        slices.append(cuda[construct_start : call.start])
+    return slices, failures
+
+
+def _validate_preappend_fields(
+    label: str,
+    fields: tuple[str, ...],
+    instances: tuple[str, ...],
+    append_slices: list[str],
+) -> list[str]:
+    """Require each frozen mapping inside a writer-construction-to-append slice.
+
+    This deliberately does not accept an assignment elsewhere in the CUDA file:
+    it catches a stale writer, a post-append assignment, and a similarly named
+    assignment in another kernel.
+    """
+    if not append_slices:
+        return [f"{label} has no valid writer-construction-to-append slice"]
+    writer_text = "\n".join(append_slices)
+    missing = [
+        field
+        for field in fields
+        if not any(
+            re.search(
+                rf"\b{re.escape(instance)}\.{re.escape(field)}\s*=",
+                writer_text,
+            )
+            for instance in instances
+        )
+    ]
+    if not missing:
+        return []
+    return [f"{label} fields must be assigned before their append: {missing}"]
+
+
+def _validate_record_component(
+    stream: str,
+    header: str,
+    binding: str,
+    scopes: Mapping[str, KernelScope],
+    cuda: str,
+    calls: list[AppendCall],
+) -> list[str]:
+    struct_name = RECORD_STRUCTS[stream]
+    spec = RECORD_APPEND_SPECS[stream]
+    fields = RECORD_FIELDS[stream]
+    failures: list[str] = []
+    try:
+        declared = struct_body(header, struct_name)
+        serialized = serializer_body(
+            binding, struct_name, RECORD_SERIALIZER_END[stream]
+        )
+    except ValueError as exc:
+        return [str(exc)]
+    missing_declared = [
+        field
+        for field in fields
+        if field != "seq" and re.search(rf"\b{re.escape(field)}\b", declared) is None
+    ]
+    missing_serialized = [
+        field
+        for field in fields
+        if field != "seq" and f'row["{field}"]' not in serialized
+    ]
+    if missing_declared:
+        failures.append(f"{stream} C++ field checklist missing {missing_declared}")
+    if missing_serialized:
+        failures.append(f"{stream} Python field checklist missing {missing_serialized}")
+    append_slices, append_failures = _validate_append_wiring(
+        stream, cuda, calls, spec, scopes[spec.scope]
+    )
+    preappend_fields = tuple(
+        field for field in fields if field not in {"seq", "schema_version"}
+    )
+    return (
+        failures
+        + append_failures
+        + _validate_preappend_fields(
+            stream, preappend_fields, spec.field_instances, append_slices
+        )
+    )
+
+
+def _validate_native_component(
+    header: str,
+    binding: str,
+    wrapper: str,
+    cuda: str,
+    calls: list[AppendCall],
+    scopes: Mapping[str, KernelScope],
+) -> list[str]:
+    failures: list[str] = []
+    for stream, spec in NATIVE_APPEND_SPECS.items():
+        if spec.declaration.split()[0] not in header:
+            failures.append(f"{stream} key struct is missing from the H0 header")
+        if f'result["{stream}"]' not in binding:
+            failures.append(f"{stream} is not drained by the Python serializer")
+        if f'"{stream}"' not in wrapper:
+            failures.append(f"{stream} is not sequenced by the Python wrapper")
+        append_slices, append_failures = _validate_append_wiring(
+            stream, cuda, calls, spec, scopes[spec.scope]
+        )
+        failures.extend(append_failures)
+        failures.extend(
+            _validate_preappend_fields(
+                stream, spec.preappend_fields, spec.field_instances, append_slices
+            )
+        )
+        observed_cursor = NATIVE_OBSERVED_CURSORS[stream]
+        if spec.cursor == observed_cursor:
+            failures.append(f"{stream} reuses observed record cursor {observed_cursor}")
+    return failures
+
+
+def _validate_envelope_component(
+    header: str, binding: str, wrapper: str, exporter: str, verifier: str
+) -> list[str]:
+    failures: list[str] = []
+    capture_struct = struct_body(header, "H0BridgeDecisionTraceCapture")
+    wrapper_owned_fields = {
+        "capture_schema_version",
+        "capture_run_uuid",
+        "capture_phase",
+        "require_candidate_exposure",
+        "require_commit_exposure",
+    }
+    for field in CAPTURE_SCHEMA["envelope_fields"]:
+        if field in wrapper_owned_fields:
+            continue
+        if f'result["{field}"]' not in binding:
+            failures.append(f"Python binding does not emit envelope field {field}")
+        if f'"{field}"' not in wrapper:
+            failures.append(f"Python wrapper does not require envelope field {field}")
+    for field in NATIVE_ENVELOPE_FIELDS:
+        if re.search(rf"\b{re.escape(field)}\b", capture_struct) is None:
+            failures.append(f"H0 capture struct missing native envelope field {field}")
+        if f'result["{field}"]' not in binding:
+            failures.append(f"Python binding missing native envelope field {field}")
+        if f'"{field}"' not in wrapper:
+            failures.append(
+                f"Python wrapper does not require native envelope field {field}"
+            )
+    for field in (
+        "capture_schema_version",
+        "capture_run_uuid",
+        "capture_phase",
+        "require_candidate_exposure",
+        "require_commit_exposure",
+    ):
+        if f'"{field}"' not in wrapper:
+            failures.append(f"Python wrapper does not write envelope field {field}")
+    exporter_markers = (
+        "missing = [field for field in ENVELOPE_FIELDS if field not in capture]",
+        'capture["trace_armed"] is not True',
+        "capture[OVERFLOW_KEYS[stream]]",
+        "capture[TOTAL_KEYS[stream]]",
+        "capture[UNIVERSE_OVERFLOW_KEYS[stream]]",
+        "capture[UNIVERSE_TOTAL_KEYS[stream]]",
+        'envelope["bridge_attempt_count"] != len(',
+        'envelope["bridge_commit_count"] != len(',
+        "required candidate exposure",
+        "required commit exposure",
+    )
+    for marker in exporter_markers:
+        if marker not in exporter:
+            failures.append(
+                f"exporter is missing fail-closed envelope marker {marker!r}"
+            )
+    if "capture.get(" in exporter:
+        failures.append("exporter retains a fail-open capture.get default")
+    h0_wrapper_start = wrapper.find("def drain_research_h0_bridge_trace")
+    if h0_wrapper_start < 0:
+        failures.append("Python wrapper is missing the H0 drain method")
+        return failures
+    h0_wrapper_end = wrapper.find("\n    def ", h0_wrapper_start + 1)
+    h0_wrapper = wrapper[h0_wrapper_start:h0_wrapper_end]
+    if "native.get(" in h0_wrapper:
+        failures.append("Python wrapper retains a fail-open native.get default")
+    if "packet = canonical_semantic_packet(capture)" not in verifier:
+        failures.append("verifier does not enter through the fail-closed envelope gate")
+    return failures
+
+
+def coverage_report(
+    source_overrides: Mapping[Path, str] | None = None,
+) -> tuple[dict[str, Any], list[str]]:
+    overrides = source_overrides or {}
+    header = _read(HEADER_PATH, overrides)
+    cuda = _read(CUDA_PATH, overrides)
+    binding = _read(PYTHON_BINDING_PATH, overrides)
+    wrapper = _read(TRACKER_WRAPPER_PATH, overrides)
+    exporter = _read(EXPORT_PATH, overrides)
+    verifier = _read(VERIFIER_PATH, overrides)
     components: dict[str, bool] = {}
     failures: list[str] = []
 
     uid_markers = ("track_instance_uid_v1", "h0_instance_uid", "d_h0_slot_generation_")
-    uid_ok = all(marker in header or marker in cuda for marker in uid_markers)
-    components["track_instance_uid_v1"] = uid_ok
-    if not uid_ok:
-        failures.append("track_instance_uid_v1 markers are incomplete")
+    uid_failures = [
+        marker for marker in uid_markers if marker not in header and marker not in cuda
+    ]
+    components["track_instance_uid_v1"] = not uid_failures
+    if uid_failures:
+        failures.append(f"track_instance_uid_v1 markers are incomplete: {uid_failures}")
 
-    for stream, struct_name in RECORD_STRUCTS.items():
+    try:
+        scopes = kernel_scopes(cuda)
+        calls = append_calls(cuda)
+    except ValueError as exc:
+        scopes = {}
+        calls = []
+        failures.append(str(exc))
+    for stream in RECORD_STRUCTS:
         component = stream.removesuffix("s")
-        fields = RECORD_FIELDS[stream]
-        try:
-            declared = struct_body(header, struct_name)
-            serialized = serializer_body(
-                binding, struct_name, RECORD_SERIALIZER_END[stream]
-            )
-        except ValueError as exc:
-            components[component] = False
-            failures.append(str(exc))
-            continue
-        missing_declared = [
-            field
-            for field in fields
-            if field != "seq"
-            and re.search(rf"\b{re.escape(field)}\b", declared) is None
-        ]
-        missing_serialized = [
-            field
-            for field in fields
-            if field != "seq" and f'row["{field}"]' not in serialized
-        ]
-        missing_written = [
-            field
-            for field in fields
-            if field not in {"seq", "schema_version"}
-            and not any(
-                f"{instance}.{field}" in cuda
-                for instance in RECORD_WRITER_INSTANCES[stream]
-            )
-        ]
-        writer_ok = RECORD_WRITER_MARKERS[stream] in cuda
-        ok = (
-            not missing_declared
-            and not missing_serialized
-            and not missing_written
-            and writer_ok
+        component_failures = (
+            _validate_record_component(stream, header, binding, scopes, cuda, calls)
+            if scopes
+            else ["CUDA kernel scopes unavailable"]
         )
-        components[component] = ok
-        if missing_declared:
-            failures.append(f"{stream} C++ field checklist missing {missing_declared}")
-        if missing_serialized:
-            failures.append(
-                f"{stream} Python field checklist missing {missing_serialized}"
-            )
-        if missing_written:
-            failures.append(
-                f"{stream} CUDA writer field checklist missing {missing_written}"
-            )
-        if not writer_ok:
-            failures.append(f"{stream} native append marker is missing")
+        components[component] = not component_failures
+        failures.extend(component_failures)
 
-    native_ok = True
-    for stream, markers in NATIVE_UNIVERSE_MARKERS.items():
-        if not all(marker in header or marker in cuda for marker in markers):
-            native_ok = False
-            failures.append(f"{stream} native-universe writer marker is missing")
-        if f'result["{stream}"]' not in binding:
-            native_ok = False
-            failures.append(f"{stream} is not drained by the Python serializer")
-        if f'"{stream}"' not in wrapper:
-            native_ok = False
-            failures.append(f"{stream} is not sequenced by the Python wrapper")
-        missing_native_fields = [
-            field
-            for field in CAPTURE_SCHEMA["native_universe_keys"][stream]
-            if field != "seq"
-            and not any(
-                f"{instance}.{field}" in cuda
-                for instance in NATIVE_UNIVERSE_WRITER_INSTANCES[stream]
-            )
-        ]
-        if missing_native_fields:
-            native_ok = False
-            failures.append(
-                f"{stream} CUDA key field checklist missing {missing_native_fields}"
-            )
-    if "independent from the record" not in cuda:
-        native_ok = False
-        failures.append("native-universe cursor independence marker is missing")
-    if "h0_bridge_decision_trace_v2" not in wrapper or 'row["seq"]' not in wrapper:
-        native_ok = False
-        failures.append("Python wrapper does not stamp the frozen v2 schema and seq")
-    components["native_universe_v2"] = native_ok
+    native_failures = (
+        _validate_native_component(header, binding, wrapper, cuda, calls, scopes)
+        if scopes
+        else ["CUDA kernel scopes unavailable"]
+    )
+    components["native_universe_v2"] = not native_failures
+    failures.extend(native_failures)
+
+    try:
+        envelope_failures = _validate_envelope_component(
+            header, binding, wrapper, exporter, verifier
+        )
+    except ValueError as exc:
+        envelope_failures = [str(exc)]
+    components["capture_envelope_v2"] = not envelope_failures
+    failures.extend(envelope_failures)
 
     required = tuple(CAPTURE_SCHEMA["coverage_components"])
     if tuple(components) != required:
@@ -221,16 +588,17 @@ def coverage_report() -> tuple[dict[str, Any], list[str]]:
         "capture_schema_version": SCHEMA_VERSION,
         "coverage_components": components,
         "all_components_true": all_true,
-        "checker_sha256": sha256(CHECKER_PATH),
-        "schema_sha256": sha256(SCHEMA_PATH),
+        "checker_sha256": _sha256(CHECKER_PATH, overrides),
+        "schema_sha256": _sha256(SCHEMA_PATH, overrides),
         "source_sha256": {
-            str(path.relative_to(ROOT)): sha256(path)
+            str(path.relative_to(ROOT)): _sha256(path, overrides)
             for path in (
                 HEADER_PATH,
                 CUDA_PATH,
                 PYTHON_BINDING_PATH,
                 TRACKER_WRAPPER_PATH,
                 EXPORT_PATH,
+                VERIFIER_PATH,
             )
         },
     }

@@ -288,6 +288,13 @@ struct H0BridgeClaimKey {
 };
 
 struct H0BridgeDecisionTraceCapture {
+    // An unarmed or partially allocated trace must remain distinguishable from
+    // a valid run with zero data-dependent events. The host exporter rejects
+    // trace_armed == 0 rather than treating this default capture as complete.
+    uint8_t trace_armed = 0;
+    int processed_frame_count = 0;
+    int bridge_attempt_count = 0;
+    int bridge_commit_count = 0;
     std::vector<H0BridgePairRecord> pair_records;
     std::vector<H0BridgeCandidateRecord> candidate_records;
     std::vector<H0BridgeClaimRecord> claim_records;
