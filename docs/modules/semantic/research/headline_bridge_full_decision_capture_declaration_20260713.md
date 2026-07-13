@@ -6,8 +6,9 @@
 <!-- doc-module: semantic -->
 
 > **Status: proposed / draft-unsealed.** Trace instrumentation exists, but this
-> declaration is not an execution seal. Until an owner seals the reviewed head,
-> no Phase A/B capture, downstream claim study, preset change, or threshold study
+> declaration is not an execution seal. Until the declaration is repaired to the
+> contract §20.2/§20.8 bar and an owner then seals the reviewed head, no
+> Phase A/B capture, downstream claim study, preset change, or threshold study
 > is authorized.
 
 Research-wide type and upstream/downstream routing live in the
@@ -20,7 +21,21 @@ declaration owns only the H0 observability contract and its ordered terminal in
 Before Phase A, the routing ledger is:
 
 1. **Satisfied:** `P0_CAPTURE_SEMANTICS_INVALID` was accepted and P0 closed.
-2. **Pending:** record a literal `SEALED` review against this declaration at the reviewed head, with the source and preset fingerprints in §2.
+2. **Pending — declaration repair to the contract §20.2/§20.8 bar** (owner
+   review, 2026-07-13):
+   - declare typed κ = (quantification space, comparison relation, decision
+     rule) for **every decidable unit** — this declaration contains at least
+     pair-, candidate-, claim-, and commit-level units, and they are distinct;
+   - replace the `H0_CAPTURE_PARTIAL` condition ("some DAG stage cannot be
+     observed without changing policy semantics") with a **mechanically
+     decidable criterion** — a fixed repair budget / attempt limit — so two
+     implementers cannot diverge between "keep repairing instrumentation" and
+     "declare partial";
+   - make the terminal partition **exhaustive over execution-invalid
+     outcomes** (build failure, runner crash, serialization failure — any run
+     that produces no packet maps to a fail-closed terminal, not to an
+     unmapped state).
+3. **Pending:** record a literal `SEALED` review against this declaration at the reviewed head, with the source and preset fingerprints in §2.
 
 The seal authorizes only an observational H0 implementation and its Phase A/B unlabelled captures. It authorizes no GT/FP read, threshold variation, policy choice, registry/ledger modification, or production-preset change.
 

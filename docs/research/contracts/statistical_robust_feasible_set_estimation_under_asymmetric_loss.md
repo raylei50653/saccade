@@ -1474,9 +1474,13 @@ A declaration is sealable only if every item below holds:
    decidable from frozen artifacts with no post-hoc judgment; language like
    "clearly better" or "reasonable margin" is not sealable.
 3. **Exhaustive terminal mapping.** The declared terminal set partitions all
-   reachable outcomes, including validity failure (§20.7 UNRESOLVED); there is
+   reachable outcomes, including validity failure (§20.7 UNRESOLVED) and
+   execution-invalid outcomes that produce no packet (build failure, runner
+   crash, serialization failure — all fail-closed, never unmapped); there is
    no residual "describe more and continue" outcome, and every terminal names
-   its mainline transition (§20.2).
+   its mainline transition — or explicitly maps to `none / diagnostic-only`
+   when the declaration claims no mainline cadence under §20.2. A diagnostic
+   declaration is sealable; what it may not do is occupy mainline cadence.
 4. **Scoped exhaustion and naming.** A negative terminal claims exhaustion
    only over the declared complexity class, and terminal naming must not
    exceed what the partition definitions entail — an outcome that is zero by

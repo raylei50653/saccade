@@ -9,7 +9,7 @@
 
 ## Proposed（non-WIP）
 
-- H0 full bridge-decision trace capture（pending owner seal；不得執行或開下游 claim）→ [declaration](research/headline_bridge_full_decision_capture_declaration_20260713.md)
+- H0 full bridge-decision trace capture（pending declaration repair under contract §20.2/§20.8, then owner seal；不得執行或開下游 claim）→ [declaration](research/headline_bridge_full_decision_capture_declaration_20260713.md)
 
 ## Parked
 

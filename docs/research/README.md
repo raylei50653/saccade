@@ -17,16 +17,27 @@
 
 ### Typed route — runtime representation → reduction → validation
 
-- **Runtime event universe** `U_evt = D_evt ˙∪ G_evt ˙∪ E_evt`
-  - **Representation and reduction**
-    - [D0 — offline proxy ↔ runtime quantity](../modules/semantic/research/d0_runtime_shadow_fidelity_results_20260712.md)
-    - [R1 — captured runtime ↔ canonical replay](../modules/semantic/research/r1_temporal_reduction_capture_results_20260712.md)
-    - `ρ_v: event → trial unit` → [S0 — runtime-coordinate transfer / claim support](../modules/semantic/research/closed/safe_domain_runtime_transfer_results_20260713.md)
-  - **Frozen-packet bookkeeping**
-    - [EK0 — frozen-packet consistency audit](../modules/semantic/research/frozen_packet_exact_key_recoverability_results_20260713.md)
-  - **Runtime decision-path observability**
-    - [P0 — frozen capture identifiability](../modules/semantic/research/closed/runtime_bridge_decision_path_identifiability_results_20260713.md)
-      → [H0 — native full-decision-path capture contract](../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md)
+每個節點標注其 κ 的量化空間；空間分區與單位定義以 linked owner doc 為準,此處不複寫數字。
+
+- **Captured runtime event space** — partition 依 owner 定義:`matched ˙∪ cohort_gap ˙∪ unemitted`
+  - κ domain = captured events(temporal reduction):
+    [R1 temporal-reduction capture — owner terminal results](../modules/semantic/research/r1_temporal_reduction_capture_results_20260712.md)
+    — captured runtime ↔ canonical replay
+  - **Joined `matched` pair space**(event-level fidelity 帳目)
+    - κ domain = joined pairs(逐 pair bit-exact):
+      [D0 — runtime shadow bridge fidelity: results](../modules/semantic/research/d0_runtime_shadow_fidelity_results_20260712.md)
+      — offline proxy ↔ runtime quantity
+    - `ρ_v: event → trial unit` ↓
+    - **Trial-unit claim space**(track-level independence unit)
+      - κ domain = trials(ε-level claim):
+        [S0 — safe-domain axis transfer to runtime coordinates: results](../modules/semantic/research/closed/safe_domain_runtime_transfer_results_20260713.md)
+        — runtime-coordinate transfer / claim support
+  - **Frozen-packet bookkeeping**(κ domain = frozen packet 的 partition labels)
+    - [EK0 — frozen-packet exact-key recoverability — results](../modules/semantic/research/frozen_packet_exact_key_recoverability_results_20260713.md)
+      — consistency audit
+  - **Runtime decision-path observability**(κ domain = frozen capture 的 decision-path 歸因)
+    - [P0 — runtime bridge decision-path identifiability: results](../modules/semantic/research/closed/runtime_bridge_decision_path_identifiability_results_20260713.md)
+      → [H0 — headline-s full bridge-decision trace capture](../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md)（native capture 宣告）
       → downstream claim 必須另行宣告。
 
 ### State resolution
