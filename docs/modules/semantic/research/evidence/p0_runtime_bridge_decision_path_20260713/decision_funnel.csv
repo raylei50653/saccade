@@ -1,0 +1,8 @@
+stage,event_count,unique_candidate_count,unique_lost_track_count,sequence_distribution,observability,reason
+eligible_raw_pairs,,,,,UNOBSERVABLE,headline provenance is invalid; P4 not entered
+pass_height_gate,,,,,UNOBSERVABLE,headline provenance is invalid; P4 not entered
+pass_bdist_cutoff,,,,,UNOBSERVABLE,headline provenance is invalid; P4 not entered
+candidate_local_winners,,,,,UNOBSERVABLE,headline provenance is invalid; P4 not entered
+pass_margin,,,,,UNOBSERVABLE,headline provenance is invalid; P4 not entered
+claim_winners,,,,,UNOBSERVABLE,headline provenance is invalid; P4 not entered
+final_commits,,,,,UNOBSERVABLE,headline provenance is invalid; P4 not entered

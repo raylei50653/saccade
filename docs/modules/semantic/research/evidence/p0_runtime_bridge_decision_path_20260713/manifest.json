@@ -1,0 +1,25 @@
+{
+  "inputs": {
+    "docs/modules/semantic/research/evidence/d0_runtime_shadow_fidelity_20260712/manifest.json": "c61ba49aac2871793a72b7b1772d48077b72abd57ce9aaa5ca63b91b47cbb6d7",
+    "docs/modules/semantic/research/evidence/r1_temporal_reduction_capture_20260712/export_manifest.json": "5d60e3baa0e3c192964c4e58ab6ed7ae01b7cc2e9139e5739f3815fa7a66d115",
+    "docs/modules/semantic/research/evidence/r1_temporal_reduction_capture_20260712/frozen_packet_hashes.json": "6d609da372a399aaa144d736f5971788476d68e253d628baa34b53e0e73a07c1",
+    "docs/modules/semantic/research/evidence/r1_temporal_reduction_capture_20260712/manifest.json": "3d9c7c9f68499eb3ea65887f29dced1f7956dcfc549b06c4d67864c407cd668d",
+    "docs/modules/semantic/research/evidence/s0_safe_domain_runtime_transfer_20260713/manifest.json": "423591cb2b8e18a7129ce4e375c9dc55cfa588892c9e599c25de95f216fc8cdb",
+    "docs/modules/semantic/research/runtime_bridge_decision_path_identifiability_declaration_20260713.md": "3d066283e738eba7201abea6946bb841def7474496d8481a76188d656d6480c4",
+    "out/signal_study/d0_runtime_shadow_fidelity_20260712T085642Z/capture.csv.gz.manifest.json": "4547ed29df726497e1050bda7326044a573579d7268571bd29a4c107bd0d8d99",
+    "src/tracking/tracker_gpu.cu": "36a0c7f952e99aee309c7fe4c9187852d070ee0ae600cd737a0beeeb55904e55"
+  },
+  "label_access": {
+    "gt_or_fp_labels_accessed": false,
+    "p5": "not_entered"
+  },
+  "outputs": {
+    "decision_funnel.csv": "5f663214be60edfb633c600253331b642c9e00c6350355a9d13efb2490a80153",
+    "field_sufficiency.json": "7fb36d9ba9f10458ca8c9a254a62e56c48598e0ab9e1ea41f683996c88553296",
+    "metrics.json": "eb4e0173e7efdca66604639ca510a09275383c0ee456324dcf81fc6cac14ad2e"
+  },
+  "runner": "scripts/tools/audit_runtime_bridge_decision_path.py",
+  "runner_sha256": "841db5ff328c1baf478ac6bb5b6b2588a321ea56ed8271fb68eaa73b8903cde9",
+  "study": "p0_runtime_bridge_decision_path_20260713",
+  "terminal": "P0_CAPTURE_SEMANTICS_INVALID"
+}
