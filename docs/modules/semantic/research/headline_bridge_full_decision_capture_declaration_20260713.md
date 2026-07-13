@@ -95,6 +95,7 @@ docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration
 docs/modules/semantic/research/headline_bridge_full_decision_capture_results_20260713.md
 docs/modules/semantic/research/runtime_bridge_decision_path_identifiability_declaration_20260713.md
 docs/modules/semantic/research/runtime_bridge_decision_path_identifiability_results_20260713.md
+docs/modules/semantic/research/closed/runtime_bridge_decision_path_identifiability_results_20260713.md
 docs/modules/semantic/research/evidence/p0_runtime_bridge_decision_path_20260713/manifest.json
 docs/modules/semantic/research/evidence/p0_runtime_bridge_decision_path_20260713/field_sufficiency.json
 docs/modules/semantic/research/evidence/p0_runtime_bridge_decision_path_20260713/decision_funnel.csv
@@ -110,6 +111,18 @@ docs-only/non-executable content and must not alter or be consumed as a
 resolved configuration, build input, runtime-policy source, executable
 artifact, or production test. Every changed path outside this exact allowlist,
 including any other document, remains in the runtime projection.
+
+For the allowed P0 results rename from
+`docs/modules/semantic/research/runtime_bridge_decision_path_identifiability_results_20260713.md`
+to
+`docs/modules/semantic/research/closed/runtime_bridge_decision_path_identifiability_results_20260713.md`,
+the manifest emits one `governance_rename_v1` record with source and destination
+paths plus `source_blob_before`, `source_blob_after`, `destination_blob_before`,
+and `destination_blob_after`. Each blob slot is a tagged pair:
+`{state: present, sha256: <hash>}` or `{state: absent, sha256: null}`; no side
+may be omitted. For the normal move, source-after and destination-before are
+`absent`/`null`, and destination-after equals the recorded source-before blob
+hash.
 
 `h0_observational_diff_v1` applies only to the runtime projection. It may add
 only H0-owned trace schema/storage, deterministic instance-UID state,
