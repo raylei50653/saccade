@@ -1373,8 +1373,11 @@ Mainline transition
                  must not occupy mainline cadence
 Type κ           for every decidable unit:
                  κ = (quantification space, comparison relation, decision rule),
-                 so fidelity claims (bit-exact at joined pairs) and claim-level
-                 statements (ε-level at trial units) route to different
+                 declared as three separate components — the space says what is
+                 quantified over, the relation and rule say how it is judged.
+                 Fidelity claims (e.g. exact or tolerance-bounded comparisons
+                 over event/pair units) and claim-level statements (e.g.
+                 ε-level bounds over trial units) route to different
                  falsification rules; sealability of the declaration is
                  governed by §20.8
 ```

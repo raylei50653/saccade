@@ -17,25 +17,26 @@
 
 ### Typed route — runtime representation → reduction → validation
 
-每個節點標注其 κ 的量化空間；空間分區與單位定義以 linked owner doc 為準,此處不複寫數字。
+下圖按**量化空間**分層；各節點完整的 κ（comparison relation 與 decision rule）
+以 linked owner document 為準，此處不複寫判準或數字。
 
 - **Captured runtime event space** — partition 依 owner 定義:`matched ˙∪ cohort_gap ˙∪ unemitted`
-  - κ domain = captured events(temporal reduction):
+  - κ quantification space = captured events:
     [R1 temporal-reduction capture — owner terminal results](../modules/semantic/research/r1_temporal_reduction_capture_results_20260712.md)
     — captured runtime ↔ canonical replay
   - **Joined `matched` pair space**(event-level fidelity 帳目)
-    - κ domain = joined pairs(逐 pair bit-exact):
+    - κ quantification space = matched joined pairs；relation / rule = owner-defined fidelity boxes:
       [D0 — runtime shadow bridge fidelity: results](../modules/semantic/research/d0_runtime_shadow_fidelity_results_20260712.md)
       — offline proxy ↔ runtime quantity
     - `ρ_v: event → trial unit` ↓
     - **Trial-unit claim space**(track-level independence unit)
-      - κ domain = trials(ε-level claim):
+      - κ quantification space = trial units:
         [S0 — safe-domain axis transfer to runtime coordinates: results](../modules/semantic/research/closed/safe_domain_runtime_transfer_results_20260713.md)
         — runtime-coordinate transfer / claim support
-  - **Frozen-packet bookkeeping**(κ domain = frozen packet 的 partition labels)
+  - **Frozen-packet bookkeeping**(κ quantification space = frozen unjoined runtime events)
     - [EK0 — frozen-packet exact-key recoverability — results](../modules/semantic/research/frozen_packet_exact_key_recoverability_results_20260713.md)
       — consistency audit
-  - **Runtime decision-path observability**(κ domain = frozen capture 的 decision-path 歸因)
+  - **Runtime decision-path observability**(κ quantification space = frozen evidence under examination — capture 與 provenance records)
     - [P0 — runtime bridge decision-path identifiability: results](../modules/semantic/research/closed/runtime_bridge_decision_path_identifiability_results_20260713.md)
       → [H0 — headline-s full bridge-decision trace capture](../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md)（native capture 宣告）
       → downstream claim 必須另行宣告。
