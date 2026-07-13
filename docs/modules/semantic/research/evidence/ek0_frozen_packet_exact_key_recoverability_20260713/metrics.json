@@ -15,6 +15,7 @@
     "input_hashes": {
       "_global_id_map.txt": "ae3b6441d1712bcce0826d611cee2cfdf7a01b4d37ec331336f91a0b9148f366",
       "capture.csv.gz": "96093b9b723ed4500b389f8ad74600d75bb49a75064630dd2205cea0b0887047",
+      "capture.csv.gz.manifest.json": "4547ed29df726497e1050bda7326044a573579d7268571bd29a4c107bd0d8d99",
       "pairs.csv": "ee2898a25ef7f01ed46331c49c12d667846975f25769bc4c3e6b8bad493f8e87",
       "substrate_mot_concat": "4c5e322a3b8c026de584baa883e26353720837ffa2bf146dfcef2679426a670e"
     },
@@ -27,7 +28,7 @@
     "passed": true
   },
   "j2_classification": {
-    "classification_rules": "sealed declaration \u00a73",
+    "classification_rules": "sealed declaration \u00a72",
     "duplicate_target_event_keys": 0,
     "offline_nonunique_pair_identities": 0,
     "offline_pair_rows_scanned_without_gt_projection": 24346,
@@ -37,6 +38,7 @@
     }
   },
   "j3_reduction": {
+    "partition_label_inconsistent_events": 0,
     "partitions": {
       "cohort_gap": {
         "by_sequence": {

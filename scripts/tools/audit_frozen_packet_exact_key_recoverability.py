@@ -48,15 +48,16 @@ TARGET_PARTITIONS = ("cohort_gap", "unemitted")
 EXPECTED_PARTITION = {"matched": 1684, "cohort_gap": 539, "unemitted": 354}
 EVENT_KEY_VERSION = "d0_event_key_v2_global"
 EVENT_KEY_FIELDS = ("seq", "lost_global_id", "cand_global_id")
-RECONSTRUCTABLE = {
-    "exact-key reconstructable",
-    "deterministic auxiliary-key reconstructable",
-}
+RECONSTRUCTABLE = {"exact-key reconstructable"}
 AMBIGUOUS = "provenance ambiguous"
+LABEL_INCONSISTENT = "partition label inconsistent"
 
 EXPECTED_INPUT_HASHES = {
     "pairs.csv": "ee2898a25ef7f01ed46331c49c12d667846975f25769bc4c3e6b8bad493f8e87",
     "capture.csv.gz": "96093b9b723ed4500b389f8ad74600d75bb49a75064630dd2205cea0b0887047",
+    "capture.csv.gz.manifest.json": (
+        "4547ed29df726497e1050bda7326044a573579d7268571bd29a4c107bd0d8d99"
+    ),
     "_global_id_map.txt": "ae3b6441d1712bcce0826d611cee2cfdf7a01b4d37ec331336f91a0b9148f366",
     "substrate_mot_concat": "4c5e322a3b8c026de584baa883e26353720837ffa2bf146dfcef2679426a670e",
 }
@@ -256,17 +257,28 @@ def verify_j1(*, study_dir: Path, substrate_dir: Path) -> dict[str, Any]:
     if not capture_manifest_path.is_file():
         failures.append(f"missing capture manifest: {capture_manifest_path}")
     else:
-        capture_manifest = json.loads(capture_manifest_path.read_text(encoding="utf-8"))
-        if capture_manifest.get("event_key_version") != EVENT_KEY_VERSION:
-            failures.append("event-key version mismatch")
-        if tuple(capture_manifest.get("event_key_fields", [])) != EVENT_KEY_FIELDS:
-            failures.append("event-key field tuple mismatch")
-        if capture_manifest.get("partition") != EXPECTED_PARTITION:
-            failures.append("capture-manifest partition mismatch")
-        if capture_manifest.get("provenance", {}).get("shadow") is not True:
-            failures.append("capture provenance is not shadow")
-        if int(capture_manifest.get("overflow_events", -1)) != 0:
-            failures.append("capture overflow is non-zero")
+        observed["capture.csv.gz.manifest.json"] = _sha256(capture_manifest_path)
+        if (
+            observed["capture.csv.gz.manifest.json"]
+            != EXPECTED_INPUT_HASHES["capture.csv.gz.manifest.json"]
+        ):
+            # The sidecar carries shadow/overflow/partition assertions; its
+            # fields must not be trusted unless its frozen hash reproduces.
+            failures.append("capture.csv.gz.manifest.json hash mismatch")
+        else:
+            capture_manifest = json.loads(
+                capture_manifest_path.read_text(encoding="utf-8")
+            )
+            if capture_manifest.get("event_key_version") != EVENT_KEY_VERSION:
+                failures.append("event-key version mismatch")
+            if tuple(capture_manifest.get("event_key_fields", [])) != EVENT_KEY_FIELDS:
+                failures.append("event-key field tuple mismatch")
+            if capture_manifest.get("partition") != EXPECTED_PARTITION:
+                failures.append("capture-manifest partition mismatch")
+            if capture_manifest.get("provenance", {}).get("shadow") is not True:
+                failures.append("capture provenance is not shadow")
+            if int(capture_manifest.get("overflow_events", -1)) != 0:
+                failures.append("capture overflow is non-zero")
 
     if any(name not in observed for name in paths) or failures:
         raise AuditInvalid("J1 provenance failed: " + "; ".join(failures))
@@ -300,7 +312,13 @@ def classify_event(
     offline_nonunique: set[tuple[str, int, int]],
     duplicated_event_keys: set[str],
 ) -> tuple[str, str, str, bool]:
-    """Return frozen J2 class, reason, offline status, coordinate availability."""
+    """Return frozen J2 class, reason, offline status, coordinate availability.
+
+    Partition-aware: each event must first satisfy the exporter shape its own
+    partition label asserts (``cohort_gap`` = resolved IDs + canonical key +
+    pair not enumerated offline; ``unemitted`` = unresolved identity).  A
+    cross-label shape is a packet defect, distinct from recoverability.
+    """
     if event["event_key_version"] != EVENT_KEY_VERSION:
         return (
             "provenance ambiguous",
@@ -326,11 +344,18 @@ def classify_event(
             "not_checked",
             False,
         )
-    if not has_global_identity:
-        if event_key:
+    if not has_global_identity and event_key:
+        return (
+            "provenance ambiguous",
+            "keyed_row_has_unresolved_global_identity",
+            "not_checked",
+            False,
+        )
+    if event["partition"] == "unemitted":
+        if has_global_identity:
             return (
-                "provenance ambiguous",
-                "keyed_row_has_unresolved_global_identity",
+                LABEL_INCONSISTENT,
+                "unemitted_row_has_resolved_global_identity",
                 "not_checked",
                 False,
             )
@@ -338,6 +363,20 @@ def classify_event(
             "structurally unjoinable",
             "unresolved_global_identity_no_local_id_fallback",
             "absent",
+            False,
+        )
+    if not has_global_identity:
+        return (
+            LABEL_INCONSISTENT,
+            "cohort_gap_row_has_unresolved_global_identity",
+            "not_checked",
+            False,
+        )
+    if not event_key:
+        return (
+            LABEL_INCONSISTENT,
+            "cohort_gap_row_missing_canonical_event_key",
+            "not_checked",
             False,
         )
     if key in offline_nonunique:
@@ -355,25 +394,20 @@ def classify_event(
             "absent",
             False,
         )
+    # The pair being enumerated offline already refutes the cohort_gap label,
+    # whether or not the frozen coordinates would be usable downstream.
     coordinates = bool(
         event["runtime_coordinates_available"]
         and offline["offline_coordinates_available"]
     )
     if not coordinates:
         return (
-            "structurally unjoinable",
-            "same_pair_frozen_coordinates_unavailable",
+            LABEL_INCONSISTENT,
+            "cohort_gap_pair_enumerated_without_frozen_coordinates",
             "unique",
             False,
         )
-    if event_key:
-        return "exact-key reconstructable", "exact_v2_global_pair_key", "unique", True
-    return (
-        "deterministic auxiliary-key reconstructable",
-        "canonical_v2_global_fields_without_event_key",
-        "unique",
-        True,
-    )
+    return "exact-key reconstructable", "exact_v2_global_pair_key", "unique", True
 
 
 def _sequence_distribution(records: list[dict[str, Any]]) -> dict[str, dict[str, int]]:
@@ -446,6 +480,9 @@ def reduce_j3(records: list[dict[str, Any]]) -> dict[str, Any]:
         "provenance_ambiguous_events": sum(
             row["classification"] == AMBIGUOUS for row in records
         ),
+        "partition_label_inconsistent_events": sum(
+            row["classification"] == LABEL_INCONSISTENT for row in records
+        ),
     }
 
 
@@ -455,7 +492,11 @@ def determine_terminal(j3: dict[str, Any]) -> str:
     ``EK0_INVALID`` is raised out-of-band via ``AuditInvalid``; every valid run
     lands in exactly one of the two remaining terminals.
     """
-    if j3["reconstructable_events"] or j3["provenance_ambiguous_events"]:
+    if (
+        j3["reconstructable_events"]
+        or j3["provenance_ambiguous_events"]
+        or j3["partition_label_inconsistent_events"]
+    ):
         return "EK0_PACKET_INCONSISTENT"
     return "EK0_NO_RECOVERABLE_SUPPORT"
 
@@ -550,7 +591,7 @@ def run_audit(
             "offline_pair_rows_scanned_without_gt_projection": offline_rows,
             "offline_nonunique_pair_identities": len(nonunique),
             "duplicate_target_event_keys": len(duplicated),
-            "classification_rules": "sealed declaration §3",
+            "classification_rules": "sealed declaration §2",
         },
         "j3_reduction": j3,
         "inventory_sha256": inventory_hash,
@@ -570,7 +611,7 @@ def run_audit(
         "seal": {
             "inventory_sha256": inventory_hash,
             "gt_label_accessed": False,
-            "classification_rules": "sealed declaration §3",
+            "classification_rules": "sealed declaration §2",
         },
         "files": {
             "inventory.csv": inventory_hash,

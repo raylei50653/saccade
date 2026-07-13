@@ -1,6 +1,6 @@
 {
   "declaration": "docs/modules/semantic/research/frozen_packet_exact_key_recoverability_declaration_20260713.md",
-  "declaration_sha256": "0f119254419a91dc592eba5475cec671b9e5b66a4b0c30f4c93db56107b4ee7e",
+  "declaration_sha256": "4051bc6f7ecc48bb8d01fc941b31bd59fac95de7140b0f15898ea333394a908e",
   "event_key": {
     "fields": [
       "seq",
@@ -11,19 +11,20 @@
   },
   "files": {
     "inventory.csv": "a90c424dc6a74fbbb0bdb3997e388517e56f0b237fa4f65384046510c3590d92",
-    "metrics.json": "3bb85803a3cc77f58d145e409fdc38043ee2e85885dde6372717ae80aa8a63a8"
+    "metrics.json": "7d60edec350d7f9ab922d93b0581de832445323dd164badf91ab875e234a0967"
   },
   "input_hashes": {
     "_global_id_map.txt": "ae3b6441d1712bcce0826d611cee2cfdf7a01b4d37ec331336f91a0b9148f366",
     "capture.csv.gz": "96093b9b723ed4500b389f8ad74600d75bb49a75064630dd2205cea0b0887047",
+    "capture.csv.gz.manifest.json": "4547ed29df726497e1050bda7326044a573579d7268571bd29a4c107bd0d8d99",
     "pairs.csv": "ee2898a25ef7f01ed46331c49c12d667846975f25769bc4c3e6b8bad493f8e87",
     "substrate_mot_concat": "4c5e322a3b8c026de584baa883e26353720837ffa2bf146dfcef2679426a670e"
   },
   "phase": "complete",
   "runner": "scripts/tools/audit_frozen_packet_exact_key_recoverability.py",
-  "runner_sha256": "7b64df98425d5013c288ed5f3388e87130a1c385be0d969b0e431f9c50ed2bf1",
+  "runner_sha256": "c63b8971d6b7d48695e8a77e8f8fcfb7a5bf3e830aba748f22b7cd55eb48c764",
   "seal": {
-    "classification_rules": "sealed declaration \u00a73",
+    "classification_rules": "sealed declaration \u00a72",
     "gt_label_accessed": false,
     "inventory_sha256": "a90c424dc6a74fbbb0bdb3997e388517e56f0b237fa4f65384046510c3590d92"
   },

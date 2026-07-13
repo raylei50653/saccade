@@ -7,10 +7,12 @@
 
 ## Terminal: `EK0_NO_RECOVERABLE_SUPPORT`
 
-The frozen D0 capture packet is internally consistent.  None of the 893
-unjoined runtime events is recoverable through the exact v2 event key or its
-canonical-field triple, and none has ambiguous provenance: every event is
-structurally unjoinable, exactly as its partition label asserts.
+The frozen D0 capture packet is internally consistent.  Every one of the 893
+unjoined runtime events satisfies the exporter shape its own partition label
+asserts (verified per event, not assumed): none is recoverable through the
+exact v2 event key, none has ambiguous provenance, and none carries a
+cross-label shape.  Every event is structurally unjoinable, exactly as its
+partition label asserts.
 
 **What this does and does not say.**  This is a consistency statement about
 the frozen artifacts.  Per the sealed declaration (§2), for a well-formed v2
@@ -30,28 +32,34 @@ Canonical packet: [manifest](evidence/ek0_frozen_packet_exact_key_recoverability
 
 ## J1 — provenance reproduction
 
-PASS.  The four frozen source hashes reproduce exactly; partition
-conservation is `1,684 + 539 + 354 = 2,577`; and all capture rows carry
-`d0_event_key_v2_global` with `(seq, lost_global_id, cand_global_id)`.  The
-capture remains shadow provenance with zero overflow.
+PASS.  The five frozen source hashes reproduce exactly — including the
+capture sidecar manifest (`4547ed29…`), which is the sole source of the
+shadow-provenance, zero-overflow, and partition-count assertions and whose
+fields are only trusted after its hash reproduces.  Partition conservation is
+`1,684 + 539 + 354 = 2,577`, and all capture rows carry
+`d0_event_key_v2_global` with `(seq, lost_global_id, cand_global_id)`.
 
 The audit is single-phase and never reads a GT/outcome column
 (`gt_label_accessed = false` by construction).  The packet manifest seals the
 declaration, runner, inventory, and metrics hashes; a completed packet is
 immutable — reruns against it fail closed without modifying it.
 
-## J2–J3 — outcome-blind inventory
+## J2–J3 — outcome-blind, partition-aware inventory
 
 All 893 unjoined events were classified using only identity, event
 provenance, frozen offline pair membership, and frozen coordinate
-availability.  The inventory SHA256 is
+availability, with each event checked against its own partition's exporter
+shape: all 539 `cohort_gap` events carry resolved global IDs and a valid
+canonical key with the pair absent offline; all 354 `unemitted` events carry
+unresolved identity and no key.  The inventory SHA256 is
 `a90c424dc6a74fbbb0bdb3997e388517e56f0b237fa4f65384046510c3590d92`
-(byte-identical to the rev.1 packet; classification rules are unchanged).
+(byte-identical to the rev.1 packet: the partition-aware rules only add
+branches that no event of a well-formed packet reaches).
 
-| Partition | Events | Identified unique lost tracks | Reconstructable | Ambiguous | Class / reason |
-|---|---:|---:|---:|---:|---|
-| `cohort_gap` | 539 | 169 | 0 | 0 | all structurally unjoinable: same global pair absent from frozen offline universe |
-| `unemitted` | 354 | 0 | 0 | 0 | all structurally unjoinable: global identity unresolved; no local-ID fallback |
+| Partition | Events | Identified unique lost tracks | Reconstructable | Ambiguous | Label-inconsistent | Class / reason |
+|---|---:|---:|---:|---:|---:|---|
+| `cohort_gap` | 539 | 169 | 0 | 0 | 0 | all structurally unjoinable: same global pair absent from frozen offline universe |
+| `unemitted` | 354 | 0 | 0 | 0 | 0 | all structurally unjoinable: global identity unresolved; no local-ID fallback |
 
 `cohort_gap` has 370 repeat events after lost-track reduction (68.65% among
 identified events).  `unemitted` has no valid `(seq, lost_global_id)` trial
